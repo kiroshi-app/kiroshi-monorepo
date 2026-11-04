@@ -1,4 +1,5 @@
-import { expect, fn, screen, within } from "storybook/test"
+import { useState } from "react"
+import { expect, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
@@ -13,11 +14,38 @@ import {
 	CASA_DO_RIO_FAVICON,
 	CASA_DO_RIO_TERRACE,
 } from "@workspace/ui/components/answer-blocks/answer-blocks.fixtures"
-import { SourcedImage } from "@workspace/ui/components/answer-blocks/sourced-image"
+import {
+	SourcedImage,
+	type SourcedImageProps,
+} from "@workspace/ui/components/answer-blocks/sourced-image"
 
 const CASA_DO_RIO_PAGE = "https://casadorio.pt/terrace"
 
 const IMAGE_SLOT_HEIGHT = 300
+
+const UNDECODABLE_PICTURE = "data:image/png;base64,AA=="
+
+const OTHER_UNDECODABLE_PICTURE = "data:image/png;base64,AAAA"
+
+const SOURCE_SEQUENCE = [
+	UNDECODABLE_PICTURE,
+	CASA_DO_RIO_TERRACE,
+	UNDECODABLE_PICTURE,
+	OTHER_UNDECODABLE_PICTURE,
+]
+
+const SourceSequence = (props: SourcedImageProps) => {
+	const [position, setPosition] = useState(0)
+
+	return (
+		<AgentAnswerFrame intro="This is the place I had in mind for Saturday dinner.">
+			<button type="button" onClick={() => setPosition(position + 1)}>
+				Next source
+			</button>
+			<SourcedImage {...props} image={{ src: SOURCE_SEQUENCE[position] }} />
+		</AgentAnswerFrame>
+	)
+}
 
 const expectSourceAboveTitle = async (canvasElement: HTMLElement) => {
 	const source = slotIn(canvasElement, "sourced-image-source")
@@ -38,7 +66,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"One picture the agent found, with a caption under it: the site it came from, the title 4 below it, then a row of chips. Reach for it when the answer is about a single place or object the reader recognises by sight; `Gallery` covers several pictures of the same thing. The save button shows only when `imageMenu` carries `onSaveToLibrary`, and hands it the picture. `isUnavailable` swaps the picture for a frame of the same slot that links to the source page.",
+					"One picture the agent found, with a caption under it: the site it came from, the title 4 below it, then a row of chips. Reach for it when the answer is about a single place or object the reader recognises by sight; `Gallery` covers several pictures of the same thing. The save button shows only when `imageMenu` carries `onSaveToLibrary`, and hands it the picture. When the picture fails to load, it swaps itself for a frame of the same slot that links to the source page, and a new `image.src` tries the picture again; `isUnavailable` forces that frame.",
 			},
 		},
 	},
@@ -183,5 +211,72 @@ export const Unavailable = meta.story({
 		).toBeNull()
 		await expect(canvas.getByText("Open now")).toBeVisible()
 		await expectSourceAboveTitle(canvasElement)
+	},
+})
+
+export const FailsToLoad = meta.story({
+	args: { image: { src: UNDECODABLE_PICTURE } },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The picture fails to load and nothing tells the component so. Check that it shows the Image unavailable frame on its own, with Open original to the source page, and that the caption line keeps the site.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		await expect(await canvas.findByText("Image unavailable")).toBeVisible()
+		await expect(
+			slotIn(canvasElement, "sourced-image-source"),
+		).toHaveTextContent("casadorio.pt")
+		await expect(
+			canvas.getByRole("link", { name: "Open original" }),
+		).toHaveAttribute("href", CASA_DO_RIO_PAGE)
+	},
+})
+
+export const TriesEachNewSource = meta.story({
+	tags: ["test-only"],
+	render: (args) => <SourceSequence {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same picture slot fed a failing source, a working one, the first failing source again, then another failing one. Check the frame gives way to the picture as soon as the source changes, that the source which failed before the working one is tried again, and that the frame comes back only once each source has failed.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		const nextSource = canvas.getByRole("button", { name: "Next source" })
+		const failedSources: string[] = []
+		const expectPictureShown = async () => {
+			const picture = await canvas.findByRole("img", {
+				name: "Casa do Rio, a terrace over the Tagus",
+			})
+			await waitFor(() => expect(picture).not.toHaveProperty("naturalWidth", 0))
+			await expect(picture).toBeVisible()
+			await expect(canvas.queryByText("Image unavailable")).toBeNull()
+		}
+		const expectFrameAfterFailureOf = async (source: string) => {
+			await waitFor(() => expect(failedSources.at(-1)).toBe(source))
+			await expect(await canvas.findByText("Image unavailable")).toBeVisible()
+		}
+
+		await canvas.findByText("Image unavailable")
+		canvasElement.addEventListener(
+			"error",
+			({ target }) => {
+				if (target instanceof HTMLImageElement) {
+					failedSources.push(target.getAttribute("src") ?? "")
+				}
+			},
+			{ capture: true },
+		)
+		await userEvent.click(nextSource)
+		await expectPictureShown()
+		await userEvent.click(nextSource)
+		await expectFrameAfterFailureOf(UNDECODABLE_PICTURE)
+		await userEvent.click(nextSource)
+		await expectFrameAfterFailureOf(OTHER_UNDECODABLE_PICTURE)
 	},
 })

@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -45,11 +46,19 @@ const SourcedImage = ({
 	className,
 }: SourcedImageProps) => {
 	const { t } = useTranslation("chat")
+	const [failedSrc, setFailedSrc] = useState<string>()
+	const isFrameShown = isUnavailable || failedSrc === image.src
 	const hasChips = status !== undefined || chips.length > 0
 	const name = accessibleNameOf(image, title)
 	const onSaveToLibrary = imageMenu?.onSaveToLibrary
 	const picture = (
-		<img src={image.src} alt={name} className="size-full object-cover" />
+		<img
+			src={image.src}
+			alt={name}
+			className="size-full object-cover"
+			onError={() => setFailedSrc(image.src)}
+			onLoad={() => setFailedSrc(undefined)}
+		/>
 	)
 	const openable = onOpen ? (
 		<button
@@ -70,7 +79,7 @@ const SourcedImage = ({
 			data-slot="sourced-image"
 			className={cn("flex w-full min-w-0 flex-col gap-2", className)}
 		>
-			{isUnavailable ? (
+			{isFrameShown ? (
 				<div
 					className="flex h-75 flex-col items-center justify-center gap-2.5 rounded-xl border border-border bg-muted p-4 text-center"
 					data-slot="sourced-image-unavailable"
