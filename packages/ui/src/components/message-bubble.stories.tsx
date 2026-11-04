@@ -208,8 +208,6 @@ const AGENT_WORD = "legacy"
 
 const PARAGRAPH_WORD = "export"
 
-type ClickCount = 2 | 3
-
 const selectedText = () => window.getSelection()?.toString() ?? ""
 
 const textRangeIn = (element: HTMLElement, part: string) => {
@@ -225,7 +223,7 @@ const textRangeIn = (element: HTMLElement, part: string) => {
 const clickWord = async (
 	element: HTMLElement,
 	word: string,
-	clickCount: ClickCount,
+	clickCount: 2 | 3,
 ) => {
 	const range = textRangeIn(element, word)
 	if (!isInBrowserRunner()) {
