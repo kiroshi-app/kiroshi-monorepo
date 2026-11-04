@@ -109,15 +109,18 @@ const importFile = async (spaceId: string, isJoined: boolean, file: File) => {
 	}
 }
 
-type LocalFile = { name: string; path: string }
+type ContentSave = {
+	spaceId: string
+	isJoined: boolean
+	image: LibraryImageSource
+}
 
-export type LibraryImageSave =
-	| { spaceId: string; isJoined: boolean; image: LibraryImageSource }
-	| { spaceId: string; file: LocalFile }
+type LocalFileSave = {
+	spaceId: string
+	file: { name: string; path: string }
+}
 
-type ContentSave = Extract<LibraryImageSave, { image: unknown }>
-
-type LocalFileSave = Extract<LibraryImageSave, { file: unknown }>
+export type LibraryImageSave = ContentSave | LocalFileSave
 
 const decodedBytesOf = (content: string) =>
 	Math.floor((content.replace(/=+$/, "").length * 3) / 4)
