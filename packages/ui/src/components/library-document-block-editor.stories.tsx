@@ -156,6 +156,18 @@ const fieldIn = (root: HTMLElement) => {
 	return field
 }
 
+const focusedFieldIn = (root: HTMLElement) =>
+	waitFor(() => {
+		const field = fieldIn(root)
+		expect(field).toHaveFocus()
+		return field
+	})
+
+const itemNamesIn = (menu: HTMLElement) =>
+	within(menu)
+		.getAllByRole("menuitem")
+		.map((item) => item.textContent)
+
 const typesIn = (root: HTMLElement) =>
 	blocksIn(root).map((block) => block.dataset.type)
 
@@ -310,11 +322,7 @@ export const BlockHandleMenu = meta.story({
 			firstLine.left,
 		)
 		await expect(within(menu).getByText("Text")).toBeVisible()
-		await expect(
-			within(menu)
-				.getAllByRole("menuitem")
-				.map((item) => item.textContent),
-		).toEqual([
+		await expect(itemNamesIn(menu)).toEqual([
 			"Turn into",
 			...(isMacPlatform() ? MAC_SHORTCUTS : OTHER_SHORTCUTS),
 		])
@@ -433,11 +441,7 @@ export const ClickEditsInPlace = meta.story({
 		const shown = block.querySelector<HTMLElement>("[tabindex]")
 		if (!shown) throw new Error("No text block")
 		shown.focus()
-		const field = await waitFor(() => {
-			const opened = fieldIn(canvasElement)
-			expect(opened).toHaveFocus()
-			return opened
-		})
+		const field = await focusedFieldIn(canvasElement)
 		await expect(field.value).toBe(
 			"Copy is final on the 7th, screenshots land on the 10th, and the release notes go out with the build on the morning of the 14th.",
 		)
@@ -716,11 +720,7 @@ export const HandleMenuShortcutsOffMac = meta.story({
 	play: async ({ canvasElement }) => {
 		const block = blockWith(canvasElement, "We also count")
 		const menu = await openHandleMenu(block)
-		await expect(
-			within(menu)
-				.getAllByRole("menuitem")
-				.map((item) => item.textContent),
-		).toEqual(["Turn into", ...OTHER_SHORTCUTS])
+		await expect(itemNamesIn(menu)).toEqual(["Turn into", ...OTHER_SHORTCUTS])
 		fireEvent.keyDown(menu, { key: "Escape" })
 		await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
 		const count = blocksIn(canvasElement).length
@@ -754,30 +754,22 @@ export const ChecklistEditsInPlace = meta.story({
 		const shown = checklist.querySelector<HTMLElement>("[tabindex]")
 		if (!shown) throw new Error("No checklist")
 		shown.focus()
-		const field = await waitFor(() => {
-			const opened = fieldIn(canvasElement)
-			expect(opened).toHaveFocus()
-			return opened
-		})
+		const field = await focusedFieldIn(canvasElement)
 		await expect(field.value).toBe("- [x] Book the room\n- [x] Send the invite")
 		await expect(field.selectionStart).toBe(field.value.length)
 
 		fireEvent.click(
 			partOf(blockWith(canvasElement, "Book the room"), "library-block-insert"),
 		)
-		const empty = await waitFor(() => {
-			const opened = fieldIn(canvasElement)
-			expect(opened.value).toBe("")
-			expect(opened).toHaveFocus()
-			return opened
-		})
+		const empty = await focusedFieldIn(canvasElement)
+		await expect(empty.value).toBe("")
 		fireEvent.keyDown(empty, { key: "Backspace" })
 		const back = await waitFor(() => {
-			const opened = fieldIn(canvasElement)
-			expect(opened.value).toContain("Book the room")
-			expect(opened).toHaveFocus()
-			return opened
+			const field = fieldIn(canvasElement)
+			expect(field.value).toContain("Book the room")
+			return field
 		})
+		await expect(back).toHaveFocus()
 		await expect(back.selectionStart).toBe(back.value.length)
 	},
 })
