@@ -50,7 +50,6 @@ const chat = {
 	},
 	transcript: {
 		label: "Conversation",
-		loadOlder: "Charger les messages plus anciens",
 		loadNewer: "Charger les messages plus récents",
 		jumpToLatest: "Aller au dernier message",
 		newMessages: "Nouveaux messages",

@@ -12,6 +12,7 @@ import {
 } from "@workspace/storybook/story-utils"
 import {
 	GenericSkeletonRow,
+	ListEndSlot,
 	ListSkeleton,
 	type ListSkeletonAnchor,
 } from "@workspace/ui/components/list-skeleton"
@@ -81,6 +82,27 @@ const TimedList = ({ pendingMs }: TimedListProps) => {
 		</div>
 	)
 }
+
+const TopEdgeList = () => (
+	<div className="flex w-80 flex-col" data-slot="top-edge-list">
+		<ListEndSlot
+			edge="top"
+			listEnd={{ hasNextPage: true, isFetchingNextPage: true }}
+			row={<GenericSkeletonRow />}
+		/>
+		<ul
+			className="flex flex-col gap-3 text-foreground text-sm"
+			data-slot="loaded-list"
+		>
+			{LOADED_NAMES.map((name) => (
+				<li key={name}>{name}</li>
+			))}
+		</ul>
+	</div>
+)
+
+const isBefore = (node: Node, other: Node) =>
+	(node.compareDocumentPosition(other) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0
 
 type SkeletonSighting = {
 	shownAt: number | null
@@ -318,5 +340,32 @@ export const Fade = meta.story({
 		} finally {
 			await emulateMotion("reduce")
 		}
+	},
+})
+
+export const ListEndOnTheTopEdge = meta.story({
+	render: () => <TopEdgeList />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The list end on the top edge of a list that pages backwards, the transcript case where older entries load above the first one. The skeleton row sits above the sentinel and both sit above the loaded rows, so the next page lands where the skeleton stood. Check that the skeleton shows above the first loaded row, timed like the bottom list end, and that the whole slot is out of the accessible tree. Pick `BottomAnchored` for the full-list skeleton of a transcript.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await waitFor(() =>
+			expect(slotsIn(canvasElement, "list-end-skeleton")).toHaveLength(1),
+		)
+		const slot = slotIn(canvasElement, "list-end")
+		const skeleton = slotIn(slot, "list-end-skeleton")
+
+		await expect(slot).toHaveAttribute("aria-hidden", "true")
+		await expect(isBefore(skeleton, slotIn(slot, "list-end-sentinel"))).toBe(
+			true,
+		)
+		await expect(isBefore(slot, slotIn(canvasElement, "loaded-list"))).toBe(
+			true,
+		)
 	},
 })

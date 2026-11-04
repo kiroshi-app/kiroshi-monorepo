@@ -29,7 +29,6 @@ interface ProbeMessage {
 const HISTORY_SIZE = 120
 const WINDOW_SIZE = 60
 const WHOLE_THREAD_SIZE = 240
-const PAGE_SIZE = 20
 const STREAM_TICK_MS = 60
 const TICKS_PER_TURN = 40
 const MERMAID_INDEX = 100
@@ -190,10 +189,6 @@ const ProbeThread = ({
 	const oldestIndex = history.findIndex(
 		(message) => message.id === messages[0]?.id,
 	)
-	const loadOlder = () => {
-		const from = Math.max(0, oldestIndex - PAGE_SIZE)
-		setMessages((current) => [...history.slice(from, oldestIndex), ...current])
-	}
 
 	return (
 		<div className="mx-auto flex h-screen w-full max-w-3xl flex-col bg-background">
@@ -202,7 +197,7 @@ const ProbeThread = ({
 				busy={isStreaming}
 				className="flex-1"
 				contentClassName="flex min-h-full w-full flex-col px-6 pt-8 pb-4"
-				older={{ has: oldestIndex > 0, onLoad: loadOlder }}
+				older={{ hasNextPage: oldestIndex > 0, isFetchingNextPage: false }}
 				onFollowChange={(isFollowing) => {
 					isFollowingRef.current = isFollowing
 				}}

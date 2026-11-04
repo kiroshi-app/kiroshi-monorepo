@@ -48,7 +48,6 @@ const chat = {
 	},
 	transcript: {
 		label: "Conversation",
-		loadOlder: "Load older messages",
 		loadNewer: "Load newer messages",
 		jumpToLatest: "Jump to latest",
 		newMessages: "New messages",
