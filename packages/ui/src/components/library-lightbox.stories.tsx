@@ -109,6 +109,13 @@ const lightbox = async () => {
 	return popup
 }
 
+const expectSoleTooltip = (name: string) =>
+	waitFor(() => {
+		const tooltips = screen.getAllByRole("tooltip")
+		expect(tooltips).toHaveLength(1)
+		expect(tooltips[0]).toHaveTextContent(name)
+	})
+
 const copySwapIn = (popup: HTMLElement) => {
 	const [copyLayer, checkLayer] = within(popup)
 		.getByRole("button", { name: "Copy" })
@@ -229,7 +236,7 @@ export const Default = meta.story({
 		await expect(args.onCopy).toHaveBeenCalledWith(LIBRARY_LIGHTBOX_IMAGES[1])
 		const more = within(popup).getByRole("button", { name: "More" })
 		await userEvent.hover(more)
-		await expect(await screen.findByRole("tooltip")).toHaveTextContent("More")
+		await expectSoleTooltip("More")
 		await userEvent.unhover(more)
 		await waitFor(() => expect(screen.queryByRole("tooltip")).toBe(null))
 
@@ -252,9 +259,7 @@ export const Default = meta.story({
 		await userEvent.hover(
 			within(popup).getByRole("button", { name: "Next image" }),
 		)
-		await expect(await screen.findByRole("tooltip")).toHaveTextContent(
-			"Next image",
-		)
+		await expectSoleTooltip("Next image")
 		await userEvent.unhover(
 			within(popup).getByRole("button", { name: "Next image" }),
 		)
@@ -533,7 +538,7 @@ export const BackButton = meta.story({
 			within(popup).getByRole("heading").getBoundingClientRect().left,
 		)
 		await userEvent.hover(back)
-		await expect(await screen.findByRole("tooltip")).toHaveTextContent("Back")
+		await expectSoleTooltip("Back")
 		await userEvent.unhover(back)
 
 		await userEvent.click(back)
