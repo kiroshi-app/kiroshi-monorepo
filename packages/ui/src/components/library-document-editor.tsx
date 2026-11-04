@@ -45,12 +45,8 @@ import { useTranslation } from "react-i18next"
 
 import {
 	agentScopeOf,
-	FINISHED_RUN_LOOK,
 	type LibraryDocumentAgent,
 	LibraryDocumentAgentCaret,
-	type LibraryDocumentEdit,
-	type LibraryDocumentFinished,
-	LibraryDocumentFinishedBar,
 	type LibraryDocumentPerson,
 	LibraryDocumentPersonCaret,
 	LibraryDocumentPresence,
@@ -494,7 +490,6 @@ const agentMarks = StateField.define<DecorationSet>({
 })
 
 type ShownAgents = {
-	edits: LibraryDocumentEdit[]
 	writers: LibraryDocumentWriter[]
 	people: LibraryDocumentPerson[]
 }
@@ -504,28 +499,20 @@ type AgentMarksInput = ShownAgents & {
 	slots: CaretSlots
 }
 
-const agentMarksOf = ({
-	length,
-	edits,
-	writers,
-	people,
-	slots,
-}: AgentMarksInput) => {
+const agentMarksOf = ({ length, writers, people, slots }: AgentMarksInput) => {
 	const clamped = (at: number) => Math.min(Math.max(0, at), length)
-	const isWriter = ({ agent }: LibraryDocumentEdit) =>
-		writers.some((writer) => writer.agent.id === agent.id)
-	const runs = edits.flatMap((edit) => {
-		const from = clamped(edit.start)
-		const to = clamped(edit.end)
+	const runs = writers.flatMap(({ agent, start, end }) => {
+		const from = clamped(start)
+		const to = clamped(end)
 		if (from >= to) return []
 		return [
 			Decoration.mark({
-				class: isWriter(edit) ? WRITTEN_RUN_LOOK : FINISHED_RUN_LOOK,
-				liveAgent: isWriter(edit) ? edit.agent.id : undefined,
+				class: WRITTEN_RUN_LOOK,
+				liveAgent: agent.id,
 				attributes: {
 					"data-slot": "library-document-run",
-					"data-agent": edit.agent.id,
-					...scopeAttributesOf(edit.agent),
+					"data-agent": agent.id,
+					...scopeAttributesOf(agent),
 				},
 			}).range(from, to),
 		]
@@ -862,8 +849,6 @@ const NO_WRITERS: LibraryDocumentWriter[] = []
 
 const NO_PEOPLE: LibraryDocumentPerson[] = []
 
-const NO_EDITS: LibraryDocumentEdit[] = []
-
 type LibraryDocumentEditorHandle = {
 	focusTitle: () => void
 	restoreTitle: (name: string) => void
@@ -884,10 +869,7 @@ type LibraryDocumentEditorProps = WriterActions &
 		onBack: () => void
 		writers?: LibraryDocumentWriter[]
 		people?: LibraryDocumentPerson[]
-		finished?: LibraryDocumentFinished
 		onStopAll?: () => void
-		onUndoAll?: () => void
-		onDone?: () => void
 		onCaretChange?: (caret: number | null) => void
 		menuFinalFocus?: () => HTMLElement | boolean
 		ref?: Ref<LibraryDocumentEditorHandle>
@@ -904,12 +886,9 @@ const LibraryDocumentEditor = ({
 	onBack,
 	writers = NO_WRITERS,
 	people = NO_PEOPLE,
-	finished,
 	onStopAll,
 	onStop,
 	onOpenConversation,
-	onUndoAll,
-	onDone,
 	onCaretChange,
 	onBold,
 	onItalic,
@@ -1257,11 +1236,6 @@ const LibraryDocumentEditor = ({
 		})
 	})
 
-	const isWriting = writers.length > 0 || people.length > 0
-	const shownFinished = isWriting ? undefined : finished
-	const edits: LibraryDocumentEdit[] =
-		writers.length > 0 ? writers : (shownFinished?.edits ?? NO_EDITS)
-
 	const markAgents = useEffectEvent((shown: ShownAgents) => {
 		const view = editor.current
 		if (!view) return
@@ -1279,8 +1253,8 @@ const LibraryDocumentEditor = ({
 
 	useLayoutEffect(() => {
 		takeBody(body)
-		markAgents({ edits, writers, people })
-	}, [body, edits, writers, people])
+		markAgents({ writers, people })
+	}, [body, writers, people])
 
 	const barItem = useMemo(() => ({ name: title }), [title])
 
@@ -1351,15 +1325,6 @@ const LibraryDocumentEditor = ({
 			<LibraryDocumentColumn
 				detail={detail}
 				onColumnMouseDown={writeFromColumn}
-				footer={
-					shownFinished ? (
-						<LibraryDocumentFinishedBar
-							finished={shownFinished}
-							onDone={onDone}
-							onUndoAll={onUndoAll}
-						/>
-					) : null
-				}
 				heading={
 					<GrowingField
 						aria-label={t("library.editor.title")}

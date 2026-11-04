@@ -1417,7 +1417,6 @@ navigation-librarydocumenteditor--a-3-toolbar-button-hover
 navigation-librarydocumenteditor--a-4-toolbar-format-on
 navigation-librarydocumenteditor--a-5-toolbar-link-field
 navigation-librarydocumenteditor--a-6-toolbar-flipped-below
-navigation-librarydocumenteditor--agent-finished
 navigation-librarydocumenteditor--agent-run-held-then-fades
 navigation-librarydocumenteditor--agents-writing
 navigation-librarydocumenteditor--blank
@@ -1482,11 +1481,9 @@ navigation-librarydocumenteditor--undo-after-outside-edit
 navigation-librarydocumenteditor--whitespace-title-reads-untitled
 navigation-librarydocumenteditor--with-typed-text
 navigation-librarydocumenteditor--write-failure
-navigation-librarydocumentview--agent-finished
 navigation-librarydocumentview--agents-writing
 navigation-librarydocumentview--bar-matches-image-bar
 navigation-librarydocumentview--default
-navigation-librarydocumentview--long-agent-name-finished
 navigation-librarydocumentview--long-agent-name-writing
 navigation-librarydocumentview--member
 navigation-librarydocumentview--more-menu
