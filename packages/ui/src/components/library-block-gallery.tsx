@@ -3,6 +3,7 @@
 import {
 	type KeyboardEvent,
 	type PointerEvent,
+	useEffect,
 	useId,
 	useLayoutEffect,
 	useRef,
@@ -10,8 +11,11 @@ import {
 } from "react"
 import { useTranslation } from "react-i18next"
 
+import { accessibleNameOf } from "@workspace/ui/components/answer-blocks/answer-image"
 import {
 	Gallery,
+	type GalleryImageStatus,
+	GallerySurface,
 	TILE_COUNT,
 } from "@workspace/ui/components/answer-blocks/gallery"
 import { Icons } from "@workspace/ui/components/icons"
@@ -31,11 +35,19 @@ type LibraryGalleryImage = {
 	caption?: string
 }
 
+type ResolveImage = (src: string) => Promise<string>
+
 type LibraryGalleryEditorProps = {
 	source: string
 	onEdit: SourceEdit
 	onRemove: () => void
 	onAddImages?: () => Promise<LibraryGalleryImage[]>
+	resolveImage?: ResolveImage
+}
+
+type ShownImage = {
+	src: string
+	status?: GalleryImageStatus
 }
 
 type TileDrag = {
@@ -69,13 +81,54 @@ const editItems =
 	(change: (items: BlockRecord[]) => BlockRecord[]) => (source: string) =>
 		withGalleryItems(source, change(galleryItemsOf(source)))
 
+const useShownImages = (
+	sources: readonly string[],
+	resolveImage: ResolveImage | undefined,
+) => {
+	const [settled, setSettled] = useState<ReadonlyMap<string, ShownImage>>(
+		() => new Map(),
+	)
+	const requested = useRef(new Set<string>())
+	const present = useRef(new Set<string>())
+
+	useEffect(() => {
+		present.current = new Set(sources)
+		const leave = () => {
+			present.current = new Set()
+		}
+		if (!resolveImage) return leave
+		const settle = (source: string, shown: ShownImage) => {
+			if (!present.current.has(source)) {
+				requested.current.delete(source)
+				return
+			}
+			setSettled((current) => new Map(current).set(source, shown))
+		}
+		for (const source of present.current) {
+			if (requested.current.has(source)) continue
+			requested.current.add(source)
+			resolveImage(source).then(
+				(src) => settle(source, { src }),
+				() => settle(source, { src: source, status: "broken" }),
+			)
+		}
+		return leave
+	})
+
+	return (source: string): ShownImage =>
+		resolveImage
+			? (settled.get(source) ?? { src: source, status: "resolving" })
+			: { src: source }
+}
+
 const LibraryGalleryEditor = ({
 	source,
 	onEdit,
 	onRemove,
 	onAddImages,
+	resolveImage,
 }: LibraryGalleryEditorProps) => {
-	const { t } = useTranslation("common")
+	const { t } = useTranslation(["common", "chat"])
 	const hintId = useId()
 	const frame = useRef<HTMLDivElement>(null)
 	const [drag, setDrag] = useState<TileDrag>()
@@ -84,6 +137,10 @@ const LibraryGalleryEditor = ({
 	const items = galleryItemsOf(source)
 	const count = items.length
 	const shown = drag ? movedTo(items, drag.from, drag.to) : items
+	const shownImageOf = useShownImages(
+		items.map(({ image }) => image),
+		resolveImage,
+	)
 
 	useLayoutEffect(() => {
 		if (!tileFocus) return
@@ -235,6 +292,7 @@ const LibraryGalleryEditor = ({
 	}
 
 	const lifted = drag ? items[drag.from] : undefined
+	const liftedImage = lifted ? shownImageOf(lifted.image) : undefined
 
 	return (
 		<div
@@ -275,7 +333,7 @@ const LibraryGalleryEditor = ({
 					<Gallery
 						images={shown
 							.slice(0, TILE_COUNT)
-							.map(({ image, alt }) => ({ src: image, alt }))}
+							.map(({ image, alt }) => ({ ...shownImageOf(image), alt }))}
 						tileSlot={tileSlot}
 					/>
 					{count > TILE_COUNT ? (
@@ -283,25 +341,41 @@ const LibraryGalleryEditor = ({
 							className="grid grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))] gap-1.5"
 							data-slot="library-gallery-overflow"
 						>
-							{shown.slice(TILE_COUNT).map(({ image, alt }, at) => (
-								<span
-									className="relative h-28 min-w-0 overflow-hidden rounded-[4px]"
-									// biome-ignore lint/suspicious/noArrayIndexKey: a tile is the slot at its position, two images may share a src
-									key={at}
-								>
-									<img
-										alt={alt}
-										className="image-outline size-full object-cover"
-										src={image}
-									/>
-									{tileSlot(TILE_COUNT + at)}
-								</span>
-							))}
+							{shown.slice(TILE_COUNT).map(({ image, alt }, at) => {
+								const { src, status } = shownImageOf(image)
+								return (
+									<span
+										className="relative h-28 min-w-0 overflow-hidden rounded-[4px]"
+										// biome-ignore lint/suspicious/noArrayIndexKey: a tile is the slot at its position, two images may share a src
+										key={at}
+									>
+										{status ? (
+											<GallerySurface
+												name={accessibleNameOf(
+													{ src, alt },
+													t("chat:answerBlock.gallery.tile", {
+														caption: "",
+														position: TILE_COUNT + at + 1,
+													}),
+												)}
+												status={status}
+											/>
+										) : (
+											<img
+												alt={alt}
+												className="image-outline size-full object-cover"
+												src={src}
+											/>
+										)}
+										{tileSlot(TILE_COUNT + at)}
+									</span>
+								)
+							})}
 						</div>
 					) : null}
 				</div>
 			) : null}
-			{drag && lifted ? (
+			{drag && liftedImage ? (
 				<span
 					aria-hidden="true"
 					className="pointer-events-none fixed z-50 h-[170px] w-60 -rotate-2 rounded-xl bg-muted bg-center bg-cover shadow-lifted-tile"
@@ -309,7 +383,9 @@ const LibraryGalleryEditor = ({
 					style={{
 						left: drag.x - 120,
 						top: drag.y - 85,
-						backgroundImage: `url("${encodeURI(lifted.image)}")`,
+						backgroundImage: liftedImage.status
+							? undefined
+							: `url("${resolveImage ? liftedImage.src : encodeURI(liftedImage.src)}")`,
 					}}
 				/>
 			) : null}

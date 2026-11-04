@@ -1482,6 +1482,9 @@ navigation-librarydocumentblockeditor--gallery-beyond-five
 navigation-librarydocumentblockeditor--gallery-editing
 navigation-librarydocumentblockeditor--gallery-editing-at-320
 navigation-librarydocumentblockeditor--gallery-editing-dark
+navigation-librarydocumentblockeditor--gallery-image-failing
+navigation-librarydocumentblockeditor--gallery-image-resolving
+navigation-librarydocumentblockeditor--gallery-images-resolved
 navigation-librarydocumentblockeditor--gallery-remove-and-caption
 navigation-librarydocumentblockeditor--gallery-tile-dragged
 navigation-librarydocumentblockeditor--handle-menu-deletes

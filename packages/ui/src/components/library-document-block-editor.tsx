@@ -373,6 +373,7 @@ type LibraryDocumentBlockEditorProps = WriterActions & {
 	writers?: LibraryDocumentWriter[]
 	people?: LibraryDocumentPerson[]
 	onAddImages?: () => Promise<LibraryGalleryImage[]>
+	resolveImage?: (src: string) => Promise<string>
 	onLinkPreview?: (url: string) => Promise<LibraryLinkPreview>
 	onCaretChange?: (caret: number | null) => void
 	placeholders?: LibraryDocumentPlaceholder[]
@@ -387,6 +388,7 @@ const LibraryDocumentBlockEditor = ({
 	onStop,
 	onOpenConversation,
 	onAddImages,
+	resolveImage,
 	onLinkPreview,
 	onCaretChange,
 	placeholders = NO_PLACEHOLDERS,
@@ -1013,6 +1015,7 @@ const LibraryDocumentBlockEditor = ({
 					onAddImages={onAddImages}
 					onEdit={onEdit}
 					onRemove={actionsFor(block.id).onDelete}
+					resolveImage={resolveImage}
 					source={source}
 				/>
 			)
