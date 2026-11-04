@@ -28,6 +28,31 @@ const runNodeOf = (id: string, value: string): MdastNode => ({
 	children: [{ type: "text", value }],
 })
 
+const isCaret = ({ start, end }: MarkdownRun) => start === end
+
+const textSpansOf = (node: MdastNode): [number, number][] => {
+	const from = node.position?.start.offset
+	const to = node.position?.end.offset
+	if (node.type === "text")
+		return from === undefined || to === undefined ? [] : [[from, to]]
+	return (node.children ?? []).flatMap(textSpansOf)
+}
+
+const caretsSnappedToText = (runs: MarkdownRun[], tree: MdastNode) => {
+	const spans = textSpansOf(tree)
+	const last = spans.at(-1)
+	if (!last) return runs
+	return runs.map((run) => {
+		if (
+			!isCaret(run) ||
+			spans.some(([from, to]) => from <= run.start && run.start <= to)
+		)
+			return run
+		const at = spans.find(([from]) => from > run.start)?.[0] ?? last[1]
+		return { ...run, start: at, end: at }
+	})
+}
+
 const cutsOf = (node: MdastNode, runs: MarkdownRun[]): Cut[] => {
 	const value = node.value ?? ""
 	const from = node.position?.start.offset
@@ -36,16 +61,21 @@ const cutsOf = (node: MdastNode, runs: MarkdownRun[]): Cut[] => {
 	const isVerbatim = to - from === value.length
 
 	return runs
-		.filter((run) => run.start < to && run.end > from)
-		.map((run) =>
-			isVerbatim
-				? {
-						from: Math.max(run.start, from) - from,
-						to: Math.min(run.end, to) - from,
-						id: run.id,
-					}
-				: { from: 0, to: value.length, id: run.id },
+		.filter((run) =>
+			isCaret(run)
+				? from <= run.start && run.start <= to
+				: run.start < to && run.end > from,
 		)
+		.map((run) => {
+			if (isVerbatim)
+				return {
+					from: Math.max(run.start, from) - from,
+					to: Math.min(run.end, to) - from,
+					id: run.id,
+				}
+			const start = isCaret(run) ? value.length : 0
+			return { from: start, to: value.length, id: run.id }
+		})
 		.sort((left, right) => left.from - right.from)
 }
 
@@ -70,8 +100,9 @@ const splitRuns = (node: MdastNode, runs: MarkdownRun[]) => {
 }
 
 const remarkRuns =
-	({ runs }: RemarkRunsOptions) =>
+	({ runs: received }: RemarkRunsOptions) =>
 	(tree: MdastNode) => {
+		const runs = caretsSnappedToText(received, tree)
 		const lastPieces = new Map<string, MdastNode>()
 
 		const rewrite = (node: MdastNode) => {
