@@ -16,7 +16,6 @@ import "@workspace/ui/lib/i18n"
 import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
 import type { TurnState } from "@workspace/ui/components/turn"
 
-import { ThreadDocumentsContext } from "@/components/thread-documents"
 import { RefusedTurn, ThreadTurn } from "@/components/thread-turn"
 import {
 	type AnswerActions,
@@ -83,15 +82,6 @@ type TurnSetup = {
 	onRetry?: (messageId: string) => void
 	onReply?: (target: ReplyTarget) => void
 	actions?: AnswerActions
-	documents?: string[]
-}
-
-const THREAD_DOCUMENTS = {
-	spaceId: "space-on-screen",
-	isJoined: false,
-	openedName: null,
-	open: () => undefined,
-	close: () => undefined,
 }
 
 const renderTurn = (
@@ -104,11 +94,10 @@ const renderTurn = (
 		onRetry,
 		onReply = () => undefined,
 		actions,
-		documents,
 	}: TurnSetup = {},
 ) => {
 	const props: ComponentProps<typeof ThreadTurn> = {
-		row: { ...rowOf(role, text), ...author, documents: documents ?? [] },
+		row: { ...rowOf(role, text), ...author },
 		anchor: "m-1",
 		state,
 		readerName: "Ada Moreau",
@@ -131,11 +120,7 @@ const renderTurn = (
 			createElement(
 				ThreadAuthorshipContext.Provider,
 				{ value: authorship },
-				createElement(
-					ThreadDocumentsContext,
-					{ value: documents ? THREAD_DOCUMENTS : null },
-					createElement(ThreadTurn, props),
-				),
+				createElement(ThreadTurn, props),
 			),
 		),
 		{ wrapper: createQueryTestWrapper().wrapper },
@@ -677,60 +662,4 @@ describe("a message of yours that did not send", () => {
 
 		expect(onSendAgain).toHaveBeenCalledWith("m-9")
 	})
-
-	it("keeps the documents it carries under its bubble", () => {
-		render(
-			createElement(
-				ThreadDocumentsContext,
-				{ value: THREAD_DOCUMENTS },
-				createElement(RefusedTurn, {
-					message: {
-						id: "m-9",
-						text: "Here is the brief.",
-						repliedToMessageId: null,
-						replyLinks: [],
-						documents: ["brief.md"],
-					},
-					readerName: "Ada Moreau",
-					onSendAgain: () => undefined,
-				}),
-			),
-			{ wrapper: createQueryTestWrapper().wrapper },
-		)
-
-		const card = screen.getByRole("article", { name: "brief" })
-		expect(card.closest('[data-slot="turn-footer"]')).not.toBeNull()
-		expect(card.closest('[data-slot="message-bubble-content"]')).toBeNull()
-	})
-})
-
-describe("a person message carrying Library documents", () => {
-	const RELAYED: MessageAuthorship = {
-		authorAccountId: "account-zoe",
-		authorName: "Zoe",
-		writtenFrom: "relay",
-	}
-
-	const footerOf = (text: string) =>
-		screen
-			.getByText(text)
-			.closest('[data-slot="message"]')
-			?.querySelector('[data-slot="turn-footer"]') ?? null
-
-	it.each([
-		["the reader", undefined],
-		["another person", RELAYED],
-	])(
-		"draws the card under the bubble of %s, never inside it",
-		(_who, author) => {
-			renderTurn("user", "Here is the brief.", {
-				author,
-				documents: ["brief.md"],
-			})
-
-			const card = screen.getByRole("article", { name: "brief" })
-			expect(footerOf("Here is the brief.")?.contains(card)).toBe(true)
-			expect(card.closest('[data-slot="message-bubble-content"]')).toBeNull()
-		},
-	)
 })
