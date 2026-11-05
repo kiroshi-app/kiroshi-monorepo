@@ -647,6 +647,18 @@ const common = {
 			},
 		},
 	},
+	board: {
+		empty: {
+			title: "An empty board",
+			body: "Pick a tool below, paste a link or an image, or drag something in from the Library. Agents in this Space can draw here too.",
+		},
+		zoom: {
+			controls: "Zoom",
+			zoomOut: "Zoom out",
+			zoomIn: "Zoom in",
+			level: "{{percent}}%",
+		},
+	},
 	whatsNew: {
 		firstLaunch: {
 			eyebrow: "New in {{version}}",

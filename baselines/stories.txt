@@ -1459,6 +1459,12 @@ navigation-apptitlebar--tear-off-reports-the-tab
 navigation-apptitlebar--unpinned-tab-menu
 navigation-apptitlebar--unpinned-tab-menu-dark
 navigation-apptitlebar--with-window-controls
+navigation-boardcanvas--empty
+navigation-boardcanvas--empty-dark
+navigation-boardcanvas--five-hundred-objects
+navigation-boardcanvas--five-hundred-objects-dark
+navigation-boardcanvas--zoom-at-maximum
+navigation-boardcanvas--zoom-at-minimum
 navigation-conversationbotpile--edged-members
 navigation-conversationbotpile--edged-members-dark
 navigation-conversationbotpile--five-bots-show-two-and-a-counter

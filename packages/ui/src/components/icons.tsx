@@ -380,6 +380,8 @@ const Icons = {
 	Web: GlobeIcon,
 	Write: PenLineIcon,
 	X,
+	ZoomIn: PlusIcon,
+	ZoomOut: MinusIcon,
 	Conversations: MessageIcon,
 	Missions: FlagIcon,
 	Library: BookIcon,

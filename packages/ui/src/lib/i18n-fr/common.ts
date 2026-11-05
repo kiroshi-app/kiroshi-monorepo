@@ -677,6 +677,18 @@ const common = {
 			},
 		},
 	},
+	board: {
+		empty: {
+			title: "Un tableau vide",
+			body: "Choisissez un outil ci-dessous, collez un lien ou une image, ou glissez un élément depuis la Bibliothèque. Les agents de cet espace peuvent aussi dessiner ici.",
+		},
+		zoom: {
+			controls: "Zoom",
+			zoomOut: "Dézoomer",
+			zoomIn: "Zoomer",
+			level: "{{percent}} %",
+		},
+	},
 	whatsNew: {
 		firstLaunch: {
 			eyebrow: "Nouveautés de la version {{version}}",
