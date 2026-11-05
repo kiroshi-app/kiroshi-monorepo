@@ -167,6 +167,7 @@ const aNavigation = (): TracedNavigation => {
 				trace.push(`landing:${messageId}:${seq}`),
 			openThreadInNewTab: (thread) =>
 				trace.push(`new-tab:${JSON.stringify(thread)}`),
+			openConversation: async ({ openInPlace }) => openInPlace(),
 		},
 	}
 }

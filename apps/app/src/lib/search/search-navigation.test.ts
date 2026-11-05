@@ -9,7 +9,7 @@ import {
 
 const ROW = { kind: "bot", id: "bot-1" } as const
 
-const tracedNavigation = () => {
+const tracedNavigation = (isShownInATab = false) => {
 	const trace: string[] = []
 
 	const navigation: SearchNavigation = {
@@ -23,6 +23,14 @@ const tracedNavigation = () => {
 		recordLanding: ({ messageId }) => trace.push(`landing:${messageId}`),
 		openThreadInNewTab: (thread, spaceId = "open") =>
 			trace.push(`new-tab:${JSON.stringify(thread)}:${spaceId}`),
+		openConversation: async ({ conversationId, openInPlace }) => {
+			trace.push(`open:${conversationId}`)
+			if (isShownInATab) {
+				trace.push(`revealed:${conversationId}`)
+				return
+			}
+			openInPlace()
+		},
 	}
 
 	return { navigation, trace }
@@ -100,4 +108,41 @@ it("opens a Cmd-clicked result of another Space in a background tab of that Spac
 	)
 
 	expect(trace).toEqual(['new-tab:{"bot":"bot-1","mission":"mi-1"}:space-2'])
+})
+
+const CONVERSATION_HIT: SearchTarget = {
+	kind: "chat",
+	row: { kind: "conversation", id: "c-1" },
+	spaceId: "space-1",
+	landing: { conversationId: "c-1", messageId: "m-1", seq: 7 },
+}
+
+it("opens a conversation result in place through the shared path when no tab shows it", () => {
+	const { navigation, trace } = tracedNavigation()
+
+	openSearchTarget(CONVERSATION_HIT, navigation)
+
+	expect(trace).toEqual([
+		"landing:m-1",
+		"open:c-1",
+		"mission:left",
+		"conversation:c-1",
+		"space:space-1",
+	])
+})
+
+it("brings forward the tab showing a conversation result and leaves the shown thread alone", () => {
+	const { navigation, trace } = tracedNavigation(true)
+
+	openSearchTarget(CONVERSATION_HIT, navigation)
+
+	expect(trace).toEqual(["landing:m-1", "open:c-1", "revealed:c-1"])
+})
+
+it("opens a Cmd-clicked conversation result in a background tab even when a tab shows it", () => {
+	const { navigation, trace } = tracedNavigation(true)
+
+	openSearchTargetInNewTab(CONVERSATION_HIT, "space-1", navigation)
+
+	expect(trace).toEqual(['new-tab:{"conversation":"c-1"}:open'])
 })

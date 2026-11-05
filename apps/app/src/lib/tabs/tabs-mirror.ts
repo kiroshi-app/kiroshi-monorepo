@@ -40,10 +40,13 @@ type KeptSpaceTabs = {
 const windowTabsPrefixOf = (windowLabel: string) =>
 	`${WINDOW_TABS_KEY_PREFIX}${windowLabel}:`
 
-const keyOf = (windowLabel: string, spaceId: string) =>
+const spaceTabsPrefixOf = (windowLabel: string) =>
 	windowLabel === MAIN_WINDOW_LABEL
-		? `${SPACE_TABS_KEY_PREFIX}${spaceId}`
-		: `${windowTabsPrefixOf(windowLabel)}${spaceId}`
+		? SPACE_TABS_KEY_PREFIX
+		: windowTabsPrefixOf(windowLabel)
+
+const keyOf = (windowLabel: string, spaceId: string) =>
+	`${spaceTabsPrefixOf(windowLabel)}${spaceId}`
 
 const openWindowKeyOf = (windowLabel: string) =>
 	`${OPEN_WINDOW_KEY_PREFIX}${windowLabel}`
@@ -144,6 +147,11 @@ const removeKeys = (keys: string[]) => {
 	for (const key of keys) {
 		localStorage.removeItem(key)
 	}
+}
+
+export const keptSpaceIdsOf = (windowLabel: string) => {
+	const prefix = spaceTabsPrefixOf(windowLabel)
+	return keysStartingWith(prefix).map((key) => key.slice(prefix.length))
 }
 
 export const openWindowLabels = () =>

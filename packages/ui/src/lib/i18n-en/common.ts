@@ -72,6 +72,11 @@ const common = {
 			title: "Couldn’t move the tab",
 			description: "The tab stayed here. Drag it to the other window again.",
 		},
+		revealTabFailed: {
+			title: "Couldn’t bring the other window forward",
+			description:
+				"The conversation is open in another window. Switch to that window to see it.",
+		},
 		reopenWindowFailed: {
 			title: "Couldn’t reopen a window",
 			description: "Its tabs were closed. Open them again from the sidebar.",

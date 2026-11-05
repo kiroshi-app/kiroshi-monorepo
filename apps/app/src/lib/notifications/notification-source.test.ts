@@ -26,6 +26,7 @@ import type {
 	MissionState,
 } from "../missions/mission-contract"
 import { aMission } from "../missions/mission-fixtures"
+import type { ConversationTarget } from "../tabs/conversation-tab-opening"
 
 const BOT = { kind: "bot", id: "bot-one" } as const
 
@@ -204,6 +205,11 @@ const createFakeRoster = (
 	}
 }
 
+const createFakeConversations = () => ({
+	open: vi.fn(async ({ openInPlace }: ConversationTarget) => openInPlace()),
+	openInNewTab: vi.fn(),
+})
+
 const createFakeJoinedSpaces = () => ({
 	getState: () => ({ joinedSpaces: [{ id: JOINED_HOST }] }),
 	selectSpace: vi.fn(),
@@ -230,6 +236,7 @@ type Harness = {
 	roster: ReturnType<typeof createFakeRoster>
 	spaces: { select: ReturnType<typeof vi.fn> }
 	joinedSpaces: ReturnType<typeof createFakeJoinedSpaces>
+	conversations: ReturnType<typeof createFakeConversations>
 	missions: FakeMissions
 	notifications: FakeNotificationPort
 	spokenWords: ReturnType<typeof createSpokenWords>
@@ -251,6 +258,7 @@ const start = async (
 	const roster = createFakeRoster(bots, conversations)
 	const spaces = { select: vi.fn() }
 	const joinedSpaces = createFakeJoinedSpaces()
+	const tabOpening = createFakeConversations()
 	const missions = createFakeMissions()
 	const notifications = createFakeNotificationPort()
 	const spokenWords = createSpokenWords()
@@ -264,6 +272,7 @@ const start = async (
 		roster,
 		spaces,
 		joinedSpaces,
+		conversations: tabOpening,
 		missions,
 		spokenWords,
 		notifications,
@@ -283,6 +292,7 @@ const start = async (
 		roster,
 		spaces,
 		joinedSpaces,
+		conversations: tabOpening,
 		missions,
 		notifications,
 		spokenWords,
@@ -754,18 +764,34 @@ describe("startNotificationSource on a conversation", () => {
 		expect(harness.playChime).toHaveBeenCalledTimes(1)
 	})
 
-	it("shows the window and opens the conversation the click carries", async () => {
+	it("shows the window and opens the conversation the click carries in a new tab of its Space", async () => {
 		const raiseWindow = vi.fn(async () => undefined)
 		const harness = await start({ raiseWindow })
 
 		harness.notifications.activate(ROOM)
 
 		expect(raiseWindow).toHaveBeenCalled()
-		expect(harness.roster.selectConversation).toHaveBeenCalledWith("room-one")
+		expect(harness.conversations.open).toHaveBeenCalledExactlyOnceWith(
+			expect.objectContaining({ conversationId: "room-one" }),
+		)
+		expect(harness.conversations.openInNewTab).toHaveBeenCalledExactlyOnceWith(
+			"room-one",
+			SPACE,
+		)
 		expect(harness.roster.select).not.toHaveBeenCalled()
 	})
 
-	it("shows the window and leaves the selection alone for a conversation that is gone", async () => {
+	it("opens no new tab when a tab already shows the conversation the click carries", async () => {
+		const harness = await start()
+		harness.conversations.open.mockImplementation(async () => undefined)
+
+		harness.notifications.activate(ROOM)
+
+		expect(harness.conversations.open).toHaveBeenCalledOnce()
+		expect(harness.conversations.openInNewTab).not.toHaveBeenCalled()
+	})
+
+	it("shows the window and opens no tab for a conversation that is gone", async () => {
 		const raiseWindow = vi.fn(async () => undefined)
 		const harness = await start({ raiseWindow })
 		harness.roster.holdConversations([])
@@ -773,7 +799,7 @@ describe("startNotificationSource on a conversation", () => {
 		harness.notifications.activate(ROOM)
 
 		expect(raiseWindow).toHaveBeenCalled()
-		expect(harness.roster.selectConversation).not.toHaveBeenCalled()
+		expect(harness.conversations.openInNewTab).not.toHaveBeenCalled()
 	})
 
 	it("forgets the round of a conversation whose runtime was let go", async () => {

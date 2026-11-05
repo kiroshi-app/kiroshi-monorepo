@@ -16,6 +16,7 @@ import {
 	createOpenedMissionController,
 	type SelectedRow,
 } from "../missions/opened-mission-controller"
+import type { ConversationTarget } from "../tabs/conversation-tab-opening"
 
 const { reportFailure } = vi.hoisted(() => ({ reportFailure: vi.fn() }))
 
@@ -25,6 +26,10 @@ vi.mock("../failure-report", async (importOriginal) => ({
 }))
 
 const UNUSED = {} as never
+
+const OPENS_IN_PLACE = {
+	open: async ({ openInPlace }: ConversationTarget) => openInPlace(),
+}
 
 const NO_JOINED_SPACES = {
 	getState: () => ({ joinedSpaces: [], openId: null, departed: null }),
@@ -38,6 +43,7 @@ const gearFor = (settings: SidebarActionsSource["settings"]) => {
 	const source: SidebarActionsSource = {
 		attachments: UNUSED,
 		collapsedSections: UNUSED,
+		conversations: UNUSED,
 		drafts: UNUSED,
 		joinedSpaces: NO_JOINED_SPACES,
 		openedMission: UNUSED,
@@ -70,7 +76,10 @@ describe("the rail gear", () => {
 	})
 })
 
-const rowsFor = (selected: SelectedRow) => {
+const rowsFor = (
+	selected: SelectedRow,
+	conversations: SidebarActionsSource["conversations"] = OPENS_IN_PLACE,
+) => {
 	const roster = createStore(selected)
 	const openedMission = createOpenedMissionController(roster)
 	const rows = {
@@ -85,6 +94,7 @@ const rowsFor = (selected: SelectedRow) => {
 	const source: SidebarActionsSource = {
 		attachments: UNUSED,
 		collapsedSections: UNUSED,
+		conversations,
 		drafts: UNUSED,
 		joinedSpaces: UNUSED,
 		openedMission,
@@ -141,10 +151,48 @@ describe("a row click while a mission is open", () => {
 	})
 })
 
+describe("a conversation row click", () => {
+	it("goes through the shared path and leaves the shown tab alone when a tab already shows it", () => {
+		const conversations = { open: vi.fn(async () => undefined) }
+		const shown = rowsFor(
+			{ selectedBotId: "b-1", selectedConversationId: null },
+			conversations,
+		)
+		shown.openedMission.open({ missionId: "m-1", rowId: "b-1", spaceId: "s-1" })
+
+		shown.actions().onSelectConversation("c-2")
+
+		expect(conversations.open).toHaveBeenCalledExactlyOnceWith(
+			expect.objectContaining({ conversationId: "c-2" }),
+		)
+		expect(shown.rows.selectConversation).not.toHaveBeenCalled()
+		expect(shown.openedMission.getState()).not.toBeNull()
+	})
+
+	it("opens a background tab on a middle-click even when a tab already shows it", () => {
+		const conversations = { open: vi.fn(async () => undefined) }
+		const shown = newTabFor(SHOWN_BOT, conversations)
+
+		shown.actions.onSelectConversation("c-2", {
+			meta: false,
+			ctrl: false,
+			shift: false,
+			middle: true,
+		})
+
+		expect(shown.settings.openThreadInNewTab).toHaveBeenCalledExactlyOnceWith({
+			conversation: "c-2",
+		})
+		expect(conversations.open).not.toHaveBeenCalled()
+		expect(shown.roster.getState()).toEqual(SHOWN_BOT)
+	})
+})
+
 const idleActions = () => {
 	const source: SidebarActionsSource = {
 		attachments: UNUSED,
 		collapsedSections: UNUSED,
+		conversations: UNUSED,
 		drafts: UNUSED,
 		joinedSpaces: UNUSED,
 		openedMission: UNUSED,
@@ -166,7 +214,10 @@ describe("the roster row", () => {
 	})
 })
 
-const newTabFor = (selected: SelectedRow) => {
+const newTabFor = (
+	selected: SelectedRow,
+	conversations: SidebarActionsSource["conversations"] = OPENS_IN_PLACE,
+) => {
 	const roster = createStore(selected)
 	const openedMission = createOpenedMissionController(roster)
 	openedMission.open({ missionId: "m-1", rowId: "b-1", spaceId: "s-1" })
@@ -185,6 +236,7 @@ const newTabFor = (selected: SelectedRow) => {
 	const source: SidebarActionsSource = {
 		attachments: UNUSED,
 		collapsedSections: UNUSED,
+		conversations,
 		drafts: UNUSED,
 		joinedSpaces: UNUSED,
 		openedMission,
@@ -248,6 +300,7 @@ const deletionFor = ({ release, removeConversation }: Deletion) => {
 	const source: SidebarActionsSource = {
 		attachments: attachments as never,
 		collapsedSections: UNUSED,
+		conversations: UNUSED,
 		drafts,
 		joinedSpaces: UNUSED,
 		openedMission: UNUSED,

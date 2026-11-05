@@ -66,6 +66,7 @@ export const useSearchNavigation = ({
 	landings,
 	user,
 	threads,
+	conversations,
 }: SearchNavigationSource): SearchNavigation =>
 	useMemo(
 		() =>
@@ -77,8 +78,18 @@ export const useSearchNavigation = ({
 				landings,
 				user,
 				threads,
+				conversations,
 			}),
-		[roster, spaces, missions, routines, landings, user, threads],
+		[
+			roster,
+			spaces,
+			missions,
+			routines,
+			landings,
+			user,
+			threads,
+			conversations,
+		],
 	)
 
 export const useSearch = ({

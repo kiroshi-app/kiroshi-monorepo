@@ -48,6 +48,7 @@ import type { MissionSpeakingRuntimes } from "@/lib/missions/use-live-missions"
 import { createOpenedController } from "@/lib/opened-controller"
 import { invalidateOnHostReconnect } from "@/lib/query/host-invalidations"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
+import type { ConversationTarget } from "@/lib/tabs/conversation-tab-opening"
 
 vi.mock("@/lib/missions/missions-transport", () => ({
 	missionsTransport: {
@@ -160,6 +161,9 @@ const sidebarMissionsWiring = () => {
 	const openedMission = createOpenedController<OpenedMission>()
 	const open = vi.spyOn(openedMission, "open")
 	const openThreadInNewTab = vi.fn()
+	const openConversation = vi.fn(async (target: ConversationTarget) =>
+		target.openInPlace(),
+	)
 	const threads: MissionSpeakingRuntimes = createFakeThreadRuntimes().runtimes
 	const runtimes = {
 		...threads,
@@ -170,6 +174,7 @@ const sidebarMissionsWiring = () => {
 	}
 	const inputFor = (selectedSpaceId: string | null) => ({
 		core: {
+			conversationOpening: { open: openConversation },
 			conversationRuntimes: runtimes,
 			openedMission,
 			roster: {
@@ -192,6 +197,7 @@ const sidebarMissionsWiring = () => {
 		open,
 		openedMission,
 		openThreadInNewTab,
+		openConversation,
 	}
 }
 
@@ -321,6 +327,21 @@ describe("useSidebarMissions", () => {
 			selectConversation.mock.invocationCallOrder[0],
 		)
 		expect(select).not.toHaveBeenCalled()
+	})
+
+	it("opens the mission on a listed conversation through the shared conversation path", async () => {
+		const { result, selectConversation, open, openConversation } =
+			renderSidebarMissions()
+		openConversation.mockImplementation(async () => undefined)
+		await waitFor(() => expect(panelOf(result.current).open).toHaveLength(2))
+
+		panelOf(result.current).onOpen("m-working", "c-2", NO_CLICK_MODIFIERS)
+
+		expect(openConversation).toHaveBeenCalledWith(
+			expect.objectContaining({ conversationId: "c-2", mission: "m-working" }),
+		)
+		expect(selectConversation).not.toHaveBeenCalled()
+		expect(open).not.toHaveBeenCalled()
 	})
 
 	it("opens the mission on its bot, then selects the bot, when its conversation is not listed", async () => {

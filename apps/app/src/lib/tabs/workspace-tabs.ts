@@ -31,6 +31,7 @@ import {
 	forgetWindow,
 	handOverWindow,
 	keepCarriedTab,
+	keptSpaceIdsOf,
 	MAIN_WINDOW_LABEL,
 	openWindowLabels,
 	readCarriedTab,
@@ -103,11 +104,17 @@ type LeaveGuard = (leave: () => void) => void
 
 export type WorkspaceTabs = {
 	history: RouterHistory
+	windowLabel: string
 	isMainWindow: boolean
 	reopenedSpaceId: string | null
 	getState: () => WorkspaceTabsState
 	subscribe: (listener: () => void) => () => void
 	showSpace: (spaceId: string) => void
+	findSpace: (isWanted: (space: SpaceTabs) => boolean) => string | null
+	changeSpace: (
+		spaceId: string,
+		update: (space: SpaceTabs) => SpaceTabs,
+	) => void
 	openEmptyTab: () => void
 	openInNewTab: (href: string, spaceId?: string) => void
 	back: () => void
@@ -618,6 +625,33 @@ export const createWorkspaceTabs = (
 		askingChange((space) => selectTab(space, tab.id))
 	}
 
+	const spaceIdsInReach = () => {
+		const { spaceId, bySpace } = store.getState()
+		const reachable = [
+			spaceId,
+			...Object.keys(bySpace),
+			...keptSpaceIdsOf(windowLabel),
+		]
+		return [...new Set(reachable)].filter((id) => id !== NO_SPACE)
+	}
+
+	const findSpace = (isWanted: (space: SpaceTabs) => boolean) =>
+		spaceIdsInReach().find((spaceId) => {
+			const reached = heldOrRestoredTabsOf(spaceId)
+			return reached !== null && isWanted(reached.space)
+		}) ?? null
+
+	const changeSpace = (
+		spaceId: string,
+		update: (space: SpaceTabs) => SpaceTabs,
+	) => {
+		if (spaceId === store.getState().spaceId) {
+			askingChange(update)
+			return
+		}
+		changeAway(spaceId, update)
+	}
+
 	const reachSpace = (spaceId: string) => {
 		const state = store.getState()
 		const { space, isRestored } = reachedTabsOf(spaceId)
@@ -639,6 +673,7 @@ export const createWorkspaceTabs = (
 
 	return {
 		history,
+		windowLabel,
 		isMainWindow,
 		reopenedSpaceId,
 		getState: store.getState,
@@ -650,6 +685,8 @@ export const createWorkspaceTabs = (
 			}
 			askBeforeLeaving(() => reachSpace(spaceId))
 		},
+		findSpace,
+		changeSpace,
 		openEmptyTab: () => askingChange(openEmptyTab),
 		openInNewTab: (href, spaceId = store.getState().spaceId) => {
 			const update = (space: SpaceTabs) => openBackgroundTab(space, href)

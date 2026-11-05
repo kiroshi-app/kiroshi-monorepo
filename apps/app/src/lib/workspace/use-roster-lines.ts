@@ -28,6 +28,7 @@ export const useRosterLines = ({
 		attachments,
 		chat,
 		collapsedSections,
+		conversationOpening,
 		conversationRuntimes,
 		drafts,
 		joinedSpaces,
@@ -56,6 +57,7 @@ export const useRosterLines = ({
 	const sidebarActions = useSidebarActions({
 		attachments,
 		collapsedSections: collapsedSections.controller,
+		conversations: conversationOpening,
 		drafts,
 		joinedSpaces: joinedSpaces.controller,
 		openedMission,
