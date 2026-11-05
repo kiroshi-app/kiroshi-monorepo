@@ -20,7 +20,7 @@ use super::presence::{seat_writer, unseat_writer, Seat, Seated};
 use super::{
 	a_document, announce, announce_change, create_document, delete_item, document_text, documents,
 	encoded_content, import_path, list, overwrite_path, read_document, rename_linked_document,
-	resolve, root, AcceptedType,
+	resolve, root, AcceptedType, OverwriteRefusal,
 };
 use crate::agent::contract::RuntimeScope;
 use crate::agent::host::{Host, Refusal};
@@ -58,6 +58,12 @@ pub enum DocumentRefusal {
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum ToolRefusal {
 	PassageNotFound,
+	#[serde(rename_all = "camelCase")]
+	FormatMismatch {
+		name: String,
+		mime_type: String,
+		produced_mime_type: String,
+	},
 	PassageNotUnique {
 		occurrences: usize,
 	},
@@ -307,13 +313,6 @@ impl<R: Runtime> LibraryHost<R> {
 		writing.at(&caret);
 		let writer = client_id_of(&agent.id);
 		let mut name = asked.name.clone();
-		if let Some(end) = passage_end {
-			let step = RemoveStep { writer, start: &caret, end: &end };
-			let removed = documents(&self.app).remove(root, space_id, &asked.name, &step)?;
-			announce(&self.app, space_id, &removed.name, &removed.change);
-			(name, caret) = (removed.name, removed.caret);
-			writing.at(&caret);
-		}
 		for (index, text) in steps(&asked.text).into_iter().enumerate() {
 			if index > 0 {
 				tokio::time::sleep(STEP_PAUSE).await;
@@ -325,6 +324,16 @@ impl<R: Runtime> LibraryHost<R> {
 			let written = documents(&self.app).write(root, space_id, &asked.name, &step)?;
 			announce(&self.app, space_id, &written.name, &written.change);
 			(name, caret) = (written.name, written.caret);
+			writing.at(&caret);
+		}
+		if let Some(end) = passage_end {
+			if turn.is_stopped() {
+				return Err(ToolRefusal::Stopped.into());
+			}
+			let step = RemoveStep { writer, start: &caret, end: &end };
+			let removed = documents(&self.app).remove(root, space_id, &asked.name, &step)?;
+			announce(&self.app, space_id, &removed.name, &removed.change);
+			(name, caret) = (removed.name, removed.caret);
 			writing.at(&caret);
 		}
 		writing.outcome = LibraryWriteOutcome::Finished;
@@ -698,6 +707,21 @@ fn steps(text: &str) -> Vec<&str> {
 impl From<LibraryError> for DocumentRefusal {
 	fn from(error: LibraryError) -> Self {
 		Self::Library(error)
+	}
+}
+
+impl From<OverwriteRefusal> for DocumentRefusal {
+	fn from(refusal: OverwriteRefusal) -> Self {
+		match refusal {
+			OverwriteRefusal::Library(error) => Self::Library(error),
+			OverwriteRefusal::FormatMismatch { name, mime_type, produced_mime_type } => {
+				Self::Tool(ToolRefusal::FormatMismatch {
+					name,
+					mime_type: mime_type.to_owned(),
+					produced_mime_type: produced_mime_type.to_owned(),
+				})
+			}
+		}
 	}
 }
 

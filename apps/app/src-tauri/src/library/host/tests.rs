@@ -803,6 +803,44 @@ async fn an_overwriting_import_of_an_image_changes_it_in_place_with_a_new_thumbn
 	);
 }
 
+fn jpeg_of(edge: u32) -> Vec<u8> {
+	let mut jpeg = Vec::new();
+	DynamicImage::ImageRgb8(RgbImage::from_pixel(edge, edge, Rgb([40, 40, 200])))
+		.write_to(&mut Cursor::new(&mut jpeg), ImageFormat::Jpeg)
+		.expect("the image encodes");
+	jpeg
+}
+
+#[tokio::test]
+async fn an_overwriting_import_of_an_image_in_another_format_is_refused_naming_both() {
+	let (app, root) = a_host("overwrite-format").await;
+	put_bytes(&root, "chart.jpg", &jpeg_of(4));
+	modified_at(&root, "chart.jpg", 1_000);
+	read_thumbnail(&root, SPACE, "chart.jpg").expect("the thumbnail lands");
+	let thumbnail = thumbnail_bytes(&root);
+	let changes = heard::<LibraryChanged>(&app, events::LIBRARY_CHANGED.name());
+	let source = produced(&root, "chart.png", &png_of(8));
+	let host = the_host(&app);
+
+	let refused =
+		host.served(Operation::Import, json!({ "path": source, "overwrite": "chart.jpg" })).await;
+
+	assert_eq!(
+		refusal_of(refused),
+		json!({
+			"kind": "formatMismatch",
+			"name": "chart.jpg",
+			"mimeType": "image/jpeg",
+			"producedMimeType": "image/png",
+		})
+	);
+	assert_eq!(std::fs::read(root.join(SPACE).join("chart.jpg")).expect("kept"), jpeg_of(4));
+	assert_eq!(thumbnail_bytes(&root), thumbnail);
+	let listed = host.served(Operation::List, json!({})).await.expect("lists");
+	assert_eq!(listed["items"][0]["updatedAt"], 1_000_000);
+	assert_eq!(all_of(&changes), []);
+}
+
 #[tokio::test]
 async fn an_overwriting_import_into_another_kind_or_an_absent_name_changes_nothing() {
 	let (app, root) = a_host("overwrite-refused").await;
@@ -1130,6 +1168,22 @@ async fn a_stop_without_an_agent_stops_every_agent_writing_and_leaves_the_member
 	let last = all_of(&presences).pop().expect("a presence was published");
 	assert_eq!(named(&last.writers), [(LibraryWriterKind::Member, Some("Ana"))]);
 	assert_eq!(stopped(&app, None).await, CancelOutcome::NothingToCancel);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_whole_rewrite_stopped_mid_way_keeps_the_old_text_and_answers_stopped() {
+	let (app, root) = two_agents_writing("stop-whole").await;
+	let host = the_host(&app);
+	let asked = json!({ "name": "notes.md", "whole": true, "text": "n".repeat(200) });
+	let rewriting = tokio::spawn(async move { host.served(Operation::Write, asked).await });
+	tokio::time::sleep(STEP_PAUSE * 3).await;
+
+	assert_eq!(stopped(&app, Some("b1")).await, CancelOutcome::Cancelled);
+
+	assert_eq!(refusal_kind(rewriting.await.expect("the stopped write ends")), "stopped");
+	let text = on_disk(&root, "notes.md");
+	assert!(text.ends_with("Base."), "{text}");
+	assert!(text.matches('n').count() < 200, "{text}");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

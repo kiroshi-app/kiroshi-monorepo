@@ -735,16 +735,38 @@ fn produced_file(path: &Path) -> Result<ProducedFile, LibraryError> {
 	Ok(ProducedFile { name, accepted, bytes })
 }
 
+#[derive(Debug)]
+pub(crate) enum OverwriteRefusal {
+	Library(LibraryError),
+	FormatMismatch { name: String, mime_type: &'static str, produced_mime_type: &'static str },
+}
+
+impl From<LibraryError> for OverwriteRefusal {
+	fn from(error: LibraryError) -> Self {
+		Self::Library(error)
+	}
+}
+
 pub(crate) fn overwrite_path<R: Runtime>(
 	app: &AppHandle<R>,
 	root: &Path,
 	space_id: &str,
 	path: &Path,
 	name: &str,
-) -> Result<LibraryItem, LibraryError> {
+) -> Result<LibraryItem, OverwriteRefusal> {
 	let file = produced_file(path)?;
 	let target = resolve(root, space_id, name)?;
 	match (file.accepted, target.accepted) {
+		(
+			AcceptedType::Image { mime_type: produced_mime_type },
+			AcceptedType::Image { mime_type },
+		) if produced_mime_type != mime_type => {
+			return Err(OverwriteRefusal::FormatMismatch {
+				name: name.to_owned(),
+				mime_type,
+				produced_mime_type,
+			});
+		}
 		(AcceptedType::Image { .. }, AcceptedType::Image { .. }) => {
 			let thumbnail = thumbnail_of(name, image_format(&target.path, name)?, &file.bytes)?;
 			documents(app).overwrite_image(root, space_id, name, &file.bytes, &thumbnail)?;
@@ -757,10 +779,10 @@ pub(crate) fn overwrite_path<R: Runtime>(
 			}
 		}
 		(AcceptedType::Image { .. }, AcceptedType::Document(_)) => {
-			return Err(LibraryError::NotAnImage { name: name.to_owned() });
+			return Err(LibraryError::NotAnImage { name: name.to_owned() }.into());
 		}
 		(AcceptedType::Document(_), AcceptedType::Image { .. }) => {
-			return Err(LibraryError::NotADocument { name: name.to_owned() });
+			return Err(LibraryError::NotADocument { name: name.to_owned() }.into());
 		}
 	}
 	let item = item_at(&space_dir(root, space_id).join(name), name.to_owned())?
