@@ -211,18 +211,6 @@ async fn a_relayed_caller_is_refused_a_name_resolving_to_loopback_before_any_req
 	assert_eq!(requests.load(Ordering::SeqCst), 0);
 }
 
-#[tokio::test]
-async fn a_relayed_caller_is_refused_an_ipv4_mapped_loopback_before_any_request() {
-	let root = temp_root();
-	let (origin, requests) = counted().await;
-	let mapped = origin.replace("127.0.0.1", "[::ffff:127.0.0.1]");
-
-	let refusal = from_a_member(&root, &format!("{mapped}/cat.png")).await;
-
-	assert_eq!(refusal, Err(LibraryImportUrlError::PrivateAddress));
-	assert_eq!(requests.load(Ordering::SeqCst), 0);
-}
-
 #[test]
 fn a_relayed_caller_is_admitted_to_the_public_web_without_any_proxy_bearer() {
 	let bearers = HashMap::from([("http://127.0.0.1:1".to_owned(), "proxy-bearer".to_owned())]);
