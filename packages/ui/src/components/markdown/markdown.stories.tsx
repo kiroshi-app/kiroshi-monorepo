@@ -2052,6 +2052,14 @@ export const AttachmentImageMidAnswer = meta.story({
 			"src",
 			resolvedAttachmentOf(CITED_IMAGE_PATH),
 		)
+		const first = canvas.getByText(/^Here is the patio/)
+		const last = canvas.getByText(/^The shade reaches the table/)
+		await expect(
+			first.compareDocumentPosition(image) & Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy()
+		await expect(
+			image.compareDocumentPosition(last) & Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy()
 		await userEvent.click(
 			canvas.getByRole("button", { name: CITED_IMAGE_CAPTION }),
 		)

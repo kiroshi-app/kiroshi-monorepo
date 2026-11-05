@@ -10,6 +10,7 @@ import {
 } from "@workspace/ui/components/markdown/answer-actions"
 import { rehypeAnswerMarks } from "@workspace/ui/components/markdown/answer-marks"
 import {
+	keepDrivePaths,
 	MarkdownAttachmentsContext,
 	type OpenAttachment,
 	useMarkdownAttachments,
@@ -126,6 +127,7 @@ export const Markdown = ({
 											[rehypeAnswerMarks, { isWriting }],
 										]}
 										remarkPlugins={remarkPlugins}
+										urlTransform={keepDrivePaths}
 									>
 										{children}
 									</ReactMarkdown>

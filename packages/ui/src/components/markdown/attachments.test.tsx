@@ -29,6 +29,11 @@ describe("attachmentPathOf", () => {
 		["photos/patio.jpg", "photos/patio.jpg"],
 		["/Users/ana/patio.jpg", "/Users/ana/patio.jpg"],
 		["reports/q3%20final.pdf", "reports/q3 final.pdf"],
+		["attachments/50% off.pdf", "attachments/50% off.pdf"],
+		["attachments/50%25%20off.pdf", "attachments/50% off.pdf"],
+		["C:/Users/me/report.pdf", "C:/Users/me/report.pdf"],
+		["C:\\Users\\me\\report.pdf", "C:\\Users\\me\\report.pdf"],
+		["C:%5CUsers%5Cme%5Creport.pdf", "C:\\Users\\me\\report.pdf"],
 	])("reads %s as the local path %s", (address, path) => {
 		expect(attachmentPathOf(address)).toBe(path)
 	})
@@ -78,6 +83,27 @@ describe("a cited attachment file", () => {
 		expect(html).toMatch(
 			/<p>Read <button type="button" aria-label="Open the Q3 report" data-slot="attachment-chip"[^>]*>.*PDF<\/span><\/span><\/button> before Friday\.<\/p>/,
 		)
+	})
+
+	it.each([
+		["a percent sign that is no escape", "attachments/50% off.pdf"],
+		["a Windows drive path", "C:/Users/me/report.pdf"],
+		["a Windows drive path with backslashes", "C:\\Users\\me\\report.pdf"],
+	])("draws the file chip for %s", (_, path) => {
+		const html = render({
+			children: `Before.\n\nRead [the report](<${path}>).\n\nAfter.`,
+			onOpenAttachment: openAttachment,
+		})
+
+		expect(html).toContain('aria-label="Open the report"')
+		expect(html).toContain("<p>After.</p>")
+	})
+
+	it("reads a Windows drive image as its caption without a resolver", () => {
+		const html = render({ children: "![The patio](<C:/Users/me/patio.jpg>)" })
+
+		expect(html).toContain("<p>The patio</p>")
+		expect(html).not.toContain("<img")
 	})
 
 	it("reads as its text without an opener", () => {
