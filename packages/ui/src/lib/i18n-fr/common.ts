@@ -688,6 +688,11 @@ const common = {
 			zoomIn: "Zoomer",
 			level: "{{percent}} %",
 		},
+		presence: {
+			drawing_one: "{{count}} agent dessine",
+			drawing_many: "{{count}} agents dessinent",
+			drawing_other: "{{count}} agents dessinent",
+		},
 		libraryCard: {
 			documentMeta: "Document · depuis la Bibliothèque",
 		},

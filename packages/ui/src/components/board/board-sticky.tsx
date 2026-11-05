@@ -21,6 +21,7 @@ type BoardStickyProps = {
 	colour: BoardStickyColour
 	text: string
 	author: BoardStickyAuthor
+	isAgentWriting?: boolean
 }
 
 type AuthorAvatarProps = { author: BoardStickyAuthor }
@@ -41,7 +42,12 @@ const AuthorAvatar = ({ author }: AuthorAvatarProps) =>
 		/>
 	)
 
-const BoardSticky = ({ colour, text, author }: BoardStickyProps) => (
+const BoardSticky = ({
+	colour,
+	text,
+	author,
+	isAgentWriting = false,
+}: BoardStickyProps) => (
 	<div
 		className={cn(
 			"flex size-40 flex-col justify-between rounded-[4px] p-4 text-board-sticky-foreground shadow-board-sticky",
@@ -55,6 +61,13 @@ const BoardSticky = ({ colour, text, author }: BoardStickyProps) => (
 			data-slot="board-sticky-text"
 		>
 			{text}
+			{isAgentWriting ? (
+				<span
+					aria-hidden="true"
+					className="inline-block h-5 w-0.5 rounded-[1px] bg-(--board-presence) align-top"
+					data-slot="board-sticky-caret"
+				/>
+			) : null}
 		</p>
 		<div
 			className="flex shrink-0 items-center gap-1.5"
