@@ -1,0 +1,99 @@
+{
+	"nodes": [
+		{
+			"id": "5c3f0a9e21b7d406",
+			"type": "group",
+			"x": -420,
+			"y": -300,
+			"width": 1180,
+			"height": 760,
+			"label": "Research",
+			"kiroshi": {
+				"kind": "section",
+				"z": "a0"
+			}
+		},
+		{
+			"id": "9a1e7c44b2f08d13",
+			"type": "text",
+			"x": -380,
+			"y": -260,
+			"width": 360,
+			"height": 120,
+			"text": "Questions for the **interview**",
+			"color": "4",
+			"kiroshi": {
+				"kind": "text",
+				"z": "a1"
+			}
+		},
+		{
+			"id": "0e6b2d7f9c835a11",
+			"type": "file",
+			"x": 20,
+			"y": -260,
+			"width": 400,
+			"height": 300,
+			"file": "Attachments/Whiteboard 1.PNG",
+			"kiroshi": {
+				"kind": "image",
+				"z": "a2"
+			}
+		},
+		{
+			"id": "7f04c1a9e6d2b358",
+			"type": "file",
+			"x": -380,
+			"y": -100,
+			"width": 360,
+			"height": 400,
+			"file": "Notes/Interview plan.md",
+			"subpath": "#Goals",
+			"kiroshi": {
+				"kind": "libraryCard",
+				"z": "a3"
+			}
+		},
+		{
+			"id": "21",
+			"type": "link",
+			"x": 460,
+			"y": -260,
+			"width": 260,
+			"height": 200,
+			"url": "https://obsidian.md",
+			"kiroshi": {
+				"kind": "linkCard",
+				"z": "a4"
+			}
+		}
+	],
+	"edges": [
+		{
+			"id": "3b9e5d07a4c1f286",
+			"fromNode": "7f04c1a9e6d2b358",
+			"fromSide": "bottom",
+			"fromEnd": "arrow",
+			"toNode": "21",
+			"toSide": "bottom",
+			"toEnd": "none",
+			"color": "#a882ff",
+			"label": "source",
+			"kiroshi": {
+				"routing": "straight"
+			}
+		},
+		{
+			"id": "d8a2f6e04b1c9735",
+			"fromNode": "9a1e7c44b2f08d13",
+			"fromSide": "right",
+			"fromEnd": "none",
+			"toNode": "0e6b2d7f9c835a11",
+			"toSide": "left",
+			"toEnd": "arrow",
+			"kiroshi": {
+				"routing": "straight"
+			}
+		}
+	]
+}

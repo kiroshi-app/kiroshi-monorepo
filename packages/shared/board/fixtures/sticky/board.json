@@ -1,0 +1,27 @@
+{
+	"nodes": {
+		"sticky-1": {
+			"kind": "sticky",
+			"x": 0,
+			"y": 0,
+			"width": 240,
+			"height": 240,
+			"z": "a0",
+			"text": "Ship the board schema\nthen the session",
+			"color": "3",
+			"author": "ichi"
+		},
+		"sticky-2": {
+			"kind": "sticky",
+			"x": 280,
+			"y": 0,
+			"width": 240,
+			"height": 240,
+			"z": "a1",
+			"text": "",
+			"color": "#f4c430",
+			"author": "ni"
+		}
+	},
+	"edges": {}
+}

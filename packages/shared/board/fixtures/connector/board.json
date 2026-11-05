@@ -1,0 +1,42 @@
+{
+	"nodes": {
+		"from": {
+			"kind": "text",
+			"x": 0,
+			"y": 0,
+			"width": 200,
+			"height": 100,
+			"z": "a0",
+			"text": "From"
+		},
+		"to": {
+			"kind": "text",
+			"x": 400,
+			"y": 200,
+			"width": 200,
+			"height": 100,
+			"z": "a0V",
+			"text": "To"
+		}
+	},
+	"edges": {
+		"edge-elbow": {
+			"fromNode": "from",
+			"fromSide": "right",
+			"fromEnd": "arrow",
+			"toNode": "to",
+			"toSide": "left",
+			"toEnd": "none",
+			"color": "6",
+			"label": "then",
+			"routing": "elbow"
+		},
+		"edge-straight": {
+			"fromNode": "to",
+			"fromEnd": "none",
+			"toNode": "from",
+			"toEnd": "arrow",
+			"routing": "straight"
+		}
+	}
+}

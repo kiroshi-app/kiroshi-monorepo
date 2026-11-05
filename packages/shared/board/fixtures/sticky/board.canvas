@@ -1,0 +1,35 @@
+{
+	"nodes": [
+		{
+			"id": "sticky-1",
+			"type": "text",
+			"x": 0,
+			"y": 0,
+			"width": 240,
+			"height": 240,
+			"text": "Ship the board schema\nthen the session",
+			"color": "3",
+			"kiroshi": {
+				"kind": "sticky",
+				"z": "a0",
+				"author": "ichi"
+			}
+		},
+		{
+			"id": "sticky-2",
+			"type": "text",
+			"x": 280,
+			"y": 0,
+			"width": 240,
+			"height": 240,
+			"text": "",
+			"color": "#f4c430",
+			"kiroshi": {
+				"kind": "sticky",
+				"z": "a1",
+				"author": "ni"
+			}
+		}
+	],
+	"edges": []
+}

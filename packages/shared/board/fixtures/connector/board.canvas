@@ -1,0 +1,56 @@
+{
+	"nodes": [
+		{
+			"id": "from",
+			"type": "text",
+			"x": 0,
+			"y": 0,
+			"width": 200,
+			"height": 100,
+			"text": "From",
+			"kiroshi": {
+				"kind": "text",
+				"z": "a0"
+			}
+		},
+		{
+			"id": "to",
+			"type": "text",
+			"x": 400,
+			"y": 200,
+			"width": 200,
+			"height": 100,
+			"text": "To",
+			"kiroshi": {
+				"kind": "text",
+				"z": "a0V"
+			}
+		}
+	],
+	"edges": [
+		{
+			"id": "edge-elbow",
+			"fromNode": "from",
+			"fromSide": "right",
+			"fromEnd": "arrow",
+			"toNode": "to",
+			"toSide": "left",
+			"toEnd": "none",
+			"color": "6",
+			"label": "then",
+			"kiroshi": {
+				"routing": "elbow"
+			}
+		},
+		{
+			"id": "edge-straight",
+			"fromNode": "to",
+			"fromEnd": "none",
+			"toNode": "from",
+			"toEnd": "arrow",
+			"kiroshi": {
+				"routing": "straight"
+			}
+		}
+	]
+}

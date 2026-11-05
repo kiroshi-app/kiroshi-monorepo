@@ -1,0 +1,55 @@
+{
+	"nodes": {
+		"chart-1": {
+			"kind": "foreign",
+			"x": 0,
+			"y": 0,
+			"width": 480,
+			"height": 320,
+			"z": "a1",
+			"canvas": {
+				"type": "chart",
+				"series": [3, 1, 4.5],
+				"title": "Velocity",
+				"color": "2"
+			},
+			"kiroshi": {
+				"pinnedBy": "san"
+			}
+		},
+		"note-1": {
+			"kind": "sticky",
+			"x": 520,
+			"y": 0,
+			"width": 240,
+			"height": 240,
+			"z": "a0",
+			"text": "Reacted to",
+			"color": "3",
+			"author": "ichi",
+			"kiroshi": {
+				"reactions": {
+					"thumbsUp": 2
+				}
+			}
+		}
+	},
+	"edges": {
+		"edge-1": {
+			"fromNode": "note-1",
+			"fromEnd": "none",
+			"toNode": "chart-1",
+			"toEnd": "arrow",
+			"routing": "straight",
+			"kiroshi": {
+				"weight": 0.5
+			}
+		}
+	},
+	"kiroshi": {
+		"theme": {
+			"grid": "dots"
+		},
+		"createdWith": "kiroshi 2"
+	}
+}

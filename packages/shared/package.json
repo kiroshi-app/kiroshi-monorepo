@@ -10,6 +10,22 @@
 	"type": "module",
 	"exports": {
 		"./conversation-icons.json": "./conversation-icons.json",
-		"./permission-modes.json": "./permission-modes.json"
+		"./permission-modes.json": "./permission-modes.json",
+		"./board/board.schema.json": "./board/board.schema.json",
+		"./board/board": "./board/board.ts",
+		"./board/board-doc": "./board/board-doc.ts",
+		"./board/json-canvas": "./board/json-canvas.ts"
+	},
+	"scripts": {
+		"test": "vitest run",
+		"types": "tsc -b",
+		"lint": "biome lint"
+	},
+	"dependencies": {
+		"yjs": "^13.6.33"
+	},
+	"devDependencies": {
+		"@types/node": "^26",
+		"vitest": "5.0.5"
 	}
 }

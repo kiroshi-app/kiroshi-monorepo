@@ -1,0 +1,33 @@
+{
+	"nodes": [
+		{
+			"id": "image-library",
+			"type": "file",
+			"x": 0,
+			"y": 0,
+			"width": 640,
+			"height": 480,
+			"file": "Library/whiteboard.png",
+			"kiroshi": {
+				"kind": "image",
+				"z": "a0",
+				"item": "whiteboard.png"
+			}
+		},
+		{
+			"id": "image-loose",
+			"type": "file",
+			"x": 700,
+			"y": 0,
+			"width": 320,
+			"height": 240,
+			"file": "attachments/sketch.jpg",
+			"color": "2",
+			"kiroshi": {
+				"kind": "image",
+				"z": "a1"
+			}
+		}
+	],
+	"edges": []
+}
