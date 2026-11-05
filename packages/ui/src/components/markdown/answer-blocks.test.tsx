@@ -892,6 +892,7 @@ describe("images of an agent answer", () => {
 		expect(html).toMatch(
 			/<a [^>]*>.*<img [^>]*data-slot="context-menu-trigger"[^>]*>.*<\/a>/,
 		)
+		expect(html).toMatch(/<img [^>]*data-typeset-image/)
 		expect(html).not.toContain("<button")
 	})
 })

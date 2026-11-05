@@ -184,7 +184,7 @@ const MarkdownAttachmentImage = ({
 			isLinked={Boolean(node?.properties?.[LINKED_IMAGE_PROPERTY])}
 			onOpen={onOpenAttachment && (() => onOpenAttachment(path))}
 		>
-			<img {...props} alt={alt} src={shown.src} />
+			<img {...props} alt={alt} data-typeset-image src={shown.src} />
 		</MarkdownImageMenu>
 	)
 }
@@ -202,7 +202,7 @@ export const MarkdownImage = ({
 			<MarkdownAttachmentImage {...props} alt={alt} node={node} path={path} />
 		)
 
-	const image = <img {...props} alt={alt} src={src} />
+	const image = <img {...props} alt={alt} data-typeset-image src={src} />
 	if (typeof src !== "string") return image
 
 	return (
@@ -219,3 +219,9 @@ export const MarkdownImage = ({
 		</MarkdownImageMenu>
 	)
 }
+
+export const MarkdownStaticImage = ({
+	node,
+	alt,
+	...props
+}: MarkdownImageProps) => <img {...props} alt={alt} data-typeset-image />
