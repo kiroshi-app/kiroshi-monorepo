@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -15,6 +15,8 @@ use super::protocol::{
 };
 use super::redact;
 use super::web_sources::WebReads;
+
+const ATTACH_TOOL: &str = "mcp__kiroshi__conversation_attach";
 
 pub(crate) fn now_ms() -> i64 {
 	SystemTime::now()
@@ -40,7 +42,7 @@ fn tool_title(name: &str, input: &Value) -> String {
 	let detail = string_field(input, "description")
 		.or_else(|| path_label(input))
 		.or_else(|| string_field(input, "pattern"))
-		.or_else(|| string_field(input, "query"));
+		.or_else(|| string_field(input, "query").filter(|query| !query.contains(ATTACH_TOOL)));
 
 	match detail {
 		Some(detail) if !detail.is_empty() => format!("{name} · {detail}"),
@@ -117,6 +119,7 @@ pub struct Translator {
 	cancelling: bool,
 	pending_permissions: HashMap<String, Value>,
 	activity_titles: HashMap<String, String>,
+	unshown_calls: HashSet<String>,
 	web_reads: WebReads,
 }
 
@@ -244,25 +247,27 @@ impl Translator {
 			}
 			StreamEvent::ContentBlockStart {
 				content_block: Some(ContentBlock::ToolUse { id, name, input }),
-			} => {
-				vec![self.tool_started(id, &name, &input)]
-			}
+			} => self.tool_started(id, &name, &input).into_iter().collect(),
 			_ => Vec::new(),
 		}
 	}
 
-	fn tool_started(&mut self, id: String, name: &str, input: &Value) -> AgentEvent {
+	fn tool_started(&mut self, id: String, name: &str, input: &Value) -> Option<AgentEvent> {
+		if name == ATTACH_TOOL {
+			self.unshown_calls.insert(id);
+			return None;
+		}
 		let title = tool_title(name, input);
 		self.activity_titles.insert(id.clone(), title.clone());
 		self.web_reads.called(&id, name, input);
-		AgentEvent::Activity {
+		Some(AgentEvent::Activity {
 			activity: ActivityEvent {
 				id,
 				title,
 				kind: ActivityKind::Tool,
 				status: ActivityStatus::Running,
 			},
-		}
+		})
 	}
 
 	fn on_user(&mut self, content: Vec<ContentBlock>, output: Option<&Value>) -> Vec<AgentEvent> {
@@ -270,6 +275,9 @@ impl Translator {
 			.into_iter()
 			.filter_map(|block| match block {
 				ContentBlock::ToolResult { tool_use_id, is_error } => {
+					if self.unshown_calls.remove(&tool_use_id) {
+						return None;
+					}
 					self.web_reads.answered(&tool_use_id, is_error, output);
 					Some(AgentEvent::Activity {
 						activity: ActivityEvent {
@@ -297,7 +305,7 @@ impl Translator {
 			match block {
 				ContentBlock::Text { text: chunk } => text.push_str(&chunk),
 				ContentBlock::ToolUse { id, name, input } => {
-					events.push(self.tool_started(id, &name, &input))
+					events.extend(self.tool_started(id, &name, &input))
 				}
 				_ => {}
 			}
@@ -368,6 +376,7 @@ impl Translator {
 
 		self.cancelling = false;
 		self.activity_titles.clear();
+		self.unshown_calls.clear();
 		self.pending_permissions.clear();
 
 		events.push(AgentEvent::TurnEnded {
@@ -450,12 +459,13 @@ mod tests {
 	}
 
 	fn tool_round(round: usize) -> Vec<Value> {
+		a_call_round(round, "Read", json!({ "file_path": "/tmp/notes.txt" }))
+	}
+
+	fn a_call_round(round: usize, name: &str, input: Value) -> Vec<Value> {
 		let message_id = format!("msg_tool_{round}");
 		let tool_id = format!("toolu_{round}");
-		let call = json!({
-			"type": "tool_use", "id": tool_id, "name": "Read",
-			"input": { "file_path": "/tmp/notes.txt" }
-		});
+		let call = json!({ "type": "tool_use", "id": tool_id, "name": name, "input": input });
 		vec![
 			json!({
 				"type": "stream_event",
@@ -648,6 +658,58 @@ mod tests {
 				.repeat(14)
 		);
 		assert_eq!(outcome(&events), Some(TurnOutcome::Completed));
+	}
+
+	#[test]
+	fn a_conversation_attach_call_raises_no_activity_and_the_answer_carries_the_file() {
+		let mut translator = Translator::new(false);
+		let answer = "The chart:\n\n![The chart](</attachments/c1/a1.png>)";
+		let mut frames =
+			a_call_round(1, "Write", json!({ "file_path": "/tmp/chart.png", "content": "png" }));
+		frames.extend(a_call_round(
+			2,
+			"ToolSearch",
+			json!({ "query": format!("select:{ATTACH_TOOL}"), "max_results": 1 }),
+		));
+		frames.extend(a_call_round(
+			3,
+			ATTACH_TOOL,
+			json!({ "path": "/tmp/chart.png", "caption": "The chart" }),
+		));
+		frames.extend(spoken_answer(answer));
+		frames.push(settled("success", false));
+
+		let events = ingest(&mut translator, frames);
+
+		let titles = events
+			.iter()
+			.filter_map(|event| match event {
+				AgentEvent::Activity { activity } => Some(activity.title.as_str()),
+				_ => None,
+			})
+			.collect::<Vec<_>>();
+		assert_eq!(
+			titles,
+			[["Write · chart.png"; 3].as_slice(), ["ToolSearch"; 3].as_slice()].concat()
+		);
+		assert_eq!(
+			completed(&events).iter().map(|message| message.text.as_str()).collect::<Vec<_>>(),
+			[answer]
+		);
+	}
+
+	#[test]
+	fn an_attach_call_cancelled_before_its_result_is_forgotten_when_the_turn_ends() {
+		let mut translator = Translator::new(false);
+		let mut frames = a_call_round(1, ATTACH_TOOL, json!({ "path": "/tmp/chart.png" }));
+		frames.pop();
+		ingest(&mut translator, frames);
+		translator.mark_cancelling();
+
+		let events = ingest(&mut translator, vec![settled("error_during_execution", false)]);
+
+		assert_eq!(outcome(&events), Some(TurnOutcome::Cancelled));
+		assert!(translator.unshown_calls.is_empty());
 	}
 
 	#[test]
