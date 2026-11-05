@@ -72,12 +72,8 @@ describe("markdown constructions", () => {
 
 		expect(html).toContain('class="task-list-item"')
 		expect(html).not.toContain("aria-label=")
-		expect(html).toMatch(
-			/<label data-slot="markdown-task-label">.*shipped<\/label>/,
-		)
-		expect(html).toMatch(
-			/<label data-slot="markdown-task-label">.*pending<\/label>/,
-		)
+		expect(html).toContain("</span>shipped</label>")
+		expect(html).toContain("</span>pending</label>")
 		expect(html).not.toContain('disabled=""')
 		expect(html.match(/checked=""/g)).toHaveLength(1)
 	})
