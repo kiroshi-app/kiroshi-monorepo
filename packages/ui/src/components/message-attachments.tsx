@@ -3,17 +3,15 @@
 import { useTranslation } from "react-i18next"
 
 import { Gallery } from "@workspace/ui/components/answer-blocks/gallery"
-import { Icons } from "@workspace/ui/components/icons"
+import {
+	AttachmentChip,
+	extensionOf,
+} from "@workspace/ui/components/attachment-chip"
 import {
 	type ImageMenuActions,
 	imageMenuActionsFor,
 } from "@workspace/ui/components/image-menu"
 import { cn } from "@workspace/ui/lib/utils"
-
-const extensionOf = (name: string) => {
-	const dot = name.lastIndexOf(".")
-	return dot > 0 ? name.slice(dot + 1).toUpperCase() : ""
-}
 
 export type MessageAttachment = {
 	id: string
@@ -66,22 +64,11 @@ export function MessageAttachments({
 			) : null}
 			{files.map((item) => (
 				<li key={item.id} data-slot="message-attachment">
-					<button
-						type="button"
-						aria-label={t("attachments.open", { name: item.name })}
-						onClick={() => onOpen(item.id)}
-						className="flex max-w-56 cursor-pointer items-center gap-2 overflow-hidden rounded-xl border border-foreground/15 bg-foreground/5 p-1 pr-2 text-left outline-none transition-opacity duration-150 hover:bg-foreground/10 focus-visible:ring-2 focus-visible:ring-current focus-visible:ring-offset-2 focus-visible:ring-offset-transparent motion-reduce:transition-none"
-					>
-						<span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-foreground/10">
-							<Icons.File aria-hidden="true" className="size-4" />
-						</span>
-						<span className="flex min-w-0 flex-col">
-							<span className="truncate font-medium text-xs">{item.name}</span>
-							<span className="text-[11px] tracking-wide">
-								{extensionOf(item.name)}
-							</span>
-						</span>
-					</button>
+					<AttachmentChip
+						name={item.name}
+						extension={extensionOf(item.name)}
+						onOpen={() => onOpen(item.id)}
+					/>
 				</li>
 			))}
 		</ul>

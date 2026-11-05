@@ -9,6 +9,11 @@ import {
 	MarkdownAnswerContext,
 } from "@workspace/ui/components/markdown/answer-actions"
 import { rehypeAnswerMarks } from "@workspace/ui/components/markdown/answer-marks"
+import {
+	MarkdownAttachmentsContext,
+	type OpenAttachment,
+	useMarkdownAttachments,
+} from "@workspace/ui/components/markdown/attachments"
 import { remarkBotMentions } from "@workspace/ui/components/markdown/bot-mentions"
 import {
 	MARKDOWN_COMPONENTS,
@@ -49,6 +54,8 @@ export interface MarkdownProps {
 	onToggleTask?: (box: HTMLInputElement) => void
 	isStatic?: boolean
 	resolveImage?: ResolveImage
+	resolveAttachment?: ResolveImage
+	onOpenAttachment?: OpenAttachment
 }
 
 const MARKDOWN_REMARK_PLUGINS = [
@@ -75,9 +82,12 @@ export const Markdown = ({
 	onToggleTask,
 	isStatic = false,
 	resolveImage,
+	resolveAttachment,
+	onOpenAttachment,
 }: MarkdownProps) => {
 	const scope = useId()
 	const inheritedResolveImage = useMarkdownImageResolver()
+	const inheritedAttachments = useMarkdownAttachments()
 	const remarkPlugins = useMemo<Options["remarkPlugins"]>(
 		() =>
 			runs?.length
@@ -95,19 +105,31 @@ export const Markdown = ({
 							<MarkdownImageResolverContext
 								value={resolveImage ?? inheritedResolveImage}
 							>
-								<ReactMarkdown
-									components={
-										isStatic ? MARKDOWN_STATIC_COMPONENTS : MARKDOWN_COMPONENTS
-									}
-									rehypePlugins={[
-										[rehypeSanitize, MARKDOWN_SANITIZE_SCHEMA],
-										[rehypeScopeIds, { scope }],
-										[rehypeAnswerMarks, { isWriting }],
-									]}
-									remarkPlugins={remarkPlugins}
+								<MarkdownAttachmentsContext
+									value={{
+										resolveAttachment:
+											resolveAttachment ??
+											inheritedAttachments.resolveAttachment,
+										onOpenAttachment:
+											onOpenAttachment ?? inheritedAttachments.onOpenAttachment,
+									}}
 								>
-									{children}
-								</ReactMarkdown>
+									<ReactMarkdown
+										components={
+											isStatic
+												? MARKDOWN_STATIC_COMPONENTS
+												: MARKDOWN_COMPONENTS
+										}
+										rehypePlugins={[
+											[rehypeSanitize, MARKDOWN_SANITIZE_SCHEMA],
+											[rehypeScopeIds, { scope }],
+											[rehypeAnswerMarks, { isWriting }],
+										]}
+										remarkPlugins={remarkPlugins}
+									>
+										{children}
+									</ReactMarkdown>
+								</MarkdownAttachmentsContext>
 							</MarkdownImageResolverContext>
 						</MarkdownTaskToggleContext>
 					</MarkdownRunContext>

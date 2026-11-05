@@ -25,6 +25,11 @@ import {
 	LINKED_IMAGE_PROPERTY,
 	SOURCED_IMAGE_PROPERTY,
 } from "@workspace/ui/components/markdown/answer-marks"
+import {
+	attachmentPathOf,
+	useMarkdownAttachments,
+} from "@workspace/ui/components/markdown/attachments"
+import { useShownImages } from "@workspace/ui/hooks/use-shown-images"
 
 type MarkdownBlockquoteProps = ComponentPropsWithoutRef<"blockquote"> &
 	ExtraProps
@@ -36,16 +41,34 @@ type MarkdownImageProps = ComponentPropsWithoutRef<"img"> & ExtraProps
 type MarkdownImageMenuProps = {
 	image: LibraryLightboxImage
 	isLinked: boolean
+	onOpen?: () => void
 	children: ReactElement
 }
 
 const MarkdownImageMenu = ({
 	image,
 	isLinked,
+	onOpen,
 	children,
 }: MarkdownImageMenuProps) => {
 	const actions = useMarkdownAnswerActions()
-	if (!actions) return children
+	const open =
+		onOpen ?? (actions ? () => actions.onOpenImage([image], 0) : undefined)
+	const trigger =
+		isLinked || !open ? (
+			children
+		) : (
+			<button
+				type="button"
+				aria-label={image.name}
+				data-slot="markdown-image-open"
+				className="inline-block max-w-full outline-offset-2"
+				onClick={open}
+			>
+				{children}
+			</button>
+		)
+	if (!actions) return trigger
 
 	return (
 		<ImageMenu
@@ -53,21 +76,7 @@ const MarkdownImageMenu = ({
 			isSavingToLibrary={actions.isSavingImage?.(image.src)}
 			item={0}
 			name={image.name}
-			trigger={
-				isLinked ? (
-					children
-				) : (
-					<button
-						type="button"
-						aria-label={image.name}
-						data-slot="markdown-image-open"
-						className="inline-block max-w-full outline-offset-2"
-						onClick={() => actions.onOpenImage([image], 0)}
-					>
-						{children}
-					</button>
-				)
-			}
+			trigger={trigger}
 		/>
 	)
 }
@@ -151,6 +160,40 @@ export const MarkdownFigure = ({
 	)
 }
 
+type MarkdownAttachmentImageProps = MarkdownImageProps & { path: string }
+
+const MarkdownAttachmentImage = ({
+	node,
+	alt,
+	path,
+	...props
+}: MarkdownAttachmentImageProps) => {
+	const { t } = useTranslation("chat")
+	const { resolveAttachment, onOpenAttachment } = useMarkdownAttachments()
+	const shown = useShownImages([path], resolveAttachment)(path)
+	if (!resolveAttachment || shown.status) return <>{alt}</>
+
+	return (
+		<MarkdownImageMenu
+			image={{
+				id: path,
+				name: alt || t("answerBlock.image.untitled"),
+				src: shown.src,
+				detail: "",
+			}}
+			isLinked={Boolean(node?.properties?.[LINKED_IMAGE_PROPERTY])}
+			onOpen={onOpenAttachment && (() => onOpenAttachment(path))}
+		>
+			<img
+				{...props}
+				alt={alt}
+				data-slot="markdown-attachment-image"
+				src={shown.src}
+			/>
+		</MarkdownImageMenu>
+	)
+}
+
 export const MarkdownImage = ({
 	node,
 	alt,
@@ -158,6 +201,12 @@ export const MarkdownImage = ({
 	...props
 }: MarkdownImageProps) => {
 	const { t } = useTranslation("chat")
+	const path = attachmentPathOf(src)
+	if (path !== null)
+		return (
+			<MarkdownAttachmentImage {...props} alt={alt} node={node} path={path} />
+		)
+
 	const image = <img {...props} alt={alt} src={src} />
 	if (typeof src !== "string") return image
 

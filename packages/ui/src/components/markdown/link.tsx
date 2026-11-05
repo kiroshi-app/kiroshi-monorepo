@@ -1,6 +1,14 @@
 import type { ComponentPropsWithoutRef } from "react"
 import type { ExtraProps } from "react-markdown"
 
+import {
+	AttachmentChip,
+	extensionOf,
+} from "@workspace/ui/components/attachment-chip"
+import {
+	attachmentPathOf,
+	useMarkdownAttachments,
+} from "@workspace/ui/components/markdown/attachments"
 import { hostInitial } from "@workspace/ui/lib/host"
 
 export type MarkdownLinkProps = ComponentPropsWithoutRef<"a"> & ExtraProps
@@ -16,6 +24,11 @@ const linkUrl = (href: string) => {
 	}
 }
 
+type TextNode = { value?: string; children?: TextNode[] }
+
+const textOf = (node: TextNode): string =>
+	node.value ?? (node.children ?? []).map(textOf).join("")
+
 const TEXT_CLASS = "inline-block max-w-full truncate align-bottom"
 const HOST_CLASS = "whitespace-nowrap font-normal"
 
@@ -30,6 +43,19 @@ export const MarkdownLink = ({
 	title,
 	...props
 }: MarkdownLinkProps) => {
+	const { onOpenAttachment } = useMarkdownAttachments()
+	const path = attachmentPathOf(href)
+	if (path !== null && onOpenAttachment) {
+		return (
+			<AttachmentChip
+				extension={extensionOf(path)}
+				isInline
+				name={(node && textOf(node)) || path}
+				onOpen={() => onOpenAttachment(path)}
+			/>
+		)
+	}
+
 	const url = href ? linkUrl(href) : null
 	const destination = url && EXTERNAL_SCHEMES.has(url.protocol) ? url : null
 	const isAnchored =

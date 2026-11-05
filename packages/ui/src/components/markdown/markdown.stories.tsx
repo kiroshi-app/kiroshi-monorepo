@@ -1995,3 +1995,148 @@ export const GalleryResolvingNotOpenable = meta.story({
 		await expect(args.answerActions?.onOpenImage).not.toHaveBeenCalled()
 	},
 })
+
+const CITED_IMAGE_PATH = "attachments/patio.jpg"
+
+const CITED_SPACED_IMAGE_PATH = "attachments/garden patio at noon.jpg"
+
+const CITED_FILE_PATH = "attachments/q3-report.pdf"
+
+const CITED_SPACED_FILE_PATH = "attachments/q3 report final.pdf"
+
+const CITED_IMAGE_CAPTION = "The patio at noon"
+
+const CITED_FILE_TEXT = "the Q3 report"
+
+const resolvedAttachmentOf = (path: string) =>
+	`data:image/svg+xml,${encodeURIComponent(
+		`<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200" viewBox="0 0 8 5"><title>${path}</title><rect width="8" height="5" fill="#5b7a55"/><circle cx="6" cy="1.5" r="0.8" fill="#f3d17a"/></svg>`,
+	)}`
+
+const resolveCitedAttachment = async (path: string) =>
+	resolvedAttachmentOf(path)
+
+const IMAGE_CITED_MID_ANSWER = `Here is the patio the way it looked on Thursday.
+
+![${CITED_IMAGE_CAPTION}](<${CITED_IMAGE_PATH}>)
+
+The shade reaches the table around two, so lunch is better under the vine.`
+
+const FILE_CITED_MID_ANSWER = `I went through [${CITED_FILE_TEXT}](<${CITED_FILE_PATH}>) and the revenue line matches the ledger, so nothing is left to reconcile before Friday.`
+
+const PATHS_WITH_SPACES = `The photo you sent:
+
+![${CITED_IMAGE_CAPTION}](<${CITED_SPACED_IMAGE_PATH}>)
+
+And the final numbers sit in [${CITED_FILE_TEXT}](<${CITED_SPACED_FILE_PATH}>).`
+
+const ATTACHMENT_FAKES =
+	"The resolver and the opener are story fakes: the app wires the real ones later."
+
+export const AttachmentImageMidAnswer = meta.story({
+	args: {
+		children: IMAGE_CITED_MID_ANSWER,
+		resolveAttachment: fn(resolveCitedAttachment),
+		onOpenAttachment: fn(),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story: `An answer citing a stored image between two paragraphs, as \`![caption](<path>)\`. Check the image sits at the place of the citation, drawn from the address \`resolveAttachment\` answered and never from the stored path, named by its caption, and that activating it hands \`onOpenAttachment\` the cited path. ${ATTACHMENT_FAKES}`,
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const image = await canvas.findByRole("img", { name: CITED_IMAGE_CAPTION })
+		await expect(image).toHaveAttribute(
+			"src",
+			resolvedAttachmentOf(CITED_IMAGE_PATH),
+		)
+		await userEvent.click(
+			canvas.getByRole("button", { name: CITED_IMAGE_CAPTION }),
+		)
+		await expect(args.onOpenAttachment).toHaveBeenCalledWith(CITED_IMAGE_PATH)
+	},
+})
+
+export const AttachmentFileMidAnswer = meta.story({
+	args: {
+		children: FILE_CITED_MID_ANSWER,
+		onOpenAttachment: fn(),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story: `An answer citing a stored file mid-sentence, as \`[text](<path>)\`. Check the attachments-row file chip sits inside the sentence, the words before and after it still on its line, labelled by the link text with the extension the path carries, and that clicking it hands \`onOpenAttachment\` the cited path. ${ATTACHMENT_FAKES}`,
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const chip = canvas.getByRole("button", {
+			name: `Open ${CITED_FILE_TEXT}`,
+		})
+		await expect(chip.closest("p")).not.toBeNull()
+		await expect(getComputedStyle(chip).display).toBe("inline-flex")
+		await expect(chip).toHaveTextContent("PDF")
+		await userEvent.click(chip)
+		await expect(args.onOpenAttachment).toHaveBeenCalledWith(CITED_FILE_PATH)
+	},
+})
+
+export const AttachmentUnresolved = meta.story({
+	args: {
+		children: IMAGE_CITED_MID_ANSWER,
+		resolveAttachment: fn(() =>
+			Promise.reject(new Error("No such attachment")),
+		),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story: `An answer citing a stored image \`resolveAttachment\` cannot turn into an address. Check the caption reads as text at the place of the citation and no image asks for the stored path. ${ATTACHMENT_FAKES}`,
+			},
+		},
+	},
+	play: async ({ args, canvas }) => {
+		await waitFor(() =>
+			expect(args.resolveAttachment).toHaveBeenCalledWith(CITED_IMAGE_PATH),
+		)
+		await expect(
+			await canvas.findByText(CITED_IMAGE_CAPTION),
+		).toBeInTheDocument()
+		await expect(canvas.queryByRole("img")).toBeNull()
+	},
+})
+
+export const AttachmentPathWithSpaces = meta.story({
+	args: {
+		children: PATHS_WITH_SPACES,
+		resolveAttachment: fn(resolveCitedAttachment),
+		onOpenAttachment: fn(),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story: `An answer citing an image and a file whose stored paths hold spaces, each written between angle brackets. Check each reads as a single attachment, the resolver and the opener receiving the paths with their spaces rather than escaped. ${ATTACHMENT_FAKES}`,
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const image = await canvas.findByRole("img", { name: CITED_IMAGE_CAPTION })
+		await expect(image).toHaveAttribute(
+			"src",
+			resolvedAttachmentOf(CITED_SPACED_IMAGE_PATH),
+		)
+		await expect(args.resolveAttachment).toHaveBeenCalledWith(
+			CITED_SPACED_IMAGE_PATH,
+		)
+		const [chip, ...others] = canvas.getAllByRole("button", {
+			name: `Open ${CITED_FILE_TEXT}`,
+		})
+		await expect(others).toHaveLength(0)
+		await userEvent.click(chip)
+		await expect(args.onOpenAttachment).toHaveBeenCalledWith(
+			CITED_SPACED_FILE_PATH,
+		)
+	},
+})
