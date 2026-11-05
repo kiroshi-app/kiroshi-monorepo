@@ -96,7 +96,7 @@ export type NotificationSourceOptions = {
 	reportFailure: FailureNoticeReporter
 }
 
-export type NotificationLandingSourceOptions = Pick<
+type NotificationLandingSourceOptions = Pick<
 	NotificationSourceOptions,
 	| "chat"
 	| "roster"
