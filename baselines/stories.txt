@@ -349,6 +349,7 @@ conversation-message-messageattachments--mixed-kinds
 conversation-message-messageattachments--several-images
 conversation-message-messageattachments--states
 conversation-message-messageattachments--two-images
+conversation-message-messagebubble--agent-surface-in-both-themes
 conversation-message-messagebubble--body-text-size
 conversation-message-messagebubble--content-widths
 conversation-message-messagebubble--default
