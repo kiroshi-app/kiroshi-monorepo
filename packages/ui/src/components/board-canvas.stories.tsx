@@ -1236,13 +1236,17 @@ const hoverObject = (root: HTMLElement, id: string) =>
 		centreOf(objectNode(root, id) as HTMLElement),
 	)
 
-const dragFromPlanToReviewAnchor = async (root: HTMLElement) => {
+const hoverPlanRightAnchor = (root: HTMLElement) => {
 	hoverObject(root, "plan")
-	const source = await waitFor(() => {
+	return waitFor(() => {
 		const anchor = anchorOn(root, "plan", "right")
 		expect(anchor).not.toBeNull()
 		return anchor as HTMLElement
 	})
+}
+
+const dragFromPlanToReviewAnchor = async (root: HTMLElement) => {
+	const source = await hoverPlanRightAnchor(root)
 	pointerAt("pointerdown", source, centreOf(source))
 	pointerAt(
 		"pointermove",
@@ -1303,12 +1307,7 @@ export const CreateConnector = meta.story({
 		"Connector mode on. A drag from the right anchor of the sticky released on empty board sends nothing and leaves no line. Elbow picked in the flyout, a drag from the same anchor released on the left anchor of Review sends one connect intent with both ids, both sides and the elbow kind, and the committed connector draws in the board shape border colour, 2px with round caps, rounded corners of 8 and the open chevron at Review. Pick ConnectorBeingDrawn for the drag in progress.",
 	),
 	play: async ({ canvasElement, args }) => {
-		hoverObject(canvasElement, "plan")
-		const source = await waitFor(() => {
-			const anchor = anchorOn(canvasElement, "plan", "right")
-			expect(anchor).not.toBeNull()
-			return anchor as HTMLElement
-		})
+		const source = await hoverPlanRightAnchor(canvasElement)
 		pointerAt("pointerdown", source, centreOf(source))
 		const empty = boardAt(canvasElement, 640, 520)
 		pointerAt("pointermove", document, empty)
@@ -1372,10 +1371,7 @@ export const ConnectorBeingDrawn = meta.story({
 	),
 	play: async ({ canvasElement, args }) => {
 		await pickElbow(canvasElement)
-		hoverObject(canvasElement, "plan")
-		await waitFor(() =>
-			expect(anchorOn(canvasElement, "plan", "right")).not.toBeNull(),
-		)
+		await hoverPlanRightAnchor(canvasElement)
 		await expectAnchorFrame(canvasElement, "plan")
 
 		await dragFromPlanToReviewAnchor(canvasElement)
