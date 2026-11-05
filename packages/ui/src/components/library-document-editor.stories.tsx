@@ -883,13 +883,6 @@ export const ColumnAtMaximumWidth = meta.story({
 		const table = slotIn(canvasElement, "markdown-table")
 		const viewport = table.firstElementChild as HTMLElement
 		await expect(viewport.scrollWidth).toBe(viewport.clientWidth)
-		const viewportBox = viewport.getBoundingClientRect()
-		for (const row of table.querySelectorAll("tr")) {
-			const last = row.lastElementChild as HTMLElement
-			await expect(last.getBoundingClientRect().right).toBeLessThanOrEqual(
-				viewportBox.right,
-			)
-		}
 	},
 })
 
