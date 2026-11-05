@@ -436,6 +436,15 @@ pub fn output_style(root: &Path, bot_id: &str) -> String {
 		.map_or_else(|| DEFAULT_OUTPUT_STYLE.to_owned(), |written| written.output_style)
 }
 
+pub fn session_output_style(root: &Path, bot_id: &str) -> String {
+	let stored = output_style(root, bot_id);
+	if stored == DEFAULT_OUTPUT_STYLE {
+		system::VISUAL_FIRST_STYLE.to_owned()
+	} else {
+		stored
+	}
+}
+
 fn front_output_style(text: &str) -> String {
 	styled(&front_value(text, OUTPUT_STYLE_KEY).unwrap_or_default()).to_owned()
 }
@@ -1633,6 +1642,37 @@ mod tests {
 		assert_eq!(read.effort, Some(EffortLevel::Low));
 
 		let _ = fs::remove_dir_all(&root);
+	}
+
+	#[test]
+	fn a_session_of_a_bot_with_no_style_stored_runs_visual_first() {
+		let root = a_root("session-styleless");
+		let bot = a_bot("Bean", "Answer briefly.");
+
+		assert_eq!(session_output_style(&root, &bot.id), system::VISUAL_FIRST_STYLE);
+		write_styled(&root, &bot, "  ", None).expect("the bundle is written");
+		assert_eq!(session_output_style(&root, &bot.id), system::VISUAL_FIRST_STYLE);
+	}
+
+	#[test]
+	fn a_session_of_a_bot_stored_as_concise_runs_visual_first_and_keeps_concise_on_the_disk() {
+		let root = a_root("session-concise");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write_styled(&root, &bot, "Concise", None).expect("the bundle is written");
+
+		assert_eq!(session_output_style(&root, &bot.id), system::VISUAL_FIRST_STYLE);
+		assert_eq!(output_style(&root, &bot.id), "Concise");
+	}
+
+	#[test]
+	fn a_session_of_a_bot_stored_with_another_style_keeps_it() {
+		let root = a_root("session-custom");
+		let bot = a_bot("Bean", "Answer briefly.");
+
+		for stored in ["default", "Explanatory", "mine:terse"] {
+			write_styled(&root, &bot, stored, None).expect("the bundle is written");
+			assert_eq!(session_output_style(&root, &bot.id), stored);
+		}
 	}
 
 	#[test]

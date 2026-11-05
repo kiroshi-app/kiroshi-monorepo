@@ -1,24 +1,125 @@
 ---
 name: "rich-answers"
-description: "How you write the blocks the chat draws as components: checklist, options card, illustrated list, large image, quoted selection, interactive view, callouts, collapsible section, web page card and gallery. Applies to every answer whose content has the shape of one of them."
+description: "How you write what the chat draws: tables, Mermaid diagrams, code, math, images, links, headings, checklists, callouts and every fenced block. Applies to every answer."
 disable-model-invocation: true
 metadata:
   kiroshi:
     preload: true
 ---
 
-The chat draws eleven shapes of content as components. Pick a block only when the content has
-that shape, and answer in plain prose otherwise. An explanation, an opinion or a single fact is
-plain prose. A block never carries the whole answer alone: one sentence before it says what it
-is. There is no video block and no map block: link the page instead.
+The chat draws Markdown as components, so an answer shows its structure instead of describing it.
+Reach for the construct that fits the content first:
+
+- A comparison, or several things with the same attributes: a table.
+- A flow, a sequence, a timeline or a hierarchy: a Mermaid diagram.
+- Something the person recognises by sight: an image, a gallery or an illustrated list.
+- Steps the person carries out: a checklist.
+- An answer with parts: headings.
+
+Prose is the few lines that tie those visuals together, and the answer stays short. A single fact
+or a yes or no stays one sentence. A visual never carries the whole answer alone: one sentence
+before it says what it is.
 
 When a person asks for a checklist of steps, write the checklist block. When a person asks for
 options to explore, write the options card.
 
+## Markdown the chat draws
+
+### Table
+
+Form: `| --- |`
+
+A GFM table: a header row, a separator row, then one row per thing compared. Keep a cell to a few
+words. The person can copy the whole table.
+
+````markdown
+| Plan | Price a month | Seats |
+| --- | --- | --- |
+| Solo | 9 euros | 1 |
+| Team | 29 euros | 5 |
+````
+
+### Mermaid diagram
+
+Form: ` ```mermaid `
+
+A fence labelled `mermaid` holding one Mermaid diagram: `flowchart`, `sequenceDiagram`,
+`timeline`, `gantt`, `stateDiagram-v2`, `classDiagram`, `pie`. A diagram that does not parse is
+shown as its source text.
+
+````markdown
+```mermaid
+flowchart LR
+  Order --> Payment --> Shipping --> Delivered
+```
+````
+
+### Code
+
+Form: ` ```<language> `
+
+A fence labelled with the language of the code, drawn highlighted with a copy button. A name, a
+command or a value inside a sentence goes in single backticks.
+
+````markdown
+```bash
+bun run build
+```
+````
+
+### Math
+
+Form: `$$`
+
+TeX between single dollars inside a sentence, `$E = mc^2$`, and between `$$` lines, or in a fence
+labelled `math`, for an equation on its own line.
+
+````markdown
+$$
+P = \frac{r \cdot A}{1 - (1 + r)^{-n}}
+$$
+````
+
+### Image
+
+Form: `![`
+
+An image on its own line, its alt text saying what it shows, its address `https://`. The person can
+open it full size. When one image is the answer and you know the page it comes from, write the
+large image instead.
+
+````markdown
+![The Destiny 2 key art, a Guardian facing the Traveler](https://images.example.org/destiny-2.jpg)
+````
+
+### Link
+
+Form: `](https://`
+
+`[text](https://...)` opens in the browser and shows its host next to the text. `mailto:`, `tel:`
+and `#anchor` links work too. Write the page's name as the text, never the bare URL.
+
+````markdown
+[The Tauri guide](https://tauri.app/start/)
+````
+
+### Heading
+
+Form: `## `
+
+`##` for each part of an answer that has several, `###` under it. Never a heading for an answer
+of one part.
+
+````markdown
+## Price
+
+## Where to buy it
+````
+
 ## How a block is written
 
-The checklist, the quoted selection, the large image and the two callouts are plain GFM. Every
-other block is a fenced block whose label names it, with a body of `key: value` lines and list
+The checklist, the quoted selection, the large image and the callouts are plain GFM. Every other
+block is a fenced block whose label names it, with a body of `key: value` lines and list
 items, never JSON and never HTML.
 
 - A line `key: value` at the start of the line is a field of the block, written before the
@@ -39,7 +140,8 @@ reads well as that text: whole words, one field per line.
 Form: `- [ ]`
 
 Use it when the person asks for a checklist of steps, or for a sequence of actions they carry
-out themselves. One step per item, `- [x]` for a step already done. The boxes are read-only.
+out themselves. One step per item, `- [x]` for a step already done. The person can tick the
+boxes.
 
 ````markdown
 - [x] Back up the database
@@ -84,12 +186,23 @@ Use it for one aside the person should not miss and that is not the answer itsel
 > The export keeps the archived rooms too.
 ````
 
+### Callout tip
+
+Form: `> [!TIP]`
+
+Use it for one shortcut or good practice that helps the person and that is not the answer itself.
+Text after the marker on its first line, for any callout, becomes its title.
+
+````markdown
+> [!TIP] Faster
+> Hold Shift to select the whole range.
+````
+
 ### Callout warning
 
 Form: `> [!WARNING]`
 
-Use it when the answer leads to something that loses data, costs money or cannot be undone. No
-other alert kind is written.
+Use it when the answer leads to something that loses data, costs money or cannot be undone.
 
 ````markdown
 > [!WARNING]
@@ -239,3 +352,80 @@ required, then `caption` (one line) and `source`, the page the image comes from,
   caption: Grey linen, 990 euros
 ```
 ````
+
+### Checklist card
+
+Form: ` ```checklist `
+
+Use it instead of the plain checklist when the list needs a title or an owner per task. `title`
+is required, then each item takes `text`, required, then `done` (`yes` or `no`, `no` when left
+out) and `assignee` (one line), optional.
+
+````markdown
+```checklist
+title: Before the launch
+- text: Freeze the release branch
+  done: yes
+  assignee: Ada
+- text: Write the release notes
+  assignee: Bea
+```
+````
+
+### Video
+
+Form: ` ```video `
+
+Use it when a video file is itself the answer. `url` is the `https://` address of the video file
+itself, never of a page that plays it: link the page instead. `url`, `title` and `duration`
+(`m:ss` or `h:mm:ss`) are required, then `source` (where it comes from, one line), `poster` (the
+`https://` URL of a still), `marker` (a time within the duration to point at) and `marker-label`,
+optional.
+
+````markdown
+```video
+url: https://media.example.org/launch-trailer.mp4
+title: Launch trailer
+duration: 2:14
+source: Example Studio
+marker: 1:05
+marker-label: The new map
+```
+````
+
+### Map
+
+Form: ` ```map `
+
+Use it when where things are is the answer. `title` is required, then `subtitle`, `area` (one
+line) and `link` (an `https://` map page) optional. Each item is one place and takes `name`, `lat`
+and `lon`, all required, the coordinates in decimal degrees (`lat` from -90 to 90, `lon` from -180
+to 180).
+
+````markdown
+```map
+title: Three bakeries near the station
+area: Lisbon, Cais do Sodre
+- name: Padaria Sao Roque
+  lat: 38.7139
+  lon: -9.1440
+- name: Manteigaria
+  lat: 38.7105
+  lon: -9.1430
+```
+````
+
+## What the chat does not draw
+
+- **Raw HTML**: a tag is shown as its source text, never drawn. Write the Markdown construct
+  instead.
+- **An address that is not `https://`**: a block whose URL field is not an absolute `https://` URL
+  is shown as its source text, and a large image whose image or page is not `https://` loses its
+  frame and its source card. An image address on `file:` or `data:` is removed. Write every
+  address as `https://`.
+- **A local file path**: a path of the machine, `file://` or not, is never a link: it shows as plain
+  text, and as an image it does not load. Send a file of the machine through `conversation_attach`.
+- **A fence label the chat does not draw**: any label other than the ones named in this skill
+  is shown as code, labelled with it.
+- **A callout kind other than NOTE, TIP and WARNING**: `[!IMPORTANT]` or `[!CAUTION]` is shown as a
+  plain quote, marker included.

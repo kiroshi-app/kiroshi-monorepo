@@ -152,10 +152,11 @@ Measured on 2.1.239, three findings that between them fix how a session is compo
   style — an empty object would still be a settings layer, and the highest-priority one.
 
 The layer itself carries the **speaking situation only** — one reader, that reader's
-language, short prose, no path or status report or tool narration unless asked, and
-never Claude Code's name or a word about its own machinery. It grants no capability and
-names no tool, which is what makes it safe to compile into every session: a bot exported
-out of this app loses the chat window it was speaking in, never anything it can do.
+language, short answers that lead with structure, no path or status report or tool
+narration unless asked, and never Claude Code's name or a word about its own machinery.
+It grants no capability and names no tool, which is what makes it safe to compile into
+every session: a bot exported out of this app loses the chat window it was speaking in,
+never anything it can do.
 
 ## Frontmatter — what survives promotion
 

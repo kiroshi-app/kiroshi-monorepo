@@ -26,9 +26,13 @@ const RICH_ANSWERS: &str = "skills/rich-answers/SKILL.md";
 
 const LIBRARY: &str = "skills/library/SKILL.md";
 
+const VISUAL_FIRST: &str = "output-styles/visual-first.md";
+
+pub const VISUAL_FIRST_STYLE: &str = "kiroshi:visual-first";
+
 const TRIGGERS: &str = ".triggers.json";
 
-const FILES: [(&str, &[u8]); 12] = [
+const FILES: [(&str, &[u8]); 13] = [
 	(MANIFEST, include_bytes!("../../plugins/kiroshi/.claude-plugin/plugin.json")),
 	(TRIGGERS, include_bytes!("../../plugins/kiroshi/.triggers.json")),
 	(LEARN, include_bytes!("../../plugins/kiroshi/skills/learn/SKILL.md")),
@@ -38,6 +42,7 @@ const FILES: [(&str, &[u8]); 12] = [
 	(CONVERSATIONS, include_bytes!("../../plugins/kiroshi/skills/conversations/SKILL.md")),
 	(LIBRARY, include_bytes!("../../plugins/kiroshi/skills/library/SKILL.md")),
 	(RICH_ANSWERS, include_bytes!("../../plugins/kiroshi/skills/rich-answers/SKILL.md")),
+	(VISUAL_FIRST, include_bytes!("../../plugins/kiroshi/output-styles/visual-first.md")),
 	(
 		"skills/learn/references/skills.md",
 		include_bytes!("../../plugins/kiroshi/skills/learn/references/skills.md"),
@@ -439,12 +444,14 @@ mod tests {
 	}
 
 	#[test]
-	fn the_rich_answers_skill_picks_a_block_only_for_its_shape() {
+	fn the_rich_answers_skill_leads_with_structure_over_prose() {
 		let text = String::from_utf8_lossy(embedded(RICH_ANSWERS));
 		let said_in_one_breath = text.split_whitespace().collect::<Vec<_>>().join(" ");
 
+		assert!(!said_in_one_breath.contains("plain prose otherwise"), "got {text}");
 		for said in [
-			"Pick a block only when the content has that shape, and answer in plain prose otherwise.",
+			"Reach for the construct that fits the content first:",
+			"Prose is the few lines that tie those visuals together, and the answer stays short.",
 			"When a person asks for a checklist of steps, write the checklist block.",
 			"When a person asks for options to explore, write the options card.",
 			"never JSON and never HTML",
@@ -452,6 +459,165 @@ mod tests {
 		] {
 			assert!(said_in_one_breath.contains(said), "{said} is missing");
 		}
+	}
+
+	const MARKDOWN: &str = "components.tsx";
+
+	const BLOCKS: &str = "answer-block-source.ts";
+
+	const MARKS: &str = "answer-marks.ts";
+
+	const RENDERED: [(&str, &[(&str, &str)]); 27] = [
+		("Table", &[(MARKDOWN, "table: MarkdownTable,")]),
+		("Mermaid diagram", &[("mermaid.tsx", "MERMAID_LANGUAGE = \"mermaid\"")]),
+		("Code", &[(MARKDOWN, "pre: MarkdownPre,")]),
+		("Math", &[("math.tsx", "MATH_LANGUAGE = \"math\"")]),
+		("Image", &[(MARKDOWN, "img: MarkdownImage,")]),
+		("Link", &[(MARKDOWN, "a: MarkdownLink,")]),
+		("Heading", &[("prose.ts", "h1,h2,h3,h4,h5,h6")]),
+		("Checklist", &[(MARKDOWN, "input: MarkdownTaskCheckbox,")]),
+		("Quoted selection", &[(MARKDOWN, "blockquote: MarkdownBlockquote,")]),
+		(
+			"Large image",
+			&[(MARKDOWN, "figure: MarkdownFigure,"), (MARKS, "SOURCE_LEAD = \"Source: \"")],
+		),
+		("Callout note", &[(MARKS, "NOTE: \"note\"")]),
+		("Callout tip", &[(MARKS, "TIP: \"tip\"")]),
+		("Callout warning", &[(MARKS, "WARNING: \"warning\"")]),
+		("Illustrated list", &[(BLOCKS, "\"illustrated-list\": readIllustratedList,")]),
+		("Options card", &[(BLOCKS, "options: readOptions,")]),
+		("Interactive view", &[(BLOCKS, "interactive: readInteractive,")]),
+		("Collapsible section", &[(BLOCKS, "collapsible: readCollapsible,")]),
+		("Web page card", &[(BLOCKS, "\"web-page\": readWebPage,")]),
+		("Gallery", &[(BLOCKS, "gallery: readGallery,")]),
+		("Checklist card", &[(BLOCKS, "checklist: readChecklist,")]),
+		("Video", &[(BLOCKS, "video: readVideo,")]),
+		("Map", &[(BLOCKS, "map: readMap,")]),
+		("Raw HTML", &[("raw-html.ts", "type: \"literalHtml\"")]),
+		(
+			"An address that is not `https://`",
+			&[
+				("block-body.ts", "protocol === \"https:\""),
+				(MARKS, "isHttpsUrl(src) &&"),
+				("sanitize.ts", "...defaultSchema,"),
+			],
+		),
+		(
+			"A local file path",
+			&[("link.tsx", "EXTERNAL_SCHEMES = new Set([\"http:\", \"https:\"])")],
+		),
+		(
+			"A fence label the chat does not draw",
+			&[("code.tsx", "return <MarkdownFence code={source} language={language} />")],
+		),
+		(
+			"A callout kind other than NOTE, TIP and WARNING",
+			&[(MARKS, "\\[!(NOTE|TIP|WARNING)\\]")],
+		),
+	];
+
+	fn renderer(file: &str) -> String {
+		let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+			.join("../../../packages/ui/src/components/markdown")
+			.join(file);
+		fs::read_to_string(&path).unwrap_or_else(|_| panic!("{file} of the renderer reads"))
+	}
+
+	fn outside_examples(text: &str) -> Vec<&str> {
+		let mut is_example = false;
+		text.lines()
+			.filter(|line| {
+				if line.starts_with("````") {
+					is_example = !is_example;
+				}
+				!is_example
+			})
+			.collect()
+	}
+
+	fn named_constructs(text: &str) -> Vec<&str> {
+		outside_examples(text)
+			.into_iter()
+			.filter_map(|line| {
+				line.strip_prefix("### ")
+					.or_else(|| line.strip_prefix("- **").and_then(|rest| rest.split("**").next()))
+			})
+			.collect()
+	}
+
+	#[test]
+	fn every_construct_the_rich_answers_skill_names_is_an_entry_of_the_renderer() {
+		let text = String::from_utf8_lossy(embedded(RICH_ANSWERS));
+		let named = named_constructs(&text);
+		for construct in &named {
+			let (_, entries) = RENDERED
+				.iter()
+				.find(|(name, _)| name == construct)
+				.unwrap_or_else(|| panic!("{construct} maps to no renderer entry"));
+			for (file, entry) in *entries {
+				assert!(renderer(file).contains(entry), "{entry} is gone from {file}");
+			}
+		}
+		for (name, _) in &RENDERED {
+			assert!(named.contains(name), "the skill no longer names {name}");
+		}
+	}
+
+	#[test]
+	fn the_rich_answers_skill_writes_every_fenced_block_the_renderer_reads() {
+		let text = String::from_utf8_lossy(embedded(RICH_ANSWERS));
+		let source = renderer(BLOCKS);
+		let readers = source
+			.split("const READERS")
+			.nth(1)
+			.and_then(|rest| rest.split("> = {\n").nth(1))
+			.and_then(|rest| rest.split("\n}").next())
+			.expect("the renderer lists its block readers");
+
+		let labels: Vec<&str> = readers
+			.lines()
+			.filter_map(|line| line.trim().split(':').next())
+			.map(|label| label.trim_matches('"'))
+			.collect();
+		assert_eq!(labels.len(), 9, "got {labels:?}");
+		for label in labels {
+			let form = format!("Form: ` ```{label} `");
+			assert!(text.contains(&form), "{form} is missing");
+		}
+		for label in ["mermaid", "math"] {
+			let fence = format!("labelled `{label}`");
+			assert!(text.contains(&fence), "{fence} is missing");
+		}
+	}
+
+	#[test]
+	fn the_visual_first_style_is_the_one_the_sdk_finds_in_the_system_plugin() {
+		let text = String::from_utf8_lossy(embedded(VISUAL_FIRST));
+		let stem = VISUAL_FIRST
+			.strip_prefix("output-styles/")
+			.and_then(|name| name.strip_suffix(".md"))
+			.expect("the style sits in the plugin's output-styles directory");
+		let front = text.split("\n---\n").next().expect("the style opens on its front");
+
+		assert_eq!(VISUAL_FIRST_STYLE, format!("{PLUGIN_NAME}:{stem}"));
+		assert!(!front.lines().any(|line| line.starts_with("name:")), "got {front}");
+		assert!(front.contains("keep-coding-instructions: true"), "got {front}");
+	}
+
+	#[test]
+	fn the_visual_first_style_keeps_the_brevity_of_concise_and_formats_visual_first() {
+		let text = String::from_utf8_lossy(embedded(VISUAL_FIRST));
+
+		for said in [
+			"**Lead with the result**",
+			"no closing recap of what you already said",
+			"**Cut narration, keep substance**",
+			"**Format follows the visual-first rule**",
+			"a table for any comparison, a Mermaid diagram for a flow or a timeline",
+		] {
+			assert!(text.contains(said), "{said} is missing");
+		}
+		assert!(!text.contains("plain prose"), "got {text}");
 	}
 
 	#[test]
