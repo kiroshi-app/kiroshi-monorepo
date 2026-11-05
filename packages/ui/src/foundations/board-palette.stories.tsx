@@ -92,9 +92,6 @@ const ratioOf = (element: Element) => {
 	return contrastRatio(rgbOf(background), rgbOf(text))
 }
 
-const stickiesIn = (root: HTMLElement, scheme: ColorScheme) =>
-	slotsIn(root, "board-sticky").filter((sticky) => schemeOf(sticky) === scheme)
-
 const expectSticky = async (sticky: HTMLElement) => {
 	const colour = sticky.dataset.colour as BoardStickyColour
 	const label = `${schemeOf(sticky)} ${colour} sticky`
@@ -158,8 +155,8 @@ export const StickiesAndSectionsInBothThemes = meta.story({
 		for (const sticky of stickies) await expectSticky(sticky)
 		for (const section of sections) await expectSection(section)
 
-		const light = stickiesIn(canvasElement, "light")
-		const dark = stickiesIn(canvasElement, "dark")
+		const inScheme = (scheme: ColorScheme) =>
+			stickies.filter((sticky) => schemeOf(sticky) === scheme)
 		const stickyPaintOf = (stickies: HTMLElement[]) =>
 			stickies.map((sticky) => {
 				const { background, text, shadow } = paintOf(sticky)
@@ -167,8 +164,8 @@ export const StickiesAndSectionsInBothThemes = meta.story({
 				return { background, text, shadow, author }
 			})
 		await expect(
-			stickyPaintOf(dark),
+			stickyPaintOf(inScheme("dark")),
 			"Stickies paint the same in both themes",
-		).toEqual(stickyPaintOf(light))
+		).toEqual(stickyPaintOf(inScheme("light")))
 	},
 })
