@@ -50,6 +50,9 @@ export const seatsAfter = (
 ): AgentSeat[] =>
 	writers
 		.filter(({ kind }) => kind === "agent")
+		.flatMap(({ id, name, at }) =>
+			at.kind === "text" ? [{ id, name, caret: at.anchor }] : [],
+		)
 		.map(({ id, name, caret }) => {
 			const seated = seats.find((seat) => seat.id === id)
 			return {
@@ -66,8 +69,8 @@ export const peopleOf = (
 	seats: LibraryWriter[],
 	document: CaretPlacedDocument,
 ): LibraryDocumentPerson[] =>
-	seats.flatMap(({ id, name, caret }) => {
-		const offset = document.offsetOf(caret)
+	seats.flatMap(({ id, name, at }) => {
+		const offset = at.kind === "text" ? document.offsetOf(at.anchor) : null
 		return offset === null ? [] : [{ id, name: name ?? "", caret: offset }]
 	})
 

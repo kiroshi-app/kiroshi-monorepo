@@ -27,7 +27,7 @@ const agentWriter = (id: string, caret: string): LibraryWriter => ({
 	id,
 	kind: "agent",
 	name: "Atlas from the host",
-	caret,
+	at: { kind: "text", anchor: caret },
 })
 
 const seatOf = (startCaret: string, caret: string): AgentSeat => ({
@@ -58,8 +58,18 @@ describe("the agent seats of a Library document", () => {
 		const seats = seatsAfter(
 			[],
 			[
-				{ id: "main", kind: "person", name: "Shoto", caret: "top" },
-				{ id: "account", kind: "member", name: "Ines", caret: "top" },
+				{
+					id: "main",
+					kind: "person",
+					name: "Shoto",
+					at: { kind: "text", anchor: "top" },
+				},
+				{
+					id: "account",
+					kind: "member",
+					name: "Ines",
+					at: { kind: "text", anchor: "top" },
+				},
 			],
 			0,
 		)

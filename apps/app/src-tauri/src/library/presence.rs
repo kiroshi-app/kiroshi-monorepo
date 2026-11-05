@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
@@ -9,7 +9,10 @@ use tokio::time::Instant;
 use yrs::updates::decoder::Decode;
 use yrs::StickyIndex;
 
-use super::contract::{LibraryDocumentPresence, LibraryError, LibraryWriter, LibraryWriterKind};
+use super::canvas::a_board;
+use super::contract::{
+	LibraryDocumentPresence, LibraryError, LibraryPresenceAt, LibraryWriter, LibraryWriterKind,
+};
 use super::{a_document, decoded_content, undecodable};
 use crate::events;
 
@@ -25,7 +28,7 @@ pub(crate) enum Seat {
 pub(crate) struct Seated {
 	pub(crate) seat: Seat,
 	pub(crate) name: Option<String>,
-	pub(crate) caret: String,
+	pub(crate) at: LibraryPresenceAt,
 	pub(crate) lease_ends_at: Option<Instant>,
 }
 
@@ -36,7 +39,10 @@ pub(crate) enum Lease {
 }
 
 #[derive(Default)]
-pub(crate) struct Presences(Mutex<HashMap<Key, Vec<Seated>>>);
+pub(crate) struct Presences {
+	seats: Mutex<HashMap<Key, Vec<Seated>>>,
+	trailing: Mutex<HashSet<Key>>,
+}
 
 impl Presences {
 	pub(crate) fn seated(
@@ -103,8 +109,23 @@ impl Presences {
 		}
 	}
 
+	fn is_first_to_trail(&self, space_id: &str, name: &str) -> bool {
+		self.trailing().insert((space_id.to_owned(), name.to_owned()))
+	}
+
+	fn trailed(&self, space_id: &str, name: &str) -> LibraryDocumentPresence {
+		let key = (space_id.to_owned(), name.to_owned());
+		self.trailing().remove(&key);
+		let held = self.held();
+		presence_of(space_id, name, held.get(&key).map_or(&[][..], Vec::as_slice))
+	}
+
 	fn held(&self) -> MutexGuard<'_, HashMap<Key, Vec<Seated>>> {
-		self.0.lock().unwrap_or_else(PoisonError::into_inner)
+		self.seats.lock().unwrap_or_else(PoisonError::into_inner)
+	}
+
+	fn trailing(&self) -> MutexGuard<'_, HashSet<Key>> {
+		self.trailing.lock().unwrap_or_else(PoisonError::into_inner)
 	}
 }
 
@@ -140,31 +161,61 @@ fn writer_of(seated: &Seated) -> LibraryWriter {
 		Seat::Member(account_id) => (account_id, LibraryWriterKind::Member),
 		Seat::Agent(bot_id) => (bot_id, LibraryWriterKind::Agent),
 	};
-	LibraryWriter { id: id.clone(), kind, name: seated.name.clone(), caret: seated.caret.clone() }
+	LibraryWriter { id: id.clone(), kind, name: seated.name.clone(), at: seated.at.clone() }
 }
 
-const MEMBER_CARET_LEASE: Duration = Duration::from_secs(30);
+const MEMBER_PRESENCE_LEASE: Duration = Duration::from_secs(30);
 
-pub(crate) fn share_caret<R: Runtime>(
+const BOARD_PRESENCE_PACE: Duration = Duration::from_millis(50);
+
+const MAX_NODE_ID_BYTES: usize = 256;
+
+pub(crate) fn share_presence<R: Runtime>(
 	app: &AppHandle<R>,
 	root: &Path,
 	space_id: &str,
 	name: &str,
 	seat: Seat,
 	writer_name: Option<String>,
-	caret: &str,
+	at: LibraryPresenceAt,
 ) -> Result<(), LibraryError> {
-	a_document(root, space_id, name)?;
-	StickyIndex::decode_v1(&decoded_content(name, caret)?)
-		.map_err(|error| undecodable(name, error.to_string()))?;
+	placed(root, space_id, name, &at)?;
 	let lease_ends_at =
-		matches!(seat, Seat::Member(_)).then(|| Instant::now() + MEMBER_CARET_LEASE);
-	let seated =
-		Seated { seat: seat.clone(), name: writer_name, caret: caret.to_owned(), lease_ends_at };
+		matches!(seat, Seat::Member(_)).then(|| Instant::now() + MEMBER_PRESENCE_LEASE);
+	let seated = Seated { seat: seat.clone(), name: writer_name, at, lease_ends_at };
 	if seat_writer(app, space_id, name, seated) && lease_ends_at.is_some() {
 		tokio::spawn(lapsing(app.clone(), space_id.to_owned(), name.to_owned(), seat));
 	}
 	Ok(())
+}
+
+fn placed(
+	root: &Path,
+	space_id: &str,
+	name: &str,
+	at: &LibraryPresenceAt,
+) -> Result<(), LibraryError> {
+	match at {
+		LibraryPresenceAt::Text { anchor } => {
+			a_document(root, space_id, name)?;
+			StickyIndex::decode_v1(&decoded_content(name, anchor)?)
+				.map(drop)
+				.map_err(|error| undecodable(name, error.to_string()))
+		}
+		LibraryPresenceAt::Board { point, node_id } => {
+			a_board(root, space_id, name)?;
+			if !point.x.is_finite() || !point.y.is_finite() {
+				return Err(undecodable(name, "a board point is not finite".to_owned()));
+			}
+			match node_id {
+				Some(node_id) if node_id.len() > MAX_NODE_ID_BYTES => Err(undecodable(
+					name,
+					format!("a node id is longer than {MAX_NODE_ID_BYTES} bytes"),
+				)),
+				_ => Ok(()),
+			}
+		}
+	}
 }
 
 pub(crate) fn seated_name<R: Runtime>(
@@ -182,8 +233,14 @@ pub(crate) fn seat_writer<R: Runtime>(
 	name: &str,
 	seated: Seated,
 ) -> bool {
-	let (presence, is_new) = presences(app).seated(space_id, name, seated);
-	published(app, presence);
+	let is_paced = matches!(seated.at, LibraryPresenceAt::Board { .. });
+	let presences = presences(app);
+	let (presence, is_new) = presences.seated(space_id, name, seated);
+	if !is_paced {
+		published(app, presence);
+	} else if presences.is_first_to_trail(space_id, name) {
+		tokio::spawn(trailing(app.clone(), space_id.to_owned(), name.to_owned()));
+	}
 	is_new
 }
 
@@ -227,6 +284,11 @@ async fn lapsing<R: Runtime>(app: AppHandle<R>, space_id: String, name: String, 
 			Lease::Lapsed(presence) => return published(&app, presence),
 		}
 	}
+}
+
+async fn trailing<R: Runtime>(app: AppHandle<R>, space_id: String, name: String) {
+	tokio::time::sleep(BOARD_PRESENCE_PACE).await;
+	published(&app, presences(&app).trailed(&space_id, &name));
 }
 
 fn published<R: Runtime>(app: &AppHandle<R>, presence: LibraryDocumentPresence) {

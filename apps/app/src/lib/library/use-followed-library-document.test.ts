@@ -28,7 +28,7 @@ const agent = (id: string): LibraryWriter => ({
 	id,
 	kind: "agent",
 	name: null,
-	caret: "caret",
+	at: { kind: "text", anchor: "caret" },
 })
 
 const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 0)))

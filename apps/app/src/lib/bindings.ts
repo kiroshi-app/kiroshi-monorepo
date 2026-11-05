@@ -49,7 +49,7 @@ export const commands = {
 	libraryBoardSummary: (spaceId: string, name: string) => typedError<LibraryBoardSummary, LibraryError>(__TAURI_INVOKE("library_board_summary", { spaceId, name })),
 	libraryOpenDocument: (spaceId: string, name: string) => typedError<LibraryDocumentState, LibraryError>(__TAURI_INVOKE("library_open_document", { spaceId, name })),
 	libraryApplyUpdate: (spaceId: string, name: string, update: string) => typedError<null, LibraryError>(__TAURI_INVOKE("library_apply_update", { spaceId, name, update })),
-	libraryShareCaret: (spaceId: string, name: string, caret: string | null) => typedError<null, LibraryError>(__TAURI_INVOKE("library_share_caret", { spaceId, name, caret })),
+	librarySharePresence: (spaceId: string, name: string, at: { kind: "text"; anchor: string } | { kind: "board"; point: LibraryBoardPoint; nodeId: string | null } | null) => typedError<null, LibraryError>(__TAURI_INVOKE("library_share_presence", { spaceId, name, at })),
 	libraryStopWriters: (spaceId: string, name: string, agentId: string | null) => typedError<CancelOutcome, LibraryError>(__TAURI_INVOKE("library_stop_writers", { spaceId, name, agentId })),
 	libraryReadThumbnail: (spaceId: string, name: string) => typedError<LibraryImage, LibraryError>(__TAURI_INVOKE("library_read_thumbnail", { spaceId, name })),
 	libraryImport: (spaceId: string, name: string, content: string) => typedError<LibraryItem, LibraryError>(__TAURI_INVOKE("library_import", { spaceId, name, content })),
@@ -1218,6 +1218,11 @@ export type LibraryBoardNode = {
 	colour: string | null,
 };
 
+export type LibraryBoardPoint = {
+	x: number | null,
+	y: number | null,
+};
+
 export type LibraryBoardSummary = {
 	name: string,
 	nodeCount: number,
@@ -1323,6 +1328,8 @@ export type LibraryOverwritten = {
 	modifiedAt: number,
 };
 
+export type LibraryPresenceAt = { kind: "text"; anchor: string } | { kind: "board"; point: LibraryBoardPoint; nodeId: string | null };
+
 export type LibraryTemplate = {
 	id: string,
 	title: string,
@@ -1334,7 +1341,7 @@ export type LibraryWriter = {
 	id: string,
 	kind: LibraryWriterKind,
 	name: string | null,
-	caret: string,
+	at: LibraryPresenceAt,
 };
 
 export type LibraryWriterKind = "agent" | "person" | "member";

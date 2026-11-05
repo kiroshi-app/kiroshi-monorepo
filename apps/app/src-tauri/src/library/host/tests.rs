@@ -21,10 +21,10 @@ use crate::conversations::contract::TranscriptMessage;
 use crate::db::repositories::messages::MessagePageQuery;
 use crate::library::commands::library_stop_writers;
 use crate::library::contract::{
-	LibraryChanged, LibraryDocumentPresence, LibraryDocumentRenamed, LibraryOverwritten,
-	LibraryWriter, LibraryWriterKind,
+	LibraryBoardPoint, LibraryChanged, LibraryDocumentPresence, LibraryDocumentRenamed,
+	LibraryOverwritten, LibraryPresenceAt, LibraryWriter, LibraryWriterKind,
 };
-use crate::library::presence::{share_caret, Presences};
+use crate::library::presence::{share_presence, Presences};
 use crate::library::{apply_update, open_document, read_thumbnail};
 use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 
@@ -43,7 +43,11 @@ const SPACE: &str = "personal";
 const PERSON_CLIENT: u64 = 7;
 
 async fn a_host(name: &str) -> (AppOfItsOwn, PathBuf) {
-	let app = an_app_of_its_own(&format!("library-host-{name}"), mock_builder());
+	a_host_built(name, mock_builder()).await
+}
+
+async fn a_host_built(name: &str, builder: tauri::Builder<MockRuntime>) -> (AppOfItsOwn, PathBuf) {
+	let app = an_app_of_its_own(&format!("library-host-{name}"), builder);
 	app.manage(db::bootstrap(app.handle()));
 	ready(&app.state::<db::DatabaseState>())
 		.expect("the database opens")
@@ -102,7 +106,7 @@ fn refusal_of(answer: Result<Value, DocumentRefusal>) -> Value {
 	serde_json::to_value(answer.expect_err("the call is refused")).expect("the refusal serializes")
 }
 
-fn caret_of_a_member(app: &App<MockRuntime>, name: &str) -> String {
+fn caret_of_a_member(app: &App<MockRuntime>, name: &str) -> LibraryPresenceAt {
 	let state = open_document(app.handle(), &root(app.handle()).expect("root"), SPACE, name)
 		.expect("the document opens")
 		.update;
@@ -111,7 +115,7 @@ fn caret_of_a_member(app: &App<MockRuntime>, name: &str) -> String {
 	doc.transact_mut().apply_update(Update::decode_v1(&update).expect("yjs")).expect("applies");
 	let text = doc.get_or_insert_text("markdown");
 	let caret = text.sticky_index(&doc.transact(), 0, yrs::Assoc::After).expect("a caret");
-	BASE64_STANDARD.encode(caret.encode_v1())
+	LibraryPresenceAt::Text { anchor: BASE64_STANDARD.encode(caret.encode_v1()) }
 }
 
 fn named(writers: &[LibraryWriter]) -> Vec<(LibraryWriterKind, Option<&str>)> {
@@ -129,14 +133,14 @@ async fn an_agent_and_a_member_are_published_with_their_names_then_the_agent_fin
 		events::LIBRARY_DOCUMENT_WRITER_FINISHED.name(),
 	);
 	let caret = caret_of_a_member(&app, "notes.md");
-	share_caret(
+	share_presence(
 		app.handle(),
 		&root,
 		SPACE,
 		"notes.md",
 		Seat::Member("u2".to_owned()),
 		Some("Ana".to_owned()),
-		&caret,
+		caret,
 	)
 	.expect("the member caret is published");
 
@@ -191,7 +195,10 @@ async fn a_write_lands_in_more_than_one_update_with_the_caret_after_what_it_wrot
 	let carets: Vec<String> = all_of(&presences)
 		.into_iter()
 		.filter_map(|presence| presence.writers.into_iter().next())
-		.map(|writer| writer.caret)
+		.filter_map(|writer| match writer.at {
+			LibraryPresenceAt::Text { anchor } => Some(anchor),
+			LibraryPresenceAt::Board { .. } => None,
+		})
 		.collect();
 	let held = Doc::new();
 	let state = std::fs::read(root.join(".documents").join(SPACE).join("notes.md.yjs"))
@@ -1008,14 +1015,14 @@ async fn a_member_caret_lapses_unless_it_is_sent_again() {
 	let caret = caret_of_a_member(&app, "notes.md");
 	let member = || Seat::Member("u2".to_owned());
 	let shared = || {
-		share_caret(
+		share_presence(
 			app.handle(),
 			&root,
 			SPACE,
 			"notes.md",
 			member(),
 			Some("Ana".to_owned()),
-			&caret,
+			caret.clone(),
 		)
 	};
 	shared().expect("the caret is published");
@@ -1031,11 +1038,219 @@ async fn a_member_caret_lapses_unless_it_is_sent_again() {
 	assert!(lapsed[0].writers.is_empty());
 }
 
+const BOARD: &str = "plan.canvas";
+
+const EMPTY_BOARD: &str = r#"{"nodes":[],"edges":[]}"#;
+
+fn on_the_board(x: f64, y: f64, node_id: Option<&str>) -> LibraryPresenceAt {
+	LibraryPresenceAt::Board {
+		point: LibraryBoardPoint { x, y },
+		node_id: node_id.map(str::to_owned),
+	}
+}
+
+fn shared_by_a_member(
+	app: &App<MockRuntime>,
+	root: &Path,
+	name: &str,
+	at: LibraryPresenceAt,
+) -> Result<(), LibraryError> {
+	let member = Seat::Member("u2".to_owned());
+	share_presence(app.handle(), root, SPACE, name, member, Some("Ana".to_owned()), at)
+}
+
+fn positions(presences: &[LibraryDocumentPresence]) -> Vec<Vec<LibraryPresenceAt>> {
+	presences
+		.iter()
+		.map(|presence| presence.writers.iter().map(|writer| writer.at.clone()).collect())
+		.collect()
+}
+
+fn shared_through_the_command(
+	window: &tauri::WebviewWindow<MockRuntime>,
+	name: &str,
+	at: &LibraryPresenceAt,
+) -> Value {
+	tauri::test::get_ipc_response(
+		window,
+		tauri::webview::InvokeRequest {
+			cmd: "library_share_presence".into(),
+			callback: tauri::ipc::CallbackFn(0),
+			error: tauri::ipc::CallbackFn(1),
+			url: "tauri://localhost".parse().expect("a url"),
+			body: json!({ "spaceId": SPACE, "name": name, "at": at }).into(),
+			headers: Default::default(),
+			invoke_key: tauri::test::INVOKE_KEY.to_string(),
+		},
+	)
+	.unwrap_or_else(|error| panic!("the presence was refused: {error:?}"))
+	.deserialize::<Value>()
+	.expect("the answer reads")
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_text_anchor_and_a_board_point_shared_through_the_command_are_published() {
+	let builder = mock_builder().invoke_handler(crate::commands::invoke_handler());
+	let (app, root) = a_host_built("share-presence", builder).await;
+	put(&root, SPACE, "notes.md", "Notes.");
+	put(&root, SPACE, BOARD, EMPTY_BOARD);
+	let window =
+		tauri::WebviewWindowBuilder::new(app.handle(), "main", tauri::WebviewUrl::default())
+			.build()
+			.expect("the window opens");
+	let presences =
+		heard::<LibraryDocumentPresence>(&app, events::LIBRARY_DOCUMENT_PRESENCE.name());
+	let anchor = caret_of_a_member(&app, "notes.md");
+	let point = on_the_board(12.5, -4.0, Some("n1"));
+
+	shared_through_the_command(&window, "notes.md", &anchor);
+	shared_through_the_command(&window, BOARD, &point);
+
+	let wait = Duration::from_secs(5);
+	let in_the_document = presences.recv_timeout(wait).expect("the anchor is published");
+	let on_the_board = presences.recv_timeout(wait).expect("the point is published");
+	assert_eq!(in_the_document.name, "notes.md");
+	assert_eq!(positions(&[in_the_document]), [vec![anchor]]);
+	assert_eq!(on_the_board.name, BOARD);
+	assert_eq!(positions(&[on_the_board]), [vec![point]]);
+}
+
+#[tokio::test(start_paused = true)]
+async fn an_agent_board_seat_publishes_its_node_and_point_then_leaves_and_finishes_on_drop() {
+	let (app, root) = a_host("board-seat").await;
+	put(&root, SPACE, BOARD, EMPTY_BOARD);
+	let presences =
+		heard::<LibraryDocumentPresence>(&app, events::LIBRARY_DOCUMENT_PRESENCE.name());
+	let finishes = heard::<LibraryDocumentWriterFinished>(
+		&app,
+		events::LIBRARY_DOCUMENT_WRITER_FINISHED.name(),
+	);
+	let agent = Agent { id: "b1".to_owned(), name: "Bean".to_owned() };
+	let mut seat = BoardWriting::of(app.handle(), SPACE, BOARD, &agent);
+
+	seat.at("n1", LibraryBoardPoint { x: 40.0, y: 80.0 });
+	tokio::time::sleep(BOARD_PACE_PASSED).await;
+
+	let seated = all_of(&presences);
+	assert_eq!(positions(&seated), [vec![on_the_board(40.0, 80.0, Some("n1"))]]);
+	assert_eq!(named(&seated[0].writers), [(LibraryWriterKind::Agent, Some("Bean"))]);
+
+	seat.writing.outcome = LibraryWriteOutcome::Finished;
+	drop(seat);
+
+	assert_eq!(positions(&all_of(&presences)), [vec![]]);
+	assert_eq!(
+		all_of(&finishes),
+		[LibraryDocumentWriterFinished {
+			space_id: SPACE.to_owned(),
+			name: BOARD.to_owned(),
+			agent_id: "b1".to_owned(),
+			agent_name: "Bean".to_owned(),
+			outcome: LibraryWriteOutcome::Finished,
+		}]
+	);
+}
+
+const BOARD_PACE_PASSED: Duration = Duration::from_millis(60);
+
+#[tokio::test(start_paused = true)]
+async fn a_member_board_position_lapses_after_its_lease() {
+	let (app, root) = a_host("board-lease").await;
+	put(&root, SPACE, BOARD, EMPTY_BOARD);
+	let presences =
+		heard::<LibraryDocumentPresence>(&app, events::LIBRARY_DOCUMENT_PRESENCE.name());
+
+	shared_by_a_member(&app, &root, BOARD, on_the_board(1.0, 2.0, None))
+		.expect("the position is published");
+	tokio::time::sleep(Duration::from_secs(29)).await;
+	assert_eq!(positions(&all_of(&presences)), [vec![on_the_board(1.0, 2.0, None)]]);
+
+	tokio::time::sleep(Duration::from_secs(2)).await;
+
+	assert_eq!(positions(&all_of(&presences)), [vec![]]);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_burst_of_board_positions_is_published_once_with_the_latest_of_every_seat() {
+	let (app, root) = a_host("board-burst").await;
+	put(&root, SPACE, BOARD, EMPTY_BOARD);
+	let presences =
+		heard::<LibraryDocumentPresence>(&app, events::LIBRARY_DOCUMENT_PRESENCE.name());
+	let window = Seat::Window("main".to_owned());
+	share_presence(app.handle(), &root, SPACE, BOARD, window, None, on_the_board(0.0, 0.0, None))
+		.expect("the window position is seated");
+
+	for step in 1..=5 {
+		let at = on_the_board(f64::from(step), 0.0, Some("n1"));
+		shared_by_a_member(&app, &root, BOARD, at).expect("the position is seated");
+		tokio::time::sleep(Duration::from_millis(8)).await;
+	}
+	assert!(all_of(&presences).is_empty());
+	tokio::time::sleep(BOARD_PACE_PASSED).await;
+
+	assert_eq!(
+		positions(&all_of(&presences)),
+		[vec![on_the_board(0.0, 0.0, None), on_the_board(5.0, 0.0, Some("n1"))]]
+	);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_position_of_the_wrong_kind_for_the_item_is_refused_and_publishes_nothing() {
+	let (app, root) = a_host("wrong-kind").await;
+	put(&root, SPACE, "notes.md", "Notes.");
+	put(&root, SPACE, BOARD, EMPTY_BOARD);
+	let presences =
+		heard::<LibraryDocumentPresence>(&app, events::LIBRARY_DOCUMENT_PRESENCE.name());
+	let anchor = caret_of_a_member(&app, "notes.md");
+
+	let on_a_board = shared_by_a_member(&app, &root, BOARD, anchor);
+	let in_a_document = shared_by_a_member(&app, &root, "notes.md", on_the_board(1.0, 1.0, None));
+	tokio::time::sleep(BOARD_PACE_PASSED).await;
+
+	assert_eq!(on_a_board, Err(LibraryError::NotADocument { name: BOARD.to_owned() }));
+	assert_eq!(in_a_document, Err(LibraryError::NotABoard { name: "notes.md".to_owned() }));
+	assert!(all_of(&presences).is_empty());
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_board_position_off_the_plane_or_with_an_oversized_node_is_refused_and_publishes_nothing()
+{
+	let (app, root) = a_host("bad-point").await;
+	put(&root, SPACE, BOARD, EMPTY_BOARD);
+	let presences =
+		heard::<LibraryDocumentPresence>(&app, events::LIBRARY_DOCUMENT_PRESENCE.name());
+	let refused = [
+		on_the_board(f64::NAN, 0.0, None),
+		on_the_board(0.0, f64::INFINITY, None),
+		on_the_board(0.0, 0.0, Some(&"n".repeat(257))),
+	];
+
+	for at in refused {
+		let answer = shared_by_a_member(&app, &root, BOARD, at);
+		assert!(
+			matches!(&answer, Err(LibraryError::Undecodable { name, .. }) if name == BOARD),
+			"got {answer:?}"
+		);
+	}
+	shared_by_a_member(&app, &root, BOARD, on_the_board(0.0, 0.0, Some(&"n".repeat(256))))
+		.expect("a node id of 256 bytes is seated");
+	tokio::time::sleep(BOARD_PACE_PASSED).await;
+
+	assert_eq!(
+		positions(&all_of(&presences)),
+		[vec![on_the_board(0.0, 0.0, Some(&"n".repeat(256)))]]
+	);
+}
+
 #[test]
 fn a_closed_window_leaves_every_document_it_stood_in() {
 	let presences = Presences::default();
-	let seated =
-		|seat: Seat| Seated { seat, name: None, caret: String::new(), lease_ends_at: None };
+	let seated = |seat: Seat| Seated {
+		seat,
+		name: None,
+		at: LibraryPresenceAt::Text { anchor: String::new() },
+		lease_ends_at: None,
+	};
 	presences.seated(SPACE, "a.md", seated(Seat::Window("main".to_owned())));
 	presences.seated(SPACE, "b.md", seated(Seat::Window("main".to_owned())));
 	presences.seated(SPACE, "b.md", seated(Seat::Window("second".to_owned())));
@@ -1190,14 +1405,14 @@ async fn a_stop_without_an_agent_stops_every_agent_writing_and_leaves_the_member
 		events::LIBRARY_DOCUMENT_WRITER_FINISHED.name(),
 	);
 	let caret = caret_of_a_member(&app, "notes.md");
-	share_caret(
+	share_presence(
 		app.handle(),
 		&root,
 		SPACE,
 		"notes.md",
 		Seat::Member("u2".to_owned()),
 		Some("Ana".to_owned()),
-		&caret,
+		caret,
 	)
 	.expect("the member caret is published");
 	let bean = writing(&app, "b1", "a".repeat(200));

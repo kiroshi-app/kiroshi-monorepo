@@ -187,7 +187,7 @@ describe("a gallery in a document opened from a conversation", () => {
 		libraryHost.answers.set("library_open_document", ({ name }) =>
 			openedStateOf(name, GALLERY_PLAN),
 		)
-		libraryHost.answers.set("library_share_caret", () => null)
+		libraryHost.answers.set("library_share_presence", () => null)
 		libraryHost.answers.set("library_read_image", (call) => {
 			imageReads.push(call)
 			return { name: call.name, mimeType: "image/jpeg", content: call.name }
@@ -256,7 +256,7 @@ describe("the width of a document opened beside a conversation", () => {
 		libraryHost.answers.set("library_open_document", ({ name }) =>
 			openedStateOf(name, "# Plan"),
 		)
-		libraryHost.answers.set("library_share_caret", () => null)
+		libraryHost.answers.set("library_share_presence", () => null)
 	})
 
 	afterEach(() => {
