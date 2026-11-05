@@ -52,6 +52,7 @@ import {
 import { useSaveMessageAsDocument } from "@/lib/library/use-save-message-as-document"
 import {
 	type BoardDrawing,
+	NOBODY_DRAWING,
 	useThreadBoardDrawers,
 } from "@/lib/library/use-thread-board-drawers"
 import {
@@ -79,9 +80,9 @@ export const ThreadDocumentsContext = createContext<ThreadDocuments | null>(
 	null,
 )
 
-const ThreadBoardDrawingContext = createContext<
-	((name: string) => BoardDrawing) | null
->(null)
+const ThreadBoardDrawingContext = createContext<(name: string) => BoardDrawing>(
+	() => NOBODY_DRAWING,
+)
 
 type BoardsByName = ReadonlyMap<string, LibraryItem>
 
@@ -371,7 +372,7 @@ type ThreadBoardCardProps = {
 const ThreadBoardCard = ({ documents, board, now }: ThreadBoardCardProps) => {
 	const summary = useBoardSummary(documents.spaceId, board)
 	const drawingOf = useContext(ThreadBoardDrawingContext)
-	const { drawing, pointers } = drawingOf?.(board.name) ?? { pointers: [] }
+	const { drawing, pointers } = drawingOf(board.name)
 	const item: ThreadLibraryItem = { kind: "board", name: board.name }
 
 	return (

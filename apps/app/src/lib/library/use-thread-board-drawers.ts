@@ -38,7 +38,7 @@ const NO_DRAWN_OBJECT = ""
 
 const NOBODY_DRAWS: DrawersByBoard = new Map()
 
-const NOBODY_DRAWING: BoardDrawing = { pointers: [] }
+export const NOBODY_DRAWING: BoardDrawing = { pointers: [] }
 
 const drawersAmong = (writers: LibraryWriter[]): BoardDrawer[] =>
 	writers.flatMap(({ id, kind, name, at }) =>
