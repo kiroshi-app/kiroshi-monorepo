@@ -178,6 +178,7 @@
 	--color-board-dot: var(--board-dot);
 	--color-board-control: var(--board-control);
 	--color-board-control-foreground: var(--board-control-foreground);
+	--color-board-control-selected: var(--board-control-selected);
 	--shadow-board-control: var(--board-control-shadow);
 	--color-board-selection-bar: var(--board-selection-bar);
 	--color-board-selection-bar-foreground: var(--board-selection-bar-foreground);
