@@ -1329,6 +1329,14 @@
                 }
             case "relay_avatar" where args["file"] as? String == "shoto.png":
                 reply(id, FixtureHost.picture)
+            case "relay_attachment":
+                if let answer = CitedFixture.answer(for: args["file"] as? String ?? "") {
+                    reply(id, answer)
+                } else {
+                    push(
+                        .frame(
+                            #"{"id":\#(id),"status":404,"body":"no file answers this path"}"#))
+                }
             default:
                 push(
                     .frame(#"{"id":\#(id),"status":403,"body":"this command belongs to the host"}"#)

@@ -226,6 +226,8 @@
             "fitting-code": (false, [fittingCode]),
             "copied-code": (false, [copiedCode]),
             "tall-mention": (true, [tallMention]),
+            "cited": (false, [CitedFixture.reply, CitedFixture.legacyBlock]),
+            "cited-failed": (false, [CitedFixture.failedReply]),
         ]
 
         static var artboard: (isGroup: Bool, replies: [String]) {
