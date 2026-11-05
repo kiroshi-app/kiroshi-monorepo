@@ -236,7 +236,7 @@ export const LIBRARY_AGENT_DOCUMENT: LibraryDocument = {
 			`- Notifications wait for the first finished task, ${ATLAS_SENTENCE}`,
 		].join("\n"),
 		"## What we measure",
-		"Weekly active Spaces is the one number we report on launch day, read against the four weeks before it.",
+		"Weekly active Spaces is the one number we report on launch day, read against the four weeks before it and against the same weeks of last spring.",
 		MIRA_SENTENCE,
 		"## Timeline",
 		"Copy is final on the 7th, screenshots land on the 10th, and the release notes go out with the build on the morning of the 14th.",

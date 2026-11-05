@@ -1637,7 +1637,7 @@ export const NarrowColumn = meta.story({
 		docs: {
 			description: {
 				story:
-					"The document column at its narrowest, the article narrower than 640 and only the 40px padding left of the text. Check the whole handle, + and the six dots, stays inside the visible column, overlapping the text by no more than the 6px the measured handle cannot fit.",
+					"The document column at its narrowest, the article narrower than 794 and only the 40px padding left of the text. Check the whole handle, + and the six dots, stays inside the visible column, overlapping the text by no more than the 6px the measured handle cannot fit.",
 			},
 		},
 	},
@@ -1652,7 +1652,7 @@ export const NarrowColumn = meta.story({
 		const column = slotsIn(canvasElement, "library-document-column")[0]
 		const visible = column.getBoundingClientRect()
 		const text = partOf(block, "markdown").getBoundingClientRect()
-		await expect(text.width).toBeLessThan(640)
+		await expect(text.width).toBeLessThan(794)
 		for (const slot of ["library-block-insert", "library-block-drag"]) {
 			const part = partOf(block, slot).getBoundingClientRect()
 			await expect(part.left).toBeGreaterThanOrEqual(visible.left)

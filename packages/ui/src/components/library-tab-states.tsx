@@ -9,6 +9,7 @@ import {
 	FAILURE_LINE,
 	FAILURE_PRIMARY_PILL,
 } from "@workspace/ui/components/library-document-states"
+import { DOCUMENT_COLUMN_MEASURE } from "@workspace/ui/components/library-document-view"
 import { LIBRARY_BAR } from "@workspace/ui/components/library-item-menu"
 import { LIGHTBOX_SURFACE } from "@workspace/ui/components/library-lightbox"
 import {
@@ -96,7 +97,12 @@ const LibraryDocumentSkeleton = () => {
 				<SkeletonBarActions />
 			</div>
 			<div className="flex min-h-0 flex-1 flex-col px-10 pt-10 pb-10">
-				<div className="mx-auto flex min-h-0 w-full max-w-160 flex-1 flex-col">
+				<div
+					className={cn(
+						"mx-auto flex min-h-0 w-full flex-1 flex-col",
+						DOCUMENT_COLUMN_MEASURE,
+					)}
+				>
 					<ListSkeleton
 						className="min-h-0 flex-1 gap-0"
 						row={documentSkeletonRowAt}

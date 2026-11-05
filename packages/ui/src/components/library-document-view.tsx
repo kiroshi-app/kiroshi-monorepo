@@ -171,6 +171,9 @@ const LibraryDocumentBar = <Item extends LibraryMenuSubject>({
 	)
 }
 
+const DOCUMENT_COLUMN_MEASURE =
+	"[--document-column-width:794px] max-w-(--document-column-width)"
+
 type LibraryDocumentColumnProps = {
 	heading: ReactNode
 	detail: string
@@ -194,7 +197,12 @@ const LibraryDocumentColumn = ({
 			data-slot="library-document-column"
 			onMouseDown={onColumnMouseDown}
 		>
-			<article className="mx-auto flex w-full max-w-160 flex-col gap-3.5">
+			<article
+				className={cn(
+					"mx-auto flex w-full flex-col gap-3.5",
+					DOCUMENT_COLUMN_MEASURE,
+				)}
+			>
 				<header className="flex flex-col gap-1.5 pb-1.5">
 					{heading}
 					<p className="text-compact text-muted-foreground leading-4.5 tabular-nums">
@@ -311,6 +319,7 @@ const LibraryDocumentView = ({
 }
 
 export {
+	DOCUMENT_COLUMN_MEASURE,
 	DOCUMENT_TITLE,
 	DOCUMENT_TYPE,
 	GrowingField,
