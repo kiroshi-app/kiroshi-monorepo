@@ -823,7 +823,7 @@ describe("an opened Library document", () => {
 		]
 		await holdsMarkdown(pasted, [...paragraphs, "Ship the notes"])
 
-		await press(shown.getByRole("checkbox", { name: i18n.t("chat:task.todo") }))
+		await press(shown.getByRole("checkbox", { name: "Ship the notes" }))
 		const ticked = pasted.replace("- [ ]", "- [x]")
 		await holdsMarkdown(ticked, [...paragraphs, "Ship the notes"])
 

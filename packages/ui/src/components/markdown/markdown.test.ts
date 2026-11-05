@@ -67,12 +67,13 @@ describe("markdown constructions", () => {
 		expect(html.match(/<ul>/g)).toHaveLength(3)
 	})
 
-	it("renders task lists as enabled named checkboxes", () => {
+	it("renders task lists as enabled checkboxes labelled by their text", () => {
 		const html = render("- [x] shipped\n- [ ] pending")
 
 		expect(html).toContain('class="task-list-item"')
-		expect(html).toContain('aria-label="Done"')
-		expect(html).toContain('aria-label="To do"')
+		expect(html).not.toContain("aria-label=")
+		expect(html).toContain("</span>shipped</label>")
+		expect(html).toContain("</span>pending</label>")
 		expect(html).not.toContain('disabled=""')
 		expect(html.match(/checked=""/g)).toHaveLength(1)
 	})
@@ -80,7 +81,7 @@ describe("markdown constructions", () => {
 	it("starts a loose task label right after its box and keeps later paragraphs", () => {
 		const html = render("- [ ] pending\n\n  later words\n\n- [x] shipped")
 
-		expect(html).toContain("</label>pending</p>")
+		expect(html).toContain("</span>pending</label></p>")
 		expect(html).toContain("<p>later words</p>")
 	})
 

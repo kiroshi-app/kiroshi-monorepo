@@ -232,8 +232,8 @@
     }
     &:where(
         li.task-list-item
-          > :is([data-slot="markdown-task-label"], p):has(
-            > label > input:checked
+          [data-slot="markdown-task-label"]:has(
+            > [data-slot="markdown-task-checkbox"] > input:checked
           )
       ) {
       color: var(--typeset-muted);

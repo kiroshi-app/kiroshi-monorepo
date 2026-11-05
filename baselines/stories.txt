@@ -207,7 +207,11 @@ conversation-markdown-markdowntaskcheckbox--default
 conversation-markdown-markdowntaskcheckbox--loose-checklist
 conversation-markdown-markdowntaskcheckbox--loose-checklist-dark
 conversation-markdown-markdowntaskcheckbox--nested-checklist
+conversation-markdown-markdowntaskcheckbox--opens-a-link-in-the-label-without-ticking
+conversation-markdown-markdowntaskcheckbox--ticks-a-loose-row-by-clicking-the-label
+conversation-markdown-markdowntaskcheckbox--ticks-a-sub-task-alone
 conversation-markdown-markdowntaskcheckbox--ticks-and-unticks-by-click
+conversation-markdown-markdowntaskcheckbox--ticks-and-unticks-by-clicking-the-label
 conversation-markdown-markdowntaskcheckbox--ticks-from-the-keyboard
 conversation-markdown-optionscard--all-folded
 conversation-markdown-optionscard--keyboard-pick
