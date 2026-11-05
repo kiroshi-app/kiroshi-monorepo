@@ -3,8 +3,17 @@ import { useCallback, useEffect, useEffectEvent, useState } from "react"
 import { LIBRARY_DOCUMENT_PRESENCE_EVENT } from "./library-document-writers"
 import { reportUnheard } from "./use-library-document-writers"
 
-import type { LibraryDocumentPresence, LibraryWriter } from "../bindings"
+import type {
+	LibraryDocumentPresence,
+	LibraryPresenceAt,
+	LibraryWriter,
+} from "../bindings"
 import { listen } from "../host/index"
+
+export type ThreadLibraryItem = {
+	kind: "document" | "board"
+	name: string
+}
 
 type FollowedLibraryDocumentInput = {
 	spaceId: string | undefined
@@ -66,7 +75,10 @@ const isFollowedWriter =
 		workingAgentIds.includes(id) &&
 		!closedAgentIds.includes(id)
 
-const usePresenceInSpace = (
+const kindAt = ({ kind }: LibraryPresenceAt): ThreadLibraryItem["kind"] =>
+	kind === "board" ? "board" : "document"
+
+export const usePresenceInSpace = (
 	spaceId: string | undefined,
 	conversationId: string | null,
 	hear: (presence: LibraryDocumentPresence) => void,
@@ -95,22 +107,25 @@ export const useFollowedLibraryDocument = ({
 	conversationId,
 	workingAgentIds,
 }: FollowedLibraryDocumentInput) => {
-	const [openedName, setOpenedName] = useState<string | null>(null)
+	const [opened, setOpened] = useState<ThreadLibraryItem | null>(null)
 	const { closedAgentIds, closeTurns } = useClosedTurns(
 		conversationId,
 		workingAgentIds,
 	)
 
 	usePresenceInSpace(spaceId, conversationId, ({ name, writers }) => {
-		if (writers.some(isFollowedWriter(workingAgentIds, closedAgentIds))) {
-			setOpenedName(name)
+		const followed = writers.find(
+			isFollowedWriter(workingAgentIds, closedAgentIds),
+		)
+		if (followed) {
+			setOpened({ kind: kindAt(followed.at), name })
 		}
 	})
 
 	const close = useCallback(() => {
-		setOpenedName(null)
+		setOpened(null)
 		closeTurns()
 	}, [closeTurns])
 
-	return { openedName, open: setOpenedName, close }
+	return { opened, open: setOpened, close }
 }

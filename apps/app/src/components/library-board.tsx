@@ -48,6 +48,39 @@ const openingViewportOf = (summary: LibraryBoardSummary): BoardViewport => ({
 
 const UNPLACED_VIEWPORT: BoardViewport = { offset: { x: 0, y: 0 }, zoom: 1 }
 
+type LibraryBoardCanvasProps = {
+	board: ReturnType<typeof useLibraryBoardSession>
+	summary: LibraryBoardSummary | undefined
+}
+
+export const LibraryBoardCanvas = ({
+	board,
+	summary,
+}: LibraryBoardCanvasProps) => {
+	const [movedViewport, setViewport] = useState<BoardViewport | null>(null)
+	const viewport =
+		movedViewport ?? (summary ? openingViewportOf(summary) : UNPLACED_VIEWPORT)
+	const { tool, pickTool } = useLibraryBoardKeys(board)
+
+	return (
+		<BoardCanvas
+			libraryItems={NO_LIBRARY_ITEMS}
+			onDropFiles={leaveBoardUnchanged}
+			onIntent={board.apply}
+			onLibraryItemDrop={leaveBoardUnchanged}
+			onLibraryItemPick={leaveBoardUnchanged}
+			onPaste={leaveBoardUnchanged}
+			onToolChange={pickTool}
+			onViewportChange={setViewport}
+			renderObject={renderBoardObject}
+			status={board.view && summary ? "ready" : "loading"}
+			tool={tool}
+			view={board.view ?? UNOPENED_VIEW}
+			viewport={viewport}
+		/>
+	)
+}
+
 export const LibraryBoard = ({
 	spaceId,
 	name,
@@ -56,11 +89,7 @@ export const LibraryBoard = ({
 	onBack,
 	onDelete,
 }: LibraryBoardProps) => {
-	const [movedViewport, setViewport] = useState<BoardViewport | null>(null)
-	const viewport =
-		movedViewport ?? (summary ? openingViewportOf(summary) : UNPLACED_VIEWPORT)
 	const board = useLibraryBoardSession(spaceId, name)
-	const { tool, pickTool } = useLibraryBoardKeys(board)
 
 	if (board.hasFailedToOpen) {
 		return (
@@ -81,23 +110,7 @@ export const LibraryBoard = ({
 					onDelete={onDelete}
 				/>
 			}
-			scroller={() => (
-				<BoardCanvas
-					libraryItems={NO_LIBRARY_ITEMS}
-					onDropFiles={leaveBoardUnchanged}
-					onIntent={board.apply}
-					onLibraryItemDrop={leaveBoardUnchanged}
-					onLibraryItemPick={leaveBoardUnchanged}
-					onPaste={leaveBoardUnchanged}
-					onToolChange={pickTool}
-					onViewportChange={setViewport}
-					renderObject={renderBoardObject}
-					status={board.view && summary ? "ready" : "loading"}
-					tool={tool}
-					view={board.view ?? UNOPENED_VIEW}
-					viewport={viewport}
-				/>
-			)}
+			scroller={() => <LibraryBoardCanvas board={board} summary={summary} />}
 		/>
 	)
 }

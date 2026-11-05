@@ -66,8 +66,9 @@ import { FaceAvatar } from "@/components/face-avatar"
 import { useMissionCardMenus } from "@/components/mission-card-menu"
 import { type PromptHandle, ThreadComposer } from "@/components/thread-composer"
 import {
-	ThreadDocumentPanel,
+	ThreadBoardDrawers,
 	ThreadDocumentsContext,
+	ThreadOpenedItemPanel,
 	useThreadDocuments,
 } from "@/components/thread-documents"
 import { botThreadMenu, conversationThreadMenu } from "@/components/thread-menu"
@@ -1863,10 +1864,9 @@ function ThreadView(props: ThreadViewProps) {
 		onOpenMissionInNewTab,
 	} = props
 	const view = useThreadView(props)
-	const documents = useThreadDocuments(
-		shownConversationIdOf(thread),
-		turnRunningAgentIdsOf(view.facts),
-	)
+	const conversationId = shownConversationIdOf(thread)
+	const workingAgentIds = turnRunningAgentIdsOf(view.facts)
+	const documents = useThreadDocuments(conversationId, workingAgentIds)
 	const imageViewer = useAnswerImageViewer()
 	const imageActions = useShownImageActions()
 	const answerActions: AnswerActions = {
@@ -1890,13 +1890,10 @@ function ThreadView(props: ThreadViewProps) {
 		<ThreadLayout
 			anchorOnSend={view.isSoloThread}
 			aside={
-				documents?.openedName ? (
-					<ThreadDocumentPanel
-						key={documents.openedName}
-						isJoined={documents.isJoined}
-						name={documents.openedName}
-						onClose={documents.close}
-						spaceId={documents.spaceId}
+				documents?.opened ? (
+					<ThreadOpenedItemPanel
+						documents={documents}
+						opened={documents.opened}
 					/>
 				) : undefined
 			}
@@ -2035,7 +2032,14 @@ function ThreadView(props: ThreadViewProps) {
 			>
 				<AnswerActionsContext value={answerActions}>
 					<ThreadDocumentsContext value={documents}>
-						{layout}
+						<ThreadBoardDrawers
+							bots={known}
+							conversationId={conversationId}
+							spaceId={documents?.spaceId}
+							workingAgentIds={workingAgentIds}
+						>
+							{layout}
+						</ThreadBoardDrawers>
 					</ThreadDocumentsContext>
 				</AnswerActionsContext>
 			</ThreadRoutines>
