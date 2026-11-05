@@ -603,9 +603,10 @@ impl Held {
 	}
 
 	fn forgot(&mut self, space_id: &str, name: &str) {
-		self.docs.remove(&key(space_id, name));
-		self.written_boards.remove(&key(space_id, name));
-		self.pending_boards.remove(&key(space_id, name));
+		let forgotten = key(space_id, name);
+		self.docs.remove(&forgotten);
+		self.written_boards.remove(&forgotten);
+		self.pending_boards.remove(&forgotten);
 		self.landed_names.retain(|(held_space_id, former), landed| {
 			held_space_id != space_id || (former != name && landed != name)
 		});
