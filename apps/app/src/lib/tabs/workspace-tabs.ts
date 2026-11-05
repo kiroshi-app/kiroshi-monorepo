@@ -55,7 +55,6 @@ import {
 	moveInHistory,
 	openBackgroundTab,
 	openEmptyTab,
-	openTabOn,
 	pinTab,
 	pushEntry,
 	reopenTab,
@@ -111,7 +110,6 @@ export type WorkspaceTabs = {
 	showSpace: (spaceId: string) => void
 	openEmptyTab: () => void
 	openInNewTab: (href: string, spaceId?: string) => void
-	openInNewActiveTab: (href: string) => void
 	back: () => void
 	forward: () => void
 	select: (id: string) => void
@@ -661,8 +659,6 @@ export const createWorkspaceTabs = (
 			}
 			changeAway(spaceId, update)
 		},
-		openInNewActiveTab: (href) =>
-			askingChange((space) => openTabOn(space, href)),
 		back: () => askingMove(-1, () => history.back()),
 		forward: () => askingMove(1, () => history.forward()),
 		select: (id) => askingChange((space) => selectTab(space, id)),

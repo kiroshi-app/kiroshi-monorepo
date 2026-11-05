@@ -54,6 +54,7 @@ import {
 import { useLibraryItems } from "@/lib/library/use-library-items"
 import { useStopLibraryWriters } from "@/lib/library/use-stop-library-writers"
 import type { LibraryOpening } from "@/lib/navigation/library-search"
+import { isNewTabClickInFlight } from "@/lib/tabs/new-tab-clicks"
 
 export type LibraryScreenProps = {
 	spaceId: string
@@ -63,7 +64,6 @@ export type LibraryScreenProps = {
 	opening?: LibraryOpening
 	onOpeningChange: (opening: LibraryOpening | undefined) => void
 	onOpenInNewTab?: (opening: LibraryOpening) => void
-	onOpenImage: (opening: LibraryOpening) => void
 	onCloseTab?: () => void
 }
 
@@ -256,7 +256,6 @@ export const LibraryScreen = ({
 	opening,
 	onOpeningChange,
 	onOpenInNewTab,
-	onOpenImage,
 	onCloseTab,
 }: LibraryScreenProps) => {
 	const library = useLibraryItems(spaceId)
@@ -343,13 +342,14 @@ export const LibraryScreen = ({
 			onOpeningChange(openingOfItem(image))
 		}
 	}
-	const openItem = (item: KindedItem) => {
-		const show = item.kind === "image" ? onOpenImage : onOpeningChange
-		show(openingOfItem(item))
-	}
+	const openItem = (item: KindedItem) => onOpeningChange(openingOfItem(item))
 	const openInNewTab =
 		onOpenInNewTab &&
 		((item: KindedItem) => onOpenInNewTab(openingOfItem(item)))
+	const openPressedItem = (item: KindedItem) =>
+		openInNewTab && isNewTabClickInFlight()
+			? openInNewTab(item)
+			: openItem(item)
 	const openImageInNewTab =
 		onOpenInNewTab &&
 		(({ id }: NamedItem) => onOpenInNewTab({ kind: "image", name: id }))
@@ -471,7 +471,7 @@ export const LibraryScreen = ({
 			onNewDocument={() => setPickedTemplate("blank")}
 			onOpen={openItem}
 			onOpenInNewTab={openInNewTab}
-			onOpenItem={openItem}
+			onOpenItem={openPressedItem}
 			onRename={openItem}
 			onSearchQueryChange={setQuery}
 			onShowInFolder={reveal}
