@@ -52,6 +52,7 @@ const ROW_LINKS: BoardObject[] = Array.from({ length: ROWS }, (_, row) => ({
 const FIVE_HUNDRED_OBJECTS = { objects: [...NOTES, ...ROW_LINKS] }
 const EMPTY_BOARD = { objects: [] }
 const AT_ORIGIN: BoardViewport = { offset: { x: 24, y: 24 }, zoom: 1 }
+const DARK_BOARD_SURFACE = "rgb(22, 22, 24)"
 const LAST_NOTE = NOTES.at(-1) as BoardItem
 
 type PlaceholderObjectProps = {
@@ -102,6 +103,11 @@ const centreOf = (element: Element) => {
 	const rect = element.getBoundingClientRect()
 	return { clientX: rect.x + rect.width / 2, clientY: rect.y + rect.height / 2 }
 }
+
+const expectDarkSurface = (root: HTMLElement) =>
+	expect(getComputedStyle(slotIn(root, "board-canvas")).backgroundColor).toBe(
+		DARK_BOARD_SURFACE,
+	)
 
 const meta = preview.meta({
 	title: "Navigation/BoardCanvas",
@@ -199,8 +205,6 @@ export const Empty = meta.story({
 	},
 })
 
-const DARK_BOARD_SURFACE = "rgb(22, 22, 24)"
-
 export const EmptyDark = meta.story({
 	globals: { theme: "dark" },
 	parameters: {
@@ -212,10 +216,7 @@ export const EmptyDark = meta.story({
 		},
 	},
 	play: async (context) => {
-		await expect(
-			getComputedStyle(slotIn(context.canvasElement, "board-canvas"))
-				.backgroundColor,
-		).toBe(DARK_BOARD_SURFACE)
+		await expectDarkSurface(context.canvasElement)
 		await Empty.input.play?.(context)
 	},
 })
@@ -279,10 +280,7 @@ export const FiveHundredObjectsDark = meta.story({
 		},
 	},
 	play: async (context) => {
-		await expect(
-			getComputedStyle(slotIn(context.canvasElement, "board-canvas"))
-				.backgroundColor,
-		).toBe(DARK_BOARD_SURFACE)
+		await expectDarkSurface(context.canvasElement)
 		await FiveHundredObjects.input.play?.(context)
 	},
 })
