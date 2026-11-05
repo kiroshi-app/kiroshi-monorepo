@@ -257,6 +257,7 @@ conversation-message-authorline--long-name-in-a-narrow-bubble
 conversation-message-authorline--name-click-selects-the-agent
 conversation-message-authorline--name-right-click-opens-the-agent-menu
 conversation-message-authorline--queued
+conversation-message-authorline--sticky-outside-a-bubble
 conversation-message-chatemptystate--centred-in-its-frame
 conversation-message-chatemptystate--free-hue
 conversation-message-chatemptystate--not-connected

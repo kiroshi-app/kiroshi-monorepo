@@ -72,6 +72,7 @@ const useStuckToBottom = (isSticky: boolean) => {
 		if (!isSticky || !line || !marker) return
 
 		const stuckInset = Number.parseFloat(getComputedStyle(line).bottom)
+		if (!Number.isFinite(stuckInset)) return
 
 		const root = marker.closest<HTMLElement>(TRANSCRIPT_VIEWPORT)
 		const observer = new IntersectionObserver(
