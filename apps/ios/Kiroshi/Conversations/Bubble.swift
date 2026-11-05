@@ -21,6 +21,7 @@ struct Bubble: Identifiable, Equatable {
     let id: String
     let text: AttributedString
     var markdown: MarkdownMessage?
+    var attachment: CitedAttachment?
     var position = Position.alone
 }
 

@@ -32,6 +32,10 @@ struct MarkdownMessage: Equatable {
         BubbleSplit.groups(blocks).map { MarkdownMessage(blocks: $0, shownText: shownText) }
     }
 
+    func copying(_ messageText: String) -> MarkdownMessage {
+        MarkdownMessage(blocks: blocks, shownText: messageText)
+    }
+
     var hasCard: Bool {
         blocks.contains(where: \.isCard)
     }

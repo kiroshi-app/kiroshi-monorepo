@@ -39,10 +39,14 @@ struct BubbleText: View {
     }
 
     private var shape: UnevenRoundedRectangle {
+        Self.shape(of: bubble.position, isYours: isYours)
+    }
+
+    static func shape(of position: Bubble.Position, isYours: Bool) -> UnevenRoundedRectangle {
         let round: CGFloat = 20
         let joined: CGFloat = 8
-        let top = [.middle, .last].contains(bubble.position) ? joined : round
-        let bottom = [.first, .middle].contains(bubble.position) ? joined : round
+        let top = [.middle, .last].contains(position) ? joined : round
+        let bottom = [.first, .middle].contains(position) ? joined : round
         return isYours
             ? UnevenRoundedRectangle(
                 topLeadingRadius: round, bottomLeadingRadius: round, bottomTrailingRadius: bottom,

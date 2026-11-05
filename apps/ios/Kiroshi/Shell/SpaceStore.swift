@@ -14,6 +14,7 @@ final class SpaceStore {
     private(set) var currentSpaceId: Space.ID
     private(set) var connection: RelayConnection?
     private(set) var pictures: CompanionPictures?
+    private(set) var citedFiles: CitedFiles?
     private(set) var spaceIdsToJoin: Set<Space.ID> = []
     private(set) var spaceIdsAwaitingHost: Set<Space.ID> = []
     let email: String
@@ -99,6 +100,7 @@ final class SpaceStore {
             spaceKeys: spaceKeys, environment: relay)
         self.connection = connection
         pictures = CompanionPictures(connection: connection)
+        citedFiles = CitedFiles(connection: connection)
         let updates = await connection.updates()
         if !hasLeft {
             await connection.start()
@@ -118,6 +120,7 @@ final class SpaceStore {
         if self.connection === connection {
             self.connection = nil
             pictures = nil
+            citedFiles = nil
             work.forget()
         }
     }

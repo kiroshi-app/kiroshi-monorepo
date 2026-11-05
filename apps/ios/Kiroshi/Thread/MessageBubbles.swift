@@ -75,10 +75,17 @@ struct MessageBubbles: View {
             }
             ForEach(bubbles) { bubble in
                 let opensMessage = bubble.id == bubbles.first?.id
-                BubbleText(
-                    bubble: bubble, isYours: isYours, speaker: opensMessage ? speaker : nil,
-                    time: opensMessage ? time : ""
-                )
+                Group {
+                    if let attachment = bubble.attachment {
+                        CitedAttachmentView(
+                            attachment: attachment,
+                            shape: BubbleText.shape(of: bubble.position, isYours: isYours))
+                    } else {
+                        BubbleText(
+                            bubble: bubble, isYours: isYours, speaker: opensMessage ? speaker : nil,
+                            time: opensMessage ? time : "")
+                    }
+                }
                 .padding(isYours ? .leading : .trailing, gutter)
                 .frame(maxWidth: .infinity, alignment: isYours ? .trailing : .leading)
                 .anchorPreference(key: BubbleRows.self, value: .bounds) { [$0] }
@@ -103,7 +110,7 @@ struct MessageBubbles: View {
     }
 
     private var isMarkdown: Bool {
-        bubbles.contains { $0.markdown != nil }
+        bubbles.contains { $0.markdown != nil || $0.attachment != nil }
     }
 
     @ViewBuilder private var avatar: some View {

@@ -43,8 +43,8 @@ struct ThreadMessage: Identifiable, Equatable {
         bubbles =
             questionPart == nil
             ? Self.bubbles(
-                of: shown.text, id: id, isWrittenByPerson: writer.isWrittenByPerson,
-                authors: authors) : []
+                of: shown, id: id, isWrittenByPerson: writer.isWrittenByPerson, authors: authors)
+            : []
     }
 
     var askedQuestionId: String? {
@@ -78,7 +78,7 @@ struct ThreadMessage: Identifiable, Equatable {
             shown.text, isWrittenByPerson: writer.isWrittenByPerson, authors: authors)
         guard questionPart == nil else { return }
         bubbles = Self.bubbles(
-            of: shown.text, id: id, isWrittenByPerson: writer.isWrittenByPerson, authors: authors)
+            of: shown, id: id, isWrittenByPerson: writer.isWrittenByPerson, authors: authors)
     }
 
     mutating func append(_ delta: String) {
@@ -91,25 +91,55 @@ struct ThreadMessage: Identifiable, Equatable {
             && calendar.isDate(previous.sentAt, inSameDayAs: sentAt)
     }
 
-    private static func shown(_ text: String, isWrittenByPerson: Bool) -> (
-        text: String, files: [String]
-    ) {
-        guard isWrittenByPerson else { return (text, []) }
+    private struct Shown {
+        let text: String
+        var files: [String] = []
+        var segments: [CitedSegment] = []
+    }
+
+    private static func shown(_ text: String, isWrittenByPerson: Bool) -> Shown {
+        guard isWrittenByPerson else {
+            let cited = CitedMessage(text)
+            return Shown(text: cited.text, segments: cited.segments)
+        }
         let split = AttachmentBlock.split(text)
-        guard !split.text.isEmpty else { return (split.names.joined(separator: "\n"), []) }
-        return (split.text, split.names)
+        guard !split.text.isEmpty else { return Shown(text: split.names.joined(separator: "\n")) }
+        return Shown(text: split.text, files: split.names)
     }
 
     private static func bubbles(
-        of text: String, id: String, isWrittenByPerson: Bool, authors: [Companion]
+        of shown: Shown, id: String, isWrittenByPerson: Bool, authors: [Companion]
     ) -> [Bubble] {
-        let whole = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !whole.isEmpty else { return [] }
-        let shown = render(whole, isWrittenByPerson: isWrittenByPerson, authors: authors)
-        guard !isWrittenByPerson else { return [Bubble(id: "\(id)-0", text: shown)] }
-        return MarkdownMessage(whole, among: authors).bubbles.enumerated().map { index, markdown in
-            Bubble(id: "\(id)-\(index)", text: shown, markdown: markdown)
+        let whole = shown.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let rendered = render(whole, isWrittenByPerson: isWrittenByPerson, authors: authors)
+        guard !isWrittenByPerson else {
+            return whole.isEmpty ? [] : [Bubble(id: "\(id)-0", text: rendered)]
         }
+        let messageText = Mentions.shown(in: whole, among: authors)
+        let pieces = shown.segments.flatMap { segment -> [CitedPiece] in
+            switch segment {
+            case .text(let text):
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                return MarkdownMessage(trimmed, among: authors).bubbles.map {
+                    .markdown($0.copying(messageText))
+                }
+            case .attachment(let attachment):
+                return [.attachment(attachment)]
+            }
+        }
+        return pieces.enumerated().map { index, piece in
+            var bubble = Bubble(id: "\(id)-\(index)", text: rendered)
+            switch piece {
+            case .markdown(let markdown): bubble.markdown = markdown
+            case .attachment(let attachment): bubble.attachment = attachment
+            }
+            return bubble
+        }
+    }
+
+    private enum CitedPiece {
+        case markdown(MarkdownMessage)
+        case attachment(CitedAttachment)
     }
 
     private static func render(_ text: String, isWrittenByPerson: Bool, authors: [Companion])

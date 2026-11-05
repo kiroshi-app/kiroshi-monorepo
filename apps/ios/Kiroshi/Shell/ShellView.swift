@@ -26,6 +26,7 @@ struct ShellView: View {
         .tint(.primary)
         .environment(\.spaceAccent, SpaceAccent(tint: store.currentSpace?.colour))
         .environment(store.pictures)
+        .environment(store.citedFiles)
         .environment(account.consent)
         .task(id: RelayFollow(spaceId: store.currentSpaceId, isInForeground: isInForeground)) {
             guard isInForeground else { return }
