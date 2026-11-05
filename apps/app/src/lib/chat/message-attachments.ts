@@ -164,3 +164,21 @@ export const messageWithAttachments = (text: string): MessageContent => {
 		? messageWithBarePaths(text, text.split("\n"))
 		: messageWithBlock(text, lines, headerIndex)
 }
+
+const LINK_DESTINATION = /\]\((?:<([^>]*)>|([^\s)]+))\)/g
+
+export const citesStoredAttachment = (text: string): boolean =>
+	[...text.matchAll(LINK_DESTINATION)].some(([, angled, bare]) =>
+		isStoredAttachmentPath(angled ?? bare ?? ""),
+	)
+
+export const citedAttachmentOf = (path: string): MessageAttachment | null =>
+	isStoredAttachmentPath(path) ? toAttachment(path) : null
+
+export const resolveCitedImage = async (path: string): Promise<string> => {
+	const previewUrl = citedAttachmentOf(path)?.previewUrl
+	if (!previewUrl) {
+		throw new Error(`${path} is not a stored image attachment`)
+	}
+	return previewUrl
+}

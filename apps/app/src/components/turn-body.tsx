@@ -5,6 +5,7 @@ import {
 	imageMenuActionsFor,
 } from "@workspace/ui/components/image-menu"
 import { Markdown, type MarkdownProps } from "@workspace/ui/components/markdown"
+import type { MarkdownAttachments } from "@workspace/ui/components/markdown/attachments"
 import {
 	type MessageAttachment,
 	MessageAttachments,
@@ -15,7 +16,12 @@ import {
 	AnswerActionsContext,
 	type ThreadImage,
 } from "@/lib/chat/answer-actions"
-import type { MessageContent } from "@/lib/chat/message-attachments"
+import {
+	citedAttachmentOf,
+	citesStoredAttachment,
+	type MessageContent,
+	resolveCitedImage,
+} from "@/lib/chat/message-attachments"
 import { openAttachment } from "@/lib/links/open-attachment"
 import { openWebPage } from "@/lib/links/open-web-page"
 
@@ -61,6 +67,30 @@ const attachmentOpener = (
 	}
 }
 
+const openerOf = (
+	attachments: MessageAttachment[],
+	actions: AnswerActions | null,
+) => (actions ? attachmentOpener(attachments, actions) : openAttachment)
+
+const citedAttachmentOpener =
+	(actions: AnswerActions | null) => (path: string) => {
+		const attachment = citedAttachmentOf(path)
+		if (attachment) {
+			openerOf([attachment], actions)(path)
+		}
+	}
+
+const citedAttachmentsOf = (
+	text: string,
+	actions: AnswerActions | null,
+): MarkdownAttachments =>
+	citesStoredAttachment(text)
+		? {
+				onOpenAttachment: citedAttachmentOpener(actions),
+				resolveAttachment: resolveCitedImage,
+			}
+		: {}
+
 export const TurnBody = ({
 	attachments,
 	text,
@@ -78,9 +108,7 @@ export const TurnBody = ({
 					actions ? attachmentImageMenu(attachments, actions) : undefined
 				}
 				items={attachments}
-				onOpen={
-					actions ? attachmentOpener(attachments, actions) : openAttachment
-				}
+				onOpen={openerOf(attachments, actions)}
 			/>
 			{text ? (
 				<Markdown
@@ -88,6 +116,7 @@ export const TurnBody = ({
 					isWriting={isWriting}
 					renderRun={renderRun}
 					runs={runs}
+					{...citedAttachmentsOf(text, actions)}
 				>
 					{text}
 				</Markdown>
