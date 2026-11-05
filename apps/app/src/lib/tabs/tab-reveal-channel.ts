@@ -16,15 +16,27 @@ type RevealAsk = RevealRequest & {
 	askId: string
 }
 
+type RevealOutcome = "revealed" | "absent" | "failed"
+
 type RevealAnswer = {
 	askId: string
-	isRevealed: boolean
+	outcome: RevealOutcome
 }
 
-const answerWithinBound = (answered: Promise<boolean>) => {
+const isRevealedBy = (outcome: RevealOutcome) => {
+	if (outcome === "failed") {
+		throw new Error("the other window could not come forward")
+	}
+	return outcome === "revealed"
+}
+
+const answerWithinBound = (answered: Promise<RevealOutcome>) => {
 	let timeout: ReturnType<typeof setTimeout> | undefined
-	const unanswered = new Promise<boolean>((resolve) => {
-		timeout = setTimeout(() => resolve(false), REVEAL_ANSWER_TIMEOUT_MS)
+	const unanswered = new Promise<never>((_, reject) => {
+		timeout = setTimeout(
+			() => reject(new Error("the other window did not answer")),
+			REVEAL_ANSWER_TIMEOUT_MS,
+		)
 	})
 	return Promise.race([answered, unanswered]).finally(() =>
 		clearTimeout(timeout),
@@ -33,33 +45,40 @@ const answerWithinBound = (answered: Promise<boolean>) => {
 
 export const askReveal = async (request: RevealRequest) => {
 	const askId = crypto.randomUUID()
-	let hear: (isRevealed: boolean) => void = () => undefined
-	const answered = new Promise<boolean>((resolve) => {
+	let hear: (outcome: RevealOutcome) => void = () => undefined
+	const answered = new Promise<RevealOutcome>((resolve) => {
 		hear = resolve
 	})
 	const stopListening = await listenOnThisComputer<RevealAnswer>(
 		REVEAL_ANSWER_EVENT,
 		({ payload }) => {
 			if (payload.askId === askId) {
-				hear(payload.isRevealed)
+				hear(payload.outcome)
 			}
 		},
 	)
 	try {
 		await emitOnThisComputer(REVEAL_ASK_EVENT, { ...request, askId })
-		return await answerWithinBound(answered)
+		return isRevealedBy(await answerWithinBound(answered))
 	} finally {
 		stopListening()
 	}
 }
 
-const reportUnrevealed = (reason: unknown) => {
+const reportUnrevealed = (reason: unknown): RevealOutcome => {
 	console.error("the tab could not be revealed for another window", reason)
-	return false
+	return "failed"
+}
+
+const reportUnanswered = (reason: unknown) => {
+	console.error("the reveal answer could not be sent", reason)
 }
 
 const answerReveal = (answer: RevealAnswer) =>
-	emitOnThisComputer(REVEAL_ANSWER_EVENT, answer).catch(reportUnrevealed)
+	emitOnThisComputer(REVEAL_ANSWER_EVENT, answer).catch(reportUnanswered)
+
+const outcomeOf = (isRevealed: boolean): RevealOutcome =>
+	isRevealed ? "revealed" : "absent"
 
 export const watchRevealAsks = (
 	windowLabel: string,
@@ -71,6 +90,6 @@ export const watchRevealAsks = (
 			return
 		}
 		void reveal(request)
-			.catch(reportUnrevealed)
-			.then((isRevealed) => answerReveal({ askId, isRevealed }))
+			.then(outcomeOf, reportUnrevealed)
+			.then((outcome) => answerReveal({ askId, outcome }))
 	})

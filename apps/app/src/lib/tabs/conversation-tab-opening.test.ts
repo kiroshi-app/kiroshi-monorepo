@@ -8,6 +8,7 @@ import { i18n } from "@workspace/ui/lib/i18n"
 import { createConversationTabOpening } from "./conversation-tab-opening"
 import { createOnThisComputerBus } from "./on-this-computer-test-bus"
 import { pageOf } from "./tab-pages"
+import { watchRevealAsks } from "./tab-reveal-channel"
 import { activeTabOf, currentHrefOf, type SpaceTabs } from "./tabs-model"
 import { useConversationTabOpening } from "./use-conversation-tab-opening"
 import {
@@ -41,6 +42,8 @@ vi.mock("../failure-report", async (importOriginal) => ({
 const MAIN = "main"
 
 const SECONDARY = "window-1"
+
+const THIRD = "window-2"
 
 const HOME = "home"
 
@@ -193,6 +196,51 @@ describe("opening a conversation a tab of another window shows", () => {
 		expect(host.raiseReportedFailure).toHaveBeenCalledOnce()
 		expect(hrefsOf(shown(here))).toEqual([OTHER_HREF])
 		expect(openInPlace).not.toHaveBeenCalled()
+	})
+
+	it("raises a failure notice and leaves this tab alone when the reveal ask is rejected", async () => {
+		const { here } = twoWindows()
+		host.emitOnThisComputer.mockRejectedValueOnce(new Error("bus closed"))
+
+		await openingOf(here).opening.open(ROOM)
+
+		expect(host.raiseReportedFailure).toHaveBeenCalledOnce()
+		expect(hrefsOf(shown(here))).toEqual([OTHER_HREF])
+		expect(openInPlace).not.toHaveBeenCalled()
+	})
+
+	it("opens in place without a failure notice when that window no longer holds the conversation", async () => {
+		const { here } = twoWindows()
+		const stopAnswering = await watchRevealAsks(SECONDARY, async () => false)
+
+		await openingOf(here).opening.open(ROOM)
+
+		expect(openInPlace).toHaveBeenCalledOnce()
+		expect(host.raiseReportedFailure).not.toHaveBeenCalled()
+		expect(host.revealWindow).not.toHaveBeenCalled()
+		stopAnswering()
+	})
+
+	it("asks the next live window the mirror names when the first one is gone", async () => {
+		const { here } = twoWindows()
+		const third = windowOn(THIRD, VOCCA, [ROOM_HREF])
+		third.openInNewTab(OTHER_HREF)
+		third.select(shown(third).tabs[1]?.id ?? "")
+		host.liveWindowLabels.mockResolvedValue([MAIN, THIRD])
+		const goneWindowAsked = vi.fn(async () => true)
+		const stopGone = await watchRevealAsks(SECONDARY, goneWindowAsked)
+		const stopThird = await openingOf(third).opening.answerReveals()
+
+		await openingOf(here).opening.open(ROOM)
+
+		expect(goneWindowAsked).not.toHaveBeenCalled()
+		expect(host.revealWindow).toHaveBeenCalledOnce()
+		expect(activeHrefOf(shown(third))).toBe(ROOM_HREF)
+		expect(hrefsOf(shown(here))).toEqual([OTHER_HREF])
+		expect(openInPlace).not.toHaveBeenCalled()
+		expect(host.raiseReportedFailure).not.toHaveBeenCalled()
+		stopGone()
+		stopThird()
 	})
 
 	it("opens in place when that window is no longer open", async () => {

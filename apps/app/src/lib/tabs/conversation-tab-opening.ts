@@ -82,24 +82,23 @@ const isWindowShowing = (windowLabel: string, conversationId: string) =>
 		return space !== null && tabShowing(space, conversationId) !== undefined
 	})
 
-const otherWindowShowing = (windowLabel: string, conversationId: string) =>
-	[MAIN_WINDOW_LABEL, ...openWindowLabels()].find(
+const otherWindowsShowing = (windowLabel: string, conversationId: string) =>
+	[MAIN_WINDOW_LABEL, ...openWindowLabels()].filter(
 		(label) => label !== windowLabel && isWindowShowing(label, conversationId),
-	) ?? null
+	)
 
-const reportUnreadWindows = (reason: unknown) => {
+const reportUnreadWindows = (reason: unknown): string[] => {
 	console.error(
 		"conversation opening: the open windows could not be read",
 		reason,
 	)
-	return false
+	return []
 }
 
-const isLive = (windowLabel: string) =>
-	liveWindowLabels().then(
-		(labels) => labels.includes(windowLabel),
-		reportUnreadWindows,
-	)
+const firstLiveAmong = async (windowLabels: string[]) => {
+	const liveLabels = await liveWindowLabels().catch(reportUnreadWindows)
+	return windowLabels.find((label) => liveLabels.includes(label)) ?? null
+}
 
 const raiseRevealFailure = () =>
 	raiseReportedFailure(
@@ -129,10 +128,10 @@ export const createConversationTabOpening = ({
 		showSpace(spaceId)
 	}
 
-	const askOtherWindow = (request: RevealRequest) =>
+	const askOtherWindow = (request: RevealRequest, openInPlace: () => void) =>
 		askReveal(request).then((isRevealed) => {
 			if (!isRevealed) {
-				raiseRevealFailure()
+				openInPlace()
 			}
 		}, raiseRevealFailure)
 
@@ -144,12 +143,20 @@ export const createConversationTabOpening = ({
 			revealHere(spaceId, conversationId, href)
 			return
 		}
-		const windowLabel = otherWindowShowing(tabs.windowLabel, conversationId)
-		if (windowLabel === null || !(await isLive(windowLabel))) {
+		const mirrored = otherWindowsShowing(tabs.windowLabel, conversationId)
+		if (mirrored.length === 0) {
 			target.openInPlace()
 			return
 		}
-		await askOtherWindow({ windowLabel, conversationId, href })
+		const windowLabel = await firstLiveAmong(mirrored)
+		if (windowLabel === null) {
+			target.openInPlace()
+			return
+		}
+		await askOtherWindow(
+			{ windowLabel, conversationId, href },
+			target.openInPlace,
+		)
 	}
 
 	const openInNewTab = (conversationId: string, spaceId: string) => {
