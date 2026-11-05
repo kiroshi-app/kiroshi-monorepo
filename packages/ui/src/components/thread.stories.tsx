@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from "react"
+import type { ReactNode } from "react"
 import {
 	expect,
 	fireEvent,
@@ -73,16 +73,12 @@ import {
 	ToolQuestion,
 	type ToolQuestionItem,
 } from "@workspace/ui/components/tool-question"
-import type {
-	TranscriptItem,
-	TranscriptNewer,
-} from "@workspace/ui/components/transcript"
+import type { TranscriptItem } from "@workspace/ui/components/transcript"
 import {
 	AssistantTurn,
 	PersonTurn,
 	UserTurn,
 } from "@workspace/ui/components/turn"
-import { Button } from "@workspace/ui/components/ui/button"
 
 const ATLAS: MessageAuthor = {
 	id: "atlas",
@@ -225,8 +221,6 @@ type PanelProps = {
 	hasPins?: boolean
 	label?: string
 	width?: number
-	countsNewMessages?: boolean
-	newer?: TranscriptNewer
 }
 
 const Panel = ({
@@ -242,8 +236,6 @@ const Panel = ({
 	hasPins = true,
 	label,
 	width = PANEL_WIDTH,
-	countsNewMessages,
-	newer,
 }: PanelProps) => (
 	<div
 		className="relative h-[847px]"
@@ -281,8 +273,6 @@ const Panel = ({
 					}
 					rows={rows}
 					label={label}
-					countsNewMessages={countsNewMessages}
-					newer={newer}
 					queue={queue}
 					composer={
 						composer ?? (
@@ -583,7 +573,7 @@ export const Conversations4 = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard Conversations 4: an answer taller than the transcript, with a heading, a table and a list, read from its top. Check the bubble keeps padding 18 around rich content and that its author line stays pinned to the bottom edge on the sticky fill, under a hairline on its top edge, inset 12 at both ends and with Jump to latest docked at its end, until the bubble's own end scrolls into view.",
+					"Artboard Conversations 4: an answer taller than the transcript, with a heading, a table and a list, read from its top. Check the bubble keeps padding 18 around rich content and that its author line stays pinned to the bottom edge on the sticky fill, under a hairline on its top edge and inset 12 at both ends, until the bubble's own end scrolls into view.",
 			},
 		},
 	},
@@ -1516,21 +1506,12 @@ const PINNED_BUBBLE_WIDTH = 580
 
 const NARROWEST_PINNED_BUBBLE_WIDTH = 550
 
-type JumpPlacement = "floating" | "docked"
-
-const jumpsIn = (root: Element, placement: JumpPlacement) =>
-	Array.from(
-		root.querySelectorAll<HTMLElement>(
-			`[data-slot="message-scroller-button"][data-placement="${placement}"]`,
-		),
-	)
-
-const scrollerOf = (viewport: HTMLElement) => {
+const jumpOf = (viewport: HTMLElement) => {
 	const scroller = viewport.closest<HTMLElement>(
 		'[data-slot="message-scroller"]',
 	)
 	if (!scroller) throw new Error("The viewport sits outside a transcript")
-	return scroller
+	return slotIn(scroller, "message-scroller-button")
 }
 
 const identityOf = (line: HTMLElement) => {
@@ -1541,26 +1522,19 @@ const identityOf = (line: HTMLElement) => {
 	return [name, badge, time]
 }
 
-const overlaps = (first: DOMRect, second: DOMRect) =>
-	first.left < second.right &&
-	second.left < first.right &&
-	first.top < second.bottom &&
-	second.top < first.bottom
+const verticalCentreOf = (box: DOMRect) => (box.top + box.bottom) / 2
 
-const expectIdentityInFull = async (line: HTMLElement, jump?: HTMLElement) => {
+const horizontalCentreOf = (box: DOMRect) => (box.left + box.right) / 2
+
+const expectIdentityInFull = async (line: HTMLElement) => {
 	const lineCentre = verticalCentreOf(line.getBoundingClientRect())
-	for (const element of [...identityOf(line), ...(jump ? [jump] : [])]) {
-		const box = element.getBoundingClientRect()
+	for (const element of identityOf(line)) {
 		await expect(element.scrollWidth).toBeLessThanOrEqual(element.clientWidth)
 		await expect(
-			Math.abs(verticalCentreOf(box) - lineCentre),
+			Math.abs(verticalCentreOf(element.getBoundingClientRect()) - lineCentre),
 		).toBeLessThanOrEqual(1)
-		if (jump && element !== jump)
-			await expect(overlaps(box, jump.getBoundingClientRect())).toBe(false)
 	}
 }
-
-const verticalCentreOf = (box: DOMRect) => (box.top + box.bottom) / 2
 
 const expectLineInPlace = async (canvasElement: HTMLElement) => {
 	const viewports = slotsIn(canvasElement, "message-scroller-viewport")
@@ -1569,12 +1543,10 @@ const expectLineInPlace = async (canvasElement: HTMLElement) => {
 		await waitFor(() =>
 			expect(viewport.scrollHeight).toBeGreaterThan(viewport.clientHeight),
 		)
-		const scroller = scrollerOf(viewport)
 		await waitFor(() => {
 			expect(lineOf(viewport, "agent").dataset.stuck).toBe("false")
-			expect(jumpsIn(scroller, "floating")[0]?.dataset.active).toBe("false")
+			expect(jumpOf(viewport).dataset.active).toBe("false")
 		})
-		await expect(jumpsIn(scroller, "docked")).toHaveLength(0)
 		await expect(
 			getComputedStyle(lineOf(viewport, "agent"), "::before").display,
 		).toBe("none")
@@ -1587,64 +1559,45 @@ const releaseFollow = (viewport: HTMLElement) =>
 		new WheelEvent("wheel", { bubbles: true, deltaY: -200 }),
 	)
 
-const dockedJumpIn = async (viewport: HTMLElement) => {
-	releaseFollow(viewport)
-	const line = await pinnedLineIn(viewport, "agent")
-	const scroller = scrollerOf(viewport)
-	await waitFor(() => {
-		expect(jumpsIn(line, "docked")[0]?.dataset.active).toBe("true")
-		expect(jumpsIn(scroller, "floating")).toHaveLength(0)
+const JUMP_SIZE = 32
+
+const expectIconOnlyJumpOverTheInput = async (viewport: HTMLElement) => {
+	const jump = jumpOf(viewport)
+	const screen = viewport.closest('[data-slot="chat-layout"]')
+	if (!screen) throw new Error("The transcript sits outside a thread")
+	const input = slotIn(screen, "prompt-input").getBoundingClientRect()
+	await waitFor(async () => {
+		const box = jump.getBoundingClientRect()
+		await expect(jump.dataset.active).toBe("true")
+		await expect([box.width, box.height]).toEqual([JUMP_SIZE, JUMP_SIZE])
+		await expect(
+			Math.abs(horizontalCentreOf(box) - horizontalCentreOf(input)),
+		).toBeLessThanOrEqual(1)
+		await expect(box.bottom).toBeLessThanOrEqual(input.top)
 	})
-	const [jump] = jumpsIn(line, "docked")
-	return { line, jump }
+	await expect(jump).toHaveAccessibleName("Jump to latest")
+	await expect(jump).toHaveTextContent("")
+	await expect(jump.querySelector("svg")).toBeVisible()
+	await expect(
+		Number.parseFloat(getComputedStyle(jump).borderTopLeftRadius),
+	).toBeGreaterThanOrEqual(JUMP_SIZE / 2)
 }
 
-const expectJumpDockedAtTheBarEnd = async (canvasElement: HTMLElement) => {
-	const viewports = slotsIn(canvasElement, "message-scroller-viewport")
-	await expect(viewports).toHaveLength(2)
-	for (const viewport of viewports) {
-		const { line, jump } = await dockedJumpIn(viewport)
-		const [, , time] = identityOf(line)
-		const content = line.closest('[data-slot="message-bubble-content"]')
-		if (!content) throw new Error("The stuck line sits outside a bubble")
-		const jumpBox = jump.getBoundingClientRect()
-		await expect(jump).toHaveAccessibleName("Jump to latest")
-		await expect(jump).toBeVisible()
-		await expect(jump.closest("[aria-live]")?.getAttribute("aria-live")).toBe(
-			"off",
-		)
-		await expect(Math.round(jumpBox.height)).toBe(28)
-		await expect(
-			Math.round(content.getBoundingClientRect().right - jumpBox.right),
-		).toBe(STUCK_BAR_PADDING)
-		await expect(
-			jumpBox.left - time.getBoundingClientRect().right,
-		).toBeGreaterThanOrEqual(2 * AUTHOR_LINE_GAP + 12)
-		await expectBlockHasHairline(line)
-		await expectIdentityInFull(line, jump)
-	}
-}
-
-const expectDockedJumpReturnsToTheEnd = async (canvasElement: HTMLElement) => {
-	const [viewport] = slotsIn(canvasElement, "message-scroller-viewport")
-	const { line, jump } = await dockedJumpIn(viewport)
+const expectJumpFocusedWithARing = async (jump: HTMLElement) => {
 	jump.focus()
-	await userEvent.tab({ shift: true })
 	await userEvent.tab()
+	await userEvent.tab({ shift: true })
 	await expect(jump).toHaveFocus()
 	await expect(jump.matches(":focus-visible")).toBe(true)
 	await expect(getComputedStyle(jump).boxShadow).not.toBe("none")
-	await userEvent.keyboard("{Enter}")
-	const scroller = scrollerOf(viewport)
-	await waitFor(
-		() => {
-			expect(line.dataset.stuck).toBe("false")
-			expect(jumpsIn(scroller, "docked")).toHaveLength(0)
-			expect(jumpsIn(scroller, "floating")[0]?.dataset.active).toBe("false")
-		},
-		{ timeout: 3000 },
+}
+
+const expectJumpTooltip = async (jump: HTMLElement) => {
+	await userEvent.hover(jump)
+	await expect(await screen.findByRole("tooltip")).toHaveTextContent(
+		"Jump to latest",
 	)
-	await expect(document.activeElement).toBe(viewport)
+	await userEvent.unhover(jump)
 }
 
 type PinnedSamplesProps = {
@@ -1755,7 +1708,7 @@ export const AgentAuthorLinePinned = meta.story({
 		docs: {
 			description: {
 				story:
-					"The author line pinned on its own, in a scroll region with no transcript around it, so no Jump to latest to dock, light then dark. Check the bar runs 52 high under a hairline, inset 12 at both ends, on the bubble's grey.",
+					"The author line pinned on its own, in a scroll region with no transcript around it, light then dark. Check the bar runs 52 high under a hairline, inset 12 at both ends, on the bubble's grey.",
 			},
 		},
 	},
@@ -1777,40 +1730,37 @@ export const AgentAuthorLinePinnedAtTheNarrowestWidth = meta.story({
 	play: async ({ canvasElement }) => expectPinnedWithoutJump(canvasElement),
 })
 
-export const AgentAuthorLinePinnedWithJumpToLatestDocked = meta.story({
+export const AgentAuthorLineStuckWithJumpToLatestFloating = meta.story({
 	globals: { theme: "light" },
 	render: () => <ThemedPanels rows={LONG_ANSWER_ROWS} />,
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"A long answer read from its top, light then dark. Check Jump to latest leaves the thread floor and docks in the pinned bar, after the time and 12 from the bar end, as a 28 high outlined pill with no shadow, that the keyboard reaches it with a visible ring, that the transcript's live log never announces it, and that pressing it returns to the end, where it shows in neither position and focus rests on the transcript.",
+					"A long answer read from its top, light then dark. Check the pinned bar carries no button while Jump to latest floats centred over the input as a 32 circle drawing only its arrow, named and tooltipped Jump to latest, and that the keyboard reaches it with a visible ring.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
-		await expectJumpDockedAtTheBarEnd(canvasElement)
-		await expectDockedJumpReturnsToTheEnd(canvasElement)
+		const viewports = slotsIn(canvasElement, "message-scroller-viewport")
+		await expect(viewports).toHaveLength(2)
+		for (const viewport of viewports) {
+			releaseFollow(viewport)
+			const line = await pinnedLineIn(viewport, "agent")
+			await expectIconOnlyJumpOverTheInput(viewport)
+			await expect(
+				within(line).queryByRole("button", { name: "Jump to latest" }),
+			).toBeNull()
+			await expect(
+				line.querySelector('[data-slot="message-scroller-button"]'),
+			).toBeNull()
+			await expectBlockHasHairline(line)
+			await expectIdentityInFull(line)
+		}
+		await expectJumpFocusedWithARing(jumpOf(viewports[0]))
+		await expectJumpTooltip(jumpOf(viewports[0]))
 	},
 })
-
-export const AgentAuthorLinePinnedWithJumpToLatestDockedAtTheNarrowestWidth =
-	meta.story({
-		globals: { theme: "light" },
-		render: () => (
-			<ThemedPanels rows={LONG_ANSWER_ROWS} width={NARROWEST_PANEL_WIDTH} />
-		),
-		parameters: {
-			docs: {
-				description: {
-					story:
-						"The docked Jump to latest in the thread the 1024 window leaves beside the widest sidebar, light then dark. Check avatar, name, badge, time and Jump to latest hold one row, none of them cut short and none of them under the pill.",
-				},
-			},
-		},
-		play: async ({ canvasElement }) =>
-			expectJumpDockedAtTheBarEnd(canvasElement),
-	})
 
 const SCROLLED_UP_ROWS = [
 	...LONG_ANSWER_ROWS,
@@ -1849,7 +1799,7 @@ export const ScrolledUpWithNothingStuckFloatsJumpToLatest = meta.story({
 		docs: {
 			description: {
 				story:
-					"A thread scrolled up to the end of a short message, with no author line pinned, light then dark. Check Jump to latest floats centred over the thread floor, as on any thread read away from its end, and that no bar carries it.",
+					"A thread scrolled up to the end of a short message, with no author line pinned, light then dark. Check Jump to latest floats centred over the input as the same arrow-only circle, named Jump to latest, as on any thread read away from its end.",
 			},
 		},
 	},
@@ -1857,7 +1807,6 @@ export const ScrolledUpWithNothingStuckFloatsJumpToLatest = meta.story({
 		const viewports = slotsIn(canvasElement, "message-scroller-viewport")
 		await expect(viewports).toHaveLength(2)
 		for (const viewport of viewports) {
-			const scroller = scrollerOf(viewport)
 			const followup = viewport.querySelector('[data-message-id="followup"]')
 			if (!followup) throw new Error("No follow-up row")
 			releaseFollow(viewport)
@@ -1867,74 +1816,12 @@ export const ScrolledUpWithNothingStuckFloatsJumpToLatest = meta.story({
 						followup.getBoundingClientRect().bottom -
 						viewport.getBoundingClientRect().bottom
 					expect(stuckLinesIn(viewport)).toHaveLength(0)
-					expect(jumpsIn(scroller, "floating")[0]?.dataset.active).toBe("true")
+					expect(jumpOf(viewport).dataset.active).toBe("true")
 				},
 				{ timeout: 3000 },
 			)
-			await expect(jumpsIn(scroller, "docked")).toHaveLength(0)
-			await expect(jumpsIn(scroller, "floating")[0]).toHaveAccessibleName(
-				"Jump to latest",
-			)
+			await expectIconOnlyJumpOverTheInput(viewport)
 		}
-	},
-})
-
-const loadLatest = fn()
-
-const NEWER_UNLOADED: TranscriptNewer = {
-	onLoad: noop,
-	onLoadLatest: loadLatest,
-}
-
-const REPLY_ROW = rowOf({
-	key: "reply",
-	from: "you",
-	text: "Book Casa do Rio.",
-	time: at(14, 20),
-})
-
-const CountingPanel = () => {
-	const [rows, setRows] = useState(LONG_ANSWER_ROWS)
-
-	return (
-		<div className="flex flex-col items-start gap-2">
-			<Panel
-				face={ATLAS}
-				leading={LISBON_HEADER}
-				rows={rows}
-				countsNewMessages
-				newer={NEWER_UNLOADED}
-			/>
-			<Button onClick={() => setRows([...LONG_ANSWER_ROWS, REPLY_ROW])}>
-				Deliver a reply
-			</Button>
-		</div>
-	)
-}
-
-export const DockedJumpToLatestCountsAndLoadsTheLatestPage = meta.story({
-	tags: ["test-only"],
-	render: () => <CountingPanel />,
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"A long answer read from its top on a thread whose newest page is not loaded. Check the docked Jump to latest names how many messages arrived since, as the floating one does, and that pressing it asks for the latest page instead of scrolling.",
-			},
-		},
-	},
-	play: async ({ canvas, canvasElement, userEvent }) => {
-		const [viewport] = slotsIn(canvasElement, "message-scroller-viewport")
-		await dockedJumpIn(viewport)
-		await userEvent.click(
-			canvas.getByRole("button", { name: "Deliver a reply" }),
-		)
-		const { jump } = await dockedJumpIn(viewport)
-		await waitFor(() => expect(jump).toHaveAccessibleName("1 new message"))
-		loadLatest.mockClear()
-		await userEvent.click(jump)
-		await expect(loadLatest).toHaveBeenCalledTimes(1)
-		await expect(lineOf(viewport, "agent").dataset.stuck).toBe("true")
 	},
 })
 

@@ -53,9 +53,6 @@ const chat = {
 		loadNewer: "Charger les messages plus récents",
 		jumpToLatest: "Aller au dernier message",
 		newMessages: "Nouveaux messages",
-		newCounted_one: "{{count}} nouveau message",
-		newCounted_many: "{{count}} nouveaux messages",
-		newCounted_other: "{{count}} nouveaux messages",
 		startOfHistory: "Début de la conversation",
 		day: {
 			today: "Aujourd’hui",

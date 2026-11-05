@@ -138,7 +138,7 @@ const spaceUnder = (viewport: HTMLElement, bubble: HTMLElement) => {
 const expectRestingPadding = (viewport: HTMLElement, bubble: HTMLElement) =>
 	expect(spaceUnder(viewport, bubble)).toBeLessThanOrEqual(RESTING_PADDING)
 
-const RETURN_CONTROL = { name: /Jump to latest|new messages?/ }
+const RETURN_CONTROL = { name: "Jump to latest" }
 
 const expectCentredOver = (viewport: HTMLElement, button: HTMLElement) =>
 	waitFor(async () => {
@@ -406,7 +406,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"Scroll container for a streamed transcript, composed on the shadcn MessageScroller primitive. Every row is mounted: nothing is windowed and no row height is guessed. It holds the live edge while the reader sits there, hands scroll control back the moment they move up, and shows a return control that takes them back and resumes following. `older` parks a sentinel above the first row for the host to page from, shows a message-row skeleton there while a page is in flight, and the reading position survives the page being prepended above it. `rows` is one entry per run, with the `messageIds` it anchors, and a row marked `isAnchor` is a message the reader sent: with `anchorOnSend` the newest one is parked near the top of the viewport with a peek of the previous turn while the answer fills the room below. `marksNewMessages` draws a session-local separator where the reader was released, `countsNewMessages` names on the return control how many arrived since. A new `transcriptKey` forgets both and lands at the end again.",
+					"Scroll container for a streamed transcript, composed on the shadcn MessageScroller primitive. Every row is mounted: nothing is windowed and no row height is guessed. It holds the live edge while the reader sits there, hands scroll control back the moment they move up, and shows a return control that takes them back and resumes following. `older` parks a sentinel above the first row for the host to page from, shows a message-row skeleton there while a page is in flight, and the reading position survives the page being prepended above it. `rows` is one entry per run, with the `messageIds` it anchors, and a row marked `isAnchor` is a message the reader sent: with `anchorOnSend` the newest one is parked near the top of the viewport with a peek of the previous turn while the answer fills the room below. `marksNewMessages` draws a session-local separator where the reader was released. A new `transcriptKey` forgets both and lands at the end again.",
 			},
 		},
 	},
@@ -419,7 +419,6 @@ const meta = preview.meta({
 		label: { control: "text" },
 		anchorOnSend: { control: "boolean" },
 		marksNewMessages: { control: "boolean" },
-		countsNewMessages: { control: "boolean" },
 	},
 	render: (args) => <TranscriptDemo {...args} />,
 })
@@ -819,13 +818,13 @@ export const RestsPostedQuestionsAtTheEnd = meta.story({
 	},
 })
 
-export const MarksAndCountsNewMessages = meta.story({
-	args: { countsNewMessages: true, marksNewMessages: true },
+export const MarksNewMessages = meta.story({
+	args: { marksNewMessages: true },
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"A conversation: once the reader is released, a separator marks where they stopped reading and the return control names how many messages arrived since. " +
+					"A conversation: once the reader is released, a separator marks where they stopped reading, and the return control stays an arrow named Jump to latest however many messages arrived since. " +
 					MOUNTED_BY_THE_LAYOUT,
 			},
 		},
@@ -841,28 +840,20 @@ export const MarksAndCountsNewMessages = meta.story({
 		await waitFor(() =>
 			expect(canvas.getByText("New messages")).toBeInTheDocument(),
 		)
-		await waitFor(() =>
-			expect(
-				canvas.getByRole("button", { name: "1 new message" }),
-			).toBeInTheDocument(),
-		)
 
 		await userEvent.click(canvas.getByRole("button", { name: "Send reply" }))
-		await waitFor(() =>
-			expect(
-				canvas.getByRole("button", { name: "2 new messages" }),
-			).toBeInTheDocument(),
-		)
+		const jump = canvas.getByRole("button", RETURN_CONTROL)
+		await expect(jump).toHaveAttribute("data-active", "true")
+		await expect(jump).toHaveTextContent("")
 	},
 })
 
 export const ReturnControlCentredOverViewport = meta.story({
-	args: { countsNewMessages: true },
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The return control, short and counted, measured against the viewport it floats over. Check its centre sits on the viewport centre and both of its edges stay inside the viewport, whichever label it carries. " +
+					"The return control, before and after messages arrive below the reader, measured against the viewport it floats over. Check its centre sits on the viewport centre and both of its edges stay inside the viewport. " +
 					MOUNTED_BY_THE_LAYOUT,
 			},
 		},
@@ -881,7 +872,7 @@ export const ReturnControlCentredOverViewport = meta.story({
 		await userEvent.click(canvas.getByRole("button", { name: "Send reply" }))
 		await expectCentredOver(
 			viewport,
-			await canvas.findByRole("button", { name: "1 new message" }),
+			canvas.getByRole("button", { name: "Jump to latest" }),
 		)
 	},
 })
@@ -923,7 +914,7 @@ export const RestsWithoutABand = meta.story({
 })
 
 export const ConversationRestsWithoutABand = meta.story({
-	args: { countsNewMessages: true, marksNewMessages: true },
+	args: { marksNewMessages: true },
 	render: (args) => (
 		<StreamingDemo {...args} answerWords={SHORT_ANSWER_WORDS} />
 	),

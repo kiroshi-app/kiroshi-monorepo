@@ -71,7 +71,6 @@ function ThreadLayout({
 	label,
 	anchorOnSend,
 	marksNewMessages,
-	countsNewMessages,
 	older,
 	newer,
 	rows,
@@ -132,7 +131,6 @@ function ThreadLayout({
 									label={label}
 									anchorOnSend={anchorOnSend}
 									marksNewMessages={marksNewMessages}
-									countsNewMessages={countsNewMessages}
 									older={older}
 									newer={newer}
 									rows={rows}
