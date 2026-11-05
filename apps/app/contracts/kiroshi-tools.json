@@ -1055,7 +1055,7 @@
 	},
 	{
 		"name": "library_create",
-		"description": "Create a Markdown document in the Library of this Space, empty or filled from a template, shown in the Library of the person right away. A name already taken is refused. It answers the name, the kind and the updatedAt of the document.",
+		"description": "Create a new Markdown document in the Library of this Space, empty or filled from a template, shown in the Library of the person right away. A name already taken is refused. To change a document that already exists, write in it with library_write, never create another one. It answers the name the document stands under, its kind and its updatedAt.",
 		"inputSchema": {
 			"$schema": "https://json-schema.org/draft/2020-12/schema",
 			"type": "object",
@@ -1083,7 +1083,7 @@
 	},
 	{
 		"name": "library_write",
-		"description": "Write text into a Markdown document of the Library of this Space, live, beside the people editing it. The text lands at the end of the document, or right after the passage you name. Nothing is replaced or removed. It answers the name and how many characters you wrote.",
+		"description": "Write into a Markdown document of the Library of this Space, live, beside the people editing it. Changing a document that already exists, such as its title or a section, means editing it here in place, never creating a new one. The text lands at the end of the document, right after the passage named in after, in place of the passage named in replace, or in place of the whole text when whole is true; give one of them at most. It answers the name the document stands under and how many characters you wrote.",
 		"inputSchema": {
 			"$schema": "https://json-schema.org/draft/2020-12/schema",
 			"type": "object",
@@ -1094,11 +1094,19 @@
 				},
 				"text": {
 					"type": "string",
-					"description": "The Markdown to write, with the line breaks it needs to stand on its own lines."
+					"description": "The Markdown to write, with the line breaks it needs to stand on its own lines. With replace, an empty text removes the passage."
 				},
 				"after": {
 					"type": "string",
 					"description": "An exact passage of the document, copied from library_read, that occurs once in it: the text lands right after it. Leave it out to write at the end."
+				},
+				"replace": {
+					"type": "string",
+					"description": "An exact passage of the document, copied from library_read, that occurs once in it: the text takes its place and every other character stays. A passage found zero times or more than once is refused with its count and nothing changes."
+				},
+				"whole": {
+					"type": "boolean",
+					"description": "True to replace the whole text of the document with the text, under the same name."
 				}
 			},
 			"required": [
@@ -1110,7 +1118,7 @@
 	},
 	{
 		"name": "library_import",
-		"description": "Copy a file you produced into the Library of this Space, a Markdown or text document or a PNG, JPEG, GIF or WebP image, under its own name, a number added when that name is taken. It answers the name the copy landed under, its kind and its updatedAt.",
+		"description": "Copy a file you produced into the Library of this Space, a Markdown or text document or a PNG, JPEG, GIF or WebP image. Left without overwrite, it lands under its own name, a number added when that name is taken. Changing an item that already exists, such as an image you imported before, means naming it in overwrite so the file replaces it in place, never adding a new one. It answers the name the item stands under, its kind and its updatedAt.",
 		"inputSchema": {
 			"$schema": "https://json-schema.org/draft/2020-12/schema",
 			"type": "object",
@@ -1118,6 +1126,10 @@
 				"path": {
 					"type": "string",
 					"description": "The path of the file to copy, absolute or relative to your working directory."
+				},
+				"overwrite": {
+					"type": "string",
+					"description": "The name of an item of this Library the file replaces in place, such as chart.png: a document for a document, an image of the same format for an image. A name absent from this Library or of another kind is refused and nothing changes. Leave it out to add a new item."
 				}
 			},
 			"required": [

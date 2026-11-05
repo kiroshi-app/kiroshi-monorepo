@@ -3623,6 +3623,16 @@
     },
     "LibraryChanged": {
       "properties": {
+        "overwritten": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LibraryOverwritten"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "spaceId": {
           "type": "string"
         }
@@ -4133,6 +4143,21 @@
         "image",
         "document"
       ]
+    },
+    "LibraryOverwritten": {
+      "properties": {
+        "modifiedAt": {
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "modifiedAt"
+      ],
+      "type": "object"
     },
     "LibraryTemplate": {
       "properties": {

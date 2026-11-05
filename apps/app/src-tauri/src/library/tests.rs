@@ -2304,7 +2304,7 @@ async fn a_deleted_item_leaves_the_library_with_its_shared_state_and_is_announce
 	assert_eq!(names(&root, &space_id), ["plan.md"]);
 	assert!(!root.join(".documents").join(&space_id).join("notes.md.yjs").exists());
 	let announced = heard.recv_timeout(Duration::from_secs(5)).expect("the delete is announced");
-	assert_eq!(announced, LibraryChanged { space_id: space_id.clone() });
+	assert_eq!(announced, LibraryChanged { space_id: space_id.clone(), overwritten: None });
 	assert_eq!(again, Err(LibraryError::Missing { name: "notes.md".to_owned() }));
 	assert_eq!(elsewhere, Err(LibraryError::UnknownSpace { id: "nowhere".to_owned() }));
 	assert!(heard.try_recv().is_err());
@@ -2448,7 +2448,10 @@ async fn a_message_with_two_images_saves_as_a_document_named_after_its_heading_w
 	);
 	let announced: Vec<LibraryChanged> =
 		(0..2).map(|_| changes.recv_timeout(Duration::from_secs(5)).expect("announced")).collect();
-	assert_eq!(announced, vec![LibraryChanged { space_id: PERSONAL.to_owned() }; 2]);
+	assert_eq!(
+		announced,
+		vec![LibraryChanged { space_id: PERSONAL.to_owned(), overwritten: None }; 2]
+	);
 }
 
 #[tokio::test]

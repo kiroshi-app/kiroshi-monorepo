@@ -35,6 +35,10 @@ writeFileSync(SECRET, "png")
 
 const A_WRITE = { name: "notes.md", text: "A paragraph.", after: "# Notes" }
 
+const A_REPLACE = { name: "notes.md", text: "# Launch", replace: "# Draft" }
+
+const A_WHOLE_REPLACE = { name: "notes.md", text: "# Launch", whole: true }
+
 const A_REFUSAL = { kind: "missing", name: "notes.md" }
 
 type Asked = { subtype: string; operation: string; payload: unknown }
@@ -114,8 +118,14 @@ describe("libraryTools", () => {
 			"name",
 			"text",
 			"after",
+			"replace",
+			"whole",
 		])
 		expect(fieldsOf("library_import").required).toEqual(["path"])
+		expect(Object.keys(fieldsOf("library_import").properties ?? {})).toEqual([
+			"path",
+			"overwrite",
+		])
 		expect(fieldsOf("library_rename").required).toEqual(["name", "newName"])
 		expect(fieldsOf("library_delete").required).toEqual(["name"])
 		expect(fieldsOf("conversation_post_document").required).toEqual(["name"])
@@ -128,6 +138,8 @@ describe("libraryTools", () => {
 			["library_search", "search", { query: "roadmap" }],
 			["library_create", "create", { name: "a.md", template: "meeting-notes" }],
 			["library_write", "write", A_WRITE],
+			["library_write", "write", A_REPLACE],
+			["library_write", "write", A_WHOLE_REPLACE],
 			["library_rename", "rename", { name: "a.md", newName: "b.md" }],
 			["library_delete", "delete", { name: "b.md" }],
 		]
@@ -194,6 +206,35 @@ describe("libraryTools", () => {
 		expect(asked).toEqual([
 			{ subtype: "library", operation: "import", payload: { path: PRODUCED } },
 		])
+	})
+
+	it("hands the host the resolved path and the item an import overwrites", async () => {
+		const asked = aHost(() => ({ result: {} }))
+
+		await called("library_import", {
+			path: "chart.png",
+			overwrite: "chart.png",
+		})
+
+		expect(asked).toEqual([
+			{
+				subtype: "library",
+				operation: "import",
+				payload: { path: PRODUCED, overwrite: "chart.png" },
+			},
+		])
+	})
+
+	it("tells the agent that changing an item edits it in place, never a new one", () => {
+		expect(theTool("library_write").description).toContain(
+			"editing it here in place, never creating a new one",
+		)
+		expect(theTool("library_import").description).toContain(
+			"replaces it in place, never adding a new one",
+		)
+		expect(theTool("library_create").description).toContain(
+			"write in it with library_write, never create another one",
+		)
 	})
 
 	it("refuses to import a path the floor denies or that is gone, without asking the host", async () => {
