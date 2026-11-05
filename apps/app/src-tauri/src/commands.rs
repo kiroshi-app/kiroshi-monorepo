@@ -112,6 +112,7 @@ fn commands<R: Runtime>() -> Commands<R> {
 		library::commands::library_stop_writers::<tauri::Wry>,
 		library::commands::library_read_thumbnail::<tauri::Wry>,
 		library::commands::library_import::<tauri::Wry>,
+		library::commands::library_import_url::<tauri::Wry>,
 		library::commands::library_import_paths::<tauri::Wry>,
 		library::commands::library_read_picked_image,
 		library::commands::library_rename_document::<tauri::Wry>,

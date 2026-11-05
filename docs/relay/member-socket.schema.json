@@ -4099,6 +4099,112 @@
       ],
       "type": "object"
     },
+    "LibraryImportUrlError": {
+      "anyOf": [
+        {
+          "properties": {
+            "kind": {
+              "const": "unsupportedScheme"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "privateAddress"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "notAnImage"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "tooLarge"
+            },
+            "limit": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "limit"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "networkFailure"
+            },
+            "status": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "status"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "unknownSpace"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "error": {
+              "$ref": "#/$defs/LibraryError"
+            },
+            "kind": {
+              "const": "library"
+            }
+          },
+          "required": [
+            "kind",
+            "error"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "LibraryItem": {
       "properties": {
         "bytes": {
@@ -11798,6 +11904,29 @@
       },
       "error": {
         "$ref": "#/$defs/LibraryError"
+      },
+      "ok": {
+        "$ref": "#/$defs/LibraryItem"
+      }
+    },
+    "library_import_url": {
+      "args": {
+        "properties": {
+          "spaceId": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spaceId",
+          "url"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/LibraryImportUrlError"
       },
       "ok": {
         "$ref": "#/$defs/LibraryItem"

@@ -51,6 +51,7 @@ export const commands = {
 	libraryStopWriters: (spaceId: string, name: string, agentId: string | null) => typedError<CancelOutcome, LibraryError>(__TAURI_INVOKE("library_stop_writers", { spaceId, name, agentId })),
 	libraryReadThumbnail: (spaceId: string, name: string) => typedError<LibraryImage, LibraryError>(__TAURI_INVOKE("library_read_thumbnail", { spaceId, name })),
 	libraryImport: (spaceId: string, name: string, content: string) => typedError<LibraryItem, LibraryError>(__TAURI_INVOKE("library_import", { spaceId, name, content })),
+	libraryImportUrl: (spaceId: string, url: string) => typedError<LibraryItem, LibraryImportUrlError>(__TAURI_INVOKE("library_import_url", { spaceId, url })),
 	libraryImportPaths: (spaceId: string, paths: string[]) => typedError<LibraryImport[], LibraryError>(__TAURI_INVOKE("library_import_paths", { spaceId, paths })),
 	libraryReadPickedImage: (path: string) => typedError<LibraryImage, LibraryError>(__TAURI_INVOKE("library_read_picked_image", { path })),
 	libraryRenameDocument: (spaceId: string, name: string, newName: string) => typedError<LibraryItem, LibraryError>(__TAURI_INVOKE("library_rename_document", { spaceId, name, newName })),
@@ -1249,6 +1250,8 @@ export type LibraryImage = {
 };
 
 export type LibraryImport = { status: "imported"; item: LibraryItem } | { status: "refused"; error: LibraryError };
+
+export type LibraryImportUrlError = { kind: "unsupportedScheme" } | { kind: "privateAddress" } | { kind: "notAnImage" } | { kind: "tooLarge"; limit: number } | { kind: "networkFailure"; status: number | null } | { kind: "unknownSpace"; id: string } | { kind: "library"; error: LibraryError };
 
 export type LibraryItem = {
 	name: string,

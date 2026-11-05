@@ -14,7 +14,9 @@ use axum::Router;
 use tokio::net::TcpListener;
 
 use super::contract::{RemoteImage, RemoteImageError};
-use super::{read, MAX_BYTES};
+use reqwest::Url;
+
+use super::{admitted, read, Admission, FetchRefusal, MAX_BYTES};
 
 const WITHIN: Duration = Duration::from_secs(10);
 const PROXY_BEARER: &str = "proxy-bearer";
@@ -245,4 +247,49 @@ async fn a_refused_status_a_closed_port_or_a_slow_answer_is_a_network_failure() 
 	assert_eq!(missing, Err(RemoteImageError::NetworkFailure { status: Some(404) }));
 	assert_eq!(unreached, Err(RemoteImageError::NetworkFailure { status: None }));
 	assert_eq!(slow, Err(RemoteImageError::NetworkFailure { status: None }));
+}
+
+fn admitted_to_the_public_web(url: &str) -> Result<Option<&'static str>, FetchRefusal> {
+	admitted(&Url::parse(url).expect("the url parses"), &Admission::PublicWeb)
+}
+
+#[test]
+fn the_public_web_admits_a_public_address_over_http_or_https_without_a_bearer() {
+	for url in [
+		"https://93.184.215.14/cat.png",
+		"http://[2606:2800:21f::1]/cat.png",
+		"https://example.test/cat.png",
+	] {
+		assert!(matches!(admitted_to_the_public_web(url), Ok(None)), "{url}");
+	}
+}
+
+#[test]
+fn the_public_web_refuses_every_private_address_literal_on_every_hop() {
+	for url in [
+		"http://127.0.0.1/",
+		"http://10.0.0.8/",
+		"http://172.16.4.2/",
+		"http://192.168.1.1/",
+		"http://169.254.169.254/latest/meta-data",
+		"http://0.0.0.0/",
+		"http://[::1]/",
+		"http://[::]/",
+		"http://[fd00::1]/",
+		"http://[fe80::1]/",
+		"http://[::ffff:10.0.0.8]/",
+	] {
+		assert!(
+			matches!(admitted_to_the_public_web(url), Err(FetchRefusal::PrivateAddress)),
+			"{url}"
+		);
+	}
+}
+
+#[test]
+fn the_public_web_refuses_a_scheme_other_than_http_or_https() {
+	assert!(matches!(
+		admitted_to_the_public_web("ftp://example.test/cat.png"),
+		Err(FetchRefusal::UnsupportedScheme)
+	));
 }

@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use reqwest::Url;
 use tauri::image::Image;
 use tauri::{AppHandle, Runtime, State, Webview};
 use tauri_plugin_clipboard_manager::ClipboardExt;
@@ -11,10 +12,11 @@ use futures_util::future::join_all;
 
 use super::contract::{
 	LibraryDocument, LibraryDocumentState, LibraryError, LibraryFile, LibraryImage, LibraryImport,
-	LibraryItem, LibraryTemplate,
+	LibraryImportUrlError, LibraryItem, LibraryTemplate,
 };
 use super::host::stop_writers;
 use super::presence::{seated_name, share_caret, unseat_writer, Seat};
+use super::url_import::{admission_for, import_url};
 use super::{
 	apply_update, clipboard_payload, clipboard_payload_of_bytes, create_document, delete_item,
 	import, import_paths, list, open_document, read_document, read_file, read_image,
@@ -27,6 +29,7 @@ use crate::agent::AgentState;
 use crate::conversations::host_turn::merged;
 use crate::db;
 use crate::hosting::authorship::Caller;
+use crate::joined_spaces::relay::RelayGuests;
 use crate::logging::scrub::scrubbed;
 
 async fn known_space(state: &db::DatabaseState, space_id: &str) -> Result<(), LibraryError> {
@@ -261,6 +264,28 @@ pub async fn library_import<R: Runtime>(
 	tokio::task::spawn_blocking(move || import(&root, &space_id, &name, &content))
 		.await
 		.map_err(|error| LibraryError::Unwritable { detail: error.to_string() })?
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn library_import_url<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	guests: State<'_, RelayGuests>,
+	caller: Caller,
+	space_id: String,
+	url: String,
+) -> Result<LibraryItem, LibraryImportUrlError> {
+	let imported = async {
+		known_space(&state, &space_id).await?;
+		let proxy_bearers = guests.proxy_bearers();
+		import_url(root(&app)?, space_id, &url, &admission_for(&caller, &proxy_bearers)).await
+	};
+	imported.await.inspect_err(|refusal| {
+		let parsed = Url::parse(&url).ok();
+		let host = parsed.as_ref().and_then(Url::host_str).unwrap_or("none");
+		log::warn!("a library import from a url was refused: kind={} host={host}", refusal.kind());
+	})
 }
 
 #[tauri::command]

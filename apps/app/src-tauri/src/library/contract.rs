@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::conversations::contract::StorageFailure;
 use crate::db::DatabaseError;
+use crate::remote_image::contract::RemoteImageError;
+use crate::remote_image::FetchRefusal;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
@@ -188,6 +190,80 @@ pub enum LibraryError {
 	Unrevealed { detail: String },
 	#[serde(rename_all = "camelCase")]
 	UnknownMessage { conversation_id: String, message_id: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum LibraryImportUrlError {
+	UnsupportedScheme,
+	PrivateAddress,
+	NotAnImage,
+	#[serde(rename_all = "camelCase")]
+	TooLarge {
+		limit: u64,
+	},
+	#[serde(rename_all = "camelCase")]
+	NetworkFailure {
+		status: Option<u16>,
+	},
+	#[serde(rename_all = "camelCase")]
+	UnknownSpace {
+		id: String,
+	},
+	#[serde(rename_all = "camelCase")]
+	Library {
+		error: LibraryError,
+	},
+}
+
+impl LibraryImportUrlError {
+	pub fn kind(&self) -> &'static str {
+		match self {
+			LibraryImportUrlError::UnsupportedScheme => "unsupportedScheme",
+			LibraryImportUrlError::PrivateAddress => "privateAddress",
+			LibraryImportUrlError::NotAnImage => "notAnImage",
+			LibraryImportUrlError::TooLarge { .. } => "tooLarge",
+			LibraryImportUrlError::NetworkFailure { .. } => "networkFailure",
+			LibraryImportUrlError::UnknownSpace { .. } => "unknownSpace",
+			LibraryImportUrlError::Library { .. } => "library",
+		}
+	}
+}
+
+impl From<LibraryError> for LibraryImportUrlError {
+	fn from(error: LibraryError) -> Self {
+		match error {
+			LibraryError::UnknownSpace { id } => LibraryImportUrlError::UnknownSpace { id },
+			LibraryError::Undecodable { .. } => LibraryImportUrlError::NotAnImage,
+			LibraryError::TooLarge { limit, .. } => LibraryImportUrlError::TooLarge { limit },
+			error => LibraryImportUrlError::Library { error },
+		}
+	}
+}
+
+impl From<FetchRefusal> for LibraryImportUrlError {
+	fn from(refusal: FetchRefusal) -> Self {
+		match refusal {
+			FetchRefusal::UnsupportedScheme => LibraryImportUrlError::UnsupportedScheme,
+			FetchRefusal::PrivateAddress => LibraryImportUrlError::PrivateAddress,
+			FetchRefusal::NetworkFailure { status } => {
+				LibraryImportUrlError::NetworkFailure { status }
+			}
+		}
+	}
+}
+
+impl From<RemoteImageError> for LibraryImportUrlError {
+	fn from(error: RemoteImageError) -> Self {
+		match error {
+			RemoteImageError::UnsupportedScheme => LibraryImportUrlError::UnsupportedScheme,
+			RemoteImageError::NotAnImage => LibraryImportUrlError::NotAnImage,
+			RemoteImageError::TooLarge { limit } => LibraryImportUrlError::TooLarge { limit },
+			RemoteImageError::NetworkFailure { status } => {
+				LibraryImportUrlError::NetworkFailure { status }
+			}
+		}
+	}
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]

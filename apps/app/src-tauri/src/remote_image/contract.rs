@@ -46,6 +46,7 @@ impl From<FetchRefusal> for RemoteImageError {
 		match refusal {
 			FetchRefusal::UnsupportedScheme => RemoteImageError::UnsupportedScheme,
 			FetchRefusal::NetworkFailure { status } => RemoteImageError::NetworkFailure { status },
+			FetchRefusal::PrivateAddress => RemoteImageError::NetworkFailure { status: None },
 		}
 	}
 }
