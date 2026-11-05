@@ -54,6 +54,11 @@ type BoardViewport = {
 	zoom: number
 }
 
+type BoardPaste =
+	| { kind: "link"; payload: string }
+	| { kind: "image"; payload: File }
+	| { kind: "files"; payload: readonly File[] }
+
 type BoardIntent =
 	| { type: "create"; object: BoardObject }
 	| { type: "move"; id: string; position: BoardPoint }
@@ -69,6 +74,7 @@ export type {
 	BoardItem,
 	BoardItemKind,
 	BoardObject,
+	BoardPaste,
 	BoardPoint,
 	BoardRect,
 	BoardShapeFill,

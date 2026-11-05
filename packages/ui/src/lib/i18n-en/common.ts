@@ -714,6 +714,31 @@ const common = {
 			textSizeMedium: "M",
 			more: "More",
 		},
+		dock: {
+			label: "Board tools",
+			tool: {
+				select: "Select",
+				hand: "Hand",
+				sticky: "Sticky note",
+				shape: "Shape",
+				text: "Text",
+				connector: "Connector",
+				section: "Section",
+				image: "Image",
+				library: "Library",
+			},
+		},
+		picker: {
+			title: "From the Library",
+			hint: "Drag onto the board",
+			empty: "Nothing in the Library yet.",
+		},
+		drop: {
+			images_one: "Drop to add {{count}} image here",
+			images_other: "Drop to add {{count}} images here",
+			files_one: "Drop to add {{count}} file here",
+			files_other: "Drop to add {{count}} files here",
+		},
 	},
 	whatsNew: {
 		firstLaunch: {

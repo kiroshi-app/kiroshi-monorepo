@@ -179,6 +179,9 @@
 	--color-board-control: var(--board-control);
 	--color-board-control-foreground: var(--board-control-foreground);
 	--shadow-board-control: var(--board-control-shadow);
+	--shadow-board-dock: var(--board-dock-shadow);
+	--shadow-board-picker: var(--board-picker-shadow);
+	--shadow-board-drop-pill: var(--board-drop-pill-shadow);
 	--color-board-selection-bar: var(--board-selection-bar);
 	--color-board-selection-bar-foreground: var(--board-selection-bar-foreground);
 	--shadow-board-selection-bar: var(--board-selection-bar-shadow);

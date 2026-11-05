@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { expect, fn, userEvent, waitFor, within } from "storybook/test"
+import { expect, fn, screen, userEvent, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
@@ -11,10 +11,15 @@ import {
 	slotsIn,
 	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
+import { CASA_DO_RIO_TERRACE } from "@workspace/ui/components/answer-blocks/answer-blocks.fixtures"
 import {
+	LIBRARY_ITEMS,
+	LINK_CARD,
 	PERSON_AUTHOR,
 	STICKY_TEXT,
 } from "@workspace/ui/components/board/board.fixtures"
+import { BoardImage } from "@workspace/ui/components/board/board-image"
+import { BoardLinkCard } from "@workspace/ui/components/board/board-link-card"
 import { BoardShape } from "@workspace/ui/components/board/board-shape"
 import { BoardSticky } from "@workspace/ui/components/board/board-sticky"
 import { BoardText } from "@workspace/ui/components/board/board-text"
@@ -26,6 +31,8 @@ import type {
 	BoardIntent,
 	BoardItem,
 	BoardObject,
+	BoardPaste,
+	BoardPoint,
 	BoardView,
 	BoardViewport,
 } from "@workspace/ui/components/board-view"
@@ -79,6 +86,31 @@ const PlaceholderObject = ({ object }: PlaceholderObjectProps) =>
 		</div>
 	)
 
+const PASTED_IMAGE_SOURCE = "example.com/terrace-at-dusk"
+const PASTED_LINK = "https://example.com/calm-interfaces"
+const LINK_CARD_SIZE = { width: 300, height: 178 }
+const PASTED_IMAGE_SIZE = { width: 200, height: 136 }
+
+const pastedItemOf = (
+	paste: BoardPaste,
+	point: BoardPoint,
+	zOrder: number,
+): BoardItem | undefined => {
+	if (paste.kind === "files") return undefined
+	const size = paste.kind === "link" ? LINK_CARD_SIZE : PASTED_IMAGE_SIZE
+	return {
+		id: `pasted-${zOrder}`,
+		kind: paste.kind,
+		position: {
+			x: point.x - size.width / 2,
+			y: point.y - size.height / 2,
+		},
+		size,
+		zOrder,
+		text: paste.kind === "link" ? paste.payload : paste.payload.name,
+	}
+}
+
 const BoardObjectView = ({ object }: PlaceholderObjectProps) => {
 	switch (object.kind) {
 		case "sticky":
@@ -101,6 +133,18 @@ const BoardObjectView = ({ object }: PlaceholderObjectProps) => {
 			)
 		case "text":
 			return <BoardText body={object.text} />
+		case "link":
+			return <BoardLinkCard {...LINK_CARD} />
+		case "image":
+			return (
+				<BoardImage
+					alt={object.text}
+					height={object.size.height}
+					source={PASTED_IMAGE_SOURCE}
+					src={CASA_DO_RIO_TERRACE}
+					width={object.size.width}
+				/>
+			)
 		default:
 			return <PlaceholderObject object={object} />
 	}
@@ -140,10 +184,14 @@ const ControlledBoard = ({
 	viewport: initialViewport,
 	onViewportChange,
 	onIntent,
+	tool: initialTool,
+	onToolChange,
+	onPaste,
 	...props
 }: BoardCanvasProps) => {
 	const [view, setView] = useState(initialView)
 	const [viewport, setViewport] = useState(initialViewport)
+	const [tool, setTool] = useState(initialTool)
 
 	return (
 		<div className="h-[640px] w-full">
@@ -153,10 +201,22 @@ const ControlledBoard = ({
 					setView((current) => applyIntent(current, intent))
 					onIntent(intent)
 				}}
+				onPaste={(paste, point) => {
+					onPaste(paste, point)
+					const item = pastedItemOf(paste, point, view.objects.length + 1)
+					if (!item) return undefined
+					setView((current) => ({ objects: [...current.objects, item] }))
+					return item.id
+				}}
+				onToolChange={(next) => {
+					setTool(next)
+					onToolChange(next)
+				}}
 				onViewportChange={(next) => {
 					setViewport(next)
 					onViewportChange(next)
 				}}
+				tool={tool}
 				view={view}
 				viewport={viewport}
 			/>
@@ -194,13 +254,20 @@ const meta = preview.meta({
 		onViewportChange: fn(),
 		onIntent: fn(),
 		renderObject: (object) => <PlaceholderObject object={object} />,
+		tool: "select" as const,
+		onToolChange: fn(),
+		libraryItems: LIBRARY_ITEMS,
+		onLibraryItemPick: fn(),
+		onLibraryItemDrop: fn(),
+		onPaste: fn(),
+		onDropFiles: fn(),
 	},
 	parameters: {
 		layout: "fullscreen",
 		docs: {
 			description: {
 				component:
-					"The board of a Space in its own tab: a dot grid the board slides over, the objects it mounts through `renderObject`, and the zoom control at the bottom end corner. The viewport is controlled: two-finger scroll, the mouse wheel and the arrow keys with nothing selected pan, a pinch zooms around the pointer, the buttons step the zoom around the centre, and every move goes out through `onViewportChange`. Only the objects inside the visible area plus a margin are mounted. A press or Tab selects an object and draws its frame and corner handles in the Space colour, a selected shape gets its style bar above it, and every move, resize, text edit, style pick or delete goes out through `onIntent` as a `BoardIntent`: the canvas never changes the board itself.",
+					"The board of a Space in its own tab: a dot grid the board slides over, the objects it mounts through `renderObject`, and the zoom control at the bottom end corner. The viewport is controlled: two-finger scroll, the mouse wheel and the arrow keys with nothing selected pan, a pinch zooms around the pointer, the buttons step the zoom around the centre, and every move goes out through `onViewportChange`. Only the objects inside the visible area plus a margin are mounted. A press or Tab selects an object and draws its frame and corner handles in the Space colour, a selected shape gets its style bar above it, and every move, resize, text edit, style pick or delete goes out through `onIntent` as a `BoardIntent`: the canvas never changes the board itself. The tool dock sits centred at the bottom with the Library picker above it, a Library tile dragged onto the board emits `onLibraryItemDrop` with the board point, a link, an image or files pasted on the focused board emit `onPaste` with the centre of the view and the object whose id it returns gets selected, and files dragged in from the desktop show the drop target and emit `onDropFiles` where they land.",
 			},
 		},
 	},
@@ -1138,4 +1205,374 @@ export const EditByKeyboardDark = meta.story({
 		await expectDarkSurface(context.canvasElement)
 		await EditByKeyboard.input.play?.(context)
 	},
+})
+
+const PICKER_NAME = "From the Library"
+const DRAGGED_ITEM = LIBRARY_ITEMS[1] as (typeof LIBRARY_ITEMS)[number]
+
+const boardPointOf = (board: HTMLElement, at: PointerAtClient) => {
+	const rect = board.getBoundingClientRect()
+	return {
+		x: Math.round(
+			at.clientX - rect.left - board.clientLeft - AT_ORIGIN.offset.x,
+		),
+		y: Math.round(at.clientY - rect.top - board.clientTop - AT_ORIGIN.offset.y),
+	}
+}
+
+type PointerAtClient = { clientX: number; clientY: number }
+
+const viewportCentreOf = (board: HTMLElement) => ({
+	x: Math.round(board.clientWidth / 2 - AT_ORIGIN.offset.x),
+	y: Math.round(board.clientHeight / 2 - AT_ORIGIN.offset.y),
+})
+
+const ghostIn = () =>
+	document.querySelector<HTMLElement>('[data-slot="board-library-ghost"]')
+
+const startTileDrag = (tile: HTMLElement, to: PointerAtClient) => {
+	const from = centreOf(tile)
+	pointerAt("pointerdown", tile, from)
+	pointerAt("pointermove", window, shifted(from, { x: 8, y: -8 }))
+	pointerAt("pointermove", window, to)
+}
+
+const playTileDragged = async ({
+	canvasElement,
+	args,
+}: {
+	canvasElement: HTMLElement
+	args: BoardCanvasProps
+}) => {
+	const board = slotIn(canvasElement, "board-canvas")
+	const picker = await screen.findByRole("dialog", { name: PICKER_NAME })
+	const tile = within(picker).getByRole("button", { name: DRAGGED_ITEM.title })
+	const boardBox = board.getBoundingClientRect()
+	const over = { clientX: boardBox.left + 360, clientY: boardBox.top + 200 }
+
+	startTileDrag(tile, over)
+	await waitFor(() => expect(tile).toHaveAttribute("data-dragging", "true"))
+	const slot = getComputedStyle(tile)
+	await expect(slot.borderTopStyle).toBe("dashed")
+	await expect(slot.borderTopWidth).toBe(
+		`${Math.floor(1.5 * devicePixelRatio) / devicePixelRatio}px`,
+	)
+	await expect(slot.borderTopColor).toBe(resolvedRootColor("--user-bubble"))
+	const ghost = ghostIn() as HTMLElement
+	const ghostBox = ghost.getBoundingClientRect()
+	await expect(ghostBox.left + ghostBox.width / 2).toBeCloseTo(over.clientX, 0)
+	await expect(ghostBox.top + ghostBox.height / 2).toBeCloseTo(over.clientY, 0)
+	const card = slotIn(ghost, "board-library-card")
+	await expect(card.offsetWidth).toBe(236)
+	await expect(getComputedStyle(card).opacity).toBe("0.94")
+	await expect(getComputedStyle(card).rotate).toBe("-2deg")
+
+	pointerAt("pointerup", window, over)
+	await expect(args.onLibraryItemDrop).toHaveBeenLastCalledWith(
+		DRAGGED_ITEM.id,
+		boardPointOf(board, over),
+	)
+	await waitFor(() => expect(ghostIn()).toBeNull())
+	await expect(tile).not.toHaveAttribute("data-dragging")
+
+	startTileDrag(tile, centreOf(picker))
+	pointerAt("pointerup", window, centreOf(picker))
+	await waitFor(() => expect(ghostIn()).toBeNull())
+	await expect(args.onLibraryItemDrop).toHaveBeenCalledTimes(1)
+	await expect(args.onLibraryItemPick).not.toHaveBeenCalled()
+
+	startTileDrag(tile, over)
+	await waitFor(() => expect(ghostIn()).not.toBeNull())
+}
+
+export const TileDragged = meta.story({
+	args: { tool: "library" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Boards 5a: a Library document dragged out of the picker onto the board. Check its slot left as a 1.5px dashed Space-colour border on a faint Space-colour fill, and the Library card under the pointer, 236px wide, tilted -2 degrees at 94 percent opacity. Released over the board it emits `onLibraryItemDrop` with the item and the board point; released over the picker it emits nothing and picks nothing.",
+			},
+		},
+	},
+	play: playTileDragged,
+})
+
+export const TileDraggedDark = meta.story({
+	args: { tool: "library" },
+	globals: { theme: "dark" },
+	play: playTileDragged,
+})
+
+const pasteOn = (
+	target: HTMLElement,
+	fill: (transfer: DataTransfer) => void,
+) => {
+	const transfer = new DataTransfer()
+	fill(transfer)
+	target.dispatchEvent(
+		new ClipboardEvent("paste", {
+			bubbles: true,
+			cancelable: true,
+			clipboardData: transfer,
+		}),
+	)
+}
+
+const PASTE_ARGS = {
+	...SELECTION_ARGS,
+	view: { objects: [PLAN, RESEARCH] },
+}
+
+const playLinkPasted = async ({
+	canvasElement,
+	args,
+}: {
+	canvasElement: HTMLElement
+	args: BoardCanvasProps
+}) => {
+	const board = slotIn(canvasElement, "board-canvas")
+	const tool = within(canvasElement).getByRole("button", { name: "Select" })
+
+	tool.focus()
+	pasteOn(tool, (transfer) => transfer.setData("text/plain", PASTED_LINK))
+	await expect(args.onPaste).not.toHaveBeenCalled()
+
+	board.focus()
+	pasteOn(board, (transfer) =>
+		transfer.setData("text/plain", "Calm interfaces"),
+	)
+	await expect(args.onPaste).not.toHaveBeenCalled()
+
+	pasteOn(board, (transfer) => transfer.setData("text/plain", PASTED_LINK))
+	await expect(args.onPaste).toHaveBeenLastCalledWith(
+		{ kind: "link", payload: PASTED_LINK },
+		viewportCentreOf(board),
+	)
+	const pasted = await within(canvasElement).findByRole("option", {
+		name: `Link: ${PASTED_LINK}`,
+	})
+	await expect(pasted).toHaveAttribute("aria-selected", "true")
+	await expect(slotIn(pasted, "board-link-card").offsetHeight).toBe(
+		LINK_CARD_SIZE.height,
+	)
+	await expectSelectionChrome(canvasElement, pasted)
+}
+
+export const LinkPasted = meta.story({
+	globals: LAPTOP_WINDOW,
+	args: PASTE_ARGS,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Boards 5b: a link pasted on the focused board. Check `onPaste` receiving the link and the board point at the centre of the view, the link card landing there in the selection frame, plain text and a paste while a dock tool has focus emitting nothing.",
+			},
+		},
+	},
+	play: playLinkPasted,
+})
+
+export const LinkPastedDark = meta.story({
+	globals: { ...LAPTOP_WINDOW, theme: "dark" },
+	args: PASTE_ARGS,
+	play: playLinkPasted,
+})
+
+const pngNamed = (name: string) =>
+	new File(["png"], name, { type: "image/png" })
+const pdfNamed = (name: string) =>
+	new File(["pdf"], name, { type: "application/pdf" })
+
+const playImagePasted = async ({
+	canvasElement,
+	args,
+}: {
+	canvasElement: HTMLElement
+	args: BoardCanvasProps
+}) => {
+	const board = slotIn(canvasElement, "board-canvas")
+	const image = pngNamed("terrace-at-dusk.png")
+	const brief = pdfNamed("launch-brief.pdf")
+
+	await userEvent.click(board)
+	await expect(board).toHaveFocus()
+	pasteOn(board, (transfer) => {
+		transfer.items.add(image)
+		transfer.items.add(brief)
+	})
+	await expect(args.onPaste).toHaveBeenLastCalledWith(
+		{ kind: "files", payload: [image, brief] },
+		viewportCentreOf(board),
+	)
+
+	pasteOn(board, (transfer) => transfer.items.add(image))
+	await expect(args.onPaste).toHaveBeenLastCalledWith(
+		{ kind: "image", payload: image },
+		viewportCentreOf(board),
+	)
+	const pasted = await within(canvasElement).findByRole("option", {
+		name: `Image: ${image.name}`,
+	})
+	await expect(pasted).toHaveAttribute("aria-selected", "true")
+	await expect(slotIn(pasted, "board-image-source")).toHaveTextContent(
+		PASTED_IMAGE_SOURCE,
+	)
+	await expectSelectionChrome(canvasElement, pasted)
+}
+
+export const ImagePasted = meta.story({
+	globals: LAPTOP_WINDOW,
+	args: PASTE_ARGS,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Boards 5b: an image pasted on the board after a press on it. Check `onPaste` receiving the image file and the centre of the view, the image landing there with its source caption in the selection frame, and two files pasted together arriving as files.",
+			},
+		},
+	},
+	play: playImagePasted,
+})
+
+export const ImagePastedDark = meta.story({
+	globals: { ...LAPTOP_WINDOW, theme: "dark" },
+	args: PASTE_ARGS,
+	play: playImagePasted,
+})
+
+const dragFiles = (
+	type: string,
+	board: HTMLElement,
+	files: readonly File[],
+	at: PointerAtClient,
+) => {
+	const transfer = new DataTransfer()
+	for (const file of files) transfer.items.add(file)
+	board.dispatchEvent(
+		new DragEvent(type, {
+			bubbles: true,
+			cancelable: true,
+			dataTransfer: transfer,
+			...at,
+		}),
+	)
+}
+
+const GHOST_TILTS = ["-3deg", "2deg", "7deg"]
+
+const playFilesDraggedOver =
+	(files: readonly File[], label: string) =>
+	async ({
+		canvasElement,
+		args,
+	}: {
+		canvasElement: HTMLElement
+		args: BoardCanvasProps
+	}) => {
+		const board = slotIn(canvasElement, "board-canvas")
+		const at = shifted(centreOf(board), { x: -120, y: -60 })
+		const dropState = () =>
+			board.querySelector<HTMLElement>('[data-slot="board-file-drop"]')
+
+		dragFiles("dragenter", board, files, at)
+		dragFiles("dragover", board, files, at)
+		await waitFor(() => expect(dropState()).not.toBeNull())
+		const boardBox = board.getBoundingClientRect()
+		const target = slotIn(board, "board-drop-target")
+		const targetBox = target.getBoundingClientRect()
+		await expect(targetBox.left - boardBox.left).toBe(8)
+		await expect(boardBox.right - targetBox.right).toBe(8)
+		await expect(getComputedStyle(target).borderTopStyle).toBe("dashed")
+		await expect(getComputedStyle(target).borderTopWidth).toBe("2px")
+		await expect(getComputedStyle(target).borderTopLeftRadius).toBe("10px")
+		await expect(getComputedStyle(target).borderTopColor).toBe(
+			resolvedRootColor("--user-bubble"),
+		)
+
+		const thumbnails = slotsIn(board, "board-drop-thumbnail")
+		await expect(thumbnails).toHaveLength(Math.min(files.length, 3))
+		await expect(
+			thumbnails
+				.map((thumbnail) => getComputedStyle(thumbnail).rotate)
+				.reverse(),
+		).toEqual(GHOST_TILTS.slice(0, thumbnails.length))
+		for (const thumbnail of thumbnails) {
+			await expect([thumbnail.offsetWidth, thumbnail.offsetHeight]).toEqual([
+				132, 92,
+			])
+		}
+		const pill = slotIn(board, "board-drop-pill")
+		await expect(pill).toHaveTextContent(label)
+		await expect(getComputedStyle(pill).backgroundColor).toBe(
+			resolvedRootColor("--user-bubble"),
+		)
+		await expect(getComputedStyle(pill).color).toBe(
+			resolvedRootColor("--user-bubble-foreground"),
+		)
+		const ghostBox = slotIn(board, "board-drop-ghost").getBoundingClientRect()
+		await expect(ghostBox.left + ghostBox.width / 2).toBeCloseTo(at.clientX, 0)
+
+		board.dispatchEvent(
+			new DragEvent("dragleave", { bubbles: true, relatedTarget: null }),
+		)
+		await waitFor(() => expect(dropState()).toBeNull())
+
+		dragFiles("dragenter", board, files, at)
+		dragFiles("drop", board, files, at)
+		await waitFor(() => expect(dropState()).toBeNull())
+		await expect(args.onDropFiles).toHaveBeenLastCalledWith(
+			files,
+			boardPointOf(board, at),
+		)
+
+		dragFiles("dragover", board, files, at)
+		await waitFor(() => expect(dropState()).not.toBeNull())
+	}
+
+const THREE_IMAGES = [
+	pngNamed("terrace.png"),
+	pngNamed("rooftop-pool.png"),
+	pngNamed("garden-patio.png"),
+]
+const MIXED_FILES = [
+	pngNamed("terrace.png"),
+	pdfNamed("launch-brief.pdf"),
+	pngNamed("garden-patio.png"),
+]
+const ONE_FILE = [pdfNamed("launch-brief.pdf")]
+
+export const FilesDraggedOverImages = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Boards 5c: three images dragged from the desktop over the board. Check the whole-board target 8px in with a 2px dashed Space-colour border, three 132 by 92 thumbnails tilted -3, 2 and 7 degrees under the pointer, the pill reading Drop to add 3 images here, the state leaving with the drag, and a drop emitting `onDropFiles` with the files and the board point. Pick FilesDraggedOverMixed when one file is not an image, FilesDraggedOverOneFile for a single file.",
+			},
+		},
+	},
+	play: playFilesDraggedOver(THREE_IMAGES, "Drop to add 3 images here"),
+})
+
+export const FilesDraggedOverImagesDark = meta.story({
+	globals: { theme: "dark" },
+	play: playFilesDraggedOver(THREE_IMAGES, "Drop to add 3 images here"),
+})
+
+export const FilesDraggedOverMixed = meta.story({
+	play: playFilesDraggedOver(MIXED_FILES, "Drop to add 3 files here"),
+})
+
+export const FilesDraggedOverMixedDark = meta.story({
+	globals: { theme: "dark" },
+	play: playFilesDraggedOver(MIXED_FILES, "Drop to add 3 files here"),
+})
+
+export const FilesDraggedOverOneFile = meta.story({
+	play: playFilesDraggedOver(ONE_FILE, "Drop to add 1 file here"),
+})
+
+export const FilesDraggedOverOneFileDark = meta.story({
+	globals: { theme: "dark" },
+	play: playFilesDraggedOver(ONE_FILE, "Drop to add 1 file here"),
 })

@@ -1,8 +1,10 @@
 "use client"
 
 import {
+	type ClipboardEvent,
 	type ComponentType,
 	type CSSProperties,
+	type DragEvent,
 	type KeyboardEvent,
 	type PointerEvent,
 	type ReactNode,
@@ -14,6 +16,12 @@ import {
 } from "react"
 import { useTranslation } from "react-i18next"
 
+import {
+	type BoardClientPoint,
+	BoardDock,
+	type BoardLibraryItem,
+	type BoardTool,
+} from "@workspace/ui/components/board/board-dock"
 import {
 	BoardObjectOutline,
 	type BoardObjectOutlineSpec,
@@ -37,6 +45,7 @@ import type {
 	BoardItem,
 	BoardItemKind,
 	BoardObject,
+	BoardPaste,
 	BoardPoint,
 	BoardRect,
 	BoardShapeStyle,
@@ -69,6 +78,13 @@ type BoardCanvasProps = {
 	renderObject: (object: BoardObject) => ReactNode
 	pointers?: readonly BoardPointerPlacement[]
 	outlines?: readonly BoardObjectOutlineSpec[]
+	tool: BoardTool
+	onToolChange: (tool: BoardTool) => void
+	libraryItems: readonly BoardLibraryItem[]
+	onLibraryItemPick: (id: string) => void
+	onLibraryItemDrop: (id: string, point: BoardPoint) => void
+	onPaste: (paste: BoardPaste, point: BoardPoint) => string | undefined
+	onDropFiles: (files: readonly File[], point: BoardPoint) => void
 	className?: string
 }
 
@@ -466,6 +482,91 @@ const OutlinedObject = ({ outline, children }: OutlinedObjectProps) =>
 		children
 	)
 
+type BoardFileKind = "image" | "file"
+
+type BoardFileDrag = {
+	kinds: readonly BoardFileKind[]
+	at: BoardPoint
+}
+
+const GHOST_TILT = ["-rotate-3", "rotate-2", "rotate-7"] as const
+
+const BoardFileDropState = ({ kinds, at }: BoardFileDrag) => {
+	const { t } = useTranslation("common")
+	const isEveryImage = kinds.every((kind) => kind === "image")
+
+	return (
+		<div
+			aria-hidden="true"
+			className="pointer-events-none absolute inset-0"
+			data-slot="board-file-drop"
+		>
+			<div
+				className="absolute inset-2 rounded-[10px] border-2 border-user-bubble border-dashed bg-user-bubble/4"
+				data-slot="board-drop-target"
+			/>
+			<div
+				className="absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-3"
+				data-slot="board-drop-ghost"
+				style={{ left: at.x, top: at.y }}
+			>
+				<div className="relative h-23 w-33">
+					{GHOST_TILT.slice(0, kinds.length)
+						.map((tilt, index) => {
+							const Glyph = kinds[index] === "image" ? Icons.Image : Icons.File
+							return (
+								<div
+									className={cn(
+										"absolute inset-0 grid place-items-center rounded-[6px] border border-board-card-border bg-board-card-surface text-board-muted-foreground shadow-board-card",
+										tilt,
+									)}
+									data-slot="board-drop-thumbnail"
+									key={tilt}
+								>
+									<Glyph className="size-6" />
+								</div>
+							)
+						})
+						.reverse()}
+				</div>
+				<p
+					className="flex items-center gap-1.5 whitespace-nowrap rounded-full bg-user-bubble p-2 font-semibold text-compact text-user-bubble-foreground leading-4 shadow-board-drop-pill"
+					data-slot="board-drop-pill"
+				>
+					<Icons.Add className="size-3.5 shrink-0" />
+					{t(isEveryImage ? "board.drop.images" : "board.drop.files", {
+						count: kinds.length,
+					})}
+				</p>
+			</div>
+		</div>
+	)
+}
+
+const isFileDrag = (event: DragEvent<HTMLElement>) =>
+	event.dataTransfer.types.includes("Files")
+
+const fileKindsOf = (transfer: DataTransfer): BoardFileKind[] =>
+	Array.from(transfer.items)
+		.filter((item) => item.kind === "file")
+		.map((item) => (item.type.startsWith("image/") ? "image" : "file"))
+
+const isWebLink = (text: string) =>
+	/^https?:\/\//i.test(text) && URL.canParse(text)
+
+const pastedOf = (clipboard: DataTransfer): BoardPaste | undefined => {
+	const files = Array.from(clipboard.files)
+	const [first] = files
+	if (files.length === 1 && first?.type.startsWith("image/"))
+		return { kind: "image", payload: first }
+	if (first) return { kind: "files", payload: files }
+	const text = clipboard.getData("text/plain").trim()
+	return isWebLink(text) ? { kind: "link", payload: text } : undefined
+}
+
+const isBoardTarget = (target: EventTarget, board: EventTarget) =>
+	target === board || (target as HTMLElement).dataset.slot === "board-object"
+
 const BoardCanvas = ({
 	view,
 	viewport,
@@ -474,6 +575,13 @@ const BoardCanvas = ({
 	renderObject,
 	pointers = [],
 	outlines = [],
+	tool,
+	onToolChange,
+	libraryItems,
+	onLibraryItemPick,
+	onLibraryItemDrop,
+	onPaste,
+	onDropFiles,
 	className,
 }: BoardCanvasProps) => {
 	const { t } = useTranslation("common")
@@ -485,6 +593,7 @@ const BoardCanvas = ({
 	const [editing, setEditing] = useState<BoardEditing | null>(null)
 	const [gesture, setGesture] = useState<BoardGesture | null>(null)
 	const [announcement, setAnnouncement] = useState("")
+	const [fileDrag, setFileDrag] = useState<BoardFileDrag | null>(null)
 
 	const mounted = cullBoardObjects(view.objects, viewport, size)
 	const mountedItems = mounted.flatMap(({ object }) =>
@@ -660,11 +769,61 @@ const BoardCanvas = ({
 		return false
 	}
 
+	const boardPointAt = (screen: BoardPoint): BoardPoint => ({
+		x: Math.round((screen.x - viewport.offset.x) / viewport.zoom),
+		y: Math.round((screen.y - viewport.offset.y) / viewport.zoom),
+	})
+
+	const paste = (event: ClipboardEvent<HTMLDivElement>) => {
+		if (!isBoardTarget(event.target, event.currentTarget)) return
+		const pasted = pastedOf(event.clipboardData)
+		if (!pasted) return
+		event.preventDefault()
+		const pastedId = onPaste(pasted, boardPointAt(centreOf(size)))
+		if (pastedId) setSelectedId(pastedId)
+	}
+
+	const dragFilesOver = (event: DragEvent<HTMLDivElement>) => {
+		if (!isFileDrag(event)) return
+		event.preventDefault()
+		event.dataTransfer.dropEffect = "copy"
+		setFileDrag({
+			kinds: fileKindsOf(event.dataTransfer),
+			at: pointerIn(event.currentTarget, event),
+		})
+	}
+
+	const leaveWithFiles = (event: DragEvent<HTMLDivElement>) => {
+		if (event.currentTarget.contains(event.relatedTarget as Node | null)) return
+		setFileDrag(null)
+	}
+
+	const dropFiles = (event: DragEvent<HTMLDivElement>) => {
+		if (!isFileDrag(event)) return
+		event.preventDefault()
+		setFileDrag(null)
+		onDropFiles(
+			Array.from(event.dataTransfer.files),
+			boardPointAt(pointerIn(event.currentTarget, event)),
+		)
+	}
+
+	const dropLibraryItem = (id: string, pointer: BoardClientPoint) => {
+		const board = canvas.current
+		const landedOn = document.elementFromPoint(pointer.clientX, pointer.clientY)
+		if (
+			!board ||
+			!landedOn ||
+			!board.contains(landedOn) ||
+			landedOn.closest('[data-slot="board-dock"]')
+		)
+			return
+		onLibraryItemDrop(id, boardPointAt(pointerIn(board, pointer)))
+	}
+
 	const pressKey = (event: KeyboardEvent<HTMLDivElement>) => {
-		const target = event.target as HTMLElement
-		const isOnBoard =
-			target === event.currentTarget || target.dataset.slot === "board-object"
-		if (!isOnBoard || event.metaKey || event.ctrlKey) return
+		if (!isBoardTarget(event.target, event.currentTarget)) return
+		if (event.metaKey || event.ctrlKey) return
 		if (event.key === "Tab") {
 			tabThrough(event)
 			return
@@ -695,7 +854,12 @@ const BoardCanvas = ({
 				className,
 			)}
 			data-slot="board-canvas"
+			onDragEnter={dragFilesOver}
+			onDragLeave={leaveWithFiles}
+			onDragOver={dragFilesOver}
+			onDrop={dropFiles}
 			onKeyDown={pressKey}
+			onPaste={paste}
 			onPointerDown={pressCanvas}
 			ref={attach}
 			role="application"
@@ -829,6 +993,14 @@ const BoardCanvas = ({
 				</div>
 			) : null}
 			{view.objects.length === 0 ? <BoardEmptyHint /> : null}
+			{fileDrag ? <BoardFileDropState {...fileDrag} /> : null}
+			<BoardDock
+				libraryItems={libraryItems}
+				onLibraryItemDrop={dropLibraryItem}
+				onLibraryItemPick={onLibraryItemPick}
+				onToolChange={onToolChange}
+				tool={tool}
+			/>
 			<BoardZoomControl
 				onZoomIn={() => zoomTo(zoomStepIn)}
 				onZoomOut={() => zoomTo(zoomStepOut)}
