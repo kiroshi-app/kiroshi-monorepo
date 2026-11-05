@@ -10,6 +10,7 @@ import { applyLibraryUpdate } from "./library-document-writes"
 import { libraryQueryKeys } from "./library-query-keys"
 import { openLibraryDocument } from "./library-reads"
 
+import type { LibraryDocumentState } from "../bindings"
 import { failureReporterIn } from "../failure-report"
 
 const RAISED_IN = "use-library-board-session"
@@ -66,22 +67,37 @@ export const useLibraryBoardSession = (spaceId: string, name: string) => {
 	const openedState = opened.data
 	const [openedSession, setOpenedSession] =
 		useState<LibraryBoardSession | null>(null)
+	const [unreadState, setUnreadState] = useState<LibraryDocumentState | null>(
+		null,
+	)
+	const hasFailedToRead = openedState === unreadState
 	const session = opened.isError ? null : openedSession
 
 	useEffect(() => {
 		if (!openedState) {
 			return
 		}
-		const live = createLibraryBoardSession({
-			state: openedState.update,
-			send,
-			onRefused: () => {
-				void reportFailure(
-					{ title: i18n.t("common:library.failure.board.refused") },
-					{ space: spaceId },
-				)
-			},
-		})
+		let live: LibraryBoardSession
+		try {
+			live = createLibraryBoardSession({
+				state: openedState.update,
+				send,
+				onRefused: () => {
+					void reportFailure(
+						{ title: i18n.t("common:library.failure.board.refused") },
+						{ space: spaceId },
+					)
+				},
+			})
+		} catch (failure) {
+			console.error("library: the opened board could not be read", failure)
+			setUnreadState(openedState)
+			void reportFailure(
+				{ title: i18n.t("common:library.failure.board.open") },
+				{ space: spaceId },
+			)
+			return
+		}
 		const detach = feed.attach(live.receive)
 		const forgetHistory = live.trackHistory()
 		setOpenedSession(live)
@@ -103,6 +119,6 @@ export const useLibraryBoardSession = (spaceId: string, name: string) => {
 		apply: (intent: BoardIntent) => session?.apply(intent),
 		undo: session?.undo ?? leaveBoardUnchanged,
 		redo: session?.redo ?? leaveBoardUnchanged,
-		hasFailedToOpen: opened.isError,
+		hasFailedToOpen: opened.isError || hasFailedToRead,
 	}
 }

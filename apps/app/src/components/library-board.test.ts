@@ -153,15 +153,54 @@ const remoteBreakOf = (id: string) =>
 		doc.getMap<Y.Map<unknown>>("nodes").get(id)?.set("x", "unreadable"),
 	)
 
-const boardElement = () =>
+const unparsableState = () => {
+	const doc = new Y.Doc()
+	Y.applyUpdate(doc, bytesOf(STATE))
+	doc.getMap<Y.Map<unknown>>("nodes").get("first")?.set("x", "unreadable")
+	return base64Of(Y.encodeStateAsUpdate(doc))
+}
+
+const undecodableState = () => base64Of(Uint8Array.of(255, 255, 255, 255))
+
+const boardElement = (onBack = vi.fn()) =>
 	createElement(LibraryBoard, {
 		spaceId: SPACE_ID,
 		name: NAME,
 		title: "Roadmap",
 		summary: SUMMARY,
-		onBack: vi.fn(),
+		onBack,
 		onDelete: vi.fn(),
 	})
+
+const mountBoardOpening = (opening: () => Promise<LibraryDocumentState>) => {
+	const host = fakeHost()
+	vi.mocked(openLibraryDocument).mockImplementation(opening)
+	const onBack = vi.fn()
+	const { wrapper } = createQueryTestWrapper()
+	render(boardElement(onBack), { wrapper })
+	return { ...host, onBack }
+}
+
+const unreadableCard = () =>
+	screen.findByRole("group", {
+		name: common("library.tab.unavailable.unreadable.title", { name: NAME }),
+	})
+
+const closeUnreadableCard = () =>
+	fireEvent.click(
+		screen.getByRole("button", {
+			name: common("library.tab.unavailable.unreadable.action"),
+		}),
+	)
+
+const expectNeitherSkeletonNorEmptyHint = () => {
+	expect(
+		screen.queryByRole("region", { name: common("board.canvas.loading") }),
+	).toBeNull()
+	expect(
+		screen.queryByRole("heading", { name: common("board.empty.title") }),
+	).toBeNull()
+}
 
 const mountBoard = async () => {
 	const host = fakeHost()
@@ -285,6 +324,49 @@ describe("a Library board on its live session", () => {
 			{ title: common("library.failure.board.refused") },
 			expect.objectContaining({ space: SPACE_ID }),
 		)
+	})
+
+	it.each([
+		["cannot be decoded", undecodableState],
+		["cannot be parsed", unparsableState],
+	])(
+		"shows the board unreadable and raises one notice when its opened state %s",
+		async (_, stateOf) => {
+			vi.spyOn(console, "error").mockImplementation(() => undefined)
+			const { announce, onBack } = mountBoardOpening(async () => ({
+				name: NAME,
+				update: stateOf(),
+			}))
+
+			expect(await unreadableCard()).toBeInstanceOf(HTMLElement)
+			expectNeitherSkeletonNorEmptyHint()
+			announce(remoteMoveOf("second", 40))
+
+			expect(raiseReportedFailure).toHaveBeenCalledOnce()
+			expect(raiseReportedFailure).toHaveBeenCalledWith(
+				{ title: common("library.failure.board.open") },
+				expect.objectContaining({ space: SPACE_ID }),
+			)
+			closeUnreadableCard()
+			expect(onBack).toHaveBeenCalledOnce()
+		},
+	)
+
+	it("keeps the unreadable card and its notice when the board fails to open", async () => {
+		const { onBack } = mountBoardOpening(() =>
+			Promise.reject({ kind: "notFound" }),
+		)
+
+		expect(await unreadableCard()).toBeInstanceOf(HTMLElement)
+		expectNeitherSkeletonNorEmptyHint()
+
+		await waitFor(() => expect(raiseReportedFailure).toHaveBeenCalledOnce())
+		expect(raiseReportedFailure).toHaveBeenCalledWith(
+			{ title: common("library.failure.board.open") },
+			expect.objectContaining({ raisedIn: "use-library-board-session" }),
+		)
+		closeUnreadableCard()
+		expect(onBack).toHaveBeenCalledOnce()
 	})
 
 	it("ignores an update of another board", async () => {
