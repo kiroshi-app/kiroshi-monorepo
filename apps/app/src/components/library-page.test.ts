@@ -1171,9 +1171,40 @@ const IMAGE_OPENERS = [
 	["Open in its menu", pickOpenInMenuOf],
 ] as const
 
+const pinActiveTab = async (
+	router: Awaited<ReturnType<typeof mountApp>>["router"],
+) => {
+	const pinnedId = activeTabId(router)
+	await act(async () => router.options.context.tabs.pin(pinnedId))
+	return pinnedId
+}
+
+const activeTabId = (
+	router: Awaited<ReturnType<typeof mountApp>>["router"],
+) => {
+	const { bySpace, spaceId } = router.options.context.tabs.getState()
+	return bySpace[spaceId].activeId
+}
+
+const currentHrefOfTab = (
+	router: Awaited<ReturnType<typeof mountApp>>["router"],
+	id: string,
+) => {
+	const { bySpace, spaceId } = router.options.context.tabs.getState()
+	const tab = bySpace[spaceId].tabs.find((held) => held.id === id)
+	return tab?.entries[tab.index].href
+}
+
+const modifierClick = async (target: Element) => {
+	await act(async () => {
+		fireEvent.click(target, { detail: 1, metaKey: true, ctrlKey: true })
+	})
+	await settle()
+}
+
 describe("an image opened from the Library grid", () => {
 	it.each(IMAGE_OPENERS)(
-		"opens on %s in a new active tab named after it, the Library tab left on its grid",
+		"opens on %s in the same unpinned tab, named after it",
 		async (_gesture, open) => {
 			const { router } = await mountApp()
 			await showLibraryGrid(router)
@@ -1181,11 +1212,57 @@ describe("an image opened from the Library grid", () => {
 
 			await open(tileNamed(IMAGE.name))
 
-			expect(tabCount()).toBe(tabsBefore + 1)
+			expect(tabCount()).toBe(tabsBefore)
 			expect(selectedTabName()).toContain(IMAGE.name)
-			expect(otherTab().textContent).toContain(LIBRARY_NAME)
 			expect(router.state.location.search).toEqual(IMAGE_OPENING)
 			expect(lightboxShown()).toBe(true)
+		},
+	)
+
+	it.each(IMAGE_OPENERS)(
+		"opens on %s in a new active tab from a pinned tab, left on its grid",
+		async (_gesture, open) => {
+			const { router } = await mountApp()
+			await showLibraryGrid(router)
+			const pinnedId = await pinActiveTab(router)
+			const tabsBefore = tabCount()
+
+			await open(tileNamed(IMAGE.name))
+
+			expect(tabCount()).toBe(tabsBefore + 1)
+			expect(activeTabId(router)).not.toBe(pinnedId)
+			expect(selectedTabName()).toContain(IMAGE.name)
+			expect(currentHrefOfTab(router, pinnedId)).toBe("/library")
+			expect(router.state.location.search).toEqual(IMAGE_OPENING)
+			expect(lightboxShown()).toBe(true)
+		},
+	)
+
+	it.each([
+		["unpinned", showLibraryGrid],
+		[
+			"pinned",
+			async (router: Awaited<ReturnType<typeof mountApp>>["router"]) => {
+				await showLibraryGrid(router)
+				await pinActiveTab(router)
+			},
+		],
+	] as const)(
+		"opens on a modifier click in a new tab, the %s tab left on its grid",
+		async (_pin, prepare) => {
+			const { router } = await mountApp()
+			await prepare(router)
+			const tabsBefore = tabCount()
+			const shownId = activeTabId(router)
+
+			await modifierClick(tileNamed(IMAGE.name))
+
+			expect(tabCount()).toBe(tabsBefore + 1)
+			expect(activeTabId(router)).toBe(shownId)
+			expect(currentHrefOfTab(router, shownId)).toBe("/library")
+			expect(otherTab().textContent).toContain(IMAGE.name)
+			expect(router.state.location.search).toEqual({})
+			expect(screen.queryByRole("dialog")).toBeNull()
 		},
 	)
 
@@ -1198,17 +1275,13 @@ describe("an image opened from the Library grid", () => {
 		expect(
 			screen.getByRole("dialog").closest('[data-slot="library-panel"]'),
 		).not.toBeNull()
-		expect(
-			screen.getByRole("button", {
-				name: i18n.t("bots:rail.library"),
-				hidden: true,
-			}),
-		).toBeInstanceOf(HTMLElement)
+		expect(libraryRailButton()).toBeInstanceOf(HTMLElement)
 	})
 
-	it("leaves the Library tab on its grid once its tab is closed", async () => {
+	it("leaves the pinned Library tab on its grid once the image tab is closed", async () => {
 		const { router } = await mountApp()
 		await showLibraryGrid(router)
+		const pinnedId = await pinActiveTab(router)
 		const tabsBefore = tabCount()
 		await click(tileNamed(IMAGE.name))
 
@@ -1216,7 +1289,7 @@ describe("an image opened from the Library grid", () => {
 		await settle()
 
 		expect(tabCount()).toBe(tabsBefore)
-		expect(selectedTabName()).toContain(LIBRARY_NAME)
+		expect(activeTabId(router)).toBe(pinnedId)
 		expect(router.state.location.search).toEqual({})
 		expect(libraryHeading()).not.toBeNull()
 		expect(screen.queryByRole("dialog")).toBeNull()
@@ -1232,6 +1305,40 @@ describe("an image opened from the Library grid", () => {
 
 		expect(tabCount()).toBe(tabsWithImage)
 		expect(selectedTabName()).toContain(LIBRARY_NAME)
+		expect(libraryHeading()).not.toBeNull()
+	})
+})
+
+const libraryRailButton = () =>
+	screen.getByRole("button", {
+		name: i18n.t("bots:rail.library"),
+		hidden: true,
+	})
+
+describe("the Library opened from the rail", () => {
+	it("shows in the same unpinned tab", async () => {
+		const { router } = await mountApp()
+		const tabsBefore = tabCount()
+
+		await click(libraryRailButton())
+
+		expect(tabCount()).toBe(tabsBefore)
+		expect(selectedTabName()).toContain(LIBRARY_NAME)
+		expect(libraryHeading()).not.toBeNull()
+		expect(router.state.location.pathname).toBe("/library")
+	})
+
+	it("opens a new active tab from a pinned tab, its address unchanged", async () => {
+		const { router } = await mountApp()
+		const pinnedId = await pinActiveTab(router)
+		const pinnedHref = currentHrefOfTab(router, pinnedId)
+		const tabsBefore = tabCount()
+
+		await click(libraryRailButton())
+
+		expect(tabCount()).toBe(tabsBefore + 1)
+		expect(selectedTabName()).toContain(LIBRARY_NAME)
+		expect(currentHrefOfTab(router, pinnedId)).toBe(pinnedHref)
 		expect(libraryHeading()).not.toBeNull()
 	})
 })
