@@ -1,4 +1,5 @@
 use std::any::TypeId;
+use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 use tauri::utils::config::WindowConfig;
@@ -115,11 +116,14 @@ pub fn focused_app_window<R: Runtime>(app: &AppHandle<R>) -> Option<WebviewWindo
 }
 
 pub fn receiving_window<R: Runtime>(app: &AppHandle<R>) -> String {
-	if let Some(focused) = focused_app_window(app) {
-		return focused.label().to_owned();
+	let focused = focused_app_window(app);
+	let windows = app.webview_windows();
+	let candidates = raise_candidates(app, &windows);
+	match receiver(focused.as_ref().map(WebviewWindow::label), &candidates) {
+		Receiver::Focused(label) => label.to_owned(),
+		Receiver::LastFocused(label) => raised_or_main(app, windows.get(label)),
+		Receiver::Main => raised_or_main(app, None),
 	}
-	raise_main(app);
-	MAIN_WINDOW.to_owned()
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -158,10 +162,32 @@ fn window_to_raise<'a>(candidates: &[RaiseCandidate<'a>]) -> Option<&'a str> {
 		.map(|candidate| candidate.label)
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum Receiver<'a> {
+	Focused(&'a str),
+	LastFocused(&'a str),
+	Main,
+}
+
+fn receiver<'a>(focused: Option<&'a str>, candidates: &[RaiseCandidate<'a>]) -> Receiver<'a> {
+	match focused {
+		Some(label) => Receiver::Focused(label),
+		None => window_to_raise(candidates).map_or(Receiver::Main, Receiver::LastFocused),
+	}
+}
+
 pub fn raise_last_focused<R: Runtime>(app: &AppHandle<R>) {
 	let windows = app.webview_windows();
+	let candidates = raise_candidates(app, &windows);
+	raised_or_main(app, window_to_raise(&candidates).and_then(|label| windows.get(label)));
+}
+
+fn raise_candidates<'a, R: Runtime>(
+	app: &AppHandle<R>,
+	windows: &'a HashMap<String, WebviewWindow<R>>,
+) -> Vec<RaiseCandidate<'a>> {
 	let focus_ranks = secondary::focus_ranks(app);
-	let candidates: Vec<RaiseCandidate> = windows
+	windows
 		.iter()
 		.filter(|(label, _)| is_app_window(label))
 		.filter_map(|(label, window)| {
@@ -171,10 +197,19 @@ pub fn raise_last_focused<R: Runtime>(app: &AppHandle<R>) {
 				presence: presence_of(window)?,
 			})
 		})
-		.collect();
-	match window_to_raise(&candidates).and_then(|label| windows.get(label)) {
-		Some(window) => raise(window),
-		None => raise_main(app),
+		.collect()
+}
+
+fn raised_or_main<R: Runtime>(app: &AppHandle<R>, window: Option<&WebviewWindow<R>>) -> String {
+	match window {
+		Some(window) => {
+			raise(window);
+			window.label().to_owned()
+		}
+		None => {
+			raise_main(app);
+			MAIN_WINDOW.to_owned()
+		}
 	}
 }
 
@@ -280,8 +315,8 @@ fn closed_per_platform<R: Runtime>(window: &WebviewWindow<R>) {
 #[cfg(test)]
 mod tests {
 	use super::{
-		closing_on, is_app_window, is_headless, window_to_raise, Closing, Presence, RaiseCandidate,
-		MAIN_WINDOW,
+		closing_on, is_app_window, is_headless, receiver, window_to_raise, Closing, Presence,
+		RaiseCandidate, Receiver, MAIN_WINDOW,
 	};
 
 	fn launched_with(args: &[&str]) -> bool {
@@ -379,6 +414,40 @@ mod tests {
 			candidate(MAIN_WINDOW, 0, Presence::Visible),
 		];
 		assert_eq!(window_to_raise(&open), Some(MAIN_WINDOW));
+	}
+
+	#[test]
+	fn a_notification_reaches_the_secondary_last_used_and_keeps_a_hidden_main_hidden() {
+		for presence in [Presence::Visible, Presence::Minimised] {
+			let open = [
+				candidate(MAIN_WINDOW, 3, Presence::Hidden),
+				candidate("window-1", 2, presence),
+				candidate("window-2", 1, Presence::Visible),
+			];
+			assert_eq!(receiver(None, &open), Receiver::LastFocused("window-1"), "{presence:?}");
+		}
+	}
+
+	#[test]
+	fn a_notification_reaches_main_when_main_is_the_only_window() {
+		let open = [candidate(MAIN_WINDOW, 1, Presence::Visible)];
+		assert_eq!(receiver(None, &open), Receiver::LastFocused(MAIN_WINDOW));
+	}
+
+	#[test]
+	fn a_notification_opens_main_when_every_window_is_hidden_or_absent() {
+		let hidden = [candidate(MAIN_WINDOW, 2, Presence::Hidden)];
+		assert_eq!(receiver(None, &hidden), Receiver::Main);
+		assert_eq!(receiver(None, &[]), Receiver::Main);
+	}
+
+	#[test]
+	fn a_notification_reaches_the_focused_window_whatever_the_focus_ranks() {
+		let open = [
+			candidate(MAIN_WINDOW, 1, Presence::Visible),
+			candidate("window-1", 3, Presence::Visible),
+		];
+		assert_eq!(receiver(Some(MAIN_WINDOW), &open), Receiver::Focused(MAIN_WINDOW));
 	}
 }
 

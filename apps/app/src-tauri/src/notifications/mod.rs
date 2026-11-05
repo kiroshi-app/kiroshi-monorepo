@@ -39,21 +39,34 @@ mod tests {
 		WebviewWindowBuilder::new(app, label, Default::default()).build().expect("window builds")
 	}
 
-	#[test]
-	fn a_clicked_notification_reaches_main_alone_when_no_app_window_is_focused() {
-		let app = an_app_of_its_own("notification-one-window", mock_builder());
-		let main = heard_by(&opened(&app, window_controls::MAIN_WINDOW));
-		let secondary = heard_by(&opened(&app, "window-1"));
-
+	fn clicked(app: &App<MockRuntime>) {
 		activated(
 			app.handle(),
 			NotificationTarget { kind: NotificationKind::Conversation, id: "c-1".to_owned() },
 		);
+	}
 
-		assert_eq!(
-			main.try_iter().collect::<Vec<_>>(),
-			vec![r#"{"kind":"conversation","id":"c-1"}"#.to_owned()]
-		);
-		assert_eq!(secondary.try_iter().count(), 0);
+	const CLICKED: &str = r#"{"kind":"conversation","id":"c-1"}"#;
+
+	#[test]
+	fn a_clicked_notification_reaches_the_secondary_it_raised_alone_when_main_is_absent() {
+		let app = an_app_of_its_own("notification-secondary-alone", mock_builder());
+		let secondary = heard_by(&opened(&app, "window-1"));
+		let dispatcher = heard_by(&opened(&app, "dispatcher"));
+
+		clicked(&app);
+
+		assert_eq!(secondary.try_iter().collect::<Vec<_>>(), vec![CLICKED.to_owned()]);
+		assert_eq!(dispatcher.try_iter().count(), 0);
+	}
+
+	#[test]
+	fn a_clicked_notification_reaches_main_alone_when_main_is_the_only_window() {
+		let app = an_app_of_its_own("notification-main-alone", mock_builder());
+		let main = heard_by(&opened(&app, window_controls::MAIN_WINDOW));
+
+		clicked(&app);
+
+		assert_eq!(main.try_iter().collect::<Vec<_>>(), vec![CLICKED.to_owned()]);
 	}
 }
