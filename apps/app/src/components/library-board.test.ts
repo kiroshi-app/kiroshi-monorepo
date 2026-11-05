@@ -14,6 +14,7 @@ import { createElement } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import * as Y from "yjs"
 
+import type { Board } from "@workspace/shared/board/board"
 import type {
 	BoardLibraryItem,
 	BoardTool,
@@ -722,5 +723,160 @@ describe("adding to a Library board", () => {
 
 		fireEvent.click(toolButton("sticky"))
 		expect(flyout()).toBeNull()
+	})
+})
+
+const atColumn = (column: number, z: string) => ({
+	x: column * 260,
+	y: 0,
+	width: 220,
+	height: 146,
+	z,
+})
+
+const PREVIEW = "https://example.com/og.png"
+
+const KINDS_BOARD: Board = {
+	nodes: {
+		idea: {
+			...atColumn(0, "a0"),
+			kind: "sticky",
+			text: "Idea",
+			fill: "pink",
+			author: { kind: "person", id: "person-a" },
+		},
+		title: { ...atColumn(1, "a1"), kind: "text", text: "Title" },
+		box: { ...atColumn(2, "a2"), kind: "shape", text: "Box", shape: "ellipse" },
+		cover: {
+			...atColumn(3, "a3"),
+			kind: "image",
+			file: "Library/cover.png",
+			item: "cover.png",
+			alt: "The cover",
+		},
+		notes: {
+			...atColumn(0, "a4"),
+			y: 300,
+			kind: "libraryCard",
+			file: "Library/Notes.md",
+			item: "Notes.md",
+		},
+		article: {
+			...atColumn(1, "a5"),
+			y: 300,
+			kind: "linkCard",
+			url: "https://www.example.com/article",
+			title: "An article",
+			description: "What it says",
+			preview: PREVIEW,
+		},
+		bare: {
+			...atColumn(2, "a6"),
+			y: 300,
+			kind: "linkCard",
+			url: LINK,
+		},
+	},
+	edges: {},
+}
+
+const mountKindsBoard = async () => {
+	fakeHost()
+	vi.mocked(openLibraryDocument).mockImplementation(async () => ({
+		name: NAME,
+		update: boardStateOf(KINDS_BOARD),
+	}))
+	const { wrapper } = createQueryTestWrapper()
+	render(boardElement(), { wrapper })
+	await screen.findByRole("option", { name: textNamed("Title") })
+}
+
+type ObjectKind = "sticky" | "text" | "shape" | "image" | "link"
+
+const namedObject = (kind: ObjectKind, text: string) =>
+	screen.getByRole("option", {
+		name: common("board.object.named", {
+			kind: common(`board.object.kind.${kind}`),
+			text,
+		}),
+	})
+
+const slotIn = (object: HTMLElement, slot: string) =>
+	object.querySelector<HTMLElement>(`[data-slot="${slot}"]`)
+
+describe("drawing the objects of a Library board", () => {
+	it("draws sticky, text and shape nodes as board shapes, as before", async () => {
+		await mountKindsBoard()
+
+		const drawnAsShapes: [ObjectKind, string][] = [
+			["sticky", "Idea"],
+			["text", "Title"],
+			["shape", "Box"],
+		]
+		for (const [kind, text] of drawnAsShapes) {
+			expect(slotIn(namedObject(kind, text), "board-shape")).toBeInstanceOf(
+				HTMLElement,
+			)
+		}
+	})
+
+	it("draws an image node as a board image with its Library source, alt text and size", async () => {
+		await mountKindsBoard()
+
+		const image = slotIn(
+			namedObject("image", "The cover"),
+			"board-image",
+		) as HTMLImageElement
+
+		expect(image.getAttribute("src")).toBe("cover-src")
+		expect(image.alt).toBe("The cover")
+		expect({ width: image.style.width, height: image.style.height }).toEqual({
+			width: "220px",
+			height: "146px",
+		})
+	})
+
+	it("draws a library card node with the title and excerpt of its item", async () => {
+		await mountKindsBoard()
+
+		const card = namedObject("link", "Notes.md")
+
+		expect(slotIn(card, "board-library-card")).toBeInstanceOf(HTMLElement)
+		expect(slotIn(card, "board-library-card-title")?.textContent).toBe("Notes")
+		expect(slotIn(card, "board-library-card-excerpt")?.textContent).toBe(
+			"Agenda",
+		)
+	})
+
+	it("draws a link card node with its title, description, preview and domain", async () => {
+		await mountKindsBoard()
+
+		const card = namedObject("link", "An article")
+
+		expect(slotIn(card, "board-link-card")).toBeInstanceOf(HTMLElement)
+		expect(slotIn(card, "board-link-card-title")?.textContent).toBe(
+			"An article",
+		)
+		expect(slotIn(card, "board-link-card-description")?.textContent).toBe(
+			"What it says",
+		)
+		expect(slotIn(card, "board-link-card-preview")?.getAttribute("src")).toBe(
+			PREVIEW,
+		)
+		expect(slotIn(card, "board-link-card-source")?.textContent).toContain(
+			"www.example.com",
+		)
+	})
+
+	it("draws a bare link card with its URL as the title and no description", async () => {
+		await mountKindsBoard()
+
+		const card = namedObject("link", LINK)
+
+		expect(slotIn(card, "board-link-card-title")?.textContent).toBe(LINK)
+		expect(slotIn(card, "board-link-card-description")?.textContent).toBe("")
+		expect(slotIn(card, "board-link-card-source")?.textContent).toContain(
+			"example.com",
+		)
 	})
 })

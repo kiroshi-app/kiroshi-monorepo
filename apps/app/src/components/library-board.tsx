@@ -1,6 +1,10 @@
 import { useState } from "react"
 
+import type { BoardNode } from "@workspace/shared/board/board"
 import type { BoardLibraryItem } from "@workspace/ui/components/board/board-dock"
+import { BoardImage } from "@workspace/ui/components/board/board-image"
+import { BoardLibraryCard } from "@workspace/ui/components/board/board-library-card"
+import { BoardLinkCard } from "@workspace/ui/components/board/board-link-card"
 import { BoardShape } from "@workspace/ui/components/board/board-shape"
 import { BoardCanvas } from "@workspace/ui/components/board-canvas"
 import type {
@@ -14,6 +18,11 @@ import { ScreenLayout } from "@workspace/ui/components/screen-layout"
 
 import type { LibraryBoardSummary, LibraryItem } from "@/lib/bindings"
 import { libraryBoardAdditionsOf } from "@/lib/library/library-board-additions"
+import {
+	imageSourceOf,
+	libraryCardOf,
+	linkCardOf,
+} from "@/lib/library/library-board-objects"
 import { boardOriginOf } from "@/lib/library/library-boards"
 import { useLibraryBoardKeys } from "@/lib/library/use-library-board-keys"
 import { useLibraryBoardSession } from "@/lib/library/use-library-board-session"
@@ -31,6 +40,7 @@ type LibraryBoardProps = {
 
 type LibraryBoardShelf = {
 	items: readonly BoardLibraryItem[]
+	pickableItems: readonly BoardLibraryItem[]
 	importFiles: (files: readonly File[]) => Promise<LibraryItem[]>
 }
 
@@ -47,7 +57,7 @@ const NO_ADDITIONS = {
 	dropFiles: leaveBoardUnchanged,
 }
 
-const renderBoardObject = ({ style, text, size }: BoardItem) => (
+const renderShape = ({ style, text, size }: BoardItem) => (
 	<BoardShape
 		fill={style?.fill}
 		height={size.height}
@@ -56,6 +66,34 @@ const renderBoardObject = ({ style, text, size }: BoardItem) => (
 		width={size.width}
 	/>
 )
+
+type BoardObjectSources = {
+	nodeOf: (id: string) => BoardNode | undefined
+	libraryItems: readonly BoardLibraryItem[]
+}
+
+const renderObjectFrom =
+	({ nodeOf, libraryItems }: BoardObjectSources) =>
+	(item: BoardItem) => {
+		const node = nodeOf(item.id)
+		switch (node?.kind) {
+			case "image":
+				return (
+					<BoardImage
+						alt={node.alt ?? ""}
+						height={item.size.height}
+						src={imageSourceOf(node, libraryItems)}
+						width={item.size.width}
+					/>
+				)
+			case "linkCard":
+				return <BoardLinkCard {...linkCardOf(node)} />
+			case "libraryCard":
+				return <BoardLibraryCard {...libraryCardOf(node, libraryItems)} />
+			default:
+				return renderShape(item)
+		}
+	}
 
 const openingViewportOf = (summary: LibraryBoardSummary): BoardViewport => ({
 	offset: boardOriginOf(summary),
@@ -82,7 +120,7 @@ export const LibraryBoardCanvas = ({
 	const additions = library
 		? libraryBoardAdditionsOf({
 				board,
-				libraryItems: library.items,
+				libraryItems: library.pickableItems,
 				importFiles: library.importFiles,
 				viewport,
 			})
@@ -91,7 +129,7 @@ export const LibraryBoardCanvas = ({
 	return (
 		<BoardCanvas
 			isConnecting={tool === "connector"}
-			libraryItems={library?.items ?? NO_LIBRARY_ITEMS}
+			libraryItems={library?.pickableItems ?? NO_LIBRARY_ITEMS}
 			onDropFiles={additions.dropFiles}
 			onIntent={board.apply}
 			onLibraryItemDrop={additions.dropItem}
@@ -99,7 +137,10 @@ export const LibraryBoardCanvas = ({
 			onPaste={additions.paste}
 			onToolChange={pickTool}
 			onViewportChange={setViewport}
-			renderObject={renderBoardObject}
+			renderObject={renderObjectFrom({
+				nodeOf: board.nodeOf,
+				libraryItems: library?.items ?? NO_LIBRARY_ITEMS,
+			})}
 			status={board.view && summary ? "ready" : "loading"}
 			tool={tool}
 			view={board.view ?? UNOPENED_VIEW}
@@ -143,7 +184,7 @@ export const LibraryBoard = ({
 			scroller={() => (
 				<LibraryBoardCanvas
 					board={board}
-					library={{ items: pickableItems, importFiles }}
+					library={{ items: libraryItems, pickableItems, importFiles }}
 					summary={summary}
 				/>
 			)}

@@ -121,6 +121,7 @@ export const useLibraryBoardSession = (spaceId: string, name: string) => {
 	return {
 		view,
 		apply: (intent: BoardIntent) => session?.apply(intent),
+		nodeOf: (id: string) => session?.nodeOf(id),
 		place: (placement: LibraryBoardPlacement) => session?.place(placement),
 		describeLink: (id: string, description: LibraryBoardLinkDescription) =>
 			session?.describeLink(id, description),

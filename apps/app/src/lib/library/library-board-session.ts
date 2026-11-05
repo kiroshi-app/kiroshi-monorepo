@@ -2,6 +2,7 @@ import * as Y from "yjs"
 
 import {
 	BOARD_SCHEMA,
+	type BoardNode,
 	isObject,
 	parsedBoard,
 } from "@workspace/shared/board/board"
@@ -59,8 +60,6 @@ const liveBoardOf = (doc: Y.Doc) => {
 	})
 }
 
-const viewOf = (doc: Y.Doc) => libraryBoardViewOf(liveBoardOf(doc))
-
 export const createLibraryBoardSession = ({
 	state,
 	send,
@@ -68,7 +67,8 @@ export const createLibraryBoardSession = ({
 }: LibraryBoardSessionOptions) => {
 	const doc = new Y.Doc()
 	Y.applyUpdate(doc, bytesOf(state), REMOTE_ORIGIN)
-	let view = viewOf(doc)
+	let board = liveBoardOf(doc)
+	let view = libraryBoardViewOf(board)
 	let isRefused = false
 	let history: Y.UndoManager | null = null
 	let pending: Uint8Array[] = []
@@ -98,7 +98,9 @@ export const createLibraryBoardSession = ({
 
 	const refreshView = () => {
 		try {
-			view = viewOf(doc)
+			const read = liveBoardOf(doc)
+			view = libraryBoardViewOf(read)
+			board = read
 			isRefused = false
 		} catch (refusal) {
 			refuse(refusal)
@@ -138,6 +140,7 @@ export const createLibraryBoardSession = ({
 
 	return {
 		view: () => view,
+		nodeOf: (id: string): BoardNode | undefined => board.nodes[id],
 		subscribe,
 		apply: (intent: BoardIntent) =>
 			applyLibraryBoardIntent(doc, intent, LOCAL_ORIGIN),
