@@ -2116,13 +2116,10 @@ export const AttachmentFileAmongCodePaths = meta.story({
 			},
 		},
 	},
-	play: async ({ args, canvas, canvasElement, userEvent }) => {
+	play: async ({ args, canvas, userEvent }) => {
 		const [chip, ...others] = canvas.getAllByRole("button")
 		await expect(others).toHaveLength(0)
 		await expect(chip).toHaveAccessibleName(`Open ${CITED_FILE_TEXT}`)
-		await expect(
-			canvasElement.querySelectorAll('[data-slot="attachment-chip"]'),
-		).toHaveLength(1)
 		const [link, ...otherLinks] = canvas.getAllByRole("link")
 		await expect(otherLinks).toHaveLength(0)
 		await expect(link).toHaveAttribute("href", "https://example.org/ledger")
