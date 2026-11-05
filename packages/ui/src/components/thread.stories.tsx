@@ -573,7 +573,7 @@ export const Conversations4 = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard Conversations 4: an answer taller than the transcript, with a heading, a table and a list, read from its top. Check the bubble keeps padding 18 around rich content and that its author line stays pinned to the bottom edge on the sticky fill, under a hairline on its top edge and inset 12 at both ends, until the bubble's own end scrolls into view.",
+					"Artboard Conversations 4: an answer taller than the transcript, with a heading, a table and a list, read from its top. Check the bubble keeps padding 18 around rich content and that its author line stays pinned to the bottom edge on the sticky fill, under a hairline on its top edge and 18 from both bubble edges, until the bubble's own end scrolls into view.",
 			},
 		},
 	},
@@ -595,7 +595,7 @@ export const Conversations4 = meta.story({
 				viewport.getBoundingClientRect().bottom -
 					line.getBoundingClientRect().bottom,
 			),
-		).toBe(16)
+		).toBe(BUBBLE_PADDING)
 	},
 })
 
@@ -1182,13 +1182,9 @@ const paintedRgb = (...colours: string[]) => {
 const widestChannelGap = (first: number[], second: number[]) =>
 	Math.max(...first.map((channel, index) => Math.abs(channel - second[index])))
 
-const STUCK_INSET = 16
-
-const STUCK_BAR_PADDING = 12
+const BUBBLE_PADDING = 18
 
 const AUTHOR_LINE_GAP = 8
-
-const STUCK_BLOCK_OVERREACH = 16
 
 const pinnedLineIn = async (viewport: HTMLElement, tone: string) => {
 	await waitFor(() =>
@@ -1273,20 +1269,20 @@ const expectCleanCutStuckLine = async (
 		const lineBox = line.getBoundingClientRect()
 		await expect(
 			Math.round(viewport.getBoundingClientRect().bottom - lineBox.bottom),
-		).toBe(STUCK_INSET)
-		await expect(block.bottom).toBe(`-${STUCK_INSET}px`)
-		await expect(block.top).toBe(`-${STUCK_BLOCK_OVERREACH}px`)
+		).toBe(BUBBLE_PADDING)
+		await expect(block.bottom).toBe(`-${BUBBLE_PADDING}px`)
+		await expect(block.top).toBe(`-${BUBBLE_PADDING}px`)
 		await expect(
 			Math.round(
 				(line.nextElementSibling?.getBoundingClientRect().top ?? 0) -
 					slotIn(content, "message-bubble-text").getBoundingClientRect().bottom,
 			),
 		).toBe(AUTHOR_LINE_GAP + lineBox.height)
-		await expect(block.left).toBe(`-${STUCK_BAR_PADDING}px`)
+		await expect(block.left).toBe(`-${BUBBLE_PADDING}px`)
 		await expect(
 			Math.round(lineBox.left - content.getBoundingClientRect().left),
-		).toBe(STUCK_BAR_PADDING)
-		await expect(Math.round(lineBox.width + 2 * STUCK_BAR_PADDING)).toBe(
+		).toBe(BUBBLE_PADDING)
+		await expect(Math.round(lineBox.width + 2 * BUBBLE_PADDING)).toBe(
 			Math.round(content.getBoundingClientRect().width),
 		)
 		await expect([
@@ -1361,7 +1357,7 @@ export const UserAuthorLineStuckOnALongMessage = meta.story({
 		docs: {
 			description: {
 				story:
-					"Your message taller than the transcript, read from its top, light then dark. Check your author line stays pinned 16 above the transcript's bottom edge, the way an agent's does, on a block in your bubble's colour under a hairline, inset 12 at both ends, that spans the bubble and runs square to the edge, so the message reads cut by the edge rather than closed.",
+					"Your message taller than the transcript, read from its top, light then dark. Check your author line stays pinned 18 above the transcript's bottom edge, the way an agent's does, on a block in your bubble's colour under a hairline, 18 from both bubble edges, that spans the bubble and runs square to the edge, so the message reads cut by the edge rather than closed.",
 			},
 		},
 	},
@@ -1390,12 +1386,117 @@ export const AgentAuthorLineStuckOnALongAnswer = meta.story({
 		docs: {
 			description: {
 				story:
-					"An answer taller than the transcript, read from its top, light then dark. Check the author line stays pinned 16 above the transcript's bottom edge on a block in the bubble's own grey under a hairline, inset 12 at both ends, square at the foot and running to the edge, and that the answer scrolling under it is cut at the bubble's sides.",
+					"An answer taller than the transcript, read from its top, light then dark. Check the author line stays pinned 18 above the transcript's bottom edge on a block in the bubble's own grey under a hairline, 18 from both bubble edges, square at the foot and running to the edge, and that the answer scrolling under it is cut at the bubble's sides.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) =>
 		expectCleanCutStuckLine(canvasElement, "agent"),
+})
+
+const surfaceOf = (line: HTMLElement) => {
+	const surface = line
+		.closest('[data-slot="message-bubble-content"]')
+		?.querySelector<HTMLElement>(":scope > span[aria-hidden='true']")
+	if (!surface) throw new Error("The author line sits outside a painted bubble")
+	return surface
+}
+
+const scrollLineTo = async (
+	viewport: HTMLElement,
+	line: HTMLElement,
+	isStuck: boolean,
+) => {
+	const surface = surfaceOf(line)
+	await waitFor(
+		() => {
+			const bubble = surface.getBoundingClientRect()
+			const frame = viewport.getBoundingClientRect()
+			viewport.scrollTop +=
+				bubble.bottom - frame.bottom + (isStuck ? -3 : 1) * BUBBLE_PADDING
+			expect(line.dataset.stuck).toBe(String(isStuck))
+		},
+		{ timeout: 3000 },
+	)
+}
+
+const authorLineGeometry = (line: HTMLElement) => {
+	const bubble = surfaceOf(line).getBoundingClientRect()
+	const lineBox = line.getBoundingClientRect()
+	const footEdge =
+		line.dataset.stuck === "true"
+			? lineBox.bottom -
+				Number.parseFloat(getComputedStyle(line, "::before").bottom)
+			: bubble.bottom
+	const inlineOffsets = (box: DOMRect) => [
+		Math.round(box.left - bubble.left),
+		Math.round(bubble.right - box.right),
+	]
+	return {
+		padding: [...inlineOffsets(lineBox), Math.round(footEdge - lineBox.bottom)],
+		size: [Math.round(lineBox.width), Math.round(lineBox.height)],
+		contents: Array.from(line.querySelectorAll("*"), (child) =>
+			child.getBoundingClientRect(),
+		)
+			.filter((box) => box.width > 0)
+			.map(inlineOffsets),
+	}
+}
+
+const expectSameGeometryStuck = async (canvasElement: HTMLElement) => {
+	const viewports = slotsIn(canvasElement, "message-scroller-viewport")
+	await expect(viewports).toHaveLength(2)
+	for (const viewport of viewports) {
+		await waitFor(() =>
+			expect(viewport.scrollHeight).toBeGreaterThan(viewport.clientHeight),
+		)
+		for (const tone of ["agent", "you"]) {
+			const line = lineOf(viewport, tone)
+			await scrollLineTo(viewport, line, false)
+			const inPlace = authorLineGeometry(line)
+			await scrollLineTo(viewport, line, true)
+			const stuck = authorLineGeometry(line)
+			await expect(inPlace.padding).toEqual([
+				BUBBLE_PADDING,
+				BUBBLE_PADDING,
+				BUBBLE_PADDING,
+			])
+			await expect(stuck).toEqual(inPlace)
+		}
+	}
+}
+
+export const AuthorLinesKeepTheirPaddingWhenStuck = meta.story({
+	globals: { theme: "light" },
+	render: () => (
+		<ThemedPanels
+			rows={[
+				LISBON_DAY,
+				rowOf({
+					key: "brief",
+					from: "you",
+					text: LONG_OWN_MESSAGE,
+					time: at(14, 10),
+				}),
+				rowOf({
+					key: "answer",
+					from: "agent",
+					author: ATLAS,
+					text: OFFSITE_ANSWER,
+					time: at(14, 12),
+				}),
+			]}
+		/>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Your message and an answer, both taller than the transcript, light then dark. Scroll each until its end shows, then until its end hides under the bottom edge. Check the author line keeps 18 from both bubble edges and 18 above the foot of its block, with its avatar, name, badge and time where they rested, so nothing moves when it sticks.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => expectSameGeometryStuck(canvasElement),
 })
 
 export const UserAuthorLineStuckOnAHoveredMessage = meta.story({
@@ -1658,13 +1759,13 @@ const expectPinnedWithoutJump = async (canvasElement: HTMLElement) => {
 		await expect(
 			viewport.querySelector('[data-slot="message-scroller-button"]'),
 		).toBeNull()
-		await expect(block.left).toBe(`-${STUCK_BAR_PADDING}px`)
+		await expect(block.left).toBe(`-${BUBBLE_PADDING}px`)
 		await expect(
 			Math.round(
 				viewport.getBoundingClientRect().bottom -
 					line.getBoundingClientRect().bottom,
 			),
-		).toBe(STUCK_INSET)
+		).toBe(BUBBLE_PADDING)
 		await expectBlockHasHairline(line)
 		await expectIdentityInFull(line)
 	}
@@ -1708,7 +1809,7 @@ export const AgentAuthorLinePinned = meta.story({
 		docs: {
 			description: {
 				story:
-					"The author line pinned on its own, in a scroll region with no transcript around it, light then dark. Check the bar runs 52 high under a hairline, inset 12 at both ends, on the bubble's grey.",
+					"The author line pinned on its own, in a scroll region with no transcript around it, light then dark. Check the bar runs 56 high under a hairline, 18 from both bubble edges, on the bubble's grey.",
 			},
 		},
 	},

@@ -382,3 +382,21 @@ export const LongNameInANarrowBubble = meta.story({
 		await expect(time?.right).toBeLessThanOrEqual(line.right)
 	},
 })
+
+export const StickyOutsideABubble = meta.story({
+	tags: ["test-only"],
+	args: { isSticky: true },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A sticky line rendered with no bubble around it, so no bubble padding to stick by. Check it renders in place and never reads as stuck.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expect(slotIn(canvasElement, "author-line").dataset.stuck).toBe(
+			"false",
+		)
+	},
+})

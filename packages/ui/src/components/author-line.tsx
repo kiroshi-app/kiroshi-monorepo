@@ -56,38 +56,41 @@ type AuthorLineQueuedProps = {
 
 const AUTHOR_LINE = "flex h-5 min-w-0 max-w-full items-center gap-2"
 
-const STUCK_INSET = 16
-
 const TRANSCRIPT_VIEWPORT = '[data-slot="message-scroller-viewport"]'
 
 const AUTHOR_LINE_STICKY =
-	"sticky bottom-4 z-10 self-stretch before:pointer-events-none before:absolute before:-inset-x-3 before:-inset-y-4 before:-z-10 before:hidden before:border-shell-border before:border-t before:bg-card before:bg-[image:linear-gradient(var(--bubble-surface,var(--bubble)),var(--bubble-surface,var(--bubble)))] data-[stuck=true]:-mx-1.5 data-[stuck=true]:max-w-none data-[stuck=true]:before:block"
+	"sticky bottom-(--bubble-padding) z-10 self-stretch before:pointer-events-none before:absolute before:-inset-(--bubble-padding) before:-z-10 before:hidden before:border-shell-border before:border-t before:bg-card before:bg-[image:linear-gradient(var(--bubble-surface,var(--bubble)),var(--bubble-surface,var(--bubble)))] data-[stuck=true]:before:block"
 
 const useStuckToBottom = (isSticky: boolean) => {
+	const lineRef = useRef<HTMLDivElement>(null)
 	const markerRef = useRef<HTMLSpanElement>(null)
 	const [isStuck, setIsStuck] = useState(false)
 
 	useEffect(() => {
+		const line = lineRef.current
 		const marker = markerRef.current
-		if (!isSticky || !marker) return
+		if (!isSticky || !line || !marker) return
+
+		const stuckInset = Number.parseFloat(getComputedStyle(line).bottom)
+		if (!Number.isFinite(stuckInset)) return
 
 		const root = marker.closest<HTMLElement>(TRANSCRIPT_VIEWPORT)
 		const observer = new IntersectionObserver(
 			([entry]) => {
 				const edge =
-					(entry.rootBounds?.bottom ?? window.innerHeight) - STUCK_INSET
+					(entry.rootBounds?.bottom ?? window.innerHeight) - stuckInset
 				setIsStuck(
 					!entry.isIntersecting && entry.boundingClientRect.top >= edge,
 				)
 			},
-			{ root, rootMargin: `0px 0px -${STUCK_INSET}px 0px` },
+			{ root, rootMargin: `0px 0px -${stuckInset}px 0px` },
 		)
 		observer.observe(marker)
 
 		return () => observer.disconnect()
 	}, [isSticky])
 
-	return { markerRef, isStuck }
+	return { lineRef, markerRef, isStuck }
 }
 
 const NAME_TONE = {
@@ -230,7 +233,7 @@ const AuthorLine = ({
 			isOnOwnBubble={isOnOwnBubble}
 		/>
 	) : null
-	const { markerRef, isStuck } = useStuckToBottom(isSticky)
+	const { lineRef, markerRef, isStuck } = useStuckToBottom(isSticky)
 	const identity = (
 		<span className="flex min-w-0 items-center gap-2">
 			<span className="flex size-5 shrink-0 items-center justify-center">
@@ -243,6 +246,7 @@ const AuthorLine = ({
 	return (
 		<>
 			<div
+				ref={lineRef}
 				data-slot="author-line"
 				data-tone={tone}
 				data-stuck={isSticky ? isStuck : undefined}
