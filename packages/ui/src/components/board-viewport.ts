@@ -170,6 +170,8 @@ export {
 	gridScreenPitch,
 	isAtZoomMax,
 	isAtZoomMin,
+	isItem,
+	itemBounds,
 	panBy,
 	pinchZoom,
 	zoomAround,

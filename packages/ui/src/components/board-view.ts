@@ -1,3 +1,8 @@
+import type {
+	BoardShapeFill,
+	BoardShapeKind,
+} from "@workspace/ui/components/board/board-shape"
+
 type BoardPoint = {
 	x: number
 	y: number
@@ -12,6 +17,13 @@ type BoardRect = BoardPoint & BoardSize
 
 type BoardItemKind = "sticky" | "text" | "shape" | "image" | "link"
 
+type BoardShapeType = BoardShapeKind
+
+type BoardShapeStyle = {
+	shape: BoardShapeType
+	fill: BoardShapeFill
+}
+
 type BoardItem = {
 	id: string
 	kind: BoardItemKind
@@ -19,6 +31,7 @@ type BoardItem = {
 	size: BoardSize
 	zOrder: number
 	text: string
+	style?: BoardShapeStyle
 }
 
 type BoardConnector = {
@@ -46,6 +59,7 @@ type BoardIntent =
 	| { type: "move"; id: string; position: BoardPoint }
 	| { type: "resize"; id: string; position: BoardPoint; size: BoardSize }
 	| { type: "edit-text"; id: string; text: string }
+	| { type: "style"; id: string; style: BoardShapeStyle }
 	| { type: "connect"; id: string; from: string; to: string }
 	| { type: "delete"; id: string }
 
@@ -57,6 +71,9 @@ export type {
 	BoardObject,
 	BoardPoint,
 	BoardRect,
+	BoardShapeFill,
+	BoardShapeStyle,
+	BoardShapeType,
 	BoardSize,
 	BoardView,
 	BoardViewport,

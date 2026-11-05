@@ -700,6 +700,41 @@ const common = {
 		libraryCard: {
 			documentMeta: "Document · depuis la Bibliothèque",
 		},
+		canvas: {
+			label: "Tableau",
+			objects: "Éléments du tableau",
+		},
+		object: {
+			named: "{{kind}} : {{text}}",
+			editText: "Modifier le texte",
+			kind: {
+				sticky: "Note autocollante",
+				text: "Texte",
+				shape: "Forme",
+				image: "Image",
+				link: "Lien",
+			},
+			moved: "Déplacé en {{x}}, {{y}}",
+			resized: "Redimensionné à {{width}} sur {{height}}",
+		},
+		selectionBar: {
+			label: "Style de la forme",
+			shapeType: "Type de forme",
+			shape: {
+				"rounded-rectangle": "Rectangle arrondi",
+				ellipse: "Ellipse",
+			},
+			fill: {
+				surface: "Sans couleur",
+				yellow: "Jaune",
+				green: "Vert",
+				blue: "Bleu",
+				pink: "Rose",
+			},
+			textSize: "Taille du texte",
+			textSizeMedium: "M",
+			more: "Plus",
+		},
 	},
 	whatsNew: {
 		firstLaunch: {

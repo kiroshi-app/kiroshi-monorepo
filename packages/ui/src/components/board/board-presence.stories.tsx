@@ -189,6 +189,7 @@ const PresenceBoard = ({
 			</div>
 			<div className="min-h-0 flex-1">
 				<BoardCanvas
+					onIntent={fn()}
 					onViewportChange={setViewport}
 					outlines={outlines}
 					pointers={pointers}
