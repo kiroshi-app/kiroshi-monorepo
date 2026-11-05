@@ -3644,6 +3644,21 @@
       ],
       "type": "object"
     },
+    "LibraryBoardFileReplaced": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "spaceId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "spaceId",
+        "name"
+      ],
+      "type": "object"
+    },
     "LibraryBoardNode": {
       "properties": {
         "colour": {
@@ -13659,6 +13674,11 @@
     "hosting://members-changed": {
       "payload": {
         "$ref": "#/$defs/MembersChanged"
+      }
+    },
+    "library://board-file-replaced": {
+      "payload": {
+        "$ref": "#/$defs/LibraryBoardFileReplaced"
       }
     },
     "library://changed": {

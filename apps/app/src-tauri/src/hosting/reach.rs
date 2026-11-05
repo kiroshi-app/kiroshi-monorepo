@@ -474,6 +474,7 @@ pub(super) const AUDIENCES: &[(&str, Audience)] = &[
 	(crate::joined_spaces::deep_link::OPENED_EVENT, Audience::HostOnly),
 	(crate::library::contract::DOCUMENT_UPDATED_EVENT, IN_THE_SPACE),
 	(crate::library::contract::DOCUMENT_RENAMED_EVENT, IN_THE_SPACE),
+	(crate::library::contract::BOARD_FILE_REPLACED_EVENT, IN_THE_SPACE),
 	(crate::library::contract::DOCUMENT_PRESENCE_EVENT, IN_THE_SPACE),
 	(crate::library::contract::DOCUMENT_WRITER_FINISHED_EVENT, IN_THE_SPACE),
 	(crate::library::contract::CHANGED_EVENT, IN_THE_SPACE),

@@ -354,6 +354,8 @@ export const JOINED_SPACE_REMOVED_EVENT = "joined-space://removed" as const;
 
 export const JOIN_LINK_OPENED_EVENT = "join-link://opened" as const;
 
+export const LIBRARY_BOARD_FILE_REPLACED_EVENT = "library://board-file-replaced" as const;
+
 export const LIBRARY_CHANGED_EVENT = "library://changed" as const;
 
 export const LIBRARY_DOCUMENT_RENAMED_EVENT = "library://document-renamed" as const;
@@ -1199,6 +1201,11 @@ export type LibraryBoardBounds = {
 	y: number,
 	width: number,
 	height: number,
+};
+
+export type LibraryBoardFileReplaced = {
+	spaceId: string,
+	name: string,
 };
 
 export type LibraryBoardNode = {

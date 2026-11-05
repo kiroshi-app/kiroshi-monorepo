@@ -117,6 +117,8 @@ declared! {
 		library::contract::DOCUMENT_UPDATED_EVENT,
 	LIBRARY_DOCUMENT_RENAMED: library::contract::LibraryDocumentRenamed =
 		library::contract::DOCUMENT_RENAMED_EVENT,
+	LIBRARY_BOARD_FILE_REPLACED: library::contract::LibraryBoardFileReplaced =
+		library::contract::BOARD_FILE_REPLACED_EVENT,
 	LIBRARY_DOCUMENT_PRESENCE: library::contract::LibraryDocumentPresence =
 		library::contract::DOCUMENT_PRESENCE_EVENT,
 	LIBRARY_DOCUMENT_WRITER_FINISHED: library::contract::LibraryDocumentWriterFinished =

@@ -22,9 +22,9 @@ use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Manager, Runtime, State};
 
 use contract::{
-	LibraryChanged, LibraryDocument, LibraryDocumentFormat, LibraryDocumentRenamed,
-	LibraryDocumentState, LibraryDocumentUpdated, LibraryError, LibraryFile, LibraryImage,
-	LibraryImport, LibraryItem, LibraryItemKind, LibraryOverwritten,
+	LibraryBoardFileReplaced, LibraryChanged, LibraryDocument, LibraryDocumentFormat,
+	LibraryDocumentRenamed, LibraryDocumentState, LibraryDocumentUpdated, LibraryError,
+	LibraryFile, LibraryImage, LibraryImport, LibraryItem, LibraryItemKind, LibraryOverwritten,
 };
 use documents::Documents;
 
@@ -449,9 +449,9 @@ pub(crate) fn apply_update<R: Runtime>(
 	update: &str,
 ) -> Result<(), LibraryError> {
 	let update = decoded_content(name, update)?;
-	let applied = documents(app).apply(root, space_id, name, &update)?;
-	announce(app, space_id, &applied.name, &applied.change);
-	Ok(())
+	documents(app).apply(root, space_id, name, &update, |applied| {
+		announce(app, space_id, &applied.name, &applied.change);
+	})
 }
 
 pub(crate) fn rename_document<R: Runtime>(
@@ -701,11 +701,28 @@ fn announce<R: Runtime>(app: &AppHandle<R>, space_id: &str, name: &str, update: 
 	}
 }
 
+fn announce_board_file_replaced<R: Runtime>(app: &AppHandle<R>, space_id: &str, name: &str) {
+	let replaced =
+		LibraryBoardFileReplaced { space_id: space_id.to_owned(), name: name.to_owned() };
+	if let Err(error) = events::emit(app, events::LIBRARY_BOARD_FILE_REPLACED, replaced) {
+		log::warn!("a rewritten board file of space {space_id} was not announced: {error}");
+	}
+}
+
 fn documents<R: Runtime>(app: &AppHandle<R>) -> State<'_, Documents> {
 	if app.try_state::<Documents>().is_none() {
-		app.manage(Documents::default());
+		let announcing = app.clone();
+		app.manage(Documents::new(move |space_id, name| {
+			announce_board_file_replaced(&announcing, space_id, name);
+		}));
 	}
 	app.state::<Documents>()
+}
+
+pub fn write_pending_boards<R: Runtime>(app: &AppHandle<R>) {
+	if let Some(documents) = app.try_state::<Documents>() {
+		documents.write_pending_boards();
+	}
 }
 
 pub(crate) fn import(

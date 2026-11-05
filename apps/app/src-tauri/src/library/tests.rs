@@ -999,9 +999,9 @@ fn an_update_ahead_of_the_one_it_depends_on_is_kept_until_that_one_arrives() {
 	let documents = Documents::default();
 	let (first, second) = an_update_and_the_one_it_depends_on(&documents, &root);
 
-	documents.apply(&root, SPACE, "notes.md", &second).expect("the update is kept");
+	documents.apply(&root, SPACE, "notes.md", &second, |_| {}).expect("the update is kept");
 	let while_waiting = file_text(&root, "notes.md");
-	documents.apply(&root, SPACE, "notes.md", &first).expect("the update merges");
+	documents.apply(&root, SPACE, "notes.md", &first, |_| {}).expect("the update merges");
 
 	assert_eq!(while_waiting, "base");
 	assert_eq!(file_text(&root, "notes.md"), "base first second");
@@ -1013,10 +1013,10 @@ fn an_update_ahead_of_the_one_it_depends_on_is_kept_across_a_restart() {
 	let root = temp_root();
 	let before_restart = Documents::default();
 	let (first, second) = an_update_and_the_one_it_depends_on(&before_restart, &root);
-	before_restart.apply(&root, SPACE, "notes.md", &second).expect("the update is kept");
+	before_restart.apply(&root, SPACE, "notes.md", &second, |_| {}).expect("the update is kept");
 
 	let restarted = Documents::default();
-	restarted.apply(&root, SPACE, "notes.md", &first).expect("the update merges");
+	restarted.apply(&root, SPACE, "notes.md", &first, |_| {}).expect("the update merges");
 
 	assert_eq!(file_text(&root, "notes.md"), "base first second");
 	assert_eq!(opened_text(&restarted, &root, "notes.md"), "base first second");
@@ -1038,7 +1038,9 @@ fn updates_sent_at_once_by_many_members_all_land_in_the_file_and_the_opened_text
 				let client = YjsClient::of(base);
 				for insert in inserts_of(member) {
 					let update = client.inserted(client.text().len() as u32, &insert);
-					documents.apply(root, SPACE, "notes.md", &bytes_of(&update)).expect("merges");
+					documents
+						.apply(root, SPACE, "notes.md", &bytes_of(&update), |_| {})
+						.expect("merges");
 				}
 			});
 		}
@@ -1281,7 +1283,7 @@ fn an_undecodable_update_leaves_the_document_and_the_file_unchanged() {
 	let served = documents.open(&root, SPACE, "notes.md").expect("opens").state;
 	let stored = stored_state_of(&root, "notes.md");
 
-	let refused = documents.apply(&root, SPACE, "notes.md", &[1, 2, 3]);
+	let refused = documents.apply(&root, SPACE, "notes.md", &[1, 2, 3], |_| {});
 
 	assert!(
 		matches!(&refused, Err(LibraryError::Undecodable { name, .. }) if name == "notes.md"),
@@ -1302,8 +1304,13 @@ fn an_update_past_the_size_limit_leaves_the_document_and_the_file_unchanged() {
 	let stored = stored_state_of(&root, "big.md");
 	let grown = YjsClient::of(&BASE64_STANDARD.encode(&served)).inserted(0, "xyz");
 
-	let refused =
-		documents.apply(&root, SPACE, "big.md", &BASE64_STANDARD.decode(grown).expect("base64"));
+	let refused = documents.apply(
+		&root,
+		SPACE,
+		"big.md",
+		&BASE64_STANDARD.decode(grown).expect("base64"),
+		|_| {},
+	);
 
 	assert_eq!(
 		refused,
@@ -1330,7 +1337,9 @@ fn an_update_made_before_a_restart_still_merges_after_it() {
 	let member = YjsClient::of(&BASE64_STANDARD.encode(&served)).inserted(4, " member");
 
 	let restarted = Documents::default();
-	restarted.apply(&root, SPACE, "notes.md", &bytes_of(&member)).expect("the update merges");
+	restarted
+		.apply(&root, SPACE, "notes.md", &bytes_of(&member), |_| {})
+		.expect("the update merges");
 
 	assert_eq!(
 		fs::read_to_string(space_dir(&root, SPACE).join("notes.md")).expect("read"),
@@ -1348,7 +1357,9 @@ fn a_file_edited_outside_is_taken_as_one_host_edit_that_still_merges_with_member
 	put(&root, SPACE, "notes.md", b"base, edited outside");
 
 	let reopened = documents.open(&root, SPACE, "notes.md").expect("opens");
-	documents.apply(&root, SPACE, "notes.md", &bytes_of(&member)).expect("the update merges");
+	documents
+		.apply(&root, SPACE, "notes.md", &bytes_of(&member), |_| {})
+		.expect("the update merges");
 
 	assert!(reopened.host_edit.is_some());
 	assert_eq!(
@@ -1403,7 +1414,9 @@ fn the_stored_state_stays_out_of_the_library_folder_and_its_listing() {
 	let documents = Documents::default();
 	let served = documents.open(&root, SPACE, "notes.md").expect("opens").state;
 	let member = YjsClient::of(&BASE64_STANDARD.encode(&served)).inserted(4, " member");
-	documents.apply(&root, SPACE, "notes.md", &bytes_of(&member)).expect("the update merges");
+	documents
+		.apply(&root, SPACE, "notes.md", &bytes_of(&member), |_| {})
+		.expect("the update merges");
 
 	let in_the_folder: Vec<String> = fs::read_dir(space_dir(&root, SPACE))
 		.expect("the folder reads")
@@ -2072,11 +2085,14 @@ fn an_update_to_a_former_name_a_new_file_now_holds_lands_in_that_file() {
 		&BASE64_STANDARD.encode(documents.open(&root, SPACE, "notes.md").expect("opens").state),
 	);
 
-	let applied = documents
-		.apply(&root, SPACE, "notes.md", &bytes_of(&member.inserted(5, "!")))
+	let mut announced = Vec::new();
+	documents
+		.apply(&root, SPACE, "notes.md", &bytes_of(&member.inserted(5, "!")), |applied| {
+			announced.push(applied.name.clone());
+		})
 		.expect("the update merges");
 
-	assert_eq!(applied.name, "notes.md");
+	assert_eq!(announced, ["notes.md"]);
 	assert_eq!(file_text(&root, "notes.md"), "fresh!");
 	assert_eq!(file_text(&root, "plan.md"), "base");
 }
@@ -2092,11 +2108,14 @@ fn an_update_to_the_first_name_follows_a_document_renamed_twice() {
 	documents.rename(&root, SPACE, "notes.md", "plan.md", |_| {}).expect("the rename lands");
 	documents.rename(&root, SPACE, "plan.md", "final.md", |_| {}).expect("the rename lands");
 
-	let applied = documents
-		.apply(&root, SPACE, "notes.md", &bytes_of(&member.inserted(4, "!")))
+	let mut announced = Vec::new();
+	documents
+		.apply(&root, SPACE, "notes.md", &bytes_of(&member.inserted(4, "!")), |applied| {
+			announced.push(applied.name.clone());
+		})
 		.expect("the update merges");
 
-	assert_eq!(applied.name, "final.md");
+	assert_eq!(announced, ["final.md"]);
 	assert_eq!(file_text(&root, "final.md"), "base!");
 	assert_eq!(names(&root, SPACE), ["final.md"]);
 }
