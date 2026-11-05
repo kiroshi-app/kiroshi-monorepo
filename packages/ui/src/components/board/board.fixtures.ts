@@ -2,6 +2,10 @@ import { ROOFTOP_POOL } from "@workspace/ui/components/answer-blocks/answer-bloc
 import type { BoardLibraryCardProps } from "@workspace/ui/components/board/board-library-card"
 import type { BoardLinkCardProps } from "@workspace/ui/components/board/board-link-card"
 import type { BoardSnapshot } from "@workspace/ui/components/board/board-miniature"
+import type {
+	BoardPointerPlacement,
+	BoardPresenceOwner,
+} from "@workspace/ui/components/board/board-presence"
 import type { BoardStickyAuthor } from "@workspace/ui/components/board/board-sticky"
 
 export const AGENT_AUTHOR: BoardStickyAuthor = {
@@ -71,6 +75,7 @@ export const PLANNING_BOARD_SNAPSHOT: BoardSnapshot = {
 			props: { heading: "Launch plan", body: "Three steps to Friday." },
 		},
 		{
+			id: "planning-ship",
 			kind: "shape",
 			x: 440,
 			y: 124,
@@ -135,4 +140,18 @@ export const REFERENCES_BOARD_SNAPSHOT: BoardSnapshot = {
 export const EMPTY_BOARD_SNAPSHOT: BoardSnapshot = {
 	bounds: { x: 0, y: 0, width: 0, height: 0 },
 	objects: [],
+}
+
+export const BOARD_CARD_TITLE = "Launch week plan"
+
+export const DRAWING_AGENT: BoardPresenceOwner = {
+	kind: "agent",
+	id: "atlas",
+	name: "Atlas",
+	hue: 41,
+}
+
+export const DRAWING_AGENT_POINTER: BoardPointerPlacement = {
+	owner: DRAWING_AGENT,
+	position: { x: 590, y: 210 },
 }

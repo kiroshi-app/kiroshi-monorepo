@@ -666,6 +666,16 @@ const common = {
 			drawing_one: "{{count}} agent drawing",
 			drawing_other: "{{count}} agents drawing",
 		},
+		card: {
+			open: "Open",
+			drawing_one: "Board · {{name}} is drawing · {{count}} item",
+			drawing_other: "Board · {{name}} is drawing · {{count}} items",
+			atRest_one: "Board · {{count}} item · {{edited}}",
+			atRest_other: "Board · {{count}} items · {{edited}}",
+		},
+		panel: {
+			openInTab: "Open in tab",
+		},
 		libraryCard: {
 			documentMeta: "Document · from the Library",
 		},

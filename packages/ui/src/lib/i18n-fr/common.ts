@@ -697,6 +697,18 @@ const common = {
 			drawing_many: "{{count}} agents dessinent",
 			drawing_other: "{{count}} agents dessinent",
 		},
+		card: {
+			open: "Ouvrir",
+			drawing_one: "Tableau · {{name}} dessine · {{count}} élément",
+			drawing_many: "Tableau · {{name}} dessine · {{count}} éléments",
+			drawing_other: "Tableau · {{name}} dessine · {{count}} éléments",
+			atRest_one: "Tableau · {{count}} élément · {{edited}}",
+			atRest_many: "Tableau · {{count}} éléments · {{edited}}",
+			atRest_other: "Tableau · {{count}} éléments · {{edited}}",
+		},
+		panel: {
+			openInTab: "Ouvrir dans un onglet",
+		},
 		libraryCard: {
 			documentMeta: "Document · depuis la Bibliothèque",
 		},

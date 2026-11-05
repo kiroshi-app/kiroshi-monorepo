@@ -15,6 +15,12 @@ import {
 	type BoardLinkCardProps,
 } from "@workspace/ui/components/board/board-link-card"
 import {
+	BoardObjectOutline,
+	type BoardObjectOutlineSpec,
+	BoardPointer,
+	type BoardPointerPlacement,
+} from "@workspace/ui/components/board/board-presence"
+import {
 	BoardSection,
 	type BoardSectionProps,
 } from "@workspace/ui/components/board/board-section"
@@ -39,8 +45,7 @@ const MINIATURE_GRID_PITCH = 12
 
 type Sized<Props> = Omit<Props, "width" | "height">
 
-type BoardSnapshotObject = BoardRect &
-	(
+type BoardSnapshotObject = BoardRect & { id?: string } & (
 		| { kind: "sticky"; props: BoardStickyProps }
 		| { kind: "text"; props: BoardTextProps }
 		| { kind: "shape"; props: Sized<BoardShapeProps> }
@@ -77,9 +82,34 @@ const renderSnapshotObject = (object: BoardSnapshotObject) => {
 
 type BoardMiniatureProps = {
 	snapshot: BoardSnapshot
+	pointers?: readonly BoardPointerPlacement[]
+	outlines?: readonly BoardObjectOutlineSpec[]
 }
 
-const BoardMiniature = ({ snapshot }: BoardMiniatureProps) => {
+type OutlinedSnapshotObjectProps = {
+	object: BoardSnapshotObject
+	outlines: readonly BoardObjectOutlineSpec[]
+}
+
+const OutlinedSnapshotObject = ({
+	object,
+	outlines,
+}: OutlinedSnapshotObjectProps) => {
+	const outline = outlines.find(({ objectId }) => objectId === object.id)
+	return outline ? (
+		<BoardObjectOutline owner={outline.owner} state={outline.state}>
+			{renderSnapshotObject(object)}
+		</BoardObjectOutline>
+	) : (
+		renderSnapshotObject(object)
+	)
+}
+
+const BoardMiniature = ({
+	snapshot,
+	pointers = [],
+	outlines = [],
+}: BoardMiniatureProps) => {
 	const [box, setBox] = useState<BoardSize | null>(null)
 	const measure = useCallback((element: HTMLDivElement | null) => {
 		if (!element) return
@@ -99,6 +129,7 @@ const BoardMiniature = ({ snapshot }: BoardMiniatureProps) => {
 			aria-hidden="true"
 			className="pointer-events-none absolute inset-0 overflow-hidden"
 			data-slot="board-miniature"
+			inert
 			ref={measure}
 		>
 			<BoardDotGrid pitch={MINIATURE_GRID_PITCH} />
@@ -122,11 +153,23 @@ const BoardMiniature = ({ snapshot }: BoardMiniatureProps) => {
 								height: object.height,
 							}}
 						>
-							{renderSnapshotObject(object)}
+							<OutlinedSnapshotObject object={object} outlines={outlines} />
 						</div>
 					))}
 				</div>
 			) : null}
+			{fitted
+				? pointers.map(({ owner, position }) => (
+						<BoardPointer
+							key={owner.id}
+							owner={owner}
+							position={{
+								x: Math.round(fitted.offset.x + position.x * fitted.zoom),
+								y: Math.round(fitted.offset.y + position.y * fitted.zoom),
+							}}
+						/>
+					))
+				: null}
 		</div>
 	)
 }

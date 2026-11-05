@@ -1,5 +1,5 @@
-import { type CSSProperties, useState } from "react"
-import { expect, fn, waitFor } from "storybook/test"
+import { type CSSProperties, type ReactNode, useState } from "react"
+import { expect, fn, userEvent, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
@@ -7,8 +7,30 @@ import {
 	hueScopeOf,
 	LAPTOP_WINDOW,
 	MarkdownProse,
+	slotIn,
+	slotsIn,
 } from "@workspace/storybook/story-utils"
 import { AppHeader } from "@workspace/ui/components/app-header"
+import {
+	AGENT_AUTHOR,
+	BOARD_CARD_TITLE,
+	DRAWING_AGENT,
+	DRAWING_AGENT_POINTER,
+	PERSON_AUTHOR,
+	PLANNING_BOARD_SNAPSHOT,
+	STICKY_TEXT,
+} from "@workspace/ui/components/board/board.fixtures"
+import { BoardCard } from "@workspace/ui/components/board/board-card"
+import type { BoardPresenceOwner } from "@workspace/ui/components/board/board-presence"
+import { BoardShape } from "@workspace/ui/components/board/board-shape"
+import { BoardSticky } from "@workspace/ui/components/board/board-sticky"
+import { BoardText } from "@workspace/ui/components/board/board-text"
+import { BoardCanvas } from "@workspace/ui/components/board-canvas"
+import type {
+	BoardItem,
+	BoardView,
+	BoardViewport,
+} from "@workspace/ui/components/board-view"
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { ContentCard } from "@workspace/ui/components/content-card"
 import {
@@ -949,4 +971,247 @@ export const NarrowedToTheThreadFloorThenScrolled = meta.story({
 			await expectEachMessageClearsTheNext(canvasElement)
 		}
 	},
+})
+
+const MIRA: BoardPresenceOwner = {
+	kind: "agent",
+	id: LIBRARY_AGENTS.mira.id,
+	name: LIBRARY_AGENTS.mira.name,
+	hue: LIBRARY_AGENTS.mira.hue,
+}
+
+const boardItem = (
+	id: string,
+	kind: BoardItem["kind"],
+	x: number,
+	y: number,
+	width: number,
+	height: number,
+): BoardItem => ({
+	id,
+	kind,
+	position: { x, y },
+	size: { width, height },
+	zOrder: 1,
+	text: "",
+})
+
+const PANEL_BOARD: BoardView = {
+	objects: [
+		boardItem("heading", "text", 0, 0, 300, 96),
+		boardItem("sticky-plan", "sticky", 0, 120, 160, 160),
+		boardItem("sticky-copy", "sticky", 192, 120, 160, 160),
+		boardItem("planning-ship", "shape", 384, 144, 160, 96),
+	],
+}
+
+const PANEL_VIEWPORT: BoardViewport = { offset: { x: 32, y: 32 }, zoom: 0.8 }
+
+const panelBoardObject = (id: string): ReactNode => {
+	switch (id) {
+		case "heading":
+			return <BoardText body="Three steps to Friday." heading="Launch plan" />
+		case "sticky-plan":
+			return (
+				<BoardSticky author={AGENT_AUTHOR} colour="yellow" text={STICKY_TEXT} />
+			)
+		case "sticky-copy":
+			return (
+				<BoardSticky
+					author={PERSON_AUTHOR}
+					colour="pink"
+					text="Ask Ada for the final copy"
+				/>
+			)
+		default:
+			return (
+				<BoardShape
+					height={96}
+					kind="rounded-rectangle"
+					label="Ship"
+					width={160}
+				/>
+			)
+	}
+}
+
+type PanelBoardProps = {
+	drawers: readonly BoardPresenceOwner[]
+}
+
+const DRAWN_OBJECT: Record<string, string> = {
+	[DRAWING_AGENT.id]: "planning-ship",
+	[MIRA.id]: "sticky-copy",
+}
+
+const POINTER_AT: Record<string, { x: number; y: number }> = {
+	[DRAWING_AGENT.id]: { x: 530, y: 228 },
+	[MIRA.id]: { x: 340, y: 262 },
+}
+
+const PanelBoard = ({ drawers }: PanelBoardProps) => {
+	const [viewport, setViewport] = useState(PANEL_VIEWPORT)
+	return (
+		<BoardCanvas
+			onIntent={fn()}
+			onViewportChange={setViewport}
+			outlines={drawers.map((owner) => ({
+				objectId: DRAWN_OBJECT[owner.id],
+				owner,
+				state: "drawing",
+			}))}
+			pointers={drawers.map((owner) => ({
+				owner,
+				position: POINTER_AT[owner.id],
+			}))}
+			renderObject={(object) => panelBoardObject(object.id)}
+			view={PANEL_BOARD}
+			viewport={viewport}
+		/>
+	)
+}
+
+const BOARD_ROWS: TranscriptItem[] = [
+	{
+		key: "question",
+		render: () => <UserTurn>Plan the launch week on a board.</UserTurn>,
+	},
+	{
+		key: "answer",
+		render: () => (
+			<AssistantTurn identity={ATLAS}>
+				<BoardCard
+					drawing={{ agent: DRAWING_AGENT, objectId: "planning-ship" }}
+					editedLabel="edited just now"
+					isOpenBeside
+					itemCount={PLANNING_BOARD_SNAPSHOT.objects.length}
+					onOpen={fn()}
+					pointers={[DRAWING_AGENT_POINTER]}
+					snapshot={PLANNING_BOARD_SNAPSHOT}
+					title={BOARD_CARD_TITLE}
+				/>
+			</AssistantTurn>
+		),
+	},
+]
+
+const boardPanelArgs = (drawers: readonly BoardPresenceOwner[]) => ({
+	variant: "board" as const,
+	title: BOARD_CARD_TITLE,
+	onOpenInTab: fn(),
+	presence: (
+		<LibraryDocumentPresence
+			activity="drawing"
+			writers={drawers.map((agent) => ({ agent }))}
+		/>
+	),
+	children: <PanelBoard drawers={drawers} />,
+})
+
+const BoardInThread = (args: DocumentPanelProps) => (
+	<div className="flex h-200 w-320" {...hueScopeOf("blue")}>
+		<ThreadLayout
+			aside={<DocumentPanel {...args} />}
+			composer={<PromptInput onSubmit={fn()} />}
+			rows={BOARD_ROWS}
+		>
+			{null}
+		</ThreadLayout>
+	</div>
+)
+
+const BOARD_BAR_HEIGHT = 52
+
+const expectBoardPanel = async (
+	canvasElement: HTMLElement,
+	chipLabel: string,
+	drawerCount: number,
+) => {
+	const canvas = within(canvasElement)
+	const panel = canvas.getByRole("complementary", { name: BOARD_CARD_TITLE })
+	const header = slotIn(panel, "document-panel-header")
+	await expect(header.getBoundingClientRect().height).toBe(BOARD_BAR_HEIGHT)
+	await expect(slotIn(header, "board-glyph")).toBeVisible()
+	await expect(
+		within(slotIn(panel, "library-document-presence")).getByText(chipLabel),
+	).toBeVisible()
+	await expect(
+		within(panel).queryByRole("button", { name: "Open in Library" }),
+	).toBeNull()
+	await expect(panel.querySelector("h2")).toBeNull()
+	const board = slotIn(panel, "document-panel-board")
+	await expect(board.getBoundingClientRect().width).toBe(
+		panel.getBoundingClientRect().width - 1,
+	)
+	await expect(getComputedStyle(board).padding).toBe("0px")
+	await expect(slotsIn(board, "board-pointer")).toHaveLength(drawerCount)
+	await expect(slotIn(canvasElement, "board-card")).toHaveAttribute(
+		"data-state",
+		"open",
+	)
+}
+
+const expectBoardPanelCallbacks = async (
+	canvasElement: HTMLElement,
+	args: DocumentPanelProps,
+) => {
+	const panel = within(canvasElement).getByRole("complementary", {
+		name: BOARD_CARD_TITLE,
+	})
+	await userEvent.click(
+		within(panel).getByRole("button", { name: "Open in tab" }),
+	)
+	await expect(args.onOpenInTab).toHaveBeenCalledOnce()
+	await userEvent.click(within(panel).getByRole("button", { name: "Close" }))
+	await expect(args.onClose).toHaveBeenCalledOnce()
+}
+
+export const BoardOneAgent = meta.story({
+	args: boardPanelArgs([DRAWING_AGENT]),
+	render: (args) => <BoardInThread {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A board open beside the thread that posted it, as artboard 3a draws it. Check the card in the message wearing the Space colour ring, the 52px bar with the board glyph, the title, 1 agent drawing, Open in tab and Close, and the board filling the panel edge to edge with no title above it. Open in tab and Close each call back once.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		await expectBoardPanel(canvasElement, "1 agent drawing", 1)
+		await expectBoardPanelCallbacks(canvasElement, args)
+	},
+})
+
+export const BoardOneAgentDark = meta.story({
+	args: boardPanelArgs([DRAWING_AGENT]),
+	globals: { ...LAPTOP_WINDOW, theme: "dark" },
+	render: (args) => <BoardInThread {...args} />,
+	play: ({ canvasElement }) =>
+		expectBoardPanel(canvasElement, "1 agent drawing", 1),
+})
+
+export const BoardSeveralAgents = meta.story({
+	args: boardPanelArgs([DRAWING_AGENT, MIRA]),
+	render: (args) => <BoardInThread {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Atlas and Mira both draw on the open board. Check the chip reading 2 agents drawing with both avatars, both pointers on the board, and Open in tab and Close each calling back once.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		await expectBoardPanel(canvasElement, "2 agents drawing", 2)
+		await expectBoardPanelCallbacks(canvasElement, args)
+	},
+})
+
+export const BoardSeveralAgentsDark = meta.story({
+	args: boardPanelArgs([DRAWING_AGENT, MIRA]),
+	globals: { ...LAPTOP_WINDOW, theme: "dark" },
+	render: (args) => <BoardInThread {...args} />,
+	play: ({ canvasElement }) =>
+		expectBoardPanel(canvasElement, "2 agents drawing", 2),
 })

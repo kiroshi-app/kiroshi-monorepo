@@ -1,3 +1,12 @@
+board-boardcard--at-rest
+board-boardcard--at-rest-dark
+board-boardcard--drawing
+board-boardcard--drawing-dark
+board-boardcard--long-title
+board-boardcard--long-title-dark
+board-boardcard--open-beside
+board-boardcard--open-beside-dark
+board-boardcard--updates-in-place
 board-boardimage--default
 board-boardimage--default-dark
 board-boardimage--with-source
@@ -1573,6 +1582,10 @@ navigation-conversationsubjecticon--unknown-icon-falls-back-to-message-square
 navigation-conversationsubjecticon--yellow
 navigation-documentpanel--after-a-drag
 navigation-documentpanel--asked-under-the-room-left
+navigation-documentpanel--board-one-agent
+navigation-documentpanel--board-one-agent-dark
+navigation-documentpanel--board-several-agents
+navigation-documentpanel--board-several-agents-dark
 navigation-documentpanel--capped-by-the-room-left
 navigation-documentpanel--consecutive-answers-at-the-thread-floor
 navigation-documentpanel--controlled-width
