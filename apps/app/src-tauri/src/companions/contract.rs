@@ -132,6 +132,7 @@ pub struct ConversationClosed {
 #[serde(rename_all = "camelCase")]
 pub struct ConversationAttached {
 	pub path: String,
+	pub markdown: String,
 	pub conversation_id: String,
 }
 

@@ -167,7 +167,8 @@ Form: `Source: [`
 
 Use it when one image is itself the answer, found on a page you read. The image alone on its
 line with its alt text, a blank line, then `Source: ` linking the page it comes from, all four
-parts required. A file of the machine goes through `conversation_attach` instead.
+parts required. A file of the machine goes through `conversation_attach` instead, cited by the
+markdown line it answers.
 
 ````markdown
 ![The Lisbon waterfront at dusk](https://images.example.org/lisbon-waterfront.jpg)

@@ -2,7 +2,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use chrono::Utc;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use tauri::{AppHandle, Runtime};
@@ -15,9 +14,11 @@ use super::contract::{
 };
 use super::launch;
 use crate::agent::host::{Host, Refusal};
-use crate::agent::reply_writer::{shown_with_attachments, HeldAttachment, TurnAttachments};
+use crate::agent::reply_writer::{HeldAttachment, TurnAttachments};
 use crate::attachments::contract::SubmittedAttachment;
-use crate::attachments::{refuse_block, refuse_file, store, Attachments, Rejection, SizedFile};
+use crate::attachments::{
+	markdown_line, refuse_block, refuse_file, store, Attachments, Rejection, SizedFile,
+};
 use crate::conversations::commands::{
 	announce_conversation, conversation_create_bot_from_draft, conversation_suggested_bots, ready,
 };
@@ -322,7 +323,7 @@ impl<R: Runtime> CompanionHost<R> {
 		path: &str,
 		caption: Option<String>,
 	) -> Result<ConversationAttached, CompanionError> {
-		let stored = self.attachments.hold_with(|held| {
+		let attached = self.attachments.hold_with(|held| {
 			let bytes = file_bytes(path)?;
 			let held_names: Vec<String> =
 				held.iter().map(|file| file.path.to_string_lossy().into_owned()).collect();
@@ -335,10 +336,12 @@ impl<R: Runtime> CompanionHost<R> {
 			refuse_block(&block)?;
 			let size = bytes.len() as u64;
 			let stored = stored_copy(root, &self.conversation_id, path, bytes)?;
-			Ok::<_, CompanionError>(HeldAttachment { path: stored, bytes: size, caption })
+			let label = label_of(caption, path, &stored);
+			Ok::<_, CompanionError>(HeldAttachment { path: stored, bytes: size, label })
 		})?;
 		Ok(ConversationAttached {
-			path: stored.to_string_lossy().into_owned(),
+			path: attached.path.to_string_lossy().into_owned(),
+			markdown: attached.markdown_line(),
 			conversation_id: self.conversation_id.clone(),
 		})
 	}
@@ -357,11 +360,11 @@ impl<R: Runtime> CompanionHost<R> {
 		let size = bytes.len() as u64;
 		refuse_block(&[SizedFile { name: path, bytes: size }])?;
 		let stored = stored_copy(root, &room, path, bytes)?;
-		let shown = HeldAttachment { path: stored.clone(), bytes: size, caption };
+		let markdown = markdown_line(&stored, &label_of(caption, path, &stored));
 		let spoken = CompanionSpoke {
 			conversation_id: room.clone(),
 			author_bot_id: self.bot_id.clone(),
-			text: shown_with_attachments("", &[shown], Utc::now()),
+			text: markdown.clone(),
 		};
 		if let Err(error) = self.announce(COMPANION_SPOKE, spoken) {
 			take_back(&stored);
@@ -369,6 +372,7 @@ impl<R: Runtime> CompanionHost<R> {
 		}
 		Ok(ConversationAttached {
 			path: stored.to_string_lossy().into_owned(),
+			markdown,
 			conversation_id: room,
 		})
 	}
@@ -482,6 +486,13 @@ fn stored_copy(
 	let submitted = SubmittedAttachment { name: path.to_owned(), bytes: Some(bytes), base64: None };
 	store(root, conversation_id, &[submitted])?.into_iter().next().ok_or_else(|| {
 		CompanionError::Unexpected { detail: "the attachment store answered no path".to_owned() }
+	})
+}
+
+fn label_of(caption: Option<String>, source: &str, stored: &Path) -> String {
+	caption.unwrap_or_else(|| {
+		let named = Path::new(source).file_name().or(stored.file_name());
+		named.unwrap_or(stored.as_os_str()).to_string_lossy().into_owned()
 	})
 }
 
@@ -1966,18 +1977,23 @@ mod tests {
 		assert_eq!(stored[0].parent(), Some(root.join("c1").as_path()));
 		assert_eq!(stored[0].extension().and_then(|it| it.to_str()), Some("png"));
 		assert_eq!(fs::read(&stored[0]).expect("the copy reads"), vec![7u8; 3]);
+		let path = stored[0].to_string_lossy();
 		assert_eq!(
 			answered,
-			json!({ "path": stored[0].to_string_lossy(), "conversationId": "c1" })
+			json!({
+				"path": path,
+				"markdown": format!("![The chart](<{path}>)"),
+				"conversationId": "c1"
+			})
 		);
 		let held = host.attachments.take();
 		assert_eq!(held.len(), 1);
 		assert_eq!(held[0].path, stored[0]);
-		assert_eq!(held[0].caption.as_deref(), Some("The chart"));
+		assert_eq!(held[0].label, "The chart");
 	}
 
 	#[tokio::test]
-	async fn an_image_attached_in_a_room_posts_its_caption_then_its_block_there() {
+	async fn an_image_attached_in_a_room_posts_its_markdown_line_there() {
 		let app = a_room("attach-room").await;
 		let arriving = heard(&app, COMPANION_SPOKE_EVENT);
 		let host = serving(&app, "c1");
@@ -1997,17 +2013,15 @@ mod tests {
 		let root = Attachments::dir(app.handle()).expect("the attachments root");
 		assert_eq!(stored[0].parent(), Some(root.join("room").as_path()));
 		let path = stored[0].to_string_lossy().into_owned();
-		assert_eq!(answered, json!({ "path": path, "conversationId": "room" }));
+		let markdown = format!("![The chart](<{path}>)");
+		assert_eq!(
+			answered,
+			json!({ "path": path, "markdown": markdown, "conversationId": "room" })
+		);
 		let spoken = announced(&arriving);
 		assert_eq!(spoken["conversationId"], json!("room"));
 		assert_eq!(spoken["authorBotId"], json!("b1"));
-		let text = spoken["text"].as_str().expect("the text");
-		let lines: Vec<&str> = text.lines().collect();
-		assert_eq!(lines.len(), 3, "{text}");
-		assert_eq!(lines[0], "The chart");
-		assert!(lines[1].starts_with("Attached to this message, sent "), "{text}");
-		assert!(lines[1].ends_with(", 1 file:"), "{text}");
-		assert_eq!(lines[2], format!("1/1 {path}"));
+		assert_eq!(spoken["text"], json!(markdown));
 		assert!(host.attachments.take().is_empty(), "a room post was held for this turn");
 	}
 
@@ -2019,7 +2033,8 @@ mod tests {
 		let log = an_image(&app, "run.LOG", 3);
 		let bare = an_image(&app, "Makefile", 2);
 
-		host.answer(an_attach(json!({ "path": log }))).await.expect("the log is attached here");
+		let here =
+			host.answer(an_attach(json!({ "path": log }))).await.expect("the log is attached here");
 		let in_room = host
 			.answer(an_attach(json!({ "path": bare, "conversation": "room" })))
 			.await
@@ -2036,9 +2051,12 @@ mod tests {
 		assert_eq!(stored.parent(), Some(root.join("room").as_path()));
 		assert_eq!(stored.extension(), None);
 		assert_eq!(fs::read(&stored).expect("the copy reads"), vec![7u8; 2]);
-		let spoken = announced(&arriving);
-		let text = spoken["text"].as_str().expect("the text");
-		assert_eq!(text.lines().last(), Some(format!("1/1 {path}").as_str()), "{text}");
+		let markdown = format!("[Makefile](<{path}>)");
+		assert_eq!(in_room["markdown"], json!(markdown));
+		assert_eq!(announced(&arriving)["text"], json!(markdown));
+		let logged = held[0].path.to_string_lossy();
+		assert_eq!(here["markdown"], json!(format!("[run.LOG](<{logged}>)")));
+		assert_eq!(held[0].markdown_line(), format!("[run.LOG](<{logged}>)"));
 	}
 
 	#[tokio::test]

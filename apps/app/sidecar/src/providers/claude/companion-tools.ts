@@ -50,13 +50,13 @@ const ROOM = "The id of the room you hold a seat in to say it in."
 const SPOKEN = "What you say in that room, read there in your name."
 
 const ATTACH =
-	"Show any file to the person, in this conversation or in a room you hold a seat in, once you want them to see it rather than only read it yourself: an image is shown inline, every other file is shown as an attachment they can open, 10 MB per file."
+	"Show any file to the person, in this conversation or in a room you hold a seat in, once you want them to see it rather than only read it yourself, 10 MB per file, attaching it first and then writing the markdown line it answers, exactly as answered, where your reply cites the file: an image is shown inline there, every other file as a link they open; the answer is the stored path, the id of that conversation and that markdown line, a file no reply of yours cites is added at the end of your last reply, and in a room the line is posted there for you."
 
 const FILE_PATH =
-	"The path of the file to show, absolute or relative to your working directory: any file up to 10 MB, an image shown inline, every other file shown as an attachment."
+	"The path of the file to show, absolute or relative to your working directory: any file up to 10 MB."
 
 const CAPTION =
-	"A line read right above the file, the image shown inline or the attachment listed."
+	"The label of the markdown line, read as the alt text of an image or the text of a link, the name of the attached file when left out."
 
 const ATTACH_ROOM =
 	"The id of a room you hold a seat in to show it there, left out for this conversation."
