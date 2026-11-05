@@ -496,7 +496,7 @@ export const UploadedAtDrawnSizes = meta.story({
 		docs: {
 			description: {
 				story:
-					"A companion picture at the two slot sizes the artboards draw, the roster line at 40px and the header identity at 20px, beside the reader's own picture. A companion picture is cut to the same rounded hexagon as its dithered field and wears the same C border over it; the reader's stays a circle. Check that each picture fills its hexagon exactly under the border at 40px and 20px, and a round reader.",
+					"An agent picture at the two slot sizes the artboards draw, the roster line at 40px and the header identity at 20px, beside the reader's own picture. An agent picture is cut to the same rounded hexagon as its dithered field and wears the same hexagon border over it; the reader's stays a circle. Check that each picture fills its hexagon exactly under the border at 40px and 20px, and a round reader.",
 			},
 		},
 	},
@@ -521,7 +521,7 @@ export const UploadedBadged = meta.story({
 		docs: {
 			description: {
 				story:
-					"A companion picture carrying a badge at both drawn slot sizes. Check that the dot sits in the corner of the hexagon without leaving the slot.",
+					"An agent picture carrying a badge at both drawn slot sizes. Check that the dot sits in the corner of the hexagon without leaving the slot.",
 			},
 		},
 	},
@@ -701,7 +701,7 @@ const expectCustomImageAtEverySize = async (
 }
 
 const CUSTOM_IMAGE_STORY =
-	"Every size the app draws a companion at, 14 to 64, the generated field on the start of each line and a custom picture after it: the 16px tab icon, the 20px author line, the 24px pinned row, the 28px import row, up to the 64px border check. The picture is cut to the same rounded hexagon as the field and wears the same C border over it. Check that each picture sits exactly in its border, with nothing peeking above or below. Pick `CustomImageAtEverySizeDark` for the dark theme."
+	"Every size the app draws an agent at, 14 to 64, the generated field on the start of each line and a custom picture after it: the 16px tab icon, the 20px author line, the 24px pinned row, the 28px import row, up to the 64px border check. The picture is cut to the same rounded hexagon as the field and wears the same hexagon border over it. Check that each picture sits exactly in its border, with nothing peeking above or below. Pick `CustomImageAtEverySizeDark` for the dark theme."
 
 export const CustomImageAtEverySize = meta.story({
 	render: (args) => <CustomImageSizes {...args} />,

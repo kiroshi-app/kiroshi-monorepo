@@ -1184,7 +1184,7 @@ export const UploadedPictures = meta.story({
 		docs: {
 			description: {
 				story:
-					"Two companions wearing a picture their reader uploaded, beside one wearing its dithered field. A picture is a still image whatever the companion is doing, so the row that is running says so with its message line rather than by moving — and it lands in the same slot as a drawing, so the names and the timestamps stay on the column the rest of the roster holds. Check that a row with a picture draws no dithered field at all, that the picture fills its slot as a hexagon under the C border, and that the picture is decorative: the row is already named by its own text. Pick `Identities` for the fields a companion wears when it has no picture.",
+					"Two agents wearing a picture their reader uploaded, beside one wearing its dithered field. A picture is a still image whatever the agent is doing, so the row that is running says so with its message line rather than by moving, and it lands in the same slot as a drawing, so the names and the timestamps stay on the column the rest of the roster holds. Check that a row with a picture draws no dithered field at all, that the picture fills its slot under the hexagon border, and that the picture is decorative: the row is already named by its own text. Pick `Identities` for the fields an agent wears when it has no picture.",
 			},
 		},
 	},
