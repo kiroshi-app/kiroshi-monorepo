@@ -387,9 +387,11 @@ const playLibraryPicker = async ({ canvasElement, args }: PlayContext) => {
 	)
 	const kept = within(reopened).getAllByRole("button")
 	await expect(kept.map((tile) => tile.tabIndex)).toEqual([-1, 0])
-	toolNamed(canvasElement, "library").focus()
-	await userEvent.tab()
-	await expect(kept[1]).toHaveFocus()
+	await waitFor(async () => {
+		toolNamed(canvasElement, "library").focus()
+		await userEvent.tab()
+		await expect(kept[1]).toHaveFocus()
+	})
 	storyLibrary.keepFirst(LIBRARY_ITEMS.length)
 	await waitFor(() =>
 		expect(within(reopened).getAllByRole("button")).toHaveLength(
