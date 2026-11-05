@@ -22,7 +22,7 @@ import {
 } from "@workspace/ui/components/library-tab-states"
 import { i18n } from "@workspace/ui/lib/i18n"
 
-import { LibraryBoard, LibraryBoardLoading } from "@/components/library-board"
+import { LibraryBoard } from "@/components/library-board"
 import { LibraryDropTarget } from "@/components/library-drop-target"
 import type { LibraryBoardSummary, LibraryItem, Space } from "@/lib/bindings"
 import type { Bot } from "@/lib/conversations/store-contract"
@@ -254,6 +254,7 @@ const isActionShownOn = (
 ) => action !== "onRename" || item.kind === "document"
 
 type LibraryOpeningStateProps = {
+	spaceId: string
 	opening: LibraryOpening
 	boardSummary: LibraryBoardSummary | undefined
 	isMissing: boolean
@@ -265,28 +266,26 @@ type LibraryOpeningStateProps = {
 
 type LibraryBoardOpeningProps = Pick<
 	LibraryOpeningStateProps,
-	"opening" | "boardSummary" | "onBackToLibrary" | "onDelete"
+	"spaceId" | "opening" | "boardSummary" | "onBackToLibrary" | "onDelete"
 >
 
 const LibraryBoardOpening = ({
+	spaceId,
 	opening: { name },
 	boardSummary,
 	onBackToLibrary,
 	onDelete,
-}: LibraryBoardOpeningProps) => {
-	const title = titleOf({ kind: "board", name })
-	return boardSummary ? (
-		<LibraryBoard
-			key={name}
-			name={title}
-			onBack={onBackToLibrary}
-			onDelete={onDelete}
-			summary={boardSummary}
-		/>
-	) : (
-		<LibraryBoardLoading name={title} onBack={onBackToLibrary} />
-	)
-}
+}: LibraryBoardOpeningProps) => (
+	<LibraryBoard
+		key={name}
+		name={name}
+		onBack={onBackToLibrary}
+		onDelete={onDelete}
+		spaceId={spaceId}
+		summary={boardSummary}
+		title={titleOf({ kind: "board", name })}
+	/>
+)
 
 const LibraryOpeningState = ({
 	isMissing,
@@ -542,6 +541,7 @@ export const LibraryScreen = ({
 				onCloseTab={onCloseTab}
 				onDelete={() => deleteAndClose({ id: opening.name })}
 				opening={opening}
+				spaceId={spaceId}
 			/>
 		)
 	}

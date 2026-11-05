@@ -1,38 +1,33 @@
 import { useState } from "react"
 
-import type { BoardTool } from "@workspace/ui/components/board/board-dock"
 import { BoardShape } from "@workspace/ui/components/board/board-shape"
 import { BoardCanvas } from "@workspace/ui/components/board-canvas"
 import type {
 	BoardItem,
+	BoardView,
 	BoardViewport,
 } from "@workspace/ui/components/board-view"
 import { LibraryDocumentBar } from "@workspace/ui/components/library-document-view"
+import { LibraryItemUnavailable } from "@workspace/ui/components/library-tab-states"
 import { ScreenLayout } from "@workspace/ui/components/screen-layout"
 
 import type { LibraryBoardSummary } from "@/lib/bindings"
-import { boardOriginOf, boardViewOf } from "@/lib/library/library-boards"
+import { boardOriginOf } from "@/lib/library/library-boards"
+import { useLibraryBoardKeys } from "@/lib/library/use-library-board-keys"
+import { useLibraryBoardSession } from "@/lib/library/use-library-board-session"
 
 type LibraryBoardProps = {
+	spaceId: string
 	name: string
-	summary: LibraryBoardSummary
+	title: string
+	summary: LibraryBoardSummary | undefined
 	onBack: () => void
 	onDelete: () => void
 }
 
-type LibraryBoardLoadingProps = Pick<LibraryBoardProps, "name" | "onBack">
-
-export const LibraryBoardLoading = ({
-	name,
-	onBack,
-}: LibraryBoardLoadingProps) => (
-	<ScreenLayout
-		aria-busy="true"
-		header={<LibraryDocumentBar item={{ name }} onBack={onBack} />}
-	/>
-)
-
 const NO_LIBRARY_ITEMS = [] as const
+
+const UNOPENED_VIEW: BoardView = { objects: [] }
 
 const leaveBoardUnchanged = () => undefined
 
@@ -51,20 +46,37 @@ const openingViewportOf = (summary: LibraryBoardSummary): BoardViewport => ({
 	zoom: 1,
 })
 
+const UNPLACED_VIEWPORT: BoardViewport = { offset: { x: 0, y: 0 }, zoom: 1 }
+
 export const LibraryBoard = ({
+	spaceId,
 	name,
+	title,
 	summary,
 	onBack,
 	onDelete,
 }: LibraryBoardProps) => {
-	const [viewport, setViewport] = useState(() => openingViewportOf(summary))
-	const [tool, setTool] = useState<BoardTool>("select")
+	const [movedViewport, setViewport] = useState<BoardViewport | null>(null)
+	const viewport =
+		movedViewport ?? (summary ? openingViewportOf(summary) : UNPLACED_VIEWPORT)
+	const board = useLibraryBoardSession(spaceId, name)
+	const { tool, pickTool } = useLibraryBoardKeys(board)
+
+	if (board.hasFailedToOpen) {
+		return (
+			<LibraryItemUnavailable
+				name={name}
+				onAction={onBack}
+				reason="unreadable"
+			/>
+		)
+	}
 
 	return (
 		<ScreenLayout
 			header={
 				<LibraryDocumentBar
-					item={{ name }}
+					item={{ name: title }}
 					onBack={onBack}
 					onDelete={onDelete}
 				/>
@@ -73,15 +85,16 @@ export const LibraryBoard = ({
 				<BoardCanvas
 					libraryItems={NO_LIBRARY_ITEMS}
 					onDropFiles={leaveBoardUnchanged}
-					onIntent={leaveBoardUnchanged}
+					onIntent={board.apply}
 					onLibraryItemDrop={leaveBoardUnchanged}
 					onLibraryItemPick={leaveBoardUnchanged}
 					onPaste={leaveBoardUnchanged}
-					onToolChange={setTool}
+					onToolChange={pickTool}
 					onViewportChange={setViewport}
 					renderObject={renderBoardObject}
+					status={board.view && summary ? "ready" : "loading"}
 					tool={tool}
-					view={boardViewOf(summary)}
+					view={board.view ?? UNOPENED_VIEW}
 					viewport={viewport}
 				/>
 			)}

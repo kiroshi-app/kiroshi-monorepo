@@ -15,6 +15,8 @@ import { createElement } from "react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import * as Y from "yjs"
 
+import { type Board, zAt } from "@workspace/shared/board/board"
+import { writeBoard } from "@workspace/shared/board/board-doc"
 import type { AppRailPanel } from "@workspace/ui/components/app-rail"
 import {
 	fieldSelectionOf,
@@ -85,6 +87,18 @@ const libraryItemOf = (
 	createdAt: null,
 })
 
+const BOARD_EXTENSION = ".canvas"
+
+const hostedBoardOf = (nodes: LibraryBoardNode[]): Board => ({
+	nodes: Object.fromEntries(
+		nodes.map(({ id, x, y, width, height }, index) => [
+			id,
+			{ kind: "text", x, y, width, height, z: zAt(index), text: "" },
+		]),
+	),
+	edges: {},
+})
+
 const createFakeLibraryHost = () => {
 	const documents = new Map<string, Y.Doc>()
 	const listeners = new Set<UpdateHeard>()
@@ -100,7 +114,11 @@ const createFakeLibraryHost = () => {
 			return held
 		}
 		const doc = new Y.Doc()
-		doc.getText("markdown").insert(0, HOSTED_CONTENT)
+		if (name.endsWith(BOARD_EXTENSION)) {
+			writeBoard(doc, hostedBoardOf(harness.boardNodes[name] ?? []))
+		} else {
+			doc.getText("markdown").insert(0, HOSTED_CONTENT)
+		}
 		documents.set(name, doc)
 		return doc
 	}
