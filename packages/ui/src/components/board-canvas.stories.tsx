@@ -18,6 +18,7 @@ import {
 	PERSON_AUTHOR,
 	STICKY_TEXT,
 } from "@workspace/ui/components/board/board.fixtures"
+import type { BoardClientPoint } from "@workspace/ui/components/board/board-dock"
 import { BoardImage } from "@workspace/ui/components/board/board-image"
 import { BoardLinkCard } from "@workspace/ui/components/board/board-link-card"
 import { BoardShape } from "@workspace/ui/components/board/board-shape"
@@ -1208,9 +1209,11 @@ export const EditByKeyboardDark = meta.story({
 })
 
 const PICKER_NAME = "From the Library"
+
+type CanvasPlayContext = { canvasElement: HTMLElement; args: BoardCanvasProps }
 const DRAGGED_ITEM = LIBRARY_ITEMS[1] as (typeof LIBRARY_ITEMS)[number]
 
-const boardPointOf = (board: HTMLElement, at: PointerAtClient) => {
+const boardPointOf = (board: HTMLElement, at: BoardClientPoint) => {
 	const rect = board.getBoundingClientRect()
 	return {
 		x: Math.round(
@@ -1220,8 +1223,6 @@ const boardPointOf = (board: HTMLElement, at: PointerAtClient) => {
 	}
 }
 
-type PointerAtClient = { clientX: number; clientY: number }
-
 const viewportCentreOf = (board: HTMLElement) => ({
 	x: Math.round(board.clientWidth / 2 - AT_ORIGIN.offset.x),
 	y: Math.round(board.clientHeight / 2 - AT_ORIGIN.offset.y),
@@ -1230,20 +1231,14 @@ const viewportCentreOf = (board: HTMLElement) => ({
 const ghostIn = () =>
 	document.querySelector<HTMLElement>('[data-slot="board-library-ghost"]')
 
-const startTileDrag = (tile: HTMLElement, to: PointerAtClient) => {
+const startTileDrag = (tile: HTMLElement, to: BoardClientPoint) => {
 	const from = centreOf(tile)
 	pointerAt("pointerdown", tile, from)
 	pointerAt("pointermove", window, shifted(from, { x: 8, y: -8 }))
 	pointerAt("pointermove", window, to)
 }
 
-const playTileDragged = async ({
-	canvasElement,
-	args,
-}: {
-	canvasElement: HTMLElement
-	args: BoardCanvasProps
-}) => {
+const playTileDragged = async ({ canvasElement, args }: CanvasPlayContext) => {
 	const board = slotIn(canvasElement, "board-canvas")
 	const picker = await screen.findByRole("dialog", { name: PICKER_NAME })
 	const tile = within(picker).getByRole("button", { name: DRAGGED_ITEM.title })
@@ -1324,13 +1319,7 @@ const PASTE_ARGS = {
 	view: { objects: [PLAN, RESEARCH] },
 }
 
-const playLinkPasted = async ({
-	canvasElement,
-	args,
-}: {
-	canvasElement: HTMLElement
-	args: BoardCanvasProps
-}) => {
+const playLinkPasted = async ({ canvasElement, args }: CanvasPlayContext) => {
 	const board = slotIn(canvasElement, "board-canvas")
 	const tool = within(canvasElement).getByRole("button", { name: "Select" })
 
@@ -1384,13 +1373,7 @@ const pngNamed = (name: string) =>
 const pdfNamed = (name: string) =>
 	new File(["pdf"], name, { type: "application/pdf" })
 
-const playImagePasted = async ({
-	canvasElement,
-	args,
-}: {
-	canvasElement: HTMLElement
-	args: BoardCanvasProps
-}) => {
+const playImagePasted = async ({ canvasElement, args }: CanvasPlayContext) => {
 	const board = slotIn(canvasElement, "board-canvas")
 	const image = pngNamed("terrace-at-dusk.png")
 	const brief = pdfNamed("launch-brief.pdf")
@@ -1445,7 +1428,7 @@ const dragFiles = (
 	type: string,
 	board: HTMLElement,
 	files: readonly File[],
-	at: PointerAtClient,
+	at: BoardClientPoint,
 ) => {
 	const transfer = new DataTransfer()
 	for (const file of files) transfer.items.add(file)
@@ -1463,13 +1446,7 @@ const GHOST_TILTS = ["-3deg", "2deg", "7deg"]
 
 const playFilesDraggedOver =
 	(files: readonly File[], label: string) =>
-	async ({
-		canvasElement,
-		args,
-	}: {
-		canvasElement: HTMLElement
-		args: BoardCanvasProps
-	}) => {
+	async ({ canvasElement, args }: CanvasPlayContext) => {
 		const board = slotIn(canvasElement, "board-canvas")
 		const at = shifted(centreOf(board), { x: -120, y: -60 })
 		const dropState = () =>

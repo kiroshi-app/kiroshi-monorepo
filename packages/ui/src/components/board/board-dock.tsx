@@ -6,7 +6,6 @@ import {
 	Fragment,
 	type KeyboardEvent,
 	type PointerEvent,
-	type ReactElement,
 	type Ref,
 	useRef,
 	useState,
@@ -280,7 +279,7 @@ type DockToolProps = {
 const DockTool = ({ tool, isActive, onPress, buttonRef }: DockToolProps) => {
 	const { t } = useTranslation("common")
 	const label = t(`board.dock.tool.${tool}`)
-	const button: ReactElement = (
+	const button = (
 		<Toolbar.Button
 			aria-label={label}
 			aria-pressed={isActive}
