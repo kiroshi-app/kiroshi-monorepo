@@ -79,7 +79,7 @@ const hrefOf = ({
 const isWindowShowing = (windowLabel: string, conversationId: string) =>
 	keptSpaceIdsOf(windowLabel).some((spaceId) => {
 		const space = readSpaceTabs(windowLabel, spaceId)
-		return space !== null && isShowingIn(conversationId)(space)
+		return space !== null && tabShowing(space, conversationId) !== undefined
 	})
 
 const otherWindowShowing = (windowLabel: string, conversationId: string) =>
