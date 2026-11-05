@@ -7,13 +7,21 @@ import {
 } from "@workspace/shared/board/board"
 import type { BoardIntent } from "@workspace/ui/components/board-view"
 
-import { applyLibraryBoardIntent } from "./library-board-intents"
+import {
+	applyLibraryBoardIntent,
+	describeLibraryBoardLink,
+	type LibraryBoardLinkDescription,
+	type LibraryBoardPlacement,
+	placeLibraryBoardObject,
+} from "./library-board-intents"
 import { libraryBoardViewOf } from "./library-board-view"
 import { base64Of, bytesOf, SEND_INTERVAL_MS } from "./library-document-session"
 
 const REMOTE_ORIGIN = Symbol("remote")
 
 const LOCAL_ORIGIN = Symbol("local")
+
+const PREVIEW_ORIGIN = Symbol("preview")
 
 const { doc: ROOTS } = BOARD_SCHEMA
 
@@ -133,6 +141,10 @@ export const createLibraryBoardSession = ({
 		subscribe,
 		apply: (intent: BoardIntent) =>
 			applyLibraryBoardIntent(doc, intent, LOCAL_ORIGIN),
+		place: (placement: LibraryBoardPlacement) =>
+			placeLibraryBoardObject(doc, placement, LOCAL_ORIGIN),
+		describeLink: (id: string, description: LibraryBoardLinkDescription) =>
+			describeLibraryBoardLink(doc, id, description, PREVIEW_ORIGIN),
 		receive: (update: string) =>
 			Y.applyUpdate(doc, bytesOf(update), REMOTE_ORIGIN),
 		undo: () => {

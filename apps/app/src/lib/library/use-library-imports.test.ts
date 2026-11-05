@@ -6,8 +6,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { shownImageSourceOf } from "./library-image-source"
-import { useLibraryImageSave } from "./use-library-imports"
+import { useLibraryImageSave, useLibraryImports } from "./use-library-imports"
 
+import type { LibraryItem } from "../bindings"
 import { createQueryTestWrapper } from "../query/query-test-wrapper"
 
 const host = vi.hoisted(() => ({
@@ -183,6 +184,39 @@ describe("saving a shown image to the Library", () => {
 
 		expect(await raisedDescription()).toBe(
 			i18n.t("common:library.failure.import.refused"),
+		)
+	})
+})
+
+describe("useLibraryImports", () => {
+	it("returns the imported items alone and names the file that failed", async () => {
+		const kept = { name: "kept.png", kind: "image" } as LibraryItem
+		host.importLibraryFile.mockImplementation(
+			async (_space: string, name: string) => {
+				if (name === "broken.png") throw { kind: "unsupported" }
+				return kept
+			},
+		)
+		const { result } = renderHook(() => useLibraryImports(SPACE, true), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
+
+		let imported: LibraryItem[] = []
+		await act(async () => {
+			imported = await result.current.importDropped([
+				new File(["a"], "kept.png"),
+				new File(["b"], "broken.png"),
+			])
+		})
+
+		expect(imported).toEqual([kept])
+		expect(host.raiseReportedFailure).toHaveBeenCalledWith(
+			expect.objectContaining({
+				title: i18n.t("common:library.failure.import.title", {
+					name: "broken.png",
+				}),
+			}),
+			expect.anything(),
 		)
 	})
 })

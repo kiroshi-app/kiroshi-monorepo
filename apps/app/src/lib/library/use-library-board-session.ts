@@ -4,6 +4,10 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from "react"
 import type { BoardIntent } from "@workspace/ui/components/board-view"
 import { i18n } from "@workspace/ui/lib/i18n"
 
+import type {
+	LibraryBoardLinkDescription,
+	LibraryBoardPlacement,
+} from "./library-board-intents"
 import { createLibraryBoardSession } from "./library-board-session"
 import { createLibraryDocumentFeed } from "./library-document-feed"
 import { applyLibraryUpdate } from "./library-document-writes"
@@ -117,6 +121,9 @@ export const useLibraryBoardSession = (spaceId: string, name: string) => {
 	return {
 		view,
 		apply: (intent: BoardIntent) => session?.apply(intent),
+		place: (placement: LibraryBoardPlacement) => session?.place(placement),
+		describeLink: (id: string, description: LibraryBoardLinkDescription) =>
+			session?.describeLink(id, description),
 		undo: session?.undo ?? leaveBoardUnchanged,
 		redo: session?.redo ?? leaveBoardUnchanged,
 		hasFailedToOpen: opened.isError || hasFailedToRead,

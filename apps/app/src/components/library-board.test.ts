@@ -4,6 +4,7 @@ import type { Event } from "@tauri-apps/api/event"
 import {
 	act,
 	cleanup,
+	createEvent,
 	fireEvent,
 	render,
 	screen,
@@ -13,7 +14,10 @@ import { createElement } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import * as Y from "yjs"
 
-import type { BoardTool } from "@workspace/ui/components/board/board-dock"
+import type {
+	BoardLibraryItem,
+	BoardTool,
+} from "@workspace/ui/components/board/board-dock"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { LibraryBoard } from "@/components/library-board"
@@ -22,6 +26,7 @@ import {
 	type LibraryBoardSummary,
 	type LibraryDocumentState,
 	type LibraryDocumentUpdated,
+	type LibraryItem,
 } from "@/lib/bindings"
 import { raiseReportedFailure } from "@/lib/failure-report"
 import { listen } from "@/lib/host"
@@ -32,6 +37,7 @@ import {
 import { applyLibraryBoardIntent } from "@/lib/library/library-board-intents"
 import { base64Of, bytesOf } from "@/lib/library/library-document-session"
 import { applyLibraryUpdate } from "@/lib/library/library-document-writes"
+import { readLinkPreview } from "@/lib/library/library-link-preview"
 import { openLibraryDocument } from "@/lib/library/library-reads"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 import { useTabKeys } from "@/lib/tabs/use-tab-keys"
@@ -46,6 +52,10 @@ vi.mock("@/lib/host", async (importOriginal) => ({
 vi.mock("@/lib/library/library-reads", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/lib/library/library-reads")>()),
 	openLibraryDocument: vi.fn(),
+}))
+
+vi.mock("@/lib/library/library-link-preview", () => ({
+	readLinkPreview: vi.fn(),
 }))
 
 vi.mock("@/lib/library/library-document-writes", async (importOriginal) => ({
@@ -162,12 +172,31 @@ const unparsableState = () => {
 
 const undecodableState = () => base64Of(Uint8Array.of(255, 255, 255, 255))
 
-const boardElement = (onBack = vi.fn()) =>
+const LIBRARY_ITEMS: BoardLibraryItem[] = [
+	{ id: "cover.png", kind: "image", title: "cover.png", src: "cover-src" },
+	{ id: "Notes.md", kind: "document", title: "Notes", excerpt: "Agenda" },
+]
+
+const NO_IMPORTS = async () => []
+
+type Importer = (files: readonly File[]) => Promise<LibraryItem[]>
+
+type BoardElementOptions = {
+	onBack?: () => void
+	importFiles?: Importer
+}
+
+const boardElement = ({
+	onBack = vi.fn(),
+	importFiles = NO_IMPORTS,
+}: BoardElementOptions = {}) =>
 	createElement(LibraryBoard, {
 		spaceId: SPACE_ID,
 		name: NAME,
 		title: "Roadmap",
 		summary: SUMMARY,
+		libraryItems: LIBRARY_ITEMS,
+		importFiles,
 		onBack,
 		onDelete: vi.fn(),
 	})
@@ -177,7 +206,7 @@ const mountBoardOpening = (opening: () => Promise<LibraryDocumentState>) => {
 	vi.mocked(openLibraryDocument).mockImplementation(opening)
 	const onBack = vi.fn()
 	const { wrapper } = createQueryTestWrapper()
-	render(boardElement(onBack), { wrapper })
+	render(boardElement({ onBack }), { wrapper })
 	return { ...host, onBack }
 }
 
@@ -202,15 +231,15 @@ const expectNeitherSkeletonNorEmptyHint = () => {
 	).toBeNull()
 }
 
-const mountBoard = async () => {
+const mountBoard = async (importFiles?: Importer) => {
 	const host = fakeHost()
 	const { wrapper } = createQueryTestWrapper()
-	const mounted = render(boardElement(), { wrapper })
+	const mounted = render(boardElement({ importFiles }), { wrapper })
 	await screen.findByRole("option", { name: textNamed("First") })
 	return {
 		...host,
 		...mounted,
-		rerenderBoard: () => mounted.rerender(boardElement()),
+		rerenderBoard: () => mounted.rerender(boardElement({ importFiles })),
 	}
 }
 
@@ -239,6 +268,7 @@ afterEach(() => {
 	vi.mocked(openLibraryDocument).mockReset()
 	vi.mocked(applyLibraryUpdate).mockReset()
 	vi.mocked(raiseReportedFailure).mockReset()
+	vi.mocked(readLinkPreview).mockReset()
 	vi.restoreAllMocks()
 })
 
@@ -489,5 +519,199 @@ describe("a Library board on its live session", () => {
 
 		expect(destroyed).toHaveBeenCalledOnce()
 		expect(objectNamed("Second")).toBeNull()
+	})
+})
+
+const LINK = "https://example.com/article"
+
+const linkObject = (text: string) =>
+	screen.queryByRole("option", {
+		name: common("board.object.named", {
+			kind: common("board.object.kind.link"),
+			text,
+		}),
+	})
+
+const imageObject = () =>
+	screen.queryByRole("option", { name: common("board.object.kind.image") })
+
+const placementOf = (object: HTMLElement | null | undefined) => ({
+	left: object?.style.left,
+	top: object?.style.top,
+})
+
+const libraryItemOf = (name: string, kind: LibraryItem["kind"]) =>
+	({ name, kind }) as LibraryItem
+
+const pasteOn = (clipboardData: object) =>
+	fireEvent.paste(boardCanvas(), { clipboardData })
+
+const pastedLink = (url: string) => ({
+	files: [],
+	getData: () => url,
+})
+
+const imageFile = (name: string) =>
+	new File(["bytes"], name, { type: "image/png" })
+
+const libraryTool = () =>
+	screen
+		.getAllByRole("button")
+		.find((button) => button.dataset.tool === "library") as HTMLElement
+
+const dropFilesAt = (
+	files: File[],
+	at: { clientX: number; clientY: number },
+) => {
+	const drop = createEvent.drop(boardCanvas(), {
+		dataTransfer: { types: ["Files"], files },
+	})
+	Object.defineProperties(drop, {
+		clientX: { value: at.clientX },
+		clientY: { value: at.clientY },
+	})
+	fireEvent(boardCanvas(), drop)
+}
+
+const openPicker = () => fireEvent.click(libraryTool())
+
+const pickerTile = (title: string) =>
+	screen.getByRole("button", { name: title })
+
+describe("adding to a Library board", () => {
+	it("lists the Library items in the dock picker", async () => {
+		await mountBoard()
+
+		openPicker()
+
+		expect(pickerTile("cover.png")).toBeInstanceOf(HTMLElement)
+		expect(pickerTile("Notes")).toBeInstanceOf(HTMLElement)
+	})
+
+	it("adds a picked Library image as an image at the centre of the visible board", async () => {
+		await mountBoard()
+		openPicker()
+
+		fireEvent.click(pickerTile("cover.png"))
+
+		expect(placementOf(imageObject())).toEqual({
+			left: "480px",
+			top: "310px",
+		})
+	})
+
+	it("adds a picked Library document as a library card pointing at it", async () => {
+		await mountBoard()
+		openPicker()
+
+		fireEvent.click(pickerTile("Notes"))
+
+		expect(linkObject("Notes.md")).toBeInstanceOf(HTMLElement)
+	})
+
+	it("adds a pasted link as a link card, titled once the preview answers", async () => {
+		let answer: (preview: { url: string; title: string }) => void = () =>
+			undefined
+		vi.mocked(readLinkPreview).mockImplementation(
+			() =>
+				new Promise((resolve) => {
+					answer = resolve
+				}),
+		)
+		await mountBoard()
+
+		pasteOn(pastedLink(LINK))
+		expect(linkObject(LINK)).toBeInstanceOf(HTMLElement)
+
+		act(() => answer({ url: LINK, title: "An article" }))
+
+		expect(
+			await screen.findByRole("option", { name: /An article/ }),
+		).toBeInstanceOf(HTMLElement)
+		expect(linkObject(LINK)).toBeNull()
+		expect(readLinkPreview).toHaveBeenCalledWith(LINK)
+	})
+
+	it("keeps the link card with its URL alone when the preview fails", async () => {
+		vi.mocked(readLinkPreview).mockResolvedValue({ url: LINK, title: "" })
+		await mountBoard()
+
+		pasteOn(pastedLink(LINK))
+		await act(() => Promise.resolve())
+
+		expect(linkObject(LINK)).toBeInstanceOf(HTMLElement)
+	})
+
+	it("selects the link card a paste created", async () => {
+		vi.mocked(readLinkPreview).mockResolvedValue({ url: LINK, title: "" })
+		await mountBoard()
+
+		pasteOn(pastedLink(LINK))
+
+		await waitFor(() =>
+			expect(linkObject(LINK)?.getAttribute("aria-selected")).toBe("true"),
+		)
+	})
+
+	it("imports a pasted image into the Library first, then adds it at the paste point", async () => {
+		const importFiles = vi.fn(async () => [
+			libraryItemOf("pasted.png", "image"),
+		])
+		await mountBoard(importFiles)
+		const pasted = imageFile("pasted.png")
+
+		pasteOn({ files: [pasted], getData: () => "" })
+
+		expect(importFiles).toHaveBeenCalledWith([pasted])
+		const image = await waitFor(() => {
+			const placed = imageObject()
+			expect(placed).toBeInstanceOf(HTMLElement)
+			return placed
+		})
+		expect(placementOf(image)).toEqual({ left: "480px", top: "310px" })
+		expect(image?.getAttribute("aria-selected")).toBe("true")
+	})
+
+	it("adds one object per imported dropped file side by side, and nothing for a failed one", async () => {
+		const importFiles = vi.fn(async () => [
+			libraryItemOf("first.png", "image"),
+			libraryItemOf("Brief.pdf", "document"),
+		])
+		await mountBoard(importFiles)
+		const dropped = [
+			imageFile("first.png"),
+			imageFile("broken.png"),
+			new File(["text"], "Brief.pdf"),
+		]
+
+		dropFilesAt(dropped, { clientX: 300, clientY: 200 })
+
+		expect(importFiles).toHaveBeenCalledWith(dropped)
+		await waitFor(() =>
+			expect(linkObject("Brief.pdf")).toBeInstanceOf(HTMLElement),
+		)
+		expect(placementOf(imageObject())).toEqual({
+			left: "180px",
+			top: "110px",
+		})
+		expect(placementOf(linkObject("Brief.pdf"))).toEqual({
+			left: "446px",
+			top: "120px",
+		})
+		expect(screen.getAllByRole("option")).toHaveLength(4)
+	})
+
+	it("ends the connection when another dock tool is picked", async () => {
+		await mountBoard()
+		const flyout = () =>
+			screen.queryByRole("radiogroup", {
+				name: common("board.connectorFlyout.label"),
+			})
+
+		fireEvent.click(toolButton("connector"))
+		expect(flyout()).toBeInstanceOf(HTMLElement)
+
+		fireEvent.click(toolButton("sticky"))
+		expect(flyout()).toBeNull()
 	})
 })

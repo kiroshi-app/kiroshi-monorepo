@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 
+import type { BoardLibraryItem } from "@workspace/ui/components/board/board-dock"
 import {
 	LibraryDocumentEditor,
 	type LibraryDocumentEditorHandle,
@@ -33,6 +34,7 @@ import {
 	matchesQuery,
 	shownTitleOf,
 	titleOf,
+	toBoardLibraryItem,
 	toShownItem,
 } from "@/lib/library/library-items"
 import { readLinkPreview } from "@/lib/library/library-link-preview"
@@ -257,6 +259,8 @@ type LibraryOpeningStateProps = {
 	spaceId: string
 	opening: LibraryOpening
 	boardSummary: LibraryBoardSummary | undefined
+	libraryItems: readonly BoardLibraryItem[]
+	importFiles: (files: readonly File[]) => Promise<LibraryItem[]>
 	isMissing: boolean
 	hasFailedToRead: boolean
 	onCloseTab?: () => void
@@ -266,18 +270,28 @@ type LibraryOpeningStateProps = {
 
 type LibraryBoardOpeningProps = Pick<
 	LibraryOpeningStateProps,
-	"spaceId" | "opening" | "boardSummary" | "onBackToLibrary" | "onDelete"
+	| "spaceId"
+	| "opening"
+	| "boardSummary"
+	| "libraryItems"
+	| "importFiles"
+	| "onBackToLibrary"
+	| "onDelete"
 >
 
 const LibraryBoardOpening = ({
 	spaceId,
 	opening: { name },
 	boardSummary,
+	libraryItems,
+	importFiles,
 	onBackToLibrary,
 	onDelete,
 }: LibraryBoardOpeningProps) => (
 	<LibraryBoard
+		importFiles={importFiles}
 		key={name}
+		libraryItems={libraryItems}
 		name={name}
 		onBack={onBackToLibrary}
 		onDelete={onDelete}
@@ -536,7 +550,9 @@ export const LibraryScreen = ({
 			<LibraryOpeningState
 				boardSummary={openedBoard.summary}
 				hasFailedToRead={hasFailedToRead}
+				importFiles={importDropped}
 				isMissing={isMissing}
+				libraryItems={library.items.map(toShown).map(toBoardLibraryItem)}
 				onBackToLibrary={close}
 				onCloseTab={onCloseTab}
 				onDelete={() => deleteAndClose({ id: opening.name })}

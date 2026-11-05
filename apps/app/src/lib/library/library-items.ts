@@ -1,3 +1,4 @@
+import type { BoardLibraryItem } from "@workspace/ui/components/board/board-dock"
 import type { LibraryItem as ShownLibraryItem } from "@workspace/ui/components/library-grid"
 import { i18n } from "@workspace/ui/lib/i18n"
 import { toRelativeTime } from "@workspace/ui/lib/time-format"
@@ -93,6 +94,20 @@ export const toShownItem = (
 				detail: boardDetailOf(item, summary, now),
 				snapshot: summary ? boardSnapshotOf(summary) : BLANK_BOARD_SNAPSHOT,
 			}
+	}
+}
+
+export const toBoardLibraryItem = (
+	shown: ShownLibraryItem,
+): BoardLibraryItem => {
+	const named = { id: shown.id, title: shown.name }
+	switch (shown.kind) {
+		case "image":
+			return { ...named, kind: "image", src: shown.src }
+		case "document":
+			return { ...named, kind: "document", excerpt: shown.excerpt }
+		case "board":
+			return { ...named, kind: "document", excerpt: shown.detail }
 	}
 }
 
