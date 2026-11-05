@@ -7,6 +7,7 @@ import {
 	expectSkeletonFilledTo,
 	hueScopeOf,
 	isInBrowserRunner,
+	middleClick,
 	realPointer,
 	slotIn,
 	slotsIn,
@@ -268,6 +269,33 @@ const ITEM_ACTION_NAMES = [
 	"Delete",
 ]
 
+export const GridMiddleClick = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A middle-click on a ready image and on a ready document. Check that each hands its item to `onOpenItem` once, while the auxclick is still dispatching, and that the middle button pressed down keeps no autoscroll cursor.",
+			},
+		},
+	},
+	play: async ({ args, canvas }) => {
+		const opened: [string | undefined, LibraryItem][] = []
+		mocked(args.onOpenItem).mockImplementation((item) => {
+			opened.push([window.event?.type, item])
+		})
+
+		const image = canvas.getByRole("button", { name: /hero-dunes\.png/ })
+		await expect(middleClick(image)).toBe(false)
+		const brief = canvas.getByRole("button", { name: /Spring launch brief/ })
+		await expect(middleClick(brief)).toBe(false)
+
+		await expect(opened).toEqual([
+			["auxclick", LIBRARY_ITEMS[0]],
+			["auxclick", LIBRARY_ITEMS[2]],
+		])
+	},
+})
+
 export const GridContextMenu = meta.story({
 	args: {
 		onOpen: fn(),
@@ -301,6 +329,7 @@ export const GridContextMenu = meta.story({
 			"role",
 			"separator",
 		)
+		await expect(args.onOpenItem).not.toHaveBeenCalled()
 		await expect(entries.at(-1)).toHaveAttribute("data-variant", "destructive")
 		for (const entry of entries)
 			await expect(getComputedStyle(entry).transitionDuration).toBe("0s")
@@ -1011,6 +1040,7 @@ export const AddedToTheGrid = meta.story({
 			null,
 		)
 		await userEvent.click(tile)
+		middleClick(tile)
 		await expect(args.onOpenItem).not.toHaveBeenCalled()
 		await expect(
 			canvas.getByRole("button", { name: /pricing-grid\.png.*Just now/ }),

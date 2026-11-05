@@ -13,6 +13,7 @@ import {
 } from "@workspace/ui/components/list-skeleton"
 import { Markdown } from "@workspace/ui/components/markdown"
 import { Skeleton } from "@workspace/ui/components/ui/skeleton"
+import { middleClickHandlers } from "@workspace/ui/lib/click-modifiers"
 import { libraryDisplayName } from "@workspace/ui/lib/library-display-name"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -148,6 +149,7 @@ const LibraryGridItem = ({
 				holdFocusForItsReturn(event.currentTarget)
 				onPress(item)
 			}}
+			{...middleClickHandlers(() => onPress(item))}
 			type="button"
 		>
 			<LibraryThumbnail item={item} />
