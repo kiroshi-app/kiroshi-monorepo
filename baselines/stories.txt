@@ -1668,6 +1668,7 @@ navigation-librarypanel--grid-documents-across-spaces
 navigation-librarypanel--grid-documents-across-spaces-light
 navigation-librarypanel--grid-image-menu
 navigation-librarypanel--grid-images
+navigation-librarypanel--grid-middle-click
 navigation-librarypanel--grid-without-item-actions
 navigation-librarypanel--import-failures
 navigation-librarypanel--import-long-names
