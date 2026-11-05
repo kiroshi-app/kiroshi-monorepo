@@ -128,6 +128,10 @@ conversation-markdown-mapcard--one-place-without-link
 conversation-markdown-mapcard--with-route
 conversation-markdown-markdown--adjacent-blocks
 conversation-markdown-markdown--appended-block
+conversation-markdown-markdown--attachment-file-mid-answer
+conversation-markdown-markdown--attachment-image-mid-answer
+conversation-markdown-markdown--attachment-path-with-spaces
+conversation-markdown-markdown--attachment-unresolved
 conversation-markdown-markdown--autolinks
 conversation-markdown-markdown--blockquote
 conversation-markdown-markdown--code-fence
@@ -239,6 +243,9 @@ conversation-markdown-webpagecard--in-agent-answer
 conversation-markdown-webpagecard--in-narrow-column
 conversation-markdown-webpagecard--with-preview-and-alt-text
 conversation-markdown-webpagecard--without-preview
+conversation-message-attachmentchip--default
+conversation-message-attachmentchip--inline
+conversation-message-attachmentchip--long-name
 conversation-message-authorline--default
 conversation-message-authorline--failed
 conversation-message-authorline--gap-above-a-person-line
