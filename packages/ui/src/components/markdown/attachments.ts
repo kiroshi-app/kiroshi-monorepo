@@ -40,8 +40,26 @@ const attachmentPathOf = (address: string | undefined) => {
 	return path
 }
 
+const STORE_DIR = "attachments"
+
+const MINTED_NAME =
+	/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(\.[a-z0-9]{1,16})?$/
+
+const isStoredAttachmentPath = (address: string | undefined) => {
+	const path = attachmentPathOf(address)
+	if (path === null) return false
+	const segments = path.split(/[\\/]/)
+	return (
+		segments.length > 3 &&
+		segments.at(-3) === STORE_DIR &&
+		(segments.at(-2) ?? "").length > 0 &&
+		MINTED_NAME.test(segments.at(-1) ?? "")
+	)
+}
+
 export {
 	attachmentPathOf,
+	isStoredAttachmentPath,
 	keepDrivePaths,
 	MarkdownAttachmentsContext,
 	useMarkdownAttachments,

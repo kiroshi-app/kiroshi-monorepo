@@ -1996,13 +1996,18 @@ export const GalleryResolvingNotOpenable = meta.story({
 	},
 })
 
-const CITED_IMAGE_PATH = "attachments/patio.jpg"
+const ATTACHMENT_STORE = "/Users/ana/Library/Kiroshi/attachments/conversation-7"
 
-const CITED_SPACED_IMAGE_PATH = "attachments/garden patio at noon.jpg"
+const SPACED_ATTACHMENT_STORE =
+	"/Users/ana/Library/Application Support/Kiroshi/attachments/conversation 7"
 
-const CITED_FILE_PATH = "attachments/q3-report.pdf"
+const CITED_IMAGE_PATH = `${ATTACHMENT_STORE}/4f9a2c1e-7b3d-4e8a-9f61-0c2d5b7e3a14.jpg`
 
-const CITED_SPACED_FILE_PATH = "attachments/q3 report final.pdf"
+const CITED_SPACED_IMAGE_PATH = `${SPACED_ATTACHMENT_STORE}/8e1d6b30-2c5f-4a97-b8e4-61f0a3c9d725.jpg`
+
+const CITED_FILE_PATH = `${ATTACHMENT_STORE}/0b6f3c2e-8d41-4a7e-9c15-2f7d9e4a1b30.pdf`
+
+const CITED_SPACED_FILE_PATH = `${SPACED_ATTACHMENT_STORE}/d3a7e9f2-5b18-4c60-a2d4-9e7f1b6c0a58.pdf`
 
 const CITED_IMAGE_CAPTION = "The patio at noon"
 
@@ -2029,6 +2034,14 @@ const PATHS_WITH_SPACES = `The photo you sent:
 ![${CITED_IMAGE_CAPTION}](<${CITED_SPACED_IMAGE_PATH}>)
 
 And the final numbers sit in [${CITED_FILE_TEXT}](<${CITED_SPACED_FILE_PATH}>).`
+
+const CODE_PATH_TEXT = "host.ts"
+
+const RELATIVE_PATH_TEXT = "the plan"
+
+const WEB_LINK_TEXT = "the ledger guide"
+
+const FILE_CITED_AMONG_CODE_PATHS = `The revenue line in [${CITED_FILE_TEXT}](<${CITED_FILE_PATH}>) matches the ledger. The reader lives in [${CODE_PATH_TEXT}](src/lib/host.ts), the next steps are in [${RELATIVE_PATH_TEXT}](../notes/plan.md), and the rounding rule follows [${WEB_LINK_TEXT}](https://example.org/ledger).`
 
 const ATTACHMENT_FAKES =
 	"The resolver and the opener are story fakes: the app wires the real ones later."
@@ -2087,6 +2100,35 @@ export const AttachmentFileMidAnswer = meta.story({
 		await expect(getComputedStyle(chip).display).toBe("inline-flex")
 		await expect(chip).toHaveTextContent("PDF")
 		await userEvent.click(chip)
+		await expect(args.onOpenAttachment).toHaveBeenCalledWith(CITED_FILE_PATH)
+	},
+})
+
+export const AttachmentFileAmongCodePaths = meta.story({
+	args: {
+		children: FILE_CITED_AMONG_CODE_PATHS,
+		onOpenAttachment: fn(),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story: `An answer citing one stored file beside a code path, a relative path and a web link. Check only the stored file reads as a file chip, the code path and the relative path read as their plain text, the web link keeps its host, and the opener only ever receives the stored path. ${ATTACHMENT_FAKES}`,
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const [chip, ...others] = canvas.getAllByRole("button")
+		await expect(others).toHaveLength(0)
+		await expect(chip).toHaveAccessibleName(`Open ${CITED_FILE_TEXT}`)
+		const [link, ...otherLinks] = canvas.getAllByRole("link")
+		await expect(otherLinks).toHaveLength(0)
+		await expect(link).toHaveAttribute("href", "https://example.org/ledger")
+		await expect(link).toHaveTextContent(WEB_LINK_TEXT)
+		await expect(chip.closest("p")).toHaveTextContent(
+			`The reader lives in ${CODE_PATH_TEXT}, the next steps are in ${RELATIVE_PATH_TEXT}, and`,
+		)
+		await userEvent.click(chip)
+		await expect(args.onOpenAttachment).toHaveBeenCalledOnce()
 		await expect(args.onOpenAttachment).toHaveBeenCalledWith(CITED_FILE_PATH)
 	},
 })
