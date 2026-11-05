@@ -9,6 +9,8 @@ board-boardcard--open-beside-dark
 board-boardcard--updates-in-place
 board-boardconnectorflyout--elbow
 board-boardconnectorflyout--elbow-dark
+board-boardconnectorflyout--elbow-in-yellow-space
+board-boardconnectorflyout--elbow-in-yellow-space-dark
 board-boardconnectorflyout--straight
 board-boardconnectorflyout--straight-dark
 board-boardimage--default
@@ -1533,8 +1535,14 @@ navigation-apptitlebar--tear-off-reports-the-tab
 navigation-apptitlebar--unpinned-tab-menu
 navigation-apptitlebar--unpinned-tab-menu-dark
 navigation-apptitlebar--with-window-controls
+navigation-boardcanvas--cancel-draft-by-escape
+navigation-boardcanvas--cancel-draft-by-escape-dark
 navigation-boardcanvas--connector-being-drawn
 navigation-boardcanvas--connector-being-drawn-dark
+navigation-boardcanvas--connector-by-keyboard
+navigation-boardcanvas--connector-by-keyboard-dark
+navigation-boardcanvas--connector-with-presence-outline
+navigation-boardcanvas--connector-with-presence-outline-dark
 navigation-boardcanvas--create-connector
 navigation-boardcanvas--create-connector-dark
 navigation-boardcanvas--edit-by-keyboard
@@ -1563,6 +1571,7 @@ navigation-boardcanvas--shape-selected
 navigation-boardcanvas--shape-selected-dark
 navigation-boardcanvas--switch-connector-routing
 navigation-boardcanvas--switch-connector-routing-dark
+navigation-boardcanvas--unmount-during-draft
 navigation-boardcanvas--zoom-at-maximum
 navigation-boardcanvas--zoom-at-minimum
 navigation-conversationbotpile--edged-members

@@ -7,6 +7,7 @@ import {
 	type PointerEvent,
 	type ReactNode,
 	useCallback,
+	useEffect,
 	useId,
 	useLayoutEffect,
 	useRef,
@@ -384,6 +385,7 @@ type BoardDraft = {
 
 type ShownConnector = {
 	connector: BoardConnector
+	bounds: BoardRect
 	route: BoardRoute
 }
 
@@ -638,6 +640,9 @@ const BoardCanvas = ({
 	const [routing, setRouting] = useState<BoardRouting>("straight")
 	const [hover, setHover] = useState(NO_HOVER)
 	const [draft, setDraft] = useState<BoardDraft | null>(null)
+	const stopDrafting = useRef<(() => void) | null>(null)
+
+	useEffect(() => () => stopDrafting.current?.(), [])
 
 	const mounted = cullBoardObjects(view.objects, viewport, size)
 	const mountedItems = mounted.flatMap(({ object }) =>
@@ -665,13 +670,15 @@ const BoardCanvas = ({
 		)
 	}
 
-	const shownConnectors = mounted.flatMap(({ object }): ShownConnector[] => {
-		if (object.kind !== "connector") return []
-		const route = routeOf(object)
-		return route
-			? [{ connector: object, route: onScreen(route, viewport) }]
-			: []
-	})
+	const shownConnectors = mounted.flatMap(
+		({ object, bounds }): ShownConnector[] => {
+			if (object.kind !== "connector") return []
+			const route = routeOf(object)
+			return route
+				? [{ connector: object, bounds, route: onScreen(route, viewport) }]
+				: []
+		},
+	)
 
 	const draftRouteOf = ({ from, pointer, target }: BoardDraft) => {
 		const source = itemsById.get(from.id)
@@ -785,6 +792,7 @@ const BoardCanvas = ({
 		(connector: BoardConnector) => (event: PointerEvent<SVGPathElement>) => {
 			if (event.button !== 0) return
 			setSelectedId(connector.id)
+			canvas.current?.focus()
 		}
 
 	const pressAnchor =
@@ -803,10 +811,21 @@ const BoardCanvas = ({
 				setDraft({ from, pointer: boardAt(moved), target })
 				return target
 			}
-			const finish = (end: globalThis.PointerEvent) => {
+			const stop = () => {
 				window.removeEventListener("pointermove", track)
 				window.removeEventListener("pointerup", finish)
 				window.removeEventListener("pointercancel", finish)
+				window.removeEventListener("keydown", cancelOnEscape)
+				stopDrafting.current = null
+			}
+			const cancelOnEscape = (key: globalThis.KeyboardEvent) => {
+				if (key.key !== "Escape") return
+				key.preventDefault()
+				stop()
+				setDraft(null)
+			}
+			const finish = (end: globalThis.PointerEvent) => {
+				stop()
 				const target = end.type === "pointerup" ? track(end) : null
 				setDraft(null)
 				if (target)
@@ -824,6 +843,8 @@ const BoardCanvas = ({
 			window.addEventListener("pointermove", track)
 			window.addEventListener("pointerup", finish)
 			window.addEventListener("pointercancel", finish)
+			window.addEventListener("keydown", cancelOnEscape)
+			stopDrafting.current = stop
 		}
 
 	const hoverOver = (event: PointerEvent<HTMLDivElement>) => {
@@ -910,11 +931,35 @@ const BoardCanvas = ({
 		return false
 	}
 
+	const actOnConnector = (
+		event: KeyboardEvent<HTMLDivElement>,
+		connector: BoardConnector,
+	) => {
+		if (event.key === "Delete" || event.key === "Backspace") {
+			onIntent({ type: "delete", id: connector.id })
+			clearSelection()
+			return true
+		}
+		if (event.key === "Escape") {
+			clearSelection()
+			return true
+		}
+		return false
+	}
+
 	const pressKey = (event: KeyboardEvent<HTMLDivElement>) => {
 		const target = event.target as HTMLElement
 		const isOnBoard =
 			target === event.currentTarget || target.dataset.slot === "board-object"
-		if (!isOnBoard || event.metaKey || event.ctrlKey) return
+		const isInFlyout = Boolean(
+			target.closest('[data-slot="board-connector-flyout"]'),
+		)
+		if (event.metaKey || event.ctrlKey) return
+		if (selectedConnector && (isOnBoard || isInFlyout)) {
+			if (actOnConnector(event, selectedConnector)) event.preventDefault()
+			return
+		}
+		if (!isOnBoard) return
 		if (event.key === "Tab") {
 			tabThrough(event)
 			return
@@ -1017,6 +1062,25 @@ const BoardCanvas = ({
 						</OutlinedObject>
 					</div>
 				))}
+				{shownConnectors.map(({ connector, bounds }) => {
+					const outline = outlines.find(
+						({ objectId }) => objectId === connector.id,
+					)
+					return outline ? (
+						<div
+							aria-hidden="true"
+							className="pointer-events-none absolute"
+							data-object-id={connector.id}
+							data-slot="board-connector-outline"
+							key={connector.id}
+							style={{ ...placeOf(bounds), zIndex: connector.zOrder }}
+						>
+							<OutlinedObject outline={outline}>
+								<div className="size-full" />
+							</OutlinedObject>
+						</div>
+					) : null
+				})}
 				{editing && editedItem ? (
 					<textarea
 						aria-label={t("board.object.editText")}

@@ -35,7 +35,7 @@ const BoardConnectorFlyout = ({
 				const Glyph = ROUTING_GLYPH[option]
 				return (
 					<RadioPrimitive.Root
-						className="flex items-center gap-1.5 rounded-[7px] px-2 py-1.5 font-medium text-board-control-foreground text-compact leading-4 outline-none transition-none focus-visible:ring-3 focus-visible:ring-ring/30 data-checked:bg-board-control-selected data-checked:font-semibold data-checked:text-user-bubble"
+						className="flex items-center gap-1.5 rounded-[7px] px-2 py-1.5 font-medium text-board-control-foreground text-compact leading-4 outline-none transition-none focus-visible:ring-3 focus-visible:ring-ring/30 data-checked:bg-board-control-selected data-checked:font-semibold data-checked:text-primary"
 						data-slot="board-connector-option"
 						key={option}
 						value={option}
