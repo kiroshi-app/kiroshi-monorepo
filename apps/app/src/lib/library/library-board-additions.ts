@@ -107,8 +107,6 @@ export const libraryBoardAdditionsOf = ({
 		pickItem: (id: string) => placeItem(id, visibleCentreOf(viewport)),
 		dropItem: placeItem,
 		paste,
-		dropFiles: (files: readonly File[], point: BoardPoint) => {
-			importAndPlace(files, point)
-		},
+		dropFiles: importAndPlace,
 	}
 }
