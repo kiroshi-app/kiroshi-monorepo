@@ -189,7 +189,13 @@ const PresenceBoard = ({
 			</div>
 			<div className="min-h-0 flex-1">
 				<BoardCanvas
+					libraryItems={[]}
+					onDropFiles={fn()}
 					onIntent={fn()}
+					onLibraryItemDrop={fn()}
+					onLibraryItemPick={fn()}
+					onPaste={fn()}
+					onToolChange={fn()}
 					onViewportChange={setViewport}
 					outlines={outlines}
 					pointers={pointers}
@@ -202,6 +208,7 @@ const PresenceBoard = ({
 							),
 						)
 					}
+					tool="select"
 					view={BOARD}
 					viewport={viewport}
 				/>

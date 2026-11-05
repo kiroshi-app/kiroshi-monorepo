@@ -754,6 +754,34 @@ const common = {
 			textSizeMedium: "M",
 			more: "Plus",
 		},
+		dock: {
+			label: "Outils du tableau",
+			tool: {
+				select: "Sélection",
+				hand: "Main",
+				sticky: "Note autocollante",
+				shape: "Forme",
+				text: "Texte",
+				connector: "Liaison",
+				section: "Section",
+				image: "Image",
+				library: "Bibliothèque",
+			},
+		},
+		picker: {
+			title: "Depuis la Bibliothèque",
+			hint: "Glissez sur le tableau",
+			empty: "Rien dans la Bibliothèque pour l’instant.",
+		},
+		drop: {
+			images_one: "Déposez pour ajouter {{count}} image ici",
+			images_many: "Déposez pour ajouter {{count}} images ici",
+			images_other: "Déposez pour ajouter {{count}} images ici",
+			files_one: "Déposez pour ajouter {{count}} fichier ici",
+			files_many: "Déposez pour ajouter {{count}} fichiers ici",
+			files_other: "Déposez pour ajouter {{count}} fichiers ici",
+			unknown: "Déposez pour ajouter des fichiers ici",
+		},
 	},
 	whatsNew: {
 		firstLaunch: {

@@ -1,4 +1,9 @@
-import { ROOFTOP_POOL } from "@workspace/ui/components/answer-blocks/answer-blocks.fixtures"
+import {
+	CASA_DO_RIO_TERRACE,
+	GARDEN_PATIO,
+	ROOFTOP_POOL,
+} from "@workspace/ui/components/answer-blocks/answer-blocks.fixtures"
+import type { BoardLibraryItem } from "@workspace/ui/components/board/board-dock"
 import type { BoardLibraryCardProps } from "@workspace/ui/components/board/board-library-card"
 import type { BoardLinkCardProps } from "@workspace/ui/components/board/board-link-card"
 import type { BoardSnapshot } from "@workspace/ui/components/board/board-miniature"
@@ -34,6 +39,40 @@ export const LIBRARY_DOCUMENT: BoardLibraryCardProps = {
 	excerpt:
 		"What we’re making, who it’s for and why it matters now. The outcome this work commits to.",
 }
+
+export const LIBRARY_ITEMS: readonly BoardLibraryItem[] = [
+	{
+		id: "terrace-at-dusk",
+		kind: "image",
+		title: "Terrace at dusk",
+		src: CASA_DO_RIO_TERRACE,
+	},
+	{ id: "launch-brief", kind: "document", ...LIBRARY_DOCUMENT },
+	{
+		id: "rooftop-pool",
+		kind: "image",
+		title: "Rooftop pool",
+		src: ROOFTOP_POOL,
+	},
+	{
+		id: "interview-notes",
+		kind: "document",
+		title: "Interview notes",
+		excerpt: "Six people, one question: what did you expect to happen next?",
+	},
+	{
+		id: "garden-patio",
+		kind: "image",
+		title: "Garden patio",
+		src: GARDEN_PATIO,
+	},
+	{
+		id: "pricing-questions",
+		kind: "document",
+		title: "Pricing questions",
+		excerpt: "What teams asked about seats, trials and invoices this month.",
+	},
+]
 
 export const PLANNING_BOARD_SNAPSHOT: BoardSnapshot = {
 	bounds: { x: -40, y: 0, width: 820, height: 260 },
