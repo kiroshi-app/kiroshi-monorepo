@@ -67,8 +67,11 @@ const SECTION_PAINT: Record<
 	},
 }
 
+const channelsOf = (colour: string) =>
+	(colour.match(/\d+(\.\d+)?/g) ?? []).map(Number)
+
 const rgbOf = (colour: string): Rgb => {
-	const [red, green, blue] = (colour.match(/\d+(\.\d+)?/g) ?? []).map(Number)
+	const [red, green, blue] = channelsOf(colour)
 	return [red, green, blue]
 }
 
@@ -88,9 +91,7 @@ const paintOf = (element: Element) => {
 }
 
 const compositeOver = (colour: string, ground: Rgb): Rgb => {
-	const [red, green, blue, alpha = 1] = (
-		colour.match(/\d+(\.\d+)?/g) ?? []
-	).map(Number)
+	const [red, green, blue, alpha = 1] = channelsOf(colour)
 	return [red, green, blue].map(
 		(channel, index) => alpha * channel + (1 - alpha) * ground[index],
 	) as Rgb
