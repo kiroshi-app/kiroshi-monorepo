@@ -11,17 +11,17 @@ use tokio::sync::oneshot;
 use futures_util::future::join_all;
 
 use super::contract::{
-	LibraryDocument, LibraryDocumentState, LibraryError, LibraryFile, LibraryImage, LibraryImport,
-	LibraryImportUrlError, LibraryItem, LibraryTemplate,
+	LibraryBoardSummary, LibraryDocument, LibraryDocumentState, LibraryError, LibraryFile,
+	LibraryImage, LibraryImport, LibraryImportUrlError, LibraryItem, LibraryTemplate,
 };
 use super::host::stop_writers;
 use super::presence::{seated_name, share_caret, unseat_writer, Seat};
 use super::url_import::{admission_for, import_url};
 use super::{
-	apply_update, clipboard_payload, clipboard_payload_of_bytes, create_document, delete_item,
-	import, import_paths, list, open_document, read_document, read_file, read_image,
-	read_picked_image, read_thumbnail, rename_linked_document, resolve, root, save, save_bytes,
-	save_message, templates, ClipboardPayload,
+	apply_update, clipboard_payload, clipboard_payload_of_bytes, create_board, create_document,
+	delete_item, import, import_paths, list, open_document, read_document, read_file, read_image,
+	read_picked_image, read_thumbnail, rename_board, rename_linked_document, resolve, root, save,
+	save_bytes, save_message, summarise_board, templates, ClipboardPayload,
 };
 use crate::agent::commands::cancel_session_turn;
 use crate::agent::contract::CancelOutcome;
@@ -110,6 +110,30 @@ pub async fn library_create_document<R: Runtime>(
 
 #[tauri::command]
 #[specta::specta]
+pub async fn library_create_board<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	space_id: String,
+	name: String,
+) -> Result<LibraryItem, LibraryError> {
+	known_space(&state, &space_id).await?;
+	create_board(&root(&app)?, &space_id, &name)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn library_board_summary<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	space_id: String,
+	name: String,
+) -> Result<LibraryBoardSummary, LibraryError> {
+	known_space(&state, &space_id).await?;
+	summarise_board(&root(&app)?, &space_id, &name)
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn library_open_document<R: Runtime>(
 	app: AppHandle<R>,
 	state: State<'_, db::DatabaseState>,
@@ -146,6 +170,19 @@ pub async fn library_rename_document<R: Runtime>(
 	let database =
 		state.as_ref().map_err(|failure| LibraryError::Unavailable { failure: failure.into() })?;
 	rename_linked_document(&app, database, &root(&app)?, &space_id, &name, &new_name).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn library_rename_board<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	space_id: String,
+	name: String,
+	new_name: String,
+) -> Result<LibraryItem, LibraryError> {
+	known_space(&state, &space_id).await?;
+	rename_board(&app, &root(&app)?, &space_id, &name, &new_name)
 }
 
 #[tauri::command]

@@ -1,3 +1,4 @@
+mod canvas;
 pub mod commands;
 pub mod contract;
 mod documents;
@@ -26,6 +27,8 @@ use contract::{
 	LibraryImport, LibraryItem, LibraryItemKind, LibraryOverwritten,
 };
 use documents::Documents;
+
+pub(crate) use canvas::{create_board, rename_board, summarise_board};
 
 use crate::attachments::{self, attached_content, Attachments};
 use crate::db;
@@ -60,6 +63,7 @@ const UNSAFE_IN_A_NAME: [char; 9] = ['/', '\\', ':', '*', '?', '"', '<', '>', '|
 enum AcceptedType {
 	Image { mime_type: &'static str },
 	Document(LibraryDocumentFormat),
+	Board,
 }
 
 impl AcceptedType {
@@ -68,6 +72,7 @@ impl AcceptedType {
 			AcceptedType::Image { mime_type } => mime_type,
 			AcceptedType::Document(LibraryDocumentFormat::Markdown) => "text/markdown",
 			AcceptedType::Document(LibraryDocumentFormat::Text) => "text/plain",
+			AcceptedType::Board => "application/json",
 		}
 	}
 }
@@ -133,6 +138,7 @@ fn item_at(path: &Path, name: String) -> Result<Option<LibraryItem>, LibraryErro
 		kind: match accepted {
 			AcceptedType::Image { .. } => LibraryItemKind::Image,
 			AcceptedType::Document(_) => LibraryItemKind::Document,
+			AcceptedType::Board => LibraryItemKind::Board,
 		},
 		path: path.to_string_lossy().into_owned(),
 		bytes: metadata.len(),
@@ -178,7 +184,9 @@ pub(crate) fn read_document(
 fn a_document(root: &Path, space_id: &str, name: &str) -> Result<(), LibraryError> {
 	match resolve(root, space_id, name)?.accepted {
 		AcceptedType::Document(_) => Ok(()),
-		AcceptedType::Image { .. } => Err(LibraryError::NotADocument { name: name.to_owned() }),
+		AcceptedType::Image { .. } | AcceptedType::Board => {
+			Err(LibraryError::NotADocument { name: name.to_owned() })
+		}
 	}
 }
 
@@ -252,7 +260,9 @@ fn clipboard_payload(
 ) -> Result<ClipboardPayload, LibraryError> {
 	let item = resolve(root, space_id, name)?;
 	match item.accepted {
-		AcceptedType::Document(_) => document_text(&item, name).map(ClipboardPayload::Text),
+		AcceptedType::Document(_) | AcceptedType::Board => {
+			document_text(&item, name).map(ClipboardPayload::Text)
+		}
 		AcceptedType::Image { .. } => decoded_image(&item, name),
 	}
 }
@@ -262,7 +272,7 @@ fn clipboard_payload_of_bytes(name: &str, content: &str) -> Result<ClipboardPayl
 	let bytes = decoded_content(name, content)?;
 	let length = bytes.len() as u64;
 	match accepted {
-		AcceptedType::Document(_) => {
+		AcceptedType::Document(_) | AcceptedType::Board => {
 			within(name, length, MAX_DOCUMENT_BYTES)?;
 			utf8_text(name, bytes).map(ClipboardPayload::Text)
 		}
@@ -397,8 +407,17 @@ pub(crate) fn create_document(
 	if !is_markdown || !is_plain_name(name) {
 		return Err(LibraryError::InvalidName { name: name.to_owned() });
 	}
+	created(root, space_id, name, content.as_bytes())
+}
+
+fn created(
+	root: &Path,
+	space_id: &str,
+	name: &str,
+	content: &[u8],
+) -> Result<LibraryItem, LibraryError> {
 	let path = space_dir(root, space_id).join(name);
-	private_files::write(&path, content.as_bytes()).map_err(|error| match error.kind() {
+	private_files::write(&path, content).map_err(|error| match error.kind() {
 		io::ErrorKind::AlreadyExists => LibraryError::AlreadyExists { name: name.to_owned() },
 		_ => unwritable(error),
 	})?;
@@ -785,6 +804,9 @@ pub(crate) fn overwrite_path<R: Runtime>(
 		(AcceptedType::Document(_), AcceptedType::Image { .. }) => {
 			return Err(LibraryError::NotADocument { name: name.to_owned() }.into());
 		}
+		(_, AcceptedType::Board) | (AcceptedType::Board, _) => {
+			return Err(LibraryError::Unsupported { name: name.to_owned() }.into());
+		}
 	}
 	let item = item_at(&space_dir(root, space_id).join(name), name.to_owned())?
 		.ok_or_else(|| LibraryError::Missing { name: name.to_owned() })?;
@@ -831,7 +853,7 @@ fn importable(name: &str) -> Result<AcceptedType, LibraryError> {
 fn import_limit(accepted: &AcceptedType) -> u64 {
 	match accepted {
 		AcceptedType::Image { .. } => MAX_IMAGE_BYTES,
-		AcceptedType::Document(_) => MAX_DOCUMENT_BYTES,
+		AcceptedType::Document(_) | AcceptedType::Board => MAX_DOCUMENT_BYTES,
 	}
 }
 
@@ -852,7 +874,7 @@ fn imported(
 		AcceptedType::Image { .. } => {
 			Some(thumbnail_of(name, image_format(Path::new(name), name)?, bytes)?)
 		}
-		AcceptedType::Document(_) => {
+		AcceptedType::Document(_) | AcceptedType::Board => {
 			std::str::from_utf8(bytes)
 				.map_err(|_| LibraryError::NotUtf8 { name: name.to_owned() })?;
 			None
@@ -1016,6 +1038,7 @@ fn accepted_type(name: &str) -> Option<AcceptedType> {
 		"webp" => Some(AcceptedType::Image { mime_type: "image/webp" }),
 		"md" | "markdown" => Some(AcceptedType::Document(LibraryDocumentFormat::Markdown)),
 		"txt" => Some(AcceptedType::Document(LibraryDocumentFormat::Text)),
+		"canvas" => Some(AcceptedType::Board),
 		_ => None,
 	}
 }

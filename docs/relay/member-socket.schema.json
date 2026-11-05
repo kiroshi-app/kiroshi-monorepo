@@ -3621,6 +3621,105 @@
       ],
       "type": "object"
     },
+    "LibraryBoardBounds": {
+      "properties": {
+        "height": {
+          "type": "integer"
+        },
+        "width": {
+          "type": "integer"
+        },
+        "x": {
+          "type": "integer"
+        },
+        "y": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "width",
+        "height"
+      ],
+      "type": "object"
+    },
+    "LibraryBoardNode": {
+      "properties": {
+        "colour": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "height": {
+          "type": "integer"
+        },
+        "id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "width": {
+          "type": "integer"
+        },
+        "x": {
+          "type": "integer"
+        },
+        "y": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "x",
+        "y",
+        "width",
+        "height",
+        "colour"
+      ],
+      "type": "object"
+    },
+    "LibraryBoardSummary": {
+      "properties": {
+        "bounds": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LibraryBoardBounds"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "nodeCount": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "nodes": {
+          "items": {
+            "$ref": "#/$defs/LibraryBoardNode"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "nodeCount",
+        "nodes",
+        "bounds"
+      ],
+      "type": "object"
+    },
     "LibraryChanged": {
       "properties": {
         "overwritten": {
@@ -3918,6 +4017,40 @@
           "required": [
             "kind",
             "name"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "notABoard"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "name"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "detail": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "invalidBoard"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "name",
+            "detail"
           ],
           "type": "object"
         },
@@ -4247,7 +4380,8 @@
     "LibraryItemKind": {
       "enum": [
         "image",
-        "document"
+        "document",
+        "board"
       ]
     },
     "LibraryOverwritten": {
@@ -11826,6 +11960,52 @@
         "type": "null"
       }
     },
+    "library_board_summary": {
+      "args": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "spaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spaceId",
+          "name"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/LibraryError"
+      },
+      "ok": {
+        "$ref": "#/$defs/LibraryBoardSummary"
+      }
+    },
+    "library_create_board": {
+      "args": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "spaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spaceId",
+          "name"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/LibraryError"
+      },
+      "ok": {
+        "$ref": "#/$defs/LibraryItem"
+      }
+    },
     "library_create_document": {
       "args": {
         "properties": {
@@ -12067,6 +12247,33 @@
       },
       "ok": {
         "$ref": "#/$defs/LibraryImage"
+      }
+    },
+    "library_rename_board": {
+      "args": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "newName": {
+            "type": "string"
+          },
+          "spaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spaceId",
+          "name",
+          "newName"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/LibraryError"
+      },
+      "ok": {
+        "$ref": "#/$defs/LibraryItem"
       }
     },
     "library_rename_document": {

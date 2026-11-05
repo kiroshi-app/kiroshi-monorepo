@@ -12,15 +12,16 @@ use yrs::updates::decoder::Decode;
 use yrs::{Doc, GetString, ReadTxn, StateVector, Text, Transact, Update};
 
 use super::commands::{
-	library_apply_update, library_copy, library_create_document, library_delete, library_import,
-	library_import_paths, library_list, library_open_document, library_read_document,
-	library_read_file, library_read_image, library_read_picked_image, library_read_thumbnail,
+	library_apply_update, library_board_summary, library_copy, library_create_board,
+	library_create_document, library_delete, library_import, library_import_paths, library_list,
+	library_open_document, library_read_document, library_read_file, library_read_image,
+	library_read_picked_image, library_read_thumbnail, library_rename_board,
 	library_rename_document, library_reveal, library_save, library_save_message, library_templates,
 };
 use super::contract::{
-	LibraryChanged, LibraryDocumentFormat, LibraryDocumentRenamed, LibraryDocumentUpdated,
-	LibraryError, LibraryFile, LibraryImage, LibraryImport, LibraryItem, LibraryItemKind,
-	LibraryTemplate,
+	LibraryBoardBounds, LibraryBoardNode, LibraryBoardSummary, LibraryChanged,
+	LibraryDocumentFormat, LibraryDocumentRenamed, LibraryDocumentUpdated, LibraryError,
+	LibraryFile, LibraryImage, LibraryImport, LibraryItem, LibraryItemKind, LibraryTemplate,
 };
 use super::*;
 use crate::attachments::attachment_block;
@@ -2578,4 +2579,258 @@ async fn a_document_attached_to_a_sent_message_reads_back_with_it_and_follows_it
 		linked_documents(&app).await,
 		[("m1".to_owned(), vec!["final.md".to_owned(), "brief.md".to_owned()])]
 	);
+}
+
+const A_BOARD: &str = r#"{
+	"nodes": [
+		{ "id": "a", "type": "text", "text": "Hello", "x": -40, "y": 10, "width": 100, "height": 50, "color": "3" },
+		{ "id": "b", "type": "group", "label": "Launch", "x": 200, "y": -20, "width": 300, "height": 200 }
+	],
+	"edges": []
+}"#;
+
+fn board_fixtures() -> PathBuf {
+	Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../packages/shared/board/fixtures")
+}
+
+async fn summary_of(
+	app: &App<MockRuntime>,
+	space_id: &str,
+	name: &str,
+) -> Result<LibraryBoardSummary, LibraryError> {
+	library_board_summary(app.handle().clone(), app.state(), space_id.to_owned(), name.to_owned())
+		.await
+}
+
+async fn board_renamed(
+	app: &App<MockRuntime>,
+	space_id: &str,
+	name: &str,
+	new_name: &str,
+) -> Result<LibraryItem, LibraryError> {
+	library_rename_board(
+		app.handle().clone(),
+		app.state(),
+		space_id.to_owned(),
+		name.to_owned(),
+		new_name.to_owned(),
+	)
+	.await
+}
+
+fn text_node(index: i64) -> serde_json::Value {
+	serde_json::json!({
+		"id": format!("n{index}"),
+		"type": "text",
+		"text": "",
+		"x": index * 10,
+		"y": -index,
+		"width": 100,
+		"height": 50,
+	})
+}
+
+#[test]
+fn a_canvas_file_is_listed_as_a_board_beside_documents_and_images() {
+	let root = temp_root();
+	put(&root, SPACE, "notes.md", b"notes");
+	put(&root, SPACE, "cover.png", b"png");
+	put(&root, SPACE, "plan.canvas", A_BOARD.as_bytes());
+	put(&root, SPACE, "broken.canvas", b"{ not json");
+	touch(&root, SPACE, "notes.md", 4);
+	touch(&root, SPACE, "cover.png", 3);
+	touch(&root, SPACE, "plan.canvas", 2);
+	touch(&root, SPACE, "broken.canvas", 1);
+
+	let kinds: Vec<_> = list(&root, SPACE)
+		.expect("the library lists")
+		.into_iter()
+		.map(|item| (item.name, item.kind))
+		.collect();
+
+	assert_eq!(
+		kinds,
+		[
+			("notes.md".to_owned(), LibraryItemKind::Document),
+			("cover.png".to_owned(), LibraryItemKind::Image),
+			("plan.canvas".to_owned(), LibraryItemKind::Board),
+			("broken.canvas".to_owned(), LibraryItemKind::Board),
+		]
+	);
+}
+
+#[tokio::test]
+async fn a_board_created_by_name_is_a_blank_canvas_and_a_taken_name_is_refused() {
+	let app = a_host("board-create");
+	let space_id = a_space(&app, "Work").await;
+	let root = root(app.handle()).expect("the library root resolves");
+	let create = |name: &str| {
+		library_create_board(app.handle().clone(), app.state(), space_id.clone(), name.to_owned())
+	};
+
+	let item = create("Plan").await.expect("the board lands");
+	let again = create("Plan").await;
+	let unnamed = create("").await;
+	let escaping = create("../Plan").await;
+
+	assert_eq!((item.name.as_str(), item.kind), ("Plan.canvas", LibraryItemKind::Board));
+	assert_eq!(on_disk(&root, &space_id, "Plan.canvas"), r#"{"nodes":[],"edges":[]}"#);
+	assert_eq!(again, Err(LibraryError::AlreadyExists { name: "Plan.canvas".to_owned() }));
+	assert_eq!(unnamed, Err(LibraryError::InvalidName { name: ".canvas".to_owned() }));
+	assert_eq!(escaping, Err(LibraryError::InvalidName { name: "../Plan.canvas".to_owned() }));
+	assert_eq!(names(&root, &space_id), ["Plan.canvas"]);
+}
+
+#[tokio::test]
+async fn a_renamed_board_keeps_its_bytes_and_is_announced_as_a_document_rename_is() {
+	let app = a_host("board-rename");
+	let space_id = a_space(&app, "Work").await;
+	let root = root(app.handle()).expect("the library root resolves");
+	put(&root, &space_id, "plan.canvas", A_BOARD.as_bytes());
+	put(&root, &space_id, "notes.md", b"notes");
+	let renames = heard_renames(&app);
+	let changes = heard_changes(&app);
+
+	let item = board_renamed(&app, &space_id, "plan.canvas", "roadmap.canvas")
+		.await
+		.expect("the rename lands");
+	let to_markdown = board_renamed(&app, &space_id, "roadmap.canvas", "roadmap.md").await;
+	let a_document = board_renamed(&app, &space_id, "notes.md", "notes.canvas").await;
+
+	assert_eq!((item.name.as_str(), item.kind), ("roadmap.canvas", LibraryItemKind::Board));
+	assert_eq!(on_disk(&root, &space_id, "roadmap.canvas"), A_BOARD);
+	assert_eq!(to_markdown, Err(LibraryError::InvalidName { name: "roadmap.md".to_owned() }));
+	assert_eq!(a_document, Err(LibraryError::NotABoard { name: "notes.md".to_owned() }));
+	assert_eq!(names(&root, &space_id).len(), 2);
+	let announced = renames.recv_timeout(Duration::from_secs(5)).expect("the rename is announced");
+	assert_eq!(
+		announced,
+		LibraryDocumentRenamed {
+			space_id: space_id.clone(),
+			former_name: "plan.canvas".to_owned(),
+			name: "roadmap.canvas".to_owned(),
+		}
+	);
+	assert!(renames.try_recv().is_err());
+	assert!(changes.try_recv().is_err());
+}
+
+#[tokio::test]
+async fn a_deleted_board_leaves_the_library_and_is_announced_as_a_document_delete_is() {
+	let app = a_host("board-delete");
+	let space_id = a_space(&app, "Work").await;
+	let root = root(app.handle()).expect("the library root resolves");
+	put(&root, &space_id, "plan.canvas", A_BOARD.as_bytes());
+	let heard = heard_changes(&app);
+
+	let removed = deleted(&app, &space_id, "plan.canvas").await;
+
+	assert_eq!(removed, Ok(()));
+	assert!(names(&root, &space_id).is_empty());
+	let announced = heard.recv_timeout(Duration::from_secs(5)).expect("the delete is announced");
+	assert_eq!(announced, LibraryChanged { space_id: space_id.clone(), overwritten: None });
+}
+
+#[tokio::test]
+async fn a_board_summary_answers_its_nodes_as_stored_and_their_bounding_box() {
+	let app = a_host("board-summary");
+	let space_id = a_space(&app, "Work").await;
+	let root = root(app.handle()).expect("the library root resolves");
+	put(&root, &space_id, "plan.canvas", A_BOARD.as_bytes());
+	put(&root, &space_id, "blank.canvas", br#"{"nodes":[],"edges":[]}"#);
+	put(&root, &space_id, "notes.md", b"notes");
+
+	let summary = summary_of(&app, &space_id, "plan.canvas").await;
+	let blank = summary_of(&app, &space_id, "blank.canvas").await.expect("the blank summarises");
+	let a_document = summary_of(&app, &space_id, "notes.md").await;
+
+	assert_eq!(
+		summary,
+		Ok(LibraryBoardSummary {
+			name: "plan.canvas".to_owned(),
+			node_count: 2,
+			nodes: vec![
+				LibraryBoardNode {
+					id: "a".to_owned(),
+					node_type: "text".to_owned(),
+					x: -40,
+					y: 10,
+					width: 100,
+					height: 50,
+					colour: Some("3".to_owned()),
+				},
+				LibraryBoardNode {
+					id: "b".to_owned(),
+					node_type: "group".to_owned(),
+					x: 200,
+					y: -20,
+					width: 300,
+					height: 200,
+					colour: None,
+				},
+			],
+			bounds: Some(LibraryBoardBounds { x: -40, y: -20, width: 540, height: 200 }),
+		})
+	);
+	assert_eq!((blank.node_count, blank.nodes.len(), blank.bounds), (0, 0, None));
+	assert_eq!(a_document, Err(LibraryError::NotABoard { name: "notes.md".to_owned() }));
+}
+
+#[test]
+fn a_board_summary_snapshots_at_most_200_nodes_and_bounds_every_node() {
+	let root = temp_root();
+	let nodes: Vec<_> = (0..250).map(text_node).collect();
+	let board = serde_json::json!({ "nodes": nodes, "edges": [] });
+	put(&root, SPACE, "crowded.canvas", board.to_string().as_bytes());
+
+	let summary = summarise_board(&root, SPACE, "crowded.canvas").expect("the board summarises");
+
+	assert_eq!(summary.node_count, 250);
+	assert_eq!(summary.nodes.len(), 200);
+	assert_eq!(summary.nodes.last().map(|node| node.id.as_str()), Some("n199"));
+	assert_eq!(
+		summary.bounds,
+		Some(LibraryBoardBounds { x: 0, y: -249, width: 2590, height: 299 })
+	);
+}
+
+#[test]
+fn an_invalid_board_is_answered_a_refusal_naming_it_never_a_zeroed_summary() {
+	let root = temp_root();
+	put(&root, SPACE, "broken.canvas", b"{ not json");
+	put(&root, SPACE, "shapeless.canvas", br#"{"nodes":[{"id":"a","type":"text"}],"edges":[]}"#);
+	put(&root, SPACE, "rootless.canvas", b"[]");
+
+	for name in ["broken.canvas", "shapeless.canvas", "rootless.canvas"] {
+		let refused = summarise_board(&root, SPACE, name);
+
+		assert!(
+			matches!(&refused, Err(LibraryError::InvalidBoard { name: refused_name, .. }) if refused_name == name),
+			"{name}: {refused:?}"
+		);
+	}
+}
+
+#[test]
+fn every_fixture_board_is_summarised_with_its_node_count() {
+	let root = temp_root();
+	let fixtures: Vec<_> = fs::read_dir(board_fixtures())
+		.expect("the board fixtures are readable")
+		.map(|entry| entry.expect("a fixture entry is readable").path().join("board.canvas"))
+		.collect();
+	assert!(fixtures.len() >= 11, "every board fixture is summarised");
+
+	for fixture in fixtures {
+		let text = fs::read_to_string(&fixture).expect("the fixture reads");
+		let stored: serde_json::Value = serde_json::from_str(&text).expect("the fixture is JSON");
+		let count = stored["nodes"].as_array().expect("the fixture has nodes").len();
+		put(&root, SPACE, "fixture.canvas", text.as_bytes());
+
+		let summary = summarise_board(&root, SPACE, "fixture.canvas")
+			.unwrap_or_else(|refusal| panic!("{}: {refusal:?}", fixture.display()));
+
+		assert_eq!(summary.node_count, count as u64, "{}", fixture.display());
+		assert_eq!(summary.nodes.len(), count.min(200), "{}", fixture.display());
+		assert_eq!(summary.bounds.is_some(), count > 0, "{}", fixture.display());
+	}
 }

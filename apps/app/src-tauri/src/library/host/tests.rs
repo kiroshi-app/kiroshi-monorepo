@@ -402,6 +402,41 @@ async fn a_search_matches_a_document_without_readable_text_on_its_name_and_keeps
 }
 
 #[tokio::test]
+async fn a_search_matches_a_board_on_its_name_or_its_node_text_and_leaves_an_invalid_board_out() {
+	let (app, root) = a_host("search-boards").await;
+	let sprint = json!({
+		"nodes": [
+			{ "id": "t", "type": "text", "text": "Ship the ROADMAP", "x": 0, "y": 0, "width": 10, "height": 10 },
+			{ "id": "g", "type": "group", "label": "Quarter one", "x": 0, "y": 0, "width": 10, "height": 10 },
+			{ "id": "f", "type": "file", "file": "deck.pdf", "label": "Launch deck", "x": 0, "y": 0, "width": 10, "height": 10 },
+			{ "id": "l", "type": "link", "url": "https://example.test", "label": "Spec page", "x": 0, "y": 0, "width": 10, "height": 10 }
+		],
+		"edges": []
+	});
+	put(&root, SPACE, "sprint.canvas", &sprint.to_string());
+	put(&root, SPACE, "roadmap.canvas", r#"{"nodes":[],"edges":[]}"#);
+	put(&root, SPACE, "roadmap draft.canvas", "{ not json");
+	put(&root, SPACE, "quiet.canvas", r#"{"nodes":[],"edges":[]}"#);
+	modified_at(&root, "sprint.canvas", 300);
+	modified_at(&root, "roadmap.canvas", 200);
+	modified_at(&root, "roadmap draft.canvas", 100);
+	let host = the_host(&app);
+	let search = |query: &str| host.served(Operation::Search, json!({ "query": query }));
+
+	let on_name_or_text = search("roadMap").await.expect("searches");
+	let on_a_group_label = search("QUARTER").await.expect("searches");
+	let on_a_file_label = search("launch deck").await.expect("searches");
+	let on_a_link_label = search("spec").await.expect("searches");
+	let on_a_file_path = search("deck.pdf").await.expect("searches");
+
+	assert_eq!(names_in(&on_name_or_text), ["sprint.canvas", "roadmap.canvas"]);
+	assert_eq!(names_in(&on_a_group_label), ["sprint.canvas"]);
+	assert_eq!(names_in(&on_a_file_label), ["sprint.canvas"]);
+	assert_eq!(names_in(&on_a_link_label), ["sprint.canvas"]);
+	assert!(names_in(&on_a_file_path).is_empty());
+}
+
+#[tokio::test]
 async fn a_read_answers_a_document_text_an_image_or_what_an_image_too_large_to_show_is() {
 	let (app, root) = a_host("read").await;
 	put(&root, SPACE, "notes.md", "# Notes\n");
