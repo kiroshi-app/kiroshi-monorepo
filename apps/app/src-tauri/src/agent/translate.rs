@@ -376,6 +376,7 @@ impl Translator {
 
 		self.cancelling = false;
 		self.activity_titles.clear();
+		self.unshown_calls.clear();
 		self.pending_permissions.clear();
 
 		events.push(AgentEvent::TurnEnded {
@@ -687,6 +688,20 @@ mod tests {
 			completed(&events).iter().map(|message| message.text.as_str()).collect::<Vec<_>>(),
 			[answer]
 		);
+	}
+
+	#[test]
+	fn an_attach_call_cancelled_before_its_result_is_forgotten_when_the_turn_ends() {
+		let mut translator = Translator::new(false);
+		let mut frames = a_call_round(1, ATTACH_TOOL, json!({ "path": "/tmp/chart.png" }));
+		frames.pop();
+		ingest(&mut translator, frames);
+		translator.mark_cancelling();
+
+		let events = ingest(&mut translator, vec![settled("error_during_execution", false)]);
+
+		assert_eq!(outcome(&events), Some(TurnOutcome::Cancelled));
+		assert!(translator.unshown_calls.is_empty());
 	}
 
 	#[test]
