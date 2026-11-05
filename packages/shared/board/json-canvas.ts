@@ -166,8 +166,8 @@ const shaped = ({
 		if (Object.hasOwn(from, name)) shape[name] = from[name] as Json
 	}
 	const unnamed = rest(source, claimedTop)
-	for (const name of verbatim) {
-		if (!isEmptyObject(unnamed)) shape[name] = unnamed
+	if (!isEmptyObject(unnamed)) {
+		for (const name of verbatim) shape[name] = unnamed
 	}
 	const extras = rest(kiroshi, claimedUnderKiroshi)
 	if (!isEmptyObject(extras)) shape[EXTRAS] = extras

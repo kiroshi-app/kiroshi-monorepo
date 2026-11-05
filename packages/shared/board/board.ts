@@ -148,8 +148,6 @@ export const BOARD_SCHEMA = schema as unknown as BoardSchema
 
 export const EXTRAS = BOARD_SCHEMA.extras
 
-export const VERBATIM = BOARD_SCHEMA.verbatim
-
 export const KIND = BOARD_SCHEMA.node.kind.field
 
 export const NODE_FIELDS = BOARD_SCHEMA.node.fields
