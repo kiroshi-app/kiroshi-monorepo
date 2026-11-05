@@ -270,6 +270,8 @@ const common = {
 		import: "Import",
 		newDocument: "New document",
 		newBoard: "New board",
+		boardFileReplaced:
+			"An edit to {{name}} made outside Kiroshi was replaced by the live board.",
 		blankBoard: "Blank board",
 		saved: {
 			title: "Saved to Library",
@@ -618,6 +620,10 @@ const common = {
 				stop: "Couldn’t stop {{name}}. Press Stop {{name}} to try again.",
 				saveAsDocument:
 					"Couldn’t save the message as a document. Try Save as document again.",
+			},
+			board: {
+				open: "Couldn’t open the board. Open it again from the Library.",
+				save: "Couldn’t save your last changes to the board. It shows what was saved, so make them again.",
 			},
 			import: {
 				title: "Couldn’t import {{name}}",

@@ -3,7 +3,6 @@ import type {
 	BoardSnapshotObject,
 } from "@workspace/ui/components/board/board-miniature"
 import type { BoardShapeFill } from "@workspace/ui/components/board/board-shape"
-import type { BoardItem, BoardView } from "@workspace/ui/components/board-view"
 
 import type { LibraryBoardNode, LibraryBoardSummary } from "../bindings"
 
@@ -11,7 +10,7 @@ const GROUP_TYPE = "group"
 
 const TEXT_TYPE = "text"
 
-const FILL_OF_PRESET: Readonly<Record<string, BoardShapeFill>> = {
+export const FILL_OF_PRESET: Readonly<Record<string, BoardShapeFill>> = {
 	"1": "pink",
 	"2": "yellow",
 	"3": "yellow",
@@ -53,20 +52,6 @@ export const boardSnapshotOf = ({
 }: LibraryBoardSummary): BoardSnapshot => ({
 	bounds: bounds ?? NO_BOUNDS,
 	objects: nodes.map(snapshotObjectOf),
-})
-
-const boardItemOf = (node: LibraryBoardNode, zOrder: number): BoardItem => ({
-	id: node.id,
-	kind: "shape",
-	position: { x: node.x, y: node.y },
-	size: { width: node.width, height: node.height },
-	zOrder,
-	text: "",
-	style: { shape: "rounded-rectangle", fill: fillOf(node) },
-})
-
-export const boardViewOf = ({ nodes }: LibraryBoardSummary): BoardView => ({
-	objects: nodes.map(boardItemOf),
 })
 
 export const boardOriginOf = ({ bounds }: LibraryBoardSummary) => ({

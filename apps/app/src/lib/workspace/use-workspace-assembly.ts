@@ -16,6 +16,7 @@ import { useWorkspaceOverlay } from "./use-workspace-overlay"
 import { useWorkspaceSubscriptions } from "./use-workspace-subscriptions"
 
 import { useNewDevice } from "../devices/use-new-device"
+import { useLibraryBoardFileReplacedNotices } from "../library/use-library-board-file-replaced-notices"
 import { useOpenSettings } from "../navigation/open-settings"
 import { useSettingsNavigation } from "../navigation/use-settings-navigation"
 import { useClaudeImportEntry } from "../onboarding/use-claude-import-entry"
@@ -74,6 +75,7 @@ export const useWorkspaceAssembly = () => {
 	useTabKeys(tabs)
 	useNewTabClicks(tabs)
 	useTabsFollowingRenames(tabs)
+	useLibraryBoardFileReplacedNotices(rosteredHostSpaceId ?? null)
 	useTabThreadSync({
 		tabs,
 		roster: core.roster.controller,
