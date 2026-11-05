@@ -29,7 +29,6 @@ const BoardSection = ({ tint, title, width, height }: BoardSectionProps) => (
 	<div
 		className={cn("relative rounded-bubble border", SECTION_TINT[tint].section)}
 		data-slot="board-section"
-		data-tint={tint}
 		style={{ width, height }}
 	>
 		<p

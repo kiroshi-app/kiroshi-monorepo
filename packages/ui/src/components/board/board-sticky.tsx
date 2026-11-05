@@ -58,7 +58,6 @@ const BoardSticky = ({ colour, text, author }: BoardStickyProps) => (
 		</p>
 		<div
 			className="flex shrink-0 items-center gap-1.5"
-			data-author-kind={author.kind}
 			data-slot="board-sticky-author"
 		>
 			<AuthorAvatar author={author} />

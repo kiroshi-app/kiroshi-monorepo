@@ -24,7 +24,6 @@ const BoardLibraryCard = ({
 					? "-rotate-2 opacity-94 shadow-board-card-dragging"
 					: "shadow-board-card",
 			)}
-			data-dragging={isDragging || undefined}
 			data-slot="board-library-card"
 		>
 			<div className="flex items-center gap-2">
