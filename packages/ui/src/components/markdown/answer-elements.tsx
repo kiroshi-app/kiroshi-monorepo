@@ -184,12 +184,7 @@ const MarkdownAttachmentImage = ({
 			isLinked={Boolean(node?.properties?.[LINKED_IMAGE_PROPERTY])}
 			onOpen={onOpenAttachment && (() => onOpenAttachment(path))}
 		>
-			<img
-				{...props}
-				alt={alt}
-				data-slot="markdown-attachment-image"
-				src={shown.src}
-			/>
+			<img {...props} alt={alt} src={shown.src} />
 		</MarkdownImageMenu>
 	)
 }
