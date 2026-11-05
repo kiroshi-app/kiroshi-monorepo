@@ -202,11 +202,8 @@ fn placed(
 				.map(drop)
 				.map_err(|error| undecodable(name, error.to_string()))
 		}
-		LibraryPresenceAt::Board { point, node_id } => {
+		LibraryPresenceAt::Board { node_id, .. } => {
 			a_board(root, space_id, name)?;
-			if !point.x.is_finite() || !point.y.is_finite() {
-				return Err(undecodable(name, "a board point is not finite".to_owned()));
-			}
 			match node_id {
 				Some(node_id) if node_id.len() > MAX_NODE_ID_BYTES => Err(undecodable(
 					name,

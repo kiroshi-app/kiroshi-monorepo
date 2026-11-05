@@ -1044,7 +1044,7 @@ const EMPTY_BOARD: &str = r#"{"nodes":[],"edges":[]}"#;
 
 const BOARD_PACE_PASSED: Duration = Duration::from_millis(60);
 
-fn on_the_board(x: f64, y: f64, node_id: Option<&str>) -> LibraryPresenceAt {
+fn on_the_board(x: i64, y: i64, node_id: Option<&str>) -> LibraryPresenceAt {
 	LibraryPresenceAt::Board {
 		point: LibraryBoardPoint { x, y },
 		node_id: node_id.map(str::to_owned),
@@ -1073,6 +1073,15 @@ fn shared_through_the_command(
 	name: &str,
 	at: &LibraryPresenceAt,
 ) -> Value {
+	invoked_with(window, name, json!(at))
+		.unwrap_or_else(|error| panic!("the presence was refused: {error:?}"))
+}
+
+fn invoked_with(
+	window: &tauri::WebviewWindow<MockRuntime>,
+	name: &str,
+	at: Value,
+) -> Result<Value, Value> {
 	tauri::test::get_ipc_response(
 		window,
 		tauri::webview::InvokeRequest {
@@ -1085,9 +1094,13 @@ fn shared_through_the_command(
 			invoke_key: tauri::test::INVOKE_KEY.to_string(),
 		},
 	)
-	.unwrap_or_else(|error| panic!("the presence was refused: {error:?}"))
-	.deserialize::<Value>()
-	.expect("the answer reads")
+	.map(|answer| answer.deserialize::<Value>().expect("the answer reads"))
+}
+
+fn a_window_of(app: &App<MockRuntime>) -> tauri::WebviewWindow<MockRuntime> {
+	tauri::WebviewWindowBuilder::new(app.handle(), "main", tauri::WebviewUrl::default())
+		.build()
+		.expect("the window opens")
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -1096,14 +1109,11 @@ async fn a_text_anchor_and_a_board_point_shared_through_the_command_are_publishe
 	let (app, root) = a_host_built("share-presence", builder).await;
 	put(&root, SPACE, "notes.md", "Notes.");
 	put(&root, SPACE, BOARD, EMPTY_BOARD);
-	let window =
-		tauri::WebviewWindowBuilder::new(app.handle(), "main", tauri::WebviewUrl::default())
-			.build()
-			.expect("the window opens");
+	let window = a_window_of(&app);
 	let presences =
 		heard::<LibraryDocumentPresence>(&app, events::LIBRARY_DOCUMENT_PRESENCE.name());
 	let anchor = caret_of_a_member(&app, "notes.md");
-	let point = on_the_board(12.5, -4.0, Some("n1"));
+	let point = on_the_board(12, -4, Some("n1"));
 
 	shared_through_the_command(&window, "notes.md", &anchor);
 	shared_through_the_command(&window, BOARD, &point);
@@ -1130,11 +1140,11 @@ async fn an_agent_board_seat_publishes_its_node_and_point_then_leaves_and_finish
 	let agent = Agent { id: "b1".to_owned(), name: "Bean".to_owned() };
 	let mut seat = BoardWriting::of(app.handle(), SPACE, BOARD, &agent);
 
-	seat.at("n1", LibraryBoardPoint { x: 40.0, y: 80.0 });
+	seat.at("n1", LibraryBoardPoint { x: 40, y: 80 });
 	tokio::time::sleep(BOARD_PACE_PASSED).await;
 
 	let seated = all_of(&presences);
-	assert_eq!(positions(&seated), [vec![on_the_board(40.0, 80.0, Some("n1"))]]);
+	assert_eq!(positions(&seated), [vec![on_the_board(40, 80, Some("n1"))]]);
 	assert_eq!(named(&seated[0].writers), [(LibraryWriterKind::Agent, Some("Bean"))]);
 
 	seat.writing.outcome = LibraryWriteOutcome::Finished;
@@ -1160,10 +1170,10 @@ async fn a_member_board_position_lapses_after_its_lease() {
 	let presences =
 		heard::<LibraryDocumentPresence>(&app, events::LIBRARY_DOCUMENT_PRESENCE.name());
 
-	shared_by_a_member(&app, &root, BOARD, on_the_board(1.0, 2.0, None))
+	shared_by_a_member(&app, &root, BOARD, on_the_board(1, 2, None))
 		.expect("the position is published");
 	tokio::time::sleep(Duration::from_secs(29)).await;
-	assert_eq!(positions(&all_of(&presences)), [vec![on_the_board(1.0, 2.0, None)]]);
+	assert_eq!(positions(&all_of(&presences)), [vec![on_the_board(1, 2, None)]]);
 
 	tokio::time::sleep(Duration::from_secs(2)).await;
 
@@ -1177,11 +1187,11 @@ async fn a_burst_of_board_positions_is_published_once_with_the_latest_of_every_s
 	let presences =
 		heard::<LibraryDocumentPresence>(&app, events::LIBRARY_DOCUMENT_PRESENCE.name());
 	let window = Seat::Window("main".to_owned());
-	share_presence(app.handle(), &root, SPACE, BOARD, window, None, on_the_board(0.0, 0.0, None))
+	share_presence(app.handle(), &root, SPACE, BOARD, window, None, on_the_board(0, 0, None))
 		.expect("the window position is seated");
 
 	for step in 1..=5 {
-		let at = on_the_board(f64::from(step), 0.0, Some("n1"));
+		let at = on_the_board(step, 0, Some("n1"));
 		shared_by_a_member(&app, &root, BOARD, at).expect("the position is seated");
 		tokio::time::sleep(Duration::from_millis(8)).await;
 	}
@@ -1190,7 +1200,7 @@ async fn a_burst_of_board_positions_is_published_once_with_the_latest_of_every_s
 
 	assert_eq!(
 		positions(&all_of(&presences)),
-		[vec![on_the_board(0.0, 0.0, None), on_the_board(5.0, 0.0, Some("n1"))]]
+		[vec![on_the_board(0, 0, None), on_the_board(5, 0, Some("n1"))]]
 	);
 }
 
@@ -1204,7 +1214,7 @@ async fn a_position_of_the_wrong_kind_for_the_item_is_refused_and_publishes_noth
 	let anchor = caret_of_a_member(&app, "notes.md");
 
 	let on_a_board = shared_by_a_member(&app, &root, BOARD, anchor);
-	let in_a_document = shared_by_a_member(&app, &root, "notes.md", on_the_board(1.0, 1.0, None));
+	let in_a_document = shared_by_a_member(&app, &root, "notes.md", on_the_board(1, 1, None));
 	tokio::time::sleep(BOARD_PACE_PASSED).await;
 
 	assert_eq!(on_a_board, Err(LibraryError::NotADocument { name: BOARD.to_owned() }));
@@ -1213,33 +1223,62 @@ async fn a_position_of_the_wrong_kind_for_the_item_is_refused_and_publishes_noth
 }
 
 #[tokio::test(start_paused = true)]
-async fn a_board_position_off_the_plane_or_with_an_oversized_node_is_refused_and_publishes_nothing()
-{
+async fn a_negative_board_point_is_seated_and_published() {
+	let (app, root) = a_host("negative-point").await;
+	put(&root, SPACE, BOARD, EMPTY_BOARD);
+	let presences =
+		heard::<LibraryDocumentPresence>(&app, events::LIBRARY_DOCUMENT_PRESENCE.name());
+
+	shared_by_a_member(&app, &root, BOARD, on_the_board(-120, -4, None))
+		.expect("a negative point is seated");
+	tokio::time::sleep(BOARD_PACE_PASSED).await;
+
+	assert_eq!(positions(&all_of(&presences)), [vec![on_the_board(-120, -4, None)]]);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_fractional_or_non_numeric_board_coordinate_is_refused_before_the_command_runs() {
+	let builder = mock_builder().invoke_handler(crate::commands::invoke_handler());
+	let (app, root) = a_host_built("fractional-point", builder).await;
+	put(&root, SPACE, BOARD, EMPTY_BOARD);
+	let window = a_window_of(&app);
+	let presences =
+		heard::<LibraryDocumentPresence>(&app, events::LIBRARY_DOCUMENT_PRESENCE.name());
+	let refused = [
+		json!({ "kind": "board", "point": { "x": 12.5, "y": 0 }, "nodeId": null }),
+		json!({ "kind": "board", "point": { "x": "12", "y": 0 }, "nodeId": null }),
+	];
+
+	for at in refused {
+		let refusal = invoked_with(&window, BOARD, at).expect_err("the point is refused");
+		assert!(
+			refusal.as_str().is_some_and(|detail| detail.contains("invalid args `at`")),
+			"got {refusal}"
+		);
+	}
+	std::thread::sleep(BOARD_PACE_PASSED);
+
+	assert!(all_of(&presences).is_empty());
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_board_position_with_an_oversized_node_is_refused_and_publishes_nothing() {
 	let (app, root) = a_host("bad-point").await;
 	put(&root, SPACE, BOARD, EMPTY_BOARD);
 	let presences =
 		heard::<LibraryDocumentPresence>(&app, events::LIBRARY_DOCUMENT_PRESENCE.name());
-	let refused = [
-		on_the_board(f64::NAN, 0.0, None),
-		on_the_board(0.0, f64::INFINITY, None),
-		on_the_board(0.0, 0.0, Some(&"n".repeat(257))),
-	];
 
-	for at in refused {
-		let answer = shared_by_a_member(&app, &root, BOARD, at);
-		assert!(
-			matches!(&answer, Err(LibraryError::Undecodable { name, .. }) if name == BOARD),
-			"got {answer:?}"
-		);
-	}
-	shared_by_a_member(&app, &root, BOARD, on_the_board(0.0, 0.0, Some(&"n".repeat(256))))
+	let answer = shared_by_a_member(&app, &root, BOARD, on_the_board(0, 0, Some(&"n".repeat(257))));
+
+	assert!(
+		matches!(&answer, Err(LibraryError::Undecodable { name, .. }) if name == BOARD),
+		"got {answer:?}"
+	);
+	shared_by_a_member(&app, &root, BOARD, on_the_board(0, 0, Some(&"n".repeat(256))))
 		.expect("a node id of 256 bytes is seated");
 	tokio::time::sleep(BOARD_PACE_PASSED).await;
 
-	assert_eq!(
-		positions(&all_of(&presences)),
-		[vec![on_the_board(0.0, 0.0, Some(&"n".repeat(256)))]]
-	);
+	assert_eq!(positions(&all_of(&presences)), [vec![on_the_board(0, 0, Some(&"n".repeat(256)))]]);
 }
 
 #[test]

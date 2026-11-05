@@ -1219,8 +1219,8 @@ export type LibraryBoardNode = {
 };
 
 export type LibraryBoardPoint = {
-	x: number | null,
-	y: number | null,
+	x: number,
+	y: number,
 };
 
 export type LibraryBoardSummary = {

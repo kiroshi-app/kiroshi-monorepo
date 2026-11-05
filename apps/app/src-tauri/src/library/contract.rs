@@ -128,14 +128,14 @@ pub enum LibraryWriterKind {
 	Member,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LibraryBoardPoint {
-	pub x: f64,
-	pub y: f64,
+	pub x: i64,
+	pub y: i64,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum LibraryPresenceAt {
 	#[serde(rename_all = "camelCase")]
@@ -144,7 +144,7 @@ pub enum LibraryPresenceAt {
 	Board { point: LibraryBoardPoint, node_id: Option<String> },
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LibraryWriter {
 	pub id: String,
@@ -153,7 +153,7 @@ pub struct LibraryWriter {
 	pub at: LibraryPresenceAt,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LibraryDocumentPresence {
 	pub space_id: String,
