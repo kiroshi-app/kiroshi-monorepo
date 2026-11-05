@@ -295,6 +295,8 @@ Every other command names its session.
   it under (`Concise`…). Named, it is passed as `settings: { outputStyle }` — an
   inline settings object, since `settingSources: []` closes every settings file on the
   machine. Left out, no `settings` key is passed at all.
+  A bot stored as `Concise`, or with no style, is sent `kiroshi:visual-first`, the
+  style the system plugin ships in `output-styles/` (see `bundles.rs::session_output_style`).
 - `settingsPath` is the `settings.json` lying at the root of the bot's own bundle, sent
   only when the file is there — see `bundles.rs::settings_file`. The sidecar reads it and
   keeps `permissions.allow`, `permissions.ask`, `permissions.deny`,

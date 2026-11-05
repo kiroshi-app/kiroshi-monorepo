@@ -5,6 +5,21 @@ import { KIROSHI_LAYER, layerFor } from "./system-layer"
 const ONE_READER = "One person is reading you"
 
 describe("the system layer of a space", () => {
+	it("asks for structure over prose", () => {
+		for (const rule of [
+			"Lead with structure, not prose:",
+			"a table for any comparison",
+			"a Mermaid diagram for a flow or a timeline",
+			"an image when one exists",
+			"a task list for steps",
+			"headings when the answer has parts",
+			"Keep prose to the lines that tie those visuals together, and keep the answer short.",
+		]) {
+			expect(KIROSHI_LAYER).toContain(rule)
+		}
+		expect(KIROSHI_LAYER).not.toContain("Write plain prose")
+	})
+
 	it("keeps the one reader line when the space has no member", () => {
 		expect(layerFor({})).toBe(KIROSHI_LAYER)
 		expect(layerFor({ members: [] })).toBe(KIROSHI_LAYER)
