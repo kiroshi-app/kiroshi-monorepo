@@ -131,15 +131,12 @@ const connect = (
 }
 
 const zAbove = (doc: Y.Doc) => {
-	const nodes = nodesOf(doc)
-	const top = [...nodes.values()]
-		.map((node) => String(node.get(Z_ORDER.field)))
-		.reduce<string | null>(
-			(highest, z) => (highest === null || z > highest ? z : highest),
-			null,
-		)
-	const next = zAt(nodes.size)
-	return top === null || next > top ? next : `${top}${Z_ORDER.digits[0]}`
+	const keys = [...nodesOf(doc).values()].map((node) =>
+		String(node.get(Z_ORDER.field)),
+	)
+	const top = keys.sort().at(-1)
+	const next = zAt(keys.length)
+	return top === undefined || next > top ? next : `${top}${Z_ORDER.digits[0]}`
 }
 
 const nodeOf = (item: BoardItem, z: string): BoardNode | null => {
