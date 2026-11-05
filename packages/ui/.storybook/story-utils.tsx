@@ -865,9 +865,22 @@ export const pictureOf = async (avatar: HTMLElement) => {
 export const expectCompanionSilhouette = (layer: Element) =>
 	expect(getComputedStyle(layer).maskImage).toContain("data:image/svg+xml")
 
+const boxOf = (element: Element) => {
+	const { left, top, width, height } = element.getBoundingClientRect()
+	return { left, top, width, height }
+}
+
+export const expectPictureUnderBorder = async (avatar: HTMLElement) => {
+	const picture = await pictureOf(avatar)
+	const avatarBox = boxOf(avatar)
+
+	await expect(boxOf(picture)).toEqual(avatarBox)
+	await expect(boxOf(slotIn(avatar, "outlined-hexagon"))).toEqual(avatarBox)
+	await expectCompanionSilhouette(picture)
+}
+
 export const expectCompanionPictureShape = async (avatar: HTMLElement) => {
 	const picture = await pictureOf(avatar)
-	const { width } = avatar.getBoundingClientRect()
 
 	for (const layer of [avatar, picture]) {
 		const style = getComputedStyle(layer)
@@ -878,10 +891,9 @@ export const expectCompanionPictureShape = async (avatar: HTMLElement) => {
 	}
 	await expect(getComputedStyle(avatar, "::after").display).toBe("none")
 	await expect(getComputedStyle(picture).objectFit).toBe("cover")
-	await expect(picture.getBoundingClientRect().width).toBe(width)
 	await expect(picture).toHaveAttribute("alt", "")
 	await expect(picture).toHaveAttribute("aria-hidden", "true")
-	await expectCompanionSilhouette(picture)
+	await expectPictureUnderBorder(avatar)
 }
 
 export const UPLOADED_AVATAR_IMAGE =

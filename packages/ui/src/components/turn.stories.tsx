@@ -6,6 +6,7 @@ import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 	animatedTransitionsOf,
 	expectClickModifiers,
+	expectPictureUnderBorder,
 	glyphIn,
 	lineHeightOf,
 	shown,
@@ -491,6 +492,29 @@ const REMOVED_HOVER_RING_CLASSES = [
 	"hover:ring-offset-2",
 	"hover:ring-offset-background",
 ]
+
+export const AuthorWithCustomImage = meta.story({
+	render: () => (
+		<div className="mx-auto flex max-w-2xl flex-col gap-6">
+			<AssistantTurn copyText={ANSWER} identity={PICTURED_BOT}>
+				{ANSWER}
+			</AssistantTurn>
+		</div>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"An answer from an agent wearing a custom picture. The author line sits inside the bubble's typeset, which spaces every image of the message: the avatar stays out of it. Check that the picture fills its 20px hexagon exactly under the border, with nothing below it. " +
+					RENDERED_BY_THE_THREAD,
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const [avatar] = slotsIn(canvasElement, "bot-identity-avatar")
+		await expectPictureUnderBorder(avatar)
+	},
+})
 
 export const CompanionSelectOnGutterHovered = meta.story({
 	tags: ["test-only"],

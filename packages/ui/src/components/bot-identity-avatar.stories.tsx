@@ -11,6 +11,7 @@ import {
 	expectCompanionPictureShape,
 	expectCompanionSilhouette,
 	expectGlazeBorders,
+	expectPictureUnderBorder,
 	expectRoundAvatar,
 	pictureOf,
 	Row,
@@ -22,6 +23,8 @@ import { BOT_BADGES } from "@workspace/ui/components/bot-badge"
 import {
 	BotIdentityAvatar,
 	type BotIdentityAvatarProps,
+	BotSelectButton,
+	BotStopButton,
 } from "@workspace/ui/components/bot-identity-avatar"
 import {
 	BLOT_HUES,
@@ -29,6 +32,7 @@ import {
 } from "@workspace/ui/components/companion-colour"
 import type { GlazeTheme } from "@workspace/ui/components/glaze-border"
 import { InitialsAvatar } from "@workspace/ui/components/initials-avatar"
+import { MARKDOWN_TYPESET_CLASS } from "@workspace/ui/components/markdown/prose"
 import { Button } from "@workspace/ui/components/ui/button"
 
 const SIZES = [40, 96, 24]
@@ -492,7 +496,7 @@ export const UploadedAtDrawnSizes = meta.story({
 		docs: {
 			description: {
 				story:
-					"A companion picture at the two slot sizes the artboards draw, the roster line at 40px and the header identity at 20px, beside the reader's own picture. A companion picture is a rounded square whose corner is a quarter of its slot, never under 6px; the reader's stays a circle. Check a 10px corner at 40px, a 6px corner at 20px, no border on either, and a round reader.",
+					"A companion picture at the two slot sizes the artboards draw, the roster line at 40px and the header identity at 20px, beside the reader's own picture. A companion picture is cut to the same rounded hexagon as its dithered field and wears the same C border over it; the reader's stays a circle. Check that each picture fills its hexagon exactly under the border at 40px and 20px, and a round reader.",
 			},
 		},
 	},
@@ -517,7 +521,7 @@ export const UploadedBadged = meta.story({
 		docs: {
 			description: {
 				story:
-					"A companion picture carrying a badge at both drawn slot sizes. Check that the dot sits in the corner of the rounded square without leaving the slot.",
+					"A companion picture carrying a badge at both drawn slot sizes. Check that the dot sits in the corner of the hexagon without leaving the slot.",
 			},
 		},
 	},
@@ -659,4 +663,121 @@ export const BorderAtEverySizeDark = meta.story({
 		},
 	},
 	play: ({ canvasElement }) => expectBorderAtEverySize(canvasElement, "dark"),
+})
+
+const CUSTOM_IMAGE_SIZES = [14, 16, 20, 24, 28, 32, 36, 40, 64]
+
+const CustomImageSizes = (props: BotIdentityAvatarProps) => (
+	<div className="flex flex-col gap-3">
+		{CUSTOM_IMAGE_SIZES.map((size) => (
+			<Row key={size}>
+				<BotIdentityAvatar {...props} size={size} />
+				<BotIdentityAvatar
+					{...props}
+					image={UPLOADED_AVATAR_IMAGE}
+					size={size}
+				/>
+			</Row>
+		))}
+	</div>
+)
+
+const expectCustomImageAtEverySize = async (
+	canvasElement: HTMLElement,
+	theme: GlazeTheme,
+) => {
+	const avatars = botIdentityAvatars(canvasElement)
+	await expect(
+		avatars.map((avatar) => avatar.getBoundingClientRect().width),
+	).toEqual(CUSTOM_IMAGE_SIZES.flatMap((size) => [size, size]))
+	for (const index of CUSTOM_IMAGE_SIZES.keys()) {
+		const [generated, pictured] = avatars.slice(2 * index, 2 * index + 2)
+		const glyph = companionGlyphOf(generated)
+		await expectPictureUnderBorder(pictured)
+		await expectCompanionSilhouette(glyph)
+		await expect(getComputedStyle(await pictureOf(pictured)).maskImage).toBe(
+			getComputedStyle(glyph).maskImage,
+		)
+	}
+	await expectGlazeBorders(canvasElement, theme)
+}
+
+const CUSTOM_IMAGE_STORY =
+	"Every size the app draws a companion at, 14 to 64, the generated field on the start of each line and a custom picture after it: the 16px tab icon, the 20px author line, the 24px pinned row, the 28px import row, up to the 64px border check. The picture is cut to the same rounded hexagon as the field and wears the same C border over it. Check that each picture sits exactly in its border, with nothing peeking above or below. Pick `CustomImageAtEverySizeDark` for the dark theme."
+
+export const CustomImageAtEverySize = meta.story({
+	render: (args) => <CustomImageSizes {...args} />,
+	parameters: { docs: { description: { story: CUSTOM_IMAGE_STORY } } },
+	play: ({ canvasElement }) =>
+		expectCustomImageAtEverySize(canvasElement, "light"),
+})
+
+export const CustomImageAtEverySizeDark = meta.story({
+	globals: { theme: "dark" },
+	render: (args) => <CustomImageSizes {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same sizes in the dark theme: the border turns white over the picture exactly as it does over the field.",
+			},
+		},
+	},
+	play: ({ canvasElement }) =>
+		expectCustomImageAtEverySize(canvasElement, "dark"),
+})
+
+const PICTURED_NAME = "Ada"
+
+const PicturedAvatar = () => (
+	<BotIdentityAvatar
+		image={UPLOADED_AVATAR_IMAGE}
+		name={PICTURED_NAME}
+		size={20}
+	/>
+)
+
+export const CustomImageInEveryParent = meta.story({
+	tags: ["test-only"],
+	render: () => (
+		<div className="flex flex-col gap-3">
+			<p className="text-base leading-loose">
+				Sent by <PicturedAvatar /> in a line of text
+			</p>
+			<div className={MARKDOWN_TYPESET_CLASS}>
+				<p>An answer above its author line</p>
+				<span className="flex items-center gap-2">
+					<PicturedAvatar />
+					{PICTURED_NAME}
+				</span>
+			</div>
+			<span className="inline-flex items-baseline gap-1 text-lg leading-loose">
+				<PicturedAvatar />
+				In a flex line
+			</span>
+			<span className="text-lg leading-loose">
+				<BotSelectButton name={PICTURED_NAME} onSelect={() => undefined}>
+					<PicturedAvatar />
+				</BotSelectButton>
+			</span>
+			<span className="text-lg leading-loose">
+				<BotStopButton name={PICTURED_NAME} onStop={() => undefined}>
+					<PicturedAvatar />
+				</BotStopButton>
+			</span>
+		</div>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A 20px custom picture inside a paragraph, a typeset block like the message bubble that holds the author line, a baseline flex line, the select button and the stop button, each under a tall line height. Check that the picture never drops below its border nor spills past the avatar box.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const avatars = botIdentityAvatars(canvasElement)
+		await expect(avatars).toHaveLength(5)
+		for (const avatar of avatars) await expectPictureUnderBorder(avatar)
+	},
 })
