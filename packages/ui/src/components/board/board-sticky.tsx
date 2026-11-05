@@ -51,7 +51,7 @@ const BoardSticky = ({ colour, text, author }: BoardStickyProps) => (
 		data-slot="board-sticky"
 	>
 		<p
-			className="min-h-0 flex-1 overflow-hidden wrap-break-word text-reading leading-5"
+			className="line-clamp-5 wrap-break-word text-reading leading-5"
 			data-slot="board-sticky-text"
 		>
 			{text}

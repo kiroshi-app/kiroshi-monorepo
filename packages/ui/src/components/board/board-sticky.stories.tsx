@@ -81,13 +81,22 @@ const playLongContent = async ({ canvasElement }: PlayContext) => {
 	const sticky = slotIn(canvasElement, "board-sticky")
 	const text = slotIn(sticky, "board-sticky-text")
 	const author = slotIn(sticky, "board-sticky-author")
+	const lineHeight = Number.parseFloat(getComputedStyle(text).lineHeight)
+	const paddingBottom = Number.parseFloat(
+		getComputedStyle(sticky).paddingBottom,
+	)
 	await expect(text.scrollHeight).toBeGreaterThan(text.clientHeight)
+	await expect(
+		text.clientHeight % lineHeight,
+		"visible text ends on a line box boundary",
+	).toBe(0)
 	await expect(text.getBoundingClientRect().bottom).toBeLessThanOrEqual(
 		author.getBoundingClientRect().top,
 	)
-	await expect(author.getBoundingClientRect().bottom).toBeLessThanOrEqual(
-		sticky.getBoundingClientRect().bottom,
-	)
+	await expect(
+		author.getBoundingClientRect().bottom,
+		"author chip on the bottom edge",
+	).toBe(sticky.getBoundingClientRect().bottom - paddingBottom)
 	await expect(author).toBeVisible()
 }
 
