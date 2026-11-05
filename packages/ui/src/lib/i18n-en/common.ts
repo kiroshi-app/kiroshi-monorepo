@@ -681,6 +681,7 @@ const common = {
 		},
 		canvas: {
 			label: "Board",
+			loading: "Loading the board…",
 			objects: "Board objects",
 		},
 		object: {

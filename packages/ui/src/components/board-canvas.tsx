@@ -21,6 +21,7 @@ import { BoardConnectorFlyout } from "@workspace/ui/components/board/board-conne
 import {
 	type BoardClientPoint,
 	BoardDock,
+	BoardDockSkeleton,
 	type BoardLibraryItem,
 	type BoardTool,
 } from "@workspace/ui/components/board/board-dock"
@@ -81,9 +82,13 @@ import {
 } from "@workspace/ui/components/board-viewport"
 import { Icons } from "@workspace/ui/components/icons"
 import { Button } from "@workspace/ui/components/ui/button"
+import { Skeleton } from "@workspace/ui/components/ui/skeleton"
 import { cn } from "@workspace/ui/lib/utils"
 
+type BoardStatus = "loading" | "ready"
+
 type BoardCanvasProps = {
+	status?: BoardStatus
 	view: BoardView
 	viewport: BoardViewport
 	onViewportChange: (viewport: BoardViewport) => void
@@ -108,6 +113,15 @@ type PointerPosition = {
 }
 
 type SafariGestureEvent = Event & PointerPosition & { scale: number }
+
+type ReadyBoardCanvasProps = Omit<BoardCanvasProps, "status">
+
+const CANVAS_SURFACE =
+	"relative isolate size-full overflow-hidden border-shell-border border-t bg-board-surface select-none -outline-offset-2"
+const ZOOM_FRAME =
+	"absolute end-5 bottom-5 flex items-center gap-0.5 rounded-lg p-1"
+const ZOOM_LEVEL =
+	"min-w-11 px-1.5 text-center font-medium text-xs tabular-nums"
 
 const NO_SIZE: BoardSize = { width: 0, height: 0 }
 const NO_PAINT = "rgba(0, 0, 0, 0)"
@@ -314,7 +328,10 @@ const BoardZoomControl = ({
 	return (
 		<div
 			aria-label={t("board.zoom.controls")}
-			className="absolute end-5 bottom-5 flex items-center gap-0.5 rounded-lg bg-board-control p-1 text-board-control-foreground shadow-board-control"
+			className={cn(
+				ZOOM_FRAME,
+				"bg-board-control text-board-control-foreground shadow-board-control",
+			)}
 			data-slot="board-zoom-control"
 			role="group"
 		>
@@ -324,10 +341,7 @@ const BoardZoomControl = ({
 				label={t("board.zoom.zoomOut")}
 				onClick={() => announce(onZoomOut())}
 			/>
-			<span
-				className="min-w-11 px-1.5 text-center font-medium text-xs tabular-nums"
-				data-slot="board-zoom-level"
-			>
+			<span className={ZOOM_LEVEL} data-slot="board-zoom-level">
 				{levelOf(zoom)}
 			</span>
 			<BoardZoomButton
@@ -340,6 +354,51 @@ const BoardZoomControl = ({
 				{announcement}
 			</span>
 		</div>
+	)
+}
+
+type BoardCanvasSkeletonProps = {
+	viewport: BoardViewport
+	className?: string
+}
+
+const BoardCanvasSkeleton = ({
+	viewport,
+	className,
+}: BoardCanvasSkeletonProps) => {
+	const { t } = useTranslation("common")
+
+	return (
+		<section
+			aria-busy="true"
+			aria-label={t("board.canvas.loading")}
+			className={cn(CANVAS_SURFACE, className)}
+			data-slot="board-canvas"
+		>
+			<div
+				aria-hidden="true"
+				className="pointer-events-none absolute inset-0"
+				data-slot="board-skeleton"
+			>
+				<BoardDotGrid
+					offset={viewport.offset}
+					pitch={gridScreenPitch(viewport.zoom)}
+				/>
+				<BoardDockSkeleton />
+				<Skeleton
+					className={cn(ZOOM_FRAME, "animate-none bg-border")}
+					data-slot="board-zoom-skeleton"
+				>
+					<span className="size-7" />
+					<span className={cn(ZOOM_LEVEL, "invisible")}>
+						{t("board.zoom.level", {
+							percent: Math.round(viewport.zoom * 100),
+						})}
+					</span>
+					<span className="size-7" />
+				</Skeleton>
+			</div>
+		</section>
 	)
 }
 
@@ -725,7 +784,7 @@ const BoardAnchorFrame = ({
 	</div>
 )
 
-const BoardCanvas = ({
+const ReadyBoardCanvas = ({
 	view,
 	viewport,
 	onViewportChange,
@@ -742,7 +801,7 @@ const BoardCanvas = ({
 	onDropFiles,
 	isConnecting = false,
 	className,
-}: BoardCanvasProps) => {
+}: ReadyBoardCanvasProps) => {
 	const { t } = useTranslation("common")
 	const { attach, canvas, pan, size, zoomTo } = useBoardGestures(
 		viewport,
@@ -1156,10 +1215,7 @@ const BoardCanvas = ({
 	return (
 		<div
 			aria-label={t("board.canvas.label")}
-			className={cn(
-				"relative isolate size-full overflow-hidden border-shell-border border-t bg-board-surface select-none -outline-offset-2",
-				className,
-			)}
+			className={cn(CANVAS_SURFACE, className)}
 			data-slot="board-canvas"
 			onDragEnter={dragFilesOver}
 			onDragLeave={leaveWithFiles}
@@ -1399,5 +1455,15 @@ const BoardCanvas = ({
 	)
 }
 
-export type { BoardCanvasProps }
+const BoardCanvas = ({ status = "ready", ...props }: BoardCanvasProps) =>
+	status === "loading" ? (
+		<BoardCanvasSkeleton
+			className={props.className}
+			viewport={props.viewport}
+		/>
+	) : (
+		<ReadyBoardCanvas {...props} />
+	)
+
+export type { BoardCanvasProps, BoardStatus }
 export { BoardCanvas, BoardDotGrid }

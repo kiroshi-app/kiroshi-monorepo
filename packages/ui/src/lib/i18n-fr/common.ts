@@ -714,6 +714,7 @@ const common = {
 		},
 		canvas: {
 			label: "Tableau",
+			loading: "Chargement du tableau…",
 			objects: "Éléments du tableau",
 		},
 		object: {
