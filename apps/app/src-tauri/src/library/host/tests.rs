@@ -1042,6 +1042,8 @@ const BOARD: &str = "plan.canvas";
 
 const EMPTY_BOARD: &str = r#"{"nodes":[],"edges":[]}"#;
 
+const BOARD_PACE_PASSED: Duration = Duration::from_millis(60);
+
 fn on_the_board(x: f64, y: f64, node_id: Option<&str>) -> LibraryPresenceAt {
 	LibraryPresenceAt::Board {
 		point: LibraryBoardPoint { x, y },
@@ -1150,8 +1152,6 @@ async fn an_agent_board_seat_publishes_its_node_and_point_then_leaves_and_finish
 		}]
 	);
 }
-
-const BOARD_PACE_PASSED: Duration = Duration::from_millis(60);
 
 #[tokio::test(start_paused = true)]
 async fn a_member_board_position_lapses_after_its_lease() {
