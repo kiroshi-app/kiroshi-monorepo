@@ -176,8 +176,13 @@
 	--board-section-purple-border: #e0d8f2;
 	--board-section-purple-title-chip: #e6dff6;
 	--board-section-purple-title-foreground: #45307a;
+	--board-surface: var(--card-raised);
+	--board-dot: #d4d4d4;
+	--board-control: var(--card);
+	--board-control-foreground: var(--soft-foreground);
 	--user-bubble-muted-strength: 70%;
 	--board-sticky-shadow: 0 1px 2px #00000014, 0 6px 14px #0000000f;
+	--board-control-shadow: 0 0 0 1px #0000000f, 0 2px 6px #0000000f;
 }
 
 .dark,
@@ -352,6 +357,12 @@
 	--board-section-purple-border: #352d48;
 	--board-section-purple-title-chip: #2f2843;
 	--board-section-purple-title-foreground: #cdbdf5;
+	--board-surface: var(--prompt-surface-inert);
+	--board-dot: #34343a;
+	--board-control: #1e1e20;
+	--board-control-foreground: #c4c4c4;
 	--user-bubble-muted-strength: 70%;
 	--board-sticky-shadow: 0 1px 2px #00000014, 0 6px 14px #0000000f;
+	--board-control-shadow:
+		0 0 0 1px #ffffff14, 0 2px 4px #00000040, 0 10px 24px #00000066;
 }

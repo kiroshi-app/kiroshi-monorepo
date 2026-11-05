@@ -6,6 +6,7 @@ import {
 	colourTransitionsOf,
 	isInBrowserRunner,
 	slotIn,
+	slotsIn,
 	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
 import {
@@ -128,7 +129,7 @@ export const Empty = meta.story({
 		docs: {
 			description: {
 				story:
-					"A board with nothing on it yet. Check the two stickies, the title and the body centred in the canvas and staying put while the grid pans, the dots on a 24px pitch at 100%, and the zoom control: Zoom out and Zoom in by name, a focus ring from the keyboard, a hover colour with no transition, and the percentage following each step. Pick FiveHundredObjects for a board with content.",
+					"A board with nothing on it yet. Check the two stickies, the title and the body centred in the canvas and staying put while the grid pans, the dots on a 24px pitch at 100%, and the zoom control: Zoom out and Zoom in by name, a focus ring from the keyboard, a hover and a press colour landing with no transition, the percentage following each step, and a screen reader hearing the percentage once per button press and never during a pinch. Pick EmptyDark for the dark theme, FiveHundredObjects for a board with content.",
 			},
 		},
 	},
@@ -149,8 +150,10 @@ export const Empty = meta.story({
 
 		const zoomOut = canvas.getByRole("button", { name: "Zoom out" })
 		const zoomIn = canvas.getByRole("button", { name: "Zoom in" })
-		const level = canvas.getByRole("status")
+		const level = slotIn(canvasElement, "board-zoom-level")
+		const announced = canvas.getByRole("status")
 		await expect(level).toHaveTextContent("100%")
+		await expect(announced).toBeEmptyDOMElement()
 
 		zoomOut.focus()
 		await userEvent.tab()
@@ -162,23 +165,58 @@ export const Empty = meta.story({
 
 		await userEvent.click(zoomIn)
 		await expect(level).toHaveTextContent("150%")
+		await expect(announced).toHaveTextContent("150%")
 		await expect(pattern.getAttribute("width")).toBe("36")
 		await userEvent.click(zoomOut)
 		await userEvent.click(zoomOut)
 		await expect(level).toHaveTextContent("75%")
+		await expect(announced).toHaveTextContent("75%")
 		await expect(hint.getBoundingClientRect()).toEqual(hintBefore)
 
+		wheel(board, { ctrlKey: true, deltaY: -20, ...centreOf(board) })
+		await waitFor(() => expect(level).toHaveTextContent("92%"))
+		await expect(announced).toHaveTextContent("75%")
+
 		if (!isInBrowserRunner()) return
+		await expect(colourTransitionsOf(zoomIn)).toEqual([])
 		await withMotionAllowed(async () => {
 			await expect(colourTransitionsOf(zoomIn)).toEqual([])
 		})
 		const { userEvent: pointer } = await import("vitest/browser")
 		const restingColour = getComputedStyle(zoomIn).backgroundColor
 		await pointer.hover(zoomIn)
-		await waitFor(() =>
-			expect(getComputedStyle(zoomIn).backgroundColor).not.toBe(restingColour),
-		)
+		const hoverColour = getComputedStyle(zoomIn).backgroundColor
+		await expect(hoverColour).not.toBe(restingColour)
 		await pointer.unhover(zoomIn)
+		await expect(getComputedStyle(zoomIn).backgroundColor).toBe(restingColour)
+
+		zoomIn.focus()
+		await pointer.keyboard("[Space>]")
+		const pressedColour = getComputedStyle(zoomIn).backgroundColor
+		await pointer.keyboard("[/Space]")
+		await expect(pressedColour).not.toBe(restingColour)
+		await expect(pressedColour).not.toBe(hoverColour)
+	},
+})
+
+const DARK_BOARD_SURFACE = "rgb(22, 22, 24)"
+
+export const EmptyDark = meta.story({
+	globals: { theme: "dark" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The empty board in the dark theme. Check the #161618 surface, the dots, the zoom control on its own raised ground and the hint, then the same pan, zoom, focus, hover, press and announcement as Empty.",
+			},
+		},
+	},
+	play: async (context) => {
+		await expect(
+			getComputedStyle(slotIn(context.canvasElement, "board-canvas"))
+				.backgroundColor,
+		).toBe(DARK_BOARD_SURFACE)
+		await Empty.input.play?.(context)
 	},
 })
 
@@ -229,6 +267,26 @@ export const FiveHundredObjects = meta.story({
 	},
 })
 
+export const FiveHundredObjectsDark = meta.story({
+	globals: { theme: "dark" },
+	args: FiveHundredObjects.input.args,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The 500-object board in the dark theme. Check the dots and the placeholders over the #161618 surface, then the same culling, node reuse and pinch as FiveHundredObjects.",
+			},
+		},
+	},
+	play: async (context) => {
+		await expect(
+			getComputedStyle(slotIn(context.canvasElement, "board-canvas"))
+				.backgroundColor,
+		).toBe(DARK_BOARD_SURFACE)
+		await FiveHundredObjects.input.play?.(context)
+	},
+})
+
 export const ZoomAtMinimum = meta.story({
 	args: {
 		view: FIVE_HUNDRED_OBJECTS,
@@ -238,15 +296,20 @@ export const ZoomAtMinimum = meta.story({
 		docs: {
 			description: {
 				story:
-					"The board zoomed all the way out to 10%, every object mounted and the dots spread so they never fill in. Check that Zoom out is disabled while Zoom in is not, and that a pinch out holds the zoom at 10%. Pick ZoomAtMaximum for the other bound.",
+					"The board zoomed all the way out to 10%, the dots spread so they never fill in. Check that all 500 objects have a node, that Zoom out is disabled while Zoom in is not, and that a pinch out holds the zoom at 10% without announcing it. Pick ZoomAtMaximum for the other bound.",
 			},
 		},
 	},
 	play: async ({ canvasElement, args }) => {
 		const canvas = within(canvasElement)
 		const board = slotIn(canvasElement, "board-canvas")
-		const level = canvas.getByRole("status")
+		const level = slotIn(canvasElement, "board-zoom-level")
 
+		await waitFor(() =>
+			expect(slotsIn(board, "board-object")).toHaveLength(
+				FIVE_HUNDRED_OBJECTS.objects.length,
+			),
+		)
 		await expect(level).toHaveTextContent("10%")
 		await expect(
 			canvas.getByRole("button", { name: "Zoom out" }),
@@ -258,6 +321,7 @@ export const ZoomAtMinimum = meta.story({
 		wheel(board, { ctrlKey: true, deltaY: 200, ...centreOf(board) })
 		await waitFor(() => expect(args.onViewportChange).toHaveBeenCalled())
 		await expect(level).toHaveTextContent("10%")
+		await expect(canvas.getByRole("status")).toBeEmptyDOMElement()
 	},
 })
 
@@ -270,14 +334,14 @@ export const ZoomAtMaximum = meta.story({
 		docs: {
 			description: {
 				story:
-					"The board zoomed all the way in to 400%, a few notes filling the canvas. Check that Zoom in is disabled while Zoom out is not, and that a pinch in holds the zoom at 400%. Pick ZoomAtMinimum for the other bound.",
+					"The board zoomed all the way in to 400%, a few notes filling the canvas. Check that Zoom in is disabled while Zoom out is not, and that a pinch in holds the zoom at 400% without announcing it. Pick ZoomAtMinimum for the other bound.",
 			},
 		},
 	},
 	play: async ({ canvasElement, args }) => {
 		const canvas = within(canvasElement)
 		const board = slotIn(canvasElement, "board-canvas")
-		const level = canvas.getByRole("status")
+		const level = slotIn(canvasElement, "board-zoom-level")
 
 		await expect(level).toHaveTextContent("400%")
 		await expect(
@@ -290,5 +354,6 @@ export const ZoomAtMaximum = meta.story({
 		wheel(board, { ctrlKey: true, deltaY: -200, ...centreOf(board) })
 		await waitFor(() => expect(args.onViewportChange).toHaveBeenCalled())
 		await expect(level).toHaveTextContent("400%")
+		await expect(canvas.getByRole("status")).toBeEmptyDOMElement()
 	},
 })

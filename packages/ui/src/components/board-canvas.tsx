@@ -80,6 +80,7 @@ const useBoardGestures = (
 		(next: (current: BoardViewport) => BoardViewport) => {
 			shown.current = next(shown.current)
 			notify.current(shown.current)
+			return shown.current
 		},
 		[],
 	)
@@ -139,6 +140,7 @@ const useBoardGestures = (
 
 	const zoomTo = (step: (zoom: number) => number) =>
 		emit((current) => zoomAround(current, step(current.zoom), centreOf(size)))
+			.zoom
 
 	return { attach, size, zoomTo }
 }
@@ -209,7 +211,7 @@ const BoardZoomButton = ({
 }: BoardZoomButtonProps) => (
 	<Button
 		aria-label={label}
-		className="rounded-[7px] text-board-control-foreground hover:bg-muted hover:text-board-control-foreground active:bg-input data-disabled:pointer-events-none data-disabled:text-disabled-foreground dark:hover:bg-muted"
+		className="rounded-[7px] text-board-control-foreground transition-none hover:bg-muted hover:text-board-control-foreground active:bg-input data-disabled:pointer-events-none data-disabled:text-disabled-foreground dark:hover:bg-muted"
 		disabled={isDisabled}
 		focusableWhenDisabled
 		onClick={onClick}
@@ -222,8 +224,8 @@ const BoardZoomButton = ({
 
 type BoardZoomControlProps = {
 	zoom: number
-	onZoomOut: () => void
-	onZoomIn: () => void
+	onZoomOut: () => number
+	onZoomIn: () => number
 }
 
 const BoardZoomControl = ({
@@ -232,6 +234,10 @@ const BoardZoomControl = ({
 	onZoomIn,
 }: BoardZoomControlProps) => {
 	const { t } = useTranslation("common")
+	const [announcement, setAnnouncement] = useState("")
+	const levelOf = (level: number) =>
+		t("board.zoom.level", { percent: Math.round(level * 100) })
+	const announce = (level: number) => setAnnouncement(levelOf(level))
 
 	return (
 		<div
@@ -244,17 +250,23 @@ const BoardZoomControl = ({
 				icon={Icons.ZoomOut}
 				isDisabled={isAtZoomMin(zoom)}
 				label={t("board.zoom.zoomOut")}
-				onClick={onZoomOut}
+				onClick={() => announce(onZoomOut())}
 			/>
-			<output className="min-w-11 px-1.5 text-center font-medium text-xs tabular-nums">
-				{t("board.zoom.level", { percent: Math.round(zoom * 100) })}
-			</output>
+			<span
+				className="min-w-11 px-1.5 text-center font-medium text-xs tabular-nums"
+				data-slot="board-zoom-level"
+			>
+				{levelOf(zoom)}
+			</span>
 			<BoardZoomButton
 				icon={Icons.ZoomIn}
 				isDisabled={isAtZoomMax(zoom)}
 				label={t("board.zoom.zoomIn")}
-				onClick={onZoomIn}
+				onClick={() => announce(onZoomIn())}
 			/>
+			<span className="sr-only" role="status">
+				{announcement}
+			</span>
 		</div>
 	)
 }
