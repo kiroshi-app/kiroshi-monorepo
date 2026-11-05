@@ -311,7 +311,7 @@ export const Pictured = meta.story({
 		docs: {
 			description: {
 				story:
-					"A companion wearing its picture, listed above companions drawn as their glyph. Check that the picture fills its 24px slot as a rounded square with no border, that it adds nothing to the option's name, and that the rows below keep their glyph on their colour. " +
+					"An agent wearing its picture, listed above agents drawn as their glyph. Check that the picture fills its 24px slot under the hexagon border, that it adds nothing to the option's name, and that the rows below keep their glyph on their colour. " +
 					OPENED_BY_THE_COMPOSER,
 			},
 		},

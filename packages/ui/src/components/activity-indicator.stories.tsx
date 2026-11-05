@@ -641,7 +641,7 @@ export const Stop = meta.story({
 		docs: {
 			description: {
 				story:
-					"Interrupting the run, from the row that is running it: the first two avatars are `stoppable` and become controls, the last is not and stays a drawing. Check that the veil holds to the rounded square of the glyph and of the uploaded picture alike, that it appears the instant the avatar is pointed at with no fade — pointing at the words beside it reveals them and nothing else — that Tab reaches each control and lights the same glyph, and that the last row exposes no button at all.",
+					"Interrupting the run, from the row that is running it: the first two avatars are `stoppable` and become controls, the last is not and stays a drawing. Check that the veil holds to the hexagon of the glyph and of the uploaded picture alike, that it appears the instant the avatar is pointed at with no fade (pointing at the words beside it reveals them and nothing else), that Tab reaches each control and lights the same glyph, and that the last row exposes no button at all.",
 			},
 		},
 	},

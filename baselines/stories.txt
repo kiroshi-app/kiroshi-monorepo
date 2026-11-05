@@ -110,6 +110,9 @@ branding-botidentityavatar--border-at-every-size-dark
 branding-botidentityavatar--bound-to-one-bot
 branding-botidentityavatar--broken-image
 branding-botidentityavatar--broken-image-working-badged
+branding-botidentityavatar--custom-image-at-every-size
+branding-botidentityavatar--custom-image-at-every-size-dark
+branding-botidentityavatar--custom-image-in-every-parent
 branding-botidentityavatar--every-badge
 branding-botidentityavatar--every-size
 branding-botidentityavatar--every-tint
@@ -554,6 +557,7 @@ conversation-message-transcript--stream-holds-the-last-line
 conversation-message-transcriptscrollprobe--long-thread
 conversation-message-transcriptscrollprobe--long-thread-streaming
 conversation-message-transcriptscrollprobe--whole-thread
+conversation-message-turn--author-with-custom-image
 conversation-message-turn--companion-select-from-gutter
 conversation-message-turn--companion-select-on-gutter-hovered
 conversation-message-turn--companion-select-with-click-modifiers
