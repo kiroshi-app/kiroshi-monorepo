@@ -288,7 +288,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"A Library document written in place of the read-only view: same bar, same 640 column, same type. The title is a field of its own, the body is `LibraryDocumentBlockEditor`: every top-level markdown block renders as `Markdown` draws it and turns into its markdown source in place when focused, a selection inside it raising the format toolbar. The title leaves as a string through `onTitleChange`, the body as markdown through `onBodyChange`, and the caret as an offset in that markdown through `onCaretChange`.",
+					"A Library document written in place of the read-only view: same bar, same 794 column, same type. The title is a field of its own, the body is `LibraryDocumentBlockEditor`: every top-level markdown block renders as `Markdown` draws it and turns into its markdown source in place when focused, a selection inside it raising the format toolbar. The title leaves as a string through `onTitleChange`, the body as markdown through `onBodyChange`, and the caret as an offset in that markdown through `onCaretChange`.",
 			},
 		},
 	},
@@ -833,6 +833,56 @@ export const ExistingDocument = meta.story({
 		await keyboard("{Backspace}".repeat(", after the review".length))
 		await expect(args.onBodyChange).toHaveBeenLastCalledWith(LAUNCH_REVIEW.body)
 		await expect(args.onTitleChange).not.toHaveBeenCalled()
+	},
+})
+
+const DOCUMENT_COLUMN_WIDTH = 794
+
+const DECISIONS_TABLE = {
+	title: "Launch decisions",
+	detail: "40 words · Edited today at 10:41",
+	body: [
+		"| Owner | Due | Decision |",
+		"| --- | --- | --- |",
+		"| Ada | 7 Nov | Copy is final once legal and design have both signed the last draft of the page |",
+		"| Noé | 14 Nov | Ship to every Space after the review, with the screenshots in the store listing |",
+	].join("\n"),
+}
+
+export const ColumnAtMaximumWidth = meta.story({
+	args: { ...DECISIONS_TABLE, template: undefined },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A document opened in its tab on a frame wider than the column. Check the article stops at 794 wide, an A4 sheet, centred in the column, the title, the meta line and the body sharing its left edge, and the three-column table showing every cell of its last column in full, without a scroll.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const column = slotIn(canvasElement, "library-document-column")
+		const article = column.querySelector("article")
+		if (!article) throw new Error("No article in the document column")
+		const columnBox = column.getBoundingClientRect()
+		const articleBox = article.getBoundingClientRect()
+		await expect(columnBox.width).toBeGreaterThan(DOCUMENT_COLUMN_WIDTH + 80)
+		await expect(articleBox.width).toBe(DOCUMENT_COLUMN_WIDTH)
+		await expect(
+			Math.abs(
+				articleBox.left - columnBox.left - (columnBox.right - articleBox.right),
+			),
+		).toBeLessThanOrEqual(1)
+		for (const edge of [
+			canvas.getByRole("textbox", { name: "Title" }),
+			canvas.getByText(DECISIONS_TABLE.detail),
+			blocksIn(canvasElement)[0],
+		]) {
+			await expect(edge.getBoundingClientRect().left).toBe(articleBox.left)
+		}
+
+		const table = slotIn(canvasElement, "markdown-table")
+		const viewport = table.firstElementChild as HTMLElement
+		await expect(viewport.scrollWidth).toBe(viewport.clientWidth)
 	},
 })
 

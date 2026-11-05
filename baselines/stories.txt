@@ -1589,6 +1589,7 @@ navigation-librarydocumenteditor--caret-moves
 navigation-librarydocumenteditor--caret-share-failure
 navigation-librarydocumenteditor--click-below-the-last-line
 navigation-librarydocumenteditor--code-shortcut
+navigation-librarydocumenteditor--column-at-maximum-width
 navigation-librarydocumenteditor--create-failure
 navigation-librarydocumenteditor--escape-closes-toolbar
 navigation-librarydocumenteditor--existing-document

@@ -101,7 +101,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"One document of the Library, read-only, in place of the grid. The bar carries the breadcrumb back to the Library, then the image viewer's actions: Download and Copy, each drawn only when its callback is given, More, drawn only when an item action is left that the bar does not already show as a button, and Close, which calls `onBack` like the breadcrumb; the body is the document's markdown, rendered by the repo renderer in a 640 wide column.",
+					"One document of the Library, read-only, in place of the grid. The bar carries the breadcrumb back to the Library, then the image viewer's actions: Download and Copy, each drawn only when its callback is given, More, drawn only when an item action is left that the bar does not already show as a button, and Close, which calls `onBack` like the breadcrumb; the body is the document's markdown, rendered by the repo renderer in a 794 wide column.",
 			},
 		},
 	},

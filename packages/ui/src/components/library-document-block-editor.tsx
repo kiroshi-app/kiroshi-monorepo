@@ -145,7 +145,8 @@ const EDITING_SLOT = "library-document-block-editing"
 
 const DRAG_THRESHOLD = 4
 
-const HANDLE_GUTTER = "me-[clamp(-6px,calc((100cqw-40rem)/2-6px),6px)]"
+const HANDLE_GUTTER =
+	"me-[clamp(-6px,calc((100cqw_-_var(--document-column-width,40rem))/2_-_6px),6px)]"
 
 const PERSON_RUN = "person:"
 

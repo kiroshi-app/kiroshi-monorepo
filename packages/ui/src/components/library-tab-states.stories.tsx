@@ -17,7 +17,7 @@ import {
 const LONG_NAME =
 	"Quarterly planning notes for the spring launch, with every decision the team took across the three workshops and the follow-ups each owner committed to"
 
-const DOCUMENT_COLUMN_WIDTH = 640
+const DOCUMENT_COLUMN_WIDTH = 794
 
 type LibraryFrameProps = {
 	children: ReactNode
@@ -48,7 +48,7 @@ const expectShapesHidden = async (region: HTMLElement) => {
 }
 
 const DOCUMENT_LOADING_STORY =
-	"A document tab before its text lands. Check the document bar, the title line, the detail line and the body lines in the 640px reading column, the lines reaching the bottom of the card, and the one busy region a screen reader hears. Pick ImageLoading for an image tab."
+	"A document tab before its text lands. Check the document bar, the title line, the detail line and the body lines in the 794px reading column, the lines reaching the bottom of the card, and the one busy region a screen reader hears. Pick ImageLoading for an image tab."
 
 const expectDocumentLoading = async (canvasElement: HTMLElement) => {
 	const region = within(canvasElement).getByRole("region", {

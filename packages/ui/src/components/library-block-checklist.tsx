@@ -178,7 +178,7 @@ const LibraryChecklistEditor = ({
 	return (
 		<ul
 			className={cn(
-				"relative flex flex-col gap-1.5 p-0 ms-[calc(30px_-_clamp(-6px,calc((100cqw_-_40rem)/2_-_6px),6px))]",
+				"relative flex flex-col gap-1.5 p-0 ms-[calc(30px_-_clamp(-6px,calc((100cqw_-_var(--document-column-width,40rem))/2_-_6px),6px))]",
 				drop !== undefined && "select-none",
 			)}
 			data-slot="library-checklist-editor"
