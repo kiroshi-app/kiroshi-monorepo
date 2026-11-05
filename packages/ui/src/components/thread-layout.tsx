@@ -42,7 +42,6 @@ interface ThreadLayoutProps {
 	label?: string
 	anchorOnSend?: boolean
 	marksNewMessages?: boolean
-	countsNewMessages?: boolean
 	older?: ListEnd
 	newer?: TranscriptNewer
 	rows?: TranscriptItem[]
@@ -71,7 +70,6 @@ function ThreadLayout({
 	label,
 	anchorOnSend,
 	marksNewMessages,
-	countsNewMessages,
 	older,
 	newer,
 	rows,
@@ -132,7 +130,6 @@ function ThreadLayout({
 									label={label}
 									anchorOnSend={anchorOnSend}
 									marksNewMessages={marksNewMessages}
-									countsNewMessages={countsNewMessages}
 									older={older}
 									newer={newer}
 									rows={rows}

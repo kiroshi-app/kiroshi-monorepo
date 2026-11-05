@@ -386,11 +386,10 @@ conversation-message-thread--agent-author-line-in-place
 conversation-message-thread--agent-author-line-in-place-at-the-narrowest-width
 conversation-message-thread--agent-author-line-pinned
 conversation-message-thread--agent-author-line-pinned-at-the-narrowest-width
-conversation-message-thread--agent-author-line-pinned-with-jump-to-latest-docked
-conversation-message-thread--agent-author-line-pinned-with-jump-to-latest-docked-at-the-narrowest-width
 conversation-message-thread--agent-author-line-stuck-on-a-hovered-answer
 conversation-message-thread--agent-author-line-stuck-on-a-long-answer
 conversation-message-thread--agent-author-line-stuck-on-an-unwrapped-answer
+conversation-message-thread--agent-author-line-stuck-with-jump-to-latest-floating
 conversation-message-thread--components-author-line-and-work-line
 conversation-message-thread--components-message-bubble
 conversation-message-thread--components-thread-furniture
@@ -403,7 +402,6 @@ conversation-message-thread--conversations-5
 conversation-message-thread--conversations-6
 conversation-message-thread--conversations-7
 conversation-message-thread--conversations-8
-conversation-message-thread--docked-jump-to-latest-counts-and-loads-the-latest-page
 conversation-message-thread--images-1
 conversation-message-thread--images-2
 conversation-message-thread--images-3
@@ -445,7 +443,7 @@ conversation-message-transcript--follows
 conversation-message-transcript--jumps-to-the-newest-page
 conversation-message-transcript--lands-at-end
 conversation-message-transcript--loads-newer-messages
-conversation-message-transcript--marks-and-counts-new-messages
+conversation-message-transcript--marks-new-messages
 conversation-message-transcript--prepends-older-messages
 conversation-message-transcript--rests-after-a-resize
 conversation-message-transcript--rests-posted-questions-at-the-end

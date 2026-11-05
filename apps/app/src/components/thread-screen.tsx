@@ -1945,7 +1945,6 @@ function ThreadView(props: ThreadViewProps) {
 					<ThreadNotices pins={view.pins} staged={view.staged} />
 				)
 			}
-			countsNewMessages={!view.isSoloThread}
 			marksNewMessages={!view.isSoloThread}
 			newer={newerControlOf({
 				hasNewer: view.hasNewer,

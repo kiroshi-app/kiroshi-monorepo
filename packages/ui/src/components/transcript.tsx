@@ -21,6 +21,7 @@ import {
 import { MessageHighlightProvider } from "@workspace/ui/components/message-highlight-context"
 import {
 	MessageScroller,
+	MessageScrollerButton,
 	MessageScrollerContent,
 	MessageScrollerItem,
 	MessageScrollerProvider,
@@ -29,12 +30,7 @@ import {
 	useMessageScrollerScrollable,
 } from "@workspace/ui/components/message-scroller"
 import { AgentSkeleton } from "@workspace/ui/components/thread-transcript-skeleton"
-import {
-	JumpToLatest,
-	type TranscriptJump,
-	TranscriptJumpProvider,
-	useJumpDock,
-} from "@workspace/ui/components/transcript-jump"
+import { TooltipHint } from "@workspace/ui/components/tooltip-hint"
 import { Button } from "@workspace/ui/components/ui/button"
 import {
 	scrollTraceViewportRef,
@@ -71,7 +67,6 @@ export interface TranscriptProps extends ComponentPropsWithRef<"div"> {
 	autoScroll?: boolean
 	anchorOnSend?: boolean
 	marksNewMessages?: boolean
-	countsNewMessages?: boolean
 	onFollowChange?: (following: boolean) => void
 	label?: string
 	busy?: boolean
@@ -88,23 +83,9 @@ const NO_SCROLL_FADE = "[animation-name:none] [mask-image:none]"
 
 const NO_SCROLLBAR_GUTTER = "scrollbar-auto scrollbar-gutter-auto"
 
-const indexOfKey = (rows: TranscriptItem[], key: string | null) =>
-	key === null ? -1 : rows.findIndex((row) => row.key === key)
-
 const keyAfter = (rows: TranscriptItem[], key: string | null) => {
-	const index = indexOfKey(rows, key)
+	const index = key === null ? -1 : rows.findIndex((row) => row.key === key)
 	return index < 0 ? undefined : rows[index + 1]?.key
-}
-
-const messagesAfter = (rows: TranscriptItem[], key: string | null) => {
-	const index = indexOfKey(rows, key)
-	if (index < 0) return 0
-
-	let counted = 0
-	for (let next = index + 1; next < rows.length; next += 1) {
-		counted += rows[next].messageIds?.length ?? 1
-	}
-	return counted
 }
 
 const lastAnchorKey = (rows: TranscriptItem[]) => {
@@ -141,7 +122,6 @@ type NewMarksInput = {
 	rows: TranscriptItem[]
 	isFollowing: boolean
 	marksNewMessages?: boolean
-	countsNewMessages?: boolean
 	onFollowChange?: (following: boolean) => void
 }
 
@@ -149,10 +129,8 @@ const useNewMarks = ({
 	rows,
 	isFollowing,
 	marksNewMessages,
-	countsNewMessages,
 	onFollowChange,
 }: NewMarksInput) => {
-	const [releasedAfterKey, setReleasedAfterKey] = useState<string | null>(null)
 	const [markedAfterKey, setMarkedAfterKey] = useState<string | null>(null)
 	const lastRowKeyRef = useRef<string | undefined>(undefined)
 	const wasFollowingRef = useRef(true)
@@ -169,14 +147,10 @@ const useNewMarks = ({
 		const lastRowKey = lastRowKeyRef.current
 		if (lastRowKey === undefined) return
 
-		setReleasedAfterKey(lastRowKey)
 		setMarkedAfterKey((current) => current ?? lastRowKey)
 	}, [isFollowing, onFollowChange])
 
-	return {
-		markKey: marksNewMessages ? keyAfter(rows, markedAfterKey) : undefined,
-		newCount: countsNewMessages ? messagesAfter(rows, releasedAfterKey) : 0,
-	}
+	return marksNewMessages ? keyAfter(rows, markedAfterKey) : undefined
 }
 
 type AnchorReleaseInput = {
@@ -347,7 +321,6 @@ const TranscriptBody = ({
 	rows = NO_ROWS,
 	anchorOnSend,
 	marksNewMessages,
-	countsNewMessages,
 	onFollowChange,
 	label,
 	busy,
@@ -367,8 +340,7 @@ const TranscriptBody = ({
 
 	useAnchorRelease({ busy, isFollowing: !hasContentBelow })
 
-	const { markKey, newCount } = useNewMarks({
-		countsNewMessages,
+	const markKey = useNewMarks({
 		isFollowing: !hasContentBelow,
 		marksNewMessages,
 		onFollowChange,
@@ -379,18 +351,7 @@ const TranscriptBody = ({
 
 	const anchorKey = anchorOnSend ? lastAnchorKey(rows) : undefined
 	const arrived = useLiveArrivals(rows)
-	const { isDocked, dock } = useJumpDock()
-	const jump: TranscriptJump = {
-		behavior,
-		newCount,
-		onClick: newer
-			? (event) => {
-					event.preventDefault()
-					newer.onLoadLatest()
-				}
-			: undefined,
-		dock,
-	}
+	const jumpToLatest = t("transcript.jumpToLatest")
 
 	return (
 		<MessageScroller className={cn("min-h-0", className)} {...props}>
@@ -415,26 +376,24 @@ const TranscriptBody = ({
 					aria-relevant="additions text"
 					className={cn("justify-end gap-3", contentClassName)}
 				>
-					<TranscriptJumpProvider jump={jump}>
-						<MessageHighlightProvider messageId={highlightedMessageId}>
-							{rows.map((row) => (
-								<MessageScrollerItem
-									className={cn(
-										"flex flex-col gap-3",
-										arrived.has(row.key) && "animate-thread-arrive",
-									)}
-									data-arrived={arrived.has(row.key) || undefined}
-									key={row.key}
-									messageId={row.key}
-									scrollAnchor={row.key === anchorKey}
-								>
-									{row.key === markKey ? <TranscriptNewMark /> : null}
-									{row.render()}
-								</MessageScrollerItem>
-							))}
-							{children}
-						</MessageHighlightProvider>
-					</TranscriptJumpProvider>
+					<MessageHighlightProvider messageId={highlightedMessageId}>
+						{rows.map((row) => (
+							<MessageScrollerItem
+								className={cn(
+									"flex flex-col gap-3",
+									arrived.has(row.key) && "animate-thread-arrive",
+								)}
+								data-arrived={arrived.has(row.key) || undefined}
+								key={row.key}
+								messageId={row.key}
+								scrollAnchor={row.key === anchorKey}
+							>
+								{row.key === markKey ? <TranscriptNewMark /> : null}
+								{row.render()}
+							</MessageScrollerItem>
+						))}
+						{children}
+					</MessageHighlightProvider>
 				</MessageScrollerContent>
 
 				{newer ? (
@@ -445,7 +404,26 @@ const TranscriptBody = ({
 				) : null}
 			</MessageScrollerViewport>
 
-			{isDocked ? null : <JumpToLatest jump={jump} placement="floating" />}
+			<TooltipHint content={jumpToLatest}>
+				<MessageScrollerButton
+					aria-label={jumpToLatest}
+					behavior={behavior}
+					className="rounded-full border-foreground/10 bg-prompt-surface [&_svg]:size-3.5"
+					data-slot="message-scroller-button"
+					onClick={
+						newer
+							? (event) => {
+									event.preventDefault()
+									newer.onLoadLatest()
+								}
+							: undefined
+					}
+					size="icon"
+					variant="secondary"
+				>
+					<Icons.ArrowDown />
+				</MessageScrollerButton>
+			</TooltipHint>
 		</MessageScroller>
 	)
 }
