@@ -9,10 +9,9 @@ import {
 	MARKDOWN_RUN_END_ATTRIBUTE,
 } from "@workspace/ui/components/markdown/runs"
 
-const WINDOWS_DRIVES = [..."ABCDEFGHIJKLMNOPQRSTUVWXYZ"].flatMap((drive) => [
-	drive,
-	drive.toLowerCase(),
-])
+const WINDOWS_DRIVES = [
+	..."ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz",
+]
 
 export const MARKDOWN_SANITIZE_SCHEMA: Options = {
 	...defaultSchema,
