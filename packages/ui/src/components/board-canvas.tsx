@@ -371,7 +371,7 @@ const surfaceBehind = (text: HTMLElement, object: HTMLElement) => {
 		const { backgroundColor } = getComputedStyle(node)
 		if (backgroundColor !== NO_PAINT) return backgroundColor
 	}
-	return "transparent"
+	return NO_PAINT
 }
 
 const textFieldOf = (
