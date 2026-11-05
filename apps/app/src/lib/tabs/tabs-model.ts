@@ -77,7 +77,7 @@ export const insertAt = (
 const insertAfterActive = (space: SpaceTabs, tab: Tab): SpaceTabs =>
 	insertAt(space, indexOfTab(space, activeTabOf(space).id) + 1, tab)
 
-const openTabOn = (space: SpaceTabs, href: string): SpaceTabs => {
+export const openTabOn = (space: SpaceTabs, href: string): SpaceTabs => {
 	const tab = tabOn(href)
 	return selectTab(insertAfterActive(space, tab), tab.id)
 }
@@ -226,6 +226,18 @@ export const pushEntry = (space: SpaceTabs, entry: TabEntry): SpaceTabs =>
 	navigatesInPlace(activeTabOf(space), entry.href)
 		? pushInPlace(space, entry)
 		: showInAnotherTab(space, entry.href)
+
+export const revealTab = (
+	space: SpaceTabs,
+	id: string,
+	href: string,
+): SpaceTabs => {
+	const revealed = selectTab(space, id)
+	const tab = activeTabOf(revealed)
+	return showsUrl(tab, href)
+		? revealed
+		: pushEntry(revealed, entryOn(href, tab.index + 1))
+}
 
 export const replaceEntry = (space: SpaceTabs, entry: TabEntry): SpaceTabs =>
 	navigatesInPlace(activeTabOf(space), entry.href)

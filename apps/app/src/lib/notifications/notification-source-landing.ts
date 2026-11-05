@@ -16,7 +16,13 @@ import {
 
 type NotificationLandingOptions = Pick<
 	NotificationSourceOptions,
-	"chat" | "roster" | "spaces" | "joinedSpaces" | "missions" | "raiseWindow"
+	| "chat"
+	| "roster"
+	| "spaces"
+	| "joinedSpaces"
+	| "conversations"
+	| "missions"
+	| "raiseWindow"
 > & {
 	missionOrigins: Map<string, MissionEvent>
 	failWith: FailWith
@@ -43,6 +49,7 @@ export const createNotificationLanding = ({
 	roster,
 	spaces,
 	joinedSpaces,
+	conversations,
 	missions,
 	missionOrigins,
 	raiseWindow,
@@ -171,16 +178,19 @@ export const createNotificationLanding = ({
 		spaces.select(roster.hostSpaceIdOf(spaceId))
 	}
 
-	const landOnConversation = (conversationId: string) => {
+	const openInNewTab = (conversationId: string) => {
 		const spaceId = roster.spaceOfConversation(conversationId)
 
-		if (!spaceId) {
-			return
+		if (spaceId) {
+			conversations.openInNewTab(conversationId, spaceId)
 		}
-
-		roster.selectConversation(conversationId)
-		spaces.select(roster.hostSpaceIdOf(spaceId))
 	}
+
+	const landOnConversation = (conversationId: string) =>
+		conversations.open({
+			conversationId,
+			openInPlace: () => openInNewTab(conversationId),
+		})
 
 	const activate = ({ kind, id }: NotificationTarget) => {
 		const isCurrent = pending.claim()
@@ -194,7 +204,7 @@ export const createNotificationLanding = ({
 			return landOnBot(id)
 		}
 
-		landOnConversation(id)
+		void landOnConversation(id)
 	}
 
 	return { activate, dropPendingLanding: pending.drop }

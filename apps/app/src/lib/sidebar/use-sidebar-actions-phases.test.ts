@@ -25,6 +25,10 @@ const sourceShowingOpenThread = () =>
 	({
 		attachments: UNUSED,
 		collapsedSections: UNUSED,
+		conversations: {
+			open: async ({ openInPlace }: { openInPlace: () => void }) =>
+				openInPlace(),
+		},
 		drafts: UNUSED,
 		joinedSpaces: {
 			getState: () => ({ joinedSpaces: [], openId: null }),

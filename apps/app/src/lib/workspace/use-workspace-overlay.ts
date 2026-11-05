@@ -63,6 +63,7 @@ export const useWorkspaceOverlay = ({
 		landings: messageLandings,
 		user: user.controller,
 		threads: navigation,
+		conversations: core.conversationOpening,
 	})
 
 	const search = useSearch({

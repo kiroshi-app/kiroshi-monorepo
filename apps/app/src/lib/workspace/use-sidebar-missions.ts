@@ -31,11 +31,13 @@ import { useSpaceMissionsFailure } from "../missions/use-mission-failure-notices
 import { useSpaceMissions } from "../missions/use-space-missions"
 import type { SettingsNavigation } from "../navigation/use-settings-navigation"
 import { useSkeletonSlot } from "../query/use-skeleton-slot"
+import type { ConversationTabOpening } from "../tabs/conversation-tab-opening"
 import { opensInNewTab } from "../tabs/new-tab-clicks"
 
 const MISSIONS_FEED_SKELETON = createElement(MissionsFeedSkeleton)
 
 type SidebarMissionsCore = {
+	conversationOpening: Pick<ConversationTabOpening, "open">
 	conversationRuntimes: MissionSpeakingRuntimes & StoppableRuntimes
 	openedMission: Pick<
 		OpenedMissionController,
@@ -91,7 +93,13 @@ export const useSidebarMissions = ({
 	rosterLines,
 	navigation,
 }: SidebarMissionsInput): SidebarMissions => {
-	const { conversationRuntimes, openedMission, roster, spaces } = core
+	const {
+		conversationOpening,
+		conversationRuntimes,
+		openedMission,
+		roster,
+		spaces,
+	} = core
 	const { now } = rosterLines
 	const feed = useSpaceMissions(spaces.state.selectedSpaceId)
 	const { spaceRowId } = roster.state
@@ -142,14 +150,29 @@ export const useSidebarMissions = ({
 				return
 			}
 			const { rowId, isConversation } = row
-			openedMission.open({ missionId, rowId, spaceId: spaceRowId, landing })
-			if (isConversation) {
-				roster.controller.selectConversation(rowId)
-			} else {
+			const openMissionThread = () =>
+				openedMission.open({ missionId, rowId, spaceId: spaceRowId, landing })
+			if (!isConversation) {
+				openMissionThread()
 				roster.controller.select(rowId)
+				return
 			}
+			void conversationOpening.open({
+				conversationId: rowId,
+				mission: missionId,
+				openInPlace: () => {
+					openMissionThread()
+					roster.controller.selectConversation(rowId)
+				},
+			})
 		},
-		[missionRowOf, roster.controller, openedMission, spaceRowId],
+		[
+			missionRowOf,
+			roster.controller,
+			openedMission,
+			spaceRowId,
+			conversationOpening,
+		],
 	)
 
 	const openMissionInNewTab = useCallback(

@@ -73,6 +73,11 @@ const common = {
 			description:
 				"L’onglet est resté ici. Faites-le de nouveau glisser vers l’autre fenêtre.",
 		},
+		revealTabFailed: {
+			title: "Impossible d’afficher l’autre fenêtre",
+			description:
+				"La conversation est ouverte dans une autre fenêtre. Passez à cette fenêtre pour la voir.",
+		},
 		reopenWindowFailed: {
 			title: "Impossible de rouvrir une fenêtre",
 			description:

@@ -8,6 +8,7 @@ import type {
 	MessageLandingController,
 } from "@/lib/search/message-landing-controller"
 import type { SpacesController } from "@/lib/spaces/spaces-controller"
+import type { ConversationTabOpening } from "@/lib/tabs/conversation-tab-opening"
 import type { UserController } from "@/lib/user/preferences-controller"
 
 export type SearchRow = {
@@ -45,14 +46,43 @@ export type SearchNavigation = {
 	openActivityPanel: () => void
 	recordLanding: (landing: MessageLanding) => void
 	openThreadInNewTab: (thread: ThreadSearch, spaceId?: string) => void
+	openConversation: ConversationTabOpening["open"]
 }
 
-const selectRow = (row: SearchRow, navigation: SearchNavigation) => {
+type RowTarget = Extract<SearchTarget, { row: SearchRow }>
+
+const recordLandingOf = (target: RowTarget, navigation: SearchNavigation) => {
+	if (target.kind === "chat" && target.landing) {
+		navigation.recordLanding(target.landing)
+	}
+}
+
+const showRow = ({ row, spaceId }: RowTarget, navigation: SearchNavigation) => {
 	if (row.kind === "bot") {
 		navigation.selectBot(row.id)
+	} else {
+		navigation.selectConversation(row.id)
+	}
+	if (spaceId) {
+		navigation.selectSpace(spaceId)
+	}
+}
+
+const openRow = (target: RowTarget, navigation: SearchNavigation) => {
+	if (target.row.kind === "bot") {
+		navigation.leaveMission()
+		recordLandingOf(target, navigation)
+		showRow(target, navigation)
 		return
 	}
-	navigation.selectConversation(row.id)
+	recordLandingOf(target, navigation)
+	void navigation.openConversation({
+		conversationId: target.row.id,
+		openInPlace: () => {
+			navigation.leaveMission()
+			showRow(target, navigation)
+		},
+	})
 }
 
 export const openSearchTarget = (
@@ -70,17 +100,7 @@ export const openSearchTarget = (
 		return
 	}
 
-	navigation.leaveMission()
-
-	if (target.kind === "chat" && target.landing) {
-		navigation.recordLanding(target.landing)
-	}
-
-	selectRow(target.row, navigation)
-
-	if (target.spaceId) {
-		navigation.selectSpace(target.spaceId)
-	}
+	openRow(target, navigation)
 
 	if (target.kind === "routine") {
 		navigation.openActivityPanel()
@@ -121,6 +141,7 @@ export type SearchNavigationSource = {
 	landings: Pick<MessageLandingController, "record">
 	user: Pick<UserController, "setActivityPanelOpen">
 	threads: Pick<SettingsNavigation, "openThreadInNewTab">
+	conversations: Pick<ConversationTabOpening, "open">
 }
 
 export const createSearchNavigation = ({
@@ -131,6 +152,7 @@ export const createSearchNavigation = ({
 	landings,
 	user,
 	threads,
+	conversations,
 }: SearchNavigationSource): SearchNavigation => ({
 	selectBot: roster.select,
 	selectConversation: roster.selectConversation,
@@ -141,4 +163,5 @@ export const createSearchNavigation = ({
 	openActivityPanel: () => void user.setActivityPanelOpen(true),
 	recordLanding: landings.record,
 	openThreadInNewTab: threads.openThreadInNewTab,
+	openConversation: conversations.open,
 })

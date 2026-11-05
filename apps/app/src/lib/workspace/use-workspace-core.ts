@@ -1,3 +1,4 @@
+import { useRouter } from "@tanstack/react-router"
 import { useEffect, useMemo } from "react"
 
 import {
@@ -36,6 +37,7 @@ import { openRowIdOf } from "../spaces/joined-spaces-controller"
 import { useInvitations } from "../spaces/use-invitations"
 import { useJoinedSpaces } from "../spaces/use-joined-spaces"
 import { useSpaces } from "../spaces/use-spaces"
+import { useConversationTabOpening } from "../tabs/use-conversation-tab-opening"
 import { useUser } from "../user/use-user"
 
 export const useWorkspaceCore = (openSettings: OpenSettings | null) => {
@@ -107,6 +109,11 @@ export const useWorkspaceCore = (openSettings: OpenSettings | null) => {
 	const spaces = useSpaces(store)
 	const joinedSpaces = useJoinedSpaces(spaces.controller, roster.controller)
 	const invitations = useInvitations(joinedSpaces.controller)
+	const { tabs } = useRouter().options.context
+	const conversationOpening = useConversationTabOpening(
+		tabs,
+		joinedSpaces.controller,
+	)
 	const companionSettingsOwner = companionSettingsOwnerOf(
 		openSettings,
 		roster.state,
@@ -162,6 +169,7 @@ export const useWorkspaceCore = (openSettings: OpenSettings | null) => {
 		chat,
 		collapsedSections,
 		companionPlugin,
+		conversationOpening,
 		conversationRuntimes,
 		drafts,
 		driver,

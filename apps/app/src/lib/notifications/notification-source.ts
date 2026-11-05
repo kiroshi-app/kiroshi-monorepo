@@ -29,6 +29,7 @@ import {
 	THIS_COMPUTER,
 } from "../missions/mission-event-read"
 import type { OpenedMission } from "../missions/opened-mission-controller"
+import type { ConversationTabOpening } from "../tabs/conversation-tab-opening"
 import type { UserPreferences } from "../user/preferences-contract"
 
 type ChatSource = {
@@ -65,6 +66,8 @@ type JoinedSpacesSource = {
 	selectSpace: (rowId: string) => void
 }
 
+type ConversationsSource = Pick<ConversationTabOpening, "open" | "openInNewTab">
+
 type MissionsSource = {
 	board: () => Promise<Pick<MissionOnBoard, "mission">[]>
 	onChanged: (
@@ -85,6 +88,7 @@ export type NotificationSourceOptions = {
 	roster: RosterSource
 	spaces: SpacesSource
 	joinedSpaces: JoinedSpacesSource
+	conversations: ConversationsSource
 	missions: MissionsSource
 	spokenWords: Pick<SpokenWords, "subscribe">
 	notifications: NotificationPort
@@ -102,6 +106,7 @@ type NotificationLandingSourceOptions = Pick<
 	| "roster"
 	| "spaces"
 	| "joinedSpaces"
+	| "conversations"
 	| "missions"
 	| "notifications"
 	| "raiseWindow"
@@ -113,6 +118,7 @@ export const startNotificationLanding = ({
 	roster,
 	spaces,
 	joinedSpaces,
+	conversations,
 	missions,
 	notifications,
 	raiseWindow,
@@ -126,6 +132,7 @@ export const startNotificationLanding = ({
 		roster,
 		spaces,
 		joinedSpaces,
+		conversations,
 		missions,
 		missionOrigins,
 		raiseWindow,
@@ -163,6 +170,7 @@ export const startNotificationSource = ({
 	roster,
 	spaces,
 	joinedSpaces,
+	conversations,
 	missions,
 	spokenWords,
 	notifications,
@@ -208,6 +216,7 @@ export const startNotificationSource = ({
 		roster,
 		spaces,
 		joinedSpaces,
+		conversations,
 		missions,
 		missionOrigins,
 		raiseWindow,

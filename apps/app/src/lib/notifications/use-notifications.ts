@@ -17,6 +17,7 @@ import { missionsTransport } from "../missions/missions-transport"
 import type { OpenedMissionController } from "../missions/opened-mission-controller"
 import type { JoinedSpacesController } from "../spaces/joined-spaces-controller"
 import type { SpacesController } from "../spaces/spaces-controller"
+import type { ConversationTabOpening } from "../tabs/conversation-tab-opening"
 import type { UserController } from "../user/preferences-controller"
 
 export type NotificationsMount = {
@@ -25,6 +26,7 @@ export type NotificationsMount = {
 	roster: RosterController
 	spaces: SpacesController
 	joinedSpaces: JoinedSpacesController
+	conversations: ConversationTabOpening
 	missions: OpenedMissionController
 	spokenWords: SpokenWords
 	user: UserController
@@ -37,6 +39,7 @@ export const useNotifications = ({
 	roster,
 	spaces,
 	joinedSpaces,
+	conversations,
 	missions,
 	spokenWords,
 	user,
@@ -48,6 +51,7 @@ export const useNotifications = ({
 			roster,
 			spaces,
 			joinedSpaces,
+			conversations,
 			missions: {
 				board: missionsTransport.board,
 				onChanged: missionsTransport.onChanged,
@@ -76,6 +80,7 @@ export const useNotifications = ({
 		roster,
 		spaces,
 		joinedSpaces,
+		conversations,
 		missions,
 		spokenWords,
 		user,

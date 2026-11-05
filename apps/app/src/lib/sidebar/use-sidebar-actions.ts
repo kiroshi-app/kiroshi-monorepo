@@ -23,6 +23,7 @@ import {
 	openRowIdOf,
 } from "../spaces/joined-spaces-controller"
 import type { SpacesController } from "../spaces/spaces-controller"
+import type { ConversationTabOpening } from "../tabs/conversation-tab-opening"
 import { opensInNewTab } from "../tabs/new-tab-clicks"
 
 export type SidebarActions = Required<
@@ -66,6 +67,7 @@ type SettingsOpening = Pick<
 export type SidebarActionsSource = {
 	attachments: AttachmentsController
 	collapsedSections: CollapsedSectionsController
+	conversations: Pick<ConversationTabOpening, "open">
 	drafts: DraftsController
 	joinedSpaces: JoinedSpacesController
 	openedMission: Pick<OpenedMissionController, "leave">
@@ -91,6 +93,7 @@ const reportFailure = failureReporterIn("use-sidebar-actions")
 export const useSidebarActions = ({
 	attachments,
 	collapsedSections,
+	conversations,
 	drafts,
 	joinedSpaces,
 	openedMission,
@@ -201,8 +204,13 @@ export const useSidebarActions = ({
 					"thread open",
 					() => id === roster.getState().selectedConversationId,
 				)
-				openedMission.leave()
-				roster.selectConversation(id)
+				void conversations.open({
+					conversationId: id,
+					openInPlace: () => {
+						openedMission.leave()
+						roster.selectConversation(id)
+					},
+				})
 			},
 			onSelectSpace: (id) => {
 				startInvokePhaseUnless(
@@ -215,6 +223,7 @@ export const useSidebarActions = ({
 		[
 			attachments,
 			collapsedSections,
+			conversations,
 			drafts,
 			joinedSpaces,
 			openedMission,

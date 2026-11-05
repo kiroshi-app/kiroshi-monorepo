@@ -85,6 +85,10 @@ const watchAlongside = async ({
 			getState: () => ({ joinedSpaces: [] }),
 			selectSpace: () => undefined,
 		},
+		conversations: {
+			open: async ({ openInPlace }) => openInPlace(),
+			openInNewTab: () => undefined,
+		},
 		missions: createFakeMissions(),
 		spokenWords: createSpokenWords(),
 		notifications,

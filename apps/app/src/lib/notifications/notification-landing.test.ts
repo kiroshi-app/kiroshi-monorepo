@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 
+import { defaultStringifySearch } from "@tanstack/react-router"
 import { act, cleanup, renderHook } from "@testing-library/react"
 import { useEffect, useSyncExternalStore } from "react"
 import { afterEach, expect, it, vi } from "vitest"
@@ -35,6 +36,10 @@ import {
 } from "../spaces/joined-spaces-controller"
 import { createSpacesController } from "../spaces/spaces-controller"
 import { useSpaceEntry } from "../spaces/use-space-entry"
+import { createConversationTabOpening } from "../tabs/conversation-tab-opening"
+import { MAIN_WINDOW_LABEL } from "../tabs/tabs-mirror"
+import { activeTabOf, currentHrefOf } from "../tabs/tabs-model"
+import { createWorkspaceTabs, type WorkspaceTabs } from "../tabs/workspace-tabs"
 
 vi.mock("@workspace/ui/components/notice-surface", async (importOriginal) => ({
 	...(await importOriginal()),
@@ -187,11 +192,21 @@ const aWorld = async ({
 	const reader = aReader()
 	const offline = offlineSwitch(missions)
 
+	const tabs = createWorkspaceTabs(
+		undefined,
+		isDriverWindow ? MAIN_WINDOW_LABEL : "window-1",
+	)
+	const conversations = createConversationTabOpening({
+		tabs,
+		selectSpace: joinedSpaces.selectSpace,
+	})
+
 	const landing = {
 		chat: chatRunningIn(threads),
 		roster,
 		spaces,
 		joinedSpaces,
+		conversations,
 		missions: { ...missions, read: offline.read },
 		notifications,
 		raiseWindow: async () => undefined,
@@ -246,6 +261,7 @@ const aWorld = async ({
 
 	return {
 		stop,
+		tabs,
 		spaces,
 		joinedSpaces,
 		hosts,
@@ -265,6 +281,7 @@ const aWorld = async ({
 
 afterEach(() => {
 	cleanup()
+	localStorage.clear()
 	vi.useRealTimers()
 	vi.restoreAllMocks()
 	vi.mocked(raiseFailureNotice).mockClear()
@@ -283,16 +300,39 @@ it("enters the space holding the companion the click carries and lands on that c
 	expect(reader.reopened).toContain(elsewhere.id)
 })
 
-it("enters the space holding the conversation the click carries and lands on it", async () => {
-	const { spaces, roster, notifications, elsewhere, room } = await aWorld()
+const activeHrefIn = (tabs: WorkspaceTabs, spaceId: string) => {
+	const space = tabs.getState().bySpace[spaceId]
+	return space ? currentHrefOf(activeTabOf(space)) : undefined
+}
+
+const conversationHrefOf = (conversationId: string) =>
+	`/${defaultStringifySearch({ conversation: conversationId })}`
+
+it("enters the space holding the conversation the click carries and opens it in a new tab", async () => {
+	const { spaces, tabs, notifications, elsewhere, room } = await aWorld()
 
 	await act(async () => {
 		notifications.activate({ kind: "conversation", id: room.id })
 	})
 
 	expect(spaces.getState().selectedSpaceId).toBe(elsewhere.id)
-	expect(roster.getState().selectedConversationId).toBe(room.id)
-	expect(roster.getState().selectedBotId).toBeNull()
+	expect(activeHrefIn(tabs, elsewhere.id)).toBe(conversationHrefOf(room.id))
+})
+
+it("brings forward the tab already showing the conversation the click carries", async () => {
+	const { spaces, tabs, notifications, elsewhere, room } = await aWorld()
+	tabs.showSpace(elsewhere.id)
+	tabs.history.push(conversationHrefOf(room.id))
+	tabs.openInNewTab("/")
+	tabs.showSpace(HOME)
+
+	await act(async () => {
+		notifications.activate({ kind: "conversation", id: room.id })
+	})
+
+	expect(spaces.getState().selectedSpaceId).toBe(elsewhere.id)
+	expect(tabs.getState().bySpace[elsewhere.id]?.tabs).toHaveLength(2)
+	expect(activeHrefIn(tabs, elsewhere.id)).toBe(conversationHrefOf(room.id))
 })
 
 it("lands on a companion of the space already on screen without changing space", async () => {
@@ -347,7 +387,7 @@ it("opens a mission of the space already on screen without changing space", asyn
 })
 
 it("lands on the room a spoken word names, in the space holding it", async () => {
-	const { spaces, roster, notifications, spokenWords, elsewhere, away, room } =
+	const { spaces, tabs, notifications, spokenWords, elsewhere, away, room } =
 		await aWorld()
 
 	spokenWords.announce({ conversationId: room.id, authorBotId: away.id })
@@ -359,7 +399,7 @@ it("lands on the room a spoken word names, in the space holding it", async () =>
 
 	expect(sent.title).toBe("Release")
 	expect(spaces.getState().selectedSpaceId).toBe(elsewhere.id)
-	expect(roster.getState().selectedConversationId).toBe(room.id)
+	expect(activeHrefIn(tabs, elsewhere.id)).toBe(conversationHrefOf(room.id))
 })
 
 type World = Awaited<ReturnType<typeof aWorld>>
@@ -624,8 +664,8 @@ it("lands a companion click delivered to a secondary window in that window", asy
 	expect(roster.getState().selectedBotId).toBe(away.id)
 })
 
-it("lands a conversation click delivered to a secondary window in that window", async () => {
-	const { spaces, roster, notifications, elsewhere, room } =
+it("lands a conversation click delivered to a secondary window in a new tab of that window", async () => {
+	const { spaces, tabs, notifications, elsewhere, room } =
 		await aWorld(SECONDARY)
 
 	await act(async () => {
@@ -633,7 +673,7 @@ it("lands a conversation click delivered to a secondary window in that window", 
 	})
 
 	expect(spaces.getState().selectedSpaceId).toBe(elsewhere.id)
-	expect(roster.getState().selectedConversationId).toBe(room.id)
+	expect(activeHrefIn(tabs, elsewhere.id)).toBe(conversationHrefOf(room.id))
 })
 
 it("opens a local mission click delivered to a secondary window in that window", async () => {
