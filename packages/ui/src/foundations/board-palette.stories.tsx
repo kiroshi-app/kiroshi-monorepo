@@ -87,9 +87,19 @@ const paintOf = (element: Element) => {
 	}
 }
 
-const ratioOf = (element: Element) => {
-	const { background, text } = paintOf(element)
-	return contrastRatio(rgbOf(background), rgbOf(text))
+const compositeOver = (colour: string, ground: Rgb): Rgb => {
+	const [red, green, blue, alpha = 1] = (
+		colour.match(/\d+(\.\d+)?/g) ?? []
+	).map(Number)
+	return [red, green, blue].map(
+		(channel, index) => alpha * channel + (1 - alpha) * ground[index],
+	) as Rgb
+}
+
+const ratioOf = (element: Element, ground: Element = element) => {
+	const background = rgbOf(paintOf(ground).background)
+	const text = compositeOver(paintOf(element).text, background)
+	return contrastRatio(background, text)
 }
 
 const expectSticky = async (sticky: HTMLElement) => {
@@ -102,6 +112,10 @@ const expectSticky = async (sticky: HTMLElement) => {
 	await expect(
 		ratioOf(sticky),
 		`${label} text contrast`,
+	).toBeGreaterThanOrEqual(AA_TEXT_RATIO)
+	await expect(
+		ratioOf(slotIn(sticky, "board-sticky-author"), sticky),
+		`${label} author label contrast`,
 	).toBeGreaterThanOrEqual(AA_TEXT_RATIO)
 }
 

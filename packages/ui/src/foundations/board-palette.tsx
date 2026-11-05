@@ -74,7 +74,7 @@ const BoardPalette = () => (
 				>
 					<span
 						className={cn(
-							"rounded-md px-2 py-0.5 font-medium text-sm",
+							"rounded-md p-1.5 font-medium text-sm",
 							SECTION_TINT[tint].titleChip,
 						)}
 						data-slot="board-section-title"
