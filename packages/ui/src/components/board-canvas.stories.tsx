@@ -51,9 +51,13 @@ const ROW_LINKS: BoardObject[] = Array.from({ length: ROWS }, (_, row) => ({
 const FIVE_HUNDRED_OBJECTS = { objects: [...NOTES, ...ROW_LINKS] }
 const EMPTY_BOARD = { objects: [] }
 const AT_ORIGIN: BoardViewport = { offset: { x: 24, y: 24 }, zoom: 1 }
-const LAST_NOTE = NOTES[NOTES.length - 1] as BoardItem
+const LAST_NOTE = NOTES.at(-1) as BoardItem
 
-const PlaceholderObject = ({ object }: { object: BoardObject }) =>
+type PlaceholderObjectProps = {
+	object: BoardObject
+}
+
+const PlaceholderObject = ({ object }: PlaceholderObjectProps) =>
 	object.kind === "connector" ? (
 		<div className="size-full rounded-md border border-border border-dashed" />
 	) : (
