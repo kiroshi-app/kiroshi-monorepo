@@ -1,114 +1,114 @@
 {
+	"edges": [
+		{
+			"color": "#a882ff",
+			"fromEnd": "arrow",
+			"fromNode": "7f04c1a9e6d2b358",
+			"fromSide": "bottom",
+			"id": "3b9e5d07a4c1f286",
+			"kiroshi": {
+				"routing": "straight"
+			},
+			"label": "source",
+			"toEnd": "none",
+			"toNode": "21",
+			"toSide": "bottom"
+		},
+		{
+			"fromEnd": "none",
+			"fromNode": "9a1e7c44b2f08d13",
+			"fromSide": "right",
+			"id": "d8a2f6e04b1c9735",
+			"kiroshi": {
+				"routing": "straight"
+			},
+			"styleAttributes": {
+				"arrow": "triangle-outline",
+				"pathfindingMethod": "square"
+			},
+			"toEnd": "arrow",
+			"toNode": "0e6b2d7f9c835a11",
+			"toSide": "left"
+		}
+	],
 	"metadata": {
-		"version": "1.0-1.0",
-		"frontmatter": {}
+		"frontmatter": {},
+		"version": "1.0-1.0"
 	},
 	"nodes": [
 		{
-			"id": "5c3f0a9e21b7d406",
-			"type": "group",
-			"x": -420,
-			"y": -300,
-			"width": 1180,
 			"height": 760,
-			"label": "Research",
+			"id": "5c3f0a9e21b7d406",
 			"kiroshi": {
 				"kind": "section",
 				"z": "a0"
-			}
+			},
+			"label": "Research",
+			"type": "group",
+			"width": 1180,
+			"x": -420,
+			"y": -300
 		},
 		{
-			"styleAttributes": {
-				"textAlign": "center",
-				"shape": "pill"
-			},
-			"id": "9a1e7c44b2f08d13",
-			"type": "text",
-			"x": -380,
-			"y": -260,
-			"width": 360,
-			"height": 120,
-			"text": "Questions for the **interview**",
 			"color": "4",
+			"height": 120,
+			"id": "9a1e7c44b2f08d13",
 			"kiroshi": {
 				"kind": "text",
 				"z": "a1"
-			}
+			},
+			"styleAttributes": {
+				"shape": "pill",
+				"textAlign": "center"
+			},
+			"text": "Questions for the **interview**",
+			"type": "text",
+			"width": 360,
+			"x": -380,
+			"y": -260
 		},
 		{
-			"styleAttributes": {
-				"border": "dashed"
-			},
-			"id": "0e6b2d7f9c835a11",
-			"type": "file",
-			"x": 20,
-			"y": -260,
-			"width": 400,
-			"height": 300,
 			"file": "Attachments/Whiteboard 1.PNG",
+			"height": 300,
+			"id": "0e6b2d7f9c835a11",
 			"kiroshi": {
 				"kind": "image",
 				"z": "a2"
-			}
+			},
+			"styleAttributes": {
+				"border": "dashed"
+			},
+			"type": "file",
+			"width": 400,
+			"x": 20,
+			"y": -260
 		},
 		{
-			"id": "7f04c1a9e6d2b358",
-			"type": "file",
-			"x": -380,
-			"y": -100,
-			"width": 360,
-			"height": 400,
 			"file": "Notes/Interview plan.md",
-			"subpath": "#Goals",
+			"height": 400,
+			"id": "7f04c1a9e6d2b358",
 			"kiroshi": {
 				"kind": "libraryCard",
 				"z": "a3"
-			}
+			},
+			"subpath": "#Goals",
+			"type": "file",
+			"width": 360,
+			"x": -380,
+			"y": -100
 		},
 		{
-			"id": "21",
-			"type": "link",
-			"x": 460,
-			"y": -260,
-			"width": 260,
 			"height": 200,
-			"url": "https://obsidian.md",
+			"id": "21",
 			"kiroshi": {
 				"kind": "linkCard",
 				"z": "a4"
-			}
-		}
-	],
-	"edges": [
-		{
-			"id": "3b9e5d07a4c1f286",
-			"fromNode": "7f04c1a9e6d2b358",
-			"fromSide": "bottom",
-			"fromEnd": "arrow",
-			"toNode": "21",
-			"toSide": "bottom",
-			"toEnd": "none",
-			"color": "#a882ff",
-			"label": "source",
-			"kiroshi": {
-				"routing": "straight"
-			}
-		},
-		{
-			"styleAttributes": {
-				"pathfindingMethod": "square",
-				"arrow": "triangle-outline"
 			},
-			"id": "d8a2f6e04b1c9735",
-			"fromNode": "9a1e7c44b2f08d13",
-			"fromSide": "right",
-			"fromEnd": "none",
-			"toNode": "0e6b2d7f9c835a11",
-			"toSide": "left",
-			"toEnd": "arrow",
-			"kiroshi": {
-				"routing": "straight"
-			}
+			"type": "link",
+			"url": "https://obsidian.md",
+			"width": 260,
+			"x": 460,
+			"y": -260
 		}
 	]
 }

@@ -1,32 +1,32 @@
 {
+	"edges": [],
 	"nodes": [
 		{
-			"id": "text-b",
-			"type": "text",
-			"x": -40,
-			"y": -200,
-			"width": 400,
-			"height": 80,
-			"text": "Written under the heading",
 			"color": "#5b8def",
+			"height": 80,
+			"id": "text-b",
 			"kiroshi": {
 				"kind": "text",
 				"z": "a0"
-			}
+			},
+			"text": "Written under the heading",
+			"type": "text",
+			"width": 400,
+			"x": -40,
+			"y": -200
 		},
 		{
-			"id": "text-a",
-			"type": "text",
-			"x": 0,
-			"y": 0,
-			"width": 400,
 			"height": 120,
-			"text": "# Board\n\nA heading and a line.",
+			"id": "text-a",
 			"kiroshi": {
 				"kind": "text",
 				"z": "a1"
-			}
+			},
+			"text": "# Board\n\nA heading and a line.",
+			"type": "text",
+			"width": 400,
+			"x": 0,
+			"y": 0
 		}
-	],
-	"edges": []
+	]
 }

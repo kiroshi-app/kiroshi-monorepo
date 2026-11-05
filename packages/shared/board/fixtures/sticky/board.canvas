@@ -1,35 +1,43 @@
 {
+	"edges": [],
 	"nodes": [
 		{
-			"id": "sticky-1",
-			"type": "text",
-			"x": 0,
-			"y": 0,
-			"width": 240,
-			"height": 240,
-			"text": "Ship the board schema\nthen the session",
 			"color": "3",
+			"height": 240,
+			"id": "sticky-1",
 			"kiroshi": {
+				"author": {
+					"id": "ichi",
+					"kind": "agent"
+				},
+				"fill": "yellow",
 				"kind": "sticky",
-				"z": "a0",
-				"author": "ichi"
-			}
+				"z": "a0"
+			},
+			"text": "Ship the board schema\nthen the session",
+			"type": "text",
+			"width": 240,
+			"x": 0,
+			"y": 0
 		},
 		{
-			"id": "sticky-2",
-			"type": "text",
-			"x": 280,
-			"y": 0,
-			"width": 240,
-			"height": 240,
-			"text": "",
 			"color": "#f4c430",
+			"height": 240,
+			"id": "sticky-2",
 			"kiroshi": {
+				"author": {
+					"id": "person-1",
+					"kind": "person"
+				},
+				"fill": "green",
 				"kind": "sticky",
-				"z": "a1",
-				"author": "ni"
-			}
+				"z": "a1"
+			},
+			"text": "",
+			"type": "text",
+			"width": 240,
+			"x": 280,
+			"y": 0
 		}
-	],
-	"edges": []
+	]
 }

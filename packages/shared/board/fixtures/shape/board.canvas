@@ -1,48 +1,48 @@
 {
+	"edges": [],
 	"nodes": [
 		{
+			"height": 120,
 			"id": "shape-rectangle",
-			"type": "text",
-			"x": 0,
-			"y": 0,
-			"width": 200,
-			"height": 120,
+			"kiroshi": {
+				"kind": "shape",
+				"shape": "rectangle",
+				"z": "a0"
+			},
 			"text": "Rectangle",
-			"kiroshi": {
-				"kind": "shape",
-				"z": "a0",
-				"shape": "rectangle"
-			}
-		},
-		{
-			"id": "shape-ellipse",
 			"type": "text",
-			"x": 240,
-			"y": 0,
 			"width": 200,
-			"height": 120,
-			"text": "Ellipse",
-			"color": "1",
-			"kiroshi": {
-				"kind": "shape",
-				"z": "a1",
-				"shape": "ellipse"
-			}
+			"x": 0,
+			"y": 0
 		},
 		{
-			"id": "shape-diamond",
-			"type": "text",
-			"x": 480,
-			"y": 0,
-			"width": 160,
-			"height": 160,
-			"text": "",
+			"color": "1",
+			"height": 120,
+			"id": "shape-ellipse",
 			"kiroshi": {
 				"kind": "shape",
-				"z": "a2",
-				"shape": "diamond"
-			}
+				"shape": "ellipse",
+				"z": "a1"
+			},
+			"text": "Ellipse",
+			"type": "text",
+			"width": 200,
+			"x": 240,
+			"y": 0
+		},
+		{
+			"height": 160,
+			"id": "shape-diamond",
+			"kiroshi": {
+				"kind": "shape",
+				"shape": "diamond",
+				"z": "a2"
+			},
+			"text": "",
+			"type": "text",
+			"width": 160,
+			"x": 480,
+			"y": 0
 		}
-	],
-	"edges": []
+	]
 }

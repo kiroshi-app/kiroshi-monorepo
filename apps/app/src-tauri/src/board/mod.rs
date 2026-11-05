@@ -13,7 +13,7 @@ use serde_json::{Map, Value};
 
 pub use canvas::{export_canvas, import_canvas};
 pub use doc::{read_board, write_board};
-use schema::{FieldSpec, Fields, Placement, SCHEMA};
+use schema::{FieldSpec, Fields, KindSpec, Placement, SCHEMA};
 
 pub type JsonObject = Map<String, Value>;
 
@@ -132,12 +132,50 @@ fn integer_of(value: &Value) -> Option<i64> {
 	(integer.abs() <= MAX_SAFE_INTEGER).then_some(integer)
 }
 
+const IDENTITY_KEYS: [&str; 2] = ["id", "kind"];
+
+fn is_identity(spec: &FieldSpec, value: &Value) -> bool {
+	let Some(identity) = value.as_object() else {
+		return false;
+	};
+	let kind = identity.get("kind").and_then(Value::as_str);
+	let id = identity.get("id").and_then(Value::as_str);
+	identity.keys().map(String::as_str).eq(IDENTITY_KEYS)
+		&& kind.is_some_and(|kind| {
+			spec.allowed.as_ref().is_some_and(|allowed| allowed.iter().any(|name| name == kind))
+		}) && id.is_some_and(|id| !id.is_empty())
+}
+
+fn with_paired_fill(mut node: JsonObject, spec: &KindSpec) -> JsonObject {
+	let Some(pairing) = &spec.fill else {
+		return node;
+	};
+	if !node.contains_key(&pairing.field) {
+		let derived = node
+			.get(&pairing.colour)
+			.and_then(Value::as_str)
+			.and_then(|colour| pairing.from_colour.get(colour))
+			.map(|fill| Value::from(fill.as_str()))
+			.or_else(|| spec.fields.get(&pairing.field).and_then(|field| field.default.clone()));
+		if let Some(fill) = derived {
+			node.insert(pairing.field.clone(), fill);
+		}
+	}
+	let preset = pairing.preset_of(node.get(&pairing.field));
+	let colour = node.get(&pairing.colour).and_then(Value::as_str);
+	if preset.is_some() && colour == preset {
+		node.remove(&pairing.colour);
+	}
+	node
+}
+
 fn fitted(spec: &FieldSpec, value: &Value) -> Option<Value> {
 	let fits = match spec.value_type.as_str() {
 		"integer" => return integer_of(value).map(Value::from),
 		"colour" => value.as_str().is_some_and(|colour| COLOUR.is_match(colour)),
 		"zOrder" => is_z(value),
 		"json" => value.is_object(),
+		"identity" => is_identity(spec, value),
 		_ => value.as_str().is_some_and(|text| {
 			spec.allowed.as_ref().is_none_or(|allowed| allowed.iter().any(|name| name == text))
 		}),
@@ -197,6 +235,7 @@ fn parsed_node(id: &str, node: Value) -> Result<JsonObject, BoardError> {
 	let Some((kind, spec)) = kind.and_then(|kind| SCHEMA.kinds.get_key_value(kind)) else {
 		return Err(at.refused(kind_key()));
 	};
+	let node = with_paired_fill(node, spec);
 	let mut parsed = JsonObject::new();
 	parsed.insert(kind_key().to_owned(), Value::from(kind.as_str()));
 	parsed_fields(&SCHEMA.node.fields, &node, at, &mut parsed)?;

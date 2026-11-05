@@ -1,0 +1,119 @@
+{
+	"nodes": {
+		"from-3": {
+			"kind": "sticky",
+			"x": 0,
+			"y": 0,
+			"width": 240,
+			"height": 240,
+			"z": "a0",
+			"text": "from-3",
+			"fill": "yellow",
+			"author": {
+				"kind": "person",
+				"id": "person-1"
+			}
+		},
+		"from-4": {
+			"kind": "sticky",
+			"x": 260,
+			"y": 0,
+			"width": 240,
+			"height": 240,
+			"z": "a1",
+			"text": "from-4",
+			"fill": "green",
+			"author": {
+				"kind": "person",
+				"id": "person-1"
+			}
+		},
+		"from-2": {
+			"kind": "sticky",
+			"x": 520,
+			"y": 0,
+			"width": 240,
+			"height": 240,
+			"z": "a2",
+			"text": "from-2",
+			"fill": "orange",
+			"author": {
+				"kind": "person",
+				"id": "person-1"
+			}
+		},
+		"from-5": {
+			"kind": "sticky",
+			"x": 780,
+			"y": 0,
+			"width": 240,
+			"height": 240,
+			"z": "a3",
+			"text": "from-5",
+			"fill": "blue",
+			"author": {
+				"kind": "person",
+				"id": "person-1"
+			}
+		},
+		"from-1": {
+			"kind": "sticky",
+			"x": 1040,
+			"y": 0,
+			"width": 240,
+			"height": 240,
+			"z": "a4",
+			"text": "from-1",
+			"fill": "pink",
+			"author": {
+				"kind": "person",
+				"id": "person-1"
+			}
+		},
+		"from-6": {
+			"kind": "sticky",
+			"x": 1300,
+			"y": 0,
+			"width": 240,
+			"height": 240,
+			"z": "a5",
+			"text": "from-6",
+			"fill": "pink",
+			"author": {
+				"kind": "person",
+				"id": "person-1"
+			},
+			"color": "6"
+		},
+		"from-hex": {
+			"kind": "sticky",
+			"x": 1560,
+			"y": 0,
+			"width": 240,
+			"height": 240,
+			"z": "a6",
+			"text": "from-hex",
+			"fill": "yellow",
+			"author": {
+				"kind": "person",
+				"id": "person-1"
+			},
+			"color": "#aabbcc"
+		},
+		"from-none": {
+			"kind": "sticky",
+			"x": 1820,
+			"y": 0,
+			"width": 240,
+			"height": 240,
+			"z": "a7",
+			"text": "from-none",
+			"fill": "yellow",
+			"author": {
+				"kind": "person",
+				"id": "person-1"
+			}
+		}
+	},
+	"edges": {}
+}

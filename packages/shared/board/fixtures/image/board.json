@@ -8,7 +8,8 @@
 			"height": 480,
 			"z": "a0",
 			"file": "Library/whiteboard.png",
-			"item": "whiteboard.png"
+			"item": "whiteboard.png",
+			"alt": "The whiteboard after the planning session"
 		},
 		"image-loose": {
 			"kind": "image",

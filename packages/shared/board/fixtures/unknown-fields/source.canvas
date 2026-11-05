@@ -15,7 +15,11 @@
 				},
 				"kind": "sticky",
 				"z": "a0",
-				"author": "ichi"
+				"author": {
+					"kind": "agent",
+					"id": "ichi"
+				},
+				"fill": "yellow"
 			},
 			"author": "a plugin",
 			"z": 7

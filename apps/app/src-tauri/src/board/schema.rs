@@ -89,6 +89,22 @@ pub(super) struct NodeSchema {
 pub(super) struct KindSpec {
 	pub canvas_type: Option<String>,
 	pub fields: Fields,
+	pub fill: Option<FillPairing>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct FillPairing {
+	pub field: String,
+	pub colour: String,
+	pub presets: BTreeMap<String, String>,
+	pub from_colour: BTreeMap<String, String>,
+}
+
+impl FillPairing {
+	pub(super) fn preset_of(&self, fill: Option<&Value>) -> Option<&str> {
+		fill.and_then(Value::as_str).and_then(|fill| self.presets.get(fill)).map(String::as_str)
+	}
 }
 
 #[derive(Deserialize)]

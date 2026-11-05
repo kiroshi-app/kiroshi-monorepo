@@ -18,6 +18,7 @@ import {
 	type Located,
 	NODE_FIELDS,
 	parsedBoard,
+	presetOf,
 	refusedField,
 	Z_FIELD,
 	zAt,
@@ -72,7 +73,7 @@ const byId = <T>([leftId]: Entry<T>, [rightId]: Entry<T>) =>
 	compared(leftId, rightId)
 
 const canvasNode = ([id, node]: Entry<BoardNode>) => {
-	const { canvasType, fields } = BOARD_SCHEMA.kinds[node.kind]
+	const { canvasType, fields, fill } = BOARD_SCHEMA.kinds[node.kind]
 	const placed = placedFrom(id, node)
 	if (canvasType !== null) {
 		placed.top[TYPE] = canvasType
@@ -80,6 +81,10 @@ const canvasNode = ([id, node]: Entry<BoardNode>) => {
 	}
 	place(NODE_FIELDS, node, placed)
 	place(fields, node, placed)
+	if (fill !== undefined && placed.top[fill.colour] === undefined) {
+		const preset = presetOf(fill, placed.kiroshi[fill.field])
+		if (preset !== undefined) placed.top[fill.colour] = preset
+	}
 	return { ...placed.top, [EXTRAS]: placed.kiroshi }
 }
 
@@ -87,6 +92,25 @@ const canvasEdge = ([id, edge]: Entry<Connector>) => {
 	const placed = placedFrom(id, edge)
 	place(EDGE_FIELDS, edge, placed)
 	return { ...placed.top, [EXTRAS]: placed.kiroshi }
+}
+
+const INDENT = "\t"
+
+const written = (value: Json, indent: string): string => {
+	const inner = indent + INDENT
+	if (Array.isArray(value)) {
+		if (value.length === 0) return "[]"
+		const items = value.map((item) => inner + written(item, inner))
+		return `[\n${items.join(",\n")}\n${indent}]`
+	}
+	if (!isObject(value)) return JSON.stringify(value)
+	const names = Object.keys(value).sort()
+	if (names.length === 0) return "{}"
+	const entries = names.map(
+		(name) =>
+			`${inner}${JSON.stringify(name)}: ${written(value[name] as Json, inner)}`,
+	)
+	return `{\n${entries.join(",\n")}\n${indent}}`
 }
 
 export const exportCanvas = (board: Board) => {
@@ -98,7 +122,7 @@ export const exportCanvas = (board: Board) => {
 	if (board.kiroshi !== undefined && !isEmptyObject(board.kiroshi)) {
 		canvas[EXTRAS] = board.kiroshi
 	}
-	return `${JSON.stringify(canvas, null, "\t")}\n`
+	return `${written(canvas, "")}\n`
 }
 
 const parsedJson = (text: string): unknown => {

@@ -60,10 +60,18 @@ fn refusal_of(canvas: Value) -> BoardError {
 fn every_fixture_board_exports_to_its_canvas_file() {
 	for case in cases() {
 		let board = board_of(&json_at(&case.join("board.json")));
-		let exported: Value =
-			serde_json::from_str(&export_canvas(&board).expect("the board exports"))
-				.expect("the export is JSON");
-		assert_eq!(exported, json_at(&case.join("board.canvas")), "{}", case.display());
+		let exported = export_canvas(&board).expect("the board exports");
+		assert_eq!(exported, text_at(&case.join("board.canvas")), "{}", case.display());
+	}
+}
+
+#[test]
+fn every_fixture_canvas_is_written_back_byte_for_byte() {
+	for case in cases() {
+		let canvas = text_at(&case.join("board.canvas"));
+		let board = import_canvas(&canvas).expect("the canvas imports");
+		let exported = export_canvas(&board).expect("the board exports");
+		assert_eq!(exported, canvas, "{}", case.display());
 	}
 }
 
@@ -133,7 +141,12 @@ fn unknown_node_types_and_kiroshi_fields_are_written_back_unchanged() {
 
 fn assert_every_field_kept(source: &JsonObject, exported: &JsonObject, at: &str) {
 	for (field, value) in source {
-		assert_eq!(exported.get(field), Some(value), "{at}: {field}");
+		match (field.as_str(), value, exported.get(field)) {
+			("kiroshi", Value::Object(source), Some(Value::Object(exported))) => {
+				assert_every_field_kept(source, exported, &format!("{at} kiroshi"));
+			}
+			_ => assert_eq!(exported.get(field), Some(value), "{at}: {field}"),
+		}
 	}
 }
 
@@ -254,6 +267,32 @@ fn an_edge_to_an_absent_node_is_refused_by_name() {
 }
 
 #[test]
+fn a_sticky_whose_author_is_not_an_identity_is_refused_by_name() {
+	let authors = [
+		json!("Ichi"),
+		json!({ "kind": "robot", "id": "ichi" }),
+		json!({ "kind": "agent", "id": "" }),
+		json!({ "kind": "agent" }),
+		json!({ "kind": "agent", "id": "ichi", "name": "Ichi" }),
+	];
+	for author in authors {
+		let sticky = json!({
+			"id": "a", "type": "text", "x": 0, "y": 0, "width": 1, "height": 1,
+			"kiroshi": { "kind": "sticky", "author": author },
+		});
+		assert_eq!(
+			refusal_of(json!({ "nodes": [sticky] })),
+			BoardError::InvalidField {
+				element: Element::Node,
+				id: "a".into(),
+				field: "author".into()
+			},
+			"{author}"
+		);
+	}
+}
+
+#[test]
 fn an_unreadable_canvas_is_refused() {
 	assert!(matches!(import_canvas("{"), Err(BoardError::NotJson { .. })));
 	assert_eq!(refusal_of(json!([])), BoardError::InvalidRoot { field: "root" });
@@ -268,6 +307,6 @@ fn the_schema_names_the_defaults_both_engines_apply() {
 	assert_eq!(default_of(&SCHEMA.edge.fields, "fromEnd"), json!("none"));
 	assert_eq!(default_of(&SCHEMA.edge.fields, "toEnd"), json!("arrow"));
 	assert_eq!(default_of(&SCHEMA.edge.fields, "routing"), json!("straight"));
-	assert_eq!(default_of(&SCHEMA.kinds["sticky"].fields, "color"), json!("3"));
+	assert_eq!(default_of(&SCHEMA.kinds["sticky"].fields, "fill"), json!("yellow"));
 	assert_eq!(default_of(&SCHEMA.kinds["shape"].fields, "shape"), json!("rectangle"));
 }

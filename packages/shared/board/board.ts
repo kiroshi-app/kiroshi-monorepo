@@ -14,11 +14,16 @@ type Placed = {
 	canvas?: JsonObject
 }
 
+export type StickyFill = "yellow" | "green" | "pink" | "blue" | "orange"
+
+export type Author = { kind: "agent" | "person"; id: string }
+
 export type StickyNode = Placed & {
 	kind: "sticky"
 	text: string
-	color: string
-	author: string
+	color?: string
+	fill: StickyFill
+	author: Author
 }
 
 export type TextNode = Placed & { kind: "text"; text: string; color?: string }
@@ -45,7 +50,7 @@ type FileFields = {
 	item?: string
 }
 
-export type ImageNode = Placed & FileFields & { kind: "image" }
+export type ImageNode = Placed & FileFields & { kind: "image"; alt?: string }
 
 export type LibraryCardNode = Placed & FileFields & { kind: "libraryCard" }
 
@@ -53,6 +58,9 @@ export type LinkCardNode = Placed & {
 	kind: "linkCard"
 	url: string
 	color?: string
+	title?: string
+	description?: string
+	preview?: string
 }
 
 export type ForeignNode = Placed & { kind: "foreign"; canvas: JsonObject }
@@ -128,7 +136,18 @@ type FieldSpec = {
 
 export type Fields = Record<string, FieldSpec>
 
-type KindSpec = { canvasType: string | null; fields: Fields }
+type FillPairing = {
+	field: string
+	colour: string
+	presets: Record<string, string>
+	fromColour: Record<string, string>
+}
+
+type KindSpec = {
+	canvasType: string | null
+	fields: Fields
+	fill?: FillPairing
+}
 
 type BoardSchema = {
 	doc: { nodes: string; edges: string; board: string; canvas: string }
@@ -197,6 +216,43 @@ export const isInZOrder = (keys: unknown[]) =>
 			isZ(key) && (index === 0 || (keys[index - 1] as string) < key),
 	)
 
+const IDENTITY_KEYS = ["id", "kind"]
+
+const isIdentity = (spec: FieldSpec, value: unknown) =>
+	isObject(value) &&
+	Object.keys(value).sort().join() === IDENTITY_KEYS.join() &&
+	typeof value.kind === "string" &&
+	(spec.enum ?? []).includes(value.kind) &&
+	typeof value.id === "string" &&
+	value.id.length > 0
+
+export const presetOf = (pairing: FillPairing, fill: unknown) =>
+	typeof fill === "string" && Object.hasOwn(pairing.presets, fill)
+		? pairing.presets[fill]
+		: undefined
+
+const derivedFill = (pairing: FillPairing, spec: KindSpec, colour: unknown) =>
+	typeof colour === "string" && Object.hasOwn(pairing.fromColour, colour)
+		? pairing.fromColour[colour]
+		: spec.fields[pairing.field]?.default
+
+const withPairedFill = (node: JsonObject, spec: KindSpec): JsonObject => {
+	const pairing = spec.fill
+	if (pairing === undefined) return node
+	const colour = node[pairing.colour]
+	const fill = Object.hasOwn(node, pairing.field)
+		? node[pairing.field]
+		: derivedFill(pairing, spec, colour)
+	const isPresetColour =
+		colour !== undefined && colour === presetOf(pairing, fill)
+	return Object.fromEntries([
+		...Object.entries(node).filter(
+			([name]) => !(isPresetColour && name === pairing.colour),
+		),
+		...(fill === undefined ? [] : [[pairing.field, fill]]),
+	])
+}
+
 const fits = (spec: FieldSpec, value: unknown) => {
 	switch (spec.type) {
 		case "integer":
@@ -207,6 +263,8 @@ const fits = (spec: FieldSpec, value: unknown) => {
 			return isZ(value)
 		case "json":
 			return isObject(value)
+		case "identity":
+			return isIdentity(spec, value)
 		default:
 			return (
 				typeof value === "string" &&
@@ -244,11 +302,12 @@ const parsedNode = (id: string, value: unknown) => {
 	const node = isObject(value) ? value : {}
 	const spec = kindSpec(node[KIND])
 	if (spec === undefined) throw refusedField(at, KIND)
+	const paired = withPairedFill(node, spec)
 	return {
 		[KIND]: node[KIND],
-		...parsedFields(NODE_FIELDS, node, at),
-		...parsedFields(spec.fields, node, at),
-		...parsedExtras(node, at),
+		...parsedFields(NODE_FIELDS, paired, at),
+		...parsedFields(spec.fields, paired, at),
+		...parsedExtras(paired, at),
 	} as BoardNode
 }
 

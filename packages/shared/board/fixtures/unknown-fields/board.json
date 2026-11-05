@@ -25,8 +25,10 @@
 			"height": 240,
 			"z": "a0",
 			"text": "Reacted to",
-			"color": "3",
-			"author": "ichi",
+			"author": {
+				"kind": "agent",
+				"id": "ichi"
+			},
 			"kiroshi": {
 				"reactions": {
 					"thumbsUp": 2
@@ -35,7 +37,8 @@
 			"canvas": {
 				"author": "a plugin",
 				"z": 7
-			}
+			},
+			"fill": "yellow"
 		}
 	},
 	"edges": {

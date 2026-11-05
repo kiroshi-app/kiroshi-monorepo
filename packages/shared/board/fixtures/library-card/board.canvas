@@ -1,34 +1,34 @@
 {
+	"edges": [],
 	"nodes": [
 		{
-			"id": "library-roadmap",
-			"type": "file",
-			"x": 0,
-			"y": 0,
-			"width": 400,
-			"height": 400,
 			"file": "Library/Roadmap.md",
-			"subpath": "#Q1",
+			"height": 400,
+			"id": "library-roadmap",
 			"kiroshi": {
+				"item": "Roadmap",
 				"kind": "libraryCard",
-				"z": "a0",
-				"item": "Roadmap"
-			}
+				"z": "a0"
+			},
+			"subpath": "#Q1",
+			"type": "file",
+			"width": 400,
+			"x": 0,
+			"y": 0
 		},
 		{
-			"id": "library-notes",
-			"type": "file",
-			"x": 450,
-			"y": 0,
-			"width": 400,
-			"height": 400,
-			"file": "Library/Notes.md",
 			"color": "4",
+			"file": "Library/Notes.md",
+			"height": 400,
+			"id": "library-notes",
 			"kiroshi": {
 				"kind": "libraryCard",
 				"z": "a1"
-			}
+			},
+			"type": "file",
+			"width": 400,
+			"x": 450,
+			"y": 0
 		}
-	],
-	"edges": []
+	]
 }

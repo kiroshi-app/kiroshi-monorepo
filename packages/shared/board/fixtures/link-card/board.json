@@ -7,7 +7,10 @@
 			"width": 400,
 			"height": 300,
 			"z": "a0",
-			"url": "https://jsoncanvas.org/spec/1.0/"
+			"url": "https://jsoncanvas.org/spec/1.0/",
+			"title": "JSON Canvas 1.0",
+			"description": "An open file format for infinite canvas data.",
+			"preview": "https://jsoncanvas.org/og.png"
 		}
 	},
 	"edges": {}

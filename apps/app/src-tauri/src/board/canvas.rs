@@ -73,6 +73,15 @@ fn canvas_node(id: &str, node: &JsonObject) -> Value {
 	place(SCHEMA.node.fields.0.iter(), node, &mut placed);
 	if let Some((_, spec)) = spec {
 		place(spec.fields.0.iter(), node, &mut placed);
+		if let Some(pairing) = &spec.fill {
+			let preset = pairing
+				.preset_of(placed.kiroshi.get(&pairing.field))
+				.map(Value::from)
+				.filter(|_| !placed.top.contains_key(&pairing.colour));
+			if let Some(preset) = preset {
+				placed.top.insert(pairing.colour.clone(), preset);
+			}
+		}
 	}
 	finished(placed)
 }

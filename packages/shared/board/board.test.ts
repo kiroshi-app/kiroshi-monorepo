@@ -101,8 +101,12 @@ describe.each(CASES)("the %s fixture", (name) => {
 
 	const canvasText = fixtureText(name, "board.canvas")
 
-	it("exports to its JSON Canvas file", () => {
-		expect(JSON.parse(exportCanvas(board))).toEqual(JSON.parse(canvasText))
+	it("exports to its JSON Canvas file byte for byte", () => {
+		expect(exportCanvas(board)).toBe(canvasText)
+	})
+
+	it("writes its JSON Canvas file back byte for byte", () => {
+		expect(exportCanvas(importCanvas(canvasText))).toBe(canvasText)
 	})
 
 	it("imports its JSON Canvas file to the same board", () => {
@@ -176,7 +180,13 @@ const byIdOf = (elements: CanvasElement[]) =>
 
 const expectEveryFieldKept = (source: object, exported: object) => {
 	for (const [field, value] of Object.entries(source)) {
-		expect(exported).toHaveProperty([field], value)
+		if (field === "kiroshi" && typeof value === "object" && value !== null) {
+			expect(exported).toHaveProperty([field])
+			expectEveryFieldKept(
+				value,
+				(exported as Record<string, object>)[field] ?? {},
+			)
+		} else expect(exported).toHaveProperty([field], value)
 	}
 }
 
@@ -303,6 +313,26 @@ describe("a canvas the import refuses", () => {
 			{ nodes: [{ id: "a", type: "text", ...placed, color: "red" }] },
 			{ kind: "invalidField", element: "node", id: "a", field: "color" },
 		],
+		...[
+			"Ichi",
+			{ kind: "robot", id: "ichi" },
+			{ kind: "agent", id: "" },
+			{ kind: "agent" },
+			{ kind: "agent", id: "ichi", name: "Ichi" },
+		].map((author): [string, object, BoardError] => [
+			`a sticky whose author is ${JSON.stringify(author)}`,
+			{
+				nodes: [
+					{
+						id: "a",
+						type: "text",
+						...placed,
+						kiroshi: { kind: "sticky", author },
+					},
+				],
+			},
+			{ kind: "invalidField", element: "node", id: "a", field: "author" },
+		]),
 		[
 			"a node whose kiroshi kind does not fit its type",
 			{
@@ -384,7 +414,11 @@ describe("the board schema", () => {
 		expect(EDGE_FIELDS.fromEnd?.default).toBe("none")
 		expect(EDGE_FIELDS.toEnd?.default).toBe("arrow")
 		expect(EDGE_FIELDS.routing?.default).toBe("straight")
-		expect(BOARD_SCHEMA.kinds.sticky?.fields.color?.default).toBe("3")
+		expect(BOARD_SCHEMA.kinds.sticky?.fields.fill?.default).toBe("yellow")
+		expect(BOARD_SCHEMA.kinds.sticky?.fields.author?.enum).toEqual([
+			"agent",
+			"person",
+		])
 		expect(BOARD_SCHEMA.kinds.shape?.fields.shape?.default).toBe("rectangle")
 	})
 })
