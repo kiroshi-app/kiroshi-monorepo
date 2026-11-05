@@ -12,6 +12,14 @@ board-boardlinkcard--long-content
 board-boardlinkcard--long-content-dark
 board-boardobjects--link-and-image-pasted
 board-boardobjects--link-and-image-pasted-dark
+board-boardpresence--agents-finished
+board-boardpresence--long-content
+board-boardpresence--one-agent
+board-boardpresence--one-agent-dark
+board-boardpresence--person-with-agents
+board-boardpresence--person-with-agents-dark
+board-boardpresence--several-agents
+board-boardpresence--several-agents-dark
 board-boardsection--blue
 board-boardsection--blue-dark
 board-boardsection--purple
@@ -22,6 +30,7 @@ board-boardshape--rounded-rectangle
 board-boardshape--rounded-rectangle-dark
 board-boardsticky--agent-author
 board-boardsticky--agent-author-dark
+board-boardsticky--agent-writing-without-outline
 board-boardsticky--colours
 board-boardsticky--colours-dark
 board-boardsticky--long-content

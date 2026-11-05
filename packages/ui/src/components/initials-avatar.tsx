@@ -14,6 +14,8 @@ const DEFAULT_SIZE = 28
 
 const INITIALS_RATIO = 0.4
 
+const PRESENCE_INITIALS_SIZE = 9
+
 type AvatarShape = "hexagon" | "round"
 
 type ShapeStyle = { frame: string; layer: string; mask?: CSSProperties }
@@ -89,6 +91,7 @@ type InitialsAvatarProps = {
 	image?: string
 	size?: number
 	isOnOwnBubble?: boolean
+	isOnPresenceTag?: boolean
 	className?: string
 }
 
@@ -97,6 +100,7 @@ const InitialsAvatar = ({
 	image,
 	size = DEFAULT_SIZE,
 	isOnOwnBubble = false,
+	isOnPresenceTag = false,
 	className,
 }: InitialsAvatarProps) => (
 	<AvatarFrame
@@ -112,8 +116,14 @@ const InitialsAvatar = ({
 				INITIALS_CLASS,
 				isOnOwnBubble &&
 					"bg-user-bubble-foreground/14 text-user-bubble-foreground",
+				isOnPresenceTag &&
+					"bg-(--hue-light-avatar-ground) font-bold text-(--hue-light-accent)",
 			)}
-			style={{ fontSize: Math.round(size * INITIALS_RATIO) }}
+			style={{
+				fontSize: isOnPresenceTag
+					? PRESENCE_INITIALS_SIZE
+					: Math.round(size * INITIALS_RATIO),
+			}}
 		>
 			{initialsOf(displayNameOf(name))}
 		</span>

@@ -658,6 +658,10 @@ const common = {
 			zoomIn: "Zoom in",
 			level: "{{percent}}%",
 		},
+		presence: {
+			drawing_one: "{{count}} agent drawing",
+			drawing_other: "{{count}} agents drawing",
+		},
 		libraryCard: {
 			documentMeta: "Document · from the Library",
 		},

@@ -112,8 +112,10 @@ const StopSquare = () => (
 	<span aria-hidden="true" className="size-2 shrink-0 rounded-xs bg-current" />
 )
 
+type PresencePerson = Omit<LibraryDocumentPerson, "caret">
+
 type PeopleStackProps = {
-	people: LibraryDocumentPerson[]
+	people: PresencePerson[]
 }
 
 const PeopleStack = ({ people }: PeopleStackProps) => (
@@ -136,15 +138,24 @@ const PeopleStack = ({ people }: PeopleStackProps) => (
 	</span>
 )
 
+type PresenceActivity = "writing" | "drawing"
+
+const ACTIVITY_LABEL = {
+	writing: "library.document.agents.writing",
+	drawing: "board.presence.drawing",
+} as const satisfies Record<PresenceActivity, string>
+
 type LibraryDocumentPresenceProps = {
-	writers: LibraryDocumentWriter[]
-	people?: LibraryDocumentPerson[]
+	writers: Pick<LibraryDocumentWriter, "agent">[]
+	people?: PresencePerson[]
+	activity?: PresenceActivity
 	onStopAll?: () => void
 }
 
 const LibraryDocumentPresence = ({
 	writers,
 	people = [],
+	activity = "writing",
 	onStopAll,
 }: LibraryDocumentPresenceProps) => {
 	const { t } = useTranslation("common")
@@ -159,7 +170,7 @@ const LibraryDocumentPresence = ({
 				>
 					<AgentStack agents={writers.map(({ agent }) => agent)} />
 					<span className="whitespace-nowrap font-medium text-compact text-soft-foreground leading-4">
-						{t("library.document.agents.writing", { count: writers.length })}
+						{t(ACTIVITY_LABEL[activity], { count: writers.length })}
 					</span>
 					{onStopAll ? (
 						<Button

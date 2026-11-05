@@ -11,6 +11,12 @@ import {
 } from "react"
 import { useTranslation } from "react-i18next"
 
+import {
+	BoardObjectOutline,
+	type BoardObjectOutlineSpec,
+	BoardPointer,
+	type BoardPointerPlacement,
+} from "@workspace/ui/components/board/board-presence"
 import type {
 	BoardObject,
 	BoardPoint,
@@ -38,6 +44,8 @@ type BoardCanvasProps = {
 	viewport: BoardViewport
 	onViewportChange: (viewport: BoardViewport) => void
 	renderObject: (object: BoardObject) => ReactNode
+	pointers?: readonly BoardPointerPlacement[]
+	outlines?: readonly BoardObjectOutlineSpec[]
 	className?: string
 }
 
@@ -275,11 +283,27 @@ const BoardZoomControl = ({
 	)
 }
 
+type OutlinedObjectProps = {
+	outline?: BoardObjectOutlineSpec
+	children: ReactNode
+}
+
+const OutlinedObject = ({ outline, children }: OutlinedObjectProps) =>
+	outline ? (
+		<BoardObjectOutline owner={outline.owner} state={outline.state}>
+			{children}
+		</BoardObjectOutline>
+	) : (
+		children
+	)
+
 const BoardCanvas = ({
 	view,
 	viewport,
 	onViewportChange,
 	renderObject,
+	pointers = [],
+	outlines = [],
 	className,
 }: BoardCanvasProps) => {
 	const { attach, size, zoomTo } = useBoardGestures(viewport, onViewportChange)
@@ -315,10 +339,32 @@ const BoardCanvas = ({
 							zIndex: object.zOrder,
 						}}
 					>
-						{renderObject(object)}
+						<OutlinedObject
+							outline={outlines.find(({ objectId }) => objectId === object.id)}
+						>
+							{renderObject(object)}
+						</OutlinedObject>
 					</div>
 				))}
 			</div>
+			{pointers.length > 0 ? (
+				<div
+					aria-hidden="true"
+					className="pointer-events-none absolute inset-0"
+					data-slot="board-pointers"
+				>
+					{pointers.map(({ owner, position }) => (
+						<BoardPointer
+							key={owner.id}
+							owner={owner}
+							position={{
+								x: Math.round(viewport.offset.x + position.x * viewport.zoom),
+								y: Math.round(viewport.offset.y + position.y * viewport.zoom),
+							}}
+						/>
+					))}
+				</div>
+			) : null}
 			{view.objects.length === 0 ? <BoardEmptyHint /> : null}
 			<BoardZoomControl
 				onZoomIn={() => zoomTo(zoomStepIn)}
