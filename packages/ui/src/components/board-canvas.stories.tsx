@@ -93,6 +93,7 @@ const BoardObjectView = ({ object }: PlaceholderObjectProps) => {
 			return (
 				<BoardShape
 					height={object.size.height}
+					fill={object.style?.fill}
 					kind={object.style?.shape ?? "rounded-rectangle"}
 					label={object.text}
 					width={object.size.width}
@@ -484,6 +485,7 @@ const KICKOFF: BoardItem = {
 const SMALL_BOARD = { objects: [PLAN, RESEARCH, SHIP, KICKOFF] }
 const PLAN_NAME = `Sticky note: ${STICKY_TEXT}`
 const FRAME_OUTSET = 4
+const FRAME_BORDER = 2
 const HANDLE_SIZE = 10
 const BAR_HEIGHT = 40
 const BAR_GAP = 16
@@ -533,7 +535,7 @@ const expectSelectionChrome = async (root: HTMLElement, object: Element) => {
 	await expect(frameBox.y).toBeCloseTo(box.y - FRAME_OUTSET, 0)
 	await expect(frameBox.width).toBeCloseTo(box.width + FRAME_OUTSET * 2, 0)
 	await expect(frameBox.height).toBeCloseTo(box.height + FRAME_OUTSET * 2, 0)
-	await expect(frameStyle.borderTopWidth).toBe("2px")
+	await expect(frameStyle.borderTopWidth).toBe(`${FRAME_BORDER}px`)
 	await expect(frameStyle.borderTopLeftRadius).toBe("2px")
 	await expect(frameStyle.borderTopColor).toBe(
 		resolvedRootColor("--user-bubble"),
@@ -541,11 +543,12 @@ const expectSelectionChrome = async (root: HTMLElement, object: Element) => {
 
 	const handles = slotsIn(root, "board-selection-handle")
 	await expect(handles).toHaveLength(4)
+	const borderMiddle = FRAME_BORDER / 2
 	const corners = [
-		[frameBox.left, frameBox.top],
-		[frameBox.right, frameBox.top],
-		[frameBox.left, frameBox.bottom],
-		[frameBox.right, frameBox.bottom],
+		[frameBox.left + borderMiddle, frameBox.top + borderMiddle],
+		[frameBox.right - borderMiddle, frameBox.top + borderMiddle],
+		[frameBox.left + borderMiddle, frameBox.bottom - borderMiddle],
+		[frameBox.right - borderMiddle, frameBox.bottom - borderMiddle],
 	]
 	for (const [index, handle] of handles.entries()) {
 		const handleBox = handle.getBoundingClientRect()
@@ -589,6 +592,35 @@ const expectBarAbove = async (root: HTMLElement, object: Element) => {
 	)
 }
 
+const expectBoxAt = async (box: DOMRect, resting: DOMRect) => {
+	await expect(box.x).toBeCloseTo(resting.x, 1)
+	await expect(box.y).toBeCloseTo(resting.y, 1)
+	await expect(box.width).toBeCloseTo(resting.width, 1)
+}
+
+const expectEditorInPlace = async (
+	object: HTMLElement,
+	editor: HTMLTextAreaElement,
+	resting: DOMRect,
+) => {
+	const text = slotIn(object, "board-sticky-text")
+	const look = getComputedStyle(editor)
+	await expect(look.backgroundColor).toBe(
+		getComputedStyle(slotIn(object, "board-sticky")).backgroundColor,
+	)
+	await expect(look.fontSize).toBe(getComputedStyle(text).fontSize)
+	await expect(look.lineHeight).toBe(getComputedStyle(text).lineHeight)
+	await expect(look.color).toBe(getComputedStyle(text).color)
+	await expectBoxAt(editor.getBoundingClientRect(), resting)
+	await expect(getComputedStyle(text).visibility).toBe("hidden")
+}
+
+const expectTextAtRest = async (object: HTMLElement, resting: DOMRect) => {
+	const text = slotIn(object, "board-sticky-text")
+	await expect(getComputedStyle(text).visibility).toBe("visible")
+	await expectBoxAt(text.getBoundingClientRect(), resting)
+}
+
 const selectionDocs = (story: string) => ({
 	docs: { description: { story } },
 })
@@ -597,7 +629,7 @@ export const ShapeSelected = meta.story({
 	globals: LAPTOP_WINDOW,
 	args: SELECTION_ARGS,
 	parameters: selectionDocs(
-		"Boards 4c: the Research shape selected. Check the frame 4px outside the shape with a 2px Space-colour border and 2px corners, the four 10px handles centred on its corners and filled with the panel surface, and the style bar 40px tall, 16px above the frame and centred on the shape: the shape-type pill, five fill swatches with the current one ringed, the text size and More. Picking a swatch or a shape type sends a style intent and rings the pick, every control changes colour on hover and press with no transition, the bar hides while the shape is dragged, and a sticky gets the frame but no bar. Pick ShapeSelectedDark for the dark theme.",
+		"Boards 4c: the Research shape selected. Check the frame 4px outside the shape with a 2px Space-colour border and 2px corners, the four 10px handles centred on its corners and filled with the panel surface, and the style bar 40px tall, 16px above the frame and centred on the shape: the shape-type pill, five fill swatches with the current one ringed, the text size and More. Picking a swatch or a shape type sends a style intent, rings the pick and paints the shape in it, every control changes colour on hover and press with no transition, the bar hides while the shape is dragged, and a sticky gets the frame but no bar. Pick ShapeSelectedDark for the dark theme.",
 	),
 	play: async ({ canvasElement, args }) => {
 		const canvas = within(canvasElement)
@@ -622,6 +654,9 @@ export const ShapeSelected = meta.story({
 			style: { shape: "rounded-rectangle", fill: "yellow" },
 		})
 		await expect(swatch("Yellow")).toHaveAttribute("aria-pressed", "true")
+		await expect(
+			getComputedStyle(slotIn(research, "board-shape")).backgroundColor,
+		).toBe(resolvedRootColor("--board-sticky-yellow"))
 		await expect(swatch("No colour")).toHaveAttribute("aria-pressed", "false")
 		const ring = swatch("Yellow").querySelector("span") as HTMLElement
 		await expect(getComputedStyle(ring).boxShadow).toMatch(/\b2px\b/)
@@ -838,17 +873,19 @@ export const EditByPointer = meta.story({
 	globals: LAPTOP_WINDOW,
 	args: SELECTION_ARGS,
 	parameters: selectionDocs(
-		"A double click on the sticky edits its text in place with the caret at the end. Escape sends one edit-text intent with the new text and keeps the sticky selected and focused; a second edit left unchanged by a press on the empty board sends nothing and keeps the sticky selected. Pick EditByKeyboard for Enter.",
+		"A double click on the sticky edits its text in place, on the sticky's own colour and over the exact spot, size and type of the resting text, with the caret at the end and no jump on the way in or out. Escape sends one edit-text intent with the new text and keeps the sticky selected and focused; a second edit left unchanged by a press on the empty board sends nothing and keeps the sticky selected. Pick EditByKeyboard for Enter.",
 	),
 	play: async ({ canvasElement, args }) => {
 		const plan = optionNamed(canvasElement, PLAN_NAME)
 		const board = slotIn(canvasElement, "board-canvas")
+		const resting = slotIn(plan, "board-sticky-text").getBoundingClientRect()
 
 		await userEvent.dblClick(plan)
 		const editor = within(canvasElement).getByRole("textbox", {
 			name: "Edit text",
 		}) as HTMLTextAreaElement
 		await expect(editor).toHaveFocus()
+		await expectEditorInPlace(plan, editor, resting)
 		await expect([editor.selectionStart, editor.selectionEnd]).toEqual([
 			STICKY_TEXT.length,
 			STICKY_TEXT.length,
@@ -871,6 +908,7 @@ export const EditByPointer = meta.story({
 		const edited = optionNamed(canvasElement, `${PLAN_NAME} today`)
 		await expect(edited).toHaveFocus()
 		await expect(edited).toHaveAttribute("aria-selected", "true")
+		await expectTextAtRest(edited, resting)
 
 		await userEvent.dblClick(edited)
 		await expect(within(canvasElement).getByRole("textbox")).toHaveFocus()
@@ -1055,10 +1093,12 @@ export const EditByKeyboard = meta.story({
 	globals: LAPTOP_WINDOW,
 	args: SELECTION_ARGS,
 	parameters: selectionDocs(
-		"With the sticky selected by Tab, Enter edits its text in place with the caret at the end, and Escape sends one edit-text intent and keeps it selected and focused. A second Enter and Escape with nothing typed sends nothing. Pick EditByPointer for a double click.",
+		"With the sticky selected by Tab, Enter edits its text in place, on the sticky's own colour and over the resting text with no jump, the caret at the end, and Escape sends one edit-text intent and keeps it selected and focused. A second Enter and Escape with nothing typed sends nothing. Pick EditByPointer for a double click.",
 	),
 	play: async ({ canvasElement, args }) => {
 		const board = slotIn(canvasElement, "board-canvas")
+		const plan = optionNamed(canvasElement, PLAN_NAME)
+		const resting = slotIn(plan, "board-sticky-text").getBoundingClientRect()
 		board.focus()
 		await userEvent.tab()
 		await userEvent.keyboard("{Enter}")
@@ -1066,6 +1106,7 @@ export const EditByKeyboard = meta.story({
 			name: "Edit text",
 		}) as HTMLTextAreaElement
 		await expect(editor).toHaveFocus()
+		await expectEditorInPlace(plan, editor, resting)
 		await expect(editor.value).toBe(STICKY_TEXT)
 		await expect(editor.selectionStart).toBe(STICKY_TEXT.length)
 
@@ -1079,6 +1120,7 @@ export const EditByKeyboard = meta.story({
 		const edited = optionNamed(canvasElement, `${PLAN_NAME} today`)
 		await expect(edited).toHaveFocus()
 		await expect(edited).toHaveAttribute("aria-selected", "true")
+		await expectTextAtRest(edited, resting)
 
 		await userEvent.keyboard("{Enter}{Escape}")
 		await expect(edited).toHaveFocus()

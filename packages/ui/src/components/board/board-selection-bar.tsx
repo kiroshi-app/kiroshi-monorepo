@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next"
 
+import { BOARD_SHAPE_FILL } from "@workspace/ui/components/board/board-shape"
 import type {
 	BoardShapeFill,
 	BoardShapeStyle,
@@ -28,14 +29,6 @@ const BOARD_SHAPE_TYPES: readonly BoardShapeType[] = [
 	"rounded-rectangle",
 	"ellipse",
 ]
-
-const FILL_DOT: Record<BoardShapeFill, string> = {
-	surface: "bg-board-shape-surface",
-	yellow: "bg-board-sticky-yellow",
-	green: "bg-board-sticky-green",
-	blue: "bg-board-sticky-blue",
-	pink: "bg-board-sticky-pink",
-}
 
 const SHAPE_GLYPH: Record<BoardShapeType, typeof Icons.Ellipse> = {
 	"rounded-rectangle": Icons.RoundedRectangle,
@@ -119,7 +112,7 @@ const BoardSelectionBar = ({
 						aria-hidden="true"
 						className={cn(
 							"size-5 rounded-full",
-							FILL_DOT[fill],
+							BOARD_SHAPE_FILL[fill],
 							fill === shapeStyle.fill
 								? "ring-2 ring-board-selection-bar-foreground"
 								: "ring-1 ring-board-selection-bar-foreground/15 ring-inset",

@@ -58,6 +58,7 @@ const BoardSticky = ({
 	>
 		<p
 			className="line-clamp-5 wrap-break-word text-reading leading-5"
+			data-board-text
 			data-slot="board-sticky-text"
 		>
 			{text}

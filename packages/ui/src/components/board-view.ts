@@ -1,4 +1,7 @@
-import type { BoardShapeKind } from "@workspace/ui/components/board/board-shape"
+import type {
+	BoardShapeFill,
+	BoardShapeKind,
+} from "@workspace/ui/components/board/board-shape"
 
 type BoardPoint = {
 	x: number
@@ -15,8 +18,6 @@ type BoardRect = BoardPoint & BoardSize
 type BoardItemKind = "sticky" | "text" | "shape" | "image" | "link"
 
 type BoardShapeType = BoardShapeKind
-
-type BoardShapeFill = "surface" | "yellow" | "green" | "blue" | "pink"
 
 type BoardShapeStyle = {
 	shape: BoardShapeType

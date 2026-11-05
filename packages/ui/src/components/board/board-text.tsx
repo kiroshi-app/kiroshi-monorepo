@@ -18,6 +18,7 @@ const BoardText = ({ heading, body }: BoardTextProps) => (
 		{body ? (
 			<p
 				className="text-board-body-foreground text-reading"
+				data-board-text
 				data-slot="board-text-body"
 			>
 				{body}

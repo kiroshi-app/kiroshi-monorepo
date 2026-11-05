@@ -34,6 +34,14 @@ board-boardselectionbar--default
 board-boardselectionbar--default-dark
 board-boardshape--ellipse
 board-boardshape--ellipse-dark
+board-boardshape--fill-blue
+board-boardshape--fill-blue-dark
+board-boardshape--fill-green
+board-boardshape--fill-green-dark
+board-boardshape--fill-pink
+board-boardshape--fill-pink-dark
+board-boardshape--fill-yellow
+board-boardshape--fill-yellow-dark
 board-boardshape--rounded-rectangle
 board-boardshape--rounded-rectangle-dark
 board-boardsticky--agent-author

@@ -2,6 +2,7 @@
 
 import {
 	type ComponentType,
+	type CSSProperties,
 	type KeyboardEvent,
 	type PointerEvent,
 	type ReactNode,
@@ -79,6 +80,7 @@ type PointerPosition = {
 type SafariGestureEvent = Event & PointerPosition & { scale: number }
 
 const NO_SIZE: BoardSize = { width: 0, height: 0 }
+const NO_PAINT = "rgba(0, 0, 0, 0)"
 
 const pointerIn = (element: HTMLElement, event: PointerPosition) => {
 	const rect = element.getBoundingClientRect()
@@ -284,7 +286,7 @@ const BoardZoomControl = ({
 			aria-label={t("board.zoom.controls")}
 			className="absolute end-5 bottom-5 flex items-center gap-0.5 rounded-lg bg-board-control p-1 text-board-control-foreground shadow-board-control"
 			data-slot="board-zoom-control"
-			role="application"
+			role="group"
 		>
 			<BoardZoomButton
 				icon={Icons.ZoomOut}
@@ -327,10 +329,10 @@ const DEFAULT_SHAPE_STYLE: BoardShapeStyle = {
 	fill: "surface",
 }
 const HANDLE_PLACE: Record<BoardCorner, string> = {
-	"top-left": "-top-[7px] -left-[7px] cursor-nwse-resize",
-	"top-right": "-top-[7px] -right-[7px] cursor-nesw-resize",
-	"bottom-left": "-bottom-[7px] -left-[7px] cursor-nesw-resize",
-	"bottom-right": "-right-[7px] -bottom-[7px] cursor-nwse-resize",
+	"top-left": "-top-1.5 -left-1.5 cursor-nwse-resize",
+	"top-right": "-top-1.5 -right-1.5 cursor-nesw-resize",
+	"bottom-left": "-bottom-1.5 -left-1.5 cursor-nesw-resize",
+	"bottom-right": "-right-1.5 -bottom-1.5 cursor-nwse-resize",
 }
 
 type BoardGesture = {
@@ -338,9 +340,15 @@ type BoardGesture = {
 	rect: BoardRect
 }
 
+type BoardTextField = {
+	rect: BoardRect
+	look: CSSProperties
+}
+
 type BoardEditing = {
 	id: string
 	text: string
+	field: BoardTextField
 }
 
 type BoardReshape = (rect: BoardRect, delta: BoardPoint) => BoardRect
@@ -353,6 +361,49 @@ const placeOf = (rect: BoardRect) => ({
 })
 
 const hasText = (item: BoardItem) => TEXT_KINDS.has(item.kind)
+
+const surfaceBehind = (text: HTMLElement, object: HTMLElement) => {
+	for (
+		let node: HTMLElement | null = text;
+		node && node !== object;
+		node = node.parentElement
+	) {
+		const { backgroundColor } = getComputedStyle(node)
+		if (backgroundColor !== NO_PAINT) return backgroundColor
+	}
+	return "transparent"
+}
+
+const textFieldOf = (
+	object: HTMLElement,
+	item: BoardItem,
+	zoom: number,
+): BoardTextField => {
+	const marked = object.querySelector<HTMLElement>("[data-board-text]")
+	const text = marked?.offsetWidth && marked.offsetHeight ? marked : object
+	const objectBox = object.getBoundingClientRect()
+	const box = text.getBoundingClientRect()
+	const style = getComputedStyle(text)
+	return {
+		rect: {
+			x: item.position.x + (box.x - objectBox.x) / zoom,
+			y: item.position.y + (box.y - objectBox.y) / zoom,
+			width: box.width / zoom,
+			height: box.height / zoom,
+		},
+		look: {
+			backgroundColor: surfaceBehind(text, object),
+			color: style.color,
+			fontFamily: style.fontFamily,
+			fontSize: style.fontSize,
+			fontStyle: style.fontStyle,
+			fontWeight: style.fontWeight,
+			letterSpacing: style.letterSpacing,
+			lineHeight: style.lineHeight,
+			textAlign: style.textAlign as CSSProperties["textAlign"],
+		},
+	}
+}
 
 const placeCaretAtEnd = (field: HTMLTextAreaElement | null) => {
 	if (!field) return
@@ -450,12 +501,12 @@ const BoardCanvas = ({
 		return item.text ? t("board.object.named", { kind, text: item.text }) : kind
 	}
 
-	const focusObject = (id: string) =>
-		canvas.current
-			?.querySelector<HTMLElement>(
-				`[data-slot="board-object"][data-object-id="${CSS.escape(id)}"]`,
-			)
-			?.focus()
+	const objectNodeOf = (id: string) =>
+		canvas.current?.querySelector<HTMLElement>(
+			`[data-slot="board-object"][data-object-id="${CSS.escape(id)}"]`,
+		)
+
+	const focusObject = (id: string) => objectNodeOf(id)?.focus()
 
 	const clearSelection = () => {
 		setSelectedId(null)
@@ -463,9 +514,14 @@ const BoardCanvas = ({
 	}
 
 	const startEditing = (item: BoardItem) => {
-		if (!hasText(item)) return
+		const node = objectNodeOf(item.id)
+		if (!hasText(item) || !node) return
 		setSelectedId(item.id)
-		setEditing({ id: item.id, text: item.text })
+		setEditing({
+			id: item.id,
+			text: item.text,
+			field: textFieldOf(node, item, viewport.zoom),
+		})
 	}
 
 	const finishEditing = () => {
@@ -663,7 +719,10 @@ const BoardCanvas = ({
 						<div
 							aria-label={nameOf(object)}
 							aria-selected={object.id === selectedId}
-							className="absolute outline-none"
+							className={cn(
+								"absolute outline-none",
+								object.id === editing?.id && "[&_[data-board-text]]:invisible",
+							)}
 							data-object-id={object.id}
 							data-slot="board-object"
 							key={object.id}
@@ -706,11 +765,11 @@ const BoardCanvas = ({
 				{editing && editedItem ? (
 					<textarea
 						aria-label={t("board.object.editText")}
-						className="absolute resize-none rounded-[3px] bg-board-shape-surface p-3 text-board-foreground text-sm leading-4.5 outline-none wrap-break-word select-text"
+						className="absolute resize-none overflow-hidden outline-none wrap-break-word select-text"
 						data-slot="board-text-editor"
 						onBlur={finishEditing}
 						onChange={(event) =>
-							setEditing({ id: editing.id, text: event.target.value })
+							setEditing({ ...editing, text: event.target.value })
 						}
 						onKeyDown={(event) => {
 							if (event.key !== "Escape") return
@@ -719,7 +778,8 @@ const BoardCanvas = ({
 						}}
 						ref={placeCaretAtEnd}
 						style={{
-							...placeOf(itemBounds(editedItem)),
+							...placeOf(editing.field.rect),
+							...editing.field.look,
 							zIndex: editedItem.zOrder,
 						}}
 						value={editing.text}
