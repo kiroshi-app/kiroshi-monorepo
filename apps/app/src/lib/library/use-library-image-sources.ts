@@ -13,6 +13,16 @@ type SourceOf = (item: LibraryItem) => string
 
 const NO_IMAGES: LibraryItem[] = []
 
+const isImage = ({ kind }: LibraryItem) => {
+	switch (kind) {
+		case "image":
+			return true
+		case "document":
+		case "board":
+			return false
+	}
+}
+
 const dataUrlOf = ({ mimeType, content }: LibraryImage) =>
 	`data:${mimeType};base64,${content}`
 
@@ -46,15 +56,13 @@ export const useLibraryImageSources = (
 	items: LibraryItem[],
 	isJoined: boolean,
 ): SourceOf => {
-	const images = isJoined
-		? items.filter((item) => item.kind === "image")
-		: NO_IMAGES
+	const images = isJoined ? items.filter(isImage) : NO_IMAGES
 	const hostSourceOf = useHostImageSources(spaceId, images)
 	return isJoined ? hostSourceOf : fileSourceOf
 }
 
 const listedImageIn = (items: LibraryItem[] | undefined, name: string) =>
-	items?.find((item) => item.kind === "image" && item.name === name)
+	items?.find((item) => isImage(item) && item.name === name)
 
 export const useLibraryImageResolver = (spaceId: string, isJoined: boolean) => {
 	const queryClient = useQueryClient()

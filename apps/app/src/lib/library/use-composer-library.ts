@@ -17,8 +17,17 @@ export type ComposerLibrary = {
 
 const NO_DOCUMENTS: LibraryItem[] = []
 
-const documentsIn = (items: LibraryItem[]) =>
-	items.filter((item) => item.kind === "document")
+const isPickable = ({ kind }: LibraryItem) => {
+	switch (kind) {
+		case "document":
+			return true
+		case "image":
+		case "board":
+			return false
+	}
+}
+
+const documentsIn = (items: LibraryItem[]) => items.filter(isPickable)
 
 const toPickerDocument = (
 	item: LibraryItem,

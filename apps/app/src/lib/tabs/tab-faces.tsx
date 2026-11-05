@@ -21,7 +21,6 @@ import {
 	threadRowIdOf,
 } from "./tab-pages"
 
-import type { LibraryItemKind } from "../bindings"
 import { shownTitleOf, titleOf } from "../library/library-items"
 import type { LibraryOpening } from "../navigation/library-search"
 import { APPLICATIONS_ENTRY } from "../navigation/settings-search"
@@ -63,31 +62,28 @@ const libraryFace = (): TabFace => ({
 	icon: <Icons.Library />,
 })
 
-const LIBRARY_ITEM_DESCRIPTORS = {
-	document: { kind: "library-document", icon: "File" },
-	image: { kind: "library-image", icon: "Image" },
-	board: { kind: "library-document", icon: "File" },
-} as const satisfies Record<
-	LibraryItemKind,
-	Omit<TitleBarTabDescriptor, "name">
->
-
-const libraryItemDescriptorOf = ({
-	kind,
-	name,
-	title,
-}: LibraryOpening): TitleBarTabDescriptor => ({
-	...LIBRARY_ITEM_DESCRIPTORS[kind],
-	name: shownTitleOf(title ?? titleOf({ kind, name })),
+const describedFace = (descriptor: TitleBarTabDescriptor): TabFace => ({
+	...libraryFace(),
+	title: descriptor.name,
+	descriptor,
 })
 
-const libraryFaceOf = ({ libraryOpening }: TabPage): TabFace => {
-	if (libraryOpening === undefined) {
-		return libraryFace()
+const libraryItemFaceOf = (opening: LibraryOpening): TabFace => {
+	const name = shownTitleOf(opening.title ?? titleOf(opening))
+	switch (opening.kind) {
+		case "document":
+			return describedFace({ kind: "library-document", icon: "File", name })
+		case "image":
+			return describedFace({ kind: "library-image", icon: "Image", name })
+		case "board":
+			return { title: name, icon: <Icons.Board /> }
 	}
-	const descriptor = libraryItemDescriptorOf(libraryOpening)
-	return { ...libraryFace(), title: descriptor.name, descriptor }
 }
+
+const libraryFaceOf = ({ libraryOpening }: TabPage): TabFace =>
+	libraryOpening === undefined
+		? libraryFace()
+		: libraryItemFaceOf(libraryOpening)
 
 const settingsFaceOf = (page: TabPage): TabFace => ({
 	title:

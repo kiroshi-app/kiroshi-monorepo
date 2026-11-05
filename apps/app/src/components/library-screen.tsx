@@ -22,8 +22,9 @@ import {
 } from "@workspace/ui/components/library-tab-states"
 import { i18n } from "@workspace/ui/lib/i18n"
 
+import { LibraryBoard } from "@/components/library-board"
 import { LibraryDropTarget } from "@/components/library-drop-target"
-import type { LibraryItem, Space } from "@/lib/bindings"
+import type { LibraryBoardSummary, LibraryItem, Space } from "@/lib/bindings"
 import type { Bot } from "@/lib/conversations/store-contract"
 import { failureReporterIn } from "@/lib/failure-report"
 import { storedImageSourceOf } from "@/lib/library/library-image-source"
@@ -35,6 +36,7 @@ import {
 	toShownItem,
 } from "@/lib/library/library-items"
 import { readLinkPreview } from "@/lib/library/library-link-preview"
+import { useCreateLibraryBoard } from "@/lib/library/use-create-library-board"
 import { useCreateLibraryDocument } from "@/lib/library/use-create-library-document"
 import {
 	useJoinedLibraryActions,
@@ -51,7 +53,10 @@ import {
 	useLibraryImageSave,
 	useLibraryImports,
 } from "@/lib/library/use-library-imports"
-import { useLibraryItems } from "@/lib/library/use-library-items"
+import {
+	type LibraryItemsRead,
+	useLibraryItems,
+} from "@/lib/library/use-library-items"
 import { useStopLibraryWriters } from "@/lib/library/use-stop-library-writers"
 import type { LibraryOpening } from "@/lib/navigation/library-search"
 import { isNewTabClickInFlight } from "@/lib/tabs/new-tab-clicks"
@@ -64,6 +69,7 @@ export type LibraryScreenProps = {
 	opening?: LibraryOpening
 	onOpeningChange: (opening: LibraryOpening | undefined) => void
 	onOpenInNewTab?: (opening: LibraryOpening) => void
+	onOpenBoard: (opening: LibraryOpening) => void
 	onCloseTab?: () => void
 }
 
@@ -85,23 +91,24 @@ type DocumentDraft = Omit<OpenedDocument, "kind" | "detail"> & {
 
 type NamedItem = { id: string }
 
-type ListedItem = Exclude<ShownLibraryItem, { kind: "board" }>
-
-type KindedItem = Pick<ListedItem, "id" | "kind">
-
-type ListedItemAction = (item: ListedItem) => void | Promise<void>
-
-const ignoringBoards = <Action extends ListedItemAction | undefined>(
-	action: Action,
-) =>
-	action &&
-	((item: ShownLibraryItem): void | Promise<void> =>
-		item.kind === "board" ? undefined : action(item))
+type KindedItem = Pick<ShownLibraryItem, "id" | "kind">
 
 const openingOfItem = ({ id, kind }: KindedItem): LibraryOpening => ({
 	kind,
 	name: id,
 })
+
+type Openers = {
+	inPlace: (opening: LibraryOpening) => void
+	inItsTab: (opening: LibraryOpening) => void
+}
+
+const openerOf =
+	({ inPlace, inItsTab }: Openers) =>
+	(item: KindedItem) => {
+		const opening = openingOfItem(item)
+		return opening.kind === "board" ? inItsTab(opening) : inPlace(opening)
+	}
 
 const documentOpeningOf = ({ name, title }: DocumentDraft): LibraryOpening => ({
 	kind: "document",
@@ -158,16 +165,43 @@ type OpeningRead = {
 	isDocumentOpened: boolean
 	isDocumentRead: boolean
 	hasFailedToOpen: boolean
+	hasBoardFailed: boolean
 }
 
 const openingStatusOf = (read: OpeningRead) => {
 	const isMissing = read.hasListed && !read.isListed && !read.isDocumentOpened
-	const hasNoOpenFailure = read.opening?.kind === "image" || read.isDocumentRead
+	const hasNoOpenFailure =
+		read.opening?.kind !== "document" || read.isDocumentRead
 	return {
 		isMissing,
 		notifiedMissing: isMissing && hasNoOpenFailure ? read.opening : undefined,
 		hasFailedToRead:
-			read.hasFailedToOpen || (!read.isListing && !read.hasListed),
+			read.hasFailedToOpen ||
+			read.hasBoardFailed ||
+			(!read.isListing && !read.hasListed),
+	}
+}
+
+type OpenedBoard = {
+	summary: LibraryBoardSummary | undefined
+	hasFailedToRead: boolean
+}
+
+const NO_OPENED_BOARD: OpenedBoard = {
+	summary: undefined,
+	hasFailedToRead: false,
+}
+
+const openedBoardOf = (
+	library: LibraryItemsRead,
+	listed: LibraryItem | undefined,
+): OpenedBoard => {
+	if (listed?.kind !== "board") {
+		return NO_OPENED_BOARD
+	}
+	return {
+		summary: library.summaryOf(listed),
+		hasFailedToRead: library.hasSummaryFailed(listed),
 	}
 }
 
@@ -221,19 +255,44 @@ const isActionShownOn = (
 
 type LibraryOpeningStateProps = {
 	opening: LibraryOpening
+	boardSummary: LibraryBoardSummary | undefined
 	isMissing: boolean
 	hasFailedToRead: boolean
 	onCloseTab?: () => void
 	onBackToLibrary: () => void
+	onDelete: () => void
 }
 
+type LibraryBoardOpeningProps = Pick<
+	LibraryOpeningStateProps,
+	"opening" | "boardSummary" | "onBackToLibrary" | "onDelete"
+>
+
+const LibraryBoardOpening = ({
+	opening: { name },
+	boardSummary,
+	onBackToLibrary,
+	onDelete,
+}: LibraryBoardOpeningProps) =>
+	boardSummary ? (
+		<LibraryBoard
+			key={name}
+			name={titleOf({ kind: "board", name })}
+			onBack={onBackToLibrary}
+			onDelete={onDelete}
+			summary={boardSummary}
+		/>
+	) : (
+		<LibraryImageSkeleton />
+	)
+
 const LibraryOpeningState = ({
-	opening,
 	isMissing,
 	hasFailedToRead,
 	onCloseTab,
-	onBackToLibrary,
+	...opened
 }: LibraryOpeningStateProps) => {
+	const { opening, onBackToLibrary } = opened
 	if (isMissing) {
 		return (
 			<LibraryItemUnavailable
@@ -252,11 +311,14 @@ const LibraryOpeningState = ({
 			/>
 		)
 	}
-	return opening.kind === "image" ? (
-		<LibraryImageSkeleton />
-	) : (
-		<LibraryDocumentSkeleton />
-	)
+	switch (opening.kind) {
+		case "document":
+			return <LibraryDocumentSkeleton />
+		case "image":
+			return <LibraryImageSkeleton />
+		case "board":
+			return <LibraryBoardOpening {...opened} />
+	}
 }
 
 export const LibraryScreen = ({
@@ -267,6 +329,7 @@ export const LibraryScreen = ({
 	opening,
 	onOpeningChange,
 	onOpenInNewTab,
+	onOpenBoard,
 	onCloseTab,
 }: LibraryScreenProps) => {
 	const library = useLibraryItems(spaceId)
@@ -293,15 +356,21 @@ export const LibraryScreen = ({
 		useState<LibraryDocumentTemplate | null>(null)
 	const editor = useRef<LibraryDocumentEditorHandle>(null)
 	const { create, isCreating } = useCreateLibraryDocument(spaceId)
+	const createBoard = useCreateLibraryBoard(spaceId)
 	const { importingItems, importDropped } = useLibraryImports(spaceId, isJoined)
 	const toShown = (item: LibraryItem) =>
 		toShownItem(
 			item,
-			{ excerpt: library.excerptOf(item), src: sourceOf(item) },
+			{
+				excerpt: library.excerptOf(item),
+				src: sourceOf(item),
+				summary: library.summaryOf(item),
+			},
 			library.readAt,
 		)
 	const listedOpened = library.items.find(isNamedBy(opening))
 	const isImageListed = listedOpened?.kind === "image"
+	const openedBoard = openedBoardOf(library, listedOpened)
 	const openedDocument = openedDocumentOf(
 		opening,
 		heldDraft,
@@ -332,6 +401,7 @@ export const LibraryScreen = ({
 		isDocumentOpened: openedDocument !== null,
 		isDocumentRead: document !== null,
 		hasFailedToOpen,
+		hasBoardFailed: openedBoard.hasFailedToRead,
 	})
 	useMissingOpeningNotice(spaceId, notifiedMissing)
 
@@ -353,7 +423,9 @@ export const LibraryScreen = ({
 			onOpeningChange(openingOfItem(image))
 		}
 	}
-	const openItem = (item: KindedItem) => onOpeningChange(openingOfItem(item))
+	const openItem = openerOf({ inPlace: onOpeningChange, inItsTab: onOpenBoard })
+	const newBoard = () =>
+		createBoard((name) => onOpenBoard({ kind: "board", name }))
 	const openInNewTab =
 		onOpenInNewTab &&
 		((item: KindedItem) => onOpenInNewTab(openingOfItem(item)))
@@ -401,7 +473,7 @@ export const LibraryScreen = ({
 			onRefused: () => showTitled({ ...opened, title: opened.startTitle }),
 		})
 	}
-	const deleteShownImage = ({ id }: NamedItem) =>
+	const deleteAndClose = ({ id }: NamedItem) =>
 		actions.remove(id, { onSuccess: close })
 	const deleteDocument = ({ name }: OpenedDocument) =>
 		closeAndRelist().then(() => actions.remove(name, { onSuccess: close }))
@@ -461,10 +533,12 @@ export const LibraryScreen = ({
 	if (opening && !isImageListed) {
 		return (
 			<LibraryOpeningState
+				boardSummary={openedBoard.summary}
 				hasFailedToRead={hasFailedToRead}
 				isMissing={isMissing}
 				onBackToLibrary={close}
 				onCloseTab={onCloseTab}
+				onDelete={() => deleteAndClose({ id: opening.name })}
 				opening={opening}
 			/>
 		)
@@ -476,16 +550,17 @@ export const LibraryScreen = ({
 			isActionShown={isActionShownOn}
 			items={[...importingItems, ...shownItems]}
 			onFilterChange={setFilter}
-			onCopy={ignoringBoards(copy)}
-			onDelete={ignoringBoards(remove)}
-			onDownload={ignoringBoards(save)}
+			onCopy={copy}
+			onDelete={remove}
+			onDownload={save}
+			onNewBoard={newBoard}
 			onNewDocument={() => setPickedTemplate("blank")}
-			onOpen={ignoringBoards(openItem)}
-			onOpenInNewTab={ignoringBoards(openInNewTab)}
-			onOpenItem={ignoringBoards(openPressedItem)}
-			onRename={ignoringBoards(openItem)}
+			onOpen={openItem}
+			onOpenInNewTab={openInNewTab}
+			onOpenItem={openPressedItem}
+			onRename={openItem}
 			onSearchQueryChange={setQuery}
-			onShowInFolder={ignoringBoards(reveal)}
+			onShowInFolder={reveal}
 			onStartTemplate={setPickedTemplate}
 			overlay={
 				<>
@@ -495,7 +570,7 @@ export const LibraryScreen = ({
 						onClose={close}
 						onCopy={copyAndWait}
 						onCopyImage={copyAndWait}
-						onDelete={deleteShownImage}
+						onDelete={deleteAndClose}
 						onDownload={save}
 						onShowInFolder={reveal}
 						onNext={() => openImageAt(imageIndex + 1)}

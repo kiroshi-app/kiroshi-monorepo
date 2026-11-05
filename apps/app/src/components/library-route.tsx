@@ -11,7 +11,10 @@ import {
 	librarySearchOf,
 	openingOf,
 } from "@/lib/navigation/library-search"
-import { useOpenLibraryItemInNewTab } from "@/lib/navigation/use-open-library-document"
+import {
+	useOpenLibraryItemInItsTab,
+	useOpenLibraryItemInNewTab,
+} from "@/lib/navigation/use-open-library-document"
 import { isJoinedRowId } from "@/lib/spaces/joined-spaces-controller"
 import { useWorkspace } from "@/lib/workspace/workspace-context"
 
@@ -41,6 +44,7 @@ export const LibraryRoute = () => {
 	const { rosteredHostSpaceId, rosterView, scopes } = useWorkspace()
 	const opening = openingOf(useSearch({ from: "/library" }))
 	const openInNewTab = useOpenLibraryItemInNewTab()
+	const openInItsTab = useOpenLibraryItemInItsTab()
 	const showOpening = useShowOpening()
 	const closeTab = useCloseActiveTab()
 	const spaceRowId = rosterView.rosteredSpaceId
@@ -53,6 +57,7 @@ export const LibraryRoute = () => {
 					isJoined={isJoinedRowId(spaceRowId)}
 					key={spaceRowId}
 					onCloseTab={closeTab}
+					onOpenBoard={openInItsTab}
 					onOpenInNewTab={openInNewTab}
 					onOpeningChange={showOpening}
 					opening={opening}

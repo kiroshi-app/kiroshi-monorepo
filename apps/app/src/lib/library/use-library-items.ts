@@ -9,9 +9,13 @@ import { useEffect } from "react"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { libraryQueryKeys } from "./library-query-keys"
-import { readLibraryDocument, readLibraryItems } from "./library-reads"
+import {
+	readLibraryBoardSummary,
+	readLibraryDocument,
+	readLibraryItems,
+} from "./library-reads"
 
-import type { LibraryItem } from "../bindings"
+import type { LibraryBoardSummary, LibraryItem } from "../bindings"
 
 const EXCERPT_LENGTH = 1_000
 
@@ -23,6 +27,8 @@ export type LibraryItemsRead = {
 	hasLoaded: boolean
 	readAt: number
 	excerptOf: (item: LibraryItem) => string
+	summaryOf: (item: LibraryItem) => LibraryBoardSummary | undefined
+	hasSummaryFailed: (item: LibraryItem) => boolean
 }
 
 const useRelistOnWindowFocus = (spaceId: string) => {
@@ -61,6 +67,37 @@ const useExcerpts = (spaceId: string, items: LibraryItem[]) => {
 	return (item: LibraryItem) => excerptByName.get(item.name) ?? ""
 }
 
+const logSummaryFailure = (name: string) => (reason: unknown) => {
+	console.error(`library: the summary of the board ${name} failed`, reason)
+	throw reason
+}
+
+const readLoggedBoardSummary = (spaceId: string, name: string) =>
+	readLibraryBoardSummary(spaceId, name).catch(logSummaryFailure(name))
+
+const useBoardSummaries = (spaceId: string, items: LibraryItem[]) => {
+	const boards = items.filter((item) => item.kind === "board")
+	const summaries = useQueries({
+		queries: boards.map((board) => ({
+			queryKey: libraryQueryKeys.boardSummaryOf(
+				spaceId,
+				board.name,
+				board.modifiedAt,
+			),
+			queryFn: () => readLoggedBoardSummary(spaceId, board.name),
+			meta: { rendersErrorInline: true as const },
+		})),
+	})
+	const summaryByName = new Map(
+		boards.map((board, index) => [board.name, summaries[index]]),
+	)
+	return {
+		summaryOf: (item: LibraryItem) => summaryByName.get(item.name)?.data,
+		hasSummaryFailed: (item: LibraryItem) =>
+			summaryByName.get(item.name)?.isError ?? false,
+	}
+}
+
 export const libraryItemsQueryOf = (spaceId: string) =>
 	queryOptions({
 		queryKey: libraryQueryKeys.itemsOf(spaceId),
@@ -79,6 +116,7 @@ export const useLibraryItems = (spaceId: string): LibraryItemsRead => {
 	useRelistOnWindowFocus(spaceId)
 	const items = list.data ?? NO_ITEMS
 	const excerptOf = useExcerpts(spaceId, items)
+	const { summaryOf, hasSummaryFailed } = useBoardSummaries(spaceId, items)
 
 	return {
 		items,
@@ -86,5 +124,7 @@ export const useLibraryItems = (spaceId: string): LibraryItemsRead => {
 		hasLoaded: list.data !== undefined,
 		readAt: list.dataUpdatedAt,
 		excerptOf,
+		summaryOf,
+		hasSummaryFailed,
 	}
 }

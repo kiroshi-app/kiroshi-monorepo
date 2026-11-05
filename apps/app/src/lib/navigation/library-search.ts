@@ -15,7 +15,7 @@ export type LibraryOpening = {
 }
 
 const isLibraryItemKind = (value: unknown): value is LibraryItemKind =>
-	value === "document" || value === "image"
+	value === "document" || value === "image" || value === "board"
 
 export const validateLibrarySearch = (
 	search: Record<string, unknown>,
