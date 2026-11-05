@@ -1375,6 +1375,26 @@ fn an_unchanged_file_opens_without_a_host_edit() {
 	assert_eq!(state_vector_of(&after_restart.state), state_vector_of(&reopened.state));
 }
 
+const MARKDOWN_ON_MAIN: &[u8] = include_bytes!("../../tests/vectors/library-markdown-on-main.md");
+
+const STATE_ON_MAIN: &[u8] = include_bytes!("../../tests/vectors/library-markdown-on-main.yjs");
+
+#[test]
+fn a_document_and_its_state_stored_before_document_kinds_open_unchanged() {
+	let root = temp_root();
+	put(&root, SPACE, "notes.md", MARKDOWN_ON_MAIN);
+	let state_dir = root.join(".documents").join(SPACE);
+	fs::create_dir_all(&state_dir).expect("the state folder lands");
+	fs::write(state_dir.join("notes.md.yjs"), STATE_ON_MAIN).expect("the state lands");
+
+	let opened = Documents::default().open(&root, SPACE, "notes.md").expect("opens");
+
+	assert!(opened.host_edit.is_none());
+	assert_eq!(opened.state, STATE_ON_MAIN);
+	assert_eq!(stored_state_of(&root, "notes.md"), STATE_ON_MAIN);
+	assert_eq!(file_text(&root, "notes.md").as_bytes(), MARKDOWN_ON_MAIN);
+}
+
 #[test]
 fn the_stored_state_stays_out_of_the_library_folder_and_its_listing() {
 	let root = temp_root();

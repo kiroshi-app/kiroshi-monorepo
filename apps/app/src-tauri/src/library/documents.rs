@@ -5,21 +5,19 @@ use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use yrs::updates::decoder::Decode;
-use yrs::updates::encoder::Encode;
-use yrs::{
-	Assoc, Doc, GetString, IndexedSequence, ReadTxn, StateVector, StickyIndex, Text, TextRef,
-	Transact, Update,
-};
+use yrs::{Doc, ReadTxn, StateVector, Transact, Update};
 
-use super::contract::LibraryError;
+use super::contract::{LibraryDocumentFormat, LibraryError};
 use super::{
 	accepted_type, discarded, document_text, is_plain_name, is_the_item_itself,
 	linked_under_free_name, resolve, space_dir, stored_thumbnail, thumbnail_name, thumbnails_dir,
-	undecodable, unwritable, within, AcceptedType, ResolvedItem, MAX_DOCUMENT_BYTES,
+	undecodable, unwritable, AcceptedType, ResolvedItem,
 };
 use crate::private_files;
 
-const TEXT_NAME: &str = "markdown";
+mod markdown;
+
+pub(crate) use markdown::located;
 
 const STATE_DIR_NAME: &str = ".documents";
 
@@ -79,10 +77,42 @@ pub(crate) enum Location {
 	PassageNotUnique { occurrences: usize },
 }
 
+#[derive(Clone, Copy)]
+enum DocumentKind {
+	Markdown,
+}
+
+impl DocumentKind {
+	fn of(format: LibraryDocumentFormat) -> Self {
+		match format {
+			LibraryDocumentFormat::Markdown | LibraryDocumentFormat::Text => Self::Markdown,
+		}
+	}
+
+	fn reconciled(self, doc: &Doc, file_text: &str) -> bool {
+		match self {
+			Self::Markdown => markdown::reconciled(doc, file_text),
+		}
+	}
+
+	fn exported(self, doc: &Doc) -> Vec<u8> {
+		match self {
+			Self::Markdown => markdown::exported(doc),
+		}
+	}
+
+	fn bounded(self, doc: &Doc, name: &str) -> Result<(), LibraryError> {
+		match self {
+			Self::Markdown => markdown::bounded(doc, name),
+		}
+	}
+}
+
 struct DocumentFile {
 	name: String,
 	path: PathBuf,
 	text: String,
+	kind: DocumentKind,
 }
 
 struct Loaded {
@@ -99,7 +129,7 @@ impl Documents {
 	) -> Result<Opened, LibraryError> {
 		let mut held = self.held();
 		let file = document_file(root, space_id, name)?;
-		held.synced(root, space_id, name, &file.text)
+		held.synced(root, space_id, name, file.kind, &file.text)
 	}
 
 	pub(crate) fn overwrite_document(
@@ -112,7 +142,7 @@ impl Documents {
 		let mut held = self.held();
 		let file = document_file(root, space_id, name)?;
 		private_files::replace_atomically(&file.path, text.as_bytes()).map_err(unwritable)?;
-		held.synced(root, space_id, name, text)
+		held.synced(root, space_id, name, file.kind, text)
 	}
 
 	pub(crate) fn overwrite_image(
@@ -144,7 +174,8 @@ impl Documents {
 		update: &[u8],
 	) -> Result<Applied, LibraryError> {
 		decoded(name, update)?;
-		let (applied, ()) = self.merged(root, space_id, name, |_, _| Ok((update.to_vec(), ())))?;
+		let (applied, ()) =
+			self.merged(root, space_id, name, |_, _, _| Ok((update.to_vec(), ())))?;
 		Ok(applied)
 	}
 
@@ -155,8 +186,9 @@ impl Documents {
 		name: &str,
 		step: &WriteStep<'_>,
 	) -> Result<Written, LibraryError> {
-		let (applied, caret) =
-			self.merged(root, space_id, name, |doc, name| inserted_by(doc, name, step))?;
+		let (applied, caret) = self.merged(root, space_id, name, |kind, doc, name| match kind {
+			DocumentKind::Markdown => markdown::inserted_by(doc, name, step),
+		})?;
 		Ok(Written { name: applied.name, change: applied.change, caret })
 	}
 
@@ -167,8 +199,9 @@ impl Documents {
 		name: &str,
 		step: &RemoveStep<'_>,
 	) -> Result<Written, LibraryError> {
-		let (applied, caret) =
-			self.merged(root, space_id, name, |doc, name| removed_by(doc, name, step))?;
+		let (applied, caret) = self.merged(root, space_id, name, |kind, doc, name| match kind {
+			DocumentKind::Markdown => markdown::removed_by(doc, name, step),
+		})?;
 		Ok(Written { name: applied.name, change: applied.change, caret })
 	}
 
@@ -177,7 +210,7 @@ impl Documents {
 		root: &Path,
 		space_id: &str,
 		name: &str,
-		update_of: impl FnOnce(&Doc, &str) -> Result<(Vec<u8>, T), LibraryError>,
+		update_of: impl FnOnce(DocumentKind, &Doc, &str) -> Result<(Vec<u8>, T), LibraryError>,
 	) -> Result<(Applied, T), LibraryError> {
 		let mut held = self.held();
 		let file = held.located(root, space_id, name)?;
@@ -188,14 +221,14 @@ impl Documents {
 			Some(held) => held,
 			None => &loaded.insert(loaded_from_disk(root, space_id, name)?).doc,
 		};
-		let (update, made) = update_of(doc, name)?;
-		checked_on_a_copy(doc, &file.text, &update, name)?;
+		let (update, made) = update_of(file.kind, doc, name)?;
+		checked_on_a_copy(doc, &file, &update)?;
 		let before = doc.transact().state_vector();
-		took_as_host_edit(doc, &file.text);
+		file.kind.reconciled(doc, &file.text);
 		merged_into(doc, name, decoded(name, &update)?)?;
 		let change = doc.transact().encode_state_as_update_v1(&before);
 		store_state(root, space_id, name, doc)?;
-		private_files::replace_atomically(&file.path, text_of(doc).as_bytes())
+		private_files::replace_atomically(&file.path, &file.kind.exported(doc))
 			.map_err(unwritable)?;
 		if let Some(loaded) = loaded {
 			held.docs.insert(key, loaded.doc);
@@ -280,6 +313,7 @@ impl Held {
 		root: &Path,
 		space_id: &str,
 		name: &str,
+		kind: DocumentKind,
 		file_text: &str,
 	) -> Result<Opened, LibraryError> {
 		let key = key(space_id, name);
@@ -292,7 +326,7 @@ impl Held {
 			}
 		};
 		let before = doc.transact().state_vector();
-		let is_host_edited = took_as_host_edit(doc, file_text);
+		let is_host_edited = kind.reconciled(doc, file_text);
 		if is_host_edited || !was_stored {
 			store_state(root, space_id, name, doc)?;
 		}
@@ -408,11 +442,12 @@ fn key(space_id: &str, name: &str) -> Key {
 
 fn document_file(root: &Path, space_id: &str, name: &str) -> Result<DocumentFile, LibraryError> {
 	let item = resolve(root, space_id, name)?;
-	if !matches!(item.accepted, AcceptedType::Document(_)) {
+	let AcceptedType::Document(format) = item.accepted else {
 		return Err(LibraryError::NotADocument { name: name.to_owned() });
-	}
+	};
 	let text = document_text(&item, name)?;
-	Ok(DocumentFile { name: name.to_owned(), path: item.path, text })
+	let kind = DocumentKind::of(format);
+	Ok(DocumentFile { name: name.to_owned(), path: item.path, text, kind })
 }
 
 fn decoded(name: &str, update: &[u8]) -> Result<Update, LibraryError> {
@@ -432,149 +467,17 @@ fn loaded_from_disk(root: &Path, space_id: &str, name: &str) -> Result<Loaded, L
 	Ok(Loaded { doc, was_stored: true })
 }
 
-fn checked_on_a_copy(
-	doc: &Doc,
-	file_text: &str,
-	update: &[u8],
-	name: &str,
-) -> Result<(), LibraryError> {
+fn checked_on_a_copy(doc: &Doc, file: &DocumentFile, update: &[u8]) -> Result<(), LibraryError> {
+	let name = file.name.as_str();
 	let copy = Doc::with_client_id(doc.client_id().get());
 	merged_into(&copy, name, decoded(name, &full_state(doc))?)?;
-	took_as_host_edit(&copy, file_text);
+	file.kind.reconciled(&copy, &file.text);
 	merged_into(&copy, name, decoded(name, update)?)?;
-	within(name, text_of(&copy).len() as u64, MAX_DOCUMENT_BYTES)
-}
-
-pub(crate) fn located(
-	state: &[u8],
-	name: &str,
-	placement: &Placement<'_>,
-) -> Result<Location, LibraryError> {
-	let doc = Doc::new();
-	merged_into(&doc, name, decoded(name, state)?)?;
-	let text = doc.get_or_insert_text(TEXT_NAME);
-	let txn = doc.transact();
-	let current = text.get_string(&txn);
-	let (start, end) = match placement {
-		Placement::End => (current.len(), current.len()),
-		Placement::Whole => (0, current.len()),
-		Placement::After(passage) | Placement::Replacing(passage) => {
-			match passage_starts(&current, passage).as_slice() {
-				[] => return Ok(Location::PassageNotFound),
-				[start] if matches!(placement, Placement::After(_)) => {
-					(start + passage.len(), start + passage.len())
-				}
-				[start] => (*start, start + passage.len()),
-				starts => return Ok(Location::PassageNotUnique { occurrences: starts.len() }),
-			}
-		}
-	};
-	let caret = caret_at(&text, &txn, start, name)?;
-	if start == end {
-		return Ok(Location::Caret(caret));
-	}
-	Ok(Location::Passage { start: caret, end: caret_at(&text, &txn, end, name)? })
-}
-
-fn passage_starts(text: &str, passage: &str) -> Vec<usize> {
-	let mut starts = Vec::new();
-	let mut from = 0;
-	while let Some(found) = text.get(from..).and_then(|rest| rest.find(passage)) {
-		let start = from + found;
-		starts.push(start);
-		from = start + text[start..].chars().next().map_or(1, char::len_utf8);
-	}
-	starts
-}
-
-fn inserted_by(
-	doc: &Doc,
-	name: &str,
-	step: &WriteStep<'_>,
-) -> Result<(Vec<u8>, Vec<u8>), LibraryError> {
-	let writer = writer_of(doc, step.writer, name)?;
-	let text = writer.get_or_insert_text(TEXT_NAME);
-	let mut txn = writer.transact_mut();
-	let index = index_of(step.caret, &text, &txn, name)?;
-	text.insert(&mut txn, index, step.text);
-	let caret = caret_at(&text, &txn, index as usize + step.text.len(), name)?;
-	let update = txn.encode_state_as_update_v1(&doc.transact().state_vector());
-	Ok((update, caret))
-}
-
-fn removed_by(
-	doc: &Doc,
-	name: &str,
-	step: &RemoveStep<'_>,
-) -> Result<(Vec<u8>, Vec<u8>), LibraryError> {
-	let writer = writer_of(doc, step.writer, name)?;
-	let text = writer.get_or_insert_text(TEXT_NAME);
-	let mut txn = writer.transact_mut();
-	let start = index_of(step.start, &text, &txn, name)?;
-	let end = index_of(step.end, &text, &txn, name)?;
-	if end > start {
-		text.remove_range(&mut txn, start, end - start);
-	}
-	let caret = caret_at(&text, &txn, start as usize, name)?;
-	let update = txn.encode_state_as_update_v1(&doc.transact().state_vector());
-	Ok((update, caret))
-}
-
-fn writer_of(doc: &Doc, writer: u64, name: &str) -> Result<Doc, LibraryError> {
-	let copy = Doc::with_client_id(writer);
-	merged_into(&copy, name, decoded(name, &full_state(doc))?)?;
-	Ok(copy)
-}
-
-fn index_of<T: ReadTxn>(
-	caret: &[u8],
-	text: &TextRef,
-	txn: &T,
-	name: &str,
-) -> Result<u32, LibraryError> {
-	let anchor =
-		StickyIndex::decode_v1(caret).map_err(|error| undecodable(name, error.to_string()))?;
-	Ok(anchor.get_offset(txn).map_or_else(|| text.len(txn), |offset| offset.index))
-}
-
-fn caret_at<T: ReadTxn>(
-	text: &TextRef,
-	txn: &T,
-	index: usize,
-	name: &str,
-) -> Result<Vec<u8>, LibraryError> {
-	u32::try_from(index)
-		.ok()
-		.and_then(|index| text.sticky_index(txn, index, Assoc::Before))
-		.map(|caret| caret.encode_v1())
-		.ok_or_else(|| undecodable(name, format!("no caret stands at byte {index}")))
+	file.kind.bounded(&copy, name)
 }
 
 fn full_state(doc: &Doc) -> Vec<u8> {
 	doc.transact().encode_state_as_update_v1(&StateVector::default())
-}
-
-fn text_of(doc: &Doc) -> String {
-	doc.get_or_insert_text(TEXT_NAME).get_string(&doc.transact())
-}
-
-fn took_as_host_edit(doc: &Doc, wanted: &str) -> bool {
-	let text = doc.get_or_insert_text(TEXT_NAME);
-	let mut txn = doc.transact_mut();
-	let current = text.get_string(&txn);
-	if current == wanted {
-		return false;
-	}
-	let prefix = shared_bytes(current.chars(), wanted.chars());
-	let suffix = shared_bytes(current[prefix..].chars().rev(), wanted[prefix..].chars().rev());
-	let removed = current.len() - prefix - suffix;
-	text.remove_range(&mut txn, prefix as u32, removed as u32);
-	text.insert(&mut txn, prefix as u32, &wanted[prefix..wanted.len() - suffix]);
-	true
-}
-
-fn shared_bytes(left: impl Iterator<Item = char>, right: impl Iterator<Item = char>) -> usize {
-	left.zip(right).take_while(|(a, b)| a == b).map(|(a, _)| a.len_utf8()).sum()
 }
 
 fn state_dir(root: &Path, space_id: &str) -> PathBuf {
