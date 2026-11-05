@@ -286,6 +286,8 @@ const common = {
 		search: "Rechercher dans la Bibliothèque",
 		import: "Importer",
 		newDocument: "Nouveau document",
+		newBoard: "Nouveau tableau",
+		blankBoard: "Tableau vierge",
 		saved: {
 			title: "Enregistré dans la Bibliothèque",
 			image: "Image enregistrée dans la Bibliothèque",
@@ -296,10 +298,12 @@ const common = {
 			all: "Tout",
 			images: "Images",
 			documents: "Documents",
+			boards: "Tableaux",
 		},
 		noResult: {
 			images: "Aucune image dans cette Bibliothèque pour l’instant.",
 			documents: "Aucun document dans cette Bibliothèque pour l’instant.",
+			boards: "Aucun tableau dans cette Bibliothèque pour l’instant.",
 			search: "Rien ne correspond à « {{query}} ».",
 		},
 		start: "Commencer un document",

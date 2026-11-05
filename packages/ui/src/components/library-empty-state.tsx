@@ -3,6 +3,7 @@
 import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
+import { BoardDotGrid } from "@workspace/ui/components/board-canvas"
 import { Icons } from "@workspace/ui/components/icons"
 import { LibraryPage } from "@workspace/ui/components/library-grid"
 import { Button } from "@workspace/ui/components/ui/button"
@@ -20,6 +21,10 @@ const OUTLINED_PILL =
 	"h-8 rounded-full border-input bg-transparent font-medium text-compact text-foreground leading-4 transition-none hover:bg-foreground/5 dark:bg-transparent dark:hover:bg-foreground/5"
 
 const DASHED = "border-[1.5px] border-input border-dashed"
+
+const BLANK_BOARD_GRID_PITCH = 12
+
+const GRID_ORIGIN = { x: 0, y: 0 }
 
 const CARD_FOCUS =
 	"focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring focus-visible:outline-offset-2"
@@ -74,19 +79,32 @@ const TemplateCard = ({
 	</button>
 )
 
+const BlankBoardThumbnail = () => (
+	<>
+		<BoardDotGrid offset={GRID_ORIGIN} pitch={BLANK_BOARD_GRID_PITCH} />
+		<span
+			aria-hidden="true"
+			className="pointer-events-none relative size-10 -rotate-4 rounded-[3px] bg-board-sticky-yellow shadow-board-hint-sticky group-hover/template:shadow-board-hint-sticky-raised"
+			data-slot="library-blank-board-sticky"
+		/>
+	</>
+)
+
 type LibraryEmptyStateProps = {
 	onNewDocument?: () => void
+	onNewBoard?: () => void
 	onStartTemplate?: (template: LibraryTemplate) => void
 	onImport?: () => void
 }
 
 const LibraryEmptyState = ({
 	onNewDocument,
+	onNewBoard,
 	onStartTemplate,
 	onImport,
 }: LibraryEmptyStateProps) => {
 	const { t } = useTranslation("common")
-	const canStart = Boolean(onNewDocument || onStartTemplate)
+	const canStart = Boolean(onNewDocument || onNewBoard || onStartTemplate)
 
 	if (!canStart && !onImport) return null
 
@@ -112,6 +130,14 @@ const LibraryEmptyState = ({
 									DASHED,
 									"group-hover/template:bg-foreground/3",
 								)}
+							/>
+						) : null}
+						{onNewBoard ? (
+							<TemplateCard
+								name={t("library.blankBoard")}
+								onPress={onNewBoard}
+								thumbnail={<BlankBoardThumbnail />}
+								thumbnailClassName="border border-input border-dashed bg-board-surface"
 							/>
 						) : null}
 						{onStartTemplate

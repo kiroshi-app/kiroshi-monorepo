@@ -22,10 +22,13 @@ import { ContentCard } from "@workspace/ui/components/content-card"
 import { hueTone } from "@workspace/ui/components/hue-palette"
 import { HUE_PRESETS } from "@workspace/ui/components/hue-tones"
 import {
+	LIBRARY_BOARDS,
 	LIBRARY_DRAG_PREVIEW,
 	LIBRARY_DROPPED_NAMES,
+	LIBRARY_EMPTY_BOARD,
 	LIBRARY_ITEMS,
 	LIBRARY_ITEMS_AFTER_IMPORT,
+	LIBRARY_ITEMS_WITH_BOARDS,
 } from "@workspace/ui/components/library.fixtures"
 import {
 	LibraryGrid,
@@ -160,6 +163,7 @@ const PANEL_STORY_ARGS: LibraryPanelProps = {
 	onSearchQueryChange: fn(),
 	onImport: fn(),
 	onNewDocument: fn(),
+	onNewBoard: fn(),
 	onStartTemplate: fn(),
 }
 
@@ -171,7 +175,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The Library tab of a Space: every image and document the Space holds, read-only. The header carries the search, Import and New document, each drawn only when its callback is passed; the filters are one single-selection toggle group whose pressed pill wears the Space colour; each grid item is a single button that hands the item to `onOpenItem`, and a right-click on it opens the item action menu, listing only the actions whose callback is given. A Library with nothing in it trades the grid for the Start a document templates and the Bring in files strip, and while the Library loads a grid skeleton fills the card. Pass a `LibraryLightbox` as `overlay` so it covers the card.",
+					"The Library tab of a Space: every image, document and board the Space holds, read-only. The header carries the search, Import, New board and New document, each drawn only when its callback is passed; the filters are one single-selection toggle group whose pressed pill wears the Space colour; each grid item is a single button that hands the item to `onOpenItem`, and a right-click on it opens the item action menu, listing only the actions whose callback is given. A Library with nothing in it trades the grid for the Start a document templates and the Bring in files strip, and while the Library loads a grid skeleton fills the card. Pass a `LibraryLightbox` as `overlay` so it covers the card.",
 			},
 		},
 	},
@@ -503,6 +507,205 @@ export const GridDocuments = meta.story({
 	},
 })
 
+const resolvedColourOf = (root: HTMLElement, value: string) => {
+	const probe = document.createElement("span")
+	probe.style.backgroundColor = value
+	root.append(probe)
+	const colour = getComputedStyle(probe).backgroundColor
+	probe.remove()
+	return colour
+}
+
+const boardTileIn = (root: HTMLElement, name: string) =>
+	within(root).getByRole("button", { name: new RegExp(`^${name}`) })
+
+export const GridWithBoards = meta.story({
+	args: { items: LIBRARY_ITEMS_WITH_BOARDS },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The Library as artboard 6a draws it, dark theme: two boards among the images and documents, each a miniature of the board drawn with the board objects themselves over the dot grid. Check that Boards and its count follow Documents, that a board tile shares the document tile's border, hover and ring, and that pressing it hands the board to `onOpenItem`. The tile keeps the shipped 180px preview and 10px caption gap rather than the artboard's 184 and 12, so mixed rows stay aligned.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		const filters = canvas.getByRole("group", { name: "Show" })
+		const pills = within(filters).getAllByRole("button")
+		await expect(pills.map((pill) => pill.textContent)).toEqual([
+			"All",
+			"Images8",
+			"Documents4",
+			"Boards2",
+		])
+
+		const tile = boardTileIn(canvasElement, "Launch plan")
+		await expect(tile).toHaveAccessibleName(
+			"Launch plan Board · 6 items · 2 min ago",
+		)
+		const thumbnail = slotIn(tile, "library-thumbnail")
+		await expect(getComputedStyle(thumbnail).backgroundColor).toBe(
+			resolvedColourOf(canvasElement, "var(--board-surface)"),
+		)
+		const miniature = slotIn(thumbnail, "board-miniature")
+		await expect(miniature).toHaveAttribute("aria-hidden", "true")
+		await expect(getComputedStyle(miniature).pointerEvents).toBe("none")
+		await expect(slotIn(miniature, "board-dot-grid")).toBeVisible()
+		await waitFor(() =>
+			expect(slotsIn(miniature, "board-sticky")).toHaveLength(3),
+		)
+		await expect(slotsIn(miniature, "board-section")).toHaveLength(1)
+		await expect(slotsIn(miniature, "board-shape")).toHaveLength(1)
+		await expect(slotsIn(miniature, "board-text")).toHaveLength(1)
+		await expect(miniature.querySelector("img")).toBe(null)
+
+		const documentTile = canvas.getByRole("button", {
+			name: /Spring launch brief/,
+		})
+		await expect(tile.className).toBe(documentTile.className)
+		await expect(thumbnail.className.replace("bg-board-surface", "")).toBe(
+			slotIn(documentTile, "library-thumbnail").className.replace(
+				"bg-(--document-ground)",
+				"",
+			),
+		)
+
+		for (let press = 0; press < 12 && document.activeElement !== tile; press++)
+			await userEvent.tab()
+		await expect(tile).toHaveFocus()
+		await expect(tile.matches(":focus-visible")).toBe(true)
+		await expect(getComputedStyle(tile).outlineStyle).toBe("solid")
+
+		await userEvent.click(tile)
+		await expect(args.onOpenItem).toHaveBeenCalledWith(LIBRARY_BOARDS[0])
+
+		await userEvent.click(
+			within(filters).getByRole("button", { name: /Boards/ }),
+		)
+		await expect(args.onFilterChange).toHaveBeenLastCalledWith("boards")
+	},
+})
+
+export const GridWithBoardsLight = GridWithBoards.extend({
+	globals: { theme: "light" },
+})
+
+export const GridBoardContextMenu = meta.story({
+	args: {
+		items: LIBRARY_ITEMS_WITH_BOARDS,
+		onOpen: fn(),
+		onRename: fn(),
+		onDelete: fn(),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A board tile right-clicked: the same item action menu a document opens, listing only the actions given. Check that an entry hands the board to its callback and that the right-click never opens it.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		await userEvent.pointer({
+			keys: "[MouseRight]",
+			target: boardTileIn(canvasElement, "Launch plan"),
+		})
+		const menu = await within(document.body).findByRole("menu", {
+			name: "Actions for Launch plan",
+		})
+		await expect(
+			within(menu)
+				.getAllByRole("menuitem")
+				.map((entry) => entry.textContent),
+		).toEqual(["Open", "Rename", "Delete"])
+		await userEvent.click(
+			within(menu).getByRole("menuitem", { name: "Rename" }),
+		)
+		await expect(args.onRename).toHaveBeenCalledWith(LIBRARY_BOARDS[0])
+		await expect(args.onOpenItem).not.toHaveBeenCalled()
+	},
+})
+
+export const GridBoards = meta.story({
+	args: { items: LIBRARY_ITEMS_WITH_BOARDS, filter: "boards" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The Boards filter checked: only the boards stay in the grid. Check that the checked pill moves to Boards and that no image or document page is left.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		await expect(
+			canvas.getByRole("button", { name: "Boards 2" }),
+		).toHaveAttribute("aria-pressed", "true")
+		await expect(slotsIn(canvasElement, "library-item")).toHaveLength(2)
+		await expect(slotsIn(canvasElement, "board-miniature")).toHaveLength(2)
+		await expect(slotsIn(canvasElement, "library-page")).toHaveLength(0)
+	},
+})
+
+export const GridBoardWithEmptySnapshot = meta.story({
+	args: { items: [LIBRARY_EMPTY_BOARD, ...LIBRARY_ITEMS_WITH_BOARDS] },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A board with nothing on it yet, first in the grid, dark theme: the dot grid ground alone, at the same height as every other tile.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const tile = boardTileIn(canvasElement, "Sprint retro")
+		const miniature = slotIn(tile, "board-miniature")
+		await expect(slotIn(miniature, "board-dot-grid")).toBeVisible()
+		await expect(slotsIn(miniature, "board-miniature-object")).toHaveLength(0)
+		await expect(
+			slotIn(tile, "library-thumbnail").getBoundingClientRect().height,
+		).toBe(180)
+	},
+})
+
+export const GridBoardWithEmptySnapshotLight =
+	GridBoardWithEmptySnapshot.extend({ globals: { theme: "light" } })
+
+export const NewBoardAction = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The header as artboard 1a draws it, dark theme: New board, an outlined pill identical to Import with the board glyph, between Import and New document. Check that it reports `onNewBoard`.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const actions = within(slotIn(canvasElement, "library-actions"))
+		const buttons = actions.getAllByRole("button")
+		await expect(buttons.map((button) => button.textContent)).toEqual([
+			"Import",
+			"New board",
+			"New document",
+		])
+		const [importPill, newBoard] = buttons
+		if (!(importPill && newBoard)) throw new Error("The header lost a pill")
+		await expect(newBoard.className).toBe(importPill.className)
+		await expect(newBoard.getBoundingClientRect().height).toBe(32)
+		const glyph = newBoard.querySelector("svg")
+		await expect(glyph?.getAttribute("aria-hidden")).toBe("true")
+		await expect(glyph?.getBoundingClientRect().width).toBe(
+			importPill.querySelector("svg")?.getBoundingClientRect().width,
+		)
+
+		await userEvent.click(newBoard)
+		await expect(args.onNewBoard).toHaveBeenCalledOnce()
+	},
+})
+
+export const NewBoardActionLight = NewBoardAction.extend({
+	globals: { theme: "light" },
+})
+
 const [ATLAS] = CONVERSATION_BOTS
 
 const CONTROLS_DOCUMENT: LibraryItem = {
@@ -759,6 +962,7 @@ export const EmptyWithNoCallbacks = meta.story({
 		items: [],
 		onImport: undefined,
 		onNewDocument: undefined,
+		onNewBoard: undefined,
 		onStartTemplate: undefined,
 		onSearchQueryChange: undefined,
 	},
@@ -766,7 +970,7 @@ export const EmptyWithNoCallbacks = meta.story({
 		docs: {
 			description: {
 				story:
-					"An empty Library before Import, New document and the templates exist in the app: the title and subtitle alone. Check that no control and no section title is left behind by an absent callback, so the empty Library never offers a press that does nothing.",
+					"An empty Library before Import, New board, New document and the templates exist in the app: the title and subtitle alone. Check that no control and no section title is left behind by an absent callback, so the empty Library never offers a press that does nothing.",
 			},
 		},
 	},
@@ -787,14 +991,38 @@ export const EmptyWithEveryCallback = meta.story({
 		docs: {
 			description: {
 				story:
-					"An empty Library as artboard 2 draws it: Blank document and the three templates under Start a document, then the Bring in files strip. Check that the header drops its actions and filters, that the Blank document plus wears the Space colour, and that each card reports its own callback.",
+					"An empty Library as artboard 6c draws it, dark theme: the header keeps its actions, then Blank document, Blank board and the three templates under Start a document, then the Bring in files strip. Check that only the filters drop, that Blank board follows Blank document on the dot grid ground with its yellow sticky, and that each card reports its own callback. The artboard's Blank document glyph and its absent templates are left to their own tickets.",
 			},
 		},
 	},
-	play: async ({ args, canvas, userEvent }) => {
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
 		await expect(canvas.queryByRole("group", { name: "Show" })).toBe(null)
-		await expect(canvas.queryByRole("searchbox")).toBe(null)
-		await expect(canvas.queryByRole("button", { name: "Import" })).toBe(null)
+		await expect(canvas.getByRole("searchbox")).toBeVisible()
+		await expect(
+			within(slotIn(canvasElement, "library-actions"))
+				.getAllByRole("button")
+				.map((button) => button.textContent),
+		).toEqual(["Import", "New board", "New document"])
+
+		const cards = slotsIn(canvasElement, "library-template")
+		await expect(cards.slice(0, 2).map((card) => card.textContent)).toEqual([
+			"Blank document",
+			"Blank board",
+		])
+		const blankBoard = cards[1]
+		if (!blankBoard) throw new Error("Blank board is missing")
+		await expect(blankBoard.getBoundingClientRect().width).toBe(200)
+		await expect(slotIn(blankBoard, "board-dot-grid")).toHaveAttribute(
+			"aria-hidden",
+			"true",
+		)
+		const sticky = slotIn(blankBoard, "library-blank-board-sticky")
+		await expect(sticky).toHaveAttribute("aria-hidden", "true")
+		await expect(getComputedStyle(sticky).rotate).toBe("-4deg")
+		await expect(sticky.getBoundingClientRect().width).toBeGreaterThan(40)
+		await expect(sticky.offsetWidth).toBe(40)
+		await userEvent.click(blankBoard)
+		await expect(args.onNewBoard).toHaveBeenCalledOnce()
 
 		await userEvent.click(
 			canvas.getByRole("button", { name: "Blank document" }),
@@ -813,14 +1041,24 @@ export const Loading = meta.story({
 		docs: {
 			description: {
 				story:
-					"The Library before its first read lands: the header stays, the filters and the grid are drawn as a skeleton that reaches the bottom of the card. Check that the last skeleton row crosses the card's bottom edge and that the panel says it is busy.",
+					"The Library before its first read lands, as artboard 6b draws it, dark theme: the header and its actions stay, the four filters and the grid are drawn as a skeleton whose tiles keep the loaded tile geometry and reach the bottom of the card. Check that the last skeleton row crosses the card's bottom edge and that the panel says it is busy.",
 			},
 		},
 	},
-	play: async ({ canvasElement }) => {
+	play: async ({ canvas, canvasElement }) => {
 		await expect(canvasElement.querySelector("[aria-busy=true]")).not.toBe(null)
+		await expect(
+			canvas.getByRole("button", { name: "New board" }),
+		).toBeVisible()
+		await expect(
+			slotIn(canvasElement, "library-filters-skeleton").children,
+		).toHaveLength(4)
 		await expectSkeletonFilledTo(canvasElement, "bottom")
 	},
+})
+
+export const LoadingLight = Loading.extend({
+	globals: { theme: "light" },
 })
 
 const WHITESPACE_NAMED_DOCUMENT: LibraryItem = {
@@ -830,6 +1068,10 @@ const WHITESPACE_NAMED_DOCUMENT: LibraryItem = {
 	detail: "Document · 1 KB · 2 min ago",
 	excerpt: "Notes that never got a title.",
 }
+
+export const EmptyWithEveryCallbackLight = EmptyWithEveryCallback.extend({
+	globals: { theme: "light" },
+})
 
 export const WhitespaceNameReadsUntitled = meta.story({
 	args: {

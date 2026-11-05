@@ -139,11 +139,34 @@ const gridScreenPitch = (zoom: number) => {
 	return pitch
 }
 
+const fitBoardBounds = (
+	bounds: BoardRect,
+	box: BoardSize,
+	margin: number,
+): BoardViewport => {
+	const zoom = Math.max(
+		0,
+		Math.min(
+			1,
+			(box.width - 2 * margin) / bounds.width,
+			(box.height - 2 * margin) / bounds.height,
+		),
+	)
+	return {
+		zoom,
+		offset: {
+			x: (box.width - bounds.width * zoom) / 2 - bounds.x * zoom,
+			y: (box.height - bounds.height * zoom) / 2 - bounds.y * zoom,
+		},
+	}
+}
+
 export {
 	BOARD_CULL_MARGIN,
 	BOARD_ZOOM_MAX,
 	BOARD_ZOOM_MIN,
 	cullBoardObjects,
+	fitBoardBounds,
 	gridScreenPitch,
 	isAtZoomMax,
 	isAtZoomMin,
