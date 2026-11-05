@@ -5,6 +5,7 @@ import { I18nProvider } from "@workspace/ui/components/i18n-provider"
 import { Markdown, type MarkdownProps } from "@workspace/ui/components/markdown"
 import {
 	attachmentPathOf,
+	isStoredAttachmentPath,
 	MarkdownAttachmentsContext,
 } from "@workspace/ui/components/markdown/attachments"
 
@@ -22,7 +23,11 @@ const openAttachment = () => {}
 const IMAGE =
 	"Before.\n\n![The patio at noon](<photos/garden patio.jpg>)\n\nAfter."
 
-const FILE = "Read [the Q3 report](<reports/q3 final.pdf>) before Friday."
+const MINTED = "0b6f3c2e-8d41-4a7e-9c15-2f7d9e4a1b30"
+
+const STORED_FILE = `/Users/ana/Library/Application Support/com.kiroshi.app/attachments/conversation-7/${MINTED}.pdf`
+
+const FILE = `Read [the Q3 report](<${STORED_FILE}>) before Friday.`
 
 describe("attachmentPathOf", () => {
 	it.each([
@@ -48,6 +53,38 @@ describe("attachmentPathOf", () => {
 		"tel:+351210000000",
 	])("reads %s as no local path", (address) => {
 		expect(attachmentPathOf(address)).toBeNull()
+	})
+})
+
+describe("isStoredAttachmentPath", () => {
+	it.each([
+		["a POSIX stored path", `/Users/ana/kiroshi/attachments/c7/${MINTED}.pdf`],
+		[
+			"a Windows stored path with backslashes",
+			`C:\\Users\\ana\\AppData\\Roaming\\kiroshi\\attachments\\c7\\${MINTED}.pdf`,
+		],
+		[
+			"a percent-encoded stored path",
+			`/Users/ana/Application%20Support/kiroshi/attachments/c7/${MINTED}.pdf`,
+		],
+		["a stored path with spaces", STORED_FILE],
+		["a stored path without extension", `/data/attachments/c7/${MINTED}`],
+	])("reads %s as stored", (_, address) => {
+		expect(isStoredAttachmentPath(address)).toBe(true)
+	})
+
+	it.each([
+		["no address", undefined],
+		["a code path", "src/lib/host.ts"],
+		["a relative path", "../notes/plan.md"],
+		["an absolute path outside the store", "/Users/ana/reports/q3.pdf"],
+		["a name that is no uuid", "/Users/ana/kiroshi/attachments/c7/q3.pdf"],
+		["an uppercase uuid", `/data/attachments/c7/${MINTED.toUpperCase()}.pdf`],
+		["no conversation segment", `/data/attachments//${MINTED}.pdf`],
+		["too few segments", `attachments/c7/${MINTED}.pdf`],
+		["a web address", `https://example.org/attachments/c7/${MINTED}.pdf`],
+	])("reads %s as not stored", (_, address) => {
+		expect(isStoredAttachmentPath(address)).toBe(false)
 	})
 })
 
@@ -86,9 +123,15 @@ describe("a cited attachment file", () => {
 	})
 
 	it.each([
-		["a percent sign that is no escape", "attachments/50% off.pdf"],
-		["a Windows drive path", "C:/Users/me/report.pdf"],
-		["a Windows drive path with backslashes", "C:\\Users\\me\\report.pdf"],
+		[
+			"a percent sign that is no escape",
+			`/Users/ana/50% off/attachments/c7/${MINTED}.pdf`,
+		],
+		["a Windows drive path", `C:/Users/me/attachments/c7/${MINTED}.pdf`],
+		[
+			"a Windows drive path with backslashes",
+			`C:\\Users\\me\\attachments\\c7\\${MINTED}.pdf`,
+		],
 	])("draws the file chip for %s", (_, path) => {
 		const html = render({
 			children: `Before.\n\nRead [the report](<${path}>).\n\nAfter.`,
@@ -133,6 +176,13 @@ describe("a cited attachment file", () => {
 			'href="https://example.org/docs"',
 		],
 		["a fragment", "[Notes](#notes)", 'href="#notes"'],
+		["a code path", "[host.ts](src/lib/host.ts)", "<p>host.ts</p>"],
+		["a relative path", "[the plan](../notes/plan.md)", "<p>the plan</p>"],
+		[
+			"an absolute path outside the store",
+			"[the report](</Users/ana/reports/q3 final.pdf>)",
+			"<p>the report</p>",
+		],
 		[
 			"a mail link",
 			"[Ana](mailto:ana@example.org)",

@@ -7,6 +7,7 @@ import {
 } from "@workspace/ui/components/attachment-chip"
 import {
 	attachmentPathOf,
+	isStoredAttachmentPath,
 	useMarkdownAttachments,
 } from "@workspace/ui/components/markdown/attachments"
 import { hostInitial } from "@workspace/ui/lib/host"
@@ -45,7 +46,7 @@ export const MarkdownLink = ({
 }: MarkdownLinkProps) => {
 	const { onOpenAttachment } = useMarkdownAttachments()
 	const path = attachmentPathOf(href)
-	if (path !== null && onOpenAttachment) {
+	if (path !== null && onOpenAttachment && isStoredAttachmentPath(href)) {
 		return (
 			<AttachmentChip
 				extension={extensionOf(path)}
