@@ -1,0 +1,157 @@
+{
+	"edges": [],
+	"nodes": [
+		{
+			"color": "3",
+			"height": 240,
+			"id": "from-3",
+			"kiroshi": {
+				"author": {
+					"id": "person-1",
+					"kind": "person"
+				},
+				"fill": "yellow",
+				"kind": "sticky",
+				"z": "a0"
+			},
+			"text": "from-3",
+			"type": "text",
+			"width": 240,
+			"x": 0,
+			"y": 0
+		},
+		{
+			"color": "4",
+			"height": 240,
+			"id": "from-4",
+			"kiroshi": {
+				"author": {
+					"id": "person-1",
+					"kind": "person"
+				},
+				"fill": "green",
+				"kind": "sticky",
+				"z": "a1"
+			},
+			"text": "from-4",
+			"type": "text",
+			"width": 240,
+			"x": 260,
+			"y": 0
+		},
+		{
+			"color": "2",
+			"height": 240,
+			"id": "from-2",
+			"kiroshi": {
+				"author": {
+					"id": "person-1",
+					"kind": "person"
+				},
+				"fill": "orange",
+				"kind": "sticky",
+				"z": "a2"
+			},
+			"text": "from-2",
+			"type": "text",
+			"width": 240,
+			"x": 520,
+			"y": 0
+		},
+		{
+			"color": "5",
+			"height": 240,
+			"id": "from-5",
+			"kiroshi": {
+				"author": {
+					"id": "person-1",
+					"kind": "person"
+				},
+				"fill": "blue",
+				"kind": "sticky",
+				"z": "a3"
+			},
+			"text": "from-5",
+			"type": "text",
+			"width": 240,
+			"x": 780,
+			"y": 0
+		},
+		{
+			"color": "1",
+			"height": 240,
+			"id": "from-1",
+			"kiroshi": {
+				"author": {
+					"id": "person-1",
+					"kind": "person"
+				},
+				"fill": "pink",
+				"kind": "sticky",
+				"z": "a4"
+			},
+			"text": "from-1",
+			"type": "text",
+			"width": 240,
+			"x": 1040,
+			"y": 0
+		},
+		{
+			"color": "6",
+			"height": 240,
+			"id": "from-6",
+			"kiroshi": {
+				"author": {
+					"id": "person-1",
+					"kind": "person"
+				},
+				"fill": "pink",
+				"kind": "sticky",
+				"z": "a5"
+			},
+			"text": "from-6",
+			"type": "text",
+			"width": 240,
+			"x": 1300,
+			"y": 0
+		},
+		{
+			"color": "#aabbcc",
+			"height": 240,
+			"id": "from-hex",
+			"kiroshi": {
+				"author": {
+					"id": "person-1",
+					"kind": "person"
+				},
+				"fill": "yellow",
+				"kind": "sticky",
+				"z": "a6"
+			},
+			"text": "from-hex",
+			"type": "text",
+			"width": 240,
+			"x": 1560,
+			"y": 0
+		},
+		{
+			"color": "3",
+			"height": 240,
+			"id": "from-none",
+			"kiroshi": {
+				"author": {
+					"id": "person-1",
+					"kind": "person"
+				},
+				"fill": "yellow",
+				"kind": "sticky",
+				"z": "a7"
+			},
+			"text": "from-none",
+			"type": "text",
+			"width": 240,
+			"x": 1820,
+			"y": 0
+		}
+	]
+}

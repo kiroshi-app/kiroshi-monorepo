@@ -4,6 +4,7 @@ pub mod applications;
 pub mod attachments;
 pub mod avatars;
 pub mod badge;
+pub mod board;
 pub mod bundles;
 pub mod claude_import;
 pub mod commands;

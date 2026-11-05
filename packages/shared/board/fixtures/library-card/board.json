@@ -1,0 +1,26 @@
+{
+	"nodes": {
+		"library-roadmap": {
+			"kind": "libraryCard",
+			"x": 0,
+			"y": 0,
+			"width": 400,
+			"height": 400,
+			"z": "a0",
+			"file": "Library/Roadmap.md",
+			"subpath": "#Q1",
+			"item": "Roadmap"
+		},
+		"library-notes": {
+			"kind": "libraryCard",
+			"x": 450,
+			"y": 0,
+			"width": 400,
+			"height": 400,
+			"z": "a1",
+			"file": "Library/Notes.md",
+			"color": "4"
+		}
+	},
+	"edges": {}
+}

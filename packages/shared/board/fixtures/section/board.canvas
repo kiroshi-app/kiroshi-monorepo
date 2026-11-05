@@ -1,0 +1,33 @@
+{
+	"edges": [],
+	"nodes": [
+		{
+			"height": 600,
+			"id": "section-plain",
+			"kiroshi": {
+				"kind": "section",
+				"z": "a0"
+			},
+			"type": "group",
+			"width": 800,
+			"x": 0,
+			"y": 0
+		},
+		{
+			"background": "Library/backdrop.png",
+			"backgroundStyle": "cover",
+			"color": "5",
+			"height": 600,
+			"id": "section-dressed",
+			"kiroshi": {
+				"kind": "section",
+				"z": "a1"
+			},
+			"label": "Launch",
+			"type": "group",
+			"width": 800,
+			"x": 900,
+			"y": 0
+		}
+	]
+}

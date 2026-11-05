@@ -1,0 +1,203 @@
+{
+	"version": 1,
+	"jsonCanvas": "1.0",
+	"doc": {
+		"nodes": "nodes",
+		"edges": "edges",
+		"board": "kiroshi",
+		"canvas": "canvas"
+	},
+	"extras": "kiroshi",
+	"verbatim": "canvas",
+	"types": {
+		"integer": "a JSON integer",
+		"string": "a JSON string",
+		"text": "a string the Y.Doc holds as Y.Text",
+		"colour": "a JSON Canvas colour: a preset 1 to 6 or a hex #RGB or #RRGGBB",
+		"zOrder": "a fractional index key over the digits, compared byte by byte",
+		"nodeId": "the id of a node of the same board",
+		"json": "any JSON object, kept verbatim",
+		"identity": "an object holding exactly kind, one of the field's enum, and id, a non-empty string"
+	},
+	"fill": "a kind's fill pairing: a read without the fill field takes it from fromColour by the colour field, or the field default; a colour equal to the fill's preset is not kept on the board, and an export of a board without that colour writes the preset",
+	"placements": {
+		"canvas": "a top-level JSON Canvas field of the same name",
+		"kiroshi": "a field of the same name under the kiroshi object of the node or edge",
+		"verbatim": "a JSON object holding every top-level field of the node, the edge or the root the schema does not name, written back at the top level unchanged"
+	},
+	"zOrder": {
+		"field": "z",
+		"digits": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+	},
+	"node": {
+		"kind": { "field": "kind", "in": "kiroshi" },
+		"fields": {
+			"x": { "type": "integer", "in": "canvas" },
+			"y": { "type": "integer", "in": "canvas" },
+			"width": { "type": "integer", "in": "canvas" },
+			"height": { "type": "integer", "in": "canvas" },
+			"z": { "type": "zOrder", "in": "kiroshi" },
+			"canvas": { "type": "json", "in": "verbatim", "optional": true }
+		}
+	},
+	"kinds": {
+		"sticky": {
+			"canvasType": "text",
+			"fields": {
+				"text": { "type": "text", "in": "canvas", "default": "" },
+				"color": { "type": "colour", "in": "canvas", "optional": true },
+				"fill": {
+					"type": "string",
+					"enum": ["yellow", "green", "pink", "blue", "orange"],
+					"in": "kiroshi",
+					"default": "yellow"
+				},
+				"author": {
+					"type": "identity",
+					"enum": ["agent", "person"],
+					"in": "kiroshi"
+				}
+			},
+			"fill": {
+				"field": "fill",
+				"colour": "color",
+				"presets": {
+					"yellow": "3",
+					"green": "4",
+					"orange": "2",
+					"blue": "5",
+					"pink": "1"
+				},
+				"fromColour": {
+					"1": "pink",
+					"2": "orange",
+					"3": "yellow",
+					"4": "green",
+					"5": "blue",
+					"6": "pink"
+				}
+			}
+		},
+		"text": {
+			"canvasType": "text",
+			"fields": {
+				"text": { "type": "text", "in": "canvas", "default": "" },
+				"color": { "type": "colour", "in": "canvas", "optional": true }
+			}
+		},
+		"shape": {
+			"canvasType": "text",
+			"fields": {
+				"text": { "type": "text", "in": "canvas", "default": "" },
+				"color": { "type": "colour", "in": "canvas", "optional": true },
+				"shape": {
+					"type": "string",
+					"enum": ["rectangle", "ellipse", "diamond"],
+					"in": "kiroshi",
+					"default": "rectangle"
+				}
+			}
+		},
+		"section": {
+			"canvasType": "group",
+			"fields": {
+				"label": { "type": "string", "in": "canvas", "optional": true },
+				"color": { "type": "colour", "in": "canvas", "optional": true },
+				"background": { "type": "string", "in": "canvas", "optional": true },
+				"backgroundStyle": {
+					"type": "string",
+					"enum": ["cover", "ratio", "repeat"],
+					"in": "canvas",
+					"optional": true
+				}
+			}
+		},
+		"image": {
+			"canvasType": "file",
+			"fields": {
+				"file": { "type": "string", "in": "canvas" },
+				"subpath": { "type": "string", "in": "canvas", "optional": true },
+				"color": { "type": "colour", "in": "canvas", "optional": true },
+				"item": { "type": "string", "in": "kiroshi", "optional": true },
+				"alt": { "type": "string", "in": "kiroshi", "optional": true }
+			}
+		},
+		"linkCard": {
+			"canvasType": "link",
+			"fields": {
+				"url": { "type": "string", "in": "canvas" },
+				"color": { "type": "colour", "in": "canvas", "optional": true },
+				"title": { "type": "string", "in": "kiroshi", "optional": true },
+				"description": { "type": "string", "in": "kiroshi", "optional": true },
+				"preview": { "type": "string", "in": "kiroshi", "optional": true }
+			}
+		},
+		"libraryCard": {
+			"canvasType": "file",
+			"fields": {
+				"file": { "type": "string", "in": "canvas" },
+				"subpath": { "type": "string", "in": "canvas", "optional": true },
+				"color": { "type": "colour", "in": "canvas", "optional": true },
+				"item": { "type": "string", "in": "kiroshi", "optional": true }
+			}
+		},
+		"foreign": {
+			"canvasType": null,
+			"fields": {
+				"canvas": { "type": "json", "in": "verbatim" }
+			}
+		}
+	},
+	"plainImport": {
+		"kinds": {
+			"text": "text",
+			"group": "section",
+			"link": "linkCard",
+			"file": "libraryCard"
+		},
+		"image": {
+			"kind": "image",
+			"canvasType": "file",
+			"extensions": ["avif", "bmp", "gif", "jpeg", "jpg", "png", "svg", "webp"]
+		}
+	},
+	"edge": {
+		"fields": {
+			"fromNode": { "type": "nodeId", "in": "canvas" },
+			"fromSide": {
+				"type": "string",
+				"enum": ["top", "right", "bottom", "left"],
+				"in": "canvas",
+				"optional": true
+			},
+			"fromEnd": {
+				"type": "string",
+				"enum": ["none", "arrow"],
+				"in": "canvas",
+				"default": "none"
+			},
+			"toNode": { "type": "nodeId", "in": "canvas" },
+			"toSide": {
+				"type": "string",
+				"enum": ["top", "right", "bottom", "left"],
+				"in": "canvas",
+				"optional": true
+			},
+			"toEnd": {
+				"type": "string",
+				"enum": ["none", "arrow"],
+				"in": "canvas",
+				"default": "arrow"
+			},
+			"color": { "type": "colour", "in": "canvas", "optional": true },
+			"label": { "type": "string", "in": "canvas", "optional": true },
+			"routing": {
+				"type": "string",
+				"enum": ["straight", "elbow"],
+				"in": "kiroshi",
+				"default": "straight"
+			},
+			"canvas": { "type": "json", "in": "verbatim", "optional": true }
+		}
+	}
+}

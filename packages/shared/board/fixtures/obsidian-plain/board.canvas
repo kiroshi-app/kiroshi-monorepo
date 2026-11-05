@@ -1,0 +1,114 @@
+{
+	"edges": [
+		{
+			"color": "#a882ff",
+			"fromEnd": "arrow",
+			"fromNode": "7f04c1a9e6d2b358",
+			"fromSide": "bottom",
+			"id": "3b9e5d07a4c1f286",
+			"kiroshi": {
+				"routing": "straight"
+			},
+			"label": "source",
+			"toEnd": "none",
+			"toNode": "21",
+			"toSide": "bottom"
+		},
+		{
+			"fromEnd": "none",
+			"fromNode": "9a1e7c44b2f08d13",
+			"fromSide": "right",
+			"id": "d8a2f6e04b1c9735",
+			"kiroshi": {
+				"routing": "straight"
+			},
+			"styleAttributes": {
+				"arrow": "triangle-outline",
+				"pathfindingMethod": "square"
+			},
+			"toEnd": "arrow",
+			"toNode": "0e6b2d7f9c835a11",
+			"toSide": "left"
+		}
+	],
+	"metadata": {
+		"frontmatter": {},
+		"version": "1.0-1.0"
+	},
+	"nodes": [
+		{
+			"height": 760,
+			"id": "5c3f0a9e21b7d406",
+			"kiroshi": {
+				"kind": "section",
+				"z": "a0"
+			},
+			"label": "Research",
+			"type": "group",
+			"width": 1180,
+			"x": -420,
+			"y": -300
+		},
+		{
+			"color": "4",
+			"height": 120,
+			"id": "9a1e7c44b2f08d13",
+			"kiroshi": {
+				"kind": "text",
+				"z": "a1"
+			},
+			"styleAttributes": {
+				"shape": "pill",
+				"textAlign": "center"
+			},
+			"text": "Questions for the **interview**",
+			"type": "text",
+			"width": 360,
+			"x": -380,
+			"y": -260
+		},
+		{
+			"file": "Attachments/Whiteboard 1.PNG",
+			"height": 300,
+			"id": "0e6b2d7f9c835a11",
+			"kiroshi": {
+				"kind": "image",
+				"z": "a2"
+			},
+			"styleAttributes": {
+				"border": "dashed"
+			},
+			"type": "file",
+			"width": 400,
+			"x": 20,
+			"y": -260
+		},
+		{
+			"file": "Notes/Interview plan.md",
+			"height": 400,
+			"id": "7f04c1a9e6d2b358",
+			"kiroshi": {
+				"kind": "libraryCard",
+				"z": "a3"
+			},
+			"subpath": "#Goals",
+			"type": "file",
+			"width": 360,
+			"x": -380,
+			"y": -100
+		},
+		{
+			"height": 200,
+			"id": "21",
+			"kiroshi": {
+				"kind": "linkCard",
+				"z": "a4"
+			},
+			"type": "link",
+			"url": "https://obsidian.md",
+			"width": 260,
+			"x": 460,
+			"y": -260
+		}
+	]
+}

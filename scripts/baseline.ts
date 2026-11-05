@@ -159,6 +159,7 @@ const VITEST_SUITES: VitestSuite[] = [
 	APP_SUITE,
 	UI_SUITE,
 	{ name: "website", filter: "website", script: "test" },
+	{ name: "shared", filter: "@workspace/shared", script: "test" },
 ]
 
 export const UNIT_SUITES: UnitSuite[] = [

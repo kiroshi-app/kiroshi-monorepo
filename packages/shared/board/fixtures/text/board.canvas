@@ -1,0 +1,32 @@
+{
+	"edges": [],
+	"nodes": [
+		{
+			"color": "#5b8def",
+			"height": 80,
+			"id": "text-b",
+			"kiroshi": {
+				"kind": "text",
+				"z": "a0"
+			},
+			"text": "Written under the heading",
+			"type": "text",
+			"width": 400,
+			"x": -40,
+			"y": -200
+		},
+		{
+			"height": 120,
+			"id": "text-a",
+			"kiroshi": {
+				"kind": "text",
+				"z": "a1"
+			},
+			"text": "# Board\n\nA heading and a line.",
+			"type": "text",
+			"width": 400,
+			"x": 0,
+			"y": 0
+		}
+	]
+}

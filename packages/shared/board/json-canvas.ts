@@ -1,0 +1,305 @@
+import {
+	BOARD_SCHEMA,
+	type Board,
+	type BoardNode,
+	BoardRefused,
+	type Connector,
+	EDGE_FIELDS,
+	type Element,
+	EXTRAS,
+	type Fields,
+	isEmptyObject,
+	isInZOrder,
+	isObject,
+	type Json,
+	type JsonObject,
+	KIND,
+	kindSpec,
+	type Located,
+	NODE_FIELDS,
+	parsedBoard,
+	presetOf,
+	refusedField,
+	Z_FIELD,
+	zAt,
+} from "./board"
+
+const FOREIGN: BoardNode["kind"] = "foreign"
+
+const ID = "id"
+
+const TYPE = "type"
+
+const { plainImport: PLAIN_IMPORT } = BOARD_SCHEMA
+
+const CANVAS_TYPES = new Set(
+	Object.values(BOARD_SCHEMA.kinds).flatMap(({ canvasType }) =>
+		canvasType === null ? [] : [canvasType],
+	),
+)
+
+type Placed = { top: JsonObject; kiroshi: JsonObject }
+
+type Carried = { kiroshi?: JsonObject; canvas?: JsonObject }
+
+const placedFrom = (id: string, element: Carried): Placed => ({
+	top: { ...element.canvas, [ID]: id },
+	kiroshi: { ...element.kiroshi },
+})
+
+const place = (fields: Fields, element: object, into: Placed) => {
+	const values = element as Record<string, Json | undefined>
+	for (const [name, spec] of Object.entries(fields)) {
+		const value = values[name]
+		if (value === undefined || spec.in === "verbatim") continue
+		into[spec.in === "canvas" ? "top" : "kiroshi"][name] = value
+	}
+}
+
+const compared = (left: string, right: string) => {
+	if (left < right) return -1
+	if (left > right) return 1
+	return 0
+}
+
+type Entry<T> = [string, T]
+
+const byZOrder = (
+	[leftId, left]: Entry<BoardNode>,
+	[rightId, right]: Entry<BoardNode>,
+) => compared(left.z, right.z) || compared(leftId, rightId)
+
+const byId = <T>([leftId]: Entry<T>, [rightId]: Entry<T>) =>
+	compared(leftId, rightId)
+
+const canvasNode = ([id, node]: Entry<BoardNode>) => {
+	const { canvasType, fields, fill } = BOARD_SCHEMA.kinds[node.kind]
+	const placed = placedFrom(id, node)
+	if (canvasType !== null) {
+		placed.top[TYPE] = canvasType
+		placed.kiroshi[KIND] = node.kind
+	}
+	place(NODE_FIELDS, node, placed)
+	place(fields, node, placed)
+	if (fill !== undefined && placed.top[fill.colour] === undefined) {
+		const preset = presetOf(fill, placed.kiroshi[fill.field])
+		if (preset !== undefined) placed.top[fill.colour] = preset
+	}
+	return { ...placed.top, [EXTRAS]: placed.kiroshi }
+}
+
+const canvasEdge = ([id, edge]: Entry<Connector>) => {
+	const placed = placedFrom(id, edge)
+	place(EDGE_FIELDS, edge, placed)
+	return { ...placed.top, [EXTRAS]: placed.kiroshi }
+}
+
+const INDENT = "\t"
+
+const written = (value: Json, indent: string): string => {
+	const inner = indent + INDENT
+	if (Array.isArray(value)) {
+		if (value.length === 0) return "[]"
+		const items = value.map((item) => inner + written(item, inner))
+		return `[\n${items.join(",\n")}\n${indent}]`
+	}
+	if (!isObject(value)) return JSON.stringify(value)
+	const names = Object.keys(value).sort()
+	if (names.length === 0) return "{}"
+	const entries = names.map(
+		(name) =>
+			`${inner}${JSON.stringify(name)}: ${written(value[name] as Json, inner)}`,
+	)
+	return `{\n${entries.join(",\n")}\n${indent}}`
+}
+
+export const exportCanvas = (board: Board) => {
+	const canvas: JsonObject = {
+		...board.canvas,
+		nodes: Object.entries(board.nodes).sort(byZOrder).map(canvasNode),
+		edges: Object.entries(board.edges).sort(byId).map(canvasEdge),
+	}
+	if (board.kiroshi !== undefined && !isEmptyObject(board.kiroshi)) {
+		canvas[EXTRAS] = board.kiroshi
+	}
+	return `${written(canvas, "")}\n`
+}
+
+const parsedJson = (text: string): unknown => {
+	try {
+		return JSON.parse(text)
+	} catch (failure) {
+		throw new BoardRefused(
+			{ kind: "notJson", reason: String(failure) },
+			failure,
+		)
+	}
+}
+
+const ROOT_LISTS = ["nodes", "edges"] as const
+
+type RootList = (typeof ROOT_LISTS)[number]
+
+const listAt = (root: JsonObject, field: RootList) => {
+	const list = root[field]
+	if (list === undefined) return []
+	if (!Array.isArray(list))
+		throw new BoardRefused({ kind: "invalidRoot", field })
+	return list
+}
+
+const rest = (source: JsonObject, claimed: Set<string>) =>
+	Object.fromEntries(
+		Object.entries(source).filter(([name]) => !claimed.has(name)),
+	)
+
+const kiroshiOf = (source: JsonObject, at: Located) => {
+	const kiroshi = source[EXTRAS]
+	if (kiroshi === undefined) return {}
+	if (!isObject(kiroshi)) throw refusedField(at, EXTRAS)
+	return kiroshi
+}
+
+type Shaping = {
+	source: JsonObject
+	kiroshi: JsonObject
+	fields: Fields
+	claimedTop: string[]
+	claimedKiroshi: string[]
+}
+
+const shaped = ({
+	source,
+	kiroshi,
+	fields,
+	claimedTop: claimedAtTop,
+	claimedKiroshi,
+}: Shaping) => {
+	const shape: JsonObject = {}
+	const claimedTop = new Set([ID, EXTRAS, ...claimedAtTop])
+	const claimedUnderKiroshi = new Set(claimedKiroshi)
+	const verbatim: string[] = []
+	for (const [name, spec] of Object.entries(fields)) {
+		if (spec.in === "verbatim") {
+			verbatim.push(name)
+			continue
+		}
+		const isTop = spec.in === "canvas"
+		;(isTop ? claimedTop : claimedUnderKiroshi).add(name)
+		const from = isTop ? source : kiroshi
+		if (Object.hasOwn(from, name)) shape[name] = from[name] as Json
+	}
+	const unnamed = rest(source, claimedTop)
+	if (!isEmptyObject(unnamed)) {
+		for (const name of verbatim) shape[name] = unnamed
+	}
+	const extras = rest(kiroshi, claimedUnderKiroshi)
+	if (!isEmptyObject(extras)) shape[EXTRAS] = extras
+	return shape
+}
+
+const extensionOf = (file: Json | undefined) => {
+	if (typeof file !== "string") return ""
+	const name = file.slice(file.lastIndexOf("/") + 1)
+	const dot = name.lastIndexOf(".")
+	return dot > 0 ? name.slice(dot + 1).toLowerCase() : ""
+}
+
+const plainKind = (type: string, node: JsonObject) => {
+	const { image, kinds } = PLAIN_IMPORT
+	if (
+		type === image.canvasType &&
+		image.extensions.includes(extensionOf(node.file))
+	) {
+		return image.kind
+	}
+	return kinds[type]
+}
+
+const kindOf = (node: JsonObject, kiroshi: JsonObject, at: Located) => {
+	const type = node[TYPE]
+	if (typeof type !== "string") throw refusedField(at, TYPE)
+	if (!CANVAS_TYPES.has(type)) return FOREIGN
+	const declared = kiroshi[KIND]
+	if (declared === undefined) return plainKind(type, node)
+	if (kindSpec(declared)?.canvasType !== type) throw refusedField(at, KIND)
+	return declared as string
+}
+
+const shapedNode = (node: JsonObject, at: Located) => {
+	const kiroshi = kiroshiOf(node, at)
+	const kind = kindOf(node, kiroshi, at)
+	const spec = BOARD_SCHEMA.kinds[kind]
+	const isKnown = spec.canvasType !== null
+	return {
+		[KIND]: kind,
+		...shaped({
+			source: node,
+			kiroshi,
+			fields: { ...NODE_FIELDS, ...spec.fields },
+			claimedTop: isKnown ? [TYPE] : [],
+			claimedKiroshi: isKnown ? [KIND] : [],
+		}),
+	}
+}
+
+const shapedEdge = (edge: JsonObject, at: Located) =>
+	shaped({
+		source: edge,
+		kiroshi: kiroshiOf(edge, at),
+		fields: EDGE_FIELDS,
+		claimedTop: [],
+		claimedKiroshi: [],
+	})
+
+type Shape = (source: JsonObject, at: Located) => JsonObject
+
+const shapedList = (list: unknown[], element: Element, shape: Shape) =>
+	list.map((entry, index): Entry<JsonObject> => {
+		const id = isObject(entry) ? entry[ID] : undefined
+		if (typeof id !== "string" || id === "") {
+			throw new BoardRefused({ kind: "missingId", element, index })
+		}
+		return [id, shape(entry as JsonObject, { element, id })]
+	})
+
+const inArrayZOrder = (nodes: Entry<JsonObject>[]) => {
+	if (isInZOrder(nodes.map(([, node]) => node[Z_FIELD]))) return nodes
+	return nodes.map(
+		([id, node], index): Entry<JsonObject> => [
+			id,
+			{ ...node, [Z_FIELD]: zAt(index) },
+		],
+	)
+}
+
+const keyedById = (entries: Entry<JsonObject>[], element: Element) => {
+	const byKey: Record<string, JsonObject> = {}
+	for (const [id, value] of entries) {
+		if (Object.hasOwn(byKey, id)) {
+			throw new BoardRefused({ kind: "duplicateId", element, id })
+		}
+		byKey[id] = value
+	}
+	return byKey
+}
+
+export const importCanvas = (text: string): Board => {
+	const root = parsedJson(text)
+	if (!isObject(root))
+		throw new BoardRefused({ kind: "invalidRoot", field: "root" })
+	const extras = root[EXTRAS] === undefined ? {} : root[EXTRAS]
+	if (!isObject(extras)) {
+		throw new BoardRefused({ kind: "invalidRoot", field: "kiroshi" })
+	}
+	const nodes = inArrayZOrder(
+		shapedList(listAt(root, "nodes"), "node", shapedNode),
+	)
+	const edges = shapedList(listAt(root, "edges"), "edge", shapedEdge)
+	return parsedBoard({
+		nodes: keyedById(nodes, "node"),
+		edges: keyedById(edges, "edge"),
+		kiroshi: extras,
+		canvas: rest(root, new Set([...ROOT_LISTS, EXTRAS])),
+	})
+}

@@ -1,0 +1,67 @@
+{
+	"edges": [
+		{
+			"fromEnd": "none",
+			"fromNode": "note-1",
+			"id": "edge-1",
+			"kiroshi": {
+				"routing": "straight",
+				"weight": 0.5
+			},
+			"routing": "curved",
+			"toEnd": "arrow",
+			"toNode": "chart-1"
+		}
+	],
+	"kiroshi": {
+		"createdWith": "kiroshi 2",
+		"theme": {
+			"grid": "dots"
+		}
+	},
+	"nodes": [
+		{
+			"author": "a plugin",
+			"color": "3",
+			"height": 240,
+			"id": "note-1",
+			"kiroshi": {
+				"author": {
+					"id": "ichi",
+					"kind": "agent"
+				},
+				"fill": "yellow",
+				"kind": "sticky",
+				"reactions": {
+					"thumbsUp": 2
+				},
+				"z": "a0"
+			},
+			"text": "Reacted to",
+			"type": "text",
+			"width": 240,
+			"x": 520,
+			"y": 0,
+			"z": 7
+		},
+		{
+			"color": "2",
+			"height": 320,
+			"id": "chart-1",
+			"kiroshi": {
+				"pinnedBy": "san",
+				"z": "a1"
+			},
+			"series": [
+				3,
+				1,
+				4.5
+			],
+			"title": "Velocity",
+			"type": "chart",
+			"width": 480,
+			"x": 0,
+			"y": 0
+		}
+	]
+}

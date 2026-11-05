@@ -509,10 +509,16 @@ describe("ci:fast", () => {
 		},
 	)
 
-	it("leaves the app perf project and the website and sidecar suites to the gate", () => {
+	it("leaves the app perf project and the website, shared and sidecar suites to the gate", () => {
 		expect(gate).not.toContainEqual(FULL_UNIT_TESTS)
 		expect(baselineScopesOf(gate)).toContain("vitest")
-		expect(SCOPES.vitest.suites).toEqual(["app", "ui", "website", "sidecar"])
+		expect(SCOPES.vitest.suites).toEqual([
+			"app",
+			"ui",
+			"website",
+			"shared",
+			"sidecar",
+		])
 	})
 
 	it("leaves the full unit set and the perf set to the gate when the scope is changed", () => {

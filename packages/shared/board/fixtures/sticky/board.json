@@ -1,0 +1,34 @@
+{
+	"nodes": {
+		"sticky-1": {
+			"kind": "sticky",
+			"x": 0,
+			"y": 0,
+			"width": 240,
+			"height": 240,
+			"z": "a0",
+			"text": "Ship the board schema\nthen the session",
+			"author": {
+				"kind": "agent",
+				"id": "ichi"
+			},
+			"fill": "yellow"
+		},
+		"sticky-2": {
+			"kind": "sticky",
+			"x": 280,
+			"y": 0,
+			"width": 240,
+			"height": 240,
+			"z": "a1",
+			"text": "",
+			"color": "#f4c430",
+			"author": {
+				"kind": "person",
+				"id": "person-1"
+			},
+			"fill": "green"
+		}
+	},
+	"edges": {}
+}

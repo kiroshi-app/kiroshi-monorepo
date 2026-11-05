@@ -1,0 +1,24 @@
+{
+	"nodes": {
+		"text-a": {
+			"kind": "text",
+			"x": 0,
+			"y": 0,
+			"width": 400,
+			"height": 120,
+			"z": "a1",
+			"text": "# Board\n\nA heading and a line."
+		},
+		"text-b": {
+			"kind": "text",
+			"x": -40,
+			"y": -200,
+			"width": 400,
+			"height": 80,
+			"z": "a0",
+			"text": "Written under the heading",
+			"color": "#5b8def"
+		}
+	},
+	"edges": {}
+}

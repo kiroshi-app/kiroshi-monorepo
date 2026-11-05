@@ -1,0 +1,48 @@
+{
+	"edges": [],
+	"nodes": [
+		{
+			"height": 120,
+			"id": "shape-rectangle",
+			"kiroshi": {
+				"kind": "shape",
+				"shape": "rectangle",
+				"z": "a0"
+			},
+			"text": "Rectangle",
+			"type": "text",
+			"width": 200,
+			"x": 0,
+			"y": 0
+		},
+		{
+			"color": "1",
+			"height": 120,
+			"id": "shape-ellipse",
+			"kiroshi": {
+				"kind": "shape",
+				"shape": "ellipse",
+				"z": "a1"
+			},
+			"text": "Ellipse",
+			"type": "text",
+			"width": 200,
+			"x": 240,
+			"y": 0
+		},
+		{
+			"height": 160,
+			"id": "shape-diamond",
+			"kiroshi": {
+				"kind": "shape",
+				"shape": "diamond",
+				"z": "a2"
+			},
+			"text": "",
+			"type": "text",
+			"width": 160,
+			"x": 480,
+			"y": 0
+		}
+	]
+}

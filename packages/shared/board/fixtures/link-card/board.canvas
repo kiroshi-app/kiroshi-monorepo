@@ -1,0 +1,21 @@
+{
+	"edges": [],
+	"nodes": [
+		{
+			"height": 300,
+			"id": "link-1",
+			"kiroshi": {
+				"description": "An open file format for infinite canvas data.",
+				"kind": "linkCard",
+				"preview": "https://jsoncanvas.org/og.png",
+				"title": "JSON Canvas 1.0",
+				"z": "a0"
+			},
+			"type": "link",
+			"url": "https://jsoncanvas.org/spec/1.0/",
+			"width": 400,
+			"x": 0,
+			"y": 0
+		}
+	]
+}

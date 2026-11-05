@@ -1,0 +1,36 @@
+{
+	"nodes": {
+		"shape-rectangle": {
+			"kind": "shape",
+			"x": 0,
+			"y": 0,
+			"width": 200,
+			"height": 120,
+			"z": "a0",
+			"text": "Rectangle",
+			"shape": "rectangle"
+		},
+		"shape-ellipse": {
+			"kind": "shape",
+			"x": 240,
+			"y": 0,
+			"width": 200,
+			"height": 120,
+			"z": "a1",
+			"text": "Ellipse",
+			"color": "1",
+			"shape": "ellipse"
+		},
+		"shape-diamond": {
+			"kind": "shape",
+			"x": 480,
+			"y": 0,
+			"width": 160,
+			"height": 160,
+			"z": "a2",
+			"text": "",
+			"shape": "diamond"
+		}
+	},
+	"edges": {}
+}

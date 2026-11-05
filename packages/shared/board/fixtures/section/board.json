@@ -1,0 +1,25 @@
+{
+	"nodes": {
+		"section-plain": {
+			"kind": "section",
+			"x": 0,
+			"y": 0,
+			"width": 800,
+			"height": 600,
+			"z": "a0"
+		},
+		"section-dressed": {
+			"kind": "section",
+			"x": 900,
+			"y": 0,
+			"width": 800,
+			"height": 600,
+			"z": "a1",
+			"label": "Launch",
+			"color": "5",
+			"background": "Library/backdrop.png",
+			"backgroundStyle": "cover"
+		}
+	},
+	"edges": {}
+}

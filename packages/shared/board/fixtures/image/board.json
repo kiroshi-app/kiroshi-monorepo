@@ -1,0 +1,26 @@
+{
+	"nodes": {
+		"image-library": {
+			"kind": "image",
+			"x": 0,
+			"y": 0,
+			"width": 640,
+			"height": 480,
+			"z": "a0",
+			"file": "Library/whiteboard.png",
+			"item": "whiteboard.png",
+			"alt": "The whiteboard after the planning session"
+		},
+		"image-loose": {
+			"kind": "image",
+			"x": 700,
+			"y": 0,
+			"width": 320,
+			"height": 240,
+			"z": "a1",
+			"file": "attachments/sketch.jpg",
+			"color": "2"
+		}
+	},
+	"edges": {}
+}

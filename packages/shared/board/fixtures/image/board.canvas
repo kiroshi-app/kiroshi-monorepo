@@ -1,0 +1,34 @@
+{
+	"edges": [],
+	"nodes": [
+		{
+			"file": "Library/whiteboard.png",
+			"height": 480,
+			"id": "image-library",
+			"kiroshi": {
+				"alt": "The whiteboard after the planning session",
+				"item": "whiteboard.png",
+				"kind": "image",
+				"z": "a0"
+			},
+			"type": "file",
+			"width": 640,
+			"x": 0,
+			"y": 0
+		},
+		{
+			"color": "2",
+			"file": "attachments/sketch.jpg",
+			"height": 240,
+			"id": "image-loose",
+			"kiroshi": {
+				"kind": "image",
+				"z": "a1"
+			},
+			"type": "file",
+			"width": 320,
+			"x": 700,
+			"y": 0
+		}
+	]
+}
