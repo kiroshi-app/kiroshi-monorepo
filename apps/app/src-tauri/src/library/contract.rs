@@ -10,6 +10,7 @@ use crate::remote_image::FetchRefusal;
 pub enum LibraryItemKind {
 	Image,
 	Document,
+	Board,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
@@ -52,6 +53,37 @@ pub struct LibraryFile {
 	pub name: String,
 	pub mime_type: String,
 	pub content: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryBoardSummary {
+	pub name: String,
+	pub node_count: u64,
+	pub nodes: Vec<LibraryBoardNode>,
+	pub bounds: Option<LibraryBoardBounds>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryBoardNode {
+	pub id: String,
+	#[serde(rename = "type")]
+	pub node_type: String,
+	pub x: i64,
+	pub y: i64,
+	pub width: i64,
+	pub height: i64,
+	pub colour: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryBoardBounds {
+	pub x: i64,
+	pub y: i64,
+	pub width: i64,
+	pub height: i64,
 }
 
 pub const DOCUMENT_UPDATED_EVENT: &str = "library://document-updated";
@@ -174,6 +206,10 @@ pub enum LibraryError {
 	NotADocument { name: String },
 	#[serde(rename_all = "camelCase")]
 	NotAnImage { name: String },
+	#[serde(rename_all = "camelCase")]
+	NotABoard { name: String },
+	#[serde(rename_all = "camelCase")]
+	InvalidBoard { name: String, detail: String },
 	#[serde(rename_all = "camelCase")]
 	NotUtf8 { name: String },
 	#[serde(rename_all = "camelCase")]

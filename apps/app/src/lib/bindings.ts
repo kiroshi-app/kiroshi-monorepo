@@ -45,6 +45,8 @@ export const commands = {
 	libraryCopyBytes: (name: string, content: string) => typedError<null, LibraryError>(__TAURI_INVOKE("library_copy_bytes", { name, content })),
 	libraryTemplates: () => __TAURI_INVOKE<LibraryTemplate[]>("library_templates"),
 	libraryCreateDocument: (spaceId: string, name: string, templateId: string | null) => typedError<LibraryItem, LibraryError>(__TAURI_INVOKE("library_create_document", { spaceId, name, templateId })),
+	libraryCreateBoard: (spaceId: string, name: string) => typedError<LibraryItem, LibraryError>(__TAURI_INVOKE("library_create_board", { spaceId, name })),
+	libraryBoardSummary: (spaceId: string, name: string) => typedError<LibraryBoardSummary, LibraryError>(__TAURI_INVOKE("library_board_summary", { spaceId, name })),
 	libraryOpenDocument: (spaceId: string, name: string) => typedError<LibraryDocumentState, LibraryError>(__TAURI_INVOKE("library_open_document", { spaceId, name })),
 	libraryApplyUpdate: (spaceId: string, name: string, update: string) => typedError<null, LibraryError>(__TAURI_INVOKE("library_apply_update", { spaceId, name, update })),
 	libraryShareCaret: (spaceId: string, name: string, caret: string | null) => typedError<null, LibraryError>(__TAURI_INVOKE("library_share_caret", { spaceId, name, caret })),
@@ -55,6 +57,7 @@ export const commands = {
 	libraryImportPaths: (spaceId: string, paths: string[]) => typedError<LibraryImport[], LibraryError>(__TAURI_INVOKE("library_import_paths", { spaceId, paths })),
 	libraryReadPickedImage: (path: string) => typedError<LibraryImage, LibraryError>(__TAURI_INVOKE("library_read_picked_image", { path })),
 	libraryRenameDocument: (spaceId: string, name: string, newName: string) => typedError<LibraryItem, LibraryError>(__TAURI_INVOKE("library_rename_document", { spaceId, name, newName })),
+	libraryRenameBoard: (spaceId: string, name: string, newName: string) => typedError<LibraryItem, LibraryError>(__TAURI_INVOKE("library_rename_board", { spaceId, name, newName })),
 	librarySaveMessage: (conversationId: string, messageId: string) => typedError<LibraryItem, LibraryError>(__TAURI_INVOKE("library_save_message", { conversationId, messageId })),
 	libraryDelete: (spaceId: string, name: string) => typedError<null, LibraryError>(__TAURI_INVOKE("library_delete", { spaceId, name })),
 	libraryReadLinkPreview: (url: string) => typedError<LibraryLinkPreview_Serialize, LibraryLinkPreviewError>(__TAURI_INVOKE("library_read_link_preview", { url })),
@@ -1191,6 +1194,30 @@ export type LaunchOutcome = {
 	refused: CompanionSeedRefused | null,
 };
 
+export type LibraryBoardBounds = {
+	x: number,
+	y: number,
+	width: number,
+	height: number,
+};
+
+export type LibraryBoardNode = {
+	id: string,
+	type: string,
+	x: number,
+	y: number,
+	width: number,
+	height: number,
+	colour: string | null,
+};
+
+export type LibraryBoardSummary = {
+	name: string,
+	nodeCount: number,
+	nodes: LibraryBoardNode[],
+	bounds: LibraryBoardBounds | null,
+};
+
 export type LibraryChanged = {
 	spaceId: string,
 	overwritten?: LibraryOverwritten | null,
@@ -1235,7 +1262,7 @@ export type LibraryDocumentWriterFinished = {
 	outcome: LibraryWriteOutcome,
 };
 
-export type LibraryError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "unknownSpace"; id: string } | { kind: "invalidName"; name: string } | { kind: "unsupported"; name: string } | { kind: "missing"; name: string } | { kind: "alreadyExists"; name: string } | { kind: "unknownTemplate"; id: string } | { kind: "notADocument"; name: string } | { kind: "notAnImage"; name: string } | { kind: "notUtf8"; name: string } | { kind: "tooLarge"; name: string; bytes: number; limit: number } | { kind: "unreadable"; detail: string } | { kind: "undecodable"; name: string; detail: string } | { kind: "unwritable"; detail: string } | { kind: "clipboardRefused"; detail: string } | { kind: "unrevealed"; detail: string } | { kind: "unknownMessage"; conversationId: string; messageId: string };
+export type LibraryError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "unknownSpace"; id: string } | { kind: "invalidName"; name: string } | { kind: "unsupported"; name: string } | { kind: "missing"; name: string } | { kind: "alreadyExists"; name: string } | { kind: "unknownTemplate"; id: string } | { kind: "notADocument"; name: string } | { kind: "notAnImage"; name: string } | { kind: "notABoard"; name: string } | { kind: "invalidBoard"; name: string; detail: string } | { kind: "notUtf8"; name: string } | { kind: "tooLarge"; name: string; bytes: number; limit: number } | { kind: "unreadable"; detail: string } | { kind: "undecodable"; name: string; detail: string } | { kind: "unwritable"; detail: string } | { kind: "clipboardRefused"; detail: string } | { kind: "unrevealed"; detail: string } | { kind: "unknownMessage"; conversationId: string; messageId: string };
 
 export type LibraryFile = {
 	name: string,
@@ -1262,7 +1289,7 @@ export type LibraryItem = {
 	createdAt: number | null,
 };
 
-export type LibraryItemKind = "image" | "document";
+export type LibraryItemKind = "image" | "document" | "board";
 
 export type LibraryLinkPreview = LibraryLinkPreview_Serialize | LibraryLinkPreview_Deserialize;
 

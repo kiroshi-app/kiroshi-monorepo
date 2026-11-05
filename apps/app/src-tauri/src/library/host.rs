@@ -11,6 +11,7 @@ use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Manager, Runtime, State};
 use tokio::sync::{watch, OwnedMutexGuard};
 
+use super::canvas::board_holds;
 use super::contract::{
 	LibraryDocumentFormat, LibraryDocumentWriterFinished, LibraryError, LibraryItem,
 	LibraryItemKind, LibraryWriteOutcome,
@@ -452,11 +453,41 @@ fn found(root: &Path, space_id: &str, asked: &Searched) -> Result<EntriesFound, 
 	let query = asked.query.to_lowercase();
 	let mut items = Vec::new();
 	for item in list(root, space_id)? {
-		if item.name.to_lowercase().contains(&query) || text_holds(root, space_id, &item, &query)? {
+		let is_hit = match item.kind {
+			LibraryItemKind::Board => a_board_holds(root, space_id, &item, &query)?,
+			_ => {
+				item.name.to_lowercase().contains(&query)
+					|| text_holds(root, space_id, &item, &query)?
+			}
+		};
+		if is_hit {
 			items.push(Entry::of(item));
 		}
 	}
 	Ok(EntriesFound { items })
+}
+
+fn a_board_holds(
+	root: &Path,
+	space_id: &str,
+	item: &LibraryItem,
+	query: &str,
+) -> Result<bool, LibraryError> {
+	let resolved = resolve(root, space_id, &item.name)?;
+	match board_holds(&resolved, &item.name, query) {
+		Err(
+			LibraryError::InvalidBoard { .. }
+			| LibraryError::NotUtf8 { .. }
+			| LibraryError::TooLarge { .. },
+		) => {
+			log::warn!(
+				"a library search of space {space_id} left {} out: it is not a readable board",
+				item.name
+			);
+			Ok(false)
+		}
+		held => held,
+	}
 }
 
 fn text_holds(
@@ -486,10 +517,10 @@ fn item_read(root: &Path, space_id: &str, name: &str) -> Result<ItemRead, Librar
 	let item = resolve(root, space_id, name)?;
 	let name = name.to_owned();
 	Ok(match item.accepted {
-		AcceptedType::Document(_) => ItemRead::Text {
+		AcceptedType::Document(_) | AcceptedType::Board => ItemRead::Text {
 			text: document_text(&item, &name)?,
+			kind: item.accepted.item_kind(),
 			name,
-			kind: LibraryItemKind::Document,
 		},
 		AcceptedType::Image { mime_type } if item.bytes <= MAX_SHOWN_IMAGE_BYTES => {
 			ItemRead::Image {

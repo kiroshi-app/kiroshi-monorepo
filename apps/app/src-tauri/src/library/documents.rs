@@ -246,17 +246,20 @@ impl Documents {
 	) -> Result<String, LibraryError> {
 		let mut held = self.held();
 		let item = resolve(root, space_id, name)?;
-		let AcceptedType::Document(format) = item.accepted else {
-			return Err(LibraryError::Missing { name: name.to_owned() });
+		let keeps_the_kind = match (&item.accepted, accepted_type(new_name)) {
+			(AcceptedType::Image { .. }, _) => {
+				return Err(LibraryError::Missing { name: name.to_owned() });
+			}
+			(AcceptedType::Document(format), Some(AcceptedType::Document(wanted))) => {
+				wanted == *format
+			}
+			(AcceptedType::Board, Some(AcceptedType::Board)) => true,
+			_ => false,
 		};
 		if new_name == name {
 			return Ok(name.to_owned());
 		}
-		let keeps_the_format = matches!(
-			accepted_type(new_name),
-			Some(AcceptedType::Document(wanted)) if wanted == format
-		);
-		if !is_plain_name(new_name) || !keeps_the_format {
+		if !is_plain_name(new_name) || !keeps_the_kind {
 			return Err(LibraryError::InvalidName { name: new_name.to_owned() });
 		}
 		let landed = if is_the_item_itself(&item, &space_dir(root, space_id).join(new_name)) {
@@ -281,7 +284,7 @@ impl Documents {
 			AcceptedType::Image { .. } => Some(
 				thumbnails_dir(&space_dir(root, space_id)).join(thumbnail_name(name, &item.path)?),
 			),
-			AcceptedType::Document(_) => None,
+			AcceptedType::Document(_) | AcceptedType::Board => None,
 		};
 		fs::remove_file(&item.path).map_err(unwritable)?;
 		if let Some(thumbnail) = thumbnail {

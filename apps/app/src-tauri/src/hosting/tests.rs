@@ -748,6 +748,29 @@ async fn host_effect_applied(
 				&text("newName"),
 			));
 		}
+		"library_create_board" => {
+			return answered_by_the_library(library::create_board(
+				&effects.library(),
+				&text("spaceId"),
+				&text("name"),
+			));
+		}
+		"library_rename_board" => {
+			return answered_by_the_library(library::rename_board(
+				effects.app(),
+				&effects.library(),
+				&text("spaceId"),
+				&text("name"),
+				&text("newName"),
+			));
+		}
+		"library_board_summary" => {
+			return answered_by_the_library(library::summarise_board(
+				&effects.library(),
+				&text("spaceId"),
+				&text("name"),
+			));
+		}
 		"library_delete" => {
 			return answered_by_the_library(library::delete_item(
 				effects.app(),
@@ -3750,6 +3773,58 @@ fn a_member_deletes_a_library_item_of_the_shared_space_only() {
 		assert!(!shelf(PERSONAL).exists());
 		assert_eq!(again["body"], json!({ "kind": "missing", "name": "notes.md" }), "{again}");
 		assert_eq!(guest.effects.reached(), ["library_delete", "library_delete"]);
+	});
+}
+
+#[test]
+fn a_member_creates_a_library_board_in_the_shared_space_only() {
+	run(kept_in_the_space_named("library_create_board", a_library_entry_of("plan")));
+}
+
+const A_LIBRARY_BOARD: &str = r#"{"nodes":[{"id":"a","type":"text","text":"","x":0,"y":0,"width":10,"height":10}],"edges":[]}"#;
+
+async fn a_guest_with_a_board(name: &str) -> Guest {
+	let guest = Guest::of_two_spaces(name).await;
+	for space_id in [PERSONAL, ELSEWHERE] {
+		std::fs::write(guest.effects.library().join(space_id).join("plan.canvas"), A_LIBRARY_BOARD)
+			.expect("the board lands");
+	}
+	guest
+}
+
+#[test]
+fn a_member_renames_a_library_board_of_the_shared_space_only() {
+	run(async {
+		let mut guest = a_guest_with_a_board("library-rename-board").await;
+		let renaming = |space_id| json!({ "spaceId": space_id, "name": "plan.canvas", "newName": "roadmap.canvas" });
+
+		guest.refused("library_rename_board", renaming(ELSEWHERE)).await;
+		let renamed = guest.called("library_rename_board", renaming(PERSONAL)).await;
+
+		let library = guest.effects.library();
+		assert_eq!(renamed["body"]["name"], json!("roadmap.canvas"), "{renamed}");
+		assert!(library.join(ELSEWHERE).join("plan.canvas").exists());
+		assert_eq!(
+			std::fs::read_to_string(library.join(PERSONAL).join("roadmap.canvas")).expect("reads"),
+			A_LIBRARY_BOARD
+		);
+		assert_eq!(guest.effects.reached(), ["library_rename_board"]);
+	});
+}
+
+#[test]
+fn a_member_reads_a_library_board_summary_of_the_shared_space_only() {
+	run(async {
+		let mut guest = a_guest_with_a_board("library-board-summary").await;
+
+		guest.refused("library_board_summary", a_library_entry_of("plan.canvas")(ELSEWHERE)).await;
+		let summary = guest
+			.called("library_board_summary", a_library_entry_of("plan.canvas")(PERSONAL))
+			.await;
+
+		assert_eq!(summary["status"], json!(200), "{summary}");
+		assert_eq!(summary["body"]["nodeCount"], json!(1), "{summary}");
+		assert_eq!(guest.effects.reached(), ["library_board_summary"]);
 	});
 }
 
