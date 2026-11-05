@@ -73,9 +73,7 @@ const OwnerAvatar = ({ owner }: OwnerAvatarProps) =>
 		/>
 	)
 
-type BoardPointerProps = BoardPointerPlacement
-
-const BoardPointer = ({ owner, position }: BoardPointerProps) => (
+const BoardPointer = ({ owner, position }: BoardPointerPlacement) => (
 	<div
 		className="absolute top-0 left-0"
 		data-owner-kind={owner.kind}
