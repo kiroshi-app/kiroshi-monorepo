@@ -183,11 +183,15 @@ const BoardEmptyHint = () => {
 			data-slot="board-empty-hint"
 		>
 			<div className="flex w-full max-w-100 flex-col items-center gap-3 text-center">
-				<div aria-hidden="true" className="relative h-15 w-18">
-					<div className="absolute top-0 right-0 size-13 rotate-8 rounded-[3px] bg-board-sticky-green" />
-					<div className="absolute bottom-0 left-0 size-13 -rotate-5 rounded-[3px] bg-board-sticky-yellow" />
+				<div
+					aria-hidden="true"
+					className="relative h-18 w-22"
+					data-slot="board-empty-stickies"
+				>
+					<div className="absolute top-1.5 left-7.5 size-13 origin-top-left rotate-8 rounded-[3px] bg-board-sticky-green shadow-board-hint-sticky" />
+					<div className="absolute top-3 left-2.5 size-13 origin-top-left -rotate-5 rounded-[3px] bg-board-sticky-yellow shadow-board-hint-sticky-raised" />
 				</div>
-				<h2 className="text-[17px] text-foreground leading-6">
+				<h2 className="font-semibold text-[17px] text-foreground leading-6">
 					{t("board.empty.title")}
 				</h2>
 				<p className="text-muted-foreground text-sm">{t("board.empty.body")}</p>

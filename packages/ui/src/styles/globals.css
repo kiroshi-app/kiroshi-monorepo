@@ -167,6 +167,8 @@
 	--color-board-control: var(--board-control);
 	--color-board-control-foreground: var(--board-control-foreground);
 	--shadow-board-control: var(--board-control-shadow);
+	--shadow-board-hint-sticky: var(--board-hint-sticky-shadow);
+	--shadow-board-hint-sticky-raised: var(--board-hint-sticky-raised-shadow);
 	--radius-xs: calc(var(--radius-root) * 0.2);
 	--radius-sm: calc(var(--radius-root) * 0.6);
 	--radius-md: calc(var(--radius-root) * 0.8);

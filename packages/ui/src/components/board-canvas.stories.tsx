@@ -135,7 +135,7 @@ export const Empty = meta.story({
 		docs: {
 			description: {
 				story:
-					"A board with nothing on it yet. Check the two stickies, the title and the body centred in the canvas and staying put while the grid pans, the dots on a 24px pitch at 100%, and the zoom control: Zoom out and Zoom in by name, a focus ring from the keyboard, a hover and a press colour landing with no transition, the percentage following each step, and a screen reader hearing the percentage once per button press and never during a pinch. Pick EmptyDark for the dark theme, FiveHundredObjects for a board with content.",
+					"A board with nothing on it yet. Check the two stickies in their 88 by 72 box, green behind at 8 degrees and yellow in front at -5, the title at weight 600 and the body, all centred in the canvas and staying put while the grid pans, the dots on a 24px pitch at 100%, and the zoom control: Zoom out and Zoom in by name, a focus ring from the keyboard, a hover and a press colour landing with no transition, the percentage following each step, and a screen reader hearing the percentage once per button press and never during a pinch. Pick EmptyDark for the dark theme, FiveHundredObjects for a board with content.",
 			},
 		},
 	},
@@ -146,7 +146,20 @@ export const Empty = meta.story({
 		const pattern = board.querySelector("pattern") as SVGPatternElement
 		const hintBefore = hint.getBoundingClientRect()
 
-		await expect(canvas.getByText("An empty board")).toBeVisible()
+		const title = canvas.getByRole("heading", { name: "An empty board" })
+		await expect(title).toBeVisible()
+		await expect(getComputedStyle(title).fontWeight).toBe("600")
+		const stickies = slotIn(canvasElement, "board-empty-stickies")
+		const stickyBox = stickies.getBoundingClientRect()
+		await expect([stickyBox.width, stickyBox.height]).toEqual([88, 72])
+		await expect(
+			Array.from(stickies.children as HTMLCollectionOf<HTMLElement>).map(
+				(sticky) => [sticky.offsetLeft, sticky.offsetTop],
+			),
+		).toEqual([
+			[30, 6],
+			[10, 12],
+		])
 		await expect(pattern.getAttribute("width")).toBe("24")
 
 		wheel(board, { deltaX: 50, deltaY: 30 })
