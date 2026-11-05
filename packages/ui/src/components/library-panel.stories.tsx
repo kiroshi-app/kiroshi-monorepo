@@ -279,22 +279,20 @@ export const GridMiddleClick = meta.story({
 		},
 	},
 	play: async ({ args, canvas }) => {
-		const dispatchedDuring: (string | undefined)[] = []
-		mocked(args.onOpenItem).mockImplementation(() => {
-			dispatchedDuring.push(window.event?.type)
+		const opened: [string | undefined, LibraryItem][] = []
+		mocked(args.onOpenItem).mockImplementation((item) => {
+			opened.push([window.event?.type, item])
 		})
 
 		const image = canvas.getByRole("button", { name: /hero-dunes\.png/ })
 		await expect(middleClick(image)).toBe(false)
-		await expect(args.onOpenItem).toHaveBeenCalledOnce()
-		await expect(args.onOpenItem).toHaveBeenLastCalledWith(LIBRARY_ITEMS[0])
-
 		const brief = canvas.getByRole("button", { name: /Spring launch brief/ })
 		await expect(middleClick(brief)).toBe(false)
-		await expect(args.onOpenItem).toHaveBeenCalledTimes(2)
-		await expect(args.onOpenItem).toHaveBeenLastCalledWith(LIBRARY_ITEMS[2])
 
-		await expect(dispatchedDuring).toEqual(["auxclick", "auxclick"])
+		await expect(opened).toEqual([
+			["auxclick", LIBRARY_ITEMS[0]],
+			["auxclick", LIBRARY_ITEMS[2]],
+		])
 	},
 })
 
