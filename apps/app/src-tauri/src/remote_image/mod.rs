@@ -6,7 +6,7 @@ mod tests;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
-use std::net::IpAddr;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::time::Duration;
 
 use base64::engine::general_purpose::STANDARD;
@@ -85,18 +85,75 @@ impl Resolve for PublicAddresses {
 	}
 }
 
+const REFUSED_V4: [(Ipv4Addr, u32); 12] = [
+	(Ipv4Addr::new(0, 0, 0, 0), 8),
+	(Ipv4Addr::new(10, 0, 0, 0), 8),
+	(Ipv4Addr::new(100, 64, 0, 0), 10),
+	(Ipv4Addr::new(127, 0, 0, 0), 8),
+	(Ipv4Addr::new(169, 254, 0, 0), 16),
+	(Ipv4Addr::new(172, 16, 0, 0), 12),
+	(Ipv4Addr::new(192, 0, 0, 0), 24),
+	(Ipv4Addr::new(192, 168, 0, 0), 16),
+	(Ipv4Addr::new(198, 18, 0, 0), 15),
+	(Ipv4Addr::new(224, 0, 0, 0), 4),
+	(Ipv4Addr::new(240, 0, 0, 0), 4),
+	(Ipv4Addr::new(255, 255, 255, 255), 32),
+];
+
+enum V6Range {
+	Refused,
+	Embeds(fn([u8; 16]) -> Ipv4Addr),
+}
+
+const V6_RANGES: [(Ipv6Addr, u32, V6Range); 9] = [
+	(Ipv6Addr::new(0xfc00, 0, 0, 0, 0, 0, 0, 0), 7, V6Range::Refused),
+	(Ipv6Addr::new(0xfe80, 0, 0, 0, 0, 0, 0, 0), 10, V6Range::Refused),
+	(Ipv6Addr::new(0xfec0, 0, 0, 0, 0, 0, 0, 0), 10, V6Range::Refused),
+	(Ipv6Addr::new(0xff00, 0, 0, 0, 0, 0, 0, 0), 8, V6Range::Refused),
+	(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0), 96, V6Range::Embeds(last_four_octets)),
+	(Ipv6Addr::new(0, 0, 0, 0, 0, 0xffff, 0, 0), 96, V6Range::Embeds(last_four_octets)),
+	(Ipv6Addr::new(0x64, 0xff9b, 0, 0, 0, 0, 0, 0), 96, V6Range::Embeds(last_four_octets)),
+	(Ipv6Addr::new(0x64, 0xff9b, 1, 0, 0, 0, 0, 0), 48, V6Range::Embeds(around_the_u_octet)),
+	(Ipv6Addr::new(0x2002, 0, 0, 0, 0, 0, 0, 0), 16, V6Range::Embeds(after_the_6to4_prefix)),
+];
+
+fn last_four_octets(octets: [u8; 16]) -> Ipv4Addr {
+	Ipv4Addr::new(octets[12], octets[13], octets[14], octets[15])
+}
+
+fn around_the_u_octet(octets: [u8; 16]) -> Ipv4Addr {
+	Ipv4Addr::new(octets[6], octets[7], octets[9], octets[10])
+}
+
+fn after_the_6to4_prefix(octets: [u8; 16]) -> Ipv4Addr {
+	Ipv4Addr::new(octets[2], octets[3], octets[4], octets[5])
+}
+
 fn is_public(address: IpAddr) -> bool {
-	match address.to_canonical() {
-		IpAddr::V4(v4) => {
-			!(v4.is_loopback() || v4.is_private() || v4.is_link_local() || v4.is_unspecified())
-		}
+	match address {
+		IpAddr::V4(v4) => is_public_v4(v4),
 		IpAddr::V6(v6) => {
-			!(v6.is_loopback()
-				|| v6.is_unique_local()
-				|| v6.is_unicast_link_local()
-				|| v6.is_unspecified())
+			let range = V6_RANGES.iter().find(|(network, length, _)| {
+				within_prefix(u128::from(v6), u128::from(*network), *length, 128)
+			});
+			match range {
+				Some((_, _, V6Range::Refused)) => false,
+				Some((_, _, V6Range::Embeds(embedded))) => is_public_v4(embedded(v6.octets())),
+				None => true,
+			}
 		}
 	}
+}
+
+fn is_public_v4(address: Ipv4Addr) -> bool {
+	!REFUSED_V4.iter().any(|(network, length)| {
+		within_prefix(u32::from(address).into(), u32::from(*network).into(), *length, 32)
+	})
+}
+
+fn within_prefix(address: u128, network: u128, length: u32, width: u32) -> bool {
+	let host_bits = width - length;
+	address >> host_bits == network >> host_bits
 }
 
 pub(crate) async fn read(
