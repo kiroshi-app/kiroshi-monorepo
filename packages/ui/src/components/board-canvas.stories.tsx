@@ -1297,6 +1297,14 @@ const expectAnchorFrame = async (root: HTMLElement, id: string) => {
 	}
 }
 
+const selectPlanToReview = async (root: HTMLElement) => {
+	const hit = root.querySelector(
+		'[data-slot="board-connector-hits"] [data-connector-id="plan-to-review"]',
+	) as SVGPathElement
+	pointerAt("pointerdown", hit, boardAt(root, 284, 224))
+	await within(root).findByRole("radiogroup", { name: "Connector type" })
+}
+
 const connectorDocs = (story: string) => ({
 	docs: { description: { story } },
 })
@@ -1430,11 +1438,8 @@ export const SwitchConnectorRouting = meta.story({
 			await expect(svg.querySelectorAll("[tabindex]")).toHaveLength(0)
 		}
 
-		const hit = canvasElement.querySelector(
-			'[data-connector-id="plan-to-review"]',
-		) as SVGPathElement
-		pointerAt("pointerdown", hit, boardAt(canvasElement, 284, 224))
-		const straight = await canvas.findByRole("radio", { name: "Straight" })
+		await selectPlanToReview(canvasElement)
+		const straight = canvas.getByRole("radio", { name: "Straight" })
 		await expect(straight).toBeChecked()
 		await expect(
 			getComputedStyle(slotIn(canvasElement, "board-connector")).stroke,
@@ -1527,14 +1532,6 @@ export const MoveConnectedObjectDark = meta.story({
 		await MoveConnectedObject.input.play?.(context)
 	},
 })
-
-const selectPlanToReview = async (root: HTMLElement) => {
-	const hit = root.querySelector(
-		'[data-slot="board-connector-hits"] [data-connector-id="plan-to-review"]',
-	) as SVGPathElement
-	pointerAt("pointerdown", hit, boardAt(root, 284, 224))
-	await within(root).findByRole("radiogroup", { name: "Connector type" })
-}
 
 export const ConnectorByKeyboard = meta.story({
 	globals: LAPTOP_WINDOW,
