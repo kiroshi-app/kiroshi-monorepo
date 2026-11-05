@@ -336,7 +336,8 @@ impl<R: Runtime> CompanionHost<R> {
 			refuse_block(&block)?;
 			let size = bytes.len() as u64;
 			let stored = stored_copy(root, &self.conversation_id, path, bytes)?;
-			Ok::<_, CompanionError>(HeldAttachment { path: stored, bytes: size, caption })
+			let label = label_of(caption, path, &stored);
+			Ok::<_, CompanionError>(HeldAttachment { path: stored, bytes: size, label })
 		})?;
 		Ok(ConversationAttached {
 			path: attached.path.to_string_lossy().into_owned(),
@@ -359,7 +360,7 @@ impl<R: Runtime> CompanionHost<R> {
 		let size = bytes.len() as u64;
 		refuse_block(&[SizedFile { name: path, bytes: size }])?;
 		let stored = stored_copy(root, &room, path, bytes)?;
-		let markdown = markdown_line(&stored, caption.as_deref());
+		let markdown = markdown_line(&stored, &label_of(caption, path, &stored));
 		let spoken = CompanionSpoke {
 			conversation_id: room.clone(),
 			author_bot_id: self.bot_id.clone(),
@@ -485,6 +486,13 @@ fn stored_copy(
 	let submitted = SubmittedAttachment { name: path.to_owned(), bytes: Some(bytes), base64: None };
 	store(root, conversation_id, &[submitted])?.into_iter().next().ok_or_else(|| {
 		CompanionError::Unexpected { detail: "the attachment store answered no path".to_owned() }
+	})
+}
+
+fn label_of(caption: Option<String>, source: &str, stored: &Path) -> String {
+	caption.unwrap_or_else(|| {
+		let named = Path::new(source).file_name().or(stored.file_name());
+		named.unwrap_or(stored.as_os_str()).to_string_lossy().into_owned()
 	})
 }
 
@@ -1981,7 +1989,7 @@ mod tests {
 		let held = host.attachments.take();
 		assert_eq!(held.len(), 1);
 		assert_eq!(held[0].path, stored[0]);
-		assert_eq!(held[0].caption.as_deref(), Some("The chart"));
+		assert_eq!(held[0].label, "The chart");
 	}
 
 	#[tokio::test]
@@ -2043,13 +2051,12 @@ mod tests {
 		assert_eq!(stored.parent(), Some(root.join("room").as_path()));
 		assert_eq!(stored.extension(), None);
 		assert_eq!(fs::read(&stored).expect("the copy reads"), vec![7u8; 2]);
-		let name = stored.file_name().and_then(|it| it.to_str()).expect("the stored name");
-		let markdown = format!("[{name}](<{path}>)");
+		let markdown = format!("[Makefile](<{path}>)");
 		assert_eq!(in_room["markdown"], json!(markdown));
 		assert_eq!(announced(&arriving)["text"], json!(markdown));
 		let logged = held[0].path.to_string_lossy();
-		let log_name = held[0].path.file_name().and_then(|it| it.to_str()).expect("the log name");
-		assert_eq!(here["markdown"], json!(format!("[{log_name}](<{logged}>)")));
+		assert_eq!(here["markdown"], json!(format!("[run.LOG](<{logged}>)")));
+		assert_eq!(held[0].markdown_line(), format!("[run.LOG](<{logged}>)"));
 	}
 
 	#[tokio::test]

@@ -674,9 +674,10 @@ image as `![label](<path>)`, every other file as `[label](<path>)`:
   line alone, the way `conversationSay` posts;
 - the answer is `{ "path", "markdown", "conversationId" }`, the stored absolute
   path, its markdown line and the conversation it was shown in;
-- the markdown line is labelled by the trimmed caption, or the stored file name
-  without one, `[`, `]` and `\` escaped with a backslash and a line break read
-  as a space; an extension of avif, bmp, gif, ico, jpeg, jpg, png, svg or webp,
+- the markdown line is labelled by the trimmed caption, or without one by the
+  name of the file attached, the stored file name when the path passed names no
+  file, `[`, `]` and `\` escaped with a backslash and a line break read as a
+  space; an extension of avif, bmp, gif, ico, jpeg, jpg, png, svg or webp,
   whatever its case, opens it on `!`; `<`, `>` and a line break in the path are
   written `%3C`, `%3E` and `%0A`.
 

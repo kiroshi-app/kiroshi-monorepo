@@ -56,7 +56,7 @@ const FILE_PATH =
 	"The path of the file to show, absolute or relative to your working directory: any file up to 10 MB."
 
 const CAPTION =
-	"The label of the markdown line, read as the alt text of an image or the text of a link, the file name when left out."
+	"The label of the markdown line, read as the alt text of an image or the text of a link, the name of the attached file when left out."
 
 const ATTACH_ROOM =
 	"The id of a room you hold a seat in to show it there, left out for this conversation."

@@ -74,12 +74,12 @@ impl HostWrites {
 pub struct HeldAttachment {
 	pub path: PathBuf,
 	pub bytes: u64,
-	pub caption: Option<String>,
+	pub label: String,
 }
 
 impl HeldAttachment {
 	pub fn markdown_line(&self) -> String {
-		markdown_line(&self.path, self.caption.as_deref())
+		markdown_line(&self.path, &self.label)
 	}
 
 	fn is_cited_in<'a>(&self, mut replies: impl Iterator<Item = &'a String>) -> bool {
@@ -1563,17 +1563,18 @@ mod tests {
 		));
 	}
 
-	fn attach(written: &Written, path: &str, caption: Option<&str>) {
+	fn attach(written: &Written, path: &str, label: &str) -> String {
 		written
 			.attachments
 			.hold_with(|_| {
 				Ok::<_, ()>(HeldAttachment {
 					path: PathBuf::from(path),
 					bytes: 1,
-					caption: caption.map(str::to_owned),
+					label: label.to_owned(),
 				})
 			})
-			.expect("the attachment is held");
+			.expect("the attachment is held")
+			.markdown_line()
 	}
 
 	async fn spoken(desk: &mut Desk<MockRuntime>, id: &str, text: &str) {
@@ -1613,11 +1614,12 @@ mod tests {
 
 		desk.open_turn(submitted("t1", "p1")).await;
 		spoken(&mut desk, "m1", "Here\n").await;
-		attach(&written, "/data/attachments/c/a.png", Some("The chart of May"));
+		let answered = attach(&written, "/data/attachments/c/a.png", "The chart of May");
 		desk.end(TerminalState::Complete).await;
 
 		let reply = written.stored("m1").await.expect("the reply is stored");
-		assert_eq!(reply.content, "Here\n![The chart of May](</data/attachments/c/a.png>)");
+		assert_eq!(answered, "![The chart of May](</data/attachments/c/a.png>)");
+		assert_eq!(reply.content, format!("Here\n{answered}"));
 		assert_eq!(reply.state, MessageState::Complete);
 	}
 
@@ -1630,17 +1632,15 @@ mod tests {
 		desk.open_turn(submitted("t1", "p1")).await;
 		spoken(&mut desk, "m1", "First").await;
 		spoken(&mut desk, "m2", "Two").await;
-		attach(&written, "/data/attachments/c/a.png", None);
-		attach(&written, "/data/attachments/c/b.pdf", Some("Second"));
+		let chart = attach(&written, "/data/attachments/c/3f9c.png", "chart.png");
+		let report = attach(&written, "/data/attachments/c/b71e.pdf", "report.pdf");
 		desk.end(TerminalState::Complete).await;
 
 		let first = written.stored("m1").await.expect("the first reply is stored");
 		let last = written.stored("m2").await.expect("the last reply is stored");
 		assert_eq!(first.content, "First");
-		assert_eq!(
-			last.content,
-			"Two\n![a.png](</data/attachments/c/a.png>)\n[Second](</data/attachments/c/b.pdf>)"
-		);
+		assert_eq!(report, "[report.pdf](</data/attachments/c/b71e.pdf>)");
+		assert_eq!(last.content, format!("Two\n{chart}\n{report}"));
 		assert!(!last.content.contains("Attached to this message"), "{}", last.content);
 		assert_eq!(written.assistant_rows().await, 2);
 	}
@@ -1653,7 +1653,7 @@ mod tests {
 		let cited = "See [My plan](</data/attachments/my c/plan v2.pdf>) first.";
 
 		desk.open_turn(submitted("t1", "p1")).await;
-		attach(&written, "/data/attachments/my c/plan v2.pdf", Some("My plan"));
+		attach(&written, "/data/attachments/my c/plan v2.pdf", "My plan");
 		spoken(&mut desk, "m1", cited).await;
 		desk.end(TerminalState::Complete).await;
 
@@ -1669,8 +1669,8 @@ mod tests {
 		let cited = "![a.png](</data/attachments/c/a.png>)";
 
 		desk.open_turn(submitted("t1", "p1")).await;
-		attach(&written, "/data/attachments/c/a.png", None);
-		attach(&written, "/data/attachments/c/b.txt", None);
+		attach(&written, "/data/attachments/c/a.png", "a.png");
+		let uncited = attach(&written, "/data/attachments/c/b.txt", "b.txt");
 		spoken(&mut desk, "m1", cited).await;
 		spoken(&mut desk, "m2", "Done.").await;
 		desk.end(TerminalState::Complete).await;
@@ -1678,7 +1678,7 @@ mod tests {
 		let first = written.stored("m1").await.expect("the first reply is stored");
 		let last = written.stored("m2").await.expect("the last reply is stored");
 		assert_eq!(first.content, cited);
-		assert_eq!(last.content, "Done.\n[b.txt](</data/attachments/c/b.txt>)");
+		assert_eq!(last.content, format!("Done.\n{uncited}"));
 	}
 
 	#[tokio::test]
@@ -1688,14 +1688,12 @@ mod tests {
 		let mut desk = written.desk();
 
 		desk.open_turn(submitted("t1", "p1")).await;
-		attach(&written, "/data/attachments/c/a.png", None);
-		attach(&written, "/data/attachments/c/notes.md", Some("Notes"));
+		let image = attach(&written, "/data/attachments/c/a.png", "a.png");
+		let notes = attach(&written, "/data/attachments/c/notes.md", "Notes");
 		desk.end(TerminalState::Complete).await;
 
-		assert_eq!(
-			only_reply_of(&written, "t1").await,
-			"![a.png](</data/attachments/c/a.png>)\n[Notes](</data/attachments/c/notes.md>)"
-		);
+		assert_eq!(notes, "[Notes](</data/attachments/c/notes.md>)");
+		assert_eq!(only_reply_of(&written, "t1").await, format!("{image}\n{notes}"));
 	}
 
 	#[tokio::test]
@@ -1712,7 +1710,7 @@ mod tests {
 			desk.record(&AgentEvent::MessageStarted { message: streaming("m1") }).await;
 			desk.record(&AgentEvent::MessageDelta { id: "m1".into(), seq: 1, text: "half".into() })
 				.await;
-			attach(&written, "/data/attachments/c/a.png", None);
+			attach(&written, "/data/attachments/c/a.png", "a.png");
 			desk.end(ending).await;
 
 			let reply = written.stored("m1").await.expect("the reply is stored");
@@ -1806,7 +1804,7 @@ mod tests {
 		let written = Written::new("attach-told").await;
 		written.prompt("t1", "p1").await;
 		let spoken = a_spoken_turn();
-		attach(&written, "/data/attachments/c/a.png", None);
+		attach(&written, "/data/attachments/c/a.png", "a.png");
 
 		let heard = written.forwarded(entries_of(&spoken)).await;
 
@@ -1828,7 +1826,7 @@ mod tests {
 	async fn a_block_without_a_reply_is_told_as_a_new_reply_before_the_turn_ends() {
 		let written = Written::new("attach-told-silent").await;
 		written.prompt("t1", "p1").await;
-		attach(&written, "/data/attachments/c/a.png", None);
+		attach(&written, "/data/attachments/c/a.png", "a.png");
 
 		let heard = written.forwarded(entries_of(&[turn_ended()])).await;
 
@@ -1864,7 +1862,7 @@ mod tests {
 			.call(|connection| Ok(connection.execute("DELETE FROM messages WHERE id = 'm1'", [])?))
 			.await
 			.expect("the reply is removed");
-		attach(&written, "/data/attachments/c/a.png", None);
+		attach(&written, "/data/attachments/c/a.png", "a.png");
 
 		desk.record(&turn_ended()).await;
 

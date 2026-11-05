@@ -140,9 +140,7 @@ pub fn refuse_block(files: &[SizedFile<'_>]) -> Result<(), Rejection> {
 	Ok(())
 }
 
-pub fn markdown_line(path: &Path, caption: Option<&str>) -> String {
-	let named = path.file_name().unwrap_or(path.as_os_str()).to_string_lossy();
-	let label = caption.map(str::trim).filter(|caption| !caption.is_empty()).unwrap_or(&named);
+pub fn markdown_line(path: &Path, label: &str) -> String {
 	let shown_inline = match is_image(path) {
 		true => "!",
 		false => "",
@@ -477,19 +475,9 @@ mod tests {
 			("/data/attachments/c1/d.pdf", "[d.pdf](</data/attachments/c1/d.pdf>)"),
 			("/data/attachments/c1/e", "[e](</data/attachments/c1/e>)"),
 		] {
-			assert_eq!(markdown_line(Path::new(path), None), line);
+			let label = Path::new(path).file_name().and_then(|name| name.to_str()).expect("a name");
+			assert_eq!(markdown_line(Path::new(path), label), line);
 		}
-	}
-
-	#[test]
-	fn a_trimmed_caption_labels_the_line_and_a_blank_one_falls_back_to_the_file_name() {
-		let path = Path::new("/data/attachments/c1/a.png");
-
-		assert_eq!(
-			markdown_line(path, Some("  The chart of May \n")),
-			"![The chart of May](</data/attachments/c1/a.png>)"
-		);
-		assert_eq!(markdown_line(path, Some("  ")), "![a.png](</data/attachments/c1/a.png>)");
 	}
 
 	#[test]
@@ -497,8 +485,8 @@ mod tests {
 		let path = Path::new("/data/my files/<odd>\nname.txt");
 
 		assert_eq!(
-			markdown_line(path, Some(r"[draft] a\b")),
-			r"[\[draft\] a\\b](</data/my files/%3Codd%3E%0Aname.txt>)"
+			markdown_line(path, "[draft] a\\b\nv2"),
+			r"[\[draft\] a\\b v2](</data/my files/%3Codd%3E%0Aname.txt>)"
 		);
 	}
 
