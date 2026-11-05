@@ -52,6 +52,9 @@ impl From<FetchRefusal> for LibraryLinkPreviewError {
 			FetchRefusal::NetworkFailure { status } => {
 				LibraryLinkPreviewError::NetworkFailure { status }
 			}
+			FetchRefusal::PrivateAddress => {
+				LibraryLinkPreviewError::NetworkFailure { status: None }
+			}
 		}
 	}
 }

@@ -14,7 +14,9 @@ use axum::Router;
 use tokio::net::TcpListener;
 
 use super::contract::{RemoteImage, RemoteImageError};
-use super::{read, MAX_BYTES};
+use reqwest::Url;
+
+use super::{admitted, is_public, read, Admission, FetchRefusal, MAX_BYTES};
 
 const WITHIN: Duration = Duration::from_secs(10);
 const PROXY_BEARER: &str = "proxy-bearer";
@@ -245,4 +247,101 @@ async fn a_refused_status_a_closed_port_or_a_slow_answer_is_a_network_failure() 
 	assert_eq!(missing, Err(RemoteImageError::NetworkFailure { status: Some(404) }));
 	assert_eq!(unreached, Err(RemoteImageError::NetworkFailure { status: None }));
 	assert_eq!(slow, Err(RemoteImageError::NetworkFailure { status: None }));
+}
+
+fn admitted_to_the_public_web(url: &str) -> Result<Option<&'static str>, FetchRefusal> {
+	admitted(&Url::parse(url).expect("the url parses"), &Admission::PublicWeb)
+}
+
+#[test]
+fn the_public_web_admits_a_public_address_over_http_or_https_without_a_bearer() {
+	for url in [
+		"https://93.184.215.14/cat.png",
+		"http://[2606:2800:21f::1]/cat.png",
+		"https://example.test/cat.png",
+	] {
+		assert!(matches!(admitted_to_the_public_web(url), Ok(None)), "{url}");
+	}
+}
+
+#[test]
+fn the_public_web_refuses_every_private_address_literal_on_every_hop() {
+	for url in [
+		"http://127.0.0.1/",
+		"http://10.0.0.8/",
+		"http://172.16.4.2/",
+		"http://192.168.1.1/",
+		"http://169.254.169.254/latest/meta-data",
+		"http://0.0.0.0/",
+		"http://[::1]/",
+		"http://[::]/",
+		"http://[fd00::1]/",
+		"http://[fe80::1]/",
+		"http://[::ffff:10.0.0.8]/",
+		"http://100.64.0.1/",
+	] {
+		assert!(
+			matches!(admitted_to_the_public_web(url), Err(FetchRefusal::PrivateAddress)),
+			"{url}"
+		);
+	}
+}
+
+#[test]
+fn the_public_web_refuses_a_scheme_other_than_http_or_https() {
+	assert!(matches!(
+		admitted_to_the_public_web("ftp://example.test/cat.png"),
+		Err(FetchRefusal::UnsupportedScheme)
+	));
+}
+
+#[test]
+fn every_refused_range_refuses_its_sample_and_admits_its_nearest_public_neighbour() {
+	let rows = [
+		("0.0.0.0/8", "0.1.2.3", "1.0.0.0"),
+		("10.0.0.0/8", "10.0.0.8", "11.0.0.0"),
+		("100.64.0.0/10", "100.64.0.1", "100.63.255.255"),
+		("127.0.0.0/8", "127.0.0.1", "128.0.0.0"),
+		("169.254.0.0/16", "169.254.169.254", "169.255.0.0"),
+		("172.16.0.0/12", "172.16.4.2", "172.32.0.0"),
+		("192.0.0.0/24", "192.0.0.8", "192.0.1.0"),
+		("192.168.0.0/16", "192.168.1.1", "192.169.0.0"),
+		("198.18.0.0/15", "198.19.255.255", "198.20.0.0"),
+		("224.0.0.0/4", "224.0.0.1", "223.255.255.255"),
+		("240.0.0.0/4", "240.0.0.1", "223.255.255.255"),
+		("255.255.255.255/32", "255.255.255.255", "223.255.255.255"),
+		("fc00::/7", "fd00::1", "fbff:ffff:ffff:ffff:ffff:ffff:ffff:ffff"),
+		("fe80::/10", "fe80::1", "fe7f:ffff:ffff:ffff:ffff:ffff:ffff:ffff"),
+		("fec0::/10", "fec0::1", "fe7f:ffff:ffff:ffff:ffff:ffff:ffff:ffff"),
+		("ff00::/8", "ff02::1", "fe7f:ffff:ffff:ffff:ffff:ffff:ffff:ffff"),
+		("::/96 compatible", "::10.0.0.8", "::8.8.8.8"),
+		("::/96 loopback", "::1", "::8.8.8.8"),
+		("::/96 unspecified", "::", "::8.8.8.8"),
+		("::ffff:0:0/96", "::ffff:127.0.0.1", "::ffff:8.8.8.8"),
+		("64:ff9b::/96", "64:ff9b::10.0.0.8", "64:ff9b::8.8.8.8"),
+		("64:ff9b:1::/48", "64:ff9b:1:a00:0:800::", "64:ff9b:1:808:8:800::"),
+		("2002::/16", "2002:a00:8::", "2002:808:808::"),
+	];
+
+	for (range, refused, admitted) in rows {
+		let address = |sample: &str| sample.parse().expect("the sample is an address");
+		assert!(!is_public(address(refused)), "{range} refuses {refused}");
+		assert!(is_public(address(admitted)), "{range} admits {admitted}");
+	}
+}
+
+#[test]
+fn the_host_still_reaches_every_address_the_public_web_refuses() {
+	for url in ["http://100.64.0.1/", "http://[64:ff9b::a00:8]/", "http://[2002:a00:8::]/"] {
+		assert!(
+			matches!(
+				admitted(
+					&Url::parse(url).expect("the url parses"),
+					&Admission::Web(&HashMap::new())
+				),
+				Ok(None)
+			),
+			"{url}"
+		);
+	}
 }

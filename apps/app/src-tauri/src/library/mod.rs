@@ -5,6 +5,7 @@ pub mod host;
 pub mod link_preview;
 pub(crate) mod presence;
 mod templates;
+pub(crate) mod url_import;
 
 use std::fs::{self, Metadata};
 use std::future::Future;

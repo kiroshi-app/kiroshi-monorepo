@@ -11,7 +11,7 @@ use regex::{Captures, Regex};
 use reqwest::header::{HeaderMap, CONTENT_TYPE};
 use reqwest::{Response, Url};
 
-use crate::remote_image::fetched;
+use crate::remote_image::{fetched, Admission};
 use contract::{LibraryLinkPreview, LibraryLinkPreviewError};
 
 const MAX_BYTES: usize = 2 * 1024 * 1024;
@@ -61,7 +61,7 @@ pub(crate) async fn read(
 	within: Duration,
 ) -> Result<LibraryLinkPreview, LibraryLinkPreviewError> {
 	tokio::time::timeout(within, async {
-		let response = fetched(url, proxy_bearers).await?;
+		let response = fetched(url, &Admission::HttpsOrHeldProxy(proxy_bearers)).await?;
 		let landed = response.url().clone();
 		let page = page_of(response).await?;
 		Ok(preview_of(url, &landed, &page))
