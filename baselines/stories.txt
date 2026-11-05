@@ -1561,6 +1561,8 @@ navigation-boardcanvas--files-dragged-over-mixed
 navigation-boardcanvas--files-dragged-over-mixed-dark
 navigation-boardcanvas--files-dragged-over-one-file
 navigation-boardcanvas--files-dragged-over-one-file-dark
+navigation-boardcanvas--files-dragged-over-unknown-count
+navigation-boardcanvas--files-dragged-over-unknown-count-dark
 navigation-boardcanvas--five-hundred-objects
 navigation-boardcanvas--five-hundred-objects-dark
 navigation-boardcanvas--image-pasted

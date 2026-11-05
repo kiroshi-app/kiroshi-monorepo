@@ -490,10 +490,18 @@ type BoardFileDrag = {
 }
 
 const GHOST_TILT = ["-rotate-3", "rotate-2", "rotate-7"] as const
+const UNREADABLE_FILES: readonly BoardFileKind[] = ["file"]
+
+const dropLabelOf = (kinds: readonly BoardFileKind[]) => {
+	if (kinds.length === 0) return "board.drop.unknown"
+	return kinds.every((kind) => kind === "image")
+		? "board.drop.images"
+		: "board.drop.files"
+}
 
 const BoardFileDropState = ({ kinds, at }: BoardFileDrag) => {
 	const { t } = useTranslation("common")
-	const isEveryImage = kinds.every((kind) => kind === "image")
+	const shownKinds = kinds.length > 0 ? kinds : UNREADABLE_FILES
 
 	return (
 		<div
@@ -511,15 +519,17 @@ const BoardFileDropState = ({ kinds, at }: BoardFileDrag) => {
 				style={{ left: at.x, top: at.y }}
 			>
 				<div className="relative h-23 w-33">
-					{GHOST_TILT.slice(0, kinds.length)
+					{GHOST_TILT.slice(0, shownKinds.length)
 						.map((tilt, index) => {
-							const Glyph = kinds[index] === "image" ? Icons.Image : Icons.File
+							const kind = shownKinds[index]
+							const Glyph = kind === "image" ? Icons.Image : Icons.File
 							return (
 								<div
 									className={cn(
 										"absolute inset-0 grid place-items-center rounded-[6px] border border-board-card-border bg-board-card-surface text-board-muted-foreground shadow-board-card",
 										tilt,
 									)}
+									data-kind={kind}
 									data-slot="board-drop-thumbnail"
 									key={tilt}
 								>
@@ -534,9 +544,7 @@ const BoardFileDropState = ({ kinds, at }: BoardFileDrag) => {
 					data-slot="board-drop-pill"
 				>
 					<Icons.Add className="size-3.5 shrink-0" />
-					{t(isEveryImage ? "board.drop.images" : "board.drop.files", {
-						count: kinds.length,
-					})}
+					{t(dropLabelOf(kinds), { count: kinds.length })}
 				</p>
 			</div>
 		</div>

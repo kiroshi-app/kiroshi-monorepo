@@ -738,6 +738,7 @@ const common = {
 			images_other: "Drop to add {{count}} images here",
 			files_one: "Drop to add {{count}} file here",
 			files_other: "Drop to add {{count}} files here",
+			unknown: "Drop to add files here",
 		},
 	},
 	whatsNew: {

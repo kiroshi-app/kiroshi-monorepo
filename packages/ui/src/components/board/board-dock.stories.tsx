@@ -33,12 +33,18 @@ const PICKER_NAME = "From the Library"
 
 type PlayContext = { canvasElement: HTMLElement; args: BoardDockProps }
 
+const storyLibrary = { keepFirst: (_count: number) => {} }
+
 const ControlledDock = ({
 	tool: initialTool,
 	onToolChange,
+	libraryItems: initialItems,
 	...props
 }: BoardDockProps) => {
 	const [tool, setTool] = useState(initialTool)
+	const [libraryItems, setLibraryItems] = useState(initialItems)
+	storyLibrary.keepFirst = (count) =>
+		setLibraryItems(initialItems.slice(0, count))
 
 	return (
 		<div
@@ -47,6 +53,7 @@ const ControlledDock = ({
 		>
 			<BoardDock
 				{...props}
+				libraryItems={libraryItems}
 				onToolChange={(next) => {
 					setTool(next)
 					onToolChange(next)
@@ -372,6 +379,22 @@ const playLibraryPicker = async ({ canvasElement, args }: PlayContext) => {
 	)
 	await expect(args.onLibraryItemPick).toHaveBeenLastCalledWith(
 		LIBRARY_ITEMS[2]?.id,
+	)
+
+	storyLibrary.keepFirst(2)
+	await waitFor(() =>
+		expect(within(reopened).getAllByRole("button")).toHaveLength(2),
+	)
+	const kept = within(reopened).getAllByRole("button")
+	await expect(kept.map((tile) => tile.tabIndex)).toEqual([-1, 0])
+	toolNamed(canvasElement, "library").focus()
+	await userEvent.tab()
+	await expect(kept[1]).toHaveFocus()
+	storyLibrary.keepFirst(LIBRARY_ITEMS.length)
+	await waitFor(() =>
+		expect(within(reopened).getAllByRole("button")).toHaveLength(
+			LIBRARY_ITEMS.length,
+		),
 	)
 }
 

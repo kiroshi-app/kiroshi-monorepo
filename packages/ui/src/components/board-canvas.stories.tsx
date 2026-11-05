@@ -1424,14 +1424,24 @@ export const ImagePastedDark = meta.story({
 	play: playImagePasted,
 })
 
+const transferOf = (files: readonly File[]) => {
+	const transfer = new DataTransfer()
+	for (const file of files) transfer.items.add(file)
+	return transfer
+}
+
+const transferHidingFiles = () => {
+	const transfer = new DataTransfer()
+	Object.defineProperty(transfer, "types", { value: ["Files"] })
+	return transfer
+}
+
 const dragFiles = (
 	type: string,
 	board: HTMLElement,
-	files: readonly File[],
+	transfer: DataTransfer,
 	at: BoardClientPoint,
 ) => {
-	const transfer = new DataTransfer()
-	for (const file of files) transfer.items.add(file)
 	board.dispatchEvent(
 		new DragEvent(type, {
 			bubbles: true,
@@ -1445,15 +1455,17 @@ const dragFiles = (
 const GHOST_TILTS = ["-3deg", "2deg", "7deg"]
 
 const playFilesDraggedOver =
-	(files: readonly File[], label: string) =>
+	(files: readonly File[], label: string, isCountHidden = false) =>
 	async ({ canvasElement, args }: CanvasPlayContext) => {
 		const board = slotIn(canvasElement, "board-canvas")
 		const at = shifted(centreOf(board), { x: -120, y: -60 })
 		const dropState = () =>
 			board.querySelector<HTMLElement>('[data-slot="board-file-drop"]')
+		const dragging = () =>
+			isCountHidden ? transferHidingFiles() : transferOf(files)
 
-		dragFiles("dragenter", board, files, at)
-		dragFiles("dragover", board, files, at)
+		dragFiles("dragenter", board, dragging(), at)
+		dragFiles("dragover", board, dragging(), at)
 		await waitFor(() => expect(dropState()).not.toBeNull())
 		const boardBox = board.getBoundingClientRect()
 		const target = slotIn(board, "board-drop-target")
@@ -1468,7 +1480,18 @@ const playFilesDraggedOver =
 		)
 
 		const thumbnails = slotsIn(board, "board-drop-thumbnail")
-		await expect(thumbnails).toHaveLength(Math.min(files.length, 3))
+		await expect(thumbnails).toHaveLength(
+			isCountHidden ? 1 : Math.min(files.length, 3),
+		)
+		await expect(
+			thumbnails.map((thumbnail) => thumbnail.dataset.kind).reverse(),
+		).toEqual(
+			isCountHidden
+				? ["file"]
+				: files
+						.slice(0, 3)
+						.map((file) => (file.type.startsWith("image/") ? "image" : "file")),
+		)
 		await expect(
 			thumbnails
 				.map((thumbnail) => getComputedStyle(thumbnail).rotate)
@@ -1495,15 +1518,15 @@ const playFilesDraggedOver =
 		)
 		await waitFor(() => expect(dropState()).toBeNull())
 
-		dragFiles("dragenter", board, files, at)
-		dragFiles("drop", board, files, at)
+		dragFiles("dragenter", board, dragging(), at)
+		dragFiles("drop", board, transferOf(files), at)
 		await waitFor(() => expect(dropState()).toBeNull())
 		await expect(args.onDropFiles).toHaveBeenLastCalledWith(
 			files,
 			boardPointOf(board, at),
 		)
 
-		dragFiles("dragover", board, files, at)
+		dragFiles("dragover", board, dragging(), at)
 		await waitFor(() => expect(dropState()).not.toBeNull())
 	}
 
@@ -1552,4 +1575,21 @@ export const FilesDraggedOverOneFile = meta.story({
 export const FilesDraggedOverOneFileDark = meta.story({
 	globals: { theme: "dark" },
 	play: playFilesDraggedOver(ONE_FILE, "Drop to add 1 file here"),
+})
+
+export const FilesDraggedOverUnknownCount = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Boards 5c when the webview hides the dragged files until the drop: one file thumbnail under the pointer and the pill reading Drop to add files here, with no number. The drop still emits `onDropFiles` with the files it carries.",
+			},
+		},
+	},
+	play: playFilesDraggedOver(MIXED_FILES, "Drop to add files here", true),
+})
+
+export const FilesDraggedOverUnknownCountDark = meta.story({
+	globals: { theme: "dark" },
+	play: playFilesDraggedOver(MIXED_FILES, "Drop to add files here", true),
 })

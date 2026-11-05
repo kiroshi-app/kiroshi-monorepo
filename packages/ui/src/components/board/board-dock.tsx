@@ -204,11 +204,13 @@ const LibraryPicker = ({
 		onLibraryItemPick(id)
 	}
 
+	const tabStopAt = Math.min(focusedAt, libraryItems.length - 1)
+
 	const moveFocus = (event: KeyboardEvent<HTMLDivElement>) => {
 		const step = TILE_STEP[event.key]
 		if (step === undefined) return
 		event.preventDefault()
-		const next = focusedAt + step
+		const next = tabStopAt + step
 		const tiles = event.currentTarget.querySelectorAll<HTMLElement>(
 			'[data-slot="board-library-tile"]',
 		)
@@ -248,7 +250,7 @@ const LibraryPicker = ({
 								onClick={() => pick(item.id)}
 								onFocus={() => setFocusedAt(index)}
 								onPointerDown={pressTile(item)}
-								tabIndex={index === focusedAt ? 0 : -1}
+								tabIndex={index === tabStopAt ? 0 : -1}
 								type="button"
 							>
 								{isDragged ? null : <TileFace item={item} />}
