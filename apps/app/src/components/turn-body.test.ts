@@ -330,12 +330,24 @@ describe("a file an agent cites in its answer", () => {
 
 	it("opens nothing for a path outside the attachment store", async () => {
 		const actions = actionsSpy()
-		renderCitation(`Read [the brief](<${OUTSIDE_THE_STORE}>) first.`, actions)
+		renderCitation(
+			`Read [the brief](<${OUTSIDE_THE_STORE}>) beside [the chart](<${CITED_IMAGE}>).`,
+			actions,
+		)
 
 		await click(screen.getByRole("button", { name: "Open the brief" }))
 
 		expect(openAttachment).not.toHaveBeenCalled()
 		expect(actions.openImage).not.toHaveBeenCalled()
+	})
+
+	it("leaves a path outside the attachment store without a chip", () => {
+		renderCitation(
+			`Read [the brief](<${OUTSIDE_THE_STORE}>) first.`,
+			actionsSpy(),
+		)
+
+		expect(screen.queryByRole("button", { name: "Open the brief" })).toBeNull()
 	})
 
 	it("keeps an image outside the attachment store as its label", async () => {
@@ -348,6 +360,15 @@ describe("a file an agent cites in its answer", () => {
 
 const attachmentChipOf = (path: string) =>
 	screen.queryByRole("button", { name: `Open ${path.split("/").at(-1)}` })
+
+describe("a message citing no stored attachment", () => {
+	it("leaves a code path link without an attachment chip", () => {
+		renderCitation("See [a.ts](src/a.ts) for the parser.", actionsSpy())
+
+		expect(screen.queryByRole("button", { name: "Open a.ts" })).toBeNull()
+		expect(screen.getByText("See a.ts for the parser.")).toBeTruthy()
+	})
+})
 
 describe("a stored message carrying the attachments block", () => {
 	it("still shows its files as chips in the attachments row", () => {

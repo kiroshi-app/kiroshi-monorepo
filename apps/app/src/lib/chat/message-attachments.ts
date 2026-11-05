@@ -165,6 +165,13 @@ export const messageWithAttachments = (text: string): MessageContent => {
 		: messageWithBlock(text, lines, headerIndex)
 }
 
+const LINK_DESTINATION = /\]\((?:<([^>]*)>|([^\s)]+))\)/g
+
+export const citesStoredAttachment = (text: string): boolean =>
+	[...text.matchAll(LINK_DESTINATION)].some(([, angled, bare]) =>
+		isStoredAttachmentPath(angled ?? bare ?? ""),
+	)
+
 export const citedAttachmentOf = (path: string): MessageAttachment | null =>
 	isStoredAttachmentPath(path) ? toAttachment(path) : null
 

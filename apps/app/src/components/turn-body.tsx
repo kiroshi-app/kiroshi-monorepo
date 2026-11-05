@@ -17,6 +17,7 @@ import {
 } from "@/lib/chat/answer-actions"
 import {
 	citedAttachmentOf,
+	citesStoredAttachment,
 	type MessageContent,
 	resolveCitedImage,
 } from "@/lib/chat/message-attachments"
@@ -78,6 +79,17 @@ const citedAttachmentOpener =
 		}
 	}
 
+const citedAttachmentsOf = (
+	text: string,
+	actions: AnswerActions | null,
+): Pick<MarkdownProps, "onOpenAttachment" | "resolveAttachment"> =>
+	citesStoredAttachment(text)
+		? {
+				onOpenAttachment: citedAttachmentOpener(actions),
+				resolveAttachment: resolveCitedImage,
+			}
+		: {}
+
 export const TurnBody = ({
 	attachments,
 	text,
@@ -101,10 +113,9 @@ export const TurnBody = ({
 				<Markdown
 					answerActions={answerActions}
 					isWriting={isWriting}
-					onOpenAttachment={citedAttachmentOpener(actions)}
 					renderRun={renderRun}
-					resolveAttachment={resolveCitedImage}
 					runs={runs}
+					{...citedAttachmentsOf(text, actions)}
 				>
 					{text}
 				</Markdown>
