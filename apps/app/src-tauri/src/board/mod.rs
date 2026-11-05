@@ -13,7 +13,7 @@ use serde_json::{Map, Value};
 
 pub use canvas::{export_canvas, import_canvas};
 pub use doc::{read_board, write_board};
-use schema::{FieldSpec, Fields, SCHEMA};
+use schema::{FieldSpec, Fields, Placement, SCHEMA};
 
 pub type JsonObject = Map<String, Value>;
 
@@ -23,6 +23,8 @@ pub struct Board {
 	edges: BTreeMap<String, JsonObject>,
 	#[serde(skip_serializing_if = "Map::is_empty")]
 	kiroshi: JsonObject,
+	#[serde(skip_serializing_if = "Map::is_empty")]
+	canvas: JsonObject,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -75,6 +77,10 @@ static COLOUR: LazyLock<Regex> = LazyLock::new(|| {
 	Regex::new("^(?:[1-6]|#[0-9A-Fa-f]{3}|#[0-9A-Fa-f]{6})$").expect("the colour pattern compiles")
 });
 
+fn verbatim_key() -> &'static str {
+	&SCHEMA.verbatim
+}
+
 fn extras_key() -> &'static str {
 	&SCHEMA.extras
 }
@@ -109,7 +115,7 @@ fn z_at(index: usize) -> String {
 fn is_in_z_order(keys: &[Option<&Value>]) -> bool {
 	let valid: Option<Vec<&str>> =
 		keys.iter().map(|key| key.filter(|key| is_z(key)).and_then(Value::as_str)).collect();
-	valid.is_some_and(|keys| keys.windows(2).all(|pair| pair[0] <= pair[1]))
+	valid.is_some_and(|keys| keys.windows(2).all(|pair| pair[0] < pair[1]))
 }
 
 fn integer_of(value: &Value) -> Option<i64> {
@@ -152,6 +158,9 @@ fn parsed_fields(
 			}
 			return Err(at.refused(name));
 		};
+		if spec.placement == Placement::Verbatim && value.as_object().is_some_and(Map::is_empty) {
+			continue;
+		}
 		let fitted = fitted(spec, value).ok_or_else(|| at.refused(name))?;
 		into.insert(name.clone(), fitted);
 	}
@@ -225,6 +234,7 @@ pub(crate) fn parsed_board(
 	nodes: BTreeMap<String, Value>,
 	edges: BTreeMap<String, Value>,
 	kiroshi: JsonObject,
+	canvas: JsonObject,
 ) -> Result<Board, BoardError> {
 	let nodes = nodes
 		.into_iter()
@@ -234,5 +244,5 @@ pub(crate) fn parsed_board(
 		.into_iter()
 		.map(|(id, edge)| parsed_edge(&id, edge, &nodes).map(|parsed| (id, parsed)))
 		.collect::<Result<BTreeMap<_, _>, _>>()?;
-	Ok(Board { nodes, edges, kiroshi })
+	Ok(Board { nodes, edges, kiroshi, canvas })
 }

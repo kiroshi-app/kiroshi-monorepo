@@ -8,6 +8,7 @@ import {
 	type Element,
 	EXTRAS,
 	type Fields,
+	isEmptyObject,
 	isInZOrder,
 	isObject,
 	type Json,
@@ -38,13 +39,19 @@ const CANVAS_TYPES = new Set(
 
 type Placed = { top: JsonObject; kiroshi: JsonObject }
 
+type Carried = { kiroshi?: JsonObject; canvas?: JsonObject }
+
+const placedFrom = (id: string, element: Carried): Placed => ({
+	top: { ...element.canvas, [ID]: id },
+	kiroshi: { ...element.kiroshi },
+})
+
 const place = (fields: Fields, element: object, into: Placed) => {
 	const values = element as Record<string, Json | undefined>
 	for (const [name, spec] of Object.entries(fields)) {
 		const value = values[name]
-		if (value === undefined) continue
-		if (spec.in === "verbatim") Object.assign(into.top, value)
-		else into[spec.in === "canvas" ? "top" : "kiroshi"][name] = value
+		if (value === undefined || spec.in === "verbatim") continue
+		into[spec.in === "canvas" ? "top" : "kiroshi"][name] = value
 	}
 }
 
@@ -66,7 +73,7 @@ const byId = <T>([leftId]: Entry<T>, [rightId]: Entry<T>) =>
 
 const canvasNode = ([id, node]: Entry<BoardNode>) => {
 	const { canvasType, fields } = BOARD_SCHEMA.kinds[node.kind]
-	const placed: Placed = { top: { [ID]: id }, kiroshi: { ...node.kiroshi } }
+	const placed = placedFrom(id, node)
 	if (canvasType !== null) {
 		placed.top[TYPE] = canvasType
 		placed.kiroshi[KIND] = node.kind
@@ -77,17 +84,18 @@ const canvasNode = ([id, node]: Entry<BoardNode>) => {
 }
 
 const canvasEdge = ([id, edge]: Entry<Connector>) => {
-	const placed: Placed = { top: { [ID]: id }, kiroshi: { ...edge.kiroshi } }
+	const placed = placedFrom(id, edge)
 	place(EDGE_FIELDS, edge, placed)
 	return { ...placed.top, [EXTRAS]: placed.kiroshi }
 }
 
 export const exportCanvas = (board: Board) => {
 	const canvas: JsonObject = {
+		...board.canvas,
 		nodes: Object.entries(board.nodes).sort(byZOrder).map(canvasNode),
 		edges: Object.entries(board.edges).sort(byId).map(canvasEdge),
 	}
-	if (board.kiroshi !== undefined && Object.keys(board.kiroshi).length > 0) {
+	if (board.kiroshi !== undefined && !isEmptyObject(board.kiroshi)) {
 		canvas[EXTRAS] = board.kiroshi
 	}
 	return `${JSON.stringify(canvas, null, "\t")}\n`
@@ -104,7 +112,9 @@ const parsedJson = (text: string): unknown => {
 	}
 }
 
-type RootList = "nodes" | "edges"
+const ROOT_LISTS = ["nodes", "edges"] as const
+
+type RootList = (typeof ROOT_LISTS)[number]
 
 const listAt = (root: JsonObject, field: RootList) => {
 	const list = root[field]
@@ -130,12 +140,19 @@ type Shaping = {
 	source: JsonObject
 	kiroshi: JsonObject
 	fields: Fields
+	claimedTop: string[]
 	claimedKiroshi: string[]
 }
 
-const shaped = ({ source, kiroshi, fields, claimedKiroshi }: Shaping) => {
+const shaped = ({
+	source,
+	kiroshi,
+	fields,
+	claimedTop: claimedAtTop,
+	claimedKiroshi,
+}: Shaping) => {
 	const shape: JsonObject = {}
-	const claimedTop = new Set([ID, EXTRAS])
+	const claimedTop = new Set([ID, EXTRAS, ...claimedAtTop])
 	const claimedUnderKiroshi = new Set(claimedKiroshi)
 	const verbatim: string[] = []
 	for (const [name, spec] of Object.entries(fields)) {
@@ -148,9 +165,12 @@ const shaped = ({ source, kiroshi, fields, claimedKiroshi }: Shaping) => {
 		const from = isTop ? source : kiroshi
 		if (Object.hasOwn(from, name)) shape[name] = from[name] as Json
 	}
-	for (const name of verbatim) shape[name] = rest(source, claimedTop)
+	const unnamed = rest(source, claimedTop)
+	for (const name of verbatim) {
+		if (!isEmptyObject(unnamed)) shape[name] = unnamed
+	}
 	const extras = rest(kiroshi, claimedUnderKiroshi)
-	if (Object.keys(extras).length > 0) shape[EXTRAS] = extras
+	if (!isEmptyObject(extras)) shape[EXTRAS] = extras
 	return shape
 }
 
@@ -186,13 +206,15 @@ const shapedNode = (node: JsonObject, at: Located) => {
 	const kiroshi = kiroshiOf(node, at)
 	const kind = kindOf(node, kiroshi, at)
 	const spec = BOARD_SCHEMA.kinds[kind]
+	const isKnown = spec.canvasType !== null
 	return {
 		[KIND]: kind,
 		...shaped({
 			source: node,
 			kiroshi,
 			fields: { ...NODE_FIELDS, ...spec.fields },
-			claimedKiroshi: spec.canvasType === null ? [] : [KIND],
+			claimedTop: isKnown ? [TYPE] : [],
+			claimedKiroshi: isKnown ? [KIND] : [],
 		}),
 	}
 }
@@ -202,6 +224,7 @@ const shapedEdge = (edge: JsonObject, at: Located) =>
 		source: edge,
 		kiroshi: kiroshiOf(edge, at),
 		fields: EDGE_FIELDS,
+		claimedTop: [],
 		claimedKiroshi: [],
 	})
 
@@ -253,5 +276,6 @@ export const importCanvas = (text: string): Board => {
 		nodes: keyedById(nodes, "node"),
 		edges: keyedById(edges, "edge"),
 		kiroshi: extras,
+		canvas: rest(root, new Set([...ROOT_LISTS, EXTRAS])),
 	})
 }

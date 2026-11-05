@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -42,6 +43,7 @@ fn board_of(value: &Value) -> Board {
 		entries(value, "nodes").into_iter().collect(),
 		entries(value, "edges").into_iter().collect(),
 		entries(value, "kiroshi"),
+		entries(value, "canvas"),
 	)
 	.expect("the fixture board is valid")
 }
@@ -129,6 +131,46 @@ fn unknown_node_types_and_kiroshi_fields_are_written_back_unchanged() {
 	assert_eq!(exported, serde_json::from_str::<Value>(&source).expect("the source is JSON"));
 }
 
+fn assert_every_field_kept(source: &JsonObject, exported: &JsonObject, at: &str) {
+	for (field, value) in source {
+		assert_eq!(exported.get(field), Some(value), "{at}: {field}");
+	}
+}
+
+fn by_id(canvas: &Value, list: &str) -> BTreeMap<String, JsonObject> {
+	canvas[list]
+		.as_array()
+		.expect("the canvas holds the list")
+		.iter()
+		.map(|element| {
+			let element = element.as_object().expect("an element is an object").clone();
+			(element["id"].as_str().expect("an element has an id").to_owned(), element)
+		})
+		.collect()
+}
+
+#[test]
+fn every_top_level_field_of_a_source_canvas_is_exported_unchanged() {
+	for case in cases().into_iter().filter(|case| case.join("source.canvas").exists()) {
+		let text = text_at(&case.join("source.canvas"));
+		let source: Value = serde_json::from_str(&text).expect("the source is JSON");
+		let board = import_canvas(&text).expect("the source imports");
+		let exported: Value =
+			serde_json::from_str(&export_canvas(&board).expect("the board exports"))
+				.expect("the export is JSON");
+		let at = case.display().to_string();
+		let mut root = source.as_object().expect("the source root is an object").clone();
+		root.retain(|field, _| field != "nodes" && field != "edges");
+		assert_every_field_kept(&root, exported.as_object().expect("the export is an object"), &at);
+		for list in ["nodes", "edges"] {
+			let exported = by_id(&exported, list);
+			for (id, element) in by_id(&source, list) {
+				assert_every_field_kept(&element, &exported[&id], &format!("{at} {list} {id}"));
+			}
+		}
+	}
+}
+
 fn text_node(id: &str, z: Option<&str>) -> Value {
 	let mut node =
 		json!({ "id": id, "type": "text", "text": id, "x": 0, "y": 0, "width": 1, "height": 1 });
@@ -159,6 +201,14 @@ fn z_is_assigned_from_the_array_order_when_missing_or_out_of_order() {
 		expected
 	);
 	assert_eq!(zs_of(vec![text_node("first", Some("a5")), text_node("second", None)]), expected);
+	assert_eq!(
+		zs_of(vec![
+			text_node("first", Some("a5")),
+			text_node("second", Some("a7")),
+			text_node("third", Some("a7")),
+		]),
+		json!({ "first": "a0", "second": "a1", "third": "a2" })
+	);
 	let many = zs_of((0..63).map(|index| text_node(&format!("n{index}"), None)).collect());
 	assert_eq!(
 		[&many["n0"], &many["n61"], &many["n62"]],

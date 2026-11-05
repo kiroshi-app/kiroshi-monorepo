@@ -11,6 +11,7 @@ pub(super) struct Roots {
 	pub nodes: String,
 	pub edges: String,
 	pub board: String,
+	pub canvas: String,
 }
 
 #[derive(Deserialize)]
@@ -114,6 +115,7 @@ pub(super) struct EdgeSchema {
 pub(super) struct BoardSchema {
 	pub doc: Roots,
 	pub extras: String,
+	pub verbatim: String,
 	pub z_order: ZOrder,
 	pub node: NodeSchema,
 	pub kinds: BTreeMap<String, KindSpec>,

@@ -6,8 +6,8 @@ use serde_json::{Serializer, Value};
 
 use super::schema::{FieldSpec, Placement, SCHEMA};
 use super::{
-	extras_key, is_in_z_order, kind_key, parsed_board, z_at, z_key, Board, BoardError, Element,
-	JsonObject, Located,
+	extras_key, is_in_z_order, kind_key, parsed_board, verbatim_key, z_at, z_key, Board,
+	BoardError, Element, JsonObject, Located,
 };
 
 const FOREIGN: &str = "foreign";
@@ -32,27 +32,26 @@ fn place<'a>(
 		let Some(value) = element.get(name) else {
 			continue;
 		};
-		match (spec.placement, value) {
-			(Placement::Verbatim, Value::Object(entries)) => into.top.extend(entries.clone()),
-			(Placement::Verbatim, _) => {}
-			(Placement::Canvas, _) => {
-				into.top.insert(name.clone(), value.clone());
-			}
-			(Placement::Kiroshi, _) => {
-				into.kiroshi.insert(name.clone(), value.clone());
-			}
-		}
+		let into = match spec.placement {
+			Placement::Verbatim => continue,
+			Placement::Canvas => &mut into.top,
+			Placement::Kiroshi => &mut into.kiroshi,
+		};
+		into.insert(name.clone(), value.clone());
+	}
+}
+
+fn object_at(element: &JsonObject, key: &str) -> JsonObject {
+	match element.get(key) {
+		Some(Value::Object(object)) => object.clone(),
+		_ => JsonObject::new(),
 	}
 }
 
 fn placed_with_extras(id: &str, element: &JsonObject) -> Placed {
-	let mut top = JsonObject::new();
+	let mut top = object_at(element, verbatim_key());
 	top.insert(ID.to_owned(), Value::from(id));
-	let kiroshi = match element.get(extras_key()) {
-		Some(Value::Object(extras)) => extras.clone(),
-		_ => JsonObject::new(),
-	};
-	Placed { top, kiroshi }
+	Placed { top, kiroshi: object_at(element, extras_key()) }
 }
 
 fn finished(placed: Placed) -> Value {
@@ -93,7 +92,7 @@ fn canvas_of(board: &Board) -> Value {
 	nodes.sort_by(|(left_id, left), (right_id, right)| {
 		z_of(left).cmp(&z_of(right)).then_with(|| left_id.cmp(right_id))
 	});
-	let mut canvas = JsonObject::new();
+	let mut canvas = board.canvas.clone();
 	canvas.insert(
 		"nodes".to_owned(),
 		nodes.into_iter().map(|(id, node)| canvas_node(id, node)).collect(),
@@ -145,13 +144,14 @@ struct Shaping<'a, F> {
 	source: &'a JsonObject,
 	kiroshi: &'a JsonObject,
 	fields: F,
+	claimed_top: Vec<&'a str>,
 	claimed_kiroshi: Vec<&'a str>,
 }
 
 fn shaped<'a>(shaping: Shaping<'a, impl Iterator<Item = &'a (String, FieldSpec)>>) -> JsonObject {
-	let Shaping { source, kiroshi, fields, mut claimed_kiroshi } = shaping;
+	let Shaping { source, kiroshi, fields, mut claimed_top, mut claimed_kiroshi } = shaping;
 	let mut shape = JsonObject::new();
-	let mut claimed_top = vec![ID, extras_key()];
+	claimed_top.extend([ID, extras_key()]);
 	let mut verbatim = Vec::new();
 	for (name, spec) in fields {
 		let (from, claimed) = match spec.placement {
@@ -167,8 +167,11 @@ fn shaped<'a>(shaping: Shaping<'a, impl Iterator<Item = &'a (String, FieldSpec)>
 			shape.insert(name.clone(), value.clone());
 		}
 	}
-	for name in verbatim {
-		shape.insert(name.clone(), Value::Object(rest(source, &claimed_top)));
+	let unnamed = rest(source, &claimed_top);
+	if !unnamed.is_empty() {
+		for name in verbatim {
+			shape.insert(name.clone(), Value::Object(unnamed.clone()));
+		}
 	}
 	let extras = rest(kiroshi, &claimed_kiroshi);
 	if !extras.is_empty() {
@@ -227,12 +230,13 @@ fn shaped_node(node: &JsonObject, at: Located) -> Result<JsonObject, BoardError>
 	let kiroshi = kiroshi_of(node, at)?;
 	let kind = kind_of(node, &kiroshi, at)?;
 	let spec = SCHEMA.kinds.get(&kind).ok_or_else(|| at.refused(kind_key()))?;
-	let claimed_kiroshi = if spec.canvas_type.is_some() { vec![kind_key()] } else { Vec::new() };
+	let is_known = spec.canvas_type.is_some();
 	let mut shape = shaped(Shaping {
 		source: node,
 		kiroshi: &kiroshi,
 		fields: SCHEMA.node.fields.0.iter().chain(spec.fields.0.iter()),
-		claimed_kiroshi,
+		claimed_top: if is_known { vec![TYPE] } else { Vec::new() },
+		claimed_kiroshi: if is_known { vec![kind_key()] } else { Vec::new() },
 	});
 	shape.insert(kind_key().to_owned(), Value::from(kind));
 	Ok(shape)
@@ -244,6 +248,7 @@ fn shaped_edge(edge: &JsonObject, at: Located) -> Result<JsonObject, BoardError>
 		source: edge,
 		kiroshi: &kiroshi,
 		fields: SCHEMA.edge.fields.0.iter(),
+		claimed_top: Vec::new(),
 		claimed_kiroshi: Vec::new(),
 	}))
 }
@@ -311,5 +316,10 @@ pub fn import_canvas(text: &str) -> Result<Board, BoardError> {
 	let nodes =
 		in_array_z_order(shaped_list(list_at(&mut root, "nodes")?, Element::Node, shaped_node)?);
 	let edges = shaped_list(list_at(&mut root, "edges")?, Element::Edge, shaped_edge)?;
-	parsed_board(keyed_by_id(nodes, Element::Node)?, keyed_by_id(edges, Element::Edge)?, extras)
+	parsed_board(
+		keyed_by_id(nodes, Element::Node)?,
+		keyed_by_id(edges, Element::Edge)?,
+		extras,
+		root,
+	)
 }

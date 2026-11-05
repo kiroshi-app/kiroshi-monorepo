@@ -1,4 +1,8 @@
 {
+	"metadata": {
+		"version": "1.0-1.0",
+		"frontmatter": {}
+	},
 	"nodes": [
 		{
 			"id": "5c3f0a9e21b7d406",
@@ -14,6 +18,10 @@
 			}
 		},
 		{
+			"styleAttributes": {
+				"textAlign": "center",
+				"shape": "pill"
+			},
 			"id": "9a1e7c44b2f08d13",
 			"type": "text",
 			"x": -380,
@@ -28,6 +36,9 @@
 			}
 		},
 		{
+			"styleAttributes": {
+				"border": "dashed"
+			},
 			"id": "0e6b2d7f9c835a11",
 			"type": "file",
 			"x": 20,
@@ -84,6 +95,10 @@
 			}
 		},
 		{
+			"styleAttributes": {
+				"pathfindingMethod": "square",
+				"arrow": "triangle-outline"
+			},
 			"id": "d8a2f6e04b1c9735",
 			"fromNode": "9a1e7c44b2f08d13",
 			"fromSide": "right",

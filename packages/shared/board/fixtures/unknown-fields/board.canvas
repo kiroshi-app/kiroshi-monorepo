@@ -1,6 +1,8 @@
 {
 	"nodes": [
 		{
+			"author": "a plugin",
+			"z": 7,
 			"id": "note-1",
 			"type": "text",
 			"x": 520,
@@ -19,11 +21,6 @@
 			}
 		},
 		{
-			"id": "chart-1",
-			"x": 0,
-			"y": 0,
-			"width": 480,
-			"height": 320,
 			"type": "chart",
 			"series": [
 				3,
@@ -32,6 +29,11 @@
 			],
 			"title": "Velocity",
 			"color": "2",
+			"id": "chart-1",
+			"x": 0,
+			"y": 0,
+			"width": 480,
+			"height": 320,
 			"kiroshi": {
 				"pinnedBy": "san",
 				"z": "a1"
@@ -40,6 +42,7 @@
 	],
 	"edges": [
 		{
+			"routing": "curved",
 			"id": "edge-1",
 			"fromNode": "note-1",
 			"fromEnd": "none",

@@ -129,21 +129,29 @@ describe.each(CASES)("the %s fixture", (name) => {
 		)
 	})
 
-	it("emits only JSON Canvas 1.0 fields at the top level", () => {
+	it("emits only JSON Canvas 1.0 fields at the top level, besides the ones it read there", () => {
 		const { nodes, edges } = JSON.parse(canvasText) as Canvas
+		const readThere = (element: { canvas?: object } | undefined) =>
+			Object.keys(element?.canvas ?? {})
 		for (const node of nodes) {
 			const own = JSON_CANVAS_NODE_FIELDS[String(node.type)]
 			if (own === undefined) continue
-			const allowed = [...JSON_CANVAS_GENERIC_NODE_FIELDS, ...own]
+			const allowed = [
+				...JSON_CANVAS_GENERIC_NODE_FIELDS,
+				...own,
+				...readThere(board.nodes[String(node.id)]),
+			]
 			expect(Object.keys(node).filter((key) => !allowed.includes(key))).toEqual(
 				[],
 			)
 			if (node.color !== undefined) expect(node.color).toMatch(COLOUR)
 		}
 		for (const edge of edges) {
-			const extra = Object.keys(edge).filter(
-				(key) => !JSON_CANVAS_EDGE_FIELDS.includes(key),
-			)
+			const allowed = [
+				...JSON_CANVAS_EDGE_FIELDS,
+				...readThere(board.edges[String(edge.id)]),
+			]
+			const extra = Object.keys(edge).filter((key) => !allowed.includes(key))
 			expect(extra).toEqual([])
 			if (edge.color !== undefined) expect(edge.color).toMatch(COLOUR)
 		}
@@ -153,6 +161,43 @@ describe.each(CASES)("the %s fixture", (name) => {
 		"imports its source canvas to the same board",
 		() => {
 			expect(importCanvas(fixtureText(name, "source.canvas"))).toEqual(board)
+		},
+	)
+})
+
+const sourceCases = CASES.filter((name) =>
+	existsSync(fixturePath(name, "source.canvas")),
+)
+
+type CanvasFile = Record<string, unknown> & Canvas
+
+const byIdOf = (elements: CanvasElement[]) =>
+	new Map(elements.map((element) => [element.id, element]))
+
+const expectEveryFieldKept = (source: object, exported: object) => {
+	for (const [field, value] of Object.entries(source)) {
+		expect(exported).toHaveProperty([field], value)
+	}
+}
+
+describe.each(sourceCases)("the exported %s source", (name) => {
+	const source = JSON.parse(fixtureText(name, "source.canvas")) as CanvasFile
+	const exported = JSON.parse(
+		exportCanvas(importCanvas(fixtureText(name, "source.canvas"))),
+	) as CanvasFile
+
+	it("keeps every top-level field of the root", () => {
+		const { nodes, edges, ...root } = source
+		expectEveryFieldKept(root, exported)
+	})
+
+	it.each(["nodes", "edges"] as const)(
+		"keeps every top-level field of its %s",
+		(list) => {
+			const exportedById = byIdOf(exported[list])
+			for (const element of source[list]) {
+				expectEveryFieldKept(element, exportedById.get(element.id) ?? {})
+			}
 		},
 	)
 })
@@ -198,6 +243,16 @@ describe("the z-order of an imported canvas", () => {
 			first: "a0",
 			second: "a1",
 		})
+	})
+
+	it("assigns z from the array order when two nodes share one", () => {
+		expect(
+			zsOf([
+				textNode("first", "a5"),
+				textNode("second", "a7"),
+				textNode("third", "a7"),
+			]),
+		).toEqual({ first: "a0", second: "a1", third: "a2" })
 	})
 
 	it("carries the key past the first digit", () => {
@@ -318,7 +373,14 @@ describe("the board schema", () => {
 	})
 
 	it("names the geometry and connector fields with their defaults", () => {
-		expect(Object.keys(NODE_FIELDS)).toEqual(["x", "y", "width", "height", "z"])
+		expect(Object.keys(NODE_FIELDS)).toEqual([
+			"x",
+			"y",
+			"width",
+			"height",
+			"z",
+			"canvas",
+		])
 		expect(EDGE_FIELDS.fromEnd?.default).toBe("none")
 		expect(EDGE_FIELDS.toEnd?.default).toBe("arrow")
 		expect(EDGE_FIELDS.routing?.default).toBe("straight")

@@ -17,7 +17,13 @@
 			"height": 120,
 			"z": "a1",
 			"text": "Questions for the **interview**",
-			"color": "4"
+			"color": "4",
+			"canvas": {
+				"styleAttributes": {
+					"textAlign": "center",
+					"shape": "pill"
+				}
+			}
 		},
 		"0e6b2d7f9c835a11": {
 			"kind": "image",
@@ -26,7 +32,12 @@
 			"width": 400,
 			"height": 300,
 			"z": "a2",
-			"file": "Attachments/Whiteboard 1.PNG"
+			"file": "Attachments/Whiteboard 1.PNG",
+			"canvas": {
+				"styleAttributes": {
+					"border": "dashed"
+				}
+			}
 		},
 		"7f04c1a9e6d2b358": {
 			"kind": "libraryCard",
@@ -56,7 +67,13 @@
 			"toNode": "0e6b2d7f9c835a11",
 			"toSide": "left",
 			"toEnd": "arrow",
-			"routing": "straight"
+			"routing": "straight",
+			"canvas": {
+				"styleAttributes": {
+					"pathfindingMethod": "square",
+					"arrow": "triangle-outline"
+				}
+			}
 		},
 		"3b9e5d07a4c1f286": {
 			"fromNode": "7f04c1a9e6d2b358",
@@ -68,6 +85,12 @@
 			"color": "#a882ff",
 			"label": "source",
 			"routing": "straight"
+		}
+	},
+	"canvas": {
+		"metadata": {
+			"version": "1.0-1.0",
+			"frontmatter": {}
 		}
 	}
 }

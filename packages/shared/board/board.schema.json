@@ -4,9 +4,11 @@
 	"doc": {
 		"nodes": "nodes",
 		"edges": "edges",
-		"board": "kiroshi"
+		"board": "kiroshi",
+		"canvas": "canvas"
 	},
 	"extras": "kiroshi",
+	"verbatim": "canvas",
 	"types": {
 		"integer": "a JSON integer",
 		"string": "a JSON string",
@@ -19,7 +21,7 @@
 	"placements": {
 		"canvas": "a top-level JSON Canvas field of the same name",
 		"kiroshi": "a field of the same name under the kiroshi object of the node or edge",
-		"verbatim": "a JSON object whose entries are the top-level fields of the node, written back unchanged"
+		"verbatim": "a JSON object holding every top-level field of the node, the edge or the root the schema does not name, written back at the top level unchanged"
 	},
 	"zOrder": {
 		"field": "z",
@@ -32,7 +34,8 @@
 			"y": { "type": "integer", "in": "canvas" },
 			"width": { "type": "integer", "in": "canvas" },
 			"height": { "type": "integer", "in": "canvas" },
-			"z": { "type": "zOrder", "in": "kiroshi" }
+			"z": { "type": "zOrder", "in": "kiroshi" },
+			"canvas": { "type": "json", "in": "verbatim", "optional": true }
 		}
 	},
 	"kinds": {
@@ -158,7 +161,8 @@
 				"enum": ["straight", "elbow"],
 				"in": "kiroshi",
 				"default": "straight"
-			}
+			},
+			"canvas": { "type": "json", "in": "verbatim", "optional": true }
 		}
 	}
 }

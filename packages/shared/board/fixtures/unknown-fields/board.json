@@ -31,6 +31,10 @@
 				"reactions": {
 					"thumbsUp": 2
 				}
+			},
+			"canvas": {
+				"author": "a plugin",
+				"z": 7
 			}
 		}
 	},
@@ -43,6 +47,9 @@
 			"routing": "straight",
 			"kiroshi": {
 				"weight": 0.5
+			},
+			"canvas": {
+				"routing": "curved"
 			}
 		}
 	},

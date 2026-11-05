@@ -16,6 +16,7 @@ export const readBoard = (doc: Y.Doc): Board =>
 		nodes: doc.getMap(ROOTS.nodes).toJSON(),
 		edges: doc.getMap(ROOTS.edges).toJSON(),
 		kiroshi: doc.getMap(ROOTS.board).toJSON(),
+		canvas: doc.getMap(ROOTS.canvas).toJSON(),
 	})
 
 const sharedElement = (element: object, fields: Fields) =>
@@ -51,4 +52,5 @@ export const writeBoard = (doc: Y.Doc, board: Board) =>
 			]),
 		)
 		replaced(doc.getMap(ROOTS.board), Object.entries(board.kiroshi ?? {}))
+		replaced(doc.getMap(ROOTS.canvas), Object.entries(board.canvas ?? {}))
 	})

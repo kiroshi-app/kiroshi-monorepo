@@ -66,6 +66,7 @@ pub fn read_board(doc: &Doc) -> Result<Board, BoardError> {
 		root_entries(&txn, &roots.nodes).into_iter().collect(),
 		root_entries(&txn, &roots.edges).into_iter().collect(),
 		root_entries(&txn, &roots.board),
+		root_entries(&txn, &roots.canvas),
 	)
 }
 
@@ -99,8 +100,9 @@ pub fn write_board(doc: &Doc, board: &Board) {
 	let nodes = doc.get_or_insert_map(roots.nodes.as_str());
 	let edges = doc.get_or_insert_map(roots.edges.as_str());
 	let extras = doc.get_or_insert_map(roots.board.as_str());
+	let canvas = doc.get_or_insert_map(roots.canvas.as_str());
 	let mut txn = doc.transact_mut();
-	for root in [&nodes, &edges, &extras] {
+	for root in [&nodes, &edges, &extras, &canvas] {
 		root.clear(&mut txn);
 	}
 	for (id, node) in &board.nodes {
@@ -111,5 +113,8 @@ pub fn write_board(doc: &Doc, board: &Board) {
 	}
 	for (name, value) in &board.kiroshi {
 		extras.insert(&mut txn, name.as_str(), any_of(value));
+	}
+	for (name, value) in &board.canvas {
+		canvas.insert(&mut txn, name.as_str(), any_of(value));
 	}
 }

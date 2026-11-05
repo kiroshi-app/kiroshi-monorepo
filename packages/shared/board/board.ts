@@ -11,6 +11,7 @@ type Placed = {
 	height: number
 	z: string
 	kiroshi?: JsonObject
+	canvas?: JsonObject
 }
 
 export type StickyNode = Placed & {
@@ -81,12 +82,14 @@ export type Connector = {
 	label?: string
 	routing: "straight" | "elbow"
 	kiroshi?: JsonObject
+	canvas?: JsonObject
 }
 
 export type Board = {
 	nodes: Record<string, BoardNode>
 	edges: Record<string, Connector>
 	kiroshi?: JsonObject
+	canvas?: JsonObject
 }
 
 export type Element = "node" | "edge"
@@ -128,8 +131,9 @@ export type Fields = Record<string, FieldSpec>
 type KindSpec = { canvasType: string | null; fields: Fields }
 
 type BoardSchema = {
-	doc: { nodes: string; edges: string; board: string }
+	doc: { nodes: string; edges: string; board: string; canvas: string }
 	extras: string
+	verbatim: string
 	zOrder: { field: string; digits: string }
 	node: { kind: { field: string }; fields: Fields }
 	kinds: Record<string, KindSpec>
@@ -143,6 +147,8 @@ type BoardSchema = {
 export const BOARD_SCHEMA = schema as unknown as BoardSchema
 
 export const EXTRAS = BOARD_SCHEMA.extras
+
+export const VERBATIM = BOARD_SCHEMA.verbatim
 
 export const KIND = BOARD_SCHEMA.node.kind.field
 
@@ -160,6 +166,9 @@ const FIRST_Z_HEAD = "a".charCodeAt(0)
 
 export const isObject = (value: unknown): value is JsonObject =>
 	typeof value === "object" && value !== null && !Array.isArray(value)
+
+export const isEmptyObject = (value: unknown) =>
+	isObject(value) && Object.keys(value).length === 0
 
 export const kindSpec = (kind: unknown) =>
 	typeof kind === "string" && Object.hasOwn(BOARD_SCHEMA.kinds, kind)
@@ -187,7 +196,7 @@ export const zAt = (index: number) => {
 export const isInZOrder = (keys: unknown[]) =>
 	keys.every(
 		(key, index) =>
-			isZ(key) && (index === 0 || (keys[index - 1] as string) <= key),
+			isZ(key) && (index === 0 || (keys[index - 1] as string) < key),
 	)
 
 const fits = (spec: FieldSpec, value: unknown) => {
@@ -218,6 +227,7 @@ const parsedFields = (fields: Fields, source: JsonObject, at: Located) => {
 	for (const [name, spec] of Object.entries(fields)) {
 		const value = Object.hasOwn(source, name) ? source[name] : spec.default
 		if (value === undefined && spec.optional) continue
+		if (spec.in === "verbatim" && isEmptyObject(value)) continue
 		if (!fits(spec, value)) throw refusedField(at, name)
 		parsed[name] = value as Json
 	}
@@ -228,7 +238,7 @@ const parsedExtras = (source: JsonObject, at: Located) => {
 	const extras = source[EXTRAS]
 	if (extras === undefined) return {}
 	if (!isObject(extras)) throw refusedField(at, EXTRAS)
-	return Object.keys(extras).length > 0 ? { [EXTRAS]: extras } : {}
+	return isEmptyObject(extras) ? {} : { [EXTRAS]: extras }
 }
 
 const parsedNode = (id: string, value: unknown) => {
@@ -274,6 +284,7 @@ type BoardShape = {
 	nodes: Record<string, unknown>
 	edges: Record<string, unknown>
 	kiroshi: Record<string, unknown>
+	canvas: Record<string, unknown>
 }
 
 export const parsedBoard = (shape: BoardShape): Board => {
@@ -281,8 +292,8 @@ export const parsedBoard = (shape: BoardShape): Board => {
 	const edges = mappedValues(shape.edges, (id, value) =>
 		parsedEdge(id, value, nodes),
 	)
-	const extras = shape.kiroshi as JsonObject
-	return Object.keys(extras).length > 0
-		? { nodes, edges, [EXTRAS]: extras }
-		: { nodes, edges }
+	const board: Board = { nodes, edges }
+	if (!isEmptyObject(shape.kiroshi)) board.kiroshi = shape.kiroshi as JsonObject
+	if (!isEmptyObject(shape.canvas)) board.canvas = shape.canvas as JsonObject
+	return board
 }
