@@ -1,4 +1,3 @@
-import type { Event } from "@tauri-apps/api/event"
 import { useCallback, useEffect, useEffectEvent, useState } from "react"
 
 import { LIBRARY_DOCUMENT_PRESENCE_EVENT } from "./library-document-writers"
@@ -79,7 +78,7 @@ const usePresenceInSpace = (
 		}
 		const subscription = listen<LibraryDocumentPresence>(
 			LIBRARY_DOCUMENT_PRESENCE_EVENT,
-			({ payload }: Event<LibraryDocumentPresence>) => {
+			({ payload }) => {
 				if (payload.spaceId === spaceId) {
 					hearIn(payload)
 				}
