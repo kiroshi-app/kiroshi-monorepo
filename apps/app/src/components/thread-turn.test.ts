@@ -6,6 +6,7 @@ import {
 	fireEvent,
 	render,
 	screen,
+	waitFor,
 	within,
 } from "@testing-library/react"
 import { type ComponentProps, type ContextType, createElement } from "react"
@@ -16,8 +17,12 @@ import "@workspace/ui/lib/i18n"
 import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
 import type { TurnState } from "@workspace/ui/components/turn"
 
-import { ThreadDocumentsContext } from "@/components/thread-documents"
+import {
+	ThreadBoardDrawers,
+	ThreadDocumentsContext,
+} from "@/components/thread-documents"
 import { RefusedTurn, ThreadTurn } from "@/components/thread-turn"
+import type { LibraryDocumentPresence, LibraryItem } from "@/lib/bindings"
 import {
 	type AnswerActions,
 	AnswerActionsContext,
@@ -31,6 +36,7 @@ import {
 	ThreadAuthorshipContext,
 } from "@/lib/chat/thread-authorship"
 import type { TranscriptRole } from "@/lib/conversations/transcript-contract"
+import type { ThreadLibraryItem } from "@/lib/library/use-followed-library-document"
 import { openInBrowser } from "@/lib/links/use-external-links"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 
@@ -40,6 +46,32 @@ vi.mock("@/lib/links/use-external-links", async (importOriginal) => ({
 }))
 
 const openInNewTab = vi.hoisted(() => vi.fn())
+
+const presence = vi.hoisted(() => ({
+	hear: null as ((event: { payload: LibraryDocumentPresence }) => void) | null,
+}))
+
+vi.mock("@/lib/host", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@/lib/host")>()),
+	listen: (
+		_event: string,
+		hear: (event: { payload: LibraryDocumentPresence }) => void,
+	) => {
+		presence.hear = hear
+		return Promise.resolve(() => undefined)
+	},
+}))
+
+vi.mock("@/lib/library/library-reads", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@/lib/library/library-reads")>()),
+	readLibraryBoardSummary: (_spaceId: string, name: string) =>
+		Promise.resolve({
+			name,
+			nodeCount: 3,
+			nodes: [],
+			bounds: null,
+		}),
+}))
 
 vi.mock("@/lib/navigation/use-open-library-document", () => ({
 	useOpenLibraryDocument: () => () => undefined,
@@ -58,6 +90,7 @@ afterEach(() => {
 	vi.mocked(openInBrowser).mockClear()
 	vi.mocked(raiseFailureNotice).mockClear()
 	openInNewTab.mockClear()
+	presence.hear = null
 })
 
 const FIRST_NAME = "0b7c6d1e-2f3a-4b5c-8d9e-0f1a2b3c4d5e.png"
@@ -93,6 +126,7 @@ type TurnSetup = {
 	actions?: AnswerActions
 	documents?: ContextType<typeof ThreadDocumentsContext>
 	names?: string[]
+	workingAgentIds?: string[]
 }
 
 const renderTurn = (
@@ -107,6 +141,7 @@ const renderTurn = (
 		actions,
 		documents = null,
 		names = [],
+		workingAgentIds = [],
 	}: TurnSetup = {},
 ) => {
 	const props: ComponentProps<typeof ThreadTurn> = {
@@ -136,7 +171,16 @@ const renderTurn = (
 				createElement(
 					ThreadAuthorshipContext.Provider,
 					{ value: authorship },
-					createElement(ThreadTurn, props),
+					createElement(
+						ThreadBoardDrawers,
+						{
+							bots: [],
+							conversationId: "conversation-on-screen",
+							spaceId: shown?.spaceId,
+							workingAgentIds,
+						},
+						createElement(ThreadTurn, props),
+					),
 				),
 			),
 		)
@@ -689,6 +733,17 @@ describe("a message of yours that did not send", () => {
 
 const PLAN = "Launch plan.md"
 
+const LAUNCH_BOARD: LibraryItem = {
+	name: "Launch week.canvas",
+	kind: "board",
+	path: "/library/Launch week.canvas",
+	bytes: 2_048,
+	modifiedAt: 0,
+	createdAt: null,
+}
+
+const boards = [LAUNCH_BOARD]
+
 const threadDocumentsOf = (
 	overrides: Partial<
 		NonNullable<ContextType<typeof ThreadDocumentsContext>>
@@ -696,9 +751,10 @@ const threadDocumentsOf = (
 ) => ({
 	spaceId: "space-on-screen",
 	isJoined: false,
-	openedName: null,
-	open: vi.fn<(name: string) => void>(),
+	opened: null,
+	open: vi.fn<(item: ThreadLibraryItem) => void>(),
 	close: () => undefined,
+	boardOf: (name: string) => boards.find((board) => board.name === name),
 	...overrides,
 })
 
@@ -806,7 +862,10 @@ describe("a Library document the agent wrote in its message", () => {
 
 		fireEvent.click(planChip())
 
-		expect(documents.open).toHaveBeenCalledWith(PLAN)
+		expect(documents.open).toHaveBeenCalledWith({
+			kind: "document",
+			name: PLAN,
+		})
 		expect(openInNewTab).not.toHaveBeenCalled()
 	})
 
@@ -816,10 +875,12 @@ describe("a Library document the agent wrote in its message", () => {
 			names: [PLAN],
 		})
 
-		showDocuments(threadDocumentsOf({ openedName: PLAN }))
+		showDocuments(
+			threadDocumentsOf({ opened: { kind: "document", name: PLAN } }),
+		)
 		expect(planChip().getAttribute("aria-pressed")).toBe("true")
 
-		showDocuments(threadDocumentsOf({ openedName: null }))
+		showDocuments(threadDocumentsOf({ opened: null }))
 		expect(planChip().getAttribute("aria-pressed")).toBe("false")
 	})
 
@@ -837,6 +898,89 @@ describe("a Library document the agent wrote in its message", () => {
 
 		expect(openInNewTab).toHaveBeenCalledWith({ kind: "document", name: PLAN })
 		expect(documents.open).not.toHaveBeenCalled()
+	})
+})
+
+const boardCard = () => screen.getByRole("article", { name: /^Launch week/ })
+
+const drawingAgent = (id: string): LibraryDocumentPresence => ({
+	spaceId: "space-on-screen",
+	name: LAUNCH_BOARD.name,
+	writers: [
+		{
+			id,
+			kind: "agent",
+			name: "Atlas",
+			at: { kind: "board", point: { x: 40, y: 20 }, nodeId: "sticky-ship" },
+		},
+	],
+})
+
+const hearPresence = (payload: LibraryDocumentPresence) =>
+	act(() => presence.hear?.({ payload }))
+
+describe("a Library board the agent posted in its message", () => {
+	it("shows the board as a card under the text, never as a chip", async () => {
+		renderTurn("assistant", "I drew Launch week.canvas for the offsite.", {
+			documents: threadDocumentsOf(),
+			names: [LAUNCH_BOARD.name, PLAN],
+		})
+
+		await waitFor(() =>
+			expect(within(boardCard()).getByText(/Board · 3 items/)).toBeTruthy(),
+		)
+		expect(within(boardCard()).getByText("Launch week")).toBeTruthy()
+		expect(screen.getByText(/I drew Launch week\.canvas/)).toBeTruthy()
+		expect(screen.queryByRole("button", { name: /^Launch week/ })).toBeNull()
+		expect(planChip()).toBeTruthy()
+	})
+
+	it("opens the board beside the thread on Open", () => {
+		const documents = threadDocumentsOf()
+		renderTurn("assistant", "", {
+			documents,
+			names: [LAUNCH_BOARD.name],
+		})
+
+		fireEvent.click(within(boardCard()).getByRole("button", { name: "Open" }))
+
+		expect(documents.open).toHaveBeenCalledWith({
+			kind: "board",
+			name: LAUNCH_BOARD.name,
+		})
+	})
+
+	it("draws the card open while its board is beside the thread", () => {
+		const { showDocuments } = renderTurn("assistant", "", {
+			documents: threadDocumentsOf(),
+			names: [LAUNCH_BOARD.name],
+		})
+		expect(boardCard().getAttribute("data-state")).toBe("rest")
+
+		showDocuments(
+			threadDocumentsOf({
+				opened: { kind: "board", name: LAUNCH_BOARD.name },
+			}),
+		)
+		expect(boardCard().getAttribute("data-state")).toBe("open")
+	})
+
+	it("says who draws while an agent of the thread draws on the board", async () => {
+		renderTurn("assistant", "", {
+			documents: threadDocumentsOf(),
+			names: [LAUNCH_BOARD.name],
+			workingAgentIds: ["bot-atlas"],
+		})
+		await waitFor(() => expect(presence.hear).not.toBeNull())
+
+		hearPresence(drawingAgent("bot-elsewhere"))
+		expect(within(boardCard()).queryByText(/is drawing/)).toBeNull()
+
+		hearPresence(drawingAgent("bot-atlas"))
+		expect(within(boardCard()).getByText(/Atlas is drawing/)).toBeTruthy()
+
+		hearPresence({ ...drawingAgent("bot-atlas"), writers: [] })
+		expect(within(boardCard()).queryByText(/is drawing/)).toBeNull()
 	})
 })
 

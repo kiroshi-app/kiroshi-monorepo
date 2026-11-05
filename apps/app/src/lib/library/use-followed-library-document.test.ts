@@ -4,7 +4,10 @@ import { act, cleanup, renderHook, waitFor } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { LIBRARY_DOCUMENT_PRESENCE_EVENT } from "./library-document-writers"
-import { useFollowedLibraryDocument } from "./use-followed-library-document"
+import {
+	type ThreadLibraryItem,
+	useFollowedLibraryDocument,
+} from "./use-followed-library-document"
 
 import type { LibraryDocumentPresence, LibraryWriter } from "../bindings"
 import { listen } from "@/lib/host"
@@ -23,6 +26,7 @@ const SPACE_ID = "space-on-screen"
 const WRITER = "bot-writer"
 const PLAN = "plan.md"
 const NOTES = "notes.md"
+const LAUNCH_BOARD = "launch.canvas"
 
 const agent = (id: string): LibraryWriter => ({
 	id,
@@ -30,6 +34,18 @@ const agent = (id: string): LibraryWriter => ({
 	name: null,
 	at: { kind: "text", anchor: "caret" },
 })
+
+const drawer = (id: string): LibraryWriter => ({
+	...agent(id),
+	at: { kind: "board", point: { x: 120, y: 80 }, nodeId: null },
+})
+
+const document = (name: string): ThreadLibraryItem => ({
+	kind: "document",
+	name,
+})
+
+const board = (name: string): ThreadLibraryItem => ({ kind: "board", name })
 
 const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 0)))
 
@@ -75,7 +91,25 @@ describe("useFollowedLibraryDocument", () => {
 
 		write(PLAN, [agent(WRITER)])
 
-		expect(result.current.openedName).toBe(PLAN)
+		expect(result.current.opened).toEqual(document(PLAN))
+	})
+
+	it("opens the board a working agent of the conversation draws on", () => {
+		const { result, write } = mountFollowed(IN_TURN)
+
+		write(LAUNCH_BOARD, [drawer(WRITER)])
+
+		expect(result.current.opened).toEqual(board(LAUNCH_BOARD))
+	})
+
+	it("keeps a closed board shut for the rest of the turn", () => {
+		const { result, write } = mountFollowed(IN_TURN)
+		write(LAUNCH_BOARD, [drawer(WRITER)])
+
+		act(() => result.current.close())
+		write(LAUNCH_BOARD, [drawer(WRITER)])
+
+		expect(result.current.opened).toBeNull()
 	})
 
 	it("switches to the next document that agent writes", () => {
@@ -84,7 +118,7 @@ describe("useFollowedLibraryDocument", () => {
 		write(PLAN, [agent(WRITER)])
 		write(NOTES, [agent(WRITER)])
 
-		expect(result.current.openedName).toBe(NOTES)
+		expect(result.current.opened).toEqual(document(NOTES))
 	})
 
 	it("keeps the panel closed for the rest of the turn once closed", () => {
@@ -95,7 +129,7 @@ describe("useFollowedLibraryDocument", () => {
 		write(PLAN, [agent(WRITER)])
 		write(NOTES, [agent(WRITER)])
 
-		expect(result.current.openedName).toBeNull()
+		expect(result.current.opened).toBeNull()
 	})
 
 	it("opens again when that agent writes in a later turn", () => {
@@ -107,19 +141,19 @@ describe("useFollowedLibraryDocument", () => {
 		rerender(IN_TURN)
 		write(NOTES, [agent(WRITER)])
 
-		expect(result.current.openedName).toBe(NOTES)
+		expect(result.current.opened).toEqual(document(NOTES))
 	})
 
 	it("leaves the panel as it is for a foreign writer", () => {
 		const { result, write } = mountFollowed(IN_TURN)
-		act(() => result.current.open(NOTES))
+		act(() => result.current.open(document(NOTES)))
 
 		write(PLAN, [{ ...agent("someone"), kind: "person" }])
 		write(PLAN, [{ ...agent(WRITER), kind: "member" }])
 		write(PLAN, [agent("bot-elsewhere")])
 		write(PLAN, [agent(WRITER)], "another-space")
 
-		expect(result.current.openedName).toBe(NOTES)
+		expect(result.current.opened).toEqual(document(NOTES))
 	})
 
 	it("listens once per conversation and stops on change and unmount", async () => {
@@ -135,7 +169,7 @@ describe("useFollowedLibraryDocument", () => {
 		expect(unlisten).toHaveBeenCalledTimes(1)
 		expect(listen).toHaveBeenCalledTimes(2)
 		write(PLAN, [agent(WRITER)])
-		expect(result.current.openedName).toBe(PLAN)
+		expect(result.current.opened).toEqual(document(PLAN))
 
 		unmount()
 		await settle()
@@ -155,7 +189,7 @@ describe("useFollowedLibraryDocument", () => {
 				expect.any(Error),
 			),
 		)
-		act(() => result.current.open(PLAN))
-		expect(result.current.openedName).toBe(PLAN)
+		act(() => result.current.open(document(PLAN)))
+		expect(result.current.opened).toEqual(document(PLAN))
 	})
 })

@@ -16,6 +16,7 @@ import { probeRender } from "@workspace/ui/lib/render-probe"
 
 import {
 	documentReferencesOf,
+	ThreadBoardCards,
 	ThreadDocumentsContext,
 } from "@/components/thread-documents"
 import { AnswerBody, TurnBody } from "@/components/turn-body"
@@ -161,13 +162,24 @@ export const ThreadTurn = memo(function ThreadTurn({
 				isWriting,
 			})
 		: { text }
-	const answer = selectable(
-		<AnswerBody
-			agentName={author?.name ?? row.authorName ?? botName ?? ""}
-			attachments={attachments}
-			isWriting={isWriting}
-			{...references}
-		/>,
+	const answer = (
+		<>
+			{selectable(
+				<AnswerBody
+					agentName={author?.name ?? row.authorName ?? botName ?? ""}
+					attachments={attachments}
+					isWriting={isWriting}
+					{...references}
+				/>,
+			)}
+			{documents ? (
+				<ThreadBoardCards
+					documents={documents}
+					names={row.documents}
+					now={now}
+				/>
+			) : null}
+		</>
 	)
 	const isFramed = card !== undefined
 

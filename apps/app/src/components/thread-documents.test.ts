@@ -17,12 +17,18 @@ import {
 	DOCUMENT_PANEL_MIN_WIDTH,
 	THREAD_MIN_WIDTH,
 } from "@workspace/ui/components/document-panel"
-import "@workspace/ui/lib/i18n"
+import { i18n } from "@workspace/ui/lib/i18n"
 
 import {
+	ThreadBoardPanel,
 	ThreadDocumentPanel,
 	ThreadDocumentsContext,
 } from "@/components/thread-documents"
+import type { LibraryItem } from "@/lib/bindings"
+import {
+	boardStateOf,
+	TWO_NOTES_BOARD,
+} from "@/lib/library/library-board-fixtures"
 import { base64Of } from "@/lib/library/library-document-session"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 
@@ -51,8 +57,11 @@ vi.mock("@/lib/host/tauri", async (importOriginal) => ({
 	convertFileSrc: (path: string) => `asset://${path}`,
 }))
 
+const openInItsTab = vi.hoisted(() => vi.fn())
+
 vi.mock("@/lib/navigation/use-open-library-document", () => ({
 	useOpenLibraryDocument: () => () => undefined,
+	useOpenLibraryItemInItsTab: () => openInItsTab,
 }))
 
 const measuredRoom = vi.hoisted(() => ({ width: null as number | null }))
@@ -74,9 +83,10 @@ const SPACE_ID = "space-on-screen"
 const DOCUMENTS = {
 	spaceId: SPACE_ID,
 	isJoined: false,
-	openedName: null,
+	opened: null,
 	open: () => undefined,
 	close: () => undefined,
+	boardOf: () => undefined,
 }
 
 const planItem = {
@@ -306,5 +316,123 @@ describe("the width of a document opened beside a conversation", () => {
 
 			expect(widthOfPanel()).toBe(`${reachableWidth}px`)
 		})
+	})
+})
+
+const common = i18n.getFixedT(null, "common")
+
+const LAUNCH_BOARD = "Launch week.canvas"
+
+const launchBoardItem: LibraryItem = {
+	name: LAUNCH_BOARD,
+	kind: "board",
+	path: `/library/${LAUNCH_BOARD}`,
+	bytes: 2_048,
+	modifiedAt: 0,
+	createdAt: null,
+}
+
+const boardDocumentsOf = (close: () => void) => ({
+	...DOCUMENTS,
+	opened: { kind: "board" as const, name: LAUNCH_BOARD },
+	close,
+	boardOf: (name: string) =>
+		name === LAUNCH_BOARD ? launchBoardItem : undefined,
+})
+
+const renderLaunchBoardPanel = (close: () => void = () => undefined) =>
+	render(
+		createElement(ThreadBoardPanel, {
+			documents: boardDocumentsOf(close),
+			name: LAUNCH_BOARD,
+		}),
+		{ wrapper: createQueryTestWrapper().wrapper },
+	)
+
+describe("a board opened beside a conversation", () => {
+	beforeEach(() => {
+		libraryHost.answers.set("library_list", () => [planItem, launchBoardItem])
+		libraryHost.answers.set("library_read_document", ({ name }) => ({
+			name,
+			format: "markdown",
+			content: "# Plan",
+		}))
+		libraryHost.answers.set("library_open_document", ({ name }) => ({
+			name,
+			update:
+				name === LAUNCH_BOARD
+					? boardStateOf(TWO_NOTES_BOARD)
+					: openedStateOf(name, "# Plan").update,
+		}))
+		libraryHost.answers.set("library_board_summary", ({ name }) => ({
+			name,
+			nodeCount: 2,
+			nodes: [],
+			bounds: { x: 0, y: 0, width: 500, height: 100 },
+		}))
+		libraryHost.answers.set("library_share_presence", () => null)
+	})
+
+	afterEach(() => {
+		cleanup()
+		libraryHost.answers.clear()
+		localStorage.clear()
+		openInItsTab.mockClear()
+	})
+
+	it("shows the board live in the panel with its dock and zoom", async () => {
+		renderLaunchBoardPanel()
+
+		expect(
+			screen.getByRole("complementary", { name: "Launch week" }),
+		).toBeTruthy()
+		expect(
+			await screen.findByRole("application", {
+				name: common("board.canvas.label"),
+			}),
+		).toBeTruthy()
+		expect(
+			screen.getByRole("button", { name: common("board.dock.tool.select") }),
+		).toBeTruthy()
+		expect(
+			screen.getByRole("group", { name: common("board.zoom.controls") }),
+		).toBeTruthy()
+	})
+
+	it("closes the panel and shows the board in its own tab on Open in tab", () => {
+		const close = vi.fn()
+		renderLaunchBoardPanel(close)
+
+		fireEvent.click(
+			screen.getByRole("button", { name: common("board.panel.openInTab") }),
+		)
+
+		expect(close).toHaveBeenCalledOnce()
+		expect(openInItsTab).toHaveBeenCalledWith({
+			kind: "board",
+			name: LAUNCH_BOARD,
+		})
+	})
+
+	it("opens at the width the document panel edge was dragged to", () => {
+		const keptWidth = DOCUMENT_PANEL_MAX_WIDTH - 200
+		const documentPanel = renderPlanPanel()
+		dragPanelEdgeBy(200)
+		documentPanel.unmount()
+
+		renderLaunchBoardPanel()
+
+		expect(widthOfPanel()).toBe(`${keptWidth}px`)
+	})
+
+	it("hands the width its edge was dragged to over to the next document", () => {
+		const keptWidth = DOCUMENT_PANEL_MAX_WIDTH - 150
+		const boardPanel = renderLaunchBoardPanel()
+		dragPanelEdgeBy(150)
+		boardPanel.unmount()
+
+		renderPlanPanel()
+
+		expect(widthOfPanel()).toBe(`${keptWidth}px`)
 	})
 })

@@ -75,18 +75,24 @@ const logSummaryFailure = (name: string) => (reason: unknown) => {
 const readLoggedBoardSummary = (spaceId: string, name: string) =>
 	readLibraryBoardSummary(spaceId, name).catch(logSummaryFailure(name))
 
+export const libraryBoardSummaryQueryOf = (
+	spaceId: string,
+	board: LibraryItem,
+) =>
+	queryOptions({
+		queryKey: libraryQueryKeys.boardSummaryOf(
+			spaceId,
+			board.name,
+			board.modifiedAt,
+		),
+		queryFn: () => readLoggedBoardSummary(spaceId, board.name),
+		meta: { rendersErrorInline: true as const },
+	})
+
 const useBoardSummaries = (spaceId: string, items: LibraryItem[]) => {
 	const boards = items.filter((item) => item.kind === "board")
 	const summaries = useQueries({
-		queries: boards.map((board) => ({
-			queryKey: libraryQueryKeys.boardSummaryOf(
-				spaceId,
-				board.name,
-				board.modifiedAt,
-			),
-			queryFn: () => readLoggedBoardSummary(spaceId, board.name),
-			meta: { rendersErrorInline: true as const },
-		})),
+		queries: boards.map((board) => libraryBoardSummaryQueryOf(spaceId, board)),
 	})
 	const summaryByName = new Map(
 		boards.map((board, index) => [board.name, summaries[index]]),
