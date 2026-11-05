@@ -10,6 +10,7 @@ import {
 	BOARD_ZOOM_MAX,
 	BOARD_ZOOM_MIN,
 	cullBoardObjects,
+	fitBoardBounds,
 	gridScreenPitch,
 	panBy,
 	zoomAround,
@@ -163,5 +164,42 @@ describe("gridScreenPitch", () => {
 		expect(gridScreenPitch(0.5)).toBe(12)
 		expect(gridScreenPitch(0.25)).toBe(12)
 		expect(gridScreenPitch(BOARD_ZOOM_MIN)).toBeCloseTo(19.2)
+	})
+})
+
+describe("fitBoardBounds", () => {
+	const PREVIEW = { width: 271, height: 180 }
+
+	it("shrinks a wide board to the width, centred, keeping the margin", () => {
+		const fitted = fitBoardBounds(
+			{ x: -100, y: 50, width: 1000, height: 200 },
+			PREVIEW,
+			20,
+		)
+		expect(fitted.zoom).toBeCloseTo(0.231, 3)
+		expect(fitted.offset.x + -100 * fitted.zoom).toBeCloseTo(20)
+		expect(fitted.offset.y + 50 * fitted.zoom).toBeCloseTo(
+			(180 - 200 * fitted.zoom) / 2,
+		)
+	})
+
+	it("shrinks a tall board to the height, centred, keeping the margin", () => {
+		const fitted = fitBoardBounds(
+			{ x: 0, y: 0, width: 200, height: 700 },
+			PREVIEW,
+			20,
+		)
+		expect(fitted.zoom).toBeCloseTo(0.2)
+		expect(fitted.offset.y).toBeCloseTo(20)
+		expect(fitted.offset.x).toBeCloseTo((271 - 40) / 2)
+	})
+
+	it("never magnifies a board smaller than the preview", () => {
+		const fitted = fitBoardBounds(
+			{ x: 10, y: 10, width: 100, height: 60 },
+			PREVIEW,
+			20,
+		)
+		expect(fitted).toEqual({ zoom: 1, offset: { x: 75.5, y: 50 } })
 	})
 })

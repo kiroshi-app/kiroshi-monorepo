@@ -1362,7 +1362,7 @@ describe("WorkspaceBody library", () => {
 		)
 	})
 
-	it("shows an empty Library offering only a new document and its templates", async () => {
+	it("shows an empty Library with its header actions, a new document and its templates", async () => {
 		libraryHost.list.mockResolvedValue([])
 		await openLibrary()
 
@@ -1373,20 +1373,19 @@ describe("WorkspaceBody library", () => {
 		expect(within(panel).getByRole("heading", { level: 1 }).textContent).toBe(
 			"Library",
 		)
-		const actions = within(panel)
-			.queryAllByRole("button")
-			.map((button) => button.textContent ?? "")
-		expect(actions).toHaveLength(4)
-		for (const start of [
+		expect(
+			within(panel).getByRole("searchbox", { name: "Search the Library" }),
+		).toBeTruthy()
+		for (const name of [
+			"New document",
 			"Blank document",
 			"Brief",
 			"Meeting notes",
 			"Checklist",
 		]) {
-			expect(actions.some((action) => action.startsWith(start))).toBe(true)
+			expect(within(panel).getByRole("button", { name })).toBeTruthy()
 		}
 		expect(within(panel).queryByRole("radiogroup")).toBeNull()
-		expect(within(panel).queryByRole("searchbox")).toBeNull()
 	})
 
 	it("draws an image from its file and a document from its excerpt, an unreadable one left blank", async () => {

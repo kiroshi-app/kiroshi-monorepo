@@ -269,6 +269,8 @@ const common = {
 		search: "Search the Library",
 		import: "Import",
 		newDocument: "New document",
+		newBoard: "New board",
+		blankBoard: "Blank board",
 		saved: {
 			title: "Saved to Library",
 			image: "Image saved to Library",
@@ -279,10 +281,12 @@ const common = {
 			all: "All",
 			images: "Images",
 			documents: "Documents",
+			boards: "Boards",
 		},
 		noResult: {
 			images: "No images in this Library yet.",
 			documents: "No documents in this Library yet.",
+			boards: "No boards in this Library yet.",
 			search: "Nothing matches “{{query}}”.",
 		},
 		start: "Start a document",

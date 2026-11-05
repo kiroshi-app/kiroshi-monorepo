@@ -32,13 +32,14 @@ import {
 } from "@workspace/ui/components/ui/toggle-group"
 import { cn } from "@workspace/ui/lib/utils"
 
-type LibraryFilter = "all" | "images" | "documents"
+type LibraryFilter = "all" | "images" | "documents" | "boards"
 
 type LibraryPanelState = "loading" | "ready"
 
 const KIND_OF_FILTER = {
 	images: "image",
 	documents: "document",
+	boards: "board",
 } as const satisfies Record<Exclude<LibraryFilter, "all">, LibraryItem["kind"]>
 
 const LibraryOverlayContainer =
@@ -121,6 +122,11 @@ const LibraryFilters = ({
 				label={t("library.filters.documents")}
 				value="documents"
 			/>
+			<FilterPill
+				count={counts.boards}
+				label={t("library.filters.boards")}
+				value="boards"
+			/>
 		</ToggleGroup>
 	)
 }
@@ -191,6 +197,7 @@ type LibraryPanelProps = LibraryItemActions<LibraryItem> &
 		onSearchQueryChange?: (query: string) => void
 		onImport?: () => void
 		onNewDocument?: () => void
+		onNewBoard?: () => void
 		onStartTemplate?: (template: LibraryTemplate) => void
 		overlay?: ReactNode
 	}
@@ -205,6 +212,7 @@ const LibraryPanel = ({
 	onSearchQueryChange,
 	onImport,
 	onNewDocument,
+	onNewBoard,
 	onStartTemplate,
 	overlay,
 	...itemActions
@@ -226,9 +234,10 @@ const LibraryPanel = ({
 	const counts = {
 		images: items.filter((item) => item.kind === "image").length,
 		documents: items.filter((item) => item.kind === "document").length,
+		boards: items.filter((item) => item.kind === "board").length,
 	}
 
-	const actions = isEmpty ? null : (
+	const actions = (
 		<div className="flex items-center gap-2" data-slot="library-actions">
 			{onSearchQueryChange ? (
 				<LibrarySearch
@@ -244,6 +253,16 @@ const LibraryPanel = ({
 				>
 					<Icons.Import aria-hidden="true" />
 					{t("library.import")}
+				</Button>
+			) : null}
+			{onNewBoard ? (
+				<Button
+					className={cn(OUTLINED_PILL, "gap-1.5 px-3")}
+					onClick={onNewBoard}
+					variant="outline"
+				>
+					<Icons.Board aria-hidden="true" />
+					{t("library.newBoard")}
 				</Button>
 			) : null}
 			{onNewDocument ? (
@@ -285,6 +304,7 @@ const LibraryPanel = ({
 					) : isEmpty ? (
 						<LibraryEmptyState
 							onImport={onImport}
+							onNewBoard={onNewBoard}
 							onNewDocument={onNewDocument}
 							onStartTemplate={onStartTemplate}
 						/>
@@ -298,7 +318,9 @@ const LibraryPanel = ({
 								? t("library.noResult.search", { query: searchQuery })
 								: filter === "images"
 									? t("library.noResult.images")
-									: t("library.noResult.documents")}
+									: filter === "boards"
+										? t("library.noResult.boards")
+										: t("library.noResult.documents")}
 						</p>
 					) : (
 						<LibraryGrid

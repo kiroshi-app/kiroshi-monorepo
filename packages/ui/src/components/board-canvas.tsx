@@ -154,12 +154,14 @@ const useBoardGestures = (
 }
 
 type BoardDotGridProps = {
-	viewport: BoardViewport
+	pitch: number
+	offset?: BoardPoint
 }
 
-const BoardDotGrid = ({ viewport }: BoardDotGridProps) => {
+const GRID_ORIGIN: BoardPoint = { x: 0, y: 0 }
+
+const BoardDotGrid = ({ pitch, offset = GRID_ORIGIN }: BoardDotGridProps) => {
 	const patternId = useId()
-	const pitch = gridScreenPitch(viewport.zoom)
 
 	return (
 		<svg
@@ -172,8 +174,8 @@ const BoardDotGrid = ({ viewport }: BoardDotGridProps) => {
 				id={patternId}
 				patternUnits="userSpaceOnUse"
 				width={pitch}
-				x={viewport.offset.x}
-				y={viewport.offset.y}
+				x={offset.x}
+				y={offset.y}
 			>
 				<rect className="fill-board-dot" height={1} width={1} />
 			</pattern>
@@ -318,7 +320,10 @@ const BoardCanvas = ({
 			data-slot="board-canvas"
 			ref={attach}
 		>
-			<BoardDotGrid viewport={viewport} />
+			<BoardDotGrid
+				offset={viewport.offset}
+				pitch={gridScreenPitch(viewport.zoom)}
+			/>
 			<div
 				className="absolute top-0 left-0 origin-top-left"
 				style={{
@@ -376,4 +381,4 @@ const BoardCanvas = ({
 }
 
 export type { BoardCanvasProps }
-export { BoardCanvas }
+export { BoardCanvas, BoardDotGrid }

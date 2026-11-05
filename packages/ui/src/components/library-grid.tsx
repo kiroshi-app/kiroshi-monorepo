@@ -2,6 +2,10 @@
 
 import { useTranslation } from "react-i18next"
 
+import {
+	BoardMiniature,
+	type BoardSnapshot,
+} from "@workspace/ui/components/board/board-miniature"
 import type { ImageMenuActions } from "@workspace/ui/components/image-menu"
 import {
 	type LibraryItemActions,
@@ -35,12 +39,27 @@ type LibraryDocumentItem = {
 	importProgress?: number
 }
 
-type LibraryItem = LibraryImageItem | LibraryDocumentItem
+type LibraryBoardItem = {
+	kind: "board"
+	id: string
+	name: string
+	detail: string
+	snapshot: BoardSnapshot
+	importProgress?: never
+}
+
+type LibraryItem = LibraryImageItem | LibraryDocumentItem | LibraryBoardItem
 
 const GRID_COLUMNS =
 	"grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-x-4"
 
 const SPACE_GROUND = "bg-(--bot-avatar-ground)"
+
+const THUMBNAIL_GROUND: Record<LibraryItem["kind"], string> = {
+	image: SPACE_GROUND,
+	document: "bg-(--document-ground)",
+	board: "bg-board-surface",
+}
 
 const PAGE_SHADOW =
 	"shadow-[0_1px_2px_rgb(0_0_0/0.4),0_6px_16px_rgb(0_0_0/0.4)]"
@@ -76,24 +95,38 @@ type LibraryThumbnailProps = {
 	item: LibraryItem
 }
 
+const LibraryThumbnailContent = ({ item }: LibraryThumbnailProps) => {
+	switch (item.kind) {
+		case "image":
+			return (
+				<img
+					alt=""
+					className="size-full object-cover"
+					draggable={false}
+					src={item.src}
+				/>
+			)
+		case "document":
+			return (
+				<LibraryPage
+					className="start-9 top-5.5 w-49.75"
+					excerpt={item.excerpt}
+				/>
+			)
+		case "board":
+			return <BoardMiniature snapshot={item.snapshot} />
+	}
+}
+
 const LibraryThumbnail = ({ item }: LibraryThumbnailProps) => (
 	<span
 		className={cn(
 			"relative block h-45 overflow-hidden rounded-control border border-shell-border group-hover/library-item:border-input",
-			item.kind === "image" ? SPACE_GROUND : "bg-(--document-ground)",
+			THUMBNAIL_GROUND[item.kind],
 		)}
 		data-slot="library-thumbnail"
 	>
-		{item.kind === "image" ? (
-			<img
-				alt=""
-				className="size-full object-cover"
-				draggable={false}
-				src={item.src}
-			/>
-		) : (
-			<LibraryPage className="start-9 top-5.5 w-49.75" excerpt={item.excerpt} />
-		)}
+		<LibraryThumbnailContent item={item} />
 	</span>
 )
 

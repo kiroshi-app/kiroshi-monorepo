@@ -1,3 +1,8 @@
+import {
+	EMPTY_BOARD_SNAPSHOT,
+	PLANNING_BOARD_SNAPSHOT,
+	REFERENCES_BOARD_SNAPSHOT,
+} from "@workspace/ui/components/board/board.fixtures"
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import type {
 	LibraryDocumentAgent,
@@ -130,6 +135,36 @@ export const LIBRARY_ITEMS: LibraryItem[] = [
 		src: HARBOUR,
 	},
 ]
+
+export const LIBRARY_BOARDS: LibraryItem[] = [
+	{
+		kind: "board",
+		id: "launch-plan",
+		name: "Launch plan",
+		detail: "Board · 6 items · 2 min ago",
+		snapshot: PLANNING_BOARD_SNAPSHOT,
+	},
+	{
+		kind: "board",
+		id: "references",
+		name: "References",
+		detail: "Board · 5 items · Yesterday",
+		snapshot: REFERENCES_BOARD_SNAPSHOT,
+	},
+]
+
+export const LIBRARY_ITEMS_WITH_BOARDS: LibraryItem[] = [
+	...LIBRARY_BOARDS,
+	...LIBRARY_ITEMS,
+]
+
+export const LIBRARY_EMPTY_BOARD: LibraryItem = {
+	kind: "board",
+	id: "retro",
+	name: "Sprint retro",
+	detail: "Board · 0 items · Just now",
+	snapshot: EMPTY_BOARD_SNAPSHOT,
+}
 
 export const LIBRARY_LIGHTBOX_IMAGES: LibraryLightboxImage[] = [
 	{

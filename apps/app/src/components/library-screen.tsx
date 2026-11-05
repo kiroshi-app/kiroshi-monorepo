@@ -85,7 +85,18 @@ type DocumentDraft = Omit<OpenedDocument, "kind" | "detail"> & {
 
 type NamedItem = { id: string }
 
-type KindedItem = Pick<ShownLibraryItem, "id" | "kind">
+type ListedItem = Exclude<ShownLibraryItem, { kind: "board" }>
+
+type KindedItem = Pick<ListedItem, "id" | "kind">
+
+type ListedItemAction = (item: ListedItem) => void | Promise<void>
+
+const ignoringBoards = <Action extends ListedItemAction | undefined>(
+	action: Action,
+) =>
+	action &&
+	((item: ShownLibraryItem): void | Promise<void> =>
+		item.kind === "board" ? undefined : action(item))
 
 const openingOfItem = ({ id, kind }: KindedItem): LibraryOpening => ({
 	kind,
@@ -465,16 +476,16 @@ export const LibraryScreen = ({
 			isActionShown={isActionShownOn}
 			items={[...importingItems, ...shownItems]}
 			onFilterChange={setFilter}
-			onCopy={copy}
-			onDelete={remove}
-			onDownload={save}
+			onCopy={ignoringBoards(copy)}
+			onDelete={ignoringBoards(remove)}
+			onDownload={ignoringBoards(save)}
 			onNewDocument={() => setPickedTemplate("blank")}
-			onOpen={openItem}
-			onOpenInNewTab={openInNewTab}
-			onOpenItem={openPressedItem}
-			onRename={openItem}
+			onOpen={ignoringBoards(openItem)}
+			onOpenInNewTab={ignoringBoards(openInNewTab)}
+			onOpenItem={ignoringBoards(openPressedItem)}
+			onRename={ignoringBoards(openItem)}
 			onSearchQueryChange={setQuery}
-			onShowInFolder={reveal}
+			onShowInFolder={ignoringBoards(reveal)}
 			onStartTemplate={setPickedTemplate}
 			overlay={
 				<>
