@@ -346,6 +346,9 @@ describe("a file an agent cites in its answer", () => {
 	})
 })
 
+const attachmentChipOf = (path: string) =>
+	screen.queryByRole("button", { name: `Open ${path.split("/").at(-1)}` })
+
 describe("a stored message carrying the attachments block", () => {
 	it("still shows its files as chips in the attachments row", () => {
 		const stored = `Have a look\n\n${attachmentBlock(
@@ -354,16 +357,8 @@ describe("a stored message carrying the attachments block", () => {
 		)}`
 		render(createElement(TurnBody, messageWithAttachments(stored)))
 
-		expect(
-			screen.getByRole("button", {
-				name: `Open ${CITED_FILE.split("/").at(-1)}`,
-			}),
-		).toBeTruthy()
-		expect(
-			screen.getByRole("button", {
-				name: `Open ${CITED_IMAGE.split("/").at(-1)}`,
-			}),
-		).toBeTruthy()
+		expect(attachmentChipOf(CITED_IMAGE)).toBeTruthy()
+		expect(attachmentChipOf(CITED_FILE)).toBeTruthy()
 		expect(screen.getByText("Have a look")).toBeTruthy()
 		expect(screen.queryByText(/Attached to this message/)).toBeNull()
 	})
