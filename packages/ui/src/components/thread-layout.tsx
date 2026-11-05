@@ -42,7 +42,6 @@ interface ThreadLayoutProps {
 	label?: string
 	anchorOnSend?: boolean
 	marksNewMessages?: boolean
-	countsNewMessages?: boolean
 	older?: ListEnd
 	newer?: TranscriptNewer
 	rows?: TranscriptItem[]
