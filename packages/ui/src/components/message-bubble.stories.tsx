@@ -1,12 +1,15 @@
 import type { ReactNode } from "react"
-import { expect, fn, userEvent } from "storybook/test"
+import { expect, fn, userEvent, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+	colourTransitionsOf,
 	hueScopeOf,
 	isInBrowserRunner,
 	listExhaustively,
+	realPointer,
+	resolvedChannelsOf,
 	slotIn,
 	slotsIn,
 } from "@workspace/storybook/story-utils"
@@ -24,6 +27,11 @@ import {
 	type MessageBubbleVariant,
 } from "@workspace/ui/components/message-bubble"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
+import {
+	type ColorScheme,
+	schemeOf,
+} from "@workspace/ui/hooks/use-color-scheme"
+import { contrastRatio, type Rgb } from "@workspace/ui/lib/contrast"
 
 const MESSAGE_BUBBLE_VARIANTS = listExhaustively<MessageBubbleVariant>({
 	solid: true,
@@ -139,6 +147,119 @@ export const Default = meta.story({
 			"data-align",
 			"start",
 		)
+	},
+})
+
+type AgentSurfaceState = "rest" | "hover"
+
+const MAIN_AGENT_SURFACE: Record<
+	ColorScheme,
+	Record<AgentSurfaceState, string>
+> = {
+	light: { rest: "oklch(0 0 0 / 4%)", hover: "oklch(0 0 0 / 7%)" },
+	dark: { rest: "oklch(1 0 0 / 5%)", hover: "oklch(1 0 0 / 8%)" },
+}
+
+const paintedOver = (ground: Rgb, layer: string): Rgb => {
+	const context = document.createElement("canvas").getContext("2d")
+	if (!context) throw new Error("Nothing here can composite a colour")
+	context.fillStyle = `rgb(${ground.join(" ")})`
+	context.fillRect(0, 0, 1, 1)
+	context.fillStyle = layer
+	context.fillRect(0, 0, 1, 1)
+	const [red, green, blue] = context.getImageData(0, 0, 1, 1).data
+	return [red, green, blue]
+}
+
+const rgbOf = (colour: string, scope: Element): Rgb => {
+	const [red, green, blue] = resolvedChannelsOf(colour, scope)
+	return [red, green, blue]
+}
+
+const surfaceOf = (content: HTMLElement) => {
+	const surface = content.querySelector<HTMLElement>(
+		':scope > [aria-hidden="true"]',
+	)
+	if (!surface) throw new Error("This bubble paints no surface")
+	return surface
+}
+
+const expectQuieterThanMain = async (
+	content: HTMLElement,
+	state: AgentSurfaceState,
+) => {
+	const scheme = schemeOf(content)
+	const label = `${scheme} ${state}`
+	const surface = surfaceOf(content)
+	const card = rgbOf("var(--card)", content)
+	const painted = paintedOver(card, getComputedStyle(surface).backgroundColor)
+	const main = paintedOver(card, MAIN_AGENT_SURFACE[scheme][state])
+	const ink = rgbOf(getComputedStyle(content).color, content)
+
+	await expect(contrastRatio(painted, card), label).toBeLessThan(
+		contrastRatio(main, card),
+	)
+	await expect(contrastRatio(ink, painted), label).toBeGreaterThanOrEqual(4.5)
+	await expect(colourTransitionsOf(content), label).toEqual([])
+	await expect(colourTransitionsOf(surface), label).toEqual([])
+	return painted
+}
+
+export const AgentSurfaceInBothThemes = meta.story({
+	globals: { theme_layout: "side-by-side" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The agent answer beside your message, light beside dark, the answer clickable so it can be hovered and focused. Check that the agent surface reads as a quiet lift off the card, quieter than muted, and that hover or keyboard focus deepens it one step without a fade. The play composites the painted surface over `--card` and asserts it sits closer to the card than the values on main (4% black light, 5% white dark at rest; 7% and 8% on hover), with the text at 4.5:1 or more. `packages/ui/src/components/turn.tsx:340` draws your message in `solid` and `packages/ui/src/components/turn.tsx:492` the agent in `soft`.",
+			},
+		},
+	},
+	render: () => (
+		<MessageBubbleGroup spacing="default" className={THREAD_WIDTH}>
+			<MessageBubble variant="solid" align="end">
+				<MessageBubbleContent>{USER_PROMPT}</MessageBubbleContent>
+			</MessageBubble>
+			<MessageBubble variant="soft" align="start">
+				<MessageBubbleContent render={<button type="button" />}>
+					{AGENT_REPLY}
+				</MessageBubbleContent>
+			</MessageBubble>
+		</MessageBubbleGroup>
+	),
+	play: async ({ canvasElement }) => {
+		const agents = Array.from(
+			canvasElement.querySelectorAll<HTMLElement>(
+				'[data-variant="soft"] [data-slot="message-bubble-content"]',
+			),
+		)
+		await expect(agents).toHaveLength(2)
+		await expect(new Set(agents.map(schemeOf))).toEqual(
+			new Set(["light", "dark"]),
+		)
+
+		const resting = new Map<HTMLElement, Rgb>()
+		for (const agent of agents)
+			resting.set(agent, await expectQuieterThanMain(agent, "rest"))
+
+		if (!isInBrowserRunner()) return
+		const pointer = await realPointer()
+		for (const agent of agents) {
+			await pointer.hover(agent)
+			await waitFor(() => expect(agent.matches(":hover")).toBe(true))
+			await expect(await expectQuieterThanMain(agent, "hover")).not.toEqual(
+				resting.get(agent),
+			)
+			await pointer.unhover(agent)
+			await waitFor(() => expect(agent.matches(":hover")).toBe(false))
+		}
+		for (const agent of agents) {
+			await pointer.tab()
+			await waitFor(() => expect(agent.matches(":focus-visible")).toBe(true))
+			await expect(await expectQuieterThanMain(agent, "hover")).not.toEqual(
+				resting.get(agent),
+			)
+		}
 	},
 })
 

@@ -151,8 +151,8 @@
 		var(--user-bubble-foreground) 70%,
 		var(--user-bubble)
 	);
-	--bubble: oklch(0 0 0 / 4%);
-	--bubble-hover: oklch(0 0 0 / 7%);
+	--bubble: oklch(0 0 0 / 3%);
+	--bubble-hover: oklch(0 0 0 / 5%);
 	--bubble-foreground: var(--foreground);
 	--faint-foreground: #67676c;
 	--disabled-foreground: #a3a3a8;
@@ -311,8 +311,8 @@
 		var(--user-bubble-foreground) 70%,
 		var(--user-bubble)
 	);
-	--bubble: oklch(1 0 0 / 5%);
-	--bubble-hover: oklch(1 0 0 / 8%);
+	--bubble: oklch(1 0 0 / 4%);
+	--bubble-hover: oklch(1 0 0 / 6%);
 	--bubble-foreground: #ececec;
 	--faint-foreground: #8a8a8e;
 	--disabled-foreground: #6b6b70;
