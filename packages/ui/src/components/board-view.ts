@@ -34,11 +34,22 @@ type BoardItem = {
 	style?: BoardShapeStyle
 }
 
+type BoardSide = "top" | "right" | "bottom" | "left"
+
+type BoardRouting = "straight" | "elbow"
+
+type BoardConnectorStyle = {
+	routing: BoardRouting
+}
+
 type BoardConnector = {
 	id: string
 	kind: "connector"
 	from: string
+	fromSide: BoardSide
 	to: string
+	toSide: BoardSide
+	routing: BoardRouting
 	zOrder: number
 	text: string
 }
@@ -59,21 +70,32 @@ type BoardIntent =
 	| { type: "move"; id: string; position: BoardPoint }
 	| { type: "resize"; id: string; position: BoardPoint; size: BoardSize }
 	| { type: "edit-text"; id: string; text: string }
-	| { type: "style"; id: string; style: BoardShapeStyle }
-	| { type: "connect"; id: string; from: string; to: string }
+	| { type: "style"; id: string; style: BoardShapeStyle | BoardConnectorStyle }
+	| {
+			type: "connect"
+			id: string
+			from: string
+			fromSide: BoardSide
+			to: string
+			toSide: BoardSide
+			routing: BoardRouting
+	  }
 	| { type: "delete"; id: string }
 
 export type {
 	BoardConnector,
+	BoardConnectorStyle,
 	BoardIntent,
 	BoardItem,
 	BoardItemKind,
 	BoardObject,
 	BoardPoint,
 	BoardRect,
+	BoardRouting,
 	BoardShapeFill,
 	BoardShapeStyle,
 	BoardShapeType,
+	BoardSide,
 	BoardSize,
 	BoardView,
 	BoardViewport,

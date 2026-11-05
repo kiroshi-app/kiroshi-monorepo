@@ -7,6 +7,10 @@ board-boardcard--long-title-dark
 board-boardcard--open-beside
 board-boardcard--open-beside-dark
 board-boardcard--updates-in-place
+board-boardconnectorflyout--elbow
+board-boardconnectorflyout--elbow-dark
+board-boardconnectorflyout--straight
+board-boardconnectorflyout--straight-dark
 board-boardimage--default
 board-boardimage--default-dark
 board-boardimage--with-source
@@ -1529,6 +1533,10 @@ navigation-apptitlebar--tear-off-reports-the-tab
 navigation-apptitlebar--unpinned-tab-menu
 navigation-apptitlebar--unpinned-tab-menu-dark
 navigation-apptitlebar--with-window-controls
+navigation-boardcanvas--connector-being-drawn
+navigation-boardcanvas--connector-being-drawn-dark
+navigation-boardcanvas--create-connector
+navigation-boardcanvas--create-connector-dark
 navigation-boardcanvas--edit-by-keyboard
 navigation-boardcanvas--edit-by-keyboard-dark
 navigation-boardcanvas--edit-by-pointer
@@ -1541,6 +1549,8 @@ navigation-boardcanvas--move-by-keyboard
 navigation-boardcanvas--move-by-keyboard-dark
 navigation-boardcanvas--move-by-pointer
 navigation-boardcanvas--move-by-pointer-dark
+navigation-boardcanvas--move-connected-object
+navigation-boardcanvas--move-connected-object-dark
 navigation-boardcanvas--resize-by-keyboard
 navigation-boardcanvas--resize-by-keyboard-dark
 navigation-boardcanvas--resize-by-pointer
@@ -1551,6 +1561,8 @@ navigation-boardcanvas--select-by-pointer
 navigation-boardcanvas--select-by-pointer-dark
 navigation-boardcanvas--shape-selected
 navigation-boardcanvas--shape-selected-dark
+navigation-boardcanvas--switch-connector-routing
+navigation-boardcanvas--switch-connector-routing-dark
 navigation-boardcanvas--zoom-at-maximum
 navigation-boardcanvas--zoom-at-minimum
 navigation-conversationbotpile--edged-members

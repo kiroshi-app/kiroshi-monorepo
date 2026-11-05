@@ -696,6 +696,13 @@ const common = {
 			moved: "Moved to {{x}}, {{y}}",
 			resized: "Resized to {{width}} by {{height}}",
 		},
+		connectorFlyout: {
+			label: "Connector type",
+			routing: {
+				straight: "Straight",
+				elbow: "Elbow",
+			},
+		},
 		selectionBar: {
 			label: "Shape style",
 			shapeType: "Shape type",
