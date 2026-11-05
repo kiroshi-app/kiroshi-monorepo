@@ -82,7 +82,10 @@ const expectOpenBeside = async ({ canvasElement }: PlayContext) => {
 const expectLongTitleWraps = async ({ canvasElement }: PlayContext) => {
 	const card = slotIn(canvasElement, "board-card")
 	const title = slotIn(card, "board-card-title")
-	const open = within(card).getByRole("button", { name: "Open" })
+	const open = within(card).getByRole("button", {
+		name: "Open",
+		description: LONG_TITLE,
+	})
 	await expect(title.getBoundingClientRect().height).toBeGreaterThan(
 		TITLE_LINE_HEIGHT,
 	)
@@ -132,6 +135,7 @@ export const Drawing = meta.story({
 		await expectDrawing(context)
 		const open = within(context.canvasElement).getByRole("button", {
 			name: "Open",
+			description: BOARD_CARD_TITLE,
 		})
 		await userEvent.click(open)
 		await expect(context.args.onOpen).toHaveBeenCalledOnce()
@@ -157,7 +161,12 @@ export const AtRest = meta.story({
 			},
 		},
 	},
-	play: expectAtRest,
+	play: async (context) => {
+		await expectAtRest(context)
+		await expect(
+			within(context.canvasElement).getByRole("button", { name: "Open" }),
+		).toHaveAccessibleDescription(BOARD_CARD_TITLE)
+	},
 })
 
 export const AtRestDark = meta.story({

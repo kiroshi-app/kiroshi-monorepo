@@ -86,6 +86,7 @@ const BoardCard = ({
 					</p>
 				</div>
 				<Button
+					aria-describedby={titleId}
 					className={cn(
 						"h-auto shrink-0 gap-1.5 rounded-full border-border p-1.5 text-compact text-foreground leading-4 transition-none hover:bg-foreground/8 active:bg-foreground/12 dark:hover:bg-foreground/8",
 						FOCUS_OUTLINE,
@@ -94,7 +95,7 @@ const BoardCard = ({
 					variant="ghost"
 				>
 					<Icons.SidePanel aria-hidden="true" className="size-3.5" />
-					{t("board.card.open")}
+					<span className="pe-1">{t("board.card.open")}</span>
 				</Button>
 			</div>
 			<div

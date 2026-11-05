@@ -184,6 +184,30 @@ const verticalCentreOf = (element: Element) => {
 const pointerAt = (type: string, clientX: number) =>
 	new PointerEvent(type, { bubbles: true, button: 0, clientX })
 
+type PanelStoryArgs = Omit<
+	DocumentPanelProps,
+	"variant" | "onOpenInLibrary" | "onOpenInTab"
+> & {
+	variant?: "document" | "board"
+	onOpenInLibrary?: () => void
+	onOpenInTab?: () => void
+}
+
+const panelPropsOf = ({
+	variant,
+	onOpenInLibrary,
+	onOpenInTab,
+	...shared
+}: PanelStoryArgs): DocumentPanelProps => {
+	if (variant === "board" && onOpenInTab)
+		return { ...shared, variant, onOpenInTab }
+	if (variant !== "board" && onOpenInLibrary)
+		return { ...shared, onOpenInLibrary }
+	throw new Error(
+		`The ${variant ?? "document"} panel story has no open callback`,
+	)
+}
+
 const meta = preview.meta({
 	globals: LAPTOP_WINDOW,
 	title: "Navigation/DocumentPanel",
@@ -209,7 +233,7 @@ const meta = preview.meta({
 	render: (args) => (
 		<div className="flex h-200 w-320" {...hueScopeOf("blue")}>
 			<ThreadLayout
-				aside={<DocumentPanel {...args} />}
+				aside={<DocumentPanel {...panelPropsOf(args)} />}
 				composer={<PromptInput onSubmit={fn()} />}
 				rows={ROWS}
 			>
@@ -424,10 +448,10 @@ export const HandleWithKeyboardFocus = meta.story({
 })
 
 export const HeaderAlignedWithTheThreadHeader = meta.story({
-	render: (args) => (
+	render: (args: PanelStoryArgs) => (
 		<div className="flex h-200 w-320" {...hueScopeOf("blue")}>
 			<ThreadLayout
-				aside={<DocumentPanel {...args} />}
+				aside={<DocumentPanel {...panelPropsOf(args)} />}
 				composer={<PromptInput onSubmit={fn()} />}
 				header={<AppHeader leading="Spring launch" />}
 				rows={ROWS}
@@ -504,7 +528,7 @@ const WIDE_WINDOW = 1536
 
 const BLUE_SCOPE = hueScopeOf("blue")
 
-type BesideTheSidebarProps = DocumentPanelProps & {
+type BesideTheSidebarProps = PanelStoryArgs & {
 	windowWidth: number
 	sidebarWidth?: number
 }
@@ -528,7 +552,7 @@ const BesideTheSidebar = ({
 			</Sidebar>
 			<SidebarInset className="min-w-0">
 				<ThreadLayout
-					aside={<DocumentPanel {...panel} />}
+					aside={<DocumentPanel {...panelPropsOf(panel)} />}
 					composer={<PromptInput onSubmit={fn()} />}
 					header={<AppHeader leading="Spring launch" />}
 					rows={ROWS}
@@ -560,7 +584,7 @@ const ASKED_UNDER_THE_ROOM = 480
 
 export const AskedUnderTheRoomLeft = meta.story({
 	args: { defaultWidth: ASKED_UNDER_THE_ROOM },
-	render: (args) => (
+	render: (args: PanelStoryArgs) => (
 		<BesideTheSidebar
 			{...args}
 			sidebarWidth={SIDEBAR_MAX_WIDTH}
@@ -606,7 +630,9 @@ export const AskedUnderTheRoomLeft = meta.story({
 
 export const CappedByTheRoomLeft = meta.story({
 	args: { defaultWidth: DOCUMENT_PANEL_MAX_WIDTH },
-	render: (args) => <BesideTheSidebar {...args} windowWidth={LAPTOP_WIDTH} />,
+	render: (args: PanelStoryArgs) => (
+		<BesideTheSidebar {...args} windowWidth={LAPTOP_WIDTH} />
+	),
 	parameters: {
 		docs: {
 			description: {
@@ -659,7 +685,7 @@ export const CappedByTheRoomLeft = meta.story({
 
 export const HeldAtItsFloorInTheSmallestWindow = meta.story({
 	args: { defaultWidth: DOCUMENT_PANEL_DEFAULT_WIDTH },
-	render: (args) => (
+	render: (args: PanelStoryArgs) => (
 		<BesideTheSidebar
 			{...args}
 			sidebarWidth={SIDEBAR_MAX_WIDTH}
@@ -727,7 +753,9 @@ export const HeldAtItsFloorInTheSmallestWindow = meta.story({
 export const MovesFromTheCappedEdge = meta.story({
 	tags: ["test-only"],
 	args: { defaultWidth: DOCUMENT_PANEL_MAX_WIDTH, onWidthChange: fn() },
-	render: (args) => <BesideTheSidebar {...args} windowWidth={LAPTOP_WIDTH} />,
+	render: (args: PanelStoryArgs) => (
+		<BesideTheSidebar {...args} windowWidth={LAPTOP_WIDTH} />
+	),
 	parameters: {
 		docs: {
 			description: {
@@ -825,7 +853,7 @@ const CONSECUTIVE_ANSWERS: TranscriptItem[] = Array.from(
 	}),
 )
 
-type InTheShellProps = DocumentPanelProps & {
+type InTheShellProps = PanelStoryArgs & {
 	windowWidth: number
 }
 
@@ -846,7 +874,7 @@ const InTheShell = ({ windowWidth, ...panel }: InTheShellProps) => (
 			</Sidebar>
 			<ContentCard>
 				<ThreadLayout
-					aside={<DocumentPanel {...panel} />}
+					aside={<DocumentPanel {...panelPropsOf(panel)} />}
 					composer={<PromptInput onSubmit={fn()} />}
 					header={<AppHeader leading="Spring launch" />}
 					rows={CONSECUTIVE_ANSWERS}
@@ -913,7 +941,9 @@ const scrollUpHalfAScreen = async (viewport: HTMLElement) => {
 
 export const ConsecutiveAnswersAtTheThreadFloor = meta.story({
 	args: { defaultWidth: DOCUMENT_PANEL_MAX_WIDTH },
-	render: (args) => <InTheShell {...args} windowWidth={LAPTOP_WIDTH} />,
+	render: (args: PanelStoryArgs) => (
+		<InTheShell {...args} windowWidth={LAPTOP_WIDTH} />
+	),
 	parameters: {
 		docs: {
 			description: {
@@ -937,7 +967,9 @@ export const ConsecutiveAnswersAtTheThreadFloor = meta.story({
 export const NarrowedToTheThreadFloorThenScrolled = meta.story({
 	tags: ["test-only"],
 	args: { defaultWidth: DOCUMENT_PANEL_MIN_WIDTH },
-	render: (args) => <InTheShell {...args} windowWidth={LAPTOP_WIDTH} />,
+	render: (args: PanelStoryArgs) => (
+		<InTheShell {...args} windowWidth={LAPTOP_WIDTH} />
+	),
 	parameters: {
 		docs: {
 			description: {
@@ -1108,10 +1140,10 @@ const boardPanelArgs = (drawers: readonly BoardPresenceOwner[]) => ({
 	children: <PanelBoard drawers={drawers} />,
 })
 
-const BoardInThread = (args: DocumentPanelProps) => (
+const BoardInThread = (args: PanelStoryArgs) => (
 	<div className="flex h-200 w-320" {...hueScopeOf("blue")}>
 		<ThreadLayout
-			aside={<DocumentPanel {...args} />}
+			aside={<DocumentPanel {...panelPropsOf(args)} />}
 			composer={<PromptInput onSubmit={fn()} />}
 			rows={BOARD_ROWS}
 		>
@@ -1153,7 +1185,7 @@ const expectBoardPanel = async (
 
 const expectBoardPanelCallbacks = async (
 	canvasElement: HTMLElement,
-	args: DocumentPanelProps,
+	args: PanelStoryArgs,
 ) => {
 	const panel = within(canvasElement).getByRole("complementary", {
 		name: BOARD_CARD_TITLE,
@@ -1168,7 +1200,7 @@ const expectBoardPanelCallbacks = async (
 
 export const BoardOneAgent = meta.story({
 	args: boardPanelArgs([DRAWING_AGENT]),
-	render: (args) => <BoardInThread {...args} />,
+	render: (args: PanelStoryArgs) => <BoardInThread {...args} />,
 	parameters: {
 		docs: {
 			description: {
@@ -1186,14 +1218,14 @@ export const BoardOneAgent = meta.story({
 export const BoardOneAgentDark = meta.story({
 	args: boardPanelArgs([DRAWING_AGENT]),
 	globals: { ...LAPTOP_WINDOW, theme: "dark" },
-	render: (args) => <BoardInThread {...args} />,
+	render: (args: PanelStoryArgs) => <BoardInThread {...args} />,
 	play: ({ canvasElement }) =>
 		expectBoardPanel(canvasElement, "1 agent drawing", 1),
 })
 
 export const BoardSeveralAgents = meta.story({
 	args: boardPanelArgs([DRAWING_AGENT, MIRA]),
-	render: (args) => <BoardInThread {...args} />,
+	render: (args: PanelStoryArgs) => <BoardInThread {...args} />,
 	parameters: {
 		docs: {
 			description: {
@@ -1211,7 +1243,7 @@ export const BoardSeveralAgents = meta.story({
 export const BoardSeveralAgentsDark = meta.story({
 	args: boardPanelArgs([DRAWING_AGENT, MIRA]),
 	globals: { ...LAPTOP_WINDOW, theme: "dark" },
-	render: (args) => <BoardInThread {...args} />,
+	render: (args: PanelStoryArgs) => <BoardInThread {...args} />,
 	play: ({ canvasElement }) =>
 		expectBoardPanel(canvasElement, "2 agents drawing", 2),
 })

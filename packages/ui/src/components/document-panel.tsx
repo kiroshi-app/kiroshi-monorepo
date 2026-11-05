@@ -61,35 +61,42 @@ const DOCUMENT_PANEL_MIN_WIDTH = 400
 const DOCUMENT_PANEL_MAX_WIDTH = 800
 const THREAD_MIN_WIDTH = 320
 
-type DocumentPanelProps = {
-	variant?: "document" | "board"
+type DocumentPanelVariant =
+	| {
+			variant?: "document"
+			onOpenInLibrary: () => void
+			onOpenInTab?: never
+	  }
+	| {
+			variant: "board"
+			onOpenInTab: () => void
+			onOpenInLibrary?: never
+	  }
+
+type DocumentPanelProps = DocumentPanelVariant & {
 	title: string
 	width?: number
 	defaultWidth?: number
 	onWidthChange?: (width: number) => void
 	presence?: ReactNode
-	onOpenInLibrary?: () => void
-	onOpenInTab?: () => void
 	onClose: () => void
 	children: ReactNode
 }
 
 const DocumentPanel = ({
-	variant = "document",
 	title,
 	width,
 	defaultWidth = DOCUMENT_PANEL_DEFAULT_WIDTH,
 	onWidthChange,
 	presence,
-	onOpenInLibrary,
-	onOpenInTab,
 	onClose,
 	children,
+	...variant
 }: DocumentPanelProps) => {
 	const { t } = useTranslation("common")
 	const titleId = useId()
 	const shownTitle = libraryDisplayName(title, t)
-	const isBoard = variant === "board"
+	const isBoard = variant.variant === "board"
 	const resize = useResizableWidth({
 		width,
 		defaultWidth,
@@ -145,10 +152,10 @@ const DocumentPanel = ({
 					{shownTitle}
 				</p>
 				{presence}
-				{isBoard ? (
+				{variant.variant === "board" ? (
 					<Button
 						className={OPEN_IN_TAB_BUTTON}
-						onClick={onOpenInTab}
+						onClick={variant.onOpenInTab}
 						variant="ghost"
 					>
 						<Icons.ExternalLink aria-hidden="true" className="size-3.5" />
@@ -158,7 +165,7 @@ const DocumentPanel = ({
 					<TooltipButton
 						aria-label={t("library.panel.openInLibrary")}
 						className={BAR_BUTTON}
-						onClick={onOpenInLibrary}
+						onClick={variant.onOpenInLibrary}
 						size="icon"
 						tooltip={t("library.panel.openInLibrary")}
 						tooltipSide="bottom"
