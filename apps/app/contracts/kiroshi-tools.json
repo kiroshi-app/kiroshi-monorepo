@@ -990,17 +990,18 @@
 	},
 	{
 		"name": "library_list",
-		"description": "List the items of the Library of this Space, the latest update first, each with its name, its kind (document or image) and its updatedAt in milliseconds since the epoch, before you read, write, rename or delete one whose name you do not hold.",
+		"description": "List the items of the Library of this Space, the latest update first, each with its name, its kind (document, image or board) and its updatedAt in milliseconds since the epoch, before you read, write, rename or delete one whose name you do not hold.",
 		"inputSchema": {
 			"$schema": "https://json-schema.org/draft/2020-12/schema",
 			"type": "object",
 			"properties": {
 				"kind": {
-					"description": "One of document or image to list only that kind; left out, every kind is listed.",
+					"description": "One of document, image or board to list only that kind; left out, every kind is listed.",
 					"type": "string",
 					"enum": [
 						"document",
-						"image"
+						"image",
+						"board"
 					]
 				},
 				"limit": {
@@ -1019,7 +1020,7 @@
 	},
 	{
 		"name": "library_search",
-		"description": "Find the items of the Library of this Space whose name or document text holds the words you give, whatever their case, each with its name, its kind and its updatedAt, the latest update first; an empty list means nothing in this Library matched, and no other Space is ever searched.",
+		"description": "Find the items of the Library of this Space whose name, document text or board text holds the words you give, whatever their case, each with its name, its kind and its updatedAt, the latest update first; an empty list means nothing in this Library matched, and no other Space is ever searched.",
 		"inputSchema": {
 			"$schema": "https://json-schema.org/draft/2020-12/schema",
 			"type": "object",
@@ -1037,7 +1038,7 @@
 	},
 	{
 		"name": "library_read",
-		"description": "Read an item of the Library of this Space by its name. A document answers its text as it stands now with what everyone has typed in it; an image is shown to you; an image too large to show answers its name, its type and its size.",
+		"description": "Read an item of the Library of this Space by its name. A document answers its text as it stands now with what everyone has typed in it; a board answers its JSON Canvas text; an image is shown to you; an image too large to show answers its name, its type and its size.",
 		"inputSchema": {
 			"$schema": "https://json-schema.org/draft/2020-12/schema",
 			"type": "object",
@@ -1118,7 +1119,7 @@
 	},
 	{
 		"name": "library_import",
-		"description": "Copy a file you produced into the Library of this Space, a Markdown or text document or a PNG, JPEG, GIF or WebP image. Left without overwrite, it lands under its own name, a number added when that name is taken. Changing an item that already exists, such as an image you imported before, means naming it in overwrite so the file replaces it in place, never adding a new one. It answers the name the item stands under, its kind and its updatedAt.",
+		"description": "Copy a file you produced into the Library of this Space, a Markdown or text document, a JSON Canvas board ending in .canvas or a PNG, JPEG, GIF or WebP image. Left without overwrite, it lands under its own name, a number added when that name is taken. Changing an item that already exists, such as an image you imported before, means naming it in overwrite so the file replaces it in place, never adding a new one. It answers the name the item stands under, its kind and its updatedAt.",
 		"inputSchema": {
 			"$schema": "https://json-schema.org/draft/2020-12/schema",
 			"type": "object",
@@ -1129,7 +1130,7 @@
 				},
 				"overwrite": {
 					"type": "string",
-					"description": "The name of an item of this Library the file replaces in place, such as chart.png: a document for a document, an image of the same format for an image. A name absent from this Library or of another kind is refused and nothing changes. Leave it out to add a new item."
+					"description": "The name of an item of this Library the file replaces in place, such as chart.png: a document for a document, an image of the same format for an image; a board is never replaced. A name absent from this Library or of another kind is refused and nothing changes. Leave it out to add a new item."
 				}
 			},
 			"required": [

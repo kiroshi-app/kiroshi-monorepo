@@ -367,6 +367,27 @@ async fn a_list_runs_newest_first_by_kind_and_pages_on_its_cursor() {
 }
 
 #[tokio::test]
+async fn a_list_by_the_board_kind_answers_only_the_canvas_items_of_the_space() {
+	let (app, root) = a_host("list-boards").await;
+	put(&root, SPACE, "notes.md", "A");
+	put_bytes(&root, "cover.png", &png_of(4));
+	put(&root, SPACE, "plan.canvas", r#"{"nodes":[],"edges":[]}"#);
+	put(&root, SPACE, "broken.canvas", "{ not json");
+	put(&root, "work", "elsewhere.canvas", r#"{"nodes":[],"edges":[]}"#);
+	modified_at(&root, "plan.canvas", 200);
+	modified_at(&root, "broken.canvas", 100);
+
+	let boards =
+		the_host(&app).served(Operation::List, json!({ "kind": "board" })).await.expect("lists");
+
+	assert_eq!(names_in(&boards), ["plan.canvas", "broken.canvas"]);
+	assert_eq!(
+		boards["items"][0],
+		json!({ "name": "plan.canvas", "kind": "board", "updatedAt": 200_000 })
+	);
+}
+
+#[tokio::test]
 async fn a_search_matches_a_name_or_a_document_text_whatever_its_case() {
 	let (app, root) = a_host("search").await;
 	put(&root, SPACE, "Roadmap.md", "Dates.");

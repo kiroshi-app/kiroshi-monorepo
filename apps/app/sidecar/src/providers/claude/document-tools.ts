@@ -7,10 +7,10 @@ import { carriedTo, spoken } from "./host-calls"
 const SUBTYPE = "library"
 
 const LIST =
-	"List the items of the Library of this Space, the latest update first, each with its name, its kind (document or image) and its updatedAt in milliseconds since the epoch, before you read, write, rename or delete one whose name you do not hold."
+	"List the items of the Library of this Space, the latest update first, each with its name, its kind (document, image or board) and its updatedAt in milliseconds since the epoch, before you read, write, rename or delete one whose name you do not hold."
 
 const KIND =
-	"One of document or image to list only that kind; left out, every kind is listed."
+	"One of document, image or board to list only that kind; left out, every kind is listed."
 
 const LIMIT = "How many items to answer, from 1 to 200; left out, 50."
 
@@ -18,12 +18,12 @@ const CURSOR =
 	"The cursor the previous library_list answered, to list the page after it; left out, the list starts at the latest update, and a null cursor in the answer marks the last page."
 
 const SEARCH =
-	"Find the items of the Library of this Space whose name or document text holds the words you give, whatever their case, each with its name, its kind and its updatedAt, the latest update first; an empty list means nothing in this Library matched, and no other Space is ever searched."
+	"Find the items of the Library of this Space whose name, document text or board text holds the words you give, whatever their case, each with its name, its kind and its updatedAt, the latest update first; an empty list means nothing in this Library matched, and no other Space is ever searched."
 
 const QUERY = "The words to look for, matched whatever their case."
 
 const READ =
-	"Read an item of the Library of this Space by its name. A document answers its text as it stands now with what everyone has typed in it; an image is shown to you; an image too large to show answers its name, its type and its size."
+	"Read an item of the Library of this Space by its name. A document answers its text as it stands now with what everyone has typed in it; a board answers its JSON Canvas text; an image is shown to you; an image too large to show answers its name, its type and its size."
 
 const CREATE =
 	"Create a new Markdown document in the Library of this Space, empty or filled from a template, shown in the Library of the person right away. A name already taken is refused. To change a document that already exists, write in it with library_write, never create another one. It answers the name the document stands under, its kind and its updatedAt."
@@ -53,10 +53,10 @@ const WHOLE =
 	"True to replace the whole text of the document with the text, under the same name."
 
 const IMPORT =
-	"Copy a file you produced into the Library of this Space, a Markdown or text document or a PNG, JPEG, GIF or WebP image. Left without overwrite, it lands under its own name, a number added when that name is taken. Changing an item that already exists, such as an image you imported before, means naming it in overwrite so the file replaces it in place, never adding a new one. It answers the name the item stands under, its kind and its updatedAt."
+	"Copy a file you produced into the Library of this Space, a Markdown or text document, a JSON Canvas board ending in .canvas or a PNG, JPEG, GIF or WebP image. Left without overwrite, it lands under its own name, a number added when that name is taken. Changing an item that already exists, such as an image you imported before, means naming it in overwrite so the file replaces it in place, never adding a new one. It answers the name the item stands under, its kind and its updatedAt."
 
 const OVERWRITE =
-	"The name of an item of this Library the file replaces in place, such as chart.png: a document for a document, an image of the same format for an image. A name absent from this Library or of another kind is refused and nothing changes. Leave it out to add a new item."
+	"The name of an item of this Library the file replaces in place, such as chart.png: a document for a document, an image of the same format for an image; a board is never replaced. A name absent from this Library or of another kind is refused and nothing changes. Leave it out to add a new item."
 
 const PATH =
 	"The path of the file to copy, absolute or relative to your working directory."
@@ -76,7 +76,7 @@ const POST_DOCUMENT =
 type ToolInput = Record<string, z.ZodType>
 
 const LISTED: ToolInput = {
-	kind: z.enum(["document", "image"]).optional().describe(KIND),
+	kind: z.enum(["document", "image", "board"]).optional().describe(KIND),
 	limit: z.number().int().optional().describe(LIMIT),
 	cursor: z.string().optional().describe(CURSOR),
 }

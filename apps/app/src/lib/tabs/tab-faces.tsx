@@ -66,6 +66,7 @@ const libraryFace = (): TabFace => ({
 const LIBRARY_ITEM_DESCRIPTORS = {
 	document: { kind: "library-document", icon: "File" },
 	image: { kind: "library-image", icon: "Image" },
+	board: { kind: "library-document", icon: "File" },
 } as const satisfies Record<
 	LibraryItemKind,
 	Omit<TitleBarTabDescriptor, "name">
