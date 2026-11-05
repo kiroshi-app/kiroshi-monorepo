@@ -180,6 +180,11 @@
 	--board-dot: #d4d4d4;
 	--board-control: var(--card);
 	--board-control-foreground: var(--soft-foreground);
+	--board-control-selected: color-mix(
+		in oklab,
+		var(--user-bubble) 12%,
+		var(--board-control)
+	);
 	--board-selection-bar: #1a1a1a;
 	--board-selection-bar-foreground: #ffffff;
 	--board-foreground: #1a1a1a;
@@ -384,6 +389,11 @@
 	--board-dot: #34343a;
 	--board-control: #1e1e20;
 	--board-control-foreground: #c4c4c4;
+	--board-control-selected: color-mix(
+		in oklab,
+		var(--user-bubble) 25%,
+		var(--board-control)
+	);
 	--board-selection-bar: #2a2a2d;
 	--board-selection-bar-foreground: #ffffff;
 	--board-foreground: #ededed;

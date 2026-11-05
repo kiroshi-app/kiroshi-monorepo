@@ -1,5 +1,13 @@
 import { useState } from "react"
-import { expect, fn, screen, userEvent, waitFor, within } from "storybook/test"
+import {
+	expect,
+	fn,
+	screen,
+	spyOn,
+	userEvent,
+	waitFor,
+	within,
+} from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
@@ -21,6 +29,7 @@ import {
 import type { BoardClientPoint } from "@workspace/ui/components/board/board-dock"
 import { BoardImage } from "@workspace/ui/components/board/board-image"
 import { BoardLinkCard } from "@workspace/ui/components/board/board-link-card"
+import type { BoardObjectOutlineSpec } from "@workspace/ui/components/board/board-presence"
 import { BoardShape } from "@workspace/ui/components/board/board-shape"
 import { BoardSticky } from "@workspace/ui/components/board/board-sticky"
 import { BoardText } from "@workspace/ui/components/board/board-text"
@@ -63,7 +72,10 @@ const ROW_LINKS: BoardObject[] = Array.from({ length: ROWS }, (_, row) => ({
 	id: `link-${row + 1}`,
 	kind: "connector",
 	from: `note-${row * COLUMNS + 1}`,
+	fromSide: "right",
 	to: `note-${row * COLUMNS + 2}`,
+	toSide: "left",
+	routing: "straight",
 	zOrder: 0,
 	text: "",
 }))
@@ -75,17 +87,14 @@ const DARK_BOARD_SURFACE = "rgb(22, 22, 24)"
 const LAST_NOTE = NOTES.at(-1) as BoardItem
 
 type PlaceholderObjectProps = {
-	object: BoardObject
+	object: BoardItem
 }
 
-const PlaceholderObject = ({ object }: PlaceholderObjectProps) =>
-	object.kind === "connector" ? (
-		<div className="size-full rounded-md border border-border border-dashed" />
-	) : (
-		<div className="flex size-full items-center justify-center rounded-md border border-border bg-card text-muted-foreground text-xs">
-			{object.text}
-		</div>
-	)
+const PlaceholderObject = ({ object }: PlaceholderObjectProps) => (
+	<div className="flex size-full items-center justify-center rounded-md border border-border bg-card text-muted-foreground text-xs">
+		{object.text}
+	</div>
+)
 
 const PASTED_IMAGE_SOURCE = "example.com/terrace-at-dusk"
 const PASTED_LINK = "https://example.com/calm-interfaces"
@@ -160,23 +169,42 @@ const patchOf = (intent: BoardIntent): Partial<BoardItem> => {
 		case "edit-text":
 			return { text: intent.text }
 		case "style":
-			return { style: intent.style }
+			return "shape" in intent.style ? { style: intent.style } : {}
 		default:
 			return {}
 	}
 }
 
+const patched = (object: BoardObject, intent: BoardIntent): BoardObject => {
+	if (object.kind !== "connector") return { ...object, ...patchOf(intent) }
+	return intent.type === "style" && "routing" in intent.style
+		? { ...object, routing: intent.style.routing }
+		: object
+}
+
 const applyIntent = (view: BoardView, intent: BoardIntent): BoardView => {
-	if (intent.type === "create") return view
-	return {
-		objects:
-			intent.type === "delete"
-				? view.objects.filter((object) => object.id !== intent.id)
-				: view.objects.map((object) =>
-						object.id === intent.id && object.kind !== "connector"
-							? { ...object, ...patchOf(intent) }
-							: object,
-					),
+	switch (intent.type) {
+		case "create":
+			return view
+		case "connect": {
+			const { type, ...connector } = intent
+			return {
+				objects: [
+					...view.objects,
+					{ ...connector, kind: "connector", zOrder: 0, text: "" },
+				],
+			}
+		}
+		case "delete":
+			return {
+				objects: view.objects.filter((object) => object.id !== intent.id),
+			}
+		default:
+			return {
+				objects: view.objects.map((object) =>
+					object.id === intent.id ? patched(object, intent) : object,
+				),
+			}
 	}
 }
 
@@ -268,7 +296,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The board of a Space in its own tab: a dot grid the board slides over, the objects it mounts through `renderObject`, and the zoom control at the bottom end corner. The viewport is controlled: two-finger scroll, the mouse wheel and the arrow keys with nothing selected pan, a pinch zooms around the pointer, the buttons step the zoom around the centre, and every move goes out through `onViewportChange`. Only the objects inside the visible area plus a margin are mounted. A press or Tab selects an object and draws its frame and corner handles in the Space colour, a selected shape gets its style bar above it, and every move, resize, text edit, style pick or delete goes out through `onIntent` as a `BoardIntent`: the canvas never changes the board itself. The tool dock sits centred at the bottom with the Library picker above it, a Library tile dragged onto the board emits `onLibraryItemDrop` with the board point, a link, an image or files pasted on the focused board emit `onPaste` with the centre of the view and the object whose id it returns gets selected, and files dragged in from the desktop show the drop target and emit `onDropFiles` where they land.",
+					"The board of a Space in its own tab: a dot grid the board slides over, the objects it mounts through `renderObject`, and the zoom control at the bottom end corner. The viewport is controlled: two-finger scroll, the mouse wheel and the arrow keys with nothing selected pan, a pinch zooms around the pointer, the buttons step the zoom around the centre, and every move goes out through `onViewportChange`. Only the objects inside the visible area plus a margin are mounted. A press or Tab selects an object and draws its frame and corner handles in the Space colour, a selected shape gets its style bar above it, and every move, resize, text edit, style pick or delete goes out through `onIntent` as a `BoardIntent`: the canvas never changes the board itself. Connectors are drawn by the canvas from the live rects of their ends, Straight or Elbow: with `isConnecting` on, a hovered object shows its outline and four anchors, a drag from one anchor to another object's anchor sends a connect intent, and the flyout picks the kind of the next connector or of the selected one. The tool dock sits centred at the bottom with the Library picker above it, a Library tile dragged onto the board emits `onLibraryItemDrop` with the board point, a link, an image or files pasted on the focused board emit `onPaste` with the centre of the view and the object whose id it returns gets selected, and files dragged in from the desktop show the drop target and emit `onDropFiles` where they land.",
 			},
 		},
 	},
@@ -396,7 +424,9 @@ export const FiveHundredObjects = meta.story({
 		await expect(
 			board.querySelectorAll('[data-slot="board-object"]').length,
 		).toBeLessThan(FIVE_HUNDRED_OBJECTS.objects.length / 2)
-		await expect(objectNode(board, "link-1")).not.toBeNull()
+		await expect(
+			board.querySelector('[data-connector-id="link-1"]'),
+		).not.toBeNull()
 
 		const kept = objectNode(board, "note-2") as HTMLElement
 		const keptX = kept.getBoundingClientRect().x
@@ -461,9 +491,10 @@ export const ZoomAtMinimum = meta.story({
 		const level = slotIn(canvasElement, "board-zoom-level")
 
 		await waitFor(() =>
-			expect(slotsIn(board, "board-object")).toHaveLength(
-				FIVE_HUNDRED_OBJECTS.objects.length,
-			),
+			expect(slotsIn(board, "board-object")).toHaveLength(NOTES.length),
+		)
+		await expect(slotsIn(board, "board-connector")).toHaveLength(
+			ROW_LINKS.length,
 		)
 		await expect(level).toHaveTextContent("10%")
 		await expect(
@@ -560,7 +591,7 @@ const BAR_GAP = 16
 
 const SELECTION_ARGS = {
 	view: SMALL_BOARD,
-	renderObject: (object: BoardObject) => <BoardObjectView object={object} />,
+	renderObject: (object: BoardItem) => <BoardObjectView object={object} />,
 }
 
 const pointerAt = (
@@ -1592,4 +1623,546 @@ export const FilesDraggedOverUnknownCount = meta.story({
 export const FilesDraggedOverUnknownCountDark = meta.story({
 	globals: { theme: "dark" },
 	play: playFilesDraggedOver(MIXED_FILES, "Drop to add files here", true),
+})
+
+const REVIEW: BoardItem = {
+	id: "review",
+	kind: "shape",
+	position: { x: 320, y: 240 },
+	size: { width: 144, height: 80 },
+	zOrder: 2,
+	text: "Review",
+}
+
+const PLAN_TO_REVIEW: BoardObject = {
+	id: "plan-to-review",
+	kind: "connector",
+	from: "plan",
+	fromSide: "right",
+	to: "review",
+	toSide: "left",
+	routing: "straight",
+	zOrder: 0,
+	text: "",
+}
+
+const CONNECTOR_ARGS = {
+	view: { objects: [PLAN, REVIEW] },
+	renderObject: (object: BoardItem) => <BoardObjectView object={object} />,
+	isConnecting: true,
+}
+
+const CONNECTED_ARGS = {
+	view: { objects: [PLAN, REVIEW, PLAN_TO_REVIEW] },
+	renderObject: (object: BoardItem) => <BoardObjectView object={object} />,
+}
+
+const STRAIGHT_PATH = "M224 144 L344 304"
+const ELBOW_PATH =
+	"M224 144 L276 144 Q284 144 284 152 L284 296 Q284 304 292 304 L344 304"
+const ARROWHEAD_PATH = "M334 310 L344 304 L334 298"
+const ANCHOR_SIZE = 10
+const HOVER_OUTSET = 4
+const HOVER_RADIUS = "14px"
+
+const anchorOn = (root: HTMLElement, id: string, side: string) =>
+	root.querySelector<HTMLElement>(
+		`[data-slot="board-anchor"][data-anchor-object="${id}"][data-side="${side}"]`,
+	)
+
+const boardAt = (root: HTMLElement, x: number, y: number) => {
+	const board = slotIn(root, "board-canvas")
+	const box = board.getBoundingClientRect()
+	return {
+		clientX: box.x + board.clientLeft + x,
+		clientY: box.y + board.clientTop + y,
+	}
+}
+
+const connectorPaths = (root: HTMLElement, slot: string) =>
+	Array.from(
+		root.querySelectorAll<SVGPathElement>(
+			`[data-slot="${slot}"] [data-slot="board-connector-path"]`,
+		),
+	).map((path) => path.getAttribute("d"))
+
+const pickElbow = async (root: HTMLElement) => {
+	const elbow = within(root).getByRole("radio", { name: "Elbow" })
+	await userEvent.click(elbow)
+	await expect(elbow).toBeChecked()
+}
+
+const hoverObject = (root: HTMLElement, id: string) =>
+	pointerAt(
+		"pointerover",
+		objectNode(root, id) as HTMLElement,
+		centreOf(objectNode(root, id) as HTMLElement),
+	)
+
+const hoverPlanRightAnchor = (root: HTMLElement) => {
+	hoverObject(root, "plan")
+	return waitFor(() => {
+		const anchor = anchorOn(root, "plan", "right")
+		expect(anchor).not.toBeNull()
+		return anchor as HTMLElement
+	})
+}
+
+const dragFromPlanToReviewAnchor = async (root: HTMLElement) => {
+	const source = await hoverPlanRightAnchor(root)
+	pointerAt("pointerdown", source, centreOf(source))
+	pointerAt(
+		"pointermove",
+		document,
+		centreOf(objectNode(root, "review") as HTMLElement),
+	)
+	const target = await waitFor(() => {
+		const anchor = anchorOn(root, "review", "left")
+		expect(anchor).not.toBeNull()
+		return anchor as HTMLElement
+	})
+	const at = centreOf(target)
+	pointerAt("pointermove", document, at)
+	await waitFor(() => expect(target).toHaveAttribute("data-active", "true"))
+	return at
+}
+
+const expectAnchorFrame = async (root: HTMLElement, id: string) => {
+	const object = (objectNode(root, id) as HTMLElement).getBoundingClientRect()
+	const outline = slotIn(root, "board-hover-outline")
+	const outlineBox = outline.getBoundingClientRect()
+	const outlineStyle = getComputedStyle(outline)
+	await expect(outlineBox.x).toBeCloseTo(object.x - HOVER_OUTSET, 0)
+	await expect(outlineBox.width).toBeCloseTo(object.width + HOVER_OUTSET * 2, 0)
+	await expect(outlineStyle.borderTopWidth).toBe("2px")
+	await expect(outlineStyle.borderTopLeftRadius).toBe(HOVER_RADIUS)
+	const middles = {
+		top: [object.x + object.width / 2, object.y],
+		right: [object.right, object.y + object.height / 2],
+		bottom: [object.x + object.width / 2, object.bottom],
+		left: [object.x, object.y + object.height / 2],
+	}
+	for (const [side, [x, y]] of Object.entries(middles)) {
+		const anchor = anchorOn(root, id, side) as HTMLElement
+		const box = anchor.getBoundingClientRect()
+		const look = getComputedStyle(anchor)
+		await expect([box.width, box.height]).toEqual([ANCHOR_SIZE, ANCHOR_SIZE])
+		await expect(box.x + box.width / 2).toBeCloseTo(x, 0)
+		await expect(box.y + box.height / 2).toBeCloseTo(y, 0)
+		await expect(look.borderTopWidth).toBe("2px")
+		await expect(look.borderTopColor).toBe(resolvedRootColor("--user-bubble"))
+		await expect(look.backgroundColor).toBe(
+			resolvedRootColor(
+				anchor.dataset.active === "true" ? "--user-bubble" : "--board-surface",
+			),
+		)
+	}
+}
+
+const selectPlanToReview = async (root: HTMLElement) => {
+	const hit = root.querySelector(
+		'[data-slot="board-connector-hits"] [data-connector-id="plan-to-review"]',
+	) as SVGPathElement
+	pointerAt("pointerdown", hit, boardAt(root, 284, 224))
+	await within(root).findByRole("radiogroup", { name: "Connector type" })
+}
+
+const connectorDocs = (story: string) => ({
+	docs: { description: { story } },
+})
+
+export const CreateConnector = meta.story({
+	globals: LAPTOP_WINDOW,
+	args: CONNECTOR_ARGS,
+	parameters: connectorDocs(
+		"Connector mode on. A drag from the right anchor of the sticky released on empty board sends nothing and leaves no line. Elbow picked in the flyout, a drag from the same anchor released on the left anchor of Review sends one connect intent with both ids, both sides and the elbow kind, and the committed connector draws in the board shape border colour, 2px with round caps, rounded corners of 8 and the open chevron at Review. Pick ConnectorBeingDrawn for the drag in progress.",
+	),
+	play: async ({ canvasElement, args }) => {
+		const source = await hoverPlanRightAnchor(canvasElement)
+		pointerAt("pointerdown", source, centreOf(source))
+		const empty = boardAt(canvasElement, 640, 520)
+		pointerAt("pointermove", document, empty)
+		await waitFor(() =>
+			expect(slotsIn(canvasElement, "board-connector-draft")).toHaveLength(1),
+		)
+		pointerAt("pointerup", document, empty)
+		await waitFor(() =>
+			expect(slotsIn(canvasElement, "board-connector-draft")).toHaveLength(0),
+		)
+		await expect(args.onIntent).not.toHaveBeenCalled()
+
+		await pickElbow(canvasElement)
+		const release = await dragFromPlanToReviewAnchor(canvasElement)
+		pointerAt("pointerup", document, release)
+		await waitFor(() => expect(args.onIntent).toHaveBeenCalledTimes(1))
+		await expect(args.onIntent).toHaveBeenCalledWith({
+			type: "connect",
+			id: expect.any(String),
+			from: "plan",
+			fromSide: "right",
+			to: "review",
+			toSide: "left",
+			routing: "elbow",
+		})
+		await expect(slotsIn(canvasElement, "board-connector-draft")).toHaveLength(
+			0,
+		)
+		await expect(connectorPaths(canvasElement, "board-connector")).toEqual([
+			ELBOW_PATH,
+		])
+		const line = slotIn(canvasElement, "board-connector")
+		const look = getComputedStyle(line)
+		await expect(look.stroke).toBe(resolvedRootColor("--board-shape-border"))
+		await expect(look.strokeWidth).toBe("2px")
+		await expect(look.strokeLinecap).toBe("round")
+		await expect(look.strokeLinejoin).toBe("round")
+		await expect(
+			slotIn(line, "board-connector-arrowhead").getAttribute("d"),
+		).toBe(ARROWHEAD_PATH)
+	},
+})
+
+export const CreateConnectorDark = meta.story({
+	globals: { ...LAPTOP_WINDOW, theme: "dark" },
+	args: CONNECTOR_ARGS,
+	parameters: connectorDocs(
+		"CreateConnector in the dark theme: the same two drags and the same single connect intent.",
+	),
+	play: async (context) => {
+		await expectDarkSurface(context.canvasElement)
+		await CreateConnector.input.play?.(context)
+	},
+})
+
+export const ConnectorBeingDrawn = meta.story({
+	globals: LAPTOP_WINDOW,
+	args: CONNECTOR_ARGS,
+	parameters: connectorDocs(
+		"Boards 4d: an elbow connector being drawn. Check the hover outline 4px outside the hovered object, 2px in the Space colour at 50% with 14px corners, the four 10px anchors centred on the middle of each side on the board surface with a 2px Space-colour ring, the anchor under the pointer filled in the Space colour with a 3px ring at 25%, the line in the Space colour from a 10px dot on the source anchor to the open chevron at the pointer, and Elbow picked in the flyout. Pick CreateConnector for the release.",
+	),
+	play: async ({ canvasElement, args }) => {
+		await pickElbow(canvasElement)
+		await hoverPlanRightAnchor(canvasElement)
+		await expectAnchorFrame(canvasElement, "plan")
+
+		await dragFromPlanToReviewAnchor(canvasElement)
+		await expectAnchorFrame(canvasElement, "review")
+		await expect(slotsIn(canvasElement, "board-anchor-frame")).toHaveLength(1)
+		const active = anchorOn(canvasElement, "review", "left") as HTMLElement
+		await expect(getComputedStyle(active).boxShadow).toMatch(/\b3px\b/)
+
+		await expect(
+			connectorPaths(canvasElement, "board-connector-draft"),
+		).toEqual([ELBOW_PATH])
+		const draft = slotIn(canvasElement, "board-connector-draft")
+		await expect(getComputedStyle(draft).stroke).toBe(
+			resolvedRootColor("--user-bubble"),
+		)
+		await expect(getComputedStyle(draft).strokeWidth).toBe("2px")
+		const dot = slotIn(canvasElement, "board-connector-source")
+		await expect(
+			["cx", "cy", "r"].map((name) => dot.getAttribute(name)),
+		).toEqual(["224", "144", "4"])
+		await expect(getComputedStyle(dot).fill).toBe(
+			resolvedRootColor("--board-surface"),
+		)
+		await expect(args.onIntent).not.toHaveBeenCalled()
+	},
+})
+
+export const ConnectorBeingDrawnDark = meta.story({
+	globals: { ...LAPTOP_WINDOW, theme: "dark" },
+	args: CONNECTOR_ARGS,
+	parameters: connectorDocs(
+		"ConnectorBeingDrawn in the dark theme: the same drag held over the anchor of Review.",
+	),
+	play: async (context) => {
+		await expectDarkSurface(context.canvasElement)
+		await ConnectorBeingDrawn.input.play?.(context)
+	},
+})
+
+export const SwitchConnectorRouting = meta.story({
+	globals: LAPTOP_WINDOW,
+	args: CONNECTED_ARGS,
+	parameters: connectorDocs(
+		"A press on a straight connector selects it, draws it in the Space colour and opens the flyout on Straight. Elbow there sends one style intent and the connector redraws as an elbow, the left arrow key on the focused radio switches it back. The connector itself never takes focus and stays hidden from assistive technology: the flyout is the only way in.",
+	),
+	play: async ({ canvasElement, args }) => {
+		const canvas = within(canvasElement)
+		await expect(connectorPaths(canvasElement, "board-connector")).toEqual([
+			STRAIGHT_PATH,
+		])
+		await expect(canvas.queryByRole("radiogroup")).toBeNull()
+		for (const layer of ["board-connectors", "board-connector-hits"]) {
+			const svg = slotIn(canvasElement, layer)
+			await expect(svg).toHaveAttribute("aria-hidden", "true")
+			await expect(svg.querySelectorAll("[tabindex]")).toHaveLength(0)
+		}
+
+		await selectPlanToReview(canvasElement)
+		const straight = canvas.getByRole("radio", { name: "Straight" })
+		await expect(straight).toBeChecked()
+		await expect(
+			getComputedStyle(slotIn(canvasElement, "board-connector")).stroke,
+		).toBe(resolvedRootColor("--user-bubble"))
+
+		const elbow = canvas.getByRole("radio", { name: "Elbow" })
+		await userEvent.click(elbow)
+		await expect(args.onIntent).toHaveBeenCalledTimes(1)
+		await expect(args.onIntent).toHaveBeenCalledWith({
+			type: "style",
+			id: "plan-to-review",
+			style: { routing: "elbow" },
+		})
+		await waitFor(() =>
+			expect(connectorPaths(canvasElement, "board-connector")).toEqual([
+				ELBOW_PATH,
+			]),
+		)
+		await expect(elbow).toBeChecked()
+
+		await userEvent.keyboard("{ArrowLeft}")
+		await expect(args.onIntent).toHaveBeenLastCalledWith({
+			type: "style",
+			id: "plan-to-review",
+			style: { routing: "straight" },
+		})
+		await waitFor(() =>
+			expect(connectorPaths(canvasElement, "board-connector")).toEqual([
+				STRAIGHT_PATH,
+			]),
+		)
+	},
+})
+
+export const SwitchConnectorRoutingDark = meta.story({
+	globals: { ...LAPTOP_WINDOW, theme: "dark" },
+	args: CONNECTED_ARGS,
+	parameters: connectorDocs(
+		"SwitchConnectorRouting in the dark theme: the same press, pick and arrow key.",
+	),
+	play: async (context) => {
+		await expectDarkSurface(context.canvasElement)
+		await SwitchConnectorRouting.input.play?.(context)
+	},
+})
+
+export const MoveConnectedObject = meta.story({
+	globals: LAPTOP_WINDOW,
+	args: CONNECTED_ARGS,
+	parameters: connectorDocs(
+		"A drag on Review redraws the connector from its new rect in the same frame as the shape moves, before any intent goes out, and the release sends one move intent. Pick SwitchConnectorRouting to change the kind.",
+	),
+	play: async ({ canvasElement, args }) => {
+		const review = objectNode(canvasElement, "review") as HTMLElement
+		const before = review.getBoundingClientRect()
+		const from = centreOf(review)
+		const to = shifted(from, { x: 60, y: 40 })
+
+		pointerAt("pointerdown", review, from)
+		pointerAt("pointermove", document, to)
+		await waitFor(() =>
+			expect(review.getBoundingClientRect().x).toBeCloseTo(before.x + 60, 0),
+		)
+		await expect(connectorPaths(canvasElement, "board-connector")).toEqual([
+			"M224 144 L404 344",
+		])
+		await expect(args.onIntent).not.toHaveBeenCalled()
+
+		pointerAt("pointerup", document, to)
+		await waitFor(() => expect(args.onIntent).toHaveBeenCalledTimes(1))
+		await expect(args.onIntent).toHaveBeenCalledWith({
+			type: "move",
+			id: "review",
+			position: { x: 380, y: 280 },
+		})
+		await expect(connectorPaths(canvasElement, "board-connector")).toEqual([
+			"M224 144 L404 344",
+		])
+	},
+})
+
+export const MoveConnectedObjectDark = meta.story({
+	globals: { ...LAPTOP_WINDOW, theme: "dark" },
+	args: CONNECTED_ARGS,
+	parameters: connectorDocs(
+		"MoveConnectedObject in the dark theme: the same drag and the same single move intent.",
+	),
+	play: async (context) => {
+		await expectDarkSurface(context.canvasElement)
+		await MoveConnectedObject.input.play?.(context)
+	},
+})
+
+export const ConnectorByKeyboard = meta.story({
+	globals: LAPTOP_WINDOW,
+	args: CONNECTED_ARGS,
+	parameters: connectorDocs(
+		"A selected connector answers the keyboard: Escape clears the selection, hides the flyout and draws the line back in the board shape border colour, Delete sends one delete intent for the connector and clears the selection. Pick SwitchConnectorRouting for the flyout.",
+	),
+	play: async ({ canvasElement, args }) => {
+		const canvas = within(canvasElement)
+		await selectPlanToReview(canvasElement)
+		await userEvent.keyboard("{Escape}")
+		await waitFor(() => expect(canvas.queryByRole("radiogroup")).toBeNull())
+		await expect(
+			getComputedStyle(slotIn(canvasElement, "board-connector")).stroke,
+		).toBe(resolvedRootColor("--board-shape-border"))
+		await expect(args.onIntent).not.toHaveBeenCalled()
+
+		await selectPlanToReview(canvasElement)
+		await userEvent.keyboard("{Delete}")
+		await expect(args.onIntent).toHaveBeenCalledTimes(1)
+		await expect(args.onIntent).toHaveBeenCalledWith({
+			type: "delete",
+			id: "plan-to-review",
+		})
+		await waitFor(() =>
+			expect(connectorPaths(canvasElement, "board-connector")).toEqual([]),
+		)
+		await expect(canvas.queryByRole("radiogroup")).toBeNull()
+	},
+})
+
+export const ConnectorByKeyboardDark = meta.story({
+	globals: { ...LAPTOP_WINDOW, theme: "dark" },
+	args: CONNECTED_ARGS,
+	parameters: connectorDocs(
+		"ConnectorByKeyboard in the dark theme: the same Escape and Delete.",
+	),
+	play: async (context) => {
+		await expectDarkSurface(context.canvasElement)
+		await ConnectorByKeyboard.input.play?.(context)
+	},
+})
+
+export const CancelDraftByEscape = meta.story({
+	globals: LAPTOP_WINDOW,
+	args: CONNECTOR_ARGS,
+	parameters: connectorDocs(
+		"Escape while a connector is being drawn drops the line, and the release that follows on an anchor of Review sends nothing. Pick CreateConnector for a drag that lands.",
+	),
+	play: async ({ canvasElement, args }) => {
+		const release = await dragFromPlanToReviewAnchor(canvasElement)
+		await expect(slotsIn(canvasElement, "board-connector-draft")).toHaveLength(
+			1,
+		)
+		await userEvent.keyboard("{Escape}")
+		await waitFor(() =>
+			expect(slotsIn(canvasElement, "board-connector-draft")).toHaveLength(0),
+		)
+		pointerAt("pointerup", document, release)
+		await expect(args.onIntent).not.toHaveBeenCalled()
+	},
+})
+
+export const CancelDraftByEscapeDark = meta.story({
+	globals: { ...LAPTOP_WINDOW, theme: "dark" },
+	args: CONNECTOR_ARGS,
+	parameters: connectorDocs(
+		"CancelDraftByEscape in the dark theme: the same drag dropped by Escape.",
+	),
+	play: async (context) => {
+		await expectDarkSurface(context.canvasElement)
+		await CancelDraftByEscape.input.play?.(context)
+	},
+})
+
+const ATLAS_WRITING_CONNECTOR: BoardObjectOutlineSpec = {
+	objectId: "plan-to-review",
+	owner: { kind: "agent", id: "agent-atlas", name: "Atlas", hue: 220 },
+	state: "writing",
+}
+
+export const ConnectorWithPresenceOutline = meta.story({
+	globals: LAPTOP_WINDOW,
+	args: { ...CONNECTED_ARGS, outlines: [ATLAS_WRITING_CONNECTOR] },
+	parameters: connectorDocs(
+		"An agent writing on a connector: the presence ring of its owner around the box spanning both ends, as before connectors were drawn by the canvas. The ring stays out of the tab order and hidden from assistive technology.",
+	),
+	play: async ({ canvasElement }) => {
+		const box = slotIn(canvasElement, "board-connector-outline")
+		await expect(box).toHaveAttribute("aria-hidden", "true")
+		const plan = (
+			objectNode(canvasElement, "plan") as HTMLElement
+		).getBoundingClientRect()
+		const review = (
+			objectNode(canvasElement, "review") as HTMLElement
+		).getBoundingClientRect()
+		const bounds = box.getBoundingClientRect()
+		await expect(bounds.x).toBeCloseTo(plan.x, 0)
+		await expect(bounds.y).toBeCloseTo(plan.y, 0)
+		await expect(bounds.right).toBeCloseTo(review.right, 0)
+		await expect(bounds.bottom).toBeCloseTo(review.bottom, 0)
+		const outline = slotIn(box, "board-object-outline")
+		await expect(outline).toHaveAttribute("data-state", "writing")
+		await expect(
+			getComputedStyle(outline.firstElementChild as HTMLElement).boxShadow,
+		).toMatch(/\b2px\b/)
+	},
+})
+
+export const ConnectorWithPresenceOutlineDark = meta.story({
+	globals: { ...LAPTOP_WINDOW, theme: "dark" },
+	args: ConnectorWithPresenceOutline.input.args,
+	parameters: connectorDocs(
+		"ConnectorWithPresenceOutline in the dark theme: the same ring around the connector.",
+	),
+	play: async (context) => {
+		await expectDarkSurface(context.canvasElement)
+		await ConnectorWithPresenceOutline.input.play?.(context)
+	},
+})
+
+const RemovableBoard = (props: BoardCanvasProps) => {
+	const [isShown, setIsShown] = useState(true)
+	return (
+		<div className="flex flex-col gap-2">
+			<button onClick={() => setIsShown(false)} type="button">
+				Remove the board
+			</button>
+			{isShown ? <ControlledBoard {...props} /> : null}
+		</div>
+	)
+}
+
+const DRAFT_EVENTS = ["pointermove", "pointerup", "pointercancel", "keydown"]
+
+export const UnmountDuringDraft = meta.story({
+	tags: ["test-only"],
+	globals: LAPTOP_WINDOW,
+	args: CONNECTOR_ARGS,
+	render: (args) => <RemovableBoard {...args} />,
+	play: async ({ canvasElement }) => {
+		const added = spyOn(window, "addEventListener")
+		const removed = spyOn(window, "removeEventListener")
+		try {
+			const source = await hoverPlanRightAnchor(canvasElement)
+			pointerAt("pointerdown", source, centreOf(source))
+			const listeners = added.mock.calls.filter(([type]) =>
+				DRAFT_EVENTS.includes(type),
+			)
+			await expect(listeners.map(([type]) => type).sort()).toEqual(
+				[...DRAFT_EVENTS].sort(),
+			)
+
+			within(canvasElement)
+				.getByRole("button", { name: "Remove the board" })
+				.focus()
+			await userEvent.keyboard("{Enter}")
+			await waitFor(() =>
+				expect(slotsIn(canvasElement, "board-canvas")).toHaveLength(0),
+			)
+			const isRemoved = ([type, listener]: (typeof listeners)[number]) =>
+				removed.mock.calls.some(
+					([removedType, removedListener]) =>
+						removedType === type && removedListener === listener,
+				)
+			await expect(listeners.every(isRemoved)).toBe(true)
+		} finally {
+			added.mockRestore()
+			removed.mockRestore()
+		}
+	},
 })

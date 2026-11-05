@@ -9,6 +9,7 @@ import {
 	type PointerEvent,
 	type ReactNode,
 	useCallback,
+	useEffect,
 	useId,
 	useLayoutEffect,
 	useRef,
@@ -16,6 +17,7 @@ import {
 } from "react"
 import { useTranslation } from "react-i18next"
 
+import { BoardConnectorFlyout } from "@workspace/ui/components/board/board-connector-flyout"
 import {
 	type BoardClientPoint,
 	BoardDock,
@@ -30,6 +32,15 @@ import {
 } from "@workspace/ui/components/board/board-presence"
 import { BoardSelectionBar } from "@workspace/ui/components/board/board-selection-bar"
 import {
+	anchorOf,
+	arrowheadPathData,
+	BOARD_SIDES,
+	type BoardRoute,
+	looseEnd,
+	routeConnector,
+	routePathData,
+} from "@workspace/ui/components/board-connector-route"
+import {
 	arrowDirectionOf,
 	BOARD_CORNERS,
 	type BoardCorner,
@@ -41,14 +52,16 @@ import {
 	toScreenRect,
 } from "@workspace/ui/components/board-selection"
 import type {
+	BoardConnector,
 	BoardIntent,
 	BoardItem,
 	BoardItemKind,
-	BoardObject,
 	BoardPaste,
 	BoardPoint,
 	BoardRect,
+	BoardRouting,
 	BoardShapeStyle,
+	BoardSide,
 	BoardSize,
 	BoardView,
 	BoardViewport,
@@ -75,7 +88,7 @@ type BoardCanvasProps = {
 	viewport: BoardViewport
 	onViewportChange: (viewport: BoardViewport) => void
 	onIntent: (intent: BoardIntent) => void
-	renderObject: (object: BoardObject) => ReactNode
+	renderObject: (item: BoardItem) => ReactNode
 	pointers?: readonly BoardPointerPlacement[]
 	outlines?: readonly BoardObjectOutlineSpec[]
 	tool: BoardTool
@@ -85,6 +98,7 @@ type BoardCanvasProps = {
 	onLibraryItemDrop: (id: string, point: BoardPoint) => void
 	onPaste: (paste: BoardPaste, point: BoardPoint) => string | undefined
 	onDropFiles: (files: readonly File[], point: BoardPoint) => void
+	isConnecting?: boolean
 	className?: string
 }
 
@@ -369,6 +383,66 @@ type BoardEditing = {
 
 type BoardReshape = (rect: BoardRect, delta: BoardPoint) => BoardRect
 
+type BoardAnchor = {
+	id: string
+	side: BoardSide
+}
+
+type BoardHover = {
+	id: string | null
+	anchor: BoardAnchor | null
+}
+
+type BoardDraft = {
+	from: BoardAnchor
+	pointer: BoardPoint
+	target: BoardAnchor | null
+}
+
+type ShownConnector = {
+	connector: BoardConnector
+	bounds: BoardRect
+	route: BoardRoute
+}
+
+const NO_HOVER: BoardHover = { id: null, anchor: null }
+const CONNECTOR_STROKE = 2
+const CONNECTOR_HIT_STROKE = 24
+const SOURCE_DOT_RADIUS = 4
+const ANCHOR_PLACE: Record<BoardSide, string> = {
+	top: "top-0 left-1/2",
+	right: "top-1/2 left-full",
+	bottom: "top-full left-1/2",
+	left: "top-1/2 left-0",
+}
+
+const toScreenPoint = (point: BoardPoint, viewport: BoardViewport) => ({
+	x: viewport.offset.x + point.x * viewport.zoom,
+	y: viewport.offset.y + point.y * viewport.zoom,
+})
+
+const toBoardPoint = (point: BoardPoint, viewport: BoardViewport) => ({
+	x: (point.x - viewport.offset.x) / viewport.zoom,
+	y: (point.y - viewport.offset.y) / viewport.zoom,
+})
+
+const onScreen = (route: BoardRoute, viewport: BoardViewport): BoardRoute => ({
+	points: route.points.map((point) => toScreenPoint(point, viewport)),
+	arrow: route.arrow,
+})
+
+const hoverOf = (element: Element | null): BoardHover => {
+	const anchor = element?.closest<HTMLElement>('[data-slot="board-anchor"]')
+	const { anchorObject, side } = anchor?.dataset ?? {}
+	if (anchorObject && side)
+		return {
+			id: anchorObject,
+			anchor: { id: anchorObject, side: side as BoardSide },
+		}
+	const object = element?.closest<HTMLElement>('[data-slot="board-object"]')
+	return { id: object?.dataset.objectId ?? null, anchor: null }
+}
+
 const placeOf = (rect: BoardRect) => ({
 	left: rect.x,
 	top: rect.y,
@@ -574,6 +648,82 @@ const pastedOf = (clipboard: DataTransfer): BoardPaste | undefined => {
 
 const isBoardTarget = (target: EventTarget, board: EventTarget) =>
 	target === board || (target as HTMLElement).dataset.slot === "board-object"
+type BoardConnectorLineProps = {
+	route: BoardRoute
+	isAccent: boolean
+	slot: "board-connector" | "board-connector-draft"
+}
+
+const BoardConnectorLine = ({
+	route,
+	isAccent,
+	slot,
+}: BoardConnectorLineProps) => {
+	const tip = route.points.at(-1)
+	return (
+		<g
+			className={isAccent ? "stroke-user-bubble" : "stroke-board-shape-border"}
+			data-slot={slot}
+			fill="none"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+			strokeWidth={CONNECTOR_STROKE}
+		>
+			<path d={routePathData(route.points)} data-slot="board-connector-path" />
+			{tip ? (
+				<path
+					d={arrowheadPathData(tip, route.arrow)}
+					data-slot="board-connector-arrowhead"
+				/>
+			) : null}
+		</g>
+	)
+}
+
+type BoardAnchorFrameProps = {
+	id: string
+	rect: BoardRect
+	activeSide?: BoardSide
+	onPressAnchor: (
+		anchor: BoardAnchor,
+	) => (event: PointerEvent<HTMLElement>) => void
+}
+
+const BoardAnchorFrame = ({
+	id,
+	rect,
+	activeSide,
+	onPressAnchor,
+}: BoardAnchorFrameProps) => (
+	<div
+		aria-hidden="true"
+		className="pointer-events-none absolute"
+		data-slot="board-anchor-frame"
+		style={placeOf(rect)}
+	>
+		<div
+			className="absolute -inset-1 rounded-[14px] border-2 border-user-bubble/50"
+			data-slot="board-hover-outline"
+		/>
+		{BOARD_SIDES.map((side) => (
+			<div
+				className={cn(
+					"pointer-events-auto absolute size-2.5 -translate-x-1/2 -translate-y-1/2 cursor-crosshair rounded-full border-2 border-user-bubble before:absolute before:-inset-[9px] before:content-['']",
+					side === activeSide
+						? "bg-user-bubble ring-3 ring-user-bubble/25"
+						: "bg-board-surface",
+					ANCHOR_PLACE[side],
+				)}
+				data-active={side === activeSide}
+				data-anchor-object={id}
+				data-side={side}
+				data-slot="board-anchor"
+				key={side}
+				onPointerDown={onPressAnchor({ id, side })}
+			/>
+		))}
+	</div>
+)
 
 const BoardCanvas = ({
 	view,
@@ -590,6 +740,7 @@ const BoardCanvas = ({
 	onLibraryItemDrop,
 	onPaste,
 	onDropFiles,
+	isConnecting = false,
 	className,
 }: BoardCanvasProps) => {
 	const { t } = useTranslation("common")
@@ -602,16 +753,60 @@ const BoardCanvas = ({
 	const [gesture, setGesture] = useState<BoardGesture | null>(null)
 	const [announcement, setAnnouncement] = useState("")
 	const [fileDrag, setFileDrag] = useState<BoardFileDrag | null>(null)
+	const [routing, setRouting] = useState<BoardRouting>("straight")
+	const [hover, setHover] = useState(NO_HOVER)
+	const [draft, setDraft] = useState<BoardDraft | null>(null)
+	const stopDrafting = useRef<(() => void) | null>(null)
+
+	useEffect(() => () => stopDrafting.current?.(), [])
 
 	const mounted = cullBoardObjects(view.objects, viewport, size)
 	const mountedItems = mounted.flatMap(({ object }) =>
 		isItem(object) ? [object] : [],
 	)
-	const selected = view.objects
-		.filter(isItem)
-		.find((item) => item.id === selectedId)
+	const itemsById = new Map(
+		view.objects.filter(isItem).map((item) => [item.id, item]),
+	)
+	const selected = selectedId ? itemsById.get(selectedId) : undefined
+	const selectedConnector = view.objects.find(
+		(object): object is BoardConnector =>
+			object.kind === "connector" && object.id === selectedId,
+	)
 	const liveBounds = (item: BoardItem) =>
 		gesture?.id === item.id ? gesture.rect : itemBounds(item)
+
+	const routeOf = (connector: BoardConnector) => {
+		const from = itemsById.get(connector.from)
+		const to = itemsById.get(connector.to)
+		if (!from || !to) return null
+		return routeConnector(
+			{ rect: liveBounds(from), side: connector.fromSide },
+			{ rect: liveBounds(to), side: connector.toSide },
+			connector.routing,
+		)
+	}
+
+	const shownConnectors = mounted.flatMap(
+		({ object, bounds }): ShownConnector[] => {
+			if (object.kind !== "connector") return []
+			const route = routeOf(object)
+			return route
+				? [{ connector: object, bounds, route: onScreen(route, viewport) }]
+				: []
+		},
+	)
+
+	const draftRouteOf = ({ from, pointer, target }: BoardDraft) => {
+		const source = itemsById.get(from.id)
+		if (!source) return null
+		const sourceEnd = { rect: liveBounds(source), side: from.side }
+		const targetItem = target ? itemsById.get(target.id) : undefined
+		const targetEnd =
+			target && targetItem
+				? { rect: liveBounds(targetItem), side: target.side }
+				: looseEnd(pointer, anchorOf(sourceEnd))
+		return onScreen(routeConnector(sourceEnd, targetEnd, routing), viewport)
+	}
 
 	const nameOf = (item: BoardItem) => {
 		const kind = t(`board.object.kind.${item.kind}`)
@@ -708,6 +903,81 @@ const BoardCanvas = ({
 				(rect) => emitResize(selected.id, rect),
 			)
 		}
+
+	const pressConnector =
+		(connector: BoardConnector) => (event: PointerEvent<SVGPathElement>) => {
+			if (event.button !== 0) return
+			setSelectedId(connector.id)
+			canvas.current?.focus()
+		}
+
+	const pressAnchor =
+		(from: BoardAnchor) => (event: PointerEvent<HTMLElement>) => {
+			const element = canvas.current
+			if (event.button !== 0 || !element) return
+			event.preventDefault()
+			const boardAt = (at: PointerPosition) =>
+				toBoardPoint(pointerIn(element, at), viewport)
+			const track = (moved: PointerPosition) => {
+				const under = hoverOf(
+					document.elementFromPoint(moved.clientX, moved.clientY),
+				)
+				const target = under.anchor?.id === from.id ? null : under.anchor
+				setHover(under.id === from.id ? NO_HOVER : under)
+				setDraft({ from, pointer: boardAt(moved), target })
+				return target
+			}
+			const stop = () => {
+				window.removeEventListener("pointermove", track)
+				window.removeEventListener("pointerup", finish)
+				window.removeEventListener("pointercancel", finish)
+				window.removeEventListener("keydown", cancelOnEscape)
+				stopDrafting.current = null
+			}
+			const cancelOnEscape = (key: globalThis.KeyboardEvent) => {
+				if (key.key !== "Escape") return
+				key.preventDefault()
+				stop()
+				setDraft(null)
+			}
+			const finish = (end: globalThis.PointerEvent) => {
+				stop()
+				const target = end.type === "pointerup" ? track(end) : null
+				setDraft(null)
+				if (target)
+					onIntent({
+						type: "connect",
+						id: crypto.randomUUID(),
+						from: from.id,
+						fromSide: from.side,
+						to: target.id,
+						toSide: target.side,
+						routing,
+					})
+			}
+			setDraft({ from, pointer: boardAt(event), target: null })
+			window.addEventListener("pointermove", track)
+			window.addEventListener("pointerup", finish)
+			window.addEventListener("pointercancel", finish)
+			window.addEventListener("keydown", cancelOnEscape)
+			stopDrafting.current = stop
+		}
+
+	const hoverOver = (event: PointerEvent<HTMLDivElement>) => {
+		if (isConnecting && !draft) setHover(hoverOf(event.target as Element))
+	}
+
+	const pickRouting = (next: BoardRouting) => {
+		if (!selectedConnector) {
+			setRouting(next)
+			return
+		}
+		onIntent({
+			type: "style",
+			id: selectedConnector.id,
+			style: { routing: next },
+		})
+	}
 
 	const pressCanvas = (event: PointerEvent<HTMLDivElement>) => {
 		if (event.target !== event.currentTarget || editing) return
@@ -829,9 +1099,35 @@ const BoardCanvas = ({
 		onLibraryItemDrop(id, boardPointAt(pointerIn(board, pointer)))
 	}
 
+	const actOnConnector = (
+		event: KeyboardEvent<HTMLDivElement>,
+		connector: BoardConnector,
+	) => {
+		if (event.key === "Delete" || event.key === "Backspace") {
+			onIntent({ type: "delete", id: connector.id })
+			clearSelection()
+			return true
+		}
+		if (event.key === "Escape") {
+			clearSelection()
+			return true
+		}
+		return false
+	}
+
 	const pressKey = (event: KeyboardEvent<HTMLDivElement>) => {
-		if (!isBoardTarget(event.target, event.currentTarget)) return
+		const target = event.target as HTMLElement
+		const isOnBoard =
+			target === event.currentTarget || target.dataset.slot === "board-object"
+		const isInFlyout = Boolean(
+			target.closest('[data-slot="board-connector-flyout"]'),
+		)
 		if (event.metaKey || event.ctrlKey) return
+		if (selectedConnector && (isOnBoard || isInFlyout)) {
+			if (actOnConnector(event, selectedConnector)) event.preventDefault()
+			return
+		}
+		if (!isOnBoard) return
 		if (event.key === "Tab") {
 			tabThrough(event)
 			return
@@ -853,6 +1149,9 @@ const BoardCanvas = ({
 	const editedItem = editing
 		? mountedItems.find((item) => item.id === editing.id)
 		: undefined
+	const hoveredItem =
+		isConnecting && hover.id ? itemsById.get(hover.id) : undefined
+	const draftRoute = draft ? draftRouteOf(draft) : null
 
 	return (
 		<div
@@ -869,6 +1168,8 @@ const BoardCanvas = ({
 			onKeyDown={pressKey}
 			onPaste={paste}
 			onPointerDown={pressCanvas}
+			onPointerLeave={() => setHover(NO_HOVER)}
+			onPointerOver={hoverOver}
 			ref={attach}
 			role="application"
 			// biome-ignore lint/a11y/noNoninteractiveTabindex: the board pans with the arrow keys and hands Tab to its objects, so it takes keyboard focus
@@ -878,6 +1179,26 @@ const BoardCanvas = ({
 				offset={viewport.offset}
 				pitch={gridScreenPitch(viewport.zoom)}
 			/>
+			{shownConnectors.length > 0 ? (
+				<svg
+					aria-hidden="true"
+					className="pointer-events-none absolute inset-0 size-full overflow-visible"
+					data-slot="board-connector-hits"
+				>
+					{shownConnectors.map(({ connector, route }) => (
+						<path
+							className="pointer-events-auto cursor-pointer"
+							d={routePathData(route.points)}
+							data-connector-id={connector.id}
+							fill="none"
+							key={connector.id}
+							onPointerDown={pressConnector(connector)}
+							stroke="transparent"
+							strokeWidth={CONNECTOR_HIT_STROKE}
+						/>
+					))}
+				</svg>
+			) : null}
 			<div
 				aria-label={t("board.canvas.objects")}
 				className="absolute top-0 left-0 origin-top-left"
@@ -886,54 +1207,53 @@ const BoardCanvas = ({
 					transform: `translate(${viewport.offset.x}px, ${viewport.offset.y}px) scale(${viewport.zoom})`,
 				}}
 			>
-				{mounted.map(({ object, bounds }) =>
-					isItem(object) ? (
-						<div
-							aria-label={nameOf(object)}
-							aria-selected={object.id === selectedId}
-							className={cn(
-								"absolute outline-none",
-								object.id === editing?.id && "[&_[data-board-text]]:invisible",
-							)}
-							data-object-id={object.id}
-							data-slot="board-object"
-							key={object.id}
-							onDoubleClick={() => startEditing(object)}
-							onFocus={() => setSelectedId(object.id)}
-							onPointerDown={pressObject(object)}
-							role="option"
-							style={{
-								...placeOf(liveBounds(object)),
-								zIndex: object.zOrder,
-							}}
-							tabIndex={object.id === selectedId ? 0 : -1}
+				{mountedItems.map((object) => (
+					<div
+						aria-label={nameOf(object)}
+						aria-selected={object.id === selectedId}
+						className={cn(
+							"absolute outline-none",
+							object.id === editing?.id && "[&_[data-board-text]]:invisible",
+						)}
+						data-object-id={object.id}
+						data-slot="board-object"
+						key={object.id}
+						onDoubleClick={() => startEditing(object)}
+						onFocus={() => setSelectedId(object.id)}
+						onPointerDown={pressObject(object)}
+						role="option"
+						style={{
+							...placeOf(liveBounds(object)),
+							zIndex: object.zOrder,
+						}}
+						tabIndex={object.id === selectedId ? 0 : -1}
+					>
+						<OutlinedObject
+							outline={outlines.find(({ objectId }) => objectId === object.id)}
 						>
-							<OutlinedObject
-								outline={outlines.find(
-									({ objectId }) => objectId === object.id,
-								)}
-							>
-								{renderObject(object)}
+							{renderObject(object)}
+						</OutlinedObject>
+					</div>
+				))}
+				{shownConnectors.map(({ connector, bounds }) => {
+					const outline = outlines.find(
+						({ objectId }) => objectId === connector.id,
+					)
+					return outline ? (
+						<div
+							aria-hidden="true"
+							className="pointer-events-none absolute"
+							data-object-id={connector.id}
+							data-slot="board-connector-outline"
+							key={connector.id}
+							style={{ ...placeOf(bounds), zIndex: connector.zOrder }}
+						>
+							<OutlinedObject outline={outline}>
+								<div className="size-full" />
 							</OutlinedObject>
 						</div>
-					) : (
-						<div
-							className="absolute"
-							data-object-id={object.id}
-							data-slot="board-object"
-							key={object.id}
-							style={{ ...placeOf(bounds), zIndex: object.zOrder }}
-						>
-							<OutlinedObject
-								outline={outlines.find(
-									({ objectId }) => objectId === object.id,
-								)}
-							>
-								{renderObject(object)}
-							</OutlinedObject>
-						</div>
-					),
-				)}
+					) : null
+				})}
 				{editing && editedItem ? (
 					<textarea
 						aria-label={t("board.object.editText")}
@@ -958,6 +1278,49 @@ const BoardCanvas = ({
 					/>
 				) : null}
 			</div>
+			{shownConnectors.length > 0 || draftRoute ? (
+				<svg
+					aria-hidden="true"
+					className="pointer-events-none absolute inset-0 size-full overflow-visible"
+					data-slot="board-connectors"
+				>
+					{shownConnectors.map(({ connector, route }) => (
+						<BoardConnectorLine
+							isAccent={connector.id === selectedId}
+							key={connector.id}
+							route={route}
+							slot="board-connector"
+						/>
+					))}
+					{draftRoute ? (
+						<>
+							<BoardConnectorLine
+								isAccent
+								route={draftRoute}
+								slot="board-connector-draft"
+							/>
+							<circle
+								className="fill-board-surface stroke-user-bubble"
+								cx={draftRoute.points[0].x}
+								cy={draftRoute.points[0].y}
+								data-slot="board-connector-source"
+								r={SOURCE_DOT_RADIUS}
+								strokeWidth={CONNECTOR_STROKE}
+							/>
+						</>
+					) : null}
+				</svg>
+			) : null}
+			{hoveredItem && hoveredItem.id !== draft?.from.id ? (
+				<BoardAnchorFrame
+					activeSide={
+						hover.anchor?.id === hoveredItem.id ? hover.anchor.side : undefined
+					}
+					id={hoveredItem.id}
+					onPressAnchor={pressAnchor}
+					rect={toScreenRect(liveBounds(hoveredItem), viewport)}
+				/>
+			) : null}
 			{selected && selectedOnScreen ? (
 				<BoardSelectionFrame
 					hasHandles={!editing}
@@ -979,6 +1342,17 @@ const BoardCanvas = ({
 							onIntent({ type: "style", id: selected.id, style })
 						}
 						shapeStyle={selected.style ?? DEFAULT_SHAPE_STYLE}
+					/>
+				</div>
+			) : null}
+			{isConnecting || selectedConnector ? (
+				<div
+					className="absolute bottom-4 left-1/2 -translate-x-1/2"
+					data-slot="board-connector-flyout-anchor"
+				>
+					<BoardConnectorFlyout
+						onRoutingChange={pickRouting}
+						routing={selectedConnector?.routing ?? routing}
 					/>
 				</div>
 			) : null}

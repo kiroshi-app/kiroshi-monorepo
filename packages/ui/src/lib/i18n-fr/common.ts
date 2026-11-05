@@ -729,6 +729,13 @@ const common = {
 			moved: "Déplacé en {{x}}, {{y}}",
 			resized: "Redimensionné à {{width}} sur {{height}}",
 		},
+		connectorFlyout: {
+			label: "Type de lien",
+			routing: {
+				straight: "Droit",
+				elbow: "Coudé",
+			},
+		},
 		selectionBar: {
 			label: "Style de la forme",
 			shapeType: "Type de forme",

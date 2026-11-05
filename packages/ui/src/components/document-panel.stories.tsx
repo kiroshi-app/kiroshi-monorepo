@@ -1085,7 +1085,13 @@ const PanelBoard = ({ drawers }: PanelBoardProps) => {
 	const [viewport, setViewport] = useState(PANEL_VIEWPORT)
 	return (
 		<BoardCanvas
+			libraryItems={[]}
+			onDropFiles={fn()}
 			onIntent={fn()}
+			onLibraryItemDrop={fn()}
+			onLibraryItemPick={fn()}
+			onPaste={fn()}
+			onToolChange={fn()}
 			onViewportChange={setViewport}
 			outlines={drawers.map((owner) => ({
 				objectId: DRAWN_OBJECT[owner.id],
@@ -1097,6 +1103,7 @@ const PanelBoard = ({ drawers }: PanelBoardProps) => {
 				position: POINTER_AT[owner.id],
 			}))}
 			renderObject={(object) => panelBoardObject(object.id)}
+			tool="select"
 			view={PANEL_BOARD}
 			viewport={viewport}
 		/>

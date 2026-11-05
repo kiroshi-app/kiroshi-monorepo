@@ -34,7 +34,10 @@ const connector = (id: string, from: string, to: string): BoardObject => ({
 	id,
 	kind: "connector",
 	from,
+	fromSide: "right",
 	to,
+	toSide: "left",
+	routing: "straight",
 	zOrder: 0,
 	text: "",
 })
