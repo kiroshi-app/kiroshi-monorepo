@@ -1,21 +1,28 @@
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::time::Duration;
 
+use tokio::time::Instant;
 use yrs::updates::decoder::Decode;
 use yrs::{Doc, ReadTxn, StateVector, Transact, Update};
 
 use super::contract::{LibraryDocumentFormat, LibraryError};
 use super::{
 	accepted_type, discarded, document_text, is_plain_name, is_the_item_itself,
-	linked_under_free_name, resolve, space_dir, stored_thumbnail, thumbnail_name, thumbnails_dir,
-	undecodable, unwritable, AcceptedType, ResolvedItem,
+	linked_under_free_name, read_bytes, resolve, space_dir, stored_thumbnail, thumbnail_name,
+	thumbnails_dir, undecodable, unwritable, AcceptedType, ResolvedItem,
 };
+use crate::board::Board;
 use crate::private_files;
 
+mod board;
 mod markdown;
+#[cfg(test)]
+mod tests;
 
 pub(crate) use markdown::located;
 
@@ -23,15 +30,39 @@ const STATE_DIR_NAME: &str = ".documents";
 
 const STATE_EXTENSION: &str = "yjs";
 
+const BOARD_WRITE_QUIET: Duration = Duration::from_millis(500);
+
+const BOARD_WRITE_LONGEST_WAIT: Duration = Duration::from_secs(2);
+
 type Key = (String, String);
 
-#[derive(Default)]
-pub(crate) struct Documents(Mutex<Held>);
+type BoardFileReplaced = Arc<dyn Fn(&str, &str) + Send + Sync>;
+
+pub(crate) struct Documents {
+	held: Arc<Mutex<Held>>,
+	on_board_file_replaced: BoardFileReplaced,
+}
 
 #[derive(Default)]
 struct Held {
 	docs: HashMap<Key, Doc>,
 	landed_names: HashMap<Key, String>,
+	written_boards: HashMap<Key, Board>,
+	pending_boards: HashMap<Key, PendingWrite>,
+	last_generation: u64,
+}
+
+struct PendingWrite {
+	root: PathBuf,
+	first: Instant,
+	last: Instant,
+	armed: Option<u64>,
+}
+
+impl PendingWrite {
+	fn due(&self) -> Instant {
+		(self.last + BOARD_WRITE_QUIET).min(self.first + BOARD_WRITE_LONGEST_WAIT)
+	}
 }
 
 pub(crate) struct Opened {
@@ -80,6 +111,7 @@ pub(crate) enum Location {
 #[derive(Clone, Copy)]
 enum DocumentKind {
 	Markdown,
+	Board,
 }
 
 impl DocumentKind {
@@ -92,18 +124,21 @@ impl DocumentKind {
 	fn reconciled(self, doc: &Doc, file_text: &str) -> bool {
 		match self {
 			Self::Markdown => markdown::reconciled(doc, file_text),
+			Self::Board => false,
 		}
 	}
 
-	fn exported(self, doc: &Doc) -> Vec<u8> {
+	fn exported(self, doc: &Doc, name: &str) -> Result<Vec<u8>, LibraryError> {
 		match self {
-			Self::Markdown => markdown::exported(doc),
+			Self::Markdown => Ok(markdown::exported(doc)),
+			Self::Board => board::exported(doc, name),
 		}
 	}
 
 	fn bounded(self, doc: &Doc, name: &str) -> Result<(), LibraryError> {
 		match self {
 			Self::Markdown => markdown::bounded(doc, name),
+			Self::Board => board::bounded(doc, name),
 		}
 	}
 }
@@ -120,7 +155,24 @@ struct Loaded {
 	was_stored: bool,
 }
 
+struct LoadedBoard {
+	doc: Doc,
+	written: Board,
+	was_stored: bool,
+}
+
+#[cfg(test)]
+impl Default for Documents {
+	fn default() -> Self {
+		Self::new(|_, _| {})
+	}
+}
+
 impl Documents {
+	pub(crate) fn new(on_board_file_replaced: impl Fn(&str, &str) + Send + Sync + 'static) -> Self {
+		Self { held: Arc::default(), on_board_file_replaced: Arc::new(on_board_file_replaced) }
+	}
+
 	pub(crate) fn open(
 		&self,
 		root: &Path,
@@ -129,7 +181,12 @@ impl Documents {
 	) -> Result<Opened, LibraryError> {
 		let mut held = self.held();
 		let file = document_file(root, space_id, name)?;
-		held.synced(root, space_id, name, file.kind, &file.text)
+		match file.kind {
+			DocumentKind::Board => {
+				held.board_synced(root, space_id, &file, &self.on_board_file_replaced)
+			}
+			DocumentKind::Markdown => held.synced(root, space_id, name, file.kind, &file.text),
+		}
 	}
 
 	pub(crate) fn overwrite_document(
@@ -172,11 +229,64 @@ impl Documents {
 		space_id: &str,
 		name: &str,
 		update: &[u8],
-	) -> Result<Applied, LibraryError> {
+		announce: impl FnOnce(&Applied),
+	) -> Result<(), LibraryError> {
 		decoded(name, update)?;
+		if matches!(accepted_type(name), Some(AcceptedType::Board)) {
+			return self.applied_to_board(root, space_id, name, update, announce);
+		}
 		let (applied, ()) =
 			self.merged(root, space_id, name, |_, _, _| Ok((update.to_vec(), ())))?;
-		Ok(applied)
+		announce(&applied);
+		Ok(())
+	}
+
+	fn applied_to_board(
+		&self,
+		root: &Path,
+		space_id: &str,
+		name: &str,
+		update: &[u8],
+		announce: impl FnOnce(&Applied),
+	) -> Result<(), LibraryError> {
+		let mut held = self.held();
+		let file = held.located(root, space_id, name)?;
+		let name = file.name.as_str();
+		let key = key(space_id, name);
+		let mut loaded = None;
+		let doc = match held.docs.get(&key) {
+			Some(held) => held,
+			None => &loaded.insert(loaded_board(root, space_id, name, &file.text)?).doc,
+		};
+		checked_on_a_copy(doc, &file, update)?;
+		let before = doc.transact().state_vector();
+		merged_into(doc, name, decoded(name, update)?)?;
+		let change = doc.transact().encode_state_as_update_v1(&before);
+		if let Some(loaded) = loaded {
+			held.docs.insert(key.clone(), loaded.doc);
+			held.written_boards.insert(key.clone(), loaded.written);
+		}
+		announce(&Applied { name: name.to_owned(), change });
+		if let Some(generation) = held.marked_pending(root, key, Instant::now()) {
+			tokio::spawn(written_when_due(
+				Arc::clone(&self.held),
+				generation,
+				Arc::clone(&self.on_board_file_replaced),
+			));
+		}
+		Ok(())
+	}
+
+	pub(crate) fn write_pending_boards(&self) {
+		let mut held = self.held();
+		let pending: Vec<(Key, PathBuf)> = held
+			.pending_boards
+			.iter()
+			.map(|(key, pending)| (key.clone(), pending.root.clone()))
+			.collect();
+		for (key, root) in pending {
+			held.board_written_or_kept_pending(&root, &key, &self.on_board_file_replaced);
+		}
 	}
 
 	pub(crate) fn write(
@@ -188,6 +298,7 @@ impl Documents {
 	) -> Result<Written, LibraryError> {
 		let (applied, caret) = self.merged(root, space_id, name, |kind, doc, name| match kind {
 			DocumentKind::Markdown => markdown::inserted_by(doc, name, step),
+			DocumentKind::Board => Err(LibraryError::NotADocument { name: name.to_owned() }),
 		})?;
 		Ok(Written { name: applied.name, change: applied.change, caret })
 	}
@@ -201,6 +312,7 @@ impl Documents {
 	) -> Result<Written, LibraryError> {
 		let (applied, caret) = self.merged(root, space_id, name, |kind, doc, name| match kind {
 			DocumentKind::Markdown => markdown::removed_by(doc, name, step),
+			DocumentKind::Board => Err(LibraryError::NotADocument { name: name.to_owned() }),
 		})?;
 		Ok(Written { name: applied.name, change: applied.change, caret })
 	}
@@ -228,7 +340,7 @@ impl Documents {
 		merged_into(doc, name, decoded(name, &update)?)?;
 		let change = doc.transact().encode_state_as_update_v1(&before);
 		store_state(root, space_id, name, doc)?;
-		private_files::replace_atomically(&file.path, &file.kind.exported(doc))
+		private_files::replace_atomically(&file.path, &file.kind.exported(doc, name)?)
 			.map_err(unwritable)?;
 		if let Some(loaded) = loaded {
 			held.docs.insert(key, loaded.doc);
@@ -299,6 +411,8 @@ impl Documents {
 		let mut held = self.held();
 		held.docs.retain(|(held_space_id, _), _| held_space_id != space_id);
 		held.landed_names.retain(|(held_space_id, _), _| held_space_id != space_id);
+		held.written_boards.retain(|(held_space_id, _), _| held_space_id != space_id);
+		held.pending_boards.retain(|(held_space_id, _), _| held_space_id != space_id);
 		match fs::remove_dir_all(state_dir(root, space_id)) {
 			Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
 			removed => removed,
@@ -306,7 +420,34 @@ impl Documents {
 	}
 
 	fn held(&self) -> MutexGuard<'_, Held> {
-		self.0.lock().unwrap_or_else(PoisonError::into_inner)
+		locked(&self.held)
+	}
+}
+
+fn locked(held: &Mutex<Held>) -> MutexGuard<'_, Held> {
+	held.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+async fn written_when_due(
+	shared: Arc<Mutex<Held>>,
+	generation: u64,
+	on_board_file_replaced: BoardFileReplaced,
+) {
+	loop {
+		let Some(due) = locked(&shared).armed(generation).map(|(_, pending)| pending.due()) else {
+			return;
+		};
+		tokio::time::sleep_until(due).await;
+		let mut held = locked(&shared);
+		let Some((key, pending)) = held.armed(generation) else {
+			return;
+		};
+		if pending.due() > Instant::now() {
+			continue;
+		}
+		let (key, root) = (key.clone(), pending.root.clone());
+		held.board_written_or_kept_pending(&root, &key, &on_board_file_replaced);
+		return;
 	}
 }
 
@@ -358,8 +499,114 @@ impl Held {
 		}
 	}
 
+	fn board_synced(
+		&mut self,
+		root: &Path,
+		space_id: &str,
+		file: &DocumentFile,
+		on_board_file_replaced: &BoardFileReplaced,
+	) -> Result<Opened, LibraryError> {
+		let key = key(space_id, &file.name);
+		let doc = match self.docs.entry(key.clone()) {
+			Entry::Occupied(held) => held.into_mut(),
+			Entry::Vacant(vacant) => {
+				let loaded = loaded_board(root, space_id, &file.name, &file.text)?;
+				if !loaded.was_stored {
+					store_state(root, space_id, &file.name, &loaded.doc)?;
+				}
+				self.written_boards.insert(key.clone(), loaded.written);
+				vacant.insert(loaded.doc)
+			}
+		};
+		let state = full_state(doc);
+		let is_diverged = self
+			.written_boards
+			.get(&key)
+			.is_some_and(|written| board::is_diverged(file.text.as_bytes(), written));
+		if is_diverged {
+			self.board_written(root, &key, on_board_file_replaced)?;
+		}
+		Ok(Opened { state, host_edit: None })
+	}
+
+	fn marked_pending(&mut self, root: &Path, key: Key, now: Instant) -> Option<u64> {
+		let pending = self.pending_boards.entry(key).or_insert_with(|| PendingWrite {
+			root: root.to_owned(),
+			first: now,
+			last: now,
+			armed: None,
+		});
+		pending.last = now;
+		if pending.armed.is_some() {
+			return None;
+		}
+		pending.first = now;
+		self.last_generation += 1;
+		pending.armed = Some(self.last_generation);
+		pending.armed
+	}
+
+	fn armed(&self, generation: u64) -> Option<(&Key, &PendingWrite)> {
+		self.pending_boards.iter().find(|(_, pending)| pending.armed == Some(generation))
+	}
+
+	fn board_written_or_kept_pending(
+		&mut self,
+		root: &Path,
+		key: &Key,
+		on_board_file_replaced: &BoardFileReplaced,
+	) {
+		let Err(error) = self.board_written(root, key, on_board_file_replaced) else {
+			return;
+		};
+		let (space_id, name) = key;
+		log::warn!(
+			"the board {name} of space {space_id} was not written and stays pending: {error:?}"
+		);
+		if let Some(pending) = self.pending_boards.get_mut(key) {
+			pending.armed = None;
+		}
+	}
+
+	fn board_written(
+		&mut self,
+		root: &Path,
+		key: &Key,
+		on_board_file_replaced: &BoardFileReplaced,
+	) -> Result<(), LibraryError> {
+		let (space_id, name) = key;
+		let (Some(doc), Some(written)) = (self.docs.get(key), self.written_boards.get(key)) else {
+			self.pending_boards.remove(key);
+			return Ok(());
+		};
+		let item = match resolve(root, space_id, name) {
+			Err(LibraryError::Missing { .. }) => {
+				self.pending_boards.remove(key);
+				return Ok(());
+			}
+			resolved => resolved?,
+		};
+		let is_replaced = board::is_diverged(&read_bytes(&item, name)?, written);
+		let current = board::read(doc, name)?;
+		let canvas = board::canvas_of(&current, name)?;
+		store_state(root, space_id, name, doc)?;
+		private_files::replace_atomically(&item.path, canvas.as_bytes()).map_err(unwritable)?;
+		if is_replaced {
+			log::warn!(
+				"the board {name} of space {space_id} changed on disk and was rewritten from its live state"
+			);
+			on_board_file_replaced(space_id, name);
+		}
+		self.written_boards.insert(key.clone(), current);
+		self.pending_boards.remove(key);
+		Ok(())
+	}
+
 	fn forgot(&mut self, space_id: &str, name: &str) {
-		self.docs.remove(&key(space_id, name));
+		let forgotten = key(space_id, name);
+		self.docs.remove(&forgotten);
+		self.written_boards.remove(&forgotten);
+		self.pending_boards.remove(&forgotten);
 		self.landed_names.retain(|(held_space_id, former), landed| {
 			held_space_id != space_id || (former != name && landed != name)
 		});
@@ -368,10 +615,9 @@ impl Held {
 	fn moved(&mut self, space_id: &str, name: &str, landed: &str) {
 		let former_key = key(space_id, name);
 		let landed_key = key(space_id, landed);
-		self.docs.remove(&landed_key);
-		if let Some(doc) = self.docs.remove(&former_key) {
-			self.docs.insert(landed_key.clone(), doc);
-		}
+		rekeyed(&mut self.docs, &former_key, &landed_key);
+		rekeyed(&mut self.written_boards, &former_key, &landed_key);
+		rekeyed(&mut self.pending_boards, &former_key, &landed_key);
 		self.landed_names.remove(&landed_key);
 		for ((held_space_id, _), target) in &mut self.landed_names {
 			if held_space_id == space_id && target == name {
@@ -443,13 +689,23 @@ fn key(space_id: &str, name: &str) -> Key {
 	(space_id.to_owned(), name.to_owned())
 }
 
+fn rekeyed<V>(held: &mut HashMap<Key, V>, former_key: &Key, landed_key: &Key) {
+	held.remove(landed_key);
+	if let Some(value) = held.remove(former_key) {
+		held.insert(landed_key.clone(), value);
+	}
+}
+
 fn document_file(root: &Path, space_id: &str, name: &str) -> Result<DocumentFile, LibraryError> {
 	let item = resolve(root, space_id, name)?;
-	let AcceptedType::Document(format) = item.accepted else {
-		return Err(LibraryError::NotADocument { name: name.to_owned() });
+	let kind = match item.accepted {
+		AcceptedType::Document(format) => DocumentKind::of(format),
+		AcceptedType::Board => DocumentKind::Board,
+		AcceptedType::Image { .. } => {
+			return Err(LibraryError::NotADocument { name: name.to_owned() });
+		}
 	};
 	let text = document_text(&item, name)?;
-	let kind = DocumentKind::of(format);
 	Ok(DocumentFile { name: name.to_owned(), path: item.path, text, kind })
 }
 
@@ -468,6 +724,21 @@ fn loaded_from_disk(root: &Path, space_id: &str, name: &str) -> Result<Loaded, L
 	};
 	merged_into(&doc, name, decoded(name, &stored)?)?;
 	Ok(Loaded { doc, was_stored: true })
+}
+
+fn loaded_board(
+	root: &Path,
+	space_id: &str,
+	name: &str,
+	file_text: &str,
+) -> Result<LoadedBoard, LibraryError> {
+	let Loaded { doc, was_stored } = loaded_from_disk(root, space_id, name)?;
+	if was_stored {
+		let written = board::read(&doc, name)?;
+		return Ok(LoadedBoard { doc, written, was_stored });
+	}
+	let (doc, written) = board::imported(file_text, name)?;
+	Ok(LoadedBoard { doc, written, was_stored })
 }
 
 fn checked_on_a_copy(doc: &Doc, file: &DocumentFile, update: &[u8]) -> Result<(), LibraryError> {

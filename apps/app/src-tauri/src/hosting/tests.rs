@@ -3813,6 +3813,31 @@ fn a_member_renames_a_library_board_of_the_shared_space_only() {
 }
 
 #[test]
+fn a_member_opens_a_library_board_of_the_shared_space_only() {
+	run(async {
+		let mut guest = a_guest_with_a_board("library-open-board").await;
+
+		guest.refused("library_open_document", a_library_entry_of("plan.canvas")(ELSEWHERE)).await;
+		guest.forwarded("library_open_document", a_library_entry_of("plan.canvas")(PERSONAL)).await;
+
+		assert_eq!(guest.effects.reached(), ["library_open_document"]);
+	});
+}
+
+#[test]
+fn a_member_applies_an_update_to_a_library_board_of_the_shared_space_only() {
+	run(async {
+		let mut guest = a_guest_with_a_board("library-apply-board").await;
+		let updating = |space_id| json!({ "spaceId": space_id, "name": "plan.canvas", "update": AN_EMPTY_UPDATE });
+
+		guest.refused("library_apply_update", updating(ELSEWHERE)).await;
+		guest.forwarded("library_apply_update", updating(PERSONAL)).await;
+
+		assert_eq!(guest.effects.reached(), ["library_apply_update"]);
+	});
+}
+
+#[test]
 fn a_member_reads_a_library_board_summary_of_the_shared_space_only() {
 	run(async {
 		let mut guest = a_guest_with_a_board("library-board-summary").await;

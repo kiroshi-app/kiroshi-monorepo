@@ -156,6 +156,7 @@ pub fn run() {
 			#[cfg(target_os = "macos")]
 			RunEvent::Reopen { .. } => window_controls::raise_last_focused(app),
 			RunEvent::Exit => {
+				library::write_pending_boards(app);
 				if let Err(failure) = badge::wear(app, 0) {
 					eprintln!("the badge was not cleared before exit: {failure}");
 				}
