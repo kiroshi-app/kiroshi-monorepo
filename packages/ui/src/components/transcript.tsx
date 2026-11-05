@@ -83,11 +83,8 @@ const NO_SCROLL_FADE = "[animation-name:none] [mask-image:none]"
 
 const NO_SCROLLBAR_GUTTER = "scrollbar-auto scrollbar-gutter-auto"
 
-const indexOfKey = (rows: TranscriptItem[], key: string | null) =>
-	key === null ? -1 : rows.findIndex((row) => row.key === key)
-
 const keyAfter = (rows: TranscriptItem[], key: string | null) => {
-	const index = indexOfKey(rows, key)
+	const index = key === null ? -1 : rows.findIndex((row) => row.key === key)
 	return index < 0 ? undefined : rows[index + 1]?.key
 }
 
