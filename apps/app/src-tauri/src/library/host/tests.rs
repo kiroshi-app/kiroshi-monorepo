@@ -21,8 +21,8 @@ use crate::conversations::contract::TranscriptMessage;
 use crate::db::repositories::messages::MessagePageQuery;
 use crate::library::commands::library_stop_writers;
 use crate::library::contract::{
-	LibraryChanged, LibraryDocumentPresence, LibraryDocumentRenamed, LibraryWriter,
-	LibraryWriterKind,
+	LibraryChanged, LibraryDocumentPresence, LibraryDocumentRenamed, LibraryOverwritten,
+	LibraryWriter, LibraryWriterKind,
 };
 use crate::library::presence::{share_caret, Presences};
 use crate::library::{apply_update, open_document, read_thumbnail};
@@ -467,7 +467,10 @@ async fn a_create_writes_the_template_and_tells_the_library_it_changed() {
 		crate::library::templates::markdown_of("meeting-notes").expect("a template")
 	);
 	assert_eq!(refusal_kind(again), "alreadyExists");
-	assert_eq!(all_of(&changes), [LibraryChanged { space_id: SPACE.to_owned() }]);
+	assert_eq!(
+		all_of(&changes),
+		[LibraryChanged { space_id: SPACE.to_owned(), overwritten: None }]
+	);
 }
 
 #[tokio::test]
@@ -487,7 +490,10 @@ async fn an_import_copies_the_file_with_its_thumbnail_and_tells_the_library_it_c
 	assert_eq!(std::fs::read(root.join(SPACE).join("chart.png")).expect("copied"), png_of(8));
 	assert!(source.exists());
 	assert_eq!(thumbnails(&root), 1);
-	assert_eq!(all_of(&changes), [LibraryChanged { space_id: SPACE.to_owned() }]);
+	assert_eq!(
+		all_of(&changes),
+		[LibraryChanged { space_id: SPACE.to_owned(), overwritten: None }]
+	);
 }
 
 #[tokio::test]
@@ -528,7 +534,10 @@ async fn a_rename_moves_the_document_and_its_shared_state_as_the_person_rename_d
 	);
 	assert_eq!(refusal_kind(image), "notADocument");
 	assert!(root.join(SPACE).join("cover.png").exists());
-	assert_eq!(all_of(&changes), [LibraryChanged { space_id: SPACE.to_owned() }]);
+	assert_eq!(
+		all_of(&changes),
+		[LibraryChanged { space_id: SPACE.to_owned(), overwritten: None }]
+	);
 }
 
 #[tokio::test]
@@ -553,7 +562,7 @@ async fn a_delete_removes_the_item_its_thumbnail_and_its_shared_state() {
 	assert!(!state_file(&root, "notes.md").exists());
 	assert_eq!(thumbnails(&root), 0);
 	assert_eq!(refusal_kind(again), "missing");
-	let changed = LibraryChanged { space_id: SPACE.to_owned() };
+	let changed = LibraryChanged { space_id: SPACE.to_owned(), overwritten: None };
 	assert_eq!(all_of(&changes), [changed.clone(), changed]);
 	put(&root, SPACE, "notes.md", "Fresh.");
 	assert_eq!(
@@ -561,6 +570,264 @@ async fn a_delete_removes_the_item_its_thumbnail_and_its_shared_state() {
 		Ok("notes.md".to_owned())
 	);
 	assert_eq!(on_disk(&root, "notes.md"), "Fresh.");
+}
+
+fn an_open_editor(app: &App<MockRuntime>, root: &Path, name: &str) -> Doc {
+	let state = open_document(app.handle(), root, SPACE, name).expect("opens").update;
+	let editor = Doc::with_client_id(PERSON_CLIENT);
+	let update = BASE64_STANDARD.decode(state).expect("base64");
+	editor.transact_mut().apply_update(Update::decode_v1(&update).expect("yjs")).expect("applies");
+	editor
+}
+
+fn caught_up(editor: &Doc, updates: &Receiver<Value>) -> String {
+	for updated in all_of(updates) {
+		let update = BASE64_STANDARD.decode(updated["update"].as_str().expect("an update"));
+		let update = Update::decode_v1(&update.expect("base64")).expect("yjs");
+		editor.transact_mut().apply_update(update).expect("applies");
+	}
+	editor.get_or_insert_text("markdown").get_string(&editor.transact())
+}
+
+fn refusal_of(answer: Result<Value, DocumentRefusal>) -> Value {
+	serde_json::to_value(answer.expect_err("the call is refused")).expect("the refusal serializes")
+}
+
+#[tokio::test]
+async fn a_replace_swaps_the_passage_live_and_keeps_every_other_character() {
+	let (app, root) = a_host("replace").await;
+	put(&root, SPACE, "notes.md", "# Draft\n\nIntro.\n\n## Plan\n\nShip it.");
+	let editor = an_open_editor(&app, &root, "notes.md");
+	let updates = heard::<Value>(&app, events::LIBRARY_DOCUMENT_UPDATED.name());
+	let host = the_host(&app);
+
+	let retitled = host
+		.served(
+			Operation::Write,
+			json!({ "name": "notes.md", "replace": "# Draft", "text": "# Launch plan" }),
+		)
+		.await
+		.expect("the agent replaces");
+	let added = host
+		.served(
+			Operation::Write,
+			json!({ "name": "notes.md", "after": "Ship it.", "text": "\n\n## Risks\n\nNone." }),
+		)
+		.await
+		.expect("the agent adds a section");
+
+	let expected = "# Launch plan\n\nIntro.\n\n## Plan\n\nShip it.\n\n## Risks\n\nNone.";
+	assert_eq!(on_disk(&root, "notes.md"), expected);
+	assert_eq!(caught_up(&editor, &updates), expected);
+	assert_eq!(retitled["name"], "notes.md");
+	assert_eq!(added["name"], "notes.md");
+	assert_eq!(
+		names_in(&host.served(Operation::List, json!({})).await.expect("lists")),
+		["notes.md"]
+	);
+}
+
+#[tokio::test]
+async fn an_empty_replacement_removes_the_passage_and_nothing_else() {
+	let (app, root) = a_host("remove").await;
+	put(&root, SPACE, "notes.md", "Keep. Drop this. Keep too.");
+	let editor = an_open_editor(&app, &root, "notes.md");
+	let updates = heard::<Value>(&app, events::LIBRARY_DOCUMENT_UPDATED.name());
+
+	the_host(&app)
+		.served(
+			Operation::Write,
+			json!({ "name": "notes.md", "replace": "Drop this. ", "text": "" }),
+		)
+		.await
+		.expect("the agent removes");
+
+	assert_eq!(on_disk(&root, "notes.md"), "Keep. Keep too.");
+	assert_eq!(caught_up(&editor, &updates), "Keep. Keep too.");
+}
+
+#[tokio::test]
+async fn a_whole_replace_leaves_one_document_under_its_name_holding_the_new_text() {
+	let (app, root) = a_host("whole").await;
+	put(&root, SPACE, "notes.md", "# Old\n\nOld body.");
+	let editor = an_open_editor(&app, &root, "notes.md");
+	let updates = heard::<Value>(&app, events::LIBRARY_DOCUMENT_UPDATED.name());
+	let host = the_host(&app);
+
+	let written = host
+		.served(Operation::Write, json!({ "name": "notes.md", "whole": true, "text": "# New" }))
+		.await
+		.expect("the agent rewrites");
+
+	assert_eq!(written["name"], "notes.md");
+	assert_eq!(on_disk(&root, "notes.md"), "# New");
+	assert_eq!(caught_up(&editor, &updates), "# New");
+	assert_eq!(
+		names_in(&host.served(Operation::List, json!({})).await.expect("lists")),
+		["notes.md"]
+	);
+}
+
+#[tokio::test]
+async fn a_replace_of_a_passage_found_zero_or_many_times_names_the_count_and_changes_nothing() {
+	let (app, root) = a_host("replace-count").await;
+	put(&root, SPACE, "notes.md", "two, two, two");
+	open_document(app.handle(), &root, SPACE, "notes.md").expect("opens");
+	let published = heard_in_order(&app);
+	let updates = heard::<Value>(&app, events::LIBRARY_DOCUMENT_UPDATED.name());
+	let host = the_host(&app);
+	let replace = |passage: &str| {
+		host.served(
+			Operation::Write,
+			json!({ "name": "notes.md", "replace": passage, "text": "!" }),
+		)
+	};
+
+	assert_eq!(refusal_of(replace("three").await), json!({ "kind": "passageNotFound" }));
+	assert_eq!(
+		refusal_of(replace("two").await),
+		json!({ "kind": "passageNotUnique", "occurrences": 3 })
+	);
+	assert_eq!(on_disk(&root, "notes.md"), "two, two, two");
+	assert_eq!(all_of(&published), []);
+	assert_eq!(all_of(&updates), Vec::<Value>::new());
+}
+
+#[tokio::test]
+async fn a_write_asking_two_placements_at_once_is_refused_and_writes_nothing() {
+	let (app, root) = a_host("placements").await;
+	put(&root, SPACE, "notes.md", "Base.");
+
+	let both = the_host(&app)
+		.served(
+			Operation::Write,
+			json!({ "name": "notes.md", "after": "Base.", "whole": true, "text": "!" }),
+		)
+		.await;
+
+	assert_eq!(refusal_kind(both), "unreadableRequest");
+	assert_eq!(on_disk(&root, "notes.md"), "Base.");
+}
+
+fn produced(root: &Path, name: &str, bytes: &[u8]) -> PathBuf {
+	let produced = root.join("produced");
+	std::fs::create_dir_all(&produced).expect("the folder lands");
+	let source = produced.join(name);
+	std::fs::write(&source, bytes).expect("the file lands");
+	source
+}
+
+fn thumbnail_bytes(root: &Path) -> Vec<Vec<u8>> {
+	std::fs::read_dir(root.join(SPACE).join(".thumbnails"))
+		.expect("the thumbnails folder")
+		.map(|entry| std::fs::read(entry.expect("an entry").path()).expect("a thumbnail"))
+		.collect()
+}
+
+#[tokio::test]
+async fn an_import_without_overwrite_still_lands_a_numbered_copy() {
+	let (app, root) = a_host("import-copy").await;
+	put_bytes(&root, "chart.png", &png_of(4));
+	let source = produced(&root, "chart.png", &png_of(8));
+
+	let imported =
+		the_host(&app).served(Operation::Import, json!({ "path": source })).await.expect("imports");
+
+	assert_eq!(imported["name"], "chart (2).png");
+	assert_eq!(std::fs::read(root.join(SPACE).join("chart.png")).expect("kept"), png_of(4));
+}
+
+#[tokio::test]
+async fn an_overwriting_import_of_a_document_changes_it_in_place_live() {
+	let (app, root) = a_host("overwrite-document").await;
+	put(&root, SPACE, "report.md", "# Report\n\nDraft.");
+	let editor = an_open_editor(&app, &root, "report.md");
+	let updates = heard::<Value>(&app, events::LIBRARY_DOCUMENT_UPDATED.name());
+	let changes = heard::<LibraryChanged>(&app, events::LIBRARY_CHANGED.name());
+	let source = produced(&root, "final.md", b"# Report\n\nFinal.");
+	let host = the_host(&app);
+
+	let overwritten = host
+		.served(Operation::Import, json!({ "path": source, "overwrite": "report.md" }))
+		.await
+		.expect("overwrites");
+
+	assert_eq!(overwritten["name"], "report.md");
+	assert_eq!(on_disk(&root, "report.md"), "# Report\n\nFinal.");
+	assert_eq!(caught_up(&editor, &updates), "# Report\n\nFinal.");
+	assert_eq!(
+		names_in(&host.served(Operation::List, json!({})).await.expect("lists")),
+		["report.md"]
+	);
+	let modified_at = overwritten["updatedAt"].as_i64().expect("an update time");
+	assert_eq!(
+		all_of(&changes),
+		[LibraryChanged {
+			space_id: SPACE.to_owned(),
+			overwritten: Some(LibraryOverwritten { name: "report.md".to_owned(), modified_at }),
+		}]
+	);
+}
+
+#[tokio::test]
+async fn an_overwriting_import_of_an_image_changes_it_in_place_with_a_new_thumbnail() {
+	let (app, root) = a_host("overwrite-image").await;
+	put_bytes(&root, "chart.png", &png_of(4));
+	modified_at(&root, "chart.png", 1_000);
+	let former = read_thumbnail(&root, SPACE, "chart.png").expect("the thumbnail lands").content;
+	let changes = heard::<LibraryChanged>(&app, events::LIBRARY_CHANGED.name());
+	let source = produced(&root, "chart-v2.png", &png_of(8));
+	let host = the_host(&app);
+
+	let overwritten = host
+		.served(Operation::Import, json!({ "path": source, "overwrite": "chart.png" }))
+		.await
+		.expect("overwrites");
+
+	assert_eq!(overwritten["name"], "chart.png");
+	assert_eq!(std::fs::read(root.join(SPACE).join("chart.png")).expect("overwritten"), png_of(8));
+	assert_eq!(
+		names_in(&host.served(Operation::List, json!({})).await.expect("lists")),
+		["chart.png"]
+	);
+	let current = read_thumbnail(&root, SPACE, "chart.png").expect("the thumbnail reads").content;
+	assert_ne!(current, former);
+	assert_eq!(thumbnail_bytes(&root), [BASE64_STANDARD.decode(current).expect("base64")]);
+	let modified_at = overwritten["updatedAt"].as_i64().expect("an update time");
+	assert!(modified_at > 1_000_000);
+	assert_eq!(
+		all_of(&changes),
+		[LibraryChanged {
+			space_id: SPACE.to_owned(),
+			overwritten: Some(LibraryOverwritten { name: "chart.png".to_owned(), modified_at }),
+		}]
+	);
+}
+
+#[tokio::test]
+async fn an_overwriting_import_into_another_kind_or_an_absent_name_changes_nothing() {
+	let (app, root) = a_host("overwrite-refused").await;
+	put(&root, SPACE, "notes.md", "Notes.");
+	put_bytes(&root, "chart.png", &png_of(4));
+	let changes = heard::<LibraryChanged>(&app, events::LIBRARY_CHANGED.name());
+	let updates = heard::<Value>(&app, events::LIBRARY_DOCUMENT_UPDATED.name());
+	let image = produced(&root, "new.png", &png_of(8));
+	let document = produced(&root, "new.md", b"New.");
+	let host = the_host(&app);
+	let overwrite = |path: &Path, name: &str| {
+		host.served(Operation::Import, json!({ "path": path, "overwrite": name }))
+	};
+
+	assert_eq!(refusal_kind(overwrite(&image, "notes.md").await), "notAnImage");
+	assert_eq!(refusal_kind(overwrite(&document, "chart.png").await), "notADocument");
+	assert_eq!(refusal_kind(overwrite(&document, "gone.md").await), "missing");
+	assert_eq!(refusal_kind(overwrite(&image, "gone.png").await), "missing");
+
+	assert_eq!(on_disk(&root, "notes.md"), "Notes.");
+	assert_eq!(std::fs::read(root.join(SPACE).join("chart.png")).expect("kept"), png_of(4));
+	assert_eq!(names_in(&host.served(Operation::List, json!({})).await.expect("lists")).len(), 2);
+	assert_eq!(all_of(&changes), []);
+	assert_eq!(all_of(&updates), Vec::<Value>::new());
 }
 
 #[derive(Debug, PartialEq)]

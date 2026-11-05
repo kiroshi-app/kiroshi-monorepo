@@ -15,12 +15,12 @@ use super::contract::{
 	LibraryDocumentFormat, LibraryDocumentWriterFinished, LibraryError, LibraryItem,
 	LibraryItemKind, LibraryWriteOutcome,
 };
-use super::documents::{located, Location, Placement, WriteStep};
+use super::documents::{located, Location, Placement, RemoveStep, WriteStep};
 use super::presence::{seat_writer, unseat_writer, Seat, Seated};
 use super::{
 	a_document, announce, announce_change, create_document, delete_item, document_text, documents,
-	encoded_content, import_path, list, read_document, rename_linked_document, resolve, root,
-	AcceptedType,
+	encoded_content, import_path, list, overwrite_path, read_document, rename_linked_document,
+	resolve, root, AcceptedType,
 };
 use crate::agent::contract::RuntimeScope;
 use crate::agent::host::{Host, Refusal};
@@ -58,7 +58,9 @@ pub enum DocumentRefusal {
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum ToolRefusal {
 	PassageNotFound,
-	PassageNotUnique,
+	PassageNotUnique {
+		occurrences: usize,
+	},
 	Stopped,
 	#[serde(rename_all = "camelCase")]
 	ConversationWithoutSpace {
@@ -129,6 +131,7 @@ struct Created {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct Imported {
 	path: PathBuf,
+	overwrite: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -144,6 +147,24 @@ struct Write {
 	name: String,
 	text: String,
 	after: Option<String>,
+	replace: Option<String>,
+	#[serde(default)]
+	whole: bool,
+}
+
+impl Write {
+	fn placement(&self) -> Result<Placement<'_>, ToolRefusal> {
+		match (self.after.as_deref(), self.replace.as_deref(), self.whole) {
+			(None, None, false) => Ok(Placement::End),
+			(Some(passage), None, false) => Ok(Placement::After(passage)),
+			(None, Some(passage), false) => Ok(Placement::Replacing(passage)),
+			(None, None, true) => Ok(Placement::Whole),
+			_ => Err(ToolRefusal::UnreadableRequest {
+				detail: "after, replace and whole are exclusive: give one of them at most"
+					.to_owned(),
+			}),
+		}
+	}
 }
 
 #[derive(Debug, Serialize)]
@@ -264,6 +285,7 @@ impl<R: Runtime> LibraryHost<R> {
 		asked: Write,
 	) -> Result<DocumentWritten, DocumentRefusal> {
 		markdown(root, space_id, &asked.name)?;
+		let placement = asked.placement()?;
 		let turn = turn_of(&self.app, space_id, &asked.name, &self.scope).await;
 		if turn.is_stopped() {
 			drop(Writing::of(&self.app, space_id, &asked.name, agent));
@@ -273,15 +295,25 @@ impl<R: Runtime> LibraryHost<R> {
 		if let Some(host_edit) = opened.host_edit {
 			announce(&self.app, space_id, &asked.name, &host_edit);
 		}
-		let placement = asked.after.as_deref().map_or(Placement::End, Placement::After);
-		let mut caret = match located(&opened.state, &asked.name, &placement)? {
-			Location::Caret(caret) => caret,
+		let (mut caret, passage_end) = match located(&opened.state, &asked.name, &placement)? {
+			Location::Caret(caret) => (caret, None),
+			Location::Passage { start, end } => (start, Some(end)),
 			Location::PassageNotFound => return Err(ToolRefusal::PassageNotFound.into()),
-			Location::PassageNotUnique => return Err(ToolRefusal::PassageNotUnique.into()),
+			Location::PassageNotUnique { occurrences } => {
+				return Err(ToolRefusal::PassageNotUnique { occurrences }.into())
+			}
 		};
 		let mut writing = Writing::of(&self.app, space_id, &asked.name, agent);
 		writing.at(&caret);
 		let writer = client_id_of(&agent.id);
+		let mut name = asked.name.clone();
+		if let Some(end) = passage_end {
+			let step = RemoveStep { writer, start: &caret, end: &end };
+			let removed = documents(&self.app).remove(root, space_id, &asked.name, &step)?;
+			announce(&self.app, space_id, &removed.name, &removed.change);
+			(name, caret) = (removed.name, removed.caret);
+			writing.at(&caret);
+		}
 		for (index, text) in steps(&asked.text).into_iter().enumerate() {
 			if index > 0 {
 				tokio::time::sleep(STEP_PAUSE).await;
@@ -292,11 +324,11 @@ impl<R: Runtime> LibraryHost<R> {
 			let step = WriteStep { writer, caret: &caret, text };
 			let written = documents(&self.app).write(root, space_id, &asked.name, &step)?;
 			announce(&self.app, space_id, &written.name, &written.change);
-			caret = written.caret;
+			(name, caret) = (written.name, written.caret);
 			writing.at(&caret);
 		}
 		writing.outcome = LibraryWriteOutcome::Finished;
-		Ok(DocumentWritten { name: asked.name.clone(), characters: asked.text.chars().count() })
+		Ok(DocumentWritten { name, characters: asked.text.chars().count() })
 	}
 }
 
@@ -333,8 +365,12 @@ impl<R: Runtime> Host for LibraryHost<R> {
 			}
 			Operation::Import => {
 				let asked: Imported = Self::read(payload)?;
-				let imported = import_path(&root, &space_id, &asked.path)?;
-				Self::answered(self.changed(&space_id, imported))
+				let Some(name) = asked.overwrite else {
+					let imported = import_path(&root, &space_id, &asked.path)?;
+					return Self::answered(self.changed(&space_id, imported));
+				};
+				let overwritten = overwrite_path(&self.app, &root, &space_id, &asked.path, &name)?;
+				Self::answered(Entry::of(overwritten))
 			}
 			Operation::Rename => {
 				let asked: Renamed = Self::read(payload)?;

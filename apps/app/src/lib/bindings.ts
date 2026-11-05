@@ -1192,6 +1192,7 @@ export type LaunchOutcome = {
 
 export type LibraryChanged = {
 	spaceId: string,
+	overwritten?: LibraryOverwritten | null,
 };
 
 export type LibraryDocument = {
@@ -1278,6 +1279,11 @@ export type LibraryLinkPreview_Serialize = {
 	site: string,
 	image?: string,
 	alt?: string,
+};
+
+export type LibraryOverwritten = {
+	name: string,
+	modifiedAt: number,
 };
 
 export type LibraryTemplate = {

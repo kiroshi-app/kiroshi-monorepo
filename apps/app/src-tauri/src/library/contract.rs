@@ -138,6 +138,15 @@ pub struct LibraryDocumentRenamed {
 #[serde(rename_all = "camelCase")]
 pub struct LibraryChanged {
 	pub space_id: String,
+	#[specta(optional)]
+	pub overwritten: Option<LibraryOverwritten>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryOverwritten {
+	pub name: String,
+	pub modified_at: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]

@@ -22,7 +22,7 @@ use tauri::{AppHandle, Manager, Runtime, State};
 use contract::{
 	LibraryChanged, LibraryDocument, LibraryDocumentFormat, LibraryDocumentRenamed,
 	LibraryDocumentState, LibraryDocumentUpdated, LibraryError, LibraryFile, LibraryImage,
-	LibraryImport, LibraryItem, LibraryItemKind,
+	LibraryImport, LibraryItem, LibraryItemKind, LibraryOverwritten,
 };
 use documents::Documents;
 
@@ -635,7 +635,19 @@ pub(crate) fn delete_item<R: Runtime>(
 }
 
 fn announce_change<R: Runtime>(app: &AppHandle<R>, space_id: &str) {
-	let changed = LibraryChanged { space_id: space_id.to_owned() };
+	announced(app, LibraryChanged { space_id: space_id.to_owned(), overwritten: None });
+}
+
+fn announce_overwrite<R: Runtime>(app: &AppHandle<R>, space_id: &str, item: &LibraryItem) {
+	let overwritten = LibraryOverwritten { name: item.name.clone(), modified_at: item.modified_at };
+	announced(
+		app,
+		LibraryChanged { space_id: space_id.to_owned(), overwritten: Some(overwritten) },
+	);
+}
+
+fn announced<R: Runtime>(app: &AppHandle<R>, changed: LibraryChanged) {
+	let space_id = changed.space_id.clone();
 	if let Err(error) = events::emit(app, events::LIBRARY_CHANGED, changed) {
 		log::warn!("a change of the library of space {space_id} was not announced: {error}");
 	}
@@ -703,13 +715,58 @@ pub(crate) fn import_paths(root: &Path, space_id: &str, paths: &[PathBuf]) -> Ve
 }
 
 fn import_path(root: &Path, space_id: &str, path: &Path) -> Result<LibraryItem, LibraryError> {
-	let name = path.file_name().unwrap_or_default().to_string_lossy();
+	let file = produced_file(path)?;
+	imported(root, space_id, &file.name, &file.accepted, &file.bytes, import_limit)
+}
+
+struct ProducedFile {
+	name: String,
+	accepted: AcceptedType,
+	bytes: Vec<u8>,
+}
+
+fn produced_file(path: &Path) -> Result<ProducedFile, LibraryError> {
+	let name = path.file_name().unwrap_or_default().to_string_lossy().into_owned();
 	let accepted = importable(&name)?;
-	let missing = || LibraryError::Missing { name: name.clone().into_owned() };
+	let missing = || LibraryError::Missing { name: name.clone() };
 	let metadata = fs::metadata(path).map_err(|error| refusal(&error, missing()))?;
 	within(&name, metadata.len(), import_limit(&accepted))?;
 	let bytes = fs::read(path).map_err(|error| refusal(&error, missing()))?;
-	imported(root, space_id, &name, &accepted, &bytes, import_limit)
+	Ok(ProducedFile { name, accepted, bytes })
+}
+
+pub(crate) fn overwrite_path<R: Runtime>(
+	app: &AppHandle<R>,
+	root: &Path,
+	space_id: &str,
+	path: &Path,
+	name: &str,
+) -> Result<LibraryItem, LibraryError> {
+	let file = produced_file(path)?;
+	let target = resolve(root, space_id, name)?;
+	match (file.accepted, target.accepted) {
+		(AcceptedType::Image { .. }, AcceptedType::Image { .. }) => {
+			let thumbnail = thumbnail_of(name, image_format(&target.path, name)?, &file.bytes)?;
+			documents(app).overwrite_image(root, space_id, name, &file.bytes, &thumbnail)?;
+		}
+		(AcceptedType::Document(_), AcceptedType::Document(_)) => {
+			let text = utf8_text(&file.name, file.bytes)?;
+			let opened = documents(app).overwrite_document(root, space_id, name, &text)?;
+			if let Some(host_edit) = opened.host_edit {
+				announce(app, space_id, name, &host_edit);
+			}
+		}
+		(AcceptedType::Image { .. }, AcceptedType::Document(_)) => {
+			return Err(LibraryError::NotAnImage { name: name.to_owned() });
+		}
+		(AcceptedType::Document(_), AcceptedType::Image { .. }) => {
+			return Err(LibraryError::NotADocument { name: name.to_owned() });
+		}
+	}
+	let item = item_at(&space_dir(root, space_id).join(name), name.to_owned())?
+		.ok_or_else(|| LibraryError::Missing { name: name.to_owned() })?;
+	announce_overwrite(app, space_id, &item);
+	Ok(item)
 }
 
 pub(crate) fn read_picked_image(path: &Path) -> Result<LibraryImage, LibraryError> {
