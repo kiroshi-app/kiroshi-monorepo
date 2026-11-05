@@ -29,6 +29,7 @@ import {
 	type CancelOutcome,
 	LIBRARY_DOCUMENT_UPDATED_EVENT,
 	type LibraryItem,
+	type LibraryPresenceAt,
 	type LibraryWriter,
 } from "@/lib/bindings"
 import type { Invoke } from "@/lib/host/joined-hosts-invoke"
@@ -45,7 +46,7 @@ type LibraryCall = {
 	name: string
 	update: string
 	content: string
-	caret: string | null
+	at: LibraryPresenceAt | null
 	agentId: string | null
 }
 
@@ -53,7 +54,9 @@ type StopCall = Pick<LibraryCall, "spaceId" | "name" | "agentId">
 
 type StopAnswer = CancelOutcome | "refused"
 
-type SharedCaret = Pick<LibraryCall, "spaceId" | "name" | "caret">
+type SharedCaret = Pick<LibraryCall, "spaceId" | "name"> & {
+	caret: string | null
+}
 
 type Heard = (event: Event<unknown>, hostId: string | null) => void
 
@@ -143,12 +146,16 @@ const LIBRARY_COMMANDS: Record<string, (call: LibraryCall) => unknown> = {
 		Y.applyUpdate(documentOf(name), bytesOf(update))
 		return null
 	},
-	library_share_caret: ({ spaceId, name, caret }) => {
+	library_share_presence: ({ spaceId, name, at }) => {
 		if (host.refusesCaretShares) {
 			host.caretRefusals += 1
 			throw { kind: "unreachable", detail: "host gone" }
 		}
-		host.sharedCarets.push({ spaceId, name, caret })
+		host.sharedCarets.push({
+			spaceId,
+			name,
+			caret: at?.kind === "text" ? at.anchor : null,
+		})
 		return null
 	},
 	library_create_document: ({ name }) => {
@@ -274,7 +281,7 @@ const writerOf = (
 	kind: LibraryWriter["kind"],
 	caret: string,
 	name: string | null = null,
-): LibraryWriter => ({ id, kind, name, caret })
+): LibraryWriter => ({ id, kind, name, at: { kind: "text", anchor: caret } })
 
 const announcePresence = (
 	name: string,
@@ -846,7 +853,7 @@ describe.each([
 				NOTES,
 				[own, ...others].map((writer) => ({
 					...writer,
-					caret: caretAt(NOTES, 3),
+					at: { kind: "text", anchor: caretAt(NOTES, 3) },
 				})),
 				hostId,
 			)
@@ -866,8 +873,14 @@ describe.each([
 			announcePresence(
 				NOTES,
 				[
-					{ ...(placed as LibraryWriter), caret: caretAt(NOTES, 3) },
-					{ ...(lost as LibraryWriter), caret: caretFromAnotherDocument() },
+					{
+						...(placed as LibraryWriter),
+						at: { kind: "text", anchor: caretAt(NOTES, 3) },
+					},
+					{
+						...(lost as LibraryWriter),
+						at: { kind: "text", anchor: caretFromAnotherDocument() },
+					},
 				],
 				hostId,
 			)

@@ -41,7 +41,12 @@ export const shareLibraryCaret = (
 	spaceId: string,
 	name: string,
 	caret: string | null,
-) => invoke<null>("library_share_caret", { spaceId, name, caret })
+) =>
+	invoke<null>("library_share_presence", {
+		spaceId,
+		name,
+		at: caret === null ? null : { kind: "text", anchor: caret },
+	})
 
 const isRefusedAs = (reason: unknown, kind: NameRefusal) =>
 	typeof reason === "object" &&

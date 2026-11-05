@@ -108,7 +108,7 @@ const LIBRARY_ANSWERS: Record<string, (args: NamedCall) => unknown> = {
 		update: base64Of(OPENED_STATE),
 	}),
 	library_apply_update: () => null,
-	library_share_caret: () => null,
+	library_share_presence: () => null,
 	library_rename_document: (args) => renameListed(args as RenameCall),
 	library_delete: ({ name }) => {
 		harness.listed = harness.listed.filter((item) => item.name !== name)

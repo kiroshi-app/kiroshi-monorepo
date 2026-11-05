@@ -141,7 +141,11 @@ pub(super) fn board_holds(
 	Ok(holds(name) || board.nodes.iter().filter_map(StoredNode::searched_field).any(holds))
 }
 
-fn a_board(root: &Path, space_id: &str, name: &str) -> Result<ResolvedItem, LibraryError> {
+pub(super) fn a_board(
+	root: &Path,
+	space_id: &str,
+	name: &str,
+) -> Result<ResolvedItem, LibraryError> {
 	let item = resolve(root, space_id, name)?;
 	match item.accepted {
 		AcceptedType::Board => Ok(item),

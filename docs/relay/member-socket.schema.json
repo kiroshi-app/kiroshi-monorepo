@@ -3701,6 +3701,21 @@
       ],
       "type": "object"
     },
+    "LibraryBoardPoint": {
+      "properties": {
+        "x": {
+          "type": "integer"
+        },
+        "y": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "type": "object"
+    },
     "LibraryBoardSummary": {
       "properties": {
         "bounds": {
@@ -4414,6 +4429,51 @@
       ],
       "type": "object"
     },
+    "LibraryPresenceAt": {
+      "anyOf": [
+        {
+          "properties": {
+            "anchor": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "text"
+            }
+          },
+          "required": [
+            "kind",
+            "anchor"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "board"
+            },
+            "nodeId": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "point": {
+              "$ref": "#/$defs/LibraryBoardPoint"
+            }
+          },
+          "required": [
+            "kind",
+            "point",
+            "nodeId"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "LibraryTemplate": {
       "properties": {
         "id": {
@@ -4437,8 +4497,8 @@
     },
     "LibraryWriter": {
       "properties": {
-        "caret": {
-          "type": "string"
+        "at": {
+          "$ref": "#/$defs/LibraryPresenceAt"
         },
         "id": {
           "type": "string"
@@ -4461,7 +4521,7 @@
         "id",
         "kind",
         "name",
-        "caret"
+        "at"
       ],
       "type": "object"
     },
@@ -12341,13 +12401,13 @@
         "$ref": "#/$defs/LibraryItem"
       }
     },
-    "library_share_caret": {
+    "library_share_presence": {
       "args": {
         "properties": {
-          "caret": {
+          "at": {
             "anyOf": [
               {
-                "type": "string"
+                "$ref": "#/$defs/LibraryPresenceAt"
               },
               {
                 "type": "null"

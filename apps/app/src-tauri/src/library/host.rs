@@ -13,8 +13,8 @@ use tokio::sync::{watch, OwnedMutexGuard};
 
 use super::canvas::board_holds;
 use super::contract::{
-	LibraryDocumentFormat, LibraryDocumentWriterFinished, LibraryError, LibraryItem,
-	LibraryItemKind, LibraryWriteOutcome,
+	LibraryBoardPoint, LibraryDocumentFormat, LibraryDocumentWriterFinished, LibraryError,
+	LibraryItem, LibraryItemKind, LibraryPresenceAt, LibraryWriteOutcome,
 };
 use super::documents::{located, Location, Placement, RemoveStep, WriteStep};
 use super::presence::{seat_writer, unseat_writer, Seat, Seated};
@@ -552,13 +552,40 @@ impl<'a, R: Runtime> Writing<'a, R> {
 	}
 
 	fn at(&self, caret: &[u8]) {
+		self.seated(LibraryPresenceAt::Text { anchor: BASE64_STANDARD.encode(caret) });
+	}
+
+	fn seated(&self, at: LibraryPresenceAt) {
 		let seated = Seated {
 			seat: Seat::Agent(self.agent.id.clone()),
 			name: Some(self.agent.name.clone()),
-			caret: BASE64_STANDARD.encode(caret),
+			at,
 			lease_ends_at: None,
 		};
 		seat_writer(self.app, self.space_id, self.name, seated);
+	}
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+struct BoardWriting<'a, R: Runtime> {
+	writing: Writing<'a, R>,
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+impl<'a, R: Runtime> BoardWriting<'a, R> {
+	fn of(app: &'a AppHandle<R>, space_id: &'a str, name: &'a str, agent: &'a Agent) -> Self {
+		Self { writing: Writing::of(app, space_id, name, agent) }
+	}
+
+	fn at(&self, node_id: &str, point: LibraryBoardPoint) {
+		self.writing.seated(LibraryPresenceAt::Board { point, node_id: Some(node_id.to_owned()) });
+	}
+}
+
+impl<R: Runtime> Drop for BoardWriting<'_, R> {
+	fn drop(&mut self) {
+		let Writing { app, space_id, name, agent, .. } = &self.writing;
+		unseat_writer(app, space_id, name, &Seat::Agent(agent.id.clone()));
 	}
 }
 

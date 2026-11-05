@@ -6017,7 +6017,7 @@ describe("ThreadScreen saving a message as a Library document", () => {
 			name,
 			update: base64Of(Y.encodeStateAsUpdate(new Y.Doc())),
 		}))
-		libraryHost.answers.set("library_share_caret", () => null)
+		libraryHost.answers.set("library_share_presence", () => null)
 	})
 
 	afterEach(() => {

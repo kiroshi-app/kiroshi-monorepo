@@ -70,7 +70,7 @@ const LIBRARY_COMMANDS: Record<string, (call: LibraryCall) => unknown> = {
 		Y.applyUpdate(documentOf(name), bytesOf(update))
 		return null
 	},
-	library_share_caret: () => null,
+	library_share_presence: () => null,
 }
 
 vi.mock("@/lib/host/index", async (importOriginal) => {

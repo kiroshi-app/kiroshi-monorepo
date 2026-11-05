@@ -128,13 +128,29 @@ pub enum LibraryWriterKind {
 	Member,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryBoardPoint {
+	pub x: i64,
+	pub y: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum LibraryPresenceAt {
+	#[serde(rename_all = "camelCase")]
+	Text { anchor: String },
+	#[serde(rename_all = "camelCase")]
+	Board { point: LibraryBoardPoint, node_id: Option<String> },
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LibraryWriter {
 	pub id: String,
 	pub kind: LibraryWriterKind,
 	pub name: Option<String>,
-	pub caret: String,
+	pub at: LibraryPresenceAt,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]

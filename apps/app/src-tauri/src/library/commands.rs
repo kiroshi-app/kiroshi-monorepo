@@ -12,10 +12,11 @@ use futures_util::future::join_all;
 
 use super::contract::{
 	LibraryBoardSummary, LibraryDocument, LibraryDocumentState, LibraryError, LibraryFile,
-	LibraryImage, LibraryImport, LibraryImportUrlError, LibraryItem, LibraryTemplate,
+	LibraryImage, LibraryImport, LibraryImportUrlError, LibraryItem, LibraryPresenceAt,
+	LibraryTemplate,
 };
 use super::host::stop_writers;
-use super::presence::{seated_name, share_caret, unseat_writer, Seat};
+use super::presence::{seated_name, share_presence, unseat_writer, Seat};
 use super::url_import::{admission_for, import_url};
 use super::{
 	apply_update, clipboard_payload, clipboard_payload_of_bytes, create_board, create_document,
@@ -212,18 +213,18 @@ pub async fn library_delete<R: Runtime>(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn library_share_caret<R: Runtime>(
+pub async fn library_share_presence<R: Runtime>(
 	app: AppHandle<R>,
 	webview: Webview<R>,
 	caller: Caller,
 	state: State<'_, db::DatabaseState>,
 	space_id: String,
 	name: String,
-	caret: Option<String>,
+	at: Option<LibraryPresenceAt>,
 ) -> Result<(), LibraryError> {
 	known_space(&state, &space_id).await?;
 	let seat = seat_of(&caller, &webview)?;
-	let Some(caret) = caret else {
+	let Some(at) = at else {
 		unseat_writer(&app, &space_id, &name, &seat);
 		return Ok(());
 	};
@@ -236,7 +237,7 @@ pub async fn library_share_caret<R: Runtime>(
 			caller.author(&app, database).await?.name
 		}
 	};
-	share_caret(&app, &root(&app)?, &space_id, &name, seat, writer_name, &caret)
+	share_presence(&app, &root(&app)?, &space_id, &name, seat, writer_name, at)
 }
 
 #[tauri::command]
@@ -267,7 +268,7 @@ fn seat_of<R: Runtime>(caller: &Caller, webview: &Webview<R>) -> Result<Seat, Li
 			.relayed_account()
 			.map(|account| Seat::Member(account.to_owned()))
 			.ok_or_else(|| LibraryError::Unreadable {
-				detail: "the member sending this caret is not vouched for".to_owned(),
+				detail: "the member sending this presence is not vouched for".to_owned(),
 			}),
 	}
 }
