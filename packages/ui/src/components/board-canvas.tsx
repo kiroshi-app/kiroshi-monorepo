@@ -147,10 +147,12 @@ const useBoardGestures = (
 
 type BoardDotGridProps = {
 	pitch: number
-	offset: BoardPoint
+	offset?: BoardPoint
 }
 
-const BoardDotGrid = ({ pitch, offset }: BoardDotGridProps) => {
+const GRID_ORIGIN: BoardPoint = { x: 0, y: 0 }
+
+const BoardDotGrid = ({ pitch, offset = GRID_ORIGIN }: BoardDotGridProps) => {
 	const patternId = useId()
 
 	return (

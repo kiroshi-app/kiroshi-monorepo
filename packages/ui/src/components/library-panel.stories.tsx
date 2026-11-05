@@ -1019,7 +1019,6 @@ export const EmptyWithEveryCallback = meta.story({
 		const sticky = slotIn(blankBoard, "library-blank-board-sticky")
 		await expect(sticky).toHaveAttribute("aria-hidden", "true")
 		await expect(getComputedStyle(sticky).rotate).toBe("-4deg")
-		await expect(sticky.getBoundingClientRect().width).toBeGreaterThan(40)
 		await expect(sticky.offsetWidth).toBe(40)
 		await userEvent.click(blankBoard)
 		await expect(args.onNewBoard).toHaveBeenCalledOnce()

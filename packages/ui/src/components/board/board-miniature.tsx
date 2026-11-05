@@ -36,7 +36,6 @@ import { fitBoardBounds } from "@workspace/ui/components/board-viewport"
 
 const MINIATURE_MARGIN = 20
 const MINIATURE_GRID_PITCH = 12
-const GRID_ORIGIN = { x: 0, y: 0 }
 
 type Sized<Props> = Omit<Props, "width" | "height">
 
@@ -102,7 +101,7 @@ const BoardMiniature = ({ snapshot }: BoardMiniatureProps) => {
 			data-slot="board-miniature"
 			ref={measure}
 		>
-			<BoardDotGrid offset={GRID_ORIGIN} pitch={MINIATURE_GRID_PITCH} />
+			<BoardDotGrid pitch={MINIATURE_GRID_PITCH} />
 			{fitted ? (
 				<div
 					className="absolute top-0 left-0 origin-top-left"

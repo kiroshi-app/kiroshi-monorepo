@@ -24,8 +24,6 @@ const DASHED = "border-[1.5px] border-input border-dashed"
 
 const BLANK_BOARD_GRID_PITCH = 12
 
-const GRID_ORIGIN = { x: 0, y: 0 }
-
 const CARD_FOCUS =
 	"focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring focus-visible:outline-offset-2"
 
@@ -81,7 +79,7 @@ const TemplateCard = ({
 
 const BlankBoardThumbnail = () => (
 	<>
-		<BoardDotGrid offset={GRID_ORIGIN} pitch={BLANK_BOARD_GRID_PITCH} />
+		<BoardDotGrid pitch={BLANK_BOARD_GRID_PITCH} />
 		<span
 			aria-hidden="true"
 			className="pointer-events-none relative size-10 -rotate-4 rounded-[3px] bg-board-sticky-yellow shadow-board-hint-sticky group-hover/template:shadow-board-hint-sticky-raised"
