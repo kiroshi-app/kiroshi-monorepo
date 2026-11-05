@@ -811,7 +811,7 @@ export const Speakers = meta.story({
 })
 
 const PersonWithCustomImageTurn = () => (
-	<div className="mx-auto flex max-w-170 flex-col gap-3">
+	<div className="mx-auto max-w-170">
 		<PersonTurn
 			name="Tom"
 			image={UPLOADED_AVATAR_IMAGE}
