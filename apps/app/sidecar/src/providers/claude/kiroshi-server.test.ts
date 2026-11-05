@@ -8,6 +8,7 @@ import {
 	kiroshiServer,
 	kiroshiTools,
 } from "./kiroshi-server"
+import { KIROSHI_LAYER } from "./system-layer"
 
 const scope: KiroshiScope = {
 	cwd: "/tmp",
@@ -46,6 +47,14 @@ const SKILLS = [
 	{ id: "missions", covers: (name: string) => name.startsWith("mission_") },
 	{ id: "library", covers: (name: string) => name.startsWith("library_") },
 ]
+
+const flat = (text: string) => text.split(/\s+/).join(" ")
+
+const SHOWS_A_FILE_INSIDE_THE_MESSAGE =
+	"sits inside your message as the markdown line"
+
+const SHOWS_A_FILE_THROUGH_THE_TOOL =
+	/To show a file, call|goes through `conversation_attach`|through `conversation_attach`|Show any file/
 
 const NAMES_A_SECRET = /key|secret|token|password|credential|value|header/i
 
@@ -135,4 +144,21 @@ describe("kiroshiServer", () => {
 			).toEqual([])
 		})
 	}
+
+	it("says in every place an agent reads about showing a file that the file sits inside its message", () => {
+		const attach = kiroshiTools(scope).find(
+			(held) => held.name === "conversation_attach",
+		)
+		const readings = [
+			systemSkill("conversations"),
+			systemSkill("rich-answers"),
+			attach?.description ?? "",
+			KIROSHI_LAYER,
+		].map(flat)
+
+		for (const reading of readings) {
+			expect(reading).toContain(SHOWS_A_FILE_INSIDE_THE_MESSAGE)
+			expect(reading).not.toMatch(SHOWS_A_FILE_THROUGH_THE_TOOL)
+		}
+	})
 })

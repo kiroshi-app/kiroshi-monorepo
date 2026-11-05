@@ -167,8 +167,8 @@ Form: `Source: [`
 
 Use it when one image is itself the answer, found on a page you read. The image alone on its
 line with its alt text, a blank line, then `Source: ` linking the page it comes from, all four
-parts required. A file of the machine goes through `conversation_attach` instead, cited by the
-markdown line it answers.
+parts required. A file of the machine sits inside your message instead, as the markdown line
+`conversation_attach` answers.
 
 ````markdown
 ![The Lisbon waterfront at dusk](https://images.example.org/lisbon-waterfront.jpg)
@@ -425,7 +425,8 @@ area: Lisbon, Cais do Sodre
   frame and its source card. An image address on `file:` or `data:` is removed. Write every
   address as `https://`.
 - **A local file path**: a path of the machine, `file://` or not, is never a link: it shows as plain
-  text, and as an image it does not load. Send a file of the machine through `conversation_attach`.
+  text, and as an image it does not load. A file of the machine sits inside your message as the
+  markdown line `conversation_attach` answers, the one path drawn as a file.
 - **A fence label the chat does not draw**: any label other than the ones named in this skill
   is shown as code, labelled with it.
 - **A callout kind other than NOTE, TIP and WARNING**: `[!IMPORTANT]` or `[!CAUTION]` is shown as a

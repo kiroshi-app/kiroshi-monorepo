@@ -653,8 +653,11 @@ has no deadline of its own.
 `companion` is served by `companions::host::CompanionHost`. Its operation
 `conversationAttach` shows one file of any extension to the person, from the
 tool `conversation_attach`, with `path`, an optional `caption` and an optional
-`conversation`; the agent cites the file with the markdown line answered, an
-image as `![label](<path>)`, every other file as `[label](<path>)`:
+`conversation`; the file sits inside the agent's message as the markdown line
+answered, an image as `![label](<path>)`, every other file as `[label](<path>)`:
+
+- the call raises no `activity`, neither when it starts nor when it is
+  answered: the file reaches the thread inside the message alone;
 
 - the sidecar resolves `path` against the working directory, symlinks
   included, and refuses it as `deniedPath` without asking the host when the
