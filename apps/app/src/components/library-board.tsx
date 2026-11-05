@@ -20,6 +20,18 @@ type LibraryBoardProps = {
 	onDelete: () => void
 }
 
+type LibraryBoardLoadingProps = Pick<LibraryBoardProps, "name" | "onBack">
+
+export const LibraryBoardLoading = ({
+	name,
+	onBack,
+}: LibraryBoardLoadingProps) => (
+	<ScreenLayout
+		aria-busy="true"
+		header={<LibraryDocumentBar item={{ name }} onBack={onBack} />}
+	/>
+)
+
 const NO_LIBRARY_ITEMS = [] as const
 
 const leaveBoardUnchanged = () => undefined

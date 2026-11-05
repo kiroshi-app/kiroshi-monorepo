@@ -51,6 +51,7 @@ type Harness = {
 	libraryItems: LibraryItem[]
 	boardNodes: Record<string, LibraryBoardNode[]>
 	unreadableBoards: string[]
+	loadingBoards: string[]
 }
 
 const harness = vi.hoisted(
@@ -60,6 +61,7 @@ const harness = vi.hoisted(
 		libraryItems: [],
 		boardNodes: {},
 		unreadableBoards: [],
+		loadingBoards: [],
 	}),
 )
 
@@ -189,6 +191,9 @@ const LIBRARY_READS: Record<string, (name: string) => unknown> = {
 	}),
 	library_read_image: (name) => ({ name, mimeType: "image/png", content: "" }),
 	library_board_summary: (name) => {
+		if (harness.loadingBoards.includes(name)) {
+			return new Promise(() => {})
+		}
 		if (harness.unreadableBoards.includes(name)) {
 			throw { kind: "invalidBoard", name, detail: "not JSON Canvas" }
 		}
@@ -302,6 +307,7 @@ afterEach(() => {
 	harness.libraryItems = []
 	harness.boardNodes = {}
 	harness.unreadableBoards = []
+	harness.loadingBoards = []
 	fakeLibraryHost.reset()
 	vi.mocked(raiseFailureNotice).mockClear()
 })
@@ -1517,6 +1523,29 @@ describe("a board opened in its tab", () => {
 		expect(
 			screen.getByRole("group", { name: common("board.zoom.controls") }),
 		).toBeInstanceOf(HTMLElement)
+	})
+
+	it("shows the board bar with its name and Back, and neither the image skeleton nor the empty hint, while its summary loads", async () => {
+		const { router } = await mountApp()
+		harness.loadingBoards = [ROADMAP.name]
+		await showLibraryOf(router, [ROADMAP])
+
+		await click(tileNamed(titleOf(ROADMAP)))
+
+		expect(
+			within(breadcrumbOf(titleOf(ROADMAP))).getByRole("button", {
+				name: common("library.document.back"),
+			}),
+		).toBeInstanceOf(HTMLElement)
+		expect(
+			screen.queryByRole("region", {
+				name: common("library.tab.loadingImage"),
+			}),
+		).toBeNull()
+		expect(
+			screen.queryByRole("heading", { name: common("board.empty.title") }),
+		).toBeNull()
+		expect(boardCanvas()).toBeNull()
 	})
 
 	it("focuses the tab a board is already open in instead of opening a second one", async () => {

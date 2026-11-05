@@ -22,7 +22,7 @@ import {
 } from "@workspace/ui/components/library-tab-states"
 import { i18n } from "@workspace/ui/lib/i18n"
 
-import { LibraryBoard } from "@/components/library-board"
+import { LibraryBoard, LibraryBoardLoading } from "@/components/library-board"
 import { LibraryDropTarget } from "@/components/library-drop-target"
 import type { LibraryBoardSummary, LibraryItem, Space } from "@/lib/bindings"
 import type { Bot } from "@/lib/conversations/store-contract"
@@ -273,18 +273,20 @@ const LibraryBoardOpening = ({
 	boardSummary,
 	onBackToLibrary,
 	onDelete,
-}: LibraryBoardOpeningProps) =>
-	boardSummary ? (
+}: LibraryBoardOpeningProps) => {
+	const title = titleOf({ kind: "board", name })
+	return boardSummary ? (
 		<LibraryBoard
 			key={name}
-			name={titleOf({ kind: "board", name })}
+			name={title}
 			onBack={onBackToLibrary}
 			onDelete={onDelete}
 			summary={boardSummary}
 		/>
 	) : (
-		<LibraryImageSkeleton />
+		<LibraryBoardLoading name={title} onBack={onBackToLibrary} />
 	)
+}
 
 const LibraryOpeningState = ({
 	isMissing,
