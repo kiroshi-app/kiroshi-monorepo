@@ -11,7 +11,7 @@ export const useOpenLibraryDocument = () => {
 		})
 }
 
-export const useLibraryHrefOf = () => {
+const useLibraryHrefOf = () => {
 	const router = useRouter()
 	return (opening: LibraryOpening) =>
 		router.buildLocation({ to: "/library", search: librarySearchOf(opening) })
