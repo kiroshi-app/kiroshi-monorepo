@@ -2,7 +2,6 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
-use chrono::{DateTime, Utc};
 use serde::Serialize;
 use tauri::{AppHandle, Manager, Runtime};
 use tokio::sync::{mpsc, oneshot};
@@ -16,7 +15,7 @@ use super::contract::{
 };
 use super::session::{Drained, EventSink, FollowUp};
 use super::translate::now_ms;
-use crate::attachments::attachment_block;
+use crate::attachments::{markdown_destination, markdown_line};
 use crate::conversations::awaited_runs::{forget_settled_turns, serve_handed};
 use crate::conversations::commands::{announce_conversation, ready};
 use crate::conversations::context::mentioned_bot_ids;
@@ -78,6 +77,18 @@ pub struct HeldAttachment {
 	pub caption: Option<String>,
 }
 
+impl HeldAttachment {
+	pub fn markdown_line(&self) -> String {
+		markdown_line(&self.path, self.caption.as_deref())
+	}
+
+	fn is_cited_in<'a>(&self, mut replies: impl Iterator<Item = &'a String>) -> bool {
+		let stored = self.path.to_string_lossy();
+		let destination = markdown_destination(&self.path);
+		replies.any(|text| text.contains(stored.as_ref()) || text.contains(&destination))
+	}
+}
+
 #[derive(Debug, Default)]
 pub struct TurnAttachments {
 	held: Mutex<Vec<HeldAttachment>>,
@@ -87,12 +98,11 @@ impl TurnAttachments {
 	pub fn hold_with<E>(
 		&self,
 		attach: impl FnOnce(&[HeldAttachment]) -> Result<HeldAttachment, E>,
-	) -> Result<PathBuf, E> {
+	) -> Result<HeldAttachment, E> {
 		let mut held = self.held.lock().unwrap_or_else(PoisonError::into_inner);
 		let attached = attach(&held)?;
-		let path = attached.path.clone();
-		held.push(attached);
-		Ok(path)
+		held.push(attached.clone());
+		Ok(attached)
 	}
 
 	pub(crate) fn take(&self) -> Vec<HeldAttachment> {
@@ -100,16 +110,9 @@ impl TurnAttachments {
 	}
 }
 
-pub(crate) fn shown_with_attachments(
-	text: &str,
-	attached: &[HeldAttachment],
-	sent_at: DateTime<Utc>,
-) -> String {
-	let paths: Vec<PathBuf> = attached.iter().map(|file| file.path.clone()).collect();
-	let captions = attached.iter().filter_map(|file| file.caption.as_deref()).map(one_line);
+fn shown_with_attachments(text: &str, attached: &[HeldAttachment]) -> String {
 	std::iter::once(text.trim_end().to_owned())
-		.chain(captions)
-		.chain(std::iter::once(attachment_block(&paths, sent_at)))
+		.chain(attached.iter().map(HeldAttachment::markdown_line))
 		.filter(|part| !part.is_empty())
 		.collect::<Vec<_>>()
 		.join("\n")
@@ -676,16 +679,20 @@ impl<R: Runtime> Desk<R> {
 	}
 
 	async fn show_attachments(&self, turn: &OpenTurn) {
-		let attached = self.attachments.take();
-		if attached.is_empty() {
+		let uncited: Vec<HeldAttachment> = self
+			.attachments
+			.take()
+			.into_iter()
+			.filter(|file| !file.is_cited_in(turn.written.values()))
+			.collect();
+		if uncited.is_empty() {
 			return;
 		}
-		let sent_at = Utc::now();
 		let named = Some(self.named(turn));
 		match &turn.last_reply {
 			Some(id) => {
 				let written = turn.written.get(id).map(String::as_str).unwrap_or_default();
-				let shown = shown_with_attachments(written, &attached, sent_at);
+				let shown = shown_with_attachments(written, &uncited);
 				if let Err(error) = self.store.replace_content(id, shown.clone()).await {
 					return self.store.report(id, &error);
 				}
@@ -699,7 +706,7 @@ impl<R: Runtime> Desk<R> {
 			}
 			None => {
 				let id = Uuid::new_v4().to_string();
-				let shown = shown_with_attachments("", &attached, sent_at);
+				let shown = shown_with_attachments("", &uncited);
 				if let Err(error) = self.store.write_settled(turn, &id, &shown).await {
 					return self.store.report(&id, &error);
 				}
@@ -1569,101 +1576,130 @@ mod tests {
 			.expect("the attachment is held");
 	}
 
-	fn with_block(text: &str, paths: &[&str]) -> impl Fn(&str) {
-		let expected_prefix = text.to_owned();
-		let listed: Vec<String> = paths
-			.iter()
-			.enumerate()
-			.map(|(index, path)| format!("{}/{} {path}", index + 1, paths.len()))
-			.collect();
-		let noun = if paths.len() == 1 { "file" } else { "files" };
-		let count = paths.len();
-		move |content: &str| {
-			let (head, block) = content
-				.split_once("Attached to this message, sent ")
-				.expect("the message carries a block");
-			assert_eq!(head, expected_prefix, "the text above the block moved");
-			let mut lines = block.lines();
-			let header = lines.next().expect("the header line");
-			assert!(header.ends_with(&format!(", {count} {noun}:")), "header {header}");
-			assert_eq!(lines.map(str::to_owned).collect::<Vec<_>>(), listed);
-		}
+	async fn spoken(desk: &mut Desk<MockRuntime>, id: &str, text: &str) {
+		desk.record(&AgentEvent::MessageStarted { message: streaming(id) }).await;
+		desk.record(&AgentEvent::MessageDelta { id: id.into(), seq: 1, text: text.into() }).await;
+		desk.record(&AgentEvent::MessageCompleted {
+			message: ChatMessage {
+				text: text.into(),
+				completion: MessageCompletion::Complete,
+				..streaming(id)
+			},
+		})
+		.await;
+	}
+
+	async fn only_reply_of(written: &Written, turn_id: &str) -> String {
+		let turn_id = turn_id.to_owned();
+		written
+			.database()
+			.messages()
+			.call(move |connection| {
+				Ok(connection.query_row(
+					"SELECT content FROM messages WHERE role = 'assistant' AND turn_id = ?1",
+					[turn_id],
+					|row| row.get(0),
+				)?)
+			})
+			.await
+			.expect("the turn stored exactly one reply")
 	}
 
 	#[tokio::test]
-	async fn text_streamed_then_an_attach_ends_the_reply_with_its_block() {
+	async fn an_uncited_attach_ends_the_last_reply_with_its_markdown_line() {
 		let written = Written::new("attach-after-text").await;
 		written.prompt("t1", "p1").await;
 		let mut desk = written.desk();
 
 		desk.open_turn(submitted("t1", "p1")).await;
-		desk.record(&AgentEvent::MessageStarted { message: streaming("m1") }).await;
-		desk.record(&AgentEvent::MessageDelta { id: "m1".into(), seq: 1, text: "Here".into() })
-			.await;
-		desk.record(&AgentEvent::MessageCompleted {
-			message: ChatMessage {
-				text: "Here".into(),
-				completion: MessageCompletion::Complete,
-				..streaming("m1")
-			},
-		})
-		.await;
-		attach(&written, "/data/attachments/c/a.png", Some("The  chart\nof May"));
+		spoken(&mut desk, "m1", "Here\n").await;
+		attach(&written, "/data/attachments/c/a.png", Some("The chart of May"));
 		desk.end(TerminalState::Complete).await;
 
 		let reply = written.stored("m1").await.expect("the reply is stored");
-		with_block("Here\nThe chart of May\n", &["/data/attachments/c/a.png"])(&reply.content);
+		assert_eq!(reply.content, "Here\n![The chart of May](</data/attachments/c/a.png>)");
 		assert_eq!(reply.state, MessageState::Complete);
 	}
 
 	#[tokio::test]
-	async fn two_attaches_of_one_turn_share_one_block_in_call_order() {
+	async fn uncited_attaches_end_the_last_reply_in_call_order_with_no_block() {
 		let written = Written::new("attach-twice").await;
 		written.prompt("t1", "p1").await;
 		let mut desk = written.desk();
 
 		desk.open_turn(submitted("t1", "p1")).await;
-		desk.record(&AgentEvent::MessageStarted { message: streaming("m1") }).await;
-		desk.record(&AgentEvent::MessageDelta { id: "m1".into(), seq: 1, text: "Two".into() })
-			.await;
+		spoken(&mut desk, "m1", "First").await;
+		spoken(&mut desk, "m2", "Two").await;
 		attach(&written, "/data/attachments/c/a.png", None);
-		attach(&written, "/data/attachments/c/b.gif", Some("Second"));
+		attach(&written, "/data/attachments/c/b.pdf", Some("Second"));
 		desk.end(TerminalState::Complete).await;
 
-		let reply = written.stored("m1").await.expect("the reply is stored");
-		with_block("Two\nSecond\n", &["/data/attachments/c/a.png", "/data/attachments/c/b.gif"])(
-			&reply.content,
+		let first = written.stored("m1").await.expect("the first reply is stored");
+		let last = written.stored("m2").await.expect("the last reply is stored");
+		assert_eq!(first.content, "First");
+		assert_eq!(
+			last.content,
+			"Two\n![a.png](</data/attachments/c/a.png>)\n[Second](</data/attachments/c/b.pdf>)"
 		);
-		assert_eq!(written.assistant_rows().await, 1);
+		assert!(!last.content.contains("Attached to this message"), "{}", last.content);
+		assert_eq!(written.assistant_rows().await, 2);
 	}
 
 	#[tokio::test]
-	async fn a_turn_without_text_still_leaves_a_reply_carrying_the_block() {
+	async fn a_reply_citing_the_stored_path_is_left_as_the_agent_wrote_it() {
+		let written = Written::new("attach-cited").await;
+		written.prompt("t1", "p1").await;
+		let mut desk = written.desk();
+		let cited = "See [My plan](</data/attachments/my c/plan v2.pdf>) first.";
+
+		desk.open_turn(submitted("t1", "p1")).await;
+		attach(&written, "/data/attachments/my c/plan v2.pdf", Some("My plan"));
+		spoken(&mut desk, "m1", cited).await;
+		desk.end(TerminalState::Complete).await;
+
+		let reply = written.stored("m1").await.expect("the reply is stored");
+		assert_eq!(reply.content, cited);
+	}
+
+	#[tokio::test]
+	async fn a_file_cited_in_an_earlier_reply_adds_nothing_while_an_uncited_one_ends_the_last() {
+		let written = Written::new("attach-cited-and-not").await;
+		written.prompt("t1", "p1").await;
+		let mut desk = written.desk();
+		let cited = "![a.png](</data/attachments/c/a.png>)";
+
+		desk.open_turn(submitted("t1", "p1")).await;
+		attach(&written, "/data/attachments/c/a.png", None);
+		attach(&written, "/data/attachments/c/b.txt", None);
+		spoken(&mut desk, "m1", cited).await;
+		spoken(&mut desk, "m2", "Done.").await;
+		desk.end(TerminalState::Complete).await;
+
+		let first = written.stored("m1").await.expect("the first reply is stored");
+		let last = written.stored("m2").await.expect("the last reply is stored");
+		assert_eq!(first.content, cited);
+		assert_eq!(last.content, "Done.\n[b.txt](</data/attachments/c/b.txt>)");
+	}
+
+	#[tokio::test]
+	async fn a_turn_without_text_posts_one_reply_of_the_markdown_lines() {
 		let written = Written::new("attach-silent").await;
 		written.prompt("t1", "p1").await;
 		let mut desk = written.desk();
 
 		desk.open_turn(submitted("t1", "p1")).await;
 		attach(&written, "/data/attachments/c/a.png", None);
+		attach(&written, "/data/attachments/c/notes.md", Some("Notes"));
 		desk.end(TerminalState::Complete).await;
 
-		let content: String = written
-			.database()
-			.messages()
-			.call(|connection| {
-				Ok(connection.query_row(
-					"SELECT content FROM messages WHERE role = 'assistant' AND turn_id = 't1'",
-					[],
-					|row| row.get(0),
-				)?)
-			})
-			.await
-			.expect("the reply is stored");
-		with_block("", &["/data/attachments/c/a.png"])(&content);
+		assert_eq!(
+			only_reply_of(&written, "t1").await,
+			"![a.png](</data/attachments/c/a.png>)\n[Notes](</data/attachments/c/notes.md>)"
+		);
 	}
 
 	#[tokio::test]
-	async fn a_turn_cancelled_or_failed_after_an_attach_keeps_the_block_on_its_reply() {
+	async fn a_turn_cancelled_or_failed_after_an_attach_keeps_the_line_on_its_reply() {
 		for (name, ending, state) in [
 			("attach-cancelled", TerminalState::Cancelled, MessageState::Cancelled),
 			("attach-failed", TerminalState::Failed, MessageState::Failed),
@@ -1680,7 +1716,7 @@ mod tests {
 			desk.end(ending).await;
 
 			let reply = written.stored("m1").await.expect("the reply is stored");
-			with_block("half\n", &["/data/attachments/c/a.png"])(&reply.content);
+			assert_eq!(reply.content, "half\n![a.png](</data/attachments/c/a.png>)");
 			assert_eq!(reply.state, state);
 		}
 	}
@@ -1807,7 +1843,7 @@ mod tests {
 		assert_eq!(completed.completion, MessageCompletion::Complete);
 		let stored = written.stored(&completed.id).await.expect("the reply is stored").content;
 		assert_eq!(completed.text, stored);
-		with_block("", &["/data/attachments/c/a.png"])(&stored);
+		assert_eq!(stored, "![a.png](</data/attachments/c/a.png>)");
 		assert_eq!(heard[2], turn_ended());
 	}
 

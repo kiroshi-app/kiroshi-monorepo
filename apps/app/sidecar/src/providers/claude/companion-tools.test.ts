@@ -33,6 +33,12 @@ const SCOPE: AttachScope = {
 
 const SHOWN = join(HOME, "shown.png")
 
+const STORED = {
+	path: "/stored.png",
+	markdown: "![The chart](</stored.png>)",
+	conversationId: "c1",
+}
+
 const SECRET = join(HOME, ".ssh", "key.png")
 
 const DISGUISED = join(HOME, "disguised.png")
@@ -469,7 +475,7 @@ describe("companionTools", () => {
 
 	it("hands the host the resolved path of the image, with its caption", async () => {
 		const asked = aHost(() => ({
-			result: { path: "/stored.png", conversationId: "c1" },
+			result: STORED,
 		}))
 
 		const result = await called("conversation_attach", {
@@ -484,6 +490,7 @@ describe("companionTools", () => {
 				payload: { path: SHOWN, caption: "The chart" },
 			},
 		])
+		expect(spoken(result)).toEqual(STORED)
 		expect(result.isError).toBeUndefined()
 	})
 

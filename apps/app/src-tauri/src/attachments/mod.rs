@@ -8,6 +8,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use base64::prelude::{Engine as _, BASE64_STANDARD};
+#[cfg(test)]
 use chrono::{DateTime, SecondsFormat, Utc};
 use uuid::Uuid;
 
@@ -24,6 +25,9 @@ const MAX_TOTAL_BYTES: u64 = 30 * 1024 * 1024;
 const MAX_EXTENSION_LENGTH: usize = 16;
 
 const BLOCK_OPENING: &str = "Attached to this message, sent ";
+
+const IMAGE_EXTENSIONS: [&str; 9] =
+	["avif", "bmp", "gif", "ico", "jpeg", "jpg", "png", "svg", "webp"];
 
 pub struct SizedFile<'a> {
 	pub name: &'a str,
@@ -136,6 +140,42 @@ pub fn refuse_block(files: &[SizedFile<'_>]) -> Result<(), Rejection> {
 	Ok(())
 }
 
+pub fn markdown_line(path: &Path, caption: Option<&str>) -> String {
+	let named = path.file_name().unwrap_or(path.as_os_str()).to_string_lossy();
+	let label = caption.map(str::trim).filter(|caption| !caption.is_empty()).unwrap_or(&named);
+	let shown_inline = match is_image(path) {
+		true => "!",
+		false => "",
+	};
+	format!("{shown_inline}[{}](<{}>)", markdown_label(label), markdown_destination(path))
+}
+
+pub fn markdown_destination(path: &Path) -> String {
+	path.to_string_lossy().replace('<', "%3C").replace('>', "%3E").replace('\n', "%0A")
+}
+
+fn markdown_label(label: &str) -> String {
+	let mut escaped = String::with_capacity(label.len());
+	for character in label.chars() {
+		match character {
+			'[' | ']' | '\\' => {
+				escaped.push('\\');
+				escaped.push(character);
+			}
+			'\r' | '\n' => escaped.push(' '),
+			_ => escaped.push(character),
+		}
+	}
+	escaped
+}
+
+fn is_image(path: &Path) -> bool {
+	path.extension().and_then(|extension| extension.to_str()).is_some_and(|extension| {
+		IMAGE_EXTENSIONS.contains(&extension.to_ascii_lowercase().as_str())
+	})
+}
+
+#[cfg(test)]
 pub fn attachment_block(paths: &[PathBuf], sent_at: DateTime<Utc>) -> String {
 	let count = paths.len();
 	let noun = match count {
@@ -426,6 +466,40 @@ mod tests {
 			Rejection::TooLargeTogether { bytes: each * count, limit: MAX_TOTAL_BYTES }
 		);
 		assert!(!root.exists(), "a refused call made the place its files would have gone");
+	}
+
+	#[test]
+	fn an_image_is_cited_inline_and_any_other_file_as_a_link_whatever_its_case() {
+		for (path, line) in [
+			("/data/attachments/c1/a.png", "![a.png](</data/attachments/c1/a.png>)"),
+			("/data/attachments/c1/b.JPEG", "![b.JPEG](</data/attachments/c1/b.JPEG>)"),
+			("/data/attachments/c1/c.Svg", "![c.Svg](</data/attachments/c1/c.Svg>)"),
+			("/data/attachments/c1/d.pdf", "[d.pdf](</data/attachments/c1/d.pdf>)"),
+			("/data/attachments/c1/e", "[e](</data/attachments/c1/e>)"),
+		] {
+			assert_eq!(markdown_line(Path::new(path), None), line);
+		}
+	}
+
+	#[test]
+	fn a_trimmed_caption_labels_the_line_and_a_blank_one_falls_back_to_the_file_name() {
+		let path = Path::new("/data/attachments/c1/a.png");
+
+		assert_eq!(
+			markdown_line(path, Some("  The chart of May \n")),
+			"![The chart of May](</data/attachments/c1/a.png>)"
+		);
+		assert_eq!(markdown_line(path, Some("  ")), "![a.png](</data/attachments/c1/a.png>)");
+	}
+
+	#[test]
+	fn the_label_escapes_brackets_and_backslashes_and_the_path_its_angles_and_newlines() {
+		let path = Path::new("/data/my files/<odd>\nname.txt");
+
+		assert_eq!(
+			markdown_line(path, Some(r"[draft] a\b")),
+			r"[\[draft\] a\\b](</data/my files/%3Codd%3E%0Aname.txt>)"
+		);
 	}
 
 	#[test]

@@ -651,8 +651,8 @@ has no deadline of its own.
 `companion` is served by `companions::host::CompanionHost`. Its operation
 `conversationAttach` shows one file of any extension to the person, from the
 tool `conversation_attach`, with `path`, an optional `caption` and an optional
-`conversation`; an image is shown inline, every other file is listed as an
-attachment the person can open:
+`conversation`; the agent cites the file with the markdown line answered, an
+image as `![label](<path>)`, every other file as `[label](<path>)`:
 
 - the sidecar resolves `path` against the working directory, symlinks
   included, and refuses it as `deniedPath` without asking the host when the
@@ -664,15 +664,21 @@ attachment the person can open:
   refusal stores nothing and changes no message;
 - without `conversation`, the file is copied to
   `attachments/<conversation id>/<uuid>.<ext>` and held for the turn: when the
-  turn ends, completed, cancelled or failed, the last reply of the turn ends
-  with one attachment block listing every file held, in call order, each
-  caption on its own line above it; a turn that wrote no reply gets one carrying
-  the block alone;
+  turn ends, completed, cancelled or failed, a file whose stored path no reply
+  of the turn carries gets its markdown line, in call order, each on a line of
+  its own at the end of the last reply; a turn that wrote no reply gets one
+  carrying those lines alone; a reply citing the path is left as written, and no
+  agent message carries an attachment block;
 - with `conversation`, the seat checks of `conversationSay` apply, the file is
-  copied under that room id, and one `companion://spoke` carries the caption
-  then the block, the way `conversationSay` posts;
-- the answer is `{ "path", "conversationId" }`, the stored absolute path and the
-  conversation it was shown in.
+  copied under that room id, and one `companion://spoke` carries the markdown
+  line alone, the way `conversationSay` posts;
+- the answer is `{ "path", "markdown", "conversationId" }`, the stored absolute
+  path, its markdown line and the conversation it was shown in;
+- the markdown line is labelled by the trimmed caption, or the stored file name
+  without one, `[`, `]` and `\` escaped with a backslash and a line break read
+  as a space; an extension of avif, bmp, gif, ico, jpeg, jpg, png, svg or webp,
+  whatever its case, opens it on `!`; `<`, `>` and a line break in the path are
+  written `%3C`, `%3E` and `%0A`.
 
 `conversationOpen`, `conversationSay`, `conversationUpdate`, `conversationList` and `conversationRead`
 answer one Conversation shape, read through the same rows as the front's
