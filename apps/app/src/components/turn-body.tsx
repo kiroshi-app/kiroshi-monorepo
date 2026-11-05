@@ -5,6 +5,7 @@ import {
 	imageMenuActionsFor,
 } from "@workspace/ui/components/image-menu"
 import { Markdown, type MarkdownProps } from "@workspace/ui/components/markdown"
+import type { MarkdownAttachments } from "@workspace/ui/components/markdown/attachments"
 import {
 	type MessageAttachment,
 	MessageAttachments,
@@ -82,7 +83,7 @@ const citedAttachmentOpener =
 const citedAttachmentsOf = (
 	text: string,
 	actions: AnswerActions | null,
-): Pick<MarkdownProps, "onOpenAttachment" | "resolveAttachment"> =>
+): MarkdownAttachments =>
 	citesStoredAttachment(text)
 		? {
 				onOpenAttachment: citedAttachmentOpener(actions),
