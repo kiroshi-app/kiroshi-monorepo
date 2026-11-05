@@ -669,6 +669,41 @@ const common = {
 		libraryCard: {
 			documentMeta: "Document · from the Library",
 		},
+		canvas: {
+			label: "Board",
+			objects: "Board objects",
+		},
+		object: {
+			named: "{{kind}}: {{text}}",
+			editText: "Edit text",
+			kind: {
+				sticky: "Sticky note",
+				text: "Text",
+				shape: "Shape",
+				image: "Image",
+				link: "Link",
+			},
+			moved: "Moved to {{x}}, {{y}}",
+			resized: "Resized to {{width}} by {{height}}",
+		},
+		selectionBar: {
+			label: "Shape style",
+			shapeType: "Shape type",
+			shape: {
+				"rounded-rectangle": "Rounded rectangle",
+				ellipse: "Ellipse",
+			},
+			fill: {
+				surface: "No colour",
+				yellow: "Yellow",
+				green: "Green",
+				blue: "Blue",
+				pink: "Pink",
+			},
+			textSize: "Text size",
+			textSizeMedium: "M",
+			more: "More",
+		},
 	},
 	whatsNew: {
 		firstLaunch: {
