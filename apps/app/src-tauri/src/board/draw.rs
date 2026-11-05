@@ -29,8 +29,6 @@ const AUTHOR: &str = "author";
 
 const PROBE_AUTHOR: &str = "probe";
 
-const GEOMETRY: [&str; 4] = ["x", "y", "width", "height"];
-
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct DrawnNode {
@@ -160,7 +158,7 @@ pub struct BoardRead {
 	pub edges: Vec<EdgeRead>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 struct Rect {
 	x: i64,
 	y: i64,
@@ -545,7 +543,7 @@ impl Layout<'_> {
 				.get(id)
 				.copied()
 				.or_else(|| self.board.nodes.get(id).map(Rect::of))
-				.unwrap_or(Rect { x: 0, y: 0, width: 0, height: 0 })),
+				.unwrap_or_default()),
 		}
 	}
 
@@ -565,10 +563,11 @@ impl Layout<'_> {
 			.into_iter()
 			.filter_map(|(id, rect)| {
 				let mut node = self.board.nodes.get(id)?.clone();
+				let mut fields = Vec::new();
 				for (field, value) in rect.geometry() {
 					node.insert(field.to_owned(), Value::from(value));
+					fields.push(field.to_owned());
 				}
-				let fields = GEOMETRY.iter().map(|field| (*field).to_owned()).collect();
 				Some(NodeChange { id: id.clone(), node, fields })
 			})
 			.collect()
