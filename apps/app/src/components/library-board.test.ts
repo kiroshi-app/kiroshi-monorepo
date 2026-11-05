@@ -175,6 +175,7 @@ const undecodableState = () => base64Of(Uint8Array.of(255, 255, 255, 255))
 const LIBRARY_ITEMS: BoardLibraryItem[] = [
 	{ id: "cover.png", kind: "image", title: "cover.png", src: "cover-src" },
 	{ id: "Notes.md", kind: "document", title: "Notes", excerpt: "Agenda" },
+	{ id: NAME, kind: "document", title: "Roadmap", excerpt: "2 objects" },
 ]
 
 const NO_IMPORTS = async () => []
@@ -588,6 +589,14 @@ describe("adding to a Library board", () => {
 		expect(pickerTile("Notes")).toBeInstanceOf(HTMLElement)
 	})
 
+	it("leaves the open board out of its own dock picker", async () => {
+		await mountBoard()
+
+		openPicker()
+
+		expect(screen.queryByRole("button", { name: "Roadmap" })).toBeNull()
+	})
+
 	it("adds a picked Library image as an image at the centre of the visible board", async () => {
 		await mountBoard()
 		openPicker()
@@ -595,8 +604,8 @@ describe("adding to a Library board", () => {
 		fireEvent.click(pickerTile("cover.png"))
 
 		expect(placementOf(imageObject())).toEqual({
-			left: "480px",
-			top: "310px",
+			left: "490px",
+			top: "327px",
 		})
 	})
 
@@ -668,7 +677,7 @@ describe("adding to a Library board", () => {
 			expect(placed).toBeInstanceOf(HTMLElement)
 			return placed
 		})
-		expect(placementOf(image)).toEqual({ left: "480px", top: "310px" })
+		expect(placementOf(image)).toEqual({ left: "490px", top: "327px" })
 		expect(image?.getAttribute("aria-selected")).toBe("true")
 	})
 
@@ -691,12 +700,12 @@ describe("adding to a Library board", () => {
 			expect(linkObject("Brief.pdf")).toBeInstanceOf(HTMLElement),
 		)
 		expect(placementOf(imageObject())).toEqual({
-			left: "180px",
-			top: "110px",
+			left: "190px",
+			top: "127px",
 		})
 		expect(placementOf(linkObject("Brief.pdf"))).toEqual({
-			left: "446px",
-			top: "120px",
+			left: "442px",
+			top: "135px",
 		})
 		expect(screen.getAllByRole("option")).toHaveLength(4)
 	})

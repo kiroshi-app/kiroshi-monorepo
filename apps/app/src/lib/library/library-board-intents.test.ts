@@ -199,10 +199,10 @@ describe("placeLibraryBoardObject", () => {
 			kind: "image",
 			item: "cover.png",
 			file: "Library/cover.png",
-			x: 280,
-			y: 210,
-			width: 240,
-			height: 180,
+			x: 290,
+			y: 227,
+			width: 220,
+			height: 146,
 		})
 	})
 
@@ -213,6 +213,19 @@ describe("placeLibraryBoardObject", () => {
 			kind: "libraryCard",
 			item: "Notes.md",
 			file: "Library/Notes.md",
+			width: 236,
+			height: 131,
+		})
+	})
+
+	it("places a link card at the size of a web card", () => {
+		const { node } = placed({ kind: "linkCard", url: "https://example.com" })
+
+		expect(node).toMatchObject({
+			kind: "linkCard",
+			url: "https://example.com",
+			width: 300,
+			height: 178,
 		})
 	})
 

@@ -16,7 +16,7 @@ import type { LibraryItem } from "../bindings"
 
 const BOARD_CANVAS_SELECTOR = '[data-slot="board-canvas"]'
 
-const IMPORTED_OBJECT_STEP = 264
+const IMPORTED_OBJECT_STEP = 260
 
 type LibraryBoardWrites = {
 	place: (placement: LibraryBoardPlacement) => void

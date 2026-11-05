@@ -119,6 +119,7 @@ export const LibraryBoard = ({
 	onDelete,
 }: LibraryBoardProps) => {
 	const board = useLibraryBoardSession(spaceId, name)
+	const pickableItems = libraryItems.filter((item) => item.id !== name)
 
 	if (board.hasFailedToOpen) {
 		return (
@@ -142,7 +143,7 @@ export const LibraryBoard = ({
 			scroller={() => (
 				<LibraryBoardCanvas
 					board={board}
-					library={{ items: libraryItems, importFiles }}
+					library={{ items: pickableItems, importFiles }}
 					summary={summary}
 				/>
 			)}

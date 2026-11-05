@@ -49,9 +49,9 @@ const { doc: ROOTS, zOrder: Z_ORDER } = BOARD_SCHEMA
 const LIBRARY_FOLDER = "Library"
 
 const SIZE_OF_LIBRARY_OBJECT: Record<LibraryBoardObject["kind"], BoardSize> = {
-	image: { width: 240, height: 180 },
-	libraryCard: { width: 236, height: 160 },
-	linkCard: { width: 300, height: 180 },
+	image: { width: 220, height: 146 },
+	libraryCard: { width: 236, height: 131 },
+	linkCard: { width: 300, height: 178 },
 }
 
 const PRESET_OF_FILL = BOARD_SCHEMA.kinds.sticky?.fill?.presets ?? {}
