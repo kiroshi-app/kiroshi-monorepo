@@ -1,5 +1,13 @@
-import type { ReactNode } from "react"
-import { expect, fireEvent, fn, screen, waitFor, within } from "storybook/test"
+import { type ReactNode, useState } from "react"
+import {
+	expect,
+	fireEvent,
+	fn,
+	screen,
+	userEvent,
+	waitFor,
+	within,
+} from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
@@ -59,17 +67,22 @@ import { PromptQueue } from "@workspace/ui/components/prompt-queue"
 import { PromptReply } from "@workspace/ui/components/prompt-reply"
 import { RichBlockPending } from "@workspace/ui/components/rich-block-pending"
 import { type RosterBot, RosterProvider } from "@workspace/ui/components/roster"
+import { SIDEBAR_MAX_WIDTH } from "@workspace/ui/components/sidebar-resize"
 import { ThreadLayout } from "@workspace/ui/components/thread-layout"
 import {
 	ToolQuestion,
 	type ToolQuestionItem,
 } from "@workspace/ui/components/tool-question"
-import type { TranscriptItem } from "@workspace/ui/components/transcript"
+import type {
+	TranscriptItem,
+	TranscriptNewer,
+} from "@workspace/ui/components/transcript"
 import {
 	AssistantTurn,
 	PersonTurn,
 	UserTurn,
 } from "@workspace/ui/components/turn"
+import { Button } from "@workspace/ui/components/ui/button"
 
 const ATLAS: MessageAuthor = {
 	id: "atlas",
@@ -193,6 +206,12 @@ const PINNED: PinnedMessage[] = [
 	},
 ]
 
+const PANEL_WIDTH = 1072
+
+const PANEL_HUE = hueScopeOf("blue")
+
+const NARROWEST_PANEL_WIDTH = 1024 - SIDEBAR_MAX_WIDTH
+
 type PanelProps = {
 	face: MessageAuthor
 	rows?: TranscriptItem[]
@@ -205,6 +224,9 @@ type PanelProps = {
 	header?: ReactNode
 	hasPins?: boolean
 	label?: string
+	width?: number
+	countsNewMessages?: boolean
+	newer?: TranscriptNewer
 }
 
 const Panel = ({
@@ -219,8 +241,15 @@ const Panel = ({
 	header,
 	hasPins = true,
 	label,
+	width = PANEL_WIDTH,
+	countsNewMessages,
+	newer,
 }: PanelProps) => (
-	<div className="relative h-[847px] w-[1072px]" {...hueScopeOf("blue")}>
+	<div
+		className="relative h-[847px]"
+		{...PANEL_HUE}
+		style={{ ...PANEL_HUE.style, width }}
+	>
 		<RosterProvider bots={MENTIONED_BOTS}>
 			<ContentCard isLandmark={false}>
 				<ThreadLayout
@@ -252,6 +281,8 @@ const Panel = ({
 					}
 					rows={rows}
 					label={label}
+					countsNewMessages={countsNewMessages}
+					newer={newer}
 					queue={queue}
 					composer={
 						composer ?? (
@@ -552,7 +583,7 @@ export const Conversations4 = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard Conversations 4: an answer taller than the transcript, with a heading, a table and a list, read from its top. Check the bubble keeps padding 18 around rich content and that its author line stays pinned to the bottom edge on the sticky fill, with no rule on its top edge and a square foot, until the bubble's own end scrolls into view.",
+					"Artboard Conversations 4: an answer taller than the transcript, with a heading, a table and a list, read from its top. Check the bubble keeps padding 18 around rich content and that its author line stays pinned to the bottom edge on the sticky fill, under a hairline on its top edge, inset 12 at both ends and with Jump to latest docked at its end, until the bubble's own end scrolls into view.",
 			},
 		},
 	},
@@ -574,7 +605,7 @@ export const Conversations4 = meta.story({
 				viewport.getBoundingClientRect().bottom -
 					line.getBoundingClientRect().bottom,
 			),
-		).toBe(18)
+		).toBe(16)
 	},
 })
 
@@ -1122,9 +1153,10 @@ const LISBON_QUESTION = rowOf({
 
 type ThemedPanelsProps = {
 	rows: TranscriptItem[]
+	width?: number
 }
 
-const ThemedPanels = ({ rows }: ThemedPanelsProps) => (
+const ThemedPanels = ({ rows, width }: ThemedPanelsProps) => (
 	<div className="flex flex-col">
 		{(["Light", "Dark"] as const).map((theme) => (
 			<section
@@ -1136,6 +1168,7 @@ const ThemedPanels = ({ rows }: ThemedPanelsProps) => (
 					face={ATLAS}
 					leading={LISBON_HEADER}
 					rows={rows}
+					width={width}
 					label={`Lisbon offsite, ${theme} theme`}
 				/>
 			</section>
@@ -1159,9 +1192,9 @@ const paintedRgb = (...colours: string[]) => {
 const widestChannelGap = (first: number[], second: number[]) =>
 	Math.max(...first.map((channel, index) => Math.abs(channel - second[index])))
 
-const STUCK_INSET = 18
+const STUCK_INSET = 16
 
-const BUBBLE_PADDING = 18
+const STUCK_BAR_PADDING = 12
 
 const AUTHOR_LINE_GAP = 8
 
@@ -1211,8 +1244,22 @@ const paintedBubbleRgb = ({ screen, surface }: StuckLine) =>
 		getComputedStyle(surface).backgroundColor,
 	)
 
-const expectBlockHasNoTopBorder = async (line: HTMLElement) =>
-	expect(getComputedStyle(line, "::before").borderTopWidth).toBe("0px")
+const expectBlockHasHairline = async (line: HTMLElement) => {
+	const block = getComputedStyle(line, "::before")
+	await expect([block.borderTopWidth, block.borderTopStyle]).toEqual([
+		"1px",
+		"solid",
+	])
+	await expect(
+		widestChannelGap(
+			paintedRgb("#808080", block.borderTopColor),
+			paintedRgb(
+				"#808080",
+				getComputedStyle(line).getPropertyValue("--shell-border"),
+			),
+		),
+	).toBeLessThanOrEqual(1)
+}
 
 const expectBlockPaintsBubble = async (stuck: StuckLine) => {
 	await expect(
@@ -1245,7 +1292,11 @@ const expectCleanCutStuckLine = async (
 					slotIn(content, "message-bubble-text").getBoundingClientRect().bottom,
 			),
 		).toBe(AUTHOR_LINE_GAP + lineBox.height)
-		await expect(Math.round(lineBox.width + 2 * BUBBLE_PADDING)).toBe(
+		await expect(block.left).toBe(`-${STUCK_BAR_PADDING}px`)
+		await expect(
+			Math.round(lineBox.left - content.getBoundingClientRect().left),
+		).toBe(STUCK_BAR_PADDING)
+		await expect(Math.round(lineBox.width + 2 * STUCK_BAR_PADDING)).toBe(
 			Math.round(content.getBoundingClientRect().width),
 		)
 		await expect([
@@ -1253,7 +1304,7 @@ const expectCleanCutStuckLine = async (
 			block.borderBottomRightRadius,
 		]).toEqual(["0px", "0px"])
 		await expect(getComputedStyle(content).overflow).toBe("clip")
-		await expectBlockHasNoTopBorder(line)
+		await expectBlockHasHairline(line)
 		await expectBlockPaintsBubble(stuck)
 	}
 }
@@ -1273,7 +1324,7 @@ const expectUnwrappedStuckBlockPaintsRestingBubble = async (
 		await expect(
 			widestChannelGap(restingBubble, paintedBlockRgb(line)),
 		).toBeLessThanOrEqual(1)
-		await expectBlockHasNoTopBorder(line)
+		await expectBlockHasHairline(line)
 	}
 }
 
@@ -1288,14 +1339,14 @@ const expectHoveredStuckBlockPaintsBubble = async (
 	for (const viewport of viewports) {
 		const stuck = await stuckLineIn(viewport, tone)
 		const resting = paintedBubbleRgb(stuck)
-		await pointer.hover(stuck.line)
+		await pointer.hover(slotIn(stuck.line, "author-line-name"))
 		await stuckLineIn(viewport, tone)
 		await waitFor(() =>
 			expect(
 				widestChannelGap(resting, paintedBubbleRgb(stuck)),
 			).toBeGreaterThan(1),
 		)
-		await expectBlockHasNoTopBorder(stuck.line)
+		await expectBlockHasHairline(stuck.line)
 		await expectBlockPaintsBubble(stuck)
 	}
 	await pointer.unhover(viewports[1])
@@ -1320,7 +1371,7 @@ export const UserAuthorLineStuckOnALongMessage = meta.story({
 		docs: {
 			description: {
 				story:
-					"Your message taller than the transcript, read from its top, light then dark. Check your author line stays pinned 18 above the transcript's bottom edge, the way an agent's does, on a block in your bubble's colour that spans the bubble and runs square to the edge, so the message reads cut by the edge rather than closed.",
+					"Your message taller than the transcript, read from its top, light then dark. Check your author line stays pinned 16 above the transcript's bottom edge, the way an agent's does, on a block in your bubble's colour under a hairline, inset 12 at both ends, that spans the bubble and runs square to the edge, so the message reads cut by the edge rather than closed.",
 			},
 		},
 	},
@@ -1349,7 +1400,7 @@ export const AgentAuthorLineStuckOnALongAnswer = meta.story({
 		docs: {
 			description: {
 				story:
-					"An answer taller than the transcript, read from its top, light then dark. Check the author line stays pinned 18 above the transcript's bottom edge on a block in the bubble's own grey, square at the foot and running to the edge, and that the answer scrolling under it is cut at the bubble's sides.",
+					"An answer taller than the transcript, read from its top, light then dark. Check the author line stays pinned 16 above the transcript's bottom edge on a block in the bubble's own grey under a hairline, inset 12 at both ends, square at the foot and running to the edge, and that the answer scrolling under it is cut at the bubble's sides.",
 			},
 		},
 	},
@@ -1447,6 +1498,444 @@ export const AgentAuthorLineStuckOnAnUnwrappedAnswer = meta.story({
 	},
 	play: async ({ canvasElement }) =>
 		expectUnwrappedStuckBlockPaintsRestingBubble(canvasElement),
+})
+
+const LONG_ANSWER_ROWS = [
+	LISBON_DAY,
+	LISBON_QUESTION,
+	rowOf({
+		key: "answer",
+		from: "agent",
+		author: ATLAS,
+		text: OFFSITE_ANSWER,
+		time: at(14, 12),
+	}),
+]
+
+const PINNED_BUBBLE_WIDTH = 580
+
+const NARROWEST_PINNED_BUBBLE_WIDTH = 550
+
+type JumpPlacement = "floating" | "docked"
+
+const jumpsIn = (root: Element, placement: JumpPlacement) =>
+	Array.from(
+		root.querySelectorAll<HTMLElement>(
+			`[data-slot="message-scroller-button"][data-placement="${placement}"]`,
+		),
+	)
+
+const scrollerOf = (viewport: HTMLElement) => {
+	const scroller = viewport.closest<HTMLElement>(
+		'[data-slot="message-scroller"]',
+	)
+	if (!scroller) throw new Error("The viewport sits outside a transcript")
+	return scroller
+}
+
+const identityOf = (line: HTMLElement) => {
+	const name = slotIn(line, "author-line-name")
+	const badge = slotIn(line, "bot-title-badge")
+	const time = badge.nextElementSibling
+	if (!(time instanceof HTMLElement)) throw new Error("No time after the badge")
+	return [name, badge, time]
+}
+
+const overlaps = (first: DOMRect, second: DOMRect) =>
+	first.left < second.right &&
+	second.left < first.right &&
+	first.top < second.bottom &&
+	second.top < first.bottom
+
+const expectIdentityInFull = async (line: HTMLElement, jump?: HTMLElement) => {
+	const lineCentre = verticalCentreOf(line.getBoundingClientRect())
+	for (const element of [...identityOf(line), ...(jump ? [jump] : [])]) {
+		const box = element.getBoundingClientRect()
+		await expect(element.scrollWidth).toBeLessThanOrEqual(element.clientWidth)
+		await expect(
+			Math.abs(verticalCentreOf(box) - lineCentre),
+		).toBeLessThanOrEqual(1)
+		if (jump && element !== jump)
+			await expect(overlaps(box, jump.getBoundingClientRect())).toBe(false)
+	}
+}
+
+const verticalCentreOf = (box: DOMRect) => (box.top + box.bottom) / 2
+
+const expectLineInPlace = async (canvasElement: HTMLElement) => {
+	const viewports = slotsIn(canvasElement, "message-scroller-viewport")
+	await expect(viewports).toHaveLength(2)
+	for (const viewport of viewports) {
+		await waitFor(() =>
+			expect(viewport.scrollHeight).toBeGreaterThan(viewport.clientHeight),
+		)
+		const scroller = scrollerOf(viewport)
+		await waitFor(() => {
+			expect(lineOf(viewport, "agent").dataset.stuck).toBe("false")
+			expect(jumpsIn(scroller, "floating")[0]?.dataset.active).toBe("false")
+		})
+		await expect(jumpsIn(scroller, "docked")).toHaveLength(0)
+		await expect(
+			getComputedStyle(lineOf(viewport, "agent"), "::before").display,
+		).toBe("none")
+		await expectIdentityInFull(lineOf(viewport, "agent"))
+	}
+}
+
+const releaseFollow = (viewport: HTMLElement) =>
+	viewport.dispatchEvent(
+		new WheelEvent("wheel", { bubbles: true, deltaY: -200 }),
+	)
+
+const dockedJumpIn = async (viewport: HTMLElement) => {
+	releaseFollow(viewport)
+	const line = await pinnedLineIn(viewport, "agent")
+	const scroller = scrollerOf(viewport)
+	await waitFor(() => {
+		expect(jumpsIn(line, "docked")[0]?.dataset.active).toBe("true")
+		expect(jumpsIn(scroller, "floating")).toHaveLength(0)
+	})
+	const [jump] = jumpsIn(line, "docked")
+	return { line, jump }
+}
+
+const expectJumpDockedAtTheBarEnd = async (canvasElement: HTMLElement) => {
+	const viewports = slotsIn(canvasElement, "message-scroller-viewport")
+	await expect(viewports).toHaveLength(2)
+	for (const viewport of viewports) {
+		const { line, jump } = await dockedJumpIn(viewport)
+		const [, , time] = identityOf(line)
+		const content = line.closest('[data-slot="message-bubble-content"]')
+		if (!content) throw new Error("The stuck line sits outside a bubble")
+		const jumpBox = jump.getBoundingClientRect()
+		await expect(jump).toHaveAccessibleName("Jump to latest")
+		await expect(jump).toBeVisible()
+		await expect(jump.closest("[aria-live]")?.getAttribute("aria-live")).toBe(
+			"off",
+		)
+		await expect(Math.round(jumpBox.height)).toBe(28)
+		await expect(
+			Math.round(content.getBoundingClientRect().right - jumpBox.right),
+		).toBe(STUCK_BAR_PADDING)
+		await expect(
+			jumpBox.left - time.getBoundingClientRect().right,
+		).toBeGreaterThanOrEqual(2 * AUTHOR_LINE_GAP + 12)
+		await expectBlockHasHairline(line)
+		await expectIdentityInFull(line, jump)
+	}
+}
+
+const expectDockedJumpReturnsToTheEnd = async (canvasElement: HTMLElement) => {
+	const [viewport] = slotsIn(canvasElement, "message-scroller-viewport")
+	const { line, jump } = await dockedJumpIn(viewport)
+	jump.focus()
+	await userEvent.tab({ shift: true })
+	await userEvent.tab()
+	await expect(jump).toHaveFocus()
+	await expect(jump.matches(":focus-visible")).toBe(true)
+	await expect(getComputedStyle(jump).boxShadow).not.toBe("none")
+	await userEvent.keyboard("{Enter}")
+	const scroller = scrollerOf(viewport)
+	await waitFor(
+		() => {
+			expect(line.dataset.stuck).toBe("false")
+			expect(jumpsIn(scroller, "docked")).toHaveLength(0)
+			expect(jumpsIn(scroller, "floating")[0]?.dataset.active).toBe("false")
+		},
+		{ timeout: 3000 },
+	)
+	await expect(document.activeElement).toBe(viewport)
+}
+
+type PinnedSamplesProps = {
+	width: number
+}
+
+const PinnedSamples = ({ width }: PinnedSamplesProps) => (
+	<div className="flex flex-col">
+		{(["Light", "Dark"] as const).map((theme) => (
+			<section
+				key={theme}
+				aria-label={`${theme} theme`}
+				className={theme === "Dark" ? "dark bg-card p-4" : "bg-card p-4"}
+			>
+				<section
+					aria-label={`Pinned author line, ${theme} theme`}
+					data-slot="message-scroller-viewport"
+					className="h-80 overflow-y-auto"
+					style={{ width }}
+					// biome-ignore lint/a11y/noNoninteractiveTabindex: a scrolling region takes keyboard focus so it can be scrolled
+					tabIndex={0}
+				>
+					<MessageBubble variant="soft">
+						<MessageBubbleContent
+							foot={
+								<AuthorLine
+									tone="agent"
+									name="Atlas"
+									badge="Planner"
+									hue={ATLAS.blot}
+									avatar={
+										<BotIdentityAvatar
+											hue={ATLAS.blot}
+											seed="atlas"
+											size={20}
+										/>
+									}
+									time="14:12"
+									isSticky
+								/>
+							}
+						>
+							<Markdown>{OFFSITE_ANSWER}</Markdown>
+						</MessageBubbleContent>
+					</MessageBubble>
+				</section>
+			</section>
+		))}
+	</div>
+)
+
+const expectPinnedWithoutJump = async (canvasElement: HTMLElement) => {
+	const viewports = slotsIn(canvasElement, "message-scroller-viewport")
+	await expect(viewports).toHaveLength(2)
+	for (const viewport of viewports) {
+		const line = await pinnedLineIn(viewport, "agent")
+		const block = getComputedStyle(line, "::before")
+		await expect(
+			viewport.querySelector('[data-slot="message-scroller-button"]'),
+		).toBeNull()
+		await expect(block.left).toBe(`-${STUCK_BAR_PADDING}px`)
+		await expect(
+			Math.round(
+				viewport.getBoundingClientRect().bottom -
+					line.getBoundingClientRect().bottom,
+			),
+		).toBe(STUCK_INSET)
+		await expectBlockHasHairline(line)
+		await expectIdentityInFull(line)
+	}
+}
+
+export const AgentAuthorLineInPlace = meta.story({
+	globals: { theme: "light" },
+	render: () => <ThemedPanels rows={LONG_ANSWER_ROWS} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A long answer read to its end, light then dark. Check the author line rests in place at the foot of the bubble, 18 from its edges, on no bar and with no hairline, and that Jump to latest shows in neither position.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => expectLineInPlace(canvasElement),
+})
+
+export const AgentAuthorLineInPlaceAtTheNarrowestWidth = meta.story({
+	globals: { theme: "light" },
+	render: () => (
+		<ThemedPanels rows={LONG_ANSWER_ROWS} width={NARROWEST_PANEL_WIDTH} />
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same answer in the thread the 1024 window leaves beside the widest sidebar, light then dark. Check the author line rests in place with its name, badge and time in full on one row.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => expectLineInPlace(canvasElement),
+})
+
+export const AgentAuthorLinePinned = meta.story({
+	tags: ["test-only"],
+	globals: { theme: "light" },
+	render: () => <PinnedSamples width={PINNED_BUBBLE_WIDTH} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The author line pinned on its own, in a scroll region with no transcript around it, so no Jump to latest to dock, light then dark. Check the bar runs 52 high under a hairline, inset 12 at both ends, on the bubble's grey.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => expectPinnedWithoutJump(canvasElement),
+})
+
+export const AgentAuthorLinePinnedAtTheNarrowestWidth = meta.story({
+	tags: ["test-only"],
+	globals: { theme: "light" },
+	render: () => <PinnedSamples width={NARROWEST_PINNED_BUBBLE_WIDTH} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The pinned author line at the bubble width of the 1024 window beside the widest sidebar, light then dark. Check the name, badge and time stay in full on one row.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => expectPinnedWithoutJump(canvasElement),
+})
+
+export const AgentAuthorLinePinnedWithJumpToLatestDocked = meta.story({
+	globals: { theme: "light" },
+	render: () => <ThemedPanels rows={LONG_ANSWER_ROWS} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A long answer read from its top, light then dark. Check Jump to latest leaves the thread floor and docks in the pinned bar, after the time and 12 from the bar end, as a 28 high outlined pill with no shadow, that the keyboard reaches it with a visible ring, that the transcript's live log never announces it, and that pressing it returns to the end, where it shows in neither position and focus rests on the transcript.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expectJumpDockedAtTheBarEnd(canvasElement)
+		await expectDockedJumpReturnsToTheEnd(canvasElement)
+	},
+})
+
+export const AgentAuthorLinePinnedWithJumpToLatestDockedAtTheNarrowestWidth =
+	meta.story({
+		globals: { theme: "light" },
+		render: () => (
+			<ThemedPanels rows={LONG_ANSWER_ROWS} width={NARROWEST_PANEL_WIDTH} />
+		),
+		parameters: {
+			docs: {
+				description: {
+					story:
+						"The docked Jump to latest in the thread the 1024 window leaves beside the widest sidebar, light then dark. Check avatar, name, badge, time and Jump to latest hold one row, none of them cut short and none of them under the pill.",
+				},
+			},
+		},
+		play: async ({ canvasElement }) =>
+			expectJumpDockedAtTheBarEnd(canvasElement),
+	})
+
+const SCROLLED_UP_ROWS = [
+	...LONG_ANSWER_ROWS,
+	rowOf({
+		key: "followup",
+		from: "you",
+		text: "Does Casa do Rio have a ground floor room?",
+		time: at(14, 14),
+	}),
+	rowOf({
+		key: "followup-answer",
+		from: "agent",
+		author: ATLAS,
+		text: "Yes, two, both with step-free access from the street.",
+		time: at(14, 15),
+	}),
+	rowOf({
+		key: "booking",
+		from: "you",
+		text: "Book it.",
+		time: at(14, 16),
+	}),
+	rowOf({
+		key: "booked",
+		from: "agent",
+		author: ATLAS,
+		text: "Booked for March 12 to 14. The confirmation is in your inbox.",
+		time: at(14, 17),
+	}),
+]
+
+export const ScrolledUpWithNothingStuckFloatsJumpToLatest = meta.story({
+	globals: { theme: "light" },
+	render: () => <ThemedPanels rows={SCROLLED_UP_ROWS} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A thread scrolled up to the end of a short message, with no author line pinned, light then dark. Check Jump to latest floats centred over the thread floor, as on any thread read away from its end, and that no bar carries it.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const viewports = slotsIn(canvasElement, "message-scroller-viewport")
+		await expect(viewports).toHaveLength(2)
+		for (const viewport of viewports) {
+			const scroller = scrollerOf(viewport)
+			const followup = viewport.querySelector('[data-message-id="followup"]')
+			if (!followup) throw new Error("No follow-up row")
+			releaseFollow(viewport)
+			await waitFor(
+				() => {
+					viewport.scrollTop +=
+						followup.getBoundingClientRect().bottom -
+						viewport.getBoundingClientRect().bottom
+					expect(stuckLinesIn(viewport)).toHaveLength(0)
+					expect(jumpsIn(scroller, "floating")[0]?.dataset.active).toBe("true")
+				},
+				{ timeout: 3000 },
+			)
+			await expect(jumpsIn(scroller, "docked")).toHaveLength(0)
+			await expect(jumpsIn(scroller, "floating")[0]).toHaveAccessibleName(
+				"Jump to latest",
+			)
+		}
+	},
+})
+
+const loadLatest = fn()
+
+const NEWER_UNLOADED: TranscriptNewer = {
+	onLoad: noop,
+	onLoadLatest: loadLatest,
+}
+
+const REPLY_ROW = rowOf({
+	key: "reply",
+	from: "you",
+	text: "Book Casa do Rio.",
+	time: at(14, 20),
+})
+
+const CountingPanel = () => {
+	const [rows, setRows] = useState(LONG_ANSWER_ROWS)
+
+	return (
+		<div className="flex flex-col items-start gap-2">
+			<Panel
+				face={ATLAS}
+				leading={LISBON_HEADER}
+				rows={rows}
+				countsNewMessages
+				newer={NEWER_UNLOADED}
+			/>
+			<Button onClick={() => setRows([...LONG_ANSWER_ROWS, REPLY_ROW])}>
+				Deliver a reply
+			</Button>
+		</div>
+	)
+}
+
+export const DockedJumpToLatestCountsAndLoadsTheLatestPage = meta.story({
+	tags: ["test-only"],
+	render: () => <CountingPanel />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A long answer read from its top on a thread whose newest page is not loaded. Check the docked Jump to latest names how many messages arrived since, as the floating one does, and that pressing it asks for the latest page instead of scrolling.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		const [viewport] = slotsIn(canvasElement, "message-scroller-viewport")
+		await dockedJumpIn(viewport)
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Deliver a reply" }),
+		)
+		const { jump } = await dockedJumpIn(viewport)
+		await waitFor(() => expect(jump).toHaveAccessibleName("1 new message"))
+		loadLatest.mockClear()
+		await userEvent.click(jump)
+		await expect(loadLatest).toHaveBeenCalledTimes(1)
+		await expect(lineOf(viewport, "agent").dataset.stuck).toBe("true")
+	},
 })
 
 export const ComponentsAuthorLineAndWorkLine = meta.story({

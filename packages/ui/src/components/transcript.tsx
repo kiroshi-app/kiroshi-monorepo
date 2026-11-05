@@ -21,7 +21,6 @@ import {
 import { MessageHighlightProvider } from "@workspace/ui/components/message-highlight-context"
 import {
 	MessageScroller,
-	MessageScrollerButton,
 	MessageScrollerContent,
 	MessageScrollerItem,
 	MessageScrollerProvider,
@@ -30,6 +29,12 @@ import {
 	useMessageScrollerScrollable,
 } from "@workspace/ui/components/message-scroller"
 import { AgentSkeleton } from "@workspace/ui/components/thread-transcript-skeleton"
+import {
+	JumpToLatest,
+	type TranscriptJump,
+	TranscriptJumpProvider,
+	useJumpDock,
+} from "@workspace/ui/components/transcript-jump"
 import { Button } from "@workspace/ui/components/ui/button"
 import {
 	scrollTraceViewportRef,
@@ -374,6 +379,18 @@ const TranscriptBody = ({
 
 	const anchorKey = anchorOnSend ? lastAnchorKey(rows) : undefined
 	const arrived = useLiveArrivals(rows)
+	const { isDocked, dock } = useJumpDock()
+	const jump: TranscriptJump = {
+		behavior,
+		newCount,
+		onClick: newer
+			? (event) => {
+					event.preventDefault()
+					newer.onLoadLatest()
+				}
+			: undefined,
+		dock,
+	}
 
 	return (
 		<MessageScroller className={cn("min-h-0", className)} {...props}>
@@ -398,24 +415,26 @@ const TranscriptBody = ({
 					aria-relevant="additions text"
 					className={cn("justify-end gap-3", contentClassName)}
 				>
-					<MessageHighlightProvider messageId={highlightedMessageId}>
-						{rows.map((row) => (
-							<MessageScrollerItem
-								className={cn(
-									"flex flex-col gap-3",
-									arrived.has(row.key) && "animate-thread-arrive",
-								)}
-								data-arrived={arrived.has(row.key) || undefined}
-								key={row.key}
-								messageId={row.key}
-								scrollAnchor={row.key === anchorKey}
-							>
-								{row.key === markKey ? <TranscriptNewMark /> : null}
-								{row.render()}
-							</MessageScrollerItem>
-						))}
-						{children}
-					</MessageHighlightProvider>
+					<TranscriptJumpProvider jump={jump}>
+						<MessageHighlightProvider messageId={highlightedMessageId}>
+							{rows.map((row) => (
+								<MessageScrollerItem
+									className={cn(
+										"flex flex-col gap-3",
+										arrived.has(row.key) && "animate-thread-arrive",
+									)}
+									data-arrived={arrived.has(row.key) || undefined}
+									key={row.key}
+									messageId={row.key}
+									scrollAnchor={row.key === anchorKey}
+								>
+									{row.key === markKey ? <TranscriptNewMark /> : null}
+									{row.render()}
+								</MessageScrollerItem>
+							))}
+							{children}
+						</MessageHighlightProvider>
+					</TranscriptJumpProvider>
 				</MessageScrollerContent>
 
 				{newer ? (
@@ -426,25 +445,7 @@ const TranscriptBody = ({
 				) : null}
 			</MessageScrollerViewport>
 
-			<MessageScrollerButton
-				behavior={behavior}
-				className="h-8 gap-1.5 rounded-full border-foreground/10 bg-prompt-surface px-3 text-compact tabular-nums [&_svg]:size-3.5"
-				onClick={
-					newer
-						? (event) => {
-								event.preventDefault()
-								newer.onLoadLatest()
-							}
-						: undefined
-				}
-				size="sm"
-				variant="secondary"
-			>
-				<Icons.ArrowDown data-icon="inline-start" />
-				{newCount > 0
-					? t("transcript.newCounted", { count: newCount })
-					: t("transcript.jumpToLatest")}
-			</MessageScrollerButton>
+			{isDocked ? null : <JumpToLatest jump={jump} placement="floating" />}
 		</MessageScroller>
 	)
 }

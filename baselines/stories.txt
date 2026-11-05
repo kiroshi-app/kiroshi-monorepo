@@ -371,6 +371,12 @@ conversation-message-pinnedmessages--one-pinned
 conversation-message-pinnedmessages--overflowing
 conversation-message-pinnedmessages--unpinning
 conversation-message-richblockpending--default
+conversation-message-thread--agent-author-line-in-place
+conversation-message-thread--agent-author-line-in-place-at-the-narrowest-width
+conversation-message-thread--agent-author-line-pinned
+conversation-message-thread--agent-author-line-pinned-at-the-narrowest-width
+conversation-message-thread--agent-author-line-pinned-with-jump-to-latest-docked
+conversation-message-thread--agent-author-line-pinned-with-jump-to-latest-docked-at-the-narrowest-width
 conversation-message-thread--agent-author-line-stuck-on-a-hovered-answer
 conversation-message-thread--agent-author-line-stuck-on-a-long-answer
 conversation-message-thread--agent-author-line-stuck-on-an-unwrapped-answer
@@ -386,6 +392,7 @@ conversation-message-thread--conversations-5
 conversation-message-thread--conversations-6
 conversation-message-thread--conversations-7
 conversation-message-thread--conversations-8
+conversation-message-thread--docked-jump-to-latest-counts-and-loads-the-latest-page
 conversation-message-thread--images-1
 conversation-message-thread--images-2
 conversation-message-thread--images-3
@@ -395,6 +402,7 @@ conversation-message-thread--motion-before-and-after
 conversation-message-thread--prompt-input-states
 conversation-message-thread--queue-1
 conversation-message-thread--queue-2
+conversation-message-thread--scrolled-up-with-nothing-stuck-floats-jump-to-latest
 conversation-message-thread--user-author-line-mirrored
 conversation-message-thread--user-author-line-stuck-on-a-hovered-message
 conversation-message-thread--user-author-line-stuck-on-a-long-message
