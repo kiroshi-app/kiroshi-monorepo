@@ -3,11 +3,7 @@ import type {
 	BoardSnapshotObject,
 } from "@workspace/ui/components/board/board-miniature"
 import type { BoardShapeFill } from "@workspace/ui/components/board/board-shape"
-import type {
-	BoardItem,
-	BoardShapeStyle,
-	BoardView,
-} from "@workspace/ui/components/board-view"
+import type { BoardItem, BoardView } from "@workspace/ui/components/board-view"
 
 import type { LibraryBoardNode, LibraryBoardSummary } from "../bindings"
 
@@ -33,11 +29,6 @@ export const BLANK_BOARD_SNAPSHOT: BoardSnapshot = {
 
 const fillOf = ({ type, colour }: LibraryBoardNode): BoardShapeFill =>
 	(type === TEXT_TYPE && colour !== null && FILL_OF_PRESET[colour]) || "surface"
-
-const styleOf = (node: LibraryBoardNode): BoardShapeStyle => ({
-	shape: "rounded-rectangle",
-	fill: fillOf(node),
-})
 
 const snapshotObjectOf = (node: LibraryBoardNode): BoardSnapshotObject => {
 	const placed = {
@@ -71,7 +62,7 @@ const boardItemOf = (node: LibraryBoardNode, zOrder: number): BoardItem => ({
 	size: { width: node.width, height: node.height },
 	zOrder,
 	text: "",
-	style: styleOf(node),
+	style: { shape: "rounded-rectangle", fill: fillOf(node) },
 })
 
 export const boardViewOf = ({ nodes }: LibraryBoardSummary): BoardView => ({
