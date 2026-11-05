@@ -50,7 +50,7 @@ const NO_PRESENCE: HeldPresence = {
 	people: [],
 }
 
-const reportUnheard = (event: string) => (reason: unknown) => {
+export const reportUnheard = (event: string) => (reason: unknown) => {
 	console.error(`library: ${event} could not be listened to`, reason)
 }
 

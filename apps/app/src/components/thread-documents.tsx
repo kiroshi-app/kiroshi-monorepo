@@ -18,6 +18,7 @@ import {
 	textCarryingDocuments,
 } from "@/lib/chat/document-mentions"
 import { titleOf } from "@/lib/library/library-items"
+import { useFollowedLibraryDocument } from "@/lib/library/use-followed-library-document"
 import { useLibraryDocumentSession } from "@/lib/library/use-library-document-session"
 import { useLibraryImageResolver } from "@/lib/library/use-library-image-sources"
 import { useSaveMessageAsDocument } from "@/lib/library/use-save-message-as-document"
@@ -45,14 +46,17 @@ export const ThreadDocumentsContext = createContext<ThreadDocuments | null>(
 
 export const useThreadDocuments = (
 	conversationId: string | null,
+	workingAgentIds: string[],
 ): ThreadDocuments | null => {
 	const library = useLibraryOnScreen()
 	const spaceId = library?.spaceId
 	const isJoined = library?.isJoined ?? false
-	const [openedName, setOpenedName] = useState<string | null>(null)
-	const save = useSaveMessageAsDocument(spaceId, ({ name }) =>
-		setOpenedName(name),
-	)
+	const { openedName, open, close } = useFollowedLibraryDocument({
+		spaceId,
+		conversationId,
+		workingAgentIds,
+	})
+	const save = useSaveMessageAsDocument(spaceId, ({ name }) => open(name))
 
 	return useMemo(
 		() =>
@@ -61,14 +65,14 @@ export const useThreadDocuments = (
 						spaceId,
 						isJoined,
 						openedName,
-						open: setOpenedName,
-						close: () => setOpenedName(null),
+						open,
+						close,
 						saveAsDocument: conversationId
 							? (messageId: string) => save({ conversationId, messageId })
 							: undefined,
 					}
 				: null,
-		[spaceId, isJoined, openedName, conversationId, save],
+		[spaceId, isJoined, openedName, open, close, conversationId, save],
 	)
 }
 

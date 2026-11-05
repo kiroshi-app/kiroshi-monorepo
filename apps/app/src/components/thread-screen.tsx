@@ -375,6 +375,17 @@ const failureContextOf = (
 const shownConversationIdOf = (thread: LoadedThread): string | null =>
 	thread.kind === "bot" ? thread.state.conversationId : thread.conversation.id
 
+const turnRunningAgentIdsOf = ({
+	bot,
+	botWork,
+	workingBotIds,
+}: ThreadFacts): string[] => {
+	if (bot) {
+		return botWork ? [bot.id] : []
+	}
+	return workingBotIds.filter((id) => id !== null)
+}
+
 const useReplyChips = (
 	targets: ReplyTarget[],
 	toQuote: ThreadNaming["toQuote"],
@@ -1852,7 +1863,10 @@ function ThreadView(props: ThreadViewProps) {
 		onOpenMissionInNewTab,
 	} = props
 	const view = useThreadView(props)
-	const documents = useThreadDocuments(shownConversationIdOf(thread))
+	const documents = useThreadDocuments(
+		shownConversationIdOf(thread),
+		turnRunningAgentIdsOf(view.facts),
+	)
 	const imageViewer = useAnswerImageViewer()
 	const imageActions = useShownImageActions()
 	const answerActions: AnswerActions = {
