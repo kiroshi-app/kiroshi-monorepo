@@ -75,6 +75,14 @@ impl AcceptedType {
 			AcceptedType::Board => "application/json",
 		}
 	}
+
+	fn item_kind(&self) -> LibraryItemKind {
+		match self {
+			AcceptedType::Image { .. } => LibraryItemKind::Image,
+			AcceptedType::Document(_) => LibraryItemKind::Document,
+			AcceptedType::Board => LibraryItemKind::Board,
+		}
+	}
 }
 
 struct ResolvedItem {
@@ -135,11 +143,7 @@ fn item_at(path: &Path, name: String) -> Result<Option<LibraryItem>, LibraryErro
 	let modified = metadata.modified().map_err(|error| unreadable(&error))?;
 	Ok(Some(LibraryItem {
 		name,
-		kind: match accepted {
-			AcceptedType::Image { .. } => LibraryItemKind::Image,
-			AcceptedType::Document(_) => LibraryItemKind::Document,
-			AcceptedType::Board => LibraryItemKind::Board,
-		},
+		kind: accepted.item_kind(),
 		path: path.to_string_lossy().into_owned(),
 		bytes: metadata.len(),
 		modified_at: epoch_millis(modified),

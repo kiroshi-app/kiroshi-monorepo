@@ -517,15 +517,10 @@ fn item_read(root: &Path, space_id: &str, name: &str) -> Result<ItemRead, Librar
 	let item = resolve(root, space_id, name)?;
 	let name = name.to_owned();
 	Ok(match item.accepted {
-		AcceptedType::Document(_) => ItemRead::Text {
+		AcceptedType::Document(_) | AcceptedType::Board => ItemRead::Text {
 			text: document_text(&item, &name)?,
+			kind: item.accepted.item_kind(),
 			name,
-			kind: LibraryItemKind::Document,
-		},
-		AcceptedType::Board => ItemRead::Text {
-			text: document_text(&item, &name)?,
-			name,
-			kind: LibraryItemKind::Board,
 		},
 		AcceptedType::Image { mime_type } if item.bytes <= MAX_SHOWN_IMAGE_BYTES => {
 			ItemRead::Image {
