@@ -1,7 +1,7 @@
 import { expect } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { slotIn } from "@workspace/storybook/story-utils"
+import { isInBrowserRunner, slotIn } from "@workspace/storybook/story-utils"
 import { Markdown } from "@workspace/ui/components/markdown"
 import { MarkdownTaskCheckbox } from "@workspace/ui/components/markdown/task-list"
 
@@ -31,6 +31,11 @@ const LOOSE_TASKS = [
 	"- [ ] Notify the owner",
 ].join("\n")
 
+const LINKED_TASKS = [
+	"- [ ] Read [the brief](https://brief.invalid/) before the call",
+	"- [ ] Notify the owner",
+].join("\n")
+
 const BOX_SIZE = 16
 
 const LABEL_GAP = 10
@@ -46,7 +51,7 @@ const labelElementOf = (box: HTMLElement) => {
 }
 
 const gapToLabelOf = (box: HTMLElement) => {
-	const words = box.closest("label")?.nextSibling
+	const words = box.closest('[data-slot="markdown-task-checkbox"]')?.nextSibling
 	if (!words || words.nodeType !== Node.TEXT_NODE)
 		throw new Error("No words follow the box")
 	const firstLetterAt = words.textContent?.search(/\S/) ?? -1
@@ -80,7 +85,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The box GFM emits for a task list item, drawn as the 16 box of the to-do artboard: radius 5, a 1.5 border at foreground 30 percent on the card surface, filled with the Space colour and a 12 check once ticked. A click ticks or unticks it in the message alone: nothing is written back to the message, so a reload shows the agent's state again. A ticked item strikes and mutes its own label alone, never the sub-tasks nested under it. The box names its own state, Done or To do, and the item text stays a sibling.",
+					"The box GFM emits for a task list item, drawn as the 16 box of the to-do artboard: radius 5, a 1.5 border at foreground 30 percent on the card surface, filled with the Space colour and a 12 check once ticked. A click ticks or unticks it in the message alone: nothing is written back to the message, so a reload shows the agent's state again. A ticked item strikes and mutes its own label alone, never the sub-tasks nested under it. The item text is the label of its box and names it: a click anywhere on that text ticks the box, a link inside it opens without ticking, and the box stays the one tab stop of its row.",
 			},
 		},
 	},
@@ -101,8 +106,8 @@ export const Default = meta.story({
 		},
 	},
 	play: async ({ canvas }) => {
-		const done = canvas.getAllByRole("checkbox", { name: "Done" })
-		const [todo] = canvas.getAllByRole("checkbox", { name: "To do" })
+		const done = canvas.getAllByRole("checkbox", { checked: true })
+		const [todo] = canvas.getAllByRole("checkbox", { checked: false })
 		if (!todo) throw new Error("No box left to do")
 
 		await expect(done).toHaveLength(2)
@@ -160,9 +165,9 @@ export const LooseChecklist = meta.story({
 			Number.parseFloat(getComputedStyle(firstRow).lineHeight) + ROW_GAP,
 			0,
 		)
-		const done = canvas.getByRole("checkbox", { name: "Done" }).closest("p")
-		if (!done) throw new Error("The ticked box sits in no paragraph")
-		await expect(getComputedStyle(done).textDecorationLine).toBe("line-through")
+		const done = canvas.getByRole("checkbox", { name: "Read the nest" })
+		await expect(done).toBeChecked()
+		await expect(labelOf(done).textDecorationLine).toBe("line-through")
 		const note = canvas.getByText(/^Keep the occupants list/)
 		await expect(note.tagName).toBe("P")
 		await expect(note.querySelector("label")).toBeNull()
@@ -193,18 +198,101 @@ export const TicksAndUnticksByClick = meta.story({
 		},
 	},
 	play: async ({ canvas, userEvent }) => {
-		const [box] = canvas.getAllByRole("checkbox", { name: "To do" })
-		if (!box) throw new Error("No box left to do")
+		const box = canvas.getByRole("checkbox", { name: "Archive the record" })
 
 		await userEvent.click(box)
 		await expect(box).toBeChecked()
-		await expect(box).toHaveAccessibleName("Done")
 		await expect(labelOf(box).textDecorationLine).toBe("line-through")
 
 		await userEvent.click(box)
 		await expect(box).not.toBeChecked()
-		await expect(box).toHaveAccessibleName("To do")
 		await expect(labelOf(box).textDecorationLine).toBe("none")
+	},
+})
+
+export const TicksAndUnticksByClickingTheLabel = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A reader ticks a row by clicking its words, then unticks it the same way. Check that the box fills with the Space colour and the label strikes and mutes, exactly as a click on the box does, and that nothing on the row changes on hover or press.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const box = canvas.getByRole("checkbox", { name: "Archive the record" })
+		const words = canvas.getByText("Archive the record")
+
+		await userEvent.click(words)
+		await expect(box).toBeChecked()
+		await expect(labelOf(box).textDecorationLine).toBe("line-through")
+
+		await userEvent.click(words)
+		await expect(box).not.toBeChecked()
+		await expect(labelOf(box).textDecorationLine).toBe("none")
+	},
+})
+
+export const TicksALooseRowByClickingTheLabel = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A reader ticks a row of the loose checklist by clicking its words. Check that the box fills and the label strikes, and that a click on the second paragraph of the item leaves the row as it is.",
+			},
+		},
+	},
+	render: LooseChecklist.input.render,
+	play: async ({ canvas, userEvent }) => {
+		const box = canvas.getByRole("checkbox", { name: "Archive the record" })
+
+		await userEvent.click(canvas.getByText("Archive the record"))
+		await expect(box).toBeChecked()
+		await expect(labelOf(box).textDecorationLine).toBe("line-through")
+
+		await userEvent.click(canvas.getByText(/^Keep the occupants list/))
+		await expect(box).toBeChecked()
+	},
+})
+
+export const OpensALinkInTheLabelWithoutTicking = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A row whose label carries a link. A click on the link follows it and leaves the row unticked, while a click on the words around it still ticks the row. Check that the box is named by the whole label. The play drives a real pointer through the Vitest browser runner, so it only asserts there; in Storybook, click the link and the words by hand.",
+			},
+		},
+	},
+	render: () => (
+		<div className="w-[44rem] max-w-full">
+			<Markdown>{LINKED_TASKS}</Markdown>
+		</div>
+	),
+	play: async ({ canvas }) => {
+		if (!isInBrowserRunner()) return
+		const pointer = (await import("vitest/browser")).userEvent
+		const box = canvas.getByRole("checkbox", {
+			name: /^Read the brief .* before the call$/,
+		})
+		const link = canvas.getByRole("link", { name: /^the brief/ })
+		const clicks: MouseEvent[] = []
+		const recordClick = (event: MouseEvent) => clicks.push(event)
+		window.addEventListener("click", recordClick)
+
+		try {
+			await pointer.click(link)
+		} finally {
+			window.removeEventListener("click", recordClick)
+		}
+		await expect(clicks).toHaveLength(1)
+		await expect(link.contains(clicks[0]?.target as Node)).toBe(true)
+		await expect(clicks[0]?.defaultPrevented).toBe(false)
+		await expect(box).not.toBeChecked()
+		await expect(labelOf(box).textDecorationLine).toBe("none")
+
+		await pointer.click(canvas.getByText(/before the call$/))
+		await expect(box).toBeChecked()
 	},
 })
 
@@ -214,17 +302,22 @@ export const TicksFromTheKeyboard = meta.story({
 		docs: {
 			description: {
 				story:
-					"The first box reached with Tab and unticked with Space. Check that the browser focus ring shows around it.",
+					"The first box reached with Tab and unticked with Space, then the next row reached with a second Tab. Check that the browser focus ring shows around the box alone, never around the label.",
 			},
 		},
 	},
 	play: async ({ canvas, userEvent }) => {
-		const [box] = canvas.getAllByRole("checkbox", { name: "Done" })
+		const box = canvas.getByRole("checkbox", { name: "Read the nest" })
 
 		await userEvent.tab()
 		await expect(box).toHaveFocus()
 		await userEvent.keyboard(" ")
-		await expect(box).toHaveAccessibleName("To do")
+		await expect(box).not.toBeChecked()
+
+		await userEvent.tab()
+		await expect(
+			canvas.getByRole("checkbox", { name: "Summarise the occupants" }),
+		).toHaveFocus()
 	},
 })
 
@@ -243,14 +336,16 @@ export const NestedChecklist = meta.story({
 		</div>
 	),
 	play: async ({ canvas, canvasElement }) => {
-		const [bookVenue, draftList] = canvas.getAllByRole("checkbox", {
-			name: "Done",
+		const bookVenue = canvas.getByRole("checkbox", { name: "Book the venue" })
+		const draftList = canvas.getByRole("checkbox", {
+			name: "Draft the guest list",
 		})
-		const [confirmCaterer, sendInvites] = canvas.getAllByRole("checkbox", {
-			name: "To do",
+		const confirmCaterer = canvas.getByRole("checkbox", {
+			name: "Confirm the caterer",
 		})
-		if (!bookVenue || !draftList || !confirmCaterer || !sendInvites)
-			throw new Error("Four boxes expected")
+		const sendInvites = canvas.getByRole("checkbox", {
+			name: "Send the invites",
+		})
 		const foreground = getComputedStyle(slotIn(canvasElement, "markdown")).color
 
 		await expect(labelElementOf(confirmCaterer)).toHaveTextContent(
@@ -269,5 +364,35 @@ export const NestedChecklist = meta.story({
 		await expect(labelOf(sendInvites).color).toBe(foreground)
 		await expect(labelOf(draftList).textDecorationLine).toBe("line-through")
 		await expect(labelOf(draftList).color).not.toBe(foreground)
+	},
+})
+
+export const TicksASubTaskAlone = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A reader clicks the words of a sub-task, then the words of another. Check that each sub-task ticks or unticks on its own while the row above it keeps its state.",
+			},
+		},
+	},
+	render: NestedChecklist.input.render,
+	play: async ({ canvas, userEvent }) => {
+		const bookVenue = canvas.getByRole("checkbox", { name: "Book the venue" })
+		const sendInvites = canvas.getByRole("checkbox", {
+			name: "Send the invites",
+		})
+
+		await userEvent.click(canvas.getByText("Confirm the caterer"))
+		await expect(
+			canvas.getByRole("checkbox", { name: "Confirm the caterer" }),
+		).toBeChecked()
+		await expect(bookVenue).toBeChecked()
+
+		await userEvent.click(canvas.getByText("Draft the guest list"))
+		await expect(
+			canvas.getByRole("checkbox", { name: "Draft the guest list" }),
+		).not.toBeChecked()
+		await expect(sendInvites).not.toBeChecked()
 	},
 })

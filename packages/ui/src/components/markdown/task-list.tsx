@@ -32,19 +32,17 @@ export const MarkdownTaskCheckbox = ({
 	checked = false,
 	...props
 }: MarkdownTaskCheckboxProps) => {
-	const { t } = useTranslation("chat")
 	const toggle = useContext(MarkdownTaskToggleContext)
 	const [isTickedHere, setTickedHere] = useState(checked)
 	const isTicked = toggle ? checked : isTickedHere
 
 	return (
-		<label
+		<span
 			className="relative me-2.5 mt-[calc((1lh-1rem)/2)] inline-grid size-4 align-top before:absolute before:-inset-1"
 			data-slot="markdown-task-checkbox"
 		>
 			<input
 				{...props}
-				aria-label={isTicked ? t("task.done") : t("task.todo")}
 				checked={isTicked}
 				className={TODO_BOX_CLASS}
 				disabled={false}
@@ -58,7 +56,7 @@ export const MarkdownTaskCheckbox = ({
 				aria-hidden="true"
 				className="pointer-events-none absolute inset-0 m-auto size-3 text-primary-foreground opacity-0 peer-checked:opacity-100"
 			/>
-		</label>
+		</span>
 	)
 }
 
@@ -76,6 +74,15 @@ const trimTextAfterBox = (nodes: ReactNode[]) =>
 			? child.trimStart()
 			: child,
 	)
+
+type TaskLabelProps = {
+	children: ReactNode[]
+}
+
+const TaskLabel = ({ children }: TaskLabelProps) => (
+	// biome-ignore lint/a11y/noLabelWithoutControl: the GFM box arrives among the children
+	<label data-slot="markdown-task-label">{trimTextAfterBox(children)}</label>
+)
 
 export const MarkdownListItem = ({
 	node,
@@ -96,7 +103,7 @@ export const MarkdownListItem = ({
 						? cloneElement(
 								child,
 								undefined,
-								trimTextAfterBox(Children.toArray(child.props.children)),
+								<TaskLabel>{Children.toArray(child.props.children)}</TaskLabel>,
 							)
 						: child,
 				)}
@@ -105,11 +112,10 @@ export const MarkdownListItem = ({
 
 	const nestedAt = items.findIndex(isNestedList)
 	const labelEnd = nestedAt === -1 ? items.length : nestedAt
-	const label = trimTextAfterBox(items.slice(0, labelEnd))
 
 	return (
 		<li {...props}>
-			<span data-slot="markdown-task-label">{label}</span>
+			<TaskLabel>{items.slice(0, labelEnd)}</TaskLabel>
 			{items.slice(labelEnd)}
 		</li>
 	)
