@@ -125,9 +125,6 @@ impl Documents {
 	) -> Result<(), LibraryError> {
 		let _held = self.held();
 		let item = resolve(root, space_id, name)?;
-		if !matches!(item.accepted, AcceptedType::Image { .. }) {
-			return Err(LibraryError::NotAnImage { name: name.to_owned() });
-		}
 		let thumbnails = thumbnails_dir(&space_dir(root, space_id));
 		let former = thumbnail_name(name, &item.path)?;
 		private_files::replace_atomically(&item.path, bytes).map_err(unwritable)?;

@@ -95,8 +95,11 @@ fn all_of<P>(heard: &Receiver<P>) -> Vec<P> {
 }
 
 fn refusal_kind(answer: Result<Value, DocumentRefusal>) -> Value {
-	let refusal = answer.expect_err("the call is refused");
-	serde_json::to_value(refusal).expect("the refusal serializes")["kind"].clone()
+	refusal_of(answer)["kind"].clone()
+}
+
+fn refusal_of(answer: Result<Value, DocumentRefusal>) -> Value {
+	serde_json::to_value(answer.expect_err("the call is refused")).expect("the refusal serializes")
 }
 
 fn caret_of_a_member(app: &App<MockRuntime>, name: &str) -> String {
@@ -587,10 +590,6 @@ fn caught_up(editor: &Doc, updates: &Receiver<Value>) -> String {
 		editor.transact_mut().apply_update(update).expect("applies");
 	}
 	editor.get_or_insert_text("markdown").get_string(&editor.transact())
-}
-
-fn refusal_of(answer: Result<Value, DocumentRefusal>) -> Value {
-	serde_json::to_value(answer.expect_err("the call is refused")).expect("the refusal serializes")
 }
 
 #[tokio::test]
