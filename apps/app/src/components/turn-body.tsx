@@ -15,7 +15,11 @@ import {
 	AnswerActionsContext,
 	type ThreadImage,
 } from "@/lib/chat/answer-actions"
-import type { MessageContent } from "@/lib/chat/message-attachments"
+import {
+	citedAttachmentOf,
+	type MessageContent,
+	resolveCitedImage,
+} from "@/lib/chat/message-attachments"
 import { openAttachment } from "@/lib/links/open-attachment"
 import { openWebPage } from "@/lib/links/open-web-page"
 
@@ -61,6 +65,19 @@ const attachmentOpener = (
 	}
 }
 
+const openerOf = (
+	attachments: MessageAttachment[],
+	actions: AnswerActions | null,
+) => (actions ? attachmentOpener(attachments, actions) : openAttachment)
+
+const citedAttachmentOpener =
+	(actions: AnswerActions | null) => (path: string) => {
+		const attachment = citedAttachmentOf(path)
+		if (attachment) {
+			openerOf([attachment], actions)(path)
+		}
+	}
+
 export const TurnBody = ({
 	attachments,
 	text,
@@ -78,15 +95,15 @@ export const TurnBody = ({
 					actions ? attachmentImageMenu(attachments, actions) : undefined
 				}
 				items={attachments}
-				onOpen={
-					actions ? attachmentOpener(attachments, actions) : openAttachment
-				}
+				onOpen={openerOf(attachments, actions)}
 			/>
 			{text ? (
 				<Markdown
 					answerActions={answerActions}
 					isWriting={isWriting}
+					onOpenAttachment={citedAttachmentOpener(actions)}
 					renderRun={renderRun}
+					resolveAttachment={resolveCitedImage}
 					runs={runs}
 				>
 					{text}

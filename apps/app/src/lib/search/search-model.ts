@@ -16,6 +16,7 @@ import type {
 	CatalogueMission,
 	CatalogueRoutine,
 } from "./catalogue-contract"
+import { withCitedFileLabels } from "./cited-file-labels"
 import type { MessageHit } from "./search-contract"
 import { markedTitle } from "./search-fold"
 import type { SearchRow, SearchTarget } from "./search-navigation"
@@ -148,7 +149,7 @@ const toMessageResult = (
 ): SearchPaletteResult => ({
 	id: `message-${hit.messageId}`,
 	identity: identityOfMessage(hit, lookups),
-	title: hit.snippet.map((part, index) => ({
+	title: withCitedFileLabels(hit.snippet).map((part, index) => ({
 		key: `${index}`,
 		text: part.text,
 		isMatch: part.matched,
