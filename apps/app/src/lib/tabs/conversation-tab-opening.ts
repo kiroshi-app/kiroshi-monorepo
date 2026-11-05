@@ -144,11 +144,8 @@ export const createConversationTabOpening = ({
 			return
 		}
 		const mirrored = otherWindowsShowing(tabs.windowLabel, conversationId)
-		if (mirrored.length === 0) {
-			target.openInPlace()
-			return
-		}
-		const windowLabel = await firstLiveAmong(mirrored)
+		const windowLabel =
+			mirrored.length === 0 ? null : await firstLiveAmong(mirrored)
 		if (windowLabel === null) {
 			target.openInPlace()
 			return
