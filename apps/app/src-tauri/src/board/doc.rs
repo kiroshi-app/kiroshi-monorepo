@@ -2,10 +2,29 @@ use std::collections::HashMap;
 
 use serde_json::Value;
 use yrs::types::ToJson;
-use yrs::{Any, Doc, In, Map, MapPrelim, Number, ReadTxn, TextPrelim, Transact};
+use yrs::{
+	Any, Doc, In, Map, MapPrelim, MapRef, Number, Out, ReadTxn, Text, TextPrelim, Transact,
+	TransactionMut,
+};
 
 use super::schema::{Fields, SCHEMA};
 use super::{parsed_board, Board, BoardError, JsonObject};
+
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct BoardEdit {
+	pub added_nodes: Vec<(String, JsonObject)>,
+	pub changed_nodes: Vec<NodeChange>,
+	pub removed_nodes: Vec<String>,
+	pub added_edges: Vec<(String, JsonObject)>,
+	pub removed_edges: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct NodeChange {
+	pub id: String,
+	pub node: JsonObject,
+	pub fields: Vec<String>,
+}
 
 const TEXT: &str = "text";
 
@@ -75,18 +94,7 @@ fn is_text(fields: &[&Fields], name: &str) -> bool {
 }
 
 fn shared_element(element: &JsonObject, fields: &[&Fields]) -> MapPrelim {
-	element
-		.iter()
-		.map(|(name, value)| {
-			let shared = match value {
-				Value::String(text) if is_text(fields, name) => {
-					In::from(TextPrelim::new(text.as_str()))
-				}
-				_ => In::Any(any_of(value)),
-			};
-			(name.as_str(), shared)
-		})
-		.collect()
+	element.iter().map(|(name, value)| (name.as_str(), shared_value(value, fields, name))).collect()
 }
 
 fn node_fields(node: &JsonObject) -> Vec<&'static Fields> {
@@ -116,5 +124,57 @@ pub fn write_board(doc: &Doc, board: &Board) {
 	}
 	for (name, value) in &board.canvas {
 		canvas.insert(&mut txn, name.as_str(), any_of(value));
+	}
+}
+
+fn shared_value(value: &Value, fields: &[&Fields], name: &str) -> In {
+	match value {
+		Value::String(text) if is_text(fields, name) => In::from(TextPrelim::new(text.as_str())),
+		_ => In::Any(any_of(value)),
+	}
+}
+
+fn changed_in_place(txn: &mut TransactionMut, node: &MapRef, change: &NodeChange) {
+	let fields = node_fields(&change.node);
+	let changed = change.fields.iter().filter_map(|name| Some((name, change.node.get(name)?)));
+	for (name, value) in changed {
+		match (node.get(txn, name), value) {
+			(Some(Out::YText(text)), Value::String(next)) => {
+				let length = text.len(txn);
+				text.remove_range(txn, 0, length);
+				text.insert(txn, 0, next);
+			}
+			_ => {
+				node.insert(txn, name.as_str(), shared_value(value, &fields, name));
+			}
+		}
+	}
+}
+
+pub fn edit_board(doc: &Doc, edit: &BoardEdit) {
+	let roots = &SCHEMA.doc;
+	let nodes = doc.get_or_insert_map(roots.nodes.as_str());
+	let edges = doc.get_or_insert_map(roots.edges.as_str());
+	let mut txn = doc.transact_mut();
+	for id in &edit.removed_edges {
+		edges.remove(&mut txn, id);
+	}
+	for id in &edit.removed_nodes {
+		nodes.remove(&mut txn, id);
+	}
+	for (id, node) in &edit.added_nodes {
+		nodes.insert(&mut txn, id.as_str(), shared_element(node, &node_fields(node)));
+	}
+	for change in &edit.changed_nodes {
+		match nodes.get(&txn, &change.id) {
+			Some(Out::YMap(node)) => changed_in_place(&mut txn, &node, change),
+			_ => {
+				let node = shared_element(&change.node, &node_fields(&change.node));
+				nodes.insert(&mut txn, change.id.as_str(), node);
+			}
+		}
+	}
+	for (id, edge) in &edit.added_edges {
+		edges.insert(&mut txn, id.as_str(), shared_element(edge, &[&SCHEMA.edge.fields]));
 	}
 }

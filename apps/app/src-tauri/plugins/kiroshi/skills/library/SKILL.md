@@ -1,13 +1,13 @@
 ---
 name: "library"
-description: "How you find, read, create, write, import, rename and delete the items of the Library of this Space. Applies when the person asks you about a document or an image of the Library, or to draft, extend, fill in, file, rename or remove one."
+description: "How you find, read, create, write, import, rename and delete the items of the Library of this Space, and draw on its boards. Applies when the person asks you about a document, an image or a board of the Library, or to draft, extend, fill in, file, rename, remove or draw one."
 disable-model-invocation: true
 metadata:
   kiroshi:
     preload: true
 ---
 
-The Library of this Space holds its documents and its images. You write in a document live,
+The Library of this Space holds its documents, its images and its boards. You write in a document live,
 beside the people editing it. You hold eight tools for the Library, on the `kiroshi` server,
 and every one acts on the Library of the Space of this conversation, never another.
 
@@ -51,3 +51,29 @@ A passage that occurs zero times or more than once is refused with its count and
 written: read the document again and pick a longer passage. A name absent from this Library is refused as
 `missing`, and a name that leaves the Library folder is refused as `invalidName`; either way
 nothing changes.
+
+## Boards
+
+A board is a `.canvas` item of the Library, drawn live beside the people who have it open: they
+see where you draw while you draw. You hold five board tools on the `kiroshi` server, and
+`conversation_post_document` to post a board in this conversation.
+
+- `board_create`, a new empty board, such as `roadmap.canvas`. A name already taken is refused
+  and nothing is created.
+- `board_read`, every node of a board with its id, kind, position, size, text and the section
+  that holds it, and every edge with the two nodes it joins and its label. Read a board before
+  you change it, so you hold the ids of its nodes.
+- `board_add`, a whole diagram in one call: every node and every edge, landing at once. A node
+  is a `sticky`, a `text`, a `shape` or a `section`, with a `key` of your own. Place it with
+  `place` (a `side` among `right`, `left`, `below`, `above`, `of` a key of this call or a node id
+  of the board), or inside a `section`, and the board computes its position without covering
+  another node. A node without a place lands right of the node before it. An edge joins `from`
+  and `to`, each a key or a node id. It answers the node id each key got.
+- `board_update`, fields of nodes by id, every other field kept.
+- `board_remove`, nodes by id, with every edge attached to them.
+
+Draw a flow in one `board_add`: create the board, add every step with its edges in a single
+call, each step placed `right` of the one before, then post the board with
+`conversation_post_document` so the person opens it. One invalid node or edge refuses the whole
+call with its `index` and its `reason`, and nothing changes: fix that item and send the call
+again.

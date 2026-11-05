@@ -87,9 +87,16 @@ pub(super) struct NodeSchema {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct KindSpec {
+	pub size: Option<Size>,
 	pub canvas_type: Option<String>,
 	pub fields: Fields,
 	pub fill: Option<FillPairing>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+pub(super) struct Size {
+	pub width: i64,
+	pub height: i64,
 }
 
 #[derive(Deserialize)]

@@ -202,6 +202,17 @@ pub(crate) fn held_document<R: Runtime>(
 	a_document(&root(app)?, space_id, name)
 }
 
+pub(crate) fn held_document_or_board<R: Runtime>(
+	app: &AppHandle<R>,
+	space_id: &str,
+	name: &str,
+) -> Result<(), LibraryError> {
+	match resolve(&root(app)?, space_id, name)?.accepted {
+		AcceptedType::Document(_) | AcceptedType::Board => Ok(()),
+		AcceptedType::Image { .. } => Err(LibraryError::NotADocument { name: name.to_owned() }),
+	}
+}
+
 fn document_text(item: &ResolvedItem, name: &str) -> Result<String, LibraryError> {
 	within(name, item.bytes, MAX_DOCUMENT_BYTES)?;
 	utf8_text(name, read_bytes(item, name)?)

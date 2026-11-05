@@ -157,7 +157,14 @@ pub async fn conversation_append_user_message<R: Runtime>(
 	message: NewUserMessage,
 ) -> Result<i64, TranscriptStoreError> {
 	let database = ready(&state)?;
-	refuse_unheld_documents(&app, database, &message.conversation_id, &message.documents).await?;
+	refuse_unheld(
+		&app,
+		database,
+		&message.conversation_id,
+		&message.documents,
+		library::held_document,
+	)
+	.await?;
 	let written_from = caller.written_from();
 	let author = caller.author(&app, database).await?;
 	let (conversation_id, id) = (message.conversation_id.clone(), message.id.clone());
@@ -259,7 +266,14 @@ async fn store_sent<R: Runtime>(
 	message: NewUserMessage,
 	summoned: &[String],
 ) -> Result<i64, TranscriptStoreError> {
-	refuse_unheld_documents(app, database, &message.conversation_id, &message.documents).await?;
+	refuse_unheld(
+		app,
+		database,
+		&message.conversation_id,
+		&message.documents,
+		library::held_document,
+	)
+	.await?;
 	let turn_id = message.turn_id.clone();
 	let completed_at = summoned.is_empty().then_some(message.created_at);
 	let written_from = caller.written_from();
@@ -285,7 +299,8 @@ pub(crate) async fn post_document<R: Runtime>(
 	name: &str,
 ) -> Result<String, TranscriptStoreError> {
 	let documents = vec![name.to_owned()];
-	refuse_unheld_documents(app, database, conversation_id, &documents).await?;
+	refuse_unheld(app, database, conversation_id, &documents, library::held_document_or_board)
+		.await?;
 	let id = Uuid::new_v4().to_string();
 	let posted = messages::NewUserMessage {
 		id: id.clone(),
@@ -305,11 +320,12 @@ pub(crate) async fn post_document<R: Runtime>(
 	Ok(id)
 }
 
-async fn refuse_unheld_documents<R: Runtime>(
+async fn refuse_unheld<R: Runtime>(
 	app: &AppHandle<R>,
 	database: &db::Database,
 	conversation_id: &str,
 	documents: &[String],
+	held: fn(&AppHandle<R>, &str, &str) -> Result<(), LibraryError>,
 ) -> Result<(), TranscriptStoreError> {
 	let Some(first) = documents.first() else {
 		return Ok(());
@@ -321,8 +337,9 @@ async fn refuse_unheld_documents<R: Runtime>(
 		});
 	};
 	documents.iter().try_for_each(|name| {
-		library::held_document(app, &space_id, name).map_err(|failure| {
-			TranscriptStoreError::DocumentRefused { name: name.clone(), failure: Box::new(failure) }
+		held(app, &space_id, name).map_err(|failure| TranscriptStoreError::DocumentRefused {
+			name: name.clone(),
+			failure: Box::new(failure),
 		})
 	})
 }

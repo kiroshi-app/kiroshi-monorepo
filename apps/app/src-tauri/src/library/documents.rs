@@ -16,7 +16,7 @@ use super::{
 	linked_under_free_name, read_bytes, resolve, space_dir, stored_thumbnail, thumbnail_name,
 	thumbnails_dir, undecodable, unwritable, AcceptedType, ResolvedItem,
 };
-use crate::board::Board;
+use crate::board::{Board, BoardEdit};
 use crate::private_files;
 
 mod board;
@@ -80,6 +80,14 @@ pub(crate) struct WriteStep<'a> {
 	pub(crate) writer: u64,
 	pub(crate) caret: &'a [u8],
 	pub(crate) text: &'a str,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct BoardTarget<'a> {
+	pub(crate) root: &'a Path,
+	pub(crate) space_id: &'a str,
+	pub(crate) name: &'a str,
+	pub(crate) writer: u64,
 }
 
 pub(crate) struct RemoveStep<'a> {
@@ -258,15 +266,47 @@ impl Documents {
 			Some(held) => held,
 			None => &loaded.insert(loaded_board(root, space_id, name, &file.text)?).doc,
 		};
-		checked_on_a_copy(doc, &file, update)?;
-		let before = doc.transact().state_vector();
-		merged_into(doc, name, decoded(name, update)?)?;
-		let change = doc.transact().encode_state_as_update_v1(&before);
+		let change = board_change(doc, &file, update)?;
 		if let Some(loaded) = loaded {
 			held.docs.insert(key.clone(), loaded.doc);
 			held.written_boards.insert(key.clone(), loaded.written);
 		}
 		announce(&Applied { name: name.to_owned(), change });
+		self.board_write_scheduled(&mut held, root, key);
+		Ok(())
+	}
+
+	pub(crate) fn board(
+		&self,
+		root: &Path,
+		space_id: &str,
+		name: &str,
+	) -> Result<Board, LibraryError> {
+		let mut held = self.held();
+		let file = held.located(root, space_id, name)?;
+		let doc = held.board_doc(root, space_id, &file, &self.on_board_file_replaced)?;
+		board::read(doc, &file.name)
+	}
+
+	pub(crate) fn edit_board<T, E: From<LibraryError>>(
+		&self,
+		target: &BoardTarget<'_>,
+		edit: impl FnOnce(&Board) -> Result<(BoardEdit, T), E>,
+		announce: impl FnOnce(&Applied),
+	) -> Result<T, E> {
+		let BoardTarget { root, space_id, name, writer } = *target;
+		let mut held = self.held();
+		let file = held.located(root, space_id, name)?;
+		let doc = held.board_doc(root, space_id, &file, &self.on_board_file_replaced)?;
+		let (board_edit, made) = edit(&board::read(doc, &file.name)?)?;
+		let update = board::update_of(doc, writer, &file.name, &board_edit)?;
+		let change = board_change(doc, &file, &update)?;
+		announce(&Applied { name: file.name.clone(), change });
+		self.board_write_scheduled(&mut held, root, key(space_id, &file.name));
+		Ok(made)
+	}
+
+	fn board_write_scheduled(&self, held: &mut Held, root: &Path, key: Key) {
 		if let Some(generation) = held.marked_pending(root, key, Instant::now()) {
 			tokio::spawn(written_when_due(
 				Arc::clone(&self.held),
@@ -274,7 +314,6 @@ impl Documents {
 				Arc::clone(&self.on_board_file_replaced),
 			));
 		}
-		Ok(())
 	}
 
 	pub(crate) fn write_pending_boards(&self) {
@@ -497,6 +536,22 @@ impl Held {
 			}
 			(found, _) => found,
 		}
+	}
+
+	fn board_doc(
+		&mut self,
+		root: &Path,
+		space_id: &str,
+		file: &DocumentFile,
+		on_board_file_replaced: &BoardFileReplaced,
+	) -> Result<&Doc, LibraryError> {
+		if !matches!(file.kind, DocumentKind::Board) {
+			return Err(LibraryError::NotABoard { name: file.name.clone() });
+		}
+		self.board_synced(root, space_id, file, on_board_file_replaced)?;
+		self.docs
+			.get(&key(space_id, &file.name))
+			.ok_or_else(|| LibraryError::Missing { name: file.name.clone() })
 	}
 
 	fn board_synced(
@@ -739,6 +794,20 @@ fn loaded_board(
 	}
 	let (doc, written) = board::imported(file_text, name)?;
 	Ok(LoadedBoard { doc, written, was_stored })
+}
+
+fn board_change(doc: &Doc, file: &DocumentFile, update: &[u8]) -> Result<Vec<u8>, LibraryError> {
+	let name = file.name.as_str();
+	checked_on_a_copy(doc, file, update)?;
+	let before = doc.transact().state_vector();
+	merged_into(doc, name, decoded(name, update)?)?;
+	Ok(doc.transact().encode_state_as_update_v1(&before))
+}
+
+fn writer_of(doc: &Doc, writer: u64, name: &str) -> Result<Doc, LibraryError> {
+	let copy = Doc::with_client_id(writer);
+	merged_into(&copy, name, decoded(name, &full_state(doc))?)?;
+	Ok(copy)
 }
 
 fn checked_on_a_copy(doc: &Doc, file: &DocumentFile, update: &[u8]) -> Result<(), LibraryError> {

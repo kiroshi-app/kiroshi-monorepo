@@ -71,7 +71,71 @@ const DELETE =
 	"Delete an item of the Library of this Space for everyone, with its thumbnail and its shared editing state, once the person asked you to remove it. It can't be undone. It answers the name of the item deleted."
 
 const POST_DOCUMENT =
-	"Post a document of the Library of this Space in this conversation, as a message of yours the person opens it from, once you want them to read it. A name that is not a document of this Library is refused and nothing is posted. It answers the name of the document, the id of this conversation and the id of the message."
+	"Post a document or a board of the Library of this Space in this conversation, as a message of yours the person opens it from, once you want them to read it. A name that is not a document or a board of this Library is refused and nothing is posted. It answers the name of the item, the id of this conversation and the id of the message."
+
+const BOARD_CREATE =
+	"Create a new empty board in the Library of this Space, shown in the Library of the person right away. A name already taken is refused and nothing is created. To draw on a board that already exists, add to it with board_add, never create another one. It answers the name the board stands under, its kind and its updatedAt."
+
+const BOARD_NAME =
+	"The name of the board in the Library of this Space, ending in .canvas, such as roadmap.canvas, without any folder."
+
+const BOARD_READ =
+	"Read a board of the Library of this Space as it stands now with what everyone has drawn on it. It answers every node with its id, its kind, its x, y, width and height, its text (the label of a section) and the id of the section that holds it, and every edge with its id, its fromNode, its toNode and its label."
+
+const BOARD_ADD =
+	"Draw a whole diagram on a board of the Library of this Space in one call, landing at once for the people who have it open. Give every node a key of your own; place a node beside another one, of this call by its key or of the board by its id, or inside a section, and the board computes where it lands without covering another node. A node without a place lands right of the node before it, the first one right of everything on the board. An edge joins two nodes named by key or id. One invalid node or edge refuses the whole call with its index and the reason, and nothing changes. It answers the id each key got."
+
+const NODES =
+	"The nodes to draw, in order: each node without a place lands right of the one before it."
+
+const KEY =
+	"A name of your own for this node, unique in this call, that the place, the section and the edges of this call use to point at it."
+
+const NODE_KIND = "One of sticky, text, shape or section."
+
+const NODE_TEXT = "The text the node shows; for a section, its label."
+
+const COLOR = "A colour, a preset from 1 to 6 or a hex such as #4a90d9."
+
+const FILL = "For a sticky only, one of yellow, green, pink, blue or orange."
+
+const SHAPE = "For a shape only, one of rectangle, ellipse or diamond."
+
+const COORDINATE =
+	"An exact board coordinate, given with its pair; left out, the board places the node."
+
+const SIZE = "In board units; left out, the default size of the kind."
+
+const PLACE =
+	"Where the node lands next to another one, at a fixed gap and centred on it."
+
+const SIDE = "One of right, left, below or above."
+
+const OF =
+	"The key of a node of this call or the id of a node of the board the node lands beside."
+
+const SECTION =
+	"The key of a section of this call or the id of a section of the board the node lands inside; the section grows to hold it."
+
+const EDGES = "The edges to draw between the nodes."
+
+const ENDPOINT =
+	"The key of a node of this call or the id of a node of the board."
+
+const EDGE_LABEL = "The text written on the edge."
+
+const BOARD_UPDATE =
+	"Change fields of nodes of a board of the Library of this Space, every other field kept as it stands, in one change the people who have it open see at once. An id absent from the board or a field the node refuses refuses the whole call with its index and the reason, and nothing changes. It answers the ids of the nodes changed."
+
+const CHANGES = "The nodes to change, each by its id with the fields to set."
+
+const NODE_ID = "The id of a node of the board, as board_read answered it."
+
+const BOARD_REMOVE =
+	"Remove nodes from a board of the Library of this Space, with every edge attached to them, in one change. An id absent from the board refuses the whole call with its index and nothing changes. It answers the ids of the nodes and of the edges removed."
+
+const REMOVED_IDS =
+	"The ids of the nodes to remove, as board_read answered them."
 
 type ToolInput = Record<string, z.ZodType>
 
@@ -114,6 +178,75 @@ const IMPORTED: ToolInput = {
 const RENAMED: ToolInput = {
 	...NAMED,
 	newName: z.string().describe(NEW_NAME),
+}
+
+const BOARD_NAMED: ToolInput = { name: z.string().describe(BOARD_NAME) }
+
+const LOOK = {
+	text: z.string().optional().describe(NODE_TEXT),
+	color: z.string().optional().describe(COLOR),
+	fill: z.string().optional().describe(FILL),
+	shape: z.string().optional().describe(SHAPE),
+}
+
+const GEOMETRY = {
+	x: z.number().int().optional().describe(COORDINATE),
+	y: z.number().int().optional().describe(COORDINATE),
+	width: z.number().int().optional().describe(SIZE),
+	height: z.number().int().optional().describe(SIZE),
+}
+
+const DRAWN: ToolInput = {
+	...BOARD_NAMED,
+	nodes: z
+		.array(
+			z
+				.object({
+					key: z.string().describe(KEY),
+					kind: z.string().describe(NODE_KIND),
+					...LOOK,
+					...GEOMETRY,
+					place: z
+						.object({
+							side: z.string().describe(SIDE),
+							of: z.string().describe(OF),
+						})
+						.strict()
+						.optional()
+						.describe(PLACE),
+					section: z.string().optional().describe(SECTION),
+				})
+				.strict(),
+		)
+		.describe(NODES),
+	edges: z
+		.array(
+			z
+				.object({
+					from: z.string().describe(ENDPOINT),
+					to: z.string().describe(ENDPOINT),
+					label: z.string().optional().describe(EDGE_LABEL),
+				})
+				.strict(),
+		)
+		.optional()
+		.describe(EDGES),
+}
+
+const CHANGED: ToolInput = {
+	...BOARD_NAMED,
+	nodes: z
+		.array(
+			z
+				.object({ id: z.string().describe(NODE_ID), ...LOOK, ...GEOMETRY })
+				.strict(),
+		)
+		.describe(CHANGES),
+}
+
+const REMOVED: ToolInput = {
+	...BOARD_NAMED,
+	ids: z.array(z.string()).describe(REMOVED_IDS),
 }
 
 type ImageRead = { form: "image"; mimeType: string; content: string }
@@ -168,5 +301,20 @@ export const libraryTools = (
 	),
 	tool("conversation_post_document", POST_DOCUMENT, NAMED, (input) =>
 		asked(session, "postDocument", input),
+	),
+	tool("board_create", BOARD_CREATE, BOARD_NAMED, (input) =>
+		asked(session, "boardCreate", input),
+	),
+	tool("board_read", BOARD_READ, BOARD_NAMED, (input) =>
+		asked(session, "boardRead", input),
+	),
+	tool("board_add", BOARD_ADD, DRAWN, (input) =>
+		asked(session, "boardAdd", input),
+	),
+	tool("board_update", BOARD_UPDATE, CHANGED, (input) =>
+		asked(session, "boardUpdate", input),
+	),
+	tool("board_remove", BOARD_REMOVE, REMOVED, (input) =>
+		asked(session, "boardRemove", input),
 	),
 ]

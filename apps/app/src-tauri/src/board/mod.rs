@@ -1,5 +1,6 @@
 mod canvas;
 mod doc;
+mod draw;
 mod schema;
 #[cfg(test)]
 mod tests;
@@ -12,7 +13,11 @@ use serde::Serialize;
 use serde_json::{Map, Value};
 
 pub use canvas::{export_canvas, import_canvas};
-pub use doc::{read_board, write_board};
+pub use doc::{edit_board, read_board, write_board, BoardEdit};
+pub use draw::{
+	changed, drawn, read_out, removed, BoardRead, ChangedNode, DrawRefusal, DrawnEdge, DrawnNode,
+	Touched,
+};
 use schema::{FieldSpec, Fields, KindSpec, Placement, SCHEMA};
 
 pub type JsonObject = Map<String, Value>;

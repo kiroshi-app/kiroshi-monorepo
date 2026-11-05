@@ -41,6 +41,20 @@ const A_WHOLE_REPLACE = { name: "notes.md", text: "# Launch", whole: true }
 
 const A_REFUSAL = { kind: "missing", name: "notes.md" }
 
+const A_DIAGRAM = {
+	name: "plan.canvas",
+	nodes: [
+		{ key: "idea", kind: "sticky", text: "Idea" },
+		{
+			key: "build",
+			kind: "shape",
+			text: "Build",
+			place: { side: "right", of: "idea" },
+		},
+	],
+	edges: [{ from: "idea", to: "build", label: "then" }],
+}
+
 type Asked = { subtype: string; operation: string; payload: unknown }
 
 type Served = { result?: unknown; error?: HostError }
@@ -82,7 +96,7 @@ afterEach(() => {
 })
 
 describe("libraryTools", () => {
-	it("serves the eight library tools and the tool that posts a document", () => {
+	it("serves the eight library tools, the tool that posts a document and the five board tools", () => {
 		expect(tools.map((held) => held.name)).toEqual([
 			"library_list",
 			"library_search",
@@ -93,6 +107,11 @@ describe("libraryTools", () => {
 			"library_rename",
 			"library_delete",
 			"conversation_post_document",
+			"board_create",
+			"board_read",
+			"board_add",
+			"board_update",
+			"board_remove",
 		])
 	})
 
@@ -129,6 +148,53 @@ describe("libraryTools", () => {
 		expect(fieldsOf("library_rename").required).toEqual(["name", "newName"])
 		expect(fieldsOf("library_delete").required).toEqual(["name"])
 		expect(fieldsOf("conversation_post_document").required).toEqual(["name"])
+		expect(fieldsOf("board_create").required).toEqual(["name"])
+		expect(fieldsOf("board_read").required).toEqual(["name"])
+		expect(fieldsOf("board_add").required).toEqual(["name", "nodes"])
+		expect(fieldsOf("board_update").required).toEqual(["name", "nodes"])
+		expect(fieldsOf("board_remove").required).toEqual(["name", "ids"])
+	})
+
+	it("hands each board call to the library host of its session under its operation", async () => {
+		const asked = aHost(() => ({ result: {} }))
+		const calls: [string, string, Record<string, unknown>][] = [
+			["board_create", "boardCreate", { name: "plan.canvas" }],
+			["board_read", "boardRead", { name: "plan.canvas" }],
+			["board_add", "boardAdd", A_DIAGRAM],
+			[
+				"board_update",
+				"boardUpdate",
+				{ name: "plan.canvas", nodes: [{ id: "n1", text: "Ship" }] },
+			],
+			["board_remove", "boardRemove", { name: "plan.canvas", ids: ["n1"] }],
+		]
+
+		for (const [name, , input] of calls) {
+			await called(name, input)
+		}
+
+		expect(asked).toEqual(
+			calls.map(([, operation, payload]) => ({
+				subtype: "library",
+				operation,
+				payload,
+			})),
+		)
+	})
+
+	it("speaks back the index and the reason of a refused board item", async () => {
+		const refusal = {
+			kind: "invalidBoardItem",
+			element: "node",
+			index: 1,
+			reason: "unknownKind",
+		}
+		aHost(() => ({ error: refusal }))
+
+		const result = await called("board_add", A_DIAGRAM)
+
+		expect(spoken(result)).toEqual(refusal)
+		expect(result.isError).toBe(true)
 	})
 
 	it("hands each call to the library host of its session under its operation", async () => {

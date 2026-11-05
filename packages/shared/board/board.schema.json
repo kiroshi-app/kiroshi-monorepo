@@ -20,6 +20,7 @@
 		"identity": "an object holding exactly kind, one of the field's enum, and id, a non-empty string"
 	},
 	"fill": "a kind's fill pairing: a read without the fill field takes it from fromColour by the colour field, or the field default; a colour equal to the fill's preset is not kept on the board, and an export of a board without that colour writes the preset",
+	"size": "a kind's default width and height, given to a node an agent draws without its own; a kind without one is never drawn by an agent",
 	"placements": {
 		"canvas": "a top-level JSON Canvas field of the same name",
 		"kiroshi": "a field of the same name under the kiroshi object of the node or edge",
@@ -42,6 +43,7 @@
 	},
 	"kinds": {
 		"sticky": {
+			"size": { "width": 200, "height": 200 },
 			"canvasType": "text",
 			"fields": {
 				"text": { "type": "text", "in": "canvas", "default": "" },
@@ -79,6 +81,7 @@
 			}
 		},
 		"text": {
+			"size": { "width": 240, "height": 80 },
 			"canvasType": "text",
 			"fields": {
 				"text": { "type": "text", "in": "canvas", "default": "" },
@@ -86,6 +89,7 @@
 			}
 		},
 		"shape": {
+			"size": { "width": 200, "height": 120 },
 			"canvasType": "text",
 			"fields": {
 				"text": { "type": "text", "in": "canvas", "default": "" },
@@ -99,6 +103,7 @@
 			}
 		},
 		"section": {
+			"size": { "width": 640, "height": 400 },
 			"canvasType": "group",
 			"fields": {
 				"label": { "type": "string", "in": "canvas", "optional": true },

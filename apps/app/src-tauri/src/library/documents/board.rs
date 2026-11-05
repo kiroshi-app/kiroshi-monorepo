@@ -1,6 +1,9 @@
-use yrs::Doc;
+use yrs::{Doc, ReadTxn, Transact};
 
-use crate::board::{export_canvas, import_canvas, read_board, write_board, Board, BoardError};
+use super::writer_of;
+use crate::board::{
+	edit_board, export_canvas, import_canvas, read_board, write_board, Board, BoardEdit, BoardError,
+};
 use crate::library::contract::LibraryError;
 use crate::library::{unwritable, within, MAX_DOCUMENT_BYTES};
 
@@ -13,6 +16,19 @@ pub(super) fn imported(text: &str, name: &str) -> Result<(Doc, Board), LibraryEr
 
 pub(super) fn read(doc: &Doc, name: &str) -> Result<Board, LibraryError> {
 	read_board(doc).map_err(|refusal| invalid(name, &refusal))
+}
+
+pub(super) fn update_of(
+	doc: &Doc,
+	writer: u64,
+	name: &str,
+	edit: &BoardEdit,
+) -> Result<Vec<u8>, LibraryError> {
+	let copy = writer_of(doc, writer, name)?;
+	let before = copy.transact().state_vector();
+	edit_board(&copy, edit);
+	let update = copy.transact().encode_state_as_update_v1(&before);
+	Ok(update)
 }
 
 pub(super) fn canvas_of(board: &Board, name: &str) -> Result<String, LibraryError> {

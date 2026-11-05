@@ -2,7 +2,7 @@ use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::Encode;
 use yrs::{Assoc, Doc, GetString, IndexedSequence, ReadTxn, StickyIndex, Text, TextRef, Transact};
 
-use super::{decoded, full_state, merged_into, Location, Placement, RemoveStep, WriteStep};
+use super::{decoded, merged_into, writer_of, Location, Placement, RemoveStep, WriteStep};
 use crate::library::contract::LibraryError;
 use crate::library::{undecodable, within, MAX_DOCUMENT_BYTES};
 
@@ -89,12 +89,6 @@ pub(super) fn removed_by(
 	let caret = caret_at(&text, &txn, start as usize, name)?;
 	let update = txn.encode_state_as_update_v1(&doc.transact().state_vector());
 	Ok((update, caret))
-}
-
-fn writer_of(doc: &Doc, writer: u64, name: &str) -> Result<Doc, LibraryError> {
-	let copy = Doc::with_client_id(writer);
-	merged_into(&copy, name, decoded(name, &full_state(doc))?)?;
-	Ok(copy)
 }
 
 fn index_of<T: ReadTxn>(
