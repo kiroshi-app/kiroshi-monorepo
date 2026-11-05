@@ -601,7 +601,6 @@ export const ShapeSelected = meta.story({
 	),
 	play: async ({ canvasElement, args }) => {
 		const canvas = within(canvasElement)
-		const board = slotIn(canvasElement, "board-canvas")
 		const research = await canvas.findByRole("option", {
 			name: "Shape: Research",
 		})
@@ -682,7 +681,6 @@ export const ShapeSelected = meta.story({
 			await expect(hovered).not.toBe(resting)
 			await pointer.unhover(control)
 		}
-		await pointer.unhover(board)
 	},
 })
 
