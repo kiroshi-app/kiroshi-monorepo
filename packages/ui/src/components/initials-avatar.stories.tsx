@@ -2,12 +2,17 @@ import { expect } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
+	boxOf,
 	expectRoundAvatar,
 	pictureOf,
 	slotsIn,
 	UPLOADED_AVATAR_IMAGE,
 } from "@workspace/storybook/story-utils"
 import { InitialsAvatar } from "@workspace/ui/components/initials-avatar"
+import {
+	MessageBubble,
+	MessageBubbleContent,
+} from "@workspace/ui/components/message-bubble"
 
 const NAME = "Ada Martin"
 
@@ -140,5 +145,42 @@ export const Sizes = meta.story({
 		)
 
 		await expect(heights).toEqual([28, 32, 64])
+	},
+})
+
+const IN_MESSAGE_SIZES = [16, 20, 28, 40, 64]
+
+export const PictureInMessageAtEverySize = meta.story({
+	tags: ["test-only"],
+	render: () => (
+		<MessageBubble>
+			<MessageBubbleContent>
+				{IN_MESSAGE_SIZES.map((size) => (
+					<InitialsAvatar
+						image={UPLOADED_AVATAR_IMAGE}
+						key={size}
+						name={NAME}
+						size={size}
+					/>
+				))}
+			</MessageBubbleContent>
+		</MessageBubble>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"An uploaded picture at five sizes inside a message bubble, whose typeset spaces only the message's own images. Check that each picture fills its circle exactly at every size, with no gap above it.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const avatars = slotsIn(canvasElement, "user-avatar")
+
+		await expect(
+			avatars.map((avatar) => avatar.getBoundingClientRect().width),
+		).toEqual(IN_MESSAGE_SIZES)
+		for (const avatar of avatars)
+			await expect(boxOf(await pictureOf(avatar))).toEqual(boxOf(avatar))
 	},
 })

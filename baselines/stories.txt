@@ -570,6 +570,8 @@ conversation-message-turn--long-content
 conversation-message-turn--menu
 conversation-message-turn--menu-with-save-as-document
 conversation-message-turn--not-sent
+conversation-message-turn--person-with-custom-image
+conversation-message-turn--person-with-custom-image-dark
 conversation-message-turn--queued
 conversation-message-turn--quoted
 conversation-message-turn--replies-to-two
@@ -2221,6 +2223,7 @@ primitives-iconswap--swapped
 primitives-initialsavatar--default
 primitives-initialsavatar--empty
 primitives-initialsavatar--picture-dark
+primitives-initialsavatar--picture-in-message-at-every-size
 primitives-initialsavatar--picture-light
 primitives-initialsavatar--sizes
 primitives-initialsavatar--with-picture

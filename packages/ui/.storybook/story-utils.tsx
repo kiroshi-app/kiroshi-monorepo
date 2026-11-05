@@ -865,7 +865,7 @@ export const pictureOf = async (avatar: HTMLElement) => {
 export const expectCompanionSilhouette = (layer: Element) =>
 	expect(getComputedStyle(layer).maskImage).toContain("data:image/svg+xml")
 
-const boxOf = (element: Element) => {
+export const boxOf = (element: Element) => {
 	const { left, top, width, height } = element.getBoundingClientRect()
 	return { left, top, width, height }
 }

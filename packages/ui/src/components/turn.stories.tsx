@@ -5,10 +5,12 @@ import preview from "@workspace/storybook/preview"
 import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 	animatedTransitionsOf,
+	boxOf,
 	expectClickModifiers,
 	expectPictureUnderBorder,
 	glyphIn,
 	lineHeightOf,
+	pictureOf,
 	shown,
 	slotIn,
 	slotsIn,
@@ -806,6 +808,57 @@ export const Speakers = meta.story({
 			),
 		).toBe(14)
 	},
+})
+
+const PersonWithCustomImageTurn = () => (
+	<div className="mx-auto max-w-170">
+		<PersonTurn
+			name="Tom"
+			image={UPLOADED_AVATAR_IMAGE}
+			copyText={PERSON_LINE}
+			sentAt={sentOn(10, 9, 22)}
+			now={READ_ON}
+		>
+			{PERSON_LINE}
+		</PersonTurn>
+	</div>
+)
+
+const expectPersonPictureInItsCircle = async (canvasElement: HTMLElement) => {
+	const [avatar] = slotsIn(canvasElement, "user-avatar")
+	const picture = await pictureOf(avatar)
+
+	await expect(boxOf(picture)).toEqual(boxOf(avatar))
+}
+
+export const PersonWithCustomImage = meta.story({
+	globals: { theme: "light" },
+	render: () => <PersonWithCustomImageTurn />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A person wearing an uploaded picture, speaking in a message. The author line sits inside the bubble's typeset, whose media rule spaces only the message's own images: the avatar picture stays out of it. Check that the picture fills its 20px circle exactly, centred, with no gap above and nothing spilling below. Pick `PersonWithCustomImageDark` for the dark theme. " +
+					RENDERED_BY_THE_THREAD,
+			},
+		},
+	},
+	play: ({ canvasElement }) => expectPersonPictureInItsCircle(canvasElement),
+})
+
+export const PersonWithCustomImageDark = meta.story({
+	globals: { theme: "dark" },
+	render: () => <PersonWithCustomImageTurn />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same person and picture in the dark theme: the picture still fills its circle exactly, with no image outline drawn around it on the dark bubble. Pick `PersonWithCustomImage` for the light theme. " +
+					RENDERED_BY_THE_THREAD,
+			},
+		},
+	},
+	play: ({ canvasElement }) => expectPersonPictureInItsCircle(canvasElement),
 })
 
 export const HoverActions = meta.story({

@@ -4,6 +4,7 @@ import {
 	MarkdownBlockquote,
 	MarkdownFigure,
 	MarkdownImage,
+	MarkdownStaticImage,
 } from "@workspace/ui/components/markdown/answer-elements"
 import {
 	MarkdownCode,
@@ -45,6 +46,7 @@ export const MARKDOWN_STATIC_COMPONENTS: Components = {
 	a: MarkdownStaticLink,
 	blockquote: MarkdownBlockquote,
 	code: MarkdownCode,
+	img: MarkdownStaticImage,
 	input: MarkdownStaticTaskBox,
 	pre: MarkdownStaticPre,
 	span: MarkdownStaticSpan,

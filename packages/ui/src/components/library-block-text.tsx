@@ -247,6 +247,7 @@ const marksOf = (source: string, nodes: InlineNode[]): ReactNode[] =>
 				<img
 					alt={node.alt}
 					data-from={node.from}
+					data-typeset-image
 					data-to={node.to}
 					draggable={false}
 					key={node.from}

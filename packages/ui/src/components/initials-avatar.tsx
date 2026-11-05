@@ -22,7 +22,7 @@ type ShapeStyle = { frame: string; layer: string; mask?: CSSProperties }
 
 const SHAPE_STYLES: Record<AvatarShape, ShapeStyle> = {
 	hexagon: {
-		frame: "not-typeset block rounded-none after:hidden",
+		frame: "block rounded-none after:hidden",
 		layer: "rounded-none",
 		mask: COMPANION_SILHOUETTE,
 	},
