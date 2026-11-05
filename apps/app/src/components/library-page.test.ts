@@ -1171,25 +1171,20 @@ const IMAGE_OPENERS = [
 	["Open in its menu", pickOpenInMenuOf],
 ] as const
 
-const pinActiveTab = async (
-	router: Awaited<ReturnType<typeof mountApp>>["router"],
-) => {
+type MountedRouter = Awaited<ReturnType<typeof mountApp>>["router"]
+
+const pinActiveTab = async (router: MountedRouter) => {
 	const pinnedId = activeTabId(router)
 	await act(async () => router.options.context.tabs.pin(pinnedId))
 	return pinnedId
 }
 
-const activeTabId = (
-	router: Awaited<ReturnType<typeof mountApp>>["router"],
-) => {
+const activeTabId = (router: MountedRouter) => {
 	const { bySpace, spaceId } = router.options.context.tabs.getState()
 	return bySpace[spaceId].activeId
 }
 
-const currentHrefOfTab = (
-	router: Awaited<ReturnType<typeof mountApp>>["router"],
-	id: string,
-) => {
+const currentHrefOfTab = (router: MountedRouter, id: string) => {
 	const { bySpace, spaceId } = router.options.context.tabs.getState()
 	const tab = bySpace[spaceId].tabs.find((held) => held.id === id)
 	return tab?.entries[tab.index].href
@@ -1200,6 +1195,11 @@ const modifierClick = async (target: Element) => {
 		fireEvent.click(target, { detail: 1, metaKey: true, ctrlKey: true })
 	})
 	await settle()
+}
+
+const showPinnedLibraryGrid = async (router: MountedRouter) => {
+	await showLibraryGrid(router)
+	await pinActiveTab(router)
 }
 
 describe("an image opened from the Library grid", () => {
@@ -1240,13 +1240,7 @@ describe("an image opened from the Library grid", () => {
 
 	it.each([
 		["unpinned", showLibraryGrid],
-		[
-			"pinned",
-			async (router: Awaited<ReturnType<typeof mountApp>>["router"]) => {
-				await showLibraryGrid(router)
-				await pinActiveTab(router)
-			},
-		],
+		["pinned", showPinnedLibraryGrid],
 	] as const)(
 		"opens on a modifier click in a new tab, the %s tab left on its grid",
 		async (_pin, prepare) => {
