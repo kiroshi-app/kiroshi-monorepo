@@ -7,7 +7,11 @@ import { afterEach, expect, it, vi } from "vitest"
 import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
 
 import { createFakeNotificationPort } from "./fake-notification-port"
-import { startNotificationSource } from "./notification-source"
+import {
+	startNotificationLanding,
+	startNotificationSource,
+} from "./notification-source"
+import { notificationFailureTitleFor } from "./notification-words"
 
 import type { JoinedSpace } from "../bindings"
 import { failureReporterIn } from "../failure-report"
@@ -136,11 +140,13 @@ type WorldHosts =
 type WorldOptions = {
 	hosts?: WorldHosts
 	listed?: JoinedSpace[]
+	isDriverWindow?: boolean
 }
 
 const aWorld = async ({
 	hosts = hostsFake(),
 	listed = [GARAGE],
+	isDriverWindow = true,
 }: WorldOptions = {}) => {
 	const store = createFakeTranscriptStore()
 	const elsewhere = await store.createSpace("Vocca")
@@ -181,22 +187,27 @@ const aWorld = async ({
 	const reader = aReader()
 	const offline = offlineSwitch(missions)
 
-	startNotificationSource({
+	const landing = {
 		chat: chatRunningIn(threads),
-		runtimes: idleRuntimes,
 		roster,
 		spaces,
 		joinedSpaces,
 		missions: { ...missions, read: offline.read },
-		spokenWords,
 		notifications,
-		switches: () => ALL_ON,
-		hasFocus: () => false,
-		watchFocus: async () => () => undefined,
 		raiseWindow: async () => undefined,
-		playChime: () => undefined,
 		reportFailure: failureReporterIn("notification-source"),
-	})
+	}
+	const stop = isDriverWindow
+		? startNotificationSource({
+				...landing,
+				runtimes: idleRuntimes,
+				spokenWords,
+				switches: () => ALL_ON,
+				hasFocus: () => false,
+				watchFocus: async () => () => undefined,
+				playChime: () => undefined,
+			})
+		: startNotificationLanding(landing)
 	await Promise.resolve()
 
 	renderHook(() => {
@@ -234,6 +245,7 @@ const aWorld = async ({
 	})
 
 	return {
+		stop,
 		spaces,
 		joinedSpaces,
 		hosts,
@@ -597,3 +609,99 @@ it.each([
 		expect(informed).toHaveBeenCalledTimes(1)
 	},
 )
+
+const SECONDARY = { isDriverWindow: false }
+
+it("lands a companion click delivered to a secondary window in that window", async () => {
+	const { spaces, roster, notifications, elsewhere, away } =
+		await aWorld(SECONDARY)
+
+	await act(async () => {
+		notifications.activate({ kind: "bot", id: away.id })
+	})
+
+	expect(spaces.getState().selectedSpaceId).toBe(elsewhere.id)
+	expect(roster.getState().selectedBotId).toBe(away.id)
+})
+
+it("lands a conversation click delivered to a secondary window in that window", async () => {
+	const { spaces, roster, notifications, elsewhere, room } =
+		await aWorld(SECONDARY)
+
+	await act(async () => {
+		notifications.activate({ kind: "conversation", id: room.id })
+	})
+
+	expect(spaces.getState().selectedSpaceId).toBe(elsewhere.id)
+	expect(roster.getState().selectedConversationId).toBe(room.id)
+})
+
+it("opens a local mission click delivered to a secondary window in that window", async () => {
+	const { spaces, notifications, missions, elsewhere, away, room } =
+		await aWorld(SECONDARY)
+	const mission = aMission({
+		id: "mission-11",
+		botId: away.id,
+		originConversationId: room.id,
+	})
+	missions.hold({ mission, events: [] })
+
+	await act(async () => {
+		notifications.activate({ kind: "mission", id: mission.id })
+	})
+
+	expect(spaces.getState().selectedSpaceId).toBe(elsewhere.id)
+	expect(missions.opened).toEqual([
+		{ missionId: mission.id, rowId: away.id, spaceId: elsewhere.id },
+	])
+})
+
+it("opens a mission a secondary window heard on a joined Space, on that Space", async () => {
+	const world = await aWorld(SECONDARY)
+	await hearMission(world, { missionId: "garage-7", hostId: GARAGE.id })
+
+	await click(world, "garage-7")
+
+	expect(openRowIn(world)).toBe(GARAGE_ROW)
+	await vi.waitFor(() =>
+		expect(world.missions.opened).toEqual([
+			{ missionId: "garage-7", rowId: world.neighbour.id, spaceId: GARAGE_ROW },
+		]),
+	)
+})
+
+it("sends no notification from a secondary window when a mission waits on a human", async () => {
+	const world = await aWorld(SECONDARY)
+
+	await hearMission(world, { missionId: "home-3", hostId: null })
+	await settle()
+
+	expect(world.notifications.sent).toEqual([])
+})
+
+it("stops landing clicks in a secondary window once its source stops", async () => {
+	const { stop, spaces, roster, notifications, away } = await aWorld(SECONDARY)
+
+	await act(async () => {
+		stop()
+	})
+	await act(async () => {
+		notifications.activate({ kind: "bot", id: away.id })
+	})
+
+	expect(spaces.getState().selectedSpaceId).toBe(HOME)
+	expect(roster.getState().selectedBotId).not.toBe(away.id)
+})
+
+it("reports a mission landing failure in a secondary window through the notification failure card", async () => {
+	const world = await aWorld(SECONDARY)
+	vi.spyOn(world.missions, "read").mockRejectedValue(new Error("unreadable"))
+
+	await click(world, "mission-12")
+
+	await vi.waitFor(() =>
+		expect(raiseFailureNotice).toHaveBeenCalledWith(
+			expect.objectContaining({ title: notificationFailureTitleFor("clicks") }),
+		),
+	)
+})

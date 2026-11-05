@@ -23,9 +23,10 @@ import type {
 	MissionChanged,
 	MissionOnBoard,
 } from "../missions/mission-contract"
-import type {
-	MissionEvent,
-	ReadMissionOfEvent,
+import {
+	type MissionEvent,
+	type ReadMissionOfEvent,
+	THIS_COMPUTER,
 } from "../missions/mission-event-read"
 import type { OpenedMission } from "../missions/opened-mission-controller"
 import type { UserPreferences } from "../user/preferences-contract"
@@ -93,6 +94,67 @@ export type NotificationSourceOptions = {
 	raiseWindow: () => Promise<void>
 	playChime: () => void
 	reportFailure: FailureNoticeReporter
+}
+
+export type NotificationLandingSourceOptions = Pick<
+	NotificationSourceOptions,
+	| "chat"
+	| "roster"
+	| "spaces"
+	| "joinedSpaces"
+	| "missions"
+	| "notifications"
+	| "raiseWindow"
+	| "reportFailure"
+>
+
+export const startNotificationLanding = ({
+	chat,
+	roster,
+	spaces,
+	joinedSpaces,
+	missions,
+	notifications,
+	raiseWindow,
+	reportFailure,
+}: NotificationLandingSourceOptions): (() => void) => {
+	const missionOrigins = new Map<string, MissionEvent>()
+
+	const failWith = createFailWith(reportFailure)
+	const { activate, dropPendingLanding } = createNotificationLanding({
+		chat,
+		roster,
+		spaces,
+		joinedSpaces,
+		missions,
+		missionOrigins,
+		raiseWindow,
+		failWith,
+	})
+
+	const holdMissionOrigin = (
+		{ missionId, spaceId }: MissionChanged,
+		hostId?: string | null,
+	) => {
+		missionOrigins.set(missionId, {
+			missionId,
+			spaceId,
+			hostId: hostId ?? THIS_COMPUTER,
+		})
+	}
+
+	const missionChanges = missions
+		.onChanged(holdMissionOrigin)
+		.catch(failWith("clicks"))
+	const activation = notifications
+		.onActivate(activate)
+		.catch(failWith("clicks"))
+
+	return () => {
+		dropPendingLanding()
+		void missionChanges.then((stop) => stop?.())
+		void activation.then((stop) => stop?.())
+	}
 }
 
 export const startNotificationSource = ({

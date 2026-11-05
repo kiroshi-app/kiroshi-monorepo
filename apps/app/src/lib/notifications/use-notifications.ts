@@ -2,7 +2,10 @@ import { useEffect } from "react"
 
 import { createNotifications } from "./create-notifications"
 import { createChime } from "./notification-chime"
-import { startNotificationSource } from "./notification-source"
+import {
+	startNotificationLanding,
+	startNotificationSource,
+} from "./notification-source"
 
 import { failureReporterIn } from "../failure-report"
 import { revealWindow, watchWindowFocus } from "../host"
@@ -40,12 +43,8 @@ export const useNotifications = ({
 	isDriverWindow,
 }: NotificationsMount) => {
 	useEffect(() => {
-		if (!isDriverWindow) {
-			return
-		}
-		return startNotificationSource({
+		const landing = {
 			chat,
-			runtimes,
 			roster,
 			spaces,
 			joinedSpaces,
@@ -55,14 +54,21 @@ export const useNotifications = ({
 				read: missionsTransport.read,
 				open: missions.open,
 			},
-			spokenWords,
 			notifications: createNotifications(),
+			raiseWindow: () => revealWindow({ withFocus: true }),
+			reportFailure: failureReporterIn("notification-source"),
+		}
+		if (!isDriverWindow) {
+			return startNotificationLanding(landing)
+		}
+		return startNotificationSource({
+			...landing,
+			runtimes,
+			spokenWords,
 			switches: () => user.getState().preferences,
 			hasFocus: () => document.hasFocus(),
 			watchFocus: watchWindowFocus,
-			raiseWindow: () => revealWindow({ withFocus: true }),
 			playChime: createChime(),
-			reportFailure: failureReporterIn("notification-source"),
 		})
 	}, [
 		chat,
