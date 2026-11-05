@@ -60,6 +60,7 @@ const authorOf = ({
 const ATLAS_INK = "rgb(0, 128, 164)"
 const LENA_ACCENT = "rgb(45, 98, 172)"
 const NAME_CONTRAST_MIN = 4.5
+const WHOLE_PIXEL_DRIFT = 0.5
 
 const item = (
 	id: string,
@@ -395,12 +396,16 @@ const expectPointerFollows = async (root: HTMLElement) => {
 		)
 		const { x, y } = anchor()
 		const origin = pointerOrigin(pointerOf(root, "Atlas"))
-		await expect(origin.x).toBeCloseTo(x + ATLAS_POINTER.position.x * zoom, 0)
-		await expect(origin.y).toBeCloseTo(
-			y + (ATLAS_POINTER.position.y - 96) * zoom,
-			0,
-		)
+		await expect(
+			Math.abs(origin.x - (x + ATLAS_POINTER.position.x * zoom)),
+		).toBeLessThanOrEqual(WHOLE_PIXEL_DRIFT)
+		await expect(
+			Math.abs(origin.y - (y + (ATLAS_POINTER.position.y - 96) * zoom)),
+		).toBeLessThanOrEqual(WHOLE_PIXEL_DRIFT)
 		await expect(tagSize()).toEqual(atZoomOne)
+		await expect(pointerOf(root, "Atlas").style.transform).toMatch(
+			/^translate\(-?\d+px, -?\d+px\)$/,
+		)
 	}
 	const zoomOut = within(root).getByRole("button", { name: "Zoom out" })
 	const zoomIn = within(root).getByRole("button", { name: "Zoom in" })

@@ -30,6 +30,7 @@ board-boardshape--rounded-rectangle
 board-boardshape--rounded-rectangle-dark
 board-boardsticky--agent-author
 board-boardsticky--agent-author-dark
+board-boardsticky--agent-writing-without-outline
 board-boardsticky--colours
 board-boardsticky--colours-dark
 board-boardsticky--long-content

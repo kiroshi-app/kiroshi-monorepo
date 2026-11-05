@@ -64,7 +64,7 @@ const BoardSticky = ({
 			{isAgentWriting ? (
 				<span
 					aria-hidden="true"
-					className="inline-block h-5 w-0.5 rounded-[1px] bg-(--board-presence) align-top"
+					className="inline-block h-5 w-0.5 rounded-[1px] bg-[var(--board-presence,var(--color-board-sticky-foreground))] align-top"
 					data-slot="board-sticky-caret"
 				/>
 			) : null}

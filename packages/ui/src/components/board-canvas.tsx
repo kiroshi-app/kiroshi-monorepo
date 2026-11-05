@@ -358,8 +358,8 @@ const BoardCanvas = ({
 							key={owner.id}
 							owner={owner}
 							position={{
-								x: viewport.offset.x + position.x * viewport.zoom,
-								y: viewport.offset.y + position.y * viewport.zoom,
+								x: Math.round(viewport.offset.x + position.x * viewport.zoom),
+								y: Math.round(viewport.offset.y + position.y * viewport.zoom),
 							}}
 						/>
 					))}

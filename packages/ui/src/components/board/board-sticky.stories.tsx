@@ -149,6 +149,30 @@ export const AgentAuthorDark = meta.story({
 	play: playAgentAuthor,
 })
 
+export const AgentWritingWithoutOutline = meta.story({
+	tags: ["test-only"],
+	args: { isAgentWriting: true },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"An agent writes in a sticky that no presence outline wraps. Check the 2 by 20 caret at the end of the text in the sticky foreground colour, never invisible. Pick `BoardPresence/OneAgent` for the caret in the agent colour.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const sticky = slotIn(canvasElement, "board-sticky")
+		const caret = slotIn(sticky, "board-sticky-caret")
+		await expect(getComputedStyle(caret).backgroundColor).toBe(
+			getComputedStyle(sticky).color,
+		)
+		await expect(caret.getBoundingClientRect()).toMatchObject({
+			width: 2,
+			height: 20,
+		})
+	},
+})
+
 export const PersonAuthor = meta.story({
 	args: { colour: "green", author: PERSON_AUTHOR },
 	parameters: {
