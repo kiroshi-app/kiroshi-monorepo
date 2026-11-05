@@ -161,15 +161,13 @@
 	--prompt-surface-inert: #f0f0f0;
 	--prompt-menu: #ffffff;
 	--author-line-sticky: #f5f5f5;
-	--user-bubble-muted-strength: 70%;
 	--board-sticky-yellow: #ffe58f;
 	--board-sticky-green: #c2ebb4;
 	--board-sticky-pink: #ffc9de;
 	--board-sticky-blue: #bcd8ff;
 	--board-sticky-orange: #ffd3a8;
 	--board-sticky-foreground: #1a1a1a;
-	--board-sticky-author-foreground: #000000b3;
-	--board-sticky-shadow: 0 1px 2px #00000014, 0 6px 14px #0000000f;
+	--board-sticky-author-foreground: rgb(0 0 0 / 70%);
 	--board-section-blue-surface: #eff4fb;
 	--board-section-blue-border: #d5e2f3;
 	--board-section-blue-title-chip: #dae6f6;
@@ -178,6 +176,8 @@
 	--board-section-purple-border: #e0d8f2;
 	--board-section-purple-title-chip: #e6dff6;
 	--board-section-purple-title-foreground: #45307a;
+	--user-bubble-muted-strength: 70%;
+	--board-sticky-shadow: 0 1px 2px #00000014, 0 6px 14px #0000000f;
 }
 
 .dark,
@@ -337,7 +337,13 @@
 	--prompt-surface-inert: #161618;
 	--prompt-menu: #1f1f22;
 	--author-line-sticky: #1e1e1f;
-	--user-bubble-muted-strength: 70%;
+	--board-sticky-yellow: #ffe58f;
+	--board-sticky-green: #c2ebb4;
+	--board-sticky-pink: #ffc9de;
+	--board-sticky-blue: #bcd8ff;
+	--board-sticky-orange: #ffd3a8;
+	--board-sticky-foreground: #1a1a1a;
+	--board-sticky-author-foreground: rgb(0 0 0 / 70%);
 	--board-section-blue-surface: #18202d;
 	--board-section-blue-border: #2a3a55;
 	--board-section-blue-title-chip: #24344f;
@@ -346,4 +352,6 @@
 	--board-section-purple-border: #352d48;
 	--board-section-purple-title-chip: #2f2843;
 	--board-section-purple-title-foreground: #cdbdf5;
+	--user-bubble-muted-strength: 70%;
+	--board-sticky-shadow: 0 1px 2px #00000014, 0 6px 14px #0000000f;
 }
