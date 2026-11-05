@@ -8,6 +8,7 @@ import {
 	type BoardSnapshot,
 } from "@workspace/ui/components/board/board-miniature"
 import type {
+	BoardObjectOutlineSpec,
 	BoardPointerPlacement,
 	BoardPresenceOwner,
 } from "@workspace/ui/components/board/board-presence"
@@ -49,6 +50,12 @@ const BoardCard = ({
 	const line = drawing
 		? t("board.card.drawing", { name: drawing.agent.name, count: itemCount })
 		: t("board.card.atRest", { count: itemCount, edited: editedLabel })
+	const outlines: BoardObjectOutlineSpec[] = drawing
+		? [{ objectId: drawing.objectId, owner: drawing.agent, state: "drawing" }]
+		: []
+	const drawerPointers = drawing
+		? pointers.filter(({ owner }) => owner.id === drawing.agent.id)
+		: []
 
 	return (
 		<article
@@ -95,22 +102,8 @@ const BoardCard = ({
 				data-slot="board-card-preview"
 			>
 				<BoardMiniature
-					outlines={
-						drawing
-							? [
-									{
-										objectId: drawing.objectId,
-										owner: drawing.agent,
-										state: "drawing",
-									},
-								]
-							: []
-					}
-					pointers={
-						drawing
-							? pointers.filter(({ owner }) => owner.id === drawing.agent.id)
-							: []
-					}
+					outlines={outlines}
+					pointers={drawerPointers}
 					snapshot={snapshot}
 				/>
 			</div>
