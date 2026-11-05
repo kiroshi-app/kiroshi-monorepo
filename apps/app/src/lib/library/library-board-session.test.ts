@@ -88,12 +88,7 @@ describe("a Library board session", () => {
 	it("opens on the view of the host state", () => {
 		const { session } = openSession()
 
-		expect(
-			session
-				.view()
-				.objects.map((object) => object.id)
-				.sort(),
-		).toEqual(["first", "link", "second"])
+		expect(idsOf(session)).toEqual(["first", "link", "second"])
 	})
 
 	it("sends at most one update every 250 ms while editing", () => {
