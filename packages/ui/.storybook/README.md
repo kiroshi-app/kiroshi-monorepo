@@ -40,6 +40,7 @@ One title shape, enforced by `storySort` in `preview.tsx`: `<Family>/<Component>
 | `Overlays` | — | Surfaces drawn above the page: `Dialog`, `Popover`, `Tooltip`. |
 | `Branding` | — | The product's identity marks: `BotAvatar`, `BotIdentityAvatar`. |
 | `Conversation` | `Message`, `Prompt`, `Markdown`, `Tools` | **The conversation with an agent** — the transcript, its turns, its composer, the payloads it renders, the approvals that interrupt it. |
+| `Board` | none | The objects a board draws: stickies, shapes, text, sections, images, link and Library cards. |
 | `Settings` | `Bot`, `User`, `Space`, `Conversation`, `Plugins` | The dialogs that configure one subject, and the panels each holds. |
 
 `Conversation` is the family authors over-reach for. Ask what the component would be in a product with no agent in it: `ProgressRing` still reports work, `AppSidebar` still moves between places, `Disclosure` still opens and closes. Only a component with no answer to that stays in `Conversation`.

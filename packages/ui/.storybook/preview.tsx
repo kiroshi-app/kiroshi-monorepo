@@ -118,6 +118,7 @@ export default definePreview({
 					"Overlays",
 					"Branding",
 					"Conversation",
+					"Board",
 					"Settings",
 				]
 				const SUB_LEVELS = [
@@ -145,6 +146,7 @@ export default definePreview({
 					"Conversation/Routines",
 					"Conversation/Missions",
 					"Conversation/Onboarding",
+					"Board/Overview",
 					"Settings/Overview",
 					"Settings/Bot",
 					"Settings/User",
