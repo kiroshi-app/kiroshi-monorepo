@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { useEffect, useMemo, useSyncExternalStore } from "react"
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react"
 
 import type { BoardIntent } from "@workspace/ui/components/board-view"
 import { i18n } from "@workspace/ui/lib/i18n"
@@ -10,7 +10,13 @@ import { applyLibraryUpdate } from "./library-document-writes"
 import { libraryQueryKeys } from "./library-query-keys"
 import { openLibraryDocument } from "./library-reads"
 
+import { failureReporterIn } from "../failure-report"
+
 const RAISED_IN = "use-library-board-session"
+
+type LibraryBoardSession = ReturnType<typeof createLibraryBoardSession>
+
+const reportFailure = failureReporterIn(RAISED_IN)
 
 const subscribeToNothing = () => () => undefined
 
@@ -58,27 +64,34 @@ export const useLibraryBoardSession = (spaceId: string, name: string) => {
 		},
 	})
 	const openedState = opened.data
-	const openedSession = useMemo(
-		() =>
-			openedState
-				? createLibraryBoardSession({ state: openedState.update, send })
-				: null,
-		[openedState, send],
-	)
+	const [openedSession, setOpenedSession] =
+		useState<LibraryBoardSession | null>(null)
 	const session = opened.isError ? null : openedSession
 
 	useEffect(() => {
-		if (!session) {
+		if (!openedState) {
 			return
 		}
-		const detach = feed.attach(session.receive)
-		const forgetHistory = session.trackHistory()
+		const live = createLibraryBoardSession({
+			state: openedState.update,
+			send,
+			onRefused: () => {
+				void reportFailure(
+					{ title: i18n.t("common:library.failure.board.refused") },
+					{ space: spaceId },
+				)
+			},
+		})
+		const detach = feed.attach(live.receive)
+		const forgetHistory = live.trackHistory()
+		setOpenedSession(live)
 		return () => {
 			detach()
 			forgetHistory()
-			void session.flush()
+			void live.close()
+			setOpenedSession((current) => (current === live ? null : current))
 		}
-	}, [session, feed])
+	}, [openedState, send, feed, spaceId])
 
 	const view = useSyncExternalStore(
 		session?.subscribe ?? subscribeToNothing,

@@ -624,6 +624,8 @@ const common = {
 			board: {
 				open: "Couldn’t open the board. Open it again from the Library.",
 				save: "Couldn’t save your last changes to the board. It shows what was saved, so make them again.",
+				refused:
+					"Couldn’t show the latest changes to the board. Close it and open it again from the Library.",
 			},
 			import: {
 				title: "Couldn’t import {{name}}",

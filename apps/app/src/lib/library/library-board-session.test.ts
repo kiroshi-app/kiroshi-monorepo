@@ -8,17 +8,17 @@ import { applyLibraryBoardIntent } from "./library-board-intents"
 import { createLibraryBoardSession } from "./library-board-session"
 import { base64Of, bytesOf, SEND_INTERVAL_MS } from "./library-document-session"
 
-const openSession = () => {
-	const state = boardStateOf(TWO_NOTES_BOARD)
+const HOST_STATE = boardStateOf(TWO_NOTES_BOARD)
+
+const openSession = (state = HOST_STATE) => {
 	const sent: string[] = []
-	const session = createLibraryBoardSession({
-		state,
-		send: async (update) => {
-			sent.push(update)
-		},
+	const send = vi.fn(async (update: string) => {
+		sent.push(update)
 	})
+	const onRefused = vi.fn()
+	const session = createLibraryBoardSession({ state, send, onRefused })
 	const stopTracking = session.trackHistory()
-	return { state, sent, session, stopTracking }
+	return { state, sent, send, onRefused, session, stopTracking }
 }
 
 const boardAfter = (state: string, ...updates: string[]) => {
@@ -65,7 +65,24 @@ beforeEach(() => {
 
 afterEach(() => {
 	vi.useRealTimers()
+	vi.restoreAllMocks()
 })
+
+const idsOf = (session: ReturnType<typeof createLibraryBoardSession>) =>
+	session
+		.view()
+		.objects.map((object) => object.id)
+		.sort()
+
+const remoteFieldOf = (
+	state: string,
+	id: string,
+	field: string,
+	value: unknown,
+) =>
+	remoteEdit(state, (doc) =>
+		doc.getMap<Y.Map<unknown>>("nodes").get(id)?.set(field, value),
+	)
 
 describe("a Library board session", () => {
 	it("opens on the view of the host state", () => {
@@ -168,5 +185,69 @@ describe("a Library board session", () => {
 
 		expect(sent).toHaveLength(1)
 		expect(boardAfter(state, ...sent).nodes.first).toMatchObject({ x: 7 })
+	})
+
+	it("keeps the board live when a concurrent delete here and connect there leave an edge dangling", async () => {
+		const here = openSession()
+		const there = openSession()
+
+		here.session.apply({ type: "delete", id: "second" })
+		there.session.apply({
+			type: "connect",
+			id: "back",
+			from: "first",
+			fromSide: "right",
+			to: "second",
+			toSide: "left",
+			routing: "straight",
+		})
+		await here.session.flush()
+		await there.session.flush()
+		for (const update of there.sent) here.session.receive(update)
+		for (const update of here.sent) there.session.receive(update)
+
+		expect(idsOf(here.session)).toEqual(["first"])
+		expect(idsOf(there.session)).toEqual(["first"])
+
+		there.session.apply({
+			type: "move",
+			id: "first",
+			position: { x: 70, y: 0 },
+		})
+		await there.session.flush()
+		here.session.receive(there.sent.at(-1) as string)
+
+		expect(positionOf(here.session, "first")).toEqual({ x: 70, y: 0 })
+		expect(here.onRefused).not.toHaveBeenCalled()
+	})
+
+	it("keeps the last good view and raises one refusal when the state stops parsing", () => {
+		const logged = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => undefined)
+		const { state, session, onRefused } = openSession()
+
+		session.receive(remoteFieldOf(state, "first", "x", "wide"))
+		session.receive(remoteFieldOf(state, "second", "width", "tall"))
+		session.apply({ type: "move", id: "second", position: { x: 5, y: 0 } })
+
+		expect(positionOf(session, "first")).toEqual({ x: 0, y: 0 })
+		expect(idsOf(session)).toEqual(["first", "link", "second"])
+		expect(onRefused).toHaveBeenCalledOnce()
+		expect(logged).toHaveBeenCalled()
+	})
+
+	it("flushes the pending update, then destroys its doc, on close", async () => {
+		const destroyed = vi.spyOn(Y.Doc.prototype, "destroy")
+		const { state, sent, send, session } = openSession()
+
+		session.apply({ type: "move", id: "first", position: { x: 9, y: 0 } })
+		await session.close()
+
+		expect(boardAfter(state, ...sent).nodes.first).toMatchObject({ x: 9 })
+		expect(destroyed).toHaveBeenCalledOnce()
+		expect(send.mock.invocationCallOrder[0]).toBeLessThan(
+			destroyed.mock.invocationCallOrder[0] ?? 0,
+		)
 	})
 })

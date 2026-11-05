@@ -67,17 +67,21 @@ export const useLibraryBoardKeys = ({ undo, redo }: LibraryBoardHistory) => {
 			step()
 		}
 
+		const releaseHand = () => setIsHandHeld(false)
+
 		const release = (event: KeyboardEvent) => {
 			if (event.key === HAND_KEY) {
-				setIsHandHeld(false)
+				releaseHand()
 			}
 		}
 
 		window.addEventListener("keydown", press)
 		window.addEventListener("keyup", release)
+		window.addEventListener("blur", releaseHand)
 		return () => {
 			window.removeEventListener("keydown", press)
 			window.removeEventListener("keyup", release)
+			window.removeEventListener("blur", releaseHand)
 		}
 	}, [undo, redo])
 

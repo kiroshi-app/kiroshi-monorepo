@@ -653,6 +653,8 @@ const common = {
 			board: {
 				open: "Impossible d’ouvrir le tableau. Ouvrez-le à nouveau depuis la Bibliothèque.",
 				save: "Impossible d’enregistrer vos dernières modifications du tableau. Il affiche ce qui a été enregistré : refaites-les.",
+				refused:
+					"Impossible d’afficher les dernières modifications du tableau. Fermez-le et rouvrez-le depuis la Bibliothèque.",
 			},
 			import: {
 				title: "Impossible d’importer {{name}}",

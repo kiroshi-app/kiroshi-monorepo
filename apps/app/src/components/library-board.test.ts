@@ -55,10 +55,17 @@ vi.mock("@/lib/library/library-document-writes", async (importOriginal) => ({
 	applyLibraryUpdate: vi.fn(),
 }))
 
-vi.mock("@/lib/failure-report", async (importOriginal) => ({
-	...(await importOriginal<typeof import("@/lib/failure-report")>()),
-	raiseReportedFailure: vi.fn(),
-}))
+vi.mock("@/lib/failure-report", async (importOriginal) => {
+	const raiseReportedFailure = vi.fn()
+	return {
+		...(await importOriginal<typeof import("@/lib/failure-report")>()),
+		raiseReportedFailure,
+		failureReporterIn:
+			(raisedIn: string) =>
+			(...[notice, facts]: Parameters<typeof raiseReportedFailure>) =>
+				raiseReportedFailure(notice, { ...facts, raisedIn }),
+	}
+})
 
 const SPACE_ID = "space-on-screen"
 const NAME = "Roadmap.canvas"
@@ -124,17 +131,27 @@ const fakeHost = () => {
 	return { unlisten, announce }
 }
 
-const remoteMoveOf = (id: string, x: number) => {
+const remoteEditOf = (edit: (doc: Y.Doc) => void) => {
 	const doc = new Y.Doc()
 	Y.applyUpdate(doc, bytesOf(STATE))
 	const before = Y.encodeStateVector(doc)
-	applyLibraryBoardIntent(
-		doc,
-		{ type: "move", id, position: { x, y: 0 } },
-		"remote peer",
-	)
+	edit(doc)
 	return base64Of(Y.encodeStateAsUpdate(doc, before))
 }
+
+const remoteMoveOf = (id: string, x: number) =>
+	remoteEditOf((doc) =>
+		applyLibraryBoardIntent(
+			doc,
+			{ type: "move", id, position: { x, y: 0 } },
+			"remote peer",
+		),
+	)
+
+const remoteBreakOf = (id: string) =>
+	remoteEditOf((doc) =>
+		doc.getMap<Y.Map<unknown>>("nodes").get(id)?.set("x", "unreadable"),
+	)
 
 const boardElement = () =>
 	createElement(LibraryBoard, {
@@ -254,6 +271,22 @@ describe("a Library board on its live session", () => {
 		expect(pressedTool()).toBe("sticky")
 	})
 
+	it("keeps the last good board and raises one notice when the state stops parsing", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => undefined)
+		const { announce } = await mountBoard()
+
+		announce(remoteBreakOf("first"))
+		announce(remoteBreakOf("second"))
+
+		expect(objectNamed("First")).toBeInstanceOf(HTMLElement)
+		expect(objectNamed("Second")).toBeInstanceOf(HTMLElement)
+		expect(raiseReportedFailure).toHaveBeenCalledOnce()
+		expect(raiseReportedFailure).toHaveBeenCalledWith(
+			{ title: common("library.failure.board.refused") },
+			expect.objectContaining({ space: SPACE_ID }),
+		)
+	})
+
 	it("ignores an update of another board", async () => {
 		const { announce } = await mountBoard()
 
@@ -326,8 +359,9 @@ describe("a Library board on its live session", () => {
 		expect(host.unlisten).not.toHaveBeenCalled()
 	})
 
-	it("sends a local edit to the host batched, and the pending one on unmount", async () => {
+	it("sends a local edit to the host batched, and the pending one on unmount before destroying its doc", async () => {
 		const { unmount, unlisten } = await mountBoard()
+		const destroyed = vi.spyOn(Y.Doc.prototype, "destroy")
 
 		fireEvent.keyDown(focusObject("Second"), { key: "Delete" })
 		expect(applyLibraryUpdate).not.toHaveBeenCalled()
@@ -339,6 +373,7 @@ describe("a Library board on its live session", () => {
 			NAME,
 		])
 		expect(unlisten).toHaveBeenCalled()
+		expect(destroyed).toHaveBeenCalledOnce()
 	})
 
 	it("raises a notice and reloads the board when the host refuses an update", async () => {
@@ -357,5 +392,20 @@ describe("a Library board on its live session", () => {
 			expect(objectNamed("Second")).toBeInstanceOf(HTMLElement),
 		)
 		expect(openLibraryDocument).toHaveBeenCalledTimes(2)
+	})
+
+	it("destroys the replaced session's doc on reload and edits on the new one", async () => {
+		await mountBoard()
+		const destroyed = vi.spyOn(Y.Doc.prototype, "destroy")
+		vi.mocked(applyLibraryUpdate).mockRejectedValueOnce({ kind: "tooLarge" })
+		fireEvent.keyDown(focusObject("Second"), { key: "Delete" })
+		await waitFor(() =>
+			expect(objectNamed("Second")).toBeInstanceOf(HTMLElement),
+		)
+
+		fireEvent.keyDown(focusObject("Second"), { key: "Delete" })
+
+		expect(destroyed).toHaveBeenCalledOnce()
+		expect(objectNamed("Second")).toBeNull()
 	})
 })
