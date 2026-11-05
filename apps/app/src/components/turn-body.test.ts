@@ -335,10 +335,15 @@ describe("a file an agent cites in its answer", () => {
 			actions,
 		)
 
-		await click(screen.getByRole("button", { name: "Open the brief" }))
+		expect(screen.queryByRole("button", { name: "Open the brief" })).toBeNull()
+
+		await click(screen.getByRole("button", { name: "Open the chart" }))
 
 		expect(openAttachment).not.toHaveBeenCalled()
-		expect(actions.openImage).not.toHaveBeenCalled()
+		expect(actions.openImage).toHaveBeenCalledWith(
+			[expect.objectContaining({ path: CITED_IMAGE })],
+			0,
+		)
 	})
 
 	it("leaves a path outside the attachment store without a chip", () => {
