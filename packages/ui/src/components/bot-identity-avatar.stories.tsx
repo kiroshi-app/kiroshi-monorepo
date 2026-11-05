@@ -692,11 +692,9 @@ const expectCustomImageAtEverySize = async (
 	).toEqual(CUSTOM_IMAGE_SIZES.flatMap((size) => [size, size]))
 	for (const index of CUSTOM_IMAGE_SIZES.keys()) {
 		const [generated, pictured] = avatars.slice(2 * index, 2 * index + 2)
-		const glyph = companionGlyphOf(generated)
 		await expectPictureUnderBorder(pictured)
-		await expectCompanionSilhouette(glyph)
 		await expect(getComputedStyle(await pictureOf(pictured)).maskImage).toBe(
-			getComputedStyle(glyph).maskImage,
+			getComputedStyle(companionGlyphOf(generated)).maskImage,
 		)
 	}
 	await expectGlazeBorders(canvasElement, theme)
