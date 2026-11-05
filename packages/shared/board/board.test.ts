@@ -86,8 +86,6 @@ const refusalOf = (text: string) => {
 	throw new Error("the import was not refused")
 }
 
-const canvasWith = (canvas: object) => JSON.stringify(canvas)
-
 const placed = { x: 0, y: 0, width: 10, height: 10 }
 
 describe.each(CASES)("the %s fixture", (name) => {
@@ -179,7 +177,7 @@ describe("the z-order of an imported canvas", () => {
 
 	const zsOf = (nodes: object[]) =>
 		Object.fromEntries(
-			Object.entries(importCanvas(canvasWith({ nodes })).nodes).map(
+			Object.entries(importCanvas(JSON.stringify({ nodes })).nodes).map(
 				([id, node]) => [id, node.z],
 			),
 		)
@@ -293,7 +291,7 @@ describe("a canvas the import refuses", () => {
 	]
 
 	it.each(cases)("refuses %s", (_, canvas, error) => {
-		const text = typeof canvas === "string" ? canvas : canvasWith(canvas)
+		const text = typeof canvas === "string" ? canvas : JSON.stringify(canvas)
 		expect(refusalOf(text)).toEqual(error)
 	})
 })

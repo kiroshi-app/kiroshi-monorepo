@@ -107,11 +107,9 @@ fn z_at(index: usize) -> String {
 }
 
 fn is_in_z_order(keys: &[Option<&Value>]) -> bool {
-	keys.iter().all(|key| key.is_some_and(is_z))
-		&& keys.windows(2).all(|pair| match (pair[0], pair[1]) {
-			(Some(Value::String(left)), Some(Value::String(right))) => left <= right,
-			_ => false,
-		})
+	let valid: Option<Vec<&str>> =
+		keys.iter().map(|key| key.filter(|key| is_z(key)).and_then(Value::as_str)).collect();
+	valid.is_some_and(|keys| keys.windows(2).all(|pair| pair[0] <= pair[1]))
 }
 
 fn integer_of(value: &Value) -> Option<i64> {

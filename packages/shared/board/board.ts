@@ -270,7 +270,7 @@ const mappedValues = <T>(
 		Object.entries(source).map(([id, value]) => [id, map(id, value)]),
 	)
 
-export type BoardShape = {
+type BoardShape = {
 	nodes: Record<string, unknown>
 	edges: Record<string, unknown>
 	kiroshi: Record<string, unknown>
