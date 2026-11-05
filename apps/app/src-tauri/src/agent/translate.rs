@@ -42,7 +42,7 @@ fn tool_title(name: &str, input: &Value) -> String {
 	let detail = string_field(input, "description")
 		.or_else(|| path_label(input))
 		.or_else(|| string_field(input, "pattern"))
-		.or_else(|| string_field(input, "query"));
+		.or_else(|| string_field(input, "query").filter(|query| !query.contains(ATTACH_TOOL)));
 
 	match detail {
 		Some(detail) if !detail.is_empty() => format!("{name} · {detail}"),
@@ -668,6 +668,11 @@ mod tests {
 			a_call_round(1, "Write", json!({ "file_path": "/tmp/chart.png", "content": "png" }));
 		frames.extend(a_call_round(
 			2,
+			"ToolSearch",
+			json!({ "query": format!("select:{ATTACH_TOOL}"), "max_results": 1 }),
+		));
+		frames.extend(a_call_round(
+			3,
 			ATTACH_TOOL,
 			json!({ "path": "/tmp/chart.png", "caption": "The chart" }),
 		));
@@ -683,7 +688,10 @@ mod tests {
 				_ => None,
 			})
 			.collect::<Vec<_>>();
-		assert_eq!(titles, ["Write · chart.png"; 3]);
+		assert_eq!(
+			titles,
+			[["Write · chart.png"; 3].as_slice(), ["ToolSearch"; 3].as_slice()].concat()
+		);
 		assert_eq!(
 			completed(&events).iter().map(|message| message.text.as_str()).collect::<Vec<_>>(),
 			[answer]

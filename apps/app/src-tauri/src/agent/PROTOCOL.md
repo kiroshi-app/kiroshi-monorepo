@@ -657,7 +657,8 @@ tool `conversation_attach`, with `path`, an optional `caption` and an optional
 answered, an image as `![label](<path>)`, every other file as `[label](<path>)`:
 
 - the call raises no `activity`, neither when it starts nor when it is
-  answered: the file reaches the thread inside the message alone;
+  answered, and the `ToolSearch` that loads it is titled without its query:
+  the file reaches the thread inside the message alone;
 
 - the sidecar resolves `path` against the working directory, symlinks
   included, and refuses it as `deniedPath` without asking the host when the
