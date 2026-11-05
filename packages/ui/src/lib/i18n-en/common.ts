@@ -658,6 +658,9 @@ const common = {
 			zoomIn: "Zoom in",
 			level: "{{percent}}%",
 		},
+		libraryCard: {
+			documentMeta: "Document · from the Library",
+		},
 	},
 	whatsNew: {
 		firstLaunch: {

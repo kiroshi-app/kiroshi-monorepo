@@ -160,7 +160,19 @@
 	--color-board-section-purple-title-foreground: var(
 		--board-section-purple-title-foreground
 	);
+	--color-board-foreground: var(--board-foreground);
+	--color-board-body-foreground: var(--board-body-foreground);
+	--color-board-muted-foreground: var(--board-muted-foreground);
+	--color-board-shape-surface: var(--board-shape-surface);
+	--color-board-shape-border: var(--board-shape-border);
+	--color-board-card-surface: var(--board-card-surface);
+	--color-board-card-border: var(--board-card-border);
+	--color-board-card-inset: var(--board-card-inset);
+	--color-board-card-foreground: var(--board-card-foreground);
+	--color-board-card-soft-foreground: var(--board-card-soft-foreground);
 	--shadow-board-sticky: var(--board-sticky-shadow);
+	--shadow-board-card: var(--board-card-shadow);
+	--shadow-board-card-dragging: var(--board-card-dragging-shadow);
 	--color-question-segment-foreground: var(--question-segment-foreground);
 	--color-board-surface: var(--board-surface);
 	--color-board-dot: var(--board-dot);
