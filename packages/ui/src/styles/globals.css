@@ -139,6 +139,28 @@
 	--color-prompt-surface-inert: var(--prompt-surface-inert);
 	--color-prompt-menu: var(--prompt-menu);
 	--color-author-line-sticky: var(--author-line-sticky);
+	--color-board-sticky-yellow: var(--board-sticky-yellow);
+	--color-board-sticky-green: var(--board-sticky-green);
+	--color-board-sticky-pink: var(--board-sticky-pink);
+	--color-board-sticky-blue: var(--board-sticky-blue);
+	--color-board-sticky-orange: var(--board-sticky-orange);
+	--color-board-sticky-foreground: var(--board-sticky-foreground);
+	--color-board-sticky-author-foreground: var(--board-sticky-author-foreground);
+	--color-board-section-blue-surface: var(--board-section-blue-surface);
+	--color-board-section-blue-border: var(--board-section-blue-border);
+	--color-board-section-blue-title-chip: var(--board-section-blue-title-chip);
+	--color-board-section-blue-title-foreground: var(
+		--board-section-blue-title-foreground
+	);
+	--color-board-section-purple-surface: var(--board-section-purple-surface);
+	--color-board-section-purple-border: var(--board-section-purple-border);
+	--color-board-section-purple-title-chip: var(
+		--board-section-purple-title-chip
+	);
+	--color-board-section-purple-title-foreground: var(
+		--board-section-purple-title-foreground
+	);
+	--shadow-board-sticky: var(--board-sticky-shadow);
 	--color-question-segment-foreground: var(--question-segment-foreground);
 	--radius-xs: calc(var(--radius-root) * 0.2);
 	--radius-sm: calc(var(--radius-root) * 0.6);
