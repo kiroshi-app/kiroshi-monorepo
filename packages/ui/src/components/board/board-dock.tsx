@@ -16,6 +16,7 @@ import { useTranslation } from "react-i18next"
 import { BoardLibraryCard } from "@workspace/ui/components/board/board-library-card"
 import { Icons } from "@workspace/ui/components/icons"
 import { TooltipHint } from "@workspace/ui/components/tooltip-hint"
+import { Skeleton } from "@workspace/ui/components/ui/skeleton"
 import { cn } from "@workspace/ui/lib/utils"
 
 const BOARD_TOOLS = [
@@ -67,6 +68,8 @@ const TILE =
 	"relative h-17.5 w-23.5 shrink-0 overflow-hidden rounded-[8px] outline-none transition-none hover:ring-2 hover:ring-input focus-visible:ring-3 focus-visible:ring-ring/30 active:ring-2 active:ring-user-bubble"
 
 const DRAG_THRESHOLD = 3
+const DOCK_FRAME =
+	"absolute inset-x-0 bottom-5 mx-auto flex w-fit items-center gap-1 rounded-[14px] p-1.5"
 const DOCK_PADDING = 6
 const PICKER_GAP = 12
 const TILES_PER_ROW = 3
@@ -323,7 +326,10 @@ const BoardDock = ({
 		<Popover.Root onOpenChange={setIsPickerOpen} open={isPickerOpen}>
 			<Toolbar.Root
 				aria-label={t("board.dock.label")}
-				className="absolute inset-x-0 bottom-5 mx-auto flex w-fit items-center gap-1 rounded-[14px] bg-board-control p-1.5 text-board-control-foreground shadow-board-dock"
+				className={cn(
+					DOCK_FRAME,
+					"bg-board-control text-board-control-foreground shadow-board-dock",
+				)}
 				data-slot="board-dock"
 			>
 				{BOARD_TOOLS.map((id) => (
@@ -366,11 +372,26 @@ const BoardDock = ({
 	)
 }
 
+const BoardDockSkeleton = () => (
+	<Skeleton
+		className={cn(DOCK_FRAME, "animate-none bg-border")}
+		data-slot="board-dock-skeleton"
+	>
+		{BOARD_TOOLS.map((id) => (
+			<Fragment key={id}>
+				<span className="size-10 shrink-0" />
+				{id === "hand" ? <span className="h-6 w-px shrink-0" /> : null}
+			</Fragment>
+		))}
+	</Skeleton>
+)
+
 export {
 	BOARD_TOOLS,
 	type BoardClientPoint,
 	BoardDock,
 	type BoardDockProps,
+	BoardDockSkeleton,
 	type BoardLibraryItem,
 	type BoardTool,
 }

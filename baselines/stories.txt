@@ -1591,6 +1591,9 @@ navigation-boardcanvas--image-pasted
 navigation-boardcanvas--image-pasted-dark
 navigation-boardcanvas--link-pasted
 navigation-boardcanvas--link-pasted-dark
+navigation-boardcanvas--loaded-with-objects
+navigation-boardcanvas--loading
+navigation-boardcanvas--loading-dark
 navigation-boardcanvas--move-by-keyboard
 navigation-boardcanvas--move-by-keyboard-dark
 navigation-boardcanvas--move-by-pointer

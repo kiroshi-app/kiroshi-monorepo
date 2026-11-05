@@ -21,6 +21,8 @@ import {
 } from "@workspace/storybook/story-utils"
 import { CASA_DO_RIO_TERRACE } from "@workspace/ui/components/answer-blocks/answer-blocks.fixtures"
 import {
+	DRAWING_AGENT,
+	DRAWING_AGENT_POINTER,
 	LIBRARY_ITEMS,
 	LINK_CARD,
 	PERSON_AUTHOR,
@@ -82,6 +84,8 @@ const ROW_LINKS: BoardObject[] = Array.from({ length: ROWS }, (_, row) => ({
 
 const FIVE_HUNDRED_OBJECTS = { objects: [...NOTES, ...ROW_LINKS] }
 const EMPTY_BOARD = { objects: [] }
+const LOADED_DOCK_SIZE = [409, 52]
+const LOADED_ZOOM_SIZE = [112, 36]
 const AT_ORIGIN: BoardViewport = { offset: { x: 24, y: 24 }, zoom: 1 }
 const DARK_BOARD_SURFACE = "rgb(22, 22, 24)"
 const LAST_NOTE = NOTES.at(-1) as BoardItem
@@ -303,6 +307,7 @@ const meta = preview.meta({
 })
 
 export const Empty = meta.story({
+	args: { status: "ready" },
 	parameters: {
 		docs: {
 			description: {
@@ -311,12 +316,16 @@ export const Empty = meta.story({
 			},
 		},
 	},
-	play: async ({ canvasElement }) => {
+	play: async ({ canvasElement, args }) => {
 		const canvas = within(canvasElement)
 		const board = slotIn(canvasElement, "board-canvas")
 		const hint = slotIn(canvasElement, "board-empty-hint")
 		const pattern = board.querySelector("pattern") as SVGPatternElement
 		const hintBefore = hint.getBoundingClientRect()
+
+		await expect(args.status).toBe("ready")
+		await expect(hint).toBeVisible()
+		await expect(board).not.toHaveAttribute("aria-busy")
 
 		const title = canvas.getByRole("heading", { name: "An empty board" })
 		await expect(title).toBeVisible()
@@ -392,6 +401,7 @@ export const Empty = meta.story({
 
 export const EmptyDark = meta.story({
 	globals: { theme: "dark" },
+	args: Empty.input.args,
 	parameters: {
 		docs: {
 			description: {
@@ -403,6 +413,141 @@ export const EmptyDark = meta.story({
 	play: async (context) => {
 		await expectDarkSurface(context.canvasElement)
 		await Empty.input.play?.(context)
+	},
+})
+
+const sizeOf = (element: Element) => {
+	const rect = element.getBoundingClientRect()
+	return [rect.width, rect.height]
+}
+
+export const Loading = meta.story({
+	args: {
+		status: "loading",
+		view: FIVE_HUNDRED_OBJECTS,
+		pointers: [DRAWING_AGENT_POINTER],
+		outlines: [{ objectId: "note-1", owner: DRAWING_AGENT, state: "writing" }],
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A board whose objects have not arrived yet. Check the surface and its dot grid filling the whole canvas, a still placeholder where the dock sits, centred at the bottom, and another where the zoom control sits at the bottom end corner, each at its loaded size, no hint, no object, no connector, no pointer and no outline even though the view holds them, and a screen reader hearing Loading the board. A pan, a pinch, a click, a key, a paste or a file drop does nothing. Pick LoadingDark for the dark theme, Empty and LoadedWithObjects for the board once loaded.",
+			},
+		},
+	},
+	play: async ({ canvasElement, args }) => {
+		const canvas = within(canvasElement)
+		const board = slotIn(canvasElement, "board-canvas")
+		const skeleton = slotIn(canvasElement, "board-skeleton")
+
+		await expect(
+			canvas.getByRole("region", { name: "Loading the board…" }),
+		).toBe(board)
+		await expect(board).toHaveAttribute("aria-busy", "true")
+		for (const slot of [
+			"board-empty-hint",
+			"board-object",
+			"board-object-outline",
+			"board-connectors",
+			"board-connector-hits",
+			"board-pointers",
+			"board-dock",
+			"board-zoom-control",
+		])
+			await expect(slotsIn(canvasElement, slot)).toHaveLength(0)
+
+		const box = board.getBoundingClientRect()
+		const covered = skeleton.getBoundingClientRect()
+		await expect([covered.x, covered.y, covered.width, covered.height]).toEqual(
+			[
+				box.x + board.clientLeft,
+				box.y + board.clientTop,
+				board.clientWidth,
+				board.clientHeight,
+			],
+		)
+		await expect(
+			slotIn(skeleton, "board-dot-grid").getBoundingClientRect(),
+		).toEqual(covered)
+
+		const dock = slotIn(skeleton, "board-dock-skeleton")
+		const dockBox = dock.getBoundingClientRect()
+		await expect(sizeOf(dock)).toEqual(LOADED_DOCK_SIZE)
+		await expect(dockBox.bottom).toBe(covered.bottom - 20)
+		await expect(dockBox.x + dockBox.width / 2).toBeCloseTo(
+			covered.x + covered.width / 2,
+		)
+		const zoom = slotIn(skeleton, "board-zoom-skeleton")
+		const zoomBox = zoom.getBoundingClientRect()
+		await expect(sizeOf(zoom)).toEqual(LOADED_ZOOM_SIZE)
+		await expect([zoomBox.right, zoomBox.bottom]).toEqual([
+			covered.right - 20,
+			covered.bottom - 20,
+		])
+		for (const node of [skeleton, ...skeleton.querySelectorAll("*")])
+			await expect(getComputedStyle(node).animationName).toBe("none")
+
+		await expect(board).not.toHaveAttribute("tabindex")
+		wheel(board, { deltaX: 50, deltaY: 30 })
+		wheel(board, { ctrlKey: true, deltaY: -20, ...centreOf(board) })
+		await userEvent.click(board)
+		await userEvent.keyboard("{ArrowRight}{Delete}")
+		pasteOn(board, (transfer) =>
+			transfer.setData("text/plain", "https://kiroshi.app"),
+		)
+		const files = [new File(["x"], "plan.png", { type: "image/png" })]
+		dragFiles("dragover", board, transferOf(files), centreOf(board))
+		dragFiles("drop", board, transferOf(files), centreOf(board))
+
+		await expect(args.onViewportChange).not.toHaveBeenCalled()
+		await expect(args.onIntent).not.toHaveBeenCalled()
+		await expect(args.onPaste).not.toHaveBeenCalled()
+		await expect(args.onDropFiles).not.toHaveBeenCalled()
+		await expect(args.onToolChange).not.toHaveBeenCalled()
+		await expect(slotsIn(canvasElement, "board-file-drop")).toHaveLength(0)
+	},
+})
+
+export const LoadingDark = meta.story({
+	globals: { theme: "dark" },
+	args: Loading.input.args,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The loading board in the dark theme. Check the dots and both placeholders over the #161618 surface, then the same coverage, silence and refusal of input as Loading.",
+			},
+		},
+	},
+	play: async (context) => {
+		await expectDarkSurface(context.canvasElement)
+		await Loading.input.play?.(context)
+	},
+})
+
+export const LoadedWithObjects = meta.story({
+	args: { status: "ready", view: { objects: NOTES.slice(0, 3) } },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A loaded board holding a few notes. Check that no empty-board hint shows, the notes render, and the dock and the zoom control stand at the sizes the Loading placeholders hold.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const board = slotIn(canvasElement, "board-canvas")
+		await waitFor(() => expect(objectNode(board, "note-1")).not.toBeNull())
+		await expect(slotsIn(canvasElement, "board-empty-hint")).toHaveLength(0)
+		await expect(board).not.toHaveAttribute("aria-busy")
+		await expect(
+			slotsIn(canvasElement, "board-object").length,
+		).toBeGreaterThanOrEqual(1)
+		await expect(sizeOf(slotIn(board, "board-dock"))).toEqual(LOADED_DOCK_SIZE)
+		await expect(sizeOf(slotIn(board, "board-zoom-control"))).toEqual(
+			LOADED_ZOOM_SIZE,
+		)
 	},
 })
 
