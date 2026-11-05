@@ -54,7 +54,7 @@ const SHOWS_A_FILE_INSIDE_THE_MESSAGE =
 	"sits inside your message as the markdown line"
 
 const SHOWS_A_FILE_THROUGH_THE_TOOL =
-	/To show a file, call|goes through `conversation_attach`|through `conversation_attach`|Show any file/
+	/To show a file, call|through `conversation_attach`|Show any file/
 
 const NAMES_A_SECRET = /key|secret|token|password|credential|value|header/i
 

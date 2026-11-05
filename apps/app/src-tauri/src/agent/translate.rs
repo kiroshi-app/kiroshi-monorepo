@@ -660,8 +660,7 @@ mod tests {
 	}
 
 	#[test]
-	fn a_file_shown_through_conversation_attach_raises_no_activity_and_reaches_the_thread_in_the_answer(
-	) {
+	fn a_conversation_attach_call_raises_no_activity_and_the_answer_carries_the_file() {
 		let mut translator = Translator::new(false);
 		let answer = "The chart:\n\n![The chart](</attachments/c1/a1.png>)";
 		let mut frames =
