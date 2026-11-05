@@ -23,10 +23,12 @@ import {
 import { libraryDocumentStartOf } from "@workspace/ui/components/library-document-editor"
 import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
+import { toRelativeTime } from "@workspace/ui/lib/time-format"
 
 import { LibraryScreenHoldingOpening } from "@/components/library-screen-holding-opening"
 import {
 	LIBRARY_DOCUMENT_UPDATED_EVENT,
+	type LibraryBoardNode,
 	type LibraryDocumentUpdated,
 	type LibraryItem,
 	type MissionInSpace,
@@ -47,10 +49,20 @@ type Harness = {
 	store: TranscriptStore | null
 	missions: MissionInSpace[]
 	libraryItems: LibraryItem[]
+	boardNodes: Record<string, LibraryBoardNode[]>
+	unreadableBoards: string[]
+	loadingBoards: string[]
 }
 
 const harness = vi.hoisted(
-	(): Harness => ({ store: null, missions: [], libraryItems: [] }),
+	(): Harness => ({
+		store: null,
+		missions: [],
+		libraryItems: [],
+		boardNodes: {},
+		unreadableBoards: [],
+		loadingBoards: [],
+	}),
 )
 
 type LibraryCall = { name: string; update: string }
@@ -106,6 +118,15 @@ const createFakeLibraryHost = () => {
 			}
 			documents.set(name, new Y.Doc())
 			const item = libraryItemOf(name, "document")
+			harness.libraryItems = [...harness.libraryItems, item]
+			return item
+		},
+		library_create_board: ({ name }) => {
+			const fileName = `${name}.canvas`
+			if (harness.libraryItems.some((item) => item.name === fileName)) {
+				throw { kind: "alreadyExists", name: fileName }
+			}
+			const item = libraryItemOf(fileName, "board")
 			harness.libraryItems = [...harness.libraryItems, item]
 			return item
 		},
@@ -169,6 +190,22 @@ const LIBRARY_READS: Record<string, (name: string) => unknown> = {
 		content: HOSTED_CONTENT,
 	}),
 	library_read_image: (name) => ({ name, mimeType: "image/png", content: "" }),
+	library_board_summary: (name) => {
+		if (harness.loadingBoards.includes(name)) {
+			return new Promise(() => {})
+		}
+		if (harness.unreadableBoards.includes(name)) {
+			throw { kind: "invalidBoard", name, detail: "not JSON Canvas" }
+		}
+		const nodes = harness.boardNodes[name] ?? []
+		return {
+			name,
+			nodeCount: nodes.length,
+			nodes,
+			bounds:
+				nodes.length === 0 ? null : { x: 0, y: 0, width: 400, height: 160 },
+		}
+	},
 }
 
 const answerLibraryCall = (command: string, args: unknown) => {
@@ -268,6 +305,9 @@ afterEach(() => {
 	harness.store = null
 	harness.missions = []
 	harness.libraryItems = []
+	harness.boardNodes = {}
+	harness.unreadableBoards = []
+	harness.loadingBoards = []
 	fakeLibraryHost.reset()
 	vi.mocked(raiseFailureNotice).mockClear()
 })
@@ -1334,5 +1374,191 @@ describe("the Library opened from the rail", () => {
 		expect(selectedTabName()).toContain(LIBRARY_NAME)
 		expect(currentHrefOfTab(router, pinnedId)).toBe(pinnedHref)
 		expect(libraryHeading()).not.toBeNull()
+	})
+})
+
+const ROADMAP = libraryItemOf("Roadmap.canvas", "board")
+
+const RETRO = libraryItemOf("Retro.canvas", "board")
+
+const stickyAt = (id: string, x: number): LibraryBoardNode => ({
+	id,
+	type: "text",
+	x,
+	y: 0,
+	width: 160,
+	height: 160,
+	colour: "3",
+})
+
+const ROADMAP_NODES = [stickyAt("a", 0), stickyAt("b", 200), stickyAt("c", 240)]
+
+const filterNamed = (label: string) =>
+	within(screen.getByRole("group", { name: common("library.filters.label") }))
+		.getAllByRole("button")
+		.find((button) => button.textContent?.startsWith(label)) as HTMLElement
+
+const isTileShown = (name: string) =>
+	screen
+		.queryAllByRole("button")
+		.some((button) => button.textContent?.includes(name))
+
+const boardCanvas = () =>
+	screen.queryByRole("application", { name: common("board.canvas.label") })
+
+const breadcrumbOf = (name: string) =>
+	screen
+		.getByText(name, { selector: "[aria-current='page']" })
+		.closest("nav") as HTMLElement
+
+const boardObjectCount = () =>
+	screen.queryAllByRole("option", { hidden: true }).length
+
+const showLibraryOf = async (router: MountedRouter, items: LibraryItem[]) => {
+	harness.libraryItems = items
+	await act(async () => router.navigate({ to: "/library" }))
+	await settle()
+}
+
+describe("the boards of the Library grid", () => {
+	it("counts the boards on the Boards filter and lists only them once it is selected", async () => {
+		harness.libraryItems = [ROADMAP, RETRO, DOCUMENT]
+		const shown = await renderLibraryScreen(false)
+		await findButtonContaining(titleOf(ROADMAP), shown)
+
+		const boards = filterNamed(common("library.filters.boards"))
+		expect(boards.textContent).toBe(`${common("library.filters.boards")}2`)
+
+		await press(boards)
+
+		expect(isTileShown(titleOf(ROADMAP))).toBe(true)
+		expect(isTileShown(titleOf(RETRO))).toBe(true)
+		expect(isTileShown(titleOf(DOCUMENT))).toBe(false)
+	})
+
+	it("draws a board tile with the line Board, its item count and its relative time", async () => {
+		harness.libraryItems = [ROADMAP]
+		harness.boardNodes = { [ROADMAP.name]: ROADMAP_NODES }
+		const shown = await renderLibraryScreen(false)
+
+		const line = common("board.card.atRest", {
+			count: ROADMAP_NODES.length,
+			edited: toRelativeTime(ROADMAP.modifiedAt, Date.now()),
+		})
+		const tile = await findButtonContaining(line, shown)
+
+		expect(tile.textContent).toContain(titleOf(ROADMAP))
+	})
+
+	it("keeps the tile of a board whose summary fails, without a miniature, and logs the failure", async () => {
+		const logged = vi.spyOn(console, "error").mockImplementation(() => {})
+		harness.libraryItems = [ROADMAP, RETRO]
+		harness.boardNodes = { [ROADMAP.name]: ROADMAP_NODES }
+		harness.unreadableBoards = [RETRO.name]
+		const shown = await renderLibraryScreen(false)
+
+		await waitFor(() =>
+			expect(logged).toHaveBeenCalledWith(
+				expect.stringContaining(RETRO.name),
+				expect.anything(),
+			),
+		)
+		const tile = await findButtonContaining(titleOf(RETRO), shown)
+		expect(
+			tile.querySelector("[data-slot='board-miniature-object']"),
+		).toBeNull()
+		expect(raiseFailureNotice).not.toHaveBeenCalled()
+		logged.mockRestore()
+	})
+
+	it("creates a board from the Blank board card of an empty Library and shows the empty board", async () => {
+		const shown = await renderLibraryScreen(false)
+
+		await press(await findButtonContaining(common("library.blankBoard"), shown))
+
+		expect(
+			await screen.findByRole("heading", { name: common("board.empty.title") }),
+		).toBeInstanceOf(HTMLElement)
+		expect(harness.libraryItems.map(({ name }) => name)).toEqual([
+			"Untitled.canvas",
+		])
+	})
+})
+
+describe("a board opened in its tab", () => {
+	it("creates a board from New board and opens it in a new tab named after it", async () => {
+		const { router } = await mountApp()
+		await showLibraryOf(router, [ROADMAP])
+		const tabsBefore = tabCount()
+
+		await click(
+			screen.getByRole("button", { name: common("library.newBoard") }),
+		)
+
+		expect(tabCount()).toBe(tabsBefore + 1)
+		expect(selectedTabName()).toBe(common("library.editor.untitled"))
+		expect(boardCanvas()).toBeInstanceOf(HTMLElement)
+		expect(
+			screen.getByRole("heading", { name: common("board.empty.title") }),
+		).toBeInstanceOf(HTMLElement)
+	})
+
+	it("opens a board from its tile in a new tab with the Library breadcrumb, its objects and the zoom control", async () => {
+		const { router } = await mountApp()
+		harness.boardNodes = { [ROADMAP.name]: ROADMAP_NODES }
+		await showLibraryOf(router, [ROADMAP])
+		const tabsBefore = tabCount()
+
+		await click(tileNamed(titleOf(ROADMAP)))
+
+		expect(tabCount()).toBe(tabsBefore + 1)
+		expect(selectedTabName()).toBe(titleOf(ROADMAP))
+		expect(boardCanvas()).toBeInstanceOf(HTMLElement)
+		expect(boardObjectCount()).toBe(ROADMAP_NODES.length)
+		expect(
+			within(breadcrumbOf(titleOf(ROADMAP))).getByRole("button", {
+				name: common("library.document.back"),
+			}),
+		).toBeInstanceOf(HTMLElement)
+		expect(
+			screen.getByRole("group", { name: common("board.zoom.controls") }),
+		).toBeInstanceOf(HTMLElement)
+	})
+
+	it("shows the board bar with its name and Back, and neither the image skeleton nor the empty hint, while its summary loads", async () => {
+		const { router } = await mountApp()
+		harness.loadingBoards = [ROADMAP.name]
+		await showLibraryOf(router, [ROADMAP])
+
+		await click(tileNamed(titleOf(ROADMAP)))
+
+		expect(
+			within(breadcrumbOf(titleOf(ROADMAP))).getByRole("button", {
+				name: common("library.document.back"),
+			}),
+		).toBeInstanceOf(HTMLElement)
+		expect(
+			screen.queryByRole("region", {
+				name: common("library.tab.loadingImage"),
+			}),
+		).toBeNull()
+		expect(
+			screen.queryByRole("heading", { name: common("board.empty.title") }),
+		).toBeNull()
+		expect(boardCanvas()).toBeNull()
+	})
+
+	it("focuses the tab a board is already open in instead of opening a second one", async () => {
+		const { router } = await mountApp()
+		await showLibraryOf(router, [ROADMAP])
+		await click(tileNamed(titleOf(ROADMAP)))
+		const tabsWithBoard = tabCount()
+
+		await click(tabTitled(LIBRARY_NAME))
+		await click(tileNamed(titleOf(ROADMAP)))
+
+		expect(tabCount()).toBe(tabsWithBoard)
+		expect(selectedTabName()).toBe(titleOf(ROADMAP))
+		expect(boardCanvas()).toBeInstanceOf(HTMLElement)
 	})
 })

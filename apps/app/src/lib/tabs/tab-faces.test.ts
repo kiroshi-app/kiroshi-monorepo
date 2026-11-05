@@ -149,6 +149,14 @@ describe("the face of a tab", () => {
 		expect(face.title).toBe("Notes")
 	})
 
+	it("gives an opened Library board its own face, named after the board, with the Board icon", () => {
+		const face = tabFaceOf("/library?item=Roadmap.canvas&kind=board", SOURCES)
+
+		expect(face.title).toBe("Roadmap")
+		expect(markupOf(face.icon)).toBe(markupOf(createElement(Icons.Board)))
+		expect(face.descriptor).toBeUndefined()
+	})
+
 	it("describes an opened Library image by its name and the Image icon", () => {
 		const face = tabFaceOf("/library?item=photo.png&kind=image", SOURCES)
 

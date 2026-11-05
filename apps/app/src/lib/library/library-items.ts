@@ -2,13 +2,19 @@ import type { LibraryItem as ShownLibraryItem } from "@workspace/ui/components/l
 import { i18n } from "@workspace/ui/lib/i18n"
 import { toRelativeTime } from "@workspace/ui/lib/time-format"
 
-import type { LibraryItem } from "../bindings"
+import { BLANK_BOARD_SNAPSHOT, boardSnapshotOf } from "./library-boards"
+
+import type { LibraryBoardSummary, LibraryItem } from "../bindings"
 
 const SIZE_UNITS = ["B", "KB", "MB", "GB"]
 
 const DETAIL_SEPARATOR = " · "
 
-type ItemContent = { excerpt: string; src: string }
+type ItemContent = {
+	excerpt: string
+	src: string
+	summary: LibraryBoardSummary | undefined
+}
 
 const extensionAt = (name: string) => name.lastIndexOf(".")
 
@@ -25,10 +31,20 @@ const formatBytes = (bytes: number) => {
 	return `${rounded} ${SIZE_UNITS[unit]}`
 }
 
+const isExtensionShown = (kind: LibraryItem["kind"]) => {
+	switch (kind) {
+		case "image":
+			return true
+		case "document":
+		case "board":
+			return false
+	}
+}
+
 export const titleOf = ({ kind, name }: Pick<LibraryItem, "kind" | "name">) =>
-	kind === "document" && extensionAt(name) > 0
-		? name.slice(0, extensionAt(name))
-		: name
+	isExtensionShown(kind) || extensionAt(name) <= 0
+		? name
+		: name.slice(0, extensionAt(name))
 
 export const shownTitleOf = (title: string) =>
 	title.trim() === "" ? i18n.t("common:library.editor.untitled") : title
@@ -43,9 +59,21 @@ export const detailOf = (item: LibraryItem, now: number) =>
 		toRelativeTime(item.modifiedAt, now),
 	].join(DETAIL_SEPARATOR)
 
+const boardDetailOf = (
+	item: LibraryItem,
+	summary: LibraryBoardSummary | undefined,
+	now: number,
+) =>
+	summary
+		? i18n.t("common:board.card.atRest", {
+				count: summary.nodeCount,
+				edited: toRelativeTime(item.modifiedAt, now),
+			})
+		: detailOf(item, now)
+
 export const toShownItem = (
 	item: LibraryItem,
-	{ excerpt, src }: ItemContent,
+	{ excerpt, src, summary }: ItemContent,
 	now: number,
 ): ShownLibraryItem => {
 	const shared = {
@@ -53,9 +81,19 @@ export const toShownItem = (
 		name: titleOf(item),
 		detail: detailOf(item, now),
 	}
-	return item.kind === "image"
-		? { ...shared, kind: "image", src }
-		: { ...shared, kind: "document", excerpt }
+	switch (item.kind) {
+		case "image":
+			return { ...shared, kind: "image", src }
+		case "document":
+			return { ...shared, kind: "document", excerpt }
+		case "board":
+			return {
+				...shared,
+				kind: "board",
+				detail: boardDetailOf(item, summary, now),
+				snapshot: summary ? boardSnapshotOf(summary) : BLANK_BOARD_SNAPSHOT,
+			}
+	}
 }
 
 export const matchesQuery = (item: LibraryItem, query: string) =>

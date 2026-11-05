@@ -14,6 +14,9 @@ export const createLibraryDocument = (spaceId: string, name: string) =>
 		templateId: null,
 	})
 
+export const createLibraryBoard = (spaceId: string, name: string) =>
+	invoke<LibraryItem>("library_create_board", { spaceId, name })
+
 export const saveMessageAsDocument = (
 	conversationId: string,
 	messageId: string,
@@ -45,19 +48,18 @@ const isRefusedAs = (reason: unknown, kind: NameRefusal) =>
 	reason !== null &&
 	(reason as { kind?: unknown }).kind === kind
 
-const documentNameOf = (base: string, copy: number) =>
-	copy === 1
-		? `${base}${DOCUMENT_EXTENSION}`
-		: `${base} ${copy}${DOCUMENT_EXTENSION}`
+const freeNameOf = (base: string, copy: number, extension: string) =>
+	copy === 1 ? `${base}${extension}` : `${base} ${copy}${extension}`
 
 export const createFreelyNamed = (
 	create: CreateNamed,
 	title: string,
 	untitled: string,
+	extension = DOCUMENT_EXTENSION,
 ) => {
 	const attempt = async (base: string, copy: number): Promise<LibraryItem> => {
 		try {
-			return await create(documentNameOf(base, copy))
+			return await create(freeNameOf(base, copy, extension))
 		} catch (reason) {
 			if (isRefusedAs(reason, "alreadyExists")) {
 				return attempt(base, copy + 1)
