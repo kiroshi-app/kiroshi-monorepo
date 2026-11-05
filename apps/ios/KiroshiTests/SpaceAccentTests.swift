@@ -57,9 +57,8 @@ struct SpaceAccentTests {
 
     @Test func aSpaceWithoutAColourKeepsTheCataloguesBubble() throws {
         let accent = SpaceAccent(tint: nil)
-        for scheme in [ColorScheme.light, .dark] {
-            #expect(try Self.hex(of: accent.userBubble, in: scheme) == "#364F7C")
-        }
+        #expect(try Self.hex(of: accent.userBubble, in: .light) == "#364F7C")
+        #expect(try Self.hex(of: accent.userBubble, in: .dark) == "#88BAFF")
     }
 
     @Test(arguments: hues)
@@ -79,7 +78,7 @@ struct SpaceAccentTests {
         #expect(try Self.hex(of: accent.userBubbleForeground, in: .dark) == "#F5F5F5")
         let fallback = SpaceAccent(tint: nil)
         #expect(try Self.hex(of: fallback.userBubbleForeground, in: .light) == "#FFFFFF")
-        #expect(try Self.hex(of: fallback.userBubbleForeground, in: .dark) == "#FFFFFF")
+        #expect(try Self.hex(of: fallback.userBubbleForeground, in: .dark) == "#0E0E10")
     }
 
     @Test(arguments: hues.compactMap { $0 })
