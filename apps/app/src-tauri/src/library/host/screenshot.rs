@@ -159,9 +159,9 @@ pub fn library_screenshot_job<R: Runtime>(
 	window: WebviewWindow<R>,
 ) -> Result<ScreenshotJob, ScreenshotRequestError> {
 	let request_id = request_of(window.label())?;
-	let held = screenshots(window.app_handle());
-	let pending = held.held();
-	pending.get(request_id).map(|pending| pending.job.clone()).ok_or_else(|| unknown(request_id))
+	let screenshots = screenshots(window.app_handle());
+	let job = screenshots.held().get(request_id).map(|pending| pending.job.clone());
+	job.ok_or_else(|| unknown(request_id))
 }
 
 #[tauri::command]
@@ -188,9 +188,8 @@ pub async fn render<R: Runtime>(
 	let request_id = Uuid::new_v4().to_string();
 	let job = ScreenshotJob { request_id, space_id: space_id.to_owned(), scale: scale.0, target };
 	let (in_flight, answered) = InFlight::opened(app, job);
-	hidden_window(app, &in_flight.request_id).map_err(|failure| ToolRefusal::RenderFailed {
-		detail: format!("the render window did not open: {failure}"),
-	})?;
+	hidden_window(app, &in_flight.request_id)
+		.map_err(|failure| failed(format!("the render window did not open: {failure}")))?;
 	match tokio::time::timeout(RENDER_TIMEOUT, answered).await {
 		Err(_) => {
 			log::warn!("the screenshot {} did not render in time", in_flight.request_id);
