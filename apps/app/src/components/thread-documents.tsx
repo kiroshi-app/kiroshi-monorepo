@@ -21,6 +21,7 @@ import {
 } from "@workspace/ui/components/file-reference-chip"
 import { LibraryDocumentPresence } from "@workspace/ui/components/library-document-agents"
 import { LibraryDocumentBlockEditor } from "@workspace/ui/components/library-document-block-editor"
+import type { MarkdownBoardLinkRenderer } from "@workspace/ui/components/markdown/board-link"
 import type { MarkdownRunRenderProps } from "@workspace/ui/components/markdown/run"
 import { toRelativeTime } from "@workspace/ui/lib/time-format"
 
@@ -31,6 +32,7 @@ import {
 	LIBRARY_CHANGED_EVENT,
 	type LibraryItem,
 } from "@/lib/bindings"
+import { boardFileOf, linkedBoardFilesOf } from "@/lib/chat/board-links"
 import {
 	documentRunsOf,
 	isTrailingRun,
@@ -197,13 +199,24 @@ type DocumentReferencesSource = {
 	text: string
 	names: string[]
 	isWriting: boolean
+	now: number
 }
+
+const boardLinkRendererOf =
+	(documents: ThreadDocuments, now: number): MarkdownBoardLinkRenderer =>
+	({ name }) => {
+		const board = documents.boardOf(boardFileOf(name))
+		return board ? (
+			<ThreadBoardCard board={board} documents={documents} now={now} />
+		) : null
+	}
 
 export const documentReferencesOf = ({
 	documents,
 	text,
 	names,
 	isWriting,
+	now,
 }: DocumentReferencesSource) => {
 	const documentNames = names.filter((name) => !documents.boardOf(name))
 	const shownText = textCarryingDocuments(text, documentNames)
@@ -223,7 +236,12 @@ export const documentReferencesOf = ({
 		return trailingNames.has(id) ? <> {chip}</> : chip
 	}
 
-	return { text: shownText, runs, renderRun }
+	return {
+		text: shownText,
+		runs,
+		renderRun,
+		renderBoardLink: boardLinkRendererOf(documents, now),
+	}
 }
 
 const useKeptPanelWidth = () => {
@@ -443,17 +461,20 @@ const ThreadBoardCard = ({ documents, board, now }: ThreadBoardCardProps) => {
 type ThreadBoardCardsProps = {
 	documents: ThreadDocuments
 	names: string[]
+	text: string
 	now: number
 }
 
 export const ThreadBoardCards = ({
 	documents,
 	names,
+	text,
 	now,
-}: ThreadBoardCardsProps) =>
-	names.flatMap((name) => {
+}: ThreadBoardCardsProps) => {
+	const linkedBoards = linkedBoardFilesOf(text)
+	return names.flatMap((name) => {
 		const board = documents.boardOf(name)
-		return board
+		return board && !linkedBoards.has(boardFileOf(name))
 			? [
 					<ThreadBoardCard
 						board={board}
@@ -464,3 +485,4 @@ export const ThreadBoardCards = ({
 				]
 			: []
 	})
+}
