@@ -301,7 +301,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The board of a Space in its own tab: a dot grid the board slides over, the objects it mounts through `renderObject`, and the zoom control at the bottom end corner. The viewport is controlled: two-finger scroll, the mouse wheel and the arrow keys with nothing selected pan, a pinch zooms around the pointer, the buttons step the zoom around the centre, and every move goes out through `onViewportChange`. Only the objects inside the visible area plus a margin are mounted. A press or Tab selects an object and draws its frame and corner handles in the Space colour, a selected shape gets its style bar above it, and every move, resize, text edit, style pick or delete goes out through `onIntent` as a `BoardIntent`: the canvas never changes the board itself. Connectors are drawn by the canvas from the live rects of their ends, Straight or Elbow: with `isConnecting` on, a hovered object shows its outline and four anchors, a drag from one anchor to another object's anchor sends a connect intent, and the flyout picks the kind of the next connector or of the selected one. The tool dock sits centred at the bottom with the Library picker above it, a Library tile dragged onto the board emits `onLibraryItemDrop` with the board point, a link, an image or files pasted on the focused board emit `onPaste` with the centre of the view and the object whose id it returns gets selected, and files dragged in from the desktop show the drop target and emit `onDropFiles` where they land, and a web image dragged in as a link shows it too and emits `onDropUrl` with the link and the board point.",
+					"The board of a Space in its own tab: a dot grid the board slides over, the objects it mounts through `renderObject`, and the zoom control at the bottom end corner. The viewport is controlled: two-finger scroll, the mouse wheel and the arrow keys with nothing selected pan, a pinch zooms around the pointer, the buttons step the zoom around the centre, and every move goes out through `onViewportChange`. Only the objects inside the visible area plus a margin are mounted. A press or Tab selects an object and draws its frame and corner handles in the Space colour, a selected shape gets its style bar above it, and every move, resize, text edit, style pick or delete goes out through `onIntent` as a `BoardIntent`: the canvas never changes the board itself. Connectors are drawn by the canvas from the live rects of their ends, Straight or Elbow: with `isConnecting` on, a hovered object shows its outline and four anchors, a drag from one anchor to another object's anchor sends a connect intent, and the flyout picks the kind of the next connector or of the selected one. The tool dock sits centred at the bottom with the Library picker above it, a Library tile dragged onto the board emits `onLibraryItemDrop` with the board point, a link, an image or files pasted on the focused board emit `onPaste` with the centre of the view and the object whose id it returns gets selected, and files dragged in from the desktop show the drop target and emit `onDropFiles` where they land, and a link dragged in shows it too and emits `onDropUrl` with the first link of the list and the board point whatever its scheme, the app deciding what it becomes.",
 			},
 		},
 	},
@@ -1799,6 +1799,8 @@ export const FilesDraggedOverUnknownCountDark = meta.story({
 })
 
 const DROPPED_IMAGE_URL = "https://images.example.com/terrace-at-dusk.jpg"
+const DROPPED_FILE_URL = "file:///Users/mira/terrace.jpg"
+const DROPPED_MAIL_URL = "mailto:mira@example.com"
 
 const urlTransferOf = (uriList: string) => {
 	const transfer = new DataTransfer()
@@ -1836,9 +1838,29 @@ const playUrlDraggedOver = async ({
 	await waitFor(() => expect(dropState()).toBeNull())
 
 	dragFiles("dragover", board, dragging(), at)
-	dragFiles("drop", board, urlTransferOf("file:///Users/mira/terrace.jpg"), at)
+	dragFiles("drop", board, urlTransferOf(DROPPED_FILE_URL), at)
 	await waitFor(() => expect(dropState()).toBeNull())
-	await expect(args.onDropUrl).not.toHaveBeenCalled()
+	await expect(args.onDropUrl).toHaveBeenCalledTimes(1)
+	await expect(args.onDropUrl).toHaveBeenLastCalledWith(
+		DROPPED_FILE_URL,
+		boardPointOf(board, at),
+	)
+
+	dragFiles("drop", board, urlTransferOf(DROPPED_MAIL_URL), at)
+	await expect(args.onDropUrl).toHaveBeenCalledTimes(2)
+	await expect(args.onDropUrl).toHaveBeenLastCalledWith(
+		DROPPED_MAIL_URL,
+		boardPointOf(board, at),
+	)
+
+	dragFiles("dragover", board, dragging(), at)
+	await waitFor(() => expect(dropState()).not.toBeNull())
+	await expect(
+		dragFiles("drop", board, urlTransferOf("# terrace\r\n\r\n  \r\n"), at)
+			.defaultPrevented,
+	).toBe(true)
+	await waitFor(() => expect(dropState()).toBeNull())
+	await expect(args.onDropUrl).toHaveBeenCalledTimes(2)
 
 	dragFiles("dragover", board, dragging(), at)
 	dragFiles(
@@ -1850,7 +1872,7 @@ const playUrlDraggedOver = async ({
 		at,
 	)
 	await waitFor(() => expect(dropState()).toBeNull())
-	await expect(args.onDropUrl).toHaveBeenCalledTimes(1)
+	await expect(args.onDropUrl).toHaveBeenCalledTimes(3)
 	await expect(args.onDropUrl).toHaveBeenLastCalledWith(
 		DROPPED_IMAGE_URL,
 		boardPointOf(board, at),
@@ -1865,7 +1887,7 @@ const playUrlDraggedOver = async ({
 		[image],
 		boardPointOf(board, at),
 	)
-	await expect(args.onDropUrl).toHaveBeenCalledTimes(1)
+	await expect(args.onDropUrl).toHaveBeenCalledTimes(3)
 
 	const fromBoard = dragging()
 	slotIn(board, "board-image").dispatchEvent(
@@ -1881,7 +1903,7 @@ const playUrlDraggedOver = async ({
 	await expect(dropState()).toBeNull()
 	dragFiles("drop", board, fromBoard, at)
 	await expect(dropState()).toBeNull()
-	await expect(args.onDropUrl).toHaveBeenCalledTimes(1)
+	await expect(args.onDropUrl).toHaveBeenCalledTimes(3)
 	await expect(args.onDropFiles).toHaveBeenCalledTimes(1)
 
 	dragFiles("dragover", board, dragging(), at)
@@ -1908,7 +1930,7 @@ export const UrlDraggedOver = meta.story({
 		docs: {
 			description: {
 				story:
-					"Boards 5c for a web image dragged from a browser: the drag carries a link and no file, so the board shows its drop target with one image thumbnail under the pointer and the pill reading Drop to add 1 image here. Check the state leaving with the drag, a drop emitting `onDropUrl` once with the first link of the list and the board point, a link that is not http or https emitting nothing, and a drag carrying files keeping to `onDropFiles`.",
+					"Boards 5c for a web image dragged from a browser: the drag carries a link and no file, so the board shows its drop target with one image thumbnail under the pointer and the pill reading Drop to add 1 image here. Check the state leaving with the drag, a drop emitting `onDropUrl` once with the first link of the list and the board point, a `file:///` or `mailto:` link reaching `onDropUrl` just the same since the app decides what a dropped link becomes, a list of only blank or comment lines claiming the drop and emitting nothing, and a drag carrying files keeping to `onDropFiles`.",
 			},
 		},
 	},

@@ -1168,7 +1168,7 @@ const ReadyBoardCanvas = ({
 			return
 		}
 		const url = firstUrlOf(transfer.getData(URL_LIST))
-		if (url && isWebLink(url)) onDropUrl(url, point)
+		if (url) onDropUrl(url, point)
 	}
 
 	const dropLibraryItem = (id: string, pointer: BoardClientPoint) => {
