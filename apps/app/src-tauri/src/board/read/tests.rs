@@ -245,3 +245,20 @@ fn every_kind_of_the_board_schema_has_its_excerpt_test() {
 
 	assert_eq!(SCHEMA.kinds.keys().map(String::as_str).collect::<Vec<_>>(), tested);
 }
+
+#[test]
+fn a_frame_holds_every_node_and_free_arrow_end_kept_plus_a_24_px_margin() {
+	let board = nested_board();
+
+	let whole = framed(&board, None).expect("the whole board");
+	let inner = framed(&board, Some("inner")).expect("the inner section");
+	let absent = framed(&board, Some("ghost")).expect_err("refused");
+
+	assert_eq!(whole.frame, Some(Frame { x: -24, y: -24, width: 958, height: 548 }));
+	assert_eq!(inner.part.nodes.keys().collect::<Vec<_>>(), ["inner", "n"]);
+	assert_eq!(inner.part.edges.keys().collect::<Vec<_>>(), ["inside"]);
+	assert_eq!(inner.frame, Some(Frame { x: -14, y: -14, width: 248, height: 248 }));
+	assert_eq!((absent.element, absent.index), (BoardItem::Node, Some(0)));
+	assert_eq!(absent.fault, DrawFault::UnknownReference { reference: "ghost".to_owned() });
+	assert_eq!(framed(&a_board(&[], &[]), None).expect("empty").frame, None);
+}

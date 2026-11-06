@@ -64,7 +64,7 @@ type BoardObjectSources = {
 	libraryItems: readonly BoardLibraryItem[]
 }
 
-const renderObjectFrom =
+export const renderObjectFrom =
 	({ nodeOf, libraryItems }: BoardObjectSources) =>
 	(item: BoardItem) => {
 		const node = nodeOf(item.id)

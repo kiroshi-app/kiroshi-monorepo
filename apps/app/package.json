@@ -32,6 +32,7 @@
 		"@tauri-apps/plugin-process": "^2.4.0",
 		"@workspace/shared": "workspace:*",
 		"@workspace/ui": "workspace:*",
+		"modern-screenshot": "^4.7.0",
 		"react": "^19.3.0",
 		"react-dom": "^19.3.0",
 		"yjs": "^13.6.33"

@@ -101,7 +101,7 @@ afterEach(() => {
 })
 
 describe("libraryTools", () => {
-	it("serves the seven library tools, the tool that posts a document, the seven document tools and the twelve board tools", () => {
+	it("serves the seven library tools, the tool that posts a document, the seven document tools, the twelve board tools and screenshot", () => {
 		expect(tools.map((held) => held.name)).toEqual([
 			"library_list",
 			"library_search",
@@ -130,6 +130,7 @@ describe("libraryTools", () => {
 			"board_delete",
 			"board_find",
 			"board_view",
+			"screenshot",
 		])
 	})
 
@@ -192,6 +193,7 @@ describe("libraryTools", () => {
 		expect(fieldsOf("board_delete").required).toEqual(["name"])
 		expect(fieldsOf("board_find").required).toEqual(["name"])
 		expect(fieldsOf("board_view").required).toEqual(["name", "id"])
+		expect(fieldsOf("screenshot").required).toEqual(["name"])
 	})
 
 	it("hands each board call to the library host of its session under its operation", async () => {
@@ -237,6 +239,7 @@ describe("libraryTools", () => {
 			],
 			["board_find", "boardFind", { name: "plan.canvas", text: "ship" }],
 			["board_view", "boardView", { name: "plan.canvas", id: "n1" }],
+			["screenshot", "screenshot", { name: "plan.canvas", id: "n1", scale: 2 }],
 		]
 
 		for (const [name, , input] of calls) {
@@ -280,6 +283,46 @@ describe("libraryTools", () => {
 			{ type: "text", text: JSON.stringify({ header: A_HEADER }) },
 		])
 		expect(result.isError).toBeUndefined()
+	})
+
+	it("answers a screenshot as an image block with the header and the rendered width, height and scale", async () => {
+		const rendered = { width: 640, height: 320, scale: 2 }
+		const asked = aHost(() => ({
+			result: {
+				header: A_HEADER,
+				rendered,
+				form: "image",
+				name: "plan.canvas",
+				mimeType: "image/png",
+				content: "cG5n",
+			},
+		}))
+
+		const result = await called("screenshot", { name: "plan.canvas", scale: 2 })
+
+		expect(asked).toEqual([
+			{
+				subtype: "library",
+				operation: "screenshot",
+				payload: { name: "plan.canvas", scale: 2 },
+			},
+		])
+		expect(result.content).toEqual([
+			{ type: "image", data: "cG5n", mimeType: "image/png" },
+			{ type: "text", text: JSON.stringify({ header: A_HEADER, rendered }) },
+		])
+		expect(result.isError).toBeUndefined()
+	})
+
+	it("speaks back a screenshot that timed out, with no image", async () => {
+		const refusal = { kind: "renderTimedOut", seconds: 15 }
+		aHost(() => ({ error: refusal }))
+
+		const result = await called("screenshot", { name: "plan.canvas" })
+
+		expect(result.isError).toBe(true)
+		expect(result.content).toHaveLength(1)
+		expect(spoken(result)).toEqual(refusal)
 	})
 
 	for (const [what, refusal] of [

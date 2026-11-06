@@ -2072,5 +2072,33 @@
 			],
 			"additionalProperties": false
 		}
+	},
+	{
+		"name": "screenshot",
+		"description": "Show you a picture of a board or of a Markdown document of the Library of this Space as a person sees it there, in the light theme, rendered from what is saved at the moment of the call. Call it after a write to check what you drew or wrote. A board name alone shows every node and arrow of the board, framed on their bounds; with the id of a node, that node and the nodes it holds. A document name alone shows the whole document; with the id of a block, that block alone. An id absent from the board or the document is refused with that id, and a board or a document with nothing in it as nothingToShow, before anything is rendered; a render that does not answer within 15 seconds is refused as renderTimedOut. It answers the picture, at most 1568 pixels on its long edge, with the header of board_info for a board or the answer of document_info for a document, and the rendered width, height and scale.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"name": {
+					"type": "string",
+					"description": "The name of a board ending in .canvas, such as roadmap.canvas, or of a Markdown document, such as notes.md, of the Library of this Space, without any folder."
+				},
+				"id": {
+					"description": "The id of a node of the board as board_tree answered it, or of a block of the document as document_tree answered it. Left out, the whole board or document.",
+					"type": "string"
+				},
+				"scale": {
+					"description": "1 or 2: the pixels drawn for each point of the board or the document. Left out, 1.",
+					"type": "integer",
+					"minimum": 1,
+					"maximum": 2
+				}
+			},
+			"required": [
+				"name"
+			],
+			"additionalProperties": false
+		}
 	}
 ]

@@ -153,6 +153,7 @@ describe("kiroshiServer", () => {
 			"board_delete",
 			"board_find",
 			"board_view",
+			"screenshot",
 		])
 	})
 

@@ -736,7 +736,11 @@ fn arrow_fields(fields: &JsonObject) -> Result<JsonObject, DrawFault> {
 	}
 }
 
-fn end_rect(edge: &JsonObject, end: &End, nodes: &BTreeMap<String, JsonObject>) -> Option<Rect> {
+pub(super) fn end_rect(
+	edge: &JsonObject,
+	end: &End,
+	nodes: &BTreeMap<String, JsonObject>,
+) -> Option<Rect> {
 	if let Some(node) = edge.get(end.node).and_then(Value::as_str) {
 		return nodes.get(node).map(Rect::of);
 	}
