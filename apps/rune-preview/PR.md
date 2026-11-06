@@ -120,3 +120,16 @@ Geist and Geist Mono (OFL, vercel/geist-font v1.9.1) are embedded from `assets/f
 - Roster dates older than four weeks are formatted in UTC.
 - The import step advances without importing. The sign-in steps show their screens without completing.
 - Headless scenes `live`, `live-mission` and `live-mission-turn` read the installed host before the first frame. `live-mission-turn` ends the conversation just after its first mission so the card is in view.
+
+## kiroshi-core (OPE-1954)
+
+The kept core of `apps/app/src-tauri` moves to a crate with no Tauri dependency, in four steps: the kept modules move off `AppHandle` and `State` onto a `Core` context inside src-tauri; they move into `crates/kiroshi-core`; the preview reads and sends through it in-process; a three-OS CI job builds the preview and runs its smoke test.
+
+### Decisions
+
+- **Core.** A cheap clonable handle holding the data folder, the app identifier, the tokio runtime, a typed registry of shared state, an event channel and the frame relay of the host API. The registry is append-only: a second insert of a type returns false and keeps the held value, nothing removes or replaces one, which is what makes `Managed<'_, T>` sound.
+- **Events.** A payload is serialised once to raw JSON, so its bytes stay exactly as the command layer wrote them. Tests subscribe to the channel without Tauri. The Tauri app installs a listener that forwards to every window or to one window.
+- **Window-keyed state.** Turn windows, mission run claims and library presence are keyed by an opaque `ClientId`. Core exposes `clear_client`. The Tauri app maps a window label to a `ClientId`; the Rune shell will use one fixed `ClientId`. No Tauri type crosses into Core.
+- **Desktop port.** Opening a URL goes through a `Desktop` port the Tauri app installs over its opener plugin. Without one, Core returns `NoDesktop`.
+- **Left in the Tauri app.** The 238 command wrappers, the host HTTP API, logging (the Tauri log plugin), deep links, and the dialog, clipboard and reveal calls made inside commands.
+- **Tests, step 2.** The tests of kept modules move onto a test `Core` (a temporary folder plus the shared test runtime) instead of a Tauri mock app. Tests that go through Tauri IPC stay in the Tauri app, next to the command wrappers they exercise. No test is deleted or ignored.
