@@ -94,10 +94,14 @@ const expectAgentFooter = async (
 	await expect(slotsIn(root, "message-bubble-content")).toHaveLength(1)
 	await expect(slotsIn(root, "message-author")).toHaveLength(0)
 	await expect(slotsIn(root, "message-gutter")).toHaveLength(0)
-	await expect(bubble.contains(footer)).toBe(true)
+	await expect(footer.parentElement).toBe(bubble)
+	await expect(footer.closest('[data-slot="mission-card"]')).toBeNull()
 	await expect(footer).toHaveAttribute("data-tone", "agent")
 	await expect(slotIn(footer, "author-line-name")).toHaveTextContent(face.name)
-	await expect(footer).toHaveTextContent(mission.timestamp)
+	await expect(footer).not.toHaveTextContent(mission.timestamp)
+	await expect(slotIn(root, "mission-timestamp")).toHaveTextContent(
+		mission.timestamp,
+	)
 	if (face.title) {
 		await expect(footer).toHaveTextContent(face.title)
 	}
@@ -121,7 +125,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"A mission as it lands in the transcript it was opened from: an assistant turn like any other, one soft bubble with the companion's author line in its footer. The bubble opens on which tools the mission runs with and where it stands, then carries the objective and the ticket it answers; the footer names the companion with its badge, its avatar and the mission's time. Reach for it in a conversation feed; the bubble on its own is `MissionCard`.",
+					"A mission as it lands in the transcript it was opened from: an assistant turn like any other, one soft bubble with the companion's author line in its footer. The bubble opens on which tools the mission runs with and where it stands, then carries the objective and the ticket it answers; the footer names the companion with its badge and its avatar, the time staying in the title row. Reach for it in a conversation feed; the bubble on its own is `MissionCard`.",
 			},
 		},
 	},
@@ -197,7 +201,7 @@ export const WaitingForTheReader = meta.story({
 		docs: {
 			description: {
 				story:
-					"The mission stopped on a question for its reader. Check that the footer names the companion with its badge and the mission's time, that the pill opens the bubble after the tool marks and says the state in words, and that the attention badge sits on the footer avatar. Tab onto the bubble to see its focus ring. Pick `Working` for the state that carries no pill at all. " +
+					"The mission stopped on a question for its reader. Check that the footer names the companion with its badge and leaves the time to the title row, that the pill opens the bubble after the tool marks and says the state in words, and that the attention badge sits on the footer avatar. Tab onto the bubble to see its focus ring. Pick `Working` for the state that carries no pill at all. " +
 					PLACED_BY_THE_FEED,
 			},
 		},
@@ -206,7 +210,13 @@ export const WaitingForTheReader = meta.story({
 		const open = canvas.getByRole("button")
 		const ticket = canvas.getByRole("link")
 		const footer = footerOf(canvasElement).getBoundingClientRect()
+		const bubble = slotIn(
+			canvasElement,
+			"message-bubble-content",
+		).getBoundingClientRect()
+		const covered = open.getBoundingClientRect()
 
+		await expect(covered.toJSON()).toEqual(bubble.toJSON())
 		await userEvent.tab()
 		await expect(open).toHaveFocus()
 		await expect(getComputedStyle(open).boxShadow).not.toBe("none")

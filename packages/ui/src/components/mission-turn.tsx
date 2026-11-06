@@ -57,7 +57,6 @@ const MissionTurn = ({ mission, onOpen, wrap }: MissionTurnProps) => {
 									working={card.isWorking}
 								/>
 							}
-							time={card.timestamp}
 							isSticky
 							className="pointer-events-none"
 						/>
