@@ -131,6 +131,7 @@ export const LibraryBoardCanvas = ({
 			isConnecting={tool === "connector"}
 			libraryItems={library?.pickableItems ?? NO_LIBRARY_ITEMS}
 			onDropFiles={additions.dropFiles}
+			onDropUrl={leaveBoardUnchanged}
 			onIntent={board.apply}
 			onLibraryItemDrop={additions.dropItem}
 			onLibraryItemPick={additions.pickItem}

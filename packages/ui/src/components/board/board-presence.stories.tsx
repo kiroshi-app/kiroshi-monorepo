@@ -191,6 +191,7 @@ const PresenceBoard = ({
 				<BoardCanvas
 					libraryItems={[]}
 					onDropFiles={fn()}
+					onDropUrl={fn()}
 					onIntent={fn()}
 					onLibraryItemDrop={fn()}
 					onLibraryItemPick={fn()}

@@ -99,10 +99,11 @@ type BoardCanvasProps = {
 	tool: BoardTool
 	onToolChange: (tool: BoardTool) => void
 	libraryItems: readonly BoardLibraryItem[]
-	onLibraryItemPick: (id: string) => void
+	onLibraryItemPick: (id: string, point: BoardPoint) => void
 	onLibraryItemDrop: (id: string, point: BoardPoint) => void
 	onPaste: (paste: BoardPaste, point: BoardPoint) => string | undefined
 	onDropFiles: (files: readonly File[], point: BoardPoint) => void
+	onDropUrl: (url: string, point: BoardPoint) => void
 	isConnecting?: boolean
 	className?: string
 }
@@ -624,6 +625,7 @@ type BoardFileDrag = {
 
 const GHOST_TILT = ["-rotate-3", "rotate-2", "rotate-7"] as const
 const UNREADABLE_FILES: readonly BoardFileKind[] = ["file"]
+const DROPPED_URL: readonly BoardFileKind[] = ["image"]
 
 const dropLabelOf = (kinds: readonly BoardFileKind[]) => {
 	if (kinds.length === 0) return "board.drop.unknown"
@@ -684,8 +686,12 @@ const BoardFileDropState = ({ kinds, at }: BoardFileDrag) => {
 	)
 }
 
-const isFileDrag = (event: DragEvent<HTMLElement>) =>
-	event.dataTransfer.types.includes("Files")
+const URL_LIST = "text/uri-list"
+
+const isFileDrag = (transfer: DataTransfer) => transfer.types.includes("Files")
+
+const isBoardDrop = (transfer: DataTransfer) =>
+	isFileDrag(transfer) || transfer.types.includes(URL_LIST)
 
 const fileKindsOf = (transfer: DataTransfer): BoardFileKind[] =>
 	Array.from(transfer.items)
@@ -694,6 +700,12 @@ const fileKindsOf = (transfer: DataTransfer): BoardFileKind[] =>
 
 const isWebLink = (text: string) =>
 	/^https?:\/\//i.test(text) && URL.canParse(text)
+
+const firstUrlOf = (uriList: string) =>
+	uriList
+		.split(/\r?\n/)
+		.map((line) => line.trim())
+		.find((line) => line !== "" && !line.startsWith("#"))
 
 const pastedOf = (clipboard: DataTransfer): BoardPaste | undefined => {
 	const files = Array.from(clipboard.files)
@@ -799,6 +811,7 @@ const ReadyBoardCanvas = ({
 	onLibraryItemDrop,
 	onPaste,
 	onDropFiles,
+	onDropUrl,
 	isConnecting = false,
 	className,
 }: ReadyBoardCanvasProps) => {
@@ -1120,29 +1133,37 @@ const ReadyBoardCanvas = ({
 		if (pastedId) setSelectedId(pastedId)
 	}
 
-	const dragFilesOver = (event: DragEvent<HTMLDivElement>) => {
-		if (!isFileDrag(event)) return
+	const pickLibraryItem = (id: string) =>
+		onLibraryItemPick(id, boardPointAt(centreOf(size)))
+
+	const dragOver = (event: DragEvent<HTMLDivElement>) => {
+		const transfer = event.dataTransfer
+		if (!isBoardDrop(transfer)) return
 		event.preventDefault()
-		event.dataTransfer.dropEffect = "copy"
+		transfer.dropEffect = "copy"
 		setFileDrag({
-			kinds: fileKindsOf(event.dataTransfer),
+			kinds: isFileDrag(transfer) ? fileKindsOf(transfer) : DROPPED_URL,
 			at: pointerIn(event.currentTarget, event),
 		})
 	}
 
-	const leaveWithFiles = (event: DragEvent<HTMLDivElement>) => {
+	const leaveWithDrag = (event: DragEvent<HTMLDivElement>) => {
 		if (event.currentTarget.contains(event.relatedTarget as Node | null)) return
 		setFileDrag(null)
 	}
 
-	const dropFiles = (event: DragEvent<HTMLDivElement>) => {
-		if (!isFileDrag(event)) return
+	const drop = (event: DragEvent<HTMLDivElement>) => {
+		const transfer = event.dataTransfer
+		if (!isBoardDrop(transfer)) return
 		event.preventDefault()
 		setFileDrag(null)
-		onDropFiles(
-			Array.from(event.dataTransfer.files),
-			boardPointAt(pointerIn(event.currentTarget, event)),
-		)
+		const point = boardPointAt(pointerIn(event.currentTarget, event))
+		if (isFileDrag(transfer)) {
+			onDropFiles(Array.from(transfer.files), point)
+			return
+		}
+		const url = firstUrlOf(transfer.getData(URL_LIST))
+		if (url && isWebLink(url)) onDropUrl(url, point)
 	}
 
 	const dropLibraryItem = (id: string, pointer: BoardClientPoint) => {
@@ -1217,10 +1238,10 @@ const ReadyBoardCanvas = ({
 			aria-label={t("board.canvas.label")}
 			className={cn(CANVAS_SURFACE, className)}
 			data-slot="board-canvas"
-			onDragEnter={dragFilesOver}
-			onDragLeave={leaveWithFiles}
-			onDragOver={dragFilesOver}
-			onDrop={dropFiles}
+			onDragEnter={dragOver}
+			onDragLeave={leaveWithDrag}
+			onDragOver={dragOver}
+			onDrop={drop}
 			onKeyDown={pressKey}
 			onPaste={paste}
 			onPointerDown={pressCanvas}
@@ -1435,7 +1456,7 @@ const ReadyBoardCanvas = ({
 			<BoardDock
 				libraryItems={libraryItems}
 				onLibraryItemDrop={dropLibraryItem}
-				onLibraryItemPick={onLibraryItemPick}
+				onLibraryItemPick={pickLibraryItem}
 				onToolChange={onToolChange}
 				tool={tool}
 			/>

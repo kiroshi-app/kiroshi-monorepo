@@ -294,13 +294,14 @@ const meta = preview.meta({
 		onLibraryItemDrop: fn(),
 		onPaste: fn(),
 		onDropFiles: fn(),
+		onDropUrl: fn(),
 	},
 	parameters: {
 		layout: "fullscreen",
 		docs: {
 			description: {
 				component:
-					"The board of a Space in its own tab: a dot grid the board slides over, the objects it mounts through `renderObject`, and the zoom control at the bottom end corner. The viewport is controlled: two-finger scroll, the mouse wheel and the arrow keys with nothing selected pan, a pinch zooms around the pointer, the buttons step the zoom around the centre, and every move goes out through `onViewportChange`. Only the objects inside the visible area plus a margin are mounted. A press or Tab selects an object and draws its frame and corner handles in the Space colour, a selected shape gets its style bar above it, and every move, resize, text edit, style pick or delete goes out through `onIntent` as a `BoardIntent`: the canvas never changes the board itself. Connectors are drawn by the canvas from the live rects of their ends, Straight or Elbow: with `isConnecting` on, a hovered object shows its outline and four anchors, a drag from one anchor to another object's anchor sends a connect intent, and the flyout picks the kind of the next connector or of the selected one. The tool dock sits centred at the bottom with the Library picker above it, a Library tile dragged onto the board emits `onLibraryItemDrop` with the board point, a link, an image or files pasted on the focused board emit `onPaste` with the centre of the view and the object whose id it returns gets selected, and files dragged in from the desktop show the drop target and emit `onDropFiles` where they land.",
+					"The board of a Space in its own tab: a dot grid the board slides over, the objects it mounts through `renderObject`, and the zoom control at the bottom end corner. The viewport is controlled: two-finger scroll, the mouse wheel and the arrow keys with nothing selected pan, a pinch zooms around the pointer, the buttons step the zoom around the centre, and every move goes out through `onViewportChange`. Only the objects inside the visible area plus a margin are mounted. A press or Tab selects an object and draws its frame and corner handles in the Space colour, a selected shape gets its style bar above it, and every move, resize, text edit, style pick or delete goes out through `onIntent` as a `BoardIntent`: the canvas never changes the board itself. Connectors are drawn by the canvas from the live rects of their ends, Straight or Elbow: with `isConnecting` on, a hovered object shows its outline and four anchors, a drag from one anchor to another object's anchor sends a connect intent, and the flyout picks the kind of the next connector or of the selected one. The tool dock sits centred at the bottom with the Library picker above it, a Library tile dragged onto the board emits `onLibraryItemDrop` with the board point, a link, an image or files pasted on the focused board emit `onPaste` with the centre of the view and the object whose id it returns gets selected, and files dragged in from the desktop show the drop target and emit `onDropFiles` where they land, and a web image dragged in as a link shows it too and emits `onDropUrl` with the link and the board point.",
 			},
 		},
 	},
@@ -1475,6 +1476,35 @@ export const TileDraggedDark = meta.story({
 	play: playTileDragged,
 })
 
+const TwoBoards = (args: BoardCanvasProps) => (
+	<div className="grid grid-cols-[3fr_2fr] gap-4">
+		<ControlledBoard {...args} tool="select" />
+		<ControlledBoard {...args} />
+	</div>
+)
+
+export const LibraryItemPickedOnSecondCanvas = meta.story({
+	tags: ["test-only"],
+	args: { status: "ready", tool: "library" },
+	render: (args) => <TwoBoards {...args} />,
+	play: async ({ canvasElement, args }) => {
+		const [first, second] = slotsIn(canvasElement, "board-canvas") as [
+			HTMLElement,
+			HTMLElement,
+		]
+		await expect(viewportCentreOf(second)).not.toEqual(viewportCentreOf(first))
+		const picker = await screen.findByRole("dialog", { name: PICKER_NAME })
+		await userEvent.click(
+			within(picker).getByRole("button", { name: DRAGGED_ITEM.title }),
+		)
+		await expect(args.onLibraryItemPick).toHaveBeenCalledTimes(1)
+		await expect(args.onLibraryItemPick).toHaveBeenLastCalledWith(
+			DRAGGED_ITEM.id,
+			viewportCentreOf(second),
+		)
+	},
+})
+
 const pasteOn = (
 	target: HTMLElement,
 	fill: (transfer: DataTransfer) => void,
@@ -1768,6 +1798,96 @@ export const FilesDraggedOverUnknownCount = meta.story({
 export const FilesDraggedOverUnknownCountDark = meta.story({
 	globals: { theme: "dark" },
 	play: playFilesDraggedOver(MIXED_FILES, "Drop to add files here", true),
+})
+
+const DROPPED_IMAGE_URL = "https://images.example.com/terrace-at-dusk.jpg"
+
+const urlTransferOf = (uriList: string) => {
+	const transfer = new DataTransfer()
+	transfer.setData("text/uri-list", uriList)
+	return transfer
+}
+
+const playUrlDraggedOver = async ({
+	canvasElement,
+	args,
+}: CanvasPlayContext) => {
+	const board = slotIn(canvasElement, "board-canvas")
+	const at = shifted(centreOf(board), { x: -120, y: -60 })
+	const dropState = () =>
+		board.querySelector<HTMLElement>('[data-slot="board-file-drop"]')
+	const dragging = () => urlTransferOf(DROPPED_IMAGE_URL)
+
+	dragFiles("dragenter", board, dragging(), at)
+	dragFiles("dragover", board, dragging(), at)
+	await waitFor(() => expect(dropState()).not.toBeNull())
+	await expect(
+		slotsIn(board, "board-drop-thumbnail").map(
+			(thumbnail) => thumbnail.dataset.kind,
+		),
+	).toEqual(["image"])
+	await expect(slotIn(board, "board-drop-pill")).toHaveTextContent(
+		"Drop to add 1 image here",
+	)
+	const ghostBox = slotIn(board, "board-drop-ghost").getBoundingClientRect()
+	await expect(ghostBox.left + ghostBox.width / 2).toBeCloseTo(at.clientX, 0)
+
+	board.dispatchEvent(
+		new DragEvent("dragleave", { bubbles: true, relatedTarget: null }),
+	)
+	await waitFor(() => expect(dropState()).toBeNull())
+
+	dragFiles("dragover", board, dragging(), at)
+	dragFiles("drop", board, urlTransferOf("file:///Users/mira/terrace.jpg"), at)
+	await waitFor(() => expect(dropState()).toBeNull())
+	await expect(args.onDropUrl).not.toHaveBeenCalled()
+
+	dragFiles("dragover", board, dragging(), at)
+	dragFiles(
+		"drop",
+		board,
+		urlTransferOf(
+			`# terrace\r\n${DROPPED_IMAGE_URL}\r\nhttps://example.com/rooftop.jpg`,
+		),
+		at,
+	)
+	await waitFor(() => expect(dropState()).toBeNull())
+	await expect(args.onDropUrl).toHaveBeenCalledTimes(1)
+	await expect(args.onDropUrl).toHaveBeenLastCalledWith(
+		DROPPED_IMAGE_URL,
+		boardPointOf(board, at),
+	)
+	await expect(args.onDropFiles).not.toHaveBeenCalled()
+
+	const image = pngNamed("terrace.png")
+	const fileWithUrl = transferOf([image])
+	fileWithUrl.setData("text/uri-list", DROPPED_IMAGE_URL)
+	dragFiles("drop", board, fileWithUrl, at)
+	await expect(args.onDropFiles).toHaveBeenLastCalledWith(
+		[image],
+		boardPointOf(board, at),
+	)
+	await expect(args.onDropUrl).toHaveBeenCalledTimes(1)
+
+	dragFiles("dragover", board, dragging(), at)
+	await waitFor(() => expect(dropState()).not.toBeNull())
+}
+
+export const UrlDraggedOver = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Boards 5c for a web image dragged from a browser: the drag carries a link and no file, so the board shows its drop target with one image thumbnail under the pointer and the pill reading Drop to add 1 image here. Check the state leaving with the drag, a drop emitting `onDropUrl` once with the first link of the list and the board point, a link that is not http or https emitting nothing, and a drag carrying files keeping to `onDropFiles`.",
+			},
+		},
+	},
+	play: playUrlDraggedOver,
+})
+
+export const UrlDraggedOverDark = meta.story({
+	globals: { theme: "dark" },
+	play: playUrlDraggedOver,
 })
 
 const REVIEW: BoardItem = {
