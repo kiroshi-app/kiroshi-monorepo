@@ -38,6 +38,8 @@ type BoardSide = "top" | "right" | "bottom" | "left"
 
 type BoardRouting = "straight" | "elbow"
 
+type BoardArrowHeadSize = "small" | "medium" | "large"
+
 type BoardConnectorStyle = {
 	routing: BoardRouting
 }
@@ -46,10 +48,15 @@ type BoardConnector = {
 	id: string
 	kind: "connector"
 	from: string
-	fromSide: BoardSide
+	fromSide?: BoardSide
+	fromAnchor?: BoardPoint
 	to: string
-	toSide: BoardSide
+	toSide?: BoardSide
+	toAnchor?: BoardPoint
 	routing: BoardRouting
+	bend?: number
+	labelPosition?: number
+	headSize?: BoardArrowHeadSize
 	zOrder: number
 	text: string
 }
@@ -88,6 +95,7 @@ type BoardIntent =
 	| { type: "delete"; id: string }
 
 export type {
+	BoardArrowHeadSize,
 	BoardConnector,
 	BoardConnectorStyle,
 	BoardIntent,

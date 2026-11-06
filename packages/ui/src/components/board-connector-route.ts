@@ -1,4 +1,5 @@
 import type {
+	BoardArrowHeadSize,
 	BoardPoint,
 	BoardRect,
 	BoardRouting,
@@ -7,21 +8,63 @@ import type {
 
 type BoardConnectorEnd = {
 	rect: BoardRect
+	side?: BoardSide
+	point?: BoardPoint
+}
+
+type BoardSideEnd = {
+	rect: BoardRect
 	side: BoardSide
+}
+
+type BoardObstacles = {
+	blocks: readonly BoardRect[]
+	frames: readonly BoardRect[]
 }
 
 type BoardRoute = {
 	points: BoardPoint[]
+	control?: BoardPoint
 	arrow: BoardPoint
 }
 
+type BoardRouteOptions = {
+	bend?: number
+	obstacles?: BoardObstacles
+}
+
+type ElbowEnd = {
+	start: BoardPoint
+	stub: BoardPoint
+	heading: number
+	preference: number
+}
+
+type QueueEntry = readonly [cost: number, state: number]
+
 const BOARD_SIDES: readonly BoardSide[] = ["top", "right", "bottom", "left"]
-const BOARD_ROUTE_CLEARANCE = 24
+const BOARD_ARROW_GAP = 8
+const SHAPE_CLEARANCE = 48
+const FRAME_CLEARANCE = 24
 const BOARD_ROUTE_CORNER_RADIUS = 8
-const BOARD_ARROW_LENGTH = 10
-const BOARD_ARROW_WIDTH = 12
-const BEND_COST = BOARD_ROUTE_CLEARANCE * 2
+const BEND_COST = SHAPE_CLEARANCE
 const OFF_CENTRE_BEND_COST = 0.001
+const SIDE_PREFERENCE_COST = 0.000001
+const SOFT_ZONE_COST = 4
+const SECTION_TITLE_INSET = 12
+const SECTION_TITLE_HEIGHT = 24
+const SECTION_TITLE_PADDING = 16
+const SECTION_TITLE_CHARACTER_WIDTH = 8
+const NO_OBSTACLES: BoardObstacles = { blocks: [], frames: [] }
+
+const BOARD_ARROW_HEADS: Record<
+	BoardArrowHeadSize,
+	{ length: number; halfWidth: number }
+> = {
+	small: { length: 7, halfWidth: 4 },
+	medium: { length: 10, halfWidth: 6 },
+	large: { length: 14, halfWidth: 8 },
+}
 
 const HEADINGS: readonly BoardPoint[] = [
 	{ x: 0, y: -1 },
@@ -34,8 +77,13 @@ const headingOf = (side: BoardSide) => BOARD_SIDES.indexOf(side)
 
 const reverseOf = (heading: number) => (heading + 2) % 4
 
-const anchorOf = ({ rect, side }: BoardConnectorEnd): BoardPoint => {
-	const middle = { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
+const centreOf = (rect: BoardRect): BoardPoint => ({
+	x: rect.x + rect.width / 2,
+	y: rect.y + rect.height / 2,
+})
+
+const anchorOf = ({ rect, side }: BoardSideEnd): BoardPoint => {
+	const middle = centreOf(rect)
 	switch (side) {
 		case "top":
 			return { x: middle.x, y: rect.y }
@@ -53,8 +101,86 @@ const offset = (point: BoardPoint, heading: number, by: number) => ({
 	y: point.y + HEADINGS[heading].y * by,
 })
 
+const unit = (from: BoardPoint, to: BoardPoint): BoardPoint | null => {
+	const length = Math.hypot(to.x - from.x, to.y - from.y)
+	return length === 0
+		? null
+		: { x: (to.x - from.x) / length, y: (to.y - from.y) / length }
+}
+
+const along = (from: BoardPoint, direction: BoardPoint, by: number) => ({
+	x: from.x + direction.x * by,
+	y: from.y + direction.y * by,
+})
+
+const isSamePoint = (a: BoardPoint, b: BoardPoint) => a.x === b.x && a.y === b.y
+
+const isSameRect = (a: BoardRect, b: BoardRect) =>
+	a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height
+
+const hasArea = (rect: BoardRect) => rect.width > 0 && rect.height > 0
+
+const inflated = (rect: BoardRect, by: number): BoardRect => ({
+	x: rect.x - by,
+	y: rect.y - by,
+	width: rect.width + by * 2,
+	height: rect.height + by * 2,
+})
+
+const intersects = (a: BoardRect, b: BoardRect) =>
+	a.x < b.x + b.width &&
+	b.x < a.x + a.width &&
+	a.y < b.y + b.height &&
+	b.y < a.y + a.height
+
+const spanOf = (rects: readonly BoardRect[]): BoardRect => {
+	const left = Math.min(...rects.map((rect) => rect.x))
+	const top = Math.min(...rects.map((rect) => rect.y))
+	const right = Math.max(...rects.map((rect) => rect.x + rect.width))
+	const bottom = Math.max(...rects.map((rect) => rect.y + rect.height))
+	return { x: left, y: top, width: right - left, height: bottom - top }
+}
+
+const referenceOf = (end: BoardConnectorEnd) =>
+	end.point ??
+	(end.side ? anchorOf({ rect: end.rect, side: end.side }) : centreOf(end.rect))
+
+const outlineExit = (rect: BoardRect, towards: BoardPoint) => {
+	const centre = centreOf(rect)
+	const dx = towards.x - centre.x
+	const dy = towards.y - centre.y
+	const scale = Math.min(
+		dx === 0 ? Number.POSITIVE_INFINITY : rect.width / 2 / Math.abs(dx),
+		dy === 0 ? Number.POSITIVE_INFINITY : rect.height / 2 / Math.abs(dy),
+	)
+	return Number.isFinite(scale)
+		? { x: centre.x + dx * scale, y: centre.y + dy * scale }
+		: centre
+}
+
+const lineEndOf = (end: BoardConnectorEnd, towards: BoardPoint) => {
+	if (end.point) return end.point
+	const outline = end.side
+		? anchorOf({ rect: end.rect, side: end.side })
+		: outlineExit(end.rect, towards)
+	const direction = unit(outline, towards)
+	return direction ? along(outline, direction, BOARD_ARROW_GAP) : outline
+}
+
+const curveControl = (from: BoardPoint, to: BoardPoint, bend: number) => {
+	const chord = unit(from, to) ?? { x: 1, y: 0 }
+	return {
+		x: (from.x + to.x) / 2 + chord.y * bend * 2,
+		y: (from.y + to.y) / 2 - chord.x * bend * 2,
+	}
+}
+
 const isBetween = (value: number, low: number, high: number) =>
 	low < value && value < high
+
+const isInside = (point: BoardPoint, rect: BoardRect) =>
+	isBetween(point.x, rect.x, rect.x + rect.width) &&
+	isBetween(point.y, rect.y, rect.y + rect.height)
 
 const overlapsOpen = (a1: number, a2: number, b1: number, b2: number) =>
 	Math.max(Math.min(a1, a2), b1) < Math.min(Math.max(a1, a2), b2) ||
@@ -70,46 +196,22 @@ const crossesInside = (a: BoardPoint, b: BoardPoint, rect: BoardRect) => {
 	return isBetween(a.x, rect.x, right) && overlapsOpen(a.y, b.y, rect.y, bottom)
 }
 
-const stubLength = (anchor: BoardPoint, heading: number, other: BoardRect) => {
-	const { x, y } = HEADINGS[heading]
-	const isFacing =
-		x === 0
-			? isBetween(anchor.x, other.x, other.x + other.width)
-			: isBetween(anchor.y, other.y, other.y + other.height)
-	if (!isFacing) return BOARD_ROUTE_CLEARANCE
-	const gap =
-		x > 0
-			? other.x - anchor.x
-			: x < 0
-				? anchor.x - other.x - other.width
-				: y > 0
-					? other.y - anchor.y
-					: anchor.y - other.y - other.height
-	return gap >= 0 && gap < BOARD_ROUTE_CLEARANCE * 2
-		? gap / 2
-		: BOARD_ROUTE_CLEARANCE
+const runsAlongFrame = (a: BoardPoint, b: BoardPoint, frame: BoardRect) => {
+	const isHorizontal = a.y === b.y
+	const edges = isHorizontal
+		? [frame.y, frame.y + frame.height]
+		: [frame.x, frame.x + frame.width]
+	const level = isHorizontal ? a.y : a.x
+	const span = isHorizontal
+		? [frame.x - FRAME_CLEARANCE, frame.x + frame.width + FRAME_CLEARANCE]
+		: [frame.y - FRAME_CLEARANCE, frame.y + frame.height + FRAME_CLEARANCE]
+	return (
+		edges.some((edge) => Math.abs(level - edge) < FRAME_CLEARANCE) &&
+		(isHorizontal
+			? overlapsOpen(a.x, b.x, span[0], span[1])
+			: overlapsOpen(a.y, b.y, span[0], span[1]))
+	)
 }
-
-const lanesBetween = (
-	a: BoardRect,
-	b: BoardRect,
-	axis: "x" | "y",
-	ends: readonly number[],
-) => {
-	const size = axis === "x" ? "width" : "height"
-	const lanes = [
-		...ends,
-		a[axis] - BOARD_ROUTE_CLEARANCE,
-		a[axis] + a[size] + BOARD_ROUTE_CLEARANCE,
-		b[axis] - BOARD_ROUTE_CLEARANCE,
-		b[axis] + b[size] + BOARD_ROUTE_CLEARANCE,
-	]
-	if (a[axis] + a[size] < b[axis]) lanes.push((a[axis] + a[size] + b[axis]) / 2)
-	if (b[axis] + b[size] < a[axis]) lanes.push((b[axis] + b[size] + a[axis]) / 2)
-	return [...new Set(lanes)].sort((first, second) => first - second)
-}
-
-const isSamePoint = (a: BoardPoint, b: BoardPoint) => a.x === b.x && a.y === b.y
 
 const isCollinear = (a: BoardPoint, b: BoardPoint, c: BoardPoint) =>
 	(a.x === b.x && b.x === c.x) || (a.y === b.y && b.y === c.y)
@@ -124,135 +226,273 @@ const simplified = (points: readonly BoardPoint[]) =>
 		return [...kept, point]
 	}, [])
 
-const gridPath = (
-	start: BoardPoint,
-	startHeading: number,
-	end: BoardPoint,
-	endHeading: number,
-	obstacles: readonly BoardRect[],
+const distanceAhead = (
+	from: BoardPoint,
+	heading: number,
+	blocks: readonly BoardRect[],
 ) => {
-	const xs = lanesBetween(obstacles[0], obstacles[1], "x", [start.x, end.x])
-	const ys = lanesBetween(obstacles[0], obstacles[1], "y", [start.y, end.y])
-	const pointAt = (at: number) => ({
-		x: xs[at % xs.length],
-		y: ys[Math.floor(at / xs.length)],
+	const { x, y } = HEADINGS[heading]
+	const distances = blocks.flatMap((rect) => {
+		const isInLine =
+			x === 0
+				? isBetween(from.x, rect.x, rect.x + rect.width)
+				: isBetween(from.y, rect.y, rect.y + rect.height)
+		if (!isInLine) return []
+		const distance =
+			x > 0
+				? rect.x - from.x
+				: x < 0
+					? from.x - rect.x - rect.width
+					: y > 0
+						? rect.y - from.y
+						: from.y - rect.y - rect.height
+		return distance >= 0 ? [distance] : []
 	})
-	const neighbourOf = (at: number, heading: number) => {
-		const column = (at % xs.length) + HEADINGS[heading].x
-		const row = Math.floor(at / xs.length) + HEADINGS[heading].y
+	return Math.min(Number.POSITIVE_INFINITY, ...distances)
+}
+
+const nearestSideOf = (rect: BoardRect, point: BoardPoint): BoardSide => {
+	const distances: Record<BoardSide, number> = {
+		top: point.y - rect.y,
+		right: rect.x + rect.width - point.x,
+		bottom: rect.y + rect.height - point.y,
+		left: point.x - rect.x,
+	}
+	return BOARD_SIDES.reduce((nearest, side) =>
+		distances[side] < distances[nearest] ? side : nearest,
+	)
+}
+
+const elbowEndsOf = (
+	end: BoardConnectorEnd,
+	blocks: readonly BoardRect[],
+): ElbowEnd[] => {
+	const sides = end.point
+		? [end.side ?? nearestSideOf(end.rect, end.point)]
+		: end.side
+			? [end.side]
+			: BOARD_SIDES
+	return sides.map((side) => {
+		const heading = headingOf(side)
+		const anchor = end.point ?? anchorOf({ rect: end.rect, side })
+		const ahead = distanceAhead(anchor, heading, blocks)
+		const stubLength = Math.min(SHAPE_CLEARANCE, ahead / 2)
+		const gap = end.point ? 0 : Math.min(BOARD_ARROW_GAP, stubLength / 2)
+		return {
+			start: offset(anchor, heading, gap),
+			stub: offset(anchor, heading, stubLength),
+			heading,
+			preference: headingOf(side) * SIDE_PREFERENCE_COST,
+		}
+	})
+}
+
+const lanesOf = (
+	axis: "x" | "y",
+	ends: readonly ElbowEnd[],
+	source: BoardRect,
+	target: BoardRect,
+	blocks: readonly BoardRect[],
+	frames: readonly BoardRect[],
+) => {
+	const size = axis === "x" ? "width" : "height"
+	const around = (rect: BoardRect, by: number) => [
+		rect[axis] - by,
+		rect[axis] + rect[size] + by,
+	]
+	const lanes = [
+		...ends.map(({ stub }) => stub[axis]),
+		...blocks.flatMap((rect) => around(rect, SHAPE_CLEARANCE)),
+		...frames.flatMap((rect) => around(rect, FRAME_CLEARANCE)),
+	]
+	if (source[axis] + source[size] < target[axis])
+		lanes.push((source[axis] + source[size] + target[axis]) / 2)
+	if (target[axis] + target[size] < source[axis])
+		lanes.push((target[axis] + target[size] + source[axis]) / 2)
+	return [...new Set(lanes)].sort((first, second) => first - second)
+}
+
+const pushEntry = (queue: QueueEntry[], entry: QueueEntry) => {
+	queue.push(entry)
+	let at = queue.length - 1
+	while (at > 0) {
+		const parent = (at - 1) >> 1
+		if (queue[parent][0] <= queue[at][0]) return
+		;[queue[parent], queue[at]] = [queue[at], queue[parent]]
+		at = parent
+	}
+}
+
+const popEntry = (queue: QueueEntry[]) => {
+	const top = queue[0]
+	const last = queue.pop() as QueueEntry
+	if (queue.length === 0) return top
+	queue[0] = last
+	let at = 0
+	for (;;) {
+		const left = at * 2 + 1
+		let least = at
+		for (const child of [left, left + 1])
+			if (child < queue.length && queue[child][0] < queue[least][0])
+				least = child
+		if (least === at) return top
+		;[queue[least], queue[at]] = [queue[at], queue[least]]
+		at = least
+	}
+}
+
+const elbowPoints = (
+	source: BoardConnectorEnd,
+	target: BoardConnectorEnd,
+	obstacles: BoardObstacles,
+) => {
+	const region = inflated(
+		spanOf([source.rect, target.rect]),
+		SHAPE_CLEARANCE * 2,
+	)
+	const points = [source.point, target.point].filter(
+		(point): point is BoardPoint => point !== undefined,
+	)
+	const blocks = [source.rect, target.rect, ...obstacles.blocks].filter(
+		(rect, index, all) =>
+			hasArea(rect) &&
+			intersects(rect, region) &&
+			!points.some((point) => isInside(point, rect)) &&
+			all.findIndex((other) => isSameRect(other, rect)) === index,
+	)
+	const frames = obstacles.frames.filter((rect) => intersects(rect, region))
+	const softZones = blocks.map((rect) => inflated(rect, SHAPE_CLEARANCE))
+	const sourceEnds = elbowEndsOf(source, blocks)
+	const targetEnds = elbowEndsOf(target, blocks)
+	const ends = [...sourceEnds, ...targetEnds]
+	const xs = lanesOf("x", ends, source.rect, target.rect, blocks, frames)
+	const ys = lanesOf("y", ends, source.rect, target.rect, blocks, frames)
+	const nodeOf = ({ x, y }: BoardPoint) =>
+		ys.indexOf(y) * xs.length + xs.indexOf(x)
+	const pointAt = (node: number) => ({
+		x: xs[node % xs.length],
+		y: ys[Math.floor(node / xs.length)],
+	})
+	const neighbourOf = (node: number, heading: number) => {
+		const column = (node % xs.length) + HEADINGS[heading].x
+		const row = Math.floor(node / xs.length) + HEADINGS[heading].y
 		if (column < 0 || column >= xs.length || row < 0 || row >= ys.length)
 			return null
 		return row * xs.length + column
 	}
-	const centre = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 }
+	const centre = {
+		x: (centreOf(source.rect).x + centreOf(target.rect).x) / 2,
+		y: (centreOf(source.rect).y + centreOf(target.rect).y) / 2,
+	}
 	const bendAt = (point: BoardPoint) =>
 		BEND_COST +
 		(Math.abs(point.x - centre.x) + Math.abs(point.y - centre.y)) *
 			OFF_CENTRE_BEND_COST
-	const stateOf = (at: number, heading: number) => at * 4 + heading
-	const startAt = ys.indexOf(start.y) * xs.length + xs.indexOf(start.x)
-	const endAt = ys.indexOf(end.y) * xs.length + xs.indexOf(end.x)
+	const legCost = (from: BoardPoint, to: BoardPoint) => {
+		const length = Math.abs(to.x - from.x) + Math.abs(to.y - from.y)
+		const isSoft =
+			softZones.some((zone) => crossesInside(from, to, zone)) ||
+			frames.some((frame) => runsAlongFrame(from, to, frame))
+		return length * (isSoft ? 1 + SOFT_ZONE_COST : 1)
+	}
+	const distance = (a: BoardPoint, b: BoardPoint) =>
+		Math.abs(a.x - b.x) + Math.abs(a.y - b.y)
+	const stateOf = (node: number, heading: number) => node * 4 + heading
 	const states = xs.length * ys.length * 4
 	const cost = new Array<number>(states).fill(Number.POSITIVE_INFINITY)
 	const previous = new Array<number>(states).fill(-1)
 	const settled = new Array<boolean>(states).fill(false)
-	cost[stateOf(startAt, startHeading)] = 0
-	let best = -1
+	const queue: QueueEntry[] = []
+	for (const end of sourceEnds) {
+		const state = stateOf(nodeOf(end.stub), end.heading)
+		const reached = distance(end.start, end.stub) + end.preference
+		if (reached < cost[state]) {
+			cost[state] = reached
+			pushEntry(queue, [reached, state])
+		}
+	}
+	let best: { state: number; end: ElbowEnd } | null = null
 	let bestCost = Number.POSITIVE_INFINITY
-	for (;;) {
-		let state = -1
-		for (let candidate = 0; candidate < states; candidate++)
-			if (
-				!settled[candidate] &&
-				cost[candidate] < (state < 0 ? Number.POSITIVE_INFINITY : cost[state])
-			)
-				state = candidate
-		if (state < 0) break
+	while (queue.length > 0) {
+		const [reached, state] = popEntry(queue)
+		if (settled[state] || reached > cost[state]) continue
 		settled[state] = true
-		const at = Math.floor(state / 4)
+		const node = Math.floor(state / 4)
 		const heading = state % 4
-		if (at === endAt && heading !== reverseOf(endHeading)) {
+		for (const end of targetEnds) {
+			const inward = reverseOf(end.heading)
+			if (nodeOf(end.stub) !== node || heading === end.heading) continue
 			const total =
-				cost[state] + (heading === endHeading ? 0 : bendAt(pointAt(at)))
+				reached +
+				(heading === inward ? 0 : bendAt(pointAt(node))) +
+				distance(end.stub, end.start) +
+				end.preference
 			if (total < bestCost) {
-				best = state
+				best = { state, end }
 				bestCost = total
 			}
 		}
 		for (const turn of HEADINGS.keys()) {
-			const next = turn === reverseOf(heading) ? null : neighbourOf(at, turn)
+			const next = turn === reverseOf(heading) ? null : neighbourOf(node, turn)
 			if (next === null) continue
-			const from = pointAt(at)
+			const from = pointAt(node)
 			const to = pointAt(next)
-			if (obstacles.some((rect) => crossesInside(from, to, rect))) continue
-			const reached =
-				cost[state] +
-				Math.abs(to.x - from.x) +
-				Math.abs(to.y - from.y) +
-				(turn === heading ? 0 : bendAt(from))
-			if (reached < cost[stateOf(next, turn)]) {
-				cost[stateOf(next, turn)] = reached
+			if (blocks.some((rect) => crossesInside(from, to, rect))) continue
+			const total =
+				reached + legCost(from, to) + (turn === heading ? 0 : bendAt(from))
+			if (total < cost[stateOf(next, turn)]) {
+				cost[stateOf(next, turn)] = total
 				previous[stateOf(next, turn)] = state
+				pushEntry(queue, [total, stateOf(next, turn)])
 			}
 		}
 	}
+	if (!best) {
+		const [first] = sourceEnds
+		const [last] = targetEnds
+		return simplified([
+			first.start,
+			first.stub,
+			{ x: last.stub.x, y: first.stub.y },
+			last.stub,
+			last.start,
+		])
+	}
 	const path: BoardPoint[] = []
-	for (let state = best; state >= 0; state = previous[state])
+	let firstState = best.state
+	for (let state = best.state; state >= 0; state = previous[state]) {
 		path.unshift(pointAt(Math.floor(state / 4)))
-	return path
-}
-
-const unit = (from: BoardPoint, to: BoardPoint): BoardPoint | null => {
-	const length = Math.hypot(to.x - from.x, to.y - from.y)
-	return length === 0
-		? null
-		: { x: (to.x - from.x) / length, y: (to.y - from.y) / length }
-}
-
-const elbowPoints = (source: BoardConnectorEnd, target: BoardConnectorEnd) => {
-	const sourceAnchor = anchorOf(source)
-	const targetAnchor = anchorOf(target)
-	const sourceHeading = headingOf(source.side)
-	const targetHeading = headingOf(target.side)
-	const sourceStub = offset(
-		sourceAnchor,
-		sourceHeading,
-		stubLength(sourceAnchor, sourceHeading, target.rect),
-	)
-	const targetStub = offset(
-		targetAnchor,
-		targetHeading,
-		stubLength(targetAnchor, targetHeading, source.rect),
-	)
-	const between = gridPath(
-		sourceStub,
-		sourceHeading,
-		targetStub,
-		reverseOf(targetHeading),
-		[source.rect, target.rect],
-	)
-	const middle =
-		between.length > 0
-			? between
-			: [sourceStub, { x: targetStub.x, y: sourceStub.y }, targetStub]
-	return simplified([sourceAnchor, ...middle, targetAnchor])
+		firstState = state
+	}
+	const start = sourceEnds.find(
+		(end) =>
+			nodeOf(end.stub) === Math.floor(firstState / 4) &&
+			end.heading === firstState % 4,
+	) as ElbowEnd
+	return simplified([start.start, ...path, best.end.start])
 }
 
 const routeConnector = (
 	source: BoardConnectorEnd,
 	target: BoardConnectorEnd,
 	routing: BoardRouting,
+	{ bend = 0, obstacles = NO_OBSTACLES }: BoardRouteOptions = {},
 ): BoardRoute => {
-	const points =
-		routing === "straight"
-			? [anchorOf(source), anchorOf(target)]
-			: elbowPoints(source, target)
-	const [beforeLast, last] = points.slice(-2)
+	if (routing === "elbow") {
+		const points = elbowPoints(source, target, obstacles)
+		const [beforeLast, last] = points.slice(-2)
+		return {
+			points,
+			arrow: unit(beforeLast, last) ?? HEADINGS[2],
+		}
+	}
+	const from = lineEndOf(source, referenceOf(target))
+	const to = lineEndOf(target, referenceOf(source))
+	const control = bend === 0 ? undefined : curveControl(from, to, bend)
 	return {
-		points,
-		arrow:
-			(beforeLast && last && unit(beforeLast, last)) ??
-			HEADINGS[reverseOf(headingOf(target.side))],
+		points: [from, to],
+		...(control ? { control } : {}),
+		arrow: unit(control ?? from, to) ?? HEADINGS[1],
 	}
 }
 
@@ -269,22 +509,42 @@ const looseEnd = (
 ): BoardConnectorEnd => ({
 	rect: { ...point, width: 0, height: 0 },
 	side: sideFacing(point, towards),
+	point,
 })
 
-const towardsBy = (from: BoardPoint, to: BoardPoint, by: number) => {
-	const direction = unit(from, to) ?? { x: 0, y: 0 }
-	return { x: from.x + direction.x * by, y: from.y + direction.y * by }
-}
+const exactPointOf = (rect: BoardRect, anchor: BoardPoint) => ({
+	x: rect.x + rect.width * anchor.x,
+	y: rect.y + rect.height * anchor.y,
+})
+
+const sectionTitleBox = (rect: BoardRect, title: string): BoardRect => ({
+	x: rect.x + SECTION_TITLE_INSET,
+	y: rect.y + SECTION_TITLE_INSET,
+	width: Math.min(
+		rect.width - SECTION_TITLE_INSET * 2,
+		SECTION_TITLE_PADDING + title.length * SECTION_TITLE_CHARACTER_WIDTH,
+	),
+	height: SECTION_TITLE_HEIGHT,
+})
+
+const towardsBy = (from: BoardPoint, to: BoardPoint, by: number) =>
+	along(from, unit(from, to) ?? { x: 0, y: 0 }, by)
+
+const rounded = (value: number) => Math.round(value * 100) / 100
+
+const pointData = ({ x, y }: BoardPoint) => `${rounded(x)} ${rounded(y)}`
 
 const routePathData = (
-	points: readonly BoardPoint[],
+	{ points, control }: Pick<BoardRoute, "points" | "control">,
 	radius = BOARD_ROUTE_CORNER_RADIUS,
 ) => {
+	if (control && points.length === 2)
+		return `M${pointData(points[0])} Q${pointData(control)} ${pointData(points[1])}`
 	const commands = points.map((point, index) => {
 		const previous = points[index - 1]
 		const next = points[index + 1]
-		if (!previous) return `M${point.x} ${point.y}`
-		if (!next) return `L${point.x} ${point.y}`
+		if (!previous) return `M${pointData(point)}`
+		if (!next) return `L${pointData(point)}`
 		const corner = Math.min(
 			radius,
 			Math.hypot(point.x - previous.x, point.y - previous.y) / 2,
@@ -292,27 +552,67 @@ const routePathData = (
 		)
 		const before = towardsBy(point, previous, corner)
 		const after = towardsBy(point, next, corner)
-		return `L${before.x} ${before.y} Q${point.x} ${point.y} ${after.x} ${after.y}`
+		return `L${pointData(before)} Q${pointData(point)} ${pointData(after)}`
 	})
 	return commands.join(" ")
 }
 
-const arrowheadPathData = (tip: BoardPoint, direction: BoardPoint) => {
-	const back = {
-		x: tip.x - direction.x * BOARD_ARROW_LENGTH,
-		y: tip.y - direction.y * BOARD_ARROW_LENGTH,
+const pointAlong = (
+	{ points, control }: Pick<BoardRoute, "points" | "control">,
+	fraction: number,
+): BoardPoint => {
+	if (control && points.length === 2) {
+		const [from, to] = points
+		const rest = 1 - fraction
+		return {
+			x:
+				rest * rest * from.x +
+				2 * rest * fraction * control.x +
+				fraction ** 2 * to.x,
+			y:
+				rest * rest * from.y +
+				2 * rest * fraction * control.y +
+				fraction ** 2 * to.y,
+		}
 	}
-	const half = BOARD_ARROW_WIDTH / 2
-	return `M${back.x - direction.y * half} ${back.y + direction.x * half} L${tip.x} ${tip.y} L${back.x + direction.y * half} ${back.y - direction.x * half}`
+	const legs = points.slice(1).map((to, index) => ({
+		from: points[index],
+		to,
+		length: Math.hypot(to.x - points[index].x, to.y - points[index].y),
+	}))
+	let left = legs.reduce((total, { length }) => total + length, 0) * fraction
+	for (const { from, to, length } of legs) {
+		if (left <= length) return towardsBy(from, to, left)
+		left -= length
+	}
+	return points.at(-1) ?? { x: 0, y: 0 }
+}
+
+const arrowheadPathData = (
+	tip: BoardPoint,
+	direction: BoardPoint,
+	size: BoardArrowHeadSize = "medium",
+) => {
+	const { length, halfWidth } = BOARD_ARROW_HEADS[size]
+	const back = along(tip, direction, -length)
+	const wing = { x: -direction.y * halfWidth, y: direction.x * halfWidth }
+	return `M${pointData({ x: back.x + wing.x, y: back.y + wing.y })} L${pointData(tip)} L${pointData({ x: back.x - wing.x, y: back.y - wing.y })}`
 }
 
 export {
 	anchorOf,
 	arrowheadPathData,
+	BOARD_ARROW_GAP,
 	BOARD_SIDES,
 	type BoardConnectorEnd,
+	type BoardObstacles,
 	type BoardRoute,
+	curveControl,
+	exactPointOf,
+	lineEndOf,
 	looseEnd,
+	pointAlong,
 	routeConnector,
 	routePathData,
+	sectionTitleBox,
 }
