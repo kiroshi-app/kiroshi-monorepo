@@ -390,7 +390,7 @@ mod tests {
 	}
 
 	#[test]
-	fn the_library_skill_is_preloaded_and_names_every_library_and_board_tool() {
+	fn the_library_skill_is_preloaded_and_names_every_library_document_and_board_tool() {
 		let text = String::from_utf8_lossy(embedded(LIBRARY));
 		let said_in_one_breath = text.split_whitespace().collect::<Vec<_>>().join(" ");
 
@@ -400,7 +400,6 @@ mod tests {
 			"`library_search`",
 			"`library_read`",
 			"`library_create`",
-			"`library_write`",
 			"`library_import`",
 			"`library_rename`",
 			"`library_delete`",
@@ -411,7 +410,14 @@ mod tests {
 			"`board_update`",
 			"`board_remove`",
 			"`conversation_post_document`",
-			"occurs once",
+			"`document_info`",
+			"`document_tree`",
+			"`document_read_block`",
+			"`document_insert_after`",
+			"`document_replace_block`",
+			"`document_delete_block`",
+			"`document_find`",
+			"Read the tree first, then target a block by its id",
 		] {
 			assert!(said_in_one_breath.contains(said), "{said} is missing");
 		}
@@ -421,7 +427,7 @@ mod tests {
 	fn no_skill_names_a_tool_the_library_tools_replaced() {
 		for (name, bytes) in FILES {
 			let text = String::from_utf8_lossy(bytes);
-			for replaced in ["document_read", "document_write"] {
+			for replaced in ["`document_read`", "`document_write`", "`library_write`"] {
 				assert!(!text.contains(replaced), "{name} still names {replaced}");
 			}
 		}

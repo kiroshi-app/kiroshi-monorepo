@@ -1038,7 +1038,7 @@
 	},
 	{
 		"name": "library_read",
-		"description": "Read an item of the Library of this Space by its name. A document answers its text as it stands now with what everyone has typed in it; a board answers its JSON Canvas text; an image is shown to you; an image too large to show answers its name, its type and its size.",
+		"description": "Read an item of the Library of this Space by its name. A document answers its text as it stands now with what everyone has typed in it; to change a Markdown document, read its blocks with document_tree instead. A board answers its JSON Canvas text; an image is shown to you; an image too large to show answers its name, its type and its size.",
 		"inputSchema": {
 			"$schema": "https://json-schema.org/draft/2020-12/schema",
 			"type": "object",
@@ -1056,7 +1056,7 @@
 	},
 	{
 		"name": "library_create",
-		"description": "Create a new Markdown document in the Library of this Space, empty or filled from a template, shown in the Library of the person right away. A name already taken is refused. To change a document that already exists, write in it with library_write, never create another one. It answers the name the document stands under, its kind and its updatedAt.",
+		"description": "Create a new Markdown document in the Library of this Space, empty or filled from a template, shown in the Library of the person right away. A name already taken is refused. To change a document that already exists, edit its blocks with document_tree then document_replace_block or document_insert_after, never create another one. It answers the name the document stands under, its kind and its updatedAt.",
 		"inputSchema": {
 			"$schema": "https://json-schema.org/draft/2020-12/schema",
 			"type": "object",
@@ -1078,41 +1078,6 @@
 			},
 			"required": [
 				"name"
-			],
-			"additionalProperties": false
-		}
-	},
-	{
-		"name": "library_write",
-		"description": "Write into a Markdown document of the Library of this Space, live, beside the people editing it. Changing a document that already exists, such as its title or a section, means editing it here in place, never creating a new one. The text lands at the end of the document, right after the passage named in after, in place of the passage named in replace, or in place of the whole text when whole is true; give one of them at most. It answers the name the document stands under and how many characters you wrote.",
-		"inputSchema": {
-			"$schema": "https://json-schema.org/draft/2020-12/schema",
-			"type": "object",
-			"properties": {
-				"name": {
-					"type": "string",
-					"description": "The name of the item in the Library of this Space, with its extension, such as notes.md."
-				},
-				"text": {
-					"type": "string",
-					"description": "The Markdown to write, with the line breaks it needs to stand on its own lines. With replace, an empty text removes the passage."
-				},
-				"after": {
-					"type": "string",
-					"description": "An exact passage of the document, copied from library_read, that occurs once in it: the text lands right after it. Leave it out to write at the end."
-				},
-				"replace": {
-					"type": "string",
-					"description": "An exact passage of the document, copied from library_read, that occurs once in it: the text takes its place and every other character stays. A passage found zero times or more than once is refused with its count and nothing changes."
-				},
-				"whole": {
-					"type": "boolean",
-					"description": "True to replace the whole text of the document with the text, under the same name."
-				}
-			},
-			"required": [
-				"name",
-				"text"
 			],
 			"additionalProperties": false
 		}
@@ -1194,6 +1159,169 @@
 			},
 			"required": [
 				"name"
+			],
+			"additionalProperties": false
+		}
+	},
+	{
+		"name": "document_info",
+		"description": "Describe a Markdown document of the Library of this Space in one short answer: its name, its updatedAt in milliseconds since the epoch, how many blocks it holds and the id of its first heading, null when it has none. Call it first to size a document before you read its tree.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"name": {
+					"type": "string",
+					"description": "The name of a Markdown document of the Library of this Space, such as notes.md."
+				}
+			},
+			"required": [
+				"name"
+			],
+			"additionalProperties": false
+		}
+	},
+	{
+		"name": "document_tree",
+		"description": "List the blocks of a Markdown document of the Library of this Space in order, as they stand now with what everyone has typed in it. Each block answers its id, its kind (heading, paragraph, list, checklist, quote, code, table, rule or image), its level for a heading, and its first words. Read the tree before you change a document: every other document tool targets a block by its id.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"name": {
+					"type": "string",
+					"description": "The name of a Markdown document of the Library of this Space, such as notes.md."
+				}
+			},
+			"required": [
+				"name"
+			],
+			"additionalProperties": false
+		}
+	},
+	{
+		"name": "document_read_block",
+		"description": "Read one block of a Markdown document of the Library of this Space by its id, as document_tree answered it. It answers the kind of the block and its Markdown.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"name": {
+					"type": "string",
+					"description": "The name of a Markdown document of the Library of this Space, such as notes.md."
+				},
+				"id": {
+					"type": "string",
+					"description": "The id of a block of the document, as document_tree answered it. An id absent from the document is refused and nothing changes."
+				}
+			},
+			"required": [
+				"name",
+				"id"
+			],
+			"additionalProperties": false
+		}
+	},
+	{
+		"name": "document_insert_after",
+		"description": "Write new blocks into a Markdown document of the Library of this Space, live, beside the people editing it, right after the block named in after, or at the start of the document when after is left out. To add at the end, name the id of the last block of document_tree. It answers the ids of the new blocks, in order.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"name": {
+					"type": "string",
+					"description": "The name of a Markdown document of the Library of this Space, such as notes.md."
+				},
+				"after": {
+					"description": "The id of the block the new blocks land right after, as document_tree answered it; left out, they land at the start of the document.",
+					"type": "string"
+				},
+				"markdown": {
+					"type": "string",
+					"description": "The Markdown of one or more blocks, such as a heading, paragraphs, a list or a table, blocks apart by a blank line. Write no block id: each new block gets its own."
+				}
+			},
+			"required": [
+				"name",
+				"markdown"
+			],
+			"additionalProperties": false
+		}
+	},
+	{
+		"name": "document_replace_block",
+		"description": "Replace one block of a Markdown document of the Library of this Space with new Markdown, live, beside the people editing it: a new title, a rewritten paragraph or list. The first new block keeps the id of the block it replaces. Changing a document that already exists means editing it here in place, never creating a new one. It answers the id of every resulting block, in order.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"name": {
+					"type": "string",
+					"description": "The name of a Markdown document of the Library of this Space, such as notes.md."
+				},
+				"id": {
+					"type": "string",
+					"description": "The id of a block of the document, as document_tree answered it. An id absent from the document is refused and nothing changes."
+				},
+				"markdown": {
+					"type": "string",
+					"description": "The Markdown of one or more blocks, such as a heading, paragraphs, a list or a table, blocks apart by a blank line. Write no block id: each new block gets its own."
+				}
+			},
+			"required": [
+				"name",
+				"id",
+				"markdown"
+			],
+			"additionalProperties": false
+		}
+	},
+	{
+		"name": "document_delete_block",
+		"description": "Remove blocks of a Markdown document of the Library of this Space by their ids, live, beside the people editing it. One id absent from the document refuses the whole call and nothing changes. It answers the ids removed.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"name": {
+					"type": "string",
+					"description": "The name of a Markdown document of the Library of this Space, such as notes.md."
+				},
+				"ids": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"description": "The ids of the blocks to remove, as document_tree answered them."
+				}
+			},
+			"required": [
+				"name",
+				"ids"
+			],
+			"additionalProperties": false
+		}
+	},
+	{
+		"name": "document_find",
+		"description": "Find the blocks of a Markdown document of the Library of this Space holding the text you give, whatever its case. It answers each matching block with its id, its kind and the first line of it that holds the text.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"name": {
+					"type": "string",
+					"description": "The name of a Markdown document of the Library of this Space, such as notes.md."
+				},
+				"text": {
+					"type": "string",
+					"description": "The text to look for, matched whatever its case."
+				}
+			},
+			"required": [
+				"name",
+				"text"
 			],
 			"additionalProperties": false
 		}

@@ -48,7 +48,9 @@ const SKILLS = [
 	{
 		id: "library",
 		covers: (name: string) =>
-			name.startsWith("library_") || name.startsWith("board_"),
+			name.startsWith("library_") ||
+			name.startsWith("document_") ||
+			name.startsWith("board_"),
 	},
 ]
 
@@ -128,11 +130,17 @@ describe("kiroshiServer", () => {
 			"library_search",
 			"library_read",
 			"library_create",
-			"library_write",
 			"library_import",
 			"library_rename",
 			"library_delete",
 			"conversation_post_document",
+			"document_info",
+			"document_tree",
+			"document_read_block",
+			"document_insert_after",
+			"document_replace_block",
+			"document_delete_block",
+			"document_find",
 			"board_create",
 			"board_read",
 			"board_view",
