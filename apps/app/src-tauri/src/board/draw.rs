@@ -7,7 +7,7 @@ use uuid::Uuid;
 use super::doc::{BoardEdit, NodeChange};
 use super::schema::{KindSpec, Size, SCHEMA};
 use super::{
-	kind_key, parsed_edge, parsed_node, z_at, z_key, Board, BoardError, Element, JsonObject,
+	kind_key, parsed_edge, parsed_node, z_at, z_key, Board, BoardError, End, JsonObject, ENDS,
 };
 use crate::library::image_media_type;
 
@@ -98,6 +98,11 @@ pub enum DrawFault {
 		reference: String,
 	},
 	#[serde(rename_all = "camelCase")]
+	AmbiguousReference {
+		reference: String,
+		ids: Vec<String>,
+	},
+	#[serde(rename_all = "camelCase")]
 	NotASection {
 		reference: String,
 	},
@@ -107,10 +112,17 @@ pub enum DrawFault {
 	},
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum BoardItem {
+	Node,
+	Arrow,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DrawRefusal {
-	pub element: Element,
+	pub element: BoardItem,
 	pub index: usize,
 	#[serde(flatten)]
 	pub fault: DrawFault,
@@ -161,9 +173,22 @@ pub struct NodeRead {
 #[serde(rename_all = "camelCase")]
 pub struct EdgeRead {
 	pub id: String,
-	pub from_node: String,
-	pub to_node: String,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub from_node: Option<String>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub from_anchor: Option<Value>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub from_point: Option<Value>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub to_node: Option<String>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub to_anchor: Option<Value>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub to_point: Option<Value>,
 	pub label: Option<String>,
+	pub bend: Value,
+	pub routing: Value,
+	pub head_size: Value,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -335,7 +360,7 @@ pub fn drawn(
 		.enumerate()
 		.map(|(index, node)| {
 			planned(board, &keys, nodes, index, node)
-				.map_err(|fault| refused(Element::Node, index, fault))
+				.map_err(|fault| refused(BoardItem::Node, index, fault))
 		})
 		.collect::<Result<Vec<_>, _>>()?;
 	let mut layout = Layout {
@@ -359,7 +384,7 @@ pub fn drawn(
 		let rect = layout.placed(index)?;
 		let object = layout.planned[index].object(rect, author, z);
 		let parsed = parsed_node(&id, Value::Object(object))
-			.map_err(|error| refused(Element::Node, index, refused_field(error)))?;
+			.map_err(|error| refused(BoardItem::Node, index, refused_field(error)))?;
 		ids.insert(node.key.clone(), id.clone());
 		added.push((id, parsed));
 	}
@@ -368,10 +393,10 @@ pub fn drawn(
 	every_node.extend(added.iter().cloned());
 	for (index, drawn) in edges.iter().enumerate() {
 		let id = Uuid::new_v4().to_string();
-		let edge =
-			drawn_edge(board, &ids, drawn).map_err(|fault| refused(Element::Edge, index, fault))?;
+		let edge = drawn_edge(board, &ids, drawn)
+			.map_err(|fault| refused(BoardItem::Arrow, index, fault))?;
 		let parsed = parsed_edge(&id, Value::Object(edge), &every_node)
-			.map_err(|error| refused(Element::Edge, index, refused_field(error)))?;
+			.map_err(|error| refused(BoardItem::Arrow, index, refused_field(error)))?;
 		edit.added_edges.push((id, parsed));
 	}
 	let touched = match added.last() {
@@ -389,7 +414,7 @@ pub fn changed(board: &Board, changes: &[ChangedNode]) -> Result<Changed, DrawRe
 	let mut edit = BoardEdit::default();
 	for (index, change) in changes.iter().enumerate() {
 		let node_change =
-			node_changed(board, change).map_err(|fault| refused(Element::Node, index, fault))?;
+			node_changed(board, change).map_err(|fault| refused(BoardItem::Node, index, fault))?;
 		edit.changed_nodes.push(node_change);
 	}
 	let touched = edit
@@ -404,7 +429,7 @@ pub fn removed(board: &Board, ids: &[String]) -> Result<Changed, DrawRefusal> {
 	for (index, id) in ids.iter().enumerate() {
 		if !board.nodes.contains_key(id) {
 			let fault = DrawFault::UnknownReference { reference: id.clone() };
-			return Err(refused(Element::Node, index, fault));
+			return Err(refused(BoardItem::Node, index, fault));
 		}
 		if !edit.removed_nodes.contains(id) {
 			edit.removed_nodes.push(id.clone());
@@ -468,11 +493,21 @@ pub fn read_out(board: &Board) -> BoardRead {
 	let edges = board
 		.edges
 		.iter()
-		.map(|(id, edge)| EdgeRead {
-			id: id.clone(),
-			from_node: text_of(edge, "fromNode").unwrap_or_default(),
-			to_node: text_of(edge, "toNode").unwrap_or_default(),
-			label: text_of(edge, LABEL),
+		.map(|(id, edge)| {
+			let [from, to] = ENDS.each_ref().map(|end| EndRead::of(edge, end));
+			EdgeRead {
+				id: id.clone(),
+				from_node: from.node,
+				from_anchor: from.anchor,
+				from_point: from.point,
+				to_node: to.node,
+				to_anchor: to.anchor,
+				to_point: to.point,
+				label: text_of(edge, LABEL),
+				bend: arrow_field(edge, "bend"),
+				routing: arrow_field(edge, "routing"),
+				head_size: arrow_field(edge, "headSize"),
+			}
 		})
 		.collect();
 	BoardRead { nodes, edges }
@@ -485,7 +520,7 @@ impl Layout<'_> {
 			Progress::Placing => {
 				let start = self.stack.iter().position(|held| *held == index).unwrap_or_default();
 				let first = self.stack[start..].iter().copied().min().unwrap_or(index);
-				return Err(refused(Element::Node, first, DrawFault::PlacementCycle));
+				return Err(refused(BoardItem::Node, first, DrawFault::PlacementCycle));
 			}
 			Progress::Waiting => {}
 		}
@@ -622,7 +657,7 @@ fn batch_keys(nodes: &[DrawnNode]) -> Result<HashMap<&str, usize>, DrawRefusal> 
 	let mut keys = HashMap::new();
 	for (index, node) in nodes.iter().enumerate() {
 		if keys.insert(node.key.as_str(), index).is_some() {
-			return Err(refused(Element::Node, index, DrawFault::DuplicateKey));
+			return Err(refused(BoardItem::Node, index, DrawFault::DuplicateKey));
 		}
 	}
 	Ok(keys)
@@ -741,7 +776,7 @@ fn drawn_edge(
 	let endpoint = |reference: &str| match ids.get(reference) {
 		Some(id) => Ok(id.clone()),
 		None if board.nodes.contains_key(reference) => Ok(reference.to_owned()),
-		None => Err(DrawFault::UnknownReference { reference: reference.to_owned() }),
+		None => node_named(board, reference),
 	};
 	let mut object = JsonObject::new();
 	object.insert("fromNode".to_owned(), Value::from(endpoint(&edge.from)?));
@@ -750,6 +785,20 @@ fn drawn_edge(
 		object.insert(LABEL.to_owned(), Value::from(label.as_str()));
 	}
 	Ok(object)
+}
+
+fn node_named(board: &Board, name: &str) -> Result<String, DrawFault> {
+	let ids: Vec<String> = board
+		.nodes
+		.iter()
+		.filter(|(_, node)| shown_text(node).is_some_and(|text| text.trim() == name))
+		.map(|(id, _)| id.clone())
+		.collect();
+	match ids.as_slice() {
+		[id] => Ok(id.clone()),
+		[] => Err(DrawFault::UnknownReference { reference: name.to_owned() }),
+		_ => Err(DrawFault::AmbiguousReference { reference: name.to_owned(), ids }),
+	}
 }
 
 fn resolved(
@@ -764,6 +813,31 @@ fn resolved(
 		return Ok(Reference::Board(reference.to_owned()));
 	}
 	Err(DrawFault::UnknownReference { reference: reference.to_owned() })
+}
+
+struct EndRead {
+	node: Option<String>,
+	anchor: Option<Value>,
+	point: Option<Value>,
+}
+
+impl EndRead {
+	fn of(edge: &JsonObject, end: &End) -> Self {
+		let side_midpoint = || {
+			let side = edge.get(end.side).and_then(Value::as_str)?;
+			SCHEMA.edge.sides.get(side).cloned()
+		};
+		Self {
+			node: text_of(edge, end.node),
+			anchor: edge.get(end.anchor).cloned().or_else(side_midpoint),
+			point: edge.get(end.point).cloned(),
+		}
+	}
+}
+
+fn arrow_field(edge: &JsonObject, field: &str) -> Value {
+	let default = || SCHEMA.edge.fields.get(field).and_then(|spec| spec.default.clone());
+	edge.get(field).cloned().or_else(default).unwrap_or(Value::Null)
 }
 
 fn z_above(keys: &[String]) -> String {
@@ -812,6 +886,6 @@ fn refused_field(error: BoardError) -> DrawFault {
 	}
 }
 
-fn refused(element: Element, index: usize, fault: DrawFault) -> DrawRefusal {
+fn refused(element: BoardItem, index: usize, fault: DrawFault) -> DrawRefusal {
 	DrawRefusal { element, index, fault }
 }

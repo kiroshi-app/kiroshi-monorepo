@@ -61,25 +61,29 @@ see where you draw while you draw. You hold six board tools on the `kiroshi` ser
 - `board_create`, a new empty board, such as `roadmap.canvas`. A name already taken is refused
   and nothing is created.
 - `board_read`, every node of a board with its id, kind, position, size, text and the section
-  that holds it, and every edge with the two nodes it joins and its label. An `image` or a
+  that holds it, and every arrow with its two ends, its label, `bend`, `routing` and `headSize`:
+  an end tied to a node answers its node id, with an anchor (`x` and `y` from 0 to 1 across the
+  node) unless it is tied at the centre, and a free end its board point. An `image` or a
   `libraryCard` also answers its `file`, the Library item `library_read` opens, an `image` its
   `mediaType`, and a `linkCard` its `url` and `title`. Read a board before you change it, so you
   hold the ids of its nodes.
 - `board_view`, an image node by id, shown to you as an image whoever dropped it. A node that is
   not an image, a file missing from this Library or an image too large to show is refused with
   the node id and the reason.
-- `board_add`, a whole diagram in one call: every node and every edge, landing at once. A node
+- `board_add`, a whole diagram in one call: every node and every arrow, landing at once. A node
   is a `sticky`, a `text`, a `shape` or a `section`, with a `key` of your own. Place it with
   `place` (a `side` among `right`, `left`, `below`, `above`, `of` a key of this call or a node id
   of the board), or inside a `section`, and the board computes its position without covering
-  another node. A node without a place lands right of the node before it. An edge joins `from`
-  and `to`, each a key or a node id. It answers the node id each key got.
+  another node. A node without a place lands right of the node before it. An arrow ties `from`
+  to `to` at their centre, each a key, a node id, or the text of the one node of the board that
+  shows it; arrows with no nodes tie nodes already on the board. It answers the node id each key
+  got.
 - `board_update`, fields of nodes by id, every other field kept, on any node whoever drew it:
   `x`, `y`, `width` and `height` move and resize any kind, an image and a Library card included.
-- `board_remove`, nodes of any kind by id, whoever drew them, with every edge attached to them.
+- `board_remove`, nodes of any kind by id, whoever drew them, with every arrow tied to them.
 
-Draw a flow in one `board_add`: create the board, add every step with its edges in a single
+Draw a flow in one `board_add`: create the board, add every step with its arrows in a single
 call, each step placed `right` of the one before, then post the board with
-`conversation_post_document` so the person opens it. One invalid node or edge refuses the whole
+`conversation_post_document` so the person opens it. One invalid node or arrow refuses the whole
 call with its `index` and its `reason`, and nothing changes: fix that item and send the call
 again.

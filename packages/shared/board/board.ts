@@ -79,16 +79,27 @@ type Side = "top" | "right" | "bottom" | "left"
 
 type End = "none" | "arrow"
 
+type Anchor = { x: number; y: number }
+
+type Point = { x: number; y: number }
+
 export type Connector = {
-	fromNode: string
+	fromNode?: string
 	fromSide?: Side
+	fromAnchor?: Anchor
+	fromPoint?: Point
 	fromEnd: End
-	toNode: string
+	toNode?: string
 	toSide?: Side
+	toAnchor?: Anchor
+	toPoint?: Point
 	toEnd: End
 	color?: string
 	label?: string
+	labelPosition?: number
+	bend?: number
 	routing: "straight" | "elbow"
+	headSize?: "small" | "medium" | "large"
 	kiroshi?: JsonObject
 	canvas?: JsonObject
 }
@@ -253,10 +264,31 @@ const withPairedFill = (node: JsonObject, spec: KindSpec): JsonObject => {
 	])
 }
 
+const isNumber = (value: unknown): value is number =>
+	typeof value === "number" && Number.isFinite(value)
+
+const isFraction = (value: unknown) =>
+	isNumber(value) && value >= 0 && value <= 1
+
+const COORDINATES = ["x", "y"]
+
+const isPair = (value: unknown, fitsCoordinate: (value: unknown) => boolean) =>
+	isObject(value) &&
+	Object.keys(value).sort().join() === COORDINATES.join() &&
+	COORDINATES.every((name) => fitsCoordinate(value[name]))
+
 const fits = (spec: FieldSpec, value: unknown) => {
 	switch (spec.type) {
 		case "integer":
 			return Number.isSafeInteger(value)
+		case "number":
+			return isNumber(value)
+		case "fraction":
+			return isFraction(value)
+		case "anchor":
+			return isPair(value, isFraction)
+		case "point":
+			return isPair(value, isNumber)
 		case "colour":
 			return typeof value === "string" && COLOUR.test(value)
 		case "zOrder":
@@ -281,8 +313,9 @@ export const refusedField = (at: Located, field: string) =>
 const parsedFields = (fields: Fields, source: JsonObject, at: Located) => {
 	const parsed: JsonObject = {}
 	for (const [name, spec] of Object.entries(fields)) {
-		const value = Object.hasOwn(source, name) ? source[name] : spec.default
-		if (value === undefined && spec.optional) continue
+		const isGiven = Object.hasOwn(source, name)
+		if (!isGiven && spec.optional) continue
+		const value = isGiven ? source[name] : spec.default
 		if (spec.in === "verbatim" && isEmptyObject(value)) continue
 		if (!fits(spec, value)) throw refusedField(at, name)
 		parsed[name] = value as Json
@@ -311,7 +344,38 @@ const parsedNode = (id: string, value: unknown) => {
 	} as BoardNode
 }
 
-const ENDPOINTS = ["fromNode", "toNode"] as const
+const ENDS = ["from", "to"] as const
+
+type EndName = (typeof ENDS)[number]
+
+const TIES = ["Side", "Anchor"]
+
+const checkEnd = (
+	edge: JsonObject,
+	end: EndName,
+	nodes: Board["nodes"],
+	at: Located,
+) => {
+	const field = (part: string) => `${end}${part}`
+	const isGiven = (part: string) => Object.hasOwn(edge, field(part))
+	const node = edge[`${end}Node`]
+	if (typeof node !== "string") {
+		if (!isGiven("Point")) throw refusedField(at, field("Node"))
+		const tie = TIES.find(isGiven)
+		if (tie !== undefined) throw refusedField(at, field(tie))
+		return
+	}
+	if (!Object.hasOwn(nodes, node)) {
+		throw new BoardRefused({
+			kind: "danglingEdge",
+			id: at.id,
+			field: `${end}Node`,
+			node,
+		})
+	}
+	if (isGiven("Point")) throw refusedField(at, field("Point"))
+	if (TIES.every(isGiven)) throw refusedField(at, field("Anchor"))
+}
 
 const parsedEdge = (id: string, value: unknown, nodes: Board["nodes"]) => {
 	const at: Located = { element: "edge", id }
@@ -319,14 +383,9 @@ const parsedEdge = (id: string, value: unknown, nodes: Board["nodes"]) => {
 	const parsed = {
 		...parsedFields(EDGE_FIELDS, edge, at),
 		...parsedExtras(edge, at),
-	} as Connector
-	for (const field of ENDPOINTS) {
-		const node = parsed[field]
-		if (!Object.hasOwn(nodes, node)) {
-			throw new BoardRefused({ kind: "danglingEdge", id, field, node })
-		}
 	}
-	return parsed
+	for (const end of ENDS) checkEnd(parsed, end, nodes, at)
+	return parsed as Connector
 }
 
 const mappedValues = <T>(

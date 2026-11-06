@@ -252,14 +252,14 @@ fn the_first_invalid_item_is_refused_with_its_index_and_its_reason() {
 		(
 			vec![fine.clone(), json!({ "key": "x", "kind": "circle" })],
 			vec![],
-			Element::Node,
+			BoardItem::Node,
 			1,
 			json!({ "reason": "unknownKind" }),
 		),
 		(
 			vec![fine.clone(), json!({ "key": "ok", "kind": "text" })],
 			vec![],
-			Element::Node,
+			BoardItem::Node,
 			1,
 			json!({ "reason": "duplicateKey" }),
 		),
@@ -268,7 +268,7 @@ fn the_first_invalid_item_is_refused_with_its_index_and_its_reason() {
 				json!({ "key": "x", "kind": "text", "place": { "side": "right", "of": "ghost" } }),
 			],
 			vec![],
-			Element::Node,
+			BoardItem::Node,
 			0,
 			json!({ "reason": "unknownReference", "reference": "ghost" }),
 		),
@@ -277,35 +277,35 @@ fn the_first_invalid_item_is_refused_with_its_index_and_its_reason() {
 				json!({ "key": "x", "kind": "text", "place": { "side": "inside", "of": "anchor" } }),
 			],
 			vec![],
-			Element::Node,
+			BoardItem::Node,
 			0,
 			json!({ "reason": "unknownSide", "side": "inside" }),
 		),
 		(
 			vec![json!({ "key": "x", "kind": "text", "section": "anchor" })],
 			vec![],
-			Element::Node,
+			BoardItem::Node,
 			0,
 			json!({ "reason": "notASection", "reference": "anchor" }),
 		),
 		(
 			vec![fine.clone(), json!({ "key": "x", "kind": "sticky", "fill": "purple" })],
 			vec![],
-			Element::Node,
+			BoardItem::Node,
 			1,
 			json!({ "reason": "refusedField", "field": "fill" }),
 		),
 		(
 			vec![json!({ "key": "x", "kind": "text", "shape": "ellipse" })],
 			vec![],
-			Element::Node,
+			BoardItem::Node,
 			0,
 			json!({ "reason": "refusedField", "field": "shape" }),
 		),
 		(
 			vec![json!({ "key": "x", "kind": "text", "x": 10 })],
 			vec![],
-			Element::Node,
+			BoardItem::Node,
 			0,
 			json!({ "reason": "partialCoordinates" }),
 		),
@@ -316,14 +316,14 @@ fn the_first_invalid_item_is_refused_with_its_index_and_its_reason() {
 				json!({ "key": "b", "kind": "text", "place": { "side": "below", "of": "a" } }),
 			],
 			vec![],
-			Element::Node,
+			BoardItem::Node,
 			1,
 			json!({ "reason": "placementCycle" }),
 		),
 		(
 			vec![fine.clone()],
 			vec![json!({ "from": "ok", "to": "anchor" }), json!({ "from": "ok", "to": "ghost" })],
-			Element::Edge,
+			BoardItem::Arrow,
 			1,
 			json!({ "reason": "unknownReference", "reference": "ghost" }),
 		),
@@ -370,7 +370,7 @@ fn an_update_changes_only_the_fields_given_and_refuses_an_unknown_id() {
 	assert_eq!(
 		refused,
 		DrawRefusal {
-			element: Element::Node,
+			element: BoardItem::Node,
 			index: 1,
 			fault: DrawFault::UnknownReference { reference: "gone".to_owned() }
 		}
@@ -439,14 +439,131 @@ fn a_read_answers_each_node_with_its_text_and_the_section_that_holds_it() {
 		]
 	);
 	assert_eq!(
-		read.edges,
-		[EdgeRead {
-			id: "e".to_owned(),
-			from_node: "n".to_owned(),
-			to_node: "out".to_owned(),
-			label: Some("goes".to_owned())
-		}]
+		serde_json::to_value(&read.edges).expect("serializes"),
+		json!([{
+			"id": "e",
+			"fromNode": "n",
+			"toNode": "out",
+			"label": "goes",
+			"bend": 0,
+			"routing": "straight",
+			"headSize": "medium"
+		}])
 	);
+}
+
+#[test]
+fn a_read_answers_each_arrow_with_both_ends_its_bend_routing_and_head_size() {
+	let board = a_board(
+		&[("a", a_text(0, 0, 100, 100, "a0")), ("b", a_text(300, 0, 100, 100, "a1"))],
+		&[
+			(
+				"sided",
+				json!({ "fromNode": "a", "fromSide": "right", "toNode": "b", "toSide": "top", "routing": "elbow" }),
+			),
+			(
+				"pinned",
+				json!({ "fromNode": "a", "fromAnchor": { "x": 0.25, "y": 1 }, "toPoint": { "x": -40, "y": 12.5 }, "bend": -30, "headSize": "large" }),
+			),
+		],
+	);
+
+	let arrows = serde_json::to_value(read_out(&board).edges).expect("serializes");
+
+	assert_eq!(
+		arrows,
+		json!([
+			{
+				"id": "pinned",
+				"fromNode": "a",
+				"fromAnchor": { "x": 0.25, "y": 1 },
+				"toPoint": { "x": -40, "y": 12.5 },
+				"label": null,
+				"bend": -30,
+				"routing": "straight",
+				"headSize": "large"
+			},
+			{
+				"id": "sided",
+				"fromNode": "a",
+				"fromAnchor": { "x": 1, "y": 0.5 },
+				"toNode": "b",
+				"toAnchor": { "x": 0.5, "y": 0 },
+				"label": null,
+				"bend": 0,
+				"routing": "elbow",
+				"headSize": "medium"
+			}
+		])
+	);
+}
+
+fn a_named(text: &str, x: i64, z: &str) -> Value {
+	json!({ "kind": "shape", "text": text, "x": x, "y": 0, "width": 100, "height": 100, "z": z })
+}
+
+fn a_named_board() -> Board {
+	a_board(
+		&[
+			("login", a_named(" Login ", 0, "a0")),
+			("home", a_named("Home", 200, "a1")),
+			("first-step", a_named("Step", 400, "a2")),
+			("second-step", a_named("Step", 600, "a3")),
+		],
+		&[],
+	)
+}
+
+#[test]
+fn arrows_alone_tie_nodes_of_the_board_named_by_their_trimmed_text_at_the_centre() {
+	let drawn = drawn_ok(
+		&a_named_board(),
+		vec![],
+		vec![json!({ "from": "Login", "to": "Home" }), json!({ "from": "home", "to": "Login" })],
+	);
+
+	let arrows: Vec<&JsonObject> = drawn.edit.added_edges.iter().map(|(_, edge)| edge).collect();
+	assert_eq!(arrows.len(), 2);
+	assert_eq!(arrows[0]["fromNode"], "login");
+	assert_eq!(arrows[0]["toNode"], "home");
+	assert_eq!(arrows[1]["fromNode"], "home");
+	assert_eq!(arrows[1]["toNode"], "login");
+	for arrow in arrows {
+		assert!(["fromSide", "fromAnchor", "toSide", "toAnchor"]
+			.iter()
+			.all(|tie| !arrow.contains_key(*tie)));
+	}
+	assert!(drawn.edit.added_nodes.is_empty());
+}
+
+#[test]
+fn an_arrow_name_matching_no_node_or_several_refuses_the_call_with_its_index() {
+	let board = a_named_board();
+	let fine = json!({ "from": "Login", "to": "Home" });
+	let cases = [
+		(
+			json!({ "from": "Login", "to": "Nowhere" }),
+			json!({ "reason": "unknownReference", "reference": "Nowhere" }),
+		),
+		(
+			json!({ "from": "Step", "to": "Home" }),
+			json!({
+				"reason": "ambiguousReference",
+				"reference": "Step",
+				"ids": ["first-step", "second-step"]
+			}),
+		),
+	];
+
+	for (arrow, reason) in cases {
+		let refused = refusal(&board, vec![], vec![fine.clone(), arrow]);
+		let mut expected = json!({ "element": "arrow", "index": 1 });
+		expected
+			.as_object_mut()
+			.expect("an object")
+			.extend(reason.as_object().expect("an object").clone());
+		assert_eq!(serde_json::to_value(&refused).expect("serializes"), expected);
+	}
 }
 
 const PERSON: &str = "p1";

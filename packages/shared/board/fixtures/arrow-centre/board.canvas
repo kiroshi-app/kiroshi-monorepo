@@ -1,0 +1,44 @@
+{
+	"edges": [
+		{
+			"fromEnd": "none",
+			"fromNode": "start",
+			"id": "tied",
+			"kiroshi": {
+				"routing": "straight"
+			},
+			"toEnd": "arrow",
+			"toNode": "finish"
+		}
+	],
+	"nodes": [
+		{
+			"height": 120,
+			"id": "start",
+			"kiroshi": {
+				"kind": "shape",
+				"shape": "rectangle",
+				"z": "a0"
+			},
+			"text": "Start",
+			"type": "text",
+			"width": 200,
+			"x": 0,
+			"y": 0
+		},
+		{
+			"height": 120,
+			"id": "finish",
+			"kiroshi": {
+				"kind": "shape",
+				"shape": "ellipse",
+				"z": "a1"
+			},
+			"text": "Finish",
+			"type": "text",
+			"width": 200,
+			"x": 400,
+			"y": 200
+		}
+	]
+}

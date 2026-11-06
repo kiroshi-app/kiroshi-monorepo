@@ -208,6 +208,7 @@ struct BoardViewed {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct BoardDrawn {
 	name: String,
+	#[serde(default)]
 	nodes: Vec<DrawnNode>,
 	#[serde(default)]
 	edges: Vec<DrawnEdge>,

@@ -1855,6 +1855,25 @@ async fn an_update_changes_a_node_in_place_and_a_removal_takes_its_edges_each_in
 	assert_eq!(read["edges"], json!([]));
 }
 
+#[tokio::test]
+async fn arrows_alone_tie_nodes_already_on_the_board_named_by_their_text() {
+	let (app, root) = a_host("board-arrows-alone").await;
+	put(&root, SPACE, BOARD, A_BOARD_WITH_ONE_NODE);
+	let host = the_host(&app);
+	let node = json!({ "name": BOARD, "nodes": [{ "key": "b", "kind": "text", "text": "B" }] });
+	let added = host.served(Operation::BoardAdd, node).await.expect("drawn");
+	let b = added["nodes"]["b"].as_str().expect("an id").to_owned();
+
+	let arrows = json!({ "name": BOARD, "edges": [{ "from": "A", "to": "B" }] });
+	let tied = host.served(Operation::BoardAdd, arrows).await.expect("tied");
+
+	assert_eq!(tied, json!({ "name": BOARD, "nodes": {} }));
+	let read = host.served(Operation::BoardRead, json!({ "name": BOARD })).await.expect("read");
+	let arrow = &read["edges"][0];
+	assert_eq!((&arrow["fromNode"], &arrow["toNode"]), (&json!("a"), &json!(b)));
+	assert_eq!(arrow.get("fromAnchor"), None);
+}
+
 #[tokio::test(start_paused = true)]
 async fn an_agent_board_seat_is_published_after_a_call_and_lapses_at_the_end_of_its_lease() {
 	let (app, root) = a_host("board-presence").await;

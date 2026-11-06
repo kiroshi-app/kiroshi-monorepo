@@ -152,7 +152,7 @@ describe("libraryTools", () => {
 		expect(fieldsOf("board_create").required).toEqual(["name"])
 		expect(fieldsOf("board_read").required).toEqual(["name"])
 		expect(fieldsOf("board_view").required).toEqual(["name", "id"])
-		expect(fieldsOf("board_add").required).toEqual(["name", "nodes"])
+		expect(fieldsOf("board_add").required).toEqual(["name"])
 		expect(fieldsOf("board_update").required).toEqual(["name", "nodes"])
 		expect(fieldsOf("board_remove").required).toEqual(["name", "ids"])
 	})
@@ -367,6 +367,28 @@ describe("libraryTools", () => {
 		expect(theTool("library_create").description).toContain(
 			"write in it with library_write, never create another one",
 		)
+	})
+
+	it("calls a board arrow an arrow in every board tool and field description", () => {
+		const descriptionsIn = (schema: unknown): string[] => {
+			if (typeof schema !== "object" || schema === null) return []
+			return Object.entries(schema).flatMap(([field, value]) =>
+				field === "description" && typeof value === "string"
+					? [value]
+					: descriptionsIn(value),
+			)
+		}
+		const boardTools = tools.filter((held) => held.name.startsWith("board_"))
+		for (const held of boardTools) {
+			const descriptions = [
+				held.description,
+				...descriptionsIn(fieldsOf(held.name)),
+			]
+			for (const description of descriptions) {
+				expect(description).not.toMatch(/\b(edge|connector)s?\b/i)
+			}
+		}
+		expect(theTool("board_add").description).toContain("An arrow ties")
 	})
 
 	it("refuses to import a path the floor denies or that is gone, without asking the host", async () => {

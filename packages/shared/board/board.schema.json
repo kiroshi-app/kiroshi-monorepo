@@ -167,27 +167,37 @@
 		}
 	},
 	"edge": {
+		"sides": {
+			"top": { "x": 0.5, "y": 0 },
+			"right": { "x": 1, "y": 0.5 },
+			"bottom": { "x": 0.5, "y": 1 },
+			"left": { "x": 0, "y": 0.5 }
+		},
 		"fields": {
-			"fromNode": { "type": "nodeId", "in": "canvas" },
+			"fromNode": { "type": "nodeId", "in": "canvas", "optional": true },
 			"fromSide": {
 				"type": "string",
 				"enum": ["top", "right", "bottom", "left"],
 				"in": "canvas",
 				"optional": true
 			},
+			"fromAnchor": { "type": "anchor", "in": "kiroshi", "optional": true },
+			"fromPoint": { "type": "point", "in": "kiroshi", "optional": true },
 			"fromEnd": {
 				"type": "string",
 				"enum": ["none", "arrow"],
 				"in": "canvas",
 				"default": "none"
 			},
-			"toNode": { "type": "nodeId", "in": "canvas" },
+			"toNode": { "type": "nodeId", "in": "canvas", "optional": true },
 			"toSide": {
 				"type": "string",
 				"enum": ["top", "right", "bottom", "left"],
 				"in": "canvas",
 				"optional": true
 			},
+			"toAnchor": { "type": "anchor", "in": "kiroshi", "optional": true },
+			"toPoint": { "type": "point", "in": "kiroshi", "optional": true },
 			"toEnd": {
 				"type": "string",
 				"enum": ["none", "arrow"],
@@ -196,11 +206,30 @@
 			},
 			"color": { "type": "colour", "in": "canvas", "optional": true },
 			"label": { "type": "string", "in": "canvas", "optional": true },
+			"labelPosition": {
+				"type": "fraction",
+				"in": "kiroshi",
+				"default": 0.5,
+				"optional": true
+			},
+			"bend": {
+				"type": "number",
+				"in": "kiroshi",
+				"default": 0,
+				"optional": true
+			},
 			"routing": {
 				"type": "string",
 				"enum": ["straight", "elbow"],
 				"in": "kiroshi",
 				"default": "straight"
+			},
+			"headSize": {
+				"type": "string",
+				"enum": ["small", "medium", "large"],
+				"in": "kiroshi",
+				"default": "medium",
+				"optional": true
 			},
 			"canvas": { "type": "json", "in": "verbatim", "optional": true }
 		}

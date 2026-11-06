@@ -76,7 +76,12 @@ const MAX_SAFE_INTEGER: i64 = (1 << 53) - 1;
 
 const FIRST_Z_HEAD: u8 = b'a';
 
-const ENDPOINTS: [&str; 2] = ["fromNode", "toNode"];
+const ENDS: [End; 2] = [
+	End { node: "fromNode", side: "fromSide", anchor: "fromAnchor", point: "fromPoint" },
+	End { node: "toNode", side: "toSide", anchor: "toAnchor", point: "toPoint" },
+];
+
+const COORDINATES: [&str; 2] = ["x", "y"];
 
 static COLOUR: LazyLock<Regex> = LazyLock::new(|| {
 	Regex::new("^(?:[1-6]|#[0-9A-Fa-f]{3}|#[0-9A-Fa-f]{6})$").expect("the colour pattern compiles")
@@ -174,9 +179,24 @@ fn with_paired_fill(mut node: JsonObject, spec: &KindSpec) -> JsonObject {
 	node
 }
 
+fn is_fraction(value: &Value) -> bool {
+	value.as_f64().is_some_and(|number| (0.0..=1.0).contains(&number))
+}
+
+fn is_pair(value: &Value, fits_coordinate: fn(&Value) -> bool) -> bool {
+	value.as_object().is_some_and(|pair| {
+		pair.len() == COORDINATES.len()
+			&& COORDINATES.iter().all(|name| pair.get(*name).is_some_and(fits_coordinate))
+	})
+}
+
 fn fitted(spec: &FieldSpec, value: &Value) -> Option<Value> {
 	let fits = match spec.value_type.as_str() {
 		"integer" => return integer_of(value).map(Value::from),
+		"number" => value.is_number(),
+		"fraction" => is_fraction(value),
+		"anchor" => is_pair(value, is_fraction),
+		"point" => is_pair(value, Value::is_number),
 		"colour" => value.as_str().is_some_and(|colour| COLOUR.is_match(colour)),
 		"zOrder" => is_z(value),
 		"json" => value.is_object(),
@@ -195,11 +215,10 @@ fn parsed_fields(
 	into: &mut JsonObject,
 ) -> Result<(), BoardError> {
 	for (name, spec) in &fields.0 {
-		let Some(value) = source.get(name).or(spec.default.as_ref()) else {
-			if spec.optional {
-				continue;
-			}
-			return Err(at.refused(name));
+		let value = match source.get(name) {
+			Some(value) => value,
+			None if spec.optional => continue,
+			None => spec.default.as_ref().ok_or_else(|| at.refused(name))?,
 		};
 		if spec.placement == Placement::Verbatim && value.as_object().is_some_and(Map::is_empty) {
 			continue;
@@ -259,19 +278,51 @@ fn parsed_edge(
 	let mut parsed = JsonObject::new();
 	parsed_fields(&SCHEMA.edge.fields, &edge, at, &mut parsed)?;
 	parsed_extras(&edge, at, &mut parsed)?;
-	for field in ENDPOINTS {
-		let Some(node) = parsed.get(field).and_then(Value::as_str) else {
-			return Err(at.refused(field));
+	for end in &ENDS {
+		end.checked(&parsed, nodes, at)?;
+	}
+	Ok(parsed)
+}
+
+struct End {
+	node: &'static str,
+	side: &'static str,
+	anchor: &'static str,
+	point: &'static str,
+}
+
+impl End {
+	fn checked(
+		&self,
+		edge: &JsonObject,
+		nodes: &BTreeMap<String, JsonObject>,
+		at: Located,
+	) -> Result<(), BoardError> {
+		let ties = [self.side, self.anchor];
+		let Some(node) = edge.get(self.node).and_then(Value::as_str) else {
+			if !edge.contains_key(self.point) {
+				return Err(at.refused(self.node));
+			}
+			return match ties.into_iter().find(|tie| edge.contains_key(*tie)) {
+				Some(tie) => Err(at.refused(tie)),
+				None => Ok(()),
+			};
 		};
 		if !nodes.contains_key(node) {
 			return Err(BoardError::DanglingEdge {
-				id: id.to_owned(),
-				field,
+				id: at.id.to_owned(),
+				field: self.node,
 				node: node.to_owned(),
 			});
 		}
+		if edge.contains_key(self.point) {
+			return Err(at.refused(self.point));
+		}
+		if ties.iter().all(|tie| edge.contains_key(*tie)) {
+			return Err(at.refused(self.anchor));
+		}
+		Ok(())
 	}
-	Ok(parsed)
 }
 
 pub(crate) fn parsed_board(
