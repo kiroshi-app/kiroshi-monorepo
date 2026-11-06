@@ -49,11 +49,6 @@ export const createBoardPointerSharer = ({
 		}
 	}
 
-	const sendNow = () => {
-		cancelPending()
-		send(currentSeat())
-	}
-
 	const sendThrottled = () => {
 		if (pending !== null) {
 			return
@@ -86,7 +81,8 @@ export const createBoardPointerSharer = ({
 				return
 			}
 			selectedId = ids[0] ?? null
-			sendNow()
+			cancelPending()
+			send(currentSeat())
 		},
 		close: () => {
 			if (!isOpen) {

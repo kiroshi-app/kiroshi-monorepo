@@ -1218,8 +1218,6 @@ const sharedSeats = () =>
 		.mock.calls.filter(([command]) => command === "library_share_presence")
 		.map(([, args]) => (args as { at: unknown }).at)
 
-const lastSharedSeat = () => sharedSeats().at(-1)
-
 const seatAt = (x: number, y: number, nodeId: string | null = null) => ({
 	kind: "board",
 	point: { x, y },
@@ -1292,7 +1290,7 @@ describe("sharing the own pointer and selection on a Library board", () => {
 		leaveCanvas()
 		await waitPointerInterval()
 
-		expect(lastSharedSeat()).toEqual(seatAt(10, 20, "first"))
+		expect(sharedSeats().at(-1)).toEqual(seatAt(10, 20, "first"))
 	})
 
 	it("shares no position once on unmount and nothing after", async () => {
