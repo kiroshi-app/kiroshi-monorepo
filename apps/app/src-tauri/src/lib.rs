@@ -4,7 +4,7 @@ pub mod applications;
 pub mod attachments;
 pub use kiroshi_core::avatars;
 pub mod badge;
-pub mod board;
+pub use kiroshi_core::board;
 pub mod bundles;
 pub mod claude_import;
 pub mod commands;

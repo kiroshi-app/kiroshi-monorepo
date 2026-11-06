@@ -274,7 +274,7 @@ fn parsed_edge(
 	Ok(parsed)
 }
 
-pub(crate) fn parsed_board(
+pub fn parsed_board(
 	nodes: BTreeMap<String, Value>,
 	edges: BTreeMap<String, Value>,
 	kiroshi: JsonObject,

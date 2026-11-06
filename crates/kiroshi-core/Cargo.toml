@@ -17,6 +17,7 @@ futures-util = { version = "0.3", default-features = false, features = ["sink", 
 git2 = { version = "0.21", default-features = false, features = ["vendored-libgit2"] }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
 log = "0.4"
+regex = "1"
 reqwest = { version = "0.13", default-features = false, features = ["json", "rustls-no-provider"] }
 rusqlite = { version = "0.40", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
@@ -26,6 +27,7 @@ specta-typescript = "=0.0.12"
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "time"] }
 unicode-normalization = "0.1"
 uuid = { version = "1", features = ["v4"] }
+yrs = "0.28"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

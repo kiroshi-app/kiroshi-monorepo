@@ -2759,6 +2759,7 @@ dependencies = [
  "image",
  "libc",
  "log",
+ "regex",
  "reqwest",
  "rusqlite",
  "serde",
@@ -2768,6 +2769,7 @@ dependencies = [
  "tokio",
  "unicode-normalization",
  "uuid",
+ "yrs",
 ]
 
 [[package]]
