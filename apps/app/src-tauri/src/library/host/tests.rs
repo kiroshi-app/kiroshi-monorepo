@@ -1960,7 +1960,7 @@ async fn an_agent_posts_a_board_of_the_space_as_its_own_message() {
 	assert_eq!(posted["name"], BOARD);
 }
 
-fn a_file_node(id: &str, item: &str, z: &str) -> Value {
+fn an_image_node(id: &str, item: &str, z: &str) -> Value {
 	json!({
 		"id": id, "type": "file", "file": format!("Library/{item}"),
 		"x": 0, "y": 0, "width": 116, "height": 124,
@@ -1983,12 +1983,12 @@ async fn a_board_view_shows_an_image_node_and_refuses_any_other_node_with_its_re
 	});
 	let canvas = json!({
 		"nodes": [
-			a_file_node("photo", "cover.png", "a0"),
+			an_image_node("photo", "cover.png", "a0"),
 			sticky,
-			a_file_node("lost", "gone.png", "a2"),
-			a_file_node("huge", "huge.png", "a3"),
-			a_file_node("escape", "../work/secret.png", "a4"),
-			a_file_node("elsewhere", "elsewhere.png", "a5"),
+			an_image_node("lost", "gone.png", "a2"),
+			an_image_node("huge", "huge.png", "a3"),
+			an_image_node("escape", "../work/secret.png", "a4"),
+			an_image_node("elsewhere", "elsewhere.png", "a5"),
 		],
 		"edges": []
 	});
