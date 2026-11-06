@@ -1892,6 +1892,7 @@ function ThreadView(props: ThreadViewProps) {
 			aside={
 				documents?.opened ? (
 					<ThreadOpenedItemPanel
+						bots={known}
 						documents={documents}
 						opened={documents.opened}
 					/>
