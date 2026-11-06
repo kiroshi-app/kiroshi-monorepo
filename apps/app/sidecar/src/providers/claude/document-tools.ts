@@ -123,6 +123,18 @@ const BOARD_VIEW = `Show you an image node of a board of the Library of this Spa
 const VIEWED_ID =
 	"The id of an image node of the board, as board_tree answered it."
 
+const SCREENSHOT =
+	"Show you a picture of a board or of a Markdown document of the Library of this Space as a person sees it there, in the light theme, rendered from what is saved at the moment of the call. Call it after a write to check what you drew or wrote. A board name alone shows every node and arrow of the board, framed on their bounds; with the id of a node, that node and the nodes it holds. A document name alone shows the whole document; with the id of a block, that block alone. An id absent from the board or the document is refused with that id, and a board or a document with nothing in it as nothingToShow, before anything is rendered; a render that does not answer within 15 seconds is refused as renderTimedOut. It answers the picture, at most 1568 pixels on its long edge, with the header of board_info for a board or the answer of document_info for a document, and the rendered width, height and scale."
+
+const SCREENSHOT_NAME =
+	"The name of a board ending in .canvas, such as roadmap.canvas, or of a Markdown document, such as notes.md, of the Library of this Space, without any folder."
+
+const SCREENSHOT_ID =
+	"The id of a node of the board as board_tree answered it, or of a block of the document as document_tree answered it. Left out, the whole board or document."
+
+const SCALE =
+	"1 or 2: the pixels drawn for each point of the board or the document. Left out, 1."
+
 const BOARD_WRITE = `Write one group of nodes and arrows into a parent of a board of the Library of this Space, the board itself or one of its sections, landing at once for the people who have it open. Give every node a key of your own; place it at x and y, beside another node with place, or inside a section with section, and the board computes where it lands without covering another node. A node with no section lands inside the parent, which grows to hold it. An arrow names its ends with fromNode and toNode, each the key of a node of this call or the id of a node of the board, or leaves an end free at fromPoint or toPoint. An arrow without routing is an elbow tied on the sides of its two nodes that face each other. In replace mode, the nodes the parent section holds and every arrow tied to them are removed in the same change, the section itself kept; replace without a parent is refused as missingParent and nothing changes. An id absent from the board, or one invalid node or arrow, refuses the whole call with its element, its index and the reason, and nothing changes. It answers the id each key got. ${HEADED}`
 
 const WRITE_MODE =
@@ -440,20 +452,27 @@ const VIEWED: ToolInput = {
 	id: z.string().describe(VIEWED_ID),
 }
 
+const SCREENSHOTTED: ToolInput = {
+	name: z.string().describe(SCREENSHOT_NAME),
+	id: z.string().optional().describe(SCREENSHOT_ID),
+	scale: z.number().int().min(1).max(2).optional().describe(SCALE),
+}
+
 type ImageRead = {
 	form: "image"
 	mimeType: string
 	content: string
 	header?: unknown
+	rendered?: unknown
 }
 
 const isImageRead = (answer: unknown): answer is ImageRead =>
 	(answer as ImageRead | null)?.form === "image"
 
-const headerOf = ({ header }: ImageRead) =>
+const headerOf = ({ header, rendered }: ImageRead) =>
 	header === undefined
 		? []
-		: [{ type: "text" as const, text: JSON.stringify({ header }) }]
+		: [{ type: "text" as const, text: JSON.stringify({ header, rendered }) }]
 
 const shownToTheModel = (answer: unknown) =>
 	isImageRead(answer)
@@ -566,5 +585,8 @@ export const libraryTools = (
 	),
 	tool("board_view", BOARD_VIEW, VIEWED, (input) =>
 		read(session, "boardView", input),
+	),
+	tool("screenshot", SCREENSHOT, SCREENSHOTTED, (input) =>
+		read(session, "screenshot", input),
 	),
 ]

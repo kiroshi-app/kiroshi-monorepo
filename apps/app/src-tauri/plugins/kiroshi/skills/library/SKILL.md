@@ -136,3 +136,22 @@ call, each step placed `right` of the one before, then post the board with
 `conversation_post_document` so the person opens it. An id absent from the board, or one invalid
 node or arrow, refuses the whole call with the `element`, its `index` and the `reason`, and
 nothing changes: fix that item and send the call again.
+
+## Checking what you made
+
+`screenshot`, on the `kiroshi` server, shows you a board or a Markdown document as a person sees
+it in the Library, in the light theme, rendered from what is saved when you call it, your last
+write included. It is the check after a write: call it once a write has landed to see what you
+made.
+
+- A board `name` alone shows every node and arrow, framed on their bounds; with the `id` of a node
+  from `board_tree`, that node and the nodes it holds.
+- A document `name` alone shows the whole document; with the `id` of a block from
+  `document_tree`, that block alone.
+- `scale` is 1 or 2, 1 when left out. The picture is at most 1568 pixels on its long edge.
+
+It answers the picture with the `header` of `board_info` for a board or the answer of
+`document_info` for a document, and the `rendered` width, height and scale. An id absent from
+the board or the document is refused with that id, and an empty board or document as
+`nothingToShow`, before anything is rendered; a render that takes longer than 15 seconds is
+refused as `renderTimedOut`, and calling again is safe.

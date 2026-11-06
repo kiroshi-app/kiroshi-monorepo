@@ -5,7 +5,8 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 use super::draw::{
-	kind_of, known, shown_text, text_of, tied_ends, z_of, BoardItem, DrawRefusal, Rect, SECTION,
+	end_rect, kind_of, known, shown_text, text_of, tied_ends, z_of, BoardItem, DrawRefusal, Rect,
+	SECTION,
 };
 use super::hierarchy::{parent_section, Hierarchy};
 use super::schema::{Fields, SCHEMA};
@@ -21,6 +22,8 @@ const ELLIPSIS: char = '…';
 const LIBRARY_ITEM: &str = "item";
 
 const CANVAS_FILE: &str = "file";
+
+const FRAME_MARGIN: i64 = 24;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -91,6 +94,26 @@ pub struct Sought {
 	pub color: Option<String>,
 	pub fill: Option<String>,
 	pub shape: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Framed {
+	pub part: Board,
+	pub frame: Option<Frame>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+pub struct Frame {
+	pub x: i64,
+	pub y: i64,
+	pub width: i64,
+	pub height: i64,
+}
+
+impl Frame {
+	fn of(rect: Rect) -> Self {
+		Self { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
+	}
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -258,16 +281,37 @@ pub fn under(board: &Board, parent: Option<&str>) -> Result<Board, DrawRefusal> 
 	let Some(parent) = parent_section(board, parent)? else {
 		return Ok(board.clone());
 	};
+	Ok(with_descendants(board, parent))
+}
+
+pub fn framed(board: &Board, id: Option<&str>) -> Result<Framed, DrawRefusal> {
+	let part = match id {
+		Some(id) => {
+			known(&[id.to_owned()], BoardItem::Node, |id| board.nodes.contains_key(id))?;
+			with_descendants(board, id)
+		}
+		None => board.clone(),
+	};
+	let nodes = part.nodes.values().map(Rect::of);
+	let ends = part
+		.edges
+		.values()
+		.flat_map(|edge| ENDS.iter().filter_map(|end| end_rect(edge, end, &part.nodes)));
+	let bounds = nodes.chain(ends).reduce(Rect::joined);
+	let frame = bounds.map(|bounds| Frame::of(bounds.padded(FRAME_MARGIN)));
+	Ok(Framed { part, frame })
+}
+
+fn with_descendants(board: &Board, id: &str) -> Board {
 	let hierarchy = Hierarchy::of(board);
-	let held: BTreeSet<&str> =
-		std::iter::once(parent).chain(hierarchy.descendants(parent)).collect();
-	Ok(board.kept(
+	let held: BTreeSet<&str> = std::iter::once(id).chain(hierarchy.descendants(id)).collect();
+	board.kept(
 		|id| held.contains(id),
 		|edge| {
 			let ends: Vec<&str> = tied_ends(edge).collect();
 			ends.len() == ENDS.len() && ends.iter().all(|node| held.contains(node))
 		},
-	))
+	)
 }
 
 pub fn find(board: &Board, sought: &Sought) -> Vec<String> {

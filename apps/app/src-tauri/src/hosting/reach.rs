@@ -217,6 +217,8 @@ pub(super) const REACHES: &[(&str, Reach)] = &[
 	("drag_ghost_tab", Reach::HostOnly),
 	("drag_ghost_move", Reach::HostOnly),
 	("drag_ghost_hide", Reach::HostOnly),
+	("library_screenshot_job", Reach::HostOnly),
+	("library_screenshot_answer", Reach::HostOnly),
 	("diagnostics", Reach::HostOnly),
 	("log_tail", Reach::HostOnly),
 	("log_reveal", Reach::HostOnly),

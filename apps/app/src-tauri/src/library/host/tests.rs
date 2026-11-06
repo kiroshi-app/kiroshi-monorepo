@@ -2552,3 +2552,194 @@ async fn a_board_view_shows_an_image_node_and_refuses_any_other_node_with_its_re
 		refused("nowhere", json!({ "reason": "unknownNode" }))
 	);
 }
+
+async fn the_page_renders(app: &AppHandle<MockRuntime>, png: &[u8]) -> screenshot::ScreenshotJob {
+	let request_id = loop {
+		if let Some(id) = screenshot::screenshots(app).held().keys().next().cloned() {
+			break id;
+		}
+		tokio::time::sleep(Duration::from_millis(5)).await;
+	};
+	let window = app
+		.get_webview_window(&screenshot::window_label(&request_id))
+		.expect("the hidden window is open");
+	let job = screenshot::library_screenshot_job(window.clone()).expect("the job is handed");
+	let rendered = screenshot::ScreenshotRendered::Rendered { png: BASE64_STANDARD.encode(png) };
+	screenshot::library_screenshot_answer(window, request_id, rendered).expect("the answer lands");
+	job
+}
+
+fn no_render_asked(app: &App<MockRuntime>) -> bool {
+	screenshot::screenshots(app.handle()).held().is_empty()
+}
+
+fn a_board_target(job: &screenshot::ScreenshotJob) -> (Value, crate::board::Frame) {
+	let screenshot::ScreenshotTarget::Board { canvas, frame, .. } = &job.target else {
+		panic!("a board target, got {:?}", job.target);
+	};
+	(serde_json::from_str(canvas).expect("the canvas is JSON"), *frame)
+}
+
+fn ids_of_canvas(canvas: &Value, field: &str) -> Vec<String> {
+	let mut ids: Vec<String> = canvas[field]
+		.as_array()
+		.expect("a list")
+		.iter()
+		.map(|element| element["id"].as_str().expect("an id").to_owned())
+		.collect();
+	ids.sort_unstable();
+	ids
+}
+
+#[tokio::test]
+async fn a_board_screenshot_renders_every_node_and_arrow_on_disk_framed_with_a_24_px_margin() {
+	let (app, root) = a_host("screenshot-board").await;
+	put(&root, SPACE, BOARD, EMPTY_BOARD);
+	let host = the_host(&app);
+	let keys = ["brief", "draft", "review", "ship"];
+	let nodes: Vec<Value> = keys
+		.iter()
+		.enumerate()
+		.map(|(index, key)| a_step(key, index.checked_sub(1).map(|previous| keys[previous])))
+		.collect();
+	let arrows: Vec<Value> =
+		keys.windows(2).map(|pair| json!({ "fromNode": pair[0], "toNode": pair[1] })).collect();
+	host.served(Operation::BoardWrite, written(json!(nodes), json!(arrows))).await.expect("drawn");
+	let bounds = host.served(Operation::BoardInfo, json!({ "name": BOARD })).await.expect("info")
+		["bounds"]
+		.clone();
+	let png = png_of(4);
+
+	let (answer, job) = tokio::join!(
+		host.served(Operation::Screenshot, json!({ "name": BOARD, "scale": 2 })),
+		the_page_renders(app.handle(), &png),
+	);
+
+	let answer = answer.expect("the board is shown");
+	let (canvas, frame) = a_board_target(&job);
+	let at = |field: &str| bounds[field].as_i64().expect("a bound");
+	assert_eq!(job.space_id, SPACE);
+	assert_eq!(job.scale, 2);
+	assert_eq!(ids_of_canvas(&canvas, "nodes").len(), 4);
+	assert_eq!(ids_of_canvas(&canvas, "edges").len(), 3);
+	assert_eq!(
+		frame,
+		crate::board::Frame {
+			x: at("x") - 24,
+			y: at("y") - 24,
+			width: at("width") + 48,
+			height: at("height") + 48,
+		}
+	);
+	assert_eq!(answer["form"], "image");
+	assert_eq!(answer["mimeType"], "image/png");
+	assert_eq!(answer["content"], BASE64_STANDARD.encode(&png));
+	assert_eq!(answer["rendered"], json!({ "width": 4, "height": 4, "scale": 2 }));
+	assert_eq!(answer["header"]["name"], BOARD);
+	assert!(answer["header"]["hash"].is_string());
+	assert!(no_render_asked(&app));
+}
+
+#[tokio::test]
+async fn a_node_screenshot_renders_that_node_and_its_descendants_only() {
+	let (app, root) = a_host("screenshot-node").await;
+	put(&root, SPACE, BOARD, EMPTY_BOARD);
+	let host = the_host(&app);
+	let drawn = host
+		.served(
+			Operation::BoardWrite,
+			written(
+				json!([
+					{ "key": "lane", "kind": "section", "text": "Lane", "x": 0, "y": 0 },
+					{ "key": "a", "kind": "shape", "text": "A", "section": "lane" },
+					{ "key": "b", "kind": "shape", "text": "B", "section": "lane" },
+					{ "key": "out", "kind": "shape", "text": "Out", "x": 3000, "y": 3000 }
+				]),
+				json!([{ "fromNode": "a", "toNode": "b" }, { "fromNode": "b", "toNode": "out" }]),
+			),
+		)
+		.await
+		.expect("drawn");
+	let id = |key: &str| drawn["ids"][key].as_str().expect("an id").to_owned();
+	let mut held = vec![id("lane"), id("a"), id("b")];
+	held.sort_unstable();
+	let png = png_of(4);
+
+	let (answer, job) = tokio::join!(
+		host.served(Operation::Screenshot, json!({ "name": BOARD, "id": id("lane") })),
+		the_page_renders(app.handle(), &png),
+	);
+
+	answer.expect("the section is shown");
+	let (canvas, frame) = a_board_target(&job);
+	assert_eq!(ids_of_canvas(&canvas, "nodes"), held);
+	assert_eq!(ids_of_canvas(&canvas, "edges").len(), 1);
+	assert_eq!(job.scale, 1);
+	assert!(frame.x + frame.width < 3000);
+}
+
+#[tokio::test]
+async fn a_screenshot_of_an_absent_node_or_of_an_empty_board_is_refused_before_rendering() {
+	let (app, root) = a_host("screenshot-absent-node").await;
+	put(&root, SPACE, BOARD, EMPTY_BOARD);
+	let host = the_host(&app);
+
+	let empty = host.served(Operation::Screenshot, json!({ "name": BOARD })).await;
+	let absent = host.served(Operation::Screenshot, json!({ "name": BOARD, "id": "ghost" })).await;
+	let scale = host.served(Operation::Screenshot, json!({ "name": BOARD, "scale": 3 })).await;
+
+	assert_eq!(refusal_of(empty), json!({ "kind": "nothingToShow" }));
+	assert_eq!(
+		refusal_of(absent),
+		json!({
+			"kind": "invalidBoardItem",
+			"element": "node",
+			"index": 0,
+			"reason": "unknownReference",
+			"reference": "ghost"
+		})
+	);
+	assert_eq!(refusal_of(scale)["kind"], "unreadableRequest");
+	assert!(no_render_asked(&app));
+}
+
+#[tokio::test]
+async fn a_document_screenshot_renders_one_block_by_id_or_every_block_and_refuses_an_absent_id() {
+	let (app, root) = a_host("screenshot-document").await;
+	put(&root, SPACE, "notes.md", "# Title\n\nFirst paragraph.\n\nSecond paragraph.\n");
+	let host = the_host(&app);
+	let ids = ids_of(&host, "notes.md").await;
+	let png = png_of(4);
+
+	let (one, job_of_one) = tokio::join!(
+		host.served(Operation::Screenshot, json!({ "name": "notes.md", "id": ids[2] })),
+		the_page_renders(app.handle(), &png),
+	);
+	let (whole, job_of_whole) = tokio::join!(
+		host.served(Operation::Screenshot, json!({ "name": "notes.md" })),
+		the_page_renders(app.handle(), &png),
+	);
+	let absent =
+		host.served(Operation::Screenshot, json!({ "name": "notes.md", "id": "ghost" })).await;
+
+	let blocks_of = |job: &screenshot::ScreenshotJob| match &job.target {
+		screenshot::ScreenshotTarget::Document { blocks, .. } => blocks
+			.iter()
+			.map(|block| (block.id.clone(), block.markdown.clone()))
+			.collect::<Vec<_>>(),
+		board @ screenshot::ScreenshotTarget::Board { .. } => panic!("a document, got {board:?}"),
+	};
+	assert_eq!(blocks_of(&job_of_one), [(ids[2].clone(), "Second paragraph.".to_owned())]);
+	assert_eq!(
+		blocks_of(&job_of_whole).iter().map(|(id, _)| id).collect::<Vec<_>>(),
+		ids.iter().collect::<Vec<_>>()
+	);
+	let one = one.expect("the block is shown");
+	assert_eq!(one["header"]["name"], "notes.md");
+	assert_eq!(one["header"]["blocks"], 3);
+	assert_eq!(one["form"], "image");
+	whole.expect("the document is shown");
+	let absent = refusal_of(absent);
+	assert_eq!((&absent["kind"], &absent["id"]), (&json!("blockNotFound"), &json!("ghost")));
+	assert!(no_render_asked(&app));
+}

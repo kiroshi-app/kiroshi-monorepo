@@ -52,6 +52,8 @@ export const commands = {
 	librarySharePresence: (spaceId: string, name: string, at: { kind: "text"; anchor: string } | { kind: "board"; point: LibraryBoardPoint; nodeId: string | null } | null) => typedError<null, LibraryError>(__TAURI_INVOKE("library_share_presence", { spaceId, name, at })),
 	libraryStopWriters: (spaceId: string, name: string, agentId: string | null) => typedError<CancelOutcome, LibraryError>(__TAURI_INVOKE("library_stop_writers", { spaceId, name, agentId })),
 	libraryReadThumbnail: (spaceId: string, name: string) => typedError<LibraryImage, LibraryError>(__TAURI_INVOKE("library_read_thumbnail", { spaceId, name })),
+	libraryScreenshotJob: () => typedError<ScreenshotJob, ScreenshotRequestError>(__TAURI_INVOKE("library_screenshot_job")),
+	libraryScreenshotAnswer: (requestId: string, answer: ScreenshotRendered) => typedError<null, ScreenshotRequestError>(__TAURI_INVOKE("library_screenshot_answer", { requestId, answer })),
 	libraryImport: (spaceId: string, name: string, content: string) => typedError<LibraryItem, LibraryError>(__TAURI_INVOKE("library_import", { spaceId, name, content })),
 	libraryImportUrl: (spaceId: string, url: string) => typedError<LibraryItem, LibraryImportUrlError>(__TAURI_INVOKE("library_import_url", { spaceId, url })),
 	libraryImportPaths: (spaceId: string, paths: string[]) => typedError<LibraryImport[], LibraryError>(__TAURI_INVOKE("library_import_paths", { spaceId, paths })),
@@ -361,6 +363,8 @@ export const LIBRARY_CHANGED_EVENT = "library://changed" as const;
 export const LIBRARY_DOCUMENT_RENAMED_EVENT = "library://document-renamed" as const;
 
 export const LIBRARY_DOCUMENT_UPDATED_EVENT = "library://document-updated" as const;
+
+export const LIBRARY_SCREENSHOT_ROUTE = "/screenshot.html" as const;
 
 export const MAXIMIZE_BUTTON_EVENT = "window-maximize-button" as const;
 
@@ -1049,6 +1053,13 @@ export type Filter_Deserialize = {
 export type Filter_Serialize = {
 	matchMode: FilterMatchMode,
 	rows: FilterRow_Serialize[],
+};
+
+export type Frame = {
+	x: number,
+	y: number,
+	width: number,
+	height: number,
 };
 
 export type GrabOffset = {
@@ -1906,6 +1917,24 @@ export type ScreenPosition = {
 	x: number,
 	y: number,
 };
+
+export type ScreenshotBlock = {
+	id: string,
+	markdown: string,
+};
+
+export type ScreenshotJob = {
+	requestId: string,
+	spaceId: string,
+	scale: number,
+	target: ScreenshotTarget,
+};
+
+export type ScreenshotRendered = { kind: "rendered"; png: string } | { kind: "failed"; reason: string };
+
+export type ScreenshotRequestError = { kind: "notAScreenshotWindow" } | { kind: "unknownRequest"; requestId: string };
+
+export type ScreenshotTarget = { kind: "board"; name: string; canvas: string; frame: Frame } | { kind: "document"; name: string; blocks: ScreenshotBlock[] };
 
 export type Section = {
 	id: string,

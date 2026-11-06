@@ -415,6 +415,7 @@ mod tests {
 			"`board_delete`",
 			"`board_find`",
 			"`board_view`",
+			"`screenshot`",
 			"`conversation_post_document`",
 			"`document_info`",
 			"`document_tree`",

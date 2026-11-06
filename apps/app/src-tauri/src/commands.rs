@@ -17,6 +17,7 @@ pub fn builder() -> Builder<tauri::Wry> {
 		.constant("DRAG_GHOST_ROUTE", window_controls::drag_ghost::DRAG_GHOST_ROUTE)
 		.constant("DRAG_GHOST_TAB_EVENT", window_controls::drag_ghost::TAB_EVENT)
 		.constant("DRAG_GHOST_ENDED_EVENT", window_controls::drag_ghost::ENDED_EVENT)
+		.constant("LIBRARY_SCREENSHOT_ROUTE", library::host::screenshot::SCREENSHOT_ROUTE)
 		.constant("ACCOUNT_CHANGED_EVENT", account::contract::CHANGED_EVENT)
 		.constant("DEVICE_APPROVAL_CHANGED_EVENT", devices::contract::APPROVAL_CHANGED_EVENT)
 		.constant("DEVICE_APPROVAL_REQUESTED_EVENT", devices::contract::APPROVAL_REQUESTED_EVENT)
@@ -115,6 +116,8 @@ fn commands<R: Runtime>() -> Commands<R> {
 		library::commands::library_share_presence::<tauri::Wry>,
 		library::commands::library_stop_writers::<tauri::Wry>,
 		library::commands::library_read_thumbnail::<tauri::Wry>,
+		library::host::screenshot::library_screenshot_job::<tauri::Wry>,
+		library::host::screenshot::library_screenshot_answer::<tauri::Wry>,
 		library::commands::library_import::<tauri::Wry>,
 		library::commands::library_import_url::<tauri::Wry>,
 		library::commands::library_import_paths::<tauri::Wry>,

@@ -31,14 +31,17 @@ use super::{
 use crate::agent::contract::RuntimeScope;
 use crate::agent::host::{Host, Refusal};
 use crate::board::{
-	content_hash, deleted, duplicated, export_canvas, find, info, moved, node_file, node_info,
-	tree, under, updated, written, ArrowPatch, Board, BoardEdit, ChangedNode, DrawRefusal,
-	DrawnArrow, DrawnNode, ElementChange, Group, Sought, Touched, WriteMode,
+	content_hash, deleted, duplicated, export_canvas, find, framed, info, moved, node_file,
+	node_info, tree, under, updated, written, ArrowPatch, Board, BoardEdit, ChangedNode,
+	DrawRefusal, DrawnArrow, DrawnNode, ElementChange, Framed, Group, Sought, Touched, WriteMode,
 };
 use crate::conversations::commands::{post_document, ready};
 use crate::conversations::contract::TranscriptStoreError;
 use crate::db::repositories::keyset::{self, Keyset};
 use crate::{db, events};
+use screenshot::{render, Rendered, Scale, ScreenshotBlock, ScreenshotTarget, Shot};
+
+pub mod screenshot;
 
 const WRITE_STEPS: usize = 40;
 
@@ -53,6 +56,8 @@ const MAX_SHOWN_IMAGE_BYTES: u64 = 5 * 1024 * 1024 / 4 * 3;
 const STEP_PAUSE: Duration = Duration::from_millis(40);
 
 const IMAGE_KIND: &str = "image";
+
+const PNG_MIME_TYPE: &str = "image/png";
 
 const NO_STORE: &str = "the store of this session is not open";
 
@@ -117,6 +122,15 @@ pub enum ToolRefusal {
 		#[serde(flatten)]
 		reason: NotShown,
 	},
+	NothingToShow,
+	#[serde(rename_all = "camelCase")]
+	RenderTimedOut {
+		seconds: u64,
+	},
+	#[serde(rename_all = "camelCase")]
+	RenderFailed {
+		detail: String,
+	},
 }
 
 #[derive(Debug, Serialize)]
@@ -177,6 +191,7 @@ pub enum Operation {
 	BoardDelete,
 	BoardFind,
 	BoardView,
+	Screenshot,
 }
 
 #[derive(Debug, Deserialize)]
@@ -225,6 +240,15 @@ struct Renamed {
 struct BoardViewed {
 	name: String,
 	id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Screenshotted {
+	name: String,
+	id: Option<String>,
+	#[serde(default)]
+	scale: Scale,
 }
 
 #[derive(Debug, Deserialize)]
@@ -401,6 +425,15 @@ struct Headed<T> {
 	header: BoardHeader,
 	#[serde(flatten)]
 	answer: T,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Screenshot<H> {
+	header: H,
+	rendered: Rendered,
+	#[serde(flatten)]
+	image: ItemRead,
 }
 
 #[derive(Debug, Serialize)]
@@ -705,6 +738,44 @@ impl<R: Runtime> LibraryHost<R> {
 		writing.outcome = LibraryWriteOutcome::Finished;
 		Ok(BlocksWritten { name: landed, ids: planned.ids })
 	}
+
+	async fn board_shot(
+		&self,
+		root: &Path,
+		space_id: &str,
+		asked: Screenshotted,
+	) -> Result<Screenshot<BoardHeader>, DocumentRefusal> {
+		let board = documents(&self.app).board(root, space_id, &asked.name)?;
+		let Framed { part, frame } = framed(&board, asked.id.as_deref())?;
+		let frame = frame.ok_or(ToolRefusal::NothingToShow)?;
+		let canvas =
+			export_canvas(&part).map_err(|error| DocumentRefusal::unexpected(error.to_string()))?;
+		let header = board_header(root, space_id, &asked.name, &board)?;
+		let target = ScreenshotTarget::Board { name: asked.name.clone(), canvas, frame };
+		let shot = render(&self.app, space_id, asked.scale, target).await?;
+		Ok(Screenshot::of(header, asked.name, shot))
+	}
+
+	async fn document_shot(
+		&self,
+		database: &db::Database,
+		root: &Path,
+		space_id: &str,
+		asked: Screenshotted,
+	) -> Result<Screenshot<DocumentInfo>, DocumentRefusal> {
+		let wanted: Vec<&str> = asked.id.iter().map(String::as_str).collect();
+		let read = self.blocks_read(database, root, space_id, &asked.name, &wanted, |outline| {
+			let header = document_info(root, space_id, &asked.name, outline)?;
+			Ok((header, outline.shown(asked.id.as_deref())))
+		});
+		let (header, blocks) = read.await?;
+		if blocks.is_empty() {
+			return Err(ToolRefusal::NothingToShow.into());
+		}
+		let target = ScreenshotTarget::Document { name: asked.name.clone(), blocks };
+		let shot = render(&self.app, space_id, asked.scale, target).await?;
+		Ok(Screenshot::of(header, asked.name, shot))
+	}
 }
 
 impl<R: Runtime> Host for LibraryHost<R> {
@@ -962,7 +1033,26 @@ impl<R: Runtime> Host for LibraryHost<R> {
 					image_viewed(&root, &space_id, board, asked.id)
 				})?)
 			}
+			Operation::Screenshot => {
+				let asked: Screenshotted = Self::read(payload)?;
+				match resolve(&root, &space_id, &asked.name)?.accepted {
+					AcceptedType::Board => {
+						Self::answered(self.board_shot(&root, &space_id, asked).await?)
+					}
+					_ => {
+						Self::answered(self.document_shot(database, &root, &space_id, asked).await?)
+					}
+				}
+			}
 		}
+	}
+}
+
+impl<H> Screenshot<H> {
+	fn of(header: H, name: String, shot: Shot) -> Self {
+		let Shot { content, rendered } = shot;
+		let image = ItemRead::Image { name, mime_type: PNG_MIME_TYPE.to_owned(), content };
+		Self { header, rendered, image }
 	}
 }
 
@@ -1010,6 +1100,17 @@ impl Outline {
 				kind: held.block.kind,
 				level: held.block.level,
 				text: preview(held.block.kind, self.source(held)),
+			})
+			.collect()
+	}
+
+	fn shown(&self, id: Option<&str>) -> Vec<ScreenshotBlock> {
+		self.blocks
+			.iter()
+			.filter(|held| id.is_none_or(|id| held.id == id))
+			.map(|held| ScreenshotBlock {
+				id: held.id.clone(),
+				markdown: self.source(held).to_owned(),
 			})
 			.collect()
 	}
