@@ -1152,9 +1152,6 @@ const expectBoardPanel = async (
 		within(slotIn(panel, "library-document-presence")).getByText(chipLabel),
 	).toBeVisible()
 	await expect(
-		within(header).queryByRole("button", { name: "Open in tab" }),
-	).toBeNull()
-	await expect(
 		within(header)
 			.getAllByRole("button")
 			.map((button) => button.getAttribute("aria-label")),
