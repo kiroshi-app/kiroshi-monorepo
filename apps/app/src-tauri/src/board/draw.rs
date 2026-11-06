@@ -439,8 +439,8 @@ pub fn removed(board: &Board, ids: &[String]) -> Result<Changed, DrawRefusal> {
 		.edges
 		.iter()
 		.filter(|(_, edge)| {
-			["fromNode", "toNode"].iter().any(|field| {
-				let node = edge.get(*field).and_then(Value::as_str);
+			ENDS.iter().any(|end| {
+				let node = edge.get(end.node).and_then(Value::as_str);
 				node.is_some_and(|node| edit.removed_nodes.iter().any(|id| id == node))
 			})
 		})
