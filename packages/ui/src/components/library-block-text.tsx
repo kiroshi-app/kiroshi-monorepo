@@ -15,7 +15,10 @@ import {
 	useState,
 } from "react"
 
-import { shiftedOffset } from "@workspace/ui/components/library-document-blocks"
+import {
+	shiftedOffset,
+	withoutIdMarkers,
+} from "@workspace/ui/components/library-document-blocks"
 import {
 	type BlockText,
 	type BlockTextLine,
@@ -225,8 +228,10 @@ const offsetAtShown = (field: HTMLElement, shown: number) => {
 const typedOf = ({ inputType, data, dataTransfer }: InputEvent) => {
 	if (inputType === "insertLineBreak" || inputType === "insertParagraph")
 		return "\n"
-	if (inputType.startsWith("insert"))
-		return data ?? dataTransfer?.getData("text/plain") ?? ""
+	const inserted = data ?? dataTransfer?.getData("text/plain") ?? ""
+	if (inputType === "insertFromPaste" || inputType === "insertFromDrop")
+		return withoutIdMarkers(inserted)
+	if (inputType.startsWith("insert")) return inserted
 	if (inputType.startsWith("delete")) return ""
 	return undefined
 }

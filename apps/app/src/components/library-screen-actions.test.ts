@@ -22,6 +22,7 @@ import { i18n } from "@workspace/ui/lib/i18n"
 import { LibraryScreenHoldingOpening } from "@/components/library-screen-holding-opening"
 import type { LibraryItem } from "@/lib/bindings"
 import type { Invoke } from "@/lib/host/joined-hosts-invoke"
+import { markdownWithIds } from "@/lib/library/block-ids-test-pattern"
 import {
 	base64Of,
 	bytesOf,
@@ -1286,7 +1287,11 @@ describe("a rename in flight", () => {
 		await settle(2 * SEND_INTERVAL_MS)
 		await release()
 
-		await waitFor(() => expect(textOfUpdatesTo("Plans.txt")).toBe("Rollout"))
+		await waitFor(() =>
+			expect(textOfUpdatesTo("Plans.txt")).toMatch(
+				markdownWithIds("Rollout ^ID"),
+			),
+		)
 		expect(callsAfterRename("library_apply_update")).not.toContainEqual(
 			expect.objectContaining({ name: "notes.txt" }),
 		)

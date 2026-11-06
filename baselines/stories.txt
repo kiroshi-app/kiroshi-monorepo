@@ -1777,6 +1777,12 @@ navigation-librarydocumentblockeditor--agents-writing
 navigation-librarydocumentblockeditor--autolink-shows-its-text
 navigation-librarydocumentblockeditor--backspace-at-the-start-turns-into-text
 navigation-librarydocumentblockeditor--block-handle-menu
+navigation-librarydocumentblockeditor--block-id-fresh-for-a-new-block
+navigation-librarydocumentblockeditor--block-id-kept-on-the-first-half-of-a-split
+navigation-librarydocumentblockeditor--block-id-kept-through-an-edit
+navigation-librarydocumentblockeditor--block-id-kept-when-an-agent-inserts-before
+navigation-librarydocumentblockeditor--block-id-leaves-with-a-deleted-block
+navigation-librarydocumentblockeditor--block-id-travels-with-a-moved-block
 navigation-librarydocumentblockeditor--bubble-and-document-parity
 navigation-librarydocumentblockeditor--callout-body-shows-its-marks
 navigation-librarydocumentblockeditor--callout-tone-switch
@@ -1791,6 +1797,7 @@ navigation-librarydocumentblockeditor--code-language-chosen
 navigation-librarydocumentblockeditor--drag-moves-block
 navigation-librarydocumentblockeditor--drag-moves-text
 navigation-librarydocumentblockeditor--drag-with-drop-indicator
+navigation-librarydocumentblockeditor--dropped-marker-never-shows
 navigation-librarydocumentblockeditor--emptied-blocks-keep-their-type
 navigation-librarydocumentblockeditor--enter-inside-a-mark-keeps-both-halves
 navigation-librarydocumentblockeditor--escape-shows-the-character
@@ -1823,6 +1830,7 @@ navigation-librarydocumentblockeditor--inline-image-is-one-node
 navigation-librarydocumentblockeditor--insert-below-puts-caret
 navigation-librarydocumentblockeditor--narrow-column
 navigation-librarydocumentblockeditor--nested-list-keeps-its-indent
+navigation-librarydocumentblockeditor--pasted-marker-never-shows
 navigation-librarydocumentblockeditor--person-caret-at-block-edges
 navigation-librarydocumentblockeditor--pointer-drag-selects-across-a-mark
 navigation-librarydocumentblockeditor--shortcuts-on-focused-block

@@ -41,6 +41,7 @@ import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-s
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import { hostOfflineOf } from "@/lib/host/host-offline"
 import type { Invoke } from "@/lib/host/joined-hosts-invoke"
+import { markdownWithIds } from "@/lib/library/block-ids-test-pattern"
 import { base64Of, bytesOf } from "@/lib/library/library-document-session"
 import { titleOf } from "@/lib/library/library-items"
 import { aMission } from "@/lib/missions/mission-fixtures"
@@ -776,7 +777,9 @@ describe("an opened Library document", () => {
 		await waitFor(() => expect(textOf(member)).toBe("Notes and actions"), {
 			timeout: 1000,
 		})
-		expect(fakeLibraryHost.markdownOf(DOCUMENT.name)).toBe("Notes and actions")
+		expect(fakeLibraryHost.markdownOf(DOCUMENT.name)).toMatch(
+			markdownWithIds("Notes and actions ^ID"),
+		)
 		expect(textOf(onHost)).toBe("Notes and actions")
 	})
 
@@ -851,20 +854,25 @@ describe("an opened Library document", () => {
 			waitFor(
 				() => {
 					expect(shownTextsOf(shown)).toEqual(texts)
-					expect(fakeLibraryHost.markdownOf(DOCUMENT.name)).toBe(markdown)
+					expect(fakeLibraryHost.markdownOf(DOCUMENT.name)).toMatch(
+						markdownWithIds(markdown),
+					)
 				},
 				{ timeout: 1000 },
 			)
 
 		await typeInto(body, "Notes and actions")
-		const typed = TASK_NOTES.replace("Notes", "Notes and actions")
+		const typed = "Notes and actions ^ID\n\n\n\n- [ ] Ship the notes\n\n^ID"
 		await holdsMarkdown(typed, ["Notes and actions", "Ship the notes"])
 
 		const pastedField = await pasteBelow(
 			blocksOf(body)[0] as HTMLElement,
 			PASTED_PARAGRAPHS,
 		)
-		const pasted = typed.replace("- [ ]", `${PASTED_PARAGRAPHS}\n\n- [ ]`)
+		const pasted = typed.replace(
+			"- [ ]",
+			"First thought. ^ID\n\nSecond thought. ^ID\n\nThird thought. ^ID\n\n- [ ]",
+		)
 		await holdsMarkdown(pasted, [
 			"Notes and actions",
 			PASTED_PARAGRAPHS,
@@ -891,7 +899,10 @@ describe("an opened Library document", () => {
 		})
 
 		const written = `${ticked}${AGENT_LINE}`
-		fakeLibraryHost.writeElsewhere(DOCUMENT.name, written)
+		fakeLibraryHost.writeElsewhere(
+			DOCUMENT.name,
+			`${fakeLibraryHost.markdownOf(DOCUMENT.name)}${AGENT_LINE}`,
+		)
 		await holdsMarkdown(written, [
 			...paragraphs,
 			"Ship the notes",
