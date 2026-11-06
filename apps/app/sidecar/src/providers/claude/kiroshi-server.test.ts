@@ -135,6 +135,7 @@ describe("kiroshiServer", () => {
 			"conversation_post_document",
 			"board_create",
 			"board_read",
+			"board_view",
 			"board_add",
 			"board_update",
 			"board_remove",

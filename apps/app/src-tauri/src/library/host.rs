@@ -46,6 +46,8 @@ const MAX_SHOWN_IMAGE_BYTES: u64 = 5 * 1024 * 1024 / 4 * 3;
 
 const STEP_PAUSE: Duration = Duration::from_millis(40);
 
+const IMAGE_KIND: &str = "image";
+
 const NO_STORE: &str = "the store of this session is not open";
 
 #[derive(Debug)]
@@ -98,6 +100,40 @@ pub enum ToolRefusal {
 		detail: String,
 	},
 	InvalidBoardItem(DrawRefusal),
+	#[serde(rename_all = "camelCase")]
+	NodeNotShown {
+		id: String,
+		#[serde(flatten)]
+		reason: NotShown,
+	},
+}
+
+#[derive(Debug, Serialize)]
+#[serde(tag = "reason", rename_all = "camelCase")]
+pub enum NotShown {
+	UnknownNode,
+	#[serde(rename_all = "camelCase")]
+	NotAnImage {
+		node_kind: String,
+	},
+	NoFile,
+	#[serde(rename_all = "camelCase")]
+	NotAnImageFile {
+		file: String,
+	},
+	#[serde(rename_all = "camelCase")]
+	MissingFile {
+		file: String,
+	},
+	#[serde(rename_all = "camelCase")]
+	OutsideLibrary {
+		file: String,
+	},
+	#[serde(rename_all = "camelCase")]
+	TooLarge {
+		bytes: u64,
+		limit: u64,
+	},
 }
 
 #[derive(Debug, Clone, Copy, Deserialize)]
@@ -114,6 +150,7 @@ pub enum Operation {
 	PostDocument,
 	BoardCreate,
 	BoardRead,
+	BoardView,
 	BoardAdd,
 	BoardUpdate,
 	BoardRemove,
@@ -158,6 +195,13 @@ struct Imported {
 struct Renamed {
 	name: String,
 	new_name: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct BoardViewed {
+	name: String,
+	id: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -561,6 +605,11 @@ impl<R: Runtime> Host for LibraryHost<R> {
 				let board = documents(&self.app).board(&root, &space_id, &asked.name)?;
 				Self::answered(BoardShown { name: asked.name, board: read_out(&board) })
 			}
+			Operation::BoardView => {
+				let asked: BoardViewed = Self::read(payload)?;
+				let board = documents(&self.app).board(&root, &space_id, &asked.name)?;
+				Self::answered(image_viewed(&root, &space_id, &board, asked.id)?)
+			}
 			Operation::BoardAdd => {
 				let asked = Self::read(payload)?;
 				Self::answered(self.board_added(database, &root, &space_id, asked).await?)
@@ -704,6 +753,49 @@ fn item_read(root: &Path, space_id: &str, name: &str) -> Result<ItemRead, Librar
 			bytes: item.bytes,
 		},
 	})
+}
+
+fn image_viewed(
+	root: &Path,
+	space_id: &str,
+	board: &Board,
+	id: String,
+) -> Result<ItemRead, DocumentRefusal> {
+	let Some(node) = read_out(board).nodes.into_iter().find(|node| node.id == id) else {
+		return Err(not_shown(id, NotShown::UnknownNode));
+	};
+	if node.kind != IMAGE_KIND {
+		return Err(not_shown(id, NotShown::NotAnImage { node_kind: node.kind }));
+	}
+	let Some(file) = node.file else {
+		return Err(not_shown(id, NotShown::NoFile));
+	};
+	let item = match resolve(root, space_id, &file) {
+		Ok(item) => item,
+		Err(LibraryError::Missing { .. }) => {
+			return Err(not_shown(id, NotShown::MissingFile { file }))
+		}
+		Err(LibraryError::InvalidName { .. }) => {
+			return Err(not_shown(id, NotShown::OutsideLibrary { file }))
+		}
+		Err(error) => return Err(error.into()),
+	};
+	let AcceptedType::Image { mime_type } = item.accepted else {
+		return Err(not_shown(id, NotShown::NotAnImageFile { file }));
+	};
+	if item.bytes > MAX_SHOWN_IMAGE_BYTES {
+		let too_large = NotShown::TooLarge { bytes: item.bytes, limit: MAX_SHOWN_IMAGE_BYTES };
+		return Err(not_shown(id, too_large));
+	}
+	Ok(ItemRead::Image {
+		content: encoded_content(&item, &file)?,
+		name: file,
+		mime_type: mime_type.to_owned(),
+	})
+}
+
+fn not_shown(id: String, reason: NotShown) -> DocumentRefusal {
+	DocumentRefusal::Tool(ToolRefusal::NodeNotShown { id, reason })
 }
 
 struct Writing<'a, R: Runtime> {
