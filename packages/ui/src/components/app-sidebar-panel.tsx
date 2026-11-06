@@ -82,6 +82,7 @@ const RosterSkeletonSlot = ({ children }: RosterSkeletonSlotProps) => (
 const AppSidebarPanel = ({
 	bots,
 	haveBotsFailedToLoad,
+	onRetryLoadBots,
 	rosterSkeleton,
 	rosterListEnd,
 	botsBySpaceId,
@@ -156,6 +157,7 @@ const AppSidebarPanel = ({
 		onPinRoster,
 		onRemoveBotFromSpace,
 		onRenameSection,
+		onRetryLoadBots,
 		onSelectBot,
 		onSelectConversation,
 		selectedBotId,

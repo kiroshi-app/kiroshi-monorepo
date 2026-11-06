@@ -1453,6 +1453,9 @@ navigation-appsidebar--space-tinted
 navigation-appsidebar--spaces-without-rosters
 navigation-appsidebar--title-bar-tear-off-reports-the-tab
 navigation-appsidebar--unreadable-roster
+navigation-appsidebar--unreadable-roster-dark
+navigation-appsidebar--unreadable-roster-with-retry
+navigation-appsidebar--unreadable-roster-with-retry-dark
 navigation-appsidebar--uploaded-pictures
 navigation-appsidebar--window-controls-reserved
 navigation-appsidebar--with-user
