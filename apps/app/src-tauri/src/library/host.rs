@@ -13,7 +13,7 @@ use tauri::{AppHandle, Manager, Runtime, State};
 use tokio::sync::{watch, OwnedMutexGuard};
 
 use super::blocks::{
-	self, backfill, blocks_of, is_backfilled, preview, removal, separated, Block, BlockKind, Splice,
+	self, backfill, blocks_of, preview, removal, separated, Block, BlockKind, Splice,
 };
 use super::canvas::board_holds;
 use super::contract::{
@@ -583,7 +583,7 @@ impl<R: Runtime> LibraryHost<R> {
 		for id in wanted {
 			outline.index_of(id)?;
 		}
-		if is_backfilled(&outline.text) {
+		if backfill(&outline.text).is_empty() {
 			return Ok(outline);
 		}
 		let writer = client_id_of(&agent.id);

@@ -86,7 +86,7 @@ fn backfill_gives_every_block_a_unique_id_and_keeps_its_kind_and_content() {
 	assert!(held
 		.iter()
 		.all(|id| id.len() == 6 && id.bytes().all(|byte| ID_ALPHABET.contains(&byte))));
-	assert!(is_backfilled(&text));
+	assert!(backfill(&text).is_empty());
 	assert!(!text.contains('<'), "{text}");
 }
 

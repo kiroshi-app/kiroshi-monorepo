@@ -14,6 +14,8 @@ const PREVIEW_CHARS: usize = 60;
 
 const BLOCK_GAP: &str = "\n\n";
 
+const TASK_BOXES: [&str; 3] = ["[ ]", "[x]", "[X]"];
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) enum BlockKind {
@@ -130,10 +132,6 @@ pub(crate) fn backfill(text: &str) -> Vec<Splice> {
 		}
 	}
 	splices
-}
-
-pub(crate) fn is_backfilled(text: &str) -> bool {
-	backfill(text).is_empty()
 }
 
 pub(crate) fn written(
@@ -274,10 +272,7 @@ fn without_list_marker(line: &str) -> &str {
 }
 
 fn without_task_box(line: &str) -> &str {
-	["[ ]", "[x]", "[X]"]
-		.iter()
-		.find_map(|task_box| line.strip_prefix(task_box))
-		.map_or(line, str::trim_start)
+	TASK_BOXES.iter().find_map(|task_box| line.strip_prefix(task_box)).map_or(line, str::trim_start)
 }
 
 fn first_words(text: &str) -> String {
@@ -599,7 +594,7 @@ fn list_item(line: &str) -> Option<ListItem> {
 		marker_end: leading + marker_length,
 		content_indent: indent + marker_length + gap,
 		can_interrupt: !is_empty && is_first_number,
-		is_task: digits == 0 && ["[ ]", "[x]", "[X]"].iter().any(|task| body.starts_with(task)),
+		is_task: digits == 0 && TASK_BOXES.iter().any(|task| body.starts_with(task)),
 	})
 }
 
