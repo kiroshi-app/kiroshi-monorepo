@@ -303,11 +303,11 @@ const marked = (
 ): LibraryBlockDocument => ({
 	...document,
 	blocks: document.blocks.map((block, index) => {
-		const written = needsWriting(block)
-			? writtenOf(block.source, block.id, ids)
-			: isBlank(block)
-				? undefined
-				: block.written
+		const written = isBlank(block)
+			? undefined
+			: carriesId(block)
+				? block.written
+				: writtenOf(block.source, block.id, ids)
 		const next = document.blocks[index + 1]
 		return {
 			...block,
