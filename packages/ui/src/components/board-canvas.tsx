@@ -2259,25 +2259,26 @@ const ReadyBoardCanvas = ({
 					rect={toScreenRect(liveBounds(ringedItem), viewport)}
 				/>
 			) : null}
-			{selectedOnScreen && isMovingShape ? (
-				<div
-					aria-hidden="true"
-					className="pointer-events-none absolute rounded-[6px] ring-[1.5px] ring-user-bubble ring-inset"
-					data-slot="board-moving-outline"
-					style={{
-						left: selectedOnScreen.x - MOVING_OUTSET,
-						top: selectedOnScreen.y - MOVING_OUTSET,
-						width: selectedOnScreen.width + MOVING_OUTSET * 2,
-						height: selectedOnScreen.height + MOVING_OUTSET * 2,
-					}}
-				/>
-			) : null}
-			{selected && selectedOnScreen && !isMovingShape ? (
-				<BoardSelectionFrame
-					hasHandles={!editing}
-					onPressHandle={pressHandle}
-					rect={selectedOnScreen}
-				/>
+			{selected && selectedOnScreen ? (
+				isMovingShape ? (
+					<div
+						aria-hidden="true"
+						className="pointer-events-none absolute rounded-[6px] ring-[1.5px] ring-user-bubble ring-inset"
+						data-slot="board-moving-outline"
+						style={{
+							left: selectedOnScreen.x - MOVING_OUTSET,
+							top: selectedOnScreen.y - MOVING_OUTSET,
+							width: selectedOnScreen.width + MOVING_OUTSET * 2,
+							height: selectedOnScreen.height + MOVING_OUTSET * 2,
+						}}
+					/>
+				) : (
+					<BoardSelectionFrame
+						hasHandles={!editing}
+						onPressHandle={pressHandle}
+						rect={selectedOnScreen}
+					/>
+				)
 			) : null}
 			{selected?.kind === "shape" && selectedOnScreen && isStill ? (
 				<div
