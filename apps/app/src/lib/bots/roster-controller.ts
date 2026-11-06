@@ -1088,6 +1088,21 @@ export const createRosterController = (
 		await reads
 	}
 
+	const rereadFailedRosterIn = async (spaceRowId: string) => {
+		const read = rosterQuery(spaceRowId)
+		await Promise.all([
+			queryClient.resetQueries({ queryKey: read.queryKey, exact: true }),
+			queryClient.prefetchInfiniteQuery(read),
+		])
+	}
+
+	const retryShownRoster = async () => {
+		const { spaceRowId } = chosen()
+		if (spaceRowId !== null) {
+			await rereadFailedRosterIn(spaceRowId)
+		}
+	}
+
 	return {
 		getState: current,
 
@@ -1105,7 +1120,7 @@ export const createRosterController = (
 
 		load,
 
-		retryLoad: () => load(chosen()),
+		retryLoad: retryShownRoster,
 
 		reload,
 
