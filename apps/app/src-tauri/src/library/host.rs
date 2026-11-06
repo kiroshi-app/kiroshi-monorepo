@@ -116,6 +116,11 @@ pub enum NotShown {
 	NotAnImage {
 		node_kind: String,
 	},
+	NoFile,
+	#[serde(rename_all = "camelCase")]
+	NotAnImageFile {
+		file: String,
+	},
 	#[serde(rename_all = "camelCase")]
 	MissingFile {
 		file: String,
@@ -763,7 +768,7 @@ fn image_viewed(
 		return Err(not_shown(id, NotShown::NotAnImage { node_kind: node.kind }));
 	}
 	let Some(file) = node.file else {
-		return Err(not_shown(id, NotShown::MissingFile { file: String::new() }));
+		return Err(not_shown(id, NotShown::NoFile));
 	};
 	let item = match resolve(root, space_id, &file) {
 		Ok(item) => item,
@@ -776,7 +781,7 @@ fn image_viewed(
 		Err(error) => return Err(error.into()),
 	};
 	let AcceptedType::Image { mime_type } = item.accepted else {
-		return Err(not_shown(id, NotShown::MissingFile { file }));
+		return Err(not_shown(id, NotShown::NotAnImageFile { file }));
 	};
 	if item.bytes > MAX_SHOWN_IMAGE_BYTES {
 		let too_large = NotShown::TooLarge { bytes: item.bytes, limit: MAX_SHOWN_IMAGE_BYTES };

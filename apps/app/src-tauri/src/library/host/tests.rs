@@ -1977,6 +1977,8 @@ async fn a_board_view_shows_an_image_node_and_refuses_any_other_node_with_its_re
 	put_bytes(&root, "huge.png", &huge);
 	put(&root, "work", "secret.png", "not yours");
 	put(&root, "work", "elsewhere.png", "not yours");
+	put(&root, SPACE, "notes.md", "# Notes");
+	put(&root, SPACE, "other.canvas", r#"{"nodes":[],"edges":[]}"#);
 	let sticky = json!({
 		"id": "note", "type": "text", "text": "Hi", "x": 0, "y": 200, "width": 200, "height": 200,
 		"kiroshi": { "kind": "sticky", "z": "a1", "author": { "kind": "person", "id": "p1" } }
@@ -1989,6 +1991,8 @@ async fn a_board_view_shows_an_image_node_and_refuses_any_other_node_with_its_re
 			an_image_node("huge", "huge.png", "a3"),
 			an_image_node("escape", "../work/secret.png", "a4"),
 			an_image_node("elsewhere", "elsewhere.png", "a5"),
+			an_image_node("notes", "notes.md", "a6"),
+			an_image_node("nested", "other.canvas", "a7"),
 		],
 		"edges": []
 	});
@@ -2035,6 +2039,14 @@ async fn a_board_view_shows_an_image_node_and_refuses_any_other_node_with_its_re
 	assert_eq!(
 		refusal_of(view("elsewhere").await),
 		refused("elsewhere", json!({ "reason": "missingFile", "file": "elsewhere.png" }))
+	);
+	assert_eq!(
+		refusal_of(view("notes").await),
+		refused("notes", json!({ "reason": "notAnImageFile", "file": "notes.md" }))
+	);
+	assert_eq!(
+		refusal_of(view("nested").await),
+		refused("nested", json!({ "reason": "notAnImageFile", "file": "other.canvas" }))
 	);
 	assert_eq!(
 		refusal_of(view("nowhere").await),
