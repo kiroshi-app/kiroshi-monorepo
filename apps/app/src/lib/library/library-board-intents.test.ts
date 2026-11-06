@@ -276,13 +276,18 @@ describe("applyLibraryBoardIntent", () => {
 		)
 
 		expect(board.edges.pinned).toEqual({
-			...TIED_ARROWS_BOARD.edges.pinned,
-			toNode: undefined,
-			toSide: undefined,
+			fromNode: "start",
+			fromAnchor: { x: 0.25, y: 0 },
+			fromEnd: "none",
 			toPoint: { x: 400, y: 50 },
+			toEnd: "arrow",
+			label: "then",
+			labelPosition: 0.3,
+			bend: 40,
+			routing: "elbow",
+			headSize: "large",
 		})
 		expect(board.edges.centred?.toPoint).toEqual({ x: 500, y: 50 })
-		expect(board.edges.pinned).not.toHaveProperty("toSide")
 	})
 
 	it("loosens an anchor tie at its point on the board", () => {
