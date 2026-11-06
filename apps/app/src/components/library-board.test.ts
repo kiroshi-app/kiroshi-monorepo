@@ -9,6 +9,7 @@ import {
 	render,
 	screen,
 	waitFor,
+	within,
 } from "@testing-library/react"
 import { createElement } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -43,7 +44,11 @@ import { base64Of, bytesOf } from "@/lib/library/library-document-session"
 import { LIBRARY_DOCUMENT_PRESENCE_EVENT } from "@/lib/library/library-document-writers"
 import { applyLibraryUpdate } from "@/lib/library/library-document-writes"
 import { readLinkPreview } from "@/lib/library/library-link-preview"
-import { openLibraryDocument } from "@/lib/library/library-reads"
+import { libraryQueryKeys } from "@/lib/library/library-query-keys"
+import {
+	importLibraryUrl,
+	openLibraryDocument,
+} from "@/lib/library/library-reads"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 import { useTabKeys } from "@/lib/tabs/use-tab-keys"
 import type { WorkspaceTabs } from "@/lib/tabs/workspace-tabs"
@@ -59,6 +64,7 @@ vi.mock("@/lib/host", async (importOriginal) => ({
 vi.mock("@/lib/library/library-reads", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/lib/library/library-reads")>()),
 	openLibraryDocument: vi.fn(),
+	importLibraryUrl: vi.fn(),
 }))
 
 vi.mock("@/lib/library/library-link-preview", () => ({
@@ -214,19 +220,23 @@ type Importer = (files: readonly File[]) => Promise<LibraryItem[]>
 type BoardElementOptions = {
 	onBack?: () => void
 	importFiles?: Importer
+	name?: string
+	summary?: LibraryBoardSummary
 }
 
 const boardElement = ({
 	onBack = vi.fn(),
 	importFiles = NO_IMPORTS,
+	name = NAME,
+	summary = SUMMARY,
 }: BoardElementOptions = {}) =>
 	createElement(LibraryBoard, {
 		spaceId: SPACE_ID,
 		isJoined: false,
 		bots: BOTS,
-		name: NAME,
+		name,
 		title: "Roadmap",
-		summary: SUMMARY,
+		summary,
 		libraryItems: LIBRARY_ITEMS,
 		importFiles,
 		onBack,
@@ -265,12 +275,13 @@ const expectNeitherSkeletonNorEmptyHint = () => {
 
 const mountBoard = async (importFiles?: Importer) => {
 	const host = fakeHost()
-	const { wrapper } = createQueryTestWrapper()
+	const { wrapper, queryClient } = createQueryTestWrapper()
 	const mounted = render(boardElement({ importFiles }), { wrapper })
 	await screen.findByRole("option", { name: textNamed("First") })
 	return {
 		...host,
 		...mounted,
+		queryClient,
 		rerenderBoard: () => mounted.rerender(boardElement({ importFiles })),
 	}
 }
@@ -302,6 +313,7 @@ afterEach(() => {
 	vi.mocked(applyLibraryUpdate).mockReset()
 	vi.mocked(raiseReportedFailure).mockReset()
 	vi.mocked(readLinkPreview).mockReset()
+	vi.mocked(importLibraryUrl).mockReset()
 	vi.restoreAllMocks()
 })
 
@@ -592,19 +604,31 @@ const libraryTool = () =>
 		.getAllByRole("button")
 		.find((button) => button.dataset.tool === "library") as HTMLElement
 
-const dropFilesAt = (
-	files: File[],
-	at: { clientX: number; clientY: number },
-) => {
-	const drop = createEvent.drop(boardCanvas(), {
-		dataTransfer: { types: ["Files"], files },
-	})
+type ClientPoint = { clientX: number; clientY: number }
+
+const dropAt = (dataTransfer: object, at: ClientPoint) => {
+	const drop = createEvent.drop(boardCanvas(), { dataTransfer })
 	Object.defineProperties(drop, {
 		clientX: { value: at.clientX },
 		clientY: { value: at.clientY },
 	})
 	fireEvent(boardCanvas(), drop)
 }
+
+const dropFilesAt = (files: File[], at: ClientPoint) =>
+	dropAt({ types: ["Files"], files }, at)
+
+const dropUrlAt = (url: string, at: ClientPoint) =>
+	dropAt({ types: ["text/uri-list"], files: [], getData: () => url }, at)
+
+const DROP_POINT = { clientX: 300, clientY: 200 }
+
+type WordedReason = "unsupported" | "tooLarge" | "unwritable"
+
+const importFailureOf = (url: string, reason: WordedReason) => ({
+	title: common("library.failure.import.title", { name: url }),
+	description: common(`library.failure.import.${reason}`),
+})
 
 const openPicker = () => fireEvent.click(libraryTool())
 
@@ -740,6 +764,120 @@ describe("adding to a Library board", () => {
 			top: "135px",
 		})
 		expect(screen.getAllByRole("option")).toHaveLength(4)
+	})
+
+	it("imports a dropped image link into the Library and adds it centred on the drop point", async () => {
+		vi.mocked(importLibraryUrl).mockResolvedValue(
+			libraryItemOf("photo.png", "image"),
+		)
+		const { queryClient } = await mountBoard()
+		queryClient.setQueryData(libraryQueryKeys.itemsOf(SPACE_ID), [])
+
+		dropUrlAt(LINK, DROP_POINT)
+
+		const image = await waitFor(() => {
+			const placed = imageObject()
+			expect(placed).toBeInstanceOf(HTMLElement)
+			return placed
+		})
+		expect(importLibraryUrl).toHaveBeenCalledWith(SPACE_ID, LINK)
+		expect(placementOf(image)).toEqual({ left: "190px", top: "127px" })
+		expect(
+			queryClient.getQueryState(libraryQueryKeys.itemsOf(SPACE_ID))
+				?.isInvalidated,
+		).toBe(true)
+	})
+
+	it("adds a dropped page link as a link card at the drop point, titled once the preview answers", async () => {
+		vi.mocked(importLibraryUrl).mockRejectedValue({ kind: "notAnImage" })
+		vi.mocked(readLinkPreview).mockResolvedValue({
+			url: LINK,
+			title: "An article",
+		})
+		await mountBoard()
+
+		dropUrlAt(LINK, DROP_POINT)
+
+		const card = await screen.findByRole("option", { name: /An article/ })
+		expect(placementOf(card)).toEqual({ left: "150px", top: "111px" })
+		expect(readLinkPreview).toHaveBeenCalledWith(LINK)
+		expect(raiseReportedFailure).not.toHaveBeenCalled()
+	})
+
+	it("refuses a dropped link that is not http or https without asking the host", async () => {
+		const url = "ftp://example.com/photo.png"
+		await mountBoard()
+
+		dropUrlAt(url, DROP_POINT)
+
+		await waitFor(() =>
+			expect(raiseReportedFailure).toHaveBeenCalledWith(
+				importFailureOf(url, "unsupported"),
+				expect.anything(),
+			),
+		)
+		expect(importLibraryUrl).not.toHaveBeenCalled()
+		expect(screen.getAllByRole("option")).toHaveLength(2)
+	})
+
+	it.each([
+		["too large", { kind: "tooLarge", limit: 10 }, "tooLarge"],
+		[
+			"unwritable",
+			{ kind: "library", error: { kind: "unwritable" } },
+			"unwritable",
+		],
+	] as const)(
+		"adds nothing and words the failure when a dropped link is %s",
+		async (_case, refusal, reason) => {
+			vi.mocked(importLibraryUrl).mockRejectedValue(refusal)
+			await mountBoard()
+
+			dropUrlAt(LINK, DROP_POINT)
+
+			await waitFor(() =>
+				expect(raiseReportedFailure).toHaveBeenCalledWith(
+					importFailureOf(LINK, reason),
+					expect.anything(),
+				),
+			)
+			expect(screen.getAllByRole("option")).toHaveLength(2)
+		},
+	)
+
+	it("adds a Library item picked on the second of two boards to that board, at its point", async () => {
+		fakeHost()
+		const { wrapper } = createQueryTestWrapper()
+		render(boardElement(), { wrapper })
+		const second = render(
+			boardElement({
+				name: "Sketches.canvas",
+				summary: {
+					...SUMMARY,
+					bounds: { x: 100, y: 50, width: 500, height: 100 },
+				},
+			}),
+			{ wrapper },
+		)
+		const secondBoard = within(second.container)
+		await secondBoard.findByRole("option", { name: textNamed("First") })
+
+		fireEvent.click(
+			secondBoard
+				.getAllByRole("button")
+				.find((button) => button.dataset.tool === "library") as HTMLElement,
+		)
+		fireEvent.click(pickerTile("cover.png"))
+
+		const image = secondBoard.getByRole("option", {
+			name: common("board.object.kind.image"),
+		})
+		expect(placementOf(image)).toEqual({ left: "590px", top: "377px" })
+		expect(
+			screen.getAllByRole("option", {
+				name: common("board.object.kind.image"),
+			}),
+		).toHaveLength(1)
 	})
 
 	it("ends the connection when another dock tool is picked", async () => {
