@@ -1,5 +1,6 @@
 import { useMutation } from "@tanstack/react-query"
 
+import type { NoticeMessage } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import type { CancelOutcome } from "../bindings"
@@ -52,14 +53,30 @@ const stopFailureNoticeOf = (error: unknown) => {
 	}
 }
 
-export const useStopLibraryWriters = (spaceId: string) => {
-	const stopping = useMutation({
+const boardStopFailureNoticeOf = () => ({
+	title: i18n.t("common:library.failure.board.stopAll"),
+})
+
+type StopFailureNotice = (error: unknown) => NoticeMessage
+
+const useStopping = (spaceId: string, failureNotice: StopFailureNotice) =>
+	useMutation({
 		mutationFn: (run: StopRun) => stopOrFail(spaceId, run),
 		meta: {
-			failureNotice: stopFailureNoticeOf,
+			failureNotice,
 			raisedIn: "use-stop-library-writers",
 		},
 	})
+
+export const useStopLibraryBoardDrawers = (spaceId: string) => {
+	const stopping = useStopping(spaceId, boardStopFailureNoticeOf)
+	return {
+		stopAll: (name: string) => stopping.mutate({ name, writer: null }),
+	}
+}
+
+export const useStopLibraryWriters = (spaceId: string) => {
+	const stopping = useStopping(spaceId, stopFailureNoticeOf)
 	return {
 		stopAll: (name: string) => stopping.mutate({ name, writer: null }),
 		stop: (name: string, writer: StoppedWriter) =>

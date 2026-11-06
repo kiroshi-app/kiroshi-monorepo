@@ -1,4 +1,4 @@
-import type { LibraryItem } from "../bindings"
+import type { LibraryBoardPoint, LibraryItem } from "../bindings"
 import { invoke } from "../host/index"
 
 type NameRefusal = "alreadyExists" | "invalidName"
@@ -46,6 +46,22 @@ export const shareLibraryCaret = (
 		spaceId,
 		name,
 		at: caret === null ? null : { kind: "text", anchor: caret },
+	})
+
+export type LibraryBoardSeat = {
+	point: LibraryBoardPoint
+	nodeId: string | null
+}
+
+export const shareLibraryBoardSeat = (
+	spaceId: string,
+	name: string,
+	seat: LibraryBoardSeat | null,
+) =>
+	invoke<null>("library_share_presence", {
+		spaceId,
+		name,
+		at: seat === null ? null : { kind: "board", ...seat },
 	})
 
 const isRefusedAs = (reason: unknown, kind: NameRefusal) =>

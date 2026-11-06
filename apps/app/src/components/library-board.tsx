@@ -28,13 +28,14 @@ import {
 import type { LibraryBoardPresence } from "@/lib/library/library-board-presence"
 import { boardOriginOf } from "@/lib/library/library-boards"
 import { useLibraryBoardKeys } from "@/lib/library/use-library-board-keys"
+import { useLibraryBoardPointerShare } from "@/lib/library/use-library-board-pointer-share"
 import { useLibraryBoardPresence } from "@/lib/library/use-library-board-presence"
 import { useLibraryBoardSession } from "@/lib/library/use-library-board-session"
 import {
 	type LibraryUrlImport,
 	useLibraryUrlImport,
 } from "@/lib/library/use-library-imports"
-import { useStopLibraryWriters } from "@/lib/library/use-stop-library-writers"
+import { useStopLibraryBoardDrawers } from "@/lib/library/use-stop-library-writers"
 
 type LibraryBoardProps = {
 	spaceId: string
@@ -119,6 +120,7 @@ type LibraryBoardCanvasProps = {
 	summary: LibraryBoardSummary | undefined
 	library?: LibraryBoardShelf
 	presence?: LibraryBoardPresence
+	pointerShare?: ReturnType<typeof useLibraryBoardPointerShare>
 }
 
 export const LibraryBoardCanvas = ({
@@ -126,6 +128,7 @@ export const LibraryBoardCanvas = ({
 	summary,
 	library,
 	presence,
+	pointerShare,
 }: LibraryBoardCanvasProps) => {
 	const [movedViewport, setViewport] = useState<BoardViewport | null>(null)
 	const viewport =
@@ -150,6 +153,8 @@ export const LibraryBoardCanvas = ({
 			onLibraryItemDrop={additions.placeItem}
 			onLibraryItemPick={additions.placeItem}
 			onPaste={additions.paste}
+			onPointerMove={pointerShare?.movePointer}
+			onSelectionChange={pointerShare?.changeSelection}
 			onToolChange={pickTool}
 			onViewportChange={setViewport}
 			outlines={presence?.outlines}
@@ -180,7 +185,8 @@ export const LibraryBoard = ({
 }: LibraryBoardProps) => {
 	const board = useLibraryBoardSession(spaceId, name)
 	const presence = useLibraryBoardPresence({ spaceId, name, isJoined, bots })
-	const { stopAll } = useStopLibraryWriters(spaceId)
+	const pointerShare = useLibraryBoardPointerShare(spaceId, name)
+	const { stopAll } = useStopLibraryBoardDrawers(spaceId)
 	const importUrl = useLibraryUrlImport(spaceId)
 	const pickableItems = libraryItems.filter((item) => item.id !== name)
 
@@ -220,6 +226,7 @@ export const LibraryBoard = ({
 						importFiles,
 						importUrl,
 					}}
+					pointerShare={pointerShare}
 					presence={presence}
 					summary={summary}
 				/>
