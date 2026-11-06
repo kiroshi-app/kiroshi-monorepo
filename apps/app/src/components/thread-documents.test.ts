@@ -32,11 +32,12 @@ import { ThreadTurn } from "@/components/thread-turn"
 import { accountQueryKeys } from "@/lib/account/account-query-keys"
 import type { Bot, LibraryItem, LibraryWriter } from "@/lib/bindings"
 import type { HostEventCallback } from "@/lib/host/joined-hosts-listen"
+import { markdownWithIds } from "@/lib/library/block-ids-test-pattern"
 import {
 	boardStateOf,
 	TWO_NOTES_BOARD,
 } from "@/lib/library/library-board-fixtures"
-import { base64Of } from "@/lib/library/library-document-session"
+import { base64Of, bytesOf } from "@/lib/library/library-document-session"
 import { LIBRARY_DOCUMENT_PRESENCE_EVENT } from "@/lib/library/library-document-writers"
 import type { ThreadLibraryItem } from "@/lib/library/use-followed-library-document"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
@@ -969,5 +970,106 @@ describe("sharing the own pointer and selection on a board opened beside a conve
 		await waitPointerInterval(200)
 
 		expect(sharedSeats()).toEqual([seatAt(10, 20), unseatedOn(LAUNCH_BOARD)])
+	})
+})
+
+const NOTES = "notes.txt"
+
+const renderDocumentPanel = (name: string) =>
+	render(
+		createElement(ThreadDocumentPanel, {
+			spaceId: SPACE_ID,
+			isJoined: false,
+			name,
+			onClose: () => undefined,
+		}),
+		{ wrapper: createQueryTestWrapper().wrapper },
+	)
+
+const typeInPanelBody = async (text: string) => {
+	const body = await screen.findByRole("group", {
+		name: common("library.editor.body"),
+	})
+	const block = body.querySelector<HTMLElement>(
+		"[data-slot='library-document-block']",
+	)
+	await act(async () => {
+		block?.querySelector<HTMLElement>("[tabindex]")?.focus()
+	})
+	const field = await waitFor(() => {
+		const opened = block?.querySelector<HTMLElement>(
+			"[data-slot='library-document-block-field']",
+		)
+		expect(document.activeElement).toBe(opened)
+		return opened as HTMLElement
+	})
+	await act(async () => {
+		document.getSelection()?.selectAllChildren(field)
+		field.dispatchEvent(
+			Object.assign(
+				new InputEvent("beforeinput", {
+					inputType: "insertText",
+					data: text,
+					bubbles: true,
+					cancelable: true,
+				}),
+				{ getTargetRanges: () => [] },
+			),
+		)
+	})
+}
+
+type SentUpdate = LibraryCall & { update: string }
+
+const DRAFT_OPENING = openedStateOf(NOTES, "Draft").update
+
+const textSavedTo = (name: string) => {
+	const doc = new Y.Doc()
+	Y.applyUpdate(doc, bytesOf(DRAFT_OPENING))
+	const sent = libraryHost.invoked
+		.filter(([command]) => command === "library_apply_update")
+		.map(([, args]) => args as SentUpdate)
+	for (const { update } of sent.filter((call) => call.name === name)) {
+		Y.applyUpdate(doc, bytesOf(update))
+	}
+	return doc.getText("markdown").toString()
+}
+
+describe("the body of a document saved from beside a conversation", () => {
+	beforeEach(() => {
+		libraryHost.answers.set("library_list", () => [
+			{ ...planItem, name: NOTES, path: `/library/${NOTES}` },
+			planItem,
+		])
+		libraryHost.answers.set("library_open_document", ({ name }) => ({
+			name,
+			update: DRAFT_OPENING,
+		}))
+		libraryHost.answers.set("library_apply_update", () => null)
+		libraryHost.answers.set("library_share_presence", () => null)
+	})
+
+	afterEach(() => {
+		cleanup()
+		libraryHost.answers.clear()
+		libraryHost.invoked.length = 0
+	})
+
+	it("saves a .txt document with no block id marker", async () => {
+		renderDocumentPanel(NOTES)
+
+		await typeInPanelBody("Rollout")
+
+		await waitFor(() => expect(textSavedTo(NOTES)).toBe("Rollout"))
+	})
+
+	it("keeps writing the block id markers of a .md document", async () => {
+		renderDocumentPanel(PLAN)
+
+		await typeInPanelBody("Rollout")
+
+		await waitFor(() =>
+			expect(textSavedTo(PLAN)).toMatch(markdownWithIds("Rollout ^ID")),
+		)
 	})
 })

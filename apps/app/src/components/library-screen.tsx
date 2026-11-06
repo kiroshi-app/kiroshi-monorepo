@@ -29,6 +29,7 @@ import type { Bot } from "@/lib/conversations/store-contract"
 import { failureReporterIn } from "@/lib/failure-report"
 import { storedImageSourceOf } from "@/lib/library/library-image-source"
 import {
+	documentFormatOf,
 	documentNamedAs,
 	matchesQuery,
 	shownTitleOf,
@@ -513,6 +514,7 @@ export const LibraryScreen = ({
 			<LibraryDocumentEditor
 				body={document.markdown}
 				detail={openedDocument.detail}
+				format={documentFormatOf(openedDocument.name)}
 				isActionShown={(_subject, action) =>
 					isActionShownOn(openedDocument, action)
 				}

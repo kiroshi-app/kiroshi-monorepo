@@ -512,6 +512,8 @@ const IMAGE = libraryItemOf("diagram.png", "image")
 
 const DOCUMENT = libraryItemOf("notes.txt", "document")
 
+const MARKDOWN_DOCUMENT = libraryItemOf("notes.md", "document")
+
 const renderLibraryScreen = async (isJoined: boolean) => {
 	const { container } = render(
 		createElement(LibraryScreenHoldingOpening, {
@@ -765,11 +767,11 @@ describe("a new Library document", () => {
 
 describe("an opened Library document", () => {
 	it("shows an edit made by one client in another client of the same host", async () => {
-		harness.libraryItems = [DOCUMENT]
+		harness.libraryItems = [MARKDOWN_DOCUMENT]
 		const onHost = await renderLibraryScreen(false)
 		const member = await renderLibraryScreen(true)
-		await openLibraryItem(DOCUMENT, onHost)
-		await openLibraryItem(DOCUMENT, member)
+		await openLibraryItem(MARKDOWN_DOCUMENT, onHost)
+		await openLibraryItem(MARKDOWN_DOCUMENT, member)
 		await waitFor(() => expect(textOf(member)).toBe(HOSTED_CONTENT))
 
 		await typeInto(bodyOf(onHost), "Notes and actions")
@@ -777,7 +779,7 @@ describe("an opened Library document", () => {
 		await waitFor(() => expect(textOf(member)).toBe("Notes and actions"), {
 			timeout: 1000,
 		})
-		expect(fakeLibraryHost.markdownOf(DOCUMENT.name)).toMatch(
+		expect(fakeLibraryHost.markdownOf(MARKDOWN_DOCUMENT.name)).toMatch(
 			markdownWithIds("Notes and actions ^ID"),
 		)
 		expect(textOf(onHost)).toBe("Notes and actions")
@@ -842,10 +844,10 @@ describe("an opened Library document", () => {
 	})
 
 	it("holds on the host the markdown the editor shows through typing, paste, a task, an agent write and a reopen", async () => {
-		harness.libraryItems = [DOCUMENT]
-		fakeLibraryHost.writeElsewhere(DOCUMENT.name, TASK_NOTES)
+		harness.libraryItems = [MARKDOWN_DOCUMENT]
+		fakeLibraryHost.writeElsewhere(MARKDOWN_DOCUMENT.name, TASK_NOTES)
 		const shown = await renderLibraryScreen(false)
-		await openLibraryItem(DOCUMENT, shown)
+		await openLibraryItem(MARKDOWN_DOCUMENT, shown)
 		await waitFor(() =>
 			expect(shownTextsOf(shown)).toEqual(["Notes", "Ship the notes"]),
 		)
@@ -854,7 +856,7 @@ describe("an opened Library document", () => {
 			waitFor(
 				() => {
 					expect(shownTextsOf(shown)).toEqual(texts)
-					expect(fakeLibraryHost.markdownOf(DOCUMENT.name)).toMatch(
+					expect(fakeLibraryHost.markdownOf(MARKDOWN_DOCUMENT.name)).toMatch(
 						markdownWithIds(markdown),
 					)
 				},
@@ -900,8 +902,8 @@ describe("an opened Library document", () => {
 
 		const written = `${ticked}${AGENT_LINE}`
 		fakeLibraryHost.writeElsewhere(
-			DOCUMENT.name,
-			`${fakeLibraryHost.markdownOf(DOCUMENT.name)}${AGENT_LINE}`,
+			MARKDOWN_DOCUMENT.name,
+			`${fakeLibraryHost.markdownOf(MARKDOWN_DOCUMENT.name)}${AGENT_LINE}`,
 		)
 		await holdsMarkdown(written, [
 			...paragraphs,
@@ -915,7 +917,7 @@ describe("an opened Library document", () => {
 		await press(
 			shown.getByRole("button", { name: common("library.document.back") }),
 		)
-		await openLibraryItem(DOCUMENT, shown)
+		await openLibraryItem(MARKDOWN_DOCUMENT, shown)
 		await holdsMarkdown(written, [
 			...paragraphs,
 			"Ship the notes",
