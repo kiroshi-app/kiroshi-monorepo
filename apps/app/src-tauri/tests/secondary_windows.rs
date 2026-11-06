@@ -408,13 +408,18 @@ fn the_drag_ghost_shows_moves_and_hides_then_stays_for_the_next_drag() {
 		.build()
 		.expect("the drag ghost builds");
 	let support = Ok(json!({ "supported": GHOST_SUPPORTED }));
+	let shown_where_the_mock_has_no_monitor =
+		if GHOST_SUPPORTED { Err(json!("cursorUnreadable")) } else { support.clone() };
 	let shown = json!({
 		"at": { "x": 400, "y": 300 },
 		"size": { "width": 320, "height": 200 },
 		"tab": { "tabId": "t1", "href": PAGE, "title": "Conversation" },
 	});
 
-	assert_eq!(call(&main, "drag_ghost_show", shown), support);
+	assert_eq!(
+		call(&main, "drag_ghost_show", shown).map_err(|refusal| refusal["kind"].clone()),
+		shown_where_the_mock_has_no_monitor
+	);
 	assert_eq!(call(&main, "drag_ghost_move", json!({ "at": { "x": 410, "y": 305 } })), support);
 	assert_eq!(call(&main, "drag_ghost_hide", json!({})), support);
 	assert!(app.get_webview_window(DRAG_GHOST).is_some(), "the drag ghost was not kept");
