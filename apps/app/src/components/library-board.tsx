@@ -26,7 +26,6 @@ import {
 	linkCardOf,
 } from "@/lib/library/library-board-objects"
 import type { LibraryBoardPresence } from "@/lib/library/library-board-presence"
-import { boardOriginOf } from "@/lib/library/library-boards"
 import { useLibraryBoardKeys } from "@/lib/library/use-library-board-keys"
 import { useLibraryBoardPointerShare } from "@/lib/library/use-library-board-pointer-share"
 import { useLibraryBoardPresence } from "@/lib/library/use-library-board-presence"
@@ -88,13 +87,6 @@ const renderObjectFrom =
 		}
 	}
 
-const openingViewportOf = (summary: LibraryBoardSummary): BoardViewport => ({
-	offset: boardOriginOf(summary),
-	zoom: 1,
-})
-
-const UNPLACED_VIEWPORT: BoardViewport = { offset: { x: 0, y: 0 }, zoom: 1 }
-
 type LibraryBoardCanvasProps = {
 	board: ReturnType<typeof useLibraryBoardSession>
 	summary: LibraryBoardSummary | undefined
@@ -110,9 +102,7 @@ export const LibraryBoardCanvas = ({
 	presence,
 	pointerShare,
 }: LibraryBoardCanvasProps) => {
-	const [movedViewport, setViewport] = useState<BoardViewport | null>(null)
-	const viewport =
-		movedViewport ?? (summary ? openingViewportOf(summary) : UNPLACED_VIEWPORT)
+	const [viewport, setViewport] = useState<BoardViewport | null>(null)
 	const { tool, pickTool } = useLibraryBoardKeys(board)
 	const additions = libraryBoardAdditionsOf({
 		board,
