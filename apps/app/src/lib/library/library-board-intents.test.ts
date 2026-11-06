@@ -259,6 +259,34 @@ describe("describeLibraryBoardLink", () => {
 		})
 	})
 
+	it("writes the page description on a link card", () => {
+		const { doc } = placed({ kind: "linkCard", url: "https://example.com" })
+
+		describeLibraryBoardLink(
+			doc,
+			"added",
+			{ title: "Example", description: "An example page." },
+			LOCAL,
+		)
+
+		expect(readBoard(doc).nodes.added).toMatchObject({
+			description: "An example page.",
+		})
+	})
+
+	it("leaves the description unset when the page has none", () => {
+		const { doc } = placed({ kind: "linkCard", url: "https://example.com" })
+
+		describeLibraryBoardLink(
+			doc,
+			"added",
+			{ title: "Example", description: "" },
+			LOCAL,
+		)
+
+		expect(readBoard(doc).nodes.added).not.toHaveProperty("description")
+	})
+
 	it("keeps the link card with its URL alone on a bare preview", () => {
 		const { doc } = placed({ kind: "linkCard", url: "https://example.com" })
 
@@ -268,6 +296,7 @@ describe("describeLibraryBoardLink", () => {
 		expect(link).toMatchObject({ url: "https://example.com" })
 		expect(link).not.toHaveProperty("title")
 		expect(link).not.toHaveProperty("preview")
+		expect(link).not.toHaveProperty("description")
 	})
 
 	it("leaves a node that is no link card unchanged", () => {

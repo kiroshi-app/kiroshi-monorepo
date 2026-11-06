@@ -19,6 +19,7 @@ type LibraryLinkPreview = {
 	site?: string
 	image?: string
 	alt?: string
+	description?: string
 }
 
 type LibraryWebPageEditorProps = {

@@ -37,6 +37,7 @@ export type LibraryBoardPlacement = {
 export type LibraryBoardLinkDescription = {
 	title: string
 	image?: string
+	description?: string
 }
 
 type Link = Pick<
@@ -299,10 +300,11 @@ export const placeLibraryBoardObject = (
 
 const describeLink = (
 	link: SharedElement,
-	{ title, image }: LibraryBoardLinkDescription,
+	{ title, image, description }: LibraryBoardLinkDescription,
 ) => {
 	if (title) link.set("title", title)
 	if (image) link.set("preview", image)
+	if (description) link.set("description", description)
 }
 
 export const describeLibraryBoardLink = (
