@@ -752,7 +752,7 @@ const common = {
 			resized: "Redimensionné à {{width}} sur {{height}}",
 		},
 		connectorFlyout: {
-			label: "Type de lien",
+			label: "Type de flèche",
 			routing: {
 				straight: "Droit",
 				elbow: "Coudé",
@@ -784,7 +784,7 @@ const common = {
 				sticky: "Note autocollante",
 				shape: "Forme",
 				text: "Texte",
-				connector: "Liaison",
+				connector: "Flèche",
 				section: "Section",
 				image: "Image",
 				library: "Bibliothèque",

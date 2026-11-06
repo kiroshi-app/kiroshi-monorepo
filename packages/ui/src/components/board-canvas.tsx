@@ -39,10 +39,17 @@ import {
 	anchorOf,
 	arrowheadPathData,
 	BOARD_SIDES,
+	type BoardConnectorEnd,
+	type BoardObstacles,
 	type BoardRoute,
+	crossedRects,
+	exactPointOf,
 	looseEnd,
+	pointAlong,
 	routeConnector,
+	routeConnectors,
 	routePathData,
+	sectionTitleBox,
 } from "@workspace/ui/components/board-connector-route"
 import {
 	arrowDirectionOf,
@@ -56,6 +63,7 @@ import {
 	toScreenRect,
 } from "@workspace/ui/components/board-selection"
 import type {
+	BoardArrowHeadSize,
 	BoardConnector,
 	BoardIntent,
 	BoardItem,
@@ -530,12 +538,23 @@ type ShownConnector = {
 	connector: BoardConnector
 	bounds: BoardRect
 	route: BoardRoute
+	passesUnder: readonly BoardRect[]
 }
 
 const NO_HOVER: BoardHover = { id: null, anchor: null }
-const CONNECTOR_STROKE = 2
+const CONNECTOR_STROKE = 1.5
+const CONNECTOR_HALO_STROKE = 4.5
 const CONNECTOR_HIT_STROKE = 24
 const SOURCE_DOT_RADIUS = 4
+const END_HANDLE_RADIUS = 4
+const MIDDLE_HANDLE_RADIUS = 5.5
+const LABEL_MIDDLE = 0.5
+const MASK_MARGIN = 32
+const CROSSABLE_KINDS: ReadonlySet<BoardItemKind> = new Set([
+	"sticky",
+	"shape",
+	"text",
+])
 const ANCHOR_PLACE: Record<BoardSide, string> = {
 	top: "top-0 left-1/2",
 	right: "top-1/2 left-full",
@@ -543,20 +562,39 @@ const ANCHOR_PLACE: Record<BoardSide, string> = {
 	left: "top-1/2 left-0",
 }
 
-const toScreenPoint = (point: BoardPoint, viewport: BoardViewport) => ({
-	x: viewport.offset.x + point.x * viewport.zoom,
-	y: viewport.offset.y + point.y * viewport.zoom,
-})
-
 const toBoardPoint = (point: BoardPoint, viewport: BoardViewport) => ({
 	x: (point.x - viewport.offset.x) / viewport.zoom,
 	y: (point.y - viewport.offset.y) / viewport.zoom,
 })
 
-const onScreen = (route: BoardRoute, viewport: BoardViewport): BoardRoute => ({
-	points: route.points.map((point) => toScreenPoint(point, viewport)),
-	arrow: route.arrow,
-})
+const boardTransformOf = ({ offset, zoom }: BoardViewport) =>
+	`translate(${offset.x} ${offset.y}) scale(${zoom})`
+
+const obstaclesOf = (
+	items: readonly BoardItem[],
+	boundsOf: (item: BoardItem) => BoardRect,
+): BoardObstacles => {
+	const sections = items.filter((item) => item.kind === "section")
+	return {
+		blocks: items.filter((item) => item.kind !== "section").map(boundsOf),
+		titles: sections.map((item) => sectionTitleBox(boundsOf(item), item.text)),
+		frames: sections.map(boundsOf),
+	}
+}
+
+const maskAreaOf = ({ points, control }: BoardRoute): BoardRect => {
+	const corners = control ? [...points, control] : points
+	const xs = corners.map(({ x }) => x)
+	const ys = corners.map(({ y }) => y)
+	const x = Math.min(...xs) - MASK_MARGIN
+	const y = Math.min(...ys) - MASK_MARGIN
+	return {
+		x,
+		y,
+		width: Math.max(...xs) + MASK_MARGIN - x,
+		height: Math.max(...ys) + MASK_MARGIN - y,
+	}
+}
 
 const hoverOf = (element: Element | null): BoardHover => {
 	const anchor = element?.closest<HTMLElement>('[data-slot="board-anchor"]')
@@ -788,35 +826,127 @@ const pastedOf = (clipboard: DataTransfer): BoardPaste | undefined => {
 
 const isBoardTarget = (target: EventTarget, board: EventTarget) =>
 	target === board || (target as HTMLElement).dataset.slot === "board-object"
+type BoardConnectorLook = "rest" | "selected" | "draft"
+
 type BoardConnectorLineProps = {
 	route: BoardRoute
-	isAccent: boolean
+	look: BoardConnectorLook
+	headSize?: BoardArrowHeadSize
+	passesUnder?: readonly BoardRect[]
 	slot: "board-connector" | "board-connector-draft"
 }
 
 const BoardConnectorLine = ({
 	route,
-	isAccent,
+	look,
+	headSize,
+	passesUnder = [],
 	slot,
 }: BoardConnectorLineProps) => {
+	const maskId = useId()
+	const maskArea = maskAreaOf(route)
+	const isMasked = passesUnder.length > 0
+	const path = routePathData(route)
 	const tip = route.points.at(-1)
+	const head = tip ? arrowheadPathData(tip, route.arrow, headSize) : null
+	const isSelected = look === "selected"
+	const middle = pointAlong(route, LABEL_MIDDLE)
 	return (
 		<g
-			className={isAccent ? "stroke-user-bubble" : "stroke-board-shape-border"}
+			className={
+				look === "rest" ? "stroke-board-shape-border" : "stroke-user-bubble"
+			}
 			data-slot={slot}
 			fill="none"
 			strokeLinecap="round"
 			strokeLinejoin="round"
 			strokeWidth={CONNECTOR_STROKE}
 		>
-			<path d={routePathData(route.points)} data-slot="board-connector-path" />
-			{tip ? (
-				<path
-					d={arrowheadPathData(tip, route.arrow)}
-					data-slot="board-connector-arrowhead"
-				/>
+			{isMasked ? (
+				<mask
+					data-slot="board-connector-mask"
+					id={maskId}
+					maskUnits="userSpaceOnUse"
+					{...maskArea}
+				>
+					<rect fill="white" stroke="none" {...maskArea} />
+					{passesUnder.map((rect) => (
+						<rect
+							data-slot="board-connector-mask-hole"
+							fill="black"
+							key={`${rect.x} ${rect.y} ${rect.width} ${rect.height}`}
+							stroke="none"
+							{...rect}
+						/>
+					))}
+				</mask>
+			) : null}
+			<g mask={isMasked ? `url(#${maskId})` : undefined}>
+				{isSelected ? (
+					<g
+						className="stroke-board-surface"
+						data-slot="board-connector-halo"
+						strokeWidth={CONNECTOR_HALO_STROKE}
+					>
+						<path d={path} />
+						{head ? <path d={head} /> : null}
+					</g>
+				) : null}
+				<path d={path} data-slot="board-connector-path" />
+				{head ? <path d={head} data-slot="board-connector-arrowhead" /> : null}
+			</g>
+			{isSelected ? (
+				<>
+					{[route.points[0], tip].map((end, index) =>
+						end ? (
+							<circle
+								className="fill-board-surface"
+								cx={end.x}
+								cy={end.y}
+								data-slot="board-connector-end-handle"
+								key={index === 0 ? "start" : "end"}
+								r={END_HANDLE_RADIUS}
+							/>
+						) : null,
+					)}
+					<circle
+						className="fill-user-bubble stroke-none"
+						cx={middle.x}
+						cy={middle.y}
+						data-slot="board-connector-middle-handle"
+						r={MIDDLE_HANDLE_RADIUS}
+					/>
+				</>
 			) : null}
 		</g>
+	)
+}
+
+type BoardConnectorLabelProps = {
+	route: BoardRoute
+	labelPosition?: number
+	isSelected: boolean
+	text: string
+}
+
+const BoardConnectorLabel = ({
+	route,
+	labelPosition = LABEL_MIDDLE,
+	isSelected,
+	text,
+}: BoardConnectorLabelProps) => {
+	const at = pointAlong(route, labelPosition)
+	return (
+		<p
+			className={cn(
+				"absolute w-max max-w-60 -translate-x-1/2 -translate-y-1/2 rounded-[4px] bg-board-surface p-1 text-center font-medium text-board-foreground text-compact leading-4 wrap-break-word",
+				isSelected && "ring-[1.5px] ring-user-bubble",
+			)}
+			data-slot="board-connector-label"
+			style={{ left: at.x, top: at.y }}
+		>
+			{text}
+		</p>
 	)
 }
 
@@ -954,23 +1084,82 @@ const ReadyBoardCanvas = ({
 	const liveBounds = (item: BoardItem) =>
 		gesture?.id === item.id ? gesture.rect : itemBounds(item)
 
-	const routeOf = (connector: BoardConnector) => {
-		const from = itemsById.get(connector.from)
-		const to = itemsById.get(connector.to)
-		if (!from || !to) return null
-		return routeConnector(
-			{ rect: liveBounds(from), side: connector.fromSide },
-			{ rect: liveBounds(to), side: connector.toSide },
-			connector.routing,
-		)
+	const obstacles = obstaclesOf([...itemsById.values()], liveBounds)
+
+	const endOf = (
+		id: string,
+		side?: BoardSide,
+		anchor?: BoardPoint,
+		point?: BoardPoint,
+	): BoardConnectorEnd | null => {
+		if (point) return { rect: { ...point, width: 0, height: 0 }, point }
+		const item = itemsById.get(id)
+		if (!item) return null
+		const rect = liveBounds(item)
+		return { rect, side, point: anchor && exactPointOf(rect, anchor) }
 	}
+
+	const arrows = view.objects.flatMap((connector) => {
+		if (connector.kind !== "connector") return []
+		const source = endOf(
+			connector.from,
+			connector.fromSide,
+			connector.fromAnchor,
+			connector.fromPoint,
+		)
+		const target = endOf(
+			connector.to,
+			connector.toSide,
+			connector.toAnchor,
+			connector.toPoint,
+		)
+		return source && target
+			? [
+					{
+						id: connector.id,
+						source,
+						target,
+						routing: connector.routing,
+						bend: connector.bend,
+					},
+				]
+			: []
+	})
+	const routes = new Map(
+		routeConnectors(arrows, obstacles).map((route, index) => [
+			arrows[index].id,
+			route,
+		]),
+	)
+
+	const passesUnderOf = (connector: BoardConnector, route: BoardRoute) =>
+		connector.routing === "straight"
+			? crossedRects(
+					route,
+					[...itemsById.values()]
+						.filter(
+							(item) =>
+								CROSSABLE_KINDS.has(item.kind) &&
+								item.id !== connector.from &&
+								item.id !== connector.to,
+						)
+						.map(liveBounds),
+				)
+			: []
 
 	const shownConnectors = mounted.flatMap(
 		({ object, bounds }): ShownConnector[] => {
 			if (object.kind !== "connector") return []
-			const route = routeOf(object)
+			const route = routes.get(object.id)
 			return route
-				? [{ connector: object, bounds, route: onScreen(route, viewport) }]
+				? [
+						{
+							connector: object,
+							bounds,
+							route,
+							passesUnder: passesUnderOf(object, route),
+						},
+					]
 				: []
 		},
 	)
@@ -984,7 +1173,10 @@ const ReadyBoardCanvas = ({
 			target && targetItem
 				? { rect: liveBounds(targetItem), side: target.side }
 				: looseEnd(pointer, anchorOf(sourceEnd))
-		return onScreen(routeConnector(sourceEnd, targetEnd, routing), viewport)
+		return {
+			route: routeConnector(sourceEnd, targetEnd, routing, { obstacles }),
+			source: anchorOf(sourceEnd),
+		}
 	}
 
 	const nameOf = (item: BoardItem) => {
@@ -1403,6 +1595,10 @@ const ReadyBoardCanvas = ({
 	const hoveredItem =
 		isConnecting && hover.id ? itemsById.get(hover.id) : undefined
 	const draftRoute = draft ? draftRouteOf(draft) : null
+	const boardTransform = boardTransformOf(viewport)
+	const labelledConnectors = shownConnectors.filter(
+		({ connector }) => connector.text !== "",
+	)
 
 	return (
 		<div
@@ -1441,18 +1637,21 @@ const ReadyBoardCanvas = ({
 					className="pointer-events-none absolute inset-0 size-full overflow-visible"
 					data-slot="board-connector-hits"
 				>
-					{shownConnectors.map(({ connector, route }) => (
-						<path
-							className="pointer-events-auto cursor-pointer"
-							d={routePathData(route.points)}
-							data-connector-id={connector.id}
-							fill="none"
-							key={connector.id}
-							onPointerDown={pressConnector(connector)}
-							stroke="transparent"
-							strokeWidth={CONNECTOR_HIT_STROKE}
-						/>
-					))}
+					<g transform={boardTransform}>
+						{shownConnectors.map(({ connector, route }) => (
+							<path
+								className="pointer-events-auto cursor-pointer"
+								d={routePathData(route)}
+								data-connector-id={connector.id}
+								fill="none"
+								key={connector.id}
+								onPointerDown={pressConnector(connector)}
+								stroke="transparent"
+								strokeWidth={CONNECTOR_HIT_STROKE}
+								vectorEffect="non-scaling-stroke"
+							/>
+						))}
+					</g>
 				</svg>
 			) : null}
 			<div
@@ -1544,32 +1743,56 @@ const ReadyBoardCanvas = ({
 					className="pointer-events-none absolute inset-0 size-full overflow-visible"
 					data-slot="board-connectors"
 				>
-					{shownConnectors.map(({ connector, route }) => (
-						<BoardConnectorLine
-							isAccent={connector.id === selectedId}
+					<g transform={boardTransform}>
+						{shownConnectors.map(({ connector, route, passesUnder }) => (
+							<BoardConnectorLine
+								headSize={connector.headSize}
+								passesUnder={passesUnder}
+								key={connector.id}
+								look={connector.id === selectedId ? "selected" : "rest"}
+								route={route}
+								slot="board-connector"
+							/>
+						))}
+						{draftRoute ? (
+							<>
+								<BoardConnectorLine
+									look="draft"
+									route={draftRoute.route}
+									slot="board-connector-draft"
+								/>
+								<circle
+									className="fill-board-surface stroke-user-bubble"
+									cx={draftRoute.source.x}
+									cy={draftRoute.source.y}
+									data-slot="board-connector-source"
+									r={SOURCE_DOT_RADIUS}
+									strokeWidth={CONNECTOR_STROKE}
+								/>
+							</>
+						) : null}
+					</g>
+				</svg>
+			) : null}
+			{labelledConnectors.length > 0 ? (
+				<div
+					aria-hidden="true"
+					className="pointer-events-none absolute top-0 left-0 origin-top-left"
+					data-slot="board-connector-labels"
+					style={{
+						transform: `translate(${viewport.offset.x}px, ${viewport.offset.y}px) scale(${viewport.zoom})`,
+					}}
+				>
+					{labelledConnectors.map(({ connector, route }) => (
+						<BoardConnectorLabel
+							isSelected={connector.id === selectedId}
 							key={connector.id}
+							labelPosition={connector.labelPosition}
 							route={route}
-							slot="board-connector"
+							text={connector.text}
 						/>
 					))}
-					{draftRoute ? (
-						<>
-							<BoardConnectorLine
-								isAccent
-								route={draftRoute}
-								slot="board-connector-draft"
-							/>
-							<circle
-								className="fill-board-surface stroke-user-bubble"
-								cx={draftRoute.points[0].x}
-								cy={draftRoute.points[0].y}
-								data-slot="board-connector-source"
-								r={SOURCE_DOT_RADIUS}
-								strokeWidth={CONNECTOR_STROKE}
-							/>
-						</>
-					) : null}
-				</svg>
+				</div>
 			) : null}
 			{hoveredItem && hoveredItem.id !== draft?.from.id ? (
 				<BoardAnchorFrame

@@ -719,7 +719,7 @@ const common = {
 			resized: "Resized to {{width}} by {{height}}",
 		},
 		connectorFlyout: {
-			label: "Connector type",
+			label: "Arrow type",
 			routing: {
 				straight: "Straight",
 				elbow: "Elbow",
@@ -751,7 +751,7 @@ const common = {
 				sticky: "Sticky note",
 				shape: "Shape",
 				text: "Text",
-				connector: "Connector",
+				connector: "Arrow",
 				section: "Section",
 				image: "Image",
 				library: "Library",

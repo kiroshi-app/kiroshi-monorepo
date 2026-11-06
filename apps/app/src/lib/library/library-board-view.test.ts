@@ -66,16 +66,17 @@ describe("libraryBoardViewOf", () => {
 		expect(objectNamed(id)).toMatchObject({ kind, text })
 	})
 
-	it("maps an edge to a connector, its missing sides facing each other", () => {
-		expect(objectNamed("leads")).toMatchObject({
+	it("maps an edge to a connector and leaves its missing sides missing", () => {
+		const leads = objectNamed("leads")
+		expect(leads).toMatchObject({
 			kind: "connector",
 			from: "title",
-			fromSide: "right",
 			to: "idea",
-			toSide: "left",
 			routing: "elbow",
 			text: "leads to",
 		})
+		expect(leads).not.toHaveProperty("fromSide", expect.anything())
+		expect(leads).not.toHaveProperty("toSide", expect.anything())
 		expect(objectNamed("sided")).toMatchObject({
 			fromSide: "bottom",
 			toSide: "top",
@@ -83,7 +84,36 @@ describe("libraryBoardViewOf", () => {
 		})
 	})
 
-	it("leaves an arrow with a free end out of the view and keeps every other item", () => {
+	it("carries the anchors, the bend, the label position and the head size unchanged", () => {
+		const shaped = {
+			fromNode: "title",
+			fromAnchor: { x: 0.25, y: 0.75 },
+			fromEnd: "none",
+			toNode: "idea",
+			toAnchor: { x: 1, y: 0.5 },
+			toEnd: "arrow",
+			routing: "straight",
+			bend: -40,
+			labelPosition: 0.3,
+			headSize: "large",
+		} as const
+		const view = libraryBoardViewOf({
+			...EVERY_KIND_BOARD,
+			edges: { shaped },
+		})
+
+		expect(view.objects.find(({ id }) => id === "shaped")).toMatchObject({
+			from: "title",
+			fromAnchor: { x: 0.25, y: 0.75 },
+			to: "idea",
+			toAnchor: { x: 1, y: 0.5 },
+			bend: -40,
+			labelPosition: 0.3,
+			headSize: "large",
+		})
+	})
+
+	it("maps a free end to its board point", () => {
 		const loose = {
 			fromNode: "title",
 			fromEnd: "none",
@@ -91,13 +121,34 @@ describe("libraryBoardViewOf", () => {
 			toEnd: "arrow",
 			routing: "straight",
 		} as const
-		const board = {
+		const view = libraryBoardViewOf({
 			...EVERY_KIND_BOARD,
 			edges: { ...EVERY_KIND_BOARD.edges, loose },
-		}
+		})
 
-		expect(libraryBoardViewOf(board)).toEqual(
-			libraryBoardViewOf(EVERY_KIND_BOARD),
+		expect(view.objects.find(({ id }) => id === "loose")).toMatchObject({
+			kind: "connector",
+			from: "title",
+			toPoint: { x: 640, y: -80 },
+			routing: "straight",
+		})
+		expect(view.objects).toHaveLength(
+			libraryBoardViewOf(EVERY_KIND_BOARD).objects.length + 1,
 		)
+	})
+
+	it("leaves out an arrow whose end has neither a node nor a point", () => {
+		const broken = {
+			fromNode: "title",
+			fromEnd: "none",
+			toEnd: "arrow",
+			routing: "straight",
+		} as const
+		expect(
+			libraryBoardViewOf({
+				...EVERY_KIND_BOARD,
+				edges: { ...EVERY_KIND_BOARD.edges, broken },
+			}),
+		).toEqual(libraryBoardViewOf(EVERY_KIND_BOARD))
 	})
 })

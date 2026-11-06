@@ -76,7 +76,7 @@ const expectOptionLook = async (option: HTMLElement, isSelected: boolean) => {
 
 const playFlyout = async ({ canvasElement, args }: FlyoutPlayContext) => {
 	const canvas = within(canvasElement)
-	const group = canvas.getByRole("radiogroup", { name: "Connector type" })
+	const group = canvas.getByRole("radiogroup", { name: "Arrow type" })
 	const flyout = slotIn(canvasElement, "board-connector-flyout")
 	const look = getComputedStyle(flyout)
 	await expect(look.paddingTop).toBe("4px")
@@ -146,7 +146,7 @@ export const Straight = meta.story({
 		docs: {
 			description: {
 				story:
-					"The connector type flyout of Boards 4d, Straight picked. Check the 4px padding and gap, the 10px corners on the board control surface and its shadow, each option with its 16px icon, 6px gap, 6 by 8 padding and 7px corners, the idle option at weight 500 in the control foreground and the picked one at weight 600 in the Space colour on its tint. Click or the arrow keys switch the pick, colours change with no transition. Pick StraightDark for the dark theme, Elbow for the other pick.",
+					"The arrow type flyout of Boards 4d, Straight picked. Check the 4px padding and gap, the 10px corners on the board control surface and its shadow, each option with its 16px icon, 6px gap, 6 by 8 padding and 7px corners, the idle option at weight 500 in the control foreground and the picked one at weight 600 in the Space colour on its tint. Click or the arrow keys switch the pick, colours change with no transition. Pick StraightDark for the dark theme, Elbow for the other pick.",
 			},
 		},
 	},
