@@ -257,8 +257,14 @@ conversation-markdown-markdown--attachment-path-with-spaces
 conversation-markdown-markdown--attachment-unresolved
 conversation-markdown-markdown--autolinks
 conversation-markdown-markdown--blockquote
+conversation-markdown-markdown--board-link-in-checklist
+conversation-markdown-markdown--board-link-in-checklist-dark
+conversation-markdown-markdown--board-link-in-list-sentence
+conversation-markdown-markdown--board-link-in-list-sentence-dark
 conversation-markdown-markdown--board-link-in-sentence
 conversation-markdown-markdown--board-link-in-sentence-dark
+conversation-markdown-markdown--board-link-in-table-cell
+conversation-markdown-markdown--board-link-in-table-cell-dark
 conversation-markdown-markdown--board-link-loaded
 conversation-markdown-markdown--board-link-loaded-dark
 conversation-markdown-markdown--board-link-loading

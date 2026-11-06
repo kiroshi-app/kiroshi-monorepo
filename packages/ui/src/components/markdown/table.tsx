@@ -6,6 +6,7 @@ import type { ExtraProps } from "react-markdown"
 
 import { IconSwap } from "@workspace/ui/components/icon-swap"
 import { Icons } from "@workspace/ui/components/icons"
+import { useBoardCards } from "@workspace/ui/components/markdown/board-link"
 import { MARKDOWN_ESCAPED_BLOCK_CLASS } from "@workspace/ui/components/markdown/prose"
 import { Button } from "@workspace/ui/components/ui/button"
 import { useCopyText } from "@workspace/ui/hooks/use-copy-text"
@@ -68,41 +69,45 @@ export const MarkdownTable = ({
 }: MarkdownTableProps) => {
 	const { t } = useTranslation("chat")
 	const { copied, copy } = useCopyText(tableToTsv(node))
+	const cards = useBoardCards(node)
 
 	return (
-		<div data-slot="markdown-table" className={FRAME_CLASS}>
-			<div
-				// biome-ignore lint/a11y/noNoninteractiveTabindex: an overflowing table must be keyboard scrollable
-				tabIndex={0}
-				role="group"
-				aria-label={t("table.label")}
-				className={VIEWPORT_CLASS}
-			>
-				<table {...props} className={cn(TABLE_CLASS, className)}>
-					{children}
-				</table>
+		<>
+			<div data-slot="markdown-table" className={FRAME_CLASS}>
+				<div
+					// biome-ignore lint/a11y/noNoninteractiveTabindex: an overflowing table must be keyboard scrollable
+					tabIndex={0}
+					role="group"
+					aria-label={t("table.label")}
+					className={VIEWPORT_CLASS}
+				>
+					<table {...props} className={cn(TABLE_CLASS, className)}>
+						{children}
+					</table>
+				</div>
+
+				<Button
+					aria-label={t("table.copy")}
+					variant="ghost"
+					size="icon-xs"
+					className={COPY_CLASS}
+					onClick={() => {
+						void copy()
+					}}
+				>
+					<IconSwap
+						icon={<Icons.Copy />}
+						isSwapped={copied}
+						swappedIcon={<Icons.Check />}
+					/>
+				</Button>
+
+				<span aria-live="polite" className="sr-only">
+					{copied ? t("table.copyAnnounced") : ""}
+				</span>
 			</div>
-
-			<Button
-				aria-label={t("table.copy")}
-				variant="ghost"
-				size="icon-xs"
-				className={COPY_CLASS}
-				onClick={() => {
-					void copy()
-				}}
-			>
-				<IconSwap
-					icon={<Icons.Copy />}
-					isSwapped={copied}
-					swappedIcon={<Icons.Check />}
-				/>
-			</Button>
-
-			<span aria-live="polite" className="sr-only">
-				{copied ? t("table.copyAnnounced") : ""}
-			</span>
-		</div>
+			{cards}
+		</>
 	)
 }
 
