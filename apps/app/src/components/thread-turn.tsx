@@ -1,5 +1,6 @@
 import { memo, type ReactNode, useContext } from "react"
 
+import { AnswerStack } from "@workspace/ui/components/answer-stack"
 import type { MessageAuthor } from "@workspace/ui/components/message"
 import type { QuotedMessage } from "@workspace/ui/components/message-quote"
 import { MessageSelection } from "@workspace/ui/components/message-selection"
@@ -163,7 +164,7 @@ export const ThreadTurn = memo(function ThreadTurn({
 			})
 		: { text }
 	const answer = (
-		<>
+		<AnswerStack>
 			{selectable(
 				<AnswerBody
 					agentName={author?.name ?? row.authorName ?? botName ?? ""}
@@ -179,7 +180,7 @@ export const ThreadTurn = memo(function ThreadTurn({
 					now={now}
 				/>
 			) : null}
-		</>
+		</AnswerStack>
 	)
 	const isFramed = card !== undefined
 

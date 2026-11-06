@@ -32,10 +32,6 @@ export type BoardDrawing = {
 	pointers: BoardPointerPlacement[]
 }
 
-const UNPAINTED_AGENT_HUE = 0
-
-const NO_DRAWN_OBJECT = ""
-
 const NOBODY_DRAWS: DrawersByBoard = new Map()
 
 export const NOBODY_DRAWING: BoardDrawing = { pointers: [] }
@@ -73,7 +69,7 @@ const ownerOf = (
 		kind: "agent",
 		id,
 		name: bot?.name ?? name ?? "",
-		hue: bot?.avatarBlot ?? UNPAINTED_AGENT_HUE,
+		hue: bot?.avatarBlot ?? undefined,
 		image: avatarSrc(bot?.avatarImagePath ?? null),
 	}
 }
@@ -90,7 +86,7 @@ const drawingBy = (drawers: BoardDrawer[], bots: Bot[]): BoardDrawing => {
 	return {
 		drawing: {
 			agent: ownerOf(first, bots),
-			objectId: first.nodeId ?? NO_DRAWN_OBJECT,
+			objectId: first.nodeId ?? undefined,
 		},
 		pointers,
 	}

@@ -2,7 +2,10 @@ import type { CSSProperties, ReactNode } from "react"
 
 import type { BoardPoint } from "@workspace/ui/components/board-view"
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
-import { companionHue } from "@workspace/ui/components/companion-avatar"
+import {
+	companionHue,
+	untintedInkOf,
+} from "@workspace/ui/components/companion-avatar"
 import { hueStyle, hueTone } from "@workspace/ui/components/hue-palette"
 import { type ToneSpec, toneOf } from "@workspace/ui/components/hue-recipe"
 import { HUE_TONES, YELLOW_BAND } from "@workspace/ui/components/hue-tones"
@@ -15,7 +18,7 @@ type BoardPresenceOwner = {
 	kind: "agent" | "person"
 	id: string
 	name: string
-	hue: number
+	hue?: number
 	image?: string
 }
 
@@ -42,16 +45,22 @@ const AGENT_INK_UNDER_WHITE: ToneSpec = {
 	contrast: { with: "#ffffff", ratio: 4.5 },
 }
 
-const ownerColourOf = ({ kind, name, hue }: BoardPresenceOwner) =>
+const ownerColourOf = (
+	kind: BoardPresenceOwner["kind"],
+	name: string,
+	hue: number,
+) =>
 	kind === "agent"
 		? toneOf(AGENT_INK_UNDER_WHITE, companionHue(name, hue), YELLOW_BAND).hex
 		: hueTone(hue, "light", "accent").hex
 
-const ownerStyleOf = (owner: BoardPresenceOwner) =>
-	({
-		...hueStyle(owner.hue),
-		"--board-presence": ownerColourOf(owner),
-	}) as CSSProperties
+const ownerStyleOf = ({ kind, name, hue }: BoardPresenceOwner) =>
+	(hue === undefined
+		? { "--board-presence": untintedInkOf("light") }
+		: {
+				...hueStyle(hue),
+				"--board-presence": ownerColourOf(kind, name, hue),
+			}) as CSSProperties
 
 type OwnerAvatarProps = { owner: BoardPresenceOwner }
 
@@ -67,7 +76,7 @@ const OwnerAvatar = ({ owner }: OwnerAvatarProps) =>
 	) : (
 		<InitialsAvatar
 			image={owner.image}
-			isOnPresenceTag
+			isOnPresenceTag={owner.hue !== undefined}
 			name={owner.name}
 			size={TAG_AVATAR_SIZE}
 		/>

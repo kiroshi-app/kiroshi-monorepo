@@ -713,6 +713,7 @@ const common = {
 			atRest_one: "Tableau · {{count}} élément · {{edited}}",
 			atRest_many: "Tableau · {{count}} éléments · {{edited}}",
 			atRest_other: "Tableau · {{count}} éléments · {{edited}}",
+			failed: "Impossible de lire ce tableau. Ouvrez-le pour réessayer.",
 		},
 		panel: {
 			openInTab: "Ouvrir dans un onglet",

@@ -1123,10 +1123,13 @@ const BOARD_ROWS: TranscriptItem[] = [
 					drawing={{ agent: DRAWING_AGENT, objectId: "planning-ship" }}
 					editedLabel="edited just now"
 					isOpenBeside
-					itemCount={PLANNING_BOARD_SNAPSHOT.objects.length}
 					onOpen={fn()}
 					pointers={[DRAWING_AGENT_POINTER]}
-					snapshot={PLANNING_BOARD_SNAPSHOT}
+					summary={{
+						status: "loaded",
+						itemCount: PLANNING_BOARD_SNAPSHOT.objects.length,
+						snapshot: PLANNING_BOARD_SNAPSHOT,
+					}}
 					title={BOARD_CARD_TITLE}
 				/>
 			</AssistantTurn>
