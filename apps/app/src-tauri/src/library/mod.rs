@@ -1076,13 +1076,6 @@ fn accepted_type(name: &str) -> Option<AcceptedType> {
 	}
 }
 
-pub(crate) fn image_media_type(name: &str) -> Option<&'static str> {
-	match accepted_type(name)? {
-		AcceptedType::Image { mime_type } => Some(mime_type),
-		AcceptedType::Document(_) | AcceptedType::Board => None,
-	}
-}
-
 fn is_plain_name(name: &str) -> bool {
 	!name.is_empty() && name != "." && name != ".." && !name.contains(['/', '\\', '\0'])
 }

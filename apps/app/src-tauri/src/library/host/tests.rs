@@ -1977,9 +1977,13 @@ fn a_five_step_flow() -> Value {
 		.enumerate()
 		.map(|(index, key)| a_step(key, index.checked_sub(1).map(|previous| keys[previous])))
 		.collect();
-	let edges: Vec<Value> =
-		keys.windows(2).map(|pair| json!({ "from": pair[0], "to": pair[1] })).collect();
-	json!({ "name": BOARD, "nodes": nodes, "edges": edges })
+	let arrows: Vec<Value> =
+		keys.windows(2).map(|pair| json!({ "fromNode": pair[0], "toNode": pair[1] })).collect();
+	json!({ "name": BOARD, "mode": "insert", "nodes": nodes, "arrows": arrows })
+}
+
+fn written(nodes: Value, arrows: Value) -> Value {
+	json!({ "name": BOARD, "mode": "insert", "nodes": nodes, "arrows": arrows })
 }
 
 fn agent_seated(app: &App<MockRuntime>) -> Option<Option<String>> {
@@ -2009,6 +2013,9 @@ async fn an_agent_creates_an_empty_board_and_a_taken_name_creates_nothing() {
 
 	assert_eq!((&created["name"], &created["kind"]), (&json!(BOARD), &json!("board")));
 	assert!(created["updatedAt"].is_i64(), "{created}");
+	assert_eq!(created["header"]["name"], BOARD);
+	assert_eq!(created["header"]["updatedAt"], created["updatedAt"]);
+	assert!(created["header"]["hash"].is_string(), "{created}");
 	assert_eq!(changed.len(), 1);
 	assert_eq!(on_disk(&root, BOARD), EMPTY_BOARD);
 	assert_eq!(refusal_of(taken), json!({ "kind": "alreadyExists", "name": BOARD }));
@@ -2025,13 +2032,13 @@ async fn a_five_step_flow_lands_in_one_call_as_one_announced_update() {
 	let editor = an_open_editor(&app, &root, BOARD);
 	let updates = heard::<Value>(&app, events::LIBRARY_DOCUMENT_UPDATED.name());
 
-	let added = host.served(Operation::BoardAdd, a_five_step_flow()).await.expect("drawn");
+	let added = host.served(Operation::BoardWrite, a_five_step_flow()).await.expect("drawn");
 	let announced = all_of(&updates);
-	let read = host.served(Operation::BoardRead, json!({ "name": BOARD })).await.expect("read");
+	let read = host.served(Operation::BoardTree, json!({ "name": BOARD })).await.expect("read");
 
 	assert_eq!(announced.len(), 1);
 	let ids: BTreeMap<String, String> =
-		serde_json::from_value(added["nodes"].clone()).expect("a key map");
+		serde_json::from_value(added["ids"].clone()).expect("a key map");
 	assert_eq!(ids.keys().collect::<Vec<_>>(), ["brief", "draft", "learn", "review", "ship"]);
 	let seen = serde_json::to_value(board_caught_up(&editor, &announced)).expect("serializes");
 	assert_eq!(seen["nodes"].as_object().map(|nodes| nodes.len()), Some(5));
@@ -2042,12 +2049,41 @@ async fn a_five_step_flow_lands_in_one_call_as_one_announced_update() {
 	assert!(nodes.iter().all(|node| node["y"] == 0 && node["kind"] == "shape"));
 	assert_eq!(nodes[1]["text"], "draft");
 	assert_eq!(nodes[1]["id"].as_str(), Some(ids["draft"].as_str()));
-	let edges = read["edges"].as_array().expect("edges");
-	assert_eq!(edges.len(), 4);
-	assert!(edges
-		.iter()
-		.any(|edge| edge["fromNode"] == ids["brief"].as_str()
-			&& edge["toNode"] == ids["draft"].as_str()));
+	let arrows = read["arrows"].as_array().expect("arrows");
+	assert_eq!(arrows.len(), 4);
+	assert!(arrows.iter().any(|arrow| arrow["fromNode"] == ids["brief"].as_str()
+		&& arrow["toNode"] == ids["draft"].as_str()));
+	assert_eq!(read["header"], added["header"]);
+}
+
+#[tokio::test]
+async fn every_board_answer_carries_a_header_whose_hash_moves_only_with_the_content() {
+	let (app, root) = a_host("board-header").await;
+	put(&root, SPACE, BOARD, A_BOARD_WITH_ONE_NODE);
+	let host = the_host(&app);
+	let named = json!({ "name": BOARD });
+
+	let info = host.served(Operation::BoardInfo, named.clone()).await.expect("info");
+	let again = host.served(Operation::BoardFind, named.clone()).await.expect("found");
+	let refused = host
+		.served(Operation::BoardUpdate, json!({ "name": BOARD, "nodes": [{ "id": "gone" }] }))
+		.await;
+	let unchanged = host.served(Operation::BoardCanvas, named.clone()).await.expect("canvas");
+	let updated = host
+		.served(Operation::BoardUpdate, json!({ "name": BOARD, "nodes": [{ "id": "a", "y": 9 }] }))
+		.await
+		.expect("updated");
+	let after = host.served(Operation::BoardNodeInfo, named.clone()).await.expect("detail");
+
+	let header = &info["header"];
+	assert_eq!(header["name"], BOARD);
+	assert!(header["updatedAt"].is_i64(), "{header}");
+	assert_eq!(header["hash"].as_str().map(str::len), Some(64));
+	assert_eq!(again["header"], *header);
+	assert_eq!(unchanged["header"], *header);
+	assert_eq!(refusal_of(refused)["reference"], "gone");
+	assert_ne!(updated["header"]["hash"], header["hash"]);
+	assert_eq!(after["header"]["hash"], updated["header"]["hash"]);
 }
 
 #[tokio::test]
@@ -2056,16 +2092,37 @@ async fn a_refused_batch_leaves_the_board_byte_identical_and_announces_nothing()
 	put(&root, SPACE, BOARD, A_BOARD_WITH_ONE_NODE);
 	let state_before = open_document(app.handle(), &root, SPACE, BOARD).expect("opens").update;
 	let updates = heard::<Value>(&app, events::LIBRARY_DOCUMENT_UPDATED.name());
-	let batch = json!({
-		"name": BOARD,
-		"nodes": [
+	let batch = written(
+		json!([
 			{ "key": "fine", "kind": "text", "place": { "side": "below", "of": "a" } },
 			{ "key": "wrong", "kind": "sticky", "fill": "purple" }
-		],
-		"edges": [{ "from": "fine", "to": "a" }]
-	});
+		]),
+		json!([{ "fromNode": "fine", "toNode": "a" }]),
+	);
+	let host = the_host(&app);
 
-	let refused = the_host(&app).served(Operation::BoardAdd, batch).await;
+	let refused = host.served(Operation::BoardWrite, batch).await;
+	let rootless_replace = host
+		.served(Operation::BoardWrite, json!({ "name": BOARD, "mode": "replace", "nodes": [] }))
+		.await;
+	let unknown_ids = [
+		host.served(Operation::BoardDelete, json!({ "name": BOARD, "nodes": ["a", "ghost"] }))
+			.await,
+		host.served(
+			Operation::BoardMove,
+			json!({ "name": BOARD, "nodes": ["ghost"], "x": 0, "y": 0 }),
+		)
+		.await,
+		host.served(Operation::BoardDuplicate, json!({ "name": BOARD, "nodes": ["ghost"] })).await,
+		host.served(Operation::BoardNodeInfo, json!({ "name": BOARD, "arrows": ["ghost"] })).await,
+		host.served(Operation::BoardTree, json!({ "name": BOARD, "parent": "ghost" })).await,
+		host.served(Operation::BoardCanvas, json!({ "name": BOARD, "parent": "ghost" })).await,
+		host.served(
+			Operation::BoardWrite,
+			json!({ "name": BOARD, "parent": "ghost", "mode": "replace", "nodes": [] }),
+		)
+		.await,
+	];
 
 	assert_eq!(
 		refusal_of(refused),
@@ -2077,6 +2134,15 @@ async fn a_refused_batch_leaves_the_board_byte_identical_and_announces_nothing()
 			"field": "fill"
 		})
 	);
+	assert_eq!(
+		refusal_of(rootless_replace),
+		json!({ "kind": "invalidBoardItem", "element": "parent", "reason": "missingParent" })
+	);
+	for answer in unknown_ids {
+		let refusal = refusal_of(answer);
+		assert_eq!(refusal["reason"], "unknownReference", "{refusal}");
+		assert_eq!(refusal["reference"], "ghost", "{refusal}");
+	}
 	assert!(all_of(&updates).is_empty());
 	assert_eq!(on_disk(&root, BOARD), A_BOARD_WITH_ONE_NODE);
 	let state_after = open_document(app.handle(), &root, SPACE, BOARD).expect("opens").update;
@@ -2084,17 +2150,16 @@ async fn a_refused_batch_leaves_the_board_byte_identical_and_announces_nothing()
 }
 
 #[tokio::test]
-async fn an_update_changes_a_node_in_place_and_a_removal_takes_its_edges_each_in_one_update() {
+async fn an_update_changes_a_node_in_place_and_a_deletion_takes_its_edges_each_in_one_update() {
 	let (app, root) = a_host("board-update-remove").await;
 	put(&root, SPACE, BOARD, A_BOARD_WITH_ONE_NODE);
 	let host = the_host(&app);
-	let batch = json!({
-		"name": BOARD,
-		"nodes": [{ "key": "b", "kind": "text", "text": "B", "place": { "side": "right", "of": "a" } }],
-		"edges": [{ "from": "a", "to": "b" }]
-	});
-	let added = host.served(Operation::BoardAdd, batch).await.expect("drawn");
-	let b = added["nodes"]["b"].as_str().expect("an id").to_owned();
+	let batch = written(
+		json!([{ "key": "b", "kind": "text", "text": "B", "place": { "side": "right", "of": "a" } }]),
+		json!([{ "key": "ab", "fromNode": "a", "toNode": "b" }]),
+	);
+	let added = host.served(Operation::BoardWrite, batch).await.expect("drawn");
+	let (b, ab) = (added["ids"]["b"].clone(), added["ids"]["ab"].clone());
 	let editor = an_open_editor(&app, &root, BOARD);
 	let text_of_a = {
 		let nodes = editor.get_or_insert_map("nodes");
@@ -2112,58 +2177,179 @@ async fn an_update_changes_a_node_in_place_and_a_removal_takes_its_edges_each_in
 	let updated = host
 		.served(
 			Operation::BoardUpdate,
-			json!({ "name": BOARD, "nodes": [{ "id": "a", "text": "Brief", "y": 20 }] }),
+			json!({
+				"name": BOARD,
+				"nodes": [{ "id": "a", "text": "Brief", "y": 20 }],
+				"arrows": [{ "id": ab, "label": "then" }]
+			}),
 		)
 		.await
 		.expect("updated");
 	let announced_update = all_of(&updates);
-	let unknown = host
-		.served(
-			Operation::BoardUpdate,
-			json!({ "name": BOARD, "nodes": [{ "id": "a", "text": "No" }, { "id": "gone" }] }),
-		)
-		.await;
+	let detail = host
+		.served(Operation::BoardNodeInfo, json!({ "name": BOARD, "nodes": ["a"], "arrows": [ab] }))
+		.await
+		.expect("detailed");
 	let removed = host
-		.served(Operation::BoardRemove, json!({ "name": BOARD, "ids": [b] }))
+		.served(Operation::BoardDelete, json!({ "name": BOARD, "nodes": [b] }))
 		.await
 		.expect("removed");
 	let announced_removal = all_of(&updates);
 
-	assert_eq!(updated, json!({ "name": BOARD, "nodes": ["a"] }));
+	assert_eq!((&updated["nodes"], &updated["arrows"]), (&json!(["a"]), &json!([ab])));
 	assert_eq!(announced_update.len(), 1);
 	board_caught_up(&editor, &announced_update);
 	assert_eq!(text_of_a.get_string(&editor.transact()), "Brief");
-	assert_eq!(refusal_of(unknown)["index"], 1);
+	let (a, arrow) = (&detail["nodes"][0], &detail["arrows"][0]);
+	assert_eq!(
+		(&a["text"], &a["y"], &a["color"], &a["z"]),
+		(&json!("Brief"), &json!(20), &Value::Null, &json!("a0"))
+	);
+	assert_eq!(
+		(&arrow["label"], &arrow["routing"], &arrow["fromSide"]),
+		(&json!("then"), &json!("elbow"), &json!("right"))
+	);
+	assert_eq!(
+		(&arrow["labelPosition"], &arrow["bend"], &arrow["headSize"]),
+		(&json!(0.5), &json!(0), &json!("medium"))
+	);
 	assert_eq!(announced_removal.len(), 1);
 	assert_eq!(removed["nodes"], json!([b]));
-	assert_eq!(removed["edges"].as_array().map(Vec::len), Some(1));
+	assert_eq!(removed["arrows"], json!([ab]));
 	let seen =
 		serde_json::to_value(board_caught_up(&editor, &announced_removal)).expect("serializes");
 	assert_eq!(seen["edges"], json!({}));
-	let read = host.served(Operation::BoardRead, json!({ "name": BOARD })).await.expect("read");
+	let read = host.served(Operation::BoardTree, json!({ "name": BOARD })).await.expect("read");
 	assert_eq!(read["nodes"].as_array().map(Vec::len), Some(1));
-	let a = &read["nodes"][0];
-	assert_eq!((&a["text"], &a["y"], &a["width"]), (&json!("Brief"), &json!(20), &json!(100)));
-	assert_eq!(read["edges"], json!([]));
+	assert_eq!(read["arrows"], json!([]));
+}
+
+const A_LANE_AND_A_NOTE: &str = r#"{"nodes":[
+	{"id":"lane","type":"group","label":"Lane","x":0,"y":0,"width":600,"height":400},
+	{"id":"in","type":"text","text":"Inside","x":40,"y":40,"width":100,"height":50},
+	{"id":"out","type":"text","text":"Outside","x":900,"y":0,"width":100,"height":50}
+],"edges":[{"id":"e","fromNode":"in","toNode":"out"}]}"#;
+
+#[tokio::test]
+async fn a_replace_into_a_section_swaps_its_children_and_their_arrows_in_one_update() {
+	let (app, root) = a_host("board-replace").await;
+	put(&root, SPACE, BOARD, A_LANE_AND_A_NOTE);
+	let host = the_host(&app);
+	let updates = heard::<Value>(&app, events::LIBRARY_DOCUMENT_UPDATED.name());
+
+	let replaced = host
+		.served(
+			Operation::BoardWrite,
+			json!({
+				"name": BOARD,
+				"parent": "lane",
+				"mode": "replace",
+				"nodes": [{ "key": "new", "kind": "sticky", "text": "Fresh" }],
+				"arrows": [{ "fromNode": "new", "toNode": "out" }]
+			}),
+		)
+		.await
+		.expect("replaced");
+	let announced = all_of(&updates);
+	let lane = host
+		.served(Operation::BoardTree, json!({ "name": BOARD, "parent": "lane" }))
+		.await
+		.expect("read");
+	let canvas = host
+		.served(Operation::BoardCanvas, json!({ "name": BOARD, "parent": "lane" }))
+		.await
+		.expect("canvas");
+
+	assert_eq!(announced.len(), 1);
+	let fresh = replaced["ids"]["new"].clone();
+	let nodes = lane["nodes"].as_array().expect("nodes");
+	assert_eq!(nodes.len(), 1);
+	assert_eq!(
+		(&nodes[0]["id"], &nodes[0]["text"], &nodes[0]["parent"]),
+		(&fresh, &json!("Fresh"), &json!("lane"))
+	);
+	assert_eq!(lane["arrows"], json!([]));
+	let canvas: Value =
+		serde_json::from_str(canvas["canvas"].as_str().expect("a text")).expect("JSON Canvas");
+	let ids: Vec<&Value> =
+		canvas["nodes"].as_array().expect("nodes").iter().map(|node| &node["id"]).collect();
+	assert_eq!(ids, [&json!("lane"), &fresh]);
+	let whole = host.served(Operation::BoardTree, json!({ "name": BOARD })).await.expect("read");
+	let arrow = &whole["arrows"][0];
+	assert_eq!(whole["arrows"].as_array().map(Vec::len), Some(1));
+	assert_eq!((&arrow["fromNode"], &arrow["toNode"]), (&fresh, &json!("out")));
 }
 
 #[tokio::test]
-async fn arrows_alone_tie_nodes_already_on_the_board_named_by_their_text() {
-	let (app, root) = a_host("board-arrows-alone").await;
-	put(&root, SPACE, BOARD, A_BOARD_WITH_ONE_NODE);
+async fn a_move_into_a_section_that_grows_answers_the_moved_nodes_and_never_the_section() {
+	let (app, root) = a_host("board-move-grow").await;
+	put(&root, SPACE, BOARD, A_LANE_AND_A_NOTE);
 	let host = the_host(&app);
-	let node = json!({ "name": BOARD, "nodes": [{ "key": "b", "kind": "text", "text": "B" }] });
-	let added = host.served(Operation::BoardAdd, node).await.expect("drawn");
-	let b = added["nodes"]["b"].as_str().expect("an id").to_owned();
 
-	let arrows = json!({ "name": BOARD, "edges": [{ "from": "A", "to": "B" }] });
-	let tied = host.served(Operation::BoardAdd, arrows).await.expect("tied");
+	let moved = host
+		.served(
+			Operation::BoardMove,
+			json!({ "name": BOARD, "nodes": ["out"], "parent": "lane", "x": 560, "y": 0 }),
+		)
+		.await
+		.expect("moved");
+	let lane = host
+		.served(Operation::BoardTree, json!({ "name": BOARD, "parent": "lane" }))
+		.await
+		.expect("read");
 
-	assert_eq!(tied, json!({ "name": BOARD, "nodes": {} }));
-	let read = host.served(Operation::BoardRead, json!({ "name": BOARD })).await.expect("read");
-	let arrow = &read["edges"][0];
-	assert_eq!((&arrow["fromNode"], &arrow["toNode"]), (&json!("a"), &json!(b)));
-	assert_eq!(arrow.get("fromAnchor"), None);
+	assert_eq!(moved["nodes"], json!(["out"]));
+	let held: Vec<&Value> =
+		lane["nodes"].as_array().expect("nodes").iter().map(|node| &node["id"]).collect();
+	assert_eq!(held, [&json!("in"), &json!("out")]);
+}
+
+#[tokio::test]
+async fn a_move_a_duplicate_and_a_find_keep_ids_and_arrows_and_answer_the_new_ids() {
+	let (app, root) = a_host("board-arrange").await;
+	put(&root, SPACE, BOARD, A_LANE_AND_A_NOTE);
+	let host = the_host(&app);
+
+	let moved = host
+		.served(
+			Operation::BoardMove,
+			json!({ "name": BOARD, "nodes": ["lane"], "x": 100, "y": 500 }),
+		)
+		.await
+		.expect("moved");
+	let copies = host
+		.served(
+			Operation::BoardDuplicate,
+			json!({ "name": BOARD, "nodes": ["lane", "out"], "x": 0, "y": 2000 }),
+		)
+		.await
+		.expect("duplicated");
+	let found = host
+		.served(Operation::BoardFind, json!({ "name": BOARD, "text": "inSIDE", "kind": "text" }))
+		.await
+		.expect("found");
+	let info = host.served(Operation::BoardInfo, json!({ "name": BOARD })).await.expect("info");
+
+	assert_eq!(moved["nodes"], json!(["lane", "in"]));
+	let copied = &copies["nodes"];
+	let found: Vec<&str> =
+		found["nodes"].as_array().expect("ids").iter().filter_map(Value::as_str).collect();
+	assert_eq!(found, ["in", copied["in"].as_str().expect("a copy")]);
+	assert_eq!(copies["arrows"]["e"].as_str().map(str::len), Some(36));
+	assert_eq!(info["kinds"], json!({ "section": 2, "text": 4 }));
+	assert_eq!(info["arrows"], 2);
+	assert_eq!(info["bounds"], json!({ "x": 0, "y": 0, "width": 1000, "height": 2900 }));
+	let sections: Vec<&Value> = info["sections"]
+		.as_array()
+		.expect("sections")
+		.iter()
+		.map(|section| &section["id"])
+		.collect();
+	assert_eq!(sections, [&json!("lane"), &copied["lane"]]);
+	assert_eq!(
+		info["sections"][0],
+		json!({ "id": "lane", "label": "Lane", "x": 100, "y": 500, "width": 600, "height": 400 })
+	);
 }
 
 #[tokio::test(start_paused = true)]
@@ -2173,13 +2359,13 @@ async fn an_agent_board_seat_is_published_after_a_call_and_lapses_at_the_end_of_
 	let presences =
 		heard::<LibraryDocumentPresence>(&app, events::LIBRARY_DOCUMENT_PRESENCE.name());
 	let host = the_host(&app);
-	let batch = json!({
-		"name": BOARD,
-		"nodes": [{ "key": "b", "kind": "text", "place": { "side": "right", "of": "a" } }]
-	});
+	let batch = written(
+		json!([{ "key": "b", "kind": "text", "place": { "side": "right", "of": "a" } }]),
+		json!([]),
+	);
 
-	let added = host.served(Operation::BoardAdd, batch).await.expect("drawn");
-	let b = added["nodes"]["b"].as_str().expect("an id").to_owned();
+	let added = host.served(Operation::BoardWrite, batch).await.expect("drawn");
+	let b = added["ids"]["b"].as_str().expect("an id").to_owned();
 	tokio::time::sleep(BOARD_PACE_PASSED).await;
 	let after_the_pace = all_of(&presences);
 	tokio::time::sleep(AGENT_BOARD_LEASE - BOARD_PACE_PASSED * 2).await;
@@ -2207,9 +2393,8 @@ async fn another_board_call_renews_the_lease_and_moves_the_one_seat_and_a_refusa
 		events::LIBRARY_DOCUMENT_WRITER_FINISHED.name(),
 	);
 	let host = the_host(&app);
-	let batch =
-		json!({ "name": BOARD, "nodes": [{ "key": "b", "kind": "text", "x": 400, "y": 0 }] });
-	host.served(Operation::BoardAdd, batch).await.expect("drawn");
+	let batch = written(json!([{ "key": "b", "kind": "text", "x": 400, "y": 0 }]), json!([]));
+	host.served(Operation::BoardWrite, batch).await.expect("drawn");
 	tokio::time::sleep(BOARD_PACE_PASSED).await;
 	let first = all_of(&presences);
 	tokio::time::sleep(AGENT_BOARD_LEASE / 2).await;
@@ -2311,8 +2496,11 @@ async fn a_board_view_shows_an_image_node_and_refuses_any_other_node_with_its_re
 	let host = the_host(&app);
 	let view = |id: &str| host.served(Operation::BoardView, json!({ "name": BOARD, "id": id }));
 
+	let mut shown = view("photo").await.expect("shown");
+	let header = shown.as_object_mut().and_then(|shown| shown.remove("header"));
+	assert_eq!(header.as_ref().map(|header| &header["name"]), Some(&json!(BOARD)));
 	assert_eq!(
-		view("photo").await.expect("shown"),
+		shown,
 		json!({
 			"form": "image",
 			"name": "cover.png",

@@ -1,6 +1,11 @@
+mod arrange;
 mod canvas;
 mod doc;
 mod draw;
+#[cfg(test)]
+mod fixtures;
+mod hierarchy;
+mod read;
 mod schema;
 #[cfg(test)]
 mod tests;
@@ -12,11 +17,15 @@ use regex::Regex;
 use serde::Serialize;
 use serde_json::{Map, Value};
 
+pub use arrange::{duplicated, moved, written, Group, Moved, WriteMode};
 pub use canvas::{export_canvas, import_canvas};
-pub use doc::{edit_board, read_board, write_board, BoardEdit};
+pub use doc::{edit_board, read_board, write_board, BoardEdit, ElementChange};
 pub use draw::{
-	changed, drawn, read_out, removed, BoardRead, ChangedNode, DrawRefusal, DrawnEdge, DrawnNode,
-	Touched,
+	deleted, updated, ArrowPatch, ChangedNode, DrawRefusal, DrawnArrow, DrawnNode, Touched,
+};
+pub use read::{
+	content_hash, find, info, node_file, node_info, tree, under, BoardDetail, BoardInfo, BoardTree,
+	Sought,
 };
 use schema::{FieldSpec, Fields, KindSpec, Placement, SCHEMA};
 
@@ -30,6 +39,28 @@ pub struct Board {
 	kiroshi: JsonObject,
 	#[serde(skip_serializing_if = "Map::is_empty")]
 	canvas: JsonObject,
+}
+
+impl Board {
+	fn kept(
+		&self,
+		keeps_node: impl Fn(&str) -> bool,
+		keeps_edge: impl Fn(&JsonObject) -> bool,
+	) -> Self {
+		let entries = |map: &BTreeMap<String, JsonObject>,
+		               keeps: &dyn Fn(&String, &JsonObject) -> bool| {
+			map.iter()
+				.filter(|(id, element)| keeps(id, element))
+				.map(|(id, element)| (id.clone(), element.clone()))
+				.collect()
+		};
+		Self {
+			nodes: entries(&self.nodes, &|id, _| keeps_node(id)),
+			edges: entries(&self.edges, &|_, edge| keeps_edge(edge)),
+			kiroshi: self.kiroshi.clone(),
+			canvas: self.canvas.clone(),
+		}
+	}
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]

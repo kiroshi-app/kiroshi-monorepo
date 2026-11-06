@@ -1,36 +1,34 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use uuid::Uuid;
 
-use super::doc::{BoardEdit, NodeChange};
-use super::schema::{KindSpec, Size, SCHEMA};
+use super::doc::{BoardEdit, ElementChange};
+use super::hierarchy::Hierarchy;
+use super::schema::{KindSpec, Placement, Size, SCHEMA};
 use super::{
 	kind_key, parsed_edge, parsed_node, z_at, z_key, Board, BoardError, End, JsonObject, ENDS,
 };
-use crate::library::image_media_type;
 
 #[cfg(test)]
 mod tests;
 
-const GAP: i64 = 80;
+pub(super) const GAP: i64 = 80;
 
-const SECTION_PADDING: i64 = 40;
+pub(super) const SECTION_PADDING: i64 = 40;
 
-const SECTION: &str = "section";
+pub(super) const SECTION: &str = "section";
 
 const STICKY: &str = "sticky";
 
 const TEXT: &str = "text";
 
-const IMAGE: &str = "image";
-
-const LIBRARY_ITEM: &str = "item";
-
-const CANVAS_FILE: &str = "file";
-
 const LABEL: &str = "label";
+
+const ROUTING: &str = "routing";
+
+const ELBOW: &str = "elbow";
 
 const AUTHOR: &str = "author";
 
@@ -61,11 +59,19 @@ pub struct Beside {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct DrawnEdge {
-	pub from: String,
-	pub to: String,
-	pub label: Option<String>,
+#[serde(rename_all = "camelCase")]
+pub struct DrawnArrow {
+	pub key: Option<String>,
+	#[serde(flatten)]
+	pub fields: JsonObject,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ArrowPatch {
+	pub id: String,
+	#[serde(flatten)]
+	pub fields: JsonObject,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -98,12 +104,12 @@ pub enum DrawFault {
 		reference: String,
 	},
 	#[serde(rename_all = "camelCase")]
-	AmbiguousReference {
-		reference: String,
-		ids: Vec<String>,
-	},
-	#[serde(rename_all = "camelCase")]
 	NotASection {
+		reference: String,
+	},
+	MissingParent,
+	#[serde(rename_all = "camelCase")]
+	NestedInItself {
 		reference: String,
 	},
 	#[serde(rename_all = "camelCase")]
@@ -117,13 +123,15 @@ pub enum DrawFault {
 pub enum BoardItem {
 	Node,
 	Arrow,
+	Parent,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DrawRefusal {
 	pub element: BoardItem,
-	pub index: usize,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub index: Option<usize>,
 	#[serde(flatten)]
 	pub fault: DrawFault,
 }
@@ -148,84 +156,33 @@ pub struct Changed {
 	pub touched: Option<Touched>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct NodeRead {
-	pub id: String,
-	pub kind: String,
-	pub x: i64,
-	pub y: i64,
-	pub width: i64,
-	pub height: i64,
-	pub text: Option<String>,
-	#[serde(skip_serializing_if = "Option::is_none")]
-	pub file: Option<String>,
-	#[serde(skip_serializing_if = "Option::is_none")]
-	pub media_type: Option<String>,
-	#[serde(skip_serializing_if = "Option::is_none")]
-	pub url: Option<String>,
-	#[serde(skip_serializing_if = "Option::is_none")]
-	pub title: Option<String>,
-	pub section: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct EdgeRead {
-	pub id: String,
-	#[serde(skip_serializing_if = "Option::is_none")]
-	pub from_node: Option<String>,
-	#[serde(skip_serializing_if = "Option::is_none")]
-	pub from_anchor: Option<Value>,
-	#[serde(skip_serializing_if = "Option::is_none")]
-	pub from_point: Option<Value>,
-	#[serde(skip_serializing_if = "Option::is_none")]
-	pub to_node: Option<String>,
-	#[serde(skip_serializing_if = "Option::is_none")]
-	pub to_anchor: Option<Value>,
-	#[serde(skip_serializing_if = "Option::is_none")]
-	pub to_point: Option<Value>,
-	pub label: Option<String>,
-	pub label_position: Value,
-	pub bend: Value,
-	pub routing: Value,
-	pub head_size: Value,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct BoardRead {
-	pub nodes: Vec<NodeRead>,
-	pub edges: Vec<EdgeRead>,
-}
-
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-struct Rect {
-	x: i64,
-	y: i64,
-	width: i64,
-	height: i64,
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize)]
+pub(super) struct Rect {
+	pub(super) x: i64,
+	pub(super) y: i64,
+	pub(super) width: i64,
+	pub(super) height: i64,
 }
 
 impl Rect {
-	fn of(node: &JsonObject) -> Self {
+	pub(super) fn of(node: &JsonObject) -> Self {
 		let at = |field: &str| node.get(field).and_then(Value::as_i64).unwrap_or_default();
 		Self { x: at("x"), y: at("y"), width: at("width"), height: at("height") }
 	}
 
-	fn sized(x: i64, y: i64, size: Size) -> Self {
+	pub(super) fn sized(x: i64, y: i64, size: Size) -> Self {
 		Self { x, y, width: size.width, height: size.height }
 	}
 
-	fn right(self) -> i64 {
+	pub(super) fn right(self) -> i64 {
 		self.x + self.width
 	}
 
-	fn bottom(self) -> i64 {
+	pub(super) fn bottom(self) -> i64 {
 		self.y + self.height
 	}
 
-	fn centre(self) -> (i64, i64) {
+	pub(super) fn centre(self) -> (i64, i64) {
 		(self.x + self.width / 2, self.y + self.height / 2)
 	}
 
@@ -240,18 +197,18 @@ impl Rect {
 			&& other.y < self.bottom()
 	}
 
-	fn contains(self, other: Self) -> bool {
+	pub(super) fn contains(self, other: Self) -> bool {
 		self.x <= other.x
 			&& self.y <= other.y
 			&& other.right() <= self.right()
 			&& other.bottom() <= self.bottom()
 	}
 
-	fn area(self) -> i64 {
+	pub(super) fn area(self) -> i64 {
 		self.width.saturating_mul(self.height)
 	}
 
-	fn padded(self, padding: i64) -> Self {
+	pub(super) fn padded(self, padding: i64) -> Self {
 		Self {
 			x: self.x - padding,
 			y: self.y - padding,
@@ -260,19 +217,19 @@ impl Rect {
 		}
 	}
 
-	fn joined(self, other: Self) -> Self {
+	pub(super) fn joined(self, other: Self) -> Self {
 		let (x, y) = (self.x.min(other.x), self.y.min(other.y));
 		let (right, bottom) = (self.right().max(other.right()), self.bottom().max(other.bottom()));
 		Self { x, y, width: right - x, height: bottom - y }
 	}
 
-	fn geometry(self) -> [(&'static str, i64); 4] {
+	pub(super) fn geometry(self) -> [(&'static str, i64); 4] {
 		[("x", self.x), ("y", self.y), ("width", self.width), ("height", self.height)]
 	}
 }
 
 #[derive(Debug, Clone, Copy)]
-enum Side {
+pub(super) enum Side {
 	Right,
 	Left,
 	Below,
@@ -353,7 +310,7 @@ pub fn drawn(
 	board: &Board,
 	author: &str,
 	nodes: &[DrawnNode],
-	edges: &[DrawnEdge],
+	arrows: &[DrawnArrow],
 ) -> Result<Drawn, DrawRefusal> {
 	let keys = batch_keys(nodes)?;
 	let planned = nodes
@@ -376,7 +333,7 @@ pub fn drawn(
 	}
 	let mut edit = BoardEdit::default();
 	let mut z_keys: Vec<String> = board.nodes.values().filter_map(z_of).collect();
-	let mut ids = BTreeMap::new();
+	let mut node_ids = BTreeMap::new();
 	let mut added = Vec::new();
 	for (index, node) in nodes.iter().enumerate() {
 		let id = Uuid::new_v4().to_string();
@@ -386,18 +343,27 @@ pub fn drawn(
 		let object = layout.planned[index].object(rect, author, z);
 		let parsed = parsed_node(&id, Value::Object(object))
 			.map_err(|error| refused(BoardItem::Node, index, refused_field(error)))?;
-		ids.insert(node.key.clone(), id.clone());
+		node_ids.insert(node.key.clone(), id.clone());
 		added.push((id, parsed));
 	}
 	edit.changed_nodes = layout.grown_sections();
 	let mut every_node = board.nodes.clone();
+	every_node.extend(
+		edit.changed_nodes.iter().map(|change| (change.id.clone(), change.element.clone())),
+	);
 	every_node.extend(added.iter().cloned());
-	for (index, drawn) in edges.iter().enumerate() {
+	let mut ids = node_ids.clone();
+	for (index, arrow) in arrows.iter().enumerate() {
 		let id = Uuid::new_v4().to_string();
-		let edge = drawn_edge(board, &ids, drawn)
-			.map_err(|fault| refused(BoardItem::Arrow, index, fault))?;
+		let at = |fault| refused(BoardItem::Arrow, index, fault);
+		let edge = drawn_arrow(&every_node, &node_ids, arrow).map_err(at)?;
 		let parsed = parsed_edge(&id, Value::Object(edge), &every_node)
-			.map_err(|error| refused(BoardItem::Arrow, index, refused_field(error)))?;
+			.map_err(|error| at(refused_field(error)))?;
+		if let Some(key) = &arrow.key {
+			if ids.insert(key.clone(), id.clone()).is_some() {
+				return Err(at(DrawFault::DuplicateKey));
+			}
+		}
 		edit.added_edges.push((id, parsed));
 	}
 	let touched = match added.last() {
@@ -411,108 +377,68 @@ pub fn drawn(
 	Ok(Drawn { edit, ids, touched })
 }
 
-pub fn changed(board: &Board, changes: &[ChangedNode]) -> Result<Changed, DrawRefusal> {
+pub fn updated(
+	board: &Board,
+	nodes: &[ChangedNode],
+	arrows: &[ArrowPatch],
+) -> Result<Changed, DrawRefusal> {
 	let mut edit = BoardEdit::default();
-	for (index, change) in changes.iter().enumerate() {
+	for (index, change) in nodes.iter().enumerate() {
 		let node_change =
 			node_changed(board, change).map_err(|fault| refused(BoardItem::Node, index, fault))?;
 		edit.changed_nodes.push(node_change);
 	}
+	for (index, patch) in arrows.iter().enumerate() {
+		let arrow_change =
+			arrow_changed(board, patch).map_err(|fault| refused(BoardItem::Arrow, index, fault))?;
+		edit.changed_edges.push(arrow_change);
+	}
 	let touched = edit
 		.changed_nodes
 		.last()
-		.map(|change| touched_at(Some(change.id.as_str()), Rect::of(&change.node)));
+		.map(|change| touched_at(Some(change.id.as_str()), Rect::of(&change.element)));
 	Ok(Changed { edit, touched })
 }
 
-pub fn removed(board: &Board, ids: &[String]) -> Result<Changed, DrawRefusal> {
-	let mut edit = BoardEdit::default();
-	for (index, id) in ids.iter().enumerate() {
-		if !board.nodes.contains_key(id) {
-			let fault = DrawFault::UnknownReference { reference: id.clone() };
-			return Err(refused(BoardItem::Node, index, fault));
-		}
-		if !edit.removed_nodes.contains(id) {
-			edit.removed_nodes.push(id.clone());
-		}
-	}
-	edit.removed_edges = board
+pub fn deleted(board: &Board, nodes: &[String], arrows: &[String]) -> Result<Changed, DrawRefusal> {
+	known(nodes, BoardItem::Node, |id| board.nodes.contains_key(id))?;
+	known(arrows, BoardItem::Arrow, |id| board.edges.contains_key(id))?;
+	let removed_nodes = Hierarchy::of(board).with_descendants(nodes);
+	let gone: BTreeSet<&str> = removed_nodes.iter().map(String::as_str).collect();
+	let removed_edges = board
 		.edges
 		.iter()
-		.filter(|(_, edge)| {
-			ENDS.iter().any(|end| {
-				let node = edge.get(end.node).and_then(Value::as_str);
-				node.is_some_and(|node| edit.removed_nodes.iter().any(|id| id == node))
-			})
-		})
+		.filter(|(id, edge)| arrows.contains(id) || is_tied_to(edge, &gone))
 		.map(|(id, _)| id.clone())
 		.collect();
-	let touched =
-		ids.last().and_then(|id| board.nodes.get(id)).map(|node| touched_at(None, Rect::of(node)));
+	let edit = BoardEdit { removed_nodes, removed_edges, ..BoardEdit::default() };
+	let touched = nodes
+		.last()
+		.and_then(|id| board.nodes.get(id))
+		.map(|node| touched_at(None, Rect::of(node)));
 	Ok(Changed { edit, touched })
 }
 
-pub fn read_out(board: &Board) -> BoardRead {
-	let sections: Vec<(&String, Rect)> = board
-		.nodes
-		.iter()
-		.filter(|(_, node)| kind_of(node) == Some(SECTION))
-		.map(|(id, node)| (id, Rect::of(node)))
-		.collect();
-	let mut ordered: Vec<(&String, &JsonObject)> = board.nodes.iter().collect();
-	ordered.sort_by_cached_key(|(id, node)| (z_of(node), *id));
-	let nodes = ordered
-		.into_iter()
-		.map(|(id, node)| {
-			let rect = Rect::of(node);
-			let section = sections
-				.iter()
-				.filter(|(section_id, section)| *section_id != id && section.contains(rect))
-				.min_by_key(|(_, section)| section.area())
-				.map(|(section_id, _)| (*section_id).clone());
-			let file = library_file_of(node);
-			let media_type = match kind_of(node) {
-				Some(IMAGE) => file.as_deref().and_then(image_media_type).map(str::to_owned),
-				_ => None,
-			};
-			NodeRead {
-				id: id.clone(),
-				kind: kind_of(node).unwrap_or_default().to_owned(),
-				x: rect.x,
-				y: rect.y,
-				width: rect.width,
-				height: rect.height,
-				text: shown_text(node),
-				file,
-				media_type,
-				url: text_of(node, "url"),
-				title: text_of(node, "title"),
-				section,
-			}
-		})
-		.collect();
-	let edges = board
-		.edges
-		.iter()
-		.map(|(id, edge)| {
-			let [from, to] = ENDS.each_ref().map(|end| EndRead::of(edge, end));
-			EdgeRead {
-				id: id.clone(),
-				from_node: from.node,
-				from_anchor: from.anchor,
-				from_point: from.point,
-				to_node: to.node,
-				to_anchor: to.anchor,
-				to_point: to.point,
-				label: text_of(edge, LABEL),
-				label_position: arrow_field(edge, "labelPosition"),
-				bend: arrow_field(edge, "bend"),
-				routing: arrow_field(edge, "routing"),
-				head_size: arrow_field(edge, "headSize"),
-			}
-		})
-		.collect();
-	BoardRead { nodes, edges }
+pub(super) fn known(
+	ids: &[String],
+	element: BoardItem,
+	holds: impl Fn(&str) -> bool,
+) -> Result<(), DrawRefusal> {
+	match ids.iter().position(|id| !holds(id)) {
+		Some(index) => {
+			let fault = DrawFault::UnknownReference { reference: ids[index].clone() };
+			Err(refused(element, index, fault))
+		}
+		None => Ok(()),
+	}
+}
+
+pub(super) fn tied_ends(edge: &JsonObject) -> impl Iterator<Item = &str> {
+	ENDS.iter().filter_map(|end| edge.get(end.node).and_then(Value::as_str))
+}
+
+pub(super) fn is_tied_to(edge: &JsonObject, nodes: &BTreeSet<&str>) -> bool {
+	tied_ends(edge).any(|node| nodes.contains(node))
 }
 
 impl Layout<'_> {
@@ -615,20 +541,12 @@ impl Layout<'_> {
 		}
 	}
 
-	fn grown_sections(&self) -> Vec<NodeChange> {
+	fn grown_sections(&self) -> Vec<ElementChange> {
 		let mut grown: Vec<_> = self.grown.iter().collect();
 		grown.sort_by_key(|(id, _)| *id);
 		grown
 			.into_iter()
-			.filter_map(|(id, rect)| {
-				let mut node = self.board.nodes.get(id)?.clone();
-				let mut fields = Vec::new();
-				for (field, value) in rect.geometry() {
-					node.insert(field.to_owned(), Value::from(value));
-					fields.push(field.to_owned());
-				}
-				Some(NodeChange { id: id.clone(), node, fields })
-			})
+			.filter_map(|(id, rect)| Some(reshaped(id, self.board.nodes.get(id)?, *rect)))
 			.collect()
 	}
 }
@@ -648,7 +566,17 @@ impl Planned<'_> {
 	}
 }
 
-fn clear_of(mut candidate: Rect, side: Side, obstacles: &[Rect]) -> Rect {
+pub(super) fn reshaped(id: &str, node: &JsonObject, rect: Rect) -> ElementChange {
+	let mut element = node.clone();
+	let mut fields = Vec::new();
+	for (field, value) in rect.geometry() {
+		element.insert(field.to_owned(), Value::from(value));
+		fields.push(field.to_owned());
+	}
+	ElementChange { id: id.to_owned(), element, fields }
+}
+
+pub(super) fn clear_of(mut candidate: Rect, side: Side, obstacles: &[Rect]) -> Rect {
 	while let Some(obstacle) = obstacles.iter().find(|obstacle| obstacle.overlaps(candidate)) {
 		candidate = side.past(candidate, *obstacle);
 	}
@@ -750,7 +678,7 @@ fn looked(
 	Ok(fields)
 }
 
-fn node_changed(board: &Board, change: &ChangedNode) -> Result<NodeChange, DrawFault> {
+fn node_changed(board: &Board, change: &ChangedNode) -> Result<ElementChange, DrawFault> {
 	let unknown = || DrawFault::UnknownReference { reference: change.id.clone() };
 	let current = board.nodes.get(&change.id).ok_or_else(unknown)?;
 	let kind = kind_of(current).ok_or_else(unknown)?;
@@ -767,40 +695,113 @@ fn node_changed(board: &Board, change: &ChangedNode) -> Result<NodeChange, DrawF
 	let mut node = current.clone();
 	node.extend(fields.clone());
 	parsed_node(&change.id, Value::Object(node.clone())).map_err(refused_field)?;
-	Ok(NodeChange { id: change.id.clone(), node, fields: fields.keys().cloned().collect() })
+	Ok(ElementChange {
+		id: change.id.clone(),
+		element: node,
+		fields: fields.keys().cloned().collect(),
+	})
 }
 
-fn drawn_edge(
-	board: &Board,
-	ids: &BTreeMap<String, String>,
-	edge: &DrawnEdge,
+fn drawn_arrow(
+	nodes: &BTreeMap<String, JsonObject>,
+	keys: &BTreeMap<String, String>,
+	arrow: &DrawnArrow,
 ) -> Result<JsonObject, DrawFault> {
-	let endpoint = |reference: &str| match ids.get(reference) {
-		Some(id) => Ok(id.clone()),
-		None if board.nodes.contains_key(reference) => Ok(reference.to_owned()),
-		None => node_named(board, reference),
-	};
-	let mut object = JsonObject::new();
-	object.insert("fromNode".to_owned(), Value::from(endpoint(&edge.from)?));
-	object.insert("toNode".to_owned(), Value::from(endpoint(&edge.to)?));
-	if let Some(label) = &edge.label {
-		object.insert(LABEL.to_owned(), Value::from(label.as_str()));
+	let mut edge = arrow_fields(&arrow.fields)?;
+	for end in &ENDS {
+		let Some(reference) = edge.get(end.node).and_then(Value::as_str) else {
+			continue;
+		};
+		let id = match keys.get(reference) {
+			Some(id) => id.clone(),
+			None if nodes.contains_key(reference) => reference.to_owned(),
+			None => return Err(DrawFault::UnknownReference { reference: reference.to_owned() }),
+		};
+		edge.insert(end.node.to_owned(), Value::from(id));
 	}
-	Ok(object)
+	if !edge.contains_key(ROUTING) {
+		edge.insert(ROUTING.to_owned(), Value::from(ELBOW));
+		tied_facing(&mut edge, nodes);
+	}
+	Ok(edge)
 }
 
-fn node_named(board: &Board, name: &str) -> Result<String, DrawFault> {
-	let ids: Vec<String> = board
-		.nodes
-		.iter()
-		.filter(|(_, node)| shown_text(node).is_some_and(|text| text.trim() == name))
-		.map(|(id, _)| id.clone())
-		.collect();
-	match ids.as_slice() {
-		[id] => Ok(id.clone()),
-		[] => Err(DrawFault::UnknownReference { reference: name.to_owned() }),
-		_ => Err(DrawFault::AmbiguousReference { reference: name.to_owned(), ids }),
+fn arrow_fields(fields: &JsonObject) -> Result<JsonObject, DrawFault> {
+	let is_arrow_field = |name: &str| {
+		SCHEMA.edge.fields.get(name).is_some_and(|spec| spec.placement != Placement::Verbatim)
+	};
+	match fields.keys().find(|name| !is_arrow_field(name)) {
+		Some(name) => Err(DrawFault::RefusedField { field: name.clone() }),
+		None => Ok(fields.clone()),
 	}
+}
+
+fn end_rect(edge: &JsonObject, end: &End, nodes: &BTreeMap<String, JsonObject>) -> Option<Rect> {
+	if let Some(node) = edge.get(end.node).and_then(Value::as_str) {
+		return nodes.get(node).map(Rect::of);
+	}
+	let point = edge.get(end.point)?;
+	let at = |axis: &str| point.get(axis).and_then(Value::as_f64).map(|value| value.round() as i64);
+	Some(Rect { x: at("x")?, y: at("y")?, width: 0, height: 0 })
+}
+
+fn facing_sides(from: Rect, to: Rect) -> [&'static str; 2] {
+	let ((from_x, from_y), (to_x, to_y)) = (from.centre(), to.centre());
+	let (across, down) = (to_x - from_x, to_y - from_y);
+	match (across.abs() >= down.abs(), across >= 0, down >= 0) {
+		(true, true, _) => ["right", "left"],
+		(true, false, _) => ["left", "right"],
+		(false, _, true) => ["bottom", "top"],
+		(false, _, false) => ["top", "bottom"],
+	}
+}
+
+fn tied_facing(edge: &mut JsonObject, nodes: &BTreeMap<String, JsonObject>) {
+	let [Some(from), Some(to)] = ENDS.each_ref().map(|end| end_rect(edge, end, nodes)) else {
+		return;
+	};
+	for (end, side) in ENDS.iter().zip(facing_sides(from, to)) {
+		let is_loose = [end.side, end.anchor].iter().all(|tie| !edge.contains_key(*tie));
+		if edge.contains_key(end.node) && is_loose {
+			edge.insert(end.side.to_owned(), Value::from(side));
+		}
+	}
+}
+
+fn displaced_by(end: &End, field: &str) -> Vec<&'static str> {
+	match field {
+		_ if field == end.node => vec![end.point],
+		_ if field == end.point => vec![end.node, end.side, end.anchor],
+		_ if field == end.side => vec![end.anchor],
+		_ if field == end.anchor => vec![end.side],
+		_ => Vec::new(),
+	}
+}
+
+fn arrow_changed(board: &Board, patch: &ArrowPatch) -> Result<ElementChange, DrawFault> {
+	let unknown = |reference: &str| DrawFault::UnknownReference { reference: reference.to_owned() };
+	let current = board.edges.get(&patch.id).ok_or_else(|| unknown(&patch.id))?;
+	let fields = arrow_fields(&patch.fields)?;
+	let mut edge = current.clone();
+	let mut named = Vec::new();
+	for end in &ENDS {
+		if let Some(node) = fields.get(end.node).and_then(Value::as_str) {
+			if !board.nodes.contains_key(node) {
+				return Err(unknown(node));
+			}
+		}
+		for given in fields.keys() {
+			for displaced in displaced_by(end, given) {
+				if !fields.contains_key(displaced) && edge.remove(displaced).is_some() {
+					named.push(displaced.to_owned());
+				}
+			}
+		}
+	}
+	edge.extend(fields.clone());
+	named.extend(fields.keys().cloned());
+	parsed_edge(&patch.id, Value::Object(edge.clone()), &board.nodes).map_err(refused_field)?;
+	Ok(ElementChange { id: patch.id.clone(), element: edge, fields: named })
 }
 
 fn resolved(
@@ -817,32 +818,7 @@ fn resolved(
 	Err(DrawFault::UnknownReference { reference: reference.to_owned() })
 }
 
-struct EndRead {
-	node: Option<String>,
-	anchor: Option<Value>,
-	point: Option<Value>,
-}
-
-impl EndRead {
-	fn of(edge: &JsonObject, end: &End) -> Self {
-		let side_midpoint = || {
-			let side = edge.get(end.side).and_then(Value::as_str)?;
-			SCHEMA.edge.sides.get(side).cloned()
-		};
-		Self {
-			node: text_of(edge, end.node),
-			anchor: edge.get(end.anchor).cloned().or_else(side_midpoint),
-			point: edge.get(end.point).cloned(),
-		}
-	}
-}
-
-fn arrow_field(edge: &JsonObject, field: &str) -> Value {
-	let default = || SCHEMA.edge.fields.get(field).and_then(|spec| spec.default.clone());
-	edge.get(field).cloned().or_else(default).unwrap_or(Value::Null)
-}
-
-fn z_above(keys: &[String]) -> String {
+pub(super) fn z_above(keys: &[String]) -> String {
 	let top = keys.iter().max();
 	let next = z_at(keys.len());
 	match top {
@@ -851,43 +827,39 @@ fn z_above(keys: &[String]) -> String {
 	}
 }
 
-fn z_of(node: &JsonObject) -> Option<String> {
+pub(super) fn z_of(node: &JsonObject) -> Option<String> {
 	node.get(z_key()).and_then(Value::as_str).map(str::to_owned)
 }
 
-fn kind_of(node: &JsonObject) -> Option<&str> {
+pub(super) fn kind_of(node: &JsonObject) -> Option<&str> {
 	node.get(kind_key()).and_then(Value::as_str)
 }
 
-fn shown_text(node: &JsonObject) -> Option<String> {
+pub(super) fn shown_text(node: &JsonObject) -> Option<String> {
 	let field = if kind_of(node) == Some(SECTION) { LABEL } else { TEXT };
 	text_of(node, field)
 }
 
-fn library_file_of(node: &JsonObject) -> Option<String> {
-	let in_canvas_folder = || {
-		let file = node.get(CANVAS_FILE).and_then(Value::as_str)?;
-		file.rsplit('/').next().map(str::to_owned)
-	};
-	text_of(node, LIBRARY_ITEM).or_else(in_canvas_folder)
-}
-
-fn text_of(object: &JsonObject, field: &str) -> Option<String> {
+pub(super) fn text_of(object: &JsonObject, field: &str) -> Option<String> {
 	object.get(field).and_then(Value::as_str).map(str::to_owned)
 }
 
-fn touched_at(node_id: Option<&str>, rect: Rect) -> Touched {
+pub(super) fn touched_at(node_id: Option<&str>, rect: Rect) -> Touched {
 	let (x, y) = rect.centre();
 	Touched { node_id: node_id.map(str::to_owned), x, y }
 }
 
-fn refused_field(error: BoardError) -> DrawFault {
+pub(super) fn refused_field(error: BoardError) -> DrawFault {
 	match error {
 		BoardError::InvalidField { field, .. } => DrawFault::RefusedField { field },
 		_ => DrawFault::RefusedField { field: kind_key().to_owned() },
 	}
 }
 
-fn refused(element: BoardItem, index: usize, fault: DrawFault) -> DrawRefusal {
-	DrawRefusal { element, index, fault }
+pub(super) fn refused(element: BoardItem, index: usize, fault: DrawFault) -> DrawRefusal {
+	DrawRefusal { element, index: Some(index), fault }
+}
+
+pub(super) fn refused_parent(fault: DrawFault) -> DrawRefusal {
+	DrawRefusal { element: BoardItem::Parent, index: None, fault }
 }

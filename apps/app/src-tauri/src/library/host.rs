@@ -25,13 +25,15 @@ use super::presence::{seat_agent_on_board, seat_writer, unseat_writer, Seat, Sea
 use super::{
 	a_document, announce, announce_change, create_board, create_document, delete_item,
 	document_text, documents, encoded_content, import_path, item_at, list, overwrite_path,
-	read_document, rename_linked_document, resolve, root, AcceptedType, OverwriteRefusal,
+	read_document, rename_linked_document, resolve, root, space_dir, AcceptedType,
+	OverwriteRefusal,
 };
 use crate::agent::contract::RuntimeScope;
 use crate::agent::host::{Host, Refusal};
 use crate::board::{
-	changed, drawn, read_out, removed, Board, BoardEdit, BoardRead, ChangedNode, DrawRefusal,
-	DrawnEdge, DrawnNode, Touched,
+	content_hash, deleted, duplicated, export_canvas, find, info, moved, node_file, node_info,
+	tree, under, updated, written, ArrowPatch, Board, BoardEdit, ChangedNode, DrawRefusal,
+	DrawnArrow, DrawnNode, ElementChange, Group, Sought, Touched, WriteMode,
 };
 use crate::conversations::commands::{post_document, ready};
 use crate::conversations::contract::TranscriptStoreError;
@@ -164,11 +166,17 @@ pub enum Operation {
 	DocumentDeleteBlock,
 	DocumentFind,
 	BoardCreate,
-	BoardRead,
-	BoardView,
-	BoardAdd,
+	BoardInfo,
+	BoardTree,
+	BoardNodeInfo,
+	BoardCanvas,
+	BoardWrite,
 	BoardUpdate,
-	BoardRemove,
+	BoardMove,
+	BoardDuplicate,
+	BoardDelete,
+	BoardFind,
+	BoardView,
 }
 
 #[derive(Debug, Deserialize)]
@@ -221,26 +229,79 @@ struct BoardViewed {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct BoardDrawn {
+struct BoardTreed {
 	name: String,
+	parent: Option<String>,
+	depth: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct BoardElements {
+	name: String,
+	#[serde(default)]
+	nodes: Vec<String>,
+	#[serde(default)]
+	arrows: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct BoardParented {
+	name: String,
+	parent: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct BoardWritten {
+	name: String,
+	parent: Option<String>,
+	mode: WriteMode,
 	#[serde(default)]
 	nodes: Vec<DrawnNode>,
 	#[serde(default)]
-	edges: Vec<DrawnEdge>,
+	arrows: Vec<DrawnArrow>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct BoardChanged {
+struct BoardPatched {
 	name: String,
+	#[serde(default)]
 	nodes: Vec<ChangedNode>,
+	#[serde(default)]
+	arrows: Vec<ArrowPatch>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct BoardEmptied {
+struct BoardMoved {
 	name: String,
-	ids: Vec<String>,
+	nodes: Vec<String>,
+	parent: Option<String>,
+	x: i64,
+	y: i64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct BoardDuplicated {
+	name: String,
+	nodes: Vec<String>,
+	x: Option<i64>,
+	y: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct BoardSought {
+	name: String,
+	text: Option<String>,
+	kind: Option<String>,
+	color: Option<String>,
+	fill: Option<String>,
+	shape: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -328,32 +389,50 @@ struct DocumentPosted {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct BoardShown {
+struct BoardHeader {
 	name: String,
+	updated_at: i64,
+	hash: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Headed<T> {
+	header: BoardHeader,
 	#[serde(flatten)]
-	board: BoardRead,
+	answer: T,
 }
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct BoardAdded {
-	name: String,
+struct CanvasShown {
+	canvas: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct KeysLanded {
+	ids: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ElementsTouched {
+	nodes: Vec<String>,
+	arrows: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct NodesFound {
+	nodes: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CopiesMade {
 	nodes: BTreeMap<String, String>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct BoardUpdated {
-	name: String,
-	nodes: Vec<String>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct BoardRemoved {
-	name: String,
-	nodes: Vec<String>,
-	edges: Vec<String>,
+	arrows: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -493,11 +572,11 @@ impl<R: Runtime> LibraryHost<R> {
 		space_id: &str,
 		name: &str,
 		edit: impl FnOnce(&Board) -> Result<(BoardEdit, Option<Touched>, T), DrawRefusal>,
-	) -> Result<T, DocumentRefusal> {
+	) -> Result<Headed<T>, DocumentRefusal> {
 		let agent = self.agent(database).await?;
 		let mut writing = BoardWriting::of(&self.app, space_id, name, &agent);
 		let target = BoardTarget { root, space_id, name, writer: client_id_of(&agent.id) };
-		let (touched, made) = documents(&self.app).edit_board(
+		let ((touched, made), edited) = documents(&self.app).edit_board(
 			&target,
 			|board| {
 				let (edit, touched, made) = edit(board)?;
@@ -509,58 +588,19 @@ impl<R: Runtime> LibraryHost<R> {
 			writing.at(touched);
 		}
 		writing.writing.outcome = LibraryWriteOutcome::Finished;
-		Ok(made)
+		Ok(Headed { header: board_header(root, space_id, name, &edited)?, answer: made })
 	}
 
-	async fn board_added(
+	fn board_answered<T>(
 		&self,
-		database: &db::Database,
 		root: &Path,
 		space_id: &str,
-		asked: BoardDrawn,
-	) -> Result<BoardAdded, DocumentRefusal> {
-		let author = self.scope.bot_id.clone();
-		let nodes = self
-			.board_edited(database, root, space_id, &asked.name, |board| {
-				let drawn = drawn(board, &author, &asked.nodes, &asked.edges)?;
-				Ok((drawn.edit, drawn.touched, drawn.ids))
-			})
-			.await?;
-		Ok(BoardAdded { name: asked.name, nodes })
-	}
-
-	async fn board_updated(
-		&self,
-		database: &db::Database,
-		root: &Path,
-		space_id: &str,
-		asked: BoardChanged,
-	) -> Result<BoardUpdated, DocumentRefusal> {
-		let nodes = self
-			.board_edited(database, root, space_id, &asked.name, |board| {
-				let changed = changed(board, &asked.nodes)?;
-				let ids = changed.edit.changed_nodes.iter().map(|node| node.id.clone()).collect();
-				Ok((changed.edit, changed.touched, ids))
-			})
-			.await?;
-		Ok(BoardUpdated { name: asked.name, nodes })
-	}
-
-	async fn board_removed(
-		&self,
-		database: &db::Database,
-		root: &Path,
-		space_id: &str,
-		asked: BoardEmptied,
-	) -> Result<BoardRemoved, DocumentRefusal> {
-		let (nodes, edges) = self
-			.board_edited(database, root, space_id, &asked.name, |board| {
-				let removed = removed(board, &asked.ids)?;
-				let ids = (removed.edit.removed_nodes.clone(), removed.edit.removed_edges.clone());
-				Ok((removed.edit, removed.touched, ids))
-			})
-			.await?;
-		Ok(BoardRemoved { name: asked.name, nodes, edges })
+		name: &str,
+		read: impl FnOnce(&Board) -> Result<T, DocumentRefusal>,
+	) -> Result<Headed<T>, DocumentRefusal> {
+		let board = documents(&self.app).board(root, space_id, name)?;
+		let answer = read(&board)?;
+		Ok(Headed { header: board_header(root, space_id, name, &board)?, answer })
 	}
 
 	fn opened(&self, root: &Path, space_id: &str, name: &str) -> Result<Outline, LibraryError> {
@@ -806,30 +846,121 @@ impl<R: Runtime> Host for LibraryHost<R> {
 					.name
 					.strip_suffix(BOARD_EXTENSION)
 					.ok_or(LibraryError::InvalidName { name: asked.name.clone() })?;
-				let created = create_board(&root, &space_id, stem)?;
-				Self::answered(self.changed(&space_id, created))
+				let created = self.changed(&space_id, create_board(&root, &space_id, stem)?);
+				Self::answered(self.board_answered(&root, &space_id, &asked.name, |_| Ok(created))?)
 			}
-			Operation::BoardRead => {
+			Operation::BoardInfo => {
 				let asked: Named = Self::read(payload)?;
-				let board = documents(&self.app).board(&root, &space_id, &asked.name)?;
-				Self::answered(BoardShown { name: asked.name, board: read_out(&board) })
+				Self::answered(
+					self.board_answered(&root, &space_id, &asked.name, |board| Ok(info(board)))?,
+				)
+			}
+			Operation::BoardTree => {
+				let asked: BoardTreed = Self::read(payload)?;
+				Self::answered(self.board_answered(&root, &space_id, &asked.name, |board| {
+					Ok(tree(board, asked.parent.as_deref(), asked.depth)?)
+				})?)
+			}
+			Operation::BoardNodeInfo => {
+				let asked: BoardElements = Self::read(payload)?;
+				Self::answered(self.board_answered(&root, &space_id, &asked.name, |board| {
+					Ok(node_info(board, &asked.nodes, &asked.arrows)?)
+				})?)
+			}
+			Operation::BoardCanvas => {
+				let asked: BoardParented = Self::read(payload)?;
+				Self::answered(self.board_answered(&root, &space_id, &asked.name, |board| {
+					let canvas = export_canvas(&under(board, asked.parent.as_deref())?)
+						.map_err(|error| DocumentRefusal::unexpected(error.to_string()))?;
+					Ok(CanvasShown { canvas })
+				})?)
+			}
+			Operation::BoardWrite => {
+				let asked: BoardWritten = Self::read(payload)?;
+				let author = self.scope.bot_id.clone();
+				let write = Group {
+					parent: asked.parent.as_deref(),
+					mode: asked.mode,
+					nodes: &asked.nodes,
+					arrows: &asked.arrows,
+				};
+				Self::answered(
+					self.board_edited(database, &root, &space_id, &asked.name, |board| {
+						let drawn = written(board, &author, &write)?;
+						Ok((drawn.edit, drawn.touched, KeysLanded { ids: drawn.ids }))
+					})
+					.await?,
+				)
+			}
+			Operation::BoardUpdate => {
+				let asked: BoardPatched = Self::read(payload)?;
+				Self::answered(
+					self.board_edited(database, &root, &space_id, &asked.name, |board| {
+						let changed = updated(board, &asked.nodes, &asked.arrows)?;
+						let touched = ElementsTouched {
+							nodes: ids_of(&changed.edit.changed_nodes),
+							arrows: ids_of(&changed.edit.changed_edges),
+						};
+						Ok((changed.edit, changed.touched, touched))
+					})
+					.await?,
+				)
+			}
+			Operation::BoardMove => {
+				let asked: BoardMoved = Self::read(payload)?;
+				let at = (asked.x, asked.y);
+				Self::answered(
+					self.board_edited(database, &root, &space_id, &asked.name, |board| {
+						let moved = moved(board, &asked.nodes, asked.parent.as_deref(), at)?;
+						Ok((moved.edit, moved.touched, NodesFound { nodes: moved.nodes }))
+					})
+					.await?,
+				)
+			}
+			Operation::BoardDuplicate => {
+				let asked: BoardDuplicated = Self::read(payload)?;
+				let at = asked.x.zip(asked.y);
+				Self::answered(
+					self.board_edited(database, &root, &space_id, &asked.name, |board| {
+						let copies = duplicated(board, &asked.nodes, at)?;
+						let made = CopiesMade { nodes: copies.nodes, arrows: copies.arrows };
+						Ok((copies.edit, copies.touched, made))
+					})
+					.await?,
+				)
+			}
+			Operation::BoardDelete => {
+				let asked: BoardElements = Self::read(payload)?;
+				Self::answered(
+					self.board_edited(database, &root, &space_id, &asked.name, |board| {
+						let gone = deleted(board, &asked.nodes, &asked.arrows)?;
+						let touched = ElementsTouched {
+							nodes: gone.edit.removed_nodes.clone(),
+							arrows: gone.edit.removed_edges.clone(),
+						};
+						Ok((gone.edit, gone.touched, touched))
+					})
+					.await?,
+				)
+			}
+			Operation::BoardFind => {
+				let asked: BoardSought = Self::read(payload)?;
+				let sought = Sought {
+					text: asked.text,
+					kind: asked.kind,
+					color: asked.color,
+					fill: asked.fill,
+					shape: asked.shape,
+				};
+				Self::answered(self.board_answered(&root, &space_id, &asked.name, |board| {
+					Ok(NodesFound { nodes: find(board, &sought) })
+				})?)
 			}
 			Operation::BoardView => {
 				let asked: BoardViewed = Self::read(payload)?;
-				let board = documents(&self.app).board(&root, &space_id, &asked.name)?;
-				Self::answered(image_viewed(&root, &space_id, &board, asked.id)?)
-			}
-			Operation::BoardAdd => {
-				let asked = Self::read(payload)?;
-				Self::answered(self.board_added(database, &root, &space_id, asked).await?)
-			}
-			Operation::BoardUpdate => {
-				let asked = Self::read(payload)?;
-				Self::answered(self.board_updated(database, &root, &space_id, asked).await?)
-			}
-			Operation::BoardRemove => {
-				let asked = Self::read(payload)?;
-				Self::answered(self.board_removed(database, &root, &space_id, asked).await?)
+				Self::answered(self.board_answered(&root, &space_id, &asked.name, |board| {
+					image_viewed(&root, &space_id, board, asked.id)
+				})?)
 			}
 		}
 	}
@@ -1112,7 +1243,7 @@ fn image_viewed(
 	board: &Board,
 	id: String,
 ) -> Result<ItemRead, DocumentRefusal> {
-	let Some(node) = read_out(board).nodes.into_iter().find(|node| node.id == id) else {
+	let Some(node) = node_file(board, &id) else {
 		return Err(not_shown(id, NotShown::UnknownNode));
 	};
 	if node.kind != IMAGE_KIND {
@@ -1143,6 +1274,24 @@ fn image_viewed(
 		name: file,
 		mime_type: mime_type.to_owned(),
 	})
+}
+
+fn board_header(
+	root: &Path,
+	space_id: &str,
+	name: &str,
+	board: &Board,
+) -> Result<BoardHeader, DocumentRefusal> {
+	let item = item_at(&space_dir(root, space_id).join(name), name.to_owned())?
+		.ok_or_else(|| LibraryError::Missing { name: name.to_owned() })?;
+	let hash = content_hash(board).map_err(|error| {
+		DocumentRefusal::unexpected(format!("the board {name} did not hash: {error}"))
+	})?;
+	Ok(BoardHeader { name: item.name, updated_at: item.modified_at, hash })
+}
+
+fn ids_of(changes: &[ElementChange]) -> Vec<String> {
+	changes.iter().map(|change| change.id.clone()).collect()
 }
 
 fn not_shown(id: String, reason: NotShown) -> DocumentRefusal {

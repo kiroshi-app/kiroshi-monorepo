@@ -96,26 +96,40 @@ const DELETE =
 const POST_DOCUMENT =
 	"Post a document or a board of the Library of this Space in this conversation, as a message of yours the person opens it from, once you want them to read it. A name that is not a document or a board of this Library is refused and nothing is posted. It answers the name of the item, the id of this conversation and the id of the message."
 
-const BOARD_CREATE =
-	"Create a new empty board in the Library of this Space, shown in the Library of the person right away. A name already taken is refused and nothing is created. To draw on a board that already exists, add to it with board_add, never create another one. It answers the name the board stands under, its kind and its updatedAt."
+const HEADED =
+	"Every answer also carries a header: the name of the board, its updatedAt and a hash of its content that changes whenever a node or an arrow changes and stays equal otherwise, so a hash other than the one you hold means someone drew on the board since."
+
+const BOARD_CREATE = `Create a new empty board in the Library of this Space, shown in the Library of the person right away. A name already taken is refused and nothing is created. To draw on a board that already exists, write into it with board_write, never create another one. It answers the name the board stands under, its kind and its updatedAt. ${HEADED}`
 
 const BOARD_NAME =
 	"The name of the board in the Library of this Space, ending in .canvas, such as roadmap.canvas, without any folder."
 
-const BOARD_READ =
-	"Read a board of the Library of this Space as it stands now with what everyone has drawn on it, you or a person. It answers every node with its id, its kind, its x, y, width and height, its text (the text of a sticky, a text or a shape, the label of a section) and the id of the section that holds it, and every arrow with its id, its two ends, its label, its labelPosition (where the label sits along the arrow, from 0 at its start to 1 at its end, 0.5 by default), its bend, its routing (straight or elbow) and its headSize (small, medium or large). An end tied to a node answers its fromNode or toNode, with its fromAnchor or toAnchor when it is tied at an exact point of the node, x and y from 0 to 1 across it, and none when it is tied at the centre; a free end answers its fromPoint or toPoint, a board x and y. An image or a libraryCard also answers its file, the name of its item in the Library of this Space that library_read opens, and an image its mediaType: call board_view with its id to see that image. A linkCard also answers its url and its title."
+const BOARD_INFO = `Orient on a board of the Library of this Space before reading it in detail, whoever drew on it. It answers how many nodes of each kind it holds, how many arrows, the bounds of all its nodes, and the id, label, x, y, width and height of every section at its top level. ${HEADED}`
 
-const BOARD_VIEW =
-	"Show you an image node of a board of the Library of this Space as an image, whoever dropped it there. A node that is not an image, an image whose file is not in the Library of this Space, or an image too large to show is refused with the node id and the reason, the size and the limit for one too large, and nothing is shown."
+const BOARD_TREE = `List the nodes of a board of the Library of this Space under a parent, the board itself or one of its sections, as they stand now with what everyone has drawn. Each node answers its id, its kind, an excerpt of its text of 60 characters at most (the label of a section, the file of an image or a libraryCard, the title or the url of a linkCard), its x, y, width and height, its z-order and its parent, the smallest section whose rectangle holds it. Given a depth, it stops that many levels down and answers for each node at that limit the count of its children it left out. It also lists every arrow whose two ends lie under that parent, with its id, its fromNode or fromPoint, its toNode or toPoint and its label. A parent absent from the board, or that is not a section, is refused with its id. ${HEADED}`
+
+const PARENT =
+	"The id of a section of the board, as board_tree answered it; left out, the board itself."
+
+const DEPTH =
+	"How many levels under the parent to list, 1 for its children alone; left out, every level."
+
+const BOARD_NODE_INFO = `Read every JSON Canvas field of nodes and arrows of a board of the Library of this Space by id. A node answers its kind, x, y, width, height, z-order, text or label, color, fill, shape and any other field it carries, such as the file of an image: call board_view with its id to see an image. An arrow answers its fromNode or fromPoint, fromSide, fromAnchor, fromEnd, toNode or toPoint, toSide, toAnchor, toEnd, color, label, labelPosition, bend, routing and headSize. A field never set answers its default, or null. An id absent from the board refuses the whole call with that id. ${HEADED}`
+
+const BOARD_CANVAS = `Read the JSON Canvas text of a board of the Library of this Space, or of one of its sections with every node the section holds and the arrows between them. ${HEADED}`
+
+const BOARD_VIEW = `Show you an image node of a board of the Library of this Space as an image, whoever dropped it there. A node that is not an image, an image whose file is not in the Library of this Space, or an image too large to show is refused with the node id and the reason, the size and the limit for one too large, and nothing is shown. ${HEADED}`
 
 const VIEWED_ID =
-	"The id of an image node of the board, as board_read answered it."
+	"The id of an image node of the board, as board_tree answered it."
 
-const BOARD_ADD =
-	"Draw a whole diagram on a board of the Library of this Space in one call, landing at once for the people who have it open. Give every node a key of your own; place a node beside another one, of this call by its key or of the board by its id, or inside a section, and the board computes where it lands without covering another node. A node without a place lands right of the node before it, the first one right of everything on the board. An arrow ties two nodes at their centre, each named by its key in this call, its id on the board, or the text of the one node of the board that shows it; give arrows and no nodes to tie nodes already on the board. One invalid node or arrow refuses the whole call with its index and the reason, a name shown by several nodes with the ids that show it, and nothing changes. It answers the id each key got."
+const BOARD_WRITE = `Write one group of nodes and arrows into a parent of a board of the Library of this Space, the board itself or one of its sections, landing at once for the people who have it open. Give every node a key of your own; place it at x and y, beside another node with place, or inside a section with section, and the board computes where it lands without covering another node. A node with no section lands inside the parent, which grows to hold it. An arrow names its ends with fromNode and toNode, each the key of a node of this call or the id of a node of the board, or leaves an end free at fromPoint or toPoint. An arrow without routing is an elbow tied on the sides of its two nodes that face each other. In replace mode, the nodes the parent section holds and every arrow tied to them are removed in the same change, the section itself kept; replace without a parent is refused as missingParent and nothing changes. An id absent from the board, or one invalid node or arrow, refuses the whole call with its element, its index and the reason, and nothing changes. It answers the id each key got. ${HEADED}`
+
+const WRITE_MODE =
+	"insert to add the group beside what the parent holds, replace to remove what the parent section holds first; replace needs a parent."
 
 const NODES =
-	"The nodes to draw, in order: each node without a place lands right of the one before it. Left out to draw arrows alone."
+	"The nodes to write, in order: each node without a place lands right of the one before it, inside the parent."
 
 const KEY =
 	"A name of your own for this node, unique in this call, that the place, the section and the arrows of this call use to point at it."
@@ -144,27 +158,80 @@ const OF =
 	"The key of a node of this call or the id of a node of the board the node lands beside."
 
 const SECTION =
-	"The key of a section of this call or the id of a section of the board the node lands inside; the section grows to hold it."
+	"The key of a section of this call or the id of a section of the board the node lands inside; the section grows to hold it. Left out, the parent."
 
-const EDGES = "The arrows to draw between the nodes."
+const ARROWS = "The arrows to write between the nodes."
 
-const ENDPOINT =
-	"The node the arrow ties at its centre: the key of a node of this call, the id of a node of the board, or the text of the one node of the board that shows it."
+const ARROW_KEY =
+	"A name of your own for this arrow, unique in this call, to find its id in the answer."
 
-const EDGE_LABEL = "The text written on the arrow."
+const ARROW_NODE =
+	"The node this end ties to: the key of a node of this call or the id of a node of the board."
 
-const BOARD_UPDATE =
-	"Change fields of nodes of a board of the Library of this Space, drawn by you or by a person, every other field kept as it stands, in one change the people who have it open see at once. x, y, width and height move and resize a node of any kind, an image and a libraryCard included; text, color, fill and shape apply only to a kind that carries them. An id absent from the board or a field the node refuses refuses the whole call with its index and the reason, and nothing changes. It answers the ids of the nodes changed."
+const ARROW_SIDE =
+	"One of top, right, bottom or left: the side of the node this end ties to; never with an anchor."
 
-const CHANGES = "The nodes to change, each by its id with the fields to set."
+const ARROW_ANCHOR =
+	"The exact point of the node this end ties to, x and y from 0 to 1 across it; never with a side."
 
-const NODE_ID = "The id of a node of the board, as board_read answered it."
+const ARROW_POINT = "A free end at a board x and y, tied to no node."
 
-const BOARD_REMOVE =
-	"Remove nodes of any kind from a board of the Library of this Space, drawn by you or by a person, with every arrow tied to them, in one change. An id absent from the board refuses the whole call with its index and nothing changes. It answers the ids of the nodes and of the arrows removed."
+const ARROW_END = "One of none or arrow: whether this end draws an arrowhead."
 
-const REMOVED_IDS =
-	"The ids of the nodes to remove, as board_read answered them."
+const ARROW_LABEL = "The text written on the arrow."
+
+const LABEL_POSITION =
+	"Where the label sits along the arrow, from 0 at its start to 1 at its end, 0.5 by default."
+
+const BEND = "How far the arrow bows, in board units, 0 for none."
+
+const ROUTING = "One of straight or elbow; left out on a new arrow, elbow."
+
+const HEAD_SIZE = "One of small, medium or large."
+
+const BOARD_UPDATE = `Change fields of nodes and of arrows of a board of the Library of this Space by id, drawn by you or by a person, every field a patch does not name kept as it stands, in one change the people who have it open see at once. x, y, width and height move and resize a node of any kind, an image and a libraryCard included; text, color, fill and shape apply only to a kind that carries them. Tying an end of an arrow to a node frees its point and the reverse; a side replaces an anchor and the reverse. An id absent from the board, or a field the node or the arrow refuses, refuses the whole call with its element, its index and the reason, and nothing changes. It answers the ids of the nodes and of the arrows changed. ${HEADED}`
+
+const NODE_PATCHES =
+	"The nodes to change, each by its id with the fields to set."
+
+const ARROW_PATCHES =
+	"The arrows to change, each by its id with the fields to set."
+
+const NODE_ID = "The id of a node of the board, as board_tree answered it."
+
+const ARROW_ID = "The id of an arrow of the board, as board_tree answered it."
+
+const BOARD_MOVE = `Move nodes of a board of the Library of this Space into a parent, the board itself or one of its sections, the top left of their bounds landing at x and y. Every node keeps its id and every arrow stays tied to it; a moved section carries every node it holds by the same offset, and the target section grows to hold what lands in it. An id absent from the board, or a section moved into itself, refuses the whole call and nothing changes. It answers the ids of the nodes moved. ${HEADED}`
+
+const MOVED_IDS = "The ids of the nodes to move, as board_tree answered them."
+
+const TARGET =
+	"The board x or y the top left of the bounds of the nodes lands at, given with its pair."
+
+const BOARD_DUPLICATE = `Copy nodes of a board of the Library of this Space, with every node a copied section holds and every arrow whose two ends are copied, right of the originals clear of the other nodes, or with the top left of their bounds at x and y. An id absent from the board refuses the whole call and nothing changes. It answers each old node id and each old arrow id with the id of its copy. ${HEADED}`
+
+const COPIED_IDS = "The ids of the nodes to copy, as board_tree answered them."
+
+const BOARD_DELETE = `Remove nodes and arrows of any kind from a board of the Library of this Space by id, drawn by you or by a person, a section with every node it holds and every arrow tied to a removed node, in one change. An id absent from the board refuses the whole call with that id and nothing changes. It answers the ids of the nodes and of the arrows removed. ${HEADED}`
+
+const REMOVED_NODES =
+	"The ids of the nodes to remove, as board_tree answered them."
+
+const REMOVED_ARROWS =
+	"The ids of the arrows to remove, as board_tree answered them."
+
+const BOARD_FIND = `Find the nodes of a board of the Library of this Space matching every criterion you give among the text they show, whatever its case, their kind, color, fill and shape. It answers their ids, lowest z-order first; given no criterion, every node. ${HEADED}`
+
+const SHOWN_TEXT = "Words the node shows, its text or the label of a section."
+
+const FOUND_KIND =
+	"One of sticky, text, shape, section, image, linkCard or libraryCard."
+
+const DETAILED_NODES =
+	"The ids of the nodes to read, as board_tree answered them."
+
+const DETAILED_ARROWS =
+	"The ids of the arrows to read, as board_tree answered them."
 
 type ToolInput = Record<string, z.ZodType>
 
@@ -245,8 +312,46 @@ const GEOMETRY = {
 	height: z.number().int().optional().describe(SIZE),
 }
 
-const DRAWN: ToolInput = {
+const PAIR = z.object({ x: z.number(), y: z.number() }).strict()
+
+const arrowEnd = (end: "from" | "to") => ({
+	[`${end}Node`]: z.string().optional().describe(ARROW_NODE),
+	[`${end}Side`]: z.string().optional().describe(ARROW_SIDE),
+	[`${end}Anchor`]: PAIR.optional().describe(ARROW_ANCHOR),
+	[`${end}Point`]: PAIR.optional().describe(ARROW_POINT),
+	[`${end}End`]: z.string().optional().describe(ARROW_END),
+})
+
+const ARROW_FIELDS = {
+	...arrowEnd("from"),
+	...arrowEnd("to"),
+	color: z.string().optional().describe(COLOR),
+	label: z.string().optional().describe(ARROW_LABEL),
+	labelPosition: z.number().optional().describe(LABEL_POSITION),
+	bend: z.number().optional().describe(BEND),
+	routing: z.string().optional().describe(ROUTING),
+	headSize: z.string().optional().describe(HEAD_SIZE),
+}
+
+const PARENTED: ToolInput = {
 	...BOARD_NAMED,
+	parent: z.string().optional().describe(PARENT),
+}
+
+const TREED: ToolInput = {
+	...PARENTED,
+	depth: z.number().int().min(1).optional().describe(DEPTH),
+}
+
+const DETAILED: ToolInput = {
+	...BOARD_NAMED,
+	nodes: z.array(z.string()).optional().describe(DETAILED_NODES),
+	arrows: z.array(z.string()).optional().describe(DETAILED_ARROWS),
+}
+
+const WRITTEN_GROUP: ToolInput = {
+	...PARENTED,
+	mode: z.enum(["insert", "replace"]).describe(WRITE_MODE),
 	nodes: z
 		.array(
 			z
@@ -269,21 +374,20 @@ const DRAWN: ToolInput = {
 		)
 		.optional()
 		.describe(NODES),
-	edges: z
+	arrows: z
 		.array(
 			z
 				.object({
-					from: z.string().describe(ENDPOINT),
-					to: z.string().describe(ENDPOINT),
-					label: z.string().optional().describe(EDGE_LABEL),
+					key: z.string().optional().describe(ARROW_KEY),
+					...ARROW_FIELDS,
 				})
 				.strict(),
 		)
 		.optional()
-		.describe(EDGES),
+		.describe(ARROWS),
 }
 
-const CHANGED: ToolInput = {
+const PATCHED: ToolInput = {
 	...BOARD_NAMED,
 	nodes: z
 		.array(
@@ -291,7 +395,44 @@ const CHANGED: ToolInput = {
 				.object({ id: z.string().describe(NODE_ID), ...LOOK, ...GEOMETRY })
 				.strict(),
 		)
-		.describe(CHANGES),
+		.optional()
+		.describe(NODE_PATCHES),
+	arrows: z
+		.array(
+			z.object({ id: z.string().describe(ARROW_ID), ...ARROW_FIELDS }).strict(),
+		)
+		.optional()
+		.describe(ARROW_PATCHES),
+}
+
+const MOVED: ToolInput = {
+	...BOARD_NAMED,
+	nodes: z.array(z.string()).describe(MOVED_IDS),
+	parent: z.string().optional().describe(PARENT),
+	x: z.number().int().describe(TARGET),
+	y: z.number().int().describe(TARGET),
+}
+
+const DUPLICATED: ToolInput = {
+	...BOARD_NAMED,
+	nodes: z.array(z.string()).describe(COPIED_IDS),
+	x: z.number().int().optional().describe(TARGET),
+	y: z.number().int().optional().describe(TARGET),
+}
+
+const DELETED: ToolInput = {
+	...BOARD_NAMED,
+	nodes: z.array(z.string()).optional().describe(REMOVED_NODES),
+	arrows: z.array(z.string()).optional().describe(REMOVED_ARROWS),
+}
+
+const SOUGHT: ToolInput = {
+	...BOARD_NAMED,
+	text: z.string().optional().describe(SHOWN_TEXT),
+	kind: z.string().optional().describe(FOUND_KIND),
+	color: z.string().optional().describe(COLOR),
+	fill: z.string().optional().describe(FILL),
+	shape: z.string().optional().describe(SHAPE),
 }
 
 const VIEWED: ToolInput = {
@@ -299,15 +440,20 @@ const VIEWED: ToolInput = {
 	id: z.string().describe(VIEWED_ID),
 }
 
-const REMOVED: ToolInput = {
-	...BOARD_NAMED,
-	ids: z.array(z.string()).describe(REMOVED_IDS),
+type ImageRead = {
+	form: "image"
+	mimeType: string
+	content: string
+	header?: unknown
 }
-
-type ImageRead = { form: "image"; mimeType: string; content: string }
 
 const isImageRead = (answer: unknown): answer is ImageRead =>
 	(answer as ImageRead | null)?.form === "image"
+
+const headerOf = ({ header }: ImageRead) =>
+	header === undefined
+		? []
+		: [{ type: "text" as const, text: JSON.stringify({ header }) }]
 
 const shownToTheModel = (answer: unknown) =>
 	isImageRead(answer)
@@ -318,6 +464,7 @@ const shownToTheModel = (answer: unknown) =>
 						data: answer.content,
 						mimeType: answer.mimeType,
 					},
+					...headerOf(answer),
 				],
 			}
 		: spoken(answer)
@@ -387,19 +534,37 @@ export const libraryTools = (
 	tool("board_create", BOARD_CREATE, BOARD_NAMED, (input) =>
 		asked(session, "boardCreate", input),
 	),
-	tool("board_read", BOARD_READ, BOARD_NAMED, (input) =>
-		asked(session, "boardRead", input),
+	tool("board_info", BOARD_INFO, BOARD_NAMED, (input) =>
+		asked(session, "boardInfo", input),
+	),
+	tool("board_tree", BOARD_TREE, TREED, (input) =>
+		asked(session, "boardTree", input),
+	),
+	tool("board_node_info", BOARD_NODE_INFO, DETAILED, (input) =>
+		asked(session, "boardNodeInfo", input),
+	),
+	tool("board_canvas", BOARD_CANVAS, PARENTED, (input) =>
+		asked(session, "boardCanvas", input),
+	),
+	tool("board_write", BOARD_WRITE, WRITTEN_GROUP, (input) =>
+		asked(session, "boardWrite", input),
+	),
+	tool("board_update", BOARD_UPDATE, PATCHED, (input) =>
+		asked(session, "boardUpdate", input),
+	),
+	tool("board_move", BOARD_MOVE, MOVED, (input) =>
+		asked(session, "boardMove", input),
+	),
+	tool("board_duplicate", BOARD_DUPLICATE, DUPLICATED, (input) =>
+		asked(session, "boardDuplicate", input),
+	),
+	tool("board_delete", BOARD_DELETE, DELETED, (input) =>
+		asked(session, "boardDelete", input),
+	),
+	tool("board_find", BOARD_FIND, SOUGHT, (input) =>
+		asked(session, "boardFind", input),
 	),
 	tool("board_view", BOARD_VIEW, VIEWED, (input) =>
 		read(session, "boardView", input),
-	),
-	tool("board_add", BOARD_ADD, DRAWN, (input) =>
-		asked(session, "boardAdd", input),
-	),
-	tool("board_update", BOARD_UPDATE, CHANGED, (input) =>
-		asked(session, "boardUpdate", input),
-	),
-	tool("board_remove", BOARD_REMOVE, REMOVED, (input) =>
-		asked(session, "boardRemove", input),
 	),
 ]

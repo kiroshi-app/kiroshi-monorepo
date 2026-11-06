@@ -280,7 +280,7 @@ impl Documents {
 		target: &BoardTarget<'_>,
 		edit: impl FnOnce(&Board) -> Result<(BoardEdit, T), E>,
 		announce: impl FnOnce(&Applied),
-	) -> Result<T, E> {
+	) -> Result<(T, Board), E> {
 		let BoardTarget { root, space_id, name, writer } = *target;
 		let mut held = self.held();
 		let file = held.located(root, space_id, name)?;
@@ -288,9 +288,10 @@ impl Documents {
 		let (board_edit, made) = edit(&board::read(doc, &file.name)?)?;
 		let update = board::update_of(doc, writer, &file.name, &board_edit)?;
 		let change = board_change(doc, &file, &update)?;
+		let edited = board::read(doc, &file.name);
 		announce(&Applied { name: file.name.clone(), change });
 		self.board_write_scheduled(&mut held, root, key(space_id, &file.name));
-		Ok(made)
+		Ok((made, edited?))
 	}
 
 	fn board_write_scheduled(&self, held: &mut Held, root: &Path, key: Key) {
