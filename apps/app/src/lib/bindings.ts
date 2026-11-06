@@ -1313,6 +1313,7 @@ export type LibraryLinkPreview_Deserialize = {
 	site: string,
 	image?: string,
 	alt?: string,
+	description?: string,
 };
 
 export type LibraryLinkPreview_Serialize = {
@@ -1321,6 +1322,7 @@ export type LibraryLinkPreview_Serialize = {
 	site: string,
 	image?: string,
 	alt?: string,
+	description?: string,
 };
 
 export type LibraryOverwritten = {

@@ -239,3 +239,46 @@ async fn an_http_or_unparsable_url_is_refused_without_a_request() {
 	}
 	assert_eq!(requests.load(Ordering::SeqCst), 0);
 }
+
+fn described(page: &str) -> Option<String> {
+	preview_of("https://example.test/", &landed("https://example.test/"), page).description
+}
+
+#[test]
+fn an_og_description_answers_its_decoded_trimmed_content_as_description() {
+	let page = r#"<meta property="og:description" content="  Cats &amp; dogs on a sofa  ">"#;
+
+	assert_eq!(described(page).as_deref(), Some("Cats & dogs on a sofa"));
+}
+
+#[test]
+fn a_named_description_answers_when_og_description_is_missing() {
+	let page = r#"<meta property="og:description" content="  "><meta name="description" content="Cats on a sofa">"#;
+
+	assert_eq!(described(page).as_deref(), Some("Cats on a sofa"));
+}
+
+#[test]
+fn an_og_description_wins_over_a_named_description_placed_before_it() {
+	let page = r#"<meta name="description" content="Named"><meta property="og:description" content="Open Graph">"#;
+
+	assert_eq!(described(page).as_deref(), Some("Open Graph"));
+}
+
+#[test]
+fn a_page_without_a_description_serializes_no_description_field() {
+	let preview =
+		preview_of("https://example.test/", &landed("https://example.test/"), "<p>cat</p>");
+
+	let json = serde_json::to_value(&preview).expect("the preview serializes");
+
+	assert!(json.get("description").is_none(), "{json}");
+}
+
+#[test]
+fn empty_or_blank_description_tags_answer_no_description() {
+	let page =
+		r#"<meta property="og:description" content=""><meta name="description" content=" &#32; ">"#;
+
+	assert_eq!(described(page), None);
+}

@@ -119,6 +119,10 @@ fn preview_of(url: &str, landed: &Url, page: &str) -> LibraryLinkPreview {
 		site: properties.get("og:site_name").cloned().unwrap_or(host),
 		image: image.map(String::from),
 		alt,
+		description: properties
+			.get("og:description")
+			.or_else(|| properties.get("description"))
+			.cloned(),
 	}
 }
 
