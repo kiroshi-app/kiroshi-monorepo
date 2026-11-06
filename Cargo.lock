@@ -2753,23 +2753,32 @@ name = "kiroshi-core"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
+ "chacha20poly1305",
  "chrono",
+ "ed25519-dalek",
  "futures-util",
+ "getrandom 0.4.3",
  "git2",
+ "hkdf",
+ "hmac",
  "image",
  "libc",
  "log",
  "regex",
  "reqwest",
  "rusqlite",
+ "security-framework",
  "serde",
  "serde_json",
+ "sha2",
  "specta",
  "specta-typescript",
  "tokio",
  "unicode-normalization",
  "uuid",
+ "x25519-dalek",
  "yrs",
+ "zeroize",
 ]
 
 [[package]]

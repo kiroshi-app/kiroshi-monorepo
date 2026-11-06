@@ -10,7 +10,7 @@ use super::join;
 use super::sealed_box;
 use super::subkey::Subkey;
 
-const VECTORS: &str = include_str!("../../tests/vectors/v2-crypto.json");
+const VECTORS: &str = include_str!("../../../../apps/app/src-tauri/tests/vectors/v2-crypto.json");
 
 #[derive(Deserialize)]
 struct Vectors {

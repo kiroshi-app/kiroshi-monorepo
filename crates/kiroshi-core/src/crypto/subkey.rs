@@ -24,8 +24,8 @@ impl Subkey {
 		Self(subkey)
 	}
 
-	#[cfg(test)]
-	pub(crate) fn from_bytes(bytes: [u8; KEY_LENGTH]) -> Self {
+	#[cfg(any(test, feature = "test-support"))]
+	pub fn from_bytes(bytes: [u8; KEY_LENGTH]) -> Self {
 		Self(Zeroizing::new(bytes))
 	}
 

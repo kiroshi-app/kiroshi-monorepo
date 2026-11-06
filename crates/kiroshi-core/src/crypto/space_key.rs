@@ -23,11 +23,11 @@ impl HeldSpaceKey {
 		Ok(Self { key_id, key })
 	}
 
-	pub(super) fn item(&self) -> Zeroizing<Vec<u8>> {
+	pub fn item(&self) -> Zeroizing<Vec<u8>> {
 		Zeroizing::new([self.key_id.to_be_bytes().as_slice(), self.key.as_slice()].concat())
 	}
 
-	pub(super) fn of_item(bytes: &[u8]) -> Result<Self, DeviceKeysError> {
+	pub fn of_item(bytes: &[u8]) -> Result<Self, DeviceKeysError> {
 		if bytes.len() != KEY_ID_LENGTH + KEY_LENGTH {
 			return Err(DeviceKeysError::Malformed);
 		}

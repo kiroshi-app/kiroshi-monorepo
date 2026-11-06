@@ -18,7 +18,7 @@ pub fn seal(recipient: &PublicKey, plaintext: &[u8]) -> Result<Vec<u8>, CryptoEr
 	seal_with(&ephemeral, *random_bytes::<NONCE_LENGTH>()?, recipient, plaintext)
 }
 
-pub(crate) fn seal_with(
+pub fn seal_with(
 	ephemeral: &StaticSecret,
 	nonce: [u8; NONCE_LENGTH],
 	recipient: &PublicKey,
