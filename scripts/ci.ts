@@ -1,4 +1,4 @@
-import { appendFileSync, mkdtempSync, readFileSync } from "node:fs"
+import { appendFileSync, mkdtempSync, readdirSync, readFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -29,6 +29,8 @@ const APP = "apps/app"
 const SRC_TAURI = join(APP, "src-tauri")
 
 const RETRYING_REF = "refs/heads/main"
+
+const UI_TESTS = join(REPO, "apps/ios/KiroshiUITests")
 
 const SIMULATOR_DESTINATION =
 	'-destination "platform=iOS Simulator,id=$SIMULATOR"'
@@ -193,7 +195,7 @@ export const GATE = {
 		},
 		{
 			name: "Test on the simulator",
-			command: `apps/ios/scripts/xcodebuild.sh -project apps/ios/Kiroshi.xcodeproj -scheme Kiroshi -testPlan Kiroshi ${SIMULATOR_DESTINATION} -derivedDataPath apps/ios/build -parallel-testing-enabled NO -collect-test-diagnostics never test-without-building`,
+			command: `apps/ios/scripts/xcodebuild.sh -project apps/ios/Kiroshi.xcodeproj -scheme Kiroshi -testPlan Kiroshi ${SIMULATOR_DESTINATION} -derivedDataPath apps/ios/build -parallel-testing-enabled NO -collect-test-diagnostics never test-without-building $IOS_ONLY_TESTING`,
 			heavy: true,
 		},
 		{
@@ -438,8 +440,14 @@ export const spawnedCommand = (step: Step) => {
 	return step.heavy ? [SLOT, ...command] : command
 }
 
+export const elapsedText = (milliseconds: number) => {
+	const seconds = Math.round(milliseconds / 1000)
+	return `${Math.floor(seconds / 60)}m ${seconds % 60}s`
+}
+
 const runStep = ({ label, step }: Labelled) => {
 	console.log(`\nci  ${label} / ${step.name}\n    $ ${step.command}`)
+	const started = performance.now()
 	const finished = Bun.spawnSync({
 		cmd: spawnedCommand(step),
 		cwd: join(REPO, step.cwd ?? ""),
@@ -447,9 +455,13 @@ const runStep = ({ label, step }: Labelled) => {
 		stderr: "inherit",
 		env: process.env,
 	})
-	if (finished.exitCode === 0) return true
+	const took = elapsedText(performance.now() - started)
+	if (finished.exitCode === 0) {
+		console.log(`\nci  passed: ${label} / ${step.name} in ${took}`)
+		return true
+	}
 	console.error(
-		`\nci  failed: ${label} / ${step.name} (exit ${finished.exitCode})`,
+		`\nci  failed: ${label} / ${step.name} (exit ${finished.exitCode}) after ${took}`,
 	)
 	return false
 }
@@ -600,8 +612,50 @@ const runWithRetry = ({ label, step }: Labelled) => {
 const runSteps = (label: string, steps: Step[]) =>
 	steps.every((step) => runWithRetry({ label, step }))
 
+export type Shard = { index: number; count: number }
+
+export const parsedShard = (text: string): Shard => {
+	const match = /^(\d+)\/(\d+)$/.exec(text)
+	const index = Number(match?.[1])
+	const count = Number(match?.[2])
+	if (!match || index < 1 || index > count)
+		throw new Error(`IOS_SHARD is "${text}", expected k/n with 1 <= k <= n`)
+	return { index, count }
+}
+
+export const uiTestClasses = (directory = UI_TESTS) =>
+	readdirSync(directory)
+		.filter((name) => name.endsWith("Tests.swift"))
+		.map((name) => name.slice(0, -".swift".length))
+		.sort()
+
+export const shardTests = ({ index, count }: Shard, classes: string[]) => [
+	...(index === 1 ? ["KiroshiTests"] : []),
+	...classes
+		.filter((_, position) => position % count === index - 1)
+		.map((name) => `KiroshiUITests/${name}`),
+]
+
+const selectIosTests = () => {
+	// biome-ignore lint/suspicious/noUndeclaredEnvVars: scripts/ci.ts runs outside turbo, its cache never reads this variable
+	const shard = process.env.IOS_SHARD
+	if (!shard) {
+		process.env.IOS_ONLY_TESTING = ""
+		console.log("\nci  ios runs every test of the Kiroshi plan")
+		return
+	}
+	const tests = shardTests(parsedShard(shard), uiTestClasses())
+	process.env.IOS_ONLY_TESTING = tests
+		.map((test) => `-only-testing:${test}`)
+		.join(" ")
+	console.log(`\nci  ios shard ${shard} runs ${tests.join(", ")}`)
+}
+
 const runGroup = (group: Group) => {
-	if (group === "ios") ensureSimulator()
+	if (group === "ios") {
+		ensureSimulator()
+		selectIosTests()
+	}
 	return runSteps(group, GATE[group])
 }
 

@@ -21,7 +21,7 @@ concurrency:
 # scripts/ci-changes.ts selects every other job per event, verify requires every selected job.
 # pull_request: changes, lint, vitest on the test files the diff changed, rust on its library tests, verify.
 # pull_request labelled ci:storybook: storybook too, on the full story set, its browser debug output uploaded as an artifact.
-# push to main: changes, lint, vitest, website, rust, storybook on the paths changed since the last green push to main, ios, verify.
+# push to main: changes, lint, vitest, website, rust, storybook on the paths changed since the last green push to main, ios split over three jobs, verify.
 # v* tag: changes, lint, vitest, website, rust, storybook, verify.
 jobs:
   lint:
@@ -231,6 +231,12 @@ jobs:
     if: needs.changes.outputs.ios == 'true'
     runs-on: xcode-27
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    env:
+      IOS_SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -251,6 +257,7 @@ jobs:
           nohup xcrun simctl boot "$simulator" > /dev/null 2>&1 &
 
       - name: Gate
+        timeout-minutes: 45
         run: bun scripts/ci.ts ios
 
   verify:
