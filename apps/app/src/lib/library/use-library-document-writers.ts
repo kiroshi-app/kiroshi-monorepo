@@ -57,7 +57,7 @@ export const reportUnheard = (event: string) => (reason: unknown) => {
 const isIn = ({ spaceId, name }: WatchedDocument, payload: WatchedDocument) =>
 	payload.spaceId === spaceId && payload.name === name
 
-const useListenWhileWatched = <Payload extends WatchedDocument>(
+export const useListenWhileWatched = <Payload extends WatchedDocument>(
 	watched: WatchedDocument | null,
 	event: string,
 	hear: (watched: WatchedDocument, payload: Payload) => void,
@@ -81,7 +81,7 @@ const useListenWhileWatched = <Payload extends WatchedDocument>(
 	}, [watched, event])
 }
 
-const useIsOwnSeat = (isJoined: boolean) => {
+export const useIsOwnSeat = (isJoined: boolean) => {
 	const signedInAccountId = useSignedInAccountId()
 	return ({ kind, id }: LibraryWriter) =>
 		isJoined

@@ -23,20 +23,24 @@ import { i18n } from "@workspace/ui/lib/i18n"
 
 import { LibraryBoard } from "@/components/library-board"
 import {
+	type Bot,
 	LIBRARY_DOCUMENT_UPDATED_EVENT,
 	type LibraryBoardSummary,
+	type LibraryDocumentPresence,
 	type LibraryDocumentState,
 	type LibraryDocumentUpdated,
 	type LibraryItem,
+	type LibraryWriter,
 } from "@/lib/bindings"
 import { raiseReportedFailure } from "@/lib/failure-report"
-import { listen } from "@/lib/host"
+import { invoke, listen } from "@/lib/host"
 import {
 	boardStateOf,
 	TWO_NOTES_BOARD,
 } from "@/lib/library/library-board-fixtures"
 import { applyLibraryBoardIntent } from "@/lib/library/library-board-intents"
 import { base64Of, bytesOf } from "@/lib/library/library-document-session"
+import { LIBRARY_DOCUMENT_PRESENCE_EVENT } from "@/lib/library/library-document-writers"
 import { applyLibraryUpdate } from "@/lib/library/library-document-writes"
 import { readLinkPreview } from "@/lib/library/library-link-preview"
 import { openLibraryDocument } from "@/lib/library/library-reads"
@@ -47,6 +51,8 @@ import type { WorkspaceTabs } from "@/lib/tabs/workspace-tabs"
 vi.mock("@/lib/host", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/lib/host")>()),
 	listen: vi.fn(),
+	invoke: vi.fn(),
+	currentWindowLabel: () => OWN_WINDOW,
 	usesCommandKey: () => true,
 }))
 
@@ -79,6 +85,9 @@ vi.mock("@/lib/failure-report", async (importOriginal) => {
 })
 
 const SPACE_ID = "space-on-screen"
+const OWN_WINDOW = "main"
+const ATLAS_ID = "bot-atlas"
+const JUNIPER_ID = "bot-juniper"
 const NAME = "Roadmap.canvas"
 const STATE = boardStateOf(TWO_NOTES_BOARD)
 
@@ -123,9 +132,15 @@ const openedState = (): LibraryDocumentState => ({ name: NAME, update: STATE })
 const fakeHost = () => {
 	const unlisten = vi.fn()
 	let heard: ((event: Event<LibraryDocumentUpdated>) => void) | null = null
+	let heardPresence: ((event: Event<LibraryDocumentPresence>) => void) | null =
+		null
 	vi.mocked(listen).mockImplementation(async (event, handler) => {
 		if (event === LIBRARY_DOCUMENT_UPDATED_EVENT) {
 			heard = (update) => handler(update as Parameters<typeof handler>[0], null)
+		}
+		if (event === LIBRARY_DOCUMENT_PRESENCE_EVENT) {
+			heardPresence = (presence) =>
+				handler(presence as Parameters<typeof handler>[0], null)
 		}
 		return unlisten
 	})
@@ -139,7 +154,15 @@ const fakeHost = () => {
 				payload: { spaceId: SPACE_ID, name, update },
 			}),
 		)
-	return { unlisten, announce }
+	const announcePresence = (writers: LibraryWriter[]) =>
+		act(() =>
+			heardPresence?.({
+				event: LIBRARY_DOCUMENT_PRESENCE_EVENT,
+				id: 0,
+				payload: { spaceId: SPACE_ID, name: NAME, writers },
+			}),
+		)
+	return { unlisten, announce, announcePresence }
 }
 
 const remoteEditOf = (edit: (doc: Y.Doc) => void) => {
@@ -181,6 +204,11 @@ const LIBRARY_ITEMS: BoardLibraryItem[] = [
 
 const NO_IMPORTS = async () => []
 
+const BOTS = [
+	{ id: ATLAS_ID, name: "Atlas", avatarBlot: 210, avatarImagePath: null },
+	{ id: JUNIPER_ID, name: "Juniper", avatarBlot: 130, avatarImagePath: null },
+] as Bot[]
+
 type Importer = (files: readonly File[]) => Promise<LibraryItem[]>
 
 type BoardElementOptions = {
@@ -194,6 +222,8 @@ const boardElement = ({
 }: BoardElementOptions = {}) =>
 	createElement(LibraryBoard, {
 		spaceId: SPACE_ID,
+		isJoined: false,
+		bots: BOTS,
 		name: NAME,
 		title: "Roadmap",
 		summary: SUMMARY,
@@ -267,6 +297,7 @@ beforeEach(() => {
 afterEach(() => {
 	cleanup()
 	vi.mocked(listen).mockReset()
+	vi.mocked(invoke).mockReset()
 	vi.mocked(openLibraryDocument).mockReset()
 	vi.mocked(applyLibraryUpdate).mockReset()
 	vi.mocked(raiseReportedFailure).mockReset()
@@ -877,6 +908,122 @@ describe("drawing the objects of a Library board", () => {
 		expect(slotIn(card, "board-link-card-description")?.textContent).toBe("")
 		expect(slotIn(card, "board-link-card-source")?.textContent).toContain(
 			"example.com",
+		)
+	})
+})
+
+const seatOf = (
+	id: string,
+	kind: LibraryWriter["kind"],
+	nodeId: string | null,
+	name: string | null = null,
+): LibraryWriter => ({
+	id,
+	kind,
+	name,
+	at: { kind: "board", point: { x: 40, y: 20 }, nodeId },
+})
+
+const pointerNames = () =>
+	[...document.querySelectorAll('[data-slot="board-pointer-name"]')].map(
+		(pointer) => pointer.textContent,
+	)
+
+const outlinedTexts = () =>
+	[...document.querySelectorAll('[data-slot="board-object-outline"]')].map(
+		(outline) => outline.textContent,
+	)
+
+const drawingChip = (count: number) =>
+	screen.queryByText(common("board.presence.drawing", { count }))
+
+const stopAllButton = () =>
+	screen.getByRole("button", {
+		name: common("library.document.agents.stopAll"),
+	})
+
+const stopCalls = () =>
+	vi
+		.mocked(invoke)
+		.mock.calls.filter(([command]) => command === "library_stop_writers")
+
+describe("presence on a Library board", () => {
+	it("shows another person's pointer with their name and outlines the object they selected", async () => {
+		const { announcePresence } = await mountBoard()
+
+		announcePresence([seatOf("window-2", "person", "first", "Lena")])
+
+		expect(pointerNames()).toEqual(["Lena"])
+		expect(outlinedTexts()).toEqual(["First"])
+		expect(drawingChip(1)).toBeNull()
+	})
+
+	it("never shows the own window's pointer or selection", async () => {
+		const { announcePresence } = await mountBoard()
+
+		announcePresence([seatOf(OWN_WINDOW, "person", "first", "Me")])
+
+		expect(pointerNames()).toEqual([])
+		expect(outlinedTexts()).toEqual([])
+	})
+
+	it("shows each drawing agent's pointer, outline and the drawing chip with their count", async () => {
+		const { announcePresence } = await mountBoard()
+
+		announcePresence([
+			seatOf(ATLAS_ID, "agent", "first"),
+			seatOf(JUNIPER_ID, "agent", "second"),
+		])
+
+		expect(pointerNames()).toEqual(["Atlas", "Juniper"])
+		expect(outlinedTexts()).toEqual(["First", "Second"])
+		expect(drawingChip(2)).toBeInstanceOf(HTMLElement)
+	})
+
+	it("removes the chip, pointers and outlines once the agents are gone", async () => {
+		const { announcePresence } = await mountBoard()
+
+		announcePresence([seatOf(ATLAS_ID, "agent", "first")])
+		announcePresence([])
+
+		expect(drawingChip(1)).toBeNull()
+		expect(pointerNames()).toEqual([])
+		expect(outlinedTexts()).toEqual([])
+	})
+
+	it("stops every agent drawing on the board on Stop all", async () => {
+		const { announcePresence } = await mountBoard()
+		vi.mocked(invoke).mockResolvedValue({ kind: "cancelled" })
+		announcePresence([
+			seatOf(ATLAS_ID, "agent", "first"),
+			seatOf(JUNIPER_ID, "agent", "second"),
+		])
+
+		fireEvent.click(stopAllButton())
+
+		await waitFor(() =>
+			expect(stopCalls()).toEqual([
+				[
+					"library_stop_writers",
+					{ spaceId: SPACE_ID, name: NAME, agentId: null },
+				],
+			]),
+		)
+		expect(raiseReportedFailure).not.toHaveBeenCalled()
+	})
+
+	it("raises a notice when Stop all fails", async () => {
+		const { announcePresence } = await mountBoard()
+		vi.mocked(invoke).mockRejectedValue({ kind: "unreachable" })
+		announcePresence([seatOf(ATLAS_ID, "agent", "first")])
+
+		fireEvent.click(stopAllButton())
+
+		await waitFor(() =>
+			expect(raiseReportedFailure).toHaveBeenCalledWith(
+				{ title: common("library.failure.document.stopAll") },
+				expect.objectContaining({ raisedIn: "use-stop-library-writers" }),
+			),
 		)
 	})
 })

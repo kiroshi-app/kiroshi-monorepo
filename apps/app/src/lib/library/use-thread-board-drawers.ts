@@ -60,8 +60,8 @@ const withDrawersOf = (
 	return next
 }
 
-const ownerOf = (
-	{ id, name }: BoardDrawer,
+export const agentOwnerOf = (
+	{ id, name }: Pick<BoardDrawer, "id" | "name">,
 	bots: Bot[],
 ): BoardPresenceOwner => {
 	const bot = bots.find((known) => known.id === id)
@@ -80,12 +80,12 @@ const drawingBy = (drawers: BoardDrawer[], bots: Bot[]): BoardDrawing => {
 		return NOBODY_DRAWING
 	}
 	const pointers = drawers.map((drawer) => ({
-		owner: ownerOf(drawer, bots),
+		owner: agentOwnerOf(drawer, bots),
 		position: drawer.point,
 	}))
 	return {
 		drawing: {
-			agent: ownerOf(first, bots),
+			agent: agentOwnerOf(first, bots),
 			objectId: first.nodeId ?? undefined,
 		},
 		pointers,
