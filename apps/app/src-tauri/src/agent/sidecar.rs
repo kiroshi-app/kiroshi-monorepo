@@ -13,6 +13,7 @@ use tokio::process::{Child, Command};
 use tokio::sync::{mpsc, oneshot, Mutex};
 use tokio::task::JoinHandle;
 
+pub use super::contract::OauthFlowError;
 use super::contract::{ConversationNaming, OfferedModel, TransportError};
 use super::protocol::{
 	self, AuthorizeRequest, Authorized, Checked, OauthStarted, Ready, RefreshRequest,
@@ -450,18 +451,6 @@ impl Sidecar {
 		}
 		sweep_group(self.pid);
 		*slot = None;
-	}
-}
-
-#[derive(Debug)]
-pub enum OauthFlowError {
-	Outlasted { timeout_ms: u64 },
-	Transport(TransportError),
-}
-
-impl From<TransportError> for OauthFlowError {
-	fn from(error: TransportError) -> Self {
-		Self::Transport(error)
 	}
 }
 

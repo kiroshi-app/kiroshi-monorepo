@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
-use serde::Serialize;
 use tauri::{AppHandle, Runtime, State};
 
 use super::checkout;
@@ -9,7 +8,7 @@ use super::contract::{
 	ConversationMissions, HookedMission, Mission, MissionAnswer, MissionClosing, MissionDetail,
 	MissionDraft, MissionEntry, MissionError, MissionEventKind, MissionHandoff, MissionInSpace,
 	MissionLiveness, MissionNote, MissionOnBoard, MissionOpened, MissionPresence, MissionSpacePage,
-	MissionState, MissionUpdate, MissionWatch, MissionWatching,
+	MissionUpdate, MissionWatch, MissionWatching,
 };
 use super::{github, hook};
 use crate::agent::commands::AgentState;
@@ -19,7 +18,7 @@ use crate::companions::host::picked;
 use crate::conversations::commands::{
 	bot_row, ready, run_handed_turn, seat_participant, HandedTurn,
 };
-use crate::conversations::contract::{Bot, PendingPrompt};
+use crate::conversations::contract::Bot;
 use crate::conversations::state as conversation_state;
 use crate::conversations::summons::{self, SummonsDropReason, SummonsRun};
 use crate::db;
@@ -28,8 +27,7 @@ use crate::events::MISSION_CHANGED;
 use crate::file_store::FileStore;
 use crate::routines::runner::NO_AGENT;
 use crate::routines::webhook::{Webhook, HEADER};
-
-pub const CHANGED_EVENT: &str = "mission://changed";
+pub use kiroshi_core::missions::contract::{MissionChanged, CHANGED_EVENT};
 
 const BOT: &str = "bot";
 
@@ -49,23 +47,6 @@ const HANDED_OVER: &str = "this mission is yours now, carry it out:";
 
 const UNHEARD: &str = "no coding session reaches this mission, it moves only on the lines, the \
 	escalations and the closing its agent writes";
-
-#[derive(Debug, Clone, Serialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub struct MissionChanged {
-	pub mission_id: String,
-	pub space_id: Option<String>,
-	pub state: MissionState,
-	pub state_seq: i64,
-	pub is_agent_running: bool,
-	#[specta(optional)]
-	pub liveness: MissionLiveness,
-	#[specta(optional)]
-	pub pending_prompt: Option<PendingPrompt>,
-	#[specta(optional)]
-	pub working_bot_ids: Vec<String>,
-	pub last_activity_at: Option<i64>,
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Pulse {
@@ -742,6 +723,7 @@ pub(crate) async fn mission_row(
 
 #[cfg(test)]
 mod tests {
+	use crate::missions::contract::MissionState;
 	use std::fs;
 	use std::sync::mpsc::channel;
 	use tauri::Manager;

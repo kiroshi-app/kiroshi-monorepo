@@ -1,5 +1,5 @@
 pub mod commands;
-pub mod contract;
+pub use kiroshi_core::claude_import::contract;
 mod import;
 mod inventory;
 mod source;

@@ -17,6 +17,7 @@ use tokio::sync::oneshot;
 use super::cors::WINDOW_ORIGIN;
 use super::token::HostToken;
 use crate::attachments::contract::AttachmentStoreError;
+use crate::hosting::contract::REFUSED_TO_A_MEMBER;
 use crate::routines::webhook::{named_here, Calls};
 
 pub const PATH: &str = "/api/invoke/{command}";
@@ -29,8 +30,6 @@ pub(crate) const DISPATCHER_WEBVIEW: &str = "dispatcher";
 
 pub(crate) const RELAYED_MEMBER_HEADER: HeaderName =
 	HeaderName::from_static("kiroshi-relayed-member");
-
-pub(crate) const REFUSED_TO_A_MEMBER: &str = "refusedToAMember";
 
 const STORE_ATTACHMENTS: &str = "chat_store_attachments";
 

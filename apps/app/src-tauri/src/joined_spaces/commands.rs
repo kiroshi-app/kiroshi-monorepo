@@ -1,4 +1,3 @@
-use serde::Serialize;
 use tauri::{AppHandle, Manager, Runtime, WebviewWindow};
 
 use super::contract::{
@@ -6,47 +5,14 @@ use super::contract::{
 };
 use super::relay::{self, RelayGuests};
 use super::{deep_link, description, held};
-use crate::conversations::contract::Hue;
 use crate::db;
 use crate::db::repositories::joined_spaces::{self, JoinedReach};
 use crate::events::{JOINED_SPACE_CHANGED, JOINED_SPACE_RECONNECTED, JOINED_SPACE_REMOVED};
-
-pub const CHANGED_EVENT: &str = "joined-space://changed";
-
-pub const REMOVED_EVENT: &str = "joined-space://removed";
-
-pub const RECONNECTED_EVENT: &str = "joined-space://reconnected";
-
-#[derive(Debug, Clone, Serialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub struct JoinedSpaceChanged {
-	pub id: String,
-	pub hosted_by: Option<String>,
-	pub colour: Option<Hue>,
-}
-
-#[derive(Debug, Clone, Serialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub struct JoinedSpaceRemoved {
-	pub id: String,
-	pub name: String,
-	pub reason: JoinedSpaceRemovalReason,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub enum JoinedSpaceRemovalReason {
-	Deleted,
-	Removed,
-	Left,
-	Unknown,
-}
-
-#[derive(Debug, Clone, Serialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub struct JoinedSpaceReconnected {
-	pub id: String,
-}
+pub use kiroshi_core::joined_spaces::contract::JoinedSpaceRemovalReason;
+pub use kiroshi_core::joined_spaces::contract::{
+	JoinedSpaceChanged, JoinedSpaceReconnected, JoinedSpaceRemoved, CHANGED_EVENT,
+	RECONNECTED_EVENT, REMOVED_EVENT,
+};
 
 pub(super) fn ready(state: &db::DatabaseState) -> Result<&db::Database, JoinedSpaceError> {
 	state.as_ref().map_err(|failure| JoinedSpaceError::Unavailable { failure: failure.into() })

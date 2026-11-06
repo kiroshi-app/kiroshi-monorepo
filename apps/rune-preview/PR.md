@@ -142,3 +142,21 @@ The kept core of `apps/app/src-tauri` moves to a crate with no Tauri dependency,
 - **Step 2 order.** kiroshi-core first holds `Core` and the Tauri-free event primitives (`Event`, `Frame`, `frame`). The kept modules follow module by module: each one's commands move to src-tauri, and its tests move from Tauri mock apps onto a test `Core` in the same commit, so every commit builds and keeps the full test count.
 - **Protected files, approved.** `.github/workflows/ci.yml` points the Rust cache at the root workspace and its `target/` (`workspaces: . -> target`). The `test` script in `apps/app/package.json` runs the Rust tests with `--workspace`. `.github/workflows/release.yml` still caches `apps/app/src-tauri` and needs the same change; it isn't in the approval.
 - **Contract modules first.** Before any module moves, kiroshi-core takes the types every layer shares: the effort level, the bot permissions, the error enums, and the event table with its payload types. src-tauri re-exports each at its old path, so no call site changes. After that, modules move one at a time (db first), each in a commit that builds.
+- **Contracts and storage in one commit.** The contract modules use db's storage types (`Bot`, `Hue`, the joined-space rows), and db uses the contract types. They depend on each other, so they moved to kiroshi-core together. Every contract module moved, along with `json`, the bundles (minus `bundles/host.rs`), avatars, attachments (minus `attachments/commands.rs`), agent's translate, lease, protocol, redact and web_sources, routines' core and filter, and four small utility modules. src-tauri re-exports each at its old path, so call sites didn't change.
+- **Types lifted into contracts.** Some contract code pointed at types defined next to logic or commands. Those definitions moved into contract modules, and src-tauri re-exports them at their old paths:
+  - from `account::cloud`: the device, member and invitation call errors and the member types;
+  - `ApplicationStatus` from `mcp_oauth::status`;
+  - `SummonsDropReason` from `conversations::summons`;
+  - `FetchRefusal` and `FetchedImage` from `remote_image`;
+  - `OauthFlowError` from `agent::sidecar`;
+  - the joined-space, mission and routine change events and the agent channels from their command modules;
+  - `REFUSED_TO_A_MEMBER` from `host_api::invoke`.
+
+  `From` impls whose types now both live in kiroshi-core moved with them. The ones that convert from a src-tauri type stay in src-tauri.
+- **The event table splits.** The 39 events whose payloads live in kiroshi-core are declared there. The 9 window, notification, menu and deep-link events stay in src-tauri, which re-exports kiroshi-core's table. The test that checks every event name is declared once covers both tables.
+- **`JoinedSpace::presented`** takes `&impl MemberRelay` instead of the cloud client. src-tauri implements `MemberRelay` for `Cloud`, so callers didn't change.
+- **Visibility.** Items src-tauri still reaches are `pub`. `pub(in crate::...)` restrictions keep their original scope inside kiroshi-core, including the `Access` token that gates who can build a repository.
+- **Test helpers.** Test helpers that src-tauri's tests use are compiled under `cfg(any(test, feature = "test-support"))`, and src-tauri enables `test-support` as a dev-dependency. Hooks only kiroshi-core's own tests use stay under `cfg(test)`. The integration tests that included `removed_on_drop.rs` by file path now use `kiroshi_core::removed_on_drop`.
+- **Assets.** The bundled plugin files are still embedded from `apps/app/src-tauri/plugins` by relative path.
+- **Test paths.** Tests moved to kiroshi-core that read files under src-tauri resolve them through a test-only `APP_DIR`. The check that the system plugin's manifest carries the app version reads that version from src-tauri's `Cargo.toml`, because `CARGO_PKG_VERSION` now names kiroshi-core's own version.
+- **Building on its own.** kiroshi-core declares its own tokio dev-dependency, so `cargo test -p kiroshi-core` builds without src-tauri.

@@ -3,43 +3,14 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{AppHandle, Manager, Runtime};
 
 use super::commands::AgentState;
-use super::contract::{SignInError, SignInStarted, TransportError};
-use super::protocol::{SignInFailure, SignInFailureKind, SignedIn};
-use super::sidecar::{OauthFlowError, Opening};
+use super::contract::{SignInError, SignInStarted};
+use super::protocol::SignedIn;
+use super::sidecar::Opening;
 use crate::events::SIGN_IN_STARTED;
 use crate::mcp_oauth::commands::is_openable;
-
-pub const SIGN_IN_STARTED_CHANNEL: &str = "agent://sign-in-started";
+pub use kiroshi_core::agent::contract::SIGN_IN_STARTED_CHANNEL;
 
 const NO_REASON: &str = "the sign-in settled with no reason";
-
-impl From<TransportError> for SignInError {
-	fn from(error: TransportError) -> Self {
-		Self::Transport { error }
-	}
-}
-
-impl From<OauthFlowError> for SignInError {
-	fn from(error: OauthFlowError) -> Self {
-		match error {
-			OauthFlowError::Outlasted { timeout_ms } => Self::FlowTimedOut { timeout_ms },
-			OauthFlowError::Transport(error) => Self::Transport { error },
-		}
-	}
-}
-
-impl From<SignInFailure> for SignInError {
-	fn from(failure: SignInFailure) -> Self {
-		match failure.kind {
-			SignInFailureKind::Busy => Self::AlreadyRunning,
-			SignInFailureKind::Cancelled => Self::Cancelled,
-			SignInFailureKind::TimedOut => Self::TimedOut,
-			SignInFailureKind::Failed => {
-				Self::Failed { detail: failure.detail.unwrap_or_else(|| NO_REASON.to_owned()) }
-			}
-		}
-	}
-}
 
 #[derive(Default)]
 pub struct SignInState {
@@ -134,6 +105,7 @@ pub async fn agent_sign_in_cancel<R: Runtime>(app: AppHandle<R>) -> Result<(), S
 
 #[cfg(test)]
 mod tests {
+	use crate::agent::protocol::{SignInFailure, SignInFailureKind};
 	use serde_json::{json, to_value};
 
 	use super::*;

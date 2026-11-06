@@ -172,6 +172,7 @@ windows = { version = "0.62", features = [
 gtk = "0.18"
 
 [dev-dependencies]
+kiroshi-core = { path = "../../../crates/kiroshi-core", features = ["test-support"] }
 tauri = { version = "2", features = ["test"] }
 # Already a dependency; named again so an integration test can build the pictures it
 # uploads and decode the ones the host stored, rather than checking bytes in.

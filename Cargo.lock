@@ -2752,9 +2752,22 @@ dependencies = [
 name = "kiroshi-core"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
+ "chrono",
+ "futures-util",
+ "git2",
+ "image",
+ "libc",
+ "log",
+ "reqwest",
+ "rusqlite",
  "serde",
  "serde_json",
+ "specta",
+ "specta-typescript",
  "tokio",
+ "unicode-normalization",
+ "uuid",
 ]
 
 [[package]]

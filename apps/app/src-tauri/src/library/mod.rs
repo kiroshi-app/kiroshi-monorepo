@@ -1,6 +1,6 @@
 mod canvas;
 pub mod commands;
-pub mod contract;
+pub use kiroshi_core::library::contract;
 mod documents;
 pub mod host;
 pub mod link_preview;

@@ -1,7 +1,7 @@
 pub mod call;
 pub mod checkout;
 pub mod commands;
-pub mod contract;
+pub use kiroshi_core::missions::contract;
 pub mod github;
 pub mod hook;
 pub mod host;

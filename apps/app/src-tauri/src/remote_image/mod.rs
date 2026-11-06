@@ -1,11 +1,9 @@
 pub mod commands;
-pub mod contract;
+pub use kiroshi_core::remote_image::contract;
 #[cfg(test)]
 mod tests;
 
 use std::collections::HashMap;
-use std::error::Error;
-use std::fmt;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::time::Duration;
 
@@ -16,7 +14,8 @@ use reqwest::header::{HeaderMap, CONTENT_TYPE, LOCATION};
 use reqwest::{redirect, Client, Response, Url};
 
 use crate::missions::github::installed_tls_provider;
-use contract::{RemoteImage, RemoteImageError};
+pub(crate) use contract::FetchedImage;
+use contract::{FetchRefusal, RemoteImage, RemoteImageError, ResolvedToPrivateAddress};
 
 pub(crate) const MAX_BYTES: u64 = 20 * 1024 * 1024;
 const MAX_REDIRECTS: usize = 5;
@@ -27,48 +26,6 @@ pub(crate) enum Admission<'a> {
 	Web(&'a HashMap<String, String>),
 	PublicWeb,
 }
-
-pub(crate) enum FetchRefusal {
-	UnsupportedScheme,
-	PrivateAddress,
-	NetworkFailure { status: Option<u16> },
-}
-
-impl From<reqwest::Error> for FetchRefusal {
-	fn from(error: reqwest::Error) -> Self {
-		if resolved_to_a_private_address(&error) {
-			return FetchRefusal::PrivateAddress;
-		}
-		FetchRefusal::NetworkFailure { status: error.status().map(|status| status.as_u16()) }
-	}
-}
-
-fn resolved_to_a_private_address(error: &(dyn Error + 'static)) -> bool {
-	let mut cause = Some(error);
-	while let Some(current) = cause {
-		if current.is::<ResolvedToPrivateAddress>() {
-			return true;
-		}
-		cause = current.source();
-	}
-	false
-}
-
-pub(crate) struct FetchedImage {
-	pub(crate) media_type: String,
-	pub(crate) bytes: Vec<u8>,
-}
-
-#[derive(Debug)]
-struct ResolvedToPrivateAddress;
-
-impl fmt::Display for ResolvedToPrivateAddress {
-	fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-		formatter.write_str("the name resolves to a private address")
-	}
-}
-
-impl Error for ResolvedToPrivateAddress {}
 
 struct PublicAddresses;
 

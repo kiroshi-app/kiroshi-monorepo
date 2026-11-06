@@ -9,101 +9,27 @@ use tokio::sync::broadcast;
 use tauri_plugin_opener::OpenerExt;
 
 use crate::core_context::{Audience, ClientId, ClientScoped, Core, Desktop, EmitError};
-pub use kiroshi_core::events::{frame, framed, Event, Frame, BUFFERED_FRAMES};
+pub use kiroshi_core::events::*;
 
-use crate::{
-	account, agent, applications, claude_import, companions, conversations, devices, hosting,
-	invitations, joined_spaces, library, menu_contract, missions, notifications, routines, spaces,
-	updates, window_controls,
-};
+use crate::{joined_spaces, menu_contract, notifications, window_controls};
 
 macro_rules! declared {
 	($($handle:ident: $payload:ty = $name:expr,)*) => {
 		$(pub const $handle: Event<$payload> = Event::new($name);)*
 
 		#[cfg(test)]
-		const DECLARED_NAMES: &[&str] = &[$($name),*];
+		const APP_DECLARED_NAMES: &[&str] = &[$($name),*];
 	};
 }
 
 declared! {
-	ACCOUNT_CHANGED: account::contract::AccountState = account::contract::CHANGED_EVENT,
-	AGENT_EVENT: agent::contract::ScopedEvent = agent::commands::EVENT_CHANNEL,
-	SIGN_IN_STARTED: agent::contract::SignInStarted = agent::sign_in::SIGN_IN_STARTED_CHANNEL,
-	APPLICATION_INSTALLED: applications::contract::ApplicationInstalled =
-		applications::contract::INSTALLED_EVENT,
-	APPLICATION_DIRECTORY_REFRESHED: () = applications::contract::DIRECTORY_REFRESHED_EVENT,
-	CLAUDE_IMPORT_PROGRESS: claude_import::contract::ClaudeImportProgress =
-		claude_import::contract::PROGRESS_EVENT,
-	COMPANION_CREATED: companions::contract::CompanionCreated = companions::contract::CREATED_EVENT,
-	COMPANION_UPDATED: companions::contract::CompanionUpdated = companions::contract::UPDATED_EVENT,
-	COMPANION_DELETED: companions::contract::CompanionDeleted = companions::contract::DELETED_EVENT,
-	FIRST_RUN_DONE: () = companions::contract::FIRST_RUN_DONE_EVENT,
-	SEED_REFUSED: companions::contract::CompanionSeedRefused =
-		companions::contract::SEED_REFUSED_EVENT,
-	CONVERSATION_CREATED: conversations::contract::ConversationStored =
-		conversations::contract::CREATED_EVENT,
-	CONVERSATION_UPDATED: conversations::contract::ConversationStored =
-		conversations::contract::UPDATED_EVENT,
-	CONVERSATION_DELETED: conversations::contract::ConversationDeleted =
-		conversations::contract::DELETED_EVENT,
-	CONVERSATION_STATE_CHANGED: conversations::contract::ConversationStateChanged =
-		conversations::contract::STATE_CHANGED_EVENT,
-	MESSAGE_STORED: conversations::contract::TranscriptMessage =
-		conversations::contract::MESSAGE_STORED_EVENT,
-	COMPANION_ARRIVED: conversations::contract::CompanionArrival =
-		conversations::contract::COMPANION_ARRIVED_EVENT,
-	COMPANION_SPOKE: conversations::contract::CompanionSpoke =
-		conversations::contract::COMPANION_SPOKE_EVENT,
-	SUMMONS_DROPPED: conversations::contract::SummonsDropped =
-		conversations::contract::SUMMONS_DROPPED_EVENT,
-	DEVICE_APPROVAL_CHANGED: devices::contract::DeviceApproval =
-		devices::contract::APPROVAL_CHANGED_EVENT,
-	DEVICE_APPROVAL_REQUESTED: devices::contract::DeviceApprovalRequested =
-		devices::contract::APPROVAL_REQUESTED_EVENT,
-	DEVICE_APPROVAL_SETTLED: devices::contract::DeviceApprovalSettled =
-		devices::contract::APPROVAL_SETTLED_EVENT,
-	HOSTING_CHANGED: hosting::contract::HostingChanged = hosting::contract::CHANGED_EVENT,
-	MEMBERS_CHANGED: hosting::contract::MembersChanged = hosting::contract::MEMBERS_CHANGED_EVENT,
-	INVITATION_CHANGED: invitations::contract::InvitationsChanged =
-		invitations::contract::CHANGED_EVENT,
-	JOINED_SPACE_CHANGED: joined_spaces::commands::JoinedSpaceChanged =
-		joined_spaces::commands::CHANGED_EVENT,
-	JOINED_SPACE_REMOVED: joined_spaces::commands::JoinedSpaceRemoved =
-		joined_spaces::commands::REMOVED_EVENT,
-	JOINED_SPACE_RECONNECTED: joined_spaces::commands::JoinedSpaceReconnected =
-		joined_spaces::commands::RECONNECTED_EVENT,
-	JOINED_SPACE_MEMBERS_CHANGED: joined_spaces::members::JoinedSpaceMembersChanged =
-		joined_spaces::members::MEMBERS_CHANGED_EVENT,
-	JOIN_LINK_OPENED: joined_spaces::deep_link::JoinLinkOpened =
-		joined_spaces::deep_link::OPENED_EVENT,
-	LIBRARY_DOCUMENT_UPDATED: library::contract::LibraryDocumentUpdated =
-		library::contract::DOCUMENT_UPDATED_EVENT,
-	LIBRARY_DOCUMENT_RENAMED: library::contract::LibraryDocumentRenamed =
-		library::contract::DOCUMENT_RENAMED_EVENT,
-	LIBRARY_BOARD_FILE_REPLACED: library::contract::LibraryBoardFileReplaced =
-		library::contract::BOARD_FILE_REPLACED_EVENT,
-	LIBRARY_DOCUMENT_PRESENCE: library::contract::LibraryDocumentPresence =
-		library::contract::DOCUMENT_PRESENCE_EVENT,
-	LIBRARY_DOCUMENT_WRITER_FINISHED: library::contract::LibraryDocumentWriterFinished =
-		library::contract::DOCUMENT_WRITER_FINISHED_EVENT,
-	LIBRARY_CHANGED: library::contract::LibraryChanged = library::contract::CHANGED_EVENT,
-	MISSION_CHANGED: missions::commands::MissionChanged = missions::commands::CHANGED_EVENT,
-	NOTIFICATION_ACTIVATED: notifications::commands::NotificationTarget =
-		notifications::commands::ACTIVATED_EVENT,
-	ROUTINE_CHANGED: routines::commands::RoutineChanged = routines::commands::CHANGED_EVENT,
-	SPACE_DESCRIBED: spaces::contract::SpaceDescribed = spaces::contract::DESCRIBED_EVENT,
-	NATIVE_MOVE_ENDED: window_controls::native_move::NativeMoveEnded =
-		window_controls::native_move::NATIVE_MOVE_ENDED_EVENT,
-	NATIVE_MOVE_FAILED: window_controls::native_move::NativeMoveFailed =
-		window_controls::native_move::NATIVE_MOVE_FAILED_EVENT,
-	MAXIMIZE_BUTTON: window_controls::MaximizeButtonPointer =
-		window_controls::MAXIMIZE_BUTTON_EVENT,
-	DRAG_GHOST_TAB: window_controls::drag_ghost::DragGhostTab =
-		window_controls::drag_ghost::TAB_EVENT,
-	DRAG_GHOST_ENDED: window_controls::drag_ghost::DragGhostEnded =
-		window_controls::drag_ghost::ENDED_EVENT,
-	UPDATE_CHANGED: updates::contract::UpdateState = updates::contract::CHANGED_EVENT,
+	JOIN_LINK_OPENED: joined_spaces::deep_link::JoinLinkOpened = joined_spaces::deep_link::OPENED_EVENT,
+	NOTIFICATION_ACTIVATED: notifications::commands::NotificationTarget = notifications::commands::ACTIVATED_EVENT,
+	NATIVE_MOVE_ENDED: window_controls::native_move::NativeMoveEnded = window_controls::native_move::NATIVE_MOVE_ENDED_EVENT,
+	NATIVE_MOVE_FAILED: window_controls::native_move::NativeMoveFailed = window_controls::native_move::NATIVE_MOVE_FAILED_EVENT,
+	MAXIMIZE_BUTTON: window_controls::MaximizeButtonPointer = window_controls::MAXIMIZE_BUTTON_EVENT,
+	DRAG_GHOST_TAB: window_controls::drag_ghost::DragGhostTab = window_controls::drag_ghost::TAB_EVENT,
+	DRAG_GHOST_ENDED: window_controls::drag_ghost::DragGhostEnded = window_controls::drag_ghost::ENDED_EVENT,
 	FILE_MENU: menu_contract::FileMenuChosen = menu_contract::FILE_MENU_EVENT,
 	TAB_DRAG: window_controls::tab_drag::TabDrag = window_controls::tab_drag::TAB_DRAG_EVENT,
 }
@@ -287,8 +213,12 @@ pub(crate) mod tests {
 	#[test]
 	fn every_event_name_is_declared_by_one_handle() {
 		let mut declared = std::collections::BTreeSet::new();
-		let twice: Vec<&str> =
-			DECLARED_NAMES.iter().copied().filter(|name| !declared.insert(*name)).collect();
+		let twice: Vec<&str> = kiroshi_core::events::DECLARED_NAMES
+			.iter()
+			.chain(APP_DECLARED_NAMES)
+			.copied()
+			.filter(|name| !declared.insert(*name))
+			.collect();
 
 		assert!(twice.is_empty(), "the events {twice:?} are declared by more than one handle");
 	}

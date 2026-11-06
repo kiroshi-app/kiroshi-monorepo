@@ -5,6 +5,7 @@ use super::reports::Standing;
 use crate::environment::contract::{
 	EnvScope, Values, OAUTH_ACCESS_TOKEN, OAUTH_REASON, OAUTH_REFRESH_TOKEN,
 };
+pub use kiroshi_core::mcp_oauth::contract::ApplicationStatus;
 
 const UNUSABLE_GRANT: &str =
 	"the session could not use the stored authorization, which is still held";
@@ -17,22 +18,6 @@ pub struct ApplicationRow {
 	pub scope: Option<EnvScope>,
 	#[serde(flatten)]
 	pub status: ApplicationStatus,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
-#[serde(tag = "status", rename_all = "camelCase")]
-pub enum ApplicationStatus {
-	Connected,
-	NeedsAuthorization {
-		#[serde(skip_serializing_if = "Option::is_none")]
-		reason: Option<String>,
-	},
-	Connecting,
-	Failed {
-		#[serde(skip_serializing_if = "Option::is_none")]
-		reason: Option<String>,
-	},
-	Unknown,
 }
 
 pub struct Evidence {

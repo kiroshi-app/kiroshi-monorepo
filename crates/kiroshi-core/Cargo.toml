@@ -7,7 +7,28 @@ license = "MIT"
 repository = "https://github.com/kiroshi-app/kiroshi-monorepo"
 publish = false
 
+[features]
+test-support = []
+
 [dependencies]
+base64 = "0.22"
+chrono = "0.4"
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+git2 = { version = "0.21", default-features = false, features = ["vendored-libgit2"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
+log = "0.4"
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls-no-provider"] }
+rusqlite = { version = "0.40", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["raw_value"] }
-tokio = { version = "1", features = ["rt-multi-thread", "sync"] }
+specta = { version = "=2.0.0-rc.25", features = ["derive", "serde_json"] }
+specta-typescript = "=0.0.12"
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "time"] }
+unicode-normalization = "0.1"
+uuid = { version = "1", features = ["v4"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "process", "io-util", "sync", "time", "rt-multi-thread", "test-util"] }

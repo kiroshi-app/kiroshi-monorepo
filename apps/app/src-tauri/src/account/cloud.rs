@@ -22,6 +22,9 @@ use crate::hosting::contract::{
 use crate::invitations::contract::Invitation;
 use crate::mcp_oauth::commands::is_openable;
 use crate::missions::github::installed_tls_provider;
+pub use kiroshi_core::account::contract::{
+	CloudMember, DeviceCallError, InvitationCallError, MemberCallError, MemberRole, MembershipState,
+};
 
 const API_URL_OVERRIDE: &str = "KIROSHI_API_URL";
 
@@ -166,29 +169,6 @@ pub struct RegisteredDevice {
 	pub status: DeviceStatus,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum DeviceCallError {
-	Revoked,
-	Refused { status: StatusCode, code: Option<String> },
-	Unreachable(String),
-}
-
-impl fmt::Display for DeviceCallError {
-	fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-		match self {
-			DeviceCallError::Revoked => write!(formatter, "the relay refused the session (401)"),
-			DeviceCallError::Refused { status, code } => {
-				write!(formatter, "the relay answered {}", status.as_u16())?;
-				match code {
-					Some(code) => write!(formatter, " {code}"),
-					None => write!(formatter, " with no readable code"),
-				}
-			}
-			DeviceCallError::Unreachable(reason) => write!(formatter, "{reason}"),
-		}
-	}
-}
-
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CurrentDevice {
@@ -210,54 +190,12 @@ pub struct CloudAccountDevice {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum MemberCallError {
-	Revoked,
-	Forbidden,
-	InvalidEmail,
-	AlreadyMember,
-	LimitReached,
-	UnknownMember,
-	UnknownInvitation,
-	OwnerNotRemovable,
-	Unreachable { reason: UnreachableReason, detail: String },
-}
-
-impl MemberCallError {
-	fn unsent(detail: String) -> Self {
-		MemberCallError::Unreachable {
-			reason: UnreachableReason::Transport { failure: TransportFailure::Unsent },
-			detail,
-		}
-	}
-
-	fn unreadable_list(error: reqwest::Error) -> Self {
-		MemberCallError::Unreachable {
-			reason: UnreachableReason::UnreadableList,
-			detail: error.without_url().to_string(),
-		}
-	}
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LeaveCallError {
 	Revoked,
 	UnknownMembership,
 	OwnerNotRemovable,
 	Refused(String),
 	Unreachable(String),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum InvitationCallError {
-	Revoked,
-	Offline(String),
-	Unreachable(String),
-	Expired,
-	Withdrawn,
-	Used,
-	OtherEmail,
-	Unknown,
-	AlreadyJoined,
 }
 
 #[derive(Deserialize)]
@@ -300,16 +238,6 @@ impl From<Unanswered> for MemberCallError {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CloudMember {
-	pub user_id: String,
-	pub email: String,
-	pub name: Option<String>,
-	pub role: MemberRole,
-	pub state: MembershipState,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct CloudRosterMember {
 	pub user_id: String,
 	pub name: Option<String>,
@@ -325,20 +253,6 @@ pub struct CloudDevice {
 	pub status: DeviceStatus,
 	pub ed25519_public_key: String,
 	pub x25519_public_key: String,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum MemberRole {
-	Owner,
-	Member,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum MembershipState {
-	Joined,
-	Pending,
 }
 
 #[derive(Deserialize)]
@@ -1245,6 +1159,12 @@ fn successful(answered: reqwest::Response) -> Result<reqwest::Response, String> 
 		return Ok(answered);
 	}
 	Err(format!("the cloud answered {status}"))
+}
+
+impl kiroshi_core::joined_spaces::contract::MemberRelay for Cloud {
+	fn member_relay_url(&self, instance_id: &str) -> String {
+		Cloud::member_relay_url(self, instance_id)
+	}
 }
 
 #[cfg(test)]

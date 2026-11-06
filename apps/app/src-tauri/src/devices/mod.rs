@@ -1,5 +1,5 @@
 pub mod commands;
-pub mod contract;
+pub use kiroshi_core::devices::contract;
 
 use std::collections::HashMap;
 use std::sync::{Mutex, MutexGuard, PoisonError};

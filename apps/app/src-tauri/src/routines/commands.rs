@@ -1,6 +1,5 @@
 use std::path::PathBuf;
 
-use serde::Serialize;
 use serde_json::Value;
 use tauri::{AppHandle, Manager, Runtime, State};
 
@@ -19,14 +18,7 @@ use crate::conversations::commands::{oldest_space, ready, space_of_the_conversat
 use crate::conversations::contract::TranscriptStoreError;
 use crate::db;
 use crate::events::ROUTINE_CHANGED;
-
-pub const CHANGED_EVENT: &str = "routine://changed";
-
-#[derive(Debug, Clone, Serialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub struct RoutineChanged {
-	pub conversation_id: String,
-}
+pub use kiroshi_core::routines::contract::{RoutineChanged, CHANGED_EVENT};
 
 pub(crate) fn announce_change(
 	core: &crate::core_context::Core,

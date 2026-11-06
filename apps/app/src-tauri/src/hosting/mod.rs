@@ -2,7 +2,7 @@ mod admission;
 pub mod authorship;
 pub mod bridge;
 pub mod commands;
-pub mod contract;
+pub use kiroshi_core::hosting::contract;
 mod devices;
 pub(crate) mod handover;
 #[cfg(test)]

@@ -1,7 +1,6 @@
 use std::convert::Infallible;
 use std::future::Future;
 
-use serde::Serialize;
 use tauri::State;
 use tokio::time::{interval, MissedTickBehavior};
 
@@ -18,15 +17,7 @@ use crate::db::repositories::joined_spaces::{JoinedReach, JoinedSpace};
 use crate::events::JOINED_SPACE_MEMBERS_CHANGED;
 use crate::hosting::roster::Rostered;
 use crate::hosting::MEMBERS_EVERY;
-
-pub const MEMBERS_CHANGED_EVENT: &str = "joined-space://members-changed";
-
-#[derive(Debug, Clone, Serialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub struct JoinedSpaceMembersChanged {
-	pub id: String,
-	pub members: Vec<JoinedSpaceMember>,
-}
+pub use kiroshi_core::joined_spaces::contract::{JoinedSpaceMembersChanged, MEMBERS_CHANGED_EVENT};
 
 #[tauri::command]
 #[specta::specta]

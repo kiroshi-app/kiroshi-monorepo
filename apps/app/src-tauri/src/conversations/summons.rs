@@ -1,56 +1,11 @@
-use serde::{Deserialize, Serialize};
-
 use super::awaited_runs::TurnWindows;
 use super::context::mentioned_bot_ids;
 use super::contract::SummonsDropped;
 use crate::agent::contract::TransportError;
 use crate::events::SUMMONS_DROPPED;
+pub use kiroshi_core::conversations::contract::SummonsDropReason;
 
 pub const MAX_SUMMONS_PER_CHAIN: usize = 5;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub enum SummonsDropReason {
-	SelfMention,
-	SummonLimit,
-	Cancelled,
-	NotSeated,
-	StartFailed,
-	NeverStarted,
-	LostQueue,
-	Interrupted,
-}
-
-impl SummonsDropReason {
-	#[cfg(test)]
-	pub(crate) const ALL: [SummonsDropReason; 8] = [
-		Self::SelfMention,
-		Self::SummonLimit,
-		Self::Cancelled,
-		Self::NotSeated,
-		Self::StartFailed,
-		Self::NeverStarted,
-		Self::LostQueue,
-		Self::Interrupted,
-	];
-
-	fn is_noticed(self) -> bool {
-		!matches!(self, Self::SelfMention | Self::NotSeated | Self::Cancelled)
-	}
-
-	fn name(self) -> &'static str {
-		match self {
-			Self::SelfMention => "selfMention",
-			Self::SummonLimit => "summonLimit",
-			Self::Cancelled => "cancelled",
-			Self::NotSeated => "notSeated",
-			Self::StartFailed => "startFailed",
-			Self::NeverStarted => "neverStarted",
-			Self::LostQueue => "lostQueue",
-			Self::Interrupted => "interrupted",
-		}
-	}
-}
 
 pub(crate) struct SummonsRun<'a> {
 	pub(crate) conversation_id: &'a str,

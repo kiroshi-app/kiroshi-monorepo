@@ -583,12 +583,14 @@ mod tests {
 		(is_an_event && !name.contains(char::is_whitespace)).then_some(name)
 	}
 
+	const CORE_SOURCES: &str = "../../../crates/kiroshi-core/src";
+
 	#[test]
 	fn the_audience_table_classifies_every_published_event_once_and_nothing_else() {
-		let sources =
-			crate::events::tests::rust_files(&Path::new(env!("CARGO_MANIFEST_DIR")).join("src"));
-		let mut published: Vec<String> = sources
+		let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
+		let mut published: Vec<String> = [manifest.join("src"), manifest.join(CORE_SOURCES)]
 			.iter()
+			.flat_map(|root| crate::events::tests::rust_files(root))
 			.flat_map(|path| {
 				let source = std::fs::read_to_string(path).expect("the file reads");
 				source

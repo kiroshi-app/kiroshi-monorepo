@@ -1,4 +1,4 @@
 pub mod commands;
 pub mod connection;
-pub mod contract;
+pub use kiroshi_core::environment::contract;
 pub mod store;

@@ -1,7 +1,7 @@
 pub mod awaited_runs;
 pub mod commands;
 pub mod context;
-pub mod contract;
+pub use kiroshi_core::conversations::contract;
 pub(crate) mod host_turn;
 mod seed;
 pub(crate) mod state;

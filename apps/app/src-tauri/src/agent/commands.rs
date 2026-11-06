@@ -50,8 +50,7 @@ use crate::missions::contract::LivenessSigns;
 use crate::missions::host::MissionHost;
 use crate::private_files;
 use crate::routines::host::RoutineHost;
-
-pub const EVENT_CHANNEL: &str = "agent://event";
+pub use kiroshi_core::agent::contract::EVENT_CHANNEL;
 
 const RUNS_DIR: &str = "runs";
 

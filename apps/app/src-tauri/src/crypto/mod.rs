@@ -1,5 +1,5 @@
 pub mod commands;
-pub mod contract;
+pub use kiroshi_core::crypto::contract;
 pub mod device_keys;
 pub mod error;
 pub mod fingerprint;

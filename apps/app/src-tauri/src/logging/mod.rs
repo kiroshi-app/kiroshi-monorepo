@@ -1,5 +1,5 @@
 pub mod commands;
-pub mod contract;
+pub use kiroshi_core::logging::contract;
 pub mod scrub;
 pub mod stderr_lines;
 

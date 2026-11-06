@@ -819,15 +819,6 @@ fn answered_input(
 	Value::Object(fields)
 }
 
-impl From<TurnOutcome> for TurnState {
-	fn from(outcome: TurnOutcome) -> Self {
-		match outcome {
-			TurnOutcome::Failed => TurnState::Failed,
-			TurnOutcome::Completed | TurnOutcome::Cancelled => TurnState::Idle,
-		}
-	}
-}
-
 fn turn_outcome(events: &[AgentEvent]) -> Option<TurnOutcome> {
 	events.iter().find_map(|event| match event {
 		AgentEvent::TurnEnded { ended } => Some(ended.outcome),

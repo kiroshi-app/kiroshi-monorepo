@@ -1,7 +1,6 @@
 #![cfg(unix)]
 
-#[path = "../src/removed_on_drop.rs"]
-mod removed_on_drop;
+use kiroshi_core::removed_on_drop;
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;

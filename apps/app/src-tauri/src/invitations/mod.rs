@@ -1,5 +1,5 @@
 pub mod commands;
-pub mod contract;
+pub use kiroshi_core::invitations::contract;
 
 use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::Duration;

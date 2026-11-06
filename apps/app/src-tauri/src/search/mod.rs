@@ -1,2 +1,2 @@
 pub mod commands;
-pub mod contract;
+pub use kiroshi_core::search::contract;
