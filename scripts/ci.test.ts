@@ -2,6 +2,7 @@ import { afterAll, describe, expect, it } from "bun:test"
 import {
 	mkdirSync,
 	mkdtempSync,
+	readdirSync,
 	readFileSync,
 	rmSync,
 	writeFileSync,
@@ -12,6 +13,7 @@ import { dirname, join } from "node:path"
 import { SCOPES, UNIT_SUITES } from "./baseline"
 import {
 	CHANGED_UNIT_TESTS,
+	elapsedText,
 	FAST_STEP_NAMES,
 	FULL_UNIT_TESTS,
 	failedRustTargets,
@@ -21,6 +23,7 @@ import {
 	type Group,
 	loggedCargoStep,
 	offPullRequestNote,
+	parsedShard,
 	RUST_PULL_REQUEST_STEPS,
 	retriedTestAnnotation,
 	retriedTestSummary,
@@ -31,9 +34,11 @@ import {
 	SIMULATOR_LOOKUP,
 	type Step,
 	scopeLine,
+	shardTests,
 	skipReason,
 	spawnedCommand,
 	type UnitTestScope,
+	uiTestClasses,
 	unitTestScope,
 	unitTestSteps,
 	vitestRetryStep,
@@ -65,6 +70,7 @@ type Workflow = {
 			needs?: string | string[]
 			permissions?: Record<string, string>
 			"timeout-minutes"?: number
+			strategy?: { "fail-fast"?: boolean; matrix?: Record<string, unknown[]> }
 			steps?: WorkflowStep[]
 		}
 	>
@@ -145,8 +151,9 @@ const lookUp = (scope: ExpressionScope, path: string) =>
 const evaluate = (expression: string, scope: ExpressionScope): unknown =>
 	new Function(
 		`return (${expression
-			.replace(/\b(?:github|needs|steps|env)(?:\.(?:[\w-]+|\*))+/g, (path) =>
-				JSON.stringify(lookUp(scope, path) ?? null),
+			.replace(
+				/\b(?:github|needs|steps|env|matrix|strategy)(?:\.(?:[\w-]+|\*))+/g,
+				(path) => JSON.stringify(lookUp(scope, path) ?? null),
 			)
 			.replace("always()", "true")
 			.replace(
@@ -1014,13 +1021,16 @@ describe("the jobs of ci.yml", () => {
 		).toBe("2")
 	})
 
-	it.each(CI_JOBS)("%s bounds its gate by the job timeout only", (job) => {
-		const stepTimeouts = (workflow.jobs[job]?.steps ?? []).flatMap(
-			(step) => step["timeout-minutes"] ?? [],
-		)
+	it.each(CI_JOBS.filter((group) => group !== "ios"))(
+		"%s bounds its gate by the job timeout only",
+		(job) => {
+			const stepTimeouts = (workflow.jobs[job]?.steps ?? []).flatMap(
+				(step) => step["timeout-minutes"] ?? [],
+			)
 
-		expect(stepTimeouts).toEqual([])
-	})
+			expect(stepTimeouts).toEqual([])
+		},
+	)
 
 	it("bounds the rust job by 25 minutes", () => {
 		expect(workflow.jobs.rust?.["timeout-minutes"]).toBe(25)
@@ -1058,8 +1068,26 @@ describe("the jobs of ci.yml", () => {
 		},
 	)
 
-	it("bounds ios by 60 minutes", () => {
+	it("bounds ios by 60 minutes, and its gate by 45 inside them", () => {
 		expect(workflow.jobs.ios?.["timeout-minutes"]).toBe(60)
+		expect(stepNamed("ios", "Gate")?.["timeout-minutes"]).toBe(45)
+	})
+
+	it("splits ios over three jobs, each told its shard out of the matrix size", () => {
+		expect(workflow.jobs.ios?.strategy).toEqual({
+			"fail-fast": false,
+			matrix: { shard: [1, 2, 3] },
+		})
+		const shards = workflow.jobs.ios?.strategy?.matrix?.shard ?? []
+
+		expect(
+			shards.map((shard) =>
+				interpolate(workflow.jobs.ios?.env?.IOS_SHARD ?? "", {
+					matrix: { shard },
+					strategy: { "job-total": shards.length },
+				}),
+			),
+		).toEqual(["1/3", "2/3", "3/3"])
 	})
 
 	it.each([
@@ -1423,5 +1451,71 @@ describe("the jobs of ci.yml", () => {
 		expect(
 			stepNamed("ios", "Boot the simulator while the app builds")?.run,
 		).toContain(SIMULATOR_LOOKUP)
+	})
+})
+
+describe("the ios shards", () => {
+	const UI_TESTS = new URL("../apps/ios/KiroshiUITests/", import.meta.url)
+	const TEST_PLAN = new URL("../apps/ios/Kiroshi.xctestplan", import.meta.url)
+	const CLASSES = ["Alpha", "Bravo", "Charlie", "Delta", "Echo"]
+
+	it("reads k/n and refuses anything else", () => {
+		expect(parsedShard("2/3")).toEqual({ index: 2, count: 3 })
+		for (const text of ["0/3", "4/3", "3", "a/b", "1/3/1", ""]) {
+			expect(() => parsedShard(text)).toThrow(`IOS_SHARD is "${text}"`)
+		}
+	})
+
+	it("gives the unit tests to the first shard and deals the UI classes in turn", () => {
+		expect(shardTests({ index: 1, count: 2 }, CLASSES)).toEqual([
+			"KiroshiTests",
+			"KiroshiUITests/Alpha",
+			"KiroshiUITests/Charlie",
+			"KiroshiUITests/Echo",
+		])
+		expect(shardTests({ index: 2, count: 2 }, CLASSES)).toEqual([
+			"KiroshiUITests/Bravo",
+			"KiroshiUITests/Delta",
+		])
+	})
+
+	it("runs every UI class once over the three shards", () => {
+		const classes = uiTestClasses()
+		const dealt = [1, 2, 3].flatMap((index) =>
+			shardTests({ index, count: 3 }, classes),
+		)
+
+		expect(dealt.filter((test) => test === "KiroshiTests")).toHaveLength(1)
+		expect(dealt.filter((test) => test !== "KiroshiTests").sort()).toEqual(
+			classes.map((name) => `KiroshiUITests/${name}`).sort(),
+		)
+	})
+
+	it("names each UI class after its file, every other test class being skipped by the plan", () => {
+		const declared = readdirSync(UI_TESTS)
+			.filter((file) => file.endsWith(".swift"))
+			.flatMap((file) =>
+				[
+					...readFileSync(new URL(file, UI_TESTS), "utf8").matchAll(
+						/class (\w+): XCTestCase/g,
+					),
+				].map((match) => match[1]),
+			)
+		const plan = JSON.parse(readFileSync(TEST_PLAN, "utf8")) as {
+			testTargets: { skippedTests?: string[]; target: { name: string } }[]
+		}
+		const skipped =
+			plan.testTargets.find(({ target }) => target.name === "KiroshiUITests")
+				?.skippedTests ?? []
+
+		expect(declared.sort()).toEqual([...uiTestClasses(), ...skipped].sort())
+	})
+})
+
+describe("the step timings", () => {
+	it("reads minutes and seconds", () => {
+		expect(elapsedText(0)).toBe("0m 0s")
+		expect(elapsedText(59_499)).toBe("0m 59s")
+		expect(elapsedText(2_771_600)).toBe("46m 12s")
 	})
 })
