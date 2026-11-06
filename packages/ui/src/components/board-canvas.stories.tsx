@@ -2560,3 +2560,62 @@ export const SelectionReported = meta.story({
 		await expect(args.onSelectionChange).toHaveBeenLastCalledWith([])
 	},
 })
+
+const WITHOUT_PLAN = {
+	objects: SMALL_BOARD.objects.filter((object) => object.id !== PLAN.id),
+}
+
+const BoardChangedElsewhere = (props: BoardCanvasProps) => {
+	const [view, setView] = useState(props.view)
+
+	return (
+		<div className="flex h-[640px] w-full flex-col">
+			<div className="flex gap-2 p-2">
+				<button onClick={() => setView(WITHOUT_PLAN)} type="button">
+					Remove the plan sticky
+				</button>
+				<button onClick={() => setView(SMALL_BOARD)} type="button">
+					Restore the plan sticky
+				</button>
+			</div>
+			<div className="min-h-0 flex-1">
+				<BoardCanvas {...props} view={view} />
+			</div>
+		</div>
+	)
+}
+
+export const SelectedObjectRemovedElsewhere = meta.story({
+	tags: ["test-only"],
+	globals: LAPTOP_WINDOW,
+	args: { ...SELECTION_ARGS, onSelectionChange: fn() },
+	render: (args) => <BoardChangedElsewhere {...args} />,
+	parameters: selectionDocs(
+		"The selected sticky deleted by someone else, its removal arriving through `view`. Check `onSelectionChange` receiving an empty list once, the frame gone, and the same sticky added back unselected with no further call.",
+	),
+	play: async ({ canvasElement, args }) => {
+		const canvas = within(canvasElement)
+
+		await userEvent.click(optionNamed(canvasElement, PLAN_NAME))
+		await expect(args.onSelectionChange).toHaveBeenLastCalledWith([PLAN.id])
+
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Remove the plan sticky" }),
+		)
+		await expect(args.onSelectionChange).toHaveBeenCalledTimes(2)
+		await expect(args.onSelectionChange).toHaveBeenLastCalledWith([])
+		await expect(slotsIn(canvasElement, "board-selection-frame")).toHaveLength(
+			0,
+		)
+
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Restore the plan sticky" }),
+		)
+		await expect(optionNamed(canvasElement, PLAN_NAME)).toHaveAttribute(
+			"aria-selected",
+			"false",
+		)
+		await expect(selectedOptions(canvasElement)).toEqual([])
+		await expect(args.onSelectionChange).toHaveBeenCalledTimes(2)
+	},
+})

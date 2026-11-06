@@ -1620,6 +1620,7 @@ navigation-boardcanvas--select-by-keyboard
 navigation-boardcanvas--select-by-keyboard-dark
 navigation-boardcanvas--select-by-pointer
 navigation-boardcanvas--select-by-pointer-dark
+navigation-boardcanvas--selected-object-removed-elsewhere
 navigation-boardcanvas--selection-reported
 navigation-boardcanvas--shape-selected
 navigation-boardcanvas--shape-selected-dark

@@ -57,6 +57,7 @@ import type {
 	BoardIntent,
 	BoardItem,
 	BoardItemKind,
+	BoardObject,
 	BoardPaste,
 	BoardPoint,
 	BoardRect,
@@ -827,6 +828,7 @@ const ReadyBoardCanvas = ({
 		onViewportChange,
 	)
 	const [selectedId, setSelectedId] = useState<string | null>(null)
+	const [shownObjects, setShownObjects] = useState(view.objects)
 	const reportedSelectionId = useRef<string | null>(null)
 	const [editing, setEditing] = useState<BoardEditing | null>(null)
 	const [gesture, setGesture] = useState<BoardGesture | null>(null)
@@ -838,6 +840,19 @@ const ReadyBoardCanvas = ({
 	const stopDrafting = useRef<(() => void) | null>(null)
 
 	useEffect(() => () => stopDrafting.current?.(), [])
+
+	if (shownObjects !== view.objects) {
+		setShownObjects(view.objects)
+		const isIn = (objects: readonly BoardObject[]) =>
+			objects.some((object) => object.id === selectedId)
+		if (isIn(shownObjects) && !isIn(view.objects)) setSelectedId(null)
+	}
+
+	useEffect(() => {
+		if (reportedSelectionId.current === selectedId) return
+		reportedSelectionId.current = selectedId
+		onSelectionChange?.(selectedId ? [selectedId] : [])
+	}, [selectedId, onSelectionChange])
 
 	const mounted = cullBoardObjects(view.objects, viewport, size)
 	const mountedItems = mounted.flatMap(({ object }) =>
@@ -899,22 +914,15 @@ const ReadyBoardCanvas = ({
 
 	const focusObject = (id: string) => objectNodeOf(id)?.focus()
 
-	const select = (id: string | null) => {
-		setSelectedId(id)
-		if (reportedSelectionId.current === id) return
-		reportedSelectionId.current = id
-		onSelectionChange?.(id ? [id] : [])
-	}
-
 	const clearSelection = () => {
-		select(null)
+		setSelectedId(null)
 		canvas.current?.focus()
 	}
 
 	const startEditing = (item: BoardItem) => {
 		const node = objectNodeOf(item.id)
 		if (!hasText(item) || !node) return
-		select(item.id)
+		setSelectedId(item.id)
 		setEditing({
 			id: item.id,
 			text: item.text,
@@ -974,7 +982,7 @@ const ReadyBoardCanvas = ({
 	const pressObject =
 		(item: BoardItem) => (event: PointerEvent<HTMLElement>) => {
 			if (event.button !== 0) return
-			select(item.id)
+			setSelectedId(item.id)
 			follow(event, item, movedRect, (rect) => emitMove(item.id, rect))
 		}
 
@@ -993,7 +1001,7 @@ const ReadyBoardCanvas = ({
 	const pressConnector =
 		(connector: BoardConnector) => (event: PointerEvent<SVGPathElement>) => {
 			if (event.button !== 0) return
-			select(connector.id)
+			setSelectedId(connector.id)
 			canvas.current?.focus()
 		}
 
@@ -1075,7 +1083,7 @@ const ReadyBoardCanvas = ({
 
 	const pressCanvas = (event: PointerEvent<HTMLDivElement>) => {
 		if (event.target !== event.currentTarget || editing) return
-		select(null)
+		setSelectedId(null)
 	}
 
 	const tabThrough = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -1152,7 +1160,7 @@ const ReadyBoardCanvas = ({
 		if (!pasted) return
 		event.preventDefault()
 		const pastedId = onPaste(pasted, boardPointAt(centreOf(size)))
-		if (pastedId) select(pastedId)
+		if (pastedId) setSelectedId(pastedId)
 	}
 
 	const pickLibraryItem = (id: string) =>
@@ -1323,7 +1331,7 @@ const ReadyBoardCanvas = ({
 						data-slot="board-object"
 						key={object.id}
 						onDoubleClick={() => startEditing(object)}
-						onFocus={() => select(object.id)}
+						onFocus={() => setSelectedId(object.id)}
 						onPointerDown={pressObject(object)}
 						role="option"
 						style={{
