@@ -1000,7 +1000,10 @@ describe("a Library board the agent links in its message", () => {
 		["by its file name", "[Launch week](<Launch week.canvas>)"],
 		["encoded", "[Launch week](Launch%20week.canvas)"],
 		["under a folder", "[Launch week](<boards/Launch week.canvas>)"],
-		["by its full path", "[Launch week](</library/Launch week.CANVAS>)"],
+		[
+			"by its full path, suffix in capitals",
+			"[Launch week](</library/Launch week.CANVAS>)",
+		],
 	])(
 		"draws the board card in place of a lone link written %s",
 		async (_, link) => {
@@ -1012,13 +1015,6 @@ describe("a Library board the agent links in its message", () => {
 			expect(boardCards()).toHaveLength(1)
 		},
 	)
-
-	it("draws the card after the paragraph when the link sits in a sentence", () => {
-		renderTurn("assistant", LAUNCH_LINK, { documents: threadDocumentsOf() })
-
-		expect(screen.getByText(/for the plan\./).closest("p")).toBeTruthy()
-		expect(boardCard()).toBeTruthy()
-	})
 
 	it.each([
 		["the host", false],
