@@ -1476,17 +1476,15 @@ export const TileDraggedDark = meta.story({
 	play: playTileDragged,
 })
 
-const TwoBoards = (args: BoardCanvasProps) => (
-	<div className="grid grid-cols-[3fr_2fr] gap-4">
-		<ControlledBoard {...args} tool="select" />
-		<ControlledBoard {...args} />
-	</div>
-)
-
 export const LibraryItemPickedOnSecondCanvas = meta.story({
 	tags: ["test-only"],
 	args: { status: "ready", tool: "library" },
-	render: (args) => <TwoBoards {...args} />,
+	render: (args) => (
+		<div className="grid grid-cols-[3fr_2fr] gap-4">
+			<ControlledBoard {...args} tool="select" />
+			<ControlledBoard {...args} />
+		</div>
+	),
 	play: async ({ canvasElement, args }) => {
 		const [first, second] = slotsIn(canvasElement, "board-canvas") as [
 			HTMLElement,
