@@ -2484,3 +2484,82 @@ export const UnmountDuringDraft = meta.story({
 		}
 	},
 })
+
+const SPOT: BoardPoint = { x: 100, y: 50 }
+
+const clientPointOf = (
+	board: HTMLElement,
+	point: BoardPoint,
+	viewport: BoardViewport,
+) => {
+	const rect = board.getBoundingClientRect()
+	return {
+		clientX:
+			rect.left +
+			board.clientLeft +
+			viewport.offset.x +
+			point.x * viewport.zoom,
+		clientY:
+			rect.top + board.clientTop + viewport.offset.y + point.y * viewport.zoom,
+	}
+}
+
+export const PointerReported = meta.story({
+	globals: LAPTOP_WINDOW,
+	args: { ...SELECTION_ARGS, onPointerMove: fn() },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The person's own pointer, reported for the others on the board. Check `onPointerMove` receiving the board point under the pointer, the same point once the board is panned and zoomed with the pointer back on the same spot, and null when the pointer leaves the canvas.",
+			},
+		},
+	},
+	play: async ({ canvasElement, args }) => {
+		const board = slotIn(canvasElement, "board-canvas")
+		const onViewportChange = args.onViewportChange as ReturnType<typeof fn>
+
+		pointerAt("pointermove", board, clientPointOf(board, SPOT, AT_ORIGIN))
+		await expect(args.onPointerMove).toHaveBeenLastCalledWith(SPOT)
+
+		wheel(board, { deltaX: 40, deltaY: 30 })
+		await userEvent.click(
+			within(canvasElement).getByRole("button", { name: "Zoom in" }),
+		)
+		const moved = onViewportChange.mock.lastCall?.[0] as BoardViewport
+		await expect(moved.zoom).not.toBe(AT_ORIGIN.zoom)
+		await expect(moved.offset).not.toEqual(AT_ORIGIN.offset)
+
+		pointerAt("pointermove", board, clientPointOf(board, SPOT, moved))
+		await expect(args.onPointerMove).toHaveBeenLastCalledWith(SPOT)
+
+		board.dispatchEvent(
+			new PointerEvent("pointerout", {
+				bubbles: true,
+				pointerId: 1,
+				relatedTarget: document.body,
+			}),
+		)
+		await expect(args.onPointerMove).toHaveBeenLastCalledWith(null)
+	},
+})
+
+export const SelectionReported = meta.story({
+	globals: LAPTOP_WINDOW,
+	args: { ...SELECTION_ARGS, onSelectionChange: fn() },
+	parameters: selectionDocs(
+		"The person's own selection, reported for the others on the board. Check `onSelectionChange` receiving the plan sticky once for the press and the focus it brings, then an empty list once when a press on the empty board clears it, and nothing more on a second press there.",
+	),
+	play: async ({ canvasElement, args }) => {
+		const board = slotIn(canvasElement, "board-canvas")
+
+		await userEvent.click(optionNamed(canvasElement, PLAN_NAME))
+		await expect(args.onSelectionChange).toHaveBeenCalledTimes(1)
+		await expect(args.onSelectionChange).toHaveBeenLastCalledWith([PLAN.id])
+
+		await userEvent.click(board)
+		await userEvent.click(board)
+		await expect(args.onSelectionChange).toHaveBeenCalledTimes(2)
+		await expect(args.onSelectionChange).toHaveBeenLastCalledWith([])
+	},
+})

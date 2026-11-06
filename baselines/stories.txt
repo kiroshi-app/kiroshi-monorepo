@@ -69,6 +69,7 @@ board-boardpresence--person-with-agents
 board-boardpresence--person-with-agents-dark
 board-boardpresence--several-agents
 board-boardpresence--several-agents-dark
+board-boardpresence--stop-all-failure
 board-boardsection--blue
 board-boardsection--blue-dark
 board-boardsection--purple
@@ -1610,6 +1611,7 @@ navigation-boardcanvas--move-by-pointer
 navigation-boardcanvas--move-by-pointer-dark
 navigation-boardcanvas--move-connected-object
 navigation-boardcanvas--move-connected-object-dark
+navigation-boardcanvas--pointer-reported
 navigation-boardcanvas--resize-by-keyboard
 navigation-boardcanvas--resize-by-keyboard-dark
 navigation-boardcanvas--resize-by-pointer
@@ -1618,6 +1620,7 @@ navigation-boardcanvas--select-by-keyboard
 navigation-boardcanvas--select-by-keyboard-dark
 navigation-boardcanvas--select-by-pointer
 navigation-boardcanvas--select-by-pointer-dark
+navigation-boardcanvas--selection-reported
 navigation-boardcanvas--shape-selected
 navigation-boardcanvas--shape-selected-dark
 navigation-boardcanvas--switch-connector-routing

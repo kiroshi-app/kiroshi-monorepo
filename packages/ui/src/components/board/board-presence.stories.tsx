@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from "react"
+import { type ReactNode, useEffect, useState } from "react"
 import { expect, fn, userEvent, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
@@ -20,7 +20,13 @@ import type {
 	BoardViewport,
 } from "@workspace/ui/components/board-view"
 import { LibraryDocumentPresence } from "@workspace/ui/components/library-document-agents"
+import {
+	endNotice,
+	NoticeSurface,
+	raiseFailureNotice,
+} from "@workspace/ui/components/notice-surface"
 import { contrastRatio, type Rgb } from "@workspace/ui/lib/contrast"
+import { i18n } from "@workspace/ui/lib/i18n"
 
 const ATLAS: BoardPresenceOwner = {
 	kind: "agent",
@@ -552,5 +558,46 @@ export const LongContent = meta.story({
 		await expect(
 			slotIn(canvasElement, "board-pointer-tag").getBoundingClientRect().height,
 		).toBe(22)
+	},
+})
+
+const StopAllFailureNotice = () => {
+	useEffect(() => {
+		const notice = raiseFailureNotice({
+			title: i18n.t("common:library.failure.board.stopAll"),
+		})
+		return () => endNotice(notice)
+	}, [])
+
+	return <NoticeSurface />
+}
+
+export const StopAllFailure = meta.story({
+	args: {
+		outlines: [ATLAS_WRITING, JUNIPER_DRAWING],
+		pointers: [ATLAS_POINTER, JUNIPER_POINTER],
+	},
+	decorators: [
+		(Story) => (
+			<>
+				<Story />
+				<StopAllFailureNotice />
+			</>
+		),
+	],
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The notice raised when Stop all could not stop the agents drawing on the board, from `common:library.failure.board.stopAll`. Check that it names what failed and sends the person back to Stop all, the chip still reading 2 agents drawing.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const shown = await waitFor(() => slotIn(document.body, "toast-title"))
+		await expect(shown).toHaveTextContent(
+			"Couldn’t stop the agents drawing on this board. Press Stop all to try again.",
+		)
+		await expectChipLabel(canvasElement, "2 agents drawing")
 	},
 })
