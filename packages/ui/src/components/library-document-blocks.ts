@@ -281,12 +281,10 @@ const partsOf = (markdown: string): Part[] =>
 		.filter(({ text }) => text.trim() !== "")
 
 const keptPartIds = (parts: Part[], previous: Part[]) => {
-	const sameAt = (index: number, previousIndex: number) =>
-		parts[index]?.text === previous[previousIndex]?.text
 	let tail = 0
 	while (
 		tail < Math.min(parts.length, previous.length) - 1 &&
-		sameAt(parts.length - 1 - tail, previous.length - 1 - tail)
+		parts.at(-1 - tail)?.text === previous.at(-1 - tail)?.text
 	)
 		tail++
 	return parts.map((_, index) => {
