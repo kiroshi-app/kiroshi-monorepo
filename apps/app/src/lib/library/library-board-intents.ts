@@ -181,7 +181,7 @@ const zBelow = (doc: Y.Doc) => {
 	const lowest = Z_ORDER.digits[0]
 	const at = [...bottom].findIndex((digit) => digit !== lowest)
 	if (at === -1) return bottom
-	const lower = Z_ORDER.digits[Z_ORDER.digits.indexOf(bottom[at] ?? lowest) - 1]
+	const lower = Z_ORDER.digits[Z_ORDER.digits.indexOf(bottom.charAt(at)) - 1]
 	return `${bottom.slice(0, at)}${lower}${Z_ORDER.digits.at(-1)}`
 }
 

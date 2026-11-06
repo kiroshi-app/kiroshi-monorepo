@@ -2870,13 +2870,13 @@ const expectZRank = async (
 	object: HTMLElement,
 	rank: "above" | "below",
 ) => {
-	const others = within(root)
+	const own = zIndexOf(object)
+	const outranking = within(root)
 		.getAllByRole("option")
 		.filter((option) => option !== object)
 		.map(zIndexOf)
-	const bound = rank === "above" ? Math.max(...others) : Math.min(...others)
-	if (rank === "above") await expect(zIndexOf(object)).toBeGreaterThan(bound)
-	else await expect(zIndexOf(object)).toBeLessThan(bound)
+		.filter((z) => (rank === "above" ? z >= own : z <= own))
+	await expect(outranking).toEqual([])
 }
 
 const placeWithTool = async (
