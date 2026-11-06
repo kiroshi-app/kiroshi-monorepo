@@ -9,7 +9,7 @@ use super::source::{
 };
 use crate::bundles;
 
-pub(super) fn inventory(root: &Path, imported: &BTreeSet<String>) -> ClaudeInventory {
+pub fn inventory(root: &Path, imported: &BTreeSet<String>) -> ClaudeInventory {
 	match listed(root, imported) {
 		Ok(found) => found,
 		Err(failure) => ClaudeInventory::Refused { cause: failure.to_string() },

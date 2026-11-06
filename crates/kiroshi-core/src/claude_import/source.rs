@@ -1,26 +1,26 @@
 use std::path::{Component, Path, PathBuf};
 
-pub(super) const AGENTS_DIR: &str = "agents";
-pub(super) const SKILLS_DIR: &str = "skills";
-pub(super) const SKILL_FILE: &str = "SKILL.md";
-pub(super) const CLAUDE_MD: &str = "CLAUDE.md";
-pub(super) const AGENT_EXTENSION: &str = "md";
+pub const AGENTS_DIR: &str = "agents";
+pub const SKILLS_DIR: &str = "skills";
+pub const SKILL_FILE: &str = "SKILL.md";
+pub const CLAUDE_MD: &str = "CLAUDE.md";
+pub const AGENT_EXTENSION: &str = "md";
 
-pub(super) enum Source {
+pub enum Source {
 	Agent(PathBuf),
 	Skill(PathBuf),
 	ClaudeMd(PathBuf),
 }
 
-pub(super) fn agent_key(file_name: &str) -> String {
+pub fn agent_key(file_name: &str) -> String {
 	format!("{AGENTS_DIR}/{file_name}")
 }
 
-pub(super) fn skill_key(dir_name: &str) -> String {
+pub fn skill_key(dir_name: &str) -> String {
 	format!("{SKILLS_DIR}/{dir_name}")
 }
 
-pub(super) fn source_of(root: &Path, key: &str) -> Option<Source> {
+pub fn source_of(root: &Path, key: &str) -> Option<Source> {
 	if key == CLAUDE_MD {
 		return Some(Source::ClaudeMd(root.join(CLAUDE_MD)));
 	}
@@ -37,7 +37,7 @@ pub(super) fn source_of(root: &Path, key: &str) -> Option<Source> {
 	}
 }
 
-pub(super) fn is_agent_file(path: &Path) -> bool {
+pub fn is_agent_file(path: &Path) -> bool {
 	path.extension().is_some_and(|extension| extension == AGENT_EXTENSION)
 }
 
