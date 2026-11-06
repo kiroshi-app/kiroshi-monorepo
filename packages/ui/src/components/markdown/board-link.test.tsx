@@ -1,5 +1,8 @@
+// @vitest-environment happy-dom
+
+import { cleanup, render as mount } from "@testing-library/react"
 import { renderToStaticMarkup } from "react-dom/server"
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { I18nProvider } from "@workspace/ui/components/i18n-provider"
 import { Markdown, type MarkdownProps } from "@workspace/ui/components/markdown"
@@ -27,7 +30,71 @@ const containing = (link: string) =>
 
 const CONTAINED = containing("[the plan](plan.canvas)")
 
+const KEY_WARNING = /unique "key" prop/
+
+const CARD_PLACES = [
+	[
+		"alone in a paragraph",
+		"[Plan](plan.canvas)",
+		"[One](one.canvas)\n\n[Two](two.canvas)",
+	],
+	[
+		"inside a sentence",
+		"See [the plan](plan.canvas) first.",
+		"See [one](one.canvas) then [two](two.canvas).",
+	],
+	[
+		"in a checklist item",
+		"- [ ] Review [the plan](plan.canvas) today",
+		"- [ ] Review [one](one.canvas) then [two](two.canvas)",
+	],
+	[
+		"in a list item",
+		"- See [the plan](plan.canvas) first",
+		"- See [one](one.canvas) then [two](two.canvas)",
+	],
+	[
+		"alone in a list item",
+		"- [Plan](plan.canvas)",
+		"- [One](one.canvas)\n- [Two](two.canvas)",
+	],
+	[
+		"in a table cell",
+		"| Board |\n| - |\n| [the plan](plan.canvas) |",
+		"| Board |\n| - |\n| [one](one.canvas) then [two](two.canvas) |",
+	],
+]
+
+const keyWarningsWhileMounting = (source: string, cardCount: number) => {
+	const consoleError = vi.spyOn(console, "error").mockImplementation(() => {})
+	const { container } = mount(
+		<I18nProvider>
+			<Markdown renderBoardLink={renderBoard}>{source}</Markdown>
+		</I18nProvider>,
+	)
+	expect(container.querySelectorAll("article")).toHaveLength(cardCount)
+	return consoleError.mock.calls.filter((args) =>
+		args.some((arg) => KEY_WARNING.test(String(arg))),
+	)
+}
+
 describe("Markdown board links", () => {
+	afterEach(() => {
+		cleanup()
+		vi.restoreAllMocks()
+	})
+
+	it.each(CARD_PLACES)("logs no key warning for one board %s", (_, oneLink) => {
+		expect(keyWarningsWhileMounting(oneLink, 1)).toEqual([])
+	})
+
+	it.each(CARD_PLACES)(
+		"logs no key warning for two boards %s",
+		(_, _oneLink, twoLinks) => {
+			expect(keyWarningsWhileMounting(twoLinks, 2)).toEqual([])
+		},
+	)
+
 	it.each([
 		["[Plan](plan.canvas)", "plan.canvas"],
 		["[Plan](boards/Plan.CANVAS)", "boards/Plan.CANVAS"],
