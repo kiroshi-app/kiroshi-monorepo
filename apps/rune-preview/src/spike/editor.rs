@@ -447,6 +447,20 @@ impl Editor {
 	}
 
 	fn select(&mut self, anchor: Point, focus: Point) {
+		if let Some((start, end)) = self.selection.take().map(Selection::ordered) {
+			for index in start.block..=end.block {
+				let caret = if index == anchor.block { anchor.at } else { 0 };
+				if let Some(edit) = self.blocks[index].fields.first_mut() {
+					edit.set_caret(caret);
+				}
+			}
+		}
+		if anchor.block == focus.block {
+			if let Some(edit) = self.blocks[anchor.block].fields.first_mut() {
+				edit.set_selection(anchor.at, focus.at);
+			}
+			return;
+		}
 		let selection = Selection { anchor, focus };
 		let (start, end) = selection.ordered();
 		for index in start.block..=end.block {

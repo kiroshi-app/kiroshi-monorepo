@@ -145,6 +145,17 @@ fn spike_a_selection_across_two_blocks_copies_and_deletes_the_text_of_both() {
 }
 
 #[test]
+fn spike_a_selection_brought_back_into_one_block_deletes_within_that_block() {
+	let mut rt = runtime("Alpha one\n\nBravo two");
+	focus(&mut rt, 0, 0, 0);
+	rt.update(|s, _| s.spike.field_mut("block-1", 0).set_selection(6, 9));
+	press(&mut rt, Key::Down, Mods { shift: true, ..Mods::default() });
+	press(&mut rt, Key::Up, Mods { shift: true, ..Mods::default() });
+	press(&mut rt, Key::Backspace, Mods::default());
+	assert_eq!(sources(&rt.state.spike), ["one", "Bravo two"]);
+}
+
+#[test]
 fn spike_a_slash_in_an_empty_block_opens_a_menu_at_the_caret_and_turns_the_block_into_the_choice() {
 	let expected = [
 		(LibraryBlockType::Heading, "## "),
