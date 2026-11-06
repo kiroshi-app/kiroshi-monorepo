@@ -1,0 +1,19 @@
+[package]
+name = "kiroshi-rune-preview"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+rune = { git = "https://github.com/anomalyco/rune", rev = "781e2b6d87cd5f32d6f4365956fad4baaf24ee50" }
+rune-kit = { git = "https://github.com/anomalyco/rune", rev = "781e2b6d87cd5f32d6f4365956fad4baaf24ee50", features = ["markdown", "mermaid"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tungstenite = { version = "0.29", default-features = false, features = ["handshake"] }
+ureq = "2"
+uuid = { version = "1", features = ["v4"] }
+
+[profile.dev.package."*"]
+opt-level = 2
