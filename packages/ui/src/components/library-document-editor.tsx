@@ -25,6 +25,7 @@ import {
 import {
 	LibraryDocumentBlockEditor,
 	type LibraryDocumentBlockEditorHandle,
+	type LibraryDocumentFormat,
 	type LibraryDocumentPlaceholder,
 } from "@workspace/ui/components/library-document-block-editor"
 import { shiftedOffset } from "@workspace/ui/components/library-document-blocks"
@@ -180,6 +181,7 @@ type LibraryDocumentEditorProps = WriterActions &
 	LibraryItemActions<LibraryMenuSubject> & {
 		title: string
 		body: string
+		format?: LibraryDocumentFormat
 		detail: string
 		template?: LibraryDocumentTemplate
 		onTitleChange: (title: string) => void
@@ -202,6 +204,7 @@ type LibraryDocumentEditorProps = WriterActions &
 const LibraryDocumentEditor = ({
 	title: titleProp,
 	body,
+	format,
 	detail,
 	template,
 	onTitleChange,
@@ -379,6 +382,7 @@ const LibraryDocumentEditor = ({
 			>
 				<LibraryDocumentBlockEditor
 					body={body}
+					format={format}
 					onAddImages={onAddImages}
 					onBodyChange={onBodyChange}
 					onCaretChange={onCaretChange}

@@ -31,6 +31,7 @@ import {
 	tableSourceOf,
 	toggledRow,
 	toggleTask,
+	unmarked,
 	webPageFieldsOf,
 	withCalloutText,
 	withCalloutTone,
@@ -746,5 +747,41 @@ describe("keepIds", () => {
 			["One.", one],
 			["Two.", two],
 		])
+	})
+})
+
+describe("unmarked", () => {
+	const plainOf = (text: string) =>
+		serializeBlocks(unmarked(parseBlocks(text, blockIdsOf())))
+
+	it("writes a plain text with no marker back byte-identical", () => {
+		const text = "Plan\n\nIntro, then a ^ sign.\n\n- one\n- two\n"
+
+		expect(serializeBlocks(parseBlocks(text, blockIdsOf()))).toBe(text)
+		expect(plainOf(text)).toBe(text)
+	})
+
+	it("drops every marker the text already carries", () => {
+		expect(
+			plainOf("# Plan ^aaaaaa\n\nIntro. ^bbbbbb\n\n- one\n\n^cccccc"),
+		).toBe("# Plan\n\nIntro.\n\n- one")
+	})
+
+	it("writes a split block with no marker on either part", () => {
+		const { lead, blocks } = parseBlocks("Plan", blockIdsOf())
+		const split = { lead, blocks: [{ ...blocks[0], source: "# New\n\nMore." }] }
+
+		expect(serializeBlocks(unmarked(split))).toBe("# New\n\nMore.")
+	})
+
+	it("sets blocks apart as the markdown format does, the markers aside", () => {
+		const text = "```\ncode\n```\nAfter."
+		const ids = blockIdsOf()
+		const document = parseBlocks(text, ids)
+
+		const gapsOf = ({ blocks }: typeof document) => blocks.map(({ gap }) => gap)
+
+		expect(gapsOf(unmarked(document))).toEqual(gapsOf(marked(document, ids)))
+		expect(plainOf(text)).toBe("```\ncode\n```\n\nAfter.")
 	})
 })

@@ -79,6 +79,7 @@ import {
 	shiftedAcross,
 	shiftedOffset,
 	toggleTask,
+	unmarked,
 	withEmptyBlocksAt,
 } from "@workspace/ui/components/library-document-blocks"
 import {
@@ -365,8 +366,11 @@ type LibraryDocumentBlockEditorHandle = {
 	focusEndAt: (clientY: number) => void
 }
 
+type LibraryDocumentFormat = "markdown" | "plain"
+
 type LibraryDocumentBlockEditorProps = WriterActions & {
 	body: string
+	format?: LibraryDocumentFormat
 	onBodyChange: (markdown: string) => void
 	writers?: LibraryDocumentWriter[]
 	people?: LibraryDocumentPerson[]
@@ -380,6 +384,7 @@ type LibraryDocumentBlockEditorProps = WriterActions & {
 
 const LibraryDocumentBlockEditor = ({
 	body,
+	format = "markdown",
 	onBodyChange,
 	writers = NO_WRITERS,
 	people = NO_PEOPLE,
@@ -461,7 +466,7 @@ const LibraryDocumentBlockEditor = ({
 			: undefined
 
 	const commit = (edited: LibraryBlockDocument) => {
-		const next = marked(edited, ids)
+		const next = format === "plain" ? unmarked(edited) : marked(edited, ids)
 		show(next)
 		const markdown = serializeBlocks(next)
 		received.current = markdown
@@ -1416,5 +1421,6 @@ const LibraryDocumentBlockEditor = ({
 export {
 	LibraryDocumentBlockEditor,
 	type LibraryDocumentBlockEditorHandle,
+	type LibraryDocumentFormat,
 	type LibraryDocumentPlaceholder,
 }
