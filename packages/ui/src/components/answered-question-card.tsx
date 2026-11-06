@@ -7,15 +7,8 @@ import { AuthorLine } from "@workspace/ui/components/author-line"
 import { Icons } from "@workspace/ui/components/icons"
 import { InitialsAvatar } from "@workspace/ui/components/initials-avatar"
 import { MessageClock } from "@workspace/ui/components/message"
-import {
-	MessageBubble,
-	MessageBubbleContent,
-} from "@workspace/ui/components/message-bubble"
 import type { ToolQuestionItem } from "@workspace/ui/components/tool-question"
-import {
-	AGENT_BUBBLE_WIDTH,
-	AUTHOR_AVATAR_SIZE,
-} from "@workspace/ui/components/turn"
+import { AUTHOR_AVATAR_SIZE } from "@workspace/ui/components/turn"
 import { cn } from "@workspace/ui/lib/utils"
 
 const CHOSEN_ROW_CLASS =
@@ -150,8 +143,7 @@ const AnswererLine = ({ author, answeredAt }: AnswererLineProps) => {
 				/>
 			}
 			time={<MessageClock at={answeredAt} />}
-			isSticky
-			className="justify-start"
+			className="self-start"
 		/>
 	)
 }
@@ -162,23 +154,17 @@ const AnsweredQuestionCard = ({
 	questions,
 	className,
 }: AnsweredQuestionCardProps) => (
-	<MessageBubble
+	<div
 		data-slot="answered-question-card"
-		variant="soft"
-		align="start"
-		className={cn("min-w-0", AGENT_BUBBLE_WIDTH, className)}
+		className={cn("flex flex-col gap-2", className)}
 	>
-		<MessageBubbleContent
-			foot={<AnswererLine author={author} answeredAt={answeredAt} />}
-			className="min-w-[min(--spacing(90),100%)]"
-		>
-			<div className="flex flex-col gap-2.5">
-				{questions.map((question) => (
-					<AnsweredBlock key={question.question} {...question} />
-				))}
-			</div>
-		</MessageBubbleContent>
-	</MessageBubble>
+		<div className="flex flex-col gap-2.5">
+			{questions.map((question) => (
+				<AnsweredBlock key={question.question} {...question} />
+			))}
+		</div>
+		<AnswererLine author={author} answeredAt={answeredAt} />
+	</div>
 )
 
 export {
