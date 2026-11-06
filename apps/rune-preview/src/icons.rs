@@ -113,3 +113,26 @@ pub static KIROSHI_RING: Icon = Icon {
 	view: 401.0,
 	body: r#"<path fill="currentColor" fill-rule="evenodd" d="M 393.14 171.16 A 58.68 58.68 0 0 1 393.14 229.84 L 322.23 352.66 A 58.68 58.68 0 0 1 271.41 382.00 L 129.59 382.00 A 58.68 58.68 0 0 1 78.77 352.66 L 7.86 229.84 A 58.68 58.68 0 0 1 7.86 171.16 L 78.77 48.34 A 58.68 58.68 0 0 1 129.59 19.00 L 271.41 19.00 A 58.68 58.68 0 0 1 322.23 48.34 Z M 327.98 174.3 A 52.39 52.39 0 0 1 327.98 226.7 L 286.93 297.8 A 52.39 52.39 0 0 1 241.55 324 L 159.45 324 A 52.39 52.39 0 0 1 114.07 297.8 L 73.02 226.7 A 52.39 52.39 0 0 1 73.02 174.3 L 114.07 103.2 A 52.39 52.39 0 0 1 159.45 77 L 241.55 77 A 52.39 52.39 0 0 1 286.93 103.2 Z"/>"#,
 };
+pub static CLOSE: Icon = Icon {
+	name: "keyline-XIcon-outline",
+	view: 24.0,
+	body: r#"<path d="M7 7L17 17M17 7L7 17" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="currentColor"></path>"#,
+};
+
+pub static BELL: Icon = Icon {
+	name: "keyline-BellIcon-outline",
+	view: 24.0,
+	body: r#"<path d="M12 3C14.7614 3 17 5.23858 17 8C17 13 19 14 19 15C19 15.5523 18.5523 16 18 16H6C5.44772 16 5 15.5523 5 15C5 14 7 13 7 8C7 5.23858 9.23858 3 12 3ZM10.2679 20C10.6252 20.6188 11.2855 21 12 21C12.7145 21 13.3748 20.6188 13.7321 20" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="currentColor"></path>"#,
+};
+
+pub static ERROR: Icon = Icon {
+	name: "keyline-CircleXIcon-outline",
+	view: 24.0,
+	body: r#"<path d="M12 2C17.5228 2 22 6.47715 22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2Z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="currentColor"></path><path d="M9 9L15 15M15 9L9 15" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="currentColor"></path>"#,
+};
+
+pub static SUCCESS: Icon = Icon {
+	name: "keyline-CircleCheckIcon-outline",
+	view: 24.0,
+	body: r#"<path d="M12 2C17.5228 2 22 6.47715 22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2Z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="currentColor"></path><path d="M8 12L10.6667 15L16 9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="currentColor"></path>"#,
+};

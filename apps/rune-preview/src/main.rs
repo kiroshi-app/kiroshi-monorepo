@@ -1,5 +1,6 @@
 mod app;
 mod avatar;
+mod composer;
 mod content;
 mod conversations;
 mod dev_profile;
@@ -32,18 +33,21 @@ fn view(s: &App, cx: &mut Cx<App>) -> El {
 	let dark = cx.system_dark();
 	let t = tokens::Tokens::new(dark);
 	let k = t.kit();
-	let mut layer = Vec::new();
 	let body = match s.screen {
 		Screen::Onboarding(step) => onboarding::view(step, s, &k, &t.in_space(Some(tokens::BLUE))),
 		Screen::Conversations => {
 			let viewport = conversations::Viewport {
 				inset: cx.titlebar_inset(),
 				transcript_height: cx.layout(conversations::TRANSCRIPT).map(|rect| rect[3]),
+				composer: composer::Measured {
+					surface_width: cx.layout(composer::COMPOSER_SURFACE).map(|rect| rect[2]),
+					text_width: cx.layout(composer::COMPOSER_MIRROR).map(|rect| rect[2]),
+				},
 			};
-			conversations::view(s, &k, &t, &viewport, &mut layer)
+			conversations::view(s, &k, &t, &viewport)
 		}
 	};
-	rune_kit::root(body, layer)
+	rune_kit::root(body, Vec::new())
 }
 
 fn setup(s: &mut App, waker: Waker) {

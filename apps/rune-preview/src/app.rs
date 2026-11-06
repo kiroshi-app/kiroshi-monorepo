@@ -1,8 +1,8 @@
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 
-use rune::image::ImageCache;
-use rune::{TextEdit, Waker};
+use rune::image::{Image, ImageCache};
+use rune::{ClipboardContent, TextEdit, Waker};
 use rune_kit::shell::PaneState;
 use serde_json::json;
 
@@ -27,6 +27,8 @@ const PAGE_LIMIT: u32 = 200;
 const MAX_THREAD_MESSAGES: usize = 10_000;
 
 pub const AGENT_PILL: &str = "agent:";
+
+const IMAGES_NOT_SENT: &str = "The preview doesn't upload images. Remove them to send the text.";
 
 const SENDING_OFF: &str = "Sending is off on the installed Kiroshi: the preview only reads it. Sending is proven on Kiroshi Dev.";
 
@@ -163,10 +165,36 @@ pub struct Mention {
 	pub active: usize,
 }
 
+pub struct Attachment {
+	pub id: u64,
+	pub name: String,
+	pub bytes: usize,
+	pub image: Image,
+}
+
 pub struct Composer {
 	pub edit: TextEdit,
 	pub mention: Option<Mention>,
+	pub attachments: Vec<Attachment>,
+	next_attachment: u64,
 }
+
+pub struct Mentionable {
+	pub bot_id: String,
+	pub name: String,
+	pub hue: Option<f32>,
+	pub title: String,
+	pub outside: bool,
+}
+
+pub struct MentionMenu {
+	pub rows: Vec<Mentionable>,
+	pub further: usize,
+}
+
+const OPENING_MENTIONS: usize = 6;
+
+const PASTED_IMAGE_NAME: &str = "image.png";
 
 pub enum Inbound {
 	Connected(Result<Ready, HostError>),
@@ -220,7 +248,12 @@ impl App {
 			screen: Screen::Onboarding(Step::first()),
 			workspace: Workspace::Connecting,
 			thread: None,
-			composer: Composer { edit: TextEdit::new(""), mention: None },
+			composer: Composer {
+				edit: TextEdit::new(""),
+				mention: None,
+				attachments: Vec::new(),
+				next_attachment: 0,
+			},
 			images: Images::default(),
 			sidebar: PaneState::new(276.0).range(180.0, 480.0),
 			notice: None,
@@ -334,13 +367,72 @@ impl App {
 		Some((agent.name.as_str(), agent.avatar_blot))
 	}
 
-	pub fn mention_candidates(&self) -> Vec<&Seat> {
-		let (Some(thread), Some(mention)) = (self.thread.as_ref(), self.composer.mention.as_ref())
-		else {
-			return Vec::new();
+	pub fn mention_menu(&self) -> Option<MentionMenu> {
+		let thread = self.thread.as_ref()?;
+		let needle = self.composer.mention.as_ref()?.query.to_lowercase();
+		let agents = self.ready().map_or(&[][..], |ready| ready.agents.as_slice());
+		let title_of = |bot_id: &str| {
+			agents
+				.iter()
+				.find(|agent| agent.id == bot_id)
+				.map_or(String::new(), |agent| agent.title.clone())
 		};
-		let query = mention.query.to_lowercase();
-		thread.seats.iter().filter(|seat| seat.name.to_lowercase().contains(&query)).collect()
+		let seated: Vec<Mentionable> = thread
+			.seats
+			.iter()
+			.map(|seat| Mentionable {
+				bot_id: seat.bot_id.clone(),
+				name: seat.name.clone(),
+				hue: seat.hue,
+				title: title_of(&seat.bot_id),
+				outside: false,
+			})
+			.collect();
+		let unseated: Vec<Mentionable> = agents
+			.iter()
+			.filter(|agent| !thread.seats.iter().any(|seat| seat.bot_id == agent.id))
+			.map(|agent| Mentionable {
+				bot_id: agent.id.clone(),
+				name: agent.name.clone(),
+				hue: agent.avatar_blot,
+				title: agent.title.clone(),
+				outside: true,
+			})
+			.collect();
+		let mentionable = seated.len() + unseated.len();
+		let named = |row: &Mentionable| row.name.to_lowercase().contains(&needle);
+		let mut rows: Vec<Mentionable> = seated.into_iter().filter(named).collect();
+		if needle.is_empty() {
+			rows.truncate(OPENING_MENTIONS);
+		} else {
+			rows.extend(unseated.into_iter().filter(named));
+		}
+		let further = if needle.is_empty() { mentionable - rows.len() } else { 0 };
+		(!rows.is_empty()).then_some(MentionMenu { rows, further })
+	}
+
+	fn mention_count(&self) -> usize {
+		self.mention_menu().map_or(0, |menu| menu.rows.len())
+	}
+
+	pub fn pasted(&mut self, content: &ClipboardContent) -> bool {
+		let Some(image) = content.image().filter(|_| content.text().is_empty()) else {
+			return false;
+		};
+		let Some(decoded) = self.images.decode(image.png()) else { return false };
+		let composer = &mut self.composer;
+		composer.next_attachment += 1;
+		composer.attachments.push(Attachment {
+			id: composer.next_attachment,
+			name: PASTED_IMAGE_NAME.to_owned(),
+			bytes: image.png().len(),
+			image: decoded,
+		});
+		true
+	}
+
+	pub fn remove_attachment(&mut self, id: u64) {
+		self.composer.attachments.retain(|attachment| attachment.id != id);
 	}
 
 	pub fn composer_changed(&mut self) {
@@ -353,14 +445,14 @@ impl App {
 				held.as_ref().filter(|held| held.start == start).map_or(0, |held| held.active);
 			Mention { start, query, active }
 		});
-		let count = self.mention_candidates().len();
+		let count = self.mention_count();
 		if let Some(mention) = self.composer.mention.as_mut() {
 			mention.active = mention.active.min(count.saturating_sub(1));
 		}
 	}
 
 	pub fn move_mention(&mut self, step: isize) {
-		let count = self.mention_candidates().len();
+		let count = self.mention_count();
 		if let Some(mention) = self.composer.mention.as_mut().filter(|_| count > 0) {
 			mention.active = (mention.active as isize + step).rem_euclid(count as isize) as usize;
 		}
@@ -370,8 +462,8 @@ impl App {
 		let Some(active) = self.composer.mention.as_ref().map(|mention| mention.active) else {
 			return false;
 		};
-		let Some(bot_id) = self.mention_candidates().get(active).map(|seat| seat.bot_id.clone())
-		else {
+		let chosen = self.mention_menu().and_then(|menu| menu.rows.into_iter().nth(active));
+		let Some(bot_id) = chosen.map(|row| row.bot_id) else {
 			return false;
 		};
 		self.choose_mention(&bot_id);
@@ -405,6 +497,10 @@ impl App {
 		}
 		if ready.host.profile() == Profile::Installed {
 			self.notice = Some(SENDING_OFF.to_owned());
+			return;
+		}
+		if !self.composer.attachments.is_empty() {
+			self.notice = Some(IMAGES_NOT_SENT.to_owned());
 			return;
 		}
 		let host = ready.host.clone();

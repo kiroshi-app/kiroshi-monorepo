@@ -2,14 +2,15 @@ use std::borrow::Cow;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use rune::{
-	Chrome, Color, Cursor, El, GrowthSpec, Icon, Key, KeyEvent, ScrollSpec, SurfaceFit, TextStyle,
-	Tx, col, el, icon, row, text,
+	Chrome, Color, Cursor, El, GrowthSpec, Icon, ScrollSpec, SurfaceFit, TextStyle, col, el, icon,
+	row, text,
 };
+use rune_kit::Kit;
 use rune_kit::markdown::{Markdown, MarkdownStyle};
-use rune_kit::{Kit, PopupItem, PopupList, TextInput};
 
-use crate::app::{AGENT_PILL, App, Ready, Thread, Workspace};
+use crate::app::{App, Ready, Thread, Workspace};
 use crate::avatar::{Face, Motion};
+use crate::composer;
 use crate::content::{self, Run, Segment};
 use crate::host::{DEV_START_COMMAND, HostError, Profile};
 use crate::hues::Role as HueRole;
@@ -38,7 +39,6 @@ const HEADER: f32 = 48.0;
 const COLUMN: f32 = 720.0;
 const COLUMN_INSET: f32 = 20.0;
 const IMAGE_MAX_WIDTH: f32 = 420.0;
-const COMPOSER: &str = "composer";
 
 const PRESENCE_ONLINE: u32 = 0x207144;
 
@@ -49,13 +49,14 @@ const HEADER_TITLE: TextStyle =
 pub struct Viewport {
 	pub inset: f32,
 	pub transcript_height: Option<f32>,
+	pub composer: composer::Measured,
 }
 
 pub const TRANSCRIPT: &str = "transcript";
 
 const ANCHORED_ROWS: usize = 40;
 
-pub fn view(s: &App, k: &Kit, t: &Tokens, viewport: &Viewport, layer: &mut Vec<El>) -> El {
+pub fn view(s: &App, k: &Kit, t: &Tokens, viewport: &Viewport) -> El {
 	match &s.workspace {
 		Workspace::Connecting => centred(
 			t,
@@ -66,9 +67,7 @@ pub fn view(s: &App, k: &Kit, t: &Tokens, viewport: &Viewport, layer: &mut Vec<E
 				.child(text("Reaching Kiroshi…").font(TEXT_COMPACT).color(t.muted_foreground)),
 		),
 		Workspace::Failed(failure) => host_failed(t, failure),
-		Workspace::Ready(ready) => {
-			frame(s, ready, k, &t.in_space(ready.space.colour), viewport, layer)
-		}
+		Workspace::Ready(ready) => frame(s, ready, k, &t.in_space(ready.space.colour), viewport),
 	}
 }
 
@@ -103,14 +102,7 @@ fn host_failed(t: &Tokens, failure: &HostError) -> El {
 	centred(t, col().items_center().gap(SPACING * 6.0).child(content).child(retry))
 }
 
-fn frame(
-	s: &App,
-	ready: &Ready,
-	k: &Kit,
-	t: &Tokens,
-	viewport: &Viewport,
-	layer: &mut Vec<El>,
-) -> El {
+fn frame(s: &App, ready: &Ready, k: &Kit, t: &Tokens, viewport: &Viewport) -> El {
 	let card = row()
 		.grow(1.0)
 		.min_h(0.0)
@@ -122,7 +114,7 @@ fn frame(
 		.border(1.0, t.shell_border)
 		.child(roster(ready, t))
 		.child(el().w(1.0).h_full().fill(t.shell_divider))
-		.child(thread_column(s, k, t, viewport, layer));
+		.child(thread_column(s, k, t, viewport));
 	col()
 		.w_full()
 		.h_full()
@@ -383,7 +375,7 @@ fn month_and_day(at: i64) -> String {
 	format!("{month}/{day}")
 }
 
-fn thread_column(s: &App, k: &Kit, t: &Tokens, viewport: &Viewport, layer: &mut Vec<El>) -> El {
+fn thread_column(s: &App, k: &Kit, t: &Tokens, viewport: &Viewport) -> El {
 	col()
 		.key("conversation")
 		.grow(1.0)
@@ -392,7 +384,7 @@ fn thread_column(s: &App, k: &Kit, t: &Tokens, viewport: &Viewport, layer: &mut 
 		.fill(t.background)
 		.child(thread_header(s, t))
 		.child(thread_view(s, k, t, viewport.transcript_height))
-		.child(composer(s, k, t, layer))
+		.child(composer::view(s, k, t, &viewport.composer))
 }
 
 fn thread_header(s: &App, t: &Tokens) -> El {
@@ -759,110 +751,6 @@ fn image_view(s: &App, alt: &str, url: &str, t: &Tokens) -> El {
 		},
 		Some(Slot::Failed(failure)) => not_drawn(t, &format!("Image not drawn: {alt}"), failure),
 		Some(Slot::Loading) | None => not_drawn(t, &format!("Loading {alt}…"), ""),
-	}
-}
-
-fn composer(s: &App, k: &Kit, t: &Tokens, layer: &mut Vec<El>) -> El {
-	let can_send = s.thread.is_some();
-	mention_popup(s, k, t, layer);
-	let pill_ink = t.primary;
-	let pill_ground = t.primary.alpha(0.14);
-	let field = TextInput::new(&s.composer.edit)
-		.plain()
-		.width(None)
-		.placeholder("Message")
-		.text_style(TEXT_BUBBLE)
-		.disabled(!can_send)
-		.pill_style(move |id| {
-			let style = rune::PillStyle::default();
-			if id.starts_with(AGENT_PILL) { style.bg(pill_ground).fg(pill_ink) } else { style }
-		})
-		.on_edit(|s: &mut App| &mut s.composer.edit)
-		.on_change(|s: &mut App, _: &mut Tx| s.composer_changed())
-		.on_key(mention_keys)
-		.on_submit(|s: &mut App, _: &mut Tx| s.send())
-		.build(k)
-		.key(COMPOSER);
-	let filled = can_send && !s.composer.edit.text.trim().is_empty();
-	let (send_fill, send_ink) = if filled {
-		(t.foreground, t.background)
-	} else {
-		(t.foreground.alpha(0.08), Color::WHITE.mix(t.muted_foreground, 0.6))
-	};
-	let send = el()
-		.size(32.0, 32.0)
-		.radius(16.0)
-		.center()
-		.fill(send_fill)
-		.child(icon(&icons::SEND, 16.0).color(send_ink));
-	let send = if filled {
-		send.cursor(Cursor::Pointer).role("button").label("Send").on_press(|s: &mut App| s.send())
-	} else {
-		send
-	};
-	let mut column = col().w(COLUMN).shrink().gap(SPACING * 2.0);
-	if let Some(notice) = &s.notice {
-		column = column.child(text(notice.clone()).font(TEXT_COMPACT).color(t.destructive).wrap());
-	}
-	let surface = row()
-		.w_full()
-		.min_h(50.0)
-		.padding(8.0)
-		.gap(SPACING)
-		.radius(25.0)
-		.fill(t.prompt_surface)
-		.border(1.0, t.foreground.alpha(0.1))
-		.center_y()
-		.child(col().grow(1.0).shrink().px(8.0).py(4.0).child(field))
-		.child(send);
-	row().w_full().justify_center().pb(SPACING * 3.0).pt(SPACING * 2.0).child(column.child(surface))
-}
-
-fn mention_popup(s: &App, k: &Kit, t: &Tokens, layer: &mut Vec<El>) {
-	let Some(mention) = s.composer.mention.as_ref() else { return };
-	let candidates = s.mention_candidates();
-	let count = candidates.len();
-	let dark = t.dark;
-	let items = candidates.into_iter().map(|seat| {
-		PopupItem::new(seat.bot_id.clone(), seat.name.clone())
-			.leading(Face::still(&seat.name, seat.hue).draw(22.0, dark))
-	});
-	PopupList::new("mentions", COMPOSER)
-		.open(true)
-		.width(250.0)
-		.label("Agents")
-		.items(items)
-		.empty_message("No agent here by that name")
-		.active((count > 0).then_some(mention.active))
-		.on_active(|s: &mut App, i| {
-			if let Some(mention) = s.composer.mention.as_mut() {
-				mention.active = i;
-			}
-		})
-		.on_choose(|s: &mut App, id, _: &mut Tx| s.choose_mention(id))
-		.on_close(|s: &mut App| s.composer.mention = None)
-		.build(k, layer);
-}
-
-fn mention_keys(s: &mut App, event: &KeyEvent, _: &mut Tx) -> bool {
-	if s.composer.mention.is_none() {
-		return false;
-	}
-	match event.key {
-		Key::Up => {
-			s.move_mention(-1);
-			true
-		}
-		Key::Down => {
-			s.move_mention(1);
-			true
-		}
-		Key::Enter | Key::Tab => s.choose_active_mention(),
-		Key::Escape => {
-			s.composer.mention = None;
-			true
-		}
-		_ => false,
 	}
 }
 
