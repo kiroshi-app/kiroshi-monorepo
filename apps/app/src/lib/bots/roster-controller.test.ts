@@ -69,7 +69,7 @@ const loaded = async (store: TranscriptStore) => {
 
 const names = (bots: Bot[]) => bots.map((bot) => bot.name)
 
-const ids = (bots: Bot[] = []) => bots.map((bot) => bot.id)
+const ids = (bots: Bot[]) => bots.map((bot) => bot.id)
 
 const useRenderedRoster = (controller: RosterController) => {
 	const state = useControllerState(controller)
