@@ -39,7 +39,7 @@ import {
 	textCarryingDocuments,
 } from "@/lib/chat/document-mentions"
 import { boardSnapshotOf } from "@/lib/library/library-boards"
-import { titleOf } from "@/lib/library/library-items"
+import { documentFormatOf, titleOf } from "@/lib/library/library-items"
 import { libraryQueryKeys } from "@/lib/library/library-query-keys"
 import {
 	type ThreadLibraryItem,
@@ -285,6 +285,7 @@ export const ThreadDocumentPanel = ({
 			{document ? (
 				<LibraryDocumentBlockEditor
 					body={document.markdown}
+					format={documentFormatOf(name)}
 					onBodyChange={edit}
 					resolveImage={resolveImage}
 				/>
