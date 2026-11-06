@@ -142,8 +142,27 @@ const IMPORT_FAILURE_REASONS = [
 	"generic",
 ] as const
 
+const URL_IMPORT_FAILURE_REASONS = [
+	"unsupportedScheme",
+	"privateAddress",
+	"networkFailure",
+	"tooLarge",
+	"unknownSpace",
+] as const
+
+const IMPORT_FAILURES = [
+	...URL_IMPORT_FAILURE_REASONS.map((reason) => ({
+		key: `url.${reason}` as const,
+		name: "https://example.com/launch-photo.png",
+	})),
+	...IMPORT_FAILURE_REASONS.map((reason) => ({
+		key: reason,
+		name: "launch-plan.md",
+	})),
+]
+
 const RAW_REASON_CODE = new RegExp(
-	`\\b(${IMPORT_FAILURE_REASONS.join("|")})\\b`,
+	`\\b(${[...IMPORT_FAILURE_REASONS, ...URL_IMPORT_FAILURE_REASONS].join("|")})\\b`,
 )
 
 const expectOutOfFocusOrder = async (element: HTMLElement) => {
@@ -1360,16 +1379,16 @@ export const ImportFailures = meta.story({
 		docs: {
 			description: {
 				story:
-					"The notice raised when a file fails to import, once per reason the host or the size check can answer, then the generic sentence for any other failure, which stays on screen. The title names the file from `common:library.failure.import.title`, the second line is `common:library.failure.import.<reason>`. Check that each second line says what went wrong and the gesture that fixes it, and that no raw reason code reaches the screen.",
+					"The notice raised when a dropped link or a file fails to import, once per reason the host or the size check can answer, then the generic sentence for any other failure, which stays on screen. The title names the link or the file from `common:library.failure.import.title`, the second line is `common:library.failure.import.url.<reason>` for a link and `common:library.failure.import.<reason>` for a file. Check that each second line says what went wrong and the gesture that fixes it, and that no raw reason code reaches the screen.",
 			},
 		},
 	},
 	play: async () => {
 		const en = i18n.getFixedT("en", "common")
 		const fr = i18n.getFixedT("fr", "common")
-		const title = en("library.failure.import.title", { name: "launch-plan.md" })
 
-		for (const [index, reason] of IMPORT_FAILURE_REASONS.entries()) {
+		for (const [index, { key: reason, name }] of IMPORT_FAILURES.entries()) {
+			const title = en("library.failure.import.title", { name })
 			const sentence = en(`library.failure.import.${reason}`)
 			const notice = raiseFailureNotice({ title, description: sentence })
 
@@ -1390,7 +1409,7 @@ export const ImportFailures = meta.story({
 			await expect(card.textContent).not.toMatch(RAW_REASON_CODE)
 			await expect(fr(`library.failure.import.${reason}`)).not.toBe(sentence)
 
-			if (index < IMPORT_FAILURE_REASONS.length - 1) endNotice(notice)
+			if (index < IMPORT_FAILURES.length - 1) endNotice(notice)
 		}
 	},
 })
