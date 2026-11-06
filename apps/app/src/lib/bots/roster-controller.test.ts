@@ -301,6 +301,60 @@ describe("createRosterController", () => {
 		expect(names(controller.getState().bots)).toEqual(["Claude"])
 	})
 
+	it("lands a retried read that fails again in the roster failure", async () => {
+		const store = createFakeTranscriptStore()
+		const refusal = vi
+			.spyOn(store, "bots")
+			.mockRejectedValue(new Error("no record"))
+		const controller = mountRoster(store)
+		await controller.load(opening())
+		refusal.mockClear()
+
+		await expect(controller.retryLoad()).resolves.toBeUndefined()
+
+		expect(refusal).toHaveBeenCalledTimes(1)
+		expect(controller.getState().hasFailedToLoad).toBe(true)
+		expect(controller.getState().isRosterPending).toBe(false)
+	})
+
+	it("reads again only the roster of the shown space on retry", async () => {
+		const store = createFakeTranscriptStore()
+		const elsewhere = await store.createSpace("Vocca")
+		const read = store.bots.bind(store)
+		const reads = vi
+			.spyOn(store, "bots")
+			.mockImplementation((spaceId, signal) =>
+				spaceId === "personal"
+					? Promise.reject(new Error("no record"))
+					: read(spaceId, signal),
+			)
+		const controller = mountRoster(store)
+		await controller.load(opening(null, "personal", ["personal", elsewhere.id]))
+		reads.mockReset()
+		reads.mockImplementation(read)
+
+		await controller.retryLoad()
+
+		expect(reads.mock.calls.map(([spaceId]) => spaceId)).toEqual(["personal"])
+		expect(controller.getState().hasFailedToLoad).toBe(false)
+		expect(names(controller.getState().bots)).toEqual(["Claude"])
+	})
+
+	it("waits on the retried read of the shown space", async () => {
+		const store = createFakeTranscriptStore()
+		const refusal = vi
+			.spyOn(store, "bots")
+			.mockRejectedValue(new Error("no record"))
+		const controller = mountRoster(store)
+		await controller.load(opening())
+
+		refusal.mockReturnValue(new Promise(() => undefined))
+		void controller.retryLoad()
+
+		expect(controller.getState().isRosterPending).toBe(true)
+		expect(controller.getState().hasFailedToLoad).toBe(false)
+	})
+
 	it("reports a roster it could not read instead of an empty sidebar", async () => {
 		const store = createFakeTranscriptStore()
 		vi.spyOn(store, "bots").mockRejectedValue(new Error("no record"))
