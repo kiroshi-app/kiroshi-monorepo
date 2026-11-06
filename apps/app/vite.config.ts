@@ -31,6 +31,7 @@ export default defineConfig({
 			input: {
 				main: resolve(__dirname, "index.html"),
 				dragGhost: resolve(__dirname, "drag-ghost.html"),
+				screenshot: resolve(__dirname, "screenshot.html"),
 			},
 		},
 	},

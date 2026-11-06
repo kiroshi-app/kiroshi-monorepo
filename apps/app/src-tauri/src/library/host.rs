@@ -751,7 +751,7 @@ impl<R: Runtime> LibraryHost<R> {
 		let canvas =
 			export_canvas(&part).map_err(|error| DocumentRefusal::unexpected(error.to_string()))?;
 		let header = board_header(root, space_id, &asked.name, &board)?;
-		let target = ScreenshotTarget::Board { name: asked.name.clone(), canvas, frame };
+		let target = ScreenshotTarget::board(asked.name.clone(), canvas, frame, asked.scale);
 		let shot = render(&self.app, space_id, asked.scale, target).await?;
 		Ok(Screenshot::of(header, asked.name, shot))
 	}

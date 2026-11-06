@@ -8,7 +8,8 @@ use image::imageops::FilterType;
 use image::{DynamicImage, ImageFormat};
 use serde::{Deserialize, Serialize};
 use tauri::{
-	AppHandle, Manager, Runtime, State, Theme, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
+	AppHandle, LogicalSize, Manager, Runtime, State, Theme, WebviewUrl, WebviewWindow,
+	WebviewWindowBuilder,
 };
 use tokio::sync::oneshot;
 use uuid::Uuid;
@@ -22,7 +23,7 @@ mod tests;
 
 pub const SCREENSHOT_ROUTE: &str = "/screenshot.html";
 
-const WINDOW_PREFIX: &str = "screenshot-";
+pub const WINDOW_PREFIX: &str = "screenshot-";
 
 const RENDER_TIMEOUT: Duration = Duration::from_secs(15);
 
@@ -33,6 +34,12 @@ const RENDERED_NAME: &str = "screenshot.png";
 const SCALES: [u8; 2] = [1, 2];
 
 const SHRINK_MARGIN: f64 = 0.9;
+
+const MIN_BOARD_ZOOM: f64 = 0.1;
+
+const DOCUMENT_WIDTH: f64 = 794.0;
+
+const DOCUMENT_HEIGHT: f64 = 600.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(try_from = "u8")]
@@ -50,7 +57,7 @@ pub struct ScreenshotJob {
 #[derive(Debug, Clone, PartialEq, Serialize, specta::Type)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum ScreenshotTarget {
-	Board { name: String, canvas: String, frame: Frame },
+	Board { name: String, canvas: String, frame: Frame, zoom: f64 },
 	Document { name: String, blocks: Vec<ScreenshotBlock> },
 }
 
@@ -123,6 +130,23 @@ impl TryFrom<u8> for Scale {
 	}
 }
 
+impl ScreenshotTarget {
+	pub fn board(name: String, canvas: String, frame: Frame, scale: Scale) -> Self {
+		let long_edge = frame.width.max(frame.height).max(1) as f64 * f64::from(scale.0);
+		let zoom = (f64::from(LONG_EDGE) / long_edge).clamp(MIN_BOARD_ZOOM, 1.0);
+		Self::Board { name, canvas, frame, zoom }
+	}
+
+	fn window_size(&self) -> LogicalSize<f64> {
+		match self {
+			Self::Board { frame, zoom, .. } => {
+				LogicalSize::new(frame.width as f64 * zoom, frame.height as f64 * zoom)
+			}
+			Self::Document { .. } => LogicalSize::new(DOCUMENT_WIDTH, DOCUMENT_HEIGHT),
+		}
+	}
+}
+
 impl Screenshots {
 	pub(super) fn held(&self) -> MutexGuard<'_, HashMap<String, Pending>> {
 		self.0.lock().unwrap_or_else(PoisonError::into_inner)
@@ -186,9 +210,10 @@ pub async fn render<R: Runtime>(
 	target: ScreenshotTarget,
 ) -> Result<Shot, ToolRefusal> {
 	let request_id = Uuid::new_v4().to_string();
+	let size = target.window_size();
 	let job = ScreenshotJob { request_id, space_id: space_id.to_owned(), scale: scale.0, target };
 	let (in_flight, answered) = InFlight::opened(app, job);
-	hidden_window(app, &in_flight.request_id)
+	hidden_window(app, &in_flight.request_id, size)
 		.map_err(|failure| failed(format!("the render window did not open: {failure}")))?;
 	match tokio::time::timeout(RENDER_TIMEOUT, answered).await {
 		Err(_) => {
@@ -204,9 +229,11 @@ pub async fn render<R: Runtime>(
 fn hidden_window<R: Runtime>(
 	app: &AppHandle<R>,
 	request_id: &str,
+	size: LogicalSize<f64>,
 ) -> tauri::Result<WebviewWindow<R>> {
 	let route = SCREENSHOT_ROUTE.trim_start_matches('/');
 	WebviewWindowBuilder::new(app, window_label(request_id), WebviewUrl::App(route.into()))
+		.inner_size(size.width, size.height)
 		.visible(false)
 		.focused(false)
 		.focusable(false)

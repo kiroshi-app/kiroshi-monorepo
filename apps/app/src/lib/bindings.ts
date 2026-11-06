@@ -366,6 +366,8 @@ export const LIBRARY_DOCUMENT_UPDATED_EVENT = "library://document-updated" as co
 
 export const LIBRARY_SCREENSHOT_ROUTE = "/screenshot.html" as const;
 
+export const LIBRARY_SCREENSHOT_WINDOW_PREFIX = "screenshot-" as const;
+
 export const MAXIMIZE_BUTTON_EVENT = "window-maximize-button" as const;
 
 export const MAX_SUMMONS_PER_CHAIN = 5 as const;
@@ -1934,7 +1936,7 @@ export type ScreenshotRendered = { kind: "rendered"; png: string } | { kind: "fa
 
 export type ScreenshotRequestError = { kind: "notAScreenshotWindow" } | { kind: "unknownRequest"; requestId: string };
 
-export type ScreenshotTarget = { kind: "board"; name: string; canvas: string; frame: Frame } | { kind: "document"; name: string; blocks: ScreenshotBlock[] };
+export type ScreenshotTarget = { kind: "board"; name: string; canvas: string; frame: Frame; zoom: number | null } | { kind: "document"; name: string; blocks: ScreenshotBlock[] };
 
 export type Section = {
 	id: string,

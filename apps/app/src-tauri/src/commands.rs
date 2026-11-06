@@ -18,6 +18,7 @@ pub fn builder() -> Builder<tauri::Wry> {
 		.constant("DRAG_GHOST_TAB_EVENT", window_controls::drag_ghost::TAB_EVENT)
 		.constant("DRAG_GHOST_ENDED_EVENT", window_controls::drag_ghost::ENDED_EVENT)
 		.constant("LIBRARY_SCREENSHOT_ROUTE", library::host::screenshot::SCREENSHOT_ROUTE)
+		.constant("LIBRARY_SCREENSHOT_WINDOW_PREFIX", library::host::screenshot::WINDOW_PREFIX)
 		.constant("ACCOUNT_CHANGED_EVENT", account::contract::CHANGED_EVENT)
 		.constant("DEVICE_APPROVAL_CHANGED_EVENT", devices::contract::APPROVAL_CHANGED_EVENT)
 		.constant("DEVICE_APPROVAL_REQUESTED_EVENT", devices::contract::APPROVAL_REQUESTED_EVENT)

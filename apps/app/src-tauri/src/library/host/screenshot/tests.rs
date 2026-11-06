@@ -3,6 +3,7 @@ use tauri::test::{mock_builder, MockRuntime};
 use tauri::WebviewWindowBuilder;
 
 use super::*;
+use crate::board::Frame;
 use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 
 fn an_app(name: &str) -> AppOfItsOwn {
@@ -183,4 +184,25 @@ fn the_scale_is_1_or_2_and_1_when_left_out() {
 	assert!(scale(serde_json::json!(3)).is_err());
 	assert!(scale(serde_json::json!(0)).is_err());
 	assert_eq!(Scale::default(), Scale(1));
+}
+
+#[test]
+fn a_board_target_zooms_out_so_its_long_edge_fits_1568_px_at_its_scale_and_never_zooms_in() {
+	let zoom_of = |width: i64, height: i64, scale: u8| {
+		let frame = Frame { x: -24, y: -24, width, height };
+		match ScreenshotTarget::board(
+			"plan.canvas".to_owned(),
+			"{}".to_owned(),
+			frame,
+			Scale(scale),
+		) {
+			ScreenshotTarget::Board { zoom, .. } => zoom,
+			ScreenshotTarget::Document { .. } => unreachable!("a board target"),
+		}
+	};
+
+	assert!((zoom_of(400, 300, 2) - 1.0).abs() < f64::EPSILON);
+	assert!((zoom_of(3136, 1000, 1) - 0.5).abs() < f64::EPSILON);
+	assert!((zoom_of(1000, 3136, 2) - 0.25).abs() < f64::EPSILON);
+	assert!((zoom_of(100_000, 10, 1) - 0.1).abs() < f64::EPSILON);
 }
