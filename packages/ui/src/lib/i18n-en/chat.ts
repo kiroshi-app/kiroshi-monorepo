@@ -131,7 +131,6 @@ const chat = {
 	richBlock: {
 		building: "Building the view…",
 		pending: {
-			options: "Options",
 			interactive: "Interactive view",
 			gallery: "Gallery",
 			"illustrated-list": "List",
