@@ -1602,6 +1602,7 @@ navigation-boardcanvas--connector-with-presence-outline
 navigation-boardcanvas--connector-with-presence-outline-dark
 navigation-boardcanvas--create-connector
 navigation-boardcanvas--create-connector-dark
+navigation-boardcanvas--draw-connector-with-tool
 navigation-boardcanvas--edit-by-keyboard
 navigation-boardcanvas--edit-by-keyboard-dark
 navigation-boardcanvas--edit-by-pointer
@@ -1637,6 +1638,12 @@ navigation-boardcanvas--opens-at-full-size-on-two-stickies-dark
 navigation-boardcanvas--opens-framed-on-spread-content
 navigation-boardcanvas--opens-framed-on-spread-content-dark
 navigation-boardcanvas--opens-framed-through-consumer-padding
+navigation-boardcanvas--pan-with-hand-tool
+navigation-boardcanvas--place-images-with-tool
+navigation-boardcanvas--place-section-with-tool
+navigation-boardcanvas--place-shape-with-tool
+navigation-boardcanvas--place-sticky-with-tool
+navigation-boardcanvas--place-text-with-tool
 navigation-boardcanvas--pointer-reported
 navigation-boardcanvas--resize-by-keyboard
 navigation-boardcanvas--resize-by-keyboard-dark
@@ -1654,6 +1661,7 @@ navigation-boardcanvas--switch-connector-routing
 navigation-boardcanvas--switch-connector-routing-dark
 navigation-boardcanvas--tile-dragged
 navigation-boardcanvas--tile-dragged-dark
+navigation-boardcanvas--tool-picked-while-selected
 navigation-boardcanvas--unmount-during-draft
 navigation-boardcanvas--url-dragged-over
 navigation-boardcanvas--url-dragged-over-dark

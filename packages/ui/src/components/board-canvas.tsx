@@ -1,11 +1,13 @@
 "use client"
 
 import {
+	type ChangeEvent,
 	type ClipboardEvent,
 	type ComponentType,
 	type CSSProperties,
 	type DragEvent,
 	type KeyboardEvent,
+	type MouseEvent,
 	type PointerEvent,
 	type ReactNode,
 	useCallback,
@@ -17,6 +19,7 @@ import {
 } from "react"
 import { useTranslation } from "react-i18next"
 
+import boardSchema from "@workspace/shared/board/board.schema.json"
 import { BoardConnectorFlyout } from "@workspace/ui/components/board/board-connector-flyout"
 import {
 	type BoardClientPoint,
@@ -437,6 +440,51 @@ const DEFAULT_SHAPE_STYLE: BoardShapeStyle = {
 	shape: "rounded-rectangle",
 	fill: "surface",
 }
+
+type BoardCreationTool = Extract<
+	BoardTool,
+	"sticky" | "shape" | "text" | "section"
+>
+
+const SIZE_OF_CREATED: Record<BoardCreationTool, BoardSize> = {
+	sticky: boardSchema.kinds.sticky.size,
+	shape: boardSchema.kinds.shape.size,
+	text: boardSchema.kinds.text.size,
+	section: boardSchema.kinds.section.size,
+}
+
+const isCreationTool = (tool: BoardTool): tool is BoardCreationTool =>
+	Object.hasOwn(SIZE_OF_CREATED, tool)
+
+const createdItemOf = (
+	kind: BoardCreationTool,
+	centre: BoardPoint,
+	zOrder: number,
+): BoardItem => {
+	const size = SIZE_OF_CREATED[kind]
+	return {
+		id: crypto.randomUUID(),
+		kind,
+		position: {
+			x: Math.round(centre.x - size.width / 2),
+			y: Math.round(centre.y - size.height / 2),
+		},
+		size,
+		zOrder,
+		text: "",
+	}
+}
+
+const zOrderOfCreated = (
+	kind: BoardCreationTool,
+	objects: readonly BoardObject[],
+) => {
+	const zOrders = objects.map(({ zOrder }) => zOrder)
+	return kind === "section"
+		? Math.min(0, ...zOrders) - 1
+		: Math.max(0, ...zOrders) + 1
+}
+
 const HANDLE_PLACE: Record<BoardCorner, string> = {
 	"top-left": "-top-1.5 -left-1.5 cursor-nwse-resize",
 	"top-right": "-top-1.5 -right-1.5 cursor-nesw-resize",
@@ -835,7 +883,7 @@ const ReadyBoardCanvas = ({
 	onDropUrl,
 	onPointerMove,
 	onSelectionChange,
-	isConnecting = false,
+	isConnecting: isConnectingByApp = false,
 	className,
 }: ReadyBoardCanvasProps) => {
 	const { t } = useTranslation("common")
@@ -857,6 +905,13 @@ const ReadyBoardCanvas = ({
 	const [hover, setHover] = useState(NO_HOVER)
 	const [draft, setDraft] = useState<BoardDraft | null>(null)
 	const stopDrafting = useRef<(() => void) | null>(null)
+	const [arrivingTextId, setArrivingTextId] = useState<string | null>(null)
+	const imageChooser = useRef<HTMLInputElement>(null)
+	const chosenImagesPoint = useRef<BoardPoint | null>(null)
+	const isConnecting = isConnectingByApp || tool === "connector"
+	const [isPanning, setIsPanning] = useState(false)
+	const isPlacing = isCreationTool(tool) || tool === "image"
+	const handCursor = isPanning ? "cursor-grabbing" : "cursor-grab"
 
 	useEffect(() => () => stopDrafting.current?.(), [])
 
@@ -958,6 +1013,12 @@ const ReadyBoardCanvas = ({
 			text: item.text,
 			field: textFieldOf(node, item, viewport.zoom),
 		})
+	}
+
+	const openArrivedText = (item: BoardItem) => (node: HTMLElement | null) => {
+		if (!node) return
+		setArrivingTextId(null)
+		startEditing(item)
 	}
 
 	const finishEditing = () => {
@@ -1111,9 +1172,56 @@ const ReadyBoardCanvas = ({
 		onPointerMove?.(null)
 	}
 
+	const panWithPointer = (event: PointerEvent<HTMLDivElement>) => {
+		let last: PointerPosition = event
+		const track = (moved: globalThis.PointerEvent) => {
+			pan({ x: last.clientX - moved.clientX, y: last.clientY - moved.clientY })
+			last = moved
+		}
+		const finish = () => {
+			window.removeEventListener("pointermove", track)
+			window.removeEventListener("pointerup", finish)
+			window.removeEventListener("pointercancel", finish)
+			setIsPanning(false)
+		}
+		setIsPanning(true)
+		window.addEventListener("pointermove", track)
+		window.addEventListener("pointerup", finish)
+		window.addEventListener("pointercancel", finish)
+	}
+
 	const pressCanvas = (event: PointerEvent<HTMLDivElement>) => {
 		if (event.target !== event.currentTarget || editing) return
+		if (tool === "hand") {
+			panWithPointer(event)
+			return
+		}
 		setSelectedId(null)
+	}
+
+	const placeWithTool = (event: MouseEvent<HTMLDivElement>) => {
+		if (event.target !== event.currentTarget) return
+		const point = boardPointAt(pointerIn(event.currentTarget, event))
+		if (tool === "image") {
+			chosenImagesPoint.current = point
+			imageChooser.current?.click()
+			return
+		}
+		if (!isCreationTool(tool)) return
+		const item = createdItemOf(tool, point, zOrderOfCreated(tool, view.objects))
+		onIntent({ type: "create", object: item })
+		setSelectedId(item.id)
+		if (tool === "text") setArrivingTextId(item.id)
+		onToolChange("select")
+	}
+
+	const placeChosenImages = (event: ChangeEvent<HTMLInputElement>) => {
+		const files = Array.from(event.target.files ?? [])
+		event.target.value = ""
+		const point = chosenImagesPoint.current
+		if (files.length === 0 || !point) return
+		onDropFiles(files, point)
+		onToolChange("select")
 	}
 
 	const tabThrough = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -1299,8 +1407,14 @@ const ReadyBoardCanvas = ({
 	return (
 		<div
 			aria-label={t("board.canvas.label")}
-			className={cn(CANVAS_SURFACE, className)}
+			className={cn(
+				CANVAS_SURFACE,
+				isPlacing && "cursor-crosshair",
+				tool === "hand" && handCursor,
+				className,
+			)}
 			data-slot="board-canvas"
+			onClick={placeWithTool}
 			onDragEnter={dragOver}
 			onDragLeave={leaveWithDrag}
 			onDragOver={dragOver}
@@ -1364,6 +1478,9 @@ const ReadyBoardCanvas = ({
 						onDoubleClick={() => startEditing(object)}
 						onFocus={() => setSelectedId(object.id)}
 						onPointerDown={pressObject(object)}
+						ref={
+							object.id === arrivingTextId ? openArrivedText(object) : undefined
+						}
 						role="option"
 						style={{
 							...placeOf(liveBounds(object)),
@@ -1519,6 +1636,16 @@ const ReadyBoardCanvas = ({
 			) : null}
 			{view.objects.length === 0 ? <BoardEmptyHint /> : null}
 			{fileDrag ? <BoardFileDropState {...fileDrag} /> : null}
+			<input
+				accept="image/*"
+				className="hidden"
+				data-slot="board-image-chooser"
+				multiple
+				onChange={placeChosenImages}
+				ref={imageChooser}
+				tabIndex={-1}
+				type="file"
+			/>
 			<BoardDock
 				libraryItems={libraryItems}
 				onLibraryItemDrop={dropLibraryItem}

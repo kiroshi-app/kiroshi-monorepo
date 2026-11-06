@@ -744,6 +744,7 @@ const common = {
 				sticky: "Note autocollante",
 				text: "Texte",
 				shape: "Forme",
+				section: "Section",
 				image: "Image",
 				link: "Lien",
 			},

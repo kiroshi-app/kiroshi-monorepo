@@ -15,7 +15,7 @@ type BoardSize = {
 
 type BoardRect = BoardPoint & BoardSize
 
-type BoardItemKind = "sticky" | "text" | "shape" | "image" | "link"
+type BoardItemKind = "sticky" | "text" | "shape" | "section" | "image" | "link"
 
 type BoardShapeType = BoardShapeKind
 

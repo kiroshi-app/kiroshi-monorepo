@@ -200,6 +200,7 @@ const remoteMoveOf = (id: string, x: number) =>
 			doc,
 			{ type: "move", id, position: { x, y: 0 } },
 			"remote peer",
+			() => ({ kind: "person", id: "remote-person" }),
 		),
 	)
 

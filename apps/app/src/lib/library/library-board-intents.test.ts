@@ -1,7 +1,11 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
+import type { Board } from "@workspace/shared/board/board"
 import { readBoard } from "@workspace/shared/board/board-doc"
-import type { BoardIntent } from "@workspace/ui/components/board-view"
+import type {
+	BoardIntent,
+	BoardItem,
+} from "@workspace/ui/components/board-view"
 
 import { boardDocOf, TWO_NOTES_BOARD } from "./library-board-fixtures"
 import {
@@ -13,13 +17,40 @@ import {
 
 const LOCAL = Symbol("local")
 
+const PERSON = { kind: "person", id: "person-a" } as const
+
+const authorOf = () => PERSON
+
+const zKeysBesides = (board: Board, id: string) =>
+	Object.entries(board.nodes).flatMap(([key, node]) =>
+		key === id ? [] : [node.z],
+	)
+
+const isAboveEvery = (board: Board, id: string) =>
+	zKeysBesides(board, id).every((z) => (board.nodes[id]?.z ?? "") > z)
+
+const isBelowEvery = (board: Board, id: string) =>
+	zKeysBesides(board, id).every((z) => (board.nodes[id]?.z ?? "") < z)
+
+const created = (kind: BoardItem["kind"], id = "made"): BoardIntent => ({
+	type: "create",
+	object: {
+		id,
+		kind,
+		position: { x: 5, y: 6 },
+		size: { width: 200, height: 120 },
+		zOrder: 0,
+		text: "",
+	},
+})
+
 const applied = (intent: BoardIntent) => {
 	const doc = boardDocOf(TWO_NOTES_BOARD)
 	let transactions = 0
 	doc.on("afterTransaction", () => {
 		transactions++
 	})
-	applyLibraryBoardIntent(doc, intent, LOCAL)
+	applyLibraryBoardIntent(doc, intent, LOCAL, authorOf)
 	return { board: readBoard(doc), transactions }
 }
 
@@ -83,8 +114,61 @@ describe("applyLibraryBoardIntent", () => {
 			shape: "ellipse",
 			color: "4",
 		})
-		expect(board.nodes.made?.z > (board.nodes.second?.z ?? "")).toBe(true)
+		expect(isAboveEvery(board, "made")).toBe(true)
 		expect(transactions).toBe(1)
+	})
+
+	it("creates a sticky above every node, authored by the current person", () => {
+		const logged = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => undefined)
+		const { board } = applied(created("sticky"))
+
+		expect(board.nodes.made).toEqual({
+			kind: "sticky",
+			x: 5,
+			y: 6,
+			width: 200,
+			height: 120,
+			z: expect.any(String),
+			text: "",
+			fill: "yellow",
+			author: PERSON,
+		})
+		expect(isAboveEvery(board, "made")).toBe(true)
+		expect(logged).not.toHaveBeenCalled()
+		logged.mockRestore()
+	})
+
+	it("creates a text above every node", () => {
+		const { board } = applied(created("text"))
+
+		expect(board.nodes.made).toMatchObject({
+			kind: "text",
+			x: 5,
+			y: 6,
+			text: "",
+		})
+		expect(isAboveEvery(board, "made")).toBe(true)
+	})
+
+	it("creates a section below every node, without a label until it has text", () => {
+		const { board } = applied(created("section"))
+
+		expect(board.nodes.made).toMatchObject({ kind: "section", x: 5, y: 6 })
+		expect(board.nodes.made).not.toHaveProperty("label")
+		expect(isBelowEvery(board, "made")).toBe(true)
+	})
+
+	it("creates each new section below the last one", () => {
+		const doc = boardDocOf(TWO_NOTES_BOARD)
+		for (const id of ["lower", "lowest"])
+			applyLibraryBoardIntent(doc, created("section", id), LOCAL, authorOf)
+		const board = readBoard(doc)
+
+		expect(isBelowEvery(board, "lower")).toBe(false)
+		expect(isBelowEvery(board, "lowest")).toBe(true)
+		expect(board.nodes.lowest?.z < (board.nodes.lower?.z ?? "")).toBe(true)
 	})
 
 	it("styles a shape back to the surface by dropping its colour", () => {
@@ -104,6 +188,7 @@ describe("applyLibraryBoardIntent", () => {
 				},
 			},
 			LOCAL,
+			authorOf,
 		)
 
 		applyLibraryBoardIntent(
@@ -114,6 +199,7 @@ describe("applyLibraryBoardIntent", () => {
 				style: { shape: "rounded-rectangle", fill: "surface" },
 			},
 			LOCAL,
+			authorOf,
 		)
 
 		const made = readBoard(doc).nodes.made
