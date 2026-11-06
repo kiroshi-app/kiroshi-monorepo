@@ -110,7 +110,7 @@ describe("derived allows", () => {
 			},
 		}).map((held) => held.name)
 
-		expect(names).toHaveLength(9)
+		expect(names).toHaveLength(14)
 		for (const name of names) {
 			expect(settled(permissions, `mcp__${KIROSHI_SERVER}__${name}`)).toBe(
 				"allow",

@@ -32,7 +32,7 @@ const systemSkill = (id: string) =>
 	)
 
 const SKILL_TOOL =
-	/\b(?:conversation|companion|mission|document|library)_[a-z_]+/g
+	/\b(?:conversation|companion|mission|document|library|board)_[a-z_]+/g
 
 const toolsNamedIn = (skill: string) => new Set(skill.match(SKILL_TOOL))
 
@@ -45,7 +45,11 @@ const SKILLS = [
 			name.startsWith("conversation_") || name === "companion_list",
 	},
 	{ id: "missions", covers: (name: string) => name.startsWith("mission_") },
-	{ id: "library", covers: (name: string) => name.startsWith("library_") },
+	{
+		id: "library",
+		covers: (name: string) =>
+			name.startsWith("library_") || name.startsWith("board_"),
+	},
 ]
 
 const flat = (text: string) => text.split(/\s+/).join(" ")
@@ -129,6 +133,11 @@ describe("kiroshiServer", () => {
 			"library_rename",
 			"library_delete",
 			"conversation_post_document",
+			"board_create",
+			"board_read",
+			"board_add",
+			"board_update",
+			"board_remove",
 		])
 	})
 
