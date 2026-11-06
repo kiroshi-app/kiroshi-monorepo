@@ -1,12 +1,12 @@
 {
-	"measured_at": "2026-11-06T14:17:31+01:00",
+	"measured_at": "2026-11-06T14:31:01+01:00",
 	"machine": {
 		"model": "Mac18,5",
 		"cpus": 12,
 		"memory_gib": 24,
 		"macos": "27.0.1"
 	},
-	"screen_locked": true,
+	"screen_locked": false,
 	"runs_per_measure": 3,
 	"machine_load": "os.getloadavg() before and after every run",
 	"installed_read": {
@@ -23,105 +23,123 @@
 			"tool": "the pid's first layer-0 window over 10,000 pt² in CGWindowListCopyWindowInfo, polled",
 			"unit": "ms from open",
 			"median": {
-				"kiroshi_dev": 491,
-				"preview": 218
+				"kiroshi_dev": 521,
+				"preview": 254
 			}
 		},
 		"conversation_displayed": {
-			"status": "not measured",
-			"reasons": [
-				"the screen was locked: Rune lays out and draws no covered window, where WebKit keeps painting, so the two sides don't run the same way"
-			]
+			"tool": "screencapture -l of that window, recognised by Vision (fast) as holding 'Quokka', the last word of the last message; resolution: the gap to the previous capture",
+			"unit": "ms from open",
+			"median": {
+				"kiroshi_dev": 2067,
+				"preview": 583
+			},
+			"median_resolution_ms": {
+				"kiroshi_dev": 218,
+				"preview": 171
+			}
 		},
 		"runs": [
 			{
 				"side": "kiroshi_dev",
 				"run": 1,
-				"first_frame_ms": 508,
+				"first_frame_ms": 485,
+				"conversation_displayed_ms": 2094,
+				"conversation_resolution_ms": 218,
 				"load_before": {
-					"one_minute": 4.78,
-					"five_minutes": 5.89,
-					"fifteen_minutes": 6.66
+					"one_minute": 3.42,
+					"five_minutes": 5.12,
+					"fifteen_minutes": 6.07
 				},
 				"load_after": {
-					"one_minute": 4.78,
-					"five_minutes": 5.89,
-					"fifteen_minutes": 6.66
+					"one_minute": 3.42,
+					"five_minutes": 5.12,
+					"fifteen_minutes": 6.07
 				}
 			},
 			{
 				"side": "kiroshi_dev",
 				"run": 2,
-				"first_frame_ms": 491,
+				"first_frame_ms": 527,
+				"conversation_displayed_ms": 1918,
+				"conversation_resolution_ms": 194,
 				"load_before": {
-					"one_minute": 4.96,
-					"five_minutes": 5.91,
-					"fifteen_minutes": 6.66
+					"one_minute": 3.3,
+					"five_minutes": 5.07,
+					"fifteen_minutes": 6.04
 				},
 				"load_after": {
-					"one_minute": 4.96,
-					"five_minutes": 5.91,
-					"fifteen_minutes": 6.66
+					"one_minute": 3.44,
+					"five_minutes": 5.06,
+					"fifteen_minutes": 6.04
 				}
 			},
 			{
 				"side": "kiroshi_dev",
 				"run": 3,
-				"first_frame_ms": 469,
+				"first_frame_ms": 521,
+				"conversation_displayed_ms": 2067,
+				"conversation_resolution_ms": 307,
 				"load_before": {
-					"one_minute": 4.8,
-					"five_minutes": 5.86,
-					"fifteen_minutes": 6.64
+					"one_minute": 3.4,
+					"five_minutes": 5.03,
+					"fifteen_minutes": 6.02
 				},
 				"load_after": {
-					"one_minute": 4.8,
-					"five_minutes": 5.86,
-					"fifteen_minutes": 6.64
+					"one_minute": 3.4,
+					"five_minutes": 5.03,
+					"fifteen_minutes": 6.02
 				}
 			},
 			{
 				"side": "preview",
 				"run": 1,
-				"first_frame_ms": 258,
+				"first_frame_ms": 293,
+				"conversation_displayed_ms": 648,
+				"conversation_resolution_ms": 171,
 				"load_before": {
-					"one_minute": 5.66,
-					"five_minutes": 6.01,
-					"fifteen_minutes": 6.68
+					"one_minute": 3.94,
+					"five_minutes": 5.09,
+					"fifteen_minutes": 6.03
 				},
 				"load_after": {
-					"one_minute": 5.66,
-					"five_minutes": 6.01,
-					"fifteen_minutes": 6.68
+					"one_minute": 3.94,
+					"five_minutes": 5.09,
+					"fifteen_minutes": 6.03
 				}
 			},
 			{
 				"side": "preview",
 				"run": 2,
-				"first_frame_ms": 218,
+				"first_frame_ms": 219,
+				"conversation_displayed_ms": 583,
+				"conversation_resolution_ms": 177,
 				"load_before": {
-					"one_minute": 5.92,
-					"five_minutes": 6.06,
-					"fifteen_minutes": 6.7
+					"one_minute": 4.27,
+					"five_minutes": 5.14,
+					"fifteen_minutes": 6.04
 				},
 				"load_after": {
-					"one_minute": 5.92,
-					"five_minutes": 6.06,
-					"fifteen_minutes": 6.7
+					"one_minute": 4.27,
+					"five_minutes": 5.14,
+					"fifteen_minutes": 6.04
 				}
 			},
 			{
 				"side": "preview",
 				"run": 3,
-				"first_frame_ms": 210,
+				"first_frame_ms": 254,
+				"conversation_displayed_ms": 581,
+				"conversation_resolution_ms": 136,
 				"load_before": {
-					"one_minute": 5.69,
-					"five_minutes": 6.01,
-					"fifteen_minutes": 6.68
+					"one_minute": 4.09,
+					"five_minutes": 5.09,
+					"fifteen_minutes": 6.02
 				},
 				"load_after": {
-					"one_minute": 5.69,
-					"five_minutes": 6.01,
-					"fifteen_minutes": 6.68
+					"one_minute": 4.09,
+					"five_minutes": 5.09,
+					"fifteen_minutes": 6.02
 				}
 			}
 		]
@@ -129,23 +147,20 @@
 	"memory": {
 		"status": "not measured",
 		"reasons": [
-			"the screen was locked: Rune lays out and draws no covered window, where WebKit keeps painting, so the two sides don't run the same way",
-			"the installed Kiroshi window shows another conversation than its longest, and the bench sends it no input; open that conversation in Kiroshi by hand, then run measure.py again"
+			"no installed Kiroshi window shows its longest conversation, and the bench sends it no input; open that conversation in Kiroshi by hand, then run measure.py again"
 		]
 	},
 	"cpu_at_rest": {
 		"status": "not measured",
 		"reasons": [
-			"the screen was locked: Rune lays out and draws no covered window, where WebKit keeps painting, so the two sides don't run the same way",
-			"the installed Kiroshi window shows another conversation than its longest, and the bench sends it no input; open that conversation in Kiroshi by hand, then run measure.py again"
+			"no installed Kiroshi window shows its longest conversation, and the bench sends it no input; open that conversation in Kiroshi by hand, then run measure.py again"
 		]
 	},
 	"scroll_frame_times": {
 		"status": "not measured",
 		"reasons": [
 			"synthetic scrolling never reaches the installed Kiroshi, so the same scroll can't run on both sides",
-			"Accessibility isn't granted to the shell running the bench",
-			"the screen was locked: Rune lays out and draws no covered window, where WebKit keeps painting, so the two sides don't run the same way"
+			"Accessibility isn't granted to the shell running the bench"
 		]
 	},
 	"key_press_to_glyph": {
@@ -153,39 +168,39 @@
 		"reasons": ["left out of this stage by decision"]
 	},
 	"tauri_cost_centres": {
-		"subject": "Kiroshi Dev opened onto 'Bench: long conversation' until its last word shows, inside a 20 s recording, screen locked",
+		"subject": "Kiroshi Dev opened onto 'Bench: long conversation' until its last word shows, inside a 20 s recording",
 		"tool": "xctrace record --template 'Time Profiler' --all-processes, samples of Kiroshi Dev and its WebKit helpers, self time grouped by process and leaf binary",
 		"trace": "apps/rune-preview/bench/traces/kiroshi-dev-cold-start.trace",
-		"sampled_ms": 2265,
+		"sampled_ms": 3938,
 		"top": [
 			{
 				"process": "com.apple.WebKit.WebContent",
 				"binary": "JavaScriptCore",
-				"self_ms": 671,
-				"share_percent": 29.6,
+				"self_ms": 1836,
+				"share_percent": 46.6,
 				"heaviest_symbols": [
+					"JSC::Yarr::CharacterClassConstructor::nonLatin1OpSorted(WTF::Vector<char32_t, 0ul, WTF::CrashOnOverflow, 16ul, WTF::FastMalloc> const&, WTF::Vector<JSC::Yarr::CharacterRange, 0ul, WTF::CrashOnOverflow, 16ul, WTF::FastMalloc> const&)",
 					"JSC::JSFinalObject::visitChildren(JSC::JSCell*, JSC::SlotVisitor&)",
-					"JSC::Lexer<char16_t>::lexWithoutClearingLineTerminator(JSC::JSToken*, WTF::OptionSet<JSC::LexerFlags, (WTF::ConcurrencyTag)0>, bool)",
-					"JSC::JSObjectWithButterfly::visitChildren(JSC::JSCell*, JSC::SlotVisitor&)"
+					"JSC::Lexer<char16_t>::lexWithoutClearingLineTerminator(JSC::JSToken*, WTF::OptionSet<JSC::LexerFlags, (WTF::ConcurrencyTag)0>, bool)"
 				]
 			},
 			{
 				"process": "com.apple.WebKit.WebContent",
 				"binary": "WebCore",
-				"self_ms": 228,
-				"share_percent": 10.1,
+				"self_ms": 287,
+				"share_percent": 7.3,
 				"heaviest_symbols": [
-					"WebCore::Style::ElementRuleCollector::collectMatchingRulesForListSlow(WTF::Vector<WebCore::Style::RuleData, 1ul, WTF::CrashOnOverflow, 16ul, WTF::FastMalloc> const&, WebCore::Style::MatchRequest const&)",
-					"WebCore::Style::Resolver::applyMatchedProperties(WebCore::Style::Resolver::State&, WebCore::Style::MatchResult const&, WebCore::Style::PropertyCascade::IncludedProperties&&)",
-					"WebCore::Layout::TextOnlySimpleLineBuilder::commitCandidateContent(WebCore::Style::ComputedStyle const&, WebCore::Layout::CandidateTextContent const&, WebCore::Layout::InlineItemRange const&)"
+					"WebCore::Style::TreeResolver::resolveComposedTree()",
+					"WebCore::RenderLayer::paintLayerContents(WebCore::GraphicsContext&, WebCore::RenderLayer::LayerPaintingInfo const&, WTF::OptionSet<WebCore::RenderLayer::PaintLayerFlag, (WTF::ConcurrencyTag)0>, std::__1::optional<WTF::Range<unsigned int>>)",
+					"WebCore::RenderBox::computeVisibleRectsInContainer(WebCore::RenderObject::RepaintRects const&, WebCore::RenderLayerModelObject const*, WebCore::VisibleRectContext) const"
 				]
 			},
 			{
 				"process": "Kiroshi",
 				"binary": "libsystem_kernel.dylib",
-				"self_ms": 197,
-				"share_percent": 8.7,
-				"heaviest_symbols": ["__chmod", "__open", "mach_msg2_trap"]
+				"self_ms": 262,
+				"share_percent": 6.7,
+				"heaviest_symbols": ["mach_msg2_trap", "__open", "__chmod"]
 			}
 		]
 	}

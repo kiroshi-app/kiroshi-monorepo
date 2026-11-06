@@ -3,16 +3,20 @@ import CoreGraphics
 import Darwin
 import Vision
 
-func window(of pid: Int32) -> Int? {
+func area(_ info: [String: Any]) -> Double {
+	let bounds = info[kCGWindowBounds as String] as? [String: Double] ?? [:]
+	return (bounds["Width"] ?? 0) * (bounds["Height"] ?? 0)
+}
+
+func windows(of pid: Int32) -> [[String: Any]] {
 	let listed = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? []
-	let owned = listed.filter {
-		($0[kCGWindowOwnerPID as String] as? Int32) == pid && ($0[kCGWindowLayer as String] as? Int) == 0
+	return listed.filter {
+		($0[kCGWindowOwnerPID as String] as? Int32) == pid && ($0[kCGWindowLayer as String] as? Int) == 0 && area($0) > 10_000
 	}
-	let area = { (info: [String: Any]) -> Double in
-		let bounds = info[kCGWindowBounds as String] as? [String: Double] ?? [:]
-		return (bounds["Width"] ?? 0) * (bounds["Height"] ?? 0)
-	}
-	return owned.filter { area($0) > 10_000 }.max { area($0) < area($1) }?[kCGWindowNumber as String] as? Int
+}
+
+func window(of pid: Int32) -> Int? {
+	windows(of: pid).max { area($0) < area($1) }?[kCGWindowNumber as String] as? Int
 }
 
 func recognises(_ needle: String, in path: String, rightOf minX: Double) -> Bool {
@@ -50,6 +54,8 @@ let arguments = CommandLine.arguments
 switch arguments.count > 1 ? arguments[1] : "" {
 case "window":
 	if let found = window(of: Int32(arguments[2]) ?? -1) { print(found) } else { exit(1) }
+case "windows":
+	print(windows(of: Int32(arguments[2]) ?? -1).compactMap { $0[kCGWindowNumber as String] as? Int }.map(String.init).joined(separator: " "))
 case "helpers":
 	guard let found = webKitHelpers(of: Int32(arguments[2]) ?? -1) else { exit(1) }
 	print(found.map(String.init).joined(separator: " "))
@@ -62,6 +68,6 @@ case "ocr":
 	let minX = arguments.count > 4 ? Double(arguments[4]) ?? 0 : 0
 	exit(recognises(arguments[3], in: arguments[2], rightOf: minX) ? 0 : 1)
 default:
-	FileHandle.standardError.write("usage: probe window <pid> | helpers <pid> | locked | trusted | ocr <png> <text> [min x]\n".data(using: .utf8)!)
+	FileHandle.standardError.write("usage: probe window <pid> | windows <pid> | helpers <pid> | locked | trusted | ocr <png> <text> [min x]\n".data(using: .utf8)!)
 	exit(64)
 }

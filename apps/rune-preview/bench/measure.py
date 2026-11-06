@@ -341,12 +341,12 @@ def at_rest_blockers(scratch, installed, longest, locked):
 	reasons = [LOCKED_REASON] if locked else []
 	if len(installed) != 1:
 		return [*reasons, f"{len(installed)} installed Kiroshi processes are running, one is needed"]
-	installed_window = window(installed[0])
-	if installed_window is None or not shows(
-		installed_window, title_needle(longest["title"]), os.path.join(scratch, "installed.png"), CONTENT_PANE_MIN_X
-	):
+	installed_windows = run([PROBE, "windows", str(installed[0])]).stdout.split()
+	capture = os.path.join(scratch, "installed.png")
+	needle = title_needle(longest["title"])
+	if not any(shows(each, needle, capture, CONTENT_PANE_MIN_X) for each in installed_windows):
 		reasons.append(
-			"the installed Kiroshi window shows another conversation than its longest, and the bench sends it no "
+			"no installed Kiroshi window shows its longest conversation, and the bench sends it no "
 			"input; open that conversation in Kiroshi by hand, then run measure.py again"
 		)
 	return reasons

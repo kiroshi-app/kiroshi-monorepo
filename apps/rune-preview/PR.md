@@ -39,30 +39,31 @@ The onboarding comes first. Its last step opens the conversation tab on the inst
 
 ## Stage 3 measures
 
-`python3 apps/rune-preview/bench/measure.py` writes `bench/results.json`: every run, its machine load (`os.getloadavg()` before and after) and the tool. Each measure runs three times, the table gives the median. Last run: Mac18,5, 12 cores, 24 GiB, macOS 27.0.1, 1-minute load 4.8 to 5.9, **screen locked**.
+`python3 apps/rune-preview/bench/measure.py` writes `bench/results.json`: every run, its machine load (`os.getloadavg()` before and after) and the tool. Each measure runs three times, the table gives the median. Last run: Mac18,5, 12 cores, 24 GiB, macOS 27.0.1, screen unlocked, 1-minute load 3.3 to 4.3.
 
 | Measure | Tool, the same on both sides | Kiroshi | Preview |
 |---|---|---|---|
-| Cold start, first frame | `open -n` on a bundle, then the pid's first window in `CGWindowListCopyWindowInfo` | 491 ms (Kiroshi Dev) | 218 ms (`--dev-host`) |
-| Cold start, conversation displayed | `screencapture -l` read by Vision until the last word of the last message shows | Not measured | Not measured |
+| Cold start, first frame | `open -n` on a bundle, then the pid's first window in `CGWindowListCopyWindowInfo` | 521 ms (Kiroshi Dev) | 254 ms (`--dev-host`) |
+| Cold start, conversation displayed | `screencapture -l` of that window, read by Vision until the last word of the last message shows | 2,067 ms (Kiroshi Dev, ±218 ms) | 583 ms (`--dev-host`, ±171 ms) |
 | Memory | `footprint`, Kiroshi plus its WebKit helpers against the preview, agents excluded | Not measured | Not measured |
 | CPU at rest | `ps` CPU time of both process sets over the same 60 s | Not measured | Not measured |
 | Scroll frame times | none | Not measured | Not measured |
 | Key press to glyph | none | Not measured, by decision | Not measured, by decision |
 
-**Cold start.** Kiroshi Dev's release bundle against the preview, on "Bench: long conversation" (2,778 messages, written by `bench/fabricate.py` into Kiroshi Dev only). Kiroshi Dev starts its own host and opens the conversation from a tab the bench restores. The preview starts against Kiroshi Dev's host, already running. The installed Kiroshi is never quit.
+**Cold start.** Kiroshi Dev's release bundle against the preview, on "Bench: long conversation" (2,778 messages, written by `bench/fabricate.py` into Kiroshi Dev only). Kiroshi Dev starts its own host and opens the conversation from a tab the bench restores. The preview starts against Kiroshi Dev's host, already running, and finds the longest conversation itself. The installed Kiroshi is never quit. The ± is the median gap between two captures, so the true moment lies up to that much before the number.
 
 **Why the rest isn't measured.**
-- The screen was locked. Rune lays out and draws no covered window, where WebKit keeps painting. "Conversation displayed", memory and CPU at rest would compare a preview that never drew the thread with a Kiroshi that did.
-- The installed Kiroshi shows another conversation than its longest. The bench sends it no input, so it can't open that conversation.
-- Scroll: no synthetic scroll ever reaches the installed Kiroshi, and Accessibility isn't granted to the shell.
+- No installed Kiroshi window shows its longest conversation (2,778 messages): the two windows show other conversations. The bench sends Kiroshi no input, so it can't open that conversation.
+- Scroll: no synthetic scroll ever reaches the installed Kiroshi, so the same scroll can't run on both sides. Accessibility isn't granted to the shell either.
 
-To fill the empty rows: unlock the screen, open the longest conversation in Kiroshi by hand, and run `measure.py` again. It checks both by itself.
+To fill memory and CPU at rest: open the longest conversation in a Kiroshi window by hand, keep the screen unlocked, and run `measure.py` again. It checks every Kiroshi window by itself.
 
-**Tauri cost centres.** From an xctrace Time Profiler recording (`--all-processes`, 20 s) of Kiroshi Dev opening the bench conversation: 2.3 s of CPU across Kiroshi Dev and its WebKit helpers, self time by process and leaf binary.
-1. WebContent, JavaScriptCore: 671 ms, 30 %. Mostly garbage collection (`JSFinalObject::visitChildren`), then the parser's lexer.
-2. WebContent, WebCore: 228 ms, 10 %. Style resolution: rule matching (`collectMatchingRulesForListSlow`, `SelectorChecker::checkOne`) and applying the matched properties.
-3. Kiroshi, the kernel: 197 ms, 9 %. File system calls, `chmod` and `open` first.
+**Tauri cost centres.** From an xctrace Time Profiler recording (`--all-processes`, 20 s) of Kiroshi Dev opening the bench conversation: 3.9 s of CPU across Kiroshi Dev and its WebKit helpers, self time by process and leaf binary.
+1. WebContent, JavaScriptCore: 1,836 ms, 47 %. Regular expression compilation first (`Yarr::CharacterClassConstructor`), then garbage collection (`JSFinalObject::visitChildren`).
+2. WebContent, WebCore: 287 ms, 7 %. Style resolution (`TreeResolver::resolveComposedTree`) and painting (`RenderLayer::paintLayerContents`).
+3. Kiroshi, the kernel: 262 ms, 7 %. Mach messages, then `open`.
+
+On a locked screen, an earlier run sampled 2.3 s: WebKit throttles painting for a window nobody sees.
 
 ## Read-only on the installed Kiroshi
 
