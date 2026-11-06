@@ -172,6 +172,8 @@ const TURN_ROW = "flex flex-col gap-1.5"
 
 const AGENT_BUBBLE_WIDTH = "max-w-145"
 
+const FRAMED_CARD_MIN_WIDTH = "min-w-[min(--spacing(90),100%)]"
+
 const PEOPLE_BUBBLE_WIDTH = "max-w-120"
 
 const FOOTER_KEY = {
@@ -574,7 +576,8 @@ function AssistantTurn(props: AssistantTurnProps) {
 	})
 	const onSelectCompanion = useCompanionSelect()
 	const face = identity ?? author
-	const unwrapped = bare || framed
+	const paintsOwnSurface = framed && fills
+	const unwrapped = bare || paintsOwnSurface
 	const end = AUTHOR_LINE_END[state]
 	const mark = face ? (
 		<BotIdentityAvatar
@@ -644,7 +647,11 @@ function AssistantTurn(props: AssistantTurnProps) {
 					<TurnBody
 						repliedTo={repliedTo}
 						foot={work ?? authorLine}
-						className={cn(framed && "py-0", fills && "w-full")}
+						className={cn(
+							paintsOwnSurface && "py-0",
+							framed && !fills && FRAMED_CARD_MIN_WIDTH,
+							fills && "w-full",
+						)}
 					>
 						{children}
 					</TurnBody>
