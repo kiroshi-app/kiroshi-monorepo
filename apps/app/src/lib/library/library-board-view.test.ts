@@ -82,4 +82,22 @@ describe("libraryBoardViewOf", () => {
 			text: "",
 		})
 	})
+
+	it("leaves an arrow with a free end out of the view and keeps every other item", () => {
+		const loose = {
+			fromNode: "title",
+			fromEnd: "none",
+			toPoint: { x: 640, y: -80 },
+			toEnd: "arrow",
+			routing: "straight",
+		} as const
+		const board = {
+			...EVERY_KIND_BOARD,
+			edges: { ...EVERY_KIND_BOARD.edges, loose },
+		}
+
+		expect(libraryBoardViewOf(board)).toEqual(
+			libraryBoardViewOf(EVERY_KIND_BOARD),
+		)
+	})
 })

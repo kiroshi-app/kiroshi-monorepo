@@ -445,6 +445,7 @@ fn a_read_answers_each_node_with_its_text_and_the_section_that_holds_it() {
 			"fromNode": "n",
 			"toNode": "out",
 			"label": "goes",
+			"labelPosition": 0.5,
 			"bend": 0,
 			"routing": "straight",
 			"headSize": "medium"
@@ -463,7 +464,7 @@ fn a_read_answers_each_arrow_with_both_ends_its_bend_routing_and_head_size() {
 			),
 			(
 				"pinned",
-				json!({ "fromNode": "a", "fromAnchor": { "x": 0.25, "y": 1 }, "toPoint": { "x": -40, "y": 12.5 }, "bend": -30, "headSize": "large" }),
+				json!({ "fromNode": "a", "fromAnchor": { "x": 0.25, "y": 1 }, "toPoint": { "x": -40, "y": 12.5 }, "label": "then", "labelPosition": 0.25, "bend": -30, "headSize": "large" }),
 			),
 		],
 	);
@@ -478,7 +479,8 @@ fn a_read_answers_each_arrow_with_both_ends_its_bend_routing_and_head_size() {
 				"fromNode": "a",
 				"fromAnchor": { "x": 0.25, "y": 1 },
 				"toPoint": { "x": -40, "y": 12.5 },
-				"label": null,
+				"label": "then",
+				"labelPosition": 0.25,
 				"bend": -30,
 				"routing": "straight",
 				"headSize": "large"
@@ -490,6 +492,7 @@ fn a_read_answers_each_arrow_with_both_ends_its_bend_routing_and_head_size() {
 				"toNode": "b",
 				"toAnchor": { "x": 0.5, "y": 0 },
 				"label": null,
+				"labelPosition": 0.5,
 				"bend": 0,
 				"routing": "elbow",
 				"headSize": "medium"

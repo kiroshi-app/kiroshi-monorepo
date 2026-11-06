@@ -186,6 +186,7 @@ pub struct EdgeRead {
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub to_point: Option<Value>,
 	pub label: Option<String>,
+	pub label_position: Value,
 	pub bend: Value,
 	pub routing: Value,
 	pub head_size: Value,
@@ -504,6 +505,7 @@ pub fn read_out(board: &Board) -> BoardRead {
 				to_anchor: to.anchor,
 				to_point: to.point,
 				label: text_of(edge, LABEL),
+				label_position: arrow_field(edge, "labelPosition"),
 				bend: arrow_field(edge, "bend"),
 				routing: arrow_field(edge, "routing"),
 				head_size: arrow_field(edge, "headSize"),

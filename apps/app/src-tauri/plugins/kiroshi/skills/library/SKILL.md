@@ -61,7 +61,8 @@ see where you draw while you draw. You hold six board tools on the `kiroshi` ser
 - `board_create`, a new empty board, such as `roadmap.canvas`. A name already taken is refused
   and nothing is created.
 - `board_read`, every node of a board with its id, kind, position, size, text and the section
-  that holds it, and every arrow with its two ends, its label, `bend`, `routing` and `headSize`:
+  that holds it, and every arrow with its two ends, its label, `labelPosition` (from 0 at the
+  start of the arrow to 1 at its end, 0.5 by default), `bend`, `routing` and `headSize`:
   an end tied to a node answers its node id, with an anchor (`x` and `y` from 0 to 1 across the
   node) unless it is tied at the centre, and a free end its board point. An `image` or a
   `libraryCard` also answers its `file`, the Library item `library_read` opens, an `image` its
