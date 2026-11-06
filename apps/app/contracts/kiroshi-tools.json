@@ -989,6 +989,28 @@
 		}
 	},
 	{
+		"name": "get_guide",
+		"description": "The guide to working in the Library of this Space: boards for its boards, documents for the Library and its Markdown documents. Call it once per session with the matching topic, before the first library_, document_, board_ or screenshot call. It answers the guide as Markdown.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"topic": {
+					"type": "string",
+					"enum": [
+						"boards",
+						"documents"
+					],
+					"description": "boards for a board, documents for the Library and its documents."
+				}
+			},
+			"required": [
+				"topic"
+			],
+			"additionalProperties": false
+		}
+	},
+	{
 		"name": "library_list",
 		"description": "List the items of the Library of this Space, the latest update first, each with its name, its kind (document, image or board) and its updatedAt in milliseconds since the epoch, before you read, write, rename or delete one whose name you do not hold.",
 		"inputSchema": {
