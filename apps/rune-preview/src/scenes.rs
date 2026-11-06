@@ -30,6 +30,7 @@ pub const SCENES: &[Scene] = &[
 	("thread-streaming", thread_streaming),
 	("thread-mention", thread_mention),
 	("thread-math", thread_math),
+	("thread-rich", thread_rich),
 ];
 
 fn welcome(s: &mut App, page: Page) {
@@ -236,6 +237,27 @@ $$
 | --- | ---: | --- |
 | North | 12 | $\frac{12}{40}$ |
 | South | 28 | $0.7$ |";
+
+const RICH: &str = "| nest | occupants | status | archived |
+| :--- | ---: | :---: | --- |
+| nest_42 | 3 | active | no |
+| nest_43 | 0 | empty | yes |
+| nest_44 | 12 | active | no |
+
+```mermaid
+flowchart TD
+	A[Read the nest] --> B{Occupants?}
+	B -- yes --> C[Summarise]
+	B -- no --> D[Archive]
+	C --> E[Notify the owner]
+	D --> E
+```";
+
+fn thread_rich(s: &mut App) {
+	workspace(s);
+	let question = message(1, Role::User, "Which nests are still active?");
+	opened(s, "chat-skippy", vec![question, message(2, Role::Assistant, RICH)]);
+}
 
 fn thread_math(s: &mut App) {
 	workspace(s);

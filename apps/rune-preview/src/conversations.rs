@@ -630,6 +630,7 @@ fn message_row(s: &App, i: usize, k: &Kit, t: &Tokens) -> El {
 }
 
 fn markdown_style(k: &Kit, t: &Tokens) -> MarkdownStyle {
+	let diagram = mermaid_theme(t.dark);
 	MarkdownStyle::from_kit(k)
 		.body_font(TEXT_BUBBLE)
 		.text(t.foreground)
@@ -640,6 +641,31 @@ fn markdown_style(k: &Kit, t: &Tokens) -> MarkdownStyle {
 		.inline_code_bg(t.foreground.alpha(0.06))
 		.rule(t.border)
 		.quote_rule(t.border)
+		.table(t.foreground.alpha(0.15), t.foreground.alpha(0.05))
+		.table_rules(t.foreground.alpha(0.1))
+		.table_header_weight(600.0)
+		.table_cell_padding(12.0, 8.0)
+		.table_min_column(0.0)
+		.diagram(diagram.node_fill, diagram.node_border, diagram.line)
+		.diagram_surface(Color::TRANSPARENT, t.foreground.alpha(0.15), diagram.node_fill)
+		.diagram_font(TextStyle { line_height: 24.0, ..TextStyle::new(16.0, 400.0) })
+}
+
+struct DiagramTheme {
+	node_fill: Color,
+	node_border: Color,
+	line: Color,
+}
+
+fn mermaid_theme(dark: bool) -> DiagramTheme {
+	if dark {
+		return DiagramTheme {
+			node_fill: srgb(0x1f2020),
+			node_border: srgb(0xcccccc),
+			line: srgb(0xd3d3d3),
+		};
+	}
+	DiagramTheme { node_fill: srgb(0xeeeeee), node_border: srgb(0x999999), line: srgb(0x666666) }
 }
 
 fn segment_view(s: &App, segment: Segment, streaming: bool, k: &Kit, t: &Tokens) -> El {
