@@ -165,32 +165,35 @@ PREVIEW_ON_DEV = Side("preview", PREVIEW_APP, f"{PREVIEW} --dev-host", ["--dev-h
 PREVIEW_ON_INSTALLED = Side("preview", PREVIEW_APP, f"{PREVIEW} --skip-onboarding", ["--skip-onboarding"])
 
 
-def launch_until(side, needle, min_x, scratch, waits_for_needle=True):
-	before = load()
-	started = time.monotonic()
-	elapsed = lambda: (time.monotonic() - started) * 1000
-	pid = side.open()
-	window_id = None
-	while window_id is None:
-		if elapsed() > LAUNCH_TIMEOUT_S * 1000:
-			stop([pid])
-			raise SystemExit(f"no window for {side.name} within {LAUNCH_TIMEOUT_S} s")
-		window_id = window(pid)
-	measured = {"first_frame_ms": round(elapsed()), "load_before": before}
-	if waits_for_needle:
-		previous_capture_ms = elapsed()
+class Launch:
+	def __init__(self, side):
+		self.side, self.load_before, self.started = side, load(), time.monotonic()
+		self.pid = side.open()
+		self.window_id = None
+		while self.window_id is None:
+			self.give_up_after_timeout("no window")
+			self.window_id = window(self.pid)
+		self.first_frame_ms = round(self.elapsed_ms())
+
+	def elapsed_ms(self):
+		return (time.monotonic() - self.started) * 1000
+
+	def give_up_after_timeout(self, what):
+		if self.elapsed_ms() > LAUNCH_TIMEOUT_S * 1000:
+			stop([self.pid])
+			raise SystemExit(f"{what} for {self.side.name} within {LAUNCH_TIMEOUT_S} s")
+
+	def wait_until_shown(self, needle, min_x, scratch):
+		previous_capture_ms = self.elapsed_ms()
 		while True:
-			capture_ms = elapsed()
-			if shows(window_id, needle, os.path.join(scratch, "frame.png"), min_x):
-				break
-			if capture_ms > LAUNCH_TIMEOUT_S * 1000:
-				stop([pid])
-				raise SystemExit(f"'{needle}' never showed in {side.name} within {LAUNCH_TIMEOUT_S} s")
+			capture_ms = self.elapsed_ms()
+			if shows(self.window_id, needle, os.path.join(scratch, "frame.png"), min_x):
+				return {
+					"conversation_displayed_ms": round(capture_ms),
+					"conversation_resolution_ms": round(capture_ms - previous_capture_ms),
+				}
+			self.give_up_after_timeout(f"'{needle}' never showed")
 			previous_capture_ms = capture_ms
-		measured["conversation_displayed_ms"] = round(capture_ms)
-		measured["conversation_resolution_ms"] = round(capture_ms - previous_capture_ms)
-	measured["load_after"] = load()
-	return pid, measured
 
 
 def seed_dev_tab(conversation_id):
@@ -242,21 +245,28 @@ def median_by_side(runs, field):
 	}
 
 
+def cold_run(side, attempt, scratch, locked):
+	launched = Launch(side)
+	shown = {} if locked else launched.wait_until_shown(END_WORD, 0.0, scratch)
+	return {
+		"side": side.name, "run": attempt + 1, "first_frame_ms": launched.first_frame_ms, **shown,
+		"load_before": launched.load_before, "load_after": load(),
+	}
+
+
 def cold_start(scratch, locked):
 	conversation_id = prepare_dev()
 	runs = []
 	for attempt in range(RUNS):
 		time.sleep(SETTLE_S)
-		_, measured = launch_until(KIROSHI_DEV, END_WORD, 0.0, scratch, not locked)
-		runs.append({"side": KIROSHI_DEV.name, "run": attempt + 1, **measured})
+		runs.append(cold_run(KIROSHI_DEV, attempt, scratch, locked))
 		stop_dev()
 	KIROSHI_DEV.open()
 	wait_for_dev_host()
 	for attempt in range(RUNS):
 		time.sleep(SETTLE_S)
-		pid, measured = launch_until(PREVIEW_ON_DEV, END_WORD, 0.0, scratch, not locked)
-		runs.append({"side": PREVIEW_ON_DEV.name, "run": attempt + 1, **measured})
-		stop([pid])
+		runs.append(cold_run(PREVIEW_ON_DEV, attempt, scratch, locked))
+		stop(preview_processes())
 	stop_dev()
 	displayed = not_measured(LOCKED_REASON) if locked else {
 		"tool": (
@@ -349,9 +359,10 @@ def at_rest(scratch, longest, locked):
 		return not_measured(*blockers), not_measured(*blockers)
 	memory_runs, cpu_runs = [], []
 	for attempt in range(RUNS):
-		pid, _ = launch_until(PREVIEW_ON_INSTALLED, title_needle(longest["title"]), CONTENT_PANE_MIN_X, scratch)
+		launched = Launch(PREVIEW_ON_INSTALLED)
+		launched.wait_until_shown(title_needle(longest["title"]), CONTENT_PANE_MIN_X, scratch)
 		time.sleep(REST_SETTLE_S)
-		sides = {"installed": [installed[0], *webkit_helpers(installed[0])], "preview": [pid]}
+		sides = {"installed": [installed[0], *webkit_helpers(installed[0])], "preview": [launched.pid]}
 		before = load()
 		memory = {side: footprint(pids) for side, pids in sides.items()}
 		memory_runs.append({"run": attempt + 1, **{f"{side}_mib": value for side, value in memory.items()}, "load": before})
@@ -364,7 +375,7 @@ def at_rest(scratch, longest, locked):
 			"run": attempt + 1, **{f"{side}_percent": value for side, value in cpu.items()},
 			"load_before": before, "load_after": load(),
 		})
-		stop([pid])
+		stop([launched.pid])
 	subject = (
 		f"installed Kiroshi on its longest conversation ({longest['messages']} messages) against the preview "
 		"on the same conversation, both left untouched"
@@ -443,10 +454,11 @@ def cost_centres(scratch, locked):
 	for line in recording.stdout:
 		if "Ctrl-C to stop" in line:
 			break
-	pid, _ = launch_until(KIROSHI_DEV, END_WORD, 0.0, scratch)
+	launched = Launch(KIROSHI_DEV)
+	launched.wait_until_shown(END_WORD, 0.0, scratch)
 	roles = {
 		member: run(["ps", "-o", "comm=", "-p", str(member)]).stdout.strip().rsplit("/", 1)[-1]
-		for member in [pid, *webkit_helpers(pid)]
+		for member in [launched.pid, *webkit_helpers(launched.pid)]
 	}
 	recording.communicate()
 	stop_dev()

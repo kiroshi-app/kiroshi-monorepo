@@ -39,11 +39,11 @@ The onboarding comes first. Its last step opens the conversation tab on the inst
 
 ## Stage 3 measures
 
-`python3 apps/rune-preview/bench/measure.py` writes `bench/results.json`: every run, its machine load (`os.getloadavg()` before and after) and the tool. Each measure runs three times, the table gives the median. Last run: Mac18,5, 12 cores, 24 GiB, macOS 27.0.1, 1-minute load 4.6 to 5.4, **screen locked**.
+`python3 apps/rune-preview/bench/measure.py` writes `bench/results.json`: every run, its machine load (`os.getloadavg()` before and after) and the tool. Each measure runs three times, the table gives the median. Last run: Mac18,5, 12 cores, 24 GiB, macOS 27.0.1, 1-minute load 4.8 to 5.9, **screen locked**.
 
 | Measure | Tool, the same on both sides | Kiroshi | Preview |
 |---|---|---|---|
-| Cold start, first frame | `open -n` on a bundle, then the pid's first window in `CGWindowListCopyWindowInfo` | 473 ms (Kiroshi Dev) | 225 ms (`--dev-host`) |
+| Cold start, first frame | `open -n` on a bundle, then the pid's first window in `CGWindowListCopyWindowInfo` | 491 ms (Kiroshi Dev) | 218 ms (`--dev-host`) |
 | Cold start, conversation displayed | `screencapture -l` read by Vision until the last word of the last message shows | Not measured | Not measured |
 | Memory | `footprint`, Kiroshi plus its WebKit helpers against the preview, agents excluded | Not measured | Not measured |
 | CPU at rest | `ps` CPU time of both process sets over the same 60 s | Not measured | Not measured |
@@ -59,10 +59,10 @@ The onboarding comes first. Its last step opens the conversation tab on the inst
 
 To fill the empty rows: unlock the screen, open the longest conversation in Kiroshi by hand, and run `measure.py` again. It checks both by itself.
 
-**Tauri cost centres.** From an xctrace Time Profiler recording (`--all-processes`, 20 s) of Kiroshi Dev opening the bench conversation: 2.2 s of CPU across Kiroshi Dev and its WebKit helpers, self time by process and leaf binary.
-1. WebContent, JavaScriptCore: 650 ms, 29 %. Mostly garbage collection (`JSFinalObject::visitChildren`), then the parser's lexer.
-2. WebContent, WebCore: 229 ms, 10 %. Style resolution: rule matching (`collectMatchingRulesForListSlow`, `SelectorChecker::checkOne`) and applying the matched properties.
-3. Kiroshi, the kernel: 201 ms, 9 %. Mach messages, then `open` and `chmod`.
+**Tauri cost centres.** From an xctrace Time Profiler recording (`--all-processes`, 20 s) of Kiroshi Dev opening the bench conversation: 2.3 s of CPU across Kiroshi Dev and its WebKit helpers, self time by process and leaf binary.
+1. WebContent, JavaScriptCore: 671 ms, 30 %. Mostly garbage collection (`JSFinalObject::visitChildren`), then the parser's lexer.
+2. WebContent, WebCore: 228 ms, 10 %. Style resolution: rule matching (`collectMatchingRulesForListSlow`, `SelectorChecker::checkOne`) and applying the matched properties.
+3. Kiroshi, the kernel: 197 ms, 9 %. File system calls, `chmod` and `open` first.
 
 ## Read-only on the installed Kiroshi
 
