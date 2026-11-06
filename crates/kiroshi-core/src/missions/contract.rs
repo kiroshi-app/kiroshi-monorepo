@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::agent::host::Refusal;
 use crate::companions::contract::CompanionError;
 use crate::conversations::contract::{Bot, PendingPrompt, StorageFailure, TranscriptStoreError};
 use crate::db::repositories::conversations::ConversationError;
@@ -568,6 +569,16 @@ pub struct MissionChanged {
 	#[specta(optional)]
 	pub working_bot_ids: Vec<String>,
 	pub last_activity_at: Option<i64>,
+}
+
+impl Refusal for MissionError {
+	fn unreadable(detail: String) -> Self {
+		Self::UnreadableRequest { detail }
+	}
+
+	fn unexpected(detail: String) -> Self {
+		Self::Unexpected { detail }
+	}
 }
 
 #[cfg(test)]

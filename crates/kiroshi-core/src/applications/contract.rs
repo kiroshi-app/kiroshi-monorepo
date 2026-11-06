@@ -4,6 +4,7 @@ use serde::ser::SerializeStruct;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 
+use crate::agent::host::Refusal;
 use crate::conversations::contract::TranscriptStoreError;
 use crate::db::DatabaseError;
 use crate::environment::contract::EnvError;
@@ -461,6 +462,16 @@ impl From<DatabaseError> for ApplicationCallError {
 impl From<EnvError> for ApplicationCallError {
 	fn from(failure: EnvError) -> Self {
 		ApplicationCallError::Environment { failure }
+	}
+}
+
+impl Refusal for ApplicationCallError {
+	fn unreadable(detail: String) -> Self {
+		Self::UnreadableRequest { detail }
+	}
+
+	fn unexpected(detail: String) -> Self {
+		Self::Unexpected { detail }
 	}
 }
 

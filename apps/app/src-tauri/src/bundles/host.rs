@@ -1,9 +1,7 @@
 use serde::Deserialize;
 use serde_json::Value;
 
-use super::own_write::{
-	write_own_file, BundleWrite, BundleWriteRefusal, BundleWritten, RefusalKind,
-};
+use super::own_write::{write_own_file, BundleWrite, BundleWriteRefusal, BundleWritten};
 use crate::agent::commands::{announce, learned_block, reconcile_bot, store_a_changed_block};
 use crate::agent::contract::{AgentEvent, EvolvedBundle, RuntimeScope};
 use crate::agent::host::{Host, Refusal};
@@ -84,16 +82,6 @@ impl Host for BundleHost {
 				Self::answered(self.written(database, asked).await?)
 			}
 		}
-	}
-}
-
-impl Refusal for BundleWriteRefusal {
-	fn unreadable(detail: String) -> Self {
-		Self::new(RefusalKind::UnreadableRequest, detail)
-	}
-
-	fn unexpected(detail: String) -> Self {
-		Self::new(RefusalKind::Unexpected, detail)
 	}
 }
 

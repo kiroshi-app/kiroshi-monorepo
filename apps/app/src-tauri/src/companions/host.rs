@@ -12,7 +12,7 @@ use super::contract::{
 	SeatedCompanion,
 };
 use super::launch;
-use crate::agent::host::{Host, Refusal};
+use crate::agent::host::Host;
 use crate::agent::reply_writer::{HeldAttachment, TurnAttachments};
 use crate::attachments::contract::SubmittedAttachment;
 use crate::attachments::{
@@ -724,16 +724,6 @@ impl Host for CompanionHost {
 				Self::answered(self.close(database, asked).await?)
 			}
 		}
-	}
-}
-
-impl Refusal for CompanionError {
-	fn unreadable(detail: String) -> Self {
-		Self::UnreadableRequest { detail }
-	}
-
-	fn unexpected(detail: String) -> Self {
-		Self::Unexpected { detail }
 	}
 }
 

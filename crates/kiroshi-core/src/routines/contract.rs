@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use crate::agent::host::Refusal as HostRefusal;
 use crate::conversations::contract::{StorageFailure, TranscriptStoreError};
 use crate::db::DatabaseError;
 
@@ -421,6 +422,16 @@ pub const CHANGED_EVENT: &str = "routine://changed";
 #[serde(rename_all = "camelCase")]
 pub struct RoutineChanged {
 	pub conversation_id: String,
+}
+
+impl HostRefusal for RoutineError {
+	fn unreadable(detail: String) -> Self {
+		Self::UnreadableRequest { detail }
+	}
+
+	fn unexpected(detail: String) -> Self {
+		Self::Unexpected { detail }
+	}
 }
 
 #[cfg(test)]

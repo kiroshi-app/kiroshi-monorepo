@@ -1,6 +1,9 @@
 pub mod contract;
+pub mod host;
 pub mod lease;
 pub mod protocol;
 pub mod redact;
+pub mod session;
+pub mod sidecar;
 pub mod translate;
 pub mod web_sources;

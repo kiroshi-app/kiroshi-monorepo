@@ -83,9 +83,9 @@ fn bundled_name() -> String {
 }
 
 fn in_the_build_tree() -> PathBuf {
-	std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+	std::path::Path::new(crate::APP_DIR)
 		.join("binaries")
-		.join(format!("{SIDECAR_NAME}-{}", env!("TAURI_ENV_TARGET_TRIPLE")))
+		.join(format!("{SIDECAR_NAME}-{}", env!("KIROSHI_TARGET_TRIPLE")))
 }
 
 fn candidates() -> Vec<(PathBuf, String)> {
@@ -844,7 +844,7 @@ mod tests {
 
 		assert_eq!(
 			built.file_name().and_then(|name| name.to_str()),
-			Some(format!("{SIDECAR_NAME}-{}", env!("TAURI_ENV_TARGET_TRIPLE")).as_str())
+			Some(format!("{SIDECAR_NAME}-{}", env!("KIROSHI_TARGET_TRIPLE")).as_str())
 		);
 		assert_eq!(built.parent().and_then(|dir| dir.file_name()), Some("binaries".as_ref()));
 	}

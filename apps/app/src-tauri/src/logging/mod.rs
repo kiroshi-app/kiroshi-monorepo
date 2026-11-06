@@ -1,7 +1,7 @@
 pub mod commands;
 pub use kiroshi_core::logging::contract;
 pub mod scrub;
-pub mod stderr_lines;
+pub use kiroshi_core::logging::stderr_lines;
 
 use std::fs;
 use std::io::{Read, Seek, SeekFrom};

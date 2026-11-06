@@ -6,7 +6,7 @@ use super::commands::{
 	update_routine,
 };
 use super::contract::{Filter, FilterMatchMode, RoutineDraft, RoutineEdit, RoutineError};
-use crate::agent::host::{Host, Refusal};
+use crate::agent::host::Host;
 use crate::conversations::commands::ready;
 use crate::db;
 
@@ -98,16 +98,6 @@ impl Host for RoutineHost {
 				Ok(Value::Null)
 			}
 		}
-	}
-}
-
-impl Refusal for RoutineError {
-	fn unreadable(detail: String) -> Self {
-		Self::UnreadableRequest { detail }
-	}
-
-	fn unexpected(detail: String) -> Self {
-		Self::Unexpected { detail }
 	}
 }
 

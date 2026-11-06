@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use crate::agent::host::Refusal;
 use crate::attachments::contract::AttachmentStoreError;
 use crate::attachments::Rejection;
 use crate::conversations::contract::{Bot, Hue, StorageFailure, TranscriptStoreError};
@@ -352,5 +353,15 @@ impl From<MissionError> for CompanionError {
 impl From<Rejection> for CompanionError {
 	fn from(rejection: Rejection) -> Self {
 		CompanionError::AttachmentRefused { refusal: rejection.into() }
+	}
+}
+
+impl Refusal for CompanionError {
+	fn unreadable(detail: String) -> Self {
+		Self::UnreadableRequest { detail }
+	}
+
+	fn unexpected(detail: String) -> Self {
+		Self::Unexpected { detail }
 	}
 }

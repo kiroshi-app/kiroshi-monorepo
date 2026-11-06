@@ -12,7 +12,7 @@ use super::directory::Directory;
 use super::runnable::{refusal, Runners};
 use super::search::terms;
 use crate::account::cloud::api_url;
-use crate::agent::host::{Host, Refusal};
+use crate::agent::host::Host;
 use crate::bundles::ApplicationMark;
 use crate::conversations::commands::ready;
 use crate::conversations::contract::McpServer;
@@ -207,16 +207,6 @@ impl Host for ApplicationHost {
 				Self::answered(self.status(asked).await?)
 			}
 		}
-	}
-}
-
-impl Refusal for ApplicationCallError {
-	fn unreadable(detail: String) -> Self {
-		Self::UnreadableRequest { detail }
-	}
-
-	fn unexpected(detail: String) -> Self {
-		Self::Unexpected { detail }
 	}
 }
 

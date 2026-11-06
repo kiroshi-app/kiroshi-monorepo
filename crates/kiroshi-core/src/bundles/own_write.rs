@@ -8,6 +8,7 @@ use super::{
 	bot_recorded, dir, rewrite_agent_holding, serialised, Evolved, AGENTS_DIR, AGENT_EXTENSION,
 	AGENT_NAME, HOOKS_DIR, MANIFEST_DIR, MARKS_NAME, MCP_NAME, SETTINGS_NAME, SKILLS_DIR,
 };
+use crate::agent::host::Refusal;
 use crate::db::repositories::conversations::Bot;
 use crate::private_files;
 
@@ -198,6 +199,16 @@ fn forbidden(reason: impl Into<String>) -> BundleWriteRefusal {
 
 fn failed_write(error: std::io::Error) -> BundleWriteRefusal {
 	BundleWriteRefusal::new(RefusalKind::WriteFailed, error.to_string())
+}
+
+impl Refusal for BundleWriteRefusal {
+	fn unreadable(detail: String) -> Self {
+		Self::new(RefusalKind::UnreadableRequest, detail)
+	}
+
+	fn unexpected(detail: String) -> Self {
+		Self::new(RefusalKind::Unexpected, detail)
+	}
 }
 
 #[cfg(test)]

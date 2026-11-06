@@ -10,7 +10,7 @@ use super::contract::{
 	MissionEvent, MissionEventKind, MissionFilter, MissionLiveness, MissionNote, MissionOutcome,
 	MissionRecord, MissionScope, MissionState, MissionStatus, MissionUpdate, MissionWatch, Ticket,
 };
-use crate::agent::host::{Host, Refusal};
+use crate::agent::host::Host;
 use crate::conversations::commands::{ready, space_of_the_conversation};
 use crate::db;
 
@@ -225,16 +225,6 @@ impl Host for MissionHost {
 				Self::answered(read_mission(MissionDossier { record, ..dossier }))
 			}
 		}
-	}
-}
-
-impl Refusal for MissionError {
-	fn unreadable(detail: String) -> Self {
-		Self::UnreadableRequest { detail }
-	}
-
-	fn unexpected(detail: String) -> Self {
-		Self::Unexpected { detail }
 	}
 }
 
