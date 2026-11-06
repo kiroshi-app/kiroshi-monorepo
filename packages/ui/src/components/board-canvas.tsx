@@ -42,10 +42,12 @@ import {
 	type BoardConnectorEnd,
 	type BoardObstacles,
 	type BoardRoute,
+	crossedRects,
 	exactPointOf,
 	looseEnd,
 	pointAlong,
 	routeConnector,
+	routeConnectors,
 	routePathData,
 	sectionTitleBox,
 } from "@workspace/ui/components/board-connector-route"
@@ -536,6 +538,7 @@ type ShownConnector = {
 	connector: BoardConnector
 	bounds: BoardRect
 	route: BoardRoute
+	passesUnder: readonly BoardRect[]
 }
 
 const NO_HOVER: BoardHover = { id: null, anchor: null }
@@ -546,6 +549,12 @@ const SOURCE_DOT_RADIUS = 4
 const END_HANDLE_RADIUS = 4
 const MIDDLE_HANDLE_RADIUS = 5.5
 const LABEL_MIDDLE = 0.5
+const MASK_MARGIN = 32
+const CROSSABLE_KINDS: ReadonlySet<BoardItemKind> = new Set([
+	"sticky",
+	"shape",
+	"text",
+])
 const ANCHOR_PLACE: Record<BoardSide, string> = {
 	top: "top-0 left-1/2",
 	right: "top-1/2 left-full",
@@ -567,11 +576,23 @@ const obstaclesOf = (
 ): BoardObstacles => {
 	const sections = items.filter((item) => item.kind === "section")
 	return {
-		blocks: [
-			...items.filter((item) => item.kind !== "section").map(boundsOf),
-			...sections.map((item) => sectionTitleBox(boundsOf(item), item.text)),
-		],
+		blocks: items.filter((item) => item.kind !== "section").map(boundsOf),
+		titles: sections.map((item) => sectionTitleBox(boundsOf(item), item.text)),
 		frames: sections.map(boundsOf),
+	}
+}
+
+const maskAreaOf = ({ points, control }: BoardRoute): BoardRect => {
+	const corners = control ? [...points, control] : points
+	const xs = corners.map(({ x }) => x)
+	const ys = corners.map(({ y }) => y)
+	const x = Math.min(...xs) - MASK_MARGIN
+	const y = Math.min(...ys) - MASK_MARGIN
+	return {
+		x,
+		y,
+		width: Math.max(...xs) + MASK_MARGIN - x,
+		height: Math.max(...ys) + MASK_MARGIN - y,
 	}
 }
 
@@ -811,6 +832,7 @@ type BoardConnectorLineProps = {
 	route: BoardRoute
 	look: BoardConnectorLook
 	headSize?: BoardArrowHeadSize
+	passesUnder?: readonly BoardRect[]
 	slot: "board-connector" | "board-connector-draft"
 }
 
@@ -818,8 +840,12 @@ const BoardConnectorLine = ({
 	route,
 	look,
 	headSize,
+	passesUnder = [],
 	slot,
 }: BoardConnectorLineProps) => {
+	const maskId = useId()
+	const maskArea = maskAreaOf(route)
+	const isMasked = passesUnder.length > 0
 	const path = routePathData(route)
 	const tip = route.points.at(-1)
 	const head = tip ? arrowheadPathData(tip, route.arrow, headSize) : null
@@ -836,18 +862,39 @@ const BoardConnectorLine = ({
 			strokeLinejoin="round"
 			strokeWidth={CONNECTOR_STROKE}
 		>
-			{isSelected ? (
-				<g
-					className="stroke-board-surface"
-					data-slot="board-connector-halo"
-					strokeWidth={CONNECTOR_HALO_STROKE}
+			{isMasked ? (
+				<mask
+					data-slot="board-connector-mask"
+					id={maskId}
+					maskUnits="userSpaceOnUse"
+					{...maskArea}
 				>
-					<path d={path} />
-					{head ? <path d={head} /> : null}
-				</g>
+					<rect fill="white" stroke="none" {...maskArea} />
+					{passesUnder.map((rect) => (
+						<rect
+							data-slot="board-connector-mask-hole"
+							fill="black"
+							key={`${rect.x} ${rect.y} ${rect.width} ${rect.height}`}
+							stroke="none"
+							{...rect}
+						/>
+					))}
+				</mask>
 			) : null}
-			<path d={path} data-slot="board-connector-path" />
-			{head ? <path d={head} data-slot="board-connector-arrowhead" /> : null}
+			<g mask={isMasked ? `url(#${maskId})` : undefined}>
+				{isSelected ? (
+					<g
+						className="stroke-board-surface"
+						data-slot="board-connector-halo"
+						strokeWidth={CONNECTOR_HALO_STROKE}
+					>
+						<path d={path} />
+						{head ? <path d={head} /> : null}
+					</g>
+				) : null}
+				<path d={path} data-slot="board-connector-path" />
+				{head ? <path d={head} data-slot="board-connector-arrowhead" /> : null}
+			</g>
 			{isSelected ? (
 				<>
 					{[route.points[0], tip].map((end, index) =>
@@ -1040,31 +1087,80 @@ const ReadyBoardCanvas = ({
 	const obstacles = obstaclesOf([...itemsById.values()], liveBounds)
 
 	const endOf = (
-		item: BoardItem,
+		id: string,
 		side?: BoardSide,
 		anchor?: BoardPoint,
-	): BoardConnectorEnd => {
+		point?: BoardPoint,
+	): BoardConnectorEnd | null => {
+		if (point) return { rect: { ...point, width: 0, height: 0 }, point }
+		const item = itemsById.get(id)
+		if (!item) return null
 		const rect = liveBounds(item)
 		return { rect, side, point: anchor && exactPointOf(rect, anchor) }
 	}
 
-	const routeOf = (connector: BoardConnector) => {
-		const from = itemsById.get(connector.from)
-		const to = itemsById.get(connector.to)
-		if (!from || !to) return null
-		return routeConnector(
-			endOf(from, connector.fromSide, connector.fromAnchor),
-			endOf(to, connector.toSide, connector.toAnchor),
-			connector.routing,
-			{ bend: connector.bend, obstacles },
+	const arrows = view.objects.flatMap((connector) => {
+		if (connector.kind !== "connector") return []
+		const source = endOf(
+			connector.from,
+			connector.fromSide,
+			connector.fromAnchor,
+			connector.fromPoint,
 		)
-	}
+		const target = endOf(
+			connector.to,
+			connector.toSide,
+			connector.toAnchor,
+			connector.toPoint,
+		)
+		return source && target
+			? [
+					{
+						id: connector.id,
+						source,
+						target,
+						routing: connector.routing,
+						bend: connector.bend,
+					},
+				]
+			: []
+	})
+	const routes = new Map(
+		routeConnectors(arrows, obstacles).map((route, index) => [
+			arrows[index].id,
+			route,
+		]),
+	)
+
+	const passesUnderOf = (connector: BoardConnector, route: BoardRoute) =>
+		connector.routing === "straight"
+			? crossedRects(
+					route,
+					[...itemsById.values()]
+						.filter(
+							(item) =>
+								CROSSABLE_KINDS.has(item.kind) &&
+								item.id !== connector.from &&
+								item.id !== connector.to,
+						)
+						.map(liveBounds),
+				)
+			: []
 
 	const shownConnectors = mounted.flatMap(
 		({ object, bounds }): ShownConnector[] => {
 			if (object.kind !== "connector") return []
-			const route = routeOf(object)
-			return route ? [{ connector: object, bounds, route }] : []
+			const route = routes.get(object.id)
+			return route
+				? [
+						{
+							connector: object,
+							bounds,
+							route,
+							passesUnder: passesUnderOf(object, route),
+						},
+					]
+				: []
 		},
 	)
 
@@ -1648,9 +1744,10 @@ const ReadyBoardCanvas = ({
 					data-slot="board-connectors"
 				>
 					<g transform={boardTransform}>
-						{shownConnectors.map(({ connector, route }) => (
+						{shownConnectors.map(({ connector, route, passesUnder }) => (
 							<BoardConnectorLine
 								headSize={connector.headSize}
+								passesUnder={passesUnder}
 								key={connector.id}
 								look={connector.id === selectedId ? "selected" : "rest"}
 								route={route}

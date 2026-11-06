@@ -5,12 +5,15 @@ import {
 	arrowheadPathData,
 	BOARD_ARROW_GAP,
 	BOARD_SIDES,
+	type BoardArrow,
+	crossedRects,
 	curveControl,
 	exactPointOf,
 	lineEndOf,
 	looseEnd,
 	pointAlong,
 	routeConnector,
+	routeConnectors,
 	routePathData,
 	sectionTitleBox,
 } from "@workspace/ui/components/board-connector-route"
@@ -63,25 +66,85 @@ const LEFT_SHAPE: BoardRect = { x: 80, y: 126, width: 160, height: 120 }
 const RIGHT_SHAPE: BoardRect = { x: 400, y: 126, width: 160, height: 120 }
 const FAR_SHAPE: BoardRect = { x: 720, y: 126, width: 160, height: 120 }
 
-const FRAME: BoardRect = { x: 16, y: 80, width: 936, height: 576 }
-const INTERFACE_REACT: BoardRect = { x: 64, y: 128, width: 160, height: 160 }
-const HOST_RUST: BoardRect = { x: 264, y: 128, width: 160, height: 160 }
-const TAURI_IPC: BoardRect = { x: 464, y: 128, width: 160, height: 480 }
-const RELAY: BoardRect = { x: 744, y: 128, width: 160, height: 160 }
-const AGENT_SDK: BoardRect = { x: 64, y: 448, width: 160, height: 160 }
-const STORAGE: BoardRect = { x: 264, y: 448, width: 160, height: 160 }
+const sticky = (x: number, y: number): BoardRect => ({
+	x,
+	y,
+	width: 160,
+	height: 160,
+})
+const DESKTOP_FRAME: BoardRect = { x: 40, y: 80, width: 608, height: 232 }
+const SIDECAR_FRAME: BoardRect = { x: 40, y: 400, width: 408, height: 232 }
+const CLOUD_FRAME: BoardRect = { x: 720, y: 80, width: 408, height: 232 }
+const INTERFACE_REACT = sticky(64, 128)
+const HOST_RUST = sticky(264, 128)
+const LOCAL_STORAGE = sticky(464, 128)
+const RELAY = sticky(744, 128)
+const IPHONE_APP = sticky(944, 128)
+const AGENT_SDK = sticky(64, 448)
+const BOT_PLUGIN = sticky(264, 448)
 const AFTER_BOARD_OBSTACLES = {
 	blocks: [
 		INTERFACE_REACT,
 		HOST_RUST,
-		TAURI_IPC,
+		LOCAL_STORAGE,
 		RELAY,
+		IPHONE_APP,
 		AGENT_SDK,
-		STORAGE,
-		sectionTitleBox(FRAME, "Kiroshi"),
+		BOT_PLUGIN,
 	],
-	frames: [FRAME],
+	titles: [
+		sectionTitleBox(DESKTOP_FRAME, "Application de bureau"),
+		sectionTitleBox(SIDECAR_FRAME, "Sidecar"),
+		sectionTitleBox(CLOUD_FRAME, "Cloud"),
+	],
+	frames: [DESKTOP_FRAME, SIDECAR_FRAME, CLOUD_FRAME],
 }
+const AFTER_BOARD_ARROWS: readonly [string, BoardArrow][] = [
+	[
+		"M232 208 L256 208",
+		{
+			source: { rect: INTERFACE_REACT },
+			target: { rect: HOST_RUST },
+			routing: "straight",
+		},
+	],
+	[
+		"M432 208 L456 208",
+		{
+			source: { rect: HOST_RUST },
+			target: { rect: LOCAL_STORAGE },
+			routing: "straight",
+		},
+	],
+	[
+		"M912 208 L936 208",
+		{
+			source: { rect: RELAY },
+			target: { rect: IPHONE_APP },
+			routing: "straight",
+		},
+	],
+	[
+		"M232 528 L256 528",
+		{
+			source: { rect: AGENT_SDK },
+			target: { rect: BOT_PLUGIN },
+			routing: "straight",
+		},
+	],
+	[
+		"M344 296 L344 360 Q344 368 336 368 L152 368 Q144 368 144 376 L144 440",
+		{
+			source: { rect: HOST_RUST },
+			target: { rect: AGENT_SDK },
+			routing: "elbow",
+		},
+	],
+	[
+		"M344 120 L344 64 Q344 56 352 56 L816 56 Q824 56 824 64 L824 120",
+		{ source: { rect: HOST_RUST }, target: { rect: RELAY }, routing: "elbow" },
+	],
+]
 
 const directionOf = (from: BoardPoint, to: BoardPoint): BoardPoint => ({
 	x: Math.sign(to.x - from.x),
@@ -285,7 +348,11 @@ describe("routeConnector elbow", () => {
 			{ rect: FAR_SHAPE },
 			"elbow",
 			{
-				obstacles: { blocks: [LEFT_SHAPE, RIGHT_SHAPE, FAR_SHAPE], frames: [] },
+				obstacles: {
+					blocks: [LEFT_SHAPE, RIGHT_SHAPE, FAR_SHAPE],
+					titles: [],
+					frames: [],
+				},
 			},
 		)
 		expect(route.points).toEqual([
@@ -304,54 +371,94 @@ describe("routeConnector elbow", () => {
 })
 
 describe("After board", () => {
-	it("joins Interface React to Hôte Rust straight on 208, from 232 to 256", () => {
-		expect(
-			routePathData(
-				routeConnector(
-					{ rect: INTERFACE_REACT },
-					{ rect: HOST_RUST },
-					"straight",
-				),
-			),
-		).toBe("M232 208 L256 208")
+	const routes = routeConnectors(
+		AFTER_BOARD_ARROWS.map(([, arrow]) => arrow),
+		AFTER_BOARD_OBSTACLES,
+	)
+
+	it.each(AFTER_BOARD_ARROWS.map(([path], index) => [index + 1, path]))(
+		"draws arrow %i on %s",
+		(index, path) => {
+			expect(routePathData(routes[Number(index) - 1])).toBe(path)
+		},
+	)
+
+	it("sends Hôte Rust to Relais over the top since the bottom side already leads to Agent SDK", () => {
+		const alone = routeConnector(
+			{ rect: HOST_RUST },
+			{ rect: RELAY },
+			"elbow",
+			{ obstacles: AFTER_BOARD_OBSTACLES },
+		)
+		expect(alone.points[0]).toEqual({ x: 344, y: 296 })
+		expect(routes[5].points[0]).toEqual({ x: 344, y: 120 })
 	})
 
-	it("routes Hôte Rust to Relais 24 above the frame", () => {
-		expect(
-			routePathData(
-				routeConnector({ rect: HOST_RUST }, { rect: RELAY }, "elbow", {
-					obstacles: AFTER_BOARD_OBSTACLES,
-				}),
-			),
-		).toBe("M344 120 L344 64 Q344 56 352 56 L816 56 Q824 56 824 64 L824 120")
+	it("crosses no sticky and no frame title on any arrow", () => {
+		for (const { points } of routes)
+			for (const [a, b] of segmentsOf(points))
+				for (const block of [
+					...AFTER_BOARD_OBSTACLES.blocks,
+					...AFTER_BOARD_OBSTACLES.titles,
+				])
+					expect(crossesInside(a, b, block)).toBe(false)
 	})
+})
 
-	it("routes Hôte Rust to Agent SDK midway between the two rows", () => {
-		expect(
-			routePathData(
-				routeConnector({ rect: HOST_RUST }, { rect: AGENT_SDK }, "elbow", {
-					obstacles: AFTER_BOARD_OBSTACLES,
-				}),
-			),
-		).toBe(
-			"M344 296 L344 360 Q344 368 336 368 L152 368 Q144 368 144 376 L144 440",
+describe("loose ends", () => {
+	const point = { x: 600, y: 320 }
+	const loose = { rect: { ...point, width: 0, height: 0 }, point }
+
+	it("ends the line and the head tip on a board point with no gap", () => {
+		const route = routeConnector({ rect: LEFT_SHAPE }, loose, "straight")
+		expect(route.points.at(-1)).toEqual(point)
+		const length = Math.hypot(point.x - 160, point.y - 186)
+		expect(route.points[0].x).toBeCloseTo(
+			240 + (BOARD_ARROW_GAP * (point.x - 160)) / length,
 		)
 	})
 
-	it("crosses no shape and no frame title on any elbow", () => {
-		for (const target of [RELAY, AGENT_SDK]) {
-			const { points } = routeConnector(
-				{ rect: HOST_RUST },
-				{ rect: target },
-				"elbow",
-				{
-					obstacles: AFTER_BOARD_OBSTACLES,
-				},
-			)
-			for (const [a, b] of segmentsOf(points))
-				for (const block of AFTER_BOARD_OBSTACLES.blocks)
-					expect(crossesInside(a, b, block)).toBe(false)
-		}
+	it("starts the line on a board point with no gap", () => {
+		const route = routeConnector(loose, { rect: RIGHT_SHAPE }, "straight")
+		expect(route.points[0]).toEqual(point)
+	})
+
+	it("draws a straight arrow between two board points, elbow or not", () => {
+		const other = { x: 100, y: 40 }
+		const route = routeConnector(
+			loose,
+			{ rect: { ...other, width: 0, height: 0 }, point: other },
+			"elbow",
+		)
+		expect(route.points).toEqual([point, other])
+	})
+
+	it("routes an elbow from a shape to a board point, the last leg facing the shape", () => {
+		const { points } = routeConnector({ rect: LEFT_SHAPE }, loose, "elbow")
+		expect(points.at(-1)).toEqual(point)
+		for (const [a, b] of segmentsOf(points))
+			expect(a.x === b.x || a.y === b.y).toBe(true)
+	})
+})
+
+describe("crossedRects", () => {
+	it("names the shapes a straight arrow passes across", () => {
+		const route = routeConnector(
+			{ rect: LEFT_SHAPE },
+			{ rect: FAR_SHAPE },
+			"straight",
+		)
+		expect(crossedRects(route, [RIGHT_SHAPE, AGENT_SDK])).toEqual([RIGHT_SHAPE])
+	})
+
+	it("follows the curve of a bent arrow", () => {
+		const route = routeConnector(
+			{ rect: LEFT_SHAPE },
+			{ rect: FAR_SHAPE },
+			"straight",
+			{ bend: 140 },
+		)
+		expect(crossedRects(route, [RIGHT_SHAPE])).toEqual([])
 	})
 })
 

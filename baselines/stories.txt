@@ -1592,6 +1592,8 @@ navigation-apptitlebar--tear-off-reports-the-tab
 navigation-apptitlebar--unpinned-tab-menu
 navigation-apptitlebar--unpinned-tab-menu-dark
 navigation-apptitlebar--with-window-controls
+navigation-boardcanvas--arrow-crossing-shape
+navigation-boardcanvas--arrow-crossing-shape-dark
 navigation-boardcanvas--arrow-curve
 navigation-boardcanvas--arrow-curve-dark
 navigation-boardcanvas--arrow-elbow
@@ -1602,6 +1604,8 @@ navigation-boardcanvas--arrow-head-sizes
 navigation-boardcanvas--arrow-head-sizes-dark
 navigation-boardcanvas--arrow-label
 navigation-boardcanvas--arrow-label-dark
+navigation-boardcanvas--arrow-loose-end
+navigation-boardcanvas--arrow-loose-end-dark
 navigation-boardcanvas--arrow-quick-release
 navigation-boardcanvas--arrow-quick-release-dark
 navigation-boardcanvas--arrows-after-board

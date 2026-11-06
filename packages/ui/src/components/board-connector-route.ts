@@ -19,7 +19,15 @@ type BoardSideEnd = {
 
 type BoardObstacles = {
 	blocks: readonly BoardRect[]
+	titles: readonly BoardRect[]
 	frames: readonly BoardRect[]
+}
+
+type BoardArrow = {
+	source: BoardConnectorEnd
+	target: BoardConnectorEnd
+	routing: BoardRouting
+	bend?: number
 }
 
 type BoardRoute = {
@@ -31,6 +39,7 @@ type BoardRoute = {
 type BoardRouteOptions = {
 	bend?: number
 	obstacles?: BoardObstacles
+	busy?: readonly BoardSideEnd[]
 }
 
 type ElbowEnd = {
@@ -51,11 +60,13 @@ const BEND_COST = SHAPE_CLEARANCE
 const OFF_CENTRE_BEND_COST = 0.001
 const SIDE_PREFERENCE_COST = 0.000001
 const SOFT_ZONE_COST = 4
+const SHARED_SIDE_COST = SHAPE_CLEARANCE * 2
+const CROSSING_SAMPLES = 64
 const SECTION_TITLE_INSET = 12
 const SECTION_TITLE_HEIGHT = 24
 const SECTION_TITLE_PADDING = 16
 const SECTION_TITLE_CHARACTER_WIDTH = 8
-const NO_OBSTACLES: BoardObstacles = { blocks: [], frames: [] }
+const NO_OBSTACLES: BoardObstacles = { blocks: [], titles: [], frames: [] }
 
 const BOARD_ARROW_HEADS: Record<
 	BoardArrowHeadSize,
@@ -269,6 +280,7 @@ const nearestSideOf = (rect: BoardRect, point: BoardPoint): BoardSide => {
 const elbowEndsOf = (
 	end: BoardConnectorEnd,
 	blocks: readonly BoardRect[],
+	busy: readonly BoardSideEnd[],
 ): ElbowEnd[] => {
 	const sides = end.point
 		? [end.side ?? nearestSideOf(end.rect, end.point)]
@@ -281,11 +293,15 @@ const elbowEndsOf = (
 		const ahead = distanceAhead(anchor, heading, blocks)
 		const stubLength = Math.min(SHAPE_CLEARANCE, ahead / 2)
 		const gap = end.point ? 0 : Math.min(BOARD_ARROW_GAP, stubLength / 2)
+		const isShared = busy.some(
+			(taken) => taken.side === side && isSameRect(taken.rect, end.rect),
+		)
 		return {
 			start: offset(anchor, heading, gap),
 			stub: offset(anchor, heading, stubLength),
 			heading,
-			preference: heading * SIDE_PREFERENCE_COST,
+			preference:
+				heading * SIDE_PREFERENCE_COST + (isShared ? SHARED_SIDE_COST : 0),
 		}
 	})
 }
@@ -348,6 +364,7 @@ const elbowPoints = (
 	source: BoardConnectorEnd,
 	target: BoardConnectorEnd,
 	obstacles: BoardObstacles,
+	busy: readonly BoardSideEnd[],
 ) => {
 	const region = inflated(
 		spanOf([source.rect, target.rect]),
@@ -356,17 +373,20 @@ const elbowPoints = (
 	const points = [source.point, target.point].filter(
 		(point): point is BoardPoint => point !== undefined,
 	)
+	const isInTheWay = (rect: BoardRect) =>
+		hasArea(rect) &&
+		intersects(rect, region) &&
+		!points.some((point) => isInside(point, rect))
 	const blocks = [source.rect, target.rect, ...obstacles.blocks].filter(
 		(rect, index, all) =>
-			hasArea(rect) &&
-			intersects(rect, region) &&
-			!points.some((point) => isInside(point, rect)) &&
+			isInTheWay(rect) &&
 			all.findIndex((other) => isSameRect(other, rect)) === index,
 	)
+	const walls = [...blocks, ...obstacles.titles.filter(isInTheWay)]
 	const frames = obstacles.frames.filter((rect) => intersects(rect, region))
 	const softZones = blocks.map((rect) => inflated(rect, SHAPE_CLEARANCE))
-	const sourceEnds = elbowEndsOf(source, blocks)
-	const targetEnds = elbowEndsOf(target, blocks)
+	const sourceEnds = elbowEndsOf(source, walls, busy)
+	const targetEnds = elbowEndsOf(target, walls, busy)
 	const ends = [...sourceEnds, ...targetEnds]
 	const xs = lanesOf("x", ends, source.rect, target.rect, blocks, frames)
 	const ys = lanesOf("y", ends, source.rect, target.rect, blocks, frames)
@@ -435,7 +455,7 @@ const elbowPoints = (
 			if (next === null) continue
 			const from = pointAt(node)
 			const to = pointAt(next)
-			if (blocks.some((rect) => crossesInside(from, to, rect))) continue
+			if (walls.some((rect) => crossesInside(from, to, rect))) continue
 			const total =
 				reached + legCost(from, to) + (turn === heading ? 0 : bendAt(from))
 			if (total < cost[stateOf(next, turn)]) {
@@ -470,14 +490,35 @@ const elbowPoints = (
 	return simplified([start.start, ...path, best.end.start])
 }
 
+const sideFacing = (from: BoardPoint, towards: BoardPoint): BoardSide => {
+	const dx = towards.x - from.x
+	const dy = towards.y - from.y
+	if (Math.abs(dx) > Math.abs(dy)) return dx > 0 ? "right" : "left"
+	return dy > 0 ? "bottom" : "top"
+}
+
+const facing = (
+	end: BoardConnectorEnd,
+	other: BoardConnectorEnd,
+): BoardConnectorEnd =>
+	end.side || hasArea(end.rect) || !end.point
+		? end
+		: { ...end, side: sideFacing(end.point, referenceOf(other)) }
+
 const routeConnector = (
 	source: BoardConnectorEnd,
 	target: BoardConnectorEnd,
 	routing: BoardRouting,
-	{ bend = 0, obstacles = NO_OBSTACLES }: BoardRouteOptions = {},
+	{ bend = 0, obstacles = NO_OBSTACLES, busy = [] }: BoardRouteOptions = {},
 ): BoardRoute => {
-	if (routing === "elbow") {
-		const points = elbowPoints(source, target, obstacles)
+	const isLoose = !hasArea(source.rect) && !hasArea(target.rect)
+	if (routing === "elbow" && !isLoose) {
+		const points = elbowPoints(
+			facing(source, target),
+			facing(target, source),
+			obstacles,
+			busy,
+		)
 		const [beforeLast, last] = points.slice(-2)
 		return {
 			points,
@@ -494,11 +535,29 @@ const routeConnector = (
 	}
 }
 
-const sideFacing = (from: BoardPoint, towards: BoardPoint): BoardSide => {
-	const dx = towards.x - from.x
-	const dy = towards.y - from.y
-	if (Math.abs(dx) > Math.abs(dy)) return dx > 0 ? "right" : "left"
-	return dy > 0 ? "bottom" : "top"
+const routeConnectors = (
+	arrows: readonly BoardArrow[],
+	obstacles: BoardObstacles,
+) => {
+	const busy: BoardSideEnd[] = []
+	const routes: BoardRoute[] = []
+	for (const { source, target, routing, bend } of arrows) {
+		const route = routeConnector(source, target, routing, {
+			bend,
+			obstacles,
+			busy,
+		})
+		const tips = [route.points[0], route.points.at(-1) as BoardPoint]
+		;[source, target].forEach((end, index) => {
+			if (hasArea(end.rect) && !end.point)
+				busy.push({
+					rect: end.rect,
+					side: nearestSideOf(end.rect, tips[index]),
+				})
+		})
+		routes.push(route)
+	}
+	return routes
 }
 
 const looseEnd = (
@@ -586,6 +645,24 @@ const pointAlong = (
 	return points.at(-1) ?? { x: 0, y: 0 }
 }
 
+const crossedRects = (
+	route: Pick<BoardRoute, "points" | "control">,
+	rects: readonly BoardRect[],
+) => {
+	const hull = [...route.points, ...(route.control ? [route.control] : [])]
+	const area = inflated(
+		spanOf(hull.map((point) => ({ ...point, width: 0, height: 0 }))),
+		1,
+	)
+	const samples = Array.from({ length: CROSSING_SAMPLES + 1 }, (_, step) =>
+		pointAlong(route, step / CROSSING_SAMPLES),
+	)
+	return rects.filter(
+		(rect) =>
+			intersects(rect, area) && samples.some((point) => isInside(point, rect)),
+	)
+}
+
 const arrowheadPathData = (
 	tip: BoardPoint,
 	direction: BoardPoint,
@@ -602,15 +679,18 @@ export {
 	arrowheadPathData,
 	BOARD_ARROW_GAP,
 	BOARD_SIDES,
+	type BoardArrow,
 	type BoardConnectorEnd,
 	type BoardObstacles,
 	type BoardRoute,
+	crossedRects,
 	curveControl,
 	exactPointOf,
 	lineEndOf,
 	looseEnd,
 	pointAlong,
 	routeConnector,
+	routeConnectors,
 	routePathData,
 	sectionTitleBox,
 }

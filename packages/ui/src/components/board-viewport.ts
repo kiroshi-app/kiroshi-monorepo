@@ -101,15 +101,25 @@ const unionOf = (a: BoardRect, b: BoardRect): BoardRect => {
 	}
 }
 
+const endBounds = (
+	id: string,
+	point: BoardPoint | undefined,
+	itemsById: ReadonlyMap<string, BoardItem>,
+): BoardRect | null => {
+	if (point) return { ...point, width: 0, height: 0 }
+	const item = itemsById.get(id)
+	return item ? itemBounds(item) : null
+}
+
 const boundsOf = (
 	object: BoardObject,
 	itemsById: ReadonlyMap<string, BoardItem>,
 ): BoardRect | null => {
 	if (object.kind !== "connector") return itemBounds(object)
-	const from = itemsById.get(object.from)
-	const to = itemsById.get(object.to)
+	const from = endBounds(object.from, object.fromPoint, itemsById)
+	const to = endBounds(object.to, object.toPoint, itemsById)
 	if (!from || !to) return null
-	return unionOf(itemBounds(from), itemBounds(to))
+	return unionOf(from, to)
 }
 
 const isItem = (object: BoardObject): object is BoardItem =>

@@ -50,9 +50,11 @@ type BoardConnector = {
 	from: string
 	fromSide?: BoardSide
 	fromAnchor?: BoardPoint
+	fromPoint?: BoardPoint
 	to: string
 	toSide?: BoardSide
 	toAnchor?: BoardPoint
+	toPoint?: BoardPoint
 	routing: BoardRouting
 	bend?: number
 	labelPosition?: number

@@ -3019,38 +3019,47 @@ export const ArrowHeadSizesDark = meta.story({
 const stickyOf = (id: string, text: string, x: number, y: number) =>
 	itemAt(id, "sticky", text, { x, y, width: 160, height: 160 }, 1)
 
+const frameOf = (id: string, text: string, rect: BoardRect) =>
+	itemAt(id, "section", text, rect, 0)
+
 const AFTER_BOARD: readonly BoardObject[] = [
-	itemAt(
-		"kiroshi",
-		"section",
-		"Kiroshi",
-		{ x: 16, y: 80, width: 936, height: 576 },
-		0,
-	),
+	frameOf("desktop", "Application de bureau", {
+		x: 40,
+		y: 80,
+		width: 608,
+		height: 232,
+	}),
+	frameOf("sidecar", "Sidecar", { x: 40, y: 400, width: 408, height: 232 }),
+	frameOf("cloud", "Cloud", { x: 720, y: 80, width: 408, height: 232 }),
 	stickyOf("interface-react", "Interface React", 64, 128),
 	stickyOf("host-rust", "Hôte Rust", 264, 128),
-	itemAt(
-		"tauri-ipc",
-		"shape",
-		"Tauri IPC",
-		{ x: 464, y: 128, width: 160, height: 480 },
-		1,
-	),
+	stickyOf("local-storage", "Stockage local", 464, 128),
 	stickyOf("relay", "Relais", 744, 128),
+	stickyOf("iphone-app", "App iPhone", 944, 128),
 	stickyOf("agent-sdk", "Agent SDK", 64, 448),
-	stickyOf("storage", "Stockage", 264, 448),
+	stickyOf("bot-plugin", "Plugin du bot", 264, 448),
 	arrowBetween("react-to-host", "interface-react", "host-rust"),
-	arrowBetween("host-to-relay", "host-rust", "relay", { routing: "elbow" }),
+	arrowBetween("host-to-storage", "host-rust", "local-storage"),
+	arrowBetween("relay-to-iphone", "relay", "iphone-app"),
+	arrowBetween("agent-to-plugin", "agent-sdk", "bot-plugin"),
 	arrowBetween("host-to-agent", "host-rust", "agent-sdk", { routing: "elbow" }),
+	arrowBetween("host-to-relay", "host-rust", "relay", { routing: "elbow" }),
 ]
 
 const AFTER_BOARD_PATHS = {
 	"react-to-host": "M232 208 L256 208",
-	"host-to-relay":
-		"M344 120 L344 64 Q344 56 352 56 L816 56 Q824 56 824 64 L824 120",
+	"host-to-storage": "M432 208 L456 208",
+	"relay-to-iphone": "M912 208 L936 208",
+	"agent-to-plugin": "M232 528 L256 528",
 	"host-to-agent":
 		"M344 296 L344 360 Q344 368 336 368 L152 368 Q144 368 144 376 L144 440",
+	"host-to-relay":
+		"M344 120 L344 64 Q344 56 352 56 L816 56 Q824 56 824 64 L824 120",
 }
+
+const AFTER_BOARD_ITEM_IDS = AFTER_BOARD.flatMap((object) =>
+	object.kind === "connector" ? [] : [object.id],
+)
 
 const PATH_SAMPLES = 240
 
@@ -3080,19 +3089,35 @@ export const ArrowsAfterBoard = meta.story({
 	globals: LAPTOP_WINDOW,
 	args: arrowArgs(AFTER_BOARD),
 	parameters: arrowDocs(
-		`Board arrows, the After board of the Before / after page: Interface React to Hôte Rust straight on 208 from 232 to 256, Hôte Rust to Relais in elbow over the top, 24 above the Kiroshi frame since Tauri IPC stands in the way, and Hôte Rust to Agent SDK in elbow on the lane midway between the two rows. No arrow crosses a sticky, a shape or the frame title. ${ARTBOARD_NOTE}`,
+		`Board arrows, the After board of the Before / after page: three frames, Application de bureau, Sidecar and Cloud, seven stickies and six arrows. The four straight arrows join neighbours 8 off each outline, Hôte Rust to Agent SDK runs its elbow on the lane midway between the two rows, and Hôte Rust to Relais goes over the top, 24 above the frames, since its bottom side already leads to Agent SDK. No arrow crosses a sticky or a frame title. ${ARTBOARD_NOTE}`,
 	),
 	play: async ({ canvasElement }) => {
 		for (const [id, path] of Object.entries(AFTER_BOARD_PATHS))
 			await expect(
 				pathOf(arrowLine(canvasElement, id), "board-connector-path"),
 			).toBe(path)
+		await expect(
+			slotsIn(canvasElement, "board-object").map(
+				(object) => object.dataset.objectId,
+			),
+		).toEqual(AFTER_BOARD_ITEM_IDS)
+		await expect(
+			within(canvasElement)
+				.getAllByRole("option")
+				.map((option) => option.textContent),
+		).toEqual(
+			AFTER_BOARD_ITEM_IDS.map((id) =>
+				expect.stringContaining(
+					(AFTER_BOARD.find((object) => object.id === id) as BoardItem).text,
+				),
+			),
+		)
 		const boxes = textBoxesOf(canvasElement)
-		await expect(boxes).toHaveLength(12)
+		await expect(boxes).toHaveLength(17)
 		const paths = canvasElement.querySelectorAll<SVGPathElement>(
 			'[data-slot="board-connector"] [data-slot="board-connector-path"]',
 		)
-		await expect(paths).toHaveLength(3)
+		await expect(paths).toHaveLength(6)
 		for (const path of paths)
 			for (const point of clientPointsOf(path))
 				await expect(boxes.some((box) => isStrictlyInside(point, box))).toBe(
@@ -3108,6 +3133,74 @@ export const ArrowsAfterBoardDark = meta.story({
 	play: async (context) => {
 		await expectDarkSurface(context.canvasElement)
 		await ArrowsAfterBoard.input.play?.(context)
+	},
+})
+
+const LOOSE_POINT = { x: 480, y: 426 }
+
+export const ArrowLooseEnd = meta.story({
+	args: arrowArgs([
+		BRIEF,
+		arrowBetween("brief-to-point", "brief", "", { toPoint: LOOSE_POINT }),
+	]),
+	parameters: arrowDocs(
+		"An arrow whose to end is a board point with no object, as a deleted shape leaves it: the line leaves Brief 8 off its outline and ends on the point itself with no gap, the head tip on it.",
+	),
+	play: async ({ canvasElement }) => {
+		const line = arrowLine(canvasElement, "brief-to-point")
+		await expect(pathOf(line, "board-connector-path")).toBe(
+			"M246.4 250.8 L480 426",
+		)
+		await expect(pathOf(line, "board-connector-arrowhead")).toBe(
+			"M468.4 424.8 L480 426 L475.6 415.2",
+		)
+		await expectArrowAtRest(line)
+	},
+})
+
+export const ArrowLooseEndDark = meta.story({
+	globals: { theme: "dark" },
+	args: ArrowLooseEnd.input.args,
+	parameters: arrowDocs("ArrowLooseEnd in the dark theme."),
+	play: async (context) => {
+		await expectDarkSurface(context.canvasElement)
+		await ArrowLooseEnd.input.play?.(context)
+	},
+})
+
+export const ArrowCrossingShape = meta.story({
+	args: arrowArgs([
+		BRIEF,
+		DRAFT,
+		LAUNCH,
+		arrowBetween("brief-to-launch", "brief", "launch"),
+	]),
+	parameters: arrowDocs(
+		"A straight arrow from Brief to Launch across Draft, a shape that is neither of its ends: the line passes behind Draft, so Draft and its label stay painted above it, while both ends keep their 8 gap.",
+	),
+	play: async ({ canvasElement }) => {
+		const line = arrowLine(canvasElement, "brief-to-launch")
+		await expect(pathOf(line, "board-connector-path")).toBe("M248 186 L712 186")
+		const holes = slotsIn(line as HTMLElement, "board-connector-mask-hole")
+		await expect(
+			holes.map((hole) => attributesOf(hole, ["x", "y", "width", "height"])),
+		).toEqual([[400, 126, 160, 120]])
+		const mask = slotIn(line as HTMLElement, "board-connector-mask")
+		const masked = (
+			line.querySelector('[data-slot="board-connector-path"]') as SVGElement
+		).parentElement as Element
+		await expect(masked.getAttribute("mask")).toBe(`url(#${mask.id})`)
+		await expectArrowAtRest(line)
+	},
+})
+
+export const ArrowCrossingShapeDark = meta.story({
+	globals: { theme: "dark" },
+	args: ArrowCrossingShape.input.args,
+	parameters: arrowDocs("ArrowCrossingShape in the dark theme."),
+	play: async (context) => {
+		await expectDarkSurface(context.canvasElement)
+		await ArrowCrossingShape.input.play?.(context)
 	},
 })
 
