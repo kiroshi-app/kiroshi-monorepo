@@ -63,6 +63,13 @@ type Run = {
 	length: number
 }
 
+type TokenSpan = {
+	from: number
+	to: number
+	insertFrom: number
+	insertTo: number
+}
+
 type Step = {
 	x: number
 	fromDiagonal: number
@@ -112,10 +119,11 @@ const snakeEnd = (before: string[], after: string[], x: number, y: number) => {
 }
 
 const frontierLayers = (before: string[], after: string[]) => {
-	const layers = [Int32Array.of(snakeEnd(before, after, 0, 0))]
 	const isDone = (x: number, diagonal: number) =>
 		x === before.length && x - diagonal === after.length
-	if (isDone(layers[0]?.[0] as number, 0)) {
+	const start = snakeEnd(before, after, 0, 0)
+	const layers = [Int32Array.of(start)]
+	if (isDone(start, 0)) {
 		return layers
 	}
 	for (let d = 1; d <= MAX_EDIT_DISTANCE; d++) {
@@ -155,13 +163,6 @@ const matchedRunsOf = (
 	}
 	runs.push({ before: 0, after: 0, length: x })
 	return runs.reverse()
-}
-
-type TokenSpan = {
-	from: number
-	to: number
-	insertFrom: number
-	insertTo: number
 }
 
 const isLineBreak = (token: string | undefined) =>
