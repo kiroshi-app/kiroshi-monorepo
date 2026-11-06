@@ -6,7 +6,7 @@ const INLINE_LINK = /(?<!!)\[[^\]\n]*\]\(\s*(?:<([^>\n]*)>|([^)\s]*))/g
 
 const DEFINITION = /^ {0,3}\[([^\]\n]+)\]:[ \t]*(?:<([^>\n]*)>|(\S+))/gm
 
-const REFERENCE = /(?<!!)\[([^\]\n]*)\](?:\[([^\]\n]*)\])?(?![(:])/g
+const REFERENCE = /(?<!!)\[([^\]\n]*)\](?:\[([^\]\n]*)\])?(?!\()/g
 
 const BOARD_SUFFIX = /\.canvas$/i
 
