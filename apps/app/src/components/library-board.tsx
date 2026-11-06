@@ -30,6 +30,10 @@ import { boardOriginOf } from "@/lib/library/library-boards"
 import { useLibraryBoardKeys } from "@/lib/library/use-library-board-keys"
 import { useLibraryBoardPresence } from "@/lib/library/use-library-board-presence"
 import { useLibraryBoardSession } from "@/lib/library/use-library-board-session"
+import {
+	type LibraryUrlImport,
+	useLibraryUrlImport,
+} from "@/lib/library/use-library-imports"
 import { useStopLibraryWriters } from "@/lib/library/use-stop-library-writers"
 
 type LibraryBoardProps = {
@@ -49,6 +53,7 @@ type LibraryBoardShelf = {
 	items: readonly BoardLibraryItem[]
 	pickableItems: readonly BoardLibraryItem[]
 	importFiles: (files: readonly File[]) => Promise<LibraryItem[]>
+	importUrl: (url: string) => Promise<LibraryUrlImport>
 }
 
 const NO_LIBRARY_ITEMS = [] as const
@@ -58,10 +63,10 @@ const UNOPENED_VIEW: BoardView = { objects: [] }
 const leaveBoardUnchanged = () => undefined
 
 const NO_ADDITIONS = {
-	pickItem: leaveBoardUnchanged,
-	dropItem: leaveBoardUnchanged,
+	placeItem: leaveBoardUnchanged,
 	paste: leaveBoardUnchanged,
 	dropFiles: leaveBoardUnchanged,
+	dropUrl: leaveBoardUnchanged,
 }
 
 const renderShape = ({ style, text, size }: BoardItem) => (
@@ -131,7 +136,7 @@ export const LibraryBoardCanvas = ({
 				board,
 				libraryItems: library.pickableItems,
 				importFiles: library.importFiles,
-				viewport,
+				importUrl: library.importUrl,
 			})
 		: NO_ADDITIONS
 
@@ -140,10 +145,10 @@ export const LibraryBoardCanvas = ({
 			isConnecting={tool === "connector"}
 			libraryItems={library?.pickableItems ?? NO_LIBRARY_ITEMS}
 			onDropFiles={additions.dropFiles}
-			onDropUrl={leaveBoardUnchanged}
+			onDropUrl={additions.dropUrl}
 			onIntent={board.apply}
-			onLibraryItemDrop={additions.dropItem}
-			onLibraryItemPick={additions.pickItem}
+			onLibraryItemDrop={additions.placeItem}
+			onLibraryItemPick={additions.placeItem}
 			onPaste={additions.paste}
 			onToolChange={pickTool}
 			onViewportChange={setViewport}
@@ -176,6 +181,7 @@ export const LibraryBoard = ({
 	const board = useLibraryBoardSession(spaceId, name)
 	const presence = useLibraryBoardPresence({ spaceId, name, isJoined, bots })
 	const { stopAll } = useStopLibraryWriters(spaceId)
+	const importUrl = useLibraryUrlImport(spaceId)
 	const pickableItems = libraryItems.filter((item) => item.id !== name)
 
 	if (board.hasFailedToOpen) {
@@ -208,7 +214,12 @@ export const LibraryBoard = ({
 			scroller={() => (
 				<LibraryBoardCanvas
 					board={board}
-					library={{ items: libraryItems, pickableItems, importFiles }}
+					library={{
+						items: libraryItems,
+						pickableItems,
+						importFiles,
+						importUrl,
+					}}
 					presence={presence}
 					summary={summary}
 				/>

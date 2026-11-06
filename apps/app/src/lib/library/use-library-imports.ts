@@ -13,9 +13,14 @@ import {
 } from "./library-image-source"
 import { type DroppedFile, toImportingItem } from "./library-items"
 import { libraryQueryKeys } from "./library-query-keys"
-import { importLibraryFile } from "./library-reads"
+import { importLibraryFile, importLibraryUrl } from "./library-reads"
 
-import { commands, type LibraryError, type LibraryItem } from "../bindings"
+import {
+	commands,
+	type LibraryError,
+	type LibraryImportUrlError,
+	type LibraryItem,
+} from "../bindings"
 import { isHostRefused } from "../host/host-refused"
 
 const MIB = 1024 * 1024
@@ -52,25 +57,57 @@ const isWordedImportReason = (kind: unknown): kind is WordedImportReason =>
 const refusalOf = (cause: unknown) =>
 	isHostRefused(cause) ? cause.cause : cause
 
+const refusalKindOf = (refusal: unknown) =>
+	typeof refusal === "object" && refusal !== null
+		? (refusal as { kind?: unknown }).kind
+		: undefined
+
 const importReasonOf = (cause: unknown) => {
-	const refusal = refusalOf(cause)
-	const kind =
-		typeof refusal === "object" && refusal !== null
-			? (refusal as { kind?: unknown }).kind
-			: undefined
+	const kind = refusalKindOf(refusalOf(cause))
 	if (isWordedImportReason(kind)) {
 		return kind
 	}
 	return typeof kind === "string" ? "refused" : "generic"
 }
 
+type ImportReason = ReturnType<typeof importReasonOf>
+
+const URL_IMPORT_REASONS = {
+	unsupportedScheme: "unsupported",
+	privateAddress: "refused",
+	tooLarge: "tooLarge",
+	networkFailure: "generic",
+	unknownSpace: "unknownSpace",
+} as const satisfies Record<
+	Exclude<LibraryImportUrlError["kind"], "notAnImage" | "library">,
+	ImportReason
+>
+
+const isUrlImportReason = (
+	kind: unknown,
+): kind is keyof typeof URL_IMPORT_REASONS =>
+	typeof kind === "string" && Object.hasOwn(URL_IMPORT_REASONS, kind)
+
+const urlImportReasonOf = (cause: unknown) => {
+	const refusal = refusalOf(cause)
+	const kind = refusalKindOf(refusal)
+	if (kind === "library") {
+		return importReasonOf((refusal as { error?: unknown }).error)
+	}
+	return isUrlImportReason(kind)
+		? URL_IMPORT_REASONS[kind]
+		: importReasonOf(cause)
+}
+
 class LibraryImportFailure extends Error {
 	readonly fileName: string
 
-	constructor(fileName: string, cause: unknown) {
-		super(i18n.t(`common:library.failure.import.${importReasonOf(cause)}`), {
-			cause,
-		})
+	constructor(
+		fileName: string,
+		cause: unknown,
+		reason: ImportReason = importReasonOf(cause),
+	) {
+		super(i18n.t(`common:library.failure.import.${reason}`), { cause })
 		this.fileName = fileName
 	}
 }
@@ -189,6 +226,56 @@ export const useLibraryImageSave = (onSaved?: (item: LibraryItem) => void) => {
 			raisedIn: "use-library-imports",
 		},
 	}).mutate
+}
+
+type LandedUrl = { kind: "image"; item: LibraryItem } | { kind: "page" }
+
+export type LibraryUrlImport = LandedUrl | { kind: "failed" }
+
+const FAILED_URL_IMPORT: LibraryUrlImport = { kind: "failed" }
+
+const WEB_URL = /^https?:\/\//i
+
+const urlImportFailureOf = (url: string, cause: unknown) =>
+	new LibraryImportFailure(url, cause, urlImportReasonOf(cause))
+
+const isNotAnImage = (cause: unknown) =>
+	refusalKindOf(refusalOf(cause)) === "notAnImage"
+
+const importUrl = async (spaceId: string, url: string): Promise<LandedUrl> => {
+	if (!WEB_URL.test(url)) {
+		throw urlImportFailureOf(url, { kind: "unsupportedScheme" })
+	}
+	try {
+		return { kind: "image", item: await importLibraryUrl(spaceId, url) }
+	} catch (reason) {
+		if (isNotAnImage(reason)) {
+			return { kind: "page" }
+		}
+		throw urlImportFailureOf(url, reason)
+	}
+}
+
+export const useLibraryUrlImport = (spaceId: string) => {
+	const queryClient = useQueryClient()
+	const { mutateAsync } = useMutation({
+		mutationFn: (url: string) => importUrl(spaceId, url),
+		onSuccess: (landed) =>
+			landed.kind === "image"
+				? queryClient.invalidateQueries({
+						queryKey: libraryQueryKeys.itemsOf(spaceId),
+					})
+				: undefined,
+		meta: {
+			failureNotice: failureNoticeOf,
+			raisedIn: "use-library-imports",
+		},
+	})
+
+	return async (url: string): Promise<LibraryUrlImport> => {
+		const [landed] = await Promise.allSettled([mutateAsync(url)])
+		return landed.status === "fulfilled" ? landed.value : FAILED_URL_IMPORT
+	}
 }
 
 const announceAdded = (count: number) => {

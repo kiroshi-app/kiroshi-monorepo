@@ -31,3 +31,6 @@ export const importLibraryFile = (
 	name: string,
 	content: string,
 ) => invoke<LibraryItem>("library_import", { spaceId, name, content })
+
+export const importLibraryUrl = (spaceId: string, url: string) =>
+	invoke<LibraryItem>("library_import_url", { spaceId, url })

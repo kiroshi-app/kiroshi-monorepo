@@ -2,7 +2,6 @@ import type { BoardLibraryItem } from "@workspace/ui/components/board/board-dock
 import type {
 	BoardPaste,
 	BoardPoint,
-	BoardViewport,
 } from "@workspace/ui/components/board-view"
 
 import type {
@@ -11,10 +10,9 @@ import type {
 	LibraryBoardPlacement,
 } from "./library-board-intents"
 import { readLinkPreview } from "./library-link-preview"
+import type { LibraryUrlImport } from "./use-library-imports"
 
 import type { LibraryItem } from "../bindings"
-
-const BOARD_CANVAS_SELECTOR = '[data-slot="board-canvas"]'
 
 const IMPORTED_OBJECT_STEP = 260
 
@@ -27,7 +25,7 @@ type LibraryBoardAdditionsOptions = {
 	board: LibraryBoardWrites
 	libraryItems: readonly BoardLibraryItem[]
 	importFiles: (files: readonly File[]) => Promise<LibraryItem[]>
-	viewport: BoardViewport
+	importUrl: (url: string) => Promise<LibraryUrlImport>
 }
 
 type NamedKind = {
@@ -40,16 +38,6 @@ const libraryObjectOf = ({ kind, name }: NamedKind): LibraryBoardObject =>
 		? { kind: "image", item: name }
 		: { kind: "libraryCard", item: name }
 
-const visibleCentreOf = ({ offset, zoom }: BoardViewport): BoardPoint => {
-	const canvas = document.querySelector<HTMLElement>(BOARD_CANVAS_SELECTOR)
-	const width = canvas?.clientWidth ?? 0
-	const height = canvas?.clientHeight ?? 0
-	return {
-		x: (width / 2 - offset.x) / zoom,
-		y: (height / 2 - offset.y) / zoom,
-	}
-}
-
 const besideAt = (point: BoardPoint, index: number): BoardPoint => ({
 	x: point.x + index * IMPORTED_OBJECT_STEP,
 	y: point.y,
@@ -59,7 +47,7 @@ export const libraryBoardAdditionsOf = ({
 	board,
 	libraryItems,
 	importFiles,
-	viewport,
+	importUrl,
 }: LibraryBoardAdditionsOptions) => {
 	const placeItem = (id: string, centre: BoardPoint) => {
 		const picked = libraryItems.find((item) => item.id === id)
@@ -92,6 +80,26 @@ export const libraryBoardAdditionsOf = ({
 		return leadId
 	}
 
+	const placeLanded =
+		(url: string, point: BoardPoint) => (landed: LibraryUrlImport) => {
+			switch (landed.kind) {
+				case "image":
+					board.place({
+						id: crypto.randomUUID(),
+						object: libraryObjectOf(landed.item),
+						centre: point,
+					})
+					return
+				case "page":
+					placeLink(url, point)
+					return
+			}
+		}
+
+	const dropUrl = (url: string, point: BoardPoint) => {
+		void importUrl(url).then(placeLanded(url, point))
+	}
+
 	const paste = (pasted: BoardPaste, point: BoardPoint) => {
 		switch (pasted.kind) {
 			case "link":
@@ -104,9 +112,9 @@ export const libraryBoardAdditionsOf = ({
 	}
 
 	return {
-		pickItem: (id: string) => placeItem(id, visibleCentreOf(viewport)),
-		dropItem: placeItem,
+		placeItem,
 		paste,
 		dropFiles: importAndPlace,
+		dropUrl,
 	}
 }
