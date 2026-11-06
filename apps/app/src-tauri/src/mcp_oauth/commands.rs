@@ -337,7 +337,7 @@ pub async fn application_rows(
 ) -> Result<Vec<ApplicationRow>, EnvError> {
 	let root = writable_root(&core)?;
 	let servers = declared_servers(&core, &owner)?;
-	let handle = core.clone();
+	let refreshing = core.clone();
 	renewed_rows(
 		&root,
 		&owner,
@@ -346,8 +346,8 @@ pub async fn application_rows(
 		&core.state::<ApplicationReports>(),
 		&core.state::<AuthorizationAnswers>(),
 		move |request| {
-			let handle = handle.clone();
-			async move { refreshed(&handle, request).await }
+			let core = refreshing.clone();
+			async move { refreshed(&core, request).await }
 		},
 	)
 	.await

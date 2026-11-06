@@ -16,7 +16,6 @@ const RANDOM_PARTS: usize = 3;
 
 #[derive(Debug)]
 pub enum TokenError {
-	NoDataDir,
 	Unreadable(std::io::Error),
 	Unwritable(std::io::Error),
 	Blank,
