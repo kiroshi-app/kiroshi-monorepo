@@ -257,6 +257,8 @@ const isActionShownOn = (
 
 type LibraryOpeningStateProps = {
 	spaceId: string
+	isJoined: boolean
+	bots: Bot[]
 	opening: LibraryOpening
 	boardSummary: LibraryBoardSummary | undefined
 	libraryItems: readonly BoardLibraryItem[]
@@ -271,6 +273,8 @@ type LibraryOpeningStateProps = {
 type LibraryBoardOpeningProps = Pick<
 	LibraryOpeningStateProps,
 	| "spaceId"
+	| "isJoined"
+	| "bots"
 	| "opening"
 	| "boardSummary"
 	| "libraryItems"
@@ -281,6 +285,8 @@ type LibraryBoardOpeningProps = Pick<
 
 const LibraryBoardOpening = ({
 	spaceId,
+	isJoined,
+	bots,
 	opening: { name },
 	boardSummary,
 	libraryItems,
@@ -289,7 +295,9 @@ const LibraryBoardOpening = ({
 	onDelete,
 }: LibraryBoardOpeningProps) => (
 	<LibraryBoard
+		bots={bots}
 		importFiles={importFiles}
+		isJoined={isJoined}
 		key={name}
 		libraryItems={libraryItems}
 		name={name}
@@ -549,8 +557,10 @@ export const LibraryScreen = ({
 		return (
 			<LibraryOpeningState
 				boardSummary={openedBoard.summary}
+				bots={bots}
 				hasFailedToRead={hasFailedToRead}
 				importFiles={importDropped}
+				isJoined={isJoined}
 				isMissing={isMissing}
 				libraryItems={library.items.map(toShown).map(toBoardLibraryItem)}
 				onBackToLibrary={close}
