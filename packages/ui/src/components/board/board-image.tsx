@@ -14,6 +14,7 @@ const BoardImage = ({ src, alt, width, height, source }: BoardImageProps) => {
 			alt={alt}
 			className="rounded-sm object-cover shadow-board-sticky"
 			data-slot="board-image"
+			draggable={false}
 			height={height}
 			src={src}
 			style={{ width, height }}

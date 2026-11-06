@@ -1646,14 +1646,14 @@ const dragFiles = (
 	transfer: DataTransfer,
 	at: BoardClientPoint,
 ) => {
-	board.dispatchEvent(
-		new DragEvent(type, {
-			bubbles: true,
-			cancelable: true,
-			dataTransfer: transfer,
-			...at,
-		}),
-	)
+	const event = new DragEvent(type, {
+		bubbles: true,
+		cancelable: true,
+		dataTransfer: transfer,
+		...at,
+	})
+	board.dispatchEvent(event)
+	return event
 }
 
 const GHOST_TILTS = ["-3deg", "2deg", "7deg"]
@@ -1867,11 +1867,45 @@ const playUrlDraggedOver = async ({
 	)
 	await expect(args.onDropUrl).toHaveBeenCalledTimes(1)
 
+	const fromBoard = dragging()
+	slotIn(board, "board-image").dispatchEvent(
+		new DragEvent("dragstart", {
+			bubbles: true,
+			cancelable: true,
+			dataTransfer: fromBoard,
+		}),
+	)
+	await expect(
+		dragFiles("dragover", board, fromBoard, at).defaultPrevented,
+	).toBe(false)
+	await expect(dropState()).toBeNull()
+	dragFiles("drop", board, fromBoard, at)
+	await expect(dropState()).toBeNull()
+	await expect(args.onDropUrl).toHaveBeenCalledTimes(1)
+	await expect(args.onDropFiles).toHaveBeenCalledTimes(1)
+
 	dragFiles("dragover", board, dragging(), at)
 	await waitFor(() => expect(dropState()).not.toBeNull())
 }
 
+const URL_DRAG_ARGS = {
+	view: {
+		objects: [
+			{
+				id: "terrace",
+				kind: "image",
+				position: { x: 40, y: 40 },
+				size: PASTED_IMAGE_SIZE,
+				zOrder: 1,
+				text: "terrace-at-dusk.png",
+			} satisfies BoardItem,
+		],
+	},
+	renderObject: (object: BoardItem) => <BoardObjectView object={object} />,
+}
+
 export const UrlDraggedOver = meta.story({
+	args: URL_DRAG_ARGS,
 	parameters: {
 		docs: {
 			description: {
@@ -1884,6 +1918,7 @@ export const UrlDraggedOver = meta.story({
 })
 
 export const UrlDraggedOverDark = meta.story({
+	args: URL_DRAG_ARGS,
 	globals: { theme: "dark" },
 	play: playUrlDraggedOver,
 })

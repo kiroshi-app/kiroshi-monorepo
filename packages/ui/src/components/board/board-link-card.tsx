@@ -19,6 +19,7 @@ const BoardLinkCard = ({
 			alt=""
 			className="h-18 w-full bg-board-card-inset object-cover"
 			data-slot="board-link-card-preview"
+			draggable={false}
 			src={preview}
 		/>
 		<div className="flex min-w-0 flex-col gap-1 p-3">

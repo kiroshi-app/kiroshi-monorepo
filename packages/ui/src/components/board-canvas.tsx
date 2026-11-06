@@ -687,11 +687,13 @@ const BoardFileDropState = ({ kinds, at }: BoardFileDrag) => {
 }
 
 const URL_LIST = "text/uri-list"
+const FROM_THIS_BOARD = "application/x-kiroshi-board"
 
 const isFileDrag = (transfer: DataTransfer) => transfer.types.includes("Files")
 
 const isBoardDrop = (transfer: DataTransfer) =>
-	isFileDrag(transfer) || transfer.types.includes(URL_LIST)
+	!transfer.types.includes(FROM_THIS_BOARD) &&
+	(isFileDrag(transfer) || transfer.types.includes(URL_LIST))
 
 const fileKindsOf = (transfer: DataTransfer): BoardFileKind[] =>
 	Array.from(transfer.items)
@@ -1147,6 +1149,9 @@ const ReadyBoardCanvas = ({
 		})
 	}
 
+	const markDragFromBoard = (event: DragEvent<HTMLDivElement>) =>
+		event.dataTransfer.setData(FROM_THIS_BOARD, "true")
+
 	const leaveWithDrag = (event: DragEvent<HTMLDivElement>) => {
 		if (event.currentTarget.contains(event.relatedTarget as Node | null)) return
 		setFileDrag(null)
@@ -1241,6 +1246,7 @@ const ReadyBoardCanvas = ({
 			onDragEnter={dragOver}
 			onDragLeave={leaveWithDrag}
 			onDragOver={dragOver}
+			onDragStart={markDragFromBoard}
 			onDrop={drop}
 			onKeyDown={pressKey}
 			onPaste={paste}
