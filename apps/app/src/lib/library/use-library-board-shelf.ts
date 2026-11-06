@@ -33,18 +33,13 @@ export const useLibraryBoardShelf = ({
 	const sourceOf = useLibraryImageSources(spaceId, library.items, isJoined)
 	const { importDropped } = useLibraryImports(spaceId, isJoined)
 	const importUrl = useLibraryUrlImport(spaceId)
+	const contentOf = (item: LibraryItem) => ({
+		excerpt: library.excerptOf(item),
+		src: sourceOf(item),
+		summary: library.summaryOf(item),
+	})
 	const items = library.items.map((item) =>
-		toBoardLibraryItem(
-			toShownItem(
-				item,
-				{
-					excerpt: library.excerptOf(item),
-					src: sourceOf(item),
-					summary: library.summaryOf(item),
-				},
-				library.readAt,
-			),
-		),
+		toBoardLibraryItem(toShownItem(item, contentOf(item), library.readAt)),
 	)
 
 	return {
