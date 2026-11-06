@@ -211,6 +211,10 @@ impl<R: Runtime> Desktop for TauriDesktop<R> {
 	fn open_url(&self, url: &str) -> Result<(), String> {
 		self.0.opener().open_url(url, None::<&str>).map_err(|failure| failure.to_string())
 	}
+
+	fn raise_main_window(&self) {
+		window_controls::raise_main(&self.0);
+	}
 }
 
 pub fn core<R: Runtime>(app: &AppHandle<R>) -> &Core {

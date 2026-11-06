@@ -3,7 +3,6 @@ use std::future::Future;
 
 use serde::Deserialize;
 use serde_json::{json, Value};
-use tauri::{AppHandle, Manager, Runtime};
 use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::broadcast::Receiver;
 
@@ -23,24 +22,24 @@ struct HeardEvent {
 	payload: Value,
 }
 
-pub(super) async fn asked<R: Runtime>(
-	app: &AppHandle<R>,
+pub(super) async fn asked(
+	core: &crate::core_context::Core,
 	id: String,
 	name: String,
 	colour: Option<i64>,
 ) -> Result<JoinedSpace, JoinedSpaceError> {
-	let SharedSpace { space_id, link } = relay::shared_space(app, &id).await?;
+	let SharedSpace { space_id, link } = relay::shared_space(core, &id).await?;
 	let args = json!({ "id": space_id, "name": name, "colour": colour });
-	let bound = crate::events::core(app.app_handle()).state::<RelayGuests>().answer_bound();
+	let bound = core.state::<RelayGuests>().answer_bound();
 	let call = HostCall { command: SPACE_UPDATE_COMMAND, args, bound };
-	let space = space_answered(&id, relay::host_answered(app, &id, &link, call).await?)?;
+	let space = space_answered(&id, relay::host_answered(core, &id, &link, call).await?)?;
 	let described = SpaceDescribed { space_id: space.id, name: space.name, colour: space.colour };
-	relay::description_adopted(app, &id, described).await?;
-	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
+	relay::description_adopted(core, &id, described).await?;
+	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	let stored = database.joined_spaces().find(id.clone()).await?;
 	let stored = stored.ok_or(JoinedSpaceError::UnknownJoinedSpace { id })?;
-	presented(app, database, stored).await
+	presented(core, database, stored).await
 }
 
 fn space_answered(id: &str, Answer { status, body }: Answer) -> Result<Space, JoinedSpaceError> {
@@ -59,8 +58,8 @@ fn space_answered(id: &str, Answer { status, body }: Answer) -> Result<Space, Jo
 	})
 }
 
-pub(super) fn alongside<R: Runtime>(
-	app: AppHandle<R>,
+pub(super) fn alongside(
+	core: crate::core_context::Core,
 	id: String,
 	link: &MemberLink,
 	linked: impl Future<Output = ()>,
@@ -69,20 +68,20 @@ pub(super) fn alongside<R: Runtime>(
 	async move {
 		tokio::select! {
 			() = linked => {}
-			never = followed(&app, &id, heard) => match never {},
+			never = followed(&core, &id, heard) => match never {},
 		}
 	}
 }
 
-async fn followed<R: Runtime>(
-	app: &AppHandle<R>,
+async fn followed(
+	core: &crate::core_context::Core,
 	id: &str,
 	heard: Option<Receiver<Frame>>,
 ) -> Infallible {
 	if let Some(mut heard) = heard {
 		loop {
 			match heard.recv().await {
-				Ok(frame) => adopted_if_described(app, id, &frame).await,
+				Ok(frame) => adopted_if_described(core, id, &frame).await,
 				Err(RecvError::Lagged(missed)) => log::warn!(
 					"joined space {id} missed {missed} events of its host: its name and hue wait for the next reconciliation"
 				),
@@ -93,11 +92,11 @@ async fn followed<R: Runtime>(
 	std::future::pending().await
 }
 
-async fn adopted_if_described<R: Runtime>(app: &AppHandle<R>, id: &str, frame: &str) {
+async fn adopted_if_described(core: &crate::core_context::Core, id: &str, frame: &str) {
 	let Some(described) = described_in(id, frame) else {
 		return;
 	};
-	if let Err(failure) = relay::description_adopted(app, id, described).await {
+	if let Err(failure) = relay::description_adopted(core, id, described).await {
 		log::warn!("joined space {id} did not take the name and hue of its host: {failure:?}");
 	}
 }

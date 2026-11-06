@@ -7,8 +7,8 @@ use crate::hosting::authorship::Caller;
 use super::contract::{is_reserved, ConnectionKind, EnvEntry, EnvError, EnvScope};
 use super::{connection, store};
 
-pub fn writable_root<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, EnvError> {
-	store::root(app).ok_or_else(|| EnvError::Unwritable {
+pub fn writable_root(core: &crate::core_context::Core) -> Result<PathBuf, EnvError> {
+	store::root(core).ok_or_else(|| EnvError::Unwritable {
 		detail: "the application data directory is unavailable".to_owned(),
 	})
 }
@@ -21,7 +21,7 @@ pub async fn env_set<R: Runtime>(
 	name: String,
 	value: String,
 ) -> Result<(), EnvError> {
-	set_by_the_person(&writable_root(&app)?, &scope, &name, &value)
+	set_by_the_person(&writable_root(crate::events::core(&app))?, &scope, &name, &value)
 }
 
 fn set_by_the_person(
@@ -43,7 +43,7 @@ pub async fn env_delete<R: Runtime>(
 	scope: EnvScope,
 	name: String,
 ) -> Result<(), EnvError> {
-	store::delete(&writable_root(&app)?, &scope, &name)
+	store::delete(&writable_root(crate::events::core(&app))?, &scope, &name)
 }
 
 #[tauri::command]
@@ -53,7 +53,7 @@ pub async fn env_list<R: Runtime>(
 	caller: Caller,
 	scope: EnvScope,
 ) -> Result<Vec<EnvEntry>, EnvError> {
-	let listed = store::list(&writable_root(&app)?, &scope)?;
+	let listed = store::list(&writable_root(crate::events::core(&app))?, &scope)?;
 	if !caller.is_relayed() {
 		return Ok(listed);
 	}
@@ -70,7 +70,7 @@ pub async fn connection_set<R: Runtime>(
 	kind: ConnectionKind,
 	value: String,
 ) -> Result<(), EnvError> {
-	connection::hold(&writable_root(&app)?, kind, &value)
+	connection::hold(&writable_root(crate::events::core(&app))?, kind, &value)
 }
 
 #[cfg(test)]

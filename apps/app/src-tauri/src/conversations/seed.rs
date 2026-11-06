@@ -2,8 +2,6 @@ use std::fs;
 use std::io::ErrorKind;
 use std::path::Path;
 
-use tauri::{AppHandle, Runtime};
-
 use super::commands::{create_bundled_bot, CODER_JOB};
 use super::contract::{BotIdentity, TranscriptStoreError};
 use crate::avatars;
@@ -70,12 +68,12 @@ impl From<DatabaseError> for Refusal {
 	}
 }
 
-pub(super) async fn plant_first_companion<R: Runtime>(
-	app: &AppHandle<R>,
+pub(super) async fn plant_first_companion(
+	core: &crate::core_context::Core,
 	database: &db::Database,
 	mut unlaid: Vec<String>,
 ) {
-	let created = match seed(app, database).await {
+	let created = match seed(core, database).await {
 		Ok(created) => created,
 		Err(refusal) => {
 			unlaid.push(refusal.reason());
@@ -84,12 +82,12 @@ pub(super) async fn plant_first_companion<R: Runtime>(
 	};
 	backfill_shoto_title(database).await;
 	backfill_coder_title(database).await;
-	retire_shoto_connect_skill(app, database).await;
-	launch::settle(app, created, unlaid);
+	retire_shoto_connect_skill(core, database).await;
+	launch::settle(core, created, unlaid);
 }
 
-async fn retire_shoto_connect_skill<R: Runtime>(app: &AppHandle<R>, database: &db::Database) {
-	let Some(root) = bundles::root(app) else {
+async fn retire_shoto_connect_skill(core: &crate::core_context::Core, database: &db::Database) {
+	let Some(root) = bundles::root(core) else {
 		return;
 	};
 	let shoto_id = match database.user().preferences().await {
@@ -119,8 +117,8 @@ async fn backfill_coder_title(database: &db::Database) {
 	}
 }
 
-async fn seed<R: Runtime>(
-	app: &AppHandle<R>,
+async fn seed(
+	core: &crate::core_context::Core,
 	database: &db::Database,
 ) -> Result<Option<CompanionCreated>, Refusal> {
 	if database.user().is_first_companion_seeded().await? {
@@ -130,7 +128,7 @@ async fn seed<R: Runtime>(
 		adopt(database).await?;
 		return Ok(None);
 	}
-	plant(app, database).await.map(Some)
+	plant(core, database).await.map(Some)
 }
 
 async fn adopt(database: &db::Database) -> Result<(), Refusal> {
@@ -138,12 +136,12 @@ async fn adopt(database: &db::Database) -> Result<(), Refusal> {
 	Ok(database.user().mark_first_companion_seeded().await?)
 }
 
-async fn plant<R: Runtime>(
-	app: &AppHandle<R>,
+async fn plant(
+	core: &crate::core_context::Core,
 	database: &db::Database,
 ) -> Result<CompanionCreated, Refusal> {
-	let dir = avatars::Avatars::dir(app).ok_or(Refusal::NoDataDir)?;
-	let root = bundles::root(app).ok_or(Refusal::NoDataDir)?;
+	let dir = avatars::Avatars::dir(core).ok_or(Refusal::NoDataDir)?;
+	let root = bundles::root(core).ok_or(Refusal::NoDataDir)?;
 	if !holds_personal_space(database).await? {
 		return Err(Refusal::NoPersonalSpace);
 	}
@@ -153,7 +151,8 @@ async fn plant<R: Runtime>(
 		return Err(withdrawn(database, rejection.into(), None, &path).await);
 	}
 
-	let created = match create_bundled_bot(app, database, identity(&path), personal_space()).await {
+	let created = match create_bundled_bot(core, database, identity(&path), personal_space()).await
+	{
 		Ok(created) => created,
 		Err(failure) => return Err(withdrawn(database, failure.into(), None, &path).await),
 	};
@@ -293,7 +292,7 @@ mod tests {
 	}
 
 	async fn seeded(app: &App<MockRuntime>, database: &db::Database) {
-		plant_first_companion(app.handle(), database, Vec::new()).await;
+		plant_first_companion(crate::events::core(app.handle()), database, Vec::new()).await;
 	}
 
 	async fn planted(app: &App<MockRuntime>, database: &db::Database) -> Vec<StoredBot> {
@@ -366,8 +365,11 @@ mod tests {
 	}
 
 	fn bundle_of(app: &App<MockRuntime>, bot: &StoredBot) -> PathBuf {
-		bundles::dir(&bundles::root(app.handle()).expect("the bundle root"), &bot.id)
-			.expect("the bundle is held")
+		bundles::dir(
+			&bundles::root(crate::events::core(app.handle())).expect("the bundle root"),
+			&bot.id,
+		)
+		.expect("the bundle is held")
 	}
 
 	fn skill_body(bundle: &Path, id: &str) -> Vec<u8> {
@@ -459,7 +461,7 @@ mod tests {
 			.manage::<db::DatabaseState>(Err(DatabaseError::AppDataDir));
 		let refused = heard(&app, SEED_REFUSED_EVENT);
 
-		list_bundles_at_launch(app.handle()).await;
+		list_bundles_at_launch(crate::events::core(app.handle())).await;
 
 		let outcome = outcome_of(&app);
 		assert_eq!(outcome.created, None);
@@ -471,9 +473,12 @@ mod tests {
 	#[tokio::test]
 	async fn a_plugin_not_laid_down_before_the_seed_is_named_beside_the_planted_shoto() {
 		let app = a_host("unlaid");
-		a_file_standing_at(&bundles::system::path(app.handle()).expect("the system plugin path"));
+		a_file_standing_at(
+			&bundles::system::path(crate::events::core(app.handle()))
+				.expect("the system plugin path"),
+		);
 
-		list_bundles_at_launch(app.handle()).await;
+		list_bundles_at_launch(crate::events::core(app.handle())).await;
 
 		let outcome = outcome_of(&app);
 		assert_eq!(outcome.created.map(|created| created.name), Some(shoto::NAME.to_owned()));
@@ -485,7 +490,8 @@ mod tests {
 	async fn the_picture_shoto_wears_is_the_embedded_one_the_pipeline_answered() {
 		let app = a_host("picture");
 		let database = database_of(&app);
-		let dir = avatars::Avatars::dir(app.handle()).expect("the avatars directory");
+		let dir = avatars::Avatars::dir(crate::events::core(app.handle()))
+			.expect("the avatars directory");
 
 		let roster = planted(&app, database).await;
 
@@ -587,7 +593,9 @@ mod tests {
 	async fn a_bundle_that_cannot_be_written_leaves_no_row_no_picture_and_no_marker() {
 		let app = a_host("unwritable");
 		let database = database_of(&app);
-		a_file_standing_at(&bundles::root(app.handle()).expect("the bundle root"));
+		a_file_standing_at(
+			&bundles::root(crate::events::core(app.handle())).expect("the bundle root"),
+		);
 		let refused = heard(&app, SEED_REFUSED_EVENT);
 
 		seeded(&app, database).await;
@@ -596,7 +604,8 @@ mod tests {
 		assert!(!database.user().is_first_companion_seeded().await.expect("the marker"));
 		let preferences = database.user().preferences().await.expect("the preferences");
 		assert_eq!(preferences.onboarding_shoto_id, None);
-		let dir = avatars::Avatars::dir(app.handle()).expect("the avatars directory");
+		let dir = avatars::Avatars::dir(crate::events::core(app.handle()))
+			.expect("the avatars directory");
 		assert_eq!(fs::read_dir(&dir).expect("the directory reads").count(), 0);
 		let reasons = payloads::<CompanionSeedRefused>(&refused);
 		assert_eq!(reasons.len(), 1, "got {reasons:?}");
@@ -607,7 +616,8 @@ mod tests {
 	async fn a_picture_that_cannot_be_written_leaves_no_row_and_no_marker_and_is_announced() {
 		let app = a_host("pictureless");
 		let database = database_of(&app);
-		let dir = avatars::Avatars::dir(app.handle()).expect("the avatars directory");
+		let dir = avatars::Avatars::dir(crate::events::core(app.handle()))
+			.expect("the avatars directory");
 		a_file_standing_at(&dir);
 		let refused = heard(&app, SEED_REFUSED_EVENT);
 
@@ -634,7 +644,7 @@ mod tests {
 
 		assert_eq!(roster.len(), 1, "a second companion was planted");
 		assert_ne!(roster[0].name, shoto::NAME);
-		let root = bundles::root(app.handle()).expect("the bundle root");
+		let root = bundles::root(crate::events::core(app.handle())).expect("the bundle root");
 		assert!(
 			bundles::lookup(&root, &roster[0].id).expect("the plugins list").is_none(),
 			"a bundle was written"
@@ -789,7 +799,12 @@ mod tests {
 		)
 		.await;
 
-		plant_first_companion(app.handle(), database, vec!["unlaid".to_owned()]).await;
+		plant_first_companion(
+			crate::events::core(app.handle()),
+			database,
+			vec!["unlaid".to_owned()],
+		)
+		.await;
 
 		assert_eq!(
 			outcome_of(&app).refused,

@@ -4,7 +4,6 @@ use std::path::{Path, PathBuf};
 use std::sync::{LazyLock, Mutex, MutexGuard, PoisonError};
 
 use serde::Deserialize;
-use tauri::{AppHandle, Manager, Runtime};
 
 use crate::db::repositories::conversations::{Bot, Hue};
 use crate::descriptors;
@@ -215,8 +214,8 @@ fn serialised_both(
 	(serialised(first), Some(serialised(second)))
 }
 
-pub fn root<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
-	Some(crate::events::core(app.app_handle()).data_dir().join(DIR_NAME))
+pub fn root(core: &crate::core_context::Core) -> Option<PathBuf> {
+	Some(core.data_dir().join(DIR_NAME))
 }
 
 pub fn lookup(root: &Path, bot_id: &str) -> std::io::Result<Option<PathBuf>> {

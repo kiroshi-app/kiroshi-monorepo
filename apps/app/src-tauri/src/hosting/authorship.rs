@@ -7,7 +7,7 @@ use specta::datatype::DataType;
 use specta::function::FunctionArg;
 use specta::Types;
 use tauri::ipc::{CommandArg, CommandItem, InvokeError};
-use tauri::{AppHandle, Manager, Runtime};
+use tauri::{Manager, Runtime};
 use uuid::Uuid;
 
 use super::contract::{Member, MemberStatus, MembersError, SpaceMembers};
@@ -108,36 +108,34 @@ impl Caller {
 		}
 	}
 
-	pub async fn author<R: Runtime>(
+	pub async fn author(
 		self,
-		app: &AppHandle<R>,
+		core: &crate::core_context::Core,
 		database: &Database,
 	) -> Result<AccountAuthor, DatabaseError> {
 		match self {
 			Caller::Host => {
 				let computer = Some(this_computer().await.to_owned());
-				Ok(AccountAuthor { computer, ..host_author(app, database).await? })
+				Ok(AccountAuthor { computer, ..host_author(core, database).await? })
 			}
 			Caller::Relayed(None) => Ok(AccountAuthor::default()),
-			Caller::Relayed(Some(member)) => member_author(app, database, member).await,
+			Caller::Relayed(Some(member)) => member_author(core, database, member).await,
 		}
 	}
 }
 
-fn signed_in_account<R: Runtime>(app: &AppHandle<R>) -> Option<KiroshiAccount> {
-	crate::events::core(app.app_handle()).try_state::<AccountSession>().and_then(|session| {
-		match session.current() {
-			AccountState::SignedIn(account) => Some(account),
-			_ => None,
-		}
+fn signed_in_account(core: &crate::core_context::Core) -> Option<KiroshiAccount> {
+	core.try_state::<AccountSession>().and_then(|session| match session.current() {
+		AccountState::SignedIn(account) => Some(account),
+		_ => None,
 	})
 }
 
-async fn host_author<R: Runtime>(
-	app: &AppHandle<R>,
+async fn host_author(
+	core: &crate::core_context::Core,
 	database: &Database,
 ) -> Result<AccountAuthor, DatabaseError> {
-	let account = signed_in_account(app);
+	let account = signed_in_account(core);
 	let email = account.as_ref().map(|account| account.email.clone());
 	Ok(AccountAuthor {
 		name: host_display_name(database).await?.or_else(|| email.clone()),
@@ -152,18 +150,18 @@ async fn host_display_name(database: &Database) -> Result<Option<String>, Databa
 	Ok(Some(display_name).filter(|name| !name.is_empty()))
 }
 
-pub async fn members_of<R: Runtime>(
-	app: &AppHandle<R>,
+pub async fn members_of(
+	core: &crate::core_context::Core,
 	database: &Database,
 	space_id: &str,
 ) -> Result<Vec<SpaceMember>, DatabaseError> {
-	let Some(members) = hosted_members(app, space_id).await else {
+	let Some(members) = hosted_members(core, space_id).await else {
 		return Ok(Vec::new());
 	};
 	if !members.iter().any(|member| member.status == MemberStatus::Joined) {
 		return Ok(Vec::new());
 	}
-	let host_account_id = signed_in_account(app).map(|account| account.id);
+	let host_account_id = signed_in_account(core).map(|account| account.id);
 	let mut read_by = Vec::new();
 	for member in members.into_iter().filter(|member| member.status != MemberStatus::Pending) {
 		let name = if host_account_id.as_deref() == Some(member.user_id.as_str()) {
@@ -177,8 +175,8 @@ pub async fn members_of<R: Runtime>(
 	Ok(read_by)
 }
 
-async fn hosted_members<R: Runtime>(app: &AppHandle<R>, space_id: &str) -> Option<Vec<Member>> {
-	let hosting = crate::events::core(app.app_handle()).try_state::<Hosting>()?;
+async fn hosted_members(core: &crate::core_context::Core, space_id: &str) -> Option<Vec<Member>> {
+	let hosting = core.try_state::<Hosting>()?;
 	let known = {
 		let hosts = hosting.hosts();
 		let host = hosts.get(space_id).filter(|host| host.state.is_running())?;
@@ -187,7 +185,7 @@ async fn hosted_members<R: Runtime>(app: &AppHandle<R>, space_id: &str) -> Optio
 	if known.is_some() {
 		return known;
 	}
-	listed_within_bound(space_id, members::list(app, space_id.to_owned())).await
+	listed_within_bound(space_id, members::list(core, space_id.to_owned())).await
 }
 
 async fn listed_within_bound(
@@ -211,22 +209,22 @@ async fn listed_within_bound(
 	}
 }
 
-async fn member_author<R: Runtime>(
-	app: &AppHandle<R>,
+async fn member_author(
+	core: &crate::core_context::Core,
 	database: &Database,
 	member: RelayedMember,
 ) -> Result<AccountAuthor, DatabaseError> {
 	let is_the_host_account =
-		signed_in_account(app).is_some_and(|account| account.id == member.user_id);
+		signed_in_account(core).is_some_and(|account| account.id == member.user_id);
 	if is_the_host_account {
 		return Ok(AccountAuthor {
 			computer: member.computer,
-			..host_author(app, database).await?
+			..host_author(core, database).await?
 		});
 	}
-	let listed = match known_member(app, &member) {
+	let listed = match known_member(core, &member) {
 		Some(listed) => Some(listed),
-		None => listed_member(app, &member).await,
+		None => listed_member(core, &member).await,
 	};
 	Ok(AccountAuthor {
 		account_id: Some(member.user_id),
@@ -238,15 +236,15 @@ async fn member_author<R: Runtime>(
 	})
 }
 
-fn known_member<R: Runtime>(app: &AppHandle<R>, member: &RelayedMember) -> Option<Member> {
-	let hosting = crate::events::core(app.app_handle()).state::<Hosting>();
+fn known_member(core: &crate::core_context::Core, member: &RelayedMember) -> Option<Member> {
+	let hosting = core.state::<Hosting>();
 	let hosts = hosting.hosts();
 	let known = hosts.get(&member.space_id)?.members.as_ref()?;
 	member_among(&known.members, &member.user_id)
 }
 
-async fn listed_member<R: Runtime>(app: &AppHandle<R>, member: &RelayedMember) -> Option<Member> {
-	match members::list(app, member.space_id.clone()).await {
+async fn listed_member(core: &crate::core_context::Core, member: &RelayedMember) -> Option<Member> {
+	match members::list(core, member.space_id.clone()).await {
 		Ok(listed) => member_among(&listed.members, &member.user_id),
 		Err(failure) => {
 			log::warn!(

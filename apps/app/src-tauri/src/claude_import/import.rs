@@ -1,8 +1,6 @@
 use std::fs;
 use std::path::Path;
 
-use tauri::{AppHandle, Runtime};
-
 use super::contract::{
 	ClaudeImportOutcome, ClaudeImportProgress, ClaudeImportResult, ClaudeImportSkip,
 };
@@ -18,8 +16,8 @@ const CLAUDE_MD_DESCRIPTION: &str = "The person's own instructions, carried over
 const FINDER_LITTER: &str = ".DS_Store";
 const IMPORT_REASON: &str = "imported from Claude Code";
 
-pub(super) struct Importer<'a, R: Runtime> {
-	pub(super) app: &'a AppHandle<R>,
+pub(super) struct Importer<'a> {
+	pub(super) core: &'a crate::core_context::Core,
 	pub(super) database: &'a db::Database,
 	pub(super) root: &'a Path,
 	pub(super) person: Option<&'a Path>,
@@ -65,7 +63,7 @@ impl From<TranscriptStoreError> for Unimported {
 	}
 }
 
-impl<R: Runtime> Importer<'_, R> {
+impl Importer<'_> {
 	pub(super) async fn run(
 		&self,
 		selection: Vec<String>,
@@ -88,7 +86,7 @@ impl<R: Runtime> Importer<'_, R> {
 			};
 			let progress =
 				ClaudeImportProgress { key: key.clone(), result: result.clone(), done, total };
-			launch::announce(self.app, CLAUDE_IMPORT_PROGRESS, progress);
+			launch::announce(self.core, CLAUDE_IMPORT_PROGRESS, progress);
 			outcomes.push(ClaudeImportOutcome { key, result });
 		}
 		Ok(outcomes)
@@ -135,7 +133,7 @@ impl<R: Runtime> Importer<'_, R> {
 			description: fronted.body,
 		};
 		let created =
-			create_drafted_bot(self.app, self.database, draft, self.space_id.to_owned()).await?;
+			create_drafted_bot(self.core, self.database, draft, self.space_id.to_owned()).await?;
 		Ok(Created { id: created.id, name: created.name })
 	}
 

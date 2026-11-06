@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use tauri::{AppHandle, Manager, Runtime, State};
+use tauri::{AppHandle, Runtime, State};
 
 use super::super::contract::{Bot, BotDraft, BotIdentity, Hue, SuggestedBot, TranscriptStoreError};
 use super::super::seed;
@@ -59,8 +59,8 @@ pub(crate) fn ready(state: &db::DatabaseState) -> Result<&db::Database, Transcri
 	state.as_ref().map_err(|failure| TranscriptStoreError::Unavailable { failure: failure.into() })
 }
 
-async fn write_bundle<R: Runtime>(
-	app: &AppHandle<R>,
+async fn write_bundle(
+	core: &crate::core_context::Core,
 	database: &db::Database,
 	bot: &StoredBot,
 	output_style: &str,
@@ -68,9 +68,9 @@ async fn write_bundle<R: Runtime>(
 ) -> Result<StoredBot, TranscriptStoreError> {
 	let accepted = permissions.clone().accepted();
 	let ruled = database.conversations().set_permissions(bot.id.clone(), accepted.clone()).await?;
-	let root = bundles::root(app);
+	let root = bundles::root(core);
 	if let Some(root) = root.as_deref() {
-		let effort = written_effort(app, bot).await;
+		let effort = written_effort(core, bot).await;
 		bundles::lay_down(root, bot).map_err(unwritable)?;
 		bundles::set_permissions(root, bot, &accepted).map_err(unwritable)?;
 		bundles::write_styled(root, bot, output_style, effort).map_err(unwritable)?;
@@ -79,11 +79,11 @@ async fn write_bundle<R: Runtime>(
 	Ok(ruled)
 }
 
-async fn written_effort<R: Runtime>(
-	app: &AppHandle<R>,
+async fn written_effort(
+	core: &crate::core_context::Core,
 	bot: &StoredBot,
 ) -> Option<bundles::EffortLevel> {
-	let supported = supported_effort_levels(app, &bot.model).await;
+	let supported = supported_effort_levels(core, &bot.model).await;
 	bundles::supported_effort(bot.effort, supported.as_deref())
 }
 
@@ -109,30 +109,30 @@ async fn forget_bundle(root: Option<&Path>, database: &db::Database, bot_id: &st
 	list_bundles(root, database).await;
 }
 
-pub async fn list_bundles_at_launch<R: Runtime>(app: &AppHandle<R>) {
-	let mut unlaid = lay_down_host_plugins(app);
-	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
+pub async fn list_bundles_at_launch(core: &crate::core_context::Core) {
+	let mut unlaid = lay_down_host_plugins(core);
+	let state = core.state::<db::DatabaseState>();
 	let database = match state.inner().as_ref() {
 		Ok(database) => database,
 		Err(failure) => {
 			unlaid.push(format!("the database could not be reached: {failure:?}"));
-			launch::settle(app, None, unlaid);
+			launch::settle(core, None, unlaid);
 			return;
 		}
 	};
-	unlaid.extend(lay_down_space_plugins(app, database).await);
-	seed::plant_first_companion(app, database, unlaid).await;
-	list_bundles(bundles::root(app).as_deref(), database).await;
+	unlaid.extend(lay_down_space_plugins(core, database).await);
+	seed::plant_first_companion(core, database, unlaid).await;
+	list_bundles(bundles::root(core).as_deref(), database).await;
 }
 
-fn lay_down_host_plugins<R: Runtime>(app: &AppHandle<R>) -> Vec<String> {
+fn lay_down_host_plugins(core: &crate::core_context::Core) -> Vec<String> {
 	let mut unlaid = Vec::new();
-	if let Some(path) = bundles::system::path(app) {
+	if let Some(path) = bundles::system::path(core) {
 		if let Err(failure) = bundles::system::write(&path) {
 			unlaid.push(unlaid_reason("the system plugin", &failure));
 		}
 	}
-	if let Some(path) = bundles::user::path(app) {
+	if let Some(path) = bundles::user::path(core) {
 		if let Err(failure) = bundles::user::lay_down(&path) {
 			unlaid.push(unlaid_reason("the user plugin", &failure));
 		}
@@ -140,8 +140,8 @@ fn lay_down_host_plugins<R: Runtime>(app: &AppHandle<R>) -> Vec<String> {
 	unlaid
 }
 
-async fn lay_down_space_plugins<R: Runtime>(
-	app: &AppHandle<R>,
+async fn lay_down_space_plugins(
+	core: &crate::core_context::Core,
 	database: &db::Database,
 ) -> Vec<String> {
 	let spaces = match database.spaces().list().await {
@@ -153,7 +153,7 @@ async fn lay_down_space_plugins<R: Runtime>(
 	spaces
 		.iter()
 		.filter_map(|space| {
-			let path = bundles::space::path(app, &space.id)?;
+			let path = bundles::space::path(core, &space.id)?;
 			let failure = bundles::space::lay_down_at(&path).err()?;
 			Some(unlaid_reason(&format!("the plugin of the space {}", space.id), &failure))
 		})
@@ -198,8 +198,8 @@ pub async fn conversation_bots<R: Runtime>(
 	space_id: Option<String>,
 ) -> Result<Vec<Bot>, TranscriptStoreError> {
 	let state = core.state::<db::DatabaseState>();
-	let dir = avatars::Avatars::dir(&app);
-	let bundle_root = bundles::root(&app);
+	let dir = avatars::Avatars::dir(crate::events::core(&app));
+	let bundle_root = bundles::root(crate::events::core(&app));
 	let stored = ready(&state)?.conversations().bots(space_id).await?;
 	Ok(stored.into_iter().map(|bot| Bot::of(bot, dir.as_deref(), bundle_root.as_deref())).collect())
 }
@@ -213,8 +213,8 @@ pub async fn conversation_bots_by_presence<R: Runtime>(
 	excluded_conversation_id: Option<String>,
 ) -> Result<Vec<Bot>, TranscriptStoreError> {
 	let state = core.state::<db::DatabaseState>();
-	let dir = avatars::Avatars::dir(&app);
-	let bundle_root = bundles::root(&app);
+	let dir = avatars::Avatars::dir(crate::events::core(&app));
+	let bundle_root = bundles::root(crate::events::core(&app));
 	let stored =
 		ready(&state)?.conversations().bots_by_presence(space_id, excluded_conversation_id).await?;
 	Ok(stored.into_iter().map(|bot| Bot::of(bot, dir.as_deref(), bundle_root.as_deref())).collect())
@@ -229,50 +229,58 @@ pub async fn conversation_create_bot<R: Runtime>(
 	space_id: Option<String>,
 ) -> Result<Bot, TranscriptStoreError> {
 	let state = core.state::<db::DatabaseState>();
-	let created = create_bundled_bot(&app, ready(&state)?, identity, space_id).await?;
-	announce_created(&app, &created);
+	let created =
+		create_bundled_bot(crate::events::core(&app), ready(&state)?, identity, space_id).await?;
+	announce_created(crate::events::core(&app), &created);
 	Ok(created)
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn conversation_create_bot_from_draft<R: Runtime>(
-	app: AppHandle<R>,
+pub async fn conversation_create_bot_from_draft(
 	core: State<'_, crate::core_context::Core>,
 	draft: BotDraft,
 	space_id: String,
 ) -> Result<Bot, TranscriptStoreError> {
-	let state = core.state::<db::DatabaseState>();
-	create_drafted_bot(&app, ready(&state)?, draft, space_id).await
+	create_bot_from_draft(core.inner(), draft, space_id).await
 }
 
-pub(crate) async fn create_drafted_bot<R: Runtime>(
-	app: &AppHandle<R>,
+pub(crate) async fn create_bot_from_draft(
+	core: &crate::core_context::Core,
+	draft: BotDraft,
+	space_id: String,
+) -> Result<Bot, TranscriptStoreError> {
+	let state = core.state::<db::DatabaseState>();
+	create_drafted_bot(core, ready(&state)?, draft, space_id).await
+}
+
+pub(crate) async fn create_drafted_bot(
+	core: &crate::core_context::Core,
 	database: &db::Database,
 	draft: BotDraft,
 	space_id: String,
 ) -> Result<Bot, TranscriptStoreError> {
 	let worn = database.conversations().bots(Some(space_id.clone())).await?;
 	let identity = drafted_identity(draft, &worn)?;
-	let created = create_bundled_bot(app, database, identity, Some(space_id)).await?;
-	announce_created(app, &created);
+	let created = create_bundled_bot(core, database, identity, Some(space_id)).await?;
+	announce_created(core, &created);
 	Ok(created)
 }
 
-fn announce_created<R: Runtime>(app: &AppHandle<R>, created: &Bot) {
+fn announce_created(core: &crate::core_context::Core, created: &Bot) {
 	let companion = CompanionCreated { id: created.id.clone(), name: created.name.clone() };
-	launch::announce(app, COMPANION_CREATED, companion);
+	launch::announce(core, COMPANION_CREATED, companion);
 }
 
-pub(crate) async fn announce_joined<R: Runtime>(
-	app: &AppHandle<R>,
+pub(crate) async fn announce_joined(
+	core: &crate::core_context::Core,
 	database: &db::Database,
 	bot_id: &str,
 ) {
 	let failure = match database.conversations().bot(bot_id.to_owned()).await {
 		Ok(Some(joined)) => {
 			let companion = CompanionCreated { id: joined.id, name: joined.name };
-			return launch::announce(app, COMPANION_CREATED, companion);
+			return launch::announce(core, COMPANION_CREATED, companion);
 		}
 		Ok(None) => "the bot was not found again".to_owned(),
 		Err(failure) => format!("the bot did not read back: {failure:?}"),
@@ -280,13 +288,13 @@ pub(crate) async fn announce_joined<R: Runtime>(
 	eprintln!("{CREATED_EVENT} was not announced for bot {bot_id}: {failure}");
 }
 
-pub(crate) fn announce_left<R: Runtime>(app: &AppHandle<R>, bot_id: &str, space_id: String) {
-	launch::announce(app, COMPANION_DELETED, CompanionDeleted { id: bot_id.to_owned(), space_id });
+pub(crate) fn announce_left(core: &crate::core_context::Core, bot_id: &str, space_id: String) {
+	launch::announce(core, COMPANION_DELETED, CompanionDeleted { id: bot_id.to_owned(), space_id });
 }
 
-fn announce_updated<R: Runtime>(app: &AppHandle<R>, updated: &Bot) {
+fn announce_updated(core: &crate::core_context::Core, updated: &Bot) {
 	let companion = CompanionUpdated { id: updated.id.clone(), bot: updated.clone() };
-	launch::announce(app, COMPANION_UPDATED, companion);
+	launch::announce(core, COMPANION_UPDATED, companion);
 }
 
 #[tauri::command]
@@ -323,19 +331,19 @@ fn unworn(worn: &[Hue], crowd: usize) -> Hue {
 	presets.into_iter().find(|blot| !worn.contains(blot)).unwrap_or(presets[crowd % presets.len()])
 }
 
-pub(in crate::conversations) async fn create_bundled_bot<R: Runtime>(
-	app: &AppHandle<R>,
+pub(in crate::conversations) async fn create_bundled_bot(
+	core: &crate::core_context::Core,
 	database: &db::Database,
 	identity: BotIdentity,
 	space_id: Option<String>,
 ) -> Result<Bot, TranscriptStoreError> {
-	let dir = avatars::Avatars::dir(app);
-	let bundle_root = bundles::root(app);
+	let dir = avatars::Avatars::dir(core);
+	let bundle_root = bundles::root(core);
 	let output_style = identity.output_style.clone();
 	let permissions = identity.permissions.clone();
 	let created = database.conversations().create_bot(identity.into(), space_id, None).await?;
 	avatars::Avatars::sweep_referenced(database, dir.as_deref()).await;
-	let ruled = match write_bundle(app, database, &created, &output_style, &permissions).await {
+	let ruled = match write_bundle(core, database, &created, &output_style, &permissions).await {
 		Ok(ruled) => ruled,
 		Err(refusal) => {
 			let _ = database.conversations().delete_bot(created.id).await;
@@ -355,8 +363,8 @@ pub async fn conversation_duplicate_bot<R: Runtime>(
 	space_id: Option<String>,
 ) -> Result<Bot, TranscriptStoreError> {
 	let state = core.state::<db::DatabaseState>();
-	let dir = avatars::Avatars::dir(&app);
-	let bundle_root = bundles::root(&app);
+	let dir = avatars::Avatars::dir(crate::events::core(&app));
+	let bundle_root = bundles::root(crate::events::core(&app));
 	let database = ready(&state)?;
 	let source = database
 		.conversations()
@@ -392,18 +400,18 @@ pub async fn conversation_duplicate_bot<R: Runtime>(
 	let created =
 		database.conversations().create_bot(identity.into(), Some(destination), section).await?;
 	avatars::Avatars::sweep_referenced(database, dir.as_deref()).await;
-	let ruled = match copied_onto(&app, database, &created, &carried).await {
+	let ruled = match copied_onto(crate::events::core(&app), database, &created, &carried).await {
 		Ok(ruled) => ruled,
 		Err(refusal) => {
 			let _ = database.conversations().delete_bot(created.id.clone()).await;
 			forget_bundle(bundle_root.as_deref(), database, &created.id).await;
-			environment::store::forget_bot(&app, &created.id);
+			environment::store::forget_bot(crate::events::core(&app), &created.id);
 			avatars::Avatars::sweep_referenced(database, dir.as_deref()).await;
 			return Err(refusal);
 		}
 	};
 	let copy = Bot::of(ruled, dir.as_deref(), bundle_root.as_deref());
-	announce_created(&app, &copy);
+	announce_created(crate::events::core(&app), &copy);
 	Ok(copy)
 }
 
@@ -416,8 +424,8 @@ struct Carried {
 	permissions: bundles::BotPermissions,
 }
 
-async fn copied_onto<R: Runtime>(
-	app: &AppHandle<R>,
+async fn copied_onto(
+	core: &crate::core_context::Core,
 	database: &db::Database,
 	created: &StoredBot,
 	carried: &Carried,
@@ -429,21 +437,21 @@ async fn copied_onto<R: Runtime>(
 	} else {
 		remembered
 	};
-	copied_environment(app, database, &carried.source_of, &placed.id).await?;
-	let root = bundles::root(app);
+	copied_environment(core, database, &carried.source_of, &placed.id).await?;
+	let root = bundles::root(core);
 	if let Some(root) = root.as_deref() {
 		bundles::inherit(root, &carried.source_id, &placed).map_err(unwritable)?;
 	}
-	write_bundle(app, database, &placed, &carried.output_style, &carried.permissions).await
+	write_bundle(core, database, &placed, &carried.output_style, &carried.permissions).await
 }
 
-async fn copied_environment<R: Runtime>(
-	app: &AppHandle<R>,
+async fn copied_environment(
+	core: &crate::core_context::Core,
 	database: &db::Database,
 	source: &EnvOwner,
 	copy_id: &str,
 ) -> Result<(), TranscriptStoreError> {
-	let Some(root) = environment::store::root(app) else {
+	let Some(root) = environment::store::root(core) else {
 		return Ok(());
 	};
 	let copy = bot_owner(database, copy_id).await?;
@@ -512,14 +520,13 @@ fn unshared_name(wanted: String, taken: &[String]) -> String {
 
 #[tauri::command]
 #[specta::specta]
-pub async fn conversation_update_bot<R: Runtime>(
-	app: AppHandle<R>,
+pub async fn conversation_update_bot(
 	core: State<'_, crate::core_context::Core>,
 	id: String,
 	identity: BotIdentity,
 ) -> Result<Bot, TranscriptStoreError> {
 	let _memory = bundles::holding_the_memory(&id).await;
-	let written = rewritten_bot(app, core, id.clone(), identity).await;
+	let written = rewritten_bot(core.inner(), id.clone(), identity).await;
 	if let Err(refusal) = &written {
 		log::warn!(
 			"the write of bot {id} did not land, its sessions open on what is stored: {refusal:?}"
@@ -528,15 +535,14 @@ pub async fn conversation_update_bot<R: Runtime>(
 	written
 }
 
-async fn rewritten_bot<R: Runtime>(
-	app: AppHandle<R>,
-	core: State<'_, crate::core_context::Core>,
+async fn rewritten_bot(
+	core: &crate::core_context::Core,
 	id: String,
 	identity: BotIdentity,
 ) -> Result<Bot, TranscriptStoreError> {
 	let state = core.state::<db::DatabaseState>();
-	let dir = avatars::Avatars::dir(&app);
-	let bundle_root = bundles::root(&app);
+	let dir = avatars::Avatars::dir(core);
+	let bundle_root = bundles::root(core);
 	let database = ready(&state)?;
 	let previous = database.conversations().bot(id.clone()).await?;
 	let reconciled = reconciled_identity(bundle_root.as_deref(), previous.as_ref(), identity);
@@ -544,7 +550,7 @@ async fn rewritten_bot<R: Runtime>(
 	let permissions = reconciled.permissions.clone();
 	let updated = database.conversations().update_bot(id.clone(), reconciled.into()).await?;
 	avatars::Avatars::sweep_referenced(database, dir.as_deref()).await;
-	let ruled = match write_bundle(&app, database, &updated, &output_style, &permissions).await {
+	let ruled = match write_bundle(core, database, &updated, &output_style, &permissions).await {
 		Ok(ruled) => ruled,
 		Err(refusal) => {
 			if let Some(previous) = previous {
@@ -555,7 +561,7 @@ async fn rewritten_bot<R: Runtime>(
 		}
 	};
 	let updated = Bot::of(ruled, dir.as_deref(), bundle_root.as_deref());
-	announce_updated(&app, &updated);
+	announce_updated(core, &updated);
 	Ok(updated)
 }
 
@@ -568,8 +574,8 @@ pub async fn conversation_set_bot_memory<R: Runtime>(
 	memory: String,
 ) -> Result<Bot, TranscriptStoreError> {
 	let state = core.state::<db::DatabaseState>();
-	let dir = avatars::Avatars::dir(&app);
-	let bundle_root = bundles::root(&app);
+	let dir = avatars::Avatars::dir(crate::events::core(&app));
+	let bundle_root = bundles::root(crate::events::core(&app));
 	let database = ready(&state)?;
 	let repository = database.conversations();
 	let _memory = bundles::holding_the_memory(&id).await;
@@ -597,9 +603,10 @@ pub async fn conversation_set_bot_avatar_image<R: Runtime>(
 	let normalised = avatars::picture::normalised(&bytes)?;
 	let database = ready(&state)?;
 	let repository = database.conversations();
-	let dir = avatars::Avatars::dir(&app).ok_or(avatars::Rejection::Unwritable {
-		detail: "there is no application data directory to store avatars in".to_owned(),
-	})?;
+	let dir =
+		avatars::Avatars::dir(crate::events::core(&app)).ok_or(avatars::Rejection::Unwritable {
+			detail: "there is no application data directory to store avatars in".to_owned(),
+		})?;
 	let path = avatars::minted_path(&dir);
 	let recorded = path.to_string_lossy().into_owned();
 	let updated = repository.set_avatar_image_path(id.clone(), Some(recorded)).await?;
@@ -609,8 +616,8 @@ pub async fn conversation_set_bot_avatar_image<R: Runtime>(
 		return Err(rejection.into());
 	}
 	avatars::Avatars::sweep_referenced(database, Some(&dir)).await;
-	let updated = Bot::of(updated, Some(&dir), bundles::root(&app).as_deref());
-	announce_updated(&app, &updated);
+	let updated = Bot::of(updated, Some(&dir), bundles::root(crate::events::core(&app)).as_deref());
+	announce_updated(crate::events::core(&app), &updated);
 	Ok(updated)
 }
 
@@ -622,18 +629,18 @@ pub async fn conversation_delete_bot<R: Runtime>(
 	id: String,
 ) -> Result<(), TranscriptStoreError> {
 	let state = core.state::<db::DatabaseState>();
-	let dir = avatars::Avatars::dir(&app);
-	let attachment_dir = attachments::Attachments::dir(&app);
-	let bundle_root = bundles::root(&app);
+	let dir = avatars::Avatars::dir(crate::events::core(&app));
+	let attachment_dir = attachments::Attachments::dir(crate::events::core(&app));
+	let bundle_root = bundles::root(crate::events::core(&app));
 	let database = ready(&state)?;
 	let held_by = database.conversations().bot_space_ids(id.clone()).await?;
 	database.conversations().delete_bot(id.clone()).await?;
 	forget_bundle(bundle_root.as_deref(), database, &id).await;
-	environment::store::forget_bot(&app, &id);
+	environment::store::forget_bot(crate::events::core(&app), &id);
 	avatars::Avatars::sweep_referenced(database, dir.as_deref()).await;
 	attachments::Attachments::sweep_referenced(database, attachment_dir.as_deref()).await;
 	for space_id in held_by {
-		announce_left(&app, &id, space_id);
+		announce_left(crate::events::core(&app), &id, space_id);
 	}
 	Ok(())
 }
@@ -682,6 +689,7 @@ pub async fn conversation_bot_commands(
 mod tests {
 	use std::fs;
 	use std::path::PathBuf;
+	use tauri::Manager;
 
 	use super::*;
 	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
@@ -738,7 +746,7 @@ mod tests {
 		draft: BotDraft,
 	) -> Result<Bot, TranscriptStoreError> {
 		let space = first_space(app).await;
-		conversation_create_bot_from_draft(app.handle().clone(), app.state(), draft, space).await
+		conversation_create_bot_from_draft(app.state(), draft, space).await
 	}
 
 	#[test]
@@ -813,7 +821,8 @@ mod tests {
 		let held = ready(&state).expect("the database opens").conversations();
 		let listed = held.bots(Some(space)).await.expect("the space reads");
 		assert!(listed.iter().any(|bot| bot.id == created.id));
-		let root = bundles::root(app.handle()).expect("the bundle root is named");
+		let root =
+			bundles::root(crate::events::core(app.handle())).expect("the bundle root is named");
 		let plugins = root.join("plugins");
 		assert_eq!(
 			bundles::dir(&root, &created.id).expect("the bundle is held"),
@@ -830,7 +839,8 @@ mod tests {
 		let held = ready(&state).expect("the database opens").conversations();
 		let stored =
 			held.bot(created.id.clone()).await.expect("the bot reads").expect("the bot is stored");
-		let root = bundles::root(app.handle()).expect("the bundle root is named");
+		let root =
+			bundles::root(crate::events::core(app.handle())).expect("the bundle root is named");
 		bundles::write_remembered(&root, &stored, "They use bun.").expect("the memory lands");
 		let agent = bundles::agent_file(&root, &created.id).expect("the agent file stands");
 		let written = fs::read_to_string(&agent).expect("the agent file reads");
@@ -848,7 +858,7 @@ mod tests {
 
 		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 		let database = ready(&state).expect("the database opens");
-		list_bundles(bundles::root(app.handle()).as_deref(), database).await;
+		list_bundles(bundles::root(crate::events::core(app.handle())).as_deref(), database).await;
 
 		let after = fs::read_to_string(&agent).expect("the agent file reads");
 		assert_eq!(after, before.replacen("model: \"default\"", "model: \"opus\"", 1));
@@ -865,7 +875,8 @@ mod tests {
 
 		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 		let database = ready(&state).expect("the database opens");
-		let root = bundles::root(app.handle()).expect("the bundle root is named");
+		let root =
+			bundles::root(crate::events::core(app.handle())).expect("the bundle root is named");
 		list_bundles(Some(&root), database).await;
 
 		assert!(blocked.is_dir());
@@ -891,7 +902,8 @@ mod tests {
 	async fn a_draft_whose_bundle_cannot_be_written_leaves_no_row_behind() {
 		let app = a_host("unbundled");
 		let before = bot_ids(&app).await;
-		let root = bundles::root(app.handle()).expect("the bundle root is named");
+		let root =
+			bundles::root(crate::events::core(app.handle())).expect("the bundle root is named");
 		let _ = fs::remove_dir_all(&root);
 		fs::create_dir_all(root.parent().expect("the root has a parent"))
 			.expect("the data dir stands");

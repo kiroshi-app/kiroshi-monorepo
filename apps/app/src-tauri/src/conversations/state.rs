@@ -1,7 +1,6 @@
 use std::collections::HashSet;
 
 use crate::core_context::Managed;
-use tauri::{AppHandle, Manager, Runtime};
 use tokio::sync::Mutex;
 
 use super::contract::{
@@ -10,20 +9,20 @@ use super::contract::{
 };
 use crate::db;
 use crate::db::repositories::conversations::{Activity, StoredPrompt};
-use crate::events::{self, CONVERSATION_STATE_CHANGED};
+use crate::events::CONVERSATION_STATE_CHANGED;
 use crate::missions::commands::observed as mission_observed;
 use crate::missions::contract::MissionLiveness;
 
 #[derive(Default)]
 struct Observed(Mutex<States>);
 
-pub(crate) async fn listed<R: Runtime>(
-	app: &AppHandle<R>,
+pub(crate) async fn listed(
+	core: &crate::core_context::Core,
 	database: &db::Database,
 	ids: Vec<String>,
 ) -> Result<States, TranscriptStoreError> {
-	let states = states_of(app, database, ids).await?;
-	let held = observed(app);
+	let states = states_of(core, database, ids).await?;
+	let held = observed(core);
 	let mut observed = held.0.lock().await;
 	for (id, state) in &states {
 		observed.entry(id.clone()).or_insert_with(|| state.clone());
@@ -31,19 +30,19 @@ pub(crate) async fn listed<R: Runtime>(
 	Ok(states)
 }
 
-pub(crate) async fn observe<R: Runtime>(
-	app: &AppHandle<R>,
+pub(crate) async fn observe(
+	core: &crate::core_context::Core,
 	database: &db::Database,
 	conversation_id: &str,
 ) -> Result<ObservedState, TranscriptStoreError> {
-	let held = observed(app);
+	let held = observed(core);
 	let mut observed = held.0.lock().await;
 	let activity = database.conversations().activity_of(vec![conversation_id.to_owned()]).await?;
 	let Some(activity) = activity.into_iter().next() else {
 		return Err(TranscriptStoreError::UnknownConversation { id: conversation_id.to_owned() });
 	};
 	let space_id = activity.space_id.clone();
-	let state = observed_state(activity, &origins_needing_you(app, database).await?);
+	let state = observed_state(activity, &origins_needing_you(core, database).await?);
 	if state_in(&observed, conversation_id) == state {
 		return Ok(state);
 	}
@@ -52,7 +51,7 @@ pub(crate) async fn observe<R: Runtime>(
 		space_id,
 		observed: state.clone(),
 	};
-	match events::emit(app, CONVERSATION_STATE_CHANGED, changed) {
+	match core.emit(CONVERSATION_STATE_CHANGED, changed) {
 		Ok(()) => {
 			observed.insert(conversation_id.to_owned(), state.clone());
 		}
@@ -63,25 +62,24 @@ pub(crate) async fn observe<R: Runtime>(
 	Ok(state)
 }
 
-pub(crate) async fn observe_reporting<R: Runtime>(
-	app: &AppHandle<R>,
+pub(crate) async fn observe_reporting(
+	core: &crate::core_context::Core,
 	database: &db::Database,
 	conversation_id: &str,
 ) {
-	if let Err(failure) = observe(app, database, conversation_id).await {
+	if let Err(failure) = observe(core, database, conversation_id).await {
 		log::warn!("the state of conversation {conversation_id} did not read: {failure:?}");
 	}
 }
 
-pub(crate) fn observe_later<R: Runtime>(app: &AppHandle<R>, conversation_id: String) {
-	let app = app.clone();
-	crate::events::core(app.app_handle()).clone().spawn(async move {
-		let Some(database) = crate::events::core(app.app_handle()).try_state::<db::DatabaseState>()
-		else {
+pub(crate) fn observe_later(core: &crate::core_context::Core, conversation_id: String) {
+	let core = core.clone();
+	core.clone().spawn(async move {
+		let Some(database) = core.try_state::<db::DatabaseState>() else {
 			return log::warn!("the state of conversation {conversation_id} has no database");
 		};
 		match database.inner() {
-			Ok(database) => observe_reporting(&app, database, &conversation_id).await,
+			Ok(database) => observe_reporting(&core, database, &conversation_id).await,
 			Err(failure) => {
 				log::warn!("the state of conversation {conversation_id} did not read: {failure:?}")
 			}
@@ -89,27 +87,27 @@ pub(crate) fn observe_later<R: Runtime>(app: &AppHandle<R>, conversation_id: Str
 	});
 }
 
-async fn states_of<R: Runtime>(
-	app: &AppHandle<R>,
+async fn states_of(
+	core: &crate::core_context::Core,
 	database: &db::Database,
 	ids: Vec<String>,
 ) -> Result<States, TranscriptStoreError> {
 	let activities = database.conversations().activity_of(ids).await?;
-	let needing_you = origins_needing_you(app, database).await?;
+	let needing_you = origins_needing_you(core, database).await?;
 	Ok(activities
 		.into_iter()
 		.map(|activity| (activity.conversation_id.clone(), observed_state(activity, &needing_you)))
 		.collect())
 }
 
-async fn origins_needing_you<R: Runtime>(
-	app: &AppHandle<R>,
+async fn origins_needing_you(
+	core: &crate::core_context::Core,
 	database: &db::Database,
 ) -> Result<HashSet<String>, TranscriptStoreError> {
 	let open = database.missions().still_open().await?;
 	Ok(open
 		.into_iter()
-		.map(|mission| mission_observed(app, mission))
+		.map(|mission| mission_observed(core, mission))
 		.filter(|mission| mission.liveness == MissionLiveness::NeedsYou)
 		.map(|mission| mission.origin_conversation_id)
 		.collect())
@@ -148,8 +146,7 @@ fn ranked(activity: &Activity, origins_needing_you: &HashSet<String>) -> Convers
 	ConversationState::Idle
 }
 
-fn observed<R: Runtime>(app: &AppHandle<R>) -> Managed<'_, Observed> {
-	let core = crate::events::core(app);
+fn observed(core: &crate::core_context::Core) -> Managed<'_, Observed> {
 	if core.try_state::<Observed>().is_none() {
 		core.manage(Observed::default());
 	}
@@ -160,6 +157,7 @@ fn observed<R: Runtime>(app: &AppHandle<R>) -> Managed<'_, Observed> {
 mod tests {
 	use std::sync::{Arc, Mutex as Held};
 	use std::time::Duration;
+	use tauri::Manager;
 
 	use serde_json::{json, Value};
 	use tauri::test::{mock_builder, MockRuntime};
@@ -369,7 +367,9 @@ mod tests {
 	}
 
 	async fn observed_in(app: &App<MockRuntime>, conversation_id: &str) -> ObservedState {
-		observe(app.handle(), database(app), conversation_id).await.expect("the state reads")
+		observe(crate::events::core(app.handle()), database(app), conversation_id)
+			.await
+			.expect("the state reads")
 	}
 
 	async fn a_run_of(app: &App<MockRuntime>, turn: (&str, &str, i64), bot_id: &str) {
@@ -418,7 +418,7 @@ mod tests {
 	async fn a_mission_reads_needs_you_for_its_origin_only_through_its_observed_liveness() {
 		let app = a_host("mission-observed").await;
 		let opened = an_open_mission(&app).await;
-		let run = a_run_held_by_the_app(app.handle(), the_thread_of(&opened));
+		let run = a_run_held_by_the_app(crate::events::core(app.handle()), the_thread_of(&opened));
 		let before = listed_state(&app).await;
 
 		run.emit(a_permission("p1"), None);
@@ -451,7 +451,7 @@ mod tests {
 	async fn a_thread_move_that_moves_the_mission_liveness_re_observes_its_origin() {
 		let app = a_host("mission-thread-move").await;
 		let opened = an_open_mission(&app).await;
-		let run = a_run_held_by_the_app(app.handle(), the_thread_of(&opened));
+		let run = a_run_held_by_the_app(crate::events::core(app.handle()), the_thread_of(&opened));
 		assert_eq!(listed_state(&app).await, Ok(ConversationState::Idle));
 		let heard = heard_states(&app);
 

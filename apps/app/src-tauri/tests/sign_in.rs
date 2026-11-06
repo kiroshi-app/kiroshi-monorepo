@@ -91,7 +91,7 @@ async fn answered_after_the_cancel(app: &App<MockRuntime>) {
 
 async fn wind_down(app: &App<MockRuntime>) {
 	terminate_session(
-		app.handle(),
+		kiroshi_app::events::core(app.handle()),
 		kiroshi_app::events::core(app.app_handle()).state::<AgentState>().inner(),
 	)
 	.await;

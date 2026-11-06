@@ -10,7 +10,7 @@ pub async fn hosting_start<R: Runtime>(
 	app: AppHandle<R>,
 	space_id: String,
 ) -> Result<HostingState, SpaceError> {
-	super::start(&app, space_id).await
+	super::start(crate::events::core(&app), space_id).await
 }
 
 #[tauri::command]
@@ -19,7 +19,7 @@ pub async fn hosting_stop<R: Runtime>(
 	app: AppHandle<R>,
 	space_id: String,
 ) -> Result<HostingState, SpaceError> {
-	super::stop(&app, space_id).await
+	super::stop(crate::events::core(&app), space_id).await
 }
 
 #[tauri::command]
@@ -35,7 +35,7 @@ pub async fn hosting_members<R: Runtime>(
 	app: AppHandle<R>,
 	space_id: String,
 ) -> Result<SpaceMembers, MembersError> {
-	members::list(&app, space_id).await
+	members::list(crate::events::core(&app), space_id).await
 }
 
 #[tauri::command]
@@ -45,7 +45,7 @@ pub async fn hosting_invite_member<R: Runtime>(
 	space_id: String,
 	email: String,
 ) -> Result<SpaceMembers, MembersError> {
-	members::invite(&app, space_id, email).await
+	members::invite(crate::events::core(&app), space_id, email).await
 }
 
 #[tauri::command]
@@ -55,7 +55,7 @@ pub async fn hosting_withdraw_invitation<R: Runtime>(
 	space_id: String,
 	invitation_id: String,
 ) -> Result<SpaceMembers, MembersError> {
-	members::withdraw(&app, space_id, invitation_id).await
+	members::withdraw(crate::events::core(&app), space_id, invitation_id).await
 }
 
 #[tauri::command]
@@ -65,7 +65,7 @@ pub async fn hosting_resend_invitation<R: Runtime>(
 	space_id: String,
 	invitation_id: String,
 ) -> Result<SpaceMembers, MembersError> {
-	members::resend(&app, space_id, invitation_id).await
+	members::resend(crate::events::core(&app), space_id, invitation_id).await
 }
 
 #[tauri::command]
@@ -75,7 +75,7 @@ pub async fn hosting_remove_member<R: Runtime>(
 	space_id: String,
 	user_id: String,
 ) -> Result<SpaceMembers, MembersError> {
-	members::remove(&app, space_id, user_id).await
+	members::remove(crate::events::core(&app), space_id, user_id).await
 }
 
 #[tauri::command]
@@ -85,7 +85,7 @@ pub async fn hosting_invite_member_again<R: Runtime>(
 	space_id: String,
 	user_id: String,
 ) -> Result<SpaceMembers, MembersError> {
-	members::invite_again(&app, space_id, user_id).await
+	members::invite_again(crate::events::core(&app), space_id, user_id).await
 }
 
 #[tauri::command]
@@ -94,7 +94,7 @@ pub async fn hosting_devices<R: Runtime>(
 	app: AppHandle<R>,
 	space_id: String,
 ) -> Result<Vec<AccountDevices>, MembersError> {
-	devices::devices(&app, space_id).await
+	devices::devices(crate::events::core(&app), space_id).await
 }
 
 #[tauri::command]
@@ -104,5 +104,5 @@ pub async fn hosting_remove_device<R: Runtime>(
 	space_id: String,
 	device_id: String,
 ) -> Result<Vec<AccountDevices>, MembersError> {
-	devices::remove_device(&app, space_id, device_id).await
+	devices::remove_device(crate::events::core(&app), space_id, device_id).await
 }

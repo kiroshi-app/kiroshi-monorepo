@@ -4,7 +4,6 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
-use tauri::{AppHandle, Runtime};
 
 use super::contract::{
 	AuthorKind, CompanionCreated, CompanionError, Conversation, ConversationAttached,
@@ -20,7 +19,7 @@ use crate::attachments::{
 	markdown_line, refuse_block, refuse_file, store, Attachments, Rejection, SizedFile,
 };
 use crate::conversations::commands::{
-	announce_conversation, conversation_create_bot_from_draft, conversation_suggested_bots, ready,
+	announce_conversation, conversation_suggested_bots, create_bot_from_draft, ready,
 };
 use crate::conversations::contract::{
 	BotDraft, CompanionArrival, CompanionSpoke, ConversationDeleted, TranscriptStoreError,
@@ -33,7 +32,7 @@ use crate::db::repositories::conversations::{
 use crate::db::repositories::keyset;
 use crate::db::repositories::messages::{AccountAuthor, MessagePageQuery, StoredMessage};
 use crate::events::{
-	self, Event, COMPANION_ARRIVED, COMPANION_CREATED, COMPANION_SPOKE, CONVERSATION_DELETED,
+	Event, COMPANION_ARRIVED, COMPANION_CREATED, COMPANION_SPOKE, CONVERSATION_DELETED,
 	CONVERSATION_UPDATED, FIRST_RUN_DONE,
 };
 use crate::file_store::FileStore;
@@ -48,21 +47,21 @@ const READ_LIMIT: Bound = Bound { default: 20, maximum: 100 };
 const LAST_MESSAGE_LENGTH: usize = 200;
 
 #[derive(Debug)]
-pub struct CompanionHost<R: Runtime> {
-	app: AppHandle<R>,
+pub struct CompanionHost {
+	core: crate::core_context::Core,
 	conversation_id: String,
 	bot_id: String,
 	attachments: Arc<TurnAttachments>,
 }
 
-impl<R: Runtime> CompanionHost<R> {
+impl CompanionHost {
 	pub fn new(
-		app: AppHandle<R>,
+		core: crate::core_context::Core,
 		conversation_id: String,
 		bot_id: String,
 		attachments: Arc<TurnAttachments>,
 	) -> Self {
-		Self { app, conversation_id, bot_id, attachments }
+		Self { core, conversation_id, bot_id, attachments }
 	}
 
 	async fn roster(
@@ -204,10 +203,10 @@ impl<R: Runtime> CompanionHost<R> {
 			.await
 			.map_err(TranscriptStoreError::from)?;
 		for arrival in amended.arrivals {
-			launch::announce(&self.app, COMPANION_ARRIVED, CompanionArrival::from(arrival));
+			launch::announce(&self.core, COMPANION_ARRIVED, CompanionArrival::from(arrival));
 		}
 		let conversation_id = &amended.conversation.active.conversation.id;
-		announce_conversation(&self.app, database, CONVERSATION_UPDATED, conversation_id).await;
+		announce_conversation(&self.core, database, CONVERSATION_UPDATED, conversation_id).await;
 		Ok(conversation_of(amended.conversation))
 	}
 
@@ -264,7 +263,7 @@ impl<R: Runtime> CompanionHost<R> {
 			.await
 			.map_err(TranscriptStoreError::from)?;
 		launch::announce(
-			&self.app,
+			&self.core,
 			CONVERSATION_DELETED,
 			ConversationDeleted {
 				space_id: archived.space_id,
@@ -308,7 +307,7 @@ impl<R: Runtime> CompanionHost<R> {
 			.caption
 			.map(|caption| caption.trim().to_owned())
 			.filter(|caption| !caption.is_empty());
-		let root = Attachments::dir(&self.app).ok_or_else(|| Rejection::Unwritable {
+		let root = Attachments::dir(&self.core).ok_or_else(|| Rejection::Unwritable {
 			detail: "there is no application data directory to store attachments in".to_owned(),
 		})?;
 		match asked.conversation {
@@ -441,7 +440,8 @@ impl<R: Runtime> CompanionHost<R> {
 		event: Event<P>,
 		payload: P,
 	) -> Result<(), CompanionError> {
-		events::emit(&self.app, event, payload)
+		self.core
+			.emit(event, payload)
 			.map_err(|error| CompanionError::Undeliverable { detail: error.to_string() })
 	}
 }
@@ -650,7 +650,7 @@ async fn space_of(
 	})
 }
 
-impl<R: Runtime> Host for CompanionHost<R> {
+impl Host for CompanionHost {
 	const SUBTYPE: &'static str = "companion";
 
 	type Operation = Operation;
@@ -658,7 +658,7 @@ impl<R: Runtime> Host for CompanionHost<R> {
 	type Error = CompanionError;
 
 	async fn served(&self, operation: Operation, payload: Value) -> Result<Value, CompanionError> {
-		let state = Self::database(&self.app)?;
+		let state = Self::database(&self.core)?;
 		let database = ready(state.state::<crate::db::DatabaseState>().inner())?;
 		match operation {
 			Operation::Suggestions => {
@@ -668,13 +668,7 @@ impl<R: Runtime> Host for CompanionHost<R> {
 			Operation::Create => {
 				let asked: Drafted = Self::read(payload)?;
 				let space_id = self.space(database).await?;
-				let created = conversation_create_bot_from_draft(
-					self.app.clone(),
-					state.clone(),
-					asked.into(),
-					space_id,
-				)
-				.await?;
+				let created = create_bot_from_draft(&self.core, asked.into(), space_id).await?;
 				let companion = CompanionCreated { id: created.id, name: created.name };
 				self.announce(COMPANION_CREATED, companion.clone())?;
 				if let Err(failure) =
@@ -987,7 +981,8 @@ mod tests {
 	async fn a_host(name: &str) -> AppOfItsOwn {
 		let app = an_app_of_its_own(&format!("companion-host-{name}"), mock_builder());
 		crate::db::install(crate::events::core(app.handle()));
-		let system = bundles::system::path(app.handle()).expect("the system bundle is named");
+		let system = bundles::system::path(crate::events::core(app.handle()))
+			.expect("the system bundle is named");
 		bundles::system::write(&system).expect("the system bundle lands");
 		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 			.expect("the database opens")
@@ -997,9 +992,9 @@ mod tests {
 		app
 	}
 
-	fn serving(app: &App<MockRuntime>, conversation_id: &str) -> CompanionHost<MockRuntime> {
+	fn serving(app: &App<MockRuntime>, conversation_id: &str) -> CompanionHost {
 		CompanionHost::new(
-			app.handle().clone(),
+			crate::events::core(app.handle()).clone(),
 			conversation_id.to_owned(),
 			"b1".to_owned(),
 			Arc::default(),
@@ -1053,11 +1048,7 @@ mod tests {
 		json!({ "subtype": "companion", "operation": "conversationSay", "payload": payload })
 	}
 
-	async fn say_refused(
-		app: &App<MockRuntime>,
-		host: &CompanionHost<MockRuntime>,
-		payload: Value,
-	) -> Value {
+	async fn say_refused(app: &App<MockRuntime>, host: &CompanionHost, payload: Value) -> Value {
 		let arriving = heard(app, COMPANION_SPOKE_EVENT);
 		let before = (written(app).await, standing(app).await);
 		let refused = refusal(host.answer(a_say(payload)).await);
@@ -1126,7 +1117,7 @@ mod tests {
 		payload: Value,
 	) -> Value {
 		CompanionHost::new(
-			app.handle().clone(),
+			crate::events::core(app.handle()).clone(),
 			conversation_id.to_owned(),
 			bot_id.to_owned(),
 			Arc::default(),
@@ -1284,7 +1275,7 @@ mod tests {
 		assert_eq!(planted.model, DEFAULT_BOT_MODEL);
 		assert_eq!(planted.permissions, Some(bundles::BotPermissions::default().accepted()));
 		assert!(planted.avatar_blot.is_some());
-		let bundled = bundles::root(app.handle())
+		let bundled = bundles::root(crate::events::core(app.handle()))
 			.and_then(|root| bundles::generated(&root, id))
 			.expect("the bundle is written");
 		assert_eq!(bundled.output_style, bundles::DEFAULT_OUTPUT_STYLE);
@@ -1836,7 +1827,7 @@ mod tests {
 	async fn a_caller_holding_no_seat_at_all_carries_no_word() {
 		let app = a_room("say-unseated").await;
 		let stranger = CompanionHost::new(
-			app.handle().clone(),
+			crate::events::core(app.handle()).clone(),
 			"c1".to_owned(),
 			"b2".to_owned(),
 			Arc::default(),
@@ -1934,7 +1925,8 @@ mod tests {
 	}
 
 	fn stored_files(app: &App<MockRuntime>) -> Vec<PathBuf> {
-		let root = Attachments::dir(app.handle()).expect("the attachments root");
+		let root =
+			Attachments::dir(crate::events::core(app.handle())).expect("the attachments root");
 		let Ok(conversations) = fs::read_dir(&root) else {
 			return Vec::new();
 		};
@@ -1946,11 +1938,7 @@ mod tests {
 			.collect()
 	}
 
-	async fn attach_refused(
-		app: &App<MockRuntime>,
-		host: &CompanionHost<MockRuntime>,
-		payload: Value,
-	) -> Value {
+	async fn attach_refused(app: &App<MockRuntime>, host: &CompanionHost, payload: Value) -> Value {
 		let arriving = heard(app, COMPANION_SPOKE_EVENT);
 		let before = written(app).await;
 		let refused = refusal(host.answer(an_attach(payload)).await);
@@ -1974,7 +1962,8 @@ mod tests {
 
 		let stored = stored_files(&app);
 		assert_eq!(stored.len(), 1);
-		let root = Attachments::dir(app.handle()).expect("the attachments root");
+		let root =
+			Attachments::dir(crate::events::core(app.handle())).expect("the attachments root");
 		assert_eq!(stored[0].parent(), Some(root.join("c1").as_path()));
 		assert_eq!(stored[0].extension().and_then(|it| it.to_str()), Some("png"));
 		assert_eq!(fs::read(&stored[0]).expect("the copy reads"), vec![7u8; 3]);
@@ -2011,7 +2000,8 @@ mod tests {
 
 		let stored = stored_files(&app);
 		assert_eq!(stored.len(), 1);
-		let root = Attachments::dir(app.handle()).expect("the attachments root");
+		let root =
+			Attachments::dir(crate::events::core(app.handle())).expect("the attachments root");
 		assert_eq!(stored[0].parent(), Some(root.join("room").as_path()));
 		let path = stored[0].to_string_lossy().into_owned();
 		let markdown = format!("![The chart](<{path}>)");
@@ -2041,7 +2031,8 @@ mod tests {
 			.await
 			.expect("the bare file is attached in the room");
 
-		let root = Attachments::dir(app.handle()).expect("the attachments root");
+		let root =
+			Attachments::dir(crate::events::core(app.handle())).expect("the attachments root");
 		let held = host.attachments.take();
 		assert_eq!(held.len(), 1);
 		assert_eq!(held[0].path.parent(), Some(root.join("c1").as_path()));
@@ -2574,7 +2565,7 @@ mod tests {
 
 	async fn update_refused(
 		app: &App<MockRuntime>,
-		host: &CompanionHost<MockRuntime>,
+		host: &CompanionHost,
 		conversation_id: &'static str,
 		payload: Value,
 	) -> Value {
@@ -2833,7 +2824,7 @@ mod tests {
 		let app = a_room("update-unseated").await;
 		planted(&app, ANOTHER_ROOM).await;
 		let stranger = CompanionHost::new(
-			app.handle().clone(),
+			crate::events::core(app.handle()).clone(),
 			"c1".to_owned(),
 			"b2".to_owned(),
 			Arc::default(),

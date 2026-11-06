@@ -1,10 +1,10 @@
 use std::sync::{Mutex, PoisonError};
 
 use serde::Serialize;
-use tauri::{AppHandle, Manager, Runtime, State};
+use tauri::State;
 
 use super::contract::{CompanionCreated, CompanionSeedRefused, LaunchOutcome};
-use crate::events::{self, Event, COMPANION_CREATED, SEED_REFUSED};
+use crate::events::{Event, COMPANION_CREATED, SEED_REFUSED};
 
 const REASON_SEPARATOR: &str = "; ";
 
@@ -28,8 +28,8 @@ pub fn companion_launch_outcome(core: State<'_, crate::core_context::Core>) -> L
 	state.read()
 }
 
-pub fn settle<R: Runtime>(
-	app: &AppHandle<R>,
+pub fn settle(
+	core: &crate::core_context::Core,
 	created: Option<CompanionCreated>,
 	reasons: Vec<String>,
 ) {
@@ -38,7 +38,7 @@ pub fn settle<R: Runtime>(
 		refused: (!reasons.is_empty())
 			.then(|| CompanionSeedRefused { reason: reasons.join(REASON_SEPARATOR) }),
 	};
-	match crate::events::core(app.app_handle()).try_state::<LaunchOutcomeState>() {
+	match core.try_state::<LaunchOutcomeState>() {
 		Some(state) => state.record(outcome.clone()),
 		None => log::warn!(
 			"the launch outcome was not kept for a later read: created={} refused={}",
@@ -47,19 +47,19 @@ pub fn settle<R: Runtime>(
 		),
 	}
 	if let Some(created) = outcome.created {
-		announce(app, COMPANION_CREATED, created);
+		announce(core, COMPANION_CREATED, created);
 	}
 	if let Some(refused) = outcome.refused {
-		announce(app, SEED_REFUSED, refused);
+		announce(core, SEED_REFUSED, refused);
 	}
 }
 
-pub(crate) fn announce<R: Runtime, P: Serialize + Clone>(
-	app: &AppHandle<R>,
+pub(crate) fn announce<P: Serialize + Clone>(
+	core: &crate::core_context::Core,
 	event: Event<P>,
 	payload: P,
 ) {
-	if let Err(failure) = events::emit(app, event, payload.clone()) {
+	if let Err(failure) = core.emit(event, payload.clone()) {
 		log::warn!("{} was not announced: {failure}", event.name());
 	}
 }
@@ -68,6 +68,7 @@ pub(crate) fn announce<R: Runtime, P: Serialize + Clone>(
 mod tests {
 	use tauri::test::{mock_builder, MockRuntime};
 	use tauri::App;
+	use tauri::Manager;
 
 	use super::*;
 	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
@@ -90,7 +91,11 @@ mod tests {
 	fn a_launch_that_planted_and_gathered_a_reason_answers_both() {
 		let app = a_host();
 
-		settle(app.handle(), Some(shoto()), vec!["the system plugin was not laid down".to_owned()]);
+		settle(
+			crate::events::core(app.handle()),
+			Some(shoto()),
+			vec!["the system plugin was not laid down".to_owned()],
+		);
 
 		assert_eq!(
 			read_of(&app),
@@ -106,7 +111,11 @@ mod tests {
 	#[test]
 	fn the_outcome_answers_the_same_to_every_read() {
 		let app = a_host();
-		settle(app.handle(), Some(shoto()), vec!["the personal space is missing".to_owned()]);
+		settle(
+			crate::events::core(app.handle()),
+			Some(shoto()),
+			vec!["the personal space is missing".to_owned()],
+		);
 
 		let first = read_of(&app);
 
@@ -117,7 +126,11 @@ mod tests {
 	fn a_launch_that_gathered_several_reasons_answers_them_in_one() {
 		let app = a_host();
 
-		settle(app.handle(), None, vec!["the first".to_owned(), "the second".to_owned()]);
+		settle(
+			crate::events::core(app.handle()),
+			None,
+			vec!["the first".to_owned(), "the second".to_owned()],
+		);
 
 		assert_eq!(
 			read_of(&app).refused,
@@ -129,7 +142,7 @@ mod tests {
 	fn a_launch_that_did_nothing_answers_nothing() {
 		let app = a_host();
 
-		settle(app.handle(), None, Vec::new());
+		settle(crate::events::core(app.handle()), None, Vec::new());
 
 		assert_eq!(read_of(&app), LaunchOutcome::default());
 	}

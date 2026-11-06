@@ -3,7 +3,6 @@ use std::collections::HashSet;
 use base64::prelude::{Engine as _, BASE64_URL_SAFE_NO_PAD};
 use ed25519_dalek::VerifyingKey;
 use serde_json::json;
-use tauri::{AppHandle, Manager, Runtime};
 
 use super::contract::MembersError;
 use super::devices::{self, database_of, host_device, settled_turn, Revocation};
@@ -50,17 +49,17 @@ struct Settled {
 	unlisted: Vec<Rostered>,
 }
 
-pub(super) async fn admitted<R: Runtime>(
-	app: AppHandle<R>,
+pub(super) async fn admitted(
+	core: crate::core_context::Core,
 	space_id: String,
 	instance_id: String,
 ) -> Result<Vec<String>, MembersError> {
-	let Some(settled) = settled(&app, &space_id, &instance_id).await? else {
+	let Some(settled) = settled(&core, &space_id, &instance_id).await? else {
 		return Ok(Vec::new());
 	};
 	for unlisted in &settled.unlisted {
 		let revocation =
-			devices::device_left(&app, &space_id, &unlisted.relay_device_id, &unlisted.account_id)
+			devices::device_left(&core, &space_id, &unlisted.relay_device_id, &unlisted.account_id)
 				.await?;
 		if let Revocation::Ignored(reason) = revocation {
 			log::warn!(
@@ -70,21 +69,21 @@ pub(super) async fn admitted<R: Runtime>(
 		}
 	}
 	if !settled.admitted.is_empty() || !settled.unlisted.is_empty() {
-		if let Err(failure) = members::read_back(&app, &space_id, &instance_id).await {
+		if let Err(failure) = members::read_back(&core, &space_id, &instance_id).await {
 			log::warn!("hosted space {space_id} announced no member list: {failure:?}");
 		}
 	}
 	Ok(settled.admitted)
 }
 
-async fn settled<R: Runtime>(
-	app: &AppHandle<R>,
+async fn settled(
+	core: &crate::core_context::Core,
 	space_id: &str,
 	instance_id: &str,
 ) -> Result<Option<Settled>, MembersError> {
-	let host = host_device(crate::events::core(app.app_handle()))?;
-	let _turn = settled_turn(app, space_id).await?;
-	let listed = match device_list(app, instance_id).await {
+	let host = host_device(core)?;
+	let _turn = settled_turn(core, space_id).await?;
+	let listed = match device_list(core, instance_id).await {
 		Ok(listed) => listed,
 		Err(failure) => {
 			log::warn!("hosted space {space_id} changed no roster row: the device list did not read: {failure:?}");
@@ -98,7 +97,7 @@ async fn settled<R: Runtime>(
 		);
 		return Ok(None);
 	}
-	let database = database_of(app)?;
+	let database = database_of(core)?;
 	let roster = roster::verified_roster(database, space_id, &host.signing_public())
 		.await
 		.map_err(SpaceError::from)?;
@@ -121,7 +120,7 @@ async fn settled<R: Runtime>(
 		if is_removed(space_id, &removed, device) || is_held(space_id, &kept, device) {
 			continue;
 		}
-		enrolled(app, &host, space_id, device).await?;
+		enrolled(core, &host, space_id, device).await?;
 		admitted.push(device);
 	}
 	let unlisted = unlisted
@@ -132,17 +131,17 @@ async fn settled<R: Runtime>(
 	Ok(Some(Settled { admitted, unlisted }))
 }
 
-async fn device_list<R: Runtime>(
-	app: &AppHandle<R>,
+async fn device_list(
+	core: &crate::core_context::Core,
 	instance_id: &str,
 ) -> Result<Vec<CloudDevice>, MembersError> {
-	let bearer = bearer_of(app)?;
-	let listed = crate::events::core(app.app_handle())
+	let bearer = bearer_of(core)?;
+	let listed = core
 		.state::<Hosting>()
 		.cloud
 		.devices(&bearer, instance_id)
 		.await
-		.inspect_err(|failure| signed_out_if_revoked(app, &bearer, failure))?;
+		.inspect_err(|failure| signed_out_if_revoked(core, &bearer, failure))?;
 	Ok(listed.into_iter().filter(|device| device.status == DeviceStatus::Approved).collect())
 }
 
@@ -186,8 +185,8 @@ fn is_held(space_id: &str, rostered: &[Rostered], device: &ListedDevice) -> bool
 	true
 }
 
-async fn enrolled<R: Runtime>(
-	app: &AppHandle<R>,
+async fn enrolled(
+	core: &crate::core_context::Core,
 	host: &DeviceKeys,
 	space_id: &str,
 	device: &ListedDevice,
@@ -201,7 +200,7 @@ async fn enrolled<R: Runtime>(
 	};
 	let row = signed_row(host, space_id, &enrolled);
 	let device_id = row.device_id.clone();
-	database_of(app)?
+	database_of(core)?
 		.space_relay()
 		.rostered(space_id.to_owned(), row)
 		.await

@@ -134,7 +134,8 @@ pub async fn conversation_start_turn<R: Runtime>(
 			true => database.messages().ensure_turn(turn.into()).await?,
 			false => database.messages().start_turn(turn.into()).await?,
 		};
-	conversation_state::observe_reporting(&app, database, &conversation_id).await;
+	conversation_state::observe_reporting(crate::events::core(&app), database, &conversation_id)
+		.await;
 	Ok(seq)
 }
 
@@ -154,7 +155,12 @@ pub async fn conversation_complete_turn<R: Runtime>(
 	let conversation_id = database.messages().conversation_of_turn(id.clone()).await?;
 	database.messages().complete_turn(id, completed_at).await?;
 	if let Some(conversation_id) = conversation_id {
-		conversation_state::observe_reporting(&app, database, &conversation_id).await;
+		conversation_state::observe_reporting(
+			crate::events::core(&app),
+			database,
+			&conversation_id,
+		)
+		.await;
 	}
 	Ok(())
 }
@@ -170,7 +176,7 @@ pub async fn conversation_append_user_message<R: Runtime>(
 	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	refuse_unheld(
-		&app,
+		crate::events::core(&app),
 		database,
 		&message.conversation_id,
 		&message.documents,
@@ -178,13 +184,19 @@ pub async fn conversation_append_user_message<R: Runtime>(
 	)
 	.await?;
 	let written_from = caller.written_from();
-	let author = caller.author(&app, database).await?;
+	let author = caller.author(crate::events::core(&app), database).await?;
 	let (conversation_id, id) = (message.conversation_id.clone(), message.id.clone());
 	let seq =
 		database.messages().append_user_message(message.written_by(author, written_from)).await?;
 	announce_stored(crate::events::core(app.app_handle()), database, conversation_id.clone(), id)
 		.await;
-	announce_conversation(&app, database, CONVERSATION_UPDATED, &conversation_id).await;
+	announce_conversation(
+		crate::events::core(&app),
+		database,
+		CONVERSATION_UPDATED,
+		&conversation_id,
+	)
+	.await;
 	Ok(seq)
 }
 
@@ -198,7 +210,7 @@ pub async fn conversation_send_user_message<R: Runtime>(
 	summoned: Vec<String>,
 ) -> Result<i64, TranscriptStoreError> {
 	let state = core.state::<db::DatabaseState>();
-	store_sent(&app, ready(&state)?, caller, message, &summoned).await
+	store_sent(crate::events::core(&app), ready(&state)?, caller, message, &summoned).await
 }
 
 #[tauri::command]
@@ -215,8 +227,10 @@ pub async fn conversation_send_turn<R: Runtime>(
 	let database = ready(&state)?;
 	let held = agent.host_turns().hold(&message.conversation_id, &message.turn_id)?;
 	let summoned = host_turn::summoned_for(database, &message, summoned).await?;
-	let seq = store_sent(&app, database, caller, message.clone().into(), &summoned).await?;
-	host_turn::run(app, held, message, summoned).await;
+	let seq =
+		store_sent(crate::events::core(&app), database, caller, message.clone().into(), &summoned)
+			.await?;
+	host_turn::run(crate::events::core(&app).clone(), held, message, summoned).await;
 	Ok(seq)
 }
 
@@ -228,8 +242,8 @@ pub(crate) struct HandedTurn {
 	pub(crate) summoned: String,
 }
 
-pub(crate) async fn run_handed_turn<R: Runtime>(
-	app: &AppHandle<R>,
+pub(crate) async fn run_handed_turn(
+	core: &crate::core_context::Core,
 	database: &db::Database,
 	agent: &AgentState,
 	handed: HandedTurn,
@@ -257,14 +271,8 @@ pub(crate) async fn run_handed_turn<R: Runtime>(
 	messages.open_assistant_message(handing.into()).await?;
 	messages.append_text(id.clone(), content.clone()).await?;
 	messages.finalize_message(id.clone(), TerminalState::Complete, None).await?;
-	announce_stored(
-		crate::events::core(app.app_handle()),
-		database,
-		conversation_id.clone(),
-		id.clone(),
-	)
-	.await;
-	announce_conversation(app, database, CONVERSATION_UPDATED, &conversation_id).await;
+	announce_stored(core, database, conversation_id.clone(), id.clone()).await;
+	announce_conversation(core, database, CONVERSATION_UPDATED, &conversation_id).await;
 	let message = SentMessage {
 		id,
 		conversation_id,
@@ -276,24 +284,19 @@ pub(crate) async fn run_handed_turn<R: Runtime>(
 		reply_links: Vec::new(),
 		documents: Vec::new(),
 	};
-	crate::events::core(app.app_handle()).spawn(host_turn::run(
-		app.clone(),
-		held,
-		message,
-		vec![summoned],
-	));
+	core.spawn(host_turn::run(core.clone(), held, message, vec![summoned]));
 	Ok(())
 }
 
-async fn store_sent<R: Runtime>(
-	app: &AppHandle<R>,
+async fn store_sent(
+	core: &crate::core_context::Core,
 	database: &db::Database,
 	caller: Caller,
 	message: NewUserMessage,
 	summoned: &[String],
 ) -> Result<i64, TranscriptStoreError> {
 	refuse_unheld(
-		app,
+		core,
 		database,
 		&message.conversation_id,
 		&message.documents,
@@ -303,30 +306,29 @@ async fn store_sent<R: Runtime>(
 	let turn_id = message.turn_id.clone();
 	let completed_at = summoned.is_empty().then_some(message.created_at);
 	let written_from = caller.written_from();
-	let author = caller.author(app, database).await?;
+	let author = caller.author(core, database).await?;
 	let (conversation_id, id) = (message.conversation_id.clone(), message.id.clone());
 	let seq = database
 		.messages()
 		.send_user_message(message.written_by(author, written_from), completed_at)
 		.await?;
-	if let Some(agent) = crate::events::core(app.app_handle()).try_state::<AgentState>() {
+	if let Some(agent) = core.try_state::<AgentState>() {
 		agent.host_writes().claim_turn(&turn_id);
 	}
-	announce_stored(crate::events::core(app.app_handle()), database, conversation_id.clone(), id)
-		.await;
-	announce_conversation(app, database, CONVERSATION_UPDATED, &conversation_id).await;
+	announce_stored(core, database, conversation_id.clone(), id).await;
+	announce_conversation(core, database, CONVERSATION_UPDATED, &conversation_id).await;
 	Ok(seq)
 }
 
-pub(crate) async fn post_document<R: Runtime>(
-	app: &AppHandle<R>,
+pub(crate) async fn post_document(
+	core: &crate::core_context::Core,
 	database: &db::Database,
 	conversation_id: &str,
 	author_bot_id: &str,
 	name: &str,
 ) -> Result<String, TranscriptStoreError> {
 	let documents = vec![name.to_owned()];
-	refuse_unheld(app, database, conversation_id, &documents, library::held_document_or_board)
+	refuse_unheld(core, database, conversation_id, &documents, library::held_document_or_board)
 		.await?;
 	let id = Uuid::new_v4().to_string();
 	let posted = messages::NewUserMessage {
@@ -342,23 +344,17 @@ pub(crate) async fn post_document<R: Runtime>(
 		created_at: now_ms(),
 	};
 	database.messages().post_message(posted).await?;
-	announce_stored(
-		crate::events::core(app.app_handle()),
-		database,
-		conversation_id.to_owned(),
-		id.clone(),
-	)
-	.await;
-	announce_conversation(app, database, CONVERSATION_UPDATED, conversation_id).await;
+	announce_stored(core, database, conversation_id.to_owned(), id.clone()).await;
+	announce_conversation(core, database, CONVERSATION_UPDATED, conversation_id).await;
 	Ok(id)
 }
 
-async fn refuse_unheld<R: Runtime>(
-	app: &AppHandle<R>,
+async fn refuse_unheld(
+	core: &crate::core_context::Core,
 	database: &db::Database,
 	conversation_id: &str,
 	documents: &[String],
-	held: fn(&AppHandle<R>, &str, &str) -> Result<(), LibraryError>,
+	held: fn(&crate::core_context::Core, &str, &str) -> Result<(), LibraryError>,
 ) -> Result<(), TranscriptStoreError> {
 	let Some(first) = documents.first() else {
 		return Ok(());
@@ -370,7 +366,7 @@ async fn refuse_unheld<R: Runtime>(
 		});
 	};
 	documents.iter().try_for_each(|name| {
-		held(app, &space_id, name).map_err(|failure| TranscriptStoreError::DocumentRefused {
+		held(core, &space_id, name).map_err(|failure| TranscriptStoreError::DocumentRefused {
 			name: name.clone(),
 			failure: Box::new(failure),
 		})
@@ -414,7 +410,13 @@ pub async fn conversation_open_assistant_message<R: Runtime>(
 	{
 		let conversation_id = message.conversation_id.clone();
 		let seq = messages.open_assistant_message(message.into()).await?;
-		announce_conversation(&app, database, CONVERSATION_UPDATED, &conversation_id).await;
+		announce_conversation(
+			crate::events::core(&app),
+			database,
+			CONVERSATION_UPDATED,
+			&conversation_id,
+		)
+		.await;
 		return Ok(seq);
 	}
 	match messages.message(message.conversation_id, message.id.clone()).await? {
@@ -466,7 +468,13 @@ pub async fn conversation_finalize_message<R: Runtime>(
 				)
 				.await;
 			}
-			announce_conversation(&app, database, CONVERSATION_UPDATED, &conversation_id).await
+			announce_conversation(
+				crate::events::core(&app),
+				database,
+				CONVERSATION_UPDATED,
+				&conversation_id,
+			)
+			.await
 		}
 		Ok(None) => {
 			eprintln!("{UPDATED_EVENT} was not announced for message {id}: it was not found")

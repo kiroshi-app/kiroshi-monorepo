@@ -3,7 +3,6 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use serde::Serialize;
-use tauri::{AppHandle, Manager, Runtime};
 use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
 
@@ -153,17 +152,16 @@ pub struct ReplyWriter {
 }
 
 impl ReplyWriter {
-	pub fn spawn<R: Runtime>(
-		app: AppHandle<R>,
+	pub fn spawn(
+		core: crate::core_context::Core,
 		scope: &RuntimeScope,
 		owned: Arc<HostWrites>,
 		attachments: Arc<TurnAttachments>,
 		inner: Arc<dyn TurnSink>,
 	) -> Self {
 		let (entries, queued) = mpsc::unbounded_channel();
-		let core = crate::events::core(app.app_handle()).clone();
 		let store = Store {
-			app,
+			core: core.clone(),
 			conversation_id: scope.conversation_id.clone(),
 			bot_id: scope.bot_id.clone(),
 			runtime_session_id: scope.runtime_session_id.clone(),
@@ -210,10 +208,7 @@ impl EventSink for ReplyWriter {
 	}
 }
 
-async fn write_then_forward<R: Runtime>(
-	mut queued: mpsc::UnboundedReceiver<Entry>,
-	mut desk: Desk<R>,
-) {
+async fn write_then_forward(mut queued: mpsc::UnboundedReceiver<Entry>, mut desk: Desk) {
 	while let Some(entry) = queued.recv().await {
 		match entry {
 			Entry::Submitted(turn) => desk.open_turn(turn).await,
@@ -292,8 +287,8 @@ impl OpenTurn {
 	}
 }
 
-struct Desk<R: Runtime> {
-	store: Store<R>,
+struct Desk {
+	store: Store,
 	turn: Option<OpenTurn>,
 	parked: Option<OpenTurn>,
 	last_answered: Option<SubmittedTurn>,
@@ -302,8 +297,8 @@ struct Desk<R: Runtime> {
 	holds_prompts: bool,
 }
 
-impl<R: Runtime> Desk<R> {
-	fn new(store: Store<R>, attachments: Arc<TurnAttachments>, inner: Arc<dyn TurnSink>) -> Self {
+impl Desk {
+	fn new(store: Store, attachments: Arc<TurnAttachments>, inner: Arc<dyn TurnSink>) -> Self {
 		Self {
 			store,
 			turn: None,
@@ -640,7 +635,7 @@ impl<R: Runtime> Desk<R> {
 	}
 }
 
-impl<R: Runtime> Desk<R> {
+impl Desk {
 	async fn handed_to(&self, turn: &OpenTurn, completion: TerminalState) -> Vec<String> {
 		for (id, text) in &turn.written {
 			summons::note_received(&self.store.conversation_id, id, text);
@@ -659,7 +654,7 @@ impl<R: Runtime> Desk<R> {
 				turn_id: &turn.id,
 				bot_id,
 			};
-			summons::note_dropped(&self.store.app, &run, *reason, None);
+			summons::note_dropped(&self.store.core, &run, *reason, None);
 		}
 		handover.handed
 	}
@@ -725,17 +720,17 @@ impl<R: Runtime> Desk<R> {
 	}
 }
 
-struct Store<R: Runtime> {
-	app: AppHandle<R>,
+struct Store {
+	core: crate::core_context::Core,
 	conversation_id: String,
 	bot_id: String,
 	runtime_session_id: String,
 	owned: Arc<HostWrites>,
 }
 
-impl<R: Runtime> Store<R> {
+impl Store {
 	fn database(&self) -> Result<&db::Database, TranscriptStoreError> {
-		match crate::events::core(self.app.app_handle()).try_state::<db::DatabaseState>() {
+		match self.core.try_state::<db::DatabaseState>() {
 			Some(state) => ready(state.inner()),
 			None => Err(TranscriptStoreError::Unavailable {
 				failure: (&DatabaseError::AppDataDir).into(),
@@ -751,9 +746,7 @@ impl<R: Runtime> Store<R> {
 	}
 
 	fn is_quitting(&self) -> bool {
-		crate::events::core(self.app.app_handle())
-			.try_state::<AgentState>()
-			.is_some_and(|agent| agent.is_quitting())
+		self.core.try_state::<AgentState>().is_some_and(|agent| agent.is_quitting())
 	}
 
 	async fn hold_prompt(
@@ -798,7 +791,7 @@ impl<R: Runtime> Store<R> {
 	}
 
 	async fn observe_state(&self, database: &db::Database) {
-		conversation_state::observe_reporting(&self.app, database, &self.conversation_id).await;
+		conversation_state::observe_reporting(&self.core, database, &self.conversation_id).await;
 	}
 
 	async fn start_continuation(
@@ -903,7 +896,7 @@ impl<R: Runtime> Store<R> {
 	}
 
 	async fn announce_updated(&self, database: &db::Database) {
-		announce_conversation(&self.app, database, CONVERSATION_UPDATED, &self.conversation_id)
+		announce_conversation(&self.core, database, CONVERSATION_UPDATED, &self.conversation_id)
 			.await;
 	}
 
@@ -917,16 +910,16 @@ impl<R: Runtime> Store<R> {
 		let database = self.database()?;
 		database.messages().end_run(ended).await?;
 		self.announce_updated(database).await;
-		arm_start_deadlines(&self.app, &self.conversation_id, id, &handed_to);
+		arm_start_deadlines(&self.core, &self.conversation_id, id, &handed_to);
 		if !handed_to.is_empty() {
 			self.serve_when_left(id).await;
 		}
-		forget_settled_turns(&self.app).await;
+		forget_settled_turns(&self.core).await;
 		Ok(())
 	}
 
 	async fn serve_when_left(&self, turn_id: &str) {
-		if let Err(error) = serve_handed(&self.app, &self.conversation_id, turn_id).await {
+		if let Err(error) = serve_handed(&self.core, &self.conversation_id, turn_id).await {
 			log::warn!(
 				"turn {turn_id} of conversation {} could not serve the runs it handed over: {error:?}",
 				self.conversation_id
@@ -1155,9 +1148,10 @@ fn is_named_at(chars: &[char], from: usize, name: &str) -> bool {
 #[cfg(test)]
 mod tests {
 	use std::time::Duration;
+	use tauri::Manager;
 
 	use serde_json::json;
-	use tauri::test::{mock_builder, MockRuntime};
+	use tauri::test::mock_builder;
 	use tauri::Listener;
 
 	use super::super::contract::{ActivityEvent, ActivityKind, ActivityStatus};
@@ -1217,21 +1211,21 @@ mod tests {
 				.expect("the database opens")
 		}
 
-		fn desk(&self) -> Desk<MockRuntime> {
+		fn desk(&self) -> Desk {
 			self.desk_telling(Arc::new(Unheard))
 		}
 
-		fn desk_telling(&self, inner: Arc<dyn TurnSink>) -> Desk<MockRuntime> {
+		fn desk_telling(&self, inner: Arc<dyn TurnSink>) -> Desk {
 			self.desk_of_telling(DEFAULT_BOT_ID, inner)
 		}
 
-		fn desk_of(&self, bot_id: &str) -> Desk<MockRuntime> {
+		fn desk_of(&self, bot_id: &str) -> Desk {
 			self.desk_of_telling(bot_id, Arc::new(Unheard))
 		}
 
-		fn desk_of_telling(&self, bot_id: &str, inner: Arc<dyn TurnSink>) -> Desk<MockRuntime> {
+		fn desk_of_telling(&self, bot_id: &str, inner: Arc<dyn TurnSink>) -> Desk {
 			let store = Store {
-				app: self.app.handle().clone(),
+				core: crate::events::core(self.app.handle()).clone(),
 				conversation_id: self.conversation_id.clone(),
 				bot_id: bot_id.to_owned(),
 				runtime_session_id: RUNTIME_SESSION_ID.to_owned(),
@@ -1491,7 +1485,7 @@ mod tests {
 			runtime_session_id: "r1".to_owned(),
 			epoch: 1,
 		};
-		let run = commands::a_run_held_by_the_app(written.app.handle(), scope);
+		let run = commands::a_run_held_by_the_app(crate::events::core(written.app.handle()), scope);
 		let (queue, queued) = mpsc::unbounded_channel();
 		queue.send(Entry::Submitted(submitted("t1", "p1"))).expect("the turn is queued");
 		queue.send(Entry::Event(question("r1"))).expect("the question is queued");
@@ -1500,7 +1494,8 @@ mod tests {
 		write_then_forward(queued, written.desk_telling(Arc::new(run))).await;
 
 		assert_eq!(written.stored("question-r1").await, None);
-		let (pending, _) = commands::subscribed_with_pending_questions(written.app.handle());
+		let (pending, _) =
+			commands::subscribed_with_pending_questions(crate::events::core(written.app.handle()));
 		assert_eq!(pending.len(), 1);
 	}
 
@@ -1578,7 +1573,7 @@ mod tests {
 			.markdown_line()
 	}
 
-	async fn spoken(desk: &mut Desk<MockRuntime>, id: &str, text: &str) {
+	async fn spoken(desk: &mut Desk, id: &str, text: &str) {
 		desk.record(&AgentEvent::MessageStarted { message: streaming(id) }).await;
 		desk.record(&AgentEvent::MessageDelta { id: id.into(), seq: 1, text: text.into() }).await;
 		desk.record(&AgentEvent::MessageCompleted {
@@ -2600,7 +2595,7 @@ mod tests {
 		desk.open_turn(submitted("t1", "p1")).await;
 		desk.record(&question("q1")).await;
 
-		commands::a_quitting_host(written.app.handle());
+		commands::a_quitting_host(crate::events::core(written.app.handle()));
 		desk.record(&turn_ended()).await;
 
 		assert_eq!(held_prompts(&written).await, [held("q1", "question")]);

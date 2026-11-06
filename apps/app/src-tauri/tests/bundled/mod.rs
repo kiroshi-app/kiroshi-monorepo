@@ -8,7 +8,8 @@ use tauri::{App, Manager};
 pub fn bundled_bots(app: &App<MockRuntime>, bot_ids: &[&str]) {
 	let state = kiroshi_app::events::core(app.app_handle()).state::<db::DatabaseState>();
 	let database = state.inner().as_ref().expect("the database is open");
-	let root = bundles::root(app.handle()).expect("the bundles have a root");
+	let root =
+		bundles::root(kiroshi_app::events::core(app.handle())).expect("the bundles have a root");
 	for bot_id in bot_ids {
 		let bot = block_on(seated(database, bot_id));
 		bundles::lay_down(&root, &bot).expect("the bundle is laid down");

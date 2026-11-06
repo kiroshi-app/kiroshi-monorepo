@@ -1,11 +1,10 @@
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager, Runtime};
 
 use super::awaited_runs::TurnWindows;
 use super::context::mentioned_bot_ids;
 use super::contract::SummonsDropped;
 use crate::agent::contract::TransportError;
-use crate::events::{self, SUMMONS_DROPPED};
+use crate::events::SUMMONS_DROPPED;
 
 pub const MAX_SUMMONS_PER_CHAIN: usize = 5;
 
@@ -85,8 +84,8 @@ pub(crate) fn note_started(run: &SummonsRun<'_>) {
 	);
 }
 
-pub(crate) fn note_dropped<R: Runtime>(
-	app: &AppHandle<R>,
+pub(crate) fn note_dropped(
+	core: &crate::core_context::Core,
 	run: &SummonsRun<'_>,
 	reason: SummonsDropReason,
 	error: Option<TransportError>,
@@ -103,9 +102,9 @@ pub(crate) fn note_dropped<R: Runtime>(
 	}
 	let dropped = dropped_of(run, reason, error);
 	if reason.is_noticed() {
-		keep_for_the_room(app, dropped.clone());
+		keep_for_the_room(core, dropped.clone());
 	}
-	if let Err(failure) = events::emit(app, SUMMONS_DROPPED, dropped) {
+	if let Err(failure) = core.emit(SUMMONS_DROPPED, dropped) {
 		log::warn!(
 			"the dropped summons of bot {} in turn {} of conversation {} was not announced: {failure}",
 			run.bot_id,
@@ -115,8 +114,8 @@ pub(crate) fn note_dropped<R: Runtime>(
 	}
 }
 
-fn keep_for_the_room<R: Runtime>(app: &AppHandle<R>, dropped: SummonsDropped) {
-	match crate::events::core(app.app_handle()).try_state::<TurnWindows>() {
+fn keep_for_the_room(core: &crate::core_context::Core, dropped: SummonsDropped) {
+	match core.try_state::<TurnWindows>() {
 		Some(windows) => windows.keep_unless_driven(dropped),
 		None => log::error!(
 			"the dropped summons of bot {} in turn {} of conversation {} found no window state to wait in",

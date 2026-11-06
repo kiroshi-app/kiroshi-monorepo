@@ -44,9 +44,9 @@ pub async fn claude_import_run<R: Runtime>(
 		path: format!("~/{CLAUDE_DIR}"),
 		reason: NO_HOME.to_owned(),
 	})?;
-	let person = bundles::user::laid_down(&app);
+	let person = bundles::user::laid_down(crate::events::core(&app));
 	let importer = Importer {
-		app: &app,
+		core: crate::events::core(&app),
 		database: ready(&state)?,
 		root: &root,
 		person: person.as_deref(),

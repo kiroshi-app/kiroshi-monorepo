@@ -5,7 +5,6 @@ use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 
-use tauri::{AppHandle, Manager, Runtime};
 use tokio::net::TcpListener;
 use tokio::sync::{MutexGuard, Notify, OnceCell};
 use tokio::task::JoinHandle;
@@ -18,11 +17,10 @@ use crate::db::{Database, DatabaseState};
 use crate::devices;
 use crate::environment::contract::{EnvError, EnvScope, ACCOUNT_BEARER};
 use crate::environment::store;
-use crate::events::{self, ACCOUNT_CHANGED};
+use crate::events::ACCOUNT_CHANGED;
 use crate::hosting;
 use crate::invitations;
 use crate::joined_spaces;
-use crate::window_controls;
 
 const SIGNED_OUT: AccountState = AccountState::SignedOut { reason: None };
 
@@ -116,10 +114,10 @@ fn unstored(error: EnvError) -> AccountState {
 	AccountState::Unreachable { reason: format!("the session store failed: {error:?}") }
 }
 
-fn entered<R: Runtime>(app: &AppHandle<R>, state: AccountState) {
-	let session = crate::events::core(app.app_handle()).state::<AccountSession>();
+fn entered(core: &crate::core_context::Core, state: AccountState) {
+	let session = core.state::<AccountSession>();
 	*session.current.lock().unwrap_or_else(PoisonError::into_inner) = state.clone();
-	if let Err(error) = events::emit(app, ACCOUNT_CHANGED, state) {
+	if let Err(error) = core.emit(ACCOUNT_CHANGED, state) {
 		eprintln!("the account state did not reach the front: {error}");
 	}
 }
@@ -140,11 +138,11 @@ fn is_cancelled(error: &tokio::task::JoinError) -> bool {
 	error.is_cancelled()
 }
 
-pub async fn sign_in<R: Runtime>(
-	app: &AppHandle<R>,
+pub async fn sign_in(
+	core: &crate::core_context::Core,
 	open: impl FnOnce(&str) -> Result<(), String>,
 ) -> Result<(), AccountError> {
-	let session = crate::events::core(app.app_handle()).state::<AccountSession>();
+	let session = core.state::<AccountSession>();
 	let mut waiting = session.turn.lock().await;
 	closed(&mut waiting).await;
 	session.root()?;
@@ -164,7 +162,7 @@ pub async fn sign_in<R: Runtime>(
 			Err(reason) => {
 				drop(listener);
 				eprintln!("the authorization request was not created: {reason}");
-				entered(app, AccountState::Failed { failure: AccountFailure::Unreachable });
+				entered(core, AccountState::Failed { failure: AccountFailure::Unreachable });
 				return Ok(());
 			}
 		};
@@ -172,18 +170,13 @@ pub async fn sign_in<R: Runtime>(
 		eprintln!("the browser did not open the authorization page: {reason}");
 	}
 	entered(
-		app,
+		core,
 		AccountState::Waiting {
 			verification_url: request.verification_url.clone(),
 			expires_at: request.expires_at.clone(),
 		},
 	);
-	*waiting = Some(crate::events::core(app.app_handle()).spawn(approved(
-		app.clone(),
-		listener,
-		nonce,
-		request,
-	)));
+	*waiting = Some(core.spawn(approved(core.clone(), listener, nonce, request)));
 	Ok(())
 }
 
@@ -242,28 +235,28 @@ enum Settled {
 	Failed(AccountFailure),
 }
 
-async fn approved<R: Runtime>(
-	app: AppHandle<R>,
+async fn approved(
+	core: crate::core_context::Core,
 	listener: TcpListener,
 	nonce: String,
 	request: AuthorizationRequest,
 ) {
-	let session = crate::events::core(app.app_handle()).state::<AccountSession>();
+	let session = core.state::<AccountSession>();
 	let called = Arc::new(Notify::new());
 	let polling = polled(&session.cloud, &request, &called);
 	let settled = callback::served_while(listener, nonce, Arc::clone(&called), polling).await;
 	let token = match settled {
 		Settled::Approved { token } => token,
-		Settled::Failed(failure) => return entered(&app, AccountState::Failed { failure }),
+		Settled::Failed(failure) => return entered(&core, AccountState::Failed { failure }),
 	};
 	let next = session.signed_in_with(&token).await;
 	let is_signed_in = matches!(next, AccountState::SignedIn(_));
-	entered(&app, next);
-	window_controls::raise_main(&app);
+	entered(&core, next);
+	core.raise_main_window();
 	if is_signed_in {
-		stored_name_sent(&app);
-		devices::signed_in(&app).await;
-		invitations::resumed(&app);
+		stored_name_sent(&core);
+		devices::signed_in(&core).await;
+		invitations::resumed(&core);
 	}
 }
 
@@ -297,8 +290,8 @@ async fn polled(cloud: &Cloud, request: &AuthorizationRequest, called: &Notify) 
 	}
 }
 
-pub async fn restore<R: Runtime>(app: AppHandle<R>) {
-	let session = crate::events::core(app.app_handle()).state::<AccountSession>();
+pub async fn restore(core: crate::core_context::Core) {
+	let session = core.state::<AccountSession>();
 	let _turn = session.turn.lock().await;
 	let next = match session.bearer() {
 		Ok(None) => None,
@@ -306,14 +299,14 @@ pub async fn restore<R: Runtime>(app: AppHandle<R>) {
 		Err(error) => Some(unstored(error)),
 	};
 	if let Some(next) = next {
-		entered(&app, next);
+		entered(&core, next);
 	}
 	if matches!(session.current(), AccountState::SignedIn(_)) {
-		stored_name_sent(&app);
-		devices::signed_in(&app).await;
-		invitations::resumed(&app);
+		stored_name_sent(&core);
+		devices::signed_in(&core).await;
+		invitations::resumed(&core);
 	} else {
-		hosting::resumed(&app).await;
+		hosting::resumed(&core).await;
 	}
 }
 
@@ -322,29 +315,25 @@ enum NameToSend {
 	Renamed(String),
 }
 
-pub fn stored_name_sent<R: Runtime>(app: &AppHandle<R>) {
-	name_queued(app, NameToSend::Stored);
+pub fn stored_name_sent(core: &crate::core_context::Core) {
+	name_queued(core, NameToSend::Stored);
 }
 
-pub fn renamed_name_sent<R: Runtime>(app: &AppHandle<R>, display_name: String) {
-	name_queued(app, NameToSend::Renamed(display_name));
+pub fn renamed_name_sent(core: &crate::core_context::Core, display_name: String) {
+	name_queued(core, NameToSend::Renamed(display_name));
 }
 
-fn name_queued<R: Runtime>(app: &AppHandle<R>, to_send: NameToSend) {
-	let Some(session) = crate::events::core(app.app_handle()).try_state::<AccountSession>() else {
+fn name_queued(core: &crate::core_context::Core, to_send: NameToSend) {
+	let Some(session) = core.try_state::<AccountSession>() else {
 		return;
 	};
 	let mut naming = session.naming.lock().unwrap_or_else(PoisonError::into_inner);
 	let previous = naming.take();
-	*naming = Some(crate::events::core(app.app_handle()).spawn(sent_after(
-		app.clone(),
-		previous,
-		to_send,
-	)));
+	*naming = Some(core.spawn(sent_after(core.clone(), previous, to_send)));
 }
 
-async fn sent_after<R: Runtime>(
-	app: AppHandle<R>,
+async fn sent_after(
+	core: crate::core_context::Core,
 	previous: Option<Naming>,
 	to_send: NameToSend,
 ) -> Option<SentName> {
@@ -355,26 +344,24 @@ async fn sent_after<R: Runtime>(
 		}),
 		None => None,
 	};
-	name_sent(&app, last_sent, to_send).await
+	name_sent(&core, last_sent, to_send).await
 }
 
-async fn name_sent<R: Runtime>(
-	app: &AppHandle<R>,
+async fn name_sent(
+	core: &crate::core_context::Core,
 	last_sent: Option<SentName>,
 	to_send: NameToSend,
 ) -> Option<SentName> {
-	let session = crate::events::core(app.app_handle()).state::<AccountSession>();
+	let session = core.state::<AccountSession>();
 	let AccountState::SignedIn(account) = session.current() else {
 		return last_sent;
 	};
 	let display_name = match to_send {
 		NameToSend::Renamed(display_name) => display_name,
-		NameToSend::Stored => {
-			match stored_display_name(crate::events::core(app.app_handle())).await {
-				Some(display_name) => display_name,
-				None => return last_sent,
-			}
-		}
+		NameToSend::Stored => match stored_display_name(core).await {
+			Some(display_name) => display_name,
+			None => return last_sent,
+		},
 	};
 	let sending =
 		SentName { account_id: account.id, name: trimmed_to(&display_name, DISPLAY_NAME_LIMIT) };
@@ -391,11 +378,11 @@ async fn name_sent<R: Runtime>(
 	};
 	match session.cloud.rename(&bearer, &sending.name).await {
 		Ok(()) => {
-			hosting::renamed(app);
+			hosting::renamed(core);
 			Some(sending)
 		}
 		Err(MeError::Revoked) => {
-			revoked(app, &bearer);
+			revoked(core, &bearer);
 			last_sent
 		}
 		Err(MeError::Unreachable(reason)) => {
@@ -418,32 +405,30 @@ async fn stored_display_name(core: &crate::core_context::Core) -> Option<String>
 		.ok()
 }
 
-async fn signed_in_work_stopped<R: Runtime>(app: &AppHandle<R>) -> Option<MutexGuard<'_, ()>> {
-	devices::signed_out(app).await;
-	hosting::signed_out(app).await;
-	invitations::signed_out(app).await;
-	joined_spaces::relay::signed_out(app).await
+async fn signed_in_work_stopped(core: &crate::core_context::Core) -> Option<MutexGuard<'_, ()>> {
+	devices::signed_out(core).await;
+	hosting::signed_out(core).await;
+	invitations::signed_out(core).await;
+	joined_spaces::relay::signed_out(core).await
 }
 
-pub async fn sign_out<R: Runtime>(app: &AppHandle<R>) -> Result<(), AccountError> {
-	let session = crate::events::core(app.app_handle()).state::<AccountSession>();
+pub async fn sign_out(core: &crate::core_context::Core) -> Result<(), AccountError> {
+	let session = core.state::<AccountSession>();
 	let (bearer, relay_device) = {
 		let mut waiting = session.turn.lock().await;
 		let bearer = session.bearer()?;
-		let relay_device = held_relay_device(app).await;
+		let relay_device = held_relay_device(core).await;
 		closed(&mut waiting).await;
-		let _relay_turn = signed_in_work_stopped(app).await;
-		relay_device_forgotten(app).await;
+		let _relay_turn = signed_in_work_stopped(core).await;
+		relay_device_forgotten(core).await;
 		session.forget_bearer()?;
-		entered(app, SIGNED_OUT);
+		entered(core, SIGNED_OUT);
 		(bearer, relay_device)
 	};
 	let Some(bearer) = bearer else {
 		return Ok(());
 	};
-	if let Err(reason) =
-		relay_device_deleted(crate::events::core(app.app_handle()), &bearer, relay_device).await
-	{
+	if let Err(reason) = relay_device_deleted(core, &bearer, relay_device).await {
 		eprintln!("the relay device was not deleted, the sign-out goes on: {reason}");
 	}
 	if let Err(reason) = session.cloud.sign_out(&bearer).await {
@@ -452,12 +437,11 @@ pub async fn sign_out<R: Runtime>(app: &AppHandle<R>) -> Result<(), AccountError
 	Ok(())
 }
 
-async fn held_relay_device<R: Runtime>(app: &AppHandle<R>) -> Result<Option<String>, String> {
-	let Some((account_id, device_id)) = relay_device_owner(crate::events::core(app.app_handle()))?
-	else {
+async fn held_relay_device(core: &crate::core_context::Core) -> Result<Option<String>, String> {
+	let Some((account_id, device_id)) = relay_device_owner(core)? else {
 		return Ok(None);
 	};
-	signed_in_database(crate::events::core(app.app_handle()))?
+	signed_in_database(core)?
 		.relay_devices()
 		.relay_device_id(account_id, device_id)
 		.await
@@ -479,18 +463,17 @@ async fn relay_device_deleted(
 		.map_err(|failure| failure.to_string())
 }
 
-async fn relay_device_forgotten<R: Runtime>(app: &AppHandle<R>) {
-	if let Err(reason) = held_relay_device_forgotten(app).await {
+async fn relay_device_forgotten(core: &crate::core_context::Core) {
+	if let Err(reason) = held_relay_device_forgotten(core).await {
 		eprintln!("the relay device id of the signed-out account was not forgotten: {reason}");
 	}
 }
 
-async fn held_relay_device_forgotten<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
-	let Some((account_id, device_id)) = relay_device_owner(crate::events::core(app.app_handle()))?
-	else {
+async fn held_relay_device_forgotten(core: &crate::core_context::Core) -> Result<(), String> {
+	let Some((account_id, device_id)) = relay_device_owner(core)? else {
 		return Ok(());
 	};
-	signed_in_database(crate::events::core(app.app_handle()))?
+	signed_in_database(core)?
 		.relay_devices()
 		.forgotten(account_id, device_id)
 		.await
@@ -520,36 +503,24 @@ fn signed_in_database(core: &crate::core_context::Core) -> Result<&Database, Str
 		.map_err(|failure| format!("the database is unavailable: {failure:?}"))
 }
 
-pub fn revoked<R: Runtime>(app: &AppHandle<R>, bearer: &str) {
-	crate::events::core(app.app_handle()).spawn(signed_out_locally(
-		app.clone(),
-		bearer.to_owned(),
-		SIGNED_OUT_ON_SITE,
-	));
+pub fn revoked(core: &crate::core_context::Core, bearer: &str) {
+	core.spawn(signed_out_locally(core.clone(), bearer.to_owned(), SIGNED_OUT_ON_SITE));
 }
 
-pub fn device_revoked<R: Runtime>(app: &AppHandle<R>, bearer: &str) {
-	crate::events::core(app.app_handle()).spawn(signed_out_locally(
-		app.clone(),
-		bearer.to_owned(),
-		DEVICE_REVOKED,
-	));
+pub fn device_revoked(core: &crate::core_context::Core, bearer: &str) {
+	core.spawn(signed_out_locally(core.clone(), bearer.to_owned(), DEVICE_REVOKED));
 }
 
-pub fn device_refused<R: Runtime>(app: &AppHandle<R>, bearer: &str) {
-	crate::events::core(app.app_handle()).spawn(signed_out_locally(
-		app.clone(),
-		bearer.to_owned(),
-		DEVICE_REFUSED,
-	));
+pub fn device_refused(core: &crate::core_context::Core, bearer: &str) {
+	core.spawn(signed_out_locally(core.clone(), bearer.to_owned(), DEVICE_REFUSED));
 }
 
-async fn signed_out_locally<R: Runtime>(
-	app: AppHandle<R>,
+async fn signed_out_locally(
+	core: crate::core_context::Core,
 	refused: String,
 	signed_out: AccountState,
 ) {
-	let session = crate::events::core(app.app_handle()).state::<AccountSession>();
+	let session = core.state::<AccountSession>();
 	let _turn = session.turn.lock().await;
 	match session.bearer() {
 		Ok(Some(bearer)) if bearer == refused => {}
@@ -558,13 +529,13 @@ async fn signed_out_locally<R: Runtime>(
 			return eprintln!("the refused bearer was not compared with the stored one: {error:?}")
 		}
 	}
-	let _relay_turn = signed_in_work_stopped(&app).await;
-	relay_device_forgotten(&app).await;
+	let _relay_turn = signed_in_work_stopped(&core).await;
+	relay_device_forgotten(&core).await;
 	let next = match session.forget_bearer() {
 		Ok(()) => signed_out,
 		Err(error) => unstored(error),
 	};
-	entered(&app, next);
+	entered(&core, next);
 }
 
 #[cfg(test)]
@@ -572,6 +543,7 @@ mod tests {
 	use std::collections::VecDeque;
 	use std::sync::{Arc, Mutex};
 	use std::time::Instant;
+	use tauri::Manager;
 
 	use tokio::sync::{watch, Semaphore};
 
@@ -821,7 +793,7 @@ mod tests {
 
 		async fn sign_in(&self) -> Result<(), AccountError> {
 			let opened = Arc::clone(&self.opened);
-			sign_in(self.app.handle(), move |url| {
+			sign_in(crate::events::core(self.app.handle()), move |url| {
 				opened.lock().expect("the browser").push(url.to_owned());
 				Ok(())
 			})
@@ -1207,7 +1179,9 @@ mod tests {
 			let harness = Harness::new("out-waiting", &stub(cloudy.clone()).await);
 			harness.sign_in().await.expect("the sign-in starts");
 
-			sign_out(harness.app.handle()).await.expect("the sign-out settles");
+			sign_out(crate::events::core(harness.app.handle()))
+				.await
+				.expect("the sign-out settles");
 			let polled = cloudy.polls().len();
 
 			assert!(is_closed(&cloudy.callback()).await);
@@ -1272,7 +1246,7 @@ mod tests {
 			let harness = Harness::new("restore", &stub(Cloudy::default()).await);
 			harness.store(BEARER);
 
-			restore(harness.app.handle().clone()).await;
+			restore(crate::events::core(harness.app.handle()).clone()).await;
 
 			assert_eq!(harness.state(), signed_in());
 			harness.assert_no_secret_was_heard();
@@ -1303,7 +1277,7 @@ mod tests {
 			harness.named_as(&format!(" {} ", "é".repeat(100))).await;
 			harness.store(BEARER);
 
-			restore(harness.app.handle().clone()).await;
+			restore(crate::events::core(harness.app.handle()).clone()).await;
 			harness.names_settled().await;
 
 			assert_eq!(cloudy.renamed(), vec![json!({ "name": "é".repeat(80) })]);
@@ -1316,7 +1290,7 @@ mod tests {
 			let cloudy = Cloudy::default();
 			let harness = Harness::new("named-rename", &stub(cloudy.clone()).await);
 			harness.store(BEARER);
-			restore(harness.app.handle().clone()).await;
+			restore(crate::events::core(harness.app.handle()).clone()).await;
 			harness.names_settled().await;
 
 			harness.renamed_to(" Grace ").await;
@@ -1345,7 +1319,7 @@ mod tests {
 			harness.named_as("   ").await;
 			harness.store(BEARER);
 
-			restore(harness.app.handle().clone()).await;
+			restore(crate::events::core(harness.app.handle()).clone()).await;
 			harness.names_settled().await;
 			harness.renamed_to("Grace").await;
 			harness.renamed_to("  ").await;
@@ -1378,7 +1352,7 @@ mod tests {
 			};
 			let harness = Harness::new("named-500", &stub(cloudy.clone()).await);
 			harness.store(BEARER);
-			restore(harness.app.handle().clone()).await;
+			restore(crate::events::core(harness.app.handle()).clone()).await;
 			harness.names_settled().await;
 
 			let answered = harness.renamed_to("Grace").await;
@@ -1398,7 +1372,7 @@ mod tests {
 				Cloudy { rename_status: Some(StatusCode::UNAUTHORIZED), ..Cloudy::default() };
 			let harness = Harness::new("named-401", &stub(cloudy.clone()).await);
 			harness.store(BEARER);
-			restore(harness.app.handle().clone()).await;
+			restore(crate::events::core(harness.app.handle()).clone()).await;
 			harness.names_settled().await;
 
 			let answered = harness.renamed_to("Grace").await;
@@ -1418,9 +1392,12 @@ mod tests {
 			harness.named_as("Ada").await;
 			harness.store(BEARER);
 
-			tokio::time::timeout(PATIENCE, restore(harness.app.handle().clone()))
-				.await
-				.expect("the restore answers while the relay holds the rename");
+			tokio::time::timeout(
+				PATIENCE,
+				restore(crate::events::core(harness.app.handle()).clone()),
+			)
+			.await
+			.expect("the restore answers while the relay holds the rename");
 			assert_eq!(cloudy.renamed_once().await, vec![json!({ "name": "Ada" })]);
 			let answered = tokio::time::timeout(PATIENCE, harness.renamed_to("Grace"))
 				.await
@@ -1445,7 +1422,7 @@ mod tests {
 			let harness = Harness::new("named-held-then-emptied", &stub(cloudy.clone()).await);
 			harness.named_as("Ada").await;
 			harness.store(BEARER);
-			restore(harness.app.handle().clone()).await;
+			restore(crate::events::core(harness.app.handle()).clone()).await;
 			assert_eq!(cloudy.renamed_once().await, vec![json!({ "name": "Ada" })]);
 
 			harness.renamed_to("Grace").await;
@@ -1466,7 +1443,7 @@ mod tests {
 			let cloudy = Cloudy::default();
 			let harness = Harness::new("named-twice", &stub(cloudy.clone()).await);
 			harness.store(BEARER);
-			restore(harness.app.handle().clone()).await;
+			restore(crate::events::core(harness.app.handle()).clone()).await;
 			harness.names_settled().await;
 
 			harness.renamed_to("Ada").await;
@@ -1483,7 +1460,7 @@ mod tests {
 			let harness = Harness::new("revoked", &stub(Cloudy::default()).await);
 			harness.store(REVOKED);
 
-			restore(harness.app.handle().clone()).await;
+			restore(crate::events::core(harness.app.handle()).clone()).await;
 
 			assert_eq!(harness.state(), SIGNED_OUT_ON_SITE);
 			assert_eq!(harness.stored(), None);
@@ -1504,10 +1481,10 @@ mod tests {
 			crate::events::core(harness.app.app_handle())
 				.manage(joined_spaces::relay::RelayGuests::new(&api));
 			harness.store(BEARER);
-			restore(harness.app.handle().clone()).await;
+			restore(crate::events::core(harness.app.handle()).clone()).await;
 			assert_eq!(harness.state(), signed_in());
 
-			joined_spaces::relay::reconciled(harness.app.handle()).await;
+			joined_spaces::relay::reconciled(crate::events::core(harness.app.handle())).await;
 
 			assert_eq!(harness.signed_out().await, SIGNED_OUT_ON_SITE);
 			assert_eq!(harness.stored(), None);
@@ -1520,10 +1497,15 @@ mod tests {
 		run(async {
 			let harness = Harness::new("stale-401", &stub(Cloudy::default()).await);
 			harness.store(BEARER);
-			restore(harness.app.handle().clone()).await;
+			restore(crate::events::core(harness.app.handle()).clone()).await;
 
 			let app = harness.app.handle().clone();
-			signed_out_locally(app, REVOKED.to_owned(), SIGNED_OUT_ON_SITE).await;
+			signed_out_locally(
+				crate::events::core(&app).clone(),
+				REVOKED.to_owned(),
+				SIGNED_OUT_ON_SITE,
+			)
+			.await;
 
 			assert_eq!(harness.state(), signed_in());
 			assert_eq!(harness.stored().as_deref(), Some(BEARER));
@@ -1536,7 +1518,7 @@ mod tests {
 			let harness = Harness::new("flaky", &stub(Cloudy::default()).await);
 			harness.store(FLAKY);
 
-			restore(harness.app.handle().clone()).await;
+			restore(crate::events::core(harness.app.handle()).clone()).await;
 
 			let AccountState::Unreachable { reason } = harness.state() else {
 				panic!("the account is not unreachable: {:?}", harness.state());
@@ -1552,7 +1534,7 @@ mod tests {
 		run(async {
 			let harness = Harness::new("nothing", &stub(Cloudy::default()).await);
 
-			restore(harness.app.handle().clone()).await;
+			restore(crate::events::core(harness.app.handle()).clone()).await;
 
 			assert_eq!(harness.state(), SIGNED_OUT);
 			assert!(harness.heard().is_empty());
@@ -1568,9 +1550,11 @@ mod tests {
 				let cloudy = Cloudy { sign_out_status: Some(status), ..Cloudy::default() };
 				let harness = Harness::new(name, &stub(cloudy.clone()).await);
 				harness.store(BEARER);
-				restore(harness.app.handle().clone()).await;
+				restore(crate::events::core(harness.app.handle()).clone()).await;
 
-				sign_out(harness.app.handle()).await.expect("the sign-out settles");
+				sign_out(crate::events::core(harness.app.handle()))
+					.await
+					.expect("the sign-out settles");
 
 				assert_eq!(
 					cloudy.signed_out.lock().expect("the stub").clone(),
@@ -1593,7 +1577,7 @@ mod tests {
 			let cloudy = Cloudy::default();
 			let harness = Harness::new("already-in", &stub(cloudy.clone()).await);
 			harness.store(BEARER);
-			restore(harness.app.handle().clone()).await;
+			restore(crate::events::core(harness.app.handle()).clone()).await;
 
 			let answered = harness.sign_in().await;
 
@@ -1615,7 +1599,7 @@ mod tests {
 			assert!(reason.contains("store"), "{reason}");
 			assert!(matches!(harness.sign_in().await, Err(AccountError::Store { .. })));
 			assert!(matches!(
-				sign_out(harness.app.handle()).await,
+				sign_out(crate::events::core(harness.app.handle())).await,
 				Err(AccountError::Store { .. })
 			));
 			assert!(cloudy.created.lock().expect("the stub").is_empty());

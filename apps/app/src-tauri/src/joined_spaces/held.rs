@@ -1,5 +1,3 @@
-use tauri::{AppHandle, Manager, Runtime};
-
 use super::commands::ready;
 use super::contract::{JoinedSpaceError, JoinedSpaceWait};
 use super::roster_set::{verified_set, Handed, HeldRoster};
@@ -20,9 +18,10 @@ pub(super) struct Held {
 	pub(super) roster: HeldRoster,
 }
 
-pub(super) fn device_keys<R: Runtime>(app: &AppHandle<R>) -> Result<DeviceKeys, JoinedSpaceError> {
-	crate::events::core(app.app_handle())
-		.try_state::<DeviceKeysState>()
+pub(super) fn device_keys(
+	core: &crate::core_context::Core,
+) -> Result<DeviceKeys, JoinedSpaceError> {
+	core.try_state::<DeviceKeysState>()
 		.ok_or_else(|| JoinedSpaceError::KeyStore {
 			detail: "the device keys are not loaded".to_owned(),
 		})?
@@ -31,36 +30,34 @@ pub(super) fn device_keys<R: Runtime>(app: &AppHandle<R>) -> Result<DeviceKeys, 
 		.map_err(key_store)
 }
 
-pub(super) async fn held<R: Runtime>(
-	app: &AppHandle<R>,
+pub(super) async fn held(
+	core: &crate::core_context::Core,
 	instance_id: &str,
 ) -> Result<Result<Held, JoinedSpaceWait>, JoinedSpaceError> {
-	let device = device_keys(app)?;
-	let Some(space) = space_keys(app)?.held(&key_item(instance_id)).map_err(key_store)? else {
-		return Ok(Err(last_wait(app, instance_id)));
+	let device = device_keys(core)?;
+	let Some(space) = space_keys(core)?.held(&key_item(instance_id)).map_err(key_store)? else {
+		return Ok(Err(last_wait(core, instance_id)));
 	};
-	let Some(roster) =
-		roster_verified(crate::events::core(app.app_handle()), instance_id, &device).await?
-	else {
+	let Some(roster) = roster_verified(core, instance_id, &device).await? else {
 		return Ok(Err(wait_of(Stall::RosterMissing)));
 	};
 	Ok(Ok(Held { device, space, roster }))
 }
 
-pub(super) fn wait<R: Runtime>(
-	app: &AppHandle<R>,
+pub(super) fn wait(
+	core: &crate::core_context::Core,
 	instance_id: &str,
 ) -> Result<Option<JoinedSpaceWait>, JoinedSpaceError> {
-	let space = space_keys(app)?.held(&key_item(instance_id)).map_err(key_store)?;
-	Ok(space.is_none().then(|| last_wait(app, instance_id)))
+	let space = space_keys(core)?.held(&key_item(instance_id)).map_err(key_store)?;
+	Ok(space.is_none().then(|| last_wait(core, instance_id)))
 }
 
-pub(super) fn wait_or_unread<R: Runtime>(
-	app: &AppHandle<R>,
+pub(super) fn wait_or_unread(
+	core: &crate::core_context::Core,
 	id: &str,
 	instance_id: &str,
 ) -> Option<JoinedSpaceWait> {
-	wait(app, instance_id).unwrap_or_else(|failure| {
+	wait(core, instance_id).unwrap_or_else(|failure| {
 		let unread = wait_of(Stall::KeyRead(failure));
 		log::warn!(
 			"joined space {id} (instance {instance_id}) waits for its host ({:?}): {}",
@@ -71,11 +68,11 @@ pub(super) fn wait_or_unread<R: Runtime>(
 	})
 }
 
-pub(super) async fn roster<R: Runtime>(
-	app: &AppHandle<R>,
+pub(super) async fn roster(
+	core: &crate::core_context::Core,
 	instance_id: &str,
 ) -> Result<Option<HeldRoster>, JoinedSpaceError> {
-	roster_verified(crate::events::core(app.app_handle()), instance_id, &device_keys(app)?).await
+	roster_verified(core, instance_id, &device_keys(core)?).await
 }
 
 async fn roster_verified(
@@ -93,17 +90,17 @@ async fn roster_verified(
 	verified_set(set, None, &device.device_id()).map(Some)
 }
 
-pub(super) async fn kept<R: Runtime>(
-	app: &AppHandle<R>,
+pub(super) async fn kept(
+	core: &crate::core_context::Core,
 	instance_id: &str,
 	handed: &Handed,
 ) -> Result<bool, JoinedSpaceError> {
-	let space_keys = space_keys(app)?;
-	if !roster_kept(app, instance_id, &handed.roster).await? {
+	let space_keys = space_keys(core)?;
+	if !roster_kept(core, instance_id, &handed.roster).await? {
 		return Ok(false);
 	}
 	let space = &handed.space;
-	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
+	let state = core.state::<db::DatabaseState>();
 	let relay = ready(&state)?.joined_space_relay();
 	relay.counter_started(instance_id.to_owned(), space.key_id).await?;
 	let copy = HeldSpaceKey { key_id: space.key_id, key: space.key.clone() };
@@ -111,8 +108,8 @@ pub(super) async fn kept<R: Runtime>(
 	Ok(true)
 }
 
-pub(super) async fn roster_kept<R: Runtime>(
-	app: &AppHandle<R>,
+pub(super) async fn roster_kept(
+	core: &crate::core_context::Core,
 	instance_id: &str,
 	roster: &HeldRoster,
 ) -> Result<bool, JoinedSpaceError> {
@@ -121,15 +118,15 @@ pub(super) async fn roster_kept<R: Runtime>(
 		detail: format!("the roster set did not serialise: {failure}"),
 	})?;
 	let held = joined_space_relay::HeldRoster { key_id: set.key_id, version: set.version, roster };
-	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
+	let state = core.state::<db::DatabaseState>();
 	Ok(ready(&state)?.joined_space_relay().roster_kept(instance_id.to_owned(), held).await?)
 }
 
-fn space_keys<R: Runtime>(
-	app: &AppHandle<R>,
+fn space_keys(
+	core: &crate::core_context::Core,
 ) -> Result<crate::core_context::Managed<'_, SpaceKeys>, JoinedSpaceError> {
-	crate::events::core(app.app_handle()).try_state::<SpaceKeys>().ok_or_else(|| {
-		JoinedSpaceError::KeyStore { detail: "the space key store is not loaded".to_owned() }
+	core.try_state::<SpaceKeys>().ok_or_else(|| JoinedSpaceError::KeyStore {
+		detail: "the space key store is not loaded".to_owned(),
 	})
 }
 

@@ -46,7 +46,7 @@ fn a_signed_in_check_crosses_no_identity() {
 		assert!(!crossed.contains('@'), "an email reached the check report: {crossed}");
 		assert!(!crossed.contains("account"), "an account reached the check report: {crossed}");
 
-		terminate_session(an_app_with_a_core().handle(), &state).await;
+		terminate_session(kiroshi_app::events::core(an_app_with_a_core().handle()), &state).await;
 	});
 
 	std::env::remove_var(SIDECAR_OVERRIDE_ENV);
@@ -70,7 +70,7 @@ fn a_signed_in_account_read_names_the_account_the_sidecar_named() {
 			})
 		);
 
-		terminate_session(an_app_with_a_core().handle(), &state).await;
+		terminate_session(kiroshi_app::events::core(an_app_with_a_core().handle()), &state).await;
 	});
 
 	std::env::remove_var(SIDECAR_OVERRIDE_ENV);
@@ -92,7 +92,7 @@ fn an_account_read_naming_no_account_crosses_a_null_account() {
 		assert_eq!(crossed.get("account"), Some(&serde_json::Value::Null));
 		assert_eq!(crossed.get("authenticated"), Some(&serde_json::Value::Bool(false)));
 
-		terminate_session(an_app_with_a_core().handle(), &state).await;
+		terminate_session(kiroshi_app::events::core(an_app_with_a_core().handle()), &state).await;
 	});
 
 	std::env::remove_var("FAKE_AGENT_SIGNED_OUT");
@@ -118,7 +118,7 @@ fn a_signed_out_install_is_reported_as_a_sign_in_and_not_as_a_missing_sidecar() 
 			"a sidecar that answered was reported as one that never spoke"
 		);
 
-		terminate_session(an_app_with_a_core().handle(), &state).await;
+		terminate_session(kiroshi_app::events::core(an_app_with_a_core().handle()), &state).await;
 	});
 
 	std::env::remove_var("FAKE_AGENT_SIGNED_OUT");
@@ -144,7 +144,7 @@ fn a_host_with_no_sidecar_reports_neither_a_version_nor_a_sign_in() {
 		);
 		assert!(report.error.is_some(), "a host with nothing to ask reported no failure");
 
-		terminate_session(an_app_with_a_core().handle(), &state).await;
+		terminate_session(kiroshi_app::events::core(an_app_with_a_core().handle()), &state).await;
 	});
 
 	std::env::remove_var(SIDECAR_OVERRIDE_ENV);
@@ -172,7 +172,7 @@ fn a_sidecar_that_died_before_ready_is_reported_with_what_it_wrote() {
 		);
 		assert!(detail.contains(motive), "what the sidecar wrote was dropped: {detail}");
 
-		terminate_session(an_app_with_a_core().handle(), &state).await;
+		terminate_session(kiroshi_app::events::core(an_app_with_a_core().handle()), &state).await;
 	});
 
 	std::env::remove_var("FAKE_AGENT_STARTUP_STDERR");
@@ -197,7 +197,7 @@ fn a_sidecar_that_died_before_ready_is_reported_with_its_exit_code() {
 			})
 		);
 
-		terminate_session(an_app_with_a_core().handle(), &state).await;
+		terminate_session(kiroshi_app::events::core(an_app_with_a_core().handle()), &state).await;
 	});
 
 	std::env::remove_var("FAKE_AGENT_STARTUP_STDERR");
@@ -223,7 +223,7 @@ fn a_sidecar_the_system_killed_at_launch_is_reported_with_the_signal() {
 			})
 		);
 
-		terminate_session(an_app_with_a_core().handle(), &state).await;
+		terminate_session(kiroshi_app::events::core(an_app_with_a_core().handle()), &state).await;
 	});
 
 	std::env::remove_var("FAKE_AGENT_STARTUP_SIGKILL");
@@ -243,7 +243,7 @@ fn a_probe_that_could_not_run_is_reported_apart_from_a_refusal() {
 		assert_eq!(report.connection, ConnectionState::Unavailable);
 		assert!(matches!(report.error, Some(TransportError::AuthCheckFailed { .. })));
 
-		terminate_session(an_app_with_a_core().handle(), &state).await;
+		terminate_session(kiroshi_app::events::core(an_app_with_a_core().handle()), &state).await;
 	});
 
 	std::env::remove_var("FAKE_AGENT_CHECK_FAILS");
@@ -265,7 +265,7 @@ fn reported_with(root: &std::path::Path) -> CheckReport {
 	let state = AgentState::default();
 	let report = runtime().block_on(async {
 		let report = check(&state, Some(root)).await;
-		terminate_session(an_app_with_a_core().handle(), &state).await;
+		terminate_session(kiroshi_app::events::core(an_app_with_a_core().handle()), &state).await;
 		report
 	});
 	std::env::remove_var(SIDECAR_OVERRIDE_ENV);

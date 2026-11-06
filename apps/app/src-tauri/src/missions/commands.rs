@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use serde::Serialize;
-use tauri::{AppHandle, Manager, Runtime, State};
+use tauri::{AppHandle, Runtime, State};
 
 use super::checkout;
 use super::contract::{
@@ -24,7 +24,7 @@ use crate::conversations::state as conversation_state;
 use crate::conversations::summons::{self, SummonsDropReason, SummonsRun};
 use crate::db;
 use crate::db::repositories::keyset;
-use crate::events::{self, MISSION_CHANGED};
+use crate::events::MISSION_CHANGED;
 use crate::file_store::FileStore;
 use crate::routines::runner::NO_AGENT;
 use crate::routines::webhook::{Webhook, HEADER};
@@ -88,9 +88,9 @@ impl AnnouncedLiveness {
 	}
 }
 
-pub(crate) fn observed<R: Runtime>(app: &AppHandle<R>, mission: Mission) -> Mission {
+pub(crate) fn observed(core: &crate::core_context::Core, mission: Mission) -> Mission {
 	let stored = MissionPresence::of(&mission);
-	let present = present(app, &mission.thread_conversation_id, &mission.bot_id, stored);
+	let present = present(core, &mission.thread_conversation_id, &mission.bot_id, stored);
 	Mission {
 		liveness: present.liveness,
 		pending_prompt: present.pending_prompt,
@@ -99,13 +99,13 @@ pub(crate) fn observed<R: Runtime>(app: &AppHandle<R>, mission: Mission) -> Miss
 	}
 }
 
-pub(crate) fn present<R: Runtime>(
-	app: &AppHandle<R>,
+pub(crate) fn present(
+	core: &crate::core_context::Core,
 	thread_conversation_id: &str,
 	bot_id: &str,
 	stored: MissionPresence,
 ) -> MissionPresence {
-	let Some(agent) = crate::events::core(app.app_handle()).try_state::<AgentState>() else {
+	let Some(agent) = core.try_state::<AgentState>() else {
 		return stored;
 	};
 	let thread = agent.thread_signs(thread_conversation_id);
@@ -121,30 +121,30 @@ pub(crate) fn present<R: Runtime>(
 	MissionPresence { liveness, pending_prompt, working_bot_ids }
 }
 
-fn observed_all<R: Runtime>(app: &AppHandle<R>, missions: Vec<Mission>) -> Vec<Mission> {
-	missions.into_iter().map(|mission| observed(app, mission)).collect()
+fn observed_all(core: &crate::core_context::Core, missions: Vec<Mission>) -> Vec<Mission> {
+	missions.into_iter().map(|mission| observed(core, mission)).collect()
 }
 
-pub(super) fn announce_change<R: Runtime>(
-	app: &AppHandle<R>,
+pub(super) fn announce_change(
+	core: &crate::core_context::Core,
 	mission: Mission,
 ) -> Result<Mission, MissionError> {
-	announce_when(app, mission, |_, _| true)
+	announce_when(core, mission, |_, _| true)
 }
 
-pub(super) fn announce_when<R: Runtime>(
-	app: &AppHandle<R>,
+pub(super) fn announce_when(
+	core: &crate::core_context::Core,
 	mission: Mission,
 	is_news: impl FnOnce(&Mission, bool) -> bool,
 ) -> Result<Mission, MissionError> {
 	let unmanaged = AnnouncedLiveness::default();
-	let announced = crate::events::core(app.app_handle()).try_state::<AnnouncedLiveness>();
+	let announced = core.try_state::<AnnouncedLiveness>();
 	let mut kept = announced.as_deref().unwrap_or(&unmanaged).kept();
-	let mission = observed(app, mission);
+	let mission = observed(core, mission);
 	let has_pulse_moved = kept.get(&mission.id) != Some(&Pulse::of(&mission));
 	if is_news(&mission, has_pulse_moved) {
-		conversation_state::observe_later(app, mission.origin_conversation_id.clone());
-		emit_change(app, &mission)?;
+		conversation_state::observe_later(core, mission.origin_conversation_id.clone());
+		emit_change(core, &mission)?;
 	}
 	match mission.closed_at {
 		Some(_) => kept.remove(&mission.id),
@@ -153,23 +153,22 @@ pub(super) fn announce_when<R: Runtime>(
 	Ok(mission)
 }
 
-pub(crate) async fn announce_thread_moved<R: Runtime>(
-	app: &AppHandle<R>,
+pub(crate) async fn announce_thread_moved(
+	core: &crate::core_context::Core,
 	database: &db::Database,
 	conversation_id: String,
 ) -> Result<(), MissionError> {
 	let Some(threaded) = database.missions().threaded(conversation_id).await? else {
 		return Ok(());
 	};
-	announce_when(app, threaded, |mission, has_pulse_moved| {
+	announce_when(core, threaded, |mission, has_pulse_moved| {
 		mission.closed_at.is_none() && has_pulse_moved
 	})?;
 	Ok(())
 }
 
-fn emit_change<R: Runtime>(app: &AppHandle<R>, mission: &Mission) -> Result<(), MissionError> {
-	events::emit(
-		app,
+fn emit_change(core: &crate::core_context::Core, mission: &Mission) -> Result<(), MissionError> {
+	core.emit(
 		MISSION_CHANGED,
 		MissionChanged {
 			mission_id: mission.id.clone(),
@@ -201,9 +200,8 @@ fn refused_draft(draft: &MissionDraft) -> Result<(), MissionError> {
 	refused_workspace(draft.workspace_path.as_deref())
 }
 
-pub async fn mission_open<R: Runtime>(
-	app: AppHandle<R>,
-	core: State<'_, crate::core_context::Core>,
+pub async fn mission_open(
+	core: &crate::core_context::Core,
 	draft: MissionDraft,
 ) -> Result<MissionOpened, MissionError> {
 	let state = core.state::<db::DatabaseState>();
@@ -212,9 +210,9 @@ pub async fn mission_open<R: Runtime>(
 	let workspace = draft.workspace_path.clone();
 	let key = uuid::Uuid::new_v4().to_string();
 	let opened = ready(&state)?.missions().open(draft, key.clone()).await?;
-	let opened = announce_change(&app, opened)?;
+	let opened = announce_change(core, opened)?;
 	let reach = match workspace {
-		Some(workspace) => reach_of(&app, &opened.id, &workspace, &key),
+		Some(workspace) => reach_of(core, &opened.id, &workspace, &key),
 		None => UNHEARD.to_owned(),
 	};
 	Ok(MissionOpened {
@@ -225,13 +223,13 @@ pub async fn mission_open<R: Runtime>(
 	})
 }
 
-fn reach_of<R: Runtime>(
-	app: &AppHandle<R>,
+fn reach_of(
+	core: &crate::core_context::Core,
 	mission_id: &str,
 	workspace: &str,
 	key: &str,
 ) -> String {
-	match install(app, mission_id, workspace, key) {
+	match install(core, mission_id, workspace, key) {
 		Ok(()) => HEARD.to_owned(),
 		Err(MissionError::Undeliverable { detail }) => format!("{UNHEARD}: {detail}"),
 		Err(failure) => {
@@ -241,22 +239,17 @@ fn reach_of<R: Runtime>(
 	}
 }
 
-fn install<R: Runtime>(
-	app: &AppHandle<R>,
+fn install(
+	core: &crate::core_context::Core,
 	mission_id: &str,
 	workspace: &str,
 	key: &str,
 ) -> Result<(), MissionError> {
-	hook::installed(
-		&hook::dir(app, mission_id)?,
-		workspace,
-		&hook_url(crate::events::core(app.app_handle()))?,
-		key,
-	)
+	hook::installed(&hook::dir(core, mission_id)?, workspace, &hook_url(core)?, key)
 }
 
-pub async fn install_hooks_at_launch<R: Runtime>(app: &AppHandle<R>) {
-	let missions = match at_launch(crate::events::core(app.app_handle())).await {
+pub async fn install_hooks_at_launch(core: &crate::core_context::Core) {
+	let missions = match at_launch(core).await {
 		Ok(missions) => missions,
 		Err(failure) => {
 			return eprintln!("the open missions holding a checkout were not read: {failure:?}")
@@ -264,7 +257,7 @@ pub async fn install_hooks_at_launch<R: Runtime>(app: &AppHandle<R>) {
 	};
 	for mission in missions {
 		if let Err(failure) =
-			install(app, &mission.id, &mission.workspace_path, &mission.delivery_key)
+			install(core, &mission.id, &mission.workspace_path, &mission.delivery_key)
 		{
 			report_unhooked(&mission.id, &failure);
 		}
@@ -280,19 +273,17 @@ fn report_unhooked(mission_id: &str, failure: &MissionError) {
 	eprintln!("the agent hook of {mission_id} was not installed: {failure:?}");
 }
 
-pub async fn mission_note<R: Runtime>(
-	app: AppHandle<R>,
-	core: State<'_, crate::core_context::Core>,
+pub async fn mission_note(
+	core: &crate::core_context::Core,
 	mission_id: String,
 	entry: MissionEntry,
 ) -> Result<Mission, MissionError> {
 	let state = core.state::<db::DatabaseState>();
-	appended(&app, &state, mission_id, entry).await
+	appended(core, &state, mission_id, entry).await
 }
 
-pub async fn mission_status<R: Runtime>(
-	app: AppHandle<R>,
-	core: State<'_, crate::core_context::Core>,
+pub async fn mission_status(
+	core: &crate::core_context::Core,
 	mission_id: String,
 	source: String,
 	text: String,
@@ -304,29 +295,27 @@ pub async fn mission_status<R: Runtime>(
 		source,
 		payload: serde_json::json!({ "text": text }),
 	};
-	appended(&app, &state, mission_id, entry).await
+	appended(core, &state, mission_id, entry).await
 }
 
-pub async fn mission_escalate<R: Runtime>(
-	app: AppHandle<R>,
-	core: State<'_, crate::core_context::Core>,
+pub async fn mission_escalate(
+	core: &crate::core_context::Core,
 	mission_id: String,
 	note: MissionNote,
 ) -> Result<Mission, MissionError> {
 	let state = core.state::<db::DatabaseState>();
-	appended(&app, &state, mission_id, MissionEntry::of(MissionEventKind::Escalated, note)).await
+	appended(core, &state, mission_id, MissionEntry::of(MissionEventKind::Escalated, note)).await
 }
 
-pub async fn mission_conclude<R: Runtime>(
-	app: AppHandle<R>,
-	core: State<'_, crate::core_context::Core>,
+pub async fn mission_conclude(
+	core: &crate::core_context::Core,
 	mission_id: String,
 	closing: MissionClosing,
 ) -> Result<Mission, MissionError> {
 	let state = core.state::<db::DatabaseState>();
 	refuse_blank("source", &closing.source)?;
 	let written = ready(&state)?.missions().close(mission_id, closing).await?;
-	announce_change(&app, written)
+	announce_change(core, written)
 }
 
 #[tauri::command]
@@ -338,7 +327,7 @@ pub async fn mission_close<R: Runtime>(
 ) -> Result<Mission, MissionError> {
 	let state = core.state::<db::DatabaseState>();
 	let written = ready(&state)?.missions().dismiss(mission_id, PERSON.to_owned()).await?;
-	announce_change(&app, written)
+	announce_change(crate::events::core(&app), written)
 }
 
 #[tauri::command]
@@ -350,12 +339,11 @@ pub async fn mission_reopen<R: Runtime>(
 ) -> Result<Mission, MissionError> {
 	let state = core.state::<db::DatabaseState>();
 	let written = ready(&state)?.missions().reopen(mission_id, PERSON.to_owned()).await?;
-	announce_change(&app, written)
+	announce_change(crate::events::core(&app), written)
 }
 
-pub async fn mission_reopen_unmerged<R: Runtime>(
-	app: AppHandle<R>,
-	core: State<'_, crate::core_context::Core>,
+pub async fn mission_reopen_unmerged(
+	core: &crate::core_context::Core,
 	mission_id: String,
 	source: String,
 ) -> Result<Mission, MissionError> {
@@ -363,7 +351,7 @@ pub async fn mission_reopen_unmerged<R: Runtime>(
 	let database = ready(&state)?;
 	refuse_a_merged_mission(database, &mission_id).await?;
 	let written = database.missions().reopen(mission_id, source).await?;
-	announce_change(&app, written)
+	announce_change(core, written)
 }
 
 async fn refuse_a_merged_mission(
@@ -386,9 +374,8 @@ async fn refuse_a_merged_mission(
 	}
 }
 
-pub async fn mission_update<R: Runtime>(
-	app: AppHandle<R>,
-	core: State<'_, crate::core_context::Core>,
+pub async fn mission_update(
+	core: &crate::core_context::Core,
 	mission_id: String,
 	update: MissionUpdate,
 	source: String,
@@ -396,7 +383,7 @@ pub async fn mission_update<R: Runtime>(
 	let state = core.state::<db::DatabaseState>();
 	refused_update(&mission_id, &update)?;
 	let written = ready(&state)?.missions().update(mission_id, update, source).await?;
-	announce_change(&app, written)
+	announce_change(core, written)
 }
 
 fn refused_update(mission_id: &str, update: &MissionUpdate) -> Result<(), MissionError> {
@@ -418,9 +405,8 @@ struct Successor {
 	name: String,
 }
 
-pub async fn mission_handoff<R: Runtime>(
-	app: AppHandle<R>,
-	core: State<'_, crate::core_context::Core>,
+pub async fn mission_handoff(
+	core: &crate::core_context::Core,
 	mission_id: String,
 	from_bot_id: String,
 	companion: String,
@@ -430,7 +416,7 @@ pub async fn mission_handoff<R: Runtime>(
 	let held = mission_row(database, &mission_id).await?;
 	let successor = successor_of(database, &held, &companion).await?;
 	seat_participant(
-		&app,
+		core,
 		database,
 		held.origin_conversation_id.clone(),
 		successor.id.clone(),
@@ -442,9 +428,9 @@ pub async fn mission_handoff<R: Runtime>(
 		to_bot_id: successor.id.clone(),
 		source: BOT.to_owned(),
 	};
-	let written = announce_change(&app, database.missions().hand_off(mission_id, handoff).await?)?;
+	let written = announce_change(core, database.missions().hand_off(mission_id, handoff).await?)?;
 	if written.closed_at.is_none() {
-		summon(&app, database, &written, from_bot_id, successor).await?;
+		summon(core, database, &written, from_bot_id, successor).await?;
 	}
 	Ok(written)
 }
@@ -465,8 +451,8 @@ async fn successor_of(
 	Ok(Successor { id: picked.id.clone(), name: picked.name.clone() })
 }
 
-async fn summon<R: Runtime>(
-	app: &AppHandle<R>,
+async fn summon(
+	core: &crate::core_context::Core,
 	database: &db::Database,
 	mission: &Mission,
 	from_bot_id: String,
@@ -481,11 +467,11 @@ async fn summon<R: Runtime>(
 		text: format!("@{} {HANDED_OVER} {}", successor.name, mission.objective),
 		summoned: successor.id.clone(),
 	};
-	let Err(failure) = handed_over(app, database, handed).await else {
+	let Err(failure) = handed_over(core, database, handed).await else {
 		return Ok(());
 	};
 	let run = SummonsRun { conversation_id: thread_id, turn_id: &turn_id, bot_id: &successor.id };
-	summons::note_dropped(app, &run, SummonsDropReason::StartFailed, None);
+	summons::note_dropped(core, &run, SummonsDropReason::StartFailed, None);
 	log::error!(
 		"mission {} changed owner to {} and the summons of its handoff was not written: {failure:?}",
 		mission.id,
@@ -494,26 +480,26 @@ async fn summon<R: Runtime>(
 	Err(failure)
 }
 
-async fn handed_over<R: Runtime>(
-	app: &AppHandle<R>,
+async fn handed_over(
+	core: &crate::core_context::Core,
 	database: &db::Database,
 	handed: HandedTurn,
 ) -> Result<(), MissionError> {
-	let Some(agent) = crate::events::core(app.app_handle()).try_state::<AgentState>() else {
+	let Some(agent) = core.try_state::<AgentState>() else {
 		return Err(MissionError::Undeliverable { detail: NO_AGENT.to_owned() });
 	};
-	Ok(run_handed_turn(app, database, &agent, handed).await?)
+	Ok(run_handed_turn(core, database, &agent, handed).await?)
 }
 
-async fn appended<R: Runtime>(
-	app: &AppHandle<R>,
+async fn appended(
+	core: &crate::core_context::Core,
 	state: &db::DatabaseState,
 	mission_id: String,
 	entry: MissionEntry,
 ) -> Result<Mission, MissionError> {
 	refuse_blank("source", &entry.source)?;
 	let written = ready(state)?.missions().append(mission_id, entry).await?;
-	announce_change(app, written)
+	announce_change(core, written)
 }
 
 #[tauri::command]
@@ -526,30 +512,29 @@ pub async fn mission_answered<R: Runtime>(
 ) -> Result<Mission, MissionError> {
 	let state = core.state::<db::DatabaseState>();
 	match ready(&state)?.missions().answer(mission_id, seq, BOT.to_owned()).await? {
-		MissionAnswer::Appended(written) => announce_change(&app, written),
+		MissionAnswer::Appended(written) => announce_change(crate::events::core(&app), written),
 		MissionAnswer::Stale(stored) => Ok(stored),
 	}
 }
 
-pub async fn mission_watch<R: Runtime>(
-	app: AppHandle<R>,
-	core: State<'_, crate::core_context::Core>,
+pub async fn mission_watch(
+	core: &crate::core_context::Core,
 	mission_id: String,
 	watch: MissionWatch,
 ) -> Result<MissionWatching, MissionError> {
 	let state = core.state::<db::DatabaseState>();
 	let watch = normalised(watch);
 	refused_watch(&watch)?;
-	let url = hook_url(crate::events::core(app.app_handle()))?;
+	let url = hook_url(core)?;
 	let database = ready(&state)?;
 	let (armed, key) =
 		database.missions().arm(mission_id, watch, uuid::Uuid::new_v4().to_string()).await?;
-	let mission = recounted_once(&app, database, armed).await;
+	let mission = recounted_once(core, database, armed).await;
 	Ok(MissionWatching { mission, url, key, header: HEADER.to_owned() })
 }
 
-async fn recounted_once<R: Runtime>(
-	app: &AppHandle<R>,
+async fn recounted_once(
+	core: &crate::core_context::Core,
 	database: &db::Database,
 	armed: Mission,
 ) -> Mission {
@@ -561,8 +546,8 @@ async fn recounted_once<R: Runtime>(
 			armed
 		}
 	};
-	checkout::told(app, &mission);
-	observed(app, mission)
+	checkout::told(core, &mission);
+	observed(core, mission)
 }
 
 async fn counted_in_its_checkout(
@@ -624,7 +609,10 @@ pub async fn mission_list<R: Runtime>(
 	let state = core.state::<db::DatabaseState>();
 	let ConversationMissions { open, done } =
 		ready(&state)?.missions().of_conversation(conversation_id).await?;
-	Ok(ConversationMissions { open: observed_all(&app, open), done: observed_all(&app, done) })
+	Ok(ConversationMissions {
+		open: observed_all(crate::events::core(&app), open),
+		done: observed_all(crate::events::core(&app), done),
+	})
 }
 
 #[tauri::command]
@@ -636,7 +624,7 @@ pub async fn mission_detail<R: Runtime>(
 ) -> Result<MissionDetail, MissionError> {
 	let state = core.state::<db::DatabaseState>();
 	let MissionDetail { mission, events } = ready(&state)?.missions().detail(mission_id).await?;
-	Ok(MissionDetail { mission: observed(&app, mission), events })
+	Ok(MissionDetail { mission: observed(crate::events::core(&app), mission), events })
 }
 
 #[tauri::command]
@@ -647,7 +635,8 @@ pub async fn mission_board<R: Runtime>(
 ) -> Result<Vec<MissionOnBoard>, MissionError> {
 	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
-	with_their_bots(&app, database, database.missions().still_open().await?).await
+	with_their_bots(crate::events::core(&app), database, database.missions().still_open().await?)
+		.await
 }
 
 #[tauri::command]
@@ -660,7 +649,7 @@ pub async fn mission_space_feed<R: Runtime>(
 ) -> Result<Vec<MissionInSpace>, MissionError> {
 	let state = core.state::<db::DatabaseState>();
 	let feed = ready(&state)?.missions().of_space(space_id, closed_since).await?;
-	Ok(observed_in_space(&app, feed))
+	Ok(observed_in_space(crate::events::core(&app), feed))
 }
 
 #[tauri::command]
@@ -681,7 +670,7 @@ pub async fn mission_space_page<R: Runtime>(
 		.space_page(space_id, closed_since, after, keyset::page_size(limit))
 		.await?;
 	Ok(MissionSpacePage {
-		missions: observed_in_space(&app, page.rows),
+		missions: observed_in_space(crate::events::core(&app), page.rows),
 		next_cursor: page.next.map(|keyset| keyset.encoded()),
 	})
 }
@@ -694,7 +683,12 @@ pub async fn mission_unreported<R: Runtime>(
 ) -> Result<Vec<MissionOnBoard>, MissionError> {
 	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
-	with_their_bots(&app, database, database.missions().closed_without_report().await?).await
+	with_their_bots(
+		crate::events::core(&app),
+		database,
+		database.missions().closed_without_report().await?,
+	)
+	.await
 }
 
 #[tauri::command]
@@ -708,24 +702,24 @@ pub async fn mission_reported(
 	ready(&state)?.missions().report(mission_id, turn_id).await
 }
 
-fn observed_in_space<R: Runtime>(
-	app: &AppHandle<R>,
+fn observed_in_space(
+	core: &crate::core_context::Core,
 	feed: Vec<MissionInSpace>,
 ) -> Vec<MissionInSpace> {
 	feed.into_iter()
-		.map(|row| MissionInSpace { mission: observed(app, row.mission), ..row })
+		.map(|row| MissionInSpace { mission: observed(core, row.mission), ..row })
 		.collect()
 }
 
-async fn with_their_bots<R: Runtime>(
-	app: &AppHandle<R>,
+async fn with_their_bots(
+	core: &crate::core_context::Core,
 	database: &db::Database,
 	missions: Vec<Mission>,
 ) -> Result<Vec<MissionOnBoard>, MissionError> {
-	let dir = avatars::Avatars::dir(app);
-	let bundle_root = bundles::root(app);
+	let dir = avatars::Avatars::dir(core);
+	let bundle_root = bundles::root(core);
 	let mut board = Vec::new();
-	for mission in observed_all(app, missions) {
+	for mission in observed_all(core, missions) {
 		let bot = bot_row(database, &mission.bot_id).await?;
 		board.push(MissionOnBoard {
 			mission,
@@ -750,6 +744,7 @@ pub(crate) async fn mission_row(
 mod tests {
 	use std::fs;
 	use std::sync::mpsc::channel;
+	use tauri::Manager;
 
 	use serde_json::json;
 	use tauri::test::{mock_builder, MockRuntime};
@@ -803,7 +798,7 @@ mod tests {
 	}
 
 	async fn a_mission(app: &App<MockRuntime>, draft: MissionDraft) -> Mission {
-		mission_open(app.handle().clone(), app.state(), draft)
+		mission_open(crate::events::core(app.handle()), draft)
 			.await
 			.expect("the mission opens")
 			.mission
@@ -832,12 +827,11 @@ mod tests {
 		db::opened_on(database, &here.id, 1).await;
 		db::opened_on(database, &there.id, 2).await;
 		db::opened_on(database, &done.id, 3).await;
-		mission_escalate(app.handle().clone(), app.state(), here.id.clone(), a_note())
+		mission_escalate(crate::events::core(app.handle()), here.id.clone(), a_note())
 			.await
 			.expect("the mission is escalated");
 		mission_conclude(
-			app.handle().clone(),
-			app.state(),
+			crate::events::core(app.handle()),
 			done.id,
 			a_closing(MissionOutcome::Done),
 		)
@@ -866,8 +860,7 @@ mod tests {
 		let opened = a_mission(&app, a_draft("c1", "b1", "Fix it")).await;
 		let open = a_mission(&app, a_draft("c1", "b1", "Ship it")).await;
 		mission_conclude(
-			app.handle().clone(),
-			app.state(),
+			crate::events::core(app.handle()),
 			opened.id.clone(),
 			a_closing(MissionOutcome::Done),
 		)
@@ -930,8 +923,7 @@ mod tests {
 		let opened = a_mission(&app, a_draft("c1", "b1", "Fix it")).await;
 
 		let closed = mission_conclude(
-			app.handle().clone(),
-			app.state(),
+			crate::events::core(app.handle()),
 			opened.id.clone(),
 			a_closing(MissionOutcome::Failed),
 		)
@@ -953,8 +945,7 @@ mod tests {
 		);
 
 		let refused = mission_note(
-			app.handle().clone(),
-			app.state(),
+			crate::events::core(app.handle()),
 			opened.id.clone(),
 			MissionEntry::of(MissionEventKind::Note, a_note()),
 		)
@@ -969,8 +960,7 @@ mod tests {
 		let opened = a_mission(&app, a_draft("c1", "b1", "Fix it")).await;
 
 		let closed = mission_conclude(
-			app.handle().clone(),
-			app.state(),
+			crate::events::core(app.handle()),
 			opened.id.clone(),
 			a_closing(MissionOutcome::Done),
 		)
@@ -993,8 +983,7 @@ mod tests {
 
 	async fn an_agent_question(app: &App<MockRuntime>, mission_id: &str) -> Mission {
 		mission_note(
-			app.handle().clone(),
-			app.state(),
+			crate::events::core(app.handle()),
 			mission_id.to_owned(),
 			MissionEntry::of(MissionEventKind::AgentAsked, a_note()),
 		)
@@ -1114,8 +1103,7 @@ mod tests {
 		let app = a_host("closed-answer").await;
 		let opened = a_mission(&app, a_draft("c1", "b1", "Fix it")).await;
 		let closed = mission_conclude(
-			app.handle().clone(),
-			app.state(),
+			crate::events::core(app.handle()),
 			opened.id.clone(),
 			a_closing(MissionOutcome::Done),
 		)
@@ -1166,7 +1154,7 @@ mod tests {
 		});
 
 		let opened = a_mission(&app, a_draft("c1", "b1", "Fix it")).await;
-		mission_escalate(app.handle().clone(), app.state(), opened.id.clone(), a_note())
+		mission_escalate(crate::events::core(app.handle()), opened.id.clone(), a_note())
 			.await
 			.expect("the mission is escalated");
 
@@ -1251,12 +1239,14 @@ mod tests {
 	#[tokio::test]
 	async fn opening_on_a_checkout_installs_the_hook_there_and_answers_that_the_agent_is_heard() {
 		let app = a_host("opened-hook").await;
-		crate::events::core(app.app_handle())
-			.manage(crate::routines::webhook::start(app.handle().clone()));
+		crate::events::core(app.app_handle()).manage(crate::routines::webhook::start(
+			crate::events::core(app.handle()).clone(),
+			crate::host_api::routes(app.handle().clone()),
+		));
 		let workspace = a_checkout("opened-hook");
 
 		let opened =
-			mission_open(app.handle().clone(), app.state(), drafted_in("Fix it", Some(&workspace)))
+			mission_open(crate::events::core(app.handle()), drafted_in("Fix it", Some(&workspace)))
 				.await
 				.expect("the mission opens");
 
@@ -1277,8 +1267,7 @@ mod tests {
 		assert!(!hooked[0].delivery_key.is_empty(), "the open call minted no delivery key");
 
 		let armed = mission_watch(
-			app.handle().clone(),
-			app.state(),
+			crate::events::core(app.handle()),
 			opened.mission.id.clone(),
 			a_watch("feature/ope-56"),
 		)
@@ -1330,17 +1319,18 @@ mod tests {
 	#[tokio::test]
 	async fn arming_a_mission_counts_its_checkout_at_once() {
 		let app = a_host("armed-counts").await;
-		crate::events::core(app.app_handle())
-			.manage(crate::routines::webhook::start(app.handle().clone()));
+		crate::events::core(app.app_handle()).manage(crate::routines::webhook::start(
+			crate::events::core(app.handle()).clone(),
+			crate::host_api::routes(app.handle().clone()),
+		));
 		let workspace = a_repository("armed-counts");
 		let opened =
-			mission_open(app.handle().clone(), app.state(), drafted_in("Fix it", Some(&workspace)))
+			mission_open(crate::events::core(app.handle()), drafted_in("Fix it", Some(&workspace)))
 				.await
 				.expect("the mission opens");
 
 		let armed = mission_watch(
-			app.handle().clone(),
-			app.state(),
+			crate::events::core(app.handle()),
 			opened.mission.id.clone(),
 			a_watch("feature/ope-56"),
 		)
@@ -1366,10 +1356,12 @@ mod tests {
 		workspace: Option<&std::path::Path>,
 	) -> (AppOfItsOwn, String) {
 		let app = a_host(name).await;
-		crate::events::core(app.app_handle())
-			.manage(crate::routines::webhook::start(app.handle().clone()));
+		crate::events::core(app.app_handle()).manage(crate::routines::webhook::start(
+			crate::events::core(app.handle()).clone(),
+			crate::host_api::routes(app.handle().clone()),
+		));
 		let opened =
-			mission_open(app.handle().clone(), app.state(), drafted_in("Fix it", workspace))
+			mission_open(crate::events::core(app.handle()), drafted_in("Fix it", workspace))
 				.await
 				.expect("the mission opens");
 		(app, opened.mission.id)
@@ -1385,8 +1377,7 @@ mod tests {
 		});
 
 		let armed = mission_watch(
-			app.handle().clone(),
-			app.state(),
+			crate::events::core(app.handle()),
 			mission_id,
 			a_watch("feature/ope-602"),
 		)
@@ -1448,10 +1439,12 @@ mod tests {
 	#[tokio::test]
 	async fn opening_without_a_checkout_writes_the_mission_and_answers_that_no_agent_reaches_it() {
 		let app = a_host("opened-bare").await;
-		crate::events::core(app.app_handle())
-			.manage(crate::routines::webhook::start(app.handle().clone()));
+		crate::events::core(app.app_handle()).manage(crate::routines::webhook::start(
+			crate::events::core(app.handle()).clone(),
+			crate::host_api::routes(app.handle().clone()),
+		));
 
-		let opened = mission_open(app.handle().clone(), app.state(), drafted_in("Fix it", None))
+		let opened = mission_open(crate::events::core(app.handle()), drafted_in("Fix it", None))
 			.await
 			.expect("the mission opens");
 
@@ -1478,7 +1471,7 @@ mod tests {
 		let workspace = a_checkout("opened-serverless");
 
 		let opened =
-			mission_open(app.handle().clone(), app.state(), drafted_in("Fix it", Some(&workspace)))
+			mission_open(crate::events::core(app.handle()), drafted_in("Fix it", Some(&workspace)))
 				.await
 				.expect("the mission opens");
 
@@ -1494,12 +1487,14 @@ mod tests {
 	#[tokio::test]
 	async fn opening_on_a_workspace_that_is_no_git_checkout_refuses_and_writes_no_mission() {
 		let app = a_host("no-git").await;
-		crate::events::core(app.app_handle())
-			.manage(crate::routines::webhook::start(app.handle().clone()));
+		crate::events::core(app.app_handle()).manage(crate::routines::webhook::start(
+			crate::events::core(app.handle()).clone(),
+			crate::host_api::routes(app.handle().clone()),
+		));
 		let workspace = a_workspace("no-git");
 
 		let refused =
-			mission_open(app.handle().clone(), app.state(), drafted_in("Fix it", Some(&workspace)))
+			mission_open(crate::events::core(app.handle()), drafted_in("Fix it", Some(&workspace)))
 				.await
 				.expect_err("the workspace that is no git checkout is refused");
 
@@ -1530,22 +1525,24 @@ mod tests {
 	async fn a_launch_hooks_every_open_mission_holding_a_checkout_and_reports_the_one_that_is_gone()
 	{
 		let app = a_host("launch").await;
-		crate::events::core(app.app_handle())
-			.manage(crate::routines::webhook::start(app.handle().clone()));
+		crate::events::core(app.app_handle()).manage(crate::routines::webhook::start(
+			crate::events::core(app.handle()).clone(),
+			crate::host_api::routes(app.handle().clone()),
+		));
 		let gone = a_checkout("launch-gone");
 		let here = a_checkout("launch-here");
 		let leaving =
-			mission_open(app.handle().clone(), app.state(), drafted_in("Ship it", Some(&gone)))
+			mission_open(crate::events::core(app.handle()), drafted_in("Ship it", Some(&gone)))
 				.await
 				.expect("the mission opens");
-		mission_open(app.handle().clone(), app.state(), drafted_in("Fix it", Some(&here)))
+		mission_open(crate::events::core(app.handle()), drafted_in("Fix it", Some(&here)))
 			.await
 			.expect("the mission opens");
 		read_first(&app, &leaving.mission.id).await;
 		fs::remove_dir_all(here.join(".claude")).expect("the settings are wiped");
 		fs::remove_dir_all(&gone).expect("the checkout is gone");
 
-		install_hooks_at_launch(app.handle()).await;
+		install_hooks_at_launch(crate::events::core(app.handle())).await;
 
 		let settings = hooked_in(&here);
 		assert!(settings.contains("kiroshi-agent-hook.sh"), "got {settings}");
@@ -1561,14 +1558,17 @@ mod tests {
 	#[tokio::test]
 	async fn a_launch_replaces_the_reader_of_an_open_mission_and_keeps_its_settings_and_its_key() {
 		let app = a_host("launch-reader").await;
-		crate::events::core(app.app_handle())
-			.manage(crate::routines::webhook::start(app.handle().clone()));
+		crate::events::core(app.app_handle()).manage(crate::routines::webhook::start(
+			crate::events::core(app.handle()).clone(),
+			crate::host_api::routes(app.handle().clone()),
+		));
 		let workspace = a_checkout("launch-reader");
 		let opened =
-			mission_open(app.handle().clone(), app.state(), drafted_in("Fix it", Some(&workspace)))
+			mission_open(crate::events::core(app.handle()), drafted_in("Fix it", Some(&workspace)))
 				.await
 				.expect("the mission opens");
-		let dir = hook::dir(app.handle(), &opened.mission.id).expect("the hook dir is named");
+		let dir = hook::dir(crate::events::core(app.handle()), &opened.mission.id)
+			.expect("the hook dir is named");
 		let reader = dir.join("kiroshi-agent-hook.py");
 		fs::write(&reader, "print('an older reader')").expect("an older reader stands");
 		let config = || fs::read_to_string(dir.join("agent-hook.json")).expect("the config reads");
@@ -1576,7 +1576,7 @@ mod tests {
 			serde_json::from_str(&config()).expect("the config is JSON");
 		let settings_before = hooked_in(&workspace);
 
-		install_hooks_at_launch(app.handle()).await;
+		install_hooks_at_launch(crate::events::core(app.handle())).await;
 
 		let key_after: serde_json::Value =
 			serde_json::from_str(&config()).expect("the config is JSON");
@@ -1598,13 +1598,14 @@ mod tests {
 	#[tokio::test]
 	async fn arming_refuses_an_unknown_mission_a_closed_one_and_a_repository_without_an_owner() {
 		let app = a_host("refused").await;
-		crate::events::core(app.app_handle())
-			.manage(crate::routines::webhook::start(app.handle().clone()));
+		crate::events::core(app.app_handle()).manage(crate::routines::webhook::start(
+			crate::events::core(app.handle()).clone(),
+			crate::host_api::routes(app.handle().clone()),
+		));
 		let opened = a_mission(&app, a_draft("c1", "b1", "Fix it")).await;
 		let done = a_mission(&app, a_draft("c1", "b1", "Old work")).await;
 		mission_conclude(
-			app.handle().clone(),
-			app.state(),
+			crate::events::core(app.handle()),
 			done.id.clone(),
 			a_closing(MissionOutcome::Done),
 		)
@@ -1612,24 +1613,21 @@ mod tests {
 		.expect("the mission closes");
 
 		let unknown = mission_watch(
-			app.handle().clone(),
-			app.state(),
+			crate::events::core(app.handle()),
 			"x9".to_owned(),
 			a_watch("feature/ope-27"),
 		)
 		.await
 		.expect_err("the unknown mission is refused");
 		let closed = mission_watch(
-			app.handle().clone(),
-			app.state(),
+			crate::events::core(app.handle()),
 			done.id.clone(),
 			a_watch("feature/ope-27"),
 		)
 		.await
 		.expect_err("the closed mission is refused");
 		let unnamed = mission_watch(
-			app.handle().clone(),
-			app.state(),
+			crate::events::core(app.handle()),
 			opened.id,
 			MissionWatch { branch: "feature/ope-27".to_owned(), repository: "Kiroshi".to_owned() },
 		)
@@ -1652,8 +1650,7 @@ mod tests {
 		let app = a_host("unknown").await;
 
 		let refused = mission_conclude(
-			app.handle().clone(),
-			app.state(),
+			crate::events::core(app.handle()),
 			"x9".to_owned(),
 			a_closing(MissionOutcome::Done),
 		)
@@ -1809,7 +1806,8 @@ mod tests {
 		async fn a_thread_turn_alone_reads_working_on_every_read_and_idle_once_it_ends() {
 			let app = a_watched_host("turn").await;
 			let opened = a_mission(&app, a_draft("c1", "b1", "Fix it")).await;
-			let run = a_run_held_by_the_app(app.handle(), the_thread_of(&opened));
+			let run =
+				a_run_held_by_the_app(crate::events::core(app.handle()), the_thread_of(&opened));
 
 			run.emit(turned(TurnState::Running), None);
 			let running = on_every_read(&app, &opened.id).await;
@@ -1824,7 +1822,8 @@ mod tests {
 		async fn a_question_or_a_permission_of_the_thread_alone_reads_needs_you_until_resolved() {
 			let app = a_watched_host("prompt").await;
 			let opened = a_mission(&app, a_draft("c1", "b1", "Fix it")).await;
-			let run = a_run_held_by_the_app(app.handle(), the_thread_of(&opened));
+			let run =
+				a_run_held_by_the_app(crate::events::core(app.handle()), the_thread_of(&opened));
 			let mut walked = Vec::new();
 
 			for (raised, settled) in
@@ -1847,13 +1846,14 @@ mod tests {
 		async fn a_checkout_agent_waiting_on_its_bot_reads_working_only_while_the_thread_answers() {
 			let app = a_watched_host("waiting-bot").await;
 			let opened = a_mission(&app, a_draft("c1", "b1", "Fix it")).await;
-			let run = a_run_held_by_the_app(app.handle(), the_thread_of(&opened));
+			let run =
+				a_run_held_by_the_app(crate::events::core(app.handle()), the_thread_of(&opened));
 			let mut walked = Vec::new();
 
 			for waiting in [MissionEventKind::AgentAsked, MissionEventKind::ChecksFailed] {
 				let entry = MissionEntry::of(waiting, a_note());
 				let asked =
-					mission_note(app.handle().clone(), app.state(), opened.id.clone(), entry)
+					mission_note(crate::events::core(app.handle()), opened.id.clone(), entry)
 						.await
 						.expect("the mission waits on its bot");
 				assert_eq!(asked.state, MissionState::WaitingBot);
@@ -1876,17 +1876,17 @@ mod tests {
 			let quiet = a_mission(&app, a_draft("c1", "b1", "Fix it")).await;
 			let escalated = a_mission(&app, a_draft("c1", "b1", "Ship it")).await;
 			let escalated =
-				mission_escalate(app.handle().clone(), app.state(), escalated.id, a_note())
+				mission_escalate(crate::events::core(app.handle()), escalated.id, a_note())
 					.await
 					.expect("the mission is escalated");
-			let run = a_run_held_by_the_app(app.handle(), the_thread_of(&quiet));
+			let run =
+				a_run_held_by_the_app(crate::events::core(app.handle()), the_thread_of(&quiet));
 			run.emit(turned(TurnState::Running), None);
-			let quiet = observed(app.handle(), quiet);
+			let quiet = observed(crate::events::core(app.handle()), quiet);
 
 			for before in [quiet, escalated] {
 				let stated = mission_status(
-					app.handle().clone(),
-					app.state(),
+					crate::events::core(app.handle()),
 					before.id.clone(),
 					"bot".to_owned(),
 					"Waiting on review".to_owned(),
@@ -1909,14 +1909,13 @@ mod tests {
 		async fn a_run_dropped_mid_turn_tells_the_front_its_mission_is_idle() {
 			let app = a_watched_host("dropped").await;
 			let opened = a_mission(&app, a_draft("c1", "b1", "Fix it")).await;
-			let run = a_run_held_by_the_app(app.handle(), the_thread_of(&opened));
+			let run =
+				a_run_held_by_the_app(crate::events::core(app.handle()), the_thread_of(&opened));
 			let received = listening(&app);
 			run.emit(turned(TurnState::Running), None);
 			let started = heard(&received, 1);
 
-			agent_shutdown(app.handle().clone(), app.state(), the_thread_of(&opened))
-				.await
-				.expect("the run is dropped");
+			agent_shutdown(app.state(), the_thread_of(&opened)).await.expect("the run is dropped");
 			let dropped = heard(&received, 1);
 
 			assert_eq!(liveness_of(&started), vec![json!("working")], "got {started:?}");
@@ -1928,7 +1927,8 @@ mod tests {
 		async fn the_front_hears_once_per_liveness_change_of_the_thread() {
 			let app = a_watched_host("once").await;
 			let opened = a_mission(&app, a_draft("c1", "b1", "Fix it")).await;
-			let run = a_run_held_by_the_app(app.handle(), the_thread_of(&opened));
+			let run =
+				a_run_held_by_the_app(crate::events::core(app.handle()), the_thread_of(&opened));
 			let received = listening(&app);
 
 			run.emit(turned(TurnState::Submitting), None);
@@ -1980,7 +1980,8 @@ mod tests {
 		async fn the_thread_prompt_and_its_working_companion_ride_on_every_read_and_event() {
 			let app = a_watched_host("presence").await;
 			let opened = a_mission(&app, a_draft("c1", "b1", "Fix it")).await;
-			let run = a_run_held_by_the_app(app.handle(), the_thread_of(&opened));
+			let run =
+				a_run_held_by_the_app(crate::events::core(app.handle()), the_thread_of(&opened));
 			let received = listening(&app);
 			let permission =
 				json!({ "promptId": "p1", "kind": "permission", "text": "Run a command" });
@@ -2020,7 +2021,7 @@ mod tests {
 				payload: json!({ "question": "Which branch ships?", "reason": "Two are ready" }),
 			};
 
-			let escalated = mission_escalate(app.handle().clone(), app.state(), opened.id, note)
+			let escalated = mission_escalate(crate::events::core(app.handle()), opened.id, note)
 				.await
 				.expect("the mission is escalated");
 

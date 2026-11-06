@@ -83,7 +83,6 @@ async fn start_run(
 	scope: RuntimeScope,
 ) -> Result<SessionHandle, TransportError> {
 	agent_start_or_resume_session(
-		app.handle().clone(),
 		app.state::<kiroshi_app::core_context::Core>(),
 		scope,
 		None,
@@ -98,7 +97,7 @@ async fn start(app: &App<MockRuntime>) -> Result<SessionHandle, TransportError> 
 }
 
 async fn shutdown(app: &App<MockRuntime>) -> Result<(), TransportError> {
-	agent_shutdown(app.handle().clone(), app.state(), scope()).await
+	agent_shutdown(app.state(), scope()).await
 }
 
 fn is_refused<T>(outcome: &Result<T, TransportError>) -> bool {
@@ -157,13 +156,13 @@ fn two_concurrent_starts_leave_one_session_and_one_sidecar() {
 		assert_eq!(live_groups().len(), 1, "the refused start spawned a sidecar of its own");
 
 		shutdown_session(
-			app.handle(),
+			kiroshi_app::events::core(app.handle()),
 			kiroshi_app::events::core(app.app_handle()).state::<AgentState>().inner(),
 			&scope(),
 		)
 		.await;
 		terminate_session(
-			app.handle(),
+			kiroshi_app::events::core(app.handle()),
 			kiroshi_app::events::core(app.app_handle()).state::<AgentState>().inner(),
 		)
 		.await;
@@ -189,13 +188,13 @@ fn a_start_racing_a_shutdown_never_interleaves() {
 		assert!(live_groups().len() <= 1, "the two transitions each spawned a sidecar");
 
 		shutdown_session(
-			app.handle(),
+			kiroshi_app::events::core(app.handle()),
 			kiroshi_app::events::core(app.app_handle()).state::<AgentState>().inner(),
 			&scope(),
 		)
 		.await;
 		terminate_session(
-			app.handle(),
+			kiroshi_app::events::core(app.handle()),
 			kiroshi_app::events::core(app.app_handle()).state::<AgentState>().inner(),
 		)
 		.await;
@@ -223,7 +222,7 @@ fn a_quit_during_a_start_sweeps_the_group_and_closes_the_gate_for_good() {
 			assert!(is_alive(orphan), "the grandchild must be running before the quit");
 
 			terminate_session(
-				app.handle(),
+				kiroshi_app::events::core(app.handle()),
 				kiroshi_app::events::core(app.app_handle()).state::<AgentState>().inner(),
 			)
 			.await;
@@ -278,7 +277,7 @@ fn a_quit_inside_a_restart_never_installs_the_session_it_was_building() {
 		let (restarted, ()) = tokio::join!(start(&app), async {
 			opening_signalled(&listener).await;
 			terminate_session(
-				app.handle(),
+				kiroshi_app::events::core(app.handle()),
 				kiroshi_app::events::core(app.app_handle()).state::<AgentState>().inner(),
 			)
 			.await;
@@ -337,7 +336,7 @@ fn a_quit_ends_every_bots_session_and_not_only_the_last_one_started() {
 		);
 
 		terminate_session(
-			app.handle(),
+			kiroshi_app::events::core(app.handle()),
 			kiroshi_app::events::core(app.app_handle()).state::<AgentState>().inner(),
 		)
 		.await;
@@ -463,13 +462,13 @@ fn ended_mid_turn(end: impl AsyncFnOnce(&App<MockRuntime>)) {
 
 		assert_the_run_was_ended(&app, &heard, updated_before).await;
 		shutdown_session(
-			app.handle(),
+			kiroshi_app::events::core(app.handle()),
 			kiroshi_app::events::core(app.app_handle()).state::<AgentState>().inner(),
 			&scope(),
 		)
 		.await;
 		terminate_session(
-			app.handle(),
+			kiroshi_app::events::core(app.handle()),
 			kiroshi_app::events::core(app.app_handle()).state::<AgentState>().inner(),
 		)
 		.await;
@@ -491,7 +490,7 @@ fn a_session_replaced_mid_turn_ends_its_run_before_the_new_one_is_installed() {
 fn a_session_shut_down_mid_turn_ends_its_run_as_cancelled() {
 	ended_mid_turn(async |app| {
 		shutdown_session(
-			app.handle(),
+			kiroshi_app::events::core(app.handle()),
 			kiroshi_app::events::core(app.app_handle()).state::<AgentState>().inner(),
 			&scope(),
 		)
@@ -503,7 +502,7 @@ fn a_session_shut_down_mid_turn_ends_its_run_as_cancelled() {
 fn a_quit_mid_turn_ends_the_run_before_the_sidecar_is_terminated() {
 	ended_mid_turn(async |app| {
 		terminate_session(
-			app.handle(),
+			kiroshi_app::events::core(app.handle()),
 			kiroshi_app::events::core(app.app_handle()).state::<AgentState>().inner(),
 		)
 		.await;

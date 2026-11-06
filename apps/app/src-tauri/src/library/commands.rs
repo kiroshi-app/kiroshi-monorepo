@@ -52,7 +52,7 @@ pub async fn library_list<R: Runtime>(
 ) -> Result<Vec<LibraryItem>, LibraryError> {
 	let state = core.state::<db::DatabaseState>();
 	known_space(&state, &space_id).await?;
-	list(&root(&app)?, &space_id)
+	list(&root(crate::events::core(&app))?, &space_id)
 }
 
 #[tauri::command]
@@ -65,7 +65,7 @@ pub async fn library_read_document<R: Runtime>(
 ) -> Result<LibraryDocument, LibraryError> {
 	let state = core.state::<db::DatabaseState>();
 	known_space(&state, &space_id).await?;
-	read_document(&root(&app)?, &space_id, &name)
+	read_document(&root(crate::events::core(&app))?, &space_id, &name)
 }
 
 #[tauri::command]
@@ -78,7 +78,7 @@ pub async fn library_read_image<R: Runtime>(
 ) -> Result<LibraryImage, LibraryError> {
 	let state = core.state::<db::DatabaseState>();
 	known_space(&state, &space_id).await?;
-	read_image(&root(&app)?, &space_id, &name)
+	read_image(&root(crate::events::core(&app))?, &space_id, &name)
 }
 
 #[tauri::command]
@@ -91,7 +91,7 @@ pub async fn library_read_file<R: Runtime>(
 ) -> Result<LibraryFile, LibraryError> {
 	let state = core.state::<db::DatabaseState>();
 	known_space(&state, &space_id).await?;
-	read_file(&root(&app)?, &space_id, &name)
+	read_file(&root(crate::events::core(&app))?, &space_id, &name)
 }
 
 #[tauri::command]
@@ -111,7 +111,7 @@ pub async fn library_create_document<R: Runtime>(
 ) -> Result<LibraryItem, LibraryError> {
 	let state = core.state::<db::DatabaseState>();
 	known_space(&state, &space_id).await?;
-	create_document(&root(&app)?, &space_id, &name, template_id.as_deref())
+	create_document(&root(crate::events::core(&app))?, &space_id, &name, template_id.as_deref())
 }
 
 #[tauri::command]
@@ -124,7 +124,7 @@ pub async fn library_create_board<R: Runtime>(
 ) -> Result<LibraryItem, LibraryError> {
 	let state = core.state::<db::DatabaseState>();
 	known_space(&state, &space_id).await?;
-	create_board(&root(&app)?, &space_id, &name)
+	create_board(&root(crate::events::core(&app))?, &space_id, &name)
 }
 
 #[tauri::command]
@@ -137,7 +137,7 @@ pub async fn library_board_summary<R: Runtime>(
 ) -> Result<LibraryBoardSummary, LibraryError> {
 	let state = core.state::<db::DatabaseState>();
 	known_space(&state, &space_id).await?;
-	summarise_board(&root(&app)?, &space_id, &name)
+	summarise_board(&root(crate::events::core(&app))?, &space_id, &name)
 }
 
 #[tauri::command]
@@ -150,7 +150,7 @@ pub async fn library_open_document<R: Runtime>(
 ) -> Result<LibraryDocumentState, LibraryError> {
 	let state = core.state::<db::DatabaseState>();
 	known_space(&state, &space_id).await?;
-	open_document(&app, &root(&app)?, &space_id, &name)
+	open_document(crate::events::core(&app), &root(crate::events::core(&app))?, &space_id, &name)
 }
 
 #[tauri::command]
@@ -164,7 +164,13 @@ pub async fn library_apply_update<R: Runtime>(
 ) -> Result<(), LibraryError> {
 	let state = core.state::<db::DatabaseState>();
 	known_space(&state, &space_id).await?;
-	apply_update(&app, &root(&app)?, &space_id, &name, &update)
+	apply_update(
+		crate::events::core(&app),
+		&root(crate::events::core(&app))?,
+		&space_id,
+		&name,
+		&update,
+	)
 }
 
 #[tauri::command]
@@ -180,7 +186,15 @@ pub async fn library_rename_document<R: Runtime>(
 	known_space(&state, &space_id).await?;
 	let database =
 		state.as_ref().map_err(|failure| LibraryError::Unavailable { failure: failure.into() })?;
-	rename_linked_document(&app, database, &root(&app)?, &space_id, &name, &new_name).await
+	rename_linked_document(
+		crate::events::core(&app),
+		database,
+		&root(crate::events::core(&app))?,
+		&space_id,
+		&name,
+		&new_name,
+	)
+	.await
 }
 
 #[tauri::command]
@@ -194,7 +208,13 @@ pub async fn library_rename_board<R: Runtime>(
 ) -> Result<LibraryItem, LibraryError> {
 	let state = core.state::<db::DatabaseState>();
 	known_space(&state, &space_id).await?;
-	rename_board(&app, &root(&app)?, &space_id, &name, &new_name)
+	rename_board(
+		crate::events::core(&app),
+		&root(crate::events::core(&app))?,
+		&space_id,
+		&name,
+		&new_name,
+	)
 }
 
 #[tauri::command]
@@ -208,7 +228,7 @@ pub async fn library_save_message<R: Runtime>(
 	let state = core.state::<db::DatabaseState>();
 	let database =
 		state.as_ref().map_err(|failure| LibraryError::Unavailable { failure: failure.into() })?;
-	save_message(&app, database, &conversation_id, &message_id).await
+	save_message(crate::events::core(&app), database, &conversation_id, &message_id).await
 }
 
 #[tauri::command]
@@ -221,7 +241,7 @@ pub async fn library_delete<R: Runtime>(
 ) -> Result<(), LibraryError> {
 	let state = core.state::<db::DatabaseState>();
 	known_space(&state, &space_id).await?;
-	delete_item(&app, &root(&app)?, &space_id, &name)
+	delete_item(crate::events::core(&app), &root(crate::events::core(&app))?, &space_id, &name)
 }
 
 #[tauri::command]
@@ -239,19 +259,27 @@ pub async fn library_share_presence<R: Runtime>(
 	known_space(&state, &space_id).await?;
 	let seat = seat_of(&caller, &webview)?;
 	let Some(at) = at else {
-		unseat_writer(&app, &space_id, &name, &seat);
+		unseat_writer(crate::events::core(&app), &space_id, &name, &seat);
 		return Ok(());
 	};
-	let identity = match seated_identity(&app, &space_id, &name, &seat) {
+	let identity = match seated_identity(crate::events::core(&app), &space_id, &name, &seat) {
 		Some(seated) => seated,
 		None => {
 			let database = state
 				.as_ref()
 				.map_err(|failure| LibraryError::Unavailable { failure: failure.into() })?;
-			Identity::of_person(caller.author(&app, database).await?, &seat)
+			Identity::of_person(caller.author(crate::events::core(&app), database).await?, &seat)
 		}
 	};
-	share_presence(&app, &root(&app)?, &space_id, &name, seat, identity, at)
+	share_presence(
+		crate::events::core(&app),
+		&root(crate::events::core(&app))?,
+		&space_id,
+		&name,
+		seat,
+		identity,
+		at,
+	)
 }
 
 #[tauri::command]
@@ -266,12 +294,15 @@ pub async fn library_stop_writers<R: Runtime>(
 	let agent = core.state::<AgentState>();
 	let state = core.state::<db::DatabaseState>();
 	known_space(&state, &space_id).await?;
-	let stopped = stop_writers(&app, &space_id, &name, agent_id.as_deref()).await;
+	let stopped =
+		stop_writers(crate::events::core(&app), &space_id, &name, agent_id.as_deref()).await;
 	if stopped.is_empty() {
 		return Ok(CancelOutcome::NothingToCancel);
 	}
-	let mut outcomes =
-		join_all(stopped.iter().map(|scope| cancel_session_turn(&app, &agent, scope))).await;
+	let mut outcomes = join_all(
+		stopped.iter().map(|scope| cancel_session_turn(crate::events::core(&app), &agent, scope)),
+	)
+	.await;
 	outcomes.push(CancelOutcome::Cancelled);
 	Ok(merged(outcomes))
 }
@@ -298,7 +329,7 @@ pub async fn library_read_thumbnail<R: Runtime>(
 ) -> Result<LibraryImage, LibraryError> {
 	let state = core.state::<db::DatabaseState>();
 	known_space(&state, &space_id).await?;
-	let root = root(&app)?;
+	let root = root(crate::events::core(&app))?;
 	tokio::task::spawn_blocking(move || read_thumbnail(&root, &space_id, &name))
 		.await
 		.map_err(|error| LibraryError::Unreadable { detail: error.to_string() })?
@@ -315,7 +346,7 @@ pub async fn library_import<R: Runtime>(
 ) -> Result<LibraryItem, LibraryError> {
 	let state = core.state::<db::DatabaseState>();
 	known_space(&state, &space_id).await?;
-	let root = root(&app)?;
+	let root = root(crate::events::core(&app))?;
 	tokio::task::spawn_blocking(move || import(&root, &space_id, &name, &content))
 		.await
 		.map_err(|error| LibraryError::Unwritable { detail: error.to_string() })?
@@ -335,7 +366,13 @@ pub async fn library_import_url<R: Runtime>(
 	let imported = async {
 		known_space(&state, &space_id).await?;
 		let proxy_bearers = guests.proxy_bearers();
-		import_url(root(&app)?, space_id, &url, &admission_for(&caller, &proxy_bearers)).await
+		import_url(
+			root(crate::events::core(&app))?,
+			space_id,
+			&url,
+			&admission_for(&caller, &proxy_bearers),
+		)
+		.await
 	};
 	imported.await.inspect_err(|refusal| {
 		let parsed = Url::parse(&url).ok();
@@ -354,7 +391,7 @@ pub async fn library_import_paths<R: Runtime>(
 ) -> Result<Vec<LibraryImport>, LibraryError> {
 	let state = core.state::<db::DatabaseState>();
 	known_space(&state, &space_id).await?;
-	let root = root(&app)?;
+	let root = root(crate::events::core(&app))?;
 	tokio::task::spawn_blocking(move || import_paths(&root, &space_id, &paths))
 		.await
 		.map_err(|error| LibraryError::Unwritable { detail: error.to_string() })
@@ -378,7 +415,7 @@ pub async fn library_save<R: Runtime>(
 ) -> Result<Option<String>, LibraryError> {
 	let state = core.state::<db::DatabaseState>();
 	known_space(&state, &space_id).await?;
-	let saved = save(&root(&app)?, &space_id, &name, |suggested| {
+	let saved = save(&root(crate::events::core(&app))?, &space_id, &name, |suggested| {
 		chosen_destination(&app, suggested.to_owned())
 	})
 	.await?;
@@ -395,7 +432,7 @@ pub async fn library_copy<R: Runtime>(
 ) -> Result<(), LibraryError> {
 	let state = core.state::<db::DatabaseState>();
 	known_space(&state, &space_id).await?;
-	let root = root(&app)?;
+	let root = root(crate::events::core(&app))?;
 	let payload = tokio::task::spawn_blocking(move || clipboard_payload(&root, &space_id, &name))
 		.await
 		.map_err(|error| LibraryError::Unreadable { detail: error.to_string() })??;
@@ -438,7 +475,7 @@ pub async fn library_reveal<R: Runtime>(
 ) -> Result<(), LibraryError> {
 	let state = core.state::<db::DatabaseState>();
 	known_space(&state, &space_id).await?;
-	let item = resolve(&root(&app)?, &space_id, &name)?;
+	let item = resolve(&root(crate::events::core(&app))?, &space_id, &name)?;
 	app.opener()
 		.reveal_item_in_dir(&item.path)
 		.map_err(|error| LibraryError::Unrevealed { detail: scrubbed(&error.to_string()) })

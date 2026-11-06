@@ -1,6 +1,5 @@
 use std::collections::{BTreeMap, HashSet};
 
-use tauri::{AppHandle, Manager, Runtime};
 use tokio::sync::MutexGuard;
 
 use super::contract::{AccountDevices, MembersError, RosterDevice};
@@ -14,22 +13,22 @@ use crate::db::{Database, DatabaseState};
 use crate::spaces::commands::ready;
 use crate::spaces::contract::SpaceError;
 
-pub async fn devices<R: Runtime>(
-	app: &AppHandle<R>,
+pub async fn devices(
+	core: &crate::core_context::Core,
 	space_id: String,
 ) -> Result<Vec<AccountDevices>, MembersError> {
-	let _turn = settled_turn(app, &space_id).await?;
-	listed_devices(app, &space_id).await
+	let _turn = settled_turn(core, &space_id).await?;
+	listed_devices(core, &space_id).await
 }
 
-pub async fn remove_device<R: Runtime>(
-	app: &AppHandle<R>,
+pub async fn remove_device(
+	core: &crate::core_context::Core,
 	space_id: String,
 	device_id: String,
 ) -> Result<Vec<AccountDevices>, MembersError> {
-	let host = host_device(crate::events::core(app.app_handle()))?;
-	let _turn = settled_turn(app, &space_id).await?;
-	let roster = roster_of(app, &space_id, &host).await?;
+	let host = host_device(core)?;
+	let _turn = settled_turn(core, &space_id).await?;
+	let roster = roster_of(core, &space_id, &host).await?;
 	let target = roster
 		.rows
 		.iter()
@@ -39,13 +38,13 @@ pub async fn remove_device<R: Runtime>(
 		return Err(MembersError::HostDeviceNotRemovable);
 	}
 	let removed_at = chrono::Utc::now().timestamp_millis();
-	database_of(app)?
+	database_of(core)?
 		.space_relay()
 		.device_removed(space_id.clone(), device_id, removed_at)
 		.await
 		.map_err(SpaceError::from)?;
-	rotated(app, &space_id).await?;
-	listed_devices(app, &space_id).await
+	rotated(core, &space_id).await?;
+	listed_devices(core, &space_id).await
 }
 
 const NO_ROSTER_ROW: &str = "no roster row has that device";
@@ -55,15 +54,15 @@ pub(super) enum Revocation {
 	Ignored(&'static str),
 }
 
-pub(super) async fn device_left<R: Runtime>(
-	app: &AppHandle<R>,
+pub(super) async fn device_left(
+	core: &crate::core_context::Core,
 	space_id: &str,
 	relay_device_id: &str,
 	account_id: &str,
 ) -> Result<Revocation, MembersError> {
-	let host = host_device(crate::events::core(app.app_handle()))?;
-	let _turn = settled_turn(app, space_id).await?;
-	let space_relay = database_of(app)?.space_relay();
+	let host = host_device(core)?;
+	let _turn = settled_turn(core, space_id).await?;
+	let space_relay = database_of(core)?.space_relay();
 	let row = space_relay
 		.roster_row_of_relay_device(space_id.to_owned(), relay_device_id.to_owned())
 		.await
@@ -84,42 +83,41 @@ pub(super) async fn device_left<R: Runtime>(
 	if !is_deleted {
 		return Ok(Revocation::Ignored(NO_ROSTER_ROW));
 	}
-	rotated(app, space_id).await?;
+	rotated(core, space_id).await?;
 	Ok(Revocation::Applied)
 }
 
-pub(super) async fn settled_turn<'a, R: Runtime>(
-	app: &'a AppHandle<R>,
+pub(super) async fn settled_turn<'a>(
+	core: &'a crate::core_context::Core,
 	space_id: &str,
 ) -> Result<MutexGuard<'a, ()>, MembersError> {
-	let turn =
-		crate::events::core(app.app_handle()).state::<Hosting>().inner().members_turn.lock().await;
-	let is_pending = database_of(app)?
+	let turn = core.state::<Hosting>().inner().members_turn.lock().await;
+	let is_pending = database_of(core)?
 		.space_relay()
 		.is_rotation_pending(space_id.to_owned())
 		.await
 		.map_err(SpaceError::from)?;
 	if is_pending {
-		rotated(app, space_id).await?;
+		rotated(core, space_id).await?;
 	}
 	Ok(turn)
 }
 
-pub(super) async fn member_removed<R: Runtime>(
-	app: &AppHandle<R>,
+pub(super) async fn member_removed(
+	core: &crate::core_context::Core,
 	space_id: &str,
 	account_id: &str,
 ) -> Result<(), MembersError> {
-	account_revoked(app, space_id, account_id).await?;
-	rotated(app, space_id).await
+	account_revoked(core, space_id, account_id).await?;
+	rotated(core, space_id).await
 }
 
-async fn account_revoked<R: Runtime>(
-	app: &AppHandle<R>,
+async fn account_revoked(
+	core: &crate::core_context::Core,
 	space_id: &str,
 	account_id: &str,
 ) -> Result<usize, MembersError> {
-	let revoked = database_of(app)?
+	let revoked = database_of(core)?
 		.space_relay()
 		.account_revoked(space_id.to_owned(), account_id.to_owned())
 		.await
@@ -127,21 +125,21 @@ async fn account_revoked<R: Runtime>(
 	Ok(revoked)
 }
 
-async fn listed_devices<R: Runtime>(
-	app: &AppHandle<R>,
+async fn listed_devices(
+	core: &crate::core_context::Core,
 	space_id: &str,
 ) -> Result<Vec<AccountDevices>, MembersError> {
-	let host = host_device(crate::events::core(app.app_handle()))?;
-	let roster = roster_of(app, space_id, &host).await?;
+	let host = host_device(core)?;
+	let roster = roster_of(core, space_id, &host).await?;
 	Ok(grouped(&roster, &host))
 }
 
-pub(super) async fn rostered_accounts<R: Runtime>(
-	app: &AppHandle<R>,
+pub(super) async fn rostered_accounts(
+	core: &crate::core_context::Core,
 	space_id: &str,
 ) -> Result<HashSet<String>, MembersError> {
-	let host = host_device(crate::events::core(app.app_handle()))?;
-	let roster = roster_of(app, space_id, &host).await?;
+	let host = host_device(core)?;
+	let roster = roster_of(core, space_id, &host).await?;
 	Ok(roster.rows.into_iter().map(|row| row.rostered.account_id).collect())
 }
 
@@ -152,23 +150,23 @@ pub(super) fn host_device(core: &crate::core_context::Core) -> Result<DeviceKeys
 		.map_err(|error| MembersError::DeviceKeys { error })
 }
 
-pub(super) fn database_of<R: Runtime>(app: &AppHandle<R>) -> Result<&Database, MembersError> {
-	Ok(ready(crate::events::core(app.app_handle()).state::<DatabaseState>().inner())?)
+pub(super) fn database_of(core: &crate::core_context::Core) -> Result<&Database, MembersError> {
+	Ok(ready(core.state::<DatabaseState>().inner())?)
 }
 
-async fn roster_of<R: Runtime>(
-	app: &AppHandle<R>,
+async fn roster_of(
+	core: &crate::core_context::Core,
 	space_id: &str,
 	host: &DeviceKeys,
 ) -> Result<VerifiedRoster, MembersError> {
-	let database = database_of(app)?;
+	let database = database_of(core)?;
 	let roster = roster::verified_roster(database, space_id, &host.signing_public()).await;
 	Ok(roster.map_err(SpaceError::from)?)
 }
 
-async fn rotated<R: Runtime>(app: &AppHandle<R>, space_id: &str) -> Result<(), MembersError> {
+async fn rotated(core: &crate::core_context::Core, space_id: &str) -> Result<(), MembersError> {
 	let not_rotated = |reason: String| MembersError::KeyNotRotated { reason };
-	let space_keys = crate::events::core(app.app_handle())
+	let space_keys = core
 		.try_state::<SpaceKeys>()
 		.ok_or_else(|| not_rotated("the space key store is not loaded".to_owned()))?;
 	let current = space_keys
@@ -181,12 +179,10 @@ async fn rotated<R: Runtime>(app: &AppHandle<R>, space_id: &str) -> Result<(), M
 			.ok_or_else(|| not_rotated(format!("space key_id {key_id} has no successor")))?;
 		let next = HeldSpaceKey::under(next_id)
 			.map_err(|failure| not_rotated(format!("no space key was generated: {failure:?}")))?;
-		wire::space_key_stored(crate::events::core(app.app_handle()), &space_keys, space_id, next)
-			.await
-			.map_err(not_rotated)?;
+		wire::space_key_stored(core, &space_keys, space_id, next).await.map_err(not_rotated)?;
 		log::info!("hosted space {space_id} rotated its space key to key_id {next_id}");
 	}
-	database_of(app)?
+	database_of(core)?
 		.space_relay()
 		.rotation_settled(space_id.to_owned())
 		.await

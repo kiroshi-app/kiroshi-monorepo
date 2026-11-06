@@ -1,5 +1,4 @@
 use futures_util::StreamExt;
-use tauri::{AppHandle, Manager, Runtime};
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tokio::time::{interval_at, sleep, Instant};
@@ -49,19 +48,19 @@ enum Attempt {
 	Dropped(Stall),
 }
 
-pub(super) async fn joins_started<R: Runtime>(
-	app: &AppHandle<R>,
+pub(super) async fn joins_started(
+	core: &crate::core_context::Core,
 	guests: &RelayGuests,
 ) -> Result<(), JoinedSpaceError> {
-	match bearer_of(app) {
+	match bearer_of(core) {
 		Ok(_) => {}
 		Err(JoinedSpaceError::NeedsSignIn) => return Ok(()),
 		Err(failure) => return Err(failure),
 	}
-	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
+	let state = core.state::<db::DatabaseState>();
 	for joined in ready(&state)?.joined_spaces().list().await? {
 		let JoinedReach::Relay { instance_id } = joined.reach;
-		if held::wait_or_unread(app, &joined.id, &instance_id).is_none() {
+		if held::wait_or_unread(core, &joined.id, &instance_id).is_none() {
 			continue;
 		}
 		let mut waiting = guests.waiting();
@@ -69,8 +68,8 @@ pub(super) async fn joins_started<R: Runtime>(
 			continue;
 		}
 		let (stop, stopped) = watch::channel(false);
-		let run = crate::events::core(app.app_handle()).spawn(waited_for_host(
-			app.clone(),
+		let run = core.spawn(waited_for_host(
+			core.clone(),
 			joined.id.clone(),
 			instance_id.clone(),
 			stopped,
@@ -80,27 +79,27 @@ pub(super) async fn joins_started<R: Runtime>(
 	Ok(())
 }
 
-pub(super) async fn waited_for_host<R: Runtime>(
-	app: AppHandle<R>,
+pub(super) async fn waited_for_host(
+	core: crate::core_context::Core,
 	id: String,
 	instance_id: String,
 	mut stop: watch::Receiver<bool>,
 ) {
 	let mut backoff = Backoff::first();
 	loop {
-		match until_stopped(&mut stop, attempted(&app, &instance_id, &mut backoff)).await {
+		match until_stopped(&mut stop, attempted(&core, &instance_id, &mut backoff)).await {
 			None => return,
 			Some(Attempt::Joined) => {
-				left(&app, &id, &stop);
+				left(&core, &id, &stop);
 				log::info!(
 					"joined space {id} (instance {instance_id}) kept its rekey and comes online"
 				);
-				return joined_announced(&app, &id, &instance_id).await;
+				return joined_announced(&core, &id, &instance_id).await;
 			}
 			Some(Attempt::Departed(departure)) => {
-				left(&app, &id, &stop);
+				left(&core, &id, &stop);
 				let reason = relay::reason_of(departure);
-				if let Err(failure) = relay::entry_evicted(&app, &id, reason).await {
+				if let Err(failure) = relay::entry_evicted(&core, &id, reason).await {
 					log::error!(
 						"joined space {id} (instance {instance_id}) whose membership ended was not evicted: {failure:?}"
 					);
@@ -108,13 +107,13 @@ pub(super) async fn waited_for_host<R: Runtime>(
 				return;
 			}
 			Some(Attempt::Ended(reason)) => {
-				left(&app, &id, &stop);
+				left(&core, &id, &stop);
 				return log::error!(
 					"joined space {id} (instance {instance_id}) stopped waiting for its host: {reason}"
 				);
 			}
 			Some(Attempt::Dropped(stall)) => {
-				waited(&app, &instance_id, stall);
+				waited(&core, &instance_id, stall);
 			}
 		}
 		let step = backoff.step();
@@ -125,29 +124,29 @@ pub(super) async fn waited_for_host<R: Runtime>(
 	}
 }
 
-async fn attempted<R: Runtime>(
-	app: &AppHandle<R>,
+async fn attempted(
+	core: &crate::core_context::Core,
 	instance_id: &str,
 	backoff: &mut Backoff,
 ) -> Attempt {
-	let bearer = match bearer_of(app) {
+	let bearer = match bearer_of(core) {
 		Ok(bearer) => bearer,
 		Err(JoinedSpaceError::NeedsSignIn) => {
 			return Attempt::Ended("no account is signed in".to_owned())
 		}
 		Err(failure) => return Attempt::Dropped(Stall::KeyRead(failure)),
 	};
-	if devices::is_awaiting_approval(app) {
+	if devices::is_awaiting_approval(core) {
 		return Attempt::Dropped(Stall::AwaitingApproval);
 	}
-	let device = match device_keys(app) {
+	let device = match device_keys(core) {
 		Ok(device) => device,
 		Err(failure) => return Attempt::Dropped(Stall::DeviceKeys(failure)),
 	};
-	let guests = crate::events::core(app.app_handle()).state::<RelayGuests>().inner();
+	let guests = core.state::<RelayGuests>().inner();
 	let cloud = guests.cloud();
 	cloud.unpaused().await;
-	let url = match member_socket_of(app, &bearer, &device, instance_id).await {
+	let url = match member_socket_of(core, &bearer, &device, instance_id).await {
 		Ok(url) => url,
 		Err(JoinedSpaceError::SessionRevoked) => {
 			return Attempt::Ended("the cloud refused the account (401)".to_owned())
@@ -160,10 +159,10 @@ async fn attempted<R: Runtime>(
 		Opened::Socket(socket) => {
 			log::info!("the waiting join of instance {instance_id} opened its member socket");
 			backoff.socket_opened();
-			listened(app, *socket, instance_id, &device).await
+			listened(core, *socket, instance_id, &device).await
 		}
 		Opened::Revoked => {
-			revoked(app, &bearer);
+			revoked(core, &bearer);
 			Attempt::Ended("the relay refused the account (401)".to_owned())
 		}
 		Opened::Gone(Some(departure)) => Attempt::Departed(departure),
@@ -174,8 +173,8 @@ async fn attempted<R: Runtime>(
 	}
 }
 
-async fn listened<R: Runtime>(
-	app: &AppHandle<R>,
+async fn listened(
+	core: &crate::core_context::Core,
 	socket: Socket,
 	instance_id: &str,
 	device: &DeviceKeys,
@@ -188,8 +187,8 @@ async fn listened<R: Runtime>(
 	if let Err(reason) = sent(&mut sink, Message::text(asked.clone())).await {
 		return Attempt::Dropped(Stall::AskNotSent(reason));
 	}
-	waited(app, instance_id, Stall::Asked);
-	let every = crate::events::core(app.app_handle()).state::<RelayGuests>().resend_every();
+	waited(core, instance_id, Stall::Asked);
+	let every = core.state::<RelayGuests>().resend_every();
 	let mut beats = interval_at(Instant::now() + every, every);
 	let silence = sleep(SILENCE_BOUND);
 	tokio::pin!(silence);
@@ -199,7 +198,7 @@ async fn listened<R: Runtime>(
 				silence.as_mut().reset(Instant::now() + SILENCE_BOUND);
 				match frame {
 					Some(Ok(Message::Text(text))) => {
-						if is_kept(app, instance_id, device, text.as_str()).await {
+						if is_kept(core, instance_id, device, text.as_str()).await {
 							let close = CloseFrame { code: CloseCode::Normal, reason: "".into() };
 							if let Err(reason) = sent(&mut sink, Message::Close(Some(close))).await {
 								log::warn!("a joined socket of instance {instance_id} was left without its close: {reason}");
@@ -207,7 +206,7 @@ async fn listened<R: Runtime>(
 							return Attempt::Joined;
 						}
 					}
-					Some(Ok(Message::Close(frame))) => return closed(app, instance_id, frame),
+					Some(Ok(Message::Close(frame))) => return closed(core, instance_id, frame),
 					Some(Ok(_)) => {}
 					Some(Err(error)) => return Attempt::Dropped(Stall::SocketFailed(error.to_string())),
 					None => return Attempt::Dropped(Stall::SocketEnded),
@@ -227,8 +226,8 @@ async fn listened<R: Runtime>(
 	}
 }
 
-async fn is_kept<R: Runtime>(
-	app: &AppHandle<R>,
+async fn is_kept(
+	core: &crate::core_context::Core,
 	instance_id: &str,
 	device: &DeviceKeys,
 	text: &str,
@@ -238,13 +237,13 @@ async fn is_kept<R: Runtime>(
 		Some(Ok(handed)) => handed,
 		Some(Err(failure)) => {
 			log::error!("the waiting join of instance {instance_id} dropped a rekey: {failure:?}");
-			waited(app, instance_id, Stall::RekeyDropped(failure));
+			waited(core, instance_id, Stall::RekeyDropped(failure));
 			return false;
 		}
 	};
-	match kept_answer(app, instance_id, &handed).await {
+	match kept_answer(core, instance_id, &handed).await {
 		Ok(()) => {
-			wait_ended(app, instance_id);
+			wait_ended(core, instance_id);
 			log::info!(
 				"the waiting join of instance {instance_id} kept a rekey: space key_id {}",
 				handed.space.key_id
@@ -253,45 +252,49 @@ async fn is_kept<R: Runtime>(
 		}
 		Err(failure) => {
 			log::error!("the waiting join of instance {instance_id} dropped a rekey: {failure:?}");
-			waited(app, instance_id, Stall::RekeyDropped(failure));
+			waited(core, instance_id, Stall::RekeyDropped(failure));
 			false
 		}
 	}
 }
 
-fn closed<R: Runtime>(app: &AppHandle<R>, instance_id: &str, frame: Option<CloseFrame>) -> Attempt {
+fn closed(
+	core: &crate::core_context::Core,
+	instance_id: &str,
+	frame: Option<CloseFrame>,
+) -> Attempt {
 	let Some(departure) = frame.as_ref().and_then(relay::departure_closing) else {
 		return Attempt::Dropped(Stall::Closed(frame));
 	};
-	waited(app, instance_id, Stall::Departed(departure));
+	waited(core, instance_id, Stall::Departed(departure));
 	Attempt::Departed(departure)
 }
 
-fn left<R: Runtime>(app: &AppHandle<R>, id: &str, stop: &watch::Receiver<bool>) {
-	let guests = crate::events::core(app.app_handle()).state::<RelayGuests>();
+fn left(core: &crate::core_context::Core, id: &str, stop: &watch::Receiver<bool>) {
+	let guests = core.state::<RelayGuests>();
 	let mut waiting = guests.waiting();
 	if waiting.get(id).is_some_and(|entry| entry.stop.subscribe().same_channel(stop)) {
 		waiting.remove(id);
 	}
 }
 
-async fn joined_announced<R: Runtime>(app: &AppHandle<R>, id: &str, instance_id: &str) {
-	if let Err(failure) = members_read(app, id).await {
+async fn joined_announced(core: &crate::core_context::Core, id: &str, instance_id: &str) {
+	if let Err(failure) = members_read(core, id).await {
 		log::warn!(
 			"the members of joined space {id} (instance {instance_id}) were not read after its join: {failure:?}"
 		);
 	}
-	if let Err(failure) = announce_change(app, id.to_owned()).await {
+	if let Err(failure) = announce_change(core, id.to_owned()).await {
 		log::error!(
 			"joined space {id} (instance {instance_id}) came online and the front was not told: {failure:?}"
 		);
 	}
 }
 
-async fn members_read<R: Runtime>(app: &AppHandle<R>, id: &str) -> Result<(), JoinedSpaceError> {
-	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
+async fn members_read(core: &crate::core_context::Core, id: &str) -> Result<(), JoinedSpaceError> {
+	let state = core.state::<db::DatabaseState>();
 	if let Some(joined) = ready(&state)?.joined_spaces().find(id.to_owned()).await? {
-		members::read_soon(app, &joined);
+		members::read_soon(core, &joined);
 	}
 	Ok(())
 }

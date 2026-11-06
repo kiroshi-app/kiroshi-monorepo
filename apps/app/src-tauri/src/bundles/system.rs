@@ -2,8 +2,6 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use tauri::{AppHandle, Manager, Runtime};
-
 use crate::private_files;
 
 const DIR_NAME: &str = "system";
@@ -57,8 +55,8 @@ const FILES: [(&str, &[u8]); 13] = [
 	),
 ];
 
-pub fn path<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
-	Some(crate::events::core(app.app_handle()).data_dir().join(DIR_NAME).join(PLUGIN_NAME))
+pub fn path(core: &crate::core_context::Core) -> Option<PathBuf> {
+	Some(core.data_dir().join(DIR_NAME).join(PLUGIN_NAME))
 }
 
 pub fn write(path: &Path) -> std::io::Result<()> {
@@ -69,8 +67,8 @@ pub fn write(path: &Path) -> std::io::Result<()> {
 	Ok(())
 }
 
-pub fn laid_down<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
-	path(app).filter(|path| path.join(MANIFEST).is_file())
+pub fn laid_down(core: &crate::core_context::Core) -> Option<PathBuf> {
+	path(core).filter(|path| path.join(MANIFEST).is_file())
 }
 
 fn embedded_paths(path: &Path) -> HashSet<PathBuf> {

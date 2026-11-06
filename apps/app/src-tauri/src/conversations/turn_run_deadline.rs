@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
-use tauri::{AppHandle, Manager, Runtime};
+use tauri::{AppHandle, Runtime};
 use tokio::time;
 
 use super::awaited_runs::forget_settled_turns;
@@ -62,8 +62,8 @@ impl Armed {
 	}
 }
 
-pub(crate) fn arm_start_deadlines<R: Runtime>(
-	app: &AppHandle<R>,
+pub(crate) fn arm_start_deadlines(
+	core: &crate::core_context::Core,
 	conversation_id: &str,
 	turn_id: &str,
 	bot_ids: &[String],
@@ -72,21 +72,20 @@ pub(crate) fn arm_start_deadlines<R: Runtime>(
 		return;
 	}
 	let held = HeldTurn {
-		app: app.clone(),
+		core: core.clone(),
 		conversation_id: conversation_id.to_owned(),
 		turn_id: turn_id.to_owned(),
 	};
-	let deadlines =
-		match crate::events::core(app).try_state::<TurnRunDeadlines>().ok_or(NO_DEADLINES) {
-			Ok(deadlines) => deadlines,
-			Err(missing) => {
-				eprintln!(
-					"{} could not arm the start deadline of {bot_ids:?}: {missing}",
-					held.label()
-				);
-				return;
-			}
-		};
+	let deadlines = match core.try_state::<TurnRunDeadlines>().ok_or(NO_DEADLINES) {
+		Ok(deadlines) => deadlines,
+		Err(missing) => {
+			eprintln!(
+				"{} could not arm the start deadline of {bot_ids:?}: {missing}",
+				held.label()
+			);
+			return;
+		}
+	};
 	let armed = deadlines.armed.clone();
 	let holds: Vec<(String, u64)> = {
 		let mut held_runs = locked(&armed);
@@ -96,7 +95,7 @@ pub(crate) fn arm_start_deadlines<R: Runtime>(
 			.collect()
 	};
 	let start_within = deadlines.start_within;
-	crate::events::core(app.app_handle()).spawn(async move {
+	core.spawn(async move {
 		time::sleep(start_within).await;
 		for (bot_id, hold) in holds {
 			let run = (held.turn_id.clone(), bot_id);
@@ -124,18 +123,18 @@ fn locked(armed: &Mutex<Armed>) -> MutexGuard<'_, Armed> {
 	armed.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-struct HeldTurn<R: Runtime> {
-	app: AppHandle<R>,
+struct HeldTurn {
+	core: crate::core_context::Core,
 	conversation_id: String,
 	turn_id: String,
 }
 
-impl<R: Runtime> HeldTurn<R> {
+impl HeldTurn {
 	async fn release(&self, bot_id: &str) {
 		let run =
 			SummonsRun { conversation_id: &self.conversation_id, turn_id: &self.turn_id, bot_id };
 		if let Err(error) =
-			released_awaited_run(&self.app, &run, SummonsDropReason::NeverStarted).await
+			released_awaited_run(&self.core, &run, SummonsDropReason::NeverStarted).await
 		{
 			eprintln!(
 				"{} could not release the awaited run of {bot_id} at its start deadline: {error:?}",
@@ -149,29 +148,29 @@ impl<R: Runtime> HeldTurn<R> {
 	}
 }
 
-pub(crate) async fn drop_awaited_run<R: Runtime>(
-	app: &AppHandle<R>,
+pub(crate) async fn drop_awaited_run(
+	core: &crate::core_context::Core,
 	run: &SummonsRun<'_>,
 	reason: SummonsDropReason,
 ) -> Result<bool, TranscriptStoreError> {
-	suspend_start_deadline(crate::events::core(app.app_handle()), run.turn_id, run.bot_id);
-	released_awaited_run(app, run, reason).await
+	suspend_start_deadline(core, run.turn_id, run.bot_id);
+	released_awaited_run(core, run, reason).await
 }
 
-async fn released_awaited_run<R: Runtime>(
-	app: &AppHandle<R>,
+async fn released_awaited_run(
+	core: &crate::core_context::Core,
 	run: &SummonsRun<'_>,
 	reason: SummonsDropReason,
 ) -> Result<bool, TranscriptStoreError> {
-	let database = database(app)?;
+	let database = database(core)?;
 	let expired = database
 		.messages()
 		.expire_awaited_run(run.turn_id.to_owned(), run.bot_id.to_owned(), now_ms())
 		.await?;
 	if expired {
-		summons::note_dropped(app, run, reason, None);
-		announce_conversation(app, database, CONVERSATION_UPDATED, run.conversation_id).await;
-		forget_settled_turns(app).await;
+		summons::note_dropped(core, run, reason, None);
+		announce_conversation(core, database, CONVERSATION_UPDATED, run.conversation_id).await;
+		forget_settled_turns(core).await;
 	}
 	Ok(expired)
 }
@@ -186,7 +185,7 @@ pub async fn conversation_drop_summons<R: Runtime>(
 	reason: SummonsDropReason,
 ) -> Result<bool, TranscriptStoreError> {
 	let run = SummonsRun { conversation_id: &conversation_id, turn_id: &turn_id, bot_id: &bot_id };
-	drop_awaited_run(&app, &run, reason).await
+	drop_awaited_run(crate::events::core(&app), &run, reason).await
 }
 
 #[cfg(test)]
@@ -223,7 +222,7 @@ mod tests {
 		let app = an_app_of_its_own("turn-run-deadline", mock_builder());
 		crate::db::install(crate::events::core(app.handle()));
 		crate::events::core(app.app_handle()).manage(TurnRunDeadlines::after(Duration::ZERO));
-		let database = database(app.handle()).expect("the database opens");
+		let database = database(crate::events::core(app.handle())).expect("the database opens");
 		database.conversations().ensure_default_bot().await.expect("the bot is seeded");
 		let chat = database
 			.conversations()
@@ -246,7 +245,7 @@ mod tests {
 				.expect("the test listens");
 		});
 
-		arm_start_deadlines(app.handle(), &chat.id, "t1", &both);
+		arm_start_deadlines(crate::events::core(app.handle()), &chat.id, "t1", &both);
 		let first = time::timeout(Duration::from_secs(60), updates.recv())
 			.await
 			.expect("the late release announced in time");
@@ -260,7 +259,7 @@ mod tests {
 		let app = an_app_of_its_own("turn-run-deadline-dropped", mock_builder());
 		crate::db::install(crate::events::core(app.handle()));
 		crate::events::core(app.app_handle()).manage(TurnRunDeadlines::after(Duration::ZERO));
-		let database = database(app.handle()).expect("the database opens");
+		let database = database(crate::events::core(app.handle())).expect("the database opens");
 		database.conversations().ensure_default_bot().await.expect("the bot is seeded");
 		let chat = database
 			.conversations()
@@ -279,7 +278,7 @@ mod tests {
 			announced.send(dropped).expect("the test listens");
 		});
 
-		arm_start_deadlines(app.handle(), &chat.id, "t1", &late);
+		arm_start_deadlines(crate::events::core(app.handle()), &chat.id, "t1", &late);
 		let first = time::timeout(Duration::from_secs(60), drops.recv())
 			.await
 			.expect("the drop announced in time");

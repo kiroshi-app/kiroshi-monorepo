@@ -73,7 +73,7 @@ async fn quitting_during_a_startup_sweeps_the_group_it_cannot_see_yet() {
 	assert!(is_alive(orphan), "the grandchild must be running before the quit");
 
 	let state = AgentState::default();
-	terminate_session(an_app_with_a_core().handle(), &state).await;
+	terminate_session(kiroshi_app::events::core(an_app_with_a_core().handle()), &state).await;
 
 	poll_until("the exit sweep to leave no orphan behind", || !is_alive(orphan)).await;
 

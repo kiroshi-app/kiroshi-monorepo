@@ -20,7 +20,6 @@ use chrono::{DateTime, SecondsFormat, Utc};
 use image::imageops::FilterType;
 use image::{DynamicImage, ImageFormat, ImageReader, Limits};
 use sha2::{Digest, Sha256};
-use tauri::{AppHandle, Manager, Runtime};
 
 use contract::{
 	LibraryBoardFileReplaced, LibraryChanged, LibraryDocument, LibraryDocumentFormat,
@@ -98,11 +97,8 @@ enum ClipboardPayload {
 	Image { rgba: Vec<u8>, width: u32, height: u32 },
 }
 
-fn root<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, LibraryError> {
-	app.path()
-		.app_data_dir()
-		.map(|data| data.join(DIR_NAME))
-		.map_err(|error| LibraryError::Unreadable { detail: error.to_string() })
+fn root(core: &crate::core_context::Core) -> Result<PathBuf, LibraryError> {
+	Ok(core.data_dir().join(DIR_NAME))
 }
 
 fn space_dir(root: &Path, space_id: &str) -> PathBuf {
@@ -195,20 +191,20 @@ fn a_document(root: &Path, space_id: &str, name: &str) -> Result<(), LibraryErro
 	}
 }
 
-pub(crate) fn held_document<R: Runtime>(
-	app: &AppHandle<R>,
+pub(crate) fn held_document(
+	core: &crate::core_context::Core,
 	space_id: &str,
 	name: &str,
 ) -> Result<(), LibraryError> {
-	a_document(&root(app)?, space_id, name)
+	a_document(&root(core)?, space_id, name)
 }
 
-pub(crate) fn held_document_or_board<R: Runtime>(
-	app: &AppHandle<R>,
+pub(crate) fn held_document_or_board(
+	core: &crate::core_context::Core,
 	space_id: &str,
 	name: &str,
 ) -> Result<(), LibraryError> {
-	match resolve(&root(app)?, space_id, name)?.accepted {
+	match resolve(&root(core)?, space_id, name)?.accepted {
 		AcceptedType::Document(_) | AcceptedType::Board => Ok(()),
 		AcceptedType::Image { .. } => Err(LibraryError::NotADocument { name: name.to_owned() }),
 	}
@@ -440,55 +436,55 @@ fn created(
 	item_at(&path, name.to_owned())?.ok_or_else(|| LibraryError::Missing { name: name.to_owned() })
 }
 
-pub(crate) fn open_document<R: Runtime>(
-	app: &AppHandle<R>,
+pub(crate) fn open_document(
+	core: &crate::core_context::Core,
 	root: &Path,
 	space_id: &str,
 	name: &str,
 ) -> Result<LibraryDocumentState, LibraryError> {
-	let opened = documents(app).open(root, space_id, name)?;
+	let opened = documents(core).open(root, space_id, name)?;
 	if let Some(host_edit) = opened.host_edit {
-		announce(app, space_id, name, &host_edit);
+		announce(core, space_id, name, &host_edit);
 	}
 	Ok(LibraryDocumentState { name: name.to_owned(), update: BASE64_STANDARD.encode(opened.state) })
 }
 
-pub(crate) fn apply_update<R: Runtime>(
-	app: &AppHandle<R>,
+pub(crate) fn apply_update(
+	core: &crate::core_context::Core,
 	root: &Path,
 	space_id: &str,
 	name: &str,
 	update: &str,
 ) -> Result<(), LibraryError> {
 	let update = decoded_content(name, update)?;
-	documents(app).apply(root, space_id, name, &update, |applied| {
-		announce(app, space_id, &applied.name, &applied.change);
+	documents(core).apply(root, space_id, name, &update, |applied| {
+		announce(core, space_id, &applied.name, &applied.change);
 	})
 }
 
-pub(crate) fn rename_document<R: Runtime>(
-	app: &AppHandle<R>,
+pub(crate) fn rename_document(
+	core: &crate::core_context::Core,
 	root: &Path,
 	space_id: &str,
 	name: &str,
 	new_name: &str,
 ) -> Result<LibraryItem, LibraryError> {
-	let landed = documents(app).rename(root, space_id, name, new_name, |landed| {
-		announce_rename(crate::events::core(app.app_handle()), space_id, name, landed);
+	let landed = documents(core).rename(root, space_id, name, new_name, |landed| {
+		announce_rename(core, space_id, name, landed);
 	})?;
 	item_at(&space_dir(root, space_id).join(&landed), landed.clone())?
 		.ok_or(LibraryError::Missing { name: landed })
 }
 
-pub(crate) async fn rename_linked_document<R: Runtime>(
-	app: &AppHandle<R>,
+pub(crate) async fn rename_linked_document(
+	core: &crate::core_context::Core,
 	database: &db::Database,
 	root: &Path,
 	space_id: &str,
 	name: &str,
 	new_name: &str,
 ) -> Result<LibraryItem, LibraryError> {
-	let renamed = rename_document(app, root, space_id, name, new_name)?;
+	let renamed = rename_document(core, root, space_id, name, new_name)?;
 	if renamed.name != name {
 		database
 			.messages()
@@ -503,8 +499,8 @@ struct AttachedImage {
 	bytes: Vec<u8>,
 }
 
-pub(crate) async fn save_message<R: Runtime>(
-	app: &AppHandle<R>,
+pub(crate) async fn save_message(
+	core: &crate::core_context::Core,
 	database: &db::Database,
 	conversation_id: &str,
 	message_id: &str,
@@ -523,14 +519,14 @@ pub(crate) async fn save_message<R: Runtime>(
 	};
 	let attached = attached_content(&message.content);
 	let text = attached.text.to_owned();
-	let images = attached_images(app, conversation_id, &attached.paths)?;
-	let root = root(app)?;
+	let images = attached_images(core, conversation_id, &attached.paths)?;
+	let root = root(core)?;
 	let landed_in = space_id.clone();
 	let saved =
 		tokio::task::spawn_blocking(move || saved_as_document(&root, &landed_in, &text, &images))
 			.await
 			.map_err(unwritable)??;
-	announce_change(app, &space_id);
+	announce_change(core, &space_id);
 	Ok(saved)
 }
 
@@ -541,8 +537,8 @@ fn unread_message(error: TranscriptError) -> LibraryError {
 	}
 }
 
-fn attached_images<R: Runtime>(
-	app: &AppHandle<R>,
+fn attached_images(
+	core: &crate::core_context::Core,
 	conversation_id: &str,
 	paths: &[PathBuf],
 ) -> Result<Vec<AttachedImage>, LibraryError> {
@@ -550,7 +546,7 @@ fn attached_images<R: Runtime>(
 	if images.is_empty() {
 		return Ok(Vec::new());
 	}
-	let store = Attachments::dir(app).ok_or_else(|| LibraryError::Unreadable {
+	let store = Attachments::dir(core).ok_or_else(|| LibraryError::Unreadable {
 		detail: "there is no application data directory holding attachments".to_owned(),
 	})?;
 	images
@@ -659,32 +655,32 @@ fn name_safe(title: &str) -> String {
 	cut.trim_end().trim_end_matches('.').to_owned()
 }
 
-pub(crate) fn delete_item<R: Runtime>(
-	app: &AppHandle<R>,
+pub(crate) fn delete_item(
+	core: &crate::core_context::Core,
 	root: &Path,
 	space_id: &str,
 	name: &str,
 ) -> Result<(), LibraryError> {
-	documents(app).delete(root, space_id, name)?;
-	announce_change(app, space_id);
+	documents(core).delete(root, space_id, name)?;
+	announce_change(core, space_id);
 	Ok(())
 }
 
-fn announce_change<R: Runtime>(app: &AppHandle<R>, space_id: &str) {
-	announced(app, LibraryChanged { space_id: space_id.to_owned(), overwritten: None });
+fn announce_change(core: &crate::core_context::Core, space_id: &str) {
+	announced(core, LibraryChanged { space_id: space_id.to_owned(), overwritten: None });
 }
 
-fn announce_overwrite<R: Runtime>(app: &AppHandle<R>, space_id: &str, item: &LibraryItem) {
+fn announce_overwrite(core: &crate::core_context::Core, space_id: &str, item: &LibraryItem) {
 	let overwritten = LibraryOverwritten { name: item.name.clone(), modified_at: item.modified_at };
 	announced(
-		app,
+		core,
 		LibraryChanged { space_id: space_id.to_owned(), overwritten: Some(overwritten) },
 	);
 }
 
-fn announced<R: Runtime>(app: &AppHandle<R>, changed: LibraryChanged) {
+fn announced(core: &crate::core_context::Core, changed: LibraryChanged) {
 	let space_id = changed.space_id.clone();
-	if let Err(error) = events::emit(app, events::LIBRARY_CHANGED, changed) {
+	if let Err(error) = core.emit(events::LIBRARY_CHANGED, changed) {
 		log::warn!("a change of the library of space {space_id} was not announced: {error}");
 	}
 }
@@ -705,13 +701,13 @@ fn announce_rename(
 	}
 }
 
-fn announce<R: Runtime>(app: &AppHandle<R>, space_id: &str, name: &str, update: &[u8]) {
+fn announce(core: &crate::core_context::Core, space_id: &str, name: &str, update: &[u8]) {
 	let updated = LibraryDocumentUpdated {
 		space_id: space_id.to_owned(),
 		name: name.to_owned(),
 		update: BASE64_STANDARD.encode(update),
 	};
-	if let Err(error) = events::emit(app, events::LIBRARY_DOCUMENT_UPDATED, updated) {
+	if let Err(error) = core.emit(events::LIBRARY_DOCUMENT_UPDATED, updated) {
 		log::warn!(
 			"an update of a library document of space {space_id} was not announced: {error}"
 		);
@@ -726,8 +722,7 @@ fn announce_board_file_replaced(core: &crate::core_context::Core, space_id: &str
 	}
 }
 
-fn documents<R: Runtime>(app: &AppHandle<R>) -> Managed<'_, Documents> {
-	let core = crate::events::core(app);
+fn documents(core: &crate::core_context::Core) -> Managed<'_, Documents> {
 	if core.try_state::<Documents>().is_none() {
 		let announcing = core.clone();
 		core.manage(Documents::new(move |space_id, name| {
@@ -737,8 +732,8 @@ fn documents<R: Runtime>(app: &AppHandle<R>) -> Managed<'_, Documents> {
 	core.state::<Documents>()
 }
 
-pub fn write_pending_boards<R: Runtime>(app: &AppHandle<R>) {
-	if let Some(documents) = crate::events::core(app.app_handle()).try_state::<Documents>() {
+pub fn write_pending_boards(core: &crate::core_context::Core) {
+	if let Some(documents) = core.try_state::<Documents>() {
 		documents.write_pending_boards();
 	}
 }
@@ -806,8 +801,8 @@ impl From<LibraryError> for OverwriteRefusal {
 	}
 }
 
-pub(crate) fn overwrite_path<R: Runtime>(
-	app: &AppHandle<R>,
+pub(crate) fn overwrite_path(
+	core: &crate::core_context::Core,
 	root: &Path,
 	space_id: &str,
 	path: &Path,
@@ -828,13 +823,13 @@ pub(crate) fn overwrite_path<R: Runtime>(
 		}
 		(AcceptedType::Image { .. }, AcceptedType::Image { .. }) => {
 			let thumbnail = thumbnail_of(name, image_format(&target.path, name)?, &file.bytes)?;
-			documents(app).overwrite_image(root, space_id, name, &file.bytes, &thumbnail)?;
+			documents(core).overwrite_image(root, space_id, name, &file.bytes, &thumbnail)?;
 		}
 		(AcceptedType::Document(_), AcceptedType::Document(_)) => {
 			let text = utf8_text(&file.name, file.bytes)?;
-			let opened = documents(app).overwrite_document(root, space_id, name, &text)?;
+			let opened = documents(core).overwrite_document(root, space_id, name, &text)?;
 			if let Some(host_edit) = opened.host_edit {
-				announce(app, space_id, name, &host_edit);
+				announce(core, space_id, name, &host_edit);
 			}
 		}
 		(AcceptedType::Image { .. }, AcceptedType::Document(_)) => {
@@ -849,7 +844,7 @@ pub(crate) fn overwrite_path<R: Runtime>(
 	}
 	let item = item_at(&space_dir(root, space_id).join(name), name.to_owned())?
 		.ok_or_else(|| LibraryError::Missing { name: name.to_owned() })?;
-	announce_overwrite(app, space_id, &item);
+	announce_overwrite(core, space_id, &item);
 	Ok(item)
 }
 
@@ -1048,9 +1043,9 @@ fn stored_thumbnail(thumbnails: &Path, file: &str, png: &[u8]) -> Result<(), Lib
 	stored
 }
 
-pub fn forget_space<R: Runtime>(app: &AppHandle<R>, space_id: &str) {
-	let removed = root(app).and_then(|root| {
-		documents(app).forget(&root, space_id).map_err(|error| unreadable(&error))?;
+pub fn forget_space(core: &crate::core_context::Core, space_id: &str) {
+	let removed = root(core).and_then(|root| {
+		documents(core).forget(&root, space_id).map_err(|error| unreadable(&error))?;
 		remove_space_dir(&root, space_id).map_err(|error| unreadable(&error))
 	});
 	if let Err(error) = removed {

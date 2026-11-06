@@ -425,10 +425,10 @@ fn last_event(window: &WebviewWindow<MockRuntime>, mission_id: &str) -> (Value, 
 	(last["kind"].clone(), last["source"].clone())
 }
 
-fn bot_of(home: &Home, window: &WebviewWindow<MockRuntime>) -> MissionHost<MockRuntime> {
+fn bot_of(home: &Home, window: &WebviewWindow<MockRuntime>) -> MissionHost {
 	let chat = call(window, "conversation_main_chat", json!({ "botId": BOT })).expect("the chat");
 	let chat_id = chat["id"].as_str().expect("the chat holds an id").to_owned();
-	MissionHost::new(home.app.handle().clone(), chat_id, BOT.to_owned())
+	MissionHost::new(kiroshi_app::events::core(home.app.handle()).clone(), chat_id, BOT.to_owned())
 }
 
 fn bot_close(

@@ -9,7 +9,7 @@ use super::{deep_link, description, held};
 use crate::conversations::contract::Hue;
 use crate::db;
 use crate::db::repositories::joined_spaces::{self, JoinedReach};
-use crate::events::{self, JOINED_SPACE_CHANGED, JOINED_SPACE_RECONNECTED, JOINED_SPACE_REMOVED};
+use crate::events::{JOINED_SPACE_CHANGED, JOINED_SPACE_RECONNECTED, JOINED_SPACE_REMOVED};
 
 pub const CHANGED_EVENT: &str = "joined-space://changed";
 
@@ -52,11 +52,11 @@ pub(super) fn ready(state: &db::DatabaseState) -> Result<&db::Database, JoinedSp
 	state.as_ref().map_err(|failure| JoinedSpaceError::Unavailable { failure: failure.into() })
 }
 
-pub(super) async fn announce_change<R: Runtime>(
-	app: &AppHandle<R>,
+pub(super) async fn announce_change(
+	core: &crate::core_context::Core,
 	id: String,
 ) -> Result<(), JoinedSpaceError> {
-	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
+	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	let held = database.joined_spaces().find(id.clone()).await?;
 	let roster = database.joined_space_members().members(id.clone()).await?;
@@ -67,7 +67,7 @@ pub(super) async fn announce_change<R: Runtime>(
 		colour: colour_shown(&listing),
 		id,
 	};
-	events::emit(app, JOINED_SPACE_CHANGED, changed)
+	core.emit(JOINED_SPACE_CHANGED, changed)
 		.map_err(|error| JoinedSpaceError::Undeliverable { detail: error.to_string() })
 }
 
@@ -97,20 +97,20 @@ pub async fn joined_spaces_list<R: Runtime>(
 	let stored = database.joined_spaces().list().await?;
 	let mut listed = Vec::with_capacity(stored.len());
 	for joined in stored {
-		listed.push(presented(&app, database, joined).await?);
+		listed.push(presented(crate::events::core(&app), database, joined).await?);
 	}
 	Ok(listed)
 }
 
-pub(super) async fn presented<R: Runtime>(
-	app: &AppHandle<R>,
+pub(super) async fn presented(
+	core: &crate::core_context::Core,
 	database: &db::Database,
 	joined: joined_spaces::JoinedSpace,
 ) -> Result<JoinedSpace, JoinedSpaceError> {
 	let roster = database.joined_space_members().members(joined.id.clone()).await?;
 	let JoinedReach::Relay { instance_id } = &joined.reach;
-	let wait = held::wait_or_unread(app, &joined.id, instance_id);
-	let cloud = crate::events::core(app.app_handle()).state::<RelayGuests>().inner().cloud();
+	let wait = held::wait_or_unread(core, &joined.id, instance_id);
+	let cloud = core.state::<RelayGuests>().inner().cloud();
 	Ok(JoinedSpace::presented(joined, cloud, wait, &roster))
 }
 
@@ -120,7 +120,7 @@ pub async fn joined_space_connect<R: Runtime>(
 	app: AppHandle<R>,
 	id: String,
 ) -> Result<JoinedSpaceConnection, JoinedSpaceError> {
-	relay::connected(&app, id).await
+	relay::connected(crate::events::core(&app), id).await
 }
 
 #[tauri::command]
@@ -135,8 +135,8 @@ pub async fn joined_space_remove<R: Runtime>(
 	app: AppHandle<R>,
 	id: String,
 ) -> Result<(), JoinedSpaceError> {
-	relay::left(&app, &id).await?;
-	announce_change(&app, id).await
+	relay::left(crate::events::core(&app), &id).await?;
+	announce_change(crate::events::core(&app), id).await
 }
 
 #[tauri::command]
@@ -147,7 +147,7 @@ pub async fn joined_space_describe<R: Runtime>(
 	name: String,
 	colour: Option<i64>,
 ) -> Result<JoinedSpace, JoinedSpaceError> {
-	description::asked(&app, id, name, colour).await
+	description::asked(crate::events::core(&app), id, name, colour).await
 }
 
 #[cfg(test)]
@@ -344,7 +344,9 @@ mod tests {
 	}
 
 	async fn announced(app: &App<MockRuntime>, hearing: &Receiver<String>, id: &str) -> Value {
-		announce_change(app.handle(), id.to_owned()).await.expect("the change is announced");
+		announce_change(crate::events::core(app.handle()), id.to_owned())
+			.await
+			.expect("the change is announced");
 		serde_json::from_str(&hearing.recv().expect("the change was heard")).expect("json")
 	}
 

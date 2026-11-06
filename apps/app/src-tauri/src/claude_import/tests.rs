@@ -58,7 +58,8 @@ fn a_claude_root() -> RemovedOnDrop {
 fn a_host(name: &str) -> AppOfItsOwn {
 	let app = an_app_of_its_own(&format!("claude-import-{name}"), mock_builder());
 	crate::db::install(crate::events::core(app.handle()));
-	let person = bundles::user::path(app.handle()).expect("the person plugin has a home");
+	let person = bundles::user::path(crate::events::core(app.handle()))
+		.expect("the person plugin has a home");
 	bundles::user::lay_down(&person).expect("the person plugin is laid down");
 	app
 }
@@ -72,13 +73,14 @@ fn database_of(app: &App<MockRuntime>) -> &db::Database {
 }
 
 fn person_of(app: &App<MockRuntime>) -> PathBuf {
-	bundles::user::laid_down(app.handle()).expect("the person plugin is laid down")
+	bundles::user::laid_down(crate::events::core(app.handle()))
+		.expect("the person plugin is laid down")
 }
 
 async fn imported(app: &App<MockRuntime>, root: &Path, keys: &[&str]) -> Vec<ClaudeImportOutcome> {
 	let person = person_of(app);
 	let importer = Importer {
-		app: app.handle(),
+		core: crate::events::core(app.handle()),
 		database: database_of(app),
 		root,
 		person: Some(&person),
@@ -328,9 +330,14 @@ async fn an_agent_whose_name_is_worn_in_the_space_is_numbered() {
 	fs::write(root.join("agents/shoto-again.md"), shoto).expect("the agent stands");
 	let draft =
 		BotDraft { name: "shoto".to_owned(), job: String::new(), description: String::new() };
-	create_drafted_bot(app.handle(), database_of(&app), draft, SPACE.to_owned())
-		.await
-		.expect("the worn name lands");
+	create_drafted_bot(
+		crate::events::core(app.handle()),
+		database_of(&app),
+		draft,
+		SPACE.to_owned(),
+	)
+	.await
+	.expect("the worn name lands");
 
 	let outcomes = imported(&app, &root, &["agents/shoto.md", "agents/shoto-again.md"]).await;
 

@@ -4,7 +4,6 @@ use std::sync::Arc;
 use base64::prelude::{Engine as _, BASE64_STANDARD};
 use ed25519_dalek::Signature;
 use serde_json::{json, Value};
-use tauri::{AppHandle, Manager, Runtime};
 
 use super::contract::HostingFailureKind;
 use super::roster::{self, Rostered};
@@ -36,32 +35,31 @@ impl HostKeys {
 	}
 }
 
-pub(super) async fn host_keys<R: Runtime>(
-	app: &AppHandle<R>,
+pub(super) async fn host_keys(
+	core: &crate::core_context::Core,
 	space_id: &str,
 ) -> Result<HostKeys, (HostingFailureKind, String)> {
 	let device =
-		device_keys(app).map_err(|detail| (HostingFailureKind::DeviceKeysNotLoaded, detail))?;
-	let space = space_key(app, space_id)
+		device_keys(core).map_err(|detail| (HostingFailureKind::DeviceKeysNotLoaded, detail))?;
+	let space = space_key(core, space_id)
 		.await
 		.map_err(|detail| (HostingFailureKind::SpaceKeyNotRead, detail))?;
 	Ok(HostKeys { device, space })
 }
 
-fn device_keys<R: Runtime>(app: &AppHandle<R>) -> Result<DeviceKeys, String> {
-	crate::events::core(app.app_handle())
-		.try_state::<DeviceKeysState>()
+fn device_keys(core: &crate::core_context::Core) -> Result<DeviceKeys, String> {
+	core.try_state::<DeviceKeysState>()
 		.ok_or_else(|| "the device keys are not loaded".to_owned())?
 		.keys()
 		.map(|keys| DeviceKeys::from_secret(&keys.secret()))
 		.map_err(|failure| format!("the device keys are unavailable: {failure:?}"))
 }
 
-async fn space_key<R: Runtime>(
-	app: &AppHandle<R>,
+async fn space_key(
+	core: &crate::core_context::Core,
 	space_id: &str,
 ) -> Result<CurrentSpaceKey, String> {
-	let space_keys = crate::events::core(app.app_handle())
+	let space_keys = core
 		.try_state::<SpaceKeys>()
 		.ok_or_else(|| "the space key store is not loaded".to_owned())?;
 	let watched = |space_keys: &SpaceKeys| {
@@ -74,7 +72,7 @@ async fn space_key<R: Runtime>(
 	}
 	let first = HeldSpaceKey::first()
 		.map_err(|failure| format!("no space key was generated: {failure:?}"))?;
-	space_key_stored(crate::events::core(app.app_handle()), &space_keys, space_id, first).await?;
+	space_key_stored(core, &space_keys, space_id, first).await?;
 	watched(&space_keys)?.ok_or_else(|| "the new space key did not read back".to_owned())
 }
 

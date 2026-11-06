@@ -2,7 +2,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use serde_json::{json, Map, Value};
-use tauri::{AppHandle, Manager, Runtime};
 
 use super::contract::MissionError;
 use crate::private_files;
@@ -39,12 +38,8 @@ const SCRIPT: &str = include_str!("../../hooks/kiroshi-agent-hook.sh");
 
 const READER: &str = include_str!("../../hooks/kiroshi-agent-hook.py");
 
-pub fn dir<R: Runtime>(app: &AppHandle<R>, mission_id: &str) -> Result<PathBuf, MissionError> {
-	let data = app
-		.path()
-		.app_data_dir()
-		.map_err(|_| unreachable("the app data directory is not named".to_owned()))?;
-	Ok(data.join(MISSIONS_DIR).join(mission_id).join(HOOK_DIR))
+pub fn dir(core: &crate::core_context::Core, mission_id: &str) -> Result<PathBuf, MissionError> {
+	Ok(core.data_dir().join(MISSIONS_DIR).join(mission_id).join(HOOK_DIR))
 }
 
 pub fn installed(dir: &Path, workspace: &str, url: &str, key: &str) -> Result<(), MissionError> {

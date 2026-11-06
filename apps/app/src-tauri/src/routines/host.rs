@@ -1,10 +1,9 @@
 use serde::Deserialize;
 use serde_json::Value;
-use tauri::{AppHandle, Runtime};
 
 use super::commands::{
-	routine_create, routine_delete, routine_list, routine_row, routine_run_now,
-	routine_trigger_sources, routine_update,
+	create_routine, delete_routine, routine_row, routines_of, run_routine_now, trigger_sources_of,
+	update_routine,
 };
 use super::contract::{Filter, FilterMatchMode, RoutineDraft, RoutineEdit, RoutineError};
 use crate::agent::host::{Host, Refusal};
@@ -12,15 +11,15 @@ use crate::conversations::commands::ready;
 use crate::db;
 
 #[derive(Debug)]
-pub struct RoutineHost<R: Runtime> {
-	app: AppHandle<R>,
+pub struct RoutineHost {
+	core: crate::core_context::Core,
 	conversation_id: String,
 	bot_id: String,
 }
 
-impl<R: Runtime> RoutineHost<R> {
-	pub fn new(app: AppHandle<R>, conversation_id: String, bot_id: String) -> Self {
-		Self { app, conversation_id, bot_id }
+impl RoutineHost {
+	pub fn new(core: crate::core_context::Core, conversation_id: String, bot_id: String) -> Self {
+		Self { core, conversation_id, bot_id }
 	}
 
 	fn draft(&self, asked: Created) -> RoutineDraft {
@@ -57,7 +56,7 @@ impl<R: Runtime> RoutineHost<R> {
 	}
 }
 
-impl<R: Runtime> Host for RoutineHost<R> {
+impl Host for RoutineHost {
 	const SUBTYPE: &'static str = "routine";
 
 	type Operation = Operation;
@@ -65,39 +64,37 @@ impl<R: Runtime> Host for RoutineHost<R> {
 	type Error = RoutineError;
 
 	async fn served(&self, operation: Operation, payload: Value) -> Result<Value, RoutineError> {
-		let state = Self::database(&self.app)?;
+		let state = Self::database(&self.core)?;
 		let database = ready(state.state::<crate::db::DatabaseState>().inner())?;
 		match operation {
 			Operation::List => {
 				let _: Bare = Self::read(payload)?;
-				Self::answered(routine_list(state, self.conversation_id.clone()).await?)
+				Self::answered(routines_of(&self.core, self.conversation_id.clone()).await?)
 			}
 			Operation::TriggerSources => {
 				let _: Bare = Self::read(payload)?;
-				Self::answered(
-					routine_trigger_sources(self.app.clone(), state, self.bot_id.clone()).await?,
-				)
+				Self::answered(trigger_sources_of(&self.core, self.bot_id.clone()).await?)
 			}
 			Operation::Create => {
 				let asked: Created = Self::read(payload)?;
 				let draft = self.draft(asked);
-				Self::answered(routine_create(self.app.clone(), state, draft).await?)
+				Self::answered(create_routine(&self.core, draft).await?)
 			}
 			Operation::Update => {
 				let asked: Edited = Self::read(payload)?;
 				self.refuse_a_routine_it_does_not_own(database, &asked.id).await?;
 				let id = asked.id.clone();
-				Self::answered(routine_update(self.app.clone(), state, id, edit(asked)).await?)
+				Self::answered(update_routine(&self.core, id, edit(asked)).await?)
 			}
 			Operation::RunNow => {
 				let asked: Named = Self::read(payload)?;
 				self.refuse_a_routine_it_does_not_own(database, &asked.id).await?;
-				Self::answered(routine_run_now(self.app.clone(), state, asked.id).await?)
+				Self::answered(run_routine_now(&self.core, asked.id).await?)
 			}
 			Operation::Delete => {
 				let asked: Named = Self::read(payload)?;
 				self.refuse_a_routine_it_does_not_own(database, &asked.id).await?;
-				routine_delete(self.app.clone(), state, asked.id).await?;
+				delete_routine(&self.core, asked.id).await?;
 				Ok(Value::Null)
 			}
 		}
@@ -178,6 +175,7 @@ fn every_event() -> Filter {
 
 #[cfg(test)]
 mod tests {
+	use crate::routines::commands::{routine_create, routine_list};
 	use std::sync::mpsc;
 	use std::time::Duration;
 
@@ -210,7 +208,8 @@ mod tests {
 	async fn a_host(name: &str) -> AppOfItsOwn {
 		let app = an_app_of_its_own(&format!("routine-host-{name}"), mock_builder());
 		crate::db::install(crate::events::core(app.handle()));
-		let system = bundles::system::path(app.handle()).expect("the system bundle is named");
+		let system = bundles::system::path(crate::events::core(app.handle()))
+			.expect("the system bundle is named");
 		bundles::system::write(&system).expect("the system bundle lands");
 		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 			.expect("the database opens")
@@ -220,8 +219,12 @@ mod tests {
 		app
 	}
 
-	fn serving(app: &App<MockRuntime>, conversation_id: &str) -> RoutineHost<MockRuntime> {
-		RoutineHost::new(app.handle().clone(), conversation_id.to_owned(), "b1".to_owned())
+	fn serving(app: &App<MockRuntime>, conversation_id: &str) -> RoutineHost {
+		RoutineHost::new(
+			crate::events::core(app.handle()).clone(),
+			conversation_id.to_owned(),
+			"b1".to_owned(),
+		)
 	}
 
 	fn a_create(extra: Value) -> Value {
@@ -267,7 +270,6 @@ mod tests {
 
 	async fn a_routine_of(app: &App<MockRuntime>, conversation_id: &str, bot_id: &str) -> Routine {
 		routine_create(
-			app.handle().clone(),
 			app.state(),
 			RoutineDraft {
 				conversation_id: conversation_id.to_owned(),

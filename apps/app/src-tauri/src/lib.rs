@@ -118,29 +118,32 @@ pub fn run() {
 			#[cfg(target_os = "macos")]
 			menu::install(app.handle())?;
 			crate::db::install(crate::events::core(app.handle()));
-			crate::events::core(app.app_handle()).manage(crypto::commands::load(app.handle()));
 			crate::events::core(app.app_handle())
-				.manage(crypto::commands::space_keys(app.handle()));
+				.manage(crypto::commands::load(crate::events::core(app.handle())));
+			crate::events::core(app.app_handle())
+				.manage(crypto::commands::space_keys(crate::events::core(app.handle())));
 			if !window_controls::is_headless(std::env::args()) {
 				window_controls::open_main(app.handle());
 				window_controls::drag_ghost::open(app.handle());
 			}
 			joined_spaces::deep_link::install(app.handle());
 			crate::events::core(app.app_handle())
-				.manage(routines::sentinel::spawn(app.handle().clone()));
+				.manage(routines::sentinel::spawn(crate::events::core(app.handle()).clone()));
+			crate::events::core(app.app_handle()).manage(routines::webhook::start(
+				crate::events::core(app.handle()).clone(),
+				host_api::routes(app.handle().clone()),
+			));
 			crate::events::core(app.app_handle())
-				.manage(routines::webhook::start(app.handle().clone()));
+				.manage(missions::github::spawn(crate::events::core(app.handle()).clone()));
 			crate::events::core(app.app_handle())
-				.manage(missions::github::spawn(app.handle().clone()));
-			crate::events::core(app.app_handle())
-				.manage(applications::directory::spawn(app.handle().clone()));
+				.manage(applications::directory::spawn(crate::events::core(app.handle()).clone()));
 			crate::events::core(app.app_handle()).manage(account::session::AccountSession::new(
-				environment::commands::writable_root(app.handle()),
+				environment::commands::writable_root(crate::events::core(app.handle())),
 				&account::cloud::api_url(),
 			));
 			crate::events::core(app.app_handle()).manage(hosting::Hosting::new(
 				&account::cloud::api_url(),
-				hosting::local_api(app.handle()),
+				hosting::local_api(crate::events::core(app.handle())),
 			));
 			crate::events::core(app.app_handle())
 				.manage(invitations::Invitations::new(&account::cloud::api_url()));
@@ -148,14 +151,16 @@ pub fn run() {
 				.manage(devices::Devices::new(&account::cloud::api_url()));
 			crate::events::core(app.app_handle())
 				.manage(joined_spaces::relay::RelayGuests::new(&account::cloud::api_url()));
-			tauri::async_runtime::spawn(account::session::restore(app.handle().clone()));
+			tauri::async_runtime::spawn(account::session::restore(
+				crate::events::core(app.handle()).clone(),
+			));
 			let handle = app.handle().clone();
 			tauri::async_runtime::spawn(async move {
-				conversations::commands::list_bundles_at_launch(&handle).await;
+				conversations::commands::list_bundles_at_launch(crate::events::core(&handle)).await;
 			});
 			let handle = app.handle().clone();
 			tauri::async_runtime::spawn(async move {
-				missions::commands::install_hooks_at_launch(&handle).await;
+				missions::commands::install_hooks_at_launch(crate::events::core(&handle)).await;
 			});
 			tauri::async_runtime::spawn(termination::exited_on_termination(app.handle().clone()));
 			Ok(())
@@ -168,7 +173,7 @@ pub fn run() {
 			#[cfg(target_os = "macos")]
 			RunEvent::Reopen { .. } => window_controls::raise_last_focused(app),
 			RunEvent::Exit => {
-				library::write_pending_boards(app);
+				library::write_pending_boards(crate::events::core(app));
 				if let Err(failure) = badge::wear(app, 0) {
 					eprintln!("the badge was not cleared before exit: {failure}");
 				}
@@ -193,7 +198,7 @@ pub fn run() {
 					directory.stop();
 				}
 				tauri::async_runtime::block_on(terminate_session(
-					app,
+					crate::events::core(app),
 					crate::events::core(app.app_handle()).state::<AgentState>().inner(),
 				));
 			}

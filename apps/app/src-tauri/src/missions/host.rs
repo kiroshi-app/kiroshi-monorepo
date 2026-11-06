@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tauri::{AppHandle, Runtime};
 
 use super::commands::{
 	mission_conclude, mission_escalate, mission_handoff, mission_note, mission_open,
@@ -18,15 +17,15 @@ use crate::db;
 const BOT: &str = "bot";
 
 #[derive(Debug)]
-pub struct MissionHost<R: Runtime> {
-	app: AppHandle<R>,
+pub struct MissionHost {
+	core: crate::core_context::Core,
 	conversation_id: String,
 	bot_id: String,
 }
 
-impl<R: Runtime> MissionHost<R> {
-	pub fn new(app: AppHandle<R>, conversation_id: String, bot_id: String) -> Self {
-		Self { app, conversation_id, bot_id }
+impl MissionHost {
+	pub fn new(core: crate::core_context::Core, conversation_id: String, bot_id: String) -> Self {
+		Self { core, conversation_id, bot_id }
 	}
 
 	fn draft(&self, asked: Opened) -> MissionDraft {
@@ -42,7 +41,7 @@ impl<R: Runtime> MissionHost<R> {
 	}
 
 	fn observed(&self, record: MissionRecord) -> MissionRecord {
-		MissionRecord { mission: observed(&self.app, record.mission), ..record }
+		MissionRecord { mission: observed(&self.core, record.mission), ..record }
 	}
 
 	fn runs_in(&self, held: &Mission) -> bool {
@@ -122,7 +121,7 @@ impl<R: Runtime> MissionHost<R> {
 	}
 }
 
-impl<R: Runtime> Host for MissionHost<R> {
+impl Host for MissionHost {
 	const SUBTYPE: &'static str = "mission";
 
 	type Operation = Operation;
@@ -130,13 +129,13 @@ impl<R: Runtime> Host for MissionHost<R> {
 	type Error = MissionError;
 
 	async fn served(&self, operation: Operation, payload: Value) -> Result<Value, MissionError> {
-		let state = Self::database(&self.app)?;
+		let state = Self::database(&self.core)?;
 		let database = ready(state.state::<crate::db::DatabaseState>().inner())?;
 		match operation {
 			Operation::Open => {
 				let asked: Opened = Self::read(payload)?;
 				let draft = self.draft(asked);
-				Self::answered(mission_open(self.app.clone(), state, draft).await?)
+				Self::answered(mission_open(&self.core, draft).await?)
 			}
 			Operation::Note => {
 				let asked: Noted = Self::read(payload)?;
@@ -146,14 +145,13 @@ impl<R: Runtime> Host for MissionHost<R> {
 					source: BOT.to_owned(),
 					payload: serde_json::json!({ "line": asked.line }),
 				};
-				Self::answered(mission_note(self.app.clone(), state, asked.id, entry).await?)
+				Self::answered(mission_note(&self.core, asked.id, entry).await?)
 			}
 			Operation::Status => {
 				let asked: Stated = Self::read(payload)?;
 				self.refuse_a_mission_it_does_not_own(database, &asked.id).await?;
 				Self::answered(
-					mission_status(self.app.clone(), state, asked.id, BOT.to_owned(), asked.text)
-						.await?,
+					mission_status(&self.core, asked.id, BOT.to_owned(), asked.text).await?,
 				)
 			}
 			Operation::Escalate => {
@@ -166,7 +164,7 @@ impl<R: Runtime> Host for MissionHost<R> {
 						"reason": asked.reason,
 					}),
 				};
-				Self::answered(mission_escalate(self.app.clone(), state, asked.id, note).await?)
+				Self::answered(mission_escalate(&self.core, asked.id, note).await?)
 			}
 			Operation::Close => {
 				let asked: Closed = Self::read(payload)?;
@@ -176,21 +174,18 @@ impl<R: Runtime> Host for MissionHost<R> {
 					outcome: asked.outcome,
 					summary: asked.summary,
 				};
-				Self::answered(mission_conclude(self.app.clone(), state, asked.id, closing).await?)
+				Self::answered(mission_conclude(&self.core, asked.id, closing).await?)
 			}
 			Operation::Watch => {
 				let asked: Armed = Self::read(payload)?;
 				self.refuse_a_mission_it_does_not_own(database, &asked.id).await?;
 				let watch = MissionWatch { branch: asked.branch, repository: asked.repository };
-				Self::answered(mission_watch(self.app.clone(), state, asked.id, watch).await?)
+				Self::answered(mission_watch(&self.core, asked.id, watch).await?)
 			}
 			Operation::Reopen => {
 				let asked: Named = Self::read(payload)?;
 				self.refuse_a_mission_it_does_not_own(database, &asked.id).await?;
-				Self::answered(
-					mission_reopen_unmerged(self.app.clone(), state, asked.id, BOT.to_owned())
-						.await?,
-				)
+				Self::answered(mission_reopen_unmerged(&self.core, asked.id, BOT.to_owned()).await?)
 			}
 			Operation::Update => {
 				let asked: Updated = Self::read(payload)?;
@@ -200,23 +195,14 @@ impl<R: Runtime> Host for MissionHost<R> {
 					ticket: asked.ticket,
 					tools: asked.tools,
 				};
-				Self::answered(
-					mission_update(self.app.clone(), state, asked.id, update, BOT.to_owned())
-						.await?,
-				)
+				Self::answered(mission_update(&self.core, asked.id, update, BOT.to_owned()).await?)
 			}
 			Operation::Handoff => {
 				let asked: HandedOff = Self::read(payload)?;
 				self.refuse_a_mission_it_does_not_own(database, &asked.id).await?;
 				Self::answered(
-					mission_handoff(
-						self.app.clone(),
-						state,
-						asked.id,
-						self.bot_id.clone(),
-						asked.companion,
-					)
-					.await?,
+					mission_handoff(&self.core, asked.id, self.bot_id.clone(), asked.companion)
+						.await?,
 				)
 			}
 			Operation::List => {
@@ -468,16 +454,16 @@ mod tests {
 		app
 	}
 
-	fn serving(app: &App<MockRuntime>, conversation_id: &str) -> MissionHost<MockRuntime> {
+	fn serving(app: &App<MockRuntime>, conversation_id: &str) -> MissionHost {
 		serving_as(app, conversation_id, "b1")
 	}
 
-	fn serving_as(
-		app: &App<MockRuntime>,
-		conversation_id: &str,
-		bot_id: &str,
-	) -> MissionHost<MockRuntime> {
-		MissionHost::new(app.handle().clone(), conversation_id.to_owned(), bot_id.to_owned())
+	fn serving_as(app: &App<MockRuntime>, conversation_id: &str, bot_id: &str) -> MissionHost {
+		MissionHost::new(
+			crate::events::core(app.handle()).clone(),
+			conversation_id.to_owned(),
+			bot_id.to_owned(),
+		)
 	}
 
 	async fn closed_by_its_bot(app: &App<MockRuntime>, held: &Mission) {
@@ -522,8 +508,7 @@ mod tests {
 
 	async fn a_mission_of(app: &App<MockRuntime>, conversation_id: &str, bot_id: &str) -> Mission {
 		opened(
-			app.handle().clone(),
-			app.state(),
+			crate::events::core(app.handle()),
 			MissionDraft {
 				origin_conversation_id: conversation_id.to_owned(),
 				bot_id: bot_id.to_owned(),
@@ -838,8 +823,10 @@ mod tests {
 	#[tokio::test]
 	async fn read_answers_the_whole_of_a_mission_of_another_bot() {
 		let app = a_host("read").await;
-		crate::events::core(app.app_handle())
-			.manage(crate::routines::webhook::start(app.handle().clone()));
+		crate::events::core(app.app_handle()).manage(crate::routines::webhook::start(
+			crate::events::core(app.handle()).clone(),
+			crate::host_api::routes(app.handle().clone()),
+		));
 		let held = a_mission_of(&app, "c1", "b2").await;
 		let its_bot = serving_as(&app, "c1", "b2");
 		its_bot
@@ -932,8 +919,10 @@ mod tests {
 	#[tokio::test]
 	async fn a_mission_is_armed_and_listed_from_its_own_thread() {
 		let app = a_host("armed").await;
-		crate::events::core(app.app_handle())
-			.manage(crate::routines::webhook::start(app.handle().clone()));
+		crate::events::core(app.app_handle()).manage(crate::routines::webhook::start(
+			crate::events::core(app.handle()).clone(),
+			crate::host_api::routes(app.handle().clone()),
+		));
 		let opened = a_mission_of(&app, "c1", "b1").await;
 		let host = serving(&app, &opened.thread_conversation_id);
 
@@ -960,8 +949,10 @@ mod tests {
 	#[tokio::test]
 	async fn a_mission_opened_on_a_checkout_carries_the_hook_and_the_line_on_its_agent() {
 		let app = a_host("opened-hook").await;
-		crate::events::core(app.app_handle())
-			.manage(crate::routines::webhook::start(app.handle().clone()));
+		crate::events::core(app.app_handle()).manage(crate::routines::webhook::start(
+			crate::events::core(app.handle()).clone(),
+			crate::host_api::routes(app.handle().clone()),
+		));
 		let workspace = a_workspace("opened-hook");
 		let host = serving(&app, "c1");
 
@@ -1183,7 +1174,7 @@ mod tests {
 		received
 	}
 
-	async fn closed_through(host: &MissionHost<MockRuntime>, id: &str) {
+	async fn closed_through(host: &MissionHost, id: &str) {
 		host.answer(asking("close", json!({ "id": id, "outcome": "done", "summary": "Shipped" })))
 			.await
 			.expect("the mission is closed");
@@ -1192,8 +1183,10 @@ mod tests {
 	#[tokio::test]
 	async fn a_closed_mission_is_reopened_by_its_bot_and_its_watch_is_read_again() {
 		let app = a_host("reopen").await;
-		crate::events::core(app.app_handle())
-			.manage(crate::routines::webhook::start(app.handle().clone()));
+		crate::events::core(app.app_handle()).manage(crate::routines::webhook::start(
+			crate::events::core(app.handle()).clone(),
+			crate::host_api::routes(app.handle().clone()),
+		));
 		let opened = a_mission_of(&app, "c1", "b1").await;
 		let failed = a_mission_of(&app, "c1", "b1").await;
 		let host = serving(&app, &opened.thread_conversation_id);
@@ -1594,7 +1587,7 @@ mod tests {
 			assert_eq!(refused["id"], json!(opened.id));
 		}
 		let successor = MissionHost::new(
-			app.handle().clone(),
+			crate::events::core(app.handle()).clone(),
 			opened.thread_conversation_id.clone(),
 			"b4".to_owned(),
 		);

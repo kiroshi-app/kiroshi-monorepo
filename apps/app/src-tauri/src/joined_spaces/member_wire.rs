@@ -250,7 +250,7 @@ mod tests {
 			identifier,
 			Some(profile),
 		));
-		let host = SealingHost::planted(app.handle(), INSTANCE).await;
+		let host = SealingHost::planted(crate::events::core(app.handle()), INSTANCE).await;
 		Member { app, host, _database: database }
 	}
 
@@ -260,7 +260,10 @@ mod tests {
 	}
 
 	async fn held_of(app: &App<MockRuntime>) -> Held {
-		held::held(app.handle(), INSTANCE).await.expect("the keys read").expect("the keys are held")
+		held::held(crate::events::core(app.handle()), INSTANCE)
+			.await
+			.expect("the keys read")
+			.expect("the keys are held")
 	}
 
 	fn ctr_of(sealed: &str) -> u64 {
@@ -351,7 +354,7 @@ mod tests {
 			panic!("the newer rekey is taken");
 		};
 		assert_eq!((handed.space.key_id, handed.roster.set.version), (2, 1));
-		assert!(held::kept(member.app.handle(), INSTANCE, &handed)
+		assert!(held::kept(crate::events::core(member.app.handle()), INSTANCE, &handed)
 			.await
 			.expect("the rekey is kept"));
 		wire.rekeyed(*handed);
@@ -376,7 +379,7 @@ mod tests {
 		let Ok(Heard::Roster(roster)) = taken else {
 			panic!("the newer roster under the held key_id is taken");
 		};
-		assert!(held::roster_kept(member.app.handle(), INSTANCE, &roster)
+		assert!(held::roster_kept(crate::events::core(member.app.handle()), INSTANCE, &roster)
 			.await
 			.expect("the roster is stored"));
 		wire.roster_taken(*roster);

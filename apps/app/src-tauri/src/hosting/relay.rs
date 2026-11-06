@@ -10,7 +10,6 @@ use reqwest::StatusCode;
 use serde::Deserialize;
 use serde_json::Value;
 use tauri::http::{header, HeaderValue};
-use tauri::{AppHandle, Manager, Runtime};
 use tokio::net::TcpStream;
 use tokio::sync::{watch, Mutex};
 use tokio::task::JoinSet;
@@ -188,40 +187,45 @@ fn jittered(step: Duration) -> Duration {
 	step + (step / 2).mul_f64(drawn)
 }
 
-pub(super) async fn hosted<R: Runtime>(
-	app: AppHandle<R>,
+pub(super) async fn hosted(
+	core: crate::core_context::Core,
 	mut hosted: Hosted,
 	local: LocalApi,
 	mut stop: watch::Receiver<bool>,
 ) {
 	let ring = watch::channel(Ring::started()).0;
 	let space_id = hosted.space_id.clone();
-	let keys = match wire::host_keys(&app, &space_id).await {
+	let keys = match wire::host_keys(&core, &space_id).await {
 		Ok(keys) => keys,
 		Err((failure, detail)) => {
 			let instance_id = hosted.instance_id.as_deref();
-			return entered(&app, &space_id, instance_id, HostingState::Failed { failure, detail });
+			return entered(
+				&core,
+				&space_id,
+				instance_id,
+				HostingState::Failed { failure, detail },
+			);
 		}
 	};
 	let mut describing = JoinSet::new();
 	if let Some(instance_id) = hosted.instance_id.clone() {
-		let (app, name, colour) = (app.clone(), hosted.name.clone(), hosted.colour);
-		describing.spawn(async move { super::described(&app, &instance_id, &name, colour).await });
+		let (core, name, colour) = (core.clone(), hosted.name.clone(), hosted.colour);
+		describing.spawn(async move { super::described(&core, &instance_id, &name, colour).await });
 	}
 	let serving = Serving { local: &local, keys: &keys };
 	tokio::select! {
-		() = attempts(&app, &mut hosted, serving, &mut stop, &ring) => return,
-		() = replay::recorded(&app, &space_id, &ring) => {}
+		() = attempts(&core, &mut hosted, serving, &mut stop, &ring) => return,
+		() = replay::recorded(&core, &space_id, &ring) => {}
 	}
 	let closed = HostingState::Failed {
 		failure: HostingFailureKind::LocalEventStreamClosed,
 		detail: "the local event stream closed".to_owned(),
 	};
-	entered(&app, &space_id, hosted.instance_id.as_deref(), closed);
+	entered(&core, &space_id, hosted.instance_id.as_deref(), closed);
 }
 
-async fn attempts<R: Runtime>(
-	app: &AppHandle<R>,
+async fn attempts(
+	core: &crate::core_context::Core,
 	hosted: &mut Hosted,
 	serving: Serving<'_>,
 	stop: &mut watch::Receiver<bool>,
@@ -232,19 +236,20 @@ async fn attempts<R: Runtime>(
 	let mut relaying = Relaying::from_the_start_of(ring);
 	loop {
 		let next =
-			attempted(app, hosted, serving, stop, &mut backoff, &mut replaced, &mut relaying).await;
+			attempted(core, hosted, serving, stop, &mut backoff, &mut replaced, &mut relaying)
+				.await;
 		let instance_id = hosted.instance_id.as_deref();
 		match next {
 			Next::Stopped => return,
 			Next::Reregister => continue,
-			Next::Settled(state) => return entered(app, &hosted.space_id, instance_id, state),
+			Next::Settled(state) => return entered(core, &hosted.space_id, instance_id, state),
 			Next::Retry(reason) => {
 				log::warn!(
 					"hosting of space {} (instance {}) lost its relay: {reason}",
 					hosted.space_id,
 					instance_id.unwrap_or("none")
 				);
-				entered(app, &hosted.space_id, instance_id, HostingState::Connecting);
+				entered(core, &hosted.space_id, instance_id, HostingState::Connecting);
 				if until_stopped(stop, sleep(backoff.step())).await.is_none() {
 					return;
 				}
@@ -253,8 +258,8 @@ async fn attempts<R: Runtime>(
 	}
 }
 
-async fn attempted<R: Runtime>(
-	app: &AppHandle<R>,
+async fn attempted(
+	core: &crate::core_context::Core,
 	hosted: &mut Hosted,
 	serving: Serving<'_>,
 	stop: &mut watch::Receiver<bool>,
@@ -262,7 +267,7 @@ async fn attempted<R: Runtime>(
 	replaced: &mut Option<String>,
 	relaying: &mut Relaying<'_>,
 ) -> Next {
-	let bearer = match crate::events::core(app.app_handle()).state::<AccountSession>().bearer() {
+	let bearer = match core.state::<AccountSession>().bearer() {
 		Ok(Some(bearer)) => bearer,
 		Ok(None) => return Next::Settled(HostingState::NeedsSignIn),
 		Err(error) => {
@@ -270,17 +275,17 @@ async fn attempted<R: Runtime>(
 			return failed(HostingFailureKind::AccountSessionStoreFailed, detail);
 		}
 	};
-	let cloud = &crate::events::core(app.app_handle()).state::<Hosting>().cloud;
+	let cloud = &core.state::<Hosting>().cloud;
 	if until_stopped(stop, cloud.unpaused()).await.is_none() {
 		return Next::Stopped;
 	}
-	let relay_device_id = match relay_device(app, &bearer, &hosted.space_id, serving.keys).await {
+	let relay_device_id = match relay_device(core, &bearer, &hosted.space_id, serving.keys).await {
 		Ok(relay_device_id) => relay_device_id,
 		Err(next) => return next,
 	};
 	let instance_id = match hosted.instance_id.clone() {
 		Some(instance_id) => instance_id,
-		None => match registered(app, &bearer, hosted, replaced.as_deref()).await {
+		None => match registered(core, &bearer, hosted, replaced.as_deref()).await {
 			Ok(_) if *stop.borrow() => return Next::Stopped,
 			Ok(instance_id) => instance_id,
 			Err(next) => return next,
@@ -293,12 +298,12 @@ async fn attempted<R: Runtime>(
 		Some(Opened::Socket(socket)) => {
 			*replaced = None;
 			backoff.socket_opened();
-			entered(app, &hosted.space_id, Some(&instance_id), HostingState::Online);
+			entered(core, &hosted.space_id, Some(&instance_id), HostingState::Online);
 			let ids = Ids { space_id: &hosted.space_id, instance_id: &instance_id };
 			let mut frames = LastFrames::default();
 			let ended = tokio::select! {
-				ended = online(app, *socket, serving, stop, ids, relaying, &mut frames) => ended,
-				never = members::polled(app, &hosted.space_id, &instance_id) => match never {},
+				ended = online(core, *socket, serving, stop, ids, relaying, &mut frames) => ended,
+				never = members::polled(core, &hosted.space_id, &instance_id) => match never {},
 			};
 			match ended {
 				Ended::Stopped => Next::Stopped,
@@ -307,7 +312,7 @@ async fn attempted<R: Runtime>(
 					"another host took this instance over (relay close 4001)".to_owned(),
 				),
 				Ended::DeviceRevoked => {
-					session::device_revoked(app, &bearer);
+					session::device_revoked(core, &bearer);
 					Next::Settled(HostingState::NeedsSignIn)
 				}
 				Ended::Dropped(reason) => Next::Retry(dropped_reason(&reason, frames)),
@@ -315,7 +320,7 @@ async fn attempted<R: Runtime>(
 			}
 		}
 		Some(Opened::Revoked) => {
-			session::revoked(app, &bearer);
+			session::revoked(core, &bearer);
 			Next::Settled(HostingState::NeedsSignIn)
 		}
 		Some(Opened::Forbidden) => failed(
@@ -355,25 +360,25 @@ fn sealing_failed(detail: String) -> Ended {
 	Ended::Failed(HostingFailureKind::SealingFailed, detail)
 }
 
-async fn relay_device<R: Runtime>(
-	app: &AppHandle<R>,
+async fn relay_device(
+	core: &crate::core_context::Core,
 	bearer: &str,
 	space_id: &str,
 	keys: &HostKeys,
 ) -> Result<String, Next> {
-	let cloud = &crate::events::core(app.app_handle()).state::<Hosting>().cloud;
+	let cloud = &core.state::<Hosting>().cloud;
 	let account_id = match cloud.me(bearer).await {
 		Ok(account) => account.id,
 		Err(MeError::Revoked) => {
-			session::revoked(app, bearer);
+			session::revoked(core, bearer);
 			return Err(Next::Settled(HostingState::NeedsSignIn));
 		}
 		Err(MeError::Unreachable(reason)) => return Err(Next::Retry(reason)),
 	};
-	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
+	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)
 		.map_err(|failure| database_failed(format!("the database is unavailable: {failure:?}")))?;
-	let relay_device_id = held_or_registered(app, bearer, database, &account_id, keys).await?;
+	let relay_device_id = held_or_registered(core, bearer, database, &account_id, keys).await?;
 	roster::host_rostered(database, space_id, &keys.device, &relay_device_id, &account_id)
 		.await
 		.map_err(|failure| {
@@ -382,8 +387,8 @@ async fn relay_device<R: Runtime>(
 	Ok(relay_device_id)
 }
 
-async fn held_or_registered<R: Runtime>(
-	app: &AppHandle<R>,
+async fn held_or_registered(
+	core: &crate::core_context::Core,
 	bearer: &str,
 	database: &Database,
 	account_id: &str,
@@ -397,11 +402,11 @@ async fn held_or_registered<R: Runtime>(
 	if let Some(relay_device_id) = held {
 		return Ok(relay_device_id);
 	}
-	let cloud = &crate::events::core(app.app_handle()).state::<Hosting>().cloud;
+	let cloud = &core.state::<Hosting>().cloud;
 	let registered = match cloud.register_device(bearer, account_id, &keys.device).await {
 		Ok(registered) => registered,
 		Err(DeviceRegisterError::Revoked) => {
-			session::revoked(app, bearer);
+			session::revoked(core, bearer);
 			return Err(Next::Settled(HostingState::NeedsSignIn));
 		}
 		Err(DeviceRegisterError::Refused(refusal)) => {
@@ -421,22 +426,22 @@ async fn held_or_registered<R: Runtime>(
 	Ok(registered.id)
 }
 
-async fn registered<R: Runtime>(
-	app: &AppHandle<R>,
+async fn registered(
+	core: &crate::core_context::Core,
 	bearer: &str,
 	hosted: &mut Hosted,
 	replaced: Option<&str>,
 ) -> Result<String, Next> {
-	let cloud = &crate::events::core(app.app_handle()).state::<Hosting>().cloud;
+	let cloud = &core.state::<Hosting>().cloud;
 	let instance_id = match cloud.register_instance(bearer, &hosted.name, hosted.colour).await {
 		Ok(instance_id) => instance_id,
 		Err(RegisterError::Revoked) => {
-			session::revoked(app, bearer);
+			session::revoked(core, bearer);
 			return Err(Next::Settled(HostingState::NeedsSignIn));
 		}
 		Err(RegisterError::Unreachable(reason)) => return Err(Next::Retry(reason)),
 	};
-	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
+	let state = core.state::<db::DatabaseState>();
 	let stored = match ready(&state) {
 		Ok(database) => database
 			.space_hosting()
@@ -535,8 +540,8 @@ struct Ids<'a> {
 	instance_id: &'a str,
 }
 
-async fn online<R: Runtime>(
-	app: &AppHandle<R>,
+async fn online(
+	core: &crate::core_context::Core,
 	socket: Socket,
 	serving: Serving<'_>,
 	stop: &mut watch::Receiver<bool>,
@@ -544,7 +549,7 @@ async fn online<R: Runtime>(
 	relaying: &mut Relaying<'_>,
 	frames: &mut LastFrames,
 ) -> Ended {
-	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
+	let state = core.state::<db::DatabaseState>();
 	let database = match ready(&state) {
 		Ok(database) => database,
 		Err(failure) => {
@@ -561,7 +566,7 @@ async fn online<R: Runtime>(
 	};
 	let mut rotations = serving.keys.space.clone();
 	rotations.borrow_and_update();
-	if let Err(failure) = devices::settled_turn(app, ids.space_id).await {
+	if let Err(failure) = devices::settled_turn(core, ids.space_id).await {
 		return Ended::Dropped(format!("the pending space key rotation failed: {failure:?}"));
 	}
 	let (sink, mut stream) = socket.split();
@@ -576,7 +581,7 @@ async fn online<R: Runtime>(
 	let mut invokes = JoinSet::new();
 	let mut files = JoinSet::new();
 	let admission =
-		|| admission::admitted(app.clone(), ids.space_id.to_owned(), ids.instance_id.to_owned());
+		|| admission::admitted(core.clone(), ids.space_id.to_owned(), ids.instance_id.to_owned());
 	let mut admissions = JoinSet::new();
 	admissions.spawn(admission());
 	let file_turn = Arc::new(Mutex::new(()));
@@ -604,7 +609,7 @@ async fn online<R: Runtime>(
 						continue;
 					}
 					Some(RelayEvent::DeviceRevoked { device_id, user_id }) => {
-						if let Err(ended) = revocation_handled(app, ids.space_id, &device_id, &user_id).await {
+						if let Err(ended) = revocation_handled(core, ids.space_id, &device_id, &user_id).await {
 							return ended;
 						}
 						continue;
@@ -623,17 +628,17 @@ async fn online<R: Runtime>(
 				};
 				match received(&wire, opened, ids) {
 					Received::Call(sender, call) => {
-						let bridged = bridge::bridged(app.clone(), serving.local.clone(), ids.space_id.to_owned(), call);
+						let bridged = bridge::bridged(core.clone(), serving.local.clone(), ids.space_id.to_owned(), call);
 						invokes.spawn(async move { (sender, bridged.await) });
 						continue;
 					}
 					Received::Avatar(sender, call) => {
-						let bridged = bridge::avatar_bridged(app.clone(), serving.local.clone(), ids.space_id.to_owned(), file_turn.clone(), call);
+						let bridged = bridge::avatar_bridged(core.clone(), serving.local.clone(), ids.space_id.to_owned(), file_turn.clone(), call);
 						files.spawn(async move { (sender, bridged.await) });
 						continue;
 					}
 					Received::Attachment(sender, call) => {
-						let bridged = bridge::attachment_bridged(app.clone(), serving.local.clone(), ids.space_id.to_owned(), file_turn.clone(), call);
+						let bridged = bridge::attachment_bridged(core.clone(), serving.local.clone(), ids.space_id.to_owned(), file_turn.clone(), call);
 						files.spawn(async move { (sender, bridged.await) });
 						continue;
 					}
@@ -837,13 +842,13 @@ fn relay_event_of(text: &str) -> Option<RelayEvent> {
 	serde_json::from_value(envelope).ok()
 }
 
-async fn revocation_handled<R: Runtime>(
-	app: &AppHandle<R>,
+async fn revocation_handled(
+	core: &crate::core_context::Core,
 	space_id: &str,
 	device_id: &str,
 	user_id: &str,
 ) -> Result<(), Ended> {
-	match devices::device_left(app, space_id, device_id, user_id).await {
+	match devices::device_left(core, space_id, device_id, user_id).await {
 		Ok(Revocation::Applied) => Ok(()),
 		Ok(Revocation::Ignored(reason)) => {
 			log::warn!("device.revoked changed nothing in space {space_id}: {reason}");

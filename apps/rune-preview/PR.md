@@ -133,3 +133,7 @@ The kept core of `apps/app/src-tauri` moves to a crate with no Tauri dependency,
 - **Desktop port.** Opening a URL goes through a `Desktop` port the Tauri app installs over its opener plugin. Without one, Core returns `NoDesktop`.
 - **Left in the Tauri app.** The 238 command wrappers, the host HTTP API, logging (the Tauri log plugin), deep links, and the dialog, clipboard and reveal calls made inside commands.
 - **Tests, step 2.** The tests of kept modules move onto a test `Core` (a temporary folder plus the shared test runtime) instead of a Tauri mock app. Tests that go through Tauri IPC stay in the Tauri app, next to the command wrappers they exercise. No test is deleted or ignored.
+- **Struct layer in one step.** HostTurn reaches `start_run`, `start_run` builds every Host implementor, and those reach the routine Runner and the webhook. The graph is strongly connected, so the structs moved onto `Core` together rather than one per commit.
+- **Commands called from kept code.** Such a command becomes a one-line wrapper over a `pub(crate)` Core function (for example `agent_shutdown` over `shut_down_agent`, `routine_create` over `create_routine`). Names, arguments and results are unchanged, and `bindings.ts` regenerates with no diff.
+- **Host HTTP API.** `webhook::start` takes the API's routes from the Tauri app. Only the invoke route holds the `AppHandle` it dispatches through.
+- **Desktop port.** Raising the main window goes through `Desktop::raise_main_window`. Without a desktop, nothing is raised.

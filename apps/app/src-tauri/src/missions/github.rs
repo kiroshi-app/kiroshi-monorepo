@@ -7,7 +7,6 @@ use reqwest::{Client, Response, StatusCode};
 use serde::de::IgnoredAny;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use tauri::{AppHandle, Manager, Runtime};
 use tokio::sync::watch as signal;
 
 use super::checkout;
@@ -76,14 +75,18 @@ impl Poller {
 	}
 }
 
-pub fn spawn<R: Runtime>(app: AppHandle<R>) -> Poller {
+pub fn spawn(core: crate::core_context::Core) -> Poller {
 	let (stop, halted) = signal::channel(false);
-	crate::events::core(app.app_handle()).clone().spawn(polling(app, API.to_owned(), halted));
+	core.clone().spawn(polling(core, API.to_owned(), halted));
 	Poller { stop }
 }
 
-async fn polling<R: Runtime>(app: AppHandle<R>, base: String, mut halted: signal::Receiver<bool>) {
-	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
+async fn polling(
+	core: crate::core_context::Core,
+	base: String,
+	mut halted: signal::Receiver<bool>,
+) {
+	let state = core.state::<db::DatabaseState>();
 	let database = match ready(&state) {
 		Ok(database) => database,
 		Err(failure) => return eprintln!("no mission is watched on github: {failure:?}"),
@@ -98,8 +101,8 @@ async fn polling<R: Runtime>(app: AppHandle<R>, base: String, mut halted: signal
 		tokio::select! {
 			_ = halted.changed() => return,
 			_ = ticker.tick() => {
-				checkout::pass(&app, database).await;
-				pass(&app, &reach, database, &mut kept, &SystemClock).await;
+				checkout::pass(&core, database).await;
+				pass(&core, &reach, database, &mut kept, &SystemClock).await;
 			}
 		}
 	}
@@ -606,8 +609,8 @@ pub(crate) fn merged_pull_request(stored: &str) -> Result<Option<u64>, MissionEr
 	Ok(held.filter(|held| held.merged).map(|held| held.number))
 }
 
-pub(crate) async fn pass<R: Runtime>(
-	app: &AppHandle<R>,
+pub(crate) async fn pass(
+	core: &crate::core_context::Core,
 	reach: &Reach,
 	database: &db::Database,
 	kept: &mut Kept,
@@ -628,14 +631,14 @@ pub(crate) async fn pass<R: Runtime>(
 		}
 		let id = mission.id.clone();
 		match read_when_due(reach, database, kept, mission).await {
-			Ok(Some(written)) => told(app, &written),
+			Ok(Some(written)) => told(core, &written),
 			Ok(None) => (),
 			Err(failure) => {
 				eprintln!("what became of mission {id} on github was not read: {failure}");
 			}
 		}
 	}
-	noted_hold(app, database, kept, &ids).await;
+	noted_hold(core, database, kept, &ids).await;
 }
 
 async fn read_when_due(
@@ -664,8 +667,8 @@ fn cadence(held: Option<&Fingerprint>) -> Duration {
 	}
 }
 
-async fn noted_hold<R: Runtime>(
-	app: &AppHandle<R>,
+async fn noted_hold(
+	core: &crate::core_context::Core,
 	database: &db::Database,
 	kept: &mut Kept,
 	watched: &[String],
@@ -683,7 +686,7 @@ async fn noted_hold<R: Runtime>(
 	for id in watched {
 		let note = entry(MissionEventKind::Note, json!({ "line": line }));
 		match database.missions().append(id.clone(), note).await {
-			Ok(noted) => told(app, &noted),
+			Ok(noted) => told(core, &noted),
 			Err(failure) => {
 				eprintln!("mission {id} was not told github holds the watch: {failure:?}")
 			}
@@ -691,8 +694,8 @@ async fn noted_hold<R: Runtime>(
 	}
 }
 
-fn told<R: Runtime>(app: &AppHandle<R>, mission: &Mission) {
-	if let Err(failure) = announce_change(app, mission.clone()) {
+fn told(core: &crate::core_context::Core, mission: &Mission) {
+	if let Err(failure) = announce_change(core, mission.clone()) {
 		eprintln!("github moved mission {} and the front was not told: {failure:?}", mission.id);
 	}
 }
@@ -1978,7 +1981,7 @@ mod tests {
 		app.handle().listen(CHANGED_EVENT, move |event| {
 			let _ = sender.send(event.payload().to_owned());
 		});
-		pass(app.handle(), reach, database, kept, clock).await;
+		pass(crate::events::core(app.handle()), reach, database, kept, clock).await;
 		received
 			.try_iter()
 			.map(|payload| serde_json::from_str(&payload).expect("the payload is JSON"))
@@ -2529,7 +2532,7 @@ mod tests {
 		let mut asked = Vec::new();
 		for at in (from_ms..from_ms + HOUR_MS).step_by(TICK_MS as usize) {
 			let before = stub.asked().await.len();
-			pass(app.handle(), &reach, database, kept, &Ticking::at(at)).await;
+			pass(crate::events::core(app.handle()), &reach, database, kept, &Ticking::at(at)).await;
 			let paths = stub.asked_paths(before).await;
 			if !paths.is_empty() {
 				asked.push((at - from_ms, paths));

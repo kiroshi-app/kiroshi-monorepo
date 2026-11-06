@@ -70,6 +70,8 @@ impl std::error::Error for EmitError {}
 
 pub trait Desktop: Send + Sync + 'static {
 	fn open_url(&self, url: &str) -> Result<(), String>;
+
+	fn raise_main_window(&self);
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -112,6 +114,15 @@ struct Inner {
 
 #[derive(Clone)]
 pub struct Core(Arc<Inner>);
+
+impl fmt::Debug for Core {
+	fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+		formatter
+			.debug_struct("Core")
+			.field("identifier", &self.0.identifier)
+			.finish_non_exhaustive()
+	}
+}
 
 pub struct Managed<'a, T>(&'a T);
 
@@ -186,6 +197,12 @@ impl Core {
 	pub fn open_url(&self, url: &str) -> Result<(), OpenUrlError> {
 		let desktop = self.try_state::<Box<dyn Desktop>>().ok_or(OpenUrlError::NoDesktop)?;
 		desktop.open_url(url).map_err(OpenUrlError::Refused)
+	}
+
+	pub fn raise_main_window(&self) {
+		if let Some(desktop) = self.try_state::<Box<dyn Desktop>>() {
+			desktop.raise_main_window();
+		}
 	}
 
 	pub fn manage<T: Send + Sync + 'static>(&self, value: T) -> bool {
@@ -333,6 +350,22 @@ mod tests {
 			self.0.lock().expect("unlocked").push(url.to_owned());
 			Ok(())
 		}
+
+		fn raise_main_window(&self) {
+			self.0.lock().expect("unlocked").push("raised".to_owned());
+		}
+	}
+
+	#[test]
+	fn the_main_window_rises_through_the_installed_desktop_and_nothing_rises_without_one() {
+		let core = a_core();
+		core.raise_main_window();
+		let opened = Arc::new(Opened(std::sync::Mutex::default()));
+		assert!(core.install_desktop(opened.clone()));
+
+		core.raise_main_window();
+
+		assert_eq!(*opened.0.lock().expect("unlocked"), vec!["raised".to_owned()]);
 	}
 
 	#[test]

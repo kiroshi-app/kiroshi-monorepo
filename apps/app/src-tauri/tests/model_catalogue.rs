@@ -66,7 +66,7 @@ fn the_catalogue_crosses_as_the_sidecar_offers_it() {
 	assert_eq!(call(&window, "agent_models"), Ok(offered), "a second ask reached the sidecar");
 
 	tauri::async_runtime::block_on(terminate_session(
-		app.handle(),
+		kiroshi_app::events::core(app.handle()),
 		kiroshi_app::events::core(app.app_handle()).state::<AgentState>().inner(),
 	));
 	std::env::remove_var("FAKE_AGENT_MODELS");

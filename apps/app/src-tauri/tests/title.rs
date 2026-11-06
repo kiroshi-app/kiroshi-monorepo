@@ -73,7 +73,7 @@ fn a_naming_crosses_without_a_session_and_nothing_crosses_when_the_runtime_answe
 	);
 
 	tauri::async_runtime::block_on(terminate_session(
-		app.handle(),
+		kiroshi_app::events::core(app.handle()),
 		kiroshi_app::events::core(app.app_handle()).state::<AgentState>().inner(),
 	));
 
@@ -88,7 +88,7 @@ fn a_naming_crosses_without_a_session_and_nothing_crosses_when_the_runtime_answe
 	);
 
 	tauri::async_runtime::block_on(terminate_session(
-		iconed.handle(),
+		kiroshi_app::events::core(iconed.handle()),
 		kiroshi_app::events::core(iconed.app_handle()).state::<AgentState>().inner(),
 	));
 	std::env::remove_var(ICON_ENV);

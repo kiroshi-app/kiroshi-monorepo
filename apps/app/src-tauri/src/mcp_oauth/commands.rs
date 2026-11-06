@@ -83,12 +83,12 @@ impl Drop for Running<'_> {
 	}
 }
 
-async fn connected<R: Runtime>(
-	app: &AppHandle<R>,
+async fn connected(
+	core: &crate::core_context::Core,
 	request: AuthorizeRequest,
 	stored: &Values,
 ) -> Result<OauthCredentials, Refused> {
-	let settled = settlement(app, &request).await?;
+	let settled = settlement(core, &request).await?;
 	let registers_anew = request.client_id.is_some() && calls_for_a_new_client(&settled);
 	let refused = match grant_of(settled) {
 		Err(refused) if registers_anew => refused,
@@ -96,7 +96,7 @@ async fn connected<R: Runtime>(
 	};
 	eprintln!("{}", refusal_line(&Step::HandingTheStoredClient.refused(refused.error), stored));
 	let registering = AuthorizeRequest { url: request.url, ..AuthorizeRequest::default() };
-	grant_of(settlement(app, &registering).await?)
+	grant_of(settlement(core, &registering).await?)
 }
 
 fn calls_for_a_new_client(settled: &Authorized) -> bool {
@@ -124,11 +124,11 @@ fn authorize_request(url: String, stored: &Values) -> AuthorizeRequest {
 	}
 }
 
-async fn settlement<R: Runtime>(
-	app: &AppHandle<R>,
+async fn settlement(
+	core: &crate::core_context::Core,
 	request: &AuthorizeRequest,
 ) -> Result<Authorized, Refused> {
-	let sidecar = crate::events::core(app.app_handle())
+	let sidecar = core
 		.state::<AgentState>()
 		.sidecar()
 		.await
@@ -145,7 +145,7 @@ async fn settlement<R: Runtime>(
 					Step::HandingTheUrl.refused(OauthError::RefusedUrl { url: authorization })
 				);
 			}
-			if crate::events::core(app.app_handle()).open_url(&authorization).is_err() {
+			if core.open_url(&authorization).is_err() {
 				return Err(Step::OpeningTheBrowser
 					.refused(OauthError::BrowserRefused { url: authorization }));
 			}
@@ -182,22 +182,23 @@ pub async fn mcp_oauth_connect<R: Runtime>(
 	name: String,
 	url: String,
 ) -> Result<(), OauthError> {
-	refuse_what_kiroshi_does_not_authorize(&app, &owner, &name, &url)
+	refuse_what_kiroshi_does_not_authorize(crate::events::core(&app), &owner, &name, &url)
 		.map_err(|refused| written(refused, &Values::new()))?;
 	let state = crate::events::core(app.app_handle()).state::<McpOauthState>();
 	let scope = EnvScope::Server { name: name.clone(), owner };
 	let _running = state
 		.begin(Flow::Authorizing(scope.clone()))
 		.map_err(|error| written(Step::ClaimingTheState.refused(error), &Values::new()))?;
-	let root = writable_root(&app).map_err(|error| {
+	let root = writable_root(crate::events::core(&app)).map_err(|error| {
 		written(Step::WritingTheStoreRoot.refused(error.into()), &Values::new())
 	})?;
 	let stored = store::values(&root, &scope).map_err(|error| {
 		written(Step::ReadingTheStoredClient.refused(error.into()), &Values::new())
 	})?;
-	let credentials = connected(&app, authorize_request(url, &stored), &stored)
-		.await
-		.map_err(|refused| written(refused, &stored))?;
+	let credentials =
+		connected(crate::events::core(&app), authorize_request(url, &stored), &stored)
+			.await
+			.map_err(|refused| written(refused, &stored))?;
 	kept(
 		&root,
 		&scope,
@@ -210,13 +211,13 @@ pub async fn mcp_oauth_connect<R: Runtime>(
 	})
 }
 
-fn refuse_what_kiroshi_does_not_authorize<R: Runtime>(
-	app: &AppHandle<R>,
+fn refuse_what_kiroshi_does_not_authorize(
+	core: &crate::core_context::Core,
 	owner: &EnvOwner,
 	name: &str,
 	url: &str,
 ) -> Result<(), Refused> {
-	let withheld = authorization_withheld(app, owner, name, url)
+	let withheld = authorization_withheld(core, owner, name, url)
 		.map_err(|error| Step::ReadingTheDeclaredServer.refused(error.into()))?;
 	match withheld {
 		Some(carries) => Err(Step::CheckingTheServer.refused(OauthError::NotAuthorizable {
@@ -227,13 +228,13 @@ fn refuse_what_kiroshi_does_not_authorize<R: Runtime>(
 	}
 }
 
-fn authorization_withheld<R: Runtime>(
-	app: &AppHandle<R>,
+fn authorization_withheld(
+	core: &crate::core_context::Core,
 	owner: &EnvOwner,
 	name: &str,
 	url: &str,
 ) -> Result<Option<AuthorizationWithheld>, EnvError> {
-	let declared = declared_servers(app, owner)?.into_iter().find(|server| server.name == name);
+	let declared = declared_servers(core, owner)?.into_iter().find(|server| server.name == name);
 	let asked = declared.unwrap_or_else(|| McpServer {
 		name: name.to_owned(),
 		config: serde_json::json!({ "url": url }),
@@ -276,26 +277,28 @@ pub async fn mcp_oauth_disconnect<R: Runtime>(
 	name: String,
 	url: String,
 ) -> Result<Disconnected, OauthError> {
-	if caller.is_relayed() && held_at(&writable_root(&app)?, &owner, &name)?.is_personal() {
+	if caller.is_relayed()
+		&& held_at(&writable_root(crate::events::core(&app))?, &owner, &name)?.is_personal()
+	{
 		return Err(OauthError::RefusedToAMember);
 	}
 	let state = crate::events::core(app.app_handle()).state::<McpOauthState>();
 	let _running = state.begin(Flow::Revoking)?;
-	let settled = disconnected(&app, &owner, &name, &url).await;
+	let settled = disconnected(crate::events::core(&app), &owner, &name, &url).await;
 	crate::events::core(app.app_handle()).state::<ApplicationReports>().forget(&name);
 	settled
 }
 
-async fn disconnected<R: Runtime>(
-	app: &AppHandle<R>,
+async fn disconnected(
+	core: &crate::core_context::Core,
 	owner: &EnvOwner,
 	name: &str,
 	url: &str,
 ) -> Result<Disconnected, OauthError> {
-	let root = writable_root(app)?;
+	let root = writable_root(core)?;
 	let scope = held_at(&root, owner, name)?;
 	let held = store::values(&root, &scope)?;
-	let revocation = revoked(app, url, &held).await;
+	let revocation = revoked(core, url, &held).await;
 	credentials::forget(&root, &scope)?;
 	Ok(revocation)
 }
@@ -316,32 +319,32 @@ pub async fn mcp_application_status<R: Runtime>(
 	owner: EnvOwner,
 ) -> Result<Vec<ApplicationRow>, EnvError> {
 	if !caller.is_relayed() {
-		return application_rows(app, owner).await;
+		return application_rows(crate::events::core(&app).clone(), owner).await;
 	}
 	if owner == EnvOwner::User {
 		return Ok(Vec::new());
 	}
-	let rows = application_rows(app, owner).await?;
+	let rows = application_rows(crate::events::core(&app).clone(), owner).await?;
 	Ok(rows
 		.into_iter()
 		.filter(|row| !row.scope.as_ref().is_some_and(EnvScope::is_personal))
 		.collect())
 }
 
-pub async fn application_rows<R: Runtime>(
-	app: AppHandle<R>,
+pub async fn application_rows(
+	core: crate::core_context::Core,
 	owner: EnvOwner,
 ) -> Result<Vec<ApplicationRow>, EnvError> {
-	let root = writable_root(&app)?;
-	let servers = declared_servers(&app, &owner)?;
-	let handle = app.clone();
+	let root = writable_root(&core)?;
+	let servers = declared_servers(&core, &owner)?;
+	let handle = core.clone();
 	renewed_rows(
 		&root,
 		&owner,
 		servers,
-		&crate::events::core(app.app_handle()).state::<McpOauthState>(),
-		&crate::events::core(app.app_handle()).state::<ApplicationReports>(),
-		&crate::events::core(app.app_handle()).state::<AuthorizationAnswers>(),
+		&core.state::<McpOauthState>(),
+		&core.state::<ApplicationReports>(),
+		&core.state::<AuthorizationAnswers>(),
 		move |request| {
 			let handle = handle.clone();
 			async move { refreshed(&handle, request).await }
@@ -350,13 +353,11 @@ pub async fn application_rows<R: Runtime>(
 	.await
 }
 
-pub(super) async fn refreshed<R: Runtime>(
-	app: &AppHandle<R>,
+pub(super) async fn refreshed(
+	core: &crate::core_context::Core,
 	request: RefreshRequest,
 ) -> Result<Authorized, TransportError> {
-	let agent = crate::events::core(app.app_handle())
-		.try_state::<AgentState>()
-		.ok_or(TransportError::NotStarted)?;
+	let agent = core.try_state::<AgentState>().ok_or(TransportError::NotStarted)?;
 	agent.sidecar().await?.refresh_oauth(&request).await
 }
 
@@ -455,22 +456,22 @@ fn last_reported(reports: &ApplicationReports, owner: &EnvOwner, name: &str) -> 
 	}
 }
 
-pub(super) fn declared_servers<R: Runtime>(
-	app: &AppHandle<R>,
+pub(super) fn declared_servers(
+	core: &crate::core_context::Core,
 	owner: &EnvOwner,
 ) -> Result<Vec<McpServer>, EnvError> {
 	match owner {
-		EnvOwner::Bot { id, .. } => bundles::root(app)
+		EnvOwner::Bot { id, .. } => bundles::root(core)
 			.map(|root| bundles::mcp_servers(&root, id))
 			.ok_or_else(|| EnvError::Unreadable { detail: NO_BUNDLES.to_owned() }),
-		EnvOwner::Space { id } => Ok(bundles::space::laid_down(app, id)
+		EnvOwner::Space { id } => Ok(bundles::space::laid_down(core, id)
 			.map_or_else(Vec::new, |bundle| bundles::mcp_servers_at(&bundle))),
-		EnvOwner::User => Ok(bundles::user::laid_down(app)
+		EnvOwner::User => Ok(bundles::user::laid_down(core)
 			.map_or_else(Vec::new, |bundle| bundles::mcp_servers_at(&bundle))),
 	}
 }
 
-async fn revoked<R: Runtime>(app: &AppHandle<R>, url: &str, held: &Values) -> Disconnected {
+async fn revoked(core: &crate::core_context::Core, url: &str, held: &Values) -> Disconnected {
 	let Some(token) = held.get(OAUTH_ACCESS_TOKEN) else {
 		return Disconnected { revoked: false, detail: Some(NOTHING_STORED.to_owned()) };
 	};
@@ -481,7 +482,7 @@ async fn revoked<R: Runtime>(app: &AppHandle<R>, url: &str, held: &Values) -> Di
 		client_id: held.get(OAUTH_CLIENT_ID).cloned(),
 		client_secret: held.get(OAUTH_CLIENT_SECRET).cloned(),
 	};
-	match crate::events::core(app.app_handle()).state::<AgentState>().sidecar().await {
+	match core.state::<AgentState>().sidecar().await {
 		Ok(sidecar) => match sidecar.revoke_oauth(&request).await {
 			Ok(answer) => Disconnected { revoked: answer.revoked, detail: answer.detail },
 			Err(error) => Disconnected { revoked: false, detail: Some(format!("{error:?}")) },
@@ -513,7 +514,8 @@ mod tests {
 		crate::events::core(app.app_handle()).manage(McpOauthState::default());
 		crate::events::core(app.app_handle()).manage(ApplicationReports::default());
 		crate::events::core(app.app_handle()).manage(AuthorizationAnswers::default());
-		let path = bundles::user::path(app.handle()).expect("the plugin has a home");
+		let path =
+			bundles::user::path(crate::events::core(app.handle())).expect("the plugin has a home");
 		bundles::user::lay_down(&path).expect("the plugin is laid down");
 		for name in ["clock", "granola"] {
 			let config = serde_json::json!({ "command": name });
@@ -526,7 +528,8 @@ mod tests {
 			None,
 		)
 		.expect("the server lands");
-		let root = writable_root(app.handle()).expect("the data dir is writable");
+		let root =
+			writable_root(crate::events::core(app.handle())).expect("the data dir is writable");
 		let notion = EnvScope::Server { name: "notion".to_owned(), owner: EnvOwner::User };
 		credentials::store(&root, &notion, &an_aging_grant(Some("held-refresh")))
 			.expect("the grant is written");
@@ -555,7 +558,8 @@ mod tests {
 		let app = an_app_of_its_own("mcp-oauth-withheld", mock_builder());
 		crate::events::core(app.app_handle()).manage(McpOauthState::default());
 		crate::events::core(app.app_handle()).manage(ApplicationReports::default());
-		let path = bundles::user::path(app.handle()).expect("the plugin has a home");
+		let path =
+			bundles::user::path(crate::events::core(app.handle())).expect("the plugin has a home");
 		bundles::user::lay_down(&path).expect("the plugin is laid down");
 		let declared = [
 			("paper", serde_json::json!({ "url": "http://127.0.0.1:29979/mcp" })),

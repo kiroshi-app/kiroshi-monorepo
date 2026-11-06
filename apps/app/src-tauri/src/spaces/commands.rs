@@ -39,7 +39,7 @@ pub async fn space_create<R: Runtime>(
 	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	let created = database.spaces().create(name).await?;
-	let Err(failure) = bundles::space::lay_down(&app, &created.id) else {
+	let Err(failure) = bundles::space::lay_down(crate::events::core(&app), &created.id) else {
 		return Ok(Space::presented(created, &[]));
 	};
 	database.spaces().delete(created.id).await?;
@@ -70,7 +70,7 @@ pub async fn space_update<R: Runtime>(
 			colour: updated.colour,
 		};
 		crate::events::core(app.app_handle()).clone().spawn(announced_once_listed(
-			app,
+			crate::events::core(&app).clone(),
 			previous.instance_id,
 			described,
 		));
@@ -79,16 +79,16 @@ pub async fn space_update<R: Runtime>(
 	Ok(Space::presented(updated, &hostings))
 }
 
-async fn announced_once_listed<R: Runtime>(
-	app: AppHandle<R>,
+async fn announced_once_listed(
+	core: crate::core_context::Core,
 	instance_id: Option<String>,
 	described: SpaceDescribed,
 ) {
 	if let Some(instance_id) = instance_id {
-		hosting::described(&app, &instance_id, &described.name, described.colour).await;
+		hosting::described(&core, &instance_id, &described.name, described.colour).await;
 	}
 	let space_id = described.space_id.clone();
-	if let Err(error) = events::emit(&app, events::SPACE_DESCRIBED, described) {
+	if let Err(error) = core.emit(events::SPACE_DESCRIBED, described) {
 		log::warn!("the description of space {space_id} was not announced: {error}");
 	}
 }
@@ -112,12 +112,12 @@ pub async fn space_delete<R: Runtime>(
 ) -> Result<(), SpaceError> {
 	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
-	hosting::forgotten(&app, &id).await;
+	hosting::forgotten(crate::events::core(&app), &id).await;
 	let held_bots = database.spaces().delete(id.clone()).await?;
-	bundles::space::remove(&app, &id);
-	library::forget_space(&app, &id);
-	forget_bundles(bundles::root(&app).as_deref(), database, &held_bots).await;
-	environment::store::forget_space(&app, &id, &held_bots);
+	bundles::space::remove(crate::events::core(&app), &id);
+	library::forget_space(crate::events::core(&app), &id);
+	forget_bundles(bundles::root(crate::events::core(&app)).as_deref(), database, &held_bots).await;
+	environment::store::forget_space(crate::events::core(&app), &id, &held_bots);
 	Ok(())
 }
 
@@ -131,7 +131,7 @@ pub async fn space_export<R: Runtime>(
 ) -> Result<(), SpaceError> {
 	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
-	let places = archive::Places::of(&app)?;
+	let places = archive::Places::of(crate::events::core(&app))?;
 	let rows = database.space_rows().read(id.clone()).await?;
 	archive::export(places, id, rows, PathBuf::from(path)).await
 }
@@ -145,9 +145,13 @@ pub async fn space_import<R: Runtime>(
 ) -> Result<Space, SpaceError> {
 	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
-	let imported =
-		archive::import(archive::Places::of(&app)?, database, PathBuf::from(path)).await?;
-	list_bundles(bundles::root(&app).as_deref(), database).await;
+	let imported = archive::import(
+		archive::Places::of(crate::events::core(&app))?,
+		database,
+		PathBuf::from(path),
+	)
+	.await?;
+	list_bundles(bundles::root(crate::events::core(&app)).as_deref(), database).await;
 	Ok(imported)
 }
 
@@ -185,7 +189,7 @@ pub async fn space_companion_counts<R: Runtime>(
 ) -> Result<Vec<CompanionCounts>, SpaceError> {
 	let state = core.state::<db::DatabaseState>();
 	let bot_ids = ready(&state)?.spaces().companions(space_id).await?;
-	Ok(counted_companions(bundles::root(&app).as_deref(), bot_ids))
+	Ok(counted_companions(bundles::root(crate::events::core(&app)).as_deref(), bot_ids))
 }
 
 fn counted_companions(root: Option<&Path>, bot_ids: Vec<String>) -> Vec<CompanionCounts> {
@@ -230,9 +234,9 @@ pub async fn bot_move_to_space<R: Runtime>(
 	let held_by = database.conversations().bot_space_ids(bot_id.clone()).await?;
 	database.spaces().move_bot(bot_id.clone(), space_id.clone()).await?;
 	for left in held_by.into_iter().filter(|held| *held != space_id) {
-		announce_left(&app, &bot_id, left);
+		announce_left(crate::events::core(&app), &bot_id, left);
 	}
-	announce_joined(&app, database, &bot_id).await;
+	announce_joined(crate::events::core(&app), database, &bot_id).await;
 	Ok(())
 }
 
@@ -248,7 +252,7 @@ pub async fn bot_add_to_space<R: Runtime>(
 	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	database.spaces().add_bot(bot_id.clone(), space_id, section_id).await?;
-	announce_joined(&app, database, &bot_id).await;
+	announce_joined(crate::events::core(&app), database, &bot_id).await;
 	Ok(())
 }
 
@@ -262,7 +266,7 @@ pub async fn bot_remove_from_space<R: Runtime>(
 ) -> Result<(), SpaceError> {
 	let state = core.state::<db::DatabaseState>();
 	ready(&state)?.spaces().remove_bot(bot_id.clone(), space_id.clone()).await?;
-	announce_left(&app, &bot_id, space_id);
+	announce_left(crate::events::core(&app), &bot_id, space_id);
 	Ok(())
 }
 
@@ -358,7 +362,8 @@ mod tests {
 			.inner()
 			.as_ref()
 			.expect("the database");
-		let root = bundles::root(app.handle()).expect("the bundles have a home");
+		let root =
+			bundles::root(crate::events::core(app.handle())).expect("the bundles have a home");
 		let vocca = database.spaces().create("Vocca".to_owned()).await.expect("a space");
 		let elsewhere = database.spaces().create("Elsewhere".to_owned()).await.expect("a space");
 

@@ -2,8 +2,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, PoisonError};
 
-use tauri::{AppHandle, Manager, Runtime};
-
 use super::contract::{
 	is_a_connection_name, is_reserved, EnvEntry, EnvError, EnvOwner, EnvScope, PerServer,
 	ResolvedEnv, Values, ACCOUNT_BEARER,
@@ -25,8 +23,8 @@ static WRITES: Mutex<()> = Mutex::new(());
 type Assignments = Vec<(String, String)>;
 type Entries = Vec<(String, Option<String>)>;
 
-pub fn root<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
-	Some(crate::events::core(app.app_handle()).data_dir().join(DIR_NAME))
+pub fn root(core: &crate::core_context::Core) -> Option<PathBuf> {
+	Some(core.data_dir().join(DIR_NAME))
 }
 
 pub fn set(root: &Path, scope: &EnvScope, name: &str, value: &str) -> Result<(), EnvError> {
@@ -222,20 +220,20 @@ pub fn server_names(root: &Path, owner: &EnvOwner) -> Result<Vec<String>, EnvErr
 		.collect())
 }
 
-pub fn forget_space<R: Runtime>(app: &AppHandle<R>, space_id: &str, bot_ids: &[String]) {
-	if let Some(root) = root(app) {
+pub fn forget_space(core: &crate::core_context::Core, space_id: &str, bot_ids: &[String]) {
+	if let Some(root) = root(core) {
 		forget_space_at(&root, space_id, bot_ids);
 	}
 }
 
-pub fn forget_bot<R: Runtime>(app: &AppHandle<R>, bot_id: &str) {
-	if let Some(root) = root(app) {
+pub fn forget_bot(core: &crate::core_context::Core, bot_id: &str) {
+	if let Some(root) = root(core) {
 		forget_owner_at(&root, BOT_DIR, bot_id);
 	}
 }
 
-pub fn forget_server<R: Runtime>(app: &AppHandle<R>, owner: &EnvOwner, name: &str) {
-	if let Some(root) = root(app) {
+pub fn forget_server(core: &crate::core_context::Core, owner: &EnvOwner, name: &str) {
+	if let Some(root) = root(core) {
 		forget_server_at(&root, owner, name);
 	}
 }

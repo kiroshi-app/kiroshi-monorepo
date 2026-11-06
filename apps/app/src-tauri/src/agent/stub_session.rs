@@ -58,6 +58,6 @@ pub(crate) async fn a_session_running(
 	let session =
 		Session::start(sidecar, options, Arc::new(Unheard)).await.expect("the session opens");
 	let session = Arc::new(session);
-	a_session_held_by_the_app(app, scope, session.clone());
+	a_session_held_by_the_app(crate::events::core(app), scope, session.clone());
 	HeldSession { session, _sidecar: script }
 }

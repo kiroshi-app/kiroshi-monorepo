@@ -22,7 +22,6 @@ use std::collections::HashMap;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
-use tauri::{AppHandle, Manager, Runtime};
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
 
@@ -32,7 +31,7 @@ use crate::db::repositories::conversations::Hue;
 use crate::db::repositories::space_hosting::Registration;
 use crate::db::DatabaseState;
 use crate::environment::contract::EnvError;
-use crate::events::{self, HOSTING_CHANGED};
+use crate::events::HOSTING_CHANGED;
 use crate::host_api::token;
 use crate::routines::webhook::Webhook;
 use crate::spaces::commands::ready;
@@ -107,15 +106,12 @@ impl Hosting {
 	}
 }
 
-pub fn local_api<R: Runtime>(app: &AppHandle<R>) -> Option<LocalApi> {
-	let Some(origin) = crate::events::core(app.app_handle())
-		.try_state::<Webhook>()
-		.and_then(|webhook| webhook.origin())
-	else {
+pub fn local_api(core: &crate::core_context::Core) -> Option<LocalApi> {
+	let Some(origin) = core.try_state::<Webhook>().and_then(|webhook| webhook.origin()) else {
 		log::error!("no space can be hosted: the local host api is not listening");
 		return None;
 	};
-	let token = match token::loaded(app) {
+	let token = match token::loaded(core) {
 		Ok(token) => token,
 		Err(failure) => {
 			log::error!("no space can be hosted: the host token was not loaded: {failure:?}");
@@ -127,13 +123,13 @@ pub fn local_api<R: Runtime>(app: &AppHandle<R>) -> Option<LocalApi> {
 		.ok()
 }
 
-fn entered<R: Runtime>(
-	app: &AppHandle<R>,
+fn entered(
+	core: &crate::core_context::Core,
 	space_id: &str,
 	instance_id: Option<&str>,
 	state: HostingState,
 ) {
-	let hosting = crate::events::core(app.app_handle()).state::<Hosting>();
+	let hosting = core.state::<Hosting>();
 	let instance_id = {
 		let mut hosts = hosting.hosts();
 		let host = hosts.entry(space_id.to_owned()).or_default();
@@ -154,18 +150,18 @@ fn entered<R: Runtime>(
 		_ => log::info!("hosting of space {space_id} (instance {instance_id}) entered {state:?}"),
 	}
 	let changed = HostingChanged { space_id: space_id.to_owned(), state };
-	if let Err(error) = events::emit(app, HOSTING_CHANGED, changed) {
+	if let Err(error) = core.emit(HOSTING_CHANGED, changed) {
 		log::error!("the hosting state of space {space_id} did not reach the front: {error}");
 	}
 }
 
-pub async fn start<R: Runtime>(
-	app: &AppHandle<R>,
+pub async fn start(
+	core: &crate::core_context::Core,
 	space_id: String,
 ) -> Result<HostingState, SpaceError> {
-	let hosting = crate::events::core(app.app_handle()).state::<Hosting>();
+	let hosting = core.state::<Hosting>();
 	let _turn = hosting.turn.lock().await;
-	let database_state = crate::events::core(app.app_handle()).state::<DatabaseState>();
+	let database_state = core.state::<DatabaseState>();
 	let database = ready(&database_state)?;
 	let registration = database.space_hosting().registration(space_id.clone()).await?;
 	let current = hosting.current(&space_id);
@@ -173,11 +169,11 @@ pub async fn start<R: Runtime>(
 		return Ok(current);
 	}
 	database.space_hosting().set_hosted(space_id.clone(), true).await?;
-	Ok(begun(app, &hosting, space_id, registration).await)
+	Ok(begun(core, &hosting, space_id, registration).await)
 }
 
-async fn begun<R: Runtime>(
-	app: &AppHandle<R>,
+async fn begun(
+	core: &crate::core_context::Core,
 	hosting: &Hosting,
 	space_id: String,
 	registration: Registration,
@@ -185,11 +181,11 @@ async fn begun<R: Runtime>(
 	finished(&space_id, hosting.taken_run(&space_id)).await;
 	let instance_id = registration.instance_id.clone();
 	let state = opening(Opening {
-		bearer: crate::events::core(app.app_handle()).state::<AccountSession>().bearer(),
-		is_awaiting_approval: crate::devices::is_awaiting_approval(app),
+		bearer: core.state::<AccountSession>().bearer(),
+		is_awaiting_approval: crate::devices::is_awaiting_approval(core),
 		is_local_api_listening: hosting.local.is_some(),
 	});
-	entered(app, &space_id, instance_id.as_deref(), state.clone());
+	entered(core, &space_id, instance_id.as_deref(), state.clone());
 	if let (HostingState::Connecting, Some(local)) = (&state, &hosting.local) {
 		let (stop, stopped) = watch::channel(false);
 		let hosted = Hosted {
@@ -198,12 +194,7 @@ async fn begun<R: Runtime>(
 			colour: registration.colour,
 			instance_id,
 		};
-		let handle = crate::events::core(app.app_handle()).spawn(relay::hosted(
-			app.clone(),
-			hosted,
-			local.clone(),
-			stopped,
-		));
+		let handle = core.spawn(relay::hosted(core.clone(), hosted, local.clone(), stopped));
 		hosting.hosts().entry(space_id).or_default().run = Some(Run { stop, handle });
 	}
 	state
@@ -246,23 +237,23 @@ async fn finished(space_id: &str, run: Option<Run>) {
 	}
 }
 
-pub async fn stop<R: Runtime>(
-	app: &AppHandle<R>,
+pub async fn stop(
+	core: &crate::core_context::Core,
 	space_id: String,
 ) -> Result<HostingState, SpaceError> {
-	let hosting = crate::events::core(app.app_handle()).state::<Hosting>();
+	let hosting = core.state::<Hosting>();
 	let _turn = hosting.turn.lock().await;
-	let database_state = crate::events::core(app.app_handle()).state::<DatabaseState>();
+	let database_state = core.state::<DatabaseState>();
 	let database = ready(&database_state)?;
 	let registration = database.space_hosting().registration(space_id.clone()).await?;
 	finished(&space_id, hosting.taken_run(&space_id)).await;
 	database.space_hosting().set_hosted(space_id.clone(), false).await?;
-	entered(app, &space_id, registration.instance_id.as_deref(), HostingState::Off);
+	entered(core, &space_id, registration.instance_id.as_deref(), HostingState::Off);
 	Ok(HostingState::Off)
 }
 
-pub async fn forgotten<R: Runtime>(app: &AppHandle<R>, space_id: &str) {
-	let Some(hosting) = crate::events::core(app.app_handle()).try_state::<Hosting>() else {
+pub async fn forgotten(core: &crate::core_context::Core, space_id: &str) {
+	let Some(hosting) = core.try_state::<Hosting>() else {
 		return;
 	};
 	let _turn = hosting.turn.lock().await;
@@ -270,12 +261,12 @@ pub async fn forgotten<R: Runtime>(app: &AppHandle<R>, space_id: &str) {
 		return;
 	};
 	finished(space_id, Some(run)).await;
-	entered(app, space_id, None, HostingState::Off);
+	entered(core, space_id, None, HostingState::Off);
 	hosting.hosts().remove(space_id);
 }
 
-pub async fn signed_out<R: Runtime>(app: &AppHandle<R>) {
-	let Some(hosting) = crate::events::core(app.app_handle()).try_state::<Hosting>() else {
+pub async fn signed_out(core: &crate::core_context::Core) {
+	let Some(hosting) = core.try_state::<Hosting>() else {
 		return;
 	};
 	let _turn = hosting.turn.lock().await;
@@ -284,22 +275,22 @@ pub async fn signed_out<R: Runtime>(app: &AppHandle<R>) {
 		finished(&space_id, Some(run)).await;
 		space_ids.push(space_id);
 	}
-	space_ids.extend(flagged(app).await);
+	space_ids.extend(flagged(core).await);
 	for space_id in space_ids {
-		entered(app, &space_id, None, HostingState::NeedsSignIn);
+		entered(core, &space_id, None, HostingState::NeedsSignIn);
 	}
 }
 
-pub async fn described<R: Runtime>(
-	app: &AppHandle<R>,
+pub async fn described(
+	core: &crate::core_context::Core,
 	instance_id: &str,
 	name: &str,
 	colour: Option<Hue>,
 ) {
-	let Some(hosting) = crate::events::core(app.app_handle()).try_state::<Hosting>() else {
+	let Some(hosting) = core.try_state::<Hosting>() else {
 		return;
 	};
-	let bearer = match crate::events::core(app.app_handle()).state::<AccountSession>().bearer() {
+	let bearer = match core.state::<AccountSession>().bearer() {
 		Ok(Some(bearer)) => bearer,
 		Ok(None) => {
 			return log::warn!("instance {instance_id} was not described to the relay: signed out")
@@ -316,8 +307,8 @@ pub async fn described<R: Runtime>(
 	}
 }
 
-pub fn renamed<R: Runtime>(app: &AppHandle<R>) {
-	let Some(hosting) = crate::events::core(app.app_handle()).try_state::<Hosting>() else {
+pub fn renamed(core: &crate::core_context::Core) {
+	let Some(hosting) = core.try_state::<Hosting>() else {
 		return;
 	};
 	for host in hosting.hosts().values_mut() {
@@ -325,30 +316,30 @@ pub fn renamed<R: Runtime>(app: &AppHandle<R>) {
 	}
 }
 
-pub async fn resumed<R: Runtime>(app: &AppHandle<R>) {
-	let Some(hosting) = crate::events::core(app.app_handle()).try_state::<Hosting>() else {
+pub async fn resumed(core: &crate::core_context::Core) {
+	let Some(hosting) = core.try_state::<Hosting>() else {
 		return;
 	};
 	let _turn = hosting.turn.lock().await;
-	let database_state = crate::events::core(app.app_handle()).state::<DatabaseState>();
+	let database_state = core.state::<DatabaseState>();
 	let Ok(database) = ready(&database_state) else {
 		return log::error!("no hosted space was resumed: the database is unavailable");
 	};
-	for space_id in flagged(app).await {
+	for space_id in flagged(core).await {
 		if hosting.current(&space_id).is_running() {
 			continue;
 		}
 		match database.space_hosting().registration(space_id.clone()).await {
 			Ok(registration) => {
-				begun(app, &hosting, space_id, registration).await;
+				begun(core, &hosting, space_id, registration).await;
 			}
 			Err(failure) => log::error!("hosted space {space_id} was not resumed: {failure:?}"),
 		}
 	}
 }
 
-async fn flagged<R: Runtime>(app: &AppHandle<R>) -> Vec<String> {
-	let database_state = crate::events::core(app.app_handle()).state::<DatabaseState>();
+async fn flagged(core: &crate::core_context::Core) -> Vec<String> {
+	let database_state = core.state::<DatabaseState>();
 	let listed = match ready(&database_state) {
 		Ok(database) => database.space_hosting().hosted_space_ids().await.map_err(SpaceError::from),
 		Err(failure) => Err(failure),

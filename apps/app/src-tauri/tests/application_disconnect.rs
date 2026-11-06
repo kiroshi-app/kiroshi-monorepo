@@ -40,7 +40,8 @@ fn a_bot_disconnect_revokes_and_deletes_the_grant_its_space_holds() {
 			.plugin(kiroshi_app::events::in_core(McpOauthState::default()))
 			.plugin(kiroshi_app::events::in_core(ApplicationReports::default())),
 	);
-	let root = store::root(app.handle()).expect("the store root is named");
+	let root =
+		store::root(kiroshi_app::events::core(app.handle())).expect("the store root is named");
 	let space = EnvScope::Server {
 		name: "granola".to_owned(),
 		owner: EnvOwner::Space { id: "s1".to_owned() },
@@ -56,7 +57,7 @@ fn a_bot_disconnect_revokes_and_deletes_the_grant_its_space_holds() {
 	));
 	let kept = store::values(&root, &space).expect("the space scope is readable");
 	tauri::async_runtime::block_on(terminate_session(
-		app.handle(),
+		kiroshi_app::events::core(app.handle()),
 		kiroshi_app::events::core(app.app_handle()).state::<AgentState>().inner(),
 	));
 	std::env::remove_var(SIDECAR_OVERRIDE_ENV);
@@ -74,7 +75,8 @@ fn a_disconnect_of_a_scope_holding_a_client_and_no_token_deletes_every_reserved_
 			.plugin(kiroshi_app::events::in_core(McpOauthState::default()))
 			.plugin(kiroshi_app::events::in_core(ApplicationReports::default())),
 	);
-	let root = store::root(app.handle()).expect("the store root is named");
+	let root =
+		store::root(kiroshi_app::events::core(app.handle())).expect("the store root is named");
 	let space = EnvScope::Server {
 		name: "granola".to_owned(),
 		owner: EnvOwner::Space { id: "s1".to_owned() },

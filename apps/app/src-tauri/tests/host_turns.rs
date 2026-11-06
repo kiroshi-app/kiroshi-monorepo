@@ -375,9 +375,13 @@ impl Host {
 		store::set(&root, &EnvScope::Account, ACCOUNT_BEARER, BEARER).expect("the bearer is kept");
 		kiroshi_app::events::core(app.app_handle())
 			.manage(AccountSession::new(Ok::<PathBuf, _>(root), &cloud));
-		restore(app.handle().clone()).await;
-		kiroshi_app::events::core(app.app_handle()).manage(webhook::start(app.handle().clone()));
-		let local = local_api(app.handle()).expect("the local host api listens");
+		restore(kiroshi_app::events::core(app.handle()).clone()).await;
+		kiroshi_app::events::core(app.app_handle()).manage(webhook::start(
+			kiroshi_app::events::core(app.handle()).clone(),
+			kiroshi_app::host_api::routes(app.handle().clone()),
+		));
+		let local =
+			local_api(kiroshi_app::events::core(app.handle())).expect("the local host api listens");
 		kiroshi_app::events::core(app.app_handle()).manage(Hosting::new(&cloud, Some(local)));
 		let window = WebviewWindowBuilder::new(&app, "main", Default::default())
 			.build()
@@ -449,7 +453,11 @@ impl Host {
 	async fn session_gone_while_lagging(&self, scope: &RuntimeScope) {
 		let stall = Stall::every_worker();
 		let state = kiroshi_app::events::core(self.app.app_handle()).state::<AgentState>();
-		let mut shutting = std::pin::pin!(shutdown_session(self.app.handle(), &state, scope));
+		let mut shutting = std::pin::pin!(shutdown_session(
+			kiroshi_app::events::core(self.app.handle()),
+			&state,
+			scope
+		));
 		tokio::select! {
 			biased;
 			() = &mut shutting => {}
@@ -596,16 +604,9 @@ impl Host {
 			runtime_session_id: opened.id,
 			epoch: opened.seq,
 		};
-		agent_start_or_resume_session(
-			self.app.handle().clone(),
-			self.app.state(),
-			scope.clone(),
-			None,
-			None,
-			None,
-		)
-		.await
-		.expect("the host run starts");
+		agent_start_or_resume_session(self.app.state(), scope.clone(), None, None, None)
+			.await
+			.expect("the host run starts");
 		scope
 	}
 
@@ -737,7 +738,7 @@ impl Host {
 
 	async fn quit(self) {
 		terminate_session(
-			self.app.handle(),
+			kiroshi_app::events::core(self.app.handle()),
 			&kiroshi_app::events::core(self.app.app_handle()).state::<AgentState>(),
 		)
 		.await;
@@ -845,7 +846,8 @@ fn turns_closed_in(frames: &[Value], bot_id: &str) -> usize {
 }
 
 async fn bundled(app: &App<MockRuntime>, bot_ids: &[&str]) {
-	let root = bundles::root(app.handle()).expect("the bundles have a root");
+	let root =
+		bundles::root(kiroshi_app::events::core(app.handle())).expect("the bundles have a root");
 	for bot_id in bot_ids {
 		let bot = database_of(app)
 			.conversations()
@@ -1087,7 +1089,7 @@ fn a_speaker_whose_session_shuts_down_mid_turn_releases_the_turn_for_the_next_se
 		let held: RuntimeScope =
 			serde_json::from_value(host.scope_of(ADA)).expect("a runtime scope");
 		shutdown_session(
-			host.app.handle(),
+			kiroshi_app::events::core(host.app.handle()),
 			&kiroshi_app::events::core(host.app.app_handle()).state::<AgentState>(),
 			&held,
 		)
@@ -1451,8 +1453,7 @@ fn a_member_turn_sent_during_a_runtime_write_opens_on_the_written_model_and_effo
 			.expect("the bot is planted");
 		let pick = picked(stored, "opus", EffortLevel::High);
 		let earlier_write = bundles::holding_the_memory(ADA).await;
-		let mut writing =
-			pin!(conversation_update_bot(app.clone(), app.state(), ADA.to_owned(), pick));
+		let mut writing = pin!(conversation_update_bot(app.state(), ADA.to_owned(), pick));
 
 		let landed = timeout(HELD_FOR, writing.as_mut()).await;
 		assert!(landed.is_err(), "the pick landed past the write in flight");

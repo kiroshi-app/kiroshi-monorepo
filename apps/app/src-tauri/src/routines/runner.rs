@@ -4,7 +4,6 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tauri::{AppHandle, Manager, Runtime, State};
 use tokio::sync::broadcast::{self, error::RecvError};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
@@ -16,8 +15,7 @@ use super::contract::{RoutineError, RunClosing, RunOutcome, RunRequested};
 use super::core::{Clock, RunSink, SystemClock};
 use super::run::{read_run_report, run_output_schema, run_prompt_for, RunReport};
 use crate::agent::commands::{
-	agent_shutdown, agent_start_or_resume_session, cancel_session_turn, submit_prompt,
-	EVENT_CHANNEL,
+	cancel_session_turn, shut_down_agent, start_or_resume_session, submit_prompt, EVENT_CHANNEL,
 };
 use crate::agent::contract::{
 	AgentEvent, CancelOutcome, ChatMessage, EventTurn, MessageCompletion, MessageRole,
@@ -26,14 +24,13 @@ use crate::agent::contract::{
 use crate::agent::lease::Lapse;
 use crate::agent::reply_writer::settled_mentions;
 use crate::agent::AgentState;
-use crate::conversations::commands::{
-	announce_conversation, conversation_open_runtime_session, ready,
-};
+use crate::conversations::commands::{announce_conversation, open_runtime_session, ready};
 use crate::conversations::contract::TranscriptStoreError;
 use crate::conversations::summons;
 use crate::db;
 use crate::db::repositories::messages::{NewAssistantMessage, NewTurn, TerminalState};
-use crate::events::{self, Frame, AGENT_EVENT, CONVERSATION_UPDATED};
+use crate::db::repositories::runtime_context::ParticipantKey;
+use crate::events::{Frame, AGENT_EVENT, CONVERSATION_UPDATED};
 
 const CANCELLED_REASON: &str = "the run's turn was cancelled";
 
@@ -71,19 +68,19 @@ pub struct RunTiming {
 pub const RUN_TIMING: RunTiming =
 	RunTiming { lease: Duration::from_secs(60), deadline: Duration::from_secs(30 * 60) };
 
-pub struct Runner<R: Runtime> {
-	app: AppHandle<R>,
+pub struct Runner {
+	core: crate::core_context::Core,
 	timing: RunTiming,
 }
 
-impl<R: Runtime> Runner<R> {
-	pub fn new(app: AppHandle<R>) -> Self {
+impl Runner {
+	pub fn new(core: crate::core_context::Core) -> Self {
 		let deadline = resolve_deadline(std::env::var(DEADLINE_SECS_ENV).ok());
-		Self::timed(app, RunTiming { deadline, ..RUN_TIMING })
+		Self::timed(core, RunTiming { deadline, ..RUN_TIMING })
 	}
 
-	pub fn timed(app: AppHandle<R>, timing: RunTiming) -> Self {
-		Self { app, timing }
+	pub fn timed(core: crate::core_context::Core, timing: RunTiming) -> Self {
+		Self { core, timing }
 	}
 }
 
@@ -124,33 +121,29 @@ impl Deadline {
 	}
 }
 
-impl<R: Runtime> RunSink for Runner<R> {
+impl RunSink for Runner {
 	fn requested(&self, requested: RunRequested) -> Result<(), RoutineError> {
-		crate::events::core(self.app.app_handle()).spawn(run(
-			self.app.clone(),
-			self.timing,
-			requested,
-		));
+		self.core.spawn(run(self.core.clone(), self.timing, requested));
 		Ok(())
 	}
 }
 
-async fn run<R: Runtime>(app: AppHandle<R>, timing: RunTiming, requested: RunRequested) {
-	let scope = match opened_scope(&app, &requested).await {
+async fn run(core: crate::core_context::Core, timing: RunTiming, requested: RunRequested) {
+	let scope = match opened_scope(&core, &requested).await {
 		Ok(scope) => scope,
-		Err(detail) => return close(&app, &requested, could_not_start(&detail)).await,
+		Err(detail) => return close(&core, &requested, could_not_start(&detail)).await,
 	};
 	let (events, mut arriving) = mpsc::unbounded_channel();
 	let held = scope.clone();
-	let mut reading = listen(&app, move |heard| heard == &held, events);
-	let closing = drive(&app, timing, &requested, &scope, &mut arriving, &mut reading).await;
+	let mut reading = listen(&core, move |heard| heard == &held, events);
+	let closing = drive(&core, timing, &requested, &scope, &mut arriving, &mut reading).await;
 	drop(reading);
-	close(&app, &requested, closing).await;
-	shut_down(&app, &requested.run_id, scope).await;
+	close(&core, &requested, closing).await;
+	shut_down(&core, &requested.run_id, scope).await;
 }
 
-async fn drive<R: Runtime>(
-	app: &AppHandle<R>,
+async fn drive(
+	core: &crate::core_context::Core,
 	timing: RunTiming,
 	requested: &RunRequested,
 	scope: &RuntimeScope,
@@ -160,8 +153,8 @@ async fn drive<R: Runtime>(
 	let run_id = &requested.run_id;
 	let mut deadline = Deadline::armed(timing.deadline);
 	tokio::select! {
-		() = &mut deadline.expiry => return refused(app, scope, DEADLINE_REASON).await,
-		begun = started(app, scope, requested) => {
+		() = &mut deadline.expiry => return refused(core, scope, DEADLINE_REASON).await,
+		begun = started(core, scope, requested) => {
 			if let Err(detail) = begun {
 				return could_not_start(&detail);
 			}
@@ -171,9 +164,9 @@ async fn drive<R: Runtime>(
 	loop {
 		tokio::select! {
 			() = &mut deadline.expiry, if !deadline.is_held() => {
-				return refused(app, scope, DEADLINE_REASON).await
+				return refused(core, scope, DEADLINE_REASON).await
 			}
-			_ = lease.tick() => renew(app, run_id).await,
+			_ = lease.tick() => renew(core, run_id).await,
 			arrived = arriving.recv() => {
 				let Some(scoped) = arrived else {
 					return lost(reading).await;
@@ -183,7 +176,7 @@ async fn drive<R: Runtime>(
 					continue;
 				}
 				let lapse_may_follow = deadline.is_held() && ends_failed(&scoped.event);
-				let Some(closing) = settled_by(app, scope, scoped.event).await else {
+				let Some(closing) = settled_by(core, scope, scoped.event).await else {
 					continue;
 				};
 				if lapse_may_follow {
@@ -228,39 +221,39 @@ async fn lost(reading: &mut RelayReader) -> RunClosing {
 	failed(&format!("{EVENTS_LOST_REASON}: {}", reading.failure().await))
 }
 
-async fn settled_by<R: Runtime>(
-	app: &AppHandle<R>,
+async fn settled_by(
+	core: &crate::core_context::Core,
 	scope: &RuntimeScope,
 	event: AgentEvent,
 ) -> Option<RunClosing> {
 	match event {
-		AgentEvent::TurnEnded { ended } => Some(settled(app, scope, ended).await),
+		AgentEvent::TurnEnded { ended } => Some(settled(core, scope, ended).await),
 		AgentEvent::Failed { error } if ends_the_session(&error) => {
 			Some(failed(&transport_reason(&error)))
 		}
-		AgentEvent::QuestionRequested { .. } => Some(refused(app, scope, QUESTION_REASON).await),
+		AgentEvent::QuestionRequested { .. } => Some(refused(core, scope, QUESTION_REASON).await),
 		AgentEvent::PermissionRequested { .. } => {
-			Some(refused(app, scope, PERMISSION_REASON).await)
+			Some(refused(core, scope, PERMISSION_REASON).await)
 		}
 		_ => None,
 	}
 }
 
-async fn settled<R: Runtime>(
-	app: &AppHandle<R>,
+async fn settled(
+	core: &crate::core_context::Core,
 	scope: &RuntimeScope,
 	ended: TurnEnded,
 ) -> RunClosing {
 	let closing = match ended.outcome {
 		TurnOutcome::Cancelled => failed(CANCELLED_REASON),
 		TurnOutcome::Failed => failed(FAILED_REASON),
-		TurnOutcome::Completed => reported(app, scope, ended.structured_output.as_ref()).await,
+		TurnOutcome::Completed => reported(core, scope, ended.structured_output.as_ref()).await,
 	};
 	RunClosing { cost_usd: ended.total_cost_usd, model_usage: ended.model_usage, ..closing }
 }
 
-async fn reported<R: Runtime>(
-	app: &AppHandle<R>,
+async fn reported(
+	core: &crate::core_context::Core,
 	scope: &RuntimeScope,
 	structured_output: Option<&Value>,
 ) -> RunClosing {
@@ -269,18 +262,18 @@ async fn reported<R: Runtime>(
 		Some(RunReport::Nothing) => return closing(RunOutcome::Nothing),
 		Some(RunReport::Report { text }) => text,
 	};
-	match write_report(app, scope, text).await {
+	match write_report(core, scope, text).await {
 		Ok(turn_id) => RunClosing { reported_turn_id: Some(turn_id), ..closing(RunOutcome::Ok) },
 		Err(error) => failed(&format!("the report could not be written: {}", detail_of(&error))),
 	}
 }
 
-async fn write_report<R: Runtime>(
-	app: &AppHandle<R>,
+async fn write_report(
+	core: &crate::core_context::Core,
 	scope: &RuntimeScope,
 	text: String,
 ) -> Result<String, TranscriptStoreError> {
-	let database = database(app)?;
+	let database = database(core)?;
 	let text = settled_mentions(database, &scope.conversation_id, &text).await?.unwrap_or(text);
 	let messages = database.messages();
 	let turn_id = Uuid::new_v4().to_string();
@@ -307,9 +300,9 @@ async fn write_report<R: Runtime>(
 	messages.finalize_message(message_id.clone(), TerminalState::Complete, None).await?;
 	summons::note_received(&scope.conversation_id, &message_id, &text);
 	messages.complete_turn(turn_id.clone(), SystemClock.now_ms()).await?;
-	announce_conversation(app, database, CONVERSATION_UPDATED, &scope.conversation_id).await;
+	announce_conversation(core, database, CONVERSATION_UPDATED, &scope.conversation_id).await;
 	announce_report(
-		crate::events::core(app.app_handle()),
+		core,
 		report_event(
 			scope,
 			&turn_id,
@@ -343,21 +336,18 @@ fn announce_report(core: &crate::core_context::Core, report: ScopedEvent) {
 	}
 }
 
-async fn opened_scope<R: Runtime>(
-	app: &AppHandle<R>,
+async fn opened_scope(
+	core: &crate::core_context::Core,
 	requested: &RunRequested,
 ) -> Result<RuntimeScope, String> {
-	let state = managed::<R, crate::core_context::Core>(app, NO_DATABASE)?;
-	let opened = conversation_open_runtime_session(
-		state,
-		requested.conversation_id.clone(),
-		requested.bot_id.clone(),
-		SystemClock.now_ms(),
-		None,
-		None,
-	)
-	.await
-	.map_err(|error| detail_of(&error))?;
+	held::<db::DatabaseState>(core, NO_DATABASE)?;
+	let participant = ParticipantKey {
+		conversation_id: requested.conversation_id.clone(),
+		bot_id: requested.bot_id.clone(),
+	};
+	let opened = open_runtime_session(core, participant, SystemClock.now_ms(), None)
+		.await
+		.map_err(|error| detail_of(&error))?;
 	Ok(RuntimeScope {
 		conversation_id: opened.conversation_id,
 		bot_id: opened.bot_id,
@@ -366,85 +356,81 @@ async fn opened_scope<R: Runtime>(
 	})
 }
 
-async fn started<R: Runtime>(
-	app: &AppHandle<R>,
+async fn started(
+	core: &crate::core_context::Core,
 	scope: &RuntimeScope,
 	requested: &RunRequested,
 ) -> Result<(), String> {
-	held::<R, AgentState>(app, NO_AGENT)?;
-	agent_start_or_resume_session(
-		app.clone(),
-		managed::<R, crate::core_context::Core>(app, NO_DATABASE)?,
-		scope.clone(),
-		None,
-		None,
-		Some(run_output_schema().into()),
-	)
-	.await
-	.map_err(|error| detail_of(&error))?;
-	submit_prompt(held(app, NO_AGENT)?, scope.clone(), run_prompt_for(requested), None)
+	held::<AgentState>(core, NO_AGENT)?;
+	held::<db::DatabaseState>(core, NO_DATABASE)?;
+	start_or_resume_session(core, scope.clone(), None, None, Some(run_output_schema().into()))
+		.await
+		.map_err(|error| detail_of(&error))?;
+	submit_prompt(held(core, NO_AGENT)?, scope.clone(), run_prompt_for(requested), None)
 		.await
 		.map_err(|error| detail_of(&error))
 }
 
-async fn refused<R: Runtime>(app: &AppHandle<R>, scope: &RuntimeScope, reason: &str) -> RunClosing {
-	match cancelled(app, scope).await {
+async fn refused(
+	core: &crate::core_context::Core,
+	scope: &RuntimeScope,
+	reason: &str,
+) -> RunClosing {
+	match cancelled(core, scope).await {
 		Ok(()) => failed(reason),
 		Err(detail) => failed(&format!("{reason}; its turn could not be cancelled: {detail}")),
 	}
 }
 
-async fn cancelled<R: Runtime>(app: &AppHandle<R>, scope: &RuntimeScope) -> Result<(), String> {
-	match cancel_session_turn(app, &*held::<R, AgentState>(app, NO_AGENT)?, scope).await {
+async fn cancelled(core: &crate::core_context::Core, scope: &RuntimeScope) -> Result<(), String> {
+	match cancel_session_turn(core, &*held::<AgentState>(core, NO_AGENT)?, scope).await {
 		CancelOutcome::Failed { failures } => Err(detail_of(&failures)),
 		CancelOutcome::Cancelled | CancelOutcome::NothingToCancel => Ok(()),
 	}
 }
 
-async fn shut_down<R: Runtime>(app: &AppHandle<R>, run_id: &str, scope: RuntimeScope) {
-	if let Err(detail) = shut(app, scope).await {
+async fn shut_down(core: &crate::core_context::Core, run_id: &str, scope: RuntimeScope) {
+	if let Err(detail) = shut(core, scope).await {
 		eprintln!("routine run {run_id} could not shut its session down: {detail}");
 	}
 }
 
-async fn shut<R: Runtime>(app: &AppHandle<R>, scope: RuntimeScope) -> Result<(), String> {
-	held::<R, AgentState>(app, NO_AGENT)?;
-	agent_shutdown(app.clone(), managed::<R, crate::core_context::Core>(app, NO_AGENT)?, scope)
-		.await
-		.map_err(|error| detail_of(&error))
+async fn shut(core: &crate::core_context::Core, scope: RuntimeScope) -> Result<(), String> {
+	held::<AgentState>(core, NO_AGENT)?;
+	shut_down_agent(core, scope).await.map_err(|error| detail_of(&error))
 }
 
-async fn renew<R: Runtime>(app: &AppHandle<R>, run_id: &str) {
-	if let Err(error) = renewed(app, run_id).await {
+async fn renew(core: &crate::core_context::Core, run_id: &str) {
+	if let Err(error) = renewed(core, run_id).await {
 		eprintln!("routine run {run_id} could not renew its lease: {error:?}");
 	}
 }
 
-async fn renewed<R: Runtime>(app: &AppHandle<R>, run_id: &str) -> Result<(), RoutineError> {
-	database(app)?.routines().renew_lease(run_id.to_owned(), SystemClock.now_ms()).await
+async fn renewed(core: &crate::core_context::Core, run_id: &str) -> Result<(), RoutineError> {
+	database(core)?.routines().renew_lease(run_id.to_owned(), SystemClock.now_ms()).await
 }
 
-async fn close<R: Runtime>(app: &AppHandle<R>, requested: &RunRequested, closing: RunClosing) {
+async fn close(core: &crate::core_context::Core, requested: &RunRequested, closing: RunClosing) {
 	let run_id = &requested.run_id;
 	if let (RunOutcome::Failed, Some(reason)) = (closing.outcome, &closing.reason) {
 		eprintln!("routine run {run_id} failed: {reason}");
 	}
-	if let Err(error) = closed(app, run_id, closing).await {
+	if let Err(error) = closed(core, run_id, closing).await {
 		return eprintln!("routine run {run_id} could not be closed: {error:?}");
 	}
-	if let Err(error) = announce_change(app, &requested.conversation_id) {
+	if let Err(error) = announce_change(core, &requested.conversation_id) {
 		eprintln!(
 			"routine run {run_id} was closed but its change could not be announced: {error:?}"
 		);
 	}
 }
 
-async fn closed<R: Runtime>(
-	app: &AppHandle<R>,
+async fn closed(
+	core: &crate::core_context::Core,
 	run_id: &str,
 	closing: RunClosing,
 ) -> Result<(), RoutineError> {
-	database(app)?.routines().close_run(run_id.to_owned(), closing, SystemClock.now_ms()).await?;
+	database(core)?.routines().close_run(run_id.to_owned(), closing, SystemClock.now_ms()).await?;
 	Ok(())
 }
 
@@ -481,12 +467,12 @@ impl Drop for RelayReader {
 	}
 }
 
-pub(crate) fn listen<R: Runtime>(
-	app: &AppHandle<R>,
+pub(crate) fn listen(
+	core: &crate::core_context::Core,
 	keeps: impl Fn(&RuntimeScope) -> bool + Send + 'static,
 	events: mpsc::UnboundedSender<ScopedEvent>,
 ) -> RelayReader {
-	read(events::subscribed(app), keeps, events)
+	read(core.subscribe_frames(), keeps, events)
 }
 
 pub(crate) fn read(
@@ -578,24 +564,17 @@ pub(crate) fn detail_of(error: &impl Serialize) -> String {
 	serde_json::to_string(error).unwrap_or_else(|failure| failure.to_string())
 }
 
-pub(crate) fn managed<'a, R: Runtime, T: Send + Sync + 'static>(
-	app: &'a AppHandle<R>,
-	missing: &str,
-) -> Result<State<'a, T>, String> {
-	app.try_state::<T>().ok_or_else(|| missing.to_owned())
-}
-
-pub(crate) fn held<'a, R: Runtime, T: Send + Sync + 'static>(
-	app: &'a AppHandle<R>,
+pub(crate) fn held<'a, T: Send + Sync + 'static>(
+	core: &'a crate::core_context::Core,
 	missing: &str,
 ) -> Result<crate::core_context::Managed<'a, T>, String> {
-	crate::events::core(app).try_state::<T>().ok_or_else(|| missing.to_owned())
+	core.try_state::<T>().ok_or_else(|| missing.to_owned())
 }
 
-pub(crate) fn database<R: Runtime>(
-	app: &AppHandle<R>,
+pub(crate) fn database(
+	core: &crate::core_context::Core,
 ) -> Result<&db::Database, TranscriptStoreError> {
-	match crate::events::core(app.app_handle()).try_state::<db::DatabaseState>() {
+	match core.try_state::<db::DatabaseState>() {
 		Some(state) => ready(state.inner()),
 		None => Err(TranscriptStoreError::Unavailable {
 			failure: (&db::DatabaseError::AppDataDir).into(),
@@ -605,6 +584,7 @@ pub(crate) fn database<R: Runtime>(
 
 #[cfg(test)]
 mod tests {
+	use crate::events;
 	use std::time::Duration;
 
 	use tauri::test::mock_builder;
@@ -740,7 +720,7 @@ mod tests {
 		let run = a_scope("session-1");
 		let (events, mut arriving) = mpsc::unbounded_channel();
 		let held = run.clone();
-		let reader = listen(app.handle(), move |scope| scope == &held, events);
+		let reader = listen(crate::events::core(app.handle()), move |scope| scope == &held, events);
 
 		drop(reader);
 
@@ -829,7 +809,9 @@ mod tests {
 	async fn a_refused_run_whose_turn_cannot_be_cancelled_names_the_cancel_failure_in_its_reason() {
 		let app = an_app_of_its_own("routine-refused-cancel-failed", mock_builder());
 
-		let closing = refused(app.handle(), &a_scope("session-1"), DEADLINE_REASON).await;
+		let closing =
+			refused(crate::events::core(app.handle()), &a_scope("session-1"), DEADLINE_REASON)
+				.await;
 
 		assert_eq!(
 			reason_of(&closing),

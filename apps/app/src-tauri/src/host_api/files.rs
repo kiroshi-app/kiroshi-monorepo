@@ -7,7 +7,6 @@ use axum::middleware;
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::Router;
-use tauri::Runtime;
 
 use super::events;
 use super::invoke::BYTES;
@@ -49,25 +48,22 @@ const MISSING: (StatusCode, &str) = (StatusCode::NOT_FOUND, "no file answers thi
 
 const UNREAD: (StatusCode, &str) = (StatusCode::INTERNAL_SERVER_ERROR, "the file was not read");
 
-pub(crate) fn route<R: Runtime>(calls: Calls<R>) -> Router<Calls<R>> {
+pub(crate) fn route(calls: Calls) -> Router<Calls> {
 	Router::new()
-		.route(AVATAR_PATH, get(avatar::<R>))
-		.route(ATTACHMENT_PATH, get(attachment::<R>))
-		.route_layer(middleware::from_fn_with_state(calls, events::guarded::<R>))
+		.route(AVATAR_PATH, get(avatar))
+		.route(ATTACHMENT_PATH, get(attachment))
+		.route_layer(middleware::from_fn_with_state(calls, events::guarded))
 }
 
-async fn avatar<R: Runtime>(
-	State(calls): State<Calls<R>>,
-	Segments(file): Segments<String>,
-) -> Response {
-	served(Avatars::dir(&calls.app), vec![file]).await
+async fn avatar(State(calls): State<Calls>, Segments(file): Segments<String>) -> Response {
+	served(Avatars::dir(&calls.core), vec![file]).await
 }
 
-async fn attachment<R: Runtime>(
-	State(calls): State<Calls<R>>,
+async fn attachment(
+	State(calls): State<Calls>,
 	Segments((conversation_id, file)): Segments<(String, String)>,
 ) -> Response {
-	served(Attachments::dir(&calls.app), vec![conversation_id, file]).await
+	served(Attachments::dir(&calls.core), vec![conversation_id, file]).await
 }
 
 async fn served(root: Option<PathBuf>, segments: Vec<String>) -> Response {

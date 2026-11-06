@@ -5,7 +5,6 @@ use std::time::Duration;
 
 use futures_util::StreamExt;
 use serde_json::{json, Value};
-use tauri::{AppHandle, Manager, Runtime};
 use tokio::sync::{mpsc, watch};
 use tokio::task::JoinHandle;
 use tokio::time::{interval_at, sleep, sleep_until, timeout, Instant};
@@ -353,13 +352,12 @@ impl RelayGuests {
 	}
 }
 
-fn is_signed_in<R: Runtime>(app: &AppHandle<R>) -> Result<bool, String> {
-	session_bearer(app).map(|bearer| bearer.is_some())
+fn is_signed_in(core: &crate::core_context::Core) -> Result<bool, String> {
+	session_bearer(core).map(|bearer| bearer.is_some())
 }
 
-fn session_bearer<R: Runtime>(app: &AppHandle<R>) -> Result<Option<String>, String> {
-	crate::events::core(app.app_handle())
-		.state::<AccountSession>()
+fn session_bearer(core: &crate::core_context::Core) -> Result<Option<String>, String> {
+	core.state::<AccountSession>()
 		.bearer()
 		.map_err(|error| format!("the account session store failed: {error:?}"))
 }
@@ -368,19 +366,19 @@ pub(super) fn member_socket_url(cloud: &Cloud, instance_id: &str, relay_device_i
 	format!("{}?device={relay_device_id}", cloud.member_relay_url(instance_id))
 }
 
-pub async fn joined<R: Runtime>(
-	app: &AppHandle<R>,
+pub async fn joined(
+	core: &crate::core_context::Core,
 	instance_id: String,
 	name: Option<String>,
 	inviter_email: Option<String>,
 	listing: HostListing,
 ) -> Result<JoinedSpace, RelayJoinError> {
-	let guests = crate::events::core(app.app_handle()).state::<RelayGuests>();
+	let guests = core.state::<RelayGuests>();
 	let _turn = guests.turn.lock().await;
-	if !is_signed_in(app).map_err(RelayJoinError::Account)? {
+	if !is_signed_in(core).map_err(RelayJoinError::Account)? {
 		return Err(RelayJoinError::SignedOut);
 	}
-	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
+	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	let repository = database.joined_spaces();
 	let reach = JoinedReach::Relay { instance_id: instance_id.clone() };
@@ -396,28 +394,28 @@ pub async fn joined<R: Runtime>(
 		inviter_email,
 		listing,
 	};
-	let wait = held::wait(app, &instance_id)?;
+	let wait = held::wait(core, &instance_id)?;
 	let joined = repository.join(candidate).await?;
 	guests.removed().remove(&joined.id);
 	guests.unlisted().remove(&joined.id);
 	guests.gesture_made();
-	members::read_soon(app, &joined);
-	announce_change(app, joined.id.clone()).await?;
+	members::read_soon(core, &joined);
+	announce_change(core, joined.id.clone()).await?;
 	let roster = database.joined_space_members().members(joined.id.clone()).await?;
 	Ok(JoinedSpace::presented(joined, guests.cloud(), wait, &roster))
 }
 
-pub async fn reconciled<R: Runtime>(app: &AppHandle<R>) {
-	let Some(guests) = crate::events::core(app.app_handle()).try_state::<RelayGuests>() else {
+pub async fn reconciled(core: &crate::core_context::Core) {
+	let Some(guests) = core.try_state::<RelayGuests>() else {
 		return;
 	};
-	if let Err(failure) = memberships_followed(app, &guests).await {
+	if let Err(failure) = memberships_followed(core, &guests).await {
 		log::warn!(
 			"the joined spaces of every instance did not follow the cloud memberships: {failure}"
 		);
 	}
 	let _turn = guests.turn.lock().await;
-	if let Err(failure) = waiting::joins_started(app, &guests).await {
+	if let Err(failure) = waiting::joins_started(core, &guests).await {
 		log::warn!(
 			"the joined spaces of every instance waiting for their host were not all followed: {failure:?}"
 		);
@@ -441,44 +439,44 @@ struct UnlistedEntry {
 	was_running: bool,
 }
 
-async fn memberships_followed<R: Runtime>(
-	app: &AppHandle<R>,
+async fn memberships_followed(
+	core: &crate::core_context::Core,
 	guests: &RelayGuests,
 ) -> Result<(), String> {
-	let Some(listing) = listing_read(app, guests).await? else {
+	let Some(listing) = listing_read(core, guests).await? else {
 		return Ok(());
 	};
 	let unlisted = {
 		let _turn = guests.turn.lock().await;
-		if is_outdated(app, guests, &listing)? {
+		if is_outdated(core, guests, &listing)? {
 			log::info!(
 				"the cloud memberships were read while a join, a leave or a sign-out moved the joined spaces: the next reconciliation follows them"
 			);
 			return Ok(());
 		}
-		listed_followed_unlisted_stopped(app, guests, listing).await?
+		listed_followed_unlisted_stopped(core, guests, listing).await?
 	};
-	let departed = departures_read(app, guests.cloud(), &unlisted).await;
+	let departed = departures_read(core, guests.cloud(), &unlisted).await;
 	let _turn = guests.turn.lock().await;
-	departed_evicted(app, guests, &unlisted.bearer, departed).await
+	departed_evicted(core, guests, &unlisted.bearer, departed).await
 }
 
-async fn departures_read<'a, R: Runtime>(
-	app: &AppHandle<R>,
+async fn departures_read<'a>(
+	core: &crate::core_context::Core,
 	cloud: &Cloud,
 	unlisted: &'a Unlisted,
 ) -> Vec<(&'a UnlistedEntry, JoinedSpaceRemovalReason)> {
 	let mut departed = Vec::new();
 	for entry in &unlisted.held {
 		let reason =
-			unlisted_reason(app, cloud, &unlisted.bearer, &entry.id, &entry.instance_id).await;
+			unlisted_reason(core, cloud, &unlisted.bearer, &entry.id, &entry.instance_id).await;
 		departed.push((entry, reason));
 	}
 	departed
 }
 
-async fn departed_evicted<R: Runtime>(
-	app: &AppHandle<R>,
+async fn departed_evicted(
+	core: &crate::core_context::Core,
 	guests: &RelayGuests,
 	bearer: &str,
 	departed: Vec<(&UnlistedEntry, JoinedSpaceRemovalReason)>,
@@ -487,25 +485,25 @@ async fn departed_evicted<R: Runtime>(
 		let mut unlisted = guests.unlisted();
 		departed.iter().map(|(entry, _)| unlisted.remove(&entry.id)).collect()
 	};
-	if session_bearer(app)?.as_deref() != Some(bearer) {
+	if session_bearer(core)?.as_deref() != Some(bearer) {
 		return Ok(());
 	}
 	for ((entry, reason), is_still_unlisted) in departed.into_iter().zip(still_unlisted) {
 		if is_still_unlisted {
-			entry_evicted(app, &entry.id, reason).await.map_err(described)?;
+			entry_evicted(core, &entry.id, reason).await.map_err(described)?;
 		} else if entry.was_running {
-			guest_restarted(app, guests, entry).await;
+			guest_restarted(core, guests, entry).await;
 		}
 	}
 	Ok(())
 }
 
-async fn guest_restarted<R: Runtime>(
-	app: &AppHandle<R>,
+async fn guest_restarted(
+	core: &crate::core_context::Core,
 	guests: &RelayGuests,
 	entry: &UnlistedEntry,
 ) {
-	if let Err(failure) = started_in_turn(app, guests, &entry.id).await {
+	if let Err(failure) = started_in_turn(core, guests, &entry.id).await {
 		log::warn!(
 			"joined space {} (instance {}) was joined again while unlisted and its guest did not start again: {failure:?}",
 			entry.id,
@@ -514,46 +512,46 @@ async fn guest_restarted<R: Runtime>(
 	}
 }
 
-async fn listing_read<R: Runtime>(
-	app: &AppHandle<R>,
+async fn listing_read(
+	core: &crate::core_context::Core,
 	guests: &RelayGuests,
 ) -> Result<Option<Listing>, String> {
 	let gestures = guests.gestures_made();
-	let Some(bearer) = session_bearer(app)? else {
+	let Some(bearer) = session_bearer(core)? else {
 		return Ok(None);
 	};
 	match guests.cloud.instances(&bearer).await {
 		Ok(instances) => Ok(Some(Listing { bearer, instances, gestures })),
 		Err(InstancesError::Revoked) => {
-			session::revoked(app, &bearer);
+			session::revoked(core, &bearer);
 			Err("the cloud refused the account (401)".to_owned())
 		}
 		Err(InstancesError::Unreachable(reason)) => Err(reason),
 	}
 }
 
-fn is_outdated<R: Runtime>(
-	app: &AppHandle<R>,
+fn is_outdated(
+	core: &crate::core_context::Core,
 	guests: &RelayGuests,
 	listing: &Listing,
 ) -> Result<bool, String> {
-	let is_signed_in_as_listed = session_bearer(app)?.as_deref() == Some(listing.bearer.as_str());
+	let is_signed_in_as_listed = session_bearer(core)?.as_deref() == Some(listing.bearer.as_str());
 	Ok(!is_signed_in_as_listed || guests.gestures_made() != listing.gestures)
 }
 
-async fn listed_followed_unlisted_stopped<R: Runtime>(
-	app: &AppHandle<R>,
+async fn listed_followed_unlisted_stopped(
+	core: &crate::core_context::Core,
 	guests: &RelayGuests,
 	listing: Listing,
 ) -> Result<Unlisted, String> {
 	let Listing { bearer, instances: listed, .. } = listing;
-	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
+	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state).map_err(described)?;
 	let hosted = database.space_hosting().registered_instance_ids().await.map_err(described)?;
 	let repository = database.joined_spaces();
 	let held = repository.list().await.map_err(described)?;
 	for instance in &listed {
-		listed_followed(app, repository, &held, &hosted, instance).await?;
+		listed_followed(core, repository, &held, &hosted, instance).await?;
 	}
 	let mut unlisted = Vec::new();
 	for (id, instance_id) in held.iter().map(relay_instance) {
@@ -571,8 +569,8 @@ fn relay_instance(joined: &joined_spaces::JoinedSpace) -> (&str, &str) {
 	(&joined.id, instance_id)
 }
 
-async fn listed_followed<R: Runtime>(
-	app: &AppHandle<R>,
+async fn listed_followed(
+	core: &crate::core_context::Core,
 	repository: &joined_spaces::JoinedSpacesRepository,
 	held: &[joined_spaces::JoinedSpace],
 	hosted: &[String],
@@ -599,7 +597,7 @@ async fn listed_followed<R: Runtime>(
 		},
 	};
 	let joined = repository.join(entry).await.map_err(described)?;
-	announce_change(app, joined.id).await.map_err(described)
+	announce_change(core, joined.id).await.map_err(described)
 }
 
 async fn unlisted_stopped(guests: &RelayGuests, id: &str) -> bool {
@@ -613,14 +611,14 @@ async fn unlisted_stopped(guests: &RelayGuests, id: &str) -> bool {
 	was_running
 }
 
-async fn unlisted_reason<R: Runtime>(
-	app: &AppHandle<R>,
+async fn unlisted_reason(
+	core: &crate::core_context::Core,
 	cloud: &Cloud,
 	bearer: &str,
 	id: &str,
 	instance_id: &str,
 ) -> JoinedSpaceRemovalReason {
-	let roster = match held::roster(app, instance_id).await {
+	let roster = match held::roster(core, instance_id).await {
 		Ok(Some(roster)) => roster,
 		Ok(None) => return JoinedSpaceRemovalReason::Unknown,
 		Err(failure) => {
@@ -649,45 +647,45 @@ fn described(failure: impl std::fmt::Debug) -> String {
 	format!("{failure:?}")
 }
 
-pub async fn connected<R: Runtime>(
-	app: &AppHandle<R>,
+pub async fn connected(
+	core: &crate::core_context::Core,
 	id: String,
 ) -> Result<JoinedSpaceConnection, JoinedSpaceError> {
-	let (mut found, reached) = started(app, &id).await?;
+	let (mut found, reached) = started(core, &id).await?;
 	if found.remote_space_id.is_none() {
-		found.remote_space_id = Some(learned(app, &found.id, &reached.link).await?);
+		found.remote_space_id = Some(learned(core, &found.id, &reached.link).await?);
 	}
 	Ok(JoinedSpaceConnection::over(found, reached.origin, reached.token))
 }
 
-async fn started<R: Runtime>(
-	app: &AppHandle<R>,
+async fn started(
+	core: &crate::core_context::Core,
 	id: &str,
 ) -> Result<(joined_spaces::JoinedSpace, Reached), JoinedSpaceError> {
-	let guests = crate::events::core(app.app_handle()).state::<RelayGuests>();
+	let guests = core.state::<RelayGuests>();
 	let _turn = guests.turn.lock().await;
-	started_in_turn(app, &guests, id).await
+	started_in_turn(core, &guests, id).await
 }
 
-async fn started_in_turn<R: Runtime>(
-	app: &AppHandle<R>,
+async fn started_in_turn(
+	core: &crate::core_context::Core,
 	guests: &RelayGuests,
 	id: &str,
 ) -> Result<(joined_spaces::JoinedSpace, Reached), JoinedSpaceError> {
 	if guests.removed().contains(id) {
 		return Err(JoinedSpaceError::RemovedByRotation);
 	}
-	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
+	let state = core.state::<db::DatabaseState>();
 	let found = ready(&state)?.joined_spaces().find(id.to_owned()).await?;
 	let unknown = || JoinedSpaceError::UnknownJoinedSpace { id: id.to_owned() };
 	let found = found.ok_or_else(unknown)?;
 	let JoinedReach::Relay { instance_id } = found.reach.clone();
 	log::info!("joined space {id} (instance {instance_id}) connects from the front");
-	let is_signed_in = is_signed_in(app).unwrap_or_else(|reason| {
+	let is_signed_in = is_signed_in(core).unwrap_or_else(|reason| {
 		log::warn!("joined space {id} (instance {instance_id}) was not connected: {reason}");
 		false
 	});
-	if !is_signed_in || devices::is_awaiting_approval(app) {
+	if !is_signed_in || devices::is_awaiting_approval(core) {
 		log::warn!(
 			"joined space {id} (instance {instance_id}) was not connected: no account is signed in or this device awaits its approval"
 		);
@@ -696,7 +694,7 @@ async fn started_in_turn<R: Runtime>(
 	if let Some(reached) = guests.reached(id) {
 		return Ok((found, reached));
 	}
-	let held = match held::held(app, &instance_id).await? {
+	let held = match held::held(core, &instance_id).await? {
 		Ok(held) => held,
 		Err(wait) => return Err(waiting_for_host(id, &instance_id, wait)),
 	};
@@ -704,21 +702,17 @@ async fn started_in_turn<R: Runtime>(
 	let token = Arc::new(HostToken::random());
 	let (stop, stopped) = watch::channel(false);
 	let reread = {
-		let (app, id, instance_id) = (app.clone(), id.to_owned(), instance_id.clone());
-		Arc::new(move || reread_announced(&app, &id, &instance_id))
+		let (core, id, instance_id) = (core.clone(), id.to_owned(), instance_id.clone());
+		Arc::new(move || reread_announced(&core, &id, &instance_id))
 	};
 	let origin = proxy::served(Arc::clone(&link), Arc::clone(&token), reread, stopped.clone())
 		.await
 		.map_err(|error| JoinedSpaceError::ProxyUnavailable { detail: error.to_string() })?;
 	let linked =
 		Linked { id: id.to_owned(), instance_id, link: Arc::clone(&link), joined: found.clone() };
-	let linked = guest_linked(app.clone(), linked, held, stopped);
-	let linked = description::alongside(app.clone(), id.to_owned(), &link, linked);
-	let run = crate::events::core(app.app_handle()).spawn(members::alongside(
-		app.clone(),
-		&found,
-		linked,
-	));
+	let linked = guest_linked(core.clone(), linked, held, stopped);
+	let linked = description::alongside(core.clone(), id.to_owned(), &link, linked);
+	let run = core.spawn(members::alongside(core.clone(), &found, linked));
 	let reached = Reached {
 		origin: origin.clone(),
 		token: token.bearer().to_owned(),
@@ -748,14 +742,14 @@ pub(super) struct SharedSpace {
 	pub(super) link: Arc<MemberLink>,
 }
 
-pub(super) async fn shared_space<R: Runtime>(
-	app: &AppHandle<R>,
+pub(super) async fn shared_space(
+	core: &crate::core_context::Core,
 	id: &str,
 ) -> Result<SharedSpace, JoinedSpaceError> {
-	let (joined, reached) = started(app, id).await?;
+	let (joined, reached) = started(core, id).await?;
 	let space_id = match joined.remote_space_id.clone() {
 		Some(space_id) => space_id,
-		None => learned(app, id, &reached.link).await?,
+		None => learned(core, id, &reached.link).await?,
 	};
 	Ok(SharedSpace { space_id, link: reached.link })
 }
@@ -766,8 +760,8 @@ pub(super) struct HostCall<'a> {
 	pub(super) bound: Duration,
 }
 
-pub(super) async fn host_answered<R: Runtime>(
-	app: &AppHandle<R>,
+pub(super) async fn host_answered(
+	core: &crate::core_context::Core,
 	id: &str,
 	link: &MemberLink,
 	call: HostCall<'_>,
@@ -775,11 +769,7 @@ pub(super) async fn host_answered<R: Runtime>(
 	let offline = || JoinedSpaceError::HostOffline { id: id.to_owned() };
 	match link.settled().await {
 		Presence::Online => {}
-		Presence::Ended => {
-			return Err(crate::events::core(app.app_handle())
-				.state::<RelayGuests>()
-				.ended_error(id))
-		}
+		Presence::Ended => return Err(core.state::<RelayGuests>().ended_error(id)),
 		Presence::Connecting | Presence::Down => return Err(offline()),
 	}
 	timeout(call.bound, link.called(call.command, call.args))
@@ -789,32 +779,32 @@ pub(super) async fn host_answered<R: Runtime>(
 		.ok_or_else(offline)
 }
 
-async fn learned<R: Runtime>(
-	app: &AppHandle<R>,
+async fn learned(
+	core: &crate::core_context::Core,
 	id: &str,
 	link: &MemberLink,
 ) -> Result<String, JoinedSpaceError> {
 	let offline = || JoinedSpaceError::HostOffline { id: id.to_owned() };
 	let call = HostCall { command: SHARED_SPACE_COMMAND, args: json!({}), bound: LEARN_BOUND };
-	let answer = host_answered(app, id, link, call).await?;
+	let answer = host_answered(core, id, link, call).await?;
 	let space_id = Some(&answer)
 		.filter(|answer| answer.status == 200)
 		.and_then(|answer| answer.body.get("spaceId"))
 		.and_then(Value::as_str)
 		.ok_or_else(offline)?;
-	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
+	let state = core.state::<db::DatabaseState>();
 	ready(&state)?.joined_spaces().learned(id.to_owned(), space_id.to_owned()).await?;
 	Ok(space_id.to_owned())
 }
 
-pub(super) async fn description_adopted<R: Runtime>(
-	app: &AppHandle<R>,
+pub(super) async fn description_adopted(
+	core: &crate::core_context::Core,
 	id: &str,
 	described: SpaceDescribed,
 ) -> Result<(), JoinedSpaceError> {
-	let guests = crate::events::core(app.app_handle()).state::<RelayGuests>();
+	let guests = core.state::<RelayGuests>();
 	let _turn = guests.turn.lock().await;
-	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
+	let state = core.state::<db::DatabaseState>();
 	let repository = ready(&state)?.joined_spaces();
 	let found = repository.find(id.to_owned()).await?;
 	let is_its_space = found.is_some_and(|joined| {
@@ -826,18 +816,18 @@ pub(super) async fn description_adopted<R: Runtime>(
 		return Ok(());
 	}
 	guests.gesture_made();
-	announce_change(app, id.to_owned()).await
+	announce_change(core, id.to_owned()).await
 }
 
-pub async fn left<R: Runtime>(app: &AppHandle<R>, id: &str) -> Result<(), JoinedSpaceError> {
-	let guests = crate::events::core(app.app_handle()).state::<RelayGuests>();
+pub async fn left(core: &crate::core_context::Core, id: &str) -> Result<(), JoinedSpaceError> {
+	let guests = core.state::<RelayGuests>();
 	let _turn = guests.turn.lock().await;
-	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
+	let state = core.state::<db::DatabaseState>();
 	let repository = ready(&state)?.joined_spaces();
 	let unknown = || JoinedSpaceError::UnknownJoinedSpace { id: id.to_owned() };
 	let found = repository.find(id.to_owned()).await?.ok_or_else(unknown)?;
 	let JoinedReach::Relay { instance_id } = &found.reach;
-	membership_ended(app, &guests.cloud, instance_id).await?;
+	membership_ended(core, &guests.cloud, instance_id).await?;
 	if !repository.remove(id.to_owned()).await? {
 		return Err(unknown());
 	}
@@ -850,12 +840,12 @@ pub async fn left<R: Runtime>(app: &AppHandle<R>, id: &str) -> Result<(), Joined
 	Ok(())
 }
 
-async fn membership_ended<R: Runtime>(
-	app: &AppHandle<R>,
+async fn membership_ended(
+	core: &crate::core_context::Core,
 	cloud: &Cloud,
 	instance_id: &str,
 ) -> Result<(), JoinedSpaceError> {
-	let bearer = match crate::events::core(app.app_handle()).state::<AccountSession>().bearer() {
+	let bearer = match core.state::<AccountSession>().bearer() {
 		Ok(Some(bearer)) => bearer,
 		Ok(None) => return Err(JoinedSpaceError::NeedsSignIn),
 		Err(error) => return Err(JoinedSpaceError::SessionStore { detail: format!("{error:?}") }),
@@ -870,7 +860,7 @@ async fn membership_ended<R: Runtime>(
 		Ok(()) | Err(LeaveCallError::UnknownMembership) => Ok(()),
 		Err(LeaveCallError::OwnerNotRemovable) => Err(JoinedSpaceError::OwnerNotRemovable),
 		Err(LeaveCallError::Revoked) => {
-			session::revoked(app, &bearer);
+			session::revoked(core, &bearer);
 			Err(JoinedSpaceError::SessionRevoked)
 		}
 		Err(LeaveCallError::Refused(detail)) => Err(JoinedSpaceError::RelayRefused { detail }),
@@ -880,8 +870,10 @@ async fn membership_ended<R: Runtime>(
 	}
 }
 
-pub async fn signed_out<R: Runtime>(app: &AppHandle<R>) -> Option<tokio::sync::MutexGuard<'_, ()>> {
-	let guests = crate::events::core(app.app_handle()).try_state::<RelayGuests>()?.inner();
+pub async fn signed_out(
+	core: &crate::core_context::Core,
+) -> Option<tokio::sync::MutexGuard<'_, ()>> {
+	let guests = core.try_state::<RelayGuests>()?.inner();
 	let turn = guests.turn.lock().await;
 	guests.gesture_made();
 	guests.removed().clear();
@@ -895,7 +887,7 @@ pub async fn signed_out<R: Runtime>(app: &AppHandle<R>) -> Option<tokio::sync::M
 	for (id, waiting) in waiting {
 		waiting.finished(&id).await;
 	}
-	if let Err(failure) = relay_entries_dropped(app).await {
+	if let Err(failure) = relay_entries_dropped(core).await {
 		log::error!(
 			"the relay spaces of every instance were not all dropped on sign out: {failure:?}"
 		);
@@ -903,14 +895,14 @@ pub async fn signed_out<R: Runtime>(app: &AppHandle<R>) -> Option<tokio::sync::M
 	Some(turn)
 }
 
-async fn relay_entries_dropped<R: Runtime>(app: &AppHandle<R>) -> Result<(), JoinedSpaceError> {
-	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
+async fn relay_entries_dropped(core: &crate::core_context::Core) -> Result<(), JoinedSpaceError> {
+	let state = core.state::<db::DatabaseState>();
 	let repository = ready(&state)?.joined_spaces();
 	for joined in repository.list().await? {
 		if repository.remove(joined.id.clone()).await? {
 			let JoinedReach::Relay { instance_id } = &joined.reach;
-			wait_ended(app, instance_id);
-			announce_change(app, joined.id).await?;
+			wait_ended(core, instance_id);
+			announce_change(core, joined.id).await?;
 		}
 	}
 	Ok(())
@@ -926,27 +918,27 @@ async fn finished(id: &str, guest: Guest) {
 	}
 }
 
-async fn guest_linked<R: Runtime>(
-	app: AppHandle<R>,
+async fn guest_linked(
+	core: crate::core_context::Core,
 	linked: Linked,
 	mut held: Held,
 	mut stop: watch::Receiver<bool>,
 ) {
 	let mut backoff = Backoff::first();
 	loop {
-		let (ended, kept) = attempted(&app, &linked, held, &mut stop, &mut backoff).await;
+		let (ended, kept) = attempted(&core, &linked, held, &mut stop, &mut backoff).await;
 		held = kept;
 		match ended {
 			Ended::Stopped => return linked.link.ended(Presence::Ended),
-			Ended::Evicted(reason) => return evicted(&app, &linked, reason).await,
+			Ended::Evicted(reason) => return evicted(&core, &linked, reason).await,
 			Ended::Departed => {
-				let Some(reason) = departure_asked(&app, &linked, &held, &mut stop).await else {
+				let Some(reason) = departure_asked(&core, &linked, &held, &mut stop).await else {
 					return linked.link.ended(Presence::Ended);
 				};
-				return evicted(&app, &linked, reason).await;
+				return evicted(&core, &linked, reason).await;
 			}
 			Ended::Removed => {
-				let guests = crate::events::core(app.app_handle()).state::<RelayGuests>();
+				let guests = core.state::<RelayGuests>();
 				guests.removed().insert(linked.id.clone());
 				linked.link.ended(Presence::Ended);
 				guests.left(&linked.id, &linked.link);
@@ -957,9 +949,7 @@ async fn guest_linked<R: Runtime>(
 			}
 			Ended::SignedOut(reason) => {
 				linked.link.ended(Presence::Down);
-				crate::events::core(app.app_handle())
-					.state::<RelayGuests>()
-					.left(&linked.id, &linked.link);
+				core.state::<RelayGuests>().left(&linked.id, &linked.link);
 				return log::warn!(
 					"joined space {} (instance {}) left its member relay: {reason}",
 					linked.id,
@@ -982,21 +972,21 @@ async fn guest_linked<R: Runtime>(
 	}
 }
 
-async fn attempted<R: Runtime>(
-	app: &AppHandle<R>,
+async fn attempted(
+	core: &crate::core_context::Core,
 	linked: &Linked,
 	held: Held,
 	stop: &mut watch::Receiver<bool>,
 	backoff: &mut Backoff,
 ) -> (Ended, Held) {
-	let bearer = match crate::events::core(app.app_handle()).state::<AccountSession>().bearer() {
+	let bearer = match core.state::<AccountSession>().bearer() {
 		Ok(Some(bearer)) => bearer,
 		Ok(None) => return (Ended::SignedOut("no account is signed in"), held),
 		Err(error) => {
 			return (Ended::Dropped(format!("the account session store failed: {error:?}")), held)
 		}
 	};
-	let cloud = &crate::events::core(app.app_handle()).state::<RelayGuests>().cloud;
+	let cloud = &core.state::<RelayGuests>().cloud;
 	let url = member_socket_url(cloud, &linked.instance_id, &held.roster.own.relay_device_id);
 	match until_stopped(stop, opened_unpaused(cloud, url, &bearer)).await {
 		None => (Ended::Stopped, held),
@@ -1007,12 +997,12 @@ async fn attempted<R: Runtime>(
 				linked.instance_id
 			);
 			backoff.socket_opened();
-			online(app, *socket, linked, held, stop).await
+			online(core, *socket, linked, held, stop).await
 		}
 		Some(Opened::Unknown) => (Ended::Evicted(JoinedSpaceRemovalReason::Unknown), held),
 		Some(Opened::Gone(Some(departure))) => (Ended::Evicted(reason_of(departure)), held),
 		Some(Opened::Revoked) => {
-			session::revoked(app, &bearer);
+			session::revoked(core, &bearer);
 			(Ended::SignedOut("the relay refused the account (401)"), held)
 		}
 		Some(Opened::Forbidden | Opened::Gone(None)) => {
@@ -1026,13 +1016,13 @@ async fn attempted<R: Runtime>(
 	}
 }
 
-async fn departure_asked<R: Runtime>(
-	app: &AppHandle<R>,
+async fn departure_asked(
+	core: &crate::core_context::Core,
 	linked: &Linked,
 	held: &Held,
 	stop: &mut watch::Receiver<bool>,
 ) -> Option<JoinedSpaceRemovalReason> {
-	let bearer = match crate::events::core(app.app_handle()).state::<AccountSession>().bearer() {
+	let bearer = match core.state::<AccountSession>().bearer() {
 		Ok(Some(bearer)) => bearer,
 		unasked => {
 			log::warn!(
@@ -1042,7 +1032,7 @@ async fn departure_asked<R: Runtime>(
 			return Some(JoinedSpaceRemovalReason::Removed);
 		}
 	};
-	let cloud = &crate::events::core(app.app_handle()).state::<RelayGuests>().cloud;
+	let cloud = &core.state::<RelayGuests>().cloud;
 	let url = member_socket_url(cloud, &linked.instance_id, &held.roster.own.relay_device_id);
 	match until_stopped(stop, opened_unpaused(cloud, url, &bearer)).await? {
 		Opened::Gone(Some(departure)) => Some(reason_of(departure)),
@@ -1050,14 +1040,14 @@ async fn departure_asked<R: Runtime>(
 	}
 }
 
-async fn online<R: Runtime>(
-	app: &AppHandle<R>,
+async fn online(
+	core: &crate::core_context::Core,
 	socket: Socket,
 	linked: &Linked,
 	held: Held,
 	stop: &mut watch::Receiver<bool>,
 ) -> (Ended, Held) {
-	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
+	let state = core.state::<db::DatabaseState>();
 	let database = match ready(&state) {
 		Ok(database) => database,
 		Err(failure) => {
@@ -1065,7 +1055,7 @@ async fn online<R: Runtime>(
 		}
 	};
 	let mut wire = MemberWire::new(database.joined_space_relay(), &linked.instance_id, held);
-	let ended = sealed_session(app, socket, linked, &mut wire, stop).await;
+	let ended = sealed_session(core, socket, linked, &mut wire, stop).await;
 	(ended, wire.into_held())
 }
 
@@ -1076,15 +1066,15 @@ enum Outgoing {
 	Ping,
 }
 
-async fn sealed_session<R: Runtime>(
-	app: &AppHandle<R>,
+async fn sealed_session(
+	core: &crate::core_context::Core,
 	socket: Socket,
 	linked: &Linked,
 	wire: &mut MemberWire<'_>,
 	stop: &mut watch::Receiver<bool>,
 ) -> Ended {
 	let link = &linked.link;
-	let answer_bound = crate::events::core(app.app_handle()).state::<RelayGuests>().answer_bound();
+	let answer_bound = core.state::<RelayGuests>().answer_bound();
 	let (mut sink, mut stream) = socket.split();
 	let (calls_in, mut calls) = mpsc::channel(CALLS_IN_FLIGHT);
 	let mut unopened = Some(calls_in);
@@ -1116,7 +1106,7 @@ async fn sealed_session<R: Runtime>(
 			frame = stream.next() => {
 				silence.as_mut().reset(Instant::now() + SILENCE_BOUND);
 				match frame {
-					Some(Ok(Message::Text(text))) => heard(app, linked, wire, text.as_str(), &mut unopened).await,
+					Some(Ok(Message::Text(text))) => heard(core, linked, wire, text.as_str(), &mut unopened).await,
 					Some(Ok(Message::Close(frame))) => return closed_by_relay(frame),
 					Some(Ok(_)) => Outgoing::Nothing,
 					Some(Err(error)) => return Ended::Dropped(format!("the member relay socket failed: {error}")),
@@ -1130,7 +1120,7 @@ async fn sealed_session<R: Runtime>(
 					"joined space {} (instance {}) heard no answer to its relay resume",
 					linked.id, linked.instance_id
 				);
-				resynced(app, linked, link.resume_lapsed())
+				resynced(core, linked, link.resume_lapsed())
 			}
 			_ = pings.tick() => Outgoing::Ping,
 			_ = &mut silence => {
@@ -1154,8 +1144,8 @@ async fn delivered(
 	sent(sink, message).await
 }
 
-async fn heard<R: Runtime>(
-	app: &AppHandle<R>,
+async fn heard(
+	core: &crate::core_context::Core,
 	linked: &Linked,
 	wire: &mut MemberWire<'_>,
 	text: &str,
@@ -1174,13 +1164,13 @@ async fn heard<R: Runtime>(
 	};
 	match heard {
 		Heard::Hello => match unopened.take() {
-			Some(calls) => resynced(app, linked, linked.link.opened(calls)),
+			Some(calls) => resynced(core, linked, linked.link.opened(calls)),
 			None => Outgoing::Nothing,
 		},
-		Heard::Frame(plaintext) => resynced(app, linked, linked.link.received(&plaintext)),
-		Heard::Roster(roster) => roster_taken(app, linked, wire, *roster).await,
+		Heard::Frame(plaintext) => resynced(core, linked, linked.link.received(&plaintext)),
+		Heard::Roster(roster) => roster_taken(core, linked, wire, *roster).await,
 		Heard::Current => Outgoing::Nothing,
-		Heard::Rekey(handed) => match held::kept(app, &linked.instance_id, &handed).await {
+		Heard::Rekey(handed) => match held::kept(core, &linked.instance_id, &handed).await {
 			Ok(true) => {
 				log::info!(
 					"joined space {} (instance {}) kept a rekey: space key_id {}",
@@ -1189,7 +1179,7 @@ async fn heard<R: Runtime>(
 					handed.space.key_id
 				);
 				wire.rekeyed(*handed);
-				members::read_soon(app, &linked.joined);
+				members::read_soon(core, &linked.joined);
 				if wire.is_greeted() {
 					Outgoing::Nothing
 				} else {
@@ -1216,17 +1206,17 @@ async fn heard<R: Runtime>(
 	}
 }
 
-async fn roster_taken<R: Runtime>(
-	app: &AppHandle<R>,
+async fn roster_taken(
+	core: &crate::core_context::Core,
 	linked: &Linked,
 	wire: &mut MemberWire<'_>,
 	roster: HeldRoster,
 ) -> Outgoing {
 	let version = roster.set.version;
-	match held::roster_kept(app, &linked.instance_id, &roster).await {
+	match held::roster_kept(core, &linked.instance_id, &roster).await {
 		Ok(true) => {
 			wire.roster_taken(roster);
-			members::read_soon(app, &linked.joined);
+			members::read_soon(core, &linked.joined);
 		}
 		Ok(false) => log::warn!(
 			"joined space {} (instance {}) kept its roster: roster version {version} is not newer than the stored one",
@@ -1240,21 +1230,19 @@ async fn roster_taken<R: Runtime>(
 	Outgoing::Nothing
 }
 
-fn resynced<R: Runtime>(app: &AppHandle<R>, linked: &Linked, resync: Resync) -> Outgoing {
+fn resynced(core: &crate::core_context::Core, linked: &Linked, resync: Resync) -> Outgoing {
 	match resync {
 		Resync::InStep => Outgoing::Nothing,
 		Resync::Resume(frame) => Outgoing::Sealed(frame),
 		Resync::Reread => {
-			reread_announced(app, &linked.id, &linked.instance_id);
+			reread_announced(core, &linked.id, &linked.instance_id);
 			Outgoing::Nothing
 		}
 	}
 }
 
-fn reread_announced<R: Runtime>(app: &AppHandle<R>, id: &str, instance_id: &str) {
-	if let Err(failure) =
-		announce_reconnection(crate::events::core(app.app_handle()), id.to_owned())
-	{
+fn reread_announced(core: &crate::core_context::Core, id: &str, instance_id: &str) {
+	if let Err(failure) = announce_reconnection(core, id.to_owned()) {
 		log::error!(
 			"joined space {id} (instance {instance_id}) must reread its host and the front was not told: {failure:?}"
 		);
@@ -1283,17 +1271,17 @@ fn closed_by_relay(frame: Option<CloseFrame>) -> Ended {
 	}
 }
 
-async fn evicted<R: Runtime>(
-	app: &AppHandle<R>,
+async fn evicted(
+	core: &crate::core_context::Core,
 	linked: &Linked,
 	reason: JoinedSpaceRemovalReason,
 ) {
 	let id = &linked.id;
-	let guests = crate::events::core(app.app_handle()).state::<RelayGuests>();
+	let guests = core.state::<RelayGuests>();
 	guests.removed().insert(id.clone());
 	linked.link.ended(Presence::Ended);
 	guests.left(id, &linked.link);
-	if let Err(failure) = entry_evicted(app, id, reason).await {
+	if let Err(failure) = entry_evicted(core, id, reason).await {
 		log::error!(
 			"joined space {id} (instance {}) whose membership ended was not evicted: {failure:?}",
 			linked.instance_id
@@ -1301,12 +1289,12 @@ async fn evicted<R: Runtime>(
 	}
 }
 
-pub(super) async fn entry_evicted<R: Runtime>(
-	app: &AppHandle<R>,
+pub(super) async fn entry_evicted(
+	core: &crate::core_context::Core,
 	id: &str,
 	reason: JoinedSpaceRemovalReason,
 ) -> Result<(), JoinedSpaceError> {
-	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
+	let state = core.state::<db::DatabaseState>();
 	let repository = ready(&state)?.joined_spaces();
 	let Some(found) = repository.find(id.to_owned()).await? else {
 		return Ok(());
@@ -1315,13 +1303,10 @@ pub(super) async fn entry_evicted<R: Runtime>(
 		return Ok(());
 	}
 	let JoinedReach::Relay { instance_id } = &found.reach;
-	wait_ended(app, instance_id);
+	wait_ended(core, instance_id);
 	log::warn!(
 		"joined space {id} (instance {instance_id}) was removed: its membership ended ({reason:?})"
 	);
-	announce_change(app, id.to_owned()).await?;
-	announce_removal(
-		crate::events::core(app.app_handle()),
-		JoinedSpaceRemoved { id: id.to_owned(), name: found.name, reason },
-	)
+	announce_change(core, id.to_owned()).await?;
+	announce_removal(core, JoinedSpaceRemoved { id: id.to_owned(), name: found.name, reason })
 }

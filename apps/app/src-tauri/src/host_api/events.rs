@@ -7,7 +7,6 @@ use axum::routing::get;
 use axum::Router;
 use std::time::Duration;
 
-use tauri::Runtime;
 use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::broadcast::Receiver;
 use tokio::time::{error::Elapsed, timeout};
@@ -26,17 +25,13 @@ pub(crate) const FELL_BEHIND: &str = "the client fell behind the event buffer";
 
 pub const SEND_PATIENCE: Duration = Duration::from_secs(5);
 
-pub(crate) fn route<R: Runtime>(calls: Calls<R>) -> Router<Calls<R>> {
+pub(crate) fn route(calls: Calls) -> Router<Calls> {
 	Router::new()
-		.route(PATH, get(opened::<R>))
-		.route_layer(middleware::from_fn_with_state(calls, guarded::<R>))
+		.route(PATH, get(opened))
+		.route_layer(middleware::from_fn_with_state(calls, guarded))
 }
 
-pub(crate) async fn guarded<R: Runtime>(
-	State(calls): State<Calls<R>>,
-	request: Request,
-	next: Next,
-) -> Response {
+pub(crate) async fn guarded(State(calls): State<Calls>, request: Request, next: Next) -> Response {
 	if !named_here(request.headers()) {
 		return REFUSED.into_response();
 	}
@@ -48,7 +43,7 @@ pub(crate) async fn guarded<R: Runtime>(
 	next.run(request).await
 }
 
-fn queried_token_admitted<R: Runtime>(calls: &Calls<R>, uri: &Uri) -> bool {
+fn queried_token_admitted(calls: &Calls, uri: &Uri) -> bool {
 	calls.token.as_ref().is_some_and(|token| query_admitted(token, uri))
 }
 
@@ -58,8 +53,8 @@ pub(crate) fn query_admitted(token: &HostToken, uri: &Uri) -> bool {
 		.is_some_and(|presented| token.admits(presented))
 }
 
-async fn opened<R: Runtime>(State(calls): State<Calls<R>>, upgrade: WebSocketUpgrade) -> Response {
-	let (pending, heard) = subscribed_with_pending_questions(&calls.app);
+async fn opened(State(calls): State<Calls>, upgrade: WebSocketUpgrade) -> Response {
+	let (pending, heard) = subscribed_with_pending_questions(&calls.core);
 	upgrade
 		.on_failed_upgrade(|failure| {
 			eprintln!("a host api event client never connected: {failure}")

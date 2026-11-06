@@ -153,7 +153,6 @@ fn shutting_down_a_session_never_queues_behind_the_quit() {
 	let finished: Mutex<Vec<&str>> = Mutex::new(Vec::new());
 	runtime.block_on(async {
 		agent_start_or_resume_session(
-			app.handle().clone(),
 			app.state::<kiroshi_app::core_context::Core>(),
 			a_scope_value(),
 			None,
@@ -170,7 +169,11 @@ fn shutting_down_a_session_never_queues_behind_the_quit() {
 			async {
 				tokio::time::timeout(
 					PATIENCE,
-					shutdown_session(app.handle(), &state, &a_scope_value()),
+					shutdown_session(
+						kiroshi_app::events::core(app.handle()),
+						&state,
+						&a_scope_value(),
+					),
 				)
 				.await
 				.expect("the shutdown never waited on the quit held open");
@@ -179,9 +182,12 @@ fn shutting_down_a_session_never_queues_behind_the_quit() {
 				assert_eq!(killed, 0, "the sidecar ends: {}", std::io::Error::last_os_error());
 			},
 			async {
-				tokio::time::timeout(PATIENCE, terminate_session(app.handle(), &state))
-					.await
-					.expect("the quit ends once its sidecar is gone");
+				tokio::time::timeout(
+					PATIENCE,
+					terminate_session(kiroshi_app::events::core(app.handle()), &state),
+				)
+				.await
+				.expect("the quit ends once its sidecar is gone");
 				finished.lock().expect("order").push("terminate");
 			},
 		);

@@ -3,7 +3,6 @@ use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::IntoResponse;
 use serde_json::{json, Map, Value};
-use tauri::{Manager, Runtime};
 use uuid::Uuid;
 
 use super::commands::announce_change;
@@ -37,8 +36,8 @@ const ACTIVITY_BUDGET: &str = ":activity";
 
 const FAILED: (StatusCode, &str) = (StatusCode::INTERNAL_SERVER_ERROR, "the call was not carried");
 
-pub(crate) async fn called<R: Runtime>(
-	State(calls): State<Calls<R>>,
+pub(crate) async fn called(
+	State(calls): State<Calls>,
 	headers: HeaderMap,
 	body: Result<String, StringRejection>,
 ) -> (StatusCode, &'static str) {
@@ -63,8 +62,8 @@ pub(crate) async fn called<R: Runtime>(
 	}
 }
 
-async fn carried<R: Runtime>(
-	calls: &Calls<R>,
+async fn carried(
+	calls: &Calls,
 	headers: &HeaderMap,
 	delivery_id: String,
 	body: String,
@@ -72,7 +71,7 @@ async fn carried<R: Runtime>(
 	let Some(key) = webhook::presented(headers) else {
 		return Ok(REFUSED);
 	};
-	let state = crate::events::core(calls.app.app_handle()).state::<db::DatabaseState>();
+	let state = calls.core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	let Some(mission) = database.missions().armed_on_key(key).await? else {
 		return Ok(REFUSED);
@@ -106,7 +105,7 @@ async fn carried<R: Runtime>(
 	};
 	match written {
 		Ok(written) => {
-			if let Err(failure) = announce_change(&calls.app, written) {
+			if let Err(failure) = announce_change(&calls.core, written) {
 				eprintln!("a hook call moved a mission the front was not told about: {failure:?}");
 			}
 			Ok(ACCEPTED)
@@ -179,6 +178,7 @@ mod tests {
 	use std::sync::atomic::{AtomicI64, Ordering};
 	use std::sync::mpsc::{channel, Receiver};
 	use std::sync::Arc;
+	use tauri::Manager;
 
 	use tauri::test::{mock_builder, MockRuntime};
 	use tauri::{App, Listener as _};
@@ -349,7 +349,12 @@ mod tests {
 	}
 
 	fn listening(app: &App<MockRuntime>, clock: Arc<Ticking>) -> Webhook {
-		started(app.handle().clone(), clock, Arc::new(Runner::new(app.handle().clone())))
+		started(
+			crate::events::core(app.handle()).clone(),
+			clock,
+			Arc::new(Runner::new(crate::events::core(app.handle()).clone())),
+			crate::host_api::routes(app.handle().clone()),
+		)
 	}
 
 	#[tokio::test]

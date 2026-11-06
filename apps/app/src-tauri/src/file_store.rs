@@ -4,8 +4,6 @@ use std::future::Future;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use tauri::{AppHandle, Manager, Runtime};
-
 use crate::db::{Database, DatabaseError};
 
 pub trait FileStore {
@@ -19,8 +17,8 @@ pub trait FileStore {
 
 	fn remove(path: &Path) -> io::Result<()>;
 
-	fn dir<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
-		Some(crate::events::core(app.app_handle()).data_dir().join(Self::DIR_NAME))
+	fn dir(core: &crate::core_context::Core) -> Option<PathBuf> {
+		Some(core.data_dir().join(Self::DIR_NAME))
 	}
 
 	fn sweep_referenced(

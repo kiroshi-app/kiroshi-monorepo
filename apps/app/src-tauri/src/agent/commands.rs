@@ -55,26 +55,26 @@ pub const EVENT_CHANNEL: &str = "agent://event";
 
 const RUNS_DIR: &str = "runs";
 
-pub(crate) fn announce<R: Runtime>(
-	app: &AppHandle<R>,
+pub(crate) fn announce(
+	core: &crate::core_context::Core,
 	scope: Option<RuntimeScope>,
 	event: AgentEvent,
 ) {
-	announce_in_turn(app, scope, None, event);
+	announce_in_turn(core, scope, None, event);
 }
 
-pub(crate) fn announce_in_turn<R: Runtime>(
-	app: &AppHandle<R>,
+pub(crate) fn announce_in_turn(
+	core: &crate::core_context::Core,
 	scope: Option<RuntimeScope>,
 	turn: Option<EventTurn>,
 	event: AgentEvent,
 ) {
-	announce_scoped(crate::events::core(app.app_handle()), ScopedEvent { scope, turn, event });
+	announce_scoped(core, ScopedEvent { scope, turn, event });
 }
 
-fn announce_denied<R: Runtime>(app: &AppHandle<R>, dropped: &[PendingQuestion]) {
+fn announce_denied(core: &crate::core_context::Core, dropped: &[PendingQuestion]) {
 	for question in dropped {
-		announce_scoped(crate::events::core(app.app_handle()), question.denied());
+		announce_scoped(core, question.denied());
 	}
 }
 
@@ -84,13 +84,13 @@ fn announce_scoped(core: &crate::core_context::Core, scoped: ScopedEvent) {
 	}
 }
 
-pub(crate) fn subscribed_with_pending_questions<R: Runtime>(
-	app: &AppHandle<R>,
+pub(crate) fn subscribed_with_pending_questions(
+	core: &crate::core_context::Core,
 ) -> (Vec<Frame>, broadcast::Receiver<Frame>) {
-	let Some(state) = crate::events::core(app.app_handle()).try_state::<AgentState>() else {
-		return (Vec::new(), events::subscribed(app));
+	let Some(state) = core.try_state::<AgentState>() else {
+		return (Vec::new(), core.subscribe_frames());
 	};
-	let (pending, heard) = state.live.questions_pending_at(|| events::subscribed(app));
+	let (pending, heard) = state.live.questions_pending_at(|| core.subscribe_frames());
 	(pending.into_iter().filter_map(|question| framed_question(question.scoped())).collect(), heard)
 }
 
@@ -435,14 +435,14 @@ impl<S: Clone> Live<S> {
 	}
 }
 
-struct RunSink<R: Runtime> {
-	app: AppHandle<R>,
+struct RunSink {
+	core: crate::core_context::Core,
 	scope: RuntimeScope,
 	live: Arc<Live>,
 	records_its_own_lineage: bool,
 }
 
-impl<R: Runtime> TurnSink for RunSink<R> {
+impl TurnSink for RunSink {
 	fn emit(&self, event: AgentEvent, turn: Option<EventTurn>) {
 		if !self.live.holds(&self.scope) && !closes_the_run(&event) {
 			return;
@@ -451,20 +451,18 @@ impl<R: Runtime> TurnSink for RunSink<R> {
 		if let AgentEvent::QuestionRequested { request } = &event {
 			let asked =
 				PendingQuestion { scope: self.scope.clone(), turn, request: request.clone() };
-			self.live.hold_question(asked, |asked| {
-				announce_scoped(crate::events::core(self.app.app_handle()), asked.scoped())
-			});
-			return retell_the_mission(&self.app, self.scope.conversation_id.clone());
+			self.live.hold_question(asked, |asked| announce_scoped(&self.core, asked.scoped()));
+			return retell_the_mission(&self.core, self.scope.conversation_id.clone());
 		}
 		self.release_questions_settled_by(&event);
 		if moves_the_thread {
-			retell_the_mission(&self.app, self.scope.conversation_id.clone());
+			retell_the_mission(&self.core, self.scope.conversation_id.clone());
 		}
 		if let AgentEvent::SessionReady { session_id, .. } = &event {
 			self.record_its_own_lineage(session_id.clone());
 		}
 		let ended = matches!(event, AgentEvent::TurnEnded { .. });
-		announce_in_turn(&self.app, Some(self.scope.clone()), turn, event);
+		announce_in_turn(&self.core, Some(self.scope.clone()), turn, event);
 		if ended {
 			self.record_writes();
 		}
@@ -479,7 +477,7 @@ fn closes_the_run(event: &AgentEvent) -> bool {
 	)
 }
 
-impl<R: Runtime> RunSink<R> {
+impl RunSink {
 	fn release_questions_settled_by(&self, event: &AgentEvent) {
 		match prompts_settled_by(event) {
 			Some(SettledPrompts::One(id)) => self.live.release_question(&self.scope, id),
@@ -489,17 +487,17 @@ impl<R: Runtime> RunSink<R> {
 	}
 
 	fn drop_questions(&self) {
-		announce_denied(&self.app, &self.live.drop_questions(&self.scope));
+		announce_denied(&self.core, &self.live.drop_questions(&self.scope));
 	}
 
 	fn record_its_own_lineage(&self, provider_session_id: String) {
 		if !self.records_its_own_lineage {
 			return;
 		}
-		let app = self.app.clone();
+		let core = self.core.clone();
 		let scope = self.scope.clone();
-		crate::events::core(app.app_handle()).clone().spawn(async move {
-			let refused = match bot_database(crate::events::core(app.app_handle())) {
+		self.core.spawn(async move {
+			let refused = match bot_database(&core) {
 				Some(database) => {
 					record_its_own_provider_session(database, &scope, provider_session_id)
 						.await
@@ -510,48 +508,48 @@ impl<R: Runtime> RunSink<R> {
 				}),
 			};
 			if let Some(error) = refused {
-				announce(&app, Some(scope), AgentEvent::Failed { error });
+				announce(&core, Some(scope), AgentEvent::Failed { error });
 			}
 		});
 	}
 
 	fn record_writes(&self) {
-		let app = self.app.clone();
+		let core = self.core.clone();
 		let scope = self.scope.clone();
 		let live = self.live.clone();
-		crate::events::core(app.app_handle()).clone().spawn(async move {
-			for (bundle, evolved) in evolutions(&app, &scope).await {
+		self.core.spawn(async move {
+			for (bundle, evolved) in evolutions(&core, &scope).await {
 				if !live.holds(&scope) {
 					return;
 				}
 				if let Some(event) = evolution_announced(bundle, evolved) {
-					announce(&app, Some(scope.clone()), event);
+					announce(&core, Some(scope.clone()), event);
 				}
 			}
 		});
 	}
 }
 
-fn retell_the_mission<R: Runtime>(app: &AppHandle<R>, conversation_id: String) {
-	let app = app.clone();
-	crate::events::core(app.app_handle()).clone().spawn(async move {
-		let Some(database) = bot_database(crate::events::core(app.app_handle())) else {
+fn retell_the_mission(core: &crate::core_context::Core, conversation_id: String) {
+	let core = core.clone();
+	core.clone().spawn(async move {
+		let Some(database) = bot_database(&core) else {
 			return log::warn!("a thread moved and its mission was not read without the store");
 		};
-		if let Err(failure) = announce_thread_moved(&app, database, conversation_id).await {
+		if let Err(failure) = announce_thread_moved(&core, database, conversation_id).await {
 			log::warn!("a thread moved and the front was not told of its mission: {failure:?}");
 		}
 	});
 }
 
-fn retell_when_moved<R: Runtime>(
-	app: &AppHandle<R>,
+fn retell_when_moved(
+	core: &crate::core_context::Core,
 	state: &AgentState,
 	scope: &RuntimeScope,
 	before: LivenessSigns,
 ) {
 	if state.thread_signs(&scope.conversation_id) != before {
-		retell_the_mission(app, scope.conversation_id.clone());
+		retell_the_mission(core, scope.conversation_id.clone());
 	}
 }
 
@@ -569,15 +567,15 @@ fn evolution_announced(bundle: EvolvedBundle, evolved: bundles::Evolved) -> Opti
 	}
 }
 
-async fn evolutions<R: Runtime>(
-	app: &AppHandle<R>,
+async fn evolutions(
+	core: &crate::core_context::Core,
 	scope: &RuntimeScope,
 ) -> Vec<(EvolvedBundle, bundles::Evolved)> {
 	let mut announced = Vec::new();
-	if let Some(path) = bundles::user::laid_down(app) {
+	if let Some(path) = bundles::user::laid_down(core) {
 		announced.push((EvolvedBundle::User, bundles::user::evolve(&path)));
 	}
-	let Some(database) = bot_database(crate::events::core(app.app_handle())) else {
+	let Some(database) = bot_database(core) else {
 		return announced;
 	};
 	let Ok(Some(bot)) = database.conversations().bot(scope.bot_id.clone()).await else {
@@ -586,11 +584,11 @@ async fn evolutions<R: Runtime>(
 	if let Ok(space_id) =
 		space_of_the_conversation(database, &scope.conversation_id, &scope.bot_id).await
 	{
-		if let Some(path) = bundles::space::laid_down(app, &space_id) {
+		if let Some(path) = bundles::space::laid_down(core, &space_id) {
 			announced.push((EvolvedBundle::Space, bundles::space::evolve(&path)));
 		}
 	}
-	let Some(root) = bundles::root(app) else {
+	let Some(root) = bundles::root(core) else {
 		return announced;
 	};
 	let evolved = bundles::evolve(&root, &bot);
@@ -731,16 +729,16 @@ impl AgentState {
 		Self { lease, ..Self::default() }
 	}
 
-	async fn admit<R: Runtime>(
+	async fn admit(
 		&self,
-		app: &AppHandle<R>,
+		core: &crate::core_context::Core,
 		scope: RuntimeScope,
 	) -> Admission<Arc<Session>> {
 		let admitted_at = now_ms();
 		let admitted = self.live.take_over(scope.clone());
-		announce_denied(app, &admitted.dropped);
+		announce_denied(core, &admitted.dropped);
 		let live_beside = self.live.sessions_beside(&scope);
-		release_orphan_prompts(app, &scope.conversation_id, live_beside, admitted_at).await;
+		release_orphan_prompts(core, &scope.conversation_id, live_beside, admitted_at).await;
 		admitted
 	}
 
@@ -838,15 +836,15 @@ fn stale(scope: &RuntimeScope) -> TransportError {
 #[specta::specta]
 pub async fn agent_models<R: Runtime>(app: AppHandle<R>) -> Vec<OfferedModel> {
 	let state = crate::events::core(app.app_handle()).state::<AgentState>();
-	state.offered(&state.models, &held_connection(&app)).await
+	state.offered(&state.models, &held_connection(crate::events::core(&app))).await
 }
 
-pub async fn supported_effort_levels<R: Runtime>(
-	app: &AppHandle<R>,
+pub async fn supported_effort_levels(
+	core: &crate::core_context::Core,
 	model: &str,
 ) -> Option<Vec<bundles::EffortLevel>> {
-	let state = crate::events::core(app.app_handle()).try_state::<AgentState>()?;
-	let offered = state.models.held(&held_connection(app)).await?;
+	let state = core.try_state::<AgentState>()?;
+	let offered = state.models.held(&held_connection(core)).await?;
 	offered
 		.into_iter()
 		.find(|offered| offered.value == model)
@@ -857,7 +855,7 @@ pub async fn supported_effort_levels<R: Runtime>(
 #[specta::specta]
 pub async fn agent_tools<R: Runtime>(app: AppHandle<R>) -> Vec<String> {
 	let state = crate::events::core(app.app_handle()).state::<AgentState>();
-	state.offered(&state.tools, &held_connection(&app)).await
+	state.offered(&state.tools, &held_connection(crate::events::core(&app))).await
 }
 
 #[tauri::command]
@@ -868,12 +866,12 @@ pub async fn agent_title<R: Runtime>(
 ) -> Option<ConversationNaming> {
 	crate::events::core(app.app_handle())
 		.state::<AgentState>()
-		.title(&text, &held_connection(&app))
+		.title(&text, &held_connection(crate::events::core(&app)))
 		.await
 }
 
-pub(crate) fn held_connection<R: Runtime>(app: &AppHandle<R>) -> Values {
-	let Some(root) = environment::root(app) else {
+pub(crate) fn held_connection(core: &crate::core_context::Core) -> Values {
+	let Some(root) = environment::root(core) else {
 		return Values::new();
 	};
 	held_and_redacted(&root).unwrap_or_else(|failure| {
@@ -895,31 +893,43 @@ pub async fn agent_check<R: Runtime>(
 	scope: Option<RuntimeScope>,
 ) -> CheckReport {
 	announce(
-		&app,
+		crate::events::core(&app),
 		scope.clone(),
 		AgentEvent::ConnectionChanged { state: ConnectionState::Checking },
 	);
-	let env_root = environment::root(&app);
+	let env_root = environment::root(crate::events::core(&app));
 	let report = check(
 		crate::events::core(app.app_handle()).state::<AgentState>().inner(),
 		env_root.as_deref(),
 	)
 	.await;
-	announce(&app, scope, AgentEvent::ConnectionChanged { state: report.connection });
+	announce(
+		crate::events::core(&app),
+		scope,
+		AgentEvent::ConnectionChanged { state: report.connection },
+	);
 	report
 }
 
 #[tauri::command]
 #[specta::specta]
 pub async fn agent_account<R: Runtime>(app: AppHandle<R>) -> AccountReport {
-	announce(&app, None, AgentEvent::ConnectionChanged { state: ConnectionState::Checking });
-	let env_root = environment::root(&app);
+	announce(
+		crate::events::core(&app),
+		None,
+		AgentEvent::ConnectionChanged { state: ConnectionState::Checking },
+	);
+	let env_root = environment::root(crate::events::core(&app));
 	let read = account(
 		crate::events::core(app.app_handle()).state::<AgentState>().inner(),
 		env_root.as_deref(),
 	)
 	.await;
-	announce(&app, None, AgentEvent::ConnectionChanged { state: read.report.connection });
+	announce(
+		crate::events::core(&app),
+		None,
+		AgentEvent::ConnectionChanged { state: read.report.connection },
+	);
 	read
 }
 
@@ -991,14 +1001,14 @@ const ROOT_UNRESOLVED: &str = "the bundle root could not be resolved";
 
 pub const ENV_UNREADABLE: &str = "the environment store could not be read";
 
-async fn served_environment<R: Runtime>(
-	app: &AppHandle<R>,
+async fn served_environment(
+	core: &crate::core_context::Core,
 	sidecar: &Sidecar,
 	bot_id: &str,
 	space_id: &str,
 	serving: &[PathBuf],
 ) -> ResolvedEnv {
-	let Some(root) = environment::root(app) else {
+	let Some(root) = environment::root(core) else {
 		return ResolvedEnv::failed(ENV_UNREADABLE);
 	};
 	let owner = EnvOwner::Bot { id: bot_id.to_owned(), space_id: space_id.to_owned() };
@@ -1023,8 +1033,8 @@ fn awaiting_served(
 	ResolvedEnv { needs_authorization, ..resolved }
 }
 
-async fn runtime_identity<R: Runtime>(
-	app: &AppHandle<R>,
+async fn runtime_identity(
+	core: &crate::core_context::Core,
 	state: &db::DatabaseState,
 	scope: &RuntimeScope,
 	sidecar: &Sidecar,
@@ -1033,8 +1043,8 @@ async fn runtime_identity<R: Runtime>(
 		identity_refused(&scope.bot_id, &format!("{DATABASE_UNREACHED}: {failure:?}"))
 	})?;
 	let LaidDownSession { bundle, space_id, serving } =
-		laid_down_session(app, database, scope).await?;
-	let server_env = served_environment(app, sidecar, &scope.bot_id, &space_id, &serving).await;
+		laid_down_session(core, database, scope).await?;
+	let server_env = served_environment(core, sidecar, &scope.bot_id, &space_id, &serving).await;
 	Ok(RuntimeIdentity { bundle, server_env, space_id })
 }
 
@@ -1044,17 +1054,17 @@ pub(crate) struct LaidDownSession {
 	serving: Vec<PathBuf>,
 }
 
-pub(crate) async fn laid_down_session<R: Runtime>(
-	app: &AppHandle<R>,
+pub(crate) async fn laid_down_session(
+	core: &crate::core_context::Core,
 	database: &db::Database,
 	scope: &RuntimeScope,
 ) -> Result<LaidDownSession, TransportError> {
 	let _memory = bundles::holding_the_memory(&scope.bot_id).await;
 	let ResolvedRun { bot, space_id, root } =
-		resolved_run(database, bundles::root(app), scope).await?;
-	let system = bundles::system::laid_down(app);
-	let user = bundles::user::laid_down(app);
-	let space = bundles::space::laid_down(app, &space_id);
+		resolved_run(database, bundles::root(core), scope).await?;
+	let system = bundles::system::laid_down(core);
+	let user = bundles::user::laid_down(core);
+	let space = bundles::space::laid_down(core, &space_id);
 	let permissions = settled_permissions(database, Some(&root), &bot).await;
 	let bundle = laid_down_bundle(
 		&root,
@@ -1099,15 +1109,15 @@ fn identity_refused(bot_id: &str, step: &str) -> TransportError {
 	TransportError::SpawnFailed { detail }
 }
 
-async fn members_reading<R: Runtime>(
-	app: &AppHandle<R>,
+async fn members_reading(
+	core: &crate::core_context::Core,
 	state: &db::DatabaseState,
 	space_id: &str,
 ) -> Vec<SpaceMember> {
 	let Ok(database) = state.as_ref() else {
 		return Vec::new();
 	};
-	authorship::members_of(app, database, space_id).await.unwrap_or_else(|failure| {
+	authorship::members_of(core, database, space_id).await.unwrap_or_else(|failure| {
 		log::warn!("the members of space {space_id} were not named to a session: {failure:?}");
 		Vec::new()
 	})
@@ -1162,10 +1172,8 @@ fn laid_down_bundle(
 	})
 }
 
-fn its_own_directory<R: Runtime>(app: &AppHandle<R>, bot_id: &str) -> PathBuf {
-	app.path()
-		.app_data_dir()
-		.map_or_else(|_| std::env::temp_dir(), |app_data| reserved_directory(app_data, bot_id))
+fn its_own_directory(core: &crate::core_context::Core, bot_id: &str) -> PathBuf {
+	reserved_directory(core.data_dir().to_path_buf(), bot_id)
 }
 
 fn reserved_directory(app_data: PathBuf, bot_id: &str) -> PathBuf {
@@ -1179,9 +1187,18 @@ fn reserved_directory(app_data: PathBuf, bot_id: &str) -> PathBuf {
 
 #[tauri::command]
 #[specta::specta]
-pub async fn agent_start_or_resume_session<R: Runtime>(
-	app: AppHandle<R>,
+pub async fn agent_start_or_resume_session(
 	core: State<'_, crate::core_context::Core>,
+	scope: RuntimeScope,
+	resume: Option<String>,
+	cwd: Option<String>,
+	output_schema: Option<JsonValue>,
+) -> Result<SessionHandle, TransportError> {
+	start_or_resume_session(core.inner(), scope, resume, cwd, output_schema).await
+}
+
+pub(crate) async fn start_or_resume_session(
+	core: &crate::core_context::Core,
 	scope: RuntimeScope,
 	resume: Option<String>,
 	cwd: Option<String>,
@@ -1196,7 +1213,7 @@ pub async fn agent_start_or_resume_session<R: Runtime>(
 		output_schema: output_schema.map(JsonValue::into),
 		lineage: Lineage::RecordedByTheCaller,
 	};
-	start_run(app, &state, &database, start).await
+	start_run(core.clone(), &state, &database, start).await
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -1213,8 +1230,8 @@ pub(crate) struct RunStart {
 	pub lineage: Lineage,
 }
 
-pub(crate) async fn start_run<R: Runtime>(
-	app: AppHandle<R>,
+pub(crate) async fn start_run(
+	core: crate::core_context::Core,
 	state: &AgentState,
 	database: &db::DatabaseState,
 	start: RunStart,
@@ -1223,8 +1240,8 @@ pub(crate) async fn start_run<R: Runtime>(
 	let _claim = state.claim(&scope)?;
 
 	let before = state.thread_signs(&scope.conversation_id);
-	let admitted = state.admit(&app, scope.clone()).await;
-	retell_when_moved(&app, state, &scope, before);
+	let admitted = state.admit(&core, scope.clone()).await;
+	retell_when_moved(&core, state, &scope, before);
 	let lineage_is_held_elsewhere = resume.is_some() && !admitted.keeps_lineage;
 	let resume = admitted.resume(resume);
 	if let Some(previous) = admitted.replaced {
@@ -1234,61 +1251,61 @@ pub(crate) async fn start_run<R: Runtime>(
 	let sidecar = state.sidecar().await?;
 	let mission_thread = opens_on_a_mission_thread(database, &scope.conversation_id).await;
 	let running_in =
-		cwd.map(PathBuf::from).unwrap_or_else(|| its_own_directory(&app, &scope.bot_id));
+		cwd.map(PathBuf::from).unwrap_or_else(|| its_own_directory(&core, &scope.bot_id));
 
 	let announcing: Arc<dyn TurnSink> = Arc::new(RunSink {
-		app: app.clone(),
+		core: core.clone(),
 		scope: scope.clone(),
 		live: state.live.clone(),
 		records_its_own_lineage: lineage_is_held_elsewhere || lineage == Lineage::RecordedByTheRun,
 	});
 	let attachments = Arc::new(TurnAttachments::default());
 	let sink: Arc<dyn EventSink> = Arc::new(ReplyWriter::spawn(
-		app.clone(),
+		core.clone(),
 		&scope,
 		state.host_writes.clone(),
 		attachments.clone(),
 		announcing,
 	));
-	let identity = match runtime_identity(&app, database, &scope, &sidecar).await {
+	let identity = match runtime_identity(&core, database, &scope, &sidecar).await {
 		Ok(identity) => identity,
 		Err(error) => return Err(refused(sink.as_ref(), error)),
 	};
-	let members = members_reading(&app, database, &identity.space_id).await;
+	let members = members_reading(&core, database, &identity.space_id).await;
 	let options = SessionOptions::new(running_in)
 		.bundled(Some(identity.bundle))
 		.serving(identity.server_env)
-		.connected(held_connection(&app))
-		.with_app_data(Some(crate::events::core(app.app_handle()).data_dir().to_path_buf()))
+		.connected(held_connection(&core))
+		.with_app_data(Some(core.data_dir().to_path_buf()))
 		.in_conversation(scope.conversation_id.clone())
 		.hosting(hosted(RoutineHost::new(
-			app.clone(),
+			core.clone(),
 			scope.conversation_id.clone(),
 			scope.bot_id.clone(),
 		)))
 		.hosting(hosted(MissionHost::new(
-			app.clone(),
+			core.clone(),
 			scope.conversation_id.clone(),
 			scope.bot_id.clone(),
 		)))
 		.hosting(hosted(CompanionHost::new(
-			app.clone(),
+			core.clone(),
 			scope.conversation_id.clone(),
 			scope.bot_id.clone(),
 			attachments,
 		)))
 		.hosting(hosted(StandingHost::new(
-			app.clone(),
+			core.clone(),
 			scope.bot_id.clone(),
 			Some(identity.space_id),
 		)))
 		.hosting(hosted(ApplicationHost::new(
-			app.clone(),
+			core.clone(),
 			scope.conversation_id.clone(),
 			scope.bot_id.clone(),
 		)))
-		.hosting(hosted(BundleHost::new(app.clone(), scope.clone())))
-		.hosting(hosted(LibraryHost::new(app.clone(), scope.clone())))
+		.hosting(hosted(BundleHost::new(core.clone(), scope.clone())))
+		.hosting(hosted(LibraryHost::new(core.clone(), scope.clone())))
 		.answering(output_schema)
 		.on_mission_thread(mission_thread)
 		.read_by(members)
@@ -1537,11 +1554,11 @@ pub async fn agent_cancel_turn<R: Runtime>(
 	if let Some(outcome) = state.host_turns().stop(&scope).await {
 		return Ok(outcome);
 	}
-	Ok(cancel_session_turn(&app, &state, &scope).await)
+	Ok(cancel_session_turn(crate::events::core(&app), &state, &scope).await)
 }
 
-pub(crate) async fn cancel_session_turn<R: Runtime>(
-	app: &AppHandle<R>,
+pub(crate) async fn cancel_session_turn(
+	core: &crate::core_context::Core,
 	state: &AgentState,
 	scope: &RuntimeScope,
 ) -> CancelOutcome {
@@ -1552,7 +1569,7 @@ pub(crate) async fn cancel_session_turn<R: Runtime>(
 	match interrupted {
 		Ok(()) => CancelOutcome::Cancelled,
 		Err(TransportError::NoActiveTurn | TransportError::NotStarted) => {
-			match close_stored_runs(app, &state.host_writes, scope).await {
+			match close_stored_runs(core, &state.host_writes, scope).await {
 				Ok(0) => CancelOutcome::NothingToCancel,
 				Ok(_) => CancelOutcome::Cancelled,
 				Err(error) => {
@@ -1564,12 +1581,12 @@ pub(crate) async fn cancel_session_turn<R: Runtime>(
 	}
 }
 
-async fn close_stored_runs<R: Runtime>(
-	app: &AppHandle<R>,
+async fn close_stored_runs(
+	core: &crate::core_context::Core,
 	owned: &HostWrites,
 	scope: &RuntimeScope,
 ) -> Result<usize, TranscriptStoreError> {
-	let Some(state) = crate::events::core(app.app_handle()).try_state::<db::DatabaseState>() else {
+	let Some(state) = core.try_state::<db::DatabaseState>() else {
 		return Err(TranscriptStoreError::Unavailable {
 			failure: (&db::DatabaseError::AppDataDir).into(),
 		});
@@ -1582,11 +1599,11 @@ async fn close_stored_runs<R: Runtime>(
 		.cancel_open_runs(conversation_id.clone(), scope.bot_id.clone(), now_ms())
 		.await?;
 	if closed > 0 {
-		announce(app, Some(scope.clone()), ended_as(TurnOutcome::Cancelled));
-		forget_settled_turns(app).await;
+		announce(core, Some(scope.clone()), ended_as(TurnOutcome::Cancelled));
+		forget_settled_turns(core).await;
 	}
 	if has_completed || closed > 0 {
-		announce_conversation(app, database, CONVERSATION_UPDATED, conversation_id).await;
+		announce_conversation(core, database, CONVERSATION_UPDATED, conversation_id).await;
 	}
 	Ok(closed)
 }
@@ -1690,40 +1707,40 @@ pub async fn agent_pending_questions_in_space(
 	Ok(in_the_space)
 }
 
-pub async fn shutdown_session<R: Runtime>(
-	app: &AppHandle<R>,
+pub async fn shutdown_session(
+	core: &crate::core_context::Core,
 	state: &AgentState,
 	scope: &RuntimeScope,
 ) {
 	let cleared = state.live.clear(scope);
-	announce_denied(app, &cleared.dropped);
+	announce_denied(core, &cleared.dropped);
 	if let Some(session) = cleared.ended {
 		session.shutdown().await;
 	}
-	release_stored_prompts(app, scope).await;
+	release_stored_prompts(core, scope).await;
 }
 
-async fn release_stored_prompts<R: Runtime>(app: &AppHandle<R>, scope: &RuntimeScope) {
+async fn release_stored_prompts(core: &crate::core_context::Core, scope: &RuntimeScope) {
 	let conversation = &scope.conversation_id;
-	let Some(database) = bot_database(crate::events::core(app.app_handle())) else {
+	let Some(database) = bot_database(core) else {
 		return log::warn!("the stored prompts of conversation {conversation} stay: no database");
 	};
 	let session = scope.runtime_session_id.clone();
 	match database.conversations().release_prompts_of_session(session).await {
-		Ok(()) => conversation_state::observe_reporting(app, database, conversation).await,
+		Ok(()) => conversation_state::observe_reporting(core, database, conversation).await,
 		Err(failure) => {
 			log::warn!("the stored prompts of conversation {conversation} stay: {failure:?}")
 		}
 	}
 }
 
-async fn release_orphan_prompts<R: Runtime>(
-	app: &AppHandle<R>,
+async fn release_orphan_prompts(
+	core: &crate::core_context::Core,
 	conversation: &str,
 	live_sessions: Vec<RunKey>,
 	asked_before: i64,
 ) {
-	let Some(database) = bot_database(crate::events::core(app.app_handle())) else {
+	let Some(database) = bot_database(core) else {
 		return log::warn!("the orphan prompts of conversation {conversation} stay: no database");
 	};
 	let released = database.conversations().release_orphan_prompts(
@@ -1732,44 +1749,40 @@ async fn release_orphan_prompts<R: Runtime>(
 		asked_before,
 	);
 	match released.await {
-		Ok(()) => conversation_state::observe_reporting(app, database, conversation).await,
+		Ok(()) => conversation_state::observe_reporting(core, database, conversation).await,
 		Err(failure) => {
 			log::warn!("the orphan prompts of conversation {conversation} stay: {failure:?}")
 		}
 	}
 }
 
-pub async fn terminate_session<R: Runtime>(app: &AppHandle<R>, state: &AgentState) {
-	end_every_session(app, state).await;
+pub async fn terminate_session(core: &crate::core_context::Core, state: &AgentState) {
+	end_every_session(core, state).await;
 	if let Some(sidecar) = state.take_sidecar().await {
 		sidecar.terminate().await;
 	}
 	sidecar::sweep_live_groups();
 }
 
-async fn end_every_session<R: Runtime>(app: &AppHandle<R>, state: &AgentState) {
+async fn end_every_session(core: &crate::core_context::Core, state: &AgentState) {
 	state.enter_quit();
 	let cleared = state.live.clear_all();
-	announce_denied(app, &cleared.dropped);
+	announce_denied(core, &cleared.dropped);
 	let ending: Vec<_> = cleared
 		.ended
 		.into_iter()
-		.map(|session| {
-			crate::events::core(app.app_handle())
-				.clone()
-				.spawn(async move { session.shutdown().await })
-		})
+		.map(|session| core.clone().spawn(async move { session.shutdown().await }))
 		.collect();
 	for termination in ending {
 		if let Err(failure) = termination.await {
 			log::warn!("a session did not shut down at quit: {failure}");
 		}
 	}
-	release_every_stored_prompt(app).await;
+	release_every_stored_prompt(core).await;
 }
 
-async fn release_every_stored_prompt<R: Runtime>(app: &AppHandle<R>) {
-	let Some(database) = bot_database(crate::events::core(app.app_handle())) else {
+async fn release_every_stored_prompt(core: &crate::core_context::Core) {
+	let Some(database) = bot_database(core) else {
 		return log::warn!("the stored prompts stay at quit: no database");
 	};
 	if let Err(failure) = database.conversations().release_every_prompt().await {
@@ -1779,9 +1792,15 @@ async fn release_every_stored_prompt<R: Runtime>(app: &AppHandle<R>) {
 
 #[tauri::command]
 #[specta::specta]
-pub async fn agent_shutdown<R: Runtime>(
-	app: AppHandle<R>,
+pub async fn agent_shutdown(
 	core: State<'_, crate::core_context::Core>,
+	scope: RuntimeScope,
+) -> Result<(), TransportError> {
+	shut_down_agent(core.inner(), scope).await
+}
+
+pub(crate) async fn shut_down_agent(
+	core: &crate::core_context::Core,
 	scope: RuntimeScope,
 ) -> Result<(), TransportError> {
 	let state = core.state::<AgentState>();
@@ -1790,52 +1809,52 @@ pub async fn agent_shutdown<R: Runtime>(
 		return Err(stale(&scope));
 	}
 	let before = state.thread_signs(&scope.conversation_id);
-	shutdown_session(&app, &state, &scope).await;
-	retell_when_moved(&app, &state, &scope, before);
-	announce(&app, Some(scope), AgentEvent::ConnectionChanged { state: ConnectionState::Checking });
+	shutdown_session(core, &state, &scope).await;
+	retell_when_moved(core, &state, &scope, before);
+	announce(core, Some(scope), AgentEvent::ConnectionChanged { state: ConnectionState::Checking });
 	Ok(())
 }
 
 #[cfg(test)]
-pub(crate) fn a_quitting_host<R: Runtime>(app: &AppHandle<R>) {
-	crate::events::core(app.app_handle()).manage(AgentState::default());
-	crate::events::core(app.app_handle()).state::<AgentState>().enter_quit();
+pub(crate) fn a_quitting_host(core: &crate::core_context::Core) {
+	core.manage(AgentState::default());
+	core.state::<AgentState>().enter_quit();
 }
 
 #[cfg(test)]
-pub(crate) fn a_live_run<R: Runtime>(app: &AppHandle<R>, scope: RuntimeScope) -> impl TurnSink {
+pub(crate) fn a_live_run(core: &crate::core_context::Core, scope: RuntimeScope) -> impl TurnSink {
 	let live = Arc::new(Live::default());
 	live.take_over(scope.clone());
-	RunSink { app: app.clone(), scope, live, records_its_own_lineage: false }
+	RunSink { core: core.clone(), scope, live, records_its_own_lineage: false }
 }
 
 #[cfg(test)]
-pub(crate) fn a_run_held_by_the_app<R: Runtime>(
-	app: &AppHandle<R>,
+pub(crate) fn a_run_held_by_the_app(
+	core: &crate::core_context::Core,
 	scope: RuntimeScope,
 ) -> impl TurnSink {
-	if crate::events::core(app.app_handle()).try_state::<AgentState>().is_none() {
-		crate::events::core(app.app_handle()).manage(AgentState::default());
+	if core.try_state::<AgentState>().is_none() {
+		core.manage(AgentState::default());
 	}
-	let live = crate::events::core(app.app_handle()).state::<AgentState>().live.clone();
+	let live = core.state::<AgentState>().live.clone();
 	live.take_over(scope.clone());
-	RunSink { app: app.clone(), scope, live, records_its_own_lineage: false }
+	RunSink { core: core.clone(), scope, live, records_its_own_lineage: false }
 }
 
 #[cfg(test)]
-pub(crate) fn a_session_held_by_the_app<R: Runtime>(
-	app: &AppHandle<R>,
+pub(crate) fn a_session_held_by_the_app(
+	core: &crate::core_context::Core,
 	scope: &RuntimeScope,
 	session: Arc<Session>,
 ) {
-	let live = &crate::events::core(app.app_handle()).state::<AgentState>().live;
+	let live = &core.state::<AgentState>().live;
 	live.take_over(scope.clone());
 	live.install(scope, session);
 }
 
 #[cfg(test)]
-pub(crate) fn a_host_wide_announce<R: Runtime>(app: &AppHandle<R>, event: AgentEvent) {
-	announce(app, None, event);
+pub(crate) fn a_host_wide_announce(core: &crate::core_context::Core, event: AgentEvent) {
+	announce(core, None, event);
 }
 
 #[cfg(test)]
@@ -2786,7 +2805,7 @@ mod tests {
 		}
 
 		fn a_late_listener(app: &AppHandle<MockRuntime>) -> Vec<Frame> {
-			let (pending, mut heard) = subscribed_with_pending_questions(app);
+			let (pending, mut heard) = subscribed_with_pending_questions(crate::events::core(app));
 			assert!(heard.try_recv().is_err(), "the late listener heard a live frame");
 			pending
 		}
@@ -2804,7 +2823,7 @@ mod tests {
 		async fn the_command_returns_a_pending_question_as_it_was_announced() {
 			let app = an_app("command-asked");
 			let mut original = events::subscribed(app.handle());
-			let run = a_run_held_by_the_app(app.handle(), a_scope());
+			let run = a_run_held_by_the_app(crate::events::core(app.handle()), a_scope());
 			run.emit(question("q1"), the_turn());
 			let announced = original.try_recv().expect("the question was emitted");
 
@@ -2820,7 +2839,7 @@ mod tests {
 		#[tokio::test]
 		async fn the_command_returns_an_empty_list_when_no_question_waits() {
 			let app = an_app("command-empty");
-			a_run_held_by_the_app(app.handle(), a_scope());
+			a_run_held_by_the_app(crate::events::core(app.handle()), a_scope());
 
 			assert!(pending_in(app.handle(), "c1").await.is_empty());
 		}
@@ -2828,8 +2847,9 @@ mod tests {
 		#[tokio::test]
 		async fn the_command_returns_no_question_of_another_conversation() {
 			let app = an_app("command-elsewhere");
-			let here = a_run_held_by_the_app(app.handle(), a_scope());
-			let elsewhere = a_run_held_by_the_app(app.handle(), another_bots_run());
+			let here = a_run_held_by_the_app(crate::events::core(app.handle()), a_scope());
+			let elsewhere =
+				a_run_held_by_the_app(crate::events::core(app.handle()), another_bots_run());
 			here.emit(question("q1"), the_turn());
 			elsewhere.emit(
 				question("q9"),
@@ -2853,7 +2873,7 @@ mod tests {
 		fn a_listener_subscribing_after_a_question_hears_it_once_in_its_turn() {
 			let app = an_app("asked");
 			let mut original = events::subscribed(app.handle());
-			let run = a_run_held_by_the_app(app.handle(), a_scope());
+			let run = a_run_held_by_the_app(crate::events::core(app.handle()), a_scope());
 
 			run.emit(question("q1"), the_turn());
 
@@ -2864,8 +2884,9 @@ mod tests {
 		#[test]
 		fn a_question_asked_after_a_listener_subscribed_reaches_it_live_only() {
 			let app = an_app("asked-live");
-			let run = a_run_held_by_the_app(app.handle(), a_scope());
-			let (pending, mut heard) = subscribed_with_pending_questions(app.handle());
+			let run = a_run_held_by_the_app(crate::events::core(app.handle()), a_scope());
+			let (pending, mut heard) =
+				subscribed_with_pending_questions(crate::events::core(app.handle()));
 
 			run.emit(question("q1"), the_turn());
 
@@ -2880,7 +2901,7 @@ mod tests {
 				[("answered", answered("q1")), ("ended", turn_ended()), ("crashed", crashed())]
 			{
 				let app = an_app(name);
-				let run = a_run_held_by_the_app(app.handle(), a_scope());
+				let run = a_run_held_by_the_app(crate::events::core(app.handle()), a_scope());
 				run.emit(question("q1"), the_turn());
 
 				run.emit(settling, the_turn());
@@ -2897,7 +2918,7 @@ mod tests {
 		fn an_answer_releases_its_own_question_and_keeps_the_other() {
 			let app = an_app("answered-one");
 			let mut original = events::subscribed(app.handle());
-			let run = a_run_held_by_the_app(app.handle(), a_scope());
+			let run = a_run_held_by_the_app(crate::events::core(app.handle()), a_scope());
 			run.emit(question("q1"), the_turn());
 			run.emit(question("q2"), the_turn());
 			let kept = original.try_recv().and_then(|_| original.try_recv()).expect("q2 emitted");
@@ -2924,10 +2945,10 @@ mod tests {
 		}
 
 		fn two_questions_and_one_elsewhere(app: &AppHandle<MockRuntime>) {
-			let run = a_run_held_by_the_app(app, a_scope());
+			let run = a_run_held_by_the_app(crate::events::core(app), a_scope());
 			run.emit(question("q1"), the_turn());
 			run.emit(question("q2"), the_turn());
-			a_run_held_by_the_app(app, another_bots_run()).emit(
+			a_run_held_by_the_app(crate::events::core(app), another_bots_run()).emit(
 				question("q9"),
 				Some(EventTurn {
 					turn_id: "t9".into(),
@@ -2944,13 +2965,13 @@ mod tests {
 			let mut heard = events::subscribed(app.handle());
 
 			shutdown_session(
-				app.handle(),
+				crate::events::core(app.handle()),
 				&crate::events::core(app.app_handle()).state::<AgentState>(),
 				&a_scope(),
 			)
 			.await;
 			shutdown_session(
-				app.handle(),
+				crate::events::core(app.handle()),
 				&crate::events::core(app.app_handle()).state::<AgentState>(),
 				&a_scope(),
 			)
@@ -2972,7 +2993,7 @@ mod tests {
 			let mut heard = events::subscribed(app.handle());
 
 			end_every_session(
-				app.handle(),
+				crate::events::core(app.handle()),
 				&crate::events::core(app.app_handle()).state::<AgentState>(),
 			)
 			.await;
@@ -3010,7 +3031,7 @@ mod tests {
 
 			crate::events::core(app.app_handle())
 				.state::<AgentState>()
-				.admit(app.handle(), a_scope())
+				.admit(crate::events::core(app.handle()), a_scope())
 				.await;
 
 			assert_eq!(everything_heard(&mut heard), vec![denied("q1"), denied("q2")]);
@@ -3022,7 +3043,7 @@ mod tests {
 			for (name, settling) in [("ended-denied", turn_ended()), ("crashed-denied", crashed())]
 			{
 				let app = an_app(name);
-				let run = a_run_held_by_the_app(app.handle(), a_scope());
+				let run = a_run_held_by_the_app(crate::events::core(app.handle()), a_scope());
 				run.emit(question("q1"), the_turn());
 				let mut heard = events::subscribed(app.handle());
 
@@ -3039,13 +3060,13 @@ mod tests {
 		#[tokio::test]
 		async fn a_question_answered_before_the_shutdown_is_not_announced_again() {
 			let app = an_app("answered-then-stopped");
-			let run = a_run_held_by_the_app(app.handle(), a_scope());
+			let run = a_run_held_by_the_app(crate::events::core(app.handle()), a_scope());
 			run.emit(question("q1"), the_turn());
 			run.emit(answered("q1"), the_turn());
 			let mut heard = events::subscribed(app.handle());
 
 			shutdown_session(
-				app.handle(),
+				crate::events::core(app.handle()),
 				&crate::events::core(app.app_handle()).state::<AgentState>(),
 				&a_scope(),
 			)
@@ -3058,9 +3079,11 @@ mod tests {
 		#[tokio::test]
 		async fn a_replaced_or_cleared_session_leaves_no_question_pending() {
 			let replaced = an_app("replaced");
-			a_run_held_by_the_app(replaced.handle(), a_scope()).emit(question("q1"), the_turn());
+			a_run_held_by_the_app(crate::events::core(replaced.handle()), a_scope())
+				.emit(question("q1"), the_turn());
 			let cleared = an_app("cleared");
-			a_run_held_by_the_app(cleared.handle(), a_scope()).emit(question("q1"), the_turn());
+			a_run_held_by_the_app(crate::events::core(cleared.handle()), a_scope())
+				.emit(question("q1"), the_turn());
 
 			crate::events::core(replaced.app_handle())
 				.state::<AgentState>()
@@ -3077,7 +3100,7 @@ mod tests {
 		#[test]
 		fn a_question_of_a_run_already_let_go_is_neither_held_nor_emitted() {
 			let app = an_app("let-go");
-			let run = a_run_held_by_the_app(app.handle(), a_scope());
+			let run = a_run_held_by_the_app(crate::events::core(app.handle()), a_scope());
 			let mut original = events::subscribed(app.handle());
 			crate::events::core(app.app_handle()).state::<AgentState>().live.clear(&a_scope());
 
@@ -3157,18 +3180,19 @@ mod tests {
 		#[tokio::test]
 		async fn a_stopped_session_releases_its_stored_prompts_and_its_conversation_reads_idle() {
 			let app = an_app_storing("stored-stopped", vec![stored("r1", "w1")]).await;
-			a_run_held_by_the_app(app.handle(), a_scope()).emit(question("q1"), the_turn());
+			a_run_held_by_the_app(crate::events::core(app.handle()), a_scope())
+				.emit(question("q1"), the_turn());
 			assert_eq!(listed_state(&app).await, ConversationState::NeedsYou);
 			let heard = heard_states(&app);
 
 			shutdown_session(
-				app.handle(),
+				crate::events::core(app.handle()),
 				&crate::events::core(app.app_handle()).state::<AgentState>(),
 				&a_scope(),
 			)
 			.await;
 			shutdown_session(
-				app.handle(),
+				crate::events::core(app.handle()),
 				&crate::events::core(app.app_handle()).state::<AgentState>(),
 				&a_scope(),
 			)
@@ -3213,7 +3237,7 @@ mod tests {
 
 			crate::events::core(app.app_handle())
 				.state::<AgentState>()
-				.admit(app.handle(), a_scope())
+				.admit(crate::events::core(app.handle()), a_scope())
 				.await;
 
 			assert_eq!(stored_sessions(&app).await, ["r9"]);
@@ -3231,7 +3255,7 @@ mod tests {
 
 			crate::events::core(app.app_handle())
 				.state::<AgentState>()
-				.admit(app.handle(), a_scope())
+				.admit(crate::events::core(app.handle()), a_scope())
 				.await;
 
 			assert!(stored_sessions(&app).await.is_empty());
@@ -3249,7 +3273,7 @@ mod tests {
 
 			crate::events::core(app.app_handle())
 				.state::<AgentState>()
-				.admit(app.handle(), a_scope())
+				.admit(crate::events::core(app.handle()), a_scope())
 				.await;
 
 			assert!(
@@ -3264,7 +3288,7 @@ mod tests {
 				an_app_storing("stored-quit", vec![stored("r1", "w1"), stored("r9", "w9")]).await;
 
 			end_every_session(
-				app.handle(),
+				crate::events::core(app.handle()),
 				&crate::events::core(app.app_handle()).state::<AgentState>(),
 			)
 			.await;

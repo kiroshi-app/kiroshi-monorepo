@@ -3,7 +3,6 @@ use std::path::Path;
 use std::process::Stdio;
 use std::time::Duration;
 
-use tauri::{AppHandle, Runtime};
 use tokio::process::Command;
 
 use super::commands::{announce_change, announce_when};
@@ -26,7 +25,7 @@ enum Read {
 	Abandoned,
 }
 
-pub(crate) async fn pass<R: Runtime>(app: &AppHandle<R>, database: &db::Database) {
+pub(crate) async fn pass(core: &crate::core_context::Core, database: &db::Database) {
 	let moved = recounted_all(database).await;
 	let open = match database.missions().still_open().await {
 		Ok(open) => open,
@@ -35,7 +34,7 @@ pub(crate) async fn pass<R: Runtime>(app: &AppHandle<R>, database: &db::Database
 	for mission in open {
 		let id = mission.id.clone();
 		let has_moved = moved.contains(&id);
-		let told = announce_when(app, mission, |_, has_pulse_moved| has_moved || has_pulse_moved);
+		let told = announce_when(core, mission, |_, has_pulse_moved| has_moved || has_pulse_moved);
 		if let Err(failure) = told {
 			eprintln!("mission {id} moved and the front was not told: {failure:?}");
 		}
@@ -84,8 +83,8 @@ pub(crate) async fn recounted(
 	database.missions().record_checkout(mission_id.to_owned(), counts).await
 }
 
-pub(crate) fn told<R: Runtime>(app: &AppHandle<R>, mission: &Mission) {
-	if let Err(failure) = announce_change(app, mission.clone()) {
+pub(crate) fn told(core: &crate::core_context::Core, mission: &Mission) {
+	if let Err(failure) = announce_change(core, mission.clone()) {
 		eprintln!("mission {} moved and the front was not told: {failure:?}", mission.id);
 	}
 }
@@ -315,7 +314,7 @@ mod tests {
 		let events_before = events_in(&database).await;
 		let app = an_app_of_its_own("mission-checkout", mock_builder());
 
-		pass(app.handle(), &database).await;
+		pass(crate::events::core(app.handle()), &database).await;
 
 		assert_eq!(counts_of(&database, &counted.id).await, (Some(2), Some(2)));
 		assert_eq!(counts_of(&database, &gone.id).await, (None, None));
@@ -331,8 +330,8 @@ mod tests {
 		let started = a_mission_in(&database, None).await;
 		let app = an_app_of_its_own("mission-checkout", mock_builder());
 		crate::events::core(app.app_handle()).manage(AnnouncedLiveness::default());
-		told(app.handle(), &quiet);
-		told(app.handle(), &started);
+		told(crate::events::core(app.handle()), &quiet);
+		told(crate::events::core(app.handle()), &started);
 		database
 			.missions()
 			.append(
@@ -349,8 +348,8 @@ mod tests {
 			let _ = sender.send(event.payload().to_owned());
 		});
 
-		pass(app.handle(), &database).await;
-		pass(app.handle(), &database).await;
+		pass(crate::events::core(app.handle()), &database).await;
+		pass(crate::events::core(app.handle()), &database).await;
 
 		let announced: Vec<Value> = received
 			.try_iter()

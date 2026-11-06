@@ -9,7 +9,6 @@ use futures_util::future::join_all;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
-use tauri::{AppHandle, Runtime};
 use tokio::sync::{watch, OwnedMutexGuard};
 
 use super::canvas::board_holds;
@@ -50,8 +49,8 @@ const STEP_PAUSE: Duration = Duration::from_millis(40);
 const NO_STORE: &str = "the store of this session is not open";
 
 #[derive(Debug)]
-pub struct LibraryHost<R: Runtime> {
-	app: AppHandle<R>,
+pub struct LibraryHost {
+	core: crate::core_context::Core,
 	scope: RuntimeScope,
 }
 
@@ -298,13 +297,13 @@ struct Agent {
 	name: String,
 }
 
-impl<R: Runtime> LibraryHost<R> {
-	pub fn new(app: AppHandle<R>, scope: RuntimeScope) -> Self {
-		Self { app, scope }
+impl LibraryHost {
+	pub fn new(core: crate::core_context::Core, scope: RuntimeScope) -> Self {
+		Self { core, scope }
 	}
 
 	fn changed(&self, space_id: &str, item: LibraryItem) -> Entry {
-		announce_change(&self.app, space_id);
+		announce_change(&self.core, space_id);
 		Entry::of(item)
 	}
 
@@ -334,7 +333,7 @@ impl<R: Runtime> LibraryHost<R> {
 		name: String,
 	) -> Result<DocumentPosted, DocumentRefusal> {
 		let message_id = post_document(
-			&self.app,
+			&self.core,
 			database,
 			&self.scope.conversation_id,
 			&self.scope.bot_id,
@@ -359,15 +358,15 @@ impl<R: Runtime> LibraryHost<R> {
 		edit: impl FnOnce(&Board) -> Result<(BoardEdit, Option<Touched>, T), DrawRefusal>,
 	) -> Result<T, DocumentRefusal> {
 		let agent = self.agent(database).await?;
-		let mut writing = BoardWriting::of(&self.app, space_id, name, &agent);
+		let mut writing = BoardWriting::of(&self.core, space_id, name, &agent);
 		let target = BoardTarget { root, space_id, name, writer: client_id_of(&agent.id) };
-		let (touched, made) = documents(&self.app).edit_board(
+		let (touched, made) = documents(&self.core).edit_board(
 			&target,
 			|board| {
 				let (edit, touched, made) = edit(board)?;
 				Ok::<_, DocumentRefusal>((edit, (touched, made)))
 			},
-			|applied| announce(&self.app, space_id, &applied.name, &applied.change),
+			|applied| announce(&self.core, space_id, &applied.name, &applied.change),
 		)?;
 		if let Some(touched) = &touched {
 			writing.at(touched);
@@ -436,14 +435,14 @@ impl<R: Runtime> LibraryHost<R> {
 	) -> Result<DocumentWritten, DocumentRefusal> {
 		markdown(root, space_id, &asked.name)?;
 		let placement = asked.placement()?;
-		let turn = turn_of(&self.app, space_id, &asked.name, &self.scope).await;
+		let turn = turn_of(&self.core, space_id, &asked.name, &self.scope).await;
 		if turn.is_stopped() {
-			drop(Writing::of(&self.app, space_id, &asked.name, agent));
+			drop(Writing::of(&self.core, space_id, &asked.name, agent));
 			return Err(ToolRefusal::Stopped.into());
 		}
-		let opened = documents(&self.app).open(root, space_id, &asked.name)?;
+		let opened = documents(&self.core).open(root, space_id, &asked.name)?;
 		if let Some(host_edit) = opened.host_edit {
-			announce(&self.app, space_id, &asked.name, &host_edit);
+			announce(&self.core, space_id, &asked.name, &host_edit);
 		}
 		let (mut caret, passage_end) = match located(&opened.state, &asked.name, &placement)? {
 			Location::Caret(caret) => (caret, None),
@@ -453,7 +452,7 @@ impl<R: Runtime> LibraryHost<R> {
 				return Err(ToolRefusal::PassageNotUnique { occurrences }.into())
 			}
 		};
-		let mut writing = Writing::of(&self.app, space_id, &asked.name, agent);
+		let mut writing = Writing::of(&self.core, space_id, &asked.name, agent);
 		writing.at(&caret);
 		let writer = client_id_of(&agent.id);
 		let mut name = asked.name.clone();
@@ -465,8 +464,8 @@ impl<R: Runtime> LibraryHost<R> {
 				return Err(ToolRefusal::Stopped.into());
 			}
 			let step = WriteStep { writer, caret: &caret, text };
-			let written = documents(&self.app).write(root, space_id, &asked.name, &step)?;
-			announce(&self.app, space_id, &written.name, &written.change);
+			let written = documents(&self.core).write(root, space_id, &asked.name, &step)?;
+			announce(&self.core, space_id, &written.name, &written.change);
 			(name, caret) = (written.name, written.caret);
 			writing.at(&caret);
 		}
@@ -475,8 +474,8 @@ impl<R: Runtime> LibraryHost<R> {
 				return Err(ToolRefusal::Stopped.into());
 			}
 			let step = RemoveStep { writer, start: &caret, end: &end };
-			let removed = documents(&self.app).remove(root, space_id, &asked.name, &step)?;
-			announce(&self.app, space_id, &removed.name, &removed.change);
+			let removed = documents(&self.core).remove(root, space_id, &asked.name, &step)?;
+			announce(&self.core, space_id, &removed.name, &removed.change);
 			(name, caret) = (removed.name, removed.caret);
 			writing.at(&caret);
 		}
@@ -485,7 +484,7 @@ impl<R: Runtime> LibraryHost<R> {
 	}
 }
 
-impl<R: Runtime> Host for LibraryHost<R> {
+impl Host for LibraryHost {
 	const SUBTYPE: &'static str = "library";
 
 	type Operation = Operation;
@@ -493,11 +492,11 @@ impl<R: Runtime> Host for LibraryHost<R> {
 	type Error = DocumentRefusal;
 
 	async fn served(&self, operation: Operation, payload: Value) -> Result<Value, DocumentRefusal> {
-		let state = Self::database(&self.app)?;
+		let state = Self::database(&self.core)?;
 		let database = ready(state.state::<crate::db::DatabaseState>().inner())
 			.map_err(|error| Self::Error::unexpected(format!("{NO_STORE}: {error:?}")))?;
 		let space_id = self.space(database).await?;
-		let root = root(&self.app)?;
+		let root = root(&self.core)?;
 		match operation {
 			Operation::List => Self::answered(listed(&root, &space_id, Self::read(payload)?)?),
 			Operation::Search => Self::answered(found(&root, &space_id, &Self::read(payload)?)?),
@@ -522,14 +521,14 @@ impl<R: Runtime> Host for LibraryHost<R> {
 					let imported = import_path(&root, &space_id, &asked.path)?;
 					return Self::answered(self.changed(&space_id, imported));
 				};
-				let overwritten = overwrite_path(&self.app, &root, &space_id, &asked.path, &name)?;
+				let overwritten = overwrite_path(&self.core, &root, &space_id, &asked.path, &name)?;
 				Self::answered(Entry::of(overwritten))
 			}
 			Operation::Rename => {
 				let asked: Renamed = Self::read(payload)?;
 				a_document(&root, &space_id, &asked.name)?;
 				let renamed = rename_linked_document(
-					&self.app,
+					&self.core,
 					database,
 					&root,
 					&space_id,
@@ -541,7 +540,7 @@ impl<R: Runtime> Host for LibraryHost<R> {
 			}
 			Operation::Delete => {
 				let asked: Named = Self::read(payload)?;
-				delete_item(&self.app, &root, &space_id, &asked.name)?;
+				delete_item(&self.core, &root, &space_id, &asked.name)?;
 				Self::answered(Deleted { name: asked.name })
 			}
 			Operation::PostDocument => {
@@ -559,7 +558,7 @@ impl<R: Runtime> Host for LibraryHost<R> {
 			}
 			Operation::BoardRead => {
 				let asked: Named = Self::read(payload)?;
-				let board = documents(&self.app).board(&root, &space_id, &asked.name)?;
+				let board = documents(&self.core).board(&root, &space_id, &asked.name)?;
 				Self::answered(BoardShown { name: asked.name, board: read_out(&board) })
 			}
 			Operation::BoardAdd => {
@@ -707,17 +706,22 @@ fn item_read(root: &Path, space_id: &str, name: &str) -> Result<ItemRead, Librar
 	})
 }
 
-struct Writing<'a, R: Runtime> {
-	app: &'a AppHandle<R>,
+struct Writing<'a> {
+	core: &'a crate::core_context::Core,
 	space_id: &'a str,
 	name: &'a str,
 	agent: &'a Agent,
 	outcome: LibraryWriteOutcome,
 }
 
-impl<'a, R: Runtime> Writing<'a, R> {
-	fn of(app: &'a AppHandle<R>, space_id: &'a str, name: &'a str, agent: &'a Agent) -> Self {
-		Self { app, space_id, name, agent, outcome: LibraryWriteOutcome::Failed }
+impl<'a> Writing<'a> {
+	fn of(
+		core: &'a crate::core_context::Core,
+		space_id: &'a str,
+		name: &'a str,
+		agent: &'a Agent,
+	) -> Self {
+		Self { core, space_id, name, agent, outcome: LibraryWriteOutcome::Failed }
 	}
 
 	fn at(&self, caret: &[u8]) {
@@ -732,28 +736,33 @@ impl<'a, R: Runtime> Writing<'a, R> {
 			at,
 			lease_ends_at: None,
 		};
-		seat_writer(self.app, self.space_id, self.name, seated);
+		seat_writer(self.core, self.space_id, self.name, seated);
 	}
 }
 
-struct BoardWriting<'a, R: Runtime> {
-	writing: Writing<'a, R>,
+struct BoardWriting<'a> {
+	writing: Writing<'a>,
 }
 
-impl<'a, R: Runtime> BoardWriting<'a, R> {
-	fn of(app: &'a AppHandle<R>, space_id: &'a str, name: &'a str, agent: &'a Agent) -> Self {
-		Self { writing: Writing::of(app, space_id, name, agent) }
+impl<'a> BoardWriting<'a> {
+	fn of(
+		core: &'a crate::core_context::Core,
+		space_id: &'a str,
+		name: &'a str,
+		agent: &'a Agent,
+	) -> Self {
+		Self { writing: Writing::of(core, space_id, name, agent) }
 	}
 
 	fn at(&self, touched: &Touched) {
-		let Writing { app, space_id, name, agent, .. } = &self.writing;
+		let Writing { core, space_id, name, agent, .. } = &self.writing;
 		let point = LibraryBoardPoint { x: touched.x, y: touched.y };
 		let at = LibraryPresenceAt::Board { point, node_id: touched.node_id.clone() };
-		seat_agent_on_board(app, space_id, name, &agent.id, &agent.name, at);
+		seat_agent_on_board(core, space_id, name, &agent.id, &agent.name, at);
 	}
 }
 
-impl<R: Runtime> Drop for Writing<'_, R> {
+impl Drop for Writing<'_> {
 	fn drop(&mut self) {
 		let finished = LibraryDocumentWriterFinished {
 			space_id: self.space_id.to_owned(),
@@ -762,9 +771,7 @@ impl<R: Runtime> Drop for Writing<'_, R> {
 			agent_name: self.agent.name.clone(),
 			outcome: self.outcome,
 		};
-		if let Err(error) =
-			events::emit(self.app, events::LIBRARY_DOCUMENT_WRITER_FINISHED, finished)
-		{
+		if let Err(error) = self.core.emit(events::LIBRARY_DOCUMENT_WRITER_FINISHED, finished) {
 			log::warn!(
 				"the end of a write by agent {} in space {} was not published: {error}",
 				self.agent.id,
@@ -799,28 +806,28 @@ impl AgentWrites {
 	}
 }
 
-struct Enlisted<'a, R: Runtime> {
-	app: &'a AppHandle<R>,
+struct Enlisted<'a> {
+	core: &'a crate::core_context::Core,
 	key: WriteKey,
 	stop: Arc<watch::Sender<bool>>,
 	stopped: watch::Receiver<bool>,
 }
 
-fn enlisted<'a, R: Runtime>(
-	app: &'a AppHandle<R>,
+fn enlisted<'a>(
+	core: &'a crate::core_context::Core,
 	key: WriteKey,
 	scope: &RuntimeScope,
-) -> Enlisted<'a, R> {
+) -> Enlisted<'a> {
 	let (stop, stopped) = watch::channel(false);
 	let stop = Arc::new(stop);
 	let writer = Writer { scope: scope.clone(), stop: stop.clone() };
-	writes(app).writing().entry(key.clone()).or_default().push(writer);
-	Enlisted { app, key, stop, stopped }
+	writes(core).writing().entry(key.clone()).or_default().push(writer);
+	Enlisted { core, key, stop, stopped }
 }
 
-impl<R: Runtime> Drop for Enlisted<'_, R> {
+impl Drop for Enlisted<'_> {
 	fn drop(&mut self) {
-		let writes = writes(self.app);
+		let writes = writes(self.core);
 		let mut writing = writes.writing();
 		let Some(writers) = writing.get_mut(&self.key) else {
 			return;
@@ -832,37 +839,37 @@ impl<R: Runtime> Drop for Enlisted<'_, R> {
 	}
 }
 
-struct Turn<'a, R: Runtime> {
+struct Turn<'a> {
 	_held: OwnedMutexGuard<()>,
-	enlisted: Enlisted<'a, R>,
+	enlisted: Enlisted<'a>,
 }
 
-impl<R: Runtime> Turn<'_, R> {
+impl Turn<'_> {
 	fn is_stopped(&self) -> bool {
 		*self.enlisted.stopped.borrow()
 	}
 }
 
-async fn turn_of<'a, R: Runtime>(
-	app: &'a AppHandle<R>,
+async fn turn_of<'a>(
+	core: &'a crate::core_context::Core,
 	space_id: &str,
 	name: &str,
 	scope: &RuntimeScope,
-) -> Turn<'a, R> {
+) -> Turn<'a> {
 	let key = (space_id.to_owned(), name.to_owned(), scope.bot_id.clone());
-	let enlisted = enlisted(app, key.clone(), scope);
-	let queue = writes(app).held().entry(key).or_default().clone();
+	let enlisted = enlisted(core, key.clone(), scope);
+	let queue = writes(core).held().entry(key).or_default().clone();
 	let held = queue.lock_owned().await;
 	Turn { _held: held, enlisted }
 }
 
-pub(crate) async fn stop_writers<R: Runtime>(
-	app: &AppHandle<R>,
+pub(crate) async fn stop_writers(
+	core: &crate::core_context::Core,
 	space_id: &str,
 	name: &str,
 	agent_id: Option<&str>,
 ) -> Vec<RuntimeScope> {
-	let stopping: Vec<_> = writes(app)
+	let stopping: Vec<_> = writes(core)
 		.writing()
 		.iter()
 		.filter(|((space, document, agent), _)| {
@@ -884,10 +891,10 @@ pub(crate) async fn stop_writers<R: Runtime>(
 	scopes
 }
 
-impl<R: Runtime> Drop for Turn<'_, R> {
+impl Drop for Turn<'_> {
 	fn drop(&mut self) {
-		let Enlisted { app, key, .. } = &self.enlisted;
-		let writes = writes(app);
+		let Enlisted { core, key, .. } = &self.enlisted;
+		let writes = writes(core);
 		let mut held = writes.held();
 		let is_another_queued = held.get(key).is_some_and(|queue| Arc::strong_count(queue) > 2);
 		if is_another_queued {
@@ -895,12 +902,11 @@ impl<R: Runtime> Drop for Turn<'_, R> {
 		}
 		held.remove(key);
 		let (space_id, name, agent_id) = key;
-		unseat_writer(app, space_id, name, &Seat::Agent(agent_id.clone()));
+		unseat_writer(core, space_id, name, &Seat::Agent(agent_id.clone()));
 	}
 }
 
-fn writes<R: Runtime>(app: &AppHandle<R>) -> Managed<'_, AgentWrites> {
-	let core = crate::events::core(app);
+fn writes(core: &crate::core_context::Core) -> Managed<'_, AgentWrites> {
 	if core.try_state::<AgentWrites>().is_none() {
 		core.manage(AgentWrites::default());
 	}

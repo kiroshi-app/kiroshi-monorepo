@@ -4,7 +4,6 @@ use std::sync::Arc;
 use serde::de::{DeserializeOwned, Error as _};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
-use tauri::{AppHandle, Manager, Runtime, State};
 
 use super::protocol::HostAnswer;
 use super::session::{Answering, HostRequests};
@@ -48,12 +47,9 @@ pub trait Host: std::fmt::Debug + Send + Sync + 'static {
 		serde_json::to_value(answer).map_err(|error| Self::Error::unexpected(error.to_string()))
 	}
 
-	fn database<R: Runtime>(
-		app: &AppHandle<R>,
-	) -> Result<State<'_, crate::core_context::Core>, Self::Error> {
-		let core = app
-			.try_state::<crate::core_context::Core>()
-			.ok_or_else(|| Self::Error::unexpected(NO_DATABASE.to_owned()))?;
+	fn database(
+		core: &crate::core_context::Core,
+	) -> Result<&crate::core_context::Core, Self::Error> {
 		if core.try_state::<DatabaseState>().is_none() {
 			return Err(Self::Error::unexpected(NO_DATABASE.to_owned()));
 		}

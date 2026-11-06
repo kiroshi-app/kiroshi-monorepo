@@ -1,7 +1,5 @@
 use std::path::{Path, PathBuf};
 
-use tauri::{AppHandle, Manager, Runtime};
-
 use super::plugin::{self, Descriptor};
 use super::Evolved;
 
@@ -15,21 +13,16 @@ pub(super) const PLUGIN: Descriptor = Descriptor {
 	laid_down_title: "The person's own plugin was laid down",
 };
 
-pub fn path<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
-	Some(
-		crate::events::core(app.app_handle())
-			.data_dir()
-			.join(PLUGIN.dir_name)
-			.join(PLUGIN.plugin_name),
-	)
+pub fn path(core: &crate::core_context::Core) -> Option<PathBuf> {
+	Some(core.data_dir().join(PLUGIN.dir_name).join(PLUGIN.plugin_name))
 }
 
 pub fn lay_down(path: &Path) -> std::io::Result<()> {
 	plugin::lay_down(&PLUGIN, path)
 }
 
-pub fn laid_down<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
-	plugin::laid_down(path(app))
+pub fn laid_down(core: &crate::core_context::Core) -> Option<PathBuf> {
+	plugin::laid_down(path(core))
 }
 
 pub fn evolve(path: &Path) -> Evolved {

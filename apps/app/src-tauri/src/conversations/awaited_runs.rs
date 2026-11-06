@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
-use tauri::{AppHandle, Manager, Runtime, State, Webview};
+use tauri::{AppHandle, Runtime, State, Webview};
 
 use super::contract::{SummonsDropped, TranscriptStoreError};
 use super::host_turn;
@@ -104,7 +104,13 @@ pub async fn conversation_serve_awaited_runs<R: Runtime>(
 ) -> Result<(), TranscriptStoreError> {
 	let windows = core.state::<TurnWindows>();
 	let agent = core.state::<AgentState>();
-	serve_on_driving(&app, &windows, &agent, &crate::events::client_of(&webview.window())).await
+	serve_on_driving(
+		crate::events::core(&app),
+		&windows,
+		&agent,
+		&crate::events::client_of(&webview.window()),
+	)
+	.await
 }
 
 #[tauri::command]
@@ -117,19 +123,19 @@ pub fn conversation_claim_unseen_drops(
 	windows.claim_unseen_drops(&conversation_id)
 }
 
-pub(crate) async fn serve_on_driving<R: Runtime>(
-	app: &AppHandle<R>,
+pub(crate) async fn serve_on_driving(
+	core: &crate::core_context::Core,
 	windows: &TurnWindows,
 	agent: &AgentState,
 	client: &ClientId,
 ) -> Result<(), TranscriptStoreError> {
 	windows.start_driving(client);
-	let awaited = database(app)?.messages().awaited_runs().await?;
+	let awaited = database(core)?.messages().awaited_runs().await?;
 	let mut turns: Vec<(String, String)> =
 		awaited.into_iter().map(|run| (run.conversation_id, run.turn_id)).collect();
 	turns.dedup();
 	for (conversation_id, turn_id) in turns {
-		if let Err(error) = serve_turn(app, windows, agent, &conversation_id, &turn_id).await {
+		if let Err(error) = serve_turn(core, windows, agent, &conversation_id, &turn_id).await {
 			log::warn!(
 				"turn {turn_id} of conversation {conversation_id} could not serve its awaited runs: {error:?}"
 			);
@@ -138,43 +144,43 @@ pub(crate) async fn serve_on_driving<R: Runtime>(
 	Ok(())
 }
 
-pub(crate) async fn forget_settled_turns<R: Runtime>(app: &AppHandle<R>) {
-	let Some(windows) = crate::events::core(app.app_handle()).try_state::<TurnWindows>() else {
+pub(crate) async fn forget_settled_turns(core: &crate::core_context::Core) {
+	let Some(windows) = core.try_state::<TurnWindows>() else {
 		return;
 	};
 	let tracked = windows.tracked();
 	if tracked.is_empty() {
 		return;
 	}
-	match open_run_turns(app).await {
+	match open_run_turns(core).await {
 		Ok(open) => windows.forget_settled(&tracked, &open),
 		Err(error) => log::warn!("the turns whose runs all ended could not be read: {error:?}"),
 	}
 }
 
-async fn open_run_turns<R: Runtime>(
-	app: &AppHandle<R>,
+async fn open_run_turns(
+	core: &crate::core_context::Core,
 ) -> Result<HashSet<String>, TranscriptStoreError> {
-	Ok(database(app)?.messages().open_run_turns().await?.into_iter().collect())
+	Ok(database(core)?.messages().open_run_turns().await?.into_iter().collect())
 }
 
-pub(crate) async fn serve_handed<R: Runtime>(
-	app: &AppHandle<R>,
+pub(crate) async fn serve_handed(
+	core: &crate::core_context::Core,
 	conversation_id: &str,
 	turn_id: &str,
 ) -> Result<(), TranscriptStoreError> {
-	let Some(windows) = crate::events::core(app.app_handle()).try_state::<TurnWindows>() else {
+	let Some(windows) = core.try_state::<TurnWindows>() else {
 		return Ok(());
 	};
-	let Some(agent) = crate::events::core(app.app_handle()).try_state::<AgentState>() else {
+	let Some(agent) = core.try_state::<AgentState>() else {
 		log::error!("turn {turn_id} of conversation {conversation_id} found no agent state to serve its awaited runs");
 		return Ok(());
 	};
-	serve_turn(app, &windows, &agent, conversation_id, turn_id).await
+	serve_turn(core, &windows, &agent, conversation_id, turn_id).await
 }
 
-async fn serve_turn<R: Runtime>(
-	app: &AppHandle<R>,
+async fn serve_turn(
+	core: &crate::core_context::Core,
 	windows: &TurnWindows,
 	agent: &AgentState,
 	conversation_id: &str,
@@ -183,7 +189,7 @@ async fn serve_turn<R: Runtime>(
 	if !windows.is_left_to_the_host(turn_id) {
 		return Ok(());
 	}
-	let database = database(app)?;
+	let database = database(core)?;
 	let held = match agent.host_turns().hold(conversation_id, turn_id) {
 		Ok(held) => held,
 		Err(TranscriptStoreError::TurnAlreadyRunning { .. }) => return Ok(()),
@@ -197,11 +203,7 @@ async fn serve_turn<R: Runtime>(
 	log::info!(
 		"turn {turn_id} of conversation {conversation_id} lost the window that ran it, the host serves its awaited runs"
 	);
-	crate::events::core(app.app_handle()).spawn(host_turn::serve_awaited(
-		app.clone(),
-		held,
-		claimed,
-	));
+	core.spawn(host_turn::serve_awaited(core.clone(), held, claimed));
 	Ok(())
 }
 
@@ -246,7 +248,7 @@ mod tests {
 		crate::db::install(crate::events::core(app.handle()));
 		crate::events::core(app.app_handle()).manage_client_scoped(TurnWindows::default());
 		crate::events::core(app.app_handle()).manage(TurnRunDeadlines::after(start_within));
-		let database = database(app.handle()).expect("the database opens");
+		let database = database(crate::events::core(app.handle())).expect("the database opens");
 		database.conversations().ensure_default_bot().await.expect("the bot is seeded");
 		let chat = database
 			.conversations()
@@ -272,11 +274,12 @@ mod tests {
 		let (app, chat_id) =
 			a_chat_with_a_running_turn("forget-settled", Duration::from_secs(60)).await;
 		let turn = NewTurn { id: "t1".to_owned(), conversation_id: chat_id, started_at: 1 };
-		let messages = database(app.handle()).expect("the database opens").messages();
+		let messages =
+			database(crate::events::core(app.handle())).expect("the database opens").messages();
 		messages.start_run(turn, DEFAULT_BOT_ID.to_owned()).await.expect("the run starts");
 		left_after_a_reload(app.handle(), &["t1", "t-ended"]);
 
-		forget_settled_turns(app.handle()).await;
+		forget_settled_turns(crate::events::core(app.handle())).await;
 
 		let windows = crate::events::core(app.app_handle()).state::<TurnWindows>();
 		assert!(windows.is_left_to_the_host("t1"), "a turn still running was forgotten");
@@ -287,12 +290,13 @@ mod tests {
 	#[tokio::test]
 	async fn a_turn_whose_last_awaited_run_expires_is_forgotten() {
 		let (app, chat_id) = a_chat_with_a_running_turn("forget-expired", Duration::ZERO).await;
-		let messages = database(app.handle()).expect("the database opens").messages();
+		let messages =
+			database(crate::events::core(app.handle())).expect("the database opens").messages();
 		let late = vec!["late".to_owned()];
 		messages.await_runs("t1".to_owned(), late.clone()).await.expect("the run waits");
 		left_after_a_reload(app.handle(), &["t1"]);
 
-		arm_start_deadlines(app.handle(), &chat_id, "t1", &late);
+		arm_start_deadlines(crate::events::core(app.handle()), &chat_id, "t1", &late);
 		let windows = crate::events::core(app.app_handle()).state::<TurnWindows>();
 		time::timeout(Duration::from_secs(10), async {
 			while !windows.tracked().is_empty() {
@@ -409,14 +413,24 @@ mod tests {
 		let elsewhere = SummonsRun { conversation_id: "c2", ..run };
 
 		for reason in SummonsDropReason::ALL {
-			summons::note_dropped(app.handle(), &run, reason, None);
+			summons::note_dropped(crate::events::core(app.handle()), &run, reason, None);
 		}
-		summons::note_dropped(app.handle(), &elsewhere, SummonsDropReason::StartFailed, None);
+		summons::note_dropped(
+			crate::events::core(app.handle()),
+			&elsewhere,
+			SummonsDropReason::StartFailed,
+			None,
+		);
 		let kept: Vec<SummonsDropReason> =
 			windows.claim_unseen_drops("c1").into_iter().map(|dropped| dropped.reason).collect();
 		let claimed_again = windows.claim_unseen_drops("c1");
 		windows.start_driving(&ClientId::new("main"));
-		summons::note_dropped(app.handle(), &run, SummonsDropReason::StartFailed, None);
+		summons::note_dropped(
+			crate::events::core(app.handle()),
+			&run,
+			SummonsDropReason::StartFailed,
+			None,
+		);
 
 		let noticed: Vec<SummonsDropReason> = SummonsDropReason::ALL
 			.into_iter()

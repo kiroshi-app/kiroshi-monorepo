@@ -63,7 +63,7 @@ fn a_companion_on(model: &str, effort: &str) -> Value {
 }
 
 fn written_effort(app: &App<MockRuntime>, bot: &Value) -> Option<EffortLevel> {
-	let root = bundles::root(app.handle()).expect("the bundle root");
+	let root = bundles::root(kiroshi_app::events::core(app.handle())).expect("the bundle root");
 	let id = bot["id"].as_str().expect("the companion holds an id");
 	bundles::generated(&root, id).expect("the agent file is written").effort
 }
@@ -131,7 +131,7 @@ fn the_agent_file_carries_only_an_effort_the_catalogue_offers_for_the_model() {
 	);
 
 	tauri::async_runtime::block_on(terminate_session(
-		app.handle(),
+		kiroshi_app::events::core(app.handle()),
 		kiroshi_app::events::core(app.app_handle()).state::<AgentState>().inner(),
 	));
 	std::env::remove_var("FAKE_AGENT_MODELS");

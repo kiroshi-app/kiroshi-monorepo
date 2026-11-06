@@ -103,7 +103,7 @@ impl Harness {
 	fn quit(&self) {
 		let runtime = tokio::runtime::Runtime::new().expect("runtime");
 		runtime.block_on(terminate_session(
-			self.app.handle(),
+			kiroshi_app::events::core(self.app.handle()),
 			&kiroshi_app::events::core(self.app.app_handle()).state::<AgentState>(),
 		));
 	}
@@ -522,7 +522,7 @@ impl Stored {
 
 	fn close(self) {
 		tauri::async_runtime::block_on(terminate_session(
-			self.app.handle(),
+			kiroshi_app::events::core(self.app.handle()),
 			&kiroshi_app::events::core(self.app.app_handle()).state::<AgentState>(),
 		));
 	}

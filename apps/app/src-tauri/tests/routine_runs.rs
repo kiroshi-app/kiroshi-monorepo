@@ -204,8 +204,8 @@ impl Host {
 			.expect("the bot is seated")
 	}
 
-	fn runner(&self) -> Runner<MockRuntime> {
-		Runner::new(self.app.handle().clone())
+	fn runner(&self) -> Runner {
+		Runner::new(kiroshi_app::events::core(self.app.handle()).clone())
 	}
 
 	fn fire_the_schedule(&self) -> TriggerDecision {
@@ -223,12 +223,8 @@ impl Host {
 	}
 
 	fn run_now(&self) -> TriggerDecision {
-		block_on(routine_run_now(
-			self.app.handle().clone(),
-			self.app.state(),
-			self.routine.id.clone(),
-		))
-		.expect("the routine runs now")
+		block_on(routine_run_now(self.app.state(), self.routine.id.clone()))
+			.expect("the routine runs now")
 	}
 
 	fn run_now_timed(&self, timing: RunTiming) -> TriggerDecision {
@@ -236,7 +232,7 @@ impl Host {
 	}
 
 	fn run_routine_now(&self, routine: &Routine, timing: RunTiming) -> TriggerDecision {
-		let runner = Runner::timed(self.app.handle().clone(), timing);
+		let runner = Runner::timed(kiroshi_app::events::core(self.app.handle()).clone(), timing);
 		block_on(core::run_now(self.database(), &runner, &SystemClock, routine.id.clone()))
 			.expect("the routine runs now")
 	}
@@ -332,7 +328,7 @@ impl Host {
 
 	fn quit(self) {
 		block_on(terminate_session(
-			self.app.handle(),
+			kiroshi_app::events::core(self.app.handle()),
 			&kiroshi_app::events::core(self.app.app_handle()).state::<AgentState>(),
 		));
 	}
@@ -636,8 +632,7 @@ fn a_run_now_fired_during_a_runtime_write_opens_on_the_written_model_and_effort(
 	let app = host.app.handle().clone();
 	let pick = picked(host.stored_bot(BOT), "sonnet", EffortLevel::High);
 	let earlier_write = block_on(bundles::holding_the_memory(BOT));
-	let mut writing =
-		Box::pin(conversation_update_bot(app.clone(), app.state(), BOT.to_owned(), pick));
+	let mut writing = Box::pin(conversation_update_bot(app.state(), BOT.to_owned(), pick));
 
 	let landed = block_on(async { timeout(HELD_FOR, writing.as_mut()).await });
 	assert!(landed.is_err(), "the pick landed past the write in flight");

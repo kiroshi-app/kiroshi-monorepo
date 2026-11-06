@@ -3,7 +3,6 @@ use std::sync::{Mutex, PoisonError};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tauri::{AppHandle, Manager, Runtime};
 
 use super::commands::{declared_servers, refreshed};
 use super::refresh::{self, Renewed};
@@ -93,15 +92,15 @@ impl ApplicationReports {
 }
 
 #[derive(Debug)]
-pub struct StandingHost<R: Runtime> {
-	app: AppHandle<R>,
+pub struct StandingHost {
+	core: crate::core_context::Core,
 	bot_id: String,
 	space_id: Option<String>,
 }
 
-impl<R: Runtime> StandingHost<R> {
-	pub fn new(app: AppHandle<R>, bot_id: String, space_id: Option<String>) -> Self {
-		Self { app, bot_id, space_id }
+impl StandingHost {
+	pub fn new(core: crate::core_context::Core, bot_id: String, space_id: Option<String>) -> Self {
+		Self { core, bot_id, space_id }
 	}
 
 	fn owner(&self) -> Option<EnvOwner> {
@@ -112,9 +111,9 @@ impl<R: Runtime> StandingHost<R> {
 		let Some(owner) = self.owner() else {
 			return Self::answered(Renewed::Unchanged);
 		};
-		let root = writable_root(&self.app).map_err(unreadable_store)?;
-		let servers = declared_servers(&self.app, &owner).map_err(unreadable_store)?;
-		let app = self.app.clone();
+		let root = writable_root(&self.core).map_err(unreadable_store)?;
+		let servers = declared_servers(&self.core, &owner).map_err(unreadable_store)?;
+		let app = self.core.clone();
 		let renewed = refresh::on_rejection(&root, &owner, name, &servers, move |request| {
 			let app = app.clone();
 			async move { refreshed(&app, request).await }
@@ -125,7 +124,8 @@ impl<R: Runtime> StandingHost<R> {
 	}
 
 	fn recorded(&self, report: Report) -> Result<Value, StandingError> {
-		let reports = crate::events::core(self.app.app_handle())
+		let reports = self
+			.core
 			.try_state::<ApplicationReports>()
 			.ok_or_else(|| StandingError::unexpected(NO_RECORDS.to_owned()))?;
 		reports.record(&self.bot_id, &report.name, report.standing);
@@ -133,7 +133,7 @@ impl<R: Runtime> StandingHost<R> {
 	}
 }
 
-impl<R: Runtime> Host for StandingHost<R> {
+impl Host for StandingHost {
 	const SUBTYPE: &'static str = "standing";
 
 	const IS_PAYLOAD_REQUIRED: bool = true;
@@ -157,12 +157,11 @@ fn unreadable_store(error: EnvError) -> StandingError {
 #[cfg(test)]
 mod tests {
 	use serde_json::json;
-	use tauri::test::MockRuntime;
 
 	use super::*;
 
 	fn read(request: Value) -> Result<Report, Value> {
-		StandingHost::<MockRuntime>::read(request["payload"].clone())
+		StandingHost::read(request["payload"].clone())
 			.map_err(|error| serde_json::to_value(error).expect("a refusal serializes"))
 	}
 
@@ -204,7 +203,7 @@ mod tests {
 	fn a_renewal_reads_the_operation_and_the_server_it_names() {
 		let operation: Operation =
 			serde_json::from_value(json!("renew")).expect("the operation reads");
-		let rejected: Rejected = StandingHost::<MockRuntime>::read(json!({ "name": "granola" }))
+		let rejected: Rejected = StandingHost::read(json!({ "name": "granola" }))
 			.map_err(|_| "the payload reads")
 			.expect("the payload reads");
 
@@ -214,9 +213,8 @@ mod tests {
 
 	#[test]
 	fn every_renewal_answer_names_the_state_the_session_reads_it_by() {
-		let answered = |renewed: Renewed| {
-			StandingHost::<MockRuntime>::answered(renewed).expect("the answer serializes")
-		};
+		let answered =
+			|renewed: Renewed| StandingHost::answered(renewed).expect("the answer serializes");
 
 		assert_eq!(
 			answered(Renewed::Granted { access_token: "renewed-access".to_owned() }),

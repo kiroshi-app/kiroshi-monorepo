@@ -9,7 +9,6 @@ use chrono::{DateTime, SecondsFormat};
 use reqwest::{Client, Url};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
-use tauri::{AppHandle, Manager, Runtime};
 use tokio::sync::watch as signal;
 use tokio::sync::Mutex;
 
@@ -20,7 +19,7 @@ use super::registry::{client, endpoint, parsed, read, variable};
 use super::search::terms;
 use crate::account::cloud::api_url;
 use crate::db::repositories::catalogue::folded;
-use crate::events::{self, APPLICATION_DIRECTORY_REFRESHED};
+use crate::events::APPLICATION_DIRECTORY_REFRESHED;
 use crate::routines::core::{Clock, SystemClock};
 
 const SEGMENTS: [&str; 3] = ["api", "directory", "servers"];
@@ -382,19 +381,16 @@ impl Directory {
 	}
 }
 
-pub fn spawn<R: Runtime>(app: AppHandle<R>) -> Arc<Directory> {
-	let directory = Directory::at(api_url(), file(&app));
-	crate::events::core(app.app_handle())
-		.spawn(watching(directory.clone(), directory.stop.subscribe()));
-	crate::events::core(app.app_handle())
-		.clone()
-		.spawn(announcing(app, directory.landed.subscribe()));
+pub fn spawn(core: crate::core_context::Core) -> Arc<Directory> {
+	let directory = Directory::at(api_url(), file(&core));
+	core.spawn(watching(directory.clone(), directory.stop.subscribe()));
+	core.clone().spawn(announcing(core, directory.landed.subscribe()));
 	directory
 }
 
-async fn announcing<R: Runtime>(app: AppHandle<R>, mut landed: signal::Receiver<()>) {
+async fn announcing(core: crate::core_context::Core, mut landed: signal::Receiver<()>) {
 	while landed.changed().await.is_ok() {
-		if let Err(error) = events::emit(&app, APPLICATION_DIRECTORY_REFRESHED, ()) {
+		if let Err(error) = core.emit(APPLICATION_DIRECTORY_REFRESHED, ()) {
 			eprintln!("the refreshed Kiroshi directory was not announced: {error}");
 		}
 	}
@@ -410,8 +406,8 @@ async fn watching(directory: Arc<Directory>, mut halted: signal::Receiver<bool>)
 	}
 }
 
-fn file<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
-	Some(crate::events::core(app.app_handle()).data_dir().join(CACHE_DIR).join(CACHE_FILE))
+fn file(core: &crate::core_context::Core) -> Option<PathBuf> {
+	Some(core.data_dir().join(CACHE_DIR).join(CACHE_FILE))
 }
 
 fn unread_directory() -> ApplicationsError {
@@ -1772,7 +1768,10 @@ pub(crate) mod tests {
 		let (base, _) = serving(vec![a_page(&["fresh"])]).await;
 		let directory = Directory::timed(base, None, Box::new(Stopped(NOON + REREAD_MS + 1)));
 		planted(&directory, a_cache_read_at(NOON, &["one"]).await);
-		tokio::spawn(announcing(app.handle().clone(), directory.landed.subscribe()));
+		tokio::spawn(announcing(
+			crate::events::core(app.handle()).clone(),
+			directory.landed.subscribe(),
+		));
 
 		directory.searched("").await.expect("the search answers");
 		settled(&directory).await;
@@ -1797,7 +1796,10 @@ pub(crate) mod tests {
 		let clock = Moving::at(NOON + REREAD_MS + 1);
 		let directory = Directory::timed(base, None, Box::new(clock.clone()));
 		planted(&directory, a_cache_read_at(NOON, &["one"]).await);
-		tokio::spawn(announcing(app.handle().clone(), directory.landed.subscribe()));
+		tokio::spawn(announcing(
+			crate::events::core(app.handle()).clone(),
+			directory.landed.subscribe(),
+		));
 
 		directory.searched("").await.expect("the search answers");
 		let announced = tokio::time::timeout(PATIENCE, heard.recv()).await.expect("announced");
@@ -1831,7 +1833,10 @@ pub(crate) mod tests {
 			HELD_BACK_BOUND,
 		);
 		planted(&directory, a_cache_read_at(NOON, &["one"]).await);
-		tokio::spawn(announcing(app.handle().clone(), directory.landed.subscribe()));
+		tokio::spawn(announcing(
+			crate::events::core(app.handle()).clone(),
+			directory.landed.subscribe(),
+		));
 
 		directory.searched("").await.expect("the search answers");
 		held_past_its_bound(&held, &directory).await;

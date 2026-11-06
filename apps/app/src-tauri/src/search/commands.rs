@@ -39,8 +39,12 @@ pub async fn search_catalogue<R: Runtime>(
 	let database = ready(&state).map_err(|failure| CatalogueError::Unavailable { failure })?;
 	let hits = database.catalogue().search(CatalogueScope { query, space_id, kind: None }).await?;
 	Ok(Catalogue {
-		chats: observed_chats(&app, database, hits.chats).await?,
-		missions: hits.missions.into_iter().map(|hit| observed_mission(&app, hit)).collect(),
+		chats: observed_chats(crate::events::core(&app), database, hits.chats).await?,
+		missions: hits
+			.missions
+			.into_iter()
+			.map(|hit| observed_mission(crate::events::core(&app), hit))
+			.collect(),
 		routines: hits.routines,
 	})
 }
@@ -55,16 +59,16 @@ pub async fn search_recent<R: Runtime>(
 	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state).map_err(|failure| CatalogueError::Unavailable { failure })?;
 	let hits = database.catalogue().recent(space_id).await?;
-	observed_chats(&app, database, hits).await
+	observed_chats(crate::events::core(&app), database, hits).await
 }
 
-async fn observed_chats<R: Runtime>(
-	app: &AppHandle<R>,
+async fn observed_chats(
+	core: &crate::core_context::Core,
 	database: &db::Database,
 	hits: Vec<ChatHit>,
 ) -> Result<Vec<CatalogueChat>, CatalogueError> {
 	let ids = hits.iter().map(|hit| hit.conversation_id.clone()).collect();
-	let states = conversation_state::listed(app, database, ids).await?;
+	let states = conversation_state::listed(core, database, ids).await?;
 	Ok(hits
 		.into_iter()
 		.map(|hit| {
@@ -74,8 +78,8 @@ async fn observed_chats<R: Runtime>(
 		.collect())
 }
 
-fn observed_mission<R: Runtime>(app: &AppHandle<R>, hit: CatalogueMission) -> CatalogueMission {
-	let observed = present(app, &hit.thread_conversation_id, &hit.bot_id, hit.presence());
+fn observed_mission(core: &crate::core_context::Core, hit: CatalogueMission) -> CatalogueMission {
+	let observed = present(core, &hit.thread_conversation_id, &hit.bot_id, hit.presence());
 	hit.with_presence(observed)
 }
 
@@ -402,7 +406,7 @@ mod tests {
 			runtime_session_id: "r1".to_owned(),
 			epoch: 1,
 		};
-		let run = a_run_held_by_the_app(app.handle(), thread);
+		let run = a_run_held_by_the_app(crate::events::core(app.handle()), thread);
 		run.emit(AgentEvent::TurnChanged { state: TurnState::Running }, None);
 
 		let found = search_catalogue(

@@ -60,7 +60,10 @@ impl Host {
 	}
 
 	fn started(&self) -> Server {
-		Server(webhook::start(self.app.handle().clone()))
+		Server(webhook::start(
+			kiroshi_app::events::core(self.app.handle()).clone(),
+			kiroshi_app::host_api::routes(self.app.handle().clone()),
+		))
 	}
 
 	fn token_path(&self) -> PathBuf {

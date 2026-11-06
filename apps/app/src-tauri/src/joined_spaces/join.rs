@@ -2,7 +2,6 @@ use base64::prelude::{Engine as _, BASE64_STANDARD};
 use ed25519_dalek::Signature;
 use futures_util::{SinkExt, StreamExt};
 use serde_json::Value;
-use tauri::{AppHandle, Manager, Runtime};
 use tokio::time::timeout;
 use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use tokio_tungstenite::tungstenite::protocol::CloseFrame;
@@ -33,45 +32,45 @@ const MEMBERSHIP_ENDED: u16 = 4003;
 
 const NO_KEY_ID: u32 = 0;
 
-pub async fn joined<R: Runtime>(
-	app: &AppHandle<R>,
+pub async fn joined(
+	core: &crate::core_context::Core,
 	instance_id: String,
 	name: String,
 	inviter_email: Option<String>,
 	listing: HostListing,
 ) -> Result<JoinedSpace, JoinedSpaceError> {
 	log::info!("the join of instance {instance_id} starts");
-	let joined = attempted(app, &instance_id, name, inviter_email, listing).await;
+	let joined = attempted(core, &instance_id, name, inviter_email, listing).await;
 	if let Err(failure) = &joined {
 		log::error!("the join of instance {instance_id} was refused: {failure:?}");
 	}
 	joined
 }
 
-async fn attempted<R: Runtime>(
-	app: &AppHandle<R>,
+async fn attempted(
+	core: &crate::core_context::Core,
 	instance_id: &str,
 	name: String,
 	inviter_email: Option<String>,
 	listing: HostListing,
 ) -> Result<JoinedSpace, JoinedSpaceError> {
-	let device = device_keys(app)?;
-	let bearer = bearer_of(app)?;
-	if devices::is_awaiting_approval(app) {
+	let device = device_keys(core)?;
+	let bearer = bearer_of(core)?;
+	if devices::is_awaiting_approval(core) {
 		return Err(JoinedSpaceError::RelayRefused {
 			detail: "this device awaits its approval by another device of the account".to_owned(),
 		});
 	}
-	let url = member_socket_of(app, &bearer, &device, instance_id).await?;
-	if let Some(handed) = answered(app, url, &bearer, instance_id, &device).await? {
-		kept_answer(app, instance_id, &handed).await?;
-		wait_ended(app, instance_id);
+	let url = member_socket_of(core, &bearer, &device, instance_id).await?;
+	if let Some(handed) = answered(core, url, &bearer, instance_id, &device).await? {
+		kept_answer(core, instance_id, &handed).await?;
+		wait_ended(core, instance_id);
 		log::info!(
 			"the join of instance {instance_id} kept a rekey: space key_id {}",
 			handed.space.key_id
 		);
 	}
-	relay::joined(app, instance_id.to_owned(), Some(name), inviter_email, listing).await.map_err(
+	relay::joined(core, instance_id.to_owned(), Some(name), inviter_email, listing).await.map_err(
 		|failure| match failure {
 			RelayJoinError::SignedOut => JoinedSpaceError::NeedsSignIn,
 			RelayJoinError::Account(detail) => JoinedSpaceError::SessionStore { detail },
@@ -104,31 +103,31 @@ pub(super) fn missed_rekey_frame(
 	Ok(envelope_of(&sealed, None))
 }
 
-pub(super) fn bearer_of<R: Runtime>(app: &AppHandle<R>) -> Result<String, JoinedSpaceError> {
-	match crate::events::core(app.app_handle()).state::<AccountSession>().bearer() {
+pub(super) fn bearer_of(core: &crate::core_context::Core) -> Result<String, JoinedSpaceError> {
+	match core.state::<AccountSession>().bearer() {
 		Ok(Some(bearer)) => Ok(bearer),
 		Ok(None) => Err(JoinedSpaceError::NeedsSignIn),
 		Err(error) => Err(JoinedSpaceError::SessionStore { detail: format!("{error:?}") }),
 	}
 }
 
-pub(super) fn revoked<R: Runtime>(app: &AppHandle<R>, bearer: &str) -> JoinedSpaceError {
-	session::revoked(app, bearer);
+pub(super) fn revoked(core: &crate::core_context::Core, bearer: &str) -> JoinedSpaceError {
+	session::revoked(core, bearer);
 	JoinedSpaceError::SessionRevoked
 }
 
-pub(super) async fn member_socket_of<R: Runtime>(
-	app: &AppHandle<R>,
+pub(super) async fn member_socket_of(
+	core: &crate::core_context::Core,
 	bearer: &str,
 	device: &DeviceKeys,
 	instance_id: &str,
 ) -> Result<String, JoinedSpaceError> {
-	let guests = crate::events::core(app.app_handle()).state::<RelayGuests>().inner();
+	let guests = core.state::<RelayGuests>().inner();
 	let device_id = device.device_id().to_string();
 	let relay_device_id = match guests.known_relay_device(bearer, &device_id) {
 		Some(known) => known,
 		None => {
-			let read = relay_device_of(app, guests.cloud(), bearer, device, instance_id).await?;
+			let read = relay_device_of(core, guests.cloud(), bearer, device, instance_id).await?;
 			guests.relay_device_known(bearer, &device_id, &read);
 			read
 		}
@@ -136,8 +135,8 @@ pub(super) async fn member_socket_of<R: Runtime>(
 	Ok(relay::member_socket_url(guests.cloud(), instance_id, &relay_device_id))
 }
 
-async fn relay_device_of<R: Runtime>(
-	app: &AppHandle<R>,
+async fn relay_device_of(
+	core: &crate::core_context::Core,
 	cloud: &Cloud,
 	bearer: &str,
 	device: &DeviceKeys,
@@ -145,12 +144,12 @@ async fn relay_device_of<R: Runtime>(
 ) -> Result<String, JoinedSpaceError> {
 	let account_id = match cloud.me(bearer).await {
 		Ok(account) => account.id,
-		Err(MeError::Revoked) => return Err(revoked(app, bearer)),
+		Err(MeError::Revoked) => return Err(revoked(core, bearer)),
 		Err(MeError::Unreachable(detail)) => {
 			return Err(JoinedSpaceError::RelayUnreachable { detail })
 		}
 	};
-	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
+	let state = core.state::<db::DatabaseState>();
 	let devices = ready(&state)?.relay_devices();
 	let device_id = device.device_id().to_string();
 	if let Some(held) = devices.relay_device_id(account_id.clone(), device_id.clone()).await? {
@@ -158,7 +157,7 @@ async fn relay_device_of<R: Runtime>(
 	}
 	let registered = match cloud.register_device(bearer, &account_id, device).await {
 		Ok(registered) => registered,
-		Err(DeviceRegisterError::Revoked) => return Err(revoked(app, bearer)),
+		Err(DeviceRegisterError::Revoked) => return Err(revoked(core, bearer)),
 		Err(DeviceRegisterError::Refused(refusal)) => {
 			return Err(JoinedSpaceError::RelayRefused { detail: refusal.to_string() })
 		}
@@ -174,42 +173,42 @@ async fn relay_device_of<R: Runtime>(
 	Ok(registered.id)
 }
 
-async fn answered<R: Runtime>(
-	app: &AppHandle<R>,
+async fn answered(
+	core: &crate::core_context::Core,
 	url: String,
 	bearer: &str,
 	instance_id: &str,
 	device: &DeviceKeys,
 ) -> Result<Option<Handed>, JoinedSpaceError> {
-	let guests = crate::events::core(app.app_handle()).state::<RelayGuests>().inner();
+	let guests = core.state::<RelayGuests>().inner();
 	let opened = opened(guests.cloud(), url, bearer).await;
 	guests.relay_device_forgotten_on_refusal(&opened);
 	let mut socket = match opened {
 		Opened::Socket(socket) => socket,
-		Opened::Revoked => return Err(revoked(app, bearer)),
+		Opened::Revoked => return Err(revoked(core, bearer)),
 		Opened::Forbidden | Opened::Unknown | Opened::Gone(_) => {
 			return Err(JoinedSpaceError::NoInvitation { inviter_email: None })
 		}
 		Opened::RateLimited(retry_after) => {
-			return Ok(waiting(app, instance_id, Stall::RateLimited(retry_after)))
+			return Ok(waiting(core, instance_id, Stall::RateLimited(retry_after)))
 		}
 		Opened::Unreachable(reason) => {
-			return Ok(waiting(app, instance_id, Stall::Unreachable(reason)))
+			return Ok(waiting(core, instance_id, Stall::Unreachable(reason)))
 		}
 	};
 	log::info!("the join of instance {instance_id} opened its member socket");
-	let bound = crate::events::core(app.app_handle()).state::<RelayGuests>().answer_bound();
+	let bound = core.state::<RelayGuests>().answer_bound();
 	let asked = Message::text(missed_rekey_frame(device, instance_id)?);
 	let answered = match socket.send(asked).await {
-		Err(failure) => Ok(waiting(app, instance_id, Stall::AskNotSent(failure.to_string()))),
+		Err(failure) => Ok(waiting(core, instance_id, Stall::AskNotSent(failure.to_string()))),
 		Ok(()) => {
 			let mut dropped = None;
 			let answer =
-				timeout(bound, next_rekey(app, &mut socket, instance_id, device, &mut dropped))
+				timeout(bound, next_rekey(core, &mut socket, instance_id, device, &mut dropped))
 					.await;
 			answer.unwrap_or_else(|_| {
 				let stall = dropped.map_or(Stall::Silent(bound), Stall::RekeyDropped);
-				Ok(waiting(app, instance_id, stall))
+				Ok(waiting(core, instance_id, stall))
 			})
 		}
 	};
@@ -222,13 +221,13 @@ async fn answered<R: Runtime>(
 	answered
 }
 
-fn waiting<R: Runtime>(app: &AppHandle<R>, instance_id: &str, stall: Stall) -> Option<Handed> {
-	waited(app, instance_id, stall);
+fn waiting(core: &crate::core_context::Core, instance_id: &str, stall: Stall) -> Option<Handed> {
+	waited(core, instance_id, stall);
 	None
 }
 
-async fn next_rekey<R: Runtime>(
-	app: &AppHandle<R>,
+async fn next_rekey(
+	core: &crate::core_context::Core,
 	socket: &mut Socket,
 	instance_id: &str,
 	device: &DeviceKeys,
@@ -251,15 +250,15 @@ async fn next_rekey<R: Runtime>(
 				return Err(JoinedSpaceError::NoInvitation { inviter_email: None })
 			}
 			Ok(Message::Close(close)) => {
-				return Ok(waiting(app, instance_id, Stall::Closed(close)))
+				return Ok(waiting(core, instance_id, Stall::Closed(close)))
 			}
 			Ok(_) => {}
 			Err(failure) => {
-				return Ok(waiting(app, instance_id, Stall::SocketFailed(failure.to_string())))
+				return Ok(waiting(core, instance_id, Stall::SocketFailed(failure.to_string())))
 			}
 		}
 	}
-	Ok(waiting(app, instance_id, Stall::SocketEnded))
+	Ok(waiting(core, instance_id, Stall::SocketEnded))
 }
 
 pub(super) fn rekey_handed(
@@ -297,17 +296,17 @@ fn first_rekey_verified(
 	Ok(handed)
 }
 
-pub(super) async fn kept_answer<R: Runtime>(
-	app: &AppHandle<R>,
+pub(super) async fn kept_answer(
+	core: &crate::core_context::Core,
 	instance_id: &str,
 	handed: &Handed,
 ) -> Result<(), JoinedSpaceError> {
-	let held = held::roster(app, instance_id).await?;
+	let held = held::roster(core, instance_id).await?;
 	if held.is_some_and(|held| held.host != handed.roster.host) {
 		log::error!("the join of instance {instance_id} dropped a rekey: it came from a host other than the one pinned");
 		return Err(JoinedSpaceError::BadSignature);
 	}
-	if !held::kept(app, instance_id, handed).await? {
+	if !held::kept(core, instance_id, handed).await? {
 		log::error!("the join of instance {instance_id} dropped a rekey: it carried a roster older than the one held");
 		return Err(JoinedSpaceError::BadSignature);
 	}

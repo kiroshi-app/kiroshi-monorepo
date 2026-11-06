@@ -2,7 +2,6 @@ use std::collections::HashMap;
 
 use serde::Deserialize;
 use serde_json::Value;
-use tauri::{AppHandle, Manager, Runtime};
 
 use crate::db::repositories::space_children::SpaceChild::{
 	self, Bot, BotHeldAlone, Conversation, Message, Mission, Routine, RoutineRun, Section, Turn,
@@ -534,8 +533,8 @@ pub(super) fn refusal_line(command: &str, shared_space_id: &str, refusal: &Refus
 	format!("the relayed {command} was refused outside shared space {shared_space_id}: {reason}")
 }
 
-pub(super) async fn stays_in_the_shared_space<R: Runtime>(
-	app: &AppHandle<R>,
+pub(super) async fn stays_in_the_shared_space(
+	core: &crate::core_context::Core,
 	shared_space_id: &str,
 	command: &str,
 	args: &Value,
@@ -546,7 +545,7 @@ pub(super) async fn stays_in_the_shared_space<R: Runtime>(
 		Some(Reach::HostOnly) => return Err(Refusal::HostOnly),
 		None => return Err(Refusal::NoReach),
 	};
-	let lookup = Lookup { app, shared_space_id, relayed: command };
+	let lookup = Lookup { core, shared_space_id, relayed: command };
 	for held in helds {
 		lookup
 			.checked(held, args.pointer(held.argument))
@@ -573,9 +572,9 @@ impl GuestEvents {
 		Self { shared_space_id: shared_space_id.to_owned(), held_children: HashMap::new() }
 	}
 
-	pub(super) async fn reach_the_guest<R: Runtime>(
+	pub(super) async fn reach_the_guest(
 		&mut self,
-		app: &AppHandle<R>,
+		core: &crate::core_context::Core,
 		frame: &str,
 	) -> bool {
 		let published = match serde_json::from_str::<Published>(frame) {
@@ -588,7 +587,7 @@ impl GuestEvents {
 			Verdict::KeptOff(reason) => return self.kept_off(event, &reason),
 			Verdict::Scoped(held, scope) => (held, scope),
 		};
-		let lookup = Lookup { app, shared_space_id: &self.shared_space_id, relayed: event };
+		let lookup = Lookup { core, shared_space_id: &self.shared_space_id, relayed: event };
 		match (held.check, scope) {
 			(Check::Child(kind), Value::String(child_id)) if never_changes_space(kind) => {
 				let key = (kind, child_id.to_owned());
@@ -640,13 +639,13 @@ fn never_changes_space(kind: SpaceChild) -> bool {
 	!matches!(kind, Bot | BotHeldAlone)
 }
 
-struct Lookup<'a, R: Runtime> {
-	app: &'a AppHandle<R>,
+struct Lookup<'a> {
+	core: &'a crate::core_context::Core,
 	shared_space_id: &'a str,
 	relayed: &'a str,
 }
 
-impl<R: Runtime> Lookup<'_, R> {
+impl Lookup<'_> {
 	async fn holds(&self, held: &Held, value: Option<&Value>) -> bool {
 		self.checked(held, value).await.is_ok()
 	}
@@ -714,7 +713,7 @@ impl<R: Runtime> Lookup<'_, R> {
 	}
 
 	async fn resolved_child(&self, kind: SpaceChild, child_id: &str) -> Option<bool> {
-		let state = crate::events::core(self.app.app_handle()).state::<DatabaseState>();
+		let state = self.core.state::<DatabaseState>();
 		let database = match state.as_ref() {
 			Ok(database) => database,
 			Err(failure) => return self.unresolved(kind, failure),

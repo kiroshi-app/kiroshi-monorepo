@@ -5,7 +5,6 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use futures_util::future::join_all;
-use tauri::{AppHandle, Manager, Runtime};
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio::time;
 
@@ -16,8 +15,8 @@ use super::contract::{SentMessage, TranscriptStoreError};
 use super::summons::{self, SummonsDropReason, SummonsRun, MAX_SUMMONS_PER_CHAIN};
 use super::turn_run_deadline::{arm_start_deadlines, drop_awaited_run, suspend_start_deadline};
 use crate::agent::commands::{
-	agent_shutdown, announce, announce_in_turn, cancel_session_turn, line_place_of, live_run_of,
-	run_is_idle, start_run, submit_in_line, withdraw_queued, Lineage, RunStart,
+	announce, announce_in_turn, cancel_session_turn, line_place_of, live_run_of, run_is_idle,
+	shut_down_agent, start_run, submit_in_line, withdraw_queued, Lineage, RunStart,
 };
 use crate::agent::contract::{
 	AgentEvent, CancelFailure, CancelFailureReason, CancelOutcome, EventTurn, RuntimeScope,
@@ -32,8 +31,8 @@ use crate::db::repositories::messages::{AwaitedRun, BotReply};
 use crate::db::repositories::runtime_context::{ParticipantKey, RuntimeSession};
 use crate::events::CONVERSATION_UPDATED;
 use crate::routines::runner::{
-	database, detail_of, ends_the_session, held, listen, managed, ReadFailure, RelayReader,
-	NO_AGENT, NO_DATABASE,
+	database, detail_of, ends_the_session, held, listen, ReadFailure, RelayReader, NO_AGENT,
+	NO_DATABASE,
 };
 
 const STOP_ANSWER_BOUND: Duration = Duration::from_secs(30);
@@ -297,8 +296,8 @@ pub(crate) fn present_bot_ids(seats: &[Seat]) -> Vec<&str> {
 		.collect()
 }
 
-pub(crate) async fn run<R: Runtime>(
-	app: AppHandle<R>,
+pub(crate) async fn run(
+	core: crate::core_context::Core,
 	held: HeldTurn,
 	message: SentMessage,
 	summoned: Vec<String>,
@@ -311,7 +310,7 @@ pub(crate) async fn run<R: Runtime>(
 		.map(|bot_id| Summons { bot_id, prompt_id: message.id.clone() })
 		.collect();
 	let turn = HostTurn {
-		app,
+		core,
 		conversation_id: message.conversation_id,
 		turn_id: message.turn_id,
 		prompt_id: message.id,
@@ -321,8 +320,8 @@ pub(crate) async fn run<R: Runtime>(
 	drive_from(turn, held, first).await;
 }
 
-pub(crate) async fn serve_awaited<R: Runtime>(
-	app: AppHandle<R>,
+pub(crate) async fn serve_awaited(
+	core: crate::core_context::Core,
 	held: HeldTurn,
 	awaited: Vec<AwaitedRun>,
 ) {
@@ -330,7 +329,7 @@ pub(crate) async fn serve_awaited<R: Runtime>(
 		return;
 	};
 	let (conversation_id, turn_id) = (first.conversation_id.clone(), first.turn_id.clone());
-	let handed_bot_ids = match stored_handovers(&app, &conversation_id, &turn_id).await {
+	let handed_bot_ids = match stored_handovers(&core, &conversation_id, &turn_id).await {
 		Ok(handed) => handed,
 		Err(error) => {
 			log::error!(
@@ -340,7 +339,7 @@ pub(crate) async fn serve_awaited<R: Runtime>(
 		}
 	};
 	let turn = HostTurn {
-		app,
+		core,
 		conversation_id,
 		turn_id,
 		prompt_id: first.prompt_id.clone(),
@@ -354,12 +353,12 @@ pub(crate) async fn serve_awaited<R: Runtime>(
 	drive_from(turn, held, summoned).await;
 }
 
-async fn stored_handovers<R: Runtime>(
-	app: &AppHandle<R>,
+async fn stored_handovers(
+	core: &crate::core_context::Core,
 	conversation_id: &str,
 	turn_id: &str,
 ) -> Result<Vec<String>, TranscriptStoreError> {
-	let database = database(app)?;
+	let database = database(core)?;
 	let seats = database.conversations().seats(conversation_id.to_owned()).await?;
 	let replies = database.messages().bot_replies_of_turn(turn_id.to_owned()).await?;
 	Ok(handovers_in(&replies, &present_bot_ids(&seats)))
@@ -377,7 +376,7 @@ fn handovers_in(replies: &[BotReply], present: &[&str]) -> Vec<String> {
 		.collect()
 }
 
-async fn drive_from<R: Runtime>(turn: HostTurn<R>, held: HeldTurn, first: Vec<Summons>) {
+async fn drive_from(turn: HostTurn, held: HeldTurn, first: Vec<Summons>) {
 	let (mut listening, heard) = turn.listening();
 	let speaking = turn.wave(&held, first).await;
 	tokio::spawn(async move {
@@ -460,8 +459,8 @@ enum Refusal {
 	Stopped(RuntimeScope),
 }
 
-struct HostTurn<R: Runtime> {
-	app: AppHandle<R>,
+struct HostTurn {
+	core: crate::core_context::Core,
 	conversation_id: String,
 	turn_id: String,
 	prompt_id: String,
@@ -469,7 +468,7 @@ struct HostTurn<R: Runtime> {
 	handed_bot_ids: Mutex<Vec<String>>,
 }
 
-impl<R: Runtime> HostTurn<R> {
+impl HostTurn {
 	async fn drive(
 		&self,
 		held: HeldTurn,
@@ -528,7 +527,7 @@ impl<R: Runtime> HostTurn<R> {
 		match (done.is_in_line, end) {
 			(true, SpeakerEnd::HandsOver) => self.lost_from_line(&done.scope).await,
 			(true, SpeakerEnd::Cancelled) => summons::note_dropped(
-				&self.app,
+				&self.core,
 				&self.run_of(&done.scope.bot_id),
 				SummonsDropReason::Cancelled,
 				None,
@@ -547,7 +546,7 @@ impl<R: Runtime> HostTurn<R> {
 		let (events, heard) = mpsc::unbounded_channel();
 		let conversation_id = self.conversation_id.clone();
 		let reading =
-			listen(&self.app, move |scope| scope.conversation_id == conversation_id, events);
+			listen(&self.core, move |scope| scope.conversation_id == conversation_id, events);
 		(reading, heard)
 	}
 
@@ -555,7 +554,7 @@ impl<R: Runtime> HostTurn<R> {
 		log::info!("{} delivers the queued turn of {}", self.label(), scope.bot_id);
 		summons::note_started(&self.run_of(&scope.bot_id));
 		let bot_ids = [scope.bot_id.clone()];
-		arm_start_deadlines(&self.app, &self.conversation_id, &self.turn_id, &bot_ids);
+		arm_start_deadlines(&self.core, &self.conversation_id, &self.turn_id, &bot_ids);
 	}
 
 	async fn reconciled(&self, speaking: Vec<Speaker>, waiting: &mut Vec<Summons>) -> Vec<Speaker> {
@@ -618,7 +617,7 @@ impl<R: Runtime> HostTurn<R> {
 	}
 
 	async fn awaited_run(&self, bot_id: &str) -> Result<bool, TranscriptStoreError> {
-		let messages = database(&self.app)?.messages();
+		let messages = database(&self.core)?.messages();
 		Ok(messages.is_run_awaited(self.turn_id.clone(), bot_id.to_owned()).await?)
 	}
 
@@ -640,14 +639,14 @@ impl<R: Runtime> HostTurn<R> {
 				self.rejected(&speaker.scope, reason.clone(), interrupted).await;
 			} else {
 				let run = self.run_of(&speaker.scope.bot_id);
-				summons::note_dropped(&self.app, &run, interrupted, Some(reason.clone()));
+				summons::note_dropped(&self.core, &run, interrupted, Some(reason.clone()));
 				running.push(speaker);
 			}
 		}
 		self.cancel_running(running).await;
 		for summons in &waiting {
 			let run = self.run_of(&summons.bot_id);
-			summons::note_dropped(&self.app, &run, interrupted, Some(reason.clone()));
+			summons::note_dropped(&self.core, &run, interrupted, Some(reason.clone()));
 		}
 		join_all(waiting.iter().map(|summons| self.abandon(&summons.bot_id))).await;
 	}
@@ -674,7 +673,7 @@ impl<R: Runtime> HostTurn<R> {
 		dropped: SummonsDropReason,
 	) {
 		summons::note_dropped(
-			&self.app,
+			&self.core,
 			&self.run_of(&scope.bot_id),
 			dropped,
 			Some(reason.clone()),
@@ -688,7 +687,7 @@ impl<R: Runtime> HostTurn<R> {
 		self.abandon(&scope.bot_id).await;
 		let failed = [AgentEvent::Failed { error: reason }, ended_as(TurnOutcome::Failed)];
 		for event in failed {
-			announce_in_turn(&self.app, Some(scope.clone()), Some(self.event_turn()), event);
+			announce_in_turn(&self.core, Some(scope.clone()), Some(self.event_turn()), event);
 		}
 	}
 
@@ -712,7 +711,7 @@ impl<R: Runtime> HostTurn<R> {
 	}
 
 	async fn ended_cancelled_runs(&self, bot_ids: &[&str]) -> Result<(), TranscriptStoreError> {
-		let database = database(&self.app)?;
+		let database = database(&self.core)?;
 		for bot_id in bot_ids {
 			let cancelled = database
 				.messages()
@@ -722,9 +721,9 @@ impl<R: Runtime> HostTurn<R> {
 				log::warn!("{} could not end the run of {bot_id}: {error:?}", self.label());
 			}
 		}
-		announce_conversation(&self.app, database, CONVERSATION_UPDATED, &self.conversation_id)
+		announce_conversation(&self.core, database, CONVERSATION_UPDATED, &self.conversation_id)
 			.await;
-		forget_settled_turns(&self.app).await;
+		forget_settled_turns(&self.core).await;
 		Ok(())
 	}
 
@@ -741,7 +740,7 @@ impl<R: Runtime> HostTurn<R> {
 		if self.has_stopped() {
 			for held in &summoned {
 				let run = self.run_of(&held.bot_id);
-				summons::note_dropped(&self.app, &run, SummonsDropReason::Cancelled, None);
+				summons::note_dropped(&self.core, &run, SummonsDropReason::Cancelled, None);
 			}
 			join_all(summoned.iter().map(|summons| self.abandon(&summons.bot_id))).await;
 			return Vec::new();
@@ -780,11 +779,7 @@ impl<R: Runtime> HostTurn<R> {
 		let run = self.run_of(&summons.bot_id);
 		if is_in_line {
 			summons::note_queued(&run);
-			suspend_start_deadline(
-				crate::events::core(self.app.app_handle()),
-				&self.turn_id,
-				&summons.bot_id,
-			);
+			suspend_start_deadline(&self.core, &self.turn_id, &summons.bot_id);
 		} else {
 			summons::note_started(&run);
 		}
@@ -819,7 +814,7 @@ impl<R: Runtime> HostTurn<R> {
 		&self,
 		participant: ParticipantKey,
 	) -> Result<RuntimeSession, TranscriptStoreError> {
-		let sessions = database(&self.app)?.runtime_context();
+		let sessions = database(&self.core)?.runtime_context();
 		let bot_id = participant.bot_id.clone();
 		let Some(active) = sessions.active_session(participant.clone()).await? else {
 			log::info!("{} starts {bot_id} fresh: no runtime session is stored", self.label());
@@ -839,7 +834,8 @@ impl<R: Runtime> HostTurn<R> {
 		scope: &RuntimeScope,
 		resume: Option<String>,
 	) -> Result<bool, TransportError> {
-		let stored = crate::events::core(&self.app)
+		let stored = self
+			.core
 			.try_state::<db::DatabaseState>()
 			.ok_or_else(|| NO_DATABASE.to_owned())
 			.map_err(missing)?;
@@ -851,7 +847,7 @@ impl<R: Runtime> HostTurn<R> {
 			lineage: Lineage::RecordedByTheRun,
 		};
 		let handle =
-			start_run(self.app.clone(), self.agent()?.inner(), stored.inner(), start).await?;
+			start_run(self.core.clone(), self.agent()?.inner(), stored.inner(), start).await?;
 		Ok(handle.resumed)
 	}
 
@@ -872,7 +868,7 @@ impl<R: Runtime> HostTurn<R> {
 		refused: String,
 	) -> Result<(), TranscriptStoreError> {
 		let participant = self.participant(&scope.bot_id);
-		database(&self.app)?
+		database(&self.core)?
 			.runtime_context()
 			.forget_provider_session(participant, refused)
 			.await?;
@@ -894,7 +890,7 @@ impl<R: Runtime> HostTurn<R> {
 		ridden: &Ridden,
 		prompt_id: &str,
 	) -> Result<String, TranscriptStoreError> {
-		let database = database(&self.app)?;
+		let database = database(&self.core)?;
 		let scope = &ridden.scope;
 		if ridden.carries_the_conversation {
 			return headed_message(database, scope.conversation_id.clone(), prompt_id.to_owned())
@@ -917,14 +913,14 @@ impl<R: Runtime> HostTurn<R> {
 			| Refusal::Unstarted(_, error)
 			| Refusal::Unsubmitted(_, error) => (SummonsDropReason::StartFailed, Some(error.clone())),
 		};
-		summons::note_dropped(&self.app, &self.run_of(bot_id), reason, error);
+		summons::note_dropped(&self.core, &self.run_of(bot_id), reason, error);
 		let (scope, detail) = match refusal {
 			Refusal::Unready(error) => (None, Some(detail_of(&error))),
 			Refusal::Unopened(error) => (None, Some(detail_of(&error))),
 			Refusal::Unstarted(scope, error) => (Some(scope), Some(detail_of(&error))),
 			Refusal::Unsubmitted(scope, error) => {
 				let detail = detail_of(&error);
-				announce(&self.app, Some(scope.clone()), AgentEvent::Failed { error });
+				announce(&self.core, Some(scope.clone()), AgentEvent::Failed { error });
 				(Some(scope), Some(detail))
 			}
 			Refusal::Stopped(scope) => (Some(scope), None),
@@ -946,8 +942,8 @@ impl<R: Runtime> HostTurn<R> {
 
 	async fn awaited(&self, summoned: &[Summons]) -> Result<(), TranscriptStoreError> {
 		let bot_ids: Vec<String> = summoned.iter().map(|summons| summons.bot_id.clone()).collect();
-		database(&self.app)?.messages().await_runs(self.turn_id.clone(), bot_ids.clone()).await?;
-		arm_start_deadlines(&self.app, &self.conversation_id, &self.turn_id, &bot_ids);
+		database(&self.core)?.messages().await_runs(self.turn_id.clone(), bot_ids.clone()).await?;
+		arm_start_deadlines(&self.core, &self.conversation_id, &self.turn_id, &bot_ids);
 		Ok(())
 	}
 
@@ -958,12 +954,12 @@ impl<R: Runtime> HostTurn<R> {
 	}
 
 	async fn abandoned(&self, bot_id: &str) -> Result<(), TranscriptStoreError> {
-		let database = database(&self.app)?;
+		let database = database(&self.core)?;
 		let messages = database.messages();
 		messages.abandon_run(self.turn_id.clone(), bot_id.to_owned(), now_ms()).await?;
-		announce_conversation(&self.app, database, CONVERSATION_UPDATED, &self.conversation_id)
+		announce_conversation(&self.core, database, CONVERSATION_UPDATED, &self.conversation_id)
 			.await;
-		forget_settled_turns(&self.app).await;
+		forget_settled_turns(&self.core).await;
 		Ok(())
 	}
 
@@ -979,7 +975,7 @@ impl<R: Runtime> HostTurn<R> {
 							self.refuse_past_the_bound(&bot_id).await
 						}
 						Some(reason) => {
-							summons::note_dropped(&self.app, &self.run_of(&bot_id), reason, None)
+							summons::note_dropped(&self.core, &self.run_of(&bot_id), reason, None)
 						}
 						None => {}
 					}
@@ -996,21 +992,21 @@ impl<R: Runtime> HostTurn<R> {
 	async fn refuse_past_the_bound(&self, bot_id: &str) {
 		let run = self.run_of(bot_id);
 		let reason = SummonsDropReason::SummonLimit;
-		match drop_awaited_run(&self.app, &run, reason).await {
+		match drop_awaited_run(&self.core, &run, reason).await {
 			Ok(true) => {}
-			Ok(false) => summons::note_dropped(&self.app, &run, reason, None),
+			Ok(false) => summons::note_dropped(&self.core, &run, reason, None),
 			Err(error) => {
 				log::warn!(
 					"{} could not release the awaited run of {bot_id} past the bound: {error:?}",
 					self.label()
 				);
-				summons::note_dropped(&self.app, &run, reason, None);
+				summons::note_dropped(&self.core, &run, reason, None);
 			}
 		}
 	}
 
 	async fn handed_by(&self, done: &Speaker) -> Result<Vec<Summons>, TranscriptStoreError> {
-		let database = database(&self.app)?;
+		let database = database(&self.core)?;
 		let seats = database.conversations().seats(self.conversation_id.clone()).await?;
 		let present = present_bot_ids(&seats);
 		let mut handed = Vec::new();
@@ -1023,7 +1019,7 @@ impl<R: Runtime> HostTurn<R> {
 			for bot_id in mentioned_bot_ids(&reply.content) {
 				if !present.contains(&bot_id) {
 					let run = self.run_of(bot_id);
-					summons::note_dropped(&self.app, &run, SummonsDropReason::NotSeated, None);
+					summons::note_dropped(&self.core, &run, SummonsDropReason::NotSeated, None);
 					continue;
 				}
 				handed.push(Summons { bot_id: bot_id.to_owned(), prompt_id: id.clone() });
@@ -1056,7 +1052,7 @@ impl<R: Runtime> HostTurn<R> {
 			}
 		};
 		let is_withdrawn = withdraw_queued(&agent, scope, &self.turn_id).await;
-		let outcome = cancel_session_turn(&self.app, &agent, scope).await;
+		let outcome = cancel_session_turn(&self.core, &agent, scope).await;
 		if is_withdrawn {
 			self.end_cancelled_runs(&[scope.bot_id.as_str()]).await;
 		}
@@ -1071,7 +1067,7 @@ impl<R: Runtime> HostTurn<R> {
 
 	fn tell_cancelled(&self, scope: &RuntimeScope) {
 		announce_in_turn(
-			&self.app,
+			&self.core,
 			Some(scope.clone()),
 			Some(self.event_turn()),
 			ended_as(TurnOutcome::Cancelled),
@@ -1126,8 +1122,7 @@ impl<R: Runtime> HostTurn<R> {
 
 	async fn shut(&self, scope: RuntimeScope) -> Result<(), TransportError> {
 		self.agent()?;
-		agent_shutdown(self.app.clone(), managed(&self.app, NO_AGENT).map_err(missing)?, scope)
-			.await
+		shut_down_agent(&self.core, scope).await
 	}
 
 	fn participant(&self, bot_id: &str) -> ParticipantKey {
@@ -1135,7 +1130,7 @@ impl<R: Runtime> HostTurn<R> {
 	}
 
 	fn agent(&self) -> Result<crate::core_context::Managed<'_, AgentState>, TransportError> {
-		held(&self.app, NO_AGENT).map_err(missing)
+		held(&self.core, NO_AGENT).map_err(missing)
 	}
 
 	fn label(&self) -> String {
@@ -1188,6 +1183,7 @@ fn missing(detail: String) -> TransportError {
 #[cfg(test)]
 mod tests {
 	use std::time::Duration;
+	use tauri::AppHandle;
 
 	use serde_json::{json, Value};
 	use tauri::test::{mock_builder, MockRuntime};
@@ -1318,7 +1314,8 @@ mod tests {
 	}
 
 	async fn a_room_running(app: &AppHandle<MockRuntime>, names: &[&str]) -> Room {
-		let conversations = database(app).expect("the database opens").conversations();
+		let conversations =
+			database(crate::events::core(app)).expect("the database opens").conversations();
 		let mut bot_ids = Vec::new();
 		for name in names {
 			let identity = BotIdentity {
@@ -1355,7 +1352,7 @@ mod tests {
 	}
 
 	async fn speaking_in(app: &AppHandle<MockRuntime>, room: &Room, bot_ids: &[String]) {
-		let messages = database(app).expect("the database opens").messages();
+		let messages = database(crate::events::core(app)).expect("the database opens").messages();
 		messages.start_turn(turn_in(room)).await.expect("the turn opens");
 		for bot_id in bot_ids {
 			messages.start_run(turn_in(room), bot_id.clone()).await.expect("the run starts");
@@ -1363,7 +1360,7 @@ mod tests {
 	}
 
 	async fn a_streaming_reply(app: &AppHandle<MockRuntime>, room: &Room, bot_id: &str) {
-		let messages = database(app).expect("the database opens").messages();
+		let messages = database(crate::events::core(app)).expect("the database opens").messages();
 		let id = format!("reply-of-{bot_id}");
 		let reply = NewAssistantMessage {
 			id: id.clone(),
@@ -1380,7 +1377,7 @@ mod tests {
 	async fn reply_states(app: &AppHandle<MockRuntime>, room: &Room) -> Vec<MessageState> {
 		let query =
 			MessagePageQuery { conversation_id: room.id.clone(), before_seq: None, limit: 10 };
-		let page = database(app)
+		let page = database(crate::events::core(app))
 			.expect("the database opens")
 			.messages()
 			.page_messages(query)
@@ -1426,9 +1423,9 @@ mod tests {
 		app: &AppHandle<MockRuntime>,
 		room: &Room,
 		stopped: watch::Receiver<bool>,
-	) -> HostTurn<MockRuntime> {
+	) -> HostTurn {
 		HostTurn {
-			app: app.clone(),
+			core: crate::events::core(app).clone(),
 			conversation_id: room.id.clone(),
 			turn_id: "t1".to_owned(),
 			prompt_id: "p1".to_owned(),
@@ -1459,7 +1456,7 @@ mod tests {
 		let grace = room.bot_ids[1].clone();
 		speaking_in(app.handle(), &room, &[]).await;
 		a_streaming_reply(app.handle(), &room, &grace).await;
-		let database = database(app.handle()).expect("the database opens");
+		let database = database(crate::events::core(app.handle())).expect("the database opens");
 
 		let sent = sent_in(&room, None, &format!("reply-of-{grace}"));
 		let summoned = summoned_for(database, &sent, Vec::new()).await.expect("it resolves");
@@ -1477,7 +1474,7 @@ mod tests {
 		for bot_id in [&ada, &grace] {
 			a_streaming_reply(app.handle(), &room, bot_id).await;
 		}
-		let database = database(app.handle()).expect("the database opens");
+		let database = database(crate::events::core(app.handle())).expect("the database opens");
 
 		let replied_to = format!("reply-of-{ada}");
 		let sent = sent_in(&room, Some(&replied_to), &format!("reply-of-{grace}"));
@@ -1492,7 +1489,8 @@ mod tests {
 		crate::db::install(crate::events::core(app.handle()));
 		let room = a_room_running(app.handle(), &["Ada", "Grace"]).await;
 		let (ada, grace) = (room.bot_ids[0].as_str(), room.bot_ids[1].as_str());
-		let messages = database(app.handle()).expect("the database opens").messages();
+		let messages =
+			database(crate::events::core(app.handle())).expect("the database opens").messages();
 		messages.start_turn(turn_in(&room)).await.expect("the turn opens");
 		let window_handovers = MAX_SUMMONS_PER_CHAIN - 2;
 		for order in 0..window_handovers {
@@ -1514,7 +1512,9 @@ mod tests {
 		let summons =
 			|bot_id: &str| Summons { bot_id: bot_id.to_owned(), prompt_id: "p".to_owned() };
 
-		let mut handed = stored_handovers(app.handle(), &room.id, "t1").await.expect("it reads");
+		let mut handed = stored_handovers(crate::events::core(app.handle()), &room.id, "t1")
+			.await
+			.expect("it reads");
 		let host_refusals: Vec<Option<SummonsDropReason>> = (0..3)
 			.map(|_| {
 				let mut waiting = Vec::new();
@@ -1571,7 +1571,7 @@ mod tests {
 		let room = a_room_running(app.handle(), &["Ada", "Grace"]).await;
 		let (speaker, waiter) = (room.bot_ids[0].clone(), room.bot_ids[1].clone());
 		speaking_in(app.handle(), &room, std::slice::from_ref(&speaker)).await;
-		let stored = database(app.handle()).expect("the database opens");
+		let stored = database(crate::events::core(app.handle())).expect("the database opens");
 		stored.messages().await_runs("t1".to_owned(), vec![waiter.clone()]).await.expect("held");
 		let mut announced = events::subscribed(app.handle());
 		let (_stop, stopped) = watch::channel(false);
@@ -1734,7 +1734,8 @@ mod tests {
 			let ada = &room.bot_ids[0];
 			a_streaming_reply(app.handle(), &room, ada).await;
 			let reply = format!("reply-of-{ada}");
-			let messages = database(app.handle()).expect("the database opens").messages();
+			let messages =
+				database(crate::events::core(app.handle())).expect("the database opens").messages();
 			messages.append_text(reply.clone(), naming(ada)).await.expect("it streams");
 			let mut announced = events::subscribed(app.handle());
 			let (_stop, stopped) = watch::channel(false);
@@ -1804,7 +1805,7 @@ mod tests {
 		let app = an_app_of_its_own("host-turn-start-deadline", mock_builder());
 		crate::db::install(crate::events::core(app.handle()));
 		crate::events::core(app.app_handle()).manage(TurnRunDeadlines::after(Duration::ZERO));
-		let stored = database(app.handle()).expect("the database opens");
+		let stored = database(crate::events::core(app.handle())).expect("the database opens");
 		let conversations = stored.conversations();
 		conversations.ensure_default_bot().await.expect("the bot is seeded");
 		let identity = BotIdentity {
@@ -1844,7 +1845,7 @@ mod tests {
 		});
 		let (stop, stopped) = watch::channel(false);
 		let host_turn = HostTurn {
-			app: app.handle().clone(),
+			core: crate::events::core(app.handle()).clone(),
 			conversation_id: room.id.clone(),
 			turn_id: "t1".to_owned(),
 			prompt_id: "p1".to_owned(),
@@ -1875,7 +1876,7 @@ mod tests {
 	}
 
 	async fn open_runs(app: &AppHandle<MockRuntime>) -> i64 {
-		database(app)
+		database(crate::events::core(app))
 			.expect("the database opens")
 			.messages()
 			.call(|connection| {
@@ -2175,7 +2176,8 @@ mod tests {
 		}
 
 		async fn an_awaited_run(app: &AppHandle<MockRuntime>, room: &Room, bot_id: &str) {
-			let messages = database(app).expect("the database opens").messages();
+			let messages =
+				database(crate::events::core(app)).expect("the database opens").messages();
 			messages.start_turn(turn_in(room)).await.expect("the turn opens");
 			messages.await_runs("t1".to_owned(), vec![bot_id.to_owned()]).await.expect("awaited");
 		}
@@ -2264,7 +2266,8 @@ mod tests {
 			crate::events::core(app.app_handle()).manage(AgentState::default());
 			let room = a_room_running(app.handle(), &["Ada"]).await;
 			let ada = scope_in(&room, &room.bot_ids[0]);
-			let messages = database(app.handle()).expect("the database opens").messages();
+			let messages =
+				database(crate::events::core(app.handle())).expect("the database opens").messages();
 			messages.start_turn(turn_in(&room)).await.expect("the turn opens");
 			let _held = a_session_held_for(app.handle(), &ada).await;
 			crate::events::core(app.app_handle())
@@ -2285,7 +2288,7 @@ mod tests {
 		}
 
 		fn heard_in_turn(
-			host_turn: &HostTurn<MockRuntime>,
+			host_turn: &HostTurn,
 			scope: &RuntimeScope,
 			told: Vec<AgentEvent>,
 		) -> (mpsc::UnboundedReceiver<ScopedEvent>, RelayReader) {
@@ -2311,7 +2314,8 @@ mod tests {
 			let room = a_room_running(app.handle(), &["Ada"]).await;
 			let ada = scope_in(&room, &room.bot_ids[0]);
 			an_awaited_run(app.handle(), &room, &ada.bot_id).await;
-			let messages = database(app.handle()).expect("the database opens").messages();
+			let messages =
+				database(crate::events::core(app.handle())).expect("the database opens").messages();
 			let claimed = messages.claim_awaited_run("t1".to_owned(), ada.bot_id.clone()).await;
 			assert!(claimed.expect("the claim is written"), "the host did not claim the run");
 			let mut announced = events::subscribed(app.handle());
@@ -2397,10 +2401,10 @@ mod tests {
 				text: "@Grace this mission is yours now".to_owned(),
 				summoned: grace.bot_id.clone(),
 			};
-			let database = database(app.handle()).expect("the database opens");
+			let database = database(crate::events::core(app.handle())).expect("the database opens");
 
 			run_handed_turn(
-				app.handle(),
+				crate::events::core(app.handle()),
 				database,
 				&crate::events::core(app.app_handle()).state::<AgentState>(),
 				handed,
@@ -2467,7 +2471,7 @@ done
 				async fn drive_from(&self, window: &str) {
 					let agent = crate::events::core(self.app.app_handle()).state::<AgentState>();
 					serve_on_driving(
-						self.handle(),
+						crate::events::core(self.handle()),
 						&self.windows(),
 						&agent,
 						&ClientId::new(window),
@@ -2509,7 +2513,9 @@ done
 				}
 
 				async fn ada_hands_over_to_grace(&self) {
-					let messages = database(self.handle()).expect("the database opens").messages();
+					let messages = database(crate::events::core(self.handle()))
+						.expect("the database opens")
+						.messages();
 					let ended = EndedRun {
 						turn_id: "t1".to_owned(),
 						bot_id: self.room.bot_ids[0].clone(),
@@ -2522,7 +2528,7 @@ done
 
 				async fn becomes_a_mission_thread(&self) {
 					let room_id = self.room.id.clone();
-					database(self.handle())
+					database(crate::events::core(self.handle()))
 						.expect("the database opens")
 						.call(move |connection| {
 							connection.execute(
@@ -2548,7 +2554,9 @@ done
 				}
 
 				async fn grace_busy_in_another_room(&self) -> HeldSession {
-					let conversations = database(self.handle()).expect("it opens").conversations();
+					let conversations = database(crate::events::core(self.handle()))
+						.expect("it opens")
+						.conversations();
 					let elsewhere = conversations
 						.create_conversation(ConversationDraft {
 							space_id: "personal".to_owned(),
@@ -2572,7 +2580,7 @@ done
 
 				async fn run(&self, sql: &'static str) {
 					let room_id = self.room.id.clone();
-					database(self.handle())
+					database(crate::events::core(self.handle()))
 						.expect("the database opens")
 						.call(move |connection| {
 							Ok(connection.execute_batch(&sql.replace("ROOM", &room_id))?)
@@ -2617,7 +2625,9 @@ done
 			async fn a_summons_received_while_its_window_reloads_starts_once_the_window_drives_again(
 			) {
 				let served = handed_over_after_a_reload("serve-after-reload").await;
-				serve_handed(served.handle(), &served.room.id, "t1").await.expect("nothing fails");
+				serve_handed(crate::events::core(served.handle()), &served.room.id, "t1")
+					.await
+					.expect("nothing fails");
 				let before_driving = served.settled().await;
 
 				tokio::join!(served.drive_from(MAIN), served.drive_from("window-1"));
@@ -2636,7 +2646,9 @@ done
 				served.drive_from(MAIN).await;
 
 				served.ada_hands_over_to_grace().await;
-				serve_handed(served.handle(), &served.room.id, "t1").await.expect("served");
+				serve_handed(crate::events::core(served.handle()), &served.room.id, "t1")
+					.await
+					.expect("served");
 				served.grace_heard_a_prompt().await;
 
 				assert_eq!(served.settled().await, 1, "grace was not started exactly once");
@@ -2648,7 +2660,9 @@ done
 				served.drive_from(MAIN).await;
 
 				served.ada_hands_over_to_grace().await;
-				serve_handed(served.handle(), &served.room.id, "t1").await.expect("nothing fails");
+				serve_handed(crate::events::core(served.handle()), &served.room.id, "t1")
+					.await
+					.expect("nothing fails");
 				served.drive_from(MAIN).await;
 
 				assert_eq!(served.settled().await, 0);
@@ -2703,7 +2717,9 @@ done
 				served.drive_from(MAIN).await;
 
 				served.ada_hands_over_to_grace().await;
-				serve_handed(served.handle(), &served.room.id, "t1").await.expect("served");
+				serve_handed(crate::events::core(served.handle()), &served.room.id, "t1")
+					.await
+					.expect("served");
 				served.grace_heard_a_prompt().await;
 
 				assert_eq!(served.settled().await, 1, "grace was not started exactly once");
@@ -2719,7 +2735,9 @@ done
 				served.drive_from(MAIN).await;
 
 				served.ada_hands_over_to_grace().await;
-				serve_handed(served.handle(), &served.room.id, "t1").await.expect("served");
+				serve_handed(crate::events::core(served.handle()), &served.room.id, "t1")
+					.await
+					.expect("served");
 				served.grace_heard_a_prompt().await;
 
 				assert_eq!(served.settled().await, 1, "grace was not started exactly once");
@@ -2735,7 +2753,9 @@ done
 
 				crate::events::clear_client_on_destroyed(&main, &tauri::WindowEvent::Destroyed);
 				served.ada_hands_over_to_grace().await;
-				serve_handed(served.handle(), &served.room.id, "t1").await.expect("served");
+				serve_handed(crate::events::core(served.handle()), &served.room.id, "t1")
+					.await
+					.expect("served");
 				served.grace_heard_a_prompt().await;
 
 				assert_eq!(served.settled().await, 1, "grace was not started exactly once");
@@ -2754,7 +2774,9 @@ done
 					tauri::webview::PageLoadEvent::Started,
 				);
 				served.ada_hands_over_to_grace().await;
-				serve_handed(served.handle(), &served.room.id, "t1").await.expect("nothing fails");
+				serve_handed(crate::events::core(served.handle()), &served.room.id, "t1")
+					.await
+					.expect("nothing fails");
 				let while_reloading = served.settled().await;
 				let traced_while_reloading = served.summons_of_grace();
 				served.drive_from(MAIN).await;
@@ -2816,7 +2838,9 @@ done
 							BEGIN SELECT RAISE(ABORT, 'the claim breaks'); END;",
 					)
 					.await;
-				let messages = database(served.handle()).expect("the database opens").messages();
+				let messages = database(crate::events::core(served.handle()))
+					.expect("the database opens")
+					.messages();
 				let grace = served.room.bot_ids[1].clone();
 				messages.await_runs("t-broken".to_owned(), vec![grace]).await.expect("awaited");
 				served.windows().submitted_from(&ClientId::new(MAIN), "t-broken");
@@ -2831,7 +2855,7 @@ done
 			#[tokio::test]
 			async fn an_awaited_run_claimed_after_it_started_is_refused_and_starts_nothing() {
 				let served = handed_over_after_a_reload("serve-already-started").await;
-				database(served.handle())
+				database(crate::events::core(served.handle()))
 					.expect("the database opens")
 					.messages()
 					.start_run(turn_in(&served.room), served.room.bot_ids[1].clone())
