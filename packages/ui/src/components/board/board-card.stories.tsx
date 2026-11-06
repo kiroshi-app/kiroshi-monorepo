@@ -21,6 +21,8 @@ import {
 	type BoardCardProps,
 } from "@workspace/ui/components/board/board-card"
 import type { BoardSnapshot } from "@workspace/ui/components/board/board-miniature"
+import type { BoardPresenceOwner } from "@workspace/ui/components/board/board-presence"
+import { untintedInkOf } from "@workspace/ui/components/companion-avatar"
 
 type PlayContext = { canvasElement: HTMLElement }
 
@@ -32,14 +34,45 @@ const LONG_TITLE =
 	"Launch week plan for the spring release across support, sales and the docs team"
 const TITLE_LINE_HEIGHT = 20
 
+const FAILED_LINE = "Couldn’t read this board. Open it to try again."
+const LINE_HEIGHT = 16
+const PREVIEW_HEIGHT = 184
+
 const DRAWING: Partial<BoardCardProps> = {
-	itemCount: 6,
+	summary: {
+		status: "loaded",
+		itemCount: 6,
+		snapshot: PLANNING_BOARD_SNAPSHOT,
+	},
 	drawing: { agent: DRAWING_AGENT, objectId: "planning-ship" },
 }
 
 const AT_REST: Partial<BoardCardProps> = {
-	itemCount: 14,
+	summary: {
+		status: "loaded",
+		itemCount: 14,
+		snapshot: PLANNING_BOARD_SNAPSHOT,
+	},
 	drawing: undefined,
+}
+
+const LOADING: Partial<BoardCardProps> = { summary: { status: "loading" } }
+
+const FAILED: Partial<BoardCardProps> = { summary: { status: "failed" } }
+
+const DRAWING_WITHOUT_OBJECT: Partial<BoardCardProps> = {
+	drawing: { agent: DRAWING_AGENT },
+}
+
+const UNPAINTED_AGENT: BoardPresenceOwner = {
+	kind: "agent",
+	id: DRAWING_AGENT.id,
+	name: DRAWING_AGENT.name,
+}
+
+const OWNER_WITHOUT_HUE: Partial<BoardCardProps> = {
+	drawing: { agent: UNPAINTED_AGENT, objectId: "planning-ship" },
+	pointers: [{ ...DRAWING_AGENT_POINTER, owner: UNPAINTED_AGENT }],
 }
 
 const cardOf = (root: HTMLElement, line: string) =>
@@ -69,6 +102,79 @@ const expectAtRest = async ({ canvasElement }: PlayContext) => {
 	)
 	await expect(slotsIn(card, "board-pointer")).toHaveLength(0)
 	await expect(slotsIn(card, "board-object-outline")).toHaveLength(0)
+}
+
+const expectHeaderKept = async (card: HTMLElement) => {
+	await expect(slotIn(card, "board-glyph")).toBeVisible()
+	await expect(slotIn(card, "board-card-title")).toHaveTextContent(
+		BOARD_CARD_TITLE,
+	)
+	await expect(
+		within(card).getByRole("button", {
+			name: "Open",
+			description: BOARD_CARD_TITLE,
+		}),
+	).toBeVisible()
+}
+
+const expectLoading = async ({ canvasElement }: PlayContext) => {
+	const card = within(canvasElement).getByRole("article", {
+		name: BOARD_CARD_TITLE,
+	})
+	await expect(card).toHaveAttribute("aria-busy", "true")
+	await expectHeaderKept(card)
+	await expect(
+		slotIn(card, "board-card-line-skeleton").getBoundingClientRect().height,
+	).toBe(LINE_HEIGHT)
+	await expect(
+		slotIn(card, "board-card-preview-skeleton").getBoundingClientRect().height,
+	).toBe(PREVIEW_HEIGHT)
+	await expect(slotsIn(card, "board-card-line")).toHaveLength(0)
+	await expect(slotsIn(card, "board-miniature")).toHaveLength(0)
+	await expect(slotsIn(card, "board-pointer")).toHaveLength(0)
+	await expect(card).not.toHaveTextContent(/item/)
+}
+
+const expectFailed = async ({ canvasElement }: PlayContext) => {
+	const card = cardOf(canvasElement, FAILED_LINE)
+	await expect(card).not.toHaveAttribute("aria-busy")
+	await expectHeaderKept(card)
+	const line = slotIn(card, "board-card-line")
+	await expect(line).toHaveTextContent(FAILED_LINE)
+	await expect(getComputedStyle(line).color).toBe(
+		resolvedRootColor("--muted-foreground"),
+	)
+	await expect(slotsIn(card, "board-card-preview")).toHaveLength(0)
+	await expect(slotsIn(card, "board-card-preview-skeleton")).toHaveLength(0)
+	await expect(slotsIn(card, "board-pointer")).toHaveLength(0)
+	await expect(card).not.toHaveTextContent(/item/)
+}
+
+const expectDrawingWithoutObject = async ({ canvasElement }: PlayContext) => {
+	const card = cardOf(canvasElement, DRAWING_LINE)
+	await expect(slotIn(card, "board-card-line")).toHaveTextContent(DRAWING_LINE)
+	await waitFor(() => expect(slotsIn(card, "board-pointer")).toHaveLength(1))
+	await expect(
+		slotIn(slotIn(card, "board-pointer"), "board-pointer-name"),
+	).toHaveTextContent(DRAWING_AGENT.name)
+	await expect(slotsIn(card, "board-object-outline")).toHaveLength(0)
+}
+
+const expectOwnerWithoutHue = async ({ canvasElement }: PlayContext) => {
+	const card = cardOf(canvasElement, DRAWING_LINE)
+	await waitFor(() => expect(slotsIn(card, "board-pointer")).toHaveLength(1))
+	const fallback = untintedInkOf("light")
+	await expect(
+		slotIn(card, "board-pointer").style.getPropertyValue("--board-presence"),
+	).toBe(fallback)
+	await expect(
+		slotIn(card, "board-object-outline").style.getPropertyValue(
+			"--board-presence",
+		),
+	).toBe(fallback)
+	await expect(slotIn(card, "board-pointer-name")).toHaveTextContent(
+		UNPAINTED_AGENT.name,
+	)
 }
 
 const expectOpenBeside = async ({ canvasElement }: PlayContext) => {
@@ -102,7 +208,6 @@ const meta = preview.meta({
 	args: {
 		title: BOARD_CARD_TITLE,
 		editedLabel: "edited just now",
-		snapshot: PLANNING_BOARD_SNAPSHOT,
 		pointers: [DRAWING_AGENT_POINTER],
 		onOpen: fn(),
 		...DRAWING,
@@ -175,6 +280,82 @@ export const AtRestDark = meta.story({
 	play: expectAtRest,
 })
 
+export const Loading = meta.story({
+	args: LOADING,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The board is still being read. Check the glyph, the title and Open in place, a 16px bar where the line goes and a 184px block where the preview goes, and no item count, no miniature and no pointer, even with Atlas drawing.",
+			},
+		},
+	},
+	play: expectLoading,
+})
+
+export const LoadingDark = meta.story({
+	args: LOADING,
+	globals: { theme: "dark" },
+	play: expectLoading,
+})
+
+export const Failed = meta.story({
+	args: FAILED,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The board could not be read. Check the glyph, the title and Open in place, the line saying so in the muted tone, and no preview and no item count.",
+			},
+		},
+	},
+	play: expectFailed,
+})
+
+export const FailedDark = meta.story({
+	args: FAILED,
+	globals: { theme: "dark" },
+	play: expectFailed,
+})
+
+export const DrawingWithoutObject = meta.story({
+	args: DRAWING_WITHOUT_OBJECT,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Atlas draws but has not picked an object yet. Check the line naming Atlas, Atlas's arrow and name tag in the preview, and no ring on any object.",
+			},
+		},
+	},
+	play: expectDrawingWithoutObject,
+})
+
+export const DrawingWithoutObjectDark = meta.story({
+	args: DRAWING_WITHOUT_OBJECT,
+	globals: { theme: "dark" },
+	play: expectDrawingWithoutObject,
+})
+
+export const OwnerWithoutHue = meta.story({
+	args: OWNER_WITHOUT_HUE,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Atlas draws with no colour of its own. Check its arrow, name tag and ring painted in the blue an agent avatar wears without a colour.",
+			},
+		},
+	},
+	play: expectOwnerWithoutHue,
+})
+
+export const OwnerWithoutHueDark = meta.story({
+	args: OWNER_WITHOUT_HUE,
+	globals: { theme: "dark" },
+	play: expectOwnerWithoutHue,
+})
+
 export const OpenBeside = meta.story({
 	args: { isOpenBeside: true },
 	parameters: {
@@ -245,7 +426,11 @@ const LiveCard = (args: BoardCardProps) => {
 			<BoardCard
 				{...args}
 				pointers={[isMoved ? MOVED_POINTER : DRAWING_AGENT_POINTER]}
-				snapshot={isMoved ? GROWN_SNAPSHOT : PLANNING_BOARD_SNAPSHOT}
+				summary={{
+					status: "loaded",
+					itemCount: 6,
+					snapshot: isMoved ? GROWN_SNAPSHOT : PLANNING_BOARD_SNAPSHOT,
+				}}
 			/>
 			<button onClick={() => setMoved(true)} type="button">
 				Move Atlas

@@ -234,9 +234,11 @@ const srgbOf = ({ lightness, a, b }: Oklab): Srgb => {
 
 const companionHue = (name: string, hue: number) => hue + hueShift(name)
 
+const untintedInkOf = (theme: AvatarTheme) => THEME_COLOURS[theme].untinted
+
 const cellColourOf = (name: string, theme: AvatarTheme, hue?: number): Srgb =>
 	hue === undefined
-		? srgbOfHex(THEME_COLOURS[theme].untinted)
+		? srgbOfHex(untintedInkOf(theme))
 		: srgbOfHex(hueTone(companionHue(name, hue), theme, "avatar-ink").hex)
 
 const groundColourOf = (
@@ -292,4 +294,5 @@ export {
 	type Srgb,
 	srgbOfHex,
 	TONE_OPACITIES,
+	untintedInkOf,
 }

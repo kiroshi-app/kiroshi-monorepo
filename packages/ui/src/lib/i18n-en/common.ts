@@ -680,6 +680,7 @@ const common = {
 			drawing_other: "Board · {{name}} is drawing · {{count}} items",
 			atRest_one: "Board · {{count}} item · {{edited}}",
 			atRest_other: "Board · {{count}} items · {{edited}}",
+			failed: "Couldn’t read this board. Open it to try again.",
 		},
 		panel: {
 			openInTab: "Open in tab",

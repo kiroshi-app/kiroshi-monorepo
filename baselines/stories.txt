@@ -2,10 +2,18 @@ board-boardcard--at-rest
 board-boardcard--at-rest-dark
 board-boardcard--drawing
 board-boardcard--drawing-dark
+board-boardcard--drawing-without-object
+board-boardcard--drawing-without-object-dark
+board-boardcard--failed
+board-boardcard--failed-dark
+board-boardcard--loading
+board-boardcard--loading-dark
 board-boardcard--long-title
 board-boardcard--long-title-dark
 board-boardcard--open-beside
 board-boardcard--open-beside-dark
+board-boardcard--owner-without-hue
+board-boardcard--owner-without-hue-dark
 board-boardcard--updates-in-place
 board-boardconnectorflyout--elbow
 board-boardconnectorflyout--elbow-dark
@@ -343,6 +351,7 @@ conversation-markdown-webpagecard--in-agent-answer
 conversation-markdown-webpagecard--in-narrow-column
 conversation-markdown-webpagecard--with-preview-and-alt-text
 conversation-markdown-webpagecard--without-preview
+conversation-message-answerstack--with-board-card
 conversation-message-attachmentchip--default
 conversation-message-attachmentchip--inline
 conversation-message-attachmentchip--long-name

@@ -16,41 +16,43 @@ import { BoardGlyph } from "@workspace/ui/components/document-panel"
 import { Icons } from "@workspace/ui/components/icons"
 import { FOCUS_OUTLINE } from "@workspace/ui/components/library-document-agents"
 import { Button } from "@workspace/ui/components/ui/button"
+import { Skeleton } from "@workspace/ui/components/ui/skeleton"
 import { cn } from "@workspace/ui/lib/utils"
 
 type BoardCardDrawing = {
 	agent: BoardPresenceOwner
-	objectId: string
+	objectId?: string
 }
+
+type BoardCardSummary =
+	| { status: "loading" }
+	| { status: "failed" }
+	| { status: "loaded"; itemCount: number; snapshot: BoardSnapshot }
 
 type BoardCardProps = {
 	title: string
-	itemCount: number
+	summary: BoardCardSummary
 	drawing?: BoardCardDrawing
 	editedLabel: string
-	snapshot: BoardSnapshot
 	pointers: readonly BoardPointerPlacement[]
 	isOpenBeside?: boolean
 	onOpen: () => void
 }
 
-const BoardCard = ({
-	title,
-	itemCount,
-	drawing,
-	editedLabel,
+const SKELETON = "animate-none bg-border"
+
+type BoardCardPreviewProps = {
+	snapshot: BoardSnapshot
+	drawing?: BoardCardDrawing
+	pointers: readonly BoardPointerPlacement[]
+}
+
+const BoardCardPreview = ({
 	snapshot,
+	drawing,
 	pointers,
-	isOpenBeside = false,
-	onOpen,
-}: BoardCardProps) => {
-	const { t } = useTranslation("common")
-	const titleId = useId()
-	const lineId = useId()
-	const line = drawing
-		? t("board.card.drawing", { name: drawing.agent.name, count: itemCount })
-		: t("board.card.atRest", { count: itemCount, edited: editedLabel })
-	const outlines: BoardObjectOutlineSpec[] = drawing
+}: BoardCardPreviewProps) => {
+	const outlines: BoardObjectOutlineSpec[] = drawing?.objectId
 		? [{ objectId: drawing.objectId, owner: drawing.agent, state: "drawing" }]
 		: []
 	const drawerPointers = drawing
@@ -58,8 +60,41 @@ const BoardCard = ({
 		: []
 
 	return (
+		<div
+			className="relative h-46 overflow-hidden rounded-md border border-foreground/6 bg-board-surface"
+			data-slot="board-card-preview"
+		>
+			<BoardMiniature
+				outlines={outlines}
+				pointers={drawerPointers}
+				snapshot={snapshot}
+			/>
+		</div>
+	)
+}
+
+const BoardCard = ({
+	title,
+	summary,
+	drawing,
+	editedLabel,
+	pointers,
+	isOpenBeside = false,
+	onOpen,
+}: BoardCardProps) => {
+	const { t } = useTranslation("common")
+	const titleId = useId()
+	const lineId = useId()
+	const isLoading = summary.status === "loading"
+	const lineOf = (itemCount: number) =>
+		drawing
+			? t("board.card.drawing", { name: drawing.agent.name, count: itemCount })
+			: t("board.card.atRest", { count: itemCount, edited: editedLabel })
+
+	return (
 		<article
-			aria-labelledby={`${titleId} ${lineId}`}
+			aria-busy={isLoading || undefined}
+			aria-labelledby={isLoading ? titleId : `${titleId} ${lineId}`}
 			className={cn(
 				"flex w-full min-w-0 flex-col gap-3 rounded-control border bg-card text-foreground",
 				isOpenBeside ? "border-2 border-primary p-2.75" : "border-border p-3",
@@ -77,13 +112,22 @@ const BoardCard = ({
 					>
 						{title}
 					</p>
-					<p
-						className="break-words text-muted-foreground text-xs leading-4 tabular-nums"
-						data-slot="board-card-line"
-						id={lineId}
-					>
-						{line}
-					</p>
+					{isLoading ? (
+						<Skeleton
+							className={cn(SKELETON, "h-4 w-40 max-w-full rounded-sm")}
+							data-slot="board-card-line-skeleton"
+						/>
+					) : (
+						<p
+							className="break-words text-muted-foreground text-xs leading-4 tabular-nums"
+							data-slot="board-card-line"
+							id={lineId}
+						>
+							{summary.status === "failed"
+								? t("board.card.failed")
+								: lineOf(summary.itemCount)}
+						</p>
+					)}
 				</div>
 				<Button
 					aria-describedby={titleId}
@@ -98,18 +142,26 @@ const BoardCard = ({
 					<span className="pe-1">{t("board.card.open")}</span>
 				</Button>
 			</div>
-			<div
-				className="relative h-46 overflow-hidden rounded-md border border-foreground/6 bg-board-surface"
-				data-slot="board-card-preview"
-			>
-				<BoardMiniature
-					outlines={outlines}
-					pointers={drawerPointers}
-					snapshot={snapshot}
+			{summary.status === "loaded" ? (
+				<BoardCardPreview
+					drawing={drawing}
+					pointers={pointers}
+					snapshot={summary.snapshot}
 				/>
-			</div>
+			) : null}
+			{isLoading ? (
+				<Skeleton
+					className={cn(SKELETON, "h-46 rounded-md")}
+					data-slot="board-card-preview-skeleton"
+				/>
+			) : null}
 		</article>
 	)
 }
 
-export { BoardCard, type BoardCardDrawing, type BoardCardProps }
+export {
+	BoardCard,
+	type BoardCardDrawing,
+	type BoardCardProps,
+	type BoardCardSummary,
+}

@@ -7,7 +7,10 @@ import {
 	useState,
 } from "react"
 
-import { BoardCard } from "@workspace/ui/components/board/board-card"
+import {
+	BoardCard,
+	type BoardCardSummary,
+} from "@workspace/ui/components/board/board-card"
 import {
 	DOCUMENT_PANEL_MAX_WIDTH,
 	DocumentPanel,
@@ -32,10 +35,7 @@ import {
 	isTrailingRun,
 	textCarryingDocuments,
 } from "@/lib/chat/document-mentions"
-import {
-	BLANK_BOARD_SNAPSHOT,
-	boardSnapshotOf,
-} from "@/lib/library/library-boards"
+import { boardSnapshotOf } from "@/lib/library/library-boards"
 import { titleOf } from "@/lib/library/library-items"
 import { libraryQueryKeys } from "@/lib/library/library-query-keys"
 import {
@@ -285,6 +285,21 @@ const useBoardSummary = (spaceId: string, board: LibraryItem | undefined) =>
 		enabled: board !== undefined,
 	}).data
 
+const useBoardCardSummary = (
+	spaceId: string,
+	board: LibraryItem,
+): BoardCardSummary => {
+	const { data, isError } = useQuery(libraryBoardSummaryQueryOf(spaceId, board))
+	if (data) {
+		return {
+			status: "loaded",
+			itemCount: data.nodeCount,
+			snapshot: boardSnapshotOf(data),
+		}
+	}
+	return { status: isError ? "failed" : "loading" }
+}
+
 type ThreadBoardPanelProps = {
 	documents: ThreadDocuments
 	name: string
@@ -370,7 +385,7 @@ type ThreadBoardCardProps = {
 }
 
 const ThreadBoardCard = ({ documents, board, now }: ThreadBoardCardProps) => {
-	const summary = useBoardSummary(documents.spaceId, board)
+	const summary = useBoardCardSummary(documents.spaceId, board)
 	const drawingOf = useContext(ThreadBoardDrawingContext)
 	const { drawing, pointers } = drawingOf(board.name)
 	const item: ThreadLibraryItem = { kind: "board", name: board.name }
@@ -380,10 +395,9 @@ const ThreadBoardCard = ({ documents, board, now }: ThreadBoardCardProps) => {
 			drawing={drawing}
 			editedLabel={toRelativeTime(board.modifiedAt, now)}
 			isOpenBeside={isOpenedItem(documents.opened, item)}
-			itemCount={summary?.nodeCount ?? 0}
 			onOpen={() => documents.open(item)}
 			pointers={pointers}
-			snapshot={summary ? boardSnapshotOf(summary) : BLANK_BOARD_SNAPSHOT}
+			summary={summary}
 			title={titleOf(board)}
 		/>
 	)

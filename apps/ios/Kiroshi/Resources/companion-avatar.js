@@ -488,7 +488,8 @@
     };
   };
   var companionHue = (name, hue) => hue + hueShift(name);
-  var cellColourOf = (name, theme, hue) => hue === undefined ? srgbOfHex(THEME_COLOURS[theme].untinted) : srgbOfHex(hueTone(companionHue(name, hue), theme, "avatar-ink").hex);
+  var untintedInkOf = (theme) => THEME_COLOURS[theme].untinted;
+  var cellColourOf = (name, theme, hue) => hue === undefined ? srgbOfHex(untintedInkOf(theme)) : srgbOfHex(hueTone(companionHue(name, hue), theme, "avatar-ink").hex);
   var groundColourOf = (name, theme, hue) => {
     if (hue !== undefined)
       return srgbOfHex(hueTone(companionHue(name, hue), theme, "avatar-ground").hex);
