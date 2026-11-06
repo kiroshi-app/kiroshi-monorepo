@@ -163,27 +163,6 @@ impl Tokens {
 	}
 }
 
-pub struct AvatarHue {
-	pub ink: Color,
-	pub ground: Color,
-}
-
-const UNTINTED_FIELD: u32 = 0x1d3ccd;
-
-pub fn avatar_hue(hue: Option<f32>, dark: bool) -> AvatarHue {
-	match hue {
-		Some(hue) => AvatarHue {
-			ink: tone(hue, dark, Role::AvatarInk),
-			ground: tone(hue, dark, Role::AvatarGround),
-		},
-		None => {
-			let field = srgb(UNTINTED_FIELD);
-			let secondary = srgb(if dark { 0x262626 } else { 0xf2f2f2 });
-			AvatarHue { ink: field, ground: field.mix(secondary, 0.75) }
-		}
-	}
-}
-
 pub fn conversation_icon(hue: Option<f32>, dark: bool) -> (Color, Color) {
 	match hue {
 		Some(hue) => (

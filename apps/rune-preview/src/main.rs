@@ -1,4 +1,5 @@
 mod app;
+mod avatar;
 mod content;
 mod conversations;
 mod dev_profile;
@@ -10,6 +11,7 @@ mod icons;
 mod images;
 mod model;
 mod onboarding;
+mod runs;
 mod scenes;
 mod smoke;
 mod tokens;
@@ -17,6 +19,7 @@ mod turn;
 mod widgets;
 
 use std::process::ExitCode;
+use std::time::Duration;
 
 use rune::{AppSpec, Cx, El, KeyEvent, Tx, Waker};
 use rune_kit::shell;
@@ -45,8 +48,13 @@ fn setup(s: &mut App, waker: Waker) {
 	s.setup(waker);
 }
 
-fn poll(s: &mut App, _: f64, _: &mut Tx) -> bool {
-	s.poll()
+fn poll(s: &mut App, seconds: f64, tx: &mut Tx) -> bool {
+	let changed = s.poll();
+	if !s.tick(seconds) {
+		return changed;
+	}
+	tx.wake_after(Duration::ZERO);
+	true
 }
 
 fn on_key(s: &mut App, event: &KeyEvent, _: &mut Tx) -> bool {

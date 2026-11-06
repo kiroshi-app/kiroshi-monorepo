@@ -3,8 +3,8 @@ use rune::TextEdit;
 use crate::app::{App, Live, Ready, Screen, Thread, Workspace, connected, whole_thread};
 use crate::dev_profile::{ClaudeLogin, DevProfile, ImportChoices, KiroshiSignIn};
 use crate::host::{Host, HostError, Profile};
-use crate::model::ClaudeItem;
 use crate::model::{Agent, Conversation, LastWord, Message, Participant, Role, Space};
+use crate::model::{AgentEvent, ClaudeItem, RuntimeScope};
 use crate::onboarding::{Account, Connect, Page, Step};
 
 type Scene = (&'static str, fn(&mut App));
@@ -259,6 +259,8 @@ fn thread_streaming(s: &mut App) {
 			text: "Two packages: `@workspace/ui` holds the design system, and".into(),
 		});
 	}
+	let scope = RuntimeScope { conversation_id: "chat-skippy".into(), bot_id: "skippy".into() };
+	s.runs.heard(&scope, &AgentEvent::MessageDelta { id: "live".into(), text: String::new() });
 }
 
 fn thread_mention(s: &mut App) {

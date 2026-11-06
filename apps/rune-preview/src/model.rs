@@ -115,11 +115,42 @@ pub enum AgentEvent {
 	TurnEnded {
 		ended: TurnEnded,
 	},
+	TurnChanged {
+		state: TurnState,
+	},
+	Activity {
+		activity: ToolActivity,
+	},
 	Failed {
 		error: serde_json::Value,
 	},
 	#[serde(other)]
 	Other,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum TurnState {
+	Idle,
+	Submitting,
+	Running,
+	Stopping,
+	Failed,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ActivityStatus {
+	Pending,
+	Running,
+	Succeeded,
+	Failed,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct ToolActivity {
+	pub title: String,
+	pub status: ActivityStatus,
 }
 
 #[derive(Clone, Debug, Deserialize)]

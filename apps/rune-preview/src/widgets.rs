@@ -2,16 +2,9 @@ use rune::{Color, Cursor, El, Icon, col, el, icon, row, text};
 
 use crate::icons;
 use crate::tokens::{
-	self, RADIUS_CONTROL, RADIUS_LG, SPACING, TEXT_COMPACT_MEDIUM, TEXT_COMPACT_MONO,
+	RADIUS_CONTROL, RADIUS_LG, SPACING, TEXT_COMPACT_MEDIUM, TEXT_COMPACT_MONO,
 	TEXT_COMPACT_MONO_MEDIUM, TEXT_SM, TEXT_SM_MEDIUM, Tokens,
 };
-
-pub fn agent_avatar(hue: Option<f32>, size: f32, dark: bool) -> El {
-	let colours = tokens::avatar_hue(hue, dark);
-	el().size(size, size)
-		.child(icon(&icons::HEXAGON, size).color(colours.ground).absolute(0.0, 0.0))
-		.child(icon(&icons::HEXAGON_INNER, size).color(colours.ink).absolute(0.0, 0.0))
-}
 
 pub fn not_drawn(t: &Tokens, what: &str, source: &str) -> El {
 	let mut placeholder = col()

@@ -6,6 +6,7 @@ use rune::{TextEdit, Waker};
 use rune_kit::shell::PaneState;
 use serde_json::json;
 
+use crate::avatar::Motion;
 use crate::content;
 use crate::dev_profile::{self, DevProfile};
 use crate::events::{self, HostEvent};
@@ -16,6 +17,7 @@ use crate::model::{
 	Role, Space,
 };
 use crate::onboarding::{Method, Step};
+use crate::runs::Runs;
 use crate::turn::{self, SendError};
 
 const PAGE_LIMIT: u32 = 200;
@@ -141,7 +143,11 @@ impl Thread {
 					live.text = message.text;
 				}
 			}
-			AgentEvent::TurnEnded { .. } | AgentEvent::Failed { .. } | AgentEvent::Other => {}
+			AgentEvent::TurnEnded { .. }
+			| AgentEvent::TurnChanged { .. }
+			| AgentEvent::Activity { .. }
+			| AgentEvent::Failed { .. }
+			| AgentEvent::Other => {}
 		}
 	}
 }
@@ -193,6 +199,8 @@ pub struct App {
 	pub dev_profile: Option<DevProfile>,
 	pub connect_method: Method,
 	pub import_selected: Vec<String>,
+	pub runs: Runs,
+	pub clock_ms: f64,
 	outbox: Option<Outbox>,
 	inbox: Receiver<Inbound>,
 	pending: Sender<Inbound>,
@@ -214,6 +222,8 @@ impl App {
 			dev_profile: None,
 			connect_method: Method::SignIn,
 			import_selected: Vec::new(),
+			runs: Runs::default(),
+			clock_ms: 0.0,
 			outbox: None,
 			inbox,
 			pending,
@@ -252,6 +262,22 @@ impl App {
 			changed = true;
 		}
 		changed
+	}
+
+	pub fn tick(&mut self, seconds: f64) -> bool {
+		self.clock_ms = seconds * 1000.0;
+		self.is_animating()
+	}
+
+	pub fn is_animating(&self) -> bool {
+		!self.runs.is_empty()
+	}
+
+	pub fn motion(&self, conversation_id: &str, bot_id: &str) -> Motion {
+		match self.runs.activity(conversation_id, bot_id) {
+			Some(activity) => Motion::Running { activity, at_ms: self.clock_ms },
+			None => Motion::Still,
+		}
 	}
 
 	pub fn ready(&self) -> Option<&Ready> {
@@ -436,9 +462,9 @@ impl App {
 	fn host_event(&mut self, event: HostEvent) {
 		match event {
 			HostEvent::Agent(scoped) => {
-				let (Some(scope), Some(thread)) = (scoped.scope, self.thread.as_mut()) else {
-					return;
-				};
+				let Some(scope) = scoped.scope else { return };
+				self.runs.heard(&scope, &scoped.event);
+				let Some(thread) = self.thread.as_mut() else { return };
 				if thread.shows(&scope.conversation_id) {
 					thread.streamed(&scope.bot_id, scoped.event);
 				}

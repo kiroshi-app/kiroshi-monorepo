@@ -2,6 +2,7 @@ use rune::{Color, Cursor, El, col, el, icon, row, text};
 use rune_kit::Kit;
 
 use crate::app::{App, Screen};
+use crate::avatar::Face;
 use crate::dev_profile::{ClaudeLogin, ImportChoices, KiroshiSignIn};
 use crate::hues::Role;
 use crate::icons;
@@ -12,7 +13,7 @@ use crate::tokens::{
 	TEXT_SM_MEDIUM, TEXT_SM_SEMIBOLD, TEXT_TITLE, TEXT_XS, TEXT_XS_MEDIUM, TEXT_XS_MONO, Tokens,
 	tone,
 };
-use crate::widgets::{Pill, agent_avatar, checkbox, field, radio, spinner};
+use crate::widgets::{Pill, checkbox, field, radio, spinner};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Step {
@@ -262,7 +263,7 @@ fn companions(t: &Tokens) -> El {
 			.items_center()
 			.gap(SPACING * 1.5)
 			.pb(if featured { 28.0 } else { 0.0 })
-			.child(agent_avatar(Some(hue), if featured { 132.0 } else { 96.0 }, t.dark))
+			.child(Face::still(name, Some(hue)).draw(if featured { 132.0 } else { 96.0 }, t.dark))
 			.child(
 				el().pt(SPACING * 2.0)
 					.child(text(name).font(TEXT_COMPACT_MEDIUM).color(t.foreground)),
@@ -282,9 +283,9 @@ fn bubble(t: &Tokens, words: &str, solid: bool) -> El {
 		.child(text(words.to_owned()).font(TEXT_SM).color(ink).wrap())
 }
 
-fn overlapping(t: &Tokens, hues: &[f32], size: f32) -> El {
-	row().children(hues.iter().enumerate().map(|(index, hue)| {
-		agent_avatar(Some(*hue), size, t.dark).ml(if index > 0 { -6.0 } else { 0.0 })
+fn overlapping(t: &Tokens, faces: &[(&str, f32)], size: f32) -> El {
+	row().children(faces.iter().enumerate().map(|(index, &(name, hue))| {
+		Face::still(name, Some(hue)).draw(size, t.dark).ml(if index > 0 { -6.0 } else { 0.0 })
 	}))
 }
 
@@ -297,7 +298,11 @@ fn conversations(t: &Tokens) -> El {
 			row()
 				.gap(SPACING * 2.0)
 				.center_y()
-				.child(el().w(44.0).child(overlapping(t, &[GREEN, PINK], 24.0)))
+				.child(el().w(44.0).child(overlapping(
+					t,
+					&[("Juniper", GREEN), ("Wren", PINK)],
+					24.0,
+				)))
 				.child(text("Launch week").font(TEXT_COMPACT_SEMIBOLD).color(t.foreground)),
 		)
 		.child(row().w_full().justify_end().child(bubble(
@@ -309,7 +314,7 @@ fn conversations(t: &Tokens) -> El {
 			row()
 				.items_end()
 				.gap(SPACING * 2.0)
-				.child(agent_avatar(Some(PINK), 24.0, t.dark))
+				.child(Face::still("Wren", Some(PINK)).draw(24.0, t.dark))
 				.child(bubble(t, "On it. I\u{2019}ll run the release notes as a mission.", false)),
 		);
 	let status = row()
@@ -330,7 +335,7 @@ fn conversations(t: &Tokens) -> El {
 		.radius(RADIUS_BUBBLE)
 		.border(1.0, t.border)
 		.fill(t.card)
-		.child(agent_avatar(Some(PINK), 32.0, t.dark))
+		.child(Face::still("Wren", Some(PINK)).draw(32.0, t.dark))
 		.child(
 			col()
 				.grow(1.0)
@@ -362,7 +367,7 @@ fn space_avatar(t: &Tokens, name: &str, hue: f32) -> El {
 }
 
 fn spaces(t: &Tokens) -> El {
-	let space = |name: &'static str, detail: &'static str, hue: f32, members: &[f32]| {
+	let space = |name: &'static str, detail: &'static str, hue: f32, members: &[(&str, f32)]| {
 		card(t)
 			.grow(1.0)
 			.min_w(144.0)
@@ -386,8 +391,8 @@ fn spaces(t: &Tokens) -> El {
 	row()
 		.w(520.0)
 		.gap(SPACING * 3.0)
-		.child(space("Work", "Shared with 3 people", BLUE, &[CYAN, PINK]))
-		.child(space("Personal", "Only you", GREEN, &[GREEN]))
+		.child(space("Work", "Shared with 3 people", BLUE, &[("Atlas", CYAN), ("Wren", PINK)]))
+		.child(space("Personal", "Only you", GREEN, &[("Juniper", GREEN)]))
 }
 
 fn tools(t: &Tokens) -> El {
@@ -706,7 +711,7 @@ fn import_row(s: &App, t: &Tokens, row_: ImportRow) -> El {
 	let key = row_.item.key.clone();
 	let checked = s.import_selected.contains(&row_.item.key);
 	let media = match row_.media {
-		Media::Agent(hue) => agent_avatar(Some(hue), 28.0, t.dark),
+		Media::Agent(hue) => Face::still(&row_.title, Some(hue)).draw(28.0, t.dark),
 		Media::Glyph(glyph) => icon(glyph, 16.0).color(t.muted_foreground),
 	};
 	let title_font =

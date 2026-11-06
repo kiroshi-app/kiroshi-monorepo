@@ -9,6 +9,7 @@ use rune_kit::markdown::{Markdown, MarkdownStyle};
 use rune_kit::{Kit, PopupItem, PopupList, TextInput};
 
 use crate::app::{AGENT_PILL, App, Ready, Thread, Workspace};
+use crate::avatar::{Face, Motion};
 use crate::content::{self, Segment};
 use crate::host::{DEV_START_COMMAND, HostError, Profile};
 use crate::hues::Role as HueRole;
@@ -20,7 +21,7 @@ use crate::tokens::{
 	TEXT_COMPACT_MONO, TEXT_COMPACT_SEMIBOLD, TEXT_SM, TEXT_SM_MEDIUM, TEXT_TITLE, TEXT_XS_MEDIUM,
 	Tokens, conversation_icon, srgb, tone,
 };
-use crate::widgets::{Pill, agent_avatar, not_drawn, spinner};
+use crate::widgets::{Pill, not_drawn, spinner};
 
 pub const CHROME: Chrome =
 	Chrome { full_size_content: true, traffic_lights: Some((16.0, 14.0)), drag_regions: true };
@@ -248,7 +249,7 @@ fn roster_row(s: &App, i: usize, t: &Tokens, now: i64) -> El {
 		s.thread.as_ref().is_some_and(|thread| thread.conversation_id == conversation.id);
 	let solo = solo_agent(s, conversation);
 	let media = match &solo {
-		Some(agent) => agent_avatar(agent.hue, 40.0, t.dark),
+		Some(agent) => agent.face(s, &conversation.id).draw(40.0, t.dark),
 		None => subject_icon(conversation, 40.0, t),
 	};
 	let name = solo.as_ref().map_or(conversation.title.clone(), |agent| agent.name.clone());
@@ -300,9 +301,16 @@ fn roster_row(s: &App, i: usize, t: &Tokens, now: i64) -> El {
 }
 
 struct SoloAgent {
+	id: String,
 	name: String,
 	hue: Option<f32>,
 	title: String,
+}
+
+impl SoloAgent {
+	fn face<'a>(&'a self, s: &App, conversation_id: &str) -> Face<'a> {
+		Face { name: &self.name, hue: self.hue, motion: s.motion(conversation_id, &self.id) }
+	}
 }
 
 fn opened_conversation<'a>(s: &'a App, thread: &Thread) -> Option<&'a Conversation> {
@@ -318,7 +326,12 @@ fn shown_name(s: &App, thread: &Thread) -> String {
 fn solo_agent(s: &App, conversation: &Conversation) -> Option<SoloAgent> {
 	let bot_id = conversation.solo_bot_id.as_deref()?;
 	let agent = s.ready()?.agents.iter().find(|agent| agent.id == bot_id)?;
-	Some(SoloAgent { name: agent.name.clone(), hue: agent.avatar_blot, title: agent.title.clone() })
+	Some(SoloAgent {
+		id: agent.id.clone(),
+		name: agent.name.clone(),
+		hue: agent.avatar_blot,
+		title: agent.title.clone(),
+	})
 }
 
 fn subject_icon(conversation: &Conversation, size: f32, t: &Tokens) -> El {
@@ -386,7 +399,7 @@ fn thread_header(s: &App, t: &Tokens) -> El {
 		let conversation = opened_conversation(s, thread);
 		let solo = conversation.and_then(|conversation| solo_agent(s, conversation));
 		let media = match (&solo, conversation) {
-			(Some(agent), _) => agent_avatar(agent.hue, 24.0, t.dark),
+			(Some(agent), _) => agent.face(s, &thread.conversation_id).draw(24.0, t.dark),
 			(None, Some(conversation)) => subject_icon(conversation, 24.0, t),
 			(None, None) => el(),
 		};
@@ -503,7 +516,7 @@ fn empty_thread(thread: &Thread, t: &Tokens) -> El {
 		.gap(SPACING * 5.0)
 		.py(48.0)
 		.px(SPACING * 6.0)
-		.child(agent_avatar(seat.and_then(|seat| seat.hue), 64.0, t.dark))
+		.child(Face::still(&name, seat.and_then(|seat| seat.hue)).draw(64.0, t.dark))
 		.child(identity)
 		.child(hint);
 	col().w_full().grow(1.0).min_h(0.0).center().child(state)
@@ -590,10 +603,14 @@ fn message_row(s: &App, i: usize, k: &Kit, t: &Tokens) -> El {
 	let name = message.author.unwrap_or_else(|| "Agent".to_owned());
 	let hue = message.bot_id.and_then(|id| s.agent_hue(id));
 	let accent = hue.map_or(t.primary, |hue| tone(hue, t.dark, HueRole::Accent));
+	let motion = match (message.streaming, message.bot_id, s.thread.as_ref()) {
+		(true, Some(bot_id), Some(thread)) => s.motion(&thread.conversation_id, bot_id),
+		_ => Motion::Still,
+	};
 	let footer = row()
 		.gap(SPACING * 1.5)
 		.center_y()
-		.child(agent_avatar(hue, 18.0, t.dark))
+		.child(Face { name: &name, hue, motion }.draw(18.0, t.dark))
 		.child(text(name).font(TEXT_COMPACT_SEMIBOLD).color(accent));
 	let body = content::segments(&named)
 		.into_iter()
@@ -720,7 +737,7 @@ fn mention_popup(s: &App, k: &Kit, t: &Tokens, layer: &mut Vec<El>) {
 	let dark = t.dark;
 	let items = candidates.into_iter().map(|seat| {
 		PopupItem::new(seat.bot_id.clone(), seat.name.clone())
-			.leading(agent_avatar(seat.hue, 18.0, dark))
+			.leading(Face::still(&seat.name, seat.hue).draw(22.0, dark))
 	});
 	PopupList::new("mentions", COMPOSER)
 		.open(true)
