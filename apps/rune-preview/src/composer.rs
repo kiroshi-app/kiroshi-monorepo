@@ -8,7 +8,7 @@ use crate::app::{AGENT_PILL, App, Attachment, MentionMenu, Mentionable};
 use crate::avatar::Face;
 use crate::icons;
 use crate::tokens::{
-	SPACING, TEXT_BUBBLE, TEXT_COMPACT, TEXT_SM_MEDIUM, TEXT_XS, TEXT_XS_MEDIUM, Tokens,
+	SPACING, TEXT_11, TEXT_BUBBLE, TEXT_COMPACT, TEXT_SM_MEDIUM, TEXT_XS, TEXT_XS_MEDIUM, Tokens,
 };
 
 pub const COMPOSER: &str = "composer";
@@ -201,14 +201,7 @@ fn chip(attachment: &Attachment, t: &Tokens) -> El {
 						.color(t.foreground)
 						.truncate(),
 				)
-				.child(
-					text(file_size(attachment.bytes))
-						.font(rune::TextStyle {
-							line_height: 16.0,
-							..rune::TextStyle::new(11.0, 400.0)
-						})
-						.color(t.muted_foreground),
-				),
+				.child(text(file_size(attachment.bytes)).font(TEXT_11).color(t.muted_foreground)),
 		)
 		.child(remove)
 }

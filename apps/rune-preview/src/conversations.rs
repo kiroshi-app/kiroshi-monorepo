@@ -351,7 +351,7 @@ fn subject_icon(conversation: &Conversation, size: f32, t: &Tokens) -> El {
 		.child(icon(&icons::MESSAGE, size * 0.45).color(ink))
 }
 
-fn title_badge(t: &Tokens, title: &str) -> El {
+pub fn title_badge(t: &Tokens, title: &str) -> El {
 	el().px(6.0).py(2.0).radius(7.0).fill(t.foreground.alpha(0.1)).shrink().child(
 		text(title.to_owned()).font(TEXT_10_MEDIUM).color(t.foreground.alpha(0.8)).truncate(),
 	)

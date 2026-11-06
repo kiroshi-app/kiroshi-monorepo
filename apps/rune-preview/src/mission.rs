@@ -2,10 +2,12 @@ use rune::{Color, Cursor, El, Icon, TextStyle, Tx, col, el, icon, oklcha, row, t
 
 use crate::app::{App, Board, OpenMission};
 use crate::avatar::{Activity, Face, Motion};
+use crate::conversations::title_badge;
 use crate::icons;
 use crate::model::{Agent, Mission, MissionEvent, MissionState, Ticket};
 use crate::tokens::{
-	RADIUS_BUBBLE, SPACING, TEXT_BUBBLE, TEXT_SM, TEXT_SM_MEDIUM, TEXT_XS, TEXT_XS_MEDIUM, Tokens,
+	RADIUS_BUBBLE, SPACING, TEXT_11, TEXT_BUBBLE, TEXT_SM, TEXT_SM_MEDIUM, TEXT_XS, TEXT_XS_MEDIUM,
+	Tokens,
 };
 
 const HEADER: f32 = 48.0;
@@ -15,7 +17,6 @@ const BAND_INSET: f32 = 50.0;
 const TURN_AVATAR: f32 = 40.0;
 const TURN_GAP: f32 = 8.0;
 const MARK: f32 = 16.0;
-const TEXT_11: TextStyle = TextStyle { line_height: 16.0, ..TextStyle::new(11.0, 400.0) };
 const TIMESTAMP: TextStyle = TextStyle { line_height: 20.0, ..TextStyle::new(11.0, 400.0) };
 const PILL_HEIGHT: f32 = 20.0;
 const BADGE_DOT: f32 = 8.0;
@@ -394,7 +395,7 @@ pub fn turn(
 		.gap(SPACING * 1.5)
 		.center_y()
 		.child(text(bot.name.clone()).font(TEXT_SM_MEDIUM).color(t.foreground))
-		.child(title_chip(&bot.title, t));
+		.child(if bot.title.is_empty() { el() } else { title_badge(t, &bot.title) });
 	col().w_full().child(author).child(
 		row()
 			.w_full()
@@ -402,17 +403,6 @@ pub fn turn(
 			.items_end()
 			.child(avatar(mission, bot, TURN_AVATAR, s, t))
 			.child(bubble),
-	)
-}
-
-fn title_chip(title: &str, t: &Tokens) -> El {
-	if title.is_empty() {
-		return el();
-	}
-	el().px(6.0).py(2.0).radius(7.0).fill(t.foreground.alpha(0.1)).child(
-		text(title.to_owned())
-			.font(TextStyle { line_height: 14.0, ..TextStyle::new(10.0, 500.0) })
-			.color(t.foreground.alpha(0.8)),
 	)
 }
 

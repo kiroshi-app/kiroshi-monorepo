@@ -33,6 +33,7 @@ const fn mono(text: TextStyle) -> TextStyle {
 }
 
 pub const TEXT_10_MEDIUM: TextStyle = style(10.0, 14.0, 500.0);
+pub const TEXT_11: TextStyle = style(11.0, 16.0, 400.0);
 pub const TEXT_XS: TextStyle = style(12.0, 16.0, 400.0);
 pub const TEXT_XS_MEDIUM: TextStyle = style(12.0, 16.0, 500.0);
 pub const TEXT_XS_MONO: TextStyle = mono(TEXT_XS);
