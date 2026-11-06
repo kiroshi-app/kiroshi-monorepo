@@ -116,3 +116,50 @@ pub struct ScopedEvent {
 	pub scope: Option<RuntimeScope>,
 	pub event: AgentEvent,
 }
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct ClaudeAccountReport {
+	pub authenticated: bool,
+	pub account: Option<ClaudeAccount>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct ClaudeAccount {
+	pub email: Option<String>,
+	pub plan: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClaudeItem {
+	pub key: String,
+	pub name: String,
+	pub description: String,
+	pub already_imported: bool,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum ClaudeInventory {
+	Absent,
+	Refused {
+		cause: String,
+	},
+	#[serde(rename_all = "camelCase")]
+	Found {
+		agents: Vec<ClaudeItem>,
+		skills: Vec<ClaudeItem>,
+		claude_md: Option<ClaudeItem>,
+	},
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum KiroshiAccountState {
+	SignedIn {
+		email: String,
+		plan: Option<String>,
+	},
+	#[serde(other)]
+	SignedOut,
+}

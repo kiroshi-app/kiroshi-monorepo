@@ -1,0 +1,115 @@
+use rune::Icon;
+
+pub static PREVIOUS: Icon = Icon {
+	name: "keyline-ChevronLeftIcon-outline1.6",
+	view: 24.0,
+	body: r#"<path d="M15 6L9 12L15 18" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="currentColor"></path>"#,
+};
+
+pub static NEXT: Icon = Icon {
+	name: "keyline-ChevronRightIcon-outline1.6",
+	view: 24.0,
+	body: r#"<path d="M9 6L15 12L9 18" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="currentColor"></path>"#,
+};
+
+pub static FOLDER: Icon = Icon {
+	name: "keyline-FolderIcon-outline",
+	view: 24.0,
+	body: r#"<path d="M3 7C3 5.3431 4.3431 4 6 4L8.6716 4C9.202 4 9.7107 4.2107 10.0858 4.5858L11.4142 5.9142C11.7893 6.2893 12.298 6.5 12.8284 6.5L18 6.5C19.6569 6.5 21 7.8431 21 9.5L21 17C21 18.6569 19.6569 20 18 20L6 20C4.3431 20 3 18.6569 3 17Z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="currentColor"></path>"#,
+};
+
+pub static SERVER: Icon = Icon {
+	name: "keyline-ServerIcon-outline",
+	view: 24.0,
+	body: r#"<path d="M6 2L18 2C19.1046 2 20 2.8954 20 4L20 8C20 9.1046 19.1046 10 18 10L6 10C4.8954 10 4 9.1046 4 8L4 4C4 2.8954 4.8954 2 6 2ZM6 14L18 14C19.1046 14 20 14.8954 20 16L20 20C20 21.1046 19.1046 22 18 22L6 22C4.8954 22 4 21.1046 4 20L4 16C4 14.8954 4.8954 14 6 14Z" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"></path><path d="M9 6C9 6.5523 8.5523 7 8 7C7.4477 7 7 6.5523 7 6C7 5.4477 7.4477 5 8 5C8.5523 5 9 5.4477 9 6ZM13 6C13 6.5523 12.5523 7 12 7C11.4477 7 11 6.5523 11 6C11 5.4477 11.4477 5 12 5C12.5523 5 13 5.4477 13 6ZM9 18C9 18.5523 8.5523 19 8 19C7.4477 19 7 18.5523 7 18C7 17.4477 7.4477 17 8 17C8.5523 17 9 17.4477 9 18ZM13 18C13 18.5523 12.5523 19 12 19C11.4477 19 11 18.5523 11 18C11 17.4477 11.4477 17 12 17C12.5523 17 13 17.4477 13 18Z" fill="currentColor" stroke="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>"#,
+};
+
+pub static CODE: Icon = Icon {
+	name: "keyline-CodeIcon-outline",
+	view: 24.0,
+	body: r#"<path d="M8 5L2 12L8 19M16 5L22 12L16 19" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="currentColor"></path>"#,
+};
+
+pub static FILE: Icon = Icon {
+	name: "keyline-FileTextIcon-outline",
+	view: 24.0,
+	body: r#"<path d="M14 2H8C5.79086 2 4 3.79086 4 6V18C4 20.2091 5.79086 22 8 22H16C18.2091 22 20 20.2091 20 18V8L14 2ZM14 2V5C14 6.65685 15.3431 8 17 8H20M8 13H12M8 17H16" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="currentColor"></path>"#,
+};
+
+pub static SKILL: Icon = Icon {
+	name: "keyline-SparklesIcon-outline",
+	view: 24.0,
+	body: r#"<path d="M15.4651 9.1794L16.7409 12.4141C16.8933 12.8006 17.1994 13.1067 17.5859 13.2591L20.8206 14.5349C21.0117 14.6102 21.1372 14.7947 21.1372 15C21.1372 15.2053 21.0117 15.3898 20.8206 15.4651L17.5859 16.7409C17.1994 16.8933 16.8933 17.1994 16.7409 17.5859L15.4651 20.8206C15.3898 21.0117 15.2053 21.1372 15 21.1372C14.7947 21.1372 14.6102 21.0117 14.5349 20.8206L13.2591 17.5859C13.1067 17.1994 12.8006 16.8933 12.4141 16.7409L9.1794 15.4651C8.9883 15.3898 8.8628 15.2053 8.8628 15C8.8628 14.7947 8.9883 14.6102 9.1794 14.5349L12.4141 13.2591C12.8006 13.1067 13.1067 12.8006 13.2591 12.4141L14.5349 9.1794C14.6102 8.9883 14.7947 8.8628 15 8.8628C15.2053 8.8628 15.3898 8.9883 15.4651 9.1794ZM6.7151 3.1794L7.2131 4.4419C7.3655 4.8285 7.6715 5.1345 8.0581 5.2869L9.3206 5.7849C9.5117 5.8602 9.6372 6.0447 9.6372 6.25C9.6372 6.4553 9.5117 6.6398 9.3206 6.7151L8.0581 7.2131C7.6715 7.3655 7.3655 7.6715 7.2131 8.0581L6.7151 9.3206C6.6398 9.5117 6.4553 9.6372 6.25 9.6372C6.0447 9.6372 5.8602 9.5117 5.7849 9.3206L5.2869 8.0581C5.1345 7.6715 4.8285 7.3655 4.4419 7.2131L3.1794 6.7151C2.9883 6.6398 2.8628 6.4553 2.8628 6.25C2.8628 6.0447 2.9883 5.8602 3.1794 5.7849L4.4419 5.2869C4.8285 5.1345 5.1345 4.8285 5.2869 4.4419L5.7849 3.1794C5.8602 2.9883 6.0447 2.8628 6.25 2.8628C6.4553 2.8628 6.6398 2.9883 6.7151 3.1794Z" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"></path>"#,
+};
+
+pub static CHECK: Icon = Icon {
+	name: "keyline-CheckIcon-outline",
+	view: 24.0,
+	body: r#"<path d="M5 12L9.66667 17L19 7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="currentColor"></path>"#,
+};
+
+pub static EXTERNAL_LINK: Icon = Icon {
+	name: "keyline-SquareArrowUpRightIcon-outline",
+	view: 24.0,
+	body: r#"<path d="M6 3H18C19.6569 3 21 4.34315 21 6V18C21 19.6569 19.6569 21 18 21H6C4.34315 21 3 19.6569 3 18V6C3 4.34315 4.34315 3 6 3Z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="currentColor"></path><path d="M9 9H14.4994C14.7756 9 15 9.22386 15 9.5V15M9 15L14.5 9.5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="currentColor"></path>"#,
+};
+
+pub static SEND: Icon = Icon {
+	name: "keyline-ArrowUpIcon-outline",
+	view: 24.0,
+	body: r#"<path d="M5 11.8771L11.5875 5.17385C11.8153 4.94205 12.1847 4.94205 12.4125 5.17385L19 11.8771M12 19V5.94129" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="currentColor"></path>"#,
+};
+
+pub static SIDEBAR: Icon = Icon {
+	name: "keyline-PanelLeftIcon-outline",
+	view: 24.0,
+	body: r#"<path d="M6 3H18C19.6569 3 21 4.34315 21 6V18C21 19.6569 19.6569 21 18 21H6C4.34315 21 3 19.6569 3 18V6C3 4.34315 4.34315 3 6 3ZM9 3V21" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="currentColor"></path>"#,
+};
+
+pub static PLUS: Icon = Icon {
+	name: "keyline-PlusIcon-outline",
+	view: 24.0,
+	body: r#"<path d="M5 12H19M11.995 19.005V5.005" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="currentColor"></path>"#,
+};
+
+pub static SEARCH: Icon = Icon {
+	name: "keyline-SearchIcon-outline",
+	view: 24.0,
+	body: r#"<path d="M17 10C17 13.866 13.866 17 10 17C6.13401 17 3 13.866 3 10C3 6.13401 6.13401 3 10 3C13.866 3 17 6.13401 17 10ZM15 15L21 21" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="currentColor"></path>"#,
+};
+
+pub static MORE: Icon = Icon {
+	name: "keyline-MoreHorizontalIcon-outline",
+	view: 24.0,
+	body: r#"<path d="M7 12C7 13.1045 6.1045 14 5 14C3.8955 14 3 13.1045 3 12C3 10.8955 3.8955 10 5 10C6.1045 10 7 10.8955 7 12ZM14 12C14 13.1045 13.1045 14 12 14C10.8955 14 10 13.1045 10 12C10 10.8955 10.8955 10 12 10C13.1045 10 14 10.8955 14 12ZM21 12C21 13.1045 20.1045 14 19 14C17.8955 14 17 13.1045 17 12C17 10.8955 17.8955 10 19 10C20.1045 10 21 10.8955 21 12Z" fill="currentColor" ></path>"#,
+};
+
+pub static SETTINGS: Icon = Icon {
+	name: "keyline-SettingsIcon-outline",
+	view: 24.0,
+	body: r#"<path d="M13.5 4.8845C13.5 5.3482 13.8221 5.7434 14.2571 5.9041C14.4124 5.9615 14.5649 6.0247 14.7143 6.0933C15.1356 6.2869 15.6427 6.2353 15.9706 5.9076L16.5966 5.2819C16.9872 4.8916 17.6202 4.8917 18.0106 5.2821L18.7175 5.989C19.1081 6.3796 19.108 7.0129 18.7173 7.4034L18.0922 8.0283C17.7641 8.3562 17.7124 8.8636 17.9062 9.2851C17.975 9.4347 18.0383 9.5874 18.0958 9.7429C18.2566 10.1779 18.6518 10.5 19.1155 10.5L20 10.5C20.5523 10.5 21 10.9477 21 11.5L21 12.5C21 13.0523 20.5523 13.5 20 13.5L19.1155 13.5C18.6518 13.5 18.2566 13.8221 18.0956 14.257C18.0381 14.4123 17.9749 14.5648 17.9061 14.7143C17.7123 15.1355 17.7639 15.6428 18.0918 15.9707L18.7177 16.5966C19.1082 16.9871 19.1082 17.6203 18.7177 18.0108L18.0108 18.7177C17.6203 19.1082 16.9871 19.1082 16.5966 18.7177L15.9707 18.0918C15.6428 17.7639 15.1355 17.7123 14.7141 17.9058C14.5647 17.9745 14.4123 18.0376 14.2571 18.0949C13.8221 18.2556 13.5 18.6508 13.5 19.1145L13.5 20C13.5 20.5523 13.0523 21 12.5 21L11.5 21C10.9477 21 10.5 20.5523 10.5 20L10.5 19.1145C10.5 18.6508 10.1779 18.2556 9.7429 18.0951C9.5874 18.0377 9.4348 17.9746 9.2852 17.9059C8.8636 17.7124 8.3562 17.7641 8.0283 18.0922L7.4034 18.7173C7.0129 19.108 6.3796 19.1081 5.989 18.7175L5.2821 18.0106C4.8917 17.6202 4.8916 16.9872 5.2819 16.5966L5.9076 15.9706C6.2353 15.6427 6.2869 15.1356 6.0933 14.7143C6.0247 14.5649 5.9615 14.4124 5.9041 14.2571C5.7434 13.8221 5.3482 13.5 4.8845 13.5L4 13.5C3.4477 13.5 3 13.0523 3 12.5L3 11.5C3 10.9477 3.4477 10.5 4 10.5L4.8845 10.5C5.3482 10.5 5.7434 10.1779 5.904 9.7429C5.9614 9.5874 6.0245 9.4346 6.0933 9.285C6.2867 8.8635 6.2351 8.3562 5.9072 8.0283L5.2823 7.4034C4.8918 7.0129 4.8918 6.3797 5.2823 5.9892L5.9892 5.2823C6.3797 4.8918 7.0129 4.8918 7.4034 5.2823L8.0283 5.9072C8.3562 6.2351 8.8635 6.2867 9.285 6.0933C9.4346 6.0245 9.5874 5.9614 9.7429 5.904C10.1779 5.7434 10.5 5.3482 10.5 4.8845L10.5 4C10.5 3.4477 10.9477 3 11.5 3L12.5 3C13.0523 3 13.5 3.4477 13.5 4L13.5 4.8845ZM12 9.5C13.3807 9.5 14.5 10.6193 14.5 12C14.5 13.3807 13.3807 14.5 12 14.5C10.6193 14.5 9.5 13.3807 9.5 12C9.5 10.6193 10.6193 9.5 12 9.5Z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="currentColor"></path>"#,
+};
+
+pub static STOP: Icon = Icon {
+	name: "keyline-SquareIcon-fill",
+	view: 24.0,
+	body: r#"<path d="M2 6C2 3.79086 3.79086 2 6 2H18C20.2091 2 22 3.79086 22 6V18C22 20.2091 20.2091 22 18 22H6C3.79086 22 2 20.2091 2 18V6Z" fill="currentColor" ></path>"#,
+};
+
+pub static KIROSHI_RING: Icon = Icon {
+	name: "kiroshi-kiroshi-ring",
+	view: 401.0,
+	body: r#"<path fill="currentColor" fill-rule="evenodd" d="M 393.14 171.16 A 58.68 58.68 0 0 1 393.14 229.84 L 322.23 352.66 A 58.68 58.68 0 0 1 271.41 382.00 L 129.59 382.00 A 58.68 58.68 0 0 1 78.77 352.66 L 7.86 229.84 A 58.68 58.68 0 0 1 7.86 171.16 L 78.77 48.34 A 58.68 58.68 0 0 1 129.59 19.00 L 271.41 19.00 A 58.68 58.68 0 0 1 322.23 48.34 Z M 327.98 174.3 A 52.39 52.39 0 0 1 327.98 226.7 L 286.93 297.8 A 52.39 52.39 0 0 1 241.55 324 L 159.45 324 A 52.39 52.39 0 0 1 114.07 297.8 L 73.02 226.7 A 52.39 52.39 0 0 1 73.02 174.3 L 114.07 103.2 A 52.39 52.39 0 0 1 159.45 77 L 241.55 77 A 52.39 52.39 0 0 1 286.93 103.2 Z"/>"#,
+};
+
+pub static HEXAGON: Icon = Icon {
+	name: "kiroshi-hexagon",
+	view: 401.0,
+	body: r#"<path fill="currentColor" fill-rule="evenodd" d="M 393.14 171.16 A 58.68 58.68 0 0 1 393.14 229.84 L 322.23 352.66 A 58.68 58.68 0 0 1 271.41 382.00 L 129.59 382.00 A 58.68 58.68 0 0 1 78.77 352.66 L 7.86 229.84 A 58.68 58.68 0 0 1 7.86 171.16 L 78.77 48.34 A 58.68 58.68 0 0 1 129.59 19.00 L 271.41 19.00 A 58.68 58.68 0 0 1 322.23 48.34 Z"/>"#,
+};
+
+pub static HEXAGON_INNER: Icon = Icon {
+	name: "kiroshi-hexagon-inner",
+	view: 401.0,
+	body: r#"<path fill="currentColor" fill-rule="evenodd" d="M 327.98 174.3 A 52.39 52.39 0 0 1 327.98 226.7 L 286.93 297.8 A 52.39 52.39 0 0 1 241.55 324 L 159.45 324 A 52.39 52.39 0 0 1 114.07 297.8 L 73.02 226.7 A 52.39 52.39 0 0 1 73.02 174.3 L 114.07 103.2 A 52.39 52.39 0 0 1 159.45 77 L 241.55 77 A 52.39 52.39 0 0 1 286.93 103.2 Z"/>"#,
+};

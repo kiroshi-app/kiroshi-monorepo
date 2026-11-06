@@ -8,6 +8,7 @@ publish = false
 
 [dependencies]
 rune = { git = "https://github.com/anomalyco/rune", rev = "781e2b6d87cd5f32d6f4365956fad4baaf24ee50" }
+rune-motion = { git = "https://github.com/anomalyco/rune", rev = "781e2b6d87cd5f32d6f4365956fad4baaf24ee50" }
 rune-kit = { git = "https://github.com/anomalyco/rune", rev = "781e2b6d87cd5f32d6f4365956fad4baaf24ee50", features = ["markdown", "mermaid"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

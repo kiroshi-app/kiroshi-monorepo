@@ -1467,6 +1467,7 @@ version = "0.0.0"
 dependencies = [
  "rune",
  "rune-kit",
+ "rune-motion",
  "serde",
  "serde_json",
  "tungstenite",

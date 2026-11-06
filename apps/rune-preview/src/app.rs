@@ -7,11 +7,12 @@ use rune_kit::shell::PaneState;
 use serde_json::json;
 
 use crate::content;
+use crate::dev_profile::{self, DevProfile};
 use crate::events::{self, HostEvent};
 use crate::host::{Host, HostError, Profile};
 use crate::images::{Fetched, Images};
 use crate::model::{Agent, AgentEvent, Conversation, MainChat, Message, MessagePage, Role, Space};
-use crate::onboarding::Step;
+use crate::onboarding::{Method, Step};
 use crate::turn::{self, SendError};
 
 const PAGE_LIMIT: u32 = 200;
@@ -167,6 +168,7 @@ pub enum Inbound {
 	SendFailed(SendError),
 	Host(HostEvent),
 	Image(Fetched),
+	DevProfile(DevProfile),
 }
 
 #[derive(Clone)]
@@ -193,6 +195,9 @@ pub struct App {
 	pub notice: Option<String>,
 	pub onboarding_code: TextEdit,
 	pub onboarding_key: TextEdit,
+	pub dev_profile: Option<DevProfile>,
+	pub connect_method: Method,
+	pub import_selected: Vec<String>,
 	outbox: Option<Outbox>,
 	inbox: Receiver<Inbound>,
 	pending: Sender<Inbound>,
@@ -211,6 +216,9 @@ impl App {
 			notice: None,
 			onboarding_code: TextEdit::new(""),
 			onboarding_key: TextEdit::new(""),
+			dev_profile: None,
+			connect_method: Method::SignIn,
+			import_selected: Vec::new(),
 			outbox: None,
 			inbox,
 			pending,
@@ -222,6 +230,18 @@ impl App {
 		self.outbox = Some(Outbox { sender: self.pending.clone(), waker });
 		if matches!(self.workspace, Workspace::Connecting) {
 			self.connect();
+		}
+		if self.dev_profile.is_none() {
+			self.work(|outbox| outbox.deliver(Inbound::DevProfile(dev_profile::read())));
+		}
+	}
+
+	pub fn toggle_import(&mut self, key: &str) {
+		match self.import_selected.iter().position(|held| held == key) {
+			Some(at) => {
+				self.import_selected.remove(at);
+			}
+			None => self.import_selected.push(key.to_owned()),
 		}
 	}
 
@@ -421,6 +441,11 @@ impl App {
 			Inbound::SendFailed(failure) => self.notice = Some(format!("Couldn't send. {failure}")),
 			Inbound::Host(event) => self.host_event(event),
 			Inbound::Image(fetched) => self.images.landed(fetched),
+			Inbound::DevProfile(profile) => {
+				self.import_selected =
+					profile.import.as_ref().map(|choices| choices.keys()).unwrap_or_default();
+				self.dev_profile = Some(profile);
+			}
 		}
 	}
 

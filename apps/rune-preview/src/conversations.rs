@@ -11,10 +11,10 @@ use crate::host::{DEV_START_COMMAND, HostError, Profile};
 use crate::images::Slot;
 use crate::model::Role;
 use crate::tokens::{
-	RADIUS_BUBBLE, RADIUS_CONTROL, RADIUS_LG, SPACING, TEXT_COMPACT, TEXT_READING, TEXT_SM,
-	TEXT_SM_MEDIUM, TEXT_XL_SEMIBOLD, Tokens,
+	RADIUS_BUBBLE, RADIUS_CONTROL, RADIUS_LG, SPACING, TEXT_BUBBLE, TEXT_COMPACT, TEXT_SM,
+	TEXT_SM_MEDIUM, TEXT_TITLE, Tokens,
 };
-use crate::widgets::{avatar, not_drawn};
+use crate::widgets::{agent_avatar, not_drawn};
 
 pub const CHROME: Chrome =
 	Chrome { full_size_content: true, traffic_lights: Some((16.0, 25.0)), drag_regions: true };
@@ -49,8 +49,8 @@ fn host_failed(k: &Kit, t: &Tokens, failure: &HostError) -> El {
 	let mut content = col()
 		.w(520.0)
 		.gap(SPACING * 4.0)
-		.child(text(failure.title()).font(TEXT_XL_SEMIBOLD).color(t.foreground))
-		.child(text(failure.detail()).font(TEXT_READING).color(t.muted_foreground).wrap());
+		.child(text(failure.title()).font(TEXT_TITLE).color(t.foreground))
+		.child(text(failure.detail()).font(TEXT_BUBBLE).color(t.muted_foreground).wrap());
 	if failure.profile() == Some(Profile::Dev) {
 		content = content.child(
 			el().padding(SPACING * 3.0)
@@ -78,7 +78,7 @@ fn tab(s: &App, k: &Kit, t: &Tokens, inset: f32, layer: &mut Vec<El>) -> El {
 		.child(thread_view(s, k, t))
 		.child(composer(s, k, t, layer));
 	SplitView::new(main)
-		.sidebar(&s.sidebar, |s: &mut App| &mut s.sidebar, sidebar(s, k))
+		.sidebar(&s.sidebar, |s: &mut App| &mut s.sidebar, sidebar(s, k, t))
 		.toolbar(Toolbar::new().title(title))
 		.titlebar_inset(inset)
 		.frame_inset(8.0)
@@ -87,13 +87,13 @@ fn tab(s: &App, k: &Kit, t: &Tokens, inset: f32, layer: &mut Vec<El>) -> El {
 		.build(k)
 }
 
-fn sidebar(s: &App, k: &Kit) -> El {
+fn sidebar(s: &App, k: &Kit, t: &Tokens) -> El {
 	let Some(ready) = s.ready() else { return el() };
 	let opened = s.thread.as_ref().map(|thread| &thread.opened);
 	let agents = ready.agents.iter().map(|agent| {
 		let id = agent.id.clone();
 		SidebarRow::new(&agent.name)
-			.avatar(avatar(&agent.name, agent.avatar_blot, 24.0))
+			.avatar(agent_avatar(agent.avatar_blot, 24.0, t.dark))
 			.subtitle(&agent.title)
 			.height(44.0)
 			.selected(opened == Some(&Opened::Agent(agent.id.clone())))
@@ -215,7 +215,7 @@ fn message_row(s: &App, i: usize, k: &Kit, t: &Tokens) -> El {
 			.fill(t.user_bubble)
 			.child(
 				text(named)
-					.font(TEXT_READING)
+					.font(TEXT_BUBBLE)
 					.color(t.user_bubble_foreground)
 					.wrap()
 					.selectable(true),
@@ -227,7 +227,7 @@ fn message_row(s: &App, i: usize, k: &Kit, t: &Tokens) -> El {
 	let author = row()
 		.gap(SPACING * 2.0)
 		.center_y()
-		.child(avatar(&name, hue, 22.0))
+		.child(agent_avatar(hue, 22.0, t.dark))
 		.child(text(name.clone()).font(TEXT_SM_MEDIUM).color(t.foreground));
 	let body = content::segments(&named)
 		.into_iter()
@@ -240,7 +240,7 @@ fn message_row(s: &App, i: usize, k: &Kit, t: &Tokens) -> El {
 fn segment_view(s: &App, segment: Segment, streaming: bool, k: &Kit, t: &Tokens) -> El {
 	match segment {
 		Segment::Markdown(source) => {
-			let style = MarkdownStyle::from_kit(k).body_font(TEXT_READING).text(t.foreground);
+			let style = MarkdownStyle::from_kit(k).body_font(TEXT_BUBBLE).text(t.foreground);
 			Markdown::new(source).streaming(streaming).selectable(true).render(&style)
 		}
 		Segment::Math(source) => not_drawn(t, "Math isn't drawn here (KaTeX)", &source),
@@ -323,8 +323,11 @@ fn mention_popup(s: &App, k: &Kit, layer: &mut Vec<El>) {
 	let candidates = s.mention_candidates();
 	let count = candidates.len();
 	let items = candidates.into_iter().map(|seat| {
-		PopupItem::new(seat.bot_id.clone(), format!("@{}", seat.name))
-			.leading(avatar(&seat.name, seat.hue, 18.0))
+		PopupItem::new(seat.bot_id.clone(), format!("@{}", seat.name)).leading(agent_avatar(
+			seat.hue,
+			18.0,
+			k.c.page.luminance() < 0.5,
+		))
 	});
 	PopupList::new("mentions", COMPOSER)
 		.open(true)

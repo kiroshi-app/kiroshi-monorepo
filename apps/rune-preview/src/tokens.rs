@@ -1,8 +1,18 @@
-use rune::Color;
-use rune::TextStyle;
 use rune::color::srgb_decode;
-use rune_kit::Kit;
-use rune_kit::PaletteSeed;
+use rune::{Color, Family, TextStyle, oklcha};
+use rune_kit::{Kit, PaletteSeed};
+
+use crate::hues::{self, Role};
+
+pub const FONTS: &[&[u8]] = &[
+	include_bytes!("../assets/fonts/Geist-Regular.ttf"),
+	include_bytes!("../assets/fonts/Geist-Medium.ttf"),
+	include_bytes!("../assets/fonts/Geist-SemiBold.ttf"),
+	include_bytes!("../assets/fonts/GeistMono-Regular.ttf"),
+	include_bytes!("../assets/fonts/GeistMono-Medium.ttf"),
+];
+
+pub const FAMILIES: (&str, &str) = ("Geist", "Geist Mono");
 
 pub const SPACING: f32 = 4.0;
 
@@ -15,91 +25,155 @@ pub const RADIUS_2XL: f32 = RADIUS_ROOT * 1.8;
 pub const RADIUS_BUBBLE: f32 = RADIUS_ROOT * 1.6;
 pub const RADIUS_CONTROL: f32 = RADIUS_ROOT * 1.2;
 
-pub const TEXT_COMPACT: TextStyle = TextStyle { line_height: 18.0, ..TextStyle::new(13.0, 400.0) };
-pub const TEXT_COMPACT_MEDIUM: TextStyle =
-	TextStyle { line_height: 18.0, ..TextStyle::new(13.0, 500.0) };
-pub const TEXT_SM: TextStyle = TextStyle { line_height: 20.0, ..TextStyle::new(14.0, 400.0) };
-pub const TEXT_SM_MEDIUM: TextStyle =
-	TextStyle { line_height: 20.0, ..TextStyle::new(14.0, 500.0) };
-pub const TEXT_READING: TextStyle = TextStyle { line_height: 22.0, ..TextStyle::new(15.0, 400.0) };
-pub const TEXT_XL_SEMIBOLD: TextStyle =
-	TextStyle { line_height: 28.0, ..TextStyle::new(20.0, 600.0) };
-pub const TEXT_2XL_SEMIBOLD: TextStyle =
-	TextStyle { line_height: 32.0, ..TextStyle::new(24.0, 600.0) };
+const fn style(size: f32, line_height: f32, weight: f32) -> TextStyle {
+	TextStyle { line_height, ..TextStyle::new(size, weight) }
+}
+
+const fn mono(text: TextStyle) -> TextStyle {
+	TextStyle { family: Family::Mono, ..text }
+}
+
+pub const TEXT_10_MEDIUM: TextStyle = style(10.0, 14.0, 500.0);
+pub const TEXT_XS: TextStyle = style(12.0, 16.0, 400.0);
+pub const TEXT_XS_MEDIUM: TextStyle = style(12.0, 16.0, 500.0);
+pub const TEXT_XS_MONO: TextStyle = mono(TEXT_XS);
+pub const TEXT_COMPACT: TextStyle = style(13.0, 18.0, 400.0);
+pub const TEXT_COMPACT_MEDIUM: TextStyle = style(13.0, 18.0, 500.0);
+pub const TEXT_COMPACT_SEMIBOLD: TextStyle = style(13.0, 18.0, 600.0);
+pub const TEXT_COMPACT_MONO: TextStyle = mono(TEXT_COMPACT);
+pub const TEXT_COMPACT_MONO_MEDIUM: TextStyle = mono(TEXT_COMPACT_MEDIUM);
+pub const TEXT_SM: TextStyle = style(14.0, 20.0, 400.0);
+pub const TEXT_SM_MEDIUM: TextStyle = style(14.0, 20.0, 500.0);
+pub const TEXT_SM_SEMIBOLD: TextStyle = style(14.0, 20.0, 600.0);
+pub const TEXT_BUBBLE: TextStyle = style(14.0, 24.0, 400.0);
+pub const TEXT_BASE_SEMIBOLD: TextStyle = style(16.0, 22.0, 600.0);
+pub const TEXT_INITIALS: TextStyle = style(28.0, 32.0, 600.0);
+pub const TEXT_TITLE: TextStyle = TextStyle { tracking: -0.22, ..style(22.0, 28.0, 600.0) };
 
 #[derive(Clone, Copy)]
 pub struct Tokens {
+	pub dark: bool,
 	pub background: Color,
 	pub foreground: Color,
 	pub card: Color,
 	pub muted: Color,
 	pub muted_foreground: Color,
+	pub soft_foreground: Color,
 	pub faint_foreground: Color,
+	pub placeholder_foreground: Color,
 	pub border: Color,
+	pub input: Color,
 	pub primary: Color,
+	pub primary_foreground: Color,
 	pub user_bubble: Color,
 	pub user_bubble_foreground: Color,
 	pub bubble: Color,
+	pub bubble_hover: Color,
+	pub sidebar: Color,
 	pub prompt_surface: Color,
+	pub person_avatar: Color,
+	pub shell_border: Color,
+	pub shell_divider: Color,
+	pub rail_item_selected: Color,
 	pub destructive: Color,
 	pub image_outline: Color,
 }
 
-const BLUE_ACCENT: u32 = 0x2d62ac;
+pub const BLUE: f32 = 257.0;
 
-pub fn tokens(dark: bool) -> Tokens {
-	if dark {
-		return Tokens {
-			background: srgb(0x000000),
-			foreground: srgb(0xf5f5f5),
-			card: srgb(0x121213),
-			muted: srgb(0x1c1c1e),
-			muted_foreground: srgb(0xa3a3a3),
-			faint_foreground: srgb(0x8a8a8e),
-			border: srgb(0x212224),
-			primary: srgb(BLUE_ACCENT),
-			user_bubble: srgb(BLUE_ACCENT),
+impl Tokens {
+	pub fn new(dark: bool) -> Tokens {
+		let ink = if dark { Color::WHITE } else { Color::BLACK };
+		let blue = tone(BLUE, dark, Role::Accent);
+		if dark {
+			return Tokens {
+				dark,
+				background: srgb(0x000000),
+				foreground: srgb(0xf5f5f5),
+				card: srgb(0x121213),
+				muted: srgb(0x262626),
+				muted_foreground: srgb(0xa3a3a3),
+				soft_foreground: srgb(0xd4d4d4),
+				faint_foreground: srgb(0x8a8a8e),
+				placeholder_foreground: srgb(0x737373),
+				border: srgb(0x212224),
+				input: ink.alpha(0.15),
+				primary: blue,
+				primary_foreground: srgb(0x0e0e10),
+				user_bubble: blue,
+				user_bubble_foreground: srgb(0x0e0e10),
+				bubble: ink.alpha(0.04),
+				bubble_hover: ink.alpha(0.06),
+				sidebar: srgb(0x1a1a1a),
+				prompt_surface: srgb(0x1c1c1e),
+				person_avatar: srgb(0x333333),
+				shell_border: ink.alpha(0.06),
+				shell_divider: ink.alpha(0.08),
+				rail_item_selected: ink.alpha(0.12),
+				destructive: oklcha(0.81, 0.191, 22.216, 1.0),
+				image_outline: ink.alpha(0.08),
+			};
+		}
+		Tokens {
+			dark,
+			background: srgb(0xf5f5f5),
+			foreground: srgb(0x0a0a0a),
+			card: srgb(0xffffff),
+			muted: srgb(0xf2f2f2),
+			muted_foreground: srgb(0x6b6b6b),
+			soft_foreground: srgb(0x404040),
+			faint_foreground: srgb(0x67676c),
+			placeholder_foreground: srgb(0x808080),
+			border: srgb(0xe5e5e5),
+			input: srgb(0xe5e5e5),
+			primary: blue,
+			primary_foreground: srgb(0xffffff),
+			user_bubble: srgb(0x364f7c),
 			user_bubble_foreground: srgb(0xffffff),
-			bubble: Color::WHITE.alpha(0.04),
-			prompt_surface: srgb(0x1c1c1e),
-			destructive: rune::oklch(0.81, 0.191, 22.216),
-			image_outline: Color::WHITE.alpha(0.08),
-		};
+			bubble: ink.alpha(0.03),
+			bubble_hover: ink.alpha(0.05),
+			sidebar: srgb(0xf7f7f7),
+			prompt_surface: srgb(0xffffff),
+			person_avatar: srgb(0xe5e5e5),
+			shell_border: ink.alpha(0.06),
+			shell_divider: ink.alpha(0.08),
+			rail_item_selected: ink.alpha(0.10),
+			destructive: oklcha(0.49, 0.245, 27.325, 1.0),
+			image_outline: ink.alpha(0.08),
+		}
 	}
-	Tokens {
-		background: srgb(0xf5f5f5),
-		foreground: srgb(0x0a0a0a),
-		card: srgb(0xffffff),
-		muted: srgb(0xf2f2f2),
-		muted_foreground: srgb(0x6b6b6b),
-		faint_foreground: srgb(0x67676c),
-		border: srgb(0xe5e5e5),
-		primary: srgb(BLUE_ACCENT),
-		user_bubble: srgb(0x364f7c),
-		user_bubble_foreground: srgb(0xffffff),
-		bubble: Color::BLACK.alpha(0.03),
-		prompt_surface: srgb(0xffffff),
-		destructive: rune::oklch(0.49, 0.245, 27.325),
-		image_outline: Color::BLACK.alpha(0.08),
-	}
-}
 
-pub fn kit(dark: bool) -> Kit {
-	let t = tokens(dark);
-	let mut k =
-		Kit::from_palette(PaletteSeed { bg: t.background, fg: t.foreground, accent: t.primary });
-	k.c.page = t.background;
-	k.c.bg_base = t.background;
-	k.c.layer_01 = t.card;
-	k.c.text_base = t.foreground;
-	k.c.text_muted = t.muted_foreground;
-	k.c.text_faint = t.faint_foreground;
-	k.c.border_base = t.border;
-	k.radius.sm = RADIUS_SM;
-	k.radius.md = RADIUS_MD;
-	k.radius.lg = RADIUS_LG;
-	k.radius.xl = RADIUS_XL;
-	k
+	pub fn in_space(mut self, hue: Option<f32>) -> Tokens {
+		let Some(hue) = hue else { return self };
+		self.primary = tone(hue, self.dark, Role::Accent);
+		if self.dark {
+			self.user_bubble = self.primary;
+		} else {
+			self.user_bubble = tone(hue, false, Role::Bubble);
+			self.user_bubble_foreground = srgb(0x020202);
+		}
+		self
+	}
+
+	pub fn kit(&self) -> Kit {
+		let mut k = Kit::from_palette(PaletteSeed {
+			bg: self.background,
+			fg: self.foreground,
+			accent: self.primary,
+		});
+		k.c.page = self.background;
+		k.c.bg_base = self.background;
+		k.c.layer_01 = self.card;
+		k.c.text_base = self.foreground;
+		k.c.text_muted = self.muted_foreground;
+		k.c.text_faint = self.faint_foreground;
+		k.c.border_base = self.border;
+		k.radius.sm = RADIUS_SM;
+		k.radius.md = RADIUS_MD;
+		k.radius.lg = RADIUS_LG;
+		k.radius.xl = RADIUS_XL;
+		k
+	}
 }
 
 pub struct AvatarHue {
@@ -107,36 +181,39 @@ pub struct AvatarHue {
 	pub ground: Color,
 }
 
-const HUE_PRESETS: [(f32, u32, u32); 8] = [
-	(42.0, 0xb25630, 0xfee1d6),
-	(63.0, 0xa86100, 0xf9e3d1),
-	(82.0, 0x966c00, 0xf4e6ce),
-	(132.0, 0x578429, 0xdfedd5),
-	(186.0, 0x00877d, 0xcff0eb),
-	(257.0, 0x3e74bf, 0xdae9ff),
-	(296.0, 0x7c62b7, 0xe9e4fd),
-	(358.0, 0xaf5074, 0xfddfe8),
-];
-
 const UNTINTED_FIELD: u32 = 0x1d3ccd;
 
-pub fn avatar_hue(hue: Option<f32>) -> AvatarHue {
-	let Some(hue) = hue else {
-		let field = srgb(UNTINTED_FIELD);
-		return AvatarHue { ink: field, ground: field.mix(srgb(0xf2f2f2), 0.75) };
-	};
-	let distance = |preset: f32| {
-		let gap = (preset - hue).rem_euclid(360.0);
-		gap.min(360.0 - gap)
-	};
-	let nearest = HUE_PRESETS
-		.iter()
-		.min_by(|a, b| distance(a.0).total_cmp(&distance(b.0)))
-		.unwrap_or(&HUE_PRESETS[5]);
-	AvatarHue { ink: srgb(nearest.1), ground: srgb(nearest.2) }
+pub fn avatar_hue(hue: Option<f32>, dark: bool) -> AvatarHue {
+	match hue {
+		Some(hue) => AvatarHue {
+			ink: tone(hue, dark, Role::AvatarInk),
+			ground: tone(hue, dark, Role::AvatarGround),
+		},
+		None => {
+			let field = srgb(UNTINTED_FIELD);
+			let secondary = srgb(if dark { 0x262626 } else { 0xf2f2f2 });
+			AvatarHue { ink: field, ground: field.mix(secondary, 0.75) }
+		}
+	}
 }
 
-fn srgb(rgb: u32) -> Color {
+pub fn conversation_icon(hue: Option<f32>, dark: bool) -> (Color, Color) {
+	match hue {
+		Some(hue) => (
+			tone(hue, dark, Role::ConversationIcon),
+			tone(hue, dark, Role::ConversationIconForeground),
+		),
+		None if dark => (srgb(0x262626), srgb(0xa3a3a3)),
+		None => (srgb(0xe5e5e5), srgb(0x525252)),
+	}
+}
+
+pub fn tone(hue: f32, dark: bool, role: Role) -> Color {
+	let [r, g, b] = hues::tone(hue, dark, role);
+	srgb(u32::from(r) << 16 | u32::from(g) << 8 | u32::from(b))
+}
+
+pub fn srgb(rgb: u32) -> Color {
 	let channel = |shift: u32| srgb_decode(((rgb >> shift) & 0xff) as f32 / 255.0);
 	Color { r: channel(16), g: channel(8), b: channel(0), a: 1.0 }
 }

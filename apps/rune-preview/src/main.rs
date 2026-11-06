@@ -1,9 +1,12 @@
 mod app;
 mod content;
 mod conversations;
+mod dev_profile;
 mod discovery;
 mod events;
 mod host;
+mod hues;
+mod icons;
 mod images;
 mod model;
 mod onboarding;
@@ -22,11 +25,11 @@ use crate::app::{App, Screen};
 
 fn view(s: &App, cx: &mut Cx<App>) -> El {
 	let dark = cx.system_dark();
-	let k = tokens::kit(dark);
-	let t = tokens::tokens(dark);
+	let t = tokens::Tokens::new(dark);
+	let k = t.kit();
 	let mut layer = Vec::new();
 	let body = match s.screen {
-		Screen::Onboarding(step) => onboarding::view(step, s, &k, &t),
+		Screen::Onboarding(step) => onboarding::view(step, s, &k, &t.in_space(Some(tokens::BLUE))),
 		Screen::Conversations => conversations::view(s, &k, &t, cx.titlebar_inset(), &mut layer),
 	};
 	rune_kit::root(body, layer)
@@ -70,6 +73,8 @@ fn main() -> ExitCode {
 		on_key: Some(on_key),
 		min_size: Some((720.0, 520.0)),
 		scenes: scenes::SCENES,
+		fonts: tokens::FONTS,
+		families: tokens::FAMILIES,
 		..AppSpec::new("Kiroshi (Rune preview)", (1180.0, 780.0), App::new, view)
 	};
 	rune::App::new(spec).chrome(conversations::CHROME).run();
