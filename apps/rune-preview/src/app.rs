@@ -1,12 +1,10 @@
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use rune::image::ImageCache;
 use rune::{TextEdit, Waker};
 use rune_kit::shell::PaneState;
-use serde_json::{Value, json};
-use uuid::Uuid;
+use serde_json::json;
 
 use crate::content;
 use crate::events::{self, HostEvent};
@@ -14,6 +12,7 @@ use crate::host::{Host, HostError};
 use crate::images::{Fetched, Images};
 use crate::model::{Agent, AgentEvent, Conversation, MainChat, Message, MessagePage, Role, Space};
 use crate::onboarding::Step;
+use crate::turn::{self, SendError};
 
 const PAGE_LIMIT: u32 = 200;
 
@@ -37,6 +36,12 @@ pub struct Ready {
 	pub space: Space,
 	pub agents: Vec<Agent>,
 	pub conversations: Vec<Conversation>,
+}
+
+impl Ready {
+	pub fn first_conversation_with_an_agent(&self) -> Option<&Conversation> {
+		self.conversations.iter().find(|conversation| conversation.present().next().is_some())
+	}
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -69,6 +74,27 @@ pub struct Thread {
 }
 
 impl Thread {
+	pub fn of_conversation(conversation: &Conversation) -> Thread {
+		let seats = conversation
+			.present()
+			.map(|seat| Seat {
+				bot_id: seat.bot_id.clone(),
+				name: seat.name.clone(),
+				hue: seat.avatar_blot,
+			})
+			.collect();
+		Thread {
+			opened: Opened::Conversation(conversation.id.clone()),
+			conversation_id: Some(conversation.id.clone()),
+			title: conversation.title.clone(),
+			seats,
+			messages: Vec::new(),
+			live: Vec::new(),
+			loaded: false,
+			failure: None,
+		}
+	}
+
 	pub fn row_count(&self) -> usize {
 		self.messages.len() + self.live.len()
 	}
@@ -81,7 +107,7 @@ impl Thread {
 		self.conversation_id.as_deref() == Some(conversation_id)
 	}
 
-	fn stored(&mut self, message: Message) {
+	pub fn stored(&mut self, message: Message) {
 		self.live.retain(|live| {
 			live.id != message.id
 				&& !(message.role == Role::Assistant
@@ -118,7 +144,7 @@ impl Thread {
 					live.text = message.text;
 				}
 			}
-			AgentEvent::Other => {}
+			AgentEvent::TurnEnded { .. } | AgentEvent::Failed { .. } | AgentEvent::Other => {}
 		}
 	}
 }
@@ -138,7 +164,7 @@ pub enum Inbound {
 	Connected(Result<Ready, HostError>),
 	ChatFound { bot_id: String, chat: Result<MainChat, HostError> },
 	ThreadRead { conversation_id: String, messages: Result<Vec<Message>, HostError> },
-	SendFailed(HostError),
+	SendFailed(SendError),
 	Host(HostEvent),
 	Image(Fetched),
 }
@@ -249,24 +275,7 @@ impl App {
 				else {
 					return;
 				};
-				let seats = conversation
-					.present()
-					.map(|seat| Seat {
-						bot_id: seat.bot_id.clone(),
-						name: seat.name.clone(),
-						hue: seat.avatar_blot,
-					})
-					.collect();
-				Thread {
-					opened: opened.clone(),
-					conversation_id: Some(id.clone()),
-					title: conversation.title.clone(),
-					seats,
-					messages: Vec::new(),
-					live: Vec::new(),
-					loaded: false,
-					failure: None,
-				}
+				Thread::of_conversation(conversation)
 			}
 		};
 		let host = ready.host.clone();
@@ -380,31 +389,11 @@ impl App {
 			return;
 		}
 		let host = ready.host.clone();
-		let created_at = match now_ms() {
-			Ok(created_at) => created_at,
-			Err(failure) => {
-				self.notice =
-					Some(format!("Couldn't send. The clock reads before 1970: {failure}"));
-				return;
-			}
-		};
-		let message = json!({
-			"id": Uuid::new_v4().to_string(),
-			"conversationId": conversation_id,
-			"turnId": Uuid::new_v4().to_string(),
-			"content": content,
-			"createdAt": created_at,
-			"repliedToMessageId": Value::Null,
-		});
 		self.composer.edit.clear();
 		self.composer.mention = None;
 		self.notice = None;
 		self.work(move |outbox| {
-			let sent = host.invoke_turn::<Value>(
-				"conversation_send_turn",
-				json!({ "message": message, "summoned": summoned }),
-			);
-			if let Err(failure) = sent {
+			if let Err(failure) = turn::send_turn(&host, &conversation_id, &content, &summoned) {
 				outbox.deliver(Inbound::SendFailed(failure));
 			}
 		});
@@ -417,8 +406,7 @@ impl App {
 					events::listen(&ready.host, move |event| outbox.deliver(Inbound::Host(event)));
 				}
 				let first = ready
-					.conversations
-					.first()
+					.first_conversation_with_an_agent()
 					.map(|conversation| Opened::Conversation(conversation.id.clone()));
 				self.workspace = Workspace::Ready(ready);
 				if let Some(first) = first.filter(|_| self.thread.is_none()) {
@@ -430,10 +418,7 @@ impl App {
 			Inbound::ThreadRead { conversation_id, messages } => {
 				self.thread_read(&conversation_id, messages)
 			}
-			Inbound::SendFailed(failure) => {
-				self.notice =
-					Some(format!("Couldn't send. {} {}", failure.title(), failure.detail()))
-			}
+			Inbound::SendFailed(failure) => self.notice = Some(format!("Couldn't send. {failure}")),
 			Inbound::Host(event) => self.host_event(event),
 			Inbound::Image(fetched) => self.images.landed(fetched),
 		}
@@ -499,6 +484,7 @@ impl App {
 				thread.stored(message);
 				self.request_images();
 			}
+			HostEvent::Listening => {}
 			HostEvent::Unreadable { event, cause } => {
 				self.notice = Some(format!("Couldn't read a {event} event: {cause}"))
 			}
@@ -534,7 +520,7 @@ impl App {
 	}
 }
 
-fn connected() -> Result<Ready, HostError> {
+pub fn connected() -> Result<Ready, HostError> {
 	let host = Host::connect()?;
 	let spaces: Vec<Space> = host.invoke("space_list", json!({}))?;
 	let Some(space) = spaces.into_iter().next() else {
@@ -549,7 +535,7 @@ fn connected() -> Result<Ready, HostError> {
 	Ok(Ready { host, space, agents, conversations })
 }
 
-fn whole_thread(host: &Host, conversation_id: &str) -> Result<Vec<Message>, HostError> {
+pub fn whole_thread(host: &Host, conversation_id: &str) -> Result<Vec<Message>, HostError> {
 	let mut messages: Vec<Message> = Vec::new();
 	let mut before: Option<i64> = None;
 	loop {
@@ -601,10 +587,6 @@ fn outgoing(edit: &TextEdit) -> (String, Vec<String>) {
 	}
 	content.push_str(&edit.text[read..]);
 	(content, summoned)
-}
-
-fn now_ms() -> Result<u64, std::time::SystemTimeError> {
-	SystemTime::now().duration_since(UNIX_EPOCH).map(|elapsed| elapsed.as_millis() as u64)
 }
 
 #[cfg(test)]

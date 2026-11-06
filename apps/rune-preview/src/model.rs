@@ -96,8 +96,19 @@ pub enum AgentEvent {
 	MessageCompleted {
 		message: StreamedMessage,
 	},
+	TurnEnded {
+		ended: TurnEnded,
+	},
+	Failed {
+		error: serde_json::Value,
+	},
 	#[serde(other)]
 	Other,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct TurnEnded {
+	pub outcome: String,
 }
 
 #[derive(Clone, Debug, Deserialize)]

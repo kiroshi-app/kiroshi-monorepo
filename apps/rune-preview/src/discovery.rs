@@ -5,7 +5,10 @@ const DEV_EXECUTABLE: &str = "Kiroshi";
 const BUNDLED: &str = ".app/Contents/";
 
 pub fn dev_host_ports() -> Result<Vec<u16>, String> {
-	let listening = run("lsof", &["-nP", "-iTCP@127.0.0.1", "-sTCP:LISTEN", "-Fpn"])?;
+	let listening = stdout_even_when_nothing_matched(
+		"lsof",
+		&["-nP", "-iTCP@127.0.0.1", "-sTCP:LISTEN", "-Fpn"],
+	)?;
 	let mut ports = Vec::new();
 	for (pid, port) in listeners(&listening) {
 		if is_dev_host(pid)? && !ports.contains(&port) {
@@ -31,14 +34,13 @@ fn listeners(lsof: &str) -> Vec<(u32, u16)> {
 }
 
 fn is_dev_host(pid: u32) -> Result<bool, String> {
-	let args = run("ps", &["-o", "args=", "-p", &pid.to_string()])?;
+	let args = stdout_even_when_nothing_matched("ps", &["-o", "args=", "-p", &pid.to_string()])?;
 	let executable = args.split_whitespace().next().unwrap_or("");
 	let name = executable.rsplit('/').next().unwrap_or("");
 	Ok(name == DEV_EXECUTABLE && !executable.contains(BUNDLED))
 }
 
-// lsof and ps exit 1 when nothing matches, an empty answer rather than a failure.
-fn run(program: &str, args: &[&str]) -> Result<String, String> {
+fn stdout_even_when_nothing_matched(program: &str, args: &[&str]) -> Result<String, String> {
 	let output = Command::new(program)
 		.args(args)
 		.output()

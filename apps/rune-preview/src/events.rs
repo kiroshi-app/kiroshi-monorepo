@@ -14,6 +14,7 @@ const AGENT_EVENT: &str = "agent://event";
 const MESSAGE_STORED: &str = "conversation://message-stored";
 
 pub enum HostEvent {
+	Listening,
 	Agent(ScopedEvent),
 	MessageStored(Message),
 	Unreadable { event: String, cause: String },
@@ -46,6 +47,7 @@ fn relayed(url: &str, bearer: &str, deliver: &impl Fn(HostEvent)) -> String {
 		Ok((socket, _)) => socket,
 		Err(failure) => return format!("the event socket did not open: {failure}"),
 	};
+	deliver(HostEvent::Listening);
 	loop {
 		match socket.read() {
 			Ok(Frame::Text(text)) => {

@@ -8,8 +8,12 @@ mod images;
 mod model;
 mod onboarding;
 mod scenes;
+mod smoke;
 mod tokens;
+mod turn;
 mod widgets;
+
+use std::process::ExitCode;
 
 use rune::{AppSpec, Cx, El, KeyEvent, Tx, Waker};
 use rune_kit::shell;
@@ -44,7 +48,17 @@ fn on_key(s: &mut App, event: &KeyEvent, _: &mut Tx) -> bool {
 	false
 }
 
-fn main() {
+const SMOKE_SEND: &str = "--smoke-send";
+
+fn main() -> ExitCode {
+	let args: Vec<String> = std::env::args().collect();
+	if let Some(at) = args.iter().position(|arg| arg == SMOKE_SEND) {
+		let Some(text) = args.get(at + 1) else {
+			eprintln!("{SMOKE_SEND} needs the text to send");
+			return ExitCode::FAILURE;
+		};
+		return smoke::run(text);
+	}
 	let spec = AppSpec {
 		setup: Some(setup),
 		poll: Some(poll),
@@ -54,4 +68,5 @@ fn main() {
 		..AppSpec::new("Kiroshi (Rune preview)", (1180.0, 780.0), App::new, view)
 	};
 	rune::App::new(spec).chrome(conversations::CHROME).run();
+	ExitCode::SUCCESS
 }

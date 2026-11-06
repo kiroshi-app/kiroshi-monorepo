@@ -1,4 +1,4 @@
-use crate::app::{App, Opened, Ready, Screen, Seat, Thread, Workspace};
+use crate::app::{App, Opened, Ready, Screen, Seat, Thread, Workspace, connected, whole_thread};
 use crate::host::{Host, HostError};
 use crate::model::{Agent, Conversation, Message, Participant, Role, Space};
 use crate::onboarding::{Page, Step};
@@ -16,6 +16,7 @@ pub const SCENES: &[Scene] = &[
 	("account", |s| s.screen = Screen::Onboarding(Step::Account)),
 	("account-waiting", |s| s.screen = Screen::Onboarding(Step::AccountWaiting)),
 	("host-failed", host_failed),
+	("live", read_the_dev_host_before_the_first_frame),
 	("thread", thread),
 ];
 
@@ -128,4 +129,25 @@ fn thread(s: &mut App) {
 		loaded: true,
 		failure: None,
 	});
+}
+
+fn read_the_dev_host_before_the_first_frame(s: &mut App) {
+	s.screen = Screen::Conversations;
+	let ready = match connected() {
+		Ok(ready) => ready,
+		Err(failure) => {
+			s.workspace = Workspace::Failed(failure);
+			return;
+		}
+	};
+	if let Some(conversation) = ready.first_conversation_with_an_agent() {
+		let mut thread = Thread::of_conversation(conversation);
+		match whole_thread(&ready.host, &conversation.id) {
+			Ok(messages) => messages.into_iter().for_each(|message| thread.stored(message)),
+			Err(failure) => thread.failure = Some(failure),
+		}
+		thread.loaded = true;
+		s.thread = Some(thread);
+	}
+	s.workspace = Workspace::Ready(ready);
 }
