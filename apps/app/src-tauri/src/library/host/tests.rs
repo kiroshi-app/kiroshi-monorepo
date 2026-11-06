@@ -1959,3 +1959,85 @@ async fn an_agent_posts_a_board_of_the_space_as_its_own_message() {
 	assert_eq!(page.messages[0].documents, [BOARD]);
 	assert_eq!(posted["name"], BOARD);
 }
+
+fn a_file_node(id: &str, item: &str, z: &str) -> Value {
+	json!({
+		"id": id, "type": "file", "file": format!("Library/{item}"),
+		"x": 0, "y": 0, "width": 116, "height": 124,
+		"kiroshi": { "kind": "image", "item": item, "z": z }
+	})
+}
+
+#[tokio::test]
+async fn a_board_view_shows_an_image_node_and_refuses_any_other_node_with_its_reason() {
+	let (app, root) = a_host("board-view").await;
+	let png = png_of(4);
+	put_bytes(&root, "cover.png", &png);
+	let huge = vec![0; usize::try_from(MAX_SHOWN_IMAGE_BYTES).expect("fits") + 1];
+	put_bytes(&root, "huge.png", &huge);
+	put(&root, "work", "secret.png", "not yours");
+	put(&root, "work", "elsewhere.png", "not yours");
+	let sticky = json!({
+		"id": "note", "type": "text", "text": "Hi", "x": 0, "y": 200, "width": 200, "height": 200,
+		"kiroshi": { "kind": "sticky", "z": "a1", "author": { "kind": "person", "id": "p1" } }
+	});
+	let canvas = json!({
+		"nodes": [
+			a_file_node("photo", "cover.png", "a0"),
+			sticky,
+			a_file_node("lost", "gone.png", "a2"),
+			a_file_node("huge", "huge.png", "a3"),
+			a_file_node("escape", "../work/secret.png", "a4"),
+			a_file_node("elsewhere", "elsewhere.png", "a5"),
+		],
+		"edges": []
+	});
+	put(&root, SPACE, BOARD, &canvas.to_string());
+	let host = the_host(&app);
+	let view = |id: &str| host.served(Operation::BoardView, json!({ "name": BOARD, "id": id }));
+
+	assert_eq!(
+		view("photo").await.expect("shown"),
+		json!({
+			"form": "image",
+			"name": "cover.png",
+			"mimeType": "image/png",
+			"content": BASE64_STANDARD.encode(&png)
+		})
+	);
+	let refused = |id: &str, reason: Value| {
+		let mut expected = json!({ "kind": "nodeNotShown", "id": id });
+		expected
+			.as_object_mut()
+			.expect("an object")
+			.extend(reason.as_object().expect("an object").clone());
+		expected
+	};
+	assert_eq!(
+		refusal_of(view("note").await),
+		refused("note", json!({ "reason": "notAnImage", "nodeKind": "sticky" }))
+	);
+	assert_eq!(
+		refusal_of(view("lost").await),
+		refused("lost", json!({ "reason": "missingFile", "file": "gone.png" }))
+	);
+	assert_eq!(
+		refusal_of(view("huge").await),
+		refused(
+			"huge",
+			json!({ "reason": "tooLarge", "bytes": MAX_SHOWN_IMAGE_BYTES + 1, "limit": MAX_SHOWN_IMAGE_BYTES })
+		)
+	);
+	assert_eq!(
+		refusal_of(view("escape").await),
+		refused("escape", json!({ "reason": "outsideLibrary", "file": "../work/secret.png" }))
+	);
+	assert_eq!(
+		refusal_of(view("elsewhere").await),
+		refused("elsewhere", json!({ "reason": "missingFile", "file": "elsewhere.png" }))
+	);
+	assert_eq!(
+		refusal_of(view("nowhere").await),
+		refused("nowhere", json!({ "reason": "unknownNode" }))
+	);
+}

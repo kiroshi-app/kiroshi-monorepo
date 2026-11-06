@@ -1218,7 +1218,7 @@
 	},
 	{
 		"name": "board_read",
-		"description": "Read a board of the Library of this Space as it stands now with what everyone has drawn on it. It answers every node with its id, its kind, its x, y, width and height, its text (the label of a section) and the id of the section that holds it, and every edge with its id, its fromNode, its toNode and its label.",
+		"description": "Read a board of the Library of this Space as it stands now with what everyone has drawn on it, you or a person. It answers every node with its id, its kind, its x, y, width and height, its text (the text of a sticky, a text or a shape, the label of a section) and the id of the section that holds it, and every edge with its id, its fromNode, its toNode and its label. An image or a libraryCard also answers its file, the name of its item in the Library of this Space that library_read opens, and an image its mediaType: call board_view with its id to see that image. A linkCard also answers its url and its title.",
 		"inputSchema": {
 			"$schema": "https://json-schema.org/draft/2020-12/schema",
 			"type": "object",
@@ -1230,6 +1230,29 @@
 			},
 			"required": [
 				"name"
+			],
+			"additionalProperties": false
+		}
+	},
+	{
+		"name": "board_view",
+		"description": "Show you an image node of a board of the Library of this Space as an image, whoever dropped it there. A node that is not an image, an image whose file is not in the Library of this Space, or an image too large to show is refused with the node id and the reason, the size and the limit for one too large, and nothing is shown.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"name": {
+					"type": "string",
+					"description": "The name of the board in the Library of this Space, ending in .canvas, such as roadmap.canvas, without any folder."
+				},
+				"id": {
+					"type": "string",
+					"description": "The id of an image node of the board, as board_read answered it."
+				}
+			},
+			"required": [
+				"name",
+				"id"
 			],
 			"additionalProperties": false
 		}
@@ -1366,7 +1389,7 @@
 	},
 	{
 		"name": "board_update",
-		"description": "Change fields of nodes of a board of the Library of this Space, every other field kept as it stands, in one change the people who have it open see at once. An id absent from the board or a field the node refuses refuses the whole call with its index and the reason, and nothing changes. It answers the ids of the nodes changed.",
+		"description": "Change fields of nodes of a board of the Library of this Space, drawn by you or by a person, every other field kept as it stands, in one change the people who have it open see at once. x, y, width and height move and resize a node of any kind, an image and a libraryCard included; text, color, fill and shape apply only to a kind that carries them. An id absent from the board or a field the node refuses refuses the whole call with its index and the reason, and nothing changes. It answers the ids of the nodes changed.",
 		"inputSchema": {
 			"$schema": "https://json-schema.org/draft/2020-12/schema",
 			"type": "object",
@@ -1442,7 +1465,7 @@
 	},
 	{
 		"name": "board_remove",
-		"description": "Remove nodes from a board of the Library of this Space, with every edge attached to them, in one change. An id absent from the board refuses the whole call with its index and nothing changes. It answers the ids of the nodes and of the edges removed.",
+		"description": "Remove nodes of any kind from a board of the Library of this Space, drawn by you or by a person, with every edge attached to them, in one change. An id absent from the board refuses the whole call with its index and nothing changes. It answers the ids of the nodes and of the edges removed.",
 		"inputSchema": {
 			"$schema": "https://json-schema.org/draft/2020-12/schema",
 			"type": "object",

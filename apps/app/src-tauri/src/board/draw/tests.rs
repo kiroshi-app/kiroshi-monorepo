@@ -448,3 +448,159 @@ fn a_read_answers_each_node_with_its_text_and_the_section_that_holds_it() {
 		}]
 	);
 }
+
+const PERSON: &str = "p1";
+
+fn placed(fields: Value) -> Value {
+	let mut node = json!({ "x": 0, "y": 0, "width": 116, "height": 124, "z": "a0" });
+	node.as_object_mut().expect("an object").extend(fields.as_object().expect("an object").clone());
+	node
+}
+
+fn a_person_image() -> Value {
+	placed(json!({ "kind": "image", "file": "Library/cat.png", "item": "cat.png" }))
+}
+
+fn read_alone(node: Value) -> NodeRead {
+	let board = a_board(&[("n", node)], &[]);
+	read_out(&board).nodes.into_iter().next().expect("the node reads out")
+}
+
+fn opened(node: &NodeRead) -> Value {
+	let mut read = serde_json::to_value(node).expect("serializes");
+	let read = read.as_object_mut().expect("an object");
+	for answered_for_every_kind in ["id", "kind", "x", "y", "width", "height", "section"] {
+		read.remove(answered_for_every_kind);
+	}
+	Value::Object(read.clone())
+}
+
+#[test]
+fn a_sticky_reads_out_with_its_text() {
+	let sticky = placed(json!({
+		"kind": "sticky", "text": "Call Ana", "author": { "kind": "person", "id": PERSON }
+	}));
+
+	assert_eq!(opened(&read_alone(sticky)), json!({ "text": "Call Ana" }));
+}
+
+#[test]
+fn a_text_reads_out_with_its_text() {
+	assert_eq!(
+		opened(&read_alone(placed(json!({ "kind": "text", "text": "Title" })))),
+		json!({ "text": "Title" })
+	);
+}
+
+#[test]
+fn a_shape_reads_out_with_its_text() {
+	let shape = placed(json!({ "kind": "shape", "text": "Box", "shape": "ellipse" }));
+
+	assert_eq!(opened(&read_alone(shape)), json!({ "text": "Box" }));
+}
+
+#[test]
+fn a_section_reads_out_with_its_label_as_its_text() {
+	assert_eq!(
+		opened(&read_alone(placed(json!({ "kind": "section", "label": "Lane" })))),
+		json!({ "text": "Lane" })
+	);
+}
+
+#[test]
+fn an_image_reads_out_with_its_library_file_name_and_its_media_type() {
+	assert_eq!(
+		opened(&read_alone(a_person_image())),
+		json!({ "text": null, "file": "cat.png", "mediaType": "image/png" })
+	);
+}
+
+#[test]
+fn an_image_of_a_plain_canvas_reads_out_with_the_last_segment_of_its_file() {
+	let plain = placed(json!({ "kind": "image", "file": "attachments/photo.JPG" }));
+
+	assert_eq!(
+		opened(&read_alone(plain)),
+		json!({ "text": null, "file": "photo.JPG", "mediaType": "image/jpeg" })
+	);
+}
+
+#[test]
+fn a_library_card_reads_out_with_its_library_file_name() {
+	let card =
+		placed(json!({ "kind": "libraryCard", "file": "Library/plan.md", "item": "plan.md" }));
+
+	assert_eq!(opened(&read_alone(card)), json!({ "text": null, "file": "plan.md" }));
+}
+
+#[test]
+fn a_link_card_reads_out_with_its_url_and_its_title() {
+	let link =
+		placed(json!({ "kind": "linkCard", "url": "https://example.com", "title": "Example" }));
+
+	assert_eq!(
+		opened(&read_alone(link)),
+		json!({ "text": null, "url": "https://example.com", "title": "Example" })
+	);
+}
+
+#[test]
+fn a_foreign_node_reads_out_with_its_kind_and_place_only() {
+	let foreign = placed(json!({ "kind": "foreign", "canvas": { "type": "x" } }));
+
+	assert_eq!(opened(&read_alone(foreign)), json!({ "text": null }));
+}
+
+#[test]
+fn every_kind_of_the_board_schema_has_its_read_out_test() {
+	let tested =
+		["foreign", "image", "libraryCard", "linkCard", "section", "shape", "sticky", "text"];
+
+	assert_eq!(SCHEMA.kinds.keys().map(String::as_str).collect::<Vec<_>>(), tested);
+}
+
+#[test]
+fn an_image_a_person_dropped_reads_out_then_moves_resizes_and_leaves_with_its_edges() {
+	let card =
+		placed(json!({ "kind": "libraryCard", "file": "Library/plan.md", "item": "plan.md" }));
+	let sticky = placed(json!({
+		"kind": "sticky", "text": "Note", "author": { "kind": "person", "id": PERSON }
+	}));
+	let board = a_board(
+		&[("photo", a_person_image()), ("card", card), ("note", sticky)],
+		&[
+			("to-card", json!({ "fromNode": "photo", "toNode": "card" })),
+			("to-note", json!({ "fromNode": "note", "toNode": "photo" })),
+		],
+	);
+	let change = |value: Value| -> ChangedNode { serde_json::from_value(value).expect("a change") };
+
+	let photo = read_out(&board).nodes.into_iter().find(|node| node.id == "photo").expect("read");
+	let updated = changed(
+		&board,
+		&[
+			change(json!({ "id": "photo", "x": 300, "y": 40, "width": 232, "height": 248 })),
+			change(json!({ "id": "card", "x": -80, "height": 90 })),
+		],
+	)
+	.expect("the geometry of a person's nodes applies");
+	let looked = changed(&board, &[change(json!({ "id": "photo", "text": "A cat" }))])
+		.expect_err("an image carries no text");
+	let gone = removed(&board, &["photo".to_owned(), "card".to_owned(), "note".to_owned()])
+		.expect("a person's nodes are removed");
+
+	assert_eq!(
+		(photo.file.as_deref(), photo.media_type.as_deref()),
+		(Some("cat.png"), Some("image/png"))
+	);
+	let [moved, card] = &updated.edit.changed_nodes[..] else {
+		panic!("two nodes change");
+	};
+	assert_eq!(moved.fields, ["height", "width", "x", "y"]);
+	assert_eq!(rect_of(&moved.node), (300, 40, 232, 248));
+	assert_eq!(moved.node["item"], "cat.png");
+	assert_eq!(rect_of(&card.node), (-80, 0, 116, 90));
+	assert_eq!(looked.fault, DrawFault::RefusedField { field: "text".to_owned() });
+	assert_eq!(gone.edit.removed_nodes, ["photo", "card", "note"]);
+	assert_eq!(gone.edit.removed_edges, ["to-card", "to-note"]);
+}

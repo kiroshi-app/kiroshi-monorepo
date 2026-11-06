@@ -9,6 +9,7 @@ use super::schema::{KindSpec, Size, SCHEMA};
 use super::{
 	kind_key, parsed_edge, parsed_node, z_at, z_key, Board, BoardError, Element, JsonObject,
 };
+use crate::library::image_media_type;
 
 #[cfg(test)]
 mod tests;
@@ -22,6 +23,12 @@ const SECTION: &str = "section";
 const STICKY: &str = "sticky";
 
 const TEXT: &str = "text";
+
+const IMAGE: &str = "image";
+
+const LIBRARY_ITEM: &str = "item";
+
+const CANVAS_FILE: &str = "file";
 
 const LABEL: &str = "label";
 
@@ -139,6 +146,14 @@ pub struct NodeRead {
 	pub width: i64,
 	pub height: i64,
 	pub text: Option<String>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub file: Option<String>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub media_type: Option<String>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub url: Option<String>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub title: Option<String>,
 	pub section: Option<String>,
 }
 
@@ -429,6 +444,11 @@ pub fn read_out(board: &Board) -> BoardRead {
 				.filter(|(section_id, section)| *section_id != id && section.contains(rect))
 				.min_by_key(|(_, section)| section.area())
 				.map(|(section_id, _)| (*section_id).clone());
+			let file = library_file_of(node);
+			let media_type = match kind_of(node) {
+				Some(IMAGE) => file.as_deref().and_then(image_media_type).map(str::to_owned),
+				_ => None,
+			};
 			NodeRead {
 				id: id.clone(),
 				kind: kind_of(node).unwrap_or_default().to_owned(),
@@ -437,12 +457,14 @@ pub fn read_out(board: &Board) -> BoardRead {
 				width: rect.width,
 				height: rect.height,
 				text: shown_text(node),
+				file,
+				media_type,
+				url: text_of(node, "url"),
+				title: text_of(node, "title"),
 				section,
 			}
 		})
 		.collect();
-	let text_of =
-		|edge: &JsonObject, field: &str| edge.get(field).and_then(Value::as_str).map(str::to_owned);
 	let edges = board
 		.edges
 		.iter()
@@ -763,7 +785,19 @@ fn kind_of(node: &JsonObject) -> Option<&str> {
 
 fn shown_text(node: &JsonObject) -> Option<String> {
 	let field = if kind_of(node) == Some(SECTION) { LABEL } else { TEXT };
-	node.get(field).and_then(Value::as_str).map(str::to_owned)
+	text_of(node, field)
+}
+
+fn library_file_of(node: &JsonObject) -> Option<String> {
+	let in_canvas_folder = || {
+		let file = node.get(CANVAS_FILE).and_then(Value::as_str)?;
+		file.rsplit('/').next().map(str::to_owned)
+	};
+	text_of(node, LIBRARY_ITEM).or_else(in_canvas_folder)
+}
+
+fn text_of(object: &JsonObject, field: &str) -> Option<String> {
+	object.get(field).and_then(Value::as_str).map(str::to_owned)
 }
 
 fn touched_at(node_id: Option<&str>, rect: Rect) -> Touched {

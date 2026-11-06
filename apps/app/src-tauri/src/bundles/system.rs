@@ -406,6 +406,7 @@ mod tests {
 			"`library_delete`",
 			"`board_create`",
 			"`board_read`",
+			"`board_view`",
 			"`board_add`",
 			"`board_update`",
 			"`board_remove`",

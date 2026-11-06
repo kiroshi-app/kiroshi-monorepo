@@ -96,7 +96,7 @@ afterEach(() => {
 })
 
 describe("libraryTools", () => {
-	it("serves the eight library tools, the tool that posts a document and the five board tools", () => {
+	it("serves the eight library tools, the tool that posts a document and the six board tools", () => {
 		expect(tools.map((held) => held.name)).toEqual([
 			"library_list",
 			"library_search",
@@ -109,6 +109,7 @@ describe("libraryTools", () => {
 			"conversation_post_document",
 			"board_create",
 			"board_read",
+			"board_view",
 			"board_add",
 			"board_update",
 			"board_remove",
@@ -150,6 +151,7 @@ describe("libraryTools", () => {
 		expect(fieldsOf("conversation_post_document").required).toEqual(["name"])
 		expect(fieldsOf("board_create").required).toEqual(["name"])
 		expect(fieldsOf("board_read").required).toEqual(["name"])
+		expect(fieldsOf("board_view").required).toEqual(["name", "id"])
 		expect(fieldsOf("board_add").required).toEqual(["name", "nodes"])
 		expect(fieldsOf("board_update").required).toEqual(["name", "nodes"])
 		expect(fieldsOf("board_remove").required).toEqual(["name", "ids"])
@@ -160,6 +162,7 @@ describe("libraryTools", () => {
 		const calls: [string, string, Record<string, unknown>][] = [
 			["board_create", "boardCreate", { name: "plan.canvas" }],
 			["board_read", "boardRead", { name: "plan.canvas" }],
+			["board_view", "boardView", { name: "plan.canvas", id: "n1" }],
 			["board_add", "boardAdd", A_DIAGRAM],
 			[
 				"board_update",
@@ -181,6 +184,69 @@ describe("libraryTools", () => {
 			})),
 		)
 	})
+
+	it("shows an image node a person dropped on a board to the model as image content", async () => {
+		const asked = aHost(() => ({
+			result: {
+				form: "image",
+				name: "cat.png",
+				mimeType: "image/png",
+				content: "cG5n",
+			},
+		}))
+
+		const result = await called("board_view", {
+			name: "plan.canvas",
+			id: "photo",
+		})
+
+		expect(asked).toEqual([
+			{
+				subtype: "library",
+				operation: "boardView",
+				payload: { name: "plan.canvas", id: "photo" },
+			},
+		])
+		expect(result.content).toEqual([
+			{ type: "image", data: "cG5n", mimeType: "image/png" },
+		])
+		expect(result.isError).toBeUndefined()
+	})
+
+	for (const [what, refusal] of [
+		[
+			"a sticky",
+			{
+				kind: "nodeNotShown",
+				id: "note",
+				reason: "notAnImage",
+				nodeKind: "sticky",
+			},
+		],
+		[
+			"an image whose file is missing",
+			{
+				kind: "nodeNotShown",
+				id: "lost",
+				reason: "missingFile",
+				file: "gone.png",
+			},
+		],
+	] as const) {
+		it(`refuses a board view of ${what} with the node id and the reason, and shows no image`, async () => {
+			aHost(() => ({ error: refusal }))
+
+			const result = await called("board_view", {
+				name: "plan.canvas",
+				id: refusal.id,
+			})
+
+			expect(result.isError).toBe(true)
+			expect(result.content).toHaveLength(1)
+			expect(result.content[0]?.type).toBe("text")
+			expect(spoken(result)).toEqual(refusal)
+		})
+	}
 
 	it("speaks back the index and the reason of a refused board item", async () => {
 		const refusal = {
