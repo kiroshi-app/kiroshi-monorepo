@@ -45,22 +45,18 @@ const AGENT_INK_UNDER_WHITE: ToneSpec = {
 	contrast: { with: "#ffffff", ratio: 4.5 },
 }
 
-const ownerColourOf = (
-	kind: BoardPresenceOwner["kind"],
-	name: string,
-	hue: number,
-) =>
-	kind === "agent"
+const ownerColourOf = ({ kind, name, hue }: BoardPresenceOwner) => {
+	if (hue === undefined) return untintedInkOf("light")
+	return kind === "agent"
 		? toneOf(AGENT_INK_UNDER_WHITE, companionHue(name, hue), YELLOW_BAND).hex
 		: hueTone(hue, "light", "accent").hex
+}
 
-const ownerStyleOf = ({ kind, name, hue }: BoardPresenceOwner) =>
-	(hue === undefined
-		? { "--board-presence": untintedInkOf("light") }
-		: {
-				...hueStyle(hue),
-				"--board-presence": ownerColourOf(kind, name, hue),
-			}) as CSSProperties
+const ownerStyleOf = (owner: BoardPresenceOwner) =>
+	({
+		...(owner.hue === undefined ? {} : hueStyle(owner.hue)),
+		"--board-presence": ownerColourOf(owner),
+	}) as CSSProperties
 
 type OwnerAvatarProps = { owner: BoardPresenceOwner }
 
