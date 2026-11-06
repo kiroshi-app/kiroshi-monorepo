@@ -40,12 +40,13 @@ export const WorkspaceLayout = () => {
 		selectCompanion,
 		whatsNew,
 	} = workspace
-	const { roster, spaces } = core
+	const { roster, spaces, user } = core
+	const isShellReady = rosterView.hasLoaded && user.state.hasLoaded
 	const isOpenSpaceRostered =
 		rosterView.rosteredSpaceId === scopes.openRowId &&
 		!roster.state.isRosterPending
 
-	useInvokePhaseEnd("boot", rosterView.hasLoaded ? "startup screen gone" : null)
+	useInvokePhaseEnd("boot", isShellReady ? "startup screen gone" : null)
 	useInvokePhaseEnd(
 		"space switch",
 		isOpenSpaceRostered ? scopes.openRowId : null,
@@ -60,15 +61,11 @@ export const WorkspaceLayout = () => {
 		)
 	}
 
-	if (!rosterView.hasLoaded) {
+	if (!isShellReady) {
 		return (
 			<StartupScreen
-				hasFailed={spaces.state.hasFailedToLoad || roster.state.hasFailedToLoad}
-				onRetry={
-					spaces.state.hasFailedToLoad
-						? loadSpaces
-						: roster.controller.retryLoad
-				}
+				hasFailed={spaces.state.hasFailedToLoad}
+				onRetry={loadSpaces}
 			/>
 		)
 	}

@@ -2,7 +2,8 @@ use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::Encode;
 use yrs::{Assoc, Doc, GetString, IndexedSequence, ReadTxn, StickyIndex, Text, TextRef, Transact};
 
-use super::{decoded, merged_into, writer_of, Location, Placement, RemoveStep, WriteStep};
+use super::{decoded, merged_into, writer_of, RemoveStep, WriteStep};
+use crate::library::blocks::Splice;
 use crate::library::contract::LibraryError;
 use crate::library::{undecodable, within, MAX_DOCUMENT_BYTES};
 
@@ -16,46 +17,50 @@ pub(super) fn bounded(doc: &Doc, name: &str) -> Result<(), LibraryError> {
 	within(name, text_of(doc).len() as u64, MAX_DOCUMENT_BYTES)
 }
 
-pub(crate) fn located(
-	state: &[u8],
-	name: &str,
-	placement: &Placement<'_>,
-) -> Result<Location, LibraryError> {
-	let doc = Doc::new();
-	merged_into(&doc, name, decoded(name, state)?)?;
-	let text = doc.get_or_insert_text(TEXT_NAME);
-	let txn = doc.transact();
-	let current = text.get_string(&txn);
-	let (start, end) = match placement {
-		Placement::End => (current.len(), current.len()),
-		Placement::Whole => (0, current.len()),
-		Placement::After(passage) | Placement::Replacing(passage) => {
-			match passage_starts(&current, passage).as_slice() {
-				[] => return Ok(Location::PassageNotFound),
-				[start] if matches!(placement, Placement::After(_)) => {
-					(start + passage.len(), start + passage.len())
-				}
-				[start] => (*start, start + passage.len()),
-				starts => return Ok(Location::PassageNotUnique { occurrences: starts.len() }),
-			}
-		}
-	};
-	let caret = caret_at(&text, &txn, start, name)?;
-	if start == end {
-		return Ok(Location::Caret(caret));
-	}
-	Ok(Location::Passage { start: caret, end: caret_at(&text, &txn, end, name)? })
+pub(crate) fn text_of_state(state: &[u8], name: &str) -> Result<String, LibraryError> {
+	Ok(text_of(&doc_of_state(state, name)?))
 }
 
-fn passage_starts(text: &str, passage: &str) -> Vec<usize> {
-	let mut starts = Vec::new();
-	let mut from = 0;
-	while let Some(found) = text.get(from..).and_then(|rest| rest.find(passage)) {
-		let start = from + found;
-		starts.push(start);
-		from = start + text[start..].chars().next().map_or(1, char::len_utf8);
+pub(crate) fn carets_at(
+	state: &[u8],
+	name: &str,
+	offsets: &[usize],
+) -> Result<Vec<Vec<u8>>, LibraryError> {
+	let doc = doc_of_state(state, name)?;
+	let text = doc.get_or_insert_text(TEXT_NAME);
+	let txn = doc.transact();
+	offsets.iter().map(|offset| caret_at(&text, &txn, *offset, name)).collect()
+}
+
+fn doc_of_state(state: &[u8], name: &str) -> Result<Doc, LibraryError> {
+	let doc = Doc::new();
+	merged_into(&doc, name, decoded(name, state)?)?;
+	Ok(doc)
+}
+
+pub(super) fn spliced_by(
+	doc: &Doc,
+	name: &str,
+	writer: u64,
+	plan: impl FnOnce(&str) -> Vec<Splice>,
+) -> Result<Vec<u8>, LibraryError> {
+	let writer = writer_of(doc, writer, name)?;
+	let text = writer.get_or_insert_text(TEXT_NAME);
+	let mut txn = writer.transact_mut();
+	let splices = plan(&text.get_string(&txn));
+	for splice in splices.iter().rev() {
+		let start = byte_index(splice.range.start, name)?;
+		let removed = byte_index(splice.range.end, name)? - start;
+		if removed > 0 {
+			text.remove_range(&mut txn, start, removed);
+		}
+		text.insert(&mut txn, start, &splice.text);
 	}
-	starts
+	Ok(txn.encode_state_as_update_v1(&doc.transact().state_vector()))
+}
+
+fn byte_index(index: usize, name: &str) -> Result<u32, LibraryError> {
+	u32::try_from(index).map_err(|_| undecodable(name, format!("no caret stands at byte {index}")))
 }
 
 pub(super) fn inserted_by(

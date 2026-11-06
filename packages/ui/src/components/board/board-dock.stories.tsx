@@ -23,7 +23,7 @@ const TOOL_NAME: Record<BoardTool, string> = {
 	sticky: "Sticky note",
 	shape: "Shape",
 	text: "Text",
-	connector: "Connector",
+	connector: "Arrow",
 	section: "Section",
 	image: "Image",
 	library: "Library",
@@ -204,7 +204,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The tool dock centred 20px above the bottom of a board: Select and Hand, a divider, then Sticky note, Shape, Text, Connector, Section, Image and Library. It is one toolbar and one tab stop, Left and Right move between tools, and pressing a tool by pointer, Enter or Space emits `onToolChange`. The active tool wears the Space colour. Library opens the Library picker above it: Escape or a press outside closes it and focus goes back to Library, arrows move between tiles, Enter emits `onLibraryItemPick`, and a tile dragged out emits `onLibraryItemDrop` with the pointer when released.",
+					"The tool dock centred 20px above the bottom of a board: Select and Hand, a divider, then Sticky note, Shape, Text, Arrow, Section, Image and Library. It is one toolbar and one tab stop, Left and Right move between tools, and pressing a tool by pointer, Enter or Space emits `onToolChange`. The active tool wears the Space colour. Library opens the Library picker above it: Escape or a press outside closes it and focus goes back to Library, arrows move between tiles, Enter emits `onLibraryItemPick`, and a tile dragged out emits `onLibraryItemDrop` with the pointer when released.",
 			},
 		},
 	},

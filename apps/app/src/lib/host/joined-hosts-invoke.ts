@@ -62,6 +62,8 @@ export const LOCAL_COMMANDS: ReadonlySet<string> = new Set([
 	"drag_ghost_tab",
 	"drag_ghost_move",
 	"drag_ghost_hide",
+	"library_screenshot_job",
+	"library_screenshot_answer",
 	"diagnostics",
 	"log_tail",
 	"log_reveal",

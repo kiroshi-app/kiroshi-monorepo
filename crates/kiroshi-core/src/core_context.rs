@@ -72,7 +72,40 @@ pub trait Desktop: Send + Sync + 'static {
 	fn open_url(&self, url: &str) -> Result<(), String>;
 
 	fn raise_main_window(&self);
+
+	fn open_render_window(&self, window: &RenderWindow) -> Result<(), String>;
+
+	fn close_window(&self, label: &str) -> Result<(), String>;
 }
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RenderWindow {
+	pub label: String,
+	pub route: String,
+	pub width: f64,
+	pub height: f64,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum RenderWindowError {
+	NoDesktop,
+	Refused(String),
+}
+
+impl fmt::Display for RenderWindowError {
+	fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match self {
+			Self::NoDesktop => {
+				formatter.write_str("no desktop is installed to open a render window")
+			}
+			Self::Refused(cause) => {
+				write!(formatter, "the desktop did not open the render window: {cause}")
+			}
+		}
+	}
+}
+
+impl std::error::Error for RenderWindowError {}
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum OpenUrlError {
@@ -202,6 +235,18 @@ impl Core {
 	pub fn raise_main_window(&self) {
 		if let Some(desktop) = self.try_state::<Box<dyn Desktop>>() {
 			desktop.raise_main_window();
+		}
+	}
+
+	pub fn open_render_window(&self, window: &RenderWindow) -> Result<(), RenderWindowError> {
+		let desktop = self.try_state::<Box<dyn Desktop>>().ok_or(RenderWindowError::NoDesktop)?;
+		desktop.open_render_window(window).map_err(RenderWindowError::Refused)
+	}
+
+	pub fn close_window(&self, label: &str) -> Result<(), String> {
+		match self.try_state::<Box<dyn Desktop>>() {
+			Some(desktop) => desktop.close_window(label),
+			None => Ok(()),
 		}
 	}
 
@@ -354,6 +399,16 @@ mod tests {
 		fn raise_main_window(&self) {
 			self.0.lock().expect("unlocked").push("raised".to_owned());
 		}
+
+		fn open_render_window(&self, window: &RenderWindow) -> Result<(), String> {
+			self.0.lock().expect("unlocked").push(format!("opened {}", window.label));
+			Ok(())
+		}
+
+		fn close_window(&self, label: &str) -> Result<(), String> {
+			self.0.lock().expect("unlocked").push(format!("closed {label}"));
+			Ok(())
+		}
 	}
 
 	#[test]
@@ -378,6 +433,29 @@ mod tests {
 		core.open_url("https://kiroshi.app").expect("opened");
 
 		assert_eq!(*opened.0.lock().expect("unlocked"), vec!["https://kiroshi.app".to_owned()]);
+	}
+
+	#[test]
+	fn a_render_window_opens_and_closes_through_the_installed_desktop_and_fails_by_name_without_one(
+	) {
+		let core = a_core();
+		let window = RenderWindow {
+			label: "screenshot-r1".to_owned(),
+			route: "screenshot.html".to_owned(),
+			width: 794.0,
+			height: 600.0,
+		};
+		assert_eq!(core.open_render_window(&window), Err(RenderWindowError::NoDesktop));
+		let opened = Arc::new(Opened(std::sync::Mutex::default()));
+		assert!(core.install_desktop(opened.clone()));
+
+		core.open_render_window(&window).expect("opened");
+		core.close_window("screenshot-r1").expect("closed");
+
+		assert_eq!(
+			*opened.0.lock().expect("unlocked"),
+			vec!["opened screenshot-r1".to_owned(), "closed screenshot-r1".to_owned()]
+		);
 	}
 
 	#[test]

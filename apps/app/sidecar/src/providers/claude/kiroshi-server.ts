@@ -12,6 +12,7 @@ import {
 	delegateTool,
 } from "./delegate"
 import { libraryTools } from "./document-tools"
+import { GUIDE_INSTRUCTIONS, guideTool } from "./guide-tool"
 import { missionTools } from "./mission-tools"
 import { routineTools } from "./routine-tools"
 
@@ -29,6 +30,7 @@ export const kiroshiTools = ({ session, ...scope }: KiroshiScope) => [
 	...applicationTools(session),
 	...companionTools(session, scope),
 	...bundleTools(session),
+	guideTool(),
 	...libraryTools(session, scope),
 ]
 
@@ -37,6 +39,7 @@ export const kiroshiServer = (
 ): NonNullable<Options["mcpServers"]> => ({
 	[KIROSHI_SERVER]: createSdkMcpServer({
 		name: KIROSHI_SERVER,
+		instructions: GUIDE_INSTRUCTIONS,
 		tools: kiroshiTools(scope),
 	}),
 })

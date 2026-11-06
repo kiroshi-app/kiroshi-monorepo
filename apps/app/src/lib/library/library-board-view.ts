@@ -84,25 +84,39 @@ const itemOf = (
 	style: styleOf(node),
 })
 
-const connectorOf = (
+const connectorsOf = (
 	[id, edge]: [string, Connector],
 	zOrder: number,
-): BoardConnector => ({
-	id,
-	kind: "connector",
-	from: edge.fromNode,
-	fromSide: edge.fromSide ?? "right",
-	to: edge.toNode,
-	toSide: edge.toSide ?? "left",
-	routing: edge.routing,
-	zOrder,
-	text: edge.label ?? "",
-})
+): BoardConnector[] => {
+	const { fromNode, fromPoint, toNode, toPoint } = edge
+	if (fromNode === undefined && fromPoint === undefined) return []
+	if (toNode === undefined && toPoint === undefined) return []
+	return [
+		{
+			id,
+			kind: "connector",
+			from: fromNode ?? "",
+			fromSide: edge.fromSide,
+			fromAnchor: edge.fromAnchor,
+			fromPoint,
+			to: toNode ?? "",
+			toSide: edge.toSide,
+			toAnchor: edge.toAnchor,
+			toPoint,
+			routing: edge.routing,
+			bend: edge.bend,
+			labelPosition: edge.labelPosition,
+			headSize: edge.headSize,
+			zOrder,
+			text: edge.label ?? "",
+		},
+	]
+}
 
 export const libraryBoardViewOf = ({ nodes, edges }: Board): BoardView => {
 	const items = Object.entries(nodes).sort(isBelow).map(itemOf)
-	const connectors = Object.entries(edges).map((edge, index) =>
-		connectorOf(edge, items.length + index),
+	const connectors = Object.entries(edges).flatMap((edge, index) =>
+		connectorsOf(edge, items.length + index),
 	)
 	return { objects: [...items, ...connectors] }
 }

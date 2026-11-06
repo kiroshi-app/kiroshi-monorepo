@@ -8,7 +8,6 @@ import type { LibraryLightboxImage } from "@workspace/ui/components/library-ligh
 
 type MarkdownAnswerActions = {
 	agentName: string
-	onPickOption: (option: string) => void
 	onUseValues: (summary: string) => void
 	onOpenImage: (images: LibraryLightboxImage[], index: number) => void
 	onOpenWebPage?: (url: string) => void

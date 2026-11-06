@@ -54,31 +54,30 @@ const mountApp = async (store: TranscriptStore) => {
 	await settle()
 }
 
-it("holds the startup screen while the roster is read", async () => {
+const SKELETON_MS = 300
+
+it("mounts the sidebar with its skeleton while the roster is read", async () => {
 	const store = createFakeTranscriptStore()
 	vi.spyOn(store, "bots").mockReturnValue(new Promise(() => undefined))
 
 	await mountApp(store)
+	await act(async () => {
+		await vi.advanceTimersByTimeAsync(SKELETON_MS)
+	})
 
-	expect(isShowing("app-boot-screen")).toBe(true)
-	expect(isShowing("app-boot-notice")).toBe(false)
+	expect(isShowing("app-boot-screen")).toBe(false)
+	expect(isShowing("sidebar-list-skeleton")).toBe(true)
 })
 
-it("offers a retry when the roster fails at launch and reads it again on retry", async () => {
+it("shows a roster failing at launch inside the sidebar, never on the startup screen", async () => {
 	const store = createFakeTranscriptStore()
-	const reads = vi
-		.spyOn(store, "bots")
-		.mockRejectedValueOnce(new Error("no record"))
+	vi.spyOn(store, "bots").mockRejectedValue(new Error("no record"))
 
 	await mountApp(store)
-	expect(isShowing("app-boot-notice")).toBe(true)
 
-	fireEvent.click(screen.getByRole("button", { name: "Retry" }))
-	await settle()
-
-	expect(reads).toHaveBeenCalledTimes(2)
-	expect(isShowing("app-boot-notice")).toBe(false)
 	expect(isShowing("app-boot-screen")).toBe(false)
+	expect(isShowing("app-boot-notice")).toBe(false)
+	expect(screen.getByText(/Couldn’t load your agents/)).toBeTruthy()
 })
 
 it("offers a retry when the space list fails at launch and reads it again on retry", async () => {

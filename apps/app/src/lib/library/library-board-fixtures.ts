@@ -88,6 +88,55 @@ export const TWO_NOTES_BOARD: Board = {
 	},
 }
 
+export const TIED_ARROWS_BOARD: Board = {
+	nodes: {
+		start: {
+			...placed(0, "a0"),
+			kind: "shape",
+			text: "Start",
+			shape: "rectangle",
+		},
+		finish: {
+			...placed(400, "a1"),
+			kind: "shape",
+			text: "Finish",
+			shape: "ellipse",
+		},
+	},
+	edges: {
+		pinned: {
+			fromNode: "start",
+			fromAnchor: { x: 0.25, y: 0 },
+			fromEnd: "none",
+			toNode: "finish",
+			toSide: "left",
+			toEnd: "arrow",
+			label: "then",
+			labelPosition: 0.3,
+			bend: 40,
+			routing: "elbow",
+			headSize: "large",
+		},
+		centred: {
+			fromNode: "start",
+			fromEnd: "none",
+			toNode: "finish",
+			toEnd: "arrow",
+			routing: "straight",
+		},
+		loop: {
+			fromNode: "finish",
+			fromSide: "top",
+			fromEnd: "none",
+			toNode: "finish",
+			toAnchor: { x: 1, y: 0.75 },
+			toEnd: "arrow",
+			bend: -20,
+			routing: "straight",
+		},
+	},
+}
+
 export const boardDocOf = (board: Board) => {
 	const doc = new Y.Doc()
 	writeBoard(doc, board)

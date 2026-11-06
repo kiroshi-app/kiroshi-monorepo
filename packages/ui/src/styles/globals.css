@@ -165,6 +165,8 @@
 	--color-board-muted-foreground: var(--board-muted-foreground);
 	--color-board-shape-surface: var(--board-shape-surface);
 	--color-board-shape-border: var(--board-shape-border);
+	--color-board-arrow-marker: var(--board-arrow-marker);
+	--color-board-move-ghost: var(--board-move-ghost);
 	--color-board-card-surface: var(--board-card-surface);
 	--color-board-card-border: var(--board-card-border);
 	--color-board-card-inset: var(--board-card-inset);

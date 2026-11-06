@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react"
 
-import type { BoardLibraryItem } from "@workspace/ui/components/board/board-dock"
 import {
 	LibraryDocumentEditor,
 	type LibraryDocumentEditorHandle,
@@ -30,11 +29,11 @@ import type { Bot } from "@/lib/conversations/store-contract"
 import { failureReporterIn } from "@/lib/failure-report"
 import { storedImageSourceOf } from "@/lib/library/library-image-source"
 import {
+	documentFormatOf,
 	documentNamedAs,
 	matchesQuery,
 	shownTitleOf,
 	titleOf,
-	toBoardLibraryItem,
 	toShownItem,
 } from "@/lib/library/library-items"
 import { readLinkPreview } from "@/lib/library/library-link-preview"
@@ -261,8 +260,6 @@ type LibraryOpeningStateProps = {
 	bots: Bot[]
 	opening: LibraryOpening
 	boardSummary: LibraryBoardSummary | undefined
-	libraryItems: readonly BoardLibraryItem[]
-	importFiles: (files: readonly File[]) => Promise<LibraryItem[]>
 	isMissing: boolean
 	hasFailedToRead: boolean
 	onCloseTab?: () => void
@@ -277,8 +274,6 @@ type LibraryBoardOpeningProps = Pick<
 	| "bots"
 	| "opening"
 	| "boardSummary"
-	| "libraryItems"
-	| "importFiles"
 	| "onBackToLibrary"
 	| "onDelete"
 >
@@ -289,17 +284,13 @@ const LibraryBoardOpening = ({
 	bots,
 	opening: { name },
 	boardSummary,
-	libraryItems,
-	importFiles,
 	onBackToLibrary,
 	onDelete,
 }: LibraryBoardOpeningProps) => (
 	<LibraryBoard
 		bots={bots}
-		importFiles={importFiles}
 		isJoined={isJoined}
 		key={name}
-		libraryItems={libraryItems}
 		name={name}
 		onBack={onBackToLibrary}
 		onDelete={onDelete}
@@ -523,6 +514,7 @@ export const LibraryScreen = ({
 			<LibraryDocumentEditor
 				body={document.markdown}
 				detail={openedDocument.detail}
+				format={documentFormatOf(openedDocument.name)}
 				isActionShown={(_subject, action) =>
 					isActionShownOn(openedDocument, action)
 				}
@@ -559,10 +551,8 @@ export const LibraryScreen = ({
 				boardSummary={openedBoard.summary}
 				bots={bots}
 				hasFailedToRead={hasFailedToRead}
-				importFiles={importDropped}
 				isJoined={isJoined}
 				isMissing={isMissing}
-				libraryItems={library.items.map(toShown).map(toBoardLibraryItem)}
 				onBackToLibrary={close}
 				onCloseTab={onCloseTab}
 				onDelete={() => deleteAndClose({ id: opening.name })}

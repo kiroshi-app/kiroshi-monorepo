@@ -3,26 +3,13 @@
 import { type ReactNode, useId } from "react"
 import { useTranslation } from "react-i18next"
 
+import { AuthorLine } from "@workspace/ui/components/author-line"
 import { Icons } from "@workspace/ui/components/icons"
-import {
-	AvatarFrame,
-	displayNameOf,
-	initialsOf,
-} from "@workspace/ui/components/initials-avatar"
+import { InitialsAvatar } from "@workspace/ui/components/initials-avatar"
 import { MessageClock } from "@workspace/ui/components/message"
-import { MESSAGE_BUBBLE_MAX_INLINE_SIZE } from "@workspace/ui/components/message-bubble"
 import type { ToolQuestionItem } from "@workspace/ui/components/tool-question"
+import { AUTHOR_AVATAR_SIZE } from "@workspace/ui/components/turn"
 import { cn } from "@workspace/ui/lib/utils"
-
-const AUTHOR_AVATAR_SIZE = 20
-
-const CARD_CLASS = cn(
-	"flex min-w-[min(--spacing(90),100%)] flex-col gap-2.5 rounded-bubble bg-bubble px-4 pt-3 pb-4 text-foreground",
-	MESSAGE_BUBBLE_MAX_INLINE_SIZE,
-)
-
-const AUTHOR_INITIALS_CLASS =
-	"grid size-full place-items-center bg-person-avatar font-medium text-[8px] text-foreground uppercase leading-none"
 
 const CHOSEN_ROW_CLASS =
 	"surface-user-bubble on-user-bubble flex items-center gap-3 rounded-control px-3 py-2.5 text-user-bubble-foreground"
@@ -133,35 +120,31 @@ const AnsweredBlock = ({
 	)
 }
 
-type AuthorLineProps = Pick<AnsweredQuestionCardProps, "author" | "answeredAt">
+type AnswererLineProps = Pick<
+	AnsweredQuestionCardProps,
+	"author" | "answeredAt"
+>
 
-const AuthorLine = ({ author, answeredAt }: AuthorLineProps) => {
+const AnswererLine = ({ author, answeredAt }: AnswererLineProps) => {
 	const { t } = useTranslation("chat")
 	const label = author.isViewer
 		? t("answeredQuestion.byViewer")
 		: t("answeredQuestion.byMember", { name: author.name })
 
 	return (
-		<div className="flex items-center gap-1.5 px-0.5 pt-0.5">
-			<AvatarFrame
-				image={author.image}
-				shape="round"
-				size={AUTHOR_AVATAR_SIZE}
-				slot="user-avatar"
-				className="shrink-0"
-			>
-				<span aria-hidden="true" className={AUTHOR_INITIALS_CLASS}>
-					{initialsOf(displayNameOf(author.name))}
-				</span>
-			</AvatarFrame>
-			<span className="min-w-0 break-words font-semibold text-muted-foreground text-xs">
-				{label}
-			</span>
-			<MessageClock
-				at={answeredAt}
-				className="ms-auto text-[11px]/4 text-muted-foreground"
-			/>
-		</div>
+		<AuthorLine
+			tone="person"
+			name={label}
+			avatar={
+				<InitialsAvatar
+					name={author.name}
+					image={author.image}
+					size={AUTHOR_AVATAR_SIZE}
+				/>
+			}
+			time={<MessageClock at={answeredAt} />}
+			className="self-start"
+		/>
 	)
 }
 
@@ -170,19 +153,19 @@ const AnsweredQuestionCard = ({
 	answeredAt,
 	questions,
 	className,
-}: AnsweredQuestionCardProps) => {
-	return (
-		<div
-			data-slot="answered-question-card"
-			className={cn(CARD_CLASS, className)}
-		>
-			<AuthorLine author={author} answeredAt={answeredAt} />
+}: AnsweredQuestionCardProps) => (
+	<div
+		data-slot="answered-question-card"
+		className={cn("flex flex-col gap-2", className)}
+	>
+		<div className="flex flex-col gap-2.5">
 			{questions.map((question) => (
 				<AnsweredBlock key={question.question} {...question} />
 			))}
 		</div>
-	)
-}
+		<AnswererLine author={author} answeredAt={answeredAt} />
+	</div>
+)
 
 export {
 	type AnsweredQuestion,

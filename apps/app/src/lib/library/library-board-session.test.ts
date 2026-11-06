@@ -3,12 +3,18 @@ import * as Y from "yjs"
 
 import { readBoard } from "@workspace/shared/board/board-doc"
 
-import { boardStateOf, TWO_NOTES_BOARD } from "./library-board-fixtures"
+import {
+	boardStateOf,
+	TIED_ARROWS_BOARD,
+	TWO_NOTES_BOARD,
+} from "./library-board-fixtures"
 import { applyLibraryBoardIntent } from "./library-board-intents"
 import { createLibraryBoardSession } from "./library-board-session"
 import { base64Of, bytesOf, SEND_INTERVAL_MS } from "./library-document-session"
 
 const HOST_STATE = boardStateOf(TWO_NOTES_BOARD)
+
+const PERSON = { kind: "person", id: "person-a" } as const
 
 const openSession = (state = HOST_STATE) => {
 	const sent: string[] = []
@@ -16,7 +22,12 @@ const openSession = (state = HOST_STATE) => {
 		sent.push(update)
 	})
 	const onRefused = vi.fn()
-	const session = createLibraryBoardSession({ state, send, onRefused })
+	const session = createLibraryBoardSession({
+		state,
+		send,
+		onRefused,
+		authorOf: () => PERSON,
+	})
 	const stopTracking = session.trackHistory()
 	return { state, sent, send, onRefused, session, stopTracking }
 }
@@ -43,6 +54,7 @@ const remoteMoveOf = (state: string, id: string, x: number) =>
 			doc,
 			{ type: "move", id, position: { x, y: 0 } },
 			"remote peer",
+			() => PERSON,
 		),
 	)
 
@@ -162,6 +174,49 @@ describe("a Library board session", () => {
 		expect(itemOf(session, "link")).toMatchObject({ kind: "connector" })
 	})
 
+	it("sends updates that keep every field of an arrow it did not edit", async () => {
+		const { state, sent, session } = openSession(
+			boardStateOf(TIED_ARROWS_BOARD),
+		)
+
+		session.receive(remoteMoveOf(state, "start", 30))
+		session.apply({ type: "edit-text", id: "finish", text: "Done" })
+		await session.flush()
+
+		expect(boardAfter(state, ...sent).edges).toEqual(TIED_ARROWS_BOARD.edges)
+	})
+
+	it("saves the loosened ends of a deleted node as a board that parses", async () => {
+		const { state, sent, session, onRefused } = openSession(
+			boardStateOf(TIED_ARROWS_BOARD),
+		)
+
+		session.apply({ type: "delete", id: "finish" })
+		await session.flush()
+
+		const saved = boardAfter(state, ...sent)
+		expect(Object.keys(saved.edges).sort()).toEqual([
+			"centred",
+			"loop",
+			"pinned",
+		])
+		expect(saved.edges.loop).not.toHaveProperty("fromNode")
+		expect(saved.edges.loop).not.toHaveProperty("toNode")
+		expect(onRefused).not.toHaveBeenCalled()
+	})
+
+	it("ties every loosened end back as it was in one undo of a delete", async () => {
+		const { state, sent, session } = openSession(
+			boardStateOf(TIED_ARROWS_BOARD),
+		)
+
+		session.apply({ type: "delete", id: "finish" })
+		session.undo()
+		await session.flush()
+
+		expect(boardAfter(state, ...sent)).toEqual(boardAfter(state))
+	})
+
 	it("undoes nothing once its history is destroyed", () => {
 		const { session, stopTracking } = openSession()
 
@@ -201,8 +256,8 @@ describe("a Library board session", () => {
 		for (const update of there.sent) here.session.receive(update)
 		for (const update of here.sent) there.session.receive(update)
 
-		expect(idsOf(here.session)).toEqual(["first"])
-		expect(idsOf(there.session)).toEqual(["first"])
+		expect(idsOf(here.session)).toEqual(["first", "link"])
+		expect(idsOf(there.session)).toEqual(["first", "link"])
 
 		there.session.apply({
 			type: "move",

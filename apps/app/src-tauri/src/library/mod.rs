@@ -1,3 +1,4 @@
+mod blocks;
 mod canvas;
 pub mod commands;
 pub use kiroshi_core::library::contract;

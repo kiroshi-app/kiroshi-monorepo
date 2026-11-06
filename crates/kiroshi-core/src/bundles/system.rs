@@ -22,15 +22,13 @@ const INSTALLS: &str = "skills/applications/SKILL.md";
 
 const RICH_ANSWERS: &str = "skills/rich-answers/SKILL.md";
 
-const LIBRARY: &str = "skills/library/SKILL.md";
-
 const VISUAL_FIRST: &str = "output-styles/visual-first.md";
 
 pub const VISUAL_FIRST_STYLE: &str = "kiroshi:visual-first";
 
 const TRIGGERS: &str = ".triggers.json";
 
-const FILES: [(&str, &[u8]); 13] = [
+const FILES: [(&str, &[u8]); 12] = [
 	(
 		MANIFEST,
 		include_bytes!("../../../../apps/app/src-tauri/plugins/kiroshi/.claude-plugin/plugin.json"),
@@ -56,10 +54,6 @@ const FILES: [(&str, &[u8]); 13] = [
 		include_bytes!(
 			"../../../../apps/app/src-tauri/plugins/kiroshi/skills/conversations/SKILL.md"
 		),
-	),
-	(
-		LIBRARY,
-		include_bytes!("../../../../apps/app/src-tauri/plugins/kiroshi/skills/library/SKILL.md"),
 	),
 	(
 		RICH_ANSWERS,
@@ -436,37 +430,17 @@ mod tests {
 	}
 
 	#[test]
-	fn the_library_skill_is_preloaded_and_names_every_library_and_board_tool() {
-		let text = String::from_utf8_lossy(embedded(LIBRARY));
-		let said_in_one_breath = text.split_whitespace().collect::<Vec<_>>().join(" ");
-
-		assert!(text.contains("preload: true"), "got {text}");
-		for said in [
-			"`library_list`",
-			"`library_search`",
-			"`library_read`",
-			"`library_create`",
-			"`library_write`",
-			"`library_import`",
-			"`library_rename`",
-			"`library_delete`",
-			"`board_create`",
-			"`board_read`",
-			"`board_add`",
-			"`board_update`",
-			"`board_remove`",
-			"`conversation_post_document`",
-			"occurs once",
-		] {
-			assert!(said_in_one_breath.contains(said), "{said} is missing");
-		}
-	}
-
-	#[test]
 	fn no_skill_names_a_tool_the_library_tools_replaced() {
 		for (name, bytes) in FILES {
 			let text = String::from_utf8_lossy(bytes);
-			for replaced in ["document_read", "document_write"] {
+			for replaced in [
+				"`document_read`",
+				"`document_write`",
+				"`library_write`",
+				"`board_read`",
+				"`board_add`",
+				"`board_remove`",
+			] {
 				assert!(!text.contains(replaced), "{name} still names {replaced}");
 			}
 		}
@@ -480,7 +454,7 @@ mod tests {
 
 		assert!(text.contains("disable-model-invocation: true"), "got {text}");
 		assert!(text.contains("preload: true"), "got {text}");
-		assert_eq!(sections.len(), 11, "the reference names eleven blocks");
+		assert_eq!(sections.len(), 10, "the reference names ten blocks");
 		for section in sections {
 			let form = form_of(section);
 			assert!(text.contains(form), "{form} is missing");
@@ -510,13 +484,21 @@ mod tests {
 			"Reach for the construct that fits the content first:",
 			"Prose is the few lines that tie those visuals together, and the answer stays short.",
 			"When a person asks for a checklist of steps, write the checklist block.",
-			"When a person asks for options to explore, write the options card.",
 			"never JSON and never HTML",
 			"Never put a script, HTML, a network fetch, a storage access or a name that is not a declared slider in it.",
 		] {
 			assert!(said_in_one_breath.contains(said), "{said} is missing");
 		}
 	}
+
+	#[test]
+	fn the_rich_answers_skill_writes_no_options_fence() {
+		let text = String::from_utf8_lossy(embedded(RICH_ANSWERS));
+
+		assert!(!text.contains(&format!("```{OPTIONS}")), "got {text}");
+	}
+
+	const OPTIONS: &str = "options";
 
 	const MARKDOWN: &str = "components.tsx";
 
@@ -542,7 +524,6 @@ mod tests {
 		("Callout tip", &[(MARKS, "TIP: \"tip\"")]),
 		("Callout warning", &[(MARKS, "WARNING: \"warning\"")]),
 		("Illustrated list", &[(BLOCKS, "\"illustrated-list\": readIllustratedList,")]),
-		("Options card", &[(BLOCKS, "options: readOptions,")]),
 		("Interactive view", &[(BLOCKS, "interactive: readInteractive,")]),
 		("Collapsible section", &[(BLOCKS, "collapsible: readCollapsible,")]),
 		("Web page card", &[(BLOCKS, "\"web-page\": readWebPage,")]),
@@ -635,6 +616,7 @@ mod tests {
 			.lines()
 			.filter_map(|line| line.trim().split(':').next())
 			.map(|label| label.trim_matches('"'))
+			.filter(|label| *label != OPTIONS)
 			.collect();
 		assert!(!labels.is_empty(), "the renderer reads no fenced block");
 		for label in labels {
@@ -730,6 +712,20 @@ mod tests {
 		}
 		assert!(!stray.exists(), "the stray file is gone");
 		assert!(!stray.parent().expect("it has a directory").exists(), "the directory is gone");
+
+		let _ = fs::remove_dir_all(&path);
+	}
+
+	#[test]
+	fn a_write_prunes_the_library_skill_an_older_version_laid_down() {
+		let path = a_path("older-library");
+		let library = path.join("skills").join("library").join(SKILL_NAME);
+		private_files::replace(&library, b"older").expect("the older skill lands");
+
+		write(&path).expect("the plugin is written");
+
+		assert!(!library.exists(), "the library skill is gone");
+		assert!(!path.join("skills").join("library").exists(), "its directory is gone");
 
 		let _ = fs::remove_dir_all(&path);
 	}

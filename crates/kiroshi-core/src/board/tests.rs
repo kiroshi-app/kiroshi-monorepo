@@ -267,6 +267,44 @@ fn an_edge_to_an_absent_node_is_refused_by_name() {
 }
 
 #[test]
+fn an_arrow_with_a_tie_ratio_or_head_size_out_of_range_is_refused_by_name() {
+	let group = json!({ "id": "a", "type": "group", "x": 0, "y": 0, "width": 1, "height": 1 });
+	let tied =
+		|kiroshi: Value| json!({ "id": "e", "fromNode": "a", "toNode": "a", "kiroshi": kiroshi });
+	let cases = [
+		("fromAnchor", tied(json!({ "fromAnchor": { "x": 1.5, "y": 0 } }))),
+		("toAnchor", tied(json!({ "toAnchor": { "x": 0.5, "y": -0.1 } }))),
+		("toAnchor", tied(json!({ "toAnchor": { "x": 0.5 } }))),
+		("labelPosition", tied(json!({ "labelPosition": 1.01 }))),
+		("headSize", tied(json!({ "headSize": "huge" }))),
+		("bend", tied(json!({ "bend": "wide" }))),
+		("toPoint", tied(json!({ "toPoint": { "x": 4, "y": 2 } }))),
+		(
+			"fromAnchor",
+			json!({ "id": "e", "fromNode": "a", "fromSide": "top", "toNode": "a",
+				"kiroshi": { "fromAnchor": { "x": 0, "y": 0 } } }),
+		),
+		("toNode", json!({ "id": "e", "fromNode": "a" })),
+		(
+			"toSide",
+			json!({ "id": "e", "fromNode": "a", "toSide": "left",
+				"kiroshi": { "toPoint": { "x": 4, "y": 2 } } }),
+		),
+	];
+	for (field, edge) in cases {
+		assert_eq!(
+			refusal_of(json!({ "nodes": [group], "edges": [edge] })),
+			BoardError::InvalidField {
+				element: Element::Edge,
+				id: "e".into(),
+				field: field.into()
+			},
+			"{edge}"
+		);
+	}
+}
+
+#[test]
 fn a_sticky_whose_author_is_not_an_identity_is_refused_by_name() {
 	let authors = [
 		json!("Ichi"),
@@ -307,6 +345,9 @@ fn the_schema_names_the_defaults_both_engines_apply() {
 	assert_eq!(default_of(&SCHEMA.edge.fields, "fromEnd"), json!("none"));
 	assert_eq!(default_of(&SCHEMA.edge.fields, "toEnd"), json!("arrow"));
 	assert_eq!(default_of(&SCHEMA.edge.fields, "routing"), json!("straight"));
+	assert_eq!(default_of(&SCHEMA.edge.fields, "bend"), json!(0));
+	assert_eq!(default_of(&SCHEMA.edge.fields, "labelPosition"), json!(0.5));
+	assert_eq!(default_of(&SCHEMA.edge.fields, "headSize"), json!("medium"));
 	assert_eq!(default_of(&SCHEMA.kinds["sticky"].fields, "fill"), json!("yellow"));
 	assert_eq!(default_of(&SCHEMA.kinds["shape"].fields, "shape"), json!("rectangle"));
 }

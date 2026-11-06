@@ -1,5 +1,6 @@
 use crate::core_context::Managed;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
+use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
@@ -11,28 +12,36 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use tokio::sync::{watch, OwnedMutexGuard};
 
+use super::blocks::{
+	self, backfill, blocks_of, preview, removal, separated, Block, BlockKind, Splice,
+};
 use super::canvas::board_holds;
 use super::contract::{
 	LibraryBoardPoint, LibraryDocumentFormat, LibraryDocumentWriterFinished, LibraryError,
 	LibraryItem, LibraryItemKind, LibraryPresenceAt, LibraryWriteOutcome,
 };
-use super::documents::{located, BoardTarget, Location, Placement, RemoveStep, WriteStep};
+use super::documents::{carets_at, text_of_state, BoardTarget, RemoveStep, WriteStep};
 use super::presence::{seat_agent_on_board, seat_writer, unseat_writer, Seat, Seated};
 use super::{
 	a_document, announce, announce_change, create_board, create_document, delete_item,
-	document_text, documents, encoded_content, import_path, list, overwrite_path, read_document,
-	rename_linked_document, resolve, root, AcceptedType, OverwriteRefusal,
+	document_text, documents, encoded_content, import_path, item_at, list, overwrite_path,
+	read_document, rename_linked_document, resolve, root, space_dir, AcceptedType,
+	OverwriteRefusal,
 };
 use crate::agent::contract::RuntimeScope;
 use crate::agent::host::{Host, Refusal};
 use crate::board::{
-	changed, drawn, read_out, removed, Board, BoardEdit, BoardRead, ChangedNode, DrawRefusal,
-	DrawnEdge, DrawnNode, Touched,
+	content_hash, deleted, duplicated, export_canvas, find, framed, info, moved, node_file,
+	node_info, tree, under, updated, written, ArrowPatch, Board, BoardEdit, ChangedNode,
+	DrawRefusal, DrawnArrow, DrawnNode, ElementChange, Framed, Group, Sought, Touched, WriteMode,
 };
 use crate::conversations::commands::{post_document, ready};
 use crate::conversations::contract::TranscriptStoreError;
 use crate::db::repositories::keyset::{self, Keyset};
 use crate::{db, events};
+use screenshot::{render, Rendered, Scale, ScreenshotBlock, ScreenshotTarget, Shot};
+
+pub mod screenshot;
 
 const WRITE_STEPS: usize = 40;
 
@@ -46,7 +55,14 @@ const MAX_SHOWN_IMAGE_BYTES: u64 = 5 * 1024 * 1024 / 4 * 3;
 
 const STEP_PAUSE: Duration = Duration::from_millis(40);
 
+const IMAGE_KIND: &str = "image";
+
+const PNG_MIME_TYPE: &str = "image/png";
+
 const NO_STORE: &str = "the store of this session is not open";
+
+const READ_THE_TREE: &str =
+	"no block of this document holds this id: call document_tree for the ids it holds";
 
 #[derive(Debug)]
 pub struct LibraryHost {
@@ -64,15 +80,17 @@ pub enum DocumentRefusal {
 #[derive(Debug, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum ToolRefusal {
-	PassageNotFound,
+	#[serde(rename_all = "camelCase")]
+	BlockNotFound {
+		id: String,
+		detail: &'static str,
+	},
+	NoBlock,
 	#[serde(rename_all = "camelCase")]
 	FormatMismatch {
 		name: String,
 		mime_type: String,
 		produced_mime_type: String,
-	},
-	PassageNotUnique {
-		occurrences: usize,
 	},
 	Stopped,
 	#[serde(rename_all = "camelCase")]
@@ -98,6 +116,49 @@ pub enum ToolRefusal {
 		detail: String,
 	},
 	InvalidBoardItem(DrawRefusal),
+	#[serde(rename_all = "camelCase")]
+	NodeNotShown {
+		id: String,
+		#[serde(flatten)]
+		reason: NotShown,
+	},
+	NothingToShow,
+	#[serde(rename_all = "camelCase")]
+	RenderTimedOut {
+		seconds: u64,
+	},
+	#[serde(rename_all = "camelCase")]
+	RenderFailed {
+		detail: String,
+	},
+}
+
+#[derive(Debug, Serialize)]
+#[serde(tag = "reason", rename_all = "camelCase")]
+pub enum NotShown {
+	UnknownNode,
+	#[serde(rename_all = "camelCase")]
+	NotAnImage {
+		node_kind: String,
+	},
+	NoFile,
+	#[serde(rename_all = "camelCase")]
+	NotAnImageFile {
+		file: String,
+	},
+	#[serde(rename_all = "camelCase")]
+	MissingFile {
+		file: String,
+	},
+	#[serde(rename_all = "camelCase")]
+	OutsideLibrary {
+		file: String,
+	},
+	#[serde(rename_all = "camelCase")]
+	TooLarge {
+		bytes: u64,
+		limit: u64,
+	},
 }
 
 #[derive(Debug, Clone, Copy, Deserialize)]
@@ -107,16 +168,30 @@ pub enum Operation {
 	Search,
 	Read,
 	Create,
-	Write,
 	Import,
 	Rename,
 	Delete,
 	PostDocument,
+	DocumentInfo,
+	DocumentTree,
+	DocumentReadBlock,
+	DocumentInsertAfter,
+	DocumentReplaceBlock,
+	DocumentDeleteBlock,
+	DocumentFind,
 	BoardCreate,
-	BoardRead,
-	BoardAdd,
+	BoardInfo,
+	BoardTree,
+	BoardNodeInfo,
+	BoardCanvas,
+	BoardWrite,
 	BoardUpdate,
-	BoardRemove,
+	BoardMove,
+	BoardDuplicate,
+	BoardDelete,
+	BoardFind,
+	BoardView,
+	Screenshot,
 }
 
 #[derive(Debug, Deserialize)]
@@ -162,51 +237,132 @@ struct Renamed {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct BoardDrawn {
+struct BoardViewed {
 	name: String,
+	id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Screenshotted {
+	name: String,
+	id: Option<String>,
+	#[serde(default)]
+	scale: Scale,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct BoardTreed {
+	name: String,
+	parent: Option<String>,
+	depth: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct BoardElements {
+	name: String,
+	#[serde(default)]
+	nodes: Vec<String>,
+	#[serde(default)]
+	arrows: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct BoardParented {
+	name: String,
+	parent: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct BoardWritten {
+	name: String,
+	parent: Option<String>,
+	mode: WriteMode,
+	#[serde(default)]
 	nodes: Vec<DrawnNode>,
 	#[serde(default)]
-	edges: Vec<DrawnEdge>,
+	arrows: Vec<DrawnArrow>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct BoardChanged {
+struct BoardPatched {
 	name: String,
+	#[serde(default)]
 	nodes: Vec<ChangedNode>,
+	#[serde(default)]
+	arrows: Vec<ArrowPatch>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct BoardEmptied {
+struct BoardMoved {
+	name: String,
+	nodes: Vec<String>,
+	parent: Option<String>,
+	x: i64,
+	y: i64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct BoardDuplicated {
+	name: String,
+	nodes: Vec<String>,
+	x: Option<i64>,
+	y: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct BoardSought {
+	name: String,
+	text: Option<String>,
+	kind: Option<String>,
+	color: Option<String>,
+	fill: Option<String>,
+	shape: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct BlockNamed {
+	name: String,
+	id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct BlocksInserted {
+	name: String,
+	after: Option<String>,
+	markdown: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct BlockReplaced {
+	name: String,
+	id: String,
+	markdown: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct BlocksDeleted {
 	name: String,
 	ids: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct Write {
+struct BlocksSought {
 	name: String,
 	text: String,
-	after: Option<String>,
-	replace: Option<String>,
-	#[serde(default)]
-	whole: bool,
-}
-
-impl Write {
-	fn placement(&self) -> Result<Placement<'_>, ToolRefusal> {
-		match (self.after.as_deref(), self.replace.as_deref(), self.whole) {
-			(None, None, false) => Ok(Placement::End),
-			(Some(passage), None, false) => Ok(Placement::After(passage)),
-			(None, Some(passage), false) => Ok(Placement::Replacing(passage)),
-			(None, None, true) => Ok(Placement::Whole),
-			_ => Err(ToolRefusal::UnreadableRequest {
-				detail: "after, replace and whole are exclusive: give one of them at most"
-					.to_owned(),
-			}),
-		}
-	}
 }
 
 #[derive(Debug, Serialize)]
@@ -257,39 +413,132 @@ struct DocumentPosted {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct BoardShown {
+struct BoardHeader {
 	name: String,
+	updated_at: i64,
+	hash: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Headed<T> {
+	header: BoardHeader,
 	#[serde(flatten)]
-	board: BoardRead,
+	answer: T,
 }
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct BoardAdded {
-	name: String,
+struct Screenshot<H> {
+	header: H,
+	rendered: Rendered,
+	#[serde(flatten)]
+	image: ItemRead,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CanvasShown {
+	canvas: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct KeysLanded {
+	ids: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ElementsTouched {
+	nodes: Vec<String>,
+	arrows: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct NodesFound {
+	nodes: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CopiesMade {
 	nodes: BTreeMap<String, String>,
+	arrows: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct BoardUpdated {
+struct DocumentInfo {
 	name: String,
-	nodes: Vec<String>,
+	updated_at: i64,
+	blocks: usize,
+	first_heading: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct BoardRemoved {
+struct DocumentTree {
 	name: String,
-	nodes: Vec<String>,
-	edges: Vec<String>,
+	blocks: Vec<TreeBlock>,
 }
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct DocumentWritten {
+struct TreeBlock {
+	id: String,
+	kind: BlockKind,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	level: Option<u8>,
+	text: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BlockRead {
 	name: String,
-	characters: usize,
+	id: String,
+	kind: BlockKind,
+	markdown: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BlocksWritten {
+	name: String,
+	ids: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BlocksFound {
+	name: String,
+	matches: Vec<BlockFound>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BlockFound {
+	id: String,
+	kind: BlockKind,
+	line: String,
+}
+
+struct Identified {
+	id: String,
+	block: Block,
+}
+
+struct Outline {
+	state: Vec<u8>,
+	text: String,
+	blocks: Vec<Identified>,
+}
+
+struct Planned {
+	splices: Vec<Splice>,
+	ids: Vec<String>,
 }
 
 struct Agent {
@@ -356,11 +605,11 @@ impl LibraryHost {
 		space_id: &str,
 		name: &str,
 		edit: impl FnOnce(&Board) -> Result<(BoardEdit, Option<Touched>, T), DrawRefusal>,
-	) -> Result<T, DocumentRefusal> {
+	) -> Result<Headed<T>, DocumentRefusal> {
 		let agent = self.agent(database).await?;
 		let mut writing = BoardWriting::of(&self.core, space_id, name, &agent);
 		let target = BoardTarget { root, space_id, name, writer: client_id_of(&agent.id) };
-		let (touched, made) = documents(&self.core).edit_board(
+		let ((touched, made), edited) = documents(&self.core).edit_board(
 			&target,
 			|board| {
 				let (edit, touched, made) = edit(board)?;
@@ -372,115 +621,160 @@ impl LibraryHost {
 			writing.at(touched);
 		}
 		writing.writing.outcome = LibraryWriteOutcome::Finished;
-		Ok(made)
+		Ok(Headed { header: board_header(root, space_id, name, &edited)?, answer: made })
 	}
 
-	async fn board_added(
-		&self,
-		database: &db::Database,
-		root: &Path,
-		space_id: &str,
-		asked: BoardDrawn,
-	) -> Result<BoardAdded, DocumentRefusal> {
-		let author = self.scope.bot_id.clone();
-		let nodes = self
-			.board_edited(database, root, space_id, &asked.name, |board| {
-				let drawn = drawn(board, &author, &asked.nodes, &asked.edges)?;
-				Ok((drawn.edit, drawn.touched, drawn.ids))
-			})
-			.await?;
-		Ok(BoardAdded { name: asked.name, nodes })
-	}
-
-	async fn board_updated(
-		&self,
-		database: &db::Database,
-		root: &Path,
-		space_id: &str,
-		asked: BoardChanged,
-	) -> Result<BoardUpdated, DocumentRefusal> {
-		let nodes = self
-			.board_edited(database, root, space_id, &asked.name, |board| {
-				let changed = changed(board, &asked.nodes)?;
-				let ids = changed.edit.changed_nodes.iter().map(|node| node.id.clone()).collect();
-				Ok((changed.edit, changed.touched, ids))
-			})
-			.await?;
-		Ok(BoardUpdated { name: asked.name, nodes })
-	}
-
-	async fn board_removed(
-		&self,
-		database: &db::Database,
-		root: &Path,
-		space_id: &str,
-		asked: BoardEmptied,
-	) -> Result<BoardRemoved, DocumentRefusal> {
-		let (nodes, edges) = self
-			.board_edited(database, root, space_id, &asked.name, |board| {
-				let removed = removed(board, &asked.ids)?;
-				let ids = (removed.edit.removed_nodes.clone(), removed.edit.removed_edges.clone());
-				Ok((removed.edit, removed.touched, ids))
-			})
-			.await?;
-		Ok(BoardRemoved { name: asked.name, nodes, edges })
-	}
-
-	async fn written(
+	fn board_answered<T>(
 		&self,
 		root: &Path,
 		space_id: &str,
+		name: &str,
+		read: impl FnOnce(&Board) -> Result<T, DocumentRefusal>,
+	) -> Result<Headed<T>, DocumentRefusal> {
+		let board = documents(&self.core).board(root, space_id, name)?;
+		let answer = read(&board)?;
+		Ok(Headed { header: board_header(root, space_id, name, &board)?, answer })
+	}
+
+	fn opened(&self, root: &Path, space_id: &str, name: &str) -> Result<Outline, LibraryError> {
+		let opened = documents(&self.core).open(root, space_id, name)?;
+		if let Some(host_edit) = opened.host_edit {
+			announce(&self.core, space_id, name, &host_edit);
+		}
+		Outline::of(opened.state, name)
+	}
+
+	fn outline(
+		&self,
+		root: &Path,
+		space_id: &str,
+		name: &str,
 		agent: &Agent,
-		asked: Write,
-	) -> Result<DocumentWritten, DocumentRefusal> {
-		markdown(root, space_id, &asked.name)?;
-		let placement = asked.placement()?;
-		let turn = turn_of(&self.core, space_id, &asked.name, &self.scope).await;
+		wanted: &[&str],
+	) -> Result<Outline, DocumentRefusal> {
+		let outline = self.opened(root, space_id, name)?;
+		for id in wanted {
+			outline.index_of(id)?;
+		}
+		if backfill(&outline.text).is_empty() {
+			return Ok(outline);
+		}
+		let writer = client_id_of(&agent.id);
+		let applied = documents(&self.core).spliced(root, space_id, name, writer, backfill)?;
+		announce(&self.core, space_id, &applied.name, &applied.change);
+		Ok(self.opened(root, space_id, name)?)
+	}
+
+	async fn blocks_read<T>(
+		&self,
+		database: &db::Database,
+		root: &Path,
+		space_id: &str,
+		name: &str,
+		wanted: &[&str],
+		answer: impl FnOnce(&Outline) -> Result<T, DocumentRefusal>,
+	) -> Result<T, DocumentRefusal> {
+		markdown(root, space_id, name)?;
+		let agent = self.agent(database).await?;
+		let _turn = turn_of(&self.core, space_id, name, &self.scope).await;
+		answer(&self.outline(root, space_id, name, &agent, wanted)?)
+	}
+
+	async fn blocks_written(
+		&self,
+		database: &db::Database,
+		root: &Path,
+		space_id: &str,
+		name: &str,
+		wanted: &[&str],
+		plan: impl FnOnce(&Outline) -> Result<Planned, DocumentRefusal>,
+	) -> Result<BlocksWritten, DocumentRefusal> {
+		markdown(root, space_id, name)?;
+		let agent = self.agent(database).await?;
+		let turn = turn_of(&self.core, space_id, name, &self.scope).await;
 		if turn.is_stopped() {
-			drop(Writing::of(&self.core, space_id, &asked.name, agent));
+			drop(Writing::of(&self.core, space_id, name, &agent));
 			return Err(ToolRefusal::Stopped.into());
 		}
-		let opened = documents(&self.core).open(root, space_id, &asked.name)?;
-		if let Some(host_edit) = opened.host_edit {
-			announce(&self.core, space_id, &asked.name, &host_edit);
-		}
-		let (mut caret, passage_end) = match located(&opened.state, &asked.name, &placement)? {
-			Location::Caret(caret) => (caret, None),
-			Location::Passage { start, end } => (start, Some(end)),
-			Location::PassageNotFound => return Err(ToolRefusal::PassageNotFound.into()),
-			Location::PassageNotUnique { occurrences } => {
-				return Err(ToolRefusal::PassageNotUnique { occurrences }.into())
-			}
-		};
-		let mut writing = Writing::of(&self.core, space_id, &asked.name, agent);
-		writing.at(&caret);
+		let outline = self.outline(root, space_id, name, &agent, wanted)?;
+		let planned = plan(&outline)?;
+		let offsets: Vec<usize> = planned
+			.splices
+			.iter()
+			.flat_map(|splice| [splice.range.start, splice.range.end])
+			.collect();
+		let carets = carets_at(&outline.state, name, &offsets)?;
+		let mut writing = Writing::of(&self.core, space_id, name, &agent);
 		let writer = client_id_of(&agent.id);
-		let mut name = asked.name.clone();
-		for (index, text) in steps(&asked.text).into_iter().enumerate() {
-			if index > 0 {
-				tokio::time::sleep(STEP_PAUSE).await;
-			}
-			if turn.is_stopped() {
-				return Err(ToolRefusal::Stopped.into());
-			}
-			let step = WriteStep { writer, caret: &caret, text };
-			let written = documents(&self.core).write(root, space_id, &asked.name, &step)?;
-			announce(&self.core, space_id, &written.name, &written.change);
-			(name, caret) = (written.name, written.caret);
+		let mut landed = name.to_owned();
+		for (splice, [start, end]) in planned.splices.iter().zip(carets.as_chunks::<2>().0) {
+			let mut caret = start.clone();
 			writing.at(&caret);
-		}
-		if let Some(end) = passage_end {
+			for (index, text) in steps(&splice.text).into_iter().enumerate() {
+				if index > 0 {
+					tokio::time::sleep(STEP_PAUSE).await;
+				}
+				if turn.is_stopped() {
+					return Err(ToolRefusal::Stopped.into());
+				}
+				let step = WriteStep { writer, caret: &caret, text };
+				let written = documents(&self.core).write(root, space_id, name, &step)?;
+				announce(&self.core, space_id, &written.name, &written.change);
+				(landed, caret) = (written.name, written.caret);
+				writing.at(&caret);
+			}
+			if splice.range.is_empty() {
+				continue;
+			}
 			if turn.is_stopped() {
 				return Err(ToolRefusal::Stopped.into());
 			}
-			let step = RemoveStep { writer, start: &caret, end: &end };
-			let removed = documents(&self.core).remove(root, space_id, &asked.name, &step)?;
+			let step = RemoveStep { writer, start: &caret, end };
+			let removed = documents(&self.core).remove(root, space_id, name, &step)?;
 			announce(&self.core, space_id, &removed.name, &removed.change);
-			(name, caret) = (removed.name, removed.caret);
+			(landed, caret) = (removed.name, removed.caret);
 			writing.at(&caret);
 		}
 		writing.outcome = LibraryWriteOutcome::Finished;
-		Ok(DocumentWritten { name, characters: asked.text.chars().count() })
+		Ok(BlocksWritten { name: landed, ids: planned.ids })
+	}
+
+	async fn board_shot(
+		&self,
+		root: &Path,
+		space_id: &str,
+		asked: Screenshotted,
+	) -> Result<Screenshot<BoardHeader>, DocumentRefusal> {
+		let board = documents(&self.core).board(root, space_id, &asked.name)?;
+		let Framed { part, frame } = framed(&board, asked.id.as_deref())?;
+		let frame = frame.ok_or(ToolRefusal::NothingToShow)?;
+		let canvas =
+			export_canvas(&part).map_err(|error| DocumentRefusal::unexpected(error.to_string()))?;
+		let header = board_header(root, space_id, &asked.name, &board)?;
+		let target = ScreenshotTarget::board(asked.name.clone(), canvas, frame, asked.scale);
+		let shot = render(&self.core, space_id, asked.scale, target).await?;
+		Ok(Screenshot::of(header, asked.name, shot))
+	}
+
+	async fn document_shot(
+		&self,
+		database: &db::Database,
+		root: &Path,
+		space_id: &str,
+		asked: Screenshotted,
+	) -> Result<Screenshot<DocumentInfo>, DocumentRefusal> {
+		let wanted: Vec<&str> = asked.id.iter().map(String::as_str).collect();
+		let read = self.blocks_read(database, root, space_id, &asked.name, &wanted, |outline| {
+			let header = document_info(root, space_id, &asked.name, outline)?;
+			Ok((header, outline.shown(asked.id.as_deref())))
+		});
+		let (header, blocks) = read.await?;
+		if blocks.is_empty() {
+			return Err(ToolRefusal::NothingToShow.into());
+		}
+		let target = ScreenshotTarget::Document { name: asked.name.clone(), blocks };
+		let shot = render(&self.core, space_id, asked.scale, target).await?;
+		Ok(Screenshot::of(header, asked.name, shot))
 	}
 }
 
@@ -509,11 +803,6 @@ impl Host for LibraryHost {
 				let created =
 					create_document(&root, &space_id, &asked.name, asked.template.as_deref())?;
 				Self::answered(self.changed(&space_id, created))
-			}
-			Operation::Write => {
-				let asked: Write = Self::read(payload)?;
-				let agent = self.agent(database).await?;
-				Self::answered(self.written(&root, &space_id, &agent, asked).await?)
 			}
 			Operation::Import => {
 				let asked: Imported = Self::read(payload)?;
@@ -547,33 +836,223 @@ impl Host for LibraryHost {
 				let asked: Named = Self::read(payload)?;
 				Self::answered(self.posted(database, asked.name).await?)
 			}
+			Operation::DocumentInfo => {
+				let Named { name } = Self::read(payload)?;
+				let read = self.blocks_read(database, &root, &space_id, &name, &[], |outline| {
+					document_info(&root, &space_id, &name, outline)
+				});
+				Self::answered(read.await?)
+			}
+			Operation::DocumentTree => {
+				let Named { name } = Self::read(payload)?;
+				let read = self.blocks_read(database, &root, &space_id, &name, &[], |outline| {
+					Ok(outline.tree())
+				});
+				Self::answered(DocumentTree { blocks: read.await?, name })
+			}
+			Operation::DocumentReadBlock => {
+				let BlockNamed { name, id } = Self::read(payload)?;
+				let wanted = [id.as_str()];
+				let read =
+					self.blocks_read(database, &root, &space_id, &name, &wanted, |outline| {
+						outline.read_out(&id)
+					});
+				let (kind, markdown) = read.await?;
+				Self::answered(BlockRead { name, id, kind, markdown })
+			}
+			Operation::DocumentFind => {
+				let BlocksSought { name, text } = Self::read(payload)?;
+				if text.trim().is_empty() {
+					let detail = "give the text to look for, not an empty one".to_owned();
+					return Err(ToolRefusal::UnreadableRequest { detail }.into());
+				}
+				let query = text.to_lowercase();
+				let read = self.blocks_read(database, &root, &space_id, &name, &[], |outline| {
+					Ok(outline.found(&query))
+				});
+				Self::answered(BlocksFound { matches: read.await?, name })
+			}
+			Operation::DocumentInsertAfter => {
+				let asked: BlocksInserted = Self::read(payload)?;
+				let wanted: Vec<&str> = asked.after.iter().map(String::as_str).collect();
+				let written = self.blocks_written(
+					database,
+					&root,
+					&space_id,
+					&asked.name,
+					&wanted,
+					|outline| outline.inserted(asked.after.as_deref(), &asked.markdown),
+				);
+				Self::answered(written.await?)
+			}
+			Operation::DocumentReplaceBlock => {
+				let asked: BlockReplaced = Self::read(payload)?;
+				let wanted = [asked.id.as_str()];
+				let written = self.blocks_written(
+					database,
+					&root,
+					&space_id,
+					&asked.name,
+					&wanted,
+					|outline| outline.replaced(&asked.id, &asked.markdown),
+				);
+				Self::answered(written.await?)
+			}
+			Operation::DocumentDeleteBlock => {
+				let asked: BlocksDeleted = Self::read(payload)?;
+				let wanted: Vec<&str> = asked.ids.iter().map(String::as_str).collect();
+				let written = self.blocks_written(
+					database,
+					&root,
+					&space_id,
+					&asked.name,
+					&wanted,
+					|outline| outline.deleted(&asked.ids),
+				);
+				Self::answered(written.await?)
+			}
 			Operation::BoardCreate => {
 				let asked: Named = Self::read(payload)?;
 				let stem = asked
 					.name
 					.strip_suffix(BOARD_EXTENSION)
 					.ok_or(LibraryError::InvalidName { name: asked.name.clone() })?;
-				let created = create_board(&root, &space_id, stem)?;
-				Self::answered(self.changed(&space_id, created))
+				let created = self.changed(&space_id, create_board(&root, &space_id, stem)?);
+				Self::answered(self.board_answered(&root, &space_id, &asked.name, |_| Ok(created))?)
 			}
-			Operation::BoardRead => {
+			Operation::BoardInfo => {
 				let asked: Named = Self::read(payload)?;
-				let board = documents(&self.core).board(&root, &space_id, &asked.name)?;
-				Self::answered(BoardShown { name: asked.name, board: read_out(&board) })
+				Self::answered(
+					self.board_answered(&root, &space_id, &asked.name, |board| Ok(info(board)))?,
+				)
 			}
-			Operation::BoardAdd => {
-				let asked = Self::read(payload)?;
-				Self::answered(self.board_added(database, &root, &space_id, asked).await?)
+			Operation::BoardTree => {
+				let asked: BoardTreed = Self::read(payload)?;
+				Self::answered(self.board_answered(&root, &space_id, &asked.name, |board| {
+					Ok(tree(board, asked.parent.as_deref(), asked.depth)?)
+				})?)
+			}
+			Operation::BoardNodeInfo => {
+				let asked: BoardElements = Self::read(payload)?;
+				Self::answered(self.board_answered(&root, &space_id, &asked.name, |board| {
+					Ok(node_info(board, &asked.nodes, &asked.arrows)?)
+				})?)
+			}
+			Operation::BoardCanvas => {
+				let asked: BoardParented = Self::read(payload)?;
+				Self::answered(self.board_answered(&root, &space_id, &asked.name, |board| {
+					let canvas = export_canvas(&under(board, asked.parent.as_deref())?)
+						.map_err(|error| DocumentRefusal::unexpected(error.to_string()))?;
+					Ok(CanvasShown { canvas })
+				})?)
+			}
+			Operation::BoardWrite => {
+				let asked: BoardWritten = Self::read(payload)?;
+				let author = self.scope.bot_id.clone();
+				let write = Group {
+					parent: asked.parent.as_deref(),
+					mode: asked.mode,
+					nodes: &asked.nodes,
+					arrows: &asked.arrows,
+				};
+				Self::answered(
+					self.board_edited(database, &root, &space_id, &asked.name, |board| {
+						let drawn = written(board, &author, &write)?;
+						Ok((drawn.edit, drawn.touched, KeysLanded { ids: drawn.ids }))
+					})
+					.await?,
+				)
 			}
 			Operation::BoardUpdate => {
-				let asked = Self::read(payload)?;
-				Self::answered(self.board_updated(database, &root, &space_id, asked).await?)
+				let asked: BoardPatched = Self::read(payload)?;
+				Self::answered(
+					self.board_edited(database, &root, &space_id, &asked.name, |board| {
+						let changed = updated(board, &asked.nodes, &asked.arrows)?;
+						let touched = ElementsTouched {
+							nodes: ids_of(&changed.edit.changed_nodes),
+							arrows: ids_of(&changed.edit.changed_edges),
+						};
+						Ok((changed.edit, changed.touched, touched))
+					})
+					.await?,
+				)
 			}
-			Operation::BoardRemove => {
-				let asked = Self::read(payload)?;
-				Self::answered(self.board_removed(database, &root, &space_id, asked).await?)
+			Operation::BoardMove => {
+				let asked: BoardMoved = Self::read(payload)?;
+				let at = (asked.x, asked.y);
+				Self::answered(
+					self.board_edited(database, &root, &space_id, &asked.name, |board| {
+						let moved = moved(board, &asked.nodes, asked.parent.as_deref(), at)?;
+						Ok((moved.edit, moved.touched, NodesFound { nodes: moved.nodes }))
+					})
+					.await?,
+				)
+			}
+			Operation::BoardDuplicate => {
+				let asked: BoardDuplicated = Self::read(payload)?;
+				let at = asked.x.zip(asked.y);
+				Self::answered(
+					self.board_edited(database, &root, &space_id, &asked.name, |board| {
+						let copies = duplicated(board, &asked.nodes, at)?;
+						let made = CopiesMade { nodes: copies.nodes, arrows: copies.arrows };
+						Ok((copies.edit, copies.touched, made))
+					})
+					.await?,
+				)
+			}
+			Operation::BoardDelete => {
+				let asked: BoardElements = Self::read(payload)?;
+				Self::answered(
+					self.board_edited(database, &root, &space_id, &asked.name, |board| {
+						let gone = deleted(board, &asked.nodes, &asked.arrows)?;
+						let touched = ElementsTouched {
+							nodes: gone.edit.removed_nodes.clone(),
+							arrows: gone.edit.removed_edges.clone(),
+						};
+						Ok((gone.edit, gone.touched, touched))
+					})
+					.await?,
+				)
+			}
+			Operation::BoardFind => {
+				let asked: BoardSought = Self::read(payload)?;
+				let sought = Sought {
+					text: asked.text,
+					kind: asked.kind,
+					color: asked.color,
+					fill: asked.fill,
+					shape: asked.shape,
+				};
+				Self::answered(self.board_answered(&root, &space_id, &asked.name, |board| {
+					Ok(NodesFound { nodes: find(board, &sought) })
+				})?)
+			}
+			Operation::BoardView => {
+				let asked: BoardViewed = Self::read(payload)?;
+				Self::answered(self.board_answered(&root, &space_id, &asked.name, |board| {
+					image_viewed(&root, &space_id, board, asked.id)
+				})?)
+			}
+			Operation::Screenshot => {
+				let asked: Screenshotted = Self::read(payload)?;
+				match resolve(&root, &space_id, &asked.name)?.accepted {
+					AcceptedType::Board => {
+						Self::answered(self.board_shot(&root, &space_id, asked).await?)
+					}
+					_ => {
+						Self::answered(self.document_shot(database, &root, &space_id, asked).await?)
+					}
+				}
 			}
 		}
+	}
+}
+
+impl<H> Screenshot<H> {
+	fn of(header: H, name: String, shot: Shot) -> Self {
+		let Shot { content, rendered } = shot;
+		let image = ItemRead::Image { name, mime_type: PNG_MIME_TYPE.to_owned(), content };
+		Self { header, rendered, image }
 	}
 }
 
@@ -581,6 +1060,159 @@ impl Entry {
 	fn of(item: LibraryItem) -> Self {
 		Self { name: item.name, kind: item.kind, updated_at: item.modified_at }
 	}
+}
+
+impl Outline {
+	fn of(state: Vec<u8>, name: &str) -> Result<Self, LibraryError> {
+		let text = text_of_state(&state, name)?;
+		let mut seen = HashSet::new();
+		let blocks = blocks_of(&text)
+			.into_iter()
+			.filter_map(|block| {
+				let id = block.id.clone().filter(|id| seen.insert(id.clone()))?;
+				Some(Identified { id, block })
+			})
+			.collect();
+		Ok(Self { state, text, blocks })
+	}
+
+	fn index_of(&self, id: &str) -> Result<usize, ToolRefusal> {
+		self.blocks
+			.iter()
+			.position(|held| held.id == id)
+			.ok_or_else(|| ToolRefusal::BlockNotFound { id: id.to_owned(), detail: READ_THE_TREE })
+	}
+
+	fn block(&self, id: &str) -> Result<&Identified, ToolRefusal> {
+		let index = self.index_of(id)?;
+		Ok(&self.blocks[index])
+	}
+
+	fn source(&self, held: &Identified) -> &str {
+		&self.text[held.block.content.clone()]
+	}
+
+	fn tree(&self) -> Vec<TreeBlock> {
+		self.blocks
+			.iter()
+			.map(|held| TreeBlock {
+				id: held.id.clone(),
+				kind: held.block.kind,
+				level: held.block.level,
+				text: preview(held.block.kind, self.source(held)),
+			})
+			.collect()
+	}
+
+	fn shown(&self, id: Option<&str>) -> Vec<ScreenshotBlock> {
+		self.blocks
+			.iter()
+			.filter(|held| id.is_none_or(|id| held.id == id))
+			.map(|held| ScreenshotBlock {
+				id: held.id.clone(),
+				markdown: self.source(held).to_owned(),
+			})
+			.collect()
+	}
+
+	fn read_out(&self, id: &str) -> Result<(BlockKind, String), DocumentRefusal> {
+		let held = self.block(id)?;
+		Ok((held.block.kind, self.source(held).to_owned()))
+	}
+
+	fn taken(&self) -> HashSet<String> {
+		self.blocks.iter().map(|held| held.id.clone()).collect()
+	}
+
+	fn found(&self, query: &str) -> Vec<BlockFound> {
+		self.blocks
+			.iter()
+			.filter_map(|held| {
+				let line =
+					self.source(held).lines().find(|line| line.to_lowercase().contains(query))?;
+				Some(BlockFound {
+					id: held.id.clone(),
+					kind: held.block.kind,
+					line: line.trim().to_owned(),
+				})
+			})
+			.collect()
+	}
+
+	fn spliced_in(
+		&self,
+		range: Range<usize>,
+		markdown: &str,
+		kept_id: Option<&str>,
+	) -> Result<Planned, DocumentRefusal> {
+		let written =
+			blocks::written(markdown, kept_id, &mut self.taken()).ok_or(ToolRefusal::NoBlock)?;
+		let text = separated(&self.text[..range.start], &written.text, &self.text[range.end..]);
+		Ok(Planned { splices: vec![Splice { range, text }], ids: written.ids })
+	}
+
+	fn inserted(&self, after: Option<&str>, markdown: &str) -> Result<Planned, DocumentRefusal> {
+		let at = match after {
+			Some(id) => self.block(id)?.block.end(),
+			None => self.blocks.first().map_or(self.text.len(), |held| held.block.content.start),
+		};
+		self.spliced_in(at..at, markdown, None)
+	}
+
+	fn replaced(&self, id: &str, markdown: &str) -> Result<Planned, DocumentRefusal> {
+		let span = self.block(id)?.block.span();
+		self.spliced_in(span, markdown, Some(id))
+	}
+
+	fn deleted(&self, ids: &[String]) -> Result<Planned, DocumentRefusal> {
+		if ids.is_empty() {
+			return Err(ToolRefusal::UnreadableRequest {
+				detail: "give at least one block id".to_owned(),
+			}
+			.into());
+		}
+		let mut indices = ids.iter().map(|id| self.index_of(id)).collect::<Result<Vec<_>, _>>()?;
+		indices.sort_unstable();
+		indices.dedup();
+		let spans: Vec<Range<usize>> = self.blocks.iter().map(|held| held.block.span()).collect();
+		let splices =
+			runs_of(&indices).into_iter().map(|run| removal(&self.text, &spans, run)).collect();
+		let ids = indices.iter().map(|index| self.blocks[*index].id.clone()).collect();
+		Ok(Planned { splices, ids })
+	}
+}
+
+fn runs_of(indices: &[usize]) -> Vec<Range<usize>> {
+	let mut runs: Vec<Range<usize>> = Vec::new();
+	for index in indices {
+		match runs.last_mut() {
+			Some(run) if run.end == *index => run.end += 1,
+			_ => runs.push(*index..*index + 1),
+		}
+	}
+	runs
+}
+
+fn document_info(
+	root: &Path,
+	space_id: &str,
+	name: &str,
+	outline: &Outline,
+) -> Result<DocumentInfo, DocumentRefusal> {
+	let resolved = resolve(root, space_id, name)?;
+	let item = item_at(&resolved.path, name.to_owned())?
+		.ok_or_else(|| LibraryError::Missing { name: name.to_owned() })?;
+	let first_heading = outline
+		.blocks
+		.iter()
+		.find(|held| held.block.kind == BlockKind::Heading)
+		.map(|held| held.id.clone());
+	Ok(DocumentInfo {
+		name: item.name,
+		updated_at: item.modified_at,
+		blocks: outline.blocks.len(),
+		first_heading,
+	})
 }
 
 fn listed(root: &Path, space_id: &str, asked: Listed) -> Result<EntriesListed, DocumentRefusal> {
@@ -704,6 +1336,67 @@ fn item_read(root: &Path, space_id: &str, name: &str) -> Result<ItemRead, Librar
 			bytes: item.bytes,
 		},
 	})
+}
+
+fn image_viewed(
+	root: &Path,
+	space_id: &str,
+	board: &Board,
+	id: String,
+) -> Result<ItemRead, DocumentRefusal> {
+	let Some(node) = node_file(board, &id) else {
+		return Err(not_shown(id, NotShown::UnknownNode));
+	};
+	if node.kind != IMAGE_KIND {
+		return Err(not_shown(id, NotShown::NotAnImage { node_kind: node.kind }));
+	}
+	let Some(file) = node.file else {
+		return Err(not_shown(id, NotShown::NoFile));
+	};
+	let item = match resolve(root, space_id, &file) {
+		Ok(item) => item,
+		Err(LibraryError::Missing { .. }) => {
+			return Err(not_shown(id, NotShown::MissingFile { file }))
+		}
+		Err(LibraryError::InvalidName { .. }) => {
+			return Err(not_shown(id, NotShown::OutsideLibrary { file }))
+		}
+		Err(error) => return Err(error.into()),
+	};
+	let AcceptedType::Image { mime_type } = item.accepted else {
+		return Err(not_shown(id, NotShown::NotAnImageFile { file }));
+	};
+	if item.bytes > MAX_SHOWN_IMAGE_BYTES {
+		let too_large = NotShown::TooLarge { bytes: item.bytes, limit: MAX_SHOWN_IMAGE_BYTES };
+		return Err(not_shown(id, too_large));
+	}
+	Ok(ItemRead::Image {
+		content: encoded_content(&item, &file)?,
+		name: file,
+		mime_type: mime_type.to_owned(),
+	})
+}
+
+fn board_header(
+	root: &Path,
+	space_id: &str,
+	name: &str,
+	board: &Board,
+) -> Result<BoardHeader, DocumentRefusal> {
+	let item = item_at(&space_dir(root, space_id).join(name), name.to_owned())?
+		.ok_or_else(|| LibraryError::Missing { name: name.to_owned() })?;
+	let hash = content_hash(board).map_err(|error| {
+		DocumentRefusal::unexpected(format!("the board {name} did not hash: {error}"))
+	})?;
+	Ok(BoardHeader { name: item.name, updated_at: item.modified_at, hash })
+}
+
+fn ids_of(changes: &[ElementChange]) -> Vec<String> {
+	changes.iter().map(|change| change.id.clone()).collect()
+}
+
+fn not_shown(id: String, reason: NotShown) -> DocumentRefusal {
+	DocumentRefusal::Tool(ToolRefusal::NodeNotShown { id, reason })
 }
 
 struct Writing<'a> {

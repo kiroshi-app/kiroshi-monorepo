@@ -9,7 +9,7 @@ import {
 	waitFor,
 	within,
 } from "@testing-library/react"
-import { createElement } from "react"
+import { createElement, useState } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import * as Y from "yjs"
 
@@ -28,15 +28,18 @@ import {
 	ThreadDocumentsContext,
 	ThreadOpenedItemPanel,
 } from "@/components/thread-documents"
+import { ThreadTurn } from "@/components/thread-turn"
 import { accountQueryKeys } from "@/lib/account/account-query-keys"
 import type { Bot, LibraryItem, LibraryWriter } from "@/lib/bindings"
 import type { HostEventCallback } from "@/lib/host/joined-hosts-listen"
+import { markdownWithIds } from "@/lib/library/block-ids-test-pattern"
 import {
 	boardStateOf,
 	TWO_NOTES_BOARD,
 } from "@/lib/library/library-board-fixtures"
-import { base64Of } from "@/lib/library/library-document-session"
+import { base64Of, bytesOf } from "@/lib/library/library-document-session"
 import { LIBRARY_DOCUMENT_PRESENCE_EVENT } from "@/lib/library/library-document-writers"
+import type { ThreadLibraryItem } from "@/lib/library/use-followed-library-document"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 
 type LibraryCall = { spaceId: string; name: string }
@@ -380,6 +383,78 @@ const renderLaunchBoardPanel = (close: () => void = () => undefined) =>
 		{ wrapper: createQueryTestWrapper().wrapper },
 	)
 
+type JoinedState = { isJoined: boolean }
+
+const renderLaunchBoardPanelIn = ({ isJoined }: JoinedState) =>
+	render(
+		createElement(ThreadBoardPanel, {
+			documents: { ...boardDocumentsOf(() => undefined), isJoined },
+			bots: BOTS,
+			name: LAUNCH_BOARD,
+		}),
+		{ wrapper: createQueryTestWrapper().wrapper },
+	)
+
+const linkingTurnOf = (text: string) =>
+	createElement(ThreadTurn, {
+		row: {
+			messageId: "m-1",
+			turnId: "t-1",
+			continuesTurnId: null,
+			quotedMessageId: null,
+			replyLinks: [],
+			documents: [],
+			authorBotId: ATLAS_ID,
+			authorAccountId: null,
+			authorName: null,
+			role: "assistant",
+			text,
+			timestamp: 1,
+			completion: "complete",
+		},
+		anchor: "m-1",
+		state: "complete",
+		readerName: "Ada Moreau",
+		pinned: false,
+		now: 0,
+		toQuote: () => ({
+			author: "",
+			excerpt: "",
+			from: "user" as const,
+			onJump: () => undefined,
+		}),
+		onPin: () => undefined,
+		onReply: () => undefined,
+	})
+
+const ThreadLinkingLaunchBoard = ({ isJoined }: JoinedState) => {
+	const [opened, setOpened] = useState<ThreadLibraryItem | null>(null)
+	const documents = {
+		...boardDocumentsOf(() => setOpened(null)),
+		isJoined,
+		opened,
+		open: setOpened,
+	}
+	return createElement(
+		ThreadDocumentsContext,
+		{ value: documents },
+		linkingTurnOf("I drew [Launch week](<Launch week.canvas>)."),
+		opened
+			? createElement(ThreadOpenedItemPanel, { documents, bots: BOTS, opened })
+			: null,
+	)
+}
+
+const openLibraryPicker = async () => {
+	await screen.findByRole("application", {
+		name: common("board.canvas.label"),
+	})
+	const libraryTool = screen
+		.getAllByRole("button")
+		.find((button) => button.dataset.tool === "library")
+	fireEvent.click(libraryTool as HTMLElement)
+}
+
 describe("a board opened beside a conversation", () => {
 	beforeEach(() => {
 		libraryHost.answers.set("library_list", () => [planItem, launchBoardItem])
@@ -411,6 +486,32 @@ describe("a board opened beside a conversation", () => {
 		openInItsTab.mockClear()
 	})
 
+	it.each([
+		["the host", false],
+		["a joined Space", true],
+	])(
+		"opens the board beside the thread from a card its agent linked in %s",
+		async (_, isJoined) => {
+			render(createElement(ThreadLinkingLaunchBoard, { isJoined }), {
+				wrapper: createQueryTestWrapper().wrapper,
+			})
+			const card = screen.getByRole("article", { name: /^Launch week/ })
+			expect(screen.queryByRole("complementary")).toBeNull()
+
+			fireEvent.click(within(card).getByRole("button", { name: "Open" }))
+
+			expect(
+				screen.getByRole("complementary", { name: "Launch week" }),
+			).toBeTruthy()
+			expect(
+				await screen.findByRole("application", {
+					name: common("board.canvas.label"),
+				}),
+			).toBeTruthy()
+			expect(card.getAttribute("data-state")).toBe("open")
+		},
+	)
+
 	it("shows the board live in the panel with its dock and zoom", async () => {
 		renderLaunchBoardPanel()
 
@@ -430,12 +531,14 @@ describe("a board opened beside a conversation", () => {
 		).toBeTruthy()
 	})
 
-	it("closes the panel and shows the board in its own tab on Open in tab", () => {
+	it("closes the panel and shows the board in its own tab on Open in Library", () => {
 		const close = vi.fn()
 		renderLaunchBoardPanel(close)
 
 		fireEvent.click(
-			screen.getByRole("button", { name: common("board.panel.openInTab") }),
+			screen.getByRole("button", {
+				name: common("library.panel.openInLibrary"),
+			}),
 		)
 
 		expect(close).toHaveBeenCalledOnce()
@@ -465,6 +568,45 @@ describe("a board opened beside a conversation", () => {
 		renderPlanPanel()
 
 		expect(widthOfPanel()).toBe(`${keptWidth}px`)
+	})
+	describe("its Library picker", () => {
+		const COVER = "cover.png"
+
+		beforeEach(() => {
+			libraryHost.answers.set("library_list", () => [
+				planItem,
+				imageItemOf(COVER),
+				launchBoardItem,
+			])
+			libraryHost.answers.set("library_read_image", ({ name }) => ({
+				name,
+				mimeType: "image/png",
+				content: name,
+			}))
+		})
+
+		it("lists the Library of the Space, the board itself left out", async () => {
+			renderLaunchBoardPanelIn({ isJoined: false })
+
+			await openLibraryPicker()
+
+			expect(await screen.findByRole("button", { name: "plan" })).toBeTruthy()
+			expect(screen.getByRole("button", { name: COVER })).toBeTruthy()
+			expect(screen.queryByRole("button", { name: "Launch week" })).toBeNull()
+		})
+
+		it("lists the Library of the joined Space while the Space is joined", async () => {
+			renderLaunchBoardPanelIn({ isJoined: true })
+
+			await openLibraryPicker()
+
+			expect(await screen.findByRole("button", { name: "plan" })).toBeTruthy()
+			expect(screen.getByRole("button", { name: COVER })).toBeTruthy()
+			expect(libraryHost.invoked).toContainEqual([
+				"library_list",
+				{ spaceId: SPACE_ID },
+			])
+		})
 	})
 })
 
@@ -828,5 +970,106 @@ describe("sharing the own pointer and selection on a board opened beside a conve
 		await waitPointerInterval(200)
 
 		expect(sharedSeats()).toEqual([seatAt(10, 20), unseatedOn(LAUNCH_BOARD)])
+	})
+})
+
+const NOTES = "notes.txt"
+
+const renderDocumentPanel = (name: string) =>
+	render(
+		createElement(ThreadDocumentPanel, {
+			spaceId: SPACE_ID,
+			isJoined: false,
+			name,
+			onClose: () => undefined,
+		}),
+		{ wrapper: createQueryTestWrapper().wrapper },
+	)
+
+const typeInPanelBody = async (text: string) => {
+	const body = await screen.findByRole("group", {
+		name: common("library.editor.body"),
+	})
+	const block = body.querySelector<HTMLElement>(
+		"[data-slot='library-document-block']",
+	)
+	await act(async () => {
+		block?.querySelector<HTMLElement>("[tabindex]")?.focus()
+	})
+	const field = await waitFor(() => {
+		const opened = block?.querySelector<HTMLElement>(
+			"[data-slot='library-document-block-field']",
+		)
+		expect(document.activeElement).toBe(opened)
+		return opened as HTMLElement
+	})
+	await act(async () => {
+		document.getSelection()?.selectAllChildren(field)
+		field.dispatchEvent(
+			Object.assign(
+				new InputEvent("beforeinput", {
+					inputType: "insertText",
+					data: text,
+					bubbles: true,
+					cancelable: true,
+				}),
+				{ getTargetRanges: () => [] },
+			),
+		)
+	})
+}
+
+type SentUpdate = LibraryCall & { update: string }
+
+const DRAFT_OPENING = openedStateOf(NOTES, "Draft").update
+
+const textSavedTo = (name: string) => {
+	const doc = new Y.Doc()
+	Y.applyUpdate(doc, bytesOf(DRAFT_OPENING))
+	const sent = libraryHost.invoked
+		.filter(([command]) => command === "library_apply_update")
+		.map(([, args]) => args as SentUpdate)
+	for (const { update } of sent.filter((call) => call.name === name)) {
+		Y.applyUpdate(doc, bytesOf(update))
+	}
+	return doc.getText("markdown").toString()
+}
+
+describe("the body of a document saved from beside a conversation", () => {
+	beforeEach(() => {
+		libraryHost.answers.set("library_list", () => [
+			{ ...planItem, name: NOTES, path: `/library/${NOTES}` },
+			planItem,
+		])
+		libraryHost.answers.set("library_open_document", ({ name }) => ({
+			name,
+			update: DRAFT_OPENING,
+		}))
+		libraryHost.answers.set("library_apply_update", () => null)
+		libraryHost.answers.set("library_share_presence", () => null)
+	})
+
+	afterEach(() => {
+		cleanup()
+		libraryHost.answers.clear()
+		libraryHost.invoked.length = 0
+	})
+
+	it("saves a .txt document with no block id marker", async () => {
+		renderDocumentPanel(NOTES)
+
+		await typeInPanelBody("Rollout")
+
+		await waitFor(() => expect(textSavedTo(NOTES)).toBe("Rollout"))
+	})
+
+	it("keeps writing the block id markers of a .md document", async () => {
+		renderDocumentPanel(PLAN)
+
+		await typeInPanelBody("Rollout")
+
+		await waitFor(() =>
+			expect(textSavedTo(PLAN)).toMatch(markdownWithIds("Rollout ^ID")),
+		)
 	})
 })

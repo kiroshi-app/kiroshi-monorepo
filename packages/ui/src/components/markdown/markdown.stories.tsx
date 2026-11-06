@@ -1,12 +1,21 @@
 import { useState } from "react"
-import { expect, fn, spyOn, waitFor, within } from "storybook/test"
+import { expect, fn, spyOn, userEvent, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
+import {
+	BOARD_CARD_TITLE,
+	PLANNING_BOARD_SNAPSHOT,
+} from "@workspace/ui/components/board/board.fixtures"
+import {
+	BoardCard,
+	type BoardCardSummary,
+} from "@workspace/ui/components/board/board-card"
 import {
 	LIBRARY_STORED_IMAGES,
 	resolvedLibraryImageOf,
 } from "@workspace/ui/components/library.fixtures"
 import { Markdown } from "@workspace/ui/components/markdown"
+import type { MarkdownBoardLinkRenderer } from "@workspace/ui/components/markdown/board-link"
 import {
 	MessageBubble,
 	MessageBubbleContent,
@@ -1928,7 +1937,6 @@ export const GalleryResolvedImageOpens = meta.story({
 		resolveImage: fn(async (src: string) => resolvedLibraryImageOf(src)),
 		answerActions: {
 			agentName: "Atlas",
-			onPickOption: fn(),
 			onUseValues: fn(),
 			onOpenImage: fn(),
 		},
@@ -1968,7 +1976,6 @@ export const GalleryResolvingNotOpenable = meta.story({
 		resolveImage: fn(() => new Promise<string>(() => {})),
 		answerActions: {
 			agentName: "Atlas",
-			onPickOption: fn(),
 			onUseValues: fn(),
 			onOpenImage: fn(),
 		},
@@ -2189,4 +2196,295 @@ export const AttachmentPathWithSpaces = meta.story({
 			CITED_SPACED_FILE_PATH,
 		)
 	},
+})
+
+const BOARD_FILE = "boards/Launch week plan.canvas"
+
+const BOARD_ALONE = `Here is the board for the launch.
+
+[${BOARD_CARD_TITLE}](<${BOARD_FILE}>)
+
+Open it beside the thread to move things around.`
+
+const BOARD_IN_SENTENCE = `I sketched [${BOARD_CARD_TITLE}](<${BOARD_FILE}>) so we can split the work before Friday.`
+
+const BOARD_SENTENCE = `I sketched ${BOARD_CARD_TITLE} so we can split the work before Friday.`
+
+const LOADED_BOARD: BoardCardSummary = {
+	status: "loaded",
+	itemCount: 14,
+	snapshot: PLANNING_BOARD_SNAPSHOT,
+}
+
+const LOADING_BOARD: BoardCardSummary = { status: "loading" }
+
+const openBoard = fn()
+
+const boardSlotOf =
+	(summary: BoardCardSummary): MarkdownBoardLinkRenderer =>
+	({ words }) => (
+		<BoardCard
+			editedLabel="edited just now"
+			onOpen={openBoard}
+			pointers={[]}
+			summary={summary}
+			title={words}
+		/>
+	)
+
+const BOARD_SLOT_FAKES =
+	"The host slot here draws `BoardCard` from the board fixtures; in the app it reads the board from the Library."
+
+type BoardLinkPlayContext = { canvasElement: HTMLElement }
+
+const expectBoardInPlaceOfLink = async ({
+	canvasElement,
+}: BoardLinkPlayContext) => {
+	const canvas = within(canvasElement)
+	const card = canvas.getByRole("article")
+	await expect(card.closest("p")).toBeNull()
+	await expect(card.parentElement).toHaveAttribute("data-slot", "markdown")
+	await expect(canvasElement.querySelector("a")).toBeNull()
+	await expect(canvas.queryByText(BOARD_FILE, { exact: false })).toBeNull()
+	return card
+}
+
+const expectLoadedBoardLink = async (context: BoardLinkPlayContext) => {
+	openBoard.mockClear()
+	const card = await expectBoardInPlaceOfLink(context)
+	await expect(card).not.toHaveAttribute("aria-busy")
+	await userEvent.click(
+		within(card).getByRole("button", {
+			name: "Open",
+			description: BOARD_CARD_TITLE,
+		}),
+	)
+	await expect(openBoard).toHaveBeenCalledOnce()
+}
+
+const expectLoadingBoardLink = async (context: BoardLinkPlayContext) => {
+	const card = await expectBoardInPlaceOfLink(context)
+	await expect(card).toHaveAttribute("aria-busy", "true")
+	await expect(
+		card.querySelector('[data-slot="board-card-preview-skeleton"]'),
+	).not.toBeNull()
+}
+
+const expectBoardAfterSentence = async (context: BoardLinkPlayContext) => {
+	const card = await expectBoardInPlaceOfLink(context)
+	const sentence = within(context.canvasElement).getByText(BOARD_SENTENCE)
+	await expect(sentence.tagName).toBe("P")
+	await expect(sentence.nextElementSibling).toBe(card)
+	for (const paragraph of context.canvasElement.querySelectorAll("p")) {
+		await expect(paragraph).not.toContainElement(card)
+	}
+}
+
+export const BoardLinkLoaded = meta.story({
+	args: { children: BOARD_ALONE, renderBoardLink: boardSlotOf(LOADED_BOARD) },
+	parameters: {
+		docs: {
+			description: {
+				story: `An answer posting a Library board as a link alone in its paragraph, \`[title](<board.canvas>)\`. Check the board card stands in place of that paragraph, between the prose before and after it, that no link and no file name is left behind, and that Open calls back once. ${BOARD_SLOT_FAKES}`,
+			},
+		},
+	},
+	play: expectLoadedBoardLink,
+})
+
+export const BoardLinkLoadedDark = meta.story({
+	args: { children: BOARD_ALONE, renderBoardLink: boardSlotOf(LOADED_BOARD) },
+	globals: { theme: "dark" },
+	play: expectLoadedBoardLink,
+})
+
+export const BoardLinkLoading = meta.story({
+	args: { children: BOARD_ALONE, renderBoardLink: boardSlotOf(LOADING_BOARD) },
+	parameters: {
+		docs: {
+			description: {
+				story: `The same answer while the host still reads the board. Check the loading card holds the place of the paragraph, its line and preview drawn as skeletons, and no link is left behind. ${BOARD_SLOT_FAKES}`,
+			},
+		},
+	},
+	play: expectLoadingBoardLink,
+})
+
+export const BoardLinkLoadingDark = meta.story({
+	args: { children: BOARD_ALONE, renderBoardLink: boardSlotOf(LOADING_BOARD) },
+	globals: { theme: "dark" },
+	play: expectLoadingBoardLink,
+})
+
+export const BoardLinkInSentence = meta.story({
+	args: {
+		children: BOARD_IN_SENTENCE,
+		renderBoardLink: boardSlotOf(LOADED_BOARD),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story: `An answer naming a Library board mid-sentence. Check the link words stay in the sentence as plain words, and the board card follows that paragraph as its own block, never inside it. ${BOARD_SLOT_FAKES}`,
+			},
+		},
+	},
+	play: expectBoardAfterSentence,
+})
+
+export const BoardLinkInSentenceDark = meta.story({
+	args: {
+		children: BOARD_IN_SENTENCE,
+		renderBoardLink: boardSlotOf(LOADED_BOARD),
+	},
+	globals: { theme: "dark" },
+	play: expectBoardAfterSentence,
+})
+
+const BOARD_LINK = `[${BOARD_CARD_TITLE}](<${BOARD_FILE}>)`
+
+const BOARD_IN_CHECKLIST = `- [ ] Review ${BOARD_LINK} with the team
+  - [ ] Book the launch room`
+
+const BOARD_CHECKLIST_LABEL = `Review ${BOARD_CARD_TITLE} with the team`
+
+const BOARD_IN_LIST_SENTENCE = `- Split ${BOARD_LINK} into owners before Friday
+  - Ana takes the timeline`
+
+const BOARD_LIST_SENTENCE = `Split ${BOARD_CARD_TITLE} into owners before Friday`
+
+const BOARD_IN_TABLE_CELL = `| Board | Owner |
+| - | - |
+| Draft in ${BOARD_LINK} | Ana |`
+
+const BOARD_TABLE_CELL = `Draft in ${BOARD_CARD_TITLE}`
+
+const expectBoardWithoutLink = async ({
+	canvasElement,
+}: BoardLinkPlayContext) => {
+	const card = within(canvasElement).getByRole("article")
+	await expect(card).not.toHaveAttribute("aria-busy")
+	await expect(canvasElement.querySelector("a")).toBeNull()
+	await expect(
+		within(canvasElement).queryByText(BOARD_FILE, { exact: false }),
+	).toBeNull()
+	return card
+}
+
+const expectBoardAfterChecklistLabel = async (
+	context: BoardLinkPlayContext,
+) => {
+	openBoard.mockClear()
+	const card = await expectBoardWithoutLink(context)
+	const label = within(context.canvasElement).getByText(BOARD_CHECKLIST_LABEL)
+	await expect(label).toHaveAttribute("data-slot", "markdown-task-label")
+	await expect(label).not.toContainElement(card)
+	await expect(label.nextElementSibling).toBe(card)
+	await expect(card.parentElement).toBe(label.closest("li"))
+	await expect(card.nextElementSibling?.tagName).toBe("UL")
+
+	const box = within(label).getByRole("checkbox")
+	await userEvent.click(label)
+	await expect(box).toBeChecked()
+	await userEvent.click(
+		within(card).getByRole("button", {
+			name: "Open",
+			description: BOARD_CARD_TITLE,
+		}),
+	)
+	await expect(openBoard).toHaveBeenCalledOnce()
+	await expect(box).toBeChecked()
+}
+
+const expectBoardAfterListSentence = async (context: BoardLinkPlayContext) => {
+	const card = await expectBoardWithoutLink(context)
+	const item = within(context.canvasElement).getByText(BOARD_LIST_SENTENCE)
+	await expect(item.tagName).toBe("LI")
+	await expect(card.parentElement).toBe(item)
+	await expect(item.firstChild?.textContent).toBe("Split ")
+	await expect(card.nextElementSibling?.tagName).toBe("UL")
+	await expect(card.closest("p")).toBeNull()
+}
+
+const expectBoardAfterTable = async (context: BoardLinkPlayContext) => {
+	const card = await expectBoardWithoutLink(context)
+	const canvas = within(context.canvasElement)
+	const cell = canvas.getByText(BOARD_TABLE_CELL)
+	await expect(cell.tagName).toBe("TD")
+	await expect(cell).not.toContainElement(card)
+	await expect(canvas.getByRole("cell", { name: "Ana" })).toBeVisible()
+	const frame = cell.closest('[data-slot="markdown-table"]')
+	await expect(frame).not.toContainElement(card)
+	await expect(frame?.nextElementSibling).toBe(card)
+}
+
+export const BoardLinkInChecklist = meta.story({
+	args: {
+		children: BOARD_IN_CHECKLIST,
+		renderBoardLink: boardSlotOf(LOADED_BOARD),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story: `A checklist item naming a Library board. Check the link words stay in the task label as plain words, the board card follows the label inside the same item and before the nested list, a click on the words ticks the box, and Open on the card calls back once without touching the box. ${BOARD_SLOT_FAKES}`,
+			},
+		},
+	},
+	play: expectBoardAfterChecklistLabel,
+})
+
+export const BoardLinkInChecklistDark = meta.story({
+	args: {
+		children: BOARD_IN_CHECKLIST,
+		renderBoardLink: boardSlotOf(LOADED_BOARD),
+	},
+	globals: { theme: "dark" },
+	play: expectBoardAfterChecklistLabel,
+})
+
+export const BoardLinkInListSentence = meta.story({
+	args: {
+		children: BOARD_IN_LIST_SENTENCE,
+		renderBoardLink: boardSlotOf(LOADED_BOARD),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story: `A list item naming a Library board mid-sentence. Check the link words stay in the item as plain words and the board card follows them inside the same item, before the nested list. ${BOARD_SLOT_FAKES}`,
+			},
+		},
+	},
+	play: expectBoardAfterListSentence,
+})
+
+export const BoardLinkInListSentenceDark = meta.story({
+	args: {
+		children: BOARD_IN_LIST_SENTENCE,
+		renderBoardLink: boardSlotOf(LOADED_BOARD),
+	},
+	globals: { theme: "dark" },
+	play: expectBoardAfterListSentence,
+})
+
+export const BoardLinkInTableCell = meta.story({
+	args: {
+		children: BOARD_IN_TABLE_CELL,
+		renderBoardLink: boardSlotOf(LOADED_BOARD),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story: `A table cell naming a Library board. Check the link words stay in the cell as plain words and the board card follows the table as its own block, never inside a cell. ${BOARD_SLOT_FAKES}`,
+			},
+		},
+	},
+	play: expectBoardAfterTable,
+})
+
+export const BoardLinkInTableCellDark = meta.story({
+	args: {
+		children: BOARD_IN_TABLE_CELL,
+		renderBoardLink: boardSlotOf(LOADED_BOARD),
+	},
+	globals: { theme: "dark" },
+	play: expectBoardAfterTable,
 })

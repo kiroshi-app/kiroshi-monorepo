@@ -45,14 +45,16 @@ import {
 } from "@workspace/ui/components/list-skeleton"
 import { sidebarRowAt } from "@workspace/ui/components/sidebar-list-skeleton"
 import type { Space } from "@workspace/ui/components/space"
+import { Button } from "@workspace/ui/components/ui/button"
 import {
 	SidebarGroup,
 	SidebarGroupContent,
 } from "@workspace/ui/components/ui/sidebar"
 import { useStableCallback } from "@workspace/ui/hooks/use-stable-callback"
-import { mergeRefs } from "@workspace/ui/lib/utils"
+import { cn, mergeRefs } from "@workspace/ui/lib/utils"
 
 const EMPTY_COPY = "px-3 py-4 text-center text-sidebar-foreground/70 text-sm"
+const FAILURE_WITH_RETRY = cn(EMPTY_COPY, "flex flex-col items-center gap-2")
 
 interface SectionNamingGroupProps {
 	bots: AppSidebarBot[]
@@ -101,6 +103,7 @@ interface BotRosterProps
 	spaceId?: string
 	bots: AppSidebarBot[]
 	haveBotsFailedToLoad?: boolean
+	onRetryLoadBots?: () => void
 	conversations: AppSidebarConversation[]
 	selectedBotId?: string
 	selectedConversationId?: string
@@ -117,6 +120,7 @@ const BotRoster = ({
 	spaceId,
 	bots,
 	haveBotsFailedToLoad = false,
+	onRetryLoadBots,
 	conversations,
 	selectedBotId,
 	selectedConversationId,
@@ -207,7 +211,21 @@ const BotRoster = ({
 	if (haveBotsFailedToLoad && bots.length === 0)
 		return (
 			<RosterSurface {...surface}>
-				<p className={EMPTY_COPY}>{t("roster.unavailable")}</p>
+				{onRetryLoadBots ? (
+					<div className={FAILURE_WITH_RETRY}>
+						<p>{t("roster.failed")}</p>
+						<Button
+							className="text-sidebar-foreground"
+							onClick={onRetryLoadBots}
+							size="xs"
+							variant="outline"
+						>
+							{t("roster.retry")}
+						</Button>
+					</div>
+				) : (
+					<p className={EMPTY_COPY}>{t("roster.unavailable")}</p>
+				)}
 			</RosterSurface>
 		)
 

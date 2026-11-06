@@ -967,6 +967,74 @@ export const UnreadableRoster = meta.story({
 			canvas.getByText("Couldn’t load your agents. Restart Kiroshi to retry."),
 		).toBeVisible()
 		await expect(canvas.queryByText("No agents yet")).not.toBeInTheDocument()
+		await expect(
+			canvas.queryByRole("button", { name: "Retry" }),
+		).not.toBeInTheDocument()
+		await expect(canvas.getByRole("button", { name: CREATE })).toBeVisible()
+	},
+})
+
+export const UnreadableRosterDark = meta.story({
+	...UnreadableRoster.input,
+	globals: { theme: "dark" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"`UnreadableRoster` in the dark theme. Check the copy reads on the dark panel and the create button is still reachable.",
+			},
+		},
+	},
+})
+
+export const UnreadableRosterWithRetry = meta.story({
+	tags: ["test-only"],
+	args: {
+		botsBySpaceId: inHome([]),
+		haveBotsFailedToLoad: true,
+		onRetryLoadBots: fn(),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The read of the roster came back refused and the caller can read it again. The sidebar says what failed, then offers Retry instead of asking for a restart. Check the restart sentence is gone, that one click or one Enter on Retry asks for one read, that Retry shows its focus ring when Tab reaches it, and that the create button is still reachable.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		await expect(rowsIn(canvasElement)).toHaveLength(0)
+		await expect(canvas.getByText("Couldn’t load your agents.")).toBeVisible()
+		await expect(
+			canvas.queryByText(
+				"Couldn’t load your agents. Restart Kiroshi to retry.",
+			),
+		).not.toBeInTheDocument()
+		await expect(canvas.getByRole("button", { name: CREATE })).toBeVisible()
+
+		const retry = canvas.getByRole("button", { name: "Retry" })
+		await userEvent.click(retry)
+		await expect(args.onRetryLoadBots).toHaveBeenCalledTimes(1)
+
+		await userEvent.tab()
+		await userEvent.tab({ shift: true })
+		await expect(retry).toHaveFocus()
+		await expect(retry.matches(":focus-visible")).toBe(true)
+		await userEvent.keyboard("{Enter}")
+		await expect(args.onRetryLoadBots).toHaveBeenCalledTimes(2)
+	},
+})
+
+export const UnreadableRosterWithRetryDark = meta.story({
+	...UnreadableRosterWithRetry.input,
+	globals: { theme: "dark" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"`UnreadableRosterWithRetry` in the dark theme. Check the copy and the Retry button read on the dark panel.",
+			},
+		},
 	},
 })
 

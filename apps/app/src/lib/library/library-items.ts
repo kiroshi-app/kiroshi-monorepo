@@ -1,4 +1,5 @@
 import type { BoardLibraryItem } from "@workspace/ui/components/board/board-dock"
+import type { LibraryDocumentFormat } from "@workspace/ui/components/library-document-block-editor"
 import type { LibraryItem as ShownLibraryItem } from "@workspace/ui/components/library-grid"
 import { i18n } from "@workspace/ui/lib/i18n"
 import { toRelativeTime } from "@workspace/ui/lib/time-format"
@@ -49,6 +50,11 @@ export const titleOf = ({ kind, name }: Pick<LibraryItem, "kind" | "name">) =>
 
 export const shownTitleOf = (title: string) =>
 	title.trim() === "" ? i18n.t("common:library.editor.untitled") : title
+
+const PLAIN_DOCUMENT_EXTENSION = ".txt"
+
+export const documentFormatOf = (name: string): LibraryDocumentFormat =>
+	name.toLowerCase().endsWith(PLAIN_DOCUMENT_EXTENSION) ? "plain" : "markdown"
 
 export const documentNamedAs = (name: string, title: string) =>
 	`${title}${name.slice(titleOf({ kind: "document", name }).length)}`

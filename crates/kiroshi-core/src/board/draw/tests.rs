@@ -1,32 +1,16 @@
 use serde_json::{json, Value};
 
 use super::*;
-use crate::board::parsed_board;
+use crate::board::fixtures::{a_board, a_section, a_text};
 
 const AGENT: &str = "b1";
-
-fn a_board(nodes: &[(&str, Value)], edges: &[(&str, Value)]) -> Board {
-	let owned = |entries: &[(&str, Value)]| {
-		entries.iter().map(|(id, value)| ((*id).to_owned(), value.clone())).collect()
-	};
-	parsed_board(owned(nodes), owned(edges), JsonObject::new(), JsonObject::new())
-		.expect("the test board is valid")
-}
-
-fn a_text(x: i64, y: i64, width: i64, height: i64, z: &str) -> Value {
-	json!({ "kind": "text", "text": "", "x": x, "y": y, "width": width, "height": height, "z": z })
-}
-
-fn a_section(x: i64, y: i64, width: i64, height: i64) -> Value {
-	json!({ "kind": "section", "label": "Lane", "x": x, "y": y, "width": width, "height": height, "z": "a0" })
-}
 
 fn node(value: Value) -> DrawnNode {
 	serde_json::from_value(value).expect("a drawn node")
 }
 
-fn edge(value: Value) -> DrawnEdge {
-	serde_json::from_value(value).expect("a drawn edge")
+fn edge(value: Value) -> DrawnArrow {
+	serde_json::from_value(value).expect("a drawn arrow")
 }
 
 fn an_empty_board() -> Board {
@@ -39,13 +23,13 @@ fn one_node_board() -> Board {
 
 fn drawn_ok(board: &Board, nodes: Vec<Value>, edges: Vec<Value>) -> Drawn {
 	let nodes: Vec<DrawnNode> = nodes.into_iter().map(node).collect();
-	let edges: Vec<DrawnEdge> = edges.into_iter().map(edge).collect();
+	let edges: Vec<DrawnArrow> = edges.into_iter().map(edge).collect();
 	drawn(board, AGENT, &nodes, &edges).expect("the batch is drawn")
 }
 
 fn refusal(board: &Board, nodes: Vec<Value>, edges: Vec<Value>) -> DrawRefusal {
 	let nodes: Vec<DrawnNode> = nodes.into_iter().map(node).collect();
-	let edges: Vec<DrawnEdge> = edges.into_iter().map(edge).collect();
+	let edges: Vec<DrawnArrow> = edges.into_iter().map(edge).collect();
 	drawn(board, AGENT, &nodes, &edges).expect_err("the batch is refused")
 }
 
@@ -132,7 +116,7 @@ fn a_node_named_in_a_section_lands_inside_it_and_the_section_grows_to_hold_it() 
 	let grown = &drawn.edit.changed_nodes;
 	assert_eq!(grown.len(), 1);
 	assert_eq!(grown[0].id, "lane");
-	assert_eq!(rect_of(&grown[0].node), (0, 0, 560, 280));
+	assert_eq!(rect_of(&grown[0].element), (0, 0, 560, 280));
 	assert_eq!(grown[0].fields, ["x", "y", "width", "height"]);
 }
 
@@ -190,23 +174,57 @@ fn a_node_without_a_size_takes_the_default_of_its_kind_from_the_board_schema() {
 }
 
 #[test]
-fn a_batch_edge_joins_two_local_keys_and_an_edge_may_name_a_node_of_the_board() {
+fn a_batch_arrow_joins_two_local_keys_and_an_arrow_may_name_a_node_of_the_board() {
 	let drawn = drawn_ok(
 		&one_node_board(),
 		vec![json!({ "key": "a", "kind": "text" }), json!({ "key": "b", "kind": "text" })],
 		vec![
-			json!({ "from": "a", "to": "b", "label": "then" }),
-			json!({ "from": "anchor", "to": "a" }),
+			json!({ "key": "then", "fromNode": "a", "toNode": "b", "label": "then" }),
+			json!({ "fromNode": "anchor", "toNode": "a", "routing": "straight" }),
 		],
 	);
 
 	let edges = &drawn.edit.added_edges;
 	assert_eq!(edges.len(), 2);
+	assert_eq!(drawn.ids["then"], edges[0].0);
 	assert_eq!(edges[0].1["fromNode"], Value::from(drawn.ids["a"].as_str()));
 	assert_eq!(edges[0].1["toNode"], Value::from(drawn.ids["b"].as_str()));
 	assert_eq!(edges[0].1["label"], "then");
 	assert_eq!(edges[0].1["toEnd"], "arrow");
 	assert_eq!(edges[1].1["fromNode"], "anchor");
+	assert_eq!(edges[1].1["routing"], "straight");
+	assert!(!edges[1].1.contains_key("fromSide") && !edges[1].1.contains_key("toSide"));
+}
+
+#[test]
+fn an_arrow_drawn_without_routing_is_an_elbow_tied_on_the_sides_that_face_each_other() {
+	let board = a_board(
+		&[
+			("centre", a_text(0, 0, 100, 100, "a0")),
+			("east", a_text(400, 50, 100, 100, "a1")),
+			("north", a_text(20, -500, 100, 100, "a2")),
+		],
+		&[],
+	);
+	let sides = |from: &str, to: &str| {
+		let drawn = drawn_ok(&board, vec![], vec![json!({ "fromNode": from, "toNode": to })]);
+		let edge = drawn.edit.added_edges[0].1.clone();
+		assert_eq!(edge["routing"], "elbow");
+		assert_eq!((&edge["fromNode"], &edge["toNode"]), (&json!(from), &json!(to)));
+		(edge["fromSide"].clone(), edge["toSide"].clone())
+	};
+
+	assert_eq!(sides("centre", "east"), (json!("right"), json!("left")));
+	assert_eq!(sides("east", "centre"), (json!("left"), json!("right")));
+	assert_eq!(sides("centre", "north"), (json!("top"), json!("bottom")));
+	assert_eq!(sides("north", "centre"), (json!("bottom"), json!("top")));
+	let anchored = drawn_ok(
+		&board,
+		vec![],
+		vec![json!({ "fromNode": "centre", "fromAnchor": { "x": 0, "y": 0 }, "toNode": "east" })],
+	);
+	let edge = &anchored.edit.added_edges[0].1;
+	assert_eq!((edge.get("fromSide"), &edge["toSide"]), (None, &json!("left")));
 }
 
 #[test]
@@ -252,14 +270,14 @@ fn the_first_invalid_item_is_refused_with_its_index_and_its_reason() {
 		(
 			vec![fine.clone(), json!({ "key": "x", "kind": "circle" })],
 			vec![],
-			Element::Node,
+			BoardItem::Node,
 			1,
 			json!({ "reason": "unknownKind" }),
 		),
 		(
 			vec![fine.clone(), json!({ "key": "ok", "kind": "text" })],
 			vec![],
-			Element::Node,
+			BoardItem::Node,
 			1,
 			json!({ "reason": "duplicateKey" }),
 		),
@@ -268,7 +286,7 @@ fn the_first_invalid_item_is_refused_with_its_index_and_its_reason() {
 				json!({ "key": "x", "kind": "text", "place": { "side": "right", "of": "ghost" } }),
 			],
 			vec![],
-			Element::Node,
+			BoardItem::Node,
 			0,
 			json!({ "reason": "unknownReference", "reference": "ghost" }),
 		),
@@ -277,35 +295,35 @@ fn the_first_invalid_item_is_refused_with_its_index_and_its_reason() {
 				json!({ "key": "x", "kind": "text", "place": { "side": "inside", "of": "anchor" } }),
 			],
 			vec![],
-			Element::Node,
+			BoardItem::Node,
 			0,
 			json!({ "reason": "unknownSide", "side": "inside" }),
 		),
 		(
 			vec![json!({ "key": "x", "kind": "text", "section": "anchor" })],
 			vec![],
-			Element::Node,
+			BoardItem::Node,
 			0,
 			json!({ "reason": "notASection", "reference": "anchor" }),
 		),
 		(
 			vec![fine.clone(), json!({ "key": "x", "kind": "sticky", "fill": "purple" })],
 			vec![],
-			Element::Node,
+			BoardItem::Node,
 			1,
 			json!({ "reason": "refusedField", "field": "fill" }),
 		),
 		(
 			vec![json!({ "key": "x", "kind": "text", "shape": "ellipse" })],
 			vec![],
-			Element::Node,
+			BoardItem::Node,
 			0,
 			json!({ "reason": "refusedField", "field": "shape" }),
 		),
 		(
 			vec![json!({ "key": "x", "kind": "text", "x": 10 })],
 			vec![],
-			Element::Node,
+			BoardItem::Node,
 			0,
 			json!({ "reason": "partialCoordinates" }),
 		),
@@ -316,16 +334,33 @@ fn the_first_invalid_item_is_refused_with_its_index_and_its_reason() {
 				json!({ "key": "b", "kind": "text", "place": { "side": "below", "of": "a" } }),
 			],
 			vec![],
-			Element::Node,
+			BoardItem::Node,
 			1,
 			json!({ "reason": "placementCycle" }),
 		),
 		(
 			vec![fine.clone()],
-			vec![json!({ "from": "ok", "to": "anchor" }), json!({ "from": "ok", "to": "ghost" })],
-			Element::Edge,
+			vec![
+				json!({ "fromNode": "ok", "toNode": "anchor" }),
+				json!({ "fromNode": "ok", "toNode": "ghost" }),
+			],
+			BoardItem::Arrow,
 			1,
 			json!({ "reason": "unknownReference", "reference": "ghost" }),
+		),
+		(
+			vec![fine.clone()],
+			vec![json!({ "fromNode": "ok", "toNode": "anchor", "html": "<b>" })],
+			BoardItem::Arrow,
+			0,
+			json!({ "reason": "refusedField", "field": "html" }),
+		),
+		(
+			vec![fine.clone()],
+			vec![json!({ "key": "ok", "fromNode": "ok", "toNode": "anchor" })],
+			BoardItem::Arrow,
+			0,
+			json!({ "reason": "duplicateKey" }),
 		),
 	];
 
@@ -344,107 +379,194 @@ fn the_first_invalid_item_is_refused_with_its_index_and_its_reason() {
 fn an_update_changes_only_the_fields_given_and_refuses_an_unknown_id() {
 	let board =
 		a_board(&[("n", a_text(0, 0, 200, 100, "a0")), ("lane", a_section(0, 0, 400, 400))], &[]);
-	let change = |value: Value| -> ChangedNode { serde_json::from_value(value).expect("a change") };
 
-	let updated = changed(
+	let updated = updated(
 		&board,
 		&[
 			change(json!({ "id": "n", "text": "Ship", "x": 40 })),
 			change(json!({ "id": "lane", "text": "Done" })),
 		],
+		&[],
 	)
 	.expect("the update applies");
 
 	let first = &updated.edit.changed_nodes[0];
 	assert_eq!(first.fields, ["text", "x"]);
 	assert_eq!(
-		(first.node["text"].clone(), first.node["x"].clone(), first.node["y"].clone()),
+		(first.element["text"].clone(), first.element["x"].clone(), first.element["y"].clone()),
 		(json!("Ship"), json!(40), json!(0))
 	);
 	assert_eq!(updated.edit.changed_nodes[1].fields, ["label"]);
-	let refused = changed(
+	let refused = super::updated(
 		&board,
 		&[change(json!({ "id": "n", "text": "A" })), change(json!({ "id": "gone" }))],
+		&[],
 	)
 	.expect_err("an unknown id is refused");
 	assert_eq!(
 		refused,
 		DrawRefusal {
-			element: Element::Node,
-			index: 1,
+			element: BoardItem::Node,
+			index: Some(1),
 			fault: DrawFault::UnknownReference { reference: "gone".to_owned() }
 		}
 	);
-	let refused = changed(&board, &[change(json!({ "id": "n", "fill": "blue" }))])
+	let refused = super::updated(&board, &[change(json!({ "id": "n", "fill": "blue" }))], &[])
 		.expect_err("a fill on a text is refused");
 	assert_eq!(refused.fault, DrawFault::RefusedField { field: "fill".to_owned() });
 }
 
-#[test]
-fn a_removal_takes_every_edge_attached_to_the_removed_nodes() {
-	let board = a_board(
+fn change(value: Value) -> ChangedNode {
+	serde_json::from_value(value).expect("a change")
+}
+
+fn patch(value: Value) -> ArrowPatch {
+	serde_json::from_value(value).expect("an arrow patch")
+}
+
+fn three_in_a_row() -> Board {
+	a_board(
 		&[
 			("a", a_text(0, 0, 10, 10, "a0")),
 			("b", a_text(40, 0, 10, 10, "a1")),
 			("c", a_text(80, 0, 10, 10, "a2")),
 		],
 		&[
-			("ab", json!({ "fromNode": "a", "toNode": "b" })),
+			("ab", json!({ "fromNode": "a", "toNode": "b", "fromSide": "right", "label": "go" })),
 			("bc", json!({ "fromNode": "b", "toNode": "c" })),
 			("ca", json!({ "fromNode": "c", "toNode": "a" })),
 		],
-	);
-
-	let gone = removed(&board, &["b".to_owned()]).expect("the removal applies");
-
-	assert_eq!(gone.edit.removed_nodes, ["b"]);
-	assert_eq!(gone.edit.removed_edges, ["ab", "bc"]);
-	assert_eq!(gone.touched, Some(Touched { node_id: None, x: 45, y: 5 }));
-	let refused = removed(&board, &["a".to_owned(), "gone".to_owned()]).expect_err("refused");
-	assert_eq!(refused.index, 1);
+	)
 }
 
 #[test]
-fn a_read_answers_each_node_with_its_text_and_the_section_that_holds_it() {
+fn an_arrow_patch_keeps_every_field_it_does_not_name_and_frees_the_tie_it_replaces() {
+	let board = three_in_a_row();
+
+	let refused = |patches: Vec<Value>| {
+		let patches: Vec<ArrowPatch> = patches.into_iter().map(patch).collect();
+		updated(&board, &[], &patches).expect_err("the call is refused")
+	};
+
+	let both_ties =
+		refused(vec![json!({ "id": "ca", "toAnchor": { "x": 0, "y": 1 }, "toSide": "top" })]);
+	let unknown = refused(vec![json!({ "id": "ab", "label": "x" }), json!({ "id": "zz" })]);
+	let to_ghost = refused(vec![json!({ "id": "ab", "toNode": "ghost" })]);
+	let html = refused(vec![json!({ "id": "ab", "html": "<b>" })]);
+
+	assert_eq!(both_ties.fault, DrawFault::RefusedField { field: "toAnchor".to_owned() });
+	assert_eq!((unknown.element, unknown.index), (BoardItem::Arrow, Some(1)));
+	assert_eq!(unknown.fault, DrawFault::UnknownReference { reference: "zz".to_owned() });
+	assert_eq!(to_ghost.fault, DrawFault::UnknownReference { reference: "ghost".to_owned() });
+	assert_eq!(html.fault, DrawFault::RefusedField { field: "html".to_owned() });
+	let applied = updated(
+		&board,
+		&[],
+		&[
+			patch(json!({ "id": "ab", "toNode": "c", "routing": "elbow", "bend": 12 })),
+			patch(json!({ "id": "bc", "fromPoint": { "x": 5, "y": 5 } })),
+			patch(json!({ "id": "ca", "toSide": "top" })),
+		],
+	)
+	.expect("the patches apply");
+	let [ab, bc, ca] = &applied.edit.changed_edges[..] else {
+		panic!("three arrows change");
+	};
+	assert_eq!(ab.fields, ["bend", "routing", "toNode"]);
+	assert_eq!(
+		(&ab.element["label"], &ab.element["fromSide"], &ab.element["toNode"]),
+		(&json!("go"), &json!("right"), &json!("c"))
+	);
+	assert_eq!(bc.fields, ["fromNode", "fromPoint"]);
+	assert_eq!(bc.element.get("fromNode"), None);
+	assert_eq!(ca.fields, ["toSide"]);
+	assert!(applied.edit.changed_nodes.is_empty());
+}
+
+#[test]
+fn a_deletion_takes_the_descendants_of_a_section_and_every_arrow_tied_to_what_it_removes() {
 	let board = a_board(
 		&[
-			("lane", a_section(0, 0, 500, 500)),
+			("lane", a_section(0, 0, 400, 400)),
 			(
 				"inner",
-				json!({ "kind": "section", "label": "Inner", "x": 10, "y": 10, "width": 200, "height": 200, "z": "a1" }),
+				json!({ "kind": "section", "x": 10, "y": 10, "width": 200, "height": 200, "z": "a1" }),
 			),
-			(
-				"n",
-				json!({ "kind": "text", "text": "Hello", "x": 20, "y": 20, "width": 50, "height": 50, "z": "a2" }),
-			),
+			("deep", a_text(20, 20, 10, 10, "a2")),
 			("out", a_text(900, 0, 10, 10, "a3")),
+			("other", a_text(1200, 0, 10, 10, "a4")),
 		],
-		&[("e", json!({ "fromNode": "n", "toNode": "out", "label": "goes" }))],
+		&[
+			("tied", json!({ "fromNode": "out", "toNode": "deep" })),
+			("loose", json!({ "fromNode": "out", "toNode": "other" })),
+			("kept", json!({ "fromPoint": { "x": 0, "y": 0 }, "toNode": "other" })),
+		],
 	);
 
-	let read = read_out(&board);
+	let gone = deleted(&board, &["inner".to_owned()], &["loose".to_owned()]).expect("deleted");
+	let unknown = deleted(&board, &["lane".to_owned()], &["kept".to_owned(), "nope".to_owned()]);
 
-	let sections: Vec<(&str, Option<&str>, Option<&str>)> = read
-		.nodes
-		.iter()
-		.map(|node| (node.id.as_str(), node.text.as_deref(), node.section.as_deref()))
-		.collect();
-	assert_eq!(
-		sections,
-		[
-			("lane", Some("Lane"), None),
-			("inner", Some("Inner"), Some("lane")),
-			("n", Some("Hello"), Some("inner")),
-			("out", Some(""), None),
-		]
+	assert_eq!(gone.edit.removed_nodes, ["inner", "deep"]);
+	assert_eq!(gone.edit.removed_edges, ["loose", "tied"]);
+	assert_eq!(gone.touched, Some(Touched { node_id: None, x: 110, y: 110 }));
+	let unknown = unknown.expect_err("an unknown arrow refuses the whole call");
+	assert_eq!((unknown.element, unknown.index), (BoardItem::Arrow, Some(1)));
+	assert_eq!(unknown.fault, DrawFault::UnknownReference { reference: "nope".to_owned() });
+}
+
+const PERSON: &str = "p1";
+
+fn placed(fields: Value) -> Value {
+	let mut node = json!({ "x": 0, "y": 0, "width": 116, "height": 124, "z": "a0" });
+	node.as_object_mut().expect("an object").extend(fields.as_object().expect("an object").clone());
+	node
+}
+
+fn a_person_image() -> Value {
+	placed(json!({ "kind": "image", "file": "Library/cat.png", "item": "cat.png" }))
+}
+
+#[test]
+fn an_image_a_person_dropped_names_its_file_then_moves_resizes_and_leaves_with_its_edges() {
+	let card =
+		placed(json!({ "kind": "libraryCard", "file": "Library/plan.md", "item": "plan.md" }));
+	let sticky = placed(json!({
+		"kind": "sticky", "text": "Note", "author": { "kind": "person", "id": PERSON }
+	}));
+	let plain = placed(json!({ "kind": "image", "file": "attachments/photo.JPG" }));
+	let board = a_board(
+		&[("photo", a_person_image()), ("card", card), ("note", sticky), ("plain", plain)],
+		&[
+			("to-card", json!({ "fromNode": "photo", "toNode": "card" })),
+			("to-note", json!({ "fromNode": "note", "toNode": "photo" })),
+		],
 	);
-	assert_eq!(
-		read.edges,
-		[EdgeRead {
-			id: "e".to_owned(),
-			from_node: "n".to_owned(),
-			to_node: "out".to_owned(),
-			label: Some("goes".to_owned())
-		}]
-	);
+
+	let updated = updated(
+		&board,
+		&[
+			change(json!({ "id": "photo", "x": 300, "y": 40, "width": 232, "height": 248 })),
+			change(json!({ "id": "card", "x": -80, "height": 90 })),
+		],
+		&[],
+	)
+	.expect("the geometry of a person's nodes applies");
+	let looked = super::updated(&board, &[change(json!({ "id": "photo", "text": "A cat" }))], &[])
+		.expect_err("an image carries no text");
+	let gone = deleted(&board, &["photo".to_owned(), "card".to_owned(), "note".to_owned()], &[])
+		.expect("a person's nodes are removed");
+
+	let file = |id: &str| crate::board::node_file(&board, id).and_then(|node| node.file);
+	assert_eq!(file("photo").as_deref(), Some("cat.png"));
+	assert_eq!(file("plain").as_deref(), Some("photo.JPG"));
+	let [moved, card] = &updated.edit.changed_nodes[..] else {
+		panic!("two nodes change");
+	};
+	assert_eq!(moved.fields, ["height", "width", "x", "y"]);
+	assert_eq!(rect_of(&moved.element), (300, 40, 232, 248));
+	assert_eq!(moved.element["item"], "cat.png");
+	assert_eq!(rect_of(&card.element), (-80, 0, 116, 90));
+	assert_eq!(looked.fault, DrawFault::RefusedField { field: "text".to_owned() });
+	assert_eq!(gone.edit.removed_nodes, ["photo", "card", "note"]);
+	assert_eq!(gone.edit.removed_edges, ["to-card", "to-note"]);
 }

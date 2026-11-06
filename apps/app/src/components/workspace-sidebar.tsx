@@ -45,6 +45,9 @@ export const WorkspaceSidebar = ({
 		<AppSidebarBody
 			bots={rosterLists.rosterBots}
 			haveBotsFailedToLoad={roster.state.hasFailedToLoad}
+			onRetryLoadBots={
+				roster.state.hasFailedToLoad ? roster.controller.retryLoad : undefined
+			}
 			rosterSkeleton={rosterLists.rosterSkeleton}
 			rosterListEnd={roster.listEnd}
 			botsBySpaceId={rosterLists.rosterBotsBySpace}

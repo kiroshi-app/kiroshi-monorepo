@@ -192,6 +192,7 @@
 	--board-muted-foreground: #6b6b6b;
 	--board-shape-surface: #ffffff;
 	--board-shape-border: #1a1a1a;
+	--board-move-ghost: #a3a3a8;
 	--board-card-surface: #ffffff;
 	--board-card-border: #e5e5e5;
 	--board-card-inset: #f2f2f2;
@@ -211,6 +212,9 @@
 	--board-hint-sticky-raised-shadow: 0 1px 2px #0000001a, 0 4px 8px #00000014;
 	--board-card-shadow: 0 1px 2px #00000014, 0 6px 14px #0000000f;
 	--board-card-dragging-shadow: 0 4px 8px #0000001a, 0 18px 36px #00000026;
+	--board-arrow-marker: var(--primary);
+	--board-lifted-filter: drop-shadow(0 2px 4px #0000001a)
+		drop-shadow(0 16px 32px #00000026);
 }
 
 .dark,
@@ -389,11 +393,7 @@
 	--board-dot: #34343a;
 	--board-control: #1e1e20;
 	--board-control-foreground: #c4c4c4;
-	--board-control-selected: color-mix(
-		in oklab,
-		var(--user-bubble) 25%,
-		var(--board-control)
-	);
+	--board-control-selected: #2a2a2d;
 	--board-selection-bar: #2a2a2d;
 	--board-selection-bar-foreground: #ffffff;
 	--board-foreground: #ededed;
@@ -401,6 +401,7 @@
 	--board-muted-foreground: #8f8f8f;
 	--board-shape-surface: #1e1e21;
 	--board-shape-border: #e5e5e5;
+	--board-move-ghost: #4a4a50;
 	--board-card-surface: #1e1e20;
 	--board-card-border: #2b2b2e;
 	--board-card-inset: #2b2b2e;
@@ -420,4 +421,9 @@
 	--board-hint-sticky-raised-shadow: 0 1px 2px #0000001a, 0 4px 8px #00000014;
 	--board-card-shadow: 0 0 0 1px #ffffff14, 0 12px 28px #00000080;
 	--board-card-dragging-shadow: 0 0 0 1px #ffffff14, 0 12px 28px #00000080;
+	--board-arrow-marker: oklch(
+		from var(--user-bubble) calc(l - 0.28) calc(c + 0.018) h
+	);
+	--board-lifted-filter: drop-shadow(0 2px 4px #00000040)
+		drop-shadow(0 16px 32px #00000066);
 }

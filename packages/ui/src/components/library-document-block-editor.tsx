@@ -58,7 +58,7 @@ import {
 	type WriterActions,
 } from "@workspace/ui/components/library-document-agents"
 import {
-	type BlockIds,
+	blockIdsOf,
 	blockTypeOf,
 	continuedMarkerOf,
 	conversionsOf,
@@ -69,14 +69,17 @@ import {
 	type LibraryBlockDocument,
 	type LibraryBlockType,
 	MARKERS,
+	marked,
 	movedTo,
 	offsetsOf,
 	parseBlocks,
 	relaid,
 	type SourceEdit,
 	serializeBlocks,
+	shiftedAcross,
 	shiftedOffset,
 	toggleTask,
+	unmarked,
 	withEmptyBlocksAt,
 } from "@workspace/ui/components/library-document-blocks"
 import {
@@ -225,11 +228,6 @@ type LibraryDocumentPlaceholder = {
 
 const NO_PLACEHOLDERS: LibraryDocumentPlaceholder[] = []
 
-const blockIdsOf = (): BlockIds => {
-	let count = 0
-	return () => `block-${++count}`
-}
-
 const skeletonOf = (type: LibrarySlashType, t: TFunction<"common">) => {
 	if (isTextBlockType(type)) return MARKERS[type]
 	const column = t("library.editor.blocks.skeleton.column")
@@ -368,8 +366,11 @@ type LibraryDocumentBlockEditorHandle = {
 	focusEndAt: (clientY: number) => void
 }
 
+type LibraryDocumentFormat = "markdown" | "plain"
+
 type LibraryDocumentBlockEditorProps = WriterActions & {
 	body: string
+	format?: LibraryDocumentFormat
 	onBodyChange: (markdown: string) => void
 	writers?: LibraryDocumentWriter[]
 	people?: LibraryDocumentPerson[]
@@ -383,6 +384,7 @@ type LibraryDocumentBlockEditorProps = WriterActions & {
 
 const LibraryDocumentBlockEditor = ({
 	body,
+	format = "markdown",
 	onBodyChange,
 	writers = NO_WRITERS,
 	people = NO_PEOPLE,
@@ -396,17 +398,17 @@ const LibraryDocumentBlockEditor = ({
 	ref,
 }: LibraryDocumentBlockEditorProps) => {
 	const { t } = useTranslation("common")
-	const [nextId] = useState(blockIdsOf)
+	const [ids] = useState(blockIdsOf)
 	const withLine = ({ lead, blocks }: LibraryBlockDocument) => ({
 		lead,
 		blocks:
-			blocks.length > 0 ? blocks : [{ id: nextId(), source: "", gap: "" }],
+			blocks.length > 0 ? blocks : [{ id: ids.fresh(), source: "", gap: "" }],
 	})
 	const seeded = (markdown: string, shown: LibraryDocumentPlaceholder[]) =>
 		withEmptyBlocksAt(
-			parseBlocks(markdown, nextId),
+			parseBlocks(markdown, ids),
 			shown.map(({ at }) => at),
-			nextId,
+			ids,
 		)
 	const [doc, setDoc] = useState(() => withLine(seeded(body, placeholders)))
 	const [anchors, setAnchors] = useState(placeholders)
@@ -429,8 +431,7 @@ const LibraryDocumentBlockEditor = ({
 	const shownWriters = useRef(writers)
 	const heldCount = useRef(0)
 	const holdTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
-	const serialized = serializeBlocks(doc)
-	const heldBody = useRef(serialized)
+	const heldDoc = useRef(doc)
 
 	const anchorsAfter = (markdown: string) => {
 		const before = serializeBlocks(latest.current)
@@ -442,10 +443,13 @@ const LibraryDocumentBlockEditor = ({
 		}))
 	}
 
-	const show = (
-		next: LibraryBlockDocument,
-		nextAnchors = anchorsAfter(serializeBlocks(next)),
-	) => {
+	const anchorsOf = (next: LibraryBlockDocument) =>
+		shownAnchors.current.map((placeholder) => ({
+			...placeholder,
+			at: shiftedAcross(latest.current, next, placeholder.at),
+		}))
+
+	const show = (next: LibraryBlockDocument, nextAnchors = anchorsOf(next)) => {
 		latest.current = next
 		setDoc(next)
 		shownAnchors.current = nextAnchors
@@ -461,7 +465,8 @@ const LibraryDocumentBlockEditor = ({
 			? shown.find((placeholder) => placeholder.at === start)?.text
 			: undefined
 
-	const commit = (next: LibraryBlockDocument) => {
+	const commit = (edited: LibraryBlockDocument) => {
+		const next = format === "plain" ? unmarked(edited) : marked(edited, ids)
 		show(next)
 		const markdown = serializeBlocks(next)
 		received.current = markdown
@@ -575,13 +580,13 @@ const LibraryDocumentBlockEditor = ({
 		}
 	}, [])
 
-	const followBody = useEffectEvent((next: string) => {
-		const before = heldBody.current
-		heldBody.current = next
-		if (before === next) return
+	const followBody = useEffectEvent((next: LibraryBlockDocument) => {
+		const before = heldDoc.current
+		heldDoc.current = next
+		if (serializeBlocks(before) === serializeBlocks(next)) return
 		reportFocusedCaret()
 		if (heldRuns.length === 0) return
-		const shifted = (at: number) => shiftedOffset(before, next, at)
+		const shifted = (at: number) => shiftedAcross(before, next, at)
 		setHeldRuns((runs) =>
 			runs.map((run) => ({
 				...run,
@@ -591,7 +596,7 @@ const LibraryDocumentBlockEditor = ({
 		)
 	})
 
-	useLayoutEffect(() => followBody(serialized), [serialized])
+	useLayoutEffect(() => followBody(doc), [doc])
 
 	useLayoutEffect(() => {
 		if (!focusRequest) return
@@ -657,7 +662,7 @@ const LibraryDocumentBlockEditor = ({
 		}
 
 	const insertAfter = (index: number, source: string) => {
-		const block = { id: nextId(), source, gap: "" }
+		const block = { id: ids.fresh(), source, gap: "" }
 		const sources = [...latest.current.blocks]
 		sources.splice(index + 1, 0, block)
 		restructure(sources)
@@ -1416,5 +1421,6 @@ const LibraryDocumentBlockEditor = ({
 export {
 	LibraryDocumentBlockEditor,
 	type LibraryDocumentBlockEditorHandle,
+	type LibraryDocumentFormat,
 	type LibraryDocumentPlaceholder,
 }

@@ -989,6 +989,28 @@
 		}
 	},
 	{
+		"name": "get_guide",
+		"description": "The guide to working in the Library of this Space: boards for its boards, documents for the Library and its Markdown documents. Call it once per session with the matching topic, before the first library_, document_, board_ or screenshot call. It answers the guide as Markdown.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"topic": {
+					"type": "string",
+					"enum": [
+						"boards",
+						"documents"
+					],
+					"description": "boards for a board, documents for the Library and its documents."
+				}
+			},
+			"required": [
+				"topic"
+			],
+			"additionalProperties": false
+		}
+	},
+	{
 		"name": "library_list",
 		"description": "List the items of the Library of this Space, the latest update first, each with its name, its kind (document, image or board) and its updatedAt in milliseconds since the epoch, before you read, write, rename or delete one whose name you do not hold.",
 		"inputSchema": {
@@ -1038,7 +1060,7 @@
 	},
 	{
 		"name": "library_read",
-		"description": "Read an item of the Library of this Space by its name. A document answers its text as it stands now with what everyone has typed in it; a board answers its JSON Canvas text; an image is shown to you; an image too large to show answers its name, its type and its size.",
+		"description": "Read an item of the Library of this Space by its name. A document answers its text as it stands now with what everyone has typed in it; to change a Markdown document, read its blocks with document_tree instead. A board answers its JSON Canvas text; an image is shown to you; an image too large to show answers its name, its type and its size.",
 		"inputSchema": {
 			"$schema": "https://json-schema.org/draft/2020-12/schema",
 			"type": "object",
@@ -1056,7 +1078,7 @@
 	},
 	{
 		"name": "library_create",
-		"description": "Create a new Markdown document in the Library of this Space, empty or filled from a template, shown in the Library of the person right away. A name already taken is refused. To change a document that already exists, write in it with library_write, never create another one. It answers the name the document stands under, its kind and its updatedAt.",
+		"description": "Create a new Markdown document in the Library of this Space, empty or filled from a template, shown in the Library of the person right away. A name already taken is refused. To change a document that already exists, edit its blocks with document_tree then document_replace_block or document_insert_after, never create another one. It answers the name the document stands under, its kind and its updatedAt.",
 		"inputSchema": {
 			"$schema": "https://json-schema.org/draft/2020-12/schema",
 			"type": "object",
@@ -1078,41 +1100,6 @@
 			},
 			"required": [
 				"name"
-			],
-			"additionalProperties": false
-		}
-	},
-	{
-		"name": "library_write",
-		"description": "Write into a Markdown document of the Library of this Space, live, beside the people editing it. Changing a document that already exists, such as its title or a section, means editing it here in place, never creating a new one. The text lands at the end of the document, right after the passage named in after, in place of the passage named in replace, or in place of the whole text when whole is true; give one of them at most. It answers the name the document stands under and how many characters you wrote.",
-		"inputSchema": {
-			"$schema": "https://json-schema.org/draft/2020-12/schema",
-			"type": "object",
-			"properties": {
-				"name": {
-					"type": "string",
-					"description": "The name of the item in the Library of this Space, with its extension, such as notes.md."
-				},
-				"text": {
-					"type": "string",
-					"description": "The Markdown to write, with the line breaks it needs to stand on its own lines. With replace, an empty text removes the passage."
-				},
-				"after": {
-					"type": "string",
-					"description": "An exact passage of the document, copied from library_read, that occurs once in it: the text lands right after it. Leave it out to write at the end."
-				},
-				"replace": {
-					"type": "string",
-					"description": "An exact passage of the document, copied from library_read, that occurs once in it: the text takes its place and every other character stays. A passage found zero times or more than once is refused with its count and nothing changes."
-				},
-				"whole": {
-					"type": "boolean",
-					"description": "True to replace the whole text of the document with the text, under the same name."
-				}
-			},
-			"required": [
-				"name",
-				"text"
 			],
 			"additionalProperties": false
 		}
@@ -1199,8 +1186,171 @@
 		}
 	},
 	{
+		"name": "document_info",
+		"description": "Describe a Markdown document of the Library of this Space in one short answer: its name, its updatedAt in milliseconds since the epoch, how many blocks it holds and the id of its first heading, null when it has none. Call it first to size a document before you read its tree.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"name": {
+					"type": "string",
+					"description": "The name of a Markdown document of the Library of this Space, such as notes.md."
+				}
+			},
+			"required": [
+				"name"
+			],
+			"additionalProperties": false
+		}
+	},
+	{
+		"name": "document_tree",
+		"description": "List the blocks of a Markdown document of the Library of this Space in order, as they stand now with what everyone has typed in it. Each block answers its id, its kind (heading, paragraph, list, checklist, quote, code, table, rule or image), its level for a heading, and its first words. Read the tree before you change a document: every other document tool targets a block by its id.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"name": {
+					"type": "string",
+					"description": "The name of a Markdown document of the Library of this Space, such as notes.md."
+				}
+			},
+			"required": [
+				"name"
+			],
+			"additionalProperties": false
+		}
+	},
+	{
+		"name": "document_read_block",
+		"description": "Read one block of a Markdown document of the Library of this Space by its id, as document_tree answered it. It answers the kind of the block and its Markdown.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"name": {
+					"type": "string",
+					"description": "The name of a Markdown document of the Library of this Space, such as notes.md."
+				},
+				"id": {
+					"type": "string",
+					"description": "The id of a block of the document, as document_tree answered it. An id absent from the document is refused and nothing changes."
+				}
+			},
+			"required": [
+				"name",
+				"id"
+			],
+			"additionalProperties": false
+		}
+	},
+	{
+		"name": "document_insert_after",
+		"description": "Write new blocks into a Markdown document of the Library of this Space, live, beside the people editing it, right after the block named in after, or at the start of the document when after is left out. To add at the end, name the id of the last block of document_tree. It answers the ids of the new blocks, in order.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"name": {
+					"type": "string",
+					"description": "The name of a Markdown document of the Library of this Space, such as notes.md."
+				},
+				"after": {
+					"description": "The id of the block the new blocks land right after, as document_tree answered it; left out, they land at the start of the document.",
+					"type": "string"
+				},
+				"markdown": {
+					"type": "string",
+					"description": "The Markdown of one or more blocks, such as a heading, paragraphs, a list or a table, blocks apart by a blank line. Write no block id: each new block gets its own."
+				}
+			},
+			"required": [
+				"name",
+				"markdown"
+			],
+			"additionalProperties": false
+		}
+	},
+	{
+		"name": "document_replace_block",
+		"description": "Replace one block of a Markdown document of the Library of this Space with new Markdown, live, beside the people editing it: a new title, a rewritten paragraph or list. The first new block keeps the id of the block it replaces. Changing a document that already exists means editing it here in place, never creating a new one. It answers the id of every resulting block, in order.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"name": {
+					"type": "string",
+					"description": "The name of a Markdown document of the Library of this Space, such as notes.md."
+				},
+				"id": {
+					"type": "string",
+					"description": "The id of a block of the document, as document_tree answered it. An id absent from the document is refused and nothing changes."
+				},
+				"markdown": {
+					"type": "string",
+					"description": "The Markdown of one or more blocks, such as a heading, paragraphs, a list or a table, blocks apart by a blank line. Write no block id: each new block gets its own."
+				}
+			},
+			"required": [
+				"name",
+				"id",
+				"markdown"
+			],
+			"additionalProperties": false
+		}
+	},
+	{
+		"name": "document_delete_block",
+		"description": "Remove blocks of a Markdown document of the Library of this Space by their ids, live, beside the people editing it. One id absent from the document refuses the whole call and nothing changes. It answers the ids removed.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"name": {
+					"type": "string",
+					"description": "The name of a Markdown document of the Library of this Space, such as notes.md."
+				},
+				"ids": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"description": "The ids of the blocks to remove, as document_tree answered them."
+				}
+			},
+			"required": [
+				"name",
+				"ids"
+			],
+			"additionalProperties": false
+		}
+	},
+	{
+		"name": "document_find",
+		"description": "Find the blocks of a Markdown document of the Library of this Space holding the text you give, whatever its case. It answers each matching block with its id, its kind and the first line of it that holds the text.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"name": {
+					"type": "string",
+					"description": "The name of a Markdown document of the Library of this Space, such as notes.md."
+				},
+				"text": {
+					"type": "string",
+					"description": "The text to look for, matched whatever its case."
+				}
+			},
+			"required": [
+				"name",
+				"text"
+			],
+			"additionalProperties": false
+		}
+	},
+	{
 		"name": "board_create",
-		"description": "Create a new empty board in the Library of this Space, shown in the Library of the person right away. A name already taken is refused and nothing is created. To draw on a board that already exists, add to it with board_add, never create another one. It answers the name the board stands under, its kind and its updatedAt.",
+		"description": "Create a new empty board in the Library of this Space, shown in the Library of the person right away. A name already taken is refused and nothing is created. To draw on a board that already exists, write into it with board_write, never create another one. It answers the name the board stands under, its kind and its updatedAt. Every answer also carries a header: the name of the board, its updatedAt and a hash of its content that changes whenever a node or an arrow changes and stays equal otherwise, so a hash other than the one you hold means someone drew on the board since.",
 		"inputSchema": {
 			"$schema": "https://json-schema.org/draft/2020-12/schema",
 			"type": "object",
@@ -1217,8 +1367,8 @@
 		}
 	},
 	{
-		"name": "board_read",
-		"description": "Read a board of the Library of this Space as it stands now with what everyone has drawn on it. It answers every node with its id, its kind, its x, y, width and height, its text (the label of a section) and the id of the section that holds it, and every edge with its id, its fromNode, its toNode and its label.",
+		"name": "board_info",
+		"description": "Orient on a board of the Library of this Space before reading it in detail, whoever drew on it. It answers how many nodes of each kind it holds, how many arrows, the bounds of all its nodes, and the id, label, x, y, width and height of every section at its top level. Every answer also carries a header: the name of the board, its updatedAt and a hash of its content that changes whenever a node or an arrow changes and stays equal otherwise, so a hash other than the one you hold means someone drew on the board since.",
 		"inputSchema": {
 			"$schema": "https://json-schema.org/draft/2020-12/schema",
 			"type": "object",
@@ -1235,8 +1385,36 @@
 		}
 	},
 	{
-		"name": "board_add",
-		"description": "Draw a whole diagram on a board of the Library of this Space in one call, landing at once for the people who have it open. Give every node a key of your own; place a node beside another one, of this call by its key or of the board by its id, or inside a section, and the board computes where it lands without covering another node. A node without a place lands right of the node before it, the first one right of everything on the board. An edge joins two nodes named by key or id. One invalid node or edge refuses the whole call with its index and the reason, and nothing changes. It answers the id each key got.",
+		"name": "board_tree",
+		"description": "List the nodes of a board of the Library of this Space under a parent, the board itself or one of its sections, as they stand now with what everyone has drawn. Each node answers its id, its kind, an excerpt of its text of 60 characters at most (the label of a section, the file of an image or a libraryCard, the title or the url of a linkCard), its x, y, width and height, its z-order and its parent, the smallest section whose rectangle holds it. Given a depth, it stops that many levels down and answers for each node at that limit the count of its children it left out. It also lists every arrow whose two ends lie under that parent, with its id, its fromNode or fromPoint, its toNode or toPoint and its label. A parent absent from the board, or that is not a section, is refused with its id. Every answer also carries a header: the name of the board, its updatedAt and a hash of its content that changes whenever a node or an arrow changes and stays equal otherwise, so a hash other than the one you hold means someone drew on the board since.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"name": {
+					"type": "string",
+					"description": "The name of the board in the Library of this Space, ending in .canvas, such as roadmap.canvas, without any folder."
+				},
+				"parent": {
+					"description": "The id of a section of the board, as board_tree answered it; left out, the board itself.",
+					"type": "string"
+				},
+				"depth": {
+					"description": "How many levels under the parent to list, 1 for its children alone; left out, every level.",
+					"type": "integer",
+					"minimum": 1,
+					"maximum": 9007199254740991
+				}
+			},
+			"required": [
+				"name"
+			],
+			"additionalProperties": false
+		}
+	},
+	{
+		"name": "board_node_info",
+		"description": "Read every JSON Canvas field of nodes and arrows of a board of the Library of this Space by id. A node answers its kind, x, y, width, height, z-order, text or label, color, fill, shape and any other field it carries, such as the file of an image: call board_view with its id to see an image. An arrow answers its fromNode or fromPoint, fromSide, fromAnchor, fromEnd, toNode or toPoint, toSide, toAnchor, toEnd, color, label, labelPosition, bend, routing and headSize. A field never set answers its default, or null. An id absent from the board refuses the whole call with that id. Every answer also carries a header: the name of the board, its updatedAt and a hash of its content that changes whenever a node or an arrow changes and stays equal otherwise, so a hash other than the one you hold means someone drew on the board since.",
 		"inputSchema": {
 			"$schema": "https://json-schema.org/draft/2020-12/schema",
 			"type": "object",
@@ -1246,13 +1424,80 @@
 					"description": "The name of the board in the Library of this Space, ending in .canvas, such as roadmap.canvas, without any folder."
 				},
 				"nodes": {
+					"description": "The ids of the nodes to read, as board_tree answered them.",
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
+				},
+				"arrows": {
+					"description": "The ids of the arrows to read, as board_tree answered them.",
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
+				}
+			},
+			"required": [
+				"name"
+			],
+			"additionalProperties": false
+		}
+	},
+	{
+		"name": "board_canvas",
+		"description": "Read the JSON Canvas text of a board of the Library of this Space, or of one of its sections with every node the section holds and the arrows between them. Every answer also carries a header: the name of the board, its updatedAt and a hash of its content that changes whenever a node or an arrow changes and stays equal otherwise, so a hash other than the one you hold means someone drew on the board since.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"name": {
+					"type": "string",
+					"description": "The name of the board in the Library of this Space, ending in .canvas, such as roadmap.canvas, without any folder."
+				},
+				"parent": {
+					"description": "The id of a section of the board, as board_tree answered it; left out, the board itself.",
+					"type": "string"
+				}
+			},
+			"required": [
+				"name"
+			],
+			"additionalProperties": false
+		}
+	},
+	{
+		"name": "board_write",
+		"description": "Write one group of nodes and arrows into a parent of a board of the Library of this Space, the board itself or one of its sections, landing at once for the people who have it open. Give every node a key of your own; place it at x and y, beside another node with place, or inside a section with section, and the board computes where it lands without covering another node. A node with no section lands inside the parent, which grows to hold it. An arrow names its ends with fromNode and toNode, each the key of a node of this call or the id of a node of the board, or leaves an end free at fromPoint or toPoint. An arrow without routing is an elbow tied on the sides of its two nodes that face each other. In replace mode, the nodes the parent section holds and every arrow tied to them are removed in the same change, the section itself kept; replace without a parent is refused as missingParent and nothing changes. An id absent from the board, or one invalid node or arrow, refuses the whole call with its element, its index and the reason, and nothing changes. It answers the id each key got. Every answer also carries a header: the name of the board, its updatedAt and a hash of its content that changes whenever a node or an arrow changes and stays equal otherwise, so a hash other than the one you hold means someone drew on the board since.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"name": {
+					"type": "string",
+					"description": "The name of the board in the Library of this Space, ending in .canvas, such as roadmap.canvas, without any folder."
+				},
+				"parent": {
+					"description": "The id of a section of the board, as board_tree answered it; left out, the board itself.",
+					"type": "string"
+				},
+				"mode": {
+					"type": "string",
+					"enum": [
+						"insert",
+						"replace"
+					],
+					"description": "insert to add the group beside what the parent holds, replace to remove what the parent section holds first; replace needs a parent."
+				},
+				"nodes": {
+					"description": "The nodes to write, in order: each node without a place lands right of the one before it, inside the parent.",
 					"type": "array",
 					"items": {
 						"type": "object",
 						"properties": {
 							"key": {
 								"type": "string",
-								"description": "A name of your own for this node, unique in this call, that the place, the section and the edges of this call use to point at it."
+								"description": "A name of your own for this node, unique in this call, that the place, the section and the arrows of this call use to point at it."
 							},
 							"kind": {
 								"type": "string",
@@ -1318,7 +1563,7 @@
 								"additionalProperties": false
 							},
 							"section": {
-								"description": "The key of a section of this call or the id of a section of the board the node lands inside; the section grows to hold it.",
+								"description": "The key of a section of this call or the id of a section of the board the node lands inside; the section grows to hold it. Left out, the parent.",
 								"type": "string"
 							}
 						},
@@ -1327,46 +1572,149 @@
 							"kind"
 						],
 						"additionalProperties": false
-					},
-					"description": "The nodes to draw, in order: each node without a place lands right of the one before it."
+					}
 				},
-				"edges": {
-					"description": "The edges to draw between the nodes.",
+				"arrows": {
+					"description": "The arrows to write between the nodes.",
 					"type": "array",
 					"items": {
 						"type": "object",
 						"properties": {
-							"from": {
-								"type": "string",
-								"description": "The key of a node of this call or the id of a node of the board."
+							"key": {
+								"description": "A name of your own for this arrow, unique in this call, to find its id in the answer.",
+								"type": "string"
 							},
-							"to": {
-								"type": "string",
-								"description": "The key of a node of this call or the id of a node of the board."
+							"fromNode": {
+								"description": "The node this end ties to: the key of a node of this call or the id of a node of the board.",
+								"type": "string"
+							},
+							"fromSide": {
+								"description": "One of top, right, bottom or left: the side of the node this end ties to; never with an anchor.",
+								"type": "string"
+							},
+							"fromAnchor": {
+								"description": "The exact point of the node this end ties to, x and y from 0 to 1 across it; never with a side.",
+								"type": "object",
+								"properties": {
+									"x": {
+										"type": "number"
+									},
+									"y": {
+										"type": "number"
+									}
+								},
+								"required": [
+									"x",
+									"y"
+								],
+								"additionalProperties": false
+							},
+							"fromPoint": {
+								"description": "A free end at a board x and y, tied to no node.",
+								"type": "object",
+								"properties": {
+									"x": {
+										"type": "number"
+									},
+									"y": {
+										"type": "number"
+									}
+								},
+								"required": [
+									"x",
+									"y"
+								],
+								"additionalProperties": false
+							},
+							"fromEnd": {
+								"description": "One of none or arrow: whether this end draws an arrowhead.",
+								"type": "string"
+							},
+							"toNode": {
+								"description": "The node this end ties to: the key of a node of this call or the id of a node of the board.",
+								"type": "string"
+							},
+							"toSide": {
+								"description": "One of top, right, bottom or left: the side of the node this end ties to; never with an anchor.",
+								"type": "string"
+							},
+							"toAnchor": {
+								"description": "The exact point of the node this end ties to, x and y from 0 to 1 across it; never with a side.",
+								"type": "object",
+								"properties": {
+									"x": {
+										"type": "number"
+									},
+									"y": {
+										"type": "number"
+									}
+								},
+								"required": [
+									"x",
+									"y"
+								],
+								"additionalProperties": false
+							},
+							"toPoint": {
+								"description": "A free end at a board x and y, tied to no node.",
+								"type": "object",
+								"properties": {
+									"x": {
+										"type": "number"
+									},
+									"y": {
+										"type": "number"
+									}
+								},
+								"required": [
+									"x",
+									"y"
+								],
+								"additionalProperties": false
+							},
+							"toEnd": {
+								"description": "One of none or arrow: whether this end draws an arrowhead.",
+								"type": "string"
+							},
+							"color": {
+								"description": "A colour, a preset from 1 to 6 or a hex such as #4a90d9.",
+								"type": "string"
 							},
 							"label": {
-								"description": "The text written on the edge.",
+								"description": "The text written on the arrow.",
+								"type": "string"
+							},
+							"labelPosition": {
+								"description": "Where the label sits along the arrow, from 0 at its start to 1 at its end, 0.5 by default.",
+								"type": "number"
+							},
+							"bend": {
+								"description": "How far the arrow bows, in board units, 0 for none.",
+								"type": "number"
+							},
+							"routing": {
+								"description": "One of straight or elbow; left out on a new arrow, elbow.",
+								"type": "string"
+							},
+							"headSize": {
+								"description": "One of small, medium or large.",
 								"type": "string"
 							}
 						},
-						"required": [
-							"from",
-							"to"
-						],
 						"additionalProperties": false
 					}
 				}
 			},
 			"required": [
 				"name",
-				"nodes"
+				"mode"
 			],
 			"additionalProperties": false
 		}
 	},
 	{
 		"name": "board_update",
-		"description": "Change fields of nodes of a board of the Library of this Space, every other field kept as it stands, in one change the people who have it open see at once. An id absent from the board or a field the node refuses refuses the whole call with its index and the reason, and nothing changes. It answers the ids of the nodes changed.",
+		"description": "Change fields of nodes and of arrows of a board of the Library of this Space by id, drawn by you or by a person, every field a patch does not name kept as it stands, in one change the people who have it open see at once. x, y, width and height move and resize a node of any kind, an image and a libraryCard included; text, color, fill and shape apply only to a kind that carries them. Tying an end of an arrow to a node frees its point and the reverse; a side replaces an anchor and the reverse. An id absent from the board, or a field the node or the arrow refuses, refuses the whole call with its element, its index and the reason, and nothing changes. It answers the ids of the nodes and of the arrows changed. Every answer also carries a header: the name of the board, its updatedAt and a hash of its content that changes whenever a node or an arrow changes and stays equal otherwise, so a hash other than the one you hold means someone drew on the board since.",
 		"inputSchema": {
 			"$schema": "https://json-schema.org/draft/2020-12/schema",
 			"type": "object",
@@ -1376,13 +1724,14 @@
 					"description": "The name of the board in the Library of this Space, ending in .canvas, such as roadmap.canvas, without any folder."
 				},
 				"nodes": {
+					"description": "The nodes to change, each by its id with the fields to set.",
 					"type": "array",
 					"items": {
 						"type": "object",
 						"properties": {
 							"id": {
 								"type": "string",
-								"description": "The id of a node of the board, as board_read answered it."
+								"description": "The id of a node of the board, as board_tree answered it."
 							},
 							"text": {
 								"description": "The text the node shows; for a section, its label.",
@@ -1429,8 +1778,221 @@
 							"id"
 						],
 						"additionalProperties": false
+					}
+				},
+				"arrows": {
+					"description": "The arrows to change, each by its id with the fields to set.",
+					"type": "array",
+					"items": {
+						"type": "object",
+						"properties": {
+							"id": {
+								"type": "string",
+								"description": "The id of an arrow of the board, as board_tree answered it."
+							},
+							"fromNode": {
+								"description": "The node this end ties to: the key of a node of this call or the id of a node of the board.",
+								"type": "string"
+							},
+							"fromSide": {
+								"description": "One of top, right, bottom or left: the side of the node this end ties to; never with an anchor.",
+								"type": "string"
+							},
+							"fromAnchor": {
+								"description": "The exact point of the node this end ties to, x and y from 0 to 1 across it; never with a side.",
+								"type": "object",
+								"properties": {
+									"x": {
+										"type": "number"
+									},
+									"y": {
+										"type": "number"
+									}
+								},
+								"required": [
+									"x",
+									"y"
+								],
+								"additionalProperties": false
+							},
+							"fromPoint": {
+								"description": "A free end at a board x and y, tied to no node.",
+								"type": "object",
+								"properties": {
+									"x": {
+										"type": "number"
+									},
+									"y": {
+										"type": "number"
+									}
+								},
+								"required": [
+									"x",
+									"y"
+								],
+								"additionalProperties": false
+							},
+							"fromEnd": {
+								"description": "One of none or arrow: whether this end draws an arrowhead.",
+								"type": "string"
+							},
+							"toNode": {
+								"description": "The node this end ties to: the key of a node of this call or the id of a node of the board.",
+								"type": "string"
+							},
+							"toSide": {
+								"description": "One of top, right, bottom or left: the side of the node this end ties to; never with an anchor.",
+								"type": "string"
+							},
+							"toAnchor": {
+								"description": "The exact point of the node this end ties to, x and y from 0 to 1 across it; never with a side.",
+								"type": "object",
+								"properties": {
+									"x": {
+										"type": "number"
+									},
+									"y": {
+										"type": "number"
+									}
+								},
+								"required": [
+									"x",
+									"y"
+								],
+								"additionalProperties": false
+							},
+							"toPoint": {
+								"description": "A free end at a board x and y, tied to no node.",
+								"type": "object",
+								"properties": {
+									"x": {
+										"type": "number"
+									},
+									"y": {
+										"type": "number"
+									}
+								},
+								"required": [
+									"x",
+									"y"
+								],
+								"additionalProperties": false
+							},
+							"toEnd": {
+								"description": "One of none or arrow: whether this end draws an arrowhead.",
+								"type": "string"
+							},
+							"color": {
+								"description": "A colour, a preset from 1 to 6 or a hex such as #4a90d9.",
+								"type": "string"
+							},
+							"label": {
+								"description": "The text written on the arrow.",
+								"type": "string"
+							},
+							"labelPosition": {
+								"description": "Where the label sits along the arrow, from 0 at its start to 1 at its end, 0.5 by default.",
+								"type": "number"
+							},
+							"bend": {
+								"description": "How far the arrow bows, in board units, 0 for none.",
+								"type": "number"
+							},
+							"routing": {
+								"description": "One of straight or elbow; left out on a new arrow, elbow.",
+								"type": "string"
+							},
+							"headSize": {
+								"description": "One of small, medium or large.",
+								"type": "string"
+							}
+						},
+						"required": [
+							"id"
+						],
+						"additionalProperties": false
+					}
+				}
+			},
+			"required": [
+				"name"
+			],
+			"additionalProperties": false
+		}
+	},
+	{
+		"name": "board_move",
+		"description": "Move nodes of a board of the Library of this Space into a parent, the board itself or one of its sections, the top left of their bounds landing at x and y. Every node keeps its id and every arrow stays tied to it; a moved section carries every node it holds by the same offset, and the target section grows to hold what lands in it. An id absent from the board, or a section moved into itself, refuses the whole call and nothing changes. It answers the ids of the nodes moved. Every answer also carries a header: the name of the board, its updatedAt and a hash of its content that changes whenever a node or an arrow changes and stays equal otherwise, so a hash other than the one you hold means someone drew on the board since.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"name": {
+					"type": "string",
+					"description": "The name of the board in the Library of this Space, ending in .canvas, such as roadmap.canvas, without any folder."
+				},
+				"nodes": {
+					"type": "array",
+					"items": {
+						"type": "string"
 					},
-					"description": "The nodes to change, each by its id with the fields to set."
+					"description": "The ids of the nodes to move, as board_tree answered them."
+				},
+				"parent": {
+					"description": "The id of a section of the board, as board_tree answered it; left out, the board itself.",
+					"type": "string"
+				},
+				"x": {
+					"type": "integer",
+					"minimum": -9007199254740991,
+					"maximum": 9007199254740991,
+					"description": "The board x or y the top left of the bounds of the nodes lands at, given with its pair."
+				},
+				"y": {
+					"type": "integer",
+					"minimum": -9007199254740991,
+					"maximum": 9007199254740991,
+					"description": "The board x or y the top left of the bounds of the nodes lands at, given with its pair."
+				}
+			},
+			"required": [
+				"name",
+				"nodes",
+				"x",
+				"y"
+			],
+			"additionalProperties": false
+		}
+	},
+	{
+		"name": "board_duplicate",
+		"description": "Copy nodes of a board of the Library of this Space, with every node a copied section holds and every arrow whose two ends are copied, right of the originals clear of the other nodes, or with the top left of their bounds at x and y. An id absent from the board refuses the whole call and nothing changes. It answers each old node id and each old arrow id with the id of its copy. Every answer also carries a header: the name of the board, its updatedAt and a hash of its content that changes whenever a node or an arrow changes and stays equal otherwise, so a hash other than the one you hold means someone drew on the board since.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"name": {
+					"type": "string",
+					"description": "The name of the board in the Library of this Space, ending in .canvas, such as roadmap.canvas, without any folder."
+				},
+				"nodes": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"description": "The ids of the nodes to copy, as board_tree answered them."
+				},
+				"x": {
+					"description": "The board x or y the top left of the bounds of the nodes lands at, given with its pair.",
+					"type": "integer",
+					"minimum": -9007199254740991,
+					"maximum": 9007199254740991
+				},
+				"y": {
+					"description": "The board x or y the top left of the bounds of the nodes lands at, given with its pair.",
+					"type": "integer",
+					"minimum": -9007199254740991,
+					"maximum": 9007199254740991
 				}
 			},
 			"required": [
@@ -1441,8 +2003,8 @@
 		}
 	},
 	{
-		"name": "board_remove",
-		"description": "Remove nodes from a board of the Library of this Space, with every edge attached to them, in one change. An id absent from the board refuses the whole call with its index and nothing changes. It answers the ids of the nodes and of the edges removed.",
+		"name": "board_delete",
+		"description": "Remove nodes and arrows of any kind from a board of the Library of this Space by id, drawn by you or by a person, a section with every node it holds and every arrow tied to a removed node, in one change. An id absent from the board refuses the whole call with that id and nothing changes. It answers the ids of the nodes and of the arrows removed. Every answer also carries a header: the name of the board, its updatedAt and a hash of its content that changes whenever a node or an arrow changes and stays equal otherwise, so a hash other than the one you hold means someone drew on the board since.",
 		"inputSchema": {
 			"$schema": "https://json-schema.org/draft/2020-12/schema",
 			"type": "object",
@@ -1451,17 +2013,112 @@
 					"type": "string",
 					"description": "The name of the board in the Library of this Space, ending in .canvas, such as roadmap.canvas, without any folder."
 				},
-				"ids": {
+				"nodes": {
+					"description": "The ids of the nodes to remove, as board_tree answered them.",
 					"type": "array",
 					"items": {
 						"type": "string"
-					},
-					"description": "The ids of the nodes to remove, as board_read answered them."
+					}
+				},
+				"arrows": {
+					"description": "The ids of the arrows to remove, as board_tree answered them.",
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
+				}
+			},
+			"required": [
+				"name"
+			],
+			"additionalProperties": false
+		}
+	},
+	{
+		"name": "board_find",
+		"description": "Find the nodes of a board of the Library of this Space matching every criterion you give among the text they show, whatever its case, their kind, color, fill and shape. It answers their ids, lowest z-order first; given no criterion, every node. Every answer also carries a header: the name of the board, its updatedAt and a hash of its content that changes whenever a node or an arrow changes and stays equal otherwise, so a hash other than the one you hold means someone drew on the board since.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"name": {
+					"type": "string",
+					"description": "The name of the board in the Library of this Space, ending in .canvas, such as roadmap.canvas, without any folder."
+				},
+				"text": {
+					"description": "Words the node shows, its text or the label of a section.",
+					"type": "string"
+				},
+				"kind": {
+					"description": "One of sticky, text, shape, section, image, linkCard or libraryCard.",
+					"type": "string"
+				},
+				"color": {
+					"description": "A colour, a preset from 1 to 6 or a hex such as #4a90d9.",
+					"type": "string"
+				},
+				"fill": {
+					"description": "For a sticky only, one of yellow, green, pink, blue or orange.",
+					"type": "string"
+				},
+				"shape": {
+					"description": "For a shape only, one of rectangle, ellipse or diamond.",
+					"type": "string"
+				}
+			},
+			"required": [
+				"name"
+			],
+			"additionalProperties": false
+		}
+	},
+	{
+		"name": "board_view",
+		"description": "Show you an image node of a board of the Library of this Space as an image, whoever dropped it there. A node that is not an image, an image whose file is not in the Library of this Space, or an image too large to show is refused with the node id and the reason, the size and the limit for one too large, and nothing is shown. Every answer also carries a header: the name of the board, its updatedAt and a hash of its content that changes whenever a node or an arrow changes and stays equal otherwise, so a hash other than the one you hold means someone drew on the board since.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"name": {
+					"type": "string",
+					"description": "The name of the board in the Library of this Space, ending in .canvas, such as roadmap.canvas, without any folder."
+				},
+				"id": {
+					"type": "string",
+					"description": "The id of an image node of the board, as board_tree answered it."
 				}
 			},
 			"required": [
 				"name",
-				"ids"
+				"id"
+			],
+			"additionalProperties": false
+		}
+	},
+	{
+		"name": "screenshot",
+		"description": "Show you a picture of a board or of a Markdown document of the Library of this Space as a person sees it there, in the light theme, rendered from what is saved at the moment of the call. Call it after a write to check what you drew or wrote. A board name alone shows every node and arrow of the board, framed on their bounds; with the id of a node, that node and the nodes it holds. A document name alone shows the whole document; with the id of a block, that block alone. An id absent from the board or the document is refused with that id, and a board or a document with nothing in it as nothingToShow, before anything is rendered; a render that does not answer within 15 seconds is refused as renderTimedOut. It answers the picture, at most 1568 pixels on its long edge, with the header of board_info for a board or the answer of document_info for a document, and the rendered width, height and scale.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"name": {
+					"type": "string",
+					"description": "The name of a board ending in .canvas, such as roadmap.canvas, or of a Markdown document, such as notes.md, of the Library of this Space, without any folder."
+				},
+				"id": {
+					"description": "The id of a node of the board as board_tree answered it, or of a block of the document as document_tree answered it. Left out, the whole board or document.",
+					"type": "string"
+				},
+				"scale": {
+					"description": "1 or 2: the pixels drawn for each point of the board or the document. Left out, 1.",
+					"type": "integer",
+					"minimum": 1,
+					"maximum": 2
+				}
+			},
+			"required": [
+				"name"
 			],
 			"additionalProperties": false
 		}

@@ -1293,6 +1293,17 @@ describe("a rename in flight", () => {
 	})
 })
 
+describe("the body of a .txt document", () => {
+	it("saves the typed body with no block id marker", async () => {
+		await renderLibraryScreen({ isJoined: false })
+		await openNotes()
+
+		await typeInBody("Rollout")
+
+		await waitFor(() => expect(textOfUpdatesTo("notes.txt")).toBe("Rollout"))
+	})
+})
+
 describe("the document bar", () => {
 	it.each([
 		["the host", false, "library_copy"],

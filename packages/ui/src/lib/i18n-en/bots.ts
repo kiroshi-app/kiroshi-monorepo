@@ -21,6 +21,8 @@ const bots = {
 		},
 		empty: "No agents yet",
 		unavailable: "Couldn’t load your agents. Restart Kiroshi to retry.",
+		failed: "Couldn’t load your agents.",
+		retry: "Retry",
 		previewUnreadable:
 			"Couldn’t load the latest messages. Restart Kiroshi to retry.",
 		settingsUnsaved:

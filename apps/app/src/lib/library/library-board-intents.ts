@@ -1,11 +1,14 @@
 import * as Y from "yjs"
 
 import {
+	type Author,
 	BOARD_SCHEMA,
 	type BoardNode,
+	type Connector,
 	type ImageNode,
 	type LibraryCardNode,
 	type LinkCardNode,
+	type StickyFill,
 	zAt,
 } from "@workspace/shared/board/board"
 import { sharedEdge, sharedNode } from "@workspace/shared/board/board-doc"
@@ -56,6 +59,9 @@ const SIZE_OF_LIBRARY_OBJECT: Record<LibraryBoardObject["kind"], BoardSize> = {
 }
 
 const PRESET_OF_FILL = BOARD_SCHEMA.kinds.sticky?.fill?.presets ?? {}
+
+const NEW_STICKY_FILL = BOARD_SCHEMA.kinds.sticky?.fields.fill
+	?.default as StickyFill
 
 const nodesOf = (doc: Y.Doc) => doc.getMap<SharedElement>(ROOTS.nodes)
 
@@ -158,16 +164,65 @@ const connect = (
 	)
 }
 
+const edgeFieldsOf = (arrow: BoardConnector) => ({
+	fromNode: arrow.from || undefined,
+	fromSide: arrow.fromSide,
+	fromAnchor: arrow.fromAnchor,
+	fromPoint: arrow.fromPoint,
+	toNode: arrow.to || undefined,
+	toSide: arrow.toSide,
+	toAnchor: arrow.toAnchor,
+	toPoint: arrow.toPoint,
+	routing: arrow.routing,
+	bend: arrow.bend,
+	label: arrow.text || undefined,
+	labelPosition: arrow.labelPosition,
+})
+
+const setArrow = (doc: Y.Doc, arrow: BoardConnector) => {
+	const nodes = nodesOf(doc)
+	const isTiedToHeldNode = (node: string) => node === "" || nodes.has(node)
+	if (!isTiedToHeldNode(arrow.from) || !isTiedToHeldNode(arrow.to)) return
+	const edges = edgesOf(doc)
+	if (!edges.has(arrow.id))
+		edges.set(
+			arrow.id,
+			sharedEdge({ fromEnd: "none", toEnd: "arrow", routing: arrow.routing }),
+		)
+	const edge = edges.get(arrow.id) as SharedElement
+	for (const [field, value] of Object.entries(edgeFieldsOf(arrow))) {
+		if (value === undefined) edge.delete(field)
+		else edge.set(field, value)
+	}
+}
+
+const zKeysOf = (doc: Y.Doc) =>
+	[...nodesOf(doc).values()]
+		.map((node) => String(node.get(Z_ORDER.field)))
+		.sort()
+
 const zAbove = (doc: Y.Doc) => {
-	const keys = [...nodesOf(doc).values()].map((node) =>
-		String(node.get(Z_ORDER.field)),
-	)
-	const top = keys.sort().at(-1)
+	const keys = zKeysOf(doc)
+	const top = keys.at(-1)
 	const next = zAt(keys.length)
 	return top === undefined || next > top ? next : `${top}${Z_ORDER.digits[0]}`
 }
 
-const nodeOf = (item: BoardItem, z: string): BoardNode | null => {
+const zBelow = (doc: Y.Doc) => {
+	const [bottom] = zKeysOf(doc)
+	if (bottom === undefined) return zAt(0)
+	const lowest = Z_ORDER.digits[0]
+	const at = [...bottom].findIndex((digit) => digit !== lowest)
+	if (at === -1) return bottom
+	const lower = Z_ORDER.digits[Z_ORDER.digits.indexOf(bottom.charAt(at)) - 1]
+	return `${bottom.slice(0, at)}${lower}${Z_ORDER.digits.at(-1)}`
+}
+
+const nodeOf = (
+	item: BoardItem,
+	z: string,
+	authorOf: () => Author,
+): BoardNode | null => {
 	const placed = {
 		x: Math.round(item.position.x),
 		y: Math.round(item.position.y),
@@ -176,6 +231,14 @@ const nodeOf = (item: BoardItem, z: string): BoardNode | null => {
 		z,
 	}
 	switch (item.kind) {
+		case "sticky":
+			return {
+				...placed,
+				kind: "sticky",
+				text: item.text,
+				fill: NEW_STICKY_FILL,
+				author: authorOf(),
+			}
 		case "text":
 			return { ...placed, kind: "text", text: item.text }
 		case "shape": {
@@ -188,13 +251,20 @@ const nodeOf = (item: BoardItem, z: string): BoardNode | null => {
 				...(colour ? { color: colour } : {}),
 			}
 		}
+		case "section":
+			return {
+				...placed,
+				kind: "section",
+				...(item.text ? { label: item.text } : {}),
+			}
 		default:
 			return null
 	}
 }
 
-const createItem = (doc: Y.Doc, item: BoardItem) => {
-	const node = nodeOf(item, zAbove(doc))
+const createItem = (doc: Y.Doc, item: BoardItem, authorOf: () => Author) => {
+	const z = item.kind === "section" ? zBelow(doc) : zAbove(doc)
+	const node = nodeOf(item, z, authorOf)
 	if (!node) {
 		console.error(
 			`library: a board ${item.kind} cannot be created without its source`,
@@ -229,28 +299,68 @@ const libraryNodeOf = (
 	}
 }
 
-const remove = (doc: Y.Doc, id: string) => {
-	const nodes = nodesOf(doc)
-	const edges = edgesOf(doc)
-	if (!nodes.has(id)) {
-		edges.delete(id)
-		return
-	}
-	nodes.delete(id)
-	const attached = [...edges.entries()].filter(
-		([, edge]) => edge.get("fromNode") === id || edge.get("toNode") === id,
-	)
-	for (const [edgeId] of attached) edges.delete(edgeId)
+type EndName = "from" | "to"
+
+type Fraction = NonNullable<Connector["fromAnchor"]>
+
+const ENDS: EndName[] = ["from", "to"]
+
+const TIES = ["Node", "Side", "Anchor"]
+
+const CENTRE: Fraction = { x: 0.5, y: 0.5 }
+
+const SIDE_MIDPOINT: Record<NonNullable<Connector["fromSide"]>, Fraction> = {
+	top: { x: 0.5, y: 0 },
+	right: { x: 1, y: 0.5 },
+	bottom: { x: 0.5, y: 1 },
+	left: { x: 0, y: 0.5 },
 }
 
-const writeIntent = (doc: Y.Doc, intent: BoardIntent) => {
+const tiedFractionOf = (edge: SharedElement, end: EndName) => {
+	const anchor = edge.get(`${end}Anchor`) as Fraction | undefined
+	const side = edge.get(`${end}Side`) as Connector["fromSide"]
+	return anchor ?? (side ? SIDE_MIDPOINT[side] : CENTRE)
+}
+
+const boardPointIn = (node: SharedElement, { x, y }: Fraction) => ({
+	x: Number(node.get("x")) + x * Number(node.get("width")),
+	y: Number(node.get("y")) + y * Number(node.get("height")),
+})
+
+const loosenEndsTiedTo = (
+	edge: SharedElement,
+	id: string,
+	node: SharedElement,
+) => {
+	for (const end of ENDS) {
+		if (edge.get(`${end}Node`) !== id) continue
+		edge.set(`${end}Point`, boardPointIn(node, tiedFractionOf(edge, end)))
+		for (const tie of TIES) edge.delete(`${end}${tie}`)
+	}
+}
+
+const remove = (doc: Y.Doc, id: string) => {
+	const node = nodesOf(doc).get(id)
+	if (!node) {
+		edgesOf(doc).delete(id)
+		return
+	}
+	for (const edge of edgesOf(doc).values()) loosenEndsTiedTo(edge, id, node)
+	nodesOf(doc).delete(id)
+}
+
+const writeIntent = (
+	doc: Y.Doc,
+	intent: BoardIntent,
+	authorOf: () => Author,
+) => {
 	switch (intent.type) {
 		case "create":
 			if (intent.object.kind === "connector") {
 				connect(doc, intent.object.id, intent.object)
 				return
 			}
-			createItem(doc, intent.object)
+			createItem(doc, intent.object, authorOf)
 			return
 		case "move": {
 			const node = nodesOf(doc).get(intent.id)
@@ -273,6 +383,9 @@ const writeIntent = (doc: Y.Doc, intent: BoardIntent) => {
 		case "connect":
 			connect(doc, intent.id, intent)
 			return
+		case "set-arrow":
+			setArrow(doc, intent.arrow)
+			return
 		case "delete":
 			remove(doc, intent.id)
 	}
@@ -282,7 +395,8 @@ export const applyLibraryBoardIntent = (
 	doc: Y.Doc,
 	intent: BoardIntent,
 	origin: unknown,
-) => doc.transact(() => writeIntent(doc, intent), origin)
+	authorOf: () => Author,
+) => doc.transact(() => writeIntent(doc, intent, authorOf), origin)
 
 export const placeLibraryBoardObject = (
 	doc: Y.Doc,

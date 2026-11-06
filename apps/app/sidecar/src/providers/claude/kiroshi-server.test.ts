@@ -1,6 +1,11 @@
 import { describe, expect, it } from "bun:test"
 import { readFileSync } from "node:fs"
 
+import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk"
+import { Client } from "@modelcontextprotocol/sdk/client/index.js"
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js"
+
+import { GUIDES } from "./guide-tool"
 import {
 	DELEGATE_TOOL,
 	KIROSHI_SERVER,
@@ -38,17 +43,25 @@ const toolsNamedIn = (skill: string) => new Set(skill.match(SKILL_TOOL))
 
 const registeredNames = kiroshiTools(scope).map((held) => held.name)
 
-const SKILLS = [
+const TEACHINGS = [
 	{
-		id: "conversations",
+		id: "conversations skill",
+		text: systemSkill("conversations"),
 		covers: (name: string) =>
 			name.startsWith("conversation_") || name === "companion_list",
 	},
-	{ id: "missions", covers: (name: string) => name.startsWith("mission_") },
 	{
-		id: "library",
+		id: "missions skill",
+		text: systemSkill("missions"),
+		covers: (name: string) => name.startsWith("mission_"),
+	},
+	{
+		id: "boards and documents guides",
+		text: `${GUIDES.boards}\n${GUIDES.documents}`,
 		covers: (name: string) =>
-			name.startsWith("library_") || name.startsWith("board_"),
+			name.startsWith("library_") ||
+			name.startsWith("document_") ||
+			name.startsWith("board_"),
 	},
 ]
 
@@ -69,6 +82,24 @@ describe("kiroshiServer", () => {
 		expect(Object.keys(servers)).toEqual([KIROSHI_SERVER])
 		expect(servers[KIROSHI_SERVER]?.type).toBe("sdk")
 		expect(DELEGATE_TOOL).toBe(`mcp__${KIROSHI_SERVER}__delegate`)
+	})
+
+	it("instructs the agent to call get_guide once per session before any library, document, board or screenshot call", async () => {
+		const server = kiroshiServer(scope)[
+			KIROSHI_SERVER
+		] as McpSdkServerConfigWithInstance
+		const [clientSide, serverSide] = InMemoryTransport.createLinkedPair()
+		const client = new Client({ name: "kiroshi-test", version: "0" })
+		await server.instance.connect(serverSide)
+		await client.connect(clientSide)
+
+		const instructions = client.getInstructions() ?? ""
+		await client.close()
+
+		expect(instructions).toContain("get_guide once per session")
+		for (const named of ["library_", "document_", "board_", "screenshot"]) {
+			expect(instructions).toContain(named)
+		}
 	})
 
 	it("carries the three application tools and none of them takes a secret value", () => {
@@ -124,26 +155,41 @@ describe("kiroshiServer", () => {
 			"conversation_search",
 			"conversation_close",
 			"bundle_write",
+			"get_guide",
 			"library_list",
 			"library_search",
 			"library_read",
 			"library_create",
-			"library_write",
 			"library_import",
 			"library_rename",
 			"library_delete",
 			"conversation_post_document",
+			"document_info",
+			"document_tree",
+			"document_read_block",
+			"document_insert_after",
+			"document_replace_block",
+			"document_delete_block",
+			"document_find",
 			"board_create",
-			"board_read",
-			"board_add",
+			"board_info",
+			"board_tree",
+			"board_node_info",
+			"board_canvas",
+			"board_write",
 			"board_update",
-			"board_remove",
+			"board_move",
+			"board_duplicate",
+			"board_delete",
+			"board_find",
+			"board_view",
+			"screenshot",
 		])
 	})
 
-	for (const { id, covers } of SKILLS) {
-		it(`names in the ${id} skill every tool of its set the server registers, and none it does not`, () => {
-			const named = toolsNamedIn(systemSkill(id))
+	for (const { id, text, covers } of TEACHINGS) {
+		it(`names in the ${id} every tool of its set the server registers, and none it does not`, () => {
+			const named = toolsNamedIn(text)
 
 			expect(
 				registeredNames.filter(covers).filter((name) => !named.has(name)),

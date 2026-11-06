@@ -41,6 +41,7 @@ import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-s
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import { hostOfflineOf } from "@/lib/host/host-offline"
 import type { Invoke } from "@/lib/host/joined-hosts-invoke"
+import { markdownWithIds } from "@/lib/library/block-ids-test-pattern"
 import { base64Of, bytesOf } from "@/lib/library/library-document-session"
 import { titleOf } from "@/lib/library/library-items"
 import { aMission } from "@/lib/missions/mission-fixtures"
@@ -511,6 +512,8 @@ const IMAGE = libraryItemOf("diagram.png", "image")
 
 const DOCUMENT = libraryItemOf("notes.txt", "document")
 
+const MARKDOWN_DOCUMENT = libraryItemOf("notes.md", "document")
+
 const renderLibraryScreen = async (isJoined: boolean) => {
 	const { container } = render(
 		createElement(LibraryScreenHoldingOpening, {
@@ -764,11 +767,11 @@ describe("a new Library document", () => {
 
 describe("an opened Library document", () => {
 	it("shows an edit made by one client in another client of the same host", async () => {
-		harness.libraryItems = [DOCUMENT]
+		harness.libraryItems = [MARKDOWN_DOCUMENT]
 		const onHost = await renderLibraryScreen(false)
 		const member = await renderLibraryScreen(true)
-		await openLibraryItem(DOCUMENT, onHost)
-		await openLibraryItem(DOCUMENT, member)
+		await openLibraryItem(MARKDOWN_DOCUMENT, onHost)
+		await openLibraryItem(MARKDOWN_DOCUMENT, member)
 		await waitFor(() => expect(textOf(member)).toBe(HOSTED_CONTENT))
 
 		await typeInto(bodyOf(onHost), "Notes and actions")
@@ -776,7 +779,9 @@ describe("an opened Library document", () => {
 		await waitFor(() => expect(textOf(member)).toBe("Notes and actions"), {
 			timeout: 1000,
 		})
-		expect(fakeLibraryHost.markdownOf(DOCUMENT.name)).toBe("Notes and actions")
+		expect(fakeLibraryHost.markdownOf(MARKDOWN_DOCUMENT.name)).toMatch(
+			markdownWithIds("Notes and actions ^ID"),
+		)
 		expect(textOf(onHost)).toBe("Notes and actions")
 	})
 
@@ -839,10 +844,10 @@ describe("an opened Library document", () => {
 	})
 
 	it("holds on the host the markdown the editor shows through typing, paste, a task, an agent write and a reopen", async () => {
-		harness.libraryItems = [DOCUMENT]
-		fakeLibraryHost.writeElsewhere(DOCUMENT.name, TASK_NOTES)
+		harness.libraryItems = [MARKDOWN_DOCUMENT]
+		fakeLibraryHost.writeElsewhere(MARKDOWN_DOCUMENT.name, TASK_NOTES)
 		const shown = await renderLibraryScreen(false)
-		await openLibraryItem(DOCUMENT, shown)
+		await openLibraryItem(MARKDOWN_DOCUMENT, shown)
 		await waitFor(() =>
 			expect(shownTextsOf(shown)).toEqual(["Notes", "Ship the notes"]),
 		)
@@ -851,20 +856,25 @@ describe("an opened Library document", () => {
 			waitFor(
 				() => {
 					expect(shownTextsOf(shown)).toEqual(texts)
-					expect(fakeLibraryHost.markdownOf(DOCUMENT.name)).toBe(markdown)
+					expect(fakeLibraryHost.markdownOf(MARKDOWN_DOCUMENT.name)).toMatch(
+						markdownWithIds(markdown),
+					)
 				},
 				{ timeout: 1000 },
 			)
 
 		await typeInto(body, "Notes and actions")
-		const typed = TASK_NOTES.replace("Notes", "Notes and actions")
+		const typed = "Notes and actions ^ID\n\n\n\n- [ ] Ship the notes\n\n^ID"
 		await holdsMarkdown(typed, ["Notes and actions", "Ship the notes"])
 
 		const pastedField = await pasteBelow(
 			blocksOf(body)[0] as HTMLElement,
 			PASTED_PARAGRAPHS,
 		)
-		const pasted = typed.replace("- [ ]", `${PASTED_PARAGRAPHS}\n\n- [ ]`)
+		const pasted = typed.replace(
+			"- [ ]",
+			"First thought. ^ID\n\nSecond thought. ^ID\n\nThird thought. ^ID\n\n- [ ]",
+		)
 		await holdsMarkdown(pasted, [
 			"Notes and actions",
 			PASTED_PARAGRAPHS,
@@ -891,7 +901,10 @@ describe("an opened Library document", () => {
 		})
 
 		const written = `${ticked}${AGENT_LINE}`
-		fakeLibraryHost.writeElsewhere(DOCUMENT.name, written)
+		fakeLibraryHost.writeElsewhere(
+			MARKDOWN_DOCUMENT.name,
+			`${fakeLibraryHost.markdownOf(MARKDOWN_DOCUMENT.name)}${AGENT_LINE}`,
+		)
 		await holdsMarkdown(written, [
 			...paragraphs,
 			"Ship the notes",
@@ -904,7 +917,7 @@ describe("an opened Library document", () => {
 		await press(
 			shown.getByRole("button", { name: common("library.document.back") }),
 		)
-		await openLibraryItem(DOCUMENT, shown)
+		await openLibraryItem(MARKDOWN_DOCUMENT, shown)
 		await holdsMarkdown(written, [
 			...paragraphs,
 			"Ship the notes",

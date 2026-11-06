@@ -101,15 +101,25 @@ const unionOf = (a: BoardRect, b: BoardRect): BoardRect => {
 	}
 }
 
+const endBounds = (
+	id: string,
+	point: BoardPoint | undefined,
+	itemsById: ReadonlyMap<string, BoardItem>,
+): BoardRect | null => {
+	if (point) return { ...point, width: 0, height: 0 }
+	const item = itemsById.get(id)
+	return item ? itemBounds(item) : null
+}
+
 const boundsOf = (
 	object: BoardObject,
 	itemsById: ReadonlyMap<string, BoardItem>,
 ): BoardRect | null => {
 	if (object.kind !== "connector") return itemBounds(object)
-	const from = itemsById.get(object.from)
-	const to = itemsById.get(object.to)
+	const from = endBounds(object.from, object.fromPoint, itemsById)
+	const to = endBounds(object.to, object.toPoint, itemsById)
 	if (!from || !to) return null
-	return unionOf(itemBounds(from), itemBounds(to))
+	return unionOf(from, to)
 }
 
 const isItem = (object: BoardObject): object is BoardItem =>
@@ -139,26 +149,52 @@ const gridScreenPitch = (zoom: number) => {
 	return pitch
 }
 
+const fitZoomOf = (bounds: BoardRect, box: BoardSize, margin: number) =>
+	Math.min(
+		1,
+		(box.width - 2 * margin) / bounds.width,
+		(box.height - 2 * margin) / bounds.height,
+	)
+
+const centredAt = (
+	bounds: BoardRect,
+	box: BoardSize,
+	zoom: number,
+): BoardViewport => ({
+	zoom,
+	offset: {
+		x: (box.width - bounds.width * zoom) / 2 - bounds.x * zoom,
+		y: (box.height - bounds.height * zoom) / 2 - bounds.y * zoom,
+	},
+})
+
 const fitBoardBounds = (
 	bounds: BoardRect,
 	box: BoardSize,
 	margin: number,
-): BoardViewport => {
-	const zoom = Math.max(
-		0,
-		Math.min(
-			1,
-			(box.width - 2 * margin) / bounds.width,
-			(box.height - 2 * margin) / bounds.height,
-		),
+): BoardViewport =>
+	centredAt(bounds, box, Math.max(0, fitZoomOf(bounds, box, margin)))
+
+const contentBoundsOf = (objects: readonly BoardObject[]) => {
+	const itemsById = new Map(
+		objects.filter(isItem).map((item) => [item.id, item]),
 	)
-	return {
-		zoom,
-		offset: {
-			x: (box.width - bounds.width * zoom) / 2 - bounds.x * zoom,
-			y: (box.height - bounds.height * zoom) / 2 - bounds.y * zoom,
-		},
-	}
+	return objects.reduce<BoardRect | null>((union, object) => {
+		const bounds = boundsOf(object, itemsById)
+		if (!bounds) return union
+		return union ? unionOf(union, bounds) : bounds
+	}, null)
+}
+
+const openingViewportOf = (
+	objects: readonly BoardObject[],
+	box: BoardSize,
+	margin: number,
+): BoardViewport => {
+	const bounds = contentBoundsOf(objects)
+	return bounds
+		? centredAt(bounds, box, clampZoom(fitZoomOf(bounds, box, margin)))
+		: { zoom: 1, offset: { x: box.width / 2, y: box.height / 2 } }
 }
 
 export {
@@ -172,6 +208,7 @@ export {
 	isAtZoomMin,
 	isItem,
 	itemBounds,
+	openingViewportOf,
 	panBy,
 	pinchZoom,
 	zoomAround,

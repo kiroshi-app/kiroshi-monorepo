@@ -13,16 +13,17 @@ use super::{parsed_board, Board, BoardError, JsonObject};
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct BoardEdit {
 	pub added_nodes: Vec<(String, JsonObject)>,
-	pub changed_nodes: Vec<NodeChange>,
+	pub changed_nodes: Vec<ElementChange>,
 	pub removed_nodes: Vec<String>,
 	pub added_edges: Vec<(String, JsonObject)>,
+	pub changed_edges: Vec<ElementChange>,
 	pub removed_edges: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct NodeChange {
+pub struct ElementChange {
 	pub id: String,
-	pub node: JsonObject,
+	pub element: JsonObject,
 	pub fields: Vec<String>,
 }
 
@@ -134,19 +135,34 @@ fn shared_value(value: &Value, fields: &[&Fields], name: &str) -> In {
 	}
 }
 
-fn changed_in_place(txn: &mut TransactionMut, node: &MapRef, change: &NodeChange) {
-	let fields = node_fields(&change.node);
-	let changed = change.fields.iter().filter_map(|name| Some((name, change.node.get(name)?)));
-	for (name, value) in changed {
-		match (node.get(txn, name), value) {
-			(Some(Out::YText(text)), Value::String(next)) => {
+fn changed_in_place(
+	txn: &mut TransactionMut,
+	element: &MapRef,
+	change: &ElementChange,
+	fields: &[&Fields],
+) {
+	for name in &change.fields {
+		match (element.get(txn, name), change.element.get(name)) {
+			(_, None) => {
+				element.remove(txn, name);
+			}
+			(Some(Out::YText(text)), Some(Value::String(next))) => {
 				let length = text.len(txn);
 				text.remove_range(txn, 0, length);
 				text.insert(txn, 0, next);
 			}
-			_ => {
-				node.insert(txn, name.as_str(), shared_value(value, &fields, name));
+			(_, Some(value)) => {
+				element.insert(txn, name.as_str(), shared_value(value, fields, name));
 			}
+		}
+	}
+}
+
+fn changed(txn: &mut TransactionMut, root: &MapRef, change: &ElementChange, fields: &[&Fields]) {
+	match root.get(txn, &change.id) {
+		Some(Out::YMap(element)) => changed_in_place(txn, &element, change, fields),
+		_ => {
+			root.insert(txn, change.id.as_str(), shared_element(&change.element, fields));
 		}
 	}
 }
@@ -166,15 +182,12 @@ pub fn edit_board(doc: &Doc, edit: &BoardEdit) {
 		nodes.insert(&mut txn, id.as_str(), shared_element(node, &node_fields(node)));
 	}
 	for change in &edit.changed_nodes {
-		match nodes.get(&txn, &change.id) {
-			Some(Out::YMap(node)) => changed_in_place(&mut txn, &node, change),
-			_ => {
-				let node = shared_element(&change.node, &node_fields(&change.node));
-				nodes.insert(&mut txn, change.id.as_str(), node);
-			}
-		}
+		changed(&mut txn, &nodes, change, &node_fields(&change.element));
 	}
 	for (id, edge) in &edit.added_edges {
 		edges.insert(&mut txn, id.as_str(), shared_element(edge, &[&SCHEMA.edge.fields]));
+	}
+	for change in &edit.changed_edges {
+		changed(&mut txn, &edges, change, &[&SCHEMA.edge.fields]);
 	}
 }

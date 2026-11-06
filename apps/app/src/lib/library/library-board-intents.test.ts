@@ -1,9 +1,18 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
+import type { Board } from "@workspace/shared/board/board"
 import { readBoard } from "@workspace/shared/board/board-doc"
-import type { BoardIntent } from "@workspace/ui/components/board-view"
+import type {
+	BoardConnector,
+	BoardIntent,
+	BoardItem,
+} from "@workspace/ui/components/board-view"
 
-import { boardDocOf, TWO_NOTES_BOARD } from "./library-board-fixtures"
+import {
+	boardDocOf,
+	TIED_ARROWS_BOARD,
+	TWO_NOTES_BOARD,
+} from "./library-board-fixtures"
 import {
 	applyLibraryBoardIntent,
 	describeLibraryBoardLink,
@@ -13,13 +22,54 @@ import {
 
 const LOCAL = Symbol("local")
 
-const applied = (intent: BoardIntent) => {
-	const doc = boardDocOf(TWO_NOTES_BOARD)
+const PERSON = { kind: "person", id: "person-a" } as const
+
+const authorOf = () => PERSON
+
+const zKeysBesides = (board: Board, id: string) =>
+	Object.entries(board.nodes).flatMap(([key, node]) =>
+		key === id ? [] : [node.z],
+	)
+
+const isAboveEvery = (board: Board, id: string) =>
+	zKeysBesides(board, id).every((z) => (board.nodes[id]?.z ?? "") > z)
+
+const isBelowEvery = (board: Board, id: string) =>
+	zKeysBesides(board, id).every((z) => (board.nodes[id]?.z ?? "") < z)
+
+const created = (kind: BoardItem["kind"], id = "made"): BoardIntent => ({
+	type: "create",
+	object: {
+		id,
+		kind,
+		position: { x: 5, y: 6 },
+		size: { width: 200, height: 120 },
+		zOrder: 0,
+		text: "",
+	},
+})
+
+const arrowSet = (arrow: Partial<BoardConnector>): BoardIntent => ({
+	type: "set-arrow",
+	arrow: {
+		id: "drawn",
+		kind: "connector",
+		from: "first",
+		to: "second",
+		routing: "straight",
+		zOrder: 0,
+		text: "",
+		...arrow,
+	},
+})
+
+const applied = (intent: BoardIntent, board = TWO_NOTES_BOARD) => {
+	const doc = boardDocOf(board)
 	let transactions = 0
 	doc.on("afterTransaction", () => {
 		transactions++
 	})
-	applyLibraryBoardIntent(doc, intent, LOCAL)
+	applyLibraryBoardIntent(doc, intent, LOCAL, authorOf)
 	return { board: readBoard(doc), transactions }
 }
 
@@ -83,8 +133,61 @@ describe("applyLibraryBoardIntent", () => {
 			shape: "ellipse",
 			color: "4",
 		})
-		expect(board.nodes.made?.z > (board.nodes.second?.z ?? "")).toBe(true)
+		expect(isAboveEvery(board, "made")).toBe(true)
 		expect(transactions).toBe(1)
+	})
+
+	it("creates a sticky above every node, authored by the current person", () => {
+		const logged = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => undefined)
+		const { board } = applied(created("sticky"))
+
+		expect(board.nodes.made).toEqual({
+			kind: "sticky",
+			x: 5,
+			y: 6,
+			width: 200,
+			height: 120,
+			z: expect.any(String),
+			text: "",
+			fill: "yellow",
+			author: PERSON,
+		})
+		expect(isAboveEvery(board, "made")).toBe(true)
+		expect(logged).not.toHaveBeenCalled()
+		logged.mockRestore()
+	})
+
+	it("creates a text above every node", () => {
+		const { board } = applied(created("text"))
+
+		expect(board.nodes.made).toMatchObject({
+			kind: "text",
+			x: 5,
+			y: 6,
+			text: "",
+		})
+		expect(isAboveEvery(board, "made")).toBe(true)
+	})
+
+	it("creates a section below every node, without a label until it has text", () => {
+		const { board } = applied(created("section"))
+
+		expect(board.nodes.made).toMatchObject({ kind: "section", x: 5, y: 6 })
+		expect(board.nodes.made).not.toHaveProperty("label")
+		expect(isBelowEvery(board, "made")).toBe(true)
+	})
+
+	it("creates each new section below the last one", () => {
+		const doc = boardDocOf(TWO_NOTES_BOARD)
+		for (const id of ["lower", "lowest"])
+			applyLibraryBoardIntent(doc, created("section", id), LOCAL, authorOf)
+		const board = readBoard(doc)
+
+		expect(isBelowEvery(board, "lower")).toBe(false)
+		expect(isBelowEvery(board, "lowest")).toBe(true)
+		expect(board.nodes.lowest?.z < (board.nodes.lower?.z ?? "")).toBe(true)
 	})
 
 	it("styles a shape back to the surface by dropping its colour", () => {
@@ -104,6 +207,7 @@ describe("applyLibraryBoardIntent", () => {
 				},
 			},
 			LOCAL,
+			authorOf,
 		)
 
 		applyLibraryBoardIntent(
@@ -114,6 +218,7 @@ describe("applyLibraryBoardIntent", () => {
 				style: { shape: "rounded-rectangle", fill: "surface" },
 			},
 			LOCAL,
+			authorOf,
 		)
 
 		const made = readBoard(doc).nodes.made
@@ -166,11 +271,189 @@ describe("applyLibraryBoardIntent", () => {
 		expect(transactions).toBe(1)
 	})
 
-	it("deletes a node with every connector attached to it", () => {
+	it("keeps every connector tied to a deleted node, its end loosened where it sat", () => {
 		const { board } = applied({ type: "delete", id: "second" })
 
 		expect(Object.keys(board.nodes)).toEqual(["first"])
-		expect(board.edges).toEqual({})
+		expect(board.edges.link).toEqual({
+			fromNode: "first",
+			fromEnd: "none",
+			toPoint: { x: 400, y: 50 },
+			toEnd: "arrow",
+			routing: "straight",
+		})
+	})
+
+	it("loosens a centre, a side and an anchor tie at the point each end sat", () => {
+		const { board } = applied(
+			{ type: "delete", id: "finish" },
+			TIED_ARROWS_BOARD,
+		)
+
+		expect(board.edges.pinned).toEqual({
+			fromNode: "start",
+			fromAnchor: { x: 0.25, y: 0 },
+			fromEnd: "none",
+			toPoint: { x: 400, y: 50 },
+			toEnd: "arrow",
+			label: "then",
+			labelPosition: 0.3,
+			bend: 40,
+			routing: "elbow",
+			headSize: "large",
+		})
+		expect(board.edges.centred?.toPoint).toEqual({ x: 500, y: 50 })
+	})
+
+	it("loosens an anchor tie at its point on the board", () => {
+		const { board } = applied(
+			{ type: "delete", id: "start" },
+			TIED_ARROWS_BOARD,
+		)
+
+		expect(board.edges.pinned).not.toHaveProperty("fromNode")
+		expect(board.edges.pinned).not.toHaveProperty("fromAnchor")
+		expect(board.edges.pinned?.fromPoint).toEqual({ x: 50, y: 0 })
+		expect(board.edges.pinned?.toNode).toBe("finish")
+	})
+
+	it("keeps an arrow tied at both ends to a deleted node, both ends free", () => {
+		const { board } = applied(
+			{ type: "delete", id: "finish" },
+			TIED_ARROWS_BOARD,
+		)
+
+		expect(board.edges.loop).toEqual({
+			fromPoint: { x: 500, y: 0 },
+			fromEnd: "none",
+			toPoint: { x: 600, y: 75 },
+			toEnd: "arrow",
+			bend: -20,
+			routing: "straight",
+		})
+	})
+
+	it("keeps the ties and the bend of every arrow when a tied node moves", () => {
+		const { board } = applied(
+			{ type: "move", id: "finish", position: { x: 900, y: 40 } },
+			TIED_ARROWS_BOARD,
+		)
+
+		expect(board.edges).toEqual(TIED_ARROWS_BOARD.edges)
+	})
+
+	it("changes only the routing of an arrow when restyled", () => {
+		const { board } = applied(
+			{ type: "style", id: "pinned", style: { routing: "straight" } },
+			TIED_ARROWS_BOARD,
+		)
+
+		expect(board.edges.pinned).toEqual({
+			...TIED_ARROWS_BOARD.edges.pinned,
+			routing: "straight",
+		})
+	})
+
+	it("changes only the label of an arrow when its text is edited", () => {
+		const { board } = applied(
+			{ type: "edit-text", id: "pinned", text: "after" },
+			TIED_ARROWS_BOARD,
+		)
+
+		expect(board.edges.pinned).toEqual({
+			...TIED_ARROWS_BOARD.edges.pinned,
+			label: "after",
+		})
+	})
+
+	it("draws an arrow from a side to the centre of a node", () => {
+		const { board, transactions } = applied(arrowSet({ fromSide: "right" }))
+
+		expect(board.edges.drawn).toEqual({
+			fromNode: "first",
+			fromSide: "right",
+			fromEnd: "none",
+			toNode: "second",
+			toEnd: "arrow",
+			routing: "straight",
+		})
+		expect(transactions).toBe(1)
+	})
+
+	it("draws an arrow tied to an exact point of a node", () => {
+		const { board } = applied(arrowSet({ toAnchor: { x: 0.25, y: 0.5 } }))
+
+		expect(board.edges.drawn).toMatchObject({
+			toNode: "second",
+			toAnchor: { x: 0.25, y: 0.5 },
+		})
+	})
+
+	it("draws an arrow left untied on a board point", () => {
+		const { board } = applied(arrowSet({ to: "", toPoint: { x: 640, y: 80 } }))
+
+		expect(board.edges.drawn).toEqual({
+			fromNode: "first",
+			fromEnd: "none",
+			toPoint: { x: 640, y: 80 },
+			toEnd: "arrow",
+			routing: "straight",
+		})
+	})
+
+	it("rewrites the ends, bend, label and label position of an arrow, keeping its heads", () => {
+		const { board, transactions } = applied(
+			arrowSet({
+				id: "pinned",
+				from: "start",
+				fromSide: "bottom",
+				to: "",
+				toPoint: { x: 900, y: 300 },
+				routing: "straight",
+				bend: -12,
+				text: "next",
+				labelPosition: 0.5,
+			}),
+			TIED_ARROWS_BOARD,
+		)
+
+		expect(board.edges.pinned).toEqual({
+			fromNode: "start",
+			fromSide: "bottom",
+			fromEnd: "none",
+			toPoint: { x: 900, y: 300 },
+			toEnd: "arrow",
+			label: "next",
+			labelPosition: 0.5,
+			bend: -12,
+			routing: "straight",
+			headSize: "large",
+		})
+		expect(transactions).toBe(1)
+	})
+
+	it("drops the bend and the label an arrow no longer carries", () => {
+		const { board } = applied(
+			arrowSet({
+				id: "pinned",
+				from: "start",
+				fromAnchor: { x: 0.25, y: 0 },
+				to: "finish",
+				toSide: "left",
+				routing: "elbow",
+			}),
+			TIED_ARROWS_BOARD,
+		)
+
+		expect(board.edges.pinned).not.toHaveProperty("bend")
+		expect(board.edges.pinned).not.toHaveProperty("label")
+		expect(board.edges.pinned).not.toHaveProperty("labelPosition")
+	})
+
+	it("refuses an arrow tied to a node the board no longer holds", () => {
+		const { board } = applied(arrowSet({ to: "gone" }))
+
+		expect(board.edges.drawn).toBeUndefined()
 	})
 
 	it("deletes a connector alone", () => {

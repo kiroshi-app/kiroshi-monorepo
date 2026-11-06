@@ -696,9 +696,6 @@ const common = {
 			atRest_other: "Board · {{count}} items · {{edited}}",
 			failed: "Couldn’t read this board. Open it to try again.",
 		},
-		panel: {
-			openInTab: "Open in tab",
-		},
 		libraryCard: {
 			documentMeta: "Document · from the Library",
 		},
@@ -714,14 +711,18 @@ const common = {
 				sticky: "Sticky note",
 				text: "Text",
 				shape: "Shape",
+				section: "Section",
 				image: "Image",
 				link: "Link",
 			},
 			moved: "Moved to {{x}}, {{y}}",
 			resized: "Resized to {{width}} by {{height}}",
 		},
+		connector: {
+			editLabel: "Arrow label",
+		},
 		connectorFlyout: {
-			label: "Connector type",
+			label: "Arrow type",
 			routing: {
 				straight: "Straight",
 				elbow: "Elbow",
@@ -753,7 +754,7 @@ const common = {
 				sticky: "Sticky note",
 				shape: "Shape",
 				text: "Text",
-				connector: "Connector",
+				connector: "Arrow",
 				section: "Section",
 				image: "Image",
 				library: "Library",

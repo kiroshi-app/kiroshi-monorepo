@@ -229,6 +229,7 @@ interface AppSidebarProps
 		TitleBarTabsProps {
 	bots: AppSidebarBot[]
 	haveBotsFailedToLoad?: boolean
+	onRetryLoadBots?: () => void
 	rosterSkeleton?: ReactNode
 	rosterListEnd?: ListEnd
 	botsBySpaceId?: Record<string, AppSidebarBot[]>

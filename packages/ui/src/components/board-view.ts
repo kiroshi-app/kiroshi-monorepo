@@ -15,7 +15,7 @@ type BoardSize = {
 
 type BoardRect = BoardPoint & BoardSize
 
-type BoardItemKind = "sticky" | "text" | "shape" | "image" | "link"
+type BoardItemKind = "sticky" | "text" | "shape" | "section" | "image" | "link"
 
 type BoardShapeType = BoardShapeKind
 
@@ -38,6 +38,8 @@ type BoardSide = "top" | "right" | "bottom" | "left"
 
 type BoardRouting = "straight" | "elbow"
 
+type BoardArrowHeadSize = "small" | "medium" | "large"
+
 type BoardConnectorStyle = {
 	routing: BoardRouting
 }
@@ -46,10 +48,17 @@ type BoardConnector = {
 	id: string
 	kind: "connector"
 	from: string
-	fromSide: BoardSide
+	fromSide?: BoardSide
+	fromAnchor?: BoardPoint
+	fromPoint?: BoardPoint
 	to: string
-	toSide: BoardSide
+	toSide?: BoardSide
+	toAnchor?: BoardPoint
+	toPoint?: BoardPoint
 	routing: BoardRouting
+	bend?: number
+	labelPosition?: number
+	headSize?: BoardArrowHeadSize
 	zOrder: number
 	text: string
 }
@@ -85,9 +94,11 @@ type BoardIntent =
 			toSide: BoardSide
 			routing: BoardRouting
 	  }
+	| { type: "set-arrow"; arrow: BoardConnector }
 	| { type: "delete"; id: string }
 
 export type {
+	BoardArrowHeadSize,
 	BoardConnector,
 	BoardConnectorStyle,
 	BoardIntent,

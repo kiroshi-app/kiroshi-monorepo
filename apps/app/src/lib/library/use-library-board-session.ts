@@ -1,6 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react"
+import {
+	useCallback,
+	useEffect,
+	useMemo,
+	useState,
+	useSyncExternalStore,
+} from "react"
 
+import type { Author } from "@workspace/shared/board/board"
 import type { BoardIntent } from "@workspace/ui/components/board-view"
 import { i18n } from "@workspace/ui/lib/i18n"
 
@@ -16,6 +23,8 @@ import { openLibraryDocument } from "./library-reads"
 
 import type { LibraryDocumentState } from "../bindings"
 import { failureReporterIn } from "../failure-report"
+import { useSignedInAccountId } from "../account/use-account"
+import { currentWindowLabel } from "../host/index"
 
 const RAISED_IN = "use-library-board-session"
 
@@ -45,8 +54,20 @@ const useApplyLibraryBoardUpdate = (spaceId: string, name: string) => {
 	return mutateAsync
 }
 
+const useCurrentAuthor = () => {
+	const signedInAccountId = useSignedInAccountId()
+	return useCallback(
+		(): Author => ({
+			kind: "person",
+			id: signedInAccountId() ?? currentWindowLabel(),
+		}),
+		[signedInAccountId],
+	)
+}
+
 export const useLibraryBoardSession = (spaceId: string, name: string) => {
 	const send = useApplyLibraryBoardUpdate(spaceId, name)
+	const authorOf = useCurrentAuthor()
 	const feed = useMemo(
 		() => createLibraryDocumentFeed(spaceId, name),
 		[spaceId, name],
@@ -86,6 +107,7 @@ export const useLibraryBoardSession = (spaceId: string, name: string) => {
 			live = createLibraryBoardSession({
 				state: openedState.update,
 				send,
+				authorOf,
 				onRefused: () => {
 					void reportFailure(
 						{ title: i18n.t("common:library.failure.board.refused") },
@@ -111,7 +133,7 @@ export const useLibraryBoardSession = (spaceId: string, name: string) => {
 			void live.close()
 			setOpenedSession((current) => (current === live ? null : current))
 		}
-	}, [openedState, send, feed, spaceId])
+	}, [openedState, send, feed, spaceId, authorOf])
 
 	const view = useSyncExternalStore(
 		session?.subscribe ?? subscribeToNothing,

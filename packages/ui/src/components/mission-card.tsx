@@ -7,7 +7,6 @@ import type { BotBadge } from "@workspace/ui/components/bot-badge"
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
 import {
 	MESSAGE_BUBBLE_INTERACTIVE,
-	MESSAGE_BUBBLE_PADDING_INSET,
 	MessageBubble,
 	MessageBubbleContent,
 } from "@workspace/ui/components/message-bubble"
@@ -58,6 +57,7 @@ type MissionCardProps = Omit<MissionCardModel, "author"> & {
 	onOpen: (missionId: string, modifiers: ClickModifiers) => void
 	surface?: MissionCardSurface
 	isActive?: boolean
+	foot?: ReactNode
 	className?: string
 }
 
@@ -130,6 +130,7 @@ const CardDensity = ({
 	lastActivity,
 	surface,
 	onOpen,
+	foot,
 	className,
 }: MissionDensityProps) => {
 	const { t } = useTranslation("chat")
@@ -138,13 +139,17 @@ const CardDensity = ({
 
 	return (
 		<MessageBubble className={className} variant="soft">
-			<MessageBubbleContent {...surface} className={MESSAGE_BUBBLE_INTERACTIVE}>
+			<MessageBubbleContent
+				{...surface}
+				className={cn(
+					MESSAGE_BUBBLE_INTERACTIVE,
+					"[&>[data-slot=message-bubble-text]]:static",
+				)}
+				foot={foot}
+			>
 				<button
 					aria-label={t("missions.card.open", { objective })}
-					className={cn(
-						"absolute rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-ring",
-						MESSAGE_BUBBLE_PADDING_INSET,
-					)}
+					className="absolute inset-0 rounded-bubble outline-none focus-visible:ring-2 focus-visible:ring-ring"
 					{...clickHandlersFor((modifiers) => onOpen(id, modifiers))}
 					type="button"
 				/>

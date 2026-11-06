@@ -33,16 +33,19 @@ mkdirSync(join(HOME, ".ssh"))
 writeFileSync(PRODUCED, "png")
 writeFileSync(SECRET, "png")
 
-const A_WRITE = { name: "notes.md", text: "A paragraph.", after: "# Notes" }
+const AN_INSERT = {
+	name: "notes.md",
+	after: "k3f9a2",
+	markdown: "A paragraph.",
+}
 
-const A_REPLACE = { name: "notes.md", text: "# Launch", replace: "# Draft" }
-
-const A_WHOLE_REPLACE = { name: "notes.md", text: "# Launch", whole: true }
+const A_REPLACE = { name: "notes.md", id: "k3f9a2", markdown: "# Launch" }
 
 const A_REFUSAL = { kind: "missing", name: "notes.md" }
 
 const A_DIAGRAM = {
 	name: "plan.canvas",
+	mode: "insert",
 	nodes: [
 		{ key: "idea", kind: "sticky", text: "Idea" },
 		{
@@ -52,8 +55,10 @@ const A_DIAGRAM = {
 			place: { side: "right", of: "idea" },
 		},
 	],
-	edges: [{ from: "idea", to: "build", label: "then" }],
+	arrows: [{ key: "then", fromNode: "idea", toNode: "build", label: "then" }],
 }
+
+const A_HEADER = { name: "plan.canvas", updatedAt: 1, hash: "ab" }
 
 type Asked = { subtype: string; operation: string; payload: unknown }
 
@@ -96,22 +101,36 @@ afterEach(() => {
 })
 
 describe("libraryTools", () => {
-	it("serves the eight library tools, the tool that posts a document and the five board tools", () => {
+	it("serves the seven library tools, the tool that posts a document, the seven document tools, the twelve board tools and screenshot", () => {
 		expect(tools.map((held) => held.name)).toEqual([
 			"library_list",
 			"library_search",
 			"library_read",
 			"library_create",
-			"library_write",
 			"library_import",
 			"library_rename",
 			"library_delete",
 			"conversation_post_document",
+			"document_info",
+			"document_tree",
+			"document_read_block",
+			"document_insert_after",
+			"document_replace_block",
+			"document_delete_block",
+			"document_find",
 			"board_create",
-			"board_read",
-			"board_add",
+			"board_info",
+			"board_tree",
+			"board_node_info",
+			"board_canvas",
+			"board_write",
 			"board_update",
-			"board_remove",
+			"board_move",
+			"board_duplicate",
+			"board_delete",
+			"board_find",
+			"board_view",
+			"screenshot",
 		])
 	})
 
@@ -132,14 +151,6 @@ describe("libraryTools", () => {
 		expect(fieldsOf("library_search").required).toEqual(["query"])
 		expect(fieldsOf("library_read").required).toEqual(["name"])
 		expect(fieldsOf("library_create").required).toEqual(["name"])
-		expect(fieldsOf("library_write").required).toEqual(["name", "text"])
-		expect(Object.keys(fieldsOf("library_write").properties ?? {})).toEqual([
-			"name",
-			"text",
-			"after",
-			"replace",
-			"whole",
-		])
 		expect(fieldsOf("library_import").required).toEqual(["path"])
 		expect(Object.keys(fieldsOf("library_import").properties ?? {})).toEqual([
 			"path",
@@ -148,25 +159,87 @@ describe("libraryTools", () => {
 		expect(fieldsOf("library_rename").required).toEqual(["name", "newName"])
 		expect(fieldsOf("library_delete").required).toEqual(["name"])
 		expect(fieldsOf("conversation_post_document").required).toEqual(["name"])
+		expect(fieldsOf("document_info").required).toEqual(["name"])
+		expect(fieldsOf("document_tree").required).toEqual(["name"])
+		expect(fieldsOf("document_read_block").required).toEqual(["name", "id"])
+		expect(fieldsOf("document_insert_after").required).toEqual([
+			"name",
+			"markdown",
+		])
+		expect(
+			Object.keys(fieldsOf("document_insert_after").properties ?? {}),
+		).toEqual(["name", "after", "markdown"])
+		expect(fieldsOf("document_replace_block").required).toEqual([
+			"name",
+			"id",
+			"markdown",
+		])
+		expect(fieldsOf("document_delete_block").required).toEqual(["name", "ids"])
+		expect(fieldsOf("document_find").required).toEqual(["name", "text"])
 		expect(fieldsOf("board_create").required).toEqual(["name"])
-		expect(fieldsOf("board_read").required).toEqual(["name"])
-		expect(fieldsOf("board_add").required).toEqual(["name", "nodes"])
-		expect(fieldsOf("board_update").required).toEqual(["name", "nodes"])
-		expect(fieldsOf("board_remove").required).toEqual(["name", "ids"])
+		expect(fieldsOf("board_info").required).toEqual(["name"])
+		expect(fieldsOf("board_tree").required).toEqual(["name"])
+		expect(Object.keys(fieldsOf("board_tree").properties ?? {})).toEqual([
+			"name",
+			"parent",
+			"depth",
+		])
+		expect(fieldsOf("board_node_info").required).toEqual(["name"])
+		expect(fieldsOf("board_canvas").required).toEqual(["name"])
+		expect(fieldsOf("board_write").required).toEqual(["name", "mode"])
+		expect(fieldsOf("board_update").required).toEqual(["name"])
+		expect(fieldsOf("board_move").required).toEqual(["name", "nodes", "x", "y"])
+		expect(fieldsOf("board_duplicate").required).toEqual(["name", "nodes"])
+		expect(fieldsOf("board_delete").required).toEqual(["name"])
+		expect(fieldsOf("board_find").required).toEqual(["name"])
+		expect(fieldsOf("board_view").required).toEqual(["name", "id"])
+		expect(fieldsOf("screenshot").required).toEqual(["name"])
 	})
 
 	it("hands each board call to the library host of its session under its operation", async () => {
 		const asked = aHost(() => ({ result: {} }))
 		const calls: [string, string, Record<string, unknown>][] = [
 			["board_create", "boardCreate", { name: "plan.canvas" }],
-			["board_read", "boardRead", { name: "plan.canvas" }],
-			["board_add", "boardAdd", A_DIAGRAM],
+			["board_info", "boardInfo", { name: "plan.canvas" }],
+			[
+				"board_tree",
+				"boardTree",
+				{ name: "plan.canvas", parent: "s", depth: 2 },
+			],
+			[
+				"board_node_info",
+				"boardNodeInfo",
+				{ name: "plan.canvas", nodes: ["n1"], arrows: ["a1"] },
+			],
+			["board_canvas", "boardCanvas", { name: "plan.canvas", parent: "s" }],
+			["board_write", "boardWrite", A_DIAGRAM],
 			[
 				"board_update",
 				"boardUpdate",
-				{ name: "plan.canvas", nodes: [{ id: "n1", text: "Ship" }] },
+				{
+					name: "plan.canvas",
+					nodes: [{ id: "n1", text: "Ship" }],
+					arrows: [{ id: "a1", toSide: "top", bend: 20 }],
+				},
 			],
-			["board_remove", "boardRemove", { name: "plan.canvas", ids: ["n1"] }],
+			[
+				"board_move",
+				"boardMove",
+				{ name: "plan.canvas", nodes: ["n1"], parent: "s", x: 0, y: 40 },
+			],
+			[
+				"board_duplicate",
+				"boardDuplicate",
+				{ name: "plan.canvas", nodes: ["n1"] },
+			],
+			[
+				"board_delete",
+				"boardDelete",
+				{ name: "plan.canvas", nodes: ["n1"], arrows: ["a1"] },
+			],
+			["board_find", "boardFind", { name: "plan.canvas", text: "ship" }],
+			["board_view", "boardView", { name: "plan.canvas", id: "n1" }],
+			["screenshot", "screenshot", { name: "plan.canvas", id: "n1", scale: 2 }],
 		]
 
 		for (const [name, , input] of calls) {
@@ -182,6 +255,111 @@ describe("libraryTools", () => {
 		)
 	})
 
+	it("shows an image node a person dropped on a board to the model as image content with the board header", async () => {
+		const asked = aHost(() => ({
+			result: {
+				header: A_HEADER,
+				form: "image",
+				name: "cat.png",
+				mimeType: "image/png",
+				content: "cG5n",
+			},
+		}))
+
+		const result = await called("board_view", {
+			name: "plan.canvas",
+			id: "photo",
+		})
+
+		expect(asked).toEqual([
+			{
+				subtype: "library",
+				operation: "boardView",
+				payload: { name: "plan.canvas", id: "photo" },
+			},
+		])
+		expect(result.content).toEqual([
+			{ type: "image", data: "cG5n", mimeType: "image/png" },
+			{ type: "text", text: JSON.stringify({ header: A_HEADER }) },
+		])
+		expect(result.isError).toBeUndefined()
+	})
+
+	it("answers a screenshot as an image block with the header and the rendered width, height and scale", async () => {
+		const rendered = { width: 640, height: 320, scale: 2 }
+		const asked = aHost(() => ({
+			result: {
+				header: A_HEADER,
+				rendered,
+				form: "image",
+				name: "plan.canvas",
+				mimeType: "image/png",
+				content: "cG5n",
+			},
+		}))
+
+		const result = await called("screenshot", { name: "plan.canvas", scale: 2 })
+
+		expect(asked).toEqual([
+			{
+				subtype: "library",
+				operation: "screenshot",
+				payload: { name: "plan.canvas", scale: 2 },
+			},
+		])
+		expect(result.content).toEqual([
+			{ type: "image", data: "cG5n", mimeType: "image/png" },
+			{ type: "text", text: JSON.stringify({ header: A_HEADER, rendered }) },
+		])
+		expect(result.isError).toBeUndefined()
+	})
+
+	it("speaks back a screenshot that timed out, with no image", async () => {
+		const refusal = { kind: "renderTimedOut", seconds: 15 }
+		aHost(() => ({ error: refusal }))
+
+		const result = await called("screenshot", { name: "plan.canvas" })
+
+		expect(result.isError).toBe(true)
+		expect(result.content).toHaveLength(1)
+		expect(spoken(result)).toEqual(refusal)
+	})
+
+	for (const [what, refusal] of [
+		[
+			"a sticky",
+			{
+				kind: "nodeNotShown",
+				id: "note",
+				reason: "notAnImage",
+				nodeKind: "sticky",
+			},
+		],
+		[
+			"an image whose file is missing",
+			{
+				kind: "nodeNotShown",
+				id: "lost",
+				reason: "missingFile",
+				file: "gone.png",
+			},
+		],
+	] as const) {
+		it(`refuses a board view of ${what} with the node id and the reason, and shows no image`, async () => {
+			aHost(() => ({ error: refusal }))
+
+			const result = await called("board_view", {
+				name: "plan.canvas",
+				id: refusal.id,
+			})
+
+			expect(result.isError).toBe(true)
+			expect(result.content).toHaveLength(1)
+			expect(result.content[0]?.type).toBe("text")
+			expect(spoken(result)).toEqual(refusal)
+		})
+	}
+
 	it("speaks back the index and the reason of a refused board item", async () => {
 		const refusal = {
 			kind: "invalidBoardItem",
@@ -191,7 +369,7 @@ describe("libraryTools", () => {
 		}
 		aHost(() => ({ error: refusal }))
 
-		const result = await called("board_add", A_DIAGRAM)
+		const result = await called("board_write", A_DIAGRAM)
 
 		expect(spoken(result)).toEqual(refusal)
 		expect(result.isError).toBe(true)
@@ -203,9 +381,26 @@ describe("libraryTools", () => {
 			["library_list", "list", { kind: "image", limit: 2, cursor: "c" }],
 			["library_search", "search", { query: "roadmap" }],
 			["library_create", "create", { name: "a.md", template: "meeting-notes" }],
-			["library_write", "write", A_WRITE],
-			["library_write", "write", A_REPLACE],
-			["library_write", "write", A_WHOLE_REPLACE],
+			["document_info", "documentInfo", { name: "notes.md" }],
+			["document_tree", "documentTree", { name: "notes.md" }],
+			[
+				"document_read_block",
+				"documentReadBlock",
+				{ name: "notes.md", id: "k3f9a2" },
+			],
+			["document_insert_after", "documentInsertAfter", AN_INSERT],
+			[
+				"document_insert_after",
+				"documentInsertAfter",
+				{ name: "notes.md", markdown: "# Notes" },
+			],
+			["document_replace_block", "documentReplaceBlock", A_REPLACE],
+			[
+				"document_delete_block",
+				"documentDeleteBlock",
+				{ name: "notes.md", ids: ["k3f9a2", "p0q1r2"] },
+			],
+			["document_find", "documentFind", { name: "notes.md", text: "launch" }],
 			["library_rename", "rename", { name: "a.md", newName: "b.md" }],
 			["library_delete", "delete", { name: "b.md" }],
 		]
@@ -223,14 +418,47 @@ describe("libraryTools", () => {
 		)
 	})
 
-	it("speaks a written answer back as text", async () => {
-		const answer = { name: "notes.md", characters: 12 }
+	it("speaks the ids of the written blocks back as text", async () => {
+		const answer = { name: "notes.md", ids: ["m4n5o6"] }
 		aHost(() => ({ result: answer }))
 
-		const result = await called("library_write", A_WRITE)
+		const result = await called("document_insert_after", AN_INSERT)
 
 		expect(spoken(result)).toEqual(answer)
 		expect(result.isError).toBeUndefined()
+	})
+
+	it("speaks back the refusal naming a block id absent from the document and the tool that lists them", async () => {
+		const refusal = {
+			kind: "blockNotFound",
+			id: "zzzzzz",
+			detail:
+				"no block of this document holds this id: call document_tree for the ids it holds",
+		}
+		aHost(() => ({ error: refusal }))
+
+		const result = await called("document_replace_block", {
+			...A_REPLACE,
+			id: "zzzzzz",
+		})
+
+		expect(spoken(result)).toEqual(refusal)
+		expect(result.isError).toBe(true)
+	})
+
+	it("tells the agent to read the tree first and to target a block by its id", () => {
+		expect(theTool("document_tree").description).toContain(
+			"Read the tree before you change a document",
+		)
+		for (const name of [
+			"document_read_block",
+			"document_replace_block",
+			"document_delete_block",
+		]) {
+			expect(JSON.stringify(fieldsOf(name))).toContain(
+				"as document_tree answered",
+			)
+		}
 	})
 
 	it("shows an image read to the model as image content", async () => {
@@ -292,14 +520,38 @@ describe("libraryTools", () => {
 	})
 
 	it("tells the agent that changing an item edits it in place, never a new one", () => {
-		expect(theTool("library_write").description).toContain(
+		expect(theTool("document_replace_block").description).toContain(
 			"editing it here in place, never creating a new one",
 		)
 		expect(theTool("library_import").description).toContain(
 			"replaces it in place, never adding a new one",
 		)
 		expect(theTool("library_create").description).toContain(
-			"write in it with library_write, never create another one",
+			"edit its blocks with document_tree then document_replace_block or document_insert_after, never create another one",
+		)
+	})
+
+	it("calls a board arrow an arrow in every board tool and field description", () => {
+		const descriptionsIn = (schema: unknown): string[] => {
+			if (typeof schema !== "object" || schema === null) return []
+			return Object.entries(schema).flatMap(([field, value]) =>
+				field === "description" && typeof value === "string"
+					? [value]
+					: descriptionsIn(value),
+			)
+		}
+		const boardTools = tools.filter((held) => held.name.startsWith("board_"))
+		for (const held of boardTools) {
+			const descriptions = [
+				held.description,
+				...descriptionsIn(fieldsOf(held.name)),
+			]
+			for (const description of descriptions) {
+				expect(description).not.toMatch(/\b(edge|connector)s?\b/i)
+			}
+		}
+		expect(theTool("board_write").description).toContain(
+			"An arrow names its ends",
 		)
 	})
 

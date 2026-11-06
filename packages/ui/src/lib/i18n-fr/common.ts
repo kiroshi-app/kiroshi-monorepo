@@ -729,9 +729,6 @@ const common = {
 			atRest_other: "Tableau · {{count}} éléments · {{edited}}",
 			failed: "Impossible de lire ce tableau. Ouvrez-le pour réessayer.",
 		},
-		panel: {
-			openInTab: "Ouvrir dans un onglet",
-		},
 		libraryCard: {
 			documentMeta: "Document · depuis la Bibliothèque",
 		},
@@ -747,14 +744,18 @@ const common = {
 				sticky: "Note autocollante",
 				text: "Texte",
 				shape: "Forme",
+				section: "Section",
 				image: "Image",
 				link: "Lien",
 			},
 			moved: "Déplacé en {{x}}, {{y}}",
 			resized: "Redimensionné à {{width}} sur {{height}}",
 		},
+		connector: {
+			editLabel: "Libellé de la flèche",
+		},
 		connectorFlyout: {
-			label: "Type de lien",
+			label: "Type de flèche",
 			routing: {
 				straight: "Droit",
 				elbow: "Coudé",
@@ -786,7 +787,7 @@ const common = {
 				sticky: "Note autocollante",
 				shape: "Forme",
 				text: "Texte",
-				connector: "Liaison",
+				connector: "Flèche",
 				section: "Section",
 				image: "Image",
 				library: "Bibliothèque",

@@ -119,6 +119,8 @@ type SkeletonRowProps = {
 	titleClassName: string
 	stampClassName: string
 	previewClassName: string
+	titleTrailing?: ReactNode
+	previewTrailing?: ReactNode
 }
 
 const SkeletonRow = ({
@@ -126,16 +128,22 @@ const SkeletonRow = ({
 	titleClassName,
 	stampClassName,
 	previewClassName,
+	titleTrailing,
+	previewTrailing,
 }: SkeletonRowProps) => (
 	<div className="flex items-center gap-2.5 py-1.5 ps-1.5 pe-3">
 		<SkeletonHexagon className={hexagonClassName} />
 		<div className="flex min-w-0 flex-1 flex-col">
 			<div className="flex h-5 items-center justify-between">
-				<SkeletonBar className={titleClassName} />
+				<div className="flex min-w-0 items-center gap-1.5">
+					<SkeletonBar className={titleClassName} />
+					{titleTrailing}
+				</div>
 				<SkeletonBar className={stampClassName} isFaint />
 			</div>
-			<div className="flex h-4 items-center">
+			<div className="flex h-4 items-center justify-between gap-2">
 				<SkeletonBar className={previewClassName} isFaint />
+				{previewTrailing}
 			</div>
 		</div>
 	</div>

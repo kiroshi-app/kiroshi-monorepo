@@ -9,6 +9,7 @@ import {
 	within,
 } from "storybook/test"
 
+import boardSchema from "@workspace/shared/board/board.schema.json"
 import preview from "@workspace/storybook/preview"
 import {
 	colourTransitionsOf,
@@ -32,6 +33,7 @@ import type { BoardClientPoint } from "@workspace/ui/components/board/board-dock
 import { BoardImage } from "@workspace/ui/components/board/board-image"
 import { BoardLinkCard } from "@workspace/ui/components/board/board-link-card"
 import type { BoardObjectOutlineSpec } from "@workspace/ui/components/board/board-presence"
+import { BoardSection } from "@workspace/ui/components/board/board-section"
 import { BoardShape } from "@workspace/ui/components/board/board-shape"
 import { BoardSticky } from "@workspace/ui/components/board/board-sticky"
 import { BoardText } from "@workspace/ui/components/board/board-text"
@@ -40,11 +42,14 @@ import {
 	type BoardCanvasProps,
 } from "@workspace/ui/components/board-canvas"
 import type {
+	BoardConnector,
 	BoardIntent,
 	BoardItem,
 	BoardObject,
 	BoardPaste,
 	BoardPoint,
+	BoardRect,
+	BoardSize,
 	BoardView,
 	BoardViewport,
 } from "@workspace/ui/components/board-view"
@@ -189,7 +194,7 @@ const patched = (object: BoardObject, intent: BoardIntent): BoardObject => {
 const applyIntent = (view: BoardView, intent: BoardIntent): BoardView => {
 	switch (intent.type) {
 		case "create":
-			return view
+			return { objects: [...view.objects, intent.object] }
 		case "connect": {
 			const { type, ...connector } = intent
 			return {
@@ -197,6 +202,17 @@ const applyIntent = (view: BoardView, intent: BoardIntent): BoardView => {
 					...view.objects,
 					{ ...connector, kind: "connector", zOrder: 0, text: "" },
 				],
+			}
+		}
+		case "set-arrow": {
+			const { arrow } = intent
+			const isKnown = view.objects.some((object) => object.id === arrow.id)
+			return {
+				objects: isKnown
+					? view.objects.map((object) =>
+							object.id === arrow.id ? arrow : object,
+						)
+					: [...view.objects, arrow],
 			}
 		}
 		case "delete":
@@ -301,7 +317,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The board of a Space in its own tab: a dot grid the board slides over, the objects it mounts through `renderObject`, and the zoom control at the bottom end corner. The viewport is controlled: two-finger scroll, the mouse wheel and the arrow keys with nothing selected pan, a pinch zooms around the pointer, the buttons step the zoom around the centre, and every move goes out through `onViewportChange`. Only the objects inside the visible area plus a margin are mounted. A press or Tab selects an object and draws its frame and corner handles in the Space colour, a selected shape gets its style bar above it, and every move, resize, text edit, style pick or delete goes out through `onIntent` as a `BoardIntent`: the canvas never changes the board itself. Connectors are drawn by the canvas from the live rects of their ends, Straight or Elbow: with `isConnecting` on, a hovered object shows its outline and four anchors, a drag from one anchor to another object's anchor sends a connect intent, and the flyout picks the kind of the next connector or of the selected one. The tool dock sits centred at the bottom with the Library picker above it, a Library tile dragged onto the board emits `onLibraryItemDrop` with the board point, a link, an image or files pasted on the focused board emit `onPaste` with the centre of the view and the object whose id it returns gets selected, and files dragged in from the desktop show the drop target and emit `onDropFiles` where they land, and a link dragged in shows it too and emits `onDropUrl` with the first link of the list and the board point whatever its scheme, the app deciding what it becomes.",
+					"The board of a Space in its own tab: a dot grid the board slides over, the objects it mounts through `renderObject`, and the zoom control at the bottom end corner. The viewport is controlled: two-finger scroll, the mouse wheel and the arrow keys with nothing selected pan, a pinch zooms around the pointer, the buttons step the zoom around the centre, and every move goes out through `onViewportChange`. Only the objects inside the visible area plus a margin are mounted. A press or Tab selects an object and draws its frame and corner handles in the Space colour, a selected shape gets its style bar above it, and every move, resize, text edit, style pick or delete goes out through `onIntent` as a `BoardIntent`: the canvas never changes the board itself. Connectors are drawn by the canvas from the live rects of their ends, Straight or Elbow: with `isConnecting` on, a hovered object shows its outline and four anchors, a drag from one anchor to another object's anchor sends a connect intent, and the flyout picks the kind of the next connector, Elbow until changed, or of the selected one. The tool dock sits centred at the bottom with the Library picker above it, a Library tile dragged onto the board emits `onLibraryItemDrop` with the board point, a link, an image or files pasted on the focused board emit `onPaste` with the centre of the view and the object whose id it returns gets selected, and files dragged in from the desktop show the drop target and emit `onDropFiles` where they land, and a link dragged in shows it too and emits `onDropUrl` with the first link of the list and the board point whatever its scheme, the app deciding what it becomes.",
 			},
 		},
 	},
@@ -618,6 +634,206 @@ export const FiveHundredObjectsDark = meta.story({
 	},
 })
 
+const OPENING_MARGIN = 64
+
+const stickyAt = (id: string, x: number, y: number): BoardItem => ({
+	id,
+	kind: "sticky",
+	position: { x, y },
+	size: NOTE_SIZE,
+	zOrder: 1,
+	text: id,
+})
+
+const SPREAD_BOARD: BoardView = {
+	objects: [
+		stickyAt("Far west", 4000, -3000),
+		stickyAt("Far east", 7400, -2200),
+		stickyAt("Far south", 5200, -900),
+		{
+			id: "Far link",
+			kind: "connector",
+			from: "Far west",
+			fromSide: "right",
+			to: "Far east",
+			toSide: "left",
+			routing: "straight",
+			zOrder: 0,
+			text: "",
+		},
+	],
+}
+
+const TWO_STICKIES_BOARD: BoardView = {
+	objects: [stickyAt("Left", -420, 260), stickyAt("Right", -200, 300)],
+}
+
+const innerBoxOf = (board: HTMLElement) => {
+	const rect = board.getBoundingClientRect()
+	const x = rect.x + board.clientLeft
+	const y = rect.y + board.clientTop
+	return {
+		x,
+		y,
+		right: x + board.clientWidth,
+		bottom: y + board.clientHeight,
+	}
+}
+
+const shownContentOf = (board: HTMLElement) => {
+	const rects = slotsIn(board, "board-object").map((node) =>
+		node.getBoundingClientRect(),
+	)
+	return {
+		x: Math.min(...rects.map((rect) => rect.left)),
+		y: Math.min(...rects.map((rect) => rect.top)),
+		right: Math.max(...rects.map((rect) => rect.right)),
+		bottom: Math.max(...rects.map((rect) => rect.bottom)),
+	}
+}
+
+const expectOpenedCentred = async (
+	canvasElement: HTMLElement,
+	args: BoardCanvasProps,
+	expectedZoomOf: (box: BoardSize, margin: number) => number,
+) => {
+	const board = slotIn(canvasElement, "board-canvas")
+	const objectCount = args.view.objects.filter(
+		(object) => object.kind !== "connector",
+	).length
+	await waitFor(() =>
+		expect(slotsIn(board, "board-object")).toHaveLength(objectCount),
+	)
+	const dockTop = slotIn(board, "board-dock").getBoundingClientRect().top
+	const margin = board.getBoundingClientRect().bottom - dockTop + OPENING_MARGIN
+	const zoom = expectedZoomOf(
+		{ width: board.clientWidth, height: board.clientHeight },
+		margin,
+	)
+	await expect(slotIn(board, "board-zoom-level")).toHaveTextContent(
+		`${Math.round(zoom * 100)}%`,
+	)
+	await expect(args.onViewportChange).toHaveBeenCalledOnce()
+	await expect(args.onViewportChange).toHaveBeenCalledWith(
+		expect.objectContaining({ zoom }),
+	)
+
+	const box = innerBoxOf(board)
+	const content = shownContentOf(board)
+	const gaps = {
+		start: content.x - box.x,
+		end: box.right - content.right,
+		top: content.y - box.y,
+		bottom: box.bottom - content.bottom,
+	}
+	await expect(Math.abs(gaps.start - gaps.end)).toBeLessThanOrEqual(1)
+	await expect(Math.abs(gaps.top - gaps.bottom)).toBeLessThanOrEqual(1)
+	return { board, content, dockTop, gaps, margin }
+}
+
+const SPREAD_BOUNDS = { width: 3560, height: 2220 }
+
+export const OpensFramedOnSpreadContent = meta.story({
+	args: { view: SPREAD_BOARD, viewport: null },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A board whose three stickies and connector sit thousands of pixels from the origin, opened with no viewport placed. Check the content centred in the canvas below 100%, the same margin on the two edges of the axis that limits the fit, wide enough that the content ends 64px above the top of the dock, the zoom control reading that zoom, the placed viewport sent once, and no refit when a sticky then moves. Pick OpensFramedOnSpreadContentDark for the dark theme, OpensAtFullSizeOnTwoStickies for content that already fits.",
+			},
+		},
+	},
+	play: async ({ canvasElement, args }) => {
+		const { board, content, dockTop, gaps, margin } = await expectOpenedCentred(
+			canvasElement,
+			args,
+			(box, margin) =>
+				Math.min(
+					(box.width - 2 * margin) / SPREAD_BOUNDS.width,
+					(box.height - 2 * margin) / SPREAD_BOUNDS.height,
+				),
+		)
+		await expect(Math.min(gaps.start, gaps.top) - margin).toBeCloseTo(0, 0)
+		await expect(content.bottom + OPENING_MARGIN).toBeLessThanOrEqual(
+			dockTop + 1,
+		)
+
+		const level = slotIn(board, "board-zoom-level").textContent
+		await userEvent.click(objectNode(board, "Far west") as HTMLElement)
+		await userEvent.keyboard("{ArrowRight}")
+		await waitFor(() => expect(args.onIntent).toHaveBeenCalled())
+		await expect(args.onViewportChange).toHaveBeenCalledOnce()
+		await expect(slotIn(board, "board-zoom-level")).toHaveTextContent(
+			level ?? "",
+		)
+	},
+})
+
+export const OpensFramedOnSpreadContentDark = meta.story({
+	globals: { theme: "dark" },
+	args: OpensFramedOnSpreadContent.input.args,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The spread board opening framed in the dark theme. Check the #161618 surface, then the same centring, margin, zoom and single placement as OpensFramedOnSpreadContent.",
+			},
+		},
+	},
+	play: async (context) => {
+		await expectDarkSurface(context.canvasElement)
+		await OpensFramedOnSpreadContent.input.play?.(context)
+	},
+})
+
+export const OpensFramedThroughConsumerPadding = meta.story({
+	tags: ["test-only"],
+	args: { ...OpensFramedOnSpreadContent.input.args, className: "p-10" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The spread board opened with a className that pads the canvas. Check the same fitted zoom, centring and dock clearance as OpensFramedOnSpreadContent: padding never moves the opening.",
+			},
+		},
+	},
+	play: async (context) => {
+		await OpensFramedOnSpreadContent.input.play?.(context)
+	},
+})
+
+export const OpensAtFullSizeOnTwoStickies = meta.story({
+	args: { view: TWO_STICKIES_BOARD, viewport: null },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Two small stickies away from the origin, opened with no viewport placed. Check the board opening at 100% rather than magnified, the two stickies centred in the canvas, and the placed viewport sent once. Pick OpensAtFullSizeOnTwoStickiesDark for the dark theme.",
+			},
+		},
+	},
+	play: async ({ canvasElement, args }) => {
+		await expectOpenedCentred(canvasElement, args, () => 1)
+	},
+})
+
+export const OpensAtFullSizeOnTwoStickiesDark = meta.story({
+	globals: { theme: "dark" },
+	args: OpensAtFullSizeOnTwoStickies.input.args,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The two stickies opening at 100% in the dark theme. Check the #161618 surface, then the same centring and zoom as OpensAtFullSizeOnTwoStickies.",
+			},
+		},
+	},
+	play: async (context) => {
+		await expectDarkSurface(context.canvasElement)
+		await OpensAtFullSizeOnTwoStickies.input.play?.(context)
+	},
+})
+
 export const ZoomAtMinimum = meta.story({
 	args: {
 		view: FIVE_HUNDRED_OBJECTS,
@@ -740,10 +956,16 @@ const SELECTION_ARGS = {
 	renderObject: (object: BoardItem) => <BoardObjectView object={object} />,
 }
 
+type HeldKeys = {
+	altKey?: boolean
+	ctrlKey?: boolean
+}
+
 const pointerAt = (
 	type: string,
 	target: EventTarget,
 	at: { clientX: number; clientY: number },
+	keys: HeldKeys = {},
 ) =>
 	target.dispatchEvent(
 		new PointerEvent(type, {
@@ -753,6 +975,7 @@ const pointerAt = (
 			isPrimary: true,
 			pointerId: 1,
 			...at,
+			...keys,
 		}),
 	)
 
@@ -1975,13 +2198,16 @@ const CONNECTED_ARGS = {
 	renderObject: (object: BoardItem) => <BoardObjectView object={object} />,
 }
 
-const STRAIGHT_PATH = "M224 144 L344 304"
+const STRAIGHT_PATH = "M204.8 126.4 L315.2 273.6"
 const ELBOW_PATH =
-	"M224 144 L276 144 Q284 144 284 152 L284 296 Q284 304 292 304 L344 304"
-const ARROWHEAD_PATH = "M334 310 L344 304 L334 298"
+	"M208 120 L252 120 Q260 120 260 128 L260 272 Q260 280 268 280 L312 280"
+const DRAWN_STRAIGHT_PATH = "M206.15 125.12 L337.85 234.88"
+const DRAWN_ELBOW_PATH = "M208 120 L384 120 Q392 120 392 128 L392 232"
+const DRAWN_ARROWHEAD_PATH = "M386 222 L392 232 L398 222"
+const MOVED_STRAIGHT_PATH = "M205.35 125.95 L374.65 314.05"
 const ANCHOR_SIZE = 10
 const HOVER_OUTSET = 4
-const HOVER_RADIUS = "14px"
+const HOVER_RADIUS = "7px"
 
 const anchorOn = (root: HTMLElement, id: string, side: string) =>
 	root.querySelector<HTMLElement>(
@@ -2004,10 +2230,13 @@ const connectorPaths = (root: HTMLElement, slot: string) =>
 		),
 	).map((path) => path.getAttribute("d"))
 
-const pickElbow = async (root: HTMLElement) => {
-	const elbow = within(root).getByRole("radio", { name: "Elbow" })
-	await userEvent.click(elbow)
-	await expect(elbow).toBeChecked()
+const expectElbowChecked = (root: HTMLElement) =>
+	expect(within(root).getByRole("radio", { name: "Elbow" })).toBeChecked()
+
+const pickStraight = async (root: HTMLElement) => {
+	const straight = within(root).getByRole("radio", { name: "Straight" })
+	await userEvent.click(straight)
+	await expect(straight).toBeChecked()
 }
 
 const hoverObject = (root: HTMLElement, id: string) =>
@@ -2026,34 +2255,42 @@ const hoverPlanRightAnchor = (root: HTMLElement) => {
 	})
 }
 
-const dragFromPlanToReviewAnchor = async (root: HTMLElement) => {
+const ringOn = (root: HTMLElement, id: string) =>
+	root.querySelector<HTMLElement>(
+		`[data-slot="board-anchor-frame"][data-object-id="${id}"]`,
+	)
+
+const dragFromPlanOntoReview = async (root: HTMLElement) => {
 	const source = await hoverPlanRightAnchor(root)
 	pointerAt("pointerdown", source, centreOf(source))
-	pointerAt(
-		"pointermove",
-		document,
-		centreOf(objectNode(root, "review") as HTMLElement),
-	)
-	const target = await waitFor(() => {
-		const anchor = anchorOn(root, "review", "left")
-		expect(anchor).not.toBeNull()
-		return anchor as HTMLElement
-	})
-	const at = centreOf(target)
+	const at = centreOf(objectNode(root, "review") as HTMLElement)
 	pointerAt("pointermove", document, at)
-	await waitFor(() => expect(target).toHaveAttribute("data-active", "true"))
+	await waitFor(() => expect(ringOn(root, "review")).not.toBeNull())
 	return at
 }
 
-const expectAnchorFrame = async (root: HTMLElement, id: string) => {
+const expectHoverRing = async (root: HTMLElement, id: string) => {
 	const object = (objectNode(root, id) as HTMLElement).getBoundingClientRect()
-	const outline = slotIn(root, "board-hover-outline")
+	const outline = slotIn(ringOn(root, id) as HTMLElement, "board-hover-outline")
 	const outlineBox = outline.getBoundingClientRect()
 	const outlineStyle = getComputedStyle(outline)
 	await expect(outlineBox.x).toBeCloseTo(object.x - HOVER_OUTSET, 0)
+	await expect(outlineBox.y).toBeCloseTo(object.y - HOVER_OUTSET, 0)
 	await expect(outlineBox.width).toBeCloseTo(object.width + HOVER_OUTSET * 2, 0)
+	await expect(outlineBox.height).toBeCloseTo(
+		object.height + HOVER_OUTSET * 2,
+		0,
+	)
 	await expect(outlineStyle.borderTopWidth).toBe("2px")
 	await expect(outlineStyle.borderTopLeftRadius).toBe(HOVER_RADIUS)
+	await expect(outlineStyle.borderTopColor).toBe(
+		resolvedRootColor("--user-bubble"),
+	)
+}
+
+const expectAnchorFrame = async (root: HTMLElement, id: string) => {
+	await expectHoverRing(root, id)
+	const object = (objectNode(root, id) as HTMLElement).getBoundingClientRect()
 	const middles = {
 		top: [object.x + object.width / 2, object.y],
 		right: [object.right, object.y + object.height / 2],
@@ -2082,7 +2319,7 @@ const selectPlanToReview = async (root: HTMLElement) => {
 		'[data-slot="board-connector-hits"] [data-connector-id="plan-to-review"]',
 	) as SVGPathElement
 	pointerAt("pointerdown", hit, boardAt(root, 284, 224))
-	await within(root).findByRole("radiogroup", { name: "Connector type" })
+	await within(root).findByRole("radiogroup", { name: "Arrow type" })
 }
 
 const connectorDocs = (story: string) => ({
@@ -2093,9 +2330,10 @@ export const CreateConnector = meta.story({
 	globals: LAPTOP_WINDOW,
 	args: CONNECTOR_ARGS,
 	parameters: connectorDocs(
-		"Connector mode on. A drag from the right anchor of the sticky released on empty board sends nothing and leaves no line. Elbow picked in the flyout, a drag from the same anchor released on the left anchor of Review sends one connect intent with both ids, both sides and the elbow kind, and the committed connector draws in the board shape border colour, 2px with round caps, rounded corners of 8 and the open chevron at Review. Pick ConnectorBeingDrawn for the drag in progress.",
+		"Connector mode on, the flyout opens with Elbow checked. A drag from the right anchor of the sticky released on empty board sends nothing and leaves no line. With no pick in the flyout, a drag from the same anchor released over Review sends one set-arrow intent tied to the right side of the sticky and to the centre of Review, of the elbow kind, and the committed connector draws in the board shape border colour, 1.5 board units with round caps, rounded corners of 8 and the open chevron 8 off Review. Pick ConnectorBeingDrawn for the drag in progress.",
 	),
 	play: async ({ canvasElement, args }) => {
+		await expectElbowChecked(canvasElement)
 		const source = await hoverPlanRightAnchor(canvasElement)
 		pointerAt("pointerdown", source, centreOf(source))
 		const empty = boardAt(canvasElement, 640, 520)
@@ -2109,34 +2347,37 @@ export const CreateConnector = meta.story({
 		)
 		await expect(args.onIntent).not.toHaveBeenCalled()
 
-		await pickElbow(canvasElement)
-		const release = await dragFromPlanToReviewAnchor(canvasElement)
+		const release = await dragFromPlanOntoReview(canvasElement)
 		pointerAt("pointerup", document, release)
 		await waitFor(() => expect(args.onIntent).toHaveBeenCalledTimes(1))
 		await expect(args.onIntent).toHaveBeenCalledWith({
-			type: "connect",
-			id: expect.any(String),
-			from: "plan",
-			fromSide: "right",
-			to: "review",
-			toSide: "left",
-			routing: "elbow",
+			type: "set-arrow",
+			arrow: {
+				id: expect.any(String),
+				kind: "connector",
+				from: "plan",
+				fromSide: "right",
+				to: "review",
+				routing: "elbow",
+				zOrder: 0,
+				text: "",
+			},
 		})
 		await expect(slotsIn(canvasElement, "board-connector-draft")).toHaveLength(
 			0,
 		)
 		await expect(connectorPaths(canvasElement, "board-connector")).toEqual([
-			ELBOW_PATH,
+			DRAWN_ELBOW_PATH,
 		])
 		const line = slotIn(canvasElement, "board-connector")
 		const look = getComputedStyle(line)
 		await expect(look.stroke).toBe(resolvedRootColor("--board-shape-border"))
-		await expect(look.strokeWidth).toBe("2px")
+		await expect(look.strokeWidth).toBe("1.5px")
 		await expect(look.strokeLinecap).toBe("round")
 		await expect(look.strokeLinejoin).toBe("round")
 		await expect(
 			slotIn(line, "board-connector-arrowhead").getAttribute("d"),
-		).toBe(ARROWHEAD_PATH)
+		).toBe(DRAWN_ARROWHEAD_PATH)
 	},
 })
 
@@ -2144,7 +2385,7 @@ export const CreateConnectorDark = meta.story({
 	globals: { ...LAPTOP_WINDOW, theme: "dark" },
 	args: CONNECTOR_ARGS,
 	parameters: connectorDocs(
-		"CreateConnector in the dark theme: the same two drags and the same single connect intent.",
+		"CreateConnector in the dark theme: the same two drags and the same single set-arrow intent.",
 	),
 	play: async (context) => {
 		await expectDarkSurface(context.canvasElement)
@@ -2156,31 +2397,35 @@ export const ConnectorBeingDrawn = meta.story({
 	globals: LAPTOP_WINDOW,
 	args: CONNECTOR_ARGS,
 	parameters: connectorDocs(
-		"Boards 4d: an elbow connector being drawn. Check the hover outline 4px outside the hovered object, 2px in the Space colour at 50% with 14px corners, the four 10px anchors centred on the middle of each side on the board surface with a 2px Space-colour ring, the anchor under the pointer filled in the Space colour with a 3px ring at 25%, the line in the Space colour from a 10px dot on the source anchor to the open chevron at the pointer, and Elbow picked in the flyout. Pick CreateConnector for the release.",
+		"An elbow connector being drawn. Check the hover ring 4px outside the hovered sticky, 2px in the Space colour with 7px corners, its four 10px anchors centred on the middle of each side on the board surface with a 2px Space-colour ring, the anchor under the pointer filled in the Space colour with a 3px ring at 25%. Over Review the target wears the same ring with no anchors, and the line runs in the Space colour from a dot of radius 4 on the source anchor to the open chevron 8 off Review, aimed at its centre, Elbow checked in the flyout from the start. Pick CreateConnector for the release.",
 	),
 	play: async ({ canvasElement, args }) => {
-		await pickElbow(canvasElement)
+		await expectElbowChecked(canvasElement)
 		await hoverPlanRightAnchor(canvasElement)
 		await expectAnchorFrame(canvasElement, "plan")
 
-		await dragFromPlanToReviewAnchor(canvasElement)
-		await expectAnchorFrame(canvasElement, "review")
-		await expect(slotsIn(canvasElement, "board-anchor-frame")).toHaveLength(1)
-		const active = anchorOn(canvasElement, "review", "left") as HTMLElement
+		const active = anchorOn(canvasElement, "plan", "right") as HTMLElement
+		pointerAt("pointerover", active, centreOf(active))
+		await waitFor(() => expect(active).toHaveAttribute("data-active", "true"))
 		await expect(getComputedStyle(active).boxShadow).toMatch(/\b3px\b/)
+
+		await dragFromPlanOntoReview(canvasElement)
+		await expectHoverRing(canvasElement, "review")
+		await expect(slotsIn(canvasElement, "board-anchor-frame")).toHaveLength(1)
+		await expect(slotsIn(canvasElement, "board-anchor")).toHaveLength(0)
 
 		await expect(
 			connectorPaths(canvasElement, "board-connector-draft"),
-		).toEqual([ELBOW_PATH])
+		).toEqual([DRAWN_ELBOW_PATH])
 		const draft = slotIn(canvasElement, "board-connector-draft")
 		await expect(getComputedStyle(draft).stroke).toBe(
 			resolvedRootColor("--user-bubble"),
 		)
-		await expect(getComputedStyle(draft).strokeWidth).toBe("2px")
+		await expect(getComputedStyle(draft).strokeWidth).toBe("1.5px")
 		const dot = slotIn(canvasElement, "board-connector-source")
 		await expect(
 			["cx", "cy", "r"].map((name) => dot.getAttribute(name)),
-		).toEqual(["224", "144", "4"])
+		).toEqual(["200", "120", "4"])
 		await expect(getComputedStyle(dot).fill).toBe(
 			resolvedRootColor("--board-surface"),
 		)
@@ -2200,11 +2445,48 @@ export const ConnectorBeingDrawnDark = meta.story({
 	},
 })
 
+export const CreateStraightConnector = meta.story({
+	globals: LAPTOP_WINDOW,
+	args: CONNECTOR_ARGS,
+	parameters: connectorDocs(
+		"Connector mode on, Straight picked in the flyout before drawing: a drag from the right anchor of the sticky released over Review sends one set-arrow intent of the straight kind, and the committed connector runs as one straight line to the open chevron 8 off Review. Pick CreateConnector for the Elbow default.",
+	),
+	play: async ({ canvasElement, args }) => {
+		await pickStraight(canvasElement)
+		const release = await dragFromPlanOntoReview(canvasElement)
+		pointerAt("pointerup", document, release)
+		await waitFor(() => expect(args.onIntent).toHaveBeenCalledTimes(1))
+		await expect(args.onIntent).toHaveBeenCalledWith({
+			type: "set-arrow",
+			arrow: expect.objectContaining({
+				from: "plan",
+				to: "review",
+				routing: "straight",
+			}),
+		})
+		await expect(connectorPaths(canvasElement, "board-connector")).toEqual([
+			DRAWN_STRAIGHT_PATH,
+		])
+	},
+})
+
+export const CreateStraightConnectorDark = meta.story({
+	globals: { ...LAPTOP_WINDOW, theme: "dark" },
+	args: CONNECTOR_ARGS,
+	parameters: connectorDocs(
+		"CreateStraightConnector in the dark theme: the same pick, drag and single set-arrow intent.",
+	),
+	play: async (context) => {
+		await expectDarkSurface(context.canvasElement)
+		await CreateStraightConnector.input.play?.(context)
+	},
+})
+
 export const SwitchConnectorRouting = meta.story({
 	globals: LAPTOP_WINDOW,
 	args: CONNECTED_ARGS,
 	parameters: connectorDocs(
-		"A press on a straight connector selects it, draws it in the Space colour and opens the flyout on Straight. Elbow there sends one style intent and the connector redraws as an elbow, the left arrow key on the focused radio switches it back. The connector itself never takes focus and stays hidden from assistive technology: the flyout is the only way in.",
+		"A press on a straight connector selects it, draws it in the Space colour and opens the flyout on Straight. Elbow there sends one set-arrow intent carrying the whole arrow with its new kind and the connector redraws as an elbow, the left arrow key on the focused radio switches it back. The connector itself never takes focus and stays hidden from assistive technology: the flyout is the only way in.",
 	),
 	play: async ({ canvasElement, args }) => {
 		const canvas = within(canvasElement)
@@ -2229,9 +2511,8 @@ export const SwitchConnectorRouting = meta.story({
 		await userEvent.click(elbow)
 		await expect(args.onIntent).toHaveBeenCalledTimes(1)
 		await expect(args.onIntent).toHaveBeenCalledWith({
-			type: "style",
-			id: "plan-to-review",
-			style: { routing: "elbow" },
+			type: "set-arrow",
+			arrow: { ...PLAN_TO_REVIEW, routing: "elbow" },
 		})
 		await waitFor(() =>
 			expect(connectorPaths(canvasElement, "board-connector")).toEqual([
@@ -2242,9 +2523,8 @@ export const SwitchConnectorRouting = meta.story({
 
 		await userEvent.keyboard("{ArrowLeft}")
 		await expect(args.onIntent).toHaveBeenLastCalledWith({
-			type: "style",
-			id: "plan-to-review",
-			style: { routing: "straight" },
+			type: "set-arrow",
+			arrow: { ...PLAN_TO_REVIEW, routing: "straight" },
 		})
 		await waitFor(() =>
 			expect(connectorPaths(canvasElement, "board-connector")).toEqual([
@@ -2284,7 +2564,7 @@ export const MoveConnectedObject = meta.story({
 			expect(review.getBoundingClientRect().x).toBeCloseTo(before.x + 60, 0),
 		)
 		await expect(connectorPaths(canvasElement, "board-connector")).toEqual([
-			"M224 144 L404 344",
+			MOVED_STRAIGHT_PATH,
 		])
 		await expect(args.onIntent).not.toHaveBeenCalled()
 
@@ -2296,7 +2576,7 @@ export const MoveConnectedObject = meta.story({
 			position: { x: 380, y: 280 },
 		})
 		await expect(connectorPaths(canvasElement, "board-connector")).toEqual([
-			"M224 144 L404 344",
+			MOVED_STRAIGHT_PATH,
 		])
 	},
 })
@@ -2359,10 +2639,10 @@ export const CancelDraftByEscape = meta.story({
 	globals: LAPTOP_WINDOW,
 	args: CONNECTOR_ARGS,
 	parameters: connectorDocs(
-		"Escape while a connector is being drawn drops the line, and the release that follows on an anchor of Review sends nothing. Pick CreateConnector for a drag that lands.",
+		"Escape while a connector is being drawn drops the line and the ring, and the release that follows over Review sends nothing. Pick CreateConnector for a drag that lands.",
 	),
 	play: async ({ canvasElement, args }) => {
-		const release = await dragFromPlanToReviewAnchor(canvasElement)
+		const release = await dragFromPlanOntoReview(canvasElement)
 		await expect(slotsIn(canvasElement, "board-connector-draft")).toHaveLength(
 			1,
 		)
@@ -2370,6 +2650,7 @@ export const CancelDraftByEscape = meta.story({
 		await waitFor(() =>
 			expect(slotsIn(canvasElement, "board-connector-draft")).toHaveLength(0),
 		)
+		await expect(ringOn(canvasElement, "review")).toBeNull()
 		pointerAt("pointerup", document, release)
 		await expect(args.onIntent).not.toHaveBeenCalled()
 	},
@@ -2433,6 +2714,1327 @@ export const ConnectorWithPresenceOutlineDark = meta.story({
 	},
 })
 
+const AT_BOARD_ORIGIN: BoardViewport = { offset: { x: 0, y: 0 }, zoom: 1 }
+
+const itemAt = (
+	id: string,
+	kind: BoardItem["kind"],
+	text: string,
+	rect: BoardRect,
+	zOrder: number,
+): BoardItem => ({
+	id,
+	kind,
+	position: { x: rect.x, y: rect.y },
+	size: { width: rect.width, height: rect.height },
+	zOrder,
+	text,
+})
+
+const arrowBetween = (
+	id: string,
+	from: string,
+	to: string,
+	more: Partial<BoardConnector> = {},
+): BoardConnector => ({
+	id,
+	kind: "connector",
+	from,
+	to,
+	routing: "straight",
+	zOrder: 0,
+	text: "",
+	...more,
+})
+
+const shapeOf = (id: string, text: string, x: number, y: number) =>
+	itemAt(id, "shape", text, { x, y, width: 160, height: 120 }, 1)
+
+const BRIEF = shapeOf("brief", "Brief", 80, 126)
+const DRAFT = shapeOf("draft", "Draft", 400, 126)
+const LAUNCH = shapeOf("launch", "Launch", 720, 126)
+const BRIEF_TO_DRAFT = "brief-to-draft"
+
+const ArrowBoardObject = ({ object }: PlaceholderObjectProps) =>
+	object.kind === "section" ? (
+		<BoardSection
+			height={object.size.height}
+			tint="blue"
+			title={object.text}
+			width={object.size.width}
+		/>
+	) : (
+		<BoardObjectView object={object} />
+	)
+
+const arrowArgs = (objects: readonly BoardObject[]) => ({
+	view: { objects },
+	viewport: AT_BOARD_ORIGIN,
+	renderObject: (object: BoardItem) => <ArrowBoardObject object={object} />,
+})
+
+const arrowLine = (root: HTMLElement, id: string) => {
+	const hits = Array.from(
+		root.querySelectorAll(
+			'[data-slot="board-connector-hits"] [data-connector-id]',
+		),
+	)
+	const index = hits.findIndex(
+		(hit) => hit.getAttribute("data-connector-id") === id,
+	)
+	return slotsIn(root, "board-connector")[index]
+}
+
+const pathOf = (line: Element, slot: string) =>
+	line.querySelector(`[data-slot="${slot}"]`)?.getAttribute("d")
+
+const selectArrow = async (root: HTMLElement, id: string) => {
+	const hit = root.querySelector(
+		`[data-slot="board-connector-hits"] [data-connector-id="${id}"]`,
+	) as SVGPathElement
+	pointerAt("pointerdown", hit, centreOf(hit))
+	await within(root).findByRole("radiogroup", { name: "Arrow type" })
+}
+
+const expectArrowAtRest = async (line: Element) => {
+	const look = getComputedStyle(line)
+	await expect(look.stroke).toBe(resolvedRootColor("--board-shape-border"))
+	await expect(look.strokeWidth).toBe("1.5px")
+	await expect(look.strokeLinecap).toBe("round")
+	await expect(look.strokeLinejoin).toBe("round")
+	await expect(line.querySelectorAll("circle")).toHaveLength(0)
+	await expect(
+		slotsIn(line as HTMLElement, "board-connector-halo"),
+	).toHaveLength(0)
+}
+
+const attributesOf = (element: Element, names: readonly string[]) =>
+	names.map((name) => Number(element.getAttribute(name)))
+
+const expectArrowSelected = async (
+	line: Element,
+	ends: readonly BoardPoint[],
+	middle: BoardPoint,
+) => {
+	await expect(getComputedStyle(line).stroke).toBe(
+		resolvedRootColor("--user-bubble"),
+	)
+	const halo = getComputedStyle(
+		slotIn(line as HTMLElement, "board-connector-halo"),
+	)
+	await expect(halo.stroke).toBe(resolvedRootColor("--board-surface"))
+	await expect(halo.strokeWidth).toBe("4.5px")
+	const handles = slotsIn(line as HTMLElement, "board-connector-end-handle")
+	await expect(
+		handles.map((handle) => attributesOf(handle, ["cx", "cy", "r"])),
+	).toEqual(ends.map(({ x, y }) => [x, y, 4]))
+	for (const handle of handles) {
+		const look = getComputedStyle(handle)
+		await expect(look.fill).toBe(resolvedRootColor("--board-surface"))
+		await expect(look.stroke).toBe(resolvedRootColor("--user-bubble"))
+		await expect(look.strokeWidth).toBe("1.5px")
+	}
+	const handle = slotIn(line as HTMLElement, "board-connector-middle-handle")
+	await expect(attributesOf(handle, ["cx", "cy", "r"])).toEqual([
+		middle.x,
+		middle.y,
+		5.5,
+	])
+	await expect(getComputedStyle(handle).fill).toBe(
+		resolvedRootColor("--user-bubble"),
+	)
+}
+
+const arrowDocs = (story: string) => ({
+	docs: { description: { story } },
+})
+
+const ARTBOARD_NOTE =
+	"The Dark story sits side by side with its artboard of the Paper file Kiroshi, Board arrows."
+
+export const ArrowQuickRelease = meta.story({
+	args: arrowArgs([
+		BRIEF,
+		DRAFT,
+		arrowBetween(BRIEF_TO_DRAFT, "brief", "draft"),
+	]),
+	parameters: arrowDocs(
+		`Board arrows 1.2 Quick release: an arrow bound to the centres of two shapes stops 8 before each outline, from 248 to 392 on 186, in the board shape border colour at 1.5 with round caps and joins, ending on the medium open chevron, 10 long and 6 to each side. ${ARTBOARD_NOTE}`,
+	),
+	play: async ({ canvasElement }) => {
+		const line = arrowLine(canvasElement, BRIEF_TO_DRAFT)
+		await expect(pathOf(line, "board-connector-path")).toBe("M248 186 L392 186")
+		await expect(pathOf(line, "board-connector-arrowhead")).toBe(
+			"M382 192 L392 186 L382 180",
+		)
+		await expectArrowAtRest(line)
+	},
+})
+
+export const ArrowQuickReleaseDark = meta.story({
+	globals: { theme: "dark" },
+	args: ArrowQuickRelease.input.args,
+	parameters: arrowDocs(
+		"ArrowQuickRelease in the dark theme, the line #E5E5E5 on the #161618 board as the artboard draws it.",
+	),
+	play: async (context) => {
+		await expectDarkSurface(context.canvasElement)
+		await ArrowQuickRelease.input.play?.(context)
+	},
+})
+
+export const ArrowExactPoint = meta.story({
+	args: arrowArgs([
+		BRIEF,
+		DRAFT,
+		arrowBetween(BRIEF_TO_DRAFT, "brief", "draft", {
+			toAnchor: { x: 0.25, y: 0.5 },
+		}),
+	]),
+	parameters: arrowDocs(
+		`Board arrows 1.3 Exact point, selected: the end bound to an exact point of Draft reaches it with no gap, the line and the head tip both on 440, 186. Selected, the line wears the Space colour over a 4.5 halo in the board colour, both ends carry a handle of radius 4 in the board colour ringed 1.5 in the Space colour, and the middle carries a handle of radius 5.5 filled in the Space colour. ${ARTBOARD_NOTE}`,
+	),
+	play: async ({ canvasElement }) => {
+		const line = arrowLine(canvasElement, BRIEF_TO_DRAFT)
+		await expect(pathOf(line, "board-connector-path")).toBe("M248 186 L440 186")
+		await expect(pathOf(line, "board-connector-arrowhead")).toBe(
+			"M430 192 L440 186 L430 180",
+		)
+		await selectArrow(canvasElement, BRIEF_TO_DRAFT)
+		await expectArrowSelected(
+			arrowLine(canvasElement, BRIEF_TO_DRAFT),
+			[
+				{ x: 248, y: 186 },
+				{ x: 440, y: 186 },
+			],
+			{ x: 344, y: 186 },
+		)
+	},
+})
+
+export const ArrowExactPointDark = meta.story({
+	globals: { theme: "dark" },
+	args: ArrowExactPoint.input.args,
+	parameters: arrowDocs(
+		"ArrowExactPoint in the dark theme, selected as the artboard draws it.",
+	),
+	play: async (context) => {
+		await expectDarkSurface(context.canvasElement)
+		await ArrowExactPoint.input.play?.(context)
+	},
+})
+
+export const ArrowCurve = meta.story({
+	args: arrowArgs([
+		BRIEF,
+		DRAFT,
+		arrowBetween(BRIEF_TO_DRAFT, "brief", "draft", { bend: 66 }),
+	]),
+	parameters: arrowDocs(
+		`Board arrows 2.1 Curve, selected: a bend of 66 turns the straight arrow into a quadratic from 248, 186 to 392, 186 through the control point 320, 54, so its midpoint 320, 120 sits 66 off the chord and carries the middle handle. The head follows the tangent at the tip. ${ARTBOARD_NOTE}`,
+	),
+	play: async ({ canvasElement }) => {
+		const line = arrowLine(canvasElement, BRIEF_TO_DRAFT)
+		await expect(pathOf(line, "board-connector-path")).toBe(
+			"M248 186 Q320 54 392 186",
+		)
+		await selectArrow(canvasElement, BRIEF_TO_DRAFT)
+		await expectArrowSelected(
+			arrowLine(canvasElement, BRIEF_TO_DRAFT),
+			[
+				{ x: 248, y: 186 },
+				{ x: 392, y: 186 },
+			],
+			{ x: 320, y: 120 },
+		)
+	},
+})
+
+export const ArrowCurveDark = meta.story({
+	globals: { theme: "dark" },
+	args: ArrowCurve.input.args,
+	parameters: arrowDocs(
+		"ArrowCurve in the dark theme, selected as the artboard draws it.",
+	),
+	play: async (context) => {
+		await expectDarkSurface(context.canvasElement)
+		await ArrowCurve.input.play?.(context)
+	},
+})
+
+export const ArrowElbow = meta.story({
+	args: arrowArgs([
+		BRIEF,
+		DRAFT,
+		LAUNCH,
+		arrowBetween("brief-to-launch", "brief", "launch", { routing: "elbow" }),
+	]),
+	parameters: arrowDocs(
+		`Board arrows 2.2 Elbow: an elbow arrow from Brief to Launch leaves and enters through the middle of the top sides 8 off the outline, and runs 48 above Draft, the shape in its way, with axis-aligned segments and corners of radius 8. ${ARTBOARD_NOTE}`,
+	),
+	play: async ({ canvasElement }) => {
+		const line = arrowLine(canvasElement, "brief-to-launch")
+		await expect(pathOf(line, "board-connector-path")).toBe(
+			"M160 118 L160 86 Q160 78 168 78 L792 78 Q800 78 800 86 L800 118",
+		)
+		await expect(pathOf(line, "board-connector-arrowhead")).toBe(
+			"M794 108 L800 118 L806 108",
+		)
+		await expectArrowAtRest(line)
+	},
+})
+
+export const ArrowElbowDark = meta.story({
+	globals: { theme: "dark" },
+	args: ArrowElbow.input.args,
+	parameters: arrowDocs("ArrowElbow in the dark theme."),
+	play: async (context) => {
+		await expectDarkSurface(context.canvasElement)
+		await ArrowElbow.input.play?.(context)
+	},
+})
+
+const expectLabelCentredOn = async (
+	root: HTMLElement,
+	label: HTMLElement,
+	at: BoardPoint,
+) => {
+	const box = label.getBoundingClientRect()
+	const origin = boardAt(root, 0, 0)
+	await expect(box.x + box.width / 2 - origin.clientX).toBeCloseTo(at.x, 0)
+	await expect(box.y + box.height / 2 - origin.clientY).toBeCloseTo(at.y, 0)
+}
+
+export const ArrowLabel = meta.story({
+	args: arrowArgs([
+		BRIEF,
+		DRAFT,
+		arrowBetween(BRIEF_TO_DRAFT, "brief", "draft", { text: "Hands over" }),
+	]),
+	parameters: arrowDocs(
+		`Board arrows 4.1 Label: the label sits on a chip centred on the arrow at its label position, the middle when none is set, with 4 of padding, corners of 4 and the board colour behind it, its text 13 over 16 at weight 500 in the board foreground. Selected, the chip takes a 1.5 ring in the Space colour. ${ARTBOARD_NOTE}`,
+	),
+	play: async ({ canvasElement }) => {
+		const label = slotIn(canvasElement, "board-connector-label")
+		await expect(label).toHaveTextContent("Hands over")
+		await expectLabelCentredOn(canvasElement, label, { x: 320, y: 186 })
+		const look = getComputedStyle(label)
+		await expect(look.padding).toBe("4px")
+		await expect(look.borderTopLeftRadius).toBe("4px")
+		await expect(look.backgroundColor).toBe(
+			resolvedRootColor("--board-surface"),
+		)
+		await expect([look.fontSize, look.lineHeight, look.fontWeight]).toEqual([
+			"13px",
+			"16px",
+			"500",
+		])
+		await expect(look.color).toBe(resolvedRootColor("--board-foreground"))
+		await expect(look.boxShadow).toBe("none")
+
+		await selectArrow(canvasElement, BRIEF_TO_DRAFT)
+		const ring = getComputedStyle(label).boxShadow
+		await expect(ring).toMatch(/\b1\.5px\b/)
+		await expect(ring).toContain(resolvedRootColor("--user-bubble"))
+		await userEvent.keyboard("{Escape}")
+		await waitFor(() => expect(getComputedStyle(label).boxShadow).toBe("none"))
+	},
+})
+
+export const ArrowLabelDark = meta.story({
+	globals: { theme: "dark" },
+	args: ArrowLabel.input.args,
+	parameters: arrowDocs(
+		"ArrowLabel in the dark theme, the text #EDEDED on the #161618 chip as the artboard draws it.",
+	),
+	play: async (context) => {
+		await expectDarkSurface(context.canvasElement)
+		await ArrowLabel.input.play?.(context)
+	},
+})
+
+const HEAD_SIZES = ["small", "medium", "large"] as const
+const HEAD_ROW_PITCH = 160
+
+const HEAD_SIZE_BOARD = HEAD_SIZES.flatMap((headSize, row) => [
+	shapeOf(`${headSize}-from`, "From", 80, 46 + row * HEAD_ROW_PITCH),
+	shapeOf(`${headSize}-to`, "To", 400, 46 + row * HEAD_ROW_PITCH),
+	arrowBetween(headSize, `${headSize}-from`, `${headSize}-to`, { headSize }),
+])
+
+const HEAD_PATHS = {
+	small: "M385 110 L392 106 L385 102",
+	medium: "M382 272 L392 266 L382 260",
+	large: "M378 434 L392 426 L378 418",
+}
+
+export const ArrowHeadSizes = meta.story({
+	args: arrowArgs(HEAD_SIZE_BOARD),
+	parameters: arrowDocs(
+		`Board arrows 5.1 Three head sizes: the same open chevron at the stroke of the line, small 7 long and 4 to each side, medium 10 by 6, the size of an arrow with none set, and large 14 by 8. ${ARTBOARD_NOTE}`,
+	),
+	play: async ({ canvasElement }) => {
+		for (const headSize of HEAD_SIZES)
+			await expect(
+				pathOf(arrowLine(canvasElement, headSize), "board-connector-arrowhead"),
+			).toBe(HEAD_PATHS[headSize])
+	},
+})
+
+export const ArrowHeadSizesDark = meta.story({
+	globals: { theme: "dark" },
+	args: ArrowHeadSizes.input.args,
+	parameters: arrowDocs("ArrowHeadSizes in the dark theme."),
+	play: async (context) => {
+		await expectDarkSurface(context.canvasElement)
+		await ArrowHeadSizes.input.play?.(context)
+	},
+})
+
+const stickyOf = (id: string, text: string, x: number, y: number) =>
+	itemAt(id, "sticky", text, { x, y, width: 160, height: 160 }, 1)
+
+const frameOf = (id: string, text: string, rect: BoardRect) =>
+	itemAt(id, "section", text, rect, 0)
+
+const AFTER_BOARD: readonly BoardObject[] = [
+	frameOf("desktop", "Application de bureau", {
+		x: 40,
+		y: 80,
+		width: 608,
+		height: 232,
+	}),
+	frameOf("sidecar", "Sidecar", { x: 40, y: 400, width: 408, height: 232 }),
+	frameOf("cloud", "Cloud", { x: 720, y: 80, width: 408, height: 232 }),
+	stickyOf("interface-react", "Interface React", 64, 128),
+	stickyOf("host-rust", "Hôte Rust", 264, 128),
+	stickyOf("local-storage", "Stockage local", 464, 128),
+	stickyOf("relay", "Relais", 744, 128),
+	stickyOf("iphone-app", "App iPhone", 944, 128),
+	stickyOf("agent-sdk", "Agent SDK", 64, 448),
+	stickyOf("bot-plugin", "Plugin du bot", 264, 448),
+	arrowBetween("react-to-host", "interface-react", "host-rust"),
+	arrowBetween("host-to-storage", "host-rust", "local-storage"),
+	arrowBetween("relay-to-iphone", "relay", "iphone-app"),
+	arrowBetween("agent-to-plugin", "agent-sdk", "bot-plugin"),
+	arrowBetween("host-to-agent", "host-rust", "agent-sdk", { routing: "elbow" }),
+	arrowBetween("host-to-relay", "host-rust", "relay", { routing: "elbow" }),
+]
+
+const AFTER_BOARD_PATHS = {
+	"react-to-host": "M232 208 L256 208",
+	"host-to-storage": "M432 208 L456 208",
+	"relay-to-iphone": "M912 208 L936 208",
+	"agent-to-plugin": "M232 528 L256 528",
+	"host-to-agent":
+		"M344 296 L344 360 Q344 368 336 368 L152 368 Q144 368 144 376 L144 440",
+	"host-to-relay":
+		"M344 120 L344 64 Q344 56 352 56 L816 56 Q824 56 824 64 L824 120",
+}
+
+const AFTER_BOARD_ITEM_IDS = AFTER_BOARD.flatMap((object) =>
+	object.kind === "connector" ? [] : [object.id],
+)
+
+const PATH_SAMPLES = 240
+
+const isStrictlyInside = (point: DOMPoint, box: DOMRect) =>
+	box.left < point.x &&
+	point.x < box.right &&
+	box.top < point.y &&
+	point.y < box.bottom
+
+const textBoxesOf = (root: HTMLElement) =>
+	Array.from(
+		root.querySelectorAll(
+			'[data-board-text], [data-slot="board-sticky"], [data-slot="board-section-title"]',
+		),
+	).map((box) => box.getBoundingClientRect())
+
+const clientPointsOf = (path: SVGPathElement) => {
+	const matrix = path.getScreenCTM() as DOMMatrix
+	const length = path.getTotalLength()
+	return Array.from({ length: PATH_SAMPLES + 1 }, (_, step) => {
+		const { x, y } = path.getPointAtLength((length * step) / PATH_SAMPLES)
+		return new DOMPoint(x, y).matrixTransform(matrix)
+	})
+}
+
+export const ArrowsAfterBoard = meta.story({
+	globals: LAPTOP_WINDOW,
+	args: arrowArgs(AFTER_BOARD),
+	parameters: arrowDocs(
+		`Board arrows, the After board of the Before / after page: three frames, Application de bureau, Sidecar and Cloud, seven stickies and six arrows. The four straight arrows join neighbours 8 off each outline, Hôte Rust to Agent SDK runs its elbow on the lane midway between the two rows, and Hôte Rust to Relais goes over the top, 24 above the frames, since its bottom side already leads to Agent SDK. No arrow crosses a sticky or a frame title. ${ARTBOARD_NOTE}`,
+	),
+	play: async ({ canvasElement }) => {
+		for (const [id, path] of Object.entries(AFTER_BOARD_PATHS))
+			await expect(
+				pathOf(arrowLine(canvasElement, id), "board-connector-path"),
+			).toBe(path)
+		await expect(
+			slotsIn(canvasElement, "board-object").map(
+				(object) => object.dataset.objectId,
+			),
+		).toEqual(AFTER_BOARD_ITEM_IDS)
+		await expect(
+			within(canvasElement)
+				.getAllByRole("option")
+				.map((option) => option.textContent),
+		).toEqual(
+			AFTER_BOARD_ITEM_IDS.map((id) =>
+				expect.stringContaining(
+					(AFTER_BOARD.find((object) => object.id === id) as BoardItem).text,
+				),
+			),
+		)
+		const boxes = textBoxesOf(canvasElement)
+		await expect(boxes).toHaveLength(17)
+		const paths = canvasElement.querySelectorAll<SVGPathElement>(
+			'[data-slot="board-connector"] [data-slot="board-connector-path"]',
+		)
+		await expect(paths).toHaveLength(6)
+		for (const path of paths)
+			for (const point of clientPointsOf(path))
+				await expect(boxes.some((box) => isStrictlyInside(point, box))).toBe(
+					false,
+				)
+	},
+})
+
+export const ArrowsAfterBoardDark = meta.story({
+	globals: { ...LAPTOP_WINDOW, theme: "dark" },
+	args: ArrowsAfterBoard.input.args,
+	parameters: arrowDocs("ArrowsAfterBoard in the dark theme."),
+	play: async (context) => {
+		await expectDarkSurface(context.canvasElement)
+		await ArrowsAfterBoard.input.play?.(context)
+	},
+})
+
+const LOOSE_POINT = { x: 480, y: 426 }
+
+export const ArrowLooseEnd = meta.story({
+	args: arrowArgs([
+		BRIEF,
+		arrowBetween("brief-to-point", "brief", "", { toPoint: LOOSE_POINT }),
+	]),
+	parameters: arrowDocs(
+		"An arrow whose to end is a board point with no object, as a deleted shape leaves it: the line leaves Brief 8 off its outline and ends on the point itself with no gap, the head tip on it.",
+	),
+	play: async ({ canvasElement }) => {
+		const line = arrowLine(canvasElement, "brief-to-point")
+		await expect(pathOf(line, "board-connector-path")).toBe(
+			"M246.4 250.8 L480 426",
+		)
+		await expect(pathOf(line, "board-connector-arrowhead")).toBe(
+			"M468.4 424.8 L480 426 L475.6 415.2",
+		)
+		await expectArrowAtRest(line)
+	},
+})
+
+export const ArrowLooseEndDark = meta.story({
+	globals: { theme: "dark" },
+	args: ArrowLooseEnd.input.args,
+	parameters: arrowDocs("ArrowLooseEnd in the dark theme."),
+	play: async (context) => {
+		await expectDarkSurface(context.canvasElement)
+		await ArrowLooseEnd.input.play?.(context)
+	},
+})
+
+export const ArrowCrossingShape = meta.story({
+	args: arrowArgs([
+		BRIEF,
+		DRAFT,
+		LAUNCH,
+		arrowBetween("brief-to-launch", "brief", "launch"),
+	]),
+	parameters: arrowDocs(
+		"A straight arrow from Brief to Launch across Draft, a shape that is neither of its ends: the line passes behind Draft, so Draft and its label stay painted above it, while both ends keep their 8 gap.",
+	),
+	play: async ({ canvasElement }) => {
+		const line = arrowLine(canvasElement, "brief-to-launch")
+		await expect(pathOf(line, "board-connector-path")).toBe("M248 186 L712 186")
+		const holes = slotsIn(line as HTMLElement, "board-connector-mask-hole")
+		await expect(
+			holes.map((hole) => attributesOf(hole, ["x", "y", "width", "height"])),
+		).toEqual([[400, 126, 160, 120]])
+		const mask = slotIn(line as HTMLElement, "board-connector-mask")
+		const masked = (
+			line.querySelector('[data-slot="board-connector-path"]') as SVGElement
+		).parentElement as Element
+		await expect(masked.getAttribute("mask")).toBe(`url(#${mask.id})`)
+		await expectArrowAtRest(line)
+	},
+})
+
+export const ArrowCrossingShapeDark = meta.story({
+	globals: { theme: "dark" },
+	args: ArrowCrossingShape.input.args,
+	parameters: arrowDocs("ArrowCrossingShape in the dark theme."),
+	play: async (context) => {
+		await expectDarkSurface(context.canvasElement)
+		await ArrowCrossingShape.input.play?.(context)
+	},
+})
+
+const handShapeOf = (id: string, text: string, x: number, y: number) =>
+	itemAt(id, "shape", text, { x, y, width: 160, height: 160 }, 1)
+
+const START = handShapeOf("start", "Start", 80, 120)
+const FINISH = handShapeOf("finish", "Finish", 400, 120)
+const START_TO_FINISH = "start-to-finish"
+const TIED_ARROW = arrowBetween(START_TO_FINISH, "start", "finish")
+const LABELLED_ARROW = arrowBetween(START_TO_FINISH, "start", "finish", {
+	text: "Hands over",
+})
+const CENTRE_PATH = "M248 200 L392 200"
+const EXACT_POINT_PATH = "M247.84 201.57 L440 240"
+const INSIDE_FINISH = { x: 440, y: 240 }
+const OVER_FINISH = { x: 470, y: 230 }
+const EXACT_POINT_WAIT = { timeout: 2000 }
+
+const drawingArgs = {
+	...arrowArgs([START, FINISH]),
+	isConnecting: true,
+}
+
+const handDocs = (story: string) =>
+	arrowDocs(
+		`${story} The Dark story sits side by side with its artboard of the Paper page Arrow behaviour.`,
+	)
+
+const atBoard = (root: HTMLElement, { x, y }: BoardPoint) => boardAt(root, x, y)
+
+const pressStartRightAnchor = async (root: HTMLElement) => {
+	hoverObject(root, "start")
+	const anchor = await waitFor(() => {
+		const found = anchorOn(root, "start", "right")
+		expect(found).not.toBeNull()
+		return found as HTMLElement
+	})
+	pointerAt("pointerdown", anchor, centreOf(anchor))
+}
+
+const draftLine = (root: HTMLElement) => slotIn(root, "board-connector-draft")
+
+const expectHalo = async (line: HTMLElement) => {
+	const halo = getComputedStyle(slotIn(line, "board-connector-halo"))
+	await expect(halo.stroke).toBe(resolvedRootColor("--board-surface"))
+	await expect(halo.strokeWidth).toBe("4.5px")
+}
+
+const expectExactPointMarker = async (root: HTMLElement, at: BoardPoint) => {
+	const marker = slotIn(root, "board-connector-exact-point")
+	const [ring, dot] = Array.from(marker.querySelectorAll("circle"))
+	const colour = resolvedRootColor("--board-arrow-marker")
+	await expect(attributesOf(ring, ["cx", "cy", "r"])).toEqual([at.x, at.y, 9])
+	await expect(getComputedStyle(ring).stroke).toBe(colour)
+	await expect(getComputedStyle(ring).strokeWidth).toBe("2px")
+	await expect(getComputedStyle(ring).fill).toBe("none")
+	await expect(attributesOf(dot, ["cx", "cy", "r"])).toEqual([at.x, at.y, 3])
+	await expect(getComputedStyle(dot).fill).toBe(colour)
+}
+
+const drawnArrow = (more: Partial<BoardConnector>) => ({
+	type: "set-arrow",
+	arrow: {
+		id: expect.any(String),
+		kind: "connector",
+		from: "start",
+		fromSide: "right",
+		to: "finish",
+		routing: "straight",
+		zOrder: 0,
+		text: "",
+		...more,
+	},
+})
+
+export const ArrowAimedAtShape = meta.story({
+	args: drawingArgs,
+	parameters: handDocs(
+		"Arrow behaviour 1.1 Hover target: with the Arrow tool on, a shape under the pointer wears a ring 2 wide, 4 outside its outline with corners of 7, in the Space colour. Drawn from the right anchor of Start and held over Finish, the draft arrow in the Space colour aims at the centre of Finish and stops 8 before its outline, with no halo and no marker, and nothing is sent yet.",
+	),
+	play: async ({ canvasElement, args }) => {
+		hoverObject(canvasElement, "finish")
+		await waitFor(() => expect(ringOn(canvasElement, "finish")).not.toBeNull())
+		await expectHoverRing(canvasElement, "finish")
+
+		await pressStartRightAnchor(canvasElement)
+		pointerAt("pointermove", document, atBoard(canvasElement, OVER_FINISH))
+		await waitFor(() => expect(ringOn(canvasElement, "finish")).not.toBeNull())
+		await expectHoverRing(canvasElement, "finish")
+		await expect(slotsIn(canvasElement, "board-anchor")).toHaveLength(0)
+		await expect(
+			connectorPaths(canvasElement, "board-connector-draft"),
+		).toEqual([CENTRE_PATH])
+		const draft = draftLine(canvasElement)
+		await expect(getComputedStyle(draft).stroke).toBe(
+			resolvedRootColor("--user-bubble"),
+		)
+		await expect(slotsIn(draft, "board-connector-halo")).toHaveLength(0)
+		await expect(
+			slotsIn(canvasElement, "board-connector-exact-point"),
+		).toHaveLength(0)
+		await expect(args.onIntent).not.toHaveBeenCalled()
+		await userEvent.keyboard("{Escape}")
+	},
+})
+
+export const ArrowAimedAtShapeDark = meta.story({
+	globals: { theme: "dark" },
+	args: ArrowAimedAtShape.input.args,
+	parameters: arrowDocs(
+		"ArrowAimedAtShape in the dark theme, the ring and the draft in #88BAFF.",
+	),
+	play: async (context) => {
+		await expectDarkSurface(context.canvasElement)
+		await ArrowAimedAtShape.input.play?.(context)
+	},
+})
+
+export const ArrowReleasedOnCentre = meta.story({
+	args: drawingArgs,
+	parameters: handDocs(
+		"Arrow behaviour 1.2 Quick release: released over Finish right after reaching it, the end ties to the centre of Finish. One set-arrow intent goes out with the end on Finish and no side, anchor or point, and the committed arrow rests in the board shape border colour, 8 before the outline of Finish on the line between the two centres. Straight is picked in the flyout first, as the artboard draws it.",
+	),
+	play: async ({ canvasElement, args }) => {
+		await pickStraight(canvasElement)
+		await pressStartRightAnchor(canvasElement)
+		const over = atBoard(canvasElement, OVER_FINISH)
+		pointerAt("pointermove", document, over)
+		pointerAt("pointerup", document, over)
+		await waitFor(() => expect(args.onIntent).toHaveBeenCalledTimes(1))
+		await expect(args.onIntent).toHaveBeenCalledWith(drawnArrow({}))
+		await expect(slotsIn(canvasElement, "board-connector-draft")).toHaveLength(
+			0,
+		)
+		const line = slotIn(canvasElement, "board-connector")
+		await expect(pathOf(line, "board-connector-path")).toBe(CENTRE_PATH)
+		await expectArrowAtRest(line)
+	},
+})
+
+export const ArrowReleasedOnCentreDark = meta.story({
+	globals: { theme: "dark" },
+	args: ArrowReleasedOnCentre.input.args,
+	parameters: arrowDocs(
+		"ArrowReleasedOnCentre in the dark theme, the committed arrow #E5E5E5.",
+	),
+	play: async (context) => {
+		await expectDarkSurface(context.canvasElement)
+		await ArrowReleasedOnCentre.input.play?.(context)
+	},
+})
+
+export const ArrowHeldOnExactPoint = meta.story({
+	args: drawingArgs,
+	parameters: handDocs(
+		"Arrow behaviour 1.3 Exact point: the pointer resting still over Finish for half a second ties the end to the point under it. The ring stays, the draft reaches the point with no gap over a 4.5 halo in the board colour, and the point carries the marker, a ring of radius 9 stroked 2 around a dot of radius 3, in the darker step of the Space colour. The release sends one set-arrow intent with the point as an anchor of Finish. Straight is picked in the flyout first, as the artboard draws it.",
+	),
+	play: async ({ canvasElement, args }) => {
+		await pickStraight(canvasElement)
+		await pressStartRightAnchor(canvasElement)
+		const inside = atBoard(canvasElement, INSIDE_FINISH)
+		pointerAt("pointermove", document, inside)
+		await waitFor(
+			() =>
+				expect(
+					slotsIn(canvasElement, "board-connector-exact-point"),
+				).toHaveLength(1),
+			EXACT_POINT_WAIT,
+		)
+		await expectExactPointMarker(canvasElement, INSIDE_FINISH)
+		await expect(ringOn(canvasElement, "finish")).not.toBeNull()
+		await expect(
+			connectorPaths(canvasElement, "board-connector-draft"),
+		).toEqual([EXACT_POINT_PATH])
+		await expectHalo(draftLine(canvasElement))
+
+		pointerAt("pointerup", document, inside)
+		await waitFor(() => expect(args.onIntent).toHaveBeenCalledTimes(1))
+		await expect(args.onIntent).toHaveBeenCalledWith(
+			drawnArrow({ toAnchor: { x: 0.25, y: 0.75 } }),
+		)
+		await expect(
+			pathOf(slotIn(canvasElement, "board-connector"), "board-connector-path"),
+		).toBe(EXACT_POINT_PATH)
+		await expect(
+			slotsIn(canvasElement, "board-connector-exact-point"),
+		).toHaveLength(0)
+	},
+})
+
+export const ArrowHeldOnExactPointDark = meta.story({
+	globals: { theme: "dark" },
+	args: ArrowHeldOnExactPoint.input.args,
+	parameters: arrowDocs(
+		"ArrowHeldOnExactPoint in the dark theme, the marker #2D62AC under the #88BAFF draft.",
+	),
+	play: async (context) => {
+		await expectDarkSurface(context.canvasElement)
+		await ArrowHeldOnExactPoint.input.play?.(context)
+	},
+})
+
+export const ArrowDrawnWithAlt = meta.story({
+	args: drawingArgs,
+	parameters: handDocs(
+		"Arrow behaviour 1.4 Alt held: while Alt is held the end sits exactly at the cursor inside Finish, still tied to it. The ring stays, the draft reaches the cursor over its halo and no marker shows, even with the pointer still. Alt pressed or let go without moving the pointer moves the end at once, and the release sends one set-arrow intent with the cursor as an anchor of Finish. Straight is picked in the flyout first, as the artboard draws it.",
+	),
+	play: async ({ canvasElement, args }) => {
+		await pickStraight(canvasElement)
+		await pressStartRightAnchor(canvasElement)
+		const inside = atBoard(canvasElement, INSIDE_FINISH)
+		pointerAt("pointermove", document, inside)
+		await waitFor(() =>
+			expect(connectorPaths(canvasElement, "board-connector-draft")).toEqual([
+				CENTRE_PATH,
+			]),
+		)
+		await userEvent.keyboard("{Alt>}")
+		await waitFor(() =>
+			expect(connectorPaths(canvasElement, "board-connector-draft")).toEqual([
+				EXACT_POINT_PATH,
+			]),
+		)
+		await expect(ringOn(canvasElement, "finish")).not.toBeNull()
+		await expectHalo(draftLine(canvasElement))
+		pointerAt("pointermove", document, inside, { altKey: true })
+		await new Promise((resolve) =>
+			setTimeout(resolve, EXACT_POINT_WAIT.timeout / 2),
+		)
+		await expect(
+			slotsIn(canvasElement, "board-connector-exact-point"),
+		).toHaveLength(0)
+
+		pointerAt("pointerup", document, inside, { altKey: true })
+		await userEvent.keyboard("{/Alt}")
+		await waitFor(() => expect(args.onIntent).toHaveBeenCalledTimes(1))
+		await expect(args.onIntent).toHaveBeenCalledWith(
+			drawnArrow({ toAnchor: { x: 0.25, y: 0.75 } }),
+		)
+		await expect(
+			pathOf(slotIn(canvasElement, "board-connector"), "board-connector-path"),
+		).toBe(EXACT_POINT_PATH)
+	},
+})
+
+export const ArrowDrawnWithAltDark = meta.story({
+	globals: { theme: "dark" },
+	args: ArrowDrawnWithAlt.input.args,
+	parameters: arrowDocs("ArrowDrawnWithAlt in the dark theme."),
+	play: async (context) => {
+		await expectDarkSurface(context.canvasElement)
+		await ArrowDrawnWithAlt.input.play?.(context)
+	},
+})
+
+export const ArrowDrawnWithCtrl = meta.story({
+	args: drawingArgs,
+	parameters: handDocs(
+		"Arrow behaviour 1.5 Ctrl held: while Ctrl is held no shape takes the end. Finish loses its ring, the draft reaches the cursor over its halo with no marker, and the release sends one set-arrow intent with the end left untied on the board point under the cursor. Straight is picked in the flyout first, as the artboard draws it.",
+	),
+	play: async ({ canvasElement, args }) => {
+		await pickStraight(canvasElement)
+		await pressStartRightAnchor(canvasElement)
+		const inside = atBoard(canvasElement, INSIDE_FINISH)
+		pointerAt("pointermove", document, inside, { ctrlKey: true })
+		await waitFor(() =>
+			expect(connectorPaths(canvasElement, "board-connector-draft")).toEqual([
+				EXACT_POINT_PATH,
+			]),
+		)
+		await expect(slotsIn(canvasElement, "board-anchor-frame")).toHaveLength(0)
+		await expectHalo(draftLine(canvasElement))
+		await expect(
+			slotsIn(canvasElement, "board-connector-exact-point"),
+		).toHaveLength(0)
+
+		pointerAt("pointerup", document, inside, { ctrlKey: true })
+		await waitFor(() => expect(args.onIntent).toHaveBeenCalledTimes(1))
+		await expect(args.onIntent).toHaveBeenCalledWith(
+			drawnArrow({ to: "", toPoint: INSIDE_FINISH }),
+		)
+		await expect(
+			pathOf(slotIn(canvasElement, "board-connector"), "board-connector-path"),
+		).toBe(EXACT_POINT_PATH)
+	},
+})
+
+export const ArrowDrawnWithCtrlDark = meta.story({
+	globals: { theme: "dark" },
+	args: ArrowDrawnWithCtrl.input.args,
+	parameters: arrowDocs("ArrowDrawnWithCtrl in the dark theme."),
+	play: async (context) => {
+		await expectDarkSurface(context.canvasElement)
+		await ArrowDrawnWithCtrl.input.play?.(context)
+	},
+})
+
+const pressOn = (element: Element, root: HTMLElement, at: BoardPoint) =>
+	pointerAt("pointerdown", element, atBoard(root, at))
+
+export const ArrowBentByHand = meta.story({
+	args: arrowArgs([START, FINISH, TIED_ARROW]),
+	parameters: handDocs(
+		"Arrow behaviour 2.1 Curve: the middle handle of the selected arrow dragged 66 up bends the arrow through it live, the handle of radius 5.5 riding the apex of the curve and the end handles of radius 4 staying on their ends. Nothing goes out before the release, which sends one set-arrow intent with the bend of 66, and the bend stays.",
+	),
+	play: async ({ canvasElement, args }) => {
+		await selectArrow(canvasElement, START_TO_FINISH)
+		const handle = slotIn(canvasElement, "board-connector-middle-handle")
+		pressOn(handle, canvasElement, { x: 320, y: 200 })
+		pointerAt(
+			"pointermove",
+			document,
+			atBoard(canvasElement, { x: 320, y: 134 }),
+		)
+		const curve = "M248 200 Q320 68 392 200"
+		await waitFor(() =>
+			expect(connectorPaths(canvasElement, "board-connector")).toEqual([curve]),
+		)
+		await expect(args.onIntent).not.toHaveBeenCalled()
+
+		pointerAt("pointerup", document, atBoard(canvasElement, { x: 320, y: 134 }))
+		await waitFor(() => expect(args.onIntent).toHaveBeenCalledTimes(1))
+		await expect(args.onIntent).toHaveBeenCalledWith({
+			type: "set-arrow",
+			arrow: { ...TIED_ARROW, bend: 66 },
+		})
+		await expect(connectorPaths(canvasElement, "board-connector")).toEqual([
+			curve,
+		])
+		await expectArrowSelected(
+			arrowLine(canvasElement, START_TO_FINISH),
+			[
+				{ x: 248, y: 200 },
+				{ x: 392, y: 200 },
+			],
+			{ x: 320, y: 134 },
+		)
+	},
+})
+
+export const ArrowBentByHandDark = meta.story({
+	globals: { theme: "dark" },
+	args: ArrowBentByHand.input.args,
+	parameters: arrowDocs("ArrowBentByHand in the dark theme."),
+	play: async (context) => {
+		await expectDarkSurface(context.canvasElement)
+		await ArrowBentByHand.input.play?.(context)
+	},
+})
+
+const LOW_FINISH = handShapeOf("finish", "Finish", 400, 360)
+const SIDED_ARROW = arrowBetween(START_TO_FINISH, "start", "finish", {
+	fromSide: "right",
+	toSide: "left",
+})
+const FLYOUT_GAP = 16
+
+export const ArrowReroutedByHand = meta.story({
+	args: arrowArgs([START, LOW_FINISH, SIDED_ARROW]),
+	parameters: handDocs(
+		"Arrow behaviour 2.2 Elbow: the flyout of the selected arrow sits centred 16 above it, Straight then Elbow. Elbow sends one set-arrow intent with the elbow kind and the arrow reroutes, the middle handle on the middle of its lane, and the chosen item is filled in the selected control colour with its icon in the Space colour and its text at 600.",
+	),
+	play: async ({ canvasElement, args }) => {
+		const canvas = within(canvasElement)
+		await selectArrow(canvasElement, START_TO_FINISH)
+		const line = slotIn(
+			arrowLine(canvasElement, START_TO_FINISH) as HTMLElement,
+			"board-connector-path",
+		).getBoundingClientRect()
+		const flyout = slotIn(canvasElement, "board-connector-flyout")
+		const box = flyout.getBoundingClientRect()
+		await expect(box.bottom).toBeCloseTo(line.top - FLYOUT_GAP, 0)
+		await expect(box.x + box.width / 2).toBeCloseTo(line.x + line.width / 2, 0)
+		const options = within(flyout).getAllByRole("radio")
+		await expect(options.map((option) => option.textContent)).toEqual([
+			"Straight",
+			"Elbow",
+		])
+
+		const elbow = canvas.getByRole("radio", { name: "Elbow" })
+		await userEvent.click(elbow)
+		await expect(args.onIntent).toHaveBeenCalledTimes(1)
+		await expect(args.onIntent).toHaveBeenCalledWith({
+			type: "set-arrow",
+			arrow: { ...SIDED_ARROW, routing: "elbow" },
+		})
+		await waitFor(() =>
+			expect(connectorPaths(canvasElement, "board-connector")).toEqual([
+				"M248 200 L312 200 Q320 200 320 208 L320 432 Q320 440 328 440 L392 440",
+			]),
+		)
+		const handle = slotIn(canvasElement, "board-connector-middle-handle")
+		await expect(attributesOf(handle, ["cx", "cy"])).toEqual([320, 320])
+		await expect(elbow).toBeChecked()
+		const chosen = getComputedStyle(elbow)
+		await expect(chosen.backgroundColor).toBe(
+			resolvedRootColor("--board-control-selected"),
+		)
+		await expect(chosen.fontWeight).toBe("600")
+		await expect(chosen.color).toBe(resolvedRootColor("--primary"))
+	},
+})
+
+export const ArrowReroutedByHandDark = meta.story({
+	globals: { theme: "dark" },
+	args: ArrowReroutedByHand.input.args,
+	parameters: arrowDocs(
+		"ArrowReroutedByHand in the dark theme, the chosen item filled #2A2A2D with its icon in #88BAFF.",
+	),
+	play: async (context) => {
+		await expectDarkSurface(context.canvasElement)
+		await ArrowReroutedByHand.input.play?.(context)
+		const elbow = within(context.canvasElement).getByRole("radio", {
+			name: "Elbow",
+		})
+		await expect(getComputedStyle(elbow).backgroundColor).toBe(
+			"rgb(42, 42, 45)",
+		)
+	},
+})
+
+const MOVING_OUTSET = 3
+
+const BENT_LABELLED_ARROW = arrowBetween(START_TO_FINISH, "start", "finish", {
+	bend: 40,
+	text: "Hands over",
+	labelPosition: 0.3,
+})
+
+export const ArrowFollowsMovedShape = meta.story({
+	args: arrowArgs([START, FINISH, BENT_LABELLED_ARROW]),
+	parameters: handDocs(
+		"Arrow behaviour 3.1 Moving: Finish dragged by the pointer is lifted on a shadow of 0 2 4 and 0 16 32 over a dashed 1.5 ghost of itself at its start, outlined 1.5 in the Space colour 3 outside it with corners of 6 in place of the selection frame, and redraws the arrow tied to it in the same frame, at rest, with its bend of 40 and its label at 0.3 of the way, before the release sends one move intent, drops the ghost and the shadow and gives Finish its selection frame back. Moved again with Shift and the down arrow key, the arrow follows the same way.",
+	),
+	play: async ({ canvasElement, args }) => {
+		const finish = objectNode(canvasElement, "finish") as HTMLElement
+		const from = centreOf(finish)
+		const to = shifted(from, { x: 60, y: 40 })
+		pointerAt("pointerdown", finish, from)
+		pointerAt("pointermove", document, to)
+		const moved = "M247.96 209.26 Q358.37 140.44 452.04 230.74"
+		await waitFor(() =>
+			expect(connectorPaths(canvasElement, "board-connector")).toEqual([moved]),
+		)
+		await expectArrowAtRest(arrowLine(canvasElement, START_TO_FINISH))
+		const ghost = slotIn(canvasElement, "board-move-ghost")
+		const ghostBox = ghost.getBoundingClientRect()
+		const origin = boardAt(canvasElement, FINISH.position.x, FINISH.position.y)
+		await expect([ghostBox.x, ghostBox.y]).toEqual([
+			origin.clientX,
+			origin.clientY,
+		])
+		await expect([ghostBox.width, ghostBox.height]).toEqual([160, 160])
+		const ghostLook = getComputedStyle(ghost)
+		await expect(ghostLook.borderTopStyle).toBe("dashed")
+		await expect(ghost).toHaveClass("border-[1.5px]")
+		await expect(ghostLook.borderTopColor).toBe(
+			resolvedRootColor("--board-move-ghost"),
+		)
+		await expect(getComputedStyle(finish).filter).toMatch(
+			/drop-shadow.*0px 2px 4px.*drop-shadow.*0px 16px 32px/,
+		)
+		await expect(slotsIn(canvasElement, "board-selection-frame")).toHaveLength(
+			0,
+		)
+		const outline = slotIn(canvasElement, "board-moving-outline")
+		const outlineBox = outline.getBoundingClientRect()
+		const movedBox = finish.getBoundingClientRect()
+		await expect(outlineBox.x).toBeCloseTo(movedBox.x - MOVING_OUTSET, 0)
+		await expect(outlineBox.y).toBeCloseTo(movedBox.y - MOVING_OUTSET, 0)
+		await expect(outlineBox.width).toBeCloseTo(
+			movedBox.width + MOVING_OUTSET * 2,
+			0,
+		)
+		await expect(outlineBox.height).toBeCloseTo(
+			movedBox.height + MOVING_OUTSET * 2,
+			0,
+		)
+		const outlineLook = getComputedStyle(outline)
+		await expect(outlineLook.borderTopLeftRadius).toBe("6px")
+		await expect(outlineLook.boxShadow).toMatch(/\binset\b/)
+		await expect(outlineLook.boxShadow).toMatch(/\b1\.5px\b/)
+		await expect(outlineLook.boxShadow).toContain(
+			resolvedRootColor("--user-bubble"),
+		)
+		const label = slotIn(canvasElement, "board-connector-label")
+		await expectLabelCentredOn(canvasElement, label, { x: 312.7, y: 182.29 })
+		await expect(args.onIntent).not.toHaveBeenCalled()
+		pointerAt("pointerup", document, to)
+		await waitFor(() => expect(args.onIntent).toHaveBeenCalledTimes(1))
+		await expect(args.onIntent).toHaveBeenCalledWith({
+			type: "move",
+			id: "finish",
+			position: { x: 460, y: 160 },
+		})
+		await expect(slotsIn(canvasElement, "board-move-ghost")).toHaveLength(0)
+		await expect(getComputedStyle(finish).filter).toBe("none")
+		await expect(slotsIn(canvasElement, "board-moving-outline")).toHaveLength(0)
+		await expect(slotsIn(canvasElement, "board-selection-frame")).toHaveLength(
+			1,
+		)
+
+		finish.focus()
+		await userEvent.keyboard("{Shift>}{ArrowDown}{/Shift}")
+		await waitFor(() => expect(args.onIntent).toHaveBeenCalledTimes(2))
+		await waitFor(() =>
+			expect(connectorPaths(canvasElement, "board-connector")).toEqual([
+				"M247.93 211.57 Q360.44 145.68 452.07 238.43",
+			]),
+		)
+		await expectLabelCentredOn(canvasElement, label, { x: 313.56, y: 186.32 })
+	},
+})
+
+export const ArrowFollowsMovedShapeDark = meta.story({
+	globals: { theme: "dark" },
+	args: ArrowFollowsMovedShape.input.args,
+	parameters: arrowDocs(
+		"ArrowFollowsMovedShape in the dark theme, the arrow #E5E5E5 while Finish moves.",
+	),
+	play: async (context) => {
+		await expectDarkSurface(context.canvasElement)
+		await ArrowFollowsMovedShape.input.play?.(context)
+	},
+})
+
+const labelEditorIn = (root: HTMLElement) =>
+	within(root).queryByRole("textbox", { name: "Arrow label" })
+
+export const ArrowLabelEdited = meta.story({
+	args: arrowArgs([START, FINISH, LABELLED_ARROW]),
+	parameters: handDocs(
+		"A double click on an arrow opens its label in place, on the chip at its label position ringed 1.5 in the Space colour, the text selected at its end. Enter sends one set-arrow intent with the new label and closes the field. Enter on the selected arrow opens it again, and Escape closes it with nothing sent and the label as it was.",
+	),
+	play: async ({ canvasElement, args }) => {
+		const hit = canvasElement.querySelector(
+			`[data-slot="board-connector-hits"] [data-connector-id="${START_TO_FINISH}"]`,
+		) as SVGPathElement
+		await userEvent.dblClick(hit)
+		const editor = await waitFor(() => {
+			const field = labelEditorIn(canvasElement)
+			expect(field).not.toBeNull()
+			return field as HTMLTextAreaElement
+		})
+		await expect(editor).toHaveFocus()
+		await expect(editor).toHaveValue("Hands over")
+		await expect(slotsIn(canvasElement, "board-connector-label")).toHaveLength(
+			0,
+		)
+		await expectLabelCentredOn(canvasElement, editor, { x: 320, y: 200 })
+		const look = getComputedStyle(editor)
+		await expect(look.boxShadow).toMatch(/\b1\.5px\b/)
+		await expect(look.backgroundColor).toBe(
+			resolvedRootColor("--board-surface"),
+		)
+		await expect([look.fontSize, look.fontWeight]).toEqual(["13px", "500"])
+
+		await userEvent.keyboard(" soon{Enter}")
+		await waitFor(() => expect(labelEditorIn(canvasElement)).toBeNull())
+		await expect(args.onIntent).toHaveBeenCalledTimes(1)
+		await expect(args.onIntent).toHaveBeenCalledWith({
+			type: "set-arrow",
+			arrow: { ...LABELLED_ARROW, text: "Hands over soon" },
+		})
+		await expect(
+			slotIn(canvasElement, "board-connector-label"),
+		).toHaveTextContent("Hands over soon")
+
+		await userEvent.keyboard("{Enter}")
+		const again = await waitFor(() => {
+			const field = labelEditorIn(canvasElement)
+			expect(field).not.toBeNull()
+			return field as HTMLTextAreaElement
+		})
+		await expect(again).toHaveValue("Hands over soon")
+		await userEvent.keyboard("!{Escape}")
+		await waitFor(() => expect(labelEditorIn(canvasElement)).toBeNull())
+		await expect(args.onIntent).toHaveBeenCalledTimes(1)
+		await expect(
+			slotIn(canvasElement, "board-connector-label"),
+		).toHaveTextContent("Hands over soon")
+	},
+})
+
+export const ArrowLabelEditedDark = meta.story({
+	globals: { theme: "dark" },
+	args: ArrowLabelEdited.input.args,
+	parameters: arrowDocs("ArrowLabelEdited in the dark theme."),
+	play: async (context) => {
+		await expectDarkSurface(context.canvasElement)
+		await ArrowLabelEdited.input.play?.(context)
+	},
+})
+
+const resolvedStroke = (root: HTMLElement, value: string) => {
+	const probe = document.createElement("span")
+	probe.style.color = value
+	root.append(probe)
+	const colour = getComputedStyle(probe).color
+	probe.remove()
+	return colour
+}
+
+export const ArrowLabelSlid = meta.story({
+	args: arrowArgs([START, FINISH, LABELLED_ARROW]),
+	parameters: handDocs(
+		"Arrow behaviour 4.1 Label: a dragged label slides along the arrow only, its chip ringed 1.5 in the Space colour, while a dashed tick 16 long in the Space colour at 60%, dashes of 2 and gaps of 3, marks the middle of the arrow across it. The release sends one set-arrow intent with the new label position and the tick goes. Released near the tick, the label snaps back to the middle.",
+	),
+	play: async ({ canvasElement, args }) => {
+		const label = slotIn(canvasElement, "board-connector-label")
+		pressOn(label, canvasElement, { x: 320, y: 200 })
+		pointerAt(
+			"pointermove",
+			document,
+			atBoard(canvasElement, { x: 284, y: 240 }),
+		)
+		await waitFor(() =>
+			expectLabelCentredOn(canvasElement, label, { x: 284, y: 200 }),
+		)
+		await expect(getComputedStyle(label).boxShadow).toMatch(/\b1\.5px\b/)
+		const tick = slotIn(canvasElement, "board-connector-middle-tick")
+		await expect(attributesOf(tick, ["x1", "y1", "x2", "y2"])).toEqual([
+			320, 192, 320, 208,
+		])
+		await expect(tick.getAttribute("stroke-dasharray")).toBe("2 3")
+		await expect(getComputedStyle(tick).stroke).toBe(
+			resolvedStroke(
+				canvasElement,
+				"color-mix(in oklab, var(--user-bubble) 60%, transparent)",
+			),
+		)
+		await expect(args.onIntent).not.toHaveBeenCalled()
+
+		pointerAt("pointerup", document, atBoard(canvasElement, { x: 284, y: 240 }))
+		await waitFor(() => expect(args.onIntent).toHaveBeenCalledTimes(1))
+		await expect(args.onIntent).toHaveBeenCalledWith({
+			type: "set-arrow",
+			arrow: { ...LABELLED_ARROW, labelPosition: 0.25 },
+		})
+		await expect(
+			slotsIn(canvasElement, "board-connector-middle-tick"),
+		).toHaveLength(0)
+
+		pressOn(label, canvasElement, { x: 284, y: 200 })
+		pointerAt(
+			"pointermove",
+			document,
+			atBoard(canvasElement, { x: 324, y: 210 }),
+		)
+		await waitFor(() =>
+			expect(
+				slotsIn(canvasElement, "board-connector-middle-tick"),
+			).toHaveLength(1),
+		)
+		pointerAt("pointerup", document, atBoard(canvasElement, { x: 324, y: 210 }))
+		await waitFor(() => expect(args.onIntent).toHaveBeenCalledTimes(2))
+		await expect(args.onIntent).toHaveBeenLastCalledWith({
+			type: "set-arrow",
+			arrow: { ...LABELLED_ARROW, labelPosition: 0.5 },
+		})
+		await expectLabelCentredOn(canvasElement, label, { x: 320, y: 200 })
+	},
+})
+
+export const ArrowLabelSlidDark = meta.story({
+	globals: { theme: "dark" },
+	args: ArrowLabelSlid.input.args,
+	parameters: arrowDocs(
+		"ArrowLabelSlid in the dark theme, the tick #88BAFF at 60% and the text #EDEDED.",
+	),
+	play: async (context) => {
+		await expectDarkSurface(context.canvasElement)
+		await ArrowLabelSlid.input.play?.(context)
+	},
+})
+
+const ASIDE_LABELLED_ARROW = arrowBetween(START_TO_FINISH, "start", "finish", {
+	text: "Hands over",
+	labelPosition: 0.25,
+})
+
+const cancelledByEscape = async (
+	root: HTMLElement,
+	press: Element,
+	from: BoardPoint,
+	to: BoardPoint,
+	expectHeld: () => Promise<void>,
+) => {
+	pressOn(press, root, from)
+	pointerAt("pointermove", document, atBoard(root, to))
+	await waitFor(expectHeld)
+	await userEvent.keyboard("{Escape}")
+	await waitFor(() =>
+		expect(connectorPaths(root, "board-connector")).toEqual([CENTRE_PATH]),
+	)
+	pointerAt("pointerup", document, atBoard(root, to))
+	await expectLabelCentredOn(root, slotIn(root, "board-connector-label"), {
+		x: 284,
+		y: 200,
+	})
+	await expect(within(root).getByRole("radiogroup")).toBeVisible()
+}
+
+export const ArrowGestureCancelled = meta.story({
+	args: arrowArgs([START, FINISH, ASIDE_LABELLED_ARROW]),
+	parameters: handDocs(
+		"Escape during a drag of an end, of the middle handle or of the label puts the arrow back as it was, still selected, and the release that follows sends nothing.",
+	),
+	play: async ({ canvasElement, args }) => {
+		await selectArrow(canvasElement, START_TO_FINISH)
+		const line = arrowLine(canvasElement, START_TO_FINISH) as HTMLElement
+		const end = line.querySelector('[data-end="to"]') as Element
+		await cancelledByEscape(
+			canvasElement,
+			end,
+			{ x: 392, y: 200 },
+			{ x: 640, y: 420 },
+			() =>
+				expect(connectorPaths(canvasElement, "board-connector")).toEqual([
+					"M247.27 240 L640 420",
+				]),
+		)
+		await cancelledByEscape(
+			canvasElement,
+			slotIn(line, "board-connector-middle-handle"),
+			{ x: 320, y: 200 },
+			{ x: 320, y: 134 },
+			() =>
+				expect(connectorPaths(canvasElement, "board-connector")).toEqual([
+					"M248 200 Q320 68 392 200",
+				]),
+		)
+		await cancelledByEscape(
+			canvasElement,
+			slotIn(canvasElement, "board-connector-label"),
+			{ x: 284, y: 200 },
+			{ x: 356, y: 200 },
+			() =>
+				expectLabelCentredOn(
+					canvasElement,
+					slotIn(canvasElement, "board-connector-label"),
+					{ x: 356, y: 200 },
+				),
+		)
+		await expect(args.onIntent).not.toHaveBeenCalled()
+	},
+})
+
+export const ArrowGestureCancelledDark = meta.story({
+	globals: { theme: "dark" },
+	args: ArrowGestureCancelled.input.args,
+	parameters: arrowDocs("ArrowGestureCancelled in the dark theme."),
+	play: async (context) => {
+		await expectDarkSurface(context.canvasElement)
+		await ArrowGestureCancelled.input.play?.(context)
+	},
+})
+
 const RemovableBoard = (props: BoardCanvasProps) => {
 	const [isShown, setIsShown] = useState(true)
 	return (
@@ -2445,7 +4047,13 @@ const RemovableBoard = (props: BoardCanvasProps) => {
 	)
 }
 
-const DRAFT_EVENTS = ["pointermove", "pointerup", "pointercancel", "keydown"]
+const DRAFT_EVENTS = [
+	"pointermove",
+	"pointerup",
+	"pointercancel",
+	"keydown",
+	"keyup",
+]
 
 export const UnmountDuringDraft = meta.story({
 	tags: ["test-only"],
@@ -2617,5 +4225,305 @@ export const SelectedObjectRemovedElsewhere = meta.story({
 		)
 		await expect(selectedOptions(canvasElement)).toEqual([])
 		await expect(args.onSelectionChange).toHaveBeenCalledTimes(2)
+	},
+})
+
+const CREATION_TOOLS = [
+	{ tool: "Sticky note", kind: "sticky" },
+	{ tool: "Shape", kind: "shape" },
+	{ tool: "Text", kind: "text" },
+	{ tool: "Section", kind: "section" },
+] as const
+
+type CreationTool = (typeof CREATION_TOOLS)[number]
+
+const EMPTY_SPOT = { x: 700, y: 480 }
+const HAND_DRAG = { x: 120, y: -60 }
+const CHOSEN_IMAGES = [pngNamed("terrace.png"), pngNamed("courtyard.png")]
+
+const toolButton = (root: HTMLElement, name: string) =>
+	within(root).getByRole("button", { name })
+
+const pickTool = async (root: HTMLElement, name: string) => {
+	const button = toolButton(root, name)
+	await userEvent.click(button)
+	await expect(button).toHaveAttribute("aria-pressed", "true")
+}
+
+const pressBoard = async (root: HTMLElement, spot: BoardPoint) => {
+	const at = boardAt(root, spot.x, spot.y)
+	await userEvent.pointer({
+		keys: "[MouseLeft]",
+		target: slotIn(root, "board-canvas"),
+		coords: at,
+	})
+	return at
+}
+
+const expectCentredOn = async (
+	object: Element,
+	at: { clientX: number; clientY: number },
+) => {
+	const box = object.getBoundingClientRect()
+	await expect(box.x + box.width / 2).toBeCloseTo(at.clientX, 0)
+	await expect(box.y + box.height / 2).toBeCloseTo(at.clientY, 0)
+}
+
+const zIndexOf = (object: HTMLElement) => Number(object.style.zIndex)
+
+const expectZRank = async (
+	root: HTMLElement,
+	object: HTMLElement,
+	rank: "above" | "below",
+) => {
+	const own = zIndexOf(object)
+	const outranking = within(root)
+		.getAllByRole("option")
+		.filter((option) => option !== object)
+		.map(zIndexOf)
+		.filter((z) => (rank === "above" ? z >= own : z <= own))
+	await expect(outranking).toEqual([])
+}
+
+const placeWithTool = async (
+	{ canvasElement, args }: CanvasPlayContext,
+	{ tool, kind }: CreationTool,
+	spot: BoardPoint,
+) => {
+	const board = slotIn(canvasElement, "board-canvas")
+	await pickTool(canvasElement, tool)
+	await expect(getComputedStyle(board).cursor).toBe("crosshair")
+
+	const at = await pressBoard(canvasElement, spot)
+	const size = boardSchema.kinds[kind].size
+	const centre = boardPointOf(board, at)
+	await expect(args.onIntent).toHaveBeenLastCalledWith({
+		type: "create",
+		object: expect.objectContaining({
+			kind,
+			size,
+			position: {
+				x: centre.x - size.width / 2,
+				y: centre.y - size.height / 2,
+			},
+			text: "",
+		}),
+	})
+	const placed = selectedOptions(canvasElement)
+	await expect(placed).toHaveLength(1)
+	const [object] = placed as [HTMLElement]
+	await expect(object).toHaveAccessibleName(tool)
+	await expectCentredOn(object, at)
+	await expectZRank(
+		canvasElement,
+		object,
+		kind === "section" ? "below" : "above",
+	)
+	await expect(args.onToolChange).toHaveBeenLastCalledWith("select")
+	await expect(toolButton(canvasElement, "Select")).toHaveAttribute(
+		"aria-pressed",
+		"true",
+	)
+	await expect(getComputedStyle(board).cursor).not.toBe("crosshair")
+	return object
+}
+
+const toolDocs = (story: string) => ({
+	docs: { description: { story } },
+})
+
+const placeOneWith =
+	(creation: CreationTool) => async (context: CanvasPlayContext) => {
+		await placeWithTool(context, creation, EMPTY_SPOT)
+		await expect(context.args.onIntent).toHaveBeenCalledTimes(1)
+	}
+
+export const PlaceStickyWithTool = meta.story({
+	globals: LAPTOP_WINDOW,
+	args: SELECTION_ARGS,
+	parameters: toolDocs(
+		"Sticky note picked in the dock: the board shows the crosshair, a press on the empty board sends one create intent for a sticky at the board's sticky size centred on the press, selects it and hands the tool back to Select.",
+	),
+	play: placeOneWith(CREATION_TOOLS[0]),
+})
+
+export const PlaceShapeWithTool = meta.story({
+	globals: LAPTOP_WINDOW,
+	args: SELECTION_ARGS,
+	parameters: toolDocs(
+		"Shape picked in the dock: a press on the empty board sends one create intent for a shape at the board's shape size centred on the press, selects it with its style bar and hands the tool back to Select.",
+	),
+	play: placeOneWith(CREATION_TOOLS[1]),
+})
+
+export const PlaceTextWithTool = meta.story({
+	globals: LAPTOP_WINDOW,
+	args: SELECTION_ARGS,
+	parameters: toolDocs(
+		"Text picked in the dock: a press on the empty board creates a text centred on the press and opens it in editing with the caret inside, so typing then Escape sends one edit-text intent.",
+	),
+	play: async (context) => {
+		const { canvasElement, args } = context
+		const object = await placeWithTool(context, CREATION_TOOLS[2], EMPTY_SPOT)
+		const editor = within(canvasElement).getByRole("textbox", {
+			name: "Edit text",
+		})
+		await expect(editor).toHaveFocus()
+
+		await userEvent.keyboard("Agenda")
+		await userEvent.keyboard("{Escape}")
+		await expect(args.onIntent).toHaveBeenLastCalledWith({
+			type: "edit-text",
+			id: object.dataset.objectId,
+			text: "Agenda",
+		})
+	},
+})
+
+export const PlaceSectionWithTool = meta.story({
+	globals: LAPTOP_WINDOW,
+	args: SELECTION_ARGS,
+	parameters: toolDocs(
+		"Section picked in the dock: a press on the empty board sends one create intent for a section at the board's section size centred on the press and below every object, selects it and hands the tool back to Select.",
+	),
+	play: placeOneWith(CREATION_TOOLS[3]),
+})
+
+const chooseImagesAt = async (
+	{ canvasElement, args }: CanvasPlayContext,
+	spot: BoardPoint,
+) => {
+	const board = slotIn(canvasElement, "board-canvas")
+	const chooser = slotIn(
+		canvasElement,
+		"board-image-chooser",
+	) as HTMLInputElement
+	const opened = spyOn(chooser, "click").mockImplementation(() => undefined)
+	await pickTool(canvasElement, "Image")
+	await expect(getComputedStyle(board).cursor).toBe("crosshair")
+
+	const at = await pressBoard(canvasElement, spot)
+	await expect(opened).toHaveBeenCalledTimes(1)
+	opened.mockRestore()
+	await userEvent.upload(chooser, CHOSEN_IMAGES)
+	await expect(args.onDropFiles).toHaveBeenCalledWith(
+		CHOSEN_IMAGES,
+		boardPointOf(board, at),
+	)
+	await expect(args.onToolChange).toHaveBeenLastCalledWith("select")
+}
+
+export const PlaceImagesWithTool = meta.story({
+	globals: LAPTOP_WINDOW,
+	args: SELECTION_ARGS,
+	parameters: toolDocs(
+		"Image picked in the dock: a press on the empty board opens the system file chooser, the chosen images go out through `onDropFiles` at the pressed board point, the app placing them there, and the tool goes back to Select.",
+	),
+	play: (context) => chooseImagesAt(context, EMPTY_SPOT),
+})
+
+export const DrawConnectorWithTool = meta.story({
+	globals: LAPTOP_WINDOW,
+	args: { ...CONNECTOR_ARGS, isConnecting: false },
+	parameters: toolDocs(
+		"Connector picked in the dock, with no `isConnecting` from the app: a hovered object shows its anchors and a drag from the sticky's right anchor released over Review sends one set-arrow intent and draws the connector to its centre, elbowed since the flyout starts on Elbow.",
+	),
+	play: async ({ canvasElement, args }) => {
+		await pickTool(canvasElement, "Arrow")
+		await expectElbowChecked(canvasElement)
+		const release = await dragFromPlanOntoReview(canvasElement)
+		pointerAt("pointerup", document, release)
+		await waitFor(() => expect(args.onIntent).toHaveBeenCalledTimes(1))
+		await expect(args.onIntent).toHaveBeenCalledWith({
+			type: "set-arrow",
+			arrow: expect.objectContaining({
+				from: "plan",
+				to: "review",
+				routing: "elbow",
+			}),
+		})
+		await expect(connectorPaths(canvasElement, "board-connector")).toEqual([
+			DRAWN_ELBOW_PATH,
+		])
+	},
+})
+
+const panWithHand = async (
+	{ canvasElement, args }: CanvasPlayContext,
+	spot: BoardPoint,
+) => {
+	const board = slotIn(canvasElement, "board-canvas")
+	await pickTool(canvasElement, "Hand")
+	await expect(getComputedStyle(board).cursor).toBe("grab")
+	const start = boardAt(canvasElement, spot.x, spot.y)
+	pointerAt("pointerdown", board, start)
+	pointerAt("pointermove", document, shifted(start, HAND_DRAG))
+	await waitFor(() => expect(getComputedStyle(board).cursor).toBe("grabbing"))
+	pointerAt("pointerup", document, shifted(start, HAND_DRAG))
+	await waitFor(() => expect(getComputedStyle(board).cursor).toBe("grab"))
+	await expect(args.onViewportChange).toHaveBeenLastCalledWith({
+		zoom: AT_ORIGIN.zoom,
+		offset: {
+			x: AT_ORIGIN.offset.x + HAND_DRAG.x,
+			y: AT_ORIGIN.offset.y + HAND_DRAG.y,
+		},
+	})
+}
+
+export const PanWithHandTool = meta.story({
+	globals: LAPTOP_WINDOW,
+	args: SELECTION_ARGS,
+	parameters: toolDocs(
+		"Hand picked in the dock with the sticky selected: the board shows the grab cursor, a drag on the empty board shows grabbing, pans the view by the drag and the sticky stays selected, with no intent sent.",
+	),
+	play: async (context) => {
+		const { canvasElement, args } = context
+		const plan = optionNamed(canvasElement, PLAN_NAME)
+		await userEvent.click(plan)
+		await panWithHand(context, EMPTY_SPOT)
+		await expect(selectedOptions(canvasElement)).toEqual([plan])
+		await expect(args.onIntent).not.toHaveBeenCalled()
+	},
+})
+
+const SPOT_OF_TOOL = {
+	sticky: { x: 800, y: 200 },
+	shape: { x: 1100, y: 150 },
+	text: { x: 1100, y: 400 },
+	section: { x: 400, y: 420 },
+}
+const IMAGE_SPOT = { x: 1100, y: 540 }
+const HAND_SPOT = { x: 900, y: 500 }
+const EMPTY_AFTER_PAN = { x: 60, y: 600 }
+
+export const ToolPickedWhileSelected = meta.story({
+	globals: LAPTOP_WINDOW,
+	args: SELECTION_ARGS,
+	parameters: toolDocs(
+		"The sticky selected, then every tool of the dock picked in turn: each creation tool places its object at the next press as with nothing selected, Image opens the chooser, Hand pans keeping the selection, Connector shows the anchors of a hovered object, and Select clears the selection on a press on the empty board.",
+	),
+	play: async (context) => {
+		const { canvasElement } = context
+		await userEvent.click(optionNamed(canvasElement, PLAN_NAME))
+
+		for (const creation of CREATION_TOOLS) {
+			await expect(selectedOptions(canvasElement)).toHaveLength(1)
+			await placeWithTool(context, creation, SPOT_OF_TOOL[creation.kind])
+			if (creation.kind === "text") await userEvent.keyboard("{Escape}")
+		}
+
+		await expect(selectedOptions(canvasElement)).toHaveLength(1)
+		await chooseImagesAt(context, IMAGE_SPOT)
+
+		const selected = selectedOptions(canvasElement)
+		await panWithHand(context, HAND_SPOT)
+		await expect(selectedOptions(canvasElement)).toEqual(selected)
+
+		await pickTool(canvasElement, "Arrow")
+		await hoverPlanRightAnchor(canvasElement)
+
+		await pickTool(canvasElement, "Select")
+		await pressBoard(canvasElement, EMPTY_AFTER_PAN)
+		await expect(selectedOptions(canvasElement)).toEqual([])
 	},
 })

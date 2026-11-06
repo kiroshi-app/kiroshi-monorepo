@@ -3,12 +3,17 @@ use std::any::type_name;
 use serde::Serialize;
 use tauri::plugin::TauriPlugin;
 use tauri::webview::{PageLoadEvent, PageLoadPayload};
-use tauri::{AppHandle, Emitter, Manager, Runtime, Webview, Window, WindowEvent};
+use tauri::{
+	AppHandle, Emitter, Manager, Runtime, Theme, Webview, WebviewUrl, WebviewWindowBuilder, Window,
+	WindowEvent,
+};
 use tokio::sync::broadcast;
 
 use tauri_plugin_opener::OpenerExt;
 
-use crate::core_context::{Audience, ClientId, ClientScoped, Core, Desktop, EmitError};
+use crate::core_context::{
+	Audience, ClientId, ClientScoped, Core, Desktop, EmitError, RenderWindow,
+};
 pub use kiroshi_core::events::*;
 
 use crate::{joined_spaces, menu_contract, notifications, window_controls};
@@ -105,6 +110,28 @@ impl<R: Runtime> Desktop for TauriDesktop<R> {
 
 	fn raise_main_window(&self) {
 		window_controls::raise_main(&self.0);
+	}
+
+	fn open_render_window(&self, window: &RenderWindow) -> Result<(), String> {
+		let url = WebviewUrl::App(window.route.clone().into());
+		WebviewWindowBuilder::new(&self.0, &window.label, url)
+			.inner_size(window.width, window.height)
+			.visible(false)
+			.focused(false)
+			.focusable(false)
+			.skip_taskbar(true)
+			.decorations(false)
+			.theme(Some(Theme::Light))
+			.build()
+			.map(drop)
+			.map_err(|failure| failure.to_string())
+	}
+
+	fn close_window(&self, label: &str) -> Result<(), String> {
+		let Some(window) = self.0.get_webview_window(label) else {
+			return Ok(());
+		};
+		window.destroy().map_err(|failure| failure.to_string())
 	}
 }
 

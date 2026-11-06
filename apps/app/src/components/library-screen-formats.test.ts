@@ -18,6 +18,7 @@ import { LibraryScreenHoldingOpening } from "@/components/library-screen-holding
 import { accountQueryKeys } from "@/lib/account/account-query-keys"
 import type { LibraryItem } from "@/lib/bindings"
 import type { Invoke } from "@/lib/host/joined-hosts-invoke"
+import { markdownWithIds } from "@/lib/library/block-ids-test-pattern"
 import { base64Of, bytesOf } from "@/lib/library/library-document-session"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 
@@ -32,7 +33,7 @@ const NOTES = "notes.md"
 
 const TWO_PARAGRAPHS = "First paragraph\n\nSecond paragraph"
 
-const FIRST_BOLD = "**First paragraph**\n\nSecond paragraph"
+const FIRST_BOLD = "**First paragraph** ^ID\n\nSecond paragraph ^ID"
 
 const common = i18n.getFixedT(null, "common")
 
@@ -180,10 +181,17 @@ describe.each([
 			})
 
 			await pressWithMod(field, "b")
-			await waitFor(() => expect(storedMarkdown()).toBe(FIRST_BOLD))
+			await waitFor(() =>
+				expect(storedMarkdown()).toMatch(markdownWithIds(FIRST_BOLD)),
+			)
+			const [first, second] = storedMarkdown().match(/\^[a-z0-9]{6}/g) ?? []
 
 			await pressWithMod(field, "b")
-			await waitFor(() => expect(storedMarkdown()).toBe(TWO_PARAGRAPHS))
+			await waitFor(() =>
+				expect(storedMarkdown()).toBe(
+					`First paragraph ${first}\n\nSecond paragraph ${second}`,
+				),
+			)
 		})
 	},
 )

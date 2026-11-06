@@ -53,8 +53,3 @@ export const boardSnapshotOf = ({
 	bounds: bounds ?? NO_BOUNDS,
 	objects: nodes.map(snapshotObjectOf),
 })
-
-export const boardOriginOf = ({ bounds }: LibraryBoardSummary) => ({
-	x: -(bounds?.x ?? 0),
-	y: -(bounds?.y ?? 0),
-})

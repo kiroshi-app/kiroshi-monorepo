@@ -27,7 +27,7 @@ const linkUrl = (href: string) => {
 
 type TextNode = { value?: string; children?: TextNode[] }
 
-const textOf = (node: TextNode): string =>
+export const textOf = (node: TextNode): string =>
 	node.value ?? (node.children ?? []).map(textOf).join("")
 
 const TEXT_CLASS = "inline-block max-w-full truncate align-bottom"

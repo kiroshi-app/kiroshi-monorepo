@@ -15,6 +15,10 @@ import {
 	type OpenAttachment,
 	useMarkdownAttachments,
 } from "@workspace/ui/components/markdown/attachments"
+import {
+	MarkdownBoardLinkContext,
+	type MarkdownBoardLinkRenderer,
+} from "@workspace/ui/components/markdown/board-link"
 import { remarkBotMentions } from "@workspace/ui/components/markdown/bot-mentions"
 import {
 	MARKDOWN_COMPONENTS,
@@ -50,6 +54,7 @@ export interface MarkdownProps {
 	className?: string
 	runs?: MarkdownRun[]
 	renderRun?: MarkdownRunRenderer
+	renderBoardLink?: MarkdownBoardLinkRenderer
 	isWriting?: boolean
 	answerActions?: MarkdownAnswerActions
 	onToggleTask?: (box: HTMLInputElement) => void
@@ -78,6 +83,7 @@ export const Markdown = ({
 	className,
 	runs,
 	renderRun,
+	renderBoardLink,
 	isWriting = false,
 	answerActions,
 	onToggleTask,
@@ -102,38 +108,41 @@ export const Markdown = ({
 			<NestedMarkdownContext value={Markdown}>
 				<MarkdownAnswerContext value={answerActions ?? null}>
 					<MarkdownRunContext value={renderRun ?? null}>
-						<MarkdownTaskToggleContext value={onToggleTask ?? null}>
-							<MarkdownImageResolverContext
-								value={resolveImage ?? inheritedResolveImage}
-							>
-								<MarkdownAttachmentsContext
-									value={{
-										resolveAttachment:
-											resolveAttachment ??
-											inheritedAttachments.resolveAttachment,
-										onOpenAttachment:
-											onOpenAttachment ?? inheritedAttachments.onOpenAttachment,
-									}}
+						<MarkdownBoardLinkContext value={renderBoardLink ?? null}>
+							<MarkdownTaskToggleContext value={onToggleTask ?? null}>
+								<MarkdownImageResolverContext
+									value={resolveImage ?? inheritedResolveImage}
 								>
-									<ReactMarkdown
-										components={
-											isStatic
-												? MARKDOWN_STATIC_COMPONENTS
-												: MARKDOWN_COMPONENTS
-										}
-										rehypePlugins={[
-											[rehypeSanitize, MARKDOWN_SANITIZE_SCHEMA],
-											[rehypeScopeIds, { scope }],
-											[rehypeAnswerMarks, { isWriting }],
-										]}
-										remarkPlugins={remarkPlugins}
-										urlTransform={keepDrivePaths}
+									<MarkdownAttachmentsContext
+										value={{
+											resolveAttachment:
+												resolveAttachment ??
+												inheritedAttachments.resolveAttachment,
+											onOpenAttachment:
+												onOpenAttachment ??
+												inheritedAttachments.onOpenAttachment,
+										}}
 									>
-										{children}
-									</ReactMarkdown>
-								</MarkdownAttachmentsContext>
-							</MarkdownImageResolverContext>
-						</MarkdownTaskToggleContext>
+										<ReactMarkdown
+											components={
+												isStatic
+													? MARKDOWN_STATIC_COMPONENTS
+													: MARKDOWN_COMPONENTS
+											}
+											rehypePlugins={[
+												[rehypeSanitize, MARKDOWN_SANITIZE_SCHEMA],
+												[rehypeScopeIds, { scope }],
+												[rehypeAnswerMarks, { isWriting }],
+											]}
+											remarkPlugins={remarkPlugins}
+											urlTransform={keepDrivePaths}
+										>
+											{children}
+										</ReactMarkdown>
+									</MarkdownAttachmentsContext>
+								</MarkdownImageResolverContext>
+							</MarkdownTaskToggleContext>
+						</MarkdownBoardLinkContext>
 					</MarkdownRunContext>
 				</MarkdownAnswerContext>
 			</NestedMarkdownContext>
