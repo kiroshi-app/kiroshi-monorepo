@@ -180,4 +180,11 @@ The kept core of `apps/app/src-tauri` moves to a crate with no Tauri dependency,
 
   They build a real webview window to check the window events that clear a client, so they moved from `awaited_runs` to `events.rs`, where those handlers live. `TurnWindows::start_driving` and `is_left_to_the_host` became `pub(crate)` for them.
 - **Window scenarios in `host_turn`.** Two scenarios closed or reloaded the main window only to clear its client. They now clear the client on the `Core` directly. The window-to-client step is covered by the two `events.rs` tests above.
+- **One cycle, one move.** conversations, companions, `agent::commands`, `agent::reply_writer`, `agent::stub_session` and `routines::runner` all import each other, so none of them can move into kiroshi-core alone. Their split and test conversion are done. They move together in one commit, after the edges below are cut. Missions and `mcp_oauth` are in the same cycle through `agent::commands` and `conversations::state`.
+- **Edges from that cycle into src-tauri, and how each gets cut:**
+  - **Session hosts.** `agent::commands` builds seven Host implementors for every session: routine, mission, companion, standing, application, bundle and library. A `SessionHosts` port in kiroshi-core hands a session its hosts. src-tauri installs it at startup with the hosts that still live there. The library host renders board screenshots in a webview, so it stays in src-tauri behind that port.
+  - **`Caller`.** The enum moves to kiroshi-core. Tauri builds it from the invoke headers through `CommandArg`. src-tauri can't implement that trait for a kiroshi-core type (orphan rule), so it keeps a local wrapper that commands take and unwrap. `bindings.ts` doesn't change, because `Caller` has no IPC type.
+  - **`authorship::members_of`.** It reads the hosting relay and the account session. It goes behind a members-reader port, or `hosting` moves first.
+  - **`missions::commands::observed` and `announce_thread_moved`.** These become Core functions in kiroshi-core's `missions`, in missions' split commit.
+  - **`mcp_oauth::refresh`.** It reaches nothing in src-tauri and moves on its own.
 
