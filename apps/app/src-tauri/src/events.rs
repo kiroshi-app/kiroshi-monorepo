@@ -4,10 +4,11 @@ use std::sync::Arc;
 
 use serde::Serialize;
 use tauri::plugin::TauriPlugin;
-use tauri::{AppHandle, Emitter, Manager, Runtime};
+use tauri::webview::{PageLoadEvent, PageLoadPayload};
+use tauri::{AppHandle, Emitter, Manager, Runtime, Webview, Window, WindowEvent};
 use tokio::sync::broadcast;
 
-use crate::core_context::{Audience, ClientId, Core, EmitError};
+use crate::core_context::{Audience, ClientId, ClientScoped, Core, EmitError};
 
 use crate::{
 	account, agent, applications, claude_import, companions, conversations, devices, hosting,
@@ -147,6 +148,35 @@ pub fn in_core<R: Runtime, T: Send + Sync + 'static>(value: T) -> TauriPlugin<R>
 			Ok(())
 		})
 		.build()
+}
+
+pub fn in_core_client_scoped<R: Runtime, T: ClientScoped>(value: T) -> TauriPlugin<R> {
+	tauri::plugin::Builder::new(type_name::<T>())
+		.setup(move |app, _| {
+			install_core(app)?.manage_client_scoped(value);
+			Ok(())
+		})
+		.build()
+}
+
+pub fn client_of<R: Runtime>(window: &Window<R>) -> ClientId {
+	ClientId::new(window.label())
+}
+
+pub fn clear_client_on_page_load<R: Runtime>(webview: &Webview<R>, payload: &PageLoadPayload<'_>) {
+	clear_client_on_page_event(&webview.window(), payload.event());
+}
+
+pub fn clear_client_on_page_event<R: Runtime>(window: &Window<R>, event: PageLoadEvent) {
+	if event == PageLoadEvent::Started {
+		core(window.app_handle()).clear_client(&client_of(window));
+	}
+}
+
+pub fn clear_client_on_destroyed<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
+	if matches!(event, WindowEvent::Destroyed) {
+		core(window.app_handle()).clear_client(&client_of(window));
+	}
 }
 
 pub fn install_core<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Core> {

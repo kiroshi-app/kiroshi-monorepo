@@ -116,7 +116,7 @@ pub(crate) fn note_dropped<R: Runtime>(
 }
 
 fn keep_for_the_room<R: Runtime>(app: &AppHandle<R>, dropped: SummonsDropped) {
-	match app.try_state::<TurnWindows>() {
+	match crate::events::core(app.app_handle()).try_state::<TurnWindows>() {
 		Some(windows) => windows.keep_unless_driven(dropped),
 		None => log::error!(
 			"the dropped summons of bot {} in turn {} of conversation {} found no window state to wait in",

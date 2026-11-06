@@ -93,17 +93,17 @@ pub fn run() {
 		.plugin(crate::events::in_core(mcp_oauth::reports::ApplicationReports::default()))
 		.plugin(crate::events::in_core(mcp_oauth::asking::AuthorizationAnswers::default()))
 		.plugin(crate::events::in_core(missions::commands::AnnouncedLiveness::default()))
-		.manage(missions::run_claims::MissionRunClaims::default())
-		.manage(conversations::awaited_runs::TurnWindows::default())
+		.plugin(crate::events::in_core_client_scoped(
+			missions::run_claims::MissionRunClaims::default(),
+		))
+		.plugin(crate::events::in_core_client_scoped(
+			conversations::awaited_runs::TurnWindows::default(),
+		))
 		.on_page_load(|webview, payload| {
-			missions::run_claims::forget_on_page_load(webview, payload);
-			conversations::awaited_runs::forget_on_page_load(webview, payload);
-			library::presence::forget_on_page_load(webview, payload);
+			events::clear_client_on_page_load(webview, payload);
 		})
 		.on_window_event(|window, event| {
-			missions::run_claims::forget_on_destroyed(window, event);
-			conversations::awaited_runs::forget_on_destroyed(window, event);
-			library::presence::forget_on_destroyed(window, event);
+			events::clear_client_on_destroyed(window, event);
 		})
 		.plugin(crate::events::in_core(
 			conversations::turn_run_deadline::TurnRunDeadlines::default(),

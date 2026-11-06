@@ -65,7 +65,13 @@ impl fmt::Display for EmitError {
 
 impl std::error::Error for EmitError {}
 
+pub trait ClientScoped: Send + Sync + 'static {
+	fn forget_client(&self, core: &Core, client: &ClientId);
+}
+
 type Listener = Box<dyn Fn(&CoreEvent) -> Result<(), String> + Send + Sync>;
+
+type Forgetter = fn(&Core, &ClientId);
 
 type Registry = HashMap<TypeId, Arc<dyn Any + Send + Sync>>;
 
@@ -75,6 +81,7 @@ struct Inner {
 	frames: broadcast::Sender<Frame>,
 	events: broadcast::Sender<CoreEvent>,
 	listeners: RwLock<Vec<Listener>>,
+	forgetters: RwLock<Vec<Forgetter>>,
 }
 
 #[derive(Clone)]
@@ -112,6 +119,7 @@ impl Core {
 			frames: broadcast::channel(BUFFERED_FRAMES).0,
 			events: broadcast::channel(BUFFERED_FRAMES).0,
 			listeners: RwLock::default(),
+			forgetters: RwLock::default(),
 		}))
 	}
 
@@ -126,6 +134,21 @@ impl Core {
 		}
 		registry.insert(TypeId::of::<T>(), Arc::new(value));
 		true
+	}
+
+	pub fn manage_client_scoped<T: ClientScoped>(&self, value: T) -> bool {
+		if !self.manage(value) {
+			return false;
+		}
+		self.0.forgetters.write().unwrap_or_else(PoisonError::into_inner).push(forget::<T>);
+		true
+	}
+
+	pub fn clear_client(&self, client: &ClientId) {
+		let forgetters = self.0.forgetters.read().unwrap_or_else(PoisonError::into_inner).clone();
+		for forget in forgetters {
+			forget(self, client);
+		}
 	}
 
 	pub fn try_state<T: Send + Sync + 'static>(&self) -> Option<Managed<'_, T>> {
@@ -219,6 +242,12 @@ impl Core {
 	}
 }
 
+fn forget<T: ClientScoped>(core: &Core, client: &ClientId) {
+	if let Some(scoped) = core.try_state::<T>() {
+		scoped.forget_client(core, client);
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -263,6 +292,37 @@ mod tests {
 
 		assert!(core.emit(FIRST_RUN_DONE, ()).is_err());
 		assert_eq!(hearing.try_recv(), Ok(FIRST_RUN_DONE.name()));
+	}
+
+	#[derive(Default)]
+	struct Forgotten(std::sync::Mutex<Vec<ClientId>>);
+
+	impl ClientScoped for Forgotten {
+		fn forget_client(&self, _: &Core, client: &ClientId) {
+			self.0.lock().expect("the test holds the lock").push(client.clone());
+		}
+	}
+
+	#[test]
+	fn clearing_a_client_reaches_every_client_scoped_state_once() {
+		let core = Core::new(std::env::temp_dir());
+		assert!(core.manage_client_scoped(Forgotten::default()));
+		assert!(!core.manage_client_scoped(Forgotten::default()));
+
+		core.clear_client(&ClientId::new("window-1"));
+
+		let forgotten = core.state::<Forgotten>();
+		assert_eq!(*forgotten.inner().0.lock().expect("unlocked"), vec![ClientId::new("window-1")]);
+	}
+
+	#[test]
+	fn clearing_a_client_with_no_client_scoped_state_reaches_nothing() {
+		let core = Core::new(std::env::temp_dir());
+		assert!(core.manage(Forgotten::default()));
+
+		core.clear_client(&ClientId::new("window-1"));
+
+		assert!(core.state::<Forgotten>().inner().0.lock().expect("unlocked").is_empty());
 	}
 
 	#[test]

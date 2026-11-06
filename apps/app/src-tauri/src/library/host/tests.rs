@@ -1371,7 +1371,7 @@ fn a_closed_window_leaves_every_document_it_stood_in() {
 	presences.seated(SPACE, "b.md", seated(Seat::Window("main".to_owned())));
 	presences.seated(SPACE, "b.md", seated(Seat::Window("second".to_owned())));
 
-	let left = presences.window_closed("main");
+	let left = presences.window_closed(&crate::core_context::ClientId::new("main"));
 
 	let mut remaining: Vec<_> = left
 		.iter()

@@ -3,8 +3,7 @@ use std::path::Path;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
-use tauri::webview::{PageLoadEvent, PageLoadPayload};
-use tauri::{AppHandle, Manager, Runtime, State, Webview, Window, WindowEvent};
+use tauri::{AppHandle, Runtime};
 use tokio::time::Instant;
 use yrs::updates::decoder::Decode;
 use yrs::StickyIndex;
@@ -14,6 +13,7 @@ use super::contract::{
 	LibraryDocumentPresence, LibraryError, LibraryPresenceAt, LibraryWriter, LibraryWriterKind,
 };
 use super::{a_document, decoded_content, undecodable};
+use crate::core_context::{ClientId, ClientScoped, Core, Managed};
 use crate::db::repositories::messages::AccountAuthor;
 use crate::events;
 
@@ -112,8 +112,8 @@ impl Presences {
 		unseated(&mut self.held(), &(space_id.to_owned(), name.to_owned()), seat)
 	}
 
-	pub(crate) fn window_closed(&self, label: &str) -> Vec<LibraryDocumentPresence> {
-		let seat = Seat::Window(label.to_owned());
+	pub(crate) fn window_closed(&self, client: &ClientId) -> Vec<LibraryDocumentPresence> {
+		let seat = Seat::Window(client.as_str().to_owned());
 		let mut held = self.held();
 		let keys: Vec<Key> = held.keys().cloned().collect();
 		keys.iter().filter_map(|key| unseated(&mut held, key, &seat)).collect()
@@ -318,27 +318,6 @@ pub(crate) fn unseat_writer<R: Runtime>(
 	}
 }
 
-pub fn forget_on_destroyed<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
-	if matches!(event, WindowEvent::Destroyed) {
-		forget(window);
-	}
-}
-
-pub fn forget_on_page_load<R: Runtime>(webview: &Webview<R>, payload: &PageLoadPayload<'_>) {
-	if payload.event() == PageLoadEvent::Started {
-		forget(&webview.window());
-	}
-}
-
-fn forget<R: Runtime>(window: &Window<R>) {
-	let Some(presences) = window.try_state::<Presences>() else {
-		return;
-	};
-	for presence in presences.window_closed(window.label()) {
-		published(window.app_handle(), presence);
-	}
-}
-
 async fn lapsing<R: Runtime>(app: AppHandle<R>, space_id: String, name: String, seat: Seat) {
 	loop {
 		match presences(&app).lease(&space_id, &name, &seat, Instant::now()) {
@@ -354,18 +333,31 @@ async fn trailing<R: Runtime>(app: AppHandle<R>, space_id: String, name: String)
 	published(&app, presences(&app).trailed(&space_id, &name));
 }
 
+impl ClientScoped for Presences {
+	fn forget_client(&self, core: &Core, client: &ClientId) {
+		for presence in self.window_closed(client) {
+			published_in(core, presence);
+		}
+	}
+}
+
 fn published<R: Runtime>(app: &AppHandle<R>, presence: LibraryDocumentPresence) {
+	published_in(events::core(app), presence);
+}
+
+fn published_in(core: &Core, presence: LibraryDocumentPresence) {
 	let space_id = presence.space_id.clone();
-	if let Err(error) = events::emit(app, events::LIBRARY_DOCUMENT_PRESENCE, presence) {
+	if let Err(error) = core.emit(events::LIBRARY_DOCUMENT_PRESENCE, presence) {
 		log::warn!(
 			"the writers of a library document of space {space_id} were not published: {error}"
 		);
 	}
 }
 
-fn presences<R: Runtime>(app: &AppHandle<R>) -> State<'_, Presences> {
-	if app.try_state::<Presences>().is_none() {
-		app.manage(Presences::default());
+fn presences<R: Runtime>(app: &AppHandle<R>) -> Managed<'_, Presences> {
+	let core = events::core(app);
+	if core.try_state::<Presences>().is_none() {
+		core.manage_client_scoped(Presences::default());
 	}
-	app.state::<Presences>()
+	core.state::<Presences>()
 }

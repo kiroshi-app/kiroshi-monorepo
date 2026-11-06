@@ -1391,9 +1391,9 @@ pub async fn agent_submit_prompt<R: Runtime>(
 	let database = crate::events::core(webview.app_handle()).try_state::<db::DatabaseState>();
 	submit_claimed_prompt(database.as_deref(), state, scope, text, turn).await?;
 	if let (Some(turn_id), Caller::Host, Some(windows)) =
-		(turn_id, caller, webview.try_state::<TurnWindows>())
+		(turn_id, caller, crate::events::core(webview.app_handle()).try_state::<TurnWindows>())
 	{
-		windows.submitted_from(webview.window().label(), &turn_id);
+		windows.submitted_from(&crate::events::client_of(&webview.window()), &turn_id);
 	}
 	Ok(())
 }

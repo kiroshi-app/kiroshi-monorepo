@@ -2417,10 +2417,8 @@ mod tests {
 		mod serving_awaited_runs {
 			use super::*;
 			use crate::agent::commands::submit_claimed_prompt;
-			use crate::conversations::awaited_runs::{
-				forget_on_destroyed, forget_on_page_event, serve_handed, serve_on_driving,
-				TurnWindows,
-			};
+			use crate::conversations::awaited_runs::{serve_handed, serve_on_driving, TurnWindows};
+			use crate::core_context::ClientId;
 			use crate::db::repositories::conversations::MISSION_KIND;
 			use crate::db::repositories::messages::EndedRun;
 
@@ -2454,8 +2452,8 @@ done
 					self.app.handle()
 				}
 
-				fn windows(&self) -> tauri::State<'_, TurnWindows> {
-					self.app.state::<TurnWindows>()
+				fn windows(&self) -> crate::core_context::Managed<'_, TurnWindows> {
+					crate::events::core(self.app.app_handle()).state::<TurnWindows>()
 				}
 
 				fn grace(&self) -> RuntimeScope {
@@ -2464,9 +2462,14 @@ done
 
 				async fn drive_from(&self, window: &str) {
 					let agent = crate::events::core(self.app.app_handle()).state::<AgentState>();
-					serve_on_driving(self.handle(), &self.windows(), &agent, window)
-						.await
-						.expect("the awaited runs are served");
+					serve_on_driving(
+						self.handle(),
+						&self.windows(),
+						&agent,
+						&ClientId::new(window),
+					)
+					.await
+					.expect("the awaited runs are served");
 				}
 
 				async fn grace_started_by_another_starter(&self) -> Result<(), TransportError> {
@@ -2580,11 +2583,13 @@ done
 				crate::db::install(crate::events::core(app.handle()));
 				crate::events::core(app.app_handle()).manage(AgentState::default());
 				crate::events::core(app.app_handle()).manage(TurnRunDeadlines::default());
-				app.manage(TurnWindows::default());
+				crate::events::core(app.app_handle()).manage_client_scoped(TurnWindows::default());
 				let room = a_room_running(app.handle(), &["Ada", "Grace"]).await;
 				speaking_in(app.handle(), &room, &room.bot_ids[..1]).await;
 				a_streaming_reply(app.handle(), &room, &room.bot_ids[0]).await;
-				app.state::<TurnWindows>().submitted_from(MAIN, "t1");
+				crate::events::core(app.app_handle())
+					.state::<TurnWindows>()
+					.submitted_from(&ClientId::new(MAIN), "t1");
 				let prompts = RemovedOnDrop(std::env::temp_dir().join(format!(
 					"kiroshi-prompts-{}-{}",
 					std::process::id(),
@@ -2599,7 +2604,7 @@ done
 
 			async fn handed_over_after_a_reload(name: &str) -> Served {
 				let served = ada_ran_t1_from_the_main_window(name).await;
-				served.windows().forget_window(MAIN);
+				served.windows().forget_window(&ClientId::new(MAIN));
 				served.ada_hands_over_to_grace().await;
 				served
 			}
@@ -2623,7 +2628,7 @@ done
 			async fn a_summons_handed_after_its_window_reloaded_starts_at_once_under_a_driving_window(
 			) {
 				let served = ada_ran_t1_from_the_main_window("serve-on-handover").await;
-				served.windows().forget_window(MAIN);
+				served.windows().forget_window(&ClientId::new(MAIN));
 				served.drive_from(MAIN).await;
 
 				served.ada_hands_over_to_grace().await;
@@ -2690,7 +2695,7 @@ done
 			async fn scenario_b_idle_starts_the_summons_once() {
 				capturing();
 				let served = ada_ran_t1_from_the_main_window("scenario-b-idle").await;
-				served.windows().forget_window(MAIN);
+				served.windows().forget_window(&ClientId::new(MAIN));
 				served.drive_from(MAIN).await;
 
 				served.ada_hands_over_to_grace().await;
@@ -2706,7 +2711,7 @@ done
 				capturing();
 				let served = ada_ran_t1_from_the_main_window("scenario-b-elsewhere").await;
 				let _busy = served.grace_busy_in_another_room().await;
-				served.windows().forget_window(MAIN);
+				served.windows().forget_window(&ClientId::new(MAIN));
 				served.drive_from(MAIN).await;
 
 				served.ada_hands_over_to_grace().await;
@@ -2724,7 +2729,7 @@ done
 				let main = served.main_window();
 				served.drive_from("window-1").await;
 
-				forget_on_destroyed(&main, &tauri::WindowEvent::Destroyed);
+				crate::events::clear_client_on_destroyed(&main, &tauri::WindowEvent::Destroyed);
 				served.ada_hands_over_to_grace().await;
 				serve_handed(served.handle(), &served.room.id, "t1").await.expect("served");
 				served.grace_heard_a_prompt().await;
@@ -2740,7 +2745,10 @@ done
 				let served = ada_ran_t1_from_the_main_window("scenario-main-reloaded").await;
 				let main = served.main_window();
 
-				forget_on_page_event(&main, tauri::webview::PageLoadEvent::Started);
+				crate::events::clear_client_on_page_event(
+					&main,
+					tauri::webview::PageLoadEvent::Started,
+				);
 				served.ada_hands_over_to_grace().await;
 				serve_handed(served.handle(), &served.room.id, "t1").await.expect("nothing fails");
 				let while_reloading = served.settled().await;
@@ -2807,8 +2815,8 @@ done
 				let messages = database(served.handle()).expect("the database opens").messages();
 				let grace = served.room.bot_ids[1].clone();
 				messages.await_runs("t-broken".to_owned(), vec![grace]).await.expect("awaited");
-				served.windows().submitted_from(MAIN, "t-broken");
-				served.windows().forget_window(MAIN);
+				served.windows().submitted_from(&ClientId::new(MAIN), "t-broken");
+				served.windows().forget_window(&ClientId::new(MAIN));
 
 				served.drive_from(MAIN).await;
 				served.grace_heard_a_prompt().await;

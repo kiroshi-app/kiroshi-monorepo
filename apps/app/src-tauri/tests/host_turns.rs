@@ -353,7 +353,7 @@ impl Host {
 			format!("com.kiroshi.host-turns-{name}-{}", std::process::id());
 		let app = mock_builder()
 			.plugin(kiroshi_app::events::in_core(AgentState::default()))
-			.manage(TurnWindows::default())
+			.plugin(kiroshi_app::events::in_core_client_scoped(TurnWindows::default()))
 			.invoke_handler(invoke_handler())
 			.build(context)
 			.expect("the app builds");

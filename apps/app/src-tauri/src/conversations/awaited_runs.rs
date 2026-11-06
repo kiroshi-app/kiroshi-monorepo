@@ -1,12 +1,12 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
-use tauri::webview::{PageLoadEvent, PageLoadPayload};
-use tauri::{AppHandle, Manager, Runtime, State, Webview, Window, WindowEvent};
+use tauri::{AppHandle, Manager, Runtime, State, Webview};
 
 use super::contract::{SummonsDropped, TranscriptStoreError};
 use super::host_turn;
 use crate::agent::AgentState;
+use crate::core_context::{ClientId, ClientScoped, Core};
 use crate::db;
 use crate::db::repositories::messages::AwaitedRun;
 use crate::routines::runner::database;
@@ -16,10 +16,16 @@ pub struct TurnWindows(Mutex<Windows>);
 
 #[derive(Default)]
 struct Windows {
-	submitted: HashMap<String, String>,
+	submitted: HashMap<String, ClientId>,
 	orphaned: HashSet<String>,
-	drivers: HashSet<String>,
+	drivers: HashSet<ClientId>,
 	unseen_drops: Vec<SummonsDropped>,
+}
+
+impl ClientScoped for TurnWindows {
+	fn forget_client(&self, _: &Core, client: &ClientId) {
+		self.forget_window(client);
+	}
 }
 
 impl TurnWindows {
@@ -27,22 +33,22 @@ impl TurnWindows {
 		self.0.lock().unwrap_or_else(PoisonError::into_inner)
 	}
 
-	pub(crate) fn submitted_from(&self, window: &str, turn_id: &str) {
+	pub(crate) fn submitted_from(&self, client: &ClientId, turn_id: &str) {
 		let mut held = self.held();
 		held.orphaned.remove(turn_id);
-		held.submitted.insert(turn_id.to_owned(), window.to_owned());
+		held.submitted.insert(turn_id.to_owned(), client.clone());
 	}
 
-	fn start_driving(&self, window: &str) {
-		self.held().drivers.insert(window.to_owned());
+	fn start_driving(&self, client: &ClientId) {
+		self.held().drivers.insert(client.clone());
 	}
 
-	pub(crate) fn forget_window(&self, window: &str) {
+	pub(crate) fn forget_window(&self, client: &ClientId) {
 		let mut held = self.held();
 		let Windows { submitted, orphaned, drivers, .. } = &mut *held;
-		drivers.remove(window);
+		drivers.remove(client);
 		submitted.retain(|turn_id, submitter| {
-			let is_left = submitter == window;
+			let is_left = submitter == client;
 			if is_left {
 				orphaned.insert(turn_id.clone());
 			}
@@ -94,19 +100,20 @@ impl TurnWindows {
 pub async fn conversation_serve_awaited_runs<R: Runtime>(
 	app: AppHandle<R>,
 	webview: Webview<R>,
-	windows: State<'_, TurnWindows>,
 	core: State<'_, crate::core_context::Core>,
 ) -> Result<(), TranscriptStoreError> {
+	let windows = core.state::<TurnWindows>();
 	let agent = core.state::<AgentState>();
-	serve_on_driving(&app, &windows, &agent, webview.window().label()).await
+	serve_on_driving(&app, &windows, &agent, &crate::events::client_of(&webview.window())).await
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn conversation_claim_unseen_drops(
-	windows: State<'_, TurnWindows>,
+	core: State<'_, crate::core_context::Core>,
 	conversation_id: String,
 ) -> Vec<SummonsDropped> {
+	let windows = core.state::<TurnWindows>();
 	windows.claim_unseen_drops(&conversation_id)
 }
 
@@ -114,9 +121,9 @@ pub(crate) async fn serve_on_driving<R: Runtime>(
 	app: &AppHandle<R>,
 	windows: &TurnWindows,
 	agent: &AgentState,
-	window: &str,
+	client: &ClientId,
 ) -> Result<(), TranscriptStoreError> {
-	windows.start_driving(window);
+	windows.start_driving(client);
 	let awaited = database(app)?.messages().awaited_runs().await?;
 	let mut turns: Vec<(String, String)> =
 		awaited.into_iter().map(|run| (run.conversation_id, run.turn_id)).collect();
@@ -132,7 +139,7 @@ pub(crate) async fn serve_on_driving<R: Runtime>(
 }
 
 pub(crate) async fn forget_settled_turns<R: Runtime>(app: &AppHandle<R>) {
-	let Some(windows) = app.try_state::<TurnWindows>() else {
+	let Some(windows) = crate::events::core(app.app_handle()).try_state::<TurnWindows>() else {
 		return;
 	};
 	let tracked = windows.tracked();
@@ -156,7 +163,7 @@ pub(crate) async fn serve_handed<R: Runtime>(
 	conversation_id: &str,
 	turn_id: &str,
 ) -> Result<(), TranscriptStoreError> {
-	let Some(windows) = app.try_state::<TurnWindows>() else {
+	let Some(windows) = crate::events::core(app.app_handle()).try_state::<TurnWindows>() else {
 		return Ok(());
 	};
 	let Some(agent) = crate::events::core(app.app_handle()).try_state::<AgentState>() else {
@@ -208,28 +215,6 @@ async fn claimed_runs_of(
 	Ok(claimed)
 }
 
-pub fn forget_on_page_load<R: Runtime>(webview: &Webview<R>, payload: &PageLoadPayload<'_>) {
-	forget_on_page_event(&webview.window(), payload.event());
-}
-
-pub(super) fn forget_on_page_event<R: Runtime>(window: &Window<R>, event: PageLoadEvent) {
-	if event == PageLoadEvent::Started {
-		forget(window);
-	}
-}
-
-pub fn forget_on_destroyed<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
-	if matches!(event, WindowEvent::Destroyed) {
-		forget(window);
-	}
-}
-
-fn forget<R: Runtime>(window: &Window<R>) {
-	if let Some(windows) = window.try_state::<TurnWindows>() {
-		windows.forget_window(window.label());
-	}
-}
-
 #[cfg(test)]
 mod tests {
 	use std::time::Duration;
@@ -239,11 +224,13 @@ mod tests {
 	use tauri::{AppHandle, Manager, WebviewWindow, WebviewWindowBuilder, WindowEvent};
 	use tokio::time;
 
-	use super::{forget_on_destroyed, forget_on_page_event, forget_settled_turns, TurnWindows};
+	use super::{forget_settled_turns, TurnWindows};
 	use crate::conversations::summons::{self, SummonsDropReason, SummonsRun};
 	use crate::conversations::turn_run_deadline::{arm_start_deadlines, TurnRunDeadlines};
+	use crate::core_context::ClientId;
 	use crate::db::repositories::conversations::DEFAULT_BOT_ID;
 	use crate::db::repositories::messages::NewTurn;
+	use crate::events::{clear_client_on_destroyed, clear_client_on_page_event};
 	use crate::routines::runner::database;
 	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 
@@ -253,7 +240,7 @@ mod tests {
 	) -> (AppOfItsOwn, String) {
 		let app = an_app_of_its_own(name, mock_builder());
 		crate::db::install(crate::events::core(app.handle()));
-		app.manage(TurnWindows::default());
+		crate::events::core(app.app_handle()).manage_client_scoped(TurnWindows::default());
 		crate::events::core(app.app_handle()).manage(TurnRunDeadlines::after(start_within));
 		let database = database(app.handle()).expect("the database opens");
 		database.conversations().ensure_default_bot().await.expect("the bot is seeded");
@@ -268,12 +255,12 @@ mod tests {
 	}
 
 	fn left_after_a_reload(app: &AppHandle<MockRuntime>, turn_ids: &[&str]) {
-		let windows = app.state::<TurnWindows>();
+		let windows = crate::events::core(app.app_handle()).state::<TurnWindows>();
 		for turn_id in turn_ids {
-			windows.submitted_from("main", turn_id);
+			windows.submitted_from(&ClientId::new("main"), turn_id);
 		}
-		windows.forget_window("main");
-		windows.start_driving("main");
+		windows.forget_window(&ClientId::new("main"));
+		windows.start_driving(&ClientId::new("main"));
 	}
 
 	#[tokio::test]
@@ -287,7 +274,7 @@ mod tests {
 
 		forget_settled_turns(app.handle()).await;
 
-		let windows = app.state::<TurnWindows>();
+		let windows = crate::events::core(app.app_handle()).state::<TurnWindows>();
 		assert!(windows.is_left_to_the_host("t1"), "a turn still running was forgotten");
 		assert!(!windows.is_left_to_the_host("t-ended"), "a turn with no run was kept");
 		assert!(windows.tracked().iter().all(|turn_id| turn_id == "t1"));
@@ -302,7 +289,7 @@ mod tests {
 		left_after_a_reload(app.handle(), &["t1"]);
 
 		arm_start_deadlines(app.handle(), &chat_id, "t1", &late);
-		let windows = app.state::<TurnWindows>();
+		let windows = crate::events::core(app.app_handle()).state::<TurnWindows>();
 		time::timeout(Duration::from_secs(10), async {
 			while !windows.tracked().is_empty() {
 				time::sleep(Duration::from_millis(10)).await;
@@ -314,25 +301,25 @@ mod tests {
 
 	fn a_window_that_ran_t1(name: &str) -> (AppOfItsOwn, WebviewWindow<MockRuntime>) {
 		let app = an_app_of_its_own(name, mock_builder());
-		app.manage(TurnWindows::default());
+		crate::events::core(app.app_handle()).manage_client_scoped(TurnWindows::default());
 		let main = WebviewWindowBuilder::new(&*app, "main", Default::default())
 			.build()
 			.expect("the window builds");
-		let windows = app.state::<TurnWindows>();
-		windows.submitted_from("main", "t1");
-		windows.start_driving("main");
+		let windows = crate::events::core(app.app_handle()).state::<TurnWindows>();
+		windows.submitted_from(&ClientId::new("main"), "t1");
+		windows.start_driving(&ClientId::new("main"));
 		(app, main)
 	}
 
 	#[test]
 	fn a_page_that_starts_loading_leaves_its_turns_to_the_host_and_a_finished_load_does_not() {
 		let (app, main) = a_window_that_ran_t1("forget-page-load");
-		let windows = app.state::<TurnWindows>();
-		windows.start_driving("window-1");
+		let windows = crate::events::core(app.app_handle()).state::<TurnWindows>();
+		windows.start_driving(&ClientId::new("window-1"));
 
-		forget_on_page_event(&main.as_ref().window(), PageLoadEvent::Finished);
+		clear_client_on_page_event(&main.as_ref().window(), PageLoadEvent::Finished);
 		let after_a_finished_load = windows.is_left_to_the_host("t1");
-		forget_on_page_event(&main.as_ref().window(), PageLoadEvent::Started);
+		clear_client_on_page_event(&main.as_ref().window(), PageLoadEvent::Started);
 
 		assert!(!after_a_finished_load, "a finished load left the turn to the host");
 		assert!(windows.is_left_to_the_host("t1"));
@@ -341,12 +328,12 @@ mod tests {
 	#[test]
 	fn a_destroyed_window_leaves_its_turns_to_the_host_and_another_event_does_not() {
 		let (app, main) = a_window_that_ran_t1("forget-destroyed");
-		let windows = app.state::<TurnWindows>();
-		windows.start_driving("window-1");
+		let windows = crate::events::core(app.app_handle()).state::<TurnWindows>();
+		windows.start_driving(&ClientId::new("window-1"));
 
-		forget_on_destroyed(&main.as_ref().window(), &WindowEvent::Focused(false));
+		clear_client_on_destroyed(&main.as_ref().window(), &WindowEvent::Focused(false));
 		let after_a_blur = windows.is_left_to_the_host("t1");
-		forget_on_destroyed(&main.as_ref().window(), &WindowEvent::Destroyed);
+		clear_client_on_destroyed(&main.as_ref().window(), &WindowEvent::Destroyed);
 
 		assert!(!after_a_blur, "a blur left the turn to the host");
 		assert!(windows.is_left_to_the_host("t1"));
@@ -355,8 +342,8 @@ mod tests {
 	#[test]
 	fn a_turn_whose_window_still_lives_is_left_to_that_window() {
 		let windows = TurnWindows::default();
-		windows.submitted_from("main", "t1");
-		windows.start_driving("main");
+		windows.submitted_from(&ClientId::new("main"), "t1");
+		windows.start_driving(&ClientId::new("main"));
 
 		assert!(!windows.is_left_to_the_host("t1"));
 	}
@@ -364,12 +351,12 @@ mod tests {
 	#[test]
 	fn a_turn_whose_window_reloaded_is_left_to_the_host_only_once_a_window_drives() {
 		let windows = TurnWindows::default();
-		windows.submitted_from("main", "t1");
-		windows.start_driving("main");
+		windows.submitted_from(&ClientId::new("main"), "t1");
+		windows.start_driving(&ClientId::new("main"));
 
-		windows.forget_window("main");
+		windows.forget_window(&ClientId::new("main"));
 		let while_reloading = windows.is_left_to_the_host("t1");
-		windows.start_driving("main");
+		windows.start_driving(&ClientId::new("main"));
 
 		assert!(!while_reloading, "a turn was left to the host with no window driving");
 		assert!(windows.is_left_to_the_host("t1"));
@@ -378,9 +365,9 @@ mod tests {
 	#[test]
 	fn a_turn_never_submitted_from_a_window_is_never_left_to_the_host() {
 		let windows = TurnWindows::default();
-		windows.start_driving("main");
+		windows.start_driving(&ClientId::new("main"));
 
-		windows.forget_window("window-1");
+		windows.forget_window(&ClientId::new("window-1"));
 
 		assert!(!windows.is_left_to_the_host("t1"));
 	}
@@ -388,11 +375,11 @@ mod tests {
 	#[test]
 	fn a_turn_submitted_again_from_a_live_window_is_that_window_s_again() {
 		let windows = TurnWindows::default();
-		windows.submitted_from("window-1", "t1");
-		windows.forget_window("window-1");
-		windows.start_driving("main");
+		windows.submitted_from(&ClientId::new("window-1"), "t1");
+		windows.forget_window(&ClientId::new("window-1"));
+		windows.start_driving(&ClientId::new("main"));
 
-		windows.submitted_from("main", "t1");
+		windows.submitted_from(&ClientId::new("main"), "t1");
 
 		assert!(!windows.is_left_to_the_host("t1"));
 	}
@@ -400,9 +387,9 @@ mod tests {
 	#[test]
 	fn a_served_turn_is_no_longer_left_to_the_host() {
 		let windows = TurnWindows::default();
-		windows.submitted_from("main", "t1");
-		windows.forget_window("main");
-		windows.start_driving("window-1");
+		windows.submitted_from(&ClientId::new("main"), "t1");
+		windows.forget_window(&ClientId::new("main"));
+		windows.start_driving(&ClientId::new("window-1"));
 
 		windows.served("t1");
 
@@ -412,8 +399,8 @@ mod tests {
 	#[test]
 	fn every_drop_the_room_notices_waits_for_it_only_while_no_window_drives() {
 		let app = an_app_of_its_own("unseen-drops", mock_builder());
-		app.manage(TurnWindows::default());
-		let windows = app.state::<TurnWindows>();
+		crate::events::core(app.app_handle()).manage_client_scoped(TurnWindows::default());
+		let windows = crate::events::core(app.app_handle()).state::<TurnWindows>();
 		let run = SummonsRun { conversation_id: "c1", turn_id: "t1", bot_id: "b1" };
 		let elsewhere = SummonsRun { conversation_id: "c2", ..run };
 
@@ -424,7 +411,7 @@ mod tests {
 		let kept: Vec<SummonsDropReason> =
 			windows.claim_unseen_drops("c1").into_iter().map(|dropped| dropped.reason).collect();
 		let claimed_again = windows.claim_unseen_drops("c1");
-		windows.start_driving("main");
+		windows.start_driving(&ClientId::new("main"));
 		summons::note_dropped(app.handle(), &run, SummonsDropReason::StartFailed, None);
 
 		let noticed: Vec<SummonsDropReason> = SummonsDropReason::ALL
