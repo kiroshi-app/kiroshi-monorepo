@@ -504,12 +504,18 @@ def cost_centres(scratch, locked):
 	}
 
 
+def save(results):
+	with open(RESULTS, "w") as written:
+		json.dump(results, written, indent="\t", ensure_ascii=False)
+		written.write("\n")
+
+
 def measure(scratch):
 	locked = probe_says("locked")
 	longest = read_installed_longest()
-	memory, cpu = at_rest(scratch, longest, locked)
-	return {
+	results = {
 		"measured_at": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
+		"complete": False,
 		"machine": machine(),
 		"screen_locked": locked,
 		"runs_per_measure": RUNS,
@@ -518,25 +524,25 @@ def measure(scratch):
 			"tool": "kiroshi-rune-preview --smoke-read", "requests": longest["requests"], "writes": 0,
 			"longest_conversation_messages": longest["messages"],
 		},
-		"cold_start": cold_start(scratch, locked),
-		"memory": memory,
-		"cpu_at_rest": cpu,
 		"scroll_frame_times": scroll_frame_times(locked),
 		"key_press_to_glyph": not_measured("left out of this stage by decision"),
-		"tauri_cost_centres": cost_centres(scratch, locked),
 	}
+	results["memory"], results["cpu_at_rest"] = at_rest(scratch, longest, locked)
+	save(results)
+	results["cold_start"] = cold_start(scratch, locked)
+	save(results)
+	results["tauri_cost_centres"] = cost_centres(scratch, locked)
+	results["complete"] = True
+	save(results)
 
 
 def main():
 	build()
 	try:
 		with tempfile.TemporaryDirectory() as scratch:
-			results = measure(scratch)
+			measure(scratch)
 	finally:
 		stop(dev_processes() + preview_processes())
-	with open(RESULTS, "w") as written:
-		json.dump(results, written, indent="\t", ensure_ascii=False)
-		written.write("\n")
 	print(f"wrote {os.path.relpath(RESULTS, REPO)}")
 
 

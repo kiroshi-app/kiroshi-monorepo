@@ -39,29 +39,29 @@ The onboarding comes first. Its last step opens the conversation tab on the inst
 
 ## Stage 3 measures
 
-`python3 apps/rune-preview/bench/measure.py` writes `bench/results.json`: every run, its machine load (`os.getloadavg()` before and after) and the tool. Each measure runs three times, the table gives the median. Last run: Mac18,5, 12 cores, 24 GiB, macOS 27.0.1, screen unlocked, 1-minute load 3.3 to 4.3.
+`python3 apps/rune-preview/bench/measure.py` writes `bench/results.json` after each measure, so a late failure keeps what was taken (`complete` turns true at the end): every run, its machine load (`os.getloadavg()` before and after) and the tool. Each measure runs three times, the table gives the median. Last run: Mac18,5, 12 cores, 24 GiB, macOS 27.0.1, screen unlocked, 1-minute load 6.0 to 8.8 (agents were working on the machine).
 
 | Measure | Tool, the same on both sides | Kiroshi | Preview |
 |---|---|---|---|
-| Cold start, first frame | `open -n` on a bundle, then the pid's first window in `CGWindowListCopyWindowInfo` | 521 ms (Kiroshi Dev) | 254 ms (`--dev-host`) |
-| Cold start, conversation displayed | `screencapture -l` of that window, read by Vision until the last word of the last message shows | 2,067 ms (Kiroshi Dev, ±218 ms) | 583 ms (`--dev-host`, ±171 ms) |
-| Memory | `footprint`, Kiroshi plus its WebKit helpers against the preview, agents excluded | Not measured | Not measured |
-| CPU at rest | `ps` CPU time of both process sets over the same 60 s | Not measured | Not measured |
+| Cold start, first frame | `open -n` on a bundle, then the pid's first window in `CGWindowListCopyWindowInfo` | 517 ms (Kiroshi Dev) | 254 ms (`--dev-host`) |
+| Cold start, conversation displayed | `screencapture -l` of that window, read by Vision until the last word of the last message shows | 2,013 ms (Kiroshi Dev, ±246 ms) | 567 ms (`--dev-host`, ±170 ms) |
+| Memory | `footprint`, Kiroshi plus its WebKit helpers against the preview, agents excluded | 2,501 MiB (installed) | 106 MiB |
+| CPU at rest | `ps` CPU time of both process sets over the same 60 s, both at once | 68.9 % of a core (installed) | 33.7 % of a core |
 | Scroll frame times | none | Not measured | Not measured |
 | Key press to glyph | none | Not measured, by decision | Not measured, by decision |
 
-**Cold start.** Kiroshi Dev's release bundle against the preview, on "Bench: long conversation" (2,778 messages, written by `bench/fabricate.py` into Kiroshi Dev only). Kiroshi Dev starts its own host and opens the conversation from a tab the bench restores. The preview starts against Kiroshi Dev's host, already running, and finds the longest conversation itself. The installed Kiroshi is never quit. The ± is the median gap between two captures, so the true moment lies up to that much before the number.
+**Cold start.** Kiroshi Dev's release bundle against the preview, on "Bench: long conversation" (2,778 messages, written by `bench/fabricate.py` into Kiroshi Dev only). Kiroshi Dev starts its own host and opens the conversation from a tab the bench restores. The preview starts against Kiroshi Dev's host, already running, and finds the longest conversation itself. The installed Kiroshi is never quit. The ± is the median gap between two captures, so the true moment lies up to that much before the number. Kiroshi Dev's three runs spread from 1,101 to 2,531 ms, the preview's from 567 to 668 ms.
 
-**Why the rest isn't measured.**
-- No installed Kiroshi window shows its longest conversation (2,778 messages): the two windows show other conversations. The bench sends Kiroshi no input, so it can't open that conversation.
-- Scroll: no synthetic scroll ever reaches the installed Kiroshi, so the same scroll can't run on both sides. Accessibility isn't granted to the shell either.
+**Memory and CPU at rest.** The installed Kiroshi, left as Steve uses it (running for four days, two windows, its longest conversation open: 2,778 messages), against a preview launched fresh onto the same conversation, read-only. Neither side is touched during the 60 s.
+- Memory: the installed runs read 2,499, 2,508 and 2,501 MiB, the preview runs 72, 107 and 106 MiB. `results.json` keeps the sums, not the split per process.
+- CPU at rest is not at rest on either side while an agent works. The preview ran 33.7 and 38.6 % in the first two runs, while agents worked on the machine, likely the avatar field it animates while a turn runs (not profiled). In the third it was 0.9 %. The installed side stayed between 67 and 73 % in all three.
 
-To fill memory and CPU at rest: open the longest conversation in a Kiroshi window by hand, keep the screen unlocked, and run `measure.py` again. It checks every Kiroshi window by itself.
+**Why scroll isn't measured.** No synthetic scroll ever reaches the installed Kiroshi, so the same scroll can't run on both sides. Accessibility isn't granted to the shell either.
 
-**Tauri cost centres.** From an xctrace Time Profiler recording (`--all-processes`, 20 s) of Kiroshi Dev opening the bench conversation: 3.9 s of CPU across Kiroshi Dev and its WebKit helpers, self time by process and leaf binary.
-1. WebContent, JavaScriptCore: 1,836 ms, 47 %. Regular expression compilation first (`Yarr::CharacterClassConstructor`), then garbage collection (`JSFinalObject::visitChildren`).
-2. WebContent, WebCore: 287 ms, 7 %. Style resolution (`TreeResolver::resolveComposedTree`) and painting (`RenderLayer::paintLayerContents`).
-3. Kiroshi, the kernel: 262 ms, 7 %. Mach messages, then `open`.
+**Tauri cost centres.** From an xctrace Time Profiler recording (`--all-processes`, 20 s) of Kiroshi Dev opening the bench conversation: 4.4 s of CPU across Kiroshi Dev and its WebKit helpers, self time by process and leaf binary.
+1. WebContent, JavaScriptCore: 1,960 ms, 45 %. Regular expression compilation first (`Yarr::CharacterClassConstructor`), then garbage collection (`JSFinalObject::visitChildren`).
+2. WebContent, WebCore: 343 ms, 8 %. Style resolution: CSS custom properties (`CustomPropertyData::forEachInternal`) and applying the matched properties.
+3. Kiroshi, the kernel: 267 ms, 6 %. Mach messages, then `chmod`.
 
 On a locked screen, an earlier run sampled 2.3 s: WebKit throttles painting for a window nobody sees.
 

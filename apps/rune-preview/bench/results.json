@@ -1,5 +1,6 @@
 {
-	"measured_at": "2026-11-06T14:31:01+01:00",
+	"measured_at": "2026-11-06T15:33:27+01:00",
+	"complete": true,
 	"machine": {
 		"model": "Mac18,5",
 		"cpus": 12,
@@ -15,147 +16,6 @@
 		"writes": 0,
 		"longest_conversation_messages": 2778
 	},
-	"cold_start": {
-		"subject": "Kiroshi Dev release bundle against the preview with --dev-host, on 'Bench: long conversation' (0786b59c-31fb-46ba-9b69-2446f0816409)",
-		"launch": "open -n on an app bundle on both sides (the preview through a bundle linking its release binary)",
-		"conditions": "process cold, file cache warm; Kiroshi Dev starts its own host and opens the conversation from its restored tab; the preview starts against Kiroshi Dev's host already running and finds the longest conversation itself",
-		"first_frame": {
-			"tool": "the pid's first layer-0 window over 10,000 pt² in CGWindowListCopyWindowInfo, polled",
-			"unit": "ms from open",
-			"median": {
-				"kiroshi_dev": 521,
-				"preview": 254
-			}
-		},
-		"conversation_displayed": {
-			"tool": "screencapture -l of that window, recognised by Vision (fast) as holding 'Quokka', the last word of the last message; resolution: the gap to the previous capture",
-			"unit": "ms from open",
-			"median": {
-				"kiroshi_dev": 2067,
-				"preview": 583
-			},
-			"median_resolution_ms": {
-				"kiroshi_dev": 218,
-				"preview": 171
-			}
-		},
-		"runs": [
-			{
-				"side": "kiroshi_dev",
-				"run": 1,
-				"first_frame_ms": 485,
-				"conversation_displayed_ms": 2094,
-				"conversation_resolution_ms": 218,
-				"load_before": {
-					"one_minute": 3.42,
-					"five_minutes": 5.12,
-					"fifteen_minutes": 6.07
-				},
-				"load_after": {
-					"one_minute": 3.42,
-					"five_minutes": 5.12,
-					"fifteen_minutes": 6.07
-				}
-			},
-			{
-				"side": "kiroshi_dev",
-				"run": 2,
-				"first_frame_ms": 527,
-				"conversation_displayed_ms": 1918,
-				"conversation_resolution_ms": 194,
-				"load_before": {
-					"one_minute": 3.3,
-					"five_minutes": 5.07,
-					"fifteen_minutes": 6.04
-				},
-				"load_after": {
-					"one_minute": 3.44,
-					"five_minutes": 5.06,
-					"fifteen_minutes": 6.04
-				}
-			},
-			{
-				"side": "kiroshi_dev",
-				"run": 3,
-				"first_frame_ms": 521,
-				"conversation_displayed_ms": 2067,
-				"conversation_resolution_ms": 307,
-				"load_before": {
-					"one_minute": 3.4,
-					"five_minutes": 5.03,
-					"fifteen_minutes": 6.02
-				},
-				"load_after": {
-					"one_minute": 3.4,
-					"five_minutes": 5.03,
-					"fifteen_minutes": 6.02
-				}
-			},
-			{
-				"side": "preview",
-				"run": 1,
-				"first_frame_ms": 293,
-				"conversation_displayed_ms": 648,
-				"conversation_resolution_ms": 171,
-				"load_before": {
-					"one_minute": 3.94,
-					"five_minutes": 5.09,
-					"fifteen_minutes": 6.03
-				},
-				"load_after": {
-					"one_minute": 3.94,
-					"five_minutes": 5.09,
-					"fifteen_minutes": 6.03
-				}
-			},
-			{
-				"side": "preview",
-				"run": 2,
-				"first_frame_ms": 219,
-				"conversation_displayed_ms": 583,
-				"conversation_resolution_ms": 177,
-				"load_before": {
-					"one_minute": 4.27,
-					"five_minutes": 5.14,
-					"fifteen_minutes": 6.04
-				},
-				"load_after": {
-					"one_minute": 4.27,
-					"five_minutes": 5.14,
-					"fifteen_minutes": 6.04
-				}
-			},
-			{
-				"side": "preview",
-				"run": 3,
-				"first_frame_ms": 254,
-				"conversation_displayed_ms": 581,
-				"conversation_resolution_ms": 136,
-				"load_before": {
-					"one_minute": 4.09,
-					"five_minutes": 5.09,
-					"fifteen_minutes": 6.02
-				},
-				"load_after": {
-					"one_minute": 4.09,
-					"five_minutes": 5.09,
-					"fifteen_minutes": 6.02
-				}
-			}
-		]
-	},
-	"memory": {
-		"status": "not measured",
-		"reasons": [
-			"no installed Kiroshi window shows its longest conversation, and the bench sends it no input; open that conversation in Kiroshi by hand, then run measure.py again"
-		]
-	},
-	"cpu_at_rest": {
-		"status": "not measured",
-		"reasons": [
-			"no installed Kiroshi window shows its longest conversation, and the bench sends it no input; open that conversation in Kiroshi by hand, then run measure.py again"
-		]
-	},
 	"scroll_frame_times": {
 		"status": "not measured",
 		"reasons": [
@@ -167,40 +27,266 @@
 		"status": "not measured",
 		"reasons": ["left out of this stage by decision"]
 	},
+	"memory": {
+		"subject": "installed Kiroshi on its longest conversation (2778 messages) against the preview on the same conversation, both left untouched",
+		"tool": "footprint --noCategories, phys_footprint summed: Kiroshi plus its WebKit helpers (by responsible pid) against the preview process; agents excluded on both sides",
+		"unit": "MiB",
+		"median": {
+			"installed": 2501.0,
+			"preview": 106.4
+		},
+		"runs": [
+			{
+				"run": 1,
+				"installed_mib": 2498.7,
+				"preview_mib": 71.5,
+				"load": {
+					"one_minute": 6.25,
+					"five_minutes": 6.35,
+					"fifteen_minutes": 7.81
+				}
+			},
+			{
+				"run": 2,
+				"installed_mib": 2507.7,
+				"preview_mib": 106.5,
+				"load": {
+					"one_minute": 7.01,
+					"five_minutes": 6.59,
+					"fifteen_minutes": 7.78
+				}
+			},
+			{
+				"run": 3,
+				"installed_mib": 2501.0,
+				"preview_mib": 106.4,
+				"load": {
+					"one_minute": 8.79,
+					"five_minutes": 6.98,
+					"fifteen_minutes": 7.81
+				}
+			}
+		]
+	},
+	"cpu_at_rest": {
+		"subject": "installed Kiroshi on its longest conversation (2778 messages) against the preview on the same conversation, both left untouched",
+		"tool": "ps -o time, CPU time of the same process sets over the same 60 s window, both sides at once",
+		"unit": "% of one core",
+		"median": {
+			"installed": 68.87,
+			"preview": 33.7
+		},
+		"runs": [
+			{
+				"run": 1,
+				"installed_percent": 72.95,
+				"preview_percent": 33.7,
+				"load_before": {
+					"one_minute": 6.25,
+					"five_minutes": 6.35,
+					"fifteen_minutes": 7.81
+				},
+				"load_after": {
+					"one_minute": 7.2,
+					"five_minutes": 6.6,
+					"fifteen_minutes": 7.8
+				}
+			},
+			{
+				"run": 2,
+				"installed_percent": 66.63,
+				"preview_percent": 38.63,
+				"load_before": {
+					"one_minute": 7.01,
+					"five_minutes": 6.59,
+					"fifteen_minutes": 7.78
+				},
+				"load_after": {
+					"one_minute": 6.04,
+					"five_minutes": 6.42,
+					"fifteen_minutes": 7.63
+				}
+			},
+			{
+				"run": 3,
+				"installed_percent": 68.87,
+				"preview_percent": 0.93,
+				"load_before": {
+					"one_minute": 8.79,
+					"five_minutes": 6.98,
+					"fifteen_minutes": 7.81
+				},
+				"load_after": {
+					"one_minute": 8.14,
+					"five_minutes": 7.08,
+					"fifteen_minutes": 7.79
+				}
+			}
+		]
+	},
+	"cold_start": {
+		"subject": "Kiroshi Dev release bundle against the preview with --dev-host, on 'Bench: long conversation' (0786b59c-31fb-46ba-9b69-2446f0816409)",
+		"launch": "open -n on an app bundle on both sides (the preview through a bundle linking its release binary)",
+		"conditions": "process cold, file cache warm; Kiroshi Dev starts its own host and opens the conversation from its restored tab; the preview starts against Kiroshi Dev's host already running and finds the longest conversation itself",
+		"first_frame": {
+			"tool": "the pid's first layer-0 window over 10,000 pt² in CGWindowListCopyWindowInfo, polled",
+			"unit": "ms from open",
+			"median": {
+				"kiroshi_dev": 517,
+				"preview": 254
+			}
+		},
+		"conversation_displayed": {
+			"tool": "screencapture -l of that window, recognised by Vision (fast) as holding 'Quokka', the last word of the last message; resolution: the gap to the previous capture",
+			"unit": "ms from open",
+			"median": {
+				"kiroshi_dev": 2013,
+				"preview": 567
+			},
+			"median_resolution_ms": {
+				"kiroshi_dev": 246,
+				"preview": 170
+			}
+		},
+		"runs": [
+			{
+				"side": "kiroshi_dev",
+				"run": 1,
+				"first_frame_ms": 517,
+				"conversation_displayed_ms": 2013,
+				"conversation_resolution_ms": 195,
+				"load_before": {
+					"one_minute": 7.81,
+					"five_minutes": 7.03,
+					"fifteen_minutes": 7.77
+				},
+				"load_after": {
+					"one_minute": 7.98,
+					"five_minutes": 7.08,
+					"fifteen_minutes": 7.78
+				}
+			},
+			{
+				"side": "kiroshi_dev",
+				"run": 2,
+				"first_frame_ms": 505,
+				"conversation_displayed_ms": 1101,
+				"conversation_resolution_ms": 281,
+				"load_before": {
+					"one_minute": 7.98,
+					"five_minutes": 7.09,
+					"fifteen_minutes": 7.78
+				},
+				"load_after": {
+					"one_minute": 7.98,
+					"five_minutes": 7.09,
+					"fifteen_minutes": 7.78
+				}
+			},
+			{
+				"side": "kiroshi_dev",
+				"run": 3,
+				"first_frame_ms": 551,
+				"conversation_displayed_ms": 2531,
+				"conversation_resolution_ms": 246,
+				"load_before": {
+					"one_minute": 7.9,
+					"five_minutes": 7.09,
+					"fifteen_minutes": 7.78
+				},
+				"load_after": {
+					"one_minute": 7.99,
+					"five_minutes": 7.12,
+					"fifteen_minutes": 7.78
+				}
+			},
+			{
+				"side": "preview",
+				"run": 1,
+				"first_frame_ms": 255,
+				"conversation_displayed_ms": 668,
+				"conversation_resolution_ms": 206,
+				"load_before": {
+					"one_minute": 7.75,
+					"five_minutes": 7.08,
+					"fifteen_minutes": 7.77
+				},
+				"load_after": {
+					"one_minute": 7.75,
+					"five_minutes": 7.08,
+					"fifteen_minutes": 7.77
+				}
+			},
+			{
+				"side": "preview",
+				"run": 2,
+				"first_frame_ms": 221,
+				"conversation_displayed_ms": 567,
+				"conversation_resolution_ms": 170,
+				"load_before": {
+					"one_minute": 8.49,
+					"five_minutes": 7.25,
+					"fifteen_minutes": 7.82
+				},
+				"load_after": {
+					"one_minute": 8.13,
+					"five_minutes": 7.19,
+					"fifteen_minutes": 7.8
+				}
+			},
+			{
+				"side": "preview",
+				"run": 3,
+				"first_frame_ms": 254,
+				"conversation_displayed_ms": 567,
+				"conversation_resolution_ms": 142,
+				"load_before": {
+					"one_minute": 7.72,
+					"five_minutes": 7.12,
+					"fifteen_minutes": 7.77
+				},
+				"load_after": {
+					"one_minute": 7.72,
+					"five_minutes": 7.12,
+					"fifteen_minutes": 7.77
+				}
+			}
+		]
+	},
 	"tauri_cost_centres": {
 		"subject": "Kiroshi Dev opened onto 'Bench: long conversation' until its last word shows, inside a 20 s recording",
 		"tool": "xctrace record --template 'Time Profiler' --all-processes, samples of Kiroshi Dev and its WebKit helpers, self time grouped by process and leaf binary",
 		"trace": "apps/rune-preview/bench/traces/kiroshi-dev-cold-start.trace",
-		"sampled_ms": 3938,
+		"sampled_ms": 4370,
 		"top": [
 			{
 				"process": "com.apple.WebKit.WebContent",
 				"binary": "JavaScriptCore",
-				"self_ms": 1836,
-				"share_percent": 46.6,
+				"self_ms": 1960,
+				"share_percent": 44.9,
 				"heaviest_symbols": [
 					"JSC::Yarr::CharacterClassConstructor::nonLatin1OpSorted(WTF::Vector<char32_t, 0ul, WTF::CrashOnOverflow, 16ul, WTF::FastMalloc> const&, WTF::Vector<JSC::Yarr::CharacterRange, 0ul, WTF::CrashOnOverflow, 16ul, WTF::FastMalloc> const&)",
 					"JSC::JSFinalObject::visitChildren(JSC::JSCell*, JSC::SlotVisitor&)",
-					"JSC::Lexer<char16_t>::lexWithoutClearingLineTerminator(JSC::JSToken*, WTF::OptionSet<JSC::LexerFlags, (WTF::ConcurrencyTag)0>, bool)"
+					"void JSC::LinkBuffer::copyCompactAndLinkCode<unsigned int>(JSC::MacroAssembler&, JSC::JITCompilationEffort)"
 				]
 			},
 			{
 				"process": "com.apple.WebKit.WebContent",
 				"binary": "WebCore",
-				"self_ms": 287,
-				"share_percent": 7.3,
+				"self_ms": 343,
+				"share_percent": 7.8,
 				"heaviest_symbols": [
-					"WebCore::Style::TreeResolver::resolveComposedTree()",
-					"WebCore::RenderLayer::paintLayerContents(WebCore::GraphicsContext&, WebCore::RenderLayer::LayerPaintingInfo const&, WTF::OptionSet<WebCore::RenderLayer::PaintLayerFlag, (WTF::ConcurrencyTag)0>, std::__1::optional<WTF::Range<unsigned int>>)",
-					"WebCore::RenderBox::computeVisibleRectsInContainer(WebCore::RenderObject::RepaintRects const&, WebCore::RenderLayerModelObject const*, WebCore::VisibleRectContext) const"
+					"void WebCore::Style::CustomPropertyData::forEachInternal<WTF::Function<WTF::IterationStatus (WTF::KeyValuePair<WTF::AtomString, WTF::Ref<WebCore::Style::CustomProperty const, WTF::RawPtrTraits<WebCore::Style::CustomProperty const>, WTF::DefaultRefDerefTraits<WebCore::Style::CustomProperty const>>> const&)> const&>(WTF::Function<WTF::IterationStatus (WTF::KeyValuePair<WTF::AtomString, WTF::Ref<WebCore::Style::CustomProperty const, WTF::RawPtrTraits<WebCore::Style::CustomProperty const>, WTF::DefaultRefDerefTraits<WebCore::Style::CustomProperty const>>> const&)> const&) const",
+					"WebCore::Style::Resolver::applyMatchedProperties(WebCore::Style::Resolver::State&, WebCore::Style::MatchResult const&, WebCore::Style::PropertyCascade::IncludedProperties&&)",
+					"WebCore::Style::ElementRuleCollector::collectMatchingRulesForListSlow(WTF::Vector<WebCore::Style::RuleData, 1ul, WTF::CrashOnOverflow, 16ul, WTF::FastMalloc> const&, WebCore::Style::MatchRequest const&)"
 				]
 			},
 			{
 				"process": "Kiroshi",
 				"binary": "libsystem_kernel.dylib",
-				"self_ms": 262,
-				"share_percent": 6.7,
-				"heaviest_symbols": ["mach_msg2_trap", "__open", "__chmod"]
+				"self_ms": 267,
+				"share_percent": 6.1,
+				"heaviest_symbols": ["mach_msg2_trap", "__chmod", "__open_nocancel"]
 			}
 		]
 	}
