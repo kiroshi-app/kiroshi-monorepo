@@ -16,7 +16,7 @@ use super::contract::{
 	LibraryTemplate,
 };
 use super::host::stop_writers;
-use super::presence::{seated_name, share_presence, unseat_writer, Seat};
+use super::presence::{seated_identity, share_presence, unseat_writer, Identity, Seat};
 use super::url_import::{admission_for, import_url};
 use super::{
 	apply_update, clipboard_payload, clipboard_payload_of_bytes, create_board, create_document,
@@ -228,16 +228,16 @@ pub async fn library_share_presence<R: Runtime>(
 		unseat_writer(&app, &space_id, &name, &seat);
 		return Ok(());
 	};
-	let writer_name = match seated_name(&app, &space_id, &name, &seat) {
+	let identity = match seated_identity(&app, &space_id, &name, &seat) {
 		Some(seated) => seated,
 		None => {
 			let database = state
 				.as_ref()
 				.map_err(|failure| LibraryError::Unavailable { failure: failure.into() })?;
-			caller.author(&app, database).await?.name
+			Identity::of_person(caller.author(&app, database).await?, &seat)
 		}
 	};
-	share_presence(&app, &root(&app)?, &space_id, &name, seat, writer_name, at)
+	share_presence(&app, &root(&app)?, &space_id, &name, seat, identity, at)
 }
 
 #[tauri::command]

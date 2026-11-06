@@ -727,6 +727,7 @@ impl<'a, R: Runtime> Writing<'a, R> {
 		let seated = Seated {
 			seat: Seat::Agent(self.agent.id.clone()),
 			name: Some(self.agent.name.clone()),
+			hue: None,
 			at,
 			lease_ends_at: None,
 		};

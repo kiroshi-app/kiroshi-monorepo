@@ -150,6 +150,8 @@ pub struct LibraryWriter {
 	pub id: String,
 	pub kind: LibraryWriterKind,
 	pub name: Option<String>,
+	#[specta(optional)]
+	pub hue: Option<u16>,
 	pub at: LibraryPresenceAt,
 }
 
