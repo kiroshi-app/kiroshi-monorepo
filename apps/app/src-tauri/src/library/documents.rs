@@ -10,6 +10,7 @@ use tokio::time::Instant;
 use yrs::updates::decoder::Decode;
 use yrs::{Doc, ReadTxn, StateVector, Transact, Update};
 
+use super::blocks::Splice;
 use super::contract::{LibraryDocumentFormat, LibraryError};
 use super::{
 	accepted_type, discarded, document_text, is_plain_name, is_the_item_itself,
@@ -24,7 +25,7 @@ mod markdown;
 #[cfg(test)]
 mod tests;
 
-pub(crate) use markdown::located;
+pub(crate) use markdown::{carets_at, text_of_state};
 
 const STATE_DIR_NAME: &str = ".documents";
 
@@ -100,20 +101,6 @@ pub(crate) struct Written {
 	pub(crate) name: String,
 	pub(crate) change: Vec<u8>,
 	pub(crate) caret: Vec<u8>,
-}
-
-pub(crate) enum Placement<'a> {
-	End,
-	After(&'a str),
-	Replacing(&'a str),
-	Whole,
-}
-
-pub(crate) enum Location {
-	Caret(Vec<u8>),
-	Passage { start: Vec<u8>, end: Vec<u8> },
-	PassageNotFound,
-	PassageNotUnique { occurrences: usize },
 }
 
 #[derive(Clone, Copy)]
@@ -354,6 +341,21 @@ impl Documents {
 			DocumentKind::Board => Err(LibraryError::NotADocument { name: name.to_owned() }),
 		})?;
 		Ok(Written { name: applied.name, change: applied.change, caret })
+	}
+
+	pub(crate) fn spliced(
+		&self,
+		root: &Path,
+		space_id: &str,
+		name: &str,
+		writer: u64,
+		plan: impl FnOnce(&str) -> Vec<Splice>,
+	) -> Result<Applied, LibraryError> {
+		let (applied, ()) = self.merged(root, space_id, name, |kind, doc, name| match kind {
+			DocumentKind::Markdown => Ok((markdown::spliced_by(doc, name, writer, plan)?, ())),
+			DocumentKind::Board => Err(LibraryError::NotADocument { name: name.to_owned() }),
+		})?;
+		Ok(applied)
 	}
 
 	fn merged<T>(

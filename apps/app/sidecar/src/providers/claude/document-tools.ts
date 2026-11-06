@@ -23,10 +23,10 @@ const SEARCH =
 const QUERY = "The words to look for, matched whatever their case."
 
 const READ =
-	"Read an item of the Library of this Space by its name. A document answers its text as it stands now with what everyone has typed in it; a board answers its JSON Canvas text; an image is shown to you; an image too large to show answers its name, its type and its size."
+	"Read an item of the Library of this Space by its name. A document answers its text as it stands now with what everyone has typed in it; to change a Markdown document, read its blocks with document_tree instead. A board answers its JSON Canvas text; an image is shown to you; an image too large to show answers its name, its type and its size."
 
 const CREATE =
-	"Create a new Markdown document in the Library of this Space, empty or filled from a template, shown in the Library of the person right away. A name already taken is refused. To change a document that already exists, write in it with library_write, never create another one. It answers the name the document stands under, its kind and its updatedAt."
+	"Create a new Markdown document in the Library of this Space, empty or filled from a template, shown in the Library of the person right away. A name already taken is refused. To change a document that already exists, edit its blocks with document_tree then document_replace_block or document_insert_after, never create another one. It answers the name the document stands under, its kind and its updatedAt."
 
 const CREATED_NAME =
 	"The name of the new document, ending in .md, such as minutes.md, without any folder."
@@ -34,23 +34,46 @@ const CREATED_NAME =
 const TEMPLATE =
 	"One of meeting-notes, project-brief, decision-record or weekly-update to start the document from that template; left out, the document starts empty."
 
-const WRITE =
-	"Write into a Markdown document of the Library of this Space, live, beside the people editing it. Changing a document that already exists, such as its title or a section, means editing it here in place, never creating a new one. The text lands at the end of the document, right after the passage named in after, in place of the passage named in replace, or in place of the whole text when whole is true; give one of them at most. It answers the name the document stands under and how many characters you wrote."
-
 const NAME =
 	"The name of the item in the Library of this Space, with its extension, such as notes.md."
 
-const TEXT =
-	"The Markdown to write, with the line breaks it needs to stand on its own lines. With replace, an empty text removes the passage."
+const DOCUMENT_NAME =
+	"The name of a Markdown document of the Library of this Space, such as notes.md."
 
-const AFTER =
-	"An exact passage of the document, copied from library_read, that occurs once in it: the text lands right after it. Leave it out to write at the end."
+const DOCUMENT_INFO =
+	"Describe a Markdown document of the Library of this Space in one short answer: its name, its updatedAt in milliseconds since the epoch, how many blocks it holds and the id of its first heading, null when it has none. Call it first to size a document before you read its tree."
 
-const REPLACE =
-	"An exact passage of the document, copied from library_read, that occurs once in it: the text takes its place and every other character stays. A passage found zero times or more than once is refused with its count and nothing changes."
+const DOCUMENT_TREE =
+	"List the blocks of a Markdown document of the Library of this Space in order, as they stand now with what everyone has typed in it. Each block answers its id, its kind (heading, paragraph, list, checklist, quote, code, table, rule or image), its level for a heading, and its first words. Read the tree before you change a document: every other document tool targets a block by its id."
 
-const WHOLE =
-	"True to replace the whole text of the document with the text, under the same name."
+const DOCUMENT_READ_BLOCK =
+	"Read one block of a Markdown document of the Library of this Space by its id, as document_tree answered it. It answers the kind of the block and its Markdown."
+
+const DOCUMENT_INSERT_AFTER =
+	"Write new blocks into a Markdown document of the Library of this Space, live, beside the people editing it, right after the block named in after, or at the start of the document when after is left out. To add at the end, name the id of the last block of document_tree. It answers the ids of the new blocks, in order."
+
+const DOCUMENT_REPLACE_BLOCK =
+	"Replace one block of a Markdown document of the Library of this Space with new Markdown, live, beside the people editing it: a new title, a rewritten paragraph or list. The first new block keeps the id of the block it replaces. Changing a document that already exists means editing it here in place, never creating a new one. It answers the id of every resulting block, in order."
+
+const DOCUMENT_DELETE_BLOCK =
+	"Remove blocks of a Markdown document of the Library of this Space by their ids, live, beside the people editing it. One id absent from the document refuses the whole call and nothing changes. It answers the ids removed."
+
+const DOCUMENT_FIND =
+	"Find the blocks of a Markdown document of the Library of this Space holding the text you give, whatever its case. It answers each matching block with its id, its kind and the first line of it that holds the text."
+
+const BLOCK_ID =
+	"The id of a block of the document, as document_tree answered it. An id absent from the document is refused and nothing changes."
+
+const AFTER_BLOCK =
+	"The id of the block the new blocks land right after, as document_tree answered it; left out, they land at the start of the document."
+
+const BLOCKS_MARKDOWN =
+	"The Markdown of one or more blocks, such as a heading, paragraphs, a list or a table, blocks apart by a blank line. Write no block id: each new block gets its own."
+
+const DELETED_IDS =
+	"The ids of the blocks to remove, as document_tree answered them."
+
+const FOUND_TEXT = "The text to look for, matched whatever its case."
 
 const IMPORT =
 	"Copy a file you produced into the Library of this Space, a Markdown or text document, a JSON Canvas board ending in .canvas or a PNG, JPEG, GIF or WebP image. Left without overwrite, it lands under its own name, a number added when that name is taken. Changing an item that already exists, such as an image you imported before, means naming it in overwrite so the file replaces it in place, never adding a new one. It answers the name the item stands under, its kind and its updatedAt."
@@ -168,12 +191,32 @@ const CREATED: ToolInput = {
 		.describe(TEMPLATE),
 }
 
-const WRITTEN: ToolInput = {
-	...NAMED,
-	text: z.string().describe(TEXT),
-	after: z.string().describe(AFTER).optional(),
-	replace: z.string().describe(REPLACE).optional(),
-	whole: z.boolean().describe(WHOLE).optional(),
+const DOCUMENT_NAMED: ToolInput = { name: z.string().describe(DOCUMENT_NAME) }
+
+const BLOCK_NAMED: ToolInput = {
+	...DOCUMENT_NAMED,
+	id: z.string().describe(BLOCK_ID),
+}
+
+const BLOCKS_INSERTED: ToolInput = {
+	...DOCUMENT_NAMED,
+	after: z.string().optional().describe(AFTER_BLOCK),
+	markdown: z.string().describe(BLOCKS_MARKDOWN),
+}
+
+const BLOCK_REPLACED: ToolInput = {
+	...BLOCK_NAMED,
+	markdown: z.string().describe(BLOCKS_MARKDOWN),
+}
+
+const BLOCKS_DELETED: ToolInput = {
+	...DOCUMENT_NAMED,
+	ids: z.array(z.string()).describe(DELETED_IDS),
+}
+
+const BLOCKS_SOUGHT: ToolInput = {
+	...DOCUMENT_NAMED,
+	text: z.string().describe(FOUND_TEXT),
 }
 
 const IMPORTED: ToolInput = {
@@ -297,9 +340,6 @@ export const libraryTools = (
 	tool("library_create", CREATE, CREATED, (input) =>
 		asked(session, "create", input),
 	),
-	tool("library_write", WRITE, WRITTEN, (input) =>
-		asked(session, "write", input),
-	),
 	tool("library_import", IMPORT, IMPORTED, (input) =>
 		onReadablePath(scope, (input as ImportInput).path, (path) =>
 			asked(session, "import", { ...input, path }),
@@ -313,6 +353,36 @@ export const libraryTools = (
 	),
 	tool("conversation_post_document", POST_DOCUMENT, NAMED, (input) =>
 		asked(session, "postDocument", input),
+	),
+	tool("document_info", DOCUMENT_INFO, DOCUMENT_NAMED, (input) =>
+		asked(session, "documentInfo", input),
+	),
+	tool("document_tree", DOCUMENT_TREE, DOCUMENT_NAMED, (input) =>
+		asked(session, "documentTree", input),
+	),
+	tool("document_read_block", DOCUMENT_READ_BLOCK, BLOCK_NAMED, (input) =>
+		asked(session, "documentReadBlock", input),
+	),
+	tool(
+		"document_insert_after",
+		DOCUMENT_INSERT_AFTER,
+		BLOCKS_INSERTED,
+		(input) => asked(session, "documentInsertAfter", input),
+	),
+	tool(
+		"document_replace_block",
+		DOCUMENT_REPLACE_BLOCK,
+		BLOCK_REPLACED,
+		(input) => asked(session, "documentReplaceBlock", input),
+	),
+	tool(
+		"document_delete_block",
+		DOCUMENT_DELETE_BLOCK,
+		BLOCKS_DELETED,
+		(input) => asked(session, "documentDeleteBlock", input),
+	),
+	tool("document_find", DOCUMENT_FIND, BLOCKS_SOUGHT, (input) =>
+		asked(session, "documentFind", input),
 	),
 	tool("board_create", BOARD_CREATE, BOARD_NAMED, (input) =>
 		asked(session, "boardCreate", input),

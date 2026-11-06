@@ -33,11 +33,13 @@ mkdirSync(join(HOME, ".ssh"))
 writeFileSync(PRODUCED, "png")
 writeFileSync(SECRET, "png")
 
-const A_WRITE = { name: "notes.md", text: "A paragraph.", after: "# Notes" }
+const AN_INSERT = {
+	name: "notes.md",
+	after: "k3f9a2",
+	markdown: "A paragraph.",
+}
 
-const A_REPLACE = { name: "notes.md", text: "# Launch", replace: "# Draft" }
-
-const A_WHOLE_REPLACE = { name: "notes.md", text: "# Launch", whole: true }
+const A_REPLACE = { name: "notes.md", id: "k3f9a2", markdown: "# Launch" }
 
 const A_REFUSAL = { kind: "missing", name: "notes.md" }
 
@@ -96,17 +98,23 @@ afterEach(() => {
 })
 
 describe("libraryTools", () => {
-	it("serves the eight library tools, the tool that posts a document and the six board tools", () => {
+	it("serves the seven library tools, the tool that posts a document, the seven document tools and the six board tools", () => {
 		expect(tools.map((held) => held.name)).toEqual([
 			"library_list",
 			"library_search",
 			"library_read",
 			"library_create",
-			"library_write",
 			"library_import",
 			"library_rename",
 			"library_delete",
 			"conversation_post_document",
+			"document_info",
+			"document_tree",
+			"document_read_block",
+			"document_insert_after",
+			"document_replace_block",
+			"document_delete_block",
+			"document_find",
 			"board_create",
 			"board_read",
 			"board_view",
@@ -133,14 +141,6 @@ describe("libraryTools", () => {
 		expect(fieldsOf("library_search").required).toEqual(["query"])
 		expect(fieldsOf("library_read").required).toEqual(["name"])
 		expect(fieldsOf("library_create").required).toEqual(["name"])
-		expect(fieldsOf("library_write").required).toEqual(["name", "text"])
-		expect(Object.keys(fieldsOf("library_write").properties ?? {})).toEqual([
-			"name",
-			"text",
-			"after",
-			"replace",
-			"whole",
-		])
 		expect(fieldsOf("library_import").required).toEqual(["path"])
 		expect(Object.keys(fieldsOf("library_import").properties ?? {})).toEqual([
 			"path",
@@ -149,6 +149,23 @@ describe("libraryTools", () => {
 		expect(fieldsOf("library_rename").required).toEqual(["name", "newName"])
 		expect(fieldsOf("library_delete").required).toEqual(["name"])
 		expect(fieldsOf("conversation_post_document").required).toEqual(["name"])
+		expect(fieldsOf("document_info").required).toEqual(["name"])
+		expect(fieldsOf("document_tree").required).toEqual(["name"])
+		expect(fieldsOf("document_read_block").required).toEqual(["name", "id"])
+		expect(fieldsOf("document_insert_after").required).toEqual([
+			"name",
+			"markdown",
+		])
+		expect(
+			Object.keys(fieldsOf("document_insert_after").properties ?? {}),
+		).toEqual(["name", "after", "markdown"])
+		expect(fieldsOf("document_replace_block").required).toEqual([
+			"name",
+			"id",
+			"markdown",
+		])
+		expect(fieldsOf("document_delete_block").required).toEqual(["name", "ids"])
+		expect(fieldsOf("document_find").required).toEqual(["name", "text"])
 		expect(fieldsOf("board_create").required).toEqual(["name"])
 		expect(fieldsOf("board_read").required).toEqual(["name"])
 		expect(fieldsOf("board_view").required).toEqual(["name", "id"])
@@ -269,9 +286,26 @@ describe("libraryTools", () => {
 			["library_list", "list", { kind: "image", limit: 2, cursor: "c" }],
 			["library_search", "search", { query: "roadmap" }],
 			["library_create", "create", { name: "a.md", template: "meeting-notes" }],
-			["library_write", "write", A_WRITE],
-			["library_write", "write", A_REPLACE],
-			["library_write", "write", A_WHOLE_REPLACE],
+			["document_info", "documentInfo", { name: "notes.md" }],
+			["document_tree", "documentTree", { name: "notes.md" }],
+			[
+				"document_read_block",
+				"documentReadBlock",
+				{ name: "notes.md", id: "k3f9a2" },
+			],
+			["document_insert_after", "documentInsertAfter", AN_INSERT],
+			[
+				"document_insert_after",
+				"documentInsertAfter",
+				{ name: "notes.md", markdown: "# Notes" },
+			],
+			["document_replace_block", "documentReplaceBlock", A_REPLACE],
+			[
+				"document_delete_block",
+				"documentDeleteBlock",
+				{ name: "notes.md", ids: ["k3f9a2", "p0q1r2"] },
+			],
+			["document_find", "documentFind", { name: "notes.md", text: "launch" }],
 			["library_rename", "rename", { name: "a.md", newName: "b.md" }],
 			["library_delete", "delete", { name: "b.md" }],
 		]
@@ -289,14 +323,47 @@ describe("libraryTools", () => {
 		)
 	})
 
-	it("speaks a written answer back as text", async () => {
-		const answer = { name: "notes.md", characters: 12 }
+	it("speaks the ids of the written blocks back as text", async () => {
+		const answer = { name: "notes.md", ids: ["m4n5o6"] }
 		aHost(() => ({ result: answer }))
 
-		const result = await called("library_write", A_WRITE)
+		const result = await called("document_insert_after", AN_INSERT)
 
 		expect(spoken(result)).toEqual(answer)
 		expect(result.isError).toBeUndefined()
+	})
+
+	it("speaks back the refusal naming a block id absent from the document and the tool that lists them", async () => {
+		const refusal = {
+			kind: "blockNotFound",
+			id: "zzzzzz",
+			detail:
+				"no block of this document holds this id: call document_tree for the ids it holds",
+		}
+		aHost(() => ({ error: refusal }))
+
+		const result = await called("document_replace_block", {
+			...A_REPLACE,
+			id: "zzzzzz",
+		})
+
+		expect(spoken(result)).toEqual(refusal)
+		expect(result.isError).toBe(true)
+	})
+
+	it("tells the agent to read the tree first and to target a block by its id", () => {
+		expect(theTool("document_tree").description).toContain(
+			"Read the tree before you change a document",
+		)
+		for (const name of [
+			"document_read_block",
+			"document_replace_block",
+			"document_delete_block",
+		]) {
+			expect(JSON.stringify(fieldsOf(name))).toContain(
+				"as document_tree answered",
+			)
+		}
 	})
 
 	it("shows an image read to the model as image content", async () => {
@@ -358,14 +425,14 @@ describe("libraryTools", () => {
 	})
 
 	it("tells the agent that changing an item edits it in place, never a new one", () => {
-		expect(theTool("library_write").description).toContain(
+		expect(theTool("document_replace_block").description).toContain(
 			"editing it here in place, never creating a new one",
 		)
 		expect(theTool("library_import").description).toContain(
 			"replaces it in place, never adding a new one",
 		)
 		expect(theTool("library_create").description).toContain(
-			"write in it with library_write, never create another one",
+			"edit its blocks with document_tree then document_replace_block or document_insert_after, never create another one",
 		)
 	})
 

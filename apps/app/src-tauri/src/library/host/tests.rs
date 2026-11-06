@@ -118,6 +118,33 @@ fn caret_of_a_member(app: &App<MockRuntime>, name: &str) -> LibraryPresenceAt {
 	LibraryPresenceAt::Text { anchor: BASE64_STANDARD.encode(caret.encode_v1()) }
 }
 
+async fn tree_of(host: &LibraryHost<MockRuntime>, name: &str) -> Vec<Value> {
+	let tree = host.served(Operation::DocumentTree, json!({ "name": name })).await.expect("reads");
+	tree["blocks"].as_array().expect("the tree lists its blocks").clone()
+}
+
+async fn ids_of(host: &LibraryHost<MockRuntime>, name: &str) -> Vec<String> {
+	tree_of(host, name)
+		.await
+		.iter()
+		.map(|block| block["id"].as_str().expect("a block id").to_owned())
+		.collect()
+}
+
+fn ids_in(answer: &Value) -> Vec<String> {
+	answer["ids"]
+		.as_array()
+		.expect("the answer lists ids")
+		.iter()
+		.map(|id| id.as_str().expect("an id").to_owned())
+		.collect()
+}
+
+fn sources_on_disk(root: &Path, name: &str) -> Vec<String> {
+	let text = on_disk(root, name);
+	blocks_of(&text).into_iter().map(|block| text[block.content].to_owned()).collect()
+}
+
 fn ana() -> Identity {
 	Identity { name: Some("Ana".to_owned()), hue: Some(hue_of("u2")) }
 }
@@ -148,8 +175,13 @@ async fn an_agent_and_a_member_are_published_with_their_names_then_the_agent_fin
 	)
 	.expect("the member caret is published");
 
-	the_host(&app)
-		.served(Operation::Write, json!({ "name": "notes.md", "text": " Bean wrote this." }))
+	let host = the_host(&app);
+	let notes = ids_of(&host, "notes.md").await;
+	let written = host
+		.served(
+			Operation::DocumentInsertAfter,
+			json!({ "name": "notes.md", "after": notes[0], "markdown": "Bean wrote this." }),
+		)
 		.await
 		.expect("the agent writes");
 
@@ -175,7 +207,11 @@ async fn an_agent_and_a_member_are_published_with_their_names_then_the_agent_fin
 	);
 	let last = published.last().expect("a presence was published");
 	assert_eq!(named(&last.writers), [(LibraryWriterKind::Member, Some("Ana"))]);
-	assert_eq!(on_disk(&root, "notes.md"), "Notes. Bean wrote this.");
+	let bean = &ids_in(&written)[0];
+	assert_eq!(
+		on_disk(&root, "notes.md"),
+		format!("Notes. ^{}\n\nBean wrote this. ^{bean}", notes[0])
+	);
 }
 
 #[tokio::test]
@@ -186,15 +222,19 @@ async fn a_write_lands_in_more_than_one_update_with_the_caret_after_what_it_wrot
 	let presences =
 		heard::<LibraryDocumentPresence>(&app, events::LIBRARY_DOCUMENT_PRESENCE.name());
 
-	the_host(&app)
+	let host = the_host(&app);
+	let held = ids_of(&host, "notes.md").await;
+	let written = host
 		.served(
-			Operation::Write,
-			json!({ "name": "notes.md", "text": "\nA paragraph.", "after": "# Title" }),
+			Operation::DocumentInsertAfter,
+			json!({ "name": "notes.md", "after": held[0], "markdown": "A paragraph." }),
 		)
 		.await
 		.expect("the agent writes");
 
-	assert_eq!(on_disk(&root, "notes.md"), "# Title\nA paragraph.\n\nEnd.");
+	let new = &ids_in(&written)[0];
+	let up_to_the_new_block = format!("# Title ^{}\n\nA paragraph. ^{new}", held[0]);
+	assert_eq!(on_disk(&root, "notes.md"), format!("{up_to_the_new_block}\n\nEnd. ^{}", held[1]));
 	assert!(all_of(&updates).len() > 1);
 	let carets: Vec<String> = all_of(&presences)
 		.into_iter()
@@ -212,45 +252,57 @@ async fn a_write_lands_in_more_than_one_update_with_the_caret_after_what_it_wrot
 	let caret = yrs::StickyIndex::decode_v1(&BASE64_STANDARD.decode(last).expect("base64"))
 		.expect("a relative position");
 	let at = caret.get_offset(&held.transact()).expect("the caret resolves").index;
-	assert_eq!(at as usize, "# Title\nA paragraph.".len());
+	assert_eq!(at as usize, up_to_the_new_block.len());
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_write_interleaved_with_a_person_keeps_every_character_of_both() {
 	let (app, root) = a_host("interleaved").await;
 	put(&root, SPACE, "notes.md", "Base.");
-	let agent_text: String = "abcdefghijklmnopqrstuvwxyz".repeat(3);
+	let agent_text: String = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".repeat(3);
 	let host = the_host(&app);
-	let asked = json!({ "name": "notes.md", "text": agent_text });
-	let writing = tokio::spawn(async move { host.served(Operation::Write, asked).await });
+	let base = ids_of(&host, "notes.md").await.remove(0);
+	let asked = json!({ "name": "notes.md", "after": base, "markdown": agent_text });
+	let writing =
+		tokio::spawn(async move { host.served(Operation::DocumentInsertAfter, asked).await });
 	let person = Doc::with_client_id(PERSON_CLIENT);
 	let mut typed = 0;
 	while !writing.is_finished() {
 		tokio::time::sleep(Duration::from_millis(15)).await;
 		typed += 1;
-		person_typed_at_the_end(&app, &root, &person);
+		person_typed_at_the_start(&app, &root, &person);
 	}
-	writing.await.expect("the write ends").expect("the agent writes");
-	person_typed_at_the_end(&app, &root, &person);
+	let written = writing.await.expect("the write ends").expect("the agent writes");
+	person_typed_at_the_start(&app, &root, &person);
 	typed += 1;
 
 	let text = on_disk(&root, "notes.md");
+	let new = &ids_in(&written)[0];
+	let expected = format!("Base. ^{base}\n\n{agent_text} ^{new}");
 	assert!(typed > 2, "the person typed only {typed} times");
 	assert_eq!(text.matches('#').count(), typed, "{text}");
-	assert_eq!(text.len(), "Base.".len() + agent_text.len() + typed, "{text}");
+	assert_eq!(text.len(), expected.len() + typed, "{text}");
 	let without_the_person: String = text.chars().filter(|char| *char != '#').collect();
-	assert_eq!(without_the_person, format!("Base.{agent_text}"));
+	assert_eq!(without_the_person, expected);
+}
+
+fn person_typed_at_the_start(app: &App<MockRuntime>, root: &Path, person: &Doc) {
+	person_typed(app, root, person, |_| 0);
 }
 
 fn person_typed_at_the_end(app: &App<MockRuntime>, root: &Path, person: &Doc) {
+	person_typed(app, root, person, str::len);
+}
+
+fn person_typed(app: &App<MockRuntime>, root: &Path, person: &Doc, at: fn(&str) -> usize) {
 	let state = open_document(app.handle(), root, SPACE, "notes.md").expect("opens").update;
 	let update = BASE64_STANDARD.decode(state).expect("base64");
 	person.transact_mut().apply_update(Update::decode_v1(&update).expect("yjs")).expect("applies");
 	let before = person.transact().state_vector();
 	let text = person.get_or_insert_text("markdown");
 	let mut txn = person.transact_mut();
-	let end = text.get_string(&txn).len() as u32;
-	text.insert(&mut txn, end, "#");
+	let index = at(&text.get_string(&txn)) as u32;
+	text.insert(&mut txn, index, "#");
 	drop(txn);
 	let typed = person.transact().encode_state_as_update_v1(&before);
 	apply_update(app.handle(), root, SPACE, "notes.md", &BASE64_STANDARD.encode(typed))
@@ -258,22 +310,250 @@ fn person_typed_at_the_end(app: &App<MockRuntime>, root: &Path, person: &Doc) {
 }
 
 #[tokio::test]
-async fn a_passage_found_zero_or_many_times_writes_nothing_says_which_and_publishes_nothing() {
-	let (app, root) = a_host("passage").await;
-	put(&root, SPACE, "notes.md", "one, two, two");
+async fn a_block_id_absent_from_the_document_is_refused_by_name_and_writes_nothing() {
+	let (app, root) = a_host("absent").await;
+	put(&root, SPACE, "notes.md", "# Plan\n\nBody.");
+	open_document(app.handle(), &root, SPACE, "notes.md").expect("opens");
 	let published = heard_in_order(&app);
+	let updates = heard::<Value>(&app, events::LIBRARY_DOCUMENT_UPDATED.name());
+	let host = the_host(&app);
+	let absent = json!({
+		"kind": "blockNotFound",
+		"id": "zzzzzz",
+		"detail": "no block of this document holds this id: call document_tree for the ids it holds",
+	});
 
-	let missing = the_host(&app)
-		.served(Operation::Write, json!({ "name": "notes.md", "text": "!", "after": "three" }))
-		.await;
-	let repeated = the_host(&app)
-		.served(Operation::Write, json!({ "name": "notes.md", "text": "!", "after": "two" }))
-		.await;
+	for (operation, asked) in [
+		(Operation::DocumentReadBlock, json!({ "name": "notes.md", "id": "zzzzzz" })),
+		(
+			Operation::DocumentInsertAfter,
+			json!({ "name": "notes.md", "after": "zzzzzz", "markdown": "New." }),
+		),
+		(
+			Operation::DocumentReplaceBlock,
+			json!({ "name": "notes.md", "id": "zzzzzz", "markdown": "New." }),
+		),
+		(Operation::DocumentDeleteBlock, json!({ "name": "notes.md", "ids": ["zzzzzz"] })),
+	] {
+		assert_eq!(refusal_of(host.served(operation, asked).await), absent);
+	}
 
-	assert_eq!(refusal_kind(missing), "passageNotFound");
-	assert_eq!(refusal_kind(repeated), "passageNotUnique");
-	assert_eq!(on_disk(&root, "notes.md"), "one, two, two");
+	assert_eq!(on_disk(&root, "notes.md"), "# Plan\n\nBody.");
 	assert_eq!(all_of(&published), []);
+	assert_eq!(all_of(&updates), Vec::<Value>::new());
+}
+
+#[tokio::test]
+async fn a_delete_naming_one_absent_id_among_present_ones_removes_nothing() {
+	let (app, root) = a_host("absent-among").await;
+	put(&root, SPACE, "notes.md", "One.\n\nTwo.");
+	let host = the_host(&app);
+	let held = ids_of(&host, "notes.md").await;
+	let before = on_disk(&root, "notes.md");
+
+	let refused = host
+		.served(
+			Operation::DocumentDeleteBlock,
+			json!({ "name": "notes.md", "ids": [held[0], "zzzzzz"] }),
+		)
+		.await;
+
+	assert_eq!(refusal_of(refused)["id"], "zzzzzz");
+	assert_eq!(on_disk(&root, "notes.md"), before);
+}
+
+#[tokio::test]
+async fn a_read_gives_the_blocks_without_an_id_new_ids_once_and_keeps_the_ids_already_there() {
+	let (app, root) = a_host("backfill").await;
+	put(&root, SPACE, "notes.md", "# Plan ^aaaaaa\n\nBody.\n\n- one\n- two");
+	let editor = an_open_editor(&app, &root, "notes.md");
+	let updates = heard::<Value>(&app, events::LIBRARY_DOCUMENT_UPDATED.name());
+	let host = the_host(&app);
+
+	let first = ids_of(&host, "notes.md").await;
+	let filled = on_disk(&root, "notes.md");
+	let seen_by_the_editor = caught_up(&editor, &updates);
+	let again = ids_of(&host, "notes.md").await;
+
+	assert_eq!(first[0], "aaaaaa");
+	assert_eq!(first.len(), 3);
+	assert_eq!(
+		filled,
+		format!("# Plan ^aaaaaa\n\nBody. ^{}\n\n- one\n- two\n\n^{}", first[1], first[2])
+	);
+	assert_eq!(seen_by_the_editor, filled);
+	assert_eq!(again, first);
+	assert_eq!(on_disk(&root, "notes.md"), filled);
+	assert_eq!(all_of(&updates), Vec::<Value>::new());
+}
+
+#[tokio::test]
+async fn the_info_answers_the_name_the_update_time_the_block_count_and_the_first_heading() {
+	let (app, root) = a_host("info").await;
+	put(&root, SPACE, "notes.md", "Intro.\n\n## Plan\n\n# Later");
+	let host = the_host(&app);
+
+	let info =
+		host.served(Operation::DocumentInfo, json!({ "name": "notes.md" })).await.expect("info");
+	let held = ids_of(&host, "notes.md").await;
+	let listed = host.served(Operation::List, json!({})).await.expect("lists");
+
+	assert_eq!(info["name"], "notes.md");
+	assert_eq!(info["blocks"], 3);
+	assert_eq!(info["firstHeading"], held[1].as_str());
+	assert_eq!(info["updatedAt"], listed["items"][0]["updatedAt"]);
+}
+
+#[tokio::test]
+async fn the_tree_answers_each_block_in_order_with_its_kind_its_level_and_its_first_words() {
+	let (app, root) = a_host("tree").await;
+	let long = "word ".repeat(40);
+	put(
+		&root,
+		SPACE,
+		"notes.md",
+		&format!("## Launch plan\n\n{long}\n\n- [ ] ship\n\n```\ncode\n```\n\n---"),
+	);
+	let host = the_host(&app);
+
+	let tree = tree_of(&host, "notes.md").await;
+
+	let shown: Vec<(&str, Option<u64>, &str)> = tree
+		.iter()
+		.map(|block| {
+			(
+				block["kind"].as_str().expect("a kind"),
+				block["level"].as_u64(),
+				block["text"].as_str().expect("words"),
+			)
+		})
+		.collect();
+	assert_eq!(shown[0], ("heading", Some(2), "Launch plan"));
+	assert_eq!(shown[1].0, "paragraph");
+	assert!(shown[1].2.ends_with('…') && shown[1].2.chars().count() <= 61, "{}", shown[1].2);
+	assert_eq!(shown[2], ("checklist", None, "ship"));
+	assert_eq!(shown[3], ("code", None, "code"));
+	assert_eq!(shown[4], ("rule", None, ""));
+	assert!(tree.iter().all(|block| block["id"].as_str().is_some_and(|id| id.len() == 6)));
+}
+
+#[tokio::test]
+async fn a_block_reads_out_as_its_markdown_without_its_id_marker() {
+	let (app, root) = a_host("read-block").await;
+	put(&root, SPACE, "notes.md", "# Plan\n\n- one\n- two");
+	let host = the_host(&app);
+	let held = ids_of(&host, "notes.md").await;
+
+	let heading = host
+		.served(Operation::DocumentReadBlock, json!({ "name": "notes.md", "id": held[0] }))
+		.await
+		.expect("reads");
+	let list = host
+		.served(Operation::DocumentReadBlock, json!({ "name": "notes.md", "id": held[1] }))
+		.await
+		.expect("reads");
+
+	assert_eq!(
+		heading,
+		json!({ "name": "notes.md", "id": held[0], "kind": "heading", "markdown": "# Plan" })
+	);
+	assert_eq!(list["markdown"], "- one\n- two");
+	assert_eq!(list["kind"], "list");
+}
+
+#[tokio::test]
+async fn a_find_answers_each_block_holding_the_text_whatever_its_case_with_the_line_that_holds_it()
+{
+	let (app, root) = a_host("find").await;
+	put(&root, SPACE, "notes.md", "# Launch\n\nNothing here.\n\n- first\n- the LAUNCH date");
+	let host = the_host(&app);
+	let held = ids_of(&host, "notes.md").await;
+
+	let found = host
+		.served(Operation::DocumentFind, json!({ "name": "notes.md", "text": "launch" }))
+		.await
+		.expect("finds");
+
+	assert_eq!(
+		found["matches"],
+		json!([
+			{ "id": held[0], "kind": "heading", "line": "# Launch" },
+			{ "id": held[2], "kind": "list", "line": "- the LAUNCH date" },
+		])
+	);
+}
+
+#[tokio::test]
+async fn an_insert_at_the_start_lands_before_the_first_block_and_answers_each_new_id() {
+	let (app, root) = a_host("insert-start").await;
+	put(&root, SPACE, "notes.md", "Body.");
+	let host = the_host(&app);
+
+	let written = host
+		.served(
+			Operation::DocumentInsertAfter,
+			json!({ "name": "notes.md", "markdown": "# Title ^forged\n\nLead. ^abcdef" }),
+		)
+		.await
+		.expect("inserts");
+
+	let new = ids_in(&written);
+	let held = ids_of(&host, "notes.md").await;
+	assert_eq!(new.len(), 2);
+	assert_eq!(held[..2], new[..]);
+	assert!(!new.contains(&"abcdef".to_owned()) && !new.contains(&"forged".to_owned()));
+	assert_eq!(sources_on_disk(&root, "notes.md"), ["# Title", "Lead.", "Body."]);
+}
+
+#[tokio::test]
+async fn markdown_holding_no_block_is_refused_and_writes_nothing() {
+	let (app, root) = a_host("no-block").await;
+	put(&root, SPACE, "notes.md", "Body. ^aaaaaa");
+	let host = the_host(&app);
+
+	let refused = host
+		.served(
+			Operation::DocumentReplaceBlock,
+			json!({ "name": "notes.md", "id": "aaaaaa", "markdown": "\n^bbbbbb\n" }),
+		)
+		.await;
+
+	assert_eq!(refusal_of(refused), json!({ "kind": "noBlock" }));
+	assert_eq!(on_disk(&root, "notes.md"), "Body. ^aaaaaa");
+}
+
+#[tokio::test]
+async fn every_id_a_call_does_not_delete_stays_the_same() {
+	let (app, root) = a_host("stable").await;
+	put(&root, SPACE, "notes.md", "# Plan\n\nOne.\n\nTwo.\n\nThree.");
+	let host = the_host(&app);
+	let held = ids_of(&host, "notes.md").await;
+	let call = |operation: Operation, asked: Value| host.served(operation, asked);
+
+	let inserted = call(
+		Operation::DocumentInsertAfter,
+		json!({ "name": "notes.md", "after": held[1], "markdown": "Between." }),
+	)
+	.await
+	.expect("inserts");
+	let replaced = call(
+		Operation::DocumentReplaceBlock,
+		json!({ "name": "notes.md", "id": held[2], "markdown": "Two again.\n\n- and a list" }),
+	)
+	.await
+	.expect("replaces");
+	call(Operation::DocumentDeleteBlock, json!({ "name": "notes.md", "ids": [held[3]] }))
+		.await
+		.expect("deletes");
+
+	let now = ids_of(&host, "notes.md").await;
+	let (between, list) = (ids_in(&inserted)[0].clone(), ids_in(&replaced)[1].clone());
+	assert_eq!(now, [held[0].clone(), held[1].clone(), between, held[2].clone(), list]);
+	assert_eq!(ids_in(&replaced)[0], held[2]);
+	assert_eq!(
+		sources_on_disk(&root, "notes.md"),
+		["# Plan", "One.", "Between.", "Two again.", "- and a list"]
+	);
 }
 
 #[tokio::test]
@@ -285,7 +565,7 @@ async fn every_tool_stays_in_the_space_of_the_conversation_and_writes_only_markd
 	put(&root, "work", "elsewhere.md", "not yours");
 	let host = the_host(&app);
 	let named = |operation: Operation, name: &str| host.served(operation, json!({ "name": name }));
-	let write = |name: &str| host.served(Operation::Write, json!({ "name": name, "text": "!" }));
+	let write = |name: &str| host.served(Operation::DocumentTree, json!({ "name": name }));
 	let rename = |name: &str, new_name: &str| {
 		host.served(Operation::Rename, json!({ "name": name, "newName": new_name }))
 	};
@@ -660,32 +940,37 @@ fn caught_up(editor: &Doc, updates: &Receiver<Value>) -> String {
 }
 
 #[tokio::test]
-async fn a_replace_swaps_the_passage_live_and_keeps_every_other_character() {
+async fn a_replace_and_an_insert_land_live_in_an_open_editor_and_keep_one_document() {
 	let (app, root) = a_host("replace").await;
 	put(&root, SPACE, "notes.md", "# Draft\n\nIntro.\n\n## Plan\n\nShip it.");
+	let host = the_host(&app);
+	let held = ids_of(&host, "notes.md").await;
 	let editor = an_open_editor(&app, &root, "notes.md");
 	let updates = heard::<Value>(&app, events::LIBRARY_DOCUMENT_UPDATED.name());
-	let host = the_host(&app);
 
 	let retitled = host
 		.served(
-			Operation::Write,
-			json!({ "name": "notes.md", "replace": "# Draft", "text": "# Launch plan" }),
+			Operation::DocumentReplaceBlock,
+			json!({ "name": "notes.md", "id": held[0], "markdown": "# Launch plan" }),
 		)
 		.await
 		.expect("the agent replaces");
 	let added = host
 		.served(
-			Operation::Write,
-			json!({ "name": "notes.md", "after": "Ship it.", "text": "\n\n## Risks\n\nNone." }),
+			Operation::DocumentInsertAfter,
+			json!({ "name": "notes.md", "after": held[3], "markdown": "## Risks\n\nNone." }),
 		)
 		.await
 		.expect("the agent adds a section");
 
-	let expected = "# Launch plan\n\nIntro.\n\n## Plan\n\nShip it.\n\n## Risks\n\nNone.";
+	let [risks, none] = [&ids_in(&added)[0], &ids_in(&added)[1]];
+	let expected = format!(
+		"# Launch plan ^{}\n\nIntro. ^{}\n\n## Plan ^{}\n\nShip it. ^{}\n\n## Risks ^{risks}\n\nNone. ^{none}",
+		held[0], held[1], held[2], held[3]
+	);
 	assert_eq!(on_disk(&root, "notes.md"), expected);
 	assert_eq!(caught_up(&editor, &updates), expected);
-	assert_eq!(retitled["name"], "notes.md");
+	assert_eq!(retitled, json!({ "name": "notes.md", "ids": [held[0]] }));
 	assert_eq!(added["name"], "notes.md");
 	assert_eq!(
 		names_in(&host.served(Operation::List, json!({})).await.expect("lists")),
@@ -694,85 +979,28 @@ async fn a_replace_swaps_the_passage_live_and_keeps_every_other_character() {
 }
 
 #[tokio::test]
-async fn an_empty_replacement_removes_the_passage_and_nothing_else() {
+async fn a_delete_removes_its_blocks_live_and_nothing_else() {
 	let (app, root) = a_host("remove").await;
-	put(&root, SPACE, "notes.md", "Keep. Drop this. Keep too.");
+	put(
+		&root,
+		SPACE,
+		"notes.md",
+		"Keep. ^aaaaaa\n\nDrop. ^bbbbbb\n\n- drop too\n\n^cccccc\n\nKeep too. ^dddddd",
+	);
 	let editor = an_open_editor(&app, &root, "notes.md");
 	let updates = heard::<Value>(&app, events::LIBRARY_DOCUMENT_UPDATED.name());
 
-	the_host(&app)
+	let removed = the_host(&app)
 		.served(
-			Operation::Write,
-			json!({ "name": "notes.md", "replace": "Drop this. ", "text": "" }),
+			Operation::DocumentDeleteBlock,
+			json!({ "name": "notes.md", "ids": ["cccccc", "bbbbbb", "cccccc"] }),
 		)
 		.await
 		.expect("the agent removes");
 
-	assert_eq!(on_disk(&root, "notes.md"), "Keep. Keep too.");
-	assert_eq!(caught_up(&editor, &updates), "Keep. Keep too.");
-}
-
-#[tokio::test]
-async fn a_whole_replace_leaves_one_document_under_its_name_holding_the_new_text() {
-	let (app, root) = a_host("whole").await;
-	put(&root, SPACE, "notes.md", "# Old\n\nOld body.");
-	let editor = an_open_editor(&app, &root, "notes.md");
-	let updates = heard::<Value>(&app, events::LIBRARY_DOCUMENT_UPDATED.name());
-	let host = the_host(&app);
-
-	let written = host
-		.served(Operation::Write, json!({ "name": "notes.md", "whole": true, "text": "# New" }))
-		.await
-		.expect("the agent rewrites");
-
-	assert_eq!(written["name"], "notes.md");
-	assert_eq!(on_disk(&root, "notes.md"), "# New");
-	assert_eq!(caught_up(&editor, &updates), "# New");
-	assert_eq!(
-		names_in(&host.served(Operation::List, json!({})).await.expect("lists")),
-		["notes.md"]
-	);
-}
-
-#[tokio::test]
-async fn a_replace_of_a_passage_found_zero_or_many_times_names_the_count_and_changes_nothing() {
-	let (app, root) = a_host("replace-count").await;
-	put(&root, SPACE, "notes.md", "two, two, two");
-	open_document(app.handle(), &root, SPACE, "notes.md").expect("opens");
-	let published = heard_in_order(&app);
-	let updates = heard::<Value>(&app, events::LIBRARY_DOCUMENT_UPDATED.name());
-	let host = the_host(&app);
-	let replace = |passage: &str| {
-		host.served(
-			Operation::Write,
-			json!({ "name": "notes.md", "replace": passage, "text": "!" }),
-		)
-	};
-
-	assert_eq!(refusal_of(replace("three").await), json!({ "kind": "passageNotFound" }));
-	assert_eq!(
-		refusal_of(replace("two").await),
-		json!({ "kind": "passageNotUnique", "occurrences": 3 })
-	);
-	assert_eq!(on_disk(&root, "notes.md"), "two, two, two");
-	assert_eq!(all_of(&published), []);
-	assert_eq!(all_of(&updates), Vec::<Value>::new());
-}
-
-#[tokio::test]
-async fn a_write_asking_two_placements_at_once_is_refused_and_writes_nothing() {
-	let (app, root) = a_host("placements").await;
-	put(&root, SPACE, "notes.md", "Base.");
-
-	let both = the_host(&app)
-		.served(
-			Operation::Write,
-			json!({ "name": "notes.md", "after": "Base.", "whole": true, "text": "!" }),
-		)
-		.await;
-
-	assert_eq!(refusal_kind(both), "unreadableRequest");
-	assert_eq!(on_disk(&root, "notes.md"), "Base.");
+	assert_eq!(removed, json!({ "name": "notes.md", "ids": ["bbbbbb", "cccccc"] }));
+	assert_eq!(on_disk(&root, "notes.md"), "Keep. ^aaaaaa\n\nKeep too. ^dddddd");
+	assert_eq!(caught_up(&editor, &updates), "Keep. ^aaaaaa\n\nKeep too. ^dddddd");
 }
 
 fn produced(root: &Path, name: &str, bytes: &[u8]) -> PathBuf {
@@ -960,24 +1188,26 @@ fn heard_in_order(app: &App<MockRuntime>) -> Receiver<Published> {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn two_writes_of_one_agent_at_once_run_one_after_the_other_and_each_finishes_once() {
 	let (app, root) = a_host("queued").await;
-	put(&root, SPACE, "notes.md", "Base.");
+	put(&root, SPACE, "notes.md", "Base. ^aaaaaa");
 	let published = heard_in_order(&app);
-	let first = "abcdefghijklmnopqrstuvwxyz".repeat(2);
-	let second = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".repeat(2);
+	let first = "ABCDEFGHIJKLM".repeat(4);
+	let second = "NOPQRSTUVWXYZ".repeat(4);
 	let write = |text: &str| {
 		let host = the_host(&app);
-		let asked = json!({ "name": "notes.md", "text": text });
-		tokio::spawn(async move { host.served(Operation::Write, asked).await })
+		let asked = json!({ "name": "notes.md", "markdown": text });
+		tokio::spawn(async move { host.served(Operation::DocumentInsertAfter, asked).await })
 	};
 
 	let (one, two) = tokio::join!(write(&first), write(&second));
 	one.expect("the first write ends").expect("the first write lands");
 	two.expect("the second write ends").expect("the second write lands");
 
-	let text = on_disk(&root, "notes.md");
+	let sources = sources_on_disk(&root, "notes.md");
 	assert!(
-		[format!("Base.{first}{second}"), format!("Base.{second}{first}")].contains(&text),
-		"{text}"
+		[[second.as_str(), first.as_str(), "Base."], [first.as_str(), second.as_str(), "Base."]]
+			.iter()
+			.any(|order| order.iter().copied().eq(sources.iter().map(String::as_str))),
+		"{sources:?}"
 	);
 	let published = all_of(&published);
 	let finished = Published::Finished(LibraryWriteOutcome::Finished);
@@ -995,8 +1225,9 @@ async fn a_write_dropped_mid_way_publishes_one_failed_finish_and_leaves() {
 	put(&root, SPACE, "notes.md", "Base.");
 	let published = heard_in_order(&app);
 	let host = the_host(&app);
-	let asked = json!({ "name": "notes.md", "text": "a".repeat(200) });
-	let writing = tokio::spawn(async move { host.served(Operation::Write, asked).await });
+	let asked = json!({ "name": "notes.md", "markdown": "A".repeat(200) });
+	let writing =
+		tokio::spawn(async move { host.served(Operation::DocumentInsertAfter, asked).await });
 	tokio::time::sleep(STEP_PAUSE * 3).await;
 
 	writing.abort();
@@ -1007,7 +1238,7 @@ async fn a_write_dropped_mid_way_publishes_one_failed_finish_and_leaves() {
 		published.iter().filter(|event| matches!(event, Published::Finished(_))).collect();
 	assert_eq!(finishes, [&Published::Finished(LibraryWriteOutcome::Failed)]);
 	assert_eq!(published.last(), Some(&Published::Writers(vec![])));
-	assert!(on_disk(&root, "notes.md").len() < "Base.".len() + 200);
+	assert!(on_disk(&root, "notes.md").matches('A').count() < 200);
 }
 
 #[tokio::test(start_paused = true)]
@@ -1474,7 +1705,7 @@ async fn two_agents_writing(name: &str) -> (AppOfItsOwn, PathBuf) {
 		.call_mut(|connection| Ok(connection.execute_batch(A_SECOND_AGENT_IN_THE_CONVERSATION)?))
 		.await
 		.expect("the second agent is planted");
-	put(&root, SPACE, "notes.md", "Base.");
+	put(&root, SPACE, "notes.md", "Base. ^aaaaaa");
 	(app, root)
 }
 
@@ -1484,8 +1715,8 @@ fn writing(
 	text: String,
 ) -> tokio::task::JoinHandle<Result<Value, DocumentRefusal>> {
 	let host = the_host_of(app, bot_id);
-	let asked = json!({ "name": "notes.md", "text": text });
-	tokio::spawn(async move { host.served(Operation::Write, asked).await })
+	let asked = json!({ "name": "notes.md", "markdown": text });
+	tokio::spawn(async move { host.served(Operation::DocumentInsertAfter, asked).await })
 }
 
 async fn stopped(app: &App<MockRuntime>, agent_id: Option<&str>) -> CancelOutcome {
@@ -1530,8 +1761,8 @@ async fn a_stop_without_an_agent_stops_every_agent_writing_and_leaves_the_member
 		caret,
 	)
 	.expect("the member caret is published");
-	let bean = writing(&app, "b1", "a".repeat(200));
-	let kit = writing(&app, "b2", "b".repeat(200));
+	let bean = writing(&app, "b1", "A".repeat(200));
+	let kit = writing(&app, "b2", "D".repeat(200));
 	tokio::time::sleep(STEP_PAUSE * 3).await;
 
 	assert_eq!(stopped(&app, None).await, CancelOutcome::Cancelled);
@@ -1543,7 +1774,7 @@ async fn a_stop_without_an_agent_stops_every_agent_writing_and_leaves_the_member
 	}
 	tokio::time::sleep(STEP_PAUSE * 3).await;
 	assert_eq!(on_disk(&root, "notes.md"), left);
-	assert!(left.len() < "Base.".len() + 400, "{left}");
+	assert!(left.matches(['A', 'D']).count() < 400, "{left}");
 	assert_eq!(
 		agent_finishes(&finishes),
 		[
@@ -1560,16 +1791,17 @@ async fn a_stop_without_an_agent_stops_every_agent_writing_and_leaves_the_member
 async fn a_whole_rewrite_stopped_mid_way_keeps_the_old_text_and_answers_stopped() {
 	let (app, root) = two_agents_writing("stop-whole").await;
 	let host = the_host(&app);
-	let asked = json!({ "name": "notes.md", "whole": true, "text": "n".repeat(200) });
-	let rewriting = tokio::spawn(async move { host.served(Operation::Write, asked).await });
+	let asked = json!({ "name": "notes.md", "id": "aaaaaa", "markdown": "N".repeat(200) });
+	let rewriting =
+		tokio::spawn(async move { host.served(Operation::DocumentReplaceBlock, asked).await });
 	tokio::time::sleep(STEP_PAUSE * 3).await;
 
 	assert_eq!(stopped(&app, Some("b1")).await, CancelOutcome::Cancelled);
 
 	assert_eq!(refusal_kind(rewriting.await.expect("the stopped write ends")), "stopped");
 	let text = on_disk(&root, "notes.md");
-	assert!(text.ends_with("Base."), "{text}");
-	assert!(text.matches('n').count() < 200, "{text}");
+	assert!(text.contains("Base. ^aaaaaa"), "{text}");
+	assert!(text.matches('N').count() < 200, "{text}");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -1579,8 +1811,8 @@ async fn a_stop_of_one_agent_leaves_the_other_of_the_same_conversation_writing_t
 		&app,
 		events::LIBRARY_DOCUMENT_WRITER_FINISHED.name(),
 	);
-	let bean = writing(&app, "b1", "a".repeat(200));
-	let kit = writing(&app, "b2", "b".repeat(200));
+	let bean = writing(&app, "b1", "A".repeat(200));
+	let kit = writing(&app, "b2", "D".repeat(200));
 	tokio::time::sleep(STEP_PAUSE * 3).await;
 
 	assert_eq!(stopped(&app, Some("b9")).await, CancelOutcome::NothingToCancel);
@@ -1589,8 +1821,8 @@ async fn a_stop_of_one_agent_leaves_the_other_of_the_same_conversation_writing_t
 	assert_eq!(refusal_kind(bean.await.expect("the stopped write ends")), "stopped");
 	kit.await.expect("the other write ends").expect("the other write lands");
 	let text = on_disk(&root, "notes.md");
-	assert_eq!(text.matches('b').count(), 200, "{text}");
-	assert!(text.matches('a').count() < 200, "{text}");
+	assert_eq!(text.matches('D').count(), 200, "{text}");
+	assert!(text.matches('A').count() < 200, "{text}");
 	assert_eq!(
 		agent_finishes(&finishes),
 		[
@@ -1620,9 +1852,9 @@ async fn enlisted_by(app: &App<MockRuntime>, agent_id: &str, count: usize) {
 async fn a_stop_also_stops_the_write_queued_behind_the_running_one_before_it_writes() {
 	let (app, root) = two_agents_writing("stop-queued").await;
 	let published = heard_in_order(&app);
-	let running = writing(&app, "b1", "a".repeat(200));
+	let running = writing(&app, "b1", "A".repeat(200));
 	tokio::time::sleep(STEP_PAUSE * 3).await;
-	let queued = writing(&app, "b1", "b".repeat(200));
+	let queued = writing(&app, "b1", "D".repeat(200));
 	enlisted_by(&app, "b1", 2).await;
 
 	assert_eq!(stopped(&app, None).await, CancelOutcome::Cancelled);
@@ -1632,7 +1864,7 @@ async fn a_stop_also_stops_the_write_queued_behind_the_running_one_before_it_wri
 		assert_eq!(refusal_kind(write.await.expect("the write ends")), "stopped");
 	}
 	let text = on_disk(&root, "notes.md");
-	assert!(!text.contains('b'), "{text}");
+	assert!(!text.contains('D'), "{text}");
 	let published = all_of(&published);
 	let finishes: Vec<_> =
 		published.iter().filter(|event| matches!(event, Published::Finished(_))).collect();
@@ -1644,18 +1876,18 @@ async fn a_stop_also_stops_the_write_queued_behind_the_running_one_before_it_wri
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_write_of_the_stopped_agent_started_after_the_stop_lands_in_full() {
 	let (app, root) = two_agents_writing("stop-then-write").await;
-	let interrupted = writing(&app, "b1", "a".repeat(200));
+	let interrupted = writing(&app, "b1", "A".repeat(200));
 	enlisted_by(&app, "b1", 1).await;
 	assert_eq!(stopped(&app, Some("b1")).await, CancelOutcome::Cancelled);
 	assert_eq!(refusal_kind(interrupted.await.expect("the stopped write ends")), "stopped");
 
-	writing(&app, "b1", "b".repeat(200))
+	writing(&app, "b1", "D".repeat(200))
 		.await
 		.expect("the new write ends")
 		.expect("the new write lands");
 
 	let text = on_disk(&root, "notes.md");
-	assert_eq!(text.matches('b').count(), 200, "{text}");
+	assert_eq!(text.matches('D').count(), 200, "{text}");
 }
 
 const A_BOARD_WITH_ONE_NODE: &str = r#"{"nodes":[{"id":"a","type":"text","text":"A","x":0,"y":0,"width":100,"height":50}],"edges":[]}"#;

@@ -1,6 +1,6 @@
 ---
 name: "library"
-description: "How you find, read, create, write, import, rename and delete the items of the Library of this Space, and draw on its boards. Applies when the person asks you about a document, an image or a board of the Library, or to draft, extend, fill in, file, rename, remove or draw one."
+description: "How you find, read, create, edit block by block, import, rename and delete the items of the Library of this Space, and draw on its boards. Applies when the person asks you about a document, an image or a board of the Library, or to draft, extend, fill in, file, rename, remove or draw one."
 disable-model-invocation: true
 metadata:
   kiroshi:
@@ -8,8 +8,9 @@ metadata:
 ---
 
 The Library of this Space holds its documents, its images and its boards. You write in a document live,
-beside the people editing it. You hold eight tools for the Library, on the `kiroshi` server,
-and every one acts on the Library of the Space of this conversation, never another.
+beside the people editing it. You hold seven tools for the Library and seven tools for its
+Markdown documents, on the `kiroshi` server, and every one acts on the Library of the Space of
+this conversation, never another.
 
 - `library_list`, the items of the Library, the latest update first, answering for each one
   its name, its kind (document or image) and its update time, then a cursor for the next
@@ -19,16 +20,11 @@ and every one acts on the Library of the Space of this conversation, never anoth
   their case, answering each with its name, its kind and its update time.
 - `library_read`, one item by its name, such as `notes.md`: a document answers its text as it
   stands now with what everyone has typed in it, an image is shown to you, and an image too
-  large to show answers its name, its type and its size. Read a document before you write in
-  it, so you know where your text goes.
+  large to show answers its name, its type and its size. To change a Markdown document, read
+  its blocks with `document_tree` instead.
 - `library_create`, a new Markdown document, empty or filled from a template: one of
   `meeting-notes`, `project-brief`, `decision-record` or `weekly-update`. A name already
   taken is refused.
-- `library_write`, text written into a Markdown document while everyone watches it land. It
-  takes the name, the Markdown to write, and one place at most: the end of the document by
-  default, `after` an exact passage, in place of an exact passage given as `replace` (an empty
-  text removes it), or in place of the whole text with `whole`. Copy a passage from what you
-  read, so it occurs once in the document.
 - `library_import`, a copy of a file you produced, a Markdown or text document or an image,
   put into the Library under its own name, a number added when that name is taken. With
   `overwrite` naming an item of the same kind, the file replaces that item in place, under
@@ -38,19 +34,48 @@ and every one acts on the Library of the Space of this conversation, never anoth
 - `library_delete`, an item removed from the Library for everyone. It can't be undone: delete
   only what the person asked you to remove.
 
-Every one of `library_create`, `library_write` and `library_import` answers the name the item
-stands under: keep it, it is how you find the item again.
+Every one of `library_create` and `library_import` answers the name the item stands under:
+keep it, it is how you find the item again.
+
+## Documents
+
+A Markdown document is a list of blocks: a heading, a paragraph, a list, a checklist, a quote, a
+code block, a table, a rule or an image. Every block carries an id of its own, written in the
+file as a `^id` marker at the end of the block, that stays the same until the block is deleted.
+A block with no id yet gets one the first time a document tool reads it.
+
+- `document_info`, a document in one short answer: its name, its update time, how many blocks
+  it holds and the id of its first heading.
+- `document_tree`, every block in order with its id, its kind, its level for a heading and its
+  first words.
+- `document_read_block`, the Markdown of one block by id, without its marker.
+- `document_insert_after`, new blocks written live right `after` a block id, or at the start of
+  the document when `after` is left out; name the last block of the tree to add at the end. It
+  answers the id of each new block.
+- `document_replace_block`, one block by id swapped live for new Markdown of one or more
+  blocks. The first new block keeps the id of the one it replaces; it answers every resulting id.
+- `document_delete_block`, blocks removed live by their ids, answering the ids removed.
+- `document_find`, the blocks holding some text, whatever its case, each with its id, its kind
+  and the line that matched.
+
+Read the tree first, then target a block by its id: `document_tree`, then
+`document_read_block` on the block you change, then `document_replace_block`,
+`document_insert_after` or `document_delete_block`. In a long document, `document_find` takes
+you to the block without reading the whole tree. Send Markdown without any `^id` marker: the
+document gives every new block its own id and drops any marker you write.
+
+An id absent from the document is refused as `blockNotFound` naming that id, and nothing
+changes: call `document_tree` again for the ids the document holds now, since a person may have
+deleted that block.
 
 Changing an item that already exists, one you made or not, means editing it in place, never
-creating a new one. A new title, a rewritten or removed section: `library_write` with
-`replace`, or with `whole` to rewrite all of it. A new version of an image or a file you
+creating a new one. A new title, a rewritten section: `document_replace_block` on its blocks. A
+removed section: `document_delete_block` on its blocks. A new version of an image or a file you
 imported: `library_import` with `overwrite` naming that item. Create or import a new item only
 when the person asks for a new one.
 
-A passage that occurs zero times or more than once is refused with its count and nothing is
-written: read the document again and pick a longer passage. A name absent from this Library is refused as
-`missing`, and a name that leaves the Library folder is refused as `invalidName`; either way
-nothing changes.
+A name absent from this Library is refused as `missing`, and a name that leaves the Library
+folder is refused as `invalidName`; either way nothing changes.
 
 ## Boards
 
