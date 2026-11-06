@@ -2553,6 +2553,16 @@ async fn a_board_view_shows_an_image_node_and_refuses_any_other_node_with_its_re
 	);
 }
 
+fn a_drawn_png() -> Vec<u8> {
+	let mut png = Vec::new();
+	let image =
+		RgbImage::from_fn(4, 4, |x, _| if x == 0 { Rgb([20, 20, 20]) } else { Rgb([255; 3]) });
+	DynamicImage::ImageRgb8(image)
+		.write_to(&mut Cursor::new(&mut png), ImageFormat::Png)
+		.expect("the image encodes");
+	png
+}
+
 async fn the_page_renders(app: &AppHandle<MockRuntime>, png: &[u8]) -> screenshot::ScreenshotJob {
 	let request_id = loop {
 		if let Some(id) = screenshot::screenshots(app).held().keys().next().cloned() {
@@ -2608,7 +2618,7 @@ async fn a_board_screenshot_renders_every_node_and_arrow_on_disk_framed_with_a_2
 	let bounds = host.served(Operation::BoardInfo, json!({ "name": BOARD })).await.expect("info")
 		["bounds"]
 		.clone();
-	let png = png_of(4);
+	let png = a_drawn_png();
 
 	let (answer, job) = tokio::join!(
 		host.served(Operation::Screenshot, json!({ "name": BOARD, "scale": 2 })),
@@ -2663,7 +2673,7 @@ async fn a_node_screenshot_renders_that_node_and_its_descendants_only() {
 	let id = |key: &str| drawn["ids"][key].as_str().expect("an id").to_owned();
 	let mut held = vec![id("lane"), id("a"), id("b")];
 	held.sort_unstable();
-	let png = png_of(4);
+	let png = a_drawn_png();
 
 	let (answer, job) = tokio::join!(
 		host.served(Operation::Screenshot, json!({ "name": BOARD, "id": id("lane") })),
@@ -2709,7 +2719,7 @@ async fn a_document_screenshot_renders_one_block_by_id_or_every_block_and_refuse
 	put(&root, SPACE, "notes.md", "# Title\n\nFirst paragraph.\n\nSecond paragraph.\n");
 	let host = the_host(&app);
 	let ids = ids_of(&host, "notes.md").await;
-	let png = png_of(4);
+	let png = a_drawn_png();
 
 	let (one, job_of_one) = tokio::join!(
 		host.served(Operation::Screenshot, json!({ "name": "notes.md", "id": ids[2] })),

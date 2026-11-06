@@ -26,6 +26,16 @@ fn plain(width: u32, height: u32) -> String {
 	BASE64_STANDARD.encode(png_of(width, height, |_, _| Rgb([255, 255, 255])))
 }
 
+fn drawn(width: u32, height: u32) -> String {
+	BASE64_STANDARD.encode(png_of(width, height, |x, _| {
+		if x == 0 {
+			Rgb([20, 20, 20])
+		} else {
+			Rgb([255, 255, 255])
+		}
+	}))
+}
+
 fn noise(edge: u32) -> String {
 	BASE64_STANDARD.encode(png_of(edge, edge, |x, y| {
 		let seed = (y * edge + x).wrapping_mul(2_654_435_761).wrapping_add(1_013_904_223);
@@ -73,7 +83,7 @@ async fn concurrent_screenshots_each_answer_the_image_their_own_window_rendered(
 		library_screenshot_answer(
 			window_of(&handle, id),
 			id.clone(),
-			rendered(plain(width, height)),
+			rendered(drawn(width, height)),
 		)
 		.expect("the answer lands");
 	}
@@ -122,9 +132,9 @@ async fn a_window_reads_and_answers_only_its_own_request() {
 	let forged = library_screenshot_answer(
 		window_of(&handle, &ids[0]),
 		ids[1].clone(),
-		rendered(plain(1, 1)),
+		rendered(drawn(2, 1)),
 	);
-	let from_main = library_screenshot_answer(main.clone(), ids[0].clone(), rendered(plain(1, 1)));
+	let from_main = library_screenshot_answer(main.clone(), ids[0].clone(), rendered(drawn(2, 1)));
 
 	assert_eq!(forged, Err(ScreenshotRequestError::UnknownRequest { request_id: ids[1].clone() }));
 	assert_eq!(from_main, Err(ScreenshotRequestError::NotAScreenshotWindow));
@@ -143,14 +153,14 @@ async fn a_window_reads_and_answers_only_its_own_request() {
 
 #[test]
 fn a_wide_render_is_downscaled_to_a_long_edge_of_1568_px() {
-	let shot = fitted(&plain(3136, 1000), Scale(2)).expect("fitted");
+	let shot = fitted(&drawn(3136, 1000), Scale(2)).expect("fitted");
 
 	assert_eq!(shot.rendered, Rendered { width: 1568, height: 500, scale: 2 });
 }
 
 #[test]
 fn a_render_within_bounds_is_answered_byte_for_byte() {
-	let png = plain(400, 300);
+	let png = drawn(400, 300);
 
 	let shot = fitted(&png, Scale(1)).expect("fitted");
 
@@ -204,4 +214,14 @@ fn a_board_target_zooms_out_so_its_long_edge_fits_1568_px_at_its_scale_and_never
 	assert!((zoom_of(3136, 1000, 1) - 0.5).abs() < f64::EPSILON);
 	assert!((zoom_of(1000, 3136, 2) - 0.25).abs() < f64::EPSILON);
 	assert!((zoom_of(100_000, 10, 1) - 0.1).abs() < f64::EPSILON);
+}
+
+#[test]
+fn a_capture_of_one_colour_is_refused_as_blank_and_never_answered_as_a_png() {
+	let refused = fitted(&plain(400, 300), Scale(1)).expect_err("blank");
+
+	let ToolRefusal::RenderFailed { detail } = refused else {
+		panic!("a failed render, got {refused:?}");
+	};
+	assert_eq!(detail, "the capture is blank: all 400 x 300 pixels are one colour");
 }

@@ -11,11 +11,13 @@ import {
 	type ScreenshotJob,
 } from "@/lib/bindings"
 import { currentWindowLabel } from "@/lib/host"
+import { forwardConsoleToLogFile } from "@/lib/host/console-log-forwarding"
 import { captured, settled } from "@/lib/library/screenshot-capture"
 import { answerScreenshot } from "@/lib/library/screenshot-page"
 import { createQueryClient } from "@/lib/query/query-client"
 import { applyLanguage, readMirror } from "@/lib/user/preferences-mirror"
 
+forwardConsoleToLogFile()
 applyLanguage(readMirror().language)
 
 const queryClient = createQueryClient()

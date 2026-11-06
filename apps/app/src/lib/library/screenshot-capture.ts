@@ -57,12 +57,21 @@ export const settled = async (queryClient: QueryClient, shown: Element) => {
 const isChrome = (node: Node) =>
 	node instanceof HTMLElement && CHROME_SLOTS.has(node.dataset.slot ?? "")
 
-export const captured = async (shown: Element, { scale }: ScreenshotJob) =>
-	pngContentOf(
+const describeLayout = (shown: Element, { requestId }: ScreenshotJob) => {
+	const { width, height } = shown.getBoundingClientRect()
+	console.info(
+		`screenshot ${requestId} captures a ${width} x ${height} target in a ${innerWidth} x ${innerHeight} page, ${document.visibilityState}`,
+	)
+}
+
+export const captured = async (shown: Element, job: ScreenshotJob) => {
+	describeLayout(shown, job)
+	return pngContentOf(
 		await domToPng(shown, {
-			scale,
+			scale: job.scale,
 			timeout: CAPTURE_TIMEOUT_MS,
 			backgroundColor: getComputedStyle(document.body).backgroundColor,
 			filter: (node) => !isChrome(node),
 		}),
 	)
+}

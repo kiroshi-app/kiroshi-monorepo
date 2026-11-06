@@ -1,7 +1,11 @@
 {
 	"$schema": "../gen/schemas/desktop-schema.json",
 	"identifier": "screenshot",
-	"description": "A screenshot window only reads the Library it renders",
+	"description": "A screenshot window reads the Library it renders and writes its log lines",
 	"windows": ["screenshot-*"],
-	"permissions": ["core:event:allow-listen", "core:event:allow-unlisten"]
+	"permissions": [
+		"core:event:allow-listen",
+		"core:event:allow-unlisten",
+		"log:default"
+	]
 }

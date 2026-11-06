@@ -249,6 +249,12 @@ fn fitted(png: &str, scale: Scale) -> Result<Shot, ToolRefusal> {
 		.map_err(|error| failed(format!("the render answered unreadable base64: {error}")))?;
 	let image = decoded(RENDERED_NAME, ImageFormat::Png, &bytes)
 		.map_err(|error| failed(format!("the render answered no PNG: {error:?}")))?;
+	if is_one_colour(&image) {
+		let (width, height) = (image.width(), image.height());
+		return Err(failed(format!(
+			"the capture is blank: all {width} x {height} pixels are one colour"
+		)));
+	}
 	let (mut image, mut png) = if image.width().max(image.height()) > LONG_EDGE {
 		let image = image.resize(LONG_EDGE, LONG_EDGE, FilterType::Triangle);
 		let png = encoded(&image)?;
@@ -262,6 +268,15 @@ fn fitted(png: &str, scale: Scale) -> Result<Shot, ToolRefusal> {
 	}
 	let rendered = Rendered { width: image.width(), height: image.height(), scale: scale.0 };
 	Ok(Shot { content: BASE64_STANDARD.encode(png), rendered })
+}
+
+fn is_one_colour(image: &DynamicImage) -> bool {
+	let pixels = image.to_rgba8();
+	let mut colours = pixels.pixels();
+	let Some(first) = colours.next() else {
+		return true;
+	};
+	colours.all(|colour| colour == first)
 }
 
 fn shrunk(image: &DynamicImage, bytes: usize) -> DynamicImage {
