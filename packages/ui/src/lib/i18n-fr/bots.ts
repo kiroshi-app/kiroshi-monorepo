@@ -13,6 +13,8 @@ const bots = {
 		empty: "Aucun agent pour l’instant",
 		unavailable:
 			"Impossible de charger vos agents. Redémarrez Kiroshi pour réessayer.",
+		failed: "Impossible de charger vos agents.",
+		retry: "Réessayer",
 		previewUnreadable:
 			"Impossible de charger les derniers messages. Redémarrez Kiroshi pour réessayer.",
 		settingsUnsaved:
