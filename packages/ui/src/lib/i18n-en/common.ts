@@ -711,6 +711,7 @@ const common = {
 				sticky: "Sticky note",
 				text: "Text",
 				shape: "Shape",
+				section: "Section",
 				image: "Image",
 				link: "Link",
 			},

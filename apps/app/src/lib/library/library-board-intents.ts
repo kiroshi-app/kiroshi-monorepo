@@ -188,6 +188,12 @@ const nodeOf = (item: BoardItem, z: string): BoardNode | null => {
 				...(colour ? { color: colour } : {}),
 			}
 		}
+		case "section":
+			return {
+				...placed,
+				kind: "section",
+				...(item.text ? { label: item.text } : {}),
+			}
 		default:
 			return null
 	}

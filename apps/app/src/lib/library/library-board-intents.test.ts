@@ -87,6 +87,25 @@ describe("applyLibraryBoardIntent", () => {
 		expect(transactions).toBe(1)
 	})
 
+	it("creates a section without a label until it has text", () => {
+		const { board } = applied({
+			type: "create",
+			object: {
+				id: "made",
+				kind: "section",
+				position: { x: 5, y: 6 },
+				size: { width: 640, height: 400 },
+				zOrder: 0,
+				text: "",
+			},
+		})
+
+		expect(board.nodes.made).toEqual(
+			expect.objectContaining({ kind: "section", x: 5, y: 6, width: 640 }),
+		)
+		expect(board.nodes.made).not.toHaveProperty("label")
+	})
+
 	it("styles a shape back to the surface by dropping its colour", () => {
 		const doc = boardDocOf(TWO_NOTES_BOARD)
 		applyLibraryBoardIntent(

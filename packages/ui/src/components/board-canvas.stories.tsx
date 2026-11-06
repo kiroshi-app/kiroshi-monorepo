@@ -9,6 +9,7 @@ import {
 	within,
 } from "storybook/test"
 
+import boardSchema from "@workspace/shared/board/board.schema.json"
 import preview from "@workspace/storybook/preview"
 import {
 	colourTransitionsOf,
@@ -190,7 +191,7 @@ const patched = (object: BoardObject, intent: BoardIntent): BoardObject => {
 const applyIntent = (view: BoardView, intent: BoardIntent): BoardView => {
 	switch (intent.type) {
 		case "create":
-			return view
+			return { objects: [...view.objects, intent.object] }
 		case "connect": {
 			const { type, ...connector } = intent
 			return {
@@ -2818,5 +2819,275 @@ export const SelectedObjectRemovedElsewhere = meta.story({
 		)
 		await expect(selectedOptions(canvasElement)).toEqual([])
 		await expect(args.onSelectionChange).toHaveBeenCalledTimes(2)
+	},
+})
+
+const CREATION_TOOLS = [
+	{ tool: "Sticky note", kind: "sticky" },
+	{ tool: "Shape", kind: "shape" },
+	{ tool: "Text", kind: "text" },
+	{ tool: "Section", kind: "section" },
+] as const
+
+type CreationTool = (typeof CREATION_TOOLS)[number]
+
+const EMPTY_SPOT = { x: 700, y: 480 }
+const HAND_DRAG = { x: 120, y: -60 }
+const CHOSEN_IMAGES = [pngNamed("terrace.png"), pngNamed("courtyard.png")]
+
+const toolButton = (root: HTMLElement, name: string) =>
+	within(root).getByRole("button", { name })
+
+const pickTool = async (root: HTMLElement, name: string) => {
+	const button = toolButton(root, name)
+	await userEvent.click(button)
+	await expect(button).toHaveAttribute("aria-pressed", "true")
+}
+
+const pressBoard = async (root: HTMLElement, spot: BoardPoint) => {
+	const at = boardAt(root, spot.x, spot.y)
+	await userEvent.pointer({
+		keys: "[MouseLeft]",
+		target: slotIn(root, "board-canvas"),
+		coords: at,
+	})
+	return at
+}
+
+const expectCentredOn = async (
+	object: Element,
+	at: { clientX: number; clientY: number },
+) => {
+	const box = object.getBoundingClientRect()
+	await expect(box.x + box.width / 2).toBeCloseTo(at.clientX, 0)
+	await expect(box.y + box.height / 2).toBeCloseTo(at.clientY, 0)
+}
+
+const placeWithTool = async (
+	{ canvasElement, args }: CanvasPlayContext,
+	{ tool, kind }: CreationTool,
+	spot: BoardPoint,
+) => {
+	const board = slotIn(canvasElement, "board-canvas")
+	await pickTool(canvasElement, tool)
+	await expect(getComputedStyle(board).cursor).toBe("crosshair")
+
+	const at = await pressBoard(canvasElement, spot)
+	const size = boardSchema.kinds[kind].size
+	const centre = boardPointOf(board, at)
+	await expect(args.onIntent).toHaveBeenLastCalledWith({
+		type: "create",
+		object: expect.objectContaining({
+			kind,
+			size,
+			position: {
+				x: centre.x - size.width / 2,
+				y: centre.y - size.height / 2,
+			},
+			text: "",
+		}),
+	})
+	const placed = selectedOptions(canvasElement)
+	await expect(placed).toHaveLength(1)
+	const [object] = placed as [HTMLElement]
+	await expect(object).toHaveAccessibleName(tool)
+	await expectCentredOn(object, at)
+	await expect(args.onToolChange).toHaveBeenLastCalledWith("select")
+	await expect(toolButton(canvasElement, "Select")).toHaveAttribute(
+		"aria-pressed",
+		"true",
+	)
+	await expect(getComputedStyle(board).cursor).not.toBe("crosshair")
+	return object
+}
+
+const toolDocs = (story: string) => ({
+	docs: { description: { story } },
+})
+
+const placeOneWith =
+	(creation: CreationTool) => async (context: CanvasPlayContext) => {
+		await placeWithTool(context, creation, EMPTY_SPOT)
+		await expect(context.args.onIntent).toHaveBeenCalledTimes(1)
+	}
+
+export const PlaceStickyWithTool = meta.story({
+	globals: LAPTOP_WINDOW,
+	args: SELECTION_ARGS,
+	parameters: toolDocs(
+		"Sticky note picked in the dock: the board shows the crosshair, a press on the empty board sends one create intent for a sticky at the board's sticky size centred on the press, selects it and hands the tool back to Select.",
+	),
+	play: placeOneWith(CREATION_TOOLS[0]),
+})
+
+export const PlaceShapeWithTool = meta.story({
+	globals: LAPTOP_WINDOW,
+	args: SELECTION_ARGS,
+	parameters: toolDocs(
+		"Shape picked in the dock: a press on the empty board sends one create intent for a shape at the board's shape size centred on the press, selects it with its style bar and hands the tool back to Select.",
+	),
+	play: placeOneWith(CREATION_TOOLS[1]),
+})
+
+export const PlaceTextWithTool = meta.story({
+	globals: LAPTOP_WINDOW,
+	args: SELECTION_ARGS,
+	parameters: toolDocs(
+		"Text picked in the dock: a press on the empty board creates a text centred on the press and opens it in editing with the caret inside, so typing then Escape sends one edit-text intent.",
+	),
+	play: async (context) => {
+		const { canvasElement, args } = context
+		const object = await placeWithTool(context, CREATION_TOOLS[2], EMPTY_SPOT)
+		const editor = within(canvasElement).getByRole("textbox", {
+			name: "Edit text",
+		})
+		await expect(editor).toHaveFocus()
+
+		await userEvent.keyboard("Agenda")
+		await userEvent.keyboard("{Escape}")
+		await expect(args.onIntent).toHaveBeenLastCalledWith({
+			type: "edit-text",
+			id: object.dataset.objectId,
+			text: "Agenda",
+		})
+	},
+})
+
+export const PlaceSectionWithTool = meta.story({
+	globals: LAPTOP_WINDOW,
+	args: SELECTION_ARGS,
+	parameters: toolDocs(
+		"Section picked in the dock: a press on the empty board sends one create intent for a section at the board's section size centred on the press, selects it and hands the tool back to Select.",
+	),
+	play: placeOneWith(CREATION_TOOLS[3]),
+})
+
+const chooseImagesAt = async (
+	{ canvasElement, args }: CanvasPlayContext,
+	spot: BoardPoint,
+) => {
+	const board = slotIn(canvasElement, "board-canvas")
+	const chooser = slotIn(
+		canvasElement,
+		"board-image-chooser",
+	) as HTMLInputElement
+	const opened = spyOn(chooser, "click").mockImplementation(() => undefined)
+	await pickTool(canvasElement, "Image")
+	await expect(getComputedStyle(board).cursor).toBe("crosshair")
+
+	const at = await pressBoard(canvasElement, spot)
+	await expect(opened).toHaveBeenCalledTimes(1)
+	opened.mockRestore()
+	await userEvent.upload(chooser, CHOSEN_IMAGES)
+	await expect(args.onDropFiles).toHaveBeenCalledWith(
+		CHOSEN_IMAGES,
+		boardPointOf(board, at),
+	)
+	await expect(args.onToolChange).toHaveBeenLastCalledWith("select")
+}
+
+export const PlaceImagesWithTool = meta.story({
+	globals: LAPTOP_WINDOW,
+	args: SELECTION_ARGS,
+	parameters: toolDocs(
+		"Image picked in the dock: a press on the empty board opens the system file chooser, the chosen images go out through `onDropFiles` at the pressed board point, the app placing them there, and the tool goes back to Select.",
+	),
+	play: (context) => chooseImagesAt(context, EMPTY_SPOT),
+})
+
+export const DrawConnectorWithTool = meta.story({
+	globals: LAPTOP_WINDOW,
+	args: { ...CONNECTOR_ARGS, isConnecting: false },
+	parameters: toolDocs(
+		"Connector picked in the dock, with no `isConnecting` from the app: a hovered object shows its anchors and a drag from the sticky's right anchor to Review's left anchor sends one connect intent and draws the connector.",
+	),
+	play: async ({ canvasElement, args }) => {
+		await pickTool(canvasElement, "Connector")
+		const release = await dragFromPlanToReviewAnchor(canvasElement)
+		pointerAt("pointerup", document, release)
+		await waitFor(() => expect(args.onIntent).toHaveBeenCalledTimes(1))
+		await expect(args.onIntent).toHaveBeenCalledWith(
+			expect.objectContaining({ type: "connect", from: "plan", to: "review" }),
+		)
+		await expect(connectorPaths(canvasElement, "board-connector")).toEqual([
+			STRAIGHT_PATH,
+		])
+	},
+})
+
+const panWithHand = async (
+	{ canvasElement, args }: CanvasPlayContext,
+	spot: BoardPoint,
+) => {
+	const board = slotIn(canvasElement, "board-canvas")
+	await pickTool(canvasElement, "Hand")
+	const start = boardAt(canvasElement, spot.x, spot.y)
+	pointerAt("pointerdown", board, start)
+	pointerAt("pointermove", document, shifted(start, HAND_DRAG))
+	pointerAt("pointerup", document, shifted(start, HAND_DRAG))
+	await expect(args.onViewportChange).toHaveBeenLastCalledWith({
+		zoom: AT_ORIGIN.zoom,
+		offset: {
+			x: AT_ORIGIN.offset.x + HAND_DRAG.x,
+			y: AT_ORIGIN.offset.y + HAND_DRAG.y,
+		},
+	})
+}
+
+export const PanWithHandTool = meta.story({
+	globals: LAPTOP_WINDOW,
+	args: SELECTION_ARGS,
+	parameters: toolDocs(
+		"Hand picked in the dock with the sticky selected: a drag on the empty board pans the view by the drag and the sticky stays selected, with no intent sent.",
+	),
+	play: async (context) => {
+		const { canvasElement, args } = context
+		const plan = optionNamed(canvasElement, PLAN_NAME)
+		await userEvent.click(plan)
+		await panWithHand(context, EMPTY_SPOT)
+		await expect(selectedOptions(canvasElement)).toEqual([plan])
+		await expect(args.onIntent).not.toHaveBeenCalled()
+	},
+})
+
+const SPOT_OF_TOOL = {
+	sticky: { x: 800, y: 200 },
+	shape: { x: 1100, y: 150 },
+	text: { x: 1100, y: 400 },
+	section: { x: 400, y: 420 },
+}
+const IMAGE_SPOT = { x: 1100, y: 540 }
+const HAND_SPOT = { x: 900, y: 500 }
+const EMPTY_AFTER_PAN = { x: 60, y: 600 }
+
+export const ToolPickedWhileSelected = meta.story({
+	globals: LAPTOP_WINDOW,
+	args: SELECTION_ARGS,
+	parameters: toolDocs(
+		"The sticky selected, then every tool of the dock picked in turn: each creation tool places its object at the next press as with nothing selected, Image opens the chooser, Hand pans keeping the selection, Connector shows the anchors of a hovered object, and Select clears the selection on a press on the empty board.",
+	),
+	play: async (context) => {
+		const { canvasElement } = context
+		await userEvent.click(optionNamed(canvasElement, PLAN_NAME))
+
+		for (const creation of CREATION_TOOLS) {
+			await expect(selectedOptions(canvasElement)).toHaveLength(1)
+			await placeWithTool(context, creation, SPOT_OF_TOOL[creation.kind])
+			if (creation.kind === "text") await userEvent.keyboard("{Escape}")
+		}
+
+		await expect(selectedOptions(canvasElement)).toHaveLength(1)
+		await chooseImagesAt(context, IMAGE_SPOT)
+
+		const selected = selectedOptions(canvasElement)
+		await panWithHand(context, HAND_SPOT)
+		await expect(selectedOptions(canvasElement)).toEqual(selected)
+
+		await pickTool(canvasElement, "Connector")
+		await hoverPlanRightAnchor(canvasElement)
+
+		await pickTool(canvasElement, "Select")
+		await pressBoard(canvasElement, EMPTY_AFTER_PAN)
+		await expect(selectedOptions(canvasElement)).toEqual([])
 	},
 })
