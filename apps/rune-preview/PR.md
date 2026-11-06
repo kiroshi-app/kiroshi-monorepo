@@ -171,4 +171,5 @@ The kept core of `apps/app/src-tauri` moves to a crate with no Tauri dependency,
   3. The module moves.
 
   The split is done for conversations and companions. The test `Core` will be built behind `test-support`: a `Core` over a temporary folder, on a shared multi-thread runtime as Tauri's was. Mock-app helpers in `agent::commands` and `agent::stub_session` that these tests use get Core versions in the same conversion commit.
-- **`bindings.ts`.** It is checked against the branch's merge base with main. main has since added commands (OPE-1945), so a plain `git diff origin/main` shows their 31 lines until main is merged in.
+- **Merge of main.** main is merged in with a merge commit, not a rebase, because the branch is already pushed. After the merge, `git diff origin/main -- apps/app/src/lib/bindings.ts` is empty.
+- **Board screenshots.** main's board screenshot opens a hidden render window from the library host, which now holds a `Core`. The `Desktop` port gains `open_render_window` and `close_window`, the Tauri desktop implements them, and the screenshot bookkeeping is Core state.
