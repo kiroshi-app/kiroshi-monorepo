@@ -742,7 +742,13 @@ const LAUNCH_BOARD: LibraryItem = {
 	createdAt: null,
 }
 
-const boards = [LAUNCH_BOARD]
+const ROADMAP_BOARD: LibraryItem = {
+	...LAUNCH_BOARD,
+	name: "Roadmap.canvas",
+	path: "/library/Roadmap.canvas",
+}
+
+const boards = [LAUNCH_BOARD, ROADMAP_BOARD]
 
 const threadDocumentsOf = (
 	overrides: Partial<
@@ -981,6 +987,131 @@ describe("a Library board the agent posted in its message", () => {
 
 		hearPresence({ ...drawingAgent("bot-atlas"), writers: [] })
 		expect(within(boardCard()).queryByText(/is drawing/)).toBeNull()
+	})
+})
+
+const LAUNCH_LINK = "See [Launch week](<Launch week.canvas>) for the plan."
+
+const boardCards = () =>
+	screen.queryAllByRole("article", { name: /^(Launch week|Roadmap)/ })
+
+describe("a Library board the agent links in its message", () => {
+	it.each([
+		["by its file name", "[Launch week](<Launch week.canvas>)"],
+		["encoded", "[Launch week](Launch%20week.canvas)"],
+		["under a folder", "[Launch week](<boards/Launch week.canvas>)"],
+		[
+			"by its full path, suffix in capitals",
+			"[Launch week](</library/Launch week.CANVAS>)",
+		],
+	])(
+		"draws the board card in place of a lone link written %s",
+		async (_, link) => {
+			renderTurn("assistant", link, { documents: threadDocumentsOf() })
+
+			await waitFor(() =>
+				expect(within(boardCard()).getByText(/Board · 3 items/)).toBeTruthy(),
+			)
+			expect(boardCards()).toHaveLength(1)
+		},
+	)
+
+	it.each([
+		["the host", false],
+		["a joined Space", true],
+	])(
+		"opens the linked board beside the thread on Open in %s",
+		(_, isJoined) => {
+			const documents = threadDocumentsOf({ isJoined })
+			renderTurn("assistant", LAUNCH_LINK, { documents })
+
+			fireEvent.click(within(boardCard()).getByRole("button", { name: "Open" }))
+
+			expect(documents.open).toHaveBeenCalledWith({
+				kind: "board",
+				name: LAUNCH_BOARD.name,
+			})
+		},
+	)
+
+	it("draws the linked card open while its board is beside the thread", () => {
+		const { showDocuments } = renderTurn("assistant", LAUNCH_LINK, {
+			documents: threadDocumentsOf(),
+		})
+		expect(boardCard().getAttribute("data-state")).toBe("rest")
+
+		showDocuments(
+			threadDocumentsOf({
+				opened: { kind: "board", name: LAUNCH_BOARD.name },
+			}),
+		)
+		expect(boardCard().getAttribute("data-state")).toBe("open")
+	})
+
+	it("keeps the link words when the link names no board of the Library", () => {
+		renderTurn("assistant", "See [Offsite](<Offsite.canvas>) soon.", {
+			documents: threadDocumentsOf(),
+		})
+
+		expect(screen.getByText(/See Offsite soon\./)).toBeTruthy()
+		expect(boardCards()).toEqual([])
+	})
+
+	it("keeps the link words when no Library is on screen", () => {
+		renderTurn("assistant", LAUNCH_LINK)
+
+		expect(screen.getByText(/See Launch week for the plan\./)).toBeTruthy()
+		expect(boardCards()).toEqual([])
+	})
+
+	it("draws one card for a board both linked and posted with the message", () => {
+		renderTurn("assistant", LAUNCH_LINK, {
+			documents: threadDocumentsOf(),
+			names: [LAUNCH_BOARD.name],
+		})
+
+		expect(boardCards()).toEqual([boardCard()])
+	})
+
+	it("keeps the card of a posted board the text never links", () => {
+		renderTurn("assistant", LAUNCH_LINK, {
+			documents: threadDocumentsOf(),
+			names: [LAUNCH_BOARD.name, ROADMAP_BOARD.name],
+		})
+
+		expect(boardCards()).toHaveLength(2)
+		expect(screen.getByRole("article", { name: /^Roadmap/ })).toBeTruthy()
+	})
+
+	it.each([
+		["a full reference", "See [Launch week][launch] for the plan."],
+		["a collapsed reference", "See [Launch][] for the plan."],
+		["a shortcut reference", "See [LAUNCH] for the plan."],
+	])("draws one card for a posted board linked by %s", (_, sentence) => {
+		renderTurn("assistant", `${sentence}\n\n[launch]: <Launch week.canvas>`, {
+			documents: threadDocumentsOf(),
+			names: [LAUNCH_BOARD.name],
+		})
+
+		expect(boardCards()).toEqual([boardCard()])
+	})
+
+	it("keeps the card of a posted board whose reference no link uses", () => {
+		renderTurn("assistant", "Done.\n\n[launch]: <Launch week.canvas>", {
+			documents: threadDocumentsOf(),
+			names: [LAUNCH_BOARD.name],
+		})
+
+		expect(boardCards()).toEqual([boardCard()])
+	})
+
+	it("keeps the card of a posted board when its link only sits in code", () => {
+		renderTurn("assistant", "Run `[Launch week](<Launch week.canvas>)`.", {
+			documents: threadDocumentsOf(),
+			names: [LAUNCH_BOARD.name],
+		})
+
+		expect(boardCards()).toEqual([boardCard()])
 	})
 })
 

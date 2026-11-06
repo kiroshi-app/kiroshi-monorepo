@@ -161,6 +161,7 @@ export const ThreadTurn = memo(function ThreadTurn({
 				text,
 				names: row.documents,
 				isWriting,
+				now,
 			})
 		: { text }
 	const answer = (
@@ -178,6 +179,7 @@ export const ThreadTurn = memo(function ThreadTurn({
 					documents={documents}
 					names={row.documents}
 					now={now}
+					text={text}
 				/>
 			) : null}
 		</AnswerStack>

@@ -25,10 +25,13 @@ import {
 import { openAttachment } from "@/lib/links/open-attachment"
 import { openWebPage } from "@/lib/links/open-web-page"
 
-type DocumentRuns = Pick<MarkdownProps, "runs" | "renderRun">
+type LibraryReferences = Pick<
+	MarkdownProps,
+	"runs" | "renderRun" | "renderBoardLink"
+>
 
 type TurnBodyProps = MessageContent &
-	DocumentRuns &
+	LibraryReferences &
 	Pick<MarkdownProps, "answerActions" | "isWriting">
 
 const viewerImagesOf = (attachments: MessageAttachment[]): ThreadImage[] =>
@@ -98,6 +101,7 @@ export const TurnBody = ({
 	isWriting,
 	runs,
 	renderRun,
+	renderBoardLink,
 }: TurnBodyProps) => {
 	const actions = useContext(AnswerActionsContext)
 
@@ -114,6 +118,7 @@ export const TurnBody = ({
 				<Markdown
 					answerActions={answerActions}
 					isWriting={isWriting}
+					renderBoardLink={renderBoardLink}
 					renderRun={renderRun}
 					runs={runs}
 					{...citedAttachmentsOf(text, actions)}
@@ -126,7 +131,7 @@ export const TurnBody = ({
 }
 
 type AnswerBodyProps = MessageContent &
-	DocumentRuns & {
+	LibraryReferences & {
 		agentName: string
 		isWriting: boolean
 	}
@@ -138,6 +143,7 @@ export const AnswerBody = ({
 	isWriting,
 	runs,
 	renderRun,
+	renderBoardLink,
 }: AnswerBodyProps) => {
 	const actions = useContext(AnswerActionsContext)
 
@@ -146,6 +152,7 @@ export const AnswerBody = ({
 			<TurnBody
 				attachments={attachments}
 				isWriting={isWriting}
+				renderBoardLink={renderBoardLink}
 				renderRun={renderRun}
 				runs={runs}
 				text={text}
@@ -166,6 +173,7 @@ export const AnswerBody = ({
 			}}
 			attachments={attachments}
 			isWriting={isWriting}
+			renderBoardLink={renderBoardLink}
 			renderRun={renderRun}
 			runs={runs}
 			text={text}

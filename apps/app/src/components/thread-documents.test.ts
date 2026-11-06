@@ -9,7 +9,7 @@ import {
 	waitFor,
 	within,
 } from "@testing-library/react"
-import { createElement } from "react"
+import { createElement, useState } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import * as Y from "yjs"
 
@@ -28,6 +28,7 @@ import {
 	ThreadDocumentsContext,
 	ThreadOpenedItemPanel,
 } from "@/components/thread-documents"
+import { ThreadTurn } from "@/components/thread-turn"
 import { accountQueryKeys } from "@/lib/account/account-query-keys"
 import type { Bot, LibraryItem, LibraryWriter } from "@/lib/bindings"
 import type { HostEventCallback } from "@/lib/host/joined-hosts-listen"
@@ -37,6 +38,7 @@ import {
 } from "@/lib/library/library-board-fixtures"
 import { base64Of } from "@/lib/library/library-document-session"
 import { LIBRARY_DOCUMENT_PRESENCE_EVENT } from "@/lib/library/library-document-writers"
+import type { ThreadLibraryItem } from "@/lib/library/use-followed-library-document"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 
 type LibraryCall = { spaceId: string; name: string }
@@ -392,6 +394,56 @@ const renderLaunchBoardPanelIn = ({ isJoined }: JoinedState) =>
 		{ wrapper: createQueryTestWrapper().wrapper },
 	)
 
+const linkingTurnOf = (text: string) =>
+	createElement(ThreadTurn, {
+		row: {
+			messageId: "m-1",
+			turnId: "t-1",
+			continuesTurnId: null,
+			quotedMessageId: null,
+			replyLinks: [],
+			documents: [],
+			authorBotId: ATLAS_ID,
+			authorAccountId: null,
+			authorName: null,
+			role: "assistant",
+			text,
+			timestamp: 1,
+			completion: "complete",
+		},
+		anchor: "m-1",
+		state: "complete",
+		readerName: "Ada Moreau",
+		pinned: false,
+		now: 0,
+		toQuote: () => ({
+			author: "",
+			excerpt: "",
+			from: "user" as const,
+			onJump: () => undefined,
+		}),
+		onPin: () => undefined,
+		onReply: () => undefined,
+	})
+
+const ThreadLinkingLaunchBoard = ({ isJoined }: JoinedState) => {
+	const [opened, setOpened] = useState<ThreadLibraryItem | null>(null)
+	const documents = {
+		...boardDocumentsOf(() => setOpened(null)),
+		isJoined,
+		opened,
+		open: setOpened,
+	}
+	return createElement(
+		ThreadDocumentsContext,
+		{ value: documents },
+		linkingTurnOf("I drew [Launch week](<Launch week.canvas>)."),
+		opened
+			? createElement(ThreadOpenedItemPanel, { documents, bots: BOTS, opened })
+			: null,
+	)
+}
+
 const openLibraryPicker = async () => {
 	await screen.findByRole("application", {
 		name: common("board.canvas.label"),
@@ -432,6 +484,32 @@ describe("a board opened beside a conversation", () => {
 		localStorage.clear()
 		openInItsTab.mockClear()
 	})
+
+	it.each([
+		["the host", false],
+		["a joined Space", true],
+	])(
+		"opens the board beside the thread from a card its agent linked in %s",
+		async (_, isJoined) => {
+			render(createElement(ThreadLinkingLaunchBoard, { isJoined }), {
+				wrapper: createQueryTestWrapper().wrapper,
+			})
+			const card = screen.getByRole("article", { name: /^Launch week/ })
+			expect(screen.queryByRole("complementary")).toBeNull()
+
+			fireEvent.click(within(card).getByRole("button", { name: "Open" }))
+
+			expect(
+				screen.getByRole("complementary", { name: "Launch week" }),
+			).toBeTruthy()
+			expect(
+				await screen.findByRole("application", {
+					name: common("board.canvas.label"),
+				}),
+			).toBeTruthy()
+			expect(card.getAttribute("data-state")).toBe("open")
+		},
+	)
 
 	it("shows the board live in the panel with its dock and zoom", async () => {
 		renderLaunchBoardPanel()
