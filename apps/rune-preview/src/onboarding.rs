@@ -263,7 +263,7 @@ fn companions(t: &Tokens) -> El {
 			.items_center()
 			.gap(SPACING * 1.5)
 			.pb(if featured { 28.0 } else { 0.0 })
-			.child(Face::still(name, Some(hue)).draw(if featured { 132.0 } else { 96.0 }, t.dark))
+			.child(Face::still(name, Some(hue)).draw(if featured { 132.0 } else { 96.0 }, t))
 			.child(
 				el().pt(SPACING * 2.0)
 					.child(text(name).font(TEXT_COMPACT_MEDIUM).color(t.foreground)),
@@ -285,7 +285,7 @@ fn bubble(t: &Tokens, words: &str, solid: bool) -> El {
 
 fn overlapping(t: &Tokens, faces: &[(&str, f32)], size: f32) -> El {
 	row().children(faces.iter().enumerate().map(|(index, &(name, hue))| {
-		Face::still(name, Some(hue)).draw(size, t.dark).ml(if index > 0 { -6.0 } else { 0.0 })
+		Face::still(name, Some(hue)).draw(size, t).ml(if index > 0 { -6.0 } else { 0.0 })
 	}))
 }
 
@@ -314,7 +314,7 @@ fn conversations(t: &Tokens) -> El {
 			row()
 				.items_end()
 				.gap(SPACING * 2.0)
-				.child(Face::still("Wren", Some(PINK)).draw(24.0, t.dark))
+				.child(Face::still("Wren", Some(PINK)).draw(24.0, t))
 				.child(bubble(t, "On it. I\u{2019}ll run the release notes as a mission.", false)),
 		);
 	let status = row()
@@ -335,7 +335,7 @@ fn conversations(t: &Tokens) -> El {
 		.radius(RADIUS_BUBBLE)
 		.border(1.0, t.border)
 		.fill(t.card)
-		.child(Face::still("Wren", Some(PINK)).draw(32.0, t.dark))
+		.child(Face::still("Wren", Some(PINK)).draw(32.0, t))
 		.child(
 			col()
 				.grow(1.0)
@@ -711,7 +711,7 @@ fn import_row(s: &App, t: &Tokens, row_: ImportRow) -> El {
 	let key = row_.item.key.clone();
 	let checked = s.import_selected.contains(&row_.item.key);
 	let media = match row_.media {
-		Media::Agent(hue) => Face::still(&row_.title, Some(hue)).draw(28.0, t.dark),
+		Media::Agent(hue) => Face::still(&row_.title, Some(hue)).draw(28.0, t),
 		Media::Glyph(glyph) => icon(glyph, 16.0).color(t.muted_foreground),
 	};
 	let title_font =

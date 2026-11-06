@@ -257,7 +257,7 @@ fn roster_row(s: &App, i: usize, t: &Tokens, now: i64) -> El {
 		s.thread.as_ref().is_some_and(|thread| thread.conversation_id == conversation.id);
 	let solo = solo_agent(s, conversation);
 	let media = match &solo {
-		Some(agent) => agent.face(s, &conversation.id).draw(40.0, t.dark),
+		Some(agent) => agent.face(s, &conversation.id).draw(40.0, t),
 		None => subject_icon(conversation, 40.0, t),
 	};
 	let name = solo.as_ref().map_or(conversation.title.clone(), |agent| agent.name.clone());
@@ -410,7 +410,7 @@ fn thread_header(s: &App, t: &Tokens) -> El {
 		let conversation = opened_conversation(s, thread);
 		let solo = conversation.and_then(|conversation| solo_agent(s, conversation));
 		let media = match (&solo, conversation) {
-			(Some(agent), _) => agent.face(s, &thread.conversation_id).draw(24.0, t.dark),
+			(Some(agent), _) => agent.face(s, &thread.conversation_id).draw(24.0, t),
 			(None, Some(conversation)) => subject_icon(conversation, 24.0, t),
 			(None, None) => el(),
 		};
@@ -615,7 +615,7 @@ fn empty_thread(thread: &Thread, t: &Tokens) -> El {
 		.gap(SPACING * 5.0)
 		.py(48.0)
 		.px(SPACING * 6.0)
-		.child(Face::still(&name, seat.and_then(|seat| seat.hue)).draw(64.0, t.dark))
+		.child(Face::still(&name, seat.and_then(|seat| seat.hue)).draw(64.0, t))
 		.child(identity)
 		.child(hint);
 	col().w_full().grow(1.0).min_h(0.0).center().child(state)
@@ -713,7 +713,7 @@ fn message_row(s: &App, i: usize, k: &Kit, t: &Tokens) -> El {
 	let footer = row()
 		.gap(SPACING * 1.5)
 		.center_y()
-		.child(Face { name: &name, hue, motion }.draw(18.0, t.dark))
+		.child(Face { name: &name, hue, motion }.draw(18.0, t))
 		.child(text(name).font(TEXT_COMPACT_SEMIBOLD).color(accent));
 	let body = content::segments(&named)
 		.into_iter()

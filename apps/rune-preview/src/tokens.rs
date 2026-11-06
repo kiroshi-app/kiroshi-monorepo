@@ -52,6 +52,7 @@ pub const TEXT_TITLE: TextStyle = TextStyle { tracking: -0.22, ..style(22.0, 28.
 #[derive(Clone, Copy)]
 pub struct Tokens {
 	pub dark: bool,
+	pub reduced_motion: bool,
 	pub background: Color,
 	pub foreground: Color,
 	pub card: Color,
@@ -85,6 +86,7 @@ impl Tokens {
 		if dark {
 			return Tokens {
 				dark,
+				reduced_motion: false,
 				background: srgb(0x000000),
 				foreground: srgb(0xf5f5f5),
 				card: srgb(0x121213),
@@ -111,6 +113,7 @@ impl Tokens {
 		}
 		Tokens {
 			dark,
+			reduced_motion: false,
 			background: srgb(0xf5f5f5),
 			foreground: srgb(0x0a0a0a),
 			card: srgb(0xffffff),

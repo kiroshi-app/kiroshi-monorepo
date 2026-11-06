@@ -308,7 +308,7 @@ fn further(s: &App, count: usize, t: &Tokens) -> El {
 fn mention_row(mentionable: &Mentionable, active: bool, t: &Tokens) -> El {
 	let highlight = if t.dark { t.foreground.alpha(0.08) } else { t.muted };
 	let bot_id = mentionable.bot_id.clone();
-	let face = Face::still(&mentionable.name, mentionable.hue).draw(MENU_AVATAR, t.dark);
+	let face = Face::still(&mentionable.name, mentionable.hue).draw(MENU_AVATAR, t);
 	let mut names =
 		row().shrink().min_w(0.0).gap(SPACING).center_y().child(
 			text(mentionable.name.clone()).font(TEXT_SM_MEDIUM).color(t.foreground).truncate(),

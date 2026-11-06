@@ -6,42 +6,88 @@ With the installed Kiroshi open, from the repo root:
 cargo run --release --manifest-path apps/rune-preview/Cargo.toml
 ```
 
-The onboarding comes first. Its last step opens the conversation tab, which reads the installed Kiroshi: your Spaces, agents and conversations. A message sent from the preview reaches your real agents.
+The onboarding comes first. Its last step opens the conversation tab on the installed Kiroshi, with its longest conversation open. The flag in the rail opens the open missions. The installed Kiroshi is only read: sending, and opening, updating or closing a mission, never leave the preview.
+
+## Stage 2 verdicts
+
+| Surface | Verdict |
+|---|---|
+| Dithered avatars | Holds |
+| Longest real conversation, KaTeX included | Holds with a workaround: inline maths is a wrapping flow of words and typeset formulas |
+| Multi-line input | Holds |
+| Mission thread | Holds |
+
+**Dithered avatars: holds.** A Rust port of `companion-avatar.ts`, `companion-field.ts`, `companion-silhouette.ts`, `field-grid.ts` and the glaze of `outlined-hexagon.tsx`: name seed, ASCII-glyph silhouette, honeycomb clipped to the rounded hexagon, error diffusion, hue jitter, ink and ground colours. A test pins the tones of three names, still and at 600 ms of thinking, to the strings main's TypeScript produces. Pairs at 2x are identical cell for cell in both themes. The field is drawn with Rune `canvas` shapes, so no rasterising. A still frame shows while the agent has no running turn. While a turn runs (from `turnChanged`, `activity`, `message*` up to `turnEnded`), the field animates with main's activity kinds (thinking, searching, working, writing) through a frame clock in `poll` (`Tx::wake_after(0)`). Reduce Motion keeps the still frame, as main does.
+
+**Longest real conversation: holds with a workaround.**
+- **Finding it.** The conversation tab looks for the longest conversation by message count, through the host API only. A message's `seq` is per conversation, so a one-message page per conversation bounds every count. Exact counts then run in descending order of bound, until no remaining bound can beat the best. On Steve's host: 283 conversations, the longest has 2,778 messages, found in 1.5 s.
+- **What that conversation holds.** It has 53 tables, 31 mermaid diagrams and 49 code blocks, but no display maths and no image. It has one inline formula: a remark-math accident, "2,19 $/mois + volume 0,15 $/Go", which main typesets too and the preview typesets the same way.
+- **Maths.** It is typeset by `katex-native`, KaTeX's own layout and fonts in Rust, rasterised through resvg into a Rune `Pixels` image at 2x. Main's maths stories (`MarkdownMath` Default and Inline) pair glyph for glyph.
+- **Missing primitive.** Rune's text has no inline box for an arbitrary element: inline boxes exist only for mention pills. The workaround: a line carrying `$…$` becomes a flex-wrap row of words and formula images, each formula set on the 16 px baseline of a 24 px line. That line loses inline Markdown emphasis and selection across the line, and joins no soft-wrapped neighbour.
+- **Tables.** Formulas inside tables stay as TeX source, because rune-kit's table cells take text only.
+
+**Multi-line input: holds.**
+- **Growth.** The prompt is Rune's raw `text_input` under `auto_grow(1, 8)`: 24 px lines, eight at most, then it scrolls with the caret kept in view. Main's `MAX_ROWS` is 8. When the text no longer fits beside the send button (measured on a hidden single-line mirror, as main does), the field takes the whole row and send wraps below. The radius goes 25 → 24, or 20 with attachments, and the border goes from 10 % to 20 % with content or focus.
+- **Keys.** Enter sends, Shift+Enter breaks a line. With the menu open, Up and Down move, Enter or Tab inserts the pill, Escape closes.
+- **Mention menu.** It is drawn as main's `prompt-mention-menu.tsx`: 300 px panel, 14 radius, "Agents" heading, 36 px rows with 22 px dithered avatars and plain titles. With no query: the conversation's six first agents and the "Keep typing to reach the other N in {space}" footer. While typing: "Not in this conversation" with "Add to this conversation".
+- **Paste.** A paste holding only an image becomes main's attachment chip (thumbnail, `image.png`, size in main's units, remove button). Pasted text goes to the field.
+- **Checked headlessly.** Scripts typed ten lines, `@`, `@e` plus Down, `@e` plus Enter, and pasted a PNG.
+
+**Mission thread: holds.**
+- **Where missions show.** The rail's flag lists `mission_board`. A mission opens its thread: `MissionHeader` (back, 24 px avatar with the attention dot, objective, state pill, ticket band with platform mark, tools, status and "opened …", then the commits and PR line), then the thread conversation's messages with the mission events between them as machine lines or authored bubbles, then "Answer this mission…". A conversation that opened missions shows each one as main's `MissionTurn` card where it was opened. Clicking the card opens the mission.
+- **Live updates.** `mission://changed` from the host socket updates the pill and the running state at once, then rereads `mission_detail`. The read-only check heard one live change on the OPE-1933 mission within 30 s.
+
+## Read-only on the installed Kiroshi
+
+On the installed profile, `Host::invoke` refuses any command outside `space_list`, `conversation_bots`, `conversation_page`, `conversation_list`, `conversation_message_page`, `account_state`, `mission_board`, `mission_detail` and `mission_list`. It returns `WriteRefused` before a request leaves, and a test proves `conversation_send_turn`, `conversation_main_chat` and `mission_close` never reach the socket. Enter on the installed host keeps the draft and says sending is off there. Sending stays proven on Kiroshi Dev (`--smoke-send`).
+
+`--smoke-read` connects to the installed host, finds and loads the longest conversation, loads one mission thread with its events and its conversation's missions, and listens 30 s for `mission://changed`. It then prints every command it sent and exits non-zero on any write. Last run: 329 requests, 0 writes. The preview opens no file of `com.kiroshi.app` other than `host/token`. The Kiroshi app's own log isn't read, for that reason. The request ledger above stands in for it.
 
 ## Host transport
 
 HTTP `POST /api/invoke/{command}` and the `/api/events` WebSocket of the Kiroshi host, with a bearer token. No change to apps/app, packages/ui or the host.
 
-- Conversation tab: the host of the bundled `Kiroshi.app/Contents/MacOS/Kiroshi`, found among the listening processes, with the token of `com.kiroshi.app/host/token`. That is the only file of `com.kiroshi.app` the preview opens. A local image path under a Kiroshi data folder is refused and shown as a placeholder.
-- Onboarding: reads the Kiroshi Dev profile when it runs (`agent_account`, `claude_import_inventory`, `account_state`). Without it, onboarding shows the provider choice, skips the import and shows the signed-out account step.
-- `--smoke-send <text>`: Kiroshi Dev only. `--smoke-read [conversation id]`: read-only check on the installed host (Spaces, agents, conversations, one thread).
+- Conversation tab: the host of the bundled `Kiroshi.app/Contents/MacOS/Kiroshi`, found among the listening processes, with the token of `com.kiroshi.app/host/token`. A local image path under a Kiroshi data folder is refused and shown as a placeholder.
+- Onboarding: reads the Kiroshi Dev profile when it runs (`agent_account`, `claude_import_inventory`, `account_state`).
+- `--smoke-send <text>`: Kiroshi Dev only. `--smoke-read`: the read-only check above.
 
 ## Crates added beyond Rune
 
-- `ureq` 2: host calls and image fetches.
-- `tungstenite` 0.29: the host event socket.
-- `serde`, `serde_json`: payloads.
-- `uuid` 1: message and turn ids.
-- `rune-motion` (part of Rune, same rev): the spinner's rotation.
+- Stage 2: `katex-native` 0.1.1 with `raster` (MIT, KaTeX fonts under OFL, about 0.5 MB embedded). It brings `katex-rs` 0.3 and `resvg` 0.45 with text.
+- Stage 1: `ureq` 2 (host calls, image fetches), `tungstenite` 0.29 (event socket), `serde` and `serde_json` (payloads), `uuid` 1 (message and turn ids), `rune-motion` (same Rune rev, the spinner).
 
-Geist and Geist Mono (OFL, vercel/geist-font v1.9.1) are embedded from `assets/fonts`, since the fontsource package only ships woff2.
+Geist and Geist Mono (OFL, vercel/geist-font v1.9.1) are embedded from `assets/fonts`.
+
+## Gaps left, by surface
+
+- **Avatars.** The attention dot is a plain 8 px dot in the primary colour, not `BotBadgeDot`.
+- **Conversation.**
+  - Mermaid in rune-mermaid uses main's neutral and dark theme colours and 16 px type, but draws straight edges with labels beside the line, where mermaid.js curves them and sits the label on the line. Labels are in Geist, not Trebuchet.
+  - Tables have main's 14 px cells, 12×8 padding, 5 % header, 10 % rules and 15 % outline, but no vertical column rules and rune-kit's corner radius instead of 14.
+  - The longest conversation has no display maths, so display maths is proven on main's `MarkdownMath` story source.
+- **Input.**
+  - No lead crown in the menu: the preview doesn't read the lead.
+  - The preview doesn't upload pasted images: sending with an attachment says so and keeps the draft.
+- **Missions.**
+  - The missions list in the rail is a plain list, not main's `MissionsPanel` (not part of this stage).
+  - Event links (`url`, `pullRequest`) aren't drawn.
+  - Mission turns are placed before the first message created after them, where main places them after the run that opened before them.
+  - Activity rows use the "working" kind, as main's header does.
+  - Live `mission://changed` events are heard while the preview runs; a mission listed before is refreshed only on that event.
 
 ## What Rune doesn't draw, and its placeholder
 
-- Dithered hexagonal avatars: the same rounded hexagon from `kiroshi-hexagon`, in the agent's ground and ink colours, flat.
-- KaTeX: a grey box with the TeX source in mono.
 - Tabs: one plain pill with the open conversation's name, where the tab strip sits.
 - Space avatar state badge: not drawn.
 - Conversation subject icons: always the message glyph, in the conversation's hue.
 
 ## Decisions taken alone
 
-- Components are built from Rune primitives where rune-kit's look differs from main (pill buttons, checkbox, radio, fields, roster rows, bubbles, prompt). rune-kit gives Markdown, syntax colouring, mermaid, the text inputs with mention pills and the mention popup.
-- Measurements come from the packages/ui stories rendered in Chromium (layout, paddings, radii, colours, type), compared side by side with Rune headless scenes at 1180x780.
-- Space and agent colours use a port of `hue-recipe` `toneOf`; its test pins four preset tones to the CSS tokens.
-- The roster is `conversation_page` (pinned first, then by activity), as main. A row opens its conversation. `conversation_main_chat` is no longer called.
+- Components are built from Rune primitives where rune-kit's look differs from main. rune-kit gives Markdown, syntax colouring, mermaid and the paste and pill plumbing of text fields.
+- Measurements come from the packages/ui stories rendered in Chromium, compared with Rune headless scenes at 1180x780, at 2x for avatars and maths.
+- Space, agent and avatar colours use a port of `hue-recipe` `toneOf`. A test pins four preset tones to the CSS tokens.
+- The roster is `conversation_page` (pinned first, then by activity), as main. The longest conversation opens once found. If the search fails, the first conversation with an agent opens and the failure shows above the prompt.
+- Threads of 40 rows or fewer anchor at the bottom without virtualisation. Longer ones are virtualised over one row list mixing messages, mission turns and mission events. A thread loads up to 10,000 messages.
 - Roster dates older than four weeks are formatted in UTC.
-- Threads of 40 messages or fewer anchor at the bottom without virtualisation. Longer ones are virtualised.
 - The import step advances without importing. The sign-in steps show their screens without completing.
-- The prompt is one line high.
-- The mention menu has no "Agents" heading.
+- Headless scenes `live`, `live-mission` and `live-mission-turn` read the installed host before the first frame. `live-mission-turn` ends the conversation just after its first mission so the card is in view.

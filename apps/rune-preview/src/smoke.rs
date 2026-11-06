@@ -4,11 +4,13 @@ use std::sync::mpsc::{self, RecvTimeoutError};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use serde_json::json;
+
 use crate::app::{connected, whole_thread};
 use crate::events::{self, HostEvent};
-use crate::host::{self, HostError, Profile};
+use crate::host::{self, Host, HostError, Profile};
 use crate::longest;
-use crate::model::AgentEvent;
+use crate::model::{AgentEvent, ConversationMissions, MissionDetail, MissionOnBoard};
 use crate::turn::{self, SendError};
 
 const FIRST_DELTA_PATIENCE: Duration = Duration::from_secs(120);
@@ -163,7 +165,64 @@ fn read_only() -> Result<(), String> {
 		found.messages,
 		messages.len()
 	);
+	read_one_mission(&ready.host).map_err(described)?;
+	listen_to_missions(&ready.host)?;
 	sent_only_reads()
+}
+
+fn read_one_mission(host: &Host) -> Result<(), HostError> {
+	let board: Vec<MissionOnBoard> = host.invoke("mission_board", json!({}))?;
+	println!("open missions: {}", board.len());
+	let Some(entry) = board.iter().find(|entry| entry.mission.is_agent_running).or(board.first())
+	else {
+		return Ok(());
+	};
+	let detail: MissionDetail =
+		host.invoke("mission_detail", json!({ "missionId": entry.mission.id }))?;
+	let thread = whole_thread(host, &detail.mission.thread_conversation_id)?;
+	let origin: ConversationMissions = host.invoke(
+		"mission_list",
+		json!({ "conversationId": detail.mission.origin_conversation_id }),
+	)?;
+	println!(
+		"mission thread: {} ({:?}, agent running: {}, {} events, {} messages, {} missions in its conversation)",
+		detail.mission.id,
+		detail.mission.state,
+		detail.mission.is_agent_running,
+		detail.events.len(),
+		thread.len(),
+		origin.open.len() + origin.done.len()
+	);
+	Ok(())
+}
+
+const MISSION_WATCH: Duration = Duration::from_secs(30);
+
+fn listen_to_missions(host: &Host) -> Result<(), String> {
+	let (sender, heard) = mpsc::channel();
+	events::listen(host, move |event| {
+		if sender.send(event).is_err() {
+			eprintln!("a host event arrived after the watch ended");
+		}
+	});
+	let until = Instant::now() + MISSION_WATCH;
+	let mut changes = 0;
+	while let Some(left) = until.checked_duration_since(Instant::now()) {
+		match heard.recv_timeout(left) {
+			Ok(HostEvent::MissionChanged(changed)) => {
+				changes += 1;
+				println!(
+					"mission://changed {} -> {:?}, agent running: {}",
+					changed.mission_id, changed.state, changed.is_agent_running
+				);
+			}
+			Ok(HostEvent::Lost(reason)) => return Err(format!("the socket dropped: {reason}")),
+			Ok(_) | Err(RecvTimeoutError::Timeout) => {}
+			Err(RecvTimeoutError::Disconnected) => return Err("the listener left".to_owned()),
+		}
+	}
+	println!("mission changes heard in {}s: {changes}", MISSION_WATCH.as_secs());
+	Ok(())
 }
 
 fn sent_only_reads() -> Result<(), String> {

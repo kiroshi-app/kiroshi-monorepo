@@ -72,7 +72,7 @@ fn motion_of(mission: &Mission, clock_ms: f64) -> Motion {
 fn avatar(mission: &Mission, bot: &Agent, size: f32, s: &App, t: &Tokens) -> El {
 	let face =
 		Face { name: &bot.name, hue: bot.avatar_blot, motion: motion_of(mission, s.clock_ms) };
-	let drawn = face.draw(size, t.dark);
+	let drawn = face.draw(size, t);
 	if mission.state != MissionState::WaitingHuman {
 		return drawn;
 	}

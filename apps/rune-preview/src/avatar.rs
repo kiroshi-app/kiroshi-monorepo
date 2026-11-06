@@ -6,7 +6,7 @@ use rune::color::srgb_decode;
 use rune::{Color, El, LineCap, Path, Shape, canvas};
 
 use crate::hues::Role;
-use crate::tokens::{srgb, tone};
+use crate::tokens::{Tokens, srgb, tone};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Activity {
@@ -33,12 +33,14 @@ impl<'a> Face<'a> {
 		Face { name, hue, motion: Motion::Still }
 	}
 
-	pub fn draw(&self, size: f32, dark: bool) -> El {
+	pub fn draw(&self, size: f32, t: &Tokens) -> El {
+		let dark = t.dark;
+		let motion = if t.reduced_motion { Motion::Still } else { self.motion };
 		let (ink, ground) = colours(self.name, self.hue, dark);
 		let side = f64::from(size);
 		let outline = Outline::of_width(side);
 		let mut shape = Shape::new().view_box(size, size).fill_path(&outline.path(0.0), ground);
-		for (cell, tone) in grid().cells.iter().zip(tones(&field(self.name), self.motion)) {
+		for (cell, tone) in grid().cells.iter().zip(tones(&field(self.name), motion)) {
 			let Some(opacity) = opacity_of(tone) else { continue };
 			let corners: Vec<[f32; 2]> = hexagon_corners(*cell, grid().radius * CELL_SHARE)
 				.map(|[u, v]| [(u * side) as f32, (v * side) as f32])

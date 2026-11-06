@@ -32,7 +32,7 @@ use crate::app::{App, Screen};
 
 fn view(s: &App, cx: &mut Cx<App>) -> El {
 	let dark = cx.system_dark();
-	let t = tokens::Tokens::new(dark);
+	let t = tokens::Tokens { reduced_motion: cx.is_reduced_motion(), ..tokens::Tokens::new(dark) };
 	let k = t.kit();
 	let body = match s.screen {
 		Screen::Onboarding(step) => onboarding::view(step, s, &k, &t.in_space(Some(tokens::BLUE))),
