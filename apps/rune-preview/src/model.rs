@@ -60,11 +60,6 @@ impl Conversation {
 	}
 }
 
-#[derive(Clone, Debug, Deserialize)]
-pub struct MainChat {
-	pub id: String,
-}
-
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum Role {

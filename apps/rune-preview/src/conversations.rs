@@ -136,7 +136,7 @@ fn title_bar(s: &App, t: &Tokens, inset: f32) -> El {
 			.center()
 			.child(icon(glyph, 14.0).color(t.muted_foreground))
 	};
-	let title = s.thread.as_ref().map_or("", |thread| thread.title.as_str()).to_owned();
+	let title = s.thread.as_ref().map_or_else(String::new, |thread| shown_name(s, thread));
 	let tab_placeholder = row()
 		.h(28.0)
 		.w(180.0)
@@ -305,6 +305,15 @@ struct SoloAgent {
 	title: String,
 }
 
+fn shown_name(s: &App, thread: &Thread) -> String {
+	let conversation = s.ready().and_then(|ready| {
+		ready.conversations.iter().find(|held| held.id == thread.conversation_id)
+	});
+	conversation
+		.and_then(|conversation| solo_agent(s, conversation))
+		.map_or_else(|| thread.title.clone(), |agent| agent.name)
+}
+
 fn solo_agent(s: &App, conversation: &Conversation) -> Option<SoloAgent> {
 	let bot_id = conversation.solo_bot_id.as_deref()?;
 	let agent = s.ready()?.agents.iter().find(|agent| agent.id == bot_id)?;
@@ -382,7 +391,7 @@ fn thread_header(s: &App, t: &Tokens) -> El {
 			(None, Some(conversation)) => subject_icon(conversation, 24.0, t),
 			(None, None) => el(),
 		};
-		let name = solo.map_or_else(|| thread.title.clone(), |agent| agent.name);
+		let name = shown_name(s, thread);
 		row()
 			.h(36.0)
 			.pl(6.0)

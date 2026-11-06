@@ -54,7 +54,14 @@ fn claude_login(report: ClaudeAccountReport) -> Option<ClaudeLogin> {
 }
 
 fn import_choices(inventory: ClaudeInventory) -> Option<ImportChoices> {
-	let ClaudeInventory::Found { agents, skills, claude_md } = inventory else { return None };
+	let (agents, skills, claude_md) = match inventory {
+		ClaudeInventory::Found { agents, skills, claude_md } => (agents, skills, claude_md),
+		ClaudeInventory::Refused { cause } => {
+			eprintln!("onboarding shows no import: ~/.claude was refused: {cause}");
+			return None;
+		}
+		ClaudeInventory::Absent => return None,
+	};
 	let choices = ImportChoices { agents, claude_md, skills };
 	(!choices.is_empty()).then_some(choices)
 }

@@ -21,7 +21,6 @@ pub const RADIUS_SM: f32 = RADIUS_ROOT * 0.6;
 pub const RADIUS_MD: f32 = RADIUS_ROOT * 0.8;
 pub const RADIUS_LG: f32 = RADIUS_ROOT;
 pub const RADIUS_XL: f32 = RADIUS_ROOT * 1.4;
-pub const RADIUS_2XL: f32 = RADIUS_ROOT * 1.8;
 pub const RADIUS_BUBBLE: f32 = RADIUS_ROOT * 1.6;
 pub const RADIUS_CONTROL: f32 = RADIUS_ROOT * 1.2;
 
@@ -58,9 +57,7 @@ pub struct Tokens {
 	pub card: Color,
 	pub muted: Color,
 	pub muted_foreground: Color,
-	pub soft_foreground: Color,
 	pub faint_foreground: Color,
-	pub placeholder_foreground: Color,
 	pub border: Color,
 	pub input: Color,
 	pub primary: Color,
@@ -68,8 +65,6 @@ pub struct Tokens {
 	pub user_bubble: Color,
 	pub user_bubble_foreground: Color,
 	pub bubble: Color,
-	pub bubble_hover: Color,
-	pub sidebar: Color,
 	pub prompt_surface: Color,
 	pub person_avatar: Color,
 	pub shell_border: Color,
@@ -93,9 +88,7 @@ impl Tokens {
 				card: srgb(0x121213),
 				muted: srgb(0x262626),
 				muted_foreground: srgb(0xa3a3a3),
-				soft_foreground: srgb(0xd4d4d4),
 				faint_foreground: srgb(0x8a8a8e),
-				placeholder_foreground: srgb(0x737373),
 				border: srgb(0x212224),
 				input: ink.alpha(0.15),
 				primary: blue,
@@ -103,8 +96,6 @@ impl Tokens {
 				user_bubble: blue,
 				user_bubble_foreground: srgb(0x0e0e10),
 				bubble: ink.alpha(0.04),
-				bubble_hover: ink.alpha(0.06),
-				sidebar: srgb(0x1a1a1a),
 				prompt_surface: srgb(0x1c1c1e),
 				person_avatar: srgb(0x333333),
 				shell_border: ink.alpha(0.06),
@@ -121,9 +112,7 @@ impl Tokens {
 			card: srgb(0xffffff),
 			muted: srgb(0xf2f2f2),
 			muted_foreground: srgb(0x6b6b6b),
-			soft_foreground: srgb(0x404040),
 			faint_foreground: srgb(0x67676c),
-			placeholder_foreground: srgb(0x808080),
 			border: srgb(0xe5e5e5),
 			input: srgb(0xe5e5e5),
 			primary: blue,
@@ -131,8 +120,6 @@ impl Tokens {
 			user_bubble: srgb(0x364f7c),
 			user_bubble_foreground: srgb(0xffffff),
 			bubble: ink.alpha(0.03),
-			bubble_hover: ink.alpha(0.05),
-			sidebar: srgb(0xf7f7f7),
 			prompt_surface: srgb(0xffffff),
 			person_avatar: srgb(0xe5e5e5),
 			shell_border: ink.alpha(0.06),
