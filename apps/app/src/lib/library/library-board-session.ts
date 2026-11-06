@@ -1,6 +1,7 @@
 import * as Y from "yjs"
 
 import {
+	type Author,
 	BOARD_SCHEMA,
 	type BoardNode,
 	isObject,
@@ -32,6 +33,7 @@ type LibraryBoardSessionOptions = {
 	state: string
 	send: (update: string) => Promise<unknown>
 	onRefused: (refusal: unknown) => void
+	authorOf: () => Author
 }
 
 type SharedEntry = [string, unknown]
@@ -64,6 +66,7 @@ export const createLibraryBoardSession = ({
 	state,
 	send,
 	onRefused,
+	authorOf,
 }: LibraryBoardSessionOptions) => {
 	const doc = new Y.Doc()
 	Y.applyUpdate(doc, bytesOf(state), REMOTE_ORIGIN)
@@ -143,7 +146,7 @@ export const createLibraryBoardSession = ({
 		nodeOf: (id: string): BoardNode | undefined => board.nodes[id],
 		subscribe,
 		apply: (intent: BoardIntent) =>
-			applyLibraryBoardIntent(doc, intent, LOCAL_ORIGIN),
+			applyLibraryBoardIntent(doc, intent, LOCAL_ORIGIN, authorOf),
 		place: (placement: LibraryBoardPlacement) =>
 			placeLibraryBoardObject(doc, placement, LOCAL_ORIGIN),
 		describeLink: (id: string, description: LibraryBoardLinkDescription) =>

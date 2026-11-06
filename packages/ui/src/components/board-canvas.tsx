@@ -475,6 +475,16 @@ const createdItemOf = (
 	}
 }
 
+const zOrderOfCreated = (
+	kind: BoardCreationTool,
+	objects: readonly BoardObject[],
+) => {
+	const zOrders = objects.map(({ zOrder }) => zOrder)
+	return kind === "section"
+		? Math.min(0, ...zOrders) - 1
+		: Math.max(0, ...zOrders) + 1
+}
+
 const HANDLE_PLACE: Record<BoardCorner, string> = {
 	"top-left": "-top-1.5 -left-1.5 cursor-nwse-resize",
 	"top-right": "-top-1.5 -right-1.5 cursor-nesw-resize",
@@ -899,7 +909,9 @@ const ReadyBoardCanvas = ({
 	const imageChooser = useRef<HTMLInputElement>(null)
 	const chosenImagesPoint = useRef<BoardPoint | null>(null)
 	const isConnecting = isConnectingByApp || tool === "connector"
+	const [isPanning, setIsPanning] = useState(false)
 	const isPlacing = isCreationTool(tool) || tool === "image"
+	const handCursor = isPanning ? "cursor-grabbing" : "cursor-grab"
 
 	useEffect(() => () => stopDrafting.current?.(), [])
 
@@ -1170,7 +1182,9 @@ const ReadyBoardCanvas = ({
 			window.removeEventListener("pointermove", track)
 			window.removeEventListener("pointerup", finish)
 			window.removeEventListener("pointercancel", finish)
+			setIsPanning(false)
 		}
+		setIsPanning(true)
 		window.addEventListener("pointermove", track)
 		window.addEventListener("pointerup", finish)
 		window.addEventListener("pointercancel", finish)
@@ -1194,8 +1208,7 @@ const ReadyBoardCanvas = ({
 			return
 		}
 		if (!isCreationTool(tool)) return
-		const topZOrder = Math.max(0, ...view.objects.map(({ zOrder }) => zOrder))
-		const item = createdItemOf(tool, point, topZOrder + 1)
+		const item = createdItemOf(tool, point, zOrderOfCreated(tool, view.objects))
 		onIntent({ type: "create", object: item })
 		setSelectedId(item.id)
 		if (tool === "text") setArrivingTextId(item.id)
@@ -1394,7 +1407,12 @@ const ReadyBoardCanvas = ({
 	return (
 		<div
 			aria-label={t("board.canvas.label")}
-			className={cn(CANVAS_SURFACE, isPlacing && "cursor-crosshair", className)}
+			className={cn(
+				CANVAS_SURFACE,
+				isPlacing && "cursor-crosshair",
+				tool === "hand" && handCursor,
+				className,
+			)}
 			data-slot="board-canvas"
 			onClick={placeWithTool}
 			onDragEnter={dragOver}

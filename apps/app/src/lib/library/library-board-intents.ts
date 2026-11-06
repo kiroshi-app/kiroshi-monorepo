@@ -1,11 +1,13 @@
 import * as Y from "yjs"
 
 import {
+	type Author,
 	BOARD_SCHEMA,
 	type BoardNode,
 	type ImageNode,
 	type LibraryCardNode,
 	type LinkCardNode,
+	type StickyFill,
 	zAt,
 } from "@workspace/shared/board/board"
 import { sharedEdge, sharedNode } from "@workspace/shared/board/board-doc"
@@ -56,6 +58,9 @@ const SIZE_OF_LIBRARY_OBJECT: Record<LibraryBoardObject["kind"], BoardSize> = {
 }
 
 const PRESET_OF_FILL = BOARD_SCHEMA.kinds.sticky?.fill?.presets ?? {}
+
+const NEW_STICKY_FILL = BOARD_SCHEMA.kinds.sticky?.fields.fill
+	?.default as StickyFill
 
 const nodesOf = (doc: Y.Doc) => doc.getMap<SharedElement>(ROOTS.nodes)
 
@@ -158,16 +163,33 @@ const connect = (
 	)
 }
 
+const zKeysOf = (doc: Y.Doc) =>
+	[...nodesOf(doc).values()]
+		.map((node) => String(node.get(Z_ORDER.field)))
+		.sort()
+
 const zAbove = (doc: Y.Doc) => {
-	const keys = [...nodesOf(doc).values()].map((node) =>
-		String(node.get(Z_ORDER.field)),
-	)
-	const top = keys.sort().at(-1)
+	const keys = zKeysOf(doc)
+	const top = keys.at(-1)
 	const next = zAt(keys.length)
 	return top === undefined || next > top ? next : `${top}${Z_ORDER.digits[0]}`
 }
 
-const nodeOf = (item: BoardItem, z: string): BoardNode | null => {
+const zBelow = (doc: Y.Doc) => {
+	const [bottom] = zKeysOf(doc)
+	if (bottom === undefined) return zAt(0)
+	const lowest = Z_ORDER.digits[0]
+	const at = [...bottom].findIndex((digit) => digit !== lowest)
+	if (at === -1) return bottom
+	const lower = Z_ORDER.digits[Z_ORDER.digits.indexOf(bottom[at] ?? lowest) - 1]
+	return `${bottom.slice(0, at)}${lower}${Z_ORDER.digits.at(-1)}`
+}
+
+const nodeOf = (
+	item: BoardItem,
+	z: string,
+	authorOf: () => Author,
+): BoardNode | null => {
 	const placed = {
 		x: Math.round(item.position.x),
 		y: Math.round(item.position.y),
@@ -176,6 +198,14 @@ const nodeOf = (item: BoardItem, z: string): BoardNode | null => {
 		z,
 	}
 	switch (item.kind) {
+		case "sticky":
+			return {
+				...placed,
+				kind: "sticky",
+				text: item.text,
+				fill: NEW_STICKY_FILL,
+				author: authorOf(),
+			}
 		case "text":
 			return { ...placed, kind: "text", text: item.text }
 		case "shape": {
@@ -199,8 +229,9 @@ const nodeOf = (item: BoardItem, z: string): BoardNode | null => {
 	}
 }
 
-const createItem = (doc: Y.Doc, item: BoardItem) => {
-	const node = nodeOf(item, zAbove(doc))
+const createItem = (doc: Y.Doc, item: BoardItem, authorOf: () => Author) => {
+	const z = item.kind === "section" ? zBelow(doc) : zAbove(doc)
+	const node = nodeOf(item, z, authorOf)
 	if (!node) {
 		console.error(
 			`library: a board ${item.kind} cannot be created without its source`,
@@ -249,14 +280,18 @@ const remove = (doc: Y.Doc, id: string) => {
 	for (const [edgeId] of attached) edges.delete(edgeId)
 }
 
-const writeIntent = (doc: Y.Doc, intent: BoardIntent) => {
+const writeIntent = (
+	doc: Y.Doc,
+	intent: BoardIntent,
+	authorOf: () => Author,
+) => {
 	switch (intent.type) {
 		case "create":
 			if (intent.object.kind === "connector") {
 				connect(doc, intent.object.id, intent.object)
 				return
 			}
-			createItem(doc, intent.object)
+			createItem(doc, intent.object, authorOf)
 			return
 		case "move": {
 			const node = nodesOf(doc).get(intent.id)
@@ -288,7 +323,8 @@ export const applyLibraryBoardIntent = (
 	doc: Y.Doc,
 	intent: BoardIntent,
 	origin: unknown,
-) => doc.transact(() => writeIntent(doc, intent), origin)
+	authorOf: () => Author,
+) => doc.transact(() => writeIntent(doc, intent, authorOf), origin)
 
 export const placeLibraryBoardObject = (
 	doc: Y.Doc,

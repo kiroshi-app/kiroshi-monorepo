@@ -10,13 +10,20 @@ import { base64Of, bytesOf, SEND_INTERVAL_MS } from "./library-document-session"
 
 const HOST_STATE = boardStateOf(TWO_NOTES_BOARD)
 
+const PERSON = { kind: "person", id: "person-a" } as const
+
 const openSession = (state = HOST_STATE) => {
 	const sent: string[] = []
 	const send = vi.fn(async (update: string) => {
 		sent.push(update)
 	})
 	const onRefused = vi.fn()
-	const session = createLibraryBoardSession({ state, send, onRefused })
+	const session = createLibraryBoardSession({
+		state,
+		send,
+		onRefused,
+		authorOf: () => PERSON,
+	})
 	const stopTracking = session.trackHistory()
 	return { state, sent, send, onRefused, session, stopTracking }
 }
@@ -43,6 +50,7 @@ const remoteMoveOf = (state: string, id: string, x: number) =>
 			doc,
 			{ type: "move", id, position: { x, y: 0 } },
 			"remote peer",
+			() => PERSON,
 		),
 	)
 

@@ -2863,6 +2863,22 @@ const expectCentredOn = async (
 	await expect(box.y + box.height / 2).toBeCloseTo(at.clientY, 0)
 }
 
+const zIndexOf = (object: HTMLElement) => Number(object.style.zIndex)
+
+const expectZRank = async (
+	root: HTMLElement,
+	object: HTMLElement,
+	rank: "above" | "below",
+) => {
+	const others = within(root)
+		.getAllByRole("option")
+		.filter((option) => option !== object)
+		.map(zIndexOf)
+	const bound = rank === "above" ? Math.max(...others) : Math.min(...others)
+	if (rank === "above") await expect(zIndexOf(object)).toBeGreaterThan(bound)
+	else await expect(zIndexOf(object)).toBeLessThan(bound)
+}
+
 const placeWithTool = async (
 	{ canvasElement, args }: CanvasPlayContext,
 	{ tool, kind }: CreationTool,
@@ -2892,6 +2908,11 @@ const placeWithTool = async (
 	const [object] = placed as [HTMLElement]
 	await expect(object).toHaveAccessibleName(tool)
 	await expectCentredOn(object, at)
+	await expectZRank(
+		canvasElement,
+		object,
+		kind === "section" ? "below" : "above",
+	)
 	await expect(args.onToolChange).toHaveBeenLastCalledWith("select")
 	await expect(toolButton(canvasElement, "Select")).toHaveAttribute(
 		"aria-pressed",
@@ -2957,7 +2978,7 @@ export const PlaceSectionWithTool = meta.story({
 	globals: LAPTOP_WINDOW,
 	args: SELECTION_ARGS,
 	parameters: toolDocs(
-		"Section picked in the dock: a press on the empty board sends one create intent for a section at the board's section size centred on the press, selects it and hands the tool back to Select.",
+		"Section picked in the dock: a press on the empty board sends one create intent for a section at the board's section size centred on the press and below every object, selects it and hands the tool back to Select.",
 	),
 	play: placeOneWith(CREATION_TOOLS[3]),
 })
@@ -3021,10 +3042,13 @@ const panWithHand = async (
 ) => {
 	const board = slotIn(canvasElement, "board-canvas")
 	await pickTool(canvasElement, "Hand")
+	await expect(getComputedStyle(board).cursor).toBe("grab")
 	const start = boardAt(canvasElement, spot.x, spot.y)
 	pointerAt("pointerdown", board, start)
 	pointerAt("pointermove", document, shifted(start, HAND_DRAG))
+	await waitFor(() => expect(getComputedStyle(board).cursor).toBe("grabbing"))
 	pointerAt("pointerup", document, shifted(start, HAND_DRAG))
+	await waitFor(() => expect(getComputedStyle(board).cursor).toBe("grab"))
 	await expect(args.onViewportChange).toHaveBeenLastCalledWith({
 		zoom: AT_ORIGIN.zoom,
 		offset: {
@@ -3038,7 +3062,7 @@ export const PanWithHandTool = meta.story({
 	globals: LAPTOP_WINDOW,
 	args: SELECTION_ARGS,
 	parameters: toolDocs(
-		"Hand picked in the dock with the sticky selected: a drag on the empty board pans the view by the drag and the sticky stays selected, with no intent sent.",
+		"Hand picked in the dock with the sticky selected: the board shows the grab cursor, a drag on the empty board shows grabbing, pans the view by the drag and the sticky stays selected, with no intent sent.",
 	),
 	play: async (context) => {
 		const { canvasElement, args } = context
