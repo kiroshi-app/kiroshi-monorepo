@@ -2,7 +2,7 @@ use std::cmp::Reverse;
 use std::collections::{BTreeSet, HashMap};
 
 use super::draw::{kind_of, refused_parent, z_of, DrawFault, DrawRefusal, Rect, SECTION};
-use super::{Board, JsonObject};
+use super::Board;
 
 pub(super) struct Hierarchy<'a> {
 	roots: Vec<&'a str>,
@@ -105,10 +105,10 @@ pub(super) fn parent_section<'a>(
 	let Some(id) = parent else {
 		return Ok(None);
 	};
-	let reference = || id.to_owned();
-	match board.nodes.get(id).map(|node: &JsonObject| kind_of(node)) {
-		None => Err(refused_parent(DrawFault::UnknownReference { reference: reference() })),
+	let reference = id.to_owned();
+	match board.nodes.get(id).map(kind_of) {
+		None => Err(refused_parent(DrawFault::UnknownReference { reference })),
 		Some(Some(SECTION)) => Ok(Some(id)),
-		Some(_) => Err(refused_parent(DrawFault::NotASection { reference: reference() })),
+		Some(_) => Err(refused_parent(DrawFault::NotASection { reference })),
 	}
 }

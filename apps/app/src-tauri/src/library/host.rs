@@ -591,7 +591,7 @@ impl<R: Runtime> LibraryHost<R> {
 		Ok(Headed { header: board_header(root, space_id, name, &edited)?, answer: made })
 	}
 
-	fn board_read<T>(
+	fn board_answered<T>(
 		&self,
 		root: &Path,
 		space_id: &str,
@@ -847,29 +847,29 @@ impl<R: Runtime> Host for LibraryHost<R> {
 					.strip_suffix(BOARD_EXTENSION)
 					.ok_or(LibraryError::InvalidName { name: asked.name.clone() })?;
 				let created = self.changed(&space_id, create_board(&root, &space_id, stem)?);
-				Self::answered(self.board_read(&root, &space_id, &asked.name, |_| Ok(created))?)
+				Self::answered(self.board_answered(&root, &space_id, &asked.name, |_| Ok(created))?)
 			}
 			Operation::BoardInfo => {
 				let asked: Named = Self::read(payload)?;
 				Self::answered(
-					self.board_read(&root, &space_id, &asked.name, |board| Ok(info(board)))?,
+					self.board_answered(&root, &space_id, &asked.name, |board| Ok(info(board)))?,
 				)
 			}
 			Operation::BoardTree => {
 				let asked: BoardTreed = Self::read(payload)?;
-				Self::answered(self.board_read(&root, &space_id, &asked.name, |board| {
+				Self::answered(self.board_answered(&root, &space_id, &asked.name, |board| {
 					Ok(tree(board, asked.parent.as_deref(), asked.depth)?)
 				})?)
 			}
 			Operation::BoardNodeInfo => {
 				let asked: BoardElements = Self::read(payload)?;
-				Self::answered(self.board_read(&root, &space_id, &asked.name, |board| {
+				Self::answered(self.board_answered(&root, &space_id, &asked.name, |board| {
 					Ok(node_info(board, &asked.nodes, &asked.arrows)?)
 				})?)
 			}
 			Operation::BoardCanvas => {
 				let asked: BoardParented = Self::read(payload)?;
-				Self::answered(self.board_read(&root, &space_id, &asked.name, |board| {
+				Self::answered(self.board_answered(&root, &space_id, &asked.name, |board| {
 					let canvas = export_canvas(&under(board, asked.parent.as_deref())?)
 						.map_err(|error| DocumentRefusal::unexpected(error.to_string()))?;
 					Ok(CanvasShown { canvas })
@@ -953,13 +953,13 @@ impl<R: Runtime> Host for LibraryHost<R> {
 					fill: asked.fill,
 					shape: asked.shape,
 				};
-				Self::answered(self.board_read(&root, &space_id, &asked.name, |board| {
+				Self::answered(self.board_answered(&root, &space_id, &asked.name, |board| {
 					Ok(NodesFound { nodes: find(board, &sought) })
 				})?)
 			}
 			Operation::BoardView => {
 				let asked: BoardViewed = Self::read(payload)?;
-				Self::answered(self.board_read(&root, &space_id, &asked.name, |board| {
+				Self::answered(self.board_answered(&root, &space_id, &asked.name, |board| {
 					image_viewed(&root, &space_id, board, asked.id)
 				})?)
 			}
