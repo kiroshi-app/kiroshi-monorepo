@@ -9,6 +9,8 @@ mod host;
 mod hues;
 mod icons;
 mod images;
+mod longest;
+mod math;
 mod model;
 mod onboarding;
 mod runs;
@@ -78,8 +80,8 @@ fn main() -> ExitCode {
 		};
 		return smoke::run(text);
 	}
-	if let Some(at) = args.iter().position(|arg| arg == SMOKE_READ) {
-		return smoke::read(args.get(at + 1).map(String::as_str));
+	if args.iter().any(|arg| arg == SMOKE_READ) {
+		return smoke::read();
 	}
 	let spec = AppSpec {
 		setup: Some(setup),

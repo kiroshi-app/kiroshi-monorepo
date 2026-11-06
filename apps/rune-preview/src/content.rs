@@ -3,6 +3,13 @@ pub enum Segment {
 	Markdown(String),
 	Image { alt: String, url: String },
 	Math(String),
+	Prose(Vec<Run>),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Run {
+	Text(String),
+	Math(String),
 }
 
 const MATH_FENCE: &str = "$$";
@@ -68,12 +75,69 @@ pub fn segments(content: &str) -> Vec<Segment> {
 			}
 			continue;
 		}
-		built.line_with_images(line);
+		match inline_runs(line).filter(|_| !trimmed.starts_with('|')) {
+			Some(runs) => built.push(Segment::Prose(runs)),
+			None => built.line_with_images(line),
+		}
 	}
 	if let Some(unclosed) = math {
 		built.text(&format!("{MATH_FENCE}{unclosed}"));
 	}
 	built.finish()
+}
+
+fn inline_runs(line: &str) -> Option<Vec<Run>> {
+	let mut runs: Vec<Run> = Vec::new();
+	let mut text = String::new();
+	let mut rest = line.trim_end_matches('\n');
+	while let Some(at) = rest.find(['`', '$', '\\']) {
+		text.push_str(&rest[..at]);
+		let from = &rest[at..];
+		let mark = from.as_bytes()[0];
+		if mark == b'\\' {
+			let escaped = from.chars().take(2).collect::<String>();
+			text.push_str(&escaped);
+			rest = &from[escaped.len()..];
+			continue;
+		}
+		let opening = from.bytes().take_while(|&byte| byte == mark).count();
+		let Some((inner, after)) = closed_by(&from[opening..], mark, opening) else {
+			text.push_str(&from[..opening]);
+			rest = &from[opening..];
+			continue;
+		};
+		if mark == b'`' {
+			text.push_str(&from[..from.len() - after.len()]);
+		} else {
+			runs.push(Run::Text(std::mem::take(&mut text)));
+			runs.push(Run::Math(inner.trim().to_owned()));
+		}
+		rest = after;
+	}
+	text.push_str(rest);
+	if !runs.iter().any(|run| matches!(run, Run::Math(_))) {
+		return None;
+	}
+	runs.push(Run::Text(text));
+	runs.retain(|run| !matches!(run, Run::Text(held) if held.is_empty()));
+	Some(runs)
+}
+
+fn closed_by(after: &str, mark: u8, size: usize) -> Option<(&str, &str)> {
+	let bytes = after.as_bytes();
+	let mut at = 0;
+	while at < bytes.len() {
+		if bytes[at] != mark {
+			at += 1;
+			continue;
+		}
+		let run = bytes[at..].iter().take_while(|&&byte| byte == mark).count();
+		if run == size && at > 0 {
+			return Some((&after[..at], &after[at + run..]));
+		}
+		at += run;
+	}
+	None
 }
 
 fn fence_opening(trimmed: &str) -> Option<&'static str> {
@@ -139,6 +203,25 @@ pub fn image_urls(content: &str) -> impl Iterator<Item = String> {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn inline_math_follows_remark_math_and_skips_code_spans() {
+		assert_eq!(
+			segments("costs 2,19 $/mois + volume 0,15 $/Go\n"),
+			vec![Segment::Prose(vec![
+				Run::Text("costs 2,19 ".into()),
+				Run::Math("/mois + volume 0,15".into()),
+				Run::Text("/Go".into()),
+			])]
+		);
+		let table = "| a | $x$ |\n| --- | --- |\n";
+		assert_eq!(segments(table), vec![Segment::Markdown(table.into())]);
+		assert_eq!(
+			segments("run `echo $A $B` now\n"),
+			vec![Segment::Markdown("run `echo $A $B` now\n".into())]
+		);
+		assert_eq!(segments("a \\$5 and $6\n"), vec![Segment::Markdown("a \\$5 and $6\n".into())]);
+	}
 
 	#[test]
 	fn a_mention_token_reads_as_the_agent_name() {

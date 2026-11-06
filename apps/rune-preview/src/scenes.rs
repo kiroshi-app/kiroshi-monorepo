@@ -29,6 +29,7 @@ pub const SCENES: &[Scene] = &[
 	("thread-empty", thread_empty),
 	("thread-streaming", thread_streaming),
 	("thread-mention", thread_mention),
+	("thread-math", thread_math),
 ];
 
 fn welcome(s: &mut App, page: Page) {
@@ -183,6 +184,7 @@ fn workspace(s: &mut App) -> i64 {
 		agents,
 		conversations,
 		person: Some("ada.martin@example.com".into()),
+		longest: None,
 	});
 	now
 }
@@ -222,6 +224,23 @@ fn default_exchange() -> Vec<Message> {
 fn thread_default(s: &mut App) {
 	workspace(s);
 	opened(s, "chat-skippy", default_exchange());
+}
+
+const MATH: &str = r"The sync covered $n = 40$ nests, one of them empty.
+
+$$
+\sum_{i=1}^{n} o_i = \frac{3n}{4}
+$$
+
+| Nest | Eggs | Share |
+| --- | ---: | --- |
+| North | 12 | $\frac{12}{40}$ |
+| South | 28 | $0.7$ |";
+
+fn thread_math(s: &mut App) {
+	workspace(s);
+	let question = message(1, Role::User, "How many nests did the sync cover?");
+	opened(s, "chat-skippy", vec![question, message(2, Role::Assistant, MATH)]);
 }
 
 fn thread_long(s: &mut App) {

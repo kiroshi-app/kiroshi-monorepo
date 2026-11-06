@@ -12,6 +12,8 @@ use crate::dev_profile::{self, DevProfile};
 use crate::events::{self, HostEvent};
 use crate::host::{Host, HostError, Profile};
 use crate::images::{Fetched, Images};
+use crate::longest::{self, Longest};
+use crate::math::Typesetter;
 use crate::model::{
 	Agent, AgentEvent, Conversation, ConversationPage, KiroshiAccountState, Message, MessagePage,
 	Role, Space,
@@ -22,9 +24,11 @@ use crate::turn::{self, SendError};
 
 const PAGE_LIMIT: u32 = 200;
 
-const MAX_THREAD_MESSAGES: usize = 2_000;
+const MAX_THREAD_MESSAGES: usize = 10_000;
 
 pub const AGENT_PILL: &str = "agent:";
+
+const SENDING_OFF: &str = "Sending is off on the installed Kiroshi: the preview only reads it. Sending is proven on Kiroshi Dev.";
 
 pub enum Screen {
 	Onboarding(Step),
@@ -43,6 +47,7 @@ pub struct Ready {
 	pub agents: Vec<Agent>,
 	pub conversations: Vec<Conversation>,
 	pub person: Option<String>,
+	pub longest: Option<Longest>,
 }
 
 impl Ready {
@@ -170,6 +175,7 @@ pub enum Inbound {
 	Host(HostEvent),
 	Image(Fetched),
 	DevProfile(DevProfile),
+	Longest(Result<Option<Longest>, HostError>),
 }
 
 #[derive(Clone)]
@@ -201,6 +207,7 @@ pub struct App {
 	pub import_selected: Vec<String>,
 	pub runs: Runs,
 	pub clock_ms: f64,
+	pub math: Typesetter,
 	outbox: Option<Outbox>,
 	inbox: Receiver<Inbound>,
 	pending: Sender<Inbound>,
@@ -223,6 +230,7 @@ impl App {
 			connect_method: Method::SignIn,
 			import_selected: Vec::new(),
 			runs: Runs::default(),
+			math: Typesetter::default(),
 			clock_ms: 0.0,
 			outbox: None,
 			inbox,
@@ -395,6 +403,10 @@ impl App {
 		if content.trim().is_empty() {
 			return;
 		}
+		if ready.host.profile() == Profile::Installed {
+			self.notice = Some(SENDING_OFF.to_owned());
+			return;
+		}
 		let host = ready.host.clone();
 		self.composer.edit.clear();
 		self.composer.mention = None;
@@ -412,14 +424,14 @@ impl App {
 				if let Some(outbox) = self.outbox.clone() {
 					events::listen(&ready.host, move |event| outbox.deliver(Inbound::Host(event)));
 				}
-				let first = ready
-					.first_conversation_with_an_agent()
-					.map(|conversation| conversation.id.clone());
+				let host = ready.host.clone();
+				let conversations = ready.conversations.clone();
 				self.workspace = Workspace::Ready(ready);
-				if let Some(first) = first.filter(|_| self.thread.is_none()) {
-					self.open(&first);
-				}
+				self.work(move |outbox| {
+					outbox.deliver(Inbound::Longest(longest::longest(&host, &conversations)))
+				});
 			}
+			Inbound::Longest(found) => self.longest_found(found),
 			Inbound::Connected(Err(failure)) => self.workspace = Workspace::Failed(failure),
 			Inbound::ThreadRead { conversation_id, messages } => {
 				self.thread_read(&conversation_id, messages)
@@ -432,6 +444,31 @@ impl App {
 					profile.import.as_ref().map(|choices| choices.keys()).unwrap_or_default();
 				self.dev_profile = Some(profile);
 			}
+		}
+	}
+
+	fn longest_found(&mut self, found: Result<Option<Longest>, HostError>) {
+		let Workspace::Ready(ready) = &mut self.workspace else { return };
+		let fallback =
+			ready.first_conversation_with_an_agent().map(|conversation| conversation.id.clone());
+		let opening = match found {
+			Ok(Some(longest)) => {
+				let id = longest.conversation_id.clone();
+				ready.longest = Some(longest);
+				Some(id)
+			}
+			Ok(None) => fallback,
+			Err(failure) => {
+				self.notice = Some(format!(
+					"Couldn't find the longest conversation. {}: {}",
+					failure.title(),
+					failure.detail()
+				));
+				fallback
+			}
+		};
+		if let Some(id) = opening.filter(|_| self.thread.is_none()) {
+			self.open(&id);
 		}
 	}
 
@@ -534,7 +571,7 @@ pub fn connected(profile: Profile) -> Result<Ready, HostError> {
 			None
 		}
 	};
-	Ok(Ready { host, space, agents, conversations, person })
+	Ok(Ready { host, space, agents, conversations, person, longest: None })
 }
 
 const ROSTER_PAGE: u32 = 100;

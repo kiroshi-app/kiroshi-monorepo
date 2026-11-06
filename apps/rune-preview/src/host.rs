@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::sync::{Mutex, PoisonError};
 use std::time::Duration;
 
 use serde::de::DeserializeOwned;
@@ -13,6 +14,27 @@ const TURN_PATIENCE: Duration = Duration::from_secs(15 * 60);
 const PROBE: &str = "space_list";
 
 const TOKEN_FILE: [&str; 2] = ["host", "token"];
+
+const INSTALLED_READS: [&str; 8] = [
+	"space_list",
+	"conversation_bots",
+	"conversation_page",
+	"conversation_list",
+	"conversation_message_page",
+	"account_state",
+	"mission_board",
+	"mission_detail",
+];
+
+static SENT: Mutex<Vec<(Profile, String)>> = Mutex::new(Vec::new());
+
+pub fn sent_commands() -> Vec<(Profile, String)> {
+	SENT.lock().unwrap_or_else(PoisonError::into_inner).clone()
+}
+
+pub fn is_read(command: &str) -> bool {
+	INSTALLED_READS.contains(&command)
+}
 
 pub const DEV_START_COMMAND: &str = "cd apps/app/sidecar && bun run build && cd .. && bun run dev";
 
@@ -65,6 +87,7 @@ pub enum HostError {
 	TokenRefused { profile: Profile },
 	CommandFailed { command: String, status: u16, body: String },
 	Unreadable { command: String, cause: String },
+	WriteRefused { command: String },
 }
 
 impl HostError {
@@ -84,6 +107,7 @@ impl HostError {
 			}
 			HostError::CommandFailed { .. } => "Kiroshi refused the call".to_owned(),
 			HostError::Unreadable { .. } => "Kiroshi answered something unreadable".to_owned(),
+			HostError::WriteRefused { .. } => "The preview only reads Kiroshi".to_owned(),
 		}
 	}
 
@@ -109,6 +133,9 @@ impl HostError {
 				format!("{command} answered {status}: {body}")
 			}
 			HostError::Unreadable { command, cause } => format!("{command}: {cause}"),
+			HostError::WriteRefused { command } => format!(
+				"{command} would change your data, so it isn't sent to the installed Kiroshi."
+			),
 		}
 	}
 
@@ -175,6 +202,10 @@ impl Host {
 		self.invoke_within(command, arguments, TURN_PATIENCE)
 	}
 
+	pub fn profile(&self) -> Profile {
+		self.profile
+	}
+
 	pub fn events_url(&self) -> String {
 		format!("ws://127.0.0.1:{}/api/events", self.port)
 	}
@@ -189,6 +220,12 @@ impl Host {
 		arguments: Value,
 		patience: Duration,
 	) -> Result<T, HostError> {
+		if self.profile == Profile::Installed && !is_read(command) {
+			return Err(HostError::WriteRefused { command: command.to_owned() });
+		}
+		SENT.lock()
+			.unwrap_or_else(PoisonError::into_inner)
+			.push((self.profile, command.to_owned()));
 		let url = format!("http://127.0.0.1:{}/api/invoke/{command}", self.port);
 		let answered = ureq::post(&url)
 			.timeout(patience)
@@ -248,6 +285,16 @@ pub fn data_folders() -> Vec<PathBuf> {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn the_installed_host_refuses_every_command_outside_the_reads() {
+		let installed = Host { profile: Profile::Installed, port: 0, token: String::new() };
+		for write in ["conversation_send_turn", "conversation_main_chat", "mission_close"] {
+			let refused = installed.invoke::<Value>(write, json!({}));
+			assert!(matches!(refused, Err(HostError::WriteRefused { .. })), "{write}");
+		}
+		assert!(sent_commands().iter().all(|(_, command)| is_read(command)));
+	}
 
 	#[test]
 	fn each_profile_reads_only_its_host_token() {

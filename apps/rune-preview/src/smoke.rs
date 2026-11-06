@@ -4,13 +4,11 @@ use std::sync::mpsc::{self, RecvTimeoutError};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use serde_json::json;
-
 use crate::app::{connected, whole_thread};
 use crate::events::{self, HostEvent};
-use crate::host::{Host, HostError, Profile};
+use crate::host::{self, HostError, Profile};
+use crate::longest;
 use crate::model::AgentEvent;
-use crate::model::{Agent, Conversation, Space};
 use crate::turn::{self, SendError};
 
 const FIRST_DELTA_PATIENCE: Duration = Duration::from_secs(120);
@@ -138,8 +136,8 @@ fn stream(hearing: &mpsc::Receiver<Heard>, conversation_id: &str) -> Result<(), 
 	}
 }
 
-pub fn read(conversation_given: Option<&str>) -> ExitCode {
-	match read_only(conversation_given) {
+pub fn read() -> ExitCode {
+	match read_only() {
 		Ok(()) => ExitCode::SUCCESS,
 		Err(failure) => {
 			eprintln!("smoke-read failed: {failure}");
@@ -148,25 +146,44 @@ pub fn read(conversation_given: Option<&str>) -> ExitCode {
 	}
 }
 
-fn read_only(conversation_given: Option<&str>) -> Result<(), String> {
+fn read_only() -> Result<(), String> {
 	let described = |failure: HostError| format!("{} {}", failure.title(), failure.detail());
-	let host = Host::connect(Profile::Installed).map_err(described)?;
-	let spaces: Vec<Space> = host.invoke("space_list", json!({})).map_err(described)?;
-	println!("spaces: {}", spaces.len());
-	let space = spaces.first().ok_or("the installed profile has no Space")?;
-	let agents: Vec<Agent> =
-		host.invoke("conversation_bots", json!({ "spaceId": space.id })).map_err(described)?;
-	let conversations: Vec<Conversation> =
-		host.invoke("conversation_list", json!({ "spaceId": space.id })).map_err(described)?;
-	println!("space read: {}", space.id);
-	println!("agents: {}", agents.len());
-	println!("conversations: {}", conversations.len());
-	let conversation = match conversation_given {
-		Some(id) => conversations.iter().find(|conversation| conversation.id == id),
-		None => conversations.iter().find(|conversation| conversation.present().next().is_some()),
+	let ready = connected(Profile::Installed).map_err(described)?;
+	println!("space read: {}", ready.space.id);
+	println!("agents: {}", ready.agents.len());
+	println!("conversations: {}", ready.conversations.len());
+	let found = longest::longest(&ready.host, &ready.conversations).map_err(described)?;
+	let found = found.ok_or("no conversation holds a message")?;
+	let messages = whole_thread(&ready.host, &found.conversation_id).map_err(described)?;
+	println!(
+		"longest conversation: {} ({} messages, {} loaded)",
+		found.conversation_id,
+		found.messages,
+		messages.len()
+	);
+	sent_only_reads()
+}
+
+fn sent_only_reads() -> Result<(), String> {
+	let sent = host::sent_commands();
+	let mut counted: Vec<(String, usize)> = Vec::new();
+	for (_, command) in &sent {
+		match counted.iter_mut().find(|(held, _)| held == command) {
+			Some((_, count)) => *count += 1,
+			None => counted.push((command.clone(), 1)),
+		}
 	}
-	.ok_or("no conversation to load")?;
-	let messages = whole_thread(&host, &conversation.id).map_err(described)?;
-	println!("thread loaded: {} ({} messages)", conversation.id, messages.len());
-	Ok(())
+	for (command, count) in &counted {
+		println!("sent {command} x{count}");
+	}
+	let writes: Vec<&str> = counted
+		.iter()
+		.map(|(command, _)| command.as_str())
+		.filter(|command| !host::is_read(command))
+		.collect();
+	println!("requests: {}, writes: {}", sent.len(), writes.len());
+	if writes.is_empty() {
+		return Ok(());
+	}
+	Err(format!("sent commands outside the reads: {}", writes.join(", ")))
 }

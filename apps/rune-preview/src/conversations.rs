@@ -10,11 +10,12 @@ use rune_kit::{Kit, PopupItem, PopupList, TextInput};
 
 use crate::app::{AGENT_PILL, App, Ready, Thread, Workspace};
 use crate::avatar::{Face, Motion};
-use crate::content::{self, Segment};
+use crate::content::{self, Run, Segment};
 use crate::host::{DEV_START_COMMAND, HostError, Profile};
 use crate::hues::Role as HueRole;
 use crate::icons;
 use crate::images::Slot;
+use crate::math::Mode;
 use crate::model::{Conversation, Role};
 use crate::tokens::{
 	RADIUS_BUBBLE, RADIUS_LG, SPACING, TEXT_10_MEDIUM, TEXT_BUBBLE, TEXT_COMPACT,
@@ -647,9 +648,70 @@ fn segment_view(s: &App, segment: Segment, streaming: bool, k: &Kit, t: &Tokens)
 			.streaming(streaming)
 			.selectable(true)
 			.render(&markdown_style(k, t)),
-		Segment::Math(source) => not_drawn(t, "Math isn't drawn here (KaTeX)", &source),
+		Segment::Math(source) => display_math(s, &source, t),
+		Segment::Prose(runs) => prose_with_math(s, &runs, t),
 		Segment::Image { alt, url } => image_view(s, &alt, &url, t),
 	}
+}
+
+const BUBBLE_TEXT_SIZE: f32 = 14.0;
+const BUBBLE_BASELINE: f32 = 16.0;
+const SPACE_WIDTH: f32 = 3.5;
+const DISPLAY_MATH_MARGIN: f32 = 14.0;
+
+fn display_math(s: &App, source: &str, t: &Tokens) -> El {
+	let typeset = s.math.formula(source, Mode::Display, t.foreground, BUBBLE_TEXT_SIZE);
+	let formula = match typeset {
+		Ok(formula) => formula.view(source),
+		Err(_) => unparsed_math(source, t),
+	};
+	row().w_full().justify_center().py(DISPLAY_MATH_MARGIN).child(formula)
+}
+
+fn unparsed_math(source: &str, t: &Tokens) -> El {
+	text(source.to_owned()).font(TEXT_BUBBLE).color(t.destructive).wrap()
+}
+
+fn prose_with_math(s: &App, runs: &[Run], t: &Tokens) -> El {
+	let mut flow = row().w_full().flex_wrap();
+	let mut spaced = false;
+	for run in runs {
+		match run {
+			Run::Math(source) => {
+				let typeset = s.math.formula(source, Mode::Inline, t.foreground, BUBBLE_TEXT_SIZE);
+				let formula = match typeset {
+					Ok(formula) => el()
+						.h(TEXT_BUBBLE.line_height)
+						.child(formula.view(source).mt(BUBBLE_BASELINE - formula.baseline)),
+					Err(_) => unparsed_math(source, t),
+				};
+				flow = flow.child(formula.ml(if spaced { SPACE_WIDTH } else { 0.0 }));
+				spaced = false;
+			}
+			Run::Text(words) => {
+				let mut pieces = words.split(char::is_whitespace).peekable();
+				let leading = words.starts_with(char::is_whitespace);
+				spaced = spaced || leading;
+				while let Some(word) = pieces.next() {
+					let plain = word.replace(['*', '`'], "");
+					if !plain.is_empty() {
+						flow = flow.child(
+							text(plain).font(TEXT_BUBBLE).color(t.foreground).ml(if spaced {
+								SPACE_WIDTH
+							} else {
+								0.0
+							}),
+						);
+						spaced = false;
+					}
+					if pieces.peek().is_some() {
+						spaced = true;
+					}
+				}
+			}
+		}
+	}
+	flow
 }
 
 fn image_view(s: &App, alt: &str, url: &str, t: &Tokens) -> El {
