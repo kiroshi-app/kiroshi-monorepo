@@ -158,7 +158,7 @@ async fn me() -> Response {
 }
 
 async fn guest_rostered(app: &App<MockRuntime>) -> GuestDevice {
-	let host_keys = app.state::<DeviceKeysState>();
+	let host_keys = kiroshi_app::events::core(app.app_handle()).state::<DeviceKeysState>();
 	let host = host_keys.keys().expect("the host device keys");
 	let keys = DeviceKeys::generate().expect("randomness");
 	let agreement = keys.agreement_public();
@@ -175,7 +175,11 @@ async fn guest_rostered(app: &App<MockRuntime>) -> GuestDevice {
 		.rostered(PERSONAL.to_owned(), row)
 		.await
 		.expect("the guest is rostered");
-	let space = app.state::<SpaceKeys>().held(PERSONAL).expect("the key reads").expect("a key");
+	let space = kiroshi_app::events::core(app.app_handle())
+		.state::<SpaceKeys>()
+		.held(PERSONAL)
+		.expect("the key reads")
+		.expect("a key");
 	GuestDevice { keys, host: host.signing_public(), space, ctr: 0, challenge: None }
 }
 
@@ -359,16 +363,22 @@ impl Host {
 		}
 		kiroshi_app::events::install_core(app.handle()).expect("the core installs");
 		kiroshi_app::db::install(kiroshi_app::events::core(app.handle()));
-		app.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
+		kiroshi_app::events::core(app.app_handle())
+			.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
 		let identifier = app.config().identifier.clone();
-		app.manage(SpaceKeys::new(InstallKind::Dev, identifier, Some(data_dir.clone())));
+		kiroshi_app::events::core(app.app_handle()).manage(SpaceKeys::new(
+			InstallKind::Dev,
+			identifier,
+			Some(data_dir.clone()),
+		));
 		let root = data_dir.join("environment");
 		store::set(&root, &EnvScope::Account, ACCOUNT_BEARER, BEARER).expect("the bearer is kept");
-		app.manage(AccountSession::new(Ok::<PathBuf, _>(root), &cloud));
+		kiroshi_app::events::core(app.app_handle())
+			.manage(AccountSession::new(Ok::<PathBuf, _>(root), &cloud));
 		restore(app.handle().clone()).await;
 		kiroshi_app::events::core(app.app_handle()).manage(webhook::start(app.handle().clone()));
 		let local = local_api(app.handle()).expect("the local host api listens");
-		app.manage(Hosting::new(&cloud, Some(local)));
+		kiroshi_app::events::core(app.app_handle()).manage(Hosting::new(&cloud, Some(local)));
 		let window = WebviewWindowBuilder::new(&app, "main", Default::default())
 			.build()
 			.expect("the window builds");

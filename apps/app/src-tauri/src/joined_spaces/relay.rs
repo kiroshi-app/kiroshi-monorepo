@@ -358,7 +358,8 @@ fn is_signed_in<R: Runtime>(app: &AppHandle<R>) -> Result<bool, String> {
 }
 
 fn session_bearer<R: Runtime>(app: &AppHandle<R>) -> Result<Option<String>, String> {
-	app.state::<AccountSession>()
+	crate::events::core(app.app_handle())
+		.state::<AccountSession>()
 		.bearer()
 		.map_err(|error| format!("the account session store failed: {error:?}"))
 }
@@ -374,7 +375,7 @@ pub async fn joined<R: Runtime>(
 	inviter_email: Option<String>,
 	listing: HostListing,
 ) -> Result<JoinedSpace, RelayJoinError> {
-	let guests = app.state::<RelayGuests>();
+	let guests = crate::events::core(app.app_handle()).state::<RelayGuests>();
 	let _turn = guests.turn.lock().await;
 	if !is_signed_in(app).map_err(RelayJoinError::Account)? {
 		return Err(RelayJoinError::SignedOut);
@@ -407,7 +408,7 @@ pub async fn joined<R: Runtime>(
 }
 
 pub async fn reconciled<R: Runtime>(app: &AppHandle<R>) {
-	let Some(guests) = app.try_state::<RelayGuests>() else {
+	let Some(guests) = crate::events::core(app.app_handle()).try_state::<RelayGuests>() else {
 		return;
 	};
 	if let Err(failure) = memberships_followed(app, &guests).await {
@@ -663,7 +664,7 @@ async fn started<R: Runtime>(
 	app: &AppHandle<R>,
 	id: &str,
 ) -> Result<(joined_spaces::JoinedSpace, Reached), JoinedSpaceError> {
-	let guests = app.state::<RelayGuests>();
+	let guests = crate::events::core(app.app_handle()).state::<RelayGuests>();
 	let _turn = guests.turn.lock().await;
 	started_in_turn(app, &guests, id).await
 }
@@ -770,7 +771,11 @@ pub(super) async fn host_answered<R: Runtime>(
 	let offline = || JoinedSpaceError::HostOffline { id: id.to_owned() };
 	match link.settled().await {
 		Presence::Online => {}
-		Presence::Ended => return Err(app.state::<RelayGuests>().ended_error(id)),
+		Presence::Ended => {
+			return Err(crate::events::core(app.app_handle())
+				.state::<RelayGuests>()
+				.ended_error(id))
+		}
 		Presence::Connecting | Presence::Down => return Err(offline()),
 	}
 	timeout(call.bound, link.called(call.command, call.args))
@@ -803,7 +808,7 @@ pub(super) async fn description_adopted<R: Runtime>(
 	id: &str,
 	described: SpaceDescribed,
 ) -> Result<(), JoinedSpaceError> {
-	let guests = app.state::<RelayGuests>();
+	let guests = crate::events::core(app.app_handle()).state::<RelayGuests>();
 	let _turn = guests.turn.lock().await;
 	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 	let repository = ready(&state)?.joined_spaces();
@@ -821,7 +826,7 @@ pub(super) async fn description_adopted<R: Runtime>(
 }
 
 pub async fn left<R: Runtime>(app: &AppHandle<R>, id: &str) -> Result<(), JoinedSpaceError> {
-	let guests = app.state::<RelayGuests>();
+	let guests = crate::events::core(app.app_handle()).state::<RelayGuests>();
 	let _turn = guests.turn.lock().await;
 	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 	let repository = ready(&state)?.joined_spaces();
@@ -846,7 +851,7 @@ async fn membership_ended<R: Runtime>(
 	cloud: &Cloud,
 	instance_id: &str,
 ) -> Result<(), JoinedSpaceError> {
-	let bearer = match app.state::<AccountSession>().bearer() {
+	let bearer = match crate::events::core(app.app_handle()).state::<AccountSession>().bearer() {
 		Ok(Some(bearer)) => bearer,
 		Ok(None) => return Err(JoinedSpaceError::NeedsSignIn),
 		Err(error) => return Err(JoinedSpaceError::SessionStore { detail: format!("{error:?}") }),
@@ -872,7 +877,7 @@ async fn membership_ended<R: Runtime>(
 }
 
 pub async fn signed_out<R: Runtime>(app: &AppHandle<R>) -> Option<tokio::sync::MutexGuard<'_, ()>> {
-	let guests = app.try_state::<RelayGuests>()?.inner();
+	let guests = crate::events::core(app.app_handle()).try_state::<RelayGuests>()?.inner();
 	let turn = guests.turn.lock().await;
 	guests.gesture_made();
 	guests.removed().clear();
@@ -937,7 +942,7 @@ async fn guest_linked<R: Runtime>(
 				return evicted(&app, &linked, reason).await;
 			}
 			Ended::Removed => {
-				let guests = app.state::<RelayGuests>();
+				let guests = crate::events::core(app.app_handle()).state::<RelayGuests>();
 				guests.removed().insert(linked.id.clone());
 				linked.link.ended(Presence::Ended);
 				guests.left(&linked.id, &linked.link);
@@ -948,7 +953,9 @@ async fn guest_linked<R: Runtime>(
 			}
 			Ended::SignedOut(reason) => {
 				linked.link.ended(Presence::Down);
-				app.state::<RelayGuests>().left(&linked.id, &linked.link);
+				crate::events::core(app.app_handle())
+					.state::<RelayGuests>()
+					.left(&linked.id, &linked.link);
 				return log::warn!(
 					"joined space {} (instance {}) left its member relay: {reason}",
 					linked.id,
@@ -978,14 +985,14 @@ async fn attempted<R: Runtime>(
 	stop: &mut watch::Receiver<bool>,
 	backoff: &mut Backoff,
 ) -> (Ended, Held) {
-	let bearer = match app.state::<AccountSession>().bearer() {
+	let bearer = match crate::events::core(app.app_handle()).state::<AccountSession>().bearer() {
 		Ok(Some(bearer)) => bearer,
 		Ok(None) => return (Ended::SignedOut("no account is signed in"), held),
 		Err(error) => {
 			return (Ended::Dropped(format!("the account session store failed: {error:?}")), held)
 		}
 	};
-	let cloud = &app.state::<RelayGuests>().cloud;
+	let cloud = &crate::events::core(app.app_handle()).state::<RelayGuests>().cloud;
 	let url = member_socket_url(cloud, &linked.instance_id, &held.roster.own.relay_device_id);
 	match until_stopped(stop, opened_unpaused(cloud, url, &bearer)).await {
 		None => (Ended::Stopped, held),
@@ -1021,7 +1028,7 @@ async fn departure_asked<R: Runtime>(
 	held: &Held,
 	stop: &mut watch::Receiver<bool>,
 ) -> Option<JoinedSpaceRemovalReason> {
-	let bearer = match app.state::<AccountSession>().bearer() {
+	let bearer = match crate::events::core(app.app_handle()).state::<AccountSession>().bearer() {
 		Ok(Some(bearer)) => bearer,
 		unasked => {
 			log::warn!(
@@ -1031,7 +1038,7 @@ async fn departure_asked<R: Runtime>(
 			return Some(JoinedSpaceRemovalReason::Removed);
 		}
 	};
-	let cloud = &app.state::<RelayGuests>().cloud;
+	let cloud = &crate::events::core(app.app_handle()).state::<RelayGuests>().cloud;
 	let url = member_socket_url(cloud, &linked.instance_id, &held.roster.own.relay_device_id);
 	match until_stopped(stop, opened_unpaused(cloud, url, &bearer)).await? {
 		Opened::Gone(Some(departure)) => Some(reason_of(departure)),
@@ -1073,7 +1080,7 @@ async fn sealed_session<R: Runtime>(
 	stop: &mut watch::Receiver<bool>,
 ) -> Ended {
 	let link = &linked.link;
-	let answer_bound = app.state::<RelayGuests>().answer_bound();
+	let answer_bound = crate::events::core(app.app_handle()).state::<RelayGuests>().answer_bound();
 	let (mut sink, mut stream) = socket.split();
 	let (calls_in, mut calls) = mpsc::channel(CALLS_IN_FLIGHT);
 	let mut unopened = Some(calls_in);
@@ -1276,7 +1283,7 @@ async fn evicted<R: Runtime>(
 	reason: JoinedSpaceRemovalReason,
 ) {
 	let id = &linked.id;
-	let guests = app.state::<RelayGuests>();
+	let guests = crate::events::core(app.app_handle()).state::<RelayGuests>();
 	guests.removed().insert(id.clone());
 	linked.link.ended(Presence::Ended);
 	guests.left(id, &linked.link);

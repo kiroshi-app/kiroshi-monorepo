@@ -138,8 +138,8 @@ impl Host {
 			"account",
 			mock_builder()
 				.invoke_handler(invoke_handler())
-				.manage(AccountSession::new(root.clone(), api_url))
-				.manage(DeviceKeysState::new(device_keys)),
+				.plugin(kiroshi_app::events::in_core(AccountSession::new(root.clone(), api_url)))
+				.plugin(kiroshi_app::events::in_core(DeviceKeysState::new(device_keys))),
 		);
 		let window = WebviewWindowBuilder::new(app.handle(), "main", Default::default())
 			.build()

@@ -49,7 +49,8 @@ pub(super) async fn host_keys<R: Runtime>(
 }
 
 fn device_keys<R: Runtime>(app: &AppHandle<R>) -> Result<DeviceKeys, String> {
-	app.try_state::<DeviceKeysState>()
+	crate::events::core(app.app_handle())
+		.try_state::<DeviceKeysState>()
 		.ok_or_else(|| "the device keys are not loaded".to_owned())?
 		.keys()
 		.map(|keys| DeviceKeys::from_secret(&keys.secret()))
@@ -60,7 +61,7 @@ async fn space_key<R: Runtime>(
 	app: &AppHandle<R>,
 	space_id: &str,
 ) -> Result<CurrentSpaceKey, String> {
-	let space_keys = app
+	let space_keys = crate::events::core(app.app_handle())
 		.try_state::<SpaceKeys>()
 		.ok_or_else(|| "the space key store is not loaded".to_owned())?;
 	let watched = |space_keys: &SpaceKeys| {

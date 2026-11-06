@@ -218,7 +218,7 @@ pub(super) async fn bridged<R: Runtime>(
 		log::warn!("{}", reach::refusal_line(&call.command, &shared_space_id, &refusal));
 		return answer(call.id, StatusCode::FORBIDDEN, json!(OTHER_SPACE_REFUSAL));
 	}
-	let hosting = app.state::<Hosting>();
+	let hosting = crate::events::core(app.app_handle()).state::<Hosting>();
 	let member = RelayedMember {
 		space_id: shared_space_id.clone(),
 		user_id: call.sender.clone(),

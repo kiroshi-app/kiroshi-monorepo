@@ -118,20 +118,21 @@ pub(super) fn waited<R: Runtime>(
 		wait.reason,
 		wait.detail
 	);
-	if let Some(guests) = app.try_state::<RelayGuests>() {
+	if let Some(guests) = crate::events::core(app.app_handle()).try_state::<RelayGuests>() {
 		guests.waited(instance_id, wait.clone());
 	}
 	wait
 }
 
 pub(super) fn last_wait<R: Runtime>(app: &AppHandle<R>, instance_id: &str) -> JoinedSpaceWait {
-	app.try_state::<RelayGuests>()
+	crate::events::core(app.app_handle())
+		.try_state::<RelayGuests>()
 		.and_then(|guests| guests.last_wait(instance_id))
 		.unwrap_or_else(|| wait_of(Stall::NoRekeyYet))
 }
 
 pub(super) fn wait_ended<R: Runtime>(app: &AppHandle<R>, instance_id: &str) {
-	if let Some(guests) = app.try_state::<RelayGuests>() {
+	if let Some(guests) = crate::events::core(app.app_handle()).try_state::<RelayGuests>() {
 		guests.wait_ended(instance_id);
 	}
 }

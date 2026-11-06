@@ -320,10 +320,15 @@ impl Harness {
 		let database = database.map(|()| db::open(&database_dir));
 		let is_database_open = database.is_ok();
 		crate::events::core(app.app_handle()).manage::<DatabaseState>(database);
-		app.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
+		crate::events::core(app.app_handle())
+			.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
 		let profile = app.path().app_data_dir().expect("the data folder resolves");
 		let identifier = app.config().identifier.clone();
-		app.manage(SpaceKeys::new(InstallKind::Dev, identifier, Some(profile)));
+		crate::events::core(app.app_handle()).manage(SpaceKeys::new(
+			InstallKind::Dev,
+			identifier,
+			Some(profile),
+		));
 		let host = match is_database_open {
 			true => Some(Arc::new(SealingHost::planted(app.handle(), INSTANCE).await)),
 			false => None,
@@ -332,10 +337,11 @@ impl Harness {
 			*cloud.admission.lock().expect("the cloud") = Some(host.admitted());
 			registered_as_the_member(&app).await;
 		}
-		app.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &api_url));
+		crate::events::core(app.app_handle())
+			.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &api_url));
 		crate::events::core(app.app_handle())
 			.manage(Invitations::new(&api_url).polling_every(every));
-		app.manage(RelayGuests::new(&api_url));
+		crate::events::core(app.app_handle()).manage(RelayGuests::new(&api_url));
 		let heard = Arc::new(Mutex::new(Vec::new()));
 		for event in [CHANGED_EVENT, JOINED_CHANGED, REMOVED_EVENT, RECONNECTED_EVENT] {
 			let hearing = Arc::clone(&heard);
@@ -488,7 +494,7 @@ struct Member {
 }
 
 async fn registered_as_the_member(app: &App<MockRuntime>) {
-	let state = app.state::<DeviceKeysState>();
+	let state = crate::events::core(app.app_handle()).state::<DeviceKeysState>();
 	let device = DeviceKeys::from_secret(&state.keys().expect("the device keys").secret());
 	let database = crate::events::core(app.app_handle()).state::<DatabaseState>();
 	let devices = database.as_ref().expect("the database").relay_devices();
@@ -900,7 +906,8 @@ fn a_relay_restarting_4005_drops_the_link_reopens_and_keeps_the_entry() {
 		let id = harness.accepted().await;
 		let (_connection, mut member) = connected(&mut harness, &id).await;
 
-		let dropped = harness.app.state::<RelayGuests>().link_dropped(&id);
+		let dropped =
+			crate::events::core(harness.app.app_handle()).state::<RelayGuests>().link_dropped(&id);
 		closed_with(&mut member, 4005).await;
 		tokio::time::timeout(PATIENCE, dropped).await.expect("the link dropped in time");
 		let _reopened = harness.member().await;
@@ -916,7 +923,8 @@ async fn closed_offline(
 	member: &mut Member,
 	connection: &JoinedSpaceConnection,
 ) {
-	let dropped = harness.app.state::<RelayGuests>().link_dropped(id);
+	let dropped =
+		crate::events::core(harness.app.app_handle()).state::<RelayGuests>().link_dropped(id);
 	harness.refusing_members(refusal(StatusCode::SERVICE_UNAVAILABLE, "HOST_ABSENT"));
 	closed_with(member, 4002).await;
 	tokio::time::timeout(PATIENCE, dropped).await.expect("the link dropped in time");
@@ -1318,7 +1326,7 @@ fn an_unlisted_entry_the_relay_answers_404_on_is_removed_as_unknown() {
 }
 
 fn is_guest_running(harness: &Harness, id: &str) -> bool {
-	harness.app.state::<RelayGuests>().is_running(id)
+	crate::events::core(harness.app.app_handle()).state::<RelayGuests>().is_running(id)
 }
 
 async fn proxy_closed(connection: &JoinedSpaceConnection) -> bool {
@@ -1348,7 +1356,10 @@ async fn port_held(connection: &JoinedSpaceConnection) -> Option<TcpListener> {
 }
 
 fn stopping(harness: &Harness, id: &str) -> watch::Receiver<bool> {
-	harness.app.state::<RelayGuests>().stopping(id).expect("a guest runs")
+	crate::events::core(harness.app.app_handle())
+		.state::<RelayGuests>()
+		.stopping(id)
+		.expect("a guest runs")
 }
 
 async fn guest_ended(harness: &Harness, id: &str, mut stopping: watch::Receiver<bool>) -> bool {
@@ -1455,7 +1466,7 @@ fn a_guest_refused_401_signs_the_account_out_on_site_and_a_new_sign_in_connects_
 		assert!(proxy_closed(&first).await, "the proxy still answers");
 		let _first_port = port_held(&first).await;
 		assert!(harness.stored_until(<[JoinedSpace]>::is_empty).await.is_empty());
-		let session = harness.app.state::<AccountSession>();
+		let session = crate::events::core(harness.app.app_handle()).state::<AccountSession>();
 		let signed_out_on_site =
 			AccountState::SignedOut { reason: Some(SignedOutReason::SignedOutOnSite) };
 		let is_signed_out_on_site = || (session.current() == signed_out_on_site).then_some(());
@@ -1780,8 +1791,7 @@ fn a_failed_listing_leaves_the_entries_unchanged_and_its_failure_carries_no_bear
 		] {
 			*harness.cloud.instances.lock().expect("the cloud") = answer;
 			reconciled(harness.app.handle()).await;
-			let failure = harness
-				.app
+			let failure = crate::events::core(harness.app.app_handle())
 				.state::<RelayGuests>()
 				.cloud()
 				.instances(BEARER)
@@ -1791,8 +1801,7 @@ fn a_failed_listing_leaves_the_entries_unchanged_and_its_failure_carries_no_bear
 			assert!(!format!("{failure:?}").contains(BEARER), "{failure:?}");
 		}
 		let offline = Harness::over(Some(BEARER), Some(a_closed_port().await), Ok(())).await;
-		let failure = offline
-			.app
+		let failure = crate::events::core(offline.app.app_handle())
 			.state::<RelayGuests>()
 			.cloud()
 			.instances(BEARER)
@@ -1813,7 +1822,7 @@ fn a_reconciliation_holds_the_relay_turn_and_a_concurrent_accept_yields_one_entr
 	run(async {
 		let harness = Harness::new(Some(BEARER)).await;
 		harness.listing(json!([an_instance(INSTANCE, "Studio")]));
-		let guests = harness.app.state::<RelayGuests>();
+		let guests = crate::events::core(harness.app.app_handle()).state::<RelayGuests>();
 		let held = guests.turn().lock().await;
 
 		let mut reconciling = std::pin::pin!(reconciled(harness.app.handle()));

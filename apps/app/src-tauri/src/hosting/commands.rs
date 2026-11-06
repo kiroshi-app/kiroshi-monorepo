@@ -24,7 +24,8 @@ pub async fn hosting_stop<R: Runtime>(
 
 #[tauri::command]
 #[specta::specta]
-pub fn hosting_state(hosting: State<'_, Hosting>, space_id: String) -> HostingState {
+pub fn hosting_state(core: State<'_, crate::core_context::Core>, space_id: String) -> HostingState {
+	let hosting = core.state::<Hosting>();
 	hosting.current(&space_id)
 }
 

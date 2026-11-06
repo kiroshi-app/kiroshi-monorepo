@@ -262,7 +262,7 @@ async fn attempted<R: Runtime>(
 	replaced: &mut Option<String>,
 	relaying: &mut Relaying<'_>,
 ) -> Next {
-	let bearer = match app.state::<AccountSession>().bearer() {
+	let bearer = match crate::events::core(app.app_handle()).state::<AccountSession>().bearer() {
 		Ok(Some(bearer)) => bearer,
 		Ok(None) => return Next::Settled(HostingState::NeedsSignIn),
 		Err(error) => {
@@ -270,7 +270,7 @@ async fn attempted<R: Runtime>(
 			return failed(HostingFailureKind::AccountSessionStoreFailed, detail);
 		}
 	};
-	let cloud = &app.state::<Hosting>().cloud;
+	let cloud = &crate::events::core(app.app_handle()).state::<Hosting>().cloud;
 	if until_stopped(stop, cloud.unpaused()).await.is_none() {
 		return Next::Stopped;
 	}
@@ -361,7 +361,7 @@ async fn relay_device<R: Runtime>(
 	space_id: &str,
 	keys: &HostKeys,
 ) -> Result<String, Next> {
-	let cloud = &app.state::<Hosting>().cloud;
+	let cloud = &crate::events::core(app.app_handle()).state::<Hosting>().cloud;
 	let account_id = match cloud.me(bearer).await {
 		Ok(account) => account.id,
 		Err(MeError::Revoked) => {
@@ -397,7 +397,7 @@ async fn held_or_registered<R: Runtime>(
 	if let Some(relay_device_id) = held {
 		return Ok(relay_device_id);
 	}
-	let cloud = &app.state::<Hosting>().cloud;
+	let cloud = &crate::events::core(app.app_handle()).state::<Hosting>().cloud;
 	let registered = match cloud.register_device(bearer, account_id, &keys.device).await {
 		Ok(registered) => registered,
 		Err(DeviceRegisterError::Revoked) => {
@@ -427,7 +427,7 @@ async fn registered<R: Runtime>(
 	hosted: &mut Hosted,
 	replaced: Option<&str>,
 ) -> Result<String, Next> {
-	let cloud = &app.state::<Hosting>().cloud;
+	let cloud = &crate::events::core(app.app_handle()).state::<Hosting>().cloud;
 	let instance_id = match cloud.register_instance(bearer, &hosted.name, hosted.colour).await {
 		Ok(instance_id) => instance_id,
 		Err(RegisterError::Revoked) => {

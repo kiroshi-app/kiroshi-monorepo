@@ -105,7 +105,7 @@ pub(super) fn missed_rekey_frame(
 }
 
 pub(super) fn bearer_of<R: Runtime>(app: &AppHandle<R>) -> Result<String, JoinedSpaceError> {
-	match app.state::<AccountSession>().bearer() {
+	match crate::events::core(app.app_handle()).state::<AccountSession>().bearer() {
 		Ok(Some(bearer)) => Ok(bearer),
 		Ok(None) => Err(JoinedSpaceError::NeedsSignIn),
 		Err(error) => Err(JoinedSpaceError::SessionStore { detail: format!("{error:?}") }),
@@ -123,7 +123,7 @@ pub(super) async fn member_socket_of<R: Runtime>(
 	device: &DeviceKeys,
 	instance_id: &str,
 ) -> Result<String, JoinedSpaceError> {
-	let guests = app.state::<RelayGuests>().inner();
+	let guests = crate::events::core(app.app_handle()).state::<RelayGuests>().inner();
 	let device_id = device.device_id().to_string();
 	let relay_device_id = match guests.known_relay_device(bearer, &device_id) {
 		Some(known) => known,
@@ -181,7 +181,7 @@ async fn answered<R: Runtime>(
 	instance_id: &str,
 	device: &DeviceKeys,
 ) -> Result<Option<Handed>, JoinedSpaceError> {
-	let guests = app.state::<RelayGuests>().inner();
+	let guests = crate::events::core(app.app_handle()).state::<RelayGuests>().inner();
 	let opened = opened(guests.cloud(), url, bearer).await;
 	guests.relay_device_forgotten_on_refusal(&opened);
 	let mut socket = match opened {
@@ -198,7 +198,7 @@ async fn answered<R: Runtime>(
 		}
 	};
 	log::info!("the join of instance {instance_id} opened its member socket");
-	let bound = app.state::<RelayGuests>().answer_bound();
+	let bound = crate::events::core(app.app_handle()).state::<RelayGuests>().answer_bound();
 	let asked = Message::text(missed_rekey_frame(device, instance_id)?);
 	let answered = match socket.send(asked).await {
 		Err(failure) => Ok(waiting(app, instance_id, Stall::AskNotSent(failure.to_string()))),

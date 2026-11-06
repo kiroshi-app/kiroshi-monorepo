@@ -70,17 +70,23 @@ pub(crate) fn install_kind(identifier: &str) -> InstallKind {
 }
 
 fn side<R: Runtime>(app: &AppHandle<R>) -> Side {
-	if app.try_state::<Hosting>().is_some_and(|hosting| hosting.is_hosting()) {
+	if crate::events::core(app.app_handle())
+		.try_state::<Hosting>()
+		.is_some_and(|hosting| hosting.is_hosting())
+	{
 		return Side::Host;
 	}
-	if app.try_state::<RelayGuests>().is_some_and(|guests| guests.is_joined()) {
+	if crate::events::core(app.app_handle())
+		.try_state::<RelayGuests>()
+		.is_some_and(|guests| guests.is_joined())
+	{
 		return Side::Member;
 	}
 	Side::Local
 }
 
 fn plan<R: Runtime>(app: &AppHandle<R>) -> Option<AccountPlan> {
-	match app.try_state::<AccountSession>()?.current() {
+	match crate::events::core(app.app_handle()).try_state::<AccountSession>()?.current() {
 		AccountState::SignedIn(account) => account.plan,
 		_ => None,
 	}

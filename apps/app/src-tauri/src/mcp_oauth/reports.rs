@@ -125,8 +125,7 @@ impl<R: Runtime> StandingHost<R> {
 	}
 
 	fn recorded(&self, report: Report) -> Result<Value, StandingError> {
-		let reports = self
-			.app
+		let reports = crate::events::core(self.app.app_handle())
 			.try_state::<ApplicationReports>()
 			.ok_or_else(|| StandingError::unexpected(NO_RECORDS.to_owned()))?;
 		reports.record(&self.bot_id, &report.name, report.standing);

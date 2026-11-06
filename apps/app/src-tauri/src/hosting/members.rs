@@ -57,7 +57,8 @@ async fn invited<R: Runtime>(
 	}
 	let bearer = bearer_of(app)?;
 	let _turn = devices::settled_turn(app, space_id).await?;
-	app.state::<Hosting>()
+	crate::events::core(app.app_handle())
+		.state::<Hosting>()
 		.cloud
 		.invite_member(&bearer, instance_id, &email)
 		.await
@@ -84,7 +85,8 @@ async fn withdrawn<R: Runtime>(
 ) -> Result<SpaceMembers, MembersError> {
 	let bearer = bearer_of(app)?;
 	let _turn = devices::settled_turn(app, space_id).await?;
-	app.state::<Hosting>()
+	crate::events::core(app.app_handle())
+		.state::<Hosting>()
 		.cloud
 		.withdraw_invitation(&bearer, instance_id, invitation_id)
 		.await
@@ -100,7 +102,8 @@ pub async fn resend<R: Runtime>(
 	let instance_id = instance_of(app, &space_id).await?;
 	let bearer = bearer_of(app)?;
 	let _turn = devices::settled_turn(app, &space_id).await?;
-	app.state::<Hosting>()
+	crate::events::core(app.app_handle())
+		.state::<Hosting>()
 		.cloud
 		.resend_invitation(&bearer, &instance_id, &invitation_id)
 		.await
@@ -138,7 +141,8 @@ async fn removed<R: Runtime>(
 		MemberStatus::Pending => return Err(MembersError::NotJoined),
 		MemberStatus::Joined | MemberStatus::NeedsInvitation => {}
 	}
-	app.state::<Hosting>()
+	crate::events::core(app.app_handle())
+		.state::<Hosting>()
 		.cloud
 		.remove_member(&bearer, instance_id, user_id)
 		.await
@@ -163,7 +167,7 @@ pub async fn invite_again<R: Runtime>(
 	if member.status != MemberStatus::NeedsInvitation {
 		return Err(MembersError::NotNeedingInvitation);
 	}
-	let cloud = &app.state::<Hosting>().cloud;
+	let cloud = &crate::events::core(app.app_handle()).state::<Hosting>().cloud;
 	cloud
 		.remove_member(&bearer, &instance_id, &user_id)
 		.await
@@ -185,7 +189,7 @@ pub(super) async fn polled<R: Runtime>(
 	space_id: &str,
 	instance_id: &str,
 ) -> Infallible {
-	let hosting = app.state::<Hosting>();
+	let hosting = crate::events::core(app.app_handle()).state::<Hosting>();
 	let mut polls = interval(hosting.members_every);
 	polls.set_missed_tick_behavior(MissedTickBehavior::Delay);
 	loop {
@@ -215,7 +219,7 @@ pub(super) async fn instance_of<R: Runtime>(
 }
 
 pub(super) fn bearer_of<R: Runtime>(app: &AppHandle<R>) -> Result<String, MembersError> {
-	match app.state::<AccountSession>().bearer() {
+	match crate::events::core(app.app_handle()).state::<AccountSession>().bearer() {
 		Ok(Some(bearer)) => Ok(bearer),
 		Ok(None) => Err(MembersError::NeedsSignIn),
 		Err(error) => Err(MembersError::SessionStore { detail: format!("{error:?}") }),
@@ -256,7 +260,7 @@ fn failure_logged(action: &str, instance_id: &str, domain: &str, failure: &Membe
 
 fn is_own_account<R: Runtime>(app: &AppHandle<R>, email: &str) -> bool {
 	matches!(
-		app.state::<AccountSession>().current(),
+		crate::events::core(app.app_handle()).state::<AccountSession>().current(),
 		AccountState::SignedIn(account) if account.email.trim().eq_ignore_ascii_case(email)
 	)
 }
@@ -279,7 +283,7 @@ pub(super) async fn listed<R: Runtime>(
 ) -> Result<SpaceMembers, MembersError> {
 	let bearer = bearer_of(app)?;
 	let members = rostered_members(app, &bearer, space_id, instance_id).await?;
-	let invitations = app
+	let invitations = crate::events::core(app.app_handle())
 		.state::<Hosting>()
 		.cloud
 		.sent_invitations(&bearer, instance_id)
@@ -312,7 +316,7 @@ async fn cloud_members<R: Runtime>(
 	bearer: &str,
 	instance_id: &str,
 ) -> Result<Vec<Member>, MembersError> {
-	let members = app
+	let members = crate::events::core(app.app_handle())
 		.state::<Hosting>()
 		.cloud
 		.members(bearer, instance_id)
@@ -345,15 +349,20 @@ fn not_read_back(failure: MembersError) -> MembersError {
 }
 
 fn announced_if_changed<R: Runtime>(app: &AppHandle<R>, space_id: &str, listed: SpaceMembers) {
-	if app.state::<Hosting>().is_last_announced(space_id, &listed) {
+	if crate::events::core(app.app_handle()).state::<Hosting>().is_last_announced(space_id, &listed)
+	{
 		return;
 	}
 	announced(app, space_id, listed);
 }
 
 fn announced<R: Runtime>(app: &AppHandle<R>, space_id: &str, listed: SpaceMembers) {
-	app.state::<Hosting>().hosts().entry(space_id.to_owned()).or_default().members =
-		Some(listed.clone());
+	crate::events::core(app.app_handle())
+		.state::<Hosting>()
+		.hosts()
+		.entry(space_id.to_owned())
+		.or_default()
+		.members = Some(listed.clone());
 	let SpaceMembers { members, invitations } = listed;
 	let changed = MembersChanged { space_id: space_id.to_owned(), members, invitations };
 	if let Err(error) = events::emit(app, MEMBERS_CHANGED, changed) {

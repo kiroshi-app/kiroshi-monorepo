@@ -225,10 +225,12 @@ async fn registration<R: Runtime>(
 		DeviceError::SignedOut => Unregistered::SignedOut,
 		failure => Unregistered::Refused(format!("{failure:?}")),
 	})?;
-	let AccountState::SignedIn(account) = app.state::<AccountSession>().current() else {
+	let AccountState::SignedIn(account) =
+		crate::events::core(app.app_handle()).state::<AccountSession>().current()
+	else {
 		return Err(Unregistered::SignedOut);
 	};
-	let keys_state = app
+	let keys_state = crate::events::core(app.app_handle())
 		.try_state::<DeviceKeysState>()
 		.ok_or_else(|| Unregistered::Refused("the device keys are not loaded".to_owned()))?;
 	let keys = keys_state.keys().map_err(|failure| {
@@ -418,7 +420,7 @@ fn signed_out_on_401<R: Runtime>(app: &AppHandle<R>, bearer: &str) {
 }
 
 fn bearer_of<R: Runtime>(app: &AppHandle<R>) -> Result<String, DeviceError> {
-	match app.state::<AccountSession>().bearer() {
+	match crate::events::core(app.app_handle()).state::<AccountSession>().bearer() {
 		Ok(Some(bearer)) => Ok(bearer),
 		Ok(None) => Err(DeviceError::SignedOut),
 		Err(error) => {

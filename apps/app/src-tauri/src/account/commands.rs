@@ -6,7 +6,8 @@ use super::session::{self, AccountSession};
 
 #[tauri::command]
 #[specta::specta]
-pub fn account_state(session: State<'_, AccountSession>) -> AccountState {
+pub fn account_state(core: State<'_, crate::core_context::Core>) -> AccountState {
+	let session = core.state::<AccountSession>();
 	session.current()
 }
 

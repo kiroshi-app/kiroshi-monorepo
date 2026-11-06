@@ -476,7 +476,7 @@ impl Member {
 	}
 
 	fn held_key_id(&self) -> Option<u32> {
-		let keys = self.app.state::<SpaceKeys>();
+		let keys = crate::events::core(self.app.app_handle()).state::<SpaceKeys>();
 		keys.held(&format!("joined-{INSTANCE}")).expect("the key reads").map(|held| held.key_id)
 	}
 
@@ -502,19 +502,22 @@ impl Member {
 	}
 
 	fn is_waiting(&self, id: &str) -> bool {
-		self.app.state::<RelayGuests>().is_waiting(id)
+		crate::events::core(self.app.app_handle()).state::<RelayGuests>().is_waiting(id)
 	}
 
 	fn last_wait(&self) -> Option<JoinedSpaceWaitReason> {
-		self.app.state::<RelayGuests>().last_wait(INSTANCE).map(|wait| wait.reason)
+		crate::events::core(self.app.app_handle())
+			.state::<RelayGuests>()
+			.last_wait(INSTANCE)
+			.map(|wait| wait.reason)
 	}
 
 	fn last_waited(&self) -> Option<JoinedSpaceWait> {
-		self.app.state::<RelayGuests>().last_wait(INSTANCE)
+		crate::events::core(self.app.app_handle()).state::<RelayGuests>().last_wait(INSTANCE)
 	}
 
 	fn device(&self) -> DeviceKeys {
-		let state = self.app.state::<DeviceKeysState>();
+		let state = crate::events::core(self.app.app_handle()).state::<DeviceKeysState>();
 		DeviceKeys::from_secret(&state.keys().expect("the device keys").secret())
 	}
 }
@@ -530,13 +533,19 @@ fn signed_in(
 	store::set(&root, &EnvScope::Account, ACCOUNT_BEARER, bearer).expect("the bearer is kept");
 	let app = an_app_of_its_own(name, mock_builder());
 	crate::events::core(app.app_handle()).manage::<DatabaseState>(Ok(db::open(&database)));
-	app.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
+	crate::events::core(app.app_handle())
+		.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
 	let profile = app.path().app_data_dir().expect("the data folder resolves");
 	let identifier = app.config().identifier.clone();
-	app.manage(SpaceKeys::new(InstallKind::Dev, identifier, Some(profile)));
-	app.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), cloud));
+	crate::events::core(app.app_handle()).manage(SpaceKeys::new(
+		InstallKind::Dev,
+		identifier,
+		Some(profile),
+	));
+	crate::events::core(app.app_handle())
+		.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), cloud));
 	let guests = RelayGuests::new(cloud).answering_within(answer_bound);
-	app.manage(guests.resending_every(RESEND_EVERY));
+	crate::events::core(app.app_handle()).manage(guests.resending_every(RESEND_EVERY));
 	crate::events::core(app.app_handle()).manage(Invitations::new(cloud));
 	let root_path = root.to_path_buf();
 	(app, root_path, vec![database, root])
@@ -595,7 +604,9 @@ fn an_accepted_invitation_joins_holds_the_key_feeds_the_members_and_answers_onli
 		let host = member.host();
 		member.relay.hosting(HostSide::Answering(host.admitted()));
 		let earlier = wait_of(Stall::Unreachable("the relay answered 503".to_owned()));
-		member.app.state::<RelayGuests>().waited(INSTANCE, earlier);
+		crate::events::core(member.app.app_handle())
+			.state::<RelayGuests>()
+			.waited(INSTANCE, earlier);
 
 		let joined = member.accepted().await.expect("the join");
 		let members = until("the roster of two devices", || async {
@@ -1013,7 +1024,7 @@ async fn unlisted_during_a_pause(member: &Member, pause: Duration) -> UnlistedDu
 		room.accepted.clear();
 		room.next_upgrade_refusal = Some(refusal(StatusCode::GONE, "MEMBER_REMOVED"));
 	}
-	let guests = member.app.state::<RelayGuests>();
+	let guests = crate::events::core(member.app.app_handle()).state::<RelayGuests>();
 	assert!(guests.is_running(&joined.id));
 	let pause_ends = Instant::now() + pause;
 	guests.cloud().rate_limited("/instances", pause);
@@ -1138,7 +1149,9 @@ fn an_unlisted_space_joined_again_during_the_429_pause_is_kept() {
 		);
 		assert!(removed.lock().expect("the events").is_empty());
 		assert_eq!(member.listed().await.len(), 1);
-		assert!(member.app.state::<RelayGuests>().is_running(&paused.joined.id));
+		assert!(crate::events::core(member.app.app_handle())
+			.state::<RelayGuests>()
+			.is_running(&paused.joined.id));
 	});
 }
 
@@ -1151,7 +1164,9 @@ fn an_unlisted_space_kept_on_a_sign_out_during_the_429_pause_starts_no_guest() {
 		member.signed_out_of_the_store();
 		paused.reconciliation.await.expect("the reconciliation ends");
 
-		assert!(!member.app.state::<RelayGuests>().is_running(&paused.joined.id));
+		assert!(!crate::events::core(member.app.app_handle())
+			.state::<RelayGuests>()
+			.is_running(&paused.joined.id));
 	});
 }
 
@@ -1182,7 +1197,7 @@ fn a_guest_stopped_by_a_reconciliation_runs_again_until_online_once_connected_ag
 
 		let connection =
 			joined_space_connect(member.app.handle().clone(), paused.joined.id.clone()).await;
-		let guests = member.app.state::<RelayGuests>();
+		let guests = crate::events::core(member.app.app_handle()).state::<RelayGuests>();
 		until("the restarted link to be online", || async {
 			(guests.presence(&paused.joined.id) == Some(Presence::Online)).then_some(())
 		})
@@ -1280,7 +1295,7 @@ fn a_leave_the_relay_fails_keeps_the_space_connectable() {
 		let connection = joined_space_connect(member.app.handle().clone(), joined.id.clone()).await;
 
 		assert!(matches!(left, Err(JoinedSpaceError::RelayRefused { .. })), "{left:?}");
-		let guests = member.app.state::<RelayGuests>();
+		let guests = crate::events::core(member.app.app_handle()).state::<RelayGuests>();
 		assert!(!guests.is_removed(&joined.id));
 		assert!(!guests.is_unlisted(&joined.id));
 		assert_eq!(connection.map(|connection| connection.id), Ok(joined.id.clone()));
@@ -1807,7 +1822,7 @@ impl Peers {
 			signed_in("joined-admission-host", OWNER_BEARER, &cloud, PATIENCE);
 		assert!(host_app.0.set(host.handle().clone()).is_ok());
 		let local = LocalApi::new(local, LOCAL_TOKEN.to_owned()).expect("the local client builds");
-		host.manage(Hosting::new(&cloud, Some(local)));
+		crate::events::core(host.app_handle()).manage(Hosting::new(&cloud, Some(local)));
 		hosting_start(host.handle().clone(), SPACE.to_owned()).await.expect("the hosting starts");
 		let peers = Self { relay, cloud, host, _temporary: temporary };
 		until("the host socket", || async { peers.relay.admission().host.is_some().then_some(()) })
@@ -1816,7 +1831,7 @@ impl Peers {
 	}
 
 	fn host_device_id(&self) -> String {
-		let state = self.host.state::<DeviceKeysState>();
+		let state = crate::events::core(self.host.app_handle()).state::<DeviceKeysState>();
 		DeviceKeys::from_secret(&state.keys().expect("the host keys").secret())
 			.device_id()
 			.to_string()
@@ -1842,7 +1857,7 @@ fn a_member_the_host_admits_from_the_device_list_joins_on_its_first_rekey_and_pi
 		assert_eq!(joined.state, JoinedSpaceState::Online);
 		let named = JoinedSpace { hosted_by: Some("Ann".to_owned()), ..joined };
 		assert_eq!(listed, vec![named]);
-		let keys = member.state::<SpaceKeys>();
+		let keys = crate::events::core(member.app_handle()).state::<SpaceKeys>();
 		let held = keys.held(&format!("joined-{INSTANCE}")).expect("the key reads");
 		assert_eq!(held.map(|held| held.key_id), Some(1));
 		let state = crate::events::core(member.app_handle()).state::<DatabaseState>();
@@ -2028,7 +2043,7 @@ async fn online_and_greeted(member: &Member, host: &SealingHost) -> JoinedSpace 
 	joined_space_connect(member.app.handle().clone(), joined.id.clone())
 		.await
 		.expect("the connection");
-	let guests = member.app.state::<RelayGuests>();
+	let guests = crate::events::core(member.app.app_handle()).state::<RelayGuests>();
 	until("the link online", || async {
 		(guests.presence(&joined.id) == Some(Presence::Online)).then_some(())
 	})

@@ -132,8 +132,9 @@ fn system_store(_kind: InstallKind, _service: &str, _item: &str) -> Option<Box<d
 #[tauri::command]
 #[specta::specta]
 pub fn get_device_identity(
-	state: State<'_, DeviceKeysState>,
+	core: State<'_, crate::core_context::Core>,
 ) -> Result<DeviceIdentity, DeviceKeysError> {
+	let state = core.state::<DeviceKeysState>();
 	state.keys().map(identity_of)
 }
 

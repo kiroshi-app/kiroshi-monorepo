@@ -77,7 +77,7 @@ impl<'de, R: Runtime> CommandArg<'de, R> for Caller {
 		let member = nonce
 			.to_str()
 			.ok()
-			.zip(webview.try_state::<Hosting>())
+			.zip(crate::events::core(webview.app_handle()).try_state::<Hosting>())
 			.and_then(|(nonce, hosting)| hosting.relayed.vouched(nonce));
 		Ok(Caller::Relayed(member))
 	}
@@ -125,9 +125,11 @@ impl Caller {
 }
 
 fn signed_in_account<R: Runtime>(app: &AppHandle<R>) -> Option<KiroshiAccount> {
-	app.try_state::<AccountSession>().and_then(|session| match session.current() {
-		AccountState::SignedIn(account) => Some(account),
-		_ => None,
+	crate::events::core(app.app_handle()).try_state::<AccountSession>().and_then(|session| {
+		match session.current() {
+			AccountState::SignedIn(account) => Some(account),
+			_ => None,
+		}
 	})
 }
 
@@ -176,7 +178,7 @@ pub async fn members_of<R: Runtime>(
 }
 
 async fn hosted_members<R: Runtime>(app: &AppHandle<R>, space_id: &str) -> Option<Vec<Member>> {
-	let hosting = app.try_state::<Hosting>()?;
+	let hosting = crate::events::core(app.app_handle()).try_state::<Hosting>()?;
 	let known = {
 		let hosts = hosting.hosts();
 		let host = hosts.get(space_id).filter(|host| host.state.is_running())?;
@@ -237,7 +239,7 @@ async fn member_author<R: Runtime>(
 }
 
 fn known_member<R: Runtime>(app: &AppHandle<R>, member: &RelayedMember) -> Option<Member> {
-	let hosting = app.state::<Hosting>();
+	let hosting = crate::events::core(app.app_handle()).state::<Hosting>();
 	let hosts = hosting.hosts();
 	let known = hosts.get(&member.space_id)?.members.as_ref()?;
 	member_among(&known.members, &member.user_id)

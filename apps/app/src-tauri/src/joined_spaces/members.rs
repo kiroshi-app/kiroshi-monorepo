@@ -71,7 +71,7 @@ async fn polled<R: Runtime>(app: &AppHandle<R>, joined: &JoinedSpace) -> Infalli
 }
 
 async fn read<R: Runtime>(app: &AppHandle<R>, joined: &JoinedSpace) {
-	let guests = app.state::<RelayGuests>();
+	let guests = crate::events::core(app.app_handle()).state::<RelayGuests>();
 	let Some(mut reading) = guests.members_read_started(&joined.id) else {
 		return;
 	};
@@ -118,7 +118,7 @@ async fn roster_of<R: Runtime>(
 	app: &AppHandle<R>,
 	joined: &JoinedSpace,
 ) -> Result<Vec<JoinedSpaceMember>, JoinedSpaceError> {
-	let bearer = match app.state::<AccountSession>().bearer() {
+	let bearer = match crate::events::core(app.app_handle()).state::<AccountSession>().bearer() {
 		Ok(Some(bearer)) => bearer,
 		Ok(None) => return Err(JoinedSpaceError::NeedsSignIn),
 		Err(error) => return Err(JoinedSpaceError::SessionStore { detail: format!("{error:?}") }),
@@ -127,7 +127,12 @@ async fn roster_of<R: Runtime>(
 	let Some(roster) = held::roster(app, instance_id).await? else {
 		return Ok(Vec::new());
 	};
-	let listed = match app.state::<RelayGuests>().cloud().roster(&bearer, instance_id).await {
+	let listed = match crate::events::core(app.app_handle())
+		.state::<RelayGuests>()
+		.cloud()
+		.roster(&bearer, instance_id)
+		.await
+	{
 		Ok(listed) => listed,
 		Err(MemberCallError::Revoked) => {
 			session::revoked(app, &bearer);
@@ -243,10 +248,16 @@ mod tests {
 	fn app_reaching(dir: &Path, api_url: &str) -> AppOfItsOwn {
 		let app = an_app_of_its_own("joined-space-members", mock_builder());
 		crate::events::core(app.app_handle()).manage::<db::DatabaseState>(Ok(db::open(dir)));
-		app.manage(AccountSession::new(Ok::<PathBuf, _>(dir.join("account")), api_url));
-		app.manage(RelayGuests::new(api_url));
-		app.manage(DeviceKeysState::new(Ok(DeviceKeys::from_secret(&DEVICE_SECRET))));
-		app.manage(SpaceKeys::new(InstallKind::Dev, "members".to_owned(), Some(dir.join("keys"))));
+		crate::events::core(app.app_handle())
+			.manage(AccountSession::new(Ok::<PathBuf, _>(dir.join("account")), api_url));
+		crate::events::core(app.app_handle()).manage(RelayGuests::new(api_url));
+		crate::events::core(app.app_handle())
+			.manage(DeviceKeysState::new(Ok(DeviceKeys::from_secret(&DEVICE_SECRET))));
+		crate::events::core(app.app_handle()).manage(SpaceKeys::new(
+			InstallKind::Dev,
+			"members".to_owned(),
+			Some(dir.join("keys")),
+		));
 		app
 	}
 
@@ -579,7 +590,12 @@ mod tests {
 		read(app.handle(), &joined).await;
 
 		timeout(HEARD_WITHIN, async {
-			while app.state::<AccountSession>().bearer().expect("the store reads").is_some() {
+			while crate::events::core(app.app_handle())
+				.state::<AccountSession>()
+				.bearer()
+				.expect("the store reads")
+				.is_some()
+			{
 				tokio::time::sleep(Duration::from_millis(10)).await;
 			}
 		})
@@ -637,7 +653,7 @@ mod tests {
 			};
 			assert_eq!(connection.map(|found| found.id), Err(waiting));
 		}
-		let guests = app.state::<RelayGuests>();
+		let guests = crate::events::core(app.app_handle()).state::<RelayGuests>();
 		assert!(!guests.is_running(&joined.id));
 	}
 }

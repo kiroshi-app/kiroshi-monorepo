@@ -34,7 +34,7 @@ pub struct ApplicationHost<R: Runtime> {
 }
 
 fn held_directory<R: Runtime>(app: &AppHandle<R>) -> Arc<Directory> {
-	match app.try_state::<Arc<Directory>>() {
+	match crate::events::core(app.app_handle()).try_state::<Arc<Directory>>() {
 		Some(state) => state.inner().clone(),
 		None => Directory::at(api_url(), None),
 	}

@@ -299,11 +299,13 @@ impl Harness {
 			store::set(&folder, &EnvScope::Account, ACCOUNT_BEARER, bearer)
 				.expect("the bearer is kept");
 		}
-		app.manage(AccountSession::new(Ok::<PathBuf, _>(folder.to_path_buf()), api));
+		crate::events::core(app.app_handle())
+			.manage(AccountSession::new(Ok::<PathBuf, _>(folder.to_path_buf()), api));
 		crate::db::install(crate::events::core(app.handle()));
-		app.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
-		app.manage(Hosting::new(api, None));
-		app.manage(RelayGuests::new(api));
+		crate::events::core(app.app_handle())
+			.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
+		crate::events::core(app.app_handle()).manage(Hosting::new(api, None));
+		crate::events::core(app.app_handle()).manage(RelayGuests::new(api));
 		crate::events::core(app.app_handle()).manage(Devices::new(api).polling_every(TICK, TICK));
 		let heard = Arc::new(Mutex::new(Vec::new()));
 		for name in [
@@ -367,7 +369,7 @@ impl Harness {
 	}
 
 	fn account(&self) -> AccountState {
-		self.app.state::<AccountSession>().current()
+		crate::events::core(self.app.app_handle()).state::<AccountSession>().current()
 	}
 
 	async fn held_relay_device(&self) -> Option<String> {
@@ -388,12 +390,12 @@ impl Harness {
 	}
 
 	fn keys(&self) -> DeviceKeys {
-		let state = self.app.state::<DeviceKeysState>();
+		let state = crate::events::core(self.app.app_handle()).state::<DeviceKeysState>();
 		DeviceKeys::from_secret(&state.keys().expect("the device keys").secret())
 	}
 
 	fn hosting(&self) -> HostingState {
-		self.app.state::<Hosting>().current(PERSONAL)
+		crate::events::core(self.app.app_handle()).state::<Hosting>().current(PERSONAL)
 	}
 }
 
@@ -571,7 +573,13 @@ fn a_401_while_pending_signs_out_locally_as_device_refused() {
 		let refused = AccountState::SignedOut { reason: Some(SignedOutReason::DeviceRefused) };
 		until(PATIENCE, || (harness.account() == refused).then_some(())).await;
 
-		assert_eq!(harness.app.state::<AccountSession>().bearer().expect("the store reads"), None);
+		assert_eq!(
+			crate::events::core(harness.app.app_handle())
+				.state::<AccountSession>()
+				.bearer()
+				.expect("the store reads"),
+			None
+		);
 		assert_eq!(harness.approval(), DeviceApproval::None);
 	});
 }

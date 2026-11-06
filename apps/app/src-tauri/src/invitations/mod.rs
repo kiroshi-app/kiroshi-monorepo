@@ -214,7 +214,7 @@ fn signed_out_if_revoked<R: Runtime>(
 }
 
 fn bearer_of<R: Runtime>(app: &AppHandle<R>) -> Result<String, InvitationError> {
-	match app.state::<AccountSession>().bearer() {
+	match crate::events::core(app.app_handle()).state::<AccountSession>().bearer() {
 		Ok(Some(bearer)) => Ok(bearer),
 		Ok(None) => Err(InvitationError::NotSignedIn),
 		Err(error) => Err(InvitationError::Storage { detail: format!("{error:?}") }),

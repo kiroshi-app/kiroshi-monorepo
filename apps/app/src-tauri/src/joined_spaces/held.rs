@@ -21,7 +21,8 @@ pub(super) struct Held {
 }
 
 pub(super) fn device_keys<R: Runtime>(app: &AppHandle<R>) -> Result<DeviceKeys, JoinedSpaceError> {
-	app.try_state::<DeviceKeysState>()
+	crate::events::core(app.app_handle())
+		.try_state::<DeviceKeysState>()
 		.ok_or_else(|| JoinedSpaceError::KeyStore {
 			detail: "the device keys are not loaded".to_owned(),
 		})?
@@ -124,9 +125,9 @@ pub(super) async fn roster_kept<R: Runtime>(
 
 fn space_keys<R: Runtime>(
 	app: &AppHandle<R>,
-) -> Result<tauri::State<'_, SpaceKeys>, JoinedSpaceError> {
-	app.try_state::<SpaceKeys>().ok_or_else(|| JoinedSpaceError::KeyStore {
-		detail: "the space key store is not loaded".to_owned(),
+) -> Result<crate::core_context::Managed<'_, SpaceKeys>, JoinedSpaceError> {
+	crate::events::core(app.app_handle()).try_state::<SpaceKeys>().ok_or_else(|| {
+		JoinedSpaceError::KeyStore { detail: "the space key store is not loaded".to_owned() }
 	})
 }
 

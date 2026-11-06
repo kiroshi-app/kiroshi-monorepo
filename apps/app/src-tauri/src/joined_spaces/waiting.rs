@@ -144,7 +144,7 @@ async fn attempted<R: Runtime>(
 		Ok(device) => device,
 		Err(failure) => return Attempt::Dropped(Stall::DeviceKeys(failure)),
 	};
-	let guests = app.state::<RelayGuests>().inner();
+	let guests = crate::events::core(app.app_handle()).state::<RelayGuests>().inner();
 	let cloud = guests.cloud();
 	cloud.unpaused().await;
 	let url = match member_socket_of(app, &bearer, &device, instance_id).await {
@@ -189,7 +189,7 @@ async fn listened<R: Runtime>(
 		return Attempt::Dropped(Stall::AskNotSent(reason));
 	}
 	waited(app, instance_id, Stall::Asked);
-	let every = app.state::<RelayGuests>().resend_every();
+	let every = crate::events::core(app.app_handle()).state::<RelayGuests>().resend_every();
 	let mut beats = interval_at(Instant::now() + every, every);
 	let silence = sleep(SILENCE_BOUND);
 	tokio::pin!(silence);
@@ -268,7 +268,7 @@ fn closed<R: Runtime>(app: &AppHandle<R>, instance_id: &str, frame: Option<Close
 }
 
 fn left<R: Runtime>(app: &AppHandle<R>, id: &str, stop: &watch::Receiver<bool>) {
-	let guests = app.state::<RelayGuests>();
+	let guests = crate::events::core(app.app_handle()).state::<RelayGuests>();
 	let mut waiting = guests.waiting();
 	if waiting.get(id).is_some_and(|entry| entry.stop.subscribe().same_channel(stop)) {
 		waiting.remove(id);

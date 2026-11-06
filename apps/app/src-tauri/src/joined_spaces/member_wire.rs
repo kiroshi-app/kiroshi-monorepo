@@ -241,10 +241,15 @@ mod tests {
 		let database = temp_dir();
 		let app = an_app_of_its_own("member-wire", mock_builder());
 		crate::events::core(app.app_handle()).manage::<DatabaseState>(Ok(db::open(&database)));
-		app.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
+		crate::events::core(app.app_handle())
+			.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
 		let profile = app.path().app_data_dir().expect("the data folder resolves");
 		let identifier = app.config().identifier.clone();
-		app.manage(SpaceKeys::new(InstallKind::Dev, identifier, Some(profile)));
+		crate::events::core(app.app_handle()).manage(SpaceKeys::new(
+			InstallKind::Dev,
+			identifier,
+			Some(profile),
+		));
 		let host = SealingHost::planted(app.handle(), INSTANCE).await;
 		Member { app, host, _database: database }
 	}

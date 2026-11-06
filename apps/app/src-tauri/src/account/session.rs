@@ -117,7 +117,7 @@ fn unstored(error: EnvError) -> AccountState {
 }
 
 fn entered<R: Runtime>(app: &AppHandle<R>, state: AccountState) {
-	let session = app.state::<AccountSession>();
+	let session = crate::events::core(app.app_handle()).state::<AccountSession>();
 	*session.current.lock().unwrap_or_else(PoisonError::into_inner) = state.clone();
 	if let Err(error) = events::emit(app, ACCOUNT_CHANGED, state) {
 		eprintln!("the account state did not reach the front: {error}");
@@ -144,7 +144,7 @@ pub async fn sign_in<R: Runtime>(
 	app: &AppHandle<R>,
 	open: impl FnOnce(&str) -> Result<(), String>,
 ) -> Result<(), AccountError> {
-	let session = app.state::<AccountSession>();
+	let session = crate::events::core(app.app_handle()).state::<AccountSession>();
 	let mut waiting = session.turn.lock().await;
 	closed(&mut waiting).await;
 	session.root()?;
@@ -243,7 +243,7 @@ async fn approved<R: Runtime>(
 	nonce: String,
 	request: AuthorizationRequest,
 ) {
-	let session = app.state::<AccountSession>();
+	let session = crate::events::core(app.app_handle()).state::<AccountSession>();
 	let called = Arc::new(Notify::new());
 	let polling = polled(&session.cloud, &request, &called);
 	let settled = callback::served_while(listener, nonce, Arc::clone(&called), polling).await;
@@ -293,7 +293,7 @@ async fn polled(cloud: &Cloud, request: &AuthorizationRequest, called: &Notify) 
 }
 
 pub async fn restore<R: Runtime>(app: AppHandle<R>) {
-	let session = app.state::<AccountSession>();
+	let session = crate::events::core(app.app_handle()).state::<AccountSession>();
 	let _turn = session.turn.lock().await;
 	let next = match session.bearer() {
 		Ok(None) => None,
@@ -326,7 +326,7 @@ pub fn renamed_name_sent<R: Runtime>(app: &AppHandle<R>, display_name: String) {
 }
 
 fn name_queued<R: Runtime>(app: &AppHandle<R>, to_send: NameToSend) {
-	let Some(session) = app.try_state::<AccountSession>() else {
+	let Some(session) = crate::events::core(app.app_handle()).try_state::<AccountSession>() else {
 		return;
 	};
 	let mut naming = session.naming.lock().unwrap_or_else(PoisonError::into_inner);
@@ -354,7 +354,7 @@ async fn name_sent<R: Runtime>(
 	last_sent: Option<SentName>,
 	to_send: NameToSend,
 ) -> Option<SentName> {
-	let session = app.state::<AccountSession>();
+	let session = crate::events::core(app.app_handle()).state::<AccountSession>();
 	let AccountState::SignedIn(account) = session.current() else {
 		return last_sent;
 	};
@@ -415,7 +415,7 @@ async fn signed_in_work_stopped<R: Runtime>(app: &AppHandle<R>) -> Option<MutexG
 }
 
 pub async fn sign_out<R: Runtime>(app: &AppHandle<R>) -> Result<(), AccountError> {
-	let session = app.state::<AccountSession>();
+	let session = crate::events::core(app.app_handle()).state::<AccountSession>();
 	let (bearer, relay_device) = {
 		let mut waiting = session.turn.lock().await;
 		let bearer = session.bearer()?;
@@ -458,7 +458,8 @@ async fn relay_device_deleted<R: Runtime>(
 	let Some(relay_device_id) = relay_device? else {
 		return Ok(());
 	};
-	app.state::<AccountSession>()
+	crate::events::core(app.app_handle())
+		.state::<AccountSession>()
 		.cloud
 		.delete_device(bearer, &relay_device_id)
 		.await
@@ -483,10 +484,12 @@ async fn held_relay_device_forgotten<R: Runtime>(app: &AppHandle<R>) -> Result<(
 }
 
 fn relay_device_owner<R: Runtime>(app: &AppHandle<R>) -> Result<Option<(String, String)>, String> {
-	let AccountState::SignedIn(account) = app.state::<AccountSession>().current() else {
+	let AccountState::SignedIn(account) =
+		crate::events::core(app.app_handle()).state::<AccountSession>().current()
+	else {
 		return Ok(None);
 	};
-	let device_id = app
+	let device_id = crate::events::core(app.app_handle())
 		.try_state::<DeviceKeysState>()
 		.ok_or_else(|| "the device keys are not loaded".to_owned())?
 		.keys()
@@ -525,7 +528,7 @@ async fn signed_out_locally<R: Runtime>(
 	refused: String,
 	signed_out: AccountState,
 ) {
-	let session = app.state::<AccountSession>();
+	let session = crate::events::core(app.app_handle()).state::<AccountSession>();
 	let _turn = session.turn.lock().await;
 	match session.bearer() {
 		Ok(Some(bearer)) if bearer == refused => {}
@@ -780,7 +783,8 @@ mod tests {
 		fn holding(folder: Result<RemovedOnDrop, EnvError>, api_url: &str) -> Self {
 			let app = an_app_of_its_own("account-session", mock_builder());
 			let root = folder.as_deref().map(Path::to_path_buf).map_err(EnvError::clone);
-			app.manage(AccountSession::new(root.clone(), api_url));
+			crate::events::core(app.app_handle())
+				.manage(AccountSession::new(root.clone(), api_url));
 			crate::db::install(crate::events::core(app.handle()));
 			let root = root.unwrap_or_default();
 			let heard = Arc::new(Mutex::new(Vec::new()));
@@ -823,7 +827,7 @@ mod tests {
 		}
 
 		async fn names_settled(&self) {
-			let session = self.app.state::<AccountSession>();
+			let session = crate::events::core(self.app.app_handle()).state::<AccountSession>();
 			let naming = session.naming.lock().expect("the naming").take();
 			let Some(naming) = naming else {
 				return;
@@ -850,7 +854,7 @@ mod tests {
 		}
 
 		fn state(&self) -> AccountState {
-			self.app.state::<AccountSession>().current()
+			crate::events::core(self.app.app_handle()).state::<AccountSession>().current()
 		}
 
 		fn stored(&self) -> Option<String> {
@@ -887,7 +891,12 @@ mod tests {
 		}
 
 		async fn flow_ended(&self) {
-			let flow = self.app.state::<AccountSession>().turn.lock().await.take();
+			let flow = crate::events::core(self.app.app_handle())
+				.state::<AccountSession>()
+				.turn
+				.lock()
+				.await
+				.take();
 			let flow = flow.expect("a sign-in flow ran");
 			let ended = tokio::time::timeout(PATIENCE, flow).await.expect("the flow ended in time");
 			ended.expect("the flow ended cleanly");
@@ -1183,7 +1192,12 @@ mod tests {
 			assert!(is_closed(&cloudy.callback()).await);
 			assert_eq!(harness.state(), SIGNED_OUT);
 			assert!(cloudy.signed_out.lock().expect("the stub").is_empty());
-			assert!(harness.app.state::<AccountSession>().turn.lock().await.is_none());
+			assert!(crate::events::core(harness.app.app_handle())
+				.state::<AccountSession>()
+				.turn
+				.lock()
+				.await
+				.is_none());
 			assert_eq!(cloudy.polls().len(), polled);
 		});
 	}
@@ -1466,7 +1480,8 @@ mod tests {
 				Cloudy { instances_status: Some(StatusCode::UNAUTHORIZED), ..Cloudy::default() };
 			let api = stub(cloudy).await;
 			let harness = Harness::new("instances-401", &api);
-			harness.app.manage(joined_spaces::relay::RelayGuests::new(&api));
+			crate::events::core(harness.app.app_handle())
+				.manage(joined_spaces::relay::RelayGuests::new(&api));
 			harness.store(BEARER);
 			restore(harness.app.handle().clone()).await;
 			assert_eq!(harness.state(), signed_in());

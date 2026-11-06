@@ -118,8 +118,9 @@ pub fn run() {
 			#[cfg(target_os = "macos")]
 			menu::install(app.handle())?;
 			crate::db::install(crate::events::core(app.handle()));
-			app.manage(crypto::commands::load(app.handle()));
-			app.manage(crypto::commands::space_keys(app.handle()));
+			crate::events::core(app.app_handle()).manage(crypto::commands::load(app.handle()));
+			crate::events::core(app.app_handle())
+				.manage(crypto::commands::space_keys(app.handle()));
 			if !window_controls::is_headless(std::env::args()) {
 				window_controls::open_main(app.handle());
 				window_controls::drag_ghost::open(app.handle());
@@ -131,12 +132,13 @@ pub fn run() {
 				.manage(routines::webhook::start(app.handle().clone()));
 			crate::events::core(app.app_handle())
 				.manage(missions::github::spawn(app.handle().clone()));
-			app.manage(applications::directory::spawn(app.handle().clone()));
-			app.manage(account::session::AccountSession::new(
+			crate::events::core(app.app_handle())
+				.manage(applications::directory::spawn(app.handle().clone()));
+			crate::events::core(app.app_handle()).manage(account::session::AccountSession::new(
 				environment::commands::writable_root(app.handle()),
 				&account::cloud::api_url(),
 			));
-			app.manage(hosting::Hosting::new(
+			crate::events::core(app.app_handle()).manage(hosting::Hosting::new(
 				&account::cloud::api_url(),
 				hosting::local_api(app.handle()),
 			));
@@ -144,7 +146,8 @@ pub fn run() {
 				.manage(invitations::Invitations::new(&account::cloud::api_url()));
 			crate::events::core(app.app_handle())
 				.manage(devices::Devices::new(&account::cloud::api_url()));
-			app.manage(joined_spaces::relay::RelayGuests::new(&account::cloud::api_url()));
+			crate::events::core(app.app_handle())
+				.manage(joined_spaces::relay::RelayGuests::new(&account::cloud::api_url()));
 			tauri::async_runtime::spawn(account::session::restore(app.handle().clone()));
 			let handle = app.handle().clone();
 			tauri::async_runtime::spawn(async move {
@@ -184,8 +187,8 @@ pub fn run() {
 				{
 					poller.stop();
 				}
-				if let Some(directory) =
-					app.try_state::<std::sync::Arc<applications::directory::Directory>>()
+				if let Some(directory) = crate::events::core(app.app_handle())
+					.try_state::<std::sync::Arc<applications::directory::Directory>>()
 				{
 					directory.stop();
 				}

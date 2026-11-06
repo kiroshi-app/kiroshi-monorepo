@@ -934,13 +934,19 @@ impl Harness {
 		}
 		let app = an_app_of_its_own(&format!("hosting-{name}"), mock_builder());
 		crate::events::core(app.app_handle()).manage::<DatabaseState>(Ok(db::open(&database)));
-		app.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
+		crate::events::core(app.app_handle())
+			.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
 		let profile = app.path().app_data_dir().expect("the data folder resolves");
 		let identifier = app.config().identifier.clone();
-		app.manage(SpaceKeys::new(InstallKind::Dev, identifier, Some(profile)));
-		app.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &cloud));
-		app.manage(RelayGuests::new(&cloud));
-		app.manage(
+		crate::events::core(app.app_handle()).manage(SpaceKeys::new(
+			InstallKind::Dev,
+			identifier,
+			Some(profile),
+		));
+		crate::events::core(app.app_handle())
+			.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &cloud));
+		crate::events::core(app.app_handle()).manage(RelayGuests::new(&cloud));
+		crate::events::core(app.app_handle()).manage(
 			Hosting::new(
 				&cloud,
 				Some(
@@ -977,7 +983,7 @@ impl Harness {
 	}
 
 	fn state(&self) -> HostingState {
-		self.app.state::<Hosting>().current(PERSONAL)
+		crate::events::core(self.app.app_handle()).state::<Hosting>().current(PERSONAL)
 	}
 
 	async fn reached(&self, expected: HostingState) {
@@ -998,7 +1004,8 @@ impl Harness {
 	}
 
 	async fn reached_by(&self, space_id: &str, expected: HostingState) {
-		let current = || self.app.state::<Hosting>().current(space_id);
+		let current =
+			|| crate::events::core(self.app.app_handle()).state::<Hosting>().current(space_id);
 		let awaited = format!("space {space_id} reaching {expected:?}");
 		self.noticed_until(&awaited, || (current() == expected).then_some(())).await;
 	}
@@ -1012,7 +1019,7 @@ impl Harness {
 	}
 
 	fn running_relay(&self) -> watch::Sender<bool> {
-		let hosting = self.app.state::<Hosting>();
+		let hosting = crate::events::core(self.app.app_handle()).state::<Hosting>();
 		let hosts = hosting.hosts();
 		let run = hosts.get(PERSONAL).and_then(|host| host.run.as_ref());
 		run.map(|run| run.stop.clone()).expect("a relay runs")
@@ -1055,12 +1062,15 @@ impl Harness {
 	}
 
 	fn host_keys(&self) -> DeviceKeys {
-		let state = self.app.state::<DeviceKeysState>();
+		let state = crate::events::core(self.app.app_handle()).state::<DeviceKeysState>();
 		DeviceKeys::from_secret(&state.keys().expect("the device keys").secret())
 	}
 
 	fn space_key(&self, space_id: &str) -> HeldSpaceKey {
-		let held = self.app.state::<SpaceKeys>().held(space_id).expect("the space key reads");
+		let held = crate::events::core(self.app.app_handle())
+			.state::<SpaceKeys>()
+			.held(space_id)
+			.expect("the space key reads");
 		held.expect("the hosted space holds a key")
 	}
 
@@ -1630,7 +1640,8 @@ fn host_keys_without_device_keys_or_without_a_space_key_store_fail_with_their_ow
 	run(async {
 		let app = an_app_of_its_own("hosting-keys", mock_builder());
 		let without_device = host_keys(app.handle(), PERSONAL).await.err().map(|(kind, _)| kind);
-		app.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
+		crate::events::core(app.app_handle())
+			.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
 		let without_space = host_keys(app.handle(), PERSONAL).await.err().map(|(kind, _)| kind);
 
 		assert_eq!(without_device, Some(HostingFailureKind::DeviceKeysNotLoaded));
@@ -1780,7 +1791,7 @@ async fn refused_with(harness: &mut Harness, command: &str, args: Value) -> (Val
 	);
 	assert_eq!((answered["id"].clone(), answered["status"].clone()), (json!("after"), json!(200)));
 	assert_eq!(harness.state(), HostingState::Online);
-	let session = harness.app.state::<AccountSession>();
+	let session = crate::events::core(harness.app.app_handle()).state::<AccountSession>();
 	assert!(matches!(session.current(), AccountState::SignedIn(_)), "{:?}", session.current());
 	assert_eq!(session.bearer().expect("the session store reads").as_deref(), Some(BEARER));
 	(refused, answered)
@@ -2402,7 +2413,10 @@ fn deleting_a_hosted_space_closes_its_relay_with_1000_and_reads_off() {
 			panic!("the relay took no close frame: {closed:?}");
 		};
 		assert_eq!(close.code, 1000);
-		assert_eq!(harness.app.state::<Hosting>().current(&work), HostingState::Off);
+		assert_eq!(
+			crate::events::core(harness.app.app_handle()).state::<Hosting>().current(&work),
+			HostingState::Off
+		);
 		let state = crate::events::core(harness.app.app_handle()).state::<DatabaseState>();
 		let hosting = state.as_ref().expect("the database").space_hosting();
 		assert!(hosting.hosted_space_ids().await.expect("the flags").is_empty());
@@ -2995,8 +3009,9 @@ fn an_unreachable_cloud_is_unreachable_with_its_cause() {
 		let database = temp_dir();
 		let app = an_app_of_its_own("hosting-down", mock_builder());
 		crate::events::core(app.app_handle()).manage::<DatabaseState>(Ok(db::open(&database)));
-		app.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &cloud));
-		app.manage(Hosting::new(&cloud, None));
+		crate::events::core(app.app_handle())
+			.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &cloud));
+		crate::events::core(app.app_handle()).manage(Hosting::new(&cloud, None));
 		let state = crate::events::core(app.app_handle()).state::<DatabaseState>();
 		let hosting = state.as_ref().expect("the database").space_hosting();
 		hosting.registered(PERSONAL.to_owned(), INSTANCE.to_owned()).await.expect("planted");
@@ -3060,7 +3075,7 @@ fn a_space_that_is_not_online_does_not_poll_its_members() {
 			Harness::polling_members("members-offline", None, Some(BEARER), POLL_EVERY).await;
 		harness.plant(INSTANCE).await;
 
-		let hosts = harness.app.state::<Hosting>();
+		let hosts = crate::events::core(harness.app.app_handle()).state::<Hosting>();
 		assert!(hosts.hosts().get(PERSONAL).and_then(|host| host.run.as_ref()).is_none());
 		assert!(harness.member_calls().is_empty());
 	});
@@ -5532,21 +5547,26 @@ impl Authoring {
 			store::set(&root, &EnvScope::Account, ACCOUNT_BEARER, bearer)
 				.expect("the bearer is kept");
 		}
-		app.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &cloud));
+		crate::events::core(app.app_handle())
+			.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &cloud));
 		restore(app.handle().clone()).await;
 		crate::events::core(app.app_handle()).manage(webhook::start(app.handle().clone()));
 		let local = super::local_api(app.handle()).expect("the local host api listens");
-		app.manage(Hosting::new(&cloud, Some(local.clone())));
-		app.state::<Hosting>().hosts().entry(PERSONAL.to_owned()).or_default().members =
-			Some(SpaceMembers {
-				members: vec![Member {
-					user_id: GUEST.to_owned(),
-					name: None,
-					email: GUEST_EMAIL.to_owned(),
-					status: MemberStatus::Joined,
-				}],
-				invitations: Vec::new(),
-			});
+		crate::events::core(app.app_handle()).manage(Hosting::new(&cloud, Some(local.clone())));
+		crate::events::core(app.app_handle())
+			.state::<Hosting>()
+			.hosts()
+			.entry(PERSONAL.to_owned())
+			.or_default()
+			.members = Some(SpaceMembers {
+			members: vec![Member {
+				user_id: GUEST.to_owned(),
+				name: None,
+				email: GUEST_EMAIL.to_owned(),
+				status: MemberStatus::Joined,
+			}],
+			invitations: Vec::new(),
+		});
 		let window = WebviewWindowBuilder::new(app.handle(), "main", Default::default())
 			.build()
 			.expect("the window builds");
@@ -5861,7 +5881,7 @@ fn a_hosted_space_with_a_joined_member_names_every_member_to_a_session_and_marks
 		let database = host.reopened_store();
 		let members_of = || super::authorship::members_of(host.app.handle(), &database, PERSONAL);
 		let hosted_with = |members: Vec<Member>| {
-			let hosting = host.app.state::<Hosting>();
+			let hosting = crate::events::core(host.app.app_handle()).state::<Hosting>();
 			let mut hosts = hosting.hosts();
 			let hosted = hosts.entry(PERSONAL.to_owned()).or_default();
 			hosted.state = HostingState::Online;
@@ -5914,7 +5934,7 @@ fn a_relayed_frame_stores_its_roster_account_over_a_forged_author() {
 			vec![(json!("vouched"), json!(GUEST), json!(GUEST_EMAIL))]
 		);
 		assert!(
-			host.app.state::<Hosting>().relayed.is_empty(),
+			crate::events::core(host.app.app_handle()).state::<Hosting>().relayed.is_empty(),
 			"a vouched member outlived its call"
 		);
 	});
@@ -7404,7 +7424,7 @@ async fn held_relay_device(harness: &Harness) -> Option<String> {
 }
 
 async fn account_reached(harness: &Harness, expected: AccountState) {
-	let session = harness.app.state::<AccountSession>();
+	let session = crate::events::core(harness.app.app_handle()).state::<AccountSession>();
 	let is_reached = || (session.current() == expected).then_some(());
 	harness.noticed_until(&format!("the account reaching {expected:?}"), is_reached).await;
 }
@@ -7415,7 +7435,10 @@ fn bearer_stored(harness: &Harness, bearer: &str) {
 }
 
 fn bearer_held(harness: &Harness) -> Option<String> {
-	harness.app.state::<AccountSession>().bearer().expect("the bearer reads")
+	crate::events::core(harness.app.app_handle())
+		.state::<AccountSession>()
+		.bearer()
+		.expect("the bearer reads")
 }
 
 #[test]
@@ -7549,7 +7572,8 @@ fn a_signature_the_relay_cannot_verify_fails_naming_403_and_keeps_the_account_si
 		assert!(detail.contains("403 DEVICE_PROOF_INVALID"), "{detail}");
 		assert_eq!(harness.relay.device.statuses(), vec![StatusCode::FORBIDDEN]);
 		assert_eq!(harness.attempts(), 0);
-		let account = harness.app.state::<AccountSession>().current();
+		let account =
+			crate::events::core(harness.app.app_handle()).state::<AccountSession>().current();
 		assert!(matches!(account, AccountState::SignedIn(_)), "the account was signed out");
 		assert_eq!(bearer_held(&harness).as_deref(), Some(BEARER));
 		assert_eq!(held_relay_device(&harness).await, None);
@@ -7637,7 +7661,8 @@ fn signing_out_deletes_the_relay_device_first_and_still_signs_out_when_the_relay
 			harness.relay.device.account_calls(),
 			vec![format!("DELETE {relay_device_id}"), "sign-out".to_owned()]
 		);
-		let account = harness.app.state::<AccountSession>().current();
+		let account =
+			crate::events::core(harness.app.app_handle()).state::<AccountSession>().current();
 		assert_eq!(account, AccountState::SignedOut { reason: None });
 		assert_eq!(bearer_held(&harness), None);
 		assert_eq!(held_relay_device(&harness).await, None);

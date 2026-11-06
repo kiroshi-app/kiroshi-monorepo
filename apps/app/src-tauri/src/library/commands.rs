@@ -326,11 +326,11 @@ pub async fn library_import<R: Runtime>(
 pub async fn library_import_url<R: Runtime>(
 	app: AppHandle<R>,
 	core: State<'_, crate::core_context::Core>,
-	guests: State<'_, RelayGuests>,
 	caller: Caller,
 	space_id: String,
 	url: String,
 ) -> Result<LibraryItem, LibraryImportUrlError> {
+	let guests = core.state::<RelayGuests>();
 	let state = core.state::<db::DatabaseState>();
 	let imported = async {
 		known_space(&state, &space_id).await?;

@@ -92,7 +92,8 @@ pub(super) async fn settled_turn<'a, R: Runtime>(
 	app: &'a AppHandle<R>,
 	space_id: &str,
 ) -> Result<MutexGuard<'a, ()>, MembersError> {
-	let turn = app.state::<Hosting>().inner().members_turn.lock().await;
+	let turn =
+		crate::events::core(app.app_handle()).state::<Hosting>().inner().members_turn.lock().await;
 	let is_pending = database_of(app)?
 		.space_relay()
 		.is_rotation_pending(space_id.to_owned())
@@ -145,7 +146,8 @@ pub(super) async fn rostered_accounts<R: Runtime>(
 }
 
 pub(super) fn host_device<R: Runtime>(app: &AppHandle<R>) -> Result<DeviceKeys, MembersError> {
-	app.state::<DeviceKeysState>()
+	crate::events::core(app.app_handle())
+		.state::<DeviceKeysState>()
 		.keys()
 		.map(|keys| DeviceKeys::from_secret(&keys.secret()))
 		.map_err(|error| MembersError::DeviceKeys { error })
@@ -167,7 +169,7 @@ async fn roster_of<R: Runtime>(
 
 async fn rotated<R: Runtime>(app: &AppHandle<R>, space_id: &str) -> Result<(), MembersError> {
 	let not_rotated = |reason: String| MembersError::KeyNotRotated { reason };
-	let space_keys = app
+	let space_keys = crate::events::core(app.app_handle())
 		.try_state::<SpaceKeys>()
 		.ok_or_else(|| not_rotated("the space key store is not loaded".to_owned()))?;
 	let current = space_keys

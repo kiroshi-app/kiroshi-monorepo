@@ -137,7 +137,7 @@ async fn device_list<R: Runtime>(
 	instance_id: &str,
 ) -> Result<Vec<CloudDevice>, MembersError> {
 	let bearer = bearer_of(app)?;
-	let listed = app
+	let listed = crate::events::core(app.app_handle())
 		.state::<Hosting>()
 		.cloud
 		.devices(&bearer, instance_id)

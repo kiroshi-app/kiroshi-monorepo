@@ -31,7 +31,7 @@ pub(super) async fn asked<R: Runtime>(
 ) -> Result<JoinedSpace, JoinedSpaceError> {
 	let SharedSpace { space_id, link } = relay::shared_space(app, &id).await?;
 	let args = json!({ "id": space_id, "name": name, "colour": colour });
-	let bound = app.state::<RelayGuests>().answer_bound();
+	let bound = crate::events::core(app.app_handle()).state::<RelayGuests>().answer_bound();
 	let call = HostCall { command: SPACE_UPDATE_COMMAND, args, bound };
 	let space = space_answered(&id, relay::host_answered(app, &id, &link, call).await?)?;
 	let described = SpaceDescribed { space_id: space.id, name: space.name, colour: space.colour };

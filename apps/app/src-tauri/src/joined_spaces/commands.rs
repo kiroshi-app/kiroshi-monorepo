@@ -110,7 +110,7 @@ pub(super) async fn presented<R: Runtime>(
 	let roster = database.joined_space_members().members(joined.id.clone()).await?;
 	let JoinedReach::Relay { instance_id } = &joined.reach;
 	let wait = held::wait_or_unread(app, &joined.id, instance_id);
-	let cloud = app.state::<RelayGuests>().inner().cloud();
+	let cloud = crate::events::core(app.app_handle()).state::<RelayGuests>().inner().cloud();
 	Ok(JoinedSpace::presented(joined, cloud, wait, &roster))
 }
 
@@ -195,10 +195,15 @@ mod tests {
 	fn app_reaching(dir: &Path, api_url: &str) -> AppOfItsOwn {
 		let app = an_app_of_its_own("joined-spaces", mock_builder());
 		crate::events::core(app.app_handle()).manage::<db::DatabaseState>(Ok(db::open(dir)));
-		app.manage(AccountSession::new(Ok::<PathBuf, _>(dir.join("account")), api_url));
-		app.manage(RelayGuests::new(api_url));
+		crate::events::core(app.app_handle())
+			.manage(AccountSession::new(Ok::<PathBuf, _>(dir.join("account")), api_url));
+		crate::events::core(app.app_handle()).manage(RelayGuests::new(api_url));
 		let identifier = app.config().identifier.clone();
-		app.manage(SpaceKeys::new(InstallKind::Dev, identifier, Some(dir.join("keys"))));
+		crate::events::core(app.app_handle()).manage(SpaceKeys::new(
+			InstallKind::Dev,
+			identifier,
+			Some(dir.join("keys")),
+		));
 		app
 	}
 
@@ -319,7 +324,7 @@ mod tests {
 		};
 		let database = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 		let joined = ready(&database).expect("the database").joined_spaces().join(candidate).await;
-		let guests = app.state::<RelayGuests>();
+		let guests = crate::events::core(app.app_handle()).state::<RelayGuests>();
 		JoinedSpace::presented(joined.expect("the join"), guests.cloud(), wait, &[])
 	}
 
@@ -397,7 +402,10 @@ mod tests {
 		let app = app_over(&dir);
 		let keyless = held(&app).await;
 		let space = HeldSpaceKey::first().expect("randomness");
-		app.state::<SpaceKeys>().stored("joined-instance-2", space).expect("the key is kept");
+		crate::events::core(app.app_handle())
+			.state::<SpaceKeys>()
+			.stored("joined-instance-2", space)
+			.expect("the key is kept");
 		let keyed = held_over(&app, "instance-2", None).await;
 		let unreadable = held_over(&app, "instance.3", None).await;
 
@@ -540,7 +548,12 @@ mod tests {
 		assert_eq!(refused, Err(JoinedSpaceError::SessionRevoked));
 		left_once(&relay);
 		tokio::time::timeout(Duration::from_secs(60), async {
-			while app.state::<AccountSession>().bearer().expect("the store reads").is_some() {
+			while crate::events::core(app.app_handle())
+				.state::<AccountSession>()
+				.bearer()
+				.expect("the store reads")
+				.is_some()
+			{
 				tokio::time::sleep(Duration::from_millis(10)).await;
 			}
 		})

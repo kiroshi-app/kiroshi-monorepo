@@ -133,7 +133,7 @@ fn entered<R: Runtime>(
 	instance_id: Option<&str>,
 	state: HostingState,
 ) {
-	let hosting = app.state::<Hosting>();
+	let hosting = crate::events::core(app.app_handle()).state::<Hosting>();
 	let instance_id = {
 		let mut hosts = hosting.hosts();
 		let host = hosts.entry(space_id.to_owned()).or_default();
@@ -163,7 +163,7 @@ pub async fn start<R: Runtime>(
 	app: &AppHandle<R>,
 	space_id: String,
 ) -> Result<HostingState, SpaceError> {
-	let hosting = app.state::<Hosting>();
+	let hosting = crate::events::core(app.app_handle()).state::<Hosting>();
 	let _turn = hosting.turn.lock().await;
 	let database_state = crate::events::core(app.app_handle()).state::<DatabaseState>();
 	let database = ready(&database_state)?;
@@ -185,7 +185,7 @@ async fn begun<R: Runtime>(
 	finished(&space_id, hosting.taken_run(&space_id)).await;
 	let instance_id = registration.instance_id.clone();
 	let state = opening(Opening {
-		bearer: app.state::<AccountSession>().bearer(),
+		bearer: crate::events::core(app.app_handle()).state::<AccountSession>().bearer(),
 		is_awaiting_approval: crate::devices::is_awaiting_approval(app),
 		is_local_api_listening: hosting.local.is_some(),
 	});
@@ -246,7 +246,7 @@ pub async fn stop<R: Runtime>(
 	app: &AppHandle<R>,
 	space_id: String,
 ) -> Result<HostingState, SpaceError> {
-	let hosting = app.state::<Hosting>();
+	let hosting = crate::events::core(app.app_handle()).state::<Hosting>();
 	let _turn = hosting.turn.lock().await;
 	let database_state = crate::events::core(app.app_handle()).state::<DatabaseState>();
 	let database = ready(&database_state)?;
@@ -258,7 +258,7 @@ pub async fn stop<R: Runtime>(
 }
 
 pub async fn forgotten<R: Runtime>(app: &AppHandle<R>, space_id: &str) {
-	let Some(hosting) = app.try_state::<Hosting>() else {
+	let Some(hosting) = crate::events::core(app.app_handle()).try_state::<Hosting>() else {
 		return;
 	};
 	let _turn = hosting.turn.lock().await;
@@ -271,7 +271,7 @@ pub async fn forgotten<R: Runtime>(app: &AppHandle<R>, space_id: &str) {
 }
 
 pub async fn signed_out<R: Runtime>(app: &AppHandle<R>) {
-	let Some(hosting) = app.try_state::<Hosting>() else {
+	let Some(hosting) = crate::events::core(app.app_handle()).try_state::<Hosting>() else {
 		return;
 	};
 	let _turn = hosting.turn.lock().await;
@@ -292,10 +292,10 @@ pub async fn described<R: Runtime>(
 	name: &str,
 	colour: Option<Hue>,
 ) {
-	let Some(hosting) = app.try_state::<Hosting>() else {
+	let Some(hosting) = crate::events::core(app.app_handle()).try_state::<Hosting>() else {
 		return;
 	};
-	let bearer = match app.state::<AccountSession>().bearer() {
+	let bearer = match crate::events::core(app.app_handle()).state::<AccountSession>().bearer() {
 		Ok(Some(bearer)) => bearer,
 		Ok(None) => {
 			return log::warn!("instance {instance_id} was not described to the relay: signed out")
@@ -313,7 +313,7 @@ pub async fn described<R: Runtime>(
 }
 
 pub fn renamed<R: Runtime>(app: &AppHandle<R>) {
-	let Some(hosting) = app.try_state::<Hosting>() else {
+	let Some(hosting) = crate::events::core(app.app_handle()).try_state::<Hosting>() else {
 		return;
 	};
 	for host in hosting.hosts().values_mut() {
@@ -322,7 +322,7 @@ pub fn renamed<R: Runtime>(app: &AppHandle<R>) {
 }
 
 pub async fn resumed<R: Runtime>(app: &AppHandle<R>) {
-	let Some(hosting) = app.try_state::<Hosting>() else {
+	let Some(hosting) = crate::events::core(app.app_handle()).try_state::<Hosting>() else {
 		return;
 	};
 	let _turn = hosting.turn.lock().await;
