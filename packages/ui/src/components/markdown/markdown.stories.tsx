@@ -1,12 +1,21 @@
 import { useState } from "react"
-import { expect, fn, spyOn, waitFor, within } from "storybook/test"
+import { expect, fn, spyOn, userEvent, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
+import {
+	BOARD_CARD_TITLE,
+	PLANNING_BOARD_SNAPSHOT,
+} from "@workspace/ui/components/board/board.fixtures"
+import {
+	BoardCard,
+	type BoardCardSummary,
+} from "@workspace/ui/components/board/board-card"
 import {
 	LIBRARY_STORED_IMAGES,
 	resolvedLibraryImageOf,
 } from "@workspace/ui/components/library.fixtures"
 import { Markdown } from "@workspace/ui/components/markdown"
+import type { MarkdownBoardLinkRenderer } from "@workspace/ui/components/markdown/board-link"
 import {
 	MessageBubble,
 	MessageBubbleContent,
@@ -2189,4 +2198,146 @@ export const AttachmentPathWithSpaces = meta.story({
 			CITED_SPACED_FILE_PATH,
 		)
 	},
+})
+
+const BOARD_FILE = "boards/Launch week plan.canvas"
+
+const BOARD_ALONE = `Here is the board for the launch.
+
+[${BOARD_CARD_TITLE}](<${BOARD_FILE}>)
+
+Open it beside the thread to move things around.`
+
+const BOARD_IN_SENTENCE = `I sketched [${BOARD_CARD_TITLE}](<${BOARD_FILE}>) so we can split the work before Friday.`
+
+const BOARD_SENTENCE = `I sketched ${BOARD_CARD_TITLE} so we can split the work before Friday.`
+
+const LOADED_BOARD: BoardCardSummary = {
+	status: "loaded",
+	itemCount: 14,
+	snapshot: PLANNING_BOARD_SNAPSHOT,
+}
+
+const LOADING_BOARD: BoardCardSummary = { status: "loading" }
+
+const openBoard = fn()
+
+const boardSlotOf =
+	(summary: BoardCardSummary): MarkdownBoardLinkRenderer =>
+	({ words }) => (
+		<BoardCard
+			editedLabel="edited just now"
+			onOpen={openBoard}
+			pointers={[]}
+			summary={summary}
+			title={words}
+		/>
+	)
+
+const BOARD_SLOT_FAKES =
+	"The host slot here draws `BoardCard` from the board fixtures; in the app it reads the board from the Library."
+
+type BoardLinkPlayContext = { canvasElement: HTMLElement }
+
+const expectBoardInPlaceOfLink = async ({
+	canvasElement,
+}: BoardLinkPlayContext) => {
+	const canvas = within(canvasElement)
+	const card = canvas.getByRole("article")
+	await expect(card.closest("p")).toBeNull()
+	await expect(card.parentElement).toHaveAttribute("data-slot", "markdown")
+	await expect(canvasElement.querySelector("a")).toBeNull()
+	await expect(canvas.queryByText(BOARD_FILE, { exact: false })).toBeNull()
+	return card
+}
+
+const expectLoadedBoardLink = async (context: BoardLinkPlayContext) => {
+	openBoard.mockClear()
+	const card = await expectBoardInPlaceOfLink(context)
+	await expect(card).not.toHaveAttribute("aria-busy")
+	await userEvent.click(
+		within(card).getByRole("button", {
+			name: "Open",
+			description: BOARD_CARD_TITLE,
+		}),
+	)
+	await expect(openBoard).toHaveBeenCalledOnce()
+}
+
+const expectLoadingBoardLink = async (context: BoardLinkPlayContext) => {
+	const card = await expectBoardInPlaceOfLink(context)
+	await expect(card).toHaveAttribute("aria-busy", "true")
+	await expect(
+		card.querySelector('[data-slot="board-card-preview-skeleton"]'),
+	).not.toBeNull()
+}
+
+const expectBoardAfterSentence = async (context: BoardLinkPlayContext) => {
+	const card = await expectBoardInPlaceOfLink(context)
+	const sentence = within(context.canvasElement).getByText(BOARD_SENTENCE)
+	await expect(sentence.tagName).toBe("P")
+	await expect(sentence.nextElementSibling).toBe(card)
+	for (const paragraph of context.canvasElement.querySelectorAll("p")) {
+		await expect(paragraph).not.toContainElement(card)
+	}
+}
+
+export const BoardLinkLoaded = meta.story({
+	args: { children: BOARD_ALONE, renderBoardLink: boardSlotOf(LOADED_BOARD) },
+	parameters: {
+		docs: {
+			description: {
+				story: `An answer posting a Library board as a link alone in its paragraph, \`[title](<board.canvas>)\`. Check the board card stands in place of that paragraph, between the prose before and after it, that no link and no file name is left behind, and that Open calls back once. ${BOARD_SLOT_FAKES}`,
+			},
+		},
+	},
+	play: expectLoadedBoardLink,
+})
+
+export const BoardLinkLoadedDark = meta.story({
+	args: { children: BOARD_ALONE, renderBoardLink: boardSlotOf(LOADED_BOARD) },
+	globals: { theme: "dark" },
+	play: expectLoadedBoardLink,
+})
+
+export const BoardLinkLoading = meta.story({
+	args: { children: BOARD_ALONE, renderBoardLink: boardSlotOf(LOADING_BOARD) },
+	parameters: {
+		docs: {
+			description: {
+				story: `The same answer while the host still reads the board. Check the loading card holds the place of the paragraph, its line and preview drawn as skeletons, and no link is left behind. ${BOARD_SLOT_FAKES}`,
+			},
+		},
+	},
+	play: expectLoadingBoardLink,
+})
+
+export const BoardLinkLoadingDark = meta.story({
+	args: { children: BOARD_ALONE, renderBoardLink: boardSlotOf(LOADING_BOARD) },
+	globals: { theme: "dark" },
+	play: expectLoadingBoardLink,
+})
+
+export const BoardLinkInSentence = meta.story({
+	args: {
+		children: BOARD_IN_SENTENCE,
+		renderBoardLink: boardSlotOf(LOADED_BOARD),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story: `An answer naming a Library board mid-sentence. Check the link words stay in the sentence as plain words, and the board card follows that paragraph as its own block, never inside it. ${BOARD_SLOT_FAKES}`,
+			},
+		},
+	},
+	play: expectBoardAfterSentence,
+})
+
+export const BoardLinkInSentenceDark = meta.story({
+	args: {
+		children: BOARD_IN_SENTENCE,
+		renderBoardLink: boardSlotOf(LOADED_BOARD),
+	},
+	globals: { theme: "dark" },
+	play: expectBoardAfterSentence,
 })

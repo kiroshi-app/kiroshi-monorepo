@@ -12,6 +12,7 @@ import { useTranslation } from "react-i18next"
 import type { ExtraProps } from "react-markdown"
 
 import { Icons } from "@workspace/ui/components/icons"
+import { MarkdownParagraph } from "@workspace/ui/components/markdown/paragraph"
 import { cn } from "@workspace/ui/lib/utils"
 
 export type MarkdownTaskCheckboxProps = ComponentPropsWithoutRef<"input"> &
@@ -66,7 +67,8 @@ const isNestedList = (child: ReactNode) =>
 	isValidElement(child) && (child.type === "ul" || child.type === "ol")
 
 const isParagraph = (child: ReactNode) =>
-	isValidElement(child) && child.type === "p"
+	isValidElement(child) &&
+	(child.type === "p" || child.type === MarkdownParagraph)
 
 const trimTextAfterBox = (nodes: ReactNode[]) =>
 	nodes.map((child, index) =>

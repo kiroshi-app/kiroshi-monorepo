@@ -19,6 +19,7 @@ import {
 	MarkdownSpan,
 	MarkdownStaticSpan,
 } from "@workspace/ui/components/markdown/mention"
+import { MarkdownParagraph } from "@workspace/ui/components/markdown/paragraph"
 import {
 	MarkdownStaticTable,
 	MarkdownTable,
@@ -37,6 +38,7 @@ export const MARKDOWN_COMPONENTS: Components = {
 	img: MarkdownImage,
 	input: MarkdownTaskCheckbox,
 	li: MarkdownListItem,
+	p: MarkdownParagraph,
 	pre: MarkdownPre,
 	span: MarkdownSpan,
 	table: MarkdownTable,
