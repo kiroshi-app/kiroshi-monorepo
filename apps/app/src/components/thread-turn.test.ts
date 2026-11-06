@@ -1083,6 +1083,28 @@ describe("a Library board the agent links in its message", () => {
 		expect(screen.getByRole("article", { name: /^Roadmap/ })).toBeTruthy()
 	})
 
+	it.each([
+		["a full reference", "See [Launch week][launch] for the plan."],
+		["a collapsed reference", "See [Launch][] for the plan."],
+		["a shortcut reference", "See [LAUNCH] for the plan."],
+	])("draws one card for a posted board linked by %s", (_, sentence) => {
+		renderTurn("assistant", `${sentence}\n\n[launch]: <Launch week.canvas>`, {
+			documents: threadDocumentsOf(),
+			names: [LAUNCH_BOARD.name],
+		})
+
+		expect(boardCards()).toEqual([boardCard()])
+	})
+
+	it("keeps the card of a posted board whose reference no link uses", () => {
+		renderTurn("assistant", "Done.\n\n[launch]: <Launch week.canvas>", {
+			documents: threadDocumentsOf(),
+			names: [LAUNCH_BOARD.name],
+		})
+
+		expect(boardCards()).toEqual([boardCard()])
+	})
+
 	it("keeps the card of a posted board when its link only sits in code", () => {
 		renderTurn("assistant", "Run `[Launch week](<Launch week.canvas>)`.", {
 			documents: threadDocumentsOf(),
