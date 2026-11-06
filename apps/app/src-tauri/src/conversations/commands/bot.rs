@@ -300,6 +300,10 @@ fn announce_updated(core: &crate::core_context::Core, updated: &Bot) {
 #[tauri::command]
 #[specta::specta]
 pub fn conversation_suggested_bots() -> Vec<SuggestedBot> {
+	suggested_bots()
+}
+
+pub fn suggested_bots() -> Vec<SuggestedBot> {
 	SUGGESTED_BOTS.to_vec()
 }
 

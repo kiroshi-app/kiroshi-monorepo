@@ -623,15 +623,9 @@ impl Host {
 			created_at: 1,
 		};
 		let summoned = vec![scope.bot_id.clone()];
-		conversation_send_user_message(
-			self.app.handle().clone(),
-			self.app.state(),
-			Caller::Host,
-			message,
-			summoned,
-		)
-		.await
-		.expect("the host message is stored");
+		conversation_send_user_message(self.app.state(), Caller::Host, message, summoned)
+			.await
+			.expect("the host message is stored");
 		let turn = SubmittedTurn { turn_id: turn_id.to_owned(), prompt_id: id.to_owned() };
 		submit_prompt(
 			kiroshi_app::events::core(self.app.handle()).state(),
@@ -1029,8 +1023,7 @@ fn a_stop_after_a_handover_cancels_the_companion_handed_the_work_and_closes_the_
 		let heard_before_stop = host.frames.len();
 		let handed_over: RuntimeScope =
 			serde_json::from_value(host.scope_of(ADA)).expect("a runtime scope");
-		let outcome =
-			agent_cancel_turn(host.app.handle().clone(), host.app.state(), handed_over).await;
+		let outcome = agent_cancel_turn(host.app.state(), handed_over).await;
 
 		assert_eq!(outcome, Ok(CancelOutcome::Cancelled));
 
@@ -1321,7 +1314,7 @@ fn a_queued_member_turn_withdrawn_by_a_stop_leaves_its_run_cancelled_and_not_awa
 		host.heard_until(|frames| !asked_to_write(frames, ADA).is_empty()).await;
 		host.send_turn(sent("p1", "t1", "member second"), &[ADA]).await;
 
-		let outcome = agent_cancel_turn(host.app.handle().clone(), host.app.state(), held).await;
+		let outcome = agent_cancel_turn(host.app.state(), held).await;
 
 		assert_eq!(outcome, Ok(CancelOutcome::Cancelled));
 		assert_eq!(host.runs_of("t1").await, 0, "the withdrawn run was left awaited");

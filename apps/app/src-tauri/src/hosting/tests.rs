@@ -6026,15 +6026,9 @@ fn a_human_message_records_whether_it_was_written_here_or_came_through_the_relay
 		.await;
 		let unvouched = serde_json::from_value(host.unstarted("unvouched")["message"].clone())
 			.expect("the message parses");
-		conversation_send_user_message(
-			host.app.handle().clone(),
-			host.app.state(),
-			Caller::Relayed(None),
-			unvouched,
-			vec![],
-		)
-		.await
-		.expect("the unvouched message is sent");
+		conversation_send_user_message(host.app.state(), Caller::Relayed(None), unvouched, vec![])
+			.await
+			.expect("the unvouched message is sent");
 
 		let read = direct(&host.window, "conversation_message_page", host.page());
 
@@ -6630,18 +6624,15 @@ impl Guest {
 	}
 
 	async fn conversation_deleted(&self, conversation_id: &str) {
-		let app = self.harness.app.handle().clone();
-		conversation_delete(app, self.harness.app.state(), conversation_id.to_owned())
+		conversation_delete(self.harness.app.state(), conversation_id.to_owned())
 			.await
 			.expect("the conversation is deleted");
 	}
 
 	async fn paged_row(&self, conversation_id: &str) -> ConversationInPage {
-		let app = self.harness.app.handle().clone();
-		let page =
-			conversation_page(app, self.harness.app.state(), PERSONAL.to_owned(), None, None)
-				.await
-				.expect("the page is read");
+		let page = conversation_page(self.harness.app.state(), PERSONAL.to_owned(), None, None)
+			.await
+			.expect("the page is read");
 		page.conversations
 			.into_iter()
 			.find(|row| row.conversation.id == conversation_id)
@@ -6707,9 +6698,8 @@ impl Guest {
 	}
 
 	async fn user_message_sent(&self, conversation_id: &str) -> i64 {
-		let app = self.harness.app.handle().clone();
 		let message = a_user_message(conversation_id, &format!("t-new-{conversation_id}"));
-		conversation_send_user_message(app, self.harness.app.state(), Caller::Host, message, vec![])
+		conversation_send_user_message(self.harness.app.state(), Caller::Host, message, vec![])
 			.await
 			.expect("the message is sent")
 	}

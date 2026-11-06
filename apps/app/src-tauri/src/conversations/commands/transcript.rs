@@ -29,6 +29,15 @@ pub async fn conversation_message_page(
 	before_seq: Option<i64>,
 	limit: u32,
 ) -> Result<TranscriptPage, TranscriptStoreError> {
+	message_page(core.inner(), conversation_id, before_seq, limit).await
+}
+
+pub(crate) async fn message_page(
+	core: &crate::core_context::Core,
+	conversation_id: String,
+	before_seq: Option<i64>,
+	limit: u32,
+) -> Result<TranscriptPage, TranscriptStoreError> {
 	let state = core.state::<db::DatabaseState>();
 	let query = MessagePageQuery { conversation_id: conversation_id.clone(), before_seq, limit };
 	let page = ready(&state)?.messages().page_messages(query).await?;
@@ -120,47 +129,52 @@ pub async fn conversation_pinned_messages(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn conversation_start_turn<R: Runtime>(
-	app: AppHandle<R>,
+pub async fn conversation_start_turn(
 	core: State<'_, crate::core_context::Core>,
+	turn: NewTurn,
+) -> Result<i64, TranscriptStoreError> {
+	start_turn(core.inner(), turn).await
+}
+
+pub(crate) async fn start_turn(
+	core: &crate::core_context::Core,
 	turn: NewTurn,
 ) -> Result<i64, TranscriptStoreError> {
 	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	let conversation_id = turn.conversation_id.clone();
-	let seq =
-		match owned_by_host(crate::events::core(app.app_handle()), |host| host.owns_turn(&turn.id))
-		{
-			true => database.messages().ensure_turn(turn.into()).await?,
-			false => database.messages().start_turn(turn.into()).await?,
-		};
-	conversation_state::observe_reporting(crate::events::core(&app), database, &conversation_id)
-		.await;
+	let seq = match owned_by_host(core, |host| host.owns_turn(&turn.id)) {
+		true => database.messages().ensure_turn(turn.into()).await?,
+		false => database.messages().start_turn(turn.into()).await?,
+	};
+	conversation_state::observe_reporting(core, database, &conversation_id).await;
 	Ok(seq)
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn conversation_complete_turn<R: Runtime>(
-	app: AppHandle<R>,
+pub async fn conversation_complete_turn(
 	core: State<'_, crate::core_context::Core>,
+	id: String,
+	completed_at: i64,
+) -> Result<(), TranscriptStoreError> {
+	complete_turn(core.inner(), id, completed_at).await
+}
+
+pub(crate) async fn complete_turn(
+	core: &crate::core_context::Core,
 	id: String,
 	completed_at: i64,
 ) -> Result<(), TranscriptStoreError> {
 	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
-	if owned_by_host(crate::events::core(app.app_handle()), |host| host.owns_turn(&id)) {
+	if owned_by_host(core, |host| host.owns_turn(&id)) {
 		return Ok(());
 	}
 	let conversation_id = database.messages().conversation_of_turn(id.clone()).await?;
 	database.messages().complete_turn(id, completed_at).await?;
 	if let Some(conversation_id) = conversation_id {
-		conversation_state::observe_reporting(
-			crate::events::core(&app),
-			database,
-			&conversation_id,
-		)
-		.await;
+		conversation_state::observe_reporting(core, database, &conversation_id).await;
 	}
 	Ok(())
 }
@@ -202,15 +216,23 @@ pub async fn conversation_append_user_message<R: Runtime>(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn conversation_send_user_message<R: Runtime>(
-	app: AppHandle<R>,
+pub async fn conversation_send_user_message(
 	core: State<'_, crate::core_context::Core>,
 	caller: Caller,
 	message: NewUserMessage,
 	summoned: Vec<String>,
 ) -> Result<i64, TranscriptStoreError> {
+	send_user_message(core.inner(), caller, message, summoned).await
+}
+
+pub(crate) async fn send_user_message(
+	core: &crate::core_context::Core,
+	caller: Caller,
+	message: NewUserMessage,
+	summoned: Vec<String>,
+) -> Result<i64, TranscriptStoreError> {
 	let state = core.state::<db::DatabaseState>();
-	store_sent(crate::events::core(&app), ready(&state)?, caller, message, &summoned).await
+	store_sent(core, ready(&state)?, caller, message, &summoned).await
 }
 
 #[tauri::command]
@@ -398,25 +420,24 @@ async fn announce_stored(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn conversation_open_assistant_message<R: Runtime>(
-	app: AppHandle<R>,
+pub async fn conversation_open_assistant_message(
 	core: State<'_, crate::core_context::Core>,
+	message: NewAssistantMessage,
+) -> Result<i64, TranscriptStoreError> {
+	open_assistant_message(core.inner(), message).await
+}
+
+pub(crate) async fn open_assistant_message(
+	core: &crate::core_context::Core,
 	message: NewAssistantMessage,
 ) -> Result<i64, TranscriptStoreError> {
 	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	let messages = database.messages();
-	if !owned_by_host(crate::events::core(app.app_handle()), |host| host.owns_message(&message.id))
-	{
+	if !owned_by_host(core, |host| host.owns_message(&message.id)) {
 		let conversation_id = message.conversation_id.clone();
 		let seq = messages.open_assistant_message(message.into()).await?;
-		announce_conversation(
-			crate::events::core(&app),
-			database,
-			CONVERSATION_UPDATED,
-			&conversation_id,
-		)
-		.await;
+		announce_conversation(core, database, CONVERSATION_UPDATED, &conversation_id).await;
 		return Ok(seq);
 	}
 	match messages.message(message.conversation_id, message.id.clone()).await? {
@@ -427,15 +448,22 @@ pub async fn conversation_open_assistant_message<R: Runtime>(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn conversation_append_text<R: Runtime>(
-	app: AppHandle<R>,
+pub async fn conversation_append_text(
 	core: State<'_, crate::core_context::Core>,
+	id: String,
+	delta: String,
+) -> Result<(), TranscriptStoreError> {
+	append_text(core.inner(), id, delta).await
+}
+
+pub(crate) async fn append_text(
+	core: &crate::core_context::Core,
 	id: String,
 	delta: String,
 ) -> Result<(), TranscriptStoreError> {
 	let state = core.state::<db::DatabaseState>();
 	let messages = ready(&state)?.messages();
-	if owned_by_host(crate::events::core(app.app_handle()), |host| host.owns_message(&id)) {
+	if owned_by_host(core, |host| host.owns_message(&id)) {
 		return Ok(());
 	}
 	Ok(messages.append_text(id, delta).await?)
@@ -443,9 +471,17 @@ pub async fn conversation_append_text<R: Runtime>(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn conversation_finalize_message<R: Runtime>(
-	app: AppHandle<R>,
+pub async fn conversation_finalize_message(
 	core: State<'_, crate::core_context::Core>,
+	id: String,
+	completion: TerminalCompletion,
+	settled_text: Option<String>,
+) -> Result<(), TranscriptStoreError> {
+	finalize_message(core.inner(), id, completion, settled_text).await
+}
+
+pub(crate) async fn finalize_message(
+	core: &crate::core_context::Core,
 	id: String,
 	completion: TerminalCompletion,
 	settled_text: Option<String>,
@@ -453,28 +489,16 @@ pub async fn conversation_finalize_message<R: Runtime>(
 	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	let messages = database.messages();
-	if owned_by_host(crate::events::core(app.app_handle()), |host| host.owns_message(&id)) {
+	if owned_by_host(core, |host| host.owns_message(&id)) {
 		return Ok(());
 	}
 	let has_closed = messages.finalize_message(id.clone(), completion.into(), settled_text).await?;
 	match messages.conversation_of_message(id.clone()).await {
 		Ok(Some(conversation_id)) => {
 			if has_closed {
-				announce_stored(
-					crate::events::core(app.app_handle()),
-					database,
-					conversation_id.clone(),
-					id,
-				)
-				.await;
+				announce_stored(core, database, conversation_id.clone(), id).await;
 			}
-			announce_conversation(
-				crate::events::core(&app),
-				database,
-				CONVERSATION_UPDATED,
-				&conversation_id,
-			)
-			.await
+			announce_conversation(core, database, CONVERSATION_UPDATED, &conversation_id).await
 		}
 		Ok(None) => {
 			eprintln!("{UPDATED_EVENT} was not announced for message {id}: it was not found")
@@ -542,8 +566,7 @@ mod tests {
 			.await
 			.expect("the conversation is deleted");
 
-		let refused =
-			conversation_start_turn(app.handle().clone(), app.state(), a_turn("t1")).await;
+		let refused = conversation_start_turn(app.state(), a_turn("t1")).await;
 
 		assert_eq!(refused, Err(TranscriptStoreError::UnknownConversation { id: "c1".into() }));
 	}
@@ -551,9 +574,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_foreign_key_failure_reaches_the_frontend_with_its_operation_table_and_code() {
 		let app = a_host("foreign-key").await;
-		conversation_start_turn(app.handle().clone(), app.state(), a_turn("t1"))
-			.await
-			.expect("the turn starts");
+		conversation_start_turn(app.state(), a_turn("t1")).await.expect("the turn starts");
 		let reply = NewAssistantMessage {
 			id: "r1".into(),
 			conversation_id: "c1".into(),
@@ -563,7 +584,7 @@ mod tests {
 			created_at: 2,
 		};
 
-		let refused = conversation_open_assistant_message(app.handle().clone(), app.state(), reply)
+		let refused = conversation_open_assistant_message(app.state(), reply)
 			.await
 			.expect_err("a reply to a missing message was stored");
 
@@ -593,9 +614,7 @@ mod tests {
 	}
 
 	async fn write_a_report(app: &AppOfItsOwn) {
-		conversation_start_turn(app.handle().clone(), app.state(), a_turn("t1"))
-			.await
-			.expect("the turn starts");
+		conversation_start_turn(app.state(), a_turn("t1")).await.expect("the turn starts");
 		let report = NewAssistantMessage {
 			id: "r1".into(),
 			conversation_id: "c1".into(),
@@ -604,28 +623,18 @@ mod tests {
 			replied_to_message_id: None,
 			created_at: 2,
 		};
-		conversation_open_assistant_message(app.handle().clone(), app.state(), report)
-			.await
-			.expect("the report opens");
-		conversation_append_text(app.handle().clone(), app.state(), "r1".into(), "done".into())
+		conversation_open_assistant_message(app.state(), report).await.expect("the report opens");
+		conversation_append_text(app.state(), "r1".into(), "done".into())
 			.await
 			.expect("the report text lands");
 		finalize_the_report(app).await;
-		conversation_complete_turn(app.handle().clone(), app.state(), "t1".into(), 3)
-			.await
-			.expect("the turn completes");
+		conversation_complete_turn(app.state(), "t1".into(), 3).await.expect("the turn completes");
 	}
 
 	async fn finalize_the_report(app: &AppOfItsOwn) {
-		conversation_finalize_message(
-			app.handle().clone(),
-			app.state(),
-			"r1".into(),
-			TerminalCompletion::Complete,
-			None,
-		)
-		.await
-		.expect("the report is finalized");
+		conversation_finalize_message(app.state(), "r1".into(), TerminalCompletion::Complete, None)
+			.await
+			.expect("the report is finalized");
 	}
 
 	async fn stored_report(app: &AppOfItsOwn) -> serde_json::Value {
@@ -665,14 +674,7 @@ mod tests {
 	}
 
 	async fn send(app: &AppOfItsOwn, message: NewUserMessage) -> Result<i64, TranscriptStoreError> {
-		conversation_send_user_message(
-			app.handle().clone(),
-			app.state(),
-			Caller::Host,
-			message,
-			Vec::new(),
-		)
-		.await
+		conversation_send_user_message(app.state(), Caller::Host, message, Vec::new()).await
 	}
 
 	async fn sent_targets(app: &AppOfItsOwn, ids: &[&str]) {

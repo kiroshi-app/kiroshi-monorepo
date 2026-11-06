@@ -1544,16 +1544,22 @@ pub(crate) async fn run_is_idle(state: &AgentState, scope: &RuntimeScope) -> boo
 
 #[tauri::command]
 #[specta::specta]
-pub async fn agent_cancel_turn<R: Runtime>(
-	app: AppHandle<R>,
+pub async fn agent_cancel_turn(
 	core: State<'_, crate::core_context::Core>,
+	scope: RuntimeScope,
+) -> Result<CancelOutcome, TransportError> {
+	cancel_turn(core.inner(), scope).await
+}
+
+pub(crate) async fn cancel_turn(
+	core: &crate::core_context::Core,
 	scope: RuntimeScope,
 ) -> Result<CancelOutcome, TransportError> {
 	let state = core.state::<AgentState>();
 	if let Some(outcome) = state.host_turns().stop(&scope).await {
 		return Ok(outcome);
 	}
-	Ok(cancel_session_turn(crate::events::core(&app), &state, &scope).await)
+	Ok(cancel_session_turn(core, &state, &scope).await)
 }
 
 pub(crate) async fn cancel_session_turn(
@@ -3155,7 +3161,7 @@ mod tests {
 		}
 
 		async fn listed_state(app: &AppOfItsOwn) -> ConversationState {
-			let rows = conversation_list(app.handle().clone(), app.state(), "personal".to_owned())
+			let rows = conversation_list(app.state(), "personal".to_owned())
 				.await
 				.expect("the list reads");
 			rows.into_iter()

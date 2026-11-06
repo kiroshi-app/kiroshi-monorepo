@@ -23,34 +23,45 @@ use crate::file_store::FileStore;
 
 #[tauri::command]
 #[specta::specta]
-pub async fn conversation_main_chat<R: Runtime>(
-	app: AppHandle<R>,
+pub async fn conversation_main_chat(
 	core: State<'_, crate::core_context::Core>,
+	bot_id: String,
+	space_id: Option<String>,
+) -> Result<Chat, TranscriptStoreError> {
+	main_chat(core.inner(), bot_id, space_id).await
+}
+
+pub(crate) async fn main_chat(
+	core: &crate::core_context::Core,
 	bot_id: String,
 	space_id: Option<String>,
 ) -> Result<Chat, TranscriptStoreError> {
 	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	let chat = database.conversations().ensure_chat(bot_id, space_id).await?;
-	let states =
-		conversation_state::listed(crate::events::core(&app), database, vec![chat.id.clone()])
-			.await?;
+	let states = conversation_state::listed(core, database, vec![chat.id.clone()]).await?;
 	let observed = state_in(&states, &chat.id);
 	Ok(Chat::of(chat, observed))
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn conversation_solo_states<R: Runtime>(
-	app: AppHandle<R>,
+pub async fn conversation_solo_states(
 	core: State<'_, crate::core_context::Core>,
+	space_id: String,
+) -> Result<Vec<SoloState>, TranscriptStoreError> {
+	solo_states(core.inner(), space_id).await
+}
+
+pub(crate) async fn solo_states(
+	core: &crate::core_context::Core,
 	space_id: String,
 ) -> Result<Vec<SoloState>, TranscriptStoreError> {
 	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	let threads = database.conversations().solo_threads(space_id).await?;
 	let ids = threads.iter().map(|thread| thread.conversation_id.clone()).collect();
-	let states = conversation_state::listed(crate::events::core(&app), database, ids).await?;
+	let states = conversation_state::listed(core, database, ids).await?;
 	Ok(threads
 		.into_iter()
 		.map(|thread| SoloState {
@@ -85,17 +96,23 @@ pub async fn conversation_create<R: Runtime>(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn conversation_list<R: Runtime>(
-	app: AppHandle<R>,
+pub async fn conversation_list(
 	core: State<'_, crate::core_context::Core>,
 	space_id: String,
 ) -> Result<Vec<ConversationInList>, TranscriptStoreError> {
+	list_conversations(core.inner(), space_id).await
+}
+
+pub(crate) async fn list_conversations(
+	core: &crate::core_context::Core,
+	space_id: String,
+) -> Result<Vec<ConversationInList>, TranscriptStoreError> {
 	let state = core.state::<db::DatabaseState>();
-	let dir = avatars::Avatars::dir(crate::events::core(&app));
+	let dir = avatars::Avatars::dir(core);
 	let database = ready(&state)?;
 	let stored = database.conversations().conversations(space_id).await?;
 	let ids = stored.iter().map(|room| room.id.clone()).collect();
-	let states = conversation_state::listed(crate::events::core(&app), database, ids).await?;
+	let states = conversation_state::listed(core, database, ids).await?;
 	Ok(stored
 		.into_iter()
 		.map(|room| ConversationInList {
@@ -119,9 +136,17 @@ pub async fn conversation_mission_thread<R: Runtime>(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn conversation_page<R: Runtime>(
-	app: AppHandle<R>,
+pub async fn conversation_page(
 	core: State<'_, crate::core_context::Core>,
+	space_id: String,
+	cursor: Option<String>,
+	limit: Option<u32>,
+) -> Result<ConversationPage, TranscriptStoreError> {
+	conversations_page(core.inner(), space_id, cursor, limit).await
+}
+
+pub(crate) async fn conversations_page(
+	core: &crate::core_context::Core,
 	space_id: String,
 	cursor: Option<String>,
 	limit: Option<u32>,
@@ -135,13 +160,8 @@ pub async fn conversation_page<R: Runtime>(
 		.conversation_page(space_id, after, keyset::page_size(limit))
 		.await?;
 	let ids = read.pinned.iter().chain(&read.page.rows).map(|row| row.conversation.id.clone());
-	let states =
-		conversation_state::listed(crate::events::core(&app), database, ids.collect()).await?;
-	Ok(ConversationPage::of(
-		read,
-		&states,
-		avatars::Avatars::dir(crate::events::core(&app)).as_deref(),
-	))
+	let states = conversation_state::listed(core, database, ids.collect()).await?;
+	Ok(ConversationPage::of(read, &states, avatars::Avatars::dir(core).as_deref()))
 }
 
 #[tauri::command]
@@ -188,20 +208,22 @@ pub async fn conversation_update<R: Runtime>(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn conversation_delete<R: Runtime>(
-	app: AppHandle<R>,
+pub async fn conversation_delete(
 	core: State<'_, crate::core_context::Core>,
+	conversation_id: String,
+) -> Result<(), TranscriptStoreError> {
+	delete_conversation(core.inner(), conversation_id).await
+}
+
+pub(crate) async fn delete_conversation(
+	core: &crate::core_context::Core,
 	conversation_id: String,
 ) -> Result<(), TranscriptStoreError> {
 	let state = core.state::<db::DatabaseState>();
 	let conversations = ready(&state)?.conversations();
 	let space_id = conversations.space(conversation_id.clone()).await?;
 	conversations.delete_conversation(conversation_id.clone()).await?;
-	launch::announce(
-		crate::events::core(&app),
-		CONVERSATION_DELETED,
-		ConversationDeleted { space_id, conversation_id },
-	);
+	launch::announce(core, CONVERSATION_DELETED, ConversationDeleted { space_id, conversation_id });
 	Ok(())
 }
 

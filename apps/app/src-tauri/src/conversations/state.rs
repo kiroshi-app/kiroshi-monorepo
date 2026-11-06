@@ -211,8 +211,7 @@ mod tests {
 	async fn listed_state(
 		app: &App<MockRuntime>,
 	) -> Result<ConversationState, TranscriptStoreError> {
-		let rows =
-			conversation_list(app.handle().clone(), app.state(), "personal".to_owned()).await?;
+		let rows = conversation_list(app.state(), "personal".to_owned()).await?;
 		let row = rows.into_iter().find(|row| row.conversation.id == "c1");
 		Ok(row.expect("the room is listed").observed.state)
 	}
@@ -222,10 +221,9 @@ mod tests {
 	}
 
 	async fn paged(app: &App<MockRuntime>, conversation_id: &str) -> ObservedState {
-		let page =
-			conversation_page(app.handle().clone(), app.state(), "personal".to_owned(), None, None)
-				.await
-				.expect("the page is read");
+		let page = conversation_page(app.state(), "personal".to_owned(), None, None)
+			.await
+			.expect("the page is read");
 		let row = page.conversations.into_iter().find(|row| row.conversation.id == conversation_id);
 		row.expect("the room is on the page").observed
 	}
@@ -584,9 +582,7 @@ mod tests {
 		let app = a_host("deleted").await;
 		ask(&app, PromptKind::Question).await;
 
-		conversation_delete(app.handle().clone(), app.state(), "c1".to_owned())
-			.await
-			.expect("the room is deleted");
+		conversation_delete(app.state(), "c1".to_owned()).await.expect("the room is deleted");
 
 		let left: i64 = database(&app)
 			.call(|connection| {
@@ -631,14 +627,9 @@ mod tests {
 	}
 
 	async fn the_main_chat(app: &App<MockRuntime>) -> Chat {
-		conversation_main_chat(
-			app.handle().clone(),
-			app.state(),
-			"b1".to_owned(),
-			Some("personal".to_owned()),
-		)
-		.await
-		.expect("the main conversation reads")
+		conversation_main_chat(app.state(), "b1".to_owned(), Some("personal".to_owned()))
+			.await
+			.expect("the main conversation reads")
 	}
 
 	#[tokio::test]
@@ -785,10 +776,9 @@ mod tests {
 		a_run_of(&app, ("t1", &working, 1), "b2").await;
 		let held_before = conversations_held(&app).await;
 
-		let read =
-			conversation_solo_states(app.handle().clone(), app.state(), "personal".to_owned())
-				.await
-				.expect("the solo states read");
+		let read = conversation_solo_states(app.state(), "personal".to_owned())
+			.await
+			.expect("the solo states read");
 
 		assert_eq!(conversations_held(&app).await, held_before);
 		let answered: Vec<(&str, &str, ConversationState, Vec<String>)> = read
@@ -846,10 +836,9 @@ mod tests {
 			.await
 			.expect("the malformed prompts are planted");
 
-		let page =
-			conversation_page(app.handle().clone(), app.state(), "personal".to_owned(), None, None)
-				.await
-				.expect("the page is read");
+		let page = conversation_page(app.state(), "personal".to_owned(), None, None)
+			.await
+			.expect("the page is read");
 
 		let observed_of = |id: &str| {
 			page.conversations

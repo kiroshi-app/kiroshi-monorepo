@@ -2411,8 +2411,7 @@ async fn sent(
 	app: &App<MockRuntime>,
 	message: NewUserMessage,
 ) -> Result<i64, TranscriptStoreError> {
-	conversation_send_user_message(app.handle().clone(), app.state(), Caller::Host, message, vec![])
-		.await
+	conversation_send_user_message(app.state(), Caller::Host, message, vec![]).await
 }
 
 async fn linked_documents(app: &App<MockRuntime>) -> Vec<(String, Vec<String>)> {

@@ -1887,7 +1887,7 @@ mod tests {
 	}
 
 	async fn stopped(app: &AppHandle<MockRuntime>, scope: RuntimeScope) -> CancelOutcome {
-		agent_cancel_turn(app.clone(), app.state(), scope).await.expect("the stop answers")
+		agent_cancel_turn(app.state(), scope).await.expect("the stop answers")
 	}
 
 	fn unavailable_store(bot_id: &str) -> CancelFailure {

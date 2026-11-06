@@ -24,8 +24,11 @@ impl LaunchOutcomeState {
 #[tauri::command]
 #[specta::specta]
 pub fn companion_launch_outcome(core: State<'_, crate::core_context::Core>) -> LaunchOutcome {
-	let state = core.state::<LaunchOutcomeState>();
-	state.read()
+	launch_outcome(core.inner())
+}
+
+pub fn launch_outcome(core: &crate::core_context::Core) -> LaunchOutcome {
+	core.state::<LaunchOutcomeState>().read()
 }
 
 pub fn settle(

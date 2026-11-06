@@ -1940,7 +1940,6 @@ mod tests {
 			created_at: 1,
 		};
 		crate::conversations::commands::conversation_send_user_message(
-			written.app.handle().clone(),
 			written.app.state(),
 			crate::hosting::authorship::Caller::Host,
 			message,
@@ -2196,7 +2195,6 @@ mod tests {
 			.expect("the seats table is renamed");
 
 		let finalized = crate::conversations::commands::conversation_finalize_message(
-			written.app.handle().clone(),
 			written.app.state(),
 			"m1".to_owned(),
 			crate::conversations::contract::TerminalCompletion::Complete,

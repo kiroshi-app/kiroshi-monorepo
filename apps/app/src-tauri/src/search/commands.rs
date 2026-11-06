@@ -440,10 +440,9 @@ mod tests {
 		let recent = search_recent(app.handle().clone(), app.state(), "work".to_owned())
 			.await
 			.expect("the recent chats answer");
-		let page =
-			conversation_page(app.handle().clone(), app.state(), "work".to_owned(), None, None)
-				.await
-				.expect("the page reads");
+		let page = conversation_page(app.state(), "work".to_owned(), None, None)
+			.await
+			.expect("the page reads");
 
 		let paged = page.conversations.into_iter().find(|row| row.conversation.id == "c2");
 		let paged = paged.expect("the room is on the page").observed;

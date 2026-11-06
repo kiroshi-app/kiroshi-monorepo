@@ -89,18 +89,16 @@ const REFUSED_TURNS: &str = "
 fn launch(name: &str, played: &str) -> Host {
 	let scenario = scenario(played);
 	let app = booted(name);
-	let chat =
-		block_on(conversation_main_chat(app.handle().clone(), app.state(), BOT.to_owned(), None))
-			.expect("the main chat opens");
+	let chat = block_on(conversation_main_chat(app.state(), BOT.to_owned(), None))
+		.expect("the main chat opens");
 	hosting(app, scenario, name, chat.id)
 }
 
 fn launch_leased(name: &str, played: &str, lease: RunLease) -> Host {
 	let scenario = scenario(played);
 	let app = booted_with(name, AgentState::leasing(lease));
-	let chat =
-		block_on(conversation_main_chat(app.handle().clone(), app.state(), BOT.to_owned(), None))
-			.expect("the main chat opens");
+	let chat = block_on(conversation_main_chat(app.state(), BOT.to_owned(), None))
+		.expect("the main chat opens");
 	hosting(app, scenario, name, chat.id)
 }
 
@@ -606,13 +604,9 @@ fn two_bots_running_a_routine_at_once_each_report_their_own_turn_on_their_own_co
 	let _serial = serial();
 	let host = launch("two-bots", "routine_report_own");
 	bundled_bots(&host.app, &[SECOND_BOT]);
-	let second_chat = block_on(conversation_main_chat(
-		host.app.handle().clone(),
-		host.app.state(),
-		SECOND_BOT.to_owned(),
-		None,
-	))
-	.expect("the second bot's main chat opens");
+	let second_chat =
+		block_on(conversation_main_chat(host.app.state(), SECOND_BOT.to_owned(), None))
+			.expect("the second bot's main chat opens");
 	let second = routine_on(&host.app, &second_chat.id, SECOND_BOT, "two-bots");
 
 	assert!(is_started(&host.run_routine_now(&host.routine, RUN_TIMING)));
@@ -668,13 +662,9 @@ fn a_runtime_write_held_on_one_bot_holds_no_run_of_another() {
 	let opened = opened_runtimes("routine-other-bot");
 	let host = launch("runtime-write-other-bot", "routine_report_own");
 	bundled_bots(&host.app, &[SECOND_BOT]);
-	let second_chat = block_on(conversation_main_chat(
-		host.app.handle().clone(),
-		host.app.state(),
-		SECOND_BOT.to_owned(),
-		None,
-	))
-	.expect("the second bot's main chat opens");
+	let second_chat =
+		block_on(conversation_main_chat(host.app.state(), SECOND_BOT.to_owned(), None))
+			.expect("the second bot's main chat opens");
 	let second = routine_on(&host.app, &second_chat.id, SECOND_BOT, "runtime-write-other-bot");
 	let write_in_flight = block_on(bundles::holding_the_memory(BOT));
 
