@@ -96,7 +96,7 @@ export const MarkdownListItem = ({
 	...props
 }: MarkdownListItemProps) => {
 	const cards = useBoardCards(node)
-	const isTask = props.className?.includes("task-list-item") ?? false
+	const isTask = props.className?.includes("task-list-item")
 	if (!isTask && cards.length === 0) return <li {...props}>{children}</li>
 
 	const items = Children.toArray(children)
@@ -121,7 +121,7 @@ export const MarkdownListItem = ({
 	const textEnd = nestedAt === -1 ? items.length : nestedAt
 	const text = items.slice(0, textEnd)
 	const nested = items.slice(textEnd)
-	if (cards.length === 1 && node !== undefined && isLoneBoardLink(node))
+	if (cards.length === 1 && node && isLoneBoardLink(node))
 		return (
 			<li {...props}>
 				{text.map((child) => (isValidElement(child) ? cards : child))}
