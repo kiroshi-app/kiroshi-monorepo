@@ -69,21 +69,17 @@ pub(crate) fn announce<P: Serialize + Clone>(
 
 #[cfg(test)]
 mod tests {
-	use tauri::test::{mock_builder, MockRuntime};
-	use tauri::App;
-	use tauri::Manager;
-
 	use super::*;
-	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
+	use crate::test_core::{a_core_of_its_own, CoreOfItsOwn};
 
-	fn a_host() -> AppOfItsOwn {
-		let app = an_app_of_its_own("companion-launch", mock_builder());
-		crate::events::core(app.app_handle()).manage(LaunchOutcomeState::default());
-		app
+	fn a_host() -> CoreOfItsOwn {
+		let core = a_core_of_its_own("companion-launch");
+		core.manage(LaunchOutcomeState::default());
+		core
 	}
 
-	fn read_of(app: &App<MockRuntime>) -> LaunchOutcome {
-		companion_launch_outcome(app.state())
+	fn read_of(core: &CoreOfItsOwn) -> LaunchOutcome {
+		launch_outcome(core)
 	}
 
 	fn shoto() -> CompanionCreated {
@@ -92,16 +88,12 @@ mod tests {
 
 	#[test]
 	fn a_launch_that_planted_and_gathered_a_reason_answers_both() {
-		let app = a_host();
+		let core = a_host();
 
-		settle(
-			crate::events::core(app.handle()),
-			Some(shoto()),
-			vec!["the system plugin was not laid down".to_owned()],
-		);
+		settle(&core, Some(shoto()), vec!["the system plugin was not laid down".to_owned()]);
 
 		assert_eq!(
-			read_of(&app),
+			read_of(&core),
 			LaunchOutcome {
 				created: Some(shoto()),
 				refused: Some(CompanionSeedRefused {
@@ -113,40 +105,32 @@ mod tests {
 
 	#[test]
 	fn the_outcome_answers_the_same_to_every_read() {
-		let app = a_host();
-		settle(
-			crate::events::core(app.handle()),
-			Some(shoto()),
-			vec!["the personal space is missing".to_owned()],
-		);
+		let core = a_host();
+		settle(&core, Some(shoto()), vec!["the personal space is missing".to_owned()]);
 
-		let first = read_of(&app);
+		let first = read_of(&core);
 
-		assert_eq!(read_of(&app), first, "a read emptied what the next one needed");
+		assert_eq!(read_of(&core), first, "a read emptied what the next one needed");
 	}
 
 	#[test]
 	fn a_launch_that_gathered_several_reasons_answers_them_in_one() {
-		let app = a_host();
+		let core = a_host();
 
-		settle(
-			crate::events::core(app.handle()),
-			None,
-			vec!["the first".to_owned(), "the second".to_owned()],
-		);
+		settle(&core, None, vec!["the first".to_owned(), "the second".to_owned()]);
 
 		assert_eq!(
-			read_of(&app).refused,
+			read_of(&core).refused,
 			Some(CompanionSeedRefused { reason: "the first; the second".to_owned() })
 		);
 	}
 
 	#[test]
 	fn a_launch_that_did_nothing_answers_nothing() {
-		let app = a_host();
+		let core = a_host();
 
-		settle(crate::events::core(app.handle()), None, Vec::new());
+		settle(&core, None, Vec::new());
 
-		assert_eq!(read_of(&app), LaunchOutcome::default());
+		assert_eq!(read_of(&core), LaunchOutcome::default());
 	}
 }

@@ -173,3 +173,11 @@ The kept core of `apps/app/src-tauri` moves to a crate with no Tauri dependency,
   The split is done for conversations and companions. The test `Core` will be built behind `test-support`: a `Core` over a temporary folder, on a shared multi-thread runtime as Tauri's was. Mock-app helpers in `agent::commands` and `agent::stub_session` that these tests use get Core versions in the same conversion commit.
 - **Merge of main.** main is merged in with a merge commit, not a rebase, because the branch is already pushed. After the merge, `git diff origin/main -- apps/app/src/lib/bindings.ts` is empty.
 - **Board screenshots.** main's board screenshot opens a hidden render window from the library host, which now holds a `Core`. The `Desktop` port gains `open_render_window` and `close_window`, the Tauri desktop implements them, and the screenshot bookkeeping is Core state.
+- **The test `Core`.** `kiroshi_core::test_core` (behind `test-support`) builds a `Core` over its own temporary folder on one shared multi-thread runtime, as Tauri's async runtime was. `listen_to` hands a test each payload of one event, like Tauri's `listen`. Tests call the Core functions the split extracted, not the command wrappers.
+- **Tests that keep a Tauri runtime.** They stay in src-tauri:
+  - `events::tests::a_page_that_starts_loading_leaves_its_turns_to_the_host_and_a_finished_load_does_not`;
+  - `events::tests::a_destroyed_window_leaves_its_turns_to_the_host_and_another_event_does_not`.
+
+  They build a real webview window to check the window events that clear a client, so they moved from `awaited_runs` to `events.rs`, where those handlers live. `TurnWindows::start_driving` and `is_left_to_the_host` became `pub(crate)` for them.
+- **Window scenarios in `host_turn`.** Two scenarios closed or reloaded the main window only to clear its client. They now clear the client on the `Core` directly. The window-to-client step is covered by the two `events.rs` tests above.
+

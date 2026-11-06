@@ -519,12 +519,10 @@ mod tests {
 	use std::sync::{Arc, Mutex};
 
 	use serde_json::json;
-	use tauri::test::mock_builder;
-	use tauri::Listener;
 
 	use super::*;
 	use crate::conversations::contract::ReplyLink;
-	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
+	use crate::test_core::{a_core_of_its_own, CoreOfItsOwn};
 
 	const ONE_SEATED_CONVERSATION: &str = "
 		INSERT INTO bots (id, name, model, created_at) VALUES ('b1', 'First', 'sonnet', 1);
@@ -535,22 +533,18 @@ mod tests {
 			VALUES ('c1', 'b1', 'lead', 1, 0);
 	";
 
-	async fn a_host(name: &str) -> AppOfItsOwn {
-		let app = an_app_of_its_own(&format!("transcript-commands-{name}"), mock_builder());
-		crate::db::install(crate::events::core(app.handle()));
-		database(&app)
+	async fn a_host(name: &str) -> CoreOfItsOwn {
+		let core = a_core_of_its_own(&format!("transcript-commands-{name}"));
+		crate::db::install(&core);
+		database(&core)
 			.call_mut(|connection| Ok(connection.execute_batch(ONE_SEATED_CONVERSATION)?))
 			.await
 			.expect("the conversation is planted");
-		app
+		core
 	}
 
-	fn database(app: &AppOfItsOwn) -> &db::Database {
-		crate::events::core(app.app_handle())
-			.state::<db::DatabaseState>()
-			.inner()
-			.as_ref()
-			.expect("the database opens")
+	fn database(core: &CoreOfItsOwn) -> &db::Database {
+		core.state::<db::DatabaseState>().inner().as_ref().expect("the database opens")
 	}
 
 	fn a_turn(id: &str) -> NewTurn {
@@ -559,22 +553,22 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_turn_started_on_a_deleted_conversation_names_it_instead_of_failing_storage() {
-		let app = a_host("deleted").await;
-		database(&app)
+		let core = a_host("deleted").await;
+		database(&core)
 			.conversations()
 			.delete_conversation("c1".into())
 			.await
 			.expect("the conversation is deleted");
 
-		let refused = conversation_start_turn(app.state(), a_turn("t1")).await;
+		let refused = start_turn(&core, a_turn("t1")).await;
 
 		assert_eq!(refused, Err(TranscriptStoreError::UnknownConversation { id: "c1".into() }));
 	}
 
 	#[tokio::test]
 	async fn a_foreign_key_failure_reaches_the_frontend_with_its_operation_table_and_code() {
-		let app = a_host("foreign-key").await;
-		conversation_start_turn(app.state(), a_turn("t1")).await.expect("the turn starts");
+		let core = a_host("foreign-key").await;
+		start_turn(&core, a_turn("t1")).await.expect("the turn starts");
 		let reply = NewAssistantMessage {
 			id: "r1".into(),
 			conversation_id: "c1".into(),
@@ -584,7 +578,7 @@ mod tests {
 			created_at: 2,
 		};
 
-		let refused = conversation_open_assistant_message(app.state(), reply)
+		let refused = open_assistant_message(&core, reply)
 			.await
 			.expect_err("a reply to a missing message was stored");
 
@@ -603,18 +597,18 @@ mod tests {
 		);
 	}
 
-	fn listen_to_stored_messages(app: &AppOfItsOwn) -> Arc<Mutex<Vec<serde_json::Value>>> {
+	fn listen_to_stored_messages(core: &CoreOfItsOwn) -> Arc<Mutex<Vec<serde_json::Value>>> {
 		let heard = Arc::new(Mutex::new(Vec::new()));
 		let kept = heard.clone();
-		app.handle().listen(MESSAGE_STORED_EVENT, move |event| {
-			let payload = serde_json::from_str(event.payload()).expect("the payload is JSON");
+		core.listen_to(MESSAGE_STORED_EVENT, move |payload| {
+			let payload = serde_json::from_str(payload).expect("the payload is JSON");
 			kept.lock().expect("the list is kept").push(payload);
 		});
 		heard
 	}
 
-	async fn write_a_report(app: &AppOfItsOwn) {
-		conversation_start_turn(app.state(), a_turn("t1")).await.expect("the turn starts");
+	async fn write_a_report(core: &CoreOfItsOwn) {
+		start_turn(core, a_turn("t1")).await.expect("the turn starts");
 		let report = NewAssistantMessage {
 			id: "r1".into(),
 			conversation_id: "c1".into(),
@@ -623,22 +617,20 @@ mod tests {
 			replied_to_message_id: None,
 			created_at: 2,
 		};
-		conversation_open_assistant_message(app.state(), report).await.expect("the report opens");
-		conversation_append_text(app.state(), "r1".into(), "done".into())
-			.await
-			.expect("the report text lands");
-		finalize_the_report(app).await;
-		conversation_complete_turn(app.state(), "t1".into(), 3).await.expect("the turn completes");
+		open_assistant_message(core, report).await.expect("the report opens");
+		append_text(core, "r1".into(), "done".into()).await.expect("the report text lands");
+		finalize_the_report(core).await;
+		complete_turn(core, "t1".into(), 3).await.expect("the turn completes");
 	}
 
-	async fn finalize_the_report(app: &AppOfItsOwn) {
-		conversation_finalize_message(app.state(), "r1".into(), TerminalCompletion::Complete, None)
+	async fn finalize_the_report(core: &CoreOfItsOwn) {
+		finalize_message(core, "r1".into(), TerminalCompletion::Complete, None)
 			.await
 			.expect("the report is finalized");
 	}
 
-	async fn stored_report(app: &AppOfItsOwn) -> serde_json::Value {
-		let stored = database(app)
+	async fn stored_report(core: &CoreOfItsOwn) -> serde_json::Value {
+		let stored = database(core)
 			.messages()
 			.message("c1".into(), "r1".into())
 			.await
@@ -649,12 +641,12 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_report_written_through_the_five_commands_is_announced_once_as_stored() {
-		let app = a_host("report-announced").await;
-		let heard = listen_to_stored_messages(&app);
+		let core = a_host("report-announced").await;
+		let heard = listen_to_stored_messages(&core);
 
-		write_a_report(&app).await;
+		write_a_report(&core).await;
 
-		let expected = vec![stored_report(&app).await];
+		let expected = vec![stored_report(&core).await];
 		assert_eq!(*heard.lock().expect("the list is kept"), expected);
 	}
 
@@ -673,21 +665,21 @@ mod tests {
 		}
 	}
 
-	async fn send(app: &AppOfItsOwn, message: NewUserMessage) -> Result<i64, TranscriptStoreError> {
-		conversation_send_user_message(app.state(), Caller::Host, message, Vec::new()).await
+	async fn send(
+		core: &CoreOfItsOwn,
+		message: NewUserMessage,
+	) -> Result<i64, TranscriptStoreError> {
+		send_user_message(core, Caller::Host, message, Vec::new()).await
 	}
 
-	async fn sent_targets(app: &AppOfItsOwn, ids: &[&str]) {
+	async fn sent_targets(core: &CoreOfItsOwn, ids: &[&str]) {
 		for id in ids {
-			send(app, a_reply_to(id, &[])).await.expect("the target is sent");
+			send(core, a_reply_to(id, &[])).await.expect("the target is sent");
 		}
 	}
 
-	async fn page_of(app: &AppOfItsOwn) -> Vec<TranscriptMessage> {
-		conversation_message_page(app.state(), "c1".into(), None, 50)
-			.await
-			.expect("the page reads")
-			.messages
+	async fn page_of(core: &CoreOfItsOwn) -> Vec<TranscriptMessage> {
+		message_page(core, "c1".into(), None, 50).await.expect("the page reads").messages
 	}
 
 	fn read<'a>(page: &'a [TranscriptMessage], id: &str) -> &'a TranscriptMessage {
@@ -702,40 +694,40 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_message_replying_to_three_reads_the_three_back_in_the_order_sent() {
-		let app = a_host("three-replies").await;
-		sent_targets(&app, &["m1", "m2", "m3"]).await;
+		let core = a_host("three-replies").await;
+		sent_targets(&core, &["m1", "m2", "m3"]).await;
 
-		send(&app, a_reply_to("m4", &["m3", "m1", "m2"])).await.expect("the reply is sent");
+		send(&core, a_reply_to("m4", &["m3", "m1", "m2"])).await.expect("the reply is sent");
 
-		let page = page_of(&app).await;
+		let page = page_of(&core).await;
 		assert_eq!(links_of(&page, "m4"), (Some("m3"), vec!["m3", "m1", "m2"]));
 		assert_eq!(links_of(&page, "m1"), (None, vec![]));
 	}
 
 	#[tokio::test]
 	async fn a_target_named_twice_is_kept_once_at_its_first_place() {
-		let app = a_host("repeated-reply").await;
-		sent_targets(&app, &["m1", "m2"]).await;
+		let core = a_host("repeated-reply").await;
+		sent_targets(&core, &["m1", "m2"]).await;
 
-		send(&app, a_reply_to("m3", &["m2", "m1", "m2"])).await.expect("the reply is sent");
+		send(&core, a_reply_to("m3", &["m2", "m1", "m2"])).await.expect("the reply is sent");
 
-		let page = page_of(&app).await;
+		let page = page_of(&core).await;
 		assert_eq!(links_of(&page, "m3"), (Some("m2"), vec!["m2", "m1"]));
 	}
 
 	#[tokio::test]
 	async fn a_payload_naming_only_its_first_target_keeps_that_one_link() {
-		let app = a_host("single-link-payload").await;
-		sent_targets(&app, &["m1"]).await;
+		let core = a_host("single-link-payload").await;
+		sent_targets(&core, &["m1"]).await;
 		let legacy: NewUserMessage = serde_json::from_value(json!({
 			"id": "m2", "conversationId": "c1", "turnId": "t-m2", "authorBotId": null,
 			"repliedToMessageId": "m1", "content": "hello", "createdAt": 1
 		}))
 		.expect("a payload without the list deserializes");
 
-		send(&app, legacy).await.expect("the reply is sent");
+		send(&core, legacy).await.expect("the reply is sent");
 
-		let page = page_of(&app).await;
+		let page = page_of(&core).await;
 		assert_eq!(links_of(&page, "m2"), (Some("m1"), vec!["m1"]));
 		assert_eq!(excerpts_of(&page, "m2"), [("m1", None)]);
 	}
@@ -761,24 +753,24 @@ mod tests {
 
 	#[tokio::test]
 	async fn each_reply_link_keeps_its_first_occurrence_with_its_excerpt_or_none_when_blank() {
-		let app = a_host("excerpted-replies").await;
-		sent_targets(&app, &["m1", "m2"]).await;
+		let core = a_host("excerpted-replies").await;
+		sent_targets(&core, &["m1", "m2"]).await;
 
 		let links = [("m2", Some("the roof")), ("m1", Some(" \n\t")), ("m2", Some("again"))];
-		send(&app, linking("m3", &links)).await.expect("the reply is sent");
+		send(&core, linking("m3", &links)).await.expect("the reply is sent");
 
-		let page = page_of(&app).await;
+		let page = page_of(&core).await;
 		assert_eq!(excerpts_of(&page, "m3"), [("m2", Some("the roof")), ("m1", None)]);
 		assert_eq!(links_of(&page, "m3"), (Some("m2"), vec!["m2", "m1"]));
 	}
 
 	#[tokio::test]
 	async fn an_unknown_target_among_the_reply_links_refuses_the_send_as_a_listed_id_does() {
-		let app = a_host("unknown-excerpted-reply").await;
-		sent_targets(&app, &["m1"]).await;
+		let core = a_host("unknown-excerpted-reply").await;
+		sent_targets(&core, &["m1"]).await;
 
-		let listed = send(&app, a_reply_to("refused", &["m1", "gone"])).await;
-		let linked = send(&app, linking("refused", &[("m1", None), ("gone", Some("x"))])).await;
+		let listed = send(&core, a_reply_to("refused", &["m1", "gone"])).await;
+		let linked = send(&core, linking("refused", &[("m1", None), ("gone", Some("x"))])).await;
 
 		assert!(listed.is_err(), "a listed unknown target was stored");
 		assert_eq!(linked, listed);
@@ -786,26 +778,26 @@ mod tests {
 
 	#[tokio::test]
 	async fn an_unknown_target_anywhere_in_the_list_refuses_the_send_as_a_lone_one_does() {
-		let app = a_host("unknown-reply").await;
-		sent_targets(&app, &["m1"]).await;
+		let core = a_host("unknown-reply").await;
+		sent_targets(&core, &["m1"]).await;
 
-		let lone = send(&app, a_reply_to("lone", &["gone"])).await;
-		let listed = send(&app, a_reply_to("listed", &["m1", "gone"])).await;
+		let lone = send(&core, a_reply_to("lone", &["gone"])).await;
+		let listed = send(&core, a_reply_to("listed", &["m1", "gone"])).await;
 
 		let refused = serde_json::to_value(&lone).expect("the error serializes");
 		assert_eq!(refused["Err"]["failure"]["code"], "SQLITE_CONSTRAINT_FOREIGNKEY");
 		assert_eq!(listed, lone);
-		let ids: Vec<String> = page_of(&app).await.into_iter().map(|message| message.id).collect();
+		let ids: Vec<String> = page_of(&core).await.into_iter().map(|message| message.id).collect();
 		assert_eq!(ids, ["m1"], "a refused reply left a message behind");
 	}
 
 	#[tokio::test]
 	async fn a_report_finalized_twice_is_announced_once() {
-		let app = a_host("report-finalized-twice").await;
-		let heard = listen_to_stored_messages(&app);
+		let core = a_host("report-finalized-twice").await;
+		let heard = listen_to_stored_messages(&core);
 
-		write_a_report(&app).await;
-		finalize_the_report(&app).await;
+		write_a_report(&core).await;
+		finalize_the_report(&core).await;
 
 		assert_eq!(heard.lock().expect("the list is kept").len(), 1);
 	}

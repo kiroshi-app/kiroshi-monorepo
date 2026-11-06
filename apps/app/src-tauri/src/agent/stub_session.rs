@@ -1,8 +1,5 @@
 use std::sync::Arc;
 
-use tauri::test::MockRuntime;
-use tauri::AppHandle;
-
 use crate::agent::commands::a_session_held_by_the_app;
 use crate::agent::contract::{AgentEvent, RuntimeScope};
 use crate::agent::session::{EventSink, Session, SessionOptions};
@@ -34,14 +31,14 @@ pub(crate) struct HeldSession {
 }
 
 pub(crate) async fn a_session_held_for(
-	app: &AppHandle<MockRuntime>,
+	core: &crate::core_context::Core,
 	scope: &RuntimeScope,
 ) -> HeldSession {
-	a_session_running(app, scope, OPENING_SIDECAR).await
+	a_session_running(core, scope, OPENING_SIDECAR).await
 }
 
 pub(crate) async fn a_session_running(
-	app: &AppHandle<MockRuntime>,
+	core: &crate::core_context::Core,
 	scope: &RuntimeScope,
 	sidecar_script: &str,
 ) -> HeldSession {
@@ -58,6 +55,6 @@ pub(crate) async fn a_session_running(
 	let session =
 		Session::start(sidecar, options, Arc::new(Unheard)).await.expect("the session opens");
 	let session = Arc::new(session);
-	a_session_held_by_the_app(crate::events::core(app), scope, session.clone());
+	a_session_held_by_the_app(core, scope, session.clone());
 	HeldSession { session, _sidecar: script }
 }

@@ -191,15 +191,13 @@ pub async fn conversation_drop_summons<R: Runtime>(
 #[cfg(test)]
 mod tests {
 	use serde_json::{json, Value};
-	use tauri::test::mock_builder;
-	use tauri::{Listener, Manager};
 	use tokio::sync::mpsc;
 
 	use super::*;
 	use crate::conversations::contract::{SummonsDropped, SUMMONS_DROPPED_EVENT, UPDATED_EVENT};
 	use crate::db::repositories::conversations::DEFAULT_BOT_ID;
 	use crate::db::repositories::messages::NewTurn;
-	use crate::test_app::an_app_of_its_own;
+	use crate::test_core::a_core_of_its_own;
 
 	fn run_of(bot_id: &str) -> TurnRun {
 		("t1".to_owned(), bot_id.to_owned())
@@ -219,10 +217,10 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_turn_run_started_before_its_start_deadline_keeps_running_and_announces_nothing() {
-		let app = an_app_of_its_own("turn-run-deadline", mock_builder());
-		crate::db::install(crate::events::core(app.handle()));
-		crate::events::core(app.app_handle()).manage(TurnRunDeadlines::after(Duration::ZERO));
-		let database = database(crate::events::core(app.handle())).expect("the database opens");
+		let core = a_core_of_its_own("turn-run-deadline");
+		crate::db::install(&core);
+		core.manage(TurnRunDeadlines::after(Duration::ZERO));
+		let database = database(&core).expect("the database opens");
 		database.conversations().ensure_default_bot().await.expect("the bot is seeded");
 		let chat = database
 			.conversations()
@@ -237,15 +235,14 @@ mod tests {
 		messages.await_runs("t1".to_owned(), both.clone()).await.expect("the runs wait");
 		messages.start_run(turn(), "early".to_owned()).await.expect("the early run starts");
 		let (announced, mut updates) = mpsc::unbounded_channel();
-		app.handle().listen(UPDATED_EVENT, move |event| {
-			let payload: Value =
-				serde_json::from_str(event.payload()).expect("the payload is JSON");
+		core.listen_to(UPDATED_EVENT, move |payload| {
+			let payload: Value = serde_json::from_str(payload).expect("the payload is JSON");
 			announced
 				.send(payload["conversation"]["activeTurn"].clone())
 				.expect("the test listens");
 		});
 
-		arm_start_deadlines(crate::events::core(app.handle()), &chat.id, "t1", &both);
+		arm_start_deadlines(&core, &chat.id, "t1", &both);
 		let first = time::timeout(Duration::from_secs(60), updates.recv())
 			.await
 			.expect("the late release announced in time");
@@ -256,10 +253,10 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_turn_run_never_started_by_its_start_deadline_is_announced_dropped() {
-		let app = an_app_of_its_own("turn-run-deadline-dropped", mock_builder());
-		crate::db::install(crate::events::core(app.handle()));
-		crate::events::core(app.app_handle()).manage(TurnRunDeadlines::after(Duration::ZERO));
-		let database = database(crate::events::core(app.handle())).expect("the database opens");
+		let core = a_core_of_its_own("turn-run-deadline-dropped");
+		crate::db::install(&core);
+		core.manage(TurnRunDeadlines::after(Duration::ZERO));
+		let database = database(&core).expect("the database opens");
 		database.conversations().ensure_default_bot().await.expect("the bot is seeded");
 		let chat = database
 			.conversations()
@@ -272,13 +269,12 @@ mod tests {
 		let late = vec!["late".to_owned()];
 		messages.await_runs("t1".to_owned(), late.clone()).await.expect("the run waits");
 		let (announced, mut drops) = mpsc::unbounded_channel();
-		app.handle().listen(SUMMONS_DROPPED_EVENT, move |event| {
-			let dropped: SummonsDropped =
-				serde_json::from_str(event.payload()).expect("a dropped summons");
+		core.listen_to(SUMMONS_DROPPED_EVENT, move |payload| {
+			let dropped: SummonsDropped = serde_json::from_str(payload).expect("a dropped summons");
 			announced.send(dropped).expect("the test listens");
 		});
 
-		arm_start_deadlines(crate::events::core(app.handle()), &chat.id, "t1", &late);
+		arm_start_deadlines(&core, &chat.id, "t1", &late);
 		let first = time::timeout(Duration::from_secs(60), drops.recv())
 			.await
 			.expect("the drop announced in time");

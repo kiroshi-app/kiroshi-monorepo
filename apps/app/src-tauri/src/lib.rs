@@ -44,6 +44,8 @@ pub mod spaces;
 pub mod termination;
 #[cfg(test)]
 mod test_app;
+#[cfg(test)]
+pub use kiroshi_core::test_core;
 pub use kiroshi_core::test_log;
 pub mod updates;
 pub mod user;

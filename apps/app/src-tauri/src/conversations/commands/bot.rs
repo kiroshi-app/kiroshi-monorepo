@@ -693,12 +693,9 @@ pub async fn conversation_bot_commands(
 mod tests {
 	use std::fs;
 	use std::path::PathBuf;
-	use tauri::Manager;
 
 	use super::*;
-	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
-	use tauri::test::{mock_builder, MockRuntime};
-	use tauri::App;
+	use crate::test_core::{a_core_of_its_own, CoreOfItsOwn};
 
 	fn a_bot() -> StoredBot {
 		StoredBot {
@@ -727,30 +724,30 @@ mod tests {
 		StoredBot { avatar_blot: blot, ..a_bot() }
 	}
 
-	fn a_host(name: &str) -> AppOfItsOwn {
-		let app = an_app_of_its_own(&format!("conversation-commands-{name}"), mock_builder());
-		crate::db::install(crate::events::core(app.handle()));
-		app
+	fn a_host(name: &str) -> CoreOfItsOwn {
+		let core = a_core_of_its_own(&format!("conversation-commands-{name}"));
+		crate::db::install(&core);
+		core
 	}
 
-	async fn first_space(app: &App<MockRuntime>) -> String {
-		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
+	async fn first_space(core: &CoreOfItsOwn) -> String {
+		let state = core.state::<db::DatabaseState>();
 		let spaces = ready(&state).expect("the database opens").spaces().list().await;
 		spaces.expect("the spaces read").remove(0).id
 	}
 
-	async fn bot_ids(app: &App<MockRuntime>) -> Vec<String> {
-		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
+	async fn bot_ids(core: &CoreOfItsOwn) -> Vec<String> {
+		let state = core.state::<db::DatabaseState>();
 		let bots = ready(&state).expect("the database opens").conversations().bots(None).await;
 		bots.expect("the bots read").into_iter().map(|bot| bot.id).collect()
 	}
 
 	async fn created_from(
-		app: &App<MockRuntime>,
+		core: &CoreOfItsOwn,
 		draft: BotDraft,
 	) -> Result<Bot, TranscriptStoreError> {
-		let space = first_space(app).await;
-		conversation_create_bot_from_draft(app.state(), draft, space).await
+		let space = first_space(core).await;
+		create_bot_from_draft(core, draft, space).await
 	}
 
 	#[test]
@@ -810,10 +807,10 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_bot_from_a_draft_lands_in_the_space_with_its_bundle() {
-		let app = a_host("drafted");
-		let space = first_space(&app).await;
+		let core = a_host("drafted");
+		let space = first_space(&core).await;
 
-		let created = created_from(&app, a_draft(" Quill ", " a writing partner ", " Write. "))
+		let created = created_from(&core, a_draft(" Quill ", " a writing partner ", " Write. "))
 			.await
 			.expect("the bot is created");
 
@@ -821,12 +818,11 @@ mod tests {
 			(created.name.as_str(), created.title.as_str(), created.instructions.as_str()),
 			("Quill", "a writing partner", "Write.")
 		);
-		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
+		let state = core.state::<db::DatabaseState>();
 		let held = ready(&state).expect("the database opens").conversations();
 		let listed = held.bots(Some(space)).await.expect("the space reads");
 		assert!(listed.iter().any(|bot| bot.id == created.id));
-		let root =
-			bundles::root(crate::events::core(app.handle())).expect("the bundle root is named");
+		let root = bundles::root(&core).expect("the bundle root is named");
 		let plugins = root.join("plugins");
 		assert_eq!(
 			bundles::dir(&root, &created.id).expect("the bundle is held"),
@@ -835,16 +831,15 @@ mod tests {
 		assert!(!plugins.join(&created.id).exists(), "a bundle was laid down under the bot id");
 	}
 
-	async fn a_bundle_on_the_default_model(app: &App<MockRuntime>, name: &str) -> PathBuf {
-		let created = created_from(app, a_draft(name, "a job", "A brief."))
+	async fn a_bundle_on_the_default_model(core: &CoreOfItsOwn, name: &str) -> PathBuf {
+		let created = created_from(core, a_draft(name, "a job", "A brief."))
 			.await
 			.expect("the bot is created");
-		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
+		let state = core.state::<db::DatabaseState>();
 		let held = ready(&state).expect("the database opens").conversations();
 		let stored =
 			held.bot(created.id.clone()).await.expect("the bot reads").expect("the bot is stored");
-		let root =
-			bundles::root(crate::events::core(app.handle())).expect("the bundle root is named");
+		let root = bundles::root(core).expect("the bundle root is named");
 		bundles::write_remembered(&root, &stored, "They use bun.").expect("the memory lands");
 		let agent = bundles::agent_file(&root, &created.id).expect("the agent file stands");
 		let written = fs::read_to_string(&agent).expect("the agent file reads");
@@ -856,13 +851,13 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_launch_rewrites_only_the_model_line_of_a_bundle_left_on_the_default_model() {
-		let app = a_host("repaired-model");
-		let agent = a_bundle_on_the_default_model(&app, "Quill").await;
+		let core = a_host("repaired-model");
+		let agent = a_bundle_on_the_default_model(&core, "Quill").await;
 		let before = fs::read_to_string(&agent).expect("the agent file reads");
 
-		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
+		let state = core.state::<db::DatabaseState>();
 		let database = ready(&state).expect("the database opens");
-		list_bundles(bundles::root(crate::events::core(app.handle())).as_deref(), database).await;
+		list_bundles(bundles::root(&core).as_deref(), database).await;
 
 		let after = fs::read_to_string(&agent).expect("the agent file reads");
 		assert_eq!(after, before.replacen("model: \"default\"", "model: \"opus\"", 1));
@@ -871,16 +866,15 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_launch_goes_on_past_a_bundle_it_cannot_write() {
-		let app = a_host("unwritable-model");
-		let blocked = a_bundle_on_the_default_model(&app, "Quill").await;
-		let repaired = a_bundle_on_the_default_model(&app, "Sage").await;
+		let core = a_host("unwritable-model");
+		let blocked = a_bundle_on_the_default_model(&core, "Quill").await;
+		let repaired = a_bundle_on_the_default_model(&core, "Sage").await;
 		fs::remove_file(&blocked).expect("the agent file goes");
 		fs::create_dir(&blocked).expect("a directory stands in its place");
 
-		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
+		let state = core.state::<db::DatabaseState>();
 		let database = ready(&state).expect("the database opens");
-		let root =
-			bundles::root(crate::events::core(app.handle())).expect("the bundle root is named");
+		let root = bundles::root(&core).expect("the bundle root is named");
 		list_bundles(Some(&root), database).await;
 
 		assert!(blocked.is_dir());
@@ -891,29 +885,28 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_nameless_draft_leaves_no_row_behind() {
-		let app = a_host("nameless");
-		let before = bot_ids(&app).await;
+		let core = a_host("nameless");
+		let before = bot_ids(&core).await;
 
-		let failure = created_from(&app, a_draft("  ", "a job", "A brief."))
+		let failure = created_from(&core, a_draft("  ", "a job", "A brief."))
 			.await
 			.expect_err("the draft is refused");
 
 		assert_eq!(failure, TranscriptStoreError::NamelessBot);
-		assert_eq!(bot_ids(&app).await, before);
+		assert_eq!(bot_ids(&core).await, before);
 	}
 
 	#[tokio::test]
 	async fn a_draft_whose_bundle_cannot_be_written_leaves_no_row_behind() {
-		let app = a_host("unbundled");
-		let before = bot_ids(&app).await;
-		let root =
-			bundles::root(crate::events::core(app.handle())).expect("the bundle root is named");
+		let core = a_host("unbundled");
+		let before = bot_ids(&core).await;
+		let root = bundles::root(&core).expect("the bundle root is named");
 		let _ = fs::remove_dir_all(&root);
 		fs::create_dir_all(root.parent().expect("the root has a parent"))
 			.expect("the data dir stands");
 		fs::write(&root, "not a directory").expect("the blocking file lands");
 
-		let failure = created_from(&app, a_draft("Quill", "a job", "A brief."))
+		let failure = created_from(&core, a_draft("Quill", "a job", "A brief."))
 			.await
 			.expect_err("the bundle is refused");
 
@@ -921,12 +914,12 @@ mod tests {
 			matches!(failure, TranscriptStoreError::UnwritableBundle { .. }),
 			"got {failure:?}"
 		);
-		assert_eq!(bot_ids(&app).await, before);
+		assert_eq!(bot_ids(&core).await, before);
 	}
 
 	#[tokio::test]
 	async fn every_suggested_bot_is_distinct_complete_and_creates_what_it_describes() {
-		let app = a_host("suggested");
+		let core = a_host("suggested");
 		let suggested = conversation_suggested_bots();
 		let ids: std::collections::HashSet<&str> = suggested.iter().map(|bot| bot.id).collect();
 
@@ -936,7 +929,7 @@ mod tests {
 			assert!([bot.name, bot.job, bot.description, bot.blurb]
 				.iter()
 				.all(|field| !field.trim().is_empty()));
-			let created = created_from(&app, a_draft(bot.name, bot.job, bot.description))
+			let created = created_from(&core, a_draft(bot.name, bot.job, bot.description))
 				.await
 				.expect("the suggestion is created");
 			assert_eq!(
@@ -948,13 +941,13 @@ mod tests {
 
 	#[tokio::test]
 	async fn the_coder_suggestion_creates_a_coding_agent() {
-		let app = a_host("suggested-coder");
+		let core = a_host("suggested-coder");
 		let coder = conversation_suggested_bots()
 			.into_iter()
 			.find(|bot| bot.id == "coder")
 			.expect("the coder is suggested");
 
-		let created = created_from(&app, a_draft(coder.name, coder.job, coder.description))
+		let created = created_from(&core, a_draft(coder.name, coder.job, coder.description))
 			.await
 			.expect("the coder is created");
 

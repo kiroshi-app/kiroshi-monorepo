@@ -372,20 +372,11 @@ fn forget<T: ClientScoped>(core: &Core, client: &ClientId) {
 }
 
 #[cfg(test)]
-fn test_runtime() -> Handle {
-	static RUNTIME: std::sync::OnceLock<tokio::runtime::Runtime> = std::sync::OnceLock::new();
-	RUNTIME
-		.get_or_init(|| tokio::runtime::Runtime::new().expect("the test runtime starts"))
-		.handle()
-		.clone()
-}
-
-#[cfg(test)]
 mod tests {
 	use super::*;
 
 	fn a_core() -> Core {
-		Core::new(std::env::temp_dir(), "com.kiroshi.test", test_runtime())
+		Core::new(std::env::temp_dir(), "com.kiroshi.test", crate::test_core::runtime())
 	}
 
 	struct Opened(std::sync::Mutex<Vec<String>>);
@@ -461,7 +452,8 @@ mod tests {
 	#[test]
 	fn spawned_work_runs_on_the_runtime_the_core_was_given() {
 		let core = a_core();
-		let answer = test_runtime().block_on(core.spawn(async { 7 })).expect("the task ran");
+		let answer =
+			crate::test_core::runtime().block_on(core.spawn(async { 7 })).expect("the task ran");
 		assert_eq!(answer, 7);
 	}
 	const FIRST_RUN_DONE: Event<()> = Event::new("user://first-run-done");

@@ -175,11 +175,12 @@ pub(crate) mod tests {
 
 	use serde::ser::Error;
 	use serde::Serializer;
-	use tauri::test::mock_builder;
-	use tauri::Listener;
+	use tauri::test::{mock_builder, MockRuntime};
+	use tauri::{Listener, WebviewWindow, WebviewWindowBuilder};
 
 	use super::*;
-	use crate::test_app::an_app_of_its_own;
+	use crate::conversations::awaited_runs::TurnWindows;
+	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 
 	const FAN_OUT: &str = "src/events.rs";
 
@@ -280,5 +281,45 @@ pub(crate) mod tests {
 		emit(app.handle(), FIRST_RUN_DONE, ()).expect("emitted");
 
 		assert_eq!(hearing.recv().expect("the window heard"), "null");
+	}
+
+	fn a_window_that_ran_t1(name: &str) -> (AppOfItsOwn, WebviewWindow<MockRuntime>) {
+		let app = an_app_of_its_own(name, mock_builder());
+		core(app.handle()).manage_client_scoped(TurnWindows::default());
+		let main = WebviewWindowBuilder::new(&*app, "main", Default::default())
+			.build()
+			.expect("the window builds");
+		let windows = core(app.handle()).state::<TurnWindows>();
+		windows.submitted_from(&ClientId::new("main"), "t1");
+		windows.start_driving(&ClientId::new("main"));
+		(app, main)
+	}
+
+	#[test]
+	fn a_page_that_starts_loading_leaves_its_turns_to_the_host_and_a_finished_load_does_not() {
+		let (app, main) = a_window_that_ran_t1("forget-page-load");
+		let windows = core(app.handle()).state::<TurnWindows>();
+		windows.start_driving(&ClientId::new("window-1"));
+
+		clear_client_on_page_event(&main.as_ref().window(), PageLoadEvent::Finished);
+		let after_a_finished_load = windows.is_left_to_the_host("t1");
+		clear_client_on_page_event(&main.as_ref().window(), PageLoadEvent::Started);
+
+		assert!(!after_a_finished_load, "a finished load left the turn to the host");
+		assert!(windows.is_left_to_the_host("t1"));
+	}
+
+	#[test]
+	fn a_destroyed_window_leaves_its_turns_to_the_host_and_another_event_does_not() {
+		let (app, main) = a_window_that_ran_t1("forget-destroyed");
+		let windows = core(app.handle()).state::<TurnWindows>();
+		windows.start_driving(&ClientId::new("window-1"));
+
+		clear_client_on_destroyed(&main.as_ref().window(), &WindowEvent::Focused(false));
+		let after_a_blur = windows.is_left_to_the_host("t1");
+		clear_client_on_destroyed(&main.as_ref().window(), &WindowEvent::Destroyed);
+
+		assert!(!after_a_blur, "a blur left the turn to the host");
+		assert!(windows.is_left_to_the_host("t1"));
 	}
 }

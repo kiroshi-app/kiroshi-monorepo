@@ -1426,7 +1426,7 @@ mod tests {
 			runtime_session_id: "session-of-b4".to_owned(),
 			epoch: 1,
 		};
-		let successor = a_session_held_for(app.handle(), &fourth).await;
+		let successor = a_session_held_for(crate::events::core(app.handle()), &fourth).await;
 		let host = serving(&app, &thread_id);
 
 		let asked = asking("handoff", json!({ "id": opened.id, "companion": "Fourth" }));

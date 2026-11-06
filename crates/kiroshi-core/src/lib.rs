@@ -31,6 +31,8 @@ pub mod routines;
 pub mod search;
 pub mod sections;
 pub mod spaces;
+#[cfg(any(test, feature = "test-support"))]
+pub mod test_core;
 pub mod test_log;
 pub mod updates;
 pub mod user;

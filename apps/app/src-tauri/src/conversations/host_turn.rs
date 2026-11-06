@@ -1183,16 +1183,13 @@ fn missing(detail: String) -> TransportError {
 #[cfg(test)]
 mod tests {
 	use std::time::Duration;
-	use tauri::AppHandle;
 
 	use serde_json::{json, Value};
-	use tauri::test::{mock_builder, MockRuntime};
-	use tauri::{Listener, Manager};
 
 	use super::*;
 	use tokio::sync::broadcast;
 
-	use crate::agent::commands::{agent_cancel_turn, EVENT_CHANNEL};
+	use crate::agent::commands::{cancel_turn, EVENT_CHANNEL};
 	use crate::agent::contract::ConnectionState;
 	use crate::conversations::contract::{ReplyLink, StorageFailure};
 	use crate::conversations::contract::{SummonsDropped, SUMMONS_DROPPED_EVENT, UPDATED_EVENT};
@@ -1203,9 +1200,9 @@ mod tests {
 	use crate::db::repositories::messages::{
 		MessagePageQuery, MessageState, NewAssistantMessage, NewTurn,
 	};
-	use crate::events::{self, Frame};
+	use crate::events::Frame;
 	use crate::routines::runner::read;
-	use crate::test_app::an_app_of_its_own;
+	use crate::test_core::a_core_of_its_own;
 	use crate::test_log::{capturing, infos_naming};
 	fn speaking_as(scope: RuntimeScope) -> Speaker {
 		Speaker { scope, written: Vec::new(), is_in_line: false }
@@ -1313,9 +1310,8 @@ mod tests {
 		bot_ids: Vec<String>,
 	}
 
-	async fn a_room_running(app: &AppHandle<MockRuntime>, names: &[&str]) -> Room {
-		let conversations =
-			database(crate::events::core(app)).expect("the database opens").conversations();
+	async fn a_room_running(core: &crate::core_context::Core, names: &[&str]) -> Room {
+		let conversations = database(core).expect("the database opens").conversations();
 		let mut bot_ids = Vec::new();
 		for name in names {
 			let identity = BotIdentity {
@@ -1351,16 +1347,16 @@ mod tests {
 		NewTurn { id: "t1".to_owned(), conversation_id: room.id.clone(), started_at: 1 }
 	}
 
-	async fn speaking_in(app: &AppHandle<MockRuntime>, room: &Room, bot_ids: &[String]) {
-		let messages = database(crate::events::core(app)).expect("the database opens").messages();
+	async fn speaking_in(core: &crate::core_context::Core, room: &Room, bot_ids: &[String]) {
+		let messages = database(core).expect("the database opens").messages();
 		messages.start_turn(turn_in(room)).await.expect("the turn opens");
 		for bot_id in bot_ids {
 			messages.start_run(turn_in(room), bot_id.clone()).await.expect("the run starts");
 		}
 	}
 
-	async fn a_streaming_reply(app: &AppHandle<MockRuntime>, room: &Room, bot_id: &str) {
-		let messages = database(crate::events::core(app)).expect("the database opens").messages();
+	async fn a_streaming_reply(core: &crate::core_context::Core, room: &Room, bot_id: &str) {
+		let messages = database(core).expect("the database opens").messages();
 		let id = format!("reply-of-{bot_id}");
 		let reply = NewAssistantMessage {
 			id: id.clone(),
@@ -1374,10 +1370,10 @@ mod tests {
 		messages.append_text(id, "half".to_owned()).await.expect("the reply streams");
 	}
 
-	async fn reply_states(app: &AppHandle<MockRuntime>, room: &Room) -> Vec<MessageState> {
+	async fn reply_states(core: &crate::core_context::Core, room: &Room) -> Vec<MessageState> {
 		let query =
 			MessagePageQuery { conversation_id: room.id.clone(), before_seq: None, limit: 10 };
-		let page = database(crate::events::core(app))
+		let page = database(core)
 			.expect("the database opens")
 			.messages()
 			.page_messages(query)
@@ -1420,12 +1416,12 @@ mod tests {
 	}
 
 	fn a_host_turn(
-		app: &AppHandle<MockRuntime>,
+		core: &crate::core_context::Core,
 		room: &Room,
 		stopped: watch::Receiver<bool>,
 	) -> HostTurn {
 		HostTurn {
-			core: crate::events::core(app).clone(),
+			core: core.clone(),
 			conversation_id: room.id.clone(),
 			turn_id: "t1".to_owned(),
 			prompt_id: "p1".to_owned(),
@@ -1450,13 +1446,13 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_message_linking_only_through_reply_links_summons_the_author_of_the_first() {
-		let app = an_app_of_its_own("host-turn-reply-links-summon", mock_builder());
-		crate::db::install(crate::events::core(app.handle()));
-		let room = a_room_running(app.handle(), &["Ada", "Grace"]).await;
+		let core = a_core_of_its_own("host-turn-reply-links-summon");
+		crate::db::install(&core);
+		let room = a_room_running(&core, &["Ada", "Grace"]).await;
 		let grace = room.bot_ids[1].clone();
-		speaking_in(app.handle(), &room, &[]).await;
-		a_streaming_reply(app.handle(), &room, &grace).await;
-		let database = database(crate::events::core(app.handle())).expect("the database opens");
+		speaking_in(&core, &room, &[]).await;
+		a_streaming_reply(&core, &room, &grace).await;
+		let database = database(&core).expect("the database opens");
 
 		let sent = sent_in(&room, None, &format!("reply-of-{grace}"));
 		let summoned = summoned_for(database, &sent, Vec::new()).await.expect("it resolves");
@@ -1466,15 +1462,15 @@ mod tests {
 
 	#[tokio::test]
 	async fn reply_links_outrank_a_replied_to_id_naming_another_message_when_summoning() {
-		let app = an_app_of_its_own("host-turn-reply-links-outrank", mock_builder());
-		crate::db::install(crate::events::core(app.handle()));
-		let room = a_room_running(app.handle(), &["Ada", "Grace"]).await;
+		let core = a_core_of_its_own("host-turn-reply-links-outrank");
+		crate::db::install(&core);
+		let room = a_room_running(&core, &["Ada", "Grace"]).await;
 		let (ada, grace) = (room.bot_ids[0].clone(), room.bot_ids[1].clone());
-		speaking_in(app.handle(), &room, &[]).await;
+		speaking_in(&core, &room, &[]).await;
 		for bot_id in [&ada, &grace] {
-			a_streaming_reply(app.handle(), &room, bot_id).await;
+			a_streaming_reply(&core, &room, bot_id).await;
 		}
-		let database = database(crate::events::core(app.handle())).expect("the database opens");
+		let database = database(&core).expect("the database opens");
 
 		let replied_to = format!("reply-of-{ada}");
 		let sent = sent_in(&room, Some(&replied_to), &format!("reply-of-{grace}"));
@@ -1485,12 +1481,11 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_turn_the_host_takes_over_counts_the_handovers_its_window_stored_toward_the_bound() {
-		let app = an_app_of_its_own("host-turn-seeded-bound", mock_builder());
-		crate::db::install(crate::events::core(app.handle()));
-		let room = a_room_running(app.handle(), &["Ada", "Grace"]).await;
+		let core = a_core_of_its_own("host-turn-seeded-bound");
+		crate::db::install(&core);
+		let room = a_room_running(&core, &["Ada", "Grace"]).await;
 		let (ada, grace) = (room.bot_ids[0].as_str(), room.bot_ids[1].as_str());
-		let messages =
-			database(crate::events::core(app.handle())).expect("the database opens").messages();
+		let messages = database(&core).expect("the database opens").messages();
 		messages.start_turn(turn_in(&room)).await.expect("the turn opens");
 		let window_handovers = MAX_SUMMONS_PER_CHAIN - 2;
 		for order in 0..window_handovers {
@@ -1512,9 +1507,7 @@ mod tests {
 		let summons =
 			|bot_id: &str| Summons { bot_id: bot_id.to_owned(), prompt_id: "p".to_owned() };
 
-		let mut handed = stored_handovers(crate::events::core(app.handle()), &room.id, "t1")
-			.await
-			.expect("it reads");
+		let mut handed = stored_handovers(&core, &room.id, "t1").await.expect("it reads");
 		let host_refusals: Vec<Option<SummonsDropReason>> = (0..3)
 			.map(|_| {
 				let mut waiting = Vec::new();
@@ -1527,27 +1520,24 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_group_turn_whose_sessions_are_gone_after_a_lag_shuts_down_every_speaker() {
-		let app = an_app_of_its_own("host-turn-reader-lag", mock_builder());
-		crate::db::install(crate::events::core(app.handle()));
-		crate::events::core(app.app_handle()).manage(AgentState::default());
-		let room = a_room_running(app.handle(), &["Ada", "Grace"]).await;
-		speaking_in(app.handle(), &room, &room.bot_ids).await;
+		let core = a_core_of_its_own("host-turn-reader-lag");
+		crate::db::install(&core);
+		core.manage(AgentState::default());
+		let room = a_room_running(&core, &["Ada", "Grace"]).await;
+		speaking_in(&core, &room, &room.bot_ids).await;
 		for bot_id in &room.bot_ids {
-			a_streaming_reply(app.handle(), &room, bot_id).await;
+			a_streaming_reply(&core, &room, bot_id).await;
 		}
-		let mut announced = events::subscribed(app.handle());
+		let mut announced = core.subscribe_frames();
 		let (mut reading, heard) = a_lagging_reader();
 		let turns = HostTurns::default();
 		let held = turns.hold(&room.id, "t1").expect("the turn is held");
-		let host_turn = a_host_turn(app.handle(), &room, held.stopped.clone());
+		let host_turn = a_host_turn(&core, &room, held.stopped.clone());
 		let mut speakers: Vec<RuntimeScope> =
 			room.bot_ids.iter().map(|bot_id| scope_in(&room, bot_id)).collect();
 		speakers.sort_by(|one, other| one.bot_id.cmp(&other.bot_id));
 		for scope in &speakers {
-			crate::events::core(app.app_handle())
-				.state::<AgentState>()
-				.host_turns()
-				.note_started(scope);
+			core.state::<AgentState>().host_turns().note_started(scope);
 		}
 		let speaking = speakers.iter().map(|scope| speaking_as(scope.clone()));
 
@@ -1560,26 +1550,23 @@ mod tests {
 			assert_cancelled_before_shut_down(&events, scope);
 		}
 		assert_eq!(active_turns(&told), vec![Value::Null]);
-		assert_eq!(reply_states(app.handle(), &room).await, vec![MessageState::Cancelled; 2]);
+		assert_eq!(reply_states(&core, &room).await, vec![MessageState::Cancelled; 2]);
 	}
 
 	#[tokio::test]
 	async fn a_group_turn_whose_relay_closes_abandons_every_waiting_bot() {
-		let app = an_app_of_its_own("host-turn-relay-closed-waiting", mock_builder());
-		crate::db::install(crate::events::core(app.handle()));
-		crate::events::core(app.app_handle()).manage(AgentState::default());
-		let room = a_room_running(app.handle(), &["Ada", "Grace"]).await;
+		let core = a_core_of_its_own("host-turn-relay-closed-waiting");
+		crate::db::install(&core);
+		core.manage(AgentState::default());
+		let room = a_room_running(&core, &["Ada", "Grace"]).await;
 		let (speaker, waiter) = (room.bot_ids[0].clone(), room.bot_ids[1].clone());
-		speaking_in(app.handle(), &room, std::slice::from_ref(&speaker)).await;
-		let stored = database(crate::events::core(app.handle())).expect("the database opens");
+		speaking_in(&core, &room, std::slice::from_ref(&speaker)).await;
+		let stored = database(&core).expect("the database opens");
 		stored.messages().await_runs("t1".to_owned(), vec![waiter.clone()]).await.expect("held");
-		let mut announced = events::subscribed(app.handle());
+		let mut announced = core.subscribe_frames();
 		let (_stop, stopped) = watch::channel(false);
-		let host_turn = a_host_turn(app.handle(), &room, stopped);
-		crate::events::core(app.app_handle())
-			.state::<AgentState>()
-			.host_turns()
-			.note_started(&scope_in(&room, &speaker));
+		let host_turn = a_host_turn(&core, &room, stopped);
+		core.state::<AgentState>().host_turns().note_started(&scope_in(&room, &speaker));
 		let speaking = vec![speaking_as(scope_in(&room, &speaker))];
 		let waiting = vec![Summons { bot_id: waiter.clone(), prompt_id: "p1".to_owned() }];
 
@@ -1606,7 +1593,7 @@ mod tests {
 		use super::*;
 
 		struct Refused {
-			_app: crate::test_app::AppOfItsOwn,
+			_app: crate::test_core::CoreOfItsOwn,
 			room: Room,
 			told: Vec<(String, Value)>,
 		}
@@ -1618,19 +1605,19 @@ mod tests {
 		}
 
 		async fn refused_as(name: &str, refusal: fn(RuntimeScope) -> Refusal) -> Refused {
-			let app = an_app_of_its_own(name, mock_builder());
-			crate::db::install(crate::events::core(app.handle()));
-			crate::events::core(app.app_handle()).manage(AgentState::default());
-			let room = a_room_running(app.handle(), &["Ada"]).await;
+			let core = a_core_of_its_own(name);
+			crate::db::install(&core);
+			core.manage(AgentState::default());
+			let room = a_room_running(&core, &["Ada"]).await;
 			let ada = scope_in(&room, &room.bot_ids[0]);
-			let mut announced = events::subscribed(app.handle());
+			let mut announced = core.subscribe_frames();
 			let (_stop, stopped) = watch::channel(false);
-			let host_turn = a_host_turn(app.handle(), &room, stopped);
+			let host_turn = a_host_turn(&core, &room, stopped);
 
 			host_turn.refused(&ada.bot_id, refusal(ada.clone())).await;
 
 			let told = told(&mut announced);
-			Refused { _app: app, room, told }
+			Refused { _app: core, room, told }
 		}
 
 		fn unreachable_store() -> TranscriptStoreError {
@@ -1714,7 +1701,7 @@ mod tests {
 		}
 
 		struct HandedOver {
-			_app: crate::test_app::AppOfItsOwn,
+			_app: crate::test_core::CoreOfItsOwn,
 			room: Room,
 			waiting: Vec<Summons>,
 			told: Vec<(String, Value)>,
@@ -1727,19 +1714,18 @@ mod tests {
 		}
 
 		async fn ada_handing_over(name: &str, naming: fn(&str) -> String) -> HandedOver {
-			let app = an_app_of_its_own(name, mock_builder());
-			crate::db::install(crate::events::core(app.handle()));
-			let room = a_room_running(app.handle(), &["Ada"]).await;
-			speaking_in(app.handle(), &room, &room.bot_ids).await;
+			let core = a_core_of_its_own(name);
+			crate::db::install(&core);
+			let room = a_room_running(&core, &["Ada"]).await;
+			speaking_in(&core, &room, &room.bot_ids).await;
 			let ada = &room.bot_ids[0];
-			a_streaming_reply(app.handle(), &room, ada).await;
+			a_streaming_reply(&core, &room, ada).await;
 			let reply = format!("reply-of-{ada}");
-			let messages =
-				database(crate::events::core(app.handle())).expect("the database opens").messages();
+			let messages = database(&core).expect("the database opens").messages();
 			messages.append_text(reply.clone(), naming(ada)).await.expect("it streams");
-			let mut announced = events::subscribed(app.handle());
+			let mut announced = core.subscribe_frames();
 			let (_stop, stopped) = watch::channel(false);
-			let host_turn = a_host_turn(app.handle(), &room, stopped);
+			let host_turn = a_host_turn(&core, &room, stopped);
 			let done =
 				Speaker { scope: scope_in(&room, ada), written: vec![reply], is_in_line: false };
 			let mut waiting = Vec::new();
@@ -1747,7 +1733,7 @@ mod tests {
 			host_turn.note_handovers(&done, &mut waiting).await;
 
 			let told = told(&mut announced);
-			HandedOver { _app: app, room, waiting, told }
+			HandedOver { _app: core, room, waiting, told }
 		}
 
 		#[tokio::test]
@@ -1778,13 +1764,13 @@ mod tests {
 
 		#[tokio::test]
 		async fn a_queued_run_whose_place_cannot_be_read_drops_the_summons_as_start_failed() {
-			let app = an_app_of_its_own("drop-unread-place", mock_builder());
-			crate::db::install(crate::events::core(app.handle()));
-			let room = a_room_running(app.handle(), &["Ada"]).await;
+			let core = a_core_of_its_own("drop-unread-place");
+			crate::db::install(&core);
+			let room = a_room_running(&core, &["Ada"]).await;
 			let ada = scope_in(&room, &room.bot_ids[0]);
-			let mut announced = events::subscribed(app.handle());
+			let mut announced = core.subscribe_frames();
 			let (_stop, stopped) = watch::channel(false);
-			let host_turn = a_host_turn(app.handle(), &room, stopped);
+			let host_turn = a_host_turn(&core, &room, stopped);
 			let queued = Speaker { scope: ada.clone(), written: Vec::new(), is_in_line: true };
 			let mut waiting = Vec::new();
 
@@ -1802,10 +1788,10 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_room_turn_releases_every_summoned_bot_that_never_starts_at_its_start_deadline() {
-		let app = an_app_of_its_own("host-turn-start-deadline", mock_builder());
-		crate::db::install(crate::events::core(app.handle()));
-		crate::events::core(app.app_handle()).manage(TurnRunDeadlines::after(Duration::ZERO));
-		let stored = database(crate::events::core(app.handle())).expect("the database opens");
+		let core = a_core_of_its_own("host-turn-start-deadline");
+		crate::db::install(&core);
+		core.manage(TurnRunDeadlines::after(Duration::ZERO));
+		let stored = database(&core).expect("the database opens");
 		let conversations = stored.conversations();
 		conversations.ensure_default_bot().await.expect("the bot is seeded");
 		let identity = BotIdentity {
@@ -1836,16 +1822,15 @@ mod tests {
 		let turn = NewTurn { id: "t1".to_owned(), conversation_id: room.id.clone(), started_at: 1 };
 		stored.messages().start_turn(turn).await.expect("the turn opens");
 		let (announced, mut updates) = mpsc::unbounded_channel();
-		app.handle().listen(UPDATED_EVENT, move |event| {
-			let payload: Value =
-				serde_json::from_str(event.payload()).expect("the payload is JSON");
+		core.listen_to(UPDATED_EVENT, move |payload| {
+			let payload: Value = serde_json::from_str(payload).expect("the payload is JSON");
 			announced
 				.send(payload["conversation"]["activeTurn"].clone())
 				.expect("the test listens");
 		});
 		let (stop, stopped) = watch::channel(false);
 		let host_turn = HostTurn {
-			core: crate::events::core(app.handle()).clone(),
+			core: core.clone(),
 			conversation_id: room.id.clone(),
 			turn_id: "t1".to_owned(),
 			prompt_id: "p1".to_owned(),
@@ -1875,8 +1860,8 @@ mod tests {
 		drop(stop);
 	}
 
-	async fn open_runs(app: &AppHandle<MockRuntime>) -> i64 {
-		database(crate::events::core(app))
+	async fn open_runs(core: &crate::core_context::Core) -> i64 {
+		database(core)
 			.expect("the database opens")
 			.messages()
 			.call(|connection| {
@@ -1886,8 +1871,8 @@ mod tests {
 			.expect("the runs are counted")
 	}
 
-	async fn stopped(app: &AppHandle<MockRuntime>, scope: RuntimeScope) -> CancelOutcome {
-		agent_cancel_turn(app.state(), scope).await.expect("the stop answers")
+	async fn stopped(core: &crate::core_context::Core, scope: RuntimeScope) -> CancelOutcome {
+		cancel_turn(core, scope).await.expect("the stop answers")
 	}
 
 	fn unavailable_store(bot_id: &str) -> CancelFailure {
@@ -1901,20 +1886,20 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_stop_with_no_live_session_closes_the_running_run_it_finds_and_says_cancelled() {
-		let app = an_app_of_its_own("cancel-stored-run", mock_builder());
-		crate::db::install(crate::events::core(app.handle()));
-		crate::events::core(app.app_handle()).manage(AgentState::default());
-		let room = a_room_running(app.handle(), &["Ada"]).await;
+		let core = a_core_of_its_own("cancel-stored-run");
+		crate::db::install(&core);
+		core.manage(AgentState::default());
+		let room = a_room_running(&core, &["Ada"]).await;
 		let ada = room.bot_ids[0].clone();
-		speaking_in(app.handle(), &room, std::slice::from_ref(&ada)).await;
-		a_streaming_reply(app.handle(), &room, &ada).await;
-		let mut announced = events::subscribed(app.handle());
+		speaking_in(&core, &room, std::slice::from_ref(&ada)).await;
+		a_streaming_reply(&core, &room, &ada).await;
+		let mut announced = core.subscribe_frames();
 
-		let outcome = stopped(app.handle(), scope_in(&room, &ada)).await;
+		let outcome = stopped(&core, scope_in(&room, &ada)).await;
 
 		assert_eq!(outcome, CancelOutcome::Cancelled);
-		assert_eq!(open_runs(app.handle()).await, 0, "the running run was left open");
-		assert_eq!(reply_states(app.handle(), &room).await, vec![MessageState::Cancelled]);
+		assert_eq!(open_runs(&core).await, 0, "the running run was left open");
+		assert_eq!(reply_states(&core, &room).await, vec![MessageState::Cancelled]);
 		let told = told(&mut announced);
 		let ended = ScopedEvent {
 			scope: Some(scope_in(&room, &ada)),
@@ -1927,13 +1912,13 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_stop_with_no_live_session_and_no_open_run_has_nothing_to_cancel() {
-		let app = an_app_of_its_own("cancel-nothing", mock_builder());
-		crate::db::install(crate::events::core(app.handle()));
-		crate::events::core(app.app_handle()).manage(AgentState::default());
-		let room = a_room_running(app.handle(), &["Ada"]).await;
-		let mut announced = events::subscribed(app.handle());
+		let core = a_core_of_its_own("cancel-nothing");
+		crate::db::install(&core);
+		core.manage(AgentState::default());
+		let room = a_room_running(&core, &["Ada"]).await;
+		let mut announced = core.subscribe_frames();
 
-		let outcome = stopped(app.handle(), scope_in(&room, &room.bot_ids[0])).await;
+		let outcome = stopped(&core, scope_in(&room, &room.bot_ids[0])).await;
 
 		assert_eq!(outcome, CancelOutcome::NothingToCancel);
 		assert_eq!(told(&mut announced), Vec::new());
@@ -1941,8 +1926,8 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_stop_whose_stored_run_cannot_be_closed_answers_failed_with_the_store_error() {
-		let app = an_app_of_its_own("cancel-store-down", mock_builder());
-		crate::events::core(app.app_handle()).manage(AgentState::default());
+		let core = a_core_of_its_own("cancel-store-down");
+		core.manage(AgentState::default());
 		let scope = RuntimeScope {
 			conversation_id: "c1".to_owned(),
 			bot_id: "b1".to_owned(),
@@ -1950,26 +1935,22 @@ mod tests {
 			epoch: 1,
 		};
 
-		let outcome = stopped(app.handle(), scope).await;
+		let outcome = stopped(&core, scope).await;
 
 		assert_eq!(outcome, CancelOutcome::Failed { failures: vec![unavailable_store("b1")] });
 	}
 
 	fn a_driven_turn(
-		app: &AppHandle<MockRuntime>,
+		core: &crate::core_context::Core,
 		room: &Room,
-	) -> (tauri::async_runtime::JoinHandle<()>, mpsc::UnboundedSender<ScopedEvent>) {
-		let held = crate::events::core(app.app_handle())
-			.state::<AgentState>()
-			.host_turns()
-			.hold(&room.id, "t1")
-			.expect("held");
-		let host_turn = a_host_turn(app, room, held.stopped.clone());
+	) -> (tokio::task::JoinHandle<()>, mpsc::UnboundedSender<ScopedEvent>) {
+		let held = core.state::<AgentState>().host_turns().hold(&room.id, "t1").expect("held");
+		let host_turn = a_host_turn(core, room, held.stopped.clone());
 		let speaking = room.bot_ids.iter().map(|bot_id| speaking_as(scope_in(room, bot_id)));
 		let speaking: Vec<Speaker> = speaking.collect();
 		let (events, heard) = mpsc::unbounded_channel();
 		let (mut reading, _lagging) = a_lagging_reader();
-		let driving = tauri::async_runtime::spawn(async move {
+		let driving = core.spawn(async move {
 			host_turn.drive(held, speaking, heard, &mut reading).await;
 		});
 		(driving, events)
@@ -1977,15 +1958,15 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_group_stop_answers_once_every_speaking_companion_cancel_has_settled() {
-		let app = an_app_of_its_own("cancel-group-settled", mock_builder());
-		crate::db::install(crate::events::core(app.handle()));
-		crate::events::core(app.app_handle()).manage(AgentState::default());
-		let room = a_room_running(app.handle(), &["Ada", "Grace"]).await;
-		speaking_in(app.handle(), &room, &room.bot_ids).await;
-		let (driving, _events) = a_driven_turn(app.handle(), &room);
+		let core = a_core_of_its_own("cancel-group-settled");
+		crate::db::install(&core);
+		core.manage(AgentState::default());
+		let room = a_room_running(&core, &["Ada", "Grace"]).await;
+		speaking_in(&core, &room, &room.bot_ids).await;
+		let (driving, _events) = a_driven_turn(&core, &room);
 
-		let outcome = stopped(app.handle(), scope_in(&room, &room.bot_ids[0])).await;
-		let left_open = open_runs(app.handle()).await;
+		let outcome = stopped(&core, scope_in(&room, &room.bot_ids[0])).await;
+		let left_open = open_runs(&core).await;
 		driving.abort();
 
 		assert_eq!(outcome, CancelOutcome::Cancelled);
@@ -1994,15 +1975,15 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_group_stop_ends_a_speaker_that_holds_nothing_left_to_cancel() {
-		let app = an_app_of_its_own("cancel-group-idle-speaker", mock_builder());
-		crate::db::install(crate::events::core(app.handle()));
-		crate::events::core(app.app_handle()).manage(AgentState::default());
-		let room = a_room_running(app.handle(), &["Ada"]).await;
+		let core = a_core_of_its_own("cancel-group-idle-speaker");
+		crate::db::install(&core);
+		core.manage(AgentState::default());
+		let room = a_room_running(&core, &["Ada"]).await;
 		let ada = scope_in(&room, &room.bot_ids[0]);
-		let (driving, _events) = a_driven_turn(app.handle(), &room);
-		let mut announced = events::subscribed(app.handle());
+		let (driving, _events) = a_driven_turn(&core, &room);
+		let mut announced = core.subscribe_frames();
 
-		let outcome = stopped(app.handle(), ada.clone()).await;
+		let outcome = stopped(&core, ada.clone()).await;
 		driving.abort();
 
 		assert_eq!(outcome, CancelOutcome::Cancelled);
@@ -2021,13 +2002,13 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_group_stop_names_every_companion_whose_cancel_failed() {
-		let app = an_app_of_its_own("cancel-group-failed", mock_builder());
-		crate::events::core(app.app_handle()).manage(AgentState::default());
+		let core = a_core_of_its_own("cancel-group-failed");
+		core.manage(AgentState::default());
 		let room =
 			Room { id: "c1".to_owned(), bot_ids: vec!["b-ada".to_owned(), "b-grace".to_owned()] };
-		let (driving, _events) = a_driven_turn(app.handle(), &room);
+		let (driving, _events) = a_driven_turn(&core, &room);
 
-		let outcome = stopped(app.handle(), scope_in(&room, "b-ada")).await;
+		let outcome = stopped(&core, scope_in(&room, "b-ada")).await;
 		driving.abort();
 
 		assert_eq!(
@@ -2053,13 +2034,13 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_stop_pending_when_every_speaker_ends_on_its_own_has_nothing_to_cancel() {
-		let app = an_app_of_its_own("cancel-ended-on-its-own", mock_builder());
+		let core = a_core_of_its_own("cancel-ended-on-its-own");
 		let room = Room { id: "c1".to_owned(), bot_ids: vec!["b-ada".to_owned()] };
 		let turns = HostTurns::default();
 		let held = turns.hold(&room.id, "t1").expect("the turn is held");
 		let answered = the_stop_of(&turns, &room.id);
 		let (_unwired, stopped) = watch::channel(false);
-		let host_turn = a_host_turn(app.handle(), &room, stopped);
+		let host_turn = a_host_turn(&core, &room, stopped);
 		let ada = scope_in(&room, "b-ada");
 		let (events, heard) = mpsc::unbounded_channel();
 		let completed = ScopedEvent {
@@ -2079,16 +2060,16 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_stop_pending_when_the_relay_is_lost_answers_cancelled_once_the_runs_are_ended() {
-		let app = an_app_of_its_own("cancel-relay-lost", mock_builder());
-		crate::db::install(crate::events::core(app.handle()));
-		crate::events::core(app.app_handle()).manage(AgentState::default());
-		let room = a_room_running(app.handle(), &["Ada"]).await;
-		speaking_in(app.handle(), &room, &room.bot_ids).await;
+		let core = a_core_of_its_own("cancel-relay-lost");
+		crate::db::install(&core);
+		core.manage(AgentState::default());
+		let room = a_room_running(&core, &["Ada"]).await;
+		speaking_in(&core, &room, &room.bot_ids).await;
 		let turns = HostTurns::default();
 		let held = turns.hold(&room.id, "t1").expect("the turn is held");
 		let answered = the_stop_of(&turns, &room.id);
 		let (_unwired, stopped) = watch::channel(false);
-		let host_turn = a_host_turn(app.handle(), &room, stopped);
+		let host_turn = a_host_turn(&core, &room, stopped);
 		let (events, heard) = mpsc::unbounded_channel::<ScopedEvent>();
 		drop(events);
 		let mut reading = a_closed_reader();
@@ -2097,7 +2078,7 @@ mod tests {
 		host_turn.drive(held, speaking, heard, &mut reading).await;
 
 		assert_eq!(answered.await, Ok(CancelOutcome::Cancelled));
-		assert_eq!(open_runs(app.handle()).await, 0, "the lost turn left its run open");
+		assert_eq!(open_runs(&core).await, 0, "the lost turn left its run open");
 	}
 
 	#[tokio::test(start_paused = true)]
@@ -2131,12 +2112,12 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_stop_that_keeps_every_summoned_companion_from_starting_answers_cancelled() {
-		let app = an_app_of_its_own("cancel-before-the-wave", mock_builder());
+		let core = a_core_of_its_own("cancel-before-the-wave");
 		let room = Room { id: "c1".to_owned(), bot_ids: vec!["b-ada".to_owned()] };
 		let turns = HostTurns::default();
 		let held = turns.hold(&room.id, "t1").expect("the turn is held");
 		let answered = the_stop_of(&turns, &room.id);
-		let host_turn = a_host_turn(app.handle(), &room, held.stopped.clone());
+		let host_turn = a_host_turn(&core, &room, held.stopped.clone());
 
 		let speaking = host_turn.wave(&held, summons_of(&["b-ada"])).await;
 
@@ -2175,28 +2156,27 @@ mod tests {
 			}
 		}
 
-		async fn an_awaited_run(app: &AppHandle<MockRuntime>, room: &Room, bot_id: &str) {
-			let messages =
-				database(crate::events::core(app)).expect("the database opens").messages();
+		async fn an_awaited_run(core: &crate::core_context::Core, room: &Room, bot_id: &str) {
+			let messages = database(core).expect("the database opens").messages();
 			messages.start_turn(turn_in(room)).await.expect("the turn opens");
 			messages.await_runs("t1".to_owned(), vec![bot_id.to_owned()]).await.expect("awaited");
 		}
 
 		#[tokio::test]
 		async fn a_relay_closed_under_a_queued_turn_withdraws_it_and_fails_it_to_the_member() {
-			let app = an_app_of_its_own("host-turn-closed-queued", mock_builder());
-			crate::db::install(crate::events::core(app.handle()));
-			crate::events::core(app.app_handle()).manage(AgentState::default());
-			let room = a_room_running(app.handle(), &["Ada"]).await;
+			let core = a_core_of_its_own("host-turn-closed-queued");
+			crate::db::install(&core);
+			core.manage(AgentState::default());
+			let room = a_room_running(&core, &["Ada"]).await;
 			let ada = scope_in(&room, &room.bot_ids[0]);
-			an_awaited_run(app.handle(), &room, &ada.bot_id).await;
-			let held = a_session_held_for(app.handle(), &ada).await;
+			an_awaited_run(&core, &room, &ada.bot_id).await;
+			let held = a_session_held_for(&core, &ada).await;
 			held.session.submit("host first", Some(submitted("t0", "h1"))).await.expect("t0 runs");
 			let handed = held.session.submit_in_line("member second", submitted("t1", "p1")).await;
 			assert_eq!(handed, Ok(Handed::Queued));
-			let mut announced = events::subscribed(app.handle());
+			let mut announced = core.subscribe_frames();
 			let (_stop, stopped) = watch::channel(false);
-			let host_turn = a_host_turn(app.handle(), &room, stopped);
+			let host_turn = a_host_turn(&core, &room, stopped);
 			let closed = ReadFailure::Ended("the relay closed".to_owned());
 
 			host_turn.lost(&closed, vec![in_line(ada.clone())], Vec::new()).await;
@@ -2211,7 +2191,7 @@ mod tests {
 			assert_eq!(heard.len(), 2, "the member heard {heard:?}");
 			assert!(failure_detail(&heard[0]).contains("the relay closed"), "{heard:?}");
 			assert_eq!(heard[1], ended_as(TurnOutcome::Failed));
-			assert_eq!(open_runs(app.handle()).await, 0, "the queued run was not abandoned");
+			assert_eq!(open_runs(&core).await, 0, "the queued run was not abandoned");
 			assert!(
 				shut_down_scopes(&agent_events(&told)).is_empty(),
 				"the live run was shut down"
@@ -2220,20 +2200,17 @@ mod tests {
 
 		#[tokio::test]
 		async fn a_queued_turn_lost_from_its_session_during_a_lag_is_rejected_and_not_released() {
-			let app = an_app_of_its_own("host-turn-lost-queue", mock_builder());
-			crate::db::install(crate::events::core(app.handle()));
-			crate::events::core(app.app_handle()).manage(AgentState::default());
-			let room = a_room_running(app.handle(), &["Ada"]).await;
+			let core = a_core_of_its_own("host-turn-lost-queue");
+			crate::db::install(&core);
+			core.manage(AgentState::default());
+			let room = a_room_running(&core, &["Ada"]).await;
 			let ada = scope_in(&room, &room.bot_ids[0]);
-			an_awaited_run(app.handle(), &room, &ada.bot_id).await;
-			let held = a_session_held_for(app.handle(), &ada).await;
-			crate::events::core(app.app_handle())
-				.state::<AgentState>()
-				.host_turns()
-				.note_started(&ada);
-			let mut announced = events::subscribed(app.handle());
+			an_awaited_run(&core, &room, &ada.bot_id).await;
+			let held = a_session_held_for(&core, &ada).await;
+			core.state::<AgentState>().host_turns().note_started(&ada);
+			let mut announced = core.subscribe_frames();
 			let (_stop, stopped) = watch::channel(false);
-			let host_turn = a_host_turn(app.handle(), &room, stopped);
+			let host_turn = a_host_turn(&core, &room, stopped);
 			let mut waiting = Vec::new();
 
 			let kept = host_turn.reconciled(vec![in_line(ada.clone())], &mut waiting).await;
@@ -2244,16 +2221,13 @@ mod tests {
 			assert_eq!(heard.len(), 2, "the member heard {heard:?}");
 			assert_eq!(failure_detail(&heard[0]), LOST_QUEUE);
 			assert_eq!(heard[1], ended_as(TurnOutcome::Failed));
-			assert_eq!(open_runs(app.handle()).await, 0, "the awaited run was not abandoned");
+			assert_eq!(open_runs(&core).await, 0, "the awaited run was not abandoned");
 			assert!(
 				shut_down_scopes(&agent_events(&told)).is_empty(),
 				"the lost turn was released"
 			);
 			assert!(
-				crate::events::core(app.app_handle())
-					.state::<AgentState>()
-					.host_turns()
-					.has_started(&ada),
+				core.state::<AgentState>().host_turns().has_started(&ada),
 				"the run was released"
 			);
 			assert!(held.session.is_idle().await);
@@ -2261,22 +2235,18 @@ mod tests {
 
 		#[tokio::test]
 		async fn a_queued_turn_that_ended_unheard_during_a_lag_is_released_without_a_failure() {
-			let app = an_app_of_its_own("host-turn-ended-unheard", mock_builder());
-			crate::db::install(crate::events::core(app.handle()));
-			crate::events::core(app.app_handle()).manage(AgentState::default());
-			let room = a_room_running(app.handle(), &["Ada"]).await;
+			let core = a_core_of_its_own("host-turn-ended-unheard");
+			crate::db::install(&core);
+			core.manage(AgentState::default());
+			let room = a_room_running(&core, &["Ada"]).await;
 			let ada = scope_in(&room, &room.bot_ids[0]);
-			let messages =
-				database(crate::events::core(app.handle())).expect("the database opens").messages();
+			let messages = database(&core).expect("the database opens").messages();
 			messages.start_turn(turn_in(&room)).await.expect("the turn opens");
-			let _held = a_session_held_for(app.handle(), &ada).await;
-			crate::events::core(app.app_handle())
-				.state::<AgentState>()
-				.host_turns()
-				.note_started(&ada);
-			let mut announced = events::subscribed(app.handle());
+			let _held = a_session_held_for(&core, &ada).await;
+			core.state::<AgentState>().host_turns().note_started(&ada);
+			let mut announced = core.subscribe_frames();
 			let (_stop, stopped) = watch::channel(false);
-			let host_turn = a_host_turn(app.handle(), &room, stopped);
+			let host_turn = a_host_turn(&core, &room, stopped);
 			let mut waiting = Vec::new();
 
 			let kept = host_turn.reconciled(vec![in_line(ada.clone())], &mut waiting).await;
@@ -2308,23 +2278,18 @@ mod tests {
 		#[tokio::test]
 		async fn a_queued_turn_its_session_ends_unrun_is_rejected_as_a_lost_queue() {
 			capturing();
-			let app = an_app_of_its_own("host-turn-ended-in-line", mock_builder());
-			crate::db::install(crate::events::core(app.handle()));
-			crate::events::core(app.app_handle()).manage(AgentState::default());
-			let room = a_room_running(app.handle(), &["Ada"]).await;
+			let core = a_core_of_its_own("host-turn-ended-in-line");
+			crate::db::install(&core);
+			core.manage(AgentState::default());
+			let room = a_room_running(&core, &["Ada"]).await;
 			let ada = scope_in(&room, &room.bot_ids[0]);
-			an_awaited_run(app.handle(), &room, &ada.bot_id).await;
-			let messages =
-				database(crate::events::core(app.handle())).expect("the database opens").messages();
+			an_awaited_run(&core, &room, &ada.bot_id).await;
+			let messages = database(&core).expect("the database opens").messages();
 			let claimed = messages.claim_awaited_run("t1".to_owned(), ada.bot_id.clone()).await;
 			assert!(claimed.expect("the claim is written"), "the host did not claim the run");
-			let mut announced = events::subscribed(app.handle());
-			let held = crate::events::core(app.app_handle())
-				.state::<AgentState>()
-				.host_turns()
-				.hold(&room.id, "t1")
-				.expect("held");
-			let host_turn = a_host_turn(app.handle(), &room, held.stopped.clone());
+			let mut announced = core.subscribe_frames();
+			let held = core.state::<AgentState>().host_turns().hold(&room.id, "t1").expect("held");
+			let host_turn = a_host_turn(&core, &room, held.stopped.clone());
 			let (heard, mut reading) =
 				heard_in_turn(&host_turn, &ada, vec![ended_as(TurnOutcome::Failed)]);
 
@@ -2335,7 +2300,7 @@ mod tests {
 			assert_eq!(heard.len(), 2, "the member heard {heard:?}");
 			assert_eq!(failure_detail(&heard[0]), LOST_QUEUE);
 			assert_eq!(heard[1], ended_as(TurnOutcome::Failed));
-			assert_eq!(open_runs(app.handle()).await, 0, "the claimed run was left open");
+			assert_eq!(open_runs(&core).await, 0, "the claimed run was left open");
 			assert_eq!(summons_steps(&room, &ada.bot_id), vec!["dropped lostQueue"]);
 			let lost = TransportError::WriteFailed { detail: LOST_QUEUE.to_owned() };
 			let lost_queue = SummonsDropReason::LostQueue;
@@ -2349,22 +2314,18 @@ mod tests {
 		async fn scenario_b_running_in_the_same_room_queues_the_summons_and_starts_it_once_delivered(
 		) {
 			capturing();
-			let app = an_app_of_its_own("scenario-same-room", mock_builder());
-			crate::db::install(crate::events::core(app.handle()));
-			crate::events::core(app.app_handle()).manage(AgentState::default());
-			let room = a_room_running(app.handle(), &["Ada", "Grace"]).await;
+			let core = a_core_of_its_own("scenario-same-room");
+			crate::db::install(&core);
+			core.manage(AgentState::default());
+			let room = a_room_running(&core, &["Ada", "Grace"]).await;
 			let grace = scope_in(&room, &room.bot_ids[1]);
-			speaking_in(app.handle(), &room, &room.bot_ids[..1]).await;
-			a_streaming_reply(app.handle(), &room, &room.bot_ids[0]).await;
-			let busy = a_session_held_for(app.handle(), &grace).await;
+			speaking_in(&core, &room, &room.bot_ids[..1]).await;
+			a_streaming_reply(&core, &room, &room.bot_ids[0]).await;
+			let busy = a_session_held_for(&core, &grace).await;
 			busy.session.submit("an earlier turn", Some(submitted("t0", "h1"))).await.expect("t0");
 			received_from_ada(&room);
-			let held = crate::events::core(app.app_handle())
-				.state::<AgentState>()
-				.host_turns()
-				.hold(&room.id, "t1")
-				.expect("held");
-			let host_turn = a_host_turn(app.handle(), &room, held.stopped.clone());
+			let held = core.state::<AgentState>().host_turns().hold(&room.id, "t1").expect("held");
+			let host_turn = a_host_turn(&core, &room, held.stopped.clone());
 			let handed = Summons {
 				bot_id: grace.bot_id.clone(),
 				prompt_id: format!("reply-of-{}", room.bot_ids[0]),
@@ -2388,12 +2349,12 @@ mod tests {
 			use crate::conversations::commands::{run_handed_turn, HandedTurn};
 
 			capturing();
-			let app = an_app_of_its_own("host-turn-handed", mock_builder());
-			crate::db::install(crate::events::core(app.handle()));
-			crate::events::core(app.app_handle()).manage(AgentState::default());
-			let room = a_room_running(app.handle(), &["Ada", "Grace"]).await;
+			let core = a_core_of_its_own("host-turn-handed");
+			crate::db::install(&core);
+			core.manage(AgentState::default());
+			let room = a_room_running(&core, &["Ada", "Grace"]).await;
 			let grace = scope_in(&room, &room.bot_ids[1]);
-			let _idle = a_session_held_for(app.handle(), &grace).await;
+			let _idle = a_session_held_for(&core, &grace).await;
 			let handed = HandedTurn {
 				conversation_id: room.id.clone(),
 				turn_id: "t-handed".to_owned(),
@@ -2401,16 +2362,11 @@ mod tests {
 				text: "@Grace this mission is yours now".to_owned(),
 				summoned: grace.bot_id.clone(),
 			};
-			let database = database(crate::events::core(app.handle())).expect("the database opens");
+			let database = database(&core).expect("the database opens");
 
-			run_handed_turn(
-				crate::events::core(app.handle()),
-				database,
-				&crate::events::core(app.app_handle()).state::<AgentState>(),
-				handed,
-			)
-			.await
-			.expect("the handed turn runs");
+			run_handed_turn(&core, database, &core.state::<AgentState>(), handed)
+				.await
+				.expect("the handed turn runs");
 
 			let query =
 				MessagePageQuery { conversation_id: room.id.clone(), before_seq: None, limit: 10 };
@@ -2449,19 +2405,15 @@ done
 "#;
 
 			struct Served {
-				app: crate::test_app::AppOfItsOwn,
+				core: crate::test_core::CoreOfItsOwn,
 				room: Room,
 				_grace: HeldSession,
 				prompts: RemovedOnDrop,
 			}
 
 			impl Served {
-				fn handle(&self) -> &AppHandle<MockRuntime> {
-					self.app.handle()
-				}
-
 				fn windows(&self) -> crate::core_context::Managed<'_, TurnWindows> {
-					crate::events::core(self.app.app_handle()).state::<TurnWindows>()
+					self.core.state::<TurnWindows>()
 				}
 
 				fn grace(&self) -> RuntimeScope {
@@ -2469,15 +2421,10 @@ done
 				}
 
 				async fn drive_from(&self, window: &str) {
-					let agent = crate::events::core(self.app.app_handle()).state::<AgentState>();
-					serve_on_driving(
-						crate::events::core(self.handle()),
-						&self.windows(),
-						&agent,
-						&ClientId::new(window),
-					)
-					.await
-					.expect("the awaited runs are served");
+					let agent = self.core.state::<AgentState>();
+					serve_on_driving(&self.core, &self.windows(), &agent, &ClientId::new(window))
+						.await
+						.expect("the awaited runs are served");
 				}
 
 				async fn grace_started_by_another_starter(&self) -> Result<(), TransportError> {
@@ -2485,9 +2432,8 @@ done
 						turn_id: "t1".to_owned(),
 						prompt_id: "reply-of-ada".to_owned(),
 					};
-					let database =
-						crate::events::core(self.app.app_handle()).state::<db::DatabaseState>();
-					let agent = crate::events::core(self.app.app_handle()).state::<AgentState>();
+					let database = self.core.state::<db::DatabaseState>();
+					let agent = self.core.state::<AgentState>();
 					let text = "your turn".to_owned();
 					submit_claimed_prompt(Some(&database), agent, self.grace(), text, Some(turn))
 						.await
@@ -2513,9 +2459,7 @@ done
 				}
 
 				async fn ada_hands_over_to_grace(&self) {
-					let messages = database(crate::events::core(self.handle()))
-						.expect("the database opens")
-						.messages();
+					let messages = database(&self.core).expect("the database opens").messages();
 					let ended = EndedRun {
 						turn_id: "t1".to_owned(),
 						bot_id: self.room.bot_ids[0].clone(),
@@ -2528,7 +2472,7 @@ done
 
 				async fn becomes_a_mission_thread(&self) {
 					let room_id = self.room.id.clone();
-					database(crate::events::core(self.handle()))
+					database(&self.core)
 						.expect("the database opens")
 						.call(move |connection| {
 							connection.execute(
@@ -2545,18 +2489,8 @@ done
 					summons_steps(&self.room, &self.room.bot_ids[1])
 				}
 
-				fn main_window(&self) -> tauri::Window<MockRuntime> {
-					let main =
-						tauri::WebviewWindowBuilder::new(self.handle(), MAIN, Default::default())
-							.build()
-							.expect("the main window builds");
-					main.as_ref().window()
-				}
-
 				async fn grace_busy_in_another_room(&self) -> HeldSession {
-					let conversations = database(crate::events::core(self.handle()))
-						.expect("it opens")
-						.conversations();
+					let conversations = database(&self.core).expect("it opens").conversations();
 					let elsewhere = conversations
 						.create_conversation(ConversationDraft {
 							space_id: "personal".to_owned(),
@@ -2572,7 +2506,7 @@ done
 						runtime_session_id: "session-of-grace-elsewhere".to_owned(),
 						..self.grace()
 					};
-					let busy = a_session_held_for(self.handle(), &grace_elsewhere).await;
+					let busy = a_session_held_for(&self.core, &grace_elsewhere).await;
 					let elsewhere_turn = Some(submitted("t-elsewhere", "h1"));
 					busy.session.submit("busy elsewhere", elsewhere_turn).await.expect("it runs");
 					busy
@@ -2580,7 +2514,7 @@ done
 
 				async fn run(&self, sql: &'static str) {
 					let room_id = self.room.id.clone();
-					database(crate::events::core(self.handle()))
+					database(&self.core)
 						.expect("the database opens")
 						.call(move |connection| {
 							Ok(connection.execute_batch(&sql.replace("ROOM", &room_id))?)
@@ -2591,17 +2525,15 @@ done
 			}
 
 			async fn ada_ran_t1_from_the_main_window(name: &str) -> Served {
-				let app = an_app_of_its_own(name, mock_builder());
-				crate::db::install(crate::events::core(app.handle()));
-				crate::events::core(app.app_handle()).manage(AgentState::default());
-				crate::events::core(app.app_handle()).manage(TurnRunDeadlines::default());
-				crate::events::core(app.app_handle()).manage_client_scoped(TurnWindows::default());
-				let room = a_room_running(app.handle(), &["Ada", "Grace"]).await;
-				speaking_in(app.handle(), &room, &room.bot_ids[..1]).await;
-				a_streaming_reply(app.handle(), &room, &room.bot_ids[0]).await;
-				crate::events::core(app.app_handle())
-					.state::<TurnWindows>()
-					.submitted_from(&ClientId::new(MAIN), "t1");
+				let core = a_core_of_its_own(name);
+				crate::db::install(&core);
+				core.manage(AgentState::default());
+				core.manage(TurnRunDeadlines::default());
+				core.manage_client_scoped(TurnWindows::default());
+				let room = a_room_running(&core, &["Ada", "Grace"]).await;
+				speaking_in(&core, &room, &room.bot_ids[..1]).await;
+				a_streaming_reply(&core, &room, &room.bot_ids[0]).await;
+				core.state::<TurnWindows>().submitted_from(&ClientId::new(MAIN), "t1");
 				let prompts = RemovedOnDrop(std::env::temp_dir().join(format!(
 					"kiroshi-prompts-{}-{}",
 					std::process::id(),
@@ -2610,8 +2542,8 @@ done
 				let answering =
 					ANSWERING_SIDECAR.replace("PROMPTS_HEARD", &prompts.display().to_string());
 				let grace_scope = scope_in(&room, &room.bot_ids[1]);
-				let grace = a_session_running(app.handle(), &grace_scope, &answering).await;
-				Served { app, room, _grace: grace, prompts }
+				let grace = a_session_running(&core, &grace_scope, &answering).await;
+				Served { core, room, _grace: grace, prompts }
 			}
 
 			async fn handed_over_after_a_reload(name: &str) -> Served {
@@ -2625,9 +2557,7 @@ done
 			async fn a_summons_received_while_its_window_reloads_starts_once_the_window_drives_again(
 			) {
 				let served = handed_over_after_a_reload("serve-after-reload").await;
-				serve_handed(crate::events::core(served.handle()), &served.room.id, "t1")
-					.await
-					.expect("nothing fails");
+				serve_handed(&served.core, &served.room.id, "t1").await.expect("nothing fails");
 				let before_driving = served.settled().await;
 
 				tokio::join!(served.drive_from(MAIN), served.drive_from("window-1"));
@@ -2646,9 +2576,7 @@ done
 				served.drive_from(MAIN).await;
 
 				served.ada_hands_over_to_grace().await;
-				serve_handed(crate::events::core(served.handle()), &served.room.id, "t1")
-					.await
-					.expect("served");
+				serve_handed(&served.core, &served.room.id, "t1").await.expect("served");
 				served.grace_heard_a_prompt().await;
 
 				assert_eq!(served.settled().await, 1, "grace was not started exactly once");
@@ -2660,9 +2588,7 @@ done
 				served.drive_from(MAIN).await;
 
 				served.ada_hands_over_to_grace().await;
-				serve_handed(crate::events::core(served.handle()), &served.room.id, "t1")
-					.await
-					.expect("nothing fails");
+				serve_handed(&served.core, &served.room.id, "t1").await.expect("nothing fails");
 				served.drive_from(MAIN).await;
 
 				assert_eq!(served.settled().await, 0);
@@ -2717,9 +2643,7 @@ done
 				served.drive_from(MAIN).await;
 
 				served.ada_hands_over_to_grace().await;
-				serve_handed(crate::events::core(served.handle()), &served.room.id, "t1")
-					.await
-					.expect("served");
+				serve_handed(&served.core, &served.room.id, "t1").await.expect("served");
 				served.grace_heard_a_prompt().await;
 
 				assert_eq!(served.settled().await, 1, "grace was not started exactly once");
@@ -2735,9 +2659,7 @@ done
 				served.drive_from(MAIN).await;
 
 				served.ada_hands_over_to_grace().await;
-				serve_handed(crate::events::core(served.handle()), &served.room.id, "t1")
-					.await
-					.expect("served");
+				serve_handed(&served.core, &served.room.id, "t1").await.expect("served");
 				served.grace_heard_a_prompt().await;
 
 				assert_eq!(served.settled().await, 1, "grace was not started exactly once");
@@ -2748,14 +2670,11 @@ done
 			async fn scenario_a_second_window_open_and_main_closed_starts_the_summons_once() {
 				capturing();
 				let served = ada_ran_t1_from_the_main_window("scenario-main-closed").await;
-				let main = served.main_window();
 				served.drive_from("window-1").await;
 
-				crate::events::clear_client_on_destroyed(&main, &tauri::WindowEvent::Destroyed);
+				served.core.clear_client(&ClientId::new(MAIN));
 				served.ada_hands_over_to_grace().await;
-				serve_handed(crate::events::core(served.handle()), &served.room.id, "t1")
-					.await
-					.expect("served");
+				serve_handed(&served.core, &served.room.id, "t1").await.expect("served");
 				served.grace_heard_a_prompt().await;
 
 				assert_eq!(served.settled().await, 1, "grace was not started exactly once");
@@ -2767,16 +2686,10 @@ done
 			{
 				capturing();
 				let served = ada_ran_t1_from_the_main_window("scenario-main-reloaded").await;
-				let main = served.main_window();
 
-				crate::events::clear_client_on_page_event(
-					&main,
-					tauri::webview::PageLoadEvent::Started,
-				);
+				served.core.clear_client(&ClientId::new(MAIN));
 				served.ada_hands_over_to_grace().await;
-				serve_handed(crate::events::core(served.handle()), &served.room.id, "t1")
-					.await
-					.expect("nothing fails");
+				serve_handed(&served.core, &served.room.id, "t1").await.expect("nothing fails");
 				let while_reloading = served.settled().await;
 				let traced_while_reloading = served.summons_of_grace();
 				served.drive_from(MAIN).await;
@@ -2838,9 +2751,7 @@ done
 							BEGIN SELECT RAISE(ABORT, 'the claim breaks'); END;",
 					)
 					.await;
-				let messages = database(crate::events::core(served.handle()))
-					.expect("the database opens")
-					.messages();
+				let messages = database(&served.core).expect("the database opens").messages();
 				let grace = served.room.bot_ids[1].clone();
 				messages.await_runs("t-broken".to_owned(), vec![grace]).await.expect("awaited");
 				served.windows().submitted_from(&ClientId::new(MAIN), "t-broken");
@@ -2855,7 +2766,7 @@ done
 			#[tokio::test]
 			async fn an_awaited_run_claimed_after_it_started_is_refused_and_starts_nothing() {
 				let served = handed_over_after_a_reload("serve-already-started").await;
-				database(crate::events::core(served.handle()))
+				database(&served.core)
 					.expect("the database opens")
 					.messages()
 					.start_run(turn_in(&served.room), served.room.bot_ids[1].clone())
@@ -2865,7 +2776,7 @@ done
 				served.drive_from(MAIN).await;
 
 				assert_eq!(served.settled().await, 0, "a started run was started again");
-				let agent = crate::events::core(served.app.app_handle()).state::<AgentState>();
+				let agent = served.core.state::<AgentState>();
 				assert!(
 					agent.host_turns().hold(&served.room.id, "t1").is_ok(),
 					"the refused claim kept the turn held"

@@ -157,11 +157,8 @@ fn observed(core: &crate::core_context::Core) -> Managed<'_, Observed> {
 mod tests {
 	use std::sync::{Arc, Mutex as Held};
 	use std::time::Duration;
-	use tauri::Manager;
 
 	use serde_json::{json, Value};
-	use tauri::test::{mock_builder, MockRuntime};
-	use tauri::{App, Listener};
 	use tokio::time::timeout;
 
 	use super::*;
@@ -170,8 +167,7 @@ mod tests {
 	use crate::agent::reply_writer::TurnSink;
 	use crate::conversations::commands::ready;
 	use crate::conversations::commands::{
-		conversation_delete, conversation_list, conversation_main_chat, conversation_page,
-		conversation_solo_states,
+		conversations_page, delete_conversation, list_conversations, main_chat, solo_states,
 	};
 	use crate::conversations::contract::Chat;
 	use crate::conversations::contract::STATE_CHANGED_EVENT;
@@ -180,7 +176,7 @@ mod tests {
 	use crate::missions::contract::{
 		Mission, MissionDraft, MissionEntry, MissionEventKind, MissionNote, Ticket,
 	};
-	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
+	use crate::test_core::{a_core_of_its_own, CoreOfItsOwn};
 
 	const PATIENCE: Duration = Duration::from_secs(10);
 
@@ -193,67 +189,64 @@ mod tests {
 			VALUES ('c1', 'b1', 'lead', 1, 0);
 	";
 
-	async fn a_host(name: &str) -> AppOfItsOwn {
-		let app = an_app_of_its_own(&format!("conversation-state-{name}"), mock_builder());
-		crate::db::install(crate::events::core(app.handle()));
-		database(&app)
+	async fn a_host(name: &str) -> CoreOfItsOwn {
+		let core = a_core_of_its_own(&format!("conversation-state-{name}"));
+		crate::db::install(&core);
+		database(&core)
 			.call_mut(|connection| Ok(connection.execute_batch(ONE_SEATED_ROOM)?))
 			.await
 			.expect("the room is planted");
-		app
+		core
 	}
 
-	fn database(app: &App<MockRuntime>) -> &db::Database {
-		ready(crate::events::core(app.app_handle()).state::<db::DatabaseState>().inner())
-			.expect("the database opens")
+	fn database(core: &CoreOfItsOwn) -> &db::Database {
+		ready(core.state::<db::DatabaseState>().inner()).expect("the database opens")
 	}
 
-	async fn listed_state(
-		app: &App<MockRuntime>,
-	) -> Result<ConversationState, TranscriptStoreError> {
-		let rows = conversation_list(app.state(), "personal".to_owned()).await?;
+	async fn listed_state(core: &CoreOfItsOwn) -> Result<ConversationState, TranscriptStoreError> {
+		let rows = list_conversations(core, "personal".to_owned()).await?;
 		let row = rows.into_iter().find(|row| row.conversation.id == "c1");
 		Ok(row.expect("the room is listed").observed.state)
 	}
 
-	async fn paged_state(app: &App<MockRuntime>) -> ConversationState {
-		paged(app, "c1").await.state
+	async fn paged_state(core: &CoreOfItsOwn) -> ConversationState {
+		paged(core, "c1").await.state
 	}
 
-	async fn paged(app: &App<MockRuntime>, conversation_id: &str) -> ObservedState {
-		let page = conversation_page(app.state(), "personal".to_owned(), None, None)
+	async fn paged(core: &CoreOfItsOwn, conversation_id: &str) -> ObservedState {
+		let page = conversations_page(core, "personal".to_owned(), None, None)
 			.await
 			.expect("the page is read");
 		let row = page.conversations.into_iter().find(|row| row.conversation.id == conversation_id);
 		row.expect("the room is on the page").observed
 	}
 
-	async fn ask(app: &App<MockRuntime>, kind: PromptKind) {
-		database(app)
+	async fn ask(core: &CoreOfItsOwn, kind: PromptKind) {
+		database(core)
 			.conversations()
 			.hold_prompt(a_pending_prompt("c1", kind))
 			.await
 			.expect("the prompt is held");
 	}
 
-	async fn answer(app: &App<MockRuntime>) {
-		database(app)
+	async fn answer(core: &CoreOfItsOwn) {
+		database(core)
 			.conversations()
 			.release_prompt("rs1".to_owned(), "p1".to_owned())
 			.await
 			.expect("the prompt is released");
 	}
 
-	async fn open_a_turn(app: &App<MockRuntime>) {
+	async fn open_a_turn(core: &CoreOfItsOwn) {
 		let turn = NewTurn { id: "t1".to_owned(), conversation_id: "c1".to_owned(), started_at: 1 };
-		database(app).messages().start_turn(turn).await.expect("the turn starts");
+		database(core).messages().start_turn(turn).await.expect("the turn starts");
 	}
 
-	async fn complete_the_turn(app: &App<MockRuntime>) {
-		database(app).messages().complete_turn("t1".to_owned(), 2).await.expect("the turn ends");
+	async fn complete_the_turn(core: &CoreOfItsOwn) {
+		database(core).messages().complete_turn("t1".to_owned(), 2).await.expect("the turn ends");
 	}
 
-	async fn an_open_mission(app: &App<MockRuntime>) -> Mission {
+	async fn an_open_mission(core: &CoreOfItsOwn) -> Mission {
 		let draft = MissionDraft {
 			origin_conversation_id: "c1".to_owned(),
 			bot_id: "b1".to_owned(),
@@ -268,11 +261,11 @@ mod tests {
 			source: "bot".to_owned(),
 			workspace_path: None,
 		};
-		database(app).missions().open(draft, "k1".to_owned()).await.expect("the mission opens")
+		database(core).missions().open(draft, "k1".to_owned()).await.expect("the mission opens")
 	}
 
-	async fn told(app: &App<MockRuntime>, mission: &Mission, entry: MissionEntry) {
-		database(app)
+	async fn told(core: &CoreOfItsOwn, mission: &Mission, entry: MissionEntry) {
+		database(core)
 			.missions()
 			.append(mission.id.clone(), entry)
 			.await
@@ -350,81 +343,79 @@ mod tests {
 		assert!(waited.is_ok(), "heard {:?}", heard.lock().expect("the list is kept"));
 	}
 
-	fn heard_states(app: &App<MockRuntime>) -> Arc<Held<Vec<Value>>> {
+	fn heard_states(core: &CoreOfItsOwn) -> Arc<Held<Vec<Value>>> {
 		let heard = Arc::new(Held::new(Vec::new()));
 		let kept = heard.clone();
-		app.handle().listen(STATE_CHANGED_EVENT, move |event| {
-			let payload = serde_json::from_str(event.payload()).expect("the payload is JSON");
+		core.listen_to(STATE_CHANGED_EVENT, move |payload| {
+			let payload = serde_json::from_str(payload).expect("the payload is JSON");
 			kept.lock().expect("the list is kept").push(payload);
 		});
 		heard
 	}
 
-	async fn observed_state(app: &App<MockRuntime>) -> ConversationState {
-		observed_in(app, "c1").await.state
+	async fn observed_state(core: &CoreOfItsOwn) -> ConversationState {
+		observed_in(core, "c1").await.state
 	}
 
-	async fn observed_in(app: &App<MockRuntime>, conversation_id: &str) -> ObservedState {
-		observe(crate::events::core(app.handle()), database(app), conversation_id)
-			.await
-			.expect("the state reads")
+	async fn observed_in(core: &CoreOfItsOwn, conversation_id: &str) -> ObservedState {
+		observe(core, database(core), conversation_id).await.expect("the state reads")
 	}
 
-	async fn a_run_of(app: &App<MockRuntime>, turn: (&str, &str, i64), bot_id: &str) {
+	async fn a_run_of(core: &CoreOfItsOwn, turn: (&str, &str, i64), bot_id: &str) {
 		let (id, conversation_id, started_at) = turn;
 		let turn =
 			NewTurn { id: id.to_owned(), conversation_id: conversation_id.to_owned(), started_at };
-		database(app).messages().start_run(turn, bot_id.to_owned()).await.expect("the run starts");
+		database(core).messages().start_run(turn, bot_id.to_owned()).await.expect("the run starts");
 	}
 
 	#[tokio::test]
 	async fn a_room_with_nothing_running_is_idle() {
-		let app = a_host("idle").await;
+		let core = a_host("idle").await;
 
-		assert_eq!(listed_state(&app).await, Ok(ConversationState::Idle));
-		assert_eq!(paged_state(&app).await, ConversationState::Idle);
+		assert_eq!(listed_state(&core).await, Ok(ConversationState::Idle));
+		assert_eq!(paged_state(&core).await, ConversationState::Idle);
 	}
 
 	#[tokio::test]
 	async fn an_open_turn_alone_is_working() {
-		let app = a_host("working").await;
-		open_a_turn(&app).await;
+		let core = a_host("working").await;
+		open_a_turn(&core).await;
 
-		assert_eq!(listed_state(&app).await, Ok(ConversationState::Working));
-		assert_eq!(paged_state(&app).await, ConversationState::Working);
+		assert_eq!(listed_state(&core).await, Ok(ConversationState::Working));
+		assert_eq!(paged_state(&core).await, ConversationState::Working);
 	}
 
 	#[tokio::test]
 	async fn a_pending_question_alone_needs_you() {
-		let app = a_host("question").await;
-		ask(&app, PromptKind::Question).await;
+		let core = a_host("question").await;
+		ask(&core, PromptKind::Question).await;
 
-		assert_eq!(listed_state(&app).await, Ok(ConversationState::NeedsYou));
-		assert_eq!(paged_state(&app).await, ConversationState::NeedsYou);
+		assert_eq!(listed_state(&core).await, Ok(ConversationState::NeedsYou));
+		assert_eq!(paged_state(&core).await, ConversationState::NeedsYou);
 	}
 
 	#[tokio::test]
 	async fn a_pending_permission_request_alone_needs_you() {
-		let app = a_host("permission").await;
-		ask(&app, PromptKind::Permission).await;
+		let core = a_host("permission").await;
+		ask(&core, PromptKind::Permission).await;
 
-		assert_eq!(listed_state(&app).await, Ok(ConversationState::NeedsYou));
-		assert_eq!(paged_state(&app).await, ConversationState::NeedsYou);
+		assert_eq!(listed_state(&core).await, Ok(ConversationState::NeedsYou));
+		assert_eq!(paged_state(&core).await, ConversationState::NeedsYou);
 	}
 
 	#[tokio::test]
 	async fn a_mission_reads_needs_you_for_its_origin_only_through_its_observed_liveness() {
-		let app = a_host("mission-observed").await;
-		let opened = an_open_mission(&app).await;
-		let run = a_run_held_by_the_app(crate::events::core(app.handle()), the_thread_of(&opened));
-		let before = listed_state(&app).await;
+		let core = a_host("mission-observed").await;
+		let opened = an_open_mission(&core).await;
+		let run = a_run_held_by_the_app(&core, the_thread_of(&opened));
+		let before = listed_state(&core).await;
 
 		run.emit(a_permission("p1"), None);
-		let prompted = listed_state(&app).await;
+		let prompted = listed_state(&core).await;
 		run.emit(resolved("p1"), None);
 
 		assert_eq!(
-			[before, prompted, listed_state(&app).await],
+			[before, prompted, listed_state(&core).await],
 			[
 				Ok(ConversationState::Idle),
 				Ok(ConversationState::NeedsYou),
@@ -436,22 +427,22 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_closed_mission_that_needed_you_leaves_its_origin_idle() {
-		let app = a_host("mission-closed").await;
-		let opened = an_open_mission(&app).await;
-		told(&app, &opened, an_escalation()).await;
+		let core = a_host("mission-closed").await;
+		let opened = an_open_mission(&core).await;
+		told(&core, &opened, an_escalation()).await;
 		let note = MissionNote { source: "bot".to_owned(), payload: Value::Null };
-		told(&app, &opened, MissionEntry::of(MissionEventKind::Closed, note)).await;
+		told(&core, &opened, MissionEntry::of(MissionEventKind::Closed, note)).await;
 
-		assert_eq!(listed_state(&app).await, Ok(ConversationState::Idle));
+		assert_eq!(listed_state(&core).await, Ok(ConversationState::Idle));
 	}
 
 	#[tokio::test]
 	async fn a_thread_move_that_moves_the_mission_liveness_re_observes_its_origin() {
-		let app = a_host("mission-thread-move").await;
-		let opened = an_open_mission(&app).await;
-		let run = a_run_held_by_the_app(crate::events::core(app.handle()), the_thread_of(&opened));
-		assert_eq!(listed_state(&app).await, Ok(ConversationState::Idle));
-		let heard = heard_states(&app);
+		let core = a_host("mission-thread-move").await;
+		let opened = an_open_mission(&core).await;
+		let run = a_run_held_by_the_app(&core, the_thread_of(&opened));
+		assert_eq!(listed_state(&core).await, Ok(ConversationState::Idle));
+		let heard = heard_states(&core);
 
 		run.emit(a_permission("p1"), None);
 		heard_until(&heard, &[a_change("needs_you")]).await;
@@ -462,66 +453,66 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_checkout_whose_last_hook_event_is_a_stop_leaves_its_origin_idle() {
-		let app = a_host("mission-stopped").await;
-		let opened = an_open_mission(&app).await;
-		told(&app, &opened, a_permission_prompt()).await;
+		let core = a_host("mission-stopped").await;
+		let opened = an_open_mission(&core).await;
+		told(&core, &opened, a_permission_prompt()).await;
 		let stop = json!({ "event": "Stop" });
-		told(&app, &opened, a_hook_call(MissionEventKind::AgentStopped, stop.clone())).await;
-		told(&app, &opened, a_hook_call(MissionEventKind::AgentAsked, stop)).await;
+		told(&core, &opened, a_hook_call(MissionEventKind::AgentStopped, stop.clone())).await;
+		told(&core, &opened, a_hook_call(MissionEventKind::AgentAsked, stop)).await;
 
-		assert_eq!(listed_state(&app).await, Ok(ConversationState::Idle));
-		assert_eq!(paged_state(&app).await, ConversationState::Idle);
+		assert_eq!(listed_state(&core).await, Ok(ConversationState::Idle));
+		assert_eq!(paged_state(&core).await, ConversationState::Idle);
 	}
 
 	#[tokio::test]
 	async fn a_permission_prompt_of_the_checkout_makes_its_origin_need_you() {
-		let app = a_host("mission-permission-prompt").await;
-		let opened = an_open_mission(&app).await;
-		told(&app, &opened, a_permission_prompt()).await;
+		let core = a_host("mission-permission-prompt").await;
+		let opened = an_open_mission(&core).await;
+		told(&core, &opened, a_permission_prompt()).await;
 
-		assert_eq!(listed_state(&app).await, Ok(ConversationState::NeedsYou));
-		assert_eq!(paged_state(&app).await, ConversationState::NeedsYou);
+		assert_eq!(listed_state(&core).await, Ok(ConversationState::NeedsYou));
+		assert_eq!(paged_state(&core).await, ConversationState::NeedsYou);
 	}
 
 	#[tokio::test]
 	async fn an_unanswered_escalation_makes_its_origin_need_you() {
-		let app = a_host("mission-escalated").await;
-		let opened = an_open_mission(&app).await;
-		told(&app, &opened, an_escalation()).await;
+		let core = a_host("mission-escalated").await;
+		let opened = an_open_mission(&core).await;
+		told(&core, &opened, an_escalation()).await;
 
-		assert_eq!(listed_state(&app).await, Ok(ConversationState::NeedsYou));
-		assert_eq!(paged_state(&app).await, ConversationState::NeedsYou);
+		assert_eq!(listed_state(&core).await, Ok(ConversationState::NeedsYou));
+		assert_eq!(paged_state(&core).await, ConversationState::NeedsYou);
 	}
 
 	#[tokio::test]
 	async fn a_pending_prompt_outranks_an_open_turn() {
-		let app = a_host("precedence").await;
-		open_a_turn(&app).await;
-		ask(&app, PromptKind::Question).await;
+		let core = a_host("precedence").await;
+		open_a_turn(&core).await;
+		ask(&core, PromptKind::Question).await;
 
-		assert_eq!(listed_state(&app).await, Ok(ConversationState::NeedsYou));
-		answer(&app).await;
-		assert_eq!(listed_state(&app).await, Ok(ConversationState::Working));
+		assert_eq!(listed_state(&core).await, Ok(ConversationState::NeedsYou));
+		answer(&core).await;
+		assert_eq!(listed_state(&core).await, Ok(ConversationState::Working));
 	}
 
 	#[tokio::test]
 	async fn each_transition_is_announced_once_and_an_unchanged_recompute_never() {
-		let app = a_host("transitions").await;
-		let heard = heard_states(&app);
+		let core = a_host("transitions").await;
+		let heard = heard_states(&core);
 
-		assert_eq!(observed_state(&app).await, ConversationState::Idle);
-		open_a_turn(&app).await;
-		observed_state(&app).await;
-		observed_state(&app).await;
-		ask(&app, PromptKind::Question).await;
-		observed_state(&app).await;
-		ask(&app, PromptKind::Question).await;
-		observed_state(&app).await;
-		answer(&app).await;
-		observed_state(&app).await;
-		complete_the_turn(&app).await;
-		observed_state(&app).await;
-		observed_state(&app).await;
+		assert_eq!(observed_state(&core).await, ConversationState::Idle);
+		open_a_turn(&core).await;
+		observed_state(&core).await;
+		observed_state(&core).await;
+		ask(&core, PromptKind::Question).await;
+		observed_state(&core).await;
+		ask(&core, PromptKind::Question).await;
+		observed_state(&core).await;
+		answer(&core).await;
+		observed_state(&core).await;
+		complete_the_turn(&core).await;
+		observed_state(&core).await;
+		observed_state(&core).await;
 
 		assert_eq!(
 			*heard.lock().expect("the list is kept"),
@@ -536,12 +527,12 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_list_read_seeds_the_state_so_a_recompute_after_it_announces_nothing() {
-		let app = a_host("seeded").await;
-		ask(&app, PromptKind::Question).await;
-		let heard = heard_states(&app);
+		let core = a_host("seeded").await;
+		ask(&core, PromptKind::Question).await;
+		let heard = heard_states(&core);
 
-		assert_eq!(listed_state(&app).await, Ok(ConversationState::NeedsYou));
-		observed_state(&app).await;
+		assert_eq!(listed_state(&core).await, Ok(ConversationState::NeedsYou));
+		observed_state(&core).await;
 
 		assert!(heard.lock().expect("the list is kept").is_empty());
 	}
@@ -550,10 +541,10 @@ mod tests {
 	async fn a_relaunched_host_reports_idle_for_a_prompt_its_dead_session_left() {
 		let before = a_host("before-relaunch").await;
 		ask(&before, PromptKind::Permission).await;
-		let file = before.path().app_data_dir().expect("the data folder resolves");
+		let file = before.data_dir().to_path_buf();
 
-		let after = an_app_of_its_own("conversation-state-after-relaunch", mock_builder());
-		crate::events::core(after.app_handle()).manage(Ok::<_, db::DatabaseError>(db::open(&file)));
+		let after = a_core_of_its_own("conversation-state-after-relaunch");
+		after.manage(Ok::<_, db::DatabaseError>(db::open(&file)));
 
 		assert_eq!(listed_state(&after).await, Ok(ConversationState::Idle));
 	}
@@ -562,10 +553,9 @@ mod tests {
 	async fn a_question_asked_after_a_crash_needs_you_until_it_is_answered() {
 		let crashed = a_host("before-crash").await;
 		ask(&crashed, PromptKind::Question).await;
-		let file = crashed.path().app_data_dir().expect("the data folder resolves");
-		let relaunched = an_app_of_its_own("conversation-state-after-crash", mock_builder());
-		crate::events::core(relaunched.app_handle())
-			.manage(Ok::<_, db::DatabaseError>(db::open(&file)));
+		let file = crashed.data_dir().to_path_buf();
+		let relaunched = a_core_of_its_own("conversation-state-after-crash");
+		relaunched.manage(Ok::<_, db::DatabaseError>(db::open(&file)));
 		assert_eq!(listed_state(&relaunched).await, Ok(ConversationState::Idle));
 
 		ask(&relaunched, PromptKind::Question).await;
@@ -579,12 +569,12 @@ mod tests {
 
 	#[tokio::test]
 	async fn deleting_a_conversation_deletes_its_prompts() {
-		let app = a_host("deleted").await;
-		ask(&app, PromptKind::Question).await;
+		let core = a_host("deleted").await;
+		ask(&core, PromptKind::Question).await;
 
-		conversation_delete(app.state(), "c1".to_owned()).await.expect("the room is deleted");
+		delete_conversation(&core, "c1".to_owned()).await.expect("the room is deleted");
 
-		let left: i64 = database(&app)
+		let left: i64 = database(&core)
 			.call(|connection| {
 				Ok(connection
 					.query_row("SELECT COUNT(*) FROM pending_prompts", [], |row| row.get(0))?)
@@ -596,13 +586,13 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_state_input_that_fails_to_read_fails_the_list_with_the_store_error() {
-		let app = a_host("unreadable").await;
-		database(&app)
+		let core = a_host("unreadable").await;
+		database(&core)
 			.call(|connection| Ok(connection.execute_batch("DROP TABLE pending_prompts")?))
 			.await
 			.expect("the table is dropped");
 
-		let refused = listed_state(&app).await;
+		let refused = listed_state(&core).await;
 
 		assert!(
 			matches!(refused, Err(TranscriptStoreError::Storage { .. })),
@@ -619,33 +609,33 @@ mod tests {
 			VALUES ('c2', 'b2', 'lead', 1, 0);
 	";
 
-	async fn a_second_room(app: &App<MockRuntime>) {
-		database(app)
+	async fn a_second_room(core: &CoreOfItsOwn) {
+		database(core)
 			.call_mut(|connection| Ok(connection.execute_batch(A_MAIN_CONVERSATION)?))
 			.await
 			.expect("the second room is planted");
 	}
 
-	async fn the_main_chat(app: &App<MockRuntime>) -> Chat {
-		conversation_main_chat(app.state(), "b1".to_owned(), Some("personal".to_owned()))
+	async fn the_main_chat(core: &CoreOfItsOwn) -> Chat {
+		main_chat(core, "b1".to_owned(), Some("personal".to_owned()))
 			.await
 			.expect("the main conversation reads")
 	}
 
 	#[tokio::test]
 	async fn the_main_conversation_answers_its_state_on_read_and_announces_its_change() {
-		let app = a_host("main-conversation").await;
-		let main = the_main_chat(&app).await;
-		let heard = heard_states(&app);
-		database(&app)
+		let core = a_host("main-conversation").await;
+		let main = the_main_chat(&core).await;
+		let heard = heard_states(&core);
+		database(&core)
 			.conversations()
 			.hold_prompt(a_pending_prompt(&main.id, PromptKind::Question))
 			.await
 			.expect("the prompt is held");
 
-		let read = the_main_chat(&app).await;
-		observed_in(&app, &main.id).await;
-		observed_in(&app, &main.id).await;
+		let read = the_main_chat(&core).await;
+		observed_in(&core, &main.id).await;
+		observed_in(&core, &main.id).await;
 
 		assert_eq!(
 			(main.state, main.pending_prompt, main.working_bot_ids),
@@ -658,21 +648,21 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_pending_prompt_carries_its_text_in_the_state_and_in_its_event() {
-		let app = a_host("prompt-text").await;
-		let heard = heard_states(&app);
-		ask(&app, PromptKind::Question).await;
-		let asked = observed_in(&app, "c1").await;
-		answer(&app).await;
-		observed_in(&app, "c1").await;
-		ask(&app, PromptKind::Permission).await;
+		let core = a_host("prompt-text").await;
+		let heard = heard_states(&core);
+		ask(&core, PromptKind::Question).await;
+		let asked = observed_in(&core, "c1").await;
+		answer(&core).await;
+		observed_in(&core, "c1").await;
+		ask(&core, PromptKind::Permission).await;
 
 		let permission = json!({ "promptId": "p1", "kind": "permission", "text": "Run git push" });
 		assert_eq!(serde_json::to_value(&asked.pending_prompt).ok(), Some(the_question()));
 		assert_eq!(
-			serde_json::to_value(paged(&app, "c1").await.pending_prompt).ok(),
+			serde_json::to_value(paged(&core, "c1").await.pending_prompt).ok(),
 			Some(permission.clone())
 		);
-		observed_in(&app, "c1").await;
+		observed_in(&core, "c1").await;
 		heard_until(
 			&heard,
 			&[
@@ -686,16 +676,16 @@ mod tests {
 
 	#[tokio::test]
 	async fn two_companions_working_in_two_conversations_are_each_named_in_its_own_event() {
-		let app = a_host("two-working").await;
-		a_second_room(&app).await;
-		let heard = heard_states(&app);
+		let core = a_host("two-working").await;
+		a_second_room(&core).await;
+		let heard = heard_states(&core);
 
-		a_run_of(&app, ("t1", "c1", 5), "b1").await;
-		observed_in(&app, "c1").await;
-		a_run_of(&app, ("t2", "c2", 3), "b2").await;
-		observed_in(&app, "c2").await;
-		a_run_of(&app, ("t3", "c1", 2), "b2").await;
-		observed_in(&app, "c1").await;
+		a_run_of(&core, ("t1", "c1", 5), "b1").await;
+		observed_in(&core, "c1").await;
+		a_run_of(&core, ("t2", "c2", 3), "b2").await;
+		observed_in(&core, "c2").await;
+		a_run_of(&core, ("t3", "c1", 2), "b2").await;
+		observed_in(&core, "c1").await;
 
 		heard_until(
 			&heard,
@@ -706,13 +696,13 @@ mod tests {
 			],
 		)
 		.await;
-		assert_eq!(paged(&app, "c2").await.working_bot_ids, ["b2"]);
+		assert_eq!(paged(&core, "c2").await.working_bot_ids, ["b2"]);
 	}
 
 	#[tokio::test]
 	async fn a_solo_thread_absent_from_every_loaded_page_reads_needs_you_on_its_first_read() {
-		let app = a_host("first-read").await;
-		let conversations = database(&app).conversations();
+		let core = a_host("first-read").await;
+		let conversations = database(&core).conversations();
 		let solo = conversations
 			.ensure_chat("b1".to_owned(), Some("personal".to_owned()))
 			.await
@@ -722,7 +712,7 @@ mod tests {
 			.await
 			.expect("the prompt is held");
 
-		let read = the_main_chat(&app).await;
+		let read = the_main_chat(&core).await;
 
 		assert_eq!(read.id, solo.id);
 		assert_eq!(read.state, ConversationState::NeedsYou);
@@ -740,8 +730,8 @@ mod tests {
 			VALUES ('c-gone', 'b4', 'lead', 1, 0);
 	";
 
-	async fn a_solo_thread_of(app: &App<MockRuntime>, bot_id: &str) -> String {
-		database(app)
+	async fn a_solo_thread_of(core: &CoreOfItsOwn, bot_id: &str) -> String {
+		database(core)
 			.conversations()
 			.ensure_chat(bot_id.to_owned(), Some("personal".to_owned()))
 			.await
@@ -749,8 +739,8 @@ mod tests {
 			.id
 	}
 
-	async fn conversations_held(app: &App<MockRuntime>) -> i64 {
-		database(app)
+	async fn conversations_held(core: &CoreOfItsOwn) -> i64 {
+		database(core)
 			.call(|connection| {
 				Ok(connection
 					.query_row("SELECT COUNT(*) FROM conversations", [], |row| row.get(0))?)
@@ -761,26 +751,24 @@ mod tests {
 
 	#[tokio::test]
 	async fn the_solo_states_of_a_space_answer_each_held_solo_thread_and_open_none() {
-		let app = a_host("solo-states").await;
-		database(&app)
+		let core = a_host("solo-states").await;
+		database(&core)
 			.call_mut(|connection| Ok(connection.execute_batch(THREE_COMPANIONS_AND_ONE_GONE)?))
 			.await
 			.expect("the companions are planted");
-		let asking = a_solo_thread_of(&app, "b1").await;
-		let working = a_solo_thread_of(&app, "b2").await;
-		database(&app)
+		let asking = a_solo_thread_of(&core, "b1").await;
+		let working = a_solo_thread_of(&core, "b2").await;
+		database(&core)
 			.conversations()
 			.hold_prompt(a_pending_prompt(&asking, PromptKind::Question))
 			.await
 			.expect("the prompt is held");
-		a_run_of(&app, ("t1", &working, 1), "b2").await;
-		let held_before = conversations_held(&app).await;
+		a_run_of(&core, ("t1", &working, 1), "b2").await;
+		let held_before = conversations_held(&core).await;
 
-		let read = conversation_solo_states(app.state(), "personal".to_owned())
-			.await
-			.expect("the solo states read");
+		let read = solo_states(&core, "personal".to_owned()).await.expect("the solo states read");
 
-		assert_eq!(conversations_held(&app).await, held_before);
+		assert_eq!(conversations_held(&core).await, held_before);
 		let answered: Vec<(&str, &str, ConversationState, Vec<String>)> = read
 			.iter()
 			.map(|entry| {
@@ -803,9 +791,9 @@ mod tests {
 			serde_json::to_value(&read[0].observed.pending_prompt).ok(),
 			Some(the_question())
 		);
-		assert_eq!(read[0].observed, paged(&app, &asking).await);
-		assert_eq!(read[1].observed, paged(&app, &working).await);
-		let main = the_main_chat(&app).await;
+		assert_eq!(read[0].observed, paged(&core, &asking).await);
+		assert_eq!(read[1].observed, paged(&core, &working).await);
+		let main = the_main_chat(&core).await;
 		assert_eq!(
 			(main.id, main.state, main.pending_prompt),
 			(asking, read[0].observed.state, read[0].observed.pending_prompt.clone())
@@ -828,15 +816,15 @@ mod tests {
 
 	#[tokio::test]
 	async fn an_undecodable_prompt_degrades_its_own_row_and_leaves_the_rest_of_the_page() {
-		let app = a_host("malformed-prompts").await;
-		ask(&app, PromptKind::Question).await;
-		a_run_of(&app, ("t1", "c1", 1), "b1").await;
-		database(&app)
+		let core = a_host("malformed-prompts").await;
+		ask(&core, PromptKind::Question).await;
+		a_run_of(&core, ("t1", "c1", 1), "b1").await;
+		database(&core)
 			.call_mut(|connection| Ok(connection.execute_batch(MALFORMED_PROMPTS)?))
 			.await
 			.expect("the malformed prompts are planted");
 
-		let page = conversation_page(app.state(), "personal".to_owned(), None, None)
+		let page = conversations_page(&core, "personal".to_owned(), None, None)
 			.await
 			.expect("the page is read");
 

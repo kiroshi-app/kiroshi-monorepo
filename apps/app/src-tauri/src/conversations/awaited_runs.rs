@@ -39,7 +39,7 @@ impl TurnWindows {
 		held.submitted.insert(turn_id.to_owned(), client.clone());
 	}
 
-	fn start_driving(&self, client: &ClientId) {
+	pub(crate) fn start_driving(&self, client: &ClientId) {
 		self.held().drivers.insert(client.clone());
 	}
 
@@ -56,7 +56,7 @@ impl TurnWindows {
 		});
 	}
 
-	fn is_left_to_the_host(&self, turn_id: &str) -> bool {
+	pub(crate) fn is_left_to_the_host(&self, turn_id: &str) -> bool {
 		let held = self.held();
 		!held.drivers.is_empty() && held.orphaned.contains(turn_id)
 	}
@@ -224,10 +224,6 @@ async fn claimed_runs_of(
 #[cfg(test)]
 mod tests {
 	use std::time::Duration;
-
-	use tauri::test::{mock_builder, MockRuntime};
-	use tauri::webview::PageLoadEvent;
-	use tauri::{AppHandle, Manager, WebviewWindow, WebviewWindowBuilder, WindowEvent};
 	use tokio::time;
 
 	use super::{forget_settled_turns, TurnWindows};
@@ -236,19 +232,18 @@ mod tests {
 	use crate::core_context::ClientId;
 	use crate::db::repositories::conversations::DEFAULT_BOT_ID;
 	use crate::db::repositories::messages::NewTurn;
-	use crate::events::{clear_client_on_destroyed, clear_client_on_page_event};
 	use crate::routines::runner::database;
-	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
+	use crate::test_core::{a_core_of_its_own, CoreOfItsOwn};
 
 	async fn a_chat_with_a_running_turn(
 		name: &str,
 		start_within: Duration,
-	) -> (AppOfItsOwn, String) {
-		let app = an_app_of_its_own(name, mock_builder());
-		crate::db::install(crate::events::core(app.handle()));
-		crate::events::core(app.app_handle()).manage_client_scoped(TurnWindows::default());
-		crate::events::core(app.app_handle()).manage(TurnRunDeadlines::after(start_within));
-		let database = database(crate::events::core(app.handle())).expect("the database opens");
+	) -> (CoreOfItsOwn, String) {
+		let core = a_core_of_its_own(name);
+		crate::db::install(&core);
+		core.manage_client_scoped(TurnWindows::default());
+		core.manage(TurnRunDeadlines::after(start_within));
+		let database = database(&core).expect("the database opens");
 		database.conversations().ensure_default_bot().await.expect("the bot is seeded");
 		let chat = database
 			.conversations()
@@ -257,11 +252,11 @@ mod tests {
 			.expect("the chat is seeded");
 		let turn = NewTurn { id: "t1".to_owned(), conversation_id: chat.id.clone(), started_at: 1 };
 		database.messages().start_turn(turn).await.expect("the turn opens");
-		(app, chat.id)
+		(core, chat.id)
 	}
 
-	fn left_after_a_reload(app: &AppHandle<MockRuntime>, turn_ids: &[&str]) {
-		let windows = crate::events::core(app.app_handle()).state::<TurnWindows>();
+	fn left_after_a_reload(core: &crate::core_context::Core, turn_ids: &[&str]) {
+		let windows = core.state::<TurnWindows>();
 		for turn_id in turn_ids {
 			windows.submitted_from(&ClientId::new("main"), turn_id);
 		}
@@ -271,17 +266,16 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_turn_left_with_no_run_is_forgotten_and_a_turn_with_a_run_is_kept() {
-		let (app, chat_id) =
+		let (core, chat_id) =
 			a_chat_with_a_running_turn("forget-settled", Duration::from_secs(60)).await;
 		let turn = NewTurn { id: "t1".to_owned(), conversation_id: chat_id, started_at: 1 };
-		let messages =
-			database(crate::events::core(app.handle())).expect("the database opens").messages();
+		let messages = database(&core).expect("the database opens").messages();
 		messages.start_run(turn, DEFAULT_BOT_ID.to_owned()).await.expect("the run starts");
-		left_after_a_reload(app.handle(), &["t1", "t-ended"]);
+		left_after_a_reload(&core, &["t1", "t-ended"]);
 
-		forget_settled_turns(crate::events::core(app.handle())).await;
+		forget_settled_turns(&core).await;
 
-		let windows = crate::events::core(app.app_handle()).state::<TurnWindows>();
+		let windows = core.state::<TurnWindows>();
 		assert!(windows.is_left_to_the_host("t1"), "a turn still running was forgotten");
 		assert!(!windows.is_left_to_the_host("t-ended"), "a turn with no run was kept");
 		assert!(windows.tracked().iter().all(|turn_id| turn_id == "t1"));
@@ -289,15 +283,14 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_turn_whose_last_awaited_run_expires_is_forgotten() {
-		let (app, chat_id) = a_chat_with_a_running_turn("forget-expired", Duration::ZERO).await;
-		let messages =
-			database(crate::events::core(app.handle())).expect("the database opens").messages();
+		let (core, chat_id) = a_chat_with_a_running_turn("forget-expired", Duration::ZERO).await;
+		let messages = database(&core).expect("the database opens").messages();
 		let late = vec!["late".to_owned()];
 		messages.await_runs("t1".to_owned(), late.clone()).await.expect("the run waits");
-		left_after_a_reload(app.handle(), &["t1"]);
+		left_after_a_reload(&core, &["t1"]);
 
-		arm_start_deadlines(crate::events::core(app.handle()), &chat_id, "t1", &late);
-		let windows = crate::events::core(app.app_handle()).state::<TurnWindows>();
+		arm_start_deadlines(&core, &chat_id, "t1", &late);
+		let windows = core.state::<TurnWindows>();
 		time::timeout(Duration::from_secs(10), async {
 			while !windows.tracked().is_empty() {
 				time::sleep(Duration::from_millis(10)).await;
@@ -305,46 +298,6 @@ mod tests {
 		})
 		.await
 		.expect("the expired turn was forgotten");
-	}
-
-	fn a_window_that_ran_t1(name: &str) -> (AppOfItsOwn, WebviewWindow<MockRuntime>) {
-		let app = an_app_of_its_own(name, mock_builder());
-		crate::events::core(app.app_handle()).manage_client_scoped(TurnWindows::default());
-		let main = WebviewWindowBuilder::new(&*app, "main", Default::default())
-			.build()
-			.expect("the window builds");
-		let windows = crate::events::core(app.app_handle()).state::<TurnWindows>();
-		windows.submitted_from(&ClientId::new("main"), "t1");
-		windows.start_driving(&ClientId::new("main"));
-		(app, main)
-	}
-
-	#[test]
-	fn a_page_that_starts_loading_leaves_its_turns_to_the_host_and_a_finished_load_does_not() {
-		let (app, main) = a_window_that_ran_t1("forget-page-load");
-		let windows = crate::events::core(app.app_handle()).state::<TurnWindows>();
-		windows.start_driving(&ClientId::new("window-1"));
-
-		clear_client_on_page_event(&main.as_ref().window(), PageLoadEvent::Finished);
-		let after_a_finished_load = windows.is_left_to_the_host("t1");
-		clear_client_on_page_event(&main.as_ref().window(), PageLoadEvent::Started);
-
-		assert!(!after_a_finished_load, "a finished load left the turn to the host");
-		assert!(windows.is_left_to_the_host("t1"));
-	}
-
-	#[test]
-	fn a_destroyed_window_leaves_its_turns_to_the_host_and_another_event_does_not() {
-		let (app, main) = a_window_that_ran_t1("forget-destroyed");
-		let windows = crate::events::core(app.app_handle()).state::<TurnWindows>();
-		windows.start_driving(&ClientId::new("window-1"));
-
-		clear_client_on_destroyed(&main.as_ref().window(), &WindowEvent::Focused(false));
-		let after_a_blur = windows.is_left_to_the_host("t1");
-		clear_client_on_destroyed(&main.as_ref().window(), &WindowEvent::Destroyed);
-
-		assert!(!after_a_blur, "a blur left the turn to the host");
-		assert!(windows.is_left_to_the_host("t1"));
 	}
 
 	#[test]
@@ -406,31 +359,21 @@ mod tests {
 
 	#[test]
 	fn every_drop_the_room_notices_waits_for_it_only_while_no_window_drives() {
-		let app = an_app_of_its_own("unseen-drops", mock_builder());
-		crate::events::core(app.app_handle()).manage_client_scoped(TurnWindows::default());
-		let windows = crate::events::core(app.app_handle()).state::<TurnWindows>();
+		let core = a_core_of_its_own("unseen-drops");
+		core.manage_client_scoped(TurnWindows::default());
+		let windows = core.state::<TurnWindows>();
 		let run = SummonsRun { conversation_id: "c1", turn_id: "t1", bot_id: "b1" };
 		let elsewhere = SummonsRun { conversation_id: "c2", ..run };
 
 		for reason in SummonsDropReason::ALL {
-			summons::note_dropped(crate::events::core(app.handle()), &run, reason, None);
+			summons::note_dropped(&core, &run, reason, None);
 		}
-		summons::note_dropped(
-			crate::events::core(app.handle()),
-			&elsewhere,
-			SummonsDropReason::StartFailed,
-			None,
-		);
+		summons::note_dropped(&core, &elsewhere, SummonsDropReason::StartFailed, None);
 		let kept: Vec<SummonsDropReason> =
 			windows.claim_unseen_drops("c1").into_iter().map(|dropped| dropped.reason).collect();
 		let claimed_again = windows.claim_unseen_drops("c1");
 		windows.start_driving(&ClientId::new("main"));
-		summons::note_dropped(
-			crate::events::core(app.handle()),
-			&run,
-			SummonsDropReason::StartFailed,
-			None,
-		);
+		summons::note_dropped(&core, &run, SummonsDropReason::StartFailed, None);
 
 		let noticed: Vec<SummonsDropReason> = SummonsDropReason::ALL
 			.into_iter()

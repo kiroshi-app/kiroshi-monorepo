@@ -237,8 +237,6 @@ mod tests {
 	use std::sync::mpsc::{channel, Receiver};
 
 	use serde::de::DeserializeOwned;
-	use tauri::test::{mock_builder, MockRuntime};
-	use tauri::{App, Listener, Manager};
 
 	use super::super::commands::list_bundles_at_launch;
 	use super::*;
@@ -250,36 +248,32 @@ mod tests {
 		Bot as StoredBot, BotIdentity as StoredIdentity, ConversationDraft,
 	};
 	use crate::db::repositories::user::OnboardingStep;
-	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
+	use crate::test_core::{a_core_of_its_own, CoreOfItsOwn};
 
-	fn a_bare_host(name: &str) -> AppOfItsOwn {
-		let app = an_app_of_its_own(&format!("conversation-seed-{name}"), mock_builder());
-		crate::events::core(app.app_handle()).manage(LaunchOutcomeState::default());
-		app
+	fn a_bare_host(name: &str) -> CoreOfItsOwn {
+		let core = a_core_of_its_own(&format!("conversation-seed-{name}"));
+		core.manage(LaunchOutcomeState::default());
+		core
 	}
 
-	fn a_host(name: &str) -> AppOfItsOwn {
-		let app = a_bare_host(name);
-		crate::db::install(crate::events::core(app.handle()));
-		app
+	fn a_host(name: &str) -> CoreOfItsOwn {
+		let core = a_bare_host(name);
+		crate::db::install(&core);
+		core
 	}
 
-	fn database_of(app: &App<MockRuntime>) -> &db::Database {
-		crate::events::core(app.app_handle())
-			.state::<db::DatabaseState>()
-			.inner()
-			.as_ref()
-			.expect("the database opens")
+	fn database_of(core: &CoreOfItsOwn) -> &db::Database {
+		core.state::<db::DatabaseState>().inner().as_ref().expect("the database opens")
 	}
 
-	fn outcome_of(app: &App<MockRuntime>) -> LaunchOutcome {
-		crate::events::core(app.app_handle()).state::<LaunchOutcomeState>().read()
+	fn outcome_of(core: &CoreOfItsOwn) -> LaunchOutcome {
+		core.state::<LaunchOutcomeState>().read()
 	}
 
-	fn heard(app: &App<MockRuntime>, event: &'static str) -> Receiver<String> {
+	fn heard(core: &CoreOfItsOwn, event: &'static str) -> Receiver<String> {
 		let (sender, received) = channel();
-		app.handle().listen(event, move |heard| {
-			sender.send(heard.payload().to_owned()).expect("the test still listens");
+		core.listen_to(event, move |payload| {
+			sender.send(payload.to_owned()).expect("the test still listens");
 		});
 		received
 	}
@@ -291,12 +285,12 @@ mod tests {
 			.collect()
 	}
 
-	async fn seeded(app: &App<MockRuntime>, database: &db::Database) {
-		plant_first_companion(crate::events::core(app.handle()), database, Vec::new()).await;
+	async fn seeded(core: &CoreOfItsOwn, database: &db::Database) {
+		plant_first_companion(core, database, Vec::new()).await;
 	}
 
-	async fn planted(app: &App<MockRuntime>, database: &db::Database) -> Vec<StoredBot> {
-		seeded(app, database).await;
+	async fn planted(core: &CoreOfItsOwn, database: &db::Database) -> Vec<StoredBot> {
+		seeded(core, database).await;
 		database.conversations().bots(personal_space()).await.expect("the roster reads")
 	}
 
@@ -364,12 +358,9 @@ mod tests {
 			.title
 	}
 
-	fn bundle_of(app: &App<MockRuntime>, bot: &StoredBot) -> PathBuf {
-		bundles::dir(
-			&bundles::root(crate::events::core(app.handle())).expect("the bundle root"),
-			&bot.id,
-		)
-		.expect("the bundle is held")
+	fn bundle_of(core: &CoreOfItsOwn, bot: &StoredBot) -> PathBuf {
+		bundles::dir(&bundles::root(core).expect("the bundle root"), &bot.id)
+			.expect("the bundle is held")
 	}
 
 	fn skill_body(bundle: &Path, id: &str) -> Vec<u8> {
@@ -383,10 +374,10 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_fresh_install_opens_with_shoto_in_the_personal_space() {
-		let app = a_host("fresh");
-		let database = database_of(&app);
+		let core = a_host("fresh");
+		let database = database_of(&core);
 
-		let roster = planted(&app, database).await;
+		let roster = planted(&core, database).await;
 
 		let shoto = roster.first().expect("Shoto is planted");
 		assert_eq!(roster.len(), 1);
@@ -403,12 +394,12 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_planted_shoto_is_announced_by_his_id_and_his_name() {
-		let app = a_host("announced");
-		let database = database_of(&app);
-		let created = heard(&app, CREATED_EVENT);
-		let refused = heard(&app, SEED_REFUSED_EVENT);
+		let core = a_host("announced");
+		let database = database_of(&core);
+		let created = heard(&core, CREATED_EVENT);
+		let refused = heard(&core, SEED_REFUSED_EVENT);
 
-		let roster = planted(&app, database).await;
+		let roster = planted(&core, database).await;
 
 		assert_eq!(
 			payloads::<CompanionCreated>(&created),
@@ -419,13 +410,13 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_planted_shoto_stays_readable_when_nothing_listened() {
-		let app = a_host("unheard");
-		let database = database_of(&app);
+		let core = a_host("unheard");
+		let database = database_of(&core);
 
-		let roster = planted(&app, database).await;
+		let roster = planted(&core, database).await;
 
 		assert_eq!(
-			outcome_of(&app),
+			outcome_of(&core),
 			LaunchOutcome {
 				created: Some(CompanionCreated {
 					id: roster[0].id.clone(),
@@ -438,15 +429,15 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_refusal_stays_readable_when_nothing_listened() {
-		let app = a_host("unheard-refusal");
-		let database = database_of(&app);
+		let core = a_host("unheard-refusal");
+		let database = database_of(&core);
 		database.spaces().create("Work".to_owned()).await.expect("the second space");
 		database.spaces().delete(PERSONAL_SPACE_ID.to_owned()).await.expect("the deletion");
 
-		seeded(&app, database).await;
+		seeded(&core, database).await;
 
 		assert_eq!(
-			outcome_of(&app),
+			outcome_of(&core),
 			LaunchOutcome {
 				created: None,
 				refused: Some(CompanionSeedRefused { reason: Refusal::NoPersonalSpace.reason() }),
@@ -456,14 +447,13 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_launch_that_cannot_reach_the_database_names_it_in_the_outcome() {
-		let app = a_bare_host("no-database");
-		crate::events::core(app.app_handle())
-			.manage::<db::DatabaseState>(Err(DatabaseError::AppDataDir));
-		let refused = heard(&app, SEED_REFUSED_EVENT);
+		let core = a_bare_host("no-database");
+		core.manage::<db::DatabaseState>(Err(DatabaseError::AppDataDir));
+		let refused = heard(&core, SEED_REFUSED_EVENT);
 
-		list_bundles_at_launch(crate::events::core(app.handle())).await;
+		list_bundles_at_launch(&core).await;
 
-		let outcome = outcome_of(&app);
+		let outcome = outcome_of(&core);
 		assert_eq!(outcome.created, None);
 		let reason = outcome.refused.expect("the refusal is kept").reason;
 		assert!(reason.contains("the database could not be reached"), "got {reason}");
@@ -472,15 +462,12 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_plugin_not_laid_down_before_the_seed_is_named_beside_the_planted_shoto() {
-		let app = a_host("unlaid");
-		a_file_standing_at(
-			&bundles::system::path(crate::events::core(app.handle()))
-				.expect("the system plugin path"),
-		);
+		let core = a_host("unlaid");
+		a_file_standing_at(&bundles::system::path(&core).expect("the system plugin path"));
 
-		list_bundles_at_launch(crate::events::core(app.handle())).await;
+		list_bundles_at_launch(&core).await;
 
-		let outcome = outcome_of(&app);
+		let outcome = outcome_of(&core);
 		assert_eq!(outcome.created.map(|created| created.name), Some(shoto::NAME.to_owned()));
 		let reason = outcome.refused.expect("the refusal is kept").reason;
 		assert!(reason.starts_with("the system plugin was not laid down"), "got {reason}");
@@ -488,12 +475,11 @@ mod tests {
 
 	#[tokio::test]
 	async fn the_picture_shoto_wears_is_the_embedded_one_the_pipeline_answered() {
-		let app = a_host("picture");
-		let database = database_of(&app);
-		let dir = avatars::Avatars::dir(crate::events::core(app.handle()))
-			.expect("the avatars directory");
+		let core = a_host("picture");
+		let database = database_of(&core);
+		let dir = avatars::Avatars::dir(&core).expect("the avatars directory");
 
-		let roster = planted(&app, database).await;
+		let roster = planted(&core, database).await;
 
 		let recorded = roster[0].avatar_image_path.as_deref().expect("a picture is recorded");
 		let path = avatars::readable(&dir, recorded).expect("the picture sits in the directory");
@@ -506,12 +492,12 @@ mod tests {
 
 	#[tokio::test]
 	async fn the_bundle_carries_the_three_skills_byte_for_byte_and_an_agent_holding_the_persona() {
-		let app = a_host("bundle");
-		let database = database_of(&app);
+		let core = a_host("bundle");
+		let database = database_of(&core);
 
-		let roster = planted(&app, database).await;
+		let roster = planted(&core, database).await;
 
-		let bundle = bundle_of(&app, &roster[0]);
+		let bundle = bundle_of(&core, &roster[0]);
 		for (id, body) in shoto::SKILLS {
 			assert_eq!(skill_body(&bundle, id), body, "the skill {id} was rewritten");
 		}
@@ -523,48 +509,48 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_second_launch_plants_nothing_and_a_deleted_shoto_stays_deleted() {
-		let app = a_host("again");
-		let database = database_of(&app);
-		let roster = planted(&app, database).await;
-		let created = heard(&app, CREATED_EVENT);
+		let core = a_host("again");
+		let database = database_of(&core);
+		let roster = planted(&core, database).await;
+		let created = heard(&core, CREATED_EVENT);
 
-		assert_eq!(planted(&app, database).await.len(), 1, "a second Shoto was planted");
+		assert_eq!(planted(&core, database).await.len(), 1, "a second Shoto was planted");
 
 		database.conversations().delete_bot(roster[0].id.clone()).await.expect("the deletion");
-		assert_eq!(planted(&app, database).await.len(), 0, "a deleted Shoto came back");
+		assert_eq!(planted(&core, database).await.len(), 0, "a deleted Shoto came back");
 		assert_eq!(payloads::<CompanionCreated>(&created), Vec::new());
-		assert_eq!(outcome_of(&app), LaunchOutcome::default());
+		assert_eq!(outcome_of(&core), LaunchOutcome::default());
 	}
 
 	#[tokio::test]
 	async fn a_start_drops_the_connect_skill_an_older_shoto_bundle_still_holds() {
-		let app = a_host("retired-connect");
-		let database = database_of(&app);
-		let roster = planted(&app, database).await;
-		let bundle = bundle_of(&app, &roster[0]);
+		let core = a_host("retired-connect");
+		let database = database_of(&core);
+		let roster = planted(&core, database).await;
+		let bundle = bundle_of(&core, &roster[0]);
 		let connect = bundle.join("skills").join(shoto::RETIRED_SKILL);
 		let old_skill = b"---\nname: \"connect\"\ndescription: \"Connect.\"\n---\n";
 		crate::private_files::replace(&connect.join("SKILL.md"), old_skill)
 			.expect("the old skill is planted");
 
-		seeded(&app, database).await;
+		seeded(&core, database).await;
 
 		assert!(!connect.exists(), "the connect skill is still on disk");
 		for (id, body) in shoto::SKILLS {
 			assert_eq!(skill_body(&bundle, id), body, "the skill {id} moved");
 		}
-		assert_eq!(outcome_of(&app), LaunchOutcome::default());
+		assert_eq!(outcome_of(&core), LaunchOutcome::default());
 	}
 
 	#[tokio::test]
 	async fn a_start_after_the_first_run_keeps_it_over_and_the_stored_step_unchanged() {
-		let app = a_host("first-run-over");
-		let database = database_of(&app);
-		planted(&app, database).await;
+		let core = a_host("first-run-over");
+		let database = database_of(&core);
+		planted(&core, database).await;
 		database.user().mark_first_run_done().await.expect("the first run is over");
 		database.user().set_onboarding_step(OnboardingStep::Account).await.expect("the step");
 
-		seeded(&app, database).await;
+		seeded(&core, database).await;
 
 		let preferences = database.user().preferences().await.expect("the preferences");
 		assert!(preferences.first_run_done);
@@ -573,13 +559,13 @@ mod tests {
 
 	#[tokio::test]
 	async fn without_the_personal_space_nothing_is_planted_and_the_refusal_is_announced() {
-		let app = a_host("spaceless");
-		let database = database_of(&app);
+		let core = a_host("spaceless");
+		let database = database_of(&core);
 		database.spaces().create("Work".to_owned()).await.expect("the second space");
 		database.spaces().delete(PERSONAL_SPACE_ID.to_owned()).await.expect("the deletion");
-		let refused = heard(&app, SEED_REFUSED_EVENT);
+		let refused = heard(&core, SEED_REFUSED_EVENT);
 
-		seeded(&app, database).await;
+		seeded(&core, database).await;
 
 		assert_eq!(database.conversations().bots(None).await.expect("the roster").len(), 0);
 		assert!(!database.user().is_first_companion_seeded().await.expect("the marker"));
@@ -591,21 +577,18 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_bundle_that_cannot_be_written_leaves_no_row_no_picture_and_no_marker() {
-		let app = a_host("unwritable");
-		let database = database_of(&app);
-		a_file_standing_at(
-			&bundles::root(crate::events::core(app.handle())).expect("the bundle root"),
-		);
-		let refused = heard(&app, SEED_REFUSED_EVENT);
+		let core = a_host("unwritable");
+		let database = database_of(&core);
+		a_file_standing_at(&bundles::root(&core).expect("the bundle root"));
+		let refused = heard(&core, SEED_REFUSED_EVENT);
 
-		seeded(&app, database).await;
+		seeded(&core, database).await;
 
 		assert_eq!(database.conversations().bots(None).await.expect("the roster").len(), 0);
 		assert!(!database.user().is_first_companion_seeded().await.expect("the marker"));
 		let preferences = database.user().preferences().await.expect("the preferences");
 		assert_eq!(preferences.onboarding_shoto_id, None);
-		let dir = avatars::Avatars::dir(crate::events::core(app.handle()))
-			.expect("the avatars directory");
+		let dir = avatars::Avatars::dir(&core).expect("the avatars directory");
 		assert_eq!(fs::read_dir(&dir).expect("the directory reads").count(), 0);
 		let reasons = payloads::<CompanionSeedRefused>(&refused);
 		assert_eq!(reasons.len(), 1, "got {reasons:?}");
@@ -614,14 +597,13 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_picture_that_cannot_be_written_leaves_no_row_and_no_marker_and_is_announced() {
-		let app = a_host("pictureless");
-		let database = database_of(&app);
-		let dir = avatars::Avatars::dir(crate::events::core(app.handle()))
-			.expect("the avatars directory");
+		let core = a_host("pictureless");
+		let database = database_of(&core);
+		let dir = avatars::Avatars::dir(&core).expect("the avatars directory");
 		a_file_standing_at(&dir);
-		let refused = heard(&app, SEED_REFUSED_EVENT);
+		let refused = heard(&core, SEED_REFUSED_EVENT);
 
-		seeded(&app, database).await;
+		seeded(&core, database).await;
 
 		assert_eq!(database.conversations().bots(None).await.expect("the roster").len(), 0);
 		assert!(!database.user().is_first_companion_seeded().await.expect("the marker"));
@@ -634,17 +616,17 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_database_that_already_holds_a_companion_receives_no_second_one_and_no_notice() {
-		let app = a_host("adopted");
-		let database = database_of(&app);
+		let core = a_host("adopted");
+		let database = database_of(&core);
 		a_companion(database).await;
-		let created = heard(&app, CREATED_EVENT);
-		let refused = heard(&app, SEED_REFUSED_EVENT);
+		let created = heard(&core, CREATED_EVENT);
+		let refused = heard(&core, SEED_REFUSED_EVENT);
 
-		let roster = planted(&app, database).await;
+		let roster = planted(&core, database).await;
 
 		assert_eq!(roster.len(), 1, "a second companion was planted");
 		assert_ne!(roster[0].name, shoto::NAME);
-		let root = bundles::root(crate::events::core(app.handle())).expect("the bundle root");
+		let root = bundles::root(&core).expect("the bundle root");
 		assert!(
 			bundles::lookup(&root, &roster[0].id).expect("the plugins list").is_none(),
 			"a bundle was written"
@@ -656,17 +638,17 @@ mod tests {
 		assert_eq!(preferences.onboarding_shoto_id, None);
 		assert_eq!(payloads::<CompanionCreated>(&created), Vec::new());
 		assert_eq!(payloads::<CompanionSeedRefused>(&refused), Vec::new());
-		assert_eq!(outcome_of(&app), LaunchOutcome::default());
+		assert_eq!(outcome_of(&core), LaunchOutcome::default());
 	}
 
 	#[tokio::test]
 	async fn a_database_whose_retired_companion_still_holds_a_row_receives_no_replacement() {
-		let app = a_host("emptied");
-		let database = database_of(&app);
+		let core = a_host("emptied");
+		let database = database_of(&core);
 		let retired = a_companion_seated_in_a_mission(database).await;
 		database.conversations().delete_bot(retired.id).await.expect("the deletion");
 
-		seeded(&app, database).await;
+		seeded(&core, database).await;
 
 		assert_eq!(database.conversations().bots(None).await.expect("the roster").len(), 0);
 		assert!(database.user().is_first_companion_seeded().await.expect("the marker"));
@@ -675,12 +657,12 @@ mod tests {
 
 	#[tokio::test]
 	async fn an_existing_shoto_without_a_title_receives_guide_once_and_no_other_bot_moves() {
-		let app = a_host("backfill-empty");
-		let database = database_of(&app);
+		let core = a_host("backfill-empty");
+		let database = database_of(&core);
 		let shoto = an_existing_shoto_titled(database, "").await;
 		let other = a_bot(database, "Kept", "").await;
 
-		seeded(&app, database).await;
+		seeded(&core, database).await;
 
 		assert_eq!(title_of(database, &shoto).await, shoto::TITLE);
 		assert_eq!(title_of(database, &other).await, "");
@@ -688,41 +670,41 @@ mod tests {
 
 	#[tokio::test]
 	async fn an_existing_shoto_whose_title_was_changed_keeps_it() {
-		let app = a_host("backfill-kept");
-		let database = database_of(&app);
+		let core = a_host("backfill-kept");
+		let database = database_of(&core);
 		let shoto = an_existing_shoto_titled(database, "Mentor").await;
 
-		seeded(&app, database).await;
+		seeded(&core, database).await;
 
 		assert_eq!(title_of(database, &shoto).await, "Mentor");
 		retitled(database, &shoto, "").await;
-		seeded(&app, database).await;
+		seeded(&core, database).await;
 		assert_eq!(title_of(database, &shoto).await, "", "a recorded backfill ran again");
 	}
 
 	#[tokio::test]
 	async fn a_title_cleared_after_the_backfill_stays_empty_on_the_next_start() {
-		let app = a_host("backfill-cleared");
-		let database = database_of(&app);
+		let core = a_host("backfill-cleared");
+		let database = database_of(&core);
 		let shoto = an_existing_shoto_titled(database, "").await;
-		seeded(&app, database).await;
+		seeded(&core, database).await;
 		retitled(database, &shoto, "").await;
 
-		seeded(&app, database).await;
+		seeded(&core, database).await;
 
 		assert_eq!(title_of(database, &shoto).await, "");
 	}
 
 	#[tokio::test]
 	async fn without_a_recorded_shoto_the_oldest_bot_named_shoto_receives_guide() {
-		let app = a_host("backfill-oldest");
-		let database = database_of(&app);
+		let core = a_host("backfill-oldest");
+		let database = database_of(&core);
 		let oldest = a_bot(database, shoto::NAME, "").await;
 		tokio::time::sleep(std::time::Duration::from_millis(5)).await;
 		let younger = a_bot(database, shoto::NAME, "").await;
 		database.user().mark_first_companion_seeded().await.expect("the seed marker");
 
-		seeded(&app, database).await;
+		seeded(&core, database).await;
 
 		assert_eq!(
 			database.user().preferences().await.expect("the preferences").onboarding_shoto_id,
@@ -734,14 +716,14 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_profile_without_any_shoto_records_the_backfill_and_titles_nobody() {
-		let app = a_host("backfill-none");
-		let database = database_of(&app);
+		let core = a_host("backfill-none");
+		let database = database_of(&core);
 		let other = a_bot(database, "Kept", "").await;
 		database.user().mark_first_companion_seeded().await.expect("the seed marker");
-		seeded(&app, database).await;
+		seeded(&core, database).await;
 		let late = a_bot(database, shoto::NAME, "").await;
 
-		seeded(&app, database).await;
+		seeded(&core, database).await;
 
 		assert_eq!(title_of(database, &other).await, "");
 		assert_eq!(title_of(database, &late).await, "", "a recorded backfill ran again");
@@ -756,8 +738,8 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_coding_companion_becomes_a_coding_agent_once_and_no_other_title_moves() {
-		let app = a_host("coder-backfill");
-		let database = database_of(&app);
+		let core = a_host("coder-backfill");
+		let database = database_of(&core);
 		let coder = a_bot(database, "Byte", RETIRED_CODER_JOB).await;
 		let near_titles = ["A coding companion", "a coding companion ", "a reviewer"];
 		let mut near_misses = Vec::new();
@@ -765,7 +747,7 @@ mod tests {
 			near_misses.push(a_bot(database, "Other", title).await);
 		}
 
-		seeded(&app, database).await;
+		seeded(&core, database).await;
 
 		assert_eq!(title_of(database, &coder).await, CODER_JOB);
 		for (bot, title) in near_misses.iter().zip(near_titles) {
@@ -773,7 +755,7 @@ mod tests {
 		}
 		retitled(database, &coder, RETIRED_CODER_JOB).await;
 		let late = a_bot(database, "Late", RETIRED_CODER_JOB).await;
-		seeded(&app, database).await;
+		seeded(&core, database).await;
 		assert_eq!(
 			title_of(database, &coder).await,
 			RETIRED_CODER_JOB,
@@ -788,8 +770,8 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_coder_backfill_that_fails_lets_the_launch_settle_and_records_nothing() {
-		let app = a_host("coder-backfill-refused");
-		let database = database_of(&app);
+		let core = a_host("coder-backfill-refused");
+		let database = database_of(&core);
 		let coder = a_bot(database, "Byte", RETIRED_CODER_JOB).await;
 		planted_sql(
 			database,
@@ -799,21 +781,16 @@ mod tests {
 		)
 		.await;
 
-		plant_first_companion(
-			crate::events::core(app.handle()),
-			database,
-			vec!["unlaid".to_owned()],
-		)
-		.await;
+		plant_first_companion(&core, database, vec!["unlaid".to_owned()]).await;
 
 		assert_eq!(
-			outcome_of(&app).refused,
+			outcome_of(&core).refused,
 			Some(CompanionSeedRefused { reason: "unlaid".to_owned() }),
 			"the launch did not settle"
 		);
 		assert_eq!(title_of(database, &coder).await, RETIRED_CODER_JOB);
 		planted_sql(database, "DROP TRIGGER refuse_coder_title;").await;
-		seeded(&app, database).await;
+		seeded(&core, database).await;
 		assert_eq!(title_of(database, &coder).await, CODER_JOB, "the failed backfill was recorded");
 	}
 }
