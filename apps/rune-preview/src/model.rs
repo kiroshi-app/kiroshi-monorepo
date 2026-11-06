@@ -4,6 +4,7 @@ use serde::Deserialize;
 pub struct Space {
 	pub id: String,
 	pub name: String,
+	pub colour: Option<f32>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -30,7 +31,27 @@ pub struct Participant {
 pub struct Conversation {
 	pub id: String,
 	pub title: String,
+	pub color: Option<f32>,
 	pub participants: Vec<Participant>,
+	#[serde(default)]
+	pub last_activity_at: Option<i64>,
+	#[serde(default)]
+	pub last_word: Option<LastWord>,
+	#[serde(default)]
+	pub solo_bot_id: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct LastWord {
+	pub text: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConversationPage {
+	pub pinned: Vec<Conversation>,
+	pub conversations: Vec<Conversation>,
+	pub next_cursor: Option<String>,
 }
 
 impl Conversation {

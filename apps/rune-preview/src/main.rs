@@ -30,7 +30,13 @@ fn view(s: &App, cx: &mut Cx<App>) -> El {
 	let mut layer = Vec::new();
 	let body = match s.screen {
 		Screen::Onboarding(step) => onboarding::view(step, s, &k, &t.in_space(Some(tokens::BLUE))),
-		Screen::Conversations => conversations::view(s, &k, &t, cx.titlebar_inset(), &mut layer),
+		Screen::Conversations => {
+			let viewport = conversations::Viewport {
+				inset: cx.titlebar_inset(),
+				transcript_height: cx.layout(conversations::TRANSCRIPT).map(|rect| rect[3]),
+			};
+			conversations::view(s, &k, &t, &viewport, &mut layer)
+		}
 	};
 	rune_kit::root(body, layer)
 }

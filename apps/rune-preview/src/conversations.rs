@@ -1,42 +1,72 @@
 use std::borrow::Cow;
+use std::time::{SystemTime, UNIX_EPOCH};
 
-use rune::{Chrome, El, GrowthSpec, Key, KeyEvent, ScrollSpec, SurfaceFit, Tx, col, el, row, text};
+use rune::{
+	Chrome, Color, Cursor, El, GrowthSpec, Icon, Key, KeyEvent, ScrollSpec, SurfaceFit, TextStyle,
+	Tx, col, el, icon, row, text,
+};
 use rune_kit::markdown::{Markdown, MarkdownStyle};
-use rune_kit::shell::{Sidebar, SidebarRow, SidebarSection, SplitView, Toolbar};
-use rune_kit::{Button, ButtonVariant, ControlSize, Kit, PopupItem, PopupList, Spinner, TextArea};
+use rune_kit::{Kit, PopupItem, PopupList, TextInput};
 
-use crate::app::{AGENT_PILL, App, Opened, Workspace};
+use crate::app::{AGENT_PILL, App, Ready, Thread, Workspace};
 use crate::content::{self, Segment};
 use crate::host::{DEV_START_COMMAND, HostError, Profile};
+use crate::hues::Role as HueRole;
+use crate::icons;
 use crate::images::Slot;
-use crate::model::Role;
+use crate::model::{Conversation, Role};
 use crate::tokens::{
-	RADIUS_BUBBLE, RADIUS_CONTROL, RADIUS_LG, SPACING, TEXT_BUBBLE, TEXT_COMPACT, TEXT_SM,
-	TEXT_SM_MEDIUM, TEXT_TITLE, Tokens,
+	RADIUS_BUBBLE, RADIUS_LG, SPACING, TEXT_10_MEDIUM, TEXT_BUBBLE, TEXT_COMPACT,
+	TEXT_COMPACT_MONO, TEXT_COMPACT_SEMIBOLD, TEXT_SM, TEXT_SM_MEDIUM, TEXT_TITLE, TEXT_XS_MEDIUM,
+	Tokens, conversation_icon, srgb, tone,
 };
-use crate::widgets::{agent_avatar, not_drawn};
+use crate::widgets::{Pill, agent_avatar, not_drawn, spinner};
 
 pub const CHROME: Chrome =
-	Chrome { full_size_content: true, traffic_lights: Some((16.0, 25.0)), drag_regions: true };
+	Chrome { full_size_content: true, traffic_lights: Some((16.0, 14.0)), drag_regions: true };
 
-const THREAD_WIDTH: f32 = 720.0;
-
+const TITLE_BAR: f32 = 40.0;
+const RAIL: f32 = 60.0;
+const SHELL_INSET: f32 = 8.0;
+const ROSTER: f32 = 304.0;
+const ROSTER_PAD: f32 = 9.0;
+const ROW: f32 = 52.0;
+const ROW_GAP: f32 = 2.0;
+const HEADER: f32 = 48.0;
+const COLUMN: f32 = 720.0;
+const COLUMN_INSET: f32 = 20.0;
 const IMAGE_MAX_WIDTH: f32 = 420.0;
-
 const COMPOSER: &str = "composer";
 
-pub fn view(s: &App, k: &Kit, t: &Tokens, inset: f32, layer: &mut Vec<El>) -> El {
+const PRESENCE_ONLINE: u32 = 0x207144;
+
+const TIMESTAMP: TextStyle = TextStyle { line_height: 20.0, ..TextStyle::new(11.0, 500.0) };
+const HEADER_TITLE: TextStyle =
+	TextStyle { line_height: 18.0, tracking: -0.15, ..TextStyle::new(15.0, 600.0) };
+
+pub struct Viewport {
+	pub inset: f32,
+	pub transcript_height: Option<f32>,
+}
+
+pub const TRANSCRIPT: &str = "transcript";
+
+const ANCHORED_ROWS: usize = 40;
+
+pub fn view(s: &App, k: &Kit, t: &Tokens, viewport: &Viewport, layer: &mut Vec<El>) -> El {
 	match &s.workspace {
 		Workspace::Connecting => centred(
 			t,
-			col()
-				.items_center()
-				.gap(SPACING * 3.0)
-				.child(Spinner::new().build(k))
-				.child(text("Reaching Kiroshi Dev…").font(TEXT_SM).color(t.muted_foreground)),
+			row()
+				.gap(SPACING * 2.0)
+				.center_y()
+				.child(spinner(t.input, t.muted_foreground))
+				.child(text("Reaching Kiroshi…").font(TEXT_COMPACT).color(t.muted_foreground)),
 		),
-		Workspace::Failed(failure) => host_failed(k, t, failure),
-		Workspace::Ready(_) => tab(s, k, t, inset, layer),
+		Workspace::Failed(failure) => host_failed(t, failure),
+		Workspace::Ready(ready) => {
+			frame(s, ready, k, &t.in_space(ready.space.colour), viewport, layer)
+		}
 	}
 }
 
@@ -44,91 +74,349 @@ fn centred(t: &Tokens, content: El) -> El {
 	col().w_full().h_full().fill(t.background).center().child(content)
 }
 
-fn host_failed(k: &Kit, t: &Tokens, failure: &HostError) -> El {
-	let mono = rune::TextStyle { family: rune::Family::SystemMono, ..TEXT_SM };
+fn host_failed(t: &Tokens, failure: &HostError) -> El {
 	let mut content = col()
-		.w(520.0)
-		.gap(SPACING * 4.0)
+		.w(480.0)
+		.items_center()
+		.gap(SPACING * 2.5)
 		.child(text(failure.title()).font(TEXT_TITLE).color(t.foreground))
-		.child(text(failure.detail()).font(TEXT_BUBBLE).color(t.muted_foreground).wrap());
+		.child(
+			text(failure.detail())
+				.font(TEXT_SM)
+				.color(t.muted_foreground)
+				.wrap()
+				.align(rune::Align::Center),
+		);
 	if failure.profile() == Some(Profile::Dev) {
 		content = content.child(
-			el().padding(SPACING * 3.0)
-				.radius(RADIUS_LG)
-				.fill(t.muted)
-				.border(1.0, t.border)
-				.child(text(DEV_START_COMMAND).font(mono).color(t.foreground).selectable(true)),
+			el().mt(SPACING * 3.0).padding(SPACING * 3.0).radius(RADIUS_LG).fill(t.muted).child(
+				text(DEV_START_COMMAND)
+					.font(TEXT_COMPACT_MONO)
+					.color(t.foreground)
+					.selectable(true),
+			),
 		);
 	}
-	let retry = Button::new("Try again")
-		.variant(ButtonVariant::Contrast)
-		.control_size(ControlSize::Large)
-		.on_press(|s: &mut App| s.connect())
-		.build(k);
-	centred(t, content.child(row().child(retry)))
+	let retry = Pill::new("Try again").primary(t, |s: &mut App| s.connect());
+	centred(t, col().items_center().gap(SPACING * 6.0).child(content).child(retry))
 }
 
-fn tab(s: &App, k: &Kit, t: &Tokens, inset: f32, layer: &mut Vec<El>) -> El {
-	let title = s.thread.as_ref().map_or("", |thread| thread.title.as_str());
-	let main = col()
-		.key("conversation")
+fn frame(
+	s: &App,
+	ready: &Ready,
+	k: &Kit,
+	t: &Tokens,
+	viewport: &Viewport,
+	layer: &mut Vec<El>,
+) -> El {
+	let card = row()
+		.grow(1.0)
+		.min_h(0.0)
+		.mr(SHELL_INSET)
+		.mb(SHELL_INSET)
+		.radius(12.0)
+		.clip_rounded(12.0)
+		.fill(t.card)
+		.border(1.0, t.shell_border)
+		.child(roster(ready, t))
+		.child(el().w(1.0).h_full().fill(t.shell_divider))
+		.child(thread_column(s, k, t, viewport, layer));
+	col()
 		.w_full()
 		.h_full()
-		.min_h(0.0)
-		.child(thread_view(s, k, t))
-		.child(composer(s, k, t, layer));
-	SplitView::new(main)
-		.sidebar(&s.sidebar, |s: &mut App| &mut s.sidebar, sidebar(s, k, t))
-		.toolbar(Toolbar::new().title(title))
-		.titlebar_inset(inset)
-		.frame_inset(8.0)
-		.toolbar_in_panel()
-		.sidebar_padding(18.0, 10.0)
-		.build(k)
+		.fill(t.background)
+		.child(title_bar(s, t, viewport.inset))
+		.child(row().w_full().grow(1.0).min_h(0.0).child(rail(ready, t)).child(card))
 }
 
-fn sidebar(s: &App, k: &Kit, t: &Tokens) -> El {
-	let Some(ready) = s.ready() else { return el() };
-	let opened = s.thread.as_ref().map(|thread| &thread.opened);
-	let agents = ready.agents.iter().map(|agent| {
-		let id = agent.id.clone();
-		SidebarRow::new(&agent.name)
-			.avatar(agent_avatar(agent.avatar_blot, 24.0, t.dark))
-			.subtitle(&agent.title)
-			.height(44.0)
-			.selected(opened == Some(&Opened::Agent(agent.id.clone())))
-			.on_select(move |s: &mut App, _: &mut Tx| s.open(Opened::Agent(id.clone())))
-			.build(k)
-			.key(format!("agent-{}", agent.id))
-	});
-	let conversations = ready.conversations.iter().map(|conversation| {
-		let id = conversation.id.clone();
-		let names: Vec<&str> = conversation.present().map(|seat| seat.name.as_str()).collect();
-		SidebarRow::new(&conversation.title)
-			.subtitle(names.join(", "))
-			.height(44.0)
-			.selected(opened == Some(&Opened::Conversation(conversation.id.clone())))
-			.on_select(move |s: &mut App, _: &mut Tx| s.open(Opened::Conversation(id.clone())))
-			.build(k)
-			.key(format!("conversation-{}", conversation.id))
-	});
-	Sidebar::new()
-		.label(&ready.space.name)
-		.section(SidebarSection::new("Agents").key("agents").count(ready.agents.len()).rows(agents))
-		.section(
-			SidebarSection::new("Conversations")
-				.key("conversations")
-				.count(ready.conversations.len())
-				.rows(conversations),
+fn title_bar(s: &App, t: &Tokens, inset: f32) -> El {
+	let glyph = |glyph: &'static Icon| {
+		el().size(24.0, 24.0)
+			.radius(6.0)
+			.center()
+			.child(icon(glyph, 14.0).color(t.muted_foreground))
+	};
+	let title = s.thread.as_ref().map_or("", |thread| thread.title.as_str()).to_owned();
+	let tab_placeholder = row()
+		.h(28.0)
+		.w(180.0)
+		.px(SPACING * 3.0)
+		.radius(8.0)
+		.center_y()
+		.fill(t.foreground.alpha(0.16))
+		.child(text(title).font(TEXT_XS_MEDIUM).color(t.foreground).truncate());
+	row()
+		.w_full()
+		.h(TITLE_BAR)
+		.pl(inset.max(76.0))
+		.gap(SPACING)
+		.center_y()
+		.window_drag()
+		.child(glyph(&icons::PREVIOUS))
+		.child(glyph(&icons::NEXT))
+		.child(tab_placeholder)
+		.child(glyph(&icons::PLUS))
+}
+
+fn rail(ready: &Ready, t: &Tokens) -> El {
+	let (ground, ink) = conversation_icon(ready.space.colour, t.dark);
+	let initial: String = ready.space.name.chars().take(1).collect();
+	let space = el()
+		.size(32.0, 32.0)
+		.radius(10.0)
+		.fill(ground)
+		.center()
+		.child(text(initial).font(TEXT_COMPACT_SEMIBOLD).color(ink));
+	let slot = |glyph: &'static Icon, selected: bool| {
+		let ink = if selected { t.foreground } else { t.muted_foreground };
+		let tile = el().size(36.0, 36.0).radius(10.0).center().child(icon(glyph, 18.0).color(ink));
+		if selected {
+			tile.fill(t.rail_item_selected)
+		} else {
+			tile.hover(t.foreground.alpha(0.05))
+		}
+	};
+	let person: String = ready.person.as_deref().map_or_else(
+		|| "?".to_owned(),
+		|email| email.chars().take(2).collect::<String>().to_uppercase(),
+	);
+	col()
+		.w(RAIL)
+		.h_full()
+		.items_center()
+		.pt(7.0)
+		.pb(SHELL_INSET + 4.0)
+		.gap(SPACING)
+		.child(space)
+		.child(el().h(SPACING * 2.0))
+		.child(slot(&icons::SEARCH, false))
+		.child(slot(&icons::CONVERSATIONS, true))
+		.child(slot(&icons::MISSIONS, false))
+		.child(el().grow(1.0))
+		.child(
+			el().size(28.0, 28.0)
+				.radius(14.0)
+				.fill(t.person_avatar)
+				.center()
+				.child(text(person).font(TEXT_10_MEDIUM).color(t.foreground)),
 		)
-		.build(k)
 }
 
-fn thread_view(s: &App, k: &Kit, t: &Tokens) -> El {
-	let Some(thread) = s.thread.as_ref() else {
-		return col().w_full().grow(1.0).min_h(0.0).center().child(
-			text("Pick an agent or a conversation.").font(TEXT_SM).color(t.muted_foreground),
+fn roster(ready: &Ready, t: &Tokens) -> El {
+	let header = row()
+		.h(32.0)
+		.pl(SPACING * 2.0)
+		.pr(2.0)
+		.center_y()
+		.justify_between()
+		.child(text("Conversations").font(HEADER_TITLE).color(t.foreground))
+		.child(
+			el().size(28.0, 28.0)
+				.radius(8.0)
+				.center()
+				.hover(t.muted)
+				.child(icon(&icons::PLUS, 16.0).color(t.foreground)),
 		);
+	let tokens = *t;
+	let now = now_ms();
+	let rows = col().key("roster-rows").w_full().growth(GrowthSpec::default()).virtual_rows(
+		ready.conversations.len(),
+		ROW + ROW_GAP,
+		|s: &App, i| {
+			s.ready()
+				.and_then(|ready| ready.conversations.get(i))
+				.map_or(Cow::Borrowed("missing"), |held| Cow::Borrowed(held.id.as_str()))
+		},
+		move |s: &App, i| roster_row(s, i, &tokens, now),
+	);
+	col().w(ROSTER).h_full().padding(ROSTER_PAD).gap(SPACING * 2.0).child(header).child(
+		col()
+			.key("roster")
+			.w_full()
+			.grow(1.0)
+			.min_h(0.0)
+			.scroll(ScrollSpec { stick_bottom: false })
+			.child(rows),
+	)
+}
+
+fn roster_row(s: &App, i: usize, t: &Tokens, now: i64) -> El {
+	let Some(conversation) = s.ready().and_then(|ready| ready.conversations.get(i)) else {
+		return el();
+	};
+	let selected =
+		s.thread.as_ref().is_some_and(|thread| thread.conversation_id == conversation.id);
+	let solo = solo_agent(s, conversation);
+	let media = match &solo {
+		Some(agent) => agent_avatar(agent.hue, 40.0, t.dark),
+		None => subject_icon(conversation, 40.0, t),
+	};
+	let name = solo.as_ref().map_or(conversation.title.clone(), |agent| agent.name.clone());
+	let ink = if selected { t.foreground } else { t.foreground.alpha(0.7) };
+	let mut name_line = row()
+		.w_full()
+		.h(20.0)
+		.gap(SPACING * 1.5)
+		.center_y()
+		.child(text(name).font(TEXT_SM_MEDIUM).color(ink).truncate().shrink());
+	if let Some(agent) = solo.as_ref().filter(|agent| !agent.title.is_empty()) {
+		name_line = name_line.child(title_badge(t, &agent.title));
+	}
+	let stamp =
+		conversation.last_activity_at.map_or_else(String::new, |at| roster_timestamp(at, now));
+	name_line = name_line.child(el().grow(1.0)).child(
+		el().w(44.0)
+			.child(text(stamp).font(TIMESTAMP).color(t.muted_foreground).align(rune::Align::End)),
+	);
+	let preview = conversation
+		.last_word
+		.as_ref()
+		.and_then(|word| word.text.as_deref())
+		.map_or_else(String::new, |words| s.mention_names(words).replace('\n', " "));
+	let id = conversation.id.clone();
+	let tile = row()
+		.key(format!("row-{}", conversation.id))
+		.w_full()
+		.h(ROW)
+		.pl(6.0)
+		.pr(12.0)
+		.py(6.0)
+		.gap(10.0)
+		.center_y()
+		.radius(10.0)
+		.cursor(Cursor::Pointer)
+		.role("button")
+		.on_press(move |s: &mut App| s.open(&id))
+		.child(media)
+		.child(
+			col().grow(1.0).shrink().min_w(0.0).justify_center().child(name_line).child(
+				el().w_full()
+					.pr(14.0)
+					.child(text(preview).font(TEXT_XS_MEDIUM).color(t.muted_foreground).truncate()),
+			),
+		);
+	let tile = if selected { tile.fill(t.muted) } else { tile.hover(t.muted) };
+	el().w_full().pb(ROW_GAP).child(tile)
+}
+
+struct SoloAgent {
+	name: String,
+	hue: Option<f32>,
+	title: String,
+}
+
+fn solo_agent(s: &App, conversation: &Conversation) -> Option<SoloAgent> {
+	let bot_id = conversation.solo_bot_id.as_deref()?;
+	let agent = s.ready()?.agents.iter().find(|agent| agent.id == bot_id)?;
+	Some(SoloAgent { name: agent.name.clone(), hue: agent.avatar_blot, title: agent.title.clone() })
+}
+
+fn subject_icon(conversation: &Conversation, size: f32, t: &Tokens) -> El {
+	let (ground, ink) = conversation_icon(conversation.color, t.dark);
+	el().size(size, size)
+		.radius(size * 0.3)
+		.fill(ground)
+		.center()
+		.child(icon(&icons::MESSAGE, size * 0.45).color(ink))
+}
+
+fn title_badge(t: &Tokens, title: &str) -> El {
+	el().px(6.0).py(2.0).radius(7.0).fill(t.foreground.alpha(0.1)).shrink().child(
+		text(title.to_owned()).font(TEXT_10_MEDIUM).color(t.foreground.alpha(0.8)).truncate(),
+	)
+}
+
+fn now_ms() -> i64 {
+	SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |elapsed| elapsed.as_millis() as i64)
+}
+
+pub fn roster_timestamp(at: i64, now: i64) -> String {
+	const MINUTE: i64 = 60_000;
+	const HOUR: i64 = 60 * MINUTE;
+	const DAY: i64 = 24 * HOUR;
+	const WEEK: i64 = 7 * DAY;
+	let age = now.saturating_sub(at);
+	match age {
+		_ if age < MINUTE => "now".to_owned(),
+		_ if age < HOUR => format!("{}m", age / MINUTE),
+		_ if age < DAY => format!("{}h", age / HOUR),
+		_ if age < WEEK => format!("{}d", age / DAY),
+		_ if age < 4 * WEEK => format!("{}w", age / WEEK),
+		_ => month_and_day(at),
+	}
+}
+
+fn month_and_day(at: i64) -> String {
+	let days = at.div_euclid(86_400_000) + 719_468;
+	let era = days.div_euclid(146_097);
+	let day_of_era = days - era * 146_097;
+	let year_of_era =
+		(day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+	let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+	let shifted_month = (5 * day_of_year + 2) / 153;
+	let day = day_of_year - (153 * shifted_month + 2) / 5 + 1;
+	let month = if shifted_month < 10 { shifted_month + 3 } else { shifted_month - 9 };
+	format!("{month}/{day}")
+}
+
+fn thread_column(s: &App, k: &Kit, t: &Tokens, viewport: &Viewport, layer: &mut Vec<El>) -> El {
+	col()
+		.key("conversation")
+		.grow(1.0)
+		.h_full()
+		.min_w(0.0)
+		.fill(t.background)
+		.child(thread_header(s, t))
+		.child(thread_view(s, k, t, viewport.transcript_height))
+		.child(composer(s, k, t, layer))
+}
+
+fn thread_header(s: &App, t: &Tokens) -> El {
+	let identity = s.thread.as_ref().map(|thread| {
+		let conversation = s.ready().and_then(|ready| {
+			ready.conversations.iter().find(|held| held.id == thread.conversation_id)
+		});
+		let solo = conversation.and_then(|conversation| solo_agent(s, conversation));
+		let media = match (&solo, conversation) {
+			(Some(agent), _) => agent_avatar(agent.hue, 24.0, t.dark),
+			(None, Some(conversation)) => subject_icon(conversation, 24.0, t),
+			(None, None) => el(),
+		};
+		let name = solo.map_or_else(|| thread.title.clone(), |agent| agent.name);
+		row()
+			.h(36.0)
+			.pl(6.0)
+			.pr(10.0)
+			.gap(SPACING * 2.0)
+			.center_y()
+			.radius(10.0)
+			.hover(t.muted)
+			.child(media)
+			.child(text(name).font(TEXT_SM_MEDIUM).color(t.foreground))
+			.child(el().size(6.0, 6.0).radius(3.0).fill(srgb(PRESENCE_ONLINE)))
+			.child(icon(&icons::SETTINGS, 14.0).color(t.muted_foreground))
+	});
+	let header = row()
+		.w_full()
+		.h(HEADER)
+		.pl(6.0)
+		.pr(10.0)
+		.pt(1.0)
+		.center_y()
+		.justify_between()
+		.child(identity.unwrap_or_else(el))
+		.child(el().size(28.0, 28.0).center().child(icon(&icons::PIN, 15.0).color(t.foreground)));
+	col().w_full().child(header).child(el().w_full().h(1.0).fill(t.shell_divider))
+}
+
+fn thread_view(s: &App, k: &Kit, t: &Tokens, height: Option<f32>) -> El {
+	let Some(thread) = s.thread.as_ref() else {
+		return col()
+			.w_full()
+			.grow(1.0)
+			.min_h(0.0)
+			.center()
+			.child(text("Pick a conversation.").font(TEXT_SM).color(t.muted_foreground));
 	};
 	if let Some(failure) = &thread.failure {
 		return col().w_full().grow(1.0).min_h(0.0).center().padding(SPACING * 6.0).child(
@@ -140,24 +428,77 @@ fn thread_view(s: &App, k: &Kit, t: &Tokens) -> El {
 		);
 	}
 	if thread.is_loading() {
-		return col().w_full().grow(1.0).min_h(0.0).center().child(Spinner::new().build(k));
+		return col()
+			.w_full()
+			.grow(1.0)
+			.min_h(0.0)
+			.center()
+			.child(spinner(t.input, t.muted_foreground));
 	}
-	let kit = k.clone();
-	let tokens = *t;
-	let rows = col().key("thread-rows").w_full().growth(GrowthSpec::default()).virtual_rows(
-		thread.row_count(),
-		120.0,
-		row_key,
-		move |s: &App, i| message_row(s, i, &kit, &tokens),
-	);
-	col()
-		.key(format!("thread-{}", thread.conversation_id.as_deref().unwrap_or("pending")))
+	if thread.row_count() == 0 {
+		return empty_thread(thread, t);
+	}
+	let scroller = col()
+		.key(format!("thread-{}", thread.conversation_id))
 		.w_full()
 		.grow(1.0)
 		.min_h(0.0)
 		.scroll(ScrollSpec { stick_bottom: true })
-		.scroll_edge_fade(16.0)
-		.child(rows)
+		.scroll_edge_fade(16.0);
+	let viewport = col().key(TRANSCRIPT).w_full().grow(1.0).min_h(0.0);
+	if thread.row_count() <= ANCHORED_ROWS {
+		let rows = (0..thread.row_count())
+			.map(|i| message_row(s, i, k, t).key(row_key(s, i).into_owned()));
+		let anchored = col()
+			.key("thread-rows")
+			.w_full()
+			.min_h(height.unwrap_or(0.0))
+			.justify_end()
+			.pt(SPACING * 4.0)
+			.children(rows);
+		return viewport.child(scroller.child(anchored));
+	}
+	let kit = k.clone();
+	let tokens = *t;
+	let rows = col()
+		.key("thread-rows")
+		.w_full()
+		.pt(SPACING * 4.0)
+		.growth(GrowthSpec::default())
+		.virtual_rows(thread.row_count(), 120.0, row_key, move |s: &App, i| {
+			message_row(s, i, &kit, &tokens)
+		});
+	viewport.child(scroller.child(rows))
+}
+
+const EMPTY_NAME: TextStyle = TextStyle { line_height: 28.0, ..TextStyle::new(18.0, 600.0) };
+
+fn empty_thread(thread: &Thread, t: &Tokens) -> El {
+	let seat = thread.seats.first();
+	let name = seat.map_or_else(|| thread.title.clone(), |seat| seat.name.clone());
+	let identity = col()
+		.items_center()
+		.gap(SPACING * 2.0)
+		.child(text(name.clone()).font(EMPTY_NAME).color(t.foreground))
+		.child(
+			text(format!("Kiroshi talks to {name} directly. Nothing leaves your device."))
+				.font(TEXT_SM)
+				.color(t.muted_foreground),
+		);
+	let hint = row()
+		.gap(SPACING)
+		.center_y()
+		.child(text("Message an agent to start.").font(TEXT_XS_MEDIUM).color(t.muted_foreground))
+		.child(icon(&icons::ARROW_DOWN, 12.0).color(t.muted_foreground));
+	let state = col()
+		.items_center()
+		.gap(SPACING * 5.0)
+		.py(48.0)
+		.px(SPACING * 6.0)
+		.child(agent_avatar(seat.and_then(|seat| seat.hue), 64.0, t.dark))
+		.child(identity)
+		.child(hint);
+	col().w_full().grow(1.0).min_h(0.0).center().child(state)
 }
 
 fn row_key(s: &App, i: usize) -> Cow<'_, str> {
@@ -205,12 +546,27 @@ fn shown(s: &App, i: usize) -> Option<Shown<'_>> {
 fn message_row(s: &App, i: usize, k: &Kit, t: &Tokens) -> El {
 	let Some(message) = shown(s, i) else { return el() };
 	let named = s.mention_names(message.content);
-	let frame = row().w_full().justify_center().px(SPACING * 6.0).py(SPACING * 2.5);
+	let width = COLUMN - 2.0 * COLUMN_INSET;
+	let column = row().w(width).shrink();
+	let frame = row().w_full().justify_center().px(COLUMN_INSET).py(6.0);
 	if message.role == Role::User {
+		let footer = row()
+			.w_full()
+			.justify_end()
+			.gap(SPACING * 1.5)
+			.center_y()
+			.child(
+				el().size(18.0, 18.0)
+					.radius(9.0)
+					.fill(t.user_bubble_foreground.alpha(0.2))
+					.center()
+					.child(text("Y").font(TEXT_10_MEDIUM).color(t.user_bubble_foreground)),
+			)
+			.child(text("You").font(TEXT_COMPACT_SEMIBOLD).color(t.user_bubble_foreground));
 		let bubble = col()
-			.max_w(THREAD_WIDTH * 0.75)
-			.px(SPACING * 4.0)
-			.py(SPACING * 2.5)
+			.max_w(width * 0.85)
+			.padding(18.0)
+			.gap(SPACING * 2.0)
 			.radius(RADIUS_BUBBLE)
 			.fill(t.user_bubble)
 			.child(
@@ -219,30 +575,53 @@ fn message_row(s: &App, i: usize, k: &Kit, t: &Tokens) -> El {
 					.color(t.user_bubble_foreground)
 					.wrap()
 					.selectable(true),
-			);
-		return frame.child(row().w(THREAD_WIDTH).shrink().justify_end().child(bubble));
+			)
+			.child(footer);
+		return frame.child(column.justify_end().child(bubble));
 	}
 	let name = message.author.unwrap_or_else(|| "Agent".to_owned());
 	let hue = message.bot_id.and_then(|id| s.agent_hue(id));
-	let author = row()
-		.gap(SPACING * 2.0)
+	let accent = hue.map_or(t.primary, |hue| tone(hue, t.dark, HueRole::Accent));
+	let footer = row()
+		.gap(SPACING * 1.5)
 		.center_y()
-		.child(agent_avatar(hue, 22.0, t.dark))
-		.child(text(name.clone()).font(TEXT_SM_MEDIUM).color(t.foreground));
+		.child(agent_avatar(hue, 18.0, t.dark))
+		.child(text(name).font(TEXT_COMPACT_SEMIBOLD).color(accent));
 	let body = content::segments(&named)
 		.into_iter()
-		.fold(col().w_full().gap(SPACING * 3.0), |body, segment| {
+		.fold(col().w_full().gap(SPACING * 2.0), |body, segment| {
 			body.child(segment_view(s, segment, message.streaming, k, t))
 		});
-	frame.child(col().w(THREAD_WIDTH).shrink().gap(SPACING * 2.0).child(author).child(body))
+	let bubble = col()
+		.max_w(width * 0.85)
+		.padding(18.0)
+		.gap(SPACING * 2.0)
+		.radius(RADIUS_BUBBLE)
+		.fill(t.bubble)
+		.child(body)
+		.child(footer);
+	frame.child(column.child(bubble))
+}
+
+fn markdown_style(k: &Kit, t: &Tokens) -> MarkdownStyle {
+	MarkdownStyle::from_kit(k)
+		.body_font(TEXT_BUBBLE)
+		.text(t.foreground)
+		.muted(t.muted_foreground)
+		.link(t.primary)
+		.code_block(t.card, t.border)
+		.code_block_font(TEXT_COMPACT_MONO)
+		.inline_code_bg(t.foreground.alpha(0.06))
+		.rule(t.border)
+		.quote_rule(t.border)
 }
 
 fn segment_view(s: &App, segment: Segment, streaming: bool, k: &Kit, t: &Tokens) -> El {
 	match segment {
-		Segment::Markdown(source) => {
-			let style = MarkdownStyle::from_kit(k).body_font(TEXT_BUBBLE).text(t.foreground);
-			Markdown::new(source).streaming(streaming).selectable(true).render(&style)
-		}
+		Segment::Markdown(source) => Markdown::new(source)
+			.streaming(streaming)
+			.selectable(true)
+			.render(&markdown_style(k, t)),
 		Segment::Math(source) => not_drawn(t, "Math isn't drawn here (KaTeX)", &source),
 		Segment::Image { alt, url } => image_view(s, &alt, &url, t),
 	}
@@ -271,14 +650,15 @@ fn image_view(s: &App, alt: &str, url: &str, t: &Tokens) -> El {
 }
 
 fn composer(s: &App, k: &Kit, t: &Tokens, layer: &mut Vec<El>) -> El {
-	let can_send = s.thread.as_ref().is_some_and(|thread| thread.conversation_id.is_some());
-	mention_popup(s, k, layer);
+	let can_send = s.thread.is_some();
+	mention_popup(s, k, t, layer);
 	let pill_ink = t.primary;
 	let pill_ground = t.primary.alpha(0.14);
-	let field = TextArea::new(&s.composer.edit)
-		.placeholder("Message, or @ to mention an agent")
+	let field = TextInput::new(&s.composer.edit)
+		.plain()
 		.width(None)
-		.auto_grow(1, 8)
+		.placeholder("Message")
+		.text_style(TEXT_BUBBLE)
 		.disabled(!can_send)
 		.pill_style(move |id| {
 			let style = rune::PillStyle::default();
@@ -290,48 +670,54 @@ fn composer(s: &App, k: &Kit, t: &Tokens, layer: &mut Vec<El>) -> El {
 		.on_submit(|s: &mut App, _: &mut Tx| s.send())
 		.build(k)
 		.key(COMPOSER);
-	let send = Button::new("Send")
-		.variant(ButtonVariant::Contrast)
-		.disabled(!can_send || s.composer.edit.text.trim().is_empty())
-		.on_press(|s: &mut App| s.send())
-		.build(k);
-	let mut column = col().w(THREAD_WIDTH).shrink().gap(SPACING * 2.0);
+	let filled = can_send && !s.composer.edit.text.trim().is_empty();
+	let (send_fill, send_ink) = if filled {
+		(t.foreground, t.background)
+	} else {
+		(t.foreground.alpha(0.08), Color::WHITE.mix(t.muted_foreground, 0.6))
+	};
+	let send = el()
+		.size(32.0, 32.0)
+		.radius(16.0)
+		.center()
+		.fill(send_fill)
+		.child(icon(&icons::SEND, 16.0).color(send_ink));
+	let send = if filled {
+		send.cursor(Cursor::Pointer).role("button").label("Send").on_press(|s: &mut App| s.send())
+	} else {
+		send
+	};
+	let mut column = col().w(COLUMN).shrink().gap(SPACING * 2.0);
 	if let Some(notice) = &s.notice {
 		column = column.child(text(notice.clone()).font(TEXT_COMPACT).color(t.destructive).wrap());
 	}
 	let surface = row()
 		.w_full()
-		.padding(SPACING * 2.0)
-		.gap(SPACING * 2.0)
-		.radius(RADIUS_CONTROL)
+		.min_h(50.0)
+		.padding(8.0)
+		.gap(SPACING)
+		.radius(25.0)
 		.fill(t.prompt_surface)
-		.border(1.0, t.border)
-		.items_end()
-		.child(col().grow(1.0).shrink().child(field))
+		.border(1.0, t.foreground.alpha(0.1))
+		.center_y()
+		.child(col().grow(1.0).shrink().px(8.0).py(4.0).child(field))
 		.child(send);
-	row()
-		.w_full()
-		.justify_center()
-		.px(SPACING * 6.0)
-		.pb(SPACING * 4.0)
-		.pt(SPACING * 2.0)
-		.child(column.child(surface))
+	row().w_full().justify_center().pb(SPACING * 3.0).pt(SPACING * 2.0).child(column.child(surface))
 }
 
-fn mention_popup(s: &App, k: &Kit, layer: &mut Vec<El>) {
+fn mention_popup(s: &App, k: &Kit, t: &Tokens, layer: &mut Vec<El>) {
 	let Some(mention) = s.composer.mention.as_ref() else { return };
 	let candidates = s.mention_candidates();
 	let count = candidates.len();
+	let dark = t.dark;
 	let items = candidates.into_iter().map(|seat| {
-		PopupItem::new(seat.bot_id.clone(), format!("@{}", seat.name)).leading(agent_avatar(
-			seat.hue,
-			18.0,
-			k.c.page.luminance() < 0.5,
-		))
+		PopupItem::new(seat.bot_id.clone(), seat.name.clone())
+			.leading(agent_avatar(seat.hue, 18.0, dark))
 	});
 	PopupList::new("mentions", COMPOSER)
 		.open(true)
-		.width(280.0)
+		.width(250.0)
+		.label("Agents")
 		.items(items)
 		.empty_message("No agent here by that name")
 		.active((count > 0).then_some(mention.active))
@@ -364,5 +750,21 @@ fn mention_keys(s: &mut App, event: &KeyEvent, _: &mut Tx) -> bool {
 			true
 		}
 		_ => false,
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn roster_stamps_follow_the_age_rule_of_main() {
+		let now = 1_762_400_000_000;
+		assert_eq!(roster_timestamp(now - 30_000, now), "now");
+		assert_eq!(roster_timestamp(now - 5 * 60_000, now), "5m");
+		assert_eq!(roster_timestamp(now - 3 * 3_600_000, now), "3h");
+		assert_eq!(roster_timestamp(now - 2 * 86_400_000, now), "2d");
+		assert_eq!(roster_timestamp(now - 15 * 86_400_000, now), "2w");
+		assert_eq!(roster_timestamp(1_757_980_800_000, now), "9/16");
 	}
 }

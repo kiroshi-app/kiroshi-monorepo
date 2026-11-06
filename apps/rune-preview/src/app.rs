@@ -11,7 +11,10 @@ use crate::dev_profile::{self, DevProfile};
 use crate::events::{self, HostEvent};
 use crate::host::{Host, HostError, Profile};
 use crate::images::{Fetched, Images};
-use crate::model::{Agent, AgentEvent, Conversation, MainChat, Message, MessagePage, Role, Space};
+use crate::model::{
+	Agent, AgentEvent, Conversation, ConversationPage, KiroshiAccountState, Message, MessagePage,
+	Role, Space,
+};
 use crate::onboarding::{Method, Step};
 use crate::turn::{self, SendError};
 
@@ -37,18 +40,13 @@ pub struct Ready {
 	pub space: Space,
 	pub agents: Vec<Agent>,
 	pub conversations: Vec<Conversation>,
+	pub person: Option<String>,
 }
 
 impl Ready {
 	pub fn first_conversation_with_an_agent(&self) -> Option<&Conversation> {
 		self.conversations.iter().find(|conversation| conversation.present().next().is_some())
 	}
-}
-
-#[derive(Clone, PartialEq, Eq)]
-pub enum Opened {
-	Agent(String),
-	Conversation(String),
 }
 
 pub struct Seat {
@@ -64,8 +62,7 @@ pub struct Live {
 }
 
 pub struct Thread {
-	pub opened: Opened,
-	pub conversation_id: Option<String>,
+	pub conversation_id: String,
 	pub title: String,
 	pub seats: Vec<Seat>,
 	pub messages: Vec<Message>,
@@ -85,8 +82,7 @@ impl Thread {
 			})
 			.collect();
 		Thread {
-			opened: Opened::Conversation(conversation.id.clone()),
-			conversation_id: Some(conversation.id.clone()),
+			conversation_id: conversation.id.clone(),
 			title: conversation.title.clone(),
 			seats,
 			messages: Vec::new(),
@@ -105,7 +101,7 @@ impl Thread {
 	}
 
 	fn shows(&self, conversation_id: &str) -> bool {
-		self.conversation_id.as_deref() == Some(conversation_id)
+		self.conversation_id == conversation_id
 	}
 
 	pub fn stored(&mut self, message: Message) {
@@ -163,7 +159,6 @@ pub struct Composer {
 
 pub enum Inbound {
 	Connected(Result<Ready, HostError>),
-	ChatFound { bot_id: String, chat: Result<MainChat, HostError> },
 	ThreadRead { conversation_id: String, messages: Result<Vec<Message>, HostError> },
 	SendFailed(SendError),
 	Host(HostEvent),
@@ -266,53 +261,19 @@ impl App {
 		}
 	}
 
-	pub fn open(&mut self, opened: Opened) {
+	pub fn open(&mut self, conversation_id: &str) {
 		let Some(ready) = self.ready() else { return };
-		let thread = match &opened {
-			Opened::Agent(bot_id) => {
-				let Some(agent) = ready.agents.iter().find(|agent| &agent.id == bot_id) else {
-					return;
-				};
-				let seats = vec![Seat {
-					bot_id: agent.id.clone(),
-					name: agent.name.clone(),
-					hue: agent.avatar_blot,
-				}];
-				Thread {
-					opened: opened.clone(),
-					conversation_id: None,
-					title: agent.name.clone(),
-					seats,
-					messages: Vec::new(),
-					live: Vec::new(),
-					loaded: false,
-					failure: None,
-				}
-			}
-			Opened::Conversation(id) => {
-				let Some(conversation) =
-					ready.conversations.iter().find(|conversation| &conversation.id == id)
-				else {
-					return;
-				};
-				Thread::of_conversation(conversation)
-			}
+		let Some(conversation) =
+			ready.conversations.iter().find(|conversation| conversation.id == conversation_id)
+		else {
+			return;
 		};
+		let thread = Thread::of_conversation(conversation);
 		let host = ready.host.clone();
-		let space_id = ready.space.id.clone();
 		self.composer.mention = None;
 		self.notice = None;
 		self.thread = Some(thread);
-		match opened {
-			Opened::Agent(bot_id) => self.work(move |outbox| {
-				let chat = host.invoke(
-					"conversation_main_chat",
-					json!({ "botId": bot_id, "spaceId": space_id }),
-				);
-				outbox.deliver(Inbound::ChatFound { bot_id, chat });
-			}),
-			Opened::Conversation(id) => self.read_thread(host, id),
-		}
+		self.read_thread(host, conversation_id.to_owned());
 	}
 
 	pub fn mention_names(&self, content: &str) -> String {
@@ -400,7 +361,7 @@ impl App {
 	pub fn send(&mut self) {
 		let Some(ready) = self.ready() else { return };
 		let Some(conversation_id) =
-			self.thread.as_ref().and_then(|thread| thread.conversation_id.clone())
+			self.thread.as_ref().map(|thread| thread.conversation_id.clone())
 		else {
 			return;
 		};
@@ -427,14 +388,13 @@ impl App {
 				}
 				let first = ready
 					.first_conversation_with_an_agent()
-					.map(|conversation| Opened::Conversation(conversation.id.clone()));
+					.map(|conversation| conversation.id.clone());
 				self.workspace = Workspace::Ready(ready);
 				if let Some(first) = first.filter(|_| self.thread.is_none()) {
-					self.open(first);
+					self.open(&first);
 				}
 			}
 			Inbound::Connected(Err(failure)) => self.workspace = Workspace::Failed(failure),
-			Inbound::ChatFound { bot_id, chat } => self.chat_found(bot_id, chat),
 			Inbound::ThreadRead { conversation_id, messages } => {
 				self.thread_read(&conversation_id, messages)
 			}
@@ -446,23 +406,6 @@ impl App {
 					profile.import.as_ref().map(|choices| choices.keys()).unwrap_or_default();
 				self.dev_profile = Some(profile);
 			}
-		}
-	}
-
-	fn chat_found(&mut self, bot_id: String, chat: Result<MainChat, HostError>) {
-		let Some(thread) =
-			self.thread.as_mut().filter(|thread| thread.opened == Opened::Agent(bot_id.clone()))
-		else {
-			return;
-		};
-		match chat {
-			Ok(chat) => {
-				thread.conversation_id = Some(chat.id.clone());
-				if let Some(host) = self.ready().map(|ready| ready.host.clone()) {
-					self.read_thread(host, chat.id);
-				}
-			}
-			Err(failure) => thread.failure = Some(failure),
 		}
 	}
 
@@ -556,8 +499,40 @@ pub fn connected(profile: Profile) -> Result<Ready, HostError> {
 		});
 	};
 	let agents = host.invoke("conversation_bots", json!({ "spaceId": space.id }))?;
-	let conversations = host.invoke("conversation_list", json!({ "spaceId": space.id }))?;
-	Ok(Ready { host, space, agents, conversations })
+	let conversations = roster(&host, &space.id)?;
+	let person = match host.invoke::<KiroshiAccountState>("account_state", json!({})) {
+		Ok(KiroshiAccountState::SignedIn { email, .. }) => Some(email),
+		Ok(KiroshiAccountState::SignedOut) => None,
+		Err(failure) => {
+			eprintln!("the rail shows no account: {}", failure.detail());
+			None
+		}
+	};
+	Ok(Ready { host, space, agents, conversations, person })
+}
+
+const ROSTER_PAGE: u32 = 100;
+
+const MAX_ROSTER: usize = 1_000;
+
+fn roster(host: &Host, space_id: &str) -> Result<Vec<Conversation>, HostError> {
+	let mut roster: Vec<Conversation> = Vec::new();
+	let mut cursor: Option<String> = None;
+	loop {
+		let page: ConversationPage = host.invoke(
+			"conversation_page",
+			json!({ "spaceId": space_id, "cursor": cursor, "limit": ROSTER_PAGE }),
+		)?;
+		for conversation in page.pinned.into_iter().chain(page.conversations) {
+			if !roster.iter().any(|held| held.id == conversation.id) {
+				roster.push(conversation);
+			}
+		}
+		match page.next_cursor {
+			Some(next) if roster.len() < MAX_ROSTER => cursor = Some(next),
+			_ => return Ok(roster),
+		}
+	}
 }
 
 pub fn whole_thread(host: &Host, conversation_id: &str) -> Result<Vec<Message>, HostError> {
@@ -621,8 +596,7 @@ mod tests {
 
 	fn thread() -> Thread {
 		Thread {
-			opened: Opened::Conversation("c".into()),
-			conversation_id: Some("c".into()),
+			conversation_id: "c".into(),
 			title: "c".into(),
 			seats: Vec::new(),
 			messages: Vec::new(),

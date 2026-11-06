@@ -1,8 +1,10 @@
-use crate::app::{App, Ready, Screen, Thread, Workspace, connected, whole_thread};
+use rune::TextEdit;
+
+use crate::app::{App, Live, Ready, Screen, Thread, Workspace, connected, whole_thread};
 use crate::dev_profile::{ClaudeLogin, DevProfile, ImportChoices, KiroshiSignIn};
 use crate::host::{Host, HostError, Profile};
 use crate::model::ClaudeItem;
-use crate::model::{Agent, Conversation, Message, Participant, Role, Space};
+use crate::model::{Agent, Conversation, LastWord, Message, Participant, Role, Space};
 use crate::onboarding::{Account, Connect, Page, Step};
 
 type Scene = (&'static str, fn(&mut App));
@@ -22,7 +24,11 @@ pub const SCENES: &[Scene] = &[
 	("account-signed-in", account_signed_in),
 	("host-failed", host_failed),
 	("live", read_the_dev_host_before_the_first_frame),
-	("thread", thread),
+	("thread", thread_default),
+	("thread-long", thread_long),
+	("thread-empty", thread_empty),
+	("thread-streaming", thread_streaming),
+	("thread-mention", thread_mention),
 ];
 
 fn welcome(s: &mut App, page: Page) {
@@ -121,68 +127,146 @@ $$
 ![release chart](relative/chart.png)
 "#;
 
-fn thread(s: &mut App) {
-	let wren = Agent {
-		id: "wren".into(),
-		name: "Wren".into(),
-		title: "Writes release notes".into(),
-		avatar_blot: Some(42.0),
+const AGENTS: [(&str, &str, f32, &str); 6] = [
+	(
+		"skippy",
+		"Skippy",
+		257.0,
+		"Two packages: `@workspace/ui` holds the design system, `app` holds the Tauri shell.",
+	),
+	("atlas", "Atlas", 186.0, "Pulled the three papers and summarised them."),
+	("beacon", "Beacon", 82.0, "Renamed the transport module and its tests."),
+	("cinder", "Cinder", 63.0, "Ran the suite twice, both green."),
+	("dune", "Dune", 132.0, "Nothing since the migration landed."),
+	("ember", "Ember", 296.0, "Left four comments on the transport rewrite."),
+];
+
+const MINUTES: i64 = 60_000;
+
+fn workspace(s: &mut App) -> i64 {
+	let now = std::time::SystemTime::now()
+		.duration_since(std::time::UNIX_EPOCH)
+		.map_or(0, |elapsed| elapsed.as_millis() as i64);
+	let agents: Vec<Agent> = AGENTS
+		.iter()
+		.map(|(id, name, hue, _)| Agent {
+			id: (*id).into(),
+			name: (*name).into(),
+			title: if *id == "atlas" { "Research".into() } else { String::new() },
+			avatar_blot: Some(*hue),
+		})
+		.collect();
+	let conversations = AGENTS
+		.iter()
+		.enumerate()
+		.map(|(index, (id, name, hue, last))| Conversation {
+			id: format!("chat-{id}"),
+			title: (*name).into(),
+			color: None,
+			participants: vec![Participant {
+				bot_id: (*id).into(),
+				name: (*name).into(),
+				avatar_blot: Some(*hue),
+				left_at: None,
+				is_deleted: false,
+			}],
+			last_activity_at: Some(now - (index as i64 * 7 + 2) * MINUTES),
+			last_word: Some(LastWord { text: Some((*last).into()) }),
+			solo_bot_id: Some((*id).into()),
+		})
+		.collect();
+	s.screen = Screen::Conversations;
+	s.dev_profile = Some(DevProfile::default());
+	s.workspace = Workspace::Ready(Ready {
+		host: Host::detached(),
+		space: Space { id: "space".into(), name: "Personal".into(), colour: None },
+		agents,
+		conversations,
+		person: Some("ada.martin@example.com".into()),
+	});
+	now
+}
+
+fn opened(s: &mut App, conversation_id: &str, messages: Vec<Message>) {
+	let Some(conversation) = s
+		.ready()
+		.and_then(|ready| ready.conversations.iter().find(|held| held.id == conversation_id))
+	else {
+		return;
 	};
-	let atlas = Agent {
-		id: "atlas".into(),
-		name: "Atlas".into(),
-		title: "Reviews code".into(),
-		avatar_blot: Some(257.0),
-	};
-	let seat = |agent: &Agent| Participant {
-		bot_id: agent.id.clone(),
-		name: agent.name.clone(),
-		avatar_blot: agent.avatar_blot,
-		left_at: None,
-		is_deleted: false,
-	};
-	let conversation = Conversation {
-		id: "launch".into(),
-		title: "Launch week".into(),
-		participants: vec![seat(&wren), seat(&atlas)],
-	};
-	let message = |seq: i64, role: Role, author: Option<&str>, content: &str| Message {
+	let mut thread = Thread::of_conversation(conversation);
+	thread.messages = messages;
+	thread.loaded = true;
+	s.thread = Some(thread);
+}
+
+fn message(seq: i64, role: Role, content: &str) -> Message {
+	Message {
 		id: format!("m{seq}"),
-		conversation_id: "launch".into(),
+		conversation_id: "chat-skippy".into(),
 		seq,
 		role,
 		content: content.into(),
-		author_bot_id: author.map(str::to_owned),
+		author_bot_id: (role == Role::Assistant).then(|| "skippy".into()),
 		author_name: None,
-	};
+	}
+}
+
+fn default_exchange() -> Vec<Message> {
+	vec![
+		message(1, Role::User, "How is this workspace laid out?"),
+		message(2, Role::Assistant, AGENTS[0].3),
+	]
+}
+
+fn thread_default(s: &mut App) {
+	workspace(s);
+	opened(s, "chat-skippy", default_exchange());
+}
+
+fn thread_long(s: &mut App) {
+	workspace(s);
 	let mut messages = Vec::new();
 	for turn in 0..150 {
 		messages.push(message(
 			turn * 2,
 			Role::User,
-			None,
-			&format!("<@wren> can you check part {turn}?"),
+			&format!("<@skippy> can you check part {turn}?"),
 		));
 		messages.push(message(
 			turn * 2 + 1,
 			Role::Assistant,
-			Some("wren"),
 			&format!("Part {turn} reads fine. Nothing to change."),
 		));
 	}
-	messages.push(message(300, Role::User, None, "Can you two get the docs ready for Friday?"));
-	messages.push(message(301, Role::Assistant, Some("wren"), SAMPLE));
-	s.screen = Screen::Conversations;
-	let mut thread = Thread::of_conversation(&conversation);
-	thread.messages = messages;
-	thread.loaded = true;
-	s.thread = Some(thread);
-	s.workspace = Workspace::Ready(Ready {
-		host: Host::detached(),
-		space: Space { id: "space".into(), name: "Work".into() },
-		agents: vec![wren, atlas],
-		conversations: vec![conversation],
-	});
+	messages.push(message(300, Role::User, "Can you get the docs ready for Friday?"));
+	messages.push(message(301, Role::Assistant, SAMPLE));
+	opened(s, "chat-skippy", messages);
+}
+
+fn thread_empty(s: &mut App) {
+	workspace(s);
+	opened(s, "chat-skippy", Vec::new());
+}
+
+fn thread_streaming(s: &mut App) {
+	workspace(s);
+	opened(s, "chat-skippy", vec![message(1, Role::User, "How is this workspace laid out?")]);
+	if let Some(thread) = s.thread.as_mut() {
+		thread.live.push(Live {
+			id: "live".into(),
+			bot_id: "skippy".into(),
+			text: "Two packages: `@workspace/ui` holds the design system, and".into(),
+		});
+	}
+}
+
+fn thread_mention(s: &mut App) {
+	thread_default(s);
+	s.composer.edit = TextEdit::new("@");
+	s.composer.edit.focused = true;
+	s.composer.edit.set_caret(1);
+	s.composer_changed();
 }
 
 fn read_the_dev_host_before_the_first_frame(s: &mut App) {
