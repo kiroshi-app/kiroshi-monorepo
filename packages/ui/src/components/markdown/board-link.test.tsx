@@ -99,6 +99,20 @@ describe("Markdown board links", () => {
 		expect(html).not.toContain("<a ")
 	})
 
+	it("keeps the words in a loose checklist label and puts the board after its paragraph", () => {
+		const html = render({
+			children: "- [ ] Review [the plan](plan.canvas) today\n\n- [ ] Sketch",
+			renderBoardLink: renderBoard,
+		})
+		const [label] = html.match(LABEL) ?? []
+		expect(label).toContain("Review the plan today")
+		expect(label).not.toContain("<article")
+		expect(html).toContain(
+			'</label></p><article data-name="plan.canvas">the plan</article>\n</li>',
+		)
+		expect(html).not.toContain("<a ")
+	})
+
 	it("keeps the words in a list sentence and puts the board after them", () => {
 		expect(
 			render({
