@@ -55,8 +55,6 @@ import { ContextMenuSeparator } from "@workspace/ui/components/ui/context-menu"
 import { useCopyText } from "@workspace/ui/hooks/use-copy-text"
 import { cn } from "@workspace/ui/lib/utils"
 
-const TURN_AVATAR_SIZE = 40
-
 const AUTHOR_AVATAR_SIZE = 20
 
 type TurnState = "streaming" | "complete" | "cancelled" | "failed"
@@ -729,9 +727,10 @@ const PersonTurn = ({
 }
 
 export {
+	AGENT_BUBBLE_WIDTH,
 	AssistantTurn,
+	AUTHOR_AVATAR_SIZE,
 	PersonTurn,
-	TURN_AVATAR_SIZE,
 	type TurnCause,
 	type TurnCauseKind,
 	TurnGroup,

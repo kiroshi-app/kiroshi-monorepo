@@ -204,7 +204,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The record of an answered agent question, posted in the companion's column right under the message that asked it. The author line says who answered and when, then each question shows its header and the options chosen, painted in the Space's person bubble colour. Use `ToolQuestion` while the question still waits for an answer.",
+					"The record of an answered agent question, posted in the companion's column right under the message that asked it, in the same soft bubble as the turn above. Each question shows its header and the options chosen, painted in the Space's person bubble colour, and the author line in the bubble's footer says who answered and when. Use `ToolQuestion` while the question still waits for an answer.",
 			},
 		},
 	},
@@ -240,13 +240,42 @@ const expectRowsPaintedFromSpace = async (root: HTMLElement) => {
 	}
 }
 
-const softBubblesOf = (root: HTMLElement) =>
-	Array.from(root.querySelectorAll('[data-variant="soft"]'), (bubble) =>
-		slotIn(bubble, "message-bubble-content"),
-	)
+const answerBubbleIn = (root: HTMLElement) =>
+	slotIn(cardIn(root), "message-bubble-content")
 
-const bubbleRadiusIn = (root: HTMLElement) =>
-	tokenStyleIn(root, "rounded-bubble", "borderTopLeftRadius")
+const surfaceOf = (bubbleContent: HTMLElement) =>
+	getComputedStyle(bubbleContent.firstElementChild as Element).backgroundColor
+
+const expectAgentBubble = async (root: HTMLElement) => {
+	const card = cardIn(root)
+	const answer = getComputedStyle(answerBubbleIn(root))
+	const turnBubble = slotIn(root, "message-bubble")
+	const turnContent = slotIn(turnBubble, "message-bubble-content")
+	const turn = getComputedStyle(turnContent)
+
+	await expect(card).toHaveAttribute("data-variant", "soft")
+	await expect(card).toHaveAttribute("data-align", "start")
+	await expect(getComputedStyle(card).maxWidth).toBe(
+		getComputedStyle(turnBubble).maxWidth,
+	)
+	await expect(answer.paddingTop).toBe(answer.paddingInlineStart)
+	await expect(answer.paddingTop).toBe(turn.paddingTop)
+	await expect(answer.paddingInlineStart).toBe(turn.paddingInlineStart)
+	await expect(answer.borderStartStartRadius).toBe(turn.borderStartStartRadius)
+	await expect(surfaceOf(answerBubbleIn(root))).toBe(surfaceOf(turnContent))
+}
+
+const expectAnswererFooter = async (root: HTMLElement, label: string) => {
+	const answer = answerBubbleIn(root)
+	const [line] = slotsIn(answer, "author-line")
+
+	await expect(slotsIn(answer, "author-line")).toHaveLength(1)
+	await expect(line.parentElement).toBe(answer)
+	await expect(line).toHaveAttribute("data-tone", "person")
+	await expect(slotIn(line, "author-line-name")).toHaveTextContent(label)
+	await expect(slotIn(line, "user-avatar")).toBeVisible()
+	await expect(slotIn(line, "message-time")).toBeVisible()
+}
 
 export const YouAnswered = meta.story({
 	render: () => (
@@ -260,31 +289,20 @@ export const YouAnswered = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this when the reader answered the question themselves, here three questions at once. The author line reads You answered beside the reader's initials, and each block reads its header then its chosen row, the key chip giving the option's place in its question. Check that the card's top-start corner tightens where it meets the bubble above, like any bubble of the run.",
+					"Reach for this when the reader answered the question themselves, here three questions at once. Each block reads its header then its chosen row, the key chip giving the option's place in its question, and the footer reads You answered beside the reader's round initials and the answer time. Check that the bubble wears the same surface, radius, padding and width as the turn above it.",
 			},
 		},
 	},
 	play: async ({ canvas, canvasElement }) => {
 		const card = cardIn(canvasElement)
-		const cardStyle = getComputedStyle(card)
 
-		await expect(canvas.getByText("You answered")).toBeVisible()
 		await expect(canvas.getAllByRole("group")).toHaveLength(3)
 		await expect(
 			spokenTextOf(canvas.getByRole("group", { name: "Scope" })),
 		).toBe("ScopeEvery tableOne window, one rollback")
 		await expect(choicesIn(card)).toHaveLength(3)
-		await expect(cardStyle.backgroundColor).toBe(
-			getComputedStyle(
-				softBubblesOf(canvasElement)[0].firstElementChild as Element,
-			).backgroundColor,
-		)
-		await expect(cardStyle.borderStartStartRadius).toBe(
-			bubbleRadiusIn(canvasElement),
-		)
-		await expect(cardStyle.borderEndStartRadius).toBe(
-			bubbleRadiusIn(canvasElement),
-		)
+		await expectAgentBubble(canvasElement)
+		await expectAnswererFooter(canvasElement, "You answered")
 		await expectRowsPaintedFromSpace(canvasElement)
 		await expect(getComputedStyle(canvas.getByText("Every table")).color).toBe(
 			tokenStyleIn(
@@ -313,14 +331,15 @@ export const MemberAnswered = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this when another member of the Space answered. The author line names them beside their initials; the chosen row is the second option, so its key chip reads 2.",
+					"Reach for this when another member of the Space answered. The footer names them beside their round initials and the answer time; the chosen row is the second option, so its key chip reads 2.",
 			},
 		},
 	},
-	play: async ({ canvas, canvasElement }) => {
+	play: async ({ canvasElement }) => {
 		const [choice] = choicesIn(cardIn(canvasElement))
 
-		await expect(canvas.getByText("Maya Okafor answered")).toBeVisible()
+		await expectAgentBubble(canvasElement)
+		await expectAnswererFooter(canvasElement, "Maya Okafor answered")
 		await expect(choice).toHaveTextContent(/^2Beta/)
 		for (const hidden of choice.querySelectorAll('[aria-hidden="true"]')) {
 			await expect(hidden.textContent).not.toContain("Beta")
@@ -376,6 +395,7 @@ export const FreeText = meta.story({
 	play: async ({ canvasElement }) => {
 		const [row] = choicesIn(cardIn(canvasElement))
 
+		await expectAnswererFooter(canvasElement, "You answered")
 		await expect(row.children).toHaveLength(2)
 		await expect(row).toHaveTextContent(/^Call it billing-core/)
 	},
@@ -399,16 +419,17 @@ export const LongContent = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this for an option whose label and description run long, and a written answer with no break opportunity. Both wrap inside their row while the card holds its 360px minimum width; nothing spills past the card's edge.",
+					"Reach for this for an option whose label and description run long, and a written answer with no break opportunity. Both wrap inside their row while the bubble holds its 360px minimum width; nothing spills past the bubble's edge, and the footer still names the member who answered.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
-		const card = cardIn(canvasElement)
-		const { right, width } = card.getBoundingClientRect()
+		const answer = answerBubbleIn(canvasElement)
+		const { right, width } = answer.getBoundingClientRect()
 
 		await expect(width).toBeGreaterThanOrEqual(360)
-		for (const row of choicesIn(card)) {
+		await expectAnswererFooter(canvasElement, "Maya Okafor answered")
+		for (const row of choicesIn(answer)) {
 			await expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth)
 			await expect(row.getBoundingClientRect().right).toBeLessThanOrEqual(right)
 		}

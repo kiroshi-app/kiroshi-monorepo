@@ -58,6 +58,7 @@ type MissionCardProps = Omit<MissionCardModel, "author"> & {
 	onOpen: (missionId: string, modifiers: ClickModifiers) => void
 	surface?: MissionCardSurface
 	isActive?: boolean
+	foot?: ReactNode
 	className?: string
 }
 
@@ -130,6 +131,7 @@ const CardDensity = ({
 	lastActivity,
 	surface,
 	onOpen,
+	foot,
 	className,
 }: MissionDensityProps) => {
 	const { t } = useTranslation("chat")
@@ -187,6 +189,7 @@ const CardDensity = ({
 							pullRequest={pullRequest}
 						/>
 					) : null}
+					{foot}
 				</span>
 			</MessageBubbleContent>
 		</MessageBubble>

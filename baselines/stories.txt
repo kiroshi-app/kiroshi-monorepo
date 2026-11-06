@@ -695,8 +695,12 @@ conversation-missions-missionmarks--as-line
 conversation-missions-missionmarks--default
 conversation-missions-missionstatepill--states
 conversation-missions-missionturn--done
+conversation-missions-missionturn--done-dark
 conversation-missions-missionturn--failed
 conversation-missions-missionturn--in-a-solo-thread
+conversation-missions-missionturn--in-a-solo-thread-dark
+conversation-missions-missionturn--long-objective
+conversation-missions-missionturn--long-objective-dark
 conversation-missions-missionturn--opens-with-click-modifiers
 conversation-missions-missionturn--ready-to-merge
 conversation-missions-missionturn--states
@@ -705,6 +709,7 @@ conversation-missions-missionturn--waiting-for-the-reader
 conversation-missions-missionturn--with-an-unknown-tool
 conversation-missions-missionturn--without-tools
 conversation-missions-missionturn--working
+conversation-missions-missionturn--working-dark
 conversation-missions-missionturn--working-without-tools
 conversation-onboarding-onboardingaccountscreen--account-empty
 conversation-onboarding-onboardingaccountscreen--account-signed-in
