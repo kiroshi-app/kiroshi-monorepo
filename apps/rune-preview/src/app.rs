@@ -276,6 +276,7 @@ pub struct App {
 	pub clock_ms: f64,
 	pub math: Typesetter,
 	pub pane: Pane,
+	pub host_profile: Profile,
 	pub board: Board,
 	pub mission: Option<OpenMission>,
 	outbox: Option<Outbox>,
@@ -307,6 +308,7 @@ impl App {
 			runs: Runs::default(),
 			math: Typesetter::default(),
 			pane: Pane::Conversations,
+			host_profile: Profile::Installed,
 			board: Board::Unread,
 			mission: None,
 			clock_ms: 0.0,
@@ -338,7 +340,8 @@ impl App {
 
 	pub fn connect(&mut self) {
 		self.workspace = Workspace::Connecting;
-		self.work(|outbox| outbox.deliver(Inbound::Connected(connected(Profile::Installed))));
+		let profile = self.host_profile;
+		self.work(move |outbox| outbox.deliver(Inbound::Connected(connected(profile))));
 	}
 
 	pub fn poll(&mut self) -> bool {

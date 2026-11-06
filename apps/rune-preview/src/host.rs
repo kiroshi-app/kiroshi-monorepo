@@ -63,10 +63,11 @@ impl Profile {
 	pub fn hosts(self, executable: &str) -> bool {
 		let name = executable.rsplit('/').next().unwrap_or("");
 		let bundled = executable.ends_with(".app/Contents/MacOS/Kiroshi");
+		let dev_bundle = executable.ends_with("Kiroshi Dev.app/Contents/MacOS/Kiroshi");
 		name == "Kiroshi"
 			&& match self {
-				Profile::Dev => !executable.contains(".app/Contents/"),
-				Profile::Installed => bundled,
+				Profile::Dev => dev_bundle || !bundled,
+				Profile::Installed => bundled && !dev_bundle,
 			}
 	}
 
@@ -315,5 +316,8 @@ mod tests {
 		assert!(!Profile::Installed.hosts(sidecar));
 		assert!(Profile::Dev.hosts(built));
 		assert!(!Profile::Dev.hosts(bundled));
+		let dev_release = "/x/bundle/macos/Kiroshi Dev.app/Contents/MacOS/Kiroshi";
+		assert!(Profile::Dev.hosts(dev_release));
+		assert!(!Profile::Installed.hosts(dev_release));
 	}
 }

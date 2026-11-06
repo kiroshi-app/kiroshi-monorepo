@@ -29,6 +29,7 @@ use rune::{AppSpec, Cx, El, KeyEvent, Tx, Waker};
 use rune_kit::shell;
 
 use crate::app::{App, Screen};
+use crate::host::Profile;
 
 fn view(s: &App, cx: &mut Cx<App>) -> El {
 	let dark = cx.system_dark();
@@ -51,7 +52,13 @@ fn view(s: &App, cx: &mut Cx<App>) -> El {
 	rune_kit::root(body, Vec::new())
 }
 
+const DEV_HOST: &str = "--dev-host";
+
 fn setup(s: &mut App, waker: Waker) {
+	if std::env::args().any(|arg| arg == DEV_HOST) {
+		s.host_profile = Profile::Dev;
+		s.screen = Screen::Conversations;
+	}
 	s.setup(waker);
 }
 
