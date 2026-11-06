@@ -1045,11 +1045,7 @@ const ReadyBoardCanvas = ({
 		anchor?: BoardPoint,
 	): BoardConnectorEnd => {
 		const rect = liveBounds(item)
-		return {
-			rect,
-			...(side ? { side } : {}),
-			...(anchor ? { point: exactPointOf(rect, anchor) } : {}),
-		}
+		return { rect, side, point: anchor && exactPointOf(rect, anchor) }
 	}
 
 	const routeOf = (connector: BoardConnector) => {

@@ -113,6 +113,9 @@ const along = (from: BoardPoint, direction: BoardPoint, by: number) => ({
 	y: from.y + direction.y * by,
 })
 
+const distance = (a: BoardPoint, b: BoardPoint) =>
+	Math.abs(a.x - b.x) + Math.abs(a.y - b.y)
+
 const isSamePoint = (a: BoardPoint, b: BoardPoint) => a.x === b.x && a.y === b.y
 
 const isSameRect = (a: BoardRect, b: BoardRect) =>
@@ -282,7 +285,7 @@ const elbowEndsOf = (
 			start: offset(anchor, heading, gap),
 			stub: offset(anchor, heading, stubLength),
 			heading,
-			preference: headingOf(side) * SIDE_PREFERENCE_COST,
+			preference: heading * SIDE_PREFERENCE_COST,
 		}
 	})
 }
@@ -385,18 +388,13 @@ const elbowPoints = (
 		y: (centreOf(source.rect).y + centreOf(target.rect).y) / 2,
 	}
 	const bendAt = (point: BoardPoint) =>
-		BEND_COST +
-		(Math.abs(point.x - centre.x) + Math.abs(point.y - centre.y)) *
-			OFF_CENTRE_BEND_COST
+		BEND_COST + distance(point, centre) * OFF_CENTRE_BEND_COST
 	const legCost = (from: BoardPoint, to: BoardPoint) => {
-		const length = Math.abs(to.x - from.x) + Math.abs(to.y - from.y)
 		const isSoft =
 			softZones.some((zone) => crossesInside(from, to, zone)) ||
 			frames.some((frame) => runsAlongFrame(from, to, frame))
-		return length * (isSoft ? 1 + SOFT_ZONE_COST : 1)
+		return distance(from, to) * (isSoft ? 1 + SOFT_ZONE_COST : 1)
 	}
-	const distance = (a: BoardPoint, b: BoardPoint) =>
-		Math.abs(a.x - b.x) + Math.abs(a.y - b.y)
 	const stateOf = (node: number, heading: number) => node * 4 + heading
 	const states = xs.length * ys.length * 4
 	const cost = new Array<number>(states).fill(Number.POSITIVE_INFINITY)
