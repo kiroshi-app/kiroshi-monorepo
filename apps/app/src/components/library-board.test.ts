@@ -16,10 +16,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import * as Y from "yjs"
 
 import type { Board } from "@workspace/shared/board/board"
-import type {
-	BoardLibraryItem,
-	BoardTool,
-} from "@workspace/ui/components/board/board-dock"
+import type { BoardTool } from "@workspace/ui/components/board/board-dock"
 import { hueTone } from "@workspace/ui/components/hue-palette"
 import { i18n } from "@workspace/ui/lib/i18n"
 
@@ -45,10 +42,12 @@ import { base64Of, bytesOf } from "@/lib/library/library-document-session"
 import { LIBRARY_DOCUMENT_PRESENCE_EVENT } from "@/lib/library/library-document-writers"
 import { applyLibraryUpdate } from "@/lib/library/library-document-writes"
 import { readLinkPreview } from "@/lib/library/library-link-preview"
-import { libraryQueryKeys } from "@/lib/library/library-query-keys"
 import {
+	importLibraryFile,
 	importLibraryUrl,
 	openLibraryDocument,
+	readLibraryDocument,
+	readLibraryItems,
 } from "@/lib/library/library-reads"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 import { useTabKeys } from "@/lib/tabs/use-tab-keys"
@@ -66,6 +65,14 @@ vi.mock("@/lib/library/library-reads", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/lib/library/library-reads")>()),
 	openLibraryDocument: vi.fn(),
 	importLibraryUrl: vi.fn(),
+	importLibraryFile: vi.fn(),
+	readLibraryItems: vi.fn(),
+	readLibraryDocument: vi.fn(),
+}))
+
+vi.mock("@/lib/host/tauri", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@/lib/host/tauri")>()),
+	convertFileSrc: (path: string) => `asset://${path}`,
 }))
 
 vi.mock("@/lib/library/library-link-preview", () => ({
@@ -152,6 +159,12 @@ const fakeHost = () => {
 		return unlisten
 	})
 	vi.mocked(openLibraryDocument).mockImplementation(async () => openedState())
+	vi.mocked(readLibraryItems).mockResolvedValue(LIBRARY_ITEMS)
+	vi.mocked(readLibraryDocument).mockImplementation(async (_spaceId, name) => ({
+		name,
+		format: "markdown",
+		content: "Agenda",
+	}))
 	vi.mocked(applyLibraryUpdate).mockResolvedValue(null)
 	vi.mocked(invoke).mockResolvedValue(null)
 	const announce = (update: string, name = NAME) =>
@@ -204,24 +217,31 @@ const unparsableState = () => {
 
 const undecodableState = () => base64Of(Uint8Array.of(255, 255, 255, 255))
 
-const LIBRARY_ITEMS: BoardLibraryItem[] = [
-	{ id: "cover.png", kind: "image", title: "cover.png", src: "cover-src" },
-	{ id: "Notes.md", kind: "document", title: "Notes", excerpt: "Agenda" },
-	{ id: NAME, kind: "document", title: "Roadmap", excerpt: "2 objects" },
-]
+const listedItemOf = (
+	name: string,
+	kind: LibraryItem["kind"],
+): LibraryItem => ({
+	name,
+	kind,
+	path: `/library/${name}`,
+	bytes: 1_024,
+	modifiedAt: 0,
+	createdAt: null,
+})
 
-const NO_IMPORTS = async () => []
+const LIBRARY_ITEMS: LibraryItem[] = [
+	listedItemOf("cover.png", "image"),
+	listedItemOf("Notes.md", "document"),
+	listedItemOf(NAME, "board"),
+]
 
 const BOTS = [
 	{ id: ATLAS_ID, name: "Atlas", avatarBlot: 210, avatarImagePath: null },
 	{ id: JUNIPER_ID, name: "Juniper", avatarBlot: 130, avatarImagePath: null },
 ] as Bot[]
 
-type Importer = (files: readonly File[]) => Promise<LibraryItem[]>
-
 type BoardElementOptions = {
 	onBack?: () => void
-	importFiles?: Importer
 	name?: string
 	summary?: LibraryBoardSummary
 	isJoined?: boolean
@@ -229,7 +249,6 @@ type BoardElementOptions = {
 
 const boardElement = ({
 	onBack = vi.fn(),
-	importFiles = NO_IMPORTS,
 	name = NAME,
 	summary = SUMMARY,
 	isJoined = false,
@@ -241,8 +260,6 @@ const boardElement = ({
 		name,
 		title: "Roadmap",
 		summary,
-		libraryItems: LIBRARY_ITEMS,
-		importFiles,
 		onBack,
 		onDelete: vi.fn(),
 	})
@@ -278,28 +295,22 @@ const expectNeitherSkeletonNorEmptyHint = () => {
 }
 
 type MountedBoardOptions = {
-	importFiles?: Importer
 	isJoined?: boolean
 }
 
-const mountBoardWith = async ({
-	importFiles,
-	isJoined,
-}: MountedBoardOptions) => {
+const mountBoardWith = async ({ isJoined }: MountedBoardOptions) => {
 	const host = fakeHost()
-	const { wrapper, queryClient } = createQueryTestWrapper()
-	const mounted = render(boardElement({ importFiles, isJoined }), { wrapper })
+	const { wrapper } = createQueryTestWrapper()
+	const mounted = render(boardElement({ isJoined }), { wrapper })
 	await screen.findByRole("option", { name: textNamed("First") })
 	return {
 		...host,
 		...mounted,
-		queryClient,
-		rerenderBoard: () =>
-			mounted.rerender(boardElement({ importFiles, isJoined })),
+		rerenderBoard: () => mounted.rerender(boardElement({ isJoined })),
 	}
 }
 
-const mountBoard = (importFiles?: Importer) => mountBoardWith({ importFiles })
+const mountBoard = () => mountBoardWith({})
 
 const focusObject = (text: string) => {
 	const object = objectNamed(text) as HTMLElement
@@ -329,6 +340,9 @@ afterEach(() => {
 	vi.mocked(raiseReportedFailure).mockReset()
 	vi.mocked(readLinkPreview).mockReset()
 	vi.mocked(importLibraryUrl).mockReset()
+	vi.mocked(importLibraryFile).mockReset()
+	vi.mocked(readLibraryItems).mockReset()
+	vi.mocked(readLibraryDocument).mockReset()
 	vi.restoreAllMocks()
 	vi.useRealTimers()
 })
@@ -612,6 +626,9 @@ const pastedLink = (url: string) => ({
 	getData: () => url,
 })
 
+const importedNames = () =>
+	vi.mocked(importLibraryFile).mock.calls.map(([, name]) => name)
+
 const imageFile = (name: string) =>
 	new File(["bytes"], name, { type: "image/png" })
 
@@ -735,15 +752,14 @@ describe("adding to a Library board", () => {
 	})
 
 	it("imports a pasted image into the Library first, then adds it at the paste point", async () => {
-		const importFiles = vi.fn(async () => [
+		vi.mocked(importLibraryFile).mockResolvedValue(
 			libraryItemOf("pasted.png", "image"),
-		])
-		await mountBoard(importFiles)
-		const pasted = imageFile("pasted.png")
+		)
+		await mountBoard()
 
-		pasteOn({ files: [pasted], getData: () => "" })
+		pasteOn({ files: [imageFile("pasted.png")], getData: () => "" })
 
-		expect(importFiles).toHaveBeenCalledWith([pasted])
+		await waitFor(() => expect(importedNames()).toEqual(["pasted.png"]))
 		const image = await waitFor(() => {
 			const placed = imageObject()
 			expect(placed).toBeInstanceOf(HTMLElement)
@@ -754,11 +770,13 @@ describe("adding to a Library board", () => {
 	})
 
 	it("adds one object per imported dropped file side by side, and nothing for a failed one", async () => {
-		const importFiles = vi.fn(async () => [
-			libraryItemOf("first.png", "image"),
-			libraryItemOf("Brief.pdf", "document"),
-		])
-		await mountBoard(importFiles)
+		vi.mocked(importLibraryFile).mockImplementation(async (_spaceId, name) => {
+			if (name === "broken.png") {
+				throw { kind: "unwritable" }
+			}
+			return libraryItemOf(name, name.endsWith(".png") ? "image" : "document")
+		})
+		await mountBoard()
 		const dropped = [
 			imageFile("first.png"),
 			imageFile("broken.png"),
@@ -767,7 +785,9 @@ describe("adding to a Library board", () => {
 
 		dropFilesAt(dropped, { clientX: 300, clientY: 200 })
 
-		expect(importFiles).toHaveBeenCalledWith(dropped)
+		await waitFor(() =>
+			expect(importedNames()).toEqual(["first.png", "broken.png", "Brief.pdf"]),
+		)
 		await waitFor(() =>
 			expect(linkObject("Brief.pdf")).toBeInstanceOf(HTMLElement),
 		)
@@ -786,8 +806,8 @@ describe("adding to a Library board", () => {
 		vi.mocked(importLibraryUrl).mockResolvedValue(
 			libraryItemOf("photo.png", "image"),
 		)
-		const { queryClient } = await mountBoard()
-		queryClient.setQueryData(libraryQueryKeys.itemsOf(SPACE_ID), [])
+		await mountBoard()
+		const listingsBeforeDrop = vi.mocked(readLibraryItems).mock.calls.length
 
 		dropUrlAt(LINK, DROP_POINT)
 
@@ -798,10 +818,11 @@ describe("adding to a Library board", () => {
 		})
 		expect(importLibraryUrl).toHaveBeenCalledWith(SPACE_ID, LINK)
 		expect(placementOf(image)).toEqual({ left: "190px", top: "127px" })
-		expect(
-			queryClient.getQueryState(libraryQueryKeys.itemsOf(SPACE_ID))
-				?.isInvalidated,
-		).toBe(true)
+		await waitFor(() =>
+			expect(vi.mocked(readLibraryItems).mock.calls.length).toBeGreaterThan(
+				listingsBeforeDrop,
+			),
+		)
 	})
 
 	it("adds a dropped page link as a link card at the drop point, titled once the preview answers", async () => {
@@ -1013,7 +1034,7 @@ describe("drawing the objects of a Library board", () => {
 			"board-image",
 		) as HTMLImageElement
 
-		expect(image.getAttribute("src")).toBe("cover-src")
+		expect(image.getAttribute("src")).toBe("asset:///library/cover.png")
 		expect(image.alt).toBe("The cover")
 		expect({ width: image.style.width, height: image.style.height }).toEqual({
 			width: "220px",

@@ -380,6 +380,28 @@ const renderLaunchBoardPanel = (close: () => void = () => undefined) =>
 		{ wrapper: createQueryTestWrapper().wrapper },
 	)
 
+type JoinedState = { isJoined: boolean }
+
+const renderLaunchBoardPanelIn = ({ isJoined }: JoinedState) =>
+	render(
+		createElement(ThreadBoardPanel, {
+			documents: { ...boardDocumentsOf(() => undefined), isJoined },
+			bots: BOTS,
+			name: LAUNCH_BOARD,
+		}),
+		{ wrapper: createQueryTestWrapper().wrapper },
+	)
+
+const openLibraryPicker = async () => {
+	await screen.findByRole("application", {
+		name: common("board.canvas.label"),
+	})
+	const libraryTool = screen
+		.getAllByRole("button")
+		.find((button) => button.dataset.tool === "library")
+	fireEvent.click(libraryTool as HTMLElement)
+}
+
 describe("a board opened beside a conversation", () => {
 	beforeEach(() => {
 		libraryHost.answers.set("library_list", () => [planItem, launchBoardItem])
@@ -465,6 +487,45 @@ describe("a board opened beside a conversation", () => {
 		renderPlanPanel()
 
 		expect(widthOfPanel()).toBe(`${keptWidth}px`)
+	})
+	describe("its Library picker", () => {
+		const COVER = "cover.png"
+
+		beforeEach(() => {
+			libraryHost.answers.set("library_list", () => [
+				planItem,
+				imageItemOf(COVER),
+				launchBoardItem,
+			])
+			libraryHost.answers.set("library_read_image", ({ name }) => ({
+				name,
+				mimeType: "image/png",
+				content: name,
+			}))
+		})
+
+		it("lists the Library of the Space, the board itself left out", async () => {
+			renderLaunchBoardPanelIn({ isJoined: false })
+
+			await openLibraryPicker()
+
+			expect(await screen.findByRole("button", { name: "plan" })).toBeTruthy()
+			expect(screen.getByRole("button", { name: COVER })).toBeTruthy()
+			expect(screen.queryByRole("button", { name: "Launch week" })).toBeNull()
+		})
+
+		it("lists the Library of the joined Space while the Space is joined", async () => {
+			renderLaunchBoardPanelIn({ isJoined: true })
+
+			await openLibraryPicker()
+
+			expect(await screen.findByRole("button", { name: "plan" })).toBeTruthy()
+			expect(screen.getByRole("button", { name: COVER })).toBeTruthy()
+			expect(libraryHost.invoked).toContainEqual([
+				"library_list",
+				{ spaceId: SPACE_ID },
+			])
+		})
 	})
 })
 
