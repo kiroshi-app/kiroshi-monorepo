@@ -1,4 +1,11 @@
-import { Children, createContext, type ReactNode, useContext } from "react"
+import {
+	Children,
+	cloneElement,
+	createContext,
+	isValidElement,
+	type ReactNode,
+	useContext,
+} from "react"
 
 import {
 	attachmentPathOf,
@@ -74,7 +81,11 @@ const useBoardCards = (node: BoardLinkNode | undefined) => {
 	const renderBoardLink = useContext(MarkdownBoardLinkContext)
 	if (!renderBoardLink || !node) return []
 	return Children.toArray(
-		boardLinksOf(node).map((link) => renderBoardLink(link)),
+		boardLinksOf(node).map((link, index) => {
+			const card = renderBoardLink(link)
+			// biome-ignore lint/suspicious/noArrayIndexKey: a card is the link at its position, two links may name the same board
+			return isValidElement(card) ? cloneElement(card, { key: index }) : card
+		}),
 	)
 }
 
