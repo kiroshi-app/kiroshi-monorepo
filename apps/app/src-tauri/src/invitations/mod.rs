@@ -63,7 +63,7 @@ impl Invitations {
 }
 
 pub async fn read<R: Runtime>(app: &AppHandle<R>) -> Result<Vec<Invitation>, InvitationError> {
-	let invitations = app.state::<Invitations>();
+	let invitations = crate::events::core(app.app_handle()).state::<Invitations>();
 	let _turn = invitations.turn.lock().await;
 	let bearer = bearer_of(app)?;
 	let listed = invitations
@@ -82,7 +82,8 @@ pub async fn accept<R: Runtime>(
 	invitation_id: String,
 ) -> Result<JoinedSpace, JoinedSpaceError> {
 	let accepted = accepted(app, &invitation_id).await?;
-	let invitation = app.state::<Invitations>().listed(&invitation_id);
+	let invitation =
+		crate::events::core(app.app_handle()).state::<Invitations>().listed(&invitation_id);
 	let (inviter_email, listing) = match invitation {
 		Some(listed) => (Some(listed.invitation.inviter_email), listed.listing),
 		None => (None, HostListing::default()),
@@ -103,7 +104,7 @@ async fn accepted<R: Runtime>(
 	app: &AppHandle<R>,
 	invitation_id: &str,
 ) -> Result<JoinedInstance, JoinedSpaceError> {
-	let invitations = app.state::<Invitations>();
+	let invitations = crate::events::core(app.app_handle()).state::<Invitations>();
 	let bearer = bearer_of(app).map_err(|failure| match failure {
 		InvitationError::NotSignedIn => JoinedSpaceError::NeedsSignIn,
 		failure => JoinedSpaceError::SessionStore { detail: format!("{failure:?}") },
@@ -146,7 +147,8 @@ pub async fn decline<R: Runtime>(
 	invitation_id: String,
 ) -> Result<(), InvitationError> {
 	let bearer = bearer_of(app)?;
-	app.state::<Invitations>()
+	crate::events::core(app.app_handle())
+		.state::<Invitations>()
 		.cloud
 		.decline_invitation(&bearer, &invitation_id)
 		.await
@@ -162,7 +164,7 @@ async fn reread<R: Runtime>(app: &AppHandle<R>) {
 }
 
 pub fn resumed<R: Runtime>(app: &AppHandle<R>) {
-	let Some(invitations) = app.try_state::<Invitations>() else {
+	let Some(invitations) = crate::events::core(app.app_handle()).try_state::<Invitations>() else {
 		return;
 	};
 	let mut poll = invitations.poll();
@@ -172,11 +174,11 @@ pub fn resumed<R: Runtime>(app: &AppHandle<R>) {
 }
 
 async fn polled<R: Runtime>(app: AppHandle<R>) {
-	let mut polls = interval(app.state::<Invitations>().every);
+	let mut polls = interval(crate::events::core(app.app_handle()).state::<Invitations>().every);
 	polls.set_missed_tick_behavior(MissedTickBehavior::Delay);
 	loop {
 		polls.tick().await;
-		app.state::<Invitations>().cloud.unpaused().await;
+		crate::events::core(app.app_handle()).state::<Invitations>().cloud.unpaused().await;
 		if let Err(failure) = read(&app).await {
 			eprintln!("the invitations were not polled: {failure:?}");
 		}
@@ -185,7 +187,7 @@ async fn polled<R: Runtime>(app: AppHandle<R>) {
 }
 
 pub async fn signed_out<R: Runtime>(app: &AppHandle<R>) {
-	let Some(invitations) = app.try_state::<Invitations>() else {
+	let Some(invitations) = crate::events::core(app.app_handle()).try_state::<Invitations>() else {
 		return;
 	};
 	let poll = invitations.poll().take();

@@ -1791,7 +1791,7 @@ mod tests {
 	async fn a_room_turn_releases_every_summoned_bot_that_never_starts_at_its_start_deadline() {
 		let app = an_app_of_its_own("host-turn-start-deadline", mock_builder());
 		crate::db::install(crate::events::core(app.handle()));
-		app.manage(TurnRunDeadlines::after(Duration::ZERO));
+		crate::events::core(app.app_handle()).manage(TurnRunDeadlines::after(Duration::ZERO));
 		let stored = database(app.handle()).expect("the database opens");
 		let conversations = stored.conversations();
 		conversations.ensure_default_bot().await.expect("the bot is seeded");
@@ -2547,7 +2547,7 @@ done
 				let app = an_app_of_its_own(name, mock_builder());
 				crate::db::install(crate::events::core(app.handle()));
 				app.manage(AgentState::default());
-				app.manage(TurnRunDeadlines::default());
+				crate::events::core(app.app_handle()).manage(TurnRunDeadlines::default());
 				app.manage(TurnWindows::default());
 				let room = a_room_running(app.handle(), &["Ada", "Grace"]).await;
 				speaking_in(app.handle(), &room, &room.bot_ids[..1]).await;

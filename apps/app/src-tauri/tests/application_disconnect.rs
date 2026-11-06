@@ -37,8 +37,8 @@ fn a_bot_disconnect_revokes_and_deletes_the_grant_its_space_holds() {
 		"application-disconnect",
 		mock_builder()
 			.manage(AgentState::default())
-			.manage(McpOauthState::default())
-			.manage(ApplicationReports::default()),
+			.plugin(kiroshi_app::events::in_core(McpOauthState::default()))
+			.plugin(kiroshi_app::events::in_core(ApplicationReports::default())),
 	);
 	let root = store::root(app.handle()).expect("the store root is named");
 	let space = EnvScope::Server {
@@ -71,8 +71,8 @@ fn a_disconnect_of_a_scope_holding_a_client_and_no_token_deletes_every_reserved_
 		"application-disconnect-client",
 		mock_builder()
 			.manage(AgentState::default())
-			.manage(McpOauthState::default())
-			.manage(ApplicationReports::default()),
+			.plugin(kiroshi_app::events::in_core(McpOauthState::default()))
+			.plugin(kiroshi_app::events::in_core(ApplicationReports::default())),
 	);
 	let root = store::root(app.handle()).expect("the store root is named");
 	let space = EnvScope::Server {

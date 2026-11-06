@@ -1,7 +1,9 @@
+use std::any::type_name;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
 use serde::Serialize;
+use tauri::plugin::TauriPlugin;
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tokio::sync::broadcast;
 
@@ -138,7 +140,19 @@ declared! {
 	TAB_DRAG: window_controls::tab_drag::TabDrag = window_controls::tab_drag::TAB_DRAG_EVENT,
 }
 
+pub fn in_core<R: Runtime, T: Send + Sync + 'static>(value: T) -> TauriPlugin<R> {
+	tauri::plugin::Builder::new(type_name::<T>())
+		.setup(move |app, _| {
+			install_core(app)?.manage(value);
+			Ok(())
+		})
+		.build()
+}
+
 pub fn install_core<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Core> {
+	if let Some(core) = app.try_state::<Core>() {
+		return Ok(core.inner().clone());
+	}
 	let core = Core::new(app.path().app_data_dir()?);
 	let windows = app.clone();
 	core.listen(move |event| {

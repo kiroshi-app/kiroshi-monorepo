@@ -5,7 +5,8 @@ use super::Devices;
 
 #[tauri::command]
 #[specta::specta]
-pub fn device_approval(devices: State<'_, Devices>) -> DeviceApproval {
+pub fn device_approval(core: State<'_, crate::core_context::Core>) -> DeviceApproval {
+	let devices = core.state::<Devices>();
 	devices.current()
 }
 

@@ -838,7 +838,8 @@ mod tests {
 	#[tokio::test]
 	async fn read_answers_the_whole_of_a_mission_of_another_bot() {
 		let app = a_host("read").await;
-		app.manage(crate::routines::webhook::start(app.handle().clone()));
+		crate::events::core(app.app_handle())
+			.manage(crate::routines::webhook::start(app.handle().clone()));
 		let held = a_mission_of(&app, "c1", "b2").await;
 		let its_bot = serving_as(&app, "c1", "b2");
 		its_bot
@@ -878,7 +879,9 @@ mod tests {
 		assert_eq!(kinds, vec![json!("opened"), json!("note"), json!("status")]);
 		assert_eq!(read["events"][1]["payload"]["line"], json!("Half way"));
 
-		if let Some(webhook) = app.try_state::<crate::routines::webhook::Webhook>() {
+		if let Some(webhook) =
+			crate::events::core(app.app_handle()).try_state::<crate::routines::webhook::Webhook>()
+		{
 			webhook.stop();
 		}
 	}
@@ -929,7 +932,8 @@ mod tests {
 	#[tokio::test]
 	async fn a_mission_is_armed_and_listed_from_its_own_thread() {
 		let app = a_host("armed").await;
-		app.manage(crate::routines::webhook::start(app.handle().clone()));
+		crate::events::core(app.app_handle())
+			.manage(crate::routines::webhook::start(app.handle().clone()));
 		let opened = a_mission_of(&app, "c1", "b1").await;
 		let host = serving(&app, &opened.thread_conversation_id);
 
@@ -946,7 +950,9 @@ mod tests {
 		assert_eq!(armed_missions(&app).await, vec![opened.id.clone()]);
 		assert_eq!(ids(&answered), vec![opened.id]);
 
-		if let Some(webhook) = app.try_state::<crate::routines::webhook::Webhook>() {
+		if let Some(webhook) =
+			crate::events::core(app.app_handle()).try_state::<crate::routines::webhook::Webhook>()
+		{
 			webhook.stop();
 		}
 	}
@@ -954,7 +960,8 @@ mod tests {
 	#[tokio::test]
 	async fn a_mission_opened_on_a_checkout_carries_the_hook_and_the_line_on_its_agent() {
 		let app = a_host("opened-hook").await;
-		app.manage(crate::routines::webhook::start(app.handle().clone()));
+		crate::events::core(app.app_handle())
+			.manage(crate::routines::webhook::start(app.handle().clone()));
 		let workspace = a_workspace("opened-hook");
 		let host = serving(&app, "c1");
 
@@ -971,7 +978,9 @@ mod tests {
 			.expect("the settings of the workspace read");
 		assert!(settings.contains("kiroshi-agent-hook.sh"), "got {settings}");
 
-		if let Some(webhook) = app.try_state::<crate::routines::webhook::Webhook>() {
+		if let Some(webhook) =
+			crate::events::core(app.app_handle()).try_state::<crate::routines::webhook::Webhook>()
+		{
 			webhook.stop();
 		}
 		fs::remove_dir_all(&workspace).expect("cleanup");
@@ -1183,7 +1192,8 @@ mod tests {
 	#[tokio::test]
 	async fn a_closed_mission_is_reopened_by_its_bot_and_its_watch_is_read_again() {
 		let app = a_host("reopen").await;
-		app.manage(crate::routines::webhook::start(app.handle().clone()));
+		crate::events::core(app.app_handle())
+			.manage(crate::routines::webhook::start(app.handle().clone()));
 		let opened = a_mission_of(&app, "c1", "b1").await;
 		let failed = a_mission_of(&app, "c1", "b1").await;
 		let host = serving(&app, &opened.thread_conversation_id);
@@ -1219,7 +1229,9 @@ mod tests {
 			Some((MissionEventKind::Reopened, BOT.to_owned()))
 		);
 
-		if let Some(webhook) = app.try_state::<crate::routines::webhook::Webhook>() {
+		if let Some(webhook) =
+			crate::events::core(app.app_handle()).try_state::<crate::routines::webhook::Webhook>()
+		{
 			webhook.stop();
 		}
 	}

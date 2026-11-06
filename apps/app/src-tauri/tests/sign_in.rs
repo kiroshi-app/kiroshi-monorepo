@@ -58,7 +58,9 @@ impl Drop for ScopedEnv {
 fn an_app() -> AppOfItsOwn {
 	an_app_of_its_own(
 		"sign-in",
-		mock_builder().manage(AgentState::default()).manage(SignInState::default()),
+		mock_builder()
+			.manage(AgentState::default())
+			.plugin(kiroshi_app::events::in_core(SignInState::default())),
 	)
 }
 

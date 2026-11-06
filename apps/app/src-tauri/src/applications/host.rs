@@ -343,9 +343,9 @@ mod tests {
 	async fn a_host(name: &str) -> AppOfItsOwn {
 		let app = an_app_of_its_own(&format!("application-host-{name}"), mock_builder());
 		crate::db::install(crate::events::core(app.handle()));
-		app.manage(McpOauthState::default());
-		app.manage(ApplicationReports::default());
-		app.manage(AuthorizationAnswers::default());
+		crate::events::core(app.app_handle()).manage(McpOauthState::default());
+		crate::events::core(app.app_handle()).manage(ApplicationReports::default());
+		crate::events::core(app.app_handle()).manage(AuthorizationAnswers::default());
 		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 			.expect("the database opens")
 			.call_mut(|connection| Ok(connection.execute_batch(A_SPACE)?))
@@ -1072,10 +1072,14 @@ mod tests {
 		let from_the_directory =
 			host.answer(an_install("com.notion/mcp", "user")).await.expect("the install answers");
 		assert_eq!(from_the_directory["install"], json!({ "kind": "oauth" }));
-		let reports = app.state::<ApplicationReports>();
+		let reports = crate::events::core(app.app_handle()).state::<ApplicationReports>();
 		reports.record("b1", "superset", Standing::Holding);
 		reports.record("b1", "paper", Standing::LeftOut { reason: Some("refused".to_owned()) });
-		app.state::<AuthorizationAnswers>().answered("https://mcp.notion.test/mcp", true, now_ms());
+		crate::events::core(app.app_handle()).state::<AuthorizationAnswers>().answered(
+			"https://mcp.notion.test/mcp",
+			true,
+			now_ms(),
+		);
 
 		let host = &host;
 		let read = move |application: &'static str, scope: &'static str| async move {

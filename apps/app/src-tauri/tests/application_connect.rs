@@ -88,8 +88,8 @@ fn connected_holding(
 		&format!("application-connect-{case}"),
 		mock_builder()
 			.manage(AgentState::default())
-			.manage(McpOauthState::default())
-			.manage(ApplicationReports::default()),
+			.plugin(kiroshi_app::events::in_core(McpOauthState::default()))
+			.plugin(kiroshi_app::events::in_core(ApplicationReports::default())),
 	);
 	let root = store::root(app.handle()).expect("the store root is named");
 	let owner = EnvOwner::Bot { id: "b1".to_owned(), space_id: "s1".to_owned() };

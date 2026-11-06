@@ -537,7 +537,7 @@ fn signed_in(
 	app.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), cloud));
 	let guests = RelayGuests::new(cloud).answering_within(answer_bound);
 	app.manage(guests.resending_every(RESEND_EVERY));
-	app.manage(Invitations::new(cloud));
+	crate::events::core(app.app_handle()).manage(Invitations::new(cloud));
 	let root_path = root.to_path_buf();
 	(app, root_path, vec![database, root])
 }

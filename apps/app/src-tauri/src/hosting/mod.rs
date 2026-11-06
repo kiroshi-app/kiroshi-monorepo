@@ -108,7 +108,10 @@ impl Hosting {
 }
 
 pub fn local_api<R: Runtime>(app: &AppHandle<R>) -> Option<LocalApi> {
-	let Some(origin) = app.try_state::<Webhook>().and_then(|webhook| webhook.origin()) else {
+	let Some(origin) = crate::events::core(app.app_handle())
+		.try_state::<Webhook>()
+		.and_then(|webhook| webhook.origin())
+	else {
 		log::error!("no space can be hosted: the local host api is not listening");
 		return None;
 	};

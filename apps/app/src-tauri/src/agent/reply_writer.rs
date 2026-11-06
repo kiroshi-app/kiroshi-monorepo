@@ -2467,7 +2467,8 @@ mod tests {
 	#[tokio::test]
 	async fn a_bot_handed_the_turn_that_never_starts_releases_its_turn_run_at_the_start_deadline() {
 		let (written, ada) = Written::in_a_room_of_two("unstarted-handover").await;
-		written.app.manage(TurnRunDeadlines::after(Duration::ZERO));
+		crate::events::core(written.app.app_handle())
+			.manage(TurnRunDeadlines::after(Duration::ZERO));
 		written.prompt("t1", "p1").await;
 		let (announced, mut updates) = mpsc::unbounded_channel();
 		written.app.handle().listen(crate::conversations::contract::UPDATED_EVENT, move |event| {

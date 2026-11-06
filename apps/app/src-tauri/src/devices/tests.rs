@@ -304,7 +304,7 @@ impl Harness {
 		app.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
 		app.manage(Hosting::new(api, None));
 		app.manage(RelayGuests::new(api));
-		app.manage(Devices::new(api).polling_every(TICK, TICK));
+		crate::events::core(app.app_handle()).manage(Devices::new(api).polling_every(TICK, TICK));
 		let heard = Arc::new(Mutex::new(Vec::new()));
 		for name in [
 			ACCOUNT_CHANGED.name(),

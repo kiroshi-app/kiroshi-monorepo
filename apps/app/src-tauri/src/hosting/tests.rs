@@ -5534,7 +5534,7 @@ impl Authoring {
 		}
 		app.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &cloud));
 		restore(app.handle().clone()).await;
-		app.manage(webhook::start(app.handle().clone()));
+		crate::events::core(app.app_handle()).manage(webhook::start(app.handle().clone()));
 		let local = super::local_api(app.handle()).expect("the local host api listens");
 		app.manage(Hosting::new(&cloud, Some(local.clone())));
 		app.state::<Hosting>().hosts().entry(PERSONAL.to_owned()).or_default().members =
@@ -5667,7 +5667,7 @@ impl Authoring {
 
 impl Drop for Authoring {
 	fn drop(&mut self) {
-		self.app.state::<Webhook>().stop();
+		crate::events::core(self.app.app_handle()).state::<Webhook>().stop();
 	}
 }
 
@@ -6260,7 +6260,7 @@ fn a_guest_reads_the_open_turn_of_a_room_while_the_second_of_its_two_bots_still_
 fn a_guest_reads_the_turn_as_not_working_once_a_handed_bot_misses_its_start_deadline() {
 	run(async {
 		let host = Authoring::new(Some(BEARER)).await;
-		host.app.manage(TurnRunDeadlines::after(Duration::ZERO));
+		crate::events::core(host.app.app_handle()).manage(TurnRunDeadlines::after(Duration::ZERO));
 		let ada = direct(
 			&host.window,
 			"conversation_create_bot",
@@ -7186,9 +7186,9 @@ impl Authoring {
 	fn reading_applications(&self) {
 		let person = bundles::user::path(self.app.handle()).expect("the plugin has a home");
 		bundles::user::lay_down(&person).expect("the plugin is laid down");
-		self.app.manage(McpOauthState::default());
-		self.app.manage(ApplicationReports::default());
-		self.app.manage(AuthorizationAnswers::default());
+		crate::events::core(self.app.app_handle()).manage(McpOauthState::default());
+		crate::events::core(self.app.app_handle()).manage(ApplicationReports::default());
+		crate::events::core(self.app.app_handle()).manage(AuthorizationAnswers::default());
 	}
 
 	async fn bundled_default_bot(&self) {

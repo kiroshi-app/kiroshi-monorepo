@@ -87,12 +87,12 @@ pub fn run() {
 		.plugin(tauri_plugin_dialog::init())
 		.plugin(tauri_plugin_clipboard_manager::init())
 		.manage(AgentState::default())
-		.manage(companions::launch::LaunchOutcomeState::default())
-		.manage(agent::sign_in::SignInState::default())
-		.manage(mcp_oauth::commands::McpOauthState::default())
-		.manage(mcp_oauth::reports::ApplicationReports::default())
-		.manage(mcp_oauth::asking::AuthorizationAnswers::default())
-		.manage(missions::commands::AnnouncedLiveness::default())
+		.plugin(crate::events::in_core(companions::launch::LaunchOutcomeState::default()))
+		.plugin(crate::events::in_core(agent::sign_in::SignInState::default()))
+		.plugin(crate::events::in_core(mcp_oauth::commands::McpOauthState::default()))
+		.plugin(crate::events::in_core(mcp_oauth::reports::ApplicationReports::default()))
+		.plugin(crate::events::in_core(mcp_oauth::asking::AuthorizationAnswers::default()))
+		.plugin(crate::events::in_core(missions::commands::AnnouncedLiveness::default()))
 		.manage(missions::run_claims::MissionRunClaims::default())
 		.manage(conversations::awaited_runs::TurnWindows::default())
 		.on_page_load(|webview, payload| {
@@ -105,7 +105,9 @@ pub fn run() {
 			conversations::awaited_runs::forget_on_destroyed(window, event);
 			library::presence::forget_on_destroyed(window, event);
 		})
-		.manage(conversations::turn_run_deadline::TurnRunDeadlines::default())
+		.plugin(crate::events::in_core(
+			conversations::turn_run_deadline::TurnRunDeadlines::default(),
+		))
 		.manage(updates::Updates::default())
 		.manage(badge::Badge::default())
 		.setup(|app| {
@@ -123,9 +125,12 @@ pub fn run() {
 				window_controls::drag_ghost::open(app.handle());
 			}
 			joined_spaces::deep_link::install(app.handle());
-			app.manage(routines::sentinel::spawn(app.handle().clone()));
-			app.manage(routines::webhook::start(app.handle().clone()));
-			app.manage(missions::github::spawn(app.handle().clone()));
+			crate::events::core(app.app_handle())
+				.manage(routines::sentinel::spawn(app.handle().clone()));
+			crate::events::core(app.app_handle())
+				.manage(routines::webhook::start(app.handle().clone()));
+			crate::events::core(app.app_handle())
+				.manage(missions::github::spawn(app.handle().clone()));
 			app.manage(applications::directory::spawn(app.handle().clone()));
 			app.manage(account::session::AccountSession::new(
 				environment::commands::writable_root(app.handle()),
@@ -135,8 +140,10 @@ pub fn run() {
 				&account::cloud::api_url(),
 				hosting::local_api(app.handle()),
 			));
-			app.manage(invitations::Invitations::new(&account::cloud::api_url()));
-			app.manage(devices::Devices::new(&account::cloud::api_url()));
+			crate::events::core(app.app_handle())
+				.manage(invitations::Invitations::new(&account::cloud::api_url()));
+			crate::events::core(app.app_handle())
+				.manage(devices::Devices::new(&account::cloud::api_url()));
 			app.manage(joined_spaces::relay::RelayGuests::new(&account::cloud::api_url()));
 			tauri::async_runtime::spawn(account::session::restore(app.handle().clone()));
 			let handle = app.handle().clone();
@@ -162,13 +169,19 @@ pub fn run() {
 				if let Err(failure) = badge::wear(app, 0) {
 					eprintln!("the badge was not cleared before exit: {failure}");
 				}
-				if let Some(sentinel) = app.try_state::<routines::sentinel::Sentinel>() {
+				if let Some(sentinel) = crate::events::core(app.app_handle())
+					.try_state::<routines::sentinel::Sentinel>()
+				{
 					sentinel.stop();
 				}
-				if let Some(webhook) = app.try_state::<routines::webhook::Webhook>() {
+				if let Some(webhook) =
+					crate::events::core(app.app_handle()).try_state::<routines::webhook::Webhook>()
+				{
 					webhook.stop();
 				}
-				if let Some(poller) = app.try_state::<missions::github::Poller>() {
+				if let Some(poller) =
+					crate::events::core(app.app_handle()).try_state::<missions::github::Poller>()
+				{
 					poller.stop();
 				}
 				if let Some(directory) =

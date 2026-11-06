@@ -72,7 +72,7 @@ impl Drop for Running<'_> {
 #[tauri::command]
 #[specta::specta]
 pub async fn agent_sign_in<R: Runtime>(app: AppHandle<R>) -> Result<(), SignInError> {
-	let state = app.state::<SignInState>();
+	let state = crate::events::core(app.app_handle()).state::<SignInState>();
 	let _running = state.begin()?;
 	let sidecar = app.state::<AgentState>().sidecar().await?;
 	let mut flow = sidecar.begin_sign_in()?;
@@ -109,7 +109,7 @@ pub async fn agent_sign_in_code<R: Runtime>(
 	app: AppHandle<R>,
 	text: String,
 ) -> Result<(), SignInError> {
-	if !app.state::<SignInState>().is_running() {
+	if !crate::events::core(app.app_handle()).state::<SignInState>().is_running() {
 		return Err(SignInError::NotRunning);
 	}
 	Ok(app.state::<AgentState>().sidecar().await?.enter_sign_in_code(&text)?)
@@ -118,7 +118,7 @@ pub async fn agent_sign_in_code<R: Runtime>(
 #[tauri::command]
 #[specta::specta]
 pub async fn agent_sign_in_cancel<R: Runtime>(app: AppHandle<R>) -> Result<(), SignInError> {
-	if !app.state::<SignInState>().is_running() {
+	if !crate::events::core(app.app_handle()).state::<SignInState>().is_running() {
 		return Err(SignInError::NotRunning);
 	}
 	Ok(app.state::<AgentState>().sidecar().await?.cancel_sign_in()?)

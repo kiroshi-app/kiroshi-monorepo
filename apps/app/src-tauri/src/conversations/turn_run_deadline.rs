@@ -11,7 +11,7 @@ use super::contract::TranscriptStoreError;
 use super::summons::{self, SummonsDropReason, SummonsRun};
 use crate::agent::translate::now_ms;
 use crate::events::CONVERSATION_UPDATED;
-use crate::routines::runner::{database, managed};
+use crate::routines::runner::database;
 
 pub(crate) const AWAITED_TURN_RUN_START_DEADLINE: Duration = Duration::from_secs(60);
 
@@ -76,16 +76,17 @@ pub(crate) fn arm_start_deadlines<R: Runtime>(
 		conversation_id: conversation_id.to_owned(),
 		turn_id: turn_id.to_owned(),
 	};
-	let deadlines = match managed::<R, TurnRunDeadlines>(app, NO_DEADLINES) {
-		Ok(deadlines) => deadlines,
-		Err(missing) => {
-			eprintln!(
-				"{} could not arm the start deadline of {bot_ids:?}: {missing}",
-				held.label()
-			);
-			return;
-		}
-	};
+	let deadlines =
+		match crate::events::core(app).try_state::<TurnRunDeadlines>().ok_or(NO_DEADLINES) {
+			Ok(deadlines) => deadlines,
+			Err(missing) => {
+				eprintln!(
+					"{} could not arm the start deadline of {bot_ids:?}: {missing}",
+					held.label()
+				);
+				return;
+			}
+		};
 	let armed = deadlines.armed.clone();
 	let holds: Vec<(String, u64)> = {
 		let mut held_runs = locked(&armed);
@@ -107,7 +108,7 @@ pub(crate) fn arm_start_deadlines<R: Runtime>(
 }
 
 pub(crate) fn suspend_start_deadline<R: Runtime>(app: &AppHandle<R>, turn_id: &str, bot_id: &str) {
-	match managed::<R, TurnRunDeadlines>(app, NO_DEADLINES) {
+	match crate::events::core(app).try_state::<TurnRunDeadlines>().ok_or(NO_DEADLINES) {
 		Ok(deadlines) => locked(&deadlines.armed).suspend(&(turn_id.to_owned(), bot_id.to_owned())),
 		Err(missing) => {
 			eprintln!("turn {turn_id} could not suspend the start deadline of {bot_id}: {missing}")
@@ -217,7 +218,7 @@ mod tests {
 	async fn a_turn_run_started_before_its_start_deadline_keeps_running_and_announces_nothing() {
 		let app = an_app_of_its_own("turn-run-deadline", mock_builder());
 		crate::db::install(crate::events::core(app.handle()));
-		app.manage(TurnRunDeadlines::after(Duration::ZERO));
+		crate::events::core(app.app_handle()).manage(TurnRunDeadlines::after(Duration::ZERO));
 		let database = database(app.handle()).expect("the database opens");
 		database.conversations().ensure_default_bot().await.expect("the bot is seeded");
 		let chat = database
@@ -254,7 +255,7 @@ mod tests {
 	async fn a_turn_run_never_started_by_its_start_deadline_is_announced_dropped() {
 		let app = an_app_of_its_own("turn-run-deadline-dropped", mock_builder());
 		crate::db::install(crate::events::core(app.handle()));
-		app.manage(TurnRunDeadlines::after(Duration::ZERO));
+		crate::events::core(app.app_handle()).manage(TurnRunDeadlines::after(Duration::ZERO));
 		let database = database(app.handle()).expect("the database opens");
 		database.conversations().ensure_default_bot().await.expect("the bot is seeded");
 		let chat = database

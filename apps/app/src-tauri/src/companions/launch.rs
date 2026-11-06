@@ -23,7 +23,8 @@ impl LaunchOutcomeState {
 
 #[tauri::command]
 #[specta::specta]
-pub fn companion_launch_outcome(state: State<'_, LaunchOutcomeState>) -> LaunchOutcome {
+pub fn companion_launch_outcome(core: State<'_, crate::core_context::Core>) -> LaunchOutcome {
+	let state = core.state::<LaunchOutcomeState>();
 	state.read()
 }
 
@@ -37,7 +38,7 @@ pub fn settle<R: Runtime>(
 		refused: (!reasons.is_empty())
 			.then(|| CompanionSeedRefused { reason: reasons.join(REASON_SEPARATOR) }),
 	};
-	match app.try_state::<LaunchOutcomeState>() {
+	match crate::events::core(app.app_handle()).try_state::<LaunchOutcomeState>() {
 		Some(state) => state.record(outcome.clone()),
 		None => log::warn!(
 			"the launch outcome was not kept for a later read: created={} refused={}",
@@ -73,12 +74,12 @@ mod tests {
 
 	fn a_host() -> AppOfItsOwn {
 		let app = an_app_of_its_own("companion-launch", mock_builder());
-		app.manage(LaunchOutcomeState::default());
+		crate::events::core(app.app_handle()).manage(LaunchOutcomeState::default());
 		app
 	}
 
 	fn read_of(app: &App<MockRuntime>) -> LaunchOutcome {
-		companion_launch_outcome(app.state::<LaunchOutcomeState>())
+		companion_launch_outcome(app.state())
 	}
 
 	fn shoto() -> CompanionCreated {

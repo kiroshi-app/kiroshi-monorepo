@@ -99,13 +99,13 @@ impl Devices {
 }
 
 pub fn is_awaiting_approval<R: Runtime>(app: &AppHandle<R>) -> bool {
-	app.try_state::<Devices>().is_some_and(|devices| {
+	crate::events::core(app.app_handle()).try_state::<Devices>().is_some_and(|devices| {
 		matches!(devices.current(), DeviceApproval::Pending { .. } | DeviceApproval::Expired)
 	})
 }
 
 pub async fn signed_in<R: Runtime>(app: &AppHandle<R>) {
-	let Some(devices) = app.try_state::<Devices>() else {
+	let Some(devices) = crate::events::core(app.app_handle()).try_state::<Devices>() else {
 		return;
 	};
 	let previous = devices.follow().take();
@@ -114,7 +114,7 @@ pub async fn signed_in<R: Runtime>(app: &AppHandle<R>) {
 }
 
 pub async fn signed_out<R: Runtime>(app: &AppHandle<R>) {
-	let Some(devices) = app.try_state::<Devices>() else {
+	let Some(devices) = crate::events::core(app.app_handle()).try_state::<Devices>() else {
 		return;
 	};
 	let follow = devices.follow().take();
@@ -169,7 +169,7 @@ fn hosts_resumed<R: Runtime>(app: &AppHandle<R>, devices: &Devices) {
 }
 
 async fn followed<R: Runtime>(app: AppHandle<R>) {
-	let devices = app.state::<Devices>();
+	let devices = crate::events::core(app.app_handle()).state::<Devices>();
 	if !registered_once_answered(&app, &devices).await {
 		return;
 	}
@@ -411,7 +411,7 @@ fn fingerprint_of(device: &CloudAccountDevice) -> Option<Vec<String>> {
 }
 
 fn signed_out_on_401<R: Runtime>(app: &AppHandle<R>, bearer: &str) {
-	match app.state::<Devices>().current() {
+	match crate::events::core(app.app_handle()).state::<Devices>().current() {
 		DeviceApproval::Pending { .. } => session::device_refused(app, bearer),
 		_ => session::revoked(app, bearer),
 	}
@@ -441,7 +441,7 @@ fn answered<R: Runtime, T>(
 }
 
 pub async fn retried<R: Runtime>(app: &AppHandle<R>) -> Result<DeviceApproval, DeviceError> {
-	let devices = app.state::<Devices>();
+	let devices = crate::events::core(app.app_handle()).state::<Devices>();
 	let current = devices.current();
 	if current != DeviceApproval::Expired {
 		return Ok(current);
@@ -453,12 +453,16 @@ pub async fn retried<R: Runtime>(app: &AppHandle<R>) -> Result<DeviceApproval, D
 
 pub async fn code_requested<R: Runtime>(app: &AppHandle<R>) -> Result<(), DeviceError> {
 	let bearer = bearer_of(app)?;
-	let answer = app.state::<Devices>().cloud.request_approval_code(&bearer).await;
+	let answer = crate::events::core(app.app_handle())
+		.state::<Devices>()
+		.cloud
+		.request_approval_code(&bearer)
+		.await;
 	answered(app, &bearer, answer)
 }
 
 pub async fn code_submitted<R: Runtime>(app: &AppHandle<R>, code: &str) -> Result<(), DeviceError> {
-	let devices = app.state::<Devices>();
+	let devices = crate::events::core(app.app_handle()).state::<Devices>();
 	let bearer = bearer_of(app)?;
 	let answer = devices.cloud.verify_approval_code(&bearer, code).await;
 	answered(app, &bearer, answer)?;
@@ -468,25 +472,41 @@ pub async fn code_submitted<R: Runtime>(app: &AppHandle<R>, code: &str) -> Resul
 
 pub async fn approved<R: Runtime>(app: &AppHandle<R>, device_id: &str) -> Result<(), DeviceError> {
 	let bearer = bearer_of(app)?;
-	let answer = app.state::<Devices>().cloud.approve_device(&bearer, device_id).await;
+	let answer = crate::events::core(app.app_handle())
+		.state::<Devices>()
+		.cloud
+		.approve_device(&bearer, device_id)
+		.await;
 	answered(app, &bearer, answer)
 }
 
 pub async fn refused<R: Runtime>(app: &AppHandle<R>, device_id: &str) -> Result<(), DeviceError> {
 	let bearer = bearer_of(app)?;
-	let answer = app.state::<Devices>().cloud.reject_device(&bearer, device_id).await;
+	let answer = crate::events::core(app.app_handle())
+		.state::<Devices>()
+		.cloud
+		.reject_device(&bearer, device_id)
+		.await;
 	answered(app, &bearer, answer)
 }
 
 pub async fn listed<R: Runtime>(app: &AppHandle<R>) -> Result<Vec<AccountDevice>, DeviceError> {
 	let bearer = bearer_of(app)?;
-	let answer = app.state::<Devices>().cloud.account_devices(&bearer).await;
+	let answer = crate::events::core(app.app_handle())
+		.state::<Devices>()
+		.cloud
+		.account_devices(&bearer)
+		.await;
 	Ok(answered(app, &bearer, answer)?.into_iter().map(presented).collect())
 }
 
 pub async fn removed<R: Runtime>(app: &AppHandle<R>, device_id: &str) -> Result<(), DeviceError> {
 	let bearer = bearer_of(app)?;
-	let answer = app.state::<Devices>().cloud.delete_device(&bearer, device_id).await;
+	let answer = crate::events::core(app.app_handle())
+		.state::<Devices>()
+		.cloud
+		.delete_device(&bearer, device_id)
+		.await;
 	answered(app, &bearer, answer)
 }
 

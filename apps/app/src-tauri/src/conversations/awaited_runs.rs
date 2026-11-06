@@ -253,7 +253,7 @@ mod tests {
 		let app = an_app_of_its_own(name, mock_builder());
 		crate::db::install(crate::events::core(app.handle()));
 		app.manage(TurnWindows::default());
-		app.manage(TurnRunDeadlines::after(start_within));
+		crate::events::core(app.app_handle()).manage(TurnRunDeadlines::after(start_within));
 		let database = database(app.handle()).expect("the database opens");
 		database.conversations().ensure_default_bot().await.expect("the bot is seeded");
 		let chat = database

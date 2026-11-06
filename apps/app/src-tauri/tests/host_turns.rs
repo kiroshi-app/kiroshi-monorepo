@@ -366,7 +366,7 @@ impl Host {
 		store::set(&root, &EnvScope::Account, ACCOUNT_BEARER, BEARER).expect("the bearer is kept");
 		app.manage(AccountSession::new(Ok::<PathBuf, _>(root), &cloud));
 		restore(app.handle().clone()).await;
-		app.manage(webhook::start(app.handle().clone()));
+		kiroshi_app::events::core(app.app_handle()).manage(webhook::start(app.handle().clone()));
 		let local = local_api(app.handle()).expect("the local host api listens");
 		app.manage(Hosting::new(&cloud, Some(local)));
 		let window = WebviewWindowBuilder::new(&app, "main", Default::default())
@@ -723,7 +723,7 @@ impl Host {
 
 	async fn quit(self) {
 		terminate_session(self.app.handle(), &self.app.state::<AgentState>()).await;
-		self.app.state::<Webhook>().stop();
+		kiroshi_app::events::core(self.app.app_handle()).state::<Webhook>().stop();
 		if let Ok(dir) = self.app.path().app_data_dir() {
 			if let Err(failure) = std::fs::remove_dir_all(&dir) {
 				eprintln!("the test data dir was not removed: {failure}");
@@ -1260,7 +1260,8 @@ fn a_member_turn_queued_past_its_start_deadline_keeps_its_run_until_it_is_answer
 	let _serial = serial();
 	block_on(async {
 		let mut host = Host::hosting("queued-past-deadline", "held_echo").await;
-		host.app.manage(TurnRunDeadlines::after(SHORT_START_DEADLINE));
+		kiroshi_app::events::core(host.app.app_handle())
+			.manage(TurnRunDeadlines::after(SHORT_START_DEADLINE));
 		let held = host.host_run(ROOM, ADA).await;
 		host.host_says(&held, "h1", "t0", "host first").await;
 		host.heard_until(|frames| !asked_to_write(frames, ADA).is_empty()).await;
@@ -1460,7 +1461,8 @@ fn a_summons_the_front_drops_is_released_at_once_and_never_expires_as_never_star
 	let _serial = serial();
 	block_on(async {
 		let mut host = Host::hosting("front-drop", "room_handover").await;
-		host.app.manage(TurnRunDeadlines::after(SHORT_START_DEADLINE));
+		kiroshi_app::events::core(host.app.app_handle())
+			.manage(TurnRunDeadlines::after(SHORT_START_DEADLINE));
 		let held = host.host_run(ROOM, ADA).await;
 		host.host_says(&held, "h1", "t1", "who takes the walls?").await;
 		host.turn_ended_for(ADA).await;
@@ -1495,7 +1497,8 @@ fn two_agents_mentioning_each_other_with_no_window_stop_at_the_bound_and_keep_th
 	let _serial = serial();
 	block_on(async {
 		let mut host = Host::hosting("summon-limit", "room_ping_pong").await;
-		host.app.manage(TurnRunDeadlines::after(SHORT_START_DEADLINE));
+		kiroshi_app::events::core(host.app.app_handle())
+			.manage(TurnRunDeadlines::after(SHORT_START_DEADLINE));
 
 		let answer = host.send_turn(sent("p1", "t1", "<@b-ada> who takes the walls?"), &[]).await;
 		host.heard_until(|frames| drops_of(frames, GRACE).contains(&"summonLimit")).await;

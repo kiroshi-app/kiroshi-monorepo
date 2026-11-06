@@ -333,7 +333,8 @@ impl Harness {
 			registered_as_the_member(&app).await;
 		}
 		app.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &api_url));
-		app.manage(Invitations::new(&api_url).polling_every(every));
+		crate::events::core(app.app_handle())
+			.manage(Invitations::new(&api_url).polling_every(every));
 		app.manage(RelayGuests::new(&api_url));
 		let heard = Arc::new(Mutex::new(Vec::new()));
 		for event in [CHANGED_EVENT, JOINED_CHANGED, REMOVED_EVENT, RECONNECTED_EVENT] {

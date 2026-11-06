@@ -255,7 +255,7 @@ mod tests {
 
 	fn a_bare_host(name: &str) -> AppOfItsOwn {
 		let app = an_app_of_its_own(&format!("conversation-seed-{name}"), mock_builder());
-		app.manage(LaunchOutcomeState::default());
+		crate::events::core(app.app_handle()).manage(LaunchOutcomeState::default());
 		app
 	}
 
@@ -274,7 +274,7 @@ mod tests {
 	}
 
 	fn outcome_of(app: &App<MockRuntime>) -> LaunchOutcome {
-		app.state::<LaunchOutcomeState>().read()
+		crate::events::core(app.app_handle()).state::<LaunchOutcomeState>().read()
 	}
 
 	fn heard(app: &App<MockRuntime>, event: &'static str) -> Receiver<String> {

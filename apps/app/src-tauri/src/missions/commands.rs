@@ -138,7 +138,7 @@ pub(super) fn announce_when<R: Runtime>(
 	is_news: impl FnOnce(&Mission, bool) -> bool,
 ) -> Result<Mission, MissionError> {
 	let unmanaged = AnnouncedLiveness::default();
-	let announced = app.try_state::<AnnouncedLiveness>();
+	let announced = crate::events::core(app.app_handle()).try_state::<AnnouncedLiveness>();
 	let mut kept = announced.as_deref().unwrap_or(&unmanaged).kept();
 	let mission = observed(app, mission);
 	let has_pulse_moved = kept.get(&mission.id) != Some(&Pulse::of(&mission));
@@ -604,9 +604,12 @@ fn refuse_unnamed(repository: &str) -> Result<(), MissionError> {
 }
 
 fn hook_url<R: Runtime>(app: &AppHandle<R>) -> Result<String, MissionError> {
-	app.try_state::<Webhook>().and_then(|webhook| webhook.mission_url()).ok_or_else(|| {
-		MissionError::Undeliverable { detail: "the local server answers no call".to_owned() }
-	})
+	crate::events::core(app.app_handle())
+		.try_state::<Webhook>()
+		.and_then(|webhook| webhook.mission_url())
+		.ok_or_else(|| MissionError::Undeliverable {
+			detail: "the local server answers no call".to_owned(),
+		})
 }
 
 #[tauri::command]
@@ -1246,7 +1249,8 @@ mod tests {
 	#[tokio::test]
 	async fn opening_on_a_checkout_installs_the_hook_there_and_answers_that_the_agent_is_heard() {
 		let app = a_host("opened-hook").await;
-		app.manage(crate::routines::webhook::start(app.handle().clone()));
+		crate::events::core(app.app_handle())
+			.manage(crate::routines::webhook::start(app.handle().clone()));
 		let workspace = a_checkout("opened-hook");
 
 		let opened =
@@ -1288,7 +1292,9 @@ mod tests {
 			.expect("the missions holding a checkout read");
 		assert_eq!(still, hooked, "arming lost the checkout or the key the open call wrote");
 
-		if let Some(webhook) = app.try_state::<crate::routines::webhook::Webhook>() {
+		if let Some(webhook) =
+			crate::events::core(app.app_handle()).try_state::<crate::routines::webhook::Webhook>()
+		{
 			webhook.stop();
 		}
 		fs::remove_dir_all(&workspace).expect("cleanup");
@@ -1322,7 +1328,8 @@ mod tests {
 	#[tokio::test]
 	async fn arming_a_mission_counts_its_checkout_at_once() {
 		let app = a_host("armed-counts").await;
-		app.manage(crate::routines::webhook::start(app.handle().clone()));
+		crate::events::core(app.app_handle())
+			.manage(crate::routines::webhook::start(app.handle().clone()));
 		let workspace = a_repository("armed-counts");
 		let opened =
 			mission_open(app.handle().clone(), app.state(), drafted_in("Fix it", Some(&workspace)))
@@ -1344,7 +1351,9 @@ mod tests {
 			"the checkout was not counted on arming"
 		);
 
-		if let Some(webhook) = app.try_state::<crate::routines::webhook::Webhook>() {
+		if let Some(webhook) =
+			crate::events::core(app.app_handle()).try_state::<crate::routines::webhook::Webhook>()
+		{
 			webhook.stop();
 		}
 		fs::remove_dir_all(&workspace).expect("cleanup");
@@ -1355,7 +1364,8 @@ mod tests {
 		workspace: Option<&std::path::Path>,
 	) -> (AppOfItsOwn, String) {
 		let app = a_host(name).await;
-		app.manage(crate::routines::webhook::start(app.handle().clone()));
+		crate::events::core(app.app_handle())
+			.manage(crate::routines::webhook::start(app.handle().clone()));
 		let opened =
 			mission_open(app.handle().clone(), app.state(), drafted_in("Fix it", workspace))
 				.await
@@ -1381,7 +1391,9 @@ mod tests {
 		.await
 		.expect("the mission is armed");
 
-		if let Some(webhook) = app.try_state::<crate::routines::webhook::Webhook>() {
+		if let Some(webhook) =
+			crate::events::core(app.app_handle()).try_state::<crate::routines::webhook::Webhook>()
+		{
 			webhook.stop();
 		}
 		let announced = received
@@ -1434,7 +1446,8 @@ mod tests {
 	#[tokio::test]
 	async fn opening_without_a_checkout_writes_the_mission_and_answers_that_no_agent_reaches_it() {
 		let app = a_host("opened-bare").await;
-		app.manage(crate::routines::webhook::start(app.handle().clone()));
+		crate::events::core(app.app_handle())
+			.manage(crate::routines::webhook::start(app.handle().clone()));
 
 		let opened = mission_open(app.handle().clone(), app.state(), drafted_in("Fix it", None))
 			.await
@@ -1450,7 +1463,9 @@ mod tests {
 			.expect("the missions holding a checkout read");
 		assert!(hooked.is_empty(), "got {hooked:?}");
 
-		if let Some(webhook) = app.try_state::<crate::routines::webhook::Webhook>() {
+		if let Some(webhook) =
+			crate::events::core(app.app_handle()).try_state::<crate::routines::webhook::Webhook>()
+		{
 			webhook.stop();
 		}
 	}
@@ -1477,7 +1492,8 @@ mod tests {
 	#[tokio::test]
 	async fn opening_on_a_workspace_that_is_no_git_checkout_refuses_and_writes_no_mission() {
 		let app = a_host("no-git").await;
-		app.manage(crate::routines::webhook::start(app.handle().clone()));
+		crate::events::core(app.app_handle())
+			.manage(crate::routines::webhook::start(app.handle().clone()));
 		let workspace = a_workspace("no-git");
 
 		let refused =
@@ -1491,7 +1507,9 @@ mod tests {
 			mission_board(app.handle().clone(), app.state()).await.expect("the board reads");
 		assert!(board.is_empty(), "got {board:?}");
 
-		if let Some(webhook) = app.try_state::<crate::routines::webhook::Webhook>() {
+		if let Some(webhook) =
+			crate::events::core(app.app_handle()).try_state::<crate::routines::webhook::Webhook>()
+		{
 			webhook.stop();
 		}
 		fs::remove_dir_all(&workspace).expect("cleanup");
@@ -1510,7 +1528,8 @@ mod tests {
 	async fn a_launch_hooks_every_open_mission_holding_a_checkout_and_reports_the_one_that_is_gone()
 	{
 		let app = a_host("launch").await;
-		app.manage(crate::routines::webhook::start(app.handle().clone()));
+		crate::events::core(app.app_handle())
+			.manage(crate::routines::webhook::start(app.handle().clone()));
 		let gone = a_checkout("launch-gone");
 		let here = a_checkout("launch-here");
 		let leaving =
@@ -1529,7 +1548,9 @@ mod tests {
 		let settings = hooked_in(&here);
 		assert!(settings.contains("kiroshi-agent-hook.sh"), "got {settings}");
 
-		if let Some(webhook) = app.try_state::<crate::routines::webhook::Webhook>() {
+		if let Some(webhook) =
+			crate::events::core(app.app_handle()).try_state::<crate::routines::webhook::Webhook>()
+		{
 			webhook.stop();
 		}
 		fs::remove_dir_all(&here).expect("cleanup");
@@ -1538,7 +1559,8 @@ mod tests {
 	#[tokio::test]
 	async fn a_launch_replaces_the_reader_of_an_open_mission_and_keeps_its_settings_and_its_key() {
 		let app = a_host("launch-reader").await;
-		app.manage(crate::routines::webhook::start(app.handle().clone()));
+		crate::events::core(app.app_handle())
+			.manage(crate::routines::webhook::start(app.handle().clone()));
 		let workspace = a_checkout("launch-reader");
 		let opened =
 			mission_open(app.handle().clone(), app.state(), drafted_in("Fix it", Some(&workspace)))
@@ -1564,7 +1586,9 @@ mod tests {
 		assert_eq!(key_after["key"], key_before["key"], "the launch moved the delivery key");
 		assert_eq!(hooked_in(&workspace), settings_before, "the launch moved the settings");
 
-		if let Some(webhook) = app.try_state::<crate::routines::webhook::Webhook>() {
+		if let Some(webhook) =
+			crate::events::core(app.app_handle()).try_state::<crate::routines::webhook::Webhook>()
+		{
 			webhook.stop();
 		}
 	}
@@ -1572,7 +1596,8 @@ mod tests {
 	#[tokio::test]
 	async fn arming_refuses_an_unknown_mission_a_closed_one_and_a_repository_without_an_owner() {
 		let app = a_host("refused").await;
-		app.manage(crate::routines::webhook::start(app.handle().clone()));
+		crate::events::core(app.app_handle())
+			.manage(crate::routines::webhook::start(app.handle().clone()));
 		let opened = a_mission(&app, a_draft("c1", "b1", "Fix it")).await;
 		let done = a_mission(&app, a_draft("c1", "b1", "Old work")).await;
 		mission_conclude(
@@ -1613,7 +1638,9 @@ mod tests {
 		assert_eq!(closed, MissionError::MissionAlreadyClosed { id: done.id });
 		assert!(matches!(unnamed, MissionError::Undeliverable { .. }), "got {unnamed:?}");
 
-		if let Some(webhook) = app.try_state::<crate::routines::webhook::Webhook>() {
+		if let Some(webhook) =
+			crate::events::core(app.app_handle()).try_state::<crate::routines::webhook::Webhook>()
+		{
 			webhook.stop();
 		}
 	}
@@ -1658,7 +1685,7 @@ mod tests {
 
 		async fn a_watched_host(name: &str) -> AppOfItsOwn {
 			let app = a_host(&format!("liveness-{name}")).await;
-			app.manage(AnnouncedLiveness::default());
+			crate::events::core(app.app_handle()).manage(AnnouncedLiveness::default());
 			app
 		}
 

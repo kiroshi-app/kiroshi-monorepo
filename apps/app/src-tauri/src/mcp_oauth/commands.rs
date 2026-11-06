@@ -185,7 +185,7 @@ pub async fn mcp_oauth_connect<R: Runtime>(
 ) -> Result<(), OauthError> {
 	refuse_what_kiroshi_does_not_authorize(&app, &owner, &name, &url)
 		.map_err(|refused| written(refused, &Values::new()))?;
-	let state = app.state::<McpOauthState>();
+	let state = crate::events::core(app.app_handle()).state::<McpOauthState>();
 	let scope = EnvScope::Server { name: name.clone(), owner };
 	let _running = state
 		.begin(Flow::Authorizing(scope.clone()))
@@ -199,7 +199,14 @@ pub async fn mcp_oauth_connect<R: Runtime>(
 	let credentials = connected(&app, authorize_request(url, &stored), &stored)
 		.await
 		.map_err(|refused| written(refused, &stored))?;
-	kept(&root, &scope, &name, &credentials, &app.state::<ApplicationReports>()).map_err(|error| {
+	kept(
+		&root,
+		&scope,
+		&name,
+		&credentials,
+		&crate::events::core(app.app_handle()).state::<ApplicationReports>(),
+	)
+	.map_err(|error| {
 		written(Step::StoringTheGrant.refused(error), &credentials::held(&credentials))
 	})
 }
@@ -251,7 +258,7 @@ fn kept(
 #[tauri::command]
 #[specta::specta]
 pub async fn mcp_oauth_cancel<R: Runtime>(app: AppHandle<R>) -> Result<(), OauthError> {
-	if !app.state::<McpOauthState>().is_running() {
+	if !crate::events::core(app.app_handle()).state::<McpOauthState>().is_running() {
 		return Ok(());
 	}
 	Ok(app.state::<AgentState>().sidecar().await?.cancel_oauth()?)
@@ -269,10 +276,10 @@ pub async fn mcp_oauth_disconnect<R: Runtime>(
 	if caller.is_relayed() && held_at(&writable_root(&app)?, &owner, &name)?.is_personal() {
 		return Err(OauthError::RefusedToAMember);
 	}
-	let state = app.state::<McpOauthState>();
+	let state = crate::events::core(app.app_handle()).state::<McpOauthState>();
 	let _running = state.begin(Flow::Revoking)?;
 	let settled = disconnected(&app, &owner, &name, &url).await;
-	app.state::<ApplicationReports>().forget(&name);
+	crate::events::core(app.app_handle()).state::<ApplicationReports>().forget(&name);
 	settled
 }
 
@@ -329,9 +336,9 @@ pub async fn application_rows<R: Runtime>(
 		&root,
 		&owner,
 		servers,
-		&app.state::<McpOauthState>(),
-		&app.state::<ApplicationReports>(),
-		&app.state::<AuthorizationAnswers>(),
+		&crate::events::core(app.app_handle()).state::<McpOauthState>(),
+		&crate::events::core(app.app_handle()).state::<ApplicationReports>(),
+		&crate::events::core(app.app_handle()).state::<AuthorizationAnswers>(),
 		move |request| {
 			let handle = handle.clone();
 			async move { refreshed(&handle, request).await }
@@ -498,9 +505,9 @@ mod tests {
 	#[tokio::test]
 	async fn the_applications_of_the_user_are_the_servers_the_user_plugin_declares() {
 		let app = an_app_of_its_own("mcp-oauth-user-applications", mock_builder());
-		app.manage(McpOauthState::default());
-		app.manage(ApplicationReports::default());
-		app.manage(AuthorizationAnswers::default());
+		crate::events::core(app.app_handle()).manage(McpOauthState::default());
+		crate::events::core(app.app_handle()).manage(ApplicationReports::default());
+		crate::events::core(app.app_handle()).manage(AuthorizationAnswers::default());
 		let path = bundles::user::path(app.handle()).expect("the plugin has a home");
 		bundles::user::lay_down(&path).expect("the plugin is laid down");
 		for name in ["clock", "granola"] {
@@ -541,8 +548,8 @@ mod tests {
 	async fn a_connect_to_a_server_kiroshi_does_not_authorize_is_refused_naming_why_and_opens_no_flow(
 	) {
 		let app = an_app_of_its_own("mcp-oauth-withheld", mock_builder());
-		app.manage(McpOauthState::default());
-		app.manage(ApplicationReports::default());
+		crate::events::core(app.app_handle()).manage(McpOauthState::default());
+		crate::events::core(app.app_handle()).manage(ApplicationReports::default());
 		let path = bundles::user::path(app.handle()).expect("the plugin has a home");
 		bundles::user::lay_down(&path).expect("the plugin is laid down");
 		let declared = [
@@ -583,7 +590,10 @@ mod tests {
 
 			let detail = withheld_reason(carries).to_owned();
 			assert_eq!(refused, Err(OauthError::NotAuthorizable { carries, detail }), "{name}");
-			assert!(!app.state::<McpOauthState>().is_running(), "{name}");
+			assert!(
+				!crate::events::core(app.app_handle()).state::<McpOauthState>().is_running(),
+				"{name}"
+			);
 		}
 		assert_eq!(
 			serde_json::to_value(OauthError::NotAuthorizable {
@@ -786,9 +796,9 @@ mod tests {
 	#[tokio::test]
 	async fn a_settled_disconnect_forgets_every_standing_of_that_server() {
 		let app = an_app_of_its_own("mcp-oauth-disconnect", mock_builder());
-		app.manage(McpOauthState::default());
-		app.manage(ApplicationReports::default());
-		let reports = app.state::<ApplicationReports>();
+		crate::events::core(app.app_handle()).manage(McpOauthState::default());
+		crate::events::core(app.app_handle()).manage(ApplicationReports::default());
+		let reports = crate::events::core(app.app_handle()).state::<ApplicationReports>();
 		reports.record("b-disconnect-test", "granola", Standing::Holding);
 		reports.record("b-other", "granola", Standing::NeedsAuth { reason: None });
 		reports.record("b-disconnect-test", "clock", Standing::Holding);

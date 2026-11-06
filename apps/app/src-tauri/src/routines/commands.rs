@@ -310,7 +310,9 @@ fn called_at<R: Runtime>(app: &AppHandle<R>, trigger_source_id: &str) -> Option<
 	if trigger_source_id != webhook::SOURCE_ID {
 		return None;
 	}
-	app.try_state::<webhook::Webhook>().and_then(|webhook| webhook.url())
+	crate::events::core(app.app_handle())
+		.try_state::<webhook::Webhook>()
+		.and_then(|webhook| webhook.url())
 }
 
 pub(crate) async fn routine_row(
@@ -382,7 +384,7 @@ mod tests {
 	#[tokio::test]
 	async fn only_a_routine_the_local_route_fires_is_answered_the_url_it_is_called_on() {
 		let app = a_host("called-at").await;
-		app.manage(webhook::start(app.handle().clone()));
+		crate::events::core(app.app_handle()).manage(webhook::start(app.handle().clone()));
 		let called = routine_create(app.handle().clone(), app.state(), a_called_draft())
 			.await
 			.expect("the called routine is created");
@@ -399,12 +401,12 @@ mod tests {
 
 		assert_eq!(
 			answered.url,
-			app.state::<webhook::Webhook>().url(),
+			crate::events::core(app.app_handle()).state::<webhook::Webhook>().url(),
 			"the answer names the address the listener bound"
 		);
 		assert!(answered.url.is_some_and(|url| url.starts_with("http://127.0.0.1:")));
 		assert_eq!(silent.url, None, "a scheduled routine is handed no address");
-		app.state::<webhook::Webhook>().stop();
+		crate::events::core(app.app_handle()).state::<webhook::Webhook>().stop();
 	}
 
 	#[tokio::test]

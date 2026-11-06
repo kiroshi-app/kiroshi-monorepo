@@ -330,7 +330,7 @@ mod tests {
 		let quiet = a_mission_in(&database, None).await;
 		let started = a_mission_in(&database, None).await;
 		let app = an_app_of_its_own("mission-checkout", mock_builder());
-		app.manage(AnnouncedLiveness::default());
+		crate::events::core(app.app_handle()).manage(AnnouncedLiveness::default());
 		told(app.handle(), &quiet);
 		told(app.handle(), &started);
 		database
