@@ -11,14 +11,12 @@ import {
 } from "@workspace/ui/components/list-skeleton"
 import { cn } from "@workspace/ui/lib/utils"
 
-type SidebarRowWidths = Pick<
-	SkeletonRowProps,
-	"titleClassName" | "stampClassName" | "previewClassName"
->
-
 type SidebarRowKind = "agent" | "conversation"
 
-type SidebarRowShape = SidebarRowWidths & { kind: SidebarRowKind }
+type SidebarRowShape = Pick<
+	SkeletonRowProps,
+	"titleClassName" | "stampClassName" | "previewClassName"
+> & { kind: SidebarRowKind }
 
 const AGENT_TITLE_BADGE = (
 	<SkeletonBar className="h-3.5 w-14 shrink-0" isFaint />

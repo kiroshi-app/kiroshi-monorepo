@@ -97,9 +97,7 @@ const TurnSkeleton = ({
 	bubbleClassName,
 	hasAuthorLine = true,
 }: TurnSkeletonProps) => (
-	<div
-		className={cn("flex", author === "agent" ? "justify-start" : "justify-end")}
-	>
+	<div className={cn("flex", author !== "agent" && "justify-end")}>
 		<div
 			className={cn(
 				"flex min-w-0 flex-col gap-2 rounded-bubble bg-border/60 p-4.5",
