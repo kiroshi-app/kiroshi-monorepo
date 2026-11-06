@@ -20,6 +20,13 @@ const renderNothing: MarkdownBoardLinkRenderer = () => null
 
 const MINTED = "0b6f3c2e-8d41-4a7e-9c15-2f7d9e4a1b30"
 
+const LABEL = /<label[^>]*>.*?<\/label>/s
+
+const containing = (link: string) =>
+	`- [ ] Review ${link} today\n- See ${link} first\n- ${link}\n\n| Board |\n| - |\n| ${link} |`
+
+const CONTAINED = containing("[the plan](plan.canvas)")
+
 describe("Markdown board links", () => {
 	it.each([
 		["[Plan](plan.canvas)", "plan.canvas"],
@@ -67,12 +74,79 @@ describe("Markdown board links", () => {
 		).toContain('<li><article data-name="plan.canvas">Plan</article></li>')
 	})
 
+	it("renders a lone board in place of the link, before a nested list", () => {
+		expect(
+			render({
+				children: "- [Plan](plan.canvas)\n  - Sketch",
+				renderBoardLink: renderBoard,
+			}),
+		).toContain(
+			'<li><article data-name="plan.canvas">Plan</article>\n<ul>\n<li>Sketch</li>',
+		)
+	})
+
+	it("keeps the words in the checklist label and puts the board after it", () => {
+		const html = render({
+			children: "- [ ] Review [the plan](plan.canvas) today\n  - [ ] Sketch",
+			renderBoardLink: renderBoard,
+		})
+		const [label] = html.match(LABEL) ?? []
+		expect(label).toContain("Review the plan today")
+		expect(label).not.toContain("<article")
+		expect(html).toContain(
+			'</label><article data-name="plan.canvas">the plan</article><ul',
+		)
+		expect(html).not.toContain("<a ")
+	})
+
+	it("keeps the words in a list sentence and puts the board after them", () => {
+		expect(
+			render({
+				children: "- See [the plan](plan.canvas) first\n  - Sketch",
+				renderBoardLink: renderBoard,
+			}),
+		).toContain(
+			'<li>See the plan first\n<article data-name="plan.canvas">the plan</article><ul>\n<li>Sketch</li>',
+		)
+	})
+
+	it("keeps the words in a table cell and puts the boards after the table, in reading order", () => {
+		const html = render({
+			children:
+				"| Board | Owner |\n| - | - |\n| [One](one.canvas) | Ana |\n| Two | [two](two.canvas) |",
+			renderBoardLink: renderBoard,
+		})
+		expect(html).toContain("<td>One</td><td>Ana</td>")
+		expect(html).toContain("<td>Two</td><td>two</td>")
+		expect(html).toContain(
+			'</div><article data-name="one.canvas">One</article><article data-name="two.canvas">two</article></div>',
+		)
+		expect(html.indexOf("<article")).toBeGreaterThan(html.indexOf("</table>"))
+	})
+
+	it("hands the slot a nested board link from its own item only", () => {
+		const renderBoardLink = vi.fn(renderBoard)
+		const html = render({
+			children:
+				"- See [one](one.canvas) first\n  - [ ] Then [two](two.canvas) here\n    - Last [three](three.canvas) one",
+			renderBoardLink,
+		})
+		expect(renderBoardLink.mock.calls).toEqual([
+			[{ name: "one.canvas", words: "one" }],
+			[{ name: "two.canvas", words: "two" }],
+			[{ name: "three.canvas", words: "three" }],
+		])
+		expect(html).toContain(
+			'</label><article data-name="two.canvas">two</article><ul>\n<li>Last three one<article data-name="three.canvas">three</article></li>',
+		)
+	})
+
 	it.each([
 		["without a slot", undefined, false],
 		["when the slot returns null", renderNothing, false],
 		["while static", renderBoard, true],
 	])("renders the link as today %s", (_, renderBoardLink, isStatic) => {
-		const source = "See [the plan](plan.canvas).\n\n[Plan](plan.canvas)"
+		const source = `See [the plan](plan.canvas).\n\n[Plan](plan.canvas)\n\n${CONTAINED}`
 		expect(render({ children: source, renderBoardLink, isStatic })).toBe(
 			render({ children: source, isStatic }),
 		)
@@ -84,7 +158,8 @@ describe("Markdown board links", () => {
 		"[Plan](//example.org/plan.canvas)",
 		`[Board](</Users/ana/attachments/conversation-7/${MINTED}.canvas>)`,
 		"[Notes](plan.md)",
-	])("leaves %s rendering as today", (source) => {
+	])("leaves %s rendering as today", (link) => {
+		const source = `${link}\n\n${containing(link)}`
 		expect(
 			render({
 				children: source,
@@ -97,7 +172,7 @@ describe("Markdown board links", () => {
 	it.each([
 		[
 			"a heading",
-			"# See [the plan](plan.canvas)\n\n### [Plan](plan.canvas)",
+			"# See [the plan](plan.canvas)\n\n### [Plan](plan.canvas)\n\n- ## See [the plan](plan.canvas)",
 			"the plan",
 		],
 		[

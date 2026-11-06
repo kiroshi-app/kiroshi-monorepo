@@ -2341,3 +2341,152 @@ export const BoardLinkInSentenceDark = meta.story({
 	globals: { theme: "dark" },
 	play: expectBoardAfterSentence,
 })
+
+const BOARD_LINK = `[${BOARD_CARD_TITLE}](<${BOARD_FILE}>)`
+
+const BOARD_IN_CHECKLIST = `- [ ] Review ${BOARD_LINK} with the team
+  - [ ] Book the launch room`
+
+const BOARD_CHECKLIST_LABEL = `Review ${BOARD_CARD_TITLE} with the team`
+
+const BOARD_IN_LIST_SENTENCE = `- Split ${BOARD_LINK} into owners before Friday
+  - Ana takes the timeline`
+
+const BOARD_LIST_SENTENCE = `Split ${BOARD_CARD_TITLE} into owners before Friday`
+
+const BOARD_IN_TABLE_CELL = `| Board | Owner |
+| - | - |
+| Draft in ${BOARD_LINK} | Ana |`
+
+const BOARD_TABLE_CELL = `Draft in ${BOARD_CARD_TITLE}`
+
+const expectBoardWithoutLink = async ({
+	canvasElement,
+}: BoardLinkPlayContext) => {
+	const card = within(canvasElement).getByRole("article")
+	await expect(card).not.toHaveAttribute("aria-busy")
+	await expect(canvasElement.querySelector("a")).toBeNull()
+	await expect(
+		within(canvasElement).queryByText(BOARD_FILE, { exact: false }),
+	).toBeNull()
+	return card
+}
+
+const expectBoardAfterChecklistLabel = async (
+	context: BoardLinkPlayContext,
+) => {
+	openBoard.mockClear()
+	const card = await expectBoardWithoutLink(context)
+	const label = within(context.canvasElement).getByText(BOARD_CHECKLIST_LABEL)
+	await expect(label).toHaveAttribute("data-slot", "markdown-task-label")
+	await expect(label).not.toContainElement(card)
+	await expect(label.nextElementSibling).toBe(card)
+	await expect(card.parentElement).toBe(label.closest("li"))
+	await expect(card.nextElementSibling?.tagName).toBe("UL")
+
+	const box = within(label).getByRole("checkbox")
+	await userEvent.click(label)
+	await expect(box).toBeChecked()
+	await userEvent.click(
+		within(card).getByRole("button", {
+			name: "Open",
+			description: BOARD_CARD_TITLE,
+		}),
+	)
+	await expect(openBoard).toHaveBeenCalledOnce()
+	await expect(box).toBeChecked()
+}
+
+const expectBoardAfterListSentence = async (context: BoardLinkPlayContext) => {
+	const card = await expectBoardWithoutLink(context)
+	const item = within(context.canvasElement).getByText(BOARD_LIST_SENTENCE)
+	await expect(item.tagName).toBe("LI")
+	await expect(card.parentElement).toBe(item)
+	await expect(item.firstChild?.textContent).toBe("Split ")
+	await expect(card.nextElementSibling?.tagName).toBe("UL")
+	await expect(card.closest("p")).toBeNull()
+}
+
+const expectBoardAfterTable = async (context: BoardLinkPlayContext) => {
+	const card = await expectBoardWithoutLink(context)
+	const canvas = within(context.canvasElement)
+	const cell = canvas.getByText(BOARD_TABLE_CELL)
+	await expect(cell.tagName).toBe("TD")
+	await expect(cell).not.toContainElement(card)
+	await expect(canvas.getByRole("cell", { name: "Ana" })).toBeVisible()
+	const frame = cell.closest('[data-slot="markdown-table"]')
+	await expect(frame).not.toContainElement(card)
+	await expect(frame?.nextElementSibling).toBe(card)
+}
+
+export const BoardLinkInChecklist = meta.story({
+	args: {
+		children: BOARD_IN_CHECKLIST,
+		renderBoardLink: boardSlotOf(LOADED_BOARD),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story: `A checklist item naming a Library board. Check the link words stay in the task label as plain words, the board card follows the label inside the same item and before the nested list, a click on the words ticks the box, and Open on the card calls back once without touching the box. ${BOARD_SLOT_FAKES}`,
+			},
+		},
+	},
+	play: expectBoardAfterChecklistLabel,
+})
+
+export const BoardLinkInChecklistDark = meta.story({
+	args: {
+		children: BOARD_IN_CHECKLIST,
+		renderBoardLink: boardSlotOf(LOADED_BOARD),
+	},
+	globals: { theme: "dark" },
+	play: expectBoardAfterChecklistLabel,
+})
+
+export const BoardLinkInListSentence = meta.story({
+	args: {
+		children: BOARD_IN_LIST_SENTENCE,
+		renderBoardLink: boardSlotOf(LOADED_BOARD),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story: `A list item naming a Library board mid-sentence. Check the link words stay in the item as plain words and the board card follows them inside the same item, before the nested list. ${BOARD_SLOT_FAKES}`,
+			},
+		},
+	},
+	play: expectBoardAfterListSentence,
+})
+
+export const BoardLinkInListSentenceDark = meta.story({
+	args: {
+		children: BOARD_IN_LIST_SENTENCE,
+		renderBoardLink: boardSlotOf(LOADED_BOARD),
+	},
+	globals: { theme: "dark" },
+	play: expectBoardAfterListSentence,
+})
+
+export const BoardLinkInTableCell = meta.story({
+	args: {
+		children: BOARD_IN_TABLE_CELL,
+		renderBoardLink: boardSlotOf(LOADED_BOARD),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story: `A table cell naming a Library board. Check the link words stay in the cell as plain words and the board card follows the table as its own block, never inside a cell. ${BOARD_SLOT_FAKES}`,
+			},
+		},
+	},
+	play: expectBoardAfterTable,
+})
+
+export const BoardLinkInTableCellDark = meta.story({
+	args: {
+		children: BOARD_IN_TABLE_CELL,
+		renderBoardLink: boardSlotOf(LOADED_BOARD),
+	},
+	globals: { theme: "dark" },
+	play: expectBoardAfterTable,
+})

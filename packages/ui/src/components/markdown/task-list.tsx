@@ -12,6 +12,10 @@ import { useTranslation } from "react-i18next"
 import type { ExtraProps } from "react-markdown"
 
 import { Icons } from "@workspace/ui/components/icons"
+import {
+	isLoneBoardLink,
+	useBoardCards,
+} from "@workspace/ui/components/markdown/board-link"
 import { MarkdownParagraph } from "@workspace/ui/components/markdown/paragraph"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -91,12 +95,13 @@ export const MarkdownListItem = ({
 	children,
 	...props
 }: MarkdownListItemProps) => {
-	if (!props.className?.includes("task-list-item"))
-		return <li {...props}>{children}</li>
+	const cards = useBoardCards(node)
+	const isTask = props.className?.includes("task-list-item") ?? false
+	if (!isTask && cards.length === 0) return <li {...props}>{children}</li>
 
 	const items = Children.toArray(children)
 	const boxParagraphAt = items.findIndex(isParagraph)
-	if (boxParagraphAt !== -1)
+	if (isTask && boxParagraphAt !== -1)
 		return (
 			<li {...props}>
 				{items.map((child, index) =>
@@ -113,12 +118,22 @@ export const MarkdownListItem = ({
 		)
 
 	const nestedAt = items.findIndex(isNestedList)
-	const labelEnd = nestedAt === -1 ? items.length : nestedAt
+	const textEnd = nestedAt === -1 ? items.length : nestedAt
+	const text = items.slice(0, textEnd)
+	const nested = items.slice(textEnd)
+	if (cards.length === 1 && node !== undefined && isLoneBoardLink(node))
+		return (
+			<li {...props}>
+				{text.map((child) => (isValidElement(child) ? cards : child))}
+				{nested}
+			</li>
+		)
 
 	return (
 		<li {...props}>
-			<TaskLabel>{items.slice(0, labelEnd)}</TaskLabel>
-			{items.slice(labelEnd)}
+			{isTask ? <TaskLabel>{text}</TaskLabel> : text}
+			{cards}
+			{nested}
 		</li>
 	)
 }
