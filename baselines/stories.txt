@@ -1598,6 +1598,7 @@ navigation-boardcanvas--five-hundred-objects
 navigation-boardcanvas--five-hundred-objects-dark
 navigation-boardcanvas--image-pasted
 navigation-boardcanvas--image-pasted-dark
+navigation-boardcanvas--library-item-picked-on-second-canvas
 navigation-boardcanvas--link-pasted
 navigation-boardcanvas--link-pasted-dark
 navigation-boardcanvas--loaded-with-objects
@@ -1624,6 +1625,8 @@ navigation-boardcanvas--switch-connector-routing-dark
 navigation-boardcanvas--tile-dragged
 navigation-boardcanvas--tile-dragged-dark
 navigation-boardcanvas--unmount-during-draft
+navigation-boardcanvas--url-dragged-over
+navigation-boardcanvas--url-dragged-over-dark
 navigation-boardcanvas--zoom-at-maximum
 navigation-boardcanvas--zoom-at-minimum
 navigation-conversationbotpile--edged-members

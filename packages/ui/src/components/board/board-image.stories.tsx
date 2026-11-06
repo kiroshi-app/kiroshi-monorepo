@@ -11,6 +11,10 @@ const SOURCE = "example.com/terrace-at-dusk"
 
 const playWithoutSource = async ({ canvasElement }: PlayContext) => {
 	await expect(slotsIn(canvasElement, "board-image")).toHaveLength(1)
+	await expect(slotIn(canvasElement, "board-image")).toHaveAttribute(
+		"draggable",
+		"false",
+	)
 	await expect(slotsIn(canvasElement, "board-image-source")).toHaveLength(0)
 }
 

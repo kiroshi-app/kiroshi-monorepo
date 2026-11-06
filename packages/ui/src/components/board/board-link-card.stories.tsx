@@ -17,6 +17,9 @@ const LONG_LINK = {
 const playTruncates = async ({ canvasElement }: PlayContext) => {
 	const title = slotIn(canvasElement, "board-link-card-title")
 	const description = slotIn(canvasElement, "board-link-card-description")
+	await expect(
+		slotIn(canvasElement, "board-link-card-preview"),
+	).toHaveAttribute("draggable", "false")
 	await expect(title.scrollWidth).toBeGreaterThan(title.clientWidth)
 	await expect(getComputedStyle(title).textOverflow).toBe("ellipsis")
 	await expect(description.scrollHeight).toBeGreaterThan(
