@@ -1,4 +1,4 @@
-import type { ComponentPropsWithoutRef } from "react"
+import { type ComponentPropsWithoutRef, useContext } from "react"
 import type { ExtraProps } from "react-markdown"
 
 import {
@@ -10,6 +10,10 @@ import {
 	isStoredAttachmentPath,
 	useMarkdownAttachments,
 } from "@workspace/ui/components/markdown/attachments"
+import {
+	boardNameOf,
+	MarkdownBoardLinkContext,
+} from "@workspace/ui/components/markdown/board-link"
 import { hostInitial } from "@workspace/ui/lib/host"
 
 export type MarkdownLinkProps = ComponentPropsWithoutRef<"a"> & ExtraProps
@@ -27,7 +31,7 @@ const linkUrl = (href: string) => {
 
 type TextNode = { value?: string; children?: TextNode[] }
 
-const textOf = (node: TextNode): string =>
+export const textOf = (node: TextNode): string =>
 	node.value ?? (node.children ?? []).map(textOf).join("")
 
 const TEXT_CLASS = "inline-block max-w-full truncate align-bottom"
@@ -45,6 +49,7 @@ export const MarkdownLink = ({
 	...props
 }: MarkdownLinkProps) => {
 	const { onOpenAttachment } = useMarkdownAttachments()
+	const renderBoardLink = useContext(MarkdownBoardLinkContext)
 	const path = attachmentPathOf(href)
 	if (path !== null && onOpenAttachment && isStoredAttachmentPath(href)) {
 		return (
@@ -56,6 +61,13 @@ export const MarkdownLink = ({
 			/>
 		)
 	}
+
+	const boardName = boardNameOf(href)
+	const board =
+		renderBoardLink && boardName !== null
+			? renderBoardLink({ name: boardName, words: node ? textOf(node) : "" })
+			: null
+	if (board != null) return board
 
 	const url = href ? linkUrl(href) : null
 	const destination = url && EXTERNAL_SCHEMES.has(url.protocol) ? url : null

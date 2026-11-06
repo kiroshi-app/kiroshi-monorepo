@@ -31,6 +31,7 @@ import type {
 	InteractiveTemplate,
 	Measure,
 } from "@workspace/ui/components/markdown/answer-block-source"
+import { MarkdownBoardLinkContext } from "@workspace/ui/components/markdown/board-link"
 import { useMarkdownImageResolver } from "@workspace/ui/components/markdown/image-resolver"
 import { MarkdownLink } from "@workspace/ui/components/markdown/link"
 import { NestedMarkdownContext } from "@workspace/ui/components/markdown/nested-markdown"
@@ -79,14 +80,16 @@ const INLINE_COMPONENTS: Components = {
 }
 
 const InlineMarkdown = ({ children }: InlineMarkdownProps) => (
-	<ReactMarkdown
-		allowedElements={INLINE_ELEMENTS}
-		components={INLINE_COMPONENTS}
-		remarkPlugins={INLINE_PLUGINS}
-		unwrapDisallowed
-	>
-		{children}
-	</ReactMarkdown>
+	<MarkdownBoardLinkContext value={null}>
+		<ReactMarkdown
+			allowedElements={INLINE_ELEMENTS}
+			components={INLINE_COMPONENTS}
+			remarkPlugins={INLINE_PLUGINS}
+			unwrapDisallowed
+		>
+			{children}
+		</ReactMarkdown>
+	</MarkdownBoardLinkContext>
 )
 
 export const AnswerBlockFrame = ({ children }: AnswerBlockFrameProps) => (

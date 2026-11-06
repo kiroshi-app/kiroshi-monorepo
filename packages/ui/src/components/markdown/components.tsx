@@ -11,6 +11,7 @@ import {
 	MarkdownPre,
 	MarkdownStaticPre,
 } from "@workspace/ui/components/markdown/code"
+import { MARKDOWN_HEADINGS } from "@workspace/ui/components/markdown/heading"
 import {
 	MarkdownLink,
 	MarkdownStaticLink,
@@ -19,6 +20,7 @@ import {
 	MarkdownSpan,
 	MarkdownStaticSpan,
 } from "@workspace/ui/components/markdown/mention"
+import { MarkdownParagraph } from "@workspace/ui/components/markdown/paragraph"
 import {
 	MarkdownStaticTable,
 	MarkdownTable,
@@ -30,6 +32,7 @@ import {
 } from "@workspace/ui/components/markdown/task-list"
 
 export const MARKDOWN_COMPONENTS: Components = {
+	...MARKDOWN_HEADINGS,
 	a: MarkdownLink,
 	blockquote: MarkdownBlockquote,
 	code: MarkdownCode,
@@ -37,6 +40,7 @@ export const MARKDOWN_COMPONENTS: Components = {
 	img: MarkdownImage,
 	input: MarkdownTaskCheckbox,
 	li: MarkdownListItem,
+	p: MarkdownParagraph,
 	pre: MarkdownPre,
 	span: MarkdownSpan,
 	table: MarkdownTable,
