@@ -696,9 +696,6 @@ const common = {
 			atRest_other: "Board · {{count}} items · {{edited}}",
 			failed: "Couldn’t read this board. Open it to try again.",
 		},
-		panel: {
-			openInTab: "Open in tab",
-		},
 		libraryCard: {
 			documentMeta: "Document · from the Library",
 		},

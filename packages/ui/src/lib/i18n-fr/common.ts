@@ -729,9 +729,6 @@ const common = {
 			atRest_other: "Tableau · {{count}} éléments · {{edited}}",
 			failed: "Impossible de lire ce tableau. Ouvrez-le pour réessayer.",
 		},
-		panel: {
-			openInTab: "Ouvrir dans un onglet",
-		},
 		libraryCard: {
 			documentMeta: "Document · depuis la Bibliothèque",
 		},

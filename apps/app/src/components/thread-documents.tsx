@@ -334,7 +334,7 @@ export const ThreadBoardPanel = ({
 	const openInItsTab = useOpenLibraryItemInItsTab()
 	const { width, keepWidth } = useKeptPanelWidth()
 
-	const openInTab = () => {
+	const openInLibrary = () => {
 		documents.close()
 		openInItsTab({ kind: "board", name })
 	}
@@ -343,7 +343,7 @@ export const ThreadBoardPanel = ({
 		<DocumentPanel
 			defaultWidth={DOCUMENT_PANEL_MAX_WIDTH}
 			onClose={documents.close}
-			onOpenInTab={openInTab}
+			onOpenInLibrary={openInLibrary}
 			onWidthChange={keepWidth}
 			presence={
 				<LibraryDocumentPresence

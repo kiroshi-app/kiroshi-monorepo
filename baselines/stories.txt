@@ -1662,6 +1662,8 @@ navigation-conversationsubjecticon--unknown-icon-falls-back-to-message-square
 navigation-conversationsubjecticon--yellow
 navigation-documentpanel--after-a-drag
 navigation-documentpanel--asked-under-the-room-left
+navigation-documentpanel--board-and-document-share-one-header
+navigation-documentpanel--board-header-aligned-with-the-thread-header
 navigation-documentpanel--board-one-agent
 navigation-documentpanel--board-one-agent-dark
 navigation-documentpanel--board-several-agents

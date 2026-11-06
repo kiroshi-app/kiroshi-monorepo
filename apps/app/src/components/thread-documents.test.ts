@@ -452,12 +452,14 @@ describe("a board opened beside a conversation", () => {
 		).toBeTruthy()
 	})
 
-	it("closes the panel and shows the board in its own tab on Open in tab", () => {
+	it("closes the panel and shows the board in its own tab on Open in Library", () => {
 		const close = vi.fn()
 		renderLaunchBoardPanel(close)
 
 		fireEvent.click(
-			screen.getByRole("button", { name: common("board.panel.openInTab") }),
+			screen.getByRole("button", {
+				name: common("library.panel.openInLibrary"),
+			}),
 		)
 
 		expect(close).toHaveBeenCalledOnce()
