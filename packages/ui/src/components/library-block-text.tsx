@@ -229,7 +229,8 @@ const typedOf = ({ inputType, data, dataTransfer }: InputEvent) => {
 	if (inputType === "insertLineBreak" || inputType === "insertParagraph")
 		return "\n"
 	const inserted = data ?? dataTransfer?.getData("text/plain") ?? ""
-	if (inputType === "insertFromPaste") return withoutIdMarkers(inserted)
+	if (inputType === "insertFromPaste" || inputType === "insertFromDrop")
+		return withoutIdMarkers(inserted)
 	if (inputType.startsWith("insert")) return inserted
 	if (inputType.startsWith("delete")) return ""
 	return undefined

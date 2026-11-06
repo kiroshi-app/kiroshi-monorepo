@@ -1797,6 +1797,7 @@ navigation-librarydocumentblockeditor--code-language-chosen
 navigation-librarydocumentblockeditor--drag-moves-block
 navigation-librarydocumentblockeditor--drag-moves-text
 navigation-librarydocumentblockeditor--drag-with-drop-indicator
+navigation-librarydocumentblockeditor--dropped-marker-never-shows
 navigation-librarydocumentblockeditor--emptied-blocks-keep-their-type
 navigation-librarydocumentblockeditor--enter-inside-a-mark-keeps-both-halves
 navigation-librarydocumentblockeditor--escape-shows-the-character

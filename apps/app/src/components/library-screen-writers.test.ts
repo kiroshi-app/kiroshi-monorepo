@@ -33,6 +33,7 @@ import {
 	type LibraryWriter,
 } from "@/lib/bindings"
 import type { Invoke } from "@/lib/host/joined-hosts-invoke"
+import { markdownWithIds } from "@/lib/library/block-ids-test-pattern"
 import { base64Of, bytesOf } from "@/lib/library/library-document-session"
 import {
 	LIBRARY_DOCUMENT_PRESENCE_EVENT,
@@ -67,6 +68,14 @@ const NOTES = "notes.md"
 const PLAN = "plan.md"
 
 const OPENING = "Intro line\n\n## Rollout\n\nWe ship in May."
+
+const NAMED_OPENING =
+	"Intro line ^intro1\n\n## Rollout ^rollot\n\nWe ship in May. ^shipme"
+
+const TRAILING_ID = /(?: \^[a-z0-9]{6})?$/
+
+const OPENING_WITH_IDS =
+	"Intro line ^ID\n\n## Rollout ^ID\n\nWe ship in May. ^ID"
 
 const AGENT_TEXT = " Atlas adds a sentence. Then a second one."
 
@@ -301,7 +310,7 @@ const agentWritesAtEnd = (
 ) => {
 	const doc = documentOf(name)
 	const markdown = doc.getText("markdown")
-	const start = markdown.length
+	const start = markdown.toString().search(TRAILING_ID)
 	announcePresence(
 		name,
 		[writerOf(ATLAS_ID, "agent", caretAt(name, start), "Atlas")],
@@ -449,6 +458,7 @@ describe.each([
 	{ place: "in a joined Space", isJoined: true, hostId: "host-1" },
 ])("an agent writing in the open document $place", ({ isJoined, hostId }) => {
 	it("draws its text arriving live under its named caret while the person keeps typing and selecting elsewhere", async () => {
+		seedDocument(NOTES, NAMED_OPENING)
 		await renderLibraryScreen(isJoined)
 		const [intro] = await openDocument(NOTES)
 		const field = selectIn(intro as HTMLElement, 2, 5)
@@ -471,7 +481,7 @@ describe.each([
 
 		await waitFor(() =>
 			expect(documentOf(NOTES).getText("markdown").toString()).toBe(
-				`Intro line, edited\n\n## Rollout\n\nWe ship in May.${AGENT_TEXT}`,
+				`Intro line, edited ^intro1\n\n## Rollout ^rollot\n\nWe ship in May.${AGENT_TEXT} ^shipme`,
 			),
 		)
 		expect(shownRuns()).toEqual([AGENT_TEXT])
@@ -1115,6 +1125,16 @@ const LAMP = "- image: https://images.example.org/lamp.jpg\n  alt: Brass lamp"
 const documentAround = (block: string) =>
 	["# Venue", "The rooms we kept.", block, "We ship in May."].join("\n\n")
 
+const writtenAround = (block: string) =>
+	markdownWithIds(
+		[
+			"# Venue ^ID",
+			"The rooms we kept. ^ID",
+			`${block}\n\n^ID`,
+			"We ship in May. ^ID",
+		].join("\n\n"),
+	)
+
 const seedDocument = (name: string, markdown: string) => {
 	const doc = new Y.Doc()
 	doc.getText("markdown").insert(0, markdown)
@@ -1227,8 +1247,10 @@ describe.each(PLACES)(
 			typeEach("Risks")
 
 			await waitFor(() =>
-				expect(markdownOnHost(NOTES)).toBe(
-					"Intro line\n\n## Risks\n\n## Rollout\n\nWe ship in May.",
+				expect(markdownOnHost(NOTES)).toMatch(
+					markdownWithIds(
+						"Intro line ^ID\n\n## Risks ^ID\n\n## Rollout ^ID\n\nWe ship in May. ^ID",
+					),
 				),
 			)
 		})
@@ -1250,8 +1272,10 @@ describe.each(PLACES)(
 			})
 
 			await waitFor(() =>
-				expect(markdownOnHost(NOTES)).toBe(
-					"Intro line\n\nWe ship in May.\n\n## Rollout",
+				expect(markdownOnHost(NOTES)).toMatch(
+					markdownWithIds(
+						"Intro line ^ID\n\nWe ship in May. ^ID\n\n## Rollout ^ID",
+					),
 				),
 			)
 		})
@@ -1270,8 +1294,10 @@ describe.each(PLACES)(
 			await pasteLinkInWebCard(isJoined)
 
 			await waitFor(() =>
-				expect(markdownOnHost(NOTES)).toBe(
-					`${OPENING}\n\n\`\`\`web-page\nurl: ${LINK}\ntitle: Rates\nsite: example.org\nimage: https://www.example.org/rates.jpg\nalt: The rates table\n\`\`\``,
+				expect(markdownOnHost(NOTES)).toMatch(
+					markdownWithIds(
+						`${OPENING_WITH_IDS}\n\n\`\`\`web-page\nurl: ${LINK}\ntitle: Rates\nsite: example.org\nimage: https://www.example.org/rates.jpg\nalt: The rates table\n\`\`\`\n\n^ID`,
+					),
 				),
 			)
 			expect(host.readLinkPreview).toHaveBeenCalledWith(LINK)
@@ -1297,8 +1323,10 @@ describe.each(PLACES)(
 				const link = await pasteLinkInWebCard(isJoined)
 
 				await waitFor(() =>
-					expect(markdownOnHost(NOTES)).toBe(
-						`${OPENING}\n\n\`\`\`web-page\nurl: ${LINK}\n\`\`\``,
+					expect(markdownOnHost(NOTES)).toMatch(
+						markdownWithIds(
+							`${OPENING_WITH_IDS}\n\n\`\`\`web-page\nurl: ${LINK}\n\`\`\`\n\n^ID`,
+						),
 					),
 				)
 				expect(link).toHaveProperty("value", LINK)
@@ -1321,8 +1349,8 @@ describe.each(PLACES)(
 			})
 
 			await waitFor(() =>
-				expect(markdownOnHost(NOTES)).toBe(
-					documentAround(TABLE.replace("| Atlas |", "| Atlas North |")),
+				expect(markdownOnHost(NOTES)).toMatch(
+					writtenAround(TABLE.replace("| Atlas |", "| Atlas North |")),
 				),
 			)
 		})
@@ -1341,10 +1369,8 @@ describe.each(PLACES)(
 			})
 
 			await waitFor(() =>
-				expect(markdownOnHost(NOTES)).toBe(
-					documentAround(
-						galleryOf(SOFA, `${LAMP}\n  caption: Brass, 90 euros`),
-					),
+				expect(markdownOnHost(NOTES)).toMatch(
+					writtenAround(galleryOf(SOFA, `${LAMP}\n  caption: Brass, 90 euros`)),
 				),
 			)
 		})
@@ -1365,8 +1391,8 @@ describe.each(PLACES)(
 			})
 
 			await waitFor(() =>
-				expect(markdownOnHost(NOTES)).toBe(
-					documentAround(galleryOf(LAMP, SOFA)),
+				expect(markdownOnHost(NOTES)).toMatch(
+					writtenAround(galleryOf(LAMP, SOFA)),
 				),
 			)
 		})
@@ -1523,8 +1549,8 @@ describe("images added to a gallery on the host", () => {
 		await addImagesTo(gallery)
 
 		await waitFor(() =>
-			expect(markdownOnHost(NOTES)).toBe(
-				documentAround(
+			expect(markdownOnHost(NOTES)).toMatch(
+				writtenAround(
 					galleryOf(
 						STORED_SOFA,
 						"- image: lamp.jpg\n  alt: lamp",
@@ -1591,10 +1617,8 @@ describe("images added to a gallery on the host", () => {
 		await addImagesTo(gallery)
 
 		await waitFor(() =>
-			expect(markdownOnHost(NOTES)).toBe(
-				documentAround(
-					galleryOf(STORED_SOFA, "- image: lamp.jpg\n  alt: lamp"),
-				),
+			expect(markdownOnHost(NOTES)).toMatch(
+				writtenAround(galleryOf(STORED_SOFA, "- image: lamp.jpg\n  alt: lamp")),
 			),
 		)
 		expect(raiseFailureNotice).toHaveBeenCalledWith(
@@ -1675,8 +1699,8 @@ describe("a gallery in a joined Space", () => {
 		await addImagesTo(gallery)
 
 		await waitFor(() =>
-			expect(markdownOnHost(NOTES)).toBe(
-				documentAround(
+			expect(markdownOnHost(NOTES)).toMatch(
+				writtenAround(
 					galleryOf(
 						STORED_SOFA,
 						"- image: lamp.png\n  alt: lamp",
@@ -1750,10 +1774,8 @@ describe("a gallery in a joined Space", () => {
 		await addImagesTo(gallery)
 
 		await waitFor(() =>
-			expect(markdownOnHost(NOTES)).toBe(
-				documentAround(
-					galleryOf(STORED_SOFA, "- image: lamp.png\n  alt: lamp"),
-				),
+			expect(markdownOnHost(NOTES)).toMatch(
+				writtenAround(galleryOf(STORED_SOFA, "- image: lamp.png\n  alt: lamp")),
 			),
 		)
 		expect(host.importContent).toHaveBeenCalledTimes(1)
@@ -1788,10 +1810,8 @@ describe("a gallery in a joined Space", () => {
 		await addImagesTo(gallery)
 
 		await waitFor(() =>
-			expect(markdownOnHost(NOTES)).toBe(
-				documentAround(
-					galleryOf(STORED_SOFA, "- image: lamp.png\n  alt: lamp"),
-				),
+			expect(markdownOnHost(NOTES)).toMatch(
+				writtenAround(galleryOf(STORED_SOFA, "- image: lamp.png\n  alt: lamp")),
 			),
 		)
 		expect(raiseFailureNotice).toHaveBeenCalledWith(

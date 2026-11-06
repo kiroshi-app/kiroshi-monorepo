@@ -1524,25 +1524,45 @@ export const BlockIdFreshForANewBlock = meta.story({
 	},
 })
 
+const MARKED_INSERT = " Bring the deck. ^abc123"
+
+const expectInsertedWithoutMarker = async (
+	args: BodyArgs,
+	root: HTMLElement,
+	insert: (field: HTMLElement) => Promise<unknown>,
+) => {
+	const kept = "The call starts at ten."
+	const shown = `${kept} Bring the deck.`
+	const field = await focusBlockWith(root, kept)
+	selectInField(field, kept.length)
+	await insert(field)
+	await waitFor(() => expect(shownIn(field)).toBe(shown))
+	await expect(fieldSelectionOf(field)?.start).toBe(shown.length)
+	await expect(writtenIn(args)).toBe(IDENTIFIED_DOCUMENT.replace(kept, shown))
+	field.blur()
+	await waitFor(() =>
+		expect(blockWith(root, "Bring the deck")).toHaveTextContent(
+			new RegExp(`^${shown}$`),
+		),
+	)
+}
+
 export const PastedMarkerNeverShows = meta.story({
 	tags: ["test-only"],
 	args: { body: IDENTIFIED_DOCUMENT },
-	play: async ({ args, canvasElement, userEvent }) => {
-		const kept = "The call starts at ten."
-		const shown = `${kept} Bring the deck.`
-		const field = await focusBlockWith(canvasElement, kept)
-		selectInField(field, kept.length)
-		await userEvent.paste(" Bring the deck. ^abc123")
-		await waitFor(() => expect(shownIn(field)).toBe(shown))
-		await expect(fieldSelectionOf(field)?.start).toBe(shown.length)
-		await expect(writtenIn(args)).toBe(IDENTIFIED_DOCUMENT.replace(kept, shown))
-		field.blur()
-		await waitFor(() =>
-			expect(blockWith(canvasElement, "Bring the deck")).toHaveTextContent(
-				new RegExp(`^${shown}$`),
-			),
-		)
-	},
+	play: ({ args, canvasElement, userEvent }) =>
+		expectInsertedWithoutMarker(args, canvasElement, () =>
+			userEvent.paste(MARKED_INSERT),
+		),
+})
+
+export const DroppedMarkerNeverShows = meta.story({
+	tags: ["test-only"],
+	args: { body: IDENTIFIED_DOCUMENT },
+	play: ({ args, canvasElement }) =>
+		expectInsertedWithoutMarker(args, canvasElement, (field) =>
+			inputInto(field, "insertFromDrop", MARKED_INSERT),
+		),
 })
 
 type AgentWritingFrameProps = BodyArgs & { body: string }
