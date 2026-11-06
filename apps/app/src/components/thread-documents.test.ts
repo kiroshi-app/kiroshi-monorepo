@@ -68,7 +68,7 @@ vi.mock("@/lib/host", async (importOriginal) => {
 		...actual,
 		invoke,
 		listen,
-		currentWindowLabel: () => "main",
+		currentWindowLabel: () => OWN_WINDOW,
 	}
 })
 
