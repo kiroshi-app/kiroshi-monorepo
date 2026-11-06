@@ -7,16 +7,19 @@ use tungstenite::http::HeaderValue;
 use tungstenite::http::header::AUTHORIZATION;
 
 use crate::host::Host;
-use crate::model::{Message, ScopedEvent};
+use crate::model::{Message, MissionChanged, ScopedEvent};
 
 const AGENT_EVENT: &str = "agent://event";
 
 const MESSAGE_STORED: &str = "conversation://message-stored";
 
+const MISSION_CHANGED: &str = "mission://changed";
+
 pub enum HostEvent {
 	Listening,
 	Agent(ScopedEvent),
 	MessageStored(Message),
+	MissionChanged(MissionChanged),
 	Unreadable { event: String, cause: String },
 	Lost(String),
 }
@@ -82,6 +85,10 @@ fn parsed(text: &str) -> Option<HostEvent> {
 		MESSAGE_STORED => Some(
 			serde_json::from_value(payload)
 				.map_or_else(|failure| unreadable(event, failure), HostEvent::MessageStored),
+		),
+		MISSION_CHANGED => Some(
+			serde_json::from_value(payload)
+				.map_or_else(|failure| unreadable(event, failure), HostEvent::MissionChanged),
 		),
 		_ => None,
 	}

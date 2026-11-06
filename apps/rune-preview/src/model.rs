@@ -77,6 +77,8 @@ pub struct Message {
 	pub content: String,
 	pub author_bot_id: Option<String>,
 	pub author_name: Option<String>,
+	#[serde(default)]
+	pub created_at: i64,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -209,4 +211,97 @@ pub enum KiroshiAccountState {
 	},
 	#[serde(other)]
 	SignedOut,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MissionState {
+	Working,
+	WaitingBot,
+	WaitingHuman,
+	ReadyToMerge,
+	Failed,
+	Done,
+	Closed,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Ticket {
+	#[serde(default)]
+	pub platform: Option<String>,
+	#[serde(default)]
+	pub external_id: Option<String>,
+	#[serde(default)]
+	pub url: Option<String>,
+	#[serde(default)]
+	pub title: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MissionStatus {
+	pub text: String,
+	pub written_at: i64,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct MissionActivity {
+	pub tool: String,
+	pub target: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Mission {
+	pub id: String,
+	pub origin_conversation_id: String,
+	pub bot_id: String,
+	pub thread_conversation_id: String,
+	pub objective: String,
+	pub ticket: Ticket,
+	pub tools: Vec<String>,
+	pub state: MissionState,
+	pub is_agent_running: bool,
+	pub opened_at: i64,
+	pub status: Option<MissionStatus>,
+	pub last_activity: Option<MissionActivity>,
+	pub commits_ahead: Option<i64>,
+	pub pull_request_url: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct MissionOnBoard {
+	pub mission: Mission,
+	pub bot: Agent,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MissionEvent {
+	pub id: String,
+	pub kind: String,
+	pub source: String,
+	pub payload: serde_json::Value,
+	pub created_at: i64,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct MissionDetail {
+	pub mission: Mission,
+	pub events: Vec<MissionEvent>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MissionChanged {
+	pub mission_id: String,
+	pub state: MissionState,
+	pub is_agent_running: bool,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct ConversationMissions {
+	pub open: Vec<Mission>,
+	pub done: Vec<Mission>,
 }

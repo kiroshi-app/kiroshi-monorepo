@@ -109,7 +109,10 @@ fn field(s: &App, k: &Kit, t: &Tokens, can_type: bool) -> El {
 		.key(COMPOSER)
 		.w_full()
 		.color(t.foreground)
-		.placeholder("Message", t.faint_foreground)
+		.placeholder(
+			if s.mission.is_some() { "Answer this mission…" } else { "Message" },
+			t.faint_foreground,
+		)
 		.caret(t.foreground, k.selection())
 		.pill_style(move |id| {
 			let style = PillStyle::default();

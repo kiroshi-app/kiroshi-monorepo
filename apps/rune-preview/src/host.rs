@@ -15,7 +15,7 @@ const PROBE: &str = "space_list";
 
 const TOKEN_FILE: [&str; 2] = ["host", "token"];
 
-const INSTALLED_READS: [&str; 8] = [
+const INSTALLED_READS: [&str; 9] = [
 	"space_list",
 	"conversation_bots",
 	"conversation_page",
@@ -24,6 +24,7 @@ const INSTALLED_READS: [&str; 8] = [
 	"account_state",
 	"mission_board",
 	"mission_detail",
+	"mission_list",
 ];
 
 static SENT: Mutex<Vec<(Profile, String)>> = Mutex::new(Vec::new());

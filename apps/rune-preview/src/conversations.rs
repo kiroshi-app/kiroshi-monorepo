@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::rc::Rc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use rune::{
@@ -8,7 +9,7 @@ use rune::{
 use rune_kit::Kit;
 use rune_kit::markdown::{Markdown, MarkdownStyle};
 
-use crate::app::{App, Ready, Thread, Workspace};
+use crate::app::{App, Pane, Ready, Thread, Workspace};
 use crate::avatar::{Face, Motion};
 use crate::composer;
 use crate::content::{self, Run, Segment};
@@ -17,6 +18,7 @@ use crate::hues::Role as HueRole;
 use crate::icons;
 use crate::images::Slot;
 use crate::math::Mode;
+use crate::mission;
 use crate::model::{Conversation, Role};
 use crate::tokens::{
 	RADIUS_BUBBLE, RADIUS_LG, SPACING, TEXT_10_MEDIUM, TEXT_BUBBLE, TEXT_COMPACT,
@@ -105,6 +107,7 @@ fn host_failed(t: &Tokens, failure: &HostError) -> El {
 fn frame(s: &App, ready: &Ready, k: &Kit, t: &Tokens, viewport: &Viewport) -> El {
 	let card = row()
 		.grow(1.0)
+		.min_w(0.0)
 		.min_h(0.0)
 		.mr(SHELL_INSET)
 		.mb(SHELL_INSET)
@@ -112,7 +115,10 @@ fn frame(s: &App, ready: &Ready, k: &Kit, t: &Tokens, viewport: &Viewport) -> El
 		.clip_rounded(12.0)
 		.fill(t.card)
 		.border(1.0, t.shell_border)
-		.child(roster(ready, t))
+		.child(match s.pane {
+			Pane::Missions => mission::roster(s, t, now_ms()),
+			Pane::Conversations => roster(ready, t),
+		})
 		.child(el().w(1.0).h_full().fill(t.shell_divider))
 		.child(thread_column(s, k, t, viewport));
 	col()
@@ -120,7 +126,7 @@ fn frame(s: &App, ready: &Ready, k: &Kit, t: &Tokens, viewport: &Viewport) -> El
 		.h_full()
 		.fill(t.background)
 		.child(title_bar(s, t, viewport.inset))
-		.child(row().w_full().grow(1.0).min_h(0.0).child(rail(ready, t)).child(card))
+		.child(row().w_full().grow(1.0).min_h(0.0).child(rail(s, ready, t)).child(card))
 }
 
 fn title_bar(s: &App, t: &Tokens, inset: f32) -> El {
@@ -152,7 +158,8 @@ fn title_bar(s: &App, t: &Tokens, inset: f32) -> El {
 		.child(glyph(&icons::PLUS))
 }
 
-fn rail(ready: &Ready, t: &Tokens) -> El {
+fn rail(s: &App, ready: &Ready, t: &Tokens) -> El {
+	let missions = matches!(s.pane, Pane::Missions);
 	let (ground, ink) = conversation_icon(ready.space.colour, t.dark);
 	let initial: String = ready.space.name.chars().take(1).collect();
 	let space = el()
@@ -184,8 +191,16 @@ fn rail(ready: &Ready, t: &Tokens) -> El {
 		.child(space)
 		.child(el().h(SPACING * 2.0))
 		.child(slot(&icons::SEARCH, false))
-		.child(slot(&icons::CONVERSATIONS, true))
-		.child(slot(&icons::MISSIONS, false))
+		.child(
+			slot(&icons::CONVERSATIONS, !missions)
+				.cursor(Cursor::Pointer)
+				.on_press(|s: &mut App| s.show_conversations()),
+		)
+		.child(
+			slot(&icons::MISSIONS, missions)
+				.cursor(Cursor::Pointer)
+				.on_press(|s: &mut App| s.show_missions()),
+		)
 		.child(el().grow(1.0))
 		.child(
 			el().size(28.0, 28.0)
@@ -382,7 +397,10 @@ fn thread_column(s: &App, k: &Kit, t: &Tokens, viewport: &Viewport) -> El {
 		.h_full()
 		.min_w(0.0)
 		.fill(t.background)
-		.child(thread_header(s, t))
+		.child(match &s.mission {
+			Some(open) => mission::header(s, open, t, now_ms()),
+			None => thread_header(s, t),
+		})
 		.child(thread_view(s, k, t, viewport.transcript_height))
 		.child(composer::view(s, k, t, &viewport.composer))
 }
@@ -449,7 +467,8 @@ fn thread_view(s: &App, k: &Kit, t: &Tokens, height: Option<f32>) -> El {
 			.center()
 			.child(spinner(t.input, t.muted_foreground));
 	}
-	if thread.row_count() == 0 {
+	let rows = Rc::new(transcript(s, thread));
+	if rows.is_empty() {
 		return empty_thread(thread, t);
 	}
 	let scroller = col()
@@ -460,29 +479,116 @@ fn thread_view(s: &App, k: &Kit, t: &Tokens, height: Option<f32>) -> El {
 		.scroll(ScrollSpec { stick_bottom: true })
 		.scroll_edge_fade(16.0);
 	let viewport = col().key(TRANSCRIPT).w_full().grow(1.0).min_h(0.0);
-	if thread.row_count() <= ANCHORED_ROWS {
-		let rows = (0..thread.row_count())
-			.map(|i| message_row(s, i, k, t).key(row_key(s, i).into_owned()));
+	let now = now_ms();
+	if rows.len() <= ANCHORED_ROWS {
+		let built = rows.iter().map(|&row| row_view(s, row, k, t, now).key(row_key(s, row)));
 		let anchored = col()
 			.key("thread-rows")
 			.w_full()
 			.min_h(height.unwrap_or(0.0))
 			.justify_end()
 			.pt(SPACING * 4.0)
-			.children(rows);
+			.children(built);
 		return viewport.child(scroller.child(anchored));
 	}
 	let kit = k.clone();
 	let tokens = *t;
-	let rows = col()
+	let keyed = Rc::clone(&rows);
+	let virtualised = col()
 		.key("thread-rows")
 		.w_full()
 		.pt(SPACING * 4.0)
 		.growth(GrowthSpec::default())
-		.virtual_rows(thread.row_count(), 120.0, row_key, move |s: &App, i| {
-			message_row(s, i, &kit, &tokens)
-		});
-	viewport.child(scroller.child(rows))
+		.virtual_rows(
+			rows.len(),
+			120.0,
+			move |s: &App, i| {
+				Cow::Owned(
+					keyed.get(i).map_or_else(|| "missing".to_owned(), |&row| row_key(s, row)),
+				)
+			},
+			move |s: &App, i| {
+				rows.get(i).map_or_else(el, |&row| row_view(s, row, &kit, &tokens, now))
+			},
+		);
+	viewport.child(scroller.child(virtualised))
+}
+
+#[derive(Clone, Copy)]
+enum Row {
+	Message(usize),
+	Live(usize),
+	Mission(usize),
+	Event(usize),
+}
+
+fn transcript(s: &App, thread: &Thread) -> Vec<Row> {
+	let mut placed: Vec<(i64, Row)> = thread
+		.missions
+		.iter()
+		.enumerate()
+		.map(|(i, mission)| (mission.opened_at, Row::Mission(i)))
+		.collect();
+	let open = s.mission.as_ref().filter(|open| thread.shows_mission(&open.mission));
+	if let Some(open) = open {
+		placed.extend(
+			open.events
+				.iter()
+				.enumerate()
+				.filter(|(_, event)| mission::shows_event(event))
+				.map(|(i, event)| (event.created_at, Row::Event(i))),
+		);
+	}
+	placed.sort_by_key(|(at, _)| *at);
+	let mut pending = placed.into_iter().peekable();
+	let mut rows = Vec::with_capacity(thread.messages.len() + thread.live.len());
+	for (i, message) in thread.messages.iter().enumerate() {
+		let summons = open.is_some()
+			&& message.role == Role::User
+			&& message.author_bot_id.is_none()
+			&& mission::is_summons(message.content.trim());
+		if summons {
+			continue;
+		}
+		while let Some((_, row)) = pending.next_if(|(at, _)| *at < message.created_at) {
+			rows.push(row);
+		}
+		rows.push(Row::Message(i));
+	}
+	rows.extend(pending.map(|(_, row)| row));
+	rows.extend((0..thread.live.len()).map(Row::Live));
+	rows
+}
+
+fn row_view(s: &App, row: Row, k: &Kit, t: &Tokens, now: i64) -> El {
+	let Some(thread) = s.thread.as_ref() else { return el() };
+	match row {
+		Row::Message(i) => message_row(s, i, k, t),
+		Row::Live(i) => message_row(s, thread.messages.len() + i, k, t),
+		Row::Mission(i) => {
+			let Some(mission) = thread.missions.get(i) else { return el() };
+			let bot = s
+				.ready()
+				.and_then(|ready| ready.agents.iter().find(|agent| agent.id == mission.bot_id));
+			let Some(bot) = bot else { return el() };
+			let stamp = roster_timestamp(mission.opened_at, now);
+			row_frame(mission::turn(s, mission, bot, t, stamp, now))
+		}
+		Row::Event(i) => {
+			let Some(open) = s.mission.as_ref() else { return el() };
+			let Some(event) = open.events.get(i) else { return el() };
+			row_frame(mission::event_row(s, open, event, t, now))
+		}
+	}
+}
+
+fn row_frame(content: El) -> El {
+	row()
+		.w_full()
+		.justify_center()
+		.px(COLUMN_INSET)
+		.py(6.0)
+		.child(row().w(COLUMN - 2.0 * COLUMN_INSET).shrink().child(content))
 }
 
 const EMPTY_NAME: TextStyle = TextStyle { line_height: 28.0, ..TextStyle::new(18.0, 600.0) };
@@ -515,15 +621,19 @@ fn empty_thread(thread: &Thread, t: &Tokens) -> El {
 	col().w_full().grow(1.0).min_h(0.0).center().child(state)
 }
 
-fn row_key(s: &App, i: usize) -> Cow<'_, str> {
-	let Some(thread) = s.thread.as_ref() else { return Cow::Borrowed("missing") };
-	match thread.messages.get(i) {
-		Some(message) => Cow::Borrowed(message.id.as_str()),
-		None => thread
-			.live
-			.get(i - thread.messages.len())
-			.map_or(Cow::Borrowed("missing"), |live| Cow::Owned(format!("live-{}", live.id))),
-	}
+fn row_key(s: &App, row: Row) -> String {
+	let Some(thread) = s.thread.as_ref() else { return "missing".to_owned() };
+	let held = match row {
+		Row::Message(i) => thread.messages.get(i).map(|message| message.id.clone()),
+		Row::Live(i) => thread.live.get(i).map(|live| format!("live-{}", live.id)),
+		Row::Mission(i) => thread.missions.get(i).map(|mission| format!("mission-{}", mission.id)),
+		Row::Event(i) => s
+			.mission
+			.as_ref()
+			.and_then(|open| open.events.get(i))
+			.map(|event| format!("event-{}", event.id)),
+	};
+	held.unwrap_or_else(|| "missing".to_owned())
 }
 
 struct Shown<'a> {
@@ -757,6 +867,49 @@ fn image_view(s: &App, alt: &str, url: &str, t: &Tokens) -> El {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn a_mission_turn_lands_between_the_messages_around_its_opening() {
+		let mission: crate::model::Mission = serde_json::from_value(serde_json::json!({
+			"id": "m-1", "originConversationId": "c", "botId": "b", "threadConversationId": "t",
+			"objective": "Ship it", "ticket": {}, "tools": [], "state": "working",
+			"isAgentRunning": false, "openedAt": 25, "status": null, "lastActivity": null,
+			"commitsAhead": null, "pullRequestUrl": null
+		}))
+		.expect("the fixture reads as a mission");
+		let message = |seq: i64| crate::model::Message {
+			id: format!("x{seq}"),
+			conversation_id: "c".into(),
+			seq,
+			role: Role::User,
+			content: "hi".into(),
+			author_bot_id: None,
+			author_name: None,
+			created_at: seq * 10,
+		};
+		let app = App::new();
+		let thread = Thread {
+			conversation_id: "c".into(),
+			title: "c".into(),
+			seats: Vec::new(),
+			messages: vec![message(1), message(2), message(3)],
+			live: Vec::new(),
+			loaded: true,
+			failure: None,
+			missions: vec![mission],
+		};
+		let rows = transcript(&app, &thread);
+		let kinds: Vec<String> = rows
+			.iter()
+			.map(|row| match row {
+				Row::Message(i) => format!("m{i}"),
+				Row::Live(i) => format!("l{i}"),
+				Row::Mission(i) => format!("M{i}"),
+				Row::Event(i) => format!("e{i}"),
+			})
+			.collect();
+		assert_eq!(kinds, ["m0", "m1", "M0", "m2"]);
+	}
 
 	#[test]
 	fn roster_stamps_follow_the_age_rule_of_main() {

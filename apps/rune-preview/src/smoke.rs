@@ -131,7 +131,9 @@ fn stream(hearing: &mpsc::Receiver<Heard>, conversation_id: &str) -> Result<(), 
 					_ => {}
 				}
 			}
-			Heard::Host(HostEvent::Listening | HostEvent::MessageStored(_)) => {}
+			Heard::Host(
+				HostEvent::Listening | HostEvent::MessageStored(_) | HostEvent::MissionChanged(_),
+			) => {}
 		}
 	}
 }

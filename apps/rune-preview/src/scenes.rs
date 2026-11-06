@@ -1,10 +1,16 @@
 use rune::TextEdit;
 
-use crate::app::{App, Live, Ready, Screen, Thread, Workspace, connected, whole_thread};
+use serde_json::json;
+
+use crate::app::{
+	App, Board, Live, Pane, Ready, Screen, Thread, Workspace, connected, whole_thread,
+};
 use crate::dev_profile::{ClaudeLogin, DevProfile, ImportChoices, KiroshiSignIn};
 use crate::host::{Host, HostError, Profile};
+use crate::longest;
 use crate::model::{Agent, Conversation, LastWord, Message, Participant, Role, Space};
 use crate::model::{AgentEvent, ClaudeItem, RuntimeScope};
+use crate::model::{ConversationMissions, MissionDetail, MissionOnBoard};
 use crate::onboarding::{Account, Connect, Page, Step};
 
 type Scene = (&'static str, fn(&mut App));
@@ -23,7 +29,9 @@ pub const SCENES: &[Scene] = &[
 	("account-waiting", |s| account(s, Account::Waiting)),
 	("account-signed-in", account_signed_in),
 	("host-failed", host_failed),
-	("live", read_the_dev_host_before_the_first_frame),
+	("live", live_longest),
+	("live-mission", live_mission),
+	("live-mission-turn", live_mission_turn),
 	("thread", thread_default),
 	("thread-long", thread_long),
 	("thread-empty", thread_empty),
@@ -212,6 +220,7 @@ fn message(seq: i64, role: Role, content: &str) -> Message {
 		content: content.into(),
 		author_bot_id: (role == Role::Assistant).then(|| "skippy".into()),
 		author_name: None,
+		created_at: seq * MINUTES,
 	}
 }
 
@@ -312,23 +321,102 @@ fn thread_mention(s: &mut App) {
 	s.composer_changed();
 }
 
-fn read_the_dev_host_before_the_first_frame(s: &mut App) {
+fn read_the_installed_host_before_the_first_frame(s: &mut App) -> Option<Ready> {
 	s.screen = Screen::Conversations;
-	let ready = match connected(Profile::Installed) {
-		Ok(ready) => ready,
+	match connected(Profile::Installed) {
+		Ok(ready) => Some(ready),
 		Err(failure) => {
 			s.workspace = Workspace::Failed(failure);
+			None
+		}
+	}
+}
+
+fn loaded(host: &Host, mut thread: Thread) -> Thread {
+	match whole_thread(host, &thread.conversation_id) {
+		Ok(messages) => messages.into_iter().for_each(|message| thread.stored(message)),
+		Err(failure) => thread.failure = Some(failure),
+	}
+	thread.loaded = true;
+	thread
+}
+
+fn live_longest(s: &mut App) {
+	let Some(mut ready) = read_the_installed_host_before_the_first_frame(s) else { return };
+	match longest::longest(&ready.host, &ready.conversations) {
+		Ok(Some(found)) => {
+			let conversation = ready
+				.conversations
+				.iter()
+				.find(|conversation| conversation.id == found.conversation_id);
+			if let Some(conversation) = conversation {
+				s.thread = Some(loaded(&ready.host, Thread::of_conversation(conversation)));
+			}
+			ready.longest = Some(found);
+		}
+		Ok(None) => {}
+		Err(failure) => s.notice = Some(format!("{}: {}", failure.title(), failure.detail())),
+	}
+	s.workspace = Workspace::Ready(ready);
+}
+
+fn live_mission(s: &mut App) {
+	let Some(ready) = read_the_installed_host_before_the_first_frame(s) else { return };
+	let board: Result<Vec<MissionOnBoard>, HostError> =
+		ready.host.invoke("mission_board", json!({}));
+	let host = ready.host.clone();
+	s.workspace = Workspace::Ready(ready);
+	s.pane = Pane::Missions;
+	let board = match board {
+		Ok(board) => board,
+		Err(failure) => {
+			s.board = Board::Failed(failure);
 			return;
 		}
 	};
-	if let Some(conversation) = ready.first_conversation_with_an_agent() {
-		let mut thread = Thread::of_conversation(conversation);
-		match whole_thread(&ready.host, &conversation.id) {
-			Ok(messages) => messages.into_iter().for_each(|message| thread.stored(message)),
-			Err(failure) => thread.failure = Some(failure),
-		}
-		thread.loaded = true;
-		s.thread = Some(thread);
+	let chosen =
+		board.iter().find(|entry| entry.mission.is_agent_running).or(board.first()).cloned();
+	s.board = Board::Read(board);
+	let Some(entry) = chosen else { return };
+	let detail: Result<MissionDetail, HostError> =
+		host.invoke("mission_detail", json!({ "missionId": entry.mission.id }));
+	s.open_mission(&entry.mission, &entry.bot);
+	if let Some(thread) = s.thread.take() {
+		s.thread = Some(loaded(&host, thread));
 	}
+	if let (Some(open), Ok(detail)) = (s.mission.as_mut(), detail) {
+		open.mission = detail.mission;
+		open.events = detail.events;
+	}
+}
+
+fn live_mission_turn(s: &mut App) {
+	let Some(ready) = read_the_installed_host_before_the_first_frame(s) else { return };
+	let board: Result<Vec<MissionOnBoard>, HostError> =
+		ready.host.invoke("mission_board", json!({}));
+	let origin = board.ok().and_then(|board| {
+		board
+			.into_iter()
+			.map(|entry| entry.mission.origin_conversation_id)
+			.find(|id| ready.conversations.iter().any(|conversation| &conversation.id == id))
+	});
+	let Some(origin) = origin else {
+		s.workspace = Workspace::Ready(ready);
+		return;
+	};
+	let conversation = ready.conversations.iter().find(|conversation| conversation.id == origin);
+	let mut thread =
+		conversation.map(|conversation| loaded(&ready.host, Thread::of_conversation(conversation)));
+	let missions: Result<ConversationMissions, HostError> =
+		ready.host.invoke("mission_list", json!({ "conversationId": origin }));
+	if let (Some(thread), Ok(missions)) = (thread.as_mut(), missions) {
+		thread.missions = missions.open.into_iter().chain(missions.done).collect();
+		thread.missions.sort_by_key(|mission| mission.opened_at);
+		if let Some(first) = thread.missions.first().map(|mission| mission.opened_at) {
+			let shown = thread.messages.partition_point(|message| message.created_at < first) + 1;
+			thread.messages.truncate(shown);
+		}
+	}
+	s.thread = thread;
 	s.workspace = Workspace::Ready(ready);
 }

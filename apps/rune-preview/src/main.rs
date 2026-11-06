@@ -12,6 +12,7 @@ mod icons;
 mod images;
 mod longest;
 mod math;
+mod mission;
 mod model;
 mod onboarding;
 mod runs;
