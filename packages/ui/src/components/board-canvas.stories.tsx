@@ -45,6 +45,7 @@ import type {
 	BoardObject,
 	BoardPaste,
 	BoardPoint,
+	BoardSize,
 	BoardView,
 	BoardViewport,
 } from "@workspace/ui/components/board-view"
@@ -615,6 +616,188 @@ export const FiveHundredObjectsDark = meta.story({
 	play: async (context) => {
 		await expectDarkSurface(context.canvasElement)
 		await FiveHundredObjects.input.play?.(context)
+	},
+})
+
+const OPENING_MARGIN = 64
+
+const stickyAt = (id: string, x: number, y: number): BoardItem => ({
+	id,
+	kind: "sticky",
+	position: { x, y },
+	size: NOTE_SIZE,
+	zOrder: 1,
+	text: id,
+})
+
+const SPREAD_BOARD: BoardView = {
+	objects: [
+		stickyAt("Far west", 4000, -3000),
+		stickyAt("Far east", 7400, -2200),
+		stickyAt("Far south", 5200, -900),
+		{
+			id: "Far link",
+			kind: "connector",
+			from: "Far west",
+			fromSide: "right",
+			to: "Far east",
+			toSide: "left",
+			routing: "straight",
+			zOrder: 0,
+			text: "",
+		},
+	],
+}
+
+const TWO_STICKIES_BOARD: BoardView = {
+	objects: [stickyAt("Left", -420, 260), stickyAt("Right", -200, 300)],
+}
+
+const innerBoxOf = (board: HTMLElement) => {
+	const rect = board.getBoundingClientRect()
+	const x = rect.x + board.clientLeft
+	const y = rect.y + board.clientTop
+	return {
+		x,
+		y,
+		right: x + board.clientWidth,
+		bottom: y + board.clientHeight,
+	}
+}
+
+const shownContentOf = (board: HTMLElement) => {
+	const rects = slotsIn(board, "board-object").map((node) =>
+		node.getBoundingClientRect(),
+	)
+	return {
+		x: Math.min(...rects.map((rect) => rect.left)),
+		y: Math.min(...rects.map((rect) => rect.top)),
+		right: Math.max(...rects.map((rect) => rect.right)),
+		bottom: Math.max(...rects.map((rect) => rect.bottom)),
+	}
+}
+
+const expectOpenedCentred = async (
+	canvasElement: HTMLElement,
+	args: BoardCanvasProps,
+	expectedZoomOf: (box: BoardSize) => number,
+) => {
+	const board = slotIn(canvasElement, "board-canvas")
+	const objectCount = args.view.objects.filter(
+		(object) => object.kind !== "connector",
+	).length
+	await waitFor(() =>
+		expect(slotsIn(board, "board-object")).toHaveLength(objectCount),
+	)
+	const zoom = expectedZoomOf({
+		width: board.clientWidth,
+		height: board.clientHeight,
+	})
+	await expect(slotIn(board, "board-zoom-level")).toHaveTextContent(
+		`${Math.round(zoom * 100)}%`,
+	)
+	await expect(args.onViewportChange).toHaveBeenCalledOnce()
+	await expect(args.onViewportChange).toHaveBeenCalledWith(
+		expect.objectContaining({ zoom }),
+	)
+
+	const box = innerBoxOf(board)
+	const content = shownContentOf(board)
+	const gaps = {
+		start: content.x - box.x,
+		end: box.right - content.right,
+		top: content.y - box.y,
+		bottom: box.bottom - content.bottom,
+	}
+	await expect(Math.abs(gaps.start - gaps.end)).toBeLessThanOrEqual(1)
+	await expect(Math.abs(gaps.top - gaps.bottom)).toBeLessThanOrEqual(1)
+	return { board, gaps }
+}
+
+const SPREAD_BOUNDS = { width: 3560, height: 2220 }
+
+export const OpensFramedOnSpreadContent = meta.story({
+	args: { view: SPREAD_BOARD, viewport: null },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A board whose three stickies and connector sit thousands of pixels from the origin, opened with no viewport placed. Check the content centred in the canvas below 100%, a 64px margin on the two edges of the axis that limits the fit, the zoom control reading that zoom, the placed viewport sent once, and no refit when a sticky then moves. Pick OpensFramedOnSpreadContentDark for the dark theme, OpensAtFullSizeOnTwoStickies for content that already fits.",
+			},
+		},
+	},
+	play: async ({ canvasElement, args }) => {
+		const { board, gaps } = await expectOpenedCentred(
+			canvasElement,
+			args,
+			(box) =>
+				Math.min(
+					(box.width - 2 * OPENING_MARGIN) / SPREAD_BOUNDS.width,
+					(box.height - 2 * OPENING_MARGIN) / SPREAD_BOUNDS.height,
+				),
+		)
+		await expect(Math.min(gaps.start, gaps.top) - OPENING_MARGIN).toBeCloseTo(
+			0,
+			0,
+		)
+
+		const level = slotIn(board, "board-zoom-level").textContent
+		await userEvent.click(objectNode(board, "Far west") as HTMLElement)
+		await userEvent.keyboard("{ArrowRight}")
+		await waitFor(() => expect(args.onIntent).toHaveBeenCalled())
+		await expect(args.onViewportChange).toHaveBeenCalledOnce()
+		await expect(slotIn(board, "board-zoom-level")).toHaveTextContent(
+			level ?? "",
+		)
+	},
+})
+
+export const OpensFramedOnSpreadContentDark = meta.story({
+	globals: { theme: "dark" },
+	args: OpensFramedOnSpreadContent.input.args,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The spread board opening framed in the dark theme. Check the #161618 surface, then the same centring, margin, zoom and single placement as OpensFramedOnSpreadContent.",
+			},
+		},
+	},
+	play: async (context) => {
+		await expectDarkSurface(context.canvasElement)
+		await OpensFramedOnSpreadContent.input.play?.(context)
+	},
+})
+
+export const OpensAtFullSizeOnTwoStickies = meta.story({
+	args: { view: TWO_STICKIES_BOARD, viewport: null },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Two small stickies away from the origin, opened with no viewport placed. Check the board opening at 100% rather than magnified, the two stickies centred in the canvas, and the placed viewport sent once. Pick OpensAtFullSizeOnTwoStickiesDark for the dark theme.",
+			},
+		},
+	},
+	play: async ({ canvasElement, args }) => {
+		await expectOpenedCentred(canvasElement, args, () => 1)
+	},
+})
+
+export const OpensAtFullSizeOnTwoStickiesDark = meta.story({
+	globals: { theme: "dark" },
+	args: OpensAtFullSizeOnTwoStickies.input.args,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The two stickies opening at 100% in the dark theme. Check the #161618 surface, then the same centring and zoom as OpensAtFullSizeOnTwoStickies.",
+			},
+		},
+	},
+	play: async (context) => {
+		await expectDarkSurface(context.canvasElement)
+		await OpensAtFullSizeOnTwoStickies.input.play?.(context)
 	},
 })
 

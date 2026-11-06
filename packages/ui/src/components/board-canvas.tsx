@@ -75,6 +75,7 @@ import {
 	isAtZoomMin,
 	isItem,
 	itemBounds,
+	openingViewportOf,
 	panBy,
 	pinchZoom,
 	zoomAround,
@@ -91,7 +92,7 @@ type BoardStatus = "loading" | "ready"
 type BoardCanvasProps = {
 	status?: BoardStatus
 	view: BoardView
-	viewport: BoardViewport
+	viewport: BoardViewport | null
 	onViewportChange: (viewport: BoardViewport) => void
 	onIntent: (intent: BoardIntent) => void
 	renderObject: (item: BoardItem) => ReactNode
@@ -127,7 +128,10 @@ const ZOOM_FRAME =
 const ZOOM_LEVEL =
 	"min-w-11 px-1.5 text-center font-medium text-xs tabular-nums"
 
+const OPENING_MARGIN = "p-16"
+
 const NO_SIZE: BoardSize = { width: 0, height: 0 }
+const UNPLACED_VIEWPORT: BoardViewport = { offset: { x: 0, y: 0 }, zoom: 1 }
 const NO_PAINT = "rgba(0, 0, 0, 0)"
 
 const pointerIn = (element: HTMLElement, event: PointerPosition) => {
@@ -226,8 +230,11 @@ const useBoardGestures = (
 
 	const pan = (delta: BoardPoint) => emit((current) => panBy(current, delta))
 
-	return { attach, canvas, pan, size, zoomTo }
+	return { attach, canvas, emit, pan, size, zoomTo }
 }
+
+const openingMarginOf = (element: HTMLElement) =>
+	Number.parseFloat(getComputedStyle(element).paddingTop) || 0
 
 type BoardDotGridProps = {
 	pitch: number
@@ -803,7 +810,7 @@ const BoardAnchorFrame = ({
 
 const ReadyBoardCanvas = ({
 	view,
-	viewport,
+	viewport: givenViewport,
 	onViewportChange,
 	onIntent,
 	renderObject,
@@ -823,7 +830,10 @@ const ReadyBoardCanvas = ({
 	className,
 }: ReadyBoardCanvasProps) => {
 	const { t } = useTranslation("common")
-	const { attach, canvas, pan, size, zoomTo } = useBoardGestures(
+	const [opening, setOpening] = useState<BoardViewport | null>(null)
+	const placed = givenViewport ?? opening
+	const viewport = placed ?? UNPLACED_VIEWPORT
+	const { attach, canvas, emit, pan, size, zoomTo } = useBoardGestures(
 		viewport,
 		onViewportChange,
 	)
@@ -840,6 +850,17 @@ const ReadyBoardCanvas = ({
 	const stopDrafting = useRef<(() => void) | null>(null)
 
 	useEffect(() => () => stopDrafting.current?.(), [])
+
+	useLayoutEffect(() => {
+		if (placed || size === NO_SIZE || !canvas.current) return
+		const fitted = openingViewportOf(
+			view.objects,
+			size,
+			openingMarginOf(canvas.current),
+		)
+		setOpening(fitted)
+		emit(() => fitted)
+	}, [placed, size, canvas, view.objects, emit])
 
 	if (shownObjects !== view.objects) {
 		setShownObjects(view.objects)
@@ -1269,7 +1290,7 @@ const ReadyBoardCanvas = ({
 	return (
 		<div
 			aria-label={t("board.canvas.label")}
-			className={cn(CANVAS_SURFACE, className)}
+			className={cn(CANVAS_SURFACE, OPENING_MARGIN, className)}
 			data-slot="board-canvas"
 			onDragEnter={dragOver}
 			onDragLeave={leaveWithDrag}
@@ -1515,7 +1536,7 @@ const BoardCanvas = ({ status = "ready", ...props }: BoardCanvasProps) =>
 	status === "loading" ? (
 		<BoardCanvasSkeleton
 			className={props.className}
-			viewport={props.viewport}
+			viewport={props.viewport ?? UNPLACED_VIEWPORT}
 		/>
 	) : (
 		<ReadyBoardCanvas {...props} />

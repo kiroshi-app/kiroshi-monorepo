@@ -12,6 +12,7 @@ import {
 	cullBoardObjects,
 	fitBoardBounds,
 	gridScreenPitch,
+	openingViewportOf,
 	panBy,
 	zoomAround,
 	zoomStepIn,
@@ -204,5 +205,42 @@ describe("fitBoardBounds", () => {
 			20,
 		)
 		expect(fitted).toEqual({ zoom: 1, offset: { x: 75.5, y: 50 } })
+	})
+})
+
+describe("openingViewportOf", () => {
+	const MARGIN = 48
+
+	it("frames content far from the origin, centred, the margin on the limiting axis", () => {
+		const objects = [
+			sticky("near", 5000, 3000),
+			sticky("far", 7900, 4900),
+			connector("link", "near", "far"),
+		]
+		const opening = openingViewportOf(objects, SCREEN, MARGIN)
+		const topLeft = toScreen(opening, { x: 5000, y: 3000 })
+		const bottomRight = toScreen(opening, { x: 8000, y: 5000 })
+
+		expect(opening.zoom).toBeCloseTo((800 - 2 * MARGIN) / 3000)
+		expect(topLeft.x).toBeCloseTo(MARGIN)
+		expect(SCREEN.width - bottomRight.x).toBeCloseTo(MARGIN)
+		expect(topLeft.y).toBeCloseTo(SCREEN.height - bottomRight.y)
+	})
+
+	it("opens content that fits at 100 percent, centred", () => {
+		const opening = openingViewportOf(
+			[sticky("a", -300, -200), sticky("b", -150, -200)],
+			SCREEN,
+			MARGIN,
+		)
+
+		expect(opening).toEqual({ zoom: 1, offset: { x: 575, y: 450 } })
+	})
+
+	it("puts the origin of an empty board at the centre, at 100 percent", () => {
+		expect(openingViewportOf([], SCREEN, MARGIN)).toEqual({
+			zoom: 1,
+			offset: { x: 400, y: 300 },
+		})
 	})
 })

@@ -315,9 +315,21 @@ const startEditing = (text: string) => {
 	return screen.getByRole("textbox", { name: common("board.object.editText") })
 }
 
+const CANVAS_SIZE = { width: 1200, height: 800 }
+const NOTES_CENTRE = { x: 250, y: 50 }
+
+const onScreen = (x: number, y: number) => ({
+	clientX: x + CANVAS_SIZE.width / 2 - NOTES_CENTRE.x,
+	clientY: y + CANVAS_SIZE.height / 2 - NOTES_CENTRE.y,
+})
+
 beforeEach(() => {
-	vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(1200)
-	vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(800)
+	vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(
+		CANVAS_SIZE.width,
+	)
+	vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(
+		CANVAS_SIZE.height,
+	)
 })
 
 afterEach(() => {
@@ -637,7 +649,7 @@ const dropFilesAt = (files: File[], at: ClientPoint) =>
 const dropUrlAt = (url: string, at: ClientPoint) =>
 	dropAt({ types: ["text/uri-list"], files: [], getData: () => url }, at)
 
-const DROP_POINT = { clientX: 300, clientY: 200 }
+const DROP_POINT = onScreen(300, 200)
 
 type WordedReason = "url.unsupportedScheme" | "url.tooLarge" | "unwritable"
 
@@ -676,8 +688,8 @@ describe("adding to a Library board", () => {
 		fireEvent.click(pickerTile("cover.png"))
 
 		expect(placementOf(imageObject())).toEqual({
-			left: "490px",
-			top: "327px",
+			left: "140px",
+			top: "-23px",
 		})
 	})
 
@@ -749,7 +761,7 @@ describe("adding to a Library board", () => {
 			expect(placed).toBeInstanceOf(HTMLElement)
 			return placed
 		})
-		expect(placementOf(image)).toEqual({ left: "490px", top: "327px" })
+		expect(placementOf(image)).toEqual({ left: "140px", top: "-23px" })
 		expect(image?.getAttribute("aria-selected")).toBe("true")
 	})
 
@@ -765,7 +777,7 @@ describe("adding to a Library board", () => {
 			new File(["text"], "Brief.pdf"),
 		]
 
-		dropFilesAt(dropped, { clientX: 300, clientY: 200 })
+		dropFilesAt(dropped, DROP_POINT)
 
 		expect(importFiles).toHaveBeenCalledWith(dropped)
 		await waitFor(() =>
@@ -868,10 +880,6 @@ describe("adding to a Library board", () => {
 		const second = render(
 			boardElement({
 				name: "Sketches.canvas",
-				summary: {
-					...SUMMARY,
-					bounds: { x: 100, y: 50, width: 500, height: 100 },
-				},
 			}),
 			{ wrapper },
 		)
@@ -888,7 +896,7 @@ describe("adding to a Library board", () => {
 		const image = secondBoard.getByRole("option", {
 			name: common("board.object.kind.image"),
 		})
-		expect(placementOf(image)).toEqual({ left: "590px", top: "377px" })
+		expect(placementOf(image)).toEqual({ left: "140px", top: "-23px" })
 		expect(
 			screen.getAllByRole("option", {
 				name: common("board.object.kind.image"),
@@ -1225,7 +1233,7 @@ const seatAt = (x: number, y: number, nodeId: string | null = null) => ({
 })
 
 const movePointer = (x: number, y: number) =>
-	fireEvent.pointerMove(boardCanvas(), { clientX: x, clientY: y })
+	fireEvent.pointerMove(boardCanvas(), onScreen(x, y))
 
 const leaveCanvas = () => fireEvent.pointerLeave(boardCanvas())
 

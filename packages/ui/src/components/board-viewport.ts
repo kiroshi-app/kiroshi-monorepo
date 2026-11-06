@@ -161,6 +161,28 @@ const fitBoardBounds = (
 	}
 }
 
+const contentBoundsOf = (objects: readonly BoardObject[]) => {
+	const itemsById = new Map(
+		objects.filter(isItem).map((item) => [item.id, item]),
+	)
+	return objects.reduce<BoardRect | null>((union, object) => {
+		const bounds = boundsOf(object, itemsById)
+		if (!bounds) return union
+		return union ? unionOf(union, bounds) : bounds
+	}, null)
+}
+
+const openingViewportOf = (
+	objects: readonly BoardObject[],
+	box: BoardSize,
+	margin: number,
+): BoardViewport => {
+	const bounds = contentBoundsOf(objects)
+	return bounds
+		? fitBoardBounds(bounds, box, margin)
+		: { zoom: 1, offset: { x: box.width / 2, y: box.height / 2 } }
+}
+
 export {
 	BOARD_CULL_MARGIN,
 	BOARD_ZOOM_MAX,
@@ -172,6 +194,7 @@ export {
 	isAtZoomMin,
 	isItem,
 	itemBounds,
+	openingViewportOf,
 	panBy,
 	pinchZoom,
 	zoomAround,
