@@ -87,7 +87,7 @@ fn announce_scoped<R: Runtime>(app: &AppHandle<R>, scoped: ScopedEvent) {
 pub(crate) fn subscribed_with_pending_questions<R: Runtime>(
 	app: &AppHandle<R>,
 ) -> (Vec<Frame>, broadcast::Receiver<Frame>) {
-	let Some(state) = app.try_state::<AgentState>() else {
+	let Some(state) = crate::events::core(app.app_handle()).try_state::<AgentState>() else {
 		return (Vec::new(), events::subscribed(app));
 	};
 	let (pending, heard) = state.live.questions_pending_at(|| events::subscribed(app));
@@ -835,7 +835,7 @@ fn stale(scope: &RuntimeScope) -> TransportError {
 #[tauri::command]
 #[specta::specta]
 pub async fn agent_models<R: Runtime>(app: AppHandle<R>) -> Vec<OfferedModel> {
-	let state = app.state::<AgentState>();
+	let state = crate::events::core(app.app_handle()).state::<AgentState>();
 	state.offered(&state.models, &held_connection(&app)).await
 }
 
@@ -843,7 +843,7 @@ pub async fn supported_effort_levels<R: Runtime>(
 	app: &AppHandle<R>,
 	model: &str,
 ) -> Option<Vec<bundles::EffortLevel>> {
-	let state = app.try_state::<AgentState>()?;
+	let state = crate::events::core(app.app_handle()).try_state::<AgentState>()?;
 	let offered = state.models.held(&held_connection(app)).await?;
 	offered
 		.into_iter()
@@ -854,7 +854,7 @@ pub async fn supported_effort_levels<R: Runtime>(
 #[tauri::command]
 #[specta::specta]
 pub async fn agent_tools<R: Runtime>(app: AppHandle<R>) -> Vec<String> {
-	let state = app.state::<AgentState>();
+	let state = crate::events::core(app.app_handle()).state::<AgentState>();
 	state.offered(&state.tools, &held_connection(&app)).await
 }
 
@@ -864,7 +864,10 @@ pub async fn agent_title<R: Runtime>(
 	app: AppHandle<R>,
 	text: String,
 ) -> Option<ConversationNaming> {
-	app.state::<AgentState>().title(&text, &held_connection(&app)).await
+	crate::events::core(app.app_handle())
+		.state::<AgentState>()
+		.title(&text, &held_connection(&app))
+		.await
 }
 
 pub(crate) fn held_connection<R: Runtime>(app: &AppHandle<R>) -> Values {
@@ -895,7 +898,11 @@ pub async fn agent_check<R: Runtime>(
 		AgentEvent::ConnectionChanged { state: ConnectionState::Checking },
 	);
 	let env_root = environment::root(&app);
-	let report = check(app.state::<AgentState>().inner(), env_root.as_deref()).await;
+	let report = check(
+		crate::events::core(app.app_handle()).state::<AgentState>().inner(),
+		env_root.as_deref(),
+	)
+	.await;
 	announce(&app, scope, AgentEvent::ConnectionChanged { state: report.connection });
 	report
 }
@@ -905,7 +912,11 @@ pub async fn agent_check<R: Runtime>(
 pub async fn agent_account<R: Runtime>(app: AppHandle<R>) -> AccountReport {
 	announce(&app, None, AgentEvent::ConnectionChanged { state: ConnectionState::Checking });
 	let env_root = environment::root(&app);
-	let read = account(app.state::<AgentState>().inner(), env_root.as_deref()).await;
+	let read = account(
+		crate::events::core(app.app_handle()).state::<AgentState>().inner(),
+		env_root.as_deref(),
+	)
+	.await;
 	announce(&app, None, AgentEvent::ConnectionChanged { state: read.report.connection });
 	read
 }
@@ -1168,13 +1179,13 @@ fn reserved_directory(app_data: PathBuf, bot_id: &str) -> PathBuf {
 #[specta::specta]
 pub async fn agent_start_or_resume_session<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, AgentState>,
 	core: State<'_, crate::core_context::Core>,
 	scope: RuntimeScope,
 	resume: Option<String>,
 	cwd: Option<String>,
 	output_schema: Option<JsonValue>,
 ) -> Result<SessionHandle, TransportError> {
+	let state = core.state::<AgentState>();
 	let database = core.state::<db::DatabaseState>();
 	let start = RunStart {
 		scope,
@@ -1370,11 +1381,12 @@ pub async fn start_with_fallback(
 pub async fn agent_submit_prompt<R: Runtime>(
 	webview: Webview<R>,
 	caller: Caller,
-	state: State<'_, AgentState>,
+	core: State<'_, crate::core_context::Core>,
 	scope: RuntimeScope,
 	text: String,
 	turn: Option<SubmittedTurn>,
 ) -> Result<(), TransportError> {
+	let state = core.state::<AgentState>();
 	let turn_id = turn.as_ref().map(|handed| handed.turn_id.clone());
 	let database = crate::events::core(webview.app_handle()).try_state::<db::DatabaseState>();
 	submit_claimed_prompt(database.as_deref(), state, scope, text, turn).await?;
@@ -1388,7 +1400,7 @@ pub async fn agent_submit_prompt<R: Runtime>(
 
 pub(crate) async fn submit_claimed_prompt(
 	database: Option<&db::DatabaseState>,
-	state: State<'_, AgentState>,
+	state: crate::core_context::Managed<'_, AgentState>,
 	scope: RuntimeScope,
 	text: String,
 	turn: Option<SubmittedTurn>,
@@ -1454,7 +1466,7 @@ async fn give_back_run(
 }
 
 pub async fn submit_prompt(
-	state: State<'_, AgentState>,
+	state: crate::core_context::Managed<'_, AgentState>,
 	scope: RuntimeScope,
 	text: String,
 	turn: Option<SubmittedTurn>,
@@ -1516,9 +1528,10 @@ pub(crate) async fn run_is_idle(state: &AgentState, scope: &RuntimeScope) -> boo
 #[specta::specta]
 pub async fn agent_cancel_turn<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, AgentState>,
+	core: State<'_, crate::core_context::Core>,
 	scope: RuntimeScope,
 ) -> Result<CancelOutcome, TransportError> {
+	let state = core.state::<AgentState>();
 	if let Some(outcome) = state.host_turns().stop(&scope).await {
 		return Ok(outcome);
 	}
@@ -1595,23 +1608,25 @@ async fn complete_unsubmitted_turns(
 #[tauri::command]
 #[specta::specta]
 pub async fn agent_respond_to_permission(
-	state: State<'_, AgentState>,
+	core: State<'_, crate::core_context::Core>,
 	scope: RuntimeScope,
 	id: String,
 	decision: PermissionDecision,
 ) -> Result<(), TransportError> {
+	let state = core.state::<AgentState>();
 	state.live.session_for(&scope)?.respond_to_permission(&id, decision).await
 }
 
 #[tauri::command]
 #[specta::specta]
 pub async fn agent_answer_question(
-	state: State<'_, AgentState>,
+	core: State<'_, crate::core_context::Core>,
 	scope: RuntimeScope,
 	id: String,
 	answers: HashMap<String, String>,
 	annotations: Option<JsonValue>,
 ) -> Result<(), TransportError> {
+	let state = core.state::<AgentState>();
 	let annotations = annotations.map(JsonValue::into);
 	state.live.session_for(&scope)?.answer_question(&id, answers, annotations).await
 }
@@ -1619,18 +1634,19 @@ pub async fn agent_answer_question(
 #[tauri::command]
 #[specta::specta]
 pub async fn agent_live_sessions(
-	state: State<'_, AgentState>,
+	core: State<'_, crate::core_context::Core>,
 ) -> Result<Vec<LiveSession>, TransportError> {
+	let state = core.state::<AgentState>();
 	Ok(state.live.report())
 }
 
 #[tauri::command]
 #[specta::specta]
 pub async fn agent_live_sessions_in_space(
-	state: State<'_, AgentState>,
 	core: State<'_, crate::core_context::Core>,
 	space_id: String,
 ) -> Result<Vec<LiveSession>, TranscriptStoreError> {
+	let state = core.state::<AgentState>();
 	let database = core.state::<db::DatabaseState>();
 	let children = ready(&database)?.space_children();
 	let mut in_the_space = Vec::new();
@@ -1646,19 +1662,20 @@ pub async fn agent_live_sessions_in_space(
 #[tauri::command]
 #[specta::specta]
 pub async fn agent_pending_questions(
-	state: State<'_, AgentState>,
+	core: State<'_, crate::core_context::Core>,
 	conversation_id: String,
 ) -> Result<Vec<ScopedEvent>, TransportError> {
+	let state = core.state::<AgentState>();
 	Ok(state.live.questions_in(&conversation_id))
 }
 
 #[tauri::command]
 #[specta::specta]
 pub async fn agent_pending_questions_in_space(
-	state: State<'_, AgentState>,
 	core: State<'_, crate::core_context::Core>,
 	space_id: String,
 ) -> Result<Vec<ScopedEvent>, TranscriptStoreError> {
+	let state = core.state::<AgentState>();
 	let database = core.state::<db::DatabaseState>();
 	let children = ready(&database)?.space_children();
 	let mut in_the_space = Vec::new();
@@ -1758,9 +1775,10 @@ async fn release_every_stored_prompt<R: Runtime>(app: &AppHandle<R>) {
 #[specta::specta]
 pub async fn agent_shutdown<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, AgentState>,
+	core: State<'_, crate::core_context::Core>,
 	scope: RuntimeScope,
 ) -> Result<(), TransportError> {
+	let state = core.state::<AgentState>();
 	let _claim = state.claim(&scope)?;
 	if state.live.is_foreign(&scope) {
 		return Err(stale(&scope));
@@ -1774,8 +1792,8 @@ pub async fn agent_shutdown<R: Runtime>(
 
 #[cfg(test)]
 pub(crate) fn a_quitting_host<R: Runtime>(app: &AppHandle<R>) {
-	app.manage(AgentState::default());
-	app.state::<AgentState>().enter_quit();
+	crate::events::core(app.app_handle()).manage(AgentState::default());
+	crate::events::core(app.app_handle()).state::<AgentState>().enter_quit();
 }
 
 #[cfg(test)]
@@ -1790,10 +1808,10 @@ pub(crate) fn a_run_held_by_the_app<R: Runtime>(
 	app: &AppHandle<R>,
 	scope: RuntimeScope,
 ) -> impl TurnSink {
-	if app.try_state::<AgentState>().is_none() {
-		app.manage(AgentState::default());
+	if crate::events::core(app.app_handle()).try_state::<AgentState>().is_none() {
+		crate::events::core(app.app_handle()).manage(AgentState::default());
 	}
-	let live = app.state::<AgentState>().live.clone();
+	let live = crate::events::core(app.app_handle()).state::<AgentState>().live.clone();
 	live.take_over(scope.clone());
 	RunSink { app: app.clone(), scope, live, records_its_own_lineage: false }
 }
@@ -1804,7 +1822,7 @@ pub(crate) fn a_session_held_by_the_app<R: Runtime>(
 	scope: &RuntimeScope,
 	session: Arc<Session>,
 ) {
-	let live = &app.state::<AgentState>().live;
+	let live = &crate::events::core(app.app_handle()).state::<AgentState>().live;
 	live.take_over(scope.clone());
 	live.install(scope, session);
 }
@@ -2919,8 +2937,18 @@ mod tests {
 			two_questions_and_one_elsewhere(app.handle());
 			let mut heard = events::subscribed(app.handle());
 
-			shutdown_session(app.handle(), &app.state::<AgentState>(), &a_scope()).await;
-			shutdown_session(app.handle(), &app.state::<AgentState>(), &a_scope()).await;
+			shutdown_session(
+				app.handle(),
+				&crate::events::core(app.app_handle()).state::<AgentState>(),
+				&a_scope(),
+			)
+			.await;
+			shutdown_session(
+				app.handle(),
+				&crate::events::core(app.app_handle()).state::<AgentState>(),
+				&a_scope(),
+			)
+			.await;
 
 			assert_eq!(everything_heard(&mut heard), vec![denied("q1"), denied("q2")]);
 			assert!(pending_in(app.handle(), "c1").await.is_empty());
@@ -2937,7 +2965,11 @@ mod tests {
 			two_questions_and_one_elsewhere(app.handle());
 			let mut heard = events::subscribed(app.handle());
 
-			end_every_session(app.handle(), &app.state::<AgentState>()).await;
+			end_every_session(
+				app.handle(),
+				&crate::events::core(app.app_handle()).state::<AgentState>(),
+			)
+			.await;
 
 			let elsewhere = ScopedEvent {
 				scope: Some(another_bots_run()),
@@ -2970,7 +3002,10 @@ mod tests {
 			two_questions_and_one_elsewhere(app.handle());
 			let mut heard = events::subscribed(app.handle());
 
-			app.state::<AgentState>().admit(app.handle(), a_scope()).await;
+			crate::events::core(app.app_handle())
+				.state::<AgentState>()
+				.admit(app.handle(), a_scope())
+				.await;
 
 			assert_eq!(everything_heard(&mut heard), vec![denied("q1"), denied("q2")]);
 			assert!(pending_in(app.handle(), "c1").await.is_empty());
@@ -3003,7 +3038,12 @@ mod tests {
 			run.emit(answered("q1"), the_turn());
 			let mut heard = events::subscribed(app.handle());
 
-			shutdown_session(app.handle(), &app.state::<AgentState>(), &a_scope()).await;
+			shutdown_session(
+				app.handle(),
+				&crate::events::core(app.app_handle()).state::<AgentState>(),
+				&a_scope(),
+			)
+			.await;
 			run.emit(turn_ended(), the_turn());
 
 			assert_eq!(everything_heard(&mut heard), vec![framed(turn_ended())]);
@@ -3016,8 +3056,11 @@ mod tests {
 			let cleared = an_app("cleared");
 			a_run_held_by_the_app(cleared.handle(), a_scope()).emit(question("q1"), the_turn());
 
-			replaced.state::<AgentState>().live.take_over(a_scope());
-			cleared.state::<AgentState>().live.clear_all();
+			crate::events::core(replaced.app_handle())
+				.state::<AgentState>()
+				.live
+				.take_over(a_scope());
+			crate::events::core(cleared.app_handle()).state::<AgentState>().live.clear_all();
 
 			for app in [&replaced, &cleared] {
 				assert!(a_late_listener(app.handle()).is_empty());
@@ -3030,7 +3073,7 @@ mod tests {
 			let app = an_app("let-go");
 			let run = a_run_held_by_the_app(app.handle(), a_scope());
 			let mut original = events::subscribed(app.handle());
-			app.state::<AgentState>().live.clear(&a_scope());
+			crate::events::core(app.app_handle()).state::<AgentState>().live.clear(&a_scope());
 
 			run.emit(question("q1"), the_turn());
 
@@ -3058,7 +3101,7 @@ mod tests {
 
 		async fn an_app_storing(name: &str, prompts: Vec<PendingPrompt>) -> AppOfItsOwn {
 			let app = an_app(name);
-			app.manage(AgentState::default());
+			crate::events::core(app.app_handle()).manage(AgentState::default());
 			crate::db::install(crate::events::core(app.handle()));
 			let database = bot_database(app.handle()).expect("the database opens");
 			database
@@ -3111,8 +3154,18 @@ mod tests {
 			assert_eq!(listed_state(&app).await, ConversationState::NeedsYou);
 			let heard = heard_states(&app);
 
-			shutdown_session(app.handle(), &app.state::<AgentState>(), &a_scope()).await;
-			shutdown_session(app.handle(), &app.state::<AgentState>(), &a_scope()).await;
+			shutdown_session(
+				app.handle(),
+				&crate::events::core(app.app_handle()).state::<AgentState>(),
+				&a_scope(),
+			)
+			.await;
+			shutdown_session(
+				app.handle(),
+				&crate::events::core(app.app_handle()).state::<AgentState>(),
+				&a_scope(),
+			)
+			.await;
 
 			assert_eq!(stored_prompts(&app).await, 0);
 			assert_eq!(listed_state(&app).await, ConversationState::Idle);
@@ -3144,11 +3197,17 @@ mod tests {
 				vec![stored("r1", "w1"), stored("r5", "w5"), stored("r9", "w9")],
 			)
 			.await;
-			app.state::<AgentState>().live.take_over(another_bot_in_the_room());
+			crate::events::core(app.app_handle())
+				.state::<AgentState>()
+				.live
+				.take_over(another_bot_in_the_room());
 			assert_eq!(listed_state(&app).await, ConversationState::NeedsYou);
 			let heard = heard_states(&app);
 
-			app.state::<AgentState>().admit(app.handle(), a_scope()).await;
+			crate::events::core(app.app_handle())
+				.state::<AgentState>()
+				.admit(app.handle(), a_scope())
+				.await;
 
 			assert_eq!(stored_sessions(&app).await, ["r9"]);
 			assert_eq!(listed_state(&app).await, ConversationState::NeedsYou);
@@ -3163,7 +3222,10 @@ mod tests {
 		async fn a_run_taken_over_releases_the_prompt_a_crashed_host_left() {
 			let app = an_app_storing("stored-orphan", vec![stored("r5", "w5")]).await;
 
-			app.state::<AgentState>().admit(app.handle(), a_scope()).await;
+			crate::events::core(app.app_handle())
+				.state::<AgentState>()
+				.admit(app.handle(), a_scope())
+				.await;
 
 			assert!(stored_sessions(&app).await.is_empty());
 			assert_eq!(listed_state(&app).await, ConversationState::Idle);
@@ -3178,9 +3240,15 @@ mod tests {
 				.await
 				.expect("the table is dropped");
 
-			app.state::<AgentState>().admit(app.handle(), a_scope()).await;
+			crate::events::core(app.app_handle())
+				.state::<AgentState>()
+				.admit(app.handle(), a_scope())
+				.await;
 
-			assert!(app.state::<AgentState>().live.holds(&a_scope()), "the run was not admitted");
+			assert!(
+				crate::events::core(app.app_handle()).state::<AgentState>().live.holds(&a_scope()),
+				"the run was not admitted"
+			);
 		}
 
 		#[tokio::test]
@@ -3188,7 +3256,11 @@ mod tests {
 			let app =
 				an_app_storing("stored-quit", vec![stored("r1", "w1"), stored("r9", "w9")]).await;
 
-			end_every_session(app.handle(), &app.state::<AgentState>()).await;
+			end_every_session(
+				app.handle(),
+				&crate::events::core(app.app_handle()).state::<AgentState>(),
+			)
+			.await;
 
 			assert_eq!(stored_prompts(&app).await, 0);
 			assert_eq!(listed_state(&app).await, ConversationState::Idle);

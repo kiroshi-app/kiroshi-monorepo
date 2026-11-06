@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use futures_util::future::join_all;
-use tauri::{AppHandle, Runtime, State};
+use tauri::{AppHandle, Runtime};
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio::time;
 
@@ -32,8 +32,8 @@ use crate::db::repositories::messages::{AwaitedRun, BotReply};
 use crate::db::repositories::runtime_context::{ParticipantKey, RuntimeSession};
 use crate::events::CONVERSATION_UPDATED;
 use crate::routines::runner::{
-	database, detail_of, ends_the_session, listen, managed, ReadFailure, RelayReader, NO_AGENT,
-	NO_DATABASE,
+	database, detail_of, ends_the_session, held, listen, managed, ReadFailure, RelayReader,
+	NO_AGENT, NO_DATABASE,
 };
 
 const STOP_ANSWER_BOUND: Duration = Duration::from_secs(30);
@@ -1121,15 +1121,17 @@ impl<R: Runtime> HostTurn<R> {
 	}
 
 	async fn shut(&self, scope: RuntimeScope) -> Result<(), TransportError> {
-		agent_shutdown(self.app.clone(), self.agent()?, scope).await
+		self.agent()?;
+		agent_shutdown(self.app.clone(), managed(&self.app, NO_AGENT).map_err(missing)?, scope)
+			.await
 	}
 
 	fn participant(&self, bot_id: &str) -> ParticipantKey {
 		ParticipantKey { conversation_id: self.conversation_id.clone(), bot_id: bot_id.to_owned() }
 	}
 
-	fn agent(&self) -> Result<State<'_, AgentState>, TransportError> {
-		managed(&self.app, NO_AGENT).map_err(missing)
+	fn agent(&self) -> Result<crate::core_context::Managed<'_, AgentState>, TransportError> {
+		held(&self.app, NO_AGENT).map_err(missing)
 	}
 
 	fn label(&self) -> String {
@@ -1523,7 +1525,7 @@ mod tests {
 	async fn a_group_turn_whose_sessions_are_gone_after_a_lag_shuts_down_every_speaker() {
 		let app = an_app_of_its_own("host-turn-reader-lag", mock_builder());
 		crate::db::install(crate::events::core(app.handle()));
-		app.manage(AgentState::default());
+		crate::events::core(app.app_handle()).manage(AgentState::default());
 		let room = a_room_running(app.handle(), &["Ada", "Grace"]).await;
 		speaking_in(app.handle(), &room, &room.bot_ids).await;
 		for bot_id in &room.bot_ids {
@@ -1538,7 +1540,10 @@ mod tests {
 			room.bot_ids.iter().map(|bot_id| scope_in(&room, bot_id)).collect();
 		speakers.sort_by(|one, other| one.bot_id.cmp(&other.bot_id));
 		for scope in &speakers {
-			app.state::<AgentState>().host_turns().note_started(scope);
+			crate::events::core(app.app_handle())
+				.state::<AgentState>()
+				.host_turns()
+				.note_started(scope);
 		}
 		let speaking = speakers.iter().map(|scope| speaking_as(scope.clone()));
 
@@ -1558,7 +1563,7 @@ mod tests {
 	async fn a_group_turn_whose_relay_closes_abandons_every_waiting_bot() {
 		let app = an_app_of_its_own("host-turn-relay-closed-waiting", mock_builder());
 		crate::db::install(crate::events::core(app.handle()));
-		app.manage(AgentState::default());
+		crate::events::core(app.app_handle()).manage(AgentState::default());
 		let room = a_room_running(app.handle(), &["Ada", "Grace"]).await;
 		let (speaker, waiter) = (room.bot_ids[0].clone(), room.bot_ids[1].clone());
 		speaking_in(app.handle(), &room, std::slice::from_ref(&speaker)).await;
@@ -1567,7 +1572,10 @@ mod tests {
 		let mut announced = events::subscribed(app.handle());
 		let (_stop, stopped) = watch::channel(false);
 		let host_turn = a_host_turn(app.handle(), &room, stopped);
-		app.state::<AgentState>().host_turns().note_started(&scope_in(&room, &speaker));
+		crate::events::core(app.app_handle())
+			.state::<AgentState>()
+			.host_turns()
+			.note_started(&scope_in(&room, &speaker));
 		let speaking = vec![speaking_as(scope_in(&room, &speaker))];
 		let waiting = vec![Summons { bot_id: waiter.clone(), prompt_id: "p1".to_owned() }];
 
@@ -1608,7 +1616,7 @@ mod tests {
 		async fn refused_as(name: &str, refusal: fn(RuntimeScope) -> Refusal) -> Refused {
 			let app = an_app_of_its_own(name, mock_builder());
 			crate::db::install(crate::events::core(app.handle()));
-			app.manage(AgentState::default());
+			crate::events::core(app.app_handle()).manage(AgentState::default());
 			let room = a_room_running(app.handle(), &["Ada"]).await;
 			let ada = scope_in(&room, &room.bot_ids[0]);
 			let mut announced = events::subscribed(app.handle());
@@ -1874,9 +1882,7 @@ mod tests {
 	}
 
 	async fn stopped(app: &AppHandle<MockRuntime>, scope: RuntimeScope) -> CancelOutcome {
-		agent_cancel_turn(app.clone(), app.state::<AgentState>(), scope)
-			.await
-			.expect("the stop answers")
+		agent_cancel_turn(app.clone(), app.state(), scope).await.expect("the stop answers")
 	}
 
 	fn unavailable_store(bot_id: &str) -> CancelFailure {
@@ -1892,7 +1898,7 @@ mod tests {
 	async fn a_stop_with_no_live_session_closes_the_running_run_it_finds_and_says_cancelled() {
 		let app = an_app_of_its_own("cancel-stored-run", mock_builder());
 		crate::db::install(crate::events::core(app.handle()));
-		app.manage(AgentState::default());
+		crate::events::core(app.app_handle()).manage(AgentState::default());
 		let room = a_room_running(app.handle(), &["Ada"]).await;
 		let ada = room.bot_ids[0].clone();
 		speaking_in(app.handle(), &room, std::slice::from_ref(&ada)).await;
@@ -1918,7 +1924,7 @@ mod tests {
 	async fn a_stop_with_no_live_session_and_no_open_run_has_nothing_to_cancel() {
 		let app = an_app_of_its_own("cancel-nothing", mock_builder());
 		crate::db::install(crate::events::core(app.handle()));
-		app.manage(AgentState::default());
+		crate::events::core(app.app_handle()).manage(AgentState::default());
 		let room = a_room_running(app.handle(), &["Ada"]).await;
 		let mut announced = events::subscribed(app.handle());
 
@@ -1931,7 +1937,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_stop_whose_stored_run_cannot_be_closed_answers_failed_with_the_store_error() {
 		let app = an_app_of_its_own("cancel-store-down", mock_builder());
-		app.manage(AgentState::default());
+		crate::events::core(app.app_handle()).manage(AgentState::default());
 		let scope = RuntimeScope {
 			conversation_id: "c1".to_owned(),
 			bot_id: "b1".to_owned(),
@@ -1948,7 +1954,11 @@ mod tests {
 		app: &AppHandle<MockRuntime>,
 		room: &Room,
 	) -> (tauri::async_runtime::JoinHandle<()>, mpsc::UnboundedSender<ScopedEvent>) {
-		let held = app.state::<AgentState>().host_turns().hold(&room.id, "t1").expect("held");
+		let held = crate::events::core(app.app_handle())
+			.state::<AgentState>()
+			.host_turns()
+			.hold(&room.id, "t1")
+			.expect("held");
 		let host_turn = a_host_turn(app, room, held.stopped.clone());
 		let speaking = room.bot_ids.iter().map(|bot_id| speaking_as(scope_in(room, bot_id)));
 		let speaking: Vec<Speaker> = speaking.collect();
@@ -1964,7 +1974,7 @@ mod tests {
 	async fn a_group_stop_answers_once_every_speaking_companion_cancel_has_settled() {
 		let app = an_app_of_its_own("cancel-group-settled", mock_builder());
 		crate::db::install(crate::events::core(app.handle()));
-		app.manage(AgentState::default());
+		crate::events::core(app.app_handle()).manage(AgentState::default());
 		let room = a_room_running(app.handle(), &["Ada", "Grace"]).await;
 		speaking_in(app.handle(), &room, &room.bot_ids).await;
 		let (driving, _events) = a_driven_turn(app.handle(), &room);
@@ -1981,7 +1991,7 @@ mod tests {
 	async fn a_group_stop_ends_a_speaker_that_holds_nothing_left_to_cancel() {
 		let app = an_app_of_its_own("cancel-group-idle-speaker", mock_builder());
 		crate::db::install(crate::events::core(app.handle()));
-		app.manage(AgentState::default());
+		crate::events::core(app.app_handle()).manage(AgentState::default());
 		let room = a_room_running(app.handle(), &["Ada"]).await;
 		let ada = scope_in(&room, &room.bot_ids[0]);
 		let (driving, _events) = a_driven_turn(app.handle(), &room);
@@ -2007,7 +2017,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_group_stop_names_every_companion_whose_cancel_failed() {
 		let app = an_app_of_its_own("cancel-group-failed", mock_builder());
-		app.manage(AgentState::default());
+		crate::events::core(app.app_handle()).manage(AgentState::default());
 		let room =
 			Room { id: "c1".to_owned(), bot_ids: vec!["b-ada".to_owned(), "b-grace".to_owned()] };
 		let (driving, _events) = a_driven_turn(app.handle(), &room);
@@ -2066,7 +2076,7 @@ mod tests {
 	async fn a_stop_pending_when_the_relay_is_lost_answers_cancelled_once_the_runs_are_ended() {
 		let app = an_app_of_its_own("cancel-relay-lost", mock_builder());
 		crate::db::install(crate::events::core(app.handle()));
-		app.manage(AgentState::default());
+		crate::events::core(app.app_handle()).manage(AgentState::default());
 		let room = a_room_running(app.handle(), &["Ada"]).await;
 		speaking_in(app.handle(), &room, &room.bot_ids).await;
 		let turns = HostTurns::default();
@@ -2170,7 +2180,7 @@ mod tests {
 		async fn a_relay_closed_under_a_queued_turn_withdraws_it_and_fails_it_to_the_member() {
 			let app = an_app_of_its_own("host-turn-closed-queued", mock_builder());
 			crate::db::install(crate::events::core(app.handle()));
-			app.manage(AgentState::default());
+			crate::events::core(app.app_handle()).manage(AgentState::default());
 			let room = a_room_running(app.handle(), &["Ada"]).await;
 			let ada = scope_in(&room, &room.bot_ids[0]);
 			an_awaited_run(app.handle(), &room, &ada.bot_id).await;
@@ -2206,12 +2216,15 @@ mod tests {
 		async fn a_queued_turn_lost_from_its_session_during_a_lag_is_rejected_and_not_released() {
 			let app = an_app_of_its_own("host-turn-lost-queue", mock_builder());
 			crate::db::install(crate::events::core(app.handle()));
-			app.manage(AgentState::default());
+			crate::events::core(app.app_handle()).manage(AgentState::default());
 			let room = a_room_running(app.handle(), &["Ada"]).await;
 			let ada = scope_in(&room, &room.bot_ids[0]);
 			an_awaited_run(app.handle(), &room, &ada.bot_id).await;
 			let held = a_session_held_for(app.handle(), &ada).await;
-			app.state::<AgentState>().host_turns().note_started(&ada);
+			crate::events::core(app.app_handle())
+				.state::<AgentState>()
+				.host_turns()
+				.note_started(&ada);
 			let mut announced = events::subscribed(app.handle());
 			let (_stop, stopped) = watch::channel(false);
 			let host_turn = a_host_turn(app.handle(), &room, stopped);
@@ -2231,7 +2244,10 @@ mod tests {
 				"the lost turn was released"
 			);
 			assert!(
-				app.state::<AgentState>().host_turns().has_started(&ada),
+				crate::events::core(app.app_handle())
+					.state::<AgentState>()
+					.host_turns()
+					.has_started(&ada),
 				"the run was released"
 			);
 			assert!(held.session.is_idle().await);
@@ -2241,13 +2257,16 @@ mod tests {
 		async fn a_queued_turn_that_ended_unheard_during_a_lag_is_released_without_a_failure() {
 			let app = an_app_of_its_own("host-turn-ended-unheard", mock_builder());
 			crate::db::install(crate::events::core(app.handle()));
-			app.manage(AgentState::default());
+			crate::events::core(app.app_handle()).manage(AgentState::default());
 			let room = a_room_running(app.handle(), &["Ada"]).await;
 			let ada = scope_in(&room, &room.bot_ids[0]);
 			let messages = database(app.handle()).expect("the database opens").messages();
 			messages.start_turn(turn_in(&room)).await.expect("the turn opens");
 			let _held = a_session_held_for(app.handle(), &ada).await;
-			app.state::<AgentState>().host_turns().note_started(&ada);
+			crate::events::core(app.app_handle())
+				.state::<AgentState>()
+				.host_turns()
+				.note_started(&ada);
 			let mut announced = events::subscribed(app.handle());
 			let (_stop, stopped) = watch::channel(false);
 			let host_turn = a_host_turn(app.handle(), &room, stopped);
@@ -2284,7 +2303,7 @@ mod tests {
 			capturing();
 			let app = an_app_of_its_own("host-turn-ended-in-line", mock_builder());
 			crate::db::install(crate::events::core(app.handle()));
-			app.manage(AgentState::default());
+			crate::events::core(app.app_handle()).manage(AgentState::default());
 			let room = a_room_running(app.handle(), &["Ada"]).await;
 			let ada = scope_in(&room, &room.bot_ids[0]);
 			an_awaited_run(app.handle(), &room, &ada.bot_id).await;
@@ -2292,7 +2311,11 @@ mod tests {
 			let claimed = messages.claim_awaited_run("t1".to_owned(), ada.bot_id.clone()).await;
 			assert!(claimed.expect("the claim is written"), "the host did not claim the run");
 			let mut announced = events::subscribed(app.handle());
-			let held = app.state::<AgentState>().host_turns().hold(&room.id, "t1").expect("held");
+			let held = crate::events::core(app.app_handle())
+				.state::<AgentState>()
+				.host_turns()
+				.hold(&room.id, "t1")
+				.expect("held");
 			let host_turn = a_host_turn(app.handle(), &room, held.stopped.clone());
 			let (heard, mut reading) =
 				heard_in_turn(&host_turn, &ada, vec![ended_as(TurnOutcome::Failed)]);
@@ -2320,7 +2343,7 @@ mod tests {
 			capturing();
 			let app = an_app_of_its_own("scenario-same-room", mock_builder());
 			crate::db::install(crate::events::core(app.handle()));
-			app.manage(AgentState::default());
+			crate::events::core(app.app_handle()).manage(AgentState::default());
 			let room = a_room_running(app.handle(), &["Ada", "Grace"]).await;
 			let grace = scope_in(&room, &room.bot_ids[1]);
 			speaking_in(app.handle(), &room, &room.bot_ids[..1]).await;
@@ -2328,7 +2351,11 @@ mod tests {
 			let busy = a_session_held_for(app.handle(), &grace).await;
 			busy.session.submit("an earlier turn", Some(submitted("t0", "h1"))).await.expect("t0");
 			received_from_ada(&room);
-			let held = app.state::<AgentState>().host_turns().hold(&room.id, "t1").expect("held");
+			let held = crate::events::core(app.app_handle())
+				.state::<AgentState>()
+				.host_turns()
+				.hold(&room.id, "t1")
+				.expect("held");
 			let host_turn = a_host_turn(app.handle(), &room, held.stopped.clone());
 			let handed = Summons {
 				bot_id: grace.bot_id.clone(),
@@ -2355,7 +2382,7 @@ mod tests {
 			capturing();
 			let app = an_app_of_its_own("host-turn-handed", mock_builder());
 			crate::db::install(crate::events::core(app.handle()));
-			app.manage(AgentState::default());
+			crate::events::core(app.app_handle()).manage(AgentState::default());
 			let room = a_room_running(app.handle(), &["Ada", "Grace"]).await;
 			let grace = scope_in(&room, &room.bot_ids[1]);
 			let _idle = a_session_held_for(app.handle(), &grace).await;
@@ -2368,9 +2395,14 @@ mod tests {
 			};
 			let database = database(app.handle()).expect("the database opens");
 
-			run_handed_turn(app.handle(), database, &app.state::<AgentState>(), handed)
-				.await
-				.expect("the handed turn runs");
+			run_handed_turn(
+				app.handle(),
+				database,
+				&crate::events::core(app.app_handle()).state::<AgentState>(),
+				handed,
+			)
+			.await
+			.expect("the handed turn runs");
 
 			let query =
 				MessagePageQuery { conversation_id: room.id.clone(), before_seq: None, limit: 10 };
@@ -2422,7 +2454,7 @@ done
 					self.app.handle()
 				}
 
-				fn windows(&self) -> State<'_, TurnWindows> {
+				fn windows(&self) -> tauri::State<'_, TurnWindows> {
 					self.app.state::<TurnWindows>()
 				}
 
@@ -2431,7 +2463,7 @@ done
 				}
 
 				async fn drive_from(&self, window: &str) {
-					let agent = self.app.state::<AgentState>();
+					let agent = crate::events::core(self.app.app_handle()).state::<AgentState>();
 					serve_on_driving(self.handle(), &self.windows(), &agent, window)
 						.await
 						.expect("the awaited runs are served");
@@ -2444,7 +2476,7 @@ done
 					};
 					let database =
 						crate::events::core(self.app.app_handle()).state::<db::DatabaseState>();
-					let agent = self.app.state::<AgentState>();
+					let agent = crate::events::core(self.app.app_handle()).state::<AgentState>();
 					let text = "your turn".to_owned();
 					submit_claimed_prompt(Some(&database), agent, self.grace(), text, Some(turn))
 						.await
@@ -2546,7 +2578,7 @@ done
 			async fn ada_ran_t1_from_the_main_window(name: &str) -> Served {
 				let app = an_app_of_its_own(name, mock_builder());
 				crate::db::install(crate::events::core(app.handle()));
-				app.manage(AgentState::default());
+				crate::events::core(app.app_handle()).manage(AgentState::default());
 				crate::events::core(app.app_handle()).manage(TurnRunDeadlines::default());
 				app.manage(TurnWindows::default());
 				let room = a_room_running(app.handle(), &["Ada", "Grace"]).await;
@@ -2797,7 +2829,7 @@ done
 				served.drive_from(MAIN).await;
 
 				assert_eq!(served.settled().await, 0, "a started run was started again");
-				let agent = served.app.state::<AgentState>();
+				let agent = crate::events::core(served.app.app_handle()).state::<AgentState>();
 				assert!(
 					agent.host_turns().hold(&served.room.id, "t1").is_ok(),
 					"the refused claim kept the turn held"

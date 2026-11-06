@@ -352,7 +352,7 @@ impl Host {
 		context.config_mut().identifier =
 			format!("com.kiroshi.host-turns-{name}-{}", std::process::id());
 		let app = mock_builder()
-			.manage(AgentState::default())
+			.plugin(kiroshi_app::events::in_core(AgentState::default()))
 			.manage(TurnWindows::default())
 			.invoke_handler(invoke_handler())
 			.build(context)
@@ -448,7 +448,7 @@ impl Host {
 
 	async fn session_gone_while_lagging(&self, scope: &RuntimeScope) {
 		let stall = Stall::every_worker();
-		let state = self.app.state::<AgentState>();
+		let state = kiroshi_app::events::core(self.app.app_handle()).state::<AgentState>();
 		let mut shutting = std::pin::pin!(shutdown_session(self.app.handle(), &state, scope));
 		tokio::select! {
 			biased;
@@ -599,7 +599,6 @@ impl Host {
 		agent_start_or_resume_session(
 			self.app.handle().clone(),
 			self.app.state(),
-			self.app.state(),
 			scope.clone(),
 			None,
 			None,
@@ -634,9 +633,14 @@ impl Host {
 		.await
 		.expect("the host message is stored");
 		let turn = SubmittedTurn { turn_id: turn_id.to_owned(), prompt_id: id.to_owned() };
-		submit_prompt(self.app.state(), scope.clone(), content.to_owned(), Some(turn))
-			.await
-			.expect("the host prompt is submitted");
+		submit_prompt(
+			kiroshi_app::events::core(self.app.handle()).state(),
+			scope.clone(),
+			content.to_owned(),
+			Some(turn),
+		)
+		.await
+		.expect("the host prompt is submitted");
 	}
 
 	async fn allow_write(&mut self, bot_id: &str, nth: usize) {
@@ -732,7 +736,11 @@ impl Host {
 	}
 
 	async fn quit(self) {
-		terminate_session(self.app.handle(), &self.app.state::<AgentState>()).await;
+		terminate_session(
+			self.app.handle(),
+			&kiroshi_app::events::core(self.app.app_handle()).state::<AgentState>(),
+		)
+		.await;
 		kiroshi_app::events::core(self.app.app_handle()).state::<Webhook>().stop();
 		if let Ok(dir) = self.app.path().app_data_dir() {
 			if let Err(failure) = std::fs::remove_dir_all(&dir) {
@@ -1020,12 +1028,8 @@ fn a_stop_after_a_handover_cancels_the_companion_handed_the_work_and_closes_the_
 		let heard_before_stop = host.frames.len();
 		let handed_over: RuntimeScope =
 			serde_json::from_value(host.scope_of(ADA)).expect("a runtime scope");
-		let outcome = agent_cancel_turn(
-			host.app.handle().clone(),
-			host.app.state::<AgentState>(),
-			handed_over,
-		)
-		.await;
+		let outcome =
+			agent_cancel_turn(host.app.handle().clone(), host.app.state(), handed_over).await;
 
 		assert_eq!(outcome, Ok(CancelOutcome::Cancelled));
 
@@ -1082,7 +1086,12 @@ fn a_speaker_whose_session_shuts_down_mid_turn_releases_the_turn_for_the_next_se
 		host.speaking(ADA).await;
 		let held: RuntimeScope =
 			serde_json::from_value(host.scope_of(ADA)).expect("a runtime scope");
-		shutdown_session(host.app.handle(), &host.app.state::<AgentState>(), &held).await;
+		shutdown_session(
+			host.app.handle(),
+			&kiroshi_app::events::core(host.app.app_handle()).state::<AgentState>(),
+			&held,
+		)
+		.await;
 		host.turn_ended_for(ADA).await;
 
 		let ada_ended: Vec<Value> = host
@@ -1311,9 +1320,7 @@ fn a_queued_member_turn_withdrawn_by_a_stop_leaves_its_run_cancelled_and_not_awa
 		host.heard_until(|frames| !asked_to_write(frames, ADA).is_empty()).await;
 		host.send_turn(sent("p1", "t1", "member second"), &[ADA]).await;
 
-		let outcome =
-			agent_cancel_turn(host.app.handle().clone(), host.app.state::<AgentState>(), held)
-				.await;
+		let outcome = agent_cancel_turn(host.app.handle().clone(), host.app.state(), held).await;
 
 		assert_eq!(outcome, Ok(CancelOutcome::Cancelled));
 		assert_eq!(host.runs_of("t1").await, 0, "the withdrawn run was left awaited");

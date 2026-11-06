@@ -18,7 +18,9 @@ const OFFERED: &str = "sonnet=low+high,haiku";
 fn host() -> AppOfItsOwn {
 	let app = an_app_of_its_own(
 		"companion-effort",
-		mock_builder().manage(AgentState::default()).invoke_handler(invoke_handler()),
+		mock_builder()
+			.plugin(kiroshi_app::events::in_core(AgentState::default()))
+			.invoke_handler(invoke_handler()),
 	);
 	kiroshi_app::db::install(kiroshi_app::events::core(app.handle()));
 	app
@@ -130,7 +132,7 @@ fn the_agent_file_carries_only_an_effort_the_catalogue_offers_for_the_model() {
 
 	tauri::async_runtime::block_on(terminate_session(
 		app.handle(),
-		app.state::<AgentState>().inner(),
+		kiroshi_app::events::core(app.app_handle()).state::<AgentState>().inner(),
 	));
 	std::env::remove_var("FAKE_AGENT_MODELS");
 	std::env::remove_var(SIDECAR_OVERRIDE_ENV);

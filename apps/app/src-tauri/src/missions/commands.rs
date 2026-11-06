@@ -105,7 +105,7 @@ pub(crate) fn present<R: Runtime>(
 	bot_id: &str,
 	stored: MissionPresence,
 ) -> MissionPresence {
-	let Some(agent) = app.try_state::<AgentState>() else {
+	let Some(agent) = crate::events::core(app.app_handle()).try_state::<AgentState>() else {
 		return stored;
 	};
 	let thread = agent.thread_signs(thread_conversation_id);
@@ -494,7 +494,7 @@ async fn handed_over<R: Runtime>(
 	database: &db::Database,
 	handed: HandedTurn,
 ) -> Result<(), MissionError> {
-	let Some(agent) = app.try_state::<AgentState>() else {
+	let Some(agent) = crate::events::core(app.app_handle()).try_state::<AgentState>() else {
 		return Err(MissionError::Undeliverable { detail: NO_AGENT.to_owned() });
 	};
 	Ok(run_handed_turn(app, database, &agent, handed).await?)

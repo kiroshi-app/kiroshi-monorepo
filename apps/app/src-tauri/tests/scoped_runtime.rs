@@ -50,7 +50,9 @@ struct Harness {
 fn launch() -> Harness {
 	let app = an_app_of_its_own(
 		"scoped-runtime",
-		mock_builder().manage(AgentState::default()).invoke_handler(invoke_handler()),
+		mock_builder()
+			.plugin(kiroshi_app::events::in_core(AgentState::default()))
+			.invoke_handler(invoke_handler()),
 	);
 	kiroshi_app::db::install(kiroshi_app::events::core(app.handle()));
 	bundled_bots(&app, &["default", "second"]);

@@ -459,7 +459,7 @@ mod tests {
 	async fn a_host(name: &str) -> AppOfItsOwn {
 		let app = an_app_of_its_own(&format!("mission-host-{name}"), mock_builder());
 		crate::db::install(crate::events::core(app.handle()));
-		app.manage(crate::agent::AgentState::default());
+		crate::events::core(app.app_handle()).manage(crate::agent::AgentState::default());
 		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 			.expect("the database opens")
 			.call_mut(|connection| Ok(connection.execute_batch(A_SPACE)?))

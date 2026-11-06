@@ -129,7 +129,7 @@ async fn settlement<R: Runtime>(
 	app: &AppHandle<R>,
 	request: &AuthorizeRequest,
 ) -> Result<Authorized, Refused> {
-	let sidecar = app
+	let sidecar = crate::events::core(app.app_handle())
 		.state::<AgentState>()
 		.sidecar()
 		.await
@@ -261,7 +261,11 @@ pub async fn mcp_oauth_cancel<R: Runtime>(app: AppHandle<R>) -> Result<(), Oauth
 	if !crate::events::core(app.app_handle()).state::<McpOauthState>().is_running() {
 		return Ok(());
 	}
-	Ok(app.state::<AgentState>().sidecar().await?.cancel_oauth()?)
+	Ok(crate::events::core(app.app_handle())
+		.state::<AgentState>()
+		.sidecar()
+		.await?
+		.cancel_oauth()?)
 }
 
 #[tauri::command]
@@ -351,7 +355,9 @@ pub(super) async fn refreshed<R: Runtime>(
 	app: &AppHandle<R>,
 	request: RefreshRequest,
 ) -> Result<Authorized, TransportError> {
-	let agent = app.try_state::<AgentState>().ok_or(TransportError::NotStarted)?;
+	let agent = crate::events::core(app.app_handle())
+		.try_state::<AgentState>()
+		.ok_or(TransportError::NotStarted)?;
 	agent.sidecar().await?.refresh_oauth(&request).await
 }
 
@@ -476,7 +482,7 @@ async fn revoked<R: Runtime>(app: &AppHandle<R>, url: &str, held: &Values) -> Di
 		client_id: held.get(OAUTH_CLIENT_ID).cloned(),
 		client_secret: held.get(OAUTH_CLIENT_SECRET).cloned(),
 	};
-	match app.state::<AgentState>().sidecar().await {
+	match crate::events::core(app.app_handle()).state::<AgentState>().sidecar().await {
 		Ok(sidecar) => match sidecar.revoke_oauth(&request).await {
 			Ok(answer) => Disconnected { revoked: answer.revoked, detail: answer.detail },
 			Err(error) => Disconnected { revoked: false, detail: Some(format!("{error:?}")) },

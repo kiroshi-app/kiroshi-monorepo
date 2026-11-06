@@ -4087,10 +4087,9 @@ fn the_live_sessions_in_a_space_hold_only_the_sessions_of_its_conversations() {
 		commands::a_run_held_by_the_app(app, a_held_scope_in("c-theirs", "b-theirs"));
 		commands::a_run_held_by_the_app(app, a_held_scope_in("c-shared", "b-shared"));
 
-		let listed =
-			commands::agent_live_sessions_in_space(app.state(), app.state(), PERSONAL.to_owned())
-				.await
-				.expect("the sessions read");
+		let listed = commands::agent_live_sessions_in_space(app.state(), PERSONAL.to_owned())
+			.await
+			.expect("the sessions read");
 
 		let conversations: Vec<&str> =
 			listed.iter().map(|session| session.conversation_id.as_str()).collect();
@@ -4134,7 +4133,7 @@ async fn pending_in_the_space(
 	app: &tauri::AppHandle<MockRuntime>,
 	space_id: &str,
 ) -> Vec<agent::ScopedEvent> {
-	commands::agent_pending_questions_in_space(app.state(), app.state(), space_id.to_owned())
+	commands::agent_pending_questions_in_space(app.state(), space_id.to_owned())
 		.await
 		.expect("the questions read")
 }
@@ -4203,7 +4202,9 @@ fn the_pending_questions_in_a_space_leave_out_every_question_settled_or_let_go()
 			match settled {
 				"answered" => run.emit(its_answer(settled), a_turn_in("c-theirs")),
 				"cancelled" => run.emit(cancelled.clone(), a_turn_in("c-theirs")),
-				"shut down" => commands::shutdown_session(app, &app.state(), &scope).await,
+				"shut down" => {
+					commands::shutdown_session(app, &crate::events::core(app).state(), &scope).await
+				}
 				_ => {
 					commands::a_run_held_by_the_app(app, scope.clone());
 				}
@@ -4259,7 +4260,7 @@ fn a_relay_guest_hears_a_pending_question_settled_when_the_host_shuts_its_sessio
 		commands::a_run_held_by_the_app(&app, scope.clone())
 			.emit(a_question("q-mine"), a_turn_in("c-mine"));
 
-		commands::shutdown_session(&app, &app.state(), &scope).await;
+		commands::shutdown_session(&app, &crate::events::core(&app).state(), &scope).await;
 		let heard = guest.events_until_the_marker().await;
 
 		let denied = agent::AgentEvent::PermissionResolved {

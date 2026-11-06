@@ -125,7 +125,10 @@ fn booted(name: &str) -> AppOfItsOwn {
 
 fn booted_with(name: &str, agent: AgentState) -> AppOfItsOwn {
 	std::env::set_var(SIDECAR_OVERRIDE_ENV, FAKE_SIDECAR);
-	let app = an_app_of_its_own(&format!("routine-runs-{name}"), mock_builder().manage(agent));
+	let app = an_app_of_its_own(
+		&format!("routine-runs-{name}"),
+		mock_builder().plugin(kiroshi_app::events::in_core(agent)),
+	);
 	kiroshi_app::db::install(kiroshi_app::events::core(app.handle()));
 	bundled_bots(&app, &["default"]);
 	app
@@ -328,7 +331,10 @@ impl Host {
 	}
 
 	fn quit(self) {
-		block_on(terminate_session(self.app.handle(), &self.app.state::<AgentState>()));
+		block_on(terminate_session(
+			self.app.handle(),
+			&kiroshi_app::events::core(self.app.app_handle()).state::<AgentState>(),
+		));
 	}
 }
 

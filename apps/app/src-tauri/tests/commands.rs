@@ -31,7 +31,9 @@ const QUIT_HELD_OPEN: Duration = Duration::from_secs(3600);
 fn app() -> AppOfItsOwn {
 	let app = an_app_of_its_own(
 		"commands",
-		mock_builder().manage(AgentState::default()).invoke_handler(invoke_handler()),
+		mock_builder()
+			.plugin(kiroshi_app::events::in_core(AgentState::default()))
+			.invoke_handler(invoke_handler()),
 	);
 	kiroshi_app::db::install(kiroshi_app::events::core(app.handle()));
 	bundled_bots(&app, &["default", "other"]);
@@ -152,7 +154,6 @@ fn shutting_down_a_session_never_queues_behind_the_quit() {
 	runtime.block_on(async {
 		agent_start_or_resume_session(
 			app.handle().clone(),
-			app.state::<AgentState>(),
 			app.state::<kiroshi_app::core_context::Core>(),
 			a_scope_value(),
 			None,
@@ -162,7 +163,7 @@ fn shutting_down_a_session_never_queues_behind_the_quit() {
 		.await
 		.expect("session starts");
 
-		let state = app.state::<AgentState>();
+		let state = kiroshi_app::events::core(app.app_handle()).state::<AgentState>();
 		let sidecar = state.sidecar().await.expect("the sidecar runs");
 		sidecar.set_terminate_grace(QUIT_HELD_OPEN);
 		tokio::join!(

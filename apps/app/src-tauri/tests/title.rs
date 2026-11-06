@@ -40,7 +40,9 @@ const ICON_ENV: &str = "FAKE_AGENT_TITLE_ICON";
 fn an_app_naming(name: &str) -> common::AppOfItsOwn {
 	an_app_of_its_own(
 		name,
-		mock_builder().manage(AgentState::default()).invoke_handler(invoke_handler()),
+		mock_builder()
+			.plugin(kiroshi_app::events::in_core(AgentState::default()))
+			.invoke_handler(invoke_handler()),
 	)
 }
 
@@ -72,7 +74,7 @@ fn a_naming_crosses_without_a_session_and_nothing_crosses_when_the_runtime_answe
 
 	tauri::async_runtime::block_on(terminate_session(
 		app.handle(),
-		app.state::<AgentState>().inner(),
+		kiroshi_app::events::core(app.app_handle()).state::<AgentState>().inner(),
 	));
 
 	std::env::set_var(ICON_ENV, "Rocket");
@@ -87,7 +89,7 @@ fn a_naming_crosses_without_a_session_and_nothing_crosses_when_the_runtime_answe
 
 	tauri::async_runtime::block_on(terminate_session(
 		iconed.handle(),
-		iconed.state::<AgentState>().inner(),
+		kiroshi_app::events::core(iconed.app_handle()).state::<AgentState>().inner(),
 	));
 	std::env::remove_var(ICON_ENV);
 	std::env::remove_var(SIDECAR_OVERRIDE_ENV);

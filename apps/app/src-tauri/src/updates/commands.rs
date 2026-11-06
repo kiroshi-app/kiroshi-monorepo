@@ -36,7 +36,8 @@ pub async fn release_notes<R: Runtime>(
 
 #[tauri::command]
 #[specta::specta]
-pub fn running_companions(agent: State<'_, AgentState>) -> usize {
+pub fn running_companions(core: State<'_, crate::core_context::Core>) -> usize {
+	let agent = core.state::<AgentState>();
 	agent.live_session_count()
 }
 

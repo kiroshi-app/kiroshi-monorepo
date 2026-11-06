@@ -367,10 +367,10 @@ async fn started<R: Runtime>(
 	scope: &RuntimeScope,
 	requested: &RunRequested,
 ) -> Result<(), String> {
+	held::<R, AgentState>(app, NO_AGENT)?;
 	agent_start_or_resume_session(
 		app.clone(),
-		managed(app, NO_AGENT)?,
-		managed(app, NO_DATABASE)?,
+		managed::<R, crate::core_context::Core>(app, NO_DATABASE)?,
 		scope.clone(),
 		None,
 		None,
@@ -378,7 +378,7 @@ async fn started<R: Runtime>(
 	)
 	.await
 	.map_err(|error| detail_of(&error))?;
-	submit_prompt(managed(app, NO_AGENT)?, scope.clone(), run_prompt_for(requested), None)
+	submit_prompt(held(app, NO_AGENT)?, scope.clone(), run_prompt_for(requested), None)
 		.await
 		.map_err(|error| detail_of(&error))
 }
@@ -391,7 +391,7 @@ async fn refused<R: Runtime>(app: &AppHandle<R>, scope: &RuntimeScope, reason: &
 }
 
 async fn cancelled<R: Runtime>(app: &AppHandle<R>, scope: &RuntimeScope) -> Result<(), String> {
-	match cancel_session_turn(app, &*managed::<R, AgentState>(app, NO_AGENT)?, scope).await {
+	match cancel_session_turn(app, &*held::<R, AgentState>(app, NO_AGENT)?, scope).await {
 		CancelOutcome::Failed { failures } => Err(detail_of(&failures)),
 		CancelOutcome::Cancelled | CancelOutcome::NothingToCancel => Ok(()),
 	}
@@ -404,7 +404,8 @@ async fn shut_down<R: Runtime>(app: &AppHandle<R>, run_id: &str, scope: RuntimeS
 }
 
 async fn shut<R: Runtime>(app: &AppHandle<R>, scope: RuntimeScope) -> Result<(), String> {
-	agent_shutdown(app.clone(), managed(app, NO_AGENT)?, scope)
+	held::<R, AgentState>(app, NO_AGENT)?;
+	agent_shutdown(app.clone(), managed::<R, crate::core_context::Core>(app, NO_AGENT)?, scope)
 		.await
 		.map_err(|error| detail_of(&error))
 }
@@ -578,6 +579,13 @@ pub(crate) fn managed<'a, R: Runtime, T: Send + Sync + 'static>(
 	missing: &str,
 ) -> Result<State<'a, T>, String> {
 	app.try_state::<T>().ok_or_else(|| missing.to_owned())
+}
+
+pub(crate) fn held<'a, R: Runtime, T: Send + Sync + 'static>(
+	app: &'a AppHandle<R>,
+	missing: &str,
+) -> Result<crate::core_context::Managed<'a, T>, String> {
+	crate::events::core(app).try_state::<T>().ok_or_else(|| missing.to_owned())
 }
 
 pub(crate) fn database<R: Runtime>(

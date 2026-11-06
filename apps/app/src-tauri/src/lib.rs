@@ -86,7 +86,7 @@ pub fn run() {
 		.plugin(tauri_plugin_os::init())
 		.plugin(tauri_plugin_dialog::init())
 		.plugin(tauri_plugin_clipboard_manager::init())
-		.manage(AgentState::default())
+		.plugin(crate::events::in_core(AgentState::default()))
 		.plugin(crate::events::in_core(companions::launch::LaunchOutcomeState::default()))
 		.plugin(crate::events::in_core(agent::sign_in::SignInState::default()))
 		.plugin(crate::events::in_core(mcp_oauth::commands::McpOauthState::default()))
@@ -194,7 +194,7 @@ pub fn run() {
 				}
 				tauri::async_runtime::block_on(terminate_session(
 					app,
-					app.state::<AgentState>().inner(),
+					crate::events::core(app.app_handle()).state::<AgentState>().inner(),
 				));
 			}
 			_ => {}

@@ -36,7 +36,7 @@ fn a_bot_disconnect_revokes_and_deletes_the_grant_its_space_holds() {
 	let app = an_app_of_its_own(
 		"application-disconnect",
 		mock_builder()
-			.manage(AgentState::default())
+			.plugin(kiroshi_app::events::in_core(AgentState::default()))
 			.plugin(kiroshi_app::events::in_core(McpOauthState::default()))
 			.plugin(kiroshi_app::events::in_core(ApplicationReports::default())),
 	);
@@ -57,7 +57,7 @@ fn a_bot_disconnect_revokes_and_deletes_the_grant_its_space_holds() {
 	let kept = store::values(&root, &space).expect("the space scope is readable");
 	tauri::async_runtime::block_on(terminate_session(
 		app.handle(),
-		app.state::<AgentState>().inner(),
+		kiroshi_app::events::core(app.app_handle()).state::<AgentState>().inner(),
 	));
 	std::env::remove_var(SIDECAR_OVERRIDE_ENV);
 
@@ -70,7 +70,7 @@ fn a_disconnect_of_a_scope_holding_a_client_and_no_token_deletes_every_reserved_
 	let app = an_app_of_its_own(
 		"application-disconnect-client",
 		mock_builder()
-			.manage(AgentState::default())
+			.plugin(kiroshi_app::events::in_core(AgentState::default()))
 			.plugin(kiroshi_app::events::in_core(McpOauthState::default()))
 			.plugin(kiroshi_app::events::in_core(ApplicationReports::default())),
 	);

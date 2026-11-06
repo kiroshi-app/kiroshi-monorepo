@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
-use tauri::{AppHandle, Manager, Runtime, State};
+use crate::core_context::Managed;
+use tauri::{AppHandle, Manager, Runtime};
 use tokio::sync::Mutex;
 
 use super::contract::{
@@ -147,11 +148,12 @@ fn ranked(activity: &Activity, origins_needing_you: &HashSet<String>) -> Convers
 	ConversationState::Idle
 }
 
-fn observed<R: Runtime>(app: &AppHandle<R>) -> State<'_, Observed> {
-	if app.try_state::<Observed>().is_none() {
-		app.manage(Observed::default());
+fn observed<R: Runtime>(app: &AppHandle<R>) -> Managed<'_, Observed> {
+	let core = crate::events::core(app);
+	if core.try_state::<Observed>().is_none() {
+		core.manage(Observed::default());
 	}
-	app.state::<Observed>()
+	core.state::<Observed>()
 }
 
 #[cfg(test)]

@@ -203,11 +203,11 @@ pub async fn conversation_send_user_message<R: Runtime>(
 pub async fn conversation_send_turn<R: Runtime>(
 	app: AppHandle<R>,
 	core: State<'_, crate::core_context::Core>,
-	agent: State<'_, AgentState>,
 	caller: Caller,
 	message: SentMessage,
 	summoned: Vec<String>,
 ) -> Result<i64, TranscriptStoreError> {
+	let agent = core.state::<AgentState>();
 	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	let held = agent.host_turns().hold(&message.conversation_id, &message.turn_id)?;
@@ -295,7 +295,7 @@ async fn store_sent<R: Runtime>(
 		.messages()
 		.send_user_message(message.written_by(author, written_from), completed_at)
 		.await?;
-	if let Some(agent) = app.try_state::<AgentState>() {
+	if let Some(agent) = crate::events::core(app.app_handle()).try_state::<AgentState>() {
 		agent.host_writes().claim_turn(&turn_id);
 	}
 	announce_stored(app, database, conversation_id.clone(), id).await;
@@ -451,7 +451,9 @@ pub async fn conversation_finalize_message<R: Runtime>(
 }
 
 fn owned_by_host<R: Runtime>(app: &AppHandle<R>, owns: impl Fn(&HostWrites) -> bool) -> bool {
-	app.try_state::<AgentState>().is_some_and(|agent| owns(agent.host_writes()))
+	crate::events::core(app.app_handle())
+		.try_state::<AgentState>()
+		.is_some_and(|agent| owns(agent.host_writes()))
 }
 
 #[cfg(test)]

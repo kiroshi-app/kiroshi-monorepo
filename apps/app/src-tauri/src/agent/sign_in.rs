@@ -74,7 +74,7 @@ impl Drop for Running<'_> {
 pub async fn agent_sign_in<R: Runtime>(app: AppHandle<R>) -> Result<(), SignInError> {
 	let state = crate::events::core(app.app_handle()).state::<SignInState>();
 	let _running = state.begin()?;
-	let sidecar = app.state::<AgentState>().sidecar().await?;
+	let sidecar = crate::events::core(app.app_handle()).state::<AgentState>().sidecar().await?;
 	let mut flow = sidecar.begin_sign_in()?;
 	let settled = match flow.opened().await? {
 		Opening::Settled(settled) => settled,
@@ -112,7 +112,11 @@ pub async fn agent_sign_in_code<R: Runtime>(
 	if !crate::events::core(app.app_handle()).state::<SignInState>().is_running() {
 		return Err(SignInError::NotRunning);
 	}
-	Ok(app.state::<AgentState>().sidecar().await?.enter_sign_in_code(&text)?)
+	Ok(crate::events::core(app.app_handle())
+		.state::<AgentState>()
+		.sidecar()
+		.await?
+		.enter_sign_in_code(&text)?)
 }
 
 #[tauri::command]
@@ -121,7 +125,11 @@ pub async fn agent_sign_in_cancel<R: Runtime>(app: AppHandle<R>) -> Result<(), S
 	if !crate::events::core(app.app_handle()).state::<SignInState>().is_running() {
 		return Err(SignInError::NotRunning);
 	}
-	Ok(app.state::<AgentState>().sidecar().await?.cancel_sign_in()?)
+	Ok(crate::events::core(app.app_handle())
+		.state::<AgentState>()
+		.sidecar()
+		.await?
+		.cancel_sign_in()?)
 }
 
 #[cfg(test)]

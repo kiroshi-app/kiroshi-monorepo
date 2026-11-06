@@ -1,3 +1,4 @@
+use crate::core_context::Managed;
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -8,7 +9,7 @@ use futures_util::future::join_all;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
-use tauri::{AppHandle, Manager, Runtime, State};
+use tauri::{AppHandle, Runtime};
 use tokio::sync::{watch, OwnedMutexGuard};
 
 use super::canvas::board_holds;
@@ -898,11 +899,12 @@ impl<R: Runtime> Drop for Turn<'_, R> {
 	}
 }
 
-fn writes<R: Runtime>(app: &AppHandle<R>) -> State<'_, AgentWrites> {
-	if app.try_state::<AgentWrites>().is_none() {
-		app.manage(AgentWrites::default());
+fn writes<R: Runtime>(app: &AppHandle<R>) -> Managed<'_, AgentWrites> {
+	let core = crate::events::core(app);
+	if core.try_state::<AgentWrites>().is_none() {
+		core.manage(AgentWrites::default());
 	}
-	app.state::<AgentWrites>()
+	core.state::<AgentWrites>()
 }
 
 fn markdown(root: &Path, space_id: &str, name: &str) -> Result<(), LibraryError> {

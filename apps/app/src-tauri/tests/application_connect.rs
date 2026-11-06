@@ -87,7 +87,7 @@ fn connected_holding(
 	let app = an_app_of_its_own(
 		&format!("application-connect-{case}"),
 		mock_builder()
-			.manage(AgentState::default())
+			.plugin(kiroshi_app::events::in_core(AgentState::default()))
 			.plugin(kiroshi_app::events::in_core(McpOauthState::default()))
 			.plugin(kiroshi_app::events::in_core(ApplicationReports::default())),
 	);
@@ -107,7 +107,7 @@ fn connected_holding(
 	let kept = store::values(&root, &scope).expect("the scope is readable");
 	tauri::async_runtime::block_on(terminate_session(
 		app.handle(),
-		app.state::<AgentState>().inner(),
+		kiroshi_app::events::core(app.app_handle()).state::<AgentState>().inner(),
 	));
 	let flows = fs::read_to_string(&log).unwrap_or_default().lines().map(str::to_owned).collect();
 	let _ = fs::remove_file(&log);

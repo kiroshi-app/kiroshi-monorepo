@@ -13,12 +13,13 @@ const DEV_IDENTIFIER_SUFFIX: &str = ".dev";
 #[tauri::command]
 #[specta::specta]
 pub async fn diagnostics<R: Runtime>(app: AppHandle<R>) -> Diagnostics {
-	let (agent_version, provider, agent_error) = match app.state::<AgentState>().sidecar().await {
-		Ok(sidecar) => {
-			(Some(sidecar.version().to_owned()), Some(sidecar.provider().to_owned()), None)
-		}
-		Err(error) => (None, None, Some(error)),
-	};
+	let (agent_version, provider, agent_error) =
+		match crate::events::core(app.app_handle()).state::<AgentState>().sidecar().await {
+			Ok(sidecar) => {
+				(Some(sidecar.version().to_owned()), Some(sidecar.provider().to_owned()), None)
+			}
+			Err(error) => (None, None, Some(error)),
+		};
 	Diagnostics {
 		app_version: app.package_info().version.to_string(),
 		git_commit: env!("KIROSHI_GIT_COMMIT").to_owned(),

@@ -47,7 +47,9 @@ fn serial() -> std::sync::MutexGuard<'static, ()> {
 fn app() -> AppOfItsOwn {
 	let app = an_app_of_its_own(
 		"lifecycle",
-		mock_builder().manage(AgentState::default()).invoke_handler(invoke_handler()),
+		mock_builder()
+			.plugin(kiroshi_app::events::in_core(AgentState::default()))
+			.invoke_handler(invoke_handler()),
 	);
 	kiroshi_app::db::install(kiroshi_app::events::core(app.handle()));
 	bundled_bots(&app, &["default", "second"]);
@@ -82,7 +84,6 @@ async fn start_run(
 ) -> Result<SessionHandle, TransportError> {
 	agent_start_or_resume_session(
 		app.handle().clone(),
-		app.state::<AgentState>(),
 		app.state::<kiroshi_app::core_context::Core>(),
 		scope,
 		None,
@@ -97,7 +98,7 @@ async fn start(app: &App<MockRuntime>) -> Result<SessionHandle, TransportError> 
 }
 
 async fn shutdown(app: &App<MockRuntime>) -> Result<(), TransportError> {
-	agent_shutdown(app.handle().clone(), app.state::<AgentState>(), scope()).await
+	agent_shutdown(app.handle().clone(), app.state(), scope()).await
 }
 
 fn is_refused<T>(outcome: &Result<T, TransportError>) -> bool {
@@ -155,8 +156,17 @@ fn two_concurrent_starts_leave_one_session_and_one_sidecar() {
 		);
 		assert_eq!(live_groups().len(), 1, "the refused start spawned a sidecar of its own");
 
-		shutdown_session(app.handle(), app.state::<AgentState>().inner(), &scope()).await;
-		terminate_session(app.handle(), app.state::<AgentState>().inner()).await;
+		shutdown_session(
+			app.handle(),
+			kiroshi_app::events::core(app.app_handle()).state::<AgentState>().inner(),
+			&scope(),
+		)
+		.await;
+		terminate_session(
+			app.handle(),
+			kiroshi_app::events::core(app.app_handle()).state::<AgentState>().inner(),
+		)
+		.await;
 		assert!(live_groups().is_empty(), "the sidecar outlived the host it served");
 	});
 }
@@ -178,8 +188,17 @@ fn a_start_racing_a_shutdown_never_interleaves() {
 		);
 		assert!(live_groups().len() <= 1, "the two transitions each spawned a sidecar");
 
-		shutdown_session(app.handle(), app.state::<AgentState>().inner(), &scope()).await;
-		terminate_session(app.handle(), app.state::<AgentState>().inner()).await;
+		shutdown_session(
+			app.handle(),
+			kiroshi_app::events::core(app.app_handle()).state::<AgentState>().inner(),
+			&scope(),
+		)
+		.await;
+		terminate_session(
+			app.handle(),
+			kiroshi_app::events::core(app.app_handle()).state::<AgentState>().inner(),
+		)
+		.await;
 		assert!(live_groups().is_empty(), "a sidecar outlived both transitions");
 	});
 
@@ -203,7 +222,11 @@ fn a_quit_during_a_start_sweeps_the_group_and_closes_the_gate_for_good() {
 			let orphan = recorded_pid(&pid_file).expect("the wait only returns once it is there");
 			assert!(is_alive(orphan), "the grandchild must be running before the quit");
 
-			terminate_session(app.handle(), app.state::<AgentState>().inner()).await;
+			terminate_session(
+				app.handle(),
+				kiroshi_app::events::core(app.app_handle()).state::<AgentState>().inner(),
+			)
+			.await;
 			poll_until("the exit sweep to leave no orphan behind", || !is_alive(orphan)).await;
 		});
 
@@ -213,7 +236,13 @@ fn a_quit_during_a_start_sweeps_the_group_and_closes_the_gate_for_good() {
 		);
 		assert!(live_groups().is_empty(), "the quit left a group behind");
 		assert_eq!(
-			submit_prompt(app.state::<AgentState>(), scope(), "salut".into(), None).await,
+			submit_prompt(
+				kiroshi_app::events::core(app.app_handle()).state::<AgentState>(),
+				scope(),
+				"salut".into(),
+				None
+			)
+			.await,
 			Err(TransportError::NotStarted),
 			"a session reached the state after the quit"
 		);
@@ -248,7 +277,11 @@ fn a_quit_inside_a_restart_never_installs_the_session_it_was_building() {
 
 		let (restarted, ()) = tokio::join!(start(&app), async {
 			opening_signalled(&listener).await;
-			terminate_session(app.handle(), app.state::<AgentState>().inner()).await;
+			terminate_session(
+				app.handle(),
+				kiroshi_app::events::core(app.app_handle()).state::<AgentState>().inner(),
+			)
+			.await;
 		});
 
 		assert!(
@@ -257,7 +290,13 @@ fn a_quit_inside_a_restart_never_installs_the_session_it_was_building() {
 		);
 		assert!(live_groups().is_empty(), "the sidecar outlived the sweep");
 		assert_eq!(
-			submit_prompt(app.state::<AgentState>(), scope(), "salut".into(), None).await,
+			submit_prompt(
+				kiroshi_app::events::core(app.app_handle()).state::<AgentState>(),
+				scope(),
+				"salut".into(),
+				None
+			)
+			.await,
 			Err(TransportError::NotStarted),
 			"a session reached the state after the quit"
 		);
@@ -286,12 +325,22 @@ fn a_quit_ends_every_bots_session_and_not_only_the_last_one_started() {
 			"the sidecar the host believes it holds is not running: {running:?}"
 		);
 		assert_eq!(
-			submit_prompt(app.state::<AgentState>(), scope(), "salut".into(), None).await,
+			submit_prompt(
+				kiroshi_app::events::core(app.app_handle()).state::<AgentState>(),
+				scope(),
+				"salut".into(),
+				None
+			)
+			.await,
 			Ok(()),
 			"starting the second bot replaced the first one's session"
 		);
 
-		terminate_session(app.handle(), app.state::<AgentState>().inner()).await;
+		terminate_session(
+			app.handle(),
+			kiroshi_app::events::core(app.app_handle()).state::<AgentState>().inner(),
+		)
+		.await;
 
 		assert!(live_groups().is_empty(), "the quit left a group behind");
 		for pid in running {
@@ -373,9 +422,14 @@ async fn a_turn_running(app: &App<MockRuntime>) {
 		.expect("the conversation is planted");
 	start(app).await.expect("the session under test starts");
 	let turn = SubmittedTurn { turn_id: "t1".to_owned(), prompt_id: "p1".to_owned() };
-	submit_prompt(app.state::<AgentState>(), scope(), "take your time".into(), Some(turn))
-		.await
-		.expect("the prompt is taken");
+	submit_prompt(
+		kiroshi_app::events::core(app.app_handle()).state::<AgentState>(),
+		scope(),
+		"take your time".into(),
+		Some(turn),
+	)
+	.await
+	.expect("the prompt is taken");
 	let deadline = tokio::time::Instant::now() + DEADLINE;
 	while running_runs(app).await == 0 {
 		assert!(tokio::time::Instant::now() < deadline, "timed out waiting for the run to start");
@@ -408,8 +462,17 @@ fn ended_mid_turn(end: impl AsyncFnOnce(&App<MockRuntime>)) {
 		end(&app).await;
 
 		assert_the_run_was_ended(&app, &heard, updated_before).await;
-		shutdown_session(app.handle(), app.state::<AgentState>().inner(), &scope()).await;
-		terminate_session(app.handle(), app.state::<AgentState>().inner()).await;
+		shutdown_session(
+			app.handle(),
+			kiroshi_app::events::core(app.app_handle()).state::<AgentState>().inner(),
+			&scope(),
+		)
+		.await;
+		terminate_session(
+			app.handle(),
+			kiroshi_app::events::core(app.app_handle()).state::<AgentState>().inner(),
+		)
+		.await;
 	});
 
 	std::env::remove_var("FAKE_AGENT_SCENARIO");
@@ -427,13 +490,22 @@ fn a_session_replaced_mid_turn_ends_its_run_before_the_new_one_is_installed() {
 #[test]
 fn a_session_shut_down_mid_turn_ends_its_run_as_cancelled() {
 	ended_mid_turn(async |app| {
-		shutdown_session(app.handle(), app.state::<AgentState>().inner(), &scope()).await;
+		shutdown_session(
+			app.handle(),
+			kiroshi_app::events::core(app.app_handle()).state::<AgentState>().inner(),
+			&scope(),
+		)
+		.await;
 	});
 }
 
 #[test]
 fn a_quit_mid_turn_ends_the_run_before_the_sidecar_is_terminated() {
 	ended_mid_turn(async |app| {
-		terminate_session(app.handle(), app.state::<AgentState>().inner()).await;
+		terminate_session(
+			app.handle(),
+			kiroshi_app::events::core(app.app_handle()).state::<AgentState>().inner(),
+		)
+		.await;
 	});
 }

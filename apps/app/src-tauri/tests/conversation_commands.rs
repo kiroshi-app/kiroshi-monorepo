@@ -3223,7 +3223,7 @@ fn sections_in(window: &WebviewWindow<MockRuntime>, space_id: &str) -> Vec<Value
 }
 fn a_host_with_agents(home: &Home) -> App<MockRuntime> {
 	let app = home.app();
-	app.manage(AgentState::default());
+	kiroshi_app::events::core(app.app_handle()).manage(AgentState::default());
 	app
 }
 
@@ -3313,7 +3313,10 @@ fn sending_opens_the_turn_with_the_message_and_hands_the_turn_to_the_host() {
 		.expect("the page");
 	assert_eq!(seqs(&page), vec![1]);
 	assert!(
-		app.state::<AgentState>().host_writes().owns_turn("t1"),
+		kiroshi_app::events::core(app.app_handle())
+			.state::<AgentState>()
+			.host_writes()
+			.owns_turn("t1"),
 		"the host does not own the turn"
 	);
 
@@ -3354,7 +3357,10 @@ fn a_refused_message_leaves_no_turn_behind() {
 		"the refusal did not say what disagreed"
 	);
 	assert_eq!(a_turn_row(&app, "t2"), None, "the refused send left its turn behind");
-	assert!(!app.state::<AgentState>().host_writes().owns_turn("t2"));
+	assert!(!kiroshi_app::events::core(app.app_handle())
+		.state::<AgentState>()
+		.host_writes()
+		.owns_turn("t2"));
 }
 
 #[test]
@@ -3532,7 +3538,7 @@ fn a_companion_cancelling_before_its_submit_spares_the_turn_another_companion_wa
 		Ok(json!({ "kind": "nothingToCancel" })),
 		"a cancel with nothing submitted was reported as done"
 	);
-	let writes = app.state::<AgentState>();
+	let writes = kiroshi_app::events::core(app.app_handle()).state::<AgentState>();
 	assert!(
 		writes.host_writes().was_submitted("t1"),
 		"the handed turn was not recorded as submitted"
@@ -3622,7 +3628,10 @@ fn a_question_line_the_host_wrote_answers_its_seq_and_refuses_every_front_write(
 
 	assert_eq!(opened, json!(seq), "the front open did not answer the stored seq");
 	assert_eq!(a_question_row(&app), Some(stored), "a front write reached the host question line");
-	tauri::async_runtime::block_on(terminate_session(app.handle(), &app.state::<AgentState>()));
+	tauri::async_runtime::block_on(terminate_session(
+		app.handle(),
+		&kiroshi_app::events::core(app.app_handle()).state::<AgentState>(),
+	));
 }
 
 fn agent_text(app: &App<MockRuntime>, bot_id: &str) -> String {

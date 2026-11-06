@@ -95,8 +95,9 @@ pub async fn conversation_serve_awaited_runs<R: Runtime>(
 	app: AppHandle<R>,
 	webview: Webview<R>,
 	windows: State<'_, TurnWindows>,
-	agent: State<'_, AgentState>,
+	core: State<'_, crate::core_context::Core>,
 ) -> Result<(), TranscriptStoreError> {
+	let agent = core.state::<AgentState>();
 	serve_on_driving(&app, &windows, &agent, webview.window().label()).await
 }
 
@@ -158,7 +159,7 @@ pub(crate) async fn serve_handed<R: Runtime>(
 	let Some(windows) = app.try_state::<TurnWindows>() else {
 		return Ok(());
 	};
-	let Some(agent) = app.try_state::<AgentState>() else {
+	let Some(agent) = crate::events::core(app.app_handle()).try_state::<AgentState>() else {
 		log::error!("turn {turn_id} of conversation {conversation_id} found no agent state to serve its awaited runs");
 		return Ok(());
 	};

@@ -74,7 +74,9 @@ fn serial() -> MutexGuard<'static, ()> {
 fn launch() -> Harness {
 	let app = an_app_of_its_own(
 		"e2e",
-		mock_builder().manage(AgentState::default()).invoke_handler(invoke_handler()),
+		mock_builder()
+			.plugin(kiroshi_app::events::in_core(AgentState::default()))
+			.invoke_handler(invoke_handler()),
 	);
 	kiroshi_app::db::install(kiroshi_app::events::core(app.handle()));
 	bundled_bots(&app, &["default"]);
@@ -100,7 +102,10 @@ impl Harness {
 
 	fn quit(&self) {
 		let runtime = tokio::runtime::Runtime::new().expect("runtime");
-		runtime.block_on(terminate_session(self.app.handle(), &self.app.state::<AgentState>()));
+		runtime.block_on(terminate_session(
+			self.app.handle(),
+			&kiroshi_app::events::core(self.app.app_handle()).state::<AgentState>(),
+		));
 	}
 
 	fn scope(&self) -> Value {
@@ -381,7 +386,7 @@ fn launch_stored_with(name: &str, played: &str, state: AgentState) -> Stored {
 	let scenario = scenario(played);
 	let app = an_app_of_its_own(
 		&format!("e2e-{name}"),
-		mock_builder().manage(state).invoke_handler(invoke_handler()),
+		mock_builder().plugin(kiroshi_app::events::in_core(state)).invoke_handler(invoke_handler()),
 	);
 	kiroshi_app::db::install(kiroshi_app::events::core(app.handle()));
 	bundled_bots(&app, &["default"]);
@@ -518,7 +523,7 @@ impl Stored {
 	fn close(self) {
 		tauri::async_runtime::block_on(terminate_session(
 			self.app.handle(),
-			&self.app.state::<AgentState>(),
+			&kiroshi_app::events::core(self.app.app_handle()).state::<AgentState>(),
 		));
 	}
 
@@ -1084,8 +1089,10 @@ fn a_prompt_the_sidecar_never_received_leaves_its_turn_completed() {
 	let _serial = serial();
 	let stored = launch_stored("unsent", "normal");
 	stored.start();
-	let sidecar = tauri::async_runtime::block_on(stored.app.state::<AgentState>().sidecar())
-		.expect("the sidecar runs");
+	let sidecar = tauri::async_runtime::block_on(
+		kiroshi_app::events::core(stored.app.app_handle()).state::<AgentState>().sidecar(),
+	)
+	.expect("the sidecar runs");
 	tauri::async_runtime::block_on(sidecar.shutdown());
 
 	stored.store_prompt("t4", "p4");

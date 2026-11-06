@@ -753,7 +753,9 @@ impl<R: Runtime> Store<R> {
 	}
 
 	fn is_quitting(&self) -> bool {
-		self.app.try_state::<AgentState>().is_some_and(|agent| agent.is_quitting())
+		crate::events::core(self.app.app_handle())
+			.try_state::<AgentState>()
+			.is_some_and(|agent| agent.is_quitting())
 	}
 
 	async fn hold_prompt(

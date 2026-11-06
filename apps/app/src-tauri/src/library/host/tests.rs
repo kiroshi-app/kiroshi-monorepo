@@ -27,6 +27,7 @@ use crate::library::contract::{
 use crate::library::presence::{hue_of, share_presence, Identity, Presences, AGENT_BOARD_LEASE};
 use crate::library::{apply_update, open_document, read_thumbnail};
 use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
+use tauri::Manager;
 
 const A_CONVERSATION: &str = "
 	INSERT INTO bots (id, name, model, created_at) VALUES ('b1', 'Bean', 'sonnet', 1);
@@ -1468,7 +1469,7 @@ const A_SECOND_AGENT_IN_THE_CONVERSATION: &str = "
 
 async fn two_agents_writing(name: &str) -> (AppOfItsOwn, PathBuf) {
 	let (app, root) = a_host(name).await;
-	app.manage(AgentState::default());
+	crate::events::core(app.app_handle()).manage(AgentState::default());
 	ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 		.expect("the database opens")
 		.call_mut(|connection| Ok(connection.execute_batch(A_SECOND_AGENT_IN_THE_CONVERSATION)?))
@@ -1491,7 +1492,6 @@ fn writing(
 async fn stopped(app: &App<MockRuntime>, agent_id: Option<&str>) -> CancelOutcome {
 	library_stop_writers(
 		app.handle().clone(),
-		app.state(),
 		app.state(),
 		SPACE.to_owned(),
 		"notes.md".to_owned(),

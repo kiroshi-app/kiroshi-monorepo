@@ -538,7 +538,7 @@ async fn without_any_window_a_command_answers_what_the_window_answers() {
 #[tokio::test(flavor = "multi_thread")]
 async fn a_permission_answer_reaches_its_handler_without_any_window() {
 	let host = Host::new();
-	host.app.manage(AgentState::default());
+	kiroshi_app::events::core(host.app.app_handle()).manage(AgentState::default());
 	let server = host.started();
 	let answer = json!({
 		"scope": {

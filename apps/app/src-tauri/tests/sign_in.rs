@@ -59,7 +59,7 @@ fn an_app() -> AppOfItsOwn {
 	an_app_of_its_own(
 		"sign-in",
 		mock_builder()
-			.manage(AgentState::default())
+			.plugin(kiroshi_app::events::in_core(AgentState::default()))
 			.plugin(kiroshi_app::events::in_core(SignInState::default())),
 	)
 }
@@ -81,12 +81,20 @@ async fn first_url(urls: &mut mpsc::UnboundedReceiver<Value>) -> Value {
 }
 
 async fn answered_after_the_cancel(app: &App<MockRuntime>) {
-	let sidecar = app.state::<AgentState>().sidecar().await.expect("the sidecar runs");
+	let sidecar = kiroshi_app::events::core(app.app_handle())
+		.state::<AgentState>()
+		.sidecar()
+		.await
+		.expect("the sidecar runs");
 	sidecar.checked(&Values::new()).await.expect("a later command is answered");
 }
 
 async fn wind_down(app: &App<MockRuntime>) {
-	terminate_session(app.handle(), app.state::<AgentState>().inner()).await;
+	terminate_session(
+		app.handle(),
+		kiroshi_app::events::core(app.app_handle()).state::<AgentState>().inner(),
+	)
+	.await;
 }
 
 fn a_received_file(name: &str) -> RemovedOnDrop {

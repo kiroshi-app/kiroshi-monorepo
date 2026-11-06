@@ -8,6 +8,7 @@ pub(crate) mod presence;
 mod templates;
 pub(crate) mod url_import;
 
+use crate::core_context::Managed;
 use std::fs::{self, Metadata};
 use std::future::Future;
 use std::io::{self, Cursor, Read, Write};
@@ -19,7 +20,7 @@ use chrono::{DateTime, SecondsFormat, Utc};
 use image::imageops::FilterType;
 use image::{DynamicImage, ImageFormat, ImageReader, Limits};
 use sha2::{Digest, Sha256};
-use tauri::{AppHandle, Manager, Runtime, State};
+use tauri::{AppHandle, Manager, Runtime};
 
 use contract::{
 	LibraryBoardFileReplaced, LibraryChanged, LibraryDocument, LibraryDocumentFormat,
@@ -720,18 +721,19 @@ fn announce_board_file_replaced<R: Runtime>(app: &AppHandle<R>, space_id: &str, 
 	}
 }
 
-fn documents<R: Runtime>(app: &AppHandle<R>) -> State<'_, Documents> {
-	if app.try_state::<Documents>().is_none() {
+fn documents<R: Runtime>(app: &AppHandle<R>) -> Managed<'_, Documents> {
+	let core = crate::events::core(app);
+	if core.try_state::<Documents>().is_none() {
 		let announcing = app.clone();
-		app.manage(Documents::new(move |space_id, name| {
+		core.manage(Documents::new(move |space_id, name| {
 			announce_board_file_replaced(&announcing, space_id, name);
 		}));
 	}
-	app.state::<Documents>()
+	core.state::<Documents>()
 }
 
 pub fn write_pending_boards<R: Runtime>(app: &AppHandle<R>) {
-	if let Some(documents) = app.try_state::<Documents>() {
+	if let Some(documents) = crate::events::core(app.app_handle()).try_state::<Documents>() {
 		documents.write_pending_boards();
 	}
 }

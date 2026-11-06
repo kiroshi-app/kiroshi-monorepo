@@ -259,11 +259,11 @@ pub async fn library_share_presence<R: Runtime>(
 pub async fn library_stop_writers<R: Runtime>(
 	app: AppHandle<R>,
 	core: State<'_, crate::core_context::Core>,
-	agent: State<'_, AgentState>,
 	space_id: String,
 	name: String,
 	agent_id: Option<String>,
 ) -> Result<CancelOutcome, LibraryError> {
+	let agent = core.state::<AgentState>();
 	let state = core.state::<db::DatabaseState>();
 	known_space(&state, &space_id).await?;
 	let stopped = stop_writers(&app, &space_id, &name, agent_id.as_deref()).await;
