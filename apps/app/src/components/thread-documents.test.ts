@@ -564,35 +564,41 @@ const mountPresencePanel = async (isJoined = false) => {
 	return panel
 }
 
+const answerBoardPanelReads = () => {
+	libraryHost.answers.set("library_list", () => [
+		launchBoardItem,
+		roadmapBoardItem,
+	])
+	libraryHost.answers.set("library_open_document", ({ name }) => ({
+		name,
+		update: boardStateOf(TWO_NOTES_BOARD),
+	}))
+	libraryHost.answers.set("library_board_summary", ({ name }) => ({
+		name,
+		nodeCount: 2,
+		nodes: [],
+		bounds: { x: 0, y: 0, width: 500, height: 100 },
+	}))
+	libraryHost.answers.set("library_share_presence", () => null)
+}
+
+const forgetBoardPanel = () => {
+	cleanup()
+	libraryHost.answers.clear()
+	libraryHost.invoked.length = 0
+	libraryHost.listeners.clear()
+	localStorage.clear()
+}
+
 describe("presence on a board opened beside a conversation", () => {
 	beforeEach(() => {
-		libraryHost.answers.set("library_list", () => [
-			launchBoardItem,
-			roadmapBoardItem,
-		])
-		libraryHost.answers.set("library_open_document", ({ name }) => ({
-			name,
-			update: boardStateOf(TWO_NOTES_BOARD),
-		}))
-		libraryHost.answers.set("library_board_summary", ({ name }) => ({
-			name,
-			nodeCount: 2,
-			nodes: [],
-			bounds: { x: 0, y: 0, width: 500, height: 100 },
-		}))
-		libraryHost.answers.set("library_share_presence", () => null)
+		answerBoardPanelReads()
 		libraryHost.answers.set("library_stop_writers", () => ({
 			kind: "cancelled",
 		}))
 	})
 
-	afterEach(() => {
-		cleanup()
-		libraryHost.answers.clear()
-		libraryHost.invoked.length = 0
-		libraryHost.listeners.clear()
-		localStorage.clear()
-	})
+	afterEach(forgetBoardPanel)
 
 	it("shows another person's pointer and outlines the object they selected, with no chip", async () => {
 		await mountPresencePanel()
@@ -763,31 +769,11 @@ const mountSharingPanel = async (isJoined = false) => {
 }
 
 describe("sharing the own pointer and selection on a board opened beside a conversation", () => {
-	beforeEach(() => {
-		libraryHost.answers.set("library_list", () => [
-			launchBoardItem,
-			roadmapBoardItem,
-		])
-		libraryHost.answers.set("library_open_document", ({ name }) => ({
-			name,
-			update: boardStateOf(TWO_NOTES_BOARD),
-		}))
-		libraryHost.answers.set("library_board_summary", ({ name }) => ({
-			name,
-			nodeCount: 2,
-			nodes: [],
-			bounds: { x: 0, y: 0, width: 500, height: 100 },
-		}))
-		libraryHost.answers.set("library_share_presence", () => null)
-	})
+	beforeEach(answerBoardPanelReads)
 
 	afterEach(() => {
 		vi.useRealTimers()
-		cleanup()
-		libraryHost.answers.clear()
-		libraryHost.invoked.length = 0
-		libraryHost.listeners.clear()
-		localStorage.clear()
+		forgetBoardPanel()
 	})
 
 	it("shares the pointer at most once every 50 ms and always sends the last position", async () => {
