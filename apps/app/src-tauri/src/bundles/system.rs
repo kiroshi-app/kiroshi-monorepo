@@ -24,15 +24,13 @@ const INSTALLS: &str = "skills/applications/SKILL.md";
 
 const RICH_ANSWERS: &str = "skills/rich-answers/SKILL.md";
 
-const LIBRARY: &str = "skills/library/SKILL.md";
-
 const VISUAL_FIRST: &str = "output-styles/visual-first.md";
 
 pub const VISUAL_FIRST_STYLE: &str = "kiroshi:visual-first";
 
 const TRIGGERS: &str = ".triggers.json";
 
-const FILES: [(&str, &[u8]); 13] = [
+const FILES: [(&str, &[u8]); 12] = [
 	(MANIFEST, include_bytes!("../../plugins/kiroshi/.claude-plugin/plugin.json")),
 	(TRIGGERS, include_bytes!("../../plugins/kiroshi/.triggers.json")),
 	(LEARN, include_bytes!("../../plugins/kiroshi/skills/learn/SKILL.md")),
@@ -40,7 +38,6 @@ const FILES: [(&str, &[u8]); 13] = [
 	(INSTALLS, include_bytes!("../../plugins/kiroshi/skills/applications/SKILL.md")),
 	(MISSIONS, include_bytes!("../../plugins/kiroshi/skills/missions/SKILL.md")),
 	(CONVERSATIONS, include_bytes!("../../plugins/kiroshi/skills/conversations/SKILL.md")),
-	(LIBRARY, include_bytes!("../../plugins/kiroshi/skills/library/SKILL.md")),
 	(RICH_ANSWERS, include_bytes!("../../plugins/kiroshi/skills/rich-answers/SKILL.md")),
 	(VISUAL_FIRST, include_bytes!("../../plugins/kiroshi/output-styles/visual-first.md")),
 	(
@@ -390,47 +387,6 @@ mod tests {
 	}
 
 	#[test]
-	fn the_library_skill_is_preloaded_and_names_every_library_document_and_board_tool() {
-		let text = String::from_utf8_lossy(embedded(LIBRARY));
-		let said_in_one_breath = text.split_whitespace().collect::<Vec<_>>().join(" ");
-
-		assert!(text.contains("preload: true"), "got {text}");
-		for said in [
-			"`library_list`",
-			"`library_search`",
-			"`library_read`",
-			"`library_create`",
-			"`library_import`",
-			"`library_rename`",
-			"`library_delete`",
-			"`board_create`",
-			"`board_info`",
-			"`board_tree`",
-			"`board_node_info`",
-			"`board_canvas`",
-			"`board_write`",
-			"`board_update`",
-			"`board_move`",
-			"`board_duplicate`",
-			"`board_delete`",
-			"`board_find`",
-			"`board_view`",
-			"`screenshot`",
-			"`conversation_post_document`",
-			"`document_info`",
-			"`document_tree`",
-			"`document_read_block`",
-			"`document_insert_after`",
-			"`document_replace_block`",
-			"`document_delete_block`",
-			"`document_find`",
-			"Read the tree first, then target a block by its id",
-		] {
-			assert!(said_in_one_breath.contains(said), "{said} is missing");
-		}
-	}
-
-	#[test]
 	fn no_skill_names_a_tool_the_library_tools_replaced() {
 		for (name, bytes) in FILES {
 			let text = String::from_utf8_lossy(bytes);
@@ -713,6 +669,20 @@ mod tests {
 		}
 		assert!(!stray.exists(), "the stray file is gone");
 		assert!(!stray.parent().expect("it has a directory").exists(), "the directory is gone");
+
+		let _ = fs::remove_dir_all(&path);
+	}
+
+	#[test]
+	fn a_write_prunes_the_library_skill_an_older_version_laid_down() {
+		let path = a_path("older-library");
+		let library = path.join("skills").join("library").join(SKILL_NAME);
+		private_files::replace(&library, b"older").expect("the older skill lands");
+
+		write(&path).expect("the plugin is written");
+
+		assert!(!library.exists(), "the library skill is gone");
+		assert!(!path.join("skills").join("library").exists(), "its directory is gone");
 
 		let _ = fs::remove_dir_all(&path);
 	}
