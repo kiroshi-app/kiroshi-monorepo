@@ -4,10 +4,10 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tauri::async_runtime::JoinHandle;
 use tauri::{AppHandle, Manager, Runtime, State};
 use tokio::sync::broadcast::{self, error::RecvError};
 use tokio::sync::mpsc;
+use tokio::task::JoinHandle;
 use tokio::time::{self, Instant, Sleep};
 use uuid::Uuid;
 
@@ -126,7 +126,11 @@ impl Deadline {
 
 impl<R: Runtime> RunSink for Runner<R> {
 	fn requested(&self, requested: RunRequested) -> Result<(), RoutineError> {
-		tauri::async_runtime::spawn(run(self.app.clone(), self.timing, requested));
+		crate::events::core(self.app.app_handle()).spawn(run(
+			self.app.clone(),
+			self.timing,
+			requested,
+		));
 		Ok(())
 	}
 }
@@ -305,7 +309,7 @@ async fn write_report<R: Runtime>(
 	messages.complete_turn(turn_id.clone(), SystemClock.now_ms()).await?;
 	announce_conversation(app, database, CONVERSATION_UPDATED, &scope.conversation_id).await;
 	announce_report(
-		app,
+		crate::events::core(app.app_handle()),
 		report_event(
 			scope,
 			&turn_id,
@@ -333,8 +337,8 @@ fn report_event(scope: &RuntimeScope, turn_id: &str, message: ChatMessage) -> Sc
 	}
 }
 
-fn announce_report<R: Runtime>(app: &AppHandle<R>, report: ScopedEvent) {
-	if let Err(error) = events::emit(app, AGENT_EVENT, report) {
+fn announce_report(core: &crate::core_context::Core, report: ScopedEvent) {
+	if let Err(error) = core.emit(AGENT_EVENT, report) {
 		eprintln!("a routine report turn could not be announced: {error}");
 	}
 }
@@ -490,7 +494,7 @@ pub(crate) fn read(
 	keeps: impl Fn(&RuntimeScope) -> bool + Send + 'static,
 	events: mpsc::UnboundedSender<ScopedEvent>,
 ) -> RelayReader {
-	RelayReader(tauri::async_runtime::spawn(relayed(heard, keeps, events)))
+	RelayReader(tokio::spawn(relayed(heard, keeps, events)))
 }
 
 async fn relayed(

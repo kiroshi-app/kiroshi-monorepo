@@ -75,7 +75,7 @@ pub(crate) async fn observe_reporting<R: Runtime>(
 
 pub(crate) fn observe_later<R: Runtime>(app: &AppHandle<R>, conversation_id: String) {
 	let app = app.clone();
-	tauri::async_runtime::spawn(async move {
+	crate::events::core(app.app_handle()).clone().spawn(async move {
 		let Some(database) = crate::events::core(app.app_handle()).try_state::<db::DatabaseState>()
 		else {
 			return log::warn!("the state of conversation {conversation_id} has no database");

@@ -5,9 +5,9 @@ use std::time::Duration;
 
 use futures_util::StreamExt;
 use serde_json::{json, Value};
-use tauri::async_runtime::JoinHandle;
 use tauri::{AppHandle, Manager, Runtime};
 use tokio::sync::{mpsc, watch};
+use tokio::task::JoinHandle;
 use tokio::time::{interval_at, sleep, sleep_until, timeout, Instant};
 use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use tokio_tungstenite::tungstenite::protocol::CloseFrame;
@@ -714,7 +714,11 @@ async fn started_in_turn<R: Runtime>(
 		Linked { id: id.to_owned(), instance_id, link: Arc::clone(&link), joined: found.clone() };
 	let linked = guest_linked(app.clone(), linked, held, stopped);
 	let linked = description::alongside(app.clone(), id.to_owned(), &link, linked);
-	let run = tauri::async_runtime::spawn(members::alongside(app.clone(), &found, linked));
+	let run = crate::events::core(app.app_handle()).spawn(members::alongside(
+		app.clone(),
+		&found,
+		linked,
+	));
 	let reached = Reached {
 		origin: origin.clone(),
 		token: token.bearer().to_owned(),
@@ -1248,7 +1252,9 @@ fn resynced<R: Runtime>(app: &AppHandle<R>, linked: &Linked, resync: Resync) -> 
 }
 
 fn reread_announced<R: Runtime>(app: &AppHandle<R>, id: &str, instance_id: &str) {
-	if let Err(failure) = announce_reconnection(app, id.to_owned()) {
+	if let Err(failure) =
+		announce_reconnection(crate::events::core(app.app_handle()), id.to_owned())
+	{
 		log::error!(
 			"joined space {id} (instance {instance_id}) must reread its host and the front was not told: {failure:?}"
 		);
@@ -1314,5 +1320,8 @@ pub(super) async fn entry_evicted<R: Runtime>(
 		"joined space {id} (instance {instance_id}) was removed: its membership ended ({reason:?})"
 	);
 	announce_change(app, id.to_owned()).await?;
-	announce_removal(app, JoinedSpaceRemoved { id: id.to_owned(), name: found.name, reason })
+	announce_removal(
+		crate::events::core(app.app_handle()),
+		JoinedSpaceRemoved { id: id.to_owned(), name: found.name, reason },
+	)
 }

@@ -108,6 +108,7 @@ fn opened<R: Runtime>(
 	let (stop, halted) = signal::channel(false);
 	legacy_web_link_cleared(&app);
 	let token = host_token(&app);
+	let core = crate::events::core(app.app_handle()).clone();
 	let calls = Calls {
 		app,
 		clock,
@@ -118,7 +119,7 @@ fn opened<R: Runtime>(
 	};
 	let address = match bound {
 		Ok((listener, address)) => {
-			tauri::async_runtime::spawn(answering(calls, listener, halted));
+			core.spawn(answering(calls, listener, halted));
 			Some(address)
 		}
 		Err(failure) => {

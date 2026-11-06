@@ -8,7 +8,9 @@ use tauri::webview::{PageLoadEvent, PageLoadPayload};
 use tauri::{AppHandle, Emitter, Manager, Runtime, Webview, Window, WindowEvent};
 use tokio::sync::broadcast;
 
-use crate::core_context::{Audience, ClientId, ClientScoped, Core, EmitError};
+use tauri_plugin_opener::OpenerExt;
+
+use crate::core_context::{Audience, ClientId, ClientScoped, Core, Desktop, EmitError};
 
 use crate::{
 	account, agent, applications, claude_import, companions, conversations, devices, hosting,
@@ -183,7 +185,12 @@ pub fn install_core<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Core> {
 	if let Some(core) = app.try_state::<Core>() {
 		return Ok(core.inner().clone());
 	}
-	let core = Core::new(app.path().app_data_dir()?);
+	let core = Core::new(
+		app.path().app_data_dir()?,
+		app.config().identifier.clone(),
+		tauri::async_runtime::handle().inner().clone(),
+	);
+	core.install_desktop(TauriDesktop(app.clone()));
 	let windows = app.clone();
 	core.listen(move |event| {
 		let sent = match &event.audience {
@@ -196,6 +203,14 @@ pub fn install_core<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Core> {
 	});
 	app.manage(core.clone());
 	Ok(core)
+}
+
+struct TauriDesktop<R: Runtime>(AppHandle<R>);
+
+impl<R: Runtime> Desktop for TauriDesktop<R> {
+	fn open_url(&self, url: &str) -> Result<(), String> {
+		self.0.opener().open_url(url, None::<&str>).map_err(|failure| failure.to_string())
+	}
 }
 
 pub fn core<R: Runtime>(app: &AppHandle<R>) -> &Core {

@@ -4,7 +4,6 @@ use std::path::Path;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use tauri::{AppHandle, Manager, Runtime};
-use tauri_plugin_opener::OpenerExt;
 
 use super::asking::AuthorizationAnswers;
 use super::contract::{Disconnected, OauthError};
@@ -146,7 +145,7 @@ async fn settlement<R: Runtime>(
 					Step::HandingTheUrl.refused(OauthError::RefusedUrl { url: authorization })
 				);
 			}
-			if app.opener().open_url(authorization.clone(), None::<&str>).is_err() {
+			if crate::events::core(app.app_handle()).open_url(&authorization).is_err() {
 				return Err(Step::OpeningTheBrowser
 					.refused(OauthError::BrowserRefused { url: authorization }));
 			}

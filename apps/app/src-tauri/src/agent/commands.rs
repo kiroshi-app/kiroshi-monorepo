@@ -69,17 +69,17 @@ pub(crate) fn announce_in_turn<R: Runtime>(
 	turn: Option<EventTurn>,
 	event: AgentEvent,
 ) {
-	announce_scoped(app, ScopedEvent { scope, turn, event });
+	announce_scoped(crate::events::core(app.app_handle()), ScopedEvent { scope, turn, event });
 }
 
 fn announce_denied<R: Runtime>(app: &AppHandle<R>, dropped: &[PendingQuestion]) {
 	for question in dropped {
-		announce_scoped(app, question.denied());
+		announce_scoped(crate::events::core(app.app_handle()), question.denied());
 	}
 }
 
-fn announce_scoped<R: Runtime>(app: &AppHandle<R>, scoped: ScopedEvent) {
-	if let Err(failure) = events::emit(app, AGENT_EVENT, scoped) {
+fn announce_scoped(core: &crate::core_context::Core, scoped: ScopedEvent) {
+	if let Err(failure) = core.emit(AGENT_EVENT, scoped) {
 		log::warn!("a turn event was not announced: {failure}");
 	}
 }
@@ -451,7 +451,9 @@ impl<R: Runtime> TurnSink for RunSink<R> {
 		if let AgentEvent::QuestionRequested { request } = &event {
 			let asked =
 				PendingQuestion { scope: self.scope.clone(), turn, request: request.clone() };
-			self.live.hold_question(asked, |asked| announce_scoped(&self.app, asked.scoped()));
+			self.live.hold_question(asked, |asked| {
+				announce_scoped(crate::events::core(self.app.app_handle()), asked.scoped())
+			});
 			return retell_the_mission(&self.app, self.scope.conversation_id.clone());
 		}
 		self.release_questions_settled_by(&event);
@@ -496,8 +498,8 @@ impl<R: Runtime> RunSink<R> {
 		}
 		let app = self.app.clone();
 		let scope = self.scope.clone();
-		tauri::async_runtime::spawn(async move {
-			let refused = match bot_database(&app) {
+		crate::events::core(app.app_handle()).clone().spawn(async move {
+			let refused = match bot_database(crate::events::core(app.app_handle())) {
 				Some(database) => {
 					record_its_own_provider_session(database, &scope, provider_session_id)
 						.await
@@ -517,7 +519,7 @@ impl<R: Runtime> RunSink<R> {
 		let app = self.app.clone();
 		let scope = self.scope.clone();
 		let live = self.live.clone();
-		tauri::async_runtime::spawn(async move {
+		crate::events::core(app.app_handle()).clone().spawn(async move {
 			for (bundle, evolved) in evolutions(&app, &scope).await {
 				if !live.holds(&scope) {
 					return;
@@ -532,8 +534,8 @@ impl<R: Runtime> RunSink<R> {
 
 fn retell_the_mission<R: Runtime>(app: &AppHandle<R>, conversation_id: String) {
 	let app = app.clone();
-	tauri::async_runtime::spawn(async move {
-		let Some(database) = bot_database(&app) else {
+	crate::events::core(app.app_handle()).clone().spawn(async move {
+		let Some(database) = bot_database(crate::events::core(app.app_handle())) else {
 			return log::warn!("a thread moved and its mission was not read without the store");
 		};
 		if let Err(failure) = announce_thread_moved(&app, database, conversation_id).await {
@@ -575,7 +577,7 @@ async fn evolutions<R: Runtime>(
 	if let Some(path) = bundles::user::laid_down(app) {
 		announced.push((EvolvedBundle::User, bundles::user::evolve(&path)));
 	}
-	let Some(database) = bot_database(app) else {
+	let Some(database) = bot_database(crate::events::core(app.app_handle())) else {
 		return announced;
 	};
 	let Ok(Some(bot)) = database.conversations().bot(scope.bot_id.clone()).await else {
@@ -620,8 +622,8 @@ async fn record_its_own_provider_session(
 		})
 }
 
-fn bot_database<R: Runtime>(app: &AppHandle<R>) -> Option<&db::Database> {
-	crate::events::core(app.app_handle()).try_state::<db::DatabaseState>()?.inner().as_ref().ok()
+fn bot_database(core: &crate::core_context::Core) -> Option<&db::Database> {
+	core.try_state::<db::DatabaseState>()?.inner().as_ref().ok()
 }
 
 pub(crate) async fn reconcile_bot(database: &db::Database, root: &Path, bot: &StoredBot) {
@@ -1257,7 +1259,7 @@ pub(crate) async fn start_run<R: Runtime>(
 		.bundled(Some(identity.bundle))
 		.serving(identity.server_env)
 		.connected(held_connection(&app))
-		.with_app_data(app.path().app_data_dir().ok())
+		.with_app_data(Some(crate::events::core(app.app_handle()).data_dir().to_path_buf()))
 		.in_conversation(scope.conversation_id.clone())
 		.hosting(hosted(RoutineHost::new(
 			app.clone(),
@@ -1703,7 +1705,7 @@ pub async fn shutdown_session<R: Runtime>(
 
 async fn release_stored_prompts<R: Runtime>(app: &AppHandle<R>, scope: &RuntimeScope) {
 	let conversation = &scope.conversation_id;
-	let Some(database) = bot_database(app) else {
+	let Some(database) = bot_database(crate::events::core(app.app_handle())) else {
 		return log::warn!("the stored prompts of conversation {conversation} stay: no database");
 	};
 	let session = scope.runtime_session_id.clone();
@@ -1721,7 +1723,7 @@ async fn release_orphan_prompts<R: Runtime>(
 	live_sessions: Vec<RunKey>,
 	asked_before: i64,
 ) {
-	let Some(database) = bot_database(app) else {
+	let Some(database) = bot_database(crate::events::core(app.app_handle())) else {
 		return log::warn!("the orphan prompts of conversation {conversation} stay: no database");
 	};
 	let released = database.conversations().release_orphan_prompts(
@@ -1752,7 +1754,11 @@ async fn end_every_session<R: Runtime>(app: &AppHandle<R>, state: &AgentState) {
 	let ending: Vec<_> = cleared
 		.ended
 		.into_iter()
-		.map(|session| tauri::async_runtime::spawn(async move { session.shutdown().await }))
+		.map(|session| {
+			crate::events::core(app.app_handle())
+				.clone()
+				.spawn(async move { session.shutdown().await })
+		})
 		.collect();
 	for termination in ending {
 		if let Err(failure) = termination.await {
@@ -1763,7 +1769,7 @@ async fn end_every_session<R: Runtime>(app: &AppHandle<R>, state: &AgentState) {
 }
 
 async fn release_every_stored_prompt<R: Runtime>(app: &AppHandle<R>) {
-	let Some(database) = bot_database(app) else {
+	let Some(database) = bot_database(crate::events::core(app.app_handle())) else {
 		return log::warn!("the stored prompts stay at quit: no database");
 	};
 	if let Err(failure) = database.conversations().release_every_prompt().await {
@@ -3103,7 +3109,8 @@ mod tests {
 			let app = an_app(name);
 			crate::events::core(app.app_handle()).manage(AgentState::default());
 			crate::db::install(crate::events::core(app.handle()));
-			let database = bot_database(app.handle()).expect("the database opens");
+			let database =
+				bot_database(crate::events::core(app.handle())).expect("the database opens");
 			database
 				.call_mut(|connection| Ok(connection.execute_batch(ONE_SEATED_ROOM)?))
 				.await
@@ -3115,7 +3122,7 @@ mod tests {
 		}
 
 		async fn stored_prompts(app: &AppOfItsOwn) -> i64 {
-			bot_database(app.handle())
+			bot_database(crate::events::core(app.handle()))
 				.expect("the database opens")
 				.call(|connection| {
 					Ok(connection
@@ -3177,7 +3184,7 @@ mod tests {
 		}
 
 		async fn stored_sessions(app: &AppOfItsOwn) -> Vec<String> {
-			bot_database(app.handle())
+			bot_database(crate::events::core(app.handle()))
 				.expect("the database opens")
 				.call(|connection| {
 					let mut statement = connection.prepare(
@@ -3234,7 +3241,7 @@ mod tests {
 		#[tokio::test]
 		async fn a_purge_that_fails_still_admits_the_run() {
 			let app = an_app_storing("stored-unpurgeable", vec![stored("r5", "w5")]).await;
-			bot_database(app.handle())
+			bot_database(crate::events::core(app.handle()))
 				.expect("the database opens")
 				.call(|connection| Ok(connection.execute_batch("DROP TABLE pending_prompts")?))
 				.await

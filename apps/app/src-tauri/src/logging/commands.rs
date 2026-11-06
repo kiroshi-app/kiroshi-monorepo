@@ -31,7 +31,7 @@ pub async fn diagnostics<R: Runtime>(app: AppHandle<R>) -> Diagnostics {
 		agent_version,
 		provider,
 		agent_error,
-		side: side(&app),
+		side: side(crate::events::core(app.app_handle())),
 		plan: plan(&app),
 	}
 }
@@ -70,17 +70,11 @@ pub(crate) fn install_kind(identifier: &str) -> InstallKind {
 	InstallKind::Installed
 }
 
-fn side<R: Runtime>(app: &AppHandle<R>) -> Side {
-	if crate::events::core(app.app_handle())
-		.try_state::<Hosting>()
-		.is_some_and(|hosting| hosting.is_hosting())
-	{
+fn side(core: &crate::core_context::Core) -> Side {
+	if core.try_state::<Hosting>().is_some_and(|hosting| hosting.is_hosting()) {
 		return Side::Host;
 	}
-	if crate::events::core(app.app_handle())
-		.try_state::<RelayGuests>()
-		.is_some_and(|guests| guests.is_joined())
-	{
+	if core.try_state::<RelayGuests>().is_some_and(|guests| guests.is_joined()) {
 		return Side::Member;
 	}
 	Side::Local

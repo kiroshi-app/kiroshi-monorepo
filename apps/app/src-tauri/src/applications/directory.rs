@@ -384,8 +384,11 @@ impl Directory {
 
 pub fn spawn<R: Runtime>(app: AppHandle<R>) -> Arc<Directory> {
 	let directory = Directory::at(api_url(), file(&app));
-	tauri::async_runtime::spawn(watching(directory.clone(), directory.stop.subscribe()));
-	tauri::async_runtime::spawn(announcing(app, directory.landed.subscribe()));
+	crate::events::core(app.app_handle())
+		.spawn(watching(directory.clone(), directory.stop.subscribe()));
+	crate::events::core(app.app_handle())
+		.clone()
+		.spawn(announcing(app, directory.landed.subscribe()));
 	directory
 }
 
@@ -408,7 +411,7 @@ async fn watching(directory: Arc<Directory>, mut halted: signal::Receiver<bool>)
 }
 
 fn file<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
-	Some(app.path().app_data_dir().ok()?.join(CACHE_DIR).join(CACHE_FILE))
+	Some(crate::events::core(app.app_handle()).data_dir().join(CACHE_DIR).join(CACHE_FILE))
 }
 
 fn unread_directory() -> ApplicationsError {

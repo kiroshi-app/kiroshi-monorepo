@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
-use tauri::{AppHandle, Runtime};
+use tauri::{AppHandle, Manager, Runtime};
 use tokio::time;
 
 use super::awaited_runs::forget_settled_turns;
@@ -96,7 +96,7 @@ pub(crate) fn arm_start_deadlines<R: Runtime>(
 			.collect()
 	};
 	let start_within = deadlines.start_within;
-	tauri::async_runtime::spawn(async move {
+	crate::events::core(app.app_handle()).spawn(async move {
 		time::sleep(start_within).await;
 		for (bot_id, hold) in holds {
 			let run = (held.turn_id.clone(), bot_id);
@@ -107,8 +107,12 @@ pub(crate) fn arm_start_deadlines<R: Runtime>(
 	});
 }
 
-pub(crate) fn suspend_start_deadline<R: Runtime>(app: &AppHandle<R>, turn_id: &str, bot_id: &str) {
-	match crate::events::core(app).try_state::<TurnRunDeadlines>().ok_or(NO_DEADLINES) {
+pub(crate) fn suspend_start_deadline(
+	core: &crate::core_context::Core,
+	turn_id: &str,
+	bot_id: &str,
+) {
+	match core.try_state::<TurnRunDeadlines>().ok_or(NO_DEADLINES) {
 		Ok(deadlines) => locked(&deadlines.armed).suspend(&(turn_id.to_owned(), bot_id.to_owned())),
 		Err(missing) => {
 			eprintln!("turn {turn_id} could not suspend the start deadline of {bot_id}: {missing}")
@@ -150,7 +154,7 @@ pub(crate) async fn drop_awaited_run<R: Runtime>(
 	run: &SummonsRun<'_>,
 	reason: SummonsDropReason,
 ) -> Result<bool, TranscriptStoreError> {
-	suspend_start_deadline(app, run.turn_id, run.bot_id);
+	suspend_start_deadline(crate::events::core(app.app_handle()), run.turn_id, run.bot_id);
 	released_awaited_run(app, run, reason).await
 }
 

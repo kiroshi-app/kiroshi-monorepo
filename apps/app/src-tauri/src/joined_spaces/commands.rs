@@ -71,19 +71,19 @@ pub(super) async fn announce_change<R: Runtime>(
 		.map_err(|error| JoinedSpaceError::Undeliverable { detail: error.to_string() })
 }
 
-pub(super) fn announce_removal<R: Runtime>(
-	app: &AppHandle<R>,
+pub(super) fn announce_removal(
+	core: &crate::core_context::Core,
 	removed: JoinedSpaceRemoved,
 ) -> Result<(), JoinedSpaceError> {
-	events::emit(app, JOINED_SPACE_REMOVED, removed)
+	core.emit(JOINED_SPACE_REMOVED, removed)
 		.map_err(|error| JoinedSpaceError::Undeliverable { detail: error.to_string() })
 }
 
-pub(super) fn announce_reconnection<R: Runtime>(
-	app: &AppHandle<R>,
+pub(super) fn announce_reconnection(
+	core: &crate::core_context::Core,
 	id: String,
 ) -> Result<(), JoinedSpaceError> {
-	events::emit(app, JOINED_SPACE_RECONNECTED, JoinedSpaceReconnected { id })
+	core.emit(JOINED_SPACE_RECONNECTED, JoinedSpaceReconnected { id })
 		.map_err(|error| JoinedSpaceError::Undeliverable { detail: error.to_string() })
 }
 

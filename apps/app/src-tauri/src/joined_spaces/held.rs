@@ -39,7 +39,9 @@ pub(super) async fn held<R: Runtime>(
 	let Some(space) = space_keys(app)?.held(&key_item(instance_id)).map_err(key_store)? else {
 		return Ok(Err(last_wait(app, instance_id)));
 	};
-	let Some(roster) = roster_verified(app, instance_id, &device).await? else {
+	let Some(roster) =
+		roster_verified(crate::events::core(app.app_handle()), instance_id, &device).await?
+	else {
 		return Ok(Err(wait_of(Stall::RosterMissing)));
 	};
 	Ok(Ok(Held { device, space, roster }))
@@ -73,15 +75,15 @@ pub(super) async fn roster<R: Runtime>(
 	app: &AppHandle<R>,
 	instance_id: &str,
 ) -> Result<Option<HeldRoster>, JoinedSpaceError> {
-	roster_verified(app, instance_id, &device_keys(app)?).await
+	roster_verified(crate::events::core(app.app_handle()), instance_id, &device_keys(app)?).await
 }
 
-async fn roster_verified<R: Runtime>(
-	app: &AppHandle<R>,
+async fn roster_verified(
+	core: &crate::core_context::Core,
 	instance_id: &str,
 	device: &DeviceKeys,
 ) -> Result<Option<HeldRoster>, JoinedSpaceError> {
-	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
+	let state = core.state::<db::DatabaseState>();
 	let stored = ready(&state)?.joined_space_relay().roster(instance_id.to_owned()).await?;
 	let Some(stored) = stored else {
 		return Ok(None);

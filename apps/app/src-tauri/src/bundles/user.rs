@@ -16,7 +16,12 @@ pub(super) const PLUGIN: Descriptor = Descriptor {
 };
 
 pub fn path<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
-	Some(app.path().app_data_dir().ok()?.join(PLUGIN.dir_name).join(PLUGIN.plugin_name))
+	Some(
+		crate::events::core(app.app_handle())
+			.data_dir()
+			.join(PLUGIN.dir_name)
+			.join(PLUGIN.plugin_name),
+	)
 }
 
 pub fn lay_down(path: &Path) -> std::io::Result<()> {

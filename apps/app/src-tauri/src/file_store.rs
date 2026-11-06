@@ -20,7 +20,7 @@ pub trait FileStore {
 	fn remove(path: &Path) -> io::Result<()>;
 
 	fn dir<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
-		Some(app.path().app_data_dir().ok()?.join(Self::DIR_NAME))
+		Some(crate::events::core(app.app_handle()).data_dir().join(Self::DIR_NAME))
 	}
 
 	fn sweep_referenced(

@@ -1,13 +1,16 @@
 use std::any::{type_name, Any, TypeId};
 use std::collections::HashMap;
 use std::fmt;
+use std::future::Future;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, PoisonError, RwLock};
 
 use serde::Serialize;
 use serde_json::value::RawValue;
+use tokio::runtime::Handle;
 use tokio::sync::broadcast;
+use tokio::task::JoinHandle;
 
 use crate::events::{Event, Frame, BUFFERED_FRAMES};
 
@@ -65,6 +68,27 @@ impl fmt::Display for EmitError {
 
 impl std::error::Error for EmitError {}
 
+pub trait Desktop: Send + Sync + 'static {
+	fn open_url(&self, url: &str) -> Result<(), String>;
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum OpenUrlError {
+	NoDesktop,
+	Refused(String),
+}
+
+impl fmt::Display for OpenUrlError {
+	fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match self {
+			Self::NoDesktop => formatter.write_str("no desktop is installed to open a link"),
+			Self::Refused(cause) => write!(formatter, "the desktop did not open the link: {cause}"),
+		}
+	}
+}
+
+impl std::error::Error for OpenUrlError {}
+
 pub trait ClientScoped: Send + Sync + 'static {
 	fn forget_client(&self, core: &Core, client: &ClientId);
 }
@@ -77,6 +101,8 @@ type Registry = HashMap<TypeId, Arc<dyn Any + Send + Sync>>;
 
 struct Inner {
 	data_dir: PathBuf,
+	identifier: String,
+	runtime: Handle,
 	registry: RwLock<Registry>,
 	frames: broadcast::Sender<Frame>,
 	events: broadcast::Sender<CoreEvent>,
@@ -112,9 +138,15 @@ impl<T> Clone for Managed<'_, T> {
 impl<T> Copy for Managed<'_, T> {}
 
 impl Core {
-	pub fn new(data_dir: impl Into<PathBuf>) -> Self {
+	pub fn new(
+		data_dir: impl Into<PathBuf>,
+		identifier: impl Into<String>,
+		runtime: Handle,
+	) -> Self {
 		Self(Arc::new(Inner {
 			data_dir: data_dir.into(),
+			identifier: identifier.into(),
+			runtime,
 			registry: RwLock::default(),
 			frames: broadcast::channel(BUFFERED_FRAMES).0,
 			events: broadcast::channel(BUFFERED_FRAMES).0,
@@ -125,6 +157,35 @@ impl Core {
 
 	pub fn data_dir(&self) -> &Path {
 		&self.0.data_dir
+	}
+
+	pub fn identifier(&self) -> &str {
+		&self.0.identifier
+	}
+
+	pub fn spawn<F>(&self, future: F) -> JoinHandle<F::Output>
+	where
+		F: Future + Send + 'static,
+		F::Output: Send + 'static,
+	{
+		self.0.runtime.spawn(future)
+	}
+
+	pub fn spawn_blocking<F, T>(&self, work: F) -> JoinHandle<T>
+	where
+		F: FnOnce() -> T + Send + 'static,
+		T: Send + 'static,
+	{
+		self.0.runtime.spawn_blocking(work)
+	}
+
+	pub fn install_desktop(&self, desktop: impl Desktop) -> bool {
+		self.manage::<Box<dyn Desktop>>(Box::new(desktop))
+	}
+
+	pub fn open_url(&self, url: &str) -> Result<(), OpenUrlError> {
+		let desktop = self.try_state::<Box<dyn Desktop>>().ok_or(OpenUrlError::NoDesktop)?;
+		desktop.open_url(url).map_err(OpenUrlError::Refused)
 	}
 
 	pub fn manage<T: Send + Sync + 'static>(&self, value: T) -> bool {
@@ -249,13 +310,54 @@ fn forget<T: ClientScoped>(core: &Core, client: &ClientId) {
 }
 
 #[cfg(test)]
+pub(crate) fn test_runtime() -> Handle {
+	static RUNTIME: std::sync::OnceLock<tokio::runtime::Runtime> = std::sync::OnceLock::new();
+	RUNTIME
+		.get_or_init(|| tokio::runtime::Runtime::new().expect("the test runtime starts"))
+		.handle()
+		.clone()
+}
+
+#[cfg(test)]
 mod tests {
 	use super::*;
+
+	fn a_core() -> Core {
+		Core::new(std::env::temp_dir(), "com.kiroshi.test", test_runtime())
+	}
+
+	struct Opened(std::sync::Mutex<Vec<String>>);
+
+	impl Desktop for Arc<Opened> {
+		fn open_url(&self, url: &str) -> Result<(), String> {
+			self.0.lock().expect("unlocked").push(url.to_owned());
+			Ok(())
+		}
+	}
+
+	#[test]
+	fn a_link_opens_through_the_installed_desktop_and_fails_by_name_without_one() {
+		let core = a_core();
+		assert_eq!(core.open_url("https://kiroshi.app"), Err(OpenUrlError::NoDesktop));
+		let opened = Arc::new(Opened(std::sync::Mutex::default()));
+		assert!(core.install_desktop(opened.clone()));
+
+		core.open_url("https://kiroshi.app").expect("opened");
+
+		assert_eq!(*opened.0.lock().expect("unlocked"), vec!["https://kiroshi.app".to_owned()]);
+	}
+
+	#[test]
+	fn spawned_work_runs_on_the_runtime_the_core_was_given() {
+		let core = a_core();
+		let answer = test_runtime().block_on(core.spawn(async { 7 })).expect("the task ran");
+		assert_eq!(answer, 7);
+	}
 	use crate::events::FIRST_RUN_DONE;
 
 	#[test]
 	fn an_emitted_event_reaches_a_subscriber_without_a_tauri_runtime() {
-		let core = Core::new(std::env::temp_dir());
+		let core = a_core();
 		let mut heard = core.subscribe();
 
 		core.emit(FIRST_RUN_DONE, ()).expect("emitted");
@@ -269,7 +371,7 @@ mod tests {
 
 	#[test]
 	fn an_event_for_one_client_names_it_and_a_local_event_skips_the_host_api() {
-		let core = Core::new(std::env::temp_dir());
+		let core = a_core();
 		let mut heard = core.subscribe();
 		let mut frames = core.subscribe_frames();
 		let client = ClientId::new("main");
@@ -285,7 +387,7 @@ mod tests {
 
 	#[test]
 	fn a_failing_listener_fails_the_emit_and_the_others_still_hear() {
-		let core = Core::new(std::env::temp_dir());
+		let core = a_core();
 		let (told, hearing) = std::sync::mpsc::channel();
 		core.listen(|_| Err("the window is gone".into()));
 		core.listen(move |event| told.send(event.name).map_err(|failure| failure.to_string()));
@@ -305,7 +407,7 @@ mod tests {
 
 	#[test]
 	fn clearing_a_client_reaches_every_client_scoped_state_once() {
-		let core = Core::new(std::env::temp_dir());
+		let core = a_core();
 		assert!(core.manage_client_scoped(Forgotten::default()));
 		assert!(!core.manage_client_scoped(Forgotten::default()));
 
@@ -317,7 +419,7 @@ mod tests {
 
 	#[test]
 	fn clearing_a_client_with_no_client_scoped_state_reaches_nothing() {
-		let core = Core::new(std::env::temp_dir());
+		let core = a_core();
 		assert!(core.manage(Forgotten::default()));
 
 		core.clear_client(&ClientId::new("window-1"));
@@ -327,7 +429,7 @@ mod tests {
 
 	#[test]
 	fn managed_state_is_found_by_its_type() {
-		let core = Core::new(std::env::temp_dir());
+		let core = a_core();
 		assert!(core.try_state::<u32>().is_none());
 		assert!(core.manage(7_u32));
 		assert_eq!(*core.state::<u32>(), 7);
@@ -335,7 +437,7 @@ mod tests {
 
 	#[test]
 	fn a_second_insert_of_a_type_is_refused_and_the_held_value_stays() {
-		let core = Core::new(std::env::temp_dir());
+		let core = a_core();
 		assert!(core.manage(String::from("first")));
 		let held = core.state::<String>().inner();
 

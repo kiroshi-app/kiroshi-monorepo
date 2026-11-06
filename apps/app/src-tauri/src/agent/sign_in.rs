@@ -6,7 +6,7 @@ use super::commands::AgentState;
 use super::contract::{SignInError, SignInStarted, TransportError};
 use super::protocol::{SignInFailure, SignInFailureKind, SignedIn};
 use super::sidecar::{OauthFlowError, Opening};
-use crate::events::{self, SIGN_IN_STARTED};
+use crate::events::SIGN_IN_STARTED;
 use crate::mcp_oauth::commands::is_openable;
 
 pub const SIGN_IN_STARTED_CHANNEL: &str = "agent://sign-in-started";
@@ -79,18 +79,18 @@ pub async fn agent_sign_in<R: Runtime>(app: AppHandle<R>) -> Result<(), SignInEr
 	let settled = match flow.opened().await? {
 		Opening::Settled(settled) => settled,
 		Opening::Authorization(url) => {
-			announce_started(&app, url)?;
+			announce_started(crate::events::core(app.app_handle()), url)?;
 			flow.settled().await?
 		}
 	};
 	outcome(settled)
 }
 
-fn announce_started<R: Runtime>(app: &AppHandle<R>, url: String) -> Result<(), SignInError> {
+fn announce_started(core: &crate::core_context::Core, url: String) -> Result<(), SignInError> {
 	if !is_openable(&url) {
 		return Err(SignInError::RefusedUrl { url });
 	}
-	events::emit(app, SIGN_IN_STARTED, SignInStarted { url })
+	core.emit(SIGN_IN_STARTED, SignInStarted { url })
 		.map_err(|error| SignInError::Failed { detail: error.to_string() })
 }
 

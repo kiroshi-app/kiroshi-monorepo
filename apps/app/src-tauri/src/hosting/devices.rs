@@ -27,7 +27,7 @@ pub async fn remove_device<R: Runtime>(
 	space_id: String,
 	device_id: String,
 ) -> Result<Vec<AccountDevices>, MembersError> {
-	let host = host_device(app)?;
+	let host = host_device(crate::events::core(app.app_handle()))?;
 	let _turn = settled_turn(app, &space_id).await?;
 	let roster = roster_of(app, &space_id, &host).await?;
 	let target = roster
@@ -61,7 +61,7 @@ pub(super) async fn device_left<R: Runtime>(
 	relay_device_id: &str,
 	account_id: &str,
 ) -> Result<Revocation, MembersError> {
-	let host = host_device(app)?;
+	let host = host_device(crate::events::core(app.app_handle()))?;
 	let _turn = settled_turn(app, space_id).await?;
 	let space_relay = database_of(app)?.space_relay();
 	let row = space_relay
@@ -131,7 +131,7 @@ async fn listed_devices<R: Runtime>(
 	app: &AppHandle<R>,
 	space_id: &str,
 ) -> Result<Vec<AccountDevices>, MembersError> {
-	let host = host_device(app)?;
+	let host = host_device(crate::events::core(app.app_handle()))?;
 	let roster = roster_of(app, space_id, &host).await?;
 	Ok(grouped(&roster, &host))
 }
@@ -140,14 +140,13 @@ pub(super) async fn rostered_accounts<R: Runtime>(
 	app: &AppHandle<R>,
 	space_id: &str,
 ) -> Result<HashSet<String>, MembersError> {
-	let host = host_device(app)?;
+	let host = host_device(crate::events::core(app.app_handle()))?;
 	let roster = roster_of(app, space_id, &host).await?;
 	Ok(roster.rows.into_iter().map(|row| row.rostered.account_id).collect())
 }
 
-pub(super) fn host_device<R: Runtime>(app: &AppHandle<R>) -> Result<DeviceKeys, MembersError> {
-	crate::events::core(app.app_handle())
-		.state::<DeviceKeysState>()
+pub(super) fn host_device(core: &crate::core_context::Core) -> Result<DeviceKeys, MembersError> {
+	core.state::<DeviceKeysState>()
 		.keys()
 		.map(|keys| DeviceKeys::from_secret(&keys.secret()))
 		.map_err(|error| MembersError::DeviceKeys { error })
@@ -182,7 +181,9 @@ async fn rotated<R: Runtime>(app: &AppHandle<R>, space_id: &str) -> Result<(), M
 			.ok_or_else(|| not_rotated(format!("space key_id {key_id} has no successor")))?;
 		let next = HeldSpaceKey::under(next_id)
 			.map_err(|failure| not_rotated(format!("no space key was generated: {failure:?}")))?;
-		wire::space_key_stored(app, &space_keys, space_id, next).await.map_err(not_rotated)?;
+		wire::space_key_stored(crate::events::core(app.app_handle()), &space_keys, space_id, next)
+			.await
+			.map_err(not_rotated)?;
 		log::info!("hosted space {space_id} rotated its space key to key_id {next_id}");
 	}
 	database_of(app)?

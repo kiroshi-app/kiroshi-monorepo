@@ -82,7 +82,7 @@ async fn settled<R: Runtime>(
 	space_id: &str,
 	instance_id: &str,
 ) -> Result<Option<Settled>, MembersError> {
-	let host = host_device(app)?;
+	let host = host_device(crate::events::core(app.app_handle()))?;
 	let _turn = settled_turn(app, space_id).await?;
 	let listed = match device_list(app, instance_id).await {
 		Ok(listed) => listed,

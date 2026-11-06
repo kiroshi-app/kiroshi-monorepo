@@ -58,7 +58,7 @@ pub(super) async fn served(
 	let origin = format!("http://{}", listener.local_addr()?);
 	let instance_id = link.instance_id().to_owned();
 	let router = routed(Proxy { link, token, reread });
-	tauri::async_runtime::spawn(async move {
+	tokio::spawn(async move {
 		if let Some(Err(failure)) =
 			until_stopped(&mut stop, axum::serve(listener, router).into_future()).await
 		{

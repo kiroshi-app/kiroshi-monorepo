@@ -33,8 +33,8 @@ pub struct ApplicationHost<R: Runtime> {
 	directory: Arc<Directory>,
 }
 
-fn held_directory<R: Runtime>(app: &AppHandle<R>) -> Arc<Directory> {
-	match crate::events::core(app.app_handle()).try_state::<Arc<Directory>>() {
+fn held_directory(core: &crate::core_context::Core) -> Arc<Directory> {
+	match core.try_state::<Arc<Directory>>() {
 		Some(state) => state.inner().clone(),
 		None => Directory::at(api_url(), None),
 	}
@@ -42,7 +42,7 @@ fn held_directory<R: Runtime>(app: &AppHandle<R>) -> Arc<Directory> {
 
 impl<R: Runtime> ApplicationHost<R> {
 	pub fn new(app: AppHandle<R>, conversation_id: String, bot_id: String) -> Self {
-		let directory = held_directory(&app);
+		let directory = held_directory(crate::events::core(app.app_handle()));
 		Self { app, conversation_id, bot_id, runners: Runners::default(), directory }
 	}
 

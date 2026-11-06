@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use futures_util::future::join_all;
-use tauri::{AppHandle, Runtime};
+use tauri::{AppHandle, Manager, Runtime};
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio::time;
 
@@ -380,7 +380,7 @@ fn handovers_in(replies: &[BotReply], present: &[&str]) -> Vec<String> {
 async fn drive_from<R: Runtime>(turn: HostTurn<R>, held: HeldTurn, first: Vec<Summons>) {
 	let (mut listening, heard) = turn.listening();
 	let speaking = turn.wave(&held, first).await;
-	tauri::async_runtime::spawn(async move {
+	tokio::spawn(async move {
 		turn.drive(held, speaking, heard, &mut listening).await;
 		drop(listening);
 	});
@@ -780,7 +780,11 @@ impl<R: Runtime> HostTurn<R> {
 		let run = self.run_of(&summons.bot_id);
 		if is_in_line {
 			summons::note_queued(&run);
-			suspend_start_deadline(&self.app, &self.turn_id, &summons.bot_id);
+			suspend_start_deadline(
+				crate::events::core(self.app.app_handle()),
+				&self.turn_id,
+				&summons.bot_id,
+			);
 		} else {
 			summons::note_started(&run);
 		}

@@ -8,9 +8,9 @@ use std::time::Duration;
 use base64::prelude::{Engine as _, BASE64_URL_SAFE_NO_PAD};
 use chrono::{DateTime, SecondsFormat, TimeDelta, Utc};
 use ed25519_dalek::VerifyingKey;
-use tauri::async_runtime::JoinHandle;
 use tauri::{AppHandle, Manager, Runtime};
 use tokio::sync::watch;
+use tokio::task::JoinHandle;
 use tokio::time::sleep;
 
 use crate::account::cloud::{
@@ -110,7 +110,7 @@ pub async fn signed_in<R: Runtime>(app: &AppHandle<R>) {
 	};
 	let previous = devices.follow().take();
 	stopped(previous).await;
-	*devices.follow() = Some(tauri::async_runtime::spawn(followed(app.clone())));
+	*devices.follow() = Some(crate::events::core(app.app_handle()).spawn(followed(app.clone())));
 }
 
 pub async fn signed_out<R: Runtime>(app: &AppHandle<R>) {
@@ -135,7 +135,7 @@ async fn stopped(follow: Option<JoinHandle<()>>) {
 	};
 	follow.abort();
 	if let Err(error) = follow.await {
-		if !matches!(&error, tauri::Error::JoinError(joined) if joined.is_cancelled()) {
+		if !error.is_cancelled() {
 			eprintln!("the device approval follow ended abnormally: {error}");
 		}
 	}
@@ -164,8 +164,10 @@ fn entered<R: Runtime>(app: &AppHandle<R>, devices: &Devices, next: DeviceApprov
 
 fn hosts_resumed<R: Runtime>(app: &AppHandle<R>, devices: &Devices) {
 	let resuming = app.clone();
-	*devices.hosts_resuming() =
-		Some(tauri::async_runtime::spawn(async move { hosting::resumed(&resuming).await }));
+	*devices.hosts_resuming() = Some(
+		crate::events::core(app.app_handle())
+			.spawn(async move { hosting::resumed(&resuming).await }),
+	);
 }
 
 async fn followed<R: Runtime>(app: AppHandle<R>) {

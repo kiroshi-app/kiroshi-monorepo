@@ -197,7 +197,11 @@ async fn serve_turn<R: Runtime>(
 	log::info!(
 		"turn {turn_id} of conversation {conversation_id} lost the window that ran it, the host serves its awaited runs"
 	);
-	tauri::async_runtime::spawn(host_turn::serve_awaited(app.clone(), held, claimed));
+	crate::events::core(app.app_handle()).spawn(host_turn::serve_awaited(
+		app.clone(),
+		held,
+		claimed,
+	));
 	Ok(())
 }
 

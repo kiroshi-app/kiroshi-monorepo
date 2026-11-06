@@ -32,7 +32,7 @@ impl Sentinel {
 
 pub fn spawn<R: Runtime>(app: AppHandle<R>) -> Sentinel {
 	let (stop, halted) = signal::channel(false);
-	tauri::async_runtime::spawn(keeping_watch(app, halted));
+	crate::events::core(app.app_handle()).clone().spawn(keeping_watch(app, halted));
 	Sentinel { stop }
 }
 

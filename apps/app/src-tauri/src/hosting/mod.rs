@@ -22,9 +22,9 @@ use std::collections::HashMap;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
-use tauri::async_runtime::JoinHandle;
 use tauri::{AppHandle, Manager, Runtime};
 use tokio::sync::watch;
+use tokio::task::JoinHandle;
 
 use crate::account::cloud::Cloud;
 use crate::account::session::AccountSession;
@@ -198,8 +198,12 @@ async fn begun<R: Runtime>(
 			colour: registration.colour,
 			instance_id,
 		};
-		let handle =
-			tauri::async_runtime::spawn(relay::hosted(app.clone(), hosted, local.clone(), stopped));
+		let handle = crate::events::core(app.app_handle()).spawn(relay::hosted(
+			app.clone(),
+			hosted,
+			local.clone(),
+			stopped,
+		));
 		hosting.hosts().entry(space_id).or_default().run = Some(Run { stop, handle });
 	}
 	state

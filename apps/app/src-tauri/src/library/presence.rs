@@ -3,7 +3,7 @@ use std::path::Path;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
-use tauri::{AppHandle, Runtime};
+use tauri::{AppHandle, Manager, Runtime};
 use tokio::time::Instant;
 use yrs::updates::decoder::Decode;
 use yrs::StickyIndex;
@@ -287,7 +287,7 @@ pub(crate) fn seated_identity<R: Runtime>(
 	name: &str,
 	seat: &Seat,
 ) -> Option<Identity> {
-	presences(app).identity_of(space_id, name, seat)
+	presences(crate::events::core(app.app_handle())).identity_of(space_id, name, seat)
 }
 
 pub(crate) fn seat_writer<R: Runtime>(
@@ -297,7 +297,7 @@ pub(crate) fn seat_writer<R: Runtime>(
 	seated: Seated,
 ) -> bool {
 	let is_paced = matches!(seated.at, LibraryPresenceAt::Board { .. });
-	let presences = presences(app);
+	let presences = presences(crate::events::core(app.app_handle()));
 	let (presence, is_new) = presences.seated(space_id, name, seated);
 	if !is_paced {
 		published(app, presence);
@@ -313,14 +313,21 @@ pub(crate) fn unseat_writer<R: Runtime>(
 	name: &str,
 	seat: &Seat,
 ) {
-	if let Some(presence) = presences(app).left(space_id, name, seat) {
+	if let Some(presence) =
+		presences(crate::events::core(app.app_handle())).left(space_id, name, seat)
+	{
 		published(app, presence);
 	}
 }
 
 async fn lapsing<R: Runtime>(app: AppHandle<R>, space_id: String, name: String, seat: Seat) {
 	loop {
-		match presences(&app).lease(&space_id, &name, &seat, Instant::now()) {
+		match presences(crate::events::core(app.app_handle())).lease(
+			&space_id,
+			&name,
+			&seat,
+			Instant::now(),
+		) {
 			Lease::Gone => return,
 			Lease::RunsUntil(ends_at) => tokio::time::sleep_until(ends_at).await,
 			Lease::Lapsed(presence) => return published(&app, presence),
@@ -330,7 +337,7 @@ async fn lapsing<R: Runtime>(app: AppHandle<R>, space_id: String, name: String, 
 
 async fn trailing<R: Runtime>(app: AppHandle<R>, space_id: String, name: String) {
 	tokio::time::sleep(BOARD_PRESENCE_PACE).await;
-	published(&app, presences(&app).trailed(&space_id, &name));
+	published(&app, presences(crate::events::core(app.app_handle())).trailed(&space_id, &name));
 }
 
 impl ClientScoped for Presences {
@@ -354,8 +361,7 @@ fn published_in(core: &Core, presence: LibraryDocumentPresence) {
 	}
 }
 
-fn presences<R: Runtime>(app: &AppHandle<R>) -> Managed<'_, Presences> {
-	let core = events::core(app);
+fn presences(core: &crate::core_context::Core) -> Managed<'_, Presences> {
 	if core.try_state::<Presences>().is_none() {
 		core.manage_client_scoped(Presences::default());
 	}

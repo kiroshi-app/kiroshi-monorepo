@@ -78,7 +78,7 @@ impl Poller {
 
 pub fn spawn<R: Runtime>(app: AppHandle<R>) -> Poller {
 	let (stop, halted) = signal::channel(false);
-	tauri::async_runtime::spawn(polling(app, API.to_owned(), halted));
+	crate::events::core(app.app_handle()).clone().spawn(polling(app, API.to_owned(), halted));
 	Poller { stop }
 }
 

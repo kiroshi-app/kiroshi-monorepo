@@ -58,7 +58,7 @@ const FILES: [(&str, &[u8]); 13] = [
 ];
 
 pub fn path<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
-	Some(app.path().app_data_dir().ok()?.join(DIR_NAME).join(PLUGIN_NAME))
+	Some(crate::events::core(app.app_handle()).data_dir().join(DIR_NAME).join(PLUGIN_NAME))
 }
 
 pub fn write(path: &Path) -> std::io::Result<()> {

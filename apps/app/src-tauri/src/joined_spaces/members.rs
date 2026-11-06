@@ -44,7 +44,7 @@ pub async fn joined_space_members(
 
 pub(super) fn read_soon<R: Runtime>(app: &AppHandle<R>, joined: &JoinedSpace) {
 	let (app, joined) = (app.clone(), joined.clone());
-	tauri::async_runtime::spawn(async move { read(&app, &joined).await });
+	crate::events::core(app.app_handle()).clone().spawn(async move { read(&app, &joined).await });
 }
 
 pub(super) fn alongside<R: Runtime>(

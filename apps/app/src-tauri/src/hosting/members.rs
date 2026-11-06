@@ -25,7 +25,7 @@ pub async fn list<R: Runtime>(
 	app: &AppHandle<R>,
 	space_id: String,
 ) -> Result<SpaceMembers, MembersError> {
-	let instance_id = instance_of(app, &space_id).await?;
+	let instance_id = instance_of(crate::events::core(app.app_handle()), &space_id).await?;
 	let _turn = devices::settled_turn(app, &space_id).await?;
 	let listed = listed(app, &space_id, &instance_id).await?;
 	announced_if_changed(app, &space_id, listed.clone());
@@ -52,7 +52,7 @@ async fn invited<R: Runtime>(
 	email: &str,
 ) -> Result<SpaceMembers, MembersError> {
 	let email = normalized_email(email).ok_or(MembersError::NotAnEmail)?;
-	if is_own_account(app, &email) {
+	if is_own_account(crate::events::core(app.app_handle()), &email) {
 		return Err(MembersError::OwnAccount);
 	}
 	let bearer = bearer_of(app)?;
@@ -99,7 +99,7 @@ pub async fn resend<R: Runtime>(
 	space_id: String,
 	invitation_id: String,
 ) -> Result<SpaceMembers, MembersError> {
-	let instance_id = instance_of(app, &space_id).await?;
+	let instance_id = instance_of(crate::events::core(app.app_handle()), &space_id).await?;
 	let bearer = bearer_of(app)?;
 	let _turn = devices::settled_turn(app, &space_id).await?;
 	crate::events::core(app.app_handle())
@@ -156,7 +156,7 @@ pub async fn invite_again<R: Runtime>(
 	space_id: String,
 	user_id: String,
 ) -> Result<SpaceMembers, MembersError> {
-	let instance_id = instance_of(app, &space_id).await?;
+	let instance_id = instance_of(crate::events::core(app.app_handle()), &space_id).await?;
 	let bearer = bearer_of(app)?;
 	let _turn = devices::settled_turn(app, &space_id).await?;
 	let members = rostered_members(app, &bearer, &space_id, &instance_id).await?;
@@ -205,11 +205,11 @@ pub(super) async fn polled<R: Runtime>(
 	}
 }
 
-pub(super) async fn instance_of<R: Runtime>(
-	app: &AppHandle<R>,
+pub(super) async fn instance_of(
+	core: &crate::core_context::Core,
 	space_id: &str,
 ) -> Result<String, MembersError> {
-	let database_state = crate::events::core(app.app_handle()).state::<DatabaseState>();
+	let database_state = core.state::<DatabaseState>();
 	let registration = ready(&database_state)?
 		.space_hosting()
 		.registration(space_id.to_owned())
@@ -241,7 +241,7 @@ async fn instance_logged<R: Runtime>(
 	action: &str,
 	space_id: &str,
 ) -> Result<String, MembersError> {
-	instance_of(app, space_id).await.inspect_err(|failure| {
+	instance_of(crate::events::core(app.app_handle()), space_id).await.inspect_err(|failure| {
 		log::error!(
 			"the member {action} in space {space_id} failed before its instance was known: {failure:?}"
 		);
@@ -258,9 +258,9 @@ fn failure_logged(action: &str, instance_id: &str, domain: &str, failure: &Membe
 	);
 }
 
-fn is_own_account<R: Runtime>(app: &AppHandle<R>, email: &str) -> bool {
+fn is_own_account(core: &crate::core_context::Core, email: &str) -> bool {
 	matches!(
-		crate::events::core(app.app_handle()).state::<AccountSession>().current(),
+		core.state::<AccountSession>().current(),
 		AccountState::SignedIn(account) if account.email.trim().eq_ignore_ascii_case(email)
 	)
 }

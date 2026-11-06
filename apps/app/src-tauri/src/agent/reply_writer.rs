@@ -161,6 +161,7 @@ impl ReplyWriter {
 		inner: Arc<dyn TurnSink>,
 	) -> Self {
 		let (entries, queued) = mpsc::unbounded_channel();
+		let core = crate::events::core(app.app_handle()).clone();
 		let store = Store {
 			app,
 			conversation_id: scope.conversation_id.clone(),
@@ -168,10 +169,7 @@ impl ReplyWriter {
 			runtime_session_id: scope.runtime_session_id.clone(),
 			owned,
 		};
-		tauri::async_runtime::spawn(write_then_forward(
-			queued,
-			Desk::new(store, attachments, inner),
-		));
+		core.spawn(write_then_forward(queued, Desk::new(store, attachments, inner)));
 		Self { entries }
 	}
 

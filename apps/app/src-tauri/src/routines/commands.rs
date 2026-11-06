@@ -302,17 +302,15 @@ pub async fn routine_key<R: Runtime>(
 	)
 	.await?;
 	let key = database.routines().key_of(id).await?;
-	let url = called_at(&app, &held.trigger_source_id);
+	let url = called_at(crate::events::core(app.app_handle()), &held.trigger_source_id);
 	Ok(RoutineKey { key, header: source.header, url })
 }
 
-fn called_at<R: Runtime>(app: &AppHandle<R>, trigger_source_id: &str) -> Option<String> {
+fn called_at(core: &crate::core_context::Core, trigger_source_id: &str) -> Option<String> {
 	if trigger_source_id != webhook::SOURCE_ID {
 		return None;
 	}
-	crate::events::core(app.app_handle())
-		.try_state::<webhook::Webhook>()
-		.and_then(|webhook| webhook.url())
+	core.try_state::<webhook::Webhook>().and_then(|webhook| webhook.url())
 }
 
 pub(crate) async fn routine_row(

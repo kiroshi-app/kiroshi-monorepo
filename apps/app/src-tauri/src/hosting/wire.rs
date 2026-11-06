@@ -74,18 +74,18 @@ async fn space_key<R: Runtime>(
 	}
 	let first = HeldSpaceKey::first()
 		.map_err(|failure| format!("no space key was generated: {failure:?}"))?;
-	space_key_stored(app, &space_keys, space_id, first).await?;
+	space_key_stored(crate::events::core(app.app_handle()), &space_keys, space_id, first).await?;
 	watched(&space_keys)?.ok_or_else(|| "the new space key did not read back".to_owned())
 }
 
-pub(super) async fn space_key_stored<R: Runtime>(
-	app: &AppHandle<R>,
+pub(super) async fn space_key_stored(
+	core: &crate::core_context::Core,
 	space_keys: &SpaceKeys,
 	space_id: &str,
 	space: HeldSpaceKey,
 ) -> Result<(), String> {
 	let key_id = space.key_id;
-	let state = crate::events::core(app.app_handle()).state::<DatabaseState>();
+	let state = core.state::<DatabaseState>();
 	let database =
 		ready(&state).map_err(|failure| format!("the database is unavailable: {failure:?}"))?;
 	database.space_relay().counter_started(space_id.to_owned(), key_id).await.map_err(

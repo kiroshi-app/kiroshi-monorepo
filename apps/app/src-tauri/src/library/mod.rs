@@ -474,7 +474,7 @@ pub(crate) fn rename_document<R: Runtime>(
 	new_name: &str,
 ) -> Result<LibraryItem, LibraryError> {
 	let landed = documents(app).rename(root, space_id, name, new_name, |landed| {
-		announce_rename(app, space_id, name, landed);
+		announce_rename(crate::events::core(app.app_handle()), space_id, name, landed);
 	})?;
 	item_at(&space_dir(root, space_id).join(&landed), landed.clone())?
 		.ok_or(LibraryError::Missing { name: landed })
@@ -689,13 +689,18 @@ fn announced<R: Runtime>(app: &AppHandle<R>, changed: LibraryChanged) {
 	}
 }
 
-fn announce_rename<R: Runtime>(app: &AppHandle<R>, space_id: &str, former_name: &str, name: &str) {
+fn announce_rename(
+	core: &crate::core_context::Core,
+	space_id: &str,
+	former_name: &str,
+	name: &str,
+) {
 	let renamed = LibraryDocumentRenamed {
 		space_id: space_id.to_owned(),
 		former_name: former_name.to_owned(),
 		name: name.to_owned(),
 	};
-	if let Err(error) = events::emit(app, events::LIBRARY_DOCUMENT_RENAMED, renamed) {
+	if let Err(error) = core.emit(events::LIBRARY_DOCUMENT_RENAMED, renamed) {
 		log::warn!("a rename of a library document of space {space_id} was not announced: {error}");
 	}
 }
@@ -713,10 +718,10 @@ fn announce<R: Runtime>(app: &AppHandle<R>, space_id: &str, name: &str, update: 
 	}
 }
 
-fn announce_board_file_replaced<R: Runtime>(app: &AppHandle<R>, space_id: &str, name: &str) {
+fn announce_board_file_replaced(core: &crate::core_context::Core, space_id: &str, name: &str) {
 	let replaced =
 		LibraryBoardFileReplaced { space_id: space_id.to_owned(), name: name.to_owned() };
-	if let Err(error) = events::emit(app, events::LIBRARY_BOARD_FILE_REPLACED, replaced) {
+	if let Err(error) = core.emit(events::LIBRARY_BOARD_FILE_REPLACED, replaced) {
 		log::warn!("a rewritten board file of space {space_id} was not announced: {error}");
 	}
 }
@@ -724,7 +729,7 @@ fn announce_board_file_replaced<R: Runtime>(app: &AppHandle<R>, space_id: &str, 
 fn documents<R: Runtime>(app: &AppHandle<R>) -> Managed<'_, Documents> {
 	let core = crate::events::core(app);
 	if core.try_state::<Documents>().is_none() {
-		let announcing = app.clone();
+		let announcing = core.clone();
 		core.manage(Documents::new(move |space_id, name| {
 			announce_board_file_replaced(&announcing, space_id, name);
 		}));

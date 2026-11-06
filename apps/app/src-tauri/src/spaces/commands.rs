@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use tauri::{AppHandle, Runtime, State};
+use tauri::{AppHandle, Manager, Runtime, State};
 
 use super::archive;
 use super::contract::{CompanionCounts, Space, SpaceDescribed, SpaceError, SpacePreferences};
@@ -69,7 +69,11 @@ pub async fn space_update<R: Runtime>(
 			name: updated.name.clone(),
 			colour: updated.colour,
 		};
-		tauri::async_runtime::spawn(announced_once_listed(app, previous.instance_id, described));
+		crate::events::core(app.app_handle()).clone().spawn(announced_once_listed(
+			app,
+			previous.instance_id,
+			described,
+		));
 	}
 	let hostings = database.space_hosting().hostings().await?;
 	Ok(Space::presented(updated, &hostings))

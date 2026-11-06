@@ -17,7 +17,7 @@ pub(super) const PLUGIN: Descriptor = Descriptor {
 };
 
 pub fn root<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
-	Some(app.path().app_data_dir().ok()?.join(PLUGIN.dir_name))
+	Some(crate::events::core(app.app_handle()).data_dir().join(PLUGIN.dir_name))
 }
 
 pub fn path<R: Runtime>(app: &AppHandle<R>, space_id: &str) -> Option<PathBuf> {

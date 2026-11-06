@@ -32,13 +32,13 @@ impl DeviceKeysState {
 }
 
 pub fn load<R: Runtime>(app: &AppHandle<R>) -> DeviceKeysState {
-	let keys = app.path().app_data_dir().map_err(|_| DeviceKeysError::NoProfileDirectory).and_then(
-		|profile| {
-			let identifier = &app.config().identifier;
-			let system = system_store(install_kind(identifier), identifier, DEVICE_KEYS_ITEM);
-			load_or_create(system.as_deref(), &FileStore::at(profile.join(DEVICE_KEYS_ITEM)))
-		},
-	);
+	let keys =
+		Ok::<_, DeviceKeysError>(crate::events::core(app.app_handle()).data_dir().to_path_buf())
+			.and_then(|profile| {
+				let identifier = &app.config().identifier;
+				let system = system_store(install_kind(identifier), identifier, DEVICE_KEYS_ITEM);
+				load_or_create(system.as_deref(), &FileStore::at(profile.join(DEVICE_KEYS_ITEM)))
+			});
 	if let Err(failure) = &keys {
 		log::error!("the device keys are unavailable: {failure:?}");
 	}
@@ -110,7 +110,7 @@ impl SpaceKeys {
 
 pub fn space_keys<R: Runtime>(app: &AppHandle<R>) -> SpaceKeys {
 	let identifier = app.config().identifier.clone();
-	let directory = app.path().app_data_dir().ok();
+	let directory = Some(crate::events::core(app.app_handle()).data_dir().to_path_buf());
 	SpaceKeys::new(install_kind(&identifier), identifier, directory)
 }
 

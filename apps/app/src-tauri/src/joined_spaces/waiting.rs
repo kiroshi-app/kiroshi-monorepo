@@ -1,7 +1,7 @@
 use futures_util::StreamExt;
-use tauri::async_runtime::JoinHandle;
 use tauri::{AppHandle, Manager, Runtime};
 use tokio::sync::watch;
+use tokio::task::JoinHandle;
 use tokio::time::{interval_at, sleep, Instant};
 use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use tokio_tungstenite::tungstenite::protocol::CloseFrame;
@@ -69,7 +69,7 @@ pub(super) async fn joins_started<R: Runtime>(
 			continue;
 		}
 		let (stop, stopped) = watch::channel(false);
-		let run = tauri::async_runtime::spawn(waited_for_host(
+		let run = crate::events::core(app.app_handle()).spawn(waited_for_host(
 			app.clone(),
 			joined.id.clone(),
 			instance_id.clone(),

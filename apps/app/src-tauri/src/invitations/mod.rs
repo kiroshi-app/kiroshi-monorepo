@@ -4,8 +4,8 @@ pub mod contract;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
-use tauri::async_runtime::JoinHandle;
 use tauri::{AppHandle, Manager, Runtime};
+use tokio::task::JoinHandle;
 use tokio::time::{interval, MissedTickBehavior};
 
 use crate::account::cloud::{Cloud, InvitationCallError, JoinedInstance, ListedInvitation};
@@ -169,7 +169,7 @@ pub fn resumed<R: Runtime>(app: &AppHandle<R>) {
 	};
 	let mut poll = invitations.poll();
 	if poll.is_none() {
-		*poll = Some(tauri::async_runtime::spawn(polled(app.clone())));
+		*poll = Some(crate::events::core(app.app_handle()).spawn(polled(app.clone())));
 	}
 }
 
@@ -194,7 +194,7 @@ pub async fn signed_out<R: Runtime>(app: &AppHandle<R>) {
 	if let Some(poll) = poll {
 		poll.abort();
 		if let Err(error) = poll.await {
-			if !matches!(&error, tauri::Error::JoinError(joined) if joined.is_cancelled()) {
+			if !error.is_cancelled() {
 				eprintln!("the invitation poll ended abnormally: {error}");
 			}
 		}

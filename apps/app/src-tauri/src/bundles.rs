@@ -216,7 +216,7 @@ fn serialised_both(
 }
 
 pub fn root<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
-	Some(app.path().app_data_dir().ok()?.join(DIR_NAME))
+	Some(crate::events::core(app.app_handle()).data_dir().join(DIR_NAME))
 }
 
 pub fn lookup(root: &Path, bot_id: &str) -> std::io::Result<Option<PathBuf>> {

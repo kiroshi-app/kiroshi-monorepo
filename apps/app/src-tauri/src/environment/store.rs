@@ -26,7 +26,7 @@ type Assignments = Vec<(String, String)>;
 type Entries = Vec<(String, Option<String>)>;
 
 pub fn root<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
-	Some(app.path().app_data_dir().ok()?.join(DIR_NAME))
+	Some(crate::events::core(app.app_handle()).data_dir().join(DIR_NAME))
 }
 
 pub fn set(root: &Path, scope: &EnvScope, name: &str, value: &str) -> Result<(), EnvError> {

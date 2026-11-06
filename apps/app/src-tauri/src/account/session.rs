@@ -5,10 +5,10 @@ use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 
-use tauri::async_runtime::JoinHandle;
 use tauri::{AppHandle, Manager, Runtime};
 use tokio::net::TcpListener;
 use tokio::sync::{MutexGuard, Notify, OnceCell};
+use tokio::task::JoinHandle;
 
 use super::callback;
 use super::cloud::{AuthorizationRequest, Cloud, MeError, PollError, Polled};
@@ -136,8 +136,8 @@ async fn closed(waiting: &mut Option<JoinHandle<()>>) {
 	}
 }
 
-fn is_cancelled(error: &tauri::Error) -> bool {
-	matches!(error, tauri::Error::JoinError(joined) if joined.is_cancelled())
+fn is_cancelled(error: &tokio::task::JoinError) -> bool {
+	error.is_cancelled()
 }
 
 pub async fn sign_in<R: Runtime>(
@@ -178,7 +178,12 @@ pub async fn sign_in<R: Runtime>(
 			expires_at: request.expires_at.clone(),
 		},
 	);
-	*waiting = Some(tauri::async_runtime::spawn(approved(app.clone(), listener, nonce, request)));
+	*waiting = Some(crate::events::core(app.app_handle()).spawn(approved(
+		app.clone(),
+		listener,
+		nonce,
+		request,
+	)));
 	Ok(())
 }
 
@@ -331,7 +336,11 @@ fn name_queued<R: Runtime>(app: &AppHandle<R>, to_send: NameToSend) {
 	};
 	let mut naming = session.naming.lock().unwrap_or_else(PoisonError::into_inner);
 	let previous = naming.take();
-	*naming = Some(tauri::async_runtime::spawn(sent_after(app.clone(), previous, to_send)));
+	*naming = Some(crate::events::core(app.app_handle()).spawn(sent_after(
+		app.clone(),
+		previous,
+		to_send,
+	)));
 }
 
 async fn sent_after<R: Runtime>(
@@ -360,10 +369,12 @@ async fn name_sent<R: Runtime>(
 	};
 	let display_name = match to_send {
 		NameToSend::Renamed(display_name) => display_name,
-		NameToSend::Stored => match stored_display_name(app).await {
-			Some(display_name) => display_name,
-			None => return last_sent,
-		},
+		NameToSend::Stored => {
+			match stored_display_name(crate::events::core(app.app_handle())).await {
+				Some(display_name) => display_name,
+				None => return last_sent,
+			}
+		}
 	};
 	let sending =
 		SentName { account_id: account.id, name: trimmed_to(&display_name, DISPLAY_NAME_LIMIT) };
@@ -394,8 +405,8 @@ async fn name_sent<R: Runtime>(
 	}
 }
 
-async fn stored_display_name<R: Runtime>(app: &AppHandle<R>) -> Option<String> {
-	let read = match crate::events::core(app.app_handle()).state::<DatabaseState>().as_ref() {
+async fn stored_display_name(core: &crate::core_context::Core) -> Option<String> {
+	let read = match core.state::<DatabaseState>().as_ref() {
 		Ok(database) => database.user().preferences().await,
 		Err(failure) => {
 			eprintln!("the display name was not sent: the database is unavailable: {failure:?}");
@@ -430,7 +441,9 @@ pub async fn sign_out<R: Runtime>(app: &AppHandle<R>) -> Result<(), AccountError
 	let Some(bearer) = bearer else {
 		return Ok(());
 	};
-	if let Err(reason) = relay_device_deleted(app, &bearer, relay_device).await {
+	if let Err(reason) =
+		relay_device_deleted(crate::events::core(app.app_handle()), &bearer, relay_device).await
+	{
 		eprintln!("the relay device was not deleted, the sign-out goes on: {reason}");
 	}
 	if let Err(reason) = session.cloud.sign_out(&bearer).await {
@@ -440,26 +453,26 @@ pub async fn sign_out<R: Runtime>(app: &AppHandle<R>) -> Result<(), AccountError
 }
 
 async fn held_relay_device<R: Runtime>(app: &AppHandle<R>) -> Result<Option<String>, String> {
-	let Some((account_id, device_id)) = relay_device_owner(app)? else {
+	let Some((account_id, device_id)) = relay_device_owner(crate::events::core(app.app_handle()))?
+	else {
 		return Ok(None);
 	};
-	signed_in_database(app)?
+	signed_in_database(crate::events::core(app.app_handle()))?
 		.relay_devices()
 		.relay_device_id(account_id, device_id)
 		.await
 		.map_err(|failure| format!("the relay device id did not read: {failure:?}"))
 }
 
-async fn relay_device_deleted<R: Runtime>(
-	app: &AppHandle<R>,
+async fn relay_device_deleted(
+	core: &crate::core_context::Core,
 	bearer: &str,
 	relay_device: Result<Option<String>, String>,
 ) -> Result<(), String> {
 	let Some(relay_device_id) = relay_device? else {
 		return Ok(());
 	};
-	crate::events::core(app.app_handle())
-		.state::<AccountSession>()
+	core.state::<AccountSession>()
 		.cloud
 		.delete_device(bearer, &relay_device_id)
 		.await
@@ -473,23 +486,24 @@ async fn relay_device_forgotten<R: Runtime>(app: &AppHandle<R>) {
 }
 
 async fn held_relay_device_forgotten<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
-	let Some((account_id, device_id)) = relay_device_owner(app)? else {
+	let Some((account_id, device_id)) = relay_device_owner(crate::events::core(app.app_handle()))?
+	else {
 		return Ok(());
 	};
-	signed_in_database(app)?
+	signed_in_database(crate::events::core(app.app_handle()))?
 		.relay_devices()
 		.forgotten(account_id, device_id)
 		.await
 		.map_err(|failure| format!("{failure:?}"))
 }
 
-fn relay_device_owner<R: Runtime>(app: &AppHandle<R>) -> Result<Option<(String, String)>, String> {
-	let AccountState::SignedIn(account) =
-		crate::events::core(app.app_handle()).state::<AccountSession>().current()
-	else {
+fn relay_device_owner(
+	core: &crate::core_context::Core,
+) -> Result<Option<(String, String)>, String> {
+	let AccountState::SignedIn(account) = core.state::<AccountSession>().current() else {
 		return Ok(None);
 	};
-	let device_id = crate::events::core(app.app_handle())
+	let device_id = core
 		.try_state::<DeviceKeysState>()
 		.ok_or_else(|| "the device keys are not loaded".to_owned())?
 		.keys()
@@ -498,9 +512,8 @@ fn relay_device_owner<R: Runtime>(app: &AppHandle<R>) -> Result<Option<(String, 
 	Ok(Some((account.id, device_id)))
 }
 
-fn signed_in_database<R: Runtime>(app: &AppHandle<R>) -> Result<&Database, String> {
-	crate::events::core(app.app_handle())
-		.try_state::<DatabaseState>()
+fn signed_in_database(core: &crate::core_context::Core) -> Result<&Database, String> {
+	core.try_state::<DatabaseState>()
 		.ok_or_else(|| "the database is not loaded".to_owned())?
 		.inner()
 		.as_ref()
@@ -508,7 +521,7 @@ fn signed_in_database<R: Runtime>(app: &AppHandle<R>) -> Result<&Database, Strin
 }
 
 pub fn revoked<R: Runtime>(app: &AppHandle<R>, bearer: &str) {
-	tauri::async_runtime::spawn(signed_out_locally(
+	crate::events::core(app.app_handle()).spawn(signed_out_locally(
 		app.clone(),
 		bearer.to_owned(),
 		SIGNED_OUT_ON_SITE,
@@ -516,11 +529,19 @@ pub fn revoked<R: Runtime>(app: &AppHandle<R>, bearer: &str) {
 }
 
 pub fn device_revoked<R: Runtime>(app: &AppHandle<R>, bearer: &str) {
-	tauri::async_runtime::spawn(signed_out_locally(app.clone(), bearer.to_owned(), DEVICE_REVOKED));
+	crate::events::core(app.app_handle()).spawn(signed_out_locally(
+		app.clone(),
+		bearer.to_owned(),
+		DEVICE_REVOKED,
+	));
 }
 
 pub fn device_refused<R: Runtime>(app: &AppHandle<R>, bearer: &str) {
-	tauri::async_runtime::spawn(signed_out_locally(app.clone(), bearer.to_owned(), DEVICE_REFUSED));
+	crate::events::core(app.app_handle()).spawn(signed_out_locally(
+		app.clone(),
+		bearer.to_owned(),
+		DEVICE_REFUSED,
+	));
 }
 
 async fn signed_out_locally<R: Runtime>(
@@ -837,7 +858,7 @@ mod tests {
 				.expect("the name was sent in time")
 				.expect("the name was sent cleanly");
 			*session.naming.lock().expect("the naming") =
-				Some(tauri::async_runtime::spawn(async move { last_sent }));
+				Some(tokio::spawn(async move { last_sent }));
 		}
 
 		async fn renamed_to(&self, display_name: &str) -> UserPreferences {

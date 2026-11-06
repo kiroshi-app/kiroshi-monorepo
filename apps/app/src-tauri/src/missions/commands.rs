@@ -247,11 +247,16 @@ fn install<R: Runtime>(
 	workspace: &str,
 	key: &str,
 ) -> Result<(), MissionError> {
-	hook::installed(&hook::dir(app, mission_id)?, workspace, &hook_url(app)?, key)
+	hook::installed(
+		&hook::dir(app, mission_id)?,
+		workspace,
+		&hook_url(crate::events::core(app.app_handle()))?,
+		key,
+	)
 }
 
 pub async fn install_hooks_at_launch<R: Runtime>(app: &AppHandle<R>) {
-	let missions = match at_launch(app).await {
+	let missions = match at_launch(crate::events::core(app.app_handle())).await {
 		Ok(missions) => missions,
 		Err(failure) => {
 			return eprintln!("the open missions holding a checkout were not read: {failure:?}")
@@ -266,8 +271,8 @@ pub async fn install_hooks_at_launch<R: Runtime>(app: &AppHandle<R>) {
 	}
 }
 
-async fn at_launch<R: Runtime>(app: &AppHandle<R>) -> Result<Vec<HookedMission>, MissionError> {
-	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
+async fn at_launch(core: &crate::core_context::Core) -> Result<Vec<HookedMission>, MissionError> {
+	let state = core.state::<db::DatabaseState>();
 	ready(&state)?.missions().hooked().await
 }
 
@@ -535,7 +540,7 @@ pub async fn mission_watch<R: Runtime>(
 	let state = core.state::<db::DatabaseState>();
 	let watch = normalised(watch);
 	refused_watch(&watch)?;
-	let url = hook_url(&app)?;
+	let url = hook_url(crate::events::core(app.app_handle()))?;
 	let database = ready(&state)?;
 	let (armed, key) =
 		database.missions().arm(mission_id, watch, uuid::Uuid::new_v4().to_string()).await?;
@@ -603,13 +608,10 @@ fn refuse_unnamed(repository: &str) -> Result<(), MissionError> {
 	}
 }
 
-fn hook_url<R: Runtime>(app: &AppHandle<R>) -> Result<String, MissionError> {
-	crate::events::core(app.app_handle())
-		.try_state::<Webhook>()
-		.and_then(|webhook| webhook.mission_url())
-		.ok_or_else(|| MissionError::Undeliverable {
-			detail: "the local server answers no call".to_owned(),
-		})
+fn hook_url(core: &crate::core_context::Core) -> Result<String, MissionError> {
+	core.try_state::<Webhook>().and_then(|webhook| webhook.mission_url()).ok_or_else(|| {
+		MissionError::Undeliverable { detail: "the local server answers no call".to_owned() }
+	})
 }
 
 #[tauri::command]
