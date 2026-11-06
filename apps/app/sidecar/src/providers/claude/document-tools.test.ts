@@ -45,6 +45,7 @@ const A_REFUSAL = { kind: "missing", name: "notes.md" }
 
 const A_DIAGRAM = {
 	name: "plan.canvas",
+	mode: "insert",
 	nodes: [
 		{ key: "idea", kind: "sticky", text: "Idea" },
 		{
@@ -54,8 +55,10 @@ const A_DIAGRAM = {
 			place: { side: "right", of: "idea" },
 		},
 	],
-	edges: [{ from: "idea", to: "build", label: "then" }],
+	arrows: [{ key: "then", fromNode: "idea", toNode: "build", label: "then" }],
 }
+
+const A_HEADER = { name: "plan.canvas", updatedAt: 1, hash: "ab" }
 
 type Asked = { subtype: string; operation: string; payload: unknown }
 
@@ -98,7 +101,7 @@ afterEach(() => {
 })
 
 describe("libraryTools", () => {
-	it("serves the seven library tools, the tool that posts a document, the seven document tools and the six board tools", () => {
+	it("serves the seven library tools, the tool that posts a document, the seven document tools and the twelve board tools", () => {
 		expect(tools.map((held) => held.name)).toEqual([
 			"library_list",
 			"library_search",
@@ -116,11 +119,17 @@ describe("libraryTools", () => {
 			"document_delete_block",
 			"document_find",
 			"board_create",
-			"board_read",
-			"board_view",
-			"board_add",
+			"board_info",
+			"board_tree",
+			"board_node_info",
+			"board_canvas",
+			"board_write",
 			"board_update",
-			"board_remove",
+			"board_move",
+			"board_duplicate",
+			"board_delete",
+			"board_find",
+			"board_view",
 		])
 	})
 
@@ -167,26 +176,67 @@ describe("libraryTools", () => {
 		expect(fieldsOf("document_delete_block").required).toEqual(["name", "ids"])
 		expect(fieldsOf("document_find").required).toEqual(["name", "text"])
 		expect(fieldsOf("board_create").required).toEqual(["name"])
-		expect(fieldsOf("board_read").required).toEqual(["name"])
+		expect(fieldsOf("board_info").required).toEqual(["name"])
+		expect(fieldsOf("board_tree").required).toEqual(["name"])
+		expect(Object.keys(fieldsOf("board_tree").properties ?? {})).toEqual([
+			"name",
+			"parent",
+			"depth",
+		])
+		expect(fieldsOf("board_node_info").required).toEqual(["name"])
+		expect(fieldsOf("board_canvas").required).toEqual(["name"])
+		expect(fieldsOf("board_write").required).toEqual(["name", "mode"])
+		expect(fieldsOf("board_update").required).toEqual(["name"])
+		expect(fieldsOf("board_move").required).toEqual(["name", "nodes", "x", "y"])
+		expect(fieldsOf("board_duplicate").required).toEqual(["name", "nodes"])
+		expect(fieldsOf("board_delete").required).toEqual(["name"])
+		expect(fieldsOf("board_find").required).toEqual(["name"])
 		expect(fieldsOf("board_view").required).toEqual(["name", "id"])
-		expect(fieldsOf("board_add").required).toEqual(["name"])
-		expect(fieldsOf("board_update").required).toEqual(["name", "nodes"])
-		expect(fieldsOf("board_remove").required).toEqual(["name", "ids"])
 	})
 
 	it("hands each board call to the library host of its session under its operation", async () => {
 		const asked = aHost(() => ({ result: {} }))
 		const calls: [string, string, Record<string, unknown>][] = [
 			["board_create", "boardCreate", { name: "plan.canvas" }],
-			["board_read", "boardRead", { name: "plan.canvas" }],
-			["board_view", "boardView", { name: "plan.canvas", id: "n1" }],
-			["board_add", "boardAdd", A_DIAGRAM],
+			["board_info", "boardInfo", { name: "plan.canvas" }],
+			[
+				"board_tree",
+				"boardTree",
+				{ name: "plan.canvas", parent: "s", depth: 2 },
+			],
+			[
+				"board_node_info",
+				"boardNodeInfo",
+				{ name: "plan.canvas", nodes: ["n1"], arrows: ["a1"] },
+			],
+			["board_canvas", "boardCanvas", { name: "plan.canvas", parent: "s" }],
+			["board_write", "boardWrite", A_DIAGRAM],
 			[
 				"board_update",
 				"boardUpdate",
-				{ name: "plan.canvas", nodes: [{ id: "n1", text: "Ship" }] },
+				{
+					name: "plan.canvas",
+					nodes: [{ id: "n1", text: "Ship" }],
+					arrows: [{ id: "a1", toSide: "top", bend: 20 }],
+				},
 			],
-			["board_remove", "boardRemove", { name: "plan.canvas", ids: ["n1"] }],
+			[
+				"board_move",
+				"boardMove",
+				{ name: "plan.canvas", nodes: ["n1"], parent: "s", x: 0, y: 40 },
+			],
+			[
+				"board_duplicate",
+				"boardDuplicate",
+				{ name: "plan.canvas", nodes: ["n1"] },
+			],
+			[
+				"board_delete",
+				"boardDelete",
+				{ name: "plan.canvas", nodes: ["n1"], arrows: ["a1"] },
+			],
+			["board_find", "boardFind", { name: "plan.canvas", text: "ship" }],
+			["board_view", "boardView", { name: "plan.canvas", id: "n1" }],
 		]
 
 		for (const [name, , input] of calls) {
@@ -202,9 +252,10 @@ describe("libraryTools", () => {
 		)
 	})
 
-	it("shows an image node a person dropped on a board to the model as image content", async () => {
+	it("shows an image node a person dropped on a board to the model as image content with the board header", async () => {
 		const asked = aHost(() => ({
 			result: {
+				header: A_HEADER,
 				form: "image",
 				name: "cat.png",
 				mimeType: "image/png",
@@ -226,6 +277,7 @@ describe("libraryTools", () => {
 		])
 		expect(result.content).toEqual([
 			{ type: "image", data: "cG5n", mimeType: "image/png" },
+			{ type: "text", text: JSON.stringify({ header: A_HEADER }) },
 		])
 		expect(result.isError).toBeUndefined()
 	})
@@ -274,7 +326,7 @@ describe("libraryTools", () => {
 		}
 		aHost(() => ({ error: refusal }))
 
-		const result = await called("board_add", A_DIAGRAM)
+		const result = await called("board_write", A_DIAGRAM)
 
 		expect(spoken(result)).toEqual(refusal)
 		expect(result.isError).toBe(true)
@@ -455,7 +507,9 @@ describe("libraryTools", () => {
 				expect(description).not.toMatch(/\b(edge|connector)s?\b/i)
 			}
 		}
-		expect(theTool("board_add").description).toContain("An arrow ties")
+		expect(theTool("board_write").description).toContain(
+			"An arrow names its ends",
+		)
 	})
 
 	it("refuses to import a path the floor denies or that is gone, without asking the host", async () => {

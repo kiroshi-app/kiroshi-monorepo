@@ -404,11 +404,17 @@ mod tests {
 			"`library_rename`",
 			"`library_delete`",
 			"`board_create`",
-			"`board_read`",
-			"`board_view`",
-			"`board_add`",
+			"`board_info`",
+			"`board_tree`",
+			"`board_node_info`",
+			"`board_canvas`",
+			"`board_write`",
 			"`board_update`",
-			"`board_remove`",
+			"`board_move`",
+			"`board_duplicate`",
+			"`board_delete`",
+			"`board_find`",
+			"`board_view`",
 			"`conversation_post_document`",
 			"`document_info`",
 			"`document_tree`",
@@ -427,7 +433,14 @@ mod tests {
 	fn no_skill_names_a_tool_the_library_tools_replaced() {
 		for (name, bytes) in FILES {
 			let text = String::from_utf8_lossy(bytes);
-			for replaced in ["`document_read`", "`document_write`", "`library_write`"] {
+			for replaced in [
+				"`document_read`",
+				"`document_write`",
+				"`library_write`",
+				"`board_read`",
+				"`board_add`",
+				"`board_remove`",
+			] {
 				assert!(!text.contains(replaced), "{name} still names {replaced}");
 			}
 		}

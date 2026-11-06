@@ -142,11 +142,17 @@ describe("kiroshiServer", () => {
 			"document_delete_block",
 			"document_find",
 			"board_create",
-			"board_read",
-			"board_view",
-			"board_add",
+			"board_info",
+			"board_tree",
+			"board_node_info",
+			"board_canvas",
+			"board_write",
 			"board_update",
-			"board_remove",
+			"board_move",
+			"board_duplicate",
+			"board_delete",
+			"board_find",
+			"board_view",
 		])
 	})
 
