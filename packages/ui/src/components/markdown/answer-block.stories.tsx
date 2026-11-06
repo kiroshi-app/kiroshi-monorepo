@@ -211,7 +211,6 @@ const meta = preview.meta({
 		children: INTERACTIVE,
 		answerActions: {
 			agentName: "Atlas",
-			onPickOption: fn(),
 			onUseValues: fn(),
 			onOpenImage: fn(),
 			onOpenWebPage: fn(),
@@ -691,7 +690,6 @@ const IMAGE_MENU_ENTRIES = ["Save to Library", "Copy image", "Open in viewer"]
 
 const IMAGE_MENU_ACTIONS: MarkdownAnswerActions = {
 	agentName: "Atlas",
-	onPickOption: fn(),
 	onUseValues: fn(),
 	onOpenImage: fn(),
 	onOpenWebPage: fn(),
@@ -1372,7 +1370,6 @@ export const ImagesLookTheSameWhenOpenable = meta.story({
 
 const ARTBOARD_ACTIONS: MarkdownAnswerActions = {
 	agentName: "Atlas",
-	onPickOption: fn(),
 	onUseValues: fn(),
 	onOpenImage: fn(),
 	onOpenWebPage: fn(),

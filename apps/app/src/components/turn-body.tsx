@@ -157,7 +157,6 @@ export const AnswerBody = ({
 		<TurnBody
 			answerActions={{
 				agentName,
-				onPickOption: actions.insert,
 				onUseValues: actions.insert,
 				onOpenImage: actions.openImage,
 				onOpenWebPage: openWebPage,

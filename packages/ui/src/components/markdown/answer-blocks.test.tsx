@@ -162,7 +162,6 @@ const slot = (name: string) => `data-slot="${name}"`
 
 const ANSWER_ACTIONS: MarkdownAnswerActions = {
 	agentName: "Atlas",
-	onPickOption: () => undefined,
 	onUseValues: () => undefined,
 	onOpenImage: () => undefined,
 }
