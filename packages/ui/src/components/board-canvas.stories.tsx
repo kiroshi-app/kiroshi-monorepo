@@ -317,7 +317,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The board of a Space in its own tab: a dot grid the board slides over, the objects it mounts through `renderObject`, and the zoom control at the bottom end corner. The viewport is controlled: two-finger scroll, the mouse wheel and the arrow keys with nothing selected pan, a pinch zooms around the pointer, the buttons step the zoom around the centre, and every move goes out through `onViewportChange`. Only the objects inside the visible area plus a margin are mounted. A press or Tab selects an object and draws its frame and corner handles in the Space colour, a selected shape gets its style bar above it, and every move, resize, text edit, style pick or delete goes out through `onIntent` as a `BoardIntent`: the canvas never changes the board itself. Connectors are drawn by the canvas from the live rects of their ends, Straight or Elbow: with `isConnecting` on, a hovered object shows its outline and four anchors, a drag from one anchor to another object's anchor sends a connect intent, and the flyout picks the kind of the next connector or of the selected one. The tool dock sits centred at the bottom with the Library picker above it, a Library tile dragged onto the board emits `onLibraryItemDrop` with the board point, a link, an image or files pasted on the focused board emit `onPaste` with the centre of the view and the object whose id it returns gets selected, and files dragged in from the desktop show the drop target and emit `onDropFiles` where they land, and a link dragged in shows it too and emits `onDropUrl` with the first link of the list and the board point whatever its scheme, the app deciding what it becomes.",
+					"The board of a Space in its own tab: a dot grid the board slides over, the objects it mounts through `renderObject`, and the zoom control at the bottom end corner. The viewport is controlled: two-finger scroll, the mouse wheel and the arrow keys with nothing selected pan, a pinch zooms around the pointer, the buttons step the zoom around the centre, and every move goes out through `onViewportChange`. Only the objects inside the visible area plus a margin are mounted. A press or Tab selects an object and draws its frame and corner handles in the Space colour, a selected shape gets its style bar above it, and every move, resize, text edit, style pick or delete goes out through `onIntent` as a `BoardIntent`: the canvas never changes the board itself. Connectors are drawn by the canvas from the live rects of their ends, Straight or Elbow: with `isConnecting` on, a hovered object shows its outline and four anchors, a drag from one anchor to another object's anchor sends a connect intent, and the flyout picks the kind of the next connector, Elbow until changed, or of the selected one. The tool dock sits centred at the bottom with the Library picker above it, a Library tile dragged onto the board emits `onLibraryItemDrop` with the board point, a link, an image or files pasted on the focused board emit `onPaste` with the centre of the view and the object whose id it returns gets selected, and files dragged in from the desktop show the drop target and emit `onDropFiles` where they land, and a link dragged in shows it too and emits `onDropUrl` with the first link of the list and the board point whatever its scheme, the app deciding what it becomes.",
 			},
 		},
 	},
@@ -2230,10 +2230,13 @@ const connectorPaths = (root: HTMLElement, slot: string) =>
 		),
 	).map((path) => path.getAttribute("d"))
 
-const pickElbow = async (root: HTMLElement) => {
-	const elbow = within(root).getByRole("radio", { name: "Elbow" })
-	await userEvent.click(elbow)
-	await expect(elbow).toBeChecked()
+const expectElbowChecked = (root: HTMLElement) =>
+	expect(within(root).getByRole("radio", { name: "Elbow" })).toBeChecked()
+
+const pickStraight = async (root: HTMLElement) => {
+	const straight = within(root).getByRole("radio", { name: "Straight" })
+	await userEvent.click(straight)
+	await expect(straight).toBeChecked()
 }
 
 const hoverObject = (root: HTMLElement, id: string) =>
@@ -2327,9 +2330,10 @@ export const CreateConnector = meta.story({
 	globals: LAPTOP_WINDOW,
 	args: CONNECTOR_ARGS,
 	parameters: connectorDocs(
-		"Connector mode on. A drag from the right anchor of the sticky released on empty board sends nothing and leaves no line. Elbow picked in the flyout, a drag from the same anchor released over Review sends one set-arrow intent tied to the right side of the sticky and to the centre of Review, of the elbow kind, and the committed connector draws in the board shape border colour, 1.5 board units with round caps, rounded corners of 8 and the open chevron 8 off Review. Pick ConnectorBeingDrawn for the drag in progress.",
+		"Connector mode on, the flyout opens with Elbow checked. A drag from the right anchor of the sticky released on empty board sends nothing and leaves no line. With no pick in the flyout, a drag from the same anchor released over Review sends one set-arrow intent tied to the right side of the sticky and to the centre of Review, of the elbow kind, and the committed connector draws in the board shape border colour, 1.5 board units with round caps, rounded corners of 8 and the open chevron 8 off Review. Pick ConnectorBeingDrawn for the drag in progress.",
 	),
 	play: async ({ canvasElement, args }) => {
+		await expectElbowChecked(canvasElement)
 		const source = await hoverPlanRightAnchor(canvasElement)
 		pointerAt("pointerdown", source, centreOf(source))
 		const empty = boardAt(canvasElement, 640, 520)
@@ -2343,7 +2347,6 @@ export const CreateConnector = meta.story({
 		)
 		await expect(args.onIntent).not.toHaveBeenCalled()
 
-		await pickElbow(canvasElement)
 		const release = await dragFromPlanOntoReview(canvasElement)
 		pointerAt("pointerup", document, release)
 		await waitFor(() => expect(args.onIntent).toHaveBeenCalledTimes(1))
@@ -2394,10 +2397,10 @@ export const ConnectorBeingDrawn = meta.story({
 	globals: LAPTOP_WINDOW,
 	args: CONNECTOR_ARGS,
 	parameters: connectorDocs(
-		"An elbow connector being drawn. Check the hover ring 4px outside the hovered sticky, 2px in the Space colour with 7px corners, its four 10px anchors centred on the middle of each side on the board surface with a 2px Space-colour ring, the anchor under the pointer filled in the Space colour with a 3px ring at 25%. Over Review the target wears the same ring with no anchors, and the line runs in the Space colour from a dot of radius 4 on the source anchor to the open chevron 8 off Review, aimed at its centre, Elbow picked in the flyout. Pick CreateConnector for the release.",
+		"An elbow connector being drawn. Check the hover ring 4px outside the hovered sticky, 2px in the Space colour with 7px corners, its four 10px anchors centred on the middle of each side on the board surface with a 2px Space-colour ring, the anchor under the pointer filled in the Space colour with a 3px ring at 25%. Over Review the target wears the same ring with no anchors, and the line runs in the Space colour from a dot of radius 4 on the source anchor to the open chevron 8 off Review, aimed at its centre, Elbow checked in the flyout from the start. Pick CreateConnector for the release.",
 	),
 	play: async ({ canvasElement, args }) => {
-		await pickElbow(canvasElement)
+		await expectElbowChecked(canvasElement)
 		await hoverPlanRightAnchor(canvasElement)
 		await expectAnchorFrame(canvasElement, "plan")
 
@@ -2439,6 +2442,43 @@ export const ConnectorBeingDrawnDark = meta.story({
 	play: async (context) => {
 		await expectDarkSurface(context.canvasElement)
 		await ConnectorBeingDrawn.input.play?.(context)
+	},
+})
+
+export const CreateStraightConnector = meta.story({
+	globals: LAPTOP_WINDOW,
+	args: CONNECTOR_ARGS,
+	parameters: connectorDocs(
+		"Connector mode on, Straight picked in the flyout before drawing: a drag from the right anchor of the sticky released over Review sends one set-arrow intent of the straight kind, and the committed connector runs as one straight line to the open chevron 8 off Review. Pick CreateConnector for the Elbow default.",
+	),
+	play: async ({ canvasElement, args }) => {
+		await pickStraight(canvasElement)
+		const release = await dragFromPlanOntoReview(canvasElement)
+		pointerAt("pointerup", document, release)
+		await waitFor(() => expect(args.onIntent).toHaveBeenCalledTimes(1))
+		await expect(args.onIntent).toHaveBeenCalledWith({
+			type: "set-arrow",
+			arrow: expect.objectContaining({
+				from: "plan",
+				to: "review",
+				routing: "straight",
+			}),
+		})
+		await expect(connectorPaths(canvasElement, "board-connector")).toEqual([
+			DRAWN_STRAIGHT_PATH,
+		])
+	},
+})
+
+export const CreateStraightConnectorDark = meta.story({
+	globals: { ...LAPTOP_WINDOW, theme: "dark" },
+	args: CONNECTOR_ARGS,
+	parameters: connectorDocs(
+		"CreateStraightConnector in the dark theme: the same pick, drag and single set-arrow intent.",
+	),
+	play: async (context) => {
+		await expectDarkSurface(context.canvasElement)
+		await CreateStraightConnector.input.play?.(context)
 	},
 })
 
@@ -3358,9 +3398,10 @@ export const ArrowAimedAtShapeDark = meta.story({
 export const ArrowReleasedOnCentre = meta.story({
 	args: drawingArgs,
 	parameters: handDocs(
-		"Arrow behaviour 1.2 Quick release: released over Finish right after reaching it, the end ties to the centre of Finish. One set-arrow intent goes out with the end on Finish and no side, anchor or point, and the committed arrow rests in the board shape border colour, 8 before the outline of Finish on the line between the two centres.",
+		"Arrow behaviour 1.2 Quick release: released over Finish right after reaching it, the end ties to the centre of Finish. One set-arrow intent goes out with the end on Finish and no side, anchor or point, and the committed arrow rests in the board shape border colour, 8 before the outline of Finish on the line between the two centres. Straight is picked in the flyout first, as the artboard draws it.",
 	),
 	play: async ({ canvasElement, args }) => {
+		await pickStraight(canvasElement)
 		await pressStartRightAnchor(canvasElement)
 		const over = atBoard(canvasElement, OVER_FINISH)
 		pointerAt("pointermove", document, over)
@@ -3391,9 +3432,10 @@ export const ArrowReleasedOnCentreDark = meta.story({
 export const ArrowHeldOnExactPoint = meta.story({
 	args: drawingArgs,
 	parameters: handDocs(
-		"Arrow behaviour 1.3 Exact point: the pointer resting still over Finish for half a second ties the end to the point under it. The ring stays, the draft reaches the point with no gap over a 4.5 halo in the board colour, and the point carries the marker, a ring of radius 9 stroked 2 around a dot of radius 3, in the darker step of the Space colour. The release sends one set-arrow intent with the point as an anchor of Finish.",
+		"Arrow behaviour 1.3 Exact point: the pointer resting still over Finish for half a second ties the end to the point under it. The ring stays, the draft reaches the point with no gap over a 4.5 halo in the board colour, and the point carries the marker, a ring of radius 9 stroked 2 around a dot of radius 3, in the darker step of the Space colour. The release sends one set-arrow intent with the point as an anchor of Finish. Straight is picked in the flyout first, as the artboard draws it.",
 	),
 	play: async ({ canvasElement, args }) => {
+		await pickStraight(canvasElement)
 		await pressStartRightAnchor(canvasElement)
 		const inside = atBoard(canvasElement, INSIDE_FINISH)
 		pointerAt("pointermove", document, inside)
@@ -3440,9 +3482,10 @@ export const ArrowHeldOnExactPointDark = meta.story({
 export const ArrowDrawnWithAlt = meta.story({
 	args: drawingArgs,
 	parameters: handDocs(
-		"Arrow behaviour 1.4 Alt held: while Alt is held the end sits exactly at the cursor inside Finish, still tied to it. The ring stays, the draft reaches the cursor over its halo and no marker shows, even with the pointer still. Alt pressed or let go without moving the pointer moves the end at once, and the release sends one set-arrow intent with the cursor as an anchor of Finish.",
+		"Arrow behaviour 1.4 Alt held: while Alt is held the end sits exactly at the cursor inside Finish, still tied to it. The ring stays, the draft reaches the cursor over its halo and no marker shows, even with the pointer still. Alt pressed or let go without moving the pointer moves the end at once, and the release sends one set-arrow intent with the cursor as an anchor of Finish. Straight is picked in the flyout first, as the artboard draws it.",
 	),
 	play: async ({ canvasElement, args }) => {
+		await pickStraight(canvasElement)
 		await pressStartRightAnchor(canvasElement)
 		const inside = atBoard(canvasElement, INSIDE_FINISH)
 		pointerAt("pointermove", document, inside)
@@ -3492,9 +3535,10 @@ export const ArrowDrawnWithAltDark = meta.story({
 export const ArrowDrawnWithCtrl = meta.story({
 	args: drawingArgs,
 	parameters: handDocs(
-		"Arrow behaviour 1.5 Ctrl held: while Ctrl is held no shape takes the end. Finish loses its ring, the draft reaches the cursor over its halo with no marker, and the release sends one set-arrow intent with the end left untied on the board point under the cursor.",
+		"Arrow behaviour 1.5 Ctrl held: while Ctrl is held no shape takes the end. Finish loses its ring, the draft reaches the cursor over its halo with no marker, and the release sends one set-arrow intent with the end left untied on the board point under the cursor. Straight is picked in the flyout first, as the artboard draws it.",
 	),
 	play: async ({ canvasElement, args }) => {
+		await pickStraight(canvasElement)
 		await pressStartRightAnchor(canvasElement)
 		const inside = atBoard(canvasElement, INSIDE_FINISH)
 		pointerAt("pointermove", document, inside, { ctrlKey: true })
@@ -4382,19 +4426,24 @@ export const DrawConnectorWithTool = meta.story({
 	globals: LAPTOP_WINDOW,
 	args: { ...CONNECTOR_ARGS, isConnecting: false },
 	parameters: toolDocs(
-		"Connector picked in the dock, with no `isConnecting` from the app: a hovered object shows its anchors and a drag from the sticky's right anchor released over Review sends one set-arrow intent and draws the connector to its centre.",
+		"Connector picked in the dock, with no `isConnecting` from the app: a hovered object shows its anchors and a drag from the sticky's right anchor released over Review sends one set-arrow intent and draws the connector to its centre, elbowed since the flyout starts on Elbow.",
 	),
 	play: async ({ canvasElement, args }) => {
 		await pickTool(canvasElement, "Arrow")
+		await expectElbowChecked(canvasElement)
 		const release = await dragFromPlanOntoReview(canvasElement)
 		pointerAt("pointerup", document, release)
 		await waitFor(() => expect(args.onIntent).toHaveBeenCalledTimes(1))
 		await expect(args.onIntent).toHaveBeenCalledWith({
 			type: "set-arrow",
-			arrow: expect.objectContaining({ from: "plan", to: "review" }),
+			arrow: expect.objectContaining({
+				from: "plan",
+				to: "review",
+				routing: "elbow",
+			}),
 		})
 		await expect(connectorPaths(canvasElement, "board-connector")).toEqual([
-			DRAWN_STRAIGHT_PATH,
+			DRAWN_ELBOW_PATH,
 		])
 	},
 })
