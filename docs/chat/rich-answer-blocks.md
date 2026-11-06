@@ -1,6 +1,6 @@
 # Rich answer blocks
 
-An agent answers in Markdown. Eleven shapes of content earn a block of their own, drawn by the
+An agent answers in Markdown. Ten shapes of content earn a block of their own, drawn by the
 chat as a component instead of as text. This document is the syntax of each block, the fields it
 takes and when an agent writes it. The system skill `skills/rich-answers/SKILL.md` of the `kiroshi`
 plugin states the same syntax to every agent, and a test in `apps/app/src-tauri/src/bundles/system.rs`
@@ -169,31 +169,6 @@ One item per entry, each one with its picture.
 
 When: two to eight things the person tells apart by how they look, such as places, products or
 rooms.
-
-### Options card
-
-Form: ` ```options `
-
-The paths open to the person, each with what it means.
-
-| Field | Type | Required |
-| --- | --- | --- |
-| question | block, text, what the person is choosing | no |
-| title | item, text, the name of the option | yes |
-| text | item, text, one line on what it costs and what it gives | yes |
-
-````markdown
-```options
-question: How should the migration ship?
-- title: One release
-  text: A single downtime window of about ten minutes, nothing to keep in sync.
-- title: Dual write
-  text: No downtime, two weeks of writing to both tables before the switch.
-```
-````
-
-When: the person asks for options to explore, or the answer is two to five distinct ways forward
-the person picks from. The card picks nothing: the agent waits for the person to name an option.
 
 ### Interactive view
 

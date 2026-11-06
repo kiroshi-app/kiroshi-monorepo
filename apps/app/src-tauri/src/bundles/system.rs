@@ -434,7 +434,7 @@ mod tests {
 
 		assert!(text.contains("disable-model-invocation: true"), "got {text}");
 		assert!(text.contains("preload: true"), "got {text}");
-		assert_eq!(sections.len(), 11, "the reference names eleven blocks");
+		assert_eq!(sections.len(), 10, "the reference names ten blocks");
 		for section in sections {
 			let form = form_of(section);
 			assert!(text.contains(form), "{form} is missing");
@@ -464,13 +464,21 @@ mod tests {
 			"Reach for the construct that fits the content first:",
 			"Prose is the few lines that tie those visuals together, and the answer stays short.",
 			"When a person asks for a checklist of steps, write the checklist block.",
-			"When a person asks for options to explore, write the options card.",
 			"never JSON and never HTML",
 			"Never put a script, HTML, a network fetch, a storage access or a name that is not a declared slider in it.",
 		] {
 			assert!(said_in_one_breath.contains(said), "{said} is missing");
 		}
 	}
+
+	#[test]
+	fn the_rich_answers_skill_writes_no_options_fence() {
+		let text = String::from_utf8_lossy(embedded(RICH_ANSWERS));
+
+		assert!(!text.contains(&format!("```{OPTIONS}")), "got {text}");
+	}
+
+	const OPTIONS: &str = "options";
 
 	const MARKDOWN: &str = "components.tsx";
 
@@ -496,7 +504,6 @@ mod tests {
 		("Callout tip", &[(MARKS, "TIP: \"tip\"")]),
 		("Callout warning", &[(MARKS, "WARNING: \"warning\"")]),
 		("Illustrated list", &[(BLOCKS, "\"illustrated-list\": readIllustratedList,")]),
-		("Options card", &[(BLOCKS, "options: readOptions,")]),
 		("Interactive view", &[(BLOCKS, "interactive: readInteractive,")]),
 		("Collapsible section", &[(BLOCKS, "collapsible: readCollapsible,")]),
 		("Web page card", &[(BLOCKS, "\"web-page\": readWebPage,")]),
@@ -589,6 +596,7 @@ mod tests {
 			.lines()
 			.filter_map(|line| line.trim().split(':').next())
 			.map(|label| label.trim_matches('"'))
+			.filter(|label| *label != OPTIONS)
 			.collect();
 		assert!(!labels.is_empty(), "the renderer reads no fenced block");
 		for label in labels {
