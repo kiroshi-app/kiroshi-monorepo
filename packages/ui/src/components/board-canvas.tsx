@@ -852,7 +852,7 @@ const ReadyBoardCanvas = ({
 	useEffect(() => () => stopDrafting.current?.(), [])
 
 	useLayoutEffect(() => {
-		if (placed || size === NO_SIZE || !canvas.current) return
+		if (placed || !size.width || !size.height || !canvas.current) return
 		const fitted = openingViewportOf(
 			view.objects,
 			size,

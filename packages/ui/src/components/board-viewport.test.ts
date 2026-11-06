@@ -237,6 +237,14 @@ describe("openingViewportOf", () => {
 		expect(opening).toEqual({ zoom: 1, offset: { x: 575, y: 450 } })
 	})
 
+	it("holds the zoom at the minimum when the canvas is narrower than its margins, still centred", () => {
+		const box = { width: 100, height: 80 }
+		const opening = openingViewportOf([sticky("a", 0, 0)], box, MARGIN)
+
+		expect(opening.zoom).toBe(BOARD_ZOOM_MIN)
+		expect(toScreen(opening, { x: 50, y: 50 })).toEqual({ x: 50, y: 40 })
+	})
+
 	it("puts the origin of an empty board at the centre, at 100 percent", () => {
 		expect(openingViewportOf([], SCREEN, MARGIN)).toEqual({
 			zoom: 1,

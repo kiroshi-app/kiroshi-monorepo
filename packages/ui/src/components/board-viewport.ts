@@ -139,27 +139,31 @@ const gridScreenPitch = (zoom: number) => {
 	return pitch
 }
 
+const fitZoomOf = (bounds: BoardRect, box: BoardSize, margin: number) =>
+	Math.min(
+		1,
+		(box.width - 2 * margin) / bounds.width,
+		(box.height - 2 * margin) / bounds.height,
+	)
+
+const centredAt = (
+	bounds: BoardRect,
+	box: BoardSize,
+	zoom: number,
+): BoardViewport => ({
+	zoom,
+	offset: {
+		x: (box.width - bounds.width * zoom) / 2 - bounds.x * zoom,
+		y: (box.height - bounds.height * zoom) / 2 - bounds.y * zoom,
+	},
+})
+
 const fitBoardBounds = (
 	bounds: BoardRect,
 	box: BoardSize,
 	margin: number,
-): BoardViewport => {
-	const zoom = Math.max(
-		0,
-		Math.min(
-			1,
-			(box.width - 2 * margin) / bounds.width,
-			(box.height - 2 * margin) / bounds.height,
-		),
-	)
-	return {
-		zoom,
-		offset: {
-			x: (box.width - bounds.width * zoom) / 2 - bounds.x * zoom,
-			y: (box.height - bounds.height * zoom) / 2 - bounds.y * zoom,
-		},
-	}
-}
+): BoardViewport =>
+	centredAt(bounds, box, Math.max(0, fitZoomOf(bounds, box, margin)))
 
 const contentBoundsOf = (objects: readonly BoardObject[]) => {
 	const itemsById = new Map(
@@ -179,7 +183,7 @@ const openingViewportOf = (
 ): BoardViewport => {
 	const bounds = contentBoundsOf(objects)
 	return bounds
-		? fitBoardBounds(bounds, box, margin)
+		? centredAt(bounds, box, clampZoom(fitZoomOf(bounds, box, margin)))
 		: { zoom: 1, offset: { x: box.width / 2, y: box.height / 2 } }
 }
 
