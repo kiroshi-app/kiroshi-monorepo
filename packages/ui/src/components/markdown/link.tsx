@@ -67,7 +67,7 @@ export const MarkdownLink = ({
 		renderBoardLink && boardName !== null
 			? renderBoardLink({ name: boardName, words: node ? textOf(node) : "" })
 			: null
-	if (board != null) return <>{board}</>
+	if (board != null) return board
 
 	const url = href ? linkUrl(href) : null
 	const destination = url && EXTERNAL_SCHEMES.has(url.protocol) ? url : null

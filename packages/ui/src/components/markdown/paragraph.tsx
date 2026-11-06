@@ -51,7 +51,7 @@ export const MarkdownParagraph = ({
 	const boards = boardLinksOf(node).map((link) => renderBoardLink(link))
 	const [loneBoard] = boards
 	if (boards.length === 1 && loneBoard != null && isLoneLink(node))
-		return <>{loneBoard}</>
+		return loneBoard
 
 	return (
 		<>
