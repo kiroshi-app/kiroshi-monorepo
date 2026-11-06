@@ -13,7 +13,6 @@ import {
 	useResizableWidth,
 } from "@workspace/ui/components/resize-handle"
 import { TooltipButton } from "@workspace/ui/components/tooltip-button"
-import { Button } from "@workspace/ui/components/ui/button"
 import { useRenderedWidth } from "@workspace/ui/hooks/use-rendered-width"
 import { libraryDisplayName } from "@workspace/ui/lib/library-display-name"
 import { cn } from "@workspace/ui/lib/utils"
@@ -51,52 +50,38 @@ const BAR_BUTTON = cn(
 	FOCUS_OUTLINE,
 )
 
-const OPEN_IN_TAB_BUTTON = cn(
-	"h-auto shrink-0 gap-1.5 rounded-full border-border p-2 text-compact text-foreground leading-4 transition-none hover:bg-foreground/8 active:bg-foreground/12 dark:hover:bg-foreground/8",
-	FOCUS_OUTLINE,
-)
-
 const DOCUMENT_PANEL_DEFAULT_WIDTH = 600
 const DOCUMENT_PANEL_MIN_WIDTH = 400
 const DOCUMENT_PANEL_MAX_WIDTH = 800
 const THREAD_MIN_WIDTH = 320
 
-type DocumentPanelVariant =
-	| {
-			variant?: "document"
-			onOpenInLibrary: () => void
-			onOpenInTab?: never
-	  }
-	| {
-			variant: "board"
-			onOpenInTab: () => void
-			onOpenInLibrary?: never
-	  }
-
-type DocumentPanelProps = DocumentPanelVariant & {
+type DocumentPanelProps = {
+	variant?: "document" | "board"
 	title: string
 	width?: number
 	defaultWidth?: number
 	onWidthChange?: (width: number) => void
 	presence?: ReactNode
+	onOpenInLibrary: () => void
 	onClose: () => void
 	children: ReactNode
 }
 
 const DocumentPanel = ({
+	variant = "document",
 	title,
 	width,
 	defaultWidth = DOCUMENT_PANEL_DEFAULT_WIDTH,
 	onWidthChange,
 	presence,
+	onOpenInLibrary,
 	onClose,
 	children,
-	...variant
 }: DocumentPanelProps) => {
 	const { t } = useTranslation("common")
 	const titleId = useId()
 	const shownTitle = libraryDisplayName(title, t)
-	const isBoard = variant.variant === "board"
+	const isBoard = variant === "board"
 	const resize = useResizableWidth({
 		width,
 		defaultWidth,
@@ -137,10 +122,7 @@ const DocumentPanel = ({
 				slot="document-panel-resize-handle"
 			/>
 			<div
-				className={cn(
-					"flex shrink-0 items-center gap-2 border-foreground/6 border-b px-3",
-					isBoard ? "h-13" : "h-12 pt-px",
-				)}
+				className="flex h-12 shrink-0 items-center gap-2 border-foreground/6 border-b px-3 pt-px"
 				data-slot="document-panel-header"
 			>
 				{isBoard ? <BoardGlyph /> : <DocumentGlyph />}
@@ -152,28 +134,17 @@ const DocumentPanel = ({
 					{shownTitle}
 				</p>
 				{presence}
-				{variant.variant === "board" ? (
-					<Button
-						className={OPEN_IN_TAB_BUTTON}
-						onClick={variant.onOpenInTab}
-						variant="ghost"
-					>
-						<Icons.ExternalLink aria-hidden="true" className="size-3.5" />
-						{t("board.panel.openInTab")}
-					</Button>
-				) : (
-					<TooltipButton
-						aria-label={t("library.panel.openInLibrary")}
-						className={BAR_BUTTON}
-						onClick={variant.onOpenInLibrary}
-						size="icon"
-						tooltip={t("library.panel.openInLibrary")}
-						tooltipSide="bottom"
-						variant="ghost"
-					>
-						<Icons.Library aria-hidden="true" />
-					</TooltipButton>
-				)}
+				<TooltipButton
+					aria-label={t("library.panel.openInLibrary")}
+					className={BAR_BUTTON}
+					onClick={onOpenInLibrary}
+					size="icon"
+					tooltip={t("library.panel.openInLibrary")}
+					tooltipSide="bottom"
+					variant="ghost"
+				>
+					<Icons.Library aria-hidden="true" />
+				</TooltipButton>
 				<TooltipButton
 					aria-label={t("library.panel.close")}
 					className={BAR_BUTTON}

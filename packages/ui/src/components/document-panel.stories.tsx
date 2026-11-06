@@ -1,5 +1,5 @@
 import { type CSSProperties, type ReactNode, useState } from "react"
-import { expect, fn, userEvent, waitFor, within } from "storybook/test"
+import { expect, fn, screen, userEvent, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
@@ -184,30 +184,6 @@ const verticalCentreOf = (element: Element) => {
 const pointerAt = (type: string, clientX: number) =>
 	new PointerEvent(type, { bubbles: true, button: 0, clientX })
 
-type PanelStoryArgs = Omit<
-	DocumentPanelProps,
-	"variant" | "onOpenInLibrary" | "onOpenInTab"
-> & {
-	variant?: "document" | "board"
-	onOpenInLibrary?: () => void
-	onOpenInTab?: () => void
-}
-
-const panelPropsOf = ({
-	variant,
-	onOpenInLibrary,
-	onOpenInTab,
-	...shared
-}: PanelStoryArgs): DocumentPanelProps => {
-	if (variant === "board" && onOpenInTab)
-		return { ...shared, variant, onOpenInTab }
-	if (variant !== "board" && onOpenInLibrary)
-		return { ...shared, onOpenInLibrary }
-	throw new Error(
-		`The ${variant ?? "document"} panel story has no open callback`,
-	)
-}
-
 const meta = preview.meta({
 	globals: LAPTOP_WINDOW,
 	title: "Navigation/DocumentPanel",
@@ -233,7 +209,7 @@ const meta = preview.meta({
 	render: (args) => (
 		<div className="flex h-200 w-320" {...hueScopeOf("blue")}>
 			<ThreadLayout
-				aside={<DocumentPanel {...panelPropsOf(args)} />}
+				aside={<DocumentPanel {...args} />}
 				composer={<PromptInput onSubmit={fn()} />}
 				rows={ROWS}
 			>
@@ -447,19 +423,39 @@ export const HandleWithKeyboardFocus = meta.story({
 	},
 })
 
+const InThreadWithItsHeader = (args: DocumentPanelProps) => (
+	<div className="flex h-200 w-320" {...hueScopeOf("blue")}>
+		<ThreadLayout
+			aside={<DocumentPanel {...args} />}
+			composer={<PromptInput onSubmit={fn()} />}
+			header={<AppHeader leading="Spring launch" />}
+			rows={ROWS}
+		>
+			{null}
+		</ThreadLayout>
+	</div>
+)
+
+const expectHeaderAlignedWithTheThreadHeader = async (
+	canvasElement: HTMLElement,
+) => {
+	const threadHeader = slotIn(canvasElement, "app-header")
+	const panelHeader = slotIn(canvasElement, "document-panel-header")
+	await expect(panelHeader.getBoundingClientRect().bottom).toBe(
+		threadHeader.getBoundingClientRect().bottom,
+	)
+	await expect(panelHeader.getBoundingClientRect().top).toBe(
+		threadHeader.getBoundingClientRect().top,
+	)
+
+	const threadTitle = within(canvasElement).getByText("Spring launch")
+	const panelTitle = panelHeader.querySelector("p")
+	if (!panelTitle) throw new Error("No panel title drawn")
+	await expect(verticalCentreOf(panelTitle)).toBe(verticalCentreOf(threadTitle))
+}
+
 export const HeaderAlignedWithTheThreadHeader = meta.story({
-	render: (args: PanelStoryArgs) => (
-		<div className="flex h-200 w-320" {...hueScopeOf("blue")}>
-			<ThreadLayout
-				aside={<DocumentPanel {...panelPropsOf(args)} />}
-				composer={<PromptInput onSubmit={fn()} />}
-				header={<AppHeader leading="Spring launch" />}
-				rows={ROWS}
-			>
-				{null}
-			</ThreadLayout>
-		</div>
-	),
+	render: InThreadWithItsHeader,
 	parameters: {
 		docs: {
 			description: {
@@ -468,28 +464,8 @@ export const HeaderAlignedWithTheThreadHeader = meta.story({
 			},
 		},
 	},
-	play: async ({ canvas, canvasElement }) => {
-		const threadHeader = canvasElement.querySelector<HTMLElement>(
-			'[data-slot="app-header"]',
-		)
-		const panelHeader = canvasElement.querySelector<HTMLElement>(
-			'[data-slot="document-panel-header"]',
-		)
-		if (!threadHeader || !panelHeader) throw new Error("No header drawn")
-		await expect(panelHeader.getBoundingClientRect().bottom).toBe(
-			threadHeader.getBoundingClientRect().bottom,
-		)
-		await expect(panelHeader.getBoundingClientRect().top).toBe(
-			threadHeader.getBoundingClientRect().top,
-		)
-
-		const threadTitle = canvas.getByText("Spring launch")
-		const panelTitle = panelHeader.querySelector("p")
-		if (!panelTitle) throw new Error("No panel title drawn")
-		await expect(verticalCentreOf(panelTitle)).toBe(
-			verticalCentreOf(threadTitle),
-		)
-	},
+	play: ({ canvasElement }) =>
+		expectHeaderAlignedWithTheThreadHeader(canvasElement),
 })
 
 const CONTROLLED_WIDTH = 640
@@ -528,7 +504,7 @@ const WIDE_WINDOW = 1536
 
 const BLUE_SCOPE = hueScopeOf("blue")
 
-type BesideTheSidebarProps = PanelStoryArgs & {
+type BesideTheSidebarProps = DocumentPanelProps & {
 	windowWidth: number
 	sidebarWidth?: number
 }
@@ -552,7 +528,7 @@ const BesideTheSidebar = ({
 			</Sidebar>
 			<SidebarInset className="min-w-0">
 				<ThreadLayout
-					aside={<DocumentPanel {...panelPropsOf(panel)} />}
+					aside={<DocumentPanel {...panel} />}
 					composer={<PromptInput onSubmit={fn()} />}
 					header={<AppHeader leading="Spring launch" />}
 					rows={ROWS}
@@ -584,7 +560,7 @@ const ASKED_UNDER_THE_ROOM = 480
 
 export const AskedUnderTheRoomLeft = meta.story({
 	args: { defaultWidth: ASKED_UNDER_THE_ROOM },
-	render: (args: PanelStoryArgs) => (
+	render: (args: DocumentPanelProps) => (
 		<BesideTheSidebar
 			{...args}
 			sidebarWidth={SIDEBAR_MAX_WIDTH}
@@ -630,7 +606,7 @@ export const AskedUnderTheRoomLeft = meta.story({
 
 export const CappedByTheRoomLeft = meta.story({
 	args: { defaultWidth: DOCUMENT_PANEL_MAX_WIDTH },
-	render: (args: PanelStoryArgs) => (
+	render: (args: DocumentPanelProps) => (
 		<BesideTheSidebar {...args} windowWidth={LAPTOP_WIDTH} />
 	),
 	parameters: {
@@ -685,7 +661,7 @@ export const CappedByTheRoomLeft = meta.story({
 
 export const HeldAtItsFloorInTheSmallestWindow = meta.story({
 	args: { defaultWidth: DOCUMENT_PANEL_DEFAULT_WIDTH },
-	render: (args: PanelStoryArgs) => (
+	render: (args: DocumentPanelProps) => (
 		<BesideTheSidebar
 			{...args}
 			sidebarWidth={SIDEBAR_MAX_WIDTH}
@@ -753,7 +729,7 @@ export const HeldAtItsFloorInTheSmallestWindow = meta.story({
 export const MovesFromTheCappedEdge = meta.story({
 	tags: ["test-only"],
 	args: { defaultWidth: DOCUMENT_PANEL_MAX_WIDTH, onWidthChange: fn() },
-	render: (args: PanelStoryArgs) => (
+	render: (args: DocumentPanelProps) => (
 		<BesideTheSidebar {...args} windowWidth={LAPTOP_WIDTH} />
 	),
 	parameters: {
@@ -853,7 +829,7 @@ const CONSECUTIVE_ANSWERS: TranscriptItem[] = Array.from(
 	}),
 )
 
-type InTheShellProps = PanelStoryArgs & {
+type InTheShellProps = DocumentPanelProps & {
 	windowWidth: number
 }
 
@@ -874,7 +850,7 @@ const InTheShell = ({ windowWidth, ...panel }: InTheShellProps) => (
 			</Sidebar>
 			<ContentCard>
 				<ThreadLayout
-					aside={<DocumentPanel {...panelPropsOf(panel)} />}
+					aside={<DocumentPanel {...panel} />}
 					composer={<PromptInput onSubmit={fn()} />}
 					header={<AppHeader leading="Spring launch" />}
 					rows={CONSECUTIVE_ANSWERS}
@@ -941,7 +917,7 @@ const scrollUpHalfAScreen = async (viewport: HTMLElement) => {
 
 export const ConsecutiveAnswersAtTheThreadFloor = meta.story({
 	args: { defaultWidth: DOCUMENT_PANEL_MAX_WIDTH },
-	render: (args: PanelStoryArgs) => (
+	render: (args: DocumentPanelProps) => (
 		<InTheShell {...args} windowWidth={LAPTOP_WIDTH} />
 	),
 	parameters: {
@@ -967,7 +943,7 @@ export const ConsecutiveAnswersAtTheThreadFloor = meta.story({
 export const NarrowedToTheThreadFloorThenScrolled = meta.story({
 	tags: ["test-only"],
 	args: { defaultWidth: DOCUMENT_PANEL_MIN_WIDTH },
-	render: (args: PanelStoryArgs) => (
+	render: (args: DocumentPanelProps) => (
 		<InTheShell {...args} windowWidth={LAPTOP_WIDTH} />
 	),
 	parameters: {
@@ -1141,7 +1117,6 @@ const BOARD_ROWS: TranscriptItem[] = [
 const boardPanelArgs = (drawers: readonly BoardPresenceOwner[]) => ({
 	variant: "board" as const,
 	title: BOARD_CARD_TITLE,
-	onOpenInTab: fn(),
 	presence: (
 		<LibraryDocumentPresence
 			activity="drawing"
@@ -1151,10 +1126,10 @@ const boardPanelArgs = (drawers: readonly BoardPresenceOwner[]) => ({
 	children: <PanelBoard drawers={drawers} />,
 })
 
-const BoardInThread = (args: PanelStoryArgs) => (
+const BoardInThread = (args: DocumentPanelProps) => (
 	<div className="flex h-200 w-320" {...hueScopeOf("blue")}>
 		<ThreadLayout
-			aside={<DocumentPanel {...panelPropsOf(args)} />}
+			aside={<DocumentPanel {...args} />}
 			composer={<PromptInput onSubmit={fn()} />}
 			rows={BOARD_ROWS}
 		>
@@ -1162,8 +1137,6 @@ const BoardInThread = (args: PanelStoryArgs) => (
 		</ThreadLayout>
 	</div>
 )
-
-const BOARD_BAR_HEIGHT = 52
 
 const expectBoardPanel = async (
 	canvasElement: HTMLElement,
@@ -1173,14 +1146,19 @@ const expectBoardPanel = async (
 	const canvas = within(canvasElement)
 	const panel = canvas.getByRole("complementary", { name: BOARD_CARD_TITLE })
 	const header = slotIn(panel, "document-panel-header")
-	await expect(header.getBoundingClientRect().height).toBe(BOARD_BAR_HEIGHT)
 	await expect(slotIn(header, "board-glyph")).toBeVisible()
+	await expect(header.querySelector('[data-slot="document-glyph"]')).toBeNull()
 	await expect(
 		within(slotIn(panel, "library-document-presence")).getByText(chipLabel),
 	).toBeVisible()
 	await expect(
-		within(panel).queryByRole("button", { name: "Open in Library" }),
+		within(header).queryByRole("button", { name: "Open in tab" }),
 	).toBeNull()
+	await expect(
+		within(header)
+			.getAllByRole("button")
+			.map((button) => button.getAttribute("aria-label")),
+	).toEqual(["Open in Library", "Close"])
 	await expect(panel.querySelector("h2")).toBeNull()
 	const board = slotIn(panel, "document-panel-board")
 	await expect(board.getBoundingClientRect().width).toBe(
@@ -1196,27 +1174,32 @@ const expectBoardPanel = async (
 
 const expectBoardPanelCallbacks = async (
 	canvasElement: HTMLElement,
-	args: PanelStoryArgs,
+	args: DocumentPanelProps,
 ) => {
 	const panel = within(canvasElement).getByRole("complementary", {
 		name: BOARD_CARD_TITLE,
 	})
-	await userEvent.click(
-		within(panel).getByRole("button", { name: "Open in tab" }),
+	const openInLibrary = within(panel).getByRole("button", {
+		name: "Open in Library",
+	})
+	await userEvent.hover(openInLibrary)
+	await expect(await screen.findByRole("tooltip")).toHaveTextContent(
+		"Open in Library",
 	)
-	await expect(args.onOpenInTab).toHaveBeenCalledOnce()
+	await userEvent.click(openInLibrary)
+	await expect(args.onOpenInLibrary).toHaveBeenCalledOnce()
 	await userEvent.click(within(panel).getByRole("button", { name: "Close" }))
 	await expect(args.onClose).toHaveBeenCalledOnce()
 }
 
 export const BoardOneAgent = meta.story({
 	args: boardPanelArgs([DRAWING_AGENT]),
-	render: (args: PanelStoryArgs) => <BoardInThread {...args} />,
+	render: (args: DocumentPanelProps) => <BoardInThread {...args} />,
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"A board open beside the thread that posted it, as artboard 3a draws it. Check the card in the message wearing the Space colour ring, the 52px bar with the board glyph, the title, 1 agent drawing, Open in tab and Close, and the board filling the panel edge to edge with no title above it. Open in tab and Close each call back once.",
+					"A board open beside the thread that posted it. Check the card in the message wearing the Space colour ring, the panel wearing the document panel header with the board glyph, the title, 1 agent drawing, Open in Library with its tooltip and Close, and the board filling the panel edge to edge with no title above it. Open in Library and Close each call back once.",
 			},
 		},
 	},
@@ -1229,19 +1212,19 @@ export const BoardOneAgent = meta.story({
 export const BoardOneAgentDark = meta.story({
 	args: boardPanelArgs([DRAWING_AGENT]),
 	globals: { ...LAPTOP_WINDOW, theme: "dark" },
-	render: (args: PanelStoryArgs) => <BoardInThread {...args} />,
+	render: (args: DocumentPanelProps) => <BoardInThread {...args} />,
 	play: ({ canvasElement }) =>
 		expectBoardPanel(canvasElement, "1 agent drawing", 1),
 })
 
 export const BoardSeveralAgents = meta.story({
 	args: boardPanelArgs([DRAWING_AGENT, MIRA]),
-	render: (args: PanelStoryArgs) => <BoardInThread {...args} />,
+	render: (args: DocumentPanelProps) => <BoardInThread {...args} />,
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Atlas and Mira both draw on the open board. Check the chip reading 2 agents drawing with both avatars, both pointers on the board, and Open in tab and Close each calling back once.",
+					"Atlas and Mira both draw on the open board. Check the chip reading 2 agents drawing with both avatars, both pointers on the board in the shared document panel header, and Open in Library and Close each calling back once.",
 			},
 		},
 	},
@@ -1254,7 +1237,60 @@ export const BoardSeveralAgents = meta.story({
 export const BoardSeveralAgentsDark = meta.story({
 	args: boardPanelArgs([DRAWING_AGENT, MIRA]),
 	globals: { ...LAPTOP_WINDOW, theme: "dark" },
-	render: (args: PanelStoryArgs) => <BoardInThread {...args} />,
+	render: (args: DocumentPanelProps) => <BoardInThread {...args} />,
 	play: ({ canvasElement }) =>
 		expectBoardPanel(canvasElement, "2 agents drawing", 2),
+})
+
+export const BoardHeaderAlignedWithTheThreadHeader = meta.story({
+	args: boardPanelArgs([DRAWING_AGENT]),
+	render: InThreadWithItsHeader,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The board panel open beside a conversation that wears its header. Check that the shared document panel header is exactly as tall as the thread header, so the two bottom borders run as one line, and that the board title sits on the same horizontal centre as the thread's.",
+			},
+		},
+	},
+	play: ({ canvasElement }) =>
+		expectHeaderAlignedWithTheThreadHeader(canvasElement),
+})
+
+const headerBoxOf = (panel: HTMLElement) => {
+	const header = slotIn(panel, "document-panel-header")
+	const style = getComputedStyle(header)
+	return {
+		height: header.getBoundingClientRect().height,
+		padding: style.padding,
+		borderBottom: `${style.borderBottomWidth} ${style.borderBottomStyle} ${style.borderBottomColor}`,
+		buttons: within(header)
+			.getAllByRole("button")
+			.map((button) => button.getAttribute("aria-label")),
+	}
+}
+
+export const BoardAndDocumentShareOneHeader = meta.story({
+	tags: ["test-only"],
+	render: (args: DocumentPanelProps) => (
+		<div className="flex h-200 w-320" {...hueScopeOf("blue")}>
+			<DocumentPanel {...args} />
+			<DocumentPanel
+				{...boardPanelArgs([DRAWING_AGENT])}
+				onClose={fn()}
+				onOpenInLibrary={fn()}
+			/>
+		</div>
+	),
+	play: async ({ canvas }) => {
+		const documentPanel = canvas.getByRole("complementary", {
+			name: DOCUMENT_TITLE,
+		})
+		const boardPanel = canvas.getByRole("complementary", {
+			name: BOARD_CARD_TITLE,
+		})
+		await expect(headerBoxOf(boardPanel)).toEqual(headerBoxOf(documentPanel))
+		await expect(slotIn(documentPanel, "document-glyph")).toBeVisible()
+		await expect(slotIn(boardPanel, "board-glyph")).toBeVisible()
+	},
 })
