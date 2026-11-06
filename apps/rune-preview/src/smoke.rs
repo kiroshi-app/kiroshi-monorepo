@@ -4,9 +4,13 @@ use std::sync::mpsc::{self, RecvTimeoutError};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crate::app::connected;
+use serde_json::json;
+
+use crate::app::{connected, whole_thread};
 use crate::events::{self, HostEvent};
+use crate::host::{Host, HostError, Profile};
 use crate::model::AgentEvent;
+use crate::model::{Agent, Conversation, Space};
 use crate::turn::{self, SendError};
 
 const FIRST_DELTA_PATIENCE: Duration = Duration::from_secs(120);
@@ -27,8 +31,8 @@ pub fn run(text: &str) -> ExitCode {
 }
 
 fn smoke(text: &str) -> Result<(), String> {
-	let ready =
-		connected().map_err(|failure| format!("{} {}", failure.title(), failure.detail()))?;
+	let ready = connected(Profile::Dev)
+		.map_err(|failure| format!("{} {}", failure.title(), failure.detail()))?;
 	let conversation = ready.first_conversation_with_an_agent().ok_or_else(|| {
 		format!("the dev profile has no conversation with an agent in {}", ready.space.name)
 	})?;
@@ -132,4 +136,37 @@ fn stream(hearing: &mpsc::Receiver<Heard>, conversation_id: &str) -> Result<(), 
 			Heard::Host(HostEvent::Listening | HostEvent::MessageStored(_)) => {}
 		}
 	}
+}
+
+pub fn read(conversation_given: Option<&str>) -> ExitCode {
+	match read_only(conversation_given) {
+		Ok(()) => ExitCode::SUCCESS,
+		Err(failure) => {
+			eprintln!("smoke-read failed: {failure}");
+			ExitCode::FAILURE
+		}
+	}
+}
+
+fn read_only(conversation_given: Option<&str>) -> Result<(), String> {
+	let described = |failure: HostError| format!("{} {}", failure.title(), failure.detail());
+	let host = Host::connect(Profile::Installed).map_err(described)?;
+	let spaces: Vec<Space> = host.invoke("space_list", json!({})).map_err(described)?;
+	println!("spaces: {}", spaces.len());
+	let space = spaces.first().ok_or("the installed profile has no Space")?;
+	let agents: Vec<Agent> =
+		host.invoke("conversation_bots", json!({ "spaceId": space.id })).map_err(described)?;
+	let conversations: Vec<Conversation> =
+		host.invoke("conversation_list", json!({ "spaceId": space.id })).map_err(described)?;
+	println!("space read: {}", space.id);
+	println!("agents: {}", agents.len());
+	println!("conversations: {}", conversations.len());
+	let conversation = match conversation_given {
+		Some(id) => conversations.iter().find(|conversation| conversation.id == id),
+		None => conversations.iter().find(|conversation| conversation.present().next().is_some()),
+	}
+	.ok_or("no conversation to load")?;
+	let messages = whole_thread(&host, &conversation.id).map_err(described)?;
+	println!("thread loaded: {} ({} messages)", conversation.id, messages.len());
+	Ok(())
 }

@@ -8,7 +8,7 @@ use serde_json::json;
 
 use crate::content;
 use crate::events::{self, HostEvent};
-use crate::host::{Host, HostError};
+use crate::host::{Host, HostError, Profile};
 use crate::images::{Fetched, Images};
 use crate::model::{Agent, AgentEvent, Conversation, MainChat, Message, MessagePage, Role, Space};
 use crate::onboarding::Step;
@@ -227,7 +227,7 @@ impl App {
 
 	pub fn connect(&mut self) {
 		self.workspace = Workspace::Connecting;
-		self.work(|outbox| outbox.deliver(Inbound::Connected(connected())));
+		self.work(|outbox| outbox.deliver(Inbound::Connected(connected(Profile::Installed))));
 	}
 
 	pub fn poll(&mut self) -> bool {
@@ -520,8 +520,8 @@ impl App {
 	}
 }
 
-pub fn connected() -> Result<Ready, HostError> {
-	let host = Host::connect()?;
+pub fn connected(profile: Profile) -> Result<Ready, HostError> {
+	let host = Host::connect(profile)?;
 	let spaces: Vec<Space> = host.invoke("space_list", json!({}))?;
 	let Some(space) = spaces.into_iter().next() else {
 		return Err(HostError::CommandFailed {

@@ -7,7 +7,7 @@ use rune_kit::{Button, ButtonVariant, ControlSize, Kit, PopupItem, PopupList, Sp
 
 use crate::app::{AGENT_PILL, App, Opened, Workspace};
 use crate::content::{self, Segment};
-use crate::host::{HostError, START_COMMAND};
+use crate::host::{DEV_START_COMMAND, HostError, Profile};
 use crate::images::Slot;
 use crate::model::Role;
 use crate::tokens::{
@@ -46,33 +46,26 @@ fn centred(t: &Tokens, content: El) -> El {
 
 fn host_failed(k: &Kit, t: &Tokens, failure: &HostError) -> El {
 	let mono = rune::TextStyle { family: rune::Family::SystemMono, ..TEXT_SM };
-	let command = el()
-		.padding(SPACING * 3.0)
-		.radius(RADIUS_LG)
-		.fill(t.muted)
-		.border(1.0, t.border)
-		.child(text(START_COMMAND).font(mono).color(t.foreground).selectable(true));
-	let content = col()
+	let mut content = col()
 		.w(520.0)
 		.gap(SPACING * 4.0)
 		.child(text(failure.title()).font(TEXT_XL_SEMIBOLD).color(t.foreground))
-		.child(text(failure.detail()).font(TEXT_READING).color(t.muted_foreground).wrap())
-		.child(
-			text("Start the dev host from the repo root, then try again:")
-				.font(TEXT_SM)
-				.color(t.foreground),
-		)
-		.child(command)
-		.child(
-			row().child(
-				Button::new("Try again")
-					.variant(ButtonVariant::Contrast)
-					.control_size(ControlSize::Large)
-					.on_press(|s: &mut App| s.connect())
-					.build(k),
-			),
+		.child(text(failure.detail()).font(TEXT_READING).color(t.muted_foreground).wrap());
+	if failure.profile() == Some(Profile::Dev) {
+		content = content.child(
+			el().padding(SPACING * 3.0)
+				.radius(RADIUS_LG)
+				.fill(t.muted)
+				.border(1.0, t.border)
+				.child(text(DEV_START_COMMAND).font(mono).color(t.foreground).selectable(true)),
 		);
-	centred(t, content)
+	}
+	let retry = Button::new("Try again")
+		.variant(ButtonVariant::Contrast)
+		.control_size(ControlSize::Large)
+		.on_press(|s: &mut App| s.connect())
+		.build(k);
+	centred(t, content.child(row().child(retry)))
 }
 
 fn tab(s: &App, k: &Kit, t: &Tokens, inset: f32, layer: &mut Vec<El>) -> El {

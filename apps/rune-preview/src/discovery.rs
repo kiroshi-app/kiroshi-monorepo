@@ -1,17 +1,15 @@
 use std::process::Command;
 
-const DEV_EXECUTABLE: &str = "Kiroshi";
+use crate::host::Profile;
 
-const BUNDLED: &str = ".app/Contents/";
-
-pub fn dev_host_ports() -> Result<Vec<u16>, String> {
+pub fn host_ports(profile: Profile) -> Result<Vec<u16>, String> {
 	let listening = stdout_even_when_nothing_matched(
 		"lsof",
 		&["-nP", "-iTCP@127.0.0.1", "-sTCP:LISTEN", "-Fpn"],
 	)?;
 	let mut ports = Vec::new();
 	for (pid, port) in listeners(&listening) {
-		if is_dev_host(pid)? && !ports.contains(&port) {
+		if is_hosted_by(profile, pid)? && !ports.contains(&port) {
 			ports.push(port);
 		}
 	}
@@ -33,11 +31,10 @@ fn listeners(lsof: &str) -> Vec<(u32, u16)> {
 	found
 }
 
-fn is_dev_host(pid: u32) -> Result<bool, String> {
-	let args = stdout_even_when_nothing_matched("ps", &["-o", "args=", "-p", &pid.to_string()])?;
-	let executable = args.split_whitespace().next().unwrap_or("");
-	let name = executable.rsplit('/').next().unwrap_or("");
-	Ok(name == DEV_EXECUTABLE && !executable.contains(BUNDLED))
+fn is_hosted_by(profile: Profile, pid: u32) -> Result<bool, String> {
+	let executable =
+		stdout_even_when_nothing_matched("ps", &["-o", "comm=", "-p", &pid.to_string()])?;
+	Ok(profile.hosts(executable.trim()))
 }
 
 fn stdout_even_when_nothing_matched(program: &str, args: &[&str]) -> Result<String, String> {

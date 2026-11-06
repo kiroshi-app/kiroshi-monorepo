@@ -50,7 +50,14 @@ impl Images {
 			fetch(url.clone(), deliver);
 			Slot::Loading
 		} else if let Some(path) = local_path(&url) {
-			Slot::Ready(cache.file(path, DRAWN_SIZE, DRAWN_SCALE))
+			if crate::host::data_folders()
+				.iter()
+				.any(|folder| std::path::Path::new(path).starts_with(folder))
+			{
+				Slot::Failed("Kiroshi's data folder isn't read here".to_owned())
+			} else {
+				Slot::Ready(cache.file(path, DRAWN_SIZE, DRAWN_SCALE))
+			}
 		} else {
 			Slot::Failed(format!("{} images aren't drawn", scheme_of(&url)))
 		};

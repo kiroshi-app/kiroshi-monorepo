@@ -50,6 +50,8 @@ fn on_key(s: &mut App, event: &KeyEvent, _: &mut Tx) -> bool {
 
 const SMOKE_SEND: &str = "--smoke-send";
 
+const SMOKE_READ: &str = "--smoke-read";
+
 fn main() -> ExitCode {
 	let args: Vec<String> = std::env::args().collect();
 	if let Some(at) = args.iter().position(|arg| arg == SMOKE_SEND) {
@@ -58,6 +60,9 @@ fn main() -> ExitCode {
 			return ExitCode::FAILURE;
 		};
 		return smoke::run(text);
+	}
+	if let Some(at) = args.iter().position(|arg| arg == SMOKE_READ) {
+		return smoke::read(args.get(at + 1).map(String::as_str));
 	}
 	let spec = AppSpec {
 		setup: Some(setup),

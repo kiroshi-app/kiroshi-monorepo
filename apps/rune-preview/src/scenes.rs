@@ -1,5 +1,5 @@
 use crate::app::{App, Ready, Screen, Thread, Workspace, connected, whole_thread};
-use crate::host::{Host, HostError};
+use crate::host::{Host, HostError, Profile};
 use crate::model::{Agent, Conversation, Message, Participant, Role, Space};
 use crate::onboarding::{Page, Step};
 
@@ -22,7 +22,7 @@ pub const SCENES: &[Scene] = &[
 
 fn host_failed(s: &mut App) {
 	s.screen = Screen::Conversations;
-	s.workspace = Workspace::Failed(HostError::NotRunning { port: 45_367 });
+	s.workspace = Workspace::Failed(HostError::NotRunning { profile: Profile::Installed });
 }
 
 const SAMPLE: &str = r#"Here's the plan for **launch week**, with the parts that moved:
@@ -120,7 +120,7 @@ fn thread(s: &mut App) {
 
 fn read_the_dev_host_before_the_first_frame(s: &mut App) {
 	s.screen = Screen::Conversations;
-	let ready = match connected() {
+	let ready = match connected(Profile::Installed) {
 		Ok(ready) => ready,
 		Err(failure) => {
 			s.workspace = Workspace::Failed(failure);

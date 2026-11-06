@@ -6,58 +6,104 @@ use serde_json::{Value, json};
 
 use crate::discovery;
 
-const DEV_IDENTIFIER: &str = "com.kiroshi.app.dev";
-
-const PREFERRED_PORT: u16 = 45_367;
-
-const PORT_OVERRIDE: &str = "KIROSHI_HOST_PORT";
-
 const READ_PATIENCE: Duration = Duration::from_secs(20);
 
 const TURN_PATIENCE: Duration = Duration::from_secs(15 * 60);
 
 const PROBE: &str = "space_list";
 
-pub const START_COMMAND: &str = "cd apps/app && bun run dev";
+const TOKEN_FILE: [&str; 2] = ["host", "token"];
+
+pub const DEV_START_COMMAND: &str = "cd apps/app/sidecar && bun run build && cd .. && bun run dev";
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Profile {
+	Dev,
+	Installed,
+}
+
+impl Profile {
+	fn identifier(self) -> &'static str {
+		match self {
+			Profile::Dev => "com.kiroshi.app.dev",
+			Profile::Installed => "com.kiroshi.app",
+		}
+	}
+
+	pub fn app_name(self) -> &'static str {
+		match self {
+			Profile::Dev => "Kiroshi Dev",
+			Profile::Installed => "Kiroshi",
+		}
+	}
+
+	pub fn hosts(self, executable: &str) -> bool {
+		let name = executable.rsplit('/').next().unwrap_or("");
+		let bundled = executable.ends_with(".app/Contents/MacOS/Kiroshi");
+		name == "Kiroshi"
+			&& match self {
+				Profile::Dev => !executable.contains(".app/Contents/"),
+				Profile::Installed => bundled,
+			}
+	}
+
+	pub fn how_to_start(self) -> &'static str {
+		match self {
+			Profile::Dev => "Start the dev host from the repo root, then try again.",
+			Profile::Installed => "Open Kiroshi from your Applications folder, then try again.",
+		}
+	}
+}
 
 #[derive(Clone, Debug)]
 pub enum HostError {
 	NoDataDir,
-	TokenMissing,
-	TokenUnreadable { cause: String },
-	NotRunning { port: u16 },
-	TokenRefused { port: u16 },
+	TokenMissing { profile: Profile },
+	TokenUnreadable { profile: Profile, cause: String },
+	NotRunning { profile: Profile },
+	NotDiscovered { cause: String },
+	TokenRefused { profile: Profile },
 	CommandFailed { command: String, status: u16, body: String },
 	Unreadable { command: String, cause: String },
 }
 
 impl HostError {
-	pub fn title(&self) -> &'static str {
+	pub fn title(&self) -> String {
 		match self {
-			HostError::NoDataDir => "Couldn't find the dev data folder",
-			HostError::TokenMissing => "Kiroshi Dev hasn't run on this computer",
-			HostError::TokenUnreadable { .. } => "Couldn't read the dev host token",
-			HostError::NotRunning { .. } => "Kiroshi Dev isn't running",
-			HostError::TokenRefused { .. } => "Kiroshi Dev refused the token",
-			HostError::CommandFailed { .. } => "Kiroshi Dev refused the call",
-			HostError::Unreadable { .. } => "Kiroshi Dev answered something unreadable",
+			HostError::NoDataDir => "Couldn't find the Application Support folder".to_owned(),
+			HostError::TokenMissing { profile } => {
+				format!("{} hasn't run on this computer", profile.app_name())
+			}
+			HostError::TokenUnreadable { profile, .. } => {
+				format!("Couldn't read the token of {}", profile.app_name())
+			}
+			HostError::NotRunning { profile } => format!("{} isn't open", profile.app_name()),
+			HostError::NotDiscovered { .. } => "Couldn't look for a running Kiroshi".to_owned(),
+			HostError::TokenRefused { profile } => {
+				format!("{} refused the token", profile.app_name())
+			}
+			HostError::CommandFailed { .. } => "Kiroshi refused the call".to_owned(),
+			HostError::Unreadable { .. } => "Kiroshi answered something unreadable".to_owned(),
 		}
 	}
 
 	pub fn detail(&self) -> String {
 		match self {
-			HostError::NoDataDir => {
-				"Neither HOME nor APPDATA is set, so the dev data folder has no path.".to_owned()
-			}
-			HostError::TokenMissing => format!(
-				"No host/token in the {DEV_IDENTIFIER} data folder. The dev host writes it when it starts."
+			HostError::NoDataDir => "HOME isn't set, so the data folder has no path.".to_owned(),
+			HostError::TokenMissing { profile } => format!(
+				"No host/token in the {} data folder. {} writes it when it opens.",
+				profile.identifier(),
+				profile.app_name()
 			),
-			HostError::TokenUnreadable { cause } => {
-				format!("host/token in the {DEV_IDENTIFIER} data folder: {cause}")
+			HostError::TokenUnreadable { profile, cause } => {
+				format!("host/token in the {} data folder: {cause}", profile.identifier())
 			}
-			HostError::NotRunning { port } => format!("Nothing answers on 127.0.0.1:{port}."),
-			HostError::TokenRefused { port } => format!(
-				"127.0.0.1:{port} answered but refused the dev token. No other dev host was found; if the installed Kiroshi holds that port, set {PORT_OVERRIDE} to the dev host's port."
+			HostError::NotRunning { profile } => profile.how_to_start().to_owned(),
+			HostError::NotDiscovered { cause } => cause.clone(),
+			HostError::TokenRefused { profile } => format!(
+				"{} answered but refused the token of {}. Quit and reopen it, then try again.",
+				profile.app_name(),
+				profile.identifier()
 			),
 			HostError::CommandFailed { command, status, body } => {
 				format!("{command} answered {status}: {body}")
@@ -65,34 +111,52 @@ impl HostError {
 			HostError::Unreadable { command, cause } => format!("{command}: {cause}"),
 		}
 	}
+
+	pub fn profile(&self) -> Option<Profile> {
+		match self {
+			HostError::TokenMissing { profile }
+			| HostError::TokenUnreadable { profile, .. }
+			| HostError::NotRunning { profile }
+			| HostError::TokenRefused { profile } => Some(*profile),
+			_ => None,
+		}
+	}
 }
 
 #[derive(Clone, Debug)]
 pub struct Host {
+	profile: Profile,
 	port: u16,
 	token: String,
 }
 
 impl Host {
 	pub fn detached() -> Host {
-		Host { port: PREFERRED_PORT, token: String::new() }
+		Host { profile: Profile::Dev, port: 0, token: String::new() }
 	}
 
-	pub fn connect() -> Result<Host, HostError> {
-		let token = dev_token()?;
-		let mut refused = None;
-		for port in candidate_ports() {
-			let host = Host { port, token: token.clone() };
+	pub fn connect(profile: Profile) -> Result<Host, HostError> {
+		let ports =
+			discovery::host_ports(profile).map_err(|cause| HostError::NotDiscovered { cause })?;
+		if ports.is_empty() {
+			return Err(HostError::NotRunning { profile });
+		}
+		let token = token_of(profile)?;
+		let mut refused = false;
+		for port in ports {
+			let host = Host { profile, port, token: token.clone() };
 			match host.invoke::<Value>(PROBE, json!({})) {
 				Ok(_) => return Ok(host),
-				Err(HostError::TokenRefused { port }) => refused = Some(port),
+				Err(HostError::TokenRefused { .. }) => refused = true,
 				Err(HostError::NotRunning { .. }) => {}
 				Err(other) => return Err(other),
 			}
 		}
-		Err(refused.map_or(HostError::NotRunning { port: PREFERRED_PORT }, |port| {
-			HostError::TokenRefused { port }
-		}))
+		Err(if refused {
+			HostError::TokenRefused { profile }
+		} else {
+			HostError::NotRunning { profile }
+		})
 	}
 
 	pub fn invoke<T: DeserializeOwned>(
@@ -134,7 +198,7 @@ impl Host {
 		let response = match answered {
 			Ok(response) => response,
 			Err(ureq::Error::Status(401, _)) => {
-				return Err(HostError::TokenRefused { port: self.port });
+				return Err(HostError::TokenRefused { profile: self.profile });
 			}
 			Err(ureq::Error::Status(status, response)) => {
 				let body = response
@@ -143,7 +207,7 @@ impl Host {
 				return Err(HostError::CommandFailed { command: command.to_owned(), status, body });
 			}
 			Err(ureq::Error::Transport(_)) => {
-				return Err(HostError::NotRunning { port: self.port });
+				return Err(HostError::NotRunning { profile: self.profile });
 			}
 		};
 		let unreadable =
@@ -153,53 +217,32 @@ impl Host {
 	}
 }
 
-fn candidate_ports() -> Vec<u16> {
-	if let Some(port) = std::env::var(PORT_OVERRIDE).ok().and_then(|held| held.trim().parse().ok())
-	{
-		return vec![port];
-	}
-	match discovery::dev_host_ports() {
-		Ok(ports) if !ports.is_empty() => ports,
-		Ok(_) => vec![PREFERRED_PORT],
-		Err(failure) => {
-			eprintln!("no dev host port was discovered, trying {PREFERRED_PORT}: {failure}");
-			vec![PREFERRED_PORT]
-		}
-	}
-}
-
-fn dev_token() -> Result<String, HostError> {
-	let path = dev_data_dir()?.join("host").join("token");
+fn token_of(profile: Profile) -> Result<String, HostError> {
+	let path = token_path(profile)?;
 	match std::fs::read_to_string(&path) {
-		Ok(held) if held.trim().is_empty() => Err(HostError::TokenMissing),
+		Ok(held) if held.trim().is_empty() => Err(HostError::TokenMissing { profile }),
 		Ok(held) => Ok(held.trim().to_owned()),
 		Err(missing) if missing.kind() == std::io::ErrorKind::NotFound => {
-			Err(HostError::TokenMissing)
+			Err(HostError::TokenMissing { profile })
 		}
-		Err(failure) => Err(HostError::TokenUnreadable { cause: failure.kind().to_string() }),
+		Err(failure) => {
+			Err(HostError::TokenUnreadable { profile, cause: failure.kind().to_string() })
+		}
 	}
 }
 
-fn dev_data_dir() -> Result<PathBuf, HostError> {
-	data_root().map(|root| root.join(DEV_IDENTIFIER)).ok_or(HostError::NoDataDir)
+fn token_path(profile: Profile) -> Result<PathBuf, HostError> {
+	let home = std::env::var_os("HOME").ok_or(HostError::NoDataDir)?;
+	let mut path = PathBuf::from(home).join("Library").join("Application Support");
+	path.push(profile.identifier());
+	path.extend(TOKEN_FILE);
+	Ok(path)
 }
 
-#[cfg(target_os = "macos")]
-fn data_root() -> Option<PathBuf> {
-	std::env::var_os("HOME")
-		.map(|home| PathBuf::from(home).join("Library").join("Application Support"))
-}
-
-#[cfg(target_os = "windows")]
-fn data_root() -> Option<PathBuf> {
-	std::env::var_os("APPDATA").map(PathBuf::from)
-}
-
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
-fn data_root() -> Option<PathBuf> {
-	std::env::var_os("XDG_DATA_HOME").map(PathBuf::from).or_else(|| {
-		std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".local").join("share"))
-	})
+pub fn data_folders() -> Vec<PathBuf> {
+	let Some(home) = std::env::var_os("HOME") else { return Vec::new() };
+	let support = PathBuf::from(home).join("Library").join("Application Support");
+	[Profile::Dev, Profile::Installed].map(|profile| support.join(profile.identifier())).to_vec()
 }
 
 #[cfg(test)]
@@ -207,9 +250,22 @@ mod tests {
 	use super::*;
 
 	#[test]
-	fn the_token_path_names_only_the_dev_profile() {
-		let path = dev_data_dir().expect("a data root on the test machine");
-		assert!(path.ends_with(DEV_IDENTIFIER));
-		assert_ne!(path.file_name().and_then(|name| name.to_str()), Some("com.kiroshi.app"));
+	fn each_profile_reads_only_its_host_token() {
+		let dev = token_path(Profile::Dev).expect("HOME on the test machine");
+		let installed = token_path(Profile::Installed).expect("HOME on the test machine");
+		assert!(dev.ends_with("com.kiroshi.app.dev/host/token"));
+		assert!(installed.ends_with("com.kiroshi.app/host/token"));
+	}
+
+	#[test]
+	fn the_installed_host_is_the_bundled_executable_and_the_dev_host_is_not() {
+		let bundled = "/Applications/Kiroshi.app/Contents/MacOS/Kiroshi";
+		let built = "target/debug/Kiroshi";
+		let sidecar = "/Applications/Kiroshi.app/Contents/MacOS/kiroshi-claude";
+		assert!(Profile::Installed.hosts(bundled));
+		assert!(!Profile::Installed.hosts(built));
+		assert!(!Profile::Installed.hosts(sidecar));
+		assert!(Profile::Dev.hosts(built));
+		assert!(!Profile::Dev.hosts(bundled));
 	}
 }
