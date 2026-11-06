@@ -3654,6 +3654,8 @@ export const ArrowReroutedByHandDark = meta.story({
 	},
 })
 
+const MOVING_OUTSET = 3
+
 const BENT_LABELLED_ARROW = arrowBetween(START_TO_FINISH, "start", "finish", {
 	bend: 40,
 	text: "Hands over",
@@ -3663,7 +3665,7 @@ const BENT_LABELLED_ARROW = arrowBetween(START_TO_FINISH, "start", "finish", {
 export const ArrowFollowsMovedShape = meta.story({
 	args: arrowArgs([START, FINISH, BENT_LABELLED_ARROW]),
 	parameters: handDocs(
-		"Arrow behaviour 3.1 Moving: Finish dragged by the pointer is lifted on a shadow of 0 2 4 and 0 16 32 over a dashed 1.5 ghost of itself at its start, and redraws the arrow tied to it in the same frame, at rest, with its bend of 40 and its label at 0.3 of the way, before the release sends one move intent and drops the ghost and the shadow. Moved again with Shift and the down arrow key, the arrow follows the same way.",
+		"Arrow behaviour 3.1 Moving: Finish dragged by the pointer is lifted on a shadow of 0 2 4 and 0 16 32 over a dashed 1.5 ghost of itself at its start, outlined 1.5 in the Space colour 3 outside it with corners of 6 in place of the selection frame, and redraws the arrow tied to it in the same frame, at rest, with its bend of 40 and its label at 0.3 of the way, before the release sends one move intent, drops the ghost and the shadow and gives Finish its selection frame back. Moved again with Shift and the down arrow key, the arrow follows the same way.",
 	),
 	play: async ({ canvasElement, args }) => {
 		const finish = objectNode(canvasElement, "finish") as HTMLElement
@@ -3693,6 +3695,29 @@ export const ArrowFollowsMovedShape = meta.story({
 		await expect(getComputedStyle(finish).filter).toMatch(
 			/drop-shadow.*0px 2px 4px.*drop-shadow.*0px 16px 32px/,
 		)
+		await expect(slotsIn(canvasElement, "board-selection-frame")).toHaveLength(
+			0,
+		)
+		const outline = slotIn(canvasElement, "board-moving-outline")
+		const outlineBox = outline.getBoundingClientRect()
+		const movedBox = finish.getBoundingClientRect()
+		await expect(outlineBox.x).toBeCloseTo(movedBox.x - MOVING_OUTSET, 0)
+		await expect(outlineBox.y).toBeCloseTo(movedBox.y - MOVING_OUTSET, 0)
+		await expect(outlineBox.width).toBeCloseTo(
+			movedBox.width + MOVING_OUTSET * 2,
+			0,
+		)
+		await expect(outlineBox.height).toBeCloseTo(
+			movedBox.height + MOVING_OUTSET * 2,
+			0,
+		)
+		const outlineLook = getComputedStyle(outline)
+		await expect(outlineLook.borderTopLeftRadius).toBe("6px")
+		await expect(outlineLook.boxShadow).toMatch(/\binset\b/)
+		await expect(outlineLook.boxShadow).toMatch(/\b1\.5px\b/)
+		await expect(outlineLook.boxShadow).toContain(
+			resolvedRootColor("--user-bubble"),
+		)
 		const label = slotIn(canvasElement, "board-connector-label")
 		await expectLabelCentredOn(canvasElement, label, { x: 312.7, y: 182.29 })
 		await expect(args.onIntent).not.toHaveBeenCalled()
@@ -3705,6 +3730,10 @@ export const ArrowFollowsMovedShape = meta.story({
 		})
 		await expect(slotsIn(canvasElement, "board-move-ghost")).toHaveLength(0)
 		await expect(getComputedStyle(finish).filter).toBe("none")
+		await expect(slotsIn(canvasElement, "board-moving-outline")).toHaveLength(0)
+		await expect(slotsIn(canvasElement, "board-selection-frame")).toHaveLength(
+			1,
+		)
 
 		finish.focus()
 		await userEvent.keyboard("{Shift>}{ArrowDown}{/Shift}")

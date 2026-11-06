@@ -438,6 +438,7 @@ const KEY_STEP = 1
 const KEY_STEP_LARGE = 10
 const PAN_STEP = 48
 const FRAME_OUTSET = 4
+const MOVING_OUTSET = 3
 const BAR_GAP = 16
 const FIT_TO_FRAME =
 	"*:size-full! *:overflow-hidden *:data-[slot=board-object-outline]:*:size-full! *:data-[slot=board-object-outline]:*:overflow-hidden"
@@ -1969,6 +1970,8 @@ const ReadyBoardCanvas = ({
 		? toScreenRect(liveBounds(selected), viewport)
 		: null
 	const movedItem = gesture?.isMove ? itemsById.get(gesture.id) : undefined
+	const isMovingShape =
+		movedItem?.kind === "shape" && movedItem.id === selected?.id
 	const isStill = !gesture && !editing
 	const editedItem = editing
 		? mountedItems.find((item) => item.id === editing.id)
@@ -2256,7 +2259,20 @@ const ReadyBoardCanvas = ({
 					rect={toScreenRect(liveBounds(ringedItem), viewport)}
 				/>
 			) : null}
-			{selected && selectedOnScreen ? (
+			{selectedOnScreen && isMovingShape ? (
+				<div
+					aria-hidden="true"
+					className="pointer-events-none absolute rounded-[6px] ring-[1.5px] ring-user-bubble ring-inset"
+					data-slot="board-moving-outline"
+					style={{
+						left: selectedOnScreen.x - MOVING_OUTSET,
+						top: selectedOnScreen.y - MOVING_OUTSET,
+						width: selectedOnScreen.width + MOVING_OUTSET * 2,
+						height: selectedOnScreen.height + MOVING_OUTSET * 2,
+					}}
+				/>
+			) : null}
+			{selected && selectedOnScreen && !isMovingShape ? (
 				<BoardSelectionFrame
 					hasHandles={!editing}
 					onPressHandle={pressHandle}
