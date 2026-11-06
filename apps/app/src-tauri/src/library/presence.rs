@@ -166,6 +166,8 @@ fn writer_of(seated: &Seated) -> LibraryWriter {
 
 const MEMBER_PRESENCE_LEASE: Duration = Duration::from_secs(30);
 
+pub(crate) const AGENT_BOARD_LEASE: Duration = Duration::from_secs(5);
+
 const BOARD_PRESENCE_PACE: Duration = Duration::from_millis(50);
 
 const MAX_NODE_ID_BYTES: usize = 256;
@@ -182,11 +184,37 @@ pub(crate) fn share_presence<R: Runtime>(
 	placed(root, space_id, name, &at)?;
 	let lease_ends_at =
 		matches!(seat, Seat::Member(_)).then(|| Instant::now() + MEMBER_PRESENCE_LEASE);
-	let seated = Seated { seat: seat.clone(), name: writer_name, at, lease_ends_at };
-	if seat_writer(app, space_id, name, seated) && lease_ends_at.is_some() {
-		tokio::spawn(lapsing(app.clone(), space_id.to_owned(), name.to_owned(), seat));
+	let seated = Seated { seat, name: writer_name, at, lease_ends_at };
+	if lease_ends_at.is_some() {
+		seat_leased(app, space_id, name, seated);
+	} else {
+		seat_writer(app, space_id, name, seated);
 	}
 	Ok(())
+}
+
+pub(crate) fn seat_agent_on_board<R: Runtime>(
+	app: &AppHandle<R>,
+	space_id: &str,
+	name: &str,
+	agent_id: &str,
+	agent_name: &str,
+	at: LibraryPresenceAt,
+) {
+	let seated = Seated {
+		seat: Seat::Agent(agent_id.to_owned()),
+		name: Some(agent_name.to_owned()),
+		at,
+		lease_ends_at: Some(Instant::now() + AGENT_BOARD_LEASE),
+	};
+	seat_leased(app, space_id, name, seated);
+}
+
+fn seat_leased<R: Runtime>(app: &AppHandle<R>, space_id: &str, name: &str, seated: Seated) {
+	let seat = seated.seat.clone();
+	if seat_writer(app, space_id, name, seated) {
+		tokio::spawn(lapsing(app.clone(), space_id.to_owned(), name.to_owned(), seat));
+	}
 }
 
 fn placed(

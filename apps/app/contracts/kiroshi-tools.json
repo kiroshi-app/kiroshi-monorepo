@@ -1182,7 +1182,7 @@
 	},
 	{
 		"name": "conversation_post_document",
-		"description": "Post a document of the Library of this Space in this conversation, as a message of yours the person opens it from, once you want them to read it. A name that is not a document of this Library is refused and nothing is posted. It answers the name of the document, the id of this conversation and the id of the message.",
+		"description": "Post a document or a board of the Library of this Space in this conversation, as a message of yours the person opens it from, once you want them to read it. A name that is not a document or a board of this Library is refused and nothing is posted. It answers the name of the item, the id of this conversation and the id of the message.",
 		"inputSchema": {
 			"$schema": "https://json-schema.org/draft/2020-12/schema",
 			"type": "object",
@@ -1194,6 +1194,274 @@
 			},
 			"required": [
 				"name"
+			],
+			"additionalProperties": false
+		}
+	},
+	{
+		"name": "board_create",
+		"description": "Create a new empty board in the Library of this Space, shown in the Library of the person right away. A name already taken is refused and nothing is created. To draw on a board that already exists, add to it with board_add, never create another one. It answers the name the board stands under, its kind and its updatedAt.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"name": {
+					"type": "string",
+					"description": "The name of the board in the Library of this Space, ending in .canvas, such as roadmap.canvas, without any folder."
+				}
+			},
+			"required": [
+				"name"
+			],
+			"additionalProperties": false
+		}
+	},
+	{
+		"name": "board_read",
+		"description": "Read a board of the Library of this Space as it stands now with what everyone has drawn on it. It answers every node with its id, its kind, its x, y, width and height, its text (the label of a section) and the id of the section that holds it, and every edge with its id, its fromNode, its toNode and its label.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"name": {
+					"type": "string",
+					"description": "The name of the board in the Library of this Space, ending in .canvas, such as roadmap.canvas, without any folder."
+				}
+			},
+			"required": [
+				"name"
+			],
+			"additionalProperties": false
+		}
+	},
+	{
+		"name": "board_add",
+		"description": "Draw a whole diagram on a board of the Library of this Space in one call, landing at once for the people who have it open. Give every node a key of your own; place a node beside another one, of this call by its key or of the board by its id, or inside a section, and the board computes where it lands without covering another node. A node without a place lands right of the node before it, the first one right of everything on the board. An edge joins two nodes named by key or id. One invalid node or edge refuses the whole call with its index and the reason, and nothing changes. It answers the id each key got.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"name": {
+					"type": "string",
+					"description": "The name of the board in the Library of this Space, ending in .canvas, such as roadmap.canvas, without any folder."
+				},
+				"nodes": {
+					"type": "array",
+					"items": {
+						"type": "object",
+						"properties": {
+							"key": {
+								"type": "string",
+								"description": "A name of your own for this node, unique in this call, that the place, the section and the edges of this call use to point at it."
+							},
+							"kind": {
+								"type": "string",
+								"description": "One of sticky, text, shape or section."
+							},
+							"text": {
+								"description": "The text the node shows; for a section, its label.",
+								"type": "string"
+							},
+							"color": {
+								"description": "A colour, a preset from 1 to 6 or a hex such as #4a90d9.",
+								"type": "string"
+							},
+							"fill": {
+								"description": "For a sticky only, one of yellow, green, pink, blue or orange.",
+								"type": "string"
+							},
+							"shape": {
+								"description": "For a shape only, one of rectangle, ellipse or diamond.",
+								"type": "string"
+							},
+							"x": {
+								"description": "An exact board coordinate, given with its pair; left out, the board places the node.",
+								"type": "integer",
+								"minimum": -9007199254740991,
+								"maximum": 9007199254740991
+							},
+							"y": {
+								"description": "An exact board coordinate, given with its pair; left out, the board places the node.",
+								"type": "integer",
+								"minimum": -9007199254740991,
+								"maximum": 9007199254740991
+							},
+							"width": {
+								"description": "In board units; left out, the default size of the kind.",
+								"type": "integer",
+								"minimum": -9007199254740991,
+								"maximum": 9007199254740991
+							},
+							"height": {
+								"description": "In board units; left out, the default size of the kind.",
+								"type": "integer",
+								"minimum": -9007199254740991,
+								"maximum": 9007199254740991
+							},
+							"place": {
+								"description": "Where the node lands next to another one, at a fixed gap and centred on it.",
+								"type": "object",
+								"properties": {
+									"side": {
+										"type": "string",
+										"description": "One of right, left, below or above."
+									},
+									"of": {
+										"type": "string",
+										"description": "The key of a node of this call or the id of a node of the board the node lands beside."
+									}
+								},
+								"required": [
+									"side",
+									"of"
+								],
+								"additionalProperties": false
+							},
+							"section": {
+								"description": "The key of a section of this call or the id of a section of the board the node lands inside; the section grows to hold it.",
+								"type": "string"
+							}
+						},
+						"required": [
+							"key",
+							"kind"
+						],
+						"additionalProperties": false
+					},
+					"description": "The nodes to draw, in order: each node without a place lands right of the one before it."
+				},
+				"edges": {
+					"description": "The edges to draw between the nodes.",
+					"type": "array",
+					"items": {
+						"type": "object",
+						"properties": {
+							"from": {
+								"type": "string",
+								"description": "The key of a node of this call or the id of a node of the board."
+							},
+							"to": {
+								"type": "string",
+								"description": "The key of a node of this call or the id of a node of the board."
+							},
+							"label": {
+								"description": "The text written on the edge.",
+								"type": "string"
+							}
+						},
+						"required": [
+							"from",
+							"to"
+						],
+						"additionalProperties": false
+					}
+				}
+			},
+			"required": [
+				"name",
+				"nodes"
+			],
+			"additionalProperties": false
+		}
+	},
+	{
+		"name": "board_update",
+		"description": "Change fields of nodes of a board of the Library of this Space, every other field kept as it stands, in one change the people who have it open see at once. An id absent from the board or a field the node refuses refuses the whole call with its index and the reason, and nothing changes. It answers the ids of the nodes changed.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"name": {
+					"type": "string",
+					"description": "The name of the board in the Library of this Space, ending in .canvas, such as roadmap.canvas, without any folder."
+				},
+				"nodes": {
+					"type": "array",
+					"items": {
+						"type": "object",
+						"properties": {
+							"id": {
+								"type": "string",
+								"description": "The id of a node of the board, as board_read answered it."
+							},
+							"text": {
+								"description": "The text the node shows; for a section, its label.",
+								"type": "string"
+							},
+							"color": {
+								"description": "A colour, a preset from 1 to 6 or a hex such as #4a90d9.",
+								"type": "string"
+							},
+							"fill": {
+								"description": "For a sticky only, one of yellow, green, pink, blue or orange.",
+								"type": "string"
+							},
+							"shape": {
+								"description": "For a shape only, one of rectangle, ellipse or diamond.",
+								"type": "string"
+							},
+							"x": {
+								"description": "An exact board coordinate, given with its pair; left out, the board places the node.",
+								"type": "integer",
+								"minimum": -9007199254740991,
+								"maximum": 9007199254740991
+							},
+							"y": {
+								"description": "An exact board coordinate, given with its pair; left out, the board places the node.",
+								"type": "integer",
+								"minimum": -9007199254740991,
+								"maximum": 9007199254740991
+							},
+							"width": {
+								"description": "In board units; left out, the default size of the kind.",
+								"type": "integer",
+								"minimum": -9007199254740991,
+								"maximum": 9007199254740991
+							},
+							"height": {
+								"description": "In board units; left out, the default size of the kind.",
+								"type": "integer",
+								"minimum": -9007199254740991,
+								"maximum": 9007199254740991
+							}
+						},
+						"required": [
+							"id"
+						],
+						"additionalProperties": false
+					},
+					"description": "The nodes to change, each by its id with the fields to set."
+				}
+			},
+			"required": [
+				"name",
+				"nodes"
+			],
+			"additionalProperties": false
+		}
+	},
+	{
+		"name": "board_remove",
+		"description": "Remove nodes from a board of the Library of this Space, with every edge attached to them, in one change. An id absent from the board refuses the whole call with its index and nothing changes. It answers the ids of the nodes and of the edges removed.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"name": {
+					"type": "string",
+					"description": "The name of the board in the Library of this Space, ending in .canvas, such as roadmap.canvas, without any folder."
+				},
+				"ids": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"description": "The ids of the nodes to remove, as board_read answered them."
+				}
+			},
+			"required": [
+				"name",
+				"ids"
 			],
 			"additionalProperties": false
 		}

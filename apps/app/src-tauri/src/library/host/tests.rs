@@ -12,7 +12,7 @@ use tauri::test::{mock_builder, MockRuntime};
 use tauri::{App, Listener as _};
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::Encode;
-use yrs::{Doc, GetString, IndexedSequence, ReadTxn, Text, Transact, Update};
+use yrs::{Doc, GetString, IndexedSequence, Map, ReadTxn, Text, Transact, Update};
 
 use super::*;
 use crate::agent::contract::CancelOutcome;
@@ -24,7 +24,7 @@ use crate::library::contract::{
 	LibraryBoardPoint, LibraryChanged, LibraryDocumentPresence, LibraryDocumentRenamed,
 	LibraryOverwritten, LibraryPresenceAt, LibraryWriter, LibraryWriterKind,
 };
-use crate::library::presence::{share_presence, Presences};
+use crate::library::presence::{share_presence, Presences, AGENT_BOARD_LEASE};
 use crate::library::{apply_update, open_document, read_thumbnail};
 use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 
@@ -1128,7 +1128,7 @@ async fn a_text_anchor_and_a_board_point_shared_through_the_command_are_publishe
 }
 
 #[tokio::test(start_paused = true)]
-async fn an_agent_board_seat_publishes_its_node_and_point_then_leaves_and_finishes_on_drop() {
+async fn an_agent_board_seat_publishes_its_node_and_point_and_stays_after_it_finishes() {
 	let (app, root) = a_host("board-seat").await;
 	put(&root, SPACE, BOARD, EMPTY_BOARD);
 	let presences =
@@ -1140,7 +1140,7 @@ async fn an_agent_board_seat_publishes_its_node_and_point_then_leaves_and_finish
 	let agent = Agent { id: "b1".to_owned(), name: "Bean".to_owned() };
 	let mut seat = BoardWriting::of(app.handle(), SPACE, BOARD, &agent);
 
-	seat.at("n1", LibraryBoardPoint { x: 40, y: 80 });
+	seat.at(&Touched { node_id: Some("n1".to_owned()), x: 40, y: 80 });
 	tokio::time::sleep(BOARD_PACE_PASSED).await;
 
 	let seated = all_of(&presences);
@@ -1150,7 +1150,8 @@ async fn an_agent_board_seat_publishes_its_node_and_point_then_leaves_and_finish
 	seat.writing.outcome = LibraryWriteOutcome::Finished;
 	drop(seat);
 
-	assert_eq!(positions(&all_of(&presences)), [vec![]]);
+	assert!(all_of(&presences).is_empty());
+	assert_eq!(agent_seated(&app), Some(Some("Bean".to_owned())));
 	assert_eq!(
 		all_of(&finishes),
 		[LibraryDocumentWriterFinished {
@@ -1580,4 +1581,300 @@ async fn a_write_of_the_stopped_agent_started_after_the_stop_lands_in_full() {
 
 	let text = on_disk(&root, "notes.md");
 	assert_eq!(text.matches('b').count(), 200, "{text}");
+}
+
+const A_BOARD_WITH_ONE_NODE: &str = r#"{"nodes":[{"id":"a","type":"text","text":"A","x":0,"y":0,"width":100,"height":50}],"edges":[]}"#;
+
+fn board_caught_up(editor: &Doc, updates: &[Value]) -> Board {
+	for updated in updates {
+		let update = BASE64_STANDARD.decode(updated["update"].as_str().expect("an update"));
+		let update = Update::decode_v1(&update.expect("base64")).expect("yjs");
+		editor.transact_mut().apply_update(update).expect("applies");
+	}
+	crate::board::read_board(editor).expect("the board reads")
+}
+
+fn a_step(key: &str, after: Option<&str>) -> Value {
+	match after {
+		Some(previous) => json!({
+			"key": key, "kind": "shape", "text": key, "place": { "side": "right", "of": previous }
+		}),
+		None => json!({ "key": key, "kind": "shape", "text": key }),
+	}
+}
+
+fn a_five_step_flow() -> Value {
+	let keys = ["brief", "draft", "review", "ship", "learn"];
+	let nodes: Vec<Value> = keys
+		.iter()
+		.enumerate()
+		.map(|(index, key)| a_step(key, index.checked_sub(1).map(|previous| keys[previous])))
+		.collect();
+	let edges: Vec<Value> =
+		keys.windows(2).map(|pair| json!({ "from": pair[0], "to": pair[1] })).collect();
+	json!({ "name": BOARD, "nodes": nodes, "edges": edges })
+}
+
+fn agent_seated(app: &App<MockRuntime>) -> Option<Option<String>> {
+	crate::library::presence::seated_name(app.handle(), SPACE, BOARD, &Seat::Agent("b1".to_owned()))
+}
+
+#[tokio::test]
+async fn an_agent_creates_an_empty_board_and_a_taken_name_creates_nothing() {
+	let (app, root) = a_host("board-create").await;
+	let changes = heard::<LibraryChanged>(&app, events::LIBRARY_CHANGED.name());
+	let host = the_host(&app);
+
+	let created = host
+		.served(Operation::BoardCreate, json!({ "name": BOARD }))
+		.await
+		.expect("the board is created");
+	let changed = all_of(&changes);
+	put(&root, SPACE, "notes.md", "Notes.");
+	let taken = host.served(Operation::BoardCreate, json!({ "name": BOARD })).await;
+	let not_a_board = host.served(Operation::BoardCreate, json!({ "name": "notes.md" })).await;
+
+	assert_eq!((&created["name"], &created["kind"]), (&json!(BOARD), &json!("board")));
+	assert!(created["updatedAt"].is_i64(), "{created}");
+	assert_eq!(changed.len(), 1);
+	assert_eq!(on_disk(&root, BOARD), EMPTY_BOARD);
+	assert_eq!(refusal_of(taken), json!({ "kind": "alreadyExists", "name": BOARD }));
+	assert_eq!(refusal_kind(not_a_board), json!("invalidName"));
+	assert_eq!(on_disk(&root, BOARD), EMPTY_BOARD);
+	assert_eq!(on_disk(&root, "notes.md"), "Notes.");
+}
+
+#[tokio::test]
+async fn a_five_step_flow_lands_in_one_call_as_one_announced_update() {
+	let (app, root) = a_host("board-flow").await;
+	let host = the_host(&app);
+	host.served(Operation::BoardCreate, json!({ "name": BOARD })).await.expect("created");
+	let editor = an_open_editor(&app, &root, BOARD);
+	let updates = heard::<Value>(&app, events::LIBRARY_DOCUMENT_UPDATED.name());
+
+	let added = host.served(Operation::BoardAdd, a_five_step_flow()).await.expect("drawn");
+	let announced = all_of(&updates);
+	let read = host.served(Operation::BoardRead, json!({ "name": BOARD })).await.expect("read");
+
+	assert_eq!(announced.len(), 1);
+	let ids: BTreeMap<String, String> =
+		serde_json::from_value(added["nodes"].clone()).expect("a key map");
+	assert_eq!(ids.keys().collect::<Vec<_>>(), ["brief", "draft", "learn", "review", "ship"]);
+	let seen = serde_json::to_value(board_caught_up(&editor, &announced)).expect("serializes");
+	assert_eq!(seen["nodes"].as_object().map(|nodes| nodes.len()), Some(5));
+	assert_eq!(seen["edges"].as_object().map(|edges| edges.len()), Some(4));
+	let nodes = read["nodes"].as_array().expect("nodes");
+	let xs: Vec<i64> = nodes.iter().map(|node| node["x"].as_i64().expect("x")).collect();
+	assert_eq!(xs, [0, 280, 560, 840, 1120]);
+	assert!(nodes.iter().all(|node| node["y"] == 0 && node["kind"] == "shape"));
+	assert_eq!(nodes[1]["text"], "draft");
+	assert_eq!(nodes[1]["id"].as_str(), Some(ids["draft"].as_str()));
+	let edges = read["edges"].as_array().expect("edges");
+	assert_eq!(edges.len(), 4);
+	assert!(edges
+		.iter()
+		.any(|edge| edge["fromNode"] == ids["brief"].as_str()
+			&& edge["toNode"] == ids["draft"].as_str()));
+}
+
+#[tokio::test]
+async fn a_refused_batch_leaves_the_board_byte_identical_and_announces_nothing() {
+	let (app, root) = a_host("board-refused").await;
+	put(&root, SPACE, BOARD, A_BOARD_WITH_ONE_NODE);
+	let state_before = open_document(app.handle(), &root, SPACE, BOARD).expect("opens").update;
+	let updates = heard::<Value>(&app, events::LIBRARY_DOCUMENT_UPDATED.name());
+	let batch = json!({
+		"name": BOARD,
+		"nodes": [
+			{ "key": "fine", "kind": "text", "place": { "side": "below", "of": "a" } },
+			{ "key": "wrong", "kind": "sticky", "fill": "purple" }
+		],
+		"edges": [{ "from": "fine", "to": "a" }]
+	});
+
+	let refused = the_host(&app).served(Operation::BoardAdd, batch).await;
+
+	assert_eq!(
+		refusal_of(refused),
+		json!({
+			"kind": "invalidBoardItem",
+			"element": "node",
+			"index": 1,
+			"reason": "refusedField",
+			"field": "fill"
+		})
+	);
+	assert!(all_of(&updates).is_empty());
+	assert_eq!(on_disk(&root, BOARD), A_BOARD_WITH_ONE_NODE);
+	let state_after = open_document(app.handle(), &root, SPACE, BOARD).expect("opens").update;
+	assert_eq!(state_after, state_before);
+}
+
+#[tokio::test]
+async fn an_update_changes_a_node_in_place_and_a_removal_takes_its_edges_each_in_one_update() {
+	let (app, root) = a_host("board-update-remove").await;
+	put(&root, SPACE, BOARD, A_BOARD_WITH_ONE_NODE);
+	let host = the_host(&app);
+	let batch = json!({
+		"name": BOARD,
+		"nodes": [{ "key": "b", "kind": "text", "text": "B", "place": { "side": "right", "of": "a" } }],
+		"edges": [{ "from": "a", "to": "b" }]
+	});
+	let added = host.served(Operation::BoardAdd, batch).await.expect("drawn");
+	let b = added["nodes"]["b"].as_str().expect("an id").to_owned();
+	let editor = an_open_editor(&app, &root, BOARD);
+	let text_of_a = {
+		let nodes = editor.get_or_insert_map("nodes");
+		let txn = editor.transact();
+		match nodes.get(&txn, "a") {
+			Some(yrs::Out::YMap(node)) => match node.get(&txn, "text") {
+				Some(yrs::Out::YText(text)) => text,
+				held => panic!("the text of a node is a Y.Text, got {held:?}"),
+			},
+			held => panic!("the node is a Y.Map, got {held:?}"),
+		}
+	};
+	let updates = heard::<Value>(&app, events::LIBRARY_DOCUMENT_UPDATED.name());
+
+	let updated = host
+		.served(
+			Operation::BoardUpdate,
+			json!({ "name": BOARD, "nodes": [{ "id": "a", "text": "Brief", "y": 20 }] }),
+		)
+		.await
+		.expect("updated");
+	let announced_update = all_of(&updates);
+	let unknown = host
+		.served(
+			Operation::BoardUpdate,
+			json!({ "name": BOARD, "nodes": [{ "id": "a", "text": "No" }, { "id": "gone" }] }),
+		)
+		.await;
+	let removed = host
+		.served(Operation::BoardRemove, json!({ "name": BOARD, "ids": [b] }))
+		.await
+		.expect("removed");
+	let announced_removal = all_of(&updates);
+
+	assert_eq!(updated, json!({ "name": BOARD, "nodes": ["a"] }));
+	assert_eq!(announced_update.len(), 1);
+	board_caught_up(&editor, &announced_update);
+	assert_eq!(text_of_a.get_string(&editor.transact()), "Brief");
+	assert_eq!(refusal_of(unknown)["index"], 1);
+	assert_eq!(announced_removal.len(), 1);
+	assert_eq!(removed["nodes"], json!([b]));
+	assert_eq!(removed["edges"].as_array().map(Vec::len), Some(1));
+	let seen =
+		serde_json::to_value(board_caught_up(&editor, &announced_removal)).expect("serializes");
+	assert_eq!(seen["edges"], json!({}));
+	let read = host.served(Operation::BoardRead, json!({ "name": BOARD })).await.expect("read");
+	assert_eq!(read["nodes"].as_array().map(Vec::len), Some(1));
+	let a = &read["nodes"][0];
+	assert_eq!((&a["text"], &a["y"], &a["width"]), (&json!("Brief"), &json!(20), &json!(100)));
+	assert_eq!(read["edges"], json!([]));
+}
+
+#[tokio::test(start_paused = true)]
+async fn an_agent_board_seat_is_published_after_a_call_and_lapses_at_the_end_of_its_lease() {
+	let (app, root) = a_host("board-presence").await;
+	put(&root, SPACE, BOARD, A_BOARD_WITH_ONE_NODE);
+	let presences =
+		heard::<LibraryDocumentPresence>(&app, events::LIBRARY_DOCUMENT_PRESENCE.name());
+	let host = the_host(&app);
+	let batch = json!({
+		"name": BOARD,
+		"nodes": [{ "key": "b", "kind": "text", "place": { "side": "right", "of": "a" } }]
+	});
+
+	let added = host.served(Operation::BoardAdd, batch).await.expect("drawn");
+	let b = added["nodes"]["b"].as_str().expect("an id").to_owned();
+	tokio::time::sleep(BOARD_PACE_PASSED).await;
+	let after_the_pace = all_of(&presences);
+	tokio::time::sleep(AGENT_BOARD_LEASE - BOARD_PACE_PASSED * 2).await;
+	let before_the_lease_ends = all_of(&presences);
+	let still_seated = agent_seated(&app);
+	tokio::time::sleep(BOARD_PACE_PASSED * 2).await;
+	let after_the_lease = all_of(&presences);
+
+	assert_eq!(positions(&after_the_pace), [vec![on_the_board(300, 25, Some(&b))]]);
+	assert_eq!(named(&after_the_pace[0].writers), [(LibraryWriterKind::Agent, Some("Bean"))]);
+	assert!(before_the_lease_ends.is_empty());
+	assert_eq!(still_seated, Some(Some("Bean".to_owned())));
+	assert_eq!(positions(&after_the_lease), [vec![]]);
+	assert_eq!(agent_seated(&app), None);
+}
+
+#[tokio::test(start_paused = true)]
+async fn another_board_call_renews_the_lease_and_moves_the_one_seat_and_a_refusal_keeps_it() {
+	let (app, root) = a_host("board-presence-renewed").await;
+	put(&root, SPACE, BOARD, A_BOARD_WITH_ONE_NODE);
+	let presences =
+		heard::<LibraryDocumentPresence>(&app, events::LIBRARY_DOCUMENT_PRESENCE.name());
+	let finishes = heard::<LibraryDocumentWriterFinished>(
+		&app,
+		events::LIBRARY_DOCUMENT_WRITER_FINISHED.name(),
+	);
+	let host = the_host(&app);
+	let batch =
+		json!({ "name": BOARD, "nodes": [{ "key": "b", "kind": "text", "x": 400, "y": 0 }] });
+	host.served(Operation::BoardAdd, batch).await.expect("drawn");
+	tokio::time::sleep(BOARD_PACE_PASSED).await;
+	let first = all_of(&presences);
+	tokio::time::sleep(AGENT_BOARD_LEASE / 2).await;
+
+	let refused = host
+		.served(Operation::BoardUpdate, json!({ "name": BOARD, "nodes": [{ "id": "gone" }] }))
+		.await;
+	tokio::time::sleep(BOARD_PACE_PASSED).await;
+	let after_the_refusal = all_of(&presences);
+	host.served(
+		Operation::BoardUpdate,
+		json!({ "name": BOARD, "nodes": [{ "id": "a", "text": "Brief" }] }),
+	)
+	.await
+	.expect("updated");
+	tokio::time::sleep(BOARD_PACE_PASSED).await;
+	let moved = all_of(&presences);
+	tokio::time::sleep(AGENT_BOARD_LEASE / 2).await;
+	let past_the_first_lease = all_of(&presences);
+	tokio::time::sleep(AGENT_BOARD_LEASE / 2).await;
+	let past_the_renewed_lease = all_of(&presences);
+
+	assert_eq!(first.len(), 1);
+	assert_eq!(refusal_kind(refused), json!("invalidBoardItem"));
+	assert!(after_the_refusal.is_empty());
+	assert_eq!(positions(&moved), [vec![on_the_board(50, 25, Some("a"))]]);
+	assert!(past_the_first_lease.is_empty());
+	assert_eq!(positions(&past_the_renewed_lease), [vec![]]);
+	let outcomes: Vec<_> = all_of(&finishes).into_iter().map(|finished| finished.outcome).collect();
+	assert_eq!(
+		outcomes,
+		[LibraryWriteOutcome::Finished, LibraryWriteOutcome::Failed, LibraryWriteOutcome::Finished]
+	);
+}
+
+#[tokio::test]
+async fn an_agent_posts_a_board_of_the_space_as_its_own_message() {
+	let (app, root) = a_host("post-board").await;
+	put(&root, SPACE, BOARD, EMPTY_BOARD);
+
+	let posted = the_host(&app)
+		.served(Operation::PostDocument, json!({ "name": BOARD }))
+		.await
+		.expect("the board is posted");
+
+	let page = ready(&app.state::<db::DatabaseState>())
+		.expect("the database opens")
+		.messages()
+		.page_messages(MessagePageQuery {
+			conversation_id: "c1".to_owned(),
+			before_seq: None,
+			limit: 10,
+		})
+		.await
+		.expect("the page reads");
+	assert_eq!(page.messages.len(), 1);
+	assert_eq!(page.messages[0].author_bot_id.as_deref(), Some("b1"));
+	assert_eq!(page.messages[0].documents, [BOARD]);
+	assert_eq!(posted["name"], BOARD);
 }

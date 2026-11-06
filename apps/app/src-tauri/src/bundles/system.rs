@@ -390,7 +390,7 @@ mod tests {
 	}
 
 	#[test]
-	fn the_library_skill_is_preloaded_and_names_every_library_tool() {
+	fn the_library_skill_is_preloaded_and_names_every_library_and_board_tool() {
 		let text = String::from_utf8_lossy(embedded(LIBRARY));
 		let said_in_one_breath = text.split_whitespace().collect::<Vec<_>>().join(" ");
 
@@ -404,6 +404,12 @@ mod tests {
 			"`library_import`",
 			"`library_rename`",
 			"`library_delete`",
+			"`board_create`",
+			"`board_read`",
+			"`board_add`",
+			"`board_update`",
+			"`board_remove`",
+			"`conversation_post_document`",
 			"occurs once",
 		] {
 			assert!(said_in_one_breath.contains(said), "{said} is missing");

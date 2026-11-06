@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
@@ -16,21 +16,27 @@ use super::contract::{
 	LibraryBoardPoint, LibraryDocumentFormat, LibraryDocumentWriterFinished, LibraryError,
 	LibraryItem, LibraryItemKind, LibraryPresenceAt, LibraryWriteOutcome,
 };
-use super::documents::{located, Location, Placement, RemoveStep, WriteStep};
-use super::presence::{seat_writer, unseat_writer, Seat, Seated};
+use super::documents::{located, BoardTarget, Location, Placement, RemoveStep, WriteStep};
+use super::presence::{seat_agent_on_board, seat_writer, unseat_writer, Seat, Seated};
 use super::{
-	a_document, announce, announce_change, create_document, delete_item, document_text, documents,
-	encoded_content, import_path, list, overwrite_path, read_document, rename_linked_document,
-	resolve, root, AcceptedType, OverwriteRefusal,
+	a_document, announce, announce_change, create_board, create_document, delete_item,
+	document_text, documents, encoded_content, import_path, list, overwrite_path, read_document,
+	rename_linked_document, resolve, root, AcceptedType, OverwriteRefusal,
 };
 use crate::agent::contract::RuntimeScope;
 use crate::agent::host::{Host, Refusal};
+use crate::board::{
+	changed, drawn, read_out, removed, Board, BoardEdit, BoardRead, ChangedNode, DrawRefusal,
+	DrawnEdge, DrawnNode, Touched,
+};
 use crate::conversations::commands::{post_document, ready};
 use crate::conversations::contract::TranscriptStoreError;
 use crate::db::repositories::keyset::{self, Keyset};
 use crate::{db, events};
 
 const WRITE_STEPS: usize = 40;
+
+const BOARD_EXTENSION: &str = ".canvas";
 
 const LIST_LIMIT_DEFAULT: u32 = 50;
 
@@ -91,6 +97,7 @@ pub enum ToolRefusal {
 	Unexpected {
 		detail: String,
 	},
+	InvalidBoardItem(DrawRefusal),
 }
 
 #[derive(Debug, Clone, Copy, Deserialize)]
@@ -105,6 +112,11 @@ pub enum Operation {
 	Rename,
 	Delete,
 	PostDocument,
+	BoardCreate,
+	BoardRead,
+	BoardAdd,
+	BoardUpdate,
+	BoardRemove,
 }
 
 #[derive(Debug, Deserialize)]
@@ -146,6 +158,29 @@ struct Imported {
 struct Renamed {
 	name: String,
 	new_name: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct BoardDrawn {
+	name: String,
+	nodes: Vec<DrawnNode>,
+	#[serde(default)]
+	edges: Vec<DrawnEdge>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct BoardChanged {
+	name: String,
+	nodes: Vec<ChangedNode>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct BoardEmptied {
+	name: String,
+	ids: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -222,6 +257,36 @@ struct DocumentPosted {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+struct BoardShown {
+	name: String,
+	#[serde(flatten)]
+	board: BoardRead,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BoardAdded {
+	name: String,
+	nodes: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BoardUpdated {
+	name: String,
+	nodes: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BoardRemoved {
+	name: String,
+	nodes: Vec<String>,
+	edges: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct DocumentWritten {
 	name: String,
 	characters: usize,
@@ -282,6 +347,83 @@ impl<R: Runtime> LibraryHost<R> {
 			unexpected => DocumentRefusal::unexpected(format!("{unexpected:?}")),
 		})?;
 		Ok(DocumentPosted { name, conversation_id: self.scope.conversation_id.clone(), message_id })
+	}
+
+	async fn board_edited<T>(
+		&self,
+		database: &db::Database,
+		root: &Path,
+		space_id: &str,
+		name: &str,
+		edit: impl FnOnce(&Board) -> Result<(BoardEdit, Option<Touched>, T), DrawRefusal>,
+	) -> Result<T, DocumentRefusal> {
+		let agent = self.agent(database).await?;
+		let mut writing = BoardWriting::of(&self.app, space_id, name, &agent);
+		let target = BoardTarget { root, space_id, name, writer: client_id_of(&agent.id) };
+		let (touched, made) = documents(&self.app).edit_board(
+			&target,
+			|board| {
+				let (edit, touched, made) = edit(board)?;
+				Ok::<_, DocumentRefusal>((edit, (touched, made)))
+			},
+			|applied| announce(&self.app, space_id, &applied.name, &applied.change),
+		)?;
+		if let Some(touched) = &touched {
+			writing.at(touched);
+		}
+		writing.writing.outcome = LibraryWriteOutcome::Finished;
+		Ok(made)
+	}
+
+	async fn board_added(
+		&self,
+		database: &db::Database,
+		root: &Path,
+		space_id: &str,
+		asked: BoardDrawn,
+	) -> Result<BoardAdded, DocumentRefusal> {
+		let author = self.scope.bot_id.clone();
+		let nodes = self
+			.board_edited(database, root, space_id, &asked.name, |board| {
+				let drawn = drawn(board, &author, &asked.nodes, &asked.edges)?;
+				Ok((drawn.edit, drawn.touched, drawn.ids))
+			})
+			.await?;
+		Ok(BoardAdded { name: asked.name, nodes })
+	}
+
+	async fn board_updated(
+		&self,
+		database: &db::Database,
+		root: &Path,
+		space_id: &str,
+		asked: BoardChanged,
+	) -> Result<BoardUpdated, DocumentRefusal> {
+		let nodes = self
+			.board_edited(database, root, space_id, &asked.name, |board| {
+				let changed = changed(board, &asked.nodes)?;
+				let ids = changed.edit.changed_nodes.iter().map(|node| node.id.clone()).collect();
+				Ok((changed.edit, changed.touched, ids))
+			})
+			.await?;
+		Ok(BoardUpdated { name: asked.name, nodes })
+	}
+
+	async fn board_removed(
+		&self,
+		database: &db::Database,
+		root: &Path,
+		space_id: &str,
+		asked: BoardEmptied,
+	) -> Result<BoardRemoved, DocumentRefusal> {
+		let (nodes, edges) = self
+			.board_edited(database, root, space_id, &asked.name, |board| {
+				let removed = removed(board, &asked.ids)?;
+				let ids = (removed.edit.removed_nodes.clone(), removed.edit.removed_edges.clone());
+				Ok((removed.edit, removed.touched, ids))
+			})
+			.await?;
+		Ok(BoardRemoved { name: asked.name, nodes, edges })
 	}
 
 	async fn written(
@@ -404,6 +546,32 @@ impl<R: Runtime> Host for LibraryHost<R> {
 			Operation::PostDocument => {
 				let asked: Named = Self::read(payload)?;
 				Self::answered(self.posted(database, asked.name).await?)
+			}
+			Operation::BoardCreate => {
+				let asked: Named = Self::read(payload)?;
+				let stem = asked
+					.name
+					.strip_suffix(BOARD_EXTENSION)
+					.ok_or(LibraryError::InvalidName { name: asked.name.clone() })?;
+				let created = create_board(&root, &space_id, stem)?;
+				Self::answered(self.changed(&space_id, created))
+			}
+			Operation::BoardRead => {
+				let asked: Named = Self::read(payload)?;
+				let board = documents(&self.app).board(&root, &space_id, &asked.name)?;
+				Self::answered(BoardShown { name: asked.name, board: read_out(&board) })
+			}
+			Operation::BoardAdd => {
+				let asked = Self::read(payload)?;
+				Self::answered(self.board_added(database, &root, &space_id, asked).await?)
+			}
+			Operation::BoardUpdate => {
+				let asked = Self::read(payload)?;
+				Self::answered(self.board_updated(database, &root, &space_id, asked).await?)
+			}
+			Operation::BoardRemove => {
+				let asked = Self::read(payload)?;
+				Self::answered(self.board_removed(database, &root, &space_id, asked).await?)
 			}
 		}
 	}
@@ -566,26 +734,20 @@ impl<'a, R: Runtime> Writing<'a, R> {
 	}
 }
 
-#[cfg_attr(not(test), allow(dead_code))]
 struct BoardWriting<'a, R: Runtime> {
 	writing: Writing<'a, R>,
 }
 
-#[cfg_attr(not(test), allow(dead_code))]
 impl<'a, R: Runtime> BoardWriting<'a, R> {
 	fn of(app: &'a AppHandle<R>, space_id: &'a str, name: &'a str, agent: &'a Agent) -> Self {
 		Self { writing: Writing::of(app, space_id, name, agent) }
 	}
 
-	fn at(&self, node_id: &str, point: LibraryBoardPoint) {
-		self.writing.seated(LibraryPresenceAt::Board { point, node_id: Some(node_id.to_owned()) });
-	}
-}
-
-impl<R: Runtime> Drop for BoardWriting<'_, R> {
-	fn drop(&mut self) {
+	fn at(&self, touched: &Touched) {
 		let Writing { app, space_id, name, agent, .. } = &self.writing;
-		unseat_writer(app, space_id, name, &Seat::Agent(agent.id.clone()));
+		let point = LibraryBoardPoint { x: touched.x, y: touched.y };
+		let at = LibraryPresenceAt::Board { point, node_id: touched.node_id.clone() };
+		seat_agent_on_board(app, space_id, name, &agent.id, &agent.name, at);
 	}
 }
 
@@ -780,6 +942,12 @@ impl From<OverwriteRefusal> for DocumentRefusal {
 				})
 			}
 		}
+	}
+}
+
+impl From<DrawRefusal> for DocumentRefusal {
+	fn from(refusal: DrawRefusal) -> Self {
+		Self::Tool(ToolRefusal::InvalidBoardItem(refusal))
 	}
 }
 
