@@ -1148,11 +1148,8 @@ fn is_named_at(chars: &[char], from: usize, name: &str) -> bool {
 #[cfg(test)]
 mod tests {
 	use std::time::Duration;
-	use tauri::Manager;
 
 	use serde_json::json;
-	use tauri::test::mock_builder;
-	use tauri::Listener;
 
 	use super::super::contract::{ActivityEvent, ActivityKind, ActivityStatus};
 	use super::*;
@@ -1165,7 +1162,7 @@ mod tests {
 	use crate::db::repositories::messages::{
 		MessageRole, MessageState, NewUserMessage, ReplyLink, StoredMessage, WrittenFrom,
 	};
-	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
+	use crate::test_core::{a_core_of_its_own, CoreOfItsOwn};
 	use crate::test_log::{capturing, infos_naming, warnings_naming};
 
 	const RUNTIME_SESSION_ID: &str = "rs1";
@@ -1187,16 +1184,17 @@ mod tests {
 	}
 
 	struct Written {
-		app: AppOfItsOwn,
+		core: CoreOfItsOwn,
 		conversation_id: String,
 		attachments: Arc<TurnAttachments>,
 	}
 
 	impl Written {
 		async fn new(name: &str) -> Self {
-			let app = an_app_of_its_own(&format!("reply-writer-{name}"), mock_builder());
-			crate::db::install(crate::events::core(app.handle()));
-			let written = Self { app, conversation_id: String::new(), attachments: Arc::default() };
+			let core = a_core_of_its_own(&format!("reply-writer-{name}"));
+			crate::db::install(&core);
+			let written =
+				Self { core, conversation_id: String::new(), attachments: Arc::default() };
 			let conversations = written.database().conversations();
 			conversations.ensure_default_bot().await.expect("the bot is seeded");
 			let chat = conversations
@@ -1207,8 +1205,7 @@ mod tests {
 		}
 
 		fn database(&self) -> &db::Database {
-			ready(crate::events::core(self.app.app_handle()).state::<db::DatabaseState>().inner())
-				.expect("the database opens")
+			ready(self.core.state::<db::DatabaseState>().inner()).expect("the database opens")
 		}
 
 		fn desk(&self) -> Desk {
@@ -1225,7 +1222,7 @@ mod tests {
 
 		fn desk_of_telling(&self, bot_id: &str, inner: Arc<dyn TurnSink>) -> Desk {
 			let store = Store {
-				core: crate::events::core(self.app.handle()).clone(),
+				core: self.core.core().clone(),
 				conversation_id: self.conversation_id.clone(),
 				bot_id: bot_id.to_owned(),
 				runtime_session_id: RUNTIME_SESSION_ID.to_owned(),
@@ -1485,7 +1482,7 @@ mod tests {
 			runtime_session_id: "r1".to_owned(),
 			epoch: 1,
 		};
-		let run = commands::a_run_held_by_the_app(crate::events::core(written.app.handle()), scope);
+		let run = commands::a_run_held_by_the_app(&written.core, scope);
 		let (queue, queued) = mpsc::unbounded_channel();
 		queue.send(Entry::Submitted(submitted("t1", "p1"))).expect("the turn is queued");
 		queue.send(Entry::Event(question("r1"))).expect("the question is queued");
@@ -1494,8 +1491,7 @@ mod tests {
 		write_then_forward(queued, written.desk_telling(Arc::new(run))).await;
 
 		assert_eq!(written.stored("question-r1").await, None);
-		let (pending, _) =
-			commands::subscribed_with_pending_questions(crate::events::core(written.app.handle()));
+		let (pending, _) = commands::subscribed_with_pending_questions(&written.core);
 		assert_eq!(pending.len(), 1);
 	}
 
@@ -1919,8 +1915,8 @@ mod tests {
 	fn listen_to_updates(written: &Written) -> Arc<Mutex<Vec<serde_json::Value>>> {
 		let heard = Arc::new(Mutex::new(Vec::new()));
 		let kept = heard.clone();
-		written.app.handle().listen(crate::conversations::contract::UPDATED_EVENT, move |event| {
-			let payload = serde_json::from_str(event.payload()).expect("the payload is JSON");
+		written.core.listen_to(crate::conversations::contract::UPDATED_EVENT, move |payload| {
+			let payload = serde_json::from_str(payload).expect("the payload is JSON");
 			kept.lock().expect("the list is kept").push(payload);
 		});
 		heard
@@ -1939,8 +1935,8 @@ mod tests {
 			content: "hello".to_owned(),
 			created_at: 1,
 		};
-		crate::conversations::commands::conversation_send_user_message(
-			written.app.state(),
+		crate::conversations::commands::send_user_message(
+			&written.core,
 			crate::hosting::authorship::Caller::Host,
 			message,
 			vec![DEFAULT_BOT_ID.to_owned()],
@@ -2194,8 +2190,8 @@ mod tests {
 			.await
 			.expect("the seats table is renamed");
 
-		let finalized = crate::conversations::commands::conversation_finalize_message(
-			written.app.state(),
+		let finalized = crate::conversations::commands::finalize_message(
+			&written.core,
 			"m1".to_owned(),
 			crate::conversations::contract::TerminalCompletion::Complete,
 			None,
@@ -2337,8 +2333,8 @@ mod tests {
 	fn listen_to_drops(written: &Written) -> Arc<Mutex<Vec<SummonsDropped>>> {
 		let heard = Arc::new(Mutex::new(Vec::new()));
 		let kept = heard.clone();
-		written.app.handle().listen(SUMMONS_DROPPED_EVENT, move |event| {
-			let dropped = serde_json::from_str(event.payload()).expect("a dropped summons");
+		written.core.listen_to(SUMMONS_DROPPED_EVENT, move |payload| {
+			let dropped = serde_json::from_str(payload).expect("a dropped summons");
 			kept.lock().expect("the list is kept").push(dropped);
 		});
 		heard
@@ -2460,13 +2456,12 @@ mod tests {
 	#[tokio::test]
 	async fn a_bot_handed_the_turn_that_never_starts_releases_its_turn_run_at_the_start_deadline() {
 		let (written, ada) = Written::in_a_room_of_two("unstarted-handover").await;
-		crate::events::core(written.app.app_handle())
-			.manage(TurnRunDeadlines::after(Duration::ZERO));
+		written.core.manage(TurnRunDeadlines::after(Duration::ZERO));
 		written.prompt("t1", "p1").await;
 		let (announced, mut updates) = mpsc::unbounded_channel();
-		written.app.handle().listen(crate::conversations::contract::UPDATED_EVENT, move |event| {
+		written.core.listen_to(crate::conversations::contract::UPDATED_EVENT, move |payload| {
 			let payload: serde_json::Value =
-				serde_json::from_str(event.payload()).expect("the payload is JSON");
+				serde_json::from_str(payload).expect("the payload is JSON");
 			announced
 				.send(payload["conversation"]["activeTurn"].clone())
 				.expect("the test listens");
@@ -2593,7 +2588,7 @@ mod tests {
 		desk.open_turn(submitted("t1", "p1")).await;
 		desk.record(&question("q1")).await;
 
-		commands::a_quitting_host(crate::events::core(written.app.handle()));
+		commands::a_quitting_host(&written.core);
 		desk.record(&turn_ended()).await;
 
 		assert_eq!(held_prompts(&written).await, [held("q1", "question")]);
@@ -2604,11 +2599,11 @@ mod tests {
 		let written = Written::new("prompts-announced").await;
 		let heard = Arc::new(Mutex::new(Vec::new()));
 		let kept = heard.clone();
-		written.app.handle().listen(
+		written.core.listen_to(
 			crate::conversations::contract::STATE_CHANGED_EVENT,
-			move |event| {
+			move |payload| {
 				let payload: serde_json::Value =
-					serde_json::from_str(event.payload()).expect("the payload is JSON");
+					serde_json::from_str(payload).expect("the payload is JSON");
 				kept.lock().expect("the list is kept").push(payload["state"].clone());
 			},
 		);

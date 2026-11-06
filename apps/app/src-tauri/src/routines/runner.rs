@@ -587,11 +587,9 @@ mod tests {
 	use crate::events;
 	use std::time::Duration;
 
-	use tauri::test::mock_builder;
-
 	use super::*;
 	use crate::events::BUFFERED_FRAMES;
-	use crate::test_app::an_app_of_its_own;
+	use crate::test_core::a_core_of_its_own;
 
 	fn a_scope(runtime_session_id: &str) -> RuntimeScope {
 		RuntimeScope {
@@ -695,11 +693,11 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_relay_that_dropped_frames_past_a_stalled_run_fails_it_with_their_count() {
-		let app = an_app_of_its_own("routine-runner-lag", mock_builder());
+		let core = a_core_of_its_own("routine-runner-lag");
 		let run = a_scope("session-1");
-		let heard = events::subscribed(app.handle());
+		let heard = core.subscribe_frames();
 		for seq in 0..(BUFFERED_FRAMES + 6) as u64 {
-			events::emit(app.handle(), AGENT_EVENT, a_delta(&run, seq)).expect("the event is sent");
+			core.emit(AGENT_EVENT, a_delta(&run, seq)).expect("the event is sent");
 		}
 		let mut reading = read_for(&run, heard);
 
@@ -716,11 +714,11 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_dropped_reader_stops_reading_the_relay() {
-		let app = an_app_of_its_own("routine-runner-stop", mock_builder());
+		let core = a_core_of_its_own("routine-runner-stop");
 		let run = a_scope("session-1");
 		let (events, mut arriving) = mpsc::unbounded_channel();
 		let held = run.clone();
-		let reader = listen(crate::events::core(app.handle()), move |scope| scope == &held, events);
+		let reader = listen(&core, move |scope| scope == &held, events);
 
 		drop(reader);
 
@@ -807,11 +805,9 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_refused_run_whose_turn_cannot_be_cancelled_names_the_cancel_failure_in_its_reason() {
-		let app = an_app_of_its_own("routine-refused-cancel-failed", mock_builder());
+		let core = a_core_of_its_own("routine-refused-cancel-failed");
 
-		let closing =
-			refused(crate::events::core(app.handle()), &a_scope("session-1"), DEADLINE_REASON)
-				.await;
+		let closing = refused(&core, &a_scope("session-1"), DEADLINE_REASON).await;
 
 		assert_eq!(
 			reason_of(&closing),

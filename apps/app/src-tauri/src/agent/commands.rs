@@ -2763,19 +2763,16 @@ mod tests {
 	}
 
 	mod pending_questions {
-		use tauri::test::{mock_builder, MockRuntime};
-
-		use tauri::Listener;
 
 		use super::super::super::contract::{TurnEnded, TurnOutcome};
 		use super::*;
-		use crate::conversations::commands::conversation_list;
+		use crate::conversations::commands::list_conversations;
 		use crate::conversations::contract::{ConversationState, STATE_CHANGED_EVENT};
 		use crate::db::repositories::conversations::{a_pending_prompt, PendingPrompt, PromptKind};
-		use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
+		use crate::test_core::{a_core_of_its_own, CoreOfItsOwn};
 
-		fn an_app(name: &str) -> AppOfItsOwn {
-			an_app_of_its_own(&format!("pending-question-{name}"), mock_builder())
+		fn an_app(name: &str) -> CoreOfItsOwn {
+			a_core_of_its_own(&format!("pending-question-{name}"))
 		}
 
 		fn the_turn() -> Option<EventTurn> {
@@ -2816,30 +2813,28 @@ mod tests {
 			AgentEvent::Failed { error: TransportError::Crashed { code: Some(1), detail: None } }
 		}
 
-		fn a_late_listener(app: &AppHandle<MockRuntime>) -> Vec<Frame> {
-			let (pending, mut heard) = subscribed_with_pending_questions(crate::events::core(app));
+		fn a_late_listener(core: &crate::core_context::Core) -> Vec<Frame> {
+			let (pending, mut heard) = subscribed_with_pending_questions(core);
 			assert!(heard.try_recv().is_err(), "the late listener heard a live frame");
 			pending
 		}
 
 		async fn pending_in(
-			app: &AppHandle<MockRuntime>,
+			core: &crate::core_context::Core,
 			conversation_id: &str,
 		) -> Vec<ScopedEvent> {
-			pending_questions(crate::events::core(app), conversation_id.to_owned())
-				.await
-				.expect("the command answers")
+			pending_questions(core, conversation_id.to_owned()).await.expect("the command answers")
 		}
 
 		#[tokio::test]
 		async fn the_command_returns_a_pending_question_as_it_was_announced() {
-			let app = an_app("command-asked");
-			let mut original = events::subscribed(app.handle());
-			let run = a_run_held_by_the_app(crate::events::core(app.handle()), a_scope());
+			let core = an_app("command-asked");
+			let mut original = core.subscribe_frames();
+			let run = a_run_held_by_the_app(&core, a_scope());
 			run.emit(question("q1"), the_turn());
 			let announced = original.try_recv().expect("the question was emitted");
 
-			let pending = pending_in(app.handle(), "c1").await;
+			let pending = pending_in(&core, "c1").await;
 
 			let returned: Vec<Frame> = pending
 				.iter()
@@ -2850,18 +2845,17 @@ mod tests {
 
 		#[tokio::test]
 		async fn the_command_returns_an_empty_list_when_no_question_waits() {
-			let app = an_app("command-empty");
-			a_run_held_by_the_app(crate::events::core(app.handle()), a_scope());
+			let core = an_app("command-empty");
+			a_run_held_by_the_app(&core, a_scope());
 
-			assert!(pending_in(app.handle(), "c1").await.is_empty());
+			assert!(pending_in(&core, "c1").await.is_empty());
 		}
 
 		#[tokio::test]
 		async fn the_command_returns_no_question_of_another_conversation() {
-			let app = an_app("command-elsewhere");
-			let here = a_run_held_by_the_app(crate::events::core(app.handle()), a_scope());
-			let elsewhere =
-				a_run_held_by_the_app(crate::events::core(app.handle()), another_bots_run());
+			let core = an_app("command-elsewhere");
+			let here = a_run_held_by_the_app(&core, a_scope());
+			let elsewhere = a_run_held_by_the_app(&core, another_bots_run());
 			here.emit(question("q1"), the_turn());
 			elsewhere.emit(
 				question("q9"),
@@ -2872,7 +2866,7 @@ mod tests {
 				}),
 			);
 
-			let pending = pending_in(app.handle(), "c1").await;
+			let pending = pending_in(&core, "c1").await;
 
 			assert_eq!(pending.len(), 1);
 			assert!(pending.iter().all(|question| question
@@ -2883,22 +2877,21 @@ mod tests {
 
 		#[test]
 		fn a_listener_subscribing_after_a_question_hears_it_once_in_its_turn() {
-			let app = an_app("asked");
-			let mut original = events::subscribed(app.handle());
-			let run = a_run_held_by_the_app(crate::events::core(app.handle()), a_scope());
+			let core = an_app("asked");
+			let mut original = core.subscribe_frames();
+			let run = a_run_held_by_the_app(&core, a_scope());
 
 			run.emit(question("q1"), the_turn());
 
 			let emitted = original.try_recv().expect("the question was emitted");
-			assert_eq!(a_late_listener(app.handle()), vec![emitted]);
+			assert_eq!(a_late_listener(&core), vec![emitted]);
 		}
 
 		#[test]
 		fn a_question_asked_after_a_listener_subscribed_reaches_it_live_only() {
-			let app = an_app("asked-live");
-			let run = a_run_held_by_the_app(crate::events::core(app.handle()), a_scope());
-			let (pending, mut heard) =
-				subscribed_with_pending_questions(crate::events::core(app.handle()));
+			let core = an_app("asked-live");
+			let run = a_run_held_by_the_app(&core, a_scope());
+			let (pending, mut heard) = subscribed_with_pending_questions(&core);
 
 			run.emit(question("q1"), the_turn());
 
@@ -2912,32 +2905,29 @@ mod tests {
 			for (name, settling) in
 				[("answered", answered("q1")), ("ended", turn_ended()), ("crashed", crashed())]
 			{
-				let app = an_app(name);
-				let run = a_run_held_by_the_app(crate::events::core(app.handle()), a_scope());
+				let core = an_app(name);
+				let run = a_run_held_by_the_app(&core, a_scope());
 				run.emit(question("q1"), the_turn());
 
 				run.emit(settling, the_turn());
 
-				assert!(
-					a_late_listener(app.handle()).is_empty(),
-					"{name} left the question pending"
-				);
-				assert!(pending_in(app.handle(), "c1").await.is_empty(), "{name} kept it listed");
+				assert!(a_late_listener(&core).is_empty(), "{name} left the question pending");
+				assert!(pending_in(&core, "c1").await.is_empty(), "{name} kept it listed");
 			}
 		}
 
 		#[test]
 		fn an_answer_releases_its_own_question_and_keeps_the_other() {
-			let app = an_app("answered-one");
-			let mut original = events::subscribed(app.handle());
-			let run = a_run_held_by_the_app(crate::events::core(app.handle()), a_scope());
+			let core = an_app("answered-one");
+			let mut original = core.subscribe_frames();
+			let run = a_run_held_by_the_app(&core, a_scope());
 			run.emit(question("q1"), the_turn());
 			run.emit(question("q2"), the_turn());
 			let kept = original.try_recv().and_then(|_| original.try_recv()).expect("q2 emitted");
 
 			run.emit(answered("q1"), the_turn());
 
-			assert_eq!(a_late_listener(app.handle()), vec![kept]);
+			assert_eq!(a_late_listener(&core), vec![kept]);
 		}
 
 		fn denied(id: &str) -> Frame {
@@ -2956,11 +2946,11 @@ mod tests {
 			std::iter::from_fn(|| heard.try_recv().ok()).collect()
 		}
 
-		fn two_questions_and_one_elsewhere(app: &AppHandle<MockRuntime>) {
-			let run = a_run_held_by_the_app(crate::events::core(app), a_scope());
+		fn two_questions_and_one_elsewhere(core: &crate::core_context::Core) {
+			let run = a_run_held_by_the_app(core, a_scope());
 			run.emit(question("q1"), the_turn());
 			run.emit(question("q2"), the_turn());
-			a_run_held_by_the_app(crate::events::core(app), another_bots_run()).emit(
+			a_run_held_by_the_app(core, another_bots_run()).emit(
 				question("q9"),
 				Some(EventTurn {
 					turn_id: "t9".into(),
@@ -2972,43 +2962,25 @@ mod tests {
 
 		#[tokio::test]
 		async fn a_stopped_session_announces_each_of_its_questions_denied_once_and_lists_none() {
-			let app = an_app("stopped");
-			two_questions_and_one_elsewhere(app.handle());
-			let mut heard = events::subscribed(app.handle());
+			let core = an_app("stopped");
+			two_questions_and_one_elsewhere(&core);
+			let mut heard = core.subscribe_frames();
 
-			shutdown_session(
-				crate::events::core(app.handle()),
-				&crate::events::core(app.app_handle()).state::<AgentState>(),
-				&a_scope(),
-			)
-			.await;
-			shutdown_session(
-				crate::events::core(app.handle()),
-				&crate::events::core(app.app_handle()).state::<AgentState>(),
-				&a_scope(),
-			)
-			.await;
+			shutdown_session(&core, &core.state::<AgentState>(), &a_scope()).await;
+			shutdown_session(&core, &core.state::<AgentState>(), &a_scope()).await;
 
 			assert_eq!(everything_heard(&mut heard), vec![denied("q1"), denied("q2")]);
-			assert!(pending_in(app.handle(), "c1").await.is_empty());
-			assert_eq!(
-				pending_in(app.handle(), "c2").await.len(),
-				1,
-				"another run lost its question"
-			);
+			assert!(pending_in(&core, "c1").await.is_empty());
+			assert_eq!(pending_in(&core, "c2").await.len(), 1, "another run lost its question");
 		}
 
 		#[tokio::test]
 		async fn a_quit_announces_every_pending_question_denied_and_lists_none() {
-			let app = an_app("quit");
-			two_questions_and_one_elsewhere(app.handle());
-			let mut heard = events::subscribed(app.handle());
+			let core = an_app("quit");
+			two_questions_and_one_elsewhere(&core);
+			let mut heard = core.subscribe_frames();
 
-			end_every_session(
-				crate::events::core(app.handle()),
-				&crate::events::core(app.app_handle()).state::<AgentState>(),
-			)
-			.await;
+			end_every_session(&core, &core.state::<AgentState>()).await;
 
 			let elsewhere = ScopedEvent {
 				scope: Some(another_bots_run()),
@@ -3030,34 +3002,31 @@ mod tests {
 					events::frame(AGENT_EVENT, &elsewhere).expect("a frame")
 				]
 			);
-			assert!(a_late_listener(app.handle()).is_empty());
-			assert!(pending_in(app.handle(), "c1").await.is_empty());
-			assert!(pending_in(app.handle(), "c2").await.is_empty());
+			assert!(a_late_listener(&core).is_empty());
+			assert!(pending_in(&core, "c1").await.is_empty());
+			assert!(pending_in(&core, "c2").await.is_empty());
 		}
 
 		#[tokio::test]
 		async fn a_run_taken_over_announces_the_questions_it_held_denied() {
-			let app = an_app("taken-over");
-			two_questions_and_one_elsewhere(app.handle());
-			let mut heard = events::subscribed(app.handle());
+			let core = an_app("taken-over");
+			two_questions_and_one_elsewhere(&core);
+			let mut heard = core.subscribe_frames();
 
-			crate::events::core(app.app_handle())
-				.state::<AgentState>()
-				.admit(crate::events::core(app.handle()), a_scope())
-				.await;
+			core.state::<AgentState>().admit(&core, a_scope()).await;
 
 			assert_eq!(everything_heard(&mut heard), vec![denied("q1"), denied("q2")]);
-			assert!(pending_in(app.handle(), "c1").await.is_empty());
+			assert!(pending_in(&core, "c1").await.is_empty());
 		}
 
 		#[test]
 		fn a_turn_that_ends_or_crashes_announces_its_questions_denied_before_its_end() {
 			for (name, settling) in [("ended-denied", turn_ended()), ("crashed-denied", crashed())]
 			{
-				let app = an_app(name);
-				let run = a_run_held_by_the_app(crate::events::core(app.handle()), a_scope());
+				let core = an_app(name);
+				let run = a_run_held_by_the_app(&core, a_scope());
 				run.emit(question("q1"), the_turn());
-				let mut heard = events::subscribed(app.handle());
+				let mut heard = core.subscribe_frames();
 
 				run.emit(settling.clone(), the_turn());
 
@@ -3071,18 +3040,13 @@ mod tests {
 
 		#[tokio::test]
 		async fn a_question_answered_before_the_shutdown_is_not_announced_again() {
-			let app = an_app("answered-then-stopped");
-			let run = a_run_held_by_the_app(crate::events::core(app.handle()), a_scope());
+			let core = an_app("answered-then-stopped");
+			let run = a_run_held_by_the_app(&core, a_scope());
 			run.emit(question("q1"), the_turn());
 			run.emit(answered("q1"), the_turn());
-			let mut heard = events::subscribed(app.handle());
+			let mut heard = core.subscribe_frames();
 
-			shutdown_session(
-				crate::events::core(app.handle()),
-				&crate::events::core(app.app_handle()).state::<AgentState>(),
-				&a_scope(),
-			)
-			.await;
+			shutdown_session(&core, &core.state::<AgentState>(), &a_scope()).await;
 			run.emit(turn_ended(), the_turn());
 
 			assert_eq!(everything_heard(&mut heard), vec![framed(turn_ended())]);
@@ -3091,35 +3055,30 @@ mod tests {
 		#[tokio::test]
 		async fn a_replaced_or_cleared_session_leaves_no_question_pending() {
 			let replaced = an_app("replaced");
-			a_run_held_by_the_app(crate::events::core(replaced.handle()), a_scope())
-				.emit(question("q1"), the_turn());
+			a_run_held_by_the_app(replaced.core(), a_scope()).emit(question("q1"), the_turn());
 			let cleared = an_app("cleared");
-			a_run_held_by_the_app(crate::events::core(cleared.handle()), a_scope())
-				.emit(question("q1"), the_turn());
+			a_run_held_by_the_app(cleared.core(), a_scope()).emit(question("q1"), the_turn());
 
-			crate::events::core(replaced.app_handle())
-				.state::<AgentState>()
-				.live
-				.take_over(a_scope());
-			crate::events::core(cleared.app_handle()).state::<AgentState>().live.clear_all();
+			replaced.core().state::<AgentState>().live.take_over(a_scope());
+			cleared.core().state::<AgentState>().live.clear_all();
 
-			for app in [&replaced, &cleared] {
-				assert!(a_late_listener(app.handle()).is_empty());
-				assert!(pending_in(app.handle(), "c1").await.is_empty());
+			for core in [&replaced, &cleared] {
+				assert!(a_late_listener(core).is_empty());
+				assert!(pending_in(core, "c1").await.is_empty());
 			}
 		}
 
 		#[test]
 		fn a_question_of_a_run_already_let_go_is_neither_held_nor_emitted() {
-			let app = an_app("let-go");
-			let run = a_run_held_by_the_app(crate::events::core(app.handle()), a_scope());
-			let mut original = events::subscribed(app.handle());
-			crate::events::core(app.app_handle()).state::<AgentState>().live.clear(&a_scope());
+			let core = an_app("let-go");
+			let run = a_run_held_by_the_app(&core, a_scope());
+			let mut original = core.subscribe_frames();
+			core.state::<AgentState>().live.clear(&a_scope());
 
 			run.emit(question("q1"), the_turn());
 
 			assert!(original.try_recv().is_err());
-			assert!(a_late_listener(app.handle()).is_empty());
+			assert!(a_late_listener(&core).is_empty());
 		}
 
 		const ONE_SEATED_ROOM: &str = "
@@ -3140,12 +3099,11 @@ mod tests {
 			}
 		}
 
-		async fn an_app_storing(name: &str, prompts: Vec<PendingPrompt>) -> AppOfItsOwn {
-			let app = an_app(name);
-			crate::events::core(app.app_handle()).manage(AgentState::default());
-			crate::db::install(crate::events::core(app.handle()));
-			let database =
-				bot_database(crate::events::core(app.handle())).expect("the database opens");
+		async fn an_app_storing(name: &str, prompts: Vec<PendingPrompt>) -> CoreOfItsOwn {
+			let core = an_app(name);
+			core.manage(AgentState::default());
+			crate::db::install(&core);
+			let database = bot_database(&core).expect("the database opens");
 			database
 				.call_mut(|connection| Ok(connection.execute_batch(ONE_SEATED_ROOM)?))
 				.await
@@ -3153,11 +3111,11 @@ mod tests {
 			for prompt in prompts {
 				database.conversations().hold_prompt(prompt).await.expect("the prompt is stored");
 			}
-			app
+			core
 		}
 
-		async fn stored_prompts(app: &AppOfItsOwn) -> i64 {
-			bot_database(crate::events::core(app.handle()))
+		async fn stored_prompts(core: &CoreOfItsOwn) -> i64 {
+			bot_database(core)
 				.expect("the database opens")
 				.call(|connection| {
 					Ok(connection
@@ -3167,10 +3125,9 @@ mod tests {
 				.expect("the prompts are counted")
 		}
 
-		async fn listed_state(app: &AppOfItsOwn) -> ConversationState {
-			let rows = conversation_list(app.state(), "personal".to_owned())
-				.await
-				.expect("the list reads");
+		async fn listed_state(core: &CoreOfItsOwn) -> ConversationState {
+			let rows =
+				list_conversations(core, "personal".to_owned()).await.expect("the list reads");
 			rows.into_iter()
 				.find(|row| row.conversation.id == "c1")
 				.expect("c1 is listed")
@@ -3178,12 +3135,12 @@ mod tests {
 				.state
 		}
 
-		fn heard_states(app: &AppOfItsOwn) -> Arc<std::sync::Mutex<Vec<serde_json::Value>>> {
+		fn heard_states(core: &CoreOfItsOwn) -> Arc<std::sync::Mutex<Vec<serde_json::Value>>> {
 			let heard = Arc::new(std::sync::Mutex::new(Vec::new()));
 			let kept = heard.clone();
-			app.handle().listen(STATE_CHANGED_EVENT, move |event| {
+			core.listen_to(STATE_CHANGED_EVENT, move |payload| {
 				let payload: serde_json::Value =
-					serde_json::from_str(event.payload()).expect("the payload is JSON");
+					serde_json::from_str(payload).expect("the payload is JSON");
 				kept.lock().expect("the list is kept").push(payload["state"].clone());
 			});
 			heard
@@ -3191,27 +3148,16 @@ mod tests {
 
 		#[tokio::test]
 		async fn a_stopped_session_releases_its_stored_prompts_and_its_conversation_reads_idle() {
-			let app = an_app_storing("stored-stopped", vec![stored("r1", "w1")]).await;
-			a_run_held_by_the_app(crate::events::core(app.handle()), a_scope())
-				.emit(question("q1"), the_turn());
-			assert_eq!(listed_state(&app).await, ConversationState::NeedsYou);
-			let heard = heard_states(&app);
+			let core = an_app_storing("stored-stopped", vec![stored("r1", "w1")]).await;
+			a_run_held_by_the_app(&core, a_scope()).emit(question("q1"), the_turn());
+			assert_eq!(listed_state(&core).await, ConversationState::NeedsYou);
+			let heard = heard_states(&core);
 
-			shutdown_session(
-				crate::events::core(app.handle()),
-				&crate::events::core(app.app_handle()).state::<AgentState>(),
-				&a_scope(),
-			)
-			.await;
-			shutdown_session(
-				crate::events::core(app.handle()),
-				&crate::events::core(app.app_handle()).state::<AgentState>(),
-				&a_scope(),
-			)
-			.await;
+			shutdown_session(&core, &core.state::<AgentState>(), &a_scope()).await;
+			shutdown_session(&core, &core.state::<AgentState>(), &a_scope()).await;
 
-			assert_eq!(stored_prompts(&app).await, 0);
-			assert_eq!(listed_state(&app).await, ConversationState::Idle);
+			assert_eq!(stored_prompts(&core).await, 0);
+			assert_eq!(listed_state(&core).await, ConversationState::Idle);
 			assert_eq!(*heard.lock().expect("the list is kept"), [serde_json::json!("idle")]);
 		}
 
@@ -3219,8 +3165,8 @@ mod tests {
 			RuntimeScope { bot_id: "b2".into(), runtime_session_id: "r9".into(), ..a_scope() }
 		}
 
-		async fn stored_sessions(app: &AppOfItsOwn) -> Vec<String> {
-			bot_database(crate::events::core(app.handle()))
+		async fn stored_sessions(core: &CoreOfItsOwn) -> Vec<String> {
+			bot_database(core)
 				.expect("the database opens")
 				.call(|connection| {
 					let mut statement = connection.prepare(
@@ -3235,25 +3181,19 @@ mod tests {
 
 		#[tokio::test]
 		async fn a_run_taken_over_releases_its_own_and_dead_prompts_and_keeps_a_live_bots_one() {
-			let app = an_app_storing(
+			let core = an_app_storing(
 				"stored-taken-over",
 				vec![stored("r1", "w1"), stored("r5", "w5"), stored("r9", "w9")],
 			)
 			.await;
-			crate::events::core(app.app_handle())
-				.state::<AgentState>()
-				.live
-				.take_over(another_bot_in_the_room());
-			assert_eq!(listed_state(&app).await, ConversationState::NeedsYou);
-			let heard = heard_states(&app);
+			core.state::<AgentState>().live.take_over(another_bot_in_the_room());
+			assert_eq!(listed_state(&core).await, ConversationState::NeedsYou);
+			let heard = heard_states(&core);
 
-			crate::events::core(app.app_handle())
-				.state::<AgentState>()
-				.admit(crate::events::core(app.handle()), a_scope())
-				.await;
+			core.state::<AgentState>().admit(&core, a_scope()).await;
 
-			assert_eq!(stored_sessions(&app).await, ["r9"]);
-			assert_eq!(listed_state(&app).await, ConversationState::NeedsYou);
+			assert_eq!(stored_sessions(&core).await, ["r9"]);
+			assert_eq!(listed_state(&core).await, ConversationState::NeedsYou);
 			assert_eq!(
 				*heard.lock().expect("the list is kept"),
 				[serde_json::json!("needs_you")],
@@ -3263,50 +3203,37 @@ mod tests {
 
 		#[tokio::test]
 		async fn a_run_taken_over_releases_the_prompt_a_crashed_host_left() {
-			let app = an_app_storing("stored-orphan", vec![stored("r5", "w5")]).await;
+			let core = an_app_storing("stored-orphan", vec![stored("r5", "w5")]).await;
 
-			crate::events::core(app.app_handle())
-				.state::<AgentState>()
-				.admit(crate::events::core(app.handle()), a_scope())
-				.await;
+			core.state::<AgentState>().admit(&core, a_scope()).await;
 
-			assert!(stored_sessions(&app).await.is_empty());
-			assert_eq!(listed_state(&app).await, ConversationState::Idle);
+			assert!(stored_sessions(&core).await.is_empty());
+			assert_eq!(listed_state(&core).await, ConversationState::Idle);
 		}
 
 		#[tokio::test]
 		async fn a_purge_that_fails_still_admits_the_run() {
-			let app = an_app_storing("stored-unpurgeable", vec![stored("r5", "w5")]).await;
-			bot_database(crate::events::core(app.handle()))
+			let core = an_app_storing("stored-unpurgeable", vec![stored("r5", "w5")]).await;
+			bot_database(&core)
 				.expect("the database opens")
 				.call(|connection| Ok(connection.execute_batch("DROP TABLE pending_prompts")?))
 				.await
 				.expect("the table is dropped");
 
-			crate::events::core(app.app_handle())
-				.state::<AgentState>()
-				.admit(crate::events::core(app.handle()), a_scope())
-				.await;
+			core.state::<AgentState>().admit(&core, a_scope()).await;
 
-			assert!(
-				crate::events::core(app.app_handle()).state::<AgentState>().live.holds(&a_scope()),
-				"the run was not admitted"
-			);
+			assert!(core.state::<AgentState>().live.holds(&a_scope()), "the run was not admitted");
 		}
 
 		#[tokio::test]
 		async fn a_quit_leaves_no_stored_prompt_behind() {
-			let app =
+			let core =
 				an_app_storing("stored-quit", vec![stored("r1", "w1"), stored("r9", "w9")]).await;
 
-			end_every_session(
-				crate::events::core(app.handle()),
-				&crate::events::core(app.app_handle()).state::<AgentState>(),
-			)
-			.await;
+			end_every_session(&core, &core.state::<AgentState>()).await;
 
-			assert_eq!(stored_prompts(&app).await, 0);
-			assert_eq!(listed_state(&app).await, ConversationState::Idle);
+			assert_eq!(stored_prompts(&core).await, 0);
+			assert_eq!(listed_state(&core).await, ConversationState::Idle);
 		}
 	}
 }
