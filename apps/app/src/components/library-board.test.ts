@@ -623,7 +623,7 @@ const dropUrlAt = (url: string, at: ClientPoint) =>
 
 const DROP_POINT = { clientX: 300, clientY: 200 }
 
-type WordedReason = "unsupported" | "tooLarge" | "unwritable"
+type WordedReason = "url.unsupportedScheme" | "url.tooLarge" | "unwritable"
 
 const importFailureOf = (url: string, reason: WordedReason) => ({
 	title: common("library.failure.import.title", { name: url }),
@@ -812,7 +812,7 @@ describe("adding to a Library board", () => {
 
 		await waitFor(() =>
 			expect(raiseReportedFailure).toHaveBeenCalledWith(
-				importFailureOf(url, "unsupported"),
+				importFailureOf(url, "url.unsupportedScheme"),
 				expect.anything(),
 			),
 		)
@@ -821,7 +821,7 @@ describe("adding to a Library board", () => {
 	})
 
 	it.each([
-		["too large", { kind: "tooLarge", limit: 10 }, "tooLarge"],
+		["too large", { kind: "tooLarge", limit: 10 }, "url.tooLarge"],
 		[
 			"unwritable",
 			{ kind: "library", error: { kind: "unwritable" } },
