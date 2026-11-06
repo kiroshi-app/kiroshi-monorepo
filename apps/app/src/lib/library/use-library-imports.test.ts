@@ -6,7 +6,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { shownImageSourceOf } from "./library-image-source"
-import { useLibraryImageSave, useLibraryImports } from "./use-library-imports"
+import {
+	useLibraryImageSave,
+	useLibraryImports,
+	useLibraryUrlImport,
+} from "./use-library-imports"
 
 import type { LibraryItem } from "../bindings"
 import { createQueryTestWrapper } from "../query/query-test-wrapper"
@@ -14,6 +18,7 @@ import { createQueryTestWrapper } from "../query/query-test-wrapper"
 const host = vi.hoisted(() => ({
 	remoteImageRead: vi.fn(),
 	importLibraryFile: vi.fn(),
+	importLibraryUrl: vi.fn(),
 	raiseReportedFailure: vi.fn(),
 }))
 
@@ -28,6 +33,7 @@ vi.mock("../bindings", async (importOriginal) => {
 vi.mock("./library-reads", async (importOriginal) => ({
 	...(await importOriginal<typeof import("./library-reads")>()),
 	importLibraryFile: host.importLibraryFile,
+	importLibraryUrl: host.importLibraryUrl,
 }))
 
 vi.mock("../failure-report", async (importOriginal) => ({
@@ -217,6 +223,57 @@ describe("useLibraryImports", () => {
 				}),
 			}),
 			expect.anything(),
+		)
+	})
+})
+
+const importLink = async (url: string) => {
+	const { result } = renderHook(() => useLibraryUrlImport(SPACE), {
+		wrapper: createQueryTestWrapper().wrapper,
+	})
+	await act(async () => {
+		await result.current(url)
+	})
+}
+
+const HARBOUR_LINK = "https://images.example.test/harbour.jpg"
+
+describe("useLibraryUrlImport", () => {
+	it.each([
+		{ kind: "unsupportedScheme" },
+		{ kind: "privateAddress" },
+		{ kind: "networkFailure", status: 404 },
+		{ kind: "tooLarge", limit: 20 * 1024 * 1024 },
+		{ kind: "unknownSpace", id: SPACE },
+	] as const)("names a $kind link in link words", async (refusal) => {
+		host.importLibraryUrl.mockRejectedValue(refusal)
+
+		await importLink(HARBOUR_LINK)
+
+		expect(await raisedDescription()).toBe(
+			i18n.t(`common:library.failure.import.url.${refusal.kind}`),
+		)
+	})
+
+	it("names a mailto link without asking the host", async () => {
+		await importLink("mailto:ada@example.test")
+
+		expect(await raisedDescription()).toBe(
+			i18n.t("common:library.failure.import.url.unsupportedScheme"),
+		)
+		expect(host.importLibraryUrl).not.toHaveBeenCalled()
+	})
+
+	it("names a Library refusal in file words", async () => {
+		host.importLibraryUrl.mockRejectedValue({
+			kind: "library",
+			error: { kind: "unwritable" },
+		})
+
+		await importLink(HARBOUR_LINK)
+
+		expect(await raisedDescription()).toBe(
+			i18n.t("common:library.failure.import.unwritable"),
 		)
 	})
 })

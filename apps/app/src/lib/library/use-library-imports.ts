@@ -72,16 +72,18 @@ const importReasonOf = (cause: unknown) => {
 
 type ImportReason = ReturnType<typeof importReasonOf>
 
-const URL_IMPORT_REASONS = {
-	unsupportedScheme: "unsupported",
-	privateAddress: "refused",
-	tooLarge: "tooLarge",
-	networkFailure: "generic",
-	unknownSpace: "unknownSpace",
-} as const satisfies Record<
-	Exclude<LibraryImportUrlError["kind"], "notAnImage" | "library">,
-	ImportReason
+type WordedUrlKind = Exclude<
+	LibraryImportUrlError["kind"],
+	"notAnImage" | "library"
 >
+
+const URL_IMPORT_REASONS = {
+	unsupportedScheme: "url.unsupportedScheme",
+	privateAddress: "url.privateAddress",
+	tooLarge: "url.tooLarge",
+	networkFailure: "url.networkFailure",
+	unknownSpace: "url.unknownSpace",
+} as const satisfies { [Kind in WordedUrlKind]: `url.${Kind}` }
 
 const isUrlImportReason = (
 	kind: unknown,
@@ -99,13 +101,15 @@ const urlImportReasonOf = (cause: unknown) => {
 		: importReasonOf(cause)
 }
 
+type UrlImportReason = ReturnType<typeof urlImportReasonOf>
+
 class LibraryImportFailure extends Error {
 	readonly fileName: string
 
 	constructor(
 		fileName: string,
 		cause: unknown,
-		reason: ImportReason = importReasonOf(cause),
+		reason: ImportReason | UrlImportReason = importReasonOf(cause),
 	) {
 		super(i18n.t(`common:library.failure.import.${reason}`), { cause })
 		this.fileName = fileName
