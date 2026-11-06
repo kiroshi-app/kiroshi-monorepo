@@ -1615,6 +1615,7 @@ navigation-boardcanvas--opens-at-full-size-on-two-stickies
 navigation-boardcanvas--opens-at-full-size-on-two-stickies-dark
 navigation-boardcanvas--opens-framed-on-spread-content
 navigation-boardcanvas--opens-framed-on-spread-content-dark
+navigation-boardcanvas--opens-framed-through-consumer-padding
 navigation-boardcanvas--pointer-reported
 navigation-boardcanvas--resize-by-keyboard
 navigation-boardcanvas--resize-by-keyboard-dark

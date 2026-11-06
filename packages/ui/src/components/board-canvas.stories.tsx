@@ -680,7 +680,7 @@ const shownContentOf = (board: HTMLElement) => {
 const expectOpenedCentred = async (
 	canvasElement: HTMLElement,
 	args: BoardCanvasProps,
-	expectedZoomOf: (box: BoardSize) => number,
+	expectedZoomOf: (box: BoardSize, margin: number) => number,
 ) => {
 	const board = slotIn(canvasElement, "board-canvas")
 	const objectCount = args.view.objects.filter(
@@ -689,10 +689,12 @@ const expectOpenedCentred = async (
 	await waitFor(() =>
 		expect(slotsIn(board, "board-object")).toHaveLength(objectCount),
 	)
-	const zoom = expectedZoomOf({
-		width: board.clientWidth,
-		height: board.clientHeight,
-	})
+	const dockTop = slotIn(board, "board-dock").getBoundingClientRect().top
+	const margin = board.getBoundingClientRect().bottom - dockTop + OPENING_MARGIN
+	const zoom = expectedZoomOf(
+		{ width: board.clientWidth, height: board.clientHeight },
+		margin,
+	)
 	await expect(slotIn(board, "board-zoom-level")).toHaveTextContent(
 		`${Math.round(zoom * 100)}%`,
 	)
@@ -711,7 +713,7 @@ const expectOpenedCentred = async (
 	}
 	await expect(Math.abs(gaps.start - gaps.end)).toBeLessThanOrEqual(1)
 	await expect(Math.abs(gaps.top - gaps.bottom)).toBeLessThanOrEqual(1)
-	return { board, gaps }
+	return { board, content, dockTop, gaps, margin }
 }
 
 const SPREAD_BOUNDS = { width: 3560, height: 2220 }
@@ -722,23 +724,23 @@ export const OpensFramedOnSpreadContent = meta.story({
 		docs: {
 			description: {
 				story:
-					"A board whose three stickies and connector sit thousands of pixels from the origin, opened with no viewport placed. Check the content centred in the canvas below 100%, a 64px margin on the two edges of the axis that limits the fit, the zoom control reading that zoom, the placed viewport sent once, and no refit when a sticky then moves. Pick OpensFramedOnSpreadContentDark for the dark theme, OpensAtFullSizeOnTwoStickies for content that already fits.",
+					"A board whose three stickies and connector sit thousands of pixels from the origin, opened with no viewport placed. Check the content centred in the canvas below 100%, the same margin on the two edges of the axis that limits the fit, wide enough that the content ends 64px above the top of the dock, the zoom control reading that zoom, the placed viewport sent once, and no refit when a sticky then moves. Pick OpensFramedOnSpreadContentDark for the dark theme, OpensAtFullSizeOnTwoStickies for content that already fits.",
 			},
 		},
 	},
 	play: async ({ canvasElement, args }) => {
-		const { board, gaps } = await expectOpenedCentred(
+		const { board, content, dockTop, gaps, margin } = await expectOpenedCentred(
 			canvasElement,
 			args,
-			(box) =>
+			(box, margin) =>
 				Math.min(
-					(box.width - 2 * OPENING_MARGIN) / SPREAD_BOUNDS.width,
-					(box.height - 2 * OPENING_MARGIN) / SPREAD_BOUNDS.height,
+					(box.width - 2 * margin) / SPREAD_BOUNDS.width,
+					(box.height - 2 * margin) / SPREAD_BOUNDS.height,
 				),
 		)
-		await expect(Math.min(gaps.start, gaps.top) - OPENING_MARGIN).toBeCloseTo(
-			0,
-			0,
+		await expect(Math.min(gaps.start, gaps.top) - margin).toBeCloseTo(0, 0)
+		await expect(content.bottom + OPENING_MARGIN).toBeLessThanOrEqual(
+			dockTop + 1,
 		)
 
 		const level = slotIn(board, "board-zoom-level").textContent
@@ -765,6 +767,22 @@ export const OpensFramedOnSpreadContentDark = meta.story({
 	},
 	play: async (context) => {
 		await expectDarkSurface(context.canvasElement)
+		await OpensFramedOnSpreadContent.input.play?.(context)
+	},
+})
+
+export const OpensFramedThroughConsumerPadding = meta.story({
+	tags: ["test-only"],
+	args: { ...OpensFramedOnSpreadContent.input.args, className: "p-10" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The spread board opened with a className that pads the canvas. Check the same fitted zoom, centring and dock clearance as OpensFramedOnSpreadContent: padding never moves the opening.",
+			},
+		},
+	},
+	play: async (context) => {
 		await OpensFramedOnSpreadContent.input.play?.(context)
 	},
 })

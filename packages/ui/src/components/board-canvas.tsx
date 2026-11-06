@@ -128,7 +128,7 @@ const ZOOM_FRAME =
 const ZOOM_LEVEL =
 	"min-w-11 px-1.5 text-center font-medium text-xs tabular-nums"
 
-const OPENING_MARGIN = "p-16"
+const OPENING_MARGIN = 64
 
 const NO_SIZE: BoardSize = { width: 0, height: 0 }
 const UNPLACED_VIEWPORT: BoardViewport = { offset: { x: 0, y: 0 }, zoom: 1 }
@@ -233,8 +233,15 @@ const useBoardGestures = (
 	return { attach, canvas, pan, size, zoomTo }
 }
 
-const openingMarginOf = (element: HTMLElement) =>
-	Number.parseFloat(getComputedStyle(element).paddingTop) || 0
+const dockReachOf = (canvas: HTMLElement) => {
+	const dock = canvas.querySelector('[data-slot="board-dock"]')
+	return dock
+		? canvas.getBoundingClientRect().bottom - dock.getBoundingClientRect().top
+		: 0
+}
+
+const openingMarginOf = (canvas: HTMLElement) =>
+	dockReachOf(canvas) + OPENING_MARGIN
 
 type BoardDotGridProps = {
 	pitch: number
@@ -1290,7 +1297,7 @@ const ReadyBoardCanvas = ({
 	return (
 		<div
 			aria-label={t("board.canvas.label")}
-			className={cn(CANVAS_SURFACE, OPENING_MARGIN, className)}
+			className={cn(CANVAS_SURFACE, className)}
 			data-slot="board-canvas"
 			onDragEnter={dragOver}
 			onDragLeave={leaveWithDrag}
