@@ -20,8 +20,7 @@ Prose is the few lines that tie those visuals together, and the answer stays sho
 or a yes or no stays one sentence. A visual never carries the whole answer alone: one sentence
 before it says what it is.
 
-When a person asks for a checklist of steps, write the checklist block. When a person asks for
-options to explore, write the options card.
+When a person asks for a checklist of steps, write the checklist block.
 
 ## Markdown the chat draws
 
@@ -226,25 +225,6 @@ and `image`, required, then `text` (one line) and `link`, optional.
 - title: Porto
   image: https://images.example.org/porto.jpg
   text: Smaller, quieter, two hours north by train.
-```
-````
-
-### Options card
-
-Form: ` ```options `
-
-Use it when the person asks for options to explore, or when two to five distinct ways forward
-are open. `question` is optional, then each item takes `title` and `text`, both required, `text`
-saying in one line what the option costs and gives. The card picks nothing: wait for the person
-to name an option.
-
-````markdown
-```options
-question: How should the migration ship?
-- title: One release
-  text: A single downtime window of about ten minutes, nothing to keep in sync.
-- title: Dual write
-  text: No downtime, two weeks of writing to both tables before the switch.
 ```
 ````
 
