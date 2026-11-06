@@ -230,7 +230,7 @@ const useBoardGestures = (
 
 	const pan = (delta: BoardPoint) => emit((current) => panBy(current, delta))
 
-	return { attach, canvas, emit, pan, size, zoomTo }
+	return { attach, canvas, pan, size, zoomTo }
 }
 
 const openingMarginOf = (element: HTMLElement) =>
@@ -833,7 +833,7 @@ const ReadyBoardCanvas = ({
 	const [opening, setOpening] = useState<BoardViewport | null>(null)
 	const placed = givenViewport ?? opening
 	const viewport = placed ?? UNPLACED_VIEWPORT
-	const { attach, canvas, emit, pan, size, zoomTo } = useBoardGestures(
+	const { attach, canvas, pan, size, zoomTo } = useBoardGestures(
 		viewport,
 		onViewportChange,
 	)
@@ -859,8 +859,8 @@ const ReadyBoardCanvas = ({
 			openingMarginOf(canvas.current),
 		)
 		setOpening(fitted)
-		emit(() => fitted)
-	}, [placed, size, canvas, view.objects, emit])
+		onViewportChange(fitted)
+	}, [placed, size, canvas, view.objects, onViewportChange])
 
 	if (shownObjects !== view.objects) {
 		setShownObjects(view.objects)
