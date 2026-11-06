@@ -14,6 +14,7 @@ use super::contract::{
 	LibraryDocumentPresence, LibraryError, LibraryPresenceAt, LibraryWriter, LibraryWriterKind,
 };
 use super::{a_document, decoded_content, undecodable};
+use crate::db::repositories::messages::AccountAuthor;
 use crate::events;
 
 type Key = (String, String);
@@ -25,9 +26,44 @@ pub(crate) enum Seat {
 	Agent(String),
 }
 
+impl Seat {
+	fn id(&self) -> &str {
+		match self {
+			Seat::Window(label) => label,
+			Seat::Member(account_id) => account_id,
+			Seat::Agent(bot_id) => bot_id,
+		}
+	}
+}
+
+#[derive(Debug)]
+pub(crate) struct Identity {
+	pub(crate) name: Option<String>,
+	pub(crate) hue: Option<u16>,
+}
+
+impl Identity {
+	pub(crate) fn of_person(author: AccountAuthor, seat: &Seat) -> Self {
+		let hue = hue_of(author.account_id.as_deref().unwrap_or(seat.id()));
+		Identity { name: author.name, hue: Some(hue) }
+	}
+}
+
+const FNV_OFFSET_BASIS: u32 = 0x811c_9dc5;
+
+const FNV_PRIME: u32 = 0x0100_0193;
+
+pub(crate) fn hue_of(key: &str) -> u16 {
+	let hash = key
+		.bytes()
+		.fold(FNV_OFFSET_BASIS, |hash, byte| (hash ^ u32::from(byte)).wrapping_mul(FNV_PRIME));
+	(hash % 360) as u16
+}
+
 pub(crate) struct Seated {
 	pub(crate) seat: Seat,
 	pub(crate) name: Option<String>,
+	pub(crate) hue: Option<u16>,
 	pub(crate) at: LibraryPresenceAt,
 	pub(crate) lease_ends_at: Option<Instant>,
 }
@@ -83,17 +119,12 @@ impl Presences {
 		keys.iter().filter_map(|key| unseated(&mut held, key, &seat)).collect()
 	}
 
-	pub(crate) fn name_of(
-		&self,
-		space_id: &str,
-		name: &str,
-		seat: &Seat,
-	) -> Option<Option<String>> {
+	pub(crate) fn identity_of(&self, space_id: &str, name: &str, seat: &Seat) -> Option<Identity> {
 		self.held()
 			.get(&(space_id.to_owned(), name.to_owned()))?
 			.iter()
 			.find(|held| held.seat == *seat)
-			.map(|held| held.name.clone())
+			.map(|held| Identity { name: held.name.clone(), hue: held.hue })
 	}
 
 	pub(crate) fn lease(&self, space_id: &str, name: &str, seat: &Seat, now: Instant) -> Lease {
@@ -156,12 +187,18 @@ fn presence_of(space_id: &str, name: &str, writers: &[Seated]) -> LibraryDocumen
 }
 
 fn writer_of(seated: &Seated) -> LibraryWriter {
-	let (id, kind) = match &seated.seat {
-		Seat::Window(label) => (label, LibraryWriterKind::Person),
-		Seat::Member(account_id) => (account_id, LibraryWriterKind::Member),
-		Seat::Agent(bot_id) => (bot_id, LibraryWriterKind::Agent),
+	let kind = match &seated.seat {
+		Seat::Window(_) => LibraryWriterKind::Person,
+		Seat::Member(_) => LibraryWriterKind::Member,
+		Seat::Agent(_) => LibraryWriterKind::Agent,
 	};
-	LibraryWriter { id: id.clone(), kind, name: seated.name.clone(), at: seated.at.clone() }
+	LibraryWriter {
+		id: seated.seat.id().to_owned(),
+		kind,
+		name: seated.name.clone(),
+		hue: seated.hue,
+		at: seated.at.clone(),
+	}
 }
 
 const MEMBER_PRESENCE_LEASE: Duration = Duration::from_secs(30);
@@ -178,13 +215,13 @@ pub(crate) fn share_presence<R: Runtime>(
 	space_id: &str,
 	name: &str,
 	seat: Seat,
-	writer_name: Option<String>,
+	identity: Identity,
 	at: LibraryPresenceAt,
 ) -> Result<(), LibraryError> {
 	placed(root, space_id, name, &at)?;
 	let lease_ends_at =
 		matches!(seat, Seat::Member(_)).then(|| Instant::now() + MEMBER_PRESENCE_LEASE);
-	let seated = Seated { seat, name: writer_name, at, lease_ends_at };
+	let seated = Seated { seat, name: identity.name, hue: identity.hue, at, lease_ends_at };
 	if lease_ends_at.is_some() {
 		seat_leased(app, space_id, name, seated);
 	} else {
@@ -204,6 +241,7 @@ pub(crate) fn seat_agent_on_board<R: Runtime>(
 	let seated = Seated {
 		seat: Seat::Agent(agent_id.to_owned()),
 		name: Some(agent_name.to_owned()),
+		hue: None,
 		at,
 		lease_ends_at: Some(Instant::now() + AGENT_BOARD_LEASE),
 	};
@@ -243,13 +281,13 @@ fn placed(
 	}
 }
 
-pub(crate) fn seated_name<R: Runtime>(
+pub(crate) fn seated_identity<R: Runtime>(
 	app: &AppHandle<R>,
 	space_id: &str,
 	name: &str,
 	seat: &Seat,
-) -> Option<Option<String>> {
-	presences(app).name_of(space_id, name, seat)
+) -> Option<Identity> {
+	presences(app).identity_of(space_id, name, seat)
 }
 
 pub(crate) fn seat_writer<R: Runtime>(

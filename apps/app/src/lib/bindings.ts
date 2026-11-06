@@ -1343,6 +1343,7 @@ export type LibraryWriter = {
 	id: string,
 	kind: LibraryWriterKind,
 	name: string | null,
+	hue?: number | null,
 	at: LibraryPresenceAt,
 };
 

@@ -4500,6 +4500,17 @@
         "at": {
           "$ref": "#/$defs/LibraryPresenceAt"
         },
+        "hue": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "id": {
           "type": "string"
         },
