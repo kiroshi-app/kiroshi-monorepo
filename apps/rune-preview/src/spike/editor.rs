@@ -436,7 +436,9 @@ impl Editor {
 			None => return KeyOutcome::Passed,
 		};
 		let from = self.selection.map_or(block, |selection| selection.focus.block);
-		let target = if down { from + 1 } else { from.wrapping_sub(1) };
+		let Some(target) = (if down { from.checked_add(1) } else { from.checked_sub(1) }) else {
+			return KeyOutcome::Consumed;
+		};
 		let Some(reached) = self.blocks.get(target).filter(|reached| reached.fields.len() == 1)
 		else {
 			return KeyOutcome::Consumed;
