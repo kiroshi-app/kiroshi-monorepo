@@ -547,14 +547,13 @@ const routeConnectors = (
 			obstacles,
 			busy,
 		})
-		const tips = [route.points[0], route.points.at(-1) as BoardPoint]
-		;[source, target].forEach((end, index) => {
+		const ends = [
+			[source, route.points[0]],
+			[target, route.points.at(-1) as BoardPoint],
+		] as const
+		for (const [end, tip] of ends)
 			if (hasArea(end.rect) && !end.point)
-				busy.push({
-					rect: end.rect,
-					side: nearestSideOf(end.rect, tips[index]),
-				})
-		})
+				busy.push({ rect: end.rect, side: nearestSideOf(end.rect, tip) })
 		routes.push(route)
 	}
 	return routes
