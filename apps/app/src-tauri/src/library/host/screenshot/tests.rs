@@ -3,7 +3,6 @@ use tauri::test::{mock_builder, MockRuntime};
 use tauri::WebviewWindowBuilder;
 
 use super::*;
-use crate::board::Frame;
 use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 
 fn an_app(name: &str) -> AppOfItsOwn {
