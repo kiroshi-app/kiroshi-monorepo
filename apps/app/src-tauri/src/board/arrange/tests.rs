@@ -51,14 +51,41 @@ fn a_write_into_a_section_lands_inside_it_and_a_replace_clears_its_children_and_
 }
 
 #[test]
-fn a_replace_at_the_root_clears_the_whole_board() {
+fn a_replace_without_a_parent_is_refused_for_its_missing_parent() {
 	let board = a_lane_board();
 	let group = Group { parent: None, mode: WriteMode::Replace, nodes: &[], arrows: &[] };
 
-	let cleared = written(&board, AGENT, &group).expect("cleared");
+	let refused = written(&board, AGENT, &group).expect_err("refused");
 
-	assert_eq!(cleared.edit.removed_nodes.len(), 5);
-	assert_eq!(cleared.edit.removed_edges.len(), 3);
+	assert_eq!(
+		serde_json::to_value(&refused).expect("serializes"),
+		json!({ "element": "parent", "reason": "missingParent" })
+	);
+}
+
+#[test]
+fn a_replace_into_a_section_keeps_the_section_its_own_arrows_and_its_outer_section() {
+	let board = a_board(
+		&[
+			("outer", a_section(0, 0, 1000, 1000)),
+			(
+				"lane",
+				json!({ "kind": "section", "x": 100, "y": 100, "width": 400, "height": 300, "z": "a1" }),
+			),
+			("in", a_text(140, 140, 100, 50, "a2")),
+			("beside", a_text(600, 100, 100, 50, "a3")),
+		],
+		&[
+			("lane-beside", json!({ "fromNode": "lane", "toNode": "beside" })),
+			("in-beside", json!({ "fromNode": "in", "toNode": "beside" })),
+		],
+	);
+	let group = Group { parent: Some("lane"), mode: WriteMode::Replace, nodes: &[], arrows: &[] };
+
+	let replaced = written(&board, AGENT, &group).expect("replaced");
+
+	assert_eq!(replaced.edit.removed_nodes, ["in"]);
+	assert_eq!(replaced.edit.removed_edges, ["in-beside"]);
 }
 
 #[test]
@@ -91,6 +118,7 @@ fn a_move_shifts_a_section_with_its_descendants_and_grows_the_target_section() {
 			("dock", (1000, 0, 490, 390)),
 		]
 	);
+	assert_eq!(moved.nodes, ["lane", "in"]);
 	assert_eq!(moved.edit.changed_nodes[0].fields, ["x", "y"]);
 	assert!(moved.edit.removed_edges.is_empty() && moved.edit.changed_edges.is_empty());
 }

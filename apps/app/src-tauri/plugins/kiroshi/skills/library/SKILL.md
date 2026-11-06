@@ -114,7 +114,9 @@ Read cheap first, then in detail:
 Then write, each call landing as one change:
 
 - `board_write`, one group into a parent, `mode` `insert` to add beside what is there or
-  `replace` to remove the parent's children, and every arrow tied to them, first. A node is a
+  `replace` to remove the nodes a section holds, and every arrow tied to them, first, the
+  section itself kept. `replace` needs a section as parent: without one it is refused as
+  `missingParent` and nothing changes. A node is a
   `sticky`, a `text`, a `shape` or a `section`, with a `key` of your own; place it with `x` and
   `y`, with `place` (a `side` among `right`, `left`, `below`, `above`, `of` a key or a node id) or
   inside a `section` of the group, and the board computes the rest without covering another node.

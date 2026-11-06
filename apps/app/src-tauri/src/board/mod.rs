@@ -17,7 +17,7 @@ use regex::Regex;
 use serde::Serialize;
 use serde_json::{Map, Value};
 
-pub use arrange::{duplicated, moved, written, Group, WriteMode};
+pub use arrange::{duplicated, moved, written, Group, Moved, WriteMode};
 pub use canvas::{export_canvas, import_canvas};
 pub use doc::{edit_board, read_board, write_board, BoardEdit, ElementChange};
 pub use draw::{

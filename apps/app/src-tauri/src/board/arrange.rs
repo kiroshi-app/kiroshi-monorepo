@@ -7,8 +7,8 @@ use uuid::Uuid;
 use super::doc::ElementChange;
 use super::draw::{
 	clear_of, drawn, is_tied_to, kind_of, known, refused_parent, reshaped, tied_ends, touched_at,
-	z_above, z_of, BoardItem, Changed, DrawFault, DrawRefusal, Drawn, DrawnArrow, DrawnNode, Rect,
-	Side, Touched, GAP, SECTION, SECTION_PADDING,
+	z_above, z_of, BoardItem, DrawFault, DrawRefusal, Drawn, DrawnArrow, DrawnNode, Rect, Side,
+	Touched, GAP, SECTION, SECTION_PADDING,
 };
 use super::hierarchy::{parent_section, Hierarchy};
 use super::{z_key, Board, BoardEdit, JsonObject, ENDS};
@@ -31,6 +31,13 @@ pub struct Duplicated {
 	pub touched: Option<Touched>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct Moved {
+	pub edit: BoardEdit,
+	pub nodes: Vec<String>,
+	pub touched: Option<Touched>,
+}
+
 pub struct Group<'a> {
 	pub parent: Option<&'a str>,
 	pub mode: WriteMode,
@@ -40,10 +47,11 @@ pub struct Group<'a> {
 
 pub fn written(board: &Board, author: &str, write: &Group) -> Result<Drawn, DrawRefusal> {
 	let parent = parent_section(board, write.parent)?;
-	let cleared = match write.mode {
-		WriteMode::Insert => Vec::new(),
-		WriteMode::Replace => {
-			Hierarchy::of(board).under(parent).into_iter().map(str::to_owned).collect()
+	let cleared = match (write.mode, parent) {
+		(WriteMode::Insert, _) => Vec::new(),
+		(WriteMode::Replace, None) => return Err(refused_parent(DrawFault::MissingParent)),
+		(WriteMode::Replace, Some(section)) => {
+			Hierarchy::of(board).descendants(section).into_iter().map(str::to_owned).collect()
 		}
 	};
 	let gone: BTreeSet<&str> = cleared.iter().map(String::as_str).collect();
@@ -73,7 +81,7 @@ pub fn moved(
 	ids: &[String],
 	parent: Option<&str>,
 	at: (i64, i64),
-) -> Result<Changed, DrawRefusal> {
+) -> Result<Moved, DrawRefusal> {
 	known(ids, BoardItem::Node, |id| board.nodes.contains_key(id))?;
 	let parent = parent_section(board, parent)?;
 	let moving = Hierarchy::of(board).with_descendants(ids);
@@ -81,7 +89,7 @@ pub fn moved(
 		return Err(refused_parent(DrawFault::NestedInItself { reference: parent.to_owned() }));
 	}
 	let Some(bounds) = bounds_of(board, ids) else {
-		return Ok(Changed { edit: BoardEdit::default(), touched: None });
+		return Ok(Moved { edit: BoardEdit::default(), nodes: moving, touched: None });
 	};
 	let offset = (at.0 - bounds.x, at.1 - bounds.y);
 	let mut edit = BoardEdit {
@@ -98,7 +106,7 @@ pub fn moved(
 	let touched = ids
 		.last()
 		.map(|id| touched_at(Some(id.as_str()), shift(Rect::of(&board.nodes[id]), offset)));
-	Ok(Changed { edit, touched })
+	Ok(Moved { edit, nodes: moving, touched })
 }
 
 pub fn duplicated(

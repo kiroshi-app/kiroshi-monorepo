@@ -1446,7 +1446,7 @@
 	},
 	{
 		"name": "board_write",
-		"description": "Write one group of nodes and arrows into a parent of a board of the Library of this Space, the board itself or one of its sections, landing at once for the people who have it open. Give every node a key of your own; place it at x and y, beside another node with place, or inside a section with section, and the board computes where it lands without covering another node. A node with no section lands inside the parent, which grows to hold it. An arrow names its ends with fromNode and toNode, each the key of a node of this call or the id of a node of the board, or leaves an end free at fromPoint or toPoint. An arrow without routing is an elbow tied on the sides of its two nodes that face each other. In replace mode, what the parent holds and every arrow tied to it are removed in the same change. An id absent from the board, or one invalid node or arrow, refuses the whole call with its element, its index and the reason, and nothing changes. It answers the id each key got. Every answer also carries a header: the name of the board, its updatedAt and a hash of its content that changes whenever a node or an arrow changes and stays equal otherwise, so a hash other than the one you hold means someone drew on the board since.",
+		"description": "Write one group of nodes and arrows into a parent of a board of the Library of this Space, the board itself or one of its sections, landing at once for the people who have it open. Give every node a key of your own; place it at x and y, beside another node with place, or inside a section with section, and the board computes where it lands without covering another node. A node with no section lands inside the parent, which grows to hold it. An arrow names its ends with fromNode and toNode, each the key of a node of this call or the id of a node of the board, or leaves an end free at fromPoint or toPoint. An arrow without routing is an elbow tied on the sides of its two nodes that face each other. In replace mode, the nodes the parent section holds and every arrow tied to them are removed in the same change, the section itself kept; replace without a parent is refused as missingParent and nothing changes. An id absent from the board, or one invalid node or arrow, refuses the whole call with its element, its index and the reason, and nothing changes. It answers the id each key got. Every answer also carries a header: the name of the board, its updatedAt and a hash of its content that changes whenever a node or an arrow changes and stays equal otherwise, so a hash other than the one you hold means someone drew on the board since.",
 		"inputSchema": {
 			"$schema": "https://json-schema.org/draft/2020-12/schema",
 			"type": "object",
@@ -1465,7 +1465,7 @@
 						"insert",
 						"replace"
 					],
-					"description": "insert to add the group beside what the parent holds, replace to remove what the parent holds first."
+					"description": "insert to add the group beside what the parent holds, replace to remove what the parent section holds first; replace needs a parent."
 				},
 				"nodes": {
 					"description": "The nodes to write, in order: each node without a place lands right of the one before it, inside the parent.",

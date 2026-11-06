@@ -107,6 +107,7 @@ pub enum DrawFault {
 	NotASection {
 		reference: String,
 	},
+	MissingParent,
 	#[serde(rename_all = "camelCase")]
 	NestedInItself {
 		reference: String,

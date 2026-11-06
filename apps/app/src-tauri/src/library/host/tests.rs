@@ -2102,6 +2102,9 @@ async fn a_refused_batch_leaves_the_board_byte_identical_and_announces_nothing()
 	let host = the_host(&app);
 
 	let refused = host.served(Operation::BoardWrite, batch).await;
+	let rootless_replace = host
+		.served(Operation::BoardWrite, json!({ "name": BOARD, "mode": "replace", "nodes": [] }))
+		.await;
 	let unknown_ids = [
 		host.served(Operation::BoardDelete, json!({ "name": BOARD, "nodes": ["a", "ghost"] }))
 			.await,
@@ -2130,6 +2133,10 @@ async fn a_refused_batch_leaves_the_board_byte_identical_and_announces_nothing()
 			"reason": "refusedField",
 			"field": "fill"
 		})
+	);
+	assert_eq!(
+		refusal_of(rootless_replace),
+		json!({ "kind": "invalidBoardItem", "element": "parent", "reason": "missingParent" })
 	);
 	for answer in unknown_ids {
 		let refusal = refusal_of(answer);
@@ -2271,6 +2278,30 @@ async fn a_replace_into_a_section_swaps_its_children_and_their_arrows_in_one_upd
 	let arrow = &whole["arrows"][0];
 	assert_eq!(whole["arrows"].as_array().map(Vec::len), Some(1));
 	assert_eq!((&arrow["fromNode"], &arrow["toNode"]), (&fresh, &json!("out")));
+}
+
+#[tokio::test]
+async fn a_move_into_a_section_that_grows_answers_the_moved_nodes_and_never_the_section() {
+	let (app, root) = a_host("board-move-grow").await;
+	put(&root, SPACE, BOARD, A_LANE_AND_A_NOTE);
+	let host = the_host(&app);
+
+	let moved = host
+		.served(
+			Operation::BoardMove,
+			json!({ "name": BOARD, "nodes": ["out"], "parent": "lane", "x": 560, "y": 0 }),
+		)
+		.await
+		.expect("moved");
+	let lane = host
+		.served(Operation::BoardTree, json!({ "name": BOARD, "parent": "lane" }))
+		.await
+		.expect("read");
+
+	assert_eq!(moved["nodes"], json!(["out"]));
+	let held: Vec<&Value> =
+		lane["nodes"].as_array().expect("nodes").iter().map(|node| &node["id"]).collect();
+	assert_eq!(held, [&json!("in"), &json!("out")]);
 }
 
 #[tokio::test]

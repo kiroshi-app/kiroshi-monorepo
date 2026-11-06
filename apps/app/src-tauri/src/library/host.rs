@@ -911,9 +911,8 @@ impl<R: Runtime> Host for LibraryHost<R> {
 				let at = (asked.x, asked.y);
 				Self::answered(
 					self.board_edited(database, &root, &space_id, &asked.name, |board| {
-						let changed = moved(board, &asked.nodes, asked.parent.as_deref(), at)?;
-						let nodes = ids_of(&changed.edit.changed_nodes);
-						Ok((changed.edit, changed.touched, NodesFound { nodes }))
+						let moved = moved(board, &asked.nodes, asked.parent.as_deref(), at)?;
+						Ok((moved.edit, moved.touched, NodesFound { nodes: moved.nodes }))
 					})
 					.await?,
 				)
