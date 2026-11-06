@@ -1642,6 +1642,8 @@ navigation-boardcanvas--connector-with-presence-outline
 navigation-boardcanvas--connector-with-presence-outline-dark
 navigation-boardcanvas--create-connector
 navigation-boardcanvas--create-connector-dark
+navigation-boardcanvas--create-straight-connector
+navigation-boardcanvas--create-straight-connector-dark
 navigation-boardcanvas--draw-connector-with-tool
 navigation-boardcanvas--edit-by-keyboard
 navigation-boardcanvas--edit-by-keyboard-dark

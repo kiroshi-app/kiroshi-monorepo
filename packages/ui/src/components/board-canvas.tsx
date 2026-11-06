@@ -1231,7 +1231,7 @@ const ReadyBoardCanvas = ({
 	const [gesture, setGesture] = useState<BoardGesture | null>(null)
 	const [announcement, setAnnouncement] = useState("")
 	const [fileDrag, setFileDrag] = useState<BoardFileDrag | null>(null)
-	const [routing, setRouting] = useState<BoardRouting>("straight")
+	const [routing, setRouting] = useState<BoardRouting>("elbow")
 	const [hover, setHover] = useState(NO_HOVER)
 	const [arrowGesture, setArrowGesture] = useState<BoardArrowGesture | null>(
 		null,
