@@ -10,6 +10,7 @@ pub mod claude_import;
 pub mod commands;
 pub mod companions;
 pub mod conversations;
+pub mod core_context;
 pub mod crypto;
 pub mod db;
 mod descriptors;
@@ -108,6 +109,7 @@ pub fn run() {
 		.manage(updates::Updates::default())
 		.manage(badge::Badge::default())
 		.setup(|app| {
+			events::install_core(app.handle())?;
 			if let Err(failure) = logging::install(app.handle()) {
 				eprintln!("the log file could not be opened: {failure}");
 			}

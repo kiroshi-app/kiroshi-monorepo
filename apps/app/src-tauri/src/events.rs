@@ -2,8 +2,10 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager, Runtime, State};
+use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tokio::sync::broadcast;
+
+use crate::core_context::{Audience, ClientId, Core, EmitError};
 
 use crate::{
 	account, agent, applications, claude_import, companions, conversations, devices, hosting,
@@ -14,14 +16,6 @@ use crate::{
 pub const BUFFERED_FRAMES: usize = 1024;
 
 pub type Frame = Arc<str>;
-
-pub struct Relay(broadcast::Sender<Frame>);
-
-impl Default for Relay {
-	fn default() -> Self {
-		Self(broadcast::channel(BUFFERED_FRAMES).0)
-	}
-}
 
 pub struct Event<P> {
 	name: &'static str,
@@ -144,31 +138,49 @@ declared! {
 	TAB_DRAG: window_controls::tab_drag::TabDrag = window_controls::tab_drag::TAB_DRAG_EVENT,
 }
 
-pub fn emit<R: Runtime, P: Serialize + Clone>(
+pub fn install_core<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Core> {
+	let core = Core::new(app.path().app_data_dir()?);
+	let windows = app.clone();
+	core.listen(move |event| {
+		let sent = match &event.audience {
+			Audience::Client(client) => {
+				windows.emit_to(client.as_str(), event.name, &event.payload)
+			}
+			Audience::Everyone | Audience::LocalClients => windows.emit(event.name, &event.payload),
+		};
+		sent.map_err(|failure| failure.to_string())
+	});
+	app.manage(core.clone());
+	Ok(core)
+}
+
+pub fn core<R: Runtime>(app: &AppHandle<R>) -> Core {
+	app.state::<Core>().inner().clone()
+}
+
+pub fn emit<R: Runtime, P: Serialize>(
 	app: &AppHandle<R>,
 	event: Event<P>,
 	payload: P,
-) -> tauri::Result<()> {
-	publish(&relay(app), event.name(), &payload);
-	app.emit(event.name(), payload)
+) -> Result<(), EmitError> {
+	core(app).emit(event, payload)
 }
 
-pub fn emit_to<R: Runtime, P: Serialize + Clone>(
+pub fn emit_to<R: Runtime, P: Serialize>(
 	app: &AppHandle<R>,
 	label: &str,
 	event: Event<P>,
 	payload: P,
-) -> tauri::Result<()> {
-	publish(&relay(app), event.name(), &payload);
-	app.emit_to(label, event.name(), payload)
+) -> Result<(), EmitError> {
+	core(app).emit_to(&ClientId::new(label), event, payload)
 }
 
-pub fn emit_to_windows<R: Runtime, P: Serialize + Clone>(
+pub fn emit_to_windows<R: Runtime, P: Serialize>(
 	app: &AppHandle<R>,
 	event: Event<P>,
 	payload: P,
-) -> tauri::Result<()> {
-	app.emit(event.name(), payload)
+) -> Result<(), EmitError> {
+	core(app).emit_locally(event, payload)
 }
 
 pub fn frame<P: Serialize>(event: Event<P>, payload: &P) -> serde_json::Result<Frame> {
@@ -176,33 +188,10 @@ pub fn frame<P: Serialize>(event: Event<P>, payload: &P) -> serde_json::Result<F
 }
 
 pub fn subscribed<R: Runtime>(app: &AppHandle<R>) -> broadcast::Receiver<Frame> {
-	relay(app).0.subscribe()
+	core(app).subscribe_frames()
 }
 
-fn relay<R: Runtime>(app: &AppHandle<R>) -> State<'_, Relay> {
-	if app.try_state::<Relay>().is_none() {
-		app.manage(Relay::default());
-	}
-	app.state::<Relay>()
-}
-
-fn publish<S: Serialize>(relay: &Relay, event: &str, payload: &S) {
-	if relay.0.receiver_count() == 0 {
-		return;
-	}
-	match framed(event, payload) {
-		Ok(frame) => {
-			if relay.0.send(frame).is_err() {
-				eprintln!("the event {event} found no host api client left to reach");
-			}
-		}
-		Err(failure) => {
-			eprintln!("the event {event} did not serialize for the host api: {failure}")
-		}
-	}
-}
-
-fn framed<S: Serialize>(event: &str, payload: &S) -> serde_json::Result<Frame> {
+pub(crate) fn framed<S: Serialize + ?Sized>(event: &str, payload: &S) -> serde_json::Result<Frame> {
 	let event = serde_json::to_string(event)?;
 	let payload = serde_json::to_string(payload)?;
 	Ok(format!(r#"{{"event":{event},"payload":{payload}}}"#).into())

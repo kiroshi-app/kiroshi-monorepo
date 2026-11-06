@@ -318,7 +318,7 @@ fn logical(at: ScreenPosition) -> LogicalPosition<f64> {
 	LogicalPosition::new(f64::from(at.x), f64::from(at.y))
 }
 
-fn unavailable(gesture: &str, failure: &tauri::Error) -> DragGhostError {
+fn unavailable(gesture: &str, failure: &dyn std::fmt::Display) -> DragGhostError {
 	eprintln!("the drag ghost was not {gesture}: {failure}");
 	DragGhostError::Unavailable
 }
