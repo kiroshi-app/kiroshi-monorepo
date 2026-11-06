@@ -3,6 +3,9 @@ import * as Y from "yjs"
 import {
 	BOARD_SCHEMA,
 	type BoardNode,
+	type ImageNode,
+	type LibraryCardNode,
+	type LinkCardNode,
 	zAt,
 } from "@workspace/shared/board/board"
 import { sharedEdge, sharedNode } from "@workspace/shared/board/board-doc"
@@ -20,12 +23,36 @@ import type {
 
 type SharedElement = Y.Map<unknown>
 
+export type LibraryBoardObject =
+	| { kind: "image"; item: string }
+	| { kind: "libraryCard"; item: string }
+	| { kind: "linkCard"; url: string }
+
+export type LibraryBoardPlacement = {
+	id: string
+	object: LibraryBoardObject
+	centre: BoardPoint
+}
+
+export type LibraryBoardLinkDescription = {
+	title: string
+	image?: string
+}
+
 type Link = Pick<
 	BoardConnector,
 	"from" | "fromSide" | "to" | "toSide" | "routing"
 >
 
 const { doc: ROOTS, zOrder: Z_ORDER } = BOARD_SCHEMA
+
+const LIBRARY_FOLDER = "Library"
+
+const SIZE_OF_LIBRARY_OBJECT: Record<LibraryBoardObject["kind"], BoardSize> = {
+	image: { width: 220, height: 146 },
+	libraryCard: { width: 236, height: 131 },
+	linkCard: { width: 300, height: 178 },
+}
 
 const PRESET_OF_FILL = BOARD_SCHEMA.kinds.sticky?.fill?.presets ?? {}
 
@@ -176,6 +203,31 @@ const createItem = (doc: Y.Doc, item: BoardItem) => {
 	nodesOf(doc).set(item.id, sharedNode(node))
 }
 
+type LibraryNodeFields =
+	| Pick<ImageNode, "kind" | "file" | "item">
+	| Pick<LibraryCardNode, "kind" | "file" | "item">
+	| Pick<LinkCardNode, "kind" | "url">
+
+const fieldsOf = (object: LibraryBoardObject): LibraryNodeFields =>
+	object.kind === "linkCard"
+		? object
+		: { ...object, file: `${LIBRARY_FOLDER}/${object.item}` }
+
+const libraryNodeOf = (
+	{ object, centre }: LibraryBoardPlacement,
+	z: string,
+): BoardNode => {
+	const { width, height } = SIZE_OF_LIBRARY_OBJECT[object.kind]
+	return {
+		...fieldsOf(object),
+		x: Math.round(centre.x - width / 2),
+		y: Math.round(centre.y - height / 2),
+		width,
+		height,
+		z,
+	}
+}
+
 const remove = (doc: Y.Doc, id: string) => {
 	const nodes = nodesOf(doc)
 	const edges = edgesOf(doc)
@@ -230,3 +282,36 @@ export const applyLibraryBoardIntent = (
 	intent: BoardIntent,
 	origin: unknown,
 ) => doc.transact(() => writeIntent(doc, intent), origin)
+
+export const placeLibraryBoardObject = (
+	doc: Y.Doc,
+	placement: LibraryBoardPlacement,
+	origin: unknown,
+) =>
+	doc.transact(
+		() =>
+			nodesOf(doc).set(
+				placement.id,
+				sharedNode(libraryNodeOf(placement, zAbove(doc))),
+			),
+		origin,
+	)
+
+const describeLink = (
+	link: SharedElement,
+	{ title, image }: LibraryBoardLinkDescription,
+) => {
+	if (title) link.set("title", title)
+	if (image) link.set("preview", image)
+}
+
+export const describeLibraryBoardLink = (
+	doc: Y.Doc,
+	id: string,
+	description: LibraryBoardLinkDescription,
+	origin: unknown,
+) =>
+	doc.transact(() => {
+		const link = nodesOf(doc).get(id)
+		if (link?.get("kind") === "linkCard") describeLink(link, description)
+	}, origin)

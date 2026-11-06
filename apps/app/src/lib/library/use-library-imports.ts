@@ -222,7 +222,7 @@ export const useLibraryImports = (spaceId: string, isJoined: boolean) => {
 	})
 
 	const importDropped = useCallback(
-		async (files: File[]) => {
+		async (files: readonly File[]) => {
 			const dropped = files.map(droppedOf)
 			setImporting((current) => [...dropped, ...current])
 			const settled = await Promise.allSettled(
@@ -232,9 +232,11 @@ export const useLibraryImports = (spaceId: string, isJoined: boolean) => {
 				queryKey: libraryQueryKeys.itemsOf(spaceId),
 			})
 			forget(dropped.map(({ id }) => id))
-			announceAdded(
-				settled.filter(({ status }) => status === "fulfilled").length,
+			const imported = settled.flatMap((landed) =>
+				landed.status === "fulfilled" ? [landed.value] : [],
 			)
+			announceAdded(imported.length)
+			return imported
 		},
 		[forget, mutateAsync, queryClient, spaceId],
 	)

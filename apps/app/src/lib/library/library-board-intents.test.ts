@@ -4,7 +4,12 @@ import { readBoard } from "@workspace/shared/board/board-doc"
 import type { BoardIntent } from "@workspace/ui/components/board-view"
 
 import { boardDocOf, TWO_NOTES_BOARD } from "./library-board-fixtures"
-import { applyLibraryBoardIntent } from "./library-board-intents"
+import {
+	applyLibraryBoardIntent,
+	describeLibraryBoardLink,
+	type LibraryBoardObject,
+	placeLibraryBoardObject,
+} from "./library-board-intents"
 
 const LOCAL = Symbol("local")
 
@@ -173,5 +178,104 @@ describe("applyLibraryBoardIntent", () => {
 
 		expect(Object.keys(board.nodes).sort()).toEqual(["first", "second"])
 		expect(board.edges).toEqual({})
+	})
+})
+
+const placed = (object: LibraryBoardObject) => {
+	const doc = boardDocOf(TWO_NOTES_BOARD)
+	placeLibraryBoardObject(
+		doc,
+		{ id: "added", object, centre: { x: 400, y: 300 } },
+		LOCAL,
+	)
+	return { doc, node: readBoard(doc).nodes.added }
+}
+
+describe("placeLibraryBoardObject", () => {
+	it("places a Library image centred on the point, pointing at its item", () => {
+		const { node } = placed({ kind: "image", item: "cover.png" })
+
+		expect(node).toMatchObject({
+			kind: "image",
+			item: "cover.png",
+			file: "Library/cover.png",
+			x: 290,
+			y: 227,
+			width: 220,
+			height: 146,
+		})
+	})
+
+	it("places any other Library item as a library card pointing at it", () => {
+		const { node } = placed({ kind: "libraryCard", item: "Notes.md" })
+
+		expect(node).toMatchObject({
+			kind: "libraryCard",
+			item: "Notes.md",
+			file: "Library/Notes.md",
+			width: 236,
+			height: 131,
+		})
+	})
+
+	it("places a link card at the size of a web card", () => {
+		const { node } = placed({ kind: "linkCard", url: "https://example.com" })
+
+		expect(node).toMatchObject({
+			kind: "linkCard",
+			url: "https://example.com",
+			width: 300,
+			height: 178,
+		})
+	})
+
+	it("stacks the placed object above every node", () => {
+		const { doc } = placed({ kind: "linkCard", url: "https://example.com" })
+		const { nodes } = readBoard(doc)
+
+		const topmost = Object.entries(nodes).sort(([, below], [, above]) =>
+			below.z < above.z ? -1 : 1,
+		)
+		expect(topmost.at(-1)?.[0]).toBe("added")
+	})
+})
+
+describe("describeLibraryBoardLink", () => {
+	it("fills the title and preview of a link card", () => {
+		const { doc } = placed({ kind: "linkCard", url: "https://example.com" })
+
+		describeLibraryBoardLink(
+			doc,
+			"added",
+			{ title: "Example", image: "https://example.com/og.png" },
+			LOCAL,
+		)
+
+		expect(readBoard(doc).nodes.added).toMatchObject({
+			kind: "linkCard",
+			url: "https://example.com",
+			title: "Example",
+			preview: "https://example.com/og.png",
+		})
+	})
+
+	it("keeps the link card with its URL alone on a bare preview", () => {
+		const { doc } = placed({ kind: "linkCard", url: "https://example.com" })
+
+		describeLibraryBoardLink(doc, "added", { title: "" }, LOCAL)
+
+		const link = readBoard(doc).nodes.added
+		expect(link).toMatchObject({ url: "https://example.com" })
+		expect(link).not.toHaveProperty("title")
+		expect(link).not.toHaveProperty("preview")
+	})
+
+	it("leaves a node that is no link card unchanged", () => {
+		const doc = boardDocOf(TWO_NOTES_BOARD)
+		const before = readBoard(doc)
+
+		describeLibraryBoardLink(doc, "first", { title: "Example" }, LOCAL)
+
+		expect(readBoard(doc)).toEqual(before)
 	})
 })

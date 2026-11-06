@@ -2,18 +2,27 @@ import * as Y from "yjs"
 
 import {
 	BOARD_SCHEMA,
+	type BoardNode,
 	isObject,
 	parsedBoard,
 } from "@workspace/shared/board/board"
 import type { BoardIntent } from "@workspace/ui/components/board-view"
 
-import { applyLibraryBoardIntent } from "./library-board-intents"
+import {
+	applyLibraryBoardIntent,
+	describeLibraryBoardLink,
+	type LibraryBoardLinkDescription,
+	type LibraryBoardPlacement,
+	placeLibraryBoardObject,
+} from "./library-board-intents"
 import { libraryBoardViewOf } from "./library-board-view"
 import { base64Of, bytesOf, SEND_INTERVAL_MS } from "./library-document-session"
 
 const REMOTE_ORIGIN = Symbol("remote")
 
 const LOCAL_ORIGIN = Symbol("local")
+
+const PREVIEW_ORIGIN = Symbol("preview")
 
 const { doc: ROOTS } = BOARD_SCHEMA
 
@@ -51,8 +60,6 @@ const liveBoardOf = (doc: Y.Doc) => {
 	})
 }
 
-const viewOf = (doc: Y.Doc) => libraryBoardViewOf(liveBoardOf(doc))
-
 export const createLibraryBoardSession = ({
 	state,
 	send,
@@ -60,7 +67,8 @@ export const createLibraryBoardSession = ({
 }: LibraryBoardSessionOptions) => {
 	const doc = new Y.Doc()
 	Y.applyUpdate(doc, bytesOf(state), REMOTE_ORIGIN)
-	let view = viewOf(doc)
+	let board = liveBoardOf(doc)
+	let view = libraryBoardViewOf(board)
 	let isRefused = false
 	let history: Y.UndoManager | null = null
 	let pending: Uint8Array[] = []
@@ -90,7 +98,9 @@ export const createLibraryBoardSession = ({
 
 	const refreshView = () => {
 		try {
-			view = viewOf(doc)
+			const read = liveBoardOf(doc)
+			view = libraryBoardViewOf(read)
+			board = read
 			isRefused = false
 		} catch (refusal) {
 			refuse(refusal)
@@ -130,9 +140,14 @@ export const createLibraryBoardSession = ({
 
 	return {
 		view: () => view,
+		nodeOf: (id: string): BoardNode | undefined => board.nodes[id],
 		subscribe,
 		apply: (intent: BoardIntent) =>
 			applyLibraryBoardIntent(doc, intent, LOCAL_ORIGIN),
+		place: (placement: LibraryBoardPlacement) =>
+			placeLibraryBoardObject(doc, placement, LOCAL_ORIGIN),
+		describeLink: (id: string, description: LibraryBoardLinkDescription) =>
+			describeLibraryBoardLink(doc, id, description, PREVIEW_ORIGIN),
 		receive: (update: string) =>
 			Y.applyUpdate(doc, bytesOf(update), REMOTE_ORIGIN),
 		undo: () => {
