@@ -79,6 +79,8 @@ const OPENING_WITH_IDS =
 
 const AGENT_TEXT = " Atlas adds a sentence. Then a second one."
 
+const EARLY_RUN = " early"
+
 const ATLAS_ID = "bot-atlas"
 
 const ATLAS_HUE = 210
@@ -303,14 +305,14 @@ const announcePresence = (
 		hostId,
 	)
 
-const agentWritesAtEnd = (
+const agentWritesAt = (
 	name: string,
+	start: number,
 	text: string,
 	hostId: string | null,
 ) => {
 	const doc = documentOf(name)
 	const markdown = doc.getText("markdown")
-	const start = markdown.toString().search(TRAILING_ID)
 	announcePresence(
 		name,
 		[writerOf(ATLAS_ID, "agent", caretAt(name, start), "Atlas")],
@@ -329,6 +331,9 @@ const agentWritesAtEnd = (
 	)
 	return caretAt(name, start + text.length)
 }
+
+const agentWritesAtEnd = (name: string, text: string, hostId: string | null) =>
+	agentWritesAt(name, markdownOnHost(name).search(TRAILING_ID), text, hostId)
 
 const ATLAS = {
 	id: ATLAS_ID,
@@ -485,6 +490,39 @@ describe.each([
 			),
 		)
 		expect(shownRuns()).toEqual([AGENT_TEXT])
+	})
+
+	it("keeps its text in place on both sides when it lands during the first edit of a document without ids", async () => {
+		await renderLibraryScreen(isJoined)
+		const [intro] = await openDocument(NOTES)
+		const field = selectIn(intro as HTMLElement, 0)
+
+		await act(async () => {
+			replaceIn(field, "Intro line, edited")
+		})
+		expect(host.appliedUpdates).toBe(0)
+		const caret = agentWritesAt(
+			NOTES,
+			OPENING.indexOf(" in May"),
+			EARLY_RUN,
+			hostId,
+		)
+		announcePresence(
+			NOTES,
+			[writerOf(ATLAS_ID, "agent", caret, "Atlas")],
+			hostId,
+		)
+
+		await waitFor(() =>
+			expect(markdownOnHost(NOTES)).toMatch(
+				markdownWithIds(
+					`Intro line, edited ^ID\n\n## Rollout ^ID\n\nWe ship${EARLY_RUN} in May. ^ID`,
+				),
+			),
+		)
+		expect(blockWith("in May.").textContent).toContain(`We ship${EARLY_RUN}`)
+		expect(shownRuns()).toEqual([EARLY_RUN])
+		expect(atlasCaret()).toBeInstanceOf(HTMLElement)
 	})
 })
 
@@ -1252,6 +1290,32 @@ describe.each(PLACES)(
 						"Intro line ^ID\n\n## Risks ^ID\n\n## Rollout ^ID\n\nWe ship in May. ^ID",
 					),
 				),
+			)
+		})
+
+		it("keeps the id of an edited paragraph and gives a paragraph added below it its own", async () => {
+			seedDocument(NOTES, NAMED_OPENING)
+			await renderLibraryScreen(isJoined)
+			await openDocument(NOTES)
+			const field = selectIn(blockWith("We ship in May."), 0)
+
+			await act(async () => {
+				replaceIn(field, "We ship in June.")
+			})
+			act(() => {
+				fireEvent.keyDown(field, { key: "Enter" })
+			})
+			typeEach("Risks are low.")
+
+			await waitFor(() =>
+				expect(markdownOnHost(NOTES)).toMatch(
+					markdownWithIds(
+						"Intro line ^intro1\n\n## Rollout ^rollot\n\nWe ship in June. ^shipme\n\nRisks are low. ^ID",
+					),
+				),
+			)
+			expect(new Set(markdownOnHost(NOTES).match(/\^[a-z0-9]{6}/g)).size).toBe(
+				4,
 			)
 		})
 
