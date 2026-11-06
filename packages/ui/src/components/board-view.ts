@@ -94,6 +94,7 @@ type BoardIntent =
 			toSide: BoardSide
 			routing: BoardRouting
 	  }
+	| { type: "set-arrow"; arrow: BoardConnector }
 	| { type: "delete"; id: string }
 
 export type {

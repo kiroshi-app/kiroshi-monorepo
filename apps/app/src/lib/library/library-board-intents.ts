@@ -164,6 +164,38 @@ const connect = (
 	)
 }
 
+const edgeFieldsOf = (arrow: BoardConnector) => ({
+	fromNode: arrow.from || undefined,
+	fromSide: arrow.fromSide,
+	fromAnchor: arrow.fromAnchor,
+	fromPoint: arrow.fromPoint,
+	toNode: arrow.to || undefined,
+	toSide: arrow.toSide,
+	toAnchor: arrow.toAnchor,
+	toPoint: arrow.toPoint,
+	routing: arrow.routing,
+	bend: arrow.bend,
+	label: arrow.text || undefined,
+	labelPosition: arrow.labelPosition,
+})
+
+const setArrow = (doc: Y.Doc, arrow: BoardConnector) => {
+	const nodes = nodesOf(doc)
+	const isTiedToHeldNode = (node: string) => node === "" || nodes.has(node)
+	if (!isTiedToHeldNode(arrow.from) || !isTiedToHeldNode(arrow.to)) return
+	const edges = edgesOf(doc)
+	if (!edges.has(arrow.id))
+		edges.set(
+			arrow.id,
+			sharedEdge({ fromEnd: "none", toEnd: "arrow", routing: arrow.routing }),
+		)
+	const edge = edges.get(arrow.id) as SharedElement
+	for (const [field, value] of Object.entries(edgeFieldsOf(arrow))) {
+		if (value === undefined) edge.delete(field)
+		else edge.set(field, value)
+	}
+}
+
 const zKeysOf = (doc: Y.Doc) =>
 	[...nodesOf(doc).values()]
 		.map((node) => String(node.get(Z_ORDER.field)))
@@ -350,6 +382,9 @@ const writeIntent = (
 			return
 		case "connect":
 			connect(doc, intent.id, intent)
+			return
+		case "set-arrow":
+			setArrow(doc, intent.arrow)
 			return
 		case "delete":
 			remove(doc, intent.id)

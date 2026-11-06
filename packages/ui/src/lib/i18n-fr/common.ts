@@ -751,6 +751,9 @@ const common = {
 			moved: "Déplacé en {{x}}, {{y}}",
 			resized: "Redimensionné à {{width}} sur {{height}}",
 		},
+		connector: {
+			editLabel: "Libellé de la flèche",
+		},
 		connectorFlyout: {
 			label: "Type de flèche",
 			routing: {

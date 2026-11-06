@@ -62,6 +62,8 @@ const SIDE_PREFERENCE_COST = 0.000001
 const SOFT_ZONE_COST = 4
 const SHARED_SIDE_COST = SHAPE_CLEARANCE * 2
 const CROSSING_SAMPLES = 64
+const FRACTION_SAMPLES = 200
+const DIRECTION_SPAN = 0.01
 const SECTION_TITLE_INSET = 12
 const SECTION_TITLE_HEIGHT = 24
 const SECTION_TITLE_PADDING = 16
@@ -187,6 +189,14 @@ const curveControl = (from: BoardPoint, to: BoardPoint, bend: number) => {
 		x: (from.x + to.x) / 2 + chord.y * bend * 2,
 		y: (from.y + to.y) / 2 - chord.x * bend * 2,
 	}
+}
+
+const bendThrough = (from: BoardPoint, to: BoardPoint, through: BoardPoint) => {
+	const chord = unit(from, to) ?? { x: 1, y: 0 }
+	const middle = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 }
+	return Math.round(
+		(through.x - middle.x) * chord.y - (through.y - middle.y) * chord.x,
+	)
 }
 
 const isBetween = (value: number, low: number, high: number) =>
@@ -644,6 +654,31 @@ const pointAlong = (
 	return points.at(-1) ?? { x: 0, y: 0 }
 }
 
+const fractionNearest = (
+	route: Pick<BoardRoute, "points" | "control">,
+	point: BoardPoint,
+) => {
+	const gapAt = (fraction: number) => {
+		const at = pointAlong(route, fraction)
+		return Math.hypot(at.x - point.x, at.y - point.y)
+	}
+	return Array.from(
+		{ length: FRACTION_SAMPLES + 1 },
+		(_, step) => step / FRACTION_SAMPLES,
+	).reduce((nearest, fraction) =>
+		gapAt(fraction) < gapAt(nearest) ? fraction : nearest,
+	)
+}
+
+const directionAlong = (
+	route: Pick<BoardRoute, "points" | "control">,
+	fraction: number,
+) =>
+	unit(
+		pointAlong(route, Math.max(0, fraction - DIRECTION_SPAN)),
+		pointAlong(route, Math.min(1, fraction + DIRECTION_SPAN)),
+	) ?? HEADINGS[1]
+
 const crossedRects = (
 	route: Pick<BoardRoute, "points" | "control">,
 	rects: readonly BoardRect[],
@@ -682,9 +717,12 @@ export {
 	type BoardConnectorEnd,
 	type BoardObstacles,
 	type BoardRoute,
+	bendThrough,
 	crossedRects,
 	curveControl,
+	directionAlong,
 	exactPointOf,
+	fractionNearest,
 	lineEndOf,
 	looseEnd,
 	pointAlong,
