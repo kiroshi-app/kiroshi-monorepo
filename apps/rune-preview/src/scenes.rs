@@ -1,4 +1,4 @@
-use crate::app::{App, Opened, Ready, Screen, Seat, Thread, Workspace, connected, whole_thread};
+use crate::app::{App, Ready, Screen, Thread, Workspace, connected, whole_thread};
 use crate::host::{Host, HostError};
 use crate::model::{Agent, Conversation, Message, Participant, Role, Space};
 use crate::onboarding::{Page, Step};
@@ -106,28 +106,15 @@ fn thread(s: &mut App) {
 	messages.push(message(300, Role::User, None, "Can you two get the docs ready for Friday?"));
 	messages.push(message(301, Role::Assistant, Some("wren"), SAMPLE));
 	s.screen = Screen::Conversations;
+	let mut thread = Thread::of_conversation(&conversation);
+	thread.messages = messages;
+	thread.loaded = true;
+	s.thread = Some(thread);
 	s.workspace = Workspace::Ready(Ready {
 		host: Host::detached(),
 		space: Space { id: "space".into(), name: "Work".into() },
-		agents: vec![wren.clone(), atlas.clone()],
+		agents: vec![wren, atlas],
 		conversations: vec![conversation],
-	});
-	s.thread = Some(Thread {
-		opened: Opened::Conversation("launch".into()),
-		conversation_id: Some("launch".into()),
-		title: "Launch week".into(),
-		seats: [wren, atlas]
-			.iter()
-			.map(|agent| Seat {
-				bot_id: agent.id.clone(),
-				name: agent.name.clone(),
-				hue: agent.avatar_blot,
-			})
-			.collect(),
-		messages,
-		live: Vec::new(),
-		loaded: true,
-		failure: None,
 	});
 }
 
