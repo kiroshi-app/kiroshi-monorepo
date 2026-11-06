@@ -2493,14 +2493,11 @@ const clientPointOf = (
 	viewport: BoardViewport,
 ) => {
 	const rect = board.getBoundingClientRect()
+	const left = rect.left + board.clientLeft
+	const top = rect.top + board.clientTop
 	return {
-		clientX:
-			rect.left +
-			board.clientLeft +
-			viewport.offset.x +
-			point.x * viewport.zoom,
-		clientY:
-			rect.top + board.clientTop + viewport.offset.y + point.y * viewport.zoom,
+		clientX: left + viewport.offset.x + point.x * viewport.zoom,
+		clientY: top + viewport.offset.y + point.y * viewport.zoom,
 	}
 }
 
