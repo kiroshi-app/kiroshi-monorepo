@@ -412,6 +412,8 @@ const KEY_STEP_LARGE = 10
 const PAN_STEP = 48
 const FRAME_OUTSET = 4
 const BAR_GAP = 16
+const FIT_TO_FRAME =
+	"*:size-full! *:overflow-hidden *:data-[slot=board-object-outline]:*:size-full! *:data-[slot=board-object-outline]:*:overflow-hidden"
 const TEXT_KINDS: ReadonlySet<BoardItemKind> = new Set([
 	"sticky",
 	"text",
@@ -1325,6 +1327,7 @@ const ReadyBoardCanvas = ({
 						aria-selected={object.id === selectedId}
 						className={cn(
 							"absolute outline-none",
+							FIT_TO_FRAME,
 							object.id === editing?.id && "[&_[data-board-text]]:invisible",
 						)}
 						data-object-id={object.id}

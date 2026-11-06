@@ -1,4 +1,5 @@
 import { Icons } from "@workspace/ui/components/icons"
+import { cn } from "@workspace/ui/lib/utils"
 
 type BoardImageProps = {
 	src: string
@@ -12,12 +13,15 @@ const BoardImage = ({ src, alt, width, height, source }: BoardImageProps) => {
 	const image = (
 		<img
 			alt={alt}
-			className="rounded-sm object-cover shadow-board-sticky"
+			className={cn(
+				"rounded-sm object-cover shadow-board-sticky",
+				source && "min-h-0 w-full flex-1",
+			)}
 			data-slot="board-image"
 			draggable={false}
 			height={height}
 			src={src}
-			style={{ width, height }}
+			style={source ? { height } : { width, height }}
 			width={width}
 		/>
 	)
