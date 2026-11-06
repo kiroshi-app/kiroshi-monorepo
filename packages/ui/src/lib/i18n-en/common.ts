@@ -626,6 +626,8 @@ const common = {
 				save: "Couldn’t save your last changes to the board. It shows what was saved, so make them again.",
 				refused:
 					"Couldn’t show the latest changes to the board. Close it and open it again from the Library.",
+				stopAll:
+					"Couldn’t stop the agents drawing on this board. Press Stop all to try again.",
 			},
 			import: {
 				title: "Couldn’t import {{name}}",

@@ -57,6 +57,7 @@ import type {
 	BoardIntent,
 	BoardItem,
 	BoardItemKind,
+	BoardObject,
 	BoardPaste,
 	BoardPoint,
 	BoardRect,
@@ -104,6 +105,8 @@ type BoardCanvasProps = {
 	onPaste: (paste: BoardPaste, point: BoardPoint) => string | undefined
 	onDropFiles: (files: readonly File[], point: BoardPoint) => void
 	onDropUrl: (url: string, point: BoardPoint) => void
+	onPointerMove?: (point: BoardPoint | null) => void
+	onSelectionChange?: (ids: readonly string[]) => void
 	isConnecting?: boolean
 	className?: string
 }
@@ -814,6 +817,8 @@ const ReadyBoardCanvas = ({
 	onPaste,
 	onDropFiles,
 	onDropUrl,
+	onPointerMove,
+	onSelectionChange,
 	isConnecting = false,
 	className,
 }: ReadyBoardCanvasProps) => {
@@ -823,6 +828,8 @@ const ReadyBoardCanvas = ({
 		onViewportChange,
 	)
 	const [selectedId, setSelectedId] = useState<string | null>(null)
+	const [shownObjects, setShownObjects] = useState(view.objects)
+	const reportedSelectionId = useRef<string | null>(null)
 	const [editing, setEditing] = useState<BoardEditing | null>(null)
 	const [gesture, setGesture] = useState<BoardGesture | null>(null)
 	const [announcement, setAnnouncement] = useState("")
@@ -833,6 +840,19 @@ const ReadyBoardCanvas = ({
 	const stopDrafting = useRef<(() => void) | null>(null)
 
 	useEffect(() => () => stopDrafting.current?.(), [])
+
+	if (shownObjects !== view.objects) {
+		setShownObjects(view.objects)
+		const isIn = (objects: readonly BoardObject[]) =>
+			objects.some((object) => object.id === selectedId)
+		if (isIn(shownObjects) && !isIn(view.objects)) setSelectedId(null)
+	}
+
+	useEffect(() => {
+		if (reportedSelectionId.current === selectedId) return
+		reportedSelectionId.current = selectedId
+		onSelectionChange?.(selectedId ? [selectedId] : [])
+	}, [selectedId, onSelectionChange])
 
 	const mounted = cullBoardObjects(view.objects, viewport, size)
 	const mountedItems = mounted.flatMap(({ object }) =>
@@ -1053,6 +1073,14 @@ const ReadyBoardCanvas = ({
 		})
 	}
 
+	const reportPointer = (event: PointerEvent<HTMLDivElement>) =>
+		onPointerMove?.(boardPointAt(pointerIn(event.currentTarget, event)))
+
+	const leaveCanvas = () => {
+		setHover(NO_HOVER)
+		onPointerMove?.(null)
+	}
+
 	const pressCanvas = (event: PointerEvent<HTMLDivElement>) => {
 		if (event.target !== event.currentTarget || editing) return
 		setSelectedId(null)
@@ -1251,7 +1279,8 @@ const ReadyBoardCanvas = ({
 			onKeyDown={pressKey}
 			onPaste={paste}
 			onPointerDown={pressCanvas}
-			onPointerLeave={() => setHover(NO_HOVER)}
+			onPointerLeave={leaveCanvas}
+			onPointerMove={reportPointer}
 			onPointerOver={hoverOver}
 			ref={attach}
 			role="application"

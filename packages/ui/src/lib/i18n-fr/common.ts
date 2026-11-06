@@ -655,6 +655,8 @@ const common = {
 				save: "Impossible d’enregistrer vos dernières modifications du tableau. Il affiche ce qui a été enregistré : refaites-les.",
 				refused:
 					"Impossible d’afficher les dernières modifications du tableau. Fermez-le et rouvrez-le depuis la Bibliothèque.",
+				stopAll:
+					"Impossible d’arrêter les agents qui dessinent sur ce tableau. Appuyez sur Tout arrêter pour réessayer.",
 			},
 			import: {
 				title: "Impossible d’importer {{name}}",
