@@ -36,7 +36,6 @@ import { useMarkdownImageResolver } from "@workspace/ui/components/markdown/imag
 import { MarkdownLink } from "@workspace/ui/components/markdown/link"
 import { NestedMarkdownContext } from "@workspace/ui/components/markdown/nested-markdown"
 import { MARKDOWN_ESCAPED_BLOCK_CLASS } from "@workspace/ui/components/markdown/prose"
-import { OptionsCard } from "@workspace/ui/components/options-card"
 import { RichBlockPending } from "@workspace/ui/components/rich-block-pending"
 import { useShownImages } from "@workspace/ui/hooks/use-shown-images"
 
@@ -100,29 +99,6 @@ export const AnswerBlockFrame = ({ children }: AnswerBlockFrameProps) => (
 		{children}
 	</div>
 )
-
-const OptionsBlockView = ({ block }: BlockProps<"options">) => {
-	const { t } = useTranslation("chat")
-	const actions = useMarkdownAnswerActions()
-
-	const pick = (id: string | null) => {
-		const option = id === null ? undefined : block.options[Number(id)]
-		if (option) actions?.onPickOption(option.title)
-	}
-
-	return (
-		<OptionsCard
-			onPick={pick}
-			options={block.options.map(({ title, text }, index) => ({
-				id: `${index}`,
-				label: title,
-				description: text,
-			}))}
-			subtitle={block.subtitle}
-			title={block.question ?? t("answerBlock.options.title")}
-		/>
-	)
-}
 
 const sliderViewsOf = ({ sliders }: InteractiveBlock) =>
 	sliders.map((slider) => ({
@@ -391,8 +367,6 @@ type MarkdownAnswerBlockProps = {
 
 const blockViewOf = (block: AnswerBlock) => {
 	switch (block.label) {
-		case "options":
-			return <OptionsBlockView block={block} />
 		case "interactive":
 			return <InteractiveBlockView block={block} />
 		case "gallery":

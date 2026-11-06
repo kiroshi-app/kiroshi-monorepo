@@ -394,9 +394,6 @@ const chat = {
 		map: {
 			open: "Open in Maps",
 		},
-		options: {
-			title: "Options",
-		},
 		interactive: {
 			result: "Result",
 			notDefined: "Not defined for these values",

@@ -426,9 +426,6 @@ const chat = {
 		map: {
 			open: "Ouvrir la carte",
 		},
-		options: {
-			title: "Options",
-		},
 		interactive: {
 			result: "Résultat",
 			notDefined: "Non défini pour ces valeurs",

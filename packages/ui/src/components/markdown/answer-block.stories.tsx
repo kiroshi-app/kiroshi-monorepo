@@ -12,16 +12,6 @@ import {
 import { Markdown } from "@workspace/ui/components/markdown"
 import type { MarkdownAnswerActions } from "@workspace/ui/components/markdown/answer-actions"
 
-const OPTIONS = `Two ways forward, pick the one that fits.
-
-\`\`\`options
-question: How should the migration ship?
-- title: One release
-  text: A single downtime window of about ten minutes, nothing to keep in sync.
-- title: Dual write
-  text: No downtime, two weeks of writing to both tables before the switch.
-\`\`\``
-
 const INTERACTIVE = `Move the sliders, the payment follows.
 
 \`\`\`interactive
@@ -197,11 +187,11 @@ area: Rio Tejo
   lon: -9.1302
 \`\`\``
 
-const BROKEN = `Two ways forward.
+const BROKEN = `Two things left.
 
-\`\`\`options
-- title: One release
-  text: Ten minutes of downtime.
+\`\`\`checklist
+title: Before Thursday
+- text: Pay the deposit
   price: 0 euros
 \`\`\``
 
@@ -213,12 +203,12 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The rich blocks of `docs/chat/rich-answer-blocks.md` as an agent answer writes them, routed by `Markdown` to their components: a fenced block by its label, the callouts and the sourced image from their GFM shape. A block that breaks its syntax is drawn as its source in a plain fence, never partly. While `isWriting` is on and a block's fence is still open, its pending frame holds the place. `answerActions` carries what a block does to the conversation: the option picked, the slider values used, the image opened, the web page opened.",
+					"The rich blocks of `docs/chat/rich-answer-blocks.md` as an agent answer writes them, routed by `Markdown` to their components: a fenced block by its label, the callouts and the sourced image from their GFM shape. A block that breaks its syntax is drawn as its source in a plain fence, never partly. While `isWriting` is on and a block's fence is still open, its pending frame holds the place. `answerActions` carries what a block does to the conversation: the slider values used, the image opened, the web page opened.",
 			},
 		},
 	},
 	args: {
-		children: OPTIONS,
+		children: INTERACTIVE,
 		answerActions: {
 			agentName: "Atlas",
 			onPickOption: fn(),
@@ -228,23 +218,6 @@ const meta = preview.meta({
 		},
 	},
 	decorators: [(Story) => <div className="w-170 max-w-full">{Story()}</div>],
-})
-
-export const OptionsCardInAnswer = meta.story({
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"An `options` block: the question heads the card, each option folds its text. Check that opening an option hands its title to `onPickOption`, and that nothing else is sent.",
-			},
-		},
-	},
-	play: async ({ args, canvas, userEvent }) => {
-		await userEvent.click(canvas.getByRole("button", { name: "Dual write" }))
-		await expect(args.answerActions?.onPickOption).toHaveBeenCalledWith(
-			"Dual write",
-		)
-	},
 })
 
 export const InteractiveViewInAnswer = meta.story({
@@ -358,7 +331,7 @@ export const BrokenBlockAsSource = meta.story({
 		docs: {
 			description: {
 				story:
-					"An `options` block with a field it does not take: it is drawn as its source in a plain fence, nothing of the card drawn.",
+					"A `checklist` block with a field it does not take: it is drawn as its source in a plain fence, nothing of the checklist drawn.",
 			},
 		},
 	},
@@ -367,7 +340,7 @@ export const BrokenBlockAsSource = meta.story({
 			"price: 0 euros",
 		)
 		await expect(
-			canvasElement.querySelector('[data-slot="options-card"]'),
+			canvasElement.querySelector('[data-slot="checklist"]'),
 		).toBeNull()
 	},
 })
@@ -1512,66 +1485,6 @@ export const IllustratedListWithBadgeAndMeta = meta.story({
 				"Quick tip: ask for the back room by name when you book; it's the only one that seats 12.",
 			),
 		).toBeVisible()
-	},
-})
-
-const OPTIONS_INTRO =
-	"Friday ends at 17:00 and the evening is free. Here are four ideas that work for 12 people. Tell me which one you want and I'll book it."
-
-const OPTION_TITLES = [
-	"Dinner, all 12 at one table",
-	"Drinks on a rooftop",
-	"A cooking class together",
-	"A quiet night in at the house",
-]
-
-const DINNER_TEXT =
-	"Taberna da Rua, Alfama. Long table from 20:00, set menu around €45 a head, ten minutes on foot from the house."
-
-const OPTIONS_ARTBOARD = `${OPTIONS_INTRO}
-
-\`\`\`options
-question: Four ideas for Friday
-subtitle: Open one to see what it involves.
-- title: ${OPTION_TITLES[0]}
-  text: ${DINNER_TEXT}
-- title: ${OPTION_TITLES[1]}
-  text: A terrace over Baixa from 19:00, drinks and small plates, no booking past ten people.
-- title: ${OPTION_TITLES[2]}
-  text: Two hours with a chef near Cais do Sodré, then we eat what we cooked.
-- title: ${OPTION_TITLES[3]}
-  text: Groceries delivered to Casa do Rio and a long dinner on the terrace.
-\`\`\``
-
-export const OptionsWithSubtitle = meta.story({
-	args: { children: OPTIONS_ARTBOARD, answerActions: ARTBOARD_ACTIONS },
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"Final page, Markdown 2. An `options` block with its `question` as title and a `subtitle` under it. Check the intro, the title, the subtitle and the four options in order, and that opening the dinner shows its text and hands its title to `onPickOption`.",
-			},
-		},
-	},
-	play: async ({ args, canvas, canvasElement, userEvent }) => {
-		await expect(canvas.getByText(OPTIONS_INTRO)).toBeVisible()
-		await expect(canvas.getByText("Four ideas for Friday")).toBeVisible()
-		await expect(
-			canvas.getByText("Open one to see what it involves."),
-		).toBeVisible()
-		const options = slotsIn(canvasElement, "options-card-option")
-		await expect(options).toHaveLength(4)
-		for (const [index, title] of OPTION_TITLES.entries()) {
-			await expect(options[index]).toHaveTextContent(title)
-		}
-
-		await userEvent.click(
-			canvas.getByRole("button", { name: OPTION_TITLES[0] }),
-		)
-		await expect(await canvas.findByText(DINNER_TEXT)).toBeVisible()
-		await expect(args.answerActions?.onPickOption).toHaveBeenCalledWith(
-			OPTION_TITLES[0],
-		)
 	},
 })
 
