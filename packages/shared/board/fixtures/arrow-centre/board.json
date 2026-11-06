@@ -1,0 +1,33 @@
+{
+	"nodes": {
+		"start": {
+			"kind": "shape",
+			"x": 0,
+			"y": 0,
+			"width": 200,
+			"height": 120,
+			"z": "a0",
+			"text": "Start",
+			"shape": "rectangle"
+		},
+		"finish": {
+			"kind": "shape",
+			"x": 400,
+			"y": 200,
+			"width": 200,
+			"height": 120,
+			"z": "a1",
+			"text": "Finish",
+			"shape": "ellipse"
+		}
+	},
+	"edges": {
+		"tied": {
+			"fromNode": "start",
+			"fromEnd": "none",
+			"toNode": "finish",
+			"toEnd": "arrow",
+			"routing": "straight"
+		}
+	}
+}

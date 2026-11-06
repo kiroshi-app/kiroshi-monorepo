@@ -373,6 +373,37 @@ describe("a canvas the import refuses", () => {
 			{ nodes: [], edges: [{ id: "e", fromNode: "gone", toNode: "gone" }] },
 			{ kind: "danglingEdge", id: "e", field: "fromNode", node: "gone" },
 		],
+		...(
+			[
+				["fromAnchor", { kiroshi: { fromAnchor: { x: 1.5, y: 0 } } }],
+				["toAnchor", { kiroshi: { toAnchor: { x: 0.5, y: -0.1 } } }],
+				["toAnchor", { kiroshi: { toAnchor: { x: 0.5 } } }],
+				["labelPosition", { kiroshi: { labelPosition: 1.01 } }],
+				["headSize", { kiroshi: { headSize: "huge" } }],
+				["bend", { kiroshi: { bend: "wide" } }],
+				["toPoint", { kiroshi: { toPoint: { x: 4, y: 2 } } }],
+				[
+					"fromAnchor",
+					{ fromSide: "top", kiroshi: { fromAnchor: { x: 0, y: 0 } } },
+				],
+				["toNode", { toNode: undefined }],
+				[
+					"toSide",
+					{
+						toNode: undefined,
+						toSide: "left",
+						kiroshi: { toPoint: { x: 4, y: 2 } },
+					},
+				],
+			] as const
+		).map(([field, arrow]): [string, object, BoardError] => [
+			`an arrow whose ${field} is ${JSON.stringify(arrow)}`,
+			{
+				nodes: [{ id: "a", type: "group", ...placed }],
+				edges: [{ id: "e", fromNode: "a", toNode: "a", ...arrow }],
+			},
+			{ kind: "invalidField", element: "edge", id: "e", field },
+		]),
 	]
 
 	it.each(cases)("refuses %s", (_, canvas, error) => {
@@ -414,6 +445,10 @@ describe("the board schema", () => {
 		expect(EDGE_FIELDS.fromEnd?.default).toBe("none")
 		expect(EDGE_FIELDS.toEnd?.default).toBe("arrow")
 		expect(EDGE_FIELDS.routing?.default).toBe("straight")
+		expect(EDGE_FIELDS.bend?.default).toBe(0)
+		expect(EDGE_FIELDS.labelPosition?.default).toBe(0.5)
+		expect(EDGE_FIELDS.headSize?.default).toBe("medium")
+		expect(EDGE_FIELDS.headSize?.enum).toEqual(["small", "medium", "large"])
 		expect(BOARD_SCHEMA.kinds.sticky?.fields.fill?.default).toBe("yellow")
 		expect(BOARD_SCHEMA.kinds.sticky?.fields.author?.enum).toEqual([
 			"agent",

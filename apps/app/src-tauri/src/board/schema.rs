@@ -130,6 +130,7 @@ pub(super) struct PlainImport {
 
 #[derive(Deserialize)]
 pub(super) struct EdgeSchema {
+	pub sides: BTreeMap<String, Value>,
 	pub fields: Fields,
 }
 

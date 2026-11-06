@@ -1,0 +1,41 @@
+{
+	"nodes": {
+		"start": {
+			"kind": "shape",
+			"x": 0,
+			"y": 0,
+			"width": 200,
+			"height": 120,
+			"z": "a0",
+			"text": "Start",
+			"shape": "rectangle"
+		},
+		"finish": {
+			"kind": "shape",
+			"x": 400,
+			"y": 200,
+			"width": 200,
+			"height": 120,
+			"z": "a1",
+			"text": "Finish",
+			"shape": "ellipse"
+		}
+	},
+	"edges": {
+		"pinned": {
+			"fromNode": "start",
+			"fromAnchor": {
+				"x": 0.25,
+				"y": 0
+			},
+			"fromEnd": "none",
+			"toNode": "finish",
+			"toAnchor": {
+				"x": 1,
+				"y": 0.75
+			},
+			"toEnd": "arrow",
+			"routing": "elbow"
+		}
+	}
+}

@@ -1218,7 +1218,7 @@
 	},
 	{
 		"name": "board_read",
-		"description": "Read a board of the Library of this Space as it stands now with what everyone has drawn on it, you or a person. It answers every node with its id, its kind, its x, y, width and height, its text (the text of a sticky, a text or a shape, the label of a section) and the id of the section that holds it, and every edge with its id, its fromNode, its toNode and its label. An image or a libraryCard also answers its file, the name of its item in the Library of this Space that library_read opens, and an image its mediaType: call board_view with its id to see that image. A linkCard also answers its url and its title.",
+		"description": "Read a board of the Library of this Space as it stands now with what everyone has drawn on it, you or a person. It answers every node with its id, its kind, its x, y, width and height, its text (the text of a sticky, a text or a shape, the label of a section) and the id of the section that holds it, and every arrow with its id, its two ends, its label, its labelPosition (where the label sits along the arrow, from 0 at its start to 1 at its end, 0.5 by default), its bend, its routing (straight or elbow) and its headSize (small, medium or large). An end tied to a node answers its fromNode or toNode, with its fromAnchor or toAnchor when it is tied at an exact point of the node, x and y from 0 to 1 across it, and none when it is tied at the centre; a free end answers its fromPoint or toPoint, a board x and y. An image or a libraryCard also answers its file, the name of its item in the Library of this Space that library_read opens, and an image its mediaType: call board_view with its id to see that image. A linkCard also answers its url and its title.",
 		"inputSchema": {
 			"$schema": "https://json-schema.org/draft/2020-12/schema",
 			"type": "object",
@@ -1259,7 +1259,7 @@
 	},
 	{
 		"name": "board_add",
-		"description": "Draw a whole diagram on a board of the Library of this Space in one call, landing at once for the people who have it open. Give every node a key of your own; place a node beside another one, of this call by its key or of the board by its id, or inside a section, and the board computes where it lands without covering another node. A node without a place lands right of the node before it, the first one right of everything on the board. An edge joins two nodes named by key or id. One invalid node or edge refuses the whole call with its index and the reason, and nothing changes. It answers the id each key got.",
+		"description": "Draw a whole diagram on a board of the Library of this Space in one call, landing at once for the people who have it open. Give every node a key of your own; place a node beside another one, of this call by its key or of the board by its id, or inside a section, and the board computes where it lands without covering another node. A node without a place lands right of the node before it, the first one right of everything on the board. An arrow ties two nodes at their centre, each named by its key in this call, its id on the board, or the text of the one node of the board that shows it; give arrows and no nodes to tie nodes already on the board. One invalid node or arrow refuses the whole call with its index and the reason, a name shown by several nodes with the ids that show it, and nothing changes. It answers the id each key got.",
 		"inputSchema": {
 			"$schema": "https://json-schema.org/draft/2020-12/schema",
 			"type": "object",
@@ -1269,13 +1269,14 @@
 					"description": "The name of the board in the Library of this Space, ending in .canvas, such as roadmap.canvas, without any folder."
 				},
 				"nodes": {
+					"description": "The nodes to draw, in order: each node without a place lands right of the one before it. Left out to draw arrows alone.",
 					"type": "array",
 					"items": {
 						"type": "object",
 						"properties": {
 							"key": {
 								"type": "string",
-								"description": "A name of your own for this node, unique in this call, that the place, the section and the edges of this call use to point at it."
+								"description": "A name of your own for this node, unique in this call, that the place, the section and the arrows of this call use to point at it."
 							},
 							"kind": {
 								"type": "string",
@@ -1350,25 +1351,24 @@
 							"kind"
 						],
 						"additionalProperties": false
-					},
-					"description": "The nodes to draw, in order: each node without a place lands right of the one before it."
+					}
 				},
 				"edges": {
-					"description": "The edges to draw between the nodes.",
+					"description": "The arrows to draw between the nodes.",
 					"type": "array",
 					"items": {
 						"type": "object",
 						"properties": {
 							"from": {
 								"type": "string",
-								"description": "The key of a node of this call or the id of a node of the board."
+								"description": "The node the arrow ties at its centre: the key of a node of this call, the id of a node of the board, or the text of the one node of the board that shows it."
 							},
 							"to": {
 								"type": "string",
-								"description": "The key of a node of this call or the id of a node of the board."
+								"description": "The node the arrow ties at its centre: the key of a node of this call, the id of a node of the board, or the text of the one node of the board that shows it."
 							},
 							"label": {
-								"description": "The text written on the edge.",
+								"description": "The text written on the arrow.",
 								"type": "string"
 							}
 						},
@@ -1381,8 +1381,7 @@
 				}
 			},
 			"required": [
-				"name",
-				"nodes"
+				"name"
 			],
 			"additionalProperties": false
 		}
@@ -1465,7 +1464,7 @@
 	},
 	{
 		"name": "board_remove",
-		"description": "Remove nodes of any kind from a board of the Library of this Space, drawn by you or by a person, with every edge attached to them, in one change. An id absent from the board refuses the whole call with its index and nothing changes. It answers the ids of the nodes and of the edges removed.",
+		"description": "Remove nodes of any kind from a board of the Library of this Space, drawn by you or by a person, with every arrow tied to them, in one change. An id absent from the board refuses the whole call with its index and nothing changes. It answers the ids of the nodes and of the arrows removed.",
 		"inputSchema": {
 			"$schema": "https://json-schema.org/draft/2020-12/schema",
 			"type": "object",

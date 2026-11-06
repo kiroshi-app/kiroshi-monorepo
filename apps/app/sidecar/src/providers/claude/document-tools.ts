@@ -80,7 +80,7 @@ const BOARD_NAME =
 	"The name of the board in the Library of this Space, ending in .canvas, such as roadmap.canvas, without any folder."
 
 const BOARD_READ =
-	"Read a board of the Library of this Space as it stands now with what everyone has drawn on it, you or a person. It answers every node with its id, its kind, its x, y, width and height, its text (the text of a sticky, a text or a shape, the label of a section) and the id of the section that holds it, and every edge with its id, its fromNode, its toNode and its label. An image or a libraryCard also answers its file, the name of its item in the Library of this Space that library_read opens, and an image its mediaType: call board_view with its id to see that image. A linkCard also answers its url and its title."
+	"Read a board of the Library of this Space as it stands now with what everyone has drawn on it, you or a person. It answers every node with its id, its kind, its x, y, width and height, its text (the text of a sticky, a text or a shape, the label of a section) and the id of the section that holds it, and every arrow with its id, its two ends, its label, its labelPosition (where the label sits along the arrow, from 0 at its start to 1 at its end, 0.5 by default), its bend, its routing (straight or elbow) and its headSize (small, medium or large). An end tied to a node answers its fromNode or toNode, with its fromAnchor or toAnchor when it is tied at an exact point of the node, x and y from 0 to 1 across it, and none when it is tied at the centre; a free end answers its fromPoint or toPoint, a board x and y. An image or a libraryCard also answers its file, the name of its item in the Library of this Space that library_read opens, and an image its mediaType: call board_view with its id to see that image. A linkCard also answers its url and its title."
 
 const BOARD_VIEW =
 	"Show you an image node of a board of the Library of this Space as an image, whoever dropped it there. A node that is not an image, an image whose file is not in the Library of this Space, or an image too large to show is refused with the node id and the reason, the size and the limit for one too large, and nothing is shown."
@@ -89,13 +89,13 @@ const VIEWED_ID =
 	"The id of an image node of the board, as board_read answered it."
 
 const BOARD_ADD =
-	"Draw a whole diagram on a board of the Library of this Space in one call, landing at once for the people who have it open. Give every node a key of your own; place a node beside another one, of this call by its key or of the board by its id, or inside a section, and the board computes where it lands without covering another node. A node without a place lands right of the node before it, the first one right of everything on the board. An edge joins two nodes named by key or id. One invalid node or edge refuses the whole call with its index and the reason, and nothing changes. It answers the id each key got."
+	"Draw a whole diagram on a board of the Library of this Space in one call, landing at once for the people who have it open. Give every node a key of your own; place a node beside another one, of this call by its key or of the board by its id, or inside a section, and the board computes where it lands without covering another node. A node without a place lands right of the node before it, the first one right of everything on the board. An arrow ties two nodes at their centre, each named by its key in this call, its id on the board, or the text of the one node of the board that shows it; give arrows and no nodes to tie nodes already on the board. One invalid node or arrow refuses the whole call with its index and the reason, a name shown by several nodes with the ids that show it, and nothing changes. It answers the id each key got."
 
 const NODES =
-	"The nodes to draw, in order: each node without a place lands right of the one before it."
+	"The nodes to draw, in order: each node without a place lands right of the one before it. Left out to draw arrows alone."
 
 const KEY =
-	"A name of your own for this node, unique in this call, that the place, the section and the edges of this call use to point at it."
+	"A name of your own for this node, unique in this call, that the place, the section and the arrows of this call use to point at it."
 
 const NODE_KIND = "One of sticky, text, shape or section."
 
@@ -123,12 +123,12 @@ const OF =
 const SECTION =
 	"The key of a section of this call or the id of a section of the board the node lands inside; the section grows to hold it."
 
-const EDGES = "The edges to draw between the nodes."
+const EDGES = "The arrows to draw between the nodes."
 
 const ENDPOINT =
-	"The key of a node of this call or the id of a node of the board."
+	"The node the arrow ties at its centre: the key of a node of this call, the id of a node of the board, or the text of the one node of the board that shows it."
 
-const EDGE_LABEL = "The text written on the edge."
+const EDGE_LABEL = "The text written on the arrow."
 
 const BOARD_UPDATE =
 	"Change fields of nodes of a board of the Library of this Space, drawn by you or by a person, every other field kept as it stands, in one change the people who have it open see at once. x, y, width and height move and resize a node of any kind, an image and a libraryCard included; text, color, fill and shape apply only to a kind that carries them. An id absent from the board or a field the node refuses refuses the whole call with its index and the reason, and nothing changes. It answers the ids of the nodes changed."
@@ -138,7 +138,7 @@ const CHANGES = "The nodes to change, each by its id with the fields to set."
 const NODE_ID = "The id of a node of the board, as board_read answered it."
 
 const BOARD_REMOVE =
-	"Remove nodes of any kind from a board of the Library of this Space, drawn by you or by a person, with every edge attached to them, in one change. An id absent from the board refuses the whole call with its index and nothing changes. It answers the ids of the nodes and of the edges removed."
+	"Remove nodes of any kind from a board of the Library of this Space, drawn by you or by a person, with every arrow tied to them, in one change. An id absent from the board refuses the whole call with its index and nothing changes. It answers the ids of the nodes and of the arrows removed."
 
 const REMOVED_IDS =
 	"The ids of the nodes to remove, as board_read answered them."
@@ -224,6 +224,7 @@ const DRAWN: ToolInput = {
 				})
 				.strict(),
 		)
+		.optional()
 		.describe(NODES),
 	edges: z
 		.array(
