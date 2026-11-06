@@ -14,6 +14,9 @@ pub struct LibraryLinkPreview {
 	#[serde(default, skip_serializing_if = "Option::is_none")]
 	#[specta(type = String, optional)]
 	pub alt: Option<String>,
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	#[specta(type = String, optional)]
+	pub description: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
