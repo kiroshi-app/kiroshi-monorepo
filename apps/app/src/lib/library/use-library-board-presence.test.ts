@@ -37,11 +37,12 @@ const seatOf = (
 	kind: LibraryWriter["kind"],
 	nodeId: string | null,
 	name: string | null = null,
+	point = { x: 40, y: 20 },
 ): LibraryWriter => ({
 	id,
 	kind,
 	name,
-	at: { kind: "board", point: { x: 40, y: 20 }, nodeId },
+	at: { kind: "board", point, nodeId },
 })
 
 const presenceListens = () =>
@@ -133,16 +134,7 @@ describe("useLibraryBoardPresence", () => {
 		const { result, hear } = await mountPresence()
 
 		hear([seatOf(ATLAS_ID, "agent", "sticky-ship")])
-		hear([
-			{
-				...seatOf(ATLAS_ID, "agent", "shape-measure"),
-				at: {
-					kind: "board",
-					point: { x: 300, y: 90 },
-					nodeId: "shape-measure",
-				},
-			},
-		])
+		hear([seatOf(ATLAS_ID, "agent", "shape-measure", null, { x: 300, y: 90 })])
 
 		expect(result.current.pointers.map(({ position }) => position)).toEqual([
 			{ x: 300, y: 90 },
