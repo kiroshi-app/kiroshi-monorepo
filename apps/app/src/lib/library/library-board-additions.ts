@@ -80,24 +80,25 @@ export const libraryBoardAdditionsOf = ({
 		return leadId
 	}
 
-	const placeLanded =
-		(url: string, point: BoardPoint) => (landed: LibraryUrlImport) => {
-			switch (landed.kind) {
-				case "image":
-					board.place({
-						id: crypto.randomUUID(),
-						object: libraryObjectOf(landed.item),
-						centre: point,
-					})
-					return
-				case "page":
-					placeLink(url, point)
-					return
-			}
+	const placeLanded = (
+		url: string,
+		point: BoardPoint,
+		landed: LibraryUrlImport,
+	) => {
+		if (landed.kind === "image") {
+			board.place({
+				id: crypto.randomUUID(),
+				object: libraryObjectOf(landed.item),
+				centre: point,
+			})
 		}
+		if (landed.kind === "page") {
+			placeLink(url, point)
+		}
+	}
 
 	const dropUrl = (url: string, point: BoardPoint) => {
-		void importUrl(url).then(placeLanded(url, point))
+		void importUrl(url).then((landed) => placeLanded(url, point, landed))
 	}
 
 	const paste = (pasted: BoardPaste, point: BoardPoint) => {
