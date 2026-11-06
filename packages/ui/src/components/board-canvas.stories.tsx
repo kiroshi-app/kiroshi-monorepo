@@ -3279,9 +3279,6 @@ const pressStartRightAnchor = async (root: HTMLElement) => {
 
 const draftLine = (root: HTMLElement) => slotIn(root, "board-connector-draft")
 
-const intentsOf = (args: BoardCanvasProps) =>
-	(args.onIntent as ReturnType<typeof fn>).mock.calls.length
-
 const expectHalo = async (line: HTMLElement) => {
 	const halo = getComputedStyle(slotIn(line, "board-connector-halo"))
 	await expect(halo.stroke).toBe(resolvedRootColor("--board-surface"))
@@ -3951,7 +3948,7 @@ export const ArrowGestureCancelled = meta.story({
 					{ x: 356, y: 200 },
 				),
 		)
-		await expect(intentsOf(args)).toBe(0)
+		await expect(args.onIntent).not.toHaveBeenCalled()
 	},
 })
 

@@ -680,7 +680,7 @@ const withEnd = (
 				toPoint: point,
 			}
 
-const heldStill = (arrow: BoardConnector): BoardArrowGesture => ({
+const gestureHolding = (arrow: BoardConnector): BoardArrowGesture => ({
 	arrow,
 	isNew: false,
 	hasEnd: true,
@@ -1585,7 +1585,7 @@ const ReadyBoardCanvas = ({
 		let exactShape: string | null = null
 		return (aim: BoardArrowAim): BoardArrowGesture => {
 			const point = boardPointAt(pointerIn(element, aim))
-			const loose = { ...heldStill(withEnd(arrow, end, { point })), isNew }
+			const loose = { ...gestureHolding(withEnd(arrow, end, { point })), isNew }
 			if (aim.ctrlKey) return loose
 			const id = objectIdUnder(aim)
 			const item = id && id !== otherShape ? itemsById.get(id) : undefined
@@ -1655,7 +1655,7 @@ const ReadyBoardCanvas = ({
 			trackArrow(
 				event,
 				(aim) =>
-					heldStill({
+					gestureHolding({
 						...connector,
 						bend: bendThrough(from, to, boardPointAt(pointerIn(element, aim))),
 					}),
@@ -1674,7 +1674,7 @@ const ReadyBoardCanvas = ({
 			trackArrow(
 				event,
 				(aim) => ({
-					...heldStill({
+					...gestureHolding({
 						...connector,
 						labelPosition: fractionNearest(
 							route,
