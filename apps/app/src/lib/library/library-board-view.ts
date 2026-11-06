@@ -88,17 +88,25 @@ const connectorsOf = (
 	[id, edge]: [string, Connector],
 	zOrder: number,
 ): BoardConnector[] => {
-	const { fromNode, toNode } = edge
-	if (fromNode === undefined || toNode === undefined) return []
+	const { fromNode, fromPoint, toNode, toPoint } = edge
+	if (fromNode === undefined && fromPoint === undefined) return []
+	if (toNode === undefined && toPoint === undefined) return []
 	return [
 		{
 			id,
 			kind: "connector",
-			from: fromNode,
-			fromSide: edge.fromSide ?? "right",
-			to: toNode,
-			toSide: edge.toSide ?? "left",
+			from: fromNode ?? "",
+			fromSide: edge.fromSide,
+			fromAnchor: edge.fromAnchor,
+			fromPoint,
+			to: toNode ?? "",
+			toSide: edge.toSide,
+			toAnchor: edge.toAnchor,
+			toPoint,
 			routing: edge.routing,
+			bend: edge.bend,
+			labelPosition: edge.labelPosition,
+			headSize: edge.headSize,
 			zOrder,
 			text: edge.label ?? "",
 		},

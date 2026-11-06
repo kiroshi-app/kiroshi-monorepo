@@ -256,8 +256,8 @@ describe("a Library board session", () => {
 		for (const update of there.sent) here.session.receive(update)
 		for (const update of here.sent) there.session.receive(update)
 
-		expect(idsOf(here.session)).toEqual(["first"])
-		expect(idsOf(there.session)).toEqual(["first"])
+		expect(idsOf(here.session)).toEqual(["first", "link"])
+		expect(idsOf(there.session)).toEqual(["first", "link"])
 
 		there.session.apply({
 			type: "move",
