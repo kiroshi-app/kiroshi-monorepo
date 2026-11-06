@@ -1026,11 +1026,11 @@ const DRAFT_OPENING = openedStateOf(NOTES, "Draft").update
 const textSavedTo = (name: string) => {
 	const doc = new Y.Doc()
 	Y.applyUpdate(doc, bytesOf(DRAFT_OPENING))
-	for (const [command, args] of libraryHost.invoked) {
-		const call = args as SentUpdate
-		if (command === "library_apply_update" && call.name === name) {
-			Y.applyUpdate(doc, bytesOf(call.update))
-		}
+	const sent = libraryHost.invoked
+		.filter(([command]) => command === "library_apply_update")
+		.map(([, args]) => args as SentUpdate)
+	for (const { update } of sent.filter((call) => call.name === name)) {
+		Y.applyUpdate(doc, bytesOf(update))
 	}
 	return doc.getText("markdown").toString()
 }
