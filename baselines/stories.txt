@@ -205,8 +205,6 @@ conversation-markdown-answerblocks--interactive-result-not-defined
 conversation-markdown-answerblocks--interactive-view-in-answer
 conversation-markdown-answerblocks--map-with-one-place-in-answer
 conversation-markdown-answerblocks--map-with-route-in-answer
-conversation-markdown-answerblocks--options-card-in-answer
-conversation-markdown-answerblocks--options-with-subtitle
 conversation-markdown-answerblocks--pending-while-writing
 conversation-markdown-answerblocks--plain-image-in-answer
 conversation-markdown-answerblocks--sourced-image-in-answer
@@ -348,11 +346,6 @@ conversation-markdown-markdowntaskcheckbox--ticks-a-sub-task-alone
 conversation-markdown-markdowntaskcheckbox--ticks-and-unticks-by-click
 conversation-markdown-markdowntaskcheckbox--ticks-and-unticks-by-clicking-the-label
 conversation-markdown-markdowntaskcheckbox--ticks-from-the-keyboard
-conversation-markdown-optionscard--all-folded
-conversation-markdown-optionscard--keyboard-pick
-conversation-markdown-optionscard--narrow-long-content
-conversation-markdown-optionscard--one-open
-conversation-markdown-optionscard--one-open-dark
 conversation-markdown-quotableanswer--in-answer
 conversation-markdown-quotableanswer--in-answer-dark
 conversation-markdown-quotableanswer--keyboard-selection

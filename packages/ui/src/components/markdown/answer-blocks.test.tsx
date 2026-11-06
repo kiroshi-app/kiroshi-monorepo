@@ -29,12 +29,6 @@ const render = (
 const fenced = (label: string, body: string) =>
 	`Here it is.\n\n\`\`\`${label}\n${body}\n\`\`\``
 
-const OPTIONS = `question: How should the migration ship?
-- title: One release
-  text: A single downtime window of about ten minutes.
-- title: Dual write
-  text: No downtime, two weeks of writing to both tables.`
-
 const ILLUSTRATED_LIST = `- title: Lisbon
   image: https://images.example.org/lisbon.jpg
   text: Mild winters.
@@ -168,7 +162,6 @@ const slot = (name: string) => `data-slot="${name}"`
 
 const ANSWER_ACTIONS: MarkdownAnswerActions = {
 	agentName: "Atlas",
-	onPickOption: () => undefined,
 	onUseValues: () => undefined,
 	onOpenImage: () => undefined,
 }
@@ -178,7 +171,6 @@ const leftOffsets = (html: string) =>
 
 describe("rich answer blocks", () => {
 	it.each([
-		["options", OPTIONS, "options-card"],
 		["illustrated-list", ILLUSTRATED_LIST, "illustrated-list"],
 		["checklist", CHECKLIST, "checklist"],
 		["gallery", GALLERY, "gallery"],
@@ -192,14 +184,6 @@ describe("rich answer blocks", () => {
 
 		expect(html).toContain(slot(component))
 		expect(html).not.toContain(slot("markdown-fence"))
-	})
-
-	it("draws the option titles and the question of an options card", () => {
-		const html = render(fenced("options", OPTIONS))
-
-		expect(html).toContain("How should the migration ship?")
-		expect(html).toContain("One release")
-		expect(html).toContain("Dual write")
 	})
 
 	it("computes the interactive result at the default values, two decimals at most", () => {
@@ -219,7 +203,6 @@ describe("rich answer blocks", () => {
 	})
 
 	it.each([
-		["a required field is missing", "options", "- title: One release"],
 		[
 			"an illustrated-list item has no image",
 			"illustrated-list",
@@ -308,16 +291,16 @@ describe("rich answer blocks", () => {
 			"web-page",
 			"url: https://www.casadorio.pt/rooms",
 		],
-		["a field is unknown", "options", `${OPTIONS}\n  price: 10 euros`],
+		["a field is unknown", "checklist", `${CHECKLIST}\n  price: 10 euros`],
 		[
 			"a field is given twice",
-			"options",
-			`question: One?\nquestion: Two?\n- title: A\n  text: B`,
+			"checklist",
+			`title: One\ntitle: Two\n- text: A`,
 		],
 		[
 			"a block field follows an item",
-			"options",
-			`- title: A\n  text: B\nquestion: Late?`,
+			"map",
+			`title: Walk\n${MAP_PLACES}\nsubtitle: Late`,
 		],
 		[
 			"a URL is not https",
@@ -508,21 +491,33 @@ describe("rich answer blocks", () => {
 	})
 
 	it("draws the pending frame while the agent is still writing a block", () => {
-		const html = render(`Here it is.\n\n\`\`\`options\n${OPTIONS}`, {
+		const html = render(`Here it is.\n\n\`\`\`checklist\n${CHECKLIST}`, {
 			isWriting: true,
 		})
 
 		expect(html).toContain(slot("rich-block-pending"))
-		expect(html).not.toContain(slot("options-card"))
+		expect(html).not.toContain(slot("checklist"))
 	})
 
 	it("draws the block once its fence closes, even while the agent writes on", () => {
-		const html = render(`${fenced("options", OPTIONS)}\n\nAnd then`, {
+		const html = render(`${fenced("checklist", CHECKLIST)}\n\nAnd then`, {
 			isWriting: true,
 		})
 
-		expect(html).toContain(slot("options-card"))
+		expect(html).toContain(slot("checklist"))
 		expect(html).not.toContain(slot("rich-block-pending"))
+	})
+
+	it("keeps a fence labelled options as code, closed or being written", () => {
+		const body = "- title: One release\n  text: Ten minutes of downtime."
+
+		expect(render(fenced("options", body))).toContain(slot("markdown-fence"))
+
+		const writing = render(`Here it is.\n\n\`\`\`options\n${body}`, {
+			isWriting: true,
+		})
+		expect(writing).toContain(slot("markdown-fence"))
+		expect(writing).not.toContain(slot("rich-block-pending"))
 	})
 
 	it("keeps a code fence being written as code", () => {
@@ -546,18 +541,6 @@ describe("fields of the Final page artboards", () => {
 		expect(html).toContain("<strong>the best view of the three</strong>")
 		expect(html).toContain("12 min on foot · Riverside")
 		expect(html).not.toContain("**")
-	})
-
-	it("draws the subtitle of an options card", () => {
-		const html = render(
-			fenced(
-				"options",
-				`question: Four ideas for Friday\nsubtitle: Open one to see what it involves.\n${OPTIONS.split("\n").slice(1).join("\n")}`,
-			),
-		)
-
-		expect(html).toContain("Four ideas for Friday")
-		expect(html).toContain("Open one to see what it involves.")
 	})
 
 	it("draws a checklist with its title, its counter, each assignee and each state", () => {

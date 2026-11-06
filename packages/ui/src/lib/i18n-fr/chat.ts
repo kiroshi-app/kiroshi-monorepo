@@ -141,7 +141,6 @@ const chat = {
 	richBlock: {
 		building: "Construction de la vue…",
 		pending: {
-			options: "Options",
 			interactive: "Vue interactive",
 			gallery: "Galerie",
 			"illustrated-list": "Liste",
@@ -425,9 +424,6 @@ const chat = {
 		},
 		map: {
 			open: "Ouvrir la carte",
-		},
-		options: {
-			title: "Options",
 		},
 		interactive: {
 			result: "Résultat",

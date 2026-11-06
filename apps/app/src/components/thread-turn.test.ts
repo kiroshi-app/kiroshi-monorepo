@@ -449,16 +449,6 @@ const actionsSpy = () => ({
 	},
 })
 
-const OPTIONS_ANSWER = `Two ways forward.
-
-\`\`\`options
-question: How should the migration ship?
-- title: One release
-  text: Ten minutes of downtime.
-- title: Dual write
-  text: No downtime, two weeks of double writes.
-\`\`\``
-
 const GALLERY_ANSWER = `Two sofas.
 
 \`\`\`gallery
@@ -470,15 +460,6 @@ const GALLERY_ANSWER = `Two sofas.
 \`\`\``
 
 describe("an agent answer carrying rich blocks", () => {
-	it("puts a picked option into the conversation input", () => {
-		const actions = actionsSpy()
-		renderTurn("assistant", OPTIONS_ANSWER, { actions })
-
-		fireEvent.click(screen.getByRole("button", { name: "Dual write" }))
-
-		expect(actions.insert).toHaveBeenCalledWith("Dual write")
-	})
-
 	it("opens a gallery image in the viewer, with every image of the gallery", () => {
 		const actions = actionsSpy()
 		renderTurn("assistant", GALLERY_ANSWER, { actions })
@@ -543,15 +524,15 @@ describe("an agent answer carrying rich blocks", () => {
 	})
 
 	it("holds the pending frame while the agent is still writing the block", () => {
-		renderTurn("assistant", OPTIONS_ANSWER.replace(/\n```$/, ""), {
+		renderTurn("assistant", GALLERY_ANSWER.replace(/\n```$/, ""), {
 			actions: actionsSpy(),
 			state: "streaming",
 		})
 
 		expect(
-			screen.getByRole("region", { name: "Options" }).getAttribute("aria-busy"),
+			screen.getByRole("region", { name: "Gallery" }).getAttribute("aria-busy"),
 		).toBe("true")
-		expect(screen.queryByRole("button", { name: "Dual write" })).toBeNull()
+		expect(screen.queryByRole("button", { name: "Grey linen sofa" })).toBeNull()
 	})
 })
 

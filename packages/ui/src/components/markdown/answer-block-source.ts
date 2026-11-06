@@ -9,13 +9,6 @@ import {
 	type Formula,
 } from "@workspace/ui/components/markdown/formula"
 
-type OptionsBlock = {
-	label: "options"
-	question?: string
-	subtitle?: string
-	options: { title: string; text: string }[]
-}
-
 type IllustratedListBlock = {
 	label: "illustrated-list"
 	items: {
@@ -118,7 +111,6 @@ type MapBlock = {
 }
 
 type AnswerBlock =
-	| OptionsBlock
 	| IllustratedListBlock
 	| ChecklistBlock
 	| GalleryBlock
@@ -148,21 +140,6 @@ const SLIDER_SHAPE: RecordShape = {
 const BREAKDOWN_ROW_SHAPE: RecordShape = { required: ["row", "value"] }
 
 const isPresent = <Value>(value: Value | null): value is Value => value !== null
-
-const readOptions = (source: string): OptionsBlock | null => {
-	const body = readShapedBody(source, {
-		fields: { required: [], optional: ["question", "subtitle"] },
-		item: { required: ["title", "text"] },
-	})
-	if (!body) return null
-
-	return {
-		label: "options",
-		question: body.fields.question,
-		subtitle: body.fields.subtitle,
-		options: body.items.map(({ title, text }) => ({ title, text })),
-	}
-}
 
 const readIllustratedList = (source: string): IllustratedListBlock | null => {
 	const body = readShapedBody(source, {
@@ -494,7 +471,6 @@ const READERS: Readonly<
 		(source: string, options: AnswerBlockReadOptions) => AnswerBlock | null
 	>
 > = {
-	options: readOptions,
 	"illustrated-list": readIllustratedList,
 	checklist: readChecklist,
 	gallery: readGallery,

@@ -1937,7 +1937,6 @@ export const GalleryResolvedImageOpens = meta.story({
 		resolveImage: fn(async (src: string) => resolvedLibraryImageOf(src)),
 		answerActions: {
 			agentName: "Atlas",
-			onPickOption: fn(),
 			onUseValues: fn(),
 			onOpenImage: fn(),
 		},
@@ -1977,7 +1976,6 @@ export const GalleryResolvingNotOpenable = meta.story({
 		resolveImage: fn(() => new Promise<string>(() => {})),
 		answerActions: {
 			agentName: "Atlas",
-			onPickOption: fn(),
 			onUseValues: fn(),
 			onOpenImage: fn(),
 		},
