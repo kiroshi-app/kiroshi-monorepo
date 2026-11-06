@@ -17,7 +17,7 @@ use super::contract::{
 	LibraryItem, LibraryItemKind, LibraryPresenceAt, LibraryWriteOutcome,
 };
 use super::documents::{located, BoardTarget, Location, Placement, RemoveStep, WriteStep};
-use super::presence::{seat_writer, unseat_writer, Seat, Seated};
+use super::presence::{seat_agent_on_board, seat_writer, unseat_writer, Seat, Seated};
 use super::{
 	a_document, announce, announce_change, create_board, create_document, delete_item,
 	document_text, documents, encoded_content, import_path, list, overwrite_path, read_document,
@@ -360,17 +360,17 @@ impl<R: Runtime> LibraryHost<R> {
 		let agent = self.agent(database).await?;
 		let mut writing = BoardWriting::of(&self.app, space_id, name, &agent);
 		let target = BoardTarget { root, space_id, name, writer: client_id_of(&agent.id) };
-		let made = documents(&self.app).edit_board(
+		let (touched, made) = documents(&self.app).edit_board(
 			&target,
 			|board| {
 				let (edit, touched, made) = edit(board)?;
-				if let Some(touched) = &touched {
-					writing.at(touched);
-				}
-				Ok::<_, DocumentRefusal>((edit, made))
+				Ok::<_, DocumentRefusal>((edit, (touched, made)))
 			},
 			|applied| announce(&self.app, space_id, &applied.name, &applied.change),
 		)?;
+		if let Some(touched) = &touched {
+			writing.at(touched);
+		}
 		writing.writing.outcome = LibraryWriteOutcome::Finished;
 		Ok(made)
 	}
@@ -744,15 +744,10 @@ impl<'a, R: Runtime> BoardWriting<'a, R> {
 	}
 
 	fn at(&self, touched: &Touched) {
-		let point = LibraryBoardPoint { x: touched.x, y: touched.y };
-		self.writing.seated(LibraryPresenceAt::Board { point, node_id: touched.node_id.clone() });
-	}
-}
-
-impl<R: Runtime> Drop for BoardWriting<'_, R> {
-	fn drop(&mut self) {
 		let Writing { app, space_id, name, agent, .. } = &self.writing;
-		unseat_writer(app, space_id, name, &Seat::Agent(agent.id.clone()));
+		let point = LibraryBoardPoint { x: touched.x, y: touched.y };
+		let at = LibraryPresenceAt::Board { point, node_id: touched.node_id.clone() };
+		seat_agent_on_board(app, space_id, name, &agent.id, &agent.name, at);
 	}
 }
 

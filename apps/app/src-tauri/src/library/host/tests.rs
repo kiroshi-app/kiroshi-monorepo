@@ -24,7 +24,7 @@ use crate::library::contract::{
 	LibraryBoardPoint, LibraryChanged, LibraryDocumentPresence, LibraryDocumentRenamed,
 	LibraryOverwritten, LibraryPresenceAt, LibraryWriter, LibraryWriterKind,
 };
-use crate::library::presence::{share_presence, Presences};
+use crate::library::presence::{share_presence, Presences, AGENT_BOARD_LEASE};
 use crate::library::{apply_update, open_document, read_thumbnail};
 use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 
@@ -1128,7 +1128,7 @@ async fn a_text_anchor_and_a_board_point_shared_through_the_command_are_publishe
 }
 
 #[tokio::test(start_paused = true)]
-async fn an_agent_board_seat_publishes_its_node_and_point_then_leaves_and_finishes_on_drop() {
+async fn an_agent_board_seat_publishes_its_node_and_point_and_stays_after_it_finishes() {
 	let (app, root) = a_host("board-seat").await;
 	put(&root, SPACE, BOARD, EMPTY_BOARD);
 	let presences =
@@ -1150,7 +1150,8 @@ async fn an_agent_board_seat_publishes_its_node_and_point_then_leaves_and_finish
 	seat.writing.outcome = LibraryWriteOutcome::Finished;
 	drop(seat);
 
-	assert_eq!(positions(&all_of(&presences)), [vec![]]);
+	assert!(all_of(&presences).is_empty());
+	assert_eq!(agent_seated(&app), Some(Some("Bean".to_owned())));
 	assert_eq!(
 		all_of(&finishes),
 		[LibraryDocumentWriterFinished {
@@ -1773,37 +1774,83 @@ async fn an_update_changes_a_node_in_place_and_a_removal_takes_its_edges_each_in
 	assert_eq!(read["edges"], json!([]));
 }
 
-#[tokio::test]
-async fn an_agent_is_seated_on_the_board_while_it_draws_and_leaves_when_the_call_ends() {
+#[tokio::test(start_paused = true)]
+async fn an_agent_board_seat_is_published_after_a_call_and_lapses_at_the_end_of_its_lease() {
 	let (app, root) = a_host("board-presence").await;
 	put(&root, SPACE, BOARD, A_BOARD_WITH_ONE_NODE);
+	let presences =
+		heard::<LibraryDocumentPresence>(&app, events::LIBRARY_DOCUMENT_PRESENCE.name());
+	let host = the_host(&app);
+	let batch = json!({
+		"name": BOARD,
+		"nodes": [{ "key": "b", "kind": "text", "place": { "side": "right", "of": "a" } }]
+	});
+
+	let added = host.served(Operation::BoardAdd, batch).await.expect("drawn");
+	let b = added["nodes"]["b"].as_str().expect("an id").to_owned();
+	tokio::time::sleep(BOARD_PACE_PASSED).await;
+	let after_the_pace = all_of(&presences);
+	tokio::time::sleep(AGENT_BOARD_LEASE - BOARD_PACE_PASSED * 2).await;
+	let before_the_lease_ends = all_of(&presences);
+	let still_seated = agent_seated(&app);
+	tokio::time::sleep(BOARD_PACE_PASSED * 2).await;
+	let after_the_lease = all_of(&presences);
+
+	assert_eq!(positions(&after_the_pace), [vec![on_the_board(300, 25, Some(&b))]]);
+	assert_eq!(named(&after_the_pace[0].writers), [(LibraryWriterKind::Agent, Some("Bean"))]);
+	assert!(before_the_lease_ends.is_empty());
+	assert_eq!(still_seated, Some(Some("Bean".to_owned())));
+	assert_eq!(positions(&after_the_lease), [vec![]]);
+	assert_eq!(agent_seated(&app), None);
+}
+
+#[tokio::test(start_paused = true)]
+async fn another_board_call_renews_the_lease_and_moves_the_one_seat_and_a_refusal_keeps_it() {
+	let (app, root) = a_host("board-presence-renewed").await;
+	put(&root, SPACE, BOARD, A_BOARD_WITH_ONE_NODE);
+	let presences =
+		heard::<LibraryDocumentPresence>(&app, events::LIBRARY_DOCUMENT_PRESENCE.name());
 	let finishes = heard::<LibraryDocumentWriterFinished>(
 		&app,
 		events::LIBRARY_DOCUMENT_WRITER_FINISHED.name(),
 	);
-	let (told, seated_while_drawing) = channel();
-	let handle = app.handle().clone();
-	app.listen_any(events::LIBRARY_DOCUMENT_UPDATED.name(), move |_| {
-		let seat = Seat::Agent("b1".to_owned());
-		let seated = crate::library::presence::seated_name(&handle, SPACE, BOARD, &seat);
-		told.send(seated).expect("the test listens");
-	});
 	let host = the_host(&app);
-	let batch = json!({ "name": BOARD, "nodes": [{ "key": "b", "kind": "text" }] });
-
+	let batch =
+		json!({ "name": BOARD, "nodes": [{ "key": "b", "kind": "text", "x": 400, "y": 0 }] });
 	host.served(Operation::BoardAdd, batch).await.expect("drawn");
-	let after_drawing = agent_seated(&app);
+	tokio::time::sleep(BOARD_PACE_PASSED).await;
+	let first = all_of(&presences);
+	tokio::time::sleep(AGENT_BOARD_LEASE / 2).await;
+
 	let refused = host
 		.served(Operation::BoardUpdate, json!({ "name": BOARD, "nodes": [{ "id": "gone" }] }))
 		.await;
-	let after_refusal = agent_seated(&app);
+	tokio::time::sleep(BOARD_PACE_PASSED).await;
+	let after_the_refusal = all_of(&presences);
+	host.served(
+		Operation::BoardUpdate,
+		json!({ "name": BOARD, "nodes": [{ "id": "a", "text": "Brief" }] }),
+	)
+	.await
+	.expect("updated");
+	tokio::time::sleep(BOARD_PACE_PASSED).await;
+	let moved = all_of(&presences);
+	tokio::time::sleep(AGENT_BOARD_LEASE / 2).await;
+	let past_the_first_lease = all_of(&presences);
+	tokio::time::sleep(AGENT_BOARD_LEASE / 2).await;
+	let past_the_renewed_lease = all_of(&presences);
 
-	assert_eq!(all_of(&seated_while_drawing), [Some(Some("Bean".to_owned()))]);
-	assert_eq!(after_drawing, None);
+	assert_eq!(first.len(), 1);
 	assert_eq!(refusal_kind(refused), json!("invalidBoardItem"));
-	assert_eq!(after_refusal, None);
+	assert!(after_the_refusal.is_empty());
+	assert_eq!(positions(&moved), [vec![on_the_board(50, 25, Some("a"))]]);
+	assert!(past_the_first_lease.is_empty());
+	assert_eq!(positions(&past_the_renewed_lease), [vec![]]);
 	let outcomes: Vec<_> = all_of(&finishes).into_iter().map(|finished| finished.outcome).collect();
-	assert_eq!(outcomes, [LibraryWriteOutcome::Finished, LibraryWriteOutcome::Failed]);
+	assert_eq!(
+		outcomes,
+		[LibraryWriteOutcome::Finished, LibraryWriteOutcome::Failed, LibraryWriteOutcome::Finished]
+	);
 }
 
 #[tokio::test]
