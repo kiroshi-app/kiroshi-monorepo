@@ -1689,6 +1689,13 @@ pub async fn agent_pending_questions(
 	core: State<'_, crate::core_context::Core>,
 	conversation_id: String,
 ) -> Result<Vec<ScopedEvent>, TransportError> {
+	pending_questions(core.inner(), conversation_id).await
+}
+
+pub(crate) async fn pending_questions(
+	core: &crate::core_context::Core,
+	conversation_id: String,
+) -> Result<Vec<ScopedEvent>, TransportError> {
 	let state = core.state::<AgentState>();
 	Ok(state.live.questions_in(&conversation_id))
 }
@@ -2819,7 +2826,7 @@ mod tests {
 			app: &AppHandle<MockRuntime>,
 			conversation_id: &str,
 		) -> Vec<ScopedEvent> {
-			agent_pending_questions(app.state(), conversation_id.to_owned())
+			pending_questions(crate::events::core(app), conversation_id.to_owned())
 				.await
 				.expect("the command answers")
 		}
