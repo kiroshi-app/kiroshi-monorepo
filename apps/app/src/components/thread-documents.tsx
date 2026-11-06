@@ -43,6 +43,7 @@ import {
 	type ThreadLibraryItem,
 	useFollowedLibraryDocument,
 } from "@/lib/library/use-followed-library-document"
+import { useLibraryBoardPointerShare } from "@/lib/library/use-library-board-pointer-share"
 import { useLibraryBoardPresence } from "@/lib/library/use-library-board-presence"
 import { useLibraryBoardSession } from "@/lib/library/use-library-board-session"
 import { useLibraryDocumentSession } from "@/lib/library/use-library-document-session"
@@ -52,7 +53,7 @@ import {
 	libraryItemsQueryOf,
 } from "@/lib/library/use-library-items"
 import { useSaveMessageAsDocument } from "@/lib/library/use-save-message-as-document"
-import { useStopLibraryWriters } from "@/lib/library/use-stop-library-writers"
+import { useStopLibraryBoardDrawers } from "@/lib/library/use-stop-library-writers"
 import {
 	type BoardDrawing,
 	NOBODY_DRAWING,
@@ -321,7 +322,8 @@ export const ThreadBoardPanel = ({
 		isJoined: documents.isJoined,
 		bots,
 	})
-	const { stopAll } = useStopLibraryWriters(documents.spaceId)
+	const pointerShare = useLibraryBoardPointerShare(documents.spaceId, name)
+	const { stopAll } = useStopLibraryBoardDrawers(documents.spaceId)
 	const summary = useBoardSummary(documents.spaceId, documents.boardOf(name))
 	const openInItsTab = useOpenLibraryItemInItsTab()
 	const { width, keepWidth } = useKeptPanelWidth()
@@ -349,7 +351,12 @@ export const ThreadBoardPanel = ({
 			variant="board"
 			width={width}
 		>
-			<LibraryBoardCanvas board={board} presence={presence} summary={summary} />
+			<LibraryBoardCanvas
+				board={board}
+				pointerShare={pointerShare}
+				presence={presence}
+				summary={summary}
+			/>
 		</DocumentPanel>
 	)
 }

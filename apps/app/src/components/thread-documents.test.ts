@@ -18,6 +18,8 @@ import {
 	DOCUMENT_PANEL_MIN_WIDTH,
 	THREAD_MIN_WIDTH,
 } from "@workspace/ui/components/document-panel"
+import { hueTone } from "@workspace/ui/components/hue-palette"
+import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import {
@@ -481,10 +483,12 @@ const seatOf = (
 	kind: LibraryWriter["kind"],
 	nodeId: string | null,
 	name: string | null = null,
+	hue?: number,
 ): LibraryWriter => ({
 	id,
 	kind,
 	name,
+	hue,
 	at: { kind: "board", point: { x: 40, y: 20 }, nodeId },
 })
 
@@ -521,6 +525,16 @@ const drawingChip = (count: number) =>
 const stopCalls = () =>
 	libraryHost.invoked.filter(([command]) => command === "library_stop_writers")
 
+const presenceInkOf = (slot: string) =>
+	(
+		document.querySelector(`[data-slot="${slot}"]`) as HTMLElement
+	).style.getPropertyValue("--board-presence")
+
+const stopAllButton = () =>
+	screen.getByRole("button", {
+		name: common("library.document.agents.stopAll"),
+	})
+
 const presenceDocumentsOf = (isJoined: boolean) => ({
 	...boardDocumentsOf(() => undefined),
 	isJoined,
@@ -550,35 +564,41 @@ const mountPresencePanel = async (isJoined = false) => {
 	return panel
 }
 
+const answerBoardPanelReads = () => {
+	libraryHost.answers.set("library_list", () => [
+		launchBoardItem,
+		roadmapBoardItem,
+	])
+	libraryHost.answers.set("library_open_document", ({ name }) => ({
+		name,
+		update: boardStateOf(TWO_NOTES_BOARD),
+	}))
+	libraryHost.answers.set("library_board_summary", ({ name }) => ({
+		name,
+		nodeCount: 2,
+		nodes: [],
+		bounds: { x: 0, y: 0, width: 500, height: 100 },
+	}))
+	libraryHost.answers.set("library_share_presence", () => null)
+}
+
+const forgetBoardPanel = () => {
+	cleanup()
+	libraryHost.answers.clear()
+	libraryHost.invoked.length = 0
+	libraryHost.listeners.clear()
+	localStorage.clear()
+}
+
 describe("presence on a board opened beside a conversation", () => {
 	beforeEach(() => {
-		libraryHost.answers.set("library_list", () => [
-			launchBoardItem,
-			roadmapBoardItem,
-		])
-		libraryHost.answers.set("library_open_document", ({ name }) => ({
-			name,
-			update: boardStateOf(TWO_NOTES_BOARD),
-		}))
-		libraryHost.answers.set("library_board_summary", ({ name }) => ({
-			name,
-			nodeCount: 2,
-			nodes: [],
-			bounds: { x: 0, y: 0, width: 500, height: 100 },
-		}))
-		libraryHost.answers.set("library_share_presence", () => null)
+		answerBoardPanelReads()
 		libraryHost.answers.set("library_stop_writers", () => ({
 			kind: "cancelled",
 		}))
 	})
 
-	afterEach(() => {
-		cleanup()
-		libraryHost.answers.clear()
-		libraryHost.invoked.length = 0
-		libraryHost.listeners.clear()
-		localStorage.clear()
-	})
+	afterEach(forgetBoardPanel)
 
 	it("shows another person's pointer and outlines the object they selected, with no chip", async () => {
 		await mountPresencePanel()
@@ -636,11 +656,7 @@ describe("presence on a board opened beside a conversation", () => {
 			seatOf(JUNIPER_ID, "agent", "second"),
 		])
 
-		fireEvent.click(
-			screen.getByRole("button", {
-				name: common("library.document.agents.stopAll"),
-			}),
-		)
+		fireEvent.click(stopAllButton())
 
 		await waitFor(() =>
 			expect(stopCalls()).toEqual([
@@ -651,6 +667,40 @@ describe("presence on a board opened beside a conversation", () => {
 			]),
 		)
 	})
+
+	it("raises the board notice, never a document one, when Stop all fails", async () => {
+		await mountPresencePanel()
+		libraryHost.answers.set("library_stop_writers", () => {
+			throw { kind: "unreachable" }
+		})
+		announcePresence([seatOf(ATLAS_ID, "agent", "first")])
+
+		fireEvent.click(stopAllButton())
+
+		await waitFor(() =>
+			expect(raiseFailureNotice).toHaveBeenCalledWith(
+				expect.objectContaining({
+					title: common("library.failure.board.stopAll"),
+				}),
+			),
+		)
+	})
+
+	it.each([
+		{ space: "a local", isJoined: false },
+		{ space: "a joined", isJoined: true },
+	])(
+		"draws a person's pointer and outline in the hue their presence carries, in $space Space",
+		async ({ isJoined }) => {
+			await mountPresencePanel(isJoined)
+
+			announcePresence([seatOf("window-2", "person", "first", "Lena", 210)])
+
+			const accent = hueTone(210, "light", "accent").hex
+			expect(presenceInkOf("board-pointer")).toBe(accent)
+			expect(presenceInkOf("board-object-outline")).toBe(accent)
+		},
+	)
 
 	it("drops the previous board's presence when the panel switches to another board", async () => {
 		const panel = await mountPresencePanel()
@@ -670,5 +720,113 @@ describe("presence on a board opened beside a conversation", () => {
 		panel.unmount()
 
 		await waitFor(() => expect(presenceListeners().size).toBe(0))
+	})
+})
+
+const sharedSeats = () =>
+	libraryHost.invoked
+		.filter(([command]) => command === "library_share_presence")
+		.map(([, args]) => args)
+
+const seatAt = (
+	x: number,
+	y: number,
+	nodeId: string | null = null,
+	name = LAUNCH_BOARD,
+) => ({
+	spaceId: SPACE_ID,
+	name,
+	at: { kind: "board", point: { x, y }, nodeId },
+})
+
+const unseatedOn = (name: string) => ({ spaceId: SPACE_ID, name, at: null })
+
+const movePointer = (x: number, y: number) =>
+	fireEvent.pointerMove(
+		screen.getByRole("application", { name: common("board.canvas.label") }),
+		{ clientX: x, clientY: y },
+	)
+
+const focusObject = (text: string) => {
+	const object = screen.getByRole("option", {
+		name: common("board.object.named", {
+			kind: common("board.object.kind.text"),
+			text,
+		}),
+	})
+	act(() => object.focus())
+}
+
+const waitPointerInterval = (ms: number) =>
+	act(() => {
+		vi.advanceTimersByTime(ms)
+	})
+
+const mountSharingPanel = async (isJoined = false) => {
+	const panel = await mountPresencePanel(isJoined)
+	vi.useFakeTimers()
+	return panel
+}
+
+describe("sharing the own pointer and selection on a board opened beside a conversation", () => {
+	beforeEach(answerBoardPanelReads)
+
+	afterEach(() => {
+		vi.useRealTimers()
+		forgetBoardPanel()
+	})
+
+	it("shares the pointer at most once every 50 ms and always sends the last position", async () => {
+		await mountSharingPanel()
+
+		movePointer(10, 20)
+		movePointer(11, 21)
+		movePointer(12, 22)
+		expect(sharedSeats()).toEqual([seatAt(10, 20)])
+
+		await waitPointerInterval(49)
+		expect(sharedSeats()).toEqual([seatAt(10, 20)])
+
+		await waitPointerInterval(1)
+		expect(sharedSeats()).toEqual([seatAt(10, 20), seatAt(12, 22)])
+	})
+
+	it("shares a selection at once with the last pointer position", async () => {
+		await mountSharingPanel()
+		movePointer(10, 20)
+		movePointer(30, 40)
+
+		focusObject("First")
+
+		expect(sharedSeats()).toEqual([seatAt(10, 20), seatAt(30, 40, "first")])
+	})
+
+	it("shares the pointer the same way in a joined Space", async () => {
+		await mountSharingPanel(true)
+
+		movePointer(10, 20)
+
+		expect(sharedSeats()).toEqual([seatAt(10, 20)])
+	})
+
+	it("shares no position once the panel closes, and nothing after", async () => {
+		const panel = await mountSharingPanel()
+		movePointer(10, 20)
+		movePointer(30, 40)
+
+		panel.unmount()
+		await waitPointerInterval(200)
+
+		expect(sharedSeats()).toEqual([seatAt(10, 20), unseatedOn(LAUNCH_BOARD)])
+	})
+
+	it("closes the previous board's seat when the panel switches to another board", async () => {
+		const panel = await mountSharingPanel()
+		movePointer(10, 20)
+
+		panel.rerender(openedBoardPanelOf(false, ROADMAP_BOARD))
+		await waitPointerInterval(200)
+
+		expect(sharedSeats()).toEqual([seatAt(10, 20), unseatedOn(LAUNCH_BOARD)])
 	})
 })
