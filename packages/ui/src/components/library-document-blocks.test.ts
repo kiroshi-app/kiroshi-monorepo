@@ -5,6 +5,7 @@ import {
 	LIBRARY_ITEMS,
 } from "@workspace/ui/components/library.fixtures"
 import {
+	blockIdsOf,
 	blockTypeOf,
 	calloutTextOf,
 	calloutTitleOf,
@@ -15,11 +16,16 @@ import {
 	conversionsOf,
 	convertSource,
 	galleryItemsOf,
+	keepIds,
+	type LibraryBlock,
+	marked,
+	movedTo,
 	offsetsOf,
 	parseBlocks,
 	relaid,
 	rowAfter,
 	serializeBlocks,
+	shiftedAcross,
 	shiftedOffset,
 	tableRowsOf,
 	tableSourceOf,
@@ -44,11 +50,6 @@ import { LIBRARY_DOCUMENT_TEMPLATES } from "@workspace/ui/components/library-new
 import { i18n } from "@workspace/ui/lib/i18n"
 
 const t = i18n.getFixedT("en", "common")
-
-const idsFrom = () => {
-	let count = 0
-	return () => `block-${++count}`
-}
 
 const EVERY_BLOCK = [
 	"# Launch plan",
@@ -111,15 +112,19 @@ const FIXTURES: [name: string, body: string][] = [
 	["a lead and no trailing newline", "\n\n  Just a line"],
 	["windows line ends", "# Title\r\n\r\nA line\r\n"],
 	["an empty document", ""],
+	[
+		"a document with ids",
+		"# Plan ^aaaaaa\n\nIntro. ^bbbbbb\n\n- one\n\n^cccccc\n\n```\ncode\n```\n\n^dddddd\n",
+	],
 ]
 
 describe("library document blocks", () => {
 	it.each(FIXTURES)("round-trips %s unchanged", (_, body) => {
-		expect(serializeBlocks(parseBlocks(body, idsFrom()))).toBe(body)
+		expect(serializeBlocks(parseBlocks(body, blockIdsOf()))).toBe(body)
 	})
 
 	it("reads one block per top-level markdown block, typed", () => {
-		const { blocks } = parseBlocks(EVERY_BLOCK, idsFrom())
+		const { blocks } = parseBlocks(EVERY_BLOCK, blockIdsOf())
 
 		expect(blocks.map(({ source }) => blockTypeOf(source))).toEqual([
 			"heading",
@@ -173,7 +178,7 @@ describe("library document blocks", () => {
 	})
 
 	it("keeps the trailing text in place and a blank line between moved blocks", () => {
-		const { blocks } = parseBlocks("# A\nText\n", idsFrom())
+		const { blocks } = parseBlocks("# A\nText\n", blockIdsOf())
 		const moved = relaid(blocks, [blocks[1], blocks[0]])
 
 		expect(serializeBlocks({ lead: "", blocks: moved })).toBe("Text\n\n# A\n")
@@ -330,9 +335,9 @@ describe("withEmptyBlocksAt", () => {
 	it("cuts an empty block at each empty line, the markdown unchanged", () => {
 		const markdown = "\n## Decisions\n\n## Next steps\n"
 		const seeded = withEmptyBlocksAt(
-			parseBlocks(markdown, idsFrom()),
+			parseBlocks(markdown, blockIdsOf()),
 			[0, 14, 29],
-			idsFrom(),
+			blockIdsOf(),
 		)
 
 		expect(serializeBlocks(seeded)).toBe(markdown)
@@ -347,15 +352,307 @@ describe("withEmptyBlocksAt", () => {
 	})
 
 	it("adds nothing where a block starts or inside a line", () => {
-		const document = parseBlocks("Ship it\n\nThen rest", idsFrom())
+		const document = parseBlocks("Ship it\n\nThen rest", blockIdsOf())
 
-		expect(withEmptyBlocksAt(document, [0, 3, 9], idsFrom())).toEqual(document)
+		expect(withEmptyBlocksAt(document, [0, 3, 9], blockIdsOf())).toEqual(
+			document,
+		)
 	})
 
 	it("gives an empty document its one empty block", () => {
-		const seeded = withEmptyBlocksAt(parseBlocks("", idsFrom()), [0], idsFrom())
+		const seeded = withEmptyBlocksAt(
+			parseBlocks("", blockIdsOf()),
+			[0],
+			blockIdsOf(),
+		)
 
 		expect(seeded.blocks.map(({ source }) => source)).toEqual([""])
 		expect(serializeBlocks(seeded)).toBe("")
+	})
+})
+
+const EVERY_KIND =
+	"# Plan\n\nIntro text.\n\n- one\n- two\n\n* [ ] task\n* [x] done\n\n> quoted\n\n```rust\nfn main() {}\n```\n\n| a | b |\n| - | - |\n| 1 | 2 |\n\n---\n\n![chart](chart.png)"
+
+const ID = /^[a-z0-9]{6}$/
+
+const blocksOf = (text: string) => parseBlocks(text, blockIdsOf()).blocks
+
+const sourcesOf = (text: string) => blocksOf(text).map(({ source }) => source)
+
+const savedIdsOf = (text: string) =>
+	blocksOf(text).map(({ id, written }) =>
+		written?.endsWith(`^${id}`) ? id : undefined,
+	)
+
+const backfilled = (text: string) => {
+	const ids = blockIdsOf()
+	return serializeBlocks(marked(parseBlocks(text, ids), ids))
+}
+
+const writtenAs = (source: string, id: string) =>
+	serializeBlocks(
+		marked({ lead: "", blocks: [{ id, source, gap: "" }] }, blockIdsOf()),
+	)
+
+describe("block ids read as blocks_of reads them", () => {
+	it("cuts every top-level kind into one block, none named", () => {
+		expect(savedIdsOf(EVERY_KIND)).toEqual(Array(9).fill(undefined))
+		expect(sourcesOf("## Goal\n\nSub\n===")).toEqual(["## Goal", "Sub\n==="])
+	})
+
+	it("holds loose list items and nested lines in one list", () => {
+		expect(
+			sourcesOf("- one\n\n- two\n  more of two\n  - nested\n\nAfter."),
+		).toEqual(["- one\n\n- two\n  more of two\n  - nested", "After."])
+	})
+
+	it("reads a marker-shaped line inside a fence as code", () => {
+		const text = "```\n# not a heading\n\n^abc123\n```"
+
+		expect(sourcesOf(text)).toEqual([text])
+		expect(savedIdsOf(text)).toEqual([undefined])
+	})
+
+	it.each(["---\ntitle: x\n---", "---\ntitle: x\n..."])(
+		"keeps the front matter %j out of every block and every marker",
+		(front) => {
+			const text = `${front}\n\n# Plan\n\n- one`
+			const filled = backfilled(text)
+
+			expect(sourcesOf(text)).toEqual(["# Plan", "- one"])
+			expect(filled.startsWith(`${front}\n\n# Plan ^`)).toBe(true)
+			expect(sourcesOf(filled)).toEqual(["# Plan", "- one"])
+			expect(blocksOf(front)).toEqual([])
+		},
+	)
+
+	it("reads dashes never closed as a rule and its blocks", () => {
+		expect(sourcesOf("---\ntitle: x\n\nBody.")).toEqual([
+			"---",
+			"title: x",
+			"Body.",
+		])
+	})
+
+	it("cuts a paragraph interrupted by a heading in two", () => {
+		expect(sourcesOf("Text\n# Title\nMore")).toEqual([
+			"Text",
+			"# Title",
+			"More",
+		])
+	})
+
+	it("names every block once with a unique id, its source unchanged", () => {
+		const text = backfilled(EVERY_KIND)
+		const ids = savedIdsOf(text)
+
+		expect(sourcesOf(text)).toEqual(sourcesOf(EVERY_KIND))
+		expect(ids.every((id) => id !== undefined && ID.test(id))).toBe(true)
+		expect(new Set(ids).size).toBe(ids.length)
+		expect(backfilled(text)).toBe(text)
+	})
+
+	it("ends a heading or a paragraph with its id and sets it below any other block", () => {
+		const text = backfilled("# Plan\n\nIntro.\n\n- one\n\n---")
+		const [plan, intro, list, rule] = savedIdsOf(text)
+
+		expect(text).toBe(
+			`# Plan ^${plan}\n\nIntro. ^${intro}\n\n- one\n\n^${list}\n\n---\n\n^${rule}`,
+		)
+	})
+
+	it("keeps every saved id and renews only a duplicate", () => {
+		const filled = backfilled(
+			"# Plan ^aaaaaa\n\nOne. ^bbbbbb\n\nCopy. ^bbbbbb\n\nNew.",
+		)
+		const [plan, one, copy, added] = savedIdsOf(filled)
+
+		expect([plan, one]).toEqual(["aaaaaa", "bbbbbb"])
+		expect(copy).toMatch(ID)
+		expect(copy).not.toBe("bbbbbb")
+		expect(added).toMatch(ID)
+		expect(sourcesOf(filled)).toEqual(["# Plan", "One.", "Copy.", "New."])
+		expect(backfilled(filled)).toBe(filled)
+	})
+
+	it("sets the id of a block glued to the next one on a line apart from both", () => {
+		const text = backfilled("```\ncode\n```\nAfter.")
+
+		expect(sourcesOf(text)).toEqual(["```\ncode\n```", "After."])
+		expect(savedIdsOf(text).every((id) => id !== undefined)).toBe(true)
+	})
+
+	it("closes an unclosed fence before its id so the id stays out of the code", () => {
+		const text = backfilled("Intro.\n\n```\ncode")
+
+		expect(sourcesOf(text)).toEqual(["Intro.", "```\ncode\n```"])
+		expect(savedIdsOf(text).every((id) => id !== undefined)).toBe(true)
+	})
+
+	it("sets the id of a heading with a closing sequence below it", () => {
+		const text = backfilled("# Plan #")
+
+		expect(sourcesOf(text)).toEqual(["# Plan #"])
+		expect(text).toMatch(/^# Plan #\n\n\^[a-z0-9]{6}$/)
+	})
+
+	it("reads a marker with no block to name as no block, and leaves it in place", () => {
+		const text = "^abcdef\n\n# Plan ^aaaaaa\n\n^bbbbbb"
+
+		expect(sourcesOf(text)).toEqual(["# Plan"])
+		expect(savedIdsOf(text)).toEqual(["aaaaaa"])
+		expect(serializeBlocks(parseBlocks(text, blockIdsOf()))).toBe(text)
+	})
+})
+
+describe("block ids written by the editor", () => {
+	it("drops every marker pasted in a block and names each block it holds anew", () => {
+		const pasted = writtenAs(
+			"# Title ^aaaaaa\nBody. ^bbbbbb ^cccccc\n\n- item\n\n^dddddd\n\n^eeeeee",
+			"pasted",
+		)
+		const ids = savedIdsOf(pasted)
+
+		expect(sourcesOf(pasted)).toEqual(["# Title", "Body.", "- item"])
+		expect(ids[0]).toBe("pasted")
+		expect(new Set(ids).size).toBe(3)
+		expect(
+			ids.some((id) =>
+				["bbbbbb", "cccccc", "dddddd", "eeeeee"].includes(id ?? ""),
+			),
+		).toBe(false)
+	})
+
+	it("keeps the id on the first part of a split block and names the second anew", () => {
+		const [first, second] = savedIdsOf(writtenAs("# New\n\nMore.", "aaaaaa"))
+
+		expect(first).toBe("aaaaaa")
+		expect(second).toMatch(ID)
+		expect(second).not.toBe("aaaaaa")
+	})
+
+	it("keeps the id of the first part and drops the second once two parts merge", () => {
+		expect(writtenAs("One and two.", "aaaaaa")).toBe("One and two. ^aaaaaa")
+	})
+
+	it("writes nothing for a block made only of markers", () => {
+		expect(writtenAs("^abcdef\n\n  \n", "aaaaaa")).toBe("")
+	})
+
+	it("leaves a document byte-identical until an edit, then names every block", () => {
+		const text = "# Plan ^aaaaaa\n\nIntro.\n\n- one"
+		const ids = blockIdsOf()
+		const document = parseBlocks(text, ids)
+		const [, intro, list] = document.blocks
+
+		expect(serializeBlocks(document)).toBe(text)
+		expect(serializeBlocks(marked(document, ids))).toBe(
+			`# Plan ^aaaaaa\n\nIntro. ^${intro.id}\n\n- one\n\n^${list.id}`,
+		)
+	})
+
+	it("keeps an id through an edit, a conversion and a move, in the encoding of the new type", () => {
+		const ids = blockIdsOf()
+		const { lead, blocks } = parseBlocks(
+			"# Plan ^aaaaaa\n\nIntro. ^bbbbbb\n\nLast. ^cccccc",
+			ids,
+		)
+		const edited = blocks.map((block) =>
+			block.id === "bbbbbb" ? { ...block, source: "- Intro, edited." } : block,
+		)
+		const moved = relaid(blocks, movedTo(edited, 1, 2))
+
+		expect(serializeBlocks(marked({ lead, blocks: moved }, ids))).toBe(
+			"# Plan ^aaaaaa\n\nLast. ^cccccc\n\n- Intro, edited.\n\n^bbbbbb",
+		)
+	})
+
+	it("keeps a blank line around an edited block so two blocks never merge", () => {
+		const ids = blockIdsOf()
+		const { lead, blocks } = parseBlocks("Text ^aaaaaa\n# Title ^bbbbbb", ids)
+		const edited = blocks.map((block) =>
+			block.id === "bbbbbb" ? { ...block, source: "Title" } : block,
+		)
+		const text = serializeBlocks(marked({ lead, blocks: edited }, ids))
+
+		expect(text).toBe("Text ^aaaaaa\n\nTitle ^bbbbbb")
+		expect(savedIdsOf(text)).toEqual(["aaaaaa", "bbbbbb"])
+	})
+
+	it("keeps a paragraph glued under a heading when it names both", () => {
+		const ids = blockIdsOf()
+		const document = parseBlocks("## Decisions\nShip\n## Next steps", ids)
+		const [decisions, ship, next] = document.blocks.map(({ id }) => id)
+
+		expect(serializeBlocks(marked(document, ids))).toBe(
+			`## Decisions ^${decisions}\nShip ^${ship}\n## Next steps ^${next}`,
+		)
+	})
+
+	it("follows an offset into its block when ids are written across the document", () => {
+		const ids = blockIdsOf()
+		const before = parseBlocks("# Plan\n\n- one\n\nShip it", ids)
+		const after = marked(before, ids)
+		const at = serializeBlocks(before).indexOf("it")
+
+		expect(
+			serializeBlocks(after).slice(shiftedAcross(before, after, at)),
+		).toMatch(/^it \^[a-z0-9]{6}$/)
+	})
+
+	it("removes the marker of a deleted block", () => {
+		const ids = blockIdsOf()
+		const { lead, blocks } = parseBlocks(
+			"# Plan ^aaaaaa\n\n- one\n\n^bbbbbb\n\nLast. ^cccccc",
+			ids,
+		)
+		const kept = relaid(
+			blocks,
+			blocks.filter(({ id }) => id !== "bbbbbb"),
+		)
+
+		expect(serializeBlocks(marked({ lead, blocks: kept }, ids))).toBe(
+			"# Plan ^aaaaaa\n\nLast. ^cccccc",
+		)
+	})
+
+	it("gives fresh ids of six letters or digits, never one already held", () => {
+		const ids = blockIdsOf()
+		ids.hold("aaaaaa")
+		const fresh = Array.from({ length: 500 }, ids.fresh)
+
+		expect(fresh.every((id) => ID.test(id))).toBe(true)
+		expect(new Set([...fresh, "aaaaaa"]).size).toBe(501)
+	})
+})
+
+describe("keepIds", () => {
+	const reread = (previous: LibraryBlock[], markdown: string) =>
+		keepIds(previous, parseBlocks(markdown, blockIdsOf())).blocks.map(
+			({ id, source }) => [source, id],
+		)
+
+	it("takes each id from the markers, never from the position", () => {
+		const { blocks } = parseBlocks("One. ^aaaaaa\n\nTwo. ^bbbbbb", blockIdsOf())
+
+		expect(
+			reread(blocks, "One. ^aaaaaa\n\nAgent. ^agent1\n\nTwo, edited. ^bbbbbb"),
+		).toEqual([
+			["One.", "aaaaaa"],
+			["Agent.", "agent1"],
+			["Two, edited.", "bbbbbb"],
+		])
+	})
+
+	it("keeps the id of an unnamed block whose text comes back unchanged", () => {
+		const { blocks } = parseBlocks("One.\n\nTwo.", blockIdsOf())
+		const [one, two] = blocks.map(({ id }) => id)
+		const next = reread(blocks, "Agent. ^agent1\n\nOne.\n\nTwo.")
+
+		expect(next.slice(1)).toEqual([
+			["One.", one],
+			["Two.", two],
+		])
 	})
 })

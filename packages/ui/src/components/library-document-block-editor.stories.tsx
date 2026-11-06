@@ -1,8 +1,9 @@
-import type { ReactNode } from "react"
+import { type ReactNode, useState } from "react"
 import {
 	expect,
 	fireEvent,
 	fn,
+	mocked,
 	screen,
 	spyOn,
 	waitFor,
@@ -216,6 +217,13 @@ const WINDOWS_AGENT =
 const EVERY_MARK =
 	"Ship **bold** with *italic*, ~~struck~~, `code` and a [link](https://kiroshi.app) today."
 
+const IDENTIFIED_DOCUMENT = [
+	"# Launch plan ^launch",
+	"The spring launch ships on the 14th. ^spring",
+	"- Book the room\n- Send the invite\n\n^rooms1",
+	"The call starts at ten. ^call10",
+].join("\n\n")
+
 const MARKED_DOCUMENT = [
 	"## Launch plan",
 	"- Book the **room**\n- Send the invite",
@@ -285,6 +293,20 @@ const DocumentFrame = ({ children, isNarrow = false }: DocumentFrameProps) => (
 		</ContentCard>
 	</div>
 )
+
+const ID_MARKER = /(?:\n\n\^| \^)[a-z0-9]{6}$/gm
+
+type BodyArgs = { onBodyChange: (markdown: string) => void }
+
+const writtenIn = ({ onBodyChange }: BodyArgs) =>
+	mocked(onBodyChange).mock.lastCall?.[0]
+
+const bodyIn = (args: BodyArgs) => writtenIn(args)?.replace(ID_MARKER, "")
+
+const idsIn = (markdown = "") =>
+	[...markdown.matchAll(/(?:^| )\^([a-z0-9]{6})$/gm)].map(([, id]) => id)
+
+const FRESH_ID = /^[a-z0-9]{6}$/
 
 const blocksIn = (root: HTMLElement) => slotsIn(root, "library-document-block")
 
@@ -790,7 +812,7 @@ export const TypingKeepsTheRenderedLook = meta.story({
 			await expectMark(field, "strong", character === "e" ? "bolde" : "bolder")
 			await expectNoMarkdownIn(field)
 		}
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+		await expect(bodyIn(args)).toBe(
 			blockAfter(EVERY_MARK, "**bold**", "**bolder**"),
 		)
 		selectShown(field, "italic")
@@ -798,7 +820,7 @@ export const TypingKeepsTheRenderedLook = meta.story({
 		await expectMark(field, "em", "italic")
 		await expectNoMarkdownIn(field)
 		await inputInto(field, "deleteContentBackward")
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+		await expect(bodyIn(args)).toBe(
 			blockAfter(EVERY_MARK, "**bold**", "**bolder**").replace(
 				" with *italic*,",
 				" with ,",
@@ -818,7 +840,7 @@ export const FormatShortcutRendersTheMark = meta.story({
 			key: "b",
 			...(isMacPlatform() ? { metaKey: true } : { ctrlKey: true }),
 		})
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+		await expect(bodyIn(args)).toBe(
 			blockAfter(EVERY_MARK, "today", "**today**"),
 		)
 		await waitFor(() =>
@@ -838,7 +860,7 @@ export const EnterInsideAMarkKeepsBothHalves = meta.story({
 		const field = await focusTextBlock(canvasElement, "paragraph")
 		selectInField(field, EVERY_MARK.indexOf("bold") + 2)
 		fireEvent.keyDown(field, { key: "Enter" })
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+		await expect(bodyIn(args)).toBe(
 			MARKED_DOCUMENT.replace(
 				EVERY_MARK,
 				`Ship **bo**\n\n${EVERY_MARK.replace("Ship **bo", "**")}`,
@@ -859,7 +881,7 @@ export const BackspaceAtTheStartTurnsIntoText = meta.story({
 		const field = await focusTextBlock(canvasElement, "quote")
 		selectInField(field, 2)
 		fireEvent.keyDown(field, { key: "Backspace" })
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+		await expect(bodyIn(args)).toBe(
 			MARKED_DOCUMENT.replace("> The export", "The export"),
 		)
 		await expect(
@@ -922,7 +944,7 @@ export const CalloutBodyShowsItsMarks = meta.story({
 		await expectNoMarkdownIn(field)
 		selectInField(field, "Keep the **archived**".length)
 		await typeInto(field, "!")
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+		await expect(bodyIn(args)).toBe(
 			RICH_TEXT_DOCUMENT.replace("**archived**", "**archived**!"),
 		)
 		await expectNoMarkdownIn(field)
@@ -1010,9 +1032,7 @@ export const InlineImageIsOneNode = meta.story({
 				await expect(["See ".length, after]).toContain(caret)
 		}
 		await inputInto(field, "deleteContentBackward")
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
-			RICH_TEXT_DOCUMENT.replace(SOFA, ""),
-		)
+		await expect(bodyIn(args)).toBe(RICH_TEXT_DOCUMENT.replace(SOFA, ""))
 		await expect(field.querySelector("img")).toBeNull()
 		await expectNoMarkdownIn(field)
 	},
@@ -1071,7 +1091,7 @@ export const EmptiedBlocksKeepTheirType = meta.story({
 					"",
 				emptied,
 			)
-			await expect(args.onBodyChange).toHaveBeenLastCalledWith(body)
+			await expect(bodyIn(args)).toBe(body)
 			await expect(blockOfType(canvasElement, type)).toContainElement(field)
 			await expect(field.querySelector(tag)).not.toBeNull()
 			await expect(shownIn(field)).toBe("")
@@ -1112,7 +1132,7 @@ export const DragMovesText = meta.story({
 				cancelable: true,
 			}),
 		)
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+		await expect(bodyIn(args)).toBe(
 			MARKED_DOCUMENT.replace(
 				EVERY_MARK,
 				`today ${EVERY_MARK.replace(" today.", " .")}`,
@@ -1224,9 +1244,7 @@ export const TypedPrefixTurnsTheBlock = meta.story({
 		await typeInto(field, "#")
 		await expect(shownIn(field)).toBe("#")
 		await typeInto(field, " Risks")
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
-			`${MARKED_DOCUMENT}\n\n# Risks`,
-		)
+		await expect(bodyIn(args)).toBe(`${MARKED_DOCUMENT}\n\n# Risks`)
 		await expect(blocksIn(canvasElement).at(-1)?.dataset.type).toBe("heading")
 		await expectMark(field, "h1", "Risks")
 		await expectNoMarkdownIn(field)
@@ -1271,7 +1289,7 @@ export const ClickEditsInPlace = meta.story({
 		)
 		selectShown(field, "7th")
 		await typeInto(field, "8th")
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+		await expect(bodyIn(args)).toBe(
 			BRIEF.replace("final on the 7th", "final on the 8th"),
 		)
 	},
@@ -1296,14 +1314,12 @@ export const SlashEnterInsertsHeading = meta.story({
 		await expect(optionNamesIn(panel)).toEqual(["Heading#"])
 		fireEvent.keyDown(fieldIn(canvasElement), { key: "Enter" })
 		await waitFor(() => expect(slashPanelIn(canvasElement)).toBeNull())
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(`${BRIEF}\n\n## `)
+		await expect(bodyIn(args)).toBe(`${BRIEF}\n\n## `)
 		await expect(shownIn(fieldIn(canvasElement))).toBe("")
 		await expect(fieldIn(canvasElement).querySelector("h2")).not.toBeNull()
 		await expect(fieldIn(canvasElement)).toHaveFocus()
 		await typeInto(fieldIn(canvasElement), "Risks")
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
-			`${BRIEF}\n\n## Risks`,
-		)
+		await expect(bodyIn(args)).toBe(`${BRIEF}\n\n## Risks`)
 	},
 })
 
@@ -1333,9 +1349,7 @@ export const SlashInsertsRichBlock = meta.story({
 		)
 		fireEvent.keyDown(field, { key: "Enter" })
 		await waitFor(() => expect(typesIn(canvasElement).at(-1)).toBe("callout"))
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
-			`${BRIEF}\n\n> [!NOTE]\n> `,
-		)
+		await expect(bodyIn(args)).toBe(`${BRIEF}\n\n> [!NOTE]\n> `)
 		await expect(isInDocument(canvasElement)).toBe(true)
 	},
 })
@@ -1373,7 +1387,7 @@ export const HandleMenuMovesBlock = meta.story({
 			blockWith(canvasElement, "The spring launch puts"),
 			/^Move up/,
 		)
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(BRIEF)
+		await expect(bodyIn(args)).toBe(BRIEF)
 	},
 })
 
@@ -1384,7 +1398,7 @@ export const HandleMenuDuplicates = meta.story({
 	},
 	play: async ({ args, canvasElement }) => {
 		await chooseInMenu(blockWith(canvasElement, "What changes"), /^Duplicate/)
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+		await expect(bodyIn(args)).toBe(
 			BRIEF.replace("## What changes", "## What changes\n\n## What changes"),
 		)
 		await waitFor(() => expect(isInDocument(canvasElement)).toBe(true))
@@ -1398,10 +1412,182 @@ export const HandleMenuDeletes = meta.story({
 	},
 	play: async ({ args, canvasElement }) => {
 		await chooseInMenu(blockWith(canvasElement, "Timeline"), /^Delete/)
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
-			BRIEF.replace("## Timeline\n\n", ""),
-		)
+		await expect(bodyIn(args)).toBe(BRIEF.replace("## Timeline\n\n", ""))
 		await waitFor(() => expect(isInDocument(canvasElement)).toBe(true))
+	},
+})
+
+const freshIdIn = (written = "", kept: string[]) => {
+	const fresh = idsIn(written).filter((id) => !kept.includes(id))
+	expect(fresh).toHaveLength(1)
+	expect(fresh[0]).toMatch(FRESH_ID)
+	return fresh[0]
+}
+
+export const BlockIdKeptThroughAnEdit = meta.story({
+	tags: ["test-only"],
+	args: { body: IDENTIFIED_DOCUMENT },
+	play: async ({ args, canvasElement }) => {
+		const field = await focusBlockWith(canvasElement, "The spring launch")
+		selectShown(field, "14th")
+		await typeInto(field, "15th")
+		await expect(writtenIn(args)).toBe(
+			IDENTIFIED_DOCUMENT.replace("14th", "15th"),
+		)
+	},
+})
+
+export const BlockIdKeptOnTheFirstHalfOfASplit = meta.story({
+	tags: ["test-only"],
+	args: { body: IDENTIFIED_DOCUMENT },
+	play: async ({ args, canvasElement }) => {
+		const field = await focusBlockWith(canvasElement, "The spring launch")
+		selectInField(field, "The spring launch ".length)
+		fireEvent.keyDown(field, { key: "Enter" })
+		const written = writtenIn(args)
+		const kept = ["launch", "spring", "rooms1", "call10"]
+		const fresh = freshIdIn(written, kept)
+		await expect(idsIn(written)).toEqual([
+			"launch",
+			"spring",
+			fresh,
+			"rooms1",
+			"call10",
+		])
+		await expect(written).toMatch(/^The spring launch\s+\^spring$/m)
+		await expect(written).toMatch(
+			new RegExp(`^ships on the 14th\\. \\^${fresh}$`, "m"),
+		)
+	},
+})
+
+export const BlockIdTravelsWithAMovedBlock = meta.story({
+	tags: ["test-only"],
+	args: { body: IDENTIFIED_DOCUMENT },
+	parameters: {
+		a11y: mergeA11y(A11Y_FLOATING_FOCUS_GUARDS, A11Y_SUBMENU_PORTAL_GUARD),
+	},
+	play: async ({ args, canvasElement }) => {
+		await chooseInMenu(
+			blockWith(canvasElement, "The spring launch"),
+			/^Move down/,
+		)
+		await expect(writtenIn(args)).toBe(
+			[
+				"# Launch plan ^launch",
+				"- Book the room\n- Send the invite\n\n^rooms1",
+				"The spring launch ships on the 14th. ^spring",
+				"The call starts at ten. ^call10",
+			].join("\n\n"),
+		)
+	},
+})
+
+export const BlockIdLeavesWithADeletedBlock = meta.story({
+	tags: ["test-only"],
+	args: { body: IDENTIFIED_DOCUMENT },
+	parameters: {
+		a11y: mergeA11y(A11Y_FLOATING_FOCUS_GUARDS, A11Y_SUBMENU_PORTAL_GUARD),
+	},
+	play: async ({ args, canvasElement }) => {
+		await chooseInMenu(blockWith(canvasElement, "Book the room"), /^Delete/)
+		await expect(writtenIn(args)).toBe(
+			[
+				"# Launch plan ^launch",
+				"The spring launch ships on the 14th. ^spring",
+				"The call starts at ten. ^call10",
+			].join("\n\n"),
+		)
+	},
+})
+
+export const BlockIdFreshForANewBlock = meta.story({
+	tags: ["test-only"],
+	args: { body: IDENTIFIED_DOCUMENT },
+	play: async ({ args, canvasElement }) => {
+		fireEvent.click(
+			partOf(
+				blockWith(canvasElement, "The spring launch"),
+				"library-block-insert",
+			),
+		)
+		const field = await focusedFieldIn(canvasElement)
+		await typeInto(field, "Agenda first.")
+		const written = writtenIn(args)
+		const fresh = freshIdIn(written, ["launch", "spring", "rooms1", "call10"])
+		await expect(written).toBe(
+			IDENTIFIED_DOCUMENT.replace(
+				"^spring\n\n",
+				`^spring\n\nAgenda first. ^${fresh}\n\n`,
+			),
+		)
+	},
+})
+
+type AgentWritingFrameProps = BodyArgs & { body: string }
+
+const AGENT_BLOCK = "The agent adds a line. ^agent1"
+
+const AgentWritingFrame = ({ body, onBodyChange }: AgentWritingFrameProps) => {
+	const [shown, setShown] = useState(body)
+	return (
+		<DocumentFrame>
+			<button
+				onClick={() =>
+					setShown((current) =>
+						current.replace(/^The call/m, `${AGENT_BLOCK}\n\nThe call`),
+					)
+				}
+				type="button"
+			>
+				Agent inserts a block
+			</button>
+			<LibraryDocumentBlockEditor
+				body={shown}
+				onBodyChange={(markdown) => {
+					setShown(markdown)
+					onBodyChange(markdown)
+				}}
+			/>
+		</DocumentFrame>
+	)
+}
+
+export const BlockIdKeptWhenAnAgentInsertsBefore = meta.story({
+	tags: ["test-only"],
+	args: {
+		body: "The spring launch ships on the 14th.\n\nThe call starts at ten.",
+	},
+	render: (args) => <AgentWritingFrame {...args} />,
+	play: async ({ args, canvasElement }) => {
+		const field = await focusBlockWith(canvasElement, "The call starts")
+		selectShown(field, "ten")
+		await typeInto(field, "nine")
+		const [spring, call] = idsIn(writtenIn(args))
+		await expect([spring, call]).toEqual([
+			expect.stringMatching(FRESH_ID),
+			expect.stringMatching(FRESH_ID),
+		])
+		fireEvent.click(
+			within(canvasElement).getByRole("button", {
+				name: "Agent inserts a block",
+			}),
+		)
+		await waitFor(() =>
+			expect(blockWith(canvasElement, "The agent adds")).toBeVisible(),
+		)
+		const again = await focusedFieldIn(
+			blockWith(canvasElement, "The call starts"),
+		)
+		selectShown(again, "nine")
+		await typeInto(again, "noon")
+		await expect(writtenIn(args)).toBe(
+			[
+				`The spring launch ships on the 14th. ^${spring}`,
+				AGENT_BLOCK,
+				`The call starts at noon. ^${call}`,
+			].join("\n\n"),
+		)
 	},
 })
 
@@ -1424,7 +1610,7 @@ export const HandleMenuTurnsInto = meta.story({
 		await expect(kinds[0]).toHaveAttribute("aria-checked", "true")
 		fireEvent.click(kinds[4])
 		await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+		await expect(bodyIn(args)).toBe(
 			BRIEF.replace("\n\nWe also count", "\n\n> We also count"),
 		)
 		await expect(blockWith(canvasElement, "We also count").dataset.type).toBe(
@@ -1475,7 +1661,7 @@ export const ShortcutsOnFocusedBlock = meta.story({
 		)
 		const moved = document.activeElement as HTMLElement
 		fireEvent.keyDown(moved, { key: "ArrowUp", altKey: true, shiftKey: true })
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(BRIEF)
+		await expect(bodyIn(args)).toBe(BRIEF)
 		const command = navigator.userAgent.includes("Mac")
 			? { metaKey: true }
 			: { ctrlKey: true }
@@ -1487,7 +1673,7 @@ export const ShortcutsOnFocusedBlock = meta.story({
 		fireEvent.keyDown(document.activeElement as HTMLElement, {
 			key: "Backspace",
 		})
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(BRIEF)
+		await expect(bodyIn(args)).toBe(BRIEF)
 		await waitFor(() => expect(isInDocument(canvasElement)).toBe(true))
 		await expect(document.activeElement).toHaveAttribute(
 			"data-slot",
@@ -1516,7 +1702,7 @@ export const DragMovesBlock = meta.story({
 		)
 		const [first, ...rest] = BRIEF.split("\n\n")
 		const landing = rest.indexOf("## What we measure") + 1
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+		await expect(bodyIn(args)).toBe(
 			[...rest.slice(0, landing), first, ...rest.slice(landing)].join("\n\n"),
 		)
 	},
@@ -1568,7 +1754,7 @@ export const ChecklistEditsInPlace = meta.story({
 		const checklist = blockWith(canvasElement, "Book the room")
 		const [room] = within(checklist).getAllByRole("checkbox")
 		fireEvent.click(room)
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+		await expect(bodyIn(args)).toBe(
 			CHECKLIST_DOCUMENT.replace("- [ ] Book", "- [x] Book"),
 		)
 		await expect(
@@ -1698,7 +1884,7 @@ const galleryEditingStory = (theme: "light" | "dark") => ({
 		fireEvent.click(add)
 		await expect(args.onAddImages).toHaveBeenCalledOnce()
 		await waitFor(() =>
-			expect(args.onBodyChange).toHaveBeenLastCalledWith(
+			expect(bodyIn(args)).toBe(
 				galleryWith(
 					GALLERY_ITEMS.green,
 					GALLERY_ITEMS.grey,
@@ -1745,7 +1931,7 @@ export const GalleryTileDragged = meta.story({
 			getComputedStyle(slot.firstElementChild as Element).borderStyle,
 		).toBe("dashed")
 		fireEvent.pointerUp(window, target)
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+		await expect(bodyIn(args)).toBe(
 			galleryWith(GALLERY_ITEMS.grey, GALLERY_ITEMS.rust, GALLERY_ITEMS.green),
 		)
 		await expect(slotsIn(gallery, "library-gallery-lifted")).toHaveLength(0)
@@ -1756,7 +1942,7 @@ export const GalleryTileDragged = meta.story({
 			return tile
 		})
 		fireEvent.keyDown(moved, { key: "ArrowLeft" })
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+		await expect(bodyIn(args)).toBe(
 			galleryWith(GALLERY_ITEMS.grey, GALLERY_ITEMS.green, GALLERY_ITEMS.rust),
 		)
 	},
@@ -1779,7 +1965,7 @@ export const GalleryRemoveAndCaption = meta.story({
 			within(gallery).getByRole("textbox", { name: "Caption of image 1" }),
 			{ target: { value: "Green velvet, 1,290 euros" } },
 		)
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+		await expect(bodyIn(args)).toBe(
 			galleryWith(
 				`${GALLERY_ITEMS.green}\n  caption: Green velvet, 1,290 euros`,
 				GALLERY_ITEMS.grey,
@@ -1789,7 +1975,7 @@ export const GalleryRemoveAndCaption = meta.story({
 		fireEvent.click(
 			within(gallery).getByRole("button", { name: "Remove image 2" }),
 		)
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+		await expect(bodyIn(args)).toBe(
 			galleryWith(
 				`${GALLERY_ITEMS.green}\n  caption: Green velvet, 1,290 euros`,
 				GALLERY_ITEMS.rust,
@@ -1802,9 +1988,7 @@ export const GalleryRemoveAndCaption = meta.story({
 					{ name },
 				),
 			)
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
-			"The sofas we kept for the lobby.",
-		)
+		await expect(bodyIn(args)).toBe("The sofas we kept for the lobby.")
 		await expect(typesIn(canvasElement)).toEqual(["paragraph"])
 	},
 })
@@ -1849,7 +2033,7 @@ export const GalleryImagesResolved = meta.story({
 			{ target: { value: "Green velvet, 1,290 euros" } },
 		)
 		const [green, ...rest] = STORED_ITEMS
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+		await expect(bodyIn(args)).toBe(
 			galleryWith(`${green}\n  caption: Green velvet, 1,290 euros`, ...rest),
 		)
 		await resolvedImgIn(gallery, "Green velvet sofa")
@@ -1893,15 +2077,13 @@ export const GalleryImageResolving = meta.story({
 			within(gallery).getByRole("textbox", { name: "Caption of image 2" }),
 			{ target: { value: "Grey linen, 990 euros" } },
 		)
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+		await expect(bodyIn(args)).toBe(
 			galleryWith(green, `${grey}\n  caption: Grey linen, 990 euros`, ...rest),
 		)
 		fireEvent.click(
 			within(gallery).getByRole("button", { name: "Remove image 2" }),
 		)
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
-			galleryWith(green, ...rest),
-		)
+		await expect(bodyIn(args)).toBe(galleryWith(green, ...rest))
 		await waitFor(() =>
 			expect(slotsIn(gallery, "gallery-resolving")).toHaveLength(0),
 		)
@@ -1984,7 +2166,7 @@ export const ChecklistEditing = meta.story({
 			resolvedRootColor("--primary"),
 		)
 		fireEvent.keyDown(room, { key: "Enter" })
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+		await expect(bodyIn(args)).toBe(
 			CHECKLIST_DOCUMENT.replace(
 				"- [ ] Book the room\n",
 				"- [ ] Book the room\n- [ ] \n",
@@ -2001,7 +2183,7 @@ export const ChecklistEditing = meta.story({
 				"library-checklist-box",
 			)[0],
 		)
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+		await expect(bodyIn(args)).toBe(
 			CHECKLIST_DOCUMENT.replace(
 				"- [ ] Book the room\n",
 				"- [x] Book the room\n- [ ] \n",
@@ -2053,7 +2235,7 @@ export const ChecklistItemMoved = meta.story({
 			).toHaveLength(1),
 		)
 		fireEvent.pointerUp(rows[2], { clientY: below })
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+		await expect(bodyIn(args)).toBe(
 			[
 				"Before the launch call:",
 				"- [x] Send the invite\n- [ ] Print the agenda\n- [ ] Book the room",
@@ -2068,7 +2250,7 @@ export const ChecklistItemMoved = meta.story({
 			return last
 		})
 		fireEvent.keyDown(moved, { key: "ArrowUp" })
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+		await expect(bodyIn(args)).toBe(
 			[
 				"Before the launch call:",
 				"- [x] Send the invite\n- [ ] Book the room\n- [ ] Print the agenda",
@@ -2098,7 +2280,7 @@ export const CalloutToneSwitch = meta.story({
 			"The export keeps the archived rooms too.",
 		)
 		fireEvent.click(within(tones).getByRole("button", { name: "Tip" }))
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+		await expect(bodyIn(args)).toBe(
 			CALLOUT_DOCUMENT.replace("[!NOTE]", "[!TIP]"),
 		)
 		await waitFor(() =>
@@ -2111,7 +2293,7 @@ export const CalloutToneSwitch = meta.story({
 				partOf(blockOfType(canvasElement, "callout"), "library-callout-tones"),
 			).getByRole("button", { name: "Warning" }),
 		)
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+		await expect(bodyIn(args)).toBe(
 			CALLOUT_DOCUMENT.replace("[!NOTE]", "[!WARNING]"),
 		)
 		await expect(colourTransitionsOf(note)).toEqual([])
@@ -2159,7 +2341,7 @@ const tableEditingStory = (theme: "light" | "dark") => ({
 			),
 		).toHaveAttribute("data-placeholder", "Empty")
 		await inputInto(fieldsOf(editing)[2], "insertText", " North")
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+		await expect(bodyIn(args)).toBe(
 			TABLE_DOCUMENT.replace("| Atlas |", "| Atlas North |"),
 		)
 		fireEvent.keyDown(fieldsOf(editing)[2], { key: "Tab" })
@@ -2168,12 +2350,12 @@ const tableEditingStory = (theme: "light" | "dark") => ({
 		await waitFor(() => expect(fieldsOf(editing)[2]).toHaveFocus())
 
 		fireEvent.click(partOf(editing, "library-table-add-row"))
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+		await expect(bodyIn(args)).toBe(
 			`${TABLE_DOCUMENT.replace("| Atlas |", "| Atlas North |")}\n|  |  |`,
 		)
 		await waitFor(() => expect(fieldsOf(editing)[6]).toHaveFocus())
 		fireEvent.click(partOf(editing, "library-table-add-column"))
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+		await expect(bodyIn(args)).toBe(
 			[
 				"Rooms held for the offsite:",
 				"| Room | Seats |  |\n| --- | --- | --- |\n| Atlas North | 12 |  |\n| Mira |  |  |\n|  |  |  |",
@@ -2230,9 +2412,7 @@ export const CodeLanguageChosen = meta.story({
 		fireEvent.change(search, { target: { value: "py" } })
 		await expect(optionNamesIn(list)).toEqual(["Python"])
 		fireEvent.keyDown(search, { key: "Enter" })
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
-			CODE_DOCUMENT.replace("```ts", "```python"),
-		)
+		await expect(bodyIn(args)).toBe(CODE_DOCUMENT.replace("```ts", "```python"))
 		await waitFor(() => expect(screen.queryByRole("listbox")).toBeNull())
 		await expect(isInDocument(canvasElement)).toBe(true)
 	},
@@ -2263,7 +2443,7 @@ export const CodeBodyEdited = meta.story({
 		fireEvent.change(body, {
 			target: { value: "const launch = await ship()\nawait announce(launch)" },
 		})
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+		await expect(bodyIn(args)).toBe(
 			CODE_DOCUMENT.replace(
 				"await ship()\n",
 				"await ship()\nawait announce(launch)\n",
@@ -2306,7 +2486,7 @@ export const WebPageLinkUpdated = meta.story({
 			"https://www.example.org/suites",
 		)
 		await waitFor(() =>
-			expect(args.onBodyChange).toHaveBeenLastCalledWith(
+			expect(bodyIn(args)).toBe(
 				[
 					"Where the team sleeps:",
 					"```web-page\nurl: https://www.example.org/suites\ntitle: Casa do Rio, suites\nsite: Casa do Rio\n```",
@@ -2392,7 +2572,7 @@ export const GalleryBeyondFive = meta.story({
 			})
 			fireEvent.keyDown(tile, { key: "ArrowLeft" })
 		}
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+		await expect(bodyIn(args)).toBe(
 			galleryWith(
 				SHELF,
 				GALLERY_ITEMS.green,
@@ -2407,7 +2587,7 @@ export const GalleryBeyondFive = meta.story({
 			within(gallery).getByRole("textbox", { name: "Caption of image 7" }),
 			{ target: { value: "Oak table" } },
 		)
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+		await expect(bodyIn(args)).toBe(
 			galleryWith(
 				SHELF,
 				GALLERY_ITEMS.green,
@@ -2421,7 +2601,7 @@ export const GalleryBeyondFive = meta.story({
 		fireEvent.click(
 			within(gallery).getByRole("button", { name: "Remove image 7" }),
 		)
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+		await expect(bodyIn(args)).toBe(
 			galleryWith(
 				SHELF,
 				GALLERY_ITEMS.green,

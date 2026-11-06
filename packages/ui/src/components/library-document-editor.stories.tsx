@@ -198,8 +198,13 @@ const selectedTextIn = (field: HTMLElement) =>
 		? (document.getSelection()?.toString() ?? "")
 		: ""
 
+const ID_MARKER = /(?:\n\n\^| \^)[a-z0-9]{6}$/gm
+
 const lastBodyOf = (args: LibraryDocumentEditorProps) =>
-	(args.onBodyChange as ReturnType<typeof fn>).mock.lastCall?.[0]
+	(args.onBodyChange as ReturnType<typeof fn>).mock.lastCall?.[0]?.replace(
+		ID_MARKER,
+		"",
+	)
 
 const keyboard = async (keys: string) => (await realPointer()).keyboard(keys)
 
@@ -351,12 +356,12 @@ export const Blank = meta.story({
 		await expect(getComputedStyle(field).boxShadow).toBe("none")
 		if (!isInBrowserRunner()) return
 		await keyboard("Hi")
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith("Hi")
+		await expect(lastBodyOf(args)).toBe("Hi")
 		await expect(placeholdersIn(canvasElement)).toEqual([])
 		await expect(title).toHaveValue("")
 		await expect(args.onTitleChange).toHaveBeenLastCalledWith("")
 		await keyboard("{Backspace}{Backspace}")
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith("")
+		await expect(lastBodyOf(args)).toBe("")
 		await expect(placeholdersIn(canvasElement)).toEqual([BLANK_PLACEHOLDER])
 	},
 })
@@ -759,9 +764,7 @@ export const FromMeetingNotes = meta.story({
 
 		await openBlock(canvasElement, underDecisions())
 		await keyboard("Ship")
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
-			"\n## Decisions\nShip\n## Next steps\n",
-		)
+		await expect(lastBodyOf(args)).toBe("\n## Decisions\nShip\n## Next steps\n")
 		await expect(placeholdersIn(canvasElement)).toEqual([
 			MEETING_PLACEHOLDERS[0],
 			MEETING_PLACEHOLDERS[2],
@@ -785,7 +788,7 @@ export const WithTypedText = meta.story({
 		await keyboard(
 			"We agreed the date.{Enter}# Decisions{Enter}- Ship on the 14th{Enter}Copy is final on the 7th",
 		)
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+		await expect(lastBodyOf(args)).toBe(
 			"We agreed the date.\n\n# Decisions\n\n- Ship on the 14th\n- Copy is final on the 7th",
 		)
 		await expect(typesIn(canvasElement)).toEqual([
@@ -824,14 +827,14 @@ export const ExistingDocument = meta.story({
 		if (!isInBrowserRunner()) return
 		await caretAfter(canvasElement, "Ship on the 14th")
 		await keyboard(", after the review")
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+		await expect(lastBodyOf(args)).toBe(
 			LAUNCH_REVIEW.body.replace(
 				"Ship on the 14th",
 				"Ship on the 14th, after the review",
 			),
 		)
 		await keyboard("{Backspace}".repeat(", after the review".length))
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(LAUNCH_REVIEW.body)
+		await expect(lastBodyOf(args)).toBe(LAUNCH_REVIEW.body)
 		await expect(args.onTitleChange).not.toHaveBeenCalled()
 	},
 })
@@ -917,7 +920,7 @@ export const RoundTripFixture = meta.story({
 		await openBlockWith(canvasElement, "Launch plan")
 		await keyboard("x{Backspace}")
 		await expect(args.onBodyChange).toHaveBeenCalledTimes(2)
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(ROUND_TRIP)
+		await expect(lastBodyOf(args)).toBe(ROUND_TRIP)
 	},
 })
 
@@ -1025,7 +1028,7 @@ export const BoldTypedThenRendered = meta.story({
 			"Screenshots land on the 10th. Then ship it.",
 		)
 		await expect(field.querySelector("strong")).toHaveTextContent(/^ship$/)
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+		await expect(lastBodyOf(args)).toBe(
 			`${LAUNCH_REVIEW.body} Then **ship** it.`,
 		)
 		await leaveBlock()
@@ -1061,11 +1064,11 @@ export const TaskToggle = meta.story({
 	play: async ({ args, canvas, userEvent }) => {
 		const boxesIn = () => canvas.getAllByRole("checkbox") as HTMLInputElement[]
 		await userEvent.click(boxesIn()[0] as HTMLInputElement)
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+		await expect(lastBodyOf(args)).toBe(
 			"- [x] Book the room\n- [x] Send the invite",
 		)
 		await userEvent.click(boxesIn()[1] as HTMLInputElement)
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+		await expect(lastBodyOf(args)).toBe(
 			"- [x] Book the room\n- [ ] Send the invite",
 		)
 		await expect(boxesIn().map((box) => box.checked)).toEqual([true, false])
@@ -1107,7 +1110,7 @@ export const OutsideChangeWhileTyping = meta.story({
 			"- Ship on the 14th, after the review".length,
 		)
 		await keyboard(" call")
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+		await expect(lastBodyOf(args)).toBe(
 			LAUNCH_REVIEW.body
 				.replace("Ship on the 14th", "Ship on the 14th, after the review call")
 				.replace("on the 10th", "on the 11th")
@@ -1135,7 +1138,7 @@ export const MultiParagraphPaste = meta.story({
 
 		const at = "\n## Decisions\n".length
 		const expected = `${MEETING_NOTES.body.slice(0, at)}${PASTED}${MEETING_NOTES.body.slice(at)}`
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(expected)
+		await expect(lastBodyOf(args)).toBe(expected)
 		fieldIn(canvasElement).blur()
 		await waitFor(() =>
 			expect(typesIn(canvasElement)).toEqual([
@@ -1153,7 +1156,7 @@ export const MultiParagraphPaste = meta.story({
 				.slice(2, 5)
 				.map((block) => block.textContent),
 		).toEqual(["First thought.", "Second thought.", "Third thought."])
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(expected)
+		await expect(lastBodyOf(args)).toBe(expected)
 	},
 })
 
@@ -1389,7 +1392,7 @@ export const AgentsWriting = meta.story({
 		if (!isInBrowserRunner()) return
 		await caretAfter(canvasElement, "stops an agent in its")
 		await keyboard(" tracks")
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+		await expect(lastBodyOf(args)).toBe(
 			LIBRARY_AGENT_DOCUMENT.body.replace(
 				"stops an agent in its",
 				"stops an agent in its tracks",
@@ -1989,7 +1992,7 @@ export const A1ToolbarAboveSelection = meta.story({
 			LAUNCH_DATE,
 			`**${LAUNCH_DATE}**`,
 		)
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(bolded)
+		await expect(lastBodyOf(args)).toBe(bolded)
 		await expect(args.onBold).not.toHaveBeenCalled()
 		const field = fieldIn(canvasElement)
 		await expect(field).toHaveFocus()
@@ -2095,7 +2098,7 @@ export const A5ToolbarLinkField = meta.story({
 			LAUNCH_DATE,
 			`[${LAUNCH_DATE}](https://kiroshi.app/brief)`,
 		)
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(linked)
+		await expect(lastBodyOf(args)).toBe(linked)
 		await expect(args.onLink).not.toHaveBeenCalled()
 		await expect(fieldIn(canvasElement)).toBe(field)
 		await expect(selectedTextIn(field)).toBe(LAUNCH_DATE)
@@ -2194,7 +2197,7 @@ const expectShortcutFormats = async ({
 	await keyboard(keys)
 	const formatted = formattedLaunchDate(marker)
 	await expect(args.onBodyChange).toHaveBeenCalledOnce()
-	await expect(args.onBodyChange).toHaveBeenLastCalledWith(formatted)
+	await expect(lastBodyOf(args)).toBe(formatted)
 	await expect(field).toHaveFocus()
 	await waitFor(() => expect(selectedTextIn(field)).toBe(LAUNCH_DATE))
 	for (const action of Object.values(SELECTION_ACTIONS))
@@ -2304,7 +2307,7 @@ export const LinkShortcut = meta.story({
 			LAUNCH_DATE,
 			`[${LAUNCH_DATE}](https://kiroshi.app/brief)`,
 		)
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(linked)
+		await expect(lastBodyOf(args)).toBe(linked)
 		await expect(args.onLink).not.toHaveBeenCalled()
 	},
 })
@@ -2327,7 +2330,7 @@ export const EscapeClosesToolbar = meta.story({
 		selectIn(field, "the copy")
 		await waitFor(() => expect(toolbarIn(canvasElement)).not.toBe(null))
 		await keyboard("x")
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+		await expect(lastBodyOf(args)).toBe(
 			SELECTION_DOCUMENT.body.replace("the copy", "x"),
 		)
 	},
@@ -2398,7 +2401,7 @@ const lineFormatStory = (button: string, marker: string, type: string) => ({
 			)
 
 		await press()
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+		await expect(lastBodyOf(args)).toBe(
 			SELECTION_DOCUMENT.body.replace(SCREENSHOTS, `${marker}${SCREENSHOTS}`),
 		)
 		await expect(field.closest<HTMLElement>("[data-type]")?.dataset.type).toBe(
@@ -2407,9 +2410,7 @@ const lineFormatStory = (button: string, marker: string, type: string) => ({
 		await waitFor(() => expect(selectedTextIn(field)).toBe("Screenshots"))
 
 		await press()
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
-			SELECTION_DOCUMENT.body,
-		)
+		await expect(lastBodyOf(args)).toBe(SELECTION_DOCUMENT.body)
 		for (const action of Object.values(SELECTION_ACTIONS))
 			await expect(action).not.toHaveBeenCalled()
 	},
@@ -2424,7 +2425,7 @@ const inlineFormatStory = (button: string, marker: string, tag: string) => ({
 		fireEvent.click(
 			await within(canvasElement).findByRole("button", { name: button }),
 		)
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+		await expect(lastBodyOf(args)).toBe(
 			SELECTION_DOCUMENT.body.replace(
 				"Screenshots",
 				`${marker}Screenshots${marker}`,
@@ -2469,7 +2470,7 @@ export const FormatLink = meta.story({
 			canvas.getByRole("textbox", { name: "Link address" }),
 			"https://kiroshi.app/brief{Enter}",
 		)
-		await expect(args.onBodyChange).toHaveBeenLastCalledWith(
+		await expect(lastBodyOf(args)).toBe(
 			SELECTION_DOCUMENT.body.replace(
 				"Screenshots",
 				"[Screenshots](https://kiroshi.app/brief)",

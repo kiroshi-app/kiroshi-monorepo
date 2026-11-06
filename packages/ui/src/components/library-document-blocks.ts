@@ -25,6 +25,7 @@ type LibraryBlockType =
 type LibraryBlock = {
 	id: string
 	source: string
+	written?: string
 	gap: string
 }
 
@@ -33,9 +34,22 @@ type LibraryBlockDocument = {
 	blocks: LibraryBlock[]
 }
 
-type BlockIds = () => string
+type BlockIds = {
+	fresh: () => string
+	hold: (id: string) => void
+}
 
 const BLOCK_GAP = "\n\n"
+
+const ID_LENGTH = 6
+const ID_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789"
+const TRAILING_MARKER = /(?<=^|\s)\^[a-z0-9]{6}$/
+const INLINE_MARKED_NODE =
+	/^(?:Paragraph|ATXHeading[1-6]|HTMLBlock|LinkReference|CommentBlock|ProcessingInstruction)$/
+const CLOSING_SEQUENCE = /[ \t]#+$/
+const BELOW_MARKER = /\n[ \t]*\^[a-z0-9]{6}$/
+const FENCE_RUN = /^ {0,3}(`{3,}|~{3,})/
+const FRONT_MATTER_CLOSING = /^(?:---|\.\.\.)$/
 
 const HEADING_SOURCE = /^#{1,6}[ \t]+|^#{1,6}$/
 const SETEXT_UNDERLINE = /\n[ \t]*(?:=+|-+)[ \t]*$/
@@ -113,37 +127,197 @@ const parsedBlocksOf = (markdown: string): ParsedBlock[] => {
 	return parsed
 }
 
+const withBlankLine = (gap: string) =>
+	gap.includes(BLOCK_GAP) ? gap : BLOCK_GAP
+
 const blockTypeOf = (source: string): LibraryBlockType =>
 	parsedBlocksOf(source)[0]?.type ?? "paragraph"
 
-const parseBlocks = (
-	markdown: string,
-	nextId: BlockIds,
-): LibraryBlockDocument => {
-	const parsed = parsedBlocksOf(markdown)
-	if (parsed.length === 0) return { lead: markdown, blocks: [] }
+const randomId = () =>
+	Array.from(
+		crypto.getRandomValues(new Uint8Array(ID_LENGTH)),
+		(byte) => ID_ALPHABET[byte % ID_ALPHABET.length],
+	).join("")
 
+const blockIdsOf = (): BlockIds => {
+	const taken = new Set<string>()
 	return {
-		lead: markdown.slice(0, parsed[0].from),
-		blocks: parsed.map(({ from, to }, index) => ({
-			id: nextId(),
-			source: markdown.slice(from, to),
-			gap: markdown.slice(to, parsed[index + 1]?.from ?? markdown.length),
-		})),
+		fresh: () => {
+			let id = randomId()
+			while (taken.has(id)) id = randomId()
+			taken.add(id)
+			return id
+		},
+		hold: (id) => {
+			taken.add(id)
+		},
 	}
 }
 
+const frontMatterEndOf = (markdown: string) => {
+	const lines = markdown.split("\n")
+	if (lines[0].trimEnd() !== "---") return 0
+	const closing = lines.findIndex(
+		(line, index) => index > 0 && FRONT_MATTER_CLOSING.test(line.trimEnd()),
+	)
+	return closing === -1 ? 0 : lines.slice(0, closing + 1).join("\n").length
+}
+
+type ReadBlock = {
+	name: string
+	from: number
+	to: number
+	end: number
+	id?: string
+}
+
+const readBlocksOf = (markdown: string, start: number): ReadBlock[] => {
+	const read: ReadBlock[] = []
+	let node = markdownLanguage.parser.parse(markdown.slice(start)).topNode
+		.firstChild
+	for (; node; node = node.nextSibling) {
+		const { name } = node
+		const from = start + node.from
+		const to = start + node.to
+		const text = markdown.slice(from, to).trimEnd()
+		const at = INLINE_MARKED_NODE.test(name) ? text.search(TRAILING_MARKER) : -1
+		if (at === -1) {
+			read.push({ name, from, to, end: to })
+			continue
+		}
+		const id = text.slice(at + 1)
+		const end = from + text.length
+		const content = text.slice(0, at).trimEnd()
+		if (name !== "Paragraph" || content.trim() !== "")
+			read.push({ name, from, to: from + content.length, end, id })
+		else {
+			const previous = read.at(-1)
+			if (previous && previous.id === undefined)
+				Object.assign(previous, { id, end })
+		}
+	}
+	return read
+}
+
+const parseBlocks = (markdown: string, ids: BlockIds): LibraryBlockDocument => {
+	const read = readBlocksOf(markdown, frontMatterEndOf(markdown))
+	if (read.length === 0) return { lead: markdown, blocks: [] }
+
+	for (const { id } of read) if (id) ids.hold(id)
+	const named = new Set<string>()
+	return {
+		lead: markdown.slice(0, read[0].from),
+		blocks: read.map(({ from, to, end, id }, index) => {
+			const isFirstNamed = id !== undefined && !named.has(id)
+			if (id) named.add(id)
+			return {
+				id: isFirstNamed ? id : ids.fresh(),
+				source: markdown.slice(from, to),
+				written: end > to ? markdown.slice(from, end) : undefined,
+				gap: markdown.slice(end, read[index + 1]?.from ?? markdown.length),
+			}
+		}),
+	}
+}
+
+const markdownOf = ({ source, written }: LibraryBlock) => written ?? source
+
 const serializeBlocks = ({ lead, blocks }: LibraryBlockDocument) =>
-	lead + blocks.map(({ source, gap }) => source + gap).join("")
+	lead + blocks.map((block) => markdownOf(block) + block.gap).join("")
 
 const offsetsOf = ({ lead, blocks }: LibraryBlockDocument) => {
 	let at = lead.length
-	return blocks.map(({ source, gap }) => {
+	return blocks.map((block) => {
 		const start = at
-		at += source.length + gap.length
+		at += markdownOf(block).length + block.gap.length
 		return start
 	})
 }
+
+const carriesId = ({ id, source, written }: LibraryBlock) => {
+	if (written === undefined || !written.startsWith(source)) return false
+	const marker = written.slice(source.length)
+	return (
+		marker.endsWith(`^${id}`) && /^\s+$/.test(marker.slice(0, -id.length - 1))
+	)
+}
+
+const withoutMarkers = (text: string): string => {
+	const at = text.trimEnd().search(TRAILING_MARKER)
+	return at === -1 ? text : withoutMarkers(text.slice(0, at).trimEnd())
+}
+
+const openFenceOf = (source: string) => {
+	const lines = source.split("\n")
+	const fence = FENCE_RUN.exec(lines[0])?.[1]
+	if (!fence) return undefined
+	const closing = new RegExp(`^ {0,3}${fence[0]}{${fence.length},}[ \\t]*$`)
+	return lines.length > 1 && closing.test(lines.at(-1) ?? "")
+		? undefined
+		: fence
+}
+
+const markerOf = (name: string, source: string, id: string) => {
+	const isHeadingClosed =
+		name.startsWith("ATXHeading") && CLOSING_SEQUENCE.test(source)
+	if (INLINE_MARKED_NODE.test(name) && !isHeadingClosed) return ` ^${id}`
+	const fence = name === "FencedCode" ? openFenceOf(source) : undefined
+	return `${fence ? `\n${fence}` : ""}${BLOCK_GAP}^${id}`
+}
+
+const writtenOf = (source: string, id: string, ids: BlockIds) =>
+	readBlocksOf(source, 0)
+		.map(({ name, from, to }) => ({
+			name,
+			text: withoutMarkers(source.slice(from, to)),
+		}))
+		.filter(({ text }) => text.trim() !== "")
+		.map(
+			({ name, text }, index) =>
+				text + markerOf(name, text, index === 0 ? id : ids.fresh()),
+		)
+		.join(BLOCK_GAP)
+
+const isBlank = ({ source }: LibraryBlock) => source.trim() === ""
+
+const needsWriting = (block: LibraryBlock) =>
+	!isBlank(block) && !carriesId(block)
+
+const isRunningOn = (block: LibraryBlock, next: LibraryBlock) =>
+	blockTypeOf(next.source) === "paragraph" &&
+	blockTypeOf(block.source) !== "heading"
+
+const isSetApart = (
+	block: LibraryBlock,
+	written: string | undefined,
+	next: LibraryBlock | undefined,
+) => {
+	if (next === undefined || isBlank(block) || isBlank(next)) return false
+	if (needsWriting(block) && BELOW_MARKER.test(written ?? "")) return true
+	return (needsWriting(block) || needsWriting(next)) && isRunningOn(block, next)
+}
+
+const marked = (
+	document: LibraryBlockDocument,
+	ids: BlockIds,
+): LibraryBlockDocument => ({
+	...document,
+	blocks: document.blocks.map((block, index) => {
+		const written = needsWriting(block)
+			? writtenOf(block.source, block.id, ids)
+			: isBlank(block)
+				? undefined
+				: block.written
+		const next = document.blocks[index + 1]
+		return {
+			...block,
+			written,
+			gap: isSetApart(block, written, next)
+				? withBlankLine(block.gap)
+				: block.gap,
+		}
+	}),
+})
 
 const shiftedOffset = (before: string, after: string, offset: number) => {
 	const limit = Math.min(before.length, after.length)
@@ -162,10 +336,32 @@ const shiftedOffset = (before: string, after: string, offset: number) => {
 	return after.length - tail
 }
 
+const shiftedAcross = (
+	before: LibraryBlockDocument,
+	after: LibraryBlockDocument,
+	offset: number,
+) => {
+	const starts = offsetsOf(before)
+	const index = starts.findLastIndex((start) => start <= offset)
+	const block = before.blocks[index]
+	const kept = after.blocks.findIndex(({ id }) => id === block?.id)
+	if (kept === -1)
+		return shiftedOffset(
+			serializeBlocks(before),
+			serializeBlocks(after),
+			offset,
+		)
+	const within = Math.min(offset - starts[index], block.source.length)
+	return (
+		offsetsOf(after)[kept] +
+		shiftedOffset(block.source, after.blocks[kept].source, within)
+	)
+}
+
 const withEmptyBlockAt = (
 	document: LibraryBlockDocument,
 	at: number,
-	nextId: BlockIds,
+	ids: BlockIds,
 ): LibraryBlockDocument => {
 	const markdown = serializeBlocks(document)
 	const offsets = offsetsOf(document)
@@ -174,7 +370,7 @@ const withEmptyBlockAt = (
 		return document
 
 	const { lead, blocks } = document
-	const emptyBlock = (gap: string) => ({ id: nextId(), source: "", gap })
+	const emptyBlock = (gap: string) => ({ id: ids.fresh(), source: "", gap })
 	if (at <= lead.length)
 		return {
 			lead: lead.slice(0, at),
@@ -182,7 +378,7 @@ const withEmptyBlockAt = (
 		}
 	const index = offsets.findLastIndex((start) => start < at)
 	const block = blocks[index]
-	const within = at - offsets[index] - block.source.length
+	const within = at - offsets[index] - markdownOf(block).length
 	if (within < 0) return document
 	return {
 		lead,
@@ -198,23 +394,26 @@ const withEmptyBlockAt = (
 const withEmptyBlocksAt = (
 	document: LibraryBlockDocument,
 	offsets: number[],
-	nextId: BlockIds,
-) =>
-	offsets.reduce((seeded, at) => withEmptyBlockAt(seeded, at, nextId), document)
+	ids: BlockIds,
+) => offsets.reduce((seeded, at) => withEmptyBlockAt(seeded, at, ids), document)
 
 const keepIds = (
 	previous: LibraryBlock[],
 	next: LibraryBlockDocument,
-): LibraryBlockDocument => ({
-	...next,
-	blocks: next.blocks.map((block, index) => ({
-		...block,
-		id: previous[index]?.id ?? block.id,
-	})),
-})
-
-const withBlankLine = (gap: string) =>
-	gap.includes(BLOCK_GAP) ? gap : BLOCK_GAP
+): LibraryBlockDocument => {
+	const unnamed = previous.filter((block) => !carriesId(block))
+	const named = new Set(next.blocks.filter(carriesId).map(({ id }) => id))
+	return {
+		...next,
+		blocks: next.blocks.map((block) => {
+			if (carriesId(block)) return block
+			const at = unnamed.findIndex(
+				({ id, source }) => source === block.source && !named.has(id),
+			)
+			return at === -1 ? block : { ...block, id: unnamed.splice(at, 1)[0].id }
+		}),
+	}
+}
 
 const relaid = (
 	previous: LibraryBlock[],
@@ -479,6 +678,7 @@ const withColumn = (rows: string[][]) =>
 export {
 	type BlockIds,
 	type BlockRecord,
+	blockIdsOf,
 	blockTypeOf,
 	type ChecklistRow,
 	calloutTextOf,
@@ -498,6 +698,7 @@ export {
 	type LibraryBlockDocument,
 	type LibraryBlockType,
 	MARKERS,
+	marked,
 	movedTo,
 	offsetsOf,
 	parseBlocks,
@@ -505,6 +706,7 @@ export {
 	rowAfter,
 	type SourceEdit,
 	serializeBlocks,
+	shiftedAcross,
 	shiftedOffset,
 	tableRowsOf,
 	tableSourceOf,

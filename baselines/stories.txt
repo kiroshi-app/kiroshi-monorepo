@@ -1777,6 +1777,12 @@ navigation-librarydocumentblockeditor--agents-writing
 navigation-librarydocumentblockeditor--autolink-shows-its-text
 navigation-librarydocumentblockeditor--backspace-at-the-start-turns-into-text
 navigation-librarydocumentblockeditor--block-handle-menu
+navigation-librarydocumentblockeditor--block-id-fresh-for-a-new-block
+navigation-librarydocumentblockeditor--block-id-kept-on-the-first-half-of-a-split
+navigation-librarydocumentblockeditor--block-id-kept-through-an-edit
+navigation-librarydocumentblockeditor--block-id-kept-when-an-agent-inserts-before
+navigation-librarydocumentblockeditor--block-id-leaves-with-a-deleted-block
+navigation-librarydocumentblockeditor--block-id-travels-with-a-moved-block
 navigation-librarydocumentblockeditor--bubble-and-document-parity
 navigation-librarydocumentblockeditor--callout-body-shows-its-marks
 navigation-librarydocumentblockeditor--callout-tone-switch
