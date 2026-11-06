@@ -1888,19 +1888,17 @@ const playUrlDraggedOver = async ({
 	await waitFor(() => expect(dropState()).not.toBeNull())
 }
 
+const TERRACE: BoardItem = {
+	id: "terrace",
+	kind: "image",
+	position: { x: 40, y: 40 },
+	size: PASTED_IMAGE_SIZE,
+	zOrder: 1,
+	text: "terrace-at-dusk.png",
+}
+
 const URL_DRAG_ARGS = {
-	view: {
-		objects: [
-			{
-				id: "terrace",
-				kind: "image",
-				position: { x: 40, y: 40 },
-				size: PASTED_IMAGE_SIZE,
-				zOrder: 1,
-				text: "terrace-at-dusk.png",
-			} satisfies BoardItem,
-		],
-	},
+	view: { objects: [TERRACE] },
 	renderObject: (object: BoardItem) => <BoardObjectView object={object} />,
 }
 
