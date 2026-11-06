@@ -165,3 +165,10 @@ The kept core of `apps/app/src-tauri` moves to a crate with no Tauri dependency,
 - **Mock-app tests.** Tests that build Tauri mock apps stay in src-tauri next to the commands they exercise, for example `claude_import/tests.rs`. Rewriting them onto a test `Core` is a separate step.
 - **Agent host, session and sidecar.** They moved with `logging::stderr_lines`. The `Refusal` impls of the host error types moved beside those types. The sidecar's development lookup still reads `apps/app/src-tauri/binaries`. A kiroshi-core build script exports the target triple that tauri-build used to provide.
 - **Where per-module moves stop.** Every file left in conversations and companions has an inline `mod tests` built on Tauri mock apps (`host_turn.rs` alone has 30 uses). So do `agent::commands`, `reply_writer`, `routines::runner` and missions. Inline tests travel with their file and kiroshi-core can't depend on Tauri, so these files can't move until their tests run on a test `Core`.
+- **Remaining modules: split, convert, move.** Each remaining module lands as three commits:
+  1. The Tauri commands its tests call get a Core function and a thin wrapper.
+  2. Its inline tests switch to those Core functions on a test `Core`.
+  3. The module moves.
+
+  The split is done for conversations and companions. The test `Core` will be built behind `test-support`: a `Core` over a temporary folder, on a shared multi-thread runtime as Tauri's was. Mock-app helpers in `agent::commands` and `agent::stub_session` that these tests use get Core versions in the same conversion commit.
+- **`bindings.ts`.** It is checked against the branch's merge base with main. main has since added commands (OPE-1945), so a plain `git diff origin/main` shows their 31 lines until main is merged in.
