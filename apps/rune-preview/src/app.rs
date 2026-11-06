@@ -291,29 +291,23 @@ impl App {
 	}
 
 	pub fn agent_name(&self, bot_id: &str) -> Option<String> {
-		let seated = self
-			.thread
-			.as_ref()
-			.and_then(|thread| thread.seats.iter().find(|seat| seat.bot_id == bot_id));
-		if let Some(seat) = seated {
-			return Some(seat.name.clone());
-		}
-		self.ready()?.agents.iter().find(|agent| agent.id == bot_id).map(|agent| agent.name.clone())
+		self.known_agent(bot_id).map(|(name, _)| name.to_owned())
 	}
 
 	pub fn agent_hue(&self, bot_id: &str) -> Option<f32> {
+		self.known_agent(bot_id).and_then(|(_, hue)| hue)
+	}
+
+	fn known_agent(&self, bot_id: &str) -> Option<(&str, Option<f32>)> {
 		let seated = self
 			.thread
 			.as_ref()
 			.and_then(|thread| thread.seats.iter().find(|seat| seat.bot_id == bot_id));
 		if let Some(seat) = seated {
-			return seat.hue;
+			return Some((seat.name.as_str(), seat.hue));
 		}
-		self.ready()?
-			.agents
-			.iter()
-			.find(|agent| agent.id == bot_id)
-			.and_then(|agent| agent.avatar_blot)
+		let agent = self.ready()?.agents.iter().find(|agent| agent.id == bot_id)?;
+		Some((agent.name.as_str(), agent.avatar_blot))
 	}
 
 	pub fn mention_candidates(&self) -> Vec<&Seat> {
