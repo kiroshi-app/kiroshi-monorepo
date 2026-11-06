@@ -265,18 +265,72 @@ const markerOf = (name: string, source: string, id: string) => {
 	return `${fence ? `\n${fence}` : ""}${BLOCK_GAP}^${id}`
 }
 
-const writtenOf = (source: string, id: string, ids: BlockIds) =>
-	readBlocksOf(source, 0)
-		.map(({ name, from, to }) => ({
+type Part = {
+	name: string
+	text: string
+	id?: string
+}
+
+const partsOf = (markdown: string): Part[] =>
+	readBlocksOf(markdown, 0)
+		.map(({ name, from, to, id }) => ({
 			name,
-			text: withoutMarkers(source.slice(from, to)),
+			id,
+			text: withoutMarkers(markdown.slice(from, to)),
 		}))
 		.filter(({ text }) => text.trim() !== "")
-		.map(
-			({ name, text }, index) =>
-				text + markerOf(name, text, index === 0 ? id : ids.fresh()),
-		)
+
+const keptPartIds = (parts: Part[], previous: Part[]) => {
+	const sameAt = (index: number, previousIndex: number) =>
+		parts[index]?.text === previous[previousIndex]?.text
+	let tail = 0
+	while (
+		tail < Math.min(parts.length, previous.length) - 1 &&
+		sameAt(parts.length - 1 - tail, previous.length - 1 - tail)
+	)
+		tail++
+	return parts.map((_, index) => {
+		const fromEnd = parts.length - index
+		if (fromEnd <= tail) return previous[previous.length - fromEnd].id
+		return index < previous.length - tail ? previous[index].id : undefined
+	})
+}
+
+const writtenOf = ({ id, source, written }: LibraryBlock, ids: BlockIds) => {
+	const parts = partsOf(source)
+	const kept = keptPartIds(parts, written === undefined ? [] : partsOf(written))
+	const used = new Set([id])
+	return parts
+		.map(({ name, text }, index) => {
+			const reused = kept[index]
+			const partId =
+				index === 0
+					? id
+					: reused !== undefined && !used.has(reused)
+						? reused
+						: ids.fresh()
+			used.add(partId)
+			return text + markerOf(name, text, partId)
+		})
 		.join(BLOCK_GAP)
+}
+
+const withoutIdMarkers = (markdown: string) => {
+	const { topNode } = markdownLanguage.parser.parse(markdown)
+	let shown = markdown.slice(0, topNode.firstChild?.from ?? markdown.length)
+	let hasKept = false
+	for (let node = topNode.firstChild; node; node = node.nextSibling) {
+		const text = markdown.slice(node.from, node.to)
+		const kept = INLINE_MARKED_NODE.test(node.name)
+			? withoutMarkers(text)
+			: text
+		if (node.name === "Paragraph" && kept.trim() === "") continue
+		if (hasKept) shown += markdown.slice(node.prevSibling?.to ?? 0, node.from)
+		shown += kept
+		hasKept = true
+	}
+	return shown + markdown.slice(topNode.lastChild?.to ?? markdown.length)
+}
 
 const isBlank = ({ source }: LibraryBlock) => source.trim() === ""
 
@@ -307,7 +361,7 @@ const marked = (
 			? undefined
 			: carriesId(block)
 				? block.written
-				: writtenOf(block.source, block.id, ids)
+				: writtenOf(block, ids)
 		const next = document.blocks[index + 1]
 		return {
 			...block,
@@ -722,6 +776,7 @@ export {
 	withColumn,
 	withEmptyBlocksAt,
 	withGalleryItems,
+	withoutIdMarkers,
 	withRow,
 	withRowText,
 	withWebPageFields,

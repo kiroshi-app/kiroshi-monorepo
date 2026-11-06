@@ -1829,6 +1829,7 @@ navigation-librarydocumentblockeditor--inline-image-is-one-node
 navigation-librarydocumentblockeditor--insert-below-puts-caret
 navigation-librarydocumentblockeditor--narrow-column
 navigation-librarydocumentblockeditor--nested-list-keeps-its-indent
+navigation-librarydocumentblockeditor--pasted-marker-never-shows
 navigation-librarydocumentblockeditor--person-caret-at-block-edges
 navigation-librarydocumentblockeditor--pointer-drag-selects-across-a-mark
 navigation-librarydocumentblockeditor--shortcuts-on-focused-block

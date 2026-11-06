@@ -1524,6 +1524,27 @@ export const BlockIdFreshForANewBlock = meta.story({
 	},
 })
 
+export const PastedMarkerNeverShows = meta.story({
+	tags: ["test-only"],
+	args: { body: IDENTIFIED_DOCUMENT },
+	play: async ({ args, canvasElement, userEvent }) => {
+		const kept = "The call starts at ten."
+		const shown = `${kept} Bring the deck.`
+		const field = await focusBlockWith(canvasElement, kept)
+		selectInField(field, kept.length)
+		await userEvent.paste(" Bring the deck. ^abc123")
+		await waitFor(() => expect(shownIn(field)).toBe(shown))
+		await expect(fieldSelectionOf(field)?.start).toBe(shown.length)
+		await expect(writtenIn(args)).toBe(IDENTIFIED_DOCUMENT.replace(kept, shown))
+		field.blur()
+		await waitFor(() =>
+			expect(blockWith(canvasElement, "Bring the deck")).toHaveTextContent(
+				new RegExp(`^${shown}$`),
+			),
+		)
+	},
+})
+
 type AgentWritingFrameProps = BodyArgs & { body: string }
 
 const AGENT_BLOCK = "The agent adds a line. ^agent1"

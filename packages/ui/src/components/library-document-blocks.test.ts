@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
 import {
 	LIBRARY_AGENT_DOCUMENT,
@@ -41,6 +41,7 @@ import {
 	withColumn,
 	withEmptyBlocksAt,
 	withGalleryItems,
+	withoutIdMarkers,
 	withRow,
 	withRowText,
 	withWebPageFields,
@@ -624,6 +625,97 @@ describe("block ids written by the editor", () => {
 
 		expect(fresh.every((id) => ID.test(id))).toBe(true)
 		expect(new Set([...fresh, "aaaaaa"]).size).toBe(501)
+	})
+})
+
+describe("block ids while a block holds several parts", () => {
+	const typedInto = (
+		block: LibraryBlock,
+		source: string,
+		ids = blockIdsOf(),
+	): LibraryBlock =>
+		marked({ lead: "", blocks: [{ ...block, source }] }, ids).blocks[0]
+
+	const idsWritten = (block: LibraryBlock) => savedIdsOf(block.written ?? "")
+
+	it("writes the same id for every part after the first on each keystroke", () => {
+		const ids = blockIdsOf()
+		const first = typedInto(
+			{ id: "aaaaaa", source: "", gap: "" },
+			"One.\n\nTwo.",
+			ids,
+		)
+		const [, second] = idsWritten(first)
+		const typed = typedInto(first, "One.\n\nTwo, typed.", ids)
+		const again = typedInto(typed, "One, typed.\n\nTwo, typed.", ids)
+
+		expect(second).toMatch(ID)
+		expect(idsWritten(typed)).toEqual(["aaaaaa", second])
+		expect(idsWritten(again)).toEqual(["aaaaaa", second])
+	})
+
+	it("gives only an added part a fresh id, wherever it lands", () => {
+		const ids = blockIdsOf()
+		const three = typedInto(
+			{ id: "aaaaaa", source: "", gap: "" },
+			"One.\n\nTwo.\n\nThree.",
+			ids,
+		)
+		const [, two, last] = idsWritten(three)
+		const appended = idsWritten(
+			typedInto(three, "One.\n\nTwo.\n\nThree.\n\nFour.", ids),
+		)
+		const inserted = idsWritten(
+			typedInto(three, "One.\n\nNew.\n\nTwo.\n\nThree.", ids),
+		)
+
+		expect(appended.slice(0, 3)).toEqual(["aaaaaa", two, last])
+		expect(appended[3]).toMatch(ID)
+		expect([two, last]).not.toContain(appended[3])
+		expect([inserted[0], inserted[2], inserted[3]]).toEqual([
+			"aaaaaa",
+			two,
+			last,
+		])
+		expect(inserted[1]).toMatch(ID)
+		expect([two, last]).not.toContain(inserted[1])
+	})
+})
+
+describe("withoutIdMarkers", () => {
+	it("strips every marker from pasted text and keeps its code", () => {
+		expect(
+			withoutIdMarkers(
+				"^stray1\n\n# Title ^aaaaaa\nBody. ^bbbbbb ^cccccc\n\n- item\n\n^dddddd\n\n```\n^code12\n```",
+			),
+		).toBe("# Title\nBody.\n\n- item\n\n```\n^code12\n```")
+	})
+
+	it("leaves text with no marker exactly as pasted", () => {
+		const pasted = "First thought.\n\nSecond ^ thought.\n\nThird thought."
+
+		expect(withoutIdMarkers(pasted)).toBe(pasted)
+		expect(withoutIdMarkers(" Bring the deck. ^abc123")).toBe(
+			" Bring the deck.",
+		)
+	})
+
+	it("keeps a pasted marker out of the saved markdown and the held ids", () => {
+		const ids = blockIdsOf()
+		const hold = vi.spyOn(ids, "hold")
+		const document = marked(
+			{
+				lead: "",
+				blocks: [{ id: "aaaaaa", source: "Body. ^abc123", gap: "" }],
+			},
+			ids,
+		)
+		const saved = serializeBlocks(document)
+		parseBlocks(saved, ids)
+
+		expect(saved).not.toContain("abc123")
+		expect(hold).toHaveBeenCalledWith("aaaaaa")
+		expect(hold).not.toHaveBeenCalledWith("abc123")
 	})
 })
 
