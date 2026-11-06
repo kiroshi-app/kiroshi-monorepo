@@ -46,6 +46,7 @@ type ReportedPreferences = Partial<
 
 export type UserState = {
 	preferences: ReaderPreferences
+	hasLoaded: boolean
 }
 
 export type UserController = {
@@ -98,6 +99,7 @@ const recordOf = (record: UserPreferences): ReaderPreferences => ({
 export const createUserController = (): UserController => {
 	const stateStore = createStore<UserState>({
 		preferences: openingPreferences(),
+		hasLoaded: false,
 	})
 	const current = stateStore.getState
 
@@ -126,6 +128,8 @@ export const createUserController = (): UserController => {
 	}
 
 	const restore = () => apply(answered)
+
+	const markLoaded = () => set({ hasLoaded: true })
 
 	const flush = async (): Promise<void> => {
 		const displayName = pendingName
@@ -208,7 +212,7 @@ export const createUserController = (): UserController => {
 			}
 		},
 
-		load: () => readPreferences().then(apply).catch(restore),
+		load: () => readPreferences().then(apply).catch(restore).then(markLoaded),
 
 		rename: (displayName: string) => {
 			show({ ...current().preferences, displayName })

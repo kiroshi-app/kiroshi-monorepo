@@ -360,8 +360,6 @@ const rosterIn = <Row>(
 
 const isJoined = ({ spaceRowId }: RosterSpace) => isJoinedRowId(spaceRowId)
 
-const isLocal = (space: RosterSpace) => !isJoined(space)
-
 const isRowOfHost = (spaceRowId: string, hostId: string | null) =>
 	hostId === null
 		? !isJoinedRowId(spaceRowId)
@@ -521,7 +519,7 @@ const rosterBaseOf = (
 		spaceRowId: choice.spaceRowId,
 		...landingIn(choice, rosters, conversationRosters),
 		hasLoaded: choice.hasLoaded,
-		hasFailedToLoad: failures.includes(true),
+		hasFailedToLoad: failures[chosenIndex] ?? false,
 		isRosterPending: pendings[chosenIndex] ?? false,
 	}
 }
@@ -1080,21 +1078,14 @@ export const createRosterController = (
 		},
 	})
 
-	const isReadyToOpen = (space: RosterSpace) =>
-		isJoined(space) || rosterReadIn(space.spaceRowId) !== undefined
-
 	const readRosterOf = ({ spaceRowId }: RosterSpace) =>
 		queryClient.prefetchInfiniteQuery(rosterQuery(spaceRowId))
 
 	const load = async ({ spaces, spaceRowId, lastRowId }: RosterOpening) => {
 		spaces.forEach(learn)
-		choose({ spaces, spaceRowId, lastRowId })
-		const joinedReads = Promise.all(spaces.filter(isJoined).map(readRosterOf))
-		await Promise.all(spaces.filter(isLocal).map(readRosterOf))
-		if (spaces.every(isReadyToOpen)) {
-			choose({ hasLoaded: true })
-		}
-		await joinedReads
+		const reads = Promise.all(spaces.map(readRosterOf))
+		choose({ spaces, spaceRowId, lastRowId, hasLoaded: true })
+		await reads
 	}
 
 	return {
