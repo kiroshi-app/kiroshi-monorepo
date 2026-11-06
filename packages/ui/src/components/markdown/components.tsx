@@ -11,6 +11,7 @@ import {
 	MarkdownPre,
 	MarkdownStaticPre,
 } from "@workspace/ui/components/markdown/code"
+import { MARKDOWN_HEADINGS } from "@workspace/ui/components/markdown/heading"
 import {
 	MarkdownLink,
 	MarkdownStaticLink,
@@ -31,6 +32,7 @@ import {
 } from "@workspace/ui/components/markdown/task-list"
 
 export const MARKDOWN_COMPONENTS: Components = {
+	...MARKDOWN_HEADINGS,
 	a: MarkdownLink,
 	blockquote: MarkdownBlockquote,
 	code: MarkdownCode,

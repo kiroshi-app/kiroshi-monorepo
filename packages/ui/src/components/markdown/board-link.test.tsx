@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
 import { I18nProvider } from "@workspace/ui/components/i18n-provider"
 import { Markdown, type MarkdownProps } from "@workspace/ui/components/markdown"
@@ -92,5 +92,29 @@ describe("Markdown board links", () => {
 				onOpenAttachment: () => {},
 			}),
 		).toBe(render({ children: source, onOpenAttachment: () => {} }))
+	})
+
+	it.each([
+		[
+			"a heading",
+			"# See [the plan](plan.canvas)\n\n### [Plan](plan.canvas)",
+			"the plan",
+		],
+		[
+			"an answer-block option label",
+			'```options\nquestion: Which board?\n- title: "[Plan](plan.canvas)"\n  text: "[Plan](plan.canvas)"\n```',
+			"[Plan](plan.canvas)",
+		],
+		[
+			"an illustrated-list description",
+			"```illustrated-list\n- title: Lisbon\n  image: https://images.example.org/lisbon.jpg\n  text: See [the plan](plan.canvas) first.\n```",
+			"See the plan first.",
+		],
+	])("never hands the slot a link inside %s", (_, source, words) => {
+		const renderBoardLink = vi.fn(renderBoard)
+		const html = render({ children: source, renderBoardLink })
+		expect(renderBoardLink).not.toHaveBeenCalled()
+		expect(html).toContain(words)
+		expect(html).toBe(render({ children: source }))
 	})
 })
