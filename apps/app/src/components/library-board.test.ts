@@ -20,6 +20,7 @@ import type {
 	BoardLibraryItem,
 	BoardTool,
 } from "@workspace/ui/components/board/board-dock"
+import { hueTone } from "@workspace/ui/components/hue-palette"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { LibraryBoard } from "@/components/library-board"
@@ -152,6 +153,7 @@ const fakeHost = () => {
 	})
 	vi.mocked(openLibraryDocument).mockImplementation(async () => openedState())
 	vi.mocked(applyLibraryUpdate).mockResolvedValue(null)
+	vi.mocked(invoke).mockResolvedValue(null)
 	const announce = (update: string, name = NAME) =>
 		act(() =>
 			heard?.({
@@ -222,6 +224,7 @@ type BoardElementOptions = {
 	importFiles?: Importer
 	name?: string
 	summary?: LibraryBoardSummary
+	isJoined?: boolean
 }
 
 const boardElement = ({
@@ -229,10 +232,11 @@ const boardElement = ({
 	importFiles = NO_IMPORTS,
 	name = NAME,
 	summary = SUMMARY,
+	isJoined = false,
 }: BoardElementOptions = {}) =>
 	createElement(LibraryBoard, {
 		spaceId: SPACE_ID,
-		isJoined: false,
+		isJoined,
 		bots: BOTS,
 		name,
 		title: "Roadmap",
@@ -273,18 +277,29 @@ const expectNeitherSkeletonNorEmptyHint = () => {
 	).toBeNull()
 }
 
-const mountBoard = async (importFiles?: Importer) => {
+type MountedBoardOptions = {
+	importFiles?: Importer
+	isJoined?: boolean
+}
+
+const mountBoardWith = async ({
+	importFiles,
+	isJoined,
+}: MountedBoardOptions) => {
 	const host = fakeHost()
 	const { wrapper, queryClient } = createQueryTestWrapper()
-	const mounted = render(boardElement({ importFiles }), { wrapper })
+	const mounted = render(boardElement({ importFiles, isJoined }), { wrapper })
 	await screen.findByRole("option", { name: textNamed("First") })
 	return {
 		...host,
 		...mounted,
 		queryClient,
-		rerenderBoard: () => mounted.rerender(boardElement({ importFiles })),
+		rerenderBoard: () =>
+			mounted.rerender(boardElement({ importFiles, isJoined })),
 	}
 }
+
+const mountBoard = (importFiles?: Importer) => mountBoardWith({ importFiles })
 
 const focusObject = (text: string) => {
 	const object = objectNamed(text) as HTMLElement
@@ -315,6 +330,7 @@ afterEach(() => {
 	vi.mocked(readLinkPreview).mockReset()
 	vi.mocked(importLibraryUrl).mockReset()
 	vi.restoreAllMocks()
+	vi.useRealTimers()
 })
 
 describe("a Library board on its live session", () => {
@@ -1055,10 +1071,12 @@ const seatOf = (
 	kind: LibraryWriter["kind"],
 	nodeId: string | null,
 	name: string | null = null,
+	hue?: number,
 ): LibraryWriter => ({
 	id,
 	kind,
 	name,
+	hue,
 	at: { kind: "board", point: { x: 40, y: 20 }, nodeId },
 })
 
@@ -1079,6 +1097,15 @@ const stopAllButton = () =>
 	screen.getByRole("button", {
 		name: common("library.document.agents.stopAll"),
 	})
+
+const presenceStyleOf = (slot: string) =>
+	(document.querySelector(`[data-slot="${slot}"]`) as HTMLElement).style
+
+const presenceInkOf = (slot: string) =>
+	presenceStyleOf(slot).getPropertyValue("--board-presence")
+
+const hueAccentOf = (slot: string) =>
+	presenceStyleOf(slot).getPropertyValue("--hue-light-accent")
 
 const stopCalls = () =>
 	vi
@@ -1150,7 +1177,26 @@ describe("presence on a Library board", () => {
 		expect(raiseReportedFailure).not.toHaveBeenCalled()
 	})
 
-	it("raises a notice when Stop all fails", async () => {
+	it("draws a person's pointer and outline in the hue their presence carries", async () => {
+		const { announcePresence } = await mountBoard()
+
+		announcePresence([seatOf("window-2", "person", "first", "Lena", 210)])
+
+		const accent = hueTone(210, "light", "accent").hex
+		expect(presenceInkOf("board-pointer")).toBe(accent)
+		expect(presenceInkOf("board-object-outline")).toBe(accent)
+	})
+
+	it("leaves a person with no hue untinted", async () => {
+		const { announcePresence } = await mountBoard()
+
+		announcePresence([seatOf("window-2", "person", "first", "Lena")])
+
+		expect(hueAccentOf("board-pointer")).toBe("")
+		expect(hueAccentOf("board-object-outline")).toBe("")
+	})
+
+	it("raises the board notice when Stop all fails", async () => {
 		const { announcePresence } = await mountBoard()
 		vi.mocked(invoke).mockRejectedValue({ kind: "unreachable" })
 		announcePresence([seatOf(ATLAS_ID, "agent", "first")])
@@ -1159,9 +1205,158 @@ describe("presence on a Library board", () => {
 
 		await waitFor(() =>
 			expect(raiseReportedFailure).toHaveBeenCalledWith(
-				{ title: common("library.failure.document.stopAll") },
+				{ title: common("library.failure.board.stopAll") },
 				expect.objectContaining({ raisedIn: "use-stop-library-writers" }),
 			),
 		)
+	})
+})
+
+const sharedSeats = () =>
+	vi
+		.mocked(invoke)
+		.mock.calls.filter(([command]) => command === "library_share_presence")
+		.map(([, args]) => (args as { at: unknown }).at)
+
+const lastSharedSeat = () => sharedSeats().at(-1)
+
+const seatAt = (x: number, y: number, nodeId: string | null = null) => ({
+	kind: "board",
+	point: { x, y },
+	nodeId,
+})
+
+const movePointer = (x: number, y: number) =>
+	fireEvent.pointerMove(boardCanvas(), { clientX: x, clientY: y })
+
+const leaveCanvas = () => fireEvent.pointerLeave(boardCanvas())
+
+const waitPointerInterval = (ms = 50) =>
+	act(() => {
+		vi.advanceTimersByTime(ms)
+	})
+
+const mountSharingBoard = async (isJoined = false) => {
+	const mounted = await mountBoardWith({ isJoined })
+	vi.useFakeTimers()
+	return mounted
+}
+
+describe("sharing the own pointer and selection on a Library board", () => {
+	it("shares the pointer at most once every 50 ms and always sends the last position", async () => {
+		const { rerenderBoard } = await mountSharingBoard()
+
+		movePointer(10, 20)
+		movePointer(11, 21)
+		rerenderBoard()
+		movePointer(12, 22)
+		expect(sharedSeats()).toEqual([seatAt(10, 20)])
+
+		await waitPointerInterval(49)
+		expect(sharedSeats()).toEqual([seatAt(10, 20)])
+
+		await waitPointerInterval(1)
+		expect(sharedSeats()).toEqual([seatAt(10, 20), seatAt(12, 22)])
+
+		await waitPointerInterval(200)
+		expect(sharedSeats()).toHaveLength(2)
+	})
+
+	it("shares a selection at once with the last pointer position, outside the throttle", async () => {
+		await mountSharingBoard()
+		movePointer(10, 20)
+		movePointer(30, 40)
+
+		focusObject("First")
+
+		expect(sharedSeats()).toEqual([seatAt(10, 20), seatAt(30, 40, "first")])
+		await waitPointerInterval(200)
+		expect(sharedSeats()).toHaveLength(2)
+	})
+
+	it("shares no position once the pointer leaves with nothing selected", async () => {
+		await mountSharingBoard()
+		movePointer(10, 20)
+
+		leaveCanvas()
+		await waitPointerInterval()
+
+		expect(sharedSeats()).toEqual([seatAt(10, 20), null])
+	})
+
+	it("keeps the seat at the last position with the selected object once the pointer leaves", async () => {
+		await mountSharingBoard()
+		movePointer(10, 20)
+		focusObject("First")
+
+		leaveCanvas()
+		await waitPointerInterval()
+
+		expect(lastSharedSeat()).toEqual(seatAt(10, 20, "first"))
+	})
+
+	it("shares no position once on unmount and nothing after", async () => {
+		const { unmount } = await mountSharingBoard()
+		movePointer(10, 20)
+		movePointer(30, 40)
+
+		unmount()
+		await waitPointerInterval(200)
+
+		expect(sharedSeats()).toEqual([seatAt(10, 20), null])
+	})
+
+	it("shares nothing on unmount when the pointer never reached the board", async () => {
+		const { unmount } = await mountSharingBoard()
+
+		unmount()
+
+		expect(sharedSeats()).toEqual([])
+	})
+
+	it("saves a board edit on its own schedule while a pointer share waits", async () => {
+		const { unmount } = await mountSharingBoard()
+		movePointer(10, 20)
+		movePointer(30, 40)
+
+		fireEvent.keyDown(focusObject("Second"), { key: "Delete" })
+		unmount()
+
+		await vi.waitFor(() => expect(applyLibraryUpdate).toHaveBeenCalledOnce())
+		expect(sharedSeats()).toEqual([
+			seatAt(10, 20),
+			seatAt(30, 40, "second"),
+			seatAt(30, 40),
+			null,
+		])
+	})
+
+	it("logs a failed share without a notice", async () => {
+		await mountSharingBoard()
+		const logged = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => undefined)
+		vi.mocked(invoke).mockRejectedValue({ kind: "unreachable" })
+
+		movePointer(10, 20)
+		await act(() => Promise.resolve())
+
+		expect(logged).toHaveBeenCalledWith(
+			"library: the board pointer could not be shared",
+			{ kind: "unreachable" },
+		)
+		expect(raiseReportedFailure).not.toHaveBeenCalled()
+	})
+
+	it("shares the pointer the same way in a joined Space", async () => {
+		await mountSharingBoard(true)
+
+		movePointer(10, 20)
+
+		expect(vi.mocked(invoke)).toHaveBeenCalledWith("library_share_presence", {
+			spaceId: SPACE_ID,
+			name: NAME,
+			at: seatAt(10, 20),
+		})
 	})
 })

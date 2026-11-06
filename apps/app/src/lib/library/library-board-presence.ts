@@ -25,10 +25,15 @@ export type LibraryBoardPresence = {
 	people: BoardPresenceOwner[]
 }
 
+const personOf = ({ id, name, hue }: LibraryWriter): BoardPresenceOwner => ({
+	kind: "person",
+	id,
+	name: name ?? "",
+	...(hue == null ? {} : { hue }),
+})
+
 const ownerOf = (writer: LibraryWriter, bots: Bot[]): BoardPresenceOwner =>
-	writer.kind === "agent"
-		? agentOwnerOf(writer, bots)
-		: { kind: "person", id: writer.id, name: writer.name ?? "" }
+	writer.kind === "agent" ? agentOwnerOf(writer, bots) : personOf(writer)
 
 const seatsOnBoard = (writers: LibraryWriter[], bots: Bot[]): BoardSeat[] =>
 	writers.flatMap((writer) =>
