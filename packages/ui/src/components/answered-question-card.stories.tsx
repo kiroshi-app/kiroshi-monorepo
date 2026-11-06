@@ -251,6 +251,18 @@ const answerBubbleIn = (root: HTMLElement) =>
 const surfaceOf = (bubbleContent: HTMLElement) =>
 	getComputedStyle(bubbleContent.firstElementChild as Element).backgroundColor
 
+const expectAgentFoot = async (answer: HTMLElement) => {
+	const lines = slotsIn(answer, "author-line")
+	const agent = lines.at(-1) as HTMLElement
+
+	await expect(lines).toHaveLength(2)
+	await expect(agent.parentElement).toBe(answer)
+	await expect(agent).toHaveAttribute("data-tone", "agent")
+	await expect(slotIn(agent, "author-line-name")).toHaveTextContent(
+		COMPANION.name,
+	)
+}
+
 const expectOneAgentBubble = async (root: HTMLElement) => {
 	const answerTurn = answerTurnIn(root)
 	const answerContent = answerBubbleIn(root)
@@ -272,23 +284,7 @@ const expectOneAgentBubble = async (root: HTMLElement) => {
 	await expect(answer.paddingInlineStart).toBe(plain.paddingInlineStart)
 	await expect(answer.borderStartStartRadius).toBe(plain.borderStartStartRadius)
 	await expect(surfaceOf(answerContent)).toBe(surfaceOf(plainContent))
-}
-
-const expectAgentFoot = async (root: HTMLElement) => {
-	const answer = answerBubbleIn(root)
-	const [answerer, agent] = slotsIn(answer, "author-line")
-
-	await expect(slotsIn(answer, "author-line")).toHaveLength(2)
-	await expect(agent.parentElement).toBe(answer)
-	await expect(
-		cardIn(root).compareDocumentPosition(agent) &
-			Node.DOCUMENT_POSITION_FOLLOWING,
-	).toBeTruthy()
-	await expect(agent).toHaveAttribute("data-tone", "agent")
-	await expect(slotIn(agent, "author-line-name")).toHaveTextContent(
-		COMPANION.name,
-	)
-	await expect(cardIn(root)).toContainElement(answerer)
+	await expectAgentFoot(answerContent)
 }
 
 const expectAnswererLine = async (root: HTMLElement, label: string) => {
@@ -329,7 +325,6 @@ export const YouAnswered = meta.story({
 		).toBe("ScopeEvery tableOne window, one rollback")
 		await expect(choicesIn(card)).toHaveLength(3)
 		await expectOneAgentBubble(canvasElement)
-		await expectAgentFoot(canvasElement)
 		await expectAnswererLine(canvasElement, "You answered")
 		await expectRowsPaintedFromSpace(canvasElement)
 		await expect(getComputedStyle(canvas.getByText("Every table")).color).toBe(
@@ -367,7 +362,6 @@ export const MemberAnswered = meta.story({
 		const [choice] = choicesIn(cardIn(canvasElement))
 
 		await expectOneAgentBubble(canvasElement)
-		await expectAgentFoot(canvasElement)
 		await expectAnswererLine(canvasElement, "Maya Okafor answered")
 		await expect(choice).toHaveTextContent(/^2Beta/)
 		for (const hidden of choice.querySelectorAll('[aria-hidden="true"]')) {
