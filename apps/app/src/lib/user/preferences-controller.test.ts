@@ -270,6 +270,28 @@ describe("the window before the host has answered", () => {
 	it("opens on the defaults when nothing has been mirrored", () => {
 		expect(createUserController().getState().preferences).toEqual(DEFAULTS)
 	})
+
+	it("says the record is not read until the host answers", async () => {
+		aHost()
+		const controller = createUserController()
+
+		expect(controller.getState().hasLoaded).toBe(false)
+
+		await controller.load()
+
+		expect(controller.getState().hasLoaded).toBe(true)
+	})
+
+	it("says the record is read once the host refuses it", async () => {
+		hostInvoke.mockRejectedValue({
+			kind: "unavailable",
+			failure: { kind: "appDataDir" },
+		})
+
+		const controller = await loaded()
+
+		expect(controller.getState().hasLoaded).toBe(true)
+	})
 })
 
 describe("the theme and the language the host holds", () => {

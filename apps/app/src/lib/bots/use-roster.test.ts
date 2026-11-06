@@ -130,8 +130,10 @@ it("opens on the local spaces while a joined host never answers", async () => {
 		lastRowId: null,
 	})
 
-	await vi.waitFor(() => expect(roster.getState().hasLoaded).toBe(true))
-	expect(roster.getState().bots.map((bot) => bot.id)).toEqual(["default"])
+	await vi.waitFor(() =>
+		expect(roster.getState().bots.map((bot) => bot.id)).toEqual(["default"]),
+	)
+	expect(roster.getState().hasLoaded).toBe(true)
 })
 
 it("knows the solo threads of the local spaces from their pages while a joined read is still out", async () => {
@@ -306,12 +308,12 @@ it("opens on the local spaces while the joined space beside them is offline at l
 
 	expect(roster.getState()).toMatchObject({
 		hasLoaded: true,
-		hasFailedToLoad: true,
+		hasFailedToLoad: false,
 	})
 	expect(roster.getState().bots.map((bot) => bot.id)).toEqual(["default"])
 })
 
-it("holds the launch while the roster of a local space fails beside a joined one", async () => {
+it("opens on the failure of the shown local space beside a joined one", async () => {
 	const store = createFakeTranscriptStore()
 	offlineHostFor(store, LOCAL.spaceId)
 	const roster = mountRoster(store)
@@ -323,7 +325,7 @@ it("holds the launch while the roster of a local space fails beside a joined one
 	})
 
 	expect(roster.getState()).toMatchObject({
-		hasLoaded: false,
+		hasLoaded: true,
 		hasFailedToLoad: true,
 	})
 })

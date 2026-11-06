@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { cleanup } from "@testing-library/react"
+import { cleanup, renderHook, waitFor } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import type { BotSettingsValue } from "@workspace/ui/components/bot-settings"
@@ -14,8 +14,13 @@ import {
 	toSettingsValue,
 } from "./bot-settings"
 import { mountRoster } from "./mounted-roster"
-import type { RosterController } from "./roster-controller"
+import {
+	createRosterController,
+	type RosterController,
+} from "./roster-controller"
+import { useRosterReads } from "./use-roster"
 
+import { useControllerState } from "../use-controller"
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
 import {
 	leadOf,
@@ -24,6 +29,7 @@ import {
 } from "../conversations/roster-conversations"
 import type { Bot, Conversation } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
+import { createQueryTestWrapper } from "../query/query-test-wrapper"
 
 vi.mock("@tauri-apps/api/event", () => ({
 	listen: vi.fn(async () => () => undefined),
@@ -62,6 +68,40 @@ const loaded = async (store: TranscriptStore) => {
 }
 
 const names = (bots: Bot[]) => bots.map((bot) => bot.name)
+
+const ids = (bots: Bot[]) => bots.map((bot) => bot.id)
+
+const useRenderedRoster = (controller: RosterController) => {
+	const state = useControllerState(controller)
+	useRosterReads(controller, state)
+	return state
+}
+
+const renderRoster = (store: TranscriptStore) => {
+	const { queryClient, wrapper } = createQueryTestWrapper()
+	const controller = createRosterController(store, { queryClient })
+	const rendered = renderHook(() => useRenderedRoster(controller), { wrapper })
+	return { controller, ...rendered }
+}
+
+const aStoreWithTwoSpaces = async () => {
+	const store = createFakeTranscriptStore()
+	const elsewhere = await store.createSpace("Vocca")
+	const away = await store.createBot(newBotIdentity([]), elsewhere.id)
+	return { store, elsewhere, away }
+}
+
+const holdBotsOf = (store: TranscriptStore, heldSpaceId: string) => {
+	const gate = Promise.withResolvers<void>()
+	const read = store.bots.bind(store)
+	vi.spyOn(store, "bots").mockImplementation(async (spaceId, signal) => {
+		if (spaceId === heldSpaceId) {
+			await gate.promise
+		}
+		return read(spaceId, signal)
+	})
+	return gate.resolve
+}
 
 const edited = (
 	value: BotSettingsValue,
@@ -232,29 +272,33 @@ describe("createRosterController", () => {
 		expect(controller.getState().selectedBotId).toBe("default")
 	})
 
-	it("says nothing has been read until the rows land", async () => {
-		const controller = mountRoster(await anEmptyStore())
+	it("opens on the spaces it is given before any roster read lands", async () => {
+		const store = createFakeTranscriptStore()
+		vi.spyOn(store, "bots").mockReturnValue(new Promise(() => undefined))
+		const controller = mountRoster(store)
 
 		expect(controller.getState().hasLoaded).toBe(false)
 
-		await controller.load(opening())
+		void controller.load(opening())
 
 		expect(controller.getState().hasLoaded).toBe(true)
+		expect(controller.getState().isRosterPending).toBe(true)
 	})
 
-	it("waits on a refused read until a retry reads the roster", async () => {
+	it("stays open on a refused read and reads the roster again on retry", async () => {
 		const store = createFakeTranscriptStore()
 		const refusal = vi
 			.spyOn(store, "bots")
 			.mockRejectedValue(new Error("no record"))
 		const controller = mountRoster(store)
 		await controller.load(opening())
-		expect(controller.getState().hasLoaded).toBe(false)
+		expect(controller.getState().hasLoaded).toBe(true)
 
 		refusal.mockRestore()
 		await controller.retryLoad()
 
-		expect(controller.getState().hasLoaded).toBe(true)
+		expect(controller.getState().hasFailedToLoad).toBe(false)
+		expect(names(controller.getState().bots)).toEqual(["Claude"])
 	})
 
 	it("reports a roster it could not read instead of an empty sidebar", async () => {
@@ -633,6 +677,74 @@ describe("createRosterController", () => {
 })
 
 describe("createRosterController on a space", () => {
+	it("renders the shown space as soon as its read lands while another space is still read", async () => {
+		const { store, elsewhere, away } = await aStoreWithTwoSpaces()
+		const release = holdBotsOf(store, elsewhere.id)
+		const { controller, result, rerender } = renderRoster(store)
+
+		void controller.load(opening(null, "personal", ["personal", elsewhere.id]))
+		await waitFor(() => expect(result.current.isRosterPending).toBe(false))
+		rerender()
+
+		expect(result.current.hasLoaded).toBe(true)
+		expect(ids(result.current.bots)).toEqual(["default"])
+		expect(ids(result.current.rosters[elsewhere.id])).toEqual([])
+
+		release()
+		await waitFor(() =>
+			expect(ids(result.current.rosters[elsewhere.id])).toEqual([away.id]),
+		)
+		rerender()
+
+		expect(ids(result.current.bots)).toEqual(["default"])
+	})
+
+	it("renders another space as soon as its read lands while the shown space is still read", async () => {
+		const { store, elsewhere, away } = await aStoreWithTwoSpaces()
+		const release = holdBotsOf(store, "personal")
+		const { controller, result, rerender } = renderRoster(store)
+
+		void controller.load(opening(null, "personal", ["personal", elsewhere.id]))
+		await waitFor(() =>
+			expect(ids(result.current.rosters[elsewhere.id])).toEqual([away.id]),
+		)
+		rerender()
+
+		expect(result.current.isRosterPending).toBe(true)
+		expect(result.current.bots).toEqual([])
+
+		release()
+		await waitFor(() => expect(result.current.isRosterPending).toBe(false))
+		rerender()
+
+		expect(ids(result.current.bots)).toEqual(["default"])
+	})
+
+	it("keeps a failed read of a space not shown to that space, with no notice", async () => {
+		const { store, elsewhere } = await aStoreWithTwoSpaces()
+		const read = store.bots.bind(store)
+		vi.spyOn(store, "bots").mockImplementation((spaceId, signal) =>
+			spaceId === elsewhere.id
+				? Promise.reject(new Error("no record"))
+				: read(spaceId, signal),
+		)
+		const controller = mountRoster(store)
+
+		await controller.load(opening(null, "personal", ["personal", elsewhere.id]))
+
+		expect(controller.getState().hasFailedToLoad).toBe(false)
+		expect(names(controller.getState().bots)).toEqual(["Claude"])
+
+		controller.enter({
+			spaceRowId: elsewhere.id,
+			spaceId: elsewhere.id,
+			lastRowId: null,
+		})
+
+		expect(controller.getState().hasFailedToLoad).toBe(true)
+		expect(raiseFailureNotice).not.toHaveBeenCalled()
+	})
+
 	it("reads the roster of every space at launch", async () => {
 		const store = createFakeTranscriptStore()
 		const elsewhere = await store.createSpace("Vocca")
