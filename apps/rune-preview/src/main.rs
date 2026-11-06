@@ -54,9 +54,14 @@ fn view(s: &App, cx: &mut Cx<App>) -> El {
 
 const DEV_HOST: &str = "--dev-host";
 
+const SKIP_ONBOARDING: &str = "--skip-onboarding";
+
 fn setup(s: &mut App, waker: Waker) {
-	if std::env::args().any(|arg| arg == DEV_HOST) {
+	let flagged = |flag: &str| std::env::args().any(|arg| arg == flag);
+	if flagged(DEV_HOST) {
 		s.host_profile = Profile::Dev;
+	}
+	if flagged(DEV_HOST) || flagged(SKIP_ONBOARDING) {
 		s.screen = Screen::Conversations;
 	}
 	s.setup(waker);

@@ -37,6 +37,33 @@ The onboarding comes first. Its last step opens the conversation tab on the inst
 - **Where missions show.** The rail's flag lists `mission_board`. A mission opens its thread: `MissionHeader` (back, 24 px avatar with the attention dot, objective, state pill, ticket band with platform mark, tools, status and "opened …", then the commits and PR line), then the thread conversation's messages with the mission events between them as machine lines or authored bubbles, then "Answer this mission…". A conversation that opened missions shows each one as main's `MissionTurn` card where it was opened. Clicking the card opens the mission.
 - **Live updates.** `mission://changed` from the host socket updates the pill and the running state at once, then rereads `mission_detail`. The read-only check heard one live change on the OPE-1933 mission within 30 s.
 
+## Stage 3 measures
+
+`python3 apps/rune-preview/bench/measure.py` writes `bench/results.json`: every run, its machine load (`os.getloadavg()` before and after) and the tool. Each measure runs three times, the table gives the median. Last run: Mac18,5, 12 cores, 24 GiB, macOS 27.0.1, 1-minute load 4.6 to 5.4, **screen locked**.
+
+| Measure | Tool, the same on both sides | Kiroshi | Preview |
+|---|---|---|---|
+| Cold start, first frame | `open -n` on a bundle, then the pid's first window in `CGWindowListCopyWindowInfo` | 473 ms (Kiroshi Dev) | 225 ms (`--dev-host`) |
+| Cold start, conversation displayed | `screencapture -l` read by Vision until the last word of the last message shows | Not measured | Not measured |
+| Memory | `footprint`, Kiroshi plus its WebKit helpers against the preview, agents excluded | Not measured | Not measured |
+| CPU at rest | `ps` CPU time of both process sets over the same 60 s | Not measured | Not measured |
+| Scroll frame times | none | Not measured | Not measured |
+| Key press to glyph | none | Not measured, by decision | Not measured, by decision |
+
+**Cold start.** Kiroshi Dev's release bundle against the preview, on "Bench: long conversation" (2,778 messages, written by `bench/fabricate.py` into Kiroshi Dev only). Kiroshi Dev starts its own host and opens the conversation from a tab the bench restores. The preview starts against Kiroshi Dev's host, already running. The installed Kiroshi is never quit.
+
+**Why the rest isn't measured.**
+- The screen was locked. Rune lays out and draws no covered window, where WebKit keeps painting. "Conversation displayed", memory and CPU at rest would compare a preview that never drew the thread with a Kiroshi that did.
+- The installed Kiroshi shows another conversation than its longest. The bench sends it no input, so it can't open that conversation.
+- Scroll: no synthetic scroll ever reaches the installed Kiroshi, and Accessibility isn't granted to the shell.
+
+To fill the empty rows: unlock the screen, open the longest conversation in Kiroshi by hand, and run `measure.py` again. It checks both by itself.
+
+**Tauri cost centres.** From an xctrace Time Profiler recording (`--all-processes`, 20 s) of Kiroshi Dev opening the bench conversation: 2.2 s of CPU across Kiroshi Dev and its WebKit helpers, self time by process and leaf binary.
+1. WebContent, JavaScriptCore: 650 ms, 29 %. Mostly garbage collection (`JSFinalObject::visitChildren`), then the parser's lexer.
+2. WebContent, WebCore: 229 ms, 10 %. Style resolution: rule matching (`collectMatchingRulesForListSlow`, `SelectorChecker::checkOne`) and applying the matched properties.
+3. Kiroshi, the kernel: 201 ms, 9 %. Mach messages, then `open` and `chmod`.
+
 ## Read-only on the installed Kiroshi
 
 On the installed profile, `Host::invoke` refuses any command outside `space_list`, `conversation_bots`, `conversation_page`, `conversation_list`, `conversation_message_page`, `account_state`, `mission_board`, `mission_detail` and `mission_list`. It returns `WriteRefused` before a request leaves, and a test proves `conversation_send_turn`, `conversation_main_chat` and `mission_close` never reach the socket. Enter on the installed host keeps the draft and says sending is off there. Sending stays proven on Kiroshi Dev (`--smoke-send`).
@@ -49,7 +76,8 @@ HTTP `POST /api/invoke/{command}` and the `/api/events` WebSocket of the Kiroshi
 
 - Conversation tab: the host of the bundled `Kiroshi.app/Contents/MacOS/Kiroshi`, found among the listening processes, with the token of `com.kiroshi.app/host/token`. A local image path under a Kiroshi data folder is refused and shown as a placeholder.
 - Onboarding: reads the Kiroshi Dev profile when it runs (`agent_account`, `claude_import_inventory`, `account_state`).
-- `--smoke-send <text>`: Kiroshi Dev only. `--smoke-read`: the read-only check above.
+- `--smoke-send <text>`: Kiroshi Dev only. `--smoke-read`: the read-only check above, which also prints the longest conversation's title for the bench.
+- `--dev-host` opens the conversation tab on Kiroshi Dev, `--skip-onboarding` on the installed Kiroshi, both without the onboarding.
 
 ## Crates added beyond Rune
 

@@ -1,0 +1,192 @@
+{
+	"measured_at": "2026-11-06T14:11:08+01:00",
+	"machine": {
+		"model": "Mac18,5",
+		"cpus": 12,
+		"memory_gib": 24,
+		"macos": "27.0.1"
+	},
+	"screen_locked": true,
+	"runs_per_measure": 3,
+	"machine_load": "os.getloadavg() before and after every run",
+	"installed_read": {
+		"tool": "kiroshi-rune-preview --smoke-read",
+		"requests": 329,
+		"writes": 0,
+		"longest_conversation_messages": 2778
+	},
+	"cold_start": {
+		"subject": "Kiroshi Dev release bundle against the preview with --dev-host, on 'Bench: long conversation' (0786b59c-31fb-46ba-9b69-2446f0816409)",
+		"launch": "open -n on an app bundle on both sides (the preview through a bundle linking its release binary)",
+		"conditions": "process cold, file cache warm; Kiroshi Dev starts its own host and opens the conversation from its restored tab; the preview starts against Kiroshi Dev's host already running and finds the longest conversation itself",
+		"first_frame": {
+			"tool": "the pid's first layer-0 window over 10,000 pt² in CGWindowListCopyWindowInfo, polled",
+			"unit": "ms from open",
+			"median": {
+				"kiroshi_dev": 473,
+				"preview": 225
+			}
+		},
+		"conversation_displayed": {
+			"status": "not measured",
+			"reasons": [
+				"the screen was locked: Rune lays out and draws no covered window, where WebKit keeps painting, so the two sides don't run the same way"
+			]
+		},
+		"runs": [
+			{
+				"side": "kiroshi_dev",
+				"run": 1,
+				"first_frame_ms": 444,
+				"load_before": {
+					"one_minute": 5.35,
+					"five_minutes": 6.02,
+					"fifteen_minutes": 6.99
+				},
+				"load_after": {
+					"one_minute": 5.35,
+					"five_minutes": 6.02,
+					"fifteen_minutes": 6.99
+				}
+			},
+			{
+				"side": "kiroshi_dev",
+				"run": 2,
+				"first_frame_ms": 524,
+				"load_before": {
+					"one_minute": 5.16,
+					"five_minutes": 5.97,
+					"fifteen_minutes": 6.97
+				},
+				"load_after": {
+					"one_minute": 5.16,
+					"five_minutes": 5.97,
+					"fifteen_minutes": 6.97
+				}
+			},
+			{
+				"side": "kiroshi_dev",
+				"run": 3,
+				"first_frame_ms": 473,
+				"load_before": {
+					"one_minute": 5.07,
+					"five_minutes": 5.94,
+					"fifteen_minutes": 6.95
+				},
+				"load_after": {
+					"one_minute": 5.07,
+					"five_minutes": 5.94,
+					"fifteen_minutes": 6.95
+				}
+			},
+			{
+				"side": "preview",
+				"run": 1,
+				"first_frame_ms": 216,
+				"load_before": {
+					"one_minute": 4.9,
+					"five_minutes": 5.89,
+					"fifteen_minutes": 6.93
+				},
+				"load_after": {
+					"one_minute": 4.9,
+					"five_minutes": 5.89,
+					"fifteen_minutes": 6.93
+				}
+			},
+			{
+				"side": "preview",
+				"run": 2,
+				"first_frame_ms": 225,
+				"load_before": {
+					"one_minute": 4.67,
+					"five_minutes": 5.83,
+					"fifteen_minutes": 6.9
+				},
+				"load_after": {
+					"one_minute": 4.67,
+					"five_minutes": 5.83,
+					"fifteen_minutes": 6.9
+				}
+			},
+			{
+				"side": "preview",
+				"run": 3,
+				"first_frame_ms": 242,
+				"load_before": {
+					"one_minute": 4.62,
+					"five_minutes": 5.8,
+					"fifteen_minutes": 6.88
+				},
+				"load_after": {
+					"one_minute": 4.62,
+					"five_minutes": 5.8,
+					"fifteen_minutes": 6.88
+				}
+			}
+		]
+	},
+	"memory": {
+		"status": "not measured",
+		"reasons": [
+			"the screen was locked: Rune lays out and draws no covered window, where WebKit keeps painting, so the two sides don't run the same way",
+			"the installed Kiroshi window shows another conversation than its longest, and the bench sends it no input; open that conversation in Kiroshi by hand, then run measure.py again"
+		]
+	},
+	"cpu_at_rest": {
+		"status": "not measured",
+		"reasons": [
+			"the screen was locked: Rune lays out and draws no covered window, where WebKit keeps painting, so the two sides don't run the same way",
+			"the installed Kiroshi window shows another conversation than its longest, and the bench sends it no input; open that conversation in Kiroshi by hand, then run measure.py again"
+		]
+	},
+	"scroll_frame_times": {
+		"status": "not measured",
+		"reasons": [
+			"synthetic scrolling never reaches the installed Kiroshi, so the same scroll can't run on both sides",
+			"Accessibility isn't granted to the shell running the bench",
+			"the screen was locked: Rune lays out and draws no covered window, where WebKit keeps painting, so the two sides don't run the same way"
+		]
+	},
+	"key_press_to_glyph": {
+		"status": "not measured",
+		"reasons": ["left out of this stage by decision"]
+	},
+	"tauri_cost_centres": {
+		"subject": "Kiroshi Dev opened onto 'Bench: long conversation' until its last word shows, inside a 20 s recording, screen locked",
+		"tool": "xctrace record --template 'Time Profiler' --all-processes, samples of Kiroshi Dev and its WebKit helpers, self time grouped by process and leaf binary",
+		"trace": "apps/rune-preview/bench/traces/kiroshi-dev-cold-start.trace",
+		"sampled_ms": 2237,
+		"top": [
+			{
+				"process": "com.apple.WebKit.WebContent",
+				"binary": "JavaScriptCore",
+				"self_ms": 650,
+				"share_percent": 29.1,
+				"heaviest_symbols": [
+					"JSC::JSFinalObject::visitChildren(JSC::JSCell*, JSC::SlotVisitor&)",
+					"pas_thread_local_cache_flush_deallocation_log",
+					"JSC::Lexer<char16_t>::lexWithoutClearingLineTerminator(JSC::JSToken*, WTF::OptionSet<JSC::LexerFlags, (WTF::ConcurrencyTag)0>, bool)"
+				]
+			},
+			{
+				"process": "com.apple.WebKit.WebContent",
+				"binary": "WebCore",
+				"self_ms": 229,
+				"share_percent": 10.2,
+				"heaviest_symbols": [
+					"WebCore::Style::ElementRuleCollector::collectMatchingRulesForListSlow(WTF::Vector<WebCore::Style::RuleData, 1ul, WTF::CrashOnOverflow, 16ul, WTF::FastMalloc> const&, WebCore::Style::MatchRequest const&)",
+					"WebCore::Style::Resolver::applyMatchedProperties(WebCore::Style::Resolver::State&, WebCore::Style::MatchResult const&, WebCore::Style::PropertyCascade::IncludedProperties&&)",
+					"WebCore::SelectorChecker::checkOne(WebCore::SelectorChecker::CheckingContext&, WebCore::SelectorChecker::LocalContext&, WebCore::SelectorChecker::MatchType&) const"
+				]
+			},
+			{
+				"process": "Kiroshi",
+				"binary": "libsystem_kernel.dylib",
+				"self_ms": 201,
+				"share_percent": 9.0,
+				"heaviest_symbols": ["mach_msg2_trap", "__open", "__chmod"]
+			}
+		]
+	}
+}

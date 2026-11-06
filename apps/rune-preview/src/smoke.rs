@@ -159,12 +159,18 @@ fn read_only() -> Result<(), String> {
 	let found = longest::longest(&ready.host, &ready.conversations).map_err(described)?;
 	let found = found.ok_or("no conversation holds a message")?;
 	let messages = whole_thread(&ready.host, &found.conversation_id).map_err(described)?;
+	let title = ready
+		.conversations
+		.iter()
+		.find(|conversation| conversation.id == found.conversation_id)
+		.map_or("", |conversation| conversation.title.as_str());
 	println!(
 		"longest conversation: {} ({} messages, {} loaded)",
 		found.conversation_id,
 		found.messages,
 		messages.len()
 	);
+	println!("longest title: {title}");
 	read_one_mission(&ready.host).map_err(described)?;
 	listen_to_missions(&ready.host)?;
 	sent_only_reads()
