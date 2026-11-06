@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 
 import {
+	act,
 	cleanup,
 	fireEvent,
 	render,
@@ -23,33 +24,52 @@ import {
 	ThreadBoardPanel,
 	ThreadDocumentPanel,
 	ThreadDocumentsContext,
+	ThreadOpenedItemPanel,
 } from "@/components/thread-documents"
-import type { LibraryItem } from "@/lib/bindings"
+import { accountQueryKeys } from "@/lib/account/account-query-keys"
+import type { Bot, LibraryItem, LibraryWriter } from "@/lib/bindings"
+import type { HostEventCallback } from "@/lib/host/joined-hosts-listen"
 import {
 	boardStateOf,
 	TWO_NOTES_BOARD,
 } from "@/lib/library/library-board-fixtures"
 import { base64Of } from "@/lib/library/library-document-session"
+import { LIBRARY_DOCUMENT_PRESENCE_EVENT } from "@/lib/library/library-document-writers"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 
 type LibraryCall = { spaceId: string; name: string }
 
 const libraryHost = vi.hoisted(() => ({
 	answers: new Map<string, (call: LibraryCall) => unknown>(),
+	invoked: [] as [string, unknown][],
+	listeners: new Map<string, Set<HostEventCallback<unknown>>>(),
 }))
 
 vi.mock("@/lib/host", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("@/lib/host")>()
 	const invoke = (async <T>(...call: Parameters<typeof actual.invoke>) => {
 		const [command, args] = call
+		libraryHost.invoked.push([command, args])
 		const answer = libraryHost.answers.get(command)
 		if (!answer) {
 			throw new Error(`no fake answer for ${command}`)
 		}
 		return answer(args as LibraryCall) as T
 	}) as typeof actual.invoke
-	const listen: typeof actual.listen = () => Promise.resolve(() => undefined)
-	return { ...actual, invoke, listen }
+	const listen: typeof actual.listen = async (event, handler) => {
+		const heard = libraryHost.listeners.get(event) ?? new Set()
+		heard.add(handler as HostEventCallback<unknown>)
+		libraryHost.listeners.set(event, heard)
+		return () => {
+			heard.delete(handler as HostEventCallback<unknown>)
+		}
+	}
+	return {
+		...actual,
+		invoke,
+		listen,
+		currentWindowLabel: () => OWN_WINDOW,
+	}
 })
 
 vi.mock("@/lib/host/tauri", async (importOriginal) => ({
@@ -340,10 +360,19 @@ const boardDocumentsOf = (close: () => void) => ({
 		name === LAUNCH_BOARD ? launchBoardItem : undefined,
 })
 
+const ATLAS_ID = "bot-atlas"
+const JUNIPER_ID = "bot-juniper"
+
+const BOTS = [
+	{ id: ATLAS_ID, name: "Atlas", avatarBlot: 210, avatarImagePath: null },
+	{ id: JUNIPER_ID, name: "Juniper", avatarBlot: 130, avatarImagePath: null },
+] as Bot[]
+
 const renderLaunchBoardPanel = (close: () => void = () => undefined) =>
 	render(
 		createElement(ThreadBoardPanel, {
 			documents: boardDocumentsOf(close),
+			bots: BOTS,
 			name: LAUNCH_BOARD,
 		}),
 		{ wrapper: createQueryTestWrapper().wrapper },
@@ -434,5 +463,212 @@ describe("a board opened beside a conversation", () => {
 		renderPlanPanel()
 
 		expect(widthOfPanel()).toBe(`${keptWidth}px`)
+	})
+})
+
+const OWN_WINDOW = "main"
+const OWN_ACCOUNT = "account-me"
+const ROADMAP_BOARD = "Roadmap.canvas"
+
+const roadmapBoardItem: LibraryItem = {
+	...launchBoardItem,
+	name: ROADMAP_BOARD,
+	path: `/library/${ROADMAP_BOARD}`,
+}
+
+const seatOf = (
+	id: string,
+	kind: LibraryWriter["kind"],
+	nodeId: string | null,
+	name: string | null = null,
+): LibraryWriter => ({
+	id,
+	kind,
+	name,
+	at: { kind: "board", point: { x: 40, y: 20 }, nodeId },
+})
+
+const presenceListeners = () =>
+	libraryHost.listeners.get(LIBRARY_DOCUMENT_PRESENCE_EVENT) ?? new Set()
+
+const announcePresence = (writers: LibraryWriter[], name = LAUNCH_BOARD) =>
+	act(() => {
+		for (const heard of presenceListeners()) {
+			heard(
+				{
+					event: LIBRARY_DOCUMENT_PRESENCE_EVENT,
+					id: 0,
+					payload: { spaceId: SPACE_ID, name, writers },
+				},
+				null,
+			)
+		}
+	})
+
+const pointerNames = () =>
+	[...document.querySelectorAll('[data-slot="board-pointer-name"]')].map(
+		(pointer) => pointer.textContent,
+	)
+
+const outlinedTexts = () =>
+	[...document.querySelectorAll('[data-slot="board-object-outline"]')].map(
+		(outline) => outline.textContent,
+	)
+
+const drawingChip = (count: number) =>
+	screen.queryByText(common("board.presence.drawing", { count }))
+
+const stopCalls = () =>
+	libraryHost.invoked.filter(([command]) => command === "library_stop_writers")
+
+const presenceDocumentsOf = (isJoined: boolean) => ({
+	...boardDocumentsOf(() => undefined),
+	isJoined,
+	boardOf: (name: string) =>
+		[launchBoardItem, roadmapBoardItem].find((board) => board.name === name),
+})
+
+const openedBoardPanelOf = (isJoined: boolean, name: string) =>
+	createElement(ThreadOpenedItemPanel, {
+		documents: presenceDocumentsOf(isJoined),
+		bots: BOTS,
+		opened: { kind: "board", name },
+	})
+
+const mountPresencePanel = async (isJoined = false) => {
+	const { queryClient, wrapper } = createQueryTestWrapper()
+	queryClient.setQueryData(accountQueryKeys.state(), {
+		kind: "signedIn",
+		id: OWN_ACCOUNT,
+		email: "me@example.com",
+		createdAt: "2026-01-01T00:00:00Z",
+		plan: null,
+	})
+	const panel = render(openedBoardPanelOf(isJoined, LAUNCH_BOARD), { wrapper })
+	await screen.findByText("First")
+	await waitFor(() => expect(presenceListeners().size).toBe(1))
+	return panel
+}
+
+describe("presence on a board opened beside a conversation", () => {
+	beforeEach(() => {
+		libraryHost.answers.set("library_list", () => [
+			launchBoardItem,
+			roadmapBoardItem,
+		])
+		libraryHost.answers.set("library_open_document", ({ name }) => ({
+			name,
+			update: boardStateOf(TWO_NOTES_BOARD),
+		}))
+		libraryHost.answers.set("library_board_summary", ({ name }) => ({
+			name,
+			nodeCount: 2,
+			nodes: [],
+			bounds: { x: 0, y: 0, width: 500, height: 100 },
+		}))
+		libraryHost.answers.set("library_share_presence", () => null)
+		libraryHost.answers.set("library_stop_writers", () => ({
+			kind: "cancelled",
+		}))
+	})
+
+	afterEach(() => {
+		cleanup()
+		libraryHost.answers.clear()
+		libraryHost.invoked.length = 0
+		libraryHost.listeners.clear()
+		localStorage.clear()
+	})
+
+	it("shows another person's pointer and outlines the object they selected, with no chip", async () => {
+		await mountPresencePanel()
+
+		announcePresence([seatOf("window-2", "person", "first", "Lena")])
+
+		expect(pointerNames()).toEqual(["Lena"])
+		expect(outlinedTexts()).toEqual(["First"])
+		expect(drawingChip(1)).toBeNull()
+	})
+
+	it("never shows the own window's pointer or selection", async () => {
+		await mountPresencePanel()
+
+		announcePresence([seatOf(OWN_WINDOW, "person", "first", "Me")])
+
+		expect(pointerNames()).toEqual([])
+		expect(outlinedTexts()).toEqual([])
+	})
+
+	it("never shows the own member in a joined Space, and shows the host's people", async () => {
+		await mountPresencePanel(true)
+
+		announcePresence([
+			seatOf(OWN_ACCOUNT, "member", "first", "Me"),
+			seatOf(OWN_WINDOW, "person", null, "Host person"),
+		])
+
+		expect(pointerNames()).toEqual(["Host person"])
+		expect(outlinedTexts()).toEqual([])
+	})
+
+	it("outlines what each agent draws and shows the drawing chip with their count in the panel header", async () => {
+		await mountPresencePanel()
+
+		announcePresence([
+			seatOf(ATLAS_ID, "agent", "first"),
+			seatOf(JUNIPER_ID, "agent", null),
+		])
+
+		expect(pointerNames()).toEqual(["Atlas", "Juniper"])
+		expect(outlinedTexts()).toEqual(["First"])
+		const header = document.querySelector(
+			'[data-slot="document-panel-header"]',
+		) as HTMLElement
+		expect(
+			within(header).getByText(common("board.presence.drawing", { count: 2 })),
+		).toBeInstanceOf(HTMLElement)
+	})
+
+	it("stops every writer of the board on Stop all", async () => {
+		await mountPresencePanel()
+		announcePresence([
+			seatOf(ATLAS_ID, "agent", "first"),
+			seatOf(JUNIPER_ID, "agent", "second"),
+		])
+
+		fireEvent.click(
+			screen.getByRole("button", {
+				name: common("library.document.agents.stopAll"),
+			}),
+		)
+
+		await waitFor(() =>
+			expect(stopCalls()).toEqual([
+				[
+					"library_stop_writers",
+					{ spaceId: SPACE_ID, name: LAUNCH_BOARD, agentId: null },
+				],
+			]),
+		)
+	})
+
+	it("drops the previous board's presence when the panel switches to another board", async () => {
+		const panel = await mountPresencePanel()
+		announcePresence([seatOf(ATLAS_ID, "agent", "first")])
+
+		panel.rerender(openedBoardPanelOf(false, ROADMAP_BOARD))
+		await screen.findByText("First")
+
+		expect(drawingChip(1)).toBeNull()
+		expect(pointerNames()).toEqual([])
+		expect(outlinedTexts()).toEqual([])
+	})
+
+	it("stops listening to presence once the panel closes", async () => {
+		const panel = await mountPresencePanel()
+
+		panel.unmount()
+
+		await waitFor(() => expect(presenceListeners().size).toBe(0))
 	})
 })

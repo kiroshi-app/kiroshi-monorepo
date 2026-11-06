@@ -19,6 +19,7 @@ import {
 	FileReferenceChip,
 	type FileReferenceChipProps,
 } from "@workspace/ui/components/file-reference-chip"
+import { LibraryDocumentPresence } from "@workspace/ui/components/library-document-agents"
 import { LibraryDocumentBlockEditor } from "@workspace/ui/components/library-document-block-editor"
 import type { MarkdownRunRenderProps } from "@workspace/ui/components/markdown/run"
 import { toRelativeTime } from "@workspace/ui/lib/time-format"
@@ -42,6 +43,7 @@ import {
 	type ThreadLibraryItem,
 	useFollowedLibraryDocument,
 } from "@/lib/library/use-followed-library-document"
+import { useLibraryBoardPresence } from "@/lib/library/use-library-board-presence"
 import { useLibraryBoardSession } from "@/lib/library/use-library-board-session"
 import { useLibraryDocumentSession } from "@/lib/library/use-library-document-session"
 import { useLibraryImageResolver } from "@/lib/library/use-library-image-sources"
@@ -50,6 +52,7 @@ import {
 	libraryItemsQueryOf,
 } from "@/lib/library/use-library-items"
 import { useSaveMessageAsDocument } from "@/lib/library/use-save-message-as-document"
+import { useStopLibraryWriters } from "@/lib/library/use-stop-library-writers"
 import {
 	type BoardDrawing,
 	NOBODY_DRAWING,
@@ -302,14 +305,23 @@ const useBoardCardSummary = (
 
 type ThreadBoardPanelProps = {
 	documents: ThreadDocuments
+	bots: Bot[]
 	name: string
 }
 
 export const ThreadBoardPanel = ({
 	documents,
+	bots,
 	name,
 }: ThreadBoardPanelProps) => {
 	const board = useLibraryBoardSession(documents.spaceId, name)
+	const presence = useLibraryBoardPresence({
+		spaceId: documents.spaceId,
+		name,
+		isJoined: documents.isJoined,
+		bots,
+	})
+	const { stopAll } = useStopLibraryWriters(documents.spaceId)
 	const summary = useBoardSummary(documents.spaceId, documents.boardOf(name))
 	const openInItsTab = useOpenLibraryItemInItsTab()
 	const { width, keepWidth } = useKeptPanelWidth()
@@ -325,26 +337,37 @@ export const ThreadBoardPanel = ({
 			onClose={documents.close}
 			onOpenInTab={openInTab}
 			onWidthChange={keepWidth}
+			presence={
+				<LibraryDocumentPresence
+					activity="drawing"
+					onStopAll={() => stopAll(name)}
+					people={presence.people}
+					writers={presence.drawers}
+				/>
+			}
 			title={titleOf({ kind: "board", name })}
 			variant="board"
 			width={width}
 		>
-			<LibraryBoardCanvas board={board} summary={summary} />
+			<LibraryBoardCanvas board={board} presence={presence} summary={summary} />
 		</DocumentPanel>
 	)
 }
 
 type ThreadOpenedItemPanelProps = {
 	documents: ThreadDocuments
+	bots: Bot[]
 	opened: ThreadLibraryItem
 }
 
 export const ThreadOpenedItemPanel = ({
 	documents,
+	bots,
 	opened,
 }: ThreadOpenedItemPanelProps) =>
 	opened.kind === "board" ? (
 		<ThreadBoardPanel
+			bots={bots}
 			documents={documents}
 			key={opened.name}
 			name={opened.name}
