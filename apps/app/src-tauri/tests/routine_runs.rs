@@ -126,7 +126,7 @@ fn booted(name: &str) -> AppOfItsOwn {
 fn booted_with(name: &str, agent: AgentState) -> AppOfItsOwn {
 	std::env::set_var(SIDECAR_OVERRIDE_ENV, FAKE_SIDECAR);
 	let app = an_app_of_its_own(&format!("routine-runs-{name}"), mock_builder().manage(agent));
-	app.manage(db::bootstrap(app.handle()));
+	kiroshi_app::db::install(kiroshi_app::events::core(app.handle()));
 	bundled_bots(&app, &["default"]);
 	app
 }
@@ -169,7 +169,11 @@ fn routine_on(app: &App<MockRuntime>, conversation_id: &str, bot_id: &str, name:
 }
 
 fn database_of(app: &App<MockRuntime>) -> &db::Database {
-	app.state::<db::DatabaseState>().inner().as_ref().expect("the database is open")
+	kiroshi_app::events::core(app.app_handle())
+		.state::<db::DatabaseState>()
+		.inner()
+		.as_ref()
+		.expect("the database is open")
 }
 
 fn the_schedule_source() -> TriggerSource {

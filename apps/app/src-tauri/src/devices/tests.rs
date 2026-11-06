@@ -23,7 +23,6 @@ use super::*;
 use crate::account::contract::{AccountState, SignedOutReason};
 use crate::account::session::{restore, sign_in, sign_out, AccountSession};
 use crate::crypto::device_keys::DeviceKeys;
-use crate::db;
 use crate::db::repositories::joined_spaces::{JoinedReach, JoinedSpace};
 use crate::environment::contract::{EnvScope, ACCOUNT_BEARER};
 use crate::environment::store;
@@ -301,7 +300,7 @@ impl Harness {
 				.expect("the bearer is kept");
 		}
 		app.manage(AccountSession::new(Ok::<PathBuf, _>(folder.to_path_buf()), api));
-		app.manage(db::bootstrap(app.handle()));
+		crate::db::install(crate::events::core(app.handle()));
 		app.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
 		app.manage(Hosting::new(api, None));
 		app.manage(RelayGuests::new(api));
@@ -373,14 +372,14 @@ impl Harness {
 
 	async fn held_relay_device(&self) -> Option<String> {
 		let device_id = self.keys().device_id().to_string();
-		let state = self.app.state::<DatabaseState>();
+		let state = crate::events::core(self.app.app_handle()).state::<DatabaseState>();
 		let devices = state.as_ref().expect("the database").relay_devices();
 		devices.relay_device_id(ACCOUNT_ID.to_owned(), device_id).await.expect("the id reads")
 	}
 
 	async fn holding_relay_device(&self, relay_device_id: &str) {
 		let device_id = self.keys().device_id().to_string();
-		let state = self.app.state::<DatabaseState>();
+		let state = crate::events::core(self.app.app_handle()).state::<DatabaseState>();
 		let devices = state.as_ref().expect("the database").relay_devices();
 		devices
 			.registered(ACCOUNT_ID.to_owned(), device_id, relay_device_id.to_owned())
@@ -625,7 +624,7 @@ fn while_pending_no_member_socket_opens() {
 	run(async {
 		let harness = Harness::restored(Relay::pending_until(&in_minutes(30))).await;
 		harness.pending().await;
-		let state = harness.app.state::<DatabaseState>();
+		let state = crate::events::core(harness.app.app_handle()).state::<DatabaseState>();
 		let joined = state
 			.as_ref()
 			.expect("the database")
@@ -946,7 +945,7 @@ fn a_refused_registration_resumes_the_hosted_spaces_once_and_keeps_the_approval_
 		let relay = Relay::approved();
 		relay.refuses_registration(StatusCode::BAD_REQUEST, "DEVICE_PROOF_INVALID");
 		let harness = Harness::new(relay, Some(BEARER)).await;
-		let state = harness.app.state::<DatabaseState>();
+		let state = crate::events::core(harness.app.app_handle()).state::<DatabaseState>();
 		let hosting = state.as_ref().expect("the database").space_hosting();
 		hosting.set_hosted(PERSONAL.to_owned(), true).await.expect("the space is flagged");
 

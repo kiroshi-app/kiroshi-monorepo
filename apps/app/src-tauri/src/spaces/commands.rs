@@ -19,7 +19,10 @@ pub(crate) fn ready(state: &db::DatabaseState) -> Result<&db::Database, SpaceErr
 
 #[tauri::command]
 #[specta::specta]
-pub async fn space_list(state: State<'_, db::DatabaseState>) -> Result<Vec<Space>, SpaceError> {
+pub async fn space_list(
+	core: State<'_, crate::core_context::Core>,
+) -> Result<Vec<Space>, SpaceError> {
+	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	let stored = database.spaces().list().await?;
 	let hostings = database.space_hosting().hostings().await?;
@@ -30,9 +33,10 @@ pub async fn space_list(state: State<'_, db::DatabaseState>) -> Result<Vec<Space
 #[specta::specta]
 pub async fn space_create<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	name: String,
 ) -> Result<Space, SpaceError> {
+	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	let created = database.spaces().create(name).await?;
 	let Err(failure) = bundles::space::lay_down(&app, &created.id) else {
@@ -46,11 +50,12 @@ pub async fn space_create<R: Runtime>(
 #[specta::specta]
 pub async fn space_update<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	id: String,
 	name: String,
 	colour: Option<i64>,
 ) -> Result<Space, SpaceError> {
+	let state = core.state::<db::DatabaseState>();
 	let colour = colour
 		.map(|asked| Hue::new(asked).ok_or_else(|| SpaceError::unknown_colour(asked)))
 		.transpose()?;
@@ -87,9 +92,10 @@ async fn announced_once_listed<R: Runtime>(
 #[tauri::command]
 #[specta::specta]
 pub async fn space_reorder(
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	ids: Vec<String>,
 ) -> Result<(), SpaceError> {
+	let state = core.state::<db::DatabaseState>();
 	Ok(ready(&state)?.spaces().reorder(ids).await?)
 }
 
@@ -97,9 +103,10 @@ pub async fn space_reorder(
 #[specta::specta]
 pub async fn space_delete<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	id: String,
 ) -> Result<(), SpaceError> {
+	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	hosting::forgotten(&app, &id).await;
 	let held_bots = database.spaces().delete(id.clone()).await?;
@@ -114,10 +121,11 @@ pub async fn space_delete<R: Runtime>(
 #[specta::specta]
 pub async fn space_export<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	id: String,
 	path: String,
 ) -> Result<(), SpaceError> {
+	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	let places = archive::Places::of(&app)?;
 	let rows = database.space_rows().read(id.clone()).await?;
@@ -128,9 +136,10 @@ pub async fn space_export<R: Runtime>(
 #[specta::specta]
 pub async fn space_import<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	path: String,
 ) -> Result<Space, SpaceError> {
+	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	let imported =
 		archive::import(archive::Places::of(&app)?, database, PathBuf::from(path)).await?;
@@ -141,19 +150,21 @@ pub async fn space_import<R: Runtime>(
 #[tauri::command]
 #[specta::specta]
 pub async fn space_preferences(
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	space_id: String,
 ) -> Result<SpacePreferences, SpaceError> {
+	let state = core.state::<db::DatabaseState>();
 	Ok(ready(&state)?.space_settings().preferences(space_id).await.map(SpacePreferences::from)?)
 }
 
 #[tauri::command]
 #[specta::specta]
 pub async fn space_set_preferences(
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	space_id: String,
 	preferences: SpacePreferences,
 ) -> Result<SpacePreferences, SpaceError> {
+	let state = core.state::<db::DatabaseState>();
 	Ok(ready(&state)?
 		.space_settings()
 		.set_preferences(space_id, preferences.into())
@@ -165,9 +176,10 @@ pub async fn space_set_preferences(
 #[specta::specta]
 pub async fn space_companion_counts<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	space_id: String,
 ) -> Result<Vec<CompanionCounts>, SpaceError> {
+	let state = core.state::<db::DatabaseState>();
 	let bot_ids = ready(&state)?.spaces().companions(space_id).await?;
 	Ok(counted_companions(bundles::root(&app).as_deref(), bot_ids))
 }
@@ -205,10 +217,11 @@ async fn forget_bundles(root: Option<&Path>, database: &db::Database, bot_ids: &
 #[specta::specta]
 pub async fn bot_move_to_space<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	bot_id: String,
 	space_id: String,
 ) -> Result<(), SpaceError> {
+	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	let held_by = database.conversations().bot_space_ids(bot_id.clone()).await?;
 	database.spaces().move_bot(bot_id.clone(), space_id.clone()).await?;
@@ -223,11 +236,12 @@ pub async fn bot_move_to_space<R: Runtime>(
 #[specta::specta]
 pub async fn bot_add_to_space<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	bot_id: String,
 	space_id: String,
 	section_id: Option<String>,
 ) -> Result<(), SpaceError> {
+	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	database.spaces().add_bot(bot_id.clone(), space_id, section_id).await?;
 	announce_joined(&app, database, &bot_id).await;
@@ -238,10 +252,11 @@ pub async fn bot_add_to_space<R: Runtime>(
 #[specta::specta]
 pub async fn bot_remove_from_space<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	bot_id: String,
 	space_id: String,
 ) -> Result<(), SpaceError> {
+	let state = core.state::<db::DatabaseState>();
 	ready(&state)?.spaces().remove_bot(bot_id.clone(), space_id.clone()).await?;
 	announce_left(&app, &bot_id, space_id);
 	Ok(())
@@ -305,7 +320,7 @@ mod tests {
 
 	fn a_host(name: &str) -> AppOfItsOwn {
 		let app = an_app_of_its_own(&format!("space-commands-{name}"), mock_builder());
-		app.manage(db::bootstrap(app.handle()));
+		crate::db::install(crate::events::core(app.handle()));
 		app
 	}
 
@@ -334,7 +349,11 @@ mod tests {
 	#[tokio::test]
 	async fn every_companion_of_a_space_answers_its_skills_and_applications_counts() {
 		let app = a_host("companion-counts");
-		let database = app.state::<db::DatabaseState>().inner().as_ref().expect("the database");
+		let database = crate::events::core(app.app_handle())
+			.state::<db::DatabaseState>()
+			.inner()
+			.as_ref()
+			.expect("the database");
 		let root = bundles::root(app.handle()).expect("the bundles have a home");
 		let vocca = database.spaces().create("Vocca".to_owned()).await.expect("a space");
 		let elsewhere = database.spaces().create("Elsewhere".to_owned()).await.expect("a space");
@@ -423,7 +442,7 @@ mod tests {
 	#[tokio::test]
 	async fn turning_the_hosting_of_one_space_on_and_off_shares_that_space_alone() {
 		let app = a_host("shared");
-		let state = app.state::<db::DatabaseState>();
+		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 		let database = ready(&state).expect("the database");
 		let vocca = database.spaces().create("Vocca".to_owned()).await.expect("a space");
 		database.spaces().create("Studio".to_owned()).await.expect("a space");
@@ -441,7 +460,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_listed_space_carries_its_registered_instance_until_it_has_none() {
 		let app = a_host("instances");
-		let state = app.state::<db::DatabaseState>();
+		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 		let database = ready(&state).expect("the database");
 		let vocca = database.spaces().create("Vocca".to_owned()).await.expect("a space");
 		let studio = database.spaces().create("Studio".to_owned()).await.expect("a space");

@@ -26,10 +26,11 @@ use crate::file_store::FileStore;
 #[specta::specta]
 pub async fn conversation_main_chat<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	bot_id: String,
 	space_id: Option<String>,
 ) -> Result<Chat, TranscriptStoreError> {
+	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	let chat = database.conversations().ensure_chat(bot_id, space_id).await?;
 	let states = conversation_state::listed(&app, database, vec![chat.id.clone()]).await?;
@@ -41,9 +42,10 @@ pub async fn conversation_main_chat<R: Runtime>(
 #[specta::specta]
 pub async fn conversation_solo_states<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	space_id: String,
 ) -> Result<Vec<SoloState>, TranscriptStoreError> {
+	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	let threads = database.conversations().solo_threads(space_id).await?;
 	let ids = threads.iter().map(|thread| thread.conversation_id.clone()).collect();
@@ -62,12 +64,13 @@ pub async fn conversation_solo_states<R: Runtime>(
 #[specta::specta]
 pub async fn conversation_create<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	space_id: String,
 	section_id: Option<String>,
 	title: String,
 	bot_ids: Vec<String>,
 ) -> Result<Conversation, TranscriptStoreError> {
+	let state = core.state::<db::DatabaseState>();
 	let draft = ConversationDraft { space_id, section_id, title, icon: None, bot_ids };
 	let database = ready(&state)?;
 	let created = drawn(&app, database.conversations().create_conversation(draft).await?);
@@ -79,9 +82,10 @@ pub async fn conversation_create<R: Runtime>(
 #[specta::specta]
 pub async fn conversation_list<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	space_id: String,
 ) -> Result<Vec<ConversationInList>, TranscriptStoreError> {
+	let state = core.state::<db::DatabaseState>();
 	let dir = avatars::Avatars::dir(&app);
 	let database = ready(&state)?;
 	let stored = database.conversations().conversations(space_id).await?;
@@ -100,9 +104,10 @@ pub async fn conversation_list<R: Runtime>(
 #[specta::specta]
 pub async fn conversation_mission_thread<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	conversation_id: String,
 ) -> Result<Conversation, TranscriptStoreError> {
+	let state = core.state::<db::DatabaseState>();
 	let thread = ready(&state)?.conversations().mission_thread(conversation_id).await?;
 	Ok(drawn(&app, thread))
 }
@@ -111,11 +116,12 @@ pub async fn conversation_mission_thread<R: Runtime>(
 #[specta::specta]
 pub async fn conversation_page<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	space_id: String,
 	cursor: Option<String>,
 	limit: Option<u32>,
 ) -> Result<ConversationPage, TranscriptStoreError> {
+	let state = core.state::<db::DatabaseState>();
 	let after = keyset::after(cursor)
 		.map_err(|cursor| TranscriptStoreError::UnreadableCursor { cursor })?;
 	let database = ready(&state)?;
@@ -131,8 +137,9 @@ pub async fn conversation_page<R: Runtime>(
 #[tauri::command]
 #[specta::specta]
 pub async fn conversation_local_ids(
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 ) -> Result<Vec<String>, TranscriptStoreError> {
+	let state = core.state::<db::DatabaseState>();
 	let mut ids = ready(&state)?.conversations().conversation_ids().await?;
 	ids.sort_unstable();
 	Ok(ids)
@@ -146,7 +153,7 @@ pub async fn conversation_local_ids(
 )]
 pub async fn conversation_update<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	conversation_id: String,
 	title: String,
 	instructions: String,
@@ -154,6 +161,7 @@ pub async fn conversation_update<R: Runtime>(
 	icon: Option<String>,
 	color: Option<i64>,
 ) -> Result<Conversation, TranscriptStoreError> {
+	let state = core.state::<db::DatabaseState>();
 	let color = color
 		.map(|asked| {
 			Hue::new(asked).ok_or_else(|| TranscriptStoreError::unknown_colour(asked.to_string()))
@@ -171,9 +179,10 @@ pub async fn conversation_update<R: Runtime>(
 #[specta::specta]
 pub async fn conversation_delete<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	conversation_id: String,
 ) -> Result<(), TranscriptStoreError> {
+	let state = core.state::<db::DatabaseState>();
 	let conversations = ready(&state)?.conversations();
 	let space_id = conversations.space(conversation_id.clone()).await?;
 	conversations.delete_conversation(conversation_id.clone()).await?;
@@ -185,11 +194,12 @@ pub async fn conversation_delete<R: Runtime>(
 #[specta::specta]
 pub async fn conversation_add_participant<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	conversation_id: String,
 	bot_id: String,
 	invited_by_bot_id: Option<String>,
 ) -> Result<Conversation, TranscriptStoreError> {
+	let state = core.state::<db::DatabaseState>();
 	let joined =
 		seat_participant(&app, ready(&state)?, conversation_id, bot_id, invited_by_bot_id).await?;
 	Ok(drawn(&app, joined.conversation))
@@ -217,10 +227,11 @@ pub(crate) async fn seat_participant<R: Runtime>(
 #[specta::specta]
 pub async fn conversation_remove_participant<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	conversation_id: String,
 	bot_id: String,
 ) -> Result<Conversation, TranscriptStoreError> {
+	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	let left = database.conversations().remove_participant(conversation_id, bot_id).await?;
 	let left = drawn(&app, left);
@@ -232,10 +243,11 @@ pub async fn conversation_remove_participant<R: Runtime>(
 #[specta::specta]
 pub async fn conversation_set_lead<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	conversation_id: String,
 	bot_id: String,
 ) -> Result<Conversation, TranscriptStoreError> {
+	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	let led = database.conversations().set_lead(conversation_id, bot_id).await?;
 	let led = drawn(&app, led);
@@ -291,13 +303,14 @@ fn drawn<R: Runtime>(app: &AppHandle<R>, room: StoredConversation) -> Conversati
 #[tauri::command]
 #[specta::specta]
 pub async fn conversation_open_runtime_session(
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	conversation_id: String,
 	bot_id: String,
 	started_at: i64,
 	runtime_session_id: Option<String>,
 	reason: Option<String>,
 ) -> Result<RuntimeSession, TranscriptStoreError> {
+	let state = core.state::<db::DatabaseState>();
 	let participant = ParticipantKey { conversation_id, bot_id };
 	let handover = runtime_session_id.map(|session_id| Handover { session_id, reason });
 	Ok(ready(&state)?.runtime_context().open(participant, started_at, handover).await?.into())
@@ -306,12 +319,13 @@ pub async fn conversation_open_runtime_session(
 #[tauri::command]
 #[specta::specta]
 pub async fn conversation_record_provider_session(
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	conversation_id: String,
 	bot_id: String,
 	runtime_session_id: String,
 	provider_session_id: String,
 ) -> Result<(), TranscriptStoreError> {
+	let state = core.state::<db::DatabaseState>();
 	let participant = ParticipantKey { conversation_id, bot_id };
 	Ok(ready(&state)?
 		.runtime_context()
@@ -322,12 +336,13 @@ pub async fn conversation_record_provider_session(
 #[tauri::command]
 #[specta::specta]
 pub async fn conversation_bounded_context(
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	conversation_id: String,
 	bot_id: String,
 	runtime_session_id: String,
 	prompt_message_id: String,
 ) -> Result<String, TranscriptStoreError> {
+	let state = core.state::<db::DatabaseState>();
 	let participant = ParticipantKey { conversation_id, bot_id };
 	context::bounded_context(ready(&state)?, participant, runtime_session_id, prompt_message_id)
 		.await
@@ -336,10 +351,11 @@ pub async fn conversation_bounded_context(
 #[tauri::command]
 #[specta::specta]
 pub async fn conversation_roster_block(
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	conversation_id: String,
 	bot_id: String,
 ) -> Result<Option<String>, TranscriptStoreError> {
+	let state = core.state::<db::DatabaseState>();
 	let participant = ParticipantKey { conversation_id, bot_id };
 	context::roster_block(ready(&state)?, participant).await
 }
@@ -347,12 +363,13 @@ pub async fn conversation_roster_block(
 #[tauri::command]
 #[specta::specta]
 pub async fn conversation_capture_checkpoint(
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	conversation_id: String,
 	bot_id: String,
 	runtime_session_id: String,
 	created_at: i64,
 ) -> Result<Option<ContextCheckpoint>, TranscriptStoreError> {
+	let state = core.state::<db::DatabaseState>();
 	let participant = ParticipantKey { conversation_id, bot_id };
 	Ok(context::capture_checkpoint(ready(&state)?, participant, runtime_session_id, created_at)
 		.await?

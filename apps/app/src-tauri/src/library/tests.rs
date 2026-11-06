@@ -350,12 +350,12 @@ fn an_oversized_image_is_refused_without_reading_its_bytes() {
 
 fn a_host(name: &str) -> AppOfItsOwn {
 	let app = an_app_of_its_own(&format!("library-{name}"), mock_builder());
-	app.manage(db::bootstrap(app.handle()));
+	crate::db::install(crate::events::core(app.handle()));
 	app
 }
 
 async fn a_space(app: &App<MockRuntime>, name: &str) -> String {
-	let state = app.state::<db::DatabaseState>();
+	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 	let database = state.as_ref().expect("the database opens");
 	database.spaces().create(name.to_owned()).await.expect("the space lands").id
 }
@@ -2381,7 +2381,8 @@ const PERSONAL: &str = "personal";
 
 async fn a_host_with_a_room(name: &str) -> AppOfItsOwn {
 	let app = a_host(name);
-	app.state::<db::DatabaseState>()
+	crate::events::core(app.app_handle())
+		.state::<db::DatabaseState>()
 		.as_ref()
 		.expect("the database opens")
 		.call_mut(|connection| Ok(connection.execute_batch(A_ROOM)?))

@@ -80,7 +80,7 @@ async fn roster_verified<R: Runtime>(
 	instance_id: &str,
 	device: &DeviceKeys,
 ) -> Result<Option<HeldRoster>, JoinedSpaceError> {
-	let state = app.state::<db::DatabaseState>();
+	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 	let stored = ready(&state)?.joined_space_relay().roster(instance_id.to_owned()).await?;
 	let Some(stored) = stored else {
 		return Ok(None);
@@ -100,7 +100,7 @@ pub(super) async fn kept<R: Runtime>(
 		return Ok(false);
 	}
 	let space = &handed.space;
-	let state = app.state::<db::DatabaseState>();
+	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 	let relay = ready(&state)?.joined_space_relay();
 	relay.counter_started(instance_id.to_owned(), space.key_id).await?;
 	let copy = HeldSpaceKey { key_id: space.key_id, key: space.key.clone() };
@@ -118,7 +118,7 @@ pub(super) async fn roster_kept<R: Runtime>(
 		detail: format!("the roster set did not serialise: {failure}"),
 	})?;
 	let held = joined_space_relay::HeldRoster { key_id: set.key_id, version: set.version, roster };
-	let state = app.state::<db::DatabaseState>();
+	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 	Ok(ready(&state)?.joined_space_relay().roster_kept(instance_id.to_owned(), held).await?)
 }
 

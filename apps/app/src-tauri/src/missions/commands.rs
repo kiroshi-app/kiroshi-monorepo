@@ -203,9 +203,10 @@ fn refused_draft(draft: &MissionDraft) -> Result<(), MissionError> {
 
 pub async fn mission_open<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	draft: MissionDraft,
 ) -> Result<MissionOpened, MissionError> {
+	let state = core.state::<db::DatabaseState>();
 	let draft = MissionDraft { workspace_path: trimmed(draft.workspace_path), ..draft };
 	refused_draft(&draft)?;
 	let workspace = draft.workspace_path.clone();
@@ -266,7 +267,7 @@ pub async fn install_hooks_at_launch<R: Runtime>(app: &AppHandle<R>) {
 }
 
 async fn at_launch<R: Runtime>(app: &AppHandle<R>) -> Result<Vec<HookedMission>, MissionError> {
-	let state = app.state::<db::DatabaseState>();
+	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 	ready(&state)?.missions().hooked().await
 }
 
@@ -276,20 +277,22 @@ fn report_unhooked(mission_id: &str, failure: &MissionError) {
 
 pub async fn mission_note<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	mission_id: String,
 	entry: MissionEntry,
 ) -> Result<Mission, MissionError> {
+	let state = core.state::<db::DatabaseState>();
 	appended(&app, &state, mission_id, entry).await
 }
 
 pub async fn mission_status<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	mission_id: String,
 	source: String,
 	text: String,
 ) -> Result<Mission, MissionError> {
+	let state = core.state::<db::DatabaseState>();
 	refuse_blank("text", &text)?;
 	let entry = MissionEntry {
 		kind: MissionEventKind::Status,
@@ -301,19 +304,21 @@ pub async fn mission_status<R: Runtime>(
 
 pub async fn mission_escalate<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	mission_id: String,
 	note: MissionNote,
 ) -> Result<Mission, MissionError> {
+	let state = core.state::<db::DatabaseState>();
 	appended(&app, &state, mission_id, MissionEntry::of(MissionEventKind::Escalated, note)).await
 }
 
 pub async fn mission_conclude<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	mission_id: String,
 	closing: MissionClosing,
 ) -> Result<Mission, MissionError> {
+	let state = core.state::<db::DatabaseState>();
 	refuse_blank("source", &closing.source)?;
 	let written = ready(&state)?.missions().close(mission_id, closing).await?;
 	announce_change(&app, written)
@@ -323,9 +328,10 @@ pub async fn mission_conclude<R: Runtime>(
 #[specta::specta]
 pub async fn mission_close<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	mission_id: String,
 ) -> Result<Mission, MissionError> {
+	let state = core.state::<db::DatabaseState>();
 	let written = ready(&state)?.missions().dismiss(mission_id, PERSON.to_owned()).await?;
 	announce_change(&app, written)
 }
@@ -334,19 +340,21 @@ pub async fn mission_close<R: Runtime>(
 #[specta::specta]
 pub async fn mission_reopen<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	mission_id: String,
 ) -> Result<Mission, MissionError> {
+	let state = core.state::<db::DatabaseState>();
 	let written = ready(&state)?.missions().reopen(mission_id, PERSON.to_owned()).await?;
 	announce_change(&app, written)
 }
 
 pub async fn mission_reopen_unmerged<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	mission_id: String,
 	source: String,
 ) -> Result<Mission, MissionError> {
+	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	refuse_a_merged_mission(database, &mission_id).await?;
 	let written = database.missions().reopen(mission_id, source).await?;
@@ -375,11 +383,12 @@ async fn refuse_a_merged_mission(
 
 pub async fn mission_update<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	mission_id: String,
 	update: MissionUpdate,
 	source: String,
 ) -> Result<Mission, MissionError> {
+	let state = core.state::<db::DatabaseState>();
 	refused_update(&mission_id, &update)?;
 	let written = ready(&state)?.missions().update(mission_id, update, source).await?;
 	announce_change(&app, written)
@@ -406,11 +415,12 @@ struct Successor {
 
 pub async fn mission_handoff<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	mission_id: String,
 	from_bot_id: String,
 	companion: String,
 ) -> Result<Mission, MissionError> {
+	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	let held = mission_row(database, &mission_id).await?;
 	let successor = successor_of(database, &held, &companion).await?;
@@ -492,7 +502,7 @@ async fn handed_over<R: Runtime>(
 
 async fn appended<R: Runtime>(
 	app: &AppHandle<R>,
-	state: &State<'_, db::DatabaseState>,
+	state: &db::DatabaseState,
 	mission_id: String,
 	entry: MissionEntry,
 ) -> Result<Mission, MissionError> {
@@ -505,10 +515,11 @@ async fn appended<R: Runtime>(
 #[specta::specta]
 pub async fn mission_answered<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	mission_id: String,
 	seq: i64,
 ) -> Result<Mission, MissionError> {
+	let state = core.state::<db::DatabaseState>();
 	match ready(&state)?.missions().answer(mission_id, seq, BOT.to_owned()).await? {
 		MissionAnswer::Appended(written) => announce_change(&app, written),
 		MissionAnswer::Stale(stored) => Ok(stored),
@@ -517,10 +528,11 @@ pub async fn mission_answered<R: Runtime>(
 
 pub async fn mission_watch<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	mission_id: String,
 	watch: MissionWatch,
 ) -> Result<MissionWatching, MissionError> {
+	let state = core.state::<db::DatabaseState>();
 	let watch = normalised(watch);
 	refused_watch(&watch)?;
 	let url = hook_url(&app)?;
@@ -601,9 +613,10 @@ fn hook_url<R: Runtime>(app: &AppHandle<R>) -> Result<String, MissionError> {
 #[specta::specta]
 pub async fn mission_list<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	conversation_id: String,
 ) -> Result<ConversationMissions, MissionError> {
+	let state = core.state::<db::DatabaseState>();
 	let ConversationMissions { open, done } =
 		ready(&state)?.missions().of_conversation(conversation_id).await?;
 	Ok(ConversationMissions { open: observed_all(&app, open), done: observed_all(&app, done) })
@@ -613,9 +626,10 @@ pub async fn mission_list<R: Runtime>(
 #[specta::specta]
 pub async fn mission_detail<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	mission_id: String,
 ) -> Result<MissionDetail, MissionError> {
+	let state = core.state::<db::DatabaseState>();
 	let MissionDetail { mission, events } = ready(&state)?.missions().detail(mission_id).await?;
 	Ok(MissionDetail { mission: observed(&app, mission), events })
 }
@@ -624,8 +638,9 @@ pub async fn mission_detail<R: Runtime>(
 #[specta::specta]
 pub async fn mission_board<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 ) -> Result<Vec<MissionOnBoard>, MissionError> {
+	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	with_their_bots(&app, database, database.missions().still_open().await?).await
 }
@@ -634,10 +649,11 @@ pub async fn mission_board<R: Runtime>(
 #[specta::specta]
 pub async fn mission_space_feed<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	space_id: String,
 	closed_since: i64,
 ) -> Result<Vec<MissionInSpace>, MissionError> {
+	let state = core.state::<db::DatabaseState>();
 	let feed = ready(&state)?.missions().of_space(space_id, closed_since).await?;
 	Ok(observed_in_space(&app, feed))
 }
@@ -646,12 +662,13 @@ pub async fn mission_space_feed<R: Runtime>(
 #[specta::specta]
 pub async fn mission_space_page<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	space_id: String,
 	closed_since: i64,
 	cursor: Option<String>,
 	limit: Option<u32>,
 ) -> Result<MissionSpacePage, MissionError> {
+	let state = core.state::<db::DatabaseState>();
 	let after =
 		keyset::after(cursor).map_err(|cursor| MissionError::UnreadableCursor { cursor })?;
 	let page = ready(&state)?
@@ -668,8 +685,9 @@ pub async fn mission_space_page<R: Runtime>(
 #[specta::specta]
 pub async fn mission_unreported<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 ) -> Result<Vec<MissionOnBoard>, MissionError> {
+	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	with_their_bots(&app, database, database.missions().closed_without_report().await?).await
 }
@@ -677,10 +695,11 @@ pub async fn mission_unreported<R: Runtime>(
 #[tauri::command]
 #[specta::specta]
 pub async fn mission_reported(
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	mission_id: String,
 	turn_id: Option<String>,
 ) -> Result<Mission, MissionError> {
+	let state = core.state::<db::DatabaseState>();
 	ready(&state)?.missions().report(mission_id, turn_id).await
 }
 
@@ -752,8 +771,8 @@ mod tests {
 
 	async fn a_host(name: &str) -> AppOfItsOwn {
 		let app = an_app_of_its_own(&format!("mission-commands-{name}"), mock_builder());
-		app.manage(db::bootstrap(app.handle()));
-		ready(&app.state::<db::DatabaseState>())
+		crate::db::install(crate::events::core(app.handle()));
+		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 			.expect("the database opens")
 			.call_mut(|connection| Ok(connection.execute_batch(TWO_SPACES)?))
 			.await
@@ -803,7 +822,7 @@ mod tests {
 		let here = a_mission(&app, a_draft("c1", "b1", "Fix it")).await;
 		let there = a_mission(&app, a_draft("c2", "b2", "Ship it")).await;
 		let done = a_mission(&app, a_draft("c2", "b2", "Old work")).await;
-		let state = app.state::<db::DatabaseState>();
+		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 		let database = ready(&state).expect("the store is open");
 		db::opened_on(database, &here.id, 1).await;
 		db::opened_on(database, &there.id, 2).await;
@@ -892,7 +911,7 @@ mod tests {
 			"INSERT INTO turns (id, conversation_id, seq, started_at)
 				VALUES ('{id}', '{conversation_id}', 1, 1)"
 		);
-		ready(&app.state::<db::DatabaseState>())
+		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 			.expect("the database opens")
 			.call_mut(move |connection| Ok(connection.execute_batch(&statement)?))
 			.await
@@ -1238,7 +1257,7 @@ mod tests {
 		assert_eq!(opened.reach, HEARD, "the answer did not tell the mission hears its agent");
 		let settings = hooked_in(&workspace);
 		assert!(settings.contains("kiroshi-agent-hook.sh"), "got {settings}");
-		let hooked = ready(&app.state::<db::DatabaseState>())
+		let hooked = ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 			.expect("the database opens")
 			.missions()
 			.hooked()
@@ -1261,7 +1280,7 @@ mod tests {
 		.expect("the mission is armed");
 
 		assert_eq!(armed.key, hooked[0].delivery_key, "arming minted another key");
-		let still = ready(&app.state::<db::DatabaseState>())
+		let still = ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 			.expect("the database opens")
 			.missions()
 			.hooked()
@@ -1423,7 +1442,7 @@ mod tests {
 
 		assert_eq!(opened.reach, UNHEARD, "got {}", opened.reach);
 		assert_eq!(opened.mission.state, MissionState::Working);
-		let hooked = ready(&app.state::<db::DatabaseState>())
+		let hooked = ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 			.expect("the database opens")
 			.missions()
 			.hooked()
@@ -1480,7 +1499,7 @@ mod tests {
 
 	async fn read_first(app: &App<MockRuntime>, mission_id: &str) {
 		let statement = format!("UPDATE missions SET opened_at = 1 WHERE id = '{mission_id}'");
-		ready(&app.state::<db::DatabaseState>())
+		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 			.expect("the database opens")
 			.call_mut(move |connection| Ok(connection.execute_batch(&statement)?))
 			.await

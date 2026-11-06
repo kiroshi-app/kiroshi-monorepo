@@ -13,10 +13,11 @@ fn ready(state: &db::DatabaseState) -> Result<&db::Database, AttachmentStoreErro
 #[specta::specta]
 pub async fn chat_store_attachments<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	conversation_id: String,
 	attachments: Vec<SubmittedAttachment>,
 ) -> Result<Vec<String>, AttachmentStoreError> {
+	let state = core.state::<db::DatabaseState>();
 	let known = ready(&state)?.conversations().conversation_ids().await?;
 	if !known.iter().any(|id| id == &conversation_id) {
 		return Err(AttachmentStoreError::UnknownConversation { id: conversation_id });

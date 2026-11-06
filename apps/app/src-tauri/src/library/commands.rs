@@ -47,9 +47,10 @@ async fn known_space(state: &db::DatabaseState, space_id: &str) -> Result<(), Li
 #[specta::specta]
 pub async fn library_list<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	space_id: String,
 ) -> Result<Vec<LibraryItem>, LibraryError> {
+	let state = core.state::<db::DatabaseState>();
 	known_space(&state, &space_id).await?;
 	list(&root(&app)?, &space_id)
 }
@@ -58,10 +59,11 @@ pub async fn library_list<R: Runtime>(
 #[specta::specta]
 pub async fn library_read_document<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	space_id: String,
 	name: String,
 ) -> Result<LibraryDocument, LibraryError> {
+	let state = core.state::<db::DatabaseState>();
 	known_space(&state, &space_id).await?;
 	read_document(&root(&app)?, &space_id, &name)
 }
@@ -70,10 +72,11 @@ pub async fn library_read_document<R: Runtime>(
 #[specta::specta]
 pub async fn library_read_image<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	space_id: String,
 	name: String,
 ) -> Result<LibraryImage, LibraryError> {
+	let state = core.state::<db::DatabaseState>();
 	known_space(&state, &space_id).await?;
 	read_image(&root(&app)?, &space_id, &name)
 }
@@ -82,10 +85,11 @@ pub async fn library_read_image<R: Runtime>(
 #[specta::specta]
 pub async fn library_read_file<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	space_id: String,
 	name: String,
 ) -> Result<LibraryFile, LibraryError> {
+	let state = core.state::<db::DatabaseState>();
 	known_space(&state, &space_id).await?;
 	read_file(&root(&app)?, &space_id, &name)
 }
@@ -100,11 +104,12 @@ pub fn library_templates() -> Vec<LibraryTemplate> {
 #[specta::specta]
 pub async fn library_create_document<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	space_id: String,
 	name: String,
 	template_id: Option<String>,
 ) -> Result<LibraryItem, LibraryError> {
+	let state = core.state::<db::DatabaseState>();
 	known_space(&state, &space_id).await?;
 	create_document(&root(&app)?, &space_id, &name, template_id.as_deref())
 }
@@ -113,10 +118,11 @@ pub async fn library_create_document<R: Runtime>(
 #[specta::specta]
 pub async fn library_create_board<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	space_id: String,
 	name: String,
 ) -> Result<LibraryItem, LibraryError> {
+	let state = core.state::<db::DatabaseState>();
 	known_space(&state, &space_id).await?;
 	create_board(&root(&app)?, &space_id, &name)
 }
@@ -125,10 +131,11 @@ pub async fn library_create_board<R: Runtime>(
 #[specta::specta]
 pub async fn library_board_summary<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	space_id: String,
 	name: String,
 ) -> Result<LibraryBoardSummary, LibraryError> {
+	let state = core.state::<db::DatabaseState>();
 	known_space(&state, &space_id).await?;
 	summarise_board(&root(&app)?, &space_id, &name)
 }
@@ -137,10 +144,11 @@ pub async fn library_board_summary<R: Runtime>(
 #[specta::specta]
 pub async fn library_open_document<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	space_id: String,
 	name: String,
 ) -> Result<LibraryDocumentState, LibraryError> {
+	let state = core.state::<db::DatabaseState>();
 	known_space(&state, &space_id).await?;
 	open_document(&app, &root(&app)?, &space_id, &name)
 }
@@ -149,11 +157,12 @@ pub async fn library_open_document<R: Runtime>(
 #[specta::specta]
 pub async fn library_apply_update<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	space_id: String,
 	name: String,
 	update: String,
 ) -> Result<(), LibraryError> {
+	let state = core.state::<db::DatabaseState>();
 	known_space(&state, &space_id).await?;
 	apply_update(&app, &root(&app)?, &space_id, &name, &update)
 }
@@ -162,11 +171,12 @@ pub async fn library_apply_update<R: Runtime>(
 #[specta::specta]
 pub async fn library_rename_document<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	space_id: String,
 	name: String,
 	new_name: String,
 ) -> Result<LibraryItem, LibraryError> {
+	let state = core.state::<db::DatabaseState>();
 	known_space(&state, &space_id).await?;
 	let database =
 		state.as_ref().map_err(|failure| LibraryError::Unavailable { failure: failure.into() })?;
@@ -177,11 +187,12 @@ pub async fn library_rename_document<R: Runtime>(
 #[specta::specta]
 pub async fn library_rename_board<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	space_id: String,
 	name: String,
 	new_name: String,
 ) -> Result<LibraryItem, LibraryError> {
+	let state = core.state::<db::DatabaseState>();
 	known_space(&state, &space_id).await?;
 	rename_board(&app, &root(&app)?, &space_id, &name, &new_name)
 }
@@ -190,10 +201,11 @@ pub async fn library_rename_board<R: Runtime>(
 #[specta::specta]
 pub async fn library_save_message<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	conversation_id: String,
 	message_id: String,
 ) -> Result<LibraryItem, LibraryError> {
+	let state = core.state::<db::DatabaseState>();
 	let database =
 		state.as_ref().map_err(|failure| LibraryError::Unavailable { failure: failure.into() })?;
 	save_message(&app, database, &conversation_id, &message_id).await
@@ -203,10 +215,11 @@ pub async fn library_save_message<R: Runtime>(
 #[specta::specta]
 pub async fn library_delete<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	space_id: String,
 	name: String,
 ) -> Result<(), LibraryError> {
+	let state = core.state::<db::DatabaseState>();
 	known_space(&state, &space_id).await?;
 	delete_item(&app, &root(&app)?, &space_id, &name)
 }
@@ -217,11 +230,12 @@ pub async fn library_share_presence<R: Runtime>(
 	app: AppHandle<R>,
 	webview: Webview<R>,
 	caller: Caller,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	space_id: String,
 	name: String,
 	at: Option<LibraryPresenceAt>,
 ) -> Result<(), LibraryError> {
+	let state = core.state::<db::DatabaseState>();
 	known_space(&state, &space_id).await?;
 	let seat = seat_of(&caller, &webview)?;
 	let Some(at) = at else {
@@ -244,12 +258,13 @@ pub async fn library_share_presence<R: Runtime>(
 #[specta::specta]
 pub async fn library_stop_writers<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	agent: State<'_, AgentState>,
 	space_id: String,
 	name: String,
 	agent_id: Option<String>,
 ) -> Result<CancelOutcome, LibraryError> {
+	let state = core.state::<db::DatabaseState>();
 	known_space(&state, &space_id).await?;
 	let stopped = stop_writers(&app, &space_id, &name, agent_id.as_deref()).await;
 	if stopped.is_empty() {
@@ -277,10 +292,11 @@ fn seat_of<R: Runtime>(caller: &Caller, webview: &Webview<R>) -> Result<Seat, Li
 #[specta::specta]
 pub async fn library_read_thumbnail<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	space_id: String,
 	name: String,
 ) -> Result<LibraryImage, LibraryError> {
+	let state = core.state::<db::DatabaseState>();
 	known_space(&state, &space_id).await?;
 	let root = root(&app)?;
 	tokio::task::spawn_blocking(move || read_thumbnail(&root, &space_id, &name))
@@ -292,11 +308,12 @@ pub async fn library_read_thumbnail<R: Runtime>(
 #[specta::specta]
 pub async fn library_import<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	space_id: String,
 	name: String,
 	content: String,
 ) -> Result<LibraryItem, LibraryError> {
+	let state = core.state::<db::DatabaseState>();
 	known_space(&state, &space_id).await?;
 	let root = root(&app)?;
 	tokio::task::spawn_blocking(move || import(&root, &space_id, &name, &content))
@@ -308,12 +325,13 @@ pub async fn library_import<R: Runtime>(
 #[specta::specta]
 pub async fn library_import_url<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	guests: State<'_, RelayGuests>,
 	caller: Caller,
 	space_id: String,
 	url: String,
 ) -> Result<LibraryItem, LibraryImportUrlError> {
+	let state = core.state::<db::DatabaseState>();
 	let imported = async {
 		known_space(&state, &space_id).await?;
 		let proxy_bearers = guests.proxy_bearers();
@@ -330,10 +348,11 @@ pub async fn library_import_url<R: Runtime>(
 #[specta::specta]
 pub async fn library_import_paths<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	space_id: String,
 	paths: Vec<PathBuf>,
 ) -> Result<Vec<LibraryImport>, LibraryError> {
+	let state = core.state::<db::DatabaseState>();
 	known_space(&state, &space_id).await?;
 	let root = root(&app)?;
 	tokio::task::spawn_blocking(move || import_paths(&root, &space_id, &paths))
@@ -353,10 +372,11 @@ pub async fn library_read_picked_image(path: PathBuf) -> Result<LibraryImage, Li
 #[specta::specta]
 pub async fn library_save<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	space_id: String,
 	name: String,
 ) -> Result<Option<String>, LibraryError> {
+	let state = core.state::<db::DatabaseState>();
 	known_space(&state, &space_id).await?;
 	let saved = save(&root(&app)?, &space_id, &name, |suggested| {
 		chosen_destination(&app, suggested.to_owned())
@@ -369,10 +389,11 @@ pub async fn library_save<R: Runtime>(
 #[specta::specta]
 pub async fn library_copy<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	space_id: String,
 	name: String,
 ) -> Result<(), LibraryError> {
+	let state = core.state::<db::DatabaseState>();
 	known_space(&state, &space_id).await?;
 	let root = root(&app)?;
 	let payload = tokio::task::spawn_blocking(move || clipboard_payload(&root, &space_id, &name))
@@ -411,10 +432,11 @@ pub async fn library_copy_bytes<R: Runtime>(
 #[specta::specta]
 pub async fn library_reveal<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	space_id: String,
 	name: String,
 ) -> Result<(), LibraryError> {
+	let state = core.state::<db::DatabaseState>();
 	known_space(&state, &space_id).await?;
 	let item = resolve(&root(&app)?, &space_id, &name)?;
 	app.opener()

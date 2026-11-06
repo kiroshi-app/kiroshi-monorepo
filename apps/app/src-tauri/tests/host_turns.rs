@@ -357,7 +357,8 @@ impl Host {
 		if data_dir.exists() {
 			std::fs::remove_dir_all(&data_dir).expect("the previous data dir is cleared");
 		}
-		app.manage(db::bootstrap(app.handle()));
+		kiroshi_app::events::install_core(app.handle()).expect("the core installs");
+		kiroshi_app::db::install(kiroshi_app::events::core(app.handle()));
 		app.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
 		let identifier = app.config().identifier.clone();
 		app.manage(SpaceKeys::new(InstallKind::Dev, identifier, Some(data_dir.clone())));
@@ -839,7 +840,11 @@ async fn bundled(app: &App<MockRuntime>, bot_ids: &[&str]) {
 }
 
 fn database_of(app: &App<MockRuntime>) -> &db::Database {
-	app.state::<db::DatabaseState>().inner().as_ref().expect("the database is open")
+	kiroshi_app::events::core(app.app_handle())
+		.state::<db::DatabaseState>()
+		.inner()
+		.as_ref()
+		.expect("the database is open")
 }
 
 fn replies_of<'a>(transcript: &'a [StoredMessage], bot_id: &str) -> Vec<&'a StoredMessage> {

@@ -49,7 +49,7 @@ fn app() -> AppOfItsOwn {
 		"lifecycle",
 		mock_builder().manage(AgentState::default()).invoke_handler(invoke_handler()),
 	);
-	app.manage(db::bootstrap(app.handle()));
+	kiroshi_app::db::install(kiroshi_app::events::core(app.handle()));
 	bundled_bots(&app, &["default", "second"]);
 	app
 }
@@ -83,7 +83,7 @@ async fn start_run(
 	agent_start_or_resume_session(
 		app.handle().clone(),
 		app.state::<AgentState>(),
-		app.state::<db::DatabaseState>(),
+		app.state::<kiroshi_app::core_context::Core>(),
 		scope,
 		None,
 		Some(std::env::temp_dir().to_string_lossy().into_owned()),
@@ -333,7 +333,11 @@ fn conversations_updated(heard: &Heard) -> usize {
 }
 
 fn database_of(app: &App<MockRuntime>) -> &db::Database {
-	app.state::<db::DatabaseState>().inner().as_ref().expect("the database is open")
+	kiroshi_app::events::core(app.app_handle())
+		.state::<db::DatabaseState>()
+		.inner()
+		.as_ref()
+		.expect("the database is open")
 }
 
 async fn running_runs(app: &App<MockRuntime>) -> i64 {

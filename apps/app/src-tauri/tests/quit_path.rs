@@ -15,6 +15,12 @@ use kiroshi_app::termination::termination_requested;
 use removed_on_drop::RemovedOnDrop;
 use tokio::sync::mpsc;
 
+fn an_app_with_a_core() -> tauri::App<tauri::test::MockRuntime> {
+	let app = tauri::test::mock_app();
+	kiroshi_app::events::install_core(app.handle()).expect("the core installs");
+	app
+}
+
 const FAKE_SIDECAR: &str = env!("CARGO_BIN_EXE_fake_sidecar");
 const DEADLINE: Duration = Duration::from_secs(60);
 const POLL: Duration = Duration::from_millis(25);
@@ -67,7 +73,7 @@ async fn quitting_during_a_startup_sweeps_the_group_it_cannot_see_yet() {
 	assert!(is_alive(orphan), "the grandchild must be running before the quit");
 
 	let state = AgentState::default();
-	terminate_session(tauri::test::mock_app().handle(), &state).await;
+	terminate_session(an_app_with_a_core().handle(), &state).await;
 
 	poll_until("the exit sweep to leave no orphan behind", || !is_alive(orphan)).await;
 

@@ -835,7 +835,10 @@ impl<R: Runtime> HostTurn<R> {
 		scope: &RuntimeScope,
 		resume: Option<String>,
 	) -> Result<bool, TransportError> {
-		let stored = managed::<R, db::DatabaseState>(&self.app, NO_DATABASE).map_err(missing)?;
+		let stored = crate::events::core(&self.app)
+			.try_state::<db::DatabaseState>()
+			.ok_or_else(|| NO_DATABASE.to_owned())
+			.map_err(missing)?;
 		let start = RunStart {
 			scope: scope.clone(),
 			resume,
@@ -1445,7 +1448,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_message_linking_only_through_reply_links_summons_the_author_of_the_first() {
 		let app = an_app_of_its_own("host-turn-reply-links-summon", mock_builder());
-		app.manage(db::bootstrap(app.handle()));
+		crate::db::install(crate::events::core(app.handle()));
 		let room = a_room_running(app.handle(), &["Ada", "Grace"]).await;
 		let grace = room.bot_ids[1].clone();
 		speaking_in(app.handle(), &room, &[]).await;
@@ -1461,7 +1464,7 @@ mod tests {
 	#[tokio::test]
 	async fn reply_links_outrank_a_replied_to_id_naming_another_message_when_summoning() {
 		let app = an_app_of_its_own("host-turn-reply-links-outrank", mock_builder());
-		app.manage(db::bootstrap(app.handle()));
+		crate::db::install(crate::events::core(app.handle()));
 		let room = a_room_running(app.handle(), &["Ada", "Grace"]).await;
 		let (ada, grace) = (room.bot_ids[0].clone(), room.bot_ids[1].clone());
 		speaking_in(app.handle(), &room, &[]).await;
@@ -1480,7 +1483,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_turn_the_host_takes_over_counts_the_handovers_its_window_stored_toward_the_bound() {
 		let app = an_app_of_its_own("host-turn-seeded-bound", mock_builder());
-		app.manage(db::bootstrap(app.handle()));
+		crate::db::install(crate::events::core(app.handle()));
 		let room = a_room_running(app.handle(), &["Ada", "Grace"]).await;
 		let (ada, grace) = (room.bot_ids[0].as_str(), room.bot_ids[1].as_str());
 		let messages = database(app.handle()).expect("the database opens").messages();
@@ -1519,7 +1522,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_group_turn_whose_sessions_are_gone_after_a_lag_shuts_down_every_speaker() {
 		let app = an_app_of_its_own("host-turn-reader-lag", mock_builder());
-		app.manage(db::bootstrap(app.handle()));
+		crate::db::install(crate::events::core(app.handle()));
 		app.manage(AgentState::default());
 		let room = a_room_running(app.handle(), &["Ada", "Grace"]).await;
 		speaking_in(app.handle(), &room, &room.bot_ids).await;
@@ -1554,7 +1557,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_group_turn_whose_relay_closes_abandons_every_waiting_bot() {
 		let app = an_app_of_its_own("host-turn-relay-closed-waiting", mock_builder());
-		app.manage(db::bootstrap(app.handle()));
+		crate::db::install(crate::events::core(app.handle()));
 		app.manage(AgentState::default());
 		let room = a_room_running(app.handle(), &["Ada", "Grace"]).await;
 		let (speaker, waiter) = (room.bot_ids[0].clone(), room.bot_ids[1].clone());
@@ -1604,7 +1607,7 @@ mod tests {
 
 		async fn refused_as(name: &str, refusal: fn(RuntimeScope) -> Refusal) -> Refused {
 			let app = an_app_of_its_own(name, mock_builder());
-			app.manage(db::bootstrap(app.handle()));
+			crate::db::install(crate::events::core(app.handle()));
 			app.manage(AgentState::default());
 			let room = a_room_running(app.handle(), &["Ada"]).await;
 			let ada = scope_in(&room, &room.bot_ids[0]);
@@ -1713,7 +1716,7 @@ mod tests {
 
 		async fn ada_handing_over(name: &str, naming: fn(&str) -> String) -> HandedOver {
 			let app = an_app_of_its_own(name, mock_builder());
-			app.manage(db::bootstrap(app.handle()));
+			crate::db::install(crate::events::core(app.handle()));
 			let room = a_room_running(app.handle(), &["Ada"]).await;
 			speaking_in(app.handle(), &room, &room.bot_ids).await;
 			let ada = &room.bot_ids[0];
@@ -1763,7 +1766,7 @@ mod tests {
 		#[tokio::test]
 		async fn a_queued_run_whose_place_cannot_be_read_drops_the_summons_as_start_failed() {
 			let app = an_app_of_its_own("drop-unread-place", mock_builder());
-			app.manage(db::bootstrap(app.handle()));
+			crate::db::install(crate::events::core(app.handle()));
 			let room = a_room_running(app.handle(), &["Ada"]).await;
 			let ada = scope_in(&room, &room.bot_ids[0]);
 			let mut announced = events::subscribed(app.handle());
@@ -1787,7 +1790,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_room_turn_releases_every_summoned_bot_that_never_starts_at_its_start_deadline() {
 		let app = an_app_of_its_own("host-turn-start-deadline", mock_builder());
-		app.manage(db::bootstrap(app.handle()));
+		crate::db::install(crate::events::core(app.handle()));
 		app.manage(TurnRunDeadlines::after(Duration::ZERO));
 		let stored = database(app.handle()).expect("the database opens");
 		let conversations = stored.conversations();
@@ -1888,7 +1891,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_stop_with_no_live_session_closes_the_running_run_it_finds_and_says_cancelled() {
 		let app = an_app_of_its_own("cancel-stored-run", mock_builder());
-		app.manage(db::bootstrap(app.handle()));
+		crate::db::install(crate::events::core(app.handle()));
 		app.manage(AgentState::default());
 		let room = a_room_running(app.handle(), &["Ada"]).await;
 		let ada = room.bot_ids[0].clone();
@@ -1914,7 +1917,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_stop_with_no_live_session_and_no_open_run_has_nothing_to_cancel() {
 		let app = an_app_of_its_own("cancel-nothing", mock_builder());
-		app.manage(db::bootstrap(app.handle()));
+		crate::db::install(crate::events::core(app.handle()));
 		app.manage(AgentState::default());
 		let room = a_room_running(app.handle(), &["Ada"]).await;
 		let mut announced = events::subscribed(app.handle());
@@ -1960,7 +1963,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_group_stop_answers_once_every_speaking_companion_cancel_has_settled() {
 		let app = an_app_of_its_own("cancel-group-settled", mock_builder());
-		app.manage(db::bootstrap(app.handle()));
+		crate::db::install(crate::events::core(app.handle()));
 		app.manage(AgentState::default());
 		let room = a_room_running(app.handle(), &["Ada", "Grace"]).await;
 		speaking_in(app.handle(), &room, &room.bot_ids).await;
@@ -1977,7 +1980,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_group_stop_ends_a_speaker_that_holds_nothing_left_to_cancel() {
 		let app = an_app_of_its_own("cancel-group-idle-speaker", mock_builder());
-		app.manage(db::bootstrap(app.handle()));
+		crate::db::install(crate::events::core(app.handle()));
 		app.manage(AgentState::default());
 		let room = a_room_running(app.handle(), &["Ada"]).await;
 		let ada = scope_in(&room, &room.bot_ids[0]);
@@ -2062,7 +2065,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_stop_pending_when_the_relay_is_lost_answers_cancelled_once_the_runs_are_ended() {
 		let app = an_app_of_its_own("cancel-relay-lost", mock_builder());
-		app.manage(db::bootstrap(app.handle()));
+		crate::db::install(crate::events::core(app.handle()));
 		app.manage(AgentState::default());
 		let room = a_room_running(app.handle(), &["Ada"]).await;
 		speaking_in(app.handle(), &room, &room.bot_ids).await;
@@ -2166,7 +2169,7 @@ mod tests {
 		#[tokio::test]
 		async fn a_relay_closed_under_a_queued_turn_withdraws_it_and_fails_it_to_the_member() {
 			let app = an_app_of_its_own("host-turn-closed-queued", mock_builder());
-			app.manage(db::bootstrap(app.handle()));
+			crate::db::install(crate::events::core(app.handle()));
 			app.manage(AgentState::default());
 			let room = a_room_running(app.handle(), &["Ada"]).await;
 			let ada = scope_in(&room, &room.bot_ids[0]);
@@ -2202,7 +2205,7 @@ mod tests {
 		#[tokio::test]
 		async fn a_queued_turn_lost_from_its_session_during_a_lag_is_rejected_and_not_released() {
 			let app = an_app_of_its_own("host-turn-lost-queue", mock_builder());
-			app.manage(db::bootstrap(app.handle()));
+			crate::db::install(crate::events::core(app.handle()));
 			app.manage(AgentState::default());
 			let room = a_room_running(app.handle(), &["Ada"]).await;
 			let ada = scope_in(&room, &room.bot_ids[0]);
@@ -2237,7 +2240,7 @@ mod tests {
 		#[tokio::test]
 		async fn a_queued_turn_that_ended_unheard_during_a_lag_is_released_without_a_failure() {
 			let app = an_app_of_its_own("host-turn-ended-unheard", mock_builder());
-			app.manage(db::bootstrap(app.handle()));
+			crate::db::install(crate::events::core(app.handle()));
 			app.manage(AgentState::default());
 			let room = a_room_running(app.handle(), &["Ada"]).await;
 			let ada = scope_in(&room, &room.bot_ids[0]);
@@ -2280,7 +2283,7 @@ mod tests {
 		async fn a_queued_turn_its_session_ends_unrun_is_rejected_as_a_lost_queue() {
 			capturing();
 			let app = an_app_of_its_own("host-turn-ended-in-line", mock_builder());
-			app.manage(db::bootstrap(app.handle()));
+			crate::db::install(crate::events::core(app.handle()));
 			app.manage(AgentState::default());
 			let room = a_room_running(app.handle(), &["Ada"]).await;
 			let ada = scope_in(&room, &room.bot_ids[0]);
@@ -2316,7 +2319,7 @@ mod tests {
 		) {
 			capturing();
 			let app = an_app_of_its_own("scenario-same-room", mock_builder());
-			app.manage(db::bootstrap(app.handle()));
+			crate::db::install(crate::events::core(app.handle()));
 			app.manage(AgentState::default());
 			let room = a_room_running(app.handle(), &["Ada", "Grace"]).await;
 			let grace = scope_in(&room, &room.bot_ids[1]);
@@ -2351,7 +2354,7 @@ mod tests {
 
 			capturing();
 			let app = an_app_of_its_own("host-turn-handed", mock_builder());
-			app.manage(db::bootstrap(app.handle()));
+			crate::db::install(crate::events::core(app.handle()));
 			app.manage(AgentState::default());
 			let room = a_room_running(app.handle(), &["Ada", "Grace"]).await;
 			let grace = scope_in(&room, &room.bot_ids[1]);
@@ -2439,7 +2442,8 @@ done
 						turn_id: "t1".to_owned(),
 						prompt_id: "reply-of-ada".to_owned(),
 					};
-					let database = self.app.state::<db::DatabaseState>();
+					let database =
+						crate::events::core(self.app.app_handle()).state::<db::DatabaseState>();
 					let agent = self.app.state::<AgentState>();
 					let text = "your turn".to_owned();
 					submit_claimed_prompt(Some(&database), agent, self.grace(), text, Some(turn))
@@ -2541,7 +2545,7 @@ done
 
 			async fn ada_ran_t1_from_the_main_window(name: &str) -> Served {
 				let app = an_app_of_its_own(name, mock_builder());
-				app.manage(db::bootstrap(app.handle()));
+				crate::db::install(crate::events::core(app.handle()));
 				app.manage(AgentState::default());
 				app.manage(TurnRunDeadlines::default());
 				app.manage(TurnWindows::default());

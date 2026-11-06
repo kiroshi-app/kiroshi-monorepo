@@ -107,10 +107,11 @@ pub async fn plugin_skills<R: Runtime>(
 #[specta::specta]
 pub async fn plugin_create_skill<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	scope: PluginScope,
 	draft: SkillDraft,
 ) -> Result<Skill, TranscriptStoreError> {
+	let state = core.state::<db::DatabaseState>();
 	let created = match writable(&app, &scope)? {
 		Plugin::Bot { root, id } => {
 			let bot = stored_bot(&state, &id).await?;
@@ -125,11 +126,12 @@ pub async fn plugin_create_skill<R: Runtime>(
 #[specta::specta]
 pub async fn plugin_update_skill<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	scope: PluginScope,
 	skill_id: String,
 	draft: SkillDraft,
 ) -> Result<Skill, TranscriptStoreError> {
+	let state = core.state::<db::DatabaseState>();
 	let updated = match writable(&app, &scope)? {
 		Plugin::Bot { root, id } => {
 			refuse_system_skill(&root, &id, &skill_id)?;
@@ -145,11 +147,12 @@ pub async fn plugin_update_skill<R: Runtime>(
 #[specta::specta]
 pub async fn plugin_set_skill_preloaded<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	scope: PluginScope,
 	skill_id: String,
 	is_preloaded: bool,
 ) -> Result<Skill, TranscriptStoreError> {
+	let state = core.state::<db::DatabaseState>();
 	let set = match writable(&app, &scope)? {
 		Plugin::Bot { root, id } => {
 			refuse_system_skill(&root, &id, &skill_id)?;
@@ -165,10 +168,11 @@ pub async fn plugin_set_skill_preloaded<R: Runtime>(
 #[specta::specta]
 pub async fn plugin_delete_skill<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	scope: PluginScope,
 	skill_id: String,
 ) -> Result<(), TranscriptStoreError> {
+	let state = core.state::<db::DatabaseState>();
 	let removed = match writable(&app, &scope)? {
 		Plugin::Bot { root, id } => {
 			refuse_system_skill(&root, &id, &skill_id)?;
@@ -252,12 +256,13 @@ pub async fn plugin_mcp_servers<R: Runtime>(
 #[specta::specta]
 pub async fn plugin_set_mcp_server<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	scope: PluginScope,
 	name: String,
 	config: JsonValue,
 	mark: Option<ApplicationMark>,
 ) -> Result<McpServer, TranscriptStoreError> {
+	let state = core.state::<db::DatabaseState>();
 	let config = config.0;
 	let set = match writable(&app, &scope)? {
 		Plugin::Bot { root, id } => {
@@ -273,10 +278,11 @@ pub async fn plugin_set_mcp_server<R: Runtime>(
 #[specta::specta]
 pub async fn plugin_delete_mcp_server<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	scope: PluginScope,
 	name: String,
 ) -> Result<(), TranscriptStoreError> {
+	let state = core.state::<db::DatabaseState>();
 	let owner = match writable(&app, &scope)? {
 		Plugin::Bot { root, id } => {
 			let database = ready(&state)?;
@@ -328,11 +334,12 @@ pub async fn plugin_history_diff<R: Runtime>(
 #[specta::specta]
 pub async fn plugin_revert<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	scope: PluginScope,
 	oldest_commit_id: String,
 	newest_commit_id: String,
 ) -> Result<Vec<BotHistoryEntry>, TranscriptStoreError> {
+	let state = core.state::<db::DatabaseState>();
 	let target = writable(&app, &scope)?;
 	match &target {
 		Plugin::Bot { root, id } => {
@@ -396,18 +403,23 @@ mod tests {
 
 	fn a_host(name: &str) -> AppOfItsOwn {
 		let app = a_bare_host(name);
-		app.manage(db::bootstrap(app.handle()));
+		crate::db::install(crate::events::core(app.handle()));
 		app
 	}
 
 	fn a_host_without_a_database(name: &str) -> AppOfItsOwn {
 		let app = a_bare_host(name);
-		app.manage::<db::DatabaseState>(Err(DatabaseError::AppDataDir));
+		crate::events::core(app.app_handle())
+			.manage::<db::DatabaseState>(Err(DatabaseError::AppDataDir));
 		app
 	}
 
 	fn database(app: &App<MockRuntime>) -> &db::Database {
-		app.state::<db::DatabaseState>().inner().as_ref().expect("the database opens")
+		crate::events::core(app.app_handle())
+			.state::<db::DatabaseState>()
+			.inner()
+			.as_ref()
+			.expect("the database opens")
 	}
 
 	async fn a_bot_in_a_space(app: &App<MockRuntime>) -> (String, String) {
@@ -726,7 +738,7 @@ mod tests {
 	) -> Result<Vec<BotHistoryEntry>, TranscriptStoreError> {
 		plugin_revert(
 			app.handle().clone(),
-			app.state::<db::DatabaseState>(),
+			app.state(),
 			bot(bot_id),
 			commit_id.to_owned(),
 			commit_id.to_owned(),

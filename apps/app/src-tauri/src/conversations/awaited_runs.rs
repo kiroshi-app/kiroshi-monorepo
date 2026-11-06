@@ -241,7 +241,6 @@ mod tests {
 	use super::{forget_on_destroyed, forget_on_page_event, forget_settled_turns, TurnWindows};
 	use crate::conversations::summons::{self, SummonsDropReason, SummonsRun};
 	use crate::conversations::turn_run_deadline::{arm_start_deadlines, TurnRunDeadlines};
-	use crate::db;
 	use crate::db::repositories::conversations::DEFAULT_BOT_ID;
 	use crate::db::repositories::messages::NewTurn;
 	use crate::routines::runner::database;
@@ -252,7 +251,7 @@ mod tests {
 		start_within: Duration,
 	) -> (AppOfItsOwn, String) {
 		let app = an_app_of_its_own(name, mock_builder());
-		app.manage(db::bootstrap(app.handle()));
+		crate::db::install(crate::events::core(app.handle()));
 		app.manage(TurnWindows::default());
 		app.manage(TurnRunDeadlines::after(start_within));
 		let database = database(app.handle()).expect("the database opens");

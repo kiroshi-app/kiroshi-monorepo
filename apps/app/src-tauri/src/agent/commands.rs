@@ -621,7 +621,7 @@ async fn record_its_own_provider_session(
 }
 
 fn bot_database<R: Runtime>(app: &AppHandle<R>) -> Option<&db::Database> {
-	app.try_state::<db::DatabaseState>()?.inner().as_ref().ok()
+	crate::events::core(app.app_handle()).try_state::<db::DatabaseState>()?.inner().as_ref().ok()
 }
 
 pub(crate) async fn reconcile_bot(database: &db::Database, root: &Path, bot: &StoredBot) {
@@ -1169,12 +1169,13 @@ fn reserved_directory(app_data: PathBuf, bot_id: &str) -> PathBuf {
 pub async fn agent_start_or_resume_session<R: Runtime>(
 	app: AppHandle<R>,
 	state: State<'_, AgentState>,
-	database: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	scope: RuntimeScope,
 	resume: Option<String>,
 	cwd: Option<String>,
 	output_schema: Option<JsonValue>,
 ) -> Result<SessionHandle, TransportError> {
+	let database = core.state::<db::DatabaseState>();
 	let start = RunStart {
 		scope,
 		resume,
@@ -1375,7 +1376,7 @@ pub async fn agent_submit_prompt<R: Runtime>(
 	turn: Option<SubmittedTurn>,
 ) -> Result<(), TransportError> {
 	let turn_id = turn.as_ref().map(|handed| handed.turn_id.clone());
-	let database = webview.try_state::<db::DatabaseState>();
+	let database = crate::events::core(webview.app_handle()).try_state::<db::DatabaseState>();
 	submit_claimed_prompt(database.as_deref(), state, scope, text, turn).await?;
 	if let (Some(turn_id), Caller::Host, Some(windows)) =
 		(turn_id, caller, webview.try_state::<TurnWindows>())
@@ -1553,7 +1554,7 @@ async fn close_stored_runs<R: Runtime>(
 	owned: &HostWrites,
 	scope: &RuntimeScope,
 ) -> Result<usize, TranscriptStoreError> {
-	let Some(state) = app.try_state::<db::DatabaseState>() else {
+	let Some(state) = crate::events::core(app.app_handle()).try_state::<db::DatabaseState>() else {
 		return Err(TranscriptStoreError::Unavailable {
 			failure: (&db::DatabaseError::AppDataDir).into(),
 		});
@@ -1627,9 +1628,10 @@ pub async fn agent_live_sessions(
 #[specta::specta]
 pub async fn agent_live_sessions_in_space(
 	state: State<'_, AgentState>,
-	database: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	space_id: String,
 ) -> Result<Vec<LiveSession>, TranscriptStoreError> {
+	let database = core.state::<db::DatabaseState>();
 	let children = ready(&database)?.space_children();
 	let mut in_the_space = Vec::new();
 	for session in state.live.report() {
@@ -1654,9 +1656,10 @@ pub async fn agent_pending_questions(
 #[specta::specta]
 pub async fn agent_pending_questions_in_space(
 	state: State<'_, AgentState>,
-	database: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	space_id: String,
 ) -> Result<Vec<ScopedEvent>, TranscriptStoreError> {
+	let database = core.state::<db::DatabaseState>();
 	let children = ready(&database)?.space_children();
 	let mut in_the_space = Vec::new();
 	for question in state.live.pending_questions() {
@@ -3056,7 +3059,7 @@ mod tests {
 		async fn an_app_storing(name: &str, prompts: Vec<PendingPrompt>) -> AppOfItsOwn {
 			let app = an_app(name);
 			app.manage(AgentState::default());
-			app.manage(db::bootstrap(app.handle()));
+			crate::db::install(crate::events::core(app.handle()));
 			let database = bot_database(app.handle()).expect("the database opens");
 			database
 				.call_mut(|connection| Ok(connection.execute_batch(ONE_SEATED_ROOM)?))

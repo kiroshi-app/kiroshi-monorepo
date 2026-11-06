@@ -80,27 +80,29 @@ struct Inner {
 #[derive(Clone)]
 pub struct Core(Arc<Inner>);
 
-pub struct Managed<T>(Arc<T>);
+pub struct Managed<'a, T>(&'a T);
 
-impl<T> Managed<T> {
-	pub fn inner(&self) -> &T {
-		&self.0
+impl<'a, T> Managed<'a, T> {
+	pub fn inner(&self) -> &'a T {
+		self.0
 	}
 }
 
-impl<T> Deref for Managed<T> {
+impl<T> Deref for Managed<'_, T> {
 	type Target = T;
 
 	fn deref(&self) -> &T {
-		&self.0
+		self.0
 	}
 }
 
-impl<T> Clone for Managed<T> {
+impl<T> Clone for Managed<'_, T> {
 	fn clone(&self) -> Self {
-		Self(self.0.clone())
+		*self
 	}
 }
+
+impl<T> Copy for Managed<'_, T> {}
 
 impl Core {
 	pub fn new(data_dir: impl Into<PathBuf>) -> Self {
@@ -126,13 +128,13 @@ impl Core {
 		true
 	}
 
-	pub fn try_state<T: Send + Sync + 'static>(&self) -> Option<Managed<T>> {
+	pub fn try_state<T: Send + Sync + 'static>(&self) -> Option<Managed<'_, T>> {
 		let registry = self.0.registry.read().unwrap_or_else(PoisonError::into_inner);
-		let held = registry.get(&TypeId::of::<T>())?.clone();
-		held.downcast::<T>().ok().map(Managed)
+		let value: *const T = registry.get(&TypeId::of::<T>())?.downcast_ref::<T>()?;
+		Some(Managed(unsafe { &*value }))
 	}
 
-	pub fn state<T: Send + Sync + 'static>(&self) -> Managed<T> {
+	pub fn state<T: Send + Sync + 'static>(&self) -> Managed<'_, T> {
 		self.try_state().unwrap_or_else(|| {
 			panic!("the core holds no {}: manage it before reading it", type_name::<T>())
 		})
@@ -264,11 +266,23 @@ mod tests {
 	}
 
 	#[test]
-	fn managed_state_is_found_by_its_type_and_managed_once() {
+	fn managed_state_is_found_by_its_type() {
 		let core = Core::new(std::env::temp_dir());
 		assert!(core.try_state::<u32>().is_none());
 		assert!(core.manage(7_u32));
-		assert!(!core.manage(8_u32));
 		assert_eq!(*core.state::<u32>(), 7);
+	}
+
+	#[test]
+	fn a_second_insert_of_a_type_is_refused_and_the_held_value_stays() {
+		let core = Core::new(std::env::temp_dir());
+		assert!(core.manage(String::from("first")));
+		let held = core.state::<String>().inner();
+
+		assert!(!core.manage(String::from("second")));
+
+		assert_eq!(held, "first");
+		assert_eq!(core.state::<String>().inner(), "first");
+		assert!(std::ptr::eq(held, core.state::<String>().inner()));
 	}
 }

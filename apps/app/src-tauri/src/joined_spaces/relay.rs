@@ -379,7 +379,7 @@ pub async fn joined<R: Runtime>(
 	if !is_signed_in(app).map_err(RelayJoinError::Account)? {
 		return Err(RelayJoinError::SignedOut);
 	}
-	let state = app.state::<db::DatabaseState>();
+	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	let repository = database.joined_spaces();
 	let reach = JoinedReach::Relay { instance_id: instance_id.clone() };
@@ -546,7 +546,7 @@ async fn listed_followed_unlisted_stopped<R: Runtime>(
 	listing: Listing,
 ) -> Result<Unlisted, String> {
 	let Listing { bearer, instances: listed, .. } = listing;
-	let state = app.state::<db::DatabaseState>();
+	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 	let database = ready(&state).map_err(described)?;
 	let hosted = database.space_hosting().registered_instance_ids().await.map_err(described)?;
 	let repository = database.joined_spaces();
@@ -676,7 +676,7 @@ async fn started_in_turn<R: Runtime>(
 	if guests.removed().contains(id) {
 		return Err(JoinedSpaceError::RemovedByRotation);
 	}
-	let state = app.state::<db::DatabaseState>();
+	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 	let found = ready(&state)?.joined_spaces().find(id.to_owned()).await?;
 	let unknown = || JoinedSpaceError::UnknownJoinedSpace { id: id.to_owned() };
 	let found = found.ok_or_else(unknown)?;
@@ -793,7 +793,7 @@ async fn learned<R: Runtime>(
 		.and_then(|answer| answer.body.get("spaceId"))
 		.and_then(Value::as_str)
 		.ok_or_else(offline)?;
-	let state = app.state::<db::DatabaseState>();
+	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 	ready(&state)?.joined_spaces().learned(id.to_owned(), space_id.to_owned()).await?;
 	Ok(space_id.to_owned())
 }
@@ -805,7 +805,7 @@ pub(super) async fn description_adopted<R: Runtime>(
 ) -> Result<(), JoinedSpaceError> {
 	let guests = app.state::<RelayGuests>();
 	let _turn = guests.turn.lock().await;
-	let state = app.state::<db::DatabaseState>();
+	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 	let repository = ready(&state)?.joined_spaces();
 	let found = repository.find(id.to_owned()).await?;
 	let is_its_space = found.is_some_and(|joined| {
@@ -823,7 +823,7 @@ pub(super) async fn description_adopted<R: Runtime>(
 pub async fn left<R: Runtime>(app: &AppHandle<R>, id: &str) -> Result<(), JoinedSpaceError> {
 	let guests = app.state::<RelayGuests>();
 	let _turn = guests.turn.lock().await;
-	let state = app.state::<db::DatabaseState>();
+	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 	let repository = ready(&state)?.joined_spaces();
 	let unknown = || JoinedSpaceError::UnknownJoinedSpace { id: id.to_owned() };
 	let found = repository.find(id.to_owned()).await?.ok_or_else(unknown)?;
@@ -895,7 +895,7 @@ pub async fn signed_out<R: Runtime>(app: &AppHandle<R>) -> Option<tokio::sync::M
 }
 
 async fn relay_entries_dropped<R: Runtime>(app: &AppHandle<R>) -> Result<(), JoinedSpaceError> {
-	let state = app.state::<db::DatabaseState>();
+	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 	let repository = ready(&state)?.joined_spaces();
 	for joined in repository.list().await? {
 		if repository.remove(joined.id.clone()).await? {
@@ -1046,7 +1046,7 @@ async fn online<R: Runtime>(
 	held: Held,
 	stop: &mut watch::Receiver<bool>,
 ) -> (Ended, Held) {
-	let state = app.state::<db::DatabaseState>();
+	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 	let database = match ready(&state) {
 		Ok(database) => database,
 		Err(failure) => {
@@ -1293,7 +1293,7 @@ pub(super) async fn entry_evicted<R: Runtime>(
 	id: &str,
 	reason: JoinedSpaceRemovalReason,
 ) -> Result<(), JoinedSpaceError> {
-	let state = app.state::<db::DatabaseState>();
+	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 	let repository = ready(&state)?.joined_spaces();
 	let Some(found) = repository.find(id.to_owned()).await? else {
 		return Ok(());

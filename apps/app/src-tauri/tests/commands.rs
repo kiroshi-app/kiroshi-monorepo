@@ -33,7 +33,7 @@ fn app() -> AppOfItsOwn {
 		"commands",
 		mock_builder().manage(AgentState::default()).invoke_handler(invoke_handler()),
 	);
-	app.manage(db::bootstrap(app.handle()));
+	kiroshi_app::db::install(kiroshi_app::events::core(app.handle()));
 	bundled_bots(&app, &["default", "other"]);
 	app
 }
@@ -153,7 +153,7 @@ fn shutting_down_a_session_never_queues_behind_the_quit() {
 		agent_start_or_resume_session(
 			app.handle().clone(),
 			app.state::<AgentState>(),
-			app.state::<db::DatabaseState>(),
+			app.state::<kiroshi_app::core_context::Core>(),
 			a_scope_value(),
 			None,
 			Some(std::env::temp_dir().to_string_lossy().into_owned()),
@@ -195,7 +195,8 @@ fn shutting_down_a_session_never_queues_behind_the_quit() {
 fn bootstrapping_leaves_a_migrated_file_in_the_app_data_directory() {
 	let app = app();
 
-	let _database = db::bootstrap(app.handle()).expect("the database opens");
+	let _database =
+		db::bootstrap(kiroshi_app::events::core(app.handle())).expect("the database opens");
 
 	let dir = app.path().app_data_dir().expect("data dir");
 	let file = dir.join(FILE_NAME);

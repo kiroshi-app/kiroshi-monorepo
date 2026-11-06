@@ -16,12 +16,11 @@ use kiroshi_app::agent::contract::{
 use kiroshi_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
 use kiroshi_app::agent::AgentState;
 use kiroshi_app::commands::invoke_handler;
-use kiroshi_app::db;
 use kiroshi_app::events::{self, Frame};
 use serde_json::{json, Value};
 use tauri::test::{mock_builder, MockRuntime, INVOKE_KEY};
 use tauri::webview::InvokeRequest;
-use tauri::{Manager, WebviewWindow, WebviewWindowBuilder};
+use tauri::{WebviewWindow, WebviewWindowBuilder};
 use tokio::sync::broadcast::{self, error::RecvError};
 
 const FAKE_SIDECAR: &str = env!("CARGO_BIN_EXE_fake_sidecar");
@@ -53,7 +52,7 @@ fn launch() -> Harness {
 		"scoped-runtime",
 		mock_builder().manage(AgentState::default()).invoke_handler(invoke_handler()),
 	);
-	app.manage(db::bootstrap(app.handle()));
+	kiroshi_app::db::install(kiroshi_app::events::core(app.handle()));
 	bundled_bots(&app, &["default", "second"]);
 	let window = WebviewWindowBuilder::new(app.handle(), "main", Default::default())
 		.build()

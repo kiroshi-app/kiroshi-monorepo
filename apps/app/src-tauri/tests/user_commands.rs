@@ -21,7 +21,7 @@ impl Home {
 
 	fn app(&self) -> App<MockRuntime> {
 		let app = host(&self.0.config().identifier);
-		app.manage(db::bootstrap(app.handle()));
+		kiroshi_app::db::install(kiroshi_app::events::core(app.handle()));
 		app
 	}
 }
@@ -29,16 +29,22 @@ impl Home {
 fn host(identifier: &str) -> App<MockRuntime> {
 	let mut context = mock_context(noop_assets());
 	context.config_mut().identifier = identifier.into();
-	mock_builder().invoke_handler(invoke_handler()).build(context).expect("app builds")
+	{
+		let app =
+			mock_builder().invoke_handler(invoke_handler()).build(context).expect("app builds");
+		kiroshi_app::events::install_core(app.handle()).expect("the core installs");
+		app
+	}
 }
 
 fn app_without_a_database() -> AppOfItsOwn {
-	an_app_of_its_own(
+	let app = an_app_of_its_own(
 		"user-commands-no-database",
-		mock_builder()
-			.invoke_handler(invoke_handler())
-			.manage(db::DatabaseState::Err(db::DatabaseError::AppDataDir)),
-	)
+		mock_builder().invoke_handler(invoke_handler()),
+	);
+	kiroshi_app::events::core(app.handle())
+		.manage(db::DatabaseState::Err(db::DatabaseError::AppDataDir));
+	app
 }
 
 fn window(app: &App<MockRuntime>) -> WebviewWindow<MockRuntime> {

@@ -154,8 +154,8 @@ pub fn install_core<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Core> {
 	Ok(core)
 }
 
-pub fn core<R: Runtime>(app: &AppHandle<R>) -> Core {
-	app.state::<Core>().inner().clone()
+pub fn core<R: Runtime>(app: &AppHandle<R>) -> &Core {
+	app.state::<Core>().inner()
 }
 
 pub fn emit<R: Runtime, P: Serialize>(

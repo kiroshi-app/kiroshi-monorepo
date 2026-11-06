@@ -16,9 +16,10 @@ fn ready(state: &db::DatabaseState) -> Result<&db::Database, StorageFailure> {
 #[tauri::command]
 #[specta::specta]
 pub async fn search_messages(
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	query: MessageSearchQuery,
 ) -> Result<Vec<MessageHit>, MessageSearchError> {
+	let state = core.state::<db::DatabaseState>();
 	ready(&state)
 		.map_err(|failure| MessageSearchError::Unavailable { failure })?
 		.search()
@@ -30,10 +31,11 @@ pub async fn search_messages(
 #[specta::specta]
 pub async fn search_catalogue<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	query: String,
 	space_id: String,
 ) -> Result<Catalogue, CatalogueError> {
+	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state).map_err(|failure| CatalogueError::Unavailable { failure })?;
 	let hits = database.catalogue().search(CatalogueScope { query, space_id, kind: None }).await?;
 	Ok(Catalogue {
@@ -47,9 +49,10 @@ pub async fn search_catalogue<R: Runtime>(
 #[specta::specta]
 pub async fn search_recent<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	space_id: String,
 ) -> Result<Vec<CatalogueChat>, CatalogueError> {
+	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state).map_err(|failure| CatalogueError::Unavailable { failure })?;
 	let hits = database.catalogue().recent(space_id).await?;
 	observed_chats(&app, database, hits).await
@@ -112,14 +115,14 @@ mod tests {
 
 	async fn a_host(name: &str) -> AppOfItsOwn {
 		let app = an_app_of_its_own(&format!("search-commands-{name}"), mock_builder());
-		app.manage(db::bootstrap(app.handle()));
+		crate::db::install(crate::events::core(app.handle()));
 		plant(&app, A_SPACE_EACH).await;
 		app
 	}
 
 	async fn plant(app: &App<MockRuntime>, statements: &str) {
 		let statements = statements.to_owned();
-		ready(&app.state::<db::DatabaseState>())
+		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 			.expect("the database opens")
 			.call_mut(move |connection| Ok(connection.execute_batch(&statements)?))
 			.await
@@ -143,7 +146,7 @@ mod tests {
 
 	async fn indexed_rows(app: &App<MockRuntime>, message_id: &str) -> i64 {
 		let message_id = message_id.to_owned();
-		ready(&app.state::<db::DatabaseState>())
+		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 			.expect("the database opens")
 			.call(move |connection| {
 				Ok(connection.query_row(
@@ -189,7 +192,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_message_reaches_the_index_once_it_settles_and_holds_a_single_row() {
 		let app = a_host("settle").await;
-		let state = app.state::<db::DatabaseState>();
+		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 		let database = ready(&state).expect("the database opens");
 		database
 			.messages()
@@ -387,7 +390,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_mission_hit_reads_working_while_its_thread_runs_a_turn() {
 		let app = a_host("mission-working").await;
-		let opened = ready(&app.state::<db::DatabaseState>())
+		let opened = ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 			.expect("the database opens")
 			.missions()
 			.open(a_draft_for_c1(), "k1".to_owned())

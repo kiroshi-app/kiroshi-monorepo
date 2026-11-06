@@ -6,8 +6,8 @@ pub mod result_code;
 use std::path::Path;
 use std::sync::{Arc, Mutex, MutexGuard};
 
+use crate::core_context::Core;
 use rusqlite::Connection;
-use tauri::{AppHandle, Runtime};
 
 pub use connection::DatabaseError;
 use connection::Located as _;
@@ -225,8 +225,12 @@ impl Database {
 	}
 }
 
-pub fn bootstrap<R: Runtime>(app: &AppHandle<R>) -> DatabaseState {
-	Database::open(&connection::file(app)?)
+pub fn bootstrap(core: &Core) -> DatabaseState {
+	Database::open(&connection::file(core.data_dir())?)
+}
+
+pub fn install(core: &Core) {
+	core.manage(bootstrap(core));
 }
 
 #[cfg(test)]

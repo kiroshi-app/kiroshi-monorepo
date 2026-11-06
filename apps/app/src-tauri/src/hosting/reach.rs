@@ -714,7 +714,7 @@ impl<R: Runtime> Lookup<'_, R> {
 	}
 
 	async fn resolved_child(&self, kind: SpaceChild, child_id: &str) -> Option<bool> {
-		let state = self.app.state::<DatabaseState>();
+		let state = crate::events::core(self.app.app_handle()).state::<DatabaseState>();
 		let database = match state.as_ref() {
 			Ok(database) => database,
 			Err(failure) => return self.unresolved(kind, failure),

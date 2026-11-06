@@ -370,7 +370,7 @@ async fn relay_device<R: Runtime>(
 		}
 		Err(MeError::Unreachable(reason)) => return Err(Next::Retry(reason)),
 	};
-	let state = app.state::<db::DatabaseState>();
+	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 	let database = ready(&state)
 		.map_err(|failure| database_failed(format!("the database is unavailable: {failure:?}")))?;
 	let relay_device_id = held_or_registered(app, bearer, database, &account_id, keys).await?;
@@ -436,7 +436,7 @@ async fn registered<R: Runtime>(
 		}
 		Err(RegisterError::Unreachable(reason)) => return Err(Next::Retry(reason)),
 	};
-	let state = app.state::<db::DatabaseState>();
+	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 	let stored = match ready(&state) {
 		Ok(database) => database
 			.space_hosting()
@@ -544,7 +544,7 @@ async fn online<R: Runtime>(
 	relaying: &mut Relaying<'_>,
 	frames: &mut LastFrames,
 ) -> Ended {
-	let state = app.state::<db::DatabaseState>();
+	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 	let database = match ready(&state) {
 		Ok(database) => database,
 		Err(failure) => {

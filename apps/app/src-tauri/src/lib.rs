@@ -115,7 +115,7 @@ pub fn run() {
 			}
 			#[cfg(target_os = "macos")]
 			menu::install(app.handle())?;
-			app.manage(db::bootstrap(app.handle()));
+			crate::db::install(crate::events::core(app.handle()));
 			app.manage(crypto::commands::load(app.handle()));
 			app.manage(crypto::commands::space_keys(app.handle()));
 			if !window_controls::is_headless(std::env::args()) {

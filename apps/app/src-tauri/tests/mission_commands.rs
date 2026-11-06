@@ -26,7 +26,7 @@ impl Home {
 	fn new() -> Self {
 		let app =
 			an_app_of_its_own("mission-commands", mock_builder().invoke_handler(invoke_handler()));
-		app.manage(db::bootstrap(app.handle()));
+		kiroshi_app::db::install(kiroshi_app::events::core(app.handle()));
 		Self { app }
 	}
 }
@@ -72,7 +72,7 @@ fn an_open_mission(home: &Home, window: &WebviewWindow<MockRuntime>) -> Mission 
 		source: "bot".to_owned(),
 		workspace_path: None,
 	};
-	let state = home.app.state::<db::DatabaseState>();
+	let state = kiroshi_app::events::core(home.app.app_handle()).state::<db::DatabaseState>();
 	let database = state.as_ref().expect("the database opens");
 	tauri::async_runtime::block_on(database.missions().open(draft, "a-key".to_owned()))
 		.expect("the mission opens")
@@ -248,7 +248,7 @@ fn opened_in(home: &Home, conversation_id: &str, bot_id: &str, objective: &str) 
 		source: "bot".to_owned(),
 		workspace_path: None,
 	};
-	let state = home.app.state::<db::DatabaseState>();
+	let state = kiroshi_app::events::core(home.app.app_handle()).state::<db::DatabaseState>();
 	let database = state.as_ref().expect("the database opens");
 	let id =
 		tauri::async_runtime::block_on(database.missions().open(draft, format!("key-{objective}")))
@@ -265,7 +265,7 @@ fn opened_in(home: &Home, conversation_id: &str, bot_id: &str, objective: &str) 
 }
 
 fn closed_long_ago(home: &Home, mission_id: &str) {
-	let state = home.app.state::<db::DatabaseState>();
+	let state = kiroshi_app::events::core(home.app.app_handle()).state::<db::DatabaseState>();
 	let database = state.as_ref().expect("the database opens");
 	let closed = mission_id.to_owned();
 	tauri::async_runtime::block_on(database.call(move |connection| {
@@ -399,10 +399,10 @@ fn a_mission_page_holds_thirty_missions_at_most_and_one_at_least() {
 fn a_mission_cursor_that_does_not_decode_is_refused_by_name_before_any_row_is_read() {
 	let app = an_app_of_its_own(
 		"mission-commands-no-database",
-		mock_builder()
-			.invoke_handler(invoke_handler())
-			.manage(db::DatabaseState::Err(db::DatabaseError::AppDataDir)),
+		mock_builder().invoke_handler(invoke_handler()),
 	);
+	kiroshi_app::events::core(app.handle())
+		.manage(db::DatabaseState::Err(db::DatabaseError::AppDataDir));
 	let window = window(&app);
 
 	let refused = call(

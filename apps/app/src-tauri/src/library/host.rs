@@ -493,7 +493,7 @@ impl<R: Runtime> Host for LibraryHost<R> {
 
 	async fn served(&self, operation: Operation, payload: Value) -> Result<Value, DocumentRefusal> {
 		let state = Self::database(&self.app)?;
-		let database = ready(&state)
+		let database = ready(state.state::<crate::db::DatabaseState>().inner())
 			.map_err(|error| Self::Error::unexpected(format!("{NO_STORE}: {error:?}")))?;
 		let space_id = self.space(database).await?;
 		let root = root(&self.app)?;

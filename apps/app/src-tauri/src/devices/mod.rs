@@ -247,7 +247,7 @@ async fn registration<R: Runtime>(
 			return Err(Unregistered::Unreachable(reason))
 		}
 	};
-	let database_state = app
+	let database_state = crate::events::core(app.app_handle())
 		.try_state::<DatabaseState>()
 		.ok_or_else(|| Unregistered::Refused("the database is not loaded".to_owned()))?;
 	let database = database_state.inner().as_ref().map_err(|failure| {

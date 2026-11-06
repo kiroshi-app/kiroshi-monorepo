@@ -319,7 +319,7 @@ impl Harness {
 		let database_dir = temp_dir();
 		let database = database.map(|()| db::open(&database_dir));
 		let is_database_open = database.is_ok();
-		app.manage::<DatabaseState>(database);
+		crate::events::core(app.app_handle()).manage::<DatabaseState>(database);
 		app.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
 		let profile = app.path().app_data_dir().expect("the data folder resolves");
 		let identifier = app.config().identifier.clone();
@@ -430,7 +430,7 @@ impl Harness {
 	}
 
 	async fn stored(&self) -> Vec<JoinedSpace> {
-		let state = self.app.state::<DatabaseState>();
+		let state = crate::events::core(self.app.app_handle()).state::<DatabaseState>();
 		state.as_ref().expect("the database").joined_spaces().list().await.expect("the list")
 	}
 
@@ -489,7 +489,7 @@ struct Member {
 async fn registered_as_the_member(app: &App<MockRuntime>) {
 	let state = app.state::<DeviceKeysState>();
 	let device = DeviceKeys::from_secret(&state.keys().expect("the device keys").secret());
-	let database = app.state::<DatabaseState>();
+	let database = crate::events::core(app.app_handle()).state::<DatabaseState>();
 	let devices = database.as_ref().expect("the database").relay_devices();
 	let (account, device_id) = ("u1".to_owned(), device.device_id().to_string());
 	devices.registered(account, device_id, MEMBER_RELAY_ID.to_owned()).await.expect("registered");
@@ -1053,7 +1053,7 @@ fn every_invoke_sent_right_after_connecting_a_learned_entry_gets_the_host_answer
 	run(async {
 		let mut harness = Harness::new(Some(BEARER)).await;
 		let id = harness.accepted().await;
-		let state = harness.app.state::<DatabaseState>();
+		let state = crate::events::core(harness.app.app_handle()).state::<DatabaseState>();
 		let repository = state.as_ref().expect("the database").joined_spaces();
 		repository.learned(id.clone(), SHARED_SPACE.to_owned()).await.expect("the shared space");
 		harness.cloud.is_member_relay_open.send_replace(false);
@@ -1257,7 +1257,7 @@ fn sign_out_drops_every_relay_entry_and_closes_the_proxy_of_the_connected_one() 
 		let mut harness = Harness::new(Some(BEARER)).await;
 		let relay_id = harness.accepted().await;
 		let (connection, _member) = connected(&mut harness, &relay_id).await;
-		let state = harness.app.state::<DatabaseState>();
+		let state = crate::events::core(harness.app.app_handle()).state::<DatabaseState>();
 		let joined_spaces = state.as_ref().expect("the database").joined_spaces();
 		let planted = a_relay_entry("planted-1", "i-planted", "Planted");
 		joined_spaces.join(planted).await.expect("the planted entry");
@@ -1726,7 +1726,7 @@ fn a_held_entry_keeps_its_id_and_learned_space_when_renamed_until_the_listing_om
 			remote_space_id: Some("remote-1".to_owned()),
 			..a_relay_entry("held-1", "i-held", "Held")
 		};
-		let state = harness.app.state::<DatabaseState>();
+		let state = crate::events::core(harness.app.app_handle()).state::<DatabaseState>();
 		let joined_spaces = state.as_ref().expect("the database").joined_spaces();
 		joined_spaces.join(held.clone()).await.expect("the held entry");
 
@@ -1749,7 +1749,7 @@ fn a_held_entry_keeps_its_id_and_learned_space_when_renamed_until_the_listing_om
 fn an_instance_this_machine_hosts_is_never_added() {
 	run(async {
 		let harness = Harness::new(Some(BEARER)).await;
-		let state = harness.app.state::<DatabaseState>();
+		let state = crate::events::core(harness.app.app_handle()).state::<DatabaseState>();
 		let database = state.as_ref().expect("the database");
 		database
 			.space_hosting()

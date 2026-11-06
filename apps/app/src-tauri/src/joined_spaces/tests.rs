@@ -481,7 +481,7 @@ impl Member {
 	}
 
 	async fn held_roster(&self) -> Option<String> {
-		let state = self.app.state::<DatabaseState>();
+		let state = crate::events::core(self.app.app_handle()).state::<DatabaseState>();
 		let relay = state.as_ref().expect("the database").joined_space_relay();
 		relay.roster(INSTANCE.to_owned()).await.expect("the roster reads").map(|held| held.roster)
 	}
@@ -529,7 +529,7 @@ fn signed_in(
 	let root = temp_dir();
 	store::set(&root, &EnvScope::Account, ACCOUNT_BEARER, bearer).expect("the bearer is kept");
 	let app = an_app_of_its_own(name, mock_builder());
-	app.manage::<DatabaseState>(Ok(db::open(&database)));
+	crate::events::core(app.app_handle()).manage::<DatabaseState>(Ok(db::open(&database)));
 	app.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
 	let profile = app.path().app_data_dir().expect("the data folder resolves");
 	let identifier = app.config().identifier.clone();
@@ -631,7 +631,7 @@ async fn online_with_two_members(member: &Member, host: &SealingHost) -> JoinedS
 		(members.expect("the members read").len() == 2).then_some(())
 	})
 	.await;
-	let state = member.app.state::<DatabaseState>();
+	let state = crate::events::core(member.app.app_handle()).state::<DatabaseState>();
 	let spaces = state.as_ref().expect("the database").joined_spaces();
 	spaces.learned(joined.id.clone(), SPACE.to_owned()).await.expect("the space id is learned");
 	joined
@@ -674,7 +674,7 @@ fn a_session_takes_the_roster_sent_before_the_hello_keeps_its_key_and_lists_the_
 		assert_eq!(connection.map(|connection| connection.id), Ok(joined.id.clone()));
 		assert!(is_listed(&changed, &newcomer), "{changed}");
 		assert_eq!(member.held_key_id(), Some(1));
-		let state = member.app.state::<DatabaseState>();
+		let state = crate::events::core(member.app.app_handle()).state::<DatabaseState>();
 		let relay = state.as_ref().expect("the database").joined_space_relay();
 		let roster = relay.roster(INSTANCE.to_owned()).await.expect("the roster reads");
 		let roster = roster.expect("a roster is held");
@@ -1379,7 +1379,7 @@ fn a_members_read_asked_during_another_runs_once_right_after_it() {
 		let member = Member::new("members-once-at-a-time").await;
 		let host = member.host();
 		let joined = online_with_two_members(&member, &host).await;
-		let state = member.app.state::<DatabaseState>();
+		let state = crate::events::core(member.app.app_handle()).state::<DatabaseState>();
 		let spaces = state.as_ref().expect("the database").joined_spaces();
 		let entry = spaces.find(joined.id.clone()).await.expect("the entry reads");
 		let reads = {
@@ -1845,7 +1845,7 @@ fn a_member_the_host_admits_from_the_device_list_joins_on_its_first_rekey_and_pi
 		let keys = member.state::<SpaceKeys>();
 		let held = keys.held(&format!("joined-{INSTANCE}")).expect("the key reads");
 		assert_eq!(held.map(|held| held.key_id), Some(1));
-		let state = member.state::<DatabaseState>();
+		let state = crate::events::core(member.app_handle()).state::<DatabaseState>();
 		let relay = state.as_ref().expect("the database").joined_space_relay();
 		let roster = relay.roster(INSTANCE.to_owned()).await.expect("the roster reads");
 		let roster: Value = serde_json::from_str(&roster.expect("a pinned roster").roster)
@@ -1870,7 +1870,7 @@ async fn described(
 }
 
 async fn host_space(peers: &Peers) -> (String, Option<Hue>) {
-	let state = peers.host.state::<DatabaseState>();
+	let state = crate::events::core(peers.host.app_handle()).state::<DatabaseState>();
 	let spaces = state.as_ref().expect("the database").spaces().list().await.expect("the spaces");
 	let space = spaces.into_iter().find(|space| space.id == SPACE).expect("the shared space");
 	(space.name, space.colour)

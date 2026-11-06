@@ -84,7 +84,7 @@ pub(super) async fn space_key_stored<R: Runtime>(
 	space: HeldSpaceKey,
 ) -> Result<(), String> {
 	let key_id = space.key_id;
-	let state = app.state::<DatabaseState>();
+	let state = crate::events::core(app.app_handle()).state::<DatabaseState>();
 	let database =
 		ready(&state).map_err(|failure| format!("the database is unavailable: {failure:?}"))?;
 	database.space_relay().counter_started(space_id.to_owned(), key_id).await.map_err(

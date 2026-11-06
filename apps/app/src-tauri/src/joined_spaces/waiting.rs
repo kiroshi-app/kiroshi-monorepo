@@ -58,7 +58,7 @@ pub(super) async fn joins_started<R: Runtime>(
 		Err(JoinedSpaceError::NeedsSignIn) => return Ok(()),
 		Err(failure) => return Err(failure),
 	}
-	let state = app.state::<db::DatabaseState>();
+	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 	for joined in ready(&state)?.joined_spaces().list().await? {
 		let JoinedReach::Relay { instance_id } = joined.reach;
 		if held::wait_or_unread(app, &joined.id, &instance_id).is_none() {
@@ -289,7 +289,7 @@ async fn joined_announced<R: Runtime>(app: &AppHandle<R>, id: &str, instance_id:
 }
 
 async fn members_read<R: Runtime>(app: &AppHandle<R>, id: &str) -> Result<(), JoinedSpaceError> {
-	let state = app.state::<db::DatabaseState>();
+	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 	if let Some(joined) = ready(&state)?.joined_spaces().find(id.to_owned()).await? {
 		members::read_soon(app, &joined);
 	}

@@ -395,7 +395,7 @@ async fn name_sent<R: Runtime>(
 }
 
 async fn stored_display_name<R: Runtime>(app: &AppHandle<R>) -> Option<String> {
-	let read = match app.state::<DatabaseState>().as_ref() {
+	let read = match crate::events::core(app.app_handle()).state::<DatabaseState>().as_ref() {
 		Ok(database) => database.user().preferences().await,
 		Err(failure) => {
 			eprintln!("the display name was not sent: the database is unavailable: {failure:?}");
@@ -496,7 +496,8 @@ fn relay_device_owner<R: Runtime>(app: &AppHandle<R>) -> Result<Option<(String, 
 }
 
 fn signed_in_database<R: Runtime>(app: &AppHandle<R>) -> Result<&Database, String> {
-	app.try_state::<DatabaseState>()
+	crate::events::core(app.app_handle())
+		.try_state::<DatabaseState>()
 		.ok_or_else(|| "the database is not loaded".to_owned())?
 		.inner()
 		.as_ref()
@@ -780,7 +781,7 @@ mod tests {
 			let app = an_app_of_its_own("account-session", mock_builder());
 			let root = folder.as_deref().map(Path::to_path_buf).map_err(EnvError::clone);
 			app.manage(AccountSession::new(root.clone(), api_url));
-			app.manage(db::bootstrap(app.handle()));
+			crate::db::install(crate::events::core(app.handle()));
 			let root = root.unwrap_or_default();
 			let heard = Arc::new(Mutex::new(Vec::new()));
 			let hearing = Arc::clone(&heard);
@@ -803,7 +804,11 @@ mod tests {
 		}
 
 		fn database(&self) -> &db::Database {
-			self.app.state::<DatabaseState>().inner().as_ref().expect("the database opens")
+			crate::events::core(self.app.app_handle())
+				.state::<DatabaseState>()
+				.inner()
+				.as_ref()
+				.expect("the database opens")
 		}
 
 		async fn preferences(&self) -> UserPreferences {

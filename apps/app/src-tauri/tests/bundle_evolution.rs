@@ -38,7 +38,7 @@ fn launch() -> Harness {
 		"bundle-evolution",
 		mock_builder().manage(AgentState::default()).invoke_handler(invoke_handler()),
 	);
-	app.manage(db::bootstrap(app.handle()));
+	kiroshi_app::db::install(kiroshi_app::events::core(app.handle()));
 	let window = WebviewWindowBuilder::new(app.handle(), "main", Default::default())
 		.build()
 		.expect("window builds");
@@ -147,7 +147,7 @@ impl Harness {
 	}
 
 	fn recorded_space(&self, bot: &str) -> String {
-		let state = self.app.state::<db::DatabaseState>();
+		let state = kiroshi_app::events::core(self.app.app_handle()).state::<db::DatabaseState>();
 		let database = state.inner().as_ref().expect("the database is open");
 		tokio::runtime::Runtime::new()
 			.expect("runtime")
@@ -157,7 +157,7 @@ impl Harness {
 	}
 
 	fn recorded_bot(&self, bot: &str) -> StoredBot {
-		let state = self.app.state::<db::DatabaseState>();
+		let state = kiroshi_app::events::core(self.app.app_handle()).state::<db::DatabaseState>();
 		let database = state.inner().as_ref().expect("the database is open");
 		tokio::runtime::Runtime::new()
 			.expect("runtime")

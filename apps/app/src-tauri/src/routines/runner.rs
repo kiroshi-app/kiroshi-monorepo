@@ -343,7 +343,7 @@ async fn opened_scope<R: Runtime>(
 	app: &AppHandle<R>,
 	requested: &RunRequested,
 ) -> Result<RuntimeScope, String> {
-	let state = managed::<R, db::DatabaseState>(app, NO_DATABASE)?;
+	let state = managed::<R, crate::core_context::Core>(app, NO_DATABASE)?;
 	let opened = conversation_open_runtime_session(
 		state,
 		requested.conversation_id.clone(),
@@ -583,7 +583,7 @@ pub(crate) fn managed<'a, R: Runtime, T: Send + Sync + 'static>(
 pub(crate) fn database<R: Runtime>(
 	app: &AppHandle<R>,
 ) -> Result<&db::Database, TranscriptStoreError> {
-	match app.try_state::<db::DatabaseState>() {
+	match crate::events::core(app.app_handle()).try_state::<db::DatabaseState>() {
 		Some(state) => ready(state.inner()),
 		None => Err(TranscriptStoreError::Unavailable {
 			failure: (&db::DatabaseError::AppDataDir).into(),

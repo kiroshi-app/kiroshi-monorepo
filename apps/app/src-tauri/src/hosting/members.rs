@@ -205,7 +205,7 @@ pub(super) async fn instance_of<R: Runtime>(
 	app: &AppHandle<R>,
 	space_id: &str,
 ) -> Result<String, MembersError> {
-	let database_state = app.state::<DatabaseState>();
+	let database_state = crate::events::core(app.app_handle()).state::<DatabaseState>();
 	let registration = ready(&database_state)?
 		.space_hosting()
 		.registration(space_id.to_owned())

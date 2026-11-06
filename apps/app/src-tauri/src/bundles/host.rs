@@ -77,7 +77,7 @@ impl<R: Runtime> Host for BundleHost<R> {
 		payload: Value,
 	) -> Result<Value, BundleWriteRefusal> {
 		let state = Self::database(&self.app)?;
-		let database = ready(&state)
+		let database = ready(state.state::<crate::db::DatabaseState>().inner())
 			.map_err(|error| BundleWriteRefusal::unexpected(format!("{NO_STORE}: {error:?}")))?;
 		match operation {
 			Operation::Write => {
@@ -130,9 +130,9 @@ mod tests {
 
 	async fn an_app_with_two_bundles(name: &str) -> AppOfItsOwn {
 		let app = an_app_of_its_own(&format!("bundle-host-{name}"), mock_builder());
-		app.manage(db::bootstrap(app.handle()));
-		let state = app.state::<db::DatabaseState>();
-		let database = ready(&state).expect("the database opens");
+		crate::db::install(crate::events::core(app.handle()));
+		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
+		let database = ready(state.inner()).expect("the database opens");
 		database
 			.call_mut(|connection| Ok(connection.execute_batch(TWO_BOTS)?))
 			.await
@@ -234,8 +234,8 @@ mod tests {
 		let agent = bundles::agent_file(&root, "b1").expect("the agent file is there");
 		let text = std::fs::read_to_string(agent).expect("the agent file reads");
 		assert!(!text.contains("They bake on Sundays."), "got {text}");
-		let state = app.state::<db::DatabaseState>();
-		let stored = ready(&state)
+		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
+		let stored = ready(state.inner())
 			.expect("the database opens")
 			.conversations()
 			.bot("b1".to_owned())

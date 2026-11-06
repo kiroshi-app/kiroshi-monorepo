@@ -36,7 +36,7 @@ pub(super) async fn asked<R: Runtime>(
 	let space = space_answered(&id, relay::host_answered(app, &id, &link, call).await?)?;
 	let described = SpaceDescribed { space_id: space.id, name: space.name, colour: space.colour };
 	relay::description_adopted(app, &id, described).await?;
-	let state = app.state::<db::DatabaseState>();
+	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	let stored = database.joined_spaces().find(id.clone()).await?;
 	let stored = stored.ok_or(JoinedSpaceError::UnknownJoinedSpace { id })?;

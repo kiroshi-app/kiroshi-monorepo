@@ -56,7 +56,7 @@ pub(super) async fn announce_change<R: Runtime>(
 	app: &AppHandle<R>,
 	id: String,
 ) -> Result<(), JoinedSpaceError> {
-	let state = app.state::<db::DatabaseState>();
+	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	let held = database.joined_spaces().find(id.clone()).await?;
 	let roster = database.joined_space_members().members(id.clone()).await?;
@@ -92,7 +92,7 @@ pub(super) fn announce_reconnection<R: Runtime>(
 pub async fn joined_spaces_list<R: Runtime>(
 	app: AppHandle<R>,
 ) -> Result<Vec<JoinedSpace>, JoinedSpaceError> {
-	let state = app.state::<db::DatabaseState>();
+	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	let stored = database.joined_spaces().list().await?;
 	let mut listed = Vec::with_capacity(stored.len());
@@ -194,7 +194,7 @@ mod tests {
 
 	fn app_reaching(dir: &Path, api_url: &str) -> AppOfItsOwn {
 		let app = an_app_of_its_own("joined-spaces", mock_builder());
-		app.manage::<db::DatabaseState>(Ok(db::open(dir)));
+		crate::events::core(app.app_handle()).manage::<db::DatabaseState>(Ok(db::open(dir)));
 		app.manage(AccountSession::new(Ok::<PathBuf, _>(dir.join("account")), api_url));
 		app.manage(RelayGuests::new(api_url));
 		let identifier = app.config().identifier.clone();
@@ -317,7 +317,7 @@ mod tests {
 			inviter_email: None,
 			listing: Default::default(),
 		};
-		let database = app.state::<db::DatabaseState>();
+		let database = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 		let joined = ready(&database).expect("the database").joined_spaces().join(candidate).await;
 		let guests = app.state::<RelayGuests>();
 		JoinedSpace::presented(joined.expect("the join"), guests.cloud(), wait, &[])
@@ -349,7 +349,7 @@ mod tests {
 		let dir = temp_dir();
 		let app = app_over(&dir);
 		let added = held(&app).await;
-		let state = app.state::<db::DatabaseState>();
+		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 		let members = ready(&state).expect("the database").joined_space_members();
 		members.replaced(added.id.clone(), vec![the_host("Ann")]).await.expect("the roster");
 		let hearing = heard(&app);
@@ -376,7 +376,7 @@ mod tests {
 			inviter_email: Some("owner@example.com".to_owned()),
 			listing: Default::default(),
 		};
-		let state = app.state::<db::DatabaseState>();
+		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 		let database = ready(&state).expect("the database");
 		database.joined_spaces().join(candidate).await.expect("the join");
 		let hearing = heard(&app);

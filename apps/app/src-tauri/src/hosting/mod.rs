@@ -162,7 +162,7 @@ pub async fn start<R: Runtime>(
 ) -> Result<HostingState, SpaceError> {
 	let hosting = app.state::<Hosting>();
 	let _turn = hosting.turn.lock().await;
-	let database_state = app.state::<DatabaseState>();
+	let database_state = crate::events::core(app.app_handle()).state::<DatabaseState>();
 	let database = ready(&database_state)?;
 	let registration = database.space_hosting().registration(space_id.clone()).await?;
 	let current = hosting.current(&space_id);
@@ -245,7 +245,7 @@ pub async fn stop<R: Runtime>(
 ) -> Result<HostingState, SpaceError> {
 	let hosting = app.state::<Hosting>();
 	let _turn = hosting.turn.lock().await;
-	let database_state = app.state::<DatabaseState>();
+	let database_state = crate::events::core(app.app_handle()).state::<DatabaseState>();
 	let database = ready(&database_state)?;
 	let registration = database.space_hosting().registration(space_id.clone()).await?;
 	finished(&space_id, hosting.taken_run(&space_id)).await;
@@ -323,7 +323,7 @@ pub async fn resumed<R: Runtime>(app: &AppHandle<R>) {
 		return;
 	};
 	let _turn = hosting.turn.lock().await;
-	let database_state = app.state::<DatabaseState>();
+	let database_state = crate::events::core(app.app_handle()).state::<DatabaseState>();
 	let Ok(database) = ready(&database_state) else {
 		return log::error!("no hosted space was resumed: the database is unavailable");
 	};
@@ -341,7 +341,7 @@ pub async fn resumed<R: Runtime>(app: &AppHandle<R>) {
 }
 
 async fn flagged<R: Runtime>(app: &AppHandle<R>) -> Vec<String> {
-	let database_state = app.state::<DatabaseState>();
+	let database_state = crate::events::core(app.app_handle()).state::<DatabaseState>();
 	let listed = match ready(&database_state) {
 		Ok(database) => database.space_hosting().hosted_space_ids().await.map_err(SpaceError::from),
 		Err(failure) => Err(failure),

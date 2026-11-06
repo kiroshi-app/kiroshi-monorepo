@@ -83,7 +83,7 @@ pub fn spawn<R: Runtime>(app: AppHandle<R>) -> Poller {
 }
 
 async fn polling<R: Runtime>(app: AppHandle<R>, base: String, mut halted: signal::Receiver<bool>) {
-	let state = app.state::<db::DatabaseState>();
+	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 	let database = match ready(&state) {
 		Ok(database) => database,
 		Err(failure) => return eprintln!("no mission is watched on github: {failure:?}"),

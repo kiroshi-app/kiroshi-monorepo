@@ -75,7 +75,8 @@ pub(crate) async fn observe_reporting<R: Runtime>(
 pub(crate) fn observe_later<R: Runtime>(app: &AppHandle<R>, conversation_id: String) {
 	let app = app.clone();
 	tauri::async_runtime::spawn(async move {
-		let Some(database) = app.try_state::<db::DatabaseState>() else {
+		let Some(database) = crate::events::core(app.app_handle()).try_state::<db::DatabaseState>()
+		else {
 			return log::warn!("the state of conversation {conversation_id} has no database");
 		};
 		match database.inner() {
@@ -194,7 +195,7 @@ mod tests {
 
 	async fn a_host(name: &str) -> AppOfItsOwn {
 		let app = an_app_of_its_own(&format!("conversation-state-{name}"), mock_builder());
-		app.manage(db::bootstrap(app.handle()));
+		crate::db::install(crate::events::core(app.handle()));
 		database(&app)
 			.call_mut(|connection| Ok(connection.execute_batch(ONE_SEATED_ROOM)?))
 			.await
@@ -203,7 +204,8 @@ mod tests {
 	}
 
 	fn database(app: &App<MockRuntime>) -> &db::Database {
-		ready(app.state::<db::DatabaseState>().inner()).expect("the database opens")
+		ready(crate::events::core(app.app_handle()).state::<db::DatabaseState>().inner())
+			.expect("the database opens")
 	}
 
 	async fn listed_state(
@@ -551,7 +553,7 @@ mod tests {
 		let file = before.path().app_data_dir().expect("the data folder resolves");
 
 		let after = an_app_of_its_own("conversation-state-after-relaunch", mock_builder());
-		after.manage(Ok::<_, db::DatabaseError>(db::open(&file)));
+		crate::events::core(after.app_handle()).manage(Ok::<_, db::DatabaseError>(db::open(&file)));
 
 		assert_eq!(listed_state(&after).await, Ok(ConversationState::Idle));
 	}
@@ -562,7 +564,8 @@ mod tests {
 		ask(&crashed, PromptKind::Question).await;
 		let file = crashed.path().app_data_dir().expect("the data folder resolves");
 		let relaunched = an_app_of_its_own("conversation-state-after-crash", mock_builder());
-		relaunched.manage(Ok::<_, db::DatabaseError>(db::open(&file)));
+		crate::events::core(relaunched.app_handle())
+			.manage(Ok::<_, db::DatabaseError>(db::open(&file)));
 		assert_eq!(listed_state(&relaunched).await, Ok(ConversationState::Idle));
 
 		ask(&relaunched, PromptKind::Question).await;

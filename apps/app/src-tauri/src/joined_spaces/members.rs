@@ -31,9 +31,10 @@ pub struct JoinedSpaceMembersChanged {
 #[tauri::command]
 #[specta::specta]
 pub async fn joined_space_members(
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	id: String,
 ) -> Result<Vec<JoinedSpaceMember>, JoinedSpaceError> {
+	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	if database.joined_spaces().find(id.clone()).await?.is_none() {
 		return Err(JoinedSpaceError::UnknownJoinedSpace { id });
@@ -94,7 +95,7 @@ async fn refreshed<R: Runtime>(
 	joined: &JoinedSpace,
 ) -> Result<(), JoinedSpaceError> {
 	let members = roster_of(app, joined).await?;
-	let state = app.state::<db::DatabaseState>();
+	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 	let repository = ready(&state)?.joined_space_members();
 	let id = joined.id.clone();
 	let previous = repository.members(id.clone()).await?;
@@ -241,7 +242,7 @@ mod tests {
 
 	fn app_reaching(dir: &Path, api_url: &str) -> AppOfItsOwn {
 		let app = an_app_of_its_own("joined-space-members", mock_builder());
-		app.manage::<db::DatabaseState>(Ok(db::open(dir)));
+		crate::events::core(app.app_handle()).manage::<db::DatabaseState>(Ok(db::open(dir)));
 		app.manage(AccountSession::new(Ok::<PathBuf, _>(dir.join("account")), api_url));
 		app.manage(RelayGuests::new(api_url));
 		app.manage(DeviceKeysState::new(Ok(DeviceKeys::from_secret(&DEVICE_SECRET))));
@@ -326,7 +327,7 @@ mod tests {
 		)
 		.await
 		.expect("the join");
-		let state = app.state::<db::DatabaseState>();
+		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 		let held = ready(&state).expect("the database").joined_spaces().list().await;
 		held.expect("the list").into_iter().next().expect("the joined space is held")
 	}
@@ -595,7 +596,7 @@ mod tests {
 		relay::joined(app.handle(), INSTANCE.to_owned(), None, None, Default::default())
 			.await
 			.expect("the join");
-		let state = app.state::<db::DatabaseState>();
+		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 		let held = ready(&state).expect("the database").joined_spaces().list().await;
 		let joined = held.expect("the list").into_iter().next().expect("the joined space");
 
@@ -618,7 +619,7 @@ mod tests {
 			inviter_email: None,
 			listing: Default::default(),
 		};
-		let state = app.state::<db::DatabaseState>();
+		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 		let joined = ready(&state).expect("the database").joined_spaces().join(candidate).await;
 		let joined = joined.expect("the join");
 

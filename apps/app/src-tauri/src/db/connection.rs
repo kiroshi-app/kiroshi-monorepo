@@ -3,7 +3,6 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use rusqlite::Connection;
-use tauri::{AppHandle, Manager, Runtime};
 
 pub const FILE_NAME: &str = "conversations.sqlite3";
 
@@ -45,9 +44,8 @@ impl<T, E: Located> Located for Result<T, E> {
 	}
 }
 
-pub fn file<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, DatabaseError> {
-	let dir = app.path().app_data_dir().map_err(|_| DatabaseError::AppDataDir)?;
-	fs::create_dir_all(&dir).map_err(|_| DatabaseError::AppDataDir)?;
+pub fn file(dir: &Path) -> Result<PathBuf, DatabaseError> {
+	fs::create_dir_all(dir).map_err(|_| DatabaseError::AppDataDir)?;
 	Ok(dir.join(FILE_NAME))
 }
 

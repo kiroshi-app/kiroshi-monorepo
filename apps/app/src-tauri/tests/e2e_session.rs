@@ -76,7 +76,7 @@ fn launch() -> Harness {
 		"e2e",
 		mock_builder().manage(AgentState::default()).invoke_handler(invoke_handler()),
 	);
-	app.manage(db::bootstrap(app.handle()));
+	kiroshi_app::db::install(kiroshi_app::events::core(app.handle()));
 	bundled_bots(&app, &["default"]);
 	let window = WebviewWindowBuilder::new(app.handle(), "main", Default::default())
 		.build()
@@ -383,7 +383,7 @@ fn launch_stored_with(name: &str, played: &str, state: AgentState) -> Stored {
 		&format!("e2e-{name}"),
 		mock_builder().manage(state).invoke_handler(invoke_handler()),
 	);
-	app.manage(db::bootstrap(app.handle()));
+	kiroshi_app::db::install(kiroshi_app::events::core(app.handle()));
 	bundled_bots(&app, &["default"]);
 	let window = WebviewWindowBuilder::new(app.handle(), "main", Default::default())
 		.build()
@@ -456,7 +456,11 @@ impl Stored {
 	}
 
 	fn database(&self) -> &db::Database {
-		self.app.state::<db::DatabaseState>().inner().as_ref().expect("the database is open")
+		kiroshi_app::events::core(self.app.app_handle())
+			.state::<db::DatabaseState>()
+			.inner()
+			.as_ref()
+			.expect("the database is open")
 	}
 
 	fn replies(&self) -> Vec<StoredMessage> {
@@ -583,7 +587,8 @@ impl Stored {
 	}
 
 	fn transcript_after_a_relaunch(&self) -> Vec<TranscriptMessage> {
-		let reopened = db::bootstrap(self.app.handle()).expect("the database reopens");
+		let reopened = db::bootstrap(kiroshi_app::events::core(self.app.handle()))
+			.expect("the database reopens");
 		let query = MessagePageQuery {
 			conversation_id: self.conversation_id.clone(),
 			before_seq: None,

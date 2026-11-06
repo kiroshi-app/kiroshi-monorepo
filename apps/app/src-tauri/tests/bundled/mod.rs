@@ -6,7 +6,7 @@ use tauri::test::MockRuntime;
 use tauri::{App, Manager};
 
 pub fn bundled_bots(app: &App<MockRuntime>, bot_ids: &[&str]) {
-	let state = app.state::<db::DatabaseState>();
+	let state = kiroshi_app::events::core(app.app_handle()).state::<db::DatabaseState>();
 	let database = state.inner().as_ref().expect("the database is open");
 	let root = bundles::root(app.handle()).expect("the bundles have a root");
 	for bot_id in bot_ids {

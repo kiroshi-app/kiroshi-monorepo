@@ -265,7 +265,7 @@ pub(super) async fn avatar_bridged<R: Runtime>(
 	turn: Arc<Mutex<()>>,
 	call: AvatarCall,
 ) -> FileAnswer {
-	let state = app.state::<DatabaseState>();
+	let state = crate::events::core(app.app_handle()).state::<DatabaseState>();
 	let (Ok(database), Some(dir)) = (state.as_ref(), Avatars::dir(&app)) else {
 		log::error!("a relayed avatar was not read: the database or the data directory is missing");
 		let frame =
@@ -308,7 +308,7 @@ pub(super) async fn attachment_bridged<R: Runtime>(
 	turn: Arc<Mutex<()>>,
 	call: AttachmentCall,
 ) -> FileAnswer {
-	let state = app.state::<DatabaseState>();
+	let state = crate::events::core(app.app_handle()).state::<DatabaseState>();
 	let Ok(database) = state.as_ref() else {
 		log::error!("a relayed attachment was not read: the database is missing");
 		let frame = answer(

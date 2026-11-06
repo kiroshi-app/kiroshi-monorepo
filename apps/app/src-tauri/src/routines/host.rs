@@ -66,7 +66,7 @@ impl<R: Runtime> Host for RoutineHost<R> {
 
 	async fn served(&self, operation: Operation, payload: Value) -> Result<Value, RoutineError> {
 		let state = Self::database(&self.app)?;
-		let database = ready(&state)?;
+		let database = ready(state.state::<crate::db::DatabaseState>().inner())?;
 		match operation {
 			Operation::List => {
 				let _: Bare = Self::read(payload)?;
@@ -209,10 +209,10 @@ mod tests {
 
 	async fn a_host(name: &str) -> AppOfItsOwn {
 		let app = an_app_of_its_own(&format!("routine-host-{name}"), mock_builder());
-		app.manage(db::bootstrap(app.handle()));
+		crate::db::install(crate::events::core(app.handle()));
 		let system = bundles::system::path(app.handle()).expect("the system bundle is named");
 		bundles::system::write(&system).expect("the system bundle lands");
-		ready(&app.state::<db::DatabaseState>())
+		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 			.expect("the database opens")
 			.call_mut(|connection| Ok(connection.execute_batch(A_SPACE)?))
 			.await

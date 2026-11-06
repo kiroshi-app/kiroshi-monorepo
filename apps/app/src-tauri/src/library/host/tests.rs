@@ -48,8 +48,8 @@ async fn a_host(name: &str) -> (AppOfItsOwn, PathBuf) {
 
 async fn a_host_built(name: &str, builder: tauri::Builder<MockRuntime>) -> (AppOfItsOwn, PathBuf) {
 	let app = an_app_of_its_own(&format!("library-host-{name}"), builder);
-	app.manage(db::bootstrap(app.handle()));
-	ready(&app.state::<db::DatabaseState>())
+	crate::db::install(crate::events::core(app.handle()));
+	ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 		.expect("the database opens")
 		.call_mut(|connection| Ok(connection.execute_batch(A_CONVERSATION)?))
 		.await
@@ -1404,7 +1404,7 @@ async fn an_agent_posts_a_document_of_the_space_as_its_own_message_announced_liv
 		.await
 		.expect("the document is posted");
 
-	let page = ready(&app.state::<db::DatabaseState>())
+	let page = ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 		.expect("the database opens")
 		.messages()
 		.page_messages(MessagePageQuery {
@@ -1446,7 +1446,7 @@ async fn an_agent_posting_what_is_not_a_document_of_the_space_is_refused_by_name
 	};
 	assert_eq!(refused(missing), json!({ "kind": "missing", "name": "theirs.md" }));
 	assert_eq!(refused(image), json!({ "kind": "notADocument", "name": "cover.png" }));
-	let page = ready(&app.state::<db::DatabaseState>())
+	let page = ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 		.expect("the database opens")
 		.messages()
 		.page_messages(MessagePageQuery {
@@ -1469,7 +1469,7 @@ const A_SECOND_AGENT_IN_THE_CONVERSATION: &str = "
 async fn two_agents_writing(name: &str) -> (AppOfItsOwn, PathBuf) {
 	let (app, root) = a_host(name).await;
 	app.manage(AgentState::default());
-	ready(&app.state::<db::DatabaseState>())
+	ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 		.expect("the database opens")
 		.call_mut(|connection| Ok(connection.execute_batch(A_SECOND_AGENT_IN_THE_CONVERSATION)?))
 		.await
@@ -1944,7 +1944,7 @@ async fn an_agent_posts_a_board_of_the_space_as_its_own_message() {
 		.await
 		.expect("the board is posted");
 
-	let page = ready(&app.state::<db::DatabaseState>())
+	let page = ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 		.expect("the database opens")
 		.messages()
 		.page_messages(MessagePageQuery {

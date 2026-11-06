@@ -261,12 +261,16 @@ mod tests {
 
 	fn a_host(name: &str) -> AppOfItsOwn {
 		let app = a_bare_host(name);
-		app.manage(db::bootstrap(app.handle()));
+		crate::db::install(crate::events::core(app.handle()));
 		app
 	}
 
 	fn database_of(app: &App<MockRuntime>) -> &db::Database {
-		app.state::<db::DatabaseState>().inner().as_ref().expect("the database opens")
+		crate::events::core(app.app_handle())
+			.state::<db::DatabaseState>()
+			.inner()
+			.as_ref()
+			.expect("the database opens")
 	}
 
 	fn outcome_of(app: &App<MockRuntime>) -> LaunchOutcome {
@@ -451,7 +455,8 @@ mod tests {
 	#[tokio::test]
 	async fn a_launch_that_cannot_reach_the_database_names_it_in_the_outcome() {
 		let app = a_bare_host("no-database");
-		app.manage::<db::DatabaseState>(Err(DatabaseError::AppDataDir));
+		crate::events::core(app.app_handle())
+			.manage::<db::DatabaseState>(Err(DatabaseError::AppDataDir));
 		let refused = heard(&app, SEED_REFUSED_EVENT);
 
 		list_bundles_at_launch(app.handle()).await;

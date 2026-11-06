@@ -659,7 +659,7 @@ impl<R: Runtime> Host for CompanionHost<R> {
 
 	async fn served(&self, operation: Operation, payload: Value) -> Result<Value, CompanionError> {
 		let state = Self::database(&self.app)?;
-		let database = ready(&state)?;
+		let database = ready(state.state::<crate::db::DatabaseState>().inner())?;
 		match operation {
 			Operation::Suggestions => {
 				let _: Bare = Self::read(payload)?;
@@ -986,10 +986,10 @@ mod tests {
 
 	async fn a_host(name: &str) -> AppOfItsOwn {
 		let app = an_app_of_its_own(&format!("companion-host-{name}"), mock_builder());
-		app.manage(db::bootstrap(app.handle()));
+		crate::db::install(crate::events::core(app.handle()));
 		let system = bundles::system::path(app.handle()).expect("the system bundle is named");
 		bundles::system::write(&system).expect("the system bundle lands");
-		ready(&app.state::<db::DatabaseState>())
+		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 			.expect("the database opens")
 			.call_mut(|connection| Ok(connection.execute_batch(A_SPACE)?))
 			.await
@@ -1013,7 +1013,7 @@ mod tests {
 	}
 
 	async fn planted(app: &App<MockRuntime>, batch: &'static str) {
-		ready(&app.state::<db::DatabaseState>())
+		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 			.expect("the database opens")
 			.call_mut(move |connection| Ok(connection.execute_batch(batch)?))
 			.await
@@ -1025,7 +1025,7 @@ mod tests {
 	}
 
 	async fn written(app: &App<MockRuntime>) -> (i64, i64, i64) {
-		ready(&app.state::<db::DatabaseState>())
+		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 			.expect("the database opens")
 			.call(|connection| {
 				let counted = |table: &str| {
@@ -1076,7 +1076,7 @@ mod tests {
 	}
 
 	async fn standing(app: &App<MockRuntime>) -> Standing {
-		ready(&app.state::<db::DatabaseState>())
+		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 			.expect("the database opens")
 			.call(|connection| {
 				let mut seats = connection.prepare(
@@ -1182,7 +1182,7 @@ mod tests {
 			rooms.join(", "),
 			said.join(", ")
 		);
-		ready(&app.state::<db::DatabaseState>())
+		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 			.expect("the database opens")
 			.call_mut(move |connection| Ok(connection.execute_batch(&batch)?))
 			.await
@@ -1210,7 +1210,7 @@ mod tests {
 	}
 
 	async fn worn(app: &App<MockRuntime>) -> Vec<StoredBot> {
-		ready(&app.state::<db::DatabaseState>())
+		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 			.expect("the database opens")
 			.conversations()
 			.bots(Some("personal".to_owned()))
@@ -1219,7 +1219,7 @@ mod tests {
 	}
 
 	async fn roster_of(app: &App<MockRuntime>, space_id: &str) -> Vec<String> {
-		ready(&app.state::<db::DatabaseState>())
+		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 			.expect("the database opens")
 			.conversations()
 			.bots(Some(space_id.to_owned()))
@@ -1231,7 +1231,7 @@ mod tests {
 	}
 
 	async fn stored_preferences(app: &App<MockRuntime>) -> Preferences {
-		ready(&app.state::<db::DatabaseState>())
+		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 			.expect("the database opens")
 			.user()
 			.preferences()
@@ -1396,7 +1396,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_companion_created_once_the_step_is_done_but_the_first_run_is_not_is_stored_first() {
 		let app = a_host("first-companion-step-done").await;
-		ready(&app.state::<db::DatabaseState>())
+		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 			.expect("the database opens")
 			.user()
 			.set_onboarding_step(OnboardingStep::Done)
@@ -1469,8 +1469,8 @@ mod tests {
 				"archived": false
 			})
 		);
-		let state = app.state::<db::DatabaseState>();
-		let database = ready(&state).expect("the database opens");
+		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
+		let database = ready(state.inner()).expect("the database opens");
 		assert_eq!(
 			database.conversations().space(id.clone()).await.expect("the space reads"),
 			Some("personal".to_owned())
@@ -1589,17 +1589,18 @@ mod tests {
 			.expect("it is opened");
 
 		let id = opened["conversationId"].as_str().expect("the room is named").to_owned();
-		let row: (String, Option<String>) = ready(&app.state::<db::DatabaseState>())
-			.expect("the database opens")
-			.call(move |connection| {
-				Ok(connection.query_row(
-					"SELECT title, icon FROM conversations WHERE id = ?1",
-					[id],
-					|row| Ok((row.get(0)?, row.get(1)?)),
-				)?)
-			})
-			.await
-			.expect("the row reads");
+		let row: (String, Option<String>) =
+			ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
+				.expect("the database opens")
+				.call(move |connection| {
+					Ok(connection.query_row(
+						"SELECT title, icon FROM conversations WHERE id = ?1",
+						[id],
+						|row| Ok((row.get(0)?, row.get(1)?)),
+					)?)
+				})
+				.await
+				.expect("the row reads");
 		assert_eq!(row, ("Trip".to_owned(), Some("Rocket".to_owned())));
 	}
 
@@ -1728,7 +1729,7 @@ mod tests {
 	}
 
 	async fn archived_at(app: &App<MockRuntime>, conversation_id: &'static str) -> Option<i64> {
-		ready(&app.state::<db::DatabaseState>())
+		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 			.expect("the database opens")
 			.call(move |connection| {
 				Ok(connection.query_row(
@@ -2548,7 +2549,7 @@ mod tests {
 	type Look = (String, String, Option<String>, Option<String>, Option<i64>, i64);
 
 	async fn look_of(app: &App<MockRuntime>, conversation_id: &'static str) -> Look {
-		ready(&app.state::<db::DatabaseState>())
+		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 			.expect("the database opens")
 			.call(move |connection| {
 				Ok(connection.query_row(

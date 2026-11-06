@@ -6,7 +6,6 @@ use kiroshi_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
 use kiroshi_app::agent::AgentState;
 use kiroshi_app::bundles::{self, EffortLevel};
 use kiroshi_app::commands::invoke_handler;
-use kiroshi_app::db;
 use serde_json::{json, Value};
 use tauri::test::{mock_builder, MockRuntime, INVOKE_KEY};
 use tauri::webview::InvokeRequest;
@@ -21,7 +20,7 @@ fn host() -> AppOfItsOwn {
 		"companion-effort",
 		mock_builder().manage(AgentState::default()).invoke_handler(invoke_handler()),
 	);
-	app.manage(db::bootstrap(app.handle()));
+	kiroshi_app::db::install(kiroshi_app::events::core(app.handle()));
 	app
 }
 

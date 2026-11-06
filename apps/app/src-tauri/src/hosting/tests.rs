@@ -933,7 +933,7 @@ impl Harness {
 				.expect("the bearer is kept");
 		}
 		let app = an_app_of_its_own(&format!("hosting-{name}"), mock_builder());
-		app.manage::<DatabaseState>(Ok(db::open(&database)));
+		crate::events::core(app.app_handle()).manage::<DatabaseState>(Ok(db::open(&database)));
 		app.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
 		let profile = app.path().app_data_dir().expect("the data folder resolves");
 		let identifier = app.config().identifier.clone();
@@ -1065,7 +1065,7 @@ impl Harness {
 	}
 
 	async fn rostered(&self, space_id: &str, device: &SealingMember) {
-		let state = self.app.state::<DatabaseState>();
+		let state = crate::events::core(self.app.app_handle()).state::<DatabaseState>();
 		let roster = state.as_ref().expect("the database").space_relay();
 		let row = device.row(&self.host_keys(), space_id);
 		roster.rostered(space_id.to_owned(), row).await.expect("the member is rostered");
@@ -1096,34 +1096,39 @@ impl Harness {
 	}
 
 	async fn coloured(&self, colour: Option<Hue>) {
-		let state = self.app.state::<DatabaseState>();
+		let state = crate::events::core(self.app.app_handle()).state::<DatabaseState>();
 		let spaces = state.as_ref().expect("the database").spaces();
 		let personal = "Personal".to_owned();
 		spaces.update(PERSONAL.to_owned(), personal, colour).await.expect("stored");
 	}
 
 	async fn updated(&self, name: &str, colour: Option<Hue>) -> Result<SpaceShown, SpaceError> {
-		let state = self.app.state::<DatabaseState>();
 		let colour = colour.map(|hue| i64::from(hue.value()));
-		space_update(self.app.handle().clone(), state, PERSONAL.to_owned(), name.to_owned(), colour)
-			.await
+		space_update(
+			self.app.handle().clone(),
+			self.app.state(),
+			PERSONAL.to_owned(),
+			name.to_owned(),
+			colour,
+		)
+		.await
 	}
 
 	async fn stored(&self) -> (Option<String>, Vec<String>) {
-		let state = self.app.state::<DatabaseState>();
+		let state = crate::events::core(self.app.app_handle()).state::<DatabaseState>();
 		let hosting = state.as_ref().expect("the database").space_hosting();
 		let registration = hosting.registration(PERSONAL.to_owned()).await.expect("the row");
 		(registration.instance_id, hosting.hosted_space_ids().await.expect("the flags"))
 	}
 
 	async fn stored_colour(&self) -> Option<Hue> {
-		let state = self.app.state::<DatabaseState>();
+		let state = crate::events::core(self.app.app_handle()).state::<DatabaseState>();
 		let hosting = state.as_ref().expect("the database").space_hosting();
 		hosting.registration(PERSONAL.to_owned()).await.expect("the row").colour
 	}
 
 	async fn joined_a_space(&self) -> JoinedSpace {
-		let state = self.app.state::<DatabaseState>();
+		let state = crate::events::core(self.app.app_handle()).state::<DatabaseState>();
 		let candidate = JoinedSpace {
 			id: uuid::Uuid::new_v4().to_string(),
 			reach: JoinedReach::Relay { instance_id: "joined-instance".to_owned() },
@@ -1137,7 +1142,7 @@ impl Harness {
 	}
 
 	async fn plant(&self, instance_id: &str) {
-		let state = self.app.state::<DatabaseState>();
+		let state = crate::events::core(self.app.app_handle()).state::<DatabaseState>();
 		let hosting = state.as_ref().expect("the database").space_hosting();
 		hosting.registered(PERSONAL.to_owned(), instance_id.to_owned()).await.expect("planted");
 	}
@@ -2095,7 +2100,7 @@ fn a_lagged_event_broadcast_closes_with_1013_and_reconnects() {
 		let (release, released) = std::sync::mpsc::channel::<()>();
 		let app = harness.app.handle().clone();
 		let holding = tauri::async_runtime::spawn(async move {
-			let state = app.state::<DatabaseState>();
+			let state = crate::events::core(app.app_handle()).state::<DatabaseState>();
 			let database = state.as_ref().expect("the database");
 			database
 				.call(move |_| {
@@ -2379,7 +2384,7 @@ fn deleting_a_hosted_space_closes_its_relay_with_1000_and_reads_off() {
 	run(async {
 		let mut harness = Harness::signed_in("deleted").await;
 		let work = {
-			let state = harness.app.state::<DatabaseState>();
+			let state = crate::events::core(harness.app.app_handle()).state::<DatabaseState>();
 			let database = state.as_ref().expect("the database");
 			database.spaces().create("Work".to_owned()).await.expect("the space").id
 		};
@@ -2398,7 +2403,7 @@ fn deleting_a_hosted_space_closes_its_relay_with_1000_and_reads_off() {
 		};
 		assert_eq!(close.code, 1000);
 		assert_eq!(harness.app.state::<Hosting>().current(&work), HostingState::Off);
-		let state = harness.app.state::<DatabaseState>();
+		let state = crate::events::core(harness.app.app_handle()).state::<DatabaseState>();
 		let hosting = state.as_ref().expect("the database").space_hosting();
 		assert!(hosting.hosted_space_ids().await.expect("the flags").is_empty());
 	});
@@ -2421,7 +2426,7 @@ fn a_first_start_persists_the_intent_before_registering() {
 fn a_space_whose_registration_never_succeeded_is_resumed_and_registered() {
 	run(async {
 		let mut harness = Harness::signed_in("intent-resumed").await;
-		let state = harness.app.state::<DatabaseState>();
+		let state = crate::events::core(harness.app.app_handle()).state::<DatabaseState>();
 		let hosting = state.as_ref().expect("the database").space_hosting();
 		hosting.set_hosted(PERSONAL.to_owned(), true).await.expect("the intent is kept");
 
@@ -2989,10 +2994,10 @@ fn an_unreachable_cloud_is_unreachable_with_its_cause() {
 		let cloud = format!("http://{address}");
 		let database = temp_dir();
 		let app = an_app_of_its_own("hosting-down", mock_builder());
-		app.manage::<DatabaseState>(Ok(db::open(&database)));
+		crate::events::core(app.app_handle()).manage::<DatabaseState>(Ok(db::open(&database)));
 		app.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &cloud));
 		app.manage(Hosting::new(&cloud, None));
-		let state = app.state::<DatabaseState>();
+		let state = crate::events::core(app.app_handle()).state::<DatabaseState>();
 		let hosting = state.as_ref().expect("the database").space_hosting();
 		hosting.registered(PERSONAL.to_owned(), INSTANCE.to_owned()).await.expect("planted");
 
@@ -5518,7 +5523,7 @@ impl Authoring {
 			"hosting-authorship",
 			mock_builder().invoke_handler(crate::commands::invoke_handler()),
 		);
-		app.manage(db::bootstrap(app.handle()));
+		crate::db::install(crate::events::core(app.handle()));
 		let root = RemovedOnDrop(
 			std::env::temp_dir()
 				.join(format!("kiroshi-hosting-authorship-{}", uuid::Uuid::new_v4())),
@@ -5615,7 +5620,8 @@ impl Authoring {
 	}
 
 	fn reopened_store(&self) -> db::Database {
-		let file = db::connection::file(self.app.handle()).expect("the store file is known");
+		let file = db::connection::file(crate::events::core(self.app.handle()).data_dir())
+			.expect("the store file is known");
 		db::open(file.parent().expect("the store lives in a directory"))
 	}
 
@@ -5796,7 +5802,7 @@ fn a_member_reads_the_web_sources_of_a_reply_through_the_relay_as_the_host_does(
 	run(async {
 		let host = Authoring::new(Some(BEARER)).await;
 		direct(&host.window, "conversation_send_user_message", host.sent("typed"));
-		let state = host.app.state::<DatabaseState>();
+		let state = crate::events::core(host.app.app_handle()).state::<DatabaseState>();
 		let messages = state.as_ref().expect("the database").messages();
 		messages
 			.open_assistant_message(NewAssistantMessage {
@@ -6068,7 +6074,7 @@ fn a_guest_reads_the_state_the_host_computed_for_each_conversation() {
 			json!({ "spaceId": PERSONAL, "sectionId": null, "title": "Room", "botIds": [] }),
 		);
 		let room_id = room["id"].as_str().expect("the room has an id");
-		let state = host.app.state::<DatabaseState>();
+		let state = crate::events::core(host.app.app_handle()).state::<DatabaseState>();
 		let conversations = state.as_ref().expect("the database").conversations();
 		let prompt = a_pending_prompt(room_id, PromptKind::Question);
 		conversations.hold_prompt(prompt).await.expect("the prompt is held");
@@ -6106,7 +6112,7 @@ fn a_guest_reads_the_state_the_host_computed_for_each_conversation() {
 fn a_guest_reads_the_same_solo_states_as_the_host() {
 	run(async {
 		let host = Authoring::new(Some(BEARER)).await;
-		let state = host.app.state::<DatabaseState>();
+		let state = crate::events::core(host.app.app_handle()).state::<DatabaseState>();
 		let conversations = state.as_ref().expect("the database").conversations();
 		let prompt = a_pending_prompt(&host.conversation_id, PromptKind::Question);
 		conversations.hold_prompt(prompt).await.expect("the prompt is held");
@@ -6191,7 +6197,7 @@ fn a_guest_reads_the_open_turn_of_a_room_while_the_second_of_its_two_bots_still_
 			json!({ "spaceId": PERSONAL, "sectionId": null, "title": "Room", "botIds": ["default", ada] }),
 		);
 		let room_id = room["id"].as_str().expect("the room holds an id").to_owned();
-		let state = host.app.state::<DatabaseState>();
+		let state = crate::events::core(host.app.app_handle()).state::<DatabaseState>();
 		let messages = state.as_ref().expect("the store is open").messages();
 		for bot_id in ["default", ada.as_str()] {
 			let turn =
@@ -6267,7 +6273,7 @@ fn a_guest_reads_the_turn_as_not_working_once_a_handed_bot_misses_its_start_dead
 			json!({ "spaceId": PERSONAL, "sectionId": null, "title": "Room", "botIds": ["default", ada] }),
 		);
 		let room_id = room["id"].as_str().expect("the room holds an id").to_owned();
-		let state = host.app.state::<DatabaseState>();
+		let state = crate::events::core(host.app.app_handle()).state::<DatabaseState>();
 		let messages = state.as_ref().expect("the store is open").messages();
 		let turn = NewTurn { id: "t1".to_owned(), conversation_id: room_id.clone(), started_at: 1 };
 		messages.start_run(turn, "default".to_owned()).await.expect("the run starts");
@@ -6424,7 +6430,7 @@ fn every_later_write_on_a_relayed_guest_message_or_its_turn_leaves_its_author_un
 			json!({ "id": 3, "command": "conversation_pin_message", "args": pin }),
 		)
 		.await;
-		let state = host.app.state::<DatabaseState>();
+		let state = crate::events::core(host.app.app_handle()).state::<DatabaseState>();
 		let messages = state.as_ref().expect("the store is open").messages();
 		messages
 			.replace_content("relayed".to_owned(), "rewritten".to_owned())
@@ -7186,7 +7192,7 @@ impl Authoring {
 	}
 
 	async fn bundled_default_bot(&self) {
-		let state = self.app.state::<DatabaseState>();
+		let state = crate::events::core(self.app.app_handle()).state::<DatabaseState>();
 		let database = state.as_ref().expect("the database");
 		let bot = database
 			.conversations()
@@ -7335,7 +7341,7 @@ fn a_member_disconnecting_through_a_bot_served_by_a_grant_of_the_host_person_is_
 }
 
 fn relay_database(harness: &Harness) -> &crate::db::Database {
-	let state = harness.app.state::<DatabaseState>().inner();
+	let state = crate::events::core(harness.app.app_handle()).state::<DatabaseState>().inner();
 	state.as_ref().expect("the database")
 }
 
@@ -8060,7 +8066,7 @@ impl Harness {
 	}
 
 	async fn is_rotation_pending(&self) -> bool {
-		let state = self.app.state::<DatabaseState>();
+		let state = crate::events::core(self.app.app_handle()).state::<DatabaseState>();
 		let relay = state.as_ref().expect("the database").space_relay();
 		relay.is_rotation_pending(PERSONAL.to_owned()).await.expect("the marker reads")
 	}

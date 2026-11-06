@@ -44,9 +44,10 @@ pub(crate) fn announce_change<R: Runtime>(
 #[specta::specta]
 pub async fn routine_trigger_sources<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	bot_id: String,
 ) -> Result<Vec<TriggerSource>, TranscriptStoreError> {
+	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	let space_id = oldest_space(database, &bot_id).await?;
 	sources::stacked(&stacked_bundles(&app, &space_id, &bot_id))
@@ -56,9 +57,10 @@ pub async fn routine_trigger_sources<R: Runtime>(
 #[specta::specta]
 pub async fn routine_trigger_sources_of_space<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	space_id: String,
 ) -> Result<Vec<BotTriggerSources>, TranscriptStoreError> {
+	let state = core.state::<db::DatabaseState>();
 	let mut bots = ready(&state)?.conversations().bots(Some(space_id.clone())).await?;
 	bots.sort_by(|left, right| left.id.cmp(&right.id));
 	let shared = sources::stacked(&space_bundles(&app, &space_id))?;
@@ -140,9 +142,10 @@ fn refuse_unreadable_expression(
 #[specta::specta]
 pub async fn routine_create<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	draft: RoutineDraft,
 ) -> Result<Routine, RoutineError> {
+	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	core::refuse_blank_task(&draft.title, &draft.instruction)?;
 	refuse_unsupported_rows(
@@ -165,10 +168,11 @@ pub async fn routine_create<R: Runtime>(
 #[specta::specta]
 pub async fn routine_update<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	id: String,
 	edit: RoutineEdit,
 ) -> Result<Routine, RoutineError> {
+	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	core::refuse_blank_task(&edit.title, &edit.instruction)?;
 	let held = routine_row(database, &id).await?;
@@ -191,9 +195,10 @@ pub async fn routine_update<R: Runtime>(
 #[specta::specta]
 pub async fn routine_delete<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	id: String,
 ) -> Result<(), RoutineError> {
+	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	let held = routine_row(database, &id).await?;
 	database.routines().delete(id).await?;
@@ -203,38 +208,42 @@ pub async fn routine_delete<R: Runtime>(
 #[tauri::command]
 #[specta::specta]
 pub async fn routine_list(
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	conversation_id: String,
 ) -> Result<Vec<Routine>, RoutineError> {
+	let state = core.state::<db::DatabaseState>();
 	ready(&state)?.routines().of_conversation(conversation_id).await
 }
 
 #[tauri::command]
 #[specta::specta]
 pub async fn routine_runs(
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	routine_id: String,
 	limit: u32,
 ) -> Result<Vec<RoutineRun>, RoutineError> {
+	let state = core.state::<db::DatabaseState>();
 	ready(&state)?.routines().runs(routine_id, limit).await
 }
 
 #[tauri::command]
 #[specta::specta]
 pub async fn routine_runs_of_space(
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	space_id: String,
 	limit: u32,
 ) -> Result<Vec<RoutineRuns>, RoutineError> {
+	let state = core.state::<db::DatabaseState>();
 	ready(&state)?.routines().runs_of_space(space_id, limit).await
 }
 
 #[tauri::command]
 #[specta::specta]
 pub async fn routine_reported_runs(
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	conversation_id: String,
 ) -> Result<Vec<ReportedRun>, RoutineError> {
+	let state = core.state::<db::DatabaseState>();
 	ready(&state)?.routines().reported(conversation_id).await
 }
 
@@ -242,9 +251,10 @@ pub async fn routine_reported_runs(
 #[specta::specta]
 pub async fn routine_run_now<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	id: String,
 ) -> Result<TriggerDecision, RoutineError> {
+	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	let held = routine_row(database, &id).await?;
 	let decision = core::run_now(database, &Runner::new(app.clone()), &SystemClock, id).await?;
@@ -255,19 +265,21 @@ pub async fn routine_run_now<R: Runtime>(
 #[tauri::command]
 #[specta::specta]
 pub async fn routine_renew_lease(
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	run_id: String,
 ) -> Result<(), RoutineError> {
+	let state = core.state::<db::DatabaseState>();
 	ready(&state)?.routines().renew_lease(run_id, SystemClock.now_ms()).await
 }
 
 #[tauri::command]
 #[specta::specta]
 pub async fn routine_close_run(
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	run_id: String,
 	closing: RunClosing,
 ) -> Result<RoutineRun, RoutineError> {
+	let state = core.state::<db::DatabaseState>();
 	ready(&state)?.routines().close_run(run_id, closing, SystemClock.now_ms()).await
 }
 
@@ -275,9 +287,10 @@ pub async fn routine_close_run(
 #[specta::specta]
 pub async fn routine_key<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	id: String,
 ) -> Result<RoutineKey, RoutineError> {
+	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	let held = routine_row(database, &id).await?;
 	let source = declared_source(
@@ -335,10 +348,10 @@ mod tests {
 
 	async fn a_host(name: &str) -> AppOfItsOwn {
 		let app = an_app_of_its_own(&format!("routine-commands-{name}"), mock_builder());
-		app.manage(db::bootstrap(app.handle()));
+		crate::db::install(crate::events::core(app.handle()));
 		let system = bundles::system::path(app.handle()).expect("the system bundle is named");
 		bundles::system::write(&system).expect("the system bundle lands");
-		ready(&app.state::<db::DatabaseState>())
+		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 			.expect("the database opens")
 			.call_mut(|connection| Ok(connection.execute_batch(A_PARTICIPANT)?))
 			.await
@@ -478,7 +491,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_trigger_source_is_read_from_the_space_the_conversation_stands_in() {
 		let app = a_host("second-space").await;
-		let state = app.state::<db::DatabaseState>();
+		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 		let database = ready(&state).expect("the database opens");
 		database
 			.call_mut(|connection| Ok(connection.execute_batch(A_SECOND_SPACE)?))
@@ -539,7 +552,7 @@ mod tests {
 	#[tokio::test]
 	async fn each_space_answers_the_trigger_sources_of_its_own_seated_bots_ordered_by_id() {
 		let app = a_host("sources-of-space").await;
-		ready(&app.state::<db::DatabaseState>())
+		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 			.expect("the database opens")
 			.call_mut(|connection| Ok(connection.execute_batch(SEATS_IN_TWO_SPACES)?))
 			.await
@@ -572,7 +585,7 @@ mod tests {
 	async fn an_unreadable_bot_bundle_fails_its_own_entry_and_an_unreadable_space_bundle_the_call()
 	{
 		let app = a_host("unreadable-sources").await;
-		ready(&app.state::<db::DatabaseState>())
+		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 			.expect("the database opens")
 			.call_mut(|connection| Ok(connection.execute_batch(SEATS_IN_TWO_SPACES)?))
 			.await

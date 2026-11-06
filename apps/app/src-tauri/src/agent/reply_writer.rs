@@ -737,7 +737,7 @@ struct Store<R: Runtime> {
 
 impl<R: Runtime> Store<R> {
 	fn database(&self) -> Result<&db::Database, TranscriptStoreError> {
-		match self.app.try_state::<db::DatabaseState>() {
+		match crate::events::core(self.app.app_handle()).try_state::<db::DatabaseState>() {
 			Some(state) => ready(state.inner()),
 			None => Err(TranscriptStoreError::Unavailable {
 				failure: (&DatabaseError::AppDataDir).into(),
@@ -1201,7 +1201,7 @@ mod tests {
 	impl Written {
 		async fn new(name: &str) -> Self {
 			let app = an_app_of_its_own(&format!("reply-writer-{name}"), mock_builder());
-			app.manage(db::bootstrap(app.handle()));
+			crate::db::install(crate::events::core(app.handle()));
 			let written = Self { app, conversation_id: String::new(), attachments: Arc::default() };
 			let conversations = written.database().conversations();
 			conversations.ensure_default_bot().await.expect("the bot is seeded");
@@ -1213,7 +1213,8 @@ mod tests {
 		}
 
 		fn database(&self) -> &db::Database {
-			ready(self.app.state::<db::DatabaseState>().inner()).expect("the database opens")
+			ready(crate::events::core(self.app.app_handle()).state::<db::DatabaseState>().inner())
+				.expect("the database opens")
 		}
 
 		fn desk(&self) -> Desk<MockRuntime> {

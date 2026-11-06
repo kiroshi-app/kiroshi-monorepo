@@ -257,7 +257,7 @@ async fn carried<R: Runtime>(
 	let Some(key) = presented(headers) else {
 		return Ok(REFUSED);
 	};
-	let state = calls.app.state::<db::DatabaseState>();
+	let state = crate::events::core(calls.app.app_handle()).state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	let held = database.routines().keyed_on_source(key, SOURCE_ID.to_owned()).await?;
 	let Some(routine) = held else {
@@ -404,11 +404,11 @@ mod tests {
 
 	async fn a_host(name: &str) -> AppOfItsOwn {
 		let app = an_app_of_its_own(&format!("routine-webhook-{name}"), mock_builder());
-		app.manage(db::bootstrap(app.handle()));
+		crate::db::install(crate::events::core(app.handle()));
 		let system = bundles::system::path(app.handle()).expect("the system bundle is named");
 		bundles::system::write(&system).expect("the system bundle lands");
 		{
-			let state = app.state::<db::DatabaseState>();
+			let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 			let database = ready(&state).expect("the database opens");
 			database
 				.call_mut(|connection| Ok(connection.execute_batch(A_PARTICIPANT)?))
@@ -593,7 +593,7 @@ mod tests {
 	}
 
 	async fn closed_open_runs(app: &App<MockRuntime>, key: &str, at: i64) {
-		let state = app.state::<db::DatabaseState>();
+		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 		let database = ready(&state).expect("the database opens");
 		let open = runs_of_key(app, key).await.into_iter().filter(|run| run.ended_at.is_none());
 		for run in open {
@@ -602,7 +602,7 @@ mod tests {
 	}
 
 	async fn runs_of_key(app: &App<MockRuntime>, key: &str) -> Vec<RoutineRun> {
-		let state = app.state::<db::DatabaseState>();
+		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 		let database = ready(&state).expect("the database opens");
 		let routine = database
 			.routines()
@@ -632,19 +632,19 @@ mod tests {
 	}
 
 	async fn runs_of(app: &App<MockRuntime>) -> i64 {
-		let state = app.state::<db::DatabaseState>();
+		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 		let database = ready(&state).expect("the database opens");
 		counted(database, "SELECT count(*) FROM routine_runs").await
 	}
 
 	async fn dedupe_values_of(app: &App<MockRuntime>) -> i64 {
-		let state = app.state::<db::DatabaseState>();
+		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 		let database = ready(&state).expect("the database opens");
 		counted(database, "SELECT count(*) FROM routine_dedupe_values").await
 	}
 
 	async fn no_row_was_written(app: &App<MockRuntime>) {
-		let state = app.state::<db::DatabaseState>();
+		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 		let database = ready(&state).expect("the database opens");
 		assert_eq!(counted(database, "SELECT count(*) FROM routine_runs").await, 0);
 		assert_eq!(counted(database, "SELECT count(*) FROM routine_dedupe_values").await, 0);
@@ -726,7 +726,7 @@ mod tests {
 			payload["receivedAt"].as_str().is_some_and(|at| at.ends_with('Z')),
 			"got {payload}"
 		);
-		let state = app.state::<db::DatabaseState>();
+		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 		let database = ready(&state).expect("the database opens");
 		assert_eq!(counted(database, "SELECT count(*) FROM routine_runs").await, 1);
 

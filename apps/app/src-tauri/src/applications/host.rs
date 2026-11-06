@@ -116,7 +116,10 @@ impl<R: Runtime> ApplicationHost<R> {
 		draft: InstallDraft,
 	) -> Result<ApplicationInstall, ApplicationCallError> {
 		let state = Self::database(&self.app)?;
-		Ok(ready(&state)?.application_installs().record(draft).await?)
+		Ok(ready(state.state::<crate::db::DatabaseState>().inner())?
+			.application_installs()
+			.record(draft)
+			.await?)
 	}
 
 	async fn status(&self, asked: Named) -> Result<ApplicationState, ApplicationCallError> {
@@ -169,7 +172,7 @@ impl<R: Runtime> ApplicationHost<R> {
 
 	async fn space(&self) -> Result<String, ApplicationCallError> {
 		let state = Self::database(&self.app)?;
-		let database = ready(&state)?;
+		let database = ready(state.state::<crate::db::DatabaseState>().inner())?;
 		database.conversations().space(self.conversation_id.clone()).await?.ok_or_else(|| {
 			ApplicationCallError::ConversationWithoutSpace {
 				conversation_id: self.conversation_id.clone(),
@@ -339,18 +342,18 @@ mod tests {
 
 	async fn a_host(name: &str) -> AppOfItsOwn {
 		let app = an_app_of_its_own(&format!("application-host-{name}"), mock_builder());
-		app.manage(db::bootstrap(app.handle()));
+		crate::db::install(crate::events::core(app.handle()));
 		app.manage(McpOauthState::default());
 		app.manage(ApplicationReports::default());
 		app.manage(AuthorizationAnswers::default());
-		ready(&app.state::<db::DatabaseState>())
+		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 			.expect("the database opens")
 			.call_mut(|connection| Ok(connection.execute_batch(A_SPACE)?))
 			.await
 			.expect("the space is planted");
 		bundles::space::lay_down(app.handle(), "personal").expect("the space plugin lands");
 		bundles::user::lay_down(&user_plugin(&app)).expect("the person plugin lands");
-		let bot = ready(&app.state::<db::DatabaseState>())
+		let bot = ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 			.expect("the database opens")
 			.conversations()
 			.bot("b1".to_owned())
@@ -726,7 +729,7 @@ mod tests {
 	}
 
 	async fn recorded_in(app: &App<MockRuntime>, conversation_id: &str) -> Vec<ApplicationInstall> {
-		ready(&app.state::<db::DatabaseState>())
+		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 			.expect("the database opens")
 			.application_installs()
 			.of_conversation(conversation_id.to_owned())

@@ -131,7 +131,7 @@ impl<R: Runtime> Host for MissionHost<R> {
 
 	async fn served(&self, operation: Operation, payload: Value) -> Result<Value, MissionError> {
 		let state = Self::database(&self.app)?;
-		let database = ready(&state)?;
+		let database = ready(state.state::<crate::db::DatabaseState>().inner())?;
 		match operation {
 			Operation::Open => {
 				let asked: Opened = Self::read(payload)?;
@@ -458,9 +458,9 @@ mod tests {
 
 	async fn a_host(name: &str) -> AppOfItsOwn {
 		let app = an_app_of_its_own(&format!("mission-host-{name}"), mock_builder());
-		app.manage(db::bootstrap(app.handle()));
+		crate::db::install(crate::events::core(app.handle()));
 		app.manage(crate::agent::AgentState::default());
-		ready(&app.state::<db::DatabaseState>())
+		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 			.expect("the database opens")
 			.call_mut(|connection| Ok(connection.execute_batch(A_SPACE)?))
 			.await
@@ -552,7 +552,7 @@ mod tests {
 	}
 
 	async fn armed_missions(app: &App<MockRuntime>) -> Vec<String> {
-		ready(&app.state::<db::DatabaseState>())
+		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 			.expect("the database opens")
 			.missions()
 			.watched()
@@ -1126,7 +1126,7 @@ mod tests {
 		r#"{"number":7,"state":"closed","headSha":"abc","checks":"passed","merged":true}"#;
 
 	async fn planted(app: &App<MockRuntime>, statements: &'static str) {
-		ready(&app.state::<db::DatabaseState>())
+		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 			.expect("the database opens")
 			.call_mut(move |connection| Ok(connection.execute_batch(statements)?))
 			.await
@@ -1135,7 +1135,7 @@ mod tests {
 
 	async fn title_of(app: &App<MockRuntime>, conversation_id: &str) -> String {
 		let id = conversation_id.to_owned();
-		ready(&app.state::<db::DatabaseState>())
+		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 			.expect("the database opens")
 			.call(move |connection| {
 				Ok(connection.query_row(
@@ -1149,7 +1149,7 @@ mod tests {
 	}
 
 	async fn seated_in(app: &App<MockRuntime>, conversation_id: &str) -> Vec<String> {
-		ready(&app.state::<db::DatabaseState>())
+		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 			.expect("the database opens")
 			.conversations()
 			.seats(conversation_id.to_owned())
@@ -1232,7 +1232,7 @@ mod tests {
 		let host = serving(&app, "c1");
 		closed_through(&host, &merged.id).await;
 		let id = merged.id.clone();
-		ready(&app.state::<db::DatabaseState>())
+		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 			.expect("the database opens")
 			.call_mut(move |connection| {
 				Ok(connection.execute(
@@ -1339,8 +1339,8 @@ mod tests {
 			before_seq: None,
 			limit: 10,
 		};
-		let state = app.state::<db::DatabaseState>();
-		let messages = ready(&state).expect("it opens").messages();
+		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
+		let messages = ready(state.inner()).expect("it opens").messages();
 		messages.page_messages(query).await.expect("the thread reads").messages
 	}
 

@@ -47,8 +47,9 @@ pub async fn application_runnable(config: JsonValue) -> Option<InstallRefusal> {
 #[tauri::command]
 #[specta::specta]
 pub async fn application_installs(
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	conversation_id: String,
 ) -> Result<Vec<ApplicationInstall>, ApplicationCallError> {
+	let state = core.state::<db::DatabaseState>();
 	Ok(ready(&state)?.application_installs().of_conversation(conversation_id).await?)
 }

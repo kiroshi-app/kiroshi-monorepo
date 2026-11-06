@@ -193,7 +193,6 @@ mod tests {
 
 	use super::*;
 	use crate::conversations::contract::{SummonsDropped, SUMMONS_DROPPED_EVENT, UPDATED_EVENT};
-	use crate::db;
 	use crate::db::repositories::conversations::DEFAULT_BOT_ID;
 	use crate::db::repositories::messages::NewTurn;
 	use crate::test_app::an_app_of_its_own;
@@ -217,7 +216,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_turn_run_started_before_its_start_deadline_keeps_running_and_announces_nothing() {
 		let app = an_app_of_its_own("turn-run-deadline", mock_builder());
-		app.manage(db::bootstrap(app.handle()));
+		crate::db::install(crate::events::core(app.handle()));
 		app.manage(TurnRunDeadlines::after(Duration::ZERO));
 		let database = database(app.handle()).expect("the database opens");
 		database.conversations().ensure_default_bot().await.expect("the bot is seeded");
@@ -254,7 +253,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_turn_run_never_started_by_its_start_deadline_is_announced_dropped() {
 		let app = an_app_of_its_own("turn-run-deadline-dropped", mock_builder());
-		app.manage(db::bootstrap(app.handle()));
+		crate::db::install(crate::events::core(app.handle()));
 		app.manage(TurnRunDeadlines::after(Duration::ZERO));
 		let database = database(app.handle()).expect("the database opens");
 		database.conversations().ensure_default_bot().await.expect("the bot is seeded");

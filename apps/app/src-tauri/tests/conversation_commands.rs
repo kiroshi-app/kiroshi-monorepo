@@ -33,7 +33,7 @@ impl Home {
 
 	fn app(&self) -> App<MockRuntime> {
 		let app = host(&self.0.config().identifier);
-		app.manage(db::bootstrap(app.handle()));
+		kiroshi_app::db::install(kiroshi_app::events::core(app.handle()));
 		app
 	}
 }
@@ -41,16 +41,22 @@ impl Home {
 fn host(identifier: &str) -> App<MockRuntime> {
 	let mut context = mock_context(noop_assets());
 	context.config_mut().identifier = identifier.into();
-	mock_builder().invoke_handler(invoke_handler()).build(context).expect("app builds")
+	{
+		let app =
+			mock_builder().invoke_handler(invoke_handler()).build(context).expect("app builds");
+		kiroshi_app::events::install_core(app.handle()).expect("the core installs");
+		app
+	}
 }
 
 fn app_without_a_database() -> AppOfItsOwn {
-	an_app_of_its_own(
+	let app = an_app_of_its_own(
 		"conversation-commands-no-database",
-		mock_builder()
-			.invoke_handler(invoke_handler())
-			.manage(db::DatabaseState::Err(db::DatabaseError::AppDataDir)),
-	)
+		mock_builder().invoke_handler(invoke_handler()),
+	);
+	kiroshi_app::events::core(app.handle())
+		.manage(db::DatabaseState::Err(db::DatabaseError::AppDataDir));
+	app
 }
 
 fn window(app: &App<MockRuntime>) -> WebviewWindow<MockRuntime> {
@@ -3245,7 +3251,7 @@ fn a_message_nobody_is_summoned_to(
 }
 
 fn a_turn_row(app: &App<MockRuntime>, turn_id: &str) -> Option<(i64, Option<i64>)> {
-	let state = app.state::<db::DatabaseState>();
+	let state = kiroshi_app::events::core(app.app_handle()).state::<db::DatabaseState>();
 	let database = state.as_ref().expect("the database is open");
 	let turn_id = turn_id.to_owned();
 	tauri::async_runtime::block_on(database.messages().call(move |connection| {
@@ -3402,7 +3408,7 @@ fn opening_the_database_interrupts_open_replies_then_closes_every_open_turn() {
 	let orphan = completed_at(&app, "t1").expect("the orphan turn was left open");
 	let answered = completed_at(&app, "t2").expect("the turn of the streaming reply was left open");
 	assert!(orphan >= before && answered >= before, "a turn was not stamped with the open time");
-	let state = app.state::<db::DatabaseState>();
+	let state = kiroshi_app::events::core(app.app_handle()).state::<db::DatabaseState>();
 	let database = state.as_ref().expect("the database is open");
 	let reply = tauri::async_runtime::block_on(database.messages().call(|connection| {
 		Ok(connection.query_row(
@@ -3537,7 +3543,7 @@ fn a_companion_cancelling_before_its_submit_spares_the_turn_another_companion_wa
 
 #[cfg(feature = "fake-claude")]
 fn a_question_row(app: &App<MockRuntime>) -> Option<(String, i64, String, String)> {
-	let state = app.state::<db::DatabaseState>();
+	let state = kiroshi_app::events::core(app.app_handle()).state::<db::DatabaseState>();
 	let database = state.as_ref().expect("the database is open");
 	tauri::async_runtime::block_on(database.messages().call(|connection| {
 		Ok(connection

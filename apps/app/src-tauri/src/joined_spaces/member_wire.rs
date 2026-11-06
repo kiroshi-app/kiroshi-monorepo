@@ -240,7 +240,7 @@ mod tests {
 	async fn a_member() -> Member {
 		let database = temp_dir();
 		let app = an_app_of_its_own("member-wire", mock_builder());
-		app.manage::<DatabaseState>(Ok(db::open(&database)));
+		crate::events::core(app.app_handle()).manage::<DatabaseState>(Ok(db::open(&database)));
 		app.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
 		let profile = app.path().app_data_dir().expect("the data folder resolves");
 		let identifier = app.config().identifier.clone();
@@ -250,7 +250,7 @@ mod tests {
 	}
 
 	fn relay_of(app: &App<MockRuntime>) -> &JoinedSpaceRelayRepository {
-		let state = app.state::<DatabaseState>().inner();
+		let state = crate::events::core(app.app_handle()).state::<DatabaseState>().inner();
 		state.as_ref().expect("the database").joined_space_relay()
 	}
 

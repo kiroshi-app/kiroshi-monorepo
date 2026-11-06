@@ -152,7 +152,7 @@ pub(super) fn host_device<R: Runtime>(app: &AppHandle<R>) -> Result<DeviceKeys, 
 }
 
 pub(super) fn database_of<R: Runtime>(app: &AppHandle<R>) -> Result<&Database, MembersError> {
-	Ok(ready(app.state::<DatabaseState>().inner())?)
+	Ok(ready(crate::events::core(app.app_handle()).state::<DatabaseState>().inner())?)
 }
 
 async fn roster_of<R: Runtime>(

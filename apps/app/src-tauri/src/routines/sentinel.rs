@@ -40,7 +40,7 @@ pub(crate) async fn keeping_watch<R: Runtime>(
 	app: AppHandle<R>,
 	mut halted: signal::Receiver<bool>,
 ) {
-	let state = app.state::<db::DatabaseState>();
+	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 	let database = match ready(&state) {
 		Ok(database) => database,
 		Err(failure) => return eprintln!("no routine is watched for: {failure:?}"),
@@ -267,7 +267,7 @@ mod tests {
 
 	fn a_host(name: &str) -> AppOfItsOwn {
 		let app = an_app_of_its_own(&format!("sentinel-{name}"), mock_builder());
-		app.manage(db::bootstrap(app.handle()));
+		crate::db::install(crate::events::core(app.handle()));
 		app
 	}
 

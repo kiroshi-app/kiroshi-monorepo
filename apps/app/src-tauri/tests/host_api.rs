@@ -11,7 +11,6 @@ use common::{an_app_of_its_own, AppOfItsOwn};
 use kiroshi_app::agent::contract::TransportError;
 use kiroshi_app::agent::AgentState;
 use kiroshi_app::commands::invoke_handler;
-use kiroshi_app::db;
 use kiroshi_app::events::{self, BUFFERED_FRAMES, MISSION_CHANGED};
 use kiroshi_app::host_api::cors;
 use kiroshi_app::host_api::events::SEND_PATIENCE;
@@ -50,7 +49,7 @@ impl Host {
 	fn new() -> Self {
 		let app = an_app_of_its_own("host-api", mock_builder().invoke_handler(invoke_handler()));
 		let dir = app.path().app_data_dir().expect("data dir");
-		app.manage(db::bootstrap(app.handle()));
+		kiroshi_app::db::install(kiroshi_app::events::core(app.handle()));
 		Self { app, dir }
 	}
 

@@ -150,7 +150,7 @@ async fn relay_device_of<R: Runtime>(
 			return Err(JoinedSpaceError::RelayUnreachable { detail })
 		}
 	};
-	let state = app.state::<db::DatabaseState>();
+	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 	let devices = ready(&state)?.relay_devices();
 	let device_id = device.device_id().to_string();
 	if let Some(held) = devices.relay_device_id(account_id.clone(), device_id.clone()).await? {

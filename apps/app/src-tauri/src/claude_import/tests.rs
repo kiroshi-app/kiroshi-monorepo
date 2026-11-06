@@ -57,14 +57,18 @@ fn a_claude_root() -> RemovedOnDrop {
 
 fn a_host(name: &str) -> AppOfItsOwn {
 	let app = an_app_of_its_own(&format!("claude-import-{name}"), mock_builder());
-	app.manage(db::bootstrap(app.handle()));
+	crate::db::install(crate::events::core(app.handle()));
 	let person = bundles::user::path(app.handle()).expect("the person plugin has a home");
 	bundles::user::lay_down(&person).expect("the person plugin is laid down");
 	app
 }
 
 fn database_of(app: &App<MockRuntime>) -> &db::Database {
-	app.state::<db::DatabaseState>().inner().as_ref().expect("the database opens")
+	crate::events::core(app.app_handle())
+		.state::<db::DatabaseState>()
+		.inner()
+		.as_ref()
+		.expect("the database opens")
 }
 
 fn person_of(app: &App<MockRuntime>) -> PathBuf {
