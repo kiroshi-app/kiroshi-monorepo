@@ -1,6 +1,4 @@
 use std::any::type_name;
-use std::marker::PhantomData;
-use std::sync::Arc;
 
 use serde::Serialize;
 use tauri::plugin::TauriPlugin;
@@ -11,46 +9,13 @@ use tokio::sync::broadcast;
 use tauri_plugin_opener::OpenerExt;
 
 use crate::core_context::{Audience, ClientId, ClientScoped, Core, Desktop, EmitError};
+pub use kiroshi_core::events::{frame, framed, Event, Frame, BUFFERED_FRAMES};
 
 use crate::{
 	account, agent, applications, claude_import, companions, conversations, devices, hosting,
 	invitations, joined_spaces, library, menu_contract, missions, notifications, routines, spaces,
 	updates, window_controls,
 };
-
-pub const BUFFERED_FRAMES: usize = 1024;
-
-pub type Frame = Arc<str>;
-
-pub struct Event<P> {
-	name: &'static str,
-	payload: PhantomData<fn() -> P>,
-}
-
-impl<P> Event<P> {
-	const fn new(name: &'static str) -> Self {
-		Self { name, payload: PhantomData }
-	}
-
-	pub const fn name(&self) -> &'static str {
-		self.name
-	}
-}
-
-#[cfg(test)]
-impl Event<serde_json::Value> {
-	pub(crate) const fn untyped(name: &'static str) -> Self {
-		Self::new(name)
-	}
-}
-
-impl<P> Clone for Event<P> {
-	fn clone(&self) -> Self {
-		*self
-	}
-}
-
-impl<P> Copy for Event<P> {}
 
 macro_rules! declared {
 	($($handle:ident: $payload:ty = $name:expr,)*) => {
@@ -246,18 +211,8 @@ pub fn emit_to_windows<R: Runtime, P: Serialize>(
 	core(app).emit_locally(event, payload)
 }
 
-pub fn frame<P: Serialize>(event: Event<P>, payload: &P) -> serde_json::Result<Frame> {
-	framed(event.name(), payload)
-}
-
 pub fn subscribed<R: Runtime>(app: &AppHandle<R>) -> broadcast::Receiver<Frame> {
 	core(app).subscribe_frames()
-}
-
-pub(crate) fn framed<S: Serialize + ?Sized>(event: &str, payload: &S) -> serde_json::Result<Frame> {
-	let event = serde_json::to_string(event)?;
-	let payload = serde_json::to_string(payload)?;
-	Ok(format!(r#"{{"event":{event},"payload":{payload}}}"#).into())
 }
 
 #[cfg(test)]

@@ -303,6 +303,12 @@ describe("the paths each job watches", () => {
 		expect(touching(...SHARED_ONLY_PATHS).website).toBe(true)
 	})
 
+	it("runs only rust on a Rust file under crates", () => {
+		expect(touching("crates/kiroshi-core/src/lib.rs")).toEqual(
+			touching("apps/app/src-tauri/src/lib.rs"),
+		)
+	})
+
 	it("runs rust on packages/shared/permission-modes.json alone, since src-tauri embeds it", () => {
 		expect(touching("packages/shared/permission-modes.json").rust).toBe(true)
 	})

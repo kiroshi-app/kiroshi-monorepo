@@ -2702,6 +2702,7 @@ dependencies = [
  "hkdf",
  "hmac",
  "image",
+ "kiroshi-core",
  "libc",
  "log",
  "mac-notification-sys",
@@ -2745,6 +2746,15 @@ dependencies = [
  "x25519-dalek",
  "yrs",
  "zeroize",
+]
+
+[[package]]
+name = "kiroshi-core"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]

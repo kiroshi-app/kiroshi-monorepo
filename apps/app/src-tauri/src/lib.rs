@@ -10,7 +10,7 @@ pub mod claude_import;
 pub mod commands;
 pub mod companions;
 pub mod conversations;
-pub mod core_context;
+pub use kiroshi_core::core_context;
 pub mod crypto;
 pub mod db;
 mod descriptors;

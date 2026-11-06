@@ -59,6 +59,7 @@ const isShared = (path: string) =>
 const touchesRust = (path: string) =>
 	isUnder(path, [
 		"apps/app/src-tauri/",
+		"crates/",
 		"apps/app/sidecar/",
 		"packages/shared/",
 	]) ||

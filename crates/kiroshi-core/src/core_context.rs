@@ -327,7 +327,7 @@ fn forget<T: ClientScoped>(core: &Core, client: &ClientId) {
 }
 
 #[cfg(test)]
-pub(crate) fn test_runtime() -> Handle {
+fn test_runtime() -> Handle {
 	static RUNTIME: std::sync::OnceLock<tokio::runtime::Runtime> = std::sync::OnceLock::new();
 	RUNTIME
 		.get_or_init(|| tokio::runtime::Runtime::new().expect("the test runtime starts"))
@@ -386,7 +386,7 @@ mod tests {
 		let answer = test_runtime().block_on(core.spawn(async { 7 })).expect("the task ran");
 		assert_eq!(answer, 7);
 	}
-	use crate::events::FIRST_RUN_DONE;
+	const FIRST_RUN_DONE: Event<()> = Event::new("user://first-run-done");
 
 	#[test]
 	fn an_emitted_event_reaches_a_subscriber_without_a_tauri_runtime() {

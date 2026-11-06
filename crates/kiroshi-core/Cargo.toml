@@ -1,0 +1,13 @@
+[package]
+name = "kiroshi-core"
+version = "0.1.0"
+description = "The Kiroshi host core, with no Tauri dependency"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/kiroshi-app/kiroshi-monorepo"
+publish = false
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["raw_value"] }
+tokio = { version = "1", features = ["rt-multi-thread", "sync"] }

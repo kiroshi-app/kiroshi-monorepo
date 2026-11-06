@@ -34,7 +34,7 @@ enables the hardened runtime on its own, and signs every nested executable —
 bundle. Confirm both:
 
 ```
-APP=apps/app/src-tauri/target/release/bundle/macos/Kiroshi.app
+APP=target/release/bundle/macos/Kiroshi.app
 codesign --verify --deep --strict --verbose=4 "$APP"
 codesign -d --verbose=4 "$APP" 2>&1 | grep -E "flags|Authority"
 ```
@@ -74,12 +74,12 @@ notarization credential belongs in the repo.
    → the four `#[ignore]`d live tests pass.
 
 2. Build signed (see **Signing** above), then
-   `ls apps/app/src-tauri/target/release/bundle/macos/Kiroshi.app/Contents/MacOS/`
+   `ls target/release/bundle/macos/Kiroshi.app/Contents/MacOS/`
    → **exactly** `kiroshi-app`, `kiroshi-agent` and `kiroshi-claude`.
    `fake_claude` next to them means the feature gate regressed.
 
 3. Open the `.dmg` from
-   `apps/app/src-tauri/target/release/bundle/dmg/`, drag to `/Applications`,
+   `target/release/bundle/dmg/`, drag to `/Applications`,
    launch.
    → first launch needs right-click → Open: the bundle is not notarized, so
    Gatekeeper refuses a double-click whether it is ad-hoc or Developer ID

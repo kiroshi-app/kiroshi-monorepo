@@ -2016,8 +2016,7 @@ fn a_local_event_is_forwarded_to_the_relay() {
 		answer(&mut member).await;
 
 		let payload = json!({ "spaceId": PERSONAL, "n": 1 });
-		events::emit(harness.app.handle(), Event::untyped(CHANGED_EVENT), payload)
-			.expect("emitted");
+		events::emit(harness.app.handle(), Event::new(CHANGED_EVENT), payload).expect("emitted");
 		let forwarded =
 			next_text(&mut member, |frame| frame["event"]["payload"]["n"] == json!(1)).await;
 
@@ -2134,12 +2133,8 @@ fn a_lagged_event_broadcast_closes_with_1013_and_reconnects() {
 		is_held.await.expect("the database lock is held");
 		let lookup = json!({ "conversationId": "c-lagged" });
 		for _ in 0..BUFFERED_FRAMES + 2 {
-			events::emit(
-				harness.app.handle(),
-				Event::untyped(MESSAGE_STORED_EVENT),
-				lookup.clone(),
-			)
-			.expect("emitted");
+			events::emit(harness.app.handle(), Event::new(MESSAGE_STORED_EVENT), lookup.clone())
+				.expect("emitted");
 		}
 		release.send(()).expect("the holder waits");
 		holding.await.expect("the holder ends").expect("the lock is released");
@@ -2179,7 +2174,7 @@ fn stamp_of(frame: &Value) -> (String, u64) {
 
 fn numbered(harness: &Harness, n: usize) {
 	let payload = json!({ "spaceId": PERSONAL, "n": n });
-	events::emit(harness.app.handle(), Event::untyped(MEMBERS_CHANGED_EVENT), payload)
+	events::emit(harness.app.handle(), Event::new(MEMBERS_CHANGED_EVENT), payload)
 		.expect("emitted");
 }
 
@@ -3170,7 +3165,7 @@ impl Guest {
 
 	async fn relay_listens(&mut self) {
 		let probed = (CHANGED_EVENT, json!({ "spaceId": PERSONAL, "probe": 0 }));
-		events::emit(self.harness.app.handle(), Event::untyped(probed.0), probed.1.clone())
+		events::emit(self.harness.app.handle(), Event::new(probed.0), probed.1.clone())
 			.expect("emitted");
 		let expected = as_forwarded(probed);
 		next_text(&mut self.member, |frame| *frame == expected).await;
@@ -5232,8 +5227,7 @@ fn an_agent_event_of(scope: Value) -> (&'static str, Value) {
 impl Guest {
 	async fn first_event_after(&mut self, published: Vec<(&'static str, Value)>) -> Value {
 		for (event, payload) in published {
-			events::emit(self.harness.app.handle(), Event::untyped(event), payload)
-				.expect("emitted");
+			events::emit(self.harness.app.handle(), Event::new(event), payload).expect("emitted");
 		}
 		next_text(&mut self.member, |frame| frame.get("event").is_some()).await
 	}
@@ -5356,8 +5350,7 @@ fn a_relay_guest_hears_a_known_child_again_without_another_lookup() {
 impl Guest {
 	async fn events_until_the_marker(&mut self) -> Vec<Value> {
 		let marker = a_shared_space_marker();
-		events::emit(self.harness.app.handle(), Event::untyped(marker.0), marker.1)
-			.expect("emitted");
+		events::emit(self.harness.app.handle(), Event::new(marker.0), marker.1).expect("emitted");
 		let mut heard = Vec::new();
 		loop {
 			let frame = next_text(&mut self.member, |frame| frame.get("event").is_some()).await;
@@ -7816,8 +7809,7 @@ fn a_seeded_member_says_hello_calls_gets_its_answer_and_hears_an_event_over_seal
 		send(&mut member, r#"{"id": "c1", "command": "agent_models", "args": {"a": 1}}"#).await;
 		let answered = answer(&mut member).await;
 		let payload = json!({ "spaceId": PERSONAL, "n": 1 });
-		events::emit(harness.app.handle(), Event::untyped(CHANGED_EVENT), payload)
-			.expect("emitted");
+		events::emit(harness.app.handle(), Event::new(CHANGED_EVENT), payload).expect("emitted");
 		let event =
 			next_text(&mut member, |frame| frame["event"]["payload"]["n"] == json!(1)).await;
 

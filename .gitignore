@@ -44,3 +44,4 @@ storybook-static
 # tauri sidecar binaries
 apps/app/src-tauri/binaries
 apps/app/sidecar/src/**/generated
+/target

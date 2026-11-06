@@ -34,6 +34,7 @@ fake-claude = []
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+kiroshi-core = { path = "../../../crates/kiroshi-core" }
 tauri = { version = "2", features = ["protocol-asset", "macos-private-api"] }
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 tauri-plugin-deep-link = "2"

@@ -35,7 +35,7 @@ const SIMULATOR_DESTINATION =
 
 const RUSTFMT: Step = {
 	name: "Rustfmt",
-	command: "cargo fmt --manifest-path src-tauri/Cargo.toml --check",
+	command: "cargo fmt --all --manifest-path src-tauri/Cargo.toml --check",
 	cwd: APP,
 }
 
@@ -48,7 +48,7 @@ const BUILD_SIDECAR: Step = {
 const CLIPPY: Step = {
 	name: "Clippy",
 	command:
-		"cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --features fake-claude -- -D warnings",
+		"cargo clippy --manifest-path src-tauri/Cargo.toml --workspace --all-targets --features fake-claude -- -D warnings",
 	cwd: APP,
 	heavy: true,
 }
@@ -86,7 +86,7 @@ export const RUST_PULL_REQUEST_STEPS: Step[] = [
 	{
 		name: "Library tests",
 		command:
-			"cargo test --manifest-path src-tauri/Cargo.toml --features fake-claude --lib",
+			"cargo test --manifest-path src-tauri/Cargo.toml --workspace --features fake-claude --lib",
 		cwd: APP,
 		heavy: true,
 	},
@@ -169,7 +169,7 @@ export const GATE = {
 		{
 			name: "Test",
 			command:
-				"cargo test --manifest-path src-tauri/Cargo.toml --features fake-claude",
+				"cargo test --manifest-path src-tauri/Cargo.toml --workspace --features fake-claude",
 			cwd: APP,
 			heavy: true,
 			retry: "cargo",
