@@ -505,6 +505,66 @@ async fn an_insert_at_the_start_lands_before_the_first_block_and_answers_each_ne
 	assert_eq!(sources_on_disk(&root, "notes.md"), ["# Title", "Lead.", "Body."]);
 }
 
+const FRONT_MATTER: &str = "---\ntitle: Launch ^abcdef\n---";
+
+#[tokio::test]
+async fn front_matter_is_no_block_of_the_tree_the_info_or_a_find_and_keeps_no_marker() {
+	let (app, root) = a_host("front-matter").await;
+	put(&root, SPACE, "notes.md", &format!("{FRONT_MATTER}\n\nLaunch day."));
+	let host = the_host(&app);
+
+	let held = ids_of(&host, "notes.md").await;
+	let info =
+		host.served(Operation::DocumentInfo, json!({ "name": "notes.md" })).await.expect("info");
+	let found = host
+		.served(Operation::DocumentFind, json!({ "name": "notes.md", "text": "launch" }))
+		.await
+		.expect("finds");
+	let refused = host
+		.served(Operation::DocumentReadBlock, json!({ "name": "notes.md", "id": "abcdef" }))
+		.await;
+
+	assert_eq!(held.len(), 1);
+	assert_eq!(info["blocks"], 1);
+	assert_eq!(info["firstHeading"], Value::Null);
+	assert_eq!(
+		found["matches"],
+		json!([{ "id": held[0], "kind": "paragraph", "line": "Launch day." }])
+	);
+	assert_eq!(refusal_kind(refused), "blockNotFound");
+	assert_eq!(on_disk(&root, "notes.md"), format!("{FRONT_MATTER}\n\nLaunch day. ^{}", held[0]));
+}
+
+#[tokio::test]
+async fn an_insert_at_the_start_lands_after_the_front_matter() {
+	let (app, root) = a_host("front-matter-start").await;
+	let host = the_host(&app);
+	for (name, body) in [("blocks.md", "\n\nBody."), ("empty.md", "")] {
+		put(&root, SPACE, name, &format!("{FRONT_MATTER}{body}"));
+
+		host.served(Operation::DocumentInsertAfter, json!({ "name": name, "markdown": "# Title" }))
+			.await
+			.expect("inserts");
+
+		let text = on_disk(&root, name);
+		assert!(text.starts_with(&format!("{FRONT_MATTER}\n\n# Title ^")), "{text}");
+	}
+}
+
+#[tokio::test]
+async fn a_find_of_empty_or_blank_text_is_refused_and_writes_nothing() {
+	let (app, root) = a_host("empty-find").await;
+	put(&root, SPACE, "notes.md", "Body.");
+	let host = the_host(&app);
+
+	for text in ["", "  \n\t"] {
+		let refused =
+			host.served(Operation::DocumentFind, json!({ "name": "notes.md", "text": text })).await;
+		assert_eq!(refusal_kind(refused), "unreadableRequest");
+	}
+	assert_eq!(on_disk(&root, "notes.md"), "Body.");
+}
+
 #[tokio::test]
 async fn markdown_holding_no_block_is_refused_and_writes_nothing() {
 	let (app, root) = a_host("no-block").await;

@@ -751,6 +751,10 @@ impl<R: Runtime> Host for LibraryHost<R> {
 			}
 			Operation::DocumentFind => {
 				let BlocksSought { name, text } = Self::read(payload)?;
+				if text.trim().is_empty() {
+					let detail = "give the text to look for, not an empty one".to_owned();
+					return Err(ToolRefusal::UnreadableRequest { detail }.into());
+				}
 				let query = text.to_lowercase();
 				let read = self.blocks_read(database, &root, &space_id, &name, &[], |outline| {
 					Ok(outline.found(&query))

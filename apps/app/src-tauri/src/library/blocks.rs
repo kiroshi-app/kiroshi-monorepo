@@ -348,7 +348,7 @@ fn lines_of(text: &str) -> Vec<Line<'_>> {
 
 fn raw_blocks(lines: &[Line<'_>]) -> Vec<Raw> {
 	let mut blocks = Vec::new();
-	let mut at = 0;
+	let mut at = front_matter_end(lines).map_or(0, |closing| closing + 1);
 	while at < lines.len() {
 		if is_blank(lines[at].text) {
 			at += 1;
@@ -359,6 +359,13 @@ fn raw_blocks(lines: &[Line<'_>]) -> Vec<Raw> {
 		blocks.push(raw);
 	}
 	blocks
+}
+
+fn front_matter_end(lines: &[Line<'_>]) -> Option<usize> {
+	if lines.first()?.text.trim_end() != "---" {
+		return None;
+	}
+	(1..lines.len()).find(|&index| matches!(lines[index].text.trim_end(), "---" | "..."))
 }
 
 fn raw_block_at(lines: &[Line<'_>], at: usize) -> Raw {

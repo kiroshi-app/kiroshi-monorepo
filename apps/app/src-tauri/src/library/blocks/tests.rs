@@ -67,6 +67,27 @@ fn a_fence_holds_blank_lines_and_marker_shaped_lines_as_code() {
 }
 
 #[test]
+fn front_matter_closed_by_dashes_or_dots_stands_outside_every_block_and_takes_no_marker() {
+	for front_matter in ["---\ntitle: x\n---", "---\ntitle: x\n..."] {
+		let text = format!("{front_matter}\n\n# Plan\n\n- one");
+		let filled = backfilled(&text);
+
+		assert_eq!(kinds(&text), [BlockKind::Heading, BlockKind::List]);
+		assert!(filled.starts_with(&format!("{front_matter}\n\n# Plan ^")), "{filled}");
+		assert_eq!(sources(&filled), ["# Plan", "- one"]);
+	}
+	assert_eq!(kinds("---\ntitle: x\n---"), []);
+}
+
+#[test]
+fn a_document_opening_with_dashes_never_closed_parses_as_a_rule_and_its_blocks() {
+	assert_eq!(
+		kinds("---\ntitle: x\n\nBody."),
+		[BlockKind::Rule, BlockKind::Paragraph, BlockKind::Paragraph]
+	);
+}
+
+#[test]
 fn a_paragraph_interrupted_by_a_heading_is_two_blocks() {
 	assert_eq!(
 		kinds("Text\n# Title\nMore"),
