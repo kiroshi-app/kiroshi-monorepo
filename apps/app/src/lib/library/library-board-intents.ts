@@ -4,6 +4,7 @@ import {
 	type Author,
 	BOARD_SCHEMA,
 	type BoardNode,
+	type Connector,
 	type ImageNode,
 	type LibraryCardNode,
 	type LinkCardNode,
@@ -266,18 +267,54 @@ const libraryNodeOf = (
 	}
 }
 
+type EndName = "from" | "to"
+
+type Fraction = NonNullable<Connector["fromAnchor"]>
+
+const ENDS: EndName[] = ["from", "to"]
+
+const TIES = ["Node", "Side", "Anchor"]
+
+const CENTRE: Fraction = { x: 0.5, y: 0.5 }
+
+const SIDE_MIDPOINT: Record<NonNullable<Connector["fromSide"]>, Fraction> = {
+	top: { x: 0.5, y: 0 },
+	right: { x: 1, y: 0.5 },
+	bottom: { x: 0.5, y: 1 },
+	left: { x: 0, y: 0.5 },
+}
+
+const tiedFractionOf = (edge: SharedElement, end: EndName) => {
+	const anchor = edge.get(`${end}Anchor`) as Fraction | undefined
+	const side = edge.get(`${end}Side`) as Connector["fromSide"]
+	return anchor ?? (side ? SIDE_MIDPOINT[side] : CENTRE)
+}
+
+const boardPointIn = (node: SharedElement, { x, y }: Fraction) => ({
+	x: Number(node.get("x")) + x * Number(node.get("width")),
+	y: Number(node.get("y")) + y * Number(node.get("height")),
+})
+
+const loosenEndsTiedTo = (
+	edge: SharedElement,
+	id: string,
+	node: SharedElement,
+) => {
+	for (const end of ENDS) {
+		if (edge.get(`${end}Node`) !== id) continue
+		edge.set(`${end}Point`, boardPointIn(node, tiedFractionOf(edge, end)))
+		for (const tie of TIES) edge.delete(`${end}${tie}`)
+	}
+}
+
 const remove = (doc: Y.Doc, id: string) => {
-	const nodes = nodesOf(doc)
-	const edges = edgesOf(doc)
-	if (!nodes.has(id)) {
-		edges.delete(id)
+	const node = nodesOf(doc).get(id)
+	if (!node) {
+		edgesOf(doc).delete(id)
 		return
 	}
-	nodes.delete(id)
-	const attached = [...edges.entries()].filter(
-		([, edge]) => edge.get("fromNode") === id || edge.get("toNode") === id,
-	)
-	for (const [edgeId] of attached) edges.delete(edgeId)
+	for (const edge of edgesOf(doc).values()) loosenEndsTiedTo(edge, id, node)
+	nodesOf(doc).delete(id)
 }
 
 const writeIntent = (

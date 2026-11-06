@@ -3,7 +3,11 @@ import * as Y from "yjs"
 
 import { readBoard } from "@workspace/shared/board/board-doc"
 
-import { boardStateOf, TWO_NOTES_BOARD } from "./library-board-fixtures"
+import {
+	boardStateOf,
+	TIED_ARROWS_BOARD,
+	TWO_NOTES_BOARD,
+} from "./library-board-fixtures"
 import { applyLibraryBoardIntent } from "./library-board-intents"
 import { createLibraryBoardSession } from "./library-board-session"
 import { base64Of, bytesOf, SEND_INTERVAL_MS } from "./library-document-session"
@@ -168,6 +172,49 @@ describe("a Library board session", () => {
 
 		expect(itemOf(session, "second")).toMatchObject({ text: "Second" })
 		expect(itemOf(session, "link")).toMatchObject({ kind: "connector" })
+	})
+
+	it("sends updates that keep every field of an arrow it did not edit", async () => {
+		const { state, sent, session } = openSession(
+			boardStateOf(TIED_ARROWS_BOARD),
+		)
+
+		session.receive(remoteMoveOf(state, "start", 30))
+		session.apply({ type: "edit-text", id: "finish", text: "Done" })
+		await session.flush()
+
+		expect(boardAfter(state, ...sent).edges).toEqual(TIED_ARROWS_BOARD.edges)
+	})
+
+	it("saves the loosened ends of a deleted node as a board that parses", async () => {
+		const { state, sent, session, onRefused } = openSession(
+			boardStateOf(TIED_ARROWS_BOARD),
+		)
+
+		session.apply({ type: "delete", id: "finish" })
+		await session.flush()
+
+		const saved = boardAfter(state, ...sent)
+		expect(Object.keys(saved.edges).sort()).toEqual([
+			"centred",
+			"loop",
+			"pinned",
+		])
+		expect(saved.edges.loop).not.toHaveProperty("fromNode")
+		expect(saved.edges.loop).not.toHaveProperty("toNode")
+		expect(onRefused).not.toHaveBeenCalled()
+	})
+
+	it("ties every loosened end back as it was in one undo of a delete", async () => {
+		const { state, sent, session } = openSession(
+			boardStateOf(TIED_ARROWS_BOARD),
+		)
+
+		session.apply({ type: "delete", id: "finish" })
+		session.undo()
+		await session.flush()
+
+		expect(boardAfter(state, ...sent)).toEqual(boardAfter(state))
 	})
 
 	it("undoes nothing once its history is destroyed", () => {

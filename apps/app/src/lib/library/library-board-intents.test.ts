@@ -7,7 +7,11 @@ import type {
 	BoardItem,
 } from "@workspace/ui/components/board-view"
 
-import { boardDocOf, TWO_NOTES_BOARD } from "./library-board-fixtures"
+import {
+	boardDocOf,
+	TIED_ARROWS_BOARD,
+	TWO_NOTES_BOARD,
+} from "./library-board-fixtures"
 import {
 	applyLibraryBoardIntent,
 	describeLibraryBoardLink,
@@ -44,8 +48,8 @@ const created = (kind: BoardItem["kind"], id = "made"): BoardIntent => ({
 	},
 })
 
-const applied = (intent: BoardIntent) => {
-	const doc = boardDocOf(TWO_NOTES_BOARD)
+const applied = (intent: BoardIntent, board = TWO_NOTES_BOARD) => {
+	const doc = boardDocOf(board)
 	let transactions = 0
 	doc.on("afterTransaction", () => {
 		transactions++
@@ -252,11 +256,94 @@ describe("applyLibraryBoardIntent", () => {
 		expect(transactions).toBe(1)
 	})
 
-	it("deletes a node with every connector attached to it", () => {
+	it("keeps every connector tied to a deleted node, its end loosened where it sat", () => {
 		const { board } = applied({ type: "delete", id: "second" })
 
 		expect(Object.keys(board.nodes)).toEqual(["first"])
-		expect(board.edges).toEqual({})
+		expect(board.edges.link).toEqual({
+			fromNode: "first",
+			fromEnd: "none",
+			toPoint: { x: 400, y: 50 },
+			toEnd: "arrow",
+			routing: "straight",
+		})
+	})
+
+	it("loosens a centre, a side and an anchor tie at the point each end sat", () => {
+		const { board } = applied(
+			{ type: "delete", id: "finish" },
+			TIED_ARROWS_BOARD,
+		)
+
+		expect(board.edges.pinned).toEqual({
+			...TIED_ARROWS_BOARD.edges.pinned,
+			toNode: undefined,
+			toSide: undefined,
+			toPoint: { x: 400, y: 50 },
+		})
+		expect(board.edges.centred?.toPoint).toEqual({ x: 500, y: 50 })
+		expect(board.edges.pinned).not.toHaveProperty("toSide")
+	})
+
+	it("loosens an anchor tie at its point on the board", () => {
+		const { board } = applied(
+			{ type: "delete", id: "start" },
+			TIED_ARROWS_BOARD,
+		)
+
+		expect(board.edges.pinned).not.toHaveProperty("fromNode")
+		expect(board.edges.pinned).not.toHaveProperty("fromAnchor")
+		expect(board.edges.pinned?.fromPoint).toEqual({ x: 50, y: 0 })
+		expect(board.edges.pinned?.toNode).toBe("finish")
+	})
+
+	it("keeps an arrow tied at both ends to a deleted node, both ends free", () => {
+		const { board } = applied(
+			{ type: "delete", id: "finish" },
+			TIED_ARROWS_BOARD,
+		)
+
+		expect(board.edges.loop).toEqual({
+			fromPoint: { x: 500, y: 0 },
+			fromEnd: "none",
+			toPoint: { x: 600, y: 75 },
+			toEnd: "arrow",
+			bend: -20,
+			routing: "straight",
+		})
+	})
+
+	it("keeps the ties and the bend of every arrow when a tied node moves", () => {
+		const { board } = applied(
+			{ type: "move", id: "finish", position: { x: 900, y: 40 } },
+			TIED_ARROWS_BOARD,
+		)
+
+		expect(board.edges).toEqual(TIED_ARROWS_BOARD.edges)
+	})
+
+	it("changes only the routing of an arrow when restyled", () => {
+		const { board } = applied(
+			{ type: "style", id: "pinned", style: { routing: "straight" } },
+			TIED_ARROWS_BOARD,
+		)
+
+		expect(board.edges.pinned).toEqual({
+			...TIED_ARROWS_BOARD.edges.pinned,
+			routing: "straight",
+		})
+	})
+
+	it("changes only the label of an arrow when its text is edited", () => {
+		const { board } = applied(
+			{ type: "edit-text", id: "pinned", text: "after" },
+			TIED_ARROWS_BOARD,
+		)
+
+		expect(board.edges.pinned).toEqual({
+			...TIED_ARROWS_BOARD.edges.pinned,
+			label: "after",
+		})
 	})
 
 	it("deletes a connector alone", () => {
