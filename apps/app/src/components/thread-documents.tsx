@@ -46,6 +46,7 @@ import {
 import { useLibraryBoardPointerShare } from "@/lib/library/use-library-board-pointer-share"
 import { useLibraryBoardPresence } from "@/lib/library/use-library-board-presence"
 import { useLibraryBoardSession } from "@/lib/library/use-library-board-session"
+import { useLibraryBoardShelf } from "@/lib/library/use-library-board-shelf"
 import { useLibraryDocumentSession } from "@/lib/library/use-library-document-session"
 import { useLibraryImageResolver } from "@/lib/library/use-library-image-sources"
 import {
@@ -323,6 +324,11 @@ export const ThreadBoardPanel = ({
 		bots,
 	})
 	const pointerShare = useLibraryBoardPointerShare(documents.spaceId, name)
+	const library = useLibraryBoardShelf({
+		spaceId: documents.spaceId,
+		isJoined: documents.isJoined,
+		name,
+	})
 	const { stopAll } = useStopLibraryBoardDrawers(documents.spaceId)
 	const summary = useBoardSummary(documents.spaceId, documents.boardOf(name))
 	const openInItsTab = useOpenLibraryItemInItsTab()
@@ -353,6 +359,7 @@ export const ThreadBoardPanel = ({
 		>
 			<LibraryBoardCanvas
 				board={board}
+				library={library}
 				pointerShare={pointerShare}
 				presence={presence}
 				summary={summary}
