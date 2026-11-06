@@ -156,7 +156,6 @@ export const LinkAndImagePastedDark = meta.story({
 })
 
 const FIT_ID = "fitted"
-const FIT_ORIGIN = { x: 40, y: 40 }
 const FRAME_OUTSET = 4
 const KEY_STEP_LARGE = 10
 
@@ -173,7 +172,7 @@ const FittedBoard = ({ fit }: FittedBoardProps) => {
 	const [item, setItem] = useState<BoardItem>({
 		id: FIT_ID,
 		kind: fit.kind,
-		position: FIT_ORIGIN,
+		position: { x: 40, y: 40 },
 		size: fit.size,
 		zOrder: 1,
 		text: fit.text,
@@ -212,9 +211,6 @@ const fittedObjectIn = (root: HTMLElement) =>
 		`[data-slot="board-object"][data-object-id="${FIT_ID}"]`,
 	) as HTMLElement
 
-const contentOf = (object: HTMLElement) =>
-	object.firstElementChild as HTMLElement
-
 const expectContentInFrame = async (root: HTMLElement, size: BoardSize) => {
 	const object = fittedObjectIn(root)
 	const frame = object.getBoundingClientRect()
@@ -222,7 +218,7 @@ const expectContentInFrame = async (root: HTMLElement, size: BoardSize) => {
 		root,
 		"board-selection-frame",
 	).getBoundingClientRect()
-	const content = contentOf(object)
+	const content = object.firstElementChild as HTMLElement
 	const box = content.getBoundingClientRect()
 	await expect(frame.width).toBeCloseTo(size.width, 0)
 	await expect(frame.height).toBeCloseTo(size.height, 0)
