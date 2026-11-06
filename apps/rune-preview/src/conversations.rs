@@ -305,11 +305,12 @@ struct SoloAgent {
 	title: String,
 }
 
+fn opened_conversation<'a>(s: &'a App, thread: &Thread) -> Option<&'a Conversation> {
+	s.ready()?.conversations.iter().find(|held| held.id == thread.conversation_id)
+}
+
 fn shown_name(s: &App, thread: &Thread) -> String {
-	let conversation = s.ready().and_then(|ready| {
-		ready.conversations.iter().find(|held| held.id == thread.conversation_id)
-	});
-	conversation
+	opened_conversation(s, thread)
 		.and_then(|conversation| solo_agent(s, conversation))
 		.map_or_else(|| thread.title.clone(), |agent| agent.name)
 }
@@ -382,16 +383,14 @@ fn thread_column(s: &App, k: &Kit, t: &Tokens, viewport: &Viewport, layer: &mut 
 
 fn thread_header(s: &App, t: &Tokens) -> El {
 	let identity = s.thread.as_ref().map(|thread| {
-		let conversation = s.ready().and_then(|ready| {
-			ready.conversations.iter().find(|held| held.id == thread.conversation_id)
-		});
+		let conversation = opened_conversation(s, thread);
 		let solo = conversation.and_then(|conversation| solo_agent(s, conversation));
 		let media = match (&solo, conversation) {
 			(Some(agent), _) => agent_avatar(agent.hue, 24.0, t.dark),
 			(None, Some(conversation)) => subject_icon(conversation, 24.0, t),
 			(None, None) => el(),
 		};
-		let name = shown_name(s, thread);
+		let name = solo.map_or_else(|| thread.title.clone(), |agent| agent.name);
 		row()
 			.h(36.0)
 			.pl(6.0)
