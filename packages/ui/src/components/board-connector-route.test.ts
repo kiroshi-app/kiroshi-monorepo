@@ -6,9 +6,12 @@ import {
 	BOARD_ARROW_GAP,
 	BOARD_SIDES,
 	type BoardArrow,
+	bendThrough,
 	crossedRects,
 	curveControl,
+	directionAlong,
 	exactPointOf,
+	fractionNearest,
 	lineEndOf,
 	looseEnd,
 	pointAlong,
@@ -281,6 +284,29 @@ describe("routeConnector curve", () => {
 	})
 })
 
+describe("bendThrough, the middle handle", () => {
+	const from = { x: 248, y: 186 }
+	const to = { x: 392, y: 186 }
+
+	it("2.1 Curve: bends the arrow by the offset of the handle from the chord", () => {
+		expect(bendThrough(from, to, { x: 320, y: 120 })).toBe(66)
+	})
+
+	it("measures the offset across the chord only", () => {
+		expect(bendThrough(from, to, { x: 260, y: 252 })).toBe(-66)
+	})
+
+	it("draws the curve through the dragged handle", () => {
+		const route = routeConnector(
+			{ rect: LEFT_SHAPE },
+			{ rect: RIGHT_SHAPE },
+			"straight",
+			{ bend: bendThrough(from, to, { x: 320, y: 90 }) },
+		)
+		expect(pointAlong(route, 0.5)).toEqual({ x: 320, y: 90 })
+	})
+})
+
 describe("routeConnector elbow", () => {
 	for (const [layout, target] of Object.entries(LAYOUTS))
 		for (const fromSide of BOARD_SIDES)
@@ -538,6 +564,54 @@ describe("pointAlong, the label position", () => {
 				0.75,
 			),
 		).toEqual({ x: 40, y: 20 })
+	})
+})
+
+describe("fractionNearest, the dragged label", () => {
+	const route = routeConnector(
+		{ rect: LEFT_SHAPE },
+		{ rect: RIGHT_SHAPE },
+		"straight",
+	)
+
+	it("slides the label to the point of the route nearest the pointer", () => {
+		expect(fractionNearest(route, { x: 284, y: 140 })).toBe(0.25)
+	})
+
+	it("keeps the label on the route past its ends", () => {
+		expect(fractionNearest(route, { x: 900, y: 186 })).toBe(1)
+	})
+
+	it("follows the curve of a bent arrow", () => {
+		const curve = routeConnector(
+			{ rect: LEFT_SHAPE },
+			{ rect: RIGHT_SHAPE },
+			"straight",
+			{ bend: 66 },
+		)
+		expect(fractionNearest(curve, { x: 320, y: 100 })).toBe(0.5)
+	})
+})
+
+describe("directionAlong, the label tick", () => {
+	it("runs along a straight route", () => {
+		const route = routeConnector(
+			{ rect: LEFT_SHAPE },
+			{ rect: RIGHT_SHAPE },
+			"straight",
+		)
+		expect(directionAlong(route, 0.5)).toEqual({ x: 1, y: 0 })
+	})
+
+	it("runs along the leg of an elbow the fraction falls on", () => {
+		const elbow = {
+			points: [
+				{ x: 0, y: 0 },
+				{ x: 40, y: 0 },
+				{ x: 40, y: 40 },
+			],
+		}
+		expect(directionAlong(elbow, 0.75)).toEqual({ x: 0, y: 1 })
 	})
 })
 

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest"
 import type { Board } from "@workspace/shared/board/board"
 import { readBoard } from "@workspace/shared/board/board-doc"
 import type {
+	BoardConnector,
 	BoardIntent,
 	BoardItem,
 } from "@workspace/ui/components/board-view"
@@ -45,6 +46,20 @@ const created = (kind: BoardItem["kind"], id = "made"): BoardIntent => ({
 		size: { width: 200, height: 120 },
 		zOrder: 0,
 		text: "",
+	},
+})
+
+const arrowSet = (arrow: Partial<BoardConnector>): BoardIntent => ({
+	type: "set-arrow",
+	arrow: {
+		id: "drawn",
+		kind: "connector",
+		from: "first",
+		to: "second",
+		routing: "straight",
+		zOrder: 0,
+		text: "",
+		...arrow,
 	},
 })
 
@@ -349,6 +364,96 @@ describe("applyLibraryBoardIntent", () => {
 			...TIED_ARROWS_BOARD.edges.pinned,
 			label: "after",
 		})
+	})
+
+	it("draws an arrow from a side to the centre of a node", () => {
+		const { board, transactions } = applied(arrowSet({ fromSide: "right" }))
+
+		expect(board.edges.drawn).toEqual({
+			fromNode: "first",
+			fromSide: "right",
+			fromEnd: "none",
+			toNode: "second",
+			toEnd: "arrow",
+			routing: "straight",
+		})
+		expect(transactions).toBe(1)
+	})
+
+	it("draws an arrow tied to an exact point of a node", () => {
+		const { board } = applied(arrowSet({ toAnchor: { x: 0.25, y: 0.5 } }))
+
+		expect(board.edges.drawn).toMatchObject({
+			toNode: "second",
+			toAnchor: { x: 0.25, y: 0.5 },
+		})
+	})
+
+	it("draws an arrow left untied on a board point", () => {
+		const { board } = applied(arrowSet({ to: "", toPoint: { x: 640, y: 80 } }))
+
+		expect(board.edges.drawn).toEqual({
+			fromNode: "first",
+			fromEnd: "none",
+			toPoint: { x: 640, y: 80 },
+			toEnd: "arrow",
+			routing: "straight",
+		})
+	})
+
+	it("rewrites the ends, bend, label and label position of an arrow, keeping its heads", () => {
+		const { board, transactions } = applied(
+			arrowSet({
+				id: "pinned",
+				from: "start",
+				fromSide: "bottom",
+				to: "",
+				toPoint: { x: 900, y: 300 },
+				routing: "straight",
+				bend: -12,
+				text: "next",
+				labelPosition: 0.5,
+			}),
+			TIED_ARROWS_BOARD,
+		)
+
+		expect(board.edges.pinned).toEqual({
+			fromNode: "start",
+			fromSide: "bottom",
+			fromEnd: "none",
+			toPoint: { x: 900, y: 300 },
+			toEnd: "arrow",
+			label: "next",
+			labelPosition: 0.5,
+			bend: -12,
+			routing: "straight",
+			headSize: "large",
+		})
+		expect(transactions).toBe(1)
+	})
+
+	it("drops the bend and the label an arrow no longer carries", () => {
+		const { board } = applied(
+			arrowSet({
+				id: "pinned",
+				from: "start",
+				fromAnchor: { x: 0.25, y: 0 },
+				to: "finish",
+				toSide: "left",
+				routing: "elbow",
+			}),
+			TIED_ARROWS_BOARD,
+		)
+
+		expect(board.edges.pinned).not.toHaveProperty("bend")
+		expect(board.edges.pinned).not.toHaveProperty("label")
+		expect(board.edges.pinned).not.toHaveProperty("labelPosition")
+	})
+
+	it("refuses an arrow tied to a node the board no longer holds", () => {
+		const { board } = applied(arrowSet({ to: "gone" }))
+
+		expect(board.edges.drawn).toBeUndefined()
 	})
 
 	it("deletes a connector alone", () => {

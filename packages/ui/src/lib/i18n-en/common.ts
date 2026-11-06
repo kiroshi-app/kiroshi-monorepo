@@ -718,6 +718,9 @@ const common = {
 			moved: "Moved to {{x}}, {{y}}",
 			resized: "Resized to {{width}} by {{height}}",
 		},
+		connector: {
+			editLabel: "Arrow label",
+		},
 		connectorFlyout: {
 			label: "Arrow type",
 			routing: {
