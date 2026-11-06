@@ -51,11 +51,10 @@ import {
 	SidebarGroupContent,
 } from "@workspace/ui/components/ui/sidebar"
 import { useStableCallback } from "@workspace/ui/hooks/use-stable-callback"
-import { mergeRefs } from "@workspace/ui/lib/utils"
+import { cn, mergeRefs } from "@workspace/ui/lib/utils"
 
 const EMPTY_COPY = "px-3 py-4 text-center text-sidebar-foreground/70 text-sm"
-const FAILURE_WITH_RETRY =
-	"flex flex-col items-center gap-2 px-3 py-4 text-center text-sidebar-foreground/70 text-sm"
+const FAILURE_WITH_RETRY = cn(EMPTY_COPY, "flex flex-col items-center gap-2")
 
 interface SectionNamingGroupProps {
 	bots: AppSidebarBot[]
