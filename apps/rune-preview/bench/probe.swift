@@ -19,12 +19,12 @@ func window(of pid: Int32) -> Int? {
 	windows(of: pid).max { area($0) < area($1) }?[kCGWindowNumber as String] as? Int
 }
 
-func recognises(_ needle: String, in path: String, rightOf minX: Double) -> Bool {
+func recognises(_ needle: String, in path: String, rightOf minX: Double, at level: VNRequestTextRecognitionLevel) -> Bool {
 	guard let image = NSImage(contentsOfFile: path)?.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
 		return false
 	}
 	let request = VNRecognizeTextRequest()
-	request.recognitionLevel = .fast
+	request.recognitionLevel = level
 	try? VNImageRequestHandler(cgImage: image).perform([request])
 	let lines = (request.results ?? []).filter { $0.boundingBox.minX >= minX }.compactMap {
 		$0.topCandidates(1).first?.string
@@ -66,8 +66,9 @@ case "trusted":
 	exit(AXIsProcessTrusted() ? 0 : 1)
 case "ocr":
 	let minX = arguments.count > 4 ? Double(arguments[4]) ?? 0 : 0
-	exit(recognises(arguments[3], in: arguments[2], rightOf: minX) ? 0 : 1)
+	let level: VNRequestTextRecognitionLevel = arguments.count > 5 && arguments[5] == "accurate" ? .accurate : .fast
+	exit(recognises(arguments[3], in: arguments[2], rightOf: minX, at: level) ? 0 : 1)
 default:
-	FileHandle.standardError.write("usage: probe window <pid> | windows <pid> | helpers <pid> | locked | trusted | ocr <png> <text> [min x]\n".data(using: .utf8)!)
+	FileHandle.standardError.write("usage: probe window <pid> | windows <pid> | helpers <pid> | locked | trusted | ocr <png> <text> [min x] [accurate]\n".data(using: .utf8)!)
 	exit(64)
 }

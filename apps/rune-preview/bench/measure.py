@@ -99,9 +99,9 @@ def window(pid):
 	return found.stdout.strip() if found.returncode == 0 else None
 
 
-def shows(window_id, needle, path, min_x=0.0):
+def shows(window_id, needle, path, min_x=0.0, level="fast"):
 	captured = run(["screencapture", "-x", "-o", "-l", window_id, path])
-	return captured.returncode == 0 and probe_says("ocr", path, needle, str(min_x))
+	return captured.returncode == 0 and probe_says("ocr", path, needle, str(min_x), level)
 
 
 def webkit_helpers(pid):
@@ -183,11 +183,11 @@ class Launch:
 			stop([self.pid])
 			raise SystemExit(f"{what} for {self.side.name} within {LAUNCH_TIMEOUT_S} s")
 
-	def wait_until_shown(self, needle, min_x, scratch):
+	def wait_until_shown(self, needle, min_x, scratch, level="fast"):
 		previous_capture_ms = self.elapsed_ms()
 		while True:
 			capture_ms = self.elapsed_ms()
-			if shows(self.window_id, needle, os.path.join(scratch, "frame.png"), min_x):
+			if shows(self.window_id, needle, os.path.join(scratch, "frame.png"), min_x, level):
 				return {
 					"conversation_displayed_ms": round(capture_ms),
 					"conversation_resolution_ms": round(capture_ms - previous_capture_ms),
@@ -344,7 +344,7 @@ def at_rest_blockers(scratch, installed, longest, locked):
 	installed_windows = run([PROBE, "windows", str(installed[0])]).stdout.split()
 	capture = os.path.join(scratch, "installed.png")
 	needle = title_needle(longest["title"])
-	if not any(shows(each, needle, capture, CONTENT_PANE_MIN_X) for each in installed_windows):
+	if not any(shows(each, needle, capture, CONTENT_PANE_MIN_X, "accurate") for each in installed_windows):
 		reasons.append(
 			"no installed Kiroshi window shows its longest conversation, and the bench sends it no "
 			"input; open that conversation in Kiroshi by hand, then run measure.py again"
@@ -360,7 +360,7 @@ def at_rest(scratch, longest, locked):
 	memory_runs, cpu_runs = [], []
 	for attempt in range(RUNS):
 		launched = Launch(PREVIEW_ON_INSTALLED)
-		launched.wait_until_shown(title_needle(longest["title"]), CONTENT_PANE_MIN_X, scratch)
+		launched.wait_until_shown(title_needle(longest["title"]), CONTENT_PANE_MIN_X, scratch, "accurate")
 		time.sleep(REST_SETTLE_S)
 		sides = {"installed": [installed[0], *webkit_helpers(installed[0])], "preview": [launched.pid]}
 		before = load()
@@ -435,10 +435,11 @@ def parsed_samples(path):
 		trace = element.find("tagged-backtrace")
 		trace = trace if trace is not None else element.find("backtrace")
 		weight = element.find("weight")
-		if process is not None and trace is not None and weight is not None:
-			stack = known(backtraces, trace, backtrace_of)
-			if stack:
-				yield known(pids, process, pid_of), stack[0], known(weights, weight, lambda found: int(found.text))
+		pid = known(pids, process, pid_of) if process is not None else None
+		stack = known(backtraces, trace, backtrace_of) if trace is not None else []
+		nanoseconds = known(weights, weight, lambda found: int(found.text)) if weight is not None else None
+		if pid is not None and stack and nanoseconds is not None:
+			yield pid, stack[0], nanoseconds
 		element.clear()
 
 
