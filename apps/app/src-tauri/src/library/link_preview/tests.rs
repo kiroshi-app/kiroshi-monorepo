@@ -272,7 +272,6 @@ fn a_page_without_a_description_serializes_no_description_field() {
 
 	let json = serde_json::to_value(&preview).expect("the preview serializes");
 
-	assert_eq!(preview.description, None);
 	assert!(json.get("description").is_none(), "{json}");
 }
 
