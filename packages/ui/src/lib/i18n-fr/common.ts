@@ -686,6 +686,18 @@ const common = {
 					"Impossible d’ajouter ce fichier à la Bibliothèque. Vérifiez le fichier, puis importez-le à nouveau.",
 				generic:
 					"Un problème est survenu pendant l’import. Importez à nouveau le fichier.",
+				url: {
+					unsupportedScheme:
+						"Seuls les liens web (http ou https) peuvent être importés. Déposez plutôt un lien web.",
+					privateAddress:
+						"Kiroshi n’importe pas depuis une adresse privée. Déposez plutôt un lien public.",
+					networkFailure:
+						"Impossible d’atteindre ce lien. Vérifiez l’adresse, puis déposez-le à nouveau.",
+					tooLarge:
+						"L’image derrière ce lien est trop lourde pour la Bibliothèque. Déposez le lien d’une image plus petite.",
+					unknownSpace:
+						"Cet espace n’existe plus sur l’ordinateur où tourne Kiroshi. Ouvrez un autre espace, puis déposez-y le lien.",
+				},
 			},
 		},
 	},

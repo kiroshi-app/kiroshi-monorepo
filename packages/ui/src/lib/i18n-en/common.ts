@@ -656,6 +656,18 @@ const common = {
 					"Couldn’t add this file to the Library. Check the file, then import it again.",
 				generic:
 					"Something went wrong during the import. Import the file again.",
+				url: {
+					unsupportedScheme:
+						"Only web links (http or https) can be imported. Drop a web link instead.",
+					privateAddress:
+						"Kiroshi doesn’t import from a private address. Drop a public link instead.",
+					networkFailure:
+						"Couldn’t reach this link. Check the address, then drop it again.",
+					tooLarge:
+						"The image behind this link is too large for the Library. Drop a link to a smaller image.",
+					unknownSpace:
+						"This Space isn’t on the computer where Kiroshi runs anymore. Open another Space, then drop the link there.",
+				},
 			},
 		},
 	},
