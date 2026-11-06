@@ -36,7 +36,7 @@ impl Seat {
 	}
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug)]
 pub(crate) struct Identity {
 	pub(crate) name: Option<String>,
 	pub(crate) hue: Option<u16>,
@@ -221,8 +221,7 @@ pub(crate) fn share_presence<R: Runtime>(
 	placed(root, space_id, name, &at)?;
 	let lease_ends_at =
 		matches!(seat, Seat::Member(_)).then(|| Instant::now() + MEMBER_PRESENCE_LEASE);
-	let Identity { name: writer_name, hue } = identity;
-	let seated = Seated { seat, name: writer_name, hue, at, lease_ends_at };
+	let seated = Seated { seat, name: identity.name, hue: identity.hue, at, lease_ends_at };
 	if lease_ends_at.is_some() {
 		seat_leased(app, space_id, name, seated);
 	} else {
