@@ -248,7 +248,8 @@ const surfaceOf = (bubbleContent: HTMLElement) =>
 
 const expectAgentBubble = async (root: HTMLElement) => {
 	const card = cardIn(root)
-	const answer = getComputedStyle(answerBubbleIn(root))
+	const answerContent = answerBubbleIn(root)
+	const answer = getComputedStyle(answerContent)
 	const turnBubble = slotIn(root, "message-bubble")
 	const turnContent = slotIn(turnBubble, "message-bubble-content")
 	const turn = getComputedStyle(turnContent)
@@ -262,7 +263,7 @@ const expectAgentBubble = async (root: HTMLElement) => {
 	await expect(answer.paddingTop).toBe(turn.paddingTop)
 	await expect(answer.paddingInlineStart).toBe(turn.paddingInlineStart)
 	await expect(answer.borderStartStartRadius).toBe(turn.borderStartStartRadius)
-	await expect(surfaceOf(answerBubbleIn(root))).toBe(surfaceOf(turnContent))
+	await expect(surfaceOf(answerContent)).toBe(surfaceOf(turnContent))
 }
 
 const expectAnswererFooter = async (root: HTMLElement, label: string) => {
