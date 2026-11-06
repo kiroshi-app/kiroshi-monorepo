@@ -371,6 +371,20 @@ const marked = (
 	}),
 })
 
+const unmarked = (document: LibraryBlockDocument): LibraryBlockDocument => ({
+	...document,
+	blocks: document.blocks.map((block, index) => {
+		const plain = { ...block, written: undefined }
+		const next = document.blocks[index + 1]
+		return {
+			...plain,
+			gap: isSetApart(plain, undefined, next)
+				? withBlankLine(block.gap)
+				: block.gap,
+		}
+	}),
+})
+
 const shiftedOffset = (before: string, after: string, offset: number) => {
 	const limit = Math.min(before.length, after.length)
 	let head = 0
@@ -764,6 +778,7 @@ export {
 	tableSourceOf,
 	toggledRow,
 	toggleTask,
+	unmarked,
 	webPageFieldsOf,
 	withCalloutText,
 	withCalloutTone,

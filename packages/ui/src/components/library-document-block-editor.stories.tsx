@@ -1565,6 +1565,79 @@ export const DroppedMarkerNeverShows = meta.story({
 		),
 })
 
+const PLAIN_DOCUMENT = IDENTIFIED_DOCUMENT.replace(ID_MARKER, "")
+
+export const PlainOpensWithoutAWrite = meta.story({
+	tags: ["test-only"],
+	args: { body: PLAIN_DOCUMENT, format: "plain" },
+	play: async ({ args, canvasElement }) => {
+		const field = await focusBlockWith(canvasElement, "The spring launch")
+		field.blur()
+		await waitFor(() =>
+			expect(blockWith(canvasElement, "The spring launch")).toHaveTextContent(
+				/^The spring launch ships on the 14th\.$/,
+			),
+		)
+		await expect(args.onBodyChange).not.toHaveBeenCalled()
+	},
+})
+
+export const PlainEditWritesNoMarker = meta.story({
+	tags: ["test-only"],
+	args: { body: PLAIN_DOCUMENT, format: "plain" },
+	play: async ({ args, canvasElement }) => {
+		const field = await focusBlockWith(canvasElement, "The spring launch")
+		selectShown(field, "14th")
+		await typeInto(field, "15th")
+		await expect(writtenIn(args)).toBe(PLAIN_DOCUMENT.replace("14th", "15th"))
+	},
+})
+
+export const PlainSplitWritesNoMarker = meta.story({
+	tags: ["test-only"],
+	args: { body: PLAIN_DOCUMENT, format: "plain" },
+	play: async ({ args, canvasElement }) => {
+		const field = await focusBlockWith(canvasElement, "The spring launch")
+		selectInField(field, "The spring launch ".length)
+		fireEvent.keyDown(field, { key: "Enter" })
+		await expect(writtenIn(args)).toBe(
+			PLAIN_DOCUMENT.replace("launch ships", "launch \n\nships"),
+		)
+		const second = await focusedFieldIn(blockWith(canvasElement, "ships on"))
+		await expect(fieldSelectionOf(second)?.start).toBe(0)
+	},
+})
+
+export const PlainPasteWritesNoMarker = meta.story({
+	tags: ["test-only"],
+	args: { body: PLAIN_DOCUMENT, format: "plain" },
+	play: async ({ args, canvasElement, userEvent }) => {
+		const kept = "The call starts at ten."
+		const shown = `${kept} Bring the deck.`
+		const field = await focusBlockWith(canvasElement, kept)
+		selectInField(field, kept.length)
+		await userEvent.paste(MARKED_INSERT)
+		await waitFor(() => expect(shownIn(field)).toBe(shown))
+		await expect(fieldSelectionOf(field)?.start).toBe(shown.length)
+		await expect(writtenIn(args)).toBe(PLAIN_DOCUMENT.replace(kept, shown))
+	},
+})
+
+export const PlainDropsLegacyMarkersAtTheFirstEdit = meta.story({
+	tags: ["test-only"],
+	args: { body: IDENTIFIED_DOCUMENT, format: "plain" },
+	play: async ({ args, canvasElement }) => {
+		await expect(
+			blockWith(canvasElement, "The spring launch"),
+		).toHaveTextContent(/^The spring launch ships on the 14th\.$/)
+		await expect(canvasElement).not.toHaveTextContent(/\^[a-z0-9]{6}/)
+		const field = await focusBlockWith(canvasElement, "The spring launch")
+		selectShown(field, "14th")
+		await typeInto(field, "15th")
+		await expect(writtenIn(args)).toBe(PLAIN_DOCUMENT.replace("14th", "15th"))
+	},
+})
+
 type AgentWritingFrameProps = BodyArgs & { body: string }
 
 const AGENT_BLOCK = "The agent adds a line. ^agent1"
