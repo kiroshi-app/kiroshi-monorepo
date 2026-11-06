@@ -39,7 +39,14 @@ pub const SCENES: &[Scene] = &[
 	("thread-mention", thread_mention),
 	("thread-math", thread_math),
 	("thread-rich", thread_rich),
+	("block-spike", block_spike),
 ];
+
+fn block_spike(s: &mut App) {
+	s.spike = crate::spike::editor::Editor::from_markdown(crate::spike::SAMPLE);
+	s.spike.focus(1, 0, 0);
+	s.screen = Screen::BlockSpike;
+}
 
 fn welcome(s: &mut App, page: Page) {
 	s.dev_profile = Some(DevProfile::default());

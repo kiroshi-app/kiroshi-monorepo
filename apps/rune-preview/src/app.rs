@@ -36,6 +36,7 @@ const SENDING_OFF: &str = "Sending is off on the installed Kiroshi: the preview 
 pub enum Screen {
 	Onboarding(Step),
 	Conversations,
+	BlockSpike,
 }
 
 pub enum Workspace {
@@ -266,6 +267,7 @@ pub struct App {
 	pub composer: Composer,
 	pub images: Images,
 	pub sidebar: PaneState,
+	pub spike: crate::spike::editor::Editor,
 	pub notice: Option<String>,
 	pub onboarding_code: TextEdit,
 	pub onboarding_key: TextEdit,
@@ -299,6 +301,7 @@ impl App {
 			},
 			images: Images::default(),
 			sidebar: PaneState::new(276.0).range(180.0, 480.0),
+			spike: crate::spike::editor::Editor::default(),
 			notice: None,
 			onboarding_code: TextEdit::new(""),
 			onboarding_key: TextEdit::new(""),
