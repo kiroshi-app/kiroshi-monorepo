@@ -41,7 +41,6 @@ use crate::account::session::restore;
 use crate::account::session::{sign_out, AccountSession};
 use crate::agent::commands;
 use crate::agent::contract as agent;
-use crate::agent::protocol::OauthCredentials;
 use crate::agent::reply_writer::TurnSink;
 use crate::attachments;
 use crate::bundles::{BotPermissions, DEFAULT_OUTPUT_STYLE};
@@ -72,7 +71,7 @@ use crate::db::repositories::conversations::{a_pending_prompt, PromptKind};
 use crate::db::repositories::joined_spaces::{JoinedReach, JoinedSpace};
 use crate::db::{self, DatabaseState};
 use crate::environment::connection;
-use crate::environment::contract::{ConnectionKind, EnvError, EnvOwner, EnvScope, ACCOUNT_BEARER};
+use crate::environment::contract::{ConnectionKind, EnvError, EnvScope, ACCOUNT_BEARER};
 use crate::environment::store;
 use crate::events::{Event, BUFFERED_FRAMES};
 use crate::host_api::files::ATTACHMENT_PATH;
@@ -3071,6 +3070,8 @@ struct Guest {
 	effects: HostEffects,
 	member: MemberWire,
 }
+
+const HOST_NAME: &str = "Ada on the host";
 
 impl Guest {
 	async fn of_two_spaces(name: &str) -> Self {
