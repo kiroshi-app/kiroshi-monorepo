@@ -11,7 +11,7 @@ use crate::model::RuntimeScope;
 
 const PREVIEW_LENGTH: usize = 140;
 
-pub const FOCUS_WATCH: Duration = Duration::from_millis(500);
+const FOCUS_WATCH: Duration = Duration::from_millis(500);
 
 pub trait Desktop {
 	fn holds_focus(&self) -> bool;
