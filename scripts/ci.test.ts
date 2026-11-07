@@ -469,6 +469,16 @@ describe("ci:fast", () => {
 			"PR enqueue script unit tests",
 			"test:pr-enqueue",
 		],
+		[
+			"scripts/pr-merge-sub.sh",
+			"PR merge sub script unit tests",
+			"test:pr-merge-sub",
+		],
+		[
+			"scripts/pr-merge-sub.test.ts",
+			"PR merge sub script unit tests",
+			"test:pr-merge-sub",
+		],
 	]
 	const QUEUE_SCRIPT_PATHS = QUEUE_SCRIPT_UNIT_TESTS.map(([path]) => path)
 	const QUEUE_SCRIPT_STEPS = QUEUE_SCRIPT_UNIT_TESTS.map(([, step]) => step)
@@ -790,7 +800,14 @@ describe("the push to main retry", () => {
 			...GROUP_ORDER.flatMap((group) => GATE[group]),
 			...RUST_PULL_REQUEST_STEPS,
 			CHANGED_UNIT_TESTS,
-			...fastSteps(["scripts/pr-dequeue.sh", "scripts/pr-enqueue.sh"], scope),
+			...fastSteps(
+				[
+					"scripts/pr-dequeue.sh",
+					"scripts/pr-enqueue.sh",
+					"scripts/pr-merge-sub.sh",
+				],
+				scope,
+			),
 		]),
 	]
 	type RetriedOn = { ref: string | undefined; scope: UnitTestScope }

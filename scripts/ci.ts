@@ -65,6 +65,11 @@ const PR_ENQUEUE_UNIT_TESTS: Step = {
 	command: "bun run test:pr-enqueue",
 }
 
+const PR_MERGE_SUB_UNIT_TESTS: Step = {
+	name: "PR merge sub script unit tests",
+	command: "bun run test:pr-merge-sub",
+}
+
 const QUEUE_SCRIPT_UNIT_TESTS = [
 	{
 		step: PR_DEQUEUE_UNIT_TESTS,
@@ -73,6 +78,10 @@ const QUEUE_SCRIPT_UNIT_TESTS = [
 	{
 		step: PR_ENQUEUE_UNIT_TESTS,
 		paths: ["scripts/pr-enqueue.sh", "scripts/pr-enqueue.test.ts"],
+	},
+	{
+		step: PR_MERGE_SUB_UNIT_TESTS,
+		paths: ["scripts/pr-merge-sub.sh", "scripts/pr-merge-sub.test.ts"],
 	},
 ]
 
@@ -117,6 +126,7 @@ export const GATE = {
 		},
 		PR_DEQUEUE_UNIT_TESTS,
 		PR_ENQUEUE_UNIT_TESTS,
+		PR_MERGE_SUB_UNIT_TESTS,
 		{ name: "Gate definition matches ci.yml", command: "bun run test:ci" },
 		{
 			name: "Biome and knip against the baseline",
@@ -228,7 +238,7 @@ const OFF_PULL_REQUEST_TRIGGERS: Partial<Record<Group, string>> = {
 // dozen agents loading the machine, which the full unit set cannot do. It
 // runs the format, Biome and knip against the baseline, the types, the unit
 // test step bun scripts/ci.ts changed picks for the same diff, and the
-// pr-dequeue or pr-enqueue script tests when the diff touches that script
+// pr-dequeue, pr-enqueue or pr-merge-sub script tests when the diff touches that script
 // or its tests. That unit test step runs the changed test files, or the
 // whole unit project of the app and ui suites when a changed path is shared,
 // and never the app perf project. bun run ci and the CI jobs keep the rest:
