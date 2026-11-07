@@ -990,7 +990,7 @@ fn a_waiting_join_the_relay_answers_403_on_settles_waiting_as_not_a_member() {
 struct UnlistedDuringAPause {
 	host: SealingHost,
 	joined: JoinedSpace,
-	reconciliation: tauri::async_runtime::JoinHandle<()>,
+	reconciliation: tokio::task::JoinHandle<()>,
 	pause_ends: Instant,
 }
 
@@ -1012,7 +1012,7 @@ async fn unlisted_during_a_pause(member: &Member, pause: Duration) -> UnlistedDu
 	assert!(guests.is_running(&joined.id));
 	let pause_ends = Instant::now() + pause;
 	guests.cloud().rate_limited("/instances", pause);
-	let app = &*member.app;
+	let app = &member.app.clone();
 	let reconciliation = tokio::spawn(async move { relay::reconciled(&*app).await });
 	until("the unlisted guest to stop", || async {
 		(!guests.is_running(&joined.id)).then_some(())
@@ -1195,14 +1195,14 @@ fn a_join_a_leave_and_a_sign_out_complete_while_the_instance_list_never_answers(
 			room.is_instance_list_stalled = true;
 			room.instance_reads
 		};
-		let app = &*member.app;
+		let app = &member.app.clone();
 		let reconciliation = tokio::spawn(async move { relay::reconciled(&*app).await });
 		until("the instance list to be asked", || async {
 			(member.relay.room().instance_reads > reads).then_some(())
 		})
 		.await;
 
-		let app = &*member.app;
+		let app = &member.app.clone();
 		let other = tokio::time::timeout(
 			PATIENCE,
 			relay::joined(
@@ -1231,14 +1231,14 @@ fn a_join_and_a_leave_answer_while_the_relay_never_answers_a_sign_out() {
 		let joined = online_with_two_members(&member, &member.host()).await;
 		session::restore(member.app.clone()).await;
 		member.relay.room().is_sign_out_stalled = true;
-		let app = &*member.app;
+		let app = &member.app.clone();
 		let sign_out = tokio::spawn(async move { session::sign_out(&*app).await });
 		until("the stalled device deletion", || async {
 			(!member.relay.room().sign_out_calls.is_empty()).then_some(())
 		})
 		.await;
 
-		let app = &*member.app;
+		let app = &member.app.clone();
 		let again = tokio::time::timeout(
 			PATIENCE,
 			relay::joined(app, INSTANCE.to_owned(), None, None, Default::default()),
@@ -1757,7 +1757,7 @@ async fn local_answered(Path(command): Path<String>) -> Response {
 }
 
 #[derive(Clone, Default)]
-struct HostApp(Arc<OnceLock<AppHandle<MockRuntime>>>);
+struct HostApp(Arc<OnceLock<crate::core_context::Core>>);
 
 async fn host_invoked(
 	Served(host): Served<HostApp>,
@@ -1771,7 +1771,7 @@ async fn host_invoked(
 	let args: Value = serde_json::from_str(&body).expect("json arguments");
 	let text = |key: &str| args[key].as_str().expect("a text argument").to_owned();
 	let colour = args["colour"].as_i64();
-	match space_update(app.clone(), &*app, text("id"), text("name"), colour).await {
+	match space_update(&app, text("id"), text("name"), colour).await {
 		Ok(space) => answered_json(StatusCode::OK, json!(space)),
 		Err(refusal) => answered_json(StatusCode::INTERNAL_SERVER_ERROR, json!(refusal)),
 	}
@@ -1793,10 +1793,10 @@ impl Peers {
 		let local = served(invoked.with_state(host_app.clone())).await;
 		let (host, _root, temporary) =
 			signed_in("joined-admission-host", OWNER_BEARER, &cloud, PATIENCE);
-		assert!(host_app.0.set(host.handle().clone()).is_ok());
+		assert!(host_app.0.set(host.core().clone()).is_ok());
 		let local = LocalApi::new(local, LOCAL_TOKEN.to_owned()).expect("the local client builds");
 		host.manage(Hosting::new(&cloud, Some(local)));
-		hosting_start(host.handle().clone(), SPACE.to_owned()).await.expect("the hosting starts");
+		hosting_start(&host, SPACE.to_owned()).await.expect("the hosting starts");
 		let peers = Self { relay, cloud, host, _temporary: temporary };
 		until("the host socket", || async { peers.relay.admission().host.is_some().then_some(()) })
 			.await;
@@ -1821,11 +1821,11 @@ fn a_member_the_host_admits_from_the_device_list_joins_on_its_first_rekey_and_pi
 		let joined = invitations::accept(&*member, INVITATION.to_owned()).await;
 		let joined = joined.expect("the join");
 		until("the roster of two devices", || async {
-			let members = joined_space_members(member.state(), joined.id.clone()).await;
+			let members = joined_space_members(&member, joined.id.clone()).await;
 			(members.expect("the members read").len() == 2).then_some(())
 		})
 		.await;
-		let listed = joined_spaces_list(member.handle().clone()).await.expect("the list");
+		let listed = joined_spaces_list(&member).await.expect("the list");
 
 		assert_eq!(joined.state, JoinedSpaceState::Online);
 		let named = JoinedSpace { hosted_by: Some("Ann".to_owned()), ..joined };
@@ -1853,7 +1853,7 @@ async fn described(
 	joined: &JoinedSpace,
 	colour: Option<i64>,
 ) -> Result<JoinedSpace, JoinedSpaceError> {
-	let (app, id) = (member.handle().clone(), joined.id.clone());
+	let (app, id) = (&member, joined.id.clone());
 	joined_space_describe(app, id, "Lab".to_owned(), colour).await
 }
 
@@ -1865,7 +1865,7 @@ async fn host_space(peers: &Peers) -> (String, Option<Hue>) {
 }
 
 async fn named_and_coloured(member: &CoreOfItsOwn) -> Vec<(String, Option<Hue>)> {
-	let listed = joined_spaces_list(member.handle().clone()).await.expect("the list");
+	let listed = joined_spaces_list(&member).await.expect("the list");
 	listed.into_iter().map(|joined| (joined.name, joined.colour)).collect()
 }
 
@@ -1883,7 +1883,7 @@ fn a_member_describes_its_joined_space_and_the_host_and_every_member_take_it_thr
 		let peers = Peers::hosting().await;
 		let (member, joined, _member_files) = joined_by(&peers, "described-member").await;
 		let (other, other_joined, _other_files) = joined_by(&peers, "described-other").await;
-		joined_space_connect(other.handle().clone(), other_joined.id.clone())
+		joined_space_connect(&other, other_joined.id.clone())
 			.await
 			.expect("the other member connects");
 		let other_changes = changes_heard(&other);
@@ -1952,7 +1952,7 @@ fn a_description_the_host_never_answers_is_host_offline_and_leaves_the_row_uncha
 		let joined = online_and_greeted(&member, &host).await;
 		let before = member.listed().await;
 
-		let app = &*member.app;
+		let app = &member.app.clone();
 		let silent =
 			joined_space_describe(app, joined.id.clone(), "Lab".to_owned(), Some(200)).await;
 
@@ -1987,7 +1987,7 @@ fn a_description_taken_while_a_reconciliation_reads_the_older_listing_is_kept() 
 		let gate = Arc::clone(&member.relay.room().is_instance_list_open);
 		gate.send_replace(false);
 		let reads = member.relay.room().instance_reads;
-		let app = &*member.app;
+		let app = &member.app.clone();
 		let reconciling = tokio::spawn(async move { relay::reconciled(&*app).await });
 		until("the listing read", || async {
 			(member.relay.room().instance_reads > reads).then_some(())
@@ -2036,7 +2036,7 @@ fn a_description_the_link_drops_before_its_event_still_lists_the_answered_name_a
 		let dropping = HostSide::DroppingAfterItsAnswer { host, command: "space_update", body };
 		member.relay.hosting(dropping);
 
-		let app = &*member.app;
+		let app = &member.app.clone();
 		let answered = joined_space_describe(app, joined.id.clone(), "Lab".to_owned(), Some(200))
 			.await
 			.expect("the description");

@@ -27,7 +27,7 @@ use crate::attachments::contract::SubmittedAttachment;
 use crate::conversations::commands::{message_page, send_user_message};
 use crate::conversations::contract::{NewUserMessage, TranscriptStoreError};
 use crate::db;
-use crate::hosting::authorship::{Caller, CommandCaller};
+use crate::hosting::authorship::Caller;
 use crate::removed_on_drop::RemovedOnDrop;
 use crate::spaces::commands::space_delete;
 use crate::test_core::{a_core_of_its_own, CoreOfItsOwn};
@@ -1331,9 +1331,11 @@ fn an_unchanged_file_opens_without_a_host_edit() {
 	assert_eq!(state_vector_of(&after_restart.state), state_vector_of(&reopened.state));
 }
 
-const MARKDOWN_ON_MAIN: &[u8] = include_bytes!("../../tests/vectors/library-markdown-on-main.md");
+const MARKDOWN_ON_MAIN: &[u8] =
+	include_bytes!("../../../../apps/app/src-tauri/tests/vectors/library-markdown-on-main.md");
 
-const STATE_ON_MAIN: &[u8] = include_bytes!("../../tests/vectors/library-markdown-on-main.yjs");
+const STATE_ON_MAIN: &[u8] =
+	include_bytes!("../../../../apps/app/src-tauri/tests/vectors/library-markdown-on-main.yjs");
 
 #[test]
 fn a_document_and_its_state_stored_before_document_kinds_open_unchanged() {
@@ -1717,26 +1719,16 @@ async fn the_import_commands_refuse_an_unknown_space_and_land_in_a_known_one() {
 	let unknown = || LibraryError::UnknownSpace { id: "nowhere".to_owned() };
 	let handle = || &*app;
 
-	let refused = library_import(
-		handle(),
-		&*app,
-		"nowhere".to_owned(),
-		"notes.md".to_owned(),
-		base64_of(b"x"),
-	)
-	.await;
-	let refused_paths = library_import_paths(
-		handle(),
-		&*app,
-		"nowhere".to_owned(),
-		vec![dropped.join("dropped.md")],
-	)
-	.await;
+	let refused =
+		library_import(handle(), "nowhere".to_owned(), "notes.md".to_owned(), base64_of(b"x"))
+			.await;
+	let refused_paths =
+		library_import_paths(handle(), "nowhere".to_owned(), vec![dropped.join("dropped.md")])
+			.await;
 	let refused_thumbnail =
-		library_read_thumbnail(handle(), &*app, "nowhere".to_owned(), "cover.png".to_owned()).await;
+		library_read_thumbnail(handle(), "nowhere".to_owned(), "cover.png".to_owned()).await;
 	let sent = library_import(
 		handle(),
-		&*app,
 		space_id.clone(),
 		"cover.png".to_owned(),
 		base64_of(&picture(600, 600, 1)),
@@ -1744,14 +1736,13 @@ async fn the_import_commands_refuse_an_unknown_space_and_land_in_a_known_one() {
 	.await
 	.expect("the sent image lands");
 	let dropped_outcomes =
-		library_import_paths(handle(), &*app, space_id.clone(), vec![dropped.join("dropped.md")])
+		library_import_paths(handle(), space_id.clone(), vec![dropped.join("dropped.md")])
 			.await
 			.expect("the drop is read");
-	let thumbnail =
-		library_read_thumbnail(handle(), &*app, space_id.clone(), "cover.png".to_owned())
-			.await
-			.expect("the thumbnail reads");
-	let listed = library_list(handle(), &*app, space_id).await.expect("the library lists");
+	let thumbnail = library_read_thumbnail(handle(), space_id.clone(), "cover.png".to_owned())
+		.await
+		.expect("the thumbnail reads");
+	let listed = library_list(handle(), space_id).await.expect("the library lists");
 
 	assert_eq!(
 		(refused, refused_paths, refused_thumbnail),
@@ -2219,7 +2210,7 @@ async fn an_update_to_the_landed_name_racing_a_rename_returns_only_after_the_ren
 	put(&root, &space_id, "notes.md", b"base");
 	let order = Arc::new(Mutex::new(Vec::new()));
 	let (told, applied) = mpsc::channel();
-	let (heard, handle, library) = (Arc::clone(&order), &*app, root.clone());
+	let (heard, handle, library) = (Arc::clone(&order), app.core().clone(), root.clone());
 	let shared_space = space_id.clone();
 	crate::test_core::listen_to(&*app, events::LIBRARY_DOCUMENT_RENAMED.name(), move |event| {
 		let renamed: LibraryDocumentRenamed =
