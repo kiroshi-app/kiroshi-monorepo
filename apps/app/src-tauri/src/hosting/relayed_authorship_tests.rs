@@ -43,18 +43,12 @@ use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 use kiroshi_core::environment::commands::env_list;
 
 const BEARER: &str = "bearer-that-never-leaves";
-const LOCAL_TOKEN: &str = "host-token-of-the-loopback";
 const PERSONAL: &str = "personal";
-const JOINED_SPACE_TOKEN: &str = "joined-space-token-of-the-host";
-const INVOKE_ROUTE: &str = "/api/invoke/{command}";
 const PATIENCE: Duration = Duration::from_secs(60);
 const OWNER_EMAIL: &str = "owner@example.com";
-const POLL_EVERY: Duration = Duration::from_millis(100);
-const MEMBER_ACCOUNT: &str = "member-account";
 const OWNER_ACCOUNT: &str = "owner";
 const OTHER_BEARER: &str = "bearer-of-another-account";
 const OTHER_ACCOUNT: &str = "another-account";
-const DEVICE_REGISTER_CONTEXT: &[u8] = b"kiroshi-device-register-v1";
 
 async fn me(headers: HeaderMap) -> Response {
 	let Some(account_id) = account_of(&headers) else {
@@ -72,10 +66,6 @@ fn account_of(headers: &HeaderMap) -> Option<&'static str> {
 		OTHER_BEARER => Some(OTHER_ACCOUNT),
 		_ => None,
 	}
-}
-
-fn typed<T: serde::de::DeserializeOwned>(args: &Value, key: &str) -> T {
-	serde_json::from_value(args[key].clone()).expect("a typed argument")
 }
 
 fn answered_json(status: StatusCode, body: Value) -> Response {

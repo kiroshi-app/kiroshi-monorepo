@@ -5471,10 +5471,6 @@ fn a_host_wide_connection_check_reaches_no_relay_guest_and_is_not_logged_as_kept
 	});
 }
 
-const GUEST: &str = "guest-account";
-const GUEST_EMAIL: &str = "guest@example.com";
-const HOST_NAME: &str = "Ada on the host";
-
 impl Guest {
 	async fn first_event(&mut self) -> Value {
 		next_text(&mut self.member, |frame| frame.get("event").is_some()).await
@@ -6089,36 +6085,6 @@ fn the_installs_refusal_names_the_conversation_the_host_does_not_hold() {
 			)
 		);
 	});
-}
-
-const DEFAULT_BOT: &str = "default";
-
-fn the_default_bot() -> EnvOwner {
-	EnvOwner::Bot { id: DEFAULT_BOT.to_owned(), space_id: PERSONAL.to_owned() }
-}
-
-fn a_host_grant() -> OauthCredentials {
-	OauthCredentials {
-		access_token: "host-access".to_owned(),
-		refresh_token: Some("host-refresh".to_owned()),
-		expires_at: None,
-		client_id: "registered".to_owned(),
-		client_secret: None,
-		redirect_uri: None,
-	}
-}
-
-fn granted_to_the_host_person(name: &str) -> EnvScope {
-	EnvScope::Server { name: name.to_owned(), owner: EnvOwner::User }
-}
-
-fn names_of(listed: &Value) -> Vec<&str> {
-	listed
-		.as_array()
-		.expect("a list")
-		.iter()
-		.map(|item| item["name"].as_str().expect("a name"))
-		.collect()
 }
 
 fn relay_database(harness: &Harness) -> &crate::db::Database {
