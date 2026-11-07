@@ -22,8 +22,6 @@ const STALL_LIMIT: Duration = Duration::from_secs(2);
 
 const ACCEPT_BACKOFF: Duration = Duration::from_secs(1);
 
-const LINK_PREFIX: &str = "kiroshi:";
-
 const ACTIVATION_TOKENS: [&str; 2] = ["XDG_ACTIVATION_TOKEN", "DESKTOP_STARTUP_ID"];
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -33,20 +31,13 @@ pub struct Forward {
 }
 
 impl Forward {
-	pub fn of_launch(args: &[String]) -> Forward {
+	pub fn of_launch(links: &[String]) -> Forward {
 		let activation_token = ACTIVATION_TOKENS
 			.iter()
 			.filter_map(|name| std::env::var(name).ok())
 			.find(|token| !token.is_empty());
-		Forward { links: links_among(args), activation_token }
+		Forward { links: links.to_vec(), activation_token }
 	}
-}
-
-pub fn links_among(args: &[String]) -> Vec<String> {
-	let is_link = |arg: &&String| {
-		arg.get(..LINK_PREFIX.len()).is_some_and(|prefix| prefix.eq_ignore_ascii_case(LINK_PREFIX))
-	};
-	args.iter().filter(is_link).cloned().collect()
 }
 
 pub enum Claim {
@@ -58,6 +49,7 @@ pub enum Claim {
 pub enum ClaimError {
 	Endpoint(io::Error),
 	Forward(io::Error),
+	ForeignOwner(io::Error),
 }
 
 impl fmt::Display for ClaimError {
@@ -66,6 +58,12 @@ impl fmt::Display for ClaimError {
 			ClaimError::Endpoint(cause) => write!(f, "the instance endpoint failed: {cause}"),
 			ClaimError::Forward(cause) => {
 				write!(f, "the running instance didn't take the launch: {cause}")
+			}
+			ClaimError::ForeignOwner(cause) => {
+				write!(
+					f,
+					"the instance endpoint is not proven to be this user's, so nothing was sent: {cause}"
+				)
 			}
 		}
 	}
@@ -160,14 +158,6 @@ mod tests {
 			Some(Err(failure)) => Err(failure),
 			None => Ok(0),
 		}
-	}
-
-	#[test]
-	fn the_kiroshi_arguments_of_a_launch_are_its_links() {
-		let args = ["/bin/kiroshi", "--dev-host", "KIROSHI://conversation/a", "kiroshi:x", "kiro"]
-			.map(String::from);
-
-		assert_eq!(links_among(&args), ["KIROSHI://conversation/a", "kiroshi:x"]);
 	}
 
 	#[test]

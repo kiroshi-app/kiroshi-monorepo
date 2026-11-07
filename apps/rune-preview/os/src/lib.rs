@@ -1,4 +1,5 @@
 pub mod instance;
+pub mod launch;
 pub mod link;
 pub mod scheme;
 

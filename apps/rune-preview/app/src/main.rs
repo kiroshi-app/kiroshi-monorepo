@@ -7,6 +7,7 @@ use rune_kit::shell;
 
 use kiroshi_rune_kit::tokens;
 use kiroshi_rune_os::instance::{self, Claim, ClaimError, Endpoint, Forward, Instance};
+use kiroshi_rune_os::launch::{self, Launch};
 use kiroshi_rune_os::link::{self, Link};
 use kiroshi_rune_os::scheme;
 use kiroshi_rune_preview::app::App;
@@ -61,7 +62,7 @@ const SKIP_ONBOARDING: &str = "--skip-onboarding";
 const HOST_API: &str = "--host-api";
 
 fn setup(s: &mut App, waker: Waker) {
-	let flagged = |flag: &str| std::env::args().any(|arg| arg == flag);
+	let flagged = |flag: &str| launched().flags.iter().any(|arg| arg == flag);
 	if flagged(DEV_HOST) {
 		s.host_profile = Profile::Dev;
 	}
@@ -101,6 +102,16 @@ const REGISTER_SCHEME: &str = "--register-scheme";
 static HELD_LINKS: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
 static WINDOW: OnceLock<AppHandle<App>> = OnceLock::new();
+
+static LAUNCH: OnceLock<Launch> = OnceLock::new();
+
+fn launched() -> &'static Launch {
+	LAUNCH.get_or_init(|| launch::split(&std::env::args().collect::<Vec<_>>()))
+}
+
+fn rune_args() -> Vec<String> {
+	launched().flags.iter().skip(1).cloned().collect()
+}
 
 fn held_links() -> MutexGuard<'static, Vec<String>> {
 	HELD_LINKS.lock().unwrap_or_else(PoisonError::into_inner)
@@ -183,15 +194,15 @@ fn data_profile(args: &[String]) -> Option<String> {
 	}
 }
 
-fn claimed(args: &[String]) -> Result<Option<Instance>, ExitCode> {
-	if rune::is_headless() {
+fn claimed(launch: &Launch) -> Result<Option<Instance>, ExitCode> {
+	if rune::tooling::Args::parse_from(rune_args()).headless() {
 		return Ok(None);
 	}
-	let Some(profile) = data_profile(args) else { return Ok(None) };
-	match instance::claim(&Endpoint::of_profile(&profile), &Forward::of_launch(args)) {
+	let Some(profile) = data_profile(&launch.flags) else { return Ok(None) };
+	match instance::claim(&Endpoint::of_profile(&profile), &Forward::of_launch(&launch.links)) {
 		Ok(Claim::First(instance)) => Ok(Some(instance)),
 		Ok(Claim::Forwarded) => Err(ExitCode::SUCCESS),
-		Err(failure @ ClaimError::Endpoint(_)) => {
+		Err(failure @ (ClaimError::Endpoint(_) | ClaimError::ForeignOwner(_))) => {
 			eprintln!("this window runs without single instance: {failure}");
 			Ok(None)
 		}
@@ -219,29 +230,42 @@ fn register_scheme(args: &[String]) -> ExitCode {
 	}
 }
 
-fn main() -> ExitCode {
-	let args: Vec<String> = std::env::args().collect();
+fn action(args: &[String]) -> Option<ExitCode> {
 	if let Some(at) = args.iter().position(|arg| arg == SMOKE_SEND) {
 		let Some(text) = args.get(at + 1) else {
 			eprintln!("{SMOKE_SEND} needs the text to send");
-			return ExitCode::FAILURE;
+			return Some(ExitCode::FAILURE);
 		};
-		return smoke::run(text);
+		return Some(smoke::run(text));
 	}
 	if args.iter().any(|arg| arg == SMOKE_READ) {
-		return smoke::read();
+		return Some(smoke::read());
 	}
 	if let Some(at) = args.iter().position(|arg| arg == LOCAL_SEND) {
 		let Some(text) = args.get(at + 1) else {
 			eprintln!("{LOCAL_SEND} needs the text to send");
-			return ExitCode::FAILURE;
+			return Some(ExitCode::FAILURE);
 		};
-		return local::send_and_read(text);
+		return Some(local::send_and_read(text));
 	}
 	if args.iter().any(|arg| arg == REGISTER_SCHEME) {
-		return register_scheme(&args);
+		return Some(register_scheme(args));
 	}
-	let instance = match claimed(&args) {
+	None
+}
+
+fn main() -> ExitCode {
+	let launch = launched();
+	if launch.dropped > 0 {
+		eprintln!(
+			"{} arguments after {} were not kiroshi links: dropped, and no smoke, send or register action runs",
+			launch.dropped,
+			launch::LINKS_FOLLOW
+		);
+	} else if let Some(exit) = action(&launch.flags) {
+		return exit;
+	}
+	let instance = match claimed(launch) {
 		Ok(instance) => instance,
 		Err(exit) => return exit,
 	};
@@ -255,9 +279,12 @@ fn main() -> ExitCode {
 		families: tokens::FAMILIES,
 		..AppSpec::new("Kiroshi (Rune preview)", (1180.0, 780.0), App::new, view)
 	};
-	let app = rune::App::new(spec).chrome(conversations::CHROME).on_open_url(on_open_url);
+	let app = rune::App::new(spec)
+		.chrome(conversations::CHROME)
+		.on_open_url(on_open_url)
+		.args(rune_args());
 	let window = WINDOW.get_or_init(|| app.handle());
-	route_all(window, instance::links_among(&args));
+	route_all(window, launch.links.clone());
 	if let Some(instance) = instance
 		&& let Err(failure) = instance.serve(|forward| forwarded(window, forward))
 	{

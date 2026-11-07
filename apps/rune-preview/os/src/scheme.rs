@@ -95,14 +95,10 @@ pub fn register(carried: &[&str]) -> Result<(), RegisterError> {
 		}
 	};
 
-	let executable = std::env::current_exe()?;
-	let quoted = |part: &str| format!("\"{part}\"");
-	let mut command = vec![quoted(&executable.to_string_lossy())];
-	command.extend(carried.iter().map(|flag| quoted(flag)));
-	command.push(quoted("%1"));
+	let command = open_command(&std::env::current_exe()?.to_string_lossy(), carried);
 	set(r"Software\Classes\kiroshi", None, &format!("URL:{APP_NAME}"))?;
 	set(r"Software\Classes\kiroshi", Some("URL Protocol"), "")?;
-	set(r"Software\Classes\kiroshi\shell\open\command", None, &command.join(" "))?;
+	set(r"Software\Classes\kiroshi\shell\open\command", None, &command)?;
 	Ok(())
 }
 
@@ -129,6 +125,16 @@ pub fn register(carried: &[&str]) -> Result<(), RegisterError> {
 		return Err(RegisterError::Refused { program: "xdg-mime", status });
 	}
 	Ok(())
+}
+
+#[cfg(any(test, windows))]
+fn open_command(executable: &str, carried: &[&str]) -> String {
+	let quoted = |part: &str| format!("\"{part}\"");
+	let mut command = vec![quoted(executable)];
+	command.extend(carried.iter().map(|flag| quoted(flag)));
+	command.push(crate::launch::LINKS_FOLLOW.into());
+	command.push(quoted("%1"));
+	command.join(" ")
 }
 
 #[cfg(any(test, not(any(target_os = "macos", windows))))]
@@ -167,6 +173,13 @@ fn exec_argument(argument: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn the_windows_command_puts_the_clicked_link_after_the_flag_boundary() {
+		let command = open_command(r"C:\Kiroshi\kiroshi.exe", &["--dev-host"]);
+
+		assert_eq!(command, r#""C:\Kiroshi\kiroshi.exe" "--dev-host" -- "%1""#);
+	}
 
 	#[test]
 	fn the_desktop_entry_opens_kiroshi_links_with_the_carried_flags() {

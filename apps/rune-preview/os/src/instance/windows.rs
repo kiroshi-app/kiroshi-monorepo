@@ -11,17 +11,23 @@ use windows_sys::Win32::Foundation::{
 use windows_sys::Win32::Security::Authorization::{
 	ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
 };
-use windows_sys::Win32::Security::{PSECURITY_DESCRIPTOR, SECURITY_ATTRIBUTES};
+use windows_sys::Win32::Security::{
+	EqualSid, GetTokenInformation, PSECURITY_DESCRIPTOR, PSID, SECURITY_ATTRIBUTES, TOKEN_QUERY,
+	TOKEN_USER, TokenUser,
+};
 use windows_sys::Win32::Storage::FileSystem::{
 	CreateFileW, FILE_FLAG_FIRST_PIPE_INSTANCE, FILE_FLAG_OVERLAPPED, OPEN_EXISTING,
 	PIPE_ACCESS_INBOUND, ReadFile, WriteFile,
 };
 use windows_sys::Win32::System::IO::{CancelIoEx, GetOverlappedResult, OVERLAPPED};
 use windows_sys::Win32::System::Pipes::{
-	ConnectNamedPipe, CreateNamedPipeW, DisconnectNamedPipe, PIPE_READMODE_BYTE,
-	PIPE_REJECT_REMOTE_CLIENTS, PIPE_TYPE_BYTE, PIPE_WAIT, WaitNamedPipeW,
+	ConnectNamedPipe, CreateNamedPipeW, DisconnectNamedPipe, GetNamedPipeServerProcessId,
+	PIPE_READMODE_BYTE, PIPE_REJECT_REMOTE_CLIENTS, PIPE_TYPE_BYTE, PIPE_WAIT, WaitNamedPipeW,
 };
-use windows_sys::Win32::System::Threading::{CreateEventW, INFINITE, WaitForSingleObject};
+use windows_sys::Win32::System::Threading::{
+	CreateEventW, GetCurrentProcess, INFINITE, OpenProcess, OpenProcessToken,
+	PROCESS_QUERY_LIMITED_INFORMATION, WaitForSingleObject,
+};
 
 use super::{ACCEPT_BACKOFF, Claim, ClaimError, Forward};
 use crate::wide;
@@ -99,6 +105,7 @@ pub(super) fn claim(endpoint: &Endpoint, forward: &Forward) -> Result<Claim, Cla
 		}
 		match client_of(&endpoint.name) {
 			Ok(client) => {
+				served_by_this_user(&client)?;
 				return sent(&client, forward)
 					.map(|()| Claim::Forwarded)
 					.map_err(ClaimError::Forward);
@@ -168,6 +175,55 @@ fn client_of(name: &[u16]) -> io::Result<Handle> {
 			open()
 		}
 		opened => opened,
+	}
+}
+
+fn served_by_this_user(client: &Handle) -> Result<(), ClaimError> {
+	let mut server = 0;
+	if unsafe { GetNamedPipeServerProcessId(client.0, &mut server) } == 0 {
+		return Err(ClaimError::ForeignOwner(io::Error::last_os_error()));
+	}
+	let process =
+		handle_or_failure(unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, server) })
+			.map_err(ClaimError::ForeignOwner)?;
+	let theirs = UserToken::of(process.0).map_err(ClaimError::ForeignOwner)?;
+	let ours = UserToken::of(unsafe { GetCurrentProcess() }).map_err(ClaimError::ForeignOwner)?;
+	if unsafe { EqualSid(theirs.sid(), ours.sid()) } == 0 {
+		return Err(ClaimError::ForeignOwner(io::Error::new(
+			io::ErrorKind::PermissionDenied,
+			"the instance pipe is served by another user",
+		)));
+	}
+	Ok(())
+}
+
+struct UserToken(Vec<u64>);
+
+impl UserToken {
+	fn of(process: HANDLE) -> io::Result<UserToken> {
+		let mut token = ptr::null_mut();
+		if unsafe { OpenProcessToken(process, TOKEN_QUERY, &mut token) } == 0 {
+			return Err(io::Error::last_os_error());
+		}
+		let token = Handle(token);
+		let mut needed = 0;
+		let sized =
+			unsafe { GetTokenInformation(token.0, TokenUser, ptr::null_mut(), 0, &mut needed) };
+		if sized != 0 || needed == 0 {
+			return Err(io::Error::last_os_error());
+		}
+		let mut held = vec![0_u64; (needed as usize).div_ceil(size_of::<u64>())];
+		let read = unsafe {
+			GetTokenInformation(token.0, TokenUser, held.as_mut_ptr().cast(), needed, &mut needed)
+		};
+		if read == 0 {
+			return Err(io::Error::last_os_error());
+		}
+		Ok(UserToken(held))
+	}
+
+	fn sid(&self) -> PSID {
+		unsafe { (*self.0.as_ptr().cast::<TOKEN_USER>()).User.Sid }
 	}
 }
 
