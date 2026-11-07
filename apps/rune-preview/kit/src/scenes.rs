@@ -9,6 +9,7 @@ mod forms;
 mod navigation;
 mod overlays;
 mod primitives;
+mod s11_applications;
 
 pub const THEMES: [Theme; 2] = [Theme::Light, Theme::Dark];
 
@@ -55,6 +56,8 @@ const SHELL: (f32, f32) = (960.0, 560.0);
 const MOBILE: (f32, f32) = (390.0, 640.0);
 const TOASTS: (f32, f32) = (560.0, 640.0);
 const COMPARISON: (f32, f32) = (1180.0, 3700.0);
+const SETTINGS_PANEL: (f32, f32) = (576.0, 448.0);
+const CATALOGUE: (f32, f32) = (832.0, 544.0);
 
 const fn scene(id: &'static str, size: (f32, f32), view: fn(&Tokens, &SceneState) -> El) -> Scene {
 	Scene { id, size, tabs: 0, pointer: Pointer::Away, typed: "", view }
@@ -211,6 +214,436 @@ pub static SCENES: &[Scene] = &[
 	scene("overlays-tooltip--with-side", OVERLAY, overlays::tooltip_with_side),
 	scene("overlays-tooltip--long-content", OVERLAY, overlays::tooltip_long_content),
 	scene("overlays-tooltip--on-dark-surface", OVERLAY, overlays::tooltip_default),
+	scene("settings-environment--default", SETTINGS_PANEL, s11_applications::secrets_default),
+	scene("settings-environment--empty", SETTINGS_PANEL, s11_applications::secrets_empty),
+	scene("settings-environment--loading", SETTINGS_PANEL, s11_applications::secrets_loading),
+	scene(
+		"settings-environment--long-content",
+		SETTINGS_PANEL,
+		s11_applications::secrets_long_content,
+	),
+	scene(
+		"settings-environment--server-scope",
+		SETTINGS_PANEL,
+		s11_applications::secrets_server_scope,
+	),
+	scene(
+		"settings-environment--space-scope",
+		SETTINGS_PANEL,
+		s11_applications::secrets_space_scope,
+	),
+	scene("settings-environment--unreadable", SETTINGS_PANEL, s11_applications::secrets_unreadable),
+	scene(
+		"settings-environment--unreadable-with-entries",
+		SETTINGS_PANEL,
+		s11_applications::secrets_unreadable_with_entries,
+	),
+	scene(
+		"settings-environment--unset-needs-value",
+		SETTINGS_PANEL,
+		s11_applications::secrets_unset_needs_value,
+	),
+	scene(
+		"settings-environment--unset-served-elsewhere",
+		SETTINGS_PANEL,
+		s11_applications::secrets_unset_served_elsewhere,
+	),
+	scene(
+		"settings-plugins-applicationspanel--companion",
+		SETTINGS_PANEL,
+		s11_applications::applications_agent,
+	),
+	scene(
+		"settings-plugins-applicationspanel--connected",
+		SETTINGS_PANEL,
+		s11_applications::applications_connected,
+	),
+	scene(
+		"settings-plugins-applicationspanel--connected-dark",
+		SETTINGS_PANEL,
+		s11_applications::applications_connected,
+	),
+	scene(
+		"settings-plugins-applicationspanel--connecting",
+		SETTINGS_PANEL,
+		s11_applications::applications_connecting,
+	),
+	scene(
+		"settings-plugins-applicationspanel--empty-companion",
+		SETTINGS_PANEL,
+		s11_applications::applications_empty_agent,
+	),
+	scene(
+		"settings-plugins-applicationspanel--empty-profile",
+		SETTINGS_PANEL,
+		s11_applications::applications_empty_profile,
+	),
+	scene(
+		"settings-plugins-applicationspanel--empty-space",
+		SETTINGS_PANEL,
+		s11_applications::applications_empty_space,
+	),
+	scene(
+		"settings-plugins-applicationspanel--failed",
+		SETTINGS_PANEL,
+		s11_applications::applications_failed,
+	),
+	scene(
+		"settings-plugins-applicationspanel--failed-with-long-reason",
+		SETTINGS_PANEL,
+		s11_applications::applications_failed_with_long_reason,
+	),
+	scene(
+		"settings-plugins-applicationspanel--failed-with-reason",
+		SETTINGS_PANEL,
+		s11_applications::applications_failed_with_reason,
+	),
+	scene(
+		"settings-plugins-applicationspanel--long-content",
+		SETTINGS_PANEL,
+		s11_applications::applications_long_content,
+	),
+	focused(
+		"settings-plugins-applicationspanel--needs-authorization",
+		SETTINGS_PANEL,
+		5,
+		s11_applications::applications_needs_authorization,
+	),
+	focused(
+		"settings-plugins-applicationspanel--needs-authorization-dark",
+		SETTINGS_PANEL,
+		5,
+		s11_applications::applications_needs_authorization,
+	),
+	scene(
+		"settings-plugins-applicationspanel--profile",
+		SETTINGS_PANEL,
+		s11_applications::applications_profile,
+	),
+	scene(
+		"settings-plugins-applicationspanel--search-row",
+		SETTINGS_PANEL,
+		s11_applications::applications_agent,
+	),
+	Scene {
+		id: "settings-plugins-applicationspanel--search-text-is-given",
+		size: SETTINGS_PANEL,
+		tabs: 0,
+		pointer: Pointer::Away,
+		typed: "linear",
+		view: s11_applications::applications_agent,
+	},
+	scene(
+		"settings-plugins-applicationspanel--space",
+		SETTINGS_PANEL,
+		s11_applications::applications_space,
+	),
+	scene(
+		"settings-plugins-applicationspanel--unanswered",
+		SETTINGS_PANEL,
+		s11_applications::applications_unanswered,
+	),
+	scene(
+		"settings-plugins-applicationspanel--unreadable",
+		SETTINGS_PANEL,
+		s11_applications::applications_unreadable,
+	),
+	scene(
+		"settings-plugins-applicationspanel--without-display-name",
+		SETTINGS_PANEL,
+		s11_applications::applications_without_display_name,
+	),
+	scene(
+		"settings-plugins-applicationidentity--hosted-result",
+		STORY,
+		s11_applications::identity_hosted_result,
+	),
+	scene(
+		"settings-plugins-applicationidentity--nothing-to-say",
+		STORY,
+		s11_applications::identity_nothing_to_say,
+	),
+	scene(
+		"settings-plugins-applicationidentity--one-use",
+		STORY,
+		s11_applications::identity_one_use,
+	),
+	scene(
+		"settings-plugins-applicationidentity--package-result",
+		STORY,
+		s11_applications::identity_package_result,
+	),
+	scene(
+		"settings-plugins-applicationidentity--source-and-uses",
+		STORY,
+		s11_applications::identity_source_and_uses,
+	),
+	scene(
+		"settings-plugins-applicationidentity--verified",
+		STORY,
+		s11_applications::identity_verified,
+	),
+	scene("settings-plugins-applicationmark--card", STORY, s11_applications::mark_card),
+	scene(
+		"settings-plugins-applicationmark--extra-small",
+		STORY,
+		s11_applications::mark_extra_small,
+	),
+	scene("settings-plugins-applicationmark--inline", STORY, s11_applications::mark_inline),
+	scene("settings-plugins-applicationmark--medium", STORY, s11_applications::mark_with_mark),
+	scene("settings-plugins-applicationmark--small", STORY, s11_applications::mark_small),
+	scene(
+		"settings-plugins-applicationmark--with-drawn-mark",
+		STORY,
+		s11_applications::mark_with_drawn_mark,
+	),
+	scene("settings-plugins-applicationmark--with-mark", STORY, s11_applications::mark_with_mark),
+	scene(
+		"settings-plugins-applicationmark--with-unreachable-mark",
+		STORY,
+		s11_applications::mark_with_unreachable_mark,
+	),
+	scene(
+		"settings-plugins-applicationmark--without-mark",
+		STORY,
+		s11_applications::mark_without_mark,
+	),
+	Scene {
+		id: "settings-plugins-applicationssearchfield--at-rest",
+		size: STORY,
+		tabs: 0,
+		pointer: Pointer::Away,
+		typed: "",
+		view: s11_applications::search_field_story,
+	},
+	Scene {
+		id: "settings-plugins-applicationssearchfield--typed",
+		size: STORY,
+		tabs: 0,
+		pointer: Pointer::Away,
+		typed: "linear",
+		view: s11_applications::search_field_story,
+	},
+	Scene {
+		id: "settings-plugins-applicationssearchfield--themes-at-rest",
+		size: STORY,
+		tabs: 0,
+		pointer: Pointer::Away,
+		typed: "",
+		view: s11_applications::search_field_theme_cell,
+	},
+	Scene {
+		id: "settings-plugins-applicationssearchfield--themes-filled",
+		size: STORY,
+		tabs: 0,
+		pointer: Pointer::Away,
+		typed: "linear",
+		view: s11_applications::search_field_theme_cell,
+	},
+	Scene {
+		id: "settings-plugins-applicationssearchfield--themes-focus-visible",
+		size: STORY,
+		tabs: 1,
+		pointer: Pointer::Away,
+		typed: "",
+		view: s11_applications::search_field_theme_cell,
+	},
+	Scene {
+		id: "settings-plugins-applicationscatalogue--at-rest",
+		size: CATALOGUE,
+		tabs: 0,
+		pointer: Pointer::Away,
+		typed: "",
+		view: s11_applications::catalogue_at_rest,
+	},
+	Scene {
+		id: "settings-plugins-applicationscatalogue--card-description-clamps",
+		size: CATALOGUE,
+		tabs: 0,
+		pointer: Pointer::Away,
+		typed: "",
+		view: s11_applications::catalogue_card_description_clamps,
+	},
+	Scene {
+		id: "settings-plugins-applicationscatalogue--card-focused",
+		size: CATALOGUE,
+		tabs: 4,
+		pointer: Pointer::Away,
+		typed: "",
+		view: s11_applications::catalogue_at_rest,
+	},
+	Scene {
+		id: "settings-plugins-applicationscatalogue--card-hovered",
+		size: CATALOGUE,
+		tabs: 0,
+		pointer: Pointer::EntersAtSnap("catalogue-card-linear"),
+		typed: "",
+		view: s11_applications::catalogue_at_rest,
+	},
+	Scene {
+		id: "settings-plugins-applicationscatalogue--card-name-too-long",
+		size: CATALOGUE,
+		tabs: 0,
+		pointer: Pointer::Away,
+		typed: "",
+		view: s11_applications::catalogue_card_name_too_long,
+	},
+	Scene {
+		id: "settings-plugins-applicationscatalogue--card-without-description",
+		size: CATALOGUE,
+		tabs: 0,
+		pointer: Pointer::Away,
+		typed: "",
+		view: s11_applications::catalogue_card_without_description,
+	},
+	Scene {
+		id: "settings-plugins-applicationscatalogue--category-empty",
+		size: CATALOGUE,
+		tabs: 0,
+		pointer: Pointer::Away,
+		typed: "",
+		view: s11_applications::catalogue_category_empty,
+	},
+	Scene {
+		id: "settings-plugins-applicationscatalogue--category-selected",
+		size: CATALOGUE,
+		tabs: 0,
+		pointer: Pointer::Away,
+		typed: "",
+		view: s11_applications::catalogue_category_selected,
+	},
+	Scene {
+		id: "settings-plugins-applicationscatalogue--loading",
+		size: CATALOGUE,
+		tabs: 0,
+		pointer: Pointer::Away,
+		typed: "",
+		view: s11_applications::catalogue_loading,
+	},
+	Scene {
+		id: "settings-plugins-applicationscatalogue--nothing-matched",
+		size: CATALOGUE,
+		tabs: 0,
+		pointer: Pointer::Away,
+		typed: "zebra",
+		view: s11_applications::catalogue_nothing_matched,
+	},
+	Scene {
+		id: "settings-plugins-applicationscatalogue--on-this-machine-selected",
+		size: CATALOGUE,
+		tabs: 0,
+		pointer: Pointer::Away,
+		typed: "",
+		view: s11_applications::catalogue_on_this_machine_selected,
+	},
+	Scene {
+		id: "settings-plugins-applicationscatalogue--partly-unreadable",
+		size: CATALOGUE,
+		tabs: 0,
+		pointer: Pointer::Away,
+		typed: "",
+		view: s11_applications::catalogue_partly_unreadable,
+	},
+	Scene {
+		id: "settings-plugins-applicationscatalogue--rail-scrolls",
+		size: CATALOGUE,
+		tabs: 0,
+		pointer: Pointer::Away,
+		typed: "",
+		view: s11_applications::catalogue_at_rest,
+	},
+	Scene {
+		id: "settings-plugins-applicationscatalogue--searching",
+		size: CATALOGUE,
+		tabs: 0,
+		pointer: Pointer::Away,
+		typed: "lin",
+		view: s11_applications::catalogue_at_rest,
+	},
+	Scene {
+		id: "settings-plugins-applicationscatalogue--served-stale",
+		size: CATALOGUE,
+		tabs: 0,
+		pointer: Pointer::Away,
+		typed: "",
+		view: s11_applications::catalogue_served_stale,
+	},
+	Scene {
+		id: "settings-plugins-applicationscatalogue--setup-unavailable",
+		size: CATALOGUE,
+		tabs: 0,
+		pointer: Pointer::Away,
+		typed: "",
+		view: s11_applications::catalogue_setup_unavailable,
+	},
+	Scene {
+		id: "settings-plugins-applicationscatalogue--unreadable",
+		size: CATALOGUE,
+		tabs: 0,
+		pointer: Pointer::Away,
+		typed: "",
+		view: s11_applications::catalogue_unreadable,
+	},
+	scene(
+		"settings-plugins-applicationinstallpage--asks-for-every-value",
+		CATALOGUE,
+		s11_applications::install_asks_for_every_value,
+	),
+	scene(
+		"settings-plugins-applicationinstallpage--empty-tool-list",
+		CATALOGUE,
+		s11_applications::install_empty_tool_list,
+	),
+	scene(
+		"settings-plugins-applicationinstallpage--for-space",
+		CATALOGUE,
+		s11_applications::install_for_space,
+	),
+	scene(
+		"settings-plugins-applicationinstallpage--hosted-nothing-to-set-up",
+		CATALOGUE,
+		s11_applications::install_hosted_nothing_to_set_up,
+	),
+	scene(
+		"settings-plugins-applicationinstallpage--install-running",
+		CATALOGUE,
+		s11_applications::install_running,
+	),
+	scene(
+		"settings-plugins-applicationinstallpage--long-content",
+		CATALOGUE,
+		s11_applications::install_long_content,
+	),
+	scene(
+		"settings-plugins-applicationinstallpage--needs-api-key",
+		CATALOGUE,
+		s11_applications::install_needs_api_key,
+	),
+	scene(
+		"settings-plugins-applicationinstallpage--nothing-to-set-up",
+		CATALOGUE,
+		s11_applications::install_nothing_to_set_up,
+	),
+	scene(
+		"settings-plugins-applicationinstallpage--refused",
+		CATALOGUE,
+		s11_applications::install_refused,
+	),
+	scene(
+		"settings-plugins-applicationinstallpage--runs-on-its-host",
+		CATALOGUE,
+		s11_applications::install_runs_on_its_host,
+	),
+	scene(
+		"settings-plugins-applicationinstallpage--signs-you-in",
+		CATALOGUE,
+		s11_applications::install_signs_you_in,
+	),
+	scene(
+		"settings-plugins-applicationinstallpage--themes-key-field-at-rest",
+		CATALOGUE,
+		s11_applications::install_needs_api_key,
+	),
 ];
 
 pub struct SceneState {
