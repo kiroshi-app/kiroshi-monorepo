@@ -17,6 +17,7 @@ pub mod events;
 pub mod file_store;
 pub mod hosting;
 pub mod invitations;
+pub mod invoke;
 pub mod joined_spaces;
 pub mod json;
 pub mod library;

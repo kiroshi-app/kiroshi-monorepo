@@ -125,6 +125,13 @@ async fn invoked<R: Runtime>(
 		.get(&RELAYED_MEMBER_HEADER)
 		.cloned()
 		.unwrap_or_else(|| HeaderValue::from_static(""));
+	if relayed_member.is_empty() && kiroshi_core::invoke::handles(&command) {
+		let core = crate::events::core(&app);
+		if let Some(answer) = kiroshi_core::invoke::dispatch(core, &command, arguments).await {
+			return answer.into_response();
+		}
+		return UNREGISTERED.into_response();
+	}
 	match dispatched(app, command.clone(), arguments, relayed_member).await {
 		Some(response) => answered(&command, response),
 		None => UNANSWERED.into_response(),

@@ -11,6 +11,7 @@ publish = false
 test-support = []
 
 [dependencies]
+axum = { version = "0.8", default-features = false, features = ["http1", "tokio", "ws"] }
 base64 = "0.22"
 chacha20poly1305 = "0.10"
 chrono = "0.4"
@@ -45,5 +46,4 @@ security-framework = "3"
 libc = "0.2"
 
 [dev-dependencies]
-axum = { version = "0.8", default-features = false, features = ["http1", "tokio", "ws"] }
 tokio = { version = "1", features = ["macros", "process", "io-util", "sync", "time", "rt-multi-thread", "test-util"] }

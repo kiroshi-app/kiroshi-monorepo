@@ -22,11 +22,7 @@ pub(crate) fn ready(state: &db::DatabaseState) -> Result<&db::Database, SpaceErr
 pub async fn space_list(
 	core: State<'_, crate::core_context::Core>,
 ) -> Result<Vec<Space>, SpaceError> {
-	let state = core.state::<db::DatabaseState>();
-	let database = ready(&state)?;
-	let stored = database.spaces().list().await?;
-	let hostings = database.space_hosting().hostings().await?;
-	Ok(stored.into_iter().map(|space| Space::presented(space, &hostings)).collect())
+	kiroshi_core::spaces::read::list_spaces(core.inner()).await
 }
 
 #[tauri::command]
