@@ -97,7 +97,7 @@ const SETUP_STEPS = new Set([
 	"Read the changed test files against the base the merge ref was built on",
 ])
 
-const UNGATED_JOBS = new Set(["changes", "verify"])
+const UNGATED_JOBS = new Set(["changes", "core", "verify"])
 
 const LOCAL_ONLY_GROUPS: Group[] = ["rust-check"]
 
@@ -263,10 +263,18 @@ const storybookEnvOn = (github: GitHubContext) =>
 		),
 	)
 
-const PULL_REQUEST_JOB_SET = ["changes", "lint", "rust", "verify", "vitest"]
+const PULL_REQUEST_JOB_SET = [
+	"changes",
+	"core",
+	"lint",
+	"rust",
+	"verify",
+	"vitest",
+]
 
 const PUSH_TO_MAIN_JOB_SET = [
 	"changes",
+	"core",
 	"ios",
 	"lint",
 	"rust",
@@ -1105,7 +1113,7 @@ describe("the jobs of ci.yml", () => {
 		})
 	})
 
-	it("runs only changes, lint, vitest and rust on a pull_request", () => {
+	it("runs only changes, lint, vitest, rust and core on a pull_request", () => {
 		expect(jobsRunningOn(A_PULL_REQUEST)).toEqual(PULL_REQUEST_JOB_SET)
 	})
 
@@ -1156,11 +1164,11 @@ describe("the jobs of ci.yml", () => {
 		expect(gate?.run).toContain('tee "$RUNNER_TEMP/storybook-debug.log"')
 	})
 
-	it("runs every desktop job and ios on a push to main", () => {
+	it("runs every desktop job, core and ios on a push to main", () => {
 		expect(jobsRunningOn(A_PUSH_TO_MAIN)).toEqual(PUSH_TO_MAIN_JOB_SET)
 	})
 
-	it("keeps the desktop jobs on a v* tag, never ios", () => {
+	it("keeps the desktop jobs on a v* tag, never ios nor core", () => {
 		expect(jobsRunningOn(A_RELEASE_TAG)).toEqual([
 			"changes",
 			"lint",
@@ -1381,6 +1389,7 @@ describe("the jobs of ci.yml", () => {
 			"vitest",
 			"website",
 			"rust",
+			"core",
 			"storybook",
 			"ios",
 		])

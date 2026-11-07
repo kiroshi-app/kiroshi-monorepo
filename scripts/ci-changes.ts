@@ -102,7 +102,7 @@ export const touchedJobs = (paths: string[]): FilteredJobs => {
 }
 
 export const decideJobs = ({ event, paths }: ChangeSet): FilteredJobs => {
-	if (event === "tag") return { ...EVERY_JOB, ios: false }
+	if (event === "tag") return { ...EVERY_JOB, ios: false, core: false }
 	const touched = touchedJobs(paths)
 	if (event === "pull_request")
 		return {

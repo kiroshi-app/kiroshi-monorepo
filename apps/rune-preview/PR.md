@@ -243,7 +243,7 @@ The kept core of `apps/app/src-tauri` moves to a crate with no Tauri dependency,
   - builds the Rune preview with `fake-claude` and runs its tests, including the in-process exchange.
 
   All four commands run with `--locked`. Each OS keeps its own cache of both target folders, saved from `main` only, like the `rust` job.
-- **When it runs.** `scripts/ci-changes.ts` selects `core` on changes under `crates/`, under `apps/rune-preview/`, to the fake sidecar the preview builds, or to the workspace `Cargo.toml` and `Cargo.lock`. It runs on pull requests as well as on pushes, and every tag runs it. `verify` requires `core` to succeed when it was selected and to be skipped otherwise, the same rule as the other filtered jobs.
+- **When it runs.** `scripts/ci-changes.ts` selects `core` on changes under `crates/`, under `apps/rune-preview/`, to the fake sidecar the preview builds, or to the workspace `Cargo.toml` and `Cargo.lock`. It runs on pull requests as well as on pushes to main. A `v*` tag never runs it: a tag runs the desktop jobs only, and `release.yml`'s `ci-green` waits on that run, so the preview's three-OS build would hold every release back. `verify` requires `core` to succeed when it was selected and to be skipped otherwise, the same rule as the other filtered jobs.
 
 ## CodeQL alerts carried by the move
 

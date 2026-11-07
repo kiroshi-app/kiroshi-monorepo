@@ -161,11 +161,12 @@ describe("ci jobs per event", () => {
 	})
 
 	it.each(PATH_MIXES)(
-		"selects vitest, website, rust and storybook on a v* tag, never ios, on %p",
+		"selects vitest, website, rust and storybook on a v* tag, never ios nor core, on %p",
 		(...paths) => {
 			expect(decideJobs({ event: "tag", paths })).toEqual({
 				...every,
 				ios: false,
+				core: false,
 			})
 		},
 	)
