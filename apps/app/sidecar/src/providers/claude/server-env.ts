@@ -13,7 +13,9 @@ const EXPANDED_FIELDS = ["command", "args", "env", "url", "headers"] as const
 const PLACEHOLDER = /\$\{([A-Z_][A-Z0-9_]*)(?::-([^}]*))?\}/g
 const OPENING = "${"
 
-export const ACCESS_TOKEN = "KIROSHI_OAUTH_ACCESS_TOKEN"
+const GRANT_PREFIX = "KIROSHI_OAUTH_"
+export const ACCESS_TOKEN = `${GRANT_PREFIX}ACCESS_TOKEN`
+export const SERVER_URL = `${GRANT_PREFIX}SERVER_URL`
 const AUTHORIZATION = "authorization"
 
 export type ResolvedServers = {
@@ -32,8 +34,14 @@ const declaredFields = (server: Server): [string, unknown][] => {
 const declaresVariable = (server: Server): boolean =>
 	JSON.stringify(declaredFields(server)).includes(OPENING)
 
+const isGrantName = (name: string): boolean => name.startsWith(GRANT_PREFIX)
+
 const expandText = (text: string, values: Values, missing: string[]): string =>
 	text.replace(PLACEHOLDER, (whole, name: string, fallback?: string) => {
+		if (isGrantName(name)) {
+			missing.push(name)
+			return whole
+		}
 		const held = values[name]
 		if (held !== undefined) {
 			return held
@@ -110,6 +118,27 @@ const authorized = (server: Server, own: Values | undefined): Server => {
 	return withBearer(server, token)
 }
 
+const withoutGrant = (own: Values): Values =>
+	Object.fromEntries(Object.entries(own).filter(([name]) => !isGrantName(name)))
+
+const holdsItsGrant = (server: Server | undefined, own: Values): boolean => {
+	const bound = own[SERVER_URL]
+	return (
+		bound !== undefined &&
+		(server as Record<string, unknown> | undefined)?.url === bound
+	)
+}
+
+export const boundEnv = (servers: Servers, env: ServerEnv): ServerEnv => ({
+	...env,
+	perServer: Object.fromEntries(
+		Object.entries(env.perServer ?? {}).map(([name, own]) => [
+			name,
+			holdsItsGrant(servers[name], own) ? own : withoutGrant(own),
+		]),
+	),
+})
+
 export const declaredWithout = (servers: Servers, name: string): Servers =>
 	Object.fromEntries(
 		Object.entries(servers).filter(([held]) => held !== name),
@@ -149,8 +178,9 @@ export const resolveServers = (
 ): ResolvedServers => {
 	const kept: Servers = {}
 	const rejections: ServerLine[] = []
+	const bound = boundEnv(servers, env)
 	for (const [name, server] of Object.entries(servers)) {
-		const own = env.perServer?.[name]
+		const own = bound.perServer?.[name]
 		if (env.needsAuthorization?.includes(name)) {
 			rejections.push({
 				detail: leftOut(name, AWAITING_AUTH),
@@ -186,15 +216,15 @@ export const resolveServers = (
 	return { servers: kept, rejections }
 }
 
+export const requestedServers = (request: SessionRequest): Servers =>
+	request.pluginPath
+		? sessionServers({
+				pluginPath: request.pluginPath,
+				systemPluginPath: request.systemPluginPath,
+				userPluginPath: request.userPluginPath,
+				spacePluginPath: request.spacePluginPath,
+			})
+		: {}
+
 export const resolvedServers = (request: SessionRequest): ResolvedServers =>
-	resolveServers(
-		request.pluginPath
-			? sessionServers({
-					pluginPath: request.pluginPath,
-					systemPluginPath: request.systemPluginPath,
-					userPluginPath: request.userPluginPath,
-					spacePluginPath: request.spacePluginPath,
-				})
-			: {},
-		request.serverEnv ?? {},
-	)
+	resolveServers(requestedServers(request), request.serverEnv ?? {})
