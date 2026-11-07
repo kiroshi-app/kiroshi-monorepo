@@ -32,6 +32,8 @@ pub const CHROME: Chrome =
 
 const TITLE_BAR: f32 = 40.0;
 const RAIL: f32 = 60.0;
+
+const SIGNED_OUT: &str = "Signed out.";
 const SHELL_INSET: f32 = 8.0;
 const ROSTER: f32 = 304.0;
 const ROSTER_PAD: f32 = 9.0;
@@ -238,15 +240,23 @@ fn roster(ready: &Ready, t: &Tokens) -> El {
 		},
 		move |s: &App, i| roster_row(s, i, &tokens, now),
 	);
-	col().w(ROSTER).h_full().padding(ROSTER_PAD).gap(SPACING * 2.0).child(header).child(
-		col()
-			.key("roster")
-			.w_full()
-			.grow(1.0)
-			.min_h(0.0)
-			.scroll(ScrollSpec { stick_bottom: false })
-			.child(rows),
-	)
+	let account = ready.person.clone().unwrap_or_else(|| SIGNED_OUT.to_owned());
+	col()
+		.w(ROSTER)
+		.h_full()
+		.padding(ROSTER_PAD)
+		.gap(SPACING * 2.0)
+		.child(header)
+		.child(
+			col()
+				.key("roster")
+				.w_full()
+				.grow(1.0)
+				.min_h(0.0)
+				.scroll(ScrollSpec { stick_bottom: false })
+				.child(rows),
+		)
+		.child(text(account).font(TIMESTAMP).color(t.muted_foreground).truncate())
 }
 
 fn roster_row(s: &App, i: usize, t: &Tokens, now: i64) -> El {

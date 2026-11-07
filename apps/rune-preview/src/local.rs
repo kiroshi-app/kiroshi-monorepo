@@ -1,29 +1,36 @@
 use std::fmt;
 use std::path::PathBuf;
-use std::process::ExitCode;
+use std::process::{Command, ExitCode};
 use std::sync::Arc;
 use std::sync::mpsc::{self, RecvTimeoutError};
+use std::thread;
 use std::time::{Duration, Instant};
 
+use kiroshi_core::account::cloud::api_url;
+use kiroshi_core::account::session::{AccountSession, restore};
 use kiroshi_core::agent::AgentState;
+use kiroshi_core::agent::sign_in::SignInState;
 use kiroshi_core::bundles;
 use kiroshi_core::companions::launch::LaunchOutcomeState;
 use kiroshi_core::conversations::awaited_runs::TurnWindows;
 use kiroshi_core::conversations::commands::{conversation_bots, list_bundles_at_launch};
 use kiroshi_core::conversations::contract::TranscriptStoreError;
 use kiroshi_core::conversations::turn_run_deadline::TurnRunDeadlines;
-use kiroshi_core::core_context::Core;
+use kiroshi_core::core_context::{Core, Desktop, RenderWindow};
 use kiroshi_core::db;
+use kiroshi_core::environment::store::writable_root;
 use kiroshi_core::invoke::{Answer, dispatch};
+use kiroshi_core::missions::run_claims::MissionRunClaims;
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 use tokio::runtime::Runtime;
+use tokio::sync::broadcast::error::RecvError;
 
 use crate::app;
 use crate::events::{self, HostEvent};
 use crate::host::HostError;
-use crate::model::AgentEvent;
+use crate::model::{AgentEvent, Role};
 use crate::source::Source;
 use crate::turn;
 
@@ -40,6 +47,7 @@ pub enum LocalError {
 	NoDataFolder,
 	NoAgent,
 	NoReply { waited: Duration },
+	StoredBeforeStreamed,
 	Unheard,
 }
 
@@ -57,6 +65,9 @@ impl fmt::Display for LocalError {
 			}
 			LocalError::NoReply { waited } => {
 				write!(f, "No reply event within {}s", waited.as_secs())
+			}
+			LocalError::StoredBeforeStreamed => {
+				write!(f, "The reply was stored before any of it streamed")
 			}
 			LocalError::Unheard => write!(f, "The Core stopped delivering its events"),
 		}
@@ -89,8 +100,13 @@ impl LocalCore {
 		core.manage(TurnRunDeadlines::default());
 		core.manage_client_scoped(TurnWindows::default());
 		core.manage(LaunchOutcomeState::default());
+		core.manage(SignInState::default());
+		core.manage_client_scoped(MissionRunClaims::default());
+		core.manage(AccountSession::new(writable_root(&core), &api_url()));
+		core.install_desktop(Browser);
 		let local = LocalCore { core, runtime };
 		local.runtime.block_on(list_bundles_at_launch(&local.core));
+		local.core.spawn(restore(local.core.clone()));
 		Ok(local)
 	}
 
@@ -115,19 +131,29 @@ impl LocalCore {
 	}
 
 	pub fn listen(&self, deliver: impl Fn(HostEvent) + Send + Sync + 'static) {
-		deliver(HostEvent::Listening);
-		self.core.listen(move |event| {
-			let payload = serde_json::from_str(event.payload.get());
-			match payload.map(|payload| events::named(event.name, payload)) {
-				Ok(Some(heard)) => deliver(heard),
-				Ok(None) => {}
-				Err(failure) => deliver(HostEvent::Unreadable {
-					event: event.name.to_owned(),
-					cause: failure.to_string(),
-				}),
+		let mut frames = self.core.subscribe_frames();
+		let spawned = thread::Builder::new().name("core-frames".into()).spawn(move || {
+			deliver(HostEvent::Listening);
+			loop {
+				match frames.blocking_recv() {
+					Ok(frame) => {
+						if let Some(heard) = events::parsed(&frame) {
+							deliver(heard);
+						}
+					}
+					Err(RecvError::Lagged(skipped)) => {
+						eprintln!("the preview fell behind the core and skipped {skipped} frames");
+						deliver(HostEvent::Lagged);
+					}
+					Err(RecvError::Closed) => {
+						return deliver(HostEvent::Lost("the core closed its frames".to_owned()));
+					}
+				}
 			}
-			Ok(())
 		});
+		if let Err(failure) = spawned {
+			eprintln!("the core frame listener did not start: {failure}");
+		}
 	}
 
 	pub fn first_agent(&self) -> Result<String, LocalError> {
@@ -191,7 +217,13 @@ fn completed_reply(
 	conversation_id: &str,
 ) -> Result<String, LocalError> {
 	let started = Instant::now();
+	let mut streamed: Option<String> = None;
+	let mut is_streaming = false;
+	let mut is_stored = false;
 	loop {
+		if let (Some(reply), true) = (&streamed, is_stored) {
+			return Ok(reply.clone());
+		}
 		let left = REPLY_PATIENCE.saturating_sub(started.elapsed());
 		match hearing.recv_timeout(left) {
 			Ok(HostEvent::Agent(scoped)) => {
@@ -199,9 +231,20 @@ fn completed_reply(
 					.scope
 					.as_ref()
 					.is_some_and(|scope| scope.conversation_id == conversation_id);
+				is_streaming |= here;
 				if let (true, AgentEvent::MessageCompleted { message }) = (here, scoped.event) {
-					return Ok(message.text);
+					streamed = Some(message.text);
 				}
+			}
+			Ok(HostEvent::MessageStored(message))
+				if message.conversation_id == conversation_id
+					&& matches!(message.role, Role::Assistant) =>
+			{
+				if !is_streaming {
+					return Err(LocalError::StoredBeforeStreamed);
+				}
+				println!("stored reply: {}", message.content);
+				is_stored = true;
 			}
 			Ok(_) => {}
 			Err(RecvTimeoutError::Timeout) => {
@@ -234,4 +277,50 @@ pub fn platform_data_root() -> Option<PathBuf> {
 	std::env::var_os("XDG_DATA_HOME")
 		.map(PathBuf::from)
 		.or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/share")))
+}
+
+struct Browser;
+
+impl Desktop for Browser {
+	fn open_url(&self, url: &str) -> Result<(), String> {
+		if !(url.starts_with("https://") || url.starts_with("http://")) {
+			return Err("the preview opens only web links".to_owned());
+		}
+		let opened = browser_opening(url).status().map_err(|failure| failure.to_string())?;
+		match opened.success() {
+			true => Ok(()),
+			false => Err(format!("the browser opener answered {opened}")),
+		}
+	}
+
+	fn raise_main_window(&self) {}
+
+	fn open_render_window(&self, window: &RenderWindow) -> Result<(), String> {
+		Err(format!("the preview opens no render window, {} included", window.label))
+	}
+
+	fn close_window(&self, _label: &str) -> Result<(), String> {
+		Ok(())
+	}
+}
+
+#[cfg(target_os = "macos")]
+fn browser_opening(url: &str) -> Command {
+	let mut opening = Command::new("open");
+	opening.arg(url);
+	opening
+}
+
+#[cfg(windows)]
+fn browser_opening(url: &str) -> Command {
+	let mut opening = Command::new("rundll32");
+	opening.args(["url.dll,FileProtocolHandler", url]);
+	opening
+}
+
+#[cfg(not(any(target_os = "macos", windows)))]
+fn browser_opening(url: &str) -> Command {
+	let mut opening = Command::new("xdg-open");
+	opening.arg(url);
+	opening
 }

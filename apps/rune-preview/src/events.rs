@@ -7,7 +7,9 @@ use tungstenite::http::HeaderValue;
 use tungstenite::http::header::AUTHORIZATION;
 
 use crate::host::Host;
-use crate::model::{Message, MissionChanged, ScopedEvent};
+use crate::model::{KiroshiAccountState, Message, MissionChanged, ScopedEvent};
+
+const ACCOUNT_CHANGED: &str = "account://changed";
 
 const AGENT_EVENT: &str = "agent://event";
 
@@ -17,9 +19,11 @@ const MISSION_CHANGED: &str = "mission://changed";
 
 pub enum HostEvent {
 	Listening,
+	AccountChanged(KiroshiAccountState),
 	Agent(ScopedEvent),
 	MessageStored(Message),
 	MissionChanged(MissionChanged),
+	Lagged,
 	Unreadable { event: String, cause: String },
 	Lost(String),
 }
@@ -70,7 +74,7 @@ fn relayed(url: &str, bearer: &str, deliver: &impl Fn(HostEvent)) -> String {
 	}
 }
 
-fn parsed(text: &str) -> Option<HostEvent> {
+pub fn parsed(text: &str) -> Option<HostEvent> {
 	let frame: Value = match serde_json::from_str(text) {
 		Ok(frame) => frame,
 		Err(failure) => return Some(unreadable("frame", failure)),
@@ -80,8 +84,12 @@ fn parsed(text: &str) -> Option<HostEvent> {
 	named(event, payload)
 }
 
-pub fn named(event: &str, payload: Value) -> Option<HostEvent> {
+fn named(event: &str, payload: Value) -> Option<HostEvent> {
 	match event {
+		ACCOUNT_CHANGED => Some(
+			serde_json::from_value(payload)
+				.map_or_else(|failure| unreadable(event, failure), HostEvent::AccountChanged),
+		),
 		AGENT_EVENT => Some(
 			serde_json::from_value(payload)
 				.map_or_else(|failure| unreadable(event, failure), HostEvent::Agent),
