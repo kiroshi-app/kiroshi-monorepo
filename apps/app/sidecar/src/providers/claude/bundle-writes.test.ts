@@ -89,6 +89,37 @@ describe("isBundleWrite", () => {
 		}
 	})
 
+	it("leaves every case variant of a reserved entry to the reader", () => {
+		for (const variant of [
+			join(bundle, "Settings.json"),
+			join(bundle, "SETTINGS.JSON"),
+			join(bundle, ".MCP.json"),
+			join(bundle, ".Applications.json"),
+			join(bundle, "Hooks", "hooks.json"),
+			join(bundle, "HOOKS", "hooks.json"),
+			join(bundle, ".Claude-Plugin", "plugin.json"),
+			join(bundle, ".GIT", "config.md"),
+			join(bundle, "Agents", "bean.md"),
+			join(bundle, "AGENTS", "agent.md"),
+			join(person, "Settings.json"),
+			join(space, ".Mcp.json"),
+		]) {
+			expect(writes(variant)).toBe(false)
+			expect(writes(variant, "Edit")).toBe(false)
+		}
+	})
+
+	it("leaves a reserved entry spelled with trailing dots or spaces to the reader", () => {
+		for (const variant of [
+			join(bundle, "hooks.", "hooks.json"),
+			join(bundle, "hooks ", "hooks.json"),
+			join(bundle, "settings.json."),
+		]) {
+			expect(writes(variant)).toBe(false)
+			expect(writes(variant, "Edit")).toBe(false)
+		}
+	})
+
 	it("leaves a file the bot could later run to the reader", () => {
 		for (const name of [
 			"setup.sh",
