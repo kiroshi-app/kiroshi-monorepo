@@ -10,6 +10,7 @@ mod forms;
 mod library;
 mod navigation;
 mod overlays;
+mod person_settings;
 mod primitives;
 
 pub const THEMES: [Theme; 2] = [Theme::Light, Theme::Dark];
@@ -57,6 +58,11 @@ const SHELL: (f32, f32) = (960.0, 560.0);
 const MOBILE: (f32, f32) = (390.0, 640.0);
 const TOASTS: (f32, f32) = (560.0, 640.0);
 const COMPARISON: (f32, f32) = (1180.0, 3700.0);
+const PALETTE: (f32, f32) = (800.0, 720.0);
+const FIELDS: (f32, f32) = (512.0, 520.0);
+const ABOUT: (f32, f32) = (640.0, 760.0);
+const SETTINGS: (f32, f32) = person_settings::DIALOG_SCENE;
+const SCREEN: (f32, f32) = (1180.0, 720.0);
 
 const fn scene(id: &'static str, size: (f32, f32), view: fn(&Tokens, &SceneState) -> El) -> Scene {
 	Scene { id, size, tabs: 0, pointer: Pointer::Away, typed: "", view }
@@ -78,6 +84,15 @@ const fn typed(
 	view: fn(&Tokens, &SceneState) -> El,
 ) -> Scene {
 	Scene { id, size: STORY, tabs, pointer: Pointer::Away, typed: text, view }
+}
+
+const fn queried(
+	id: &'static str,
+	tabs: usize,
+	text: &'static str,
+	view: fn(&Tokens, &SceneState) -> El,
+) -> Scene {
+	Scene { id, size: PALETTE, tabs, pointer: Pointer::Away, typed: text, view }
 }
 
 const fn pointed(
@@ -213,6 +228,324 @@ pub static SCENES: &[Scene] = &[
 	scene("overlays-tooltip--with-side", OVERLAY, overlays::tooltip_with_side),
 	scene("overlays-tooltip--long-content", OVERLAY, overlays::tooltip_long_content),
 	scene("overlays-tooltip--on-dark-surface", OVERLAY, overlays::tooltip_default),
+	scene("navigation-searchresultrow--message", STORY, person_settings::row_message),
+	scene(
+		"navigation-searchresultrow--message-from-you",
+		STORY,
+		person_settings::row_message_from_you,
+	),
+	scene("navigation-searchresultrow--chat-group", STORY, person_settings::row_chat_group),
+	scene("navigation-searchresultrow--chat-solo", STORY, person_settings::row_chat_solo),
+	scene("navigation-searchresultrow--themes-chat-solo", STORY, person_settings::row_chat_solo),
+	scene("navigation-searchresultrow--themes-chat-group", STORY, person_settings::row_chat_group),
+	scene(
+		"navigation-searchresultrow--themes-chat-group-picked-icon",
+		STORY,
+		person_settings::row_chat_group_picked_icon,
+	),
+	scene(
+		"navigation-searchresultrow--themes-chat-group-free-hue",
+		STORY,
+		person_settings::row_chat_group_free_hue,
+	),
+	scene("navigation-searchresultrow--mission", STORY, person_settings::row_mission),
+	scene("navigation-searchresultrow--routine", STORY, person_settings::row_routine),
+	scene("navigation-searchresultrow--active", STORY, person_settings::row_active),
+	scene("navigation-searchresultrow--long-content", STORY, person_settings::row_long_content),
+	focused("navigation-searchresultrow--activated", STORY, 1, person_settings::row_message),
+	queried("overlays-searchpalette--default", 0, "parser", person_settings::palette_default),
+	queried("overlays-searchpalette--one-kind", 0, "parser", person_settings::palette_messages),
+	queried("overlays-searchpalette--changing-tab", 0, "parser", person_settings::palette_messages),
+	queried("overlays-searchpalette--one-hit", 0, "parser", person_settings::palette_one_hit),
+	queried("overlays-searchpalette--many-hits", 0, "parser", person_settings::palette_many_hits),
+	queried("overlays-searchpalette--resting", 0, "", person_settings::palette_resting_chats),
+	queried(
+		"overlays-searchpalette--resting-messages",
+		0,
+		"",
+		person_settings::palette_resting_messages,
+	),
+	queried(
+		"overlays-searchpalette--resting-one-kind",
+		0,
+		"",
+		person_settings::palette_resting_chats,
+	),
+	queried(
+		"overlays-searchpalette--resting-kind-empty",
+		0,
+		"",
+		person_settings::palette_resting_kind_empty,
+	),
+	queried(
+		"overlays-searchpalette--resting-nothing",
+		0,
+		"",
+		person_settings::palette_resting_nothing,
+	),
+	queried(
+		"overlays-searchpalette--resting-loading",
+		0,
+		"",
+		person_settings::palette_resting_loading,
+	),
+	queried(
+		"overlays-searchpalette--resting-all-loading",
+		0,
+		"",
+		person_settings::palette_resting_all_loading,
+	),
+	queried("overlays-searchpalette--empty", 0, "parser", person_settings::palette_empty),
+	queried("overlays-searchpalette--loading", 0, "parser", person_settings::palette_loading),
+	queried(
+		"overlays-searchpalette--loading-first-query",
+		0,
+		"parser",
+		person_settings::palette_loading_first_query,
+	),
+	queried(
+		"overlays-searchpalette--arrow-key-tabs",
+		3,
+		"parser",
+		person_settings::palette_messages,
+	),
+	queried(
+		"overlays-searchpalette--reduced-motion",
+		0,
+		"parser",
+		person_settings::palette_reduced_motion,
+	),
+	scene("settings-user-appearancefields--default", FIELDS, person_settings::appearance_default),
+	scene(
+		"settings-user-appearancefields--in-french",
+		FIELDS,
+		person_settings::appearance_in_french,
+	),
+	scene("settings-user-appearancefields--dark", FIELDS, person_settings::appearance_dark),
+	scene(
+		"settings-user-notificationfields--default",
+		FIELDS,
+		person_settings::notifications_default,
+	),
+	scene(
+		"settings-user-notificationfields--all-off",
+		FIELDS,
+		person_settings::notifications_all_off,
+	),
+	scene(
+		"settings-user-notificationfields--in-french",
+		FIELDS,
+		person_settings::notifications_in_french,
+	),
+	scene(
+		"settings-user-languagefields--following-the-machine",
+		FIELDS,
+		person_settings::language_machine,
+	),
+	scene("settings-user-languagefields--chosen", FIELDS, person_settings::language_chosen),
+	scene(
+		"settings-user-languagefields--back-to-the-machine",
+		FIELDS,
+		person_settings::language_machine,
+	),
+	scene("settings-user-languagefields--dark", FIELDS, person_settings::language_english),
+	scene("settings-user-diagnosticsfields--idle", FIELDS, person_settings::diagnostics_idle),
+	scene(
+		"settings-user-diagnosticsfields--clear-log-confirming",
+		FIELDS,
+		person_settings::diagnostics_confirming,
+	),
+	scene("settings-user-aboutfields--up-to-date", ABOUT, person_settings::about_up_to_date),
+	scene("settings-user-aboutfields--checking", ABOUT, person_settings::about_checking),
+	scene("settings-user-aboutfields--update-available", ABOUT, person_settings::about_available),
+	scene("settings-user-aboutfields--downloading", ABOUT, person_settings::about_downloading),
+	scene("settings-user-aboutfields--ready-to-restart", ABOUT, person_settings::about_ready),
+	scene(
+		"settings-user-aboutfields--companions-still-running",
+		ABOUT,
+		person_settings::about_still_running,
+	),
+	scene("settings-user-aboutfields--download-failed", ABOUT, person_settings::about_failed),
+	scene("settings-user-aboutfields--beta-available", ABOUT, person_settings::about_beta),
+	scene(
+		"settings-user-aboutfields--about-getting-started",
+		ABOUT,
+		person_settings::about_getting_started,
+	),
+	scene(
+		"settings-user-aboutfields--about-nothing-to-import",
+		ABOUT,
+		person_settings::about_nothing_to_import,
+	),
+	scene("forms-profilepicturefield--default", STORY, person_settings::picture_default),
+	scene("forms-profilepicturefield--empty", STORY, person_settings::picture_empty),
+	scene("forms-profilepicturefield--drawn", STORY, person_settings::picture_drawn),
+	scene("settings-user-yourdevices--default", SETTINGS, person_settings::devices_default),
+	scene("settings-user-yourdevices--confirming", SETTINGS, person_settings::devices_confirming),
+	scene("settings-user-yourdevices--removing", SETTINGS, person_settings::devices_removing),
+	scene("settings-user-yourdevices--error", SETTINGS, person_settings::devices_error),
+	scene("settings-user-yourdevices--empty", SETTINGS, person_settings::devices_empty),
+	scene("settings-user-yourdevices--loading", SETTINGS, person_settings::devices_loading),
+	scene("settings-user-usersettingsdialog--default", SETTINGS, person_settings::dialog_default),
+	scene(
+		"settings-user-usersettingsdialog--opens-on-appearance-without-an-account",
+		SETTINGS,
+		person_settings::dialog_without_account,
+	),
+	scene("settings-user-usersettingsdialog--empty", SETTINGS, person_settings::dialog_empty),
+	scene(
+		"settings-user-usersettingsdialog--appearance",
+		SETTINGS,
+		person_settings::dialog_appearance,
+	),
+	scene(
+		"settings-user-usersettingsdialog--notifications",
+		SETTINGS,
+		person_settings::dialog_notifications,
+	),
+	scene(
+		"settings-user-usersettingsdialog--language-tab",
+		SETTINGS,
+		person_settings::dialog_language,
+	),
+	scene("settings-user-usersettingsdialog--skills", SETTINGS, person_settings::dialog_skills),
+	scene("settings-user-usersettingsdialog--no-skills", SETTINGS, person_settings::dialog_skills),
+	scene(
+		"settings-user-usersettingsdialog--with-a-long-skill",
+		SETTINGS,
+		person_settings::dialog_skills,
+	),
+	scene(
+		"settings-user-usersettingsdialog--applications",
+		SETTINGS,
+		person_settings::dialog_applications,
+	),
+	scene(
+		"settings-user-usersettingsdialog--opens-on-an-application",
+		SETTINGS,
+		person_settings::dialog_applications,
+	),
+	scene(
+		"settings-user-usersettingsdialog--opens-on-a-missing-application",
+		SETTINGS,
+		person_settings::dialog_applications,
+	),
+	scene(
+		"settings-user-usersettingsdialog--without-applications",
+		SETTINGS,
+		person_settings::dialog_without_account,
+	),
+	scene("settings-user-usersettingsdialog--history", SETTINGS, person_settings::dialog_history),
+	scene(
+		"settings-user-usersettingsdialog--diagnostics",
+		SETTINGS,
+		person_settings::dialog_diagnostics,
+	),
+	scene("settings-user-usersettingsdialog--about", SETTINGS, person_settings::dialog_about),
+	scene(
+		"settings-user-usersettingsdialog--account-loading",
+		SETTINGS,
+		person_settings::dialog_account_loading,
+	),
+	scene(
+		"settings-user-usersettingsdialog--signed-out",
+		SETTINGS,
+		person_settings::dialog_signed_out,
+	),
+	scene("settings-user-usersettingsdialog--waiting", SETTINGS, person_settings::dialog_waiting),
+	scene(
+		"settings-user-usersettingsdialog--signed-in",
+		SETTINGS,
+		person_settings::dialog_signed_in,
+	),
+	scene(
+		"settings-user-usersettingsdialog--signed-in-with-picture",
+		SETTINGS,
+		person_settings::dialog_signed_in_with_picture,
+	),
+	scene(
+		"settings-user-usersettingsdialog--signed-in-on-the-free-plan",
+		SETTINGS,
+		person_settings::dialog_free_plan,
+	),
+	scene(
+		"settings-user-usersettingsdialog--signed-in-without-a-plan",
+		SETTINGS,
+		person_settings::dialog_without_plan,
+	),
+	scene(
+		"settings-user-usersettingsdialog--cant-reach-kiroshi",
+		SETTINGS,
+		person_settings::dialog_cant_reach,
+	),
+	scene(
+		"settings-user-usersettingsdialog--request-expired",
+		SETTINGS,
+		person_settings::dialog_request_expired,
+	),
+	scene(
+		"settings-user-usersettingsdialog--signed-out-from-the-site",
+		SETTINGS,
+		person_settings::dialog_signed_out_from_the_site,
+	),
+	focused(
+		"settings-user-usersettingsdialog--default-focus-visible",
+		SETTINGS,
+		2,
+		person_settings::dialog_default,
+	),
+	scene("settings-user-settingsscreen--account", SCREEN, person_settings::screen_account),
+	scene("settings-user-settingsscreen--spaces", SCREEN, person_settings::screen_spaces),
+	scene(
+		"settings-user-settingsscreen--spaces-host-states",
+		SCREEN,
+		person_settings::screen_host_states,
+	),
+	scene("settings-user-settingsscreen--left-column", SCREEN, person_settings::screen_account),
+	scene("settings-user-settingsscreen--rail-space-host", SCREEN, person_settings::screen_account),
+	scene(
+		"settings-user-settingsscreen--after-leaving-a-space",
+		SCREEN,
+		person_settings::screen_after_leaving,
+	),
+	scene(
+		"settings-user-settingsscreen--without-optional-entries",
+		SCREEN,
+		person_settings::screen_without_optional,
+	),
+	scene("settings-user-settingsscreen--appearance", SCREEN, person_settings::screen_appearance),
+	scene(
+		"settings-user-settingsscreen--notifications",
+		SCREEN,
+		person_settings::screen_notifications,
+	),
+	scene("settings-user-settingsscreen--language", SCREEN, person_settings::screen_language),
+	scene("settings-user-settingsscreen--skills", SCREEN, person_settings::screen_skills),
+	scene("settings-user-settingsscreen--user-skills", SCREEN, person_settings::screen_skills),
+	scene(
+		"settings-user-settingsscreen--leaving-an-unsaved-skill-by-the-rail",
+		SCREEN,
+		person_settings::screen_skills,
+	),
+	scene(
+		"settings-user-settingsscreen--applications",
+		SCREEN,
+		person_settings::screen_applications,
+	),
+	scene("settings-user-settingsscreen--history", SCREEN, person_settings::screen_history),
+	scene("settings-user-settingsscreen--diagnostics", SCREEN, person_settings::screen_diagnostics),
+	scene("settings-user-settingsscreen--about", SCREEN, person_settings::screen_about),
+	scene("settings-user-settingsscreen--default-width", SCREEN, person_settings::screen_account),
+	scene(
+		"settings-user-settingsscreen--minimum-width",
+		SCREEN,
+		person_settings::screen_minimum_width,
+	),
+	scene(
+		"settings-user-settingsscreen--maximum-width",
+		SCREEN,
+		person_settings::screen_maximum_width,
+	),
 	library::library("navigation-librarypanel--grid-all", library::grid_all),
 	library::library("navigation-librarypanel--grid-middle-click", library::grid_all),
 	library::library("navigation-librarypanel--grid-context-menu", library::grid_context_menu),
