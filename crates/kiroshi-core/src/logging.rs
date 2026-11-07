@@ -1,4 +1,6 @@
+pub mod commands;
 pub mod contract;
+pub mod files;
 pub mod scrub;
 pub mod stderr_lines;
 

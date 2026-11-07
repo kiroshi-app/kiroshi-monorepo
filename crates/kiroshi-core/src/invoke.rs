@@ -645,6 +645,11 @@ table! { core, client;
 	devices_list() => answered(crate::devices::commands::devices_list(core).await);
 	device_remove(device_id: String) =>
 		answered(crate::devices::commands::device_remove(core, device_id).await);
+
+	diagnostics() => plain(crate::logging::commands::diagnostics(core).await);
+	log_tail(lines: u32) => answered(crate::logging::commands::log_tail(core, lines).await);
+	log_reveal() => answered(crate::logging::commands::log_reveal(core).await);
+	log_clear() => answered(crate::logging::commands::log_clear(core).await);
 }
 
 pub async fn dispatch(core: &Core, command: &str, arguments: Value) -> Option<Answer> {
@@ -769,8 +774,6 @@ mod tests {
 
 	const OS_SHELL_MODULES: [&str; 4] = ["badge", "notifications", "updates", "window_controls"];
 
-	const NOT_YET_IN_CORE: [&str; 4] = ["diagnostics", "log_tail", "log_reveal", "log_clear"];
-
 	fn tauri_commands() -> Vec<(String, String)> {
 		let table = std::fs::read_to_string(format!("{}/src/commands.rs", crate::APP_DIR))
 			.expect("the Tauri command table reads");
@@ -795,26 +798,21 @@ mod tests {
 			.filter(|(module, _)| !OS_SHELL_MODULES.contains(&module.as_str()))
 			.map(|(_, name)| name)
 			.filter(|name| !COMMANDS.contains(&name.as_str()))
-			.filter(|name| !NOT_YET_IN_CORE.contains(&name.as_str()))
 			.collect();
 
 		assert!(missing.is_empty(), "the core answers none of {missing:?}");
 	}
 
 	#[test]
-	fn every_core_command_and_every_pending_one_names_a_tauri_command() {
+	fn every_core_command_names_a_tauri_command() {
 		let tauri: Vec<String> = tauri_commands().into_iter().map(|(_, name)| name).collect();
 		let unknown: Vec<&str> = COMMANDS
 			.iter()
-			.chain(NOT_YET_IN_CORE.iter())
 			.copied()
 			.filter(|name| !tauri.iter().any(|listed| listed == name))
 			.collect();
-		let answered_yet_pending: Vec<&str> =
-			NOT_YET_IN_CORE.iter().copied().filter(|name| COMMANDS.contains(name)).collect();
 
 		assert!(unknown.is_empty(), "no Tauri command bears {unknown:?}");
-		assert!(answered_yet_pending.is_empty(), "{answered_yet_pending:?} left the pending list");
 	}
 
 	#[tokio::test]
