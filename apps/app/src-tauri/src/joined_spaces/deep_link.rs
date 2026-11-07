@@ -112,7 +112,7 @@ mod tests {
 	#[test]
 	fn an_invitation_link_opened_before_the_front_listens_is_announced_once_it_listens() {
 		let app = an_app_of_its_own("join-links-held", mock_builder());
-		crate::events::core(app).manage(JoinLinks::default());
+		crate::events::core(app.handle()).manage(JoinLinks::default());
 		let hearing = heard(&app);
 
 		received(app.handle(), invitations_of(&urls(&[LINK, LINK])));
@@ -129,7 +129,7 @@ mod tests {
 	#[test]
 	fn an_invitation_link_opened_while_the_front_listens_is_announced_with_its_invitation() {
 		let app = an_app_of_its_own("join-links-live", mock_builder());
-		crate::events::core(app).manage(JoinLinks::default());
+		crate::events::core(app.handle()).manage(JoinLinks::default());
 		let hearing = heard(&app);
 		listened(app.handle(), window_controls::MAIN_WINDOW);
 
@@ -144,7 +144,7 @@ mod tests {
 	#[test]
 	fn an_invitation_link_reaches_main_alone_when_no_app_window_is_focused() {
 		let app = an_app_of_its_own("join-links-one-window", mock_builder());
-		crate::events::core(app).manage(JoinLinks::default());
+		crate::events::core(app.handle()).manage(JoinLinks::default());
 		let main = heard_by(&opened(&app, window_controls::MAIN_WINDOW));
 		let secondary = heard_by(&opened(&app, "window-1"));
 		listened(app.handle(), window_controls::MAIN_WINDOW);
@@ -158,7 +158,7 @@ mod tests {
 	#[test]
 	fn a_held_invitation_link_reaches_the_window_that_listens_alone() {
 		let app = an_app_of_its_own("join-links-held-one-window", mock_builder());
-		crate::events::core(app).manage(JoinLinks::default());
+		crate::events::core(app.handle()).manage(JoinLinks::default());
 		let main = heard_by(&opened(&app, window_controls::MAIN_WINDOW));
 		let secondary = heard_by(&opened(&app, "window-1"));
 

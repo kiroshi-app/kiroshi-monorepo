@@ -77,7 +77,7 @@ pub(super) struct MemberCall {
 	computer: Option<String>,
 }
 
-pub(super) fn member_call(text: &str, sender: &str) -> Result<MemberCall, String> {
+pub fn member_call(text: &str, sender: &str) -> Result<MemberCall, String> {
 	let frame: Value = serde_json::from_str(text).unwrap_or(Value::Null);
 	let id = frame.get("id").filter(|id| id.is_string() || id.is_number()).cloned();
 	let command = frame
@@ -205,7 +205,7 @@ pub(super) fn replayed(frame: &str, epoch: &str, seq: u64, token: &str) -> Strin
 	format!("{{\"event\":{frame},\"epoch\":\"{epoch}\",\"seq\":{seq},\"token\":{token}}}")
 }
 
-pub(super) async fn bridged(
+pub async fn bridged(
 	core: crate::core_context::Core,
 	local: LocalApi,
 	shared_space_id: String,

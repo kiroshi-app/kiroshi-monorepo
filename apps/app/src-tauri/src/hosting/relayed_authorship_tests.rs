@@ -77,22 +77,13 @@ use crate::hosting::contract::{
 	SpaceInvitation, SpaceMembers, TransportFailure, UnreachableReason, CHANGED_EVENT,
 	MEMBERS_CHANGED_EVENT,
 };
-use crate::hosting::devices::{devices, remove_device};
-use crate::hosting::members::{invite, invite_again, list, remove, resend, withdraw};
 use crate::hosting::reach;
 use crate::hosting::relay::relay_socket_config;
-use crate::hosting::replay::{RESUME_COMMAND, RING_FRAMES};
 use crate::hosting::roster::SignedRow;
-use crate::hosting::sealing_member::{
-	host_frame_opened, space_key_of, verified_set, HostFrame, SealingMember, Space,
-};
-use crate::hosting::wire::{host_keys, HELLO};
-use crate::hosting::{opening, renamed, resumed, signed_out, start, stop, Hosting, Opening};
 use crate::joined_spaces::contract::JoinedSpaceConnection;
 use crate::joined_spaces::relay::RelayGuests;
 use crate::library;
 use crate::library::contract::{LibraryError, DOCUMENT_RENAMED_EVENT, DOCUMENT_UPDATED_EVENT};
-use crate::library::tests::YjsClient;
 use crate::logging::contract::InstallKind;
 use crate::mcp_oauth::asking::AuthorizationAnswers;
 use crate::mcp_oauth::commands::{mcp_application_status, McpOauthState};
@@ -193,10 +184,6 @@ impl Authoring {
 		}
 		crate::events::core(app.app_handle())
 			.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &cloud));
-		crate::account::session::install_signed_in_work(
-			crate::events::core(app.app_handle()),
-			crate::account::AppSignedInWork,
-		);
 		restore(crate::events::core(app.handle()).clone()).await;
 		crate::events::core(app.app_handle()).manage(webhook::start(
 			crate::events::core(app.handle()).clone(),
@@ -205,20 +192,19 @@ impl Authoring {
 		let local = super::local_api(crate::events::core(app.handle()))
 			.expect("the local host api listens");
 		crate::events::core(app.app_handle()).manage(Hosting::new(&cloud, Some(local.clone())));
-		crate::events::core(app.app_handle())
-			.state::<Hosting>()
-			.hosts()
-			.entry(PERSONAL.to_owned())
-			.or_default()
-			.members = Some(SpaceMembers {
-			members: vec![Member {
-				user_id: GUEST.to_owned(),
-				name: None,
-				email: GUEST_EMAIL.to_owned(),
-				status: MemberStatus::Joined,
-			}],
-			invitations: Vec::new(),
-		});
+		crate::events::core(app.app_handle()).state::<Hosting>().seated(
+			PERSONAL,
+			None,
+			SpaceMembers {
+				members: vec![Member {
+					user_id: GUEST.to_owned(),
+					name: None,
+					email: GUEST_EMAIL.to_owned(),
+					status: MemberStatus::Joined,
+				}],
+				invitations: Vec::new(),
+			},
+		);
 		let window = WebviewWindowBuilder::new(app.handle(), "main", Default::default())
 			.build()
 			.expect("the window builds");
@@ -540,10 +526,8 @@ fn a_hosted_space_with_a_joined_member_names_every_member_to_a_session_and_marks
 		};
 		let hosted_with = |members: Vec<Member>| {
 			let hosting = crate::events::core(host.app.app_handle()).state::<Hosting>();
-			let mut hosts = hosting.hosts();
-			let hosted = hosts.entry(PERSONAL.to_owned()).or_default();
-			hosted.state = HostingState::Online;
-			hosted.members = Some(SpaceMembers { members, invitations: Vec::new() });
+			let members = SpaceMembers { members, invitations: Vec::new() };
+			hosting.seated(PERSONAL, Some(HostingState::Online), members);
 		};
 		let member =
 			|user_id: &str, name: Option<&str>, email: &str, status: MemberStatus| Member {
@@ -592,7 +576,7 @@ fn a_relayed_frame_stores_its_roster_account_over_a_forged_author() {
 			vec![(json!("vouched"), json!(GUEST), json!(GUEST_EMAIL))]
 		);
 		assert!(
-			crate::events::core(host.app.app_handle()).state::<Hosting>().relayed.is_empty(),
+			crate::events::core(host.app.app_handle()).state::<Hosting>().holds_no_vouched_member(),
 			"a vouched member outlived its call"
 		);
 	});
@@ -1372,4 +1356,20 @@ fn a_member_disconnecting_through_a_bot_served_by_a_grant_of_the_host_person_is_
 		assert!(!before.is_empty());
 		assert_eq!(store::values(&root, &grant).expect("the grant reads"), before);
 	});
+}
+
+const OTHER_SPACE_REFUSAL: &str = "this command reaches outside the shared space";
+
+fn bearer_of(headers: &HeaderMap) -> &str {
+	let header = headers.get("authorization").and_then(|value| value.to_str().ok());
+	header.unwrap_or_default().trim_start_matches("Bearer ")
+}
+
+fn names_of(listed: &Value) -> Vec<&str> {
+	listed
+		.as_array()
+		.expect("a list")
+		.iter()
+		.map(|item| item["name"].as_str().expect("a name"))
+		.collect()
 }

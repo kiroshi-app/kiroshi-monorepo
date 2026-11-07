@@ -96,6 +96,21 @@ impl Hosting {
 		self.hosts().values().any(|host| host.state.is_running())
 	}
 
+	#[cfg(any(test, feature = "test-support"))]
+	pub fn seated(&self, space_id: &str, state: Option<HostingState>, members: SpaceMembers) {
+		let mut hosts = self.hosts();
+		let hosted = hosts.entry(space_id.to_owned()).or_default();
+		if let Some(state) = state {
+			hosted.state = state;
+		}
+		hosted.members = Some(members);
+	}
+
+	#[cfg(any(test, feature = "test-support"))]
+	pub fn holds_no_vouched_member(&self) -> bool {
+		self.relayed.is_empty()
+	}
+
 	fn hosts(&self) -> MutexGuard<'_, HashMap<String, Host>> {
 		self.hosts.lock().unwrap_or_else(PoisonError::into_inner)
 	}
