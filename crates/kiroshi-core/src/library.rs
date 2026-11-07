@@ -64,11 +64,7 @@ const MAX_TITLE_CHARS: usize = 100;
 
 const UNSAFE_IN_A_NAME: [char; 9] = ['/', '\\', ':', '*', '?', '"', '<', '>', '|'];
 
-#[derive(Debug, PartialEq, Eq)]
-enum ClipboardPayload {
-	Text(String),
-	Image { rgba: Vec<u8>, width: u32, height: u32 },
-}
+pub use crate::core_context::Copied as ClipboardPayload;
 
 pub fn list(root: &Path, space_id: &str) -> Result<Vec<LibraryItem>, LibraryError> {
 	let entries = match fs::read_dir(space_dir(root, space_id)) {

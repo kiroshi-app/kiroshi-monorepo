@@ -12,7 +12,7 @@ use uuid::Uuid;
 
 use super::{ToolRefusal, MAX_SHOWN_IMAGE_BYTES};
 use crate::board::Frame;
-use crate::core_context::{Core, Managed, RenderWindow};
+use crate::core_context::{ClientId, Core, Managed, RenderWindow};
 use crate::library::decoded;
 
 #[cfg(test)]
@@ -134,12 +134,12 @@ impl ScreenshotTarget {
 		Self::Board { name, canvas, frame, zoom }
 	}
 
-	fn window_size(&self) -> LogicalSize<f64> {
+	fn window_size(&self) -> (f64, f64) {
 		match self {
 			Self::Board { frame, zoom, .. } => {
-				LogicalSize::new(frame.width as f64 * zoom, frame.height as f64 * zoom)
+				(frame.width as f64 * zoom, frame.height as f64 * zoom)
 			}
-			Self::Document { .. } => LogicalSize::new(DOCUMENT_WIDTH, DOCUMENT_HEIGHT),
+			Self::Document { .. } => (DOCUMENT_WIDTH, DOCUMENT_HEIGHT),
 		}
 	}
 }
@@ -169,24 +169,26 @@ impl Drop for InFlight<'_> {
 	}
 }
 
-pub fn library_screenshot_job<R: Runtime>(
-	window: WebviewWindow<R>,
+pub fn library_screenshot_job(
+	core: &Core,
+	client: &ClientId,
 ) -> Result<ScreenshotJob, ScreenshotRequestError> {
-	let request_id = request_of(window.label())?;
-	let screenshots = screenshots(crate::events::core(window.app_handle()));
+	let request_id = request_of(client.as_str())?;
+	let screenshots = screenshots(core);
 	let job = screenshots.held().get(request_id).map(|pending| pending.job.clone());
 	job.ok_or_else(|| unknown(request_id))
 }
 
-pub fn library_screenshot_answer<R: Runtime>(
-	window: WebviewWindow<R>,
+pub fn library_screenshot_answer(
+	core: &Core,
+	client: &ClientId,
 	request_id: String,
 	answer: ScreenshotRendered,
 ) -> Result<(), ScreenshotRequestError> {
-	if request_of(window.label())? != request_id {
+	if request_of(client.as_str())? != request_id {
 		return Err(unknown(&request_id));
 	}
-	let pending = screenshots(crate::events::core(window.app_handle())).held().remove(&request_id);
+	let pending = screenshots(core).held().remove(&request_id);
 	let pending = pending.ok_or_else(|| unknown(&request_id))?;
 	pending.answer.send(answer).map_err(|_| unknown(&request_id))
 }
@@ -214,12 +216,12 @@ pub async fn render(
 	}
 }
 
-fn render_window(request_id: &str, size: LogicalSize<f64>) -> RenderWindow {
+fn render_window(request_id: &str, (width, height): (f64, f64)) -> RenderWindow {
 	RenderWindow {
 		label: window_label(request_id),
 		route: SCREENSHOT_ROUTE.trim_start_matches('/').to_owned(),
-		width: size.width,
-		height: size.height,
+		width,
+		height,
 	}
 }
 

@@ -1,10 +1,6 @@
 use std::path::PathBuf;
 
 use reqwest::Url;
-use tauri_plugin_clipboard_manager::ClipboardExt;
-use tauri_plugin_dialog::DialogExt;
-use tauri_plugin_opener::OpenerExt;
-use tokio::sync::oneshot;
 
 use futures_util::future::join_all;
 
@@ -28,7 +24,7 @@ use crate::agent::AgentState;
 use crate::conversations::host_turn::merged;
 use crate::db;
 use crate::hosting::authors;
-use crate::hosting::authorship::{Caller, CommandCaller};
+use crate::hosting::caller::Caller;
 use crate::joined_spaces::relay::RelayGuests;
 use crate::logging::scrub::scrubbed;
 
@@ -184,16 +180,15 @@ pub async fn library_delete(
 
 pub async fn library_share_presence(
 	core: &crate::core_context::Core,
-	webview: Webview<R>,
+	client: &crate::core_context::ClientId,
 	caller: crate::hosting::caller::Caller,
-	core: &crate::core_context::Core,
 	space_id: String,
 	name: String,
 	at: Option<LibraryPresenceAt>,
 ) -> Result<(), LibraryError> {
 	let state = core.state::<db::DatabaseState>();
 	known_space(&state, &space_id).await?;
-	let seat = seat_of(&caller, &webview)?;
+	let seat = seat_of(&caller, client)?;
 	let Some(at) = at else {
 		unseat_writer(core, &space_id, &name, &seat);
 		return Ok(());
@@ -229,9 +224,9 @@ pub async fn library_stop_writers(
 	Ok(merged(outcomes))
 }
 
-fn seat_of<R: Runtime>(caller: &Caller, webview: &Webview<R>) -> Result<Seat, LibraryError> {
+fn seat_of(caller: &Caller, client: &crate::core_context::ClientId) -> Result<Seat, LibraryError> {
 	match caller {
-		Caller::Host => Ok(Seat::Window(webview.window().label().to_owned())),
+		Caller::Host => Ok(Seat::Window(client.as_str().to_owned())),
 		Caller::Relayed(_) => caller
 			.relayed_account()
 			.map(|account| Seat::Member(account.to_owned()))
@@ -315,7 +310,7 @@ pub async fn library_save(
 	let state = core.state::<db::DatabaseState>();
 	known_space(&state, &space_id).await?;
 	let saved = save(&root(core)?, &space_id, &name, |suggested| {
-		chosen_destination(&app, suggested.to_owned())
+		chosen_destination(core, suggested.to_owned())
 	})
 	.await?;
 	Ok(saved.map(|path| path.to_string_lossy().into_owned()))
@@ -332,7 +327,7 @@ pub async fn library_copy(
 	let payload = tokio::task::spawn_blocking(move || clipboard_payload(&root, &space_id, &name))
 		.await
 		.map_err(|error| LibraryError::Unreadable { detail: error.to_string() })??;
-	put_on_clipboard(&app, payload)
+	put_on_clipboard(core, payload)
 }
 
 pub async fn library_save_bytes(
@@ -341,7 +336,7 @@ pub async fn library_save_bytes(
 	content: String,
 ) -> Result<Option<String>, LibraryError> {
 	let saved =
-		save_bytes(&name, &content, |suggested| chosen_destination(&app, suggested.to_owned()))
+		save_bytes(&name, &content, |suggested| chosen_destination(core, suggested.to_owned()))
 			.await?;
 	Ok(saved.map(|path| path.to_string_lossy().into_owned()))
 }
@@ -354,7 +349,7 @@ pub async fn library_copy_bytes(
 	let payload = tokio::task::spawn_blocking(move || clipboard_payload_of_bytes(&name, &content))
 		.await
 		.map_err(|error| LibraryError::Unreadable { detail: error.to_string() })??;
-	put_on_clipboard(&app, payload)
+	put_on_clipboard(core, payload)
 }
 
 pub async fn library_reveal(
@@ -365,41 +360,22 @@ pub async fn library_reveal(
 	let state = core.state::<db::DatabaseState>();
 	known_space(&state, &space_id).await?;
 	let item = resolve(&root(core)?, &space_id, &name)?;
-	app.opener()
-		.reveal_item_in_dir(&item.path)
+	core.reveal(&item.path)
 		.map_err(|error| LibraryError::Unrevealed { detail: scrubbed(&error.to_string()) })
 }
 
-async fn chosen_destination<R: Runtime>(
-	app: &AppHandle<R>,
+async fn chosen_destination(
+	core: &crate::core_context::Core,
 	suggested: String,
 ) -> Result<Option<PathBuf>, LibraryError> {
-	let (answer, answered) = oneshot::channel();
-	app.dialog().file().set_file_name(suggested).save_file(move |chosen| {
-		if answer.send(chosen).is_err() {
-			log::warn!("a library save dialog answered after its command was dropped");
-		}
-	});
-	let chosen = answered.await.map_err(|_| LibraryError::Unwritable {
-		detail: "the save dialog closed without an answer".to_owned(),
-	})?;
-	chosen
-		.map(|path| {
-			path.into_path().map_err(|error| LibraryError::Unwritable { detail: error.to_string() })
-		})
-		.transpose()
+	core.chosen_save_path(suggested)
+		.await
+		.map_err(|error| LibraryError::Unwritable { detail: error.to_string() })
 }
 
-fn put_on_clipboard<R: Runtime>(
-	app: &AppHandle<R>,
+fn put_on_clipboard(
+	core: &crate::core_context::Core,
 	payload: ClipboardPayload,
 ) -> Result<(), LibraryError> {
-	let clipboard = app.clipboard();
-	let written = match payload {
-		ClipboardPayload::Text(text) => clipboard.write_text(text),
-		ClipboardPayload::Image { rgba, width, height } => {
-			clipboard.write_image(&Image::new_owned(rgba, width, height))
-		}
-	};
-	written.map_err(|error| LibraryError::ClipboardRefused { detail: error.to_string() })
+	core.copy(payload).map_err(|error| LibraryError::ClipboardRefused { detail: error.to_string() })
 }
