@@ -78,6 +78,9 @@ fn setup(s: &mut App, waker: Waker) {
 fn poll(s: &mut App, seconds: f64, tx: &mut Tx) -> bool {
 	let changed = s.poll();
 	let changed = open_held(s, &mut held_links()) || changed;
+	if let Some(after) = s.focus_wake() {
+		tx.wake_after(after);
+	}
 	if !s.tick(seconds) {
 		return changed;
 	}

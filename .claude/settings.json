@@ -8,7 +8,9 @@
 			"Bash(scripts/pr-dequeue.sh)",
 			"Bash(./scripts/pr-dequeue.sh)",
 			"Bash(scripts/pr-enqueue.sh)",
-			"Bash(./scripts/pr-enqueue.sh)"
+			"Bash(./scripts/pr-enqueue.sh)",
+			"Bash(scripts/pr-merge-sub.sh)",
+			"Bash(./scripts/pr-merge-sub.sh)"
 		],
 		"ask": [
 			"Bash(git push origin +*)",
@@ -27,6 +29,8 @@
 			"Write(/scripts/pr-dequeue.sh)",
 			"Edit(/scripts/pr-enqueue.sh)",
 			"Write(/scripts/pr-enqueue.sh)",
+			"Edit(/scripts/pr-merge-sub.sh)",
+			"Write(/scripts/pr-merge-sub.sh)",
 			"Bash(gh pr merge* --squash*)",
 			"Bash(gh pr merge* --merge*)",
 			"Bash(gh pr merge* --rebase*)",
