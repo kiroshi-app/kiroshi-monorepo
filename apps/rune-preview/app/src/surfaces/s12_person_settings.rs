@@ -11,6 +11,7 @@ mod view;
 
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use kiroshi_core::updates::contract::UpdateState;
 use rune::{Key as Pressed, KeyEvent, TextEdit, Tx, Waker};
 
 use kiroshi_rune_kit::primitives::toast::ToastType;
@@ -21,7 +22,7 @@ use kiroshi_rune_kit::surfaces::s12_person_settings::shell::Entry;
 
 use crate::app::{App, Person};
 use crate::host::HostError;
-use crate::model::Space;
+use crate::model::{MissionDetail, Space};
 use crate::navigation::Route;
 use crate::onboarding::Step;
 use crate::source::Source;
@@ -62,7 +63,7 @@ pub enum Effect {
 }
 
 enum Follow {
-	OpenMission(crate::model::MissionDetail),
+	OpenMission(MissionDetail),
 }
 
 pub struct State {
@@ -152,12 +153,6 @@ impl State {
 
 	pub fn language(&self) -> Language {
 		self.preferences.shown().language.unwrap_or(Language::En)
-	}
-
-	pub fn notifications(
-		&self,
-	) -> kiroshi_rune_kit::surfaces::s12_person_settings::panes::Notifications {
-		self.preferences.shown().notifications
 	}
 
 	pub fn landing(&self) -> Option<&Landing> {
@@ -362,16 +357,13 @@ impl State {
 		}
 	}
 
-	fn update_landed(&mut self, state: kiroshi_core::updates::contract::UpdateState) {
+	fn update_landed(&mut self, state: UpdateState) {
 		let call = self.updater.land(state, now_ms());
 		self.watch_download(call.as_ref());
 		self.queued.extend(call);
 	}
 
-	fn updater_answered(
-		&mut self,
-		outcome: Result<kiroshi_core::updates::contract::UpdateState, HostError>,
-	) {
+	fn updater_answered(&mut self, outcome: Result<UpdateState, HostError>) {
 		match outcome {
 			Ok(state) => self.update_landed(state),
 			Err(failure) => self.fail(chat::screen::notice::FAILED, &failure),

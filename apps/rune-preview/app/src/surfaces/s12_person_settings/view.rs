@@ -18,11 +18,15 @@ use kiroshi_rune_kit::surfaces::s12_person_settings::{Look, SettingsEvent};
 use kiroshi_rune_kit::tokens::Tokens;
 
 use super::about::{self as updater};
-use super::account::{DeviceRead, panel_of, shown_kind};
+use super::account::{DeviceRead, DevicesRead, panel_of, shown_kind};
 use super::hits::{self, Face, Group, Part, Row};
 use super::preferences::Shown;
-use super::{Notice, State, close_search, current_entry, lookups_of, search_event, settings_event};
+use super::{
+	Notice, State, can_import, close_search, current_entry, lookups_of, now_ms, search_event,
+	settings_event,
+};
 use crate::app::App;
+use crate::model::Space;
 use crate::navigation::Route;
 
 const RAIL: [Entry; 8] = [
@@ -102,7 +106,7 @@ fn about_pane(app: &App, look: Look, version: &str, shown: &Shown) -> El {
 	let settings = &app.surfaces.s12_person_settings;
 	let update = settings.updater.shown();
 	let checked = match update {
-		updater::Shown::UpToDate { checked_at } => relative_time(checked_at, super::now_ms()),
+		updater::Shown::UpToDate { checked_at } => relative_time(checked_at, now_ms()),
 		_ => String::new(),
 	};
 	let about = About {
@@ -110,7 +114,7 @@ fn about_pane(app: &App, look: Look, version: &str, shown: &Shown) -> El {
 		channel: shown.channel,
 		update: update_of(&update, &checked),
 		shows_whats_new: shown.shows_whats_new,
-		getting_started: Some(super::can_import(app)),
+		getting_started: Some(can_import(app)),
 	};
 	panes::about(look, about, emit)
 }
@@ -132,11 +136,10 @@ fn account_pane(settings: &State, look: Look, shown: &Shown) -> El {
 	let current = listed.iter().find(|device| device.current);
 	let others: Vec<Device> =
 		listed.iter().filter(|device| !device.current).map(device_of).collect();
-	let is_pending =
-		matches!(settings.devices.read, super::DevicesRead::Unread | super::DevicesRead::Reading);
+	let is_pending = matches!(settings.devices.read, DevicesRead::Unread | DevicesRead::Reading);
 	let fallback = Device { id: "", kind: panes::DeviceKind::Laptop, name: "", activity: None };
 	let devices = settings.account.email().and_then(|email| {
-		let is_failed = matches!(settings.devices.read, super::DevicesRead::Failed);
+		let is_failed = matches!(settings.devices.read, DevicesRead::Failed);
 		if is_failed || (!is_pending && current.is_none()) {
 			return None;
 		}
@@ -168,7 +171,7 @@ fn content(app: &App, look: Look, entry: Entry, shown: &Shown) -> El {
 	}
 }
 
-fn menu_space<'a>(app: &App, space: &'a crate::model::Space) -> MenuSpace<'a> {
+fn menu_space<'a>(app: &App, space: &'a Space) -> MenuSpace<'a> {
 	let current = app.ready().map(|ready| ready.space.id.as_str());
 	MenuSpace {
 		id: &space.id,
