@@ -1,10 +1,13 @@
-use rune::{Align, Color, Cursor, El, Icon, TextStyle, col, el, icon, row, spacer, text};
+use rune::{
+	Align, Color, Cursor, El, Icon, Key, TextEdit, TextStyle, col, el, icon, row, spacer, text,
+};
 
 use crate::avatar::Face;
 use crate::icons;
 use crate::primitives::button::{Button, ButtonSize, ButtonVariant};
+use crate::primitives::input::{InputSize, input};
 use crate::primitives::skeleton::skeleton;
-use crate::primitives::{FOCUS_RING_WIDTH, Interaction, Paint, tight};
+use crate::primitives::{FOCUS_RING_WIDTH, Interaction, Paint, equal_padding, tight};
 use crate::strings::{Language, bots};
 use crate::tokens::{
 	RADIUS_2XL, RADIUS_LG, RADIUS_SM, RADIUS_XL, SPACING, TEXT_10_MEDIUM, TEXT_11, TEXT_SM,
@@ -35,6 +38,7 @@ const STRIP_DOT: f32 = SPACING * 1.5;
 const STRIP_MARK: f32 = SPACING * 3.0;
 const SECTION_HEADER: f32 = SPACING * 2.5;
 const SECTION_INSET: f32 = 4.5;
+const SECTION_LABEL_HEIGHT: f32 = SECTION_HEADER * 2.0 + SPACING * 4.0;
 const CHEVRON: f32 = SPACING * 3.5;
 const SEPARATOR_INSET: f32 = SPACING * 1.5;
 const LIFT_SHADOW_Y: f32 = 10.0;
@@ -73,10 +77,18 @@ const TABULAR: &str = "'tnum' 1";
 pub enum RosterEvent {
 	Select(String),
 	ToggleSection(String),
+	RenameCommit { section: String, name: String },
+	RenameCancel(String),
 	Retry,
 }
 
 pub type Emit<S> = fn(&mut S, RosterEvent);
+
+pub struct NameField<'a, S> {
+	pub label: &'a str,
+	pub edit: &'a TextEdit,
+	pub access: for<'b> fn(&'b mut S) -> &'b mut TextEdit,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RowBadge {
@@ -160,6 +172,7 @@ pub struct Section<'a> {
 	pub name: &'a str,
 	pub is_open: bool,
 	pub is_landing: bool,
+	pub is_renaming: bool,
 	pub rows: Vec<Row<'a>>,
 	pub lift: Lift,
 }
@@ -503,6 +516,40 @@ pub fn section_label(t: &Tokens, name: &str) -> El {
 	text(name.to_owned()).font(weighted(TEXT_XS, SEMIBOLD)).color(t.sidebar_foreground).truncate()
 }
 
+fn section_frame(key: String) -> El {
+	row().key(key).w_full().h(SECTION_LABEL_HEIGHT).radius(RADIUS_XL).center_y()
+}
+
+fn rename_event(section: &str, key: &Key, name: &str) -> Option<RosterEvent> {
+	match key {
+		Key::Enter => {
+			Some(RosterEvent::RenameCommit { section: section.to_owned(), name: name.to_owned() })
+		}
+		Key::Escape => Some(RosterEvent::RenameCancel(section.to_owned())),
+		_ => None,
+	}
+}
+
+pub fn section_name_field<S: 'static>(
+	t: &Tokens,
+	id: &str,
+	field: &NameField<S>,
+	emit: Emit<S>,
+) -> El {
+	let (section, access) = (id.to_owned(), field.access);
+	let entry = input(t, field.edit, field.label, InputSize::Sm, access).on_input_key(
+		move |state: &mut S, key: &rune::KeyEvent, _: &mut rune::Tx| {
+			let name = access(state).text.clone();
+			let Some(event) = rename_event(&section, &key.key, &name) else { return false };
+			emit(state, event);
+			true
+		},
+	);
+	section_frame(format!("roster-section-field-{id}"))
+		.padding(equal_padding(SECTION_LABEL_HEIGHT, InputSize::Sm.height()))
+		.child(entry)
+}
+
 pub fn section_header<S: 'static>(
 	t: &Tokens,
 	id: &str,
@@ -514,13 +561,9 @@ pub fn section_header<S: 'static>(
 		.color(faded(t.sidebar_foreground, CHEVRON_INK_SHARE))
 		.rotate(if is_open { std::f32::consts::FRAC_PI_2 } else { 0.0 });
 	let id = id.to_owned();
-	row()
-		.key(format!("roster-section-{id}"))
-		.w_full()
+	section_frame(format!("roster-section-{id}"))
 		.padding(SECTION_HEADER)
 		.gap(SPACING * 1.5)
-		.radius(RADIUS_XL)
-		.center_y()
 		.role("button")
 		.label(name)
 		.expanded(is_open)
@@ -535,21 +578,21 @@ pub fn section_header<S: 'static>(
 pub fn roster_section<S: 'static>(
 	t: &Tokens,
 	section: &Section,
+	field: Option<&NameField<S>>,
 	language: Language,
 	emit: Emit<S>,
 ) -> El {
+	let label = match field.filter(|_| section.is_renaming) {
+		Some(field) => section_name_field(t, section.id, field, emit),
+		None => section_header(t, section.id, section.name, section.is_open, emit),
+	};
 	let fill = match (section.is_open, section.is_landing) {
 		(true, true) => t.sidebar_accent,
 		(true, false) => faded(t.sidebar_accent, OPEN_SECTION_SHARE),
 		(false, _) => t.sidebar.alpha(0.0),
 	};
-	let mut card = col()
-		.w_full()
-		.radius(RADIUS_XL)
-		.fill(fill)
-		.role("group")
-		.label(section.name)
-		.child(section_header(t, section.id, section.name, section.is_open, emit));
+	let mut card =
+		col().w_full().radius(RADIUS_XL).fill(fill).role("group").label(section.name).child(label);
 	if section.is_open {
 		card = card.child(
 			col()
@@ -591,14 +634,20 @@ fn drop_area(t: &Tokens, is_landing: bool, content: El) -> El {
 	if is_landing { area.fill(faded(t.sidebar_accent, LANDING_SHARE)) } else { area }
 }
 
-pub fn roster<S: 'static>(t: &Tokens, roster: &Roster, language: Language, emit: Emit<S>) -> El {
+pub fn roster<S: 'static>(
+	t: &Tokens,
+	roster: &Roster,
+	field: Option<&NameField<S>>,
+	language: Language,
+	emit: Emit<S>,
+) -> El {
 	let t = &t.in_space(roster.space_hue);
 	let mut list = col().w_full().gap(ZONE_SPACING);
 	if !roster.pinned.is_empty() {
 		list = list.child(col().w_full().gap(PINNED_SPACING).children(roster.pinned.iter().map(
 			|entry| match entry {
 				Entry::Row(item) => roster_row(t, item, language, emit),
-				Entry::Section(section) => roster_section(t, section, language, emit),
+				Entry::Section(section) => roster_section(t, section, field, language, emit),
 			},
 		)));
 		list = list.child(zone_separator(t));
@@ -746,6 +795,19 @@ pub fn loading(t: &Tokens, height: f32) -> El {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn enter_commits_the_field_value_and_escape_cancels() {
+		assert_eq!(
+			rename_event("desk", &Key::Enter, "Front desk"),
+			Some(RosterEvent::RenameCommit { section: "desk".into(), name: "Front desk".into() })
+		);
+		assert_eq!(
+			rename_event("desk", &Key::Escape, "Front desk"),
+			Some(RosterEvent::RenameCancel("desk".into()))
+		);
+		assert_eq!(rename_event("desk", &Key::Tab, "Front desk"), None);
+	}
 
 	#[test]
 	fn the_skeleton_fills_the_height_it_is_given() {

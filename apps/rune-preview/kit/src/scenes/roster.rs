@@ -1,4 +1,4 @@
-use rune::{El, col};
+use rune::{El, TextEdit, col};
 
 use super::SceneState;
 use crate::avatar::{Activity, Face, Motion};
@@ -8,9 +8,9 @@ use crate::primitives::Interaction;
 use crate::primitives::sidebar::menu_button;
 use crate::strings::Language;
 use crate::surfaces::s03_roster::{
-	Entry, Lift, Media, MissionState, Roster, RosterEvent, Row, RowBadge, Section, Strip, loading,
-	roster, roster_row, roster_section, section_drop, section_label as label_of, unreadable,
-	zone_separator,
+	Entry, Lift, Media, MissionState, NameField, Roster, RosterEvent, Row, RowBadge, Section,
+	Strip, loading, roster, roster_row, roster_section, section_drop, section_label as label_of,
+	section_name_field, unreadable, zone_separator,
 };
 use crate::tokens::{SPACING, Tokens};
 
@@ -149,7 +149,7 @@ fn listed_at(t: &Tokens, width: f32, item: &Row) -> El {
 }
 
 fn shown(t: &Tokens, model: &Roster) -> El {
-	frame(t, roster(t, model, LANGUAGE, ignore))
+	frame(t, roster(t, model, None, LANGUAGE, ignore))
 }
 
 pub(super) fn bot_answered(t: &Tokens, _: &SceneState) -> El {
@@ -543,6 +543,7 @@ fn desk(rows: Vec<Row<'static>>) -> Section<'static> {
 		name: "Desk",
 		is_open: true,
 		is_landing: false,
+		is_renaming: false,
 		rows,
 		lift: Lift::default(),
 	}
@@ -738,7 +739,7 @@ pub(super) fn menu_loose_run(t: &Tokens, _: &SceneState) -> El {
 			.w_full()
 			.gap(SPACING)
 			.child(roster_row(t, &atlas(), LANGUAGE, ignore))
-			.child(roster_section(t, &desk(vec![beacon()]), LANGUAGE, ignore))
+			.child(roster_section(t, &desk(vec![beacon()]), None, LANGUAGE, ignore))
 			.child(roster_row(t, &room(None), LANGUAGE, ignore)),
 	)
 }
@@ -747,8 +748,17 @@ pub(super) fn section_label(t: &Tokens, _: &SceneState) -> El {
 	frame(t, col().w_full().child(label_of(t, "Desk")))
 }
 
+fn scene_edit(state: &mut SceneState) -> &mut TextEdit {
+	&mut state.edit
+}
+
+pub(super) fn section_name_field_on_enter(t: &Tokens, s: &SceneState) -> El {
+	let field = NameField { label: "Desk", edit: &s.edit, access: scene_edit };
+	frame(t, col().w_full().child(section_name_field(t, "desk", &field, ignore)))
+}
+
 pub(super) fn section_open(t: &Tokens, _: &SceneState) -> El {
-	frame(t, roster_section(t, &desk(vec![Row::new("atlas", "Atlas")]), LANGUAGE, ignore))
+	frame(t, roster_section(t, &desk(vec![Row::new("atlas", "Atlas")]), None, LANGUAGE, ignore))
 }
 
 pub(super) fn parts_zone_separator(t: &Tokens, _: &SceneState) -> El {
@@ -825,11 +835,11 @@ fn panel(t: &Tokens, content: El) -> El {
 }
 
 pub(super) fn panel_roster_loaded(t: &Tokens, _: &SceneState) -> El {
-	panel(t, roster(t, &panel_roster(false), LANGUAGE, ignore))
+	panel(t, roster(t, &panel_roster(false), None, LANGUAGE, ignore))
 }
 
 pub(super) fn panel_roster_reading_next_page(t: &Tokens, _: &SceneState) -> El {
-	panel(t, roster(t, &panel_roster(true), LANGUAGE, ignore))
+	panel(t, roster(t, &panel_roster(true), None, LANGUAGE, ignore))
 }
 
 pub(super) fn panel_loading(t: &Tokens, s: &SceneState) -> El {
