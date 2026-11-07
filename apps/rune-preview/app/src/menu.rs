@@ -4,8 +4,6 @@ use crate::app::App;
 
 const WEBSITE: &str = "https://kiroshi.app";
 
-const APP_MENU: &str = "Kiroshi";
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Act {
 	Platform,
@@ -25,7 +23,7 @@ use Line::{Item, PlatformSeparator, Separator};
 
 const MENUS: [(&str, &[Line]); 6] = [
 	(
-		APP_MENU,
+		"Kiroshi",
 		&[
 			Item("About Kiroshi", None, Act::Platform),
 			PlatformSeparator,
