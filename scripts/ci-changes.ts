@@ -8,6 +8,7 @@ type FilteredJobs = {
 	website: boolean
 	storybook: boolean
 	ios: boolean
+	core: boolean
 }
 
 type ChangeSet = { event: CiEvent; paths: string[] }
@@ -38,6 +39,7 @@ const EVERY_JOB: FilteredJobs = {
 	website: true,
 	storybook: true,
 	ios: true,
+	core: true,
 }
 
 const NO_JOB: FilteredJobs = {
@@ -46,6 +48,7 @@ const NO_JOB: FilteredJobs = {
 	website: false,
 	storybook: false,
 	ios: false,
+	core: false,
 }
 
 const isUnder = (path: string, directories: string[]) =>
@@ -76,6 +79,13 @@ const touchesWebsite = (path: string) =>
 const touchesStorybook = (path: string) =>
 	isUnder(path, ["packages/ui/", "packages/shared/", "scripts/", "baselines/"])
 
+const FILES_THE_PREVIEW_BUILDS = ["apps/app/src-tauri/src/bin/fake_sidecar.rs"]
+
+const touchesCore = (path: string) =>
+	isUnder(path, ["crates/", "apps/rune-preview/"]) ||
+	FILES_THE_PREVIEW_BUILDS.includes(path) ||
+	["Cargo.toml", "Cargo.lock"].includes(path)
+
 const touchesIos = (path: string) =>
 	path.startsWith("apps/ios/") || IOS_ROOT_FILES.includes(path)
 
@@ -87,6 +97,7 @@ export const touchedJobs = (paths: string[]): FilteredJobs => {
 		website: paths.some(touchesWebsite),
 		storybook: paths.some(touchesStorybook),
 		ios: paths.some(touchesIos),
+		core: paths.some(touchesCore),
 	}
 }
 
@@ -94,7 +105,12 @@ export const decideJobs = ({ event, paths }: ChangeSet): FilteredJobs => {
 	if (event === "tag") return { ...EVERY_JOB, ios: false }
 	const touched = touchedJobs(paths)
 	if (event === "pull_request")
-		return { ...NO_JOB, vitest: touched.vitest, rust: touched.rust }
+		return {
+			...NO_JOB,
+			vitest: touched.vitest,
+			rust: touched.rust,
+			core: touched.core,
+		}
 	return { ...touched, ios: true }
 }
 

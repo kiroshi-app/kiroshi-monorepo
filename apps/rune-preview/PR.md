@@ -236,3 +236,12 @@ The kept core of `apps/app/src-tauri` moves to a crate with no Tauri dependency,
 - **Dependencies.** kiroshi-core and tokio (`rt-multi-thread`, already in the tree) are the preview's only new direct dependencies. The preview keeps its own lockfile.
 - **The test.** `tests/local_core.rs` runs the preview binary with `--local-send`, with no window, against a throwaway data folder. It checks that the reply settled, that it answers the message sent, and that the exchange landed in the preview's own store. The agent process is src-tauri's `fake_sidecar`: the preview declares that same file as a binary behind a `fake-claude` feature, so both crates share one fake. Run it with `cargo test --features fake-claude`. `libc` (unix) came with that binary.
 
+## Step 4: kiroshi-core and the Rune preview on macOS, Windows and Linux
+
+- **The `core` job.** `.github/workflows/ci.yml` gains a `core` job of its own, run as a matrix over `macos-latest`, `windows-latest` and `ubuntu-latest` with `fail-fast: false`. On each OS it:
+  - builds kiroshi-core and runs its tests;
+  - builds the Rune preview with `fake-claude` and runs its tests, including the in-process exchange.
+
+  All four commands run with `--locked`. Each OS keeps its own cache of both target folders, saved from `main` only, like the `rust` job.
+- **When it runs.** `scripts/ci-changes.ts` selects `core` on changes under `crates/`, under `apps/rune-preview/`, to the fake sidecar the preview builds, or to the workspace `Cargo.toml` and `Cargo.lock`. It runs on pull requests as well as on pushes, and every tag runs it. `verify` requires `core` to succeed when it was selected and to be skipped otherwise, the same rule as the other filtered jobs.
+
