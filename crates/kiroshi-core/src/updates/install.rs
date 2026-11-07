@@ -58,18 +58,16 @@ pub(super) async fn installed(
 }
 
 fn swapped_bundle(location: &Path, archive: &[u8]) -> Result<(), String> {
-	let refused = |error: io::Error| format!("the app bundle was not replaced: {error}");
-	let parent = location.parent().ok_or_else(|| refused(io::Error::other("it has no folder")))?;
-	let name = location
-		.file_name()
-		.ok_or_else(|| refused(io::Error::other("it has no name")))?
-		.to_string_lossy();
+	let (Some(parent), Some(name)) = (location.parent(), location.file_name()) else {
+		return Err("the app bundle was not replaced: it has no folder".to_owned());
+	};
+	let name = name.to_string_lossy();
 	let attempt = Uuid::new_v4();
 	let staging = parent.join(format!(".{name}.update-{attempt}"));
 	let backup = parent.join(format!(".{name}.previous-{attempt}"));
 	let swapped = staged_bundle(&staging, archive)
 		.and_then(|bundle| replaced(location, &bundle, &backup))
-		.map_err(refused);
+		.map_err(|error| format!("the app bundle was not replaced: {error}"));
 	removed(&staging, "staged update");
 	swapped
 }
