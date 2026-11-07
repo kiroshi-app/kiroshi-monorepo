@@ -13,7 +13,9 @@ use kiroshi_rune_os::scheme;
 use kiroshi_rune_preview::app::App;
 use kiroshi_rune_preview::host::Profile;
 use kiroshi_rune_preview::navigation::Route;
-use kiroshi_rune_preview::{composer, conversations, local, onboarding, scenes, smoke, spike};
+use kiroshi_rune_preview::{
+	composer, conversations, local, menu, onboarding, scenes, smoke, spike,
+};
 
 fn view(s: &App, cx: &mut Cx<App>) -> El {
 	let dark = cx.system_dark();
@@ -290,7 +292,7 @@ fn main() -> ExitCode {
 	{
 		eprintln!("this window takes no forwarded launch: {failure}");
 	}
-	app.run();
+	app.on_ready(move |_| menu::install(window)).run();
 	ExitCode::SUCCESS
 }
 
