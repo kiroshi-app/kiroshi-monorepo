@@ -476,9 +476,10 @@ impl State {
 				};
 				let open = self.board.as_mut().zip(failure);
 				if let Some((open, failure)) = open {
+					eprintln!("the drawers of a board were not stopped: {failure}");
 					open.notice = Some(error_notice(
 						said(common::library::failure::board::STOP_ALL),
-						failure,
+						String::new(),
 					));
 				}
 				None

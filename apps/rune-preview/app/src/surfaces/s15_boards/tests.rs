@@ -483,10 +483,15 @@ fn stopping_stops_the_drawers_of_this_board_only() {
 		Answer::Stopped(Ok(CancelOutcome::Failed { failures: Vec::new() })),
 		Instant::now(),
 	);
+	let notice = state.board.as_ref().and_then(|open| open.notice.clone()).expect("a notice");
 	assert_eq!(
-		notice_title(&state).as_deref(),
-		Some("Couldn’t stop the agents drawing on this board. Press Stop all to try again.")
+		notice.title,
+		"Couldn’t stop the agents drawing on this board. Press Stop all to try again."
 	);
+	assert_eq!(notice.description, "");
+	state.answered(Answer::Stopped(Err(failed("library_stop_writers"))), Instant::now());
+	let notice = state.board.as_ref().and_then(|open| open.notice.clone()).expect("a notice");
+	assert_eq!(notice.description, "");
 }
 
 fn shares(state: &mut State) -> Vec<Call> {
