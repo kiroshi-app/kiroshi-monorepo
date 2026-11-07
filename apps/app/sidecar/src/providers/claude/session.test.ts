@@ -971,6 +971,45 @@ describe("reportConnections", () => {
 
 	const ticked = () => new Promise((resolve) => setTimeout(resolve, 10))
 
+	it("redacts the secrets it is handed, even a token the pass env no longer holds", async () => {
+		const withheld = "withheld-access-token"
+		const emitted: string[] = []
+		const done = Promise.withResolvers<void>()
+
+		reportConnections({
+			emit: (frame) => {
+				emitted.push(String(frame.detail))
+			},
+			push: (text) => {
+				emitted.push(text)
+				done.resolve()
+			},
+			pass: {
+				names: ["superset"],
+				port: {
+					status: async () => [
+						{
+							name: "superset",
+							status: "failed",
+							error: `refused ${withheld}`,
+						},
+					],
+					reconnect: async () => {
+						throw new Error(`refused ${withheld}`)
+					},
+				},
+				env: { perServer: { superset: {} } },
+				wait: async () => {},
+			},
+			secrets: [withheld],
+		}).prompt("first")
+		await done.promise
+		await ticked()
+
+		expect(emitted.join("\n")).toContain("refused [redacted]")
+		expect(emitted.join("\n")).not.toContain(withheld)
+	})
+
 	it("lets the session be announced before the pass reads a status", async () => {
 		const order: string[] = []
 		const read = Promise.withResolvers<void>()

@@ -5,6 +5,7 @@ import { join } from "node:path"
 
 import {
 	AWAITING_AUTH,
+	boundEnv,
 	declaredAgain,
 	declaredWithout,
 	leftOut,
@@ -32,6 +33,8 @@ const plain = { command: "python3", args: ["server.py"] }
 const granola = { type: "http" as const, url: "https://mcp.granola.ai/mcp" }
 
 const ACCESS_TOKEN = "KIROSHI_OAUTH_ACCESS_TOKEN"
+const SERVER_URL = "KIROSHI_OAUTH_SERVER_URL"
+const placeholder = (name: string) => `\${${name}}`
 
 const held: ServerEnv = {
 	base: { RUNNER: "node", TOKEN: "wide", API_KEY: "secret" },
@@ -215,7 +218,11 @@ describe("resolvedServers", () => {
 	it("sends the stored access token as a bearer header on a server declaring no placeholder", () => {
 		const { servers, rejections } = resolveServers(
 			{ granola },
-			{ perServer: { granola: { [ACCESS_TOKEN]: "granted" } } },
+			{
+				perServer: {
+					granola: { [ACCESS_TOKEN]: "granted", [SERVER_URL]: granola.url },
+				},
+			},
 		)
 
 		expect(servers.granola).toEqual({
@@ -231,7 +238,11 @@ describe("resolvedServers", () => {
 			{
 				granola: { ...granola, headers: { authorization: "Bearer written" } },
 			},
-			{ perServer: { granola: { [ACCESS_TOKEN]: "granted" } } },
+			{
+				perServer: {
+					granola: { [ACCESS_TOKEN]: "granted", [SERVER_URL]: granola.url },
+				},
+			},
 		)
 
 		expect(servers.granola).toEqual({
@@ -246,7 +257,12 @@ describe("resolvedServers", () => {
 			{ remote: { type: "http" as const, url: "${BASE_URL}/mcp" } },
 			{
 				base: { BASE_URL: "https://example.test" },
-				perServer: { remote: { [ACCESS_TOKEN]: "granted" } },
+				perServer: {
+					remote: {
+						[ACCESS_TOKEN]: "granted",
+						[SERVER_URL]: `${placeholder("BASE_URL")}/mcp`,
+					},
+				},
 			},
 		)
 
@@ -311,6 +327,101 @@ describe("resolvedServers", () => {
 		expect(resolvedServers({ cwd: "/tmp", partialMessages: true })).toEqual({
 			servers: {},
 			rejections: [],
+		})
+	})
+})
+
+describe("bound grants", () => {
+	const grant = { [ACCESS_TOKEN]: "granted", [SERVER_URL]: granola.url }
+	const elsewhere = { type: "http" as const, url: "https://elsewhere.test/mcp" }
+	it("attaches the bearer to the url the grant was issued for", () => {
+		const { servers } = resolveServers(
+			{ granola },
+			{ perServer: { granola: grant } },
+		)
+
+		expect(servers.granola).toEqual({
+			...granola,
+			headers: { Authorization: "Bearer granted" },
+		})
+	})
+
+	it("drops the bearer when a server of the same name declares another url", () => {
+		const env = { perServer: { granola: grant } }
+
+		const { servers } = resolveServers({ granola: elsewhere }, env)
+
+		expect(servers.granola).toEqual(elsewhere)
+		expect(boundEnv({ granola: elsewhere }, env).perServer?.granola).toEqual({})
+	})
+
+	it("keeps the grant of a server declaring the url it was issued for", () => {
+		const env = { perServer: { granola: grant } }
+
+		expect(boundEnv({ granola }, env).perServer?.granola).toEqual(grant)
+	})
+
+	it("drops the bearer of a grant bound to no url", () => {
+		const { servers } = resolveServers(
+			{ granola },
+			{ perServer: { granola: { [ACCESS_TOKEN]: "granted" } } },
+		)
+
+		expect(servers.granola).toEqual(granola)
+	})
+
+	it("compares the declared url as written, before any expansion", () => {
+		const { servers } = resolveServers(
+			{ granola: { ...granola, url: `${granola.url}/` } },
+			{ perServer: { granola: grant } },
+		)
+
+		expect(servers.granola).toEqual({ ...granola, url: `${granola.url}/` })
+	})
+
+	it("never expands a grant name as a placeholder, bound or not, even with a default", () => {
+		const declarations = [
+			{
+				type: "http" as const,
+				url: `https://x.test/${placeholder(ACCESS_TOKEN)}`,
+			},
+			{ ...granola, headers: { "X-Token": placeholder(ACCESS_TOKEN) } },
+			{ command: "run", args: [placeholder(`${ACCESS_TOKEN}:-none`)] },
+			{ command: "run", env: { TOKEN: placeholder(ACCESS_TOKEN) } },
+		]
+		for (const server of declarations) {
+			const result = resolveServers(
+				{ granola: server },
+				{ base: { [ACCESS_TOKEN]: "granted" }, perServer: { granola: grant } },
+			)
+
+			expect(result.servers).toEqual({})
+			expect(result.rejections).toEqual([
+				leftOutLine(
+					leftOut("granola", `${ACCESS_TOKEN} is defined by no scope`),
+				),
+			])
+			expect(JSON.stringify(result)).not.toContain("granted")
+		}
+	})
+
+	it("keeps expanding the other values of a server whose grant is withheld", () => {
+		const { servers } = resolveServers(
+			{
+				granola: {
+					type: "http" as const,
+					url: `https://${placeholder("REGION")}.x.test/${placeholder("PATH")}`,
+				},
+			},
+			{
+				base: { PATH: "mcp" },
+				perServer: { granola: { REGION: "eu", [ACCESS_TOKEN]: "granted" } },
+			},
+		)
+
+		expect(servers.granola).toEqual({
+			type: "http",
+			url: "https://eu.x.test/mcp",
 		})
 	})
 })
