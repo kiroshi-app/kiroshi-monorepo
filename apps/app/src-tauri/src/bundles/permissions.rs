@@ -3,8 +3,9 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use super::{
-	denies_changes, dir, object_at, serialised, settings_path, ALLOW_KEY, ASK_KEY, CHANGING_TOOLS,
-	DEFAULT_MODE_KEY, DENY_KEY, DIRECTORIES_KEY, PERMISSIONS_KEY, PERMISSION_MODES, SETTINGS_NAME,
+	denies_changes, dir, object_at, object_to_rewrite, serialised, settings_path, ALLOW_KEY,
+	ASK_KEY, CHANGING_TOOLS, DEFAULT_MODE_KEY, DENY_KEY, DIRECTORIES_KEY, PERMISSIONS_KEY,
+	PERMISSION_MODES, SETTINGS_NAME,
 };
 use crate::db::repositories::conversations::Bot;
 use crate::private_files;
@@ -65,7 +66,7 @@ pub fn set_permissions(
 	let bundle = dir(root, &bot.id)?;
 	let _serialised = serialised(&bundle);
 	let path = bundle.join(SETTINGS_NAME);
-	let mut kept = object_at(&path);
+	let mut kept = object_to_rewrite(&bundle, &path)?;
 	let mut declared = match kept.remove(PERMISSIONS_KEY) {
 		Some(serde_json::Value::Object(held)) => held,
 		_ => serde_json::Map::new(),
@@ -80,7 +81,7 @@ pub fn set_permissions(
 		written_list(&mut declared, key, items);
 	}
 	kept.insert(PERMISSIONS_KEY.to_owned(), serde_json::Value::Object(declared));
-	private_files::replace(&path, serde_json::Value::Object(kept).to_string().as_bytes())
+	private_files::replace_atomically(&path, serde_json::Value::Object(kept).to_string().as_bytes())
 }
 
 fn written_list(
@@ -127,7 +128,7 @@ fn listed(declared: &serde_json::Map<String, serde_json::Value>, key: &str) -> V
 mod tests {
 	use std::fs;
 
-	use super::super::tests::{a_bot, a_root};
+	use super::super::tests::{a_bot, a_refusal_naming, a_root, shown_in_bundle};
 	use super::super::{settings_file, write};
 	use super::*;
 
@@ -299,5 +300,42 @@ mod tests {
 			assert_eq!(accepted_mode(mode), mode, "a shared mode was refused");
 		}
 		assert_eq!(accepted_mode("everything"), PERMISSION_MODES.fallback);
+	}
+
+	#[test]
+	fn a_broken_settings_file_is_refused_and_kept_as_it_was() {
+		let root = a_root("broken-settings");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		let path = settings_path(&root, &bot.id).expect("the bundle is held");
+		let broken = r#"{"permissions": {"deny": ["Bash"]}, "hooks": {},}"#;
+		private_files::replace(&path, broken.as_bytes()).expect("the broken file is written");
+
+		let wanted = BotPermissions {
+			default_mode: "acceptEdits".to_owned(),
+			allow: vec!["Read".to_owned()],
+			ask: Vec::new(),
+			deny: Vec::new(),
+		};
+		a_refusal_naming(
+			set_permissions(&root, &bot, &wanted),
+			&shown_in_bundle(&root, &bot.id, SETTINGS_NAME),
+		);
+
+		assert_eq!(fs::read_to_string(&path).expect("the file is still there"), broken);
+	}
+
+	#[test]
+	fn opening_a_session_leaves_a_broken_settings_file_as_it_was() {
+		let root = a_root("broken-forgotten");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		let path = settings_path(&root, &bot.id).expect("the bundle is held");
+		let broken = r#"{"permissions": {"additionalDirectories": ["/notes"]},}"#;
+		private_files::replace(&path, broken.as_bytes()).expect("the broken file is written");
+
+		assert_eq!(settings_file(&root, &bot.id), Some(path.clone()));
+
+		assert_eq!(fs::read_to_string(&path).expect("the file is still there"), broken);
 	}
 }
