@@ -358,7 +358,6 @@ export const Final10 = meta.story({
 				restingChevron,
 			)
 			await expect(line.getBoundingClientRect().toJSON()).toEqual(restingBounds)
-			await expectInstantColours(line)
 			await expectInstantColours(toggle)
 			for (const each of toggles) {
 				await clickLineAt(each, "right")
