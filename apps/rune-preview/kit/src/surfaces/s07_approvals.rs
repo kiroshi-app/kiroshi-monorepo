@@ -1129,38 +1129,16 @@ fn primary_pill<S: 'static>(
 	shown: &Question,
 	on: impl Fn(&mut S, QuestionEvent) + 'static,
 ) -> El {
-	let is_waiting = panel.waiting_after_shown().is_some();
-	let visible = if is_waiting {
-		copy(tool_question::NEXT_LABEL, language)
+	let (visible, named, leading, trailing) = if panel.waiting_after_shown().is_some() {
+		(tool_question::NEXT_LABEL, Some(tool_question::NEXT), None, Some(&icons::ARROW_RIGHT))
 	} else if shown.entry.is_some() {
-		copy(tool_question::CONTINUE, language)
+		(tool_question::CONTINUE, None, Some(&icons::SEND), None)
 	} else {
-		copy(tool_question::SEND, language)
+		(tool_question::SEND, Some(tool_question::SUBMIT), Some(&icons::SEND), None)
 	};
-	let face = if is_waiting {
-		Face {
-			scope: shown.header,
-			label: &visible,
-			leading: None,
-			trailing: Some(&icons::ARROW_RIGHT),
-			paint: inverse_paint(t),
-		}
-	} else {
-		Face {
-			scope: shown.header,
-			label: &visible,
-			leading: Some(&icons::SEND),
-			trailing: None,
-			paint: inverse_paint(t),
-		}
-	};
-	let named = if is_waiting {
-		Some(tool_question::NEXT)
-	} else if shown.entry.is_some() {
-		None
-	} else {
-		Some(tool_question::SUBMIT)
-	};
+	let label = copy(visible, language);
+	let face =
+		Face { scope: shown.header, label: &label, leading, trailing, paint: inverse_paint(t) };
 	let mut send = pill(face);
 	if let Some(name) = named {
 		send = send.label(copy(name, language));
