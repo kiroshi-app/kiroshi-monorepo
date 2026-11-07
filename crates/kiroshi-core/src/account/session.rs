@@ -1,5 +1,7 @@
+use std::future::Future;
 use std::net::Ipv4Addr;
 use std::path::{Path, PathBuf};
+use std::pin::Pin;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
@@ -14,13 +16,9 @@ use super::cloud::{AuthorizationRequest, Cloud, MeError, PollError, Polled};
 use super::contract::{AccountError, AccountFailure, AccountState, SignedOutReason};
 use crate::crypto::commands::DeviceKeysState;
 use crate::db::{Database, DatabaseState};
-use crate::devices;
 use crate::environment::contract::{EnvError, EnvScope, ACCOUNT_BEARER};
 use crate::environment::store;
 use crate::events::ACCOUNT_CHANGED;
-use crate::hosting;
-use crate::invitations;
-use crate::joined_spaces;
 
 const SIGNED_OUT: AccountState = AccountState::SignedOut { reason: None };
 
@@ -35,11 +33,36 @@ const DEVICE_REFUSED: AccountState =
 
 const SLOW_DOWN: Duration = Duration::from_secs(5);
 
-pub(crate) const DEVICE_NAME_LIMIT: usize = 64;
+pub const DEVICE_NAME_LIMIT: usize = 64;
 
 const DISPLAY_NAME_LIMIT: usize = 80;
 
 const UNNAMED_DEVICE: &str = "Mac";
+
+pub type Working<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
+
+pub trait SignedInWork: Send + Sync + 'static {
+	fn signed_in<'a>(&'a self, core: &'a crate::core_context::Core) -> Working<'a, ()>;
+
+	fn launched_signed_out<'a>(&'a self, core: &'a crate::core_context::Core) -> Working<'a, ()>;
+
+	fn renamed(&self, core: &crate::core_context::Core);
+
+	fn stopped<'a>(
+		&'a self,
+		core: &'a crate::core_context::Core,
+	) -> Working<'a, Option<MutexGuard<'a, ()>>>;
+}
+
+pub fn install_signed_in_work(core: &crate::core_context::Core, work: impl SignedInWork) -> bool {
+	core.manage::<Box<dyn SignedInWork>>(Box::new(work))
+}
+
+async fn signed_in_work_started(core: &crate::core_context::Core) {
+	if let Some(work) = core.try_state::<Box<dyn SignedInWork>>() {
+		work.inner().signed_in(core).await;
+	}
+}
 
 pub struct AccountSession {
 	cloud: Cloud,
@@ -80,7 +103,7 @@ impl AccountSession {
 		self.current.lock().unwrap_or_else(PoisonError::into_inner).clone()
 	}
 
-	pub(crate) fn bearer(&self) -> Result<Option<String>, EnvError> {
+	pub fn bearer(&self) -> Result<Option<String>, EnvError> {
 		Ok(store::values(self.root()?, &EnvScope::Account)?.remove(ACCOUNT_BEARER))
 	}
 
@@ -182,7 +205,7 @@ pub async fn sign_in(
 
 static THIS_COMPUTER: OnceCell<String> = OnceCell::const_new();
 
-pub(crate) async fn this_computer() -> &'static str {
+pub async fn this_computer() -> &'static str {
 	THIS_COMPUTER.get_or_init(device_name).await
 }
 
@@ -214,7 +237,7 @@ fn device_name_of(named: &str) -> String {
 	}
 }
 
-pub(crate) fn trimmed_to(named: &str, utf16_limit: usize) -> String {
+pub fn trimmed_to(named: &str, utf16_limit: usize) -> String {
 	let mut utf16_units = 0;
 	named
 		.trim()
@@ -255,8 +278,7 @@ async fn approved(
 	core.raise_main_window();
 	if is_signed_in {
 		stored_name_sent(&core);
-		devices::signed_in(&core).await;
-		invitations::resumed(&core);
+		signed_in_work_started(&core).await;
 	}
 }
 
@@ -303,10 +325,9 @@ pub async fn restore(core: crate::core_context::Core) {
 	}
 	if matches!(session.current(), AccountState::SignedIn(_)) {
 		stored_name_sent(&core);
-		devices::signed_in(&core).await;
-		invitations::resumed(&core);
-	} else {
-		hosting::resumed(&core).await;
+		signed_in_work_started(&core).await;
+	} else if let Some(work) = core.try_state::<Box<dyn SignedInWork>>() {
+		work.inner().launched_signed_out(&core).await;
 	}
 }
 
@@ -378,7 +399,9 @@ async fn name_sent(
 	};
 	match session.cloud.rename(&bearer, &sending.name).await {
 		Ok(()) => {
-			hosting::renamed(core);
+			if let Some(work) = core.try_state::<Box<dyn SignedInWork>>() {
+				work.inner().renamed(core);
+			}
 			Some(sending)
 		}
 		Err(MeError::Revoked) => {
@@ -406,10 +429,7 @@ async fn stored_display_name(core: &crate::core_context::Core) -> Option<String>
 }
 
 async fn signed_in_work_stopped(core: &crate::core_context::Core) -> Option<MutexGuard<'_, ()>> {
-	devices::signed_out(core).await;
-	hosting::signed_out(core).await;
-	invitations::signed_out(core).await;
-	joined_spaces::relay::signed_out(core).await
+	core.try_state::<Box<dyn SignedInWork>>()?.inner().stopped(core).await
 }
 
 pub async fn sign_out(core: &crate::core_context::Core) -> Result<(), AccountError> {
@@ -543,7 +563,6 @@ mod tests {
 	use std::collections::VecDeque;
 	use std::sync::{Arc, Mutex};
 	use std::time::Instant;
-	use tauri::Manager;
 
 	use tokio::sync::{watch, Semaphore};
 
@@ -552,14 +571,12 @@ mod tests {
 	use axum::routing::{get, post};
 	use axum::Router;
 	use serde_json::{json, Value};
-	use tauri::test::mock_builder;
-	use tauri::Listener;
 
 	use super::*;
 	use crate::account::contract::AccountPlan;
 	use crate::db;
 	use crate::removed_on_drop::RemovedOnDrop;
-	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
+	use crate::test_core::{a_core_of_its_own, CoreOfItsOwn};
 	use crate::user::commands::user_set_preferences;
 	use crate::user::contract::UserPreferences;
 
@@ -582,7 +599,6 @@ mod tests {
 		closes_after_create: bool,
 		poll_answers: Arc<Mutex<VecDeque<(StatusCode, Value)>>>,
 		sign_out_status: Option<StatusCode>,
-		instances_status: Option<StatusCode>,
 		account: Option<Value>,
 		rename_status: Option<StatusCode>,
 		rename_held: Option<Arc<Semaphore>>,
@@ -649,10 +665,9 @@ mod tests {
 			.route("/authorization-requests", post(created))
 			.route("/authorization-requests/{id}/poll", post(poll))
 			.route("/me", get(me).patch(renamed))
-			.route("/instances", get(instances))
 			.route("/api/auth/sign-out", post(signed_out))
 			.with_state(cloudy);
-		tauri::async_runtime::spawn(async move {
+		tokio::spawn(async move {
 			axum::serve(listener, router)
 				.with_graceful_shutdown(async move { stop.notified().await })
 				.await
@@ -741,17 +756,13 @@ mod tests {
 		answered_json(cloudy.rename_status.unwrap_or(StatusCode::OK), body)
 	}
 
-	async fn instances(Served(cloudy): Served<Cloudy>) -> Answered {
-		answered_json(cloudy.instances_status.unwrap_or(StatusCode::OK), json!([]))
-	}
-
 	async fn signed_out(Served(cloudy): Served<Cloudy>, headers: HeaderMap) -> StatusCode {
 		cloudy.signed_out.lock().expect("the stub").push(bearer_of(&headers));
 		cloudy.sign_out_status.unwrap_or(StatusCode::OK)
 	}
 
 	struct Harness {
-		app: AppOfItsOwn,
+		core: CoreOfItsOwn,
 		root: PathBuf,
 		heard: Arc<Mutex<Vec<String>>>,
 		noticed: Arc<watch::Sender<()>>,
@@ -774,26 +785,25 @@ mod tests {
 		}
 
 		fn holding(folder: Result<RemovedOnDrop, EnvError>, api_url: &str) -> Self {
-			let app = an_app_of_its_own("account-session", mock_builder());
+			let core = a_core_of_its_own("account-session");
 			let root = folder.as_deref().map(Path::to_path_buf).map_err(EnvError::clone);
-			crate::events::core(app.app_handle())
-				.manage(AccountSession::new(root.clone(), api_url));
-			crate::db::install(crate::events::core(app.handle()));
+			core.manage(AccountSession::new(root.clone(), api_url));
+			crate::db::install(&core);
 			let root = root.unwrap_or_default();
 			let heard = Arc::new(Mutex::new(Vec::new()));
 			let hearing = Arc::clone(&heard);
 			let noticed = Arc::new(watch::channel(()).0);
 			let noticing = Arc::clone(&noticed);
-			app.listen(ACCOUNT_CHANGED.name(), move |event| {
-				hearing.lock().expect("the events").push(event.payload().to_owned());
+			core.listen_to(ACCOUNT_CHANGED.name(), move |payload| {
+				hearing.lock().expect("the events").push(payload.to_owned());
 				noticing.send_replace(());
 			});
-			Self { app, root, heard, noticed, opened: Arc::default(), _folder: folder.ok() }
+			Self { core, root, heard, noticed, opened: Arc::default(), _folder: folder.ok() }
 		}
 
 		async fn sign_in(&self) -> Result<(), AccountError> {
 			let opened = Arc::clone(&self.opened);
-			sign_in(crate::events::core(self.app.handle()), move |url| {
+			sign_in(self.core.core(), move |url| {
 				opened.lock().expect("the browser").push(url.to_owned());
 				Ok(())
 			})
@@ -801,11 +811,7 @@ mod tests {
 		}
 
 		fn database(&self) -> &db::Database {
-			crate::events::core(self.app.app_handle())
-				.state::<DatabaseState>()
-				.inner()
-				.as_ref()
-				.expect("the database opens")
+			self.core.core().state::<DatabaseState>().inner().as_ref().expect("the database opens")
 		}
 
 		async fn preferences(&self) -> UserPreferences {
@@ -820,7 +826,7 @@ mod tests {
 		}
 
 		async fn names_settled(&self) {
-			let session = crate::events::core(self.app.app_handle()).state::<AccountSession>();
+			let session = self.core.core().state::<AccountSession>();
 			let naming = session.naming.lock().expect("the naming").take();
 			let Some(naming) = naming else {
 				return;
@@ -836,10 +842,7 @@ mod tests {
 		async fn renamed_to(&self, display_name: &str) -> UserPreferences {
 			let mut preferences = self.preferences().await;
 			preferences.display_name = display_name.to_owned();
-			let handle = self.app.handle();
-			user_set_preferences(handle.clone(), handle.state(), preferences)
-				.await
-				.expect("the preferences are stored")
+			user_set_preferences(&self.core, preferences).await.expect("the preferences are stored")
 		}
 
 		fn opened(&self) -> Vec<String> {
@@ -847,7 +850,7 @@ mod tests {
 		}
 
 		fn state(&self) -> AccountState {
-			crate::events::core(self.app.app_handle()).state::<AccountSession>().current()
+			self.core.core().state::<AccountSession>().current()
 		}
 
 		fn stored(&self) -> Option<String> {
@@ -884,12 +887,7 @@ mod tests {
 		}
 
 		async fn flow_ended(&self) {
-			let flow = crate::events::core(self.app.app_handle())
-				.state::<AccountSession>()
-				.turn
-				.lock()
-				.await
-				.take();
+			let flow = self.core.core().state::<AccountSession>().turn.lock().await.take();
 			let flow = flow.expect("a sign-in flow ran");
 			let ended = tokio::time::timeout(PATIENCE, flow).await.expect("the flow ended in time");
 			ended.expect("the flow ended cleanly");
@@ -947,7 +945,7 @@ mod tests {
 	}
 
 	fn run(test: impl std::future::Future<Output = ()>) {
-		tauri::async_runtime::block_on(test);
+		crate::test_core::runtime().block_on(test);
 	}
 
 	#[test]
@@ -1179,20 +1177,13 @@ mod tests {
 			let harness = Harness::new("out-waiting", &stub(cloudy.clone()).await);
 			harness.sign_in().await.expect("the sign-in starts");
 
-			sign_out(crate::events::core(harness.app.handle()))
-				.await
-				.expect("the sign-out settles");
+			sign_out(harness.core.core()).await.expect("the sign-out settles");
 			let polled = cloudy.polls().len();
 
 			assert!(is_closed(&cloudy.callback()).await);
 			assert_eq!(harness.state(), SIGNED_OUT);
 			assert!(cloudy.signed_out.lock().expect("the stub").is_empty());
-			assert!(crate::events::core(harness.app.app_handle())
-				.state::<AccountSession>()
-				.turn
-				.lock()
-				.await
-				.is_none());
+			assert!(harness.core.core().state::<AccountSession>().turn.lock().await.is_none());
 			assert_eq!(cloudy.polls().len(), polled);
 		});
 	}
@@ -1246,7 +1237,7 @@ mod tests {
 			let harness = Harness::new("restore", &stub(Cloudy::default()).await);
 			harness.store(BEARER);
 
-			restore(crate::events::core(harness.app.handle()).clone()).await;
+			restore(harness.core.core().clone()).await;
 
 			assert_eq!(harness.state(), signed_in());
 			harness.assert_no_secret_was_heard();
@@ -1277,7 +1268,7 @@ mod tests {
 			harness.named_as(&format!(" {} ", "é".repeat(100))).await;
 			harness.store(BEARER);
 
-			restore(crate::events::core(harness.app.handle()).clone()).await;
+			restore(harness.core.core().clone()).await;
 			harness.names_settled().await;
 
 			assert_eq!(cloudy.renamed(), vec![json!({ "name": "é".repeat(80) })]);
@@ -1290,7 +1281,7 @@ mod tests {
 			let cloudy = Cloudy::default();
 			let harness = Harness::new("named-rename", &stub(cloudy.clone()).await);
 			harness.store(BEARER);
-			restore(crate::events::core(harness.app.handle()).clone()).await;
+			restore(harness.core.core().clone()).await;
 			harness.names_settled().await;
 
 			harness.renamed_to(" Grace ").await;
@@ -1319,7 +1310,7 @@ mod tests {
 			harness.named_as("   ").await;
 			harness.store(BEARER);
 
-			restore(crate::events::core(harness.app.handle()).clone()).await;
+			restore(harness.core.core().clone()).await;
 			harness.names_settled().await;
 			harness.renamed_to("Grace").await;
 			harness.renamed_to("  ").await;
@@ -1352,7 +1343,7 @@ mod tests {
 			};
 			let harness = Harness::new("named-500", &stub(cloudy.clone()).await);
 			harness.store(BEARER);
-			restore(crate::events::core(harness.app.handle()).clone()).await;
+			restore(harness.core.core().clone()).await;
 			harness.names_settled().await;
 
 			let answered = harness.renamed_to("Grace").await;
@@ -1372,7 +1363,7 @@ mod tests {
 				Cloudy { rename_status: Some(StatusCode::UNAUTHORIZED), ..Cloudy::default() };
 			let harness = Harness::new("named-401", &stub(cloudy.clone()).await);
 			harness.store(BEARER);
-			restore(crate::events::core(harness.app.handle()).clone()).await;
+			restore(harness.core.core().clone()).await;
 			harness.names_settled().await;
 
 			let answered = harness.renamed_to("Grace").await;
@@ -1392,12 +1383,9 @@ mod tests {
 			harness.named_as("Ada").await;
 			harness.store(BEARER);
 
-			tokio::time::timeout(
-				PATIENCE,
-				restore(crate::events::core(harness.app.handle()).clone()),
-			)
-			.await
-			.expect("the restore answers while the relay holds the rename");
+			tokio::time::timeout(PATIENCE, restore(harness.core.core().clone()))
+				.await
+				.expect("the restore answers while the relay holds the rename");
 			assert_eq!(cloudy.renamed_once().await, vec![json!({ "name": "Ada" })]);
 			let answered = tokio::time::timeout(PATIENCE, harness.renamed_to("Grace"))
 				.await
@@ -1422,7 +1410,7 @@ mod tests {
 			let harness = Harness::new("named-held-then-emptied", &stub(cloudy.clone()).await);
 			harness.named_as("Ada").await;
 			harness.store(BEARER);
-			restore(crate::events::core(harness.app.handle()).clone()).await;
+			restore(harness.core.core().clone()).await;
 			assert_eq!(cloudy.renamed_once().await, vec![json!({ "name": "Ada" })]);
 
 			harness.renamed_to("Grace").await;
@@ -1443,7 +1431,7 @@ mod tests {
 			let cloudy = Cloudy::default();
 			let harness = Harness::new("named-twice", &stub(cloudy.clone()).await);
 			harness.store(BEARER);
-			restore(crate::events::core(harness.app.handle()).clone()).await;
+			restore(harness.core.core().clone()).await;
 			harness.names_settled().await;
 
 			harness.renamed_to("Ada").await;
@@ -1460,7 +1448,7 @@ mod tests {
 			let harness = Harness::new("revoked", &stub(Cloudy::default()).await);
 			harness.store(REVOKED);
 
-			restore(crate::events::core(harness.app.handle()).clone()).await;
+			restore(harness.core.core().clone()).await;
 
 			assert_eq!(harness.state(), SIGNED_OUT_ON_SITE);
 			assert_eq!(harness.stored(), None);
@@ -1472,40 +1460,14 @@ mod tests {
 	}
 
 	#[test]
-	fn a_401_on_the_instances_route_signs_out_on_site_and_deletes_the_bearer() {
-		run(async {
-			let cloudy =
-				Cloudy { instances_status: Some(StatusCode::UNAUTHORIZED), ..Cloudy::default() };
-			let api = stub(cloudy).await;
-			let harness = Harness::new("instances-401", &api);
-			crate::events::core(harness.app.app_handle())
-				.manage(joined_spaces::relay::RelayGuests::new(&api));
-			harness.store(BEARER);
-			restore(crate::events::core(harness.app.handle()).clone()).await;
-			assert_eq!(harness.state(), signed_in());
-
-			joined_spaces::relay::reconciled(crate::events::core(harness.app.handle())).await;
-
-			assert_eq!(harness.signed_out().await, SIGNED_OUT_ON_SITE);
-			assert_eq!(harness.stored(), None);
-			harness.assert_no_secret_was_heard();
-		});
-	}
-
-	#[test]
 	fn a_401_for_a_bearer_no_longer_stored_leaves_the_account_alone() {
 		run(async {
 			let harness = Harness::new("stale-401", &stub(Cloudy::default()).await);
 			harness.store(BEARER);
-			restore(crate::events::core(harness.app.handle()).clone()).await;
+			restore(harness.core.core().clone()).await;
 
-			let app = harness.app.handle().clone();
-			signed_out_locally(
-				crate::events::core(&app).clone(),
-				REVOKED.to_owned(),
-				SIGNED_OUT_ON_SITE,
-			)
-			.await;
+			signed_out_locally(harness.core.core().clone(), REVOKED.to_owned(), SIGNED_OUT_ON_SITE)
+				.await;
 
 			assert_eq!(harness.state(), signed_in());
 			assert_eq!(harness.stored().as_deref(), Some(BEARER));
@@ -1518,7 +1480,7 @@ mod tests {
 			let harness = Harness::new("flaky", &stub(Cloudy::default()).await);
 			harness.store(FLAKY);
 
-			restore(crate::events::core(harness.app.handle()).clone()).await;
+			restore(harness.core.core().clone()).await;
 
 			let AccountState::Unreachable { reason } = harness.state() else {
 				panic!("the account is not unreachable: {:?}", harness.state());
@@ -1534,7 +1496,7 @@ mod tests {
 		run(async {
 			let harness = Harness::new("nothing", &stub(Cloudy::default()).await);
 
-			restore(crate::events::core(harness.app.handle()).clone()).await;
+			restore(harness.core.core().clone()).await;
 
 			assert_eq!(harness.state(), SIGNED_OUT);
 			assert!(harness.heard().is_empty());
@@ -1550,11 +1512,9 @@ mod tests {
 				let cloudy = Cloudy { sign_out_status: Some(status), ..Cloudy::default() };
 				let harness = Harness::new(name, &stub(cloudy.clone()).await);
 				harness.store(BEARER);
-				restore(crate::events::core(harness.app.handle()).clone()).await;
+				restore(harness.core.core().clone()).await;
 
-				sign_out(crate::events::core(harness.app.handle()))
-					.await
-					.expect("the sign-out settles");
+				sign_out(harness.core.core()).await.expect("the sign-out settles");
 
 				assert_eq!(
 					cloudy.signed_out.lock().expect("the stub").clone(),
@@ -1577,7 +1537,7 @@ mod tests {
 			let cloudy = Cloudy::default();
 			let harness = Harness::new("already-in", &stub(cloudy.clone()).await);
 			harness.store(BEARER);
-			restore(crate::events::core(harness.app.handle()).clone()).await;
+			restore(harness.core.core().clone()).await;
 
 			let answered = harness.sign_in().await;
 
@@ -1598,10 +1558,7 @@ mod tests {
 			};
 			assert!(reason.contains("store"), "{reason}");
 			assert!(matches!(harness.sign_in().await, Err(AccountError::Store { .. })));
-			assert!(matches!(
-				sign_out(crate::events::core(harness.app.handle())).await,
-				Err(AccountError::Store { .. })
-			));
+			assert!(matches!(sign_out(harness.core.core()).await, Err(AccountError::Store { .. })));
 			assert!(cloudy.created.lock().expect("the stub").is_empty());
 		});
 	}

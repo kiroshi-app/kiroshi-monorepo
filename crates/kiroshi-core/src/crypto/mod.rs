@@ -1,3 +1,4 @@
+pub mod commands;
 pub mod contract;
 pub mod device_keys;
 pub mod error;

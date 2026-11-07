@@ -22,7 +22,7 @@ use crate::hosting::contract::{
 use crate::invitations::contract::Invitation;
 use crate::mcp_oauth::commands::is_openable;
 use crate::missions::github::installed_tls_provider;
-pub use kiroshi_core::account::contract::{
+pub use crate::account::contract::{
 	CloudMember, DeviceCallError, InvitationCallError, MemberCallError, MemberRole, MembershipState,
 };
 
@@ -67,7 +67,7 @@ const LONGEST_PAUSE: Duration = Duration::from_secs(120);
 static PAUSES: LazyLock<Mutex<HashMap<String, Instant>>> =
 	LazyLock::new(|| Mutex::new(HashMap::new()));
 
-pub(crate) fn retry_after(headers: &HeaderMap) -> Duration {
+pub fn retry_after(headers: &HeaderMap) -> Duration {
 	let Some(value) = headers.get(RETRY_AFTER) else {
 		return PAUSE_WITHOUT_RETRY_AFTER;
 	};
@@ -945,7 +945,7 @@ impl Cloud {
 		format!("{}{path}", self.base)
 	}
 
-	pub(crate) fn rate_limited(&self, path: &str, retry_after: Duration) {
+	pub fn rate_limited(&self, path: &str, retry_after: Duration) {
 		let until = Instant::now() + retry_after;
 		let mut pauses = PAUSES.lock().unwrap_or_else(PoisonError::into_inner);
 		let paused = pauses.entry(self.base.clone()).or_insert(until);
@@ -961,7 +961,7 @@ impl Cloud {
 		pauses.get(&self.base).copied().filter(|until| *until > Instant::now())
 	}
 
-	pub(crate) async fn unpaused(&self) {
+	pub async fn unpaused(&self) {
 		while let Some(until) = self.paused_until() {
 			sleep_until(until).await;
 		}
@@ -1161,7 +1161,7 @@ fn successful(answered: reqwest::Response) -> Result<reqwest::Response, String> 
 	Err(format!("the cloud answered {status}"))
 }
 
-impl kiroshi_core::joined_spaces::contract::MemberRelay for Cloud {
+impl crate::joined_spaces::contract::MemberRelay for Cloud {
 	fn member_relay_url(&self, instance_id: &str) -> String {
 		Cloud::member_relay_url(self, instance_id)
 	}

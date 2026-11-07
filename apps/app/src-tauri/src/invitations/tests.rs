@@ -341,6 +341,10 @@ impl Harness {
 		}
 		crate::events::core(app.app_handle())
 			.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &api_url));
+		crate::account::session::install_signed_in_work(
+			crate::events::core(app.app_handle()),
+			crate::account::AppSignedInWork,
+		);
 		crate::events::core(app.app_handle())
 			.manage(Invitations::new(&api_url).polling_every(every));
 		crate::events::core(app.app_handle()).manage(RelayGuests::new(&api_url));

@@ -1,14 +1,13 @@
 use tauri::{AppHandle, Manager, Runtime};
 use tauri_plugin_opener::OpenerExt;
 
-use super::contract::{Diagnostics, InstallKind, LogFileError, Side};
+use super::contract::{Diagnostics, LogFileError, Side};
 use crate::account::contract::{AccountPlan, AccountState};
 use crate::account::session::AccountSession;
 use crate::agent::AgentState;
 use crate::hosting::Hosting;
 use crate::joined_spaces::relay::RelayGuests;
-
-const DEV_IDENTIFIER_SUFFIX: &str = ".dev";
+use kiroshi_core::logging::install_kind;
 
 #[tauri::command]
 #[specta::specta]
@@ -63,13 +62,6 @@ pub async fn log_clear<R: Runtime>(app: AppHandle<R>) -> Result<(), LogFileError
 	super::clear(&file).map_err(|error| LogFileError::Unwritable { detail: error.to_string() })
 }
 
-pub(crate) fn install_kind(identifier: &str) -> InstallKind {
-	if identifier.ends_with(DEV_IDENTIFIER_SUFFIX) {
-		return InstallKind::Dev;
-	}
-	InstallKind::Installed
-}
-
 fn side(core: &crate::core_context::Core) -> Side {
 	if core.try_state::<Hosting>().is_some_and(|hosting| hosting.is_hosting()) {
 		return Side::Host;
@@ -104,12 +96,6 @@ fn ram_bytes() -> Option<u64> {
 #[cfg(test)]
 mod tests {
 	use super::*;
-
-	#[test]
-	fn the_dev_identifier_is_a_dev_install_and_the_shipped_one_is_installed() {
-		assert_eq!(install_kind("com.kiroshi.app.dev"), InstallKind::Dev);
-		assert_eq!(install_kind("com.kiroshi.app"), InstallKind::Installed);
-	}
 
 	#[cfg(unix)]
 	#[test]

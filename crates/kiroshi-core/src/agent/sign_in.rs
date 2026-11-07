@@ -1,14 +1,12 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use tauri::{AppHandle, Manager, Runtime};
-
 use super::commands::AgentState;
 use super::contract::{SignInError, SignInStarted};
 use super::protocol::SignedIn;
 use super::sidecar::Opening;
+pub use crate::agent::contract::SIGN_IN_STARTED_CHANNEL;
 use crate::events::SIGN_IN_STARTED;
 use crate::mcp_oauth::commands::is_openable;
-pub use kiroshi_core::agent::contract::SIGN_IN_STARTED_CHANNEL;
 
 const NO_REASON: &str = "the sign-in settled with no reason";
 
@@ -40,17 +38,15 @@ impl Drop for Running<'_> {
 	}
 }
 
-#[tauri::command]
-#[specta::specta]
-pub async fn agent_sign_in<R: Runtime>(app: AppHandle<R>) -> Result<(), SignInError> {
-	let state = crate::events::core(app.app_handle()).state::<SignInState>();
+pub async fn agent_sign_in(core: &crate::core_context::Core) -> Result<(), SignInError> {
+	let state = core.state::<SignInState>();
 	let _running = state.begin()?;
-	let sidecar = crate::events::core(app.app_handle()).state::<AgentState>().sidecar().await?;
+	let sidecar = core.state::<AgentState>().sidecar().await?;
 	let mut flow = sidecar.begin_sign_in()?;
 	let settled = match flow.opened().await? {
 		Opening::Settled(settled) => settled,
 		Opening::Authorization(url) => {
-			announce_started(crate::events::core(app.app_handle()), url)?;
+			announce_started(core, url)?;
 			flow.settled().await?
 		}
 	};
@@ -74,33 +70,21 @@ fn outcome(settled: SignedIn) -> Result<(), SignInError> {
 		.map_or_else(|| SignInError::Failed { detail: NO_REASON.to_owned() }, SignInError::from))
 }
 
-#[tauri::command]
-#[specta::specta]
-pub async fn agent_sign_in_code<R: Runtime>(
-	app: AppHandle<R>,
+pub async fn agent_sign_in_code(
+	core: &crate::core_context::Core,
 	text: String,
 ) -> Result<(), SignInError> {
-	if !crate::events::core(app.app_handle()).state::<SignInState>().is_running() {
+	if !core.state::<SignInState>().is_running() {
 		return Err(SignInError::NotRunning);
 	}
-	Ok(crate::events::core(app.app_handle())
-		.state::<AgentState>()
-		.sidecar()
-		.await?
-		.enter_sign_in_code(&text)?)
+	Ok(core.state::<AgentState>().sidecar().await?.enter_sign_in_code(&text)?)
 }
 
-#[tauri::command]
-#[specta::specta]
-pub async fn agent_sign_in_cancel<R: Runtime>(app: AppHandle<R>) -> Result<(), SignInError> {
-	if !crate::events::core(app.app_handle()).state::<SignInState>().is_running() {
+pub async fn agent_sign_in_cancel(core: &crate::core_context::Core) -> Result<(), SignInError> {
+	if !core.state::<SignInState>().is_running() {
 		return Err(SignInError::NotRunning);
 	}
-	Ok(crate::events::core(app.app_handle())
-		.state::<AgentState>()
-		.sidecar()
-		.await?
-		.cancel_sign_in()?)
+	Ok(core.state::<AgentState>().sidecar().await?.cancel_sign_in()?)
 }
 
 #[cfg(test)]

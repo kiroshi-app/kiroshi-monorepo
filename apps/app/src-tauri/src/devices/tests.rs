@@ -302,6 +302,10 @@ impl Harness {
 		}
 		crate::events::core(app.app_handle())
 			.manage(AccountSession::new(Ok::<PathBuf, _>(folder.to_path_buf()), api));
+		crate::account::session::install_signed_in_work(
+			crate::events::core(app.app_handle()),
+			crate::account::AppSignedInWork,
+		);
 		crate::db::install(crate::events::core(app.handle()));
 		crate::events::core(app.app_handle())
 			.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));

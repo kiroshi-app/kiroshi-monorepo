@@ -80,7 +80,8 @@ use crate::db::repositories::messages::{
 	EndedRun, MessagePageQuery, MessageRole, NewAssistantMessage, NewTurn, WebSource,
 };
 use crate::db::{self, DatabaseState};
-use crate::environment::commands::{env_list, writable_root};
+use crate::environment::commands::writable_root;
+use kiroshi_core::environment::commands::env_list;
 use crate::environment::connection;
 use crate::environment::contract::{ConnectionKind, EnvError, EnvOwner, EnvScope, ACCOUNT_BEARER};
 use crate::environment::store;
@@ -945,6 +946,10 @@ impl Harness {
 		));
 		crate::events::core(app.app_handle())
 			.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &cloud));
+		crate::account::session::install_signed_in_work(
+			crate::events::core(app.app_handle()),
+			crate::account::AppSignedInWork,
+		);
 		crate::events::core(app.app_handle()).manage(RelayGuests::new(&cloud));
 		crate::events::core(app.app_handle()).manage(
 			Hosting::new(
@@ -3034,6 +3039,10 @@ fn an_unreachable_cloud_is_unreachable_with_its_cause() {
 		crate::events::core(app.app_handle()).manage::<DatabaseState>(Ok(db::open(&database)));
 		crate::events::core(app.app_handle())
 			.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &cloud));
+		crate::account::session::install_signed_in_work(
+			crate::events::core(app.app_handle()),
+			crate::account::AppSignedInWork,
+		);
 		crate::events::core(app.app_handle()).manage(Hosting::new(&cloud, None));
 		let state = crate::events::core(app.app_handle()).state::<DatabaseState>();
 		let hosting = state.as_ref().expect("the database").space_hosting();
@@ -5612,6 +5621,10 @@ impl Authoring {
 		}
 		crate::events::core(app.app_handle())
 			.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &cloud));
+		crate::account::session::install_signed_in_work(
+			crate::events::core(app.app_handle()),
+			crate::account::AppSignedInWork,
+		);
 		restore(crate::events::core(app.handle()).clone()).await;
 		crate::events::core(app.app_handle()).manage(webhook::start(
 			crate::events::core(app.handle()).clone(),
@@ -7339,7 +7352,7 @@ fn a_relayed_env_list_of_a_server_of_the_host_person_answers_no_entry() {
 		let scope = granted_to_the_host_person("granola");
 		store::set(&host.env_root(), &scope, "PLANTED", "host").expect("the host sets");
 		let listed =
-			|caller| env_list(host.app.handle().clone(), CommandCaller(caller), scope.clone());
+			|caller| env_list(crate::events::core(host.app.handle()), caller, scope.clone());
 
 		let relayed = listed(Caller::Relayed(None)).await.expect("the list reads");
 		let on_the_host = listed(Caller::Host).await.expect("the list reads");

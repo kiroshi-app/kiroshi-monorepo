@@ -544,6 +544,10 @@ fn signed_in(
 	));
 	crate::events::core(app.app_handle())
 		.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), cloud));
+	crate::account::session::install_signed_in_work(
+		crate::events::core(app.app_handle()),
+		crate::account::AppSignedInWork,
+	);
 	let guests = RelayGuests::new(cloud).answering_within(answer_bound);
 	crate::events::core(app.app_handle()).manage(guests.resending_every(RESEND_EVERY));
 	crate::events::core(app.app_handle()).manage(Invitations::new(cloud));

@@ -163,6 +163,10 @@ mod tests {
 		crate::events::core(app.app_handle()).manage::<db::DatabaseState>(Ok(db::open(dir)));
 		crate::events::core(app.app_handle())
 			.manage(AccountSession::new(Ok::<PathBuf, _>(dir.join("account")), api_url));
+		crate::account::session::install_signed_in_work(
+			crate::events::core(app.app_handle()),
+			crate::account::AppSignedInWork,
+		);
 		crate::events::core(app.app_handle()).manage(RelayGuests::new(api_url));
 		let identifier = app.config().identifier.clone();
 		crate::events::core(app.app_handle()).manage(SpaceKeys::new(

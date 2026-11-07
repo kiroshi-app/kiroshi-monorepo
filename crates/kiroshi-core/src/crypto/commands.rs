@@ -1,6 +1,5 @@
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
-use tauri::State;
 use tokio::sync::watch;
 
 use std::collections::HashMap;
@@ -12,8 +11,8 @@ use super::device_keys::DeviceKeys;
 use super::fingerprint::fingerprint;
 use super::key_store::{load_or_create, FileStore, KeyStore};
 use super::space_key::HeldSpaceKey;
-use crate::logging::commands::install_kind;
 use crate::logging::contract::InstallKind;
+use crate::logging::install_kind;
 
 const DEVICE_KEYS_ITEM: &str = "device-keys";
 
@@ -127,10 +126,8 @@ fn system_store(_kind: InstallKind, _service: &str, _item: &str) -> Option<Box<d
 	None
 }
 
-#[tauri::command]
-#[specta::specta]
 pub fn get_device_identity(
-	core: State<'_, crate::core_context::Core>,
+	core: &crate::core_context::Core,
 ) -> Result<DeviceIdentity, DeviceKeysError> {
 	let state = core.state::<DeviceKeysState>();
 	state.keys().map(identity_of)

@@ -1,20 +1,17 @@
-use tauri::{AppHandle, Runtime};
-
-use crate::hosting::authorship::CommandCaller;
+use crate::core_context::Core;
+use crate::hosting::caller::Caller;
 
 use super::contract::{is_reserved, ConnectionKind, EnvEntry, EnvError, EnvScope};
 use super::{connection, store};
 pub use crate::environment::store::writable_root;
 
-#[tauri::command]
-#[specta::specta]
-pub async fn env_set<R: Runtime>(
-	app: AppHandle<R>,
+pub async fn env_set(
+	core: &Core,
 	scope: EnvScope,
 	name: String,
 	value: String,
 ) -> Result<(), EnvError> {
-	set_by_the_person(&writable_root(crate::events::core(&app))?, &scope, &name, &value)
+	set_by_the_person(&writable_root(core)?, &scope, &name, &value)
 }
 
 fn set_by_the_person(
@@ -29,24 +26,16 @@ fn set_by_the_person(
 	store::set(root, scope, name, value)
 }
 
-#[tauri::command]
-#[specta::specta]
-pub async fn env_delete<R: Runtime>(
-	app: AppHandle<R>,
-	scope: EnvScope,
-	name: String,
-) -> Result<(), EnvError> {
-	store::delete(&writable_root(crate::events::core(&app))?, &scope, &name)
+pub async fn env_delete(core: &Core, scope: EnvScope, name: String) -> Result<(), EnvError> {
+	store::delete(&writable_root(core)?, &scope, &name)
 }
 
-#[tauri::command]
-#[specta::specta]
-pub async fn env_list<R: Runtime>(
-	app: AppHandle<R>,
-	caller: CommandCaller,
+pub async fn env_list(
+	core: &Core,
+	caller: Caller,
 	scope: EnvScope,
 ) -> Result<Vec<EnvEntry>, EnvError> {
-	let listed = store::list(&writable_root(crate::events::core(&app))?, &scope)?;
+	let listed = store::list(&writable_root(core)?, &scope)?;
 	if !caller.is_relayed() {
 		return Ok(listed);
 	}
@@ -56,14 +45,12 @@ pub async fn env_list<R: Runtime>(
 		.collect())
 }
 
-#[tauri::command]
-#[specta::specta]
-pub async fn connection_set<R: Runtime>(
-	app: AppHandle<R>,
+pub async fn connection_set(
+	core: &Core,
 	kind: ConnectionKind,
 	value: String,
 ) -> Result<(), EnvError> {
-	connection::hold(&writable_root(crate::events::core(&app))?, kind, &value)
+	connection::hold(&writable_root(core)?, kind, &value)
 }
 
 #[cfg(test)]

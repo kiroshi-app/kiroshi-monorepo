@@ -1,7 +1,5 @@
 use std::path::PathBuf;
 
-use tauri::{AppHandle, Runtime, State};
-
 use super::contract::{ClaudeImportOutcome, ClaudeInventory};
 use super::import::Importer;
 use super::inventory::inventory;
@@ -18,10 +16,8 @@ fn claude_root() -> Option<PathBuf> {
 	home_dir().map(|home| home.join(CLAUDE_DIR))
 }
 
-#[tauri::command]
-#[specta::specta]
 pub async fn claude_import_inventory(
-	core: State<'_, crate::core_context::Core>,
+	core: &crate::core_context::Core,
 ) -> Result<ClaudeInventory, TranscriptStoreError> {
 	let state = core.state::<db::DatabaseState>();
 	let imported = ready(&state)?.user().claude_imported().await?;
@@ -31,11 +27,8 @@ pub async fn claude_import_inventory(
 	})
 }
 
-#[tauri::command]
-#[specta::specta]
-pub async fn claude_import_run<R: Runtime>(
-	app: AppHandle<R>,
-	core: State<'_, crate::core_context::Core>,
+pub async fn claude_import_run(
+	core: &crate::core_context::Core,
 	selection: Vec<String>,
 	space_id: String,
 ) -> Result<Vec<ClaudeImportOutcome>, TranscriptStoreError> {
@@ -44,9 +37,9 @@ pub async fn claude_import_run<R: Runtime>(
 		path: format!("~/{CLAUDE_DIR}"),
 		reason: NO_HOME.to_owned(),
 	})?;
-	let person = bundles::user::laid_down(crate::events::core(&app));
+	let person = bundles::user::laid_down(core);
 	let importer = Importer {
-		core: crate::events::core(&app),
+		core: core,
 		database: ready(&state)?,
 		root: &root,
 		person: person.as_deref(),
