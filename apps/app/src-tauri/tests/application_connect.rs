@@ -63,12 +63,13 @@ fn connected_under(
 	handed_settles: &str,
 	registration_settles: Option<&str>,
 ) -> Connected {
-	connected_holding(case, &a_refused_grant(), handed_settles, registration_settles)
+	connected_holding(case, &a_refused_grant(), Some(URL), handed_settles, registration_settles)
 }
 
 fn connected_holding(
 	case: &str,
 	held: &OauthCredentials,
+	bound: Option<&str>,
 	handed_settles: &str,
 	registration_settles: Option<&str>,
 ) -> Connected {
@@ -95,6 +96,9 @@ fn connected_holding(
 	let owner = EnvOwner::Bot { id: "b1".to_owned(), space_id: "s1".to_owned() };
 	let scope = EnvScope::Server { name: "granola".to_owned(), owner: owner.clone() };
 	credentials::store(&root, &scope, held).expect("the grant is written");
+	if let Some(bound) = bound {
+		credentials::bind(&root, &scope, bound).expect("the grant is bound");
+	}
 	credentials::forget_tokens(&root, &scope).expect("the tokens are deleted");
 	credentials::remember_refusal(&root, &scope, "invalid_grant").expect("the reason is written");
 
@@ -188,7 +192,33 @@ fn a_new_registration_that_settles_with_no_grant_is_not_followed_by_another() {
 fn a_stored_client_holding_no_redirect_uri_is_never_handed() {
 	let unpaired = OauthCredentials { redirect_uri: None, ..a_refused_grant() };
 
-	let connected = connected_holding("unpaired", &unpaired, r#"{"kind":"timedOut"}"#, None);
+	let connected =
+		connected_holding("unpaired", &unpaired, Some(URL), r#"{"kind":"timedOut"}"#, None);
+
+	assert_eq!(connected.settled, Ok(()));
+	assert_eq!(connected.flows, flows(&[REGISTERED]));
+	assert_eq!(connected.kept, granted_anew());
+}
+
+#[test]
+fn a_stored_client_bound_to_another_url_is_never_handed() {
+	let connected = connected_holding(
+		"moved",
+		&a_refused_grant(),
+		Some("https://mcp.granola.test/elsewhere"),
+		r#"{"kind":"timedOut"}"#,
+		None,
+	);
+
+	assert_eq!(connected.settled, Ok(()));
+	assert_eq!(connected.flows, flows(&[REGISTERED]));
+	assert_eq!(connected.kept, granted_anew());
+}
+
+#[test]
+fn a_stored_client_of_an_unbound_grant_is_never_handed() {
+	let connected =
+		connected_holding("unbound", &a_refused_grant(), None, r#"{"kind":"timedOut"}"#, None);
 
 	assert_eq!(connected.settled, Ok(()));
 	assert_eq!(connected.flows, flows(&[REGISTERED]));
