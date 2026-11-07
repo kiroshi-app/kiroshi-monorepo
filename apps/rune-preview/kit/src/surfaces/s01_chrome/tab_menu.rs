@@ -9,7 +9,7 @@ use crate::strings::Key;
 use crate::strings::common::title_bar as copy_keys;
 use crate::tokens::{RADIUS_MD, SPACING, TEXT_COMPACT, TEXT_XS, Tokens, faded};
 
-pub static OPTION: Icon = Icon {
+static OPTION: Icon = Icon {
 	name: "s01-option",
 	view: 24.0,
 	body: r#"<path d="M3 3h6l6 18h6M14 3h7" fill="none" stroke="currentColor" stroke-width="2.16" stroke-linecap="round" stroke-linejoin="round"></path>"#,

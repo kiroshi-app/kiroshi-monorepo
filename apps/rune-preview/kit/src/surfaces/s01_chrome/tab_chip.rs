@@ -1,7 +1,7 @@
 use rune::{El, icon, row, spacer, text};
 
 use super::title_bar::{ChromeTab, ICON_SLOT, TAB_HEIGHT, TAB_TITLE, TabIcon, tab_icon};
-use super::{chip_shadows, lifted_shadow};
+use super::{NOT_ALLOWED_OPACITY, chip_shadows, lifted_shadow};
 use crate::icons;
 use crate::strings::Language;
 use crate::tokens::{RADIUS_MD, SPACING, Tokens};
@@ -10,7 +10,6 @@ const TITLE_MAX_WIDTH: f32 = SPACING * 50.0;
 const CLOSE_SLOT: f32 = SPACING * 4.5;
 const CLOSE_GLYPH: f32 = SPACING * 3.0;
 const ALONE_GLYPH: f32 = SPACING * 3.75;
-const NOT_ALLOWED_OPACITY: f32 = 0.75;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum ChipPlacement {

@@ -1,7 +1,7 @@
 use rune::{El, TextStyle, col, row, text};
 
-use super::thumbnail_shadows;
 use super::title_bar::{ICON_SLOT, TAB_TITLE, TabIcon, tab_icon};
+use super::{NOT_ALLOWED_OPACITY, thumbnail_shadows};
 use crate::tokens::{RADIUS_LG, RADIUS_MD, SPACING, TEXT_XS, Tokens};
 
 const HEADER_HEIGHT: f32 = SPACING * 8.0;
@@ -11,7 +11,6 @@ const BUBBLE_MAX_WIDTH: f32 = SPACING * 72.5;
 const REPLY_MAX_WIDTH: f32 = SPACING * 82.5;
 const THUMBNAIL_TEXT: TextStyle = TextStyle { line_height: 14.0, ..TextStyle::new(10.0, 400.0) };
 const THUMBNAIL_REPLY: TextStyle = TextStyle { line_height: 15.0, ..THUMBNAIL_TEXT };
-const NOT_ALLOWED_OPACITY: f32 = 0.75;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ThumbnailAuthor {
