@@ -668,6 +668,16 @@ table! { core, client, caller;
 	log_tail(lines: u32) => answered(crate::logging::commands::log_tail(core, lines).await);
 	log_reveal() => answered(crate::logging::commands::log_reveal(core).await);
 	log_clear() => answered(crate::logging::commands::log_clear(core).await);
+
+	update_state() => plain(crate::updates::commands::update_state(core));
+	check_for_updates() => plain(crate::updates::commands::check_for_updates(core).await);
+	install_update() => plain(crate::updates::commands::install_update(core).await);
+	restart_to_update() => plain(crate::updates::commands::restart_to_update(core));
+	release_notes(version: String) =>
+		answered(crate::updates::commands::release_notes(core, version).await);
+	whats_new() => answered(crate::updates::commands::whats_new(core).await);
+	acknowledge_whats_new() => answered(crate::updates::commands::acknowledge_whats_new(core).await);
+	running_companions() => plain(crate::updates::commands::running_companions(core));
 }
 
 pub async fn dispatch(core: &Core, command: &str, arguments: Value) -> Option<Answer> {
@@ -799,7 +809,10 @@ mod tests {
 		assert_eq!(answered.status().as_u16(), 404);
 	}
 
-	const OS_SHELL_MODULES: [&str; 4] = ["badge", "notifications", "updates", "window_controls"];
+	const OS_SHELL_MODULES: [&str; 3] = ["badge", "notifications", "window_controls"];
+
+	const RUNE_ONLY_COMMANDS: [&str; 3] =
+		["restart_to_update", "whats_new", "acknowledge_whats_new"];
 
 	fn tauri_commands() -> Vec<(String, String)> {
 		let table = std::fs::read_to_string(format!("{}/src/commands.rs", crate::APP_DIR))
@@ -836,6 +849,7 @@ mod tests {
 		let unknown: Vec<&str> = COMMANDS
 			.iter()
 			.copied()
+			.filter(|name| !RUNE_ONLY_COMMANDS.contains(name))
 			.filter(|name| !tauri.iter().any(|listed| listed == name))
 			.collect();
 

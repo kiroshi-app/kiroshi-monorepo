@@ -1,0 +1,39 @@
+{
+	"version": "0.26.1",
+	"notes": "### Features\n\n- **website**: show the Product Hunt featured badge in the hero (OPE-1623)\n- **website**: move the Product Hunt badge to the hexagon row (OPE-1624)\n\n### Fixes\n\n- **onboarding**: keep the account screen from coming back after Shoto (OPE-1621)\n- **onboarding**: key the host first run on first_run_done, never the step (OPE-1622)\n- **app**: keep the picked model and effort on an agent's runtime settings (OPE-1626)\n- **app**: open every agent session only once its runtime write settles (OPE-1627)\n- **app**: hold a host-opened session behind its bot runtime write (OPE-1628)",
+	"pub_date": "2026-11-02T09:24:55.250Z",
+	"platforms": {
+		"linux-x86_64": {
+			"signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSOWRsckxmS1l1ajFPdmJ4dGdsa0NuNEJnSXdXYTZ1TS8rMUZ1bGRjdUkzUkNTVVhXaDBDbmtlKzJydDl6U2tHelg3YlFERDBiRHFnUEdUdnRDeXVNbWpIcDYvaVVqVHdjPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkzNjEwNzM1CWZpbGU6S2lyb3NoaV8wLjI2LjFfYW1kNjQuZGViCXZlcnNpb246MC4yNi4xCkx1c2NtZjdWM1E0N1duR29KQTlXUWxBL2c3T2p6eFVicmczN0ppWHVycitwS3NySEdEYURQVjhad3Q1YWV2RlFEemtNQ01ZTElDY0liR2JzN2FmUkJnPT0K",
+			"url": "https://api.github.com/repos/kiroshi-app/kiroshi-monorepo/releases/assets/701159610"
+		},
+		"linux-x86_64-deb": {
+			"signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSOWRsckxmS1l1ajFPdmJ4dGdsa0NuNEJnSXdXYTZ1TS8rMUZ1bGRjdUkzUkNTVVhXaDBDbmtlKzJydDl6U2tHelg3YlFERDBiRHFnUEdUdnRDeXVNbWpIcDYvaVVqVHdjPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkzNjEwNzM1CWZpbGU6S2lyb3NoaV8wLjI2LjFfYW1kNjQuZGViCXZlcnNpb246MC4yNi4xCkx1c2NtZjdWM1E0N1duR29KQTlXUWxBL2c3T2p6eFVicmczN0ppWHVycitwS3NySEdEYURQVjhad3Q1YWV2RlFEemtNQ01ZTElDY0liR2JzN2FmUkJnPT0K",
+			"url": "https://api.github.com/repos/kiroshi-app/kiroshi-monorepo/releases/assets/701159610"
+		},
+		"darwin-aarch64": {
+			"signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSOWRsckxmS1l1ai94K3EyNHl6VGtoc0xKK1pXN2hkTmUwREhiYzZ5MEFpYXJHNHV4ZlBqbjQvekdjZ1MzWHNoMjF2OENJNlJxd3MxTy9mTFZsSWw4bVN0NGJGUXh6ZWdnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkzNjExMTAyCWZpbGU6S2lyb3NoaS5hcHAudGFyLmd6CXZlcnNpb246MC4yNi4xCkJCWWxmYlliL0xETjlMek1sRjhSZ3BBMllGZEhhZUFNQVlQU0haN0hKUjRaMkZNK2tOQ0oxTGdUR1Eya2Z0cldQZDA1TjRLU2FSZVFIcEU3NkJRQUFRPT0K",
+			"url": "https://api.github.com/repos/kiroshi-app/kiroshi-monorepo/releases/assets/701176956"
+		},
+		"darwin-aarch64-app": {
+			"signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSOWRsckxmS1l1ai94K3EyNHl6VGtoc0xKK1pXN2hkTmUwREhiYzZ5MEFpYXJHNHV4ZlBqbjQvekdjZ1MzWHNoMjF2OENJNlJxd3MxTy9mTFZsSWw4bVN0NGJGUXh6ZWdnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkzNjExMTAyCWZpbGU6S2lyb3NoaS5hcHAudGFyLmd6CXZlcnNpb246MC4yNi4xCkJCWWxmYlliL0xETjlMek1sRjhSZ3BBMllGZEhhZUFNQVlQU0haN0hKUjRaMkZNK2tOQ0oxTGdUR1Eya2Z0cldQZDA1TjRLU2FSZVFIcEU3NkJRQUFRPT0K",
+			"url": "https://api.github.com/repos/kiroshi-app/kiroshi-monorepo/releases/assets/701176956"
+		},
+		"windows-x86_64": {
+			"signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSOWRsckxmS1l1ajRZbDdOakFFKzdRQU1iK3R5SzhDbXlHMHhCMjlTaDBwTWNOa050QmIyZXVIbjRzQWo2TlhoTVBZUVN1WnVmdmF2cUFWQXJOMFE2djRKamdEV0g5ZFFjPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkzNjExMjM3CWZpbGU6S2lyb3NoaV8wLjI2LjFfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuMjYuMQptem5INFM2aUZsSWtZaTBYdnFaSnBwczVZeWNtTVErRVRDMmZyY0RWT3lMcGhPM3YvRlJTWG9acnU0UnZRNm55TUV4Qml3dkd3VEVrQk5UNGlKU2lDQT09Cg==",
+			"url": "https://api.github.com/repos/kiroshi-app/kiroshi-monorepo/releases/assets/701182909"
+		},
+		"windows-x86_64-nsis": {
+			"signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSOWRsckxmS1l1ajRZbDdOakFFKzdRQU1iK3R5SzhDbXlHMHhCMjlTaDBwTWNOa050QmIyZXVIbjRzQWo2TlhoTVBZUVN1WnVmdmF2cUFWQXJOMFE2djRKamdEV0g5ZFFjPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkzNjExMjM3CWZpbGU6S2lyb3NoaV8wLjI2LjFfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuMjYuMQptem5INFM2aUZsSWtZaTBYdnFaSnBwczVZeWNtTVErRVRDMmZyY0RWT3lMcGhPM3YvRlJTWG9acnU0UnZRNm55TUV4Qml3dkd3VEVrQk5UNGlKU2lDQT09Cg==",
+			"url": "https://api.github.com/repos/kiroshi-app/kiroshi-monorepo/releases/assets/701182909"
+		},
+		"darwin-x86_64": {
+			"signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSOWRsckxmS1l1ai84RHRia0JObW9hL25WRlZXd09uNWN4T2Y2K0wvaDg5RFNiZ1dtWjdWVHZKZEp4WXBSV1BQWTVaSXN3R2d3Yi8xQUpmM2VuMUU4elNaMkxFQ3hBdlFjPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkzNjExNDc2CWZpbGU6S2lyb3NoaS5hcHAudGFyLmd6CXZlcnNpb246MC4yNi4xCjRiTDFFckJPTVduVCt3V2JBRHllQUx6aE5JS2JYcUMzRkhkWEhvT2NEaXZaR2VvVmRDOTJVeG9sbDFSNlRQWFlOOFFjYklsc1N4bEZEaE42cEJKNENnPT0K",
+			"url": "https://api.github.com/repos/kiroshi-app/kiroshi-monorepo/releases/assets/701194301"
+		},
+		"darwin-x86_64-app": {
+			"signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSOWRsckxmS1l1ai84RHRia0JObW9hL25WRlZXd09uNWN4T2Y2K0wvaDg5RFNiZ1dtWjdWVHZKZEp4WXBSV1BQWTVaSXN3R2d3Yi8xQUpmM2VuMUU4elNaMkxFQ3hBdlFjPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkzNjExNDc2CWZpbGU6S2lyb3NoaS5hcHAudGFyLmd6CXZlcnNpb246MC4yNi4xCjRiTDFFckJPTVduVCt3V2JBRHllQUx6aE5JS2JYcUMzRkhkWEhvT2NEaXZaR2VvVmRDOTJVeG9sbDFSNlRQWFlOOFFjYklsc1N4bEZEaE42cEJKNENnPT0K",
+			"url": "https://api.github.com/repos/kiroshi-app/kiroshi-monorepo/releases/assets/701194301"
+		}
+	}
+}

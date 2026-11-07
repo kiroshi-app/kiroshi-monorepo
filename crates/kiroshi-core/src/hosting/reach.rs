@@ -735,3 +735,15 @@ impl Lookup<'_> {
 		None
 	}
 }
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn the_update_commands_with_no_tauri_twin_stay_unclassified_so_a_member_is_refused() {
+		for command in ["restart_to_update", "whats_new", "acknowledge_whats_new"] {
+			assert!(reach_of(command).is_none(), "{command} is classified");
+		}
+	}
+}
