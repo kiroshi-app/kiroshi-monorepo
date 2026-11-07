@@ -25,6 +25,8 @@ use crate::db;
 use crate::host_api::cors;
 use crate::host_api::token::{self, HostToken};
 use crate::missions;
+pub use kiroshi_core::routines::local_server::Webhook;
+use kiroshi_core::routines::local_server::ROUTINE_CALL_PATH as PATH;
 
 pub const SOURCE_ID: &str = "local-webhook";
 
@@ -37,8 +39,6 @@ pub const MAX_DELIVERY_ID_BYTES: usize = 200;
 pub const PREFERRED_PORT: u16 = 45_367;
 
 pub const MAX_BODY_BYTES: usize = 64 * 1024;
-
-const PATH: &str = "/routines/call";
 
 const ACCEPTED: (StatusCode, &str) = (StatusCode::ACCEPTED, "the routine was told");
 
@@ -56,34 +56,6 @@ const REFUSED_DELIVERY_ID: (StatusCode, &str) =
 const FAILED: (StatusCode, &str) = (StatusCode::INTERNAL_SERVER_ERROR, "the call was not carried");
 
 const LOOPBACK_NAMES: [&str; 2] = ["127.0.0.1", "localhost"];
-
-pub struct Webhook {
-	address: Option<SocketAddr>,
-	stop: signal::Sender<bool>,
-}
-
-impl Webhook {
-	pub fn url(&self) -> Option<String> {
-		self.address.map(|address| format!("http://{address}{PATH}"))
-	}
-
-	pub fn origin(&self) -> Option<String> {
-		self.address.map(|address| format!("http://{address}"))
-	}
-
-	pub fn mission_url(&self) -> Option<String> {
-		self.address.map(|address| format!("http://{address}{}", missions::call::PATH))
-	}
-
-	pub fn stop(&self) {
-		self.stop.send_replace(true);
-	}
-
-	#[cfg(test)]
-	pub(crate) fn address(&self) -> SocketAddr {
-		self.address.expect("the webhook bound an address")
-	}
-}
 
 pub fn start(
 	core: crate::core_context::Core,
@@ -131,7 +103,7 @@ fn opened(
 			None
 		}
 	};
-	Webhook { address, stop }
+	Webhook::new(address, stop)
 }
 
 fn host_token(core: &crate::core_context::Core) -> Option<Arc<HostToken>> {
@@ -494,7 +466,7 @@ mod tests {
 	}
 
 	fn address_of(webhook: &Webhook) -> SocketAddr {
-		webhook.address.expect("the webhook bound an address")
+		webhook.address()
 	}
 
 	struct HeldOpen;

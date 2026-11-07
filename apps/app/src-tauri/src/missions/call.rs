@@ -12,7 +12,7 @@ use crate::conversations::commands::ready;
 use crate::db;
 use crate::routines::webhook::{self, Calls, DeliveryId};
 
-pub const PATH: &str = "/missions/call";
+pub use kiroshi_core::routines::local_server::MISSION_CALL_PATH as PATH;
 
 pub const SOURCE: &str = "agent-hook";
 

@@ -207,4 +207,5 @@ The kept core of `apps/app/src-tauri` moves to a crate with no Tauri dependency,
   - Where a command took both an `AppHandle` and the Core `State`, the wrapper keeps only the `State`. The `::<tauri::Wry>` turbofish went from the registry for those 15 commands, and the tests that called them with an app handle now pass only the state.
   - `bindings.ts` and the contract snapshots are unchanged.
 - **After the shared move:** the full workspace suite passes `--no-fail-fast` (37 targets, 3,496 passed, 0 failed, 18 ignored as before). `cargo tree -p kiroshi-core -e normal,dev` shows no tauri crate. There are 3,460 test attributes.
+- **Webhook handle cut (missions).** The mission commands read their hook URL from the webhook the app manages. The `Webhook` handle (bound address, stop signal, `url`, `origin`, `mission_url`) and the two call paths are now in `kiroshi_core::routines::local_server`. src-tauri's axum server still binds and serves, and builds the handle with `Webhook::new`. `missions::call` stays in src-tauri as that server's mission route, next to `routines::webhook`.
 
