@@ -1,71 +1,69 @@
-use tauri::{AppHandle, Runtime, State};
+use tauri::State;
 
-use super::contract::{AccountDevice, DeviceApproval, DeviceError};
-use super::Devices;
+use super::contract::*;
 
 #[tauri::command]
 #[specta::specta]
 pub fn device_approval(core: State<'_, crate::core_context::Core>) -> DeviceApproval {
-	let devices = core.state::<Devices>();
-	devices.current()
+	kiroshi_core::devices::commands::device_approval(core.inner())
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn device_approval_retry<R: Runtime>(
-	app: AppHandle<R>,
+pub async fn device_approval_retry(
+	core: State<'_, crate::core_context::Core>,
 ) -> Result<DeviceApproval, DeviceError> {
-	super::retried(crate::events::core(&app)).await
+	kiroshi_core::devices::commands::device_approval_retry(core.inner()).await
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn device_approval_code_request<R: Runtime>(
-	app: AppHandle<R>,
+pub async fn device_approval_code_request(
+	core: State<'_, crate::core_context::Core>,
 ) -> Result<(), DeviceError> {
-	super::code_requested(crate::events::core(&app)).await
+	kiroshi_core::devices::commands::device_approval_code_request(core.inner()).await
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn device_approval_code_submit<R: Runtime>(
-	app: AppHandle<R>,
+pub async fn device_approval_code_submit(
+	core: State<'_, crate::core_context::Core>,
 	code: String,
 ) -> Result<(), DeviceError> {
-	super::code_submitted(crate::events::core(&app), &code).await
+	kiroshi_core::devices::commands::device_approval_code_submit(core.inner(), code).await
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn device_approve<R: Runtime>(
-	app: AppHandle<R>,
+pub async fn device_approve(
+	core: State<'_, crate::core_context::Core>,
 	device_id: String,
 ) -> Result<(), DeviceError> {
-	super::approved(crate::events::core(&app), &device_id).await
+	kiroshi_core::devices::commands::device_approve(core.inner(), device_id).await
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn device_refuse<R: Runtime>(
-	app: AppHandle<R>,
+pub async fn device_refuse(
+	core: State<'_, crate::core_context::Core>,
 	device_id: String,
 ) -> Result<(), DeviceError> {
-	super::refused(crate::events::core(&app), &device_id).await
+	kiroshi_core::devices::commands::device_refuse(core.inner(), device_id).await
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn devices_list<R: Runtime>(
-	app: AppHandle<R>,
+pub async fn devices_list(
+	core: State<'_, crate::core_context::Core>,
 ) -> Result<Vec<AccountDevice>, DeviceError> {
-	super::listed(crate::events::core(&app)).await
+	kiroshi_core::devices::commands::devices_list(core.inner()).await
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn device_remove<R: Runtime>(
-	app: AppHandle<R>,
+pub async fn device_remove(
+	core: State<'_, crate::core_context::Core>,
 	device_id: String,
 ) -> Result<(), DeviceError> {
-	super::removed(crate::events::core(&app), &device_id).await
+	kiroshi_core::devices::commands::device_remove(core.inner(), device_id).await
 }

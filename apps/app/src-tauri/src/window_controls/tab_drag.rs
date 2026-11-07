@@ -9,7 +9,7 @@ use super::secondary::ScreenPosition;
 use crate::events::{self, TAB_DRAG};
 use crate::json::JsonValue;
 
-pub const TAB_DRAG_EVENT: &str = "window://tab-drag";
+pub use kiroshi_core::desktop_events::TAB_DRAG_EVENT;
 
 #[derive(Debug, Clone, PartialEq, Serialize, specta::Type)]
 #[serde(tag = "kind", rename_all = "camelCase")]

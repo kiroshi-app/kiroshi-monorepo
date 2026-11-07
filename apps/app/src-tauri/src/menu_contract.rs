@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-pub const FILE_MENU_EVENT: &str = "menu-file-chosen";
+pub use kiroshi_core::desktop_events::FILE_MENU_EVENT;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]

@@ -46,13 +46,13 @@ use kiroshi_app::environment::contract::{EnvScope, ACCOUNT_BEARER};
 use kiroshi_app::environment::store;
 use kiroshi_app::events::{self, BUFFERED_FRAMES, MISSION_CHANGED};
 use kiroshi_app::hosting::authorship::{Caller, CommandCaller};
-use kiroshi_app::hosting::commands::hosting_start;
 use kiroshi_app::hosting::roster::{signed_row, Enrolled};
 use kiroshi_app::hosting::{local_api, Hosting};
 use kiroshi_app::logging::contract::InstallKind;
 use kiroshi_app::missions::commands::MissionChanged;
 use kiroshi_app::missions::contract::{MissionLiveness, MissionState};
 use kiroshi_app::routines::webhook::{self, Webhook};
+use kiroshi_core::hosting::commands::hosting_start;
 use removed_on_drop::RemovedOnDrop;
 use runtime_pick::{picked, record_named, OpenedRuntimes, HELD_FOR};
 use serde_json::{json, Value};
@@ -390,7 +390,9 @@ impl Host {
 			.await
 			.expect("the room is planted");
 		bundled(&app, &[ADA, GRACE]).await;
-		hosting_start(app.handle().clone(), PERSONAL.to_owned()).await.expect("the hosting starts");
+		hosting_start(kiroshi_app::events::core(app.handle()), PERSONAL.to_owned())
+			.await
+			.expect("the hosting starts");
 		let member = timeout(PATIENCE, sockets.recv())
 			.await
 			.expect("the host reached the relay in time")

@@ -9,6 +9,7 @@ pub mod host;
 mod images;
 pub mod local;
 mod longest;
+pub mod menu;
 mod mission;
 mod model;
 pub mod navigation;

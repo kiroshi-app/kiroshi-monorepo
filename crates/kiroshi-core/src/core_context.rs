@@ -4,6 +4,7 @@ use std::fmt;
 use std::future::Future;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
+use std::pin::Pin;
 use std::sync::{Arc, PoisonError, RwLock};
 
 use serde::Serialize;
@@ -76,7 +77,38 @@ pub trait Desktop: Send + Sync + 'static {
 	fn open_render_window(&self, window: &RenderWindow) -> Result<(), String>;
 
 	fn close_window(&self, label: &str) -> Result<(), String>;
+
+	fn reveal(&self, path: &Path) -> Result<(), String>;
+
+	fn copy(&self, copied: Copied) -> Result<(), String>;
+
+	fn chosen_save_path(&self, suggested: String) -> ChosenPath;
 }
+
+pub type ChosenPath = Pin<Box<dyn Future<Output = Result<Option<PathBuf>, String>> + Send>>;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Copied {
+	Text(String),
+	Image { rgba: Vec<u8>, width: u32, height: u32 },
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum DesktopError {
+	NoDesktop,
+	Refused(String),
+}
+
+impl fmt::Display for DesktopError {
+	fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match self {
+			Self::NoDesktop => formatter.write_str("no desktop is installed to do this"),
+			Self::Refused(cause) => write!(formatter, "the desktop refused: {cause}"),
+		}
+	}
+}
+
+impl std::error::Error for DesktopError {}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RenderWindow {
@@ -143,6 +175,18 @@ struct Inner {
 	events: broadcast::Sender<CoreEvent>,
 	listeners: RwLock<Vec<Listener>>,
 	forgetters: RwLock<Vec<Forgetter>>,
+}
+
+pub const UNMANAGED: &str = "the core holds no ";
+
+const UNMANAGED_ADVICE: &str = ": manage it before reading it";
+
+pub fn unmanaged_state(panic: &(dyn Any + Send)) -> Option<&str> {
+	let told = panic
+		.downcast_ref::<String>()
+		.map(String::as_str)
+		.or_else(|| panic.downcast_ref::<&str>().copied())?;
+	told.strip_prefix(UNMANAGED)?.strip_suffix(UNMANAGED_ADVICE)
 }
 
 #[derive(Clone)]
@@ -250,6 +294,26 @@ impl Core {
 		}
 	}
 
+	pub fn reveal(&self, path: &Path) -> Result<(), DesktopError> {
+		self.desktop()?.reveal(path).map_err(DesktopError::Refused)
+	}
+
+	pub fn copy(&self, copied: Copied) -> Result<(), DesktopError> {
+		self.desktop()?.copy(copied).map_err(DesktopError::Refused)
+	}
+
+	pub async fn chosen_save_path(
+		&self,
+		suggested: String,
+	) -> Result<Option<PathBuf>, DesktopError> {
+		let choosing = self.desktop()?.chosen_save_path(suggested);
+		choosing.await.map_err(DesktopError::Refused)
+	}
+
+	fn desktop(&self) -> Result<Managed<'_, Box<dyn Desktop>>, DesktopError> {
+		self.try_state::<Box<dyn Desktop>>().ok_or(DesktopError::NoDesktop)
+	}
+
 	pub fn manage<T: Send + Sync + 'static>(&self, value: T) -> bool {
 		let mut registry = self.0.registry.write().unwrap_or_else(PoisonError::into_inner);
 		if registry.contains_key(&TypeId::of::<T>()) {
@@ -281,9 +345,8 @@ impl Core {
 	}
 
 	pub fn state<T: Send + Sync + 'static>(&self) -> Managed<'_, T> {
-		self.try_state().unwrap_or_else(|| {
-			panic!("the core holds no {}: manage it before reading it", type_name::<T>())
-		})
+		self.try_state()
+			.unwrap_or_else(|| panic!("{UNMANAGED}{}{UNMANAGED_ADVICE}", type_name::<T>()))
 	}
 
 	pub fn listen(
@@ -399,6 +462,20 @@ mod tests {
 		fn close_window(&self, label: &str) -> Result<(), String> {
 			self.0.lock().expect("unlocked").push(format!("closed {label}"));
 			Ok(())
+		}
+
+		fn reveal(&self, path: &Path) -> Result<(), String> {
+			self.0.lock().expect("unlocked").push(format!("revealed {}", path.display()));
+			Ok(())
+		}
+
+		fn copy(&self, copied: Copied) -> Result<(), String> {
+			self.0.lock().expect("unlocked").push(format!("copied {copied:?}"));
+			Ok(())
+		}
+
+		fn chosen_save_path(&self, suggested: String) -> ChosenPath {
+			Box::pin(async move { Ok(Some(PathBuf::from(suggested))) })
 		}
 	}
 

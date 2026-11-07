@@ -116,6 +116,7 @@ pub fn run() {
 			if let Err(failure) = logging::install(app.handle()) {
 				eprintln!("the log file could not be opened: {failure}");
 			}
+			crate::events::core(app.handle()).manage(logging::host_facts(app.handle()));
 			#[cfg(target_os = "macos")]
 			menu::install(app.handle())?;
 			crate::db::install(crate::events::core(app.handle()));

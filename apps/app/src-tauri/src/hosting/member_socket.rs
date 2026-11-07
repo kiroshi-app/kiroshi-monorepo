@@ -11,10 +11,10 @@ use specta::{Format, Type, Types};
 use specta_serde::{select_phase_datatype, Phase, PhasesFormat};
 use tauri_specta::{BuilderConfiguration, LanguageExt};
 
-use super::reach::{Audience, Reach, AUDIENCES, REACHES};
-use super::replay::RESUME_COMMAND;
 use crate::db::repositories::conversations::Hue;
 use crate::events::{self, Event};
+use kiroshi_core::hosting::reach::{Audience, Reach, AUDIENCES, REACHES};
+use kiroshi_core::hosting::replay::RESUME_COMMAND;
 
 type Definition = fn(&mut Types) -> DataType;
 

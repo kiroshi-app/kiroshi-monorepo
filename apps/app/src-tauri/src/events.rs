@@ -1,4 +1,5 @@
 use std::any::type_name;
+use std::path::Path;
 
 use serde::Serialize;
 use tauri::plugin::TauriPlugin;
@@ -7,19 +8,22 @@ use tauri::{
 	AppHandle, Emitter, Manager, Runtime, Theme, Webview, WebviewUrl, WebviewWindowBuilder, Window,
 	WindowEvent,
 };
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, oneshot};
 
-use tauri_plugin_opener::OpenerExt;
+use tauri::image::Image;
+use tauri_plugin_clipboard_manager::Clipboard;
+use tauri_plugin_dialog::Dialog;
+use tauri_plugin_opener::Opener;
 
 use crate::core_context::{
-	Audience, ClientId, ClientScoped, Core, Desktop, EmitError, RenderWindow,
+	Audience, ChosenPath, ClientId, ClientScoped, Copied, Core, Desktop, EmitError, RenderWindow,
 };
 pub use kiroshi_core::events::*;
 
 use crate::agent::host::install_session_hosts;
 use crate::hosting::authorship::DesktopAuthors;
 use crate::session_hosts::DesktopHosts;
-use crate::{joined_spaces, menu_contract, notifications, window_controls};
+use crate::{menu_contract, notifications, window_controls};
 use kiroshi_core::hosting::authors::install_authors;
 
 macro_rules! declared {
@@ -32,7 +36,6 @@ macro_rules! declared {
 }
 
 declared! {
-	JOIN_LINK_OPENED: joined_spaces::deep_link::JoinLinkOpened = joined_spaces::deep_link::OPENED_EVENT,
 	NOTIFICATION_ACTIVATED: notifications::commands::NotificationTarget = notifications::commands::ACTIVATED_EVENT,
 	NATIVE_MOVE_ENDED: window_controls::native_move::NativeMoveEnded = window_controls::native_move::NATIVE_MOVE_ENDED_EVENT,
 	NATIVE_MOVE_FAILED: window_controls::native_move::NativeMoveFailed = window_controls::native_move::NATIVE_MOVE_FAILED_EVENT,
@@ -107,11 +110,18 @@ pub fn install_core<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Core> {
 	Ok(core)
 }
 
+const NO_OPENER: &str = "the opener plugin is not installed";
+
+const NO_CLIPBOARD: &str = "the clipboard plugin is not installed";
+
+const NO_DIALOG: &str = "the dialog plugin is not installed";
+
 struct TauriDesktop<R: Runtime>(AppHandle<R>);
 
 impl<R: Runtime> Desktop for TauriDesktop<R> {
 	fn open_url(&self, url: &str) -> Result<(), String> {
-		self.0.opener().open_url(url, None::<&str>).map_err(|failure| failure.to_string())
+		let opener = self.0.try_state::<Opener<R>>().ok_or(NO_OPENER)?;
+		opener.open_url(url, None::<&str>).map_err(|failure| failure.to_string())
 	}
 
 	fn raise_main_window(&self) {
@@ -138,6 +148,40 @@ impl<R: Runtime> Desktop for TauriDesktop<R> {
 			return Ok(());
 		};
 		window.destroy().map_err(|failure| failure.to_string())
+	}
+
+	fn reveal(&self, path: &Path) -> Result<(), String> {
+		let opener = self.0.try_state::<Opener<R>>().ok_or(NO_OPENER)?;
+		opener.reveal_item_in_dir(path).map_err(|failure| failure.to_string())
+	}
+
+	fn copy(&self, copied: Copied) -> Result<(), String> {
+		let clipboard = self.0.try_state::<Clipboard<R>>().ok_or(NO_CLIPBOARD)?;
+		let written = match copied {
+			Copied::Text(text) => clipboard.write_text(text),
+			Copied::Image { rgba, width, height } => {
+				clipboard.write_image(&Image::new_owned(rgba, width, height))
+			}
+		};
+		written.map_err(|failure| failure.to_string())
+	}
+
+	fn chosen_save_path(&self, suggested: String) -> ChosenPath {
+		let Some(dialog) = self.0.try_state::<Dialog<R>>() else {
+			return Box::pin(async { Err(NO_DIALOG.to_owned()) });
+		};
+		let (answer, answered) = oneshot::channel();
+		dialog.file().set_file_name(suggested).save_file(move |chosen| {
+			if answer.send(chosen).is_err() {
+				log::warn!("a save dialog answered after its caller was dropped");
+			}
+		});
+		Box::pin(async move {
+			let chosen = answered
+				.await
+				.map_err(|_| "the save dialog closed without an answer".to_owned())?;
+			chosen.map(|path| path.into_path().map_err(|failure| failure.to_string())).transpose()
+		})
 	}
 }
 

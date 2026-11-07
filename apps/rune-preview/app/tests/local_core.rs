@@ -40,6 +40,10 @@ fn the_window_model_opens_in_process_sends_and_hears_the_reply_as_a_core_event()
 		"the reply did not answer the message: {printed}"
 	);
 	assert!(
+		printed.contains("stored reply: "),
+		"the stored reply was not announced after its stream: {printed}"
+	);
+	assert!(
 		data.join("conversations.sqlite3").is_file(),
 		"the exchange did not land in the preview's own store"
 	);

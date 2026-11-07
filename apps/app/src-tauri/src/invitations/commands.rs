@@ -1,30 +1,30 @@
-use tauri::{AppHandle, Runtime};
+use tauri::State;
 
-use super::contract::{Invitation, InvitationError};
+use super::contract::*;
 use crate::joined_spaces::contract::{JoinedSpace, JoinedSpaceError};
 
 #[tauri::command]
 #[specta::specta]
-pub async fn invitations_list<R: Runtime>(
-	app: AppHandle<R>,
+pub async fn invitations_list(
+	core: State<'_, crate::core_context::Core>,
 ) -> Result<Vec<Invitation>, InvitationError> {
-	super::read(crate::events::core(&app)).await
+	kiroshi_core::invitations::commands::invitations_list(core.inner()).await
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn invitation_accept<R: Runtime>(
-	app: AppHandle<R>,
+pub async fn invitation_accept(
+	core: State<'_, crate::core_context::Core>,
 	invitation_id: String,
 ) -> Result<JoinedSpace, JoinedSpaceError> {
-	super::accept(crate::events::core(&app), invitation_id).await
+	kiroshi_core::invitations::commands::invitation_accept(core.inner(), invitation_id).await
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn invitation_decline<R: Runtime>(
-	app: AppHandle<R>,
+pub async fn invitation_decline(
+	core: State<'_, crate::core_context::Core>,
 	invitation_id: String,
 ) -> Result<(), InvitationError> {
-	super::decline(crate::events::core(&app), invitation_id).await
+	kiroshi_core::invitations::commands::invitation_decline(core.inner(), invitation_id).await
 }

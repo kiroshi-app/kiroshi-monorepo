@@ -2,6 +2,7 @@ use super::contract::{ReleaseNotes, ReleaseNotesError, UpdateChannel, UpdateStat
 use super::engine::{self, Updates};
 use super::release_notes;
 use super::whats_new::{due, Due};
+use crate::agent::AgentState;
 use crate::core_context::Core;
 use crate::db::{self, Database};
 
@@ -16,6 +17,10 @@ pub async fn check_for_updates(core: &Core) -> UpdateState {
 
 pub async fn install_update(core: &Core) -> UpdateState {
 	engine::install(core).await
+}
+
+pub fn running_companions(core: &Core) -> usize {
+	core.state::<AgentState>().live_session_count()
 }
 
 pub fn restart_to_update(core: &Core) -> UpdateState {
