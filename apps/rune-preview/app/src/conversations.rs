@@ -9,13 +9,6 @@ use rune::{
 use rune_kit::Kit;
 use rune_kit::markdown::{Markdown, MarkdownStyle};
 
-use crate::app::{App, Pane, Ready, Thread, Workspace};
-use crate::composer;
-use crate::content::{self, Run, Segment};
-use crate::host::{DEV_START_COMMAND, HostError, Profile};
-use crate::images::Slot;
-use crate::mission;
-use crate::model::{Conversation, Role};
 use kiroshi_rune_kit::avatar::{Face, Motion};
 use kiroshi_rune_kit::hues::Role as HueRole;
 use kiroshi_rune_kit::icons;
@@ -26,6 +19,14 @@ use kiroshi_rune_kit::tokens::{
 	Tokens, conversation_icon, srgb, tone,
 };
 use kiroshi_rune_kit::widgets::{Pill, not_drawn, spinner};
+
+use crate::app::{App, Pane, Ready, Thread, Workspace};
+use crate::composer;
+use crate::content::{self, Run, Segment};
+use crate::host::{DEV_START_COMMAND, HostError, Profile};
+use crate::images::Slot;
+use crate::mission;
+use crate::model::{Conversation, Role};
 
 pub const CHROME: Chrome =
 	Chrome { full_size_content: true, traffic_lights: Some((16.0, 14.0)), drag_regions: true };

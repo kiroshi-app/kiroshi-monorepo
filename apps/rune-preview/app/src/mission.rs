@@ -1,14 +1,15 @@
 use rune::{Color, Cursor, El, Icon, TextStyle, Tx, col, el, icon, oklcha, row, text};
 
-use crate::app::{App, Board, OpenMission};
-use crate::conversations::title_badge;
-use crate::model::{Agent, Mission, MissionEvent, MissionState, Ticket};
 use kiroshi_rune_kit::avatar::{Activity, Face, Motion};
 use kiroshi_rune_kit::icons;
 use kiroshi_rune_kit::tokens::{
 	RADIUS_BUBBLE, SPACING, TEXT_11, TEXT_BUBBLE, TEXT_SM, TEXT_SM_MEDIUM, TEXT_XS, TEXT_XS_MEDIUM,
 	Tokens,
 };
+
+use crate::app::{App, Board, OpenMission};
+use crate::conversations::title_badge;
+use crate::model::{Agent, Mission, MissionEvent, MissionState, Ticket};
 
 const HEADER: f32 = 48.0;
 const HEADER_AVATAR: f32 = 24.0;

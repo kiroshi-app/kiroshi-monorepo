@@ -6,6 +6,9 @@ use rune::{ClipboardContent, TextEdit, Waker};
 use rune_kit::shell::PaneState;
 use serde_json::json;
 
+use kiroshi_rune_kit::avatar::Motion;
+use kiroshi_rune_kit::math::Typesetter;
+
 use crate::content;
 use crate::dev_profile::{self, DevProfile};
 use crate::events::HostEvent;
@@ -24,8 +27,6 @@ use crate::runs::Runs;
 use crate::source::Source;
 use crate::surfaces::Surfaces;
 use crate::turn::{self, SendError};
-use kiroshi_rune_kit::avatar::Motion;
-use kiroshi_rune_kit::math::Typesetter;
 
 const PAGE_LIMIT: u32 = 200;
 

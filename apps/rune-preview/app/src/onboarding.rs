@@ -1,10 +1,6 @@
 use rune::{Color, Cursor, El, col, el, icon, row, text};
 use rune_kit::Kit;
 
-use crate::app::App;
-use crate::dev_profile::{ClaudeLogin, ImportChoices, KiroshiSignIn};
-use crate::model::ClaudeItem;
-use crate::navigation::Route;
 use kiroshi_rune_kit::avatar::Face;
 use kiroshi_rune_kit::hues::Role;
 use kiroshi_rune_kit::icons;
@@ -15,6 +11,11 @@ use kiroshi_rune_kit::tokens::{
 	tone,
 };
 use kiroshi_rune_kit::widgets::{Pill, checkbox, field, radio, spinner};
+
+use crate::app::App;
+use crate::dev_profile::{ClaudeLogin, ImportChoices, KiroshiSignIn};
+use crate::model::ClaudeItem;
+use crate::navigation::Route;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Step {

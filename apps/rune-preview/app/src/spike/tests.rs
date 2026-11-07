@@ -4,12 +4,13 @@ use rune::text::TextSystem;
 use rune::{Cx, El, Env, Ime, Key, KeyEvent, Mark, Mods, Runtime, TextEdit};
 use rune_kit::syntax::SyntaxTheme;
 
+use kiroshi_rune_kit::tokens::{self, Tokens};
+
 use super::editor::Editor;
 use super::model::{LibraryBlockType, block_type_of};
 use super::view::{self, code_decorations, field_key};
 use crate::app::App;
 use crate::navigation::Route;
-use kiroshi_rune_kit::tokens::{self, Tokens};
 
 const FRAME_BUDGET: Duration = Duration::from_millis(16);
 
