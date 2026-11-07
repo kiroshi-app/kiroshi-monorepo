@@ -54,9 +54,18 @@ fn roster() -> Vec<Agent> {
 }
 
 fn with_cx(t: &Tokens, s: &SceneState, view: impl FnOnce(&Context<SceneState>) -> El) -> El {
+	with_cx_in(t, s, Language::En, view)
+}
+
+fn with_cx_in(
+	t: &Tokens,
+	s: &SceneState,
+	language: Language,
+	view: impl FnOnce(&Context<SceneState>) -> El,
+) -> El {
 	let roster = roster();
 	let emit: Emit<SceneState> = Rc::new(|_, _| {});
-	let cx = Context { t, math: &s.math, language: Language::En, roster: &roster, emit: &emit };
+	let cx = Context { t, math: &s.math, language, roster: &roster, emit: &emit };
 	view(&cx)
 }
 
@@ -1131,18 +1140,15 @@ pub(super) fn actions_square_icon_buttons(t: &Tokens, s: &SceneState) -> El {
 	)
 }
 
+fn with_menu(cx: &Context<SceneState>, shown: &Turn) -> El {
+	col()
+		.gap(SPACING * 2.0)
+		.child(turn(cx, shown))
+		.child(row().pl(SPACING * 12.0).child(message_menu(cx, shown)))
+}
+
 fn menu_scene(t: &Tokens, s: &SceneState, language: Language) -> El {
-	let roster = roster();
-	let emit: Emit<SceneState> = Rc::new(|_, _| {});
-	let cx = Context { t, math: &s.math, language, roster: &roster, emit: &emit };
-	let shown = atlas_answer();
-	padded(
-		t,
-		col()
-			.gap(SPACING * 2.0)
-			.child(turn(&cx, &shown))
-			.child(row().pl(SPACING * 12.0).child(message_menu(&cx, &shown))),
-	)
+	with_cx_in(t, s, language, |cx| padded(t, with_menu(cx, &atlas_answer())))
 }
 
 pub(super) fn actions_menu(t: &Tokens, s: &SceneState) -> El {
@@ -1175,21 +1181,12 @@ pub(super) fn actions_same_surface_as_image_menu(t: &Tokens, s: &SceneState) -> 
 		);
 		padded(
 			t,
-			row()
-				.gap(SPACING * 6.0)
-				.items_start()
-				.child(
-					col()
-						.gap(SPACING * 2.0)
-						.child(turn(cx, &shown))
-						.child(row().pl(SPACING * 12.0).child(message_menu(cx, &shown))),
-				)
-				.child(
-					col()
-						.gap(SPACING * 2.0)
-						.child(thumbnail)
-						.child(row().pl(SPACING * 2.0).child(image_menu)),
-				),
+			row().gap(SPACING * 6.0).items_start().child(with_menu(cx, &shown)).child(
+				col()
+					.gap(SPACING * 2.0)
+					.child(thumbnail)
+					.child(row().pl(SPACING * 2.0).child(image_menu)),
+			),
 		)
 	})
 }
