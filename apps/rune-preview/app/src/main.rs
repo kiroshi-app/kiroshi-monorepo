@@ -8,7 +8,9 @@ use kiroshi_rune_kit::tokens;
 use kiroshi_rune_preview::app::App;
 use kiroshi_rune_preview::host::Profile;
 use kiroshi_rune_preview::navigation::Route;
-use kiroshi_rune_preview::{composer, conversations, local, onboarding, scenes, smoke, spike};
+use kiroshi_rune_preview::{
+	composer, conversations, local, menu, onboarding, scenes, smoke, spike,
+};
 
 fn view(s: &App, cx: &mut Cx<App>) -> El {
 	let dark = cx.system_dark();
@@ -120,6 +122,8 @@ fn main() -> ExitCode {
 		families: tokens::FAMILIES,
 		..AppSpec::new("Kiroshi (Rune preview)", (1180.0, 780.0), App::new, view)
 	};
-	rune::App::new(spec).chrome(conversations::CHROME).run();
+	let app = rune::App::new(spec).chrome(conversations::CHROME);
+	let handle = app.handle();
+	app.on_ready(move |_| menu::install(&handle)).run();
 	ExitCode::SUCCESS
 }
