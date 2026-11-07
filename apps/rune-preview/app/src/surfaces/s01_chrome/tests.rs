@@ -77,9 +77,7 @@ impl Bench {
 	}
 
 	fn hear(&mut self, window: WindowId, event: ChromeEvent) {
-		let mut desk =
-			Desk { navigation: &mut self.navigation, windows: &self.windows, shelf: &self.shelf };
-		self.state.heard(window, event, &mut desk);
+		self.act(|state, desk| state.heard(window, event, desk));
 	}
 
 	fn act(&mut self, act: impl FnOnce(&mut State, &mut Desk)) {
@@ -111,10 +109,6 @@ impl Bench {
 	fn second_window(&self) -> WindowId {
 		self.windows()[1]
 	}
-}
-
-fn moved_failure(reason: &str) -> Failure {
-	Failure::moved(reason)
 }
 
 #[test]
@@ -221,7 +215,7 @@ fn a_refused_window_keeps_the_tabs_and_shows_why() {
 
 	assert_eq!(bench.ids(MAIN_WINDOW), ids);
 	assert_eq!(bench.windows(), [MAIN_WINDOW]);
-	assert_eq!(bench.state.failure, Some(moved_failure("no room")));
+	assert_eq!(bench.state.failure, Some(Failure::moved("no room")));
 }
 
 #[test]

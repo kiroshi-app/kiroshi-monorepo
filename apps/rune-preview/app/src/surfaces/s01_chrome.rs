@@ -270,9 +270,8 @@ impl State {
 	}
 
 	fn tear_off(&mut self, window: WindowId, id: &str, desk: &mut Desk) {
-		match self.tabs_of(window) {
-			Some(tabs) if !tabs.is_only_tab(id) => self.move_to_new_window(window, id, desk, true),
-			_ => {}
+		if self.tabs_of(window).is_some_and(|tabs| !tabs.is_only_tab(id)) {
+			self.move_to_new_window(window, id, desk, true);
 		}
 	}
 
