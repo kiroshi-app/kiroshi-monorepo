@@ -15,9 +15,7 @@ pub const MAX_BODY_BYTES: usize = 128 * 1024 * 1024;
 pub const RELAYED_MEMBER_HEADER: HeaderName =
 	HeaderName::from_static("kiroshi-relayed-member");
 
-const STORE_ATTACHMENTS: &str = "chat_store_attachments";
-
-pub const BEARER: &str = "Bearer ";
+const BEARER: &str = "Bearer ";
 
 pub const JSON: &str = "application/json";
 
@@ -26,117 +24,17 @@ pub const BYTES: &str = "application/octet-stream";
 pub const REFUSED: (StatusCode, &str) =
 	(StatusCode::NOT_FOUND, "no host api answers this call");
 
-pub(crate) const UNAUTHORIZED: (StatusCode, &str) =
-	(StatusCode::UNAUTHORIZED, "the call carried no valid bearer token");
-
-pub(crate) const UNREGISTERED: (StatusCode, &str) =
-	(StatusCode::NOT_FOUND, "no command bears this name");
-
-pub(crate) const TOO_LARGE: (StatusCode, &str) =
-	(StatusCode::PAYLOAD_TOO_LARGE, "the call carried more than the cap");
-
-pub(crate) const UNREADABLE: (StatusCode, &str) =
-	(StatusCode::BAD_REQUEST, "the call carried no readable JSON arguments");
-
-const UNANSWERED: (StatusCode, &str) =
-	(StatusCode::INTERNAL_SERVER_ERROR, "the command gave no answer");
-
-pub(crate) fn route<R: Runtime>(calls: Calls, app: AppHandle<R>) -> Router<Calls> {
-	let answering = move |Path(command): Path<String>,
-	                      headers: HeaderMap,
-	                      body: Result<Bytes, BytesRejection>| {
-		invoked(app.clone(), command, headers, body)
-	};
-	Router::new()
-		.route(PATH, post(answering).layer(DefaultBodyLimit::max(MAX_BODY_BYTES)))
-		.route_layer(middleware::from_fn_with_state(calls, guarded))
-}
-
 pub const UNAUTHORIZED: (StatusCode, &str) =
 	(StatusCode::UNAUTHORIZED, "the call carried no valid bearer token");
-
-pub(crate) const UNREGISTERED: (StatusCode, &str) =
-	(StatusCode::NOT_FOUND, "no command bears this name");
-
-pub(crate) const TOO_LARGE: (StatusCode, &str) =
-	(StatusCode::PAYLOAD_TOO_LARGE, "the call carried more than the cap");
-
-pub(crate) const UNREADABLE: (StatusCode, &str) =
-	(StatusCode::BAD_REQUEST, "the call carried no readable JSON arguments");
-
-const UNANSWERED: (StatusCode, &str) =
-	(StatusCode::INTERNAL_SERVER_ERROR, "the command gave no answer");
-
-pub(crate) fn route<R: Runtime>(calls: Calls, app: AppHandle<R>) -> Router<Calls> {
-	let answering = move |Path(command): Path<String>,
-	                      headers: HeaderMap,
-	                      body: Result<Bytes, BytesRejection>| {
-		invoked(app.clone(), command, headers, body)
-	};
-	Router::new()
-		.route(PATH, post(answering).layer(DefaultBodyLimit::max(MAX_BODY_BYTES)))
-		.route_layer(middleware::from_fn_with_state(calls, guarded))
-}
 
 pub const UNREGISTERED: (StatusCode, &str) =
 	(StatusCode::NOT_FOUND, "no command bears this name");
 
-pub(crate) const TOO_LARGE: (StatusCode, &str) =
-	(StatusCode::PAYLOAD_TOO_LARGE, "the call carried more than the cap");
-
-pub(crate) const UNREADABLE: (StatusCode, &str) =
-	(StatusCode::BAD_REQUEST, "the call carried no readable JSON arguments");
-
-const UNANSWERED: (StatusCode, &str) =
-	(StatusCode::INTERNAL_SERVER_ERROR, "the command gave no answer");
-
-pub(crate) fn route<R: Runtime>(calls: Calls, app: AppHandle<R>) -> Router<Calls> {
-	let answering = move |Path(command): Path<String>,
-	                      headers: HeaderMap,
-	                      body: Result<Bytes, BytesRejection>| {
-		invoked(app.clone(), command, headers, body)
-	};
-	Router::new()
-		.route(PATH, post(answering).layer(DefaultBodyLimit::max(MAX_BODY_BYTES)))
-		.route_layer(middleware::from_fn_with_state(calls, guarded))
-}
-
 pub const TOO_LARGE: (StatusCode, &str) =
 	(StatusCode::PAYLOAD_TOO_LARGE, "the call carried more than the cap");
 
-pub(crate) const UNREADABLE: (StatusCode, &str) =
-	(StatusCode::BAD_REQUEST, "the call carried no readable JSON arguments");
-
-const UNANSWERED: (StatusCode, &str) =
-	(StatusCode::INTERNAL_SERVER_ERROR, "the command gave no answer");
-
-pub(crate) fn route<R: Runtime>(calls: Calls, app: AppHandle<R>) -> Router<Calls> {
-	let answering = move |Path(command): Path<String>,
-	                      headers: HeaderMap,
-	                      body: Result<Bytes, BytesRejection>| {
-		invoked(app.clone(), command, headers, body)
-	};
-	Router::new()
-		.route(PATH, post(answering).layer(DefaultBodyLimit::max(MAX_BODY_BYTES)))
-		.route_layer(middleware::from_fn_with_state(calls, guarded))
-}
-
 pub const UNREADABLE: (StatusCode, &str) =
 	(StatusCode::BAD_REQUEST, "the call carried no readable JSON arguments");
-
-const UNANSWERED: (StatusCode, &str) =
-	(StatusCode::INTERNAL_SERVER_ERROR, "the command gave no answer");
-
-pub(crate) fn route<R: Runtime>(calls: Calls, app: AppHandle<R>) -> Router<Calls> {
-	let answering = move |Path(command): Path<String>,
-	                      headers: HeaderMap,
-	                      body: Result<Bytes, BytesRejection>| {
-		invoked(app.clone(), command, headers, body)
-	};
-	Router::new()
-		.route(PATH, post(answering).layer(DefaultBodyLimit::max(MAX_BODY_BYTES)))
-		.route_layer(middleware::from_fn_with_state(calls, guarded))
-}
 
 pub async fn guarded(State(calls): State<Calls>, request: Request, next: Next) -> Response {
 	if !named_here(request.headers()) {

@@ -15,18 +15,33 @@ use tauri::{AppHandle, Manager, Runtime, Url, WebviewUrl, WebviewWindow, Webview
 use tokio::sync::oneshot;
 
 use super::cors::WINDOW_ORIGIN;
-pub use kiroshi_core::host_api::invoke::*;
 use crate::attachments::contract::AttachmentStoreError;
 use crate::hosting::contract::REFUSED_TO_A_MEMBER;
 use crate::routines::webhook::{named_here, Calls};
-
+pub use kiroshi_core::host_api::invoke::*;
 const MAIN_WEBVIEW: &str = "main";
 
 pub(crate) const DISPATCHER_WEBVIEW: &str = "dispatcher";
 
+const STORE_ATTACHMENTS: &str = "chat_store_attachments";
+
 const BLANK_PAGE: &str = "about:blank";
 
 static DISPATCHER_OPENING: Mutex<()> = Mutex::new(());
+
+const UNANSWERED: (StatusCode, &str) =
+	(StatusCode::INTERNAL_SERVER_ERROR, "the command gave no answer");
+
+pub(crate) fn route<R: Runtime>(calls: Calls, app: AppHandle<R>) -> Router<Calls> {
+	let answering = move |Path(command): Path<String>,
+	                      headers: HeaderMap,
+	                      body: Result<Bytes, BytesRejection>| {
+		invoked(app.clone(), command, headers, body)
+	};
+	Router::new()
+		.route(PATH, post(answering).layer(DefaultBodyLimit::max(MAX_BODY_BYTES)))
+		.route_layer(middleware::from_fn_with_state(calls, guarded))
+}
 
 async fn invoked<R: Runtime>(
 	app: AppHandle<R>,
