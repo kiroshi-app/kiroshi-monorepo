@@ -68,9 +68,8 @@ use crate::environment::store;
 use crate::events::{self, Event, BUFFERED_FRAMES};
 use crate::host_api::files::ATTACHMENT_PATH;
 use crate::hosting::authorship::{Caller, CommandCaller};
-use crate::hosting::bridge::{
-	self, belongs_to_the_host, LocalApi, RelayedFile, ATTACHMENT_COMMAND,
-};
+use crate::hosting::bridge::{self, LocalApi, RelayedFile, ATTACHMENT_COMMAND};
+use crate::hosting::Hosting;
 use crate::hosting::contract::{AccountDevices, RosterDevice};
 use crate::hosting::contract::{
 	HostingFailureKind, HostingState, InvitationState, Member, MemberStatus, MembersError,
