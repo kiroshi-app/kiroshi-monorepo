@@ -6,6 +6,7 @@ use crate::tokens::{self, SPACING, Tokens};
 
 mod feedback;
 mod forms;
+mod library;
 mod navigation;
 mod overlays;
 mod primitives;
@@ -211,18 +212,148 @@ pub static SCENES: &[Scene] = &[
 	scene("overlays-tooltip--with-side", OVERLAY, overlays::tooltip_with_side),
 	scene("overlays-tooltip--long-content", OVERLAY, overlays::tooltip_long_content),
 	scene("overlays-tooltip--on-dark-surface", OVERLAY, overlays::tooltip_default),
+	library::library("navigation-librarypanel--grid-all", library::grid_all),
+	library::library("navigation-librarypanel--grid-images", library::grid_images),
+	library::library("navigation-librarypanel--grid-documents", library::grid_documents),
+	library::library(
+		"navigation-librarypanel--filter-with-no-match",
+		library::filter_with_no_match,
+	),
+	library::library(
+		"navigation-librarypanel--empty-with-no-callbacks",
+		library::empty_with_no_callbacks,
+	),
+	library::library(
+		"navigation-librarypanel--empty-with-every-callback",
+		library::empty_with_every_callback,
+	),
+	library::library(
+		"navigation-librarypanel--empty-with-every-callback-light",
+		library::empty_with_every_callback,
+	),
+	library::library("navigation-librarypanel--loading", library::loading),
+	library::library("navigation-librarypanel--loading-light", library::loading),
+	library::library(
+		"navigation-librarypanel--whitespace-name-reads-untitled",
+		library::whitespace_name,
+	),
+	library::library("navigation-librarypanel--long-names", library::long_names),
+	library::library("navigation-librarypanel--added-to-the-grid", library::added_to_the_grid),
+	library::searched(
+		"navigation-librarypanel--search-with-no-match",
+		"quarterly roadmap",
+		library::search,
+	),
+	library::searched("navigation-librarypanel--search-filled", "dashboard", library::search),
+	library::tabbed("navigation-librarypanel--focus-visible", 9, library::grid_all),
+	library::library("navigation-librarytabstates--document-loading", library::document_loading),
+	library::library(
+		"navigation-librarytabstates--document-loading-dark",
+		library::document_loading,
+	),
+	library::library("navigation-librarytabstates--image-loading", library::image_loading),
+	library::library("navigation-librarytabstates--missing-item", library::missing_item),
+	library::library("navigation-librarytabstates--missing-item-dark", library::missing_item),
+	library::library("navigation-librarytabstates--unreadable-item", library::unreadable_item),
+	library::library("navigation-librarytabstates--unreadable-item-dark", library::unreadable_item),
+	library::library("navigation-librarydocumentview--default", library::document_default),
+	library::library(
+		"navigation-librarydocumentview--whitespace-name-reads-untitled",
+		library::document_whitespace_name,
+	),
+	library::tabbed("navigation-librarydocumentview--focus-visible", 1, library::document_default),
+	library::library("navigation-librarydocumentstates--empty-document", library::document_empty),
+	library::library(
+		"navigation-librarydocumentstates--files-dropped-in",
+		library::document_files_dropped,
+	),
+	library::library(
+		"navigation-librarydocumentstates--failed-import",
+		library::document_failed_import,
+	),
+	library::library("navigation-librarydocumentstates--read-only", library::document_read_only),
+	library::library(
+		"navigation-librarynewdocumentdialog--meeting-notes-selected",
+		library::meeting_notes_selected,
+	),
+	library::library(
+		"navigation-librarynewdocumentdialog--blank-selected",
+		library::blank_selected,
+	),
+	library::narrow(
+		"navigation-librarynewdocumentdialog--narrow-window",
+		library::meeting_notes_selected,
+	),
+	library::library("overlays-librarylightbox--default", library::lightbox_default),
+	library::library("overlays-librarylightbox--at-the-first-image", library::lightbox_first),
+	library::library("navigation-documentpanel--in-thread", library::document_panel_in_thread),
+	library::library(
+		"navigation-librarydocumentblockeditor--slash-menu-near-bottom",
+		library::slash_menu_near_bottom,
+	),
+	library::library(
+		"navigation-librarydocumentblockeditor--slash-menu-near-bottom-dark",
+		library::slash_menu_near_bottom,
+	),
+	library::library(
+		"navigation-librarydocumentblockeditor--focused-heading",
+		library::focused_marked,
+	),
+	library::library(
+		"navigation-librarydocumentblockeditor--focused-heading-dark",
+		library::focused_marked,
+	),
+	library::library(
+		"navigation-librarydocumentblockeditor--focused-list-item",
+		library::focused_marked,
+	),
+	library::library(
+		"navigation-librarydocumentblockeditor--focused-list-item-dark",
+		library::focused_marked,
+	),
+	library::library(
+		"navigation-librarydocumentblockeditor--focused-to-do-item",
+		library::focused_marked,
+	),
+	library::library(
+		"navigation-librarydocumentblockeditor--focused-to-do-item-dark",
+		library::focused_marked,
+	),
+	library::library(
+		"navigation-librarydocumentblockeditor--focused-quote",
+		library::focused_marked,
+	),
+	library::library(
+		"navigation-librarydocumentblockeditor--focused-quote-dark",
+		library::focused_marked,
+	),
+	library::library(
+		"navigation-librarydocumentblockeditor--focused-every-inline-mark",
+		library::focused_marked,
+	),
+	library::library(
+		"navigation-librarydocumentblockeditor--focused-every-inline-mark-dark",
+		library::focused_marked,
+	),
 ];
 
 pub struct SceneState {
 	pub scene: &'static Scene,
 	pub edit: TextEdit,
 	pub picture: Option<Image>,
+	pub library: library::LibraryScene,
 	images: Option<ImageCache>,
 }
 
 impl SceneState {
 	pub fn new(scene: &'static Scene) -> SceneState {
-		SceneState { scene, edit: TextEdit::new(scene.typed), picture: None, images: None }
+		SceneState {
+			scene,
+			edit: TextEdit::new(scene.typed),
+			picture: None,
+			library: library::LibraryScene::new(scene),
+			images: None,
+		}
 	}
 }
 
@@ -233,6 +364,7 @@ pub fn setup(s: &mut SceneState, waker: Waker) {
 		eprintln!("the avatar picture didn't decode: {}", failure.0);
 	}
 	s.picture = Some(picture);
+	s.library.decode(&images);
 	s.images = Some(images);
 }
 
