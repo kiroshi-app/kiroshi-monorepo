@@ -1,5 +1,5 @@
 pub mod commands;
-pub use crate::library::link_preview::contract;
+pub mod contract;
 #[cfg(test)]
 mod tests;
 

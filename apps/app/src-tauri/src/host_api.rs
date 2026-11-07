@@ -1,6 +1,6 @@
 pub use kiroshi_core::host_api::cors;
-pub mod events;
-pub mod files;
+pub use kiroshi_core::host_api::events;
+pub use kiroshi_core::host_api::files;
 pub mod invoke;
 pub use kiroshi_core::host_api::token;
 

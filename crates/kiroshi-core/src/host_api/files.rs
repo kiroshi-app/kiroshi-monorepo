@@ -40,15 +40,15 @@ const CONTENT_TYPES: [(&str, &str); 12] = [
 	("csv", TEXT),
 ];
 
-pub(crate) const INERT: &str = "default-src 'none'; sandbox";
+pub const INERT: &str = "default-src 'none'; sandbox";
 
-pub(crate) const NO_SNIFF: &str = "nosniff";
+pub const NO_SNIFF: &str = "nosniff";
 
 const MISSING: (StatusCode, &str) = (StatusCode::NOT_FOUND, "no file answers this path");
 
 const UNREAD: (StatusCode, &str) = (StatusCode::INTERNAL_SERVER_ERROR, "the file was not read");
 
-pub(crate) fn route(calls: Calls) -> Router<Calls> {
+pub fn route(calls: Calls) -> Router<Calls> {
 	Router::new()
 		.route(AVATAR_PATH, get(avatar))
 		.route(ATTACHMENT_PATH, get(attachment))
@@ -104,7 +104,7 @@ fn confined(root: &Path, segments: &[String]) -> Option<PathBuf> {
 	(resolved.parent() == Some(expected.as_path()) && resolved.is_file()).then_some(resolved)
 }
 
-pub(crate) fn plain(segment: &str) -> bool {
+pub fn plain(segment: &str) -> bool {
 	!matches!(segment, "" | "." | "..") && !segment.contains(SEPARATORS)
 }
 

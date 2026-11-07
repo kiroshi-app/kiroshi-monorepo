@@ -21,17 +21,17 @@ pub const PATH: &str = "/api/events";
 
 const TOKEN_PARAMETER: &str = "token=";
 
-pub(crate) const FELL_BEHIND: &str = "the client fell behind the event buffer";
+pub const FELL_BEHIND: &str = "the client fell behind the event buffer";
 
 pub const SEND_PATIENCE: Duration = Duration::from_secs(5);
 
-pub(crate) fn route(calls: Calls) -> Router<Calls> {
+pub fn route(calls: Calls) -> Router<Calls> {
 	Router::new()
 		.route(PATH, get(opened))
 		.route_layer(middleware::from_fn_with_state(calls, guarded))
 }
 
-pub(crate) async fn guarded(State(calls): State<Calls>, request: Request, next: Next) -> Response {
+pub async fn guarded(State(calls): State<Calls>, request: Request, next: Next) -> Response {
 	if !named_here(request.headers()) {
 		return REFUSED.into_response();
 	}
@@ -47,7 +47,7 @@ fn queried_token_admitted(calls: &Calls, uri: &Uri) -> bool {
 	calls.token.as_ref().is_some_and(|token| query_admitted(token, uri))
 }
 
-pub(crate) fn query_admitted(token: &HostToken, uri: &Uri) -> bool {
+pub fn query_admitted(token: &HostToken, uri: &Uri) -> bool {
 	uri.query()
 		.and_then(|query| query.split('&').find_map(|pair| pair.strip_prefix(TOKEN_PARAMETER)))
 		.is_some_and(|presented| token.admits(presented))
@@ -81,7 +81,7 @@ async fn relayed(socket: WebSocket, mut heard: Receiver<Frame>) {
 	}
 }
 
-pub(crate) async fn relayed_until_behind(
+pub async fn relayed_until_behind(
 	mut socket: WebSocket,
 	heard: &mut Receiver<Frame>,
 ) -> Option<(WebSocket, u64)> {
