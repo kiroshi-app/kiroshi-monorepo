@@ -235,7 +235,7 @@ mod tests {
 	struct Member {
 		app: AppOfItsOwn,
 		host: SealingHost,
-		_database: RemovedOnDrop,
+		database: RemovedOnDrop,
 	}
 
 	async fn a_member() -> Member {
@@ -247,7 +247,7 @@ mod tests {
 		let identifier = app.config().identifier.clone();
 		app.manage(SpaceKeys::new(InstallKind::Dev, identifier, Some(profile)));
 		let host = SealingHost::planted(app.handle(), INSTANCE).await;
-		Member { app, host, _database: database }
+		Member { app, host, database }
 	}
 
 	fn relay_of(app: &App<MockRuntime>) -> &JoinedSpaceRelayRepository {
@@ -301,7 +301,7 @@ mod tests {
 		let mut wire = MemberWire::new(relay_of(&member.app), INSTANCE, held_of(&member.app).await);
 		let before_restart = wire.sealed(CALL).await.expect("the call seals");
 
-		let reopened = db::open(&member._database);
+		let reopened = db::open(&member.database);
 		let mut restarted =
 			MemberWire::new(reopened.joined_space_relay(), INSTANCE, wire.into_held());
 		let after_restart = restarted.sealed(CALL).await.expect("the call seals");
