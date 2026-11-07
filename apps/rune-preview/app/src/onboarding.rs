@@ -1,19 +1,21 @@
 use rune::{Color, Cursor, El, col, el, icon, row, text};
 use rune_kit::Kit;
 
-use crate::app::{App, Screen};
-use crate::avatar::Face;
-use crate::dev_profile::{ClaudeLogin, ImportChoices, KiroshiSignIn};
-use crate::hues::Role;
-use crate::icons;
-use crate::model::ClaudeItem;
-use crate::tokens::{
+use kiroshi_rune_kit::avatar::Face;
+use kiroshi_rune_kit::hues::Role;
+use kiroshi_rune_kit::icons;
+use kiroshi_rune_kit::tokens::{
 	RADIUS_BUBBLE, RADIUS_CONTROL, SPACING, TEXT_10_MEDIUM, TEXT_BASE_SEMIBOLD, TEXT_COMPACT,
 	TEXT_COMPACT_MEDIUM, TEXT_COMPACT_MONO_MEDIUM, TEXT_COMPACT_SEMIBOLD, TEXT_INITIALS, TEXT_SM,
 	TEXT_SM_MEDIUM, TEXT_SM_SEMIBOLD, TEXT_TITLE, TEXT_XS, TEXT_XS_MEDIUM, TEXT_XS_MONO, Tokens,
 	tone,
 };
-use crate::widgets::{Pill, checkbox, field, radio, spinner};
+use kiroshi_rune_kit::widgets::{Pill, checkbox, field, radio, spinner};
+
+use crate::app::App;
+use crate::dev_profile::{ClaudeLogin, ImportChoices, KiroshiSignIn};
+use crate::model::ClaudeItem;
+use crate::navigation::Route;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Step {
@@ -102,23 +104,23 @@ impl Page {
 }
 
 fn go(step: Step) -> impl Fn(&mut App) + 'static {
-	move |s: &mut App| s.screen = Screen::Onboarding(step)
+	move |s: &mut App| s.navigation.navigate_main(Route::Onboarding(step))
 }
 
 fn leave_intro(s: &mut App) {
 	let found = s.dev_profile.as_ref().is_some_and(|profile| profile.claude.is_some());
 	let connect = if found { Connect::LoginFound } else { Connect::NothingFound };
-	s.screen = Screen::Onboarding(Step::Connect(connect));
+	s.navigation.navigate_main(Route::Onboarding(Step::Connect(connect)));
 }
 
 fn leave_connect(s: &mut App) {
 	let has_import = s.dev_profile.as_ref().is_some_and(|profile| profile.import.is_some());
 	let next = if has_import { Step::Import } else { Step::Account(Account::SignedOut) };
-	s.screen = Screen::Onboarding(next);
+	s.navigation.navigate_main(Route::Onboarding(next));
 }
 
 fn finish(s: &mut App) {
-	s.screen = Screen::Conversations;
+	s.navigation.navigate_main(Route::Conversations);
 }
 
 pub fn view(step: Step, s: &App, k: &Kit, t: &Tokens) -> El {
@@ -847,4 +849,25 @@ fn signed_in_view(t: &Tokens, signed_in: &KiroshiSignIn) -> El {
 		vec![intro, account_card],
 		vec![Pill::new("Continue").primary(t, finish)],
 	)
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn a_new_app_opens_on_the_first_onboarding_step() {
+		let app = App::new();
+
+		assert!(app.navigation.main_route() == Route::Onboarding(Step::first()));
+	}
+
+	#[test]
+	fn finishing_the_onboarding_opens_the_conversations() {
+		let mut app = App::new();
+
+		finish(&mut app);
+
+		assert!(app.navigation.main_route() == Route::Conversations);
+	}
 }

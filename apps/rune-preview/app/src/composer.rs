@@ -4,12 +4,13 @@ use rune::{
 };
 use rune_kit::Kit;
 
-use crate::app::{AGENT_PILL, App, Attachment, MentionMenu, Mentionable};
-use crate::avatar::Face;
-use crate::icons;
-use crate::tokens::{
+use kiroshi_rune_kit::avatar::Face;
+use kiroshi_rune_kit::icons;
+use kiroshi_rune_kit::tokens::{
 	SPACING, TEXT_11, TEXT_BUBBLE, TEXT_COMPACT, TEXT_SM_MEDIUM, TEXT_XS, TEXT_XS_MEDIUM, Tokens,
 };
+
+use crate::app::{AGENT_PILL, App, Attachment, MentionMenu, Mentionable};
 
 pub const COMPOSER: &str = "composer";
 pub const COMPOSER_SURFACE: &str = "composer-surface";

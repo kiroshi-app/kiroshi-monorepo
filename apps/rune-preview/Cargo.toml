@@ -1,39 +1,15 @@
-[package]
-name = "kiroshi-rune-preview"
-version = "0.0.0"
+[workspace]
+resolver = "3"
+members = ["app", "kit"]
+
+[workspace.package]
 edition = "2024"
 publish = false
 
-[workspace]
-
-[features]
-fake-claude = []
-
-[[bin]]
-name = "fake_sidecar"
-path = "../app/src-tauri/src/bin/fake_sidecar.rs"
-required-features = ["fake-claude"]
-test = false
-
-[[test]]
-name = "local_core"
-required-features = ["fake-claude"]
-
-[dependencies]
+[workspace.dependencies]
 rune = { git = "https://github.com/anomalyco/rune", rev = "781e2b6d87cd5f32d6f4365956fad4baaf24ee50" }
 rune-motion = { git = "https://github.com/anomalyco/rune", rev = "781e2b6d87cd5f32d6f4365956fad4baaf24ee50" }
 rune-kit = { git = "https://github.com/anomalyco/rune", rev = "781e2b6d87cd5f32d6f4365956fad4baaf24ee50", features = ["markdown", "mermaid"] }
-katex-native = { version = "0.1.1", features = ["raster"] }
-kiroshi-core = { path = "../../crates/kiroshi-core" }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-tokio = { version = "1", features = ["rt-multi-thread"] }
-tungstenite = { version = "0.29", default-features = false, features = ["handshake"] }
-ureq = "2"
-uuid = { version = "1", features = ["v4"] }
-
-[target.'cfg(unix)'.dependencies]
-libc = "0.2"
 
 [profile.dev.package."*"]
 opt-level = 2

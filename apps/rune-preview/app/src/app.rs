@@ -6,7 +6,9 @@ use rune::{ClipboardContent, TextEdit, Waker};
 use rune_kit::shell::PaneState;
 use serde_json::json;
 
-use crate::avatar::Motion;
+use kiroshi_rune_kit::avatar::Motion;
+use kiroshi_rune_kit::math::Typesetter;
+
 use crate::content;
 use crate::dev_profile::{self, DevProfile};
 use crate::events::HostEvent;
@@ -14,15 +16,16 @@ use crate::host::{Host, HostError, Profile};
 use crate::images::{Fetched, Images};
 use crate::local;
 use crate::longest::{self, Longest};
-use crate::math::Typesetter;
 use crate::model::{
 	Agent, AgentEvent, Conversation, ConversationMissions, ConversationPage, KiroshiAccountState,
 	Message, MessagePage, Mission, MissionChanged, MissionDetail, MissionEvent, MissionOnBoard,
 	Role, Space,
 };
+use crate::navigation::{Navigation, Route};
 use crate::onboarding::{Method, Step};
 use crate::runs::Runs;
 use crate::source::Source;
+use crate::surfaces::Surfaces;
 use crate::turn::{self, SendError};
 
 const PAGE_LIMIT: u32 = 200;
@@ -34,12 +37,6 @@ pub const AGENT_PILL: &str = "agent:";
 const IMAGES_NOT_SENT: &str = "The preview doesn't upload images. Remove them to send the text.";
 
 const SENDING_OFF: &str = "Sending is off on the installed Kiroshi: the preview only reads it. Sending is proven on Kiroshi Dev.";
-
-pub enum Screen {
-	Onboarding(Step),
-	Conversations,
-	BlockSpike,
-}
 
 pub enum Workspace {
 	Connecting,
@@ -263,7 +260,8 @@ impl Outbox {
 }
 
 pub struct App {
-	pub screen: Screen,
+	pub navigation: Navigation,
+	pub surfaces: Surfaces,
 	pub workspace: Workspace,
 	pub thread: Option<Thread>,
 	pub composer: Composer,
@@ -289,11 +287,18 @@ pub struct App {
 	pending: Sender<Inbound>,
 }
 
+impl Default for App {
+	fn default() -> App {
+		App::new()
+	}
+}
+
 impl App {
 	pub fn new() -> App {
 		let (pending, inbox) = mpsc::channel();
 		App {
-			screen: Screen::Onboarding(Step::first()),
+			navigation: Navigation::new(Route::Onboarding(Step::first())),
+			surfaces: Surfaces::default(),
 			workspace: Workspace::Connecting,
 			thread: None,
 			composer: Composer {

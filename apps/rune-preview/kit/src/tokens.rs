@@ -5,11 +5,11 @@ use rune_kit::{Kit, PaletteSeed};
 use crate::hues::{self, Role};
 
 pub const FONTS: &[&[u8]] = &[
-	include_bytes!("../assets/fonts/Geist-Regular.ttf"),
-	include_bytes!("../assets/fonts/Geist-Medium.ttf"),
-	include_bytes!("../assets/fonts/Geist-SemiBold.ttf"),
-	include_bytes!("../assets/fonts/GeistMono-Regular.ttf"),
-	include_bytes!("../assets/fonts/GeistMono-Medium.ttf"),
+	include_bytes!("../../assets/fonts/Geist-Regular.ttf"),
+	include_bytes!("../../assets/fonts/Geist-Medium.ttf"),
+	include_bytes!("../../assets/fonts/Geist-SemiBold.ttf"),
+	include_bytes!("../../assets/fonts/GeistMono-Regular.ttf"),
+	include_bytes!("../../assets/fonts/GeistMono-Medium.ttf"),
 ];
 
 pub const FAMILIES: (&str, &str) = ("Geist", "Geist Mono");
