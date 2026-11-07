@@ -5,7 +5,8 @@ use super::refusal::on_one_line;
 use crate::agent::protocol::OauthCredentials;
 use crate::environment::contract::{
 	EnvError, EnvOwner, EnvScope, Values, OAUTH_ACCESS_TOKEN, OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET,
-	OAUTH_EXPIRES_AT, OAUTH_REASON, OAUTH_REDIRECT_URI, OAUTH_REFRESH_TOKEN, RESERVED_NAMES,
+	OAUTH_EXPIRES_AT, OAUTH_REASON, OAUTH_REDIRECT_URI, OAUTH_REFRESH_TOKEN, OAUTH_SERVER_URL,
+	RESERVED_NAMES,
 };
 use crate::environment::store;
 
@@ -16,6 +17,10 @@ const REDACTED: &str = "[redacted]";
 const SECRET_NAMES: [&str; 3] = [OAUTH_ACCESS_TOKEN, OAUTH_REFRESH_TOKEN, OAUTH_CLIENT_SECRET];
 
 const TOKEN_NAMES: [&str; 3] = [OAUTH_ACCESS_TOKEN, OAUTH_REFRESH_TOKEN, OAUTH_EXPIRES_AT];
+
+pub fn bound_url(held: &Values) -> Option<&str> {
+	held.get(OAUTH_SERVER_URL).map(String::as_str)
+}
 
 pub fn expires_at(held: &Values) -> Option<i64> {
 	held.get(OAUTH_EXPIRES_AT).map(|at| at.parse().unwrap_or(AN_UNREADABLE_EXPIRY_HAS_PASSED))
@@ -91,7 +96,7 @@ fn named(held: &OauthCredentials, name: &str) -> Option<String> {
 }
 
 pub fn store(root: &Path, scope: &EnvScope, held: &OauthCredentials) -> Result<(), EnvError> {
-	for name in RESERVED_NAMES {
+	for name in RESERVED_NAMES.into_iter().filter(|name| *name != OAUTH_SERVER_URL) {
 		let written = match named(held, name) {
 			Some(value) => store::set(root, scope, name, &value),
 			None => store::delete(root, scope, name),
@@ -101,6 +106,11 @@ pub fn store(root: &Path, scope: &EnvScope, held: &OauthCredentials) -> Result<(
 		}
 	}
 	Ok(())
+}
+
+pub fn bind(root: &Path, scope: &EnvScope, url: &str) -> Result<(), EnvError> {
+	store::set(root, scope, OAUTH_SERVER_URL, url)
+		.map_err(|refused| rolled_back(root, scope, refused))
 }
 
 pub fn forget(root: &Path, scope: &EnvScope) -> Result<(), EnvError> {
@@ -194,6 +204,34 @@ mod tests {
 
 		let kept = store::values(&root, &scope).expect("the scope is readable");
 		assert_eq!(kept.get(OAUTH_REASON), None);
+	}
+
+	const SERVER_URL: &str = "https://mcp.granola.test/mcp";
+
+	#[test]
+	fn a_refresh_store_keeps_the_bound_url() {
+		let root = a_root("store-keeps-url");
+		let scope = a_server();
+		store(&root, &scope, &a_full_grant()).expect("the grant is written");
+		bind(&root, &scope, SERVER_URL).expect("the grant is bound");
+
+		store(&root, &scope, &a_bare_grant()).expect("the renewed grant is written");
+
+		let kept = store::values(&root, &scope).expect("the scope is readable");
+		assert_eq!(bound_url(&kept), Some(SERVER_URL));
+		assert_eq!(kept.get(OAUTH_ACCESS_TOKEN).map(String::as_str), Some("granted-again"));
+	}
+
+	#[test]
+	fn forgetting_a_grant_forgets_its_bound_url() {
+		let root = a_root("forget-url");
+		let scope = a_server();
+		store(&root, &scope, &a_full_grant()).expect("the grant is written");
+		bind(&root, &scope, SERVER_URL).expect("the grant is bound");
+
+		forget(&root, &scope).expect("the grant is forgotten");
+
+		assert_eq!(bound_url(&store::values(&root, &scope).expect("the scope is readable")), None);
 	}
 
 	#[test]
