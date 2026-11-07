@@ -104,7 +104,6 @@ pub fn create_dir(path: &Path) -> std::io::Result<()> {
 	fs::create_dir_all(path)
 }
 
-#[cfg(unix)]
 fn create_owned(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
 	use std::io::Write;
 
@@ -114,15 +113,6 @@ fn create_owned(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
 		return Err(stopped_partway());
 	}
 	file.write_all(bytes)
-}
-
-#[cfg(not(unix))]
-fn create_owned(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
-	if interrupted() {
-		fs::write(path, &bytes[..bytes.len() / 2])?;
-		return Err(stopped_partway());
-	}
-	fs::write(path, bytes)
 }
 
 fn stopped_partway() -> std::io::Error {
