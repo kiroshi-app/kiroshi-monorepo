@@ -263,20 +263,12 @@ fn with_frame(frame: &Frame, change: impl FnOnce(&mut Frame)) -> Event {
 	Event::Frame(Box::new(next))
 }
 
-fn caret_of(
-	t: &Tokens,
-	item: &Item,
-	outline: Option<&Outline>,
-	writers: &[String],
-) -> Option<Color> {
-	if !matches!(item.content, Content::Sticky { .. }) {
-		return None;
-	}
-	match outline {
-		Some(outline) if outline.state == OutlineState::Writing => {
+fn caret_of(item: &Item, outline: Option<&Outline>) -> Option<Color> {
+	match (&item.content, outline) {
+		(Content::Sticky { .. }, Some(outline)) if outline.state == OutlineState::Writing => {
 			Some(owner_colour(&outline.owner))
 		}
-		_ => writers.contains(&item.id).then_some(t.board_sticky_foreground),
+		_ => None,
 	}
 }
 
@@ -306,7 +298,7 @@ fn object_view<S: 'static>(
 	let outline = board.outlines.iter().find(|outline| outline.object_id == item.id);
 	let is_edited = frame.editing.as_ref().is_some_and(|editing| editing.id == item.id);
 	let shown = if is_edited { without_text(&item.content) } else { item.content.clone() };
-	let mut face = content(t, &shown, size, caret_of(t, item, outline, &[])).clip_rounded(0.0);
+	let mut face = content(t, &shown, size, caret_of(item, outline)).clip_rounded(0.0);
 	if let Some(outline) = outline {
 		face = outlined(face, outline);
 	}

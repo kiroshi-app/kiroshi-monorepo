@@ -13,9 +13,6 @@ use crate::tokens::{
 	TEXT_READING, TEXT_SM_MEDIUM, TEXT_SM_SEMIBOLD, TEXT_XS, Tokens,
 };
 
-pub const STICKY_SIDE: f32 = 160.0;
-pub const TEXT_WIDTH: f32 = 300.0;
-pub const LINK_CARD_WIDTH: f32 = 300.0;
 pub const LIBRARY_CARD_WIDTH: f32 = 236.0;
 const STICKY_RADIUS: f32 = 4.0;
 const STICKY_PADDING: f32 = SPACING * 4.0;
