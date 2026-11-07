@@ -1,7 +1,7 @@
 use rune::{Cursor, El, Icon, col, el, icon, row, text};
 
 use super::agent::Identity;
-use super::parts::{PANEL_GAP, PANEL_INSET, ROW_GLYPH, SMALL_GLYPH};
+use super::parts::{PANEL_GAP, PANEL_INSET, ROW_GLYPH, SMALL_GLYPH, rule};
 use super::{Event, Host, say};
 use crate::icons;
 use crate::primitives::button::{Button, ButtonSize, ButtonVariant};
@@ -151,10 +151,6 @@ impl RailItem<'_> {
 			.focus_ring(FOCUS_RING_WIDTH, 0.0, ring_tint(t, 0.5))
 			.on_press(move |s: &mut S| s.emit(event.clone()))
 	}
-}
-
-fn rule(t: &Tokens) -> El {
-	el().w_full().h(1.0).fill(t.border).a11y_hidden()
 }
 
 fn rail(t: &Tokens, leading: Option<El>, items: Vec<El>) -> El {

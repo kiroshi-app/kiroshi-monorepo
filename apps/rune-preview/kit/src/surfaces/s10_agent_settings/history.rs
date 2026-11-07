@@ -1,7 +1,7 @@
-use rune::{Cursor, El, TextEdit, TextStyle, col, el, icon, row, text};
+use rune::{Cursor, El, TextEdit, TextStyle, col, icon, row, text};
 
 use super::parts::{
-	Density, PANEL_GAP, PANEL_INSET, SMALL_GLYPH, bar, button, empty, notice, skeleton_rows,
+	Density, PANEL_GAP, PANEL_INSET, SMALL_GLYPH, bar, button, empty, notice, rule, skeleton_rows,
 	spacer_line,
 };
 use super::shell::{RailItem, pushed};
@@ -368,10 +368,6 @@ pub fn change_page<S: Host>(t: &Tokens, page: &ChangePage) -> El {
 	pushed::<S>(t, say(history::change::BACK), rail, column)
 }
 
-fn rule(t: &Tokens) -> El {
-	el().w_full().h(1.0).fill(t.border).a11y_hidden()
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Line {
 	Context,
@@ -441,14 +437,16 @@ fn parse(patch: &str) -> Option<Patch<'_>> {
 	(files == 1 && !lines.is_empty()).then_some(Patch { path: path?, lines })
 }
 
+fn tally(patch: &Patch) -> (usize, usize) {
+	patch.lines.iter().fold((0, 0), |(added, removed), line| match line.kind {
+		Line::Added => (added + 1, removed),
+		Line::Removed => (added, removed + 1),
+		Line::Context => (added, removed),
+	})
+}
+
 fn changed_lines(patch: &str) -> String {
-	let (added, removed) = parse(patch).map_or((0, 0), |patch| {
-		patch.lines.iter().fold((0, 0), |(added, removed), line| match line.kind {
-			Line::Added => (added + 1, removed),
-			Line::Removed => (added, removed + 1),
-			Line::Context => (added, removed),
-		})
-	});
+	let (added, removed) = parse(patch).map_or((0, 0), |patch| tally(&patch));
 	let mut parts = Vec::new();
 	if added > 0 {
 		parts.push(counted(history::change::ADDED_ONE, history::change::ADDED_OTHER, added, &[]));
@@ -502,11 +500,7 @@ pub fn commit_diff(t: &Tokens, patch: &str) -> El {
 					.wrap(),
 			);
 	};
-	let (added, removed) = parsed.lines.iter().fold((0, 0), |(a, r), line| match line.kind {
-		Line::Added => (a + 1, r),
-		Line::Removed => (a, r + 1),
-		Line::Context => (a, r),
-	});
+	let (added, removed) = tally(&parsed);
 	let header = row()
 		.w_full()
 		.padding(SPACING * 3.0)

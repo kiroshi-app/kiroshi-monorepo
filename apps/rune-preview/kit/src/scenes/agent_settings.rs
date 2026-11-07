@@ -238,9 +238,9 @@ fn agent_panel(
 			},
 		),
 		Entry::Skills => {
-			let mut listed: Vec<SkillItem> = BOT_SKILLS.iter().map(copy_skill).collect();
+			let mut listed: Vec<SkillItem> = BOT_SKILLS.to_vec();
 			if extra == Extra::LongSkill {
-				listed.push(copy_skill(&LONG_SKILL));
+				listed.push(LONG_SKILL);
 			}
 			skills::skills_panel::<SceneState>(t, density, Some(&listed))
 		}
@@ -276,10 +276,6 @@ fn agent_panel(
 			"Belongs to OPE-1985: the Applications and Secrets panes are not part of the S10 views.",
 		),
 	}
-}
-
-fn copy_skill(skill: &SkillItem<'static>) -> SkillItem<'static> {
-	SkillItem { ..*skill }
 }
 
 fn frame(content: El, layers: Vec<El>) -> El {
@@ -947,12 +943,10 @@ pub(super) enum SkillsCase {
 
 pub(super) fn skills_panel(t: &Tokens, case: SkillsCase) -> El {
 	let listed = match case {
-		SkillsCase::Default => Some(BOT_SKILLS.iter().map(copy_skill).collect()),
+		SkillsCase::Default => Some(BOT_SKILLS.to_vec()),
 		SkillsCase::Empty => Some(Vec::new()),
-		SkillsCase::WithSystem => {
-			Some([SYSTEM_SKILL].iter().chain(BOT_SKILLS).map(copy_skill).collect())
-		}
-		SkillsCase::Long => Some([LONG_SKILL].iter().chain(BOT_SKILLS).map(copy_skill).collect()),
+		SkillsCase::WithSystem => Some([SYSTEM_SKILL].iter().chain(BOT_SKILLS).copied().collect()),
+		SkillsCase::Long => Some([LONG_SKILL].iter().chain(BOT_SKILLS).copied().collect()),
 		SkillsCase::Loading => None,
 	};
 	skills_scene(t, listed)

@@ -463,6 +463,10 @@ pub(super) fn outlined_skeleton_row(t: &Tokens, density: Density, bars: Vec<El>)
 		.child(col().grow(1.0).gap(SPACING * 1.5).children(bars))
 }
 
+pub(super) fn rule(t: &Tokens) -> El {
+	el().w_full().h(1.0).fill(t.border).a11y_hidden()
+}
+
 pub(super) fn spacer_line(t: &Tokens) -> El {
 	el().h(1.0).grow(1.0).fill(t.border).a11y_hidden()
 }

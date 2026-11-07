@@ -3,7 +3,7 @@ use rune::{El, TextEdit, col, row, text};
 use super::agent::panel;
 use super::parts::{
 	Density, Lines, ListRow, PANEL_GAP, PANEL_INSET, Select, TextField, add_button, bar, button,
-	empty, list, notice, outlined_skeleton_row, skeleton_rows, switch_row, tag,
+	empty, list, notice, outlined_skeleton_row, rule, skeleton_rows, switch_row, tag,
 };
 use super::shell::{RailItem, pushed};
 use super::{Event, Field, Host, Picker, fill, say};
@@ -82,6 +82,7 @@ impl Section {
 	}
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SkillItem<'a> {
 	pub id: &'a str,
 	pub name: &'a str,
@@ -311,7 +312,7 @@ pub fn skill_editor<S: Host>(t: &Tokens, editor: &SkillEditor) -> El {
 		.grow(1.0)
 		.h_full()
 		.child(editor_header::<S>(t, editor))
-		.child(rule_line(t))
+		.child(rule(t))
 		.child(
 			col()
 				.w_full()
@@ -321,10 +322,6 @@ pub fn skill_editor<S: Host>(t: &Tokens, editor: &SkillEditor) -> El {
 				.child(section_body::<S>(t, editor)),
 		);
 	pushed::<S>(t, say(skills::BACK), sections, body)
-}
-
-fn rule_line(t: &Tokens) -> El {
-	rune::el().w_full().h(1.0).fill(t.border).a11y_hidden()
 }
 
 fn section_body<S: Host>(t: &Tokens, editor: &SkillEditor) -> El {
@@ -535,7 +532,7 @@ pub fn system_skill<S: Host>(t: &Tokens, texts: &SkillTexts) -> El {
 		.child(text(name.to_owned()).font(TEXT_SM_MEDIUM).color(t.foreground).grow(1.0).truncate())
 		.child(tag(t, say(skills::system::TAG), t.muted_foreground));
 	let d = Density::Dialog;
-	col().w_full().grow(1.0).h_full().child(header).child(rule_line(t)).child(
+	col().w_full().grow(1.0).h_full().child(header).child(rule(t)).child(
 		col()
 			.w_full()
 			.grow(1.0)
