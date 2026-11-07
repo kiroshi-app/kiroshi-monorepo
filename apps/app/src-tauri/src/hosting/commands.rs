@@ -1,6 +1,7 @@
 use tauri::State;
 
 use super::contract::*;
+use crate::spaces::contract::SpaceError;
 
 #[tauri::command]
 #[specta::specta]

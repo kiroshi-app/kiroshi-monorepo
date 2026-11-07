@@ -4,7 +4,7 @@ use specta::datatype::DataType;
 use specta::function::FunctionArg;
 use specta::Types;
 use tauri::ipc::{CommandArg, CommandItem, InvokeError};
-use tauri::Runtime;
+use tauri::{Manager, Runtime};
 
 use crate::host_api::invoke::RELAYED_MEMBER_HEADER;
 use crate::hosting::Hosting;

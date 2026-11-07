@@ -1,6 +1,11 @@
 use tauri::{Runtime, State, Webview};
 
 use super::contract::*;
+use std::path::PathBuf;
+
+use super::host::screenshot::{ScreenshotJob, ScreenshotRendered, ScreenshotRequestError};
+use super::link_preview::contract::{LibraryLinkPreview, LibraryLinkPreviewError};
+use crate::agent::contract::CancelOutcome;
 use crate::hosting::authorship::CommandCaller;
 
 #[tauri::command]

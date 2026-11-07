@@ -1,4 +1,4 @@
-use tauri::{AppHandle, Manager, Runtime, Url};
+use tauri::{AppHandle, Runtime, Url};
 use tauri_plugin_deep_link::DeepLinkExt;
 
 use crate::core_context::ClientId;

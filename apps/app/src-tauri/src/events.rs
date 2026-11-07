@@ -1,4 +1,5 @@
 use std::any::type_name;
+use std::path::Path;
 
 use serde::Serialize;
 use tauri::plugin::TauriPlugin;
@@ -7,12 +8,15 @@ use tauri::{
 	AppHandle, Emitter, Manager, Runtime, Theme, Webview, WebviewUrl, WebviewWindowBuilder, Window,
 	WindowEvent,
 };
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, oneshot};
 
+use tauri::image::Image;
+use tauri_plugin_clipboard_manager::ClipboardExt;
+use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 
 use crate::core_context::{
-	Audience, ClientId, ClientScoped, Core, Desktop, EmitError, RenderWindow,
+	Audience, ChosenPath, ClientId, ClientScoped, Copied, Core, Desktop, EmitError, RenderWindow,
 };
 pub use kiroshi_core::events::*;
 
@@ -137,6 +141,36 @@ impl<R: Runtime> Desktop for TauriDesktop<R> {
 			return Ok(());
 		};
 		window.destroy().map_err(|failure| failure.to_string())
+	}
+
+	fn reveal(&self, path: &Path) -> Result<(), String> {
+		self.0.opener().reveal_item_in_dir(path).map_err(|failure| failure.to_string())
+	}
+
+	fn copy(&self, copied: Copied) -> Result<(), String> {
+		let clipboard = self.0.clipboard();
+		let written = match copied {
+			Copied::Text(text) => clipboard.write_text(text),
+			Copied::Image { rgba, width, height } => {
+				clipboard.write_image(&Image::new_owned(rgba, width, height))
+			}
+		};
+		written.map_err(|failure| failure.to_string())
+	}
+
+	fn chosen_save_path(&self, suggested: String) -> ChosenPath {
+		let (answer, answered) = oneshot::channel();
+		self.0.dialog().file().set_file_name(suggested).save_file(move |chosen| {
+			if answer.send(chosen).is_err() {
+				log::warn!("a save dialog answered after its caller was dropped");
+			}
+		});
+		Box::pin(async move {
+			let chosen = answered
+				.await
+				.map_err(|_| "the save dialog closed without an answer".to_owned())?;
+			chosen.map(|path| path.into_path().map_err(|failure| failure.to_string())).transpose()
+		})
 	}
 }
 

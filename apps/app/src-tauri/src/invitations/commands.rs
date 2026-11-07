@@ -1,6 +1,7 @@
 use tauri::State;
 
 use super::contract::*;
+use crate::joined_spaces::contract::{JoinedSpace, JoinedSpaceError};
 
 #[tauri::command]
 #[specta::specta]
