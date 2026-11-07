@@ -36,7 +36,8 @@ pub async fn joined_space_describe(
 	name: String,
 	colour: Option<i64>,
 ) -> Result<JoinedSpace, JoinedSpaceError> {
-	kiroshi_core::joined_spaces::commands::joined_space_describe(core.inner(), id, name, colour).await
+	kiroshi_core::joined_spaces::commands::joined_space_describe(core.inner(), id, name, colour)
+		.await
 }
 
 #[tauri::command]
@@ -45,9 +46,11 @@ pub fn join_link_listen<R: Runtime>(
 	webview: Webview<R>,
 	core: State<'_, crate::core_context::Core>,
 ) {
-	kiroshi_core::joined_spaces::commands::join_link_listen(core.inner(), &crate::events::client_of(&webview.window()))
+	kiroshi_core::joined_spaces::commands::join_link_listen(
+		core.inner(),
+		&crate::events::client_of(&webview.window()),
+	)
 }
-
 
 #[tauri::command]
 #[specta::specta]
@@ -57,4 +60,3 @@ pub async fn joined_space_members(
 ) -> Result<Vec<JoinedSpaceMember>, JoinedSpaceError> {
 	kiroshi_core::joined_spaces::members::joined_space_members(core.inner(), id).await
 }
-

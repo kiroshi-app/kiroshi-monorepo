@@ -1,12 +1,10 @@
-use tauri::{State};
+use tauri::State;
 
 use super::contract::*;
 
 #[tauri::command]
 #[specta::specta]
-pub fn device_approval(
-	core: State<'_, crate::core_context::Core>,
-) -> DeviceApproval {
+pub fn device_approval(core: State<'_, crate::core_context::Core>) -> DeviceApproval {
 	kiroshi_core::devices::commands::device_approval(core.inner())
 }
 
@@ -69,4 +67,3 @@ pub async fn device_remove(
 ) -> Result<(), DeviceError> {
 	kiroshi_core::devices::commands::device_remove(core.inner(), device_id).await
 }
-

@@ -94,9 +94,7 @@ pub async fn library_copy_bytes(
 
 #[tauri::command]
 #[specta::specta]
-pub fn library_templates(
-	,
-) -> Vec<LibraryTemplate> {
+pub fn library_templates() -> Vec<LibraryTemplate> {
 	kiroshi_core::library::commands::library_templates()
 }
 
@@ -108,7 +106,13 @@ pub async fn library_create_document(
 	name: String,
 	template_id: Option<String>,
 ) -> Result<LibraryItem, LibraryError> {
-	kiroshi_core::library::commands::library_create_document(core.inner(), space_id, name, template_id).await
+	kiroshi_core::library::commands::library_create_document(
+		core.inner(),
+		space_id,
+		name,
+		template_id,
+	)
+	.await
 }
 
 #[tauri::command]
@@ -149,7 +153,8 @@ pub async fn library_apply_update(
 	name: String,
 	update: String,
 ) -> Result<(), LibraryError> {
-	kiroshi_core::library::commands::library_apply_update(core.inner(), space_id, name, update).await
+	kiroshi_core::library::commands::library_apply_update(core.inner(), space_id, name, update)
+		.await
 }
 
 #[tauri::command]
@@ -162,7 +167,15 @@ pub async fn library_share_presence<R: Runtime>(
 	name: String,
 	at: Option<LibraryPresenceAt>,
 ) -> Result<(), LibraryError> {
-	kiroshi_core::library::commands::library_share_presence(core.inner(), &crate::events::client_of(&webview.window()), caller.0, space_id, name, at).await
+	kiroshi_core::library::commands::library_share_presence(
+		core.inner(),
+		&crate::events::client_of(&webview.window()),
+		caller.0,
+		space_id,
+		name,
+		at,
+	)
+	.await
 }
 
 #[tauri::command]
@@ -173,7 +186,8 @@ pub async fn library_stop_writers(
 	name: String,
 	agent_id: Option<String>,
 ) -> Result<CancelOutcome, LibraryError> {
-	kiroshi_core::library::commands::library_stop_writers(core.inner(), space_id, name, agent_id).await
+	kiroshi_core::library::commands::library_stop_writers(core.inner(), space_id, name, agent_id)
+		.await
 }
 
 #[tauri::command]
@@ -220,9 +234,7 @@ pub async fn library_import_paths(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn library_read_picked_image(
-	path: PathBuf,
-) -> Result<LibraryImage, LibraryError> {
+pub async fn library_read_picked_image(path: PathBuf) -> Result<LibraryImage, LibraryError> {
 	kiroshi_core::library::commands::library_read_picked_image(path).await
 }
 
@@ -234,7 +246,8 @@ pub async fn library_rename_document(
 	name: String,
 	new_name: String,
 ) -> Result<LibraryItem, LibraryError> {
-	kiroshi_core::library::commands::library_rename_document(core.inner(), space_id, name, new_name).await
+	kiroshi_core::library::commands::library_rename_document(core.inner(), space_id, name, new_name)
+		.await
 }
 
 #[tauri::command]
@@ -245,7 +258,8 @@ pub async fn library_rename_board(
 	name: String,
 	new_name: String,
 ) -> Result<LibraryItem, LibraryError> {
-	kiroshi_core::library::commands::library_rename_board(core.inner(), space_id, name, new_name).await
+	kiroshi_core::library::commands::library_rename_board(core.inner(), space_id, name, new_name)
+		.await
 }
 
 #[tauri::command]
@@ -255,7 +269,8 @@ pub async fn library_save_message(
 	conversation_id: String,
 	message_id: String,
 ) -> Result<LibraryItem, LibraryError> {
-	kiroshi_core::library::commands::library_save_message(core.inner(), conversation_id, message_id).await
+	kiroshi_core::library::commands::library_save_message(core.inner(), conversation_id, message_id)
+		.await
 }
 
 #[tauri::command]
@@ -268,14 +283,16 @@ pub async fn library_delete(
 	kiroshi_core::library::commands::library_delete(core.inner(), space_id, name).await
 }
 
-
 #[tauri::command]
 #[specta::specta]
 pub fn library_screenshot_job<R: Runtime>(
 	webview: Webview<R>,
 	core: State<'_, crate::core_context::Core>,
 ) -> Result<ScreenshotJob, ScreenshotRequestError> {
-	kiroshi_core::library::host::screenshot::library_screenshot_job(core.inner(), &crate::events::client_of(&webview.window()))
+	kiroshi_core::library::host::screenshot::library_screenshot_job(
+		core.inner(),
+		&crate::events::client_of(&webview.window()),
+	)
 }
 
 #[tauri::command]
@@ -286,9 +303,13 @@ pub fn library_screenshot_answer<R: Runtime>(
 	request_id: String,
 	answer: ScreenshotRendered,
 ) -> Result<(), ScreenshotRequestError> {
-	kiroshi_core::library::host::screenshot::library_screenshot_answer(core.inner(), &crate::events::client_of(&webview.window()), request_id, answer)
+	kiroshi_core::library::host::screenshot::library_screenshot_answer(
+		core.inner(),
+		&crate::events::client_of(&webview.window()),
+		request_id,
+		answer,
+	)
 }
-
 
 #[tauri::command]
 #[specta::specta]
@@ -297,4 +318,3 @@ pub async fn library_read_link_preview(
 ) -> Result<LibraryLinkPreview, LibraryLinkPreviewError> {
 	kiroshi_core::library::link_preview::commands::library_read_link_preview(url).await
 }
-

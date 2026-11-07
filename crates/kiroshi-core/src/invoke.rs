@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::panic::{resume_unwind, AssertUnwindSafe};
+use std::path::PathBuf;
 
 use axum::body::Bytes;
 use axum::extract::{Path, State};
@@ -37,6 +38,8 @@ use crate::environment::commands::{connection_set, env_delete, env_list, env_set
 use crate::environment::contract::{ConnectionKind, EnvOwner, EnvScope};
 use crate::hosting::caller::Caller;
 use crate::json::JsonValue;
+use crate::library::contract::LibraryPresenceAt;
+use crate::library::host::screenshot::ScreenshotRendered;
 use crate::mcp_oauth::commands::{
 	application_status, connect_application, disconnect_application, mcp_oauth_cancel,
 };
@@ -47,6 +50,7 @@ use crate::routines::contract::{RoutineDraft, RoutineEdit, RunClosing};
 use crate::search::contract::MessageSearchQuery;
 use crate::sections::commands::*;
 use crate::sections::contract::RosterPin;
+use crate::spaces::contract::SpacePreferences;
 use crate::spaces::read::list_spaces;
 use crate::user::commands::*;
 use crate::user::contract::{OnboardingStep, UserPreferences};

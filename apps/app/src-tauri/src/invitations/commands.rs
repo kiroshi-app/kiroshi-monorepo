@@ -1,4 +1,4 @@
-use tauri::{State};
+use tauri::State;
 
 use super::contract::*;
 
@@ -27,4 +27,3 @@ pub async fn invitation_decline(
 ) -> Result<(), InvitationError> {
 	kiroshi_core::invitations::commands::invitation_decline(core.inner(), invitation_id).await
 }
-

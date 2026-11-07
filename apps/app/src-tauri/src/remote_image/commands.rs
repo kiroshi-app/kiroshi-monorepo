@@ -1,4 +1,4 @@
-use tauri::{State};
+use tauri::State;
 
 use super::contract::*;
 
@@ -10,4 +10,3 @@ pub async fn remote_image_read(
 ) -> Result<RemoteImage, RemoteImageError> {
 	kiroshi_core::remote_image::commands::remote_image_read(core.inner(), url).await
 }
-

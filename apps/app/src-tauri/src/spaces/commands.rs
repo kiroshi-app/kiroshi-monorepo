@@ -1,4 +1,4 @@
-use tauri::{State};
+use tauri::State;
 
 use super::contract::*;
 
@@ -85,7 +85,8 @@ pub async fn bot_add_to_space(
 	space_id: String,
 	section_id: Option<String>,
 ) -> Result<(), SpaceError> {
-	kiroshi_core::spaces::commands::bot_add_to_space(core.inner(), bot_id, space_id, section_id).await
+	kiroshi_core::spaces::commands::bot_add_to_space(core.inner(), bot_id, space_id, section_id)
+		.await
 }
 
 #[tauri::command]
@@ -125,4 +126,3 @@ pub async fn space_companion_counts(
 ) -> Result<Vec<CompanionCounts>, SpaceError> {
 	kiroshi_core::spaces::commands::space_companion_counts(core.inner(), space_id).await
 }
-
