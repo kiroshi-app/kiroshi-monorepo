@@ -499,6 +499,148 @@ table! { core, client;
 	routine_close_run(run_id: String, closing: RunClosing) =>
 		answered(crate::routines::commands::routine_close_run(core, run_id, closing).await);
 	routine_key(id: String) => answered(crate::routines::commands::routine_key(core, id).await);
+
+	library_list(space_id: String) =>
+		answered(crate::library::commands::library_list(core, space_id).await);
+	library_read_document(space_id: String, name: String) =>
+		answered(crate::library::commands::library_read_document(core, space_id, name).await);
+	library_save(space_id: String, name: String) =>
+		answered(crate::library::commands::library_save(core, space_id, name).await);
+	library_copy(space_id: String, name: String) =>
+		answered(crate::library::commands::library_copy(core, space_id, name).await);
+	library_reveal(space_id: String, name: String) =>
+		answered(crate::library::commands::library_reveal(core, space_id, name).await);
+	library_read_image(space_id: String, name: String) =>
+		answered(crate::library::commands::library_read_image(core, space_id, name).await);
+	library_read_file(space_id: String, name: String) =>
+		answered(crate::library::commands::library_read_file(core, space_id, name).await);
+	library_save_bytes(name: String, content: String) =>
+		answered(crate::library::commands::library_save_bytes(core, name, content).await);
+	library_copy_bytes(name: String, content: String) =>
+		answered(crate::library::commands::library_copy_bytes(core, name, content).await);
+	library_templates() => plain(crate::library::commands::library_templates());
+	library_create_document(space_id: String, name: String, template_id: Option<String>) =>
+		answered(crate::library::commands::library_create_document(core, space_id, name, template_id).await);
+	library_create_board(space_id: String, name: String) =>
+		answered(crate::library::commands::library_create_board(core, space_id, name).await);
+	library_board_summary(space_id: String, name: String) =>
+		answered(crate::library::commands::library_board_summary(core, space_id, name).await);
+	library_open_document(space_id: String, name: String) =>
+		answered(crate::library::commands::library_open_document(core, space_id, name).await);
+	library_apply_update(space_id: String, name: String, update: String) =>
+		answered(crate::library::commands::library_apply_update(core, space_id, name, update).await);
+	library_share_presence(space_id: String, name: String, at: Option<LibraryPresenceAt>) =>
+		answered(crate::library::commands::library_share_presence(core, client, Caller::Host, space_id, name, at).await);
+	library_stop_writers(space_id: String, name: String, agent_id: Option<String>) =>
+		answered(crate::library::commands::library_stop_writers(core, space_id, name, agent_id).await);
+	library_read_thumbnail(space_id: String, name: String) =>
+		answered(crate::library::commands::library_read_thumbnail(core, space_id, name).await);
+	library_import(space_id: String, name: String, content: String) =>
+		answered(crate::library::commands::library_import(core, space_id, name, content).await);
+	library_import_url(space_id: String, url: String) =>
+		answered(crate::library::commands::library_import_url(core, Caller::Host, space_id, url).await);
+	library_import_paths(space_id: String, paths: Vec<PathBuf>) =>
+		answered(crate::library::commands::library_import_paths(core, space_id, paths).await);
+	library_read_picked_image(path: PathBuf) =>
+		answered(crate::library::commands::library_read_picked_image(path).await);
+	library_rename_document(space_id: String, name: String, new_name: String) =>
+		answered(crate::library::commands::library_rename_document(core, space_id, name, new_name).await);
+	library_rename_board(space_id: String, name: String, new_name: String) =>
+		answered(crate::library::commands::library_rename_board(core, space_id, name, new_name).await);
+	library_save_message(conversation_id: String, message_id: String) =>
+		answered(crate::library::commands::library_save_message(core, conversation_id, message_id).await);
+	library_delete(space_id: String, name: String) =>
+		answered(crate::library::commands::library_delete(core, space_id, name).await);
+
+	library_screenshot_job() =>
+		answered(crate::library::host::screenshot::library_screenshot_job(core, client));
+	library_screenshot_answer(request_id: String, answer: ScreenshotRendered) =>
+		answered(crate::library::host::screenshot::library_screenshot_answer(core, client, request_id, answer));
+
+	library_read_link_preview(url: String) =>
+		answered(crate::library::link_preview::commands::library_read_link_preview(url).await);
+
+	joined_spaces_list() =>
+		answered(crate::joined_spaces::commands::joined_spaces_list(core).await);
+	joined_space_connect(id: String) =>
+		answered(crate::joined_spaces::commands::joined_space_connect(core, id).await);
+	joined_space_remove(id: String) =>
+		answered(crate::joined_spaces::commands::joined_space_remove(core, id).await);
+	joined_space_describe(id: String, name: String, colour: Option<i64>) =>
+		answered(crate::joined_spaces::commands::joined_space_describe(core, id, name, colour).await);
+	join_link_listen() => plain(crate::joined_spaces::commands::join_link_listen(core, client));
+
+	joined_space_members(id: String) =>
+		answered(crate::joined_spaces::members::joined_space_members(core, id).await);
+
+	invitations_list() => answered(crate::invitations::commands::invitations_list(core).await);
+	invitation_accept(invitation_id: String) =>
+		answered(crate::invitations::commands::invitation_accept(core, invitation_id).await);
+	invitation_decline(invitation_id: String) =>
+		answered(crate::invitations::commands::invitation_decline(core, invitation_id).await);
+
+	remote_image_read(url: String) =>
+		answered(crate::remote_image::commands::remote_image_read(core, url).await);
+
+	hosting_start(space_id: String) =>
+		answered(crate::hosting::commands::hosting_start(core, space_id).await);
+	hosting_stop(space_id: String) =>
+		answered(crate::hosting::commands::hosting_stop(core, space_id).await);
+	hosting_state(space_id: String) =>
+		plain(crate::hosting::commands::hosting_state(core, space_id));
+	hosting_members(space_id: String) =>
+		answered(crate::hosting::commands::hosting_members(core, space_id).await);
+	hosting_invite_member(space_id: String, email: String) =>
+		answered(crate::hosting::commands::hosting_invite_member(core, space_id, email).await);
+	hosting_withdraw_invitation(space_id: String, invitation_id: String) =>
+		answered(crate::hosting::commands::hosting_withdraw_invitation(core, space_id, invitation_id).await);
+	hosting_resend_invitation(space_id: String, invitation_id: String) =>
+		answered(crate::hosting::commands::hosting_resend_invitation(core, space_id, invitation_id).await);
+	hosting_remove_member(space_id: String, user_id: String) =>
+		answered(crate::hosting::commands::hosting_remove_member(core, space_id, user_id).await);
+	hosting_invite_member_again(space_id: String, user_id: String) =>
+		answered(crate::hosting::commands::hosting_invite_member_again(core, space_id, user_id).await);
+	hosting_devices(space_id: String) =>
+		answered(crate::hosting::commands::hosting_devices(core, space_id).await);
+	hosting_remove_device(space_id: String, device_id: String) =>
+		answered(crate::hosting::commands::hosting_remove_device(core, space_id, device_id).await);
+
+	space_create(name: String) => answered(crate::spaces::commands::space_create(core, name).await);
+	space_update(id: String, name: String, colour: Option<i64>) =>
+		answered(crate::spaces::commands::space_update(core, id, name, colour).await);
+	space_reorder(ids: Vec<String>) =>
+		answered(crate::spaces::commands::space_reorder(core, ids).await);
+	space_delete(id: String) => answered(crate::spaces::commands::space_delete(core, id).await);
+	space_export(id: String, path: String) =>
+		answered(crate::spaces::commands::space_export(core, id, path).await);
+	space_import(path: String) => answered(crate::spaces::commands::space_import(core, path).await);
+	bot_move_to_space(bot_id: String, space_id: String) =>
+		answered(crate::spaces::commands::bot_move_to_space(core, bot_id, space_id).await);
+	bot_add_to_space(bot_id: String, space_id: String, section_id: Option<String>) =>
+		answered(crate::spaces::commands::bot_add_to_space(core, bot_id, space_id, section_id).await);
+	bot_remove_from_space(bot_id: String, space_id: String) =>
+		answered(crate::spaces::commands::bot_remove_from_space(core, bot_id, space_id).await);
+	space_preferences(space_id: String) =>
+		answered(crate::spaces::commands::space_preferences(core, space_id).await);
+	space_set_preferences(space_id: String, preferences: SpacePreferences) =>
+		answered(crate::spaces::commands::space_set_preferences(core, space_id, preferences).await);
+	space_companion_counts(space_id: String) =>
+		answered(crate::spaces::commands::space_companion_counts(core, space_id).await);
+
+	device_approval() => plain(crate::devices::commands::device_approval(core));
+	device_approval_retry() =>
+		answered(crate::devices::commands::device_approval_retry(core).await);
+	device_approval_code_request() =>
+		answered(crate::devices::commands::device_approval_code_request(core).await);
+	device_approval_code_submit(code: String) =>
+		answered(crate::devices::commands::device_approval_code_submit(core, code).await);
+	device_approve(device_id: String) =>
+		answered(crate::devices::commands::device_approve(core, device_id).await);
+	device_refuse(device_id: String) =>
+		answered(crate::devices::commands::device_refuse(core, device_id).await);
+	devices_list() => answered(crate::devices::commands::devices_list(core).await);
+	device_remove(device_id: String) =>
+		answered(crate::devices::commands::device_remove(core, device_id).await);
 }
 
 pub async fn dispatch(core: &Core, command: &str, arguments: Value) -> Option<Answer> {
@@ -623,82 +765,7 @@ mod tests {
 
 	const OS_SHELL_MODULES: [&str; 4] = ["badge", "notifications", "updates", "window_controls"];
 
-	const NOT_YET_IN_CORE: [&str; 74] = [
-		"remote_image_read",
-		"library_list",
-		"library_read_document",
-		"library_save",
-		"library_copy",
-		"library_reveal",
-		"library_read_image",
-		"library_read_file",
-		"library_save_bytes",
-		"library_copy_bytes",
-		"library_templates",
-		"library_create_document",
-		"library_create_board",
-		"library_board_summary",
-		"library_open_document",
-		"library_apply_update",
-		"library_share_presence",
-		"library_stop_writers",
-		"library_read_thumbnail",
-		"library_screenshot_job",
-		"library_screenshot_answer",
-		"library_import",
-		"library_import_url",
-		"library_import_paths",
-		"library_read_picked_image",
-		"library_rename_document",
-		"library_rename_board",
-		"library_save_message",
-		"library_delete",
-		"library_read_link_preview",
-		"diagnostics",
-		"log_tail",
-		"log_reveal",
-		"log_clear",
-		"device_approval",
-		"device_approval_retry",
-		"device_approval_code_request",
-		"device_approval_code_submit",
-		"device_approve",
-		"device_refuse",
-		"devices_list",
-		"device_remove",
-		"hosting_start",
-		"hosting_stop",
-		"hosting_state",
-		"hosting_members",
-		"hosting_invite_member",
-		"hosting_withdraw_invitation",
-		"hosting_resend_invitation",
-		"hosting_remove_member",
-		"hosting_invite_member_again",
-		"hosting_devices",
-		"hosting_remove_device",
-		"invitations_list",
-		"invitation_accept",
-		"invitation_decline",
-		"joined_spaces_list",
-		"joined_space_connect",
-		"joined_space_remove",
-		"joined_space_describe",
-		"join_link_listen",
-		"joined_space_members",
-		"space_create",
-		"space_update",
-		"space_reorder",
-		"space_delete",
-		"space_export",
-		"space_import",
-		"bot_move_to_space",
-		"bot_add_to_space",
-		"bot_remove_from_space",
-		"space_preferences",
-		"space_set_preferences",
-		"space_companion_counts",
-	];
+	const NOT_YET_IN_CORE: [&str; 4] = ["diagnostics", "log_tail", "log_reveal", "log_clear"];
 
 	fn tauri_commands() -> Vec<(String, String)> {
 		let table = std::fs::read_to_string(format!("{}/src/commands.rs", crate::APP_DIR))
