@@ -230,7 +230,6 @@ mod tests {
 		let app = a_core_of_its_own("joined-space-members");
 		app.manage::<db::DatabaseState>(Ok(db::open(dir)));
 		app.manage(AccountSession::new(Ok::<PathBuf, _>(dir.join("account")), api_url));
-		crate::account::session::install_signed_in_work(&*app, crate::account::AppSignedInWork);
 		app.manage(RelayGuests::new(api_url));
 		app.manage(DeviceKeysState::new(Ok(DeviceKeys::from_secret(&DEVICE_SECRET))));
 		app.manage(SpaceKeys::new(InstallKind::Dev, "members".to_owned(), Some(dir.join("keys"))));

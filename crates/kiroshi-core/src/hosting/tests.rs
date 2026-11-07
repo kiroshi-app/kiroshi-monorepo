@@ -612,7 +612,7 @@ struct HostEffects {
 	database: PathBuf,
 	env_root: PathBuf,
 	reached: Arc<Mutex<Vec<String>>>,
-	app: Arc<OnceLock<tauri::AppHandle<MockRuntime>>>,
+	app: Arc<OnceLock<crate::core_context::Core>>,
 }
 
 impl HostEffects {
@@ -624,7 +624,7 @@ impl HostEffects {
 		self.env_root.join("library")
 	}
 
-	fn app(&self) -> &tauri::AppHandle<MockRuntime> {
+	fn app(&self) -> &crate::core_context::Core {
 		self.app.get().expect("the host app is up")
 	}
 }
@@ -704,7 +704,7 @@ async fn host_effect_applied(
 		}
 		"library_open_document" => {
 			return answered_by_the_library(library::open_document(
-				crate::events::core(effects.app()),
+				effects.app(),
 				&effects.library(),
 				&text("spaceId"),
 				&text("name"),
@@ -712,7 +712,7 @@ async fn host_effect_applied(
 		}
 		"library_apply_update" => {
 			return answered_by_the_library(library::apply_update(
-				crate::events::core(effects.app()),
+				effects.app(),
 				&effects.library(),
 				&text("spaceId"),
 				&text("name"),
@@ -739,7 +739,7 @@ async fn host_effect_applied(
 		}
 		"library_rename_document" => {
 			return answered_by_the_library(library::rename_document(
-				crate::events::core(effects.app()),
+				effects.app(),
 				&effects.library(),
 				&text("spaceId"),
 				&text("name"),
@@ -755,7 +755,7 @@ async fn host_effect_applied(
 		}
 		"library_rename_board" => {
 			return answered_by_the_library(library::rename_board(
-				crate::events::core(effects.app()),
+				effects.app(),
 				&effects.library(),
 				&text("spaceId"),
 				&text("name"),
@@ -771,7 +771,7 @@ async fn host_effect_applied(
 		}
 		"library_delete" => {
 			return answered_by_the_library(library::delete_item(
-				crate::events::core(effects.app()),
+				effects.app(),
 				&effects.library(),
 				&text("spaceId"),
 				&text("name"),
@@ -934,10 +934,9 @@ impl Harness {
 		app.manage::<DatabaseState>(Ok(db::open(&database)));
 		app.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
 		let profile = app.data_dir().to_path_buf();
-		let identifier = app.config().identifier.clone();
+		let identifier = app.identifier().to_owned();
 		app.manage(SpaceKeys::new(InstallKind::Dev, identifier, Some(profile)));
 		app.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &cloud));
-		crate::account::session::install_signed_in_work(&*app, crate::account::AppSignedInWork);
 		app.manage(RelayGuests::new(&cloud));
 		app.manage(
 			Hosting::new(
@@ -1987,7 +1986,7 @@ fn a_local_event_is_forwarded_to_the_relay() {
 		answer(&mut member).await;
 
 		let payload = json!({ "spaceId": PERSONAL, "n": 1 });
-		events::emit(harness.app.handle(), Event::new(CHANGED_EVENT), payload).expect("emitted");
+		harness.app.emit(Event::new(CHANGED_EVENT), payload).expect("emitted");
 		let forwarded =
 			next_text(&mut member, |frame| frame["event"]["payload"]["n"] == json!(1)).await;
 
@@ -2104,8 +2103,7 @@ fn a_lagged_event_broadcast_closes_with_1013_and_reconnects() {
 		is_held.await.expect("the database lock is held");
 		let lookup = json!({ "conversationId": "c-lagged" });
 		for _ in 0..BUFFERED_FRAMES + 2 {
-			events::emit(harness.app.handle(), Event::new(MESSAGE_STORED_EVENT), lookup.clone())
-				.expect("emitted");
+			harness.app.emit(Event::new(MESSAGE_STORED_EVENT), lookup.clone()).expect("emitted");
 		}
 		release.send(()).expect("the holder waits");
 		holding.await.expect("the holder ends").expect("the lock is released");
@@ -2145,8 +2143,7 @@ fn stamp_of(frame: &Value) -> (String, u64) {
 
 fn numbered(harness: &Harness, n: usize) {
 	let payload = json!({ "spaceId": PERSONAL, "n": n });
-	events::emit(harness.app.handle(), Event::new(MEMBERS_CHANGED_EVENT), payload)
-		.expect("emitted");
+	harness.app.emit(Event::new(MEMBERS_CHANGED_EVENT), payload).expect("emitted");
 }
 
 async fn numbered_through(harness: &Harness, member: &mut MemberWire, n: usize) -> Value {
@@ -2981,7 +2978,6 @@ fn an_unreachable_cloud_is_unreachable_with_its_cause() {
 		let app = a_core_of_its_own("hosting-down");
 		app.manage::<DatabaseState>(Ok(db::open(&database)));
 		app.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &cloud));
-		crate::account::session::install_signed_in_work(&*app, crate::account::AppSignedInWork);
 		app.manage(Hosting::new(&cloud, None));
 		let state = app.state::<DatabaseState>();
 		let hosting = state.as_ref().expect("the database").space_hosting();
@@ -3113,8 +3109,7 @@ impl Guest {
 
 	async fn relay_listens(&mut self) {
 		let probed = (CHANGED_EVENT, json!({ "spaceId": PERSONAL, "probe": 0 }));
-		events::emit(self.harness.app.handle(), Event::new(probed.0), probed.1.clone())
-			.expect("emitted");
+		self.harness.app.emit(Event::new(probed.0), probed.1.clone()).expect("emitted");
 		let expected = as_forwarded(probed);
 		next_text(&mut self.member, |frame| *frame == expected).await;
 	}
@@ -4110,7 +4105,7 @@ fn its_answer(id: &str) -> agent::AgentEvent {
 }
 
 async fn pending_in_the_space(
-	app: &tauri::AppHandle<MockRuntime>,
+	app: &crate::core_context::Core,
 	space_id: &str,
 ) -> Vec<agent::ScopedEvent> {
 	commands::agent_pending_questions_in_space(&*app, space_id.to_owned())
@@ -4119,7 +4114,7 @@ async fn pending_in_the_space(
 }
 
 async fn pending_in_the_conversation(
-	app: &tauri::AppHandle<MockRuntime>,
+	app: &crate::core_context::Core,
 	conversation_id: &str,
 ) -> Vec<agent::ScopedEvent> {
 	commands::agent_pending_questions(&*app, conversation_id.to_owned())
@@ -5158,7 +5153,7 @@ fn an_agent_event_of(scope: Value) -> (&'static str, Value) {
 impl Guest {
 	async fn first_event_after(&mut self, published: Vec<(&'static str, Value)>) -> Value {
 		for (event, payload) in published {
-			events::emit(self.harness.app.handle(), Event::new(event), payload).expect("emitted");
+			self.harness.app.emit(Event::new(event), payload).expect("emitted");
 		}
 		next_text(&mut self.member, |frame| frame.get("event").is_some()).await
 	}
@@ -5281,7 +5276,7 @@ fn a_relay_guest_hears_a_known_child_again_without_another_lookup() {
 impl Guest {
 	async fn events_until_the_marker(&mut self) -> Vec<Value> {
 		let marker = a_shared_space_marker();
-		events::emit(self.harness.app.handle(), Event::new(marker.0), marker.1).expect("emitted");
+		self.harness.app.emit(Event::new(marker.0), marker.1).expect("emitted");
 		let mut heard = Vec::new();
 		loop {
 			let frame = next_text(&mut self.member, |frame| frame.get("event").is_some()).await;
@@ -5535,7 +5530,6 @@ impl Authoring {
 				.expect("the bearer is kept");
 		}
 		app.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &cloud));
-		crate::account::session::install_signed_in_work(&*app, crate::account::AppSignedInWork);
 		restore(app.clone()).await;
 		app.manage(webhook::start(app.clone(), crate::host_api::routes(&*app)));
 		let local = super::local_api(&*app).expect("the local host api listens");
@@ -7672,7 +7666,7 @@ fn a_seeded_member_says_hello_calls_gets_its_answer_and_hears_an_event_over_seal
 		send(&mut member, r#"{"id": "c1", "command": "agent_models", "args": {"a": 1}}"#).await;
 		let answered = answer(&mut member).await;
 		let payload = json!({ "spaceId": PERSONAL, "n": 1 });
-		events::emit(harness.app.handle(), Event::new(CHANGED_EVENT), payload).expect("emitted");
+		harness.app.emit(Event::new(CHANGED_EVENT), payload).expect("emitted");
 		let event =
 			next_text(&mut member, |frame| frame["event"]["payload"]["n"] == json!(1)).await;
 

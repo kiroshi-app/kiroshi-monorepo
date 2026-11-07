@@ -143,10 +143,6 @@ pub fn run() {
 				environment::commands::writable_root(crate::events::core(app.handle())),
 				&account::cloud::api_url(),
 			));
-			account::session::install_signed_in_work(
-				crate::events::core(app.handle()),
-				account::AppSignedInWork,
-			);
 			crate::events::core(app.app_handle()).manage(hosting::Hosting::new(
 				&account::cloud::api_url(),
 				hosting::local_api(crate::events::core(app.handle())),

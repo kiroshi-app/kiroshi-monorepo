@@ -241,7 +241,7 @@ mod tests {
 		app.manage::<DatabaseState>(Ok(db::open(&database)));
 		app.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
 		let profile = app.data_dir().to_path_buf();
-		let identifier = app.config().identifier.clone();
+		let identifier = app.identifier().to_owned();
 		app.manage(SpaceKeys::new(InstallKind::Dev, identifier, Some(profile)));
 		let host = SealingHost::planted(&*app, INSTANCE).await;
 		Member { app, host, _database: database }

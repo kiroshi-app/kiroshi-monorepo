@@ -298,7 +298,6 @@ impl Harness {
 				.expect("the bearer is kept");
 		}
 		app.manage(AccountSession::new(Ok::<PathBuf, _>(folder.to_path_buf()), api));
-		crate::account::session::install_signed_in_work(&*app, crate::account::AppSignedInWork);
 		crate::db::install(&*app);
 		app.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
 		app.manage(Hosting::new(api, None));

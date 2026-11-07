@@ -320,7 +320,7 @@ impl Harness {
 		app.manage::<DatabaseState>(database);
 		app.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
 		let profile = app.data_dir().to_path_buf();
-		let identifier = app.config().identifier.clone();
+		let identifier = app.identifier().to_owned();
 		app.manage(SpaceKeys::new(InstallKind::Dev, identifier, Some(profile)));
 		let host = match is_database_open {
 			true => Some(Arc::new(SealingHost::planted(&*app, INSTANCE).await)),
@@ -331,7 +331,6 @@ impl Harness {
 			registered_as_the_member(&app).await;
 		}
 		app.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &api_url));
-		crate::account::session::install_signed_in_work(&*app, crate::account::AppSignedInWork);
 		app.manage(Invitations::new(&api_url).polling_every(every));
 		app.manage(RelayGuests::new(&api_url));
 		let heard = Arc::new(Mutex::new(Vec::new()));

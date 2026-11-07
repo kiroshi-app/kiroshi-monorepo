@@ -1,7 +1,5 @@
-use std::future::Future;
 use std::net::Ipv4Addr;
 use std::path::{Path, PathBuf};
-use std::pin::Pin;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
@@ -16,9 +14,13 @@ use super::cloud::{AuthorizationRequest, Cloud, MeError, PollError, Polled};
 use super::contract::{AccountError, AccountFailure, AccountState, SignedOutReason};
 use crate::crypto::commands::DeviceKeysState;
 use crate::db::{Database, DatabaseState};
+use crate::devices;
 use crate::environment::contract::{EnvError, EnvScope, ACCOUNT_BEARER};
 use crate::environment::store;
 use crate::events::ACCOUNT_CHANGED;
+use crate::hosting;
+use crate::invitations;
+use crate::joined_spaces;
 
 const SIGNED_OUT: AccountState = AccountState::SignedOut { reason: None };
 
@@ -38,31 +40,6 @@ pub const DEVICE_NAME_LIMIT: usize = 64;
 const DISPLAY_NAME_LIMIT: usize = 80;
 
 const UNNAMED_DEVICE: &str = "Mac";
-
-pub type Working<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
-
-pub trait SignedInWork: Send + Sync + 'static {
-	fn signed_in<'a>(&'a self, core: &'a crate::core_context::Core) -> Working<'a, ()>;
-
-	fn launched_signed_out<'a>(&'a self, core: &'a crate::core_context::Core) -> Working<'a, ()>;
-
-	fn renamed(&self, core: &crate::core_context::Core);
-
-	fn stopped<'a>(
-		&'a self,
-		core: &'a crate::core_context::Core,
-	) -> Working<'a, Option<MutexGuard<'a, ()>>>;
-}
-
-pub fn install_signed_in_work(core: &crate::core_context::Core, work: impl SignedInWork) -> bool {
-	core.manage::<Box<dyn SignedInWork>>(Box::new(work))
-}
-
-async fn signed_in_work_started(core: &crate::core_context::Core) {
-	if let Some(work) = core.try_state::<Box<dyn SignedInWork>>() {
-		work.inner().signed_in(core).await;
-	}
-}
 
 pub struct AccountSession {
 	cloud: Cloud,
@@ -278,7 +255,8 @@ async fn approved(
 	core.raise_main_window();
 	if is_signed_in {
 		stored_name_sent(&core);
-		signed_in_work_started(&core).await;
+		devices::signed_in(&core).await;
+		invitations::resumed(&core);
 	}
 }
 
@@ -325,9 +303,10 @@ pub async fn restore(core: crate::core_context::Core) {
 	}
 	if matches!(session.current(), AccountState::SignedIn(_)) {
 		stored_name_sent(&core);
-		signed_in_work_started(&core).await;
-	} else if let Some(work) = core.try_state::<Box<dyn SignedInWork>>() {
-		work.inner().launched_signed_out(&core).await;
+		devices::signed_in(&core).await;
+		invitations::resumed(&core);
+	} else {
+		hosting::resumed(&core).await;
 	}
 }
 
@@ -399,9 +378,7 @@ async fn name_sent(
 	};
 	match session.cloud.rename(&bearer, &sending.name).await {
 		Ok(()) => {
-			if let Some(work) = core.try_state::<Box<dyn SignedInWork>>() {
-				work.inner().renamed(core);
-			}
+			hosting::renamed(core);
 			Some(sending)
 		}
 		Err(MeError::Revoked) => {
@@ -429,7 +406,10 @@ async fn stored_display_name(core: &crate::core_context::Core) -> Option<String>
 }
 
 async fn signed_in_work_stopped(core: &crate::core_context::Core) -> Option<MutexGuard<'_, ()>> {
-	core.try_state::<Box<dyn SignedInWork>>()?.inner().stopped(core).await
+	devices::signed_out(core).await;
+	hosting::signed_out(core).await;
+	invitations::signed_out(core).await;
+	joined_spaces::relay::signed_out(core).await
 }
 
 pub async fn sign_out(core: &crate::core_context::Core) -> Result<(), AccountError> {
@@ -599,6 +579,7 @@ mod tests {
 		closes_after_create: bool,
 		poll_answers: Arc<Mutex<VecDeque<(StatusCode, Value)>>>,
 		sign_out_status: Option<StatusCode>,
+		instances_status: Option<StatusCode>,
 		account: Option<Value>,
 		rename_status: Option<StatusCode>,
 		rename_held: Option<Arc<Semaphore>>,
@@ -665,6 +646,7 @@ mod tests {
 			.route("/authorization-requests", post(created))
 			.route("/authorization-requests/{id}/poll", post(poll))
 			.route("/me", get(me).patch(renamed))
+			.route("/instances", get(instances))
 			.route("/api/auth/sign-out", post(signed_out))
 			.with_state(cloudy);
 		tokio::spawn(async move {
@@ -754,6 +736,10 @@ mod tests {
 			held.acquire().await.expect("the hold stays open").forget();
 		}
 		answered_json(cloudy.rename_status.unwrap_or(StatusCode::OK), body)
+	}
+
+	async fn instances(Served(cloudy): Served<Cloudy>) -> Answered {
+		answered_json(cloudy.instances_status.unwrap_or(StatusCode::OK), json!([]))
 	}
 
 	async fn signed_out(Served(cloudy): Served<Cloudy>, headers: HeaderMap) -> StatusCode {
@@ -1456,6 +1442,26 @@ mod tests {
 				harness.heard(),
 				vec![json!({ "kind": "signedOut", "reason": "signedOutOnSite" })]
 			);
+		});
+	}
+
+	#[test]
+	fn a_401_on_the_instances_route_signs_out_on_site_and_deletes_the_bearer() {
+		run(async {
+			let cloudy =
+				Cloudy { instances_status: Some(StatusCode::UNAUTHORIZED), ..Cloudy::default() };
+			let api = stub(cloudy).await;
+			let harness = Harness::new("instances-401", &api);
+			harness.core.manage(joined_spaces::relay::RelayGuests::new(&api));
+			harness.store(BEARER);
+			restore(harness.core.core().clone()).await;
+			assert_eq!(harness.state(), signed_in());
+
+			joined_spaces::relay::reconciled(harness.core.core()).await;
+
+			assert_eq!(harness.signed_out().await, SIGNED_OUT_ON_SITE);
+			assert_eq!(harness.stored(), None);
+			harness.assert_no_secret_was_heard();
 		});
 	}
 

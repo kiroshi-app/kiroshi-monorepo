@@ -530,10 +530,9 @@ fn signed_in(
 	app.manage::<DatabaseState>(Ok(db::open(&database)));
 	app.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
 	let profile = app.data_dir().to_path_buf();
-	let identifier = app.config().identifier.clone();
+	let identifier = app.identifier().to_owned();
 	app.manage(SpaceKeys::new(InstallKind::Dev, identifier, Some(profile)));
 	app.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), cloud));
-	crate::account::session::install_signed_in_work(&*app, crate::account::AppSignedInWork);
 	let guests = RelayGuests::new(cloud).answering_within(answer_bound);
 	app.manage(guests.resending_every(RESEND_EVERY));
 	app.manage(Invitations::new(cloud));
