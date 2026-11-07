@@ -156,7 +156,7 @@ const Failure = ({ agent }: FailureProps) => {
 				variant="ghost"
 				aria-label={t("workLine.retry", { name: agent.name })}
 				onClick={agent.onRetry}
-				className="h-5.5 shrink-0 rounded-sm border-foreground/15 px-2 font-medium text-foreground text-xs transition-none"
+				className="relative z-1 h-5.5 shrink-0 rounded-sm border-foreground/15 px-2 font-medium text-foreground text-xs transition-none"
 			>
 				{t("turn.retry")}
 			</Button>
@@ -322,7 +322,7 @@ const Toggle = ({ isOpen, detailId, onOpenChange }: ToggleProps) => {
 			aria-label={t("workLine.toggle")}
 			onClick={() => onOpenChange(!isOpen)}
 			className={cn(
-				"relative flex size-5 shrink-0 items-center justify-center rounded-sm border border-transparent text-muted-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 after:absolute after:-inset-0.5 hover:bg-foreground/8 hover:text-foreground active:bg-foreground/12",
+				"ms-auto flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground outline-none after:absolute after:inset-0 after:rounded-sm after:border after:border-transparent hover:bg-foreground/8 hover:text-foreground focus-visible:after:border-ring focus-visible:after:ring-3 focus-visible:after:ring-ring/30 active:bg-foreground/12",
 				isOpen && "bg-foreground/8 text-foreground",
 			)}
 		>
@@ -363,7 +363,11 @@ const ThreadWorkLine = ({
 	const line = (
 		<div
 			data-slot="thread-work-line-line"
-			className="flex h-5 min-w-0 items-center gap-2 whitespace-nowrap"
+			className={cn(
+				"flex h-5 min-w-0 items-center gap-2 whitespace-nowrap",
+				hasDetail &&
+					"relative isolate rounded-sm has-[[data-slot=thread-work-line-toggle]:hover]:bg-muted/50 [&_[data-slot=bot-working-stop]]:z-1",
+			)}
 		>
 			{failed.map((agent) => (
 				<Fragment key={agent.id}>
