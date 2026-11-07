@@ -92,10 +92,7 @@ fn bar(t: &Tokens, open: &Open, shown: &Shown) -> El {
 }
 
 fn canvas(app: &App, t: &Tokens, open: &Open, shown: &Shown, area: Option<Size>) -> El {
-	let session = match &open.phase {
-		Phase::Open(session) => Some(session),
-		Phase::Opening | Phase::Failed(_) => None,
-	};
+	let session = open.opened_session();
 	let objects: Vec<Object> = session.map_or_else(Vec::new, |session| {
 		objects_of(session.held(), &|kind, id| owner_of(app, kind, id))
 	});
@@ -127,7 +124,7 @@ pub fn view(app: &App, t: &Tokens, measured: Option<[f32; 2]>) -> El {
 	let area = measured.map(|[width, height]| Size::new(f64::from(width), f64::from(height)));
 	let Some(open) = app.surfaces.s15_boards.board.as_ref() else { return el() };
 	let notice = open.notice.as_ref().map(|notice| notice_view(t, notice));
-	if let Phase::Failed(_) = open.phase {
+	if let Phase::Failed = open.phase {
 		let back = |app: &mut App| leave_board(app);
 		let unavailable = item_unavailable(
 			t,

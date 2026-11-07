@@ -51,19 +51,19 @@ const IMPORTED_OBJECT_STEP: f64 = 260.0;
 const WEB_SCHEMES: [&str; 2] = ["http://", "https://"];
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Notice {
-	pub kind: ToastType,
-	pub title: String,
-	pub description: String,
+struct Notice {
+	kind: ToastType,
+	title: String,
+	description: String,
 }
 
-pub enum Phase {
+enum Phase {
 	Opening,
-	Failed(String),
+	Failed,
 	Open(Session),
 }
 
-pub struct Open {
+struct Open {
 	target: Target,
 	author: String,
 	phase: Phase,
@@ -78,7 +78,7 @@ pub struct Open {
 	is_reloading: bool,
 }
 
-pub enum Summary {
+enum Summary {
 	Loading,
 	Failed,
 	Loaded(LibraryBoardSummary),
@@ -165,24 +165,28 @@ impl Open {
 		}
 	}
 
-	pub fn viewport_in(&self, objects: &[Object], area: Size) -> Viewport {
+	fn opened_session(&self) -> Option<&Session> {
+		match &self.phase {
+			Phase::Open(session) => Some(session),
+			Phase::Opening | Phase::Failed => None,
+		}
+	}
+
+	fn viewport_in(&self, objects: &[Object], area: Size) -> Viewport {
 		self.viewport.unwrap_or_else(|| opening_viewport(objects, area, opening_margin()))
 	}
 
 	fn session(&mut self) -> Option<&mut Session> {
 		match &mut self.phase {
 			Phase::Open(session) => Some(session),
-			Phase::Opening | Phase::Failed(_) => None,
+			Phase::Opening | Phase::Failed => None,
 		}
-	}
-
-	fn raise(&mut self, notice: Notice) {
-		self.notice = Some(notice);
 	}
 
 	fn raise_refused(&mut self, was_refused: bool, is_refused: bool) {
 		if is_refused && !was_refused {
-			self.raise(error_notice(said(common::library::failure::board::REFUSED), String::new()));
+			self.notice =
+				Some(error_notice(said(common::library::failure::board::REFUSED), String::new()));
 		}
 	}
 
@@ -242,7 +246,7 @@ impl Open {
 					self.heard_early.push(update);
 				}
 			}
-			Phase::Failed(_) => {}
+			Phase::Failed => {}
 		}
 	}
 
@@ -264,11 +268,9 @@ impl Open {
 				self.raise_refused(false, caught_up.is_err());
 			}
 			Err(failure) => {
-				self.raise(error_notice(
-					said(common::library::failure::board::OPEN),
-					failure.clone(),
-				));
-				self.phase = Phase::Failed(failure);
+				self.notice =
+					Some(error_notice(said(common::library::failure::board::OPEN), failure));
+				self.phase = Phase::Failed;
 			}
 		}
 	}
@@ -347,7 +349,8 @@ impl State {
 				};
 				let title = said(common::library::BOARD_FILE_REPLACED)
 					.replace("{{name}}", title_of(&replaced.name));
-				open.raise(Notice { kind: ToastType::Info, title, description: String::new() });
+				open.notice =
+					Some(Notice { kind: ToastType::Info, title, description: String::new() });
 			}
 			Heard::Renamed(renamed) => {
 				if let Some(summary) = self.summaries.remove(&renamed.former_name) {
@@ -452,7 +455,7 @@ impl State {
 			}
 			Answer::Applied { target, outcome: Err(failure) } => {
 				let Some(open) = self.board_of(&target.space_id, &target.name) else { return };
-				open.raise(error_notice(
+				open.notice = Some(error_notice(
 					said(common::library::failure::board::SAVE),
 					failure_text(&failure),
 				));
@@ -473,7 +476,7 @@ impl State {
 				};
 				let open = self.board.as_mut().zip(failure);
 				if let Some((open, failure)) = open {
-					open.raise(error_notice(
+					open.notice = Some(error_notice(
 						said(common::library::failure::board::STOP_ALL),
 						failure,
 					));
@@ -493,10 +496,12 @@ impl State {
 							.filter(|item| item.name != open.target.name)
 							.collect();
 					}
-					Err(failure) => open.raise(error_notice(
-						said(common::library::failure::LIST),
-						failure_text(&failure),
-					)),
+					Err(failure) => {
+						open.notice = Some(error_notice(
+							said(common::library::failure::LIST),
+							failure_text(&failure),
+						))
+					}
 				}
 				None
 			}
@@ -535,7 +540,7 @@ impl State {
 		let imports = match imports {
 			Ok(imports) => imports,
 			Err(failure) => {
-				open.raise(import_failed(paths.first(), failure_text(&failure)));
+				open.notice = Some(import_failed(paths.first(), failure_text(&failure)));
 				return;
 			}
 		};
@@ -552,7 +557,7 @@ impl State {
 					self.queued.extend(call);
 				}
 				LibraryImport::Refused { error } => {
-					open.raise(import_failed(Some(path), format!("{error:?}")))
+					open.notice = Some(import_failed(Some(path), format!("{error:?}")))
 				}
 			}
 		}

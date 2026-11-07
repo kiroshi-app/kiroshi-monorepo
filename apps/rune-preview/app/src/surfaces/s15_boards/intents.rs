@@ -163,7 +163,13 @@ fn change_of(element: &Value, changes: Value) -> Option<ElementChange> {
 	let mut element = element.as_object()?.clone();
 	let changes = object_of(changes);
 	let fields = changes.keys().cloned().collect();
-	element.extend(changes);
+	for (name, value) in changes {
+		if value.is_null() {
+			element.remove(&name);
+		} else {
+			element.insert(name, value);
+		}
+	}
 	Some(ElementChange { id: String::new(), element, fields })
 }
 
@@ -263,36 +269,16 @@ fn colour_change(fill: ShapeFill) -> Value {
 	preset_of(fill).map_or(Value::Null, Value::from)
 }
 
-fn without_nulls(changes: Value) -> (Value, Vec<String>) {
-	let entries = object_of(changes);
-	let removed = entries.iter().filter(|(_, value)| value.is_null()).map(|(name, _)| name.clone());
-	let removed: Vec<String> = removed.collect();
-	let kept = entries.into_iter().filter(|(_, value)| !value.is_null()).collect();
-	(Value::Object(kept), removed)
-}
-
-fn changed_node_dropping(held: &Held, id: &str, changes: Value) -> Option<BoardEdit> {
-	let (kept, removed) = without_nulls(changes);
-	let mut edit = changed_node(held, id, kept)?;
-	if let Some(change) = edit.changed_nodes.first_mut() {
-		for name in removed {
-			change.element.remove(&name);
-			change.fields.push(name);
-		}
-	}
-	Some(edit)
-}
-
 pub fn restyled(held: &Held, id: &str, style: ShapeStyle) -> Option<BoardEdit> {
 	match kind_of(held, id)? {
 		"sticky" => changed_node(held, id, json!({ "fill": fill_name(style.fill)? })),
-		"shape" => changed_node_dropping(
+		"shape" => changed_node(
 			held,
 			id,
 			json!({ "shape": schema_shape(style.shape), "color": colour_change(style.fill) }),
 		),
 		"foreign" => None,
-		_ => changed_node_dropping(held, id, json!({ "color": colour_change(style.fill) })),
+		_ => changed_node(held, id, json!({ "color": colour_change(style.fill) })),
 	}
 }
 

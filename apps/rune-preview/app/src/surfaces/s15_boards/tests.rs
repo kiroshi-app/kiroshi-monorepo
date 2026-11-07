@@ -120,27 +120,18 @@ fn opened_on(core: &Core) -> State {
 }
 
 fn held_node(state: &State, id: &str) -> Option<Value> {
-	let open = state.board.as_ref()?;
-	match &open.phase {
-		Phase::Open(session) => session.held().nodes.get(id).cloned(),
-		Phase::Opening | Phase::Failed(_) => None,
-	}
+	state.board.as_ref()?.opened_session()?.held().nodes.get(id).cloned()
 }
 
 fn held_edge(state: &State, id: &str) -> Option<Value> {
-	let open = state.board.as_ref()?;
-	match &open.phase {
-		Phase::Open(session) => session.held().edges.get(id).cloned(),
-		Phase::Opening | Phase::Failed(_) => None,
-	}
+	state.board.as_ref()?.opened_session()?.held().edges.get(id).cloned()
 }
 
 fn objects(state: &State) -> Vec<Object> {
-	let Some(open) = state.board.as_ref() else { return Vec::new() };
-	match &open.phase {
-		Phase::Open(session) => objects_of(session.held(), &|_, id| Owner::person(id, "", None)),
-		Phase::Opening | Phase::Failed(_) => Vec::new(),
-	}
+	let session = state.board.as_ref().and_then(|open| open.opened_session());
+	session.map_or_else(Vec::new, |session| {
+		objects_of(session.held(), &|_, id| Owner::person(id, "", None))
+	})
 }
 
 fn sent_updates(state: &mut State) -> Vec<String> {
@@ -215,12 +206,10 @@ fn a_failed_open_shows_the_failed_state_with_the_error() {
 		Instant::now(),
 	);
 	let open = state.board.as_ref().expect("an open board");
-	let Phase::Failed(failure) = &open.phase else { panic!("the board should have failed") };
-	assert!(failure.contains("refused"));
-	assert_eq!(
-		notice_title(&state).as_deref(),
-		Some("Couldn’t open the board. Open it again from the Library.")
-	);
+	assert!(matches!(open.phase, Phase::Failed));
+	let notice = open.notice.as_ref().expect("a notice");
+	assert_eq!(notice.title, "Couldn’t open the board. Open it again from the Library.");
+	assert!(notice.description.contains("refused"));
 }
 
 #[test]
@@ -229,7 +218,7 @@ fn an_unreadable_board_state_fails_the_open() {
 	state.open(SPACE, BOARD, "main");
 	let unreadable = LibraryDocumentState { name: BOARD.to_owned(), update: "%%%".to_owned() };
 	state.answered(Answer::Opened { target: target(), state: Ok(unreadable) }, Instant::now());
-	assert!(matches!(state.board.as_ref().map(|open| &open.phase), Some(Phase::Failed(_))));
+	assert!(matches!(state.board.as_ref().map(|open| &open.phase), Some(Phase::Failed)));
 }
 
 #[test]
