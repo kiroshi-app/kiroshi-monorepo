@@ -115,20 +115,21 @@ fn calls_for_a_new_client(settled: &Authorized) -> bool {
 }
 
 fn authorize_request(name: &str, url: String, stored: &Values) -> AuthorizeRequest {
+	let registering = AuthorizeRequest { url, ..AuthorizeRequest::default() };
 	let (Some(client_id), Some(redirect_uri)) =
 		(stored.get(OAUTH_CLIENT_ID), stored.get(OAUTH_REDIRECT_URI))
 	else {
-		return AuthorizeRequest { url, ..AuthorizeRequest::default() };
+		return registering;
 	};
-	if credentials::bound_url(stored) != Some(url.as_str()) {
+	if credentials::bound_url(stored) != Some(registering.url.as_str()) {
 		eprintln!("the stored client of {name} was withheld: its grant is bound to another url");
-		return AuthorizeRequest { url, ..AuthorizeRequest::default() };
+		return registering;
 	}
 	AuthorizeRequest {
-		url,
 		client_id: Some(client_id.clone()),
 		client_secret: stored.get(OAUTH_CLIENT_SECRET).cloned(),
 		redirect_uri: Some(redirect_uri.clone()),
+		..registering
 	}
 }
 
