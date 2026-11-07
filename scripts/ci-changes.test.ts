@@ -47,21 +47,24 @@ const touching = (...paths: string[]) => touchedJobs(paths)
 
 const REPO = fileURLToPath(new URL("..", import.meta.url))
 
-const SRC_TAURI = join(REPO, "apps/app/src-tauri")
+const RUST_SOURCES = [
+	"apps/app/src-tauri/{src,tests}/**/*.rs",
+	"crates/*/{src,tests}/**/*.rs",
+]
 
 const EMBEDDED_PATH = /include_(?:str|bytes)!\(\s*"([^"]+)"\s*\)/g
 
 const embeddedPathsOf = (source: string) => {
-	const file = join(SRC_TAURI, source)
+	const file = join(REPO, source)
 	return [...readFileSync(file, "utf8").matchAll(EMBEDDED_PATH)].map(
 		([, embedded]) => relative(REPO, join(dirname(file), embedded ?? "")),
 	)
 }
 
-const filesSrcTauriEmbeds = () =>
-	[...new Bun.Glob("{src,tests}/**/*.rs").scanSync({ cwd: SRC_TAURI })].flatMap(
-		embeddedPathsOf,
-	)
+const filesTheRustCratesEmbed = () =>
+	RUST_SOURCES.flatMap((pattern) => [
+		...new Bun.Glob(pattern).scanSync({ cwd: REPO }),
+	]).flatMap(embeddedPathsOf)
 
 const runChangeDetectorIn = (cwd: string, ...args: string[]) =>
 	Bun.spawnSync(
@@ -325,8 +328,8 @@ describe("the paths each job watches", () => {
 		})
 	})
 
-	it("runs rust on every file src-tauri embeds with include_str! or include_bytes!", () => {
-		const embedded = filesSrcTauriEmbeds()
+	it("runs rust on every file the Rust crates embed with include_str! or include_bytes!", () => {
+		const embedded = filesTheRustCratesEmbed()
 
 		expect(embedded).toContain(".claude/settings.json")
 		expect(embedded.filter((path) => !touching(path).rust)).toEqual([])
