@@ -29,7 +29,7 @@ use crate::attachments::contract::SubmittedAttachment;
 use crate::conversations::commands::{conversation_message_page, conversation_send_user_message};
 use crate::conversations::contract::{NewUserMessage, TranscriptStoreError};
 use crate::db;
-use crate::hosting::authorship::Caller;
+use crate::hosting::authorship::{Caller, CommandCaller};
 use crate::removed_on_drop::RemovedOnDrop;
 use crate::spaces::commands::space_delete;
 use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
@@ -2411,7 +2411,7 @@ async fn sent(
 	app: &App<MockRuntime>,
 	message: NewUserMessage,
 ) -> Result<i64, TranscriptStoreError> {
-	conversation_send_user_message(app.state(), Caller::Host, message, vec![]).await
+	conversation_send_user_message(app.state(), CommandCaller(Caller::Host), message, vec![]).await
 }
 
 async fn linked_documents(app: &App<MockRuntime>) -> Vec<(String, Vec<String>)> {

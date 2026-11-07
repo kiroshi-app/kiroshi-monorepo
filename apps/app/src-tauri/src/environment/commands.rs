@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use tauri::{AppHandle, Runtime};
 
-use crate::hosting::authorship::Caller;
+use crate::hosting::authorship::CommandCaller;
 
 use super::contract::{is_reserved, ConnectionKind, EnvEntry, EnvError, EnvScope};
 use super::{connection, store};
@@ -50,7 +50,7 @@ pub async fn env_delete<R: Runtime>(
 #[specta::specta]
 pub async fn env_list<R: Runtime>(
 	app: AppHandle<R>,
-	caller: Caller,
+	caller: CommandCaller,
 	scope: EnvScope,
 ) -> Result<Vec<EnvEntry>, EnvError> {
 	let listed = store::list(&writable_root(crate::events::core(&app))?, &scope)?;

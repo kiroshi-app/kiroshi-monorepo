@@ -37,7 +37,7 @@ use crate::environment::connection;
 use crate::environment::contract::{EnvError, EnvOwner, ResolvedEnv, Values};
 use crate::environment::store as environment;
 use crate::events::{self, Frame, AGENT_EVENT, CONVERSATION_UPDATED};
-use crate::hosting::authorship::{self, Caller};
+use crate::hosting::authorship::{self, Caller, CommandCaller};
 use crate::json::JsonValue;
 use crate::logging;
 use crate::mcp_oauth::refresh;
@@ -1371,7 +1371,7 @@ pub async fn start_with_fallback(
 #[specta::specta]
 pub async fn agent_submit_prompt<R: Runtime>(
 	webview: Webview<R>,
-	caller: Caller,
+	caller: CommandCaller,
 	core: State<'_, crate::core_context::Core>,
 	scope: RuntimeScope,
 	text: String,
@@ -1382,7 +1382,7 @@ pub async fn agent_submit_prompt<R: Runtime>(
 	let database = crate::events::core(webview.app_handle()).try_state::<db::DatabaseState>();
 	submit_claimed_prompt(database.as_deref(), state, scope, text, turn).await?;
 	if let (Some(turn_id), Caller::Host, Some(windows)) =
-		(turn_id, caller, crate::events::core(webview.app_handle()).try_state::<TurnWindows>())
+		(turn_id, caller.0, crate::events::core(webview.app_handle()).try_state::<TurnWindows>())
 	{
 		windows.submitted_from(&crate::events::client_of(&webview.window()), &turn_id);
 	}

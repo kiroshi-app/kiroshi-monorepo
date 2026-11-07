@@ -18,7 +18,7 @@ use crate::db::repositories::messages::{
 	self, AccountAuthor, MessagePageQuery, MessagesAroundQuery, TerminalState, WrittenFrom,
 };
 use crate::events::{CONVERSATION_UPDATED, MESSAGE_STORED};
-use crate::hosting::authorship::Caller;
+use crate::hosting::authorship::{self, Caller, CommandCaller};
 use crate::library::{self, contract::LibraryError};
 
 #[tauri::command]
@@ -184,7 +184,7 @@ pub(crate) async fn complete_turn(
 pub async fn conversation_append_user_message<R: Runtime>(
 	app: AppHandle<R>,
 	core: State<'_, crate::core_context::Core>,
-	caller: Caller,
+	caller: CommandCaller,
 	message: NewUserMessage,
 ) -> Result<i64, TranscriptStoreError> {
 	let state = core.state::<db::DatabaseState>();
@@ -198,7 +198,7 @@ pub async fn conversation_append_user_message<R: Runtime>(
 	)
 	.await?;
 	let written_from = caller.written_from();
-	let author = caller.author(crate::events::core(&app), database).await?;
+	let author = authorship::author(caller.0, crate::events::core(&app), database).await?;
 	let (conversation_id, id) = (message.conversation_id.clone(), message.id.clone());
 	let seq =
 		database.messages().append_user_message(message.written_by(author, written_from)).await?;
@@ -218,11 +218,11 @@ pub async fn conversation_append_user_message<R: Runtime>(
 #[specta::specta]
 pub async fn conversation_send_user_message(
 	core: State<'_, crate::core_context::Core>,
-	caller: Caller,
+	caller: CommandCaller,
 	message: NewUserMessage,
 	summoned: Vec<String>,
 ) -> Result<i64, TranscriptStoreError> {
-	send_user_message(core.inner(), caller, message, summoned).await
+	send_user_message(core.inner(), caller.0, message, summoned).await
 }
 
 pub(crate) async fn send_user_message(
@@ -240,7 +240,7 @@ pub(crate) async fn send_user_message(
 pub async fn conversation_send_turn<R: Runtime>(
 	app: AppHandle<R>,
 	core: State<'_, crate::core_context::Core>,
-	caller: Caller,
+	caller: CommandCaller,
 	message: SentMessage,
 	summoned: Vec<String>,
 ) -> Result<i64, TranscriptStoreError> {
@@ -249,9 +249,14 @@ pub async fn conversation_send_turn<R: Runtime>(
 	let database = ready(&state)?;
 	let held = agent.host_turns().hold(&message.conversation_id, &message.turn_id)?;
 	let summoned = host_turn::summoned_for(database, &message, summoned).await?;
-	let seq =
-		store_sent(crate::events::core(&app), database, caller, message.clone().into(), &summoned)
-			.await?;
+	let seq = store_sent(
+		crate::events::core(&app),
+		database,
+		caller.0,
+		message.clone().into(),
+		&summoned,
+	)
+	.await?;
 	host_turn::run(crate::events::core(&app).clone(), held, message, summoned).await;
 	Ok(seq)
 }
@@ -328,7 +333,7 @@ async fn store_sent(
 	let turn_id = message.turn_id.clone();
 	let completed_at = summoned.is_empty().then_some(message.created_at);
 	let written_from = caller.written_from();
-	let author = caller.author(core, database).await?;
+	let author = authorship::author(caller, core, database).await?;
 	let (conversation_id, id) = (message.conversation_id.clone(), message.id.clone());
 	let seq = database
 		.messages()

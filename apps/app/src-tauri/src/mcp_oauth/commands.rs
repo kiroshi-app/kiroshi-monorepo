@@ -27,7 +27,7 @@ use crate::environment::contract::{
 	OAUTH_REDIRECT_URI, OAUTH_REFRESH_TOKEN,
 };
 use crate::environment::store;
-use crate::hosting::authorship::Caller;
+use crate::hosting::authorship::CommandCaller;
 
 const NOTHING_STORED: &str = "no access token was stored for that server";
 
@@ -272,7 +272,7 @@ pub async fn mcp_oauth_cancel<R: Runtime>(app: AppHandle<R>) -> Result<(), Oauth
 #[specta::specta]
 pub async fn mcp_oauth_disconnect<R: Runtime>(
 	app: AppHandle<R>,
-	caller: Caller,
+	caller: CommandCaller,
 	owner: EnvOwner,
 	name: String,
 	url: String,
@@ -315,7 +315,7 @@ fn held_at(root: &Path, owner: &EnvOwner, name: &str) -> Result<EnvScope, EnvErr
 #[specta::specta]
 pub async fn mcp_application_status<R: Runtime>(
 	app: AppHandle<R>,
-	caller: Caller,
+	caller: CommandCaller,
 	owner: EnvOwner,
 ) -> Result<Vec<ApplicationRow>, EnvError> {
 	if !caller.is_relayed() {
@@ -496,6 +496,7 @@ mod tests {
 	use super::*;
 	use crate::agent::protocol::{OauthFailure, OauthFailureKind};
 	use crate::db::connection::fixture_root;
+	use crate::hosting::authorship::Caller;
 	use crate::mcp_oauth::status::ApplicationStatus;
 	use crate::removed_on_drop::RemovedOnDrop;
 	use crate::test_app::an_app_of_its_own;
@@ -534,9 +535,13 @@ mod tests {
 		credentials::store(&root, &notion, &an_aging_grant(Some("held-refresh")))
 			.expect("the grant is written");
 
-		let rows = mcp_application_status(app.handle().clone(), Caller::Host, EnvOwner::User)
-			.await
-			.expect("the status reads");
+		let rows = mcp_application_status(
+			app.handle().clone(),
+			CommandCaller(Caller::Host),
+			EnvOwner::User,
+		)
+		.await
+		.expect("the status reads");
 
 		assert_eq!(
 			rows.iter().map(|row| row.name.as_str()).collect::<Vec<_>>(),
@@ -816,7 +821,7 @@ mod tests {
 
 		let settled = mcp_oauth_disconnect(
 			app.handle().clone(),
-			Caller::Host,
+			CommandCaller(Caller::Host),
 			owner,
 			"granola".to_owned(),
 			"https://mcp.granola.test/mcp".to_owned(),

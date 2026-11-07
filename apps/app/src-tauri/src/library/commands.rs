@@ -29,7 +29,7 @@ use crate::agent::contract::CancelOutcome;
 use crate::agent::AgentState;
 use crate::conversations::host_turn::merged;
 use crate::db;
-use crate::hosting::authorship::Caller;
+use crate::hosting::authorship::{self, Caller, CommandCaller};
 use crate::joined_spaces::relay::RelayGuests;
 use crate::logging::scrub::scrubbed;
 
@@ -249,7 +249,7 @@ pub async fn library_delete<R: Runtime>(
 pub async fn library_share_presence<R: Runtime>(
 	app: AppHandle<R>,
 	webview: Webview<R>,
-	caller: Caller,
+	caller: CommandCaller,
 	core: State<'_, crate::core_context::Core>,
 	space_id: String,
 	name: String,
@@ -268,7 +268,10 @@ pub async fn library_share_presence<R: Runtime>(
 			let database = state
 				.as_ref()
 				.map_err(|failure| LibraryError::Unavailable { failure: failure.into() })?;
-			Identity::of_person(caller.author(crate::events::core(&app), database).await?, &seat)
+			Identity::of_person(
+				authorship::author(caller.0, crate::events::core(&app), database).await?,
+				&seat,
+			)
 		}
 	};
 	share_presence(
@@ -357,7 +360,7 @@ pub async fn library_import<R: Runtime>(
 pub async fn library_import_url<R: Runtime>(
 	app: AppHandle<R>,
 	core: State<'_, crate::core_context::Core>,
-	caller: Caller,
+	caller: CommandCaller,
 	space_id: String,
 	url: String,
 ) -> Result<LibraryItem, LibraryImportUrlError> {

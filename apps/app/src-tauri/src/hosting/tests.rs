@@ -19,7 +19,7 @@ use tauri::{Listener, Manager, WebviewWindow, WebviewWindowBuilder};
 use tokio::net::TcpListener;
 use tokio::sync::{mpsc, watch};
 
-use super::authorship::Caller;
+use super::authorship::{Caller, CommandCaller};
 use super::bridge::{self, belongs_to_the_host, LocalApi, RelayedFile, ATTACHMENT_COMMAND};
 use super::contract::{AccountDevices, RosterDevice};
 use super::contract::{
@@ -6026,9 +6026,14 @@ fn a_human_message_records_whether_it_was_written_here_or_came_through_the_relay
 		.await;
 		let unvouched = serde_json::from_value(host.unstarted("unvouched")["message"].clone())
 			.expect("the message parses");
-		conversation_send_user_message(host.app.state(), Caller::Relayed(None), unvouched, vec![])
-			.await
-			.expect("the unvouched message is sent");
+		conversation_send_user_message(
+			host.app.state(),
+			CommandCaller(Caller::Relayed(None)),
+			unvouched,
+			vec![],
+		)
+		.await
+		.expect("the unvouched message is sent");
 
 		let read = direct(&host.window, "conversation_message_page", host.page());
 
@@ -6685,9 +6690,14 @@ impl Guest {
 	async fn user_message_appended(&self, conversation_id: &str, turn_id: &str) -> i64 {
 		let app = self.harness.app.handle().clone();
 		let message = a_user_message(conversation_id, turn_id);
-		conversation_append_user_message(app, self.harness.app.state(), Caller::Host, message)
-			.await
-			.expect("the message is appended")
+		conversation_append_user_message(
+			app,
+			self.harness.app.state(),
+			CommandCaller(Caller::Host),
+			message,
+		)
+		.await
+		.expect("the message is appended")
 	}
 
 	async fn host_named(&self, display_name: &str) {
@@ -6699,9 +6709,14 @@ impl Guest {
 
 	async fn user_message_sent(&self, conversation_id: &str) -> i64 {
 		let message = a_user_message(conversation_id, &format!("t-new-{conversation_id}"));
-		conversation_send_user_message(self.harness.app.state(), Caller::Host, message, vec![])
-			.await
-			.expect("the message is sent")
+		conversation_send_user_message(
+			self.harness.app.state(),
+			CommandCaller(Caller::Host),
+			message,
+			vec![],
+		)
+		.await
+		.expect("the message is sent")
 	}
 
 	async fn bot_created_in(&self, space_id: &str) -> Bot {
@@ -7336,7 +7351,8 @@ fn a_relayed_env_list_of_a_server_of_the_host_person_answers_no_entry() {
 		let host = Authoring::new(Some(BEARER)).await;
 		let scope = granted_to_the_host_person("granola");
 		store::set(&host.env_root(), &scope, "PLANTED", "host").expect("the host sets");
-		let listed = |caller| env_list(host.app.handle().clone(), caller, scope.clone());
+		let listed =
+			|caller| env_list(host.app.handle().clone(), CommandCaller(caller), scope.clone());
 
 		let relayed = listed(Caller::Relayed(None)).await.expect("the list reads");
 		let on_the_host = listed(Caller::Host).await.expect("the list reads");
@@ -7383,8 +7399,9 @@ fn a_relayed_status_of_the_host_person_plugin_answers_no_row() {
 		let host = Authoring::new(Some(BEARER)).await;
 		host.reading_applications();
 		host.declared(json!({ "kind": "user" }), "notion");
-		let status =
-			|caller| mcp_application_status(host.app.handle().clone(), caller, EnvOwner::User);
+		let status = |caller| {
+			mcp_application_status(host.app.handle().clone(), CommandCaller(caller), EnvOwner::User)
+		};
 
 		let relayed = status(Caller::Relayed(None)).await.expect("the status reads");
 		let on_the_host = status(Caller::Host).await.expect("the status reads");

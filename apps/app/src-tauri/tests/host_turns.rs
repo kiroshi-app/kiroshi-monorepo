@@ -45,7 +45,7 @@ use kiroshi_app::db::repositories::messages::{
 use kiroshi_app::environment::contract::{EnvScope, ACCOUNT_BEARER};
 use kiroshi_app::environment::store;
 use kiroshi_app::events::{self, BUFFERED_FRAMES, MISSION_CHANGED};
-use kiroshi_app::hosting::authorship::Caller;
+use kiroshi_app::hosting::authorship::{Caller, CommandCaller};
 use kiroshi_app::hosting::commands::hosting_start;
 use kiroshi_app::hosting::roster::{signed_row, Enrolled};
 use kiroshi_app::hosting::{local_api, Hosting};
@@ -623,9 +623,14 @@ impl Host {
 			created_at: 1,
 		};
 		let summoned = vec![scope.bot_id.clone()];
-		conversation_send_user_message(self.app.state(), Caller::Host, message, summoned)
-			.await
-			.expect("the host message is stored");
+		conversation_send_user_message(
+			self.app.state(),
+			CommandCaller(Caller::Host),
+			message,
+			summoned,
+		)
+		.await
+		.expect("the host message is stored");
 		let turn = SubmittedTurn { turn_id: turn_id.to_owned(), prompt_id: id.to_owned() };
 		submit_prompt(
 			kiroshi_app::events::core(self.app.handle()).state(),

@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::future::Future;
+use std::ops::Deref;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
@@ -15,18 +16,12 @@ use super::{members, Hosting};
 use crate::account::contract::{AccountState, KiroshiAccount};
 use crate::account::session::{this_computer, AccountSession};
 use crate::agent::protocol::SpaceMember;
-use crate::db::repositories::messages::{AccountAuthor, WrittenFrom};
+use crate::db::repositories::messages::AccountAuthor;
 use crate::db::{Database, DatabaseError};
 use crate::host_api::invoke::RELAYED_MEMBER_HEADER;
+pub use kiroshi_core::hosting::caller::{Caller, RelayedMember};
 
 const MEMBERS_READ_BOUND: Duration = Duration::from_secs(3);
-
-#[derive(Clone)]
-pub struct RelayedMember {
-	pub(super) space_id: String,
-	pub(super) user_id: String,
-	pub(super) computer: Option<String>,
-}
 
 #[derive(Default)]
 pub(super) struct RelayedMembers(Mutex<HashMap<String, RelayedMember>>);
@@ -63,15 +58,20 @@ impl Drop for Vouched<'_> {
 	}
 }
 
-pub enum Caller {
-	Host,
-	Relayed(Option<RelayedMember>),
+pub struct CommandCaller(pub Caller);
+
+impl Deref for CommandCaller {
+	type Target = Caller;
+
+	fn deref(&self) -> &Caller {
+		&self.0
+	}
 }
 
-impl<'de, R: Runtime> CommandArg<'de, R> for Caller {
+impl<'de, R: Runtime> CommandArg<'de, R> for CommandCaller {
 	fn from_command(command: CommandItem<'de, R>) -> Result<Self, InvokeError> {
 		let Some(nonce) = command.message.headers().get(&RELAYED_MEMBER_HEADER) else {
-			return Ok(Caller::Host);
+			return Ok(CommandCaller(Caller::Host));
 		};
 		let webview = command.message.webview();
 		let member = nonce
@@ -79,48 +79,28 @@ impl<'de, R: Runtime> CommandArg<'de, R> for Caller {
 			.ok()
 			.zip(crate::events::core(webview.app_handle()).try_state::<Hosting>())
 			.and_then(|(nonce, hosting)| hosting.relayed.vouched(nonce));
-		Ok(Caller::Relayed(member))
+		Ok(CommandCaller(Caller::Relayed(member)))
 	}
 }
 
-impl FunctionArg for Caller {
+impl FunctionArg for CommandCaller {
 	fn to_datatype(_: &mut Types) -> Option<DataType> {
 		None
 	}
 }
 
-impl Caller {
-	pub fn is_relayed(&self) -> bool {
-		matches!(self, Caller::Relayed(_))
-	}
-
-	pub fn relayed_account(&self) -> Option<&str> {
-		match self {
-			Caller::Relayed(Some(member)) => Some(&member.user_id),
-			_ => None,
+pub async fn author(
+	caller: Caller,
+	core: &crate::core_context::Core,
+	database: &Database,
+) -> Result<AccountAuthor, DatabaseError> {
+	match caller {
+		Caller::Host => {
+			let computer = Some(this_computer().await.to_owned());
+			Ok(AccountAuthor { computer, ..host_author(core, database).await? })
 		}
-	}
-
-	pub fn written_from(&self) -> WrittenFrom {
-		match self {
-			Caller::Host => WrittenFrom::Here,
-			Caller::Relayed(_) => WrittenFrom::Relay,
-		}
-	}
-
-	pub async fn author(
-		self,
-		core: &crate::core_context::Core,
-		database: &Database,
-	) -> Result<AccountAuthor, DatabaseError> {
-		match self {
-			Caller::Host => {
-				let computer = Some(this_computer().await.to_owned());
-				Ok(AccountAuthor { computer, ..host_author(core, database).await? })
-			}
-			Caller::Relayed(None) => Ok(AccountAuthor::default()),
-			Caller::Relayed(Some(member)) => member_author(core, database, member).await,
-		}
+		Caller::Relayed(None) => Ok(AccountAuthor::default()),
+		Caller::Relayed(Some(member)) => member_author(core, database, member).await,
 	}
 }
 
