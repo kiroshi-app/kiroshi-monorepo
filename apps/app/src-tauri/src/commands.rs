@@ -142,7 +142,7 @@ fn commands<R: Runtime>() -> Commands<R> {
 		agent::commands::agent_start_or_resume_session,
 		agent::commands::agent_submit_prompt::<tauri::Wry>,
 		agent::commands::agent_cancel_turn,
-		logging::commands::diagnostics,
+		logging::commands::diagnostics::<tauri::Wry>,
 		logging::commands::log_tail,
 		logging::commands::log_reveal,
 		logging::commands::log_clear,

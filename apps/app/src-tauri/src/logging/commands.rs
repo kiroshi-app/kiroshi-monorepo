@@ -1,11 +1,11 @@
-use tauri::State;
+use tauri::{AppHandle, Runtime, State};
 
 use super::contract::{Diagnostics, LogFileError};
 
 #[tauri::command]
 #[specta::specta]
-pub async fn diagnostics(core: State<'_, crate::core_context::Core>) -> Diagnostics {
-	kiroshi_core::logging::commands::diagnostics(core.inner()).await
+pub async fn diagnostics<R: Runtime>(app: AppHandle<R>) -> Diagnostics {
+	kiroshi_core::logging::commands::diagnostics(crate::events::core(&app)).await
 }
 
 #[tauri::command]
