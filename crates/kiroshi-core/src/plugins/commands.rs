@@ -386,7 +386,7 @@ mod tests {
 
 	fn a_host_without_a_database(name: &str) -> CoreOfItsOwn {
 		let app = a_bare_host(name);
-		&*app.manage::<db::DatabaseState>(Err(DatabaseError::AppDataDir));
+		app.manage::<db::DatabaseState>(Err(DatabaseError::AppDataDir));
 		app
 	}
 
@@ -645,7 +645,7 @@ mod tests {
 		path: &str,
 		text: &str,
 	) -> String {
-		let session = BundleHost::new(&*app.clone(), a_session_of(bot_id));
+		let session = BundleHost::new(app.clone(), a_session_of(bot_id));
 		let answer = session
 			.answer(serde_json::json!({
 				"subtype": "bundle",

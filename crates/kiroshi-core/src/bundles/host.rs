@@ -97,13 +97,11 @@ mod tests {
 	use std::time::Duration;
 
 	use serde_json::json;
-	use tauri::test::{mock_builder, MockRuntime};
-	use tauri::{App, Listener as _, Manager as _};
 
 	use super::*;
 	use crate::agent::commands::EVENT_CHANNEL;
 	use crate::bundles;
-	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
+	use crate::test_core::{a_core_of_its_own, CoreOfItsOwn};
 
 	const TWO_BOTS: &str = "
 		INSERT INTO bots (id, name, model, created_at, memory)
@@ -115,17 +113,16 @@ mod tests {
 
 	const A_SKILL: &str = "skills/baking/SKILL.md";
 
-	async fn an_app_with_two_bundles(name: &str) -> AppOfItsOwn {
-		let app = an_app_of_its_own(&format!("bundle-host-{name}"), mock_builder());
-		crate::db::install(crate::events::core(app.handle()));
-		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
+	async fn an_app_with_two_bundles(name: &str) -> CoreOfItsOwn {
+		let app = a_core_of_its_own(&format!("bundle-host-{name}"));
+		crate::db::install(&*app);
+		let state = app.state::<db::DatabaseState>();
 		let database = ready(state.inner()).expect("the database opens");
 		database
 			.call_mut(|connection| Ok(connection.execute_batch(TWO_BOTS)?))
 			.await
 			.expect("the bots are planted");
-		let root = bundles::root(crate::events::core(app.handle()))
-			.expect("the bundles directory resolves");
+		let root = bundles::root(&*app).expect("the bundles directory resolves");
 		for id in ["b1", "b2"] {
 			let bot = database
 				.conversations()
@@ -138,9 +135,9 @@ mod tests {
 		app
 	}
 
-	fn serving(app: &App<MockRuntime>, bot_id: &str) -> BundleHost {
+	fn serving(app: &crate::core_context::Core, bot_id: &str) -> BundleHost {
 		BundleHost::new(
-			crate::events::core(app.handle()).clone(),
+			app.clone(),
 			RuntimeScope {
 				conversation_id: "c1".to_owned(),
 				bot_id: bot_id.to_owned(),
@@ -158,18 +155,22 @@ mod tests {
 		})
 	}
 
-	fn listening(app: &App<MockRuntime>) -> Receiver<Value> {
+	fn listening(app: &crate::core_context::Core) -> Receiver<Value> {
 		let (sender, received) = channel();
-		app.handle().listen(EVENT_CHANNEL, move |heard| {
-			let payload = serde_json::from_str(heard.payload()).expect("the payload is JSON");
-			sender.send(payload).expect("the event is passed on");
+		let sender = std::sync::Mutex::new(sender);
+		app.listen(move |heard| {
+			if heard.name == EVENT_CHANNEL {
+				let payload =
+					serde_json::from_str(heard.payload.get()).expect("the payload is JSON");
+				sender.lock().expect("unlocked").send(payload).expect("the event is passed on");
+			}
+			Ok(())
 		});
 		received
 	}
 
-	fn skill_of(app: &App<MockRuntime>, bot_id: &str) -> Option<String> {
-		let root = bundles::root(crate::events::core(app.handle()))
-			.expect("the bundles directory resolves");
+	fn skill_of(app: &crate::core_context::Core, bot_id: &str) -> Option<String> {
+		let root = bundles::root(&*app).expect("the bundles directory resolves");
 		let bundle = bundles::dir(&root, bot_id).expect("the bundle is held");
 		std::fs::read_to_string(bundle.join(A_SKILL)).ok()
 	}
@@ -219,12 +220,11 @@ mod tests {
 		let answer = serving(&app, "b1").answer(asked).await.expect("the write is served");
 
 		assert_eq!(answer["outcome"], "recorded");
-		let root = bundles::root(crate::events::core(app.handle()))
-			.expect("the bundles directory resolves");
+		let root = bundles::root(&*app).expect("the bundles directory resolves");
 		let agent = bundles::agent_file(&root, "b1").expect("the agent file is there");
 		let text = std::fs::read_to_string(agent).expect("the agent file reads");
 		assert!(!text.contains("They bake on Sundays."), "got {text}");
-		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
+		let state = app.state::<db::DatabaseState>();
 		let stored = ready(state.inner())
 			.expect("the database opens")
 			.conversations()
