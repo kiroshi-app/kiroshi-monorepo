@@ -17,6 +17,7 @@ import type { ConnectionStatusState } from "@workspace/ui/components/connection-
 import { HeaderIdentityButton } from "@workspace/ui/components/header-identity-button"
 import { LIBRARY_LIGHTBOX_IMAGES } from "@workspace/ui/components/library.fixtures"
 import { LibraryLightbox } from "@workspace/ui/components/library-lightbox"
+import { MissionDetailSkeleton } from "@workspace/ui/components/mission-detail-skeleton"
 import { Notice } from "@workspace/ui/components/notice"
 import { PinnedMessages } from "@workspace/ui/components/pinned-messages"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
@@ -26,6 +27,7 @@ import {
 	ThreadLayout,
 	type ThreadLayoutProps,
 } from "@workspace/ui/components/thread-layout"
+import { ThreadTranscriptSkeleton } from "@workspace/ui/components/thread-transcript-skeleton"
 import {
 	ToolApproval,
 	ToolApprovalCode,
@@ -797,6 +799,92 @@ export const UserMessageAboveThePrompt = meta.story({
 			await expect(Math.abs(end - PROMPT_OVERHANG)).toBeLessThanOrEqual(
 				PROMPT_EDGE_TOLERANCE,
 			)
+		}
+	},
+})
+
+const COLUMN_FRAME_WIDTHS = [
+	{ label: "Wide", className: "w-[1072px]" },
+	{ label: "Narrow", className: "w-120" },
+]
+
+const COLUMN_FRAMES = [
+	{ label: "conversation skeleton", skeleton: <ThreadTranscriptSkeleton /> },
+	{ label: "mission skeleton", skeleton: <MissionDetailSkeleton /> },
+	{ label: "loaded thread" },
+]
+
+const columnOf = (element: HTMLElement, frame: HTMLElement) => {
+	const box = element.getBoundingClientRect()
+	const { paddingLeft, paddingRight } = getComputedStyle(element)
+	const start = Number.parseFloat(paddingLeft)
+	return {
+		left: box.left + start - frame.getBoundingClientRect().left,
+		width: box.width - start - Number.parseFloat(paddingRight),
+	}
+}
+
+const surfaceOf = (element: HTMLElement, frame: HTMLElement) => {
+	const box = element.getBoundingClientRect()
+	const { top } = frame.getBoundingClientRect()
+	return { top: box.top - top, bottom: box.bottom - top }
+}
+
+export const SkeletonInTheTranscriptColumn = meta.story({
+	render: (args) => (
+		<div className="flex flex-col gap-6">
+			{COLUMN_FRAME_WIDTHS.map(({ label, className }) => (
+				<div key={label} data-slot="column-frame-row" className="flex gap-6">
+					{COLUMN_FRAMES.map((frame) => (
+						<div
+							key={frame.label}
+							data-slot="column-frame"
+							className={cn("h-100 shrink-0", className)}
+						>
+							<ThreadLayout
+								{...args}
+								header={null}
+								label={`${label} ${frame.label}`}
+								skeleton={frame.skeleton}
+							/>
+						</div>
+					))}
+				</div>
+			))}
+		</div>
+	),
+	args: { rows: CONVERSATION_ROWS, children: null },
+	globals: { theme_layout: "side-by-side" },
+	parameters: {
+		a11y: A11Y_SIDE_BY_SIDE_THREADS,
+		docs: {
+			description: {
+				story:
+					"The conversation skeleton and the mission skeleton beside the loaded transcript, at 1072 wide then at 480 wide, in both themes. Every skeleton takes the column the layout hands the loaded transcript, so check that the bubbles start and end on the same edges across a row, and that each skeleton fills the whole surface down to the composer. Pick `Default` for the loaded transcript alone.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const rows = slotsIn(canvasElement, "column-frame-row")
+		await expect(rows).toHaveLength(COLUMN_FRAME_WIDTHS.length * BOTH_THEMES)
+
+		for (const row of rows) {
+			const frames = slotsIn(row, "column-frame")
+			const loadedFrame = frames.at(-1) as HTMLElement
+			const loadedColumn = columnOf(
+				slotIn(loadedFrame, "message-scroller-content"),
+				loadedFrame,
+			)
+			const loadedSurface = surfaceOf(
+				slotIn(loadedFrame, "message-scroller-viewport"),
+				loadedFrame,
+			)
+
+			for (const frame of frames.slice(0, -1)) {
+				const skeleton = slotIn(frame, "list-skeleton")
+				await expect(columnOf(skeleton, frame)).toEqual(loadedColumn)
+				await expect(surfaceOf(skeleton, frame)).toEqual(loadedSurface)
+			}
 		}
 	},
 })
