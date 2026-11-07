@@ -1,19 +1,19 @@
 use std::f32::consts::TAU;
 
-use rune::{El, ScrollSpec, Shape, canvas, col, el, icon, row, text};
+use rune::{El, ScrollSpec, col, el, icon, row, text};
 
-use super::reported_run::{ACTIVITY_AVATAR, ReportedRun, reported_run_row};
+use super::reported_run::{ReportedRun, reported_run_row};
 use super::row::{ROW_GAP, RoutineRow, routine_row_skeleton, routine_rows};
 use super::{
-	Emit, Retry, RoutinesEvent, bar, bar_line, emits, empty_state, faint_bar, filling_skeleton,
-	glyph, icon_button, notice, ringed, say, tabular,
+	Emit, Retry, RoutinesEvent, emits, empty_state, filling_skeleton, glyph, icon_button, notice,
+	ringed, say, tabular,
 };
 use crate::icons;
 use crate::primitives::button::{Button, ButtonSize, ButtonVariant};
 use crate::primitives::dialog::scrim;
-use crate::primitives::skeleton::skeleton;
 use crate::primitives::{elevated, popup_motion};
 use crate::strings::{Key, Language, chat, common};
+use crate::surfaces::s08_missions::missions_feed_skeleton;
 use crate::tokens::{
 	RADIUS_2XL, RADIUS_LG, RADIUS_XL, SHELL_INSET, SPACING, TEXT_BASE_SEMIBOLD, TEXT_COMPACT,
 	TEXT_SM, TEXT_SM_SEMIBOLD, TEXT_XS, TEXT_XS_MEDIUM, Tokens, faded,
@@ -31,20 +31,7 @@ const FOLD_GLYPH: f32 = SPACING * 3.5;
 const ENTRY: f32 = SPACING * 10.0;
 const ENTRY_GLYPH: f32 = SPACING * 4.0;
 const SKELETON_ROWS: usize = 16;
-const SKELETON_GROUPS: usize = 8;
-const GROUP_BAR: f32 = SPACING * 2.25;
-const STAMP_BAR: f32 = SPACING * 7.0;
-const MISSION_GROUP_SHAPES: [(f32, &[(f32, f32)]); 2] = [
-	(SPACING * 23.0, &[(SPACING * 37.5, SPACING * 42.5), (SPACING * 31.0, SPACING * 37.5)]),
-	(
-		SPACING * 17.5,
-		&[
-			(SPACING * 42.0, SPACING * 46.0),
-			(SPACING * 33.0, SPACING * 24.0),
-			(SPACING * 36.0, SPACING * 40.0),
-		],
-	),
-];
+const FEED_REACH: f32 = SPACING * 512.0;
 const CONFIRM_WIDTH: f32 = SPACING * 88.0;
 const CONFIRM_INSET: f32 = SPACING * 5.0;
 
@@ -289,65 +276,6 @@ fn folded_group<S: 'static>(
 	if open { group.child(group_list(rows)) } else { group }
 }
 
-fn hexagon(t: &Tokens, side: f32) -> El {
-	let half = side / 2.0;
-	let corners: Vec<[f32; 2]> = (0..6)
-		.map(|corner| {
-			let angle = corner as f32 * TAU / 6.0;
-			[half + half * angle.cos(), half + half * angle.sin()]
-		})
-		.collect();
-	canvas(Shape::new().view_box(side, side).fill(corners, t.border)).size(side, side)
-}
-
-fn mission_row_skeleton(t: &Tokens, (title, preview): (f32, f32)) -> El {
-	row()
-		.w_full()
-		.gap(SPACING * 2.5)
-		.center_y()
-		.py(SPACING * 1.5)
-		.pl(SPACING * 1.5)
-		.pr(SPACING * 3.0)
-		.child(hexagon(t, ACTIVITY_AVATAR))
-		.child(
-			col()
-				.grow(1.0)
-				.min_w(0.0)
-				.child(
-					row()
-						.w_full()
-						.h(SPACING * 5.0)
-						.justify_between()
-						.center_y()
-						.child(bar(t, title))
-						.child(faint_bar(t, STAMP_BAR)),
-				)
-				.child(bar_line(SPACING * 4.0, faint_bar(t, preview))),
-		)
-}
-
-fn missions_skeleton(t: &Tokens) -> El {
-	let groups = (0..SKELETON_GROUPS).map(|rank| {
-		let (head, rows) = MISSION_GROUP_SHAPES[rank % MISSION_GROUP_SHAPES.len()];
-		col()
-			.w_full()
-			.child(
-				row()
-					.h(GROUP_HEAD)
-					.px(GROUP_HEAD_INSET)
-					.center_y()
-					.child(skeleton(t).size(head, GROUP_BAR).radius(GROUP_BAR).fill(t.border)),
-			)
-			.child(
-				col()
-					.w_full()
-					.gap(GROUP_ROW_GAP)
-					.children(rows.iter().map(|&widths| mission_row_skeleton(t, widths))),
-			)
-	});
-	filling_skeleton(groups, SPACING * 3.0)
-}
-
 pub fn activity<S: 'static>(
 	t: &Tokens,
 	lang: Language,
@@ -358,7 +286,7 @@ pub fn activity<S: 'static>(
 	let body = col().w_full().grow(1.0).gap(SPACING * 4.0);
 	let Missions::Listed { waiting, in_progress, earlier_today, earlier_today_open } = missions
 	else {
-		return body.child(missions_skeleton(t));
+		return body.child(filling_skeleton([missions_feed_skeleton(t, FEED_REACH)], 0.0));
 	};
 	if waiting.is_empty() && in_progress.is_empty() && earlier_today.is_empty() {
 		if notice_shown {

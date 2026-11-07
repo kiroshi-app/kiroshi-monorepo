@@ -6,8 +6,8 @@ use crate::icons;
 use crate::strings::{Language, chat};
 use crate::tokens::{RADIUS_XL, SPACING, TEXT_11, TEXT_SM_MEDIUM, TEXT_XS, Tokens};
 
-pub const ACTIVITY_ROW_HEIGHT: f32 = SPACING * 13.0;
-pub const ACTIVITY_AVATAR: f32 = SPACING * 8.0;
+const ACTIVITY_ROW_HEIGHT: f32 = SPACING * 13.0;
+const ACTIVITY_AVATAR: f32 = SPACING * 8.0;
 
 const NAME_LINE: f32 = SPACING * 5.0;
 const PREVIEW_LINE: f32 = SPACING * 4.0;

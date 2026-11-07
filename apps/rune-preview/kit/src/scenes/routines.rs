@@ -1,8 +1,11 @@
-use rune::{El, TextEdit, col, row, text};
+use rune::{El, TextEdit, col, row};
 
-use super::{SceneState, stage, staged};
+use std::rc::Rc;
+
+use super::{SceneState, missions, stage, staged};
 use crate::hues::Preset;
 use crate::strings::Language;
+use crate::surfaces::s08_missions::{Emit as MissionsEmit, Mission, mission_row};
 use crate::surfaces::s09_routines::detail::{
 	History, Outcome, RoutineDetail, Run, RunRefusal, routine_detail,
 };
@@ -15,12 +18,10 @@ use crate::surfaces::s09_routines::panel::{
 	Confirm, EarlierToday, Failure, Missions, Page, PanelChrome, Routines, activity, confirm_layer,
 	panel, routines_page,
 };
-use crate::surfaces::s09_routines::reported_run::{
-	ACTIVITY_ROW_HEIGHT, ReportedRun, reported_run_row,
-};
+use crate::surfaces::s09_routines::reported_run::{ReportedRun, reported_run_row};
 use crate::surfaces::s09_routines::row::{RoutineRow, routine_row};
 use crate::surfaces::s09_routines::{PANEL_WIDTH, RoutinesEvent};
-use crate::tokens::{RADIUS_XL, SPACING, TEXT_XS, Tokens};
+use crate::tokens::{SPACING, Tokens};
 
 const EN: Language = Language::En;
 const SCENE_INSET: f32 = SPACING * 6.0;
@@ -172,14 +173,9 @@ const LATE_REPORTED_RUN: ReportedRun = ReportedRun {
 	time: "10:04",
 };
 
-const WAITING_MISSIONS: [&str; 2] =
-	["Migrate the run history table", "Draw the badge dots of the roster"];
-const WORKING_MISSIONS: [&str; 3] = [
-	"Rewrite the changelog parser",
-	"Store the transcript of a mission thread",
-	"Upgrade the desktop shell",
-];
-const CLOSED_MISSION: &str = "Let a bot manage its routines through MCP";
+const WAITING_MISSIONS: [Mission; 2] = [missions::WAITING_HUMAN_MISSION, missions::READY_MISSION];
+const WORKING_MISSIONS: [Mission; 3] =
+	[missions::WORKING_MISSION, missions::WAITING_BOT_MISSION, missions::FAILED_MISSION];
 
 fn ignore(_: &mut SceneState, _: RoutinesEvent) {}
 
@@ -209,34 +205,27 @@ fn at_height(t: &Tokens, content: El) -> El {
 	)
 }
 
-fn mission_slot(t: &Tokens, objective: &str) -> El {
-	row()
-		.w_full()
-		.h(ACTIVITY_ROW_HEIGHT)
-		.px(SPACING * 3.0)
-		.center_y()
-		.radius(RADIUS_XL)
-		.border(1.0, t.border)
-		.border_dash(SPACING, SPACING)
-		.child(text(objective.to_owned()).font(TEXT_XS).color(t.muted_foreground).truncate())
+fn mission_rows(t: &Tokens, missions: &[Mission]) -> Vec<El> {
+	missions.iter().map(|mission| mission_row_of(t, mission)).collect()
 }
 
-fn slots(t: &Tokens, objectives: &[&str]) -> Vec<El> {
-	objectives.iter().map(|objective| mission_slot(t, objective)).collect()
+fn mission_row_of(t: &Tokens, mission: &Mission) -> El {
+	let ignore_missions: MissionsEmit<SceneState> = Rc::new(|_, _| {});
+	mission_row(t, EN, mission, false, &ignore_missions, None)
 }
 
 fn earlier_today(t: &Tokens) -> Vec<EarlierToday<'static>> {
 	vec![
 		EarlierToday::Run(LATE_REPORTED_RUN),
-		EarlierToday::Mission(Box::new(mission_slot(t, CLOSED_MISSION))),
+		EarlierToday::Mission(Box::new(mission_row_of(t, &missions::CLOSED_MISSION))),
 		EarlierToday::Run(REPORTED_RUN),
 	]
 }
 
 fn every_mission(t: &Tokens, earlier_today_open: bool) -> Missions<'static> {
 	Missions::Listed {
-		waiting: slots(t, &WAITING_MISSIONS),
-		in_progress: slots(t, &WORKING_MISSIONS),
+		waiting: mission_rows(t, &WAITING_MISSIONS),
+		in_progress: mission_rows(t, &WORKING_MISSIONS),
 		earlier_today: earlier_today(t),
 		earlier_today_open,
 	}
@@ -284,7 +273,7 @@ pub(super) fn panel_default(t: &Tokens, _: &SceneState) -> El {
 
 pub(super) fn panel_one_mission(t: &Tokens, _: &SceneState) -> El {
 	let missions = Missions::Listed {
-		waiting: slots(t, &WAITING_MISSIONS[..1]),
+		waiting: mission_rows(t, &WAITING_MISSIONS[..1]),
 		in_progress: Vec::new(),
 		earlier_today: Vec::new(),
 		earlier_today_open: false,
