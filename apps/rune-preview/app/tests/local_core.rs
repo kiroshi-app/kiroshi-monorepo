@@ -4,7 +4,7 @@ use std::process::Command;
 
 use kiroshi_core::db::{connection, migrations};
 use kiroshi_core::removed_on_drop::RemovedOnDrop;
-use kiroshi_rune_preview::local::{IDENTIFIER, LocalCore};
+use kiroshi_rune_preview::local::{DATA_ENV, IDENTIFIER, LocalCore};
 use serde_json::{Value, json};
 
 const PREVIEW: &str = env!("CARGO_BIN_EXE_kiroshi-rune-preview");
@@ -12,8 +12,6 @@ const PREVIEW: &str = env!("CARGO_BIN_EXE_kiroshi-rune-preview");
 const FAKE_SIDECAR: &str = env!("CARGO_BIN_EXE_fake_sidecar");
 
 const SIDECAR_ENV: &str = "KIROSHI_AGENT_SIDECAR";
-
-const DATA_ENV: &str = "KIROSHI_PREVIEW_DATA";
 
 fn a_data_folder() -> RemovedOnDrop {
 	RemovedOnDrop(
