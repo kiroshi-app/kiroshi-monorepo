@@ -25,13 +25,17 @@ impl CoreOfItsOwn {
 	}
 
 	pub fn listen_to(&self, name: &'static str, heard: impl Fn(&str) + Send + Sync + 'static) {
-		self.core.listen(move |event| {
-			if event.name == name {
-				heard(event.payload.get());
-			}
-			Ok(())
-		});
+		listen_to(&self.core, name, heard);
 	}
+}
+
+pub fn listen_to(core: &Core, name: &'static str, heard: impl Fn(&str) + Send + Sync + 'static) {
+	core.listen(move |event| {
+		if event.name == name {
+			heard(event.payload.get());
+		}
+		Ok(())
+	});
 }
 
 pub fn a_core_of_its_own(name: &str) -> CoreOfItsOwn {

@@ -734,7 +734,7 @@ fn written(file: &Path, cached: &Cached) -> Result<(), String> {
 }
 
 #[cfg(test)]
-pub(crate) mod tests {
+pub mod tests {
 	use std::net::{Ipv4Addr, SocketAddr};
 	use std::sync::atomic::{AtomicI64, Ordering};
 	use std::sync::Mutex as Recorded;
@@ -747,8 +747,6 @@ pub(crate) mod tests {
 	use futures_util::FutureExt;
 	use reqwest::StatusCode;
 	use serde_json::{json, to_value};
-	use tauri::test::mock_builder;
-	use tauri::Listener;
 
 	use super::*;
 	use crate::db::connection::temp_dir;
@@ -790,7 +788,7 @@ pub(crate) mod tests {
 		}
 	}
 
-	pub(crate) struct Served {
+	pub struct Served {
 		curated: Recorded<Vec<Value>>,
 		partner: Recorded<Vec<Value>>,
 		stale_feeds: Recorded<Vec<String>>,
@@ -861,7 +859,7 @@ pub(crate) mod tests {
 		}
 	}
 
-	pub(crate) async fn serving(pages: Vec<Value>) -> (String, Arc<Served>) {
+	pub async fn serving(pages: Vec<Value>) -> (String, Arc<Served>) {
 		serving_tiers(Vec::new(), pages).await
 	}
 
@@ -938,7 +936,7 @@ pub(crate) mod tests {
 			.expect("the stub answers with a body")
 	}
 
-	pub(crate) async fn unreached() -> String {
+	pub async fn unreached() -> String {
 		let listener =
 			tokio::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.expect("a port binds");
 		let address = listener.local_addr().expect("the port is named");
@@ -946,7 +944,7 @@ pub(crate) mod tests {
 		format!("http://{address}")
 	}
 
-	pub(crate) fn a_row(name: &str, tier: &str, rank: i64) -> Value {
+	pub fn a_row(name: &str, tier: &str, rank: i64) -> Value {
 		json!({
 			"id": format!("id-{name}"),
 			"slug": null,
@@ -972,7 +970,7 @@ pub(crate) mod tests {
 		})
 	}
 
-	pub(crate) fn a_page(names: &[&str]) -> Value {
+	pub fn a_page(names: &[&str]) -> Value {
 		Value::Array(
 			names
 				.iter()
@@ -982,7 +980,7 @@ pub(crate) mod tests {
 		)
 	}
 
-	pub(crate) fn carrying(mut row: Value, fields: Value) -> Value {
+	pub fn carrying(mut row: Value, fields: Value) -> Value {
 		for (key, value) in fields.as_object().expect("the fields are an object") {
 			row[key] = value.clone();
 		}
@@ -1018,7 +1016,7 @@ pub(crate) mod tests {
 		directory.kept().cached.clone().expect("a cache is held")
 	}
 
-	pub(crate) async fn settled(directory: &Directory) {
+	pub async fn settled(directory: &Directory) {
 		drop(directory.reading.lock().await);
 	}
 
@@ -1051,11 +1049,11 @@ pub(crate) mod tests {
 		Cached { read_at, listed_at: read_at, ..a_cache_of(&directory) }
 	}
 
-	pub(crate) fn applications(rows: Vec<Value>) -> Vec<Application> {
+	pub fn applications(rows: Vec<Value>) -> Vec<Application> {
 		rows.into_iter().filter_map(row).map(|held| held.application).collect()
 	}
 
-	pub(crate) fn holding(rows: Vec<Value>) -> Arc<Directory> {
+	pub fn holding(rows: Vec<Value>) -> Arc<Directory> {
 		let directory = Directory::at("http://127.0.0.1:1".to_owned(), None);
 		let rows = rows.into_iter().filter_map(row).collect();
 		let read_at = SystemClock.now_ms();
@@ -1065,7 +1063,7 @@ pub(crate) mod tests {
 		directory
 	}
 
-	pub(crate) async fn a_cache_file_read_long_ago(rows: Vec<Value>) -> (PathBuf, RemovedOnDrop) {
+	pub async fn a_cache_file_read_long_ago(rows: Vec<Value>) -> (PathBuf, RemovedOnDrop) {
 		let dir = temp_dir();
 		let file = dir.join(CACHE_DIR).join(CACHE_FILE);
 		let (base, _) = serving(vec![Value::Array(rows)]).await;
@@ -1768,10 +1766,7 @@ pub(crate) mod tests {
 		let (base, _) = serving(vec![a_page(&["fresh"])]).await;
 		let directory = Directory::timed(base, None, Box::new(Stopped(NOON + REREAD_MS + 1)));
 		planted(&directory, a_cache_read_at(NOON, &["one"]).await);
-		tokio::spawn(announcing(
-			crate::events::core(app.handle()).clone(),
-			directory.landed.subscribe(),
-		));
+		tokio::spawn(announcing(core.clone(), directory.landed.subscribe()));
 
 		directory.searched("").await.expect("the search answers");
 		settled(&directory).await;
@@ -1796,10 +1791,7 @@ pub(crate) mod tests {
 		let clock = Moving::at(NOON + REREAD_MS + 1);
 		let directory = Directory::timed(base, None, Box::new(clock.clone()));
 		planted(&directory, a_cache_read_at(NOON, &["one"]).await);
-		tokio::spawn(announcing(
-			crate::events::core(app.handle()).clone(),
-			directory.landed.subscribe(),
-		));
+		tokio::spawn(announcing(core.clone(), directory.landed.subscribe()));
 
 		directory.searched("").await.expect("the search answers");
 		let announced = tokio::time::timeout(PATIENCE, heard.recv()).await.expect("announced");
@@ -1833,10 +1825,7 @@ pub(crate) mod tests {
 			HELD_BACK_BOUND,
 		);
 		planted(&directory, a_cache_read_at(NOON, &["one"]).await);
-		tokio::spawn(announcing(
-			crate::events::core(app.handle()).clone(),
-			directory.landed.subscribe(),
-		));
+		tokio::spawn(announcing(core.clone(), directory.landed.subscribe()));
 
 		directory.searched("").await.expect("the search answers");
 		held_past_its_bound(&held, &directory).await;

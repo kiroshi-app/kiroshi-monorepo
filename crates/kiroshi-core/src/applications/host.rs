@@ -288,11 +288,8 @@ mod tests {
 	use std::path::PathBuf;
 	use std::sync::mpsc;
 	use std::time::Duration;
-	use tauri::Manager;
 
 	use serde_json::json;
-	use tauri::test::{mock_builder, MockRuntime};
-	use tauri::{App, Listener as _};
 
 	use super::*;
 	use crate::agent::translate::now_ms;
@@ -305,7 +302,7 @@ mod tests {
 	use crate::mcp_oauth::asking::AuthorizationAnswers;
 	use crate::mcp_oauth::commands::McpOauthState;
 	use crate::mcp_oauth::reports::{ApplicationReports, Standing};
-	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
+	use crate::test_core::{a_core_of_its_own, CoreOfItsOwn};
 
 	const A_SPACE: &str = "
 		INSERT INTO bots (id, name, model, created_at) VALUES ('b1', 'Shoto', 'sonnet', 1);
@@ -324,50 +321,50 @@ mod tests {
 
 	const NO_PACKAGE_REGISTRY: &str = "http://127.0.0.1:1";
 
-	async fn a_host(name: &str) -> AppOfItsOwn {
-		let app = an_app_of_its_own(&format!("application-host-{name}"), mock_builder());
-		crate::db::install(crate::events::core(app.handle()));
-		crate::events::core(app.app_handle()).manage(McpOauthState::default());
-		crate::events::core(app.app_handle()).manage(ApplicationReports::default());
-		crate::events::core(app.app_handle()).manage(AuthorizationAnswers::default());
-		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
+	async fn a_host(name: &str) -> CoreOfItsOwn {
+		let app = a_core_of_its_own(&format!("application-host-{name}"));
+		crate::db::install(&*app);
+		app.manage(McpOauthState::default());
+		app.manage(ApplicationReports::default());
+		app.manage(AuthorizationAnswers::default());
+		ready(&app.state::<db::DatabaseState>())
 			.expect("the database opens")
 			.call_mut(|connection| Ok(connection.execute_batch(A_SPACE)?))
 			.await
 			.expect("the space is planted");
-		bundles::space::lay_down(crate::events::core(app.handle()), "personal")
-			.expect("the space plugin lands");
+		bundles::space::lay_down(&*app, "personal").expect("the space plugin lands");
 		bundles::user::lay_down(&user_plugin(&app)).expect("the person plugin lands");
-		let bot = ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
+		let bot = ready(&app.state::<db::DatabaseState>())
 			.expect("the database opens")
 			.conversations()
 			.bot("b1".to_owned())
 			.await
 			.expect("the bot reads")
 			.expect("the bot is planted");
-		let root =
-			bundles::root(crate::events::core(app.handle())).expect("the bundles have a root");
+		let root = bundles::root(&*app).expect("the bundles have a root");
 		bundles::lay_down(&root, &bot).expect("the bot bundle lands");
 		app
 	}
 
-	fn user_plugin(app: &App<MockRuntime>) -> PathBuf {
-		bundles::user::path(crate::events::core(app.handle()))
-			.expect("the person plugin has a home")
+	fn user_plugin(app: &crate::core_context::Core) -> PathBuf {
+		bundles::user::path(&*app).expect("the person plugin has a home")
 	}
 
-	fn space_plugin(app: &App<MockRuntime>) -> PathBuf {
-		bundles::space::path(crate::events::core(app.handle()), "personal")
-			.expect("the space plugin has a home")
+	fn space_plugin(app: &crate::core_context::Core) -> PathBuf {
+		bundles::space::path(&*app, "personal").expect("the space plugin has a home")
 	}
 
-	fn reading(app: &App<MockRuntime>, conversation_id: &str) -> ApplicationHost {
+	fn reading(app: &crate::core_context::Core, conversation_id: &str) -> ApplicationHost {
 		holding(app, conversation_id, the_catalogue().into_iter().chain(the_others()).collect())
 	}
 
-	fn holding(app: &App<MockRuntime>, conversation_id: &str, rows: Vec<Value>) -> ApplicationHost {
+	fn holding(
+		app: &crate::core_context::Core,
+		conversation_id: &str,
+		rows: Vec<Value>,
+	) -> ApplicationHost {
 		ApplicationHost {
-			core: crate::events::core(app.handle()).clone(),
+			core: app.clone(),
 			conversation_id: conversation_id.to_owned(),
 			bot_id: "b1".to_owned(),
 			runners: runners_carrying(app, &[NPX, UVX]),
@@ -449,7 +446,7 @@ mod tests {
 		)
 	}
 
-	fn runners_carrying(app: &App<MockRuntime>, commands: &[&str]) -> Runners {
+	fn runners_carrying(app: &crate::core_context::Core, commands: &[&str]) -> Runners {
 		let home = app.path().app_data_dir().expect("the data folder resolves");
 		Runners {
 			path: a_path_carrying(&home, commands),
@@ -479,9 +476,8 @@ mod tests {
 			.collect()
 	}
 
-	fn declarations(app: &App<MockRuntime>) -> [Vec<(String, Value)>; 3] {
-		let root =
-			bundles::root(crate::events::core(app.handle())).expect("the bundles have a root");
+	fn declarations(app: &crate::core_context::Core) -> [Vec<(String, Value)>; 3] {
+		let root = bundles::root(&*app).expect("the bundles have a root");
 		[
 			bundles::mcp_servers(&root, "b1"),
 			bundles::plugin::mcp_servers(&space_plugin(app)),
@@ -490,9 +486,8 @@ mod tests {
 		.map(|servers| servers.into_iter().map(|server| (server.name, server.config)).collect())
 	}
 
-	fn marks(app: &App<MockRuntime>) -> [Vec<(String, ApplicationMark)>; 3] {
-		let root =
-			bundles::root(crate::events::core(app.handle())).expect("the bundles have a root");
+	fn marks(app: &crate::core_context::Core) -> [Vec<(String, ApplicationMark)>; 3] {
+		let root = bundles::root(&*app).expect("the bundles have a root");
 		[
 			bundles::mcp_servers(&root, "b1"),
 			bundles::plugin::mcp_servers(&space_plugin(app)),
@@ -520,10 +515,10 @@ mod tests {
 		curated(name).config
 	}
 
-	fn heard(app: &App<MockRuntime>) -> mpsc::Receiver<String> {
+	fn heard(app: &crate::core_context::Core) -> mpsc::Receiver<String> {
 		let (announced, arriving) = mpsc::channel();
-		app.listen(APPLICATION_INSTALLED.name(), move |event| {
-			announced.send(event.payload().to_owned()).expect("the test is listening");
+		crate::test_core::listen_to(&*app, APPLICATION_INSTALLED.name(), move |event| {
+			announced.send(event.to_owned()).expect("the test is listening");
 		});
 		arriving
 	}
@@ -548,7 +543,7 @@ mod tests {
 		"zinc-10", "zinc-11", "zinc-12",
 	];
 
-	fn a_host_reading(app: &App<MockRuntime>, page: &[&str]) -> ApplicationHost {
+	fn a_host_reading(app: &crate::core_context::Core, page: &[&str]) -> ApplicationHost {
 		let page = a_page(page).as_array().cloned().expect("a page is a list");
 		holding(app, "c1", the_catalogue().into_iter().chain(page).collect())
 	}
@@ -714,8 +709,11 @@ mod tests {
 		assert_eq!(answer["install"], json!({ "kind": "key", "secrets": ["SUPERSET_API_KEY"] }));
 	}
 
-	async fn recorded_in(app: &App<MockRuntime>, conversation_id: &str) -> Vec<ApplicationInstall> {
-		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
+	async fn recorded_in(
+		app: &crate::core_context::Core,
+		conversation_id: &str,
+	) -> Vec<ApplicationInstall> {
+		ready(&app.state::<db::DatabaseState>())
 			.expect("the database opens")
 			.application_installs()
 			.of_conversation(conversation_id.to_owned())
@@ -888,7 +886,7 @@ mod tests {
 		assert_eq!(recorded_in(&app, "nowhere").await, Vec::new());
 	}
 
-	async fn searched(app: &App<MockRuntime>, query: &str) -> Value {
+	async fn searched(app: &crate::core_context::Core, query: &str) -> Value {
 		a_host_reading(app, &[])
 			.answer(asking("search", json!({ "query": query })))
 			.await
@@ -1058,14 +1056,10 @@ mod tests {
 		let from_the_directory =
 			host.answer(an_install("com.notion/mcp", "user")).await.expect("the install answers");
 		assert_eq!(from_the_directory["install"], json!({ "kind": "oauth" }));
-		let reports = crate::events::core(app.app_handle()).state::<ApplicationReports>();
+		let reports = app.state::<ApplicationReports>();
 		reports.record("b1", "superset", Standing::Holding);
 		reports.record("b1", "paper", Standing::LeftOut { reason: Some("refused".to_owned()) });
-		crate::events::core(app.app_handle()).state::<AuthorizationAnswers>().answered(
-			"https://mcp.notion.test/mcp",
-			true,
-			now_ms(),
-		);
+		app.state::<AuthorizationAnswers>().answered("https://mcp.notion.test/mcp", true, now_ms());
 
 		let host = &host;
 		let read = move |application: &'static str, scope: &'static str| async move {

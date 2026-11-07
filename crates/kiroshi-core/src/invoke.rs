@@ -461,6 +461,17 @@ table! { core, client;
 		answered(crate::plugins::commands::plugin_history_diff(core, scope, oldest_commit_id, newest_commit_id).await);
 	plugin_revert(scope: PluginScope, oldest_commit_id: String, newest_commit_id: String) =>
 		answered(crate::plugins::commands::plugin_revert(core, scope, oldest_commit_id, newest_commit_id).await);
+
+	application_catalogue() =>
+		answered(crate::applications::commands::application_catalogue(core).await);
+	application_search(query: String) =>
+		answered(crate::applications::commands::application_search(core, query).await);
+	application_named(name: String) =>
+		answered(crate::applications::commands::application_named(core, name).await);
+	application_installs(conversation_id: String) =>
+		answered(crate::applications::commands::application_installs(core, conversation_id).await);
+	application_runnable(config: JsonValue) =>
+		plain(crate::applications::commands::application_runnable(core, config).await);
 }
 
 pub async fn dispatch(core: &Core, command: &str, arguments: Value) -> Option<Answer> {
@@ -585,12 +596,7 @@ mod tests {
 
 	const OS_SHELL_MODULES: [&str; 4] = ["badge", "notifications", "updates", "window_controls"];
 
-	const NOT_YET_IN_CORE: [&str; 92] = [
-		"application_catalogue",
-		"application_search",
-		"application_named",
-		"application_installs",
-		"application_runnable",
+	const NOT_YET_IN_CORE: [&str; 87] = [
 		"remote_image_read",
 		"library_list",
 		"library_read_document",

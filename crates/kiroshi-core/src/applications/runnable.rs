@@ -147,7 +147,7 @@ fn unpublished(identifier: &str, status: u16) -> String {
 }
 
 #[cfg(test)]
-pub(crate) mod tests {
+pub mod tests {
 	use std::fs;
 	use std::net::{Ipv4Addr, SocketAddr};
 	use std::path::Path;
@@ -166,12 +166,12 @@ pub(crate) mod tests {
 
 	const ABSENT: &str = "a-command-kiroshi-would-never-find";
 
-	pub(crate) struct Held {
+	pub struct Held {
 		status: StatusCode,
-		pub(crate) asked: Mutex<Vec<String>>,
+		pub asked: Mutex<Vec<String>>,
 	}
 
-	pub(crate) fn a_path_carrying(home: &Path, commands: &[&str]) -> OsString {
+	pub fn a_path_carrying(home: &Path, commands: &[&str]) -> OsString {
 		let directory = home.join(format!("kiroshi-runners-{}", commands.join("-")));
 		fs::create_dir_all(&directory).expect("the runner directory is made");
 		for command in commands {
@@ -190,7 +190,7 @@ pub(crate) mod tests {
 		fs::write(held, "").expect("the runner is written");
 	}
 
-	pub(crate) async fn serving(status: StatusCode) -> (Runners, Arc<Held>, RemovedOnDrop) {
+	pub async fn serving(status: StatusCode) -> (Runners, Arc<Held>, RemovedOnDrop) {
 		let held = Arc::new(Held { status, asked: Mutex::new(Vec::new()) });
 		let listener =
 			tokio::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.expect("the stub binds");
