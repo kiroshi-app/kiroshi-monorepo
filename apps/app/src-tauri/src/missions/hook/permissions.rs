@@ -135,19 +135,19 @@ fn leasable(branch: &str) -> bool {
 }
 
 fn checked_out(root: &Path) -> Option<String> {
-	let head = match Repository::discover(root).and_then(|repository| head_target(&repository)) {
-		Ok(head) => head,
+	match Repository::discover(root).and_then(|repository| branch_of(&repository)) {
+		Ok(branch) => branch,
 		Err(error) => {
 			eprintln!("the branch of the mission checkout was not read: {}", error.message());
-			return None;
+			None
 		}
-	};
-	head?.strip_prefix(BRANCH_REFS).map(str::to_owned)
+	}
 }
 
-fn head_target(repository: &Repository) -> Result<Option<String>, git2::Error> {
+fn branch_of(repository: &Repository) -> Result<Option<String>, git2::Error> {
 	let head = repository.find_reference("HEAD")?;
-	Ok(head.symbolic_target()?.map(str::to_owned))
+	let target = head.symbolic_target()?;
+	Ok(target.and_then(|target| target.strip_prefix(BRANCH_REFS)).map(str::to_owned))
 }
 
 fn dev_data_edits() -> Vec<String> {
