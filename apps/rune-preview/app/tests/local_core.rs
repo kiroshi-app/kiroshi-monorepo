@@ -115,7 +115,8 @@ fn the_core_lists_every_row_of_an_existing_profile_and_writes_nothing_to_its_sto
 	let store = a_profile_of_the_tauri_app(&data);
 	let before = std::fs::read(&store).expect("the profile store reads");
 
-	let core = LocalCore::open(data.to_path_buf()).expect("the Rune core opens the profile");
+	let core = LocalCore::open(data.to_path_buf())
+		.unwrap_or_else(|failure| panic!("the Rune core did not open the profile: {failure}"));
 	let (spaces, agents, conversations) = listed_by_space(&core);
 	drop(core);
 
