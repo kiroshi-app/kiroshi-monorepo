@@ -69,7 +69,7 @@ impl LocalApi {
 }
 
 #[derive(Debug, PartialEq)]
-pub(super) struct MemberCall {
+pub struct MemberCall {
 	id: Value,
 	command: String,
 	args: Value,

@@ -16,7 +16,7 @@ pub enum Reach {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub(super) struct Held {
+pub struct Held {
 	argument: &'static str,
 	check: Check,
 	is_optional: bool,
