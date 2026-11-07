@@ -1,6 +1,6 @@
 use rune::{Align, Color, Cursor, El, Icon, TextStyle, col, el, icon, row, spacer, text};
 
-use crate::avatar::{Face, hexagon, outlined_hexagon};
+use crate::avatar::Face;
 use crate::icons;
 use crate::primitives::button::{Button, ButtonSize, ButtonVariant};
 use crate::primitives::skeleton::skeleton;
@@ -218,10 +218,11 @@ fn media_of(t: &Tokens, media: &Media) -> El {
 
 pub fn subject_icon(t: &Tokens, glyph: &'static Icon, hue: Option<f32>, side: f32) -> El {
 	let (fill, ink) = crate::tokens::conversation_icon(hue, t.dark);
-	el().size(side, side)
-		.a11y_hidden()
-		.child(outlined_hexagon(side, fill, t).absolute(0.0, 0.0))
-		.child(row().size(side, side).center().child(icon(glyph, side / 2.0).color(ink)))
+	disc(side, fill).center().a11y_hidden().child(icon(glyph, side / 2.0).color(ink))
+}
+
+fn disc(side: f32, fill: Color) -> El {
+	row().size(side, side).radius(side / 2.0).fill(fill)
 }
 
 fn title_badge(t: &Tokens, title: &str) -> El {
@@ -288,8 +289,8 @@ fn pile(t: &Tokens, members: &[Face], ground: Color, language: Language) -> Opti
 	for (at, face) in shown.iter().enumerate() {
 		let left = at as f32 * PILE_STEP;
 		if at > 0 {
-			stack = stack
-				.child(hexagon(hole, ground).absolute(left - PILE_KNOCKOUT, 1.0 - PILE_KNOCKOUT));
+			stack =
+				stack.child(disc(hole, ground).absolute(left - PILE_KNOCKOUT, 1.0 - PILE_KNOCKOUT));
 		}
 		stack = stack.child(face.draw(PILE_MEMBER, t).absolute(left, 1.0));
 	}
@@ -302,17 +303,11 @@ fn pile(t: &Tokens, members: &[Face], ground: Color, language: Language) -> Opti
 			..tabular(weighted(TextStyle::new(PILE_MEMBER * 0.45, BOLD), BOLD))
 		};
 		stack = stack
-			.child(hexagon(hole, ground).absolute(left - PILE_KNOCKOUT, 1.0 - PILE_KNOCKOUT))
+			.child(disc(hole, ground).absolute(left - PILE_KNOCKOUT, 1.0 - PILE_KNOCKOUT))
 			.child(
-				el().size(PILE_MEMBER, PILE_MEMBER)
-					.absolute(left, 1.0)
-					.child(
-						outlined_hexagon(PILE_MEMBER, t.conversation_pile_overflow, t)
-							.absolute(0.0, 0.0),
-					)
-					.child(row().size(PILE_MEMBER, PILE_MEMBER).center().child(
-						text(label).font(counter).color(t.conversation_pile_overflow_foreground),
-					)),
+				disc(PILE_MEMBER, t.conversation_pile_overflow).center().absolute(left, 1.0).child(
+					text(label).font(counter).color(t.conversation_pile_overflow_foreground),
+				),
 			);
 	}
 	Some(stack)
@@ -700,27 +695,21 @@ fn skeleton_row(t: &Tokens, at: usize) -> El {
 		SkeletonKind::Conversation => {
 			preview = preview.child(
 				el().size(PILE_MEMBER + PILE_STEP, PREVIEW_LINE)
-					.child(hexagon(PILE_MEMBER, t.border).absolute(0.0, 1.0))
-					.child(hexagon(PILE_MEMBER, t.border).absolute(PILE_STEP, 1.0)),
+					.child(disc(PILE_MEMBER, t.border).absolute(0.0, 1.0))
+					.child(disc(PILE_MEMBER, t.border).absolute(PILE_STEP, 1.0)),
 			);
 		}
 	}
-	row()
-		.w_full()
-		.padding(ROW_PADDING)
-		.gap(ROW_GAP)
-		.center_y()
-		.child(hexagon(AVATAR, t.border))
-		.child(
-			col()
-				.grow(1.0)
-				.child(row().h(NAME_LINE).center_y().justify_between().child(title).child(bar(
-					faint,
-					shape.stamp,
-					SKELETON_FAINT_BAR,
-				)))
-				.child(preview),
-		)
+	row().w_full().padding(ROW_PADDING).gap(ROW_GAP).center_y().child(disc(AVATAR, t.border)).child(
+		col()
+			.grow(1.0)
+			.child(row().h(NAME_LINE).center_y().justify_between().child(title).child(bar(
+				faint,
+				shape.stamp,
+				SKELETON_FAINT_BAR,
+			)))
+			.child(preview),
+	)
 }
 
 const SKELETON_PITCH: f32 = SKELETON_ROW_HEIGHT + SKELETON_ROW_GAP;

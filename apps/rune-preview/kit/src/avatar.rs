@@ -52,18 +52,6 @@ impl<'a> Face<'a> {
 	}
 }
 
-pub fn hexagon(size: f32, fill: Color) -> El {
-	let outline = Outline::of_width(f64::from(size));
-	canvas(Shape::new().view_box(size, size).fill_path(&outline.path(0.0), fill)).size(size, size)
-}
-
-pub fn outlined_hexagon(size: f32, fill: Color, t: &Tokens) -> El {
-	let side = f64::from(size);
-	let outline = Outline::of_width(side);
-	let shape = Shape::new().view_box(size, size).fill_path(&outline.path(0.0), fill);
-	canvas(glazed(shape, &outline, side, t.dark)).size(size, size)
-}
-
 pub struct Person<'a> {
 	pub name: &'a str,
 	pub image: Option<&'a Image>,
