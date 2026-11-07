@@ -91,12 +91,13 @@ pub enum HostError {
 	CommandFailed { command: String, status: u16, body: String },
 	Unreadable { command: String, cause: String },
 	WriteRefused { command: String },
+	InProcess { cause: String },
 }
 
 impl HostError {
 	pub fn title(&self) -> String {
 		match self {
-			HostError::NoDataDir => "Couldn't find the Application Support folder".to_owned(),
+			HostError::NoDataDir => "Couldn't find the data folder".to_owned(),
 			HostError::TokenMissing { profile } => {
 				format!("{} hasn't run on this computer", profile.app_name())
 			}
@@ -111,12 +112,15 @@ impl HostError {
 			HostError::CommandFailed { .. } => "Kiroshi refused the call".to_owned(),
 			HostError::Unreadable { .. } => "Kiroshi answered something unreadable".to_owned(),
 			HostError::WriteRefused { .. } => "The preview only reads Kiroshi".to_owned(),
+			HostError::InProcess { .. } => "The in-process Kiroshi didn't open".to_owned(),
 		}
 	}
 
 	pub fn detail(&self) -> String {
 		match self {
-			HostError::NoDataDir => "HOME isn't set, so the data folder has no path.".to_owned(),
+			HostError::NoDataDir => {
+				"Set HOME, or APPDATA on Windows, so the data folder has a path.".to_owned()
+			}
 			HostError::TokenMissing { profile } => format!(
 				"No host/token in the {} data folder. {} writes it when it opens.",
 				profile.identifier(),
@@ -139,6 +143,7 @@ impl HostError {
 			HostError::WriteRefused { command } => format!(
 				"{command} would change your data, so it isn't sent to the installed Kiroshi."
 			),
+			HostError::InProcess { cause } => cause.clone(),
 		}
 	}
 

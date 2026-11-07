@@ -1,43 +1,46 @@
 use std::fmt;
 use std::path::PathBuf;
 use std::process::ExitCode;
-use std::time::{Duration, Instant, SystemTime, SystemTimeError, UNIX_EPOCH};
+use std::sync::Arc;
+use std::sync::mpsc::{self, RecvTimeoutError};
+use std::time::{Duration, Instant};
 
 use kiroshi_core::agent::AgentState;
 use kiroshi_core::bundles;
 use kiroshi_core::companions::launch::LaunchOutcomeState;
 use kiroshi_core::conversations::awaited_runs::TurnWindows;
-use kiroshi_core::conversations::commands::{
-	conversation_bots, conversation_send_turn, list_bundles_at_launch, main_chat, message_page,
-};
-use kiroshi_core::conversations::contract::{
-	Chat, SentMessage, TranscriptCompletion, TranscriptMessage, TranscriptRole,
-	TranscriptStoreError,
-};
+use kiroshi_core::conversations::commands::{conversation_bots, list_bundles_at_launch};
+use kiroshi_core::conversations::contract::TranscriptStoreError;
 use kiroshi_core::conversations::turn_run_deadline::TurnRunDeadlines;
 use kiroshi_core::core_context::Core;
 use kiroshi_core::db;
-use kiroshi_core::hosting::caller::Caller;
+use kiroshi_core::invoke::{Answer, dispatch};
+use serde::Deserialize;
+use serde::de::DeserializeOwned;
+use serde_json::{Value, json};
 use tokio::runtime::Runtime;
-use uuid::Uuid;
+
+use crate::app;
+use crate::events::{self, HostEvent};
+use crate::host::HostError;
+use crate::model::AgentEvent;
+use crate::source::Source;
+use crate::turn;
 
 pub const IDENTIFIER: &str = "com.kiroshi.rune-preview";
 
 pub const DATA_ENV: &str = "KIROSHI_PREVIEW_DATA";
 
-const PAGE_LIMIT: u32 = 100;
-
 const REPLY_PATIENCE: Duration = Duration::from_secs(120);
-
-const REPLY_POLL: Duration = Duration::from_millis(50);
 
 pub enum LocalError {
 	Runtime(std::io::Error),
 	Store(TranscriptStoreError),
-	Clock(SystemTimeError),
+	Host(HostError),
 	NoDataFolder,
 	NoAgent,
-	NoReply { waited: Duration, heard: Vec<String> },
+	NoReply { waited: Duration },
+	Unheard,
 }
 
 impl fmt::Display for LocalError {
@@ -47,18 +50,15 @@ impl fmt::Display for LocalError {
 				write!(f, "The in-process Kiroshi didn't start: {failure}")
 			}
 			LocalError::Store(failure) => write!(f, "The conversation store refused: {failure:?}"),
-			LocalError::Clock(failure) => write!(f, "The clock reads before 1970: {failure}"),
+			LocalError::Host(failure) => write!(f, "{} {}", failure.title(), failure.detail()),
 			LocalError::NoAgent => write!(f, "No agent with a bundle to talk to"),
 			LocalError::NoDataFolder => {
 				write!(f, "No data folder for the in-process Kiroshi: set {DATA_ENV}")
 			}
-			LocalError::NoReply { waited, heard } => {
-				write!(
-					f,
-					"No reply settled within {}s; the thread holds: {heard:?}",
-					waited.as_secs()
-				)
+			LocalError::NoReply { waited } => {
+				write!(f, "No reply event within {}s", waited.as_secs())
 			}
+			LocalError::Unheard => write!(f, "The Core stopped delivering its events"),
 		}
 	}
 }
@@ -66,6 +66,12 @@ impl fmt::Display for LocalError {
 impl From<TranscriptStoreError> for LocalError {
 	fn from(failure: TranscriptStoreError) -> Self {
 		LocalError::Store(failure)
+	}
+}
+
+impl From<HostError> for LocalError {
+	fn from(failure: HostError) -> Self {
+		LocalError::Host(failure)
 	}
 }
 
@@ -84,118 +90,74 @@ impl LocalCore {
 		core.manage_client_scoped(TurnWindows::default());
 		core.manage(LaunchOutcomeState::default());
 		let local = LocalCore { core, runtime };
-		local.launched();
+		local.runtime.block_on(list_bundles_at_launch(&local.core));
 		Ok(local)
 	}
 
-	fn launched(&self) {
-		self.runtime.block_on(list_bundles_at_launch(&self.core));
+	pub fn invoke<T: DeserializeOwned>(
+		&self,
+		command: &str,
+		arguments: Value,
+	) -> Result<T, HostError> {
+		let failed = |status: u16, body: String| HostError::CommandFailed {
+			command: command.to_owned(),
+			status,
+			body,
+		};
+		match self.runtime.block_on(dispatch(&self.core, command, arguments)) {
+			Some(Answer::Answered(json)) => serde_json::from_value(json).map_err(|failure| {
+				HostError::Unreadable { command: command.to_owned(), cause: failure.to_string() }
+			}),
+			Some(Answer::Refused(json)) => Err(failed(500, json.to_string())),
+			Some(Answer::Unanswerable(detail)) => Err(failed(500, detail)),
+			None => Err(failed(404, "the in-process Kiroshi holds no such command".to_owned())),
+		}
 	}
 
-	pub fn open_conversation(&self) -> Result<(Chat, String), LocalError> {
-		self.runtime.block_on(async {
-			let agent = self.first_agent().await?;
-			let chat = main_chat(&self.core, agent.clone(), None).await?;
-			Ok((chat, agent))
-		})
+	pub fn listen(&self, deliver: impl Fn(HostEvent) + Send + Sync + 'static) {
+		deliver(HostEvent::Listening);
+		self.core.listen(move |event| {
+			let payload = serde_json::from_str(event.payload.get());
+			match payload.map(|payload| events::named(event.name, payload)) {
+				Ok(Some(heard)) => deliver(heard),
+				Ok(None) => {}
+				Err(failure) => deliver(HostEvent::Unreadable {
+					event: event.name.to_owned(),
+					cause: failure.to_string(),
+				}),
+			}
+			Ok(())
+		});
 	}
 
-	async fn first_agent(&self) -> Result<String, LocalError> {
+	pub fn first_agent(&self) -> Result<String, LocalError> {
 		let root = bundles::root(&self.core).ok_or(LocalError::NoAgent)?;
-		let agents = conversation_bots(&self.core, None).await?;
+		let agents = self.runtime.block_on(conversation_bots(&self.core, None))?;
 		agents
 			.into_iter()
 			.map(|agent| agent.id)
 			.find(|id| matches!(bundles::lookup(&root, id), Ok(Some(_))))
 			.ok_or(LocalError::NoAgent)
 	}
-
-	pub fn send(
-		&self,
-		conversation_id: &str,
-		content: &str,
-		summoned: &[String],
-	) -> Result<String, LocalError> {
-		let created_at =
-			SystemTime::now().duration_since(UNIX_EPOCH).map_err(LocalError::Clock)?.as_millis();
-		let turn_id = Uuid::new_v4().to_string();
-		let message = SentMessage {
-			id: Uuid::new_v4().to_string(),
-			conversation_id: conversation_id.to_owned(),
-			turn_id: turn_id.clone(),
-			content: content.to_owned(),
-			created_at: created_at as i64,
-			replied_to_message_id: None,
-			replied_to_message_ids: Vec::new(),
-			reply_links: Vec::new(),
-			documents: Vec::new(),
-		};
-		self.runtime.block_on(conversation_send_turn(
-			&self.core,
-			Caller::Host,
-			message,
-			summoned.to_vec(),
-		))?;
-		Ok(turn_id)
-	}
-
-	pub fn reply_to(
-		&self,
-		conversation_id: &str,
-		turn_id: &str,
-	) -> Result<TranscriptMessage, LocalError> {
-		let started = Instant::now();
-		loop {
-			let thread = self.thread(conversation_id)?;
-			let settled = thread.iter().find(|message| {
-				message.turn_id == turn_id
-					&& message.role == TranscriptRole::Assistant
-					&& !matches!(
-						message.completion,
-						TranscriptCompletion::Pending | TranscriptCompletion::Streaming
-					)
-			});
-			if let Some(reply) = settled {
-				return Ok(reply.clone());
-			}
-			if started.elapsed() > REPLY_PATIENCE {
-				let heard = thread.iter().map(described).collect();
-				return Err(LocalError::NoReply { waited: REPLY_PATIENCE, heard });
-			}
-			std::thread::sleep(REPLY_POLL);
-		}
-	}
-
-	pub fn thread(&self, conversation_id: &str) -> Result<Vec<TranscriptMessage>, LocalError> {
-		let mut messages: Vec<TranscriptMessage> = Vec::new();
-		let mut before: Option<i64> = None;
-		loop {
-			let page = self.runtime.block_on(message_page(
-				&self.core,
-				conversation_id.to_owned(),
-				before,
-				PAGE_LIMIT,
-			))?;
-			let oldest = page.messages.iter().map(|message| message.seq).min();
-			messages.extend(page.messages);
-			match oldest {
-				Some(oldest) if page.has_more => before = Some(oldest),
-				_ => break,
-			}
-		}
-		messages.sort_by_key(|message| message.seq);
-		Ok(messages)
-	}
 }
 
-fn described(message: &TranscriptMessage) -> String {
-	format!("{:?} {:?}: {}", message.role, message.completion, message.content)
+pub fn opened() -> Result<Arc<LocalCore>, HostError> {
+	let folder =
+		data_folder().map_err(|failure| HostError::InProcess { cause: failure.to_string() })?;
+	LocalCore::open(folder)
+		.map(Arc::new)
+		.map_err(|failure| HostError::InProcess { cause: failure.to_string() })
+}
+
+#[derive(Deserialize)]
+struct Opened {
+	id: String,
 }
 
 pub fn send_and_read(text: &str) -> ExitCode {
 	match exchanged(text) {
 		Ok(reply) => {
-			println!("reply ({:?}): {}", reply.completion, reply.content);
+			println!("reply: {reply}");
 			ExitCode::SUCCESS
 		}
 		Err(failure) => {
@@ -205,12 +167,49 @@ pub fn send_and_read(text: &str) -> ExitCode {
 	}
 }
 
-fn exchanged(text: &str) -> Result<TranscriptMessage, LocalError> {
-	let local = LocalCore::open(data_folder()?)?;
-	let (chat, agent) = local.open_conversation()?;
-	let turn_id = local.send(&chat.id, text, &[agent])?;
-	println!("sent to conversation {} in turn {turn_id}", chat.id);
-	local.reply_to(&chat.id, &turn_id)
+fn exchanged(text: &str) -> Result<String, LocalError> {
+	let local = opened()?;
+	let agent = local.first_agent()?;
+	let ready = app::ready_on(Source::InProcess(local))?;
+	let chat: Opened =
+		ready.source.invoke("conversation_main_chat", json!({ "botId": agent.clone() }))?;
+	println!("opened {} with {} agents in space {}", chat.id, ready.agents.len(), ready.space.id);
+	let (heard, hearing) = mpsc::channel();
+	ready.source.listen(move |event| {
+		if heard.send(event).is_err() {
+			eprintln!("an event arrived after the exchange ended");
+		}
+	});
+	turn::send_turn(&ready.source, &chat.id, text, &[agent])
+		.map_err(|failure| LocalError::Host(HostError::InProcess { cause: failure.to_string() }))?;
+	println!("sent to conversation {}", chat.id);
+	completed_reply(&hearing, &chat.id)
+}
+
+fn completed_reply(
+	hearing: &mpsc::Receiver<HostEvent>,
+	conversation_id: &str,
+) -> Result<String, LocalError> {
+	let started = Instant::now();
+	loop {
+		let left = REPLY_PATIENCE.saturating_sub(started.elapsed());
+		match hearing.recv_timeout(left) {
+			Ok(HostEvent::Agent(scoped)) => {
+				let here = scoped
+					.scope
+					.as_ref()
+					.is_some_and(|scope| scope.conversation_id == conversation_id);
+				if let (true, AgentEvent::MessageCompleted { message }) = (here, scoped.event) {
+					return Ok(message.text);
+				}
+			}
+			Ok(_) => {}
+			Err(RecvTimeoutError::Timeout) => {
+				return Err(LocalError::NoReply { waited: REPLY_PATIENCE });
+			}
+			Err(RecvTimeoutError::Disconnected) => return Err(LocalError::Unheard),
+		}
+	}
 }
 
 pub fn data_folder() -> Result<PathBuf, LocalError> {

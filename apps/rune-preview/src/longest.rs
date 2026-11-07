@@ -1,8 +1,9 @@
 use serde_json::json;
 
 use crate::app::whole_thread;
-use crate::host::{Host, HostError};
+use crate::host::HostError;
 use crate::model::{Conversation, MessagePage};
+use crate::source::Source;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Longest {
@@ -10,7 +11,10 @@ pub struct Longest {
 	pub messages: usize,
 }
 
-pub fn longest(host: &Host, conversations: &[Conversation]) -> Result<Option<Longest>, HostError> {
+pub fn longest(
+	host: &Source,
+	conversations: &[Conversation],
+) -> Result<Option<Longest>, HostError> {
 	let mut bounded = Vec::with_capacity(conversations.len());
 	for conversation in conversations {
 		bounded.push((newest_seq(host, &conversation.id)?, conversation.id.as_str()));
@@ -18,7 +22,7 @@ pub fn longest(host: &Host, conversations: &[Conversation]) -> Result<Option<Lon
 	pick(bounded, |conversation_id| whole_thread(host, conversation_id).map(|thread| thread.len()))
 }
 
-fn newest_seq(host: &Host, conversation_id: &str) -> Result<usize, HostError> {
+fn newest_seq(host: &Source, conversation_id: &str) -> Result<usize, HostError> {
 	let page: MessagePage = host.invoke(
 		"conversation_message_page",
 		json!({ "conversationId": conversation_id, "beforeSeq": null, "limit": 1 }),

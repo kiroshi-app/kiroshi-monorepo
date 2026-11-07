@@ -17,7 +17,7 @@ fn a_data_folder() -> RemovedOnDrop {
 }
 
 #[test]
-fn the_preview_opens_a_conversation_sends_a_message_and_reads_the_reply_in_process() {
+fn the_window_model_opens_in_process_sends_and_hears_the_reply_as_a_core_event() {
 	let data = a_data_folder();
 
 	let ran = Command::new(PREVIEW)
@@ -30,12 +30,11 @@ fn the_preview_opens_a_conversation_sends_a_message_and_reads_the_reply_in_proce
 	let printed = String::from_utf8_lossy(&ran.stdout);
 	let complained = String::from_utf8_lossy(&ran.stderr);
 	assert!(ran.status.success(), "the exchange failed: {printed}{complained}");
+	assert!(printed.contains("opened "), "the window model did not open: {printed}");
 	assert!(printed.contains("sent to conversation"), "{printed}");
-	let reply = printed
-		.lines()
-		.skip_while(|line| !line.starts_with("reply (Complete): "))
-		.collect::<Vec<_>>();
-	assert!(!reply.is_empty(), "no settled reply was read back: {printed}");
+	let reply: Vec<&str> =
+		printed.lines().skip_while(|line| !line.starts_with("reply: ")).collect();
+	assert!(!reply.is_empty(), "no reply event was heard: {printed}");
 	assert!(
 		reply.join("\n").contains("hello from the preview"),
 		"the reply did not answer the message: {printed}"

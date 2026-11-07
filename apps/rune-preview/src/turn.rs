@@ -4,7 +4,8 @@ use std::time::{SystemTime, SystemTimeError, UNIX_EPOCH};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-use crate::host::{Host, HostError};
+use crate::host::HostError;
+use crate::source::Source;
 
 pub enum SendError {
 	Clock(SystemTimeError),
@@ -21,7 +22,7 @@ impl fmt::Display for SendError {
 }
 
 pub fn send_turn(
-	host: &Host,
+	host: &Source,
 	conversation_id: &str,
 	content: &str,
 	summoned: &[String],

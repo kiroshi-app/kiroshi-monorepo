@@ -77,6 +77,10 @@ fn parsed(text: &str) -> Option<HostEvent> {
 	};
 	let event = frame.get("event")?.as_str()?;
 	let payload = frame.get("payload")?.clone();
+	named(event, payload)
+}
+
+pub fn named(event: &str, payload: Value) -> Option<HostEvent> {
 	match event {
 		AGENT_EVENT => Some(
 			serde_json::from_value(payload)

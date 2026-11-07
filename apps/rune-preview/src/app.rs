@@ -9,9 +9,10 @@ use serde_json::json;
 use crate::avatar::Motion;
 use crate::content;
 use crate::dev_profile::{self, DevProfile};
-use crate::events::{self, HostEvent};
+use crate::events::HostEvent;
 use crate::host::{Host, HostError, Profile};
 use crate::images::{Fetched, Images};
+use crate::local;
 use crate::longest::{self, Longest};
 use crate::math::Typesetter;
 use crate::model::{
@@ -21,6 +22,7 @@ use crate::model::{
 };
 use crate::onboarding::{Method, Step};
 use crate::runs::Runs;
+use crate::source::Source;
 use crate::turn::{self, SendError};
 
 const PAGE_LIMIT: u32 = 200;
@@ -46,7 +48,7 @@ pub enum Workspace {
 }
 
 pub struct Ready {
-	pub host: Host,
+	pub source: Source,
 	pub space: Space,
 	pub agents: Vec<Agent>,
 	pub conversations: Vec<Conversation>,
@@ -279,6 +281,7 @@ pub struct App {
 	pub math: Typesetter,
 	pub pane: Pane,
 	pub host_profile: Profile,
+	pub uses_host_api: bool,
 	pub board: Board,
 	pub mission: Option<OpenMission>,
 	outbox: Option<Outbox>,
@@ -312,6 +315,7 @@ impl App {
 			math: Typesetter::default(),
 			pane: Pane::Conversations,
 			host_profile: Profile::Installed,
+			uses_host_api: false,
 			board: Board::Unread,
 			mission: None,
 			clock_ms: 0.0,
@@ -327,8 +331,12 @@ impl App {
 		if matches!(self.workspace, Workspace::Connecting) {
 			self.connect();
 		}
-		if self.dev_profile.is_none() {
-			self.work(|outbox| outbox.deliver(Inbound::DevProfile(dev_profile::read())));
+		match (self.dev_profile.is_none(), self.uses_host_api) {
+			(true, true) => {
+				self.work(|outbox| outbox.deliver(Inbound::DevProfile(dev_profile::read())))
+			}
+			(true, false) => self.dev_profile = Some(DevProfile::default()),
+			(false, _) => {}
 		}
 	}
 
@@ -344,7 +352,11 @@ impl App {
 	pub fn connect(&mut self) {
 		self.workspace = Workspace::Connecting;
 		let profile = self.host_profile;
-		self.work(move |outbox| outbox.deliver(Inbound::Connected(connected(profile))));
+		let in_process = !self.uses_host_api;
+		self.work(move |outbox| {
+			let ready = if in_process { opened_in_process() } else { connected(profile) };
+			outbox.deliver(Inbound::Connected(ready));
+		});
 	}
 
 	pub fn poll(&mut self) -> bool {
@@ -393,7 +405,7 @@ impl App {
 			return;
 		};
 		let thread = Thread::of_conversation(conversation);
-		let host = ready.host.clone();
+		let host = ready.source.clone();
 		self.composer.mention = None;
 		self.notice = None;
 		self.mission = None;
@@ -412,7 +424,7 @@ impl App {
 		if !matches!(self.board, Board::Unread | Board::Failed(_)) {
 			return;
 		}
-		let Some(host) = self.ready().map(|ready| ready.host.clone()) else { return };
+		let Some(host) = self.ready().map(|ready| ready.source.clone()) else { return };
 		self.board = Board::Reading;
 		self.work(move |outbox| {
 			outbox.deliver(Inbound::Board(host.invoke("mission_board", json!({}))))
@@ -424,7 +436,7 @@ impl App {
 	}
 
 	pub fn open_mission(&mut self, mission: &Mission, bot: &Agent) {
-		let Some(host) = self.ready().map(|ready| ready.host.clone()) else { return };
+		let Some(host) = self.ready().map(|ready| ready.source.clone()) else { return };
 		self.composer.mention = None;
 		self.notice = None;
 		self.thread = Some(Thread::of_mission(mission, bot));
@@ -458,7 +470,7 @@ impl App {
 	}
 
 	fn read_mission(&self, mission_id: &str) {
-		let Some(host) = self.ready().map(|ready| ready.host.clone()) else { return };
+		let Some(host) = self.ready().map(|ready| ready.source.clone()) else { return };
 		let mission_id = mission_id.to_owned();
 		self.work(move |outbox| {
 			let detail = host.invoke("mission_detail", json!({ "missionId": mission_id }));
@@ -677,7 +689,7 @@ impl App {
 		if content.trim().is_empty() {
 			return;
 		}
-		if ready.host.profile() == Profile::Installed {
+		if ready.source.running_profile() == Some(Profile::Installed) {
 			self.notice = Some(SENDING_OFF.to_owned());
 			return;
 		}
@@ -685,7 +697,7 @@ impl App {
 			self.notice = Some(IMAGES_NOT_SENT.to_owned());
 			return;
 		}
-		let host = ready.host.clone();
+		let host = ready.source.clone();
 		self.composer.edit.clear();
 		self.composer.mention = None;
 		self.notice = None;
@@ -700,9 +712,9 @@ impl App {
 		match inbound {
 			Inbound::Connected(Ok(ready)) => {
 				if let Some(outbox) = self.outbox.clone() {
-					events::listen(&ready.host, move |event| outbox.deliver(Inbound::Host(event)));
+					ready.source.listen(move |event| outbox.deliver(Inbound::Host(event)));
 				}
-				let host = ready.host.clone();
+				let host = ready.source.clone();
 				let conversations = ready.conversations.clone();
 				self.workspace = Workspace::Ready(ready);
 				self.work(move |outbox| {
@@ -760,7 +772,7 @@ impl App {
 		}
 	}
 
-	fn read_thread(&self, host: Host, conversation_id: String) {
+	fn read_thread(&self, host: Source, conversation_id: String) {
 		self.work(move |outbox| {
 			let messages = whole_thread(&host, &conversation_id);
 			outbox.deliver(Inbound::ThreadRead { conversation_id, messages });
@@ -841,8 +853,15 @@ impl App {
 }
 
 pub fn connected(profile: Profile) -> Result<Ready, HostError> {
-	let host = Host::connect(profile)?;
-	let spaces: Vec<Space> = host.invoke("space_list", json!({}))?;
+	ready_on(Source::Running(Host::connect(profile)?))
+}
+
+pub fn opened_in_process() -> Result<Ready, HostError> {
+	ready_on(Source::InProcess(local::opened()?))
+}
+
+pub fn ready_on(source: Source) -> Result<Ready, HostError> {
+	let spaces: Vec<Space> = source.invoke("space_list", json!({}))?;
 	let Some(space) = spaces.into_iter().next() else {
 		return Err(HostError::CommandFailed {
 			command: "space_list".into(),
@@ -850,24 +869,29 @@ pub fn connected(profile: Profile) -> Result<Ready, HostError> {
 			body: "no Space on the dev profile".into(),
 		});
 	};
-	let agents = host.invoke("conversation_bots", json!({ "spaceId": space.id }))?;
-	let conversations = roster(&host, &space.id)?;
-	let person = match host.invoke::<KiroshiAccountState>("account_state", json!({})) {
-		Ok(KiroshiAccountState::SignedIn { email, .. }) => Some(email),
-		Ok(KiroshiAccountState::SignedOut) => None,
-		Err(failure) => {
-			eprintln!("the rail shows no account: {}", failure.detail());
-			None
+	let agents = source.invoke("conversation_bots", json!({ "spaceId": space.id }))?;
+	let conversations = roster(&source, &space.id)?;
+	let person = match &source {
+		Source::InProcess(_) => None,
+		Source::Running(host) => {
+			match host.invoke::<KiroshiAccountState>("account_state", json!({})) {
+				Ok(KiroshiAccountState::SignedIn { email, .. }) => Some(email),
+				Ok(KiroshiAccountState::SignedOut) => None,
+				Err(failure) => {
+					eprintln!("the rail shows no account: {}", failure.detail());
+					None
+				}
+			}
 		}
 	};
-	Ok(Ready { host, space, agents, conversations, person, longest: None })
+	Ok(Ready { source, space, agents, conversations, person, longest: None })
 }
 
 const ROSTER_PAGE: u32 = 100;
 
 const MAX_ROSTER: usize = 1_000;
 
-fn roster(host: &Host, space_id: &str) -> Result<Vec<Conversation>, HostError> {
+fn roster(host: &Source, space_id: &str) -> Result<Vec<Conversation>, HostError> {
 	let mut roster: Vec<Conversation> = Vec::new();
 	let mut cursor: Option<String> = None;
 	loop {
@@ -887,7 +911,7 @@ fn roster(host: &Host, space_id: &str) -> Result<Vec<Conversation>, HostError> {
 	}
 }
 
-pub fn whole_thread(host: &Host, conversation_id: &str) -> Result<Vec<Message>, HostError> {
+pub fn whole_thread(host: &Source, conversation_id: &str) -> Result<Vec<Message>, HostError> {
 	let mut messages: Vec<Message> = Vec::new();
 	let mut before: Option<i64> = None;
 	loop {

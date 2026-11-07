@@ -7,10 +7,11 @@ use std::time::{Duration, Instant};
 use serde_json::json;
 
 use crate::app::{connected, whole_thread};
-use crate::events::{self, HostEvent};
-use crate::host::{self, Host, HostError, Profile};
+use crate::events::HostEvent;
+use crate::host::{self, HostError, Profile};
 use crate::longest;
 use crate::model::{AgentEvent, ConversationMissions, MissionDetail, MissionOnBoard};
+use crate::source::Source;
 use crate::turn::{self, SendError};
 
 const FIRST_DELTA_PATIENCE: Duration = Duration::from_secs(120);
@@ -42,14 +43,14 @@ fn smoke(text: &str) -> Result<(), String> {
 
 	let (heard, hearing) = mpsc::channel();
 	let host_heard = heard.clone();
-	events::listen(&ready.host, move |event| {
+	ready.source.listen(move |event| {
 		if host_heard.send(Heard::Host(event)).is_err() {
 			eprintln!("a host event arrived after the smoke run ended");
 		}
 	});
 	await_listening(&hearing)?;
 
-	let host = ready.host.clone();
+	let host = ready.source.clone();
 	let conversation_id = conversation.id.clone();
 	let content = format!("<@{}> {text}", agent.bot_id);
 	let summoned = vec![agent.bot_id.clone()];
@@ -156,9 +157,9 @@ fn read_only() -> Result<(), String> {
 	println!("space read: {}", ready.space.id);
 	println!("agents: {}", ready.agents.len());
 	println!("conversations: {}", ready.conversations.len());
-	let found = longest::longest(&ready.host, &ready.conversations).map_err(described)?;
+	let found = longest::longest(&ready.source, &ready.conversations).map_err(described)?;
 	let found = found.ok_or("no conversation holds a message")?;
-	let messages = whole_thread(&ready.host, &found.conversation_id).map_err(described)?;
+	let messages = whole_thread(&ready.source, &found.conversation_id).map_err(described)?;
 	let title = ready
 		.conversations
 		.iter()
@@ -171,12 +172,12 @@ fn read_only() -> Result<(), String> {
 		messages.len()
 	);
 	println!("longest title: {title}");
-	read_one_mission(&ready.host).map_err(described)?;
-	listen_to_missions(&ready.host)?;
+	read_one_mission(&ready.source).map_err(described)?;
+	listen_to_missions(&ready.source)?;
 	sent_only_reads()
 }
 
-fn read_one_mission(host: &Host) -> Result<(), HostError> {
+fn read_one_mission(host: &Source) -> Result<(), HostError> {
 	let board: Vec<MissionOnBoard> = host.invoke("mission_board", json!({}))?;
 	println!("open missions: {}", board.len());
 	let Some(entry) = board.iter().find(|entry| entry.mission.is_agent_running).or(board.first())
@@ -204,9 +205,9 @@ fn read_one_mission(host: &Host) -> Result<(), HostError> {
 
 const MISSION_WATCH: Duration = Duration::from_secs(30);
 
-fn listen_to_missions(host: &Host) -> Result<(), String> {
+fn listen_to_missions(host: &Source) -> Result<(), String> {
 	let (sender, heard) = mpsc::channel();
-	events::listen(host, move |event| {
+	host.listen(move |event| {
 		if sender.send(event).is_err() {
 			eprintln!("a host event arrived after the watch ended");
 		}

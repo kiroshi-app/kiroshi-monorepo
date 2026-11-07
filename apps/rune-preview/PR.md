@@ -232,7 +232,11 @@ The kept core of `apps/app/src-tauri` moves to a crate with no Tauri dependency,
 
   When no reply settles, the error lists what the thread holds.
 - **Where it runs.** `kiroshi-rune-preview --local-send <text>` runs that path with no window and prints the reply, next to the existing `--smoke-send` that goes through a running app's host API.
-- **Not moved yet.** The windowed screens still read through the host API of a running Kiroshi. Moving them onto the in-process Core also means turning Core events into the preview's live updates, which is its own change.
+- **The window on the in-process Core.** The window opens the in-process Core by default. Its data path goes through a `Source`: the in-process Core, or a running Kiroshi behind `--host-api` (or `--dev-host`).
+  - The conversation list, a thread, the mission board, a mission detail and the send all go through `kiroshi_core::invoke::dispatch` on that Core. There is no host token read and no HTTP call.
+  - Core events reach the window's existing handlers through `core.listen`: agent events, stored messages, mission changes.
+  - `--local-send` runs that same window data path headless. It opens the window model, sends with `conversation_send_turn`, and prints the reply from the Core's `MessageCompleted` event; it never polls `message_page`.
+  - The host token path and the data folders use the same per-OS root as the in-process data folder: Application Support on macOS, `APPDATA` on Windows, `XDG_DATA_HOME` or `~/.local/share` elsewhere. Their test runs on all three OSes, ungated.
 - **Dependencies.** kiroshi-core and tokio (`rt-multi-thread`, already in the tree) are the preview's only new direct dependencies. The preview keeps its own lockfile.
 - **The test.** `tests/local_core.rs` runs the preview binary with `--local-send`, with no window, against a throwaway data folder. It checks that the reply settled, that it answers the message sent, and that the exchange landed in the preview's own store. The agent process is src-tauri's `fake_sidecar`: the preview declares that same file as a binary behind a `fake-claude` feature, so both crates share one fake. Run it with `cargo test --features fake-claude`. `libc` (unix) came with that binary.
 
@@ -282,4 +286,20 @@ Run 42334518683 on `2493b2914`:
 - **kiroshi-core on Windows:** 1,786 passed, 0 failed.
 - **The Rune preview on Windows:** 1 of 36 tests failed (34 passed, 1 ignored as before). `host::tests::each_profile_reads_only_its_host_token` checks the path of a running Kiroshi's host token, `$HOME/Library/Application Support/<id>/host/token`. That's the macOS app's home layout, a unix-only feature, and Windows has no `HOME`. It is now `cfg(unix)`.
 - **The `rust` job:** it stopped on "No space left on device" while compiling the `bounded_rotation` integration test, after the library tests had passed (1,836). The commit only touched `.gitattributes` and this file, so the build output didn't grow. The next head runs the job again, and that run serves as its one rerun.
+
+## Core commands over HTTP
+
+- `kiroshi_core::invoke` holds the command table for the commands whose functions live in kiroshi-core: `space_list`, `conversation_bots`, `conversation_list`, `conversation_page`, `conversation_message_page`, `conversation_main_chat`, `conversation_send_turn`, `mission_list`, `mission_board` and `mission_detail`.
+  - `dispatch` answers each with the JSON Tauri answers for the same command: the result on success, the serialized error on refusal.
+  - `router` serves that table over HTTP at the host API's path with no Tauri. A test serves it on a loopback port and checks one write and one read against the Core functions' own results.
+- `space_list`'s body moved to `kiroshi_core::spaces::read::list_spaces`, and the Tauri command delegates to it.
+- src-tauri's host API answers every command in that table through `dispatch`, behind its existing header, token and size guards.
+- `axum` moved from kiroshi-core's dev-dependencies to its dependencies, with the same spec.
+
+## Gaps left
+
+By surface:
+- **Host HTTP API.** The core table answers only the ten commands above. Every other command still lives in src-tauri (library, hosting, spaces writes, user, plugins, applications and more), so src-tauri still dispatches it through its hidden webview's IPC. Calls relayed for a space member also stay on that path, because their caller is vouched from src-tauri's hosting state. src-tauri therefore mounts the core table and keeps the webview path for the rest; it doesn't yet mount the core router alone.
+- **Window, account rail.** In-process, the rail shows no signed-in account, because the account session lives in src-tauri.
+- **Window, onboarding profile.** In-process, onboarding starts from an empty profile. The Claude account, Claude import inventory and other onboarding reads (`dev_profile.rs`) still come from a running Kiroshi Dev, behind `--host-api` or `--dev-host`.
 

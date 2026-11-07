@@ -12,6 +12,7 @@ use crate::model::{Agent, Conversation, LastWord, Message, Participant, Role, Sp
 use crate::model::{AgentEvent, ClaudeItem, RuntimeScope};
 use crate::model::{ConversationMissions, MissionDetail, MissionOnBoard};
 use crate::onboarding::{Account, Connect, Page, Step};
+use crate::source::Source;
 
 type Scene = (&'static str, fn(&mut App));
 
@@ -195,7 +196,7 @@ fn workspace(s: &mut App) -> i64 {
 	s.screen = Screen::Conversations;
 	s.dev_profile = Some(DevProfile::default());
 	s.workspace = Workspace::Ready(Ready {
-		host: Host::detached(),
+		source: Source::Running(Host::detached()),
 		space: Space { id: "space".into(), name: "Personal".into(), colour: None },
 		agents,
 		conversations,
@@ -339,7 +340,7 @@ fn read_the_installed_host_before_the_first_frame(s: &mut App) -> Option<Ready> 
 	}
 }
 
-fn loaded(host: &Host, mut thread: Thread) -> Thread {
+fn loaded(host: &Source, mut thread: Thread) -> Thread {
 	match whole_thread(host, &thread.conversation_id) {
 		Ok(messages) => messages.into_iter().for_each(|message| thread.stored(message)),
 		Err(failure) => thread.failure = Some(failure),
@@ -350,14 +351,14 @@ fn loaded(host: &Host, mut thread: Thread) -> Thread {
 
 fn live_longest(s: &mut App) {
 	let Some(mut ready) = read_the_installed_host_before_the_first_frame(s) else { return };
-	match longest::longest(&ready.host, &ready.conversations) {
+	match longest::longest(&ready.source, &ready.conversations) {
 		Ok(Some(found)) => {
 			let conversation = ready
 				.conversations
 				.iter()
 				.find(|conversation| conversation.id == found.conversation_id);
 			if let Some(conversation) = conversation {
-				s.thread = Some(loaded(&ready.host, Thread::of_conversation(conversation)));
+				s.thread = Some(loaded(&ready.source, Thread::of_conversation(conversation)));
 			}
 			ready.longest = Some(found);
 		}
@@ -370,8 +371,8 @@ fn live_longest(s: &mut App) {
 fn live_mission(s: &mut App) {
 	let Some(ready) = read_the_installed_host_before_the_first_frame(s) else { return };
 	let board: Result<Vec<MissionOnBoard>, HostError> =
-		ready.host.invoke("mission_board", json!({}));
-	let host = ready.host.clone();
+		ready.source.invoke("mission_board", json!({}));
+	let host = ready.source.clone();
 	s.workspace = Workspace::Ready(ready);
 	s.pane = Pane::Missions;
 	let board = match board {
@@ -400,7 +401,7 @@ fn live_mission(s: &mut App) {
 fn live_mission_turn(s: &mut App) {
 	let Some(ready) = read_the_installed_host_before_the_first_frame(s) else { return };
 	let board: Result<Vec<MissionOnBoard>, HostError> =
-		ready.host.invoke("mission_board", json!({}));
+		ready.source.invoke("mission_board", json!({}));
 	let origin = board.ok().and_then(|board| {
 		board
 			.into_iter()
@@ -412,10 +413,10 @@ fn live_mission_turn(s: &mut App) {
 		return;
 	};
 	let conversation = ready.conversations.iter().find(|conversation| conversation.id == origin);
-	let mut thread =
-		conversation.map(|conversation| loaded(&ready.host, Thread::of_conversation(conversation)));
+	let mut thread = conversation
+		.map(|conversation| loaded(&ready.source, Thread::of_conversation(conversation)));
 	let missions: Result<ConversationMissions, HostError> =
-		ready.host.invoke("mission_list", json!({ "conversationId": origin }));
+		ready.source.invoke("mission_list", json!({ "conversationId": origin }));
 	if let (Some(thread), Ok(missions)) = (thread.as_mut(), missions) {
 		thread.missions = missions.open.into_iter().chain(missions.done).collect();
 		thread.missions.sort_by_key(|mission| mission.opened_at);

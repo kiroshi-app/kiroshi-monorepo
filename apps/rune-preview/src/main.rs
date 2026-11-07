@@ -19,6 +19,7 @@ mod onboarding;
 mod runs;
 mod scenes;
 mod smoke;
+mod source;
 mod spike;
 mod tokens;
 mod turn;
@@ -62,11 +63,14 @@ const DEV_HOST: &str = "--dev-host";
 
 const SKIP_ONBOARDING: &str = "--skip-onboarding";
 
+const HOST_API: &str = "--host-api";
+
 fn setup(s: &mut App, waker: Waker) {
 	let flagged = |flag: &str| std::env::args().any(|arg| arg == flag);
 	if flagged(DEV_HOST) {
 		s.host_profile = Profile::Dev;
 	}
+	s.uses_host_api = flagged(DEV_HOST) || flagged(HOST_API);
 	if flagged(DEV_HOST) || flagged(SKIP_ONBOARDING) {
 		s.screen = Screen::Conversations;
 	}
