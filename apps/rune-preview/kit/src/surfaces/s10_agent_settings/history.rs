@@ -1,4 +1,4 @@
-use rune::{Cursor, El, TextEdit, TextStyle, col, icon, row, text};
+use rune::{Cursor, El, TextEdit, TextStyle, col, el, icon, row, text};
 
 use super::parts::{
 	Density, PANEL_GAP, PANEL_INSET, SMALL_GLYPH, bar, button, empty, notice, rule, skeleton_rows,
@@ -20,6 +20,8 @@ use crate::tokens::{
 
 const AUTHOR_MARK: f32 = SPACING * 5.0;
 const TIME_WIDTH: f32 = SPACING * 10.0;
+const DIALOG_UNDO_SLOT: f32 = SPACING * 6.0;
+const PAGE_UNDO_SLOT: f32 = SPACING * 3.5;
 const ROW_INSET: f32 = SPACING * 2.0;
 const DIFF_TINT: f32 = 0.15;
 const GUTTER: f32 = SPACING * 8.0;
@@ -221,9 +223,14 @@ fn change_row<S: Host>(t: &Tokens, density: Density, list: &HistoryList, change:
 		.color(t.muted_foreground)
 		.w(TIME_WIDTH)
 		.align(rune::Align::End);
+	let slot = match density {
+		Density::Dialog => DIALOG_UNDO_SLOT,
+		Density::Page => PAGE_UNDO_SLOT,
+	};
+	let undo_slot = el().size(slot, slot).center().children(undo);
 	let trailing = match density {
-		Density::Dialog => row().gap(SPACING * 2.0).center_y().children(undo).child(time),
-		Density::Page => row().gap(SPACING * 2.0).center_y().child(time).children(undo),
+		Density::Dialog => row().gap(SPACING * 2.0).center_y().child(undo_slot).child(time),
+		Density::Page => row().gap(SPACING * 2.0).center_y().child(time).child(undo_slot),
 	};
 	let item = row()
 		.key(format!("history-change-{}", change.id))
