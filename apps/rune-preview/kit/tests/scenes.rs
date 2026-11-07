@@ -5,7 +5,7 @@ use std::fs::{self, File};
 use std::io::BufWriter;
 use std::path::{Path, PathBuf};
 
-use kiroshi_rune_kit::scenes::{self, Pointer, SCENES, Scene, SceneState, THEMES, Theme};
+use kiroshi_rune_kit::scenes::{self, Pointer, Scene, SceneState, THEMES, Theme};
 use rune::tooling::{self, Args};
 use rune::{App, FontSmoothing};
 
@@ -182,7 +182,7 @@ fn check(
 
 fn orphans() -> Vec<String> {
 	let registered: BTreeSet<String> =
-		SCENES.iter().flat_map(|scene| THEMES.map(|theme| scene.baseline(theme))).collect();
+		scenes::every_scene().flat_map(|scene| THEMES.map(|theme| scene.baseline(theme))).collect();
 	let Ok(entries) = fs::read_dir(baselines()) else { return Vec::new() };
 	entries
 		.filter_map(|entry| entry.ok()?.file_name().into_string().ok())
@@ -203,8 +203,7 @@ fn every_registered_scene_matches_its_baseline() {
 	if bless {
 		fs::create_dir_all(baselines()).expect("the baseline folder exists");
 	}
-	let mut failures: Vec<String> = SCENES
-		.iter()
+	let mut failures: Vec<String> = scenes::every_scene()
 		.flat_map(|scene| THEMES.map(|theme| (scene, theme)))
 		.filter_map(|(scene, theme)| check(scene, theme, bless, &rendered, &failed))
 		.collect();
@@ -215,7 +214,7 @@ fn every_registered_scene_matches_its_baseline() {
 #[test]
 fn every_scene_id_is_unique_and_kebab_case() {
 	let mut seen = BTreeSet::new();
-	for scene in SCENES {
+	for scene in scenes::every_scene() {
 		assert!(seen.insert(scene.id), "{} is registered twice", scene.id);
 		assert!(
 			scene.id.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-'),
