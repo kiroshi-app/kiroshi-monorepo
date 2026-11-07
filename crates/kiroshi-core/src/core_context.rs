@@ -145,7 +145,6 @@ struct Inner {
 	forgetters: RwLock<Vec<Forgetter>>,
 }
 
-#[derive(Clone)]
 pub const UNMANAGED: &str = "the core holds no ";
 
 pub fn unmanaged_state(panic: &(dyn Any + Send)) -> Option<&str> {
@@ -156,6 +155,7 @@ pub fn unmanaged_state(panic: &(dyn Any + Send)) -> Option<&str> {
 	told.strip_prefix(UNMANAGED)?.split_once(':').map(|(state, _)| state)
 }
 
+#[derive(Clone)]
 pub struct Core(Arc<Inner>);
 
 impl fmt::Debug for Core {
