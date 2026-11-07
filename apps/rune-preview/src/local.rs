@@ -19,6 +19,8 @@ use kiroshi_core::conversations::turn_run_deadline::TurnRunDeadlines;
 use kiroshi_core::core_context::{ChosenPath, Copied, Core, Desktop, RenderWindow};
 use kiroshi_core::db;
 use kiroshi_core::environment::store::writable_root;
+use kiroshi_core::hosting::authors::install_authors;
+use kiroshi_core::hosting::authorship::DesktopAuthors;
 use kiroshi_core::invoke::{Answer, dispatch};
 use kiroshi_core::missions::run_claims::MissionRunClaims;
 use serde::Deserialize;
@@ -104,6 +106,7 @@ impl LocalCore {
 		core.manage_client_scoped(MissionRunClaims::default());
 		core.manage(AccountSession::new(writable_root(&core), &api_url()));
 		core.install_desktop(Browser);
+		install_authors(&core, DesktopAuthors);
 		let local = LocalCore { core, runtime };
 		local.runtime.block_on(list_bundles_at_launch(&local.core));
 		local.core.spawn(restore(local.core.clone()));

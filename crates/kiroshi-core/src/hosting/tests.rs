@@ -918,6 +918,7 @@ impl Harness {
 				.expect("the bearer is kept");
 		}
 		let app = a_core_of_its_own(&format!("hosting-{name}"));
+		crate::hosting::authors::install_authors(&app, super::authorship::DesktopAuthors);
 		app.manage::<DatabaseState>(Ok(db::open(&database)));
 		app.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
 		let profile = app.data_dir().to_path_buf();
@@ -1607,6 +1608,7 @@ fn each_unmet_precondition_of_a_start_maps_to_its_own_state() {
 fn host_keys_without_device_keys_or_without_a_space_key_store_fail_with_their_own_kind() {
 	run(async {
 		let app = a_core_of_its_own("hosting-keys");
+		crate::hosting::authors::install_authors(&app, super::authorship::DesktopAuthors);
 		let without_device = host_keys(&app, PERSONAL).await.err().map(|(kind, _)| kind);
 		app.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
 		let without_space = host_keys(&app, PERSONAL).await.err().map(|(kind, _)| kind);
@@ -2963,6 +2965,7 @@ fn an_unreachable_cloud_is_unreachable_with_its_cause() {
 		let cloud = format!("http://{address}");
 		let database = temp_dir();
 		let app = a_core_of_its_own("hosting-down");
+		crate::hosting::authors::install_authors(&app, super::authorship::DesktopAuthors);
 		app.manage::<DatabaseState>(Ok(db::open(&database)));
 		app.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &cloud));
 		app.manage(Hosting::new(&cloud, None));
