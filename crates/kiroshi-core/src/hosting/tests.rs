@@ -4328,7 +4328,7 @@ fn the_refusal_line_names_the_command_space_argument_check_and_value_and_no_acco
 
 	assert_eq!(
 		reach::refusal_line("conversation_message_page", PERSONAL, &refusal),
-		"the relayed message_page was refused outside shared space personal: \
+		"the relayed conversation_message_page was refused outside shared space personal: \
 		 /conversationId failed the Conversation check with \"c-theirs\""
 	);
 }
