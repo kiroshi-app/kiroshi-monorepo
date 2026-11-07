@@ -122,6 +122,8 @@ const LINE_MIDDLE = LINE_HEIGHT / 2
 
 const EDGE_INSET = 2
 
+const HOVER_FILL_INSET = 6
+
 const togglesIn = (canvasElement: HTMLElement) =>
 	within(canvasElement).getAllByRole("button", { name: "Each agent’s work" })
 
@@ -288,7 +290,7 @@ export const Final10 = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard Final 10: two agents. Both names in their colours, the breakdown, the clock of the longest run and the closed chevron at the right end. The whole line is one keyboard reachable button that names itself and says it is collapsed: a click anywhere on it opens the detail, a second click closes it. Hover tints the line and the chevron at once, with no colour transition.",
+					"Artboard Final 10: two agents. Both names in their colours, the breakdown, the clock of the longest run and the closed chevron at the right end. The whole line is one keyboard reachable button that names itself and says it is collapsed: a click anywhere on it opens the detail, a second click closes it. Hover tints one surface around the line, 6 past its content on every side, with no colour transition; the chevron keeps its resting fill.",
 			},
 		},
 	},
@@ -338,14 +340,24 @@ export const Final10 = meta.story({
 		if (isInBrowserRunner()) {
 			toggle.blur()
 			const pointer = await realPointer()
+			const restingChevron = getComputedStyle(toggle).backgroundColor
+			const restingLine = getComputedStyle(line).backgroundColor
+			const restingBounds = line.getBoundingClientRect().toJSON()
 			await pointer.hover(line, { position: { x: EDGE_INSET, y: LINE_MIDDLE } })
 			await expect(getComputedStyle(toggle, "::after").cursor).toBe("pointer")
-			await expect(getComputedStyle(line).backgroundColor).toBe(
+			const fill = getComputedStyle(line, "::before")
+			await expect(fill.backgroundColor).toBe(
 				tokenStyleIn(line, "bg-muted/50", "backgroundColor"),
 			)
+			for (const side of [fill.top, fill.right, fill.bottom, fill.left])
+				await expect(side).toBe(`-${HOVER_FILL_INSET}px`)
+			await expect(fill.transitionDuration).toBe("0s")
+			await expect(fill.zIndex).toBe("-1")
+			await expect(getComputedStyle(line).backgroundColor).toBe(restingLine)
 			await expect(getComputedStyle(toggle).backgroundColor).toBe(
-				tokenStyleIn(line, "bg-foreground/8", "backgroundColor"),
+				restingChevron,
 			)
+			await expect(line.getBoundingClientRect().toJSON()).toEqual(restingBounds)
 			await expectInstantColours(line)
 			await expectInstantColours(toggle)
 			for (const each of toggles) {
@@ -572,6 +584,9 @@ export const Final17 = meta.story({
 		const canvas = within(canvasElement)
 		const [toggle] = togglesIn(canvasElement)
 		await expect(toggle).toHaveAttribute("aria-expanded", "true")
+		await expect(getComputedStyle(toggle).backgroundColor).toBe(
+			tokenStyleIn(toggle, "bg-foreground/8", "backgroundColor"),
+		)
 		await expectChevronAtRightEnd(canvasElement)
 		const [lineClock] = within(
 			slotIn(canvasElement, "thread-work-line-tail"),

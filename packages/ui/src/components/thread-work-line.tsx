@@ -322,7 +322,7 @@ const Toggle = ({ isOpen, detailId, onOpenChange }: ToggleProps) => {
 			aria-label={t("workLine.toggle")}
 			onClick={() => onOpenChange(!isOpen)}
 			className={cn(
-				"ms-auto flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground outline-none after:absolute after:inset-0 after:rounded-sm after:border after:border-transparent hover:bg-foreground/8 hover:text-foreground focus-visible:after:border-ring focus-visible:after:ring-3 focus-visible:after:ring-ring/30 active:bg-foreground/12",
+				"ms-auto flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground outline-none after:absolute after:inset-0 after:rounded-sm after:border after:border-transparent hover:text-foreground focus-visible:after:border-ring focus-visible:after:ring-3 focus-visible:after:ring-ring/30",
 				isOpen && "bg-foreground/8 text-foreground",
 			)}
 		>
@@ -366,7 +366,7 @@ const ThreadWorkLine = ({
 			className={cn(
 				"flex h-5 min-w-0 items-center gap-2 whitespace-nowrap",
 				hasDetail &&
-					"relative isolate rounded-sm has-[[data-slot=thread-work-line-toggle]:hover]:bg-muted/50 [&_[data-slot=bot-working-stop]]:z-1",
+					"relative isolate before:pointer-events-none before:absolute before:-inset-1.5 before:-z-1 before:rounded-lg has-[[data-slot=thread-work-line-toggle]:hover]:before:bg-muted/50 [&_[data-slot=bot-working-stop]]:z-1",
 			)}
 		>
 			{failed.map((agent) => (
