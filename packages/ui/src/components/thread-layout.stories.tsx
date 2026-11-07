@@ -808,9 +808,10 @@ const COLUMN_FRAME_WIDTHS = [
 	{ label: "Narrow", className: "w-120" },
 ]
 
-const COLUMN_FRAME_SKELETONS = [
-	{ label: "Conversation skeleton", skeleton: <ThreadTranscriptSkeleton /> },
-	{ label: "Mission skeleton", skeleton: <MissionDetailSkeleton /> },
+const COLUMN_FRAMES = [
+	{ label: "conversation skeleton", skeleton: <ThreadTranscriptSkeleton /> },
+	{ label: "mission skeleton", skeleton: <MissionDetailSkeleton /> },
+	{ label: "loaded thread" },
 ]
 
 const columnOf = (element: HTMLElement, frame: HTMLElement) => {
@@ -834,25 +835,20 @@ export const SkeletonInTheTranscriptColumn = meta.story({
 		<div className="flex flex-col gap-6">
 			{COLUMN_FRAME_WIDTHS.map(({ label, className }) => (
 				<div key={label} data-slot="column-frame-row" className="flex gap-6">
-					{COLUMN_FRAME_SKELETONS.map((frame) => (
+					{COLUMN_FRAMES.map((frame) => (
 						<div
 							key={frame.label}
 							data-slot="column-frame"
 							className={cn("h-100 shrink-0", className)}
 						>
-							<ThreadLayout {...args} header={null} skeleton={frame.skeleton} />
+							<ThreadLayout
+								{...args}
+								header={null}
+								label={`${label} ${frame.label}`}
+								skeleton={frame.skeleton}
+							/>
 						</div>
 					))}
-					<div
-						data-slot="column-frame"
-						className={cn("h-100 shrink-0", className)}
-					>
-						<ThreadLayout
-							{...args}
-							header={null}
-							label={`${label} loaded thread`}
-						/>
-					</div>
 				</div>
 			))}
 		</div>
