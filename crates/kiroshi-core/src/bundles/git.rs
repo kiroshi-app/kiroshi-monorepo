@@ -316,7 +316,9 @@ fn others(run: &[Commit]) -> String {
 }
 
 pub fn init(bundle: &Path) -> Result<(), git2::Error> {
-	exclude(&Repository::init(bundle)?);
+	let repository = Repository::init(bundle)?;
+	repository.config()?.set_bool("core.autocrlf", false)?;
+	exclude(&repository);
 	Ok(())
 }
 
