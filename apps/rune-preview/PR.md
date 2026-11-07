@@ -214,4 +214,6 @@ The kept core of `apps/app/src-tauri` moves to a crate with no Tauri dependency,
   - `missions::run_claims`: its two commands take a webview, and its tests open real windows and run the invoke handler.
 
   The `HEADER` constant of the webhook moved beside the `Webhook` handle in `routines::local_server`. `github.rs` brought its dependencies with it: `rustls` installs the TLS provider at runtime, and `axum` serves the fake GitHub in its tests (as a dev-dependency). Both use the same specs as src-tauri. `Cargo.lock` gains no package, only the two names under kiroshi-core.
+- **mcp_oauth move (done).** `writable_root` moved next to `environment::store::root` in its split commit. `mcp_oauth::asking`, `commands`, `reports` and `status` moved into kiroshi-core, and the four OAuth commands stay in src-tauri as wrappers in a `mcp_oauth::commands` shadow module. All of `mcp_oauth` now lives in kiroshi-core.
+- **The app version in kiroshi-core.** The MCP `initialize` sent `env!("CARGO_PKG_VERSION")` as its client version, which in kiroshi-core would be kiroshi-core's `0.1.0`. kiroshi-core's build script now exports `KIROSHI_APP_VERSION`, read from `apps/app/src-tauri/Cargo.toml` and rebuilt whenever that file changes. A test checks the handshake still names the app's version. No other compile-time environment read in kiroshi-core named the app.
 

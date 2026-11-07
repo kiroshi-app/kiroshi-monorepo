@@ -7,8 +7,8 @@ use serde_json::Value;
 use super::commands::{declared_servers, refreshed};
 use super::refresh::{self, Renewed};
 use crate::agent::host::{Host, Refusal};
-use crate::environment::commands::writable_root;
 use crate::environment::contract::{EnvError, EnvOwner};
+use crate::environment::store::writable_root;
 
 const NO_RECORDS: &str = "the record of where servers stand is not held";
 

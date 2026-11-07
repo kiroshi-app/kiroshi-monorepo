@@ -5,7 +5,7 @@ use super::reports::Standing;
 use crate::environment::contract::{
 	EnvScope, Values, OAUTH_ACCESS_TOKEN, OAUTH_REASON, OAUTH_REFRESH_TOKEN,
 };
-pub use kiroshi_core::mcp_oauth::contract::ApplicationStatus;
+pub use crate::mcp_oauth::contract::ApplicationStatus;
 
 const UNUSABLE_GRANT: &str =
 	"the session could not use the stored authorization, which is still held";

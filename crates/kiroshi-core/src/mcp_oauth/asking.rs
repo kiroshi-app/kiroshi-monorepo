@@ -193,7 +193,7 @@ fn an_initialize() -> serde_json::Value {
 		"params": {
 			"protocolVersion": MCP_PROTOCOL_VERSION,
 			"capabilities": {},
-			"clientInfo": { "name": "kiroshi", "version": env!("CARGO_PKG_VERSION") }
+			"clientInfo": { "name": "kiroshi", "version": env!("KIROSHI_APP_VERSION") }
 		}
 	})
 }
@@ -202,7 +202,7 @@ fn asks_for_authorization(status: StatusCode, challenges: bool) -> bool {
 	status == StatusCode::UNAUTHORIZED || (status == StatusCode::FORBIDDEN && challenges)
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 impl AuthorizationAnswers {
 	pub fn holds_anything_for(&self, url: &str) -> bool {
 		self.held().contains_key(url)
@@ -646,5 +646,22 @@ mod tests {
 			AuthorizationAnswers::default().asked_within(asked.clone(), NOW, PATIENCE).await;
 
 		assert_eq!(asking, asked);
+	}
+
+	#[test]
+	fn the_initialize_names_the_app_and_its_version_not_the_core_crate() {
+		let manifest =
+			std::fs::read_to_string(std::path::PathBuf::from(crate::APP_DIR).join("Cargo.toml"))
+				.expect("the app manifest reads");
+		let app_version = manifest
+			.lines()
+			.find_map(|line| line.strip_prefix("version = \""))
+			.and_then(|rest| rest.strip_suffix('"'))
+			.expect("the app manifest names its version");
+
+		let client = &an_initialize()["params"]["clientInfo"];
+
+		assert_eq!(client["name"], "kiroshi");
+		assert_eq!(client["version"], app_version);
 	}
 }
