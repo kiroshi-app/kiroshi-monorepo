@@ -2039,6 +2039,7 @@ version = "0.0.0"
 dependencies = [
  "katex-native",
  "kiroshi-core",
+ "libc",
  "rune",
  "rune-kit",
  "rune-motion",

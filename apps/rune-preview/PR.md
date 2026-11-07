@@ -234,4 +234,5 @@ The kept core of `apps/app/src-tauri` moves to a crate with no Tauri dependency,
 - **Where it runs.** `kiroshi-rune-preview --local-send <text>` runs that path with no window and prints the reply, next to the existing `--smoke-send` that goes through a running app's host API.
 - **Not moved yet.** The windowed screens still read through the host API of a running Kiroshi. Moving them onto the in-process Core also means turning Core events into the preview's live updates, which is its own change.
 - **Dependencies.** kiroshi-core and tokio (`rt-multi-thread`, already in the tree) are the preview's only new direct dependencies. The preview keeps its own lockfile.
+- **The test.** `tests/local_core.rs` runs the preview binary with `--local-send`, with no window, against a throwaway data folder. It checks that the reply settled, that it answers the message sent, and that the exchange landed in the preview's own store. The agent process is src-tauri's `fake_sidecar`: the preview declares that same file as a binary behind a `fake-claude` feature, so both crates share one fake. Run it with `cargo test --features fake-claude`. `libc` (unix) came with that binary.
 
