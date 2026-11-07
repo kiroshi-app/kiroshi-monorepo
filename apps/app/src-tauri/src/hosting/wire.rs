@@ -365,6 +365,14 @@ pub(crate) fn envelope_of(frame: &Frame, to: Option<&str>) -> String {
 }
 
 #[cfg(test)]
+pub(crate) fn nonce_sealed_in(envelope: &str) -> Vec<u8> {
+	let envelope: Value = serde_json::from_str(envelope).expect("a json frame");
+	let ct = envelope["ct"].as_str().expect("a ct");
+	let ciphertext = BASE64_STANDARD.decode(ct).expect("a base64 ct");
+	ciphertext[..frame::NONCE_LENGTH].to_vec()
+}
+
+#[cfg(test)]
 mod tests {
 	use ed25519_dalek::VerifyingKey;
 
@@ -572,6 +580,28 @@ mod tests {
 		assert_eq!(before, [1, 2]);
 		assert_eq!(after, CTR_BLOCK + 1);
 		assert_eq!(reserved, Some(2 * CTR_BLOCK));
+	}
+
+	#[tokio::test]
+	async fn two_frames_sealed_on_either_side_of_a_restart_carry_different_nonces() {
+		let dir = temp_dir();
+		let keys = host_keys();
+		let key_id = keys.current_space_key().key_id;
+		let before_restart = {
+			let database = crate::db::open(&dir);
+			database
+				.space_relay()
+				.counter_started(SPACE.to_owned(), key_id)
+				.await
+				.expect("started");
+			Wire::new(&database, &keys, SPACE, INSTANCE).sealed("{}", None).await.expect("sealed")
+		};
+
+		let reopened = crate::db::open(&dir);
+		let after_restart =
+			Wire::new(&reopened, &keys, SPACE, INSTANCE).sealed("{}", None).await.expect("sealed");
+
+		assert_ne!(nonce_sealed_in(&before_restart), nonce_sealed_in(&after_restart));
 	}
 
 	#[tokio::test]

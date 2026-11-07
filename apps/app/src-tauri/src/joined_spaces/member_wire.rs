@@ -223,6 +223,7 @@ mod tests {
 	use crate::crypto::device_keys::DeviceKeys;
 	use crate::db::connection::temp_dir;
 	use crate::db::{self, DatabaseState};
+	use crate::hosting::wire::nonce_sealed_in;
 	use crate::logging::contract::InstallKind;
 	use crate::removed_on_drop::RemovedOnDrop;
 	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
@@ -292,6 +293,20 @@ mod tests {
 		let ctrs = [ctr_of(&hello), ctr_of(&first), ctr_of(&second), ctr_of(&after_restart)];
 		assert!(ctrs.windows(2).all(|pair| pair[0] < pair[1]), "{ctrs:?}");
 		assert!(serde_json::from_str::<Value>(&first).expect("json").get("to").is_none());
+	}
+
+	#[tokio::test]
+	async fn two_frames_sealed_on_either_side_of_a_restart_carry_different_nonces() {
+		let member = a_member().await;
+		let mut wire = MemberWire::new(relay_of(&member.app), INSTANCE, held_of(&member.app).await);
+		let before_restart = wire.sealed(CALL).await.expect("the call seals");
+
+		let reopened = db::open(&member._database);
+		let mut restarted =
+			MemberWire::new(reopened.joined_space_relay(), INSTANCE, wire.into_held());
+		let after_restart = restarted.sealed(CALL).await.expect("the call seals");
+
+		assert_ne!(nonce_sealed_in(&before_restart), nonce_sealed_in(&after_restart));
 	}
 
 	#[tokio::test]
