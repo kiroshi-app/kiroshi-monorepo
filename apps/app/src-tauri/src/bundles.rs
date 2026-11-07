@@ -3640,8 +3640,8 @@ They said figs, not dates.
 		let broken = r#"{"mcpServers": {,}"#;
 		private_files::replace(&path, broken.as_bytes()).expect("the broken file is written");
 
-		let entries = serde_json::json!({ "notes": { "command": "notes" } });
-		let serde_json::Value::Object(entries) = entries else { unreachable!() };
+		let entries =
+			Keyed::from_iter([("notes".to_owned(), serde_json::json!({ "command": "notes" }))]);
 		a_refusal_naming(
 			write_declared(&bundle, MCP_NAME, SERVERS_KEY, entries),
 			&shown_in_bundle(&root, &bot.id, MCP_NAME),
@@ -3656,8 +3656,8 @@ They said figs, not dates.
 		let path = root.join(MCP_NAME);
 		assert!(!path.exists(), "the file was there before the write");
 
-		let entries = serde_json::json!({ "notes": { "command": "notes" } });
-		let serde_json::Value::Object(entries) = entries else { unreachable!() };
+		let entries =
+			Keyed::from_iter([("notes".to_owned(), serde_json::json!({ "command": "notes" }))]);
 		write_declared(&root, MCP_NAME, SERVERS_KEY, entries).expect("the missing file is written");
 
 		assert_eq!(object_at(&path)[SERVERS_KEY]["notes"]["command"], serde_json::json!("notes"));
