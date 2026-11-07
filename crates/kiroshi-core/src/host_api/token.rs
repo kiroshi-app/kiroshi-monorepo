@@ -24,7 +24,7 @@ pub enum TokenError {
 pub struct HostToken(String);
 
 impl HostToken {
-	pub(crate) fn random() -> Self {
+	pub fn random() -> Self {
 		Self(fresh())
 	}
 
