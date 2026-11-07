@@ -474,8 +474,7 @@ impl State {
 					Ok(CancelOutcome::Cancelled | CancelOutcome::NothingToCancel) => None,
 					Err(failure) => Some(failure_text(&failure)),
 				};
-				let open = self.board.as_mut().zip(failure);
-				if let Some((open, failure)) = open {
+				if let Some((open, failure)) = self.board.as_mut().zip(failure) {
 					eprintln!("the drawers of a board were not stopped: {failure}");
 					open.notice = Some(error_notice(
 						said(common::library::failure::board::STOP_ALL),
