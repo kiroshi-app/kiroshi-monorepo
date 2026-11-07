@@ -319,6 +319,7 @@ mod tests {
 		assert_eq!(counts_of(&database, &gone.id).await, (None, None));
 		assert_eq!(events_in(&database).await, events_before);
 
+		drop(database);
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -358,6 +359,7 @@ mod tests {
 		assert_eq!(announced[0]["missionId"], json!(started.id));
 		assert_eq!(announced[0]["isAgentRunning"], json!(true));
 
+		drop(database);
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 }

@@ -522,6 +522,7 @@ mod tests {
 		assert_eq!(held.chats[0].space_id, Some(PERSONAL.to_owned()));
 		assert_eq!(held.chats[0].bot_id, None);
 
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -547,6 +548,7 @@ mod tests {
 		assert_eq!(held.chats[0].space_id, Some(PERSONAL.to_owned()));
 		assert_eq!(held.chats[0].participants, Vec::<String>::new());
 
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -579,6 +581,7 @@ mod tests {
 		);
 		assert_eq!(held.chats[0].space_id, Some(PERSONAL.to_owned()));
 
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -610,6 +613,7 @@ mod tests {
 		assert_eq!(first.trigger_source_id, "schedule");
 		assert!(first.is_enabled);
 
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -639,6 +643,7 @@ mod tests {
 			"a chat of another space crossed the scope"
 		);
 
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -753,6 +758,7 @@ mod tests {
 			"a solo chat no present seat names answered as recent"
 		);
 
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -781,6 +787,7 @@ mod tests {
 			"the rest routines ran past their bound"
 		);
 
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -794,6 +801,7 @@ mod tests {
 
 		assert_eq!(held.len(), MAX_RECENT_CHATS, "the recent chats ran past their bound");
 
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -827,6 +835,7 @@ mod tests {
 			"the chats fold their last message through an aggregate: {opcodes:?}"
 		);
 
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -851,6 +860,7 @@ mod tests {
 			vec![("topic-1", ConversationKind::Topic, "Roadmap review")]
 		);
 
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -882,6 +892,7 @@ mod tests {
 			);
 		}
 
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -907,6 +918,7 @@ mod tests {
 			"the rest of the other space lost its routine, or kept one of this space"
 		);
 
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -925,6 +937,7 @@ mod tests {
 		assert_eq!(held.missions, vec![], "a space holding no mission answered one");
 		assert_eq!(held.routines, vec![], "a space holding no routine answered one");
 
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -966,6 +979,7 @@ mod tests {
 			"the rest routines came back in another order than the matching ones"
 		);
 
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -992,6 +1006,7 @@ mod tests {
 		);
 		assert_eq!(held.chats[0].space_id, Some(PERSONAL.to_owned()));
 
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -1021,6 +1036,7 @@ mod tests {
 			"a mission whose bot sits in this space crossed the scope"
 		);
 
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -1059,6 +1075,7 @@ mod tests {
 			"a routine of a shared bot answered under a space the search did not name"
 		);
 
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -1086,6 +1103,7 @@ mod tests {
 			);
 		}
 
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -1098,6 +1116,7 @@ mod tests {
 
 		assert_eq!(held, Err(CatalogueError::QueryTooLong { limit: MAX_QUERY_CHARS }));
 
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -1117,6 +1136,7 @@ mod tests {
 			"the recent chats lost the last message order, or kept a mission thread"
 		);
 
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -1135,6 +1155,7 @@ mod tests {
 			"the recents of the other space lost a chat of their own, or kept one of this space"
 		);
 
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 }

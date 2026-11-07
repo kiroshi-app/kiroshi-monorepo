@@ -3085,6 +3085,7 @@ mod tests {
 			Some("over to <@nyx>"),
 			"the settled text did not land on the message"
 		);
+		drop(database);
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 

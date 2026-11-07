@@ -250,6 +250,7 @@ mod tests {
 			vec![recorded]
 		);
 
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -267,6 +268,7 @@ mod tests {
 
 		assert_eq!(recorded.install, InstallCase::Key { secrets });
 
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -298,6 +300,7 @@ mod tests {
 			InstallCase::Key { secrets: vec!["SUPERSET_API_KEY".to_owned()] }
 		);
 
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -323,6 +326,7 @@ mod tests {
 			"a conversation with no install answered rows"
 		);
 
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -350,6 +354,7 @@ mod tests {
 			"the capped read did not answer oldest first"
 		);
 
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -372,6 +377,7 @@ mod tests {
 
 		assert_eq!(count_of(&database, "application_installs").await, 0);
 
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 }

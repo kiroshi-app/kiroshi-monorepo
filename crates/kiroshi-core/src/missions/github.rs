@@ -2043,6 +2043,7 @@ mod tests {
 		);
 
 		stub.stop.send_replace(true);
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -2079,6 +2080,7 @@ mod tests {
 		assert!(silent.is_empty(), "a pass that wrote nothing told the front: {silent:?}");
 
 		stub.stop.send_replace(true);
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -2110,6 +2112,7 @@ mod tests {
 		assert_eq!(state_of(&database, &mission.id).await, (MissionState::ReadyToMerge, false));
 
 		stub.stop.send_replace(true);
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -2140,6 +2143,7 @@ mod tests {
 		);
 
 		stub.stop.send_replace(true);
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -2167,6 +2171,7 @@ mod tests {
 		assert_eq!(from_github(&database, &mission.id).await.len(), 2);
 
 		stub.stop.send_replace(true);
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -2195,6 +2200,7 @@ mod tests {
 		);
 
 		stub.stop.send_replace(true);
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -2223,6 +2229,7 @@ mod tests {
 		);
 
 		stub.stop.send_replace(true);
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -2246,6 +2253,7 @@ mod tests {
 		assert_eq!(state_of(&database, &mission.id).await, (MissionState::ReadyToMerge, false));
 
 		stub.stop.send_replace(true);
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -2279,6 +2287,7 @@ mod tests {
 		assert_eq!(state_of(&database, &mission.id).await, (MissionState::WaitingBot, false));
 
 		stub.stop.send_replace(true);
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -2304,6 +2313,7 @@ mod tests {
 		);
 
 		stub.stop.send_replace(true);
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -2336,6 +2346,7 @@ mod tests {
 		assert_eq!(state_of(&database, &mission.id).await, (MissionState::WaitingBot, false));
 
 		stub.stop.send_replace(true);
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -2360,6 +2371,7 @@ mod tests {
 		assert_eq!(state_of(&database, &mission.id).await, (MissionState::ReadyToMerge, false));
 
 		stub.stop.send_replace(true);
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -2385,6 +2397,7 @@ mod tests {
 		assert_eq!(state_of(&database, &mission.id).await, (MissionState::Done, true));
 
 		stub.stop.send_replace(true);
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -2417,6 +2430,7 @@ mod tests {
 		assert_eq!(state_of(&database, &mission.id).await, (MissionState::Working, false));
 
 		stub.stop.send_replace(true);
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -2452,6 +2466,7 @@ mod tests {
 		assert_eq!(stub.asked().await.len(), asked, "the closed mission was read on github");
 
 		stub.stop.send_replace(true);
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -2482,6 +2497,7 @@ mod tests {
 		assert_eq!(state_of(&database, &mission.id).await, (MissionState::Closed, true));
 
 		stub.stop.send_replace(true);
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -2503,6 +2519,7 @@ mod tests {
 		assert_eq!(from_github(&database, &mission.id).await, vec![hold_note(NOON + 600_000)]);
 
 		stub.stop.send_replace(true);
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -2599,6 +2616,7 @@ mod tests {
 		assert_eq!(state_of(&database, &mission.id).await, (MissionState::WaitingBot, false));
 
 		stub.stop.send_replace(true);
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -2641,6 +2659,7 @@ mod tests {
 		assert_eq!(state_of(&database, &mission.id).await, (MissionState::ReadyToMerge, false));
 
 		stub.stop.send_replace(true);
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -2693,6 +2712,7 @@ mod tests {
 		assert_eq!(state_of(&database, &mission.id).await, (MissionState::ReadyToMerge, false));
 
 		stub.stop.send_replace(true);
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -2718,6 +2738,7 @@ mod tests {
 		assert_eq!(state_of(&database, &mission.id).await, (MissionState::WaitingBot, false));
 
 		stub.stop.send_replace(true);
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -2772,6 +2793,7 @@ mod tests {
 		);
 
 		stub.stop.send_replace(true);
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -2796,6 +2818,7 @@ mod tests {
 		);
 
 		stub.stop.send_replace(true);
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -2836,6 +2859,7 @@ mod tests {
 		);
 
 		stub.stop.send_replace(true);
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -2860,6 +2884,7 @@ mod tests {
 		assert_eq!(state_of(&database, &mission.id).await, (MissionState::WaitingBot, false));
 
 		stub.stop.send_replace(true);
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -2884,6 +2909,7 @@ mod tests {
 		);
 
 		stub.stop.send_replace(true);
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -2916,6 +2942,7 @@ mod tests {
 		assert_eq!(state_of(&database, &mission.id).await, (MissionState::WaitingBot, false));
 
 		stub.stop.send_replace(true);
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -2945,6 +2972,7 @@ mod tests {
 		);
 
 		stub.stop.send_replace(true);
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -2973,6 +3001,7 @@ mod tests {
 			.collect();
 		let events = from_github(&database, &mission.id).await;
 		stub.stop.send_replace(true);
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 		(events, jobs_read)
 	}
@@ -3060,6 +3089,7 @@ mod tests {
 		assert_eq!(state_of(&database, &mission.id).await, (MissionState::ReadyToMerge, false));
 
 		stub.stop.send_replace(true);
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -3100,6 +3130,7 @@ mod tests {
 		assert_eq!(state_of(&database, &mission.id).await, (MissionState::WaitingBot, false));
 
 		stub.stop.send_replace(true);
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -3175,6 +3206,7 @@ mod tests {
 		assert_eq!(standing_of(&database, &green.id).await, standing);
 
 		stub.stop.send_replace(true);
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -3201,6 +3233,7 @@ mod tests {
 		assert_eq!(standing_of(&database, &mission.id).await, standing);
 
 		stub.stop.send_replace(true);
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -3224,6 +3257,7 @@ mod tests {
 		}
 
 		stub.stop.send_replace(true);
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -3238,6 +3272,7 @@ mod tests {
 		assert!(calls_in(&ticks) <= 6, "a mission with no pull request spent {ticks:?}");
 
 		stub.stop.send_replace(true);
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -3253,6 +3288,7 @@ mod tests {
 		assert!(calls_in(&ticks) <= 30, "a pull request with running checks spent {ticks:?}");
 
 		stub.stop.send_replace(true);
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -3268,6 +3304,7 @@ mod tests {
 			assert!(calls_in(&ticks) <= 8, "queued {auto_merge}, the pull request spent {ticks:?}");
 
 			stub.stop.send_replace(true);
+			drop(database);
 			std::fs::remove_dir_all(&dir).expect("cleanup");
 		}
 	}
@@ -3292,6 +3329,7 @@ mod tests {
 		assert!(calls_in(&ticks) < 40, "three watched missions spent {ticks:?}");
 
 		stub.stop.send_replace(true);
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -3318,6 +3356,7 @@ mod tests {
 		);
 
 		stub.stop.send_replace(true);
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -3346,6 +3385,7 @@ mod tests {
 		);
 
 		stub.stop.send_replace(true);
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
@@ -3384,6 +3424,7 @@ mod tests {
 		}
 
 		stub.stop.send_replace(true);
+		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 }
