@@ -7,6 +7,7 @@ use crate::tokens::{self, SPACING, Tokens};
 mod boards;
 mod feedback;
 mod forms;
+mod library;
 mod navigation;
 mod overlays;
 mod primitives;
@@ -212,6 +213,441 @@ pub static SCENES: &[Scene] = &[
 	scene("overlays-tooltip--with-side", OVERLAY, overlays::tooltip_with_side),
 	scene("overlays-tooltip--long-content", OVERLAY, overlays::tooltip_long_content),
 	scene("overlays-tooltip--on-dark-surface", OVERLAY, overlays::tooltip_default),
+	library::library("navigation-librarypanel--grid-all", library::grid_all),
+	library::library("navigation-librarypanel--grid-middle-click", library::grid_all),
+	library::library("navigation-librarypanel--grid-context-menu", library::grid_context_menu),
+	library::library(
+		"navigation-librarypanel--grid-actions-per-item",
+		library::grid_actions_per_item,
+	),
+	library::library("navigation-librarypanel--grid-image-menu", library::grid_image_menu),
+	library::library("navigation-librarypanel--grid-images", library::grid_images),
+	library::library("navigation-librarypanel--grid-documents", library::grid_documents),
+	library::library("navigation-librarypanel--new-board-action", library::grid_all),
+	library::library("navigation-librarypanel--new-board-action-light", library::grid_all),
+	library::library(
+		"navigation-librarypanel--grid-document-preview-holds-no-control",
+		library::preview_holds_no_control,
+	),
+	library::library(
+		"navigation-librarypanel--grid-documents-across-spaces",
+		library::documents_across_spaces,
+	),
+	library::library(
+		"navigation-librarypanel--grid-documents-across-spaces-light",
+		library::documents_across_spaces,
+	),
+	library::library(
+		"navigation-librarypanel--filter-with-no-match",
+		library::filter_with_no_match,
+	),
+	library::library(
+		"navigation-librarypanel--empty-with-no-callbacks",
+		library::empty_with_no_callbacks,
+	),
+	library::library(
+		"navigation-librarypanel--empty-with-every-callback",
+		library::empty_with_every_callback,
+	),
+	library::library(
+		"navigation-librarypanel--empty-with-every-callback-light",
+		library::empty_with_every_callback,
+	),
+	library::library("navigation-librarypanel--loading", library::loading),
+	library::library("navigation-librarypanel--loading-light", library::loading),
+	library::library(
+		"navigation-librarypanel--whitespace-name-reads-untitled",
+		library::whitespace_name,
+	),
+	library::library("navigation-librarypanel--long-names", library::long_names),
+	library::library("navigation-librarypanel--dropping-files", library::dropping_files),
+	library::library("navigation-librarypanel--dropping-one-file", library::dropping_one_file),
+	library::library("navigation-librarypanel--added-to-the-grid", library::added_to_the_grid),
+	library::library("navigation-librarypanel--import-long-names", library::import_long_names),
+	library::library("navigation-librarypanel--import-failures", library::import_failures),
+	library::searched(
+		"navigation-librarypanel--search-with-no-match",
+		"quarterly roadmap",
+		library::search,
+	),
+	library::searched("navigation-librarypanel--search-filled", "dashboard", library::search),
+	library::tabbed("navigation-librarypanel--focus-visible", 9, library::grid_all),
+	library::library("navigation-librarytabstates--document-loading", library::document_loading),
+	library::library(
+		"navigation-librarytabstates--document-loading-dark",
+		library::document_loading,
+	),
+	library::library("navigation-librarytabstates--image-loading", library::image_loading),
+	library::library("navigation-librarytabstates--missing-item", library::missing_item),
+	library::library("navigation-librarytabstates--missing-item-dark", library::missing_item),
+	library::library("navigation-librarytabstates--unreadable-item", library::unreadable_item),
+	library::library("navigation-librarytabstates--unreadable-item-dark", library::unreadable_item),
+	library::library("navigation-librarydocumentview--default", library::document_default),
+	library::library(
+		"navigation-librarydocumentview--bar-matches-image-bar",
+		library::document_default,
+	),
+	library::library("navigation-librarydocumentview--more-menu", library::document_more_menu),
+	library::library(
+		"navigation-librarydocumentview--whitespace-name-reads-untitled",
+		library::document_whitespace_name,
+	),
+	library::library("navigation-librarydocumentview--member", library::document_member),
+	library::library(
+		"navigation-librarydocumentview--agents-writing",
+		library::document_agents_writing,
+	),
+	library::library(
+		"navigation-librarydocumentview--gallery-of-stored-images",
+		library::document_gallery_of_stored_images,
+	),
+	library::tabbed(
+		"navigation-librarydocumentview--rename-without-focus-target",
+		4,
+		library::document_default,
+	),
+	library::tabbed("navigation-librarydocumentview--focus-visible", 1, library::document_default),
+	library::library("navigation-librarydocumentstates--empty-document", library::document_empty),
+	library::library(
+		"navigation-librarydocumentstates--files-dropped-in",
+		library::document_files_dropped,
+	),
+	library::library(
+		"navigation-librarydocumentstates--failed-import",
+		library::document_failed_import,
+	),
+	library::library("navigation-librarydocumentstates--read-only", library::document_read_only),
+	library::library(
+		"navigation-librarynewdocumentdialog--meeting-notes-selected",
+		library::meeting_notes_selected,
+	),
+	library::library(
+		"navigation-librarynewdocumentdialog--blank-selected",
+		library::blank_selected,
+	),
+	library::narrow(
+		"navigation-librarynewdocumentdialog--narrow-window",
+		library::meeting_notes_selected,
+	),
+	library::library("overlays-librarylightbox--default", library::lightbox_default),
+	library::library("overlays-librarylightbox--host-more-menu", library::lightbox_host_more_menu),
+	library::library(
+		"overlays-librarylightbox--member-more-menu",
+		library::lightbox_member_more_menu,
+	),
+	library::library(
+		"overlays-librarylightbox--image-without-rename",
+		library::lightbox_without_rename,
+	),
+	library::library(
+		"overlays-librarylightbox--delete-confirmation",
+		library::lightbox_delete_confirmation,
+	),
+	library::library("overlays-librarylightbox--back-button", library::lightbox_back_button),
+	library::library("overlays-librarylightbox--backdrop-click", library::lightbox_first),
+	library::library("overlays-librarylightbox--copy-check", library::lightbox_copy_check),
+	library::library("overlays-librarylightbox--at-the-first-image", library::lightbox_first),
+	library::library("overlays-librarylightbox--opened-with-the-panel", library::lightbox_default),
+	library::library("overlays-librarylightbox--zoomed", library::lightbox_zoomed),
+	library::library(
+		"overlays-librarylightbox--image-menu-open",
+		library::lightbox_image_menu_open,
+	),
+	library::library(
+		"overlays-librarylightbox--image-menu-saving",
+		library::lightbox_image_menu_saving,
+	),
+	library::threaded("navigation-documentpanel--in-thread", 0, library::document_panel_in_thread),
+	library::threaded(
+		"navigation-documentpanel--keeps-the-thread-when-toggled",
+		0,
+		library::document_panel_in_thread,
+	),
+	library::threaded(
+		"navigation-documentpanel--after-a-drag",
+		0,
+		library::document_panel_after_a_drag,
+	),
+	library::threaded(
+		"navigation-documentpanel--handle-with-keyboard-focus",
+		1,
+		library::document_panel_in_thread,
+	),
+	library::threaded(
+		"navigation-documentpanel--header-aligned-with-the-thread-header",
+		0,
+		library::document_panel_in_thread,
+	),
+	library::threaded(
+		"navigation-documentpanel--asked-under-the-room-left",
+		0,
+		library::document_panel_asked_under_the_room,
+	),
+	library::threaded(
+		"navigation-documentpanel--capped-by-the-room-left",
+		0,
+		library::document_panel_capped,
+	),
+	library::threaded(
+		"navigation-documentpanel--handle-with-keyboard-focus-dark",
+		1,
+		library::document_panel_in_thread,
+	),
+	library::threaded(
+		"navigation-documentpanel--consecutive-answers-at-the-thread-floor",
+		0,
+		library::document_panel_capped,
+	),
+	library::threaded(
+		"navigation-documentpanel--board-one-agent",
+		0,
+		library::document_board_panel,
+	),
+	library::threaded(
+		"navigation-documentpanel--board-one-agent-dark",
+		0,
+		library::document_board_panel,
+	),
+	library::threaded(
+		"navigation-documentpanel--board-several-agents",
+		0,
+		library::document_board_panel,
+	),
+	library::threaded(
+		"navigation-documentpanel--board-several-agents-dark",
+		0,
+		library::document_board_panel,
+	),
+	library::threaded(
+		"navigation-documentpanel--board-header-aligned-with-the-thread-header",
+		0,
+		library::document_board_panel,
+	),
+	library::small_window(
+		"navigation-documentpanel--held-at-its-floor-in-the-smallest-window",
+		library::document_panel_at_its_floor,
+	),
+	library::library("navigation-librarydocumenteditor--blank", library::editor),
+	library::library(
+		"navigation-librarydocumenteditor--whitespace-title-reads-untitled",
+		library::editor,
+	),
+	library::library("navigation-librarydocumenteditor--title-at-rest", library::editor),
+	library::library("navigation-librarydocumenteditor--title-focused-by-rename", library::editor),
+	library::library(
+		"navigation-librarydocumenteditor--rename-focuses-title-from-handle",
+		library::editor,
+	),
+	library::library(
+		"navigation-librarydocumenteditor--title-enter-moves-to-body",
+		library::editor,
+	),
+	library::library("navigation-librarydocumenteditor--title-escape-restores", library::editor),
+	library::library("navigation-librarydocumenteditor--title-click-away-keeps", library::editor),
+	library::library("navigation-librarydocumenteditor--title-emptied-restores", library::editor),
+	library::library(
+		"navigation-librarydocumenteditor--title-restored-after-refused-rename",
+		library::editor,
+	),
+	library::library("navigation-librarydocumenteditor--from-meeting-notes", library::editor),
+	library::library("navigation-librarydocumenteditor--with-typed-text", library::editor),
+	library::library("navigation-librarydocumenteditor--existing-document", library::editor),
+	library::library("navigation-librarydocumenteditor--column-at-maximum-width", library::editor),
+	library::library("navigation-librarydocumenteditor--round-trip-fixture", library::editor),
+	library::library("navigation-librarydocumenteditor--blocks-rendered", library::editor),
+	library::library("navigation-librarydocumenteditor--blocks-rendered-light", library::editor),
+	library::library("navigation-librarydocumenteditor--bold-typed-then-rendered", library::editor),
+	library::library("navigation-librarydocumenteditor--task-toggle", library::editor),
+	library::library(
+		"navigation-librarydocumenteditor--outside-change-while-typing",
+		library::editor,
+	),
+	library::library("navigation-librarydocumenteditor--multi-paragraph-paste", library::editor),
+	library::library("navigation-librarydocumenteditor--outside-title-change", library::editor),
+	library::library("navigation-librarydocumenteditor--caret-moves", library::editor),
+	library::library(
+		"navigation-librarydocumenteditor--click-below-the-last-line",
+		library::editor,
+	),
+	library::library("navigation-librarydocumenteditor--agents-writing", library::editor),
+	library::library(
+		"navigation-librarydocumenteditor--agent-run-held-then-fades",
+		library::editor,
+	),
+	library::library(
+		"navigation-librarydocumenteditor--person-caret-beside-agent",
+		library::editor,
+	),
+	library::library("navigation-librarydocumenteditor--presence-people-only", library::editor),
+	library::library("navigation-librarydocumenteditor--presence-agents-only", library::editor),
+	library::library(
+		"navigation-librarydocumenteditor--presence-agents-and-people",
+		library::editor,
+	),
+	library::library("navigation-librarydocumenteditor--create-failure", library::editor),
+	library::library("navigation-librarydocumenteditor--open-failure", library::editor),
+	library::library("navigation-librarydocumenteditor--save-failure", library::editor),
+	library::library("navigation-librarydocumenteditor--write-failure", library::editor),
+	library::library("navigation-librarydocumenteditor--caret-share-failure", library::editor),
+	library::library("navigation-librarydocumenteditor--format-without-change", library::editor),
+	library::library(
+		"navigation-librarydocumenteditor--a-1-toolbar-above-selection",
+		library::editor,
+	),
+	library::library(
+		"navigation-librarydocumenteditor--a-2-toolbar-over-two-lines",
+		library::editor,
+	),
+	library::library("navigation-librarydocumenteditor--a-3-toolbar-button-hover", library::editor),
+	library::library("navigation-librarydocumenteditor--a-4-toolbar-format-on", library::editor),
+	library::library("navigation-librarydocumenteditor--a-5-toolbar-link-field", library::editor),
+	library::library(
+		"navigation-librarydocumenteditor--a-6-toolbar-flipped-below",
+		library::editor,
+	),
+	library::library("navigation-librarydocumenteditor--bold-shortcut", library::editor),
+	library::library("navigation-librarydocumenteditor--italic-shortcut", library::editor),
+	library::library("navigation-librarydocumenteditor--strikethrough-shortcut", library::editor),
+	library::library("navigation-librarydocumenteditor--code-shortcut", library::editor),
+	library::library("navigation-librarydocumenteditor--link-shortcut", library::editor),
+	library::library("navigation-librarydocumenteditor--escape-closes-toolbar", library::editor),
+	library::library("navigation-librarydocumenteditor--toolbar-after-drag", library::editor),
+	library::library(
+		"navigation-librarydocumenteditor--toolbar-after-keyboard-selection",
+		library::editor,
+	),
+	library::library("navigation-librarydocumenteditor--format-bold", library::editor),
+	library::library("navigation-librarydocumenteditor--format-italic", library::editor),
+	library::library("navigation-librarydocumenteditor--format-strikethrough", library::editor),
+	library::library("navigation-librarydocumenteditor--format-inline-code", library::editor),
+	library::library("navigation-librarydocumenteditor--format-link", library::editor),
+	library::library("navigation-librarydocumenteditor--format-heading-2", library::editor),
+	library::library("navigation-librarydocumenteditor--format-bullet-list", library::editor),
+	library::library("navigation-librarydocumenteditor--gallery-images-resolved", library::editor),
+	library::library(
+		"navigation-librarydocumentblockeditor--slash-menu-near-bottom",
+		library::editor,
+	),
+	library::library(
+		"navigation-librarydocumentblockeditor--slash-menu-near-bottom-dark",
+		library::editor,
+	),
+	library::library("navigation-librarydocumentblockeditor--slash-menu-filtered", library::editor),
+	library::library("navigation-librarydocumentblockeditor--block-handle-menu", library::editor),
+	library::library(
+		"navigation-librarydocumentblockeditor--drag-with-drop-indicator",
+		library::editor,
+	),
+	library::library(
+		"navigation-librarydocumentblockeditor--bubble-and-document-parity",
+		library::editor,
+	),
+	library::library("navigation-librarydocumentblockeditor--agents-writing", library::editor),
+	library::library("navigation-librarydocumentblockeditor--focused-heading", library::editor),
+	library::library(
+		"navigation-librarydocumentblockeditor--focused-heading-dark",
+		library::editor,
+	),
+	library::library("navigation-librarydocumentblockeditor--focused-list-item", library::editor),
+	library::library(
+		"navigation-librarydocumentblockeditor--focused-list-item-dark",
+		library::editor,
+	),
+	library::library("navigation-librarydocumentblockeditor--focused-to-do-item", library::editor),
+	library::library(
+		"navigation-librarydocumentblockeditor--focused-to-do-item-dark",
+		library::editor,
+	),
+	library::library("navigation-librarydocumentblockeditor--focused-quote", library::editor),
+	library::library("navigation-librarydocumentblockeditor--focused-quote-dark", library::editor),
+	library::library(
+		"navigation-librarydocumentblockeditor--focused-every-inline-mark",
+		library::editor,
+	),
+	library::library(
+		"navigation-librarydocumentblockeditor--focused-every-inline-mark-dark",
+		library::editor,
+	),
+	library::library(
+		"navigation-librarydocumentblockeditor--callout-body-shows-its-marks",
+		library::editor,
+	),
+	library::library(
+		"navigation-librarydocumentblockeditor--table-cell-shows-its-marks",
+		library::editor,
+	),
+	library::library(
+		"navigation-librarydocumentblockeditor--escape-shows-the-character",
+		library::editor,
+	),
+	library::library(
+		"navigation-librarydocumentblockeditor--autolink-shows-its-text",
+		library::editor,
+	),
+	library::library(
+		"navigation-librarydocumentblockeditor--inline-image-is-one-node",
+		library::editor,
+	),
+	library::library(
+		"navigation-librarydocumentblockeditor--nested-list-keeps-its-indent",
+		library::editor,
+	),
+	library::library(
+		"navigation-librarydocumentblockeditor--emptied-blocks-keep-their-type",
+		library::editor,
+	),
+	library::library(
+		"navigation-librarydocumentblockeditor--person-caret-at-block-edges",
+		library::editor,
+	),
+	library::library("navigation-librarydocumentblockeditor--gallery-editing", library::editor),
+	library::library(
+		"navigation-librarydocumentblockeditor--gallery-editing-dark",
+		library::editor,
+	),
+	library::library(
+		"navigation-librarydocumentblockeditor--gallery-tile-dragged",
+		library::editor,
+	),
+	library::library(
+		"navigation-librarydocumentblockeditor--gallery-images-resolved",
+		library::editor,
+	),
+	library::library(
+		"navigation-librarydocumentblockeditor--gallery-image-resolving",
+		library::editor,
+	),
+	library::library(
+		"navigation-librarydocumentblockeditor--gallery-image-failing",
+		library::editor,
+	),
+	library::library("navigation-librarydocumentblockeditor--checklist-editing", library::editor),
+	library::library(
+		"navigation-librarydocumentblockeditor--checklist-item-moved",
+		library::editor,
+	),
+	library::library("navigation-librarydocumentblockeditor--callout-tone-switch", library::editor),
+	library::library("navigation-librarydocumentblockeditor--table-editing", library::editor),
+	library::library("navigation-librarydocumentblockeditor--table-editing-dark", library::editor),
+	library::library(
+		"navigation-librarydocumentblockeditor--code-language-chosen",
+		library::editor,
+	),
+	library::library(
+		"navigation-librarydocumentblockeditor--web-page-link-updated",
+		library::editor,
+	),
+	library::library(
+		"navigation-librarydocumentblockeditor--web-page-link-failed",
+		library::editor,
+	),
+	library::library("navigation-librarydocumentblockeditor--gallery-beyond-five", library::editor),
+	library::narrow("navigation-librarydocumentblockeditor--narrow-column", library::editor),
+	library::narrow(
+		"navigation-librarydocumentblockeditor--gallery-editing-at-320",
+		library::editor,
+	),
+	library::narrow("navigation-librarydocumentblockeditor--table-editing-at-320", library::editor),
 	scene("board-boardcard--at-rest", boards::ANSWER, boards::card_at_rest),
 	scene("board-boardcard--drawing", boards::ANSWER, boards::card_drawing),
 	scene(
@@ -643,6 +1079,7 @@ pub struct SceneState {
 	pub scene: &'static Scene,
 	pub edit: TextEdit,
 	pub picture: Option<Image>,
+	pub library: library::LibraryScene,
 	pub board_pictures: Vec<Image>,
 	images: Option<ImageCache>,
 }
@@ -653,6 +1090,7 @@ impl SceneState {
 			scene,
 			edit: TextEdit::new(scene.typed),
 			picture: None,
+			library: library::LibraryScene::new(scene),
 			board_pictures: Vec::new(),
 			images: None,
 		}
@@ -666,6 +1104,7 @@ pub fn setup(s: &mut SceneState, waker: Waker) {
 		eprintln!("the avatar picture didn't decode: {}", failure.0);
 	}
 	s.picture = Some(picture);
+	s.library.decode(&images);
 	s.board_pictures =
 		[boards::fixtures::TERRACE_SVG, boards::fixtures::POOL_SVG, boards::fixtures::PATIO_SVG]
 			.map(|svg| {
