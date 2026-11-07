@@ -494,35 +494,18 @@ pub static SCENES: &[Scene] = &[
 	),
 	scene("settings-user-settingsscreen--account", SCREEN, person_settings::screen_account),
 	scene("settings-user-settingsscreen--spaces", SCREEN, person_settings::screen_spaces),
-	scene("settings-user-settingsscreen--spaces-dark", SCREEN, person_settings::screen_spaces),
 	scene(
 		"settings-user-settingsscreen--spaces-host-states",
-		SCREEN,
-		person_settings::screen_host_states,
-	),
-	scene(
-		"settings-user-settingsscreen--spaces-host-states-dark",
 		SCREEN,
 		person_settings::screen_host_states,
 	),
 	scene("settings-user-settingsscreen--left-column", SCREEN, person_settings::screen_account),
 	scene("settings-user-settingsscreen--rail-space-host", SCREEN, person_settings::screen_account),
 	scene(
-		"settings-user-settingsscreen--rail-space-host-dark",
-		SCREEN,
-		person_settings::screen_account,
-	),
-	scene(
-		"settings-user-settingsscreen--left-column-dark",
-		SCREEN,
-		person_settings::screen_account,
-	),
-	scene(
 		"settings-user-settingsscreen--after-leaving-a-space",
 		SCREEN,
 		person_settings::screen_after_leaving,
 	),
-	scene("settings-user-settingsscreen--account-dark", SCREEN, person_settings::screen_account),
 	scene(
 		"settings-user-settingsscreen--without-optional-entries",
 		SCREEN,
