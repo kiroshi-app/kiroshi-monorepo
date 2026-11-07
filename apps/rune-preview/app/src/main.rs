@@ -13,6 +13,7 @@ use kiroshi_rune_os::scheme;
 use kiroshi_rune_preview::app::App;
 use kiroshi_rune_preview::host::Profile;
 use kiroshi_rune_preview::navigation::Route;
+use kiroshi_rune_preview::surfaces::s15_boards;
 use kiroshi_rune_preview::{
 	composer, conversations, local, menu, onboarding, scenes, smoke, spike,
 };
@@ -51,8 +52,8 @@ fn view(s: &App, cx: &mut Cx<App>) -> El {
 		| Route::Applications
 		| Route::PersonSettings
 		| Route::SpaceSettings
-		| Route::Library
-		| Route::Boards => el(),
+		| Route::Library => el(),
+		Route::Boards => s15_boards::view(s, &t, cx.layout_size(s15_boards::CANVAS)),
 	};
 	rune_kit::root(body, Vec::new())
 }
