@@ -1159,7 +1159,7 @@ mod tests {
 				avatar_blot: None,
 			}],
 			conversations: vec![conversation("c-1"), conversation("c-2")],
-			person: None,
+			person: Person::Unread,
 			longest: None,
 		});
 		(app, record)
