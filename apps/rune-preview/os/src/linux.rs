@@ -4,6 +4,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::{Mutex, OnceLock};
+use std::thread;
 
 use notify_rust::{Hint, Notification, NotificationResponse};
 use x11rb::connection::Connection;
@@ -40,11 +41,20 @@ pub fn bring_to_front() -> Result<(), String> {
 
 pub fn play_chime() -> Result<(), String> {
 	let chime = chime_file()?;
-	let status = Command::new("paplay")
+	let mut paplay = Command::new("paplay")
 		.arg(chime)
-		.status()
+		.spawn()
 		.map_err(|failure| format!("paplay did not start: {failure}"))?;
-	status.success().then_some(()).ok_or_else(|| format!("paplay answered {status}"))
+	let reaped =
+		thread::Builder::new().name("notice-chime".into()).spawn(move || match paplay.wait() {
+			Ok(status) if status.success() => {}
+			Ok(status) => eprintln!("the chime did not play: paplay answered {status}"),
+			Err(failure) => eprintln!("the chime did not play: paplay was not awaited: {failure}"),
+		});
+	if let Err(failure) = reaped {
+		eprintln!("the chime player is left unawaited: {failure}");
+	}
+	Ok(())
 }
 
 pub fn post_banner(app_id: &str, notice: Notice, heard: Heard) {
