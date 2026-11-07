@@ -1376,7 +1376,7 @@ fn invoked_with(
 }
 
 fn a_window_of(app: &crate::core_context::Core) -> tauri::WebviewWindow<MockRuntime> {
-	tauri::WebviewWindowBuilder::new(app.handle(), "main", tauri::WebviewUrl::default())
+	tauri::WebviewWindowBuilder::new(&*app, "main", tauri::WebviewUrl::default())
 		.build()
 		.expect("the window opens")
 }
@@ -2542,9 +2542,7 @@ fn a_drawn_png() -> Vec<u8> {
 
 async fn the_page_renders(app: &AppHandle<MockRuntime>, png: &[u8]) -> screenshot::ScreenshotJob {
 	let request_id = loop {
-		if let Some(id) =
-			screenshot::screenshots(crate::events::core(app)).held().keys().next().cloned()
-		{
+		if let Some(id) = screenshot::screenshots(app).held().keys().next().cloned() {
 			break id;
 		}
 		tokio::time::sleep(Duration::from_millis(5)).await;
@@ -2601,7 +2599,7 @@ async fn a_board_screenshot_renders_every_node_and_arrow_on_disk_framed_with_a_2
 
 	let (answer, job) = tokio::join!(
 		host.served(Operation::Screenshot, json!({ "name": BOARD, "scale": 2 })),
-		the_page_renders(app.handle(), &png),
+		the_page_renders(&*app, &png),
 	);
 
 	let answer = answer.expect("the board is shown");
@@ -2656,7 +2654,7 @@ async fn a_node_screenshot_renders_that_node_and_its_descendants_only() {
 
 	let (answer, job) = tokio::join!(
 		host.served(Operation::Screenshot, json!({ "name": BOARD, "id": id("lane") })),
-		the_page_renders(app.handle(), &png),
+		the_page_renders(&*app, &png),
 	);
 
 	answer.expect("the section is shown");
@@ -2702,11 +2700,11 @@ async fn a_document_screenshot_renders_one_block_by_id_or_every_block_and_refuse
 
 	let (one, job_of_one) = tokio::join!(
 		host.served(Operation::Screenshot, json!({ "name": "notes.md", "id": ids[2] })),
-		the_page_renders(app.handle(), &png),
+		the_page_renders(&*app, &png),
 	);
 	let (whole, job_of_whole) = tokio::join!(
 		host.served(Operation::Screenshot, json!({ "name": "notes.md" })),
-		the_page_renders(app.handle(), &png),
+		the_page_renders(&*app, &png),
 	);
 	let absent =
 		host.served(Operation::Screenshot, json!({ "name": "notes.md", "id": "ghost" })).await;

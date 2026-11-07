@@ -43,7 +43,7 @@ fn noise(edge: u32) -> String {
 }
 
 fn pending_ids(app: &AppHandle<MockRuntime>) -> Vec<String> {
-	screenshots(crate::events::core(app)).held().keys().cloned().collect()
+	screenshots(app).held().keys().cloned().collect()
 }
 
 async fn requests_in_flight(app: &AppHandle<MockRuntime>, count: usize) -> Vec<String> {

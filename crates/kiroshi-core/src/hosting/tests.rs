@@ -52,10 +52,9 @@ use crate::companions::contract::{
 };
 use crate::conversations::commands::{
 	conversation_add_participant, conversation_append_user_message, conversation_create,
-	conversation_create_bot_from_draft, conversation_delete, conversation_delete_bot,
-	conversation_duplicate_bot, conversation_page, conversation_remove_participant,
-	conversation_send_user_message, conversation_set_lead, conversation_update,
-	conversation_update_bot,
+	conversation_delete_bot, conversation_duplicate_bot, conversation_remove_participant,
+	conversation_set_lead, conversation_update, conversation_update_bot, conversations_page,
+	create_bot_from_draft, delete_conversation, send_user_message,
 };
 use crate::conversations::contract::{
 	Bot, BotDraft, BotIdentity, Conversation, ConversationInPage, Hue, LastWord, NewUserMessage,
@@ -91,7 +90,7 @@ use crate::library::contract::{LibraryError, DOCUMENT_RENAMED_EVENT, DOCUMENT_UP
 use crate::library::tests::YjsClient;
 use crate::logging::contract::InstallKind;
 use crate::mcp_oauth::asking::AuthorizationAnswers;
-use crate::mcp_oauth::commands::{mcp_application_status, McpOauthState};
+use crate::mcp_oauth::commands::{application_status, McpOauthState};
 use crate::mcp_oauth::credentials;
 use crate::mcp_oauth::reports::ApplicationReports;
 use crate::removed_on_drop::RemovedOnDrop;
@@ -1002,7 +1001,7 @@ impl Harness {
 	}
 
 	async fn failed(&self) -> (HostingFailureKind, String) {
-		let failure = || match &*self {
+		let failure = || match self.state() {
 			HostingState::Failed { failure, detail } => Some((failure, detail)),
 			_ => None,
 		};
@@ -1497,7 +1496,7 @@ fn a_bearer_the_relay_refuses_needs_a_sign_in_and_is_not_retried() {
 		ended_on_its_own(relay).await;
 
 		assert_eq!(harness.attempts(), 1);
-		assert_eq!(&*harness, HostingState::NeedsSignIn);
+		assert_eq!(harness.state(), HostingState::NeedsSignIn);
 	});
 }
 
@@ -1559,7 +1558,7 @@ fn a_relay_answering_503_is_retried_on_connecting_and_never_fails() {
 		let is_attempted_again = || (harness.attempts() >= 2).then_some(());
 		harness.noticed_until("the relay attempted again", is_attempted_again).await;
 
-		assert_eq!(&*harness, HostingState::Connecting);
+		assert_eq!(harness.state(), HostingState::Connecting);
 	});
 }
 
@@ -1740,7 +1739,7 @@ fn a_malformed_member_frame_is_answered_400_and_the_socket_stays_open() {
 
 		assert_eq!((refused["id"].clone(), refused["status"].clone()), (json!("m1"), json!(400)));
 		assert_eq!((answered["id"].clone(), answered["status"].clone()), (json!("m2"), json!(200)));
-		assert_eq!(&*harness, HostingState::Online);
+		assert_eq!(harness.state(), HostingState::Online);
 	});
 }
 
@@ -1770,7 +1769,7 @@ async fn refused_with(harness: &mut Harness, command: &str, args: Value) -> (Val
 		json!({ "id": command, "status": 403, "body": "this command belongs to the host" })
 	);
 	assert_eq!((answered["id"].clone(), answered["status"].clone()), (json!("after"), json!(200)));
-	assert_eq!(&*harness, HostingState::Online);
+	assert_eq!(harness.state(), HostingState::Online);
 	let session = harness.app.state::<AccountSession>();
 	assert!(matches!(session.current(), AccountState::SignedIn(_)), "{:?}", session.current());
 	assert_eq!(session.bearer().expect("the session store reads").as_deref(), Some(BEARER));
@@ -2299,7 +2298,7 @@ fn signing_out_closes_the_relay_and_needs_a_sign_in_keeping_the_flag() {
 		signed_out(&*harness.app).await;
 		member.close_frame().await;
 
-		assert_eq!(&*harness, HostingState::NeedsSignIn);
+		assert_eq!(harness.state(), HostingState::NeedsSignIn);
 		assert_eq!(harness.stored().await.1, vec![PERSONAL.to_owned()]);
 	});
 }
@@ -3141,7 +3140,7 @@ async fn kept_in_the_shared_space(command: &str, other: Value, shared: Value) {
 	guest.forwarded(command, shared).await;
 
 	assert_eq!(guest.effects.reached(), [command]);
-	assert_eq!(&*guest.harness, HostingState::Online);
+	assert_eq!(guest.harness.state(), HostingState::Online);
 }
 
 async fn kept_in_the_space_named(command: &str, args: impl Fn(&str) -> Value) {
@@ -3190,7 +3189,7 @@ fn a_member_launches_an_agent() {
 #[test]
 fn a_member_reads_a_conversation_page() {
 	run(answered_as_today(
-		"conversation_message_page",
+		"message_page",
 		json!({ "conversationId": "c-mine", "beforeSeq": null, "limit": 50 }),
 	));
 }
@@ -3997,7 +3996,7 @@ fn a_member_deletes_an_env_entry_of_a_bot_of_the_shared_space_only() {
 #[test]
 fn a_member_reads_the_application_status_of_the_shared_space_only() {
 	run(kept_in_the_shared_space(
-		"mcp_application_status",
+		"application_status",
 		json!({ "owner": an_env_scope_of(ELSEWHERE) }),
 		json!({ "owner": an_env_scope_of(PERSONAL) }),
 	));
@@ -4027,7 +4026,7 @@ fn a_member_reaches_no_env_or_application_of_the_host_person_or_outside_the_shar
 
 		for scope in outside.clone() {
 			guest.refused("env_list", json!({ "scope": scope })).await;
-			guest.refused("mcp_application_status", json!({ "owner": scope })).await;
+			guest.refused("application_status", json!({ "owner": scope })).await;
 		}
 		for scope in outside.into_iter().chain([held_with_another_space]) {
 			guest.refused("env_set", json!({ "scope": scope, "name": "A", "value": "b" })).await;
@@ -4048,19 +4047,10 @@ fn a_member_reaches_no_env_or_application_of_the_host_person_or_outside_the_shar
 fn the_live_sessions_in_a_space_hold_only_the_sessions_of_its_conversations() {
 	run(async {
 		let guest = Guest::of_two_spaces("live-sessions-in-space").await;
-		let app = guest.harness.app.handle();
-		commands::a_run_held_by_the_app(
-			crate::events::core(app),
-			a_held_scope_in("c-mine", "b-mine"),
-		);
-		commands::a_run_held_by_the_app(
-			crate::events::core(app),
-			a_held_scope_in("c-theirs", "b-theirs"),
-		);
-		commands::a_run_held_by_the_app(
-			crate::events::core(app),
-			a_held_scope_in("c-shared", "b-shared"),
-		);
+		let app = &*guest.harness.app;
+		commands::a_run_held_by_the_app(app, a_held_scope_in("c-mine", "b-mine"));
+		commands::a_run_held_by_the_app(app, a_held_scope_in("c-theirs", "b-theirs"));
+		commands::a_run_held_by_the_app(app, a_held_scope_in("c-shared", "b-shared"));
 
 		let listed = commands::agent_live_sessions_in_space(&*app, PERSONAL.to_owned())
 			.await
@@ -4117,7 +4107,7 @@ async fn pending_in_the_conversation(
 	app: &crate::core_context::Core,
 	conversation_id: &str,
 ) -> Vec<agent::ScopedEvent> {
-	commands::agent_pending_questions(&*app, conversation_id.to_owned())
+	commands::pending_questions(&*app, conversation_id.to_owned())
 		.await
 		.expect("the questions read")
 }
@@ -4126,15 +4116,12 @@ async fn pending_in_the_conversation(
 fn the_pending_questions_in_a_space_hold_the_questions_of_each_of_its_conversations_only() {
 	run(async {
 		let guest = Guest::of_two_spaces("pending-questions-in-space").await;
-		let app = guest.harness.app.handle();
+		let app = &*guest.harness.app;
 		for (conversation_id, bot_id) in
 			[("c-theirs", "b-theirs"), ("c-shared", "b-shared"), ("c-mine", "b-mine")]
 		{
-			commands::a_run_held_by_the_app(
-				crate::events::core(app),
-				a_held_scope_in(conversation_id, bot_id),
-			)
-			.emit(a_question(&format!("q-{conversation_id}")), a_turn_in(conversation_id));
+			commands::a_run_held_by_the_app(app, a_held_scope_in(conversation_id, bot_id))
+				.emit(a_question(&format!("q-{conversation_id}")), a_turn_in(conversation_id));
 		}
 
 		let listed = pending_in_the_space(app, ELSEWHERE).await;
@@ -4154,7 +4141,7 @@ fn the_pending_questions_in_a_space_hold_the_questions_of_each_of_its_conversati
 fn the_pending_questions_in_a_space_leave_out_every_question_settled_or_let_go() {
 	run(async {
 		let guest = Guest::of_two_spaces("pending-questions-settled").await;
-		let app = guest.harness.app.handle();
+		let app = &*guest.harness.app;
 		let scope = a_held_scope_in("c-theirs", "b-theirs");
 		let cancelled = agent::AgentEvent::TurnEnded {
 			ended: agent::TurnEnded {
@@ -4168,7 +4155,7 @@ fn the_pending_questions_in_a_space_leave_out_every_question_settled_or_let_go()
 		};
 
 		for settled in ["answered", "cancelled", "shut down", "taken over"] {
-			let run = commands::a_run_held_by_the_app(crate::events::core(app), scope.clone());
+			let run = commands::a_run_held_by_the_app(app, scope.clone());
 			run.emit(a_question(settled), a_turn_in("c-theirs"));
 			assert_eq!(
 				pending_in_the_space(app, ELSEWHERE).await.len(),
@@ -4180,16 +4167,9 @@ fn the_pending_questions_in_a_space_leave_out_every_question_settled_or_let_go()
 			match settled {
 				"answered" => run.emit(its_answer(settled), a_turn_in("c-theirs")),
 				"cancelled" => run.emit(cancelled.clone(), a_turn_in("c-theirs")),
-				"shut down" => {
-					commands::shutdown_session(
-						crate::events::core(app),
-						&crate::events::core(app).state(),
-						&scope,
-					)
-					.await
-				}
+				"shut down" => commands::shutdown_session(app, &&*app, &scope).await,
 				_ => {
-					commands::a_run_held_by_the_app(crate::events::core(app), scope.clone());
+					commands::a_run_held_by_the_app(app, scope.clone());
 				}
 			}
 
@@ -4243,7 +4223,7 @@ fn a_relay_guest_hears_a_pending_question_settled_when_the_host_shuts_its_sessio
 		commands::a_run_held_by_the_app(&*app, scope.clone())
 			.emit(a_question("q-mine"), a_turn_in("c-mine"));
 
-		commands::shutdown_session(&*app, &&*app.state(), &scope).await;
+		commands::shutdown_session(&*app, &&*&*app, &scope).await;
 		let heard = guest.events_until_the_marker().await;
 
 		let denied = agent::AgentEvent::PermissionResolved {
@@ -4289,7 +4269,7 @@ fn the_shared_space_check_names_a_conversation_of_another_space() {
 
 		let refusal = shared_space_refusal(
 			&guest,
-			"conversation_message_page",
+			"message_page",
 			json!({ "conversationId": "c-theirs", "beforeSeq": null, "limit": 10 }),
 		)
 		.await;
@@ -4297,7 +4277,7 @@ fn the_shared_space_check_names_a_conversation_of_another_space() {
 		assert_eq!(
 			refusal,
 			reach::Refusal::Unheld {
-				held: held_of("conversation_message_page", 0),
+				held: held_of("message_page", 0),
 				offending: reach::Offending::Value(json!("c-theirs")),
 			}
 		);
@@ -4309,16 +4289,12 @@ fn the_shared_space_check_names_a_missing_required_id_as_absent() {
 	run(async {
 		let guest = Guest::of_two_spaces("refusal-absent").await;
 
-		let missing = shared_space_refusal(&guest, "conversation_message_page", json!({})).await;
-		let null = shared_space_refusal(
-			&guest,
-			"conversation_message_page",
-			json!({ "conversationId": null }),
-		)
-		.await;
+		let missing = shared_space_refusal(&guest, "message_page", json!({})).await;
+		let null =
+			shared_space_refusal(&guest, "message_page", json!({ "conversationId": null })).await;
 
 		let absent = reach::Refusal::Unheld {
-			held: held_of("conversation_message_page", 0),
+			held: held_of("message_page", 0),
 			offending: reach::Offending::Absent,
 		};
 		assert_eq!(missing, absent);
@@ -4351,13 +4327,13 @@ fn the_shared_space_check_names_the_first_unheld_id_of_an_array() {
 #[test]
 fn the_refusal_line_names_the_command_space_argument_check_and_value_and_no_account() {
 	let refusal = reach::Refusal::Unheld {
-		held: held_of("conversation_message_page", 0),
+		held: held_of("message_page", 0),
 		offending: reach::Offending::Value(json!("c-theirs")),
 	};
 
 	assert_eq!(
-		reach::refusal_line("conversation_message_page", PERSONAL, &refusal),
-		"the relayed conversation_message_page was refused outside shared space personal: \
+		reach::refusal_line("message_page", PERSONAL, &refusal),
+		"the relayed message_page was refused outside shared space personal: \
 		 /conversationId failed the Conversation check with \"c-theirs\""
 	);
 }
@@ -4391,11 +4367,11 @@ fn the_refusal_line_names_the_reach_when_there_is_no_argument() {
 #[test]
 fn the_refusal_line_caps_the_value_at_200_characters() {
 	let refusal = reach::Refusal::Unheld {
-		held: held_of("conversation_message_page", 0),
+		held: held_of("message_page", 0),
 		offending: reach::Offending::Value(json!("x".repeat(500))),
 	};
 
-	let line = reach::refusal_line("conversation_message_page", PERSONAL, &refusal);
+	let line = reach::refusal_line("message_page", PERSONAL, &refusal);
 
 	let value = line.rsplit(" with ").next().expect("a value is logged");
 	assert_eq!(value, format!("\"{}", "x".repeat(199)));
@@ -4425,7 +4401,7 @@ fn a_relay_guest_creates_a_bot_in_the_shared_space_only() {
 #[test]
 fn a_relay_guest_creates_a_bot_from_a_draft_in_the_shared_space_only() {
 	run(kept_in_the_space_named(
-		"conversation_create_bot_from_draft",
+		"create_bot_from_draft",
 		|space_id| json!({ "spaceId": space_id, "draft": {} }),
 	));
 }
@@ -4467,7 +4443,7 @@ fn a_relay_guest_lists_the_conversations_of_the_shared_space_only() {
 #[test]
 fn a_relay_guest_pages_the_conversations_of_the_shared_space_only() {
 	run(kept_in_the_space_named(
-		"conversation_page",
+		"conversations_page",
 		|space_id| json!({ "spaceId": space_id, "cursor": null, "limit": null }),
 	));
 }
@@ -4671,7 +4647,7 @@ fn a_relay_guest_omitting_the_space_id_is_refused() {
 #[test]
 fn a_relay_guest_reads_a_conversation_of_the_shared_space_only() {
 	run(kept_in_the_shared_space(
-		"conversation_message_page",
+		"message_page",
 		json!({ "conversationId": "c-theirs", "beforeSeq": null, "limit": 10 }),
 		json!({ "conversationId": "c-mine", "beforeSeq": null, "limit": 10 }),
 	));
@@ -4755,7 +4731,7 @@ fn a_relay_guest_sends_a_message_with_documents_in_the_shared_space_only() {
 		}, "summoned": [] })
 	};
 	run(kept_in_the_shared_space(
-		"conversation_send_user_message",
+		"send_user_message",
 		with_documents("c-theirs"),
 		with_documents("c-mine"),
 	));
@@ -4805,7 +4781,7 @@ fn a_relay_guest_naming_a_row_the_host_does_not_hold_is_refused() {
 	run(async {
 		let mut guest = Guest::of_two_spaces("unknown-child").await;
 
-		guest.refused("conversation_delete", json!({ "conversationId": "c-unknown" })).await;
+		guest.refused("delete_conversation", json!({ "conversationId": "c-unknown" })).await;
 		guest.refused("conversation_delete_bot", json!({ "id": "b-unknown" })).await;
 		guest.refused("mission_detail", json!({ "missionId": "mi-unknown" })).await;
 		guest.refused("routine_key", json!({ "id": "r-unknown" })).await;
@@ -4829,7 +4805,7 @@ fn a_child_lookup_the_store_fails_is_refused() {
 		guest.refused("section_rename", json!({ "id": "s-mine", "name": "n" })).await;
 
 		assert!(guest.effects.reached().is_empty());
-		assert_eq!(&*guest.harness, HostingState::Online);
+		assert_eq!(guest.harness.state(), HostingState::Online);
 	});
 }
 
@@ -5481,7 +5457,7 @@ fn a_host_wide_connection_check_reaches_no_relay_guest_and_is_not_logged_as_kept
 	run(async {
 		let mut guest = Guest::of_two_spaces("host-wide-check").await;
 		let app = &*guest.harness.app;
-		let mut published = events::subscribed(&app);
+		let mut published = app.subscribe_frames();
 
 		commands::a_host_wide_announce(
 			&*app,
@@ -5505,6 +5481,26 @@ const GUEST: &str = "guest-account";
 const GUEST_EMAIL: &str = "guest@example.com";
 const HOST_NAME: &str = "Ada on the host";
 
+#[test]
+#[test]
+#[test]
+#[test]
+#[test]
+#[test]
+#[test]
+#[test]
+#[test]
+#[test]
+#[test]
+#[test]
+#[test]
+#[test]
+#[test]
+#[test]
+#[test]
+#[test]
+#[test]
+#[test]
 impl Guest {
 	async fn first_event(&mut self) -> Value {
 		next_text(&mut self.member, |frame| frame.get("event").is_some()).await
@@ -5532,13 +5528,13 @@ impl Guest {
 	}
 
 	async fn conversation_deleted(&self, conversation_id: &str) {
-		conversation_delete(&*self.harness.app, conversation_id.to_owned())
+		delete_conversation(&*self.harness.app, conversation_id.to_owned())
 			.await
 			.expect("the conversation is deleted");
 	}
 
 	async fn paged_row(&self, conversation_id: &str) -> ConversationInPage {
-		let page = conversation_page(&*self.harness.app, PERSONAL.to_owned(), None, None)
+		let page = conversations_page(&*self.harness.app, PERSONAL.to_owned(), None, None)
 			.await
 			.expect("the page is read");
 		page.conversations
@@ -5587,7 +5583,7 @@ impl Guest {
 
 	async fn user_message_appended(&self, conversation_id: &str, turn_id: &str) -> i64 {
 		let message = a_user_message(conversation_id, turn_id);
-		conversation_append_user_message(&*self.harness.app, CommandCaller(Caller::Host), message)
+		conversation_append_user_message(&*self.harness.app, Caller::Host, message)
 			.await
 			.expect("the message is appended")
 	}
@@ -5601,20 +5597,15 @@ impl Guest {
 
 	async fn user_message_sent(&self, conversation_id: &str) -> i64 {
 		let message = a_user_message(conversation_id, &format!("t-new-{conversation_id}"));
-		conversation_send_user_message(
-			&*self.harness.app,
-			CommandCaller(Caller::Host),
-			message,
-			vec![],
-		)
-		.await
-		.expect("the message is sent")
+		send_user_message(&*self.harness.app, Caller::Host, message, vec![])
+			.await
+			.expect("the message is sent")
 	}
 
 	async fn bot_created_in(&self, space_id: &str) -> Bot {
 		let draft =
 			BotDraft { name: "Fresh".to_owned(), job: String::new(), description: String::new() };
-		conversation_create_bot_from_draft(&*self.harness.app, draft, space_id.to_owned())
+		create_bot_from_draft(&*self.harness.app, draft, space_id.to_owned())
 			.await
 			.expect("the bot is created")
 	}
@@ -6108,7 +6099,7 @@ fn a_guest_reads_the_installs_of_a_shared_conversation_and_not_of_its_own() {
 #[test]
 fn a_guest_reads_the_pending_questions_of_a_shared_conversation_and_not_of_its_own() {
 	run(kept_in_the_shared_space(
-		"agent_pending_questions",
+		"pending_questions",
 		json!({ "conversationId": GUEST_LOCAL_CONVERSATION }),
 		json!({ "conversationId": "c-mine" }),
 	));
@@ -6153,6 +6144,11 @@ fn granted_to_the_host_person(name: &str) -> EnvScope {
 	EnvScope::Server { name: name.to_owned(), owner: EnvOwner::User }
 }
 
+#[test]
+#[test]
+#[test]
+#[test]
+#[test]
 fn relay_database(harness: &Harness) -> &crate::db::Database {
 	let state = harness.app.state::<DatabaseState>().inner();
 	state.as_ref().expect("the database")
@@ -6664,7 +6660,7 @@ fn a_plaintext_frame_or_one_signed_outside_the_roster_gets_nothing_back() {
 
 		assert_eq!(answered["id"], json!("genuine"));
 		assert_eq!(effects.reached(), ["agent_models"]);
-		assert_eq!(&*harness, HostingState::Online);
+		assert_eq!(harness.state(), HostingState::Online);
 	});
 }
 
@@ -6699,7 +6695,7 @@ fn a_sealed_frame_whose_v_is_absent_or_one_is_dropped_without_dispatching_its_ca
 
 		assert_eq!(answered["id"], json!("genuine"));
 		assert_eq!(effects.reached(), ["agent_models"]);
-		assert_eq!(&*harness, HostingState::Online);
+		assert_eq!(harness.state(), HostingState::Online);
 	});
 }
 
@@ -7360,7 +7356,7 @@ fn a_device_revoked_event_drops_the_row_and_rekeys_the_remaining_devices_with_th
 		assert_eq!(answer["status"], 200);
 		assert!(!relay.has_held_any_frame_to(&guest.member));
 		assert!(!harness.is_rotation_pending().await);
-		assert_eq!(&*harness, HostingState::Online);
+		assert_eq!(harness.state(), HostingState::Online);
 		let accounts: Vec<String> =
 			device_ids(&harness.devices().await).into_iter().map(|(account, _)| account).collect();
 		assert_eq!(accounts, vec!["joiner".to_owned(), "owner".to_owned()]);
@@ -7394,7 +7390,7 @@ fn a_device_revoked_event_naming_no_row_another_account_the_host_or_sent_by_a_me
 		assert_eq!(harness.devices().await, before);
 		assert_eq!(harness.space_key(PERSONAL).key_id, 1);
 		assert!(!harness.is_rotation_pending().await);
-		assert_eq!(&*harness, HostingState::Online);
+		assert_eq!(harness.state(), HostingState::Online);
 	});
 }
 
@@ -7564,7 +7560,7 @@ fn a_device_approved_event_admits_and_rekeys_the_device_on_the_open_host_socket(
 		assert_eq!(rekeyed_handover(&relay, &device, &rekey, &host).key_id, 1);
 		assert!(harness.rostered_as(&device).await.is_some());
 		assert_eq!(harness.attempts(), opens);
-		assert_eq!(&*harness, HostingState::Online);
+		assert_eq!(harness.state(), HostingState::Online);
 	});
 }
 
@@ -7673,7 +7669,7 @@ fn a_device_approved_frame_sent_by_a_member_or_the_retired_device_list_event_adm
 		assert_eq!(answer["status"], 200);
 		assert!(!held_before);
 		assert_eq!(harness.device_lists(), reads + 1);
-		assert_eq!(&*harness, HostingState::Online);
+		assert_eq!(harness.state(), HostingState::Online);
 	});
 }
 
@@ -7752,7 +7748,7 @@ fn a_device_list_that_omits_the_host_device_or_fails_to_read_changes_no_roster_r
 		assert!(harness.rostered_as(&rostered.member).await.is_some());
 		assert!(harness.rostered_as(&newcomer).await.is_none());
 		assert!(!relay.has_held_any_frame_to(&newcomer));
-		assert_eq!(&*harness, HostingState::Online);
+		assert_eq!(harness.state(), HostingState::Online);
 	});
 }
 
@@ -7900,6 +7896,6 @@ fn a_failed_admission_keeps_the_host_socket_open_and_the_next_device_approved_ad
 		assert_eq!(rekeyed_handover(&relay, &unadmitted, &rekey, &host).key_id, 1);
 		assert!(harness.rostered_as(&unadmitted).await.is_some());
 		assert_eq!(harness.attempts(), attempts);
-		assert_eq!(&*harness, HostingState::Online);
+		assert_eq!(harness.state(), HostingState::Online);
 	});
 }

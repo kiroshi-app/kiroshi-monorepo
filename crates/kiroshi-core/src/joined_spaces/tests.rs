@@ -1202,11 +1202,11 @@ fn a_join_a_leave_and_a_sign_out_complete_while_the_instance_list_never_answers(
 		})
 		.await;
 
-		let app = member.app.handle();
+		let app = &*member.app;
 		let other = tokio::time::timeout(
 			PATIENCE,
 			relay::joined(
-				crate::events::core(app),
+				app,
 				OTHER_INSTANCE.to_owned(),
 				Some("Harbour".into()),
 				None,
@@ -1214,10 +1214,8 @@ fn a_join_a_leave_and_a_sign_out_complete_while_the_instance_list_never_answers(
 			),
 		)
 		.await;
-		let left =
-			tokio::time::timeout(PATIENCE, relay::left(crate::events::core(app), &joined.id)).await;
-		let signed_out =
-			tokio::time::timeout(PATIENCE, relay::signed_out(crate::events::core(app))).await;
+		let left = tokio::time::timeout(PATIENCE, relay::left(app, &joined.id)).await;
+		let signed_out = tokio::time::timeout(PATIENCE, relay::signed_out(app)).await;
 		reconciliation.abort();
 
 		assert!(other.expect("the join is not held by the stalled list").is_ok());
@@ -1240,20 +1238,13 @@ fn a_join_and_a_leave_answer_while_the_relay_never_answers_a_sign_out() {
 		})
 		.await;
 
-		let app = member.app.handle();
+		let app = &*member.app;
 		let again = tokio::time::timeout(
 			PATIENCE,
-			relay::joined(
-				crate::events::core(app),
-				INSTANCE.to_owned(),
-				None,
-				None,
-				Default::default(),
-			),
+			relay::joined(app, INSTANCE.to_owned(), None, None, Default::default()),
 		)
 		.await;
-		let left =
-			tokio::time::timeout(PATIENCE, relay::left(crate::events::core(app), &joined.id)).await;
+		let left = tokio::time::timeout(PATIENCE, relay::left(app, &joined.id)).await;
 		sign_out.abort();
 
 		let again = again.expect("the join is not held by the stalled sign-out");
@@ -1802,10 +1793,10 @@ impl Peers {
 		let local = served(invoked.with_state(host_app.clone())).await;
 		let (host, _root, temporary) =
 			signed_in("joined-admission-host", OWNER_BEARER, &cloud, PATIENCE);
-		assert!(host_app.0.set(&*host).is_ok());
+		assert!(host_app.0.set(host.handle().clone()).is_ok());
 		let local = LocalApi::new(local, LOCAL_TOKEN.to_owned()).expect("the local client builds");
 		host.manage(Hosting::new(&cloud, Some(local)));
-		hosting_start(&*host, SPACE.to_owned()).await.expect("the hosting starts");
+		hosting_start(host.handle().clone(), SPACE.to_owned()).await.expect("the hosting starts");
 		let peers = Self { relay, cloud, host, _temporary: temporary };
 		until("the host socket", || async { peers.relay.admission().host.is_some().then_some(()) })
 			.await;
@@ -1830,11 +1821,11 @@ fn a_member_the_host_admits_from_the_device_list_joins_on_its_first_rekey_and_pi
 		let joined = invitations::accept(&*member, INVITATION.to_owned()).await;
 		let joined = joined.expect("the join");
 		until("the roster of two devices", || async {
-			let members = joined_space_members(&*member, joined.id.clone()).await;
+			let members = joined_space_members(member.state(), joined.id.clone()).await;
 			(members.expect("the members read").len() == 2).then_some(())
 		})
 		.await;
-		let listed = joined_spaces_list(&*member).await.expect("the list");
+		let listed = joined_spaces_list(member.handle().clone()).await.expect("the list");
 
 		assert_eq!(joined.state, JoinedSpaceState::Online);
 		let named = JoinedSpace { hosted_by: Some("Ann".to_owned()), ..joined };
@@ -1862,7 +1853,7 @@ async fn described(
 	joined: &JoinedSpace,
 	colour: Option<i64>,
 ) -> Result<JoinedSpace, JoinedSpaceError> {
-	let (app, id) = (&*member, joined.id.clone());
+	let (app, id) = (member.handle().clone(), joined.id.clone());
 	joined_space_describe(app, id, "Lab".to_owned(), colour).await
 }
 
@@ -1874,7 +1865,7 @@ async fn host_space(peers: &Peers) -> (String, Option<Hue>) {
 }
 
 async fn named_and_coloured(member: &CoreOfItsOwn) -> Vec<(String, Option<Hue>)> {
-	let listed = joined_spaces_list(&*member).await.expect("the list");
+	let listed = joined_spaces_list(member.handle().clone()).await.expect("the list");
 	listed.into_iter().map(|joined| (joined.name, joined.colour)).collect()
 }
 
@@ -1892,7 +1883,7 @@ fn a_member_describes_its_joined_space_and_the_host_and_every_member_take_it_thr
 		let peers = Peers::hosting().await;
 		let (member, joined, _member_files) = joined_by(&peers, "described-member").await;
 		let (other, other_joined, _other_files) = joined_by(&peers, "described-other").await;
-		joined_space_connect(&*other, other_joined.id.clone())
+		joined_space_connect(other.handle().clone(), other_joined.id.clone())
 			.await
 			.expect("the other member connects");
 		let other_changes = changes_heard(&other);

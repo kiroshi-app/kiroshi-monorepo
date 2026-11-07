@@ -24,7 +24,7 @@ use super::contract::{
 use super::*;
 use crate::attachments::attachment_block;
 use crate::attachments::contract::SubmittedAttachment;
-use crate::conversations::commands::{conversation_message_page, conversation_send_user_message};
+use crate::conversations::commands::{message_page, send_user_message};
 use crate::conversations::contract::{NewUserMessage, TranscriptStoreError};
 use crate::db;
 use crate::hosting::authorship::{Caller, CommandCaller};
@@ -2343,12 +2343,11 @@ async fn sent(
 	app: &crate::core_context::Core,
 	message: NewUserMessage,
 ) -> Result<i64, TranscriptStoreError> {
-	conversation_send_user_message(&*app, CommandCaller(Caller::Host), message, vec![]).await
+	send_user_message(&*app, Caller::Host, message, vec![]).await
 }
 
 async fn linked_documents(app: &crate::core_context::Core) -> Vec<(String, Vec<String>)> {
-	let page =
-		conversation_message_page(&*app, ROOM.to_owned(), None, 20).await.expect("the page reads");
+	let page = message_page(&*app, ROOM.to_owned(), None, 20).await.expect("the page reads");
 	page.messages.into_iter().map(|message| (message.id, message.documents)).collect()
 }
 
