@@ -61,7 +61,7 @@ The iPhone app is a native app for your Spaces online. Sign in with Apple, Googl
 
 ## Your model provider
 
-Your Agents need a model to think with, on your own account with the model provider. Kiroshi runs the coding session that answers and ships the executable beside its agent sidecar: nothing else to install.
+Your Agents need a model to think with, on your own account with the model provider. Kiroshi ships the coding session executable beside its agent sidecar: nothing else to install.
 
 The provider Kiroshi ships today is Claude. When you first open Kiroshi, sign-in offers two ways in:
 
