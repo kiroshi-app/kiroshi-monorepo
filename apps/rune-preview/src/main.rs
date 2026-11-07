@@ -10,6 +10,7 @@ mod host;
 mod hues;
 mod icons;
 mod images;
+mod local;
 mod longest;
 mod math;
 mod mission;
@@ -93,6 +94,8 @@ const SMOKE_SEND: &str = "--smoke-send";
 
 const SMOKE_READ: &str = "--smoke-read";
 
+const LOCAL_SEND: &str = "--local-send";
+
 fn main() -> ExitCode {
 	let args: Vec<String> = std::env::args().collect();
 	if let Some(at) = args.iter().position(|arg| arg == SMOKE_SEND) {
@@ -104,6 +107,13 @@ fn main() -> ExitCode {
 	}
 	if args.iter().any(|arg| arg == SMOKE_READ) {
 		return smoke::read();
+	}
+	if let Some(at) = args.iter().position(|arg| arg == LOCAL_SEND) {
+		let Some(text) = args.get(at + 1) else {
+			eprintln!("{LOCAL_SEND} needs the text to send");
+			return ExitCode::FAILURE;
+		};
+		return local::send_and_read(text);
 	}
 	let spec = AppSpec {
 		setup: Some(setup),

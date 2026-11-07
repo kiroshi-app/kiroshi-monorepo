@@ -218,3 +218,20 @@ The kept core of `apps/app/src-tauri` moves to a crate with no Tauri dependency,
 - **The app version in kiroshi-core.** The MCP `initialize` sent `env!("CARGO_PKG_VERSION")` as its client version, which in kiroshi-core would be kiroshi-core's `0.1.0`. kiroshi-core's build script now exports `KIROSHI_APP_VERSION`, read from `apps/app/src-tauri/Cargo.toml` and rebuilt whenever that file changes. A test checks the handshake still names the app's version. No other compile-time environment read in kiroshi-core named the app.
 - **claude_import/import.rs (done).** It moved into kiroshi-core in one commit. It has no command and no inline tests, so its split and convert steps had nothing to change. src-tauri imports it privately, as it did when it was a private module. `claude_import::commands` and its mock-app tests (`claude_import/tests.rs`) stay in src-tauri.
 
+## Step 3: the Rune preview on an in-process kiroshi-core
+
+- **The in-process Core.** `apps/rune-preview` depends on `crates/kiroshi-core`. `src/local.rs` builds a `Core` on a tokio runtime the preview owns, over a data folder of its own:
+  - `KIROSHI_PREVIEW_DATA` if set;
+  - otherwise `com.kiroshi.rune-preview` under the platform's data root, so it never writes into the installed app's database.
+
+  It installs the database and the states the conversation path reads (`AgentState`, `TurnRunDeadlines`, `TurnWindows`, `LaunchOutcomeState`). It then runs the app's own launch step, `list_bundles_at_launch`, which lays the plugins down and plants the first companion.
+- **The path.** Every call is a kiroshi-core function, with no Tauri, no IPC and no fabricated data:
+  - opening the conversation is `main_chat` with the first agent that has a bundle (the planted companion on a fresh profile);
+  - sending is `conversation_send_turn`, which summons that agent, as the composer does;
+  - reading is `message_page`, followed until the turn's assistant message settles or two minutes pass.
+
+  When no reply settles, the error lists what the thread holds.
+- **Where it runs.** `kiroshi-rune-preview --local-send <text>` runs that path with no window and prints the reply, next to the existing `--smoke-send` that goes through a running app's host API.
+- **Not moved yet.** The windowed screens still read through the host API of a running Kiroshi. Moving them onto the in-process Core also means turning Core events into the preview's live updates, which is its own change.
+- **Dependencies.** kiroshi-core and tokio (`rt-multi-thread`, already in the tree) are the preview's only new direct dependencies. The preview keeps its own lockfile.
+
