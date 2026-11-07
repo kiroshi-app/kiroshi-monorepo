@@ -47,7 +47,7 @@ pub enum Profile {
 }
 
 impl Profile {
-	fn identifier(self) -> &'static str {
+	pub fn identifier(self) -> &'static str {
 		match self {
 			Profile::Dev => "com.kiroshi.app.dev",
 			Profile::Installed => "com.kiroshi.app",
