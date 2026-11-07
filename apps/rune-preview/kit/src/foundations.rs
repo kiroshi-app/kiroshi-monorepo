@@ -27,6 +27,8 @@ const AVATAR_NAME: &str = "Atlas";
 const PERSON_NAME: &str = "Ada Martin";
 const EVERY_SIZE_SIDES: [f32; 3] = [40.0, 96.0, 24.0];
 pub const PICTURE_SIDE: f32 = 96.0;
+pub const PICTURE_SCALE: f32 = 2.0;
+pub const UPLOADED_AVATAR_IMAGE: &str = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><rect width='96' height='96' fill='#e8a33d'/><circle cx='48' cy='38' r='16' fill='#fff7e8'/><rect x='20' y='60' width='56' height='40' rx='20' fill='#fff7e8'/></svg>";
 const EVERY_TINT_SIDE: f32 = 96.0;
 const EVERY_TINT_ORDER: [Preset; 8] = [
 	Preset::Red,

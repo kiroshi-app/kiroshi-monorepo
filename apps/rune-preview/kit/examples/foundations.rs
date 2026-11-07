@@ -1,10 +1,9 @@
-use kiroshi_rune_kit::foundations::{self, PICTURE_SIDE, SCENE};
+use kiroshi_rune_kit::foundations::{
+	self, PICTURE_SCALE, PICTURE_SIDE, SCENE, UPLOADED_AVATAR_IMAGE,
+};
 use kiroshi_rune_kit::tokens::{self, Tokens};
 use rune::image::{Image, ImageCache};
 use rune::{AppSpec, Cx, El, Waker};
-
-const UPLOADED_AVATAR_IMAGE: &str = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><rect width='96' height='96' fill='#e8a33d'/><circle cx='48' cy='38' r='16' fill='#fff7e8'/><rect x='20' y='60' width='56' height='40' rx='20' fill='#fff7e8'/></svg>";
-const PICTURE_SCALE: f32 = 2.0;
 
 #[derive(Default)]
 struct Sheet {
