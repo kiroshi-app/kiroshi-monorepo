@@ -243,8 +243,7 @@ fn bubble(t: &Tokens, words: &str, solid: bool) -> El {
 	};
 	el().max_w(BUBBLE_MAX_WIDTH)
 		.shrink()
-		.px(SPACING * 3.0)
-		.py(SPACING * 2.0)
+		.padding(SPACING * 3.0)
 		.radius(RADIUS_BUBBLE)
 		.fill(fill)
 		.child(text(words.to_owned()).font(TEXT_SM).color(ink).wrap())

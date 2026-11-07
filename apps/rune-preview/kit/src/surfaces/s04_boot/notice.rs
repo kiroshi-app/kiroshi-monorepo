@@ -263,7 +263,7 @@ fn content<S: 'static>(
 	if let Some(action) = notice.action {
 		body = body.child(
 			Button::new(action)
-				.variant(ButtonVariant::Outline)
+				.variant(ButtonVariant::Secondary)
 				.size(ButtonSize::Sm)
 				.view(t)
 				.on_press(move |s: &mut S| emit(s, SurfaceEvent::Act(index))),
