@@ -221,17 +221,17 @@ pub fn data_folder() -> Result<PathBuf, LocalError> {
 }
 
 #[cfg(target_os = "macos")]
-fn platform_data_root() -> Option<PathBuf> {
+pub fn platform_data_root() -> Option<PathBuf> {
 	std::env::var_os("HOME").map(|home| PathBuf::from(home).join("Library/Application Support"))
 }
 
 #[cfg(windows)]
-fn platform_data_root() -> Option<PathBuf> {
+pub fn platform_data_root() -> Option<PathBuf> {
 	std::env::var_os("APPDATA").map(PathBuf::from)
 }
 
 #[cfg(not(any(target_os = "macos", windows)))]
-fn platform_data_root() -> Option<PathBuf> {
+pub fn platform_data_root() -> Option<PathBuf> {
 	std::env::var_os("XDG_DATA_HOME")
 		.map(PathBuf::from)
 		.or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/share")))

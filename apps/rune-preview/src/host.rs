@@ -6,6 +6,7 @@ use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 
 use crate::discovery;
+use crate::local::platform_data_root;
 
 const READ_PATIENCE: Duration = Duration::from_secs(20);
 
@@ -271,17 +272,15 @@ fn token_of(profile: Profile) -> Result<String, HostError> {
 }
 
 fn token_path(profile: Profile) -> Result<PathBuf, HostError> {
-	let home = std::env::var_os("HOME").ok_or(HostError::NoDataDir)?;
-	let mut path = PathBuf::from(home).join("Library").join("Application Support");
+	let mut path = platform_data_root().ok_or(HostError::NoDataDir)?;
 	path.push(profile.identifier());
 	path.extend(TOKEN_FILE);
 	Ok(path)
 }
 
 pub fn data_folders() -> Vec<PathBuf> {
-	let Some(home) = std::env::var_os("HOME") else { return Vec::new() };
-	let support = PathBuf::from(home).join("Library").join("Application Support");
-	[Profile::Dev, Profile::Installed].map(|profile| support.join(profile.identifier())).to_vec()
+	let Some(root) = platform_data_root() else { return Vec::new() };
+	[Profile::Dev, Profile::Installed].map(|profile| root.join(profile.identifier())).to_vec()
 }
 
 #[cfg(test)]
@@ -298,13 +297,32 @@ mod tests {
 		assert!(sent_commands().iter().all(|(_, command)| is_read(command)));
 	}
 
-	#[cfg(unix)]
 	#[test]
-	fn each_profile_reads_only_its_host_token() {
-		let dev = token_path(Profile::Dev).expect("HOME on the test machine");
-		let installed = token_path(Profile::Installed).expect("HOME on the test machine");
-		assert!(dev.ends_with("com.kiroshi.app.dev/host/token"));
-		assert!(installed.ends_with("com.kiroshi.app/host/token"));
+	fn each_profile_reads_only_its_host_token_under_the_data_root_of_its_os() {
+		let root = platform_data_root().expect("the test machine names a data root");
+		let dev = token_path(Profile::Dev).expect("the dev token path is built");
+		let installed = token_path(Profile::Installed).expect("the installed token path is built");
+
+		assert_eq!(dev, root.join("com.kiroshi.app.dev").join("host").join("token"));
+		assert_eq!(installed, root.join("com.kiroshi.app").join("host").join("token"));
+		assert_eq!(root, expected_root());
+	}
+
+	#[cfg(target_os = "macos")]
+	fn expected_root() -> PathBuf {
+		PathBuf::from(std::env::var_os("HOME").expect("HOME")).join("Library/Application Support")
+	}
+
+	#[cfg(windows)]
+	fn expected_root() -> PathBuf {
+		PathBuf::from(std::env::var_os("APPDATA").expect("APPDATA"))
+	}
+
+	#[cfg(not(any(target_os = "macos", windows)))]
+	fn expected_root() -> PathBuf {
+		std::env::var_os("XDG_DATA_HOME").map(PathBuf::from).unwrap_or_else(|| {
+			PathBuf::from(std::env::var_os("HOME").expect("HOME")).join(".local/share")
+		})
 	}
 
 	#[test]
