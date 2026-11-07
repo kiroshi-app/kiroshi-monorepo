@@ -1,4 +1,5 @@
 import {
+	type Options,
 	query,
 	type SDKMessage,
 	type SdkMcpToolDefinition,
@@ -13,7 +14,7 @@ import { createPromptStream } from "./prompt-stream"
 
 export const DELEGATE_TOOL_NAME = "delegate"
 
-const READ_ONLY_TOOLS = ["Read", "Glob", "Grep", "WebFetch", "WebSearch"]
+const READ_ONLY_TOOLS = ["Read", "Glob", "Grep"]
 
 const DESCRIPTION = [
 	"Hand a self-contained job to a nested read-only agent and read its report right here.",
@@ -32,6 +33,7 @@ const failed = (cause: string) => `The delegated run gave no report: ${cause}.`
 
 export type DelegateScope = {
 	cwd: string
+	env: Record<string, string>
 	managedSettings: Settings
 }
 
@@ -48,23 +50,30 @@ export const reportOf = async (
 	return failed(ENDED)
 }
 
+export const delegateOptions = ({
+	cwd,
+	env,
+	managedSettings,
+}: DelegateScope): Options => ({
+	cwd,
+	env,
+	tools: READ_ONLY_TOOLS,
+	allowedTools: READ_ONLY_TOOLS,
+	managedSettings,
+	settingSources: [],
+	persistSession: false,
+	pathToClaudeCodeExecutable: resolveExecutable(),
+	stderr: agentStderr("delegate"),
+})
+
 const delegated = async (
 	instructions: string,
-	{ cwd, managedSettings }: DelegateScope,
+	scope: DelegateScope,
 ): Promise<string> => {
 	const prompts = createPromptStream()
 	const run = query({
 		prompt: prompts.stream,
-		options: {
-			cwd,
-			tools: READ_ONLY_TOOLS,
-			allowedTools: READ_ONLY_TOOLS,
-			managedSettings,
-			settingSources: [],
-			persistSession: false,
-			pathToClaudeCodeExecutable: resolveExecutable(),
-			stderr: agentStderr("delegate"),
-		},
+		options: delegateOptions(scope),
 	})
 	try {
 		prompts.push(instructions)
