@@ -58,7 +58,10 @@ const pathInside = (
 }
 
 const asFilesystemResolvesIt = (entry: string): string =>
-	entry.toLowerCase().replace(/[. ]+$/, "")
+	entry
+		.normalize("NFKC")
+		.toLowerCase()
+		.replace(/[. ]+$/, "")
 
 const isOpenEntry = (inside: string): boolean => {
 	const [entry = ""] = inside.split(sep)

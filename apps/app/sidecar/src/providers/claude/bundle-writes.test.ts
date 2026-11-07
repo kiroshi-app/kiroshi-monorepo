@@ -103,6 +103,8 @@ describe("isBundleWrite", () => {
 			join(bundle, "AGENTS", "agent.md"),
 			join(person, "Settings.json"),
 			join(space, ".Mcp.json"),
+			join(bundle, "hook\u017f", "hooks.json"),
+			join(bundle, "setting\u017f.json"),
 		]) {
 			expect(writes(variant)).toBe(false)
 			expect(writes(variant, "Edit")).toBe(false)
