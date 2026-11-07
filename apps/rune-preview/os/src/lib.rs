@@ -1,6 +1,10 @@
 #[cfg(any(windows, test))]
 mod badge_icon;
+pub mod instance;
+pub mod launch;
+pub mod link;
 pub mod policy;
+pub mod scheme;
 
 #[cfg_attr(target_os = "macos", path = "macos.rs")]
 #[cfg_attr(windows, path = "windows.rs")]
@@ -116,4 +120,9 @@ fn post_waiting(
 	if let Err(failure) = spawned {
 		report(&heard, target, format!("the banner thread did not start: {failure}"));
 	}
+}
+
+#[cfg(windows)]
+fn wide(text: &str) -> Vec<u16> {
+	text.encode_utf16().chain(std::iter::once(0)).collect()
 }
