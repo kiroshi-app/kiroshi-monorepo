@@ -18,7 +18,7 @@ use crate::agent::commands::*;
 use crate::agent::contract::{AgentCommand, PermissionDecision, RuntimeScope, SubmittedTurn};
 use crate::agent::sign_in::{agent_sign_in, agent_sign_in_cancel, agent_sign_in_code};
 use crate::attachments::commands::chat_store_attachments;
-use crate::attachments::contract::SubmittedAttachment;
+use crate::attachments::contract::{AttachmentStoreError, SubmittedAttachment};
 use crate::bundles::ApplicationMark;
 use crate::claude_import::commands::{claude_import_inventory, claude_import_run};
 use crate::companions::launch::launch_outcome;
@@ -37,6 +37,7 @@ use crate::crypto::commands::get_device_identity;
 use crate::environment::commands::{connection_set, env_delete, env_list, env_set};
 use crate::environment::contract::{ConnectionKind, EnvOwner, EnvScope};
 use crate::hosting::caller::Caller;
+use crate::hosting::contract::REFUSED_TO_A_MEMBER;
 use crate::json::JsonValue;
 use crate::library::contract::LibraryPresenceAt;
 use crate::library::host::screenshot::ScreenshotRendered;
@@ -59,20 +60,9 @@ pub const PATH: &str = "/api/invoke/{command}";
 
 pub const IN_PROCESS_CLIENT: &str = "in-process";
 
-pub const HOST_API_COMMANDS: [&str; 10] = [
-	"space_list",
-	"conversation_bots",
-	"conversation_list",
-	"conversation_page",
-	"conversation_message_page",
-	"conversation_main_chat",
-	"conversation_send_turn",
-	"mission_list",
-	"mission_board",
-	"mission_detail",
-];
-
 const JSON: &str = "application/json";
+
+const STORE_ATTACHMENTS: &str = "chat_store_attachments";
 
 const UNREGISTERED: (StatusCode, &str) = (StatusCode::NOT_FOUND, "no command bears this name");
 
@@ -86,17 +76,15 @@ pub enum Answer {
 	Unanswerable(String),
 }
 
-impl IntoResponse for Answer {
-	fn into_response(self) -> Response {
+impl Answer {
+	pub fn into_http(self, command: &str) -> Response {
 		match self {
 			Answer::Answered(json) => {
 				(StatusCode::OK, [(header::CONTENT_TYPE, JSON)], json.to_string())
 			}
-			Answer::Refused(json) => (
-				StatusCode::INTERNAL_SERVER_ERROR,
-				[(header::CONTENT_TYPE, JSON)],
-				json.to_string(),
-			),
+			Answer::Refused(json) => {
+				(refusal_status(command, &json), [(header::CONTENT_TYPE, JSON)], json.to_string())
+			}
 			Answer::Unanswerable(detail) => (
 				StatusCode::INTERNAL_SERVER_ERROR,
 				[(header::CONTENT_TYPE, JSON)],
@@ -107,8 +95,26 @@ impl IntoResponse for Answer {
 	}
 }
 
+fn refusal_status(command: &str, refusal: &Value) -> StatusCode {
+	if refusal["kind"] == REFUSED_TO_A_MEMBER {
+		return StatusCode::FORBIDDEN;
+	}
+	attachment_refusal_status(command, refusal).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)
+}
+
+fn attachment_refusal_status(command: &str, error: &Value) -> Option<StatusCode> {
+	if command != STORE_ATTACHMENTS {
+		return None;
+	}
+	match AttachmentStoreError::deserialize(error).ok()? {
+		AttachmentStoreError::Unreadable { .. } => Some(StatusCode::BAD_REQUEST),
+		refusal if refusal.exceeds_a_limit() => Some(StatusCode::PAYLOAD_TOO_LARGE),
+		_ => None,
+	}
+}
+
 pub fn handles(command: &str) -> bool {
-	HOST_API_COMMANDS.contains(&command)
+	COMMANDS.contains(&command)
 }
 
 macro_rules! decoded {
@@ -129,11 +135,17 @@ macro_rules! decoded {
 }
 
 macro_rules! table {
-	($core:ident, $client:ident; $($name:ident ($($arg:ident: $ty:ty),*) => $answer:expr;)*) => {
+	($core:ident, $client:ident, $caller:ident; $($name:ident ($($arg:ident: $ty:ty),*) => $answer:expr;)*) => {
 		pub const COMMANDS: &[&str] = &[$(stringify!($name)),*];
 
-		async fn answer(core: &Core, command: &str, arguments: Value) -> Option<Answer> {
+		async fn answer(
+			core: &Core,
+			caller: Caller,
+			command: &str,
+			arguments: Value,
+		) -> Option<Answer> {
 			let $core = core;
+			let $caller = caller;
 			let $client = &ClientId::new(IN_PROCESS_CLIENT);
 			Some(match command {
 				$(stringify!($name) => decoded!(command, arguments; ($($arg: $ty),*) => $answer),)*
@@ -143,7 +155,7 @@ macro_rules! table {
 	};
 }
 
-table! { core, client;
+table! { core, client, caller;
 	account_state() => plain(account_state(core));
 	account_sign_in() => answered(account_sign_in(core).await);
 	account_sign_out() => answered(account_sign_out(core).await);
@@ -153,7 +165,7 @@ table! { core, client;
 	env_set(scope: EnvScope, name: String, value: String) =>
 		answered(env_set(core, scope, name, value).await);
 	env_delete(scope: EnvScope, name: String) => answered(env_delete(core, scope, name).await);
-	env_list(scope: EnvScope) => answered(env_list(core, Caller::Host, scope).await);
+	env_list(scope: EnvScope) => answered(env_list(core, caller, scope).await);
 	connection_set(kind: ConnectionKind, value: String) =>
 		answered(connection_set(core, kind, value).await);
 
@@ -331,11 +343,11 @@ table! { core, client;
 	conversation_complete_turn(id: String, completed_at: i64) =>
 		answered(complete_turn(core, id, completed_at).await);
 	conversation_append_user_message(message: NewUserMessage) =>
-		answered(conversation_append_user_message(core, Caller::Host, message).await);
+		answered(conversation_append_user_message(core, caller, message).await);
 	conversation_send_user_message(message: NewUserMessage, summoned: Vec<String>) =>
-		answered(send_user_message(core, Caller::Host, message, summoned).await);
+		answered(send_user_message(core, caller, message, summoned).await);
 	conversation_send_turn(message: SentMessage, summoned: Vec<String>) =>
-		answered(conversation_send_turn(core, Caller::Host, message, summoned).await);
+		answered(conversation_send_turn(core, caller, message, summoned).await);
 	conversation_serve_awaited_runs() =>
 		answered(conversation_serve_awaited_runs(core, client).await);
 	conversation_claim_unseen_drops(conversation_id: String) =>
@@ -375,7 +387,7 @@ table! { core, client;
 		output_schema: Option<JsonValue>
 	) => answered(start_or_resume_session(core, scope, resume, cwd, output_schema).await);
 	agent_submit_prompt(scope: RuntimeScope, text: String, turn: Option<SubmittedTurn>) =>
-		answered(agent_submit_prompt(core, client, Caller::Host, scope, text, turn).await);
+		answered(agent_submit_prompt(core, client, caller, scope, text, turn).await);
 	agent_cancel_turn(scope: RuntimeScope) => answered(cancel_turn(core, scope).await);
 	agent_respond_to_permission(scope: RuntimeScope, id: String, decision: PermissionDecision) =>
 		answered(agent_respond_to_permission(core, scope, id, decision).await);
@@ -398,9 +410,9 @@ table! { core, client;
 		answered(connect_application(core, owner, name, url).await);
 	mcp_oauth_cancel() => answered(mcp_oauth_cancel(core).await);
 	mcp_oauth_disconnect(owner: EnvOwner, name: String, url: String) =>
-		answered(disconnect_application(core, Caller::Host, owner, name, url).await);
+		answered(disconnect_application(core, caller, owner, name, url).await);
 	mcp_application_status(owner: EnvOwner) =>
-		answered(application_status(core, Caller::Host, owner).await);
+		answered(application_status(core, caller, owner).await);
 
 	mission_close(mission_id: String) => answered(mission_close(core, mission_id).await);
 	mission_reopen(mission_id: String) => answered(mission_reopen(core, mission_id).await);
@@ -537,7 +549,7 @@ table! { core, client;
 	library_apply_update(space_id: String, name: String, update: String) =>
 		answered(crate::library::commands::library_apply_update(core, space_id, name, update).await);
 	library_share_presence(space_id: String, name: String, at: Option<LibraryPresenceAt>) =>
-		answered(crate::library::commands::library_share_presence(core, client, Caller::Host, space_id, name, at).await);
+		answered(crate::library::commands::library_share_presence(core, client, caller, space_id, name, at).await);
 	library_stop_writers(space_id: String, name: String, agent_id: Option<String>) =>
 		answered(crate::library::commands::library_stop_writers(core, space_id, name, agent_id).await);
 	library_read_thumbnail(space_id: String, name: String) =>
@@ -545,7 +557,7 @@ table! { core, client;
 	library_import(space_id: String, name: String, content: String) =>
 		answered(crate::library::commands::library_import(core, space_id, name, content).await);
 	library_import_url(space_id: String, url: String) =>
-		answered(crate::library::commands::library_import_url(core, Caller::Host, space_id, url).await);
+		answered(crate::library::commands::library_import_url(core, caller, space_id, url).await);
 	library_import_paths(space_id: String, paths: Vec<PathBuf>) =>
 		answered(crate::library::commands::library_import_paths(core, space_id, paths).await);
 	library_read_picked_image(path: PathBuf) =>
@@ -659,7 +671,16 @@ table! { core, client;
 }
 
 pub async fn dispatch(core: &Core, command: &str, arguments: Value) -> Option<Answer> {
-	match AssertUnwindSafe(answer(core, command, arguments)).catch_unwind().await {
+	dispatch_as(core, Caller::Host, command, arguments).await
+}
+
+pub async fn dispatch_as(
+	core: &Core,
+	caller: Caller,
+	command: &str,
+	arguments: Value,
+) -> Option<Answer> {
+	match AssertUnwindSafe(answer(core, caller, command, arguments)).catch_unwind().await {
 		Ok(answer) => answer,
 		Err(panic) => match unmanaged_state(&*panic) {
 			Some(state) => Some(Answer::Unanswerable(format!(
@@ -684,7 +705,7 @@ async fn invoked(State(core): State<Core>, Path(command): Path<String>, body: By
 		}
 	};
 	match dispatch(&core, &command, arguments).await {
-		Some(answer) => answer.into_response(),
+		Some(answer) => answer.into_http(&command),
 		None => UNREGISTERED.into_response(),
 	}
 }
@@ -819,6 +840,67 @@ mod tests {
 			.collect();
 
 		assert!(unknown.is_empty(), "no Tauri command bears {unknown:?}");
+	}
+
+	fn refused_status(command: &str, refusal: Value) -> u16 {
+		Answer::Refused(refusal).into_http(command).status().as_u16()
+	}
+
+	#[test]
+	fn a_refusal_answers_403_to_a_member_400_or_413_on_an_upload_and_500_otherwise() {
+		let unreadable = json!({ "kind": "unreadable", "name": "a.png", "detail": "d" });
+		let too_large = json!({ "kind": "tooLarge", "name": "a.png", "bytes": 2, "limit": 1 });
+		let unwritable = json!({ "kind": "unwritable", "detail": "no space" });
+
+		assert_eq!(refused_status("env_list", json!({ "kind": REFUSED_TO_A_MEMBER })), 403);
+		assert_eq!(refused_status(STORE_ATTACHMENTS, unreadable.clone()), 400);
+		assert_eq!(refused_status(STORE_ATTACHMENTS, too_large.clone()), 413);
+		assert_eq!(refused_status(STORE_ATTACHMENTS, unwritable), 500);
+		assert_eq!(refused_status("section_create", too_large), 500);
+	}
+
+	const IPHONE_SOURCES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../apps/ios/Kiroshi");
+
+	const ANSWERED_BY_THE_BRIDGE: [&str; 3] = [
+		crate::hosting::bridge::SHARED_SPACE_COMMAND,
+		crate::hosting::bridge::AVATAR_COMMAND,
+		crate::hosting::bridge::ATTACHMENT_COMMAND,
+	];
+
+	fn swift_sources(folder: &std::path::Path) -> Vec<String> {
+		std::fs::read_dir(folder)
+			.expect("the iPhone sources list")
+			.map(|entry| entry.expect("an iPhone source entry").path())
+			.flat_map(|path| match path.extension() {
+				_ if path.is_dir() => swift_sources(&path),
+				Some(extension) if extension == "swift" => {
+					vec![std::fs::read_to_string(&path).expect("an iPhone source reads")]
+				}
+				_ => Vec::new(),
+			})
+			.collect()
+	}
+
+	fn iphone_commands() -> Vec<String> {
+		let call = regex::Regex::new(r#"\b(?:call|ok|ask)\(\s*"([a-z0-9_]+)""#).expect("a pattern");
+		let mut commands: Vec<String> = swift_sources(std::path::Path::new(IPHONE_SOURCES))
+			.iter()
+			.flat_map(|source| call.captures_iter(source).map(|named| named[1].to_owned()))
+			.filter(|command| !ANSWERED_BY_THE_BRIDGE.contains(&command.as_str()))
+			.collect();
+		commands.sort();
+		commands.dedup();
+		commands
+	}
+
+	#[test]
+	fn every_command_the_iphone_app_sends_is_answered_by_the_core() {
+		let commands = iphone_commands();
+		let unanswered: Vec<&String> =
+			commands.iter().filter(|command| !handles(command)).collect();
+
+		assert!(commands.contains(&"conversation_send_turn".to_owned()), "{commands:?}");
+		assert!(unanswered.is_empty(), "the core answers none of {unanswered:?}");
 	}
 
 	#[tokio::test]

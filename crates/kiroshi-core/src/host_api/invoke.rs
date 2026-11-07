@@ -1,11 +1,17 @@
+use axum::body::Bytes;
 use axum::extract::rejection::BytesRejection;
-use axum::extract::{Request, State};
+use axum::extract::{DefaultBodyLimit, Path, Request, State};
 use axum::http::{header, HeaderMap, HeaderName, StatusCode};
-use axum::middleware::Next;
+use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
+use axum::routing::{post, MethodRouter};
+use axum::Router;
 use serde_json::{Map, Value};
 
 use super::token::HostToken;
+use crate::core_context::Core;
+use crate::hosting::caller::Caller;
+use crate::invoke::dispatch_as;
 use crate::routines::webhook::{named_here, Calls};
 
 pub const PATH: &str = "/api/invoke/{command}";
@@ -32,6 +38,51 @@ pub const TOO_LARGE: (StatusCode, &str) =
 
 pub const UNREADABLE: (StatusCode, &str) =
 	(StatusCode::BAD_REQUEST, "the call carried no readable JSON arguments");
+
+pub fn route(calls: Calls) -> Router<Calls> {
+	guarded_route(calls, post(answering))
+}
+
+pub fn guarded_route(calls: Calls, answering: MethodRouter<Calls>) -> Router<Calls> {
+	Router::new()
+		.route(PATH, answering.layer(DefaultBodyLimit::max(MAX_BODY_BYTES)))
+		.route_layer(middleware::from_fn_with_state(calls, guarded))
+}
+
+async fn answering(
+	State(calls): State<Calls>,
+	Path(command): Path<String>,
+	headers: HeaderMap,
+	body: Result<Bytes, BytesRejection>,
+) -> Response {
+	match called_arguments(&command, body) {
+		Ok(arguments) => answered(&calls.core, &command, &headers, arguments).await,
+		Err(refused) => refused.into_response(),
+	}
+}
+
+pub fn called_arguments(
+	command: &str,
+	body: Result<Bytes, BytesRejection>,
+) -> Result<Value, (StatusCode, &'static str)> {
+	if !names_an_app_command(command) {
+		return Err(UNREGISTERED);
+	}
+	let body = body.map_err(unread)?;
+	arguments(&body).ok_or(UNREADABLE)
+}
+
+pub async fn answered(
+	core: &Core,
+	command: &str,
+	headers: &HeaderMap,
+	arguments: Value,
+) -> Response {
+	match dispatch_as(core, Caller::of(core, headers), command, arguments).await {
+		Some(answer) => answer.into_http(command),
+		None => UNREGISTERED.into_response(),
+	}
+}
 
 pub async fn guarded(State(calls): State<Calls>, request: Request, next: Next) -> Response {
 	if !named_here(request.headers()) {
@@ -80,9 +131,9 @@ pub fn arguments(body: &[u8]) -> Option<Value> {
 	serde_json::from_slice(body).ok()
 }
 
-pub fn unread(rejection: BytesRejection) -> Response {
+pub fn unread(rejection: BytesRejection) -> (StatusCode, &'static str) {
 	match rejection.status() {
-		StatusCode::PAYLOAD_TOO_LARGE => TOO_LARGE.into_response(),
-		_ => UNREADABLE.into_response(),
+		StatusCode::PAYLOAD_TOO_LARGE => TOO_LARGE,
+		_ => UNREADABLE,
 	}
 }

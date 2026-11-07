@@ -107,6 +107,7 @@ impl LocalCore {
 		core.manage(AccountSession::new(writable_root(&core), &api_url()));
 		core.install_desktop(Browser);
 		install_authors(&core, DesktopAuthors);
+		kiroshi_core::host_services::start(&core);
 		let local = LocalCore { core, runtime };
 		local.runtime.block_on(list_bundles_at_launch(&local.core));
 		local.core.spawn(restore(local.core.clone()));

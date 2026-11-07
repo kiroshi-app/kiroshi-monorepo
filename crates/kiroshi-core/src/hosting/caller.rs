@@ -1,4 +1,9 @@
+use axum::http::HeaderMap;
+
+use crate::core_context::Core;
 use crate::db::repositories::messages::WrittenFrom;
+use crate::host_api::invoke::RELAYED_MEMBER_HEADER;
+use crate::hosting::Hosting;
 
 #[derive(Clone)]
 pub struct RelayedMember {
@@ -13,6 +18,18 @@ pub enum Caller {
 }
 
 impl Caller {
+	pub fn of(core: &Core, headers: &HeaderMap) -> Caller {
+		let Some(nonce) = headers.get(&RELAYED_MEMBER_HEADER) else {
+			return Caller::Host;
+		};
+		let member = nonce
+			.to_str()
+			.ok()
+			.zip(core.try_state::<Hosting>())
+			.and_then(|(nonce, hosting)| hosting.relayed_member(nonce));
+		Caller::Relayed(member)
+	}
+
 	pub fn is_relayed(&self) -> bool {
 		matches!(self, Caller::Relayed(_))
 	}
