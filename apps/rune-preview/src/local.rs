@@ -1,5 +1,5 @@
 use std::fmt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 use std::sync::Arc;
 use std::sync::mpsc::{self, RecvTimeoutError};
@@ -16,7 +16,7 @@ use kiroshi_core::conversations::awaited_runs::TurnWindows;
 use kiroshi_core::conversations::commands::{conversation_bots, list_bundles_at_launch};
 use kiroshi_core::conversations::contract::TranscriptStoreError;
 use kiroshi_core::conversations::turn_run_deadline::TurnRunDeadlines;
-use kiroshi_core::core_context::{Core, Desktop, RenderWindow};
+use kiroshi_core::core_context::{ChosenPath, Copied, Core, Desktop, RenderWindow};
 use kiroshi_core::db;
 use kiroshi_core::environment::store::writable_root;
 use kiroshi_core::invoke::{Answer, dispatch};
@@ -302,6 +302,34 @@ impl Desktop for Browser {
 	fn close_window(&self, _label: &str) -> Result<(), String> {
 		Ok(())
 	}
+
+	fn reveal(&self, path: &Path) -> Result<(), String> {
+		let revealed = revealing(path)?.status().map_err(|failure| failure.to_string())?;
+		match revealed.success() {
+			true => Ok(()),
+			false => Err(format!("the file reveal answered {revealed}")),
+		}
+	}
+
+	fn copy(&self, _copied: Copied) -> Result<(), String> {
+		Err("the preview holds no clipboard".to_owned())
+	}
+
+	fn chosen_save_path(&self, _suggested: String) -> ChosenPath {
+		Box::pin(async { Err("the preview opens no save dialog".to_owned()) })
+	}
+}
+
+#[cfg(target_os = "macos")]
+fn revealing(path: &Path) -> Result<Command, String> {
+	let mut revealing = Command::new("open");
+	revealing.arg("-R").arg(path);
+	Ok(revealing)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn revealing(_path: &Path) -> Result<Command, String> {
+	Err("the preview reveals files on macOS only".to_owned())
 }
 
 #[cfg(target_os = "macos")]
