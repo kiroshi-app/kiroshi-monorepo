@@ -81,7 +81,6 @@ use crate::db::repositories::messages::{
 };
 use crate::db::{self, DatabaseState};
 use crate::environment::commands::writable_root;
-use kiroshi_core::environment::commands::env_list;
 use crate::environment::connection;
 use crate::environment::contract::{ConnectionKind, EnvError, EnvOwner, EnvScope, ACCOUNT_BEARER};
 use crate::environment::store;
@@ -107,6 +106,7 @@ use crate::spaces::commands::{
 use crate::spaces::contract::{Space as SpaceShown, SpaceError, DESCRIBED_EVENT};
 use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 use crate::test_log::{capturing, warnings_naming};
+use kiroshi_core::environment::commands::env_list;
 
 const BEARER: &str = "bearer-that-never-leaves";
 const LOCAL_TOKEN: &str = "host-token-of-the-loopback";
