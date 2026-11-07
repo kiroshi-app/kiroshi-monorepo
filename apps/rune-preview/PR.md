@@ -245,3 +245,11 @@ The kept core of `apps/app/src-tauri` moves to a crate with no Tauri dependency,
   All four commands run with `--locked`. Each OS keeps its own cache of both target folders, saved from `main` only, like the `rust` job.
 - **When it runs.** `scripts/ci-changes.ts` selects `core` on changes under `crates/`, under `apps/rune-preview/`, to the fake sidecar the preview builds, or to the workspace `Cargo.toml` and `Cargo.lock`. It runs on pull requests as well as on pushes, and every tag runs it. `verify` requires `core` to succeed when it was selected and to be skipped otherwise, the same rule as the other filtered jobs.
 
+## CodeQL alerts carried by the move
+
+CodeQL reports three alerts on `ae115e9c0`. They are pre-existing code that the move relocated unchanged: both files are byte-identical to their `origin/main` copies under `apps/app/src-tauri/src`. They stay as they are in this PR and get triaged in their own ticket.
+
+- `crates/kiroshi-core/src/crypto/frame.rs:92`: hard-coded nonce. The line is the zeroed buffer the nonce is built in (`let mut nonce = [0u8; NONCE_LENGTH];`).
+- `crates/kiroshi-core/src/mcp_oauth/refresh.rs:266`: cleartext logging, the `eprintln!` reporting that a grant was not refreshed.
+- `crates/kiroshi-core/src/mcp_oauth/refresh.rs:269`: cleartext logging, the `eprintln!` reporting that the authorization server refused a refresh.
+
