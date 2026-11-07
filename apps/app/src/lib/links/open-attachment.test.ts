@@ -4,6 +4,7 @@ import { opensInItsApp } from "./open-attachment"
 
 const STORED = "/Users/me/Library/kiroshi/attachments/space-1"
 const NAME = "0b6f2c1e-4a1d-4c8e-9f3a-2d7e5b8c9a10"
+const WINDOWS_STORED = "C:\\Users\\me\\kiroshi\\attachments\\space-1"
 
 const storedPathOf = (extension: string) => `${STORED}/${NAME}.${extension}`
 
@@ -81,16 +82,8 @@ describe("opensInItsApp", () => {
 	})
 
 	it("reads the extension from a Windows path", () => {
-		expect(
-			opensInItsApp(
-				`C:\\Users\\me\\kiroshi\\attachments\\space-1\\${NAME}.pdf`,
-			),
-		).toBe(true)
-		expect(
-			opensInItsApp(
-				`C:\\Users\\me\\kiroshi\\attachments\\space-1\\${NAME}.exe`,
-			),
-		).toBe(false)
+		expect(opensInItsApp(`${WINDOWS_STORED}\\${NAME}.pdf`)).toBe(true)
+		expect(opensInItsApp(`${WINDOWS_STORED}\\${NAME}.exe`)).toBe(false)
 	})
 
 	it("reads the extension from the file name, not its folder", () => {
