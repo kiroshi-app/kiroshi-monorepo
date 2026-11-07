@@ -47,12 +47,19 @@ pub enum Workspace {
 	Ready(Ready),
 }
 
+#[derive(Clone)]
+pub enum Person {
+	SignedIn(String),
+	SignedOut,
+	Unread,
+}
+
 pub struct Ready {
 	pub source: Source,
 	pub space: Space,
 	pub agents: Vec<Agent>,
 	pub conversations: Vec<Conversation>,
-	pub person: Option<String>,
+	pub person: Person,
 	pub longest: Option<Longest>,
 }
 
@@ -830,7 +837,7 @@ impl App {
 			HostEvent::MissionChanged(changed) => self.mission_changed(changed),
 			HostEvent::AccountChanged(account) => {
 				if let Some(ready) = self.ready_mut() {
-					ready.person = signed_in_email(account);
+					ready.person = person_of(account);
 				}
 			}
 			HostEvent::Lagged => self.reload_visible_thread(),
@@ -890,19 +897,19 @@ pub fn ready_on(source: Source) -> Result<Ready, HostError> {
 	let agents = source.invoke("conversation_bots", json!({ "spaceId": space.id }))?;
 	let conversations = roster(&source, &space.id)?;
 	let person = match source.invoke::<KiroshiAccountState>("account_state", json!({})) {
-		Ok(account) => signed_in_email(account),
+		Ok(account) => person_of(account),
 		Err(failure) => {
-			eprintln!("the rail shows no account: {}", failure.detail());
-			None
+			eprintln!("the account did not read: {}", failure.detail());
+			Person::Unread
 		}
 	};
 	Ok(Ready { source, space, agents, conversations, person, longest: None })
 }
 
-fn signed_in_email(account: KiroshiAccountState) -> Option<String> {
+fn person_of(account: KiroshiAccountState) -> Person {
 	match account {
-		KiroshiAccountState::SignedIn { email, .. } => Some(email),
-		KiroshiAccountState::SignedOut => None,
+		KiroshiAccountState::SignedIn { email, .. } => Person::SignedIn(email),
+		KiroshiAccountState::SignedOut => Person::SignedOut,
 	}
 }
 

@@ -146,6 +146,16 @@ struct Inner {
 }
 
 #[derive(Clone)]
+pub const UNMANAGED: &str = "the core holds no ";
+
+pub fn unmanaged_state(panic: &(dyn Any + Send)) -> Option<&str> {
+	let told = panic
+		.downcast_ref::<String>()
+		.map(String::as_str)
+		.or_else(|| panic.downcast_ref::<&str>().copied())?;
+	told.strip_prefix(UNMANAGED)?.split_once(':').map(|(state, _)| state)
+}
+
 pub struct Core(Arc<Inner>);
 
 impl fmt::Debug for Core {
@@ -282,7 +292,7 @@ impl Core {
 
 	pub fn state<T: Send + Sync + 'static>(&self) -> Managed<'_, T> {
 		self.try_state().unwrap_or_else(|| {
-			panic!("the core holds no {}: manage it before reading it", type_name::<T>())
+			panic!("{UNMANAGED}{}: manage it before reading it", type_name::<T>())
 		})
 	}
 

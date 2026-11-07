@@ -9,7 +9,7 @@ use rune::{
 use rune_kit::Kit;
 use rune_kit::markdown::{Markdown, MarkdownStyle};
 
-use crate::app::{App, Pane, Ready, Thread, Workspace};
+use crate::app::{App, Pane, Person, Ready, Thread, Workspace};
 use crate::avatar::{Face, Motion};
 use crate::composer;
 use crate::content::{self, Run, Segment};
@@ -34,6 +34,8 @@ const TITLE_BAR: f32 = 40.0;
 const RAIL: f32 = 60.0;
 
 const SIGNED_OUT: &str = "Signed out.";
+
+const ACCOUNT_UNREAD: &str = "Couldn't read your account. Restart the preview to try again.";
 const SHELL_INSET: f32 = 8.0;
 const ROSTER: f32 = 304.0;
 const ROSTER_PAD: f32 = 9.0;
@@ -179,10 +181,10 @@ fn rail(s: &App, ready: &Ready, t: &Tokens) -> El {
 			tile.hover(t.foreground.alpha(0.05))
 		}
 	};
-	let person: String = ready.person.as_deref().map_or_else(
-		|| "?".to_owned(),
-		|email| email.chars().take(2).collect::<String>().to_uppercase(),
-	);
+	let person: String = match &ready.person {
+		Person::SignedIn(email) => email.chars().take(2).collect::<String>().to_uppercase(),
+		Person::SignedOut | Person::Unread => "?".to_owned(),
+	};
 	col()
 		.w(RAIL)
 		.h_full()
@@ -240,7 +242,11 @@ fn roster(ready: &Ready, t: &Tokens) -> El {
 		},
 		move |s: &App, i| roster_row(s, i, &tokens, now),
 	);
-	let account = ready.person.clone().unwrap_or_else(|| SIGNED_OUT.to_owned());
+	let account = match &ready.person {
+		Person::SignedIn(email) => email.clone(),
+		Person::SignedOut => SIGNED_OUT.to_owned(),
+		Person::Unread => ACCOUNT_UNREAD.to_owned(),
+	};
 	col()
 		.w(ROSTER)
 		.h_full()

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::panic::{resume_unwind, AssertUnwindSafe};
 
 use axum::body::Bytes;
 use axum::extract::{Path, State};
@@ -6,6 +7,7 @@ use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::post;
 use axum::Router;
+use futures_util::FutureExt;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -27,7 +29,7 @@ use crate::conversations::contract::{
 	SummonsDropReason, TerminalCompletion,
 };
 use crate::conversations::turn_run_deadline::conversation_drop_summons;
-use crate::core_context::{ClientId, Core};
+use crate::core_context::{unmanaged_state, ClientId, Core};
 use crate::crypto::commands::get_device_identity;
 use crate::environment::commands::{connection_set, env_delete, env_list, env_set};
 use crate::environment::contract::{ConnectionKind, EnvOwner, EnvScope};
@@ -121,7 +123,7 @@ macro_rules! table {
 	($core:ident, $client:ident; $($name:ident ($($arg:ident: $ty:ty),*) => $answer:expr;)*) => {
 		pub const COMMANDS: &[&str] = &[$(stringify!($name)),*];
 
-		pub async fn dispatch(core: &Core, command: &str, arguments: Value) -> Option<Answer> {
+		async fn answer(core: &Core, command: &str, arguments: Value) -> Option<Answer> {
 			let $core = core;
 			let $client = &ClientId::new(IN_PROCESS_CLIENT);
 			Some(match command {
@@ -421,6 +423,18 @@ table! { core, client;
 		answered(claude_import_run(core, selection, space_id).await);
 }
 
+pub async fn dispatch(core: &Core, command: &str, arguments: Value) -> Option<Answer> {
+	match AssertUnwindSafe(answer(core, command, arguments)).catch_unwind().await {
+		Ok(answer) => answer,
+		Err(panic) => match unmanaged_state(&*panic) {
+			Some(state) => Some(Answer::Unanswerable(format!(
+				"{command} needs {state}, which the core does not hold"
+			))),
+			None => resume_unwind(panic),
+		},
+	}
+}
+
 pub fn router(core: Core) -> Router {
 	Router::new().route(PATH, post(invoked)).with_state(core)
 }
@@ -687,6 +701,18 @@ mod tests {
 
 		assert!(unknown.is_empty(), "no Tauri command bears {unknown:?}");
 		assert!(answered_yet_pending.is_empty(), "{answered_yet_pending:?} left the pending list");
+	}
+
+	#[tokio::test]
+	async fn a_command_whose_state_the_core_does_not_hold_is_unanswerable_naming_that_state() {
+		let core = a_core_of_its_own("invoke-unmanaged");
+
+		let answer = dispatch(&core, "account_state", json!({})).await;
+
+		let Some(Answer::Unanswerable(detail)) = answer else {
+			panic!("the call was answered: {answer:?}");
+		};
+		assert!(detail.contains("account_state") && detail.contains("AccountSession"), "{detail}");
 	}
 
 	#[tokio::test]
