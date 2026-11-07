@@ -1069,16 +1069,11 @@ pub(super) fn turn_crossing_a_day(t: &Tokens, s: &SceneState) -> El {
 }
 
 fn image(s: &SceneState, name: &str) -> Attachment {
-	Attachment {
-		name: name.to_owned(),
-		detail: String::new(),
-		preview: s.picture.clone(),
-		failed: false,
-	}
+	Attachment { name: name.to_owned(), preview: s.picture.clone(), failed: false }
 }
 
 fn file(name: &str) -> Attachment {
-	Attachment { name: name.to_owned(), detail: String::new(), preview: None, failed: false }
+	Attachment { name: name.to_owned(), preview: None, failed: false }
 }
 
 fn attachments_scene(t: &Tokens, s: &SceneState, attachments: Vec<Attachment>, said: &str) -> El {

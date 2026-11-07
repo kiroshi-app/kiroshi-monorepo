@@ -6,7 +6,7 @@ use rune::{El, ScrollSpec, col, row, text};
 use crate::avatar::Face;
 use crate::math::Typesetter;
 use crate::strings::{Language, chat};
-use crate::tokens::{SPACING, TEXT_SM, Tokens};
+use crate::tokens::{SPACING, TEXT_BASE_SEMIBOLD, TEXT_SM, Tokens};
 use crate::widgets::not_drawn;
 
 mod body;
@@ -94,7 +94,6 @@ pub struct Quote {
 #[derive(Clone)]
 pub struct Attachment {
 	pub name: String,
-	pub detail: String,
 	pub preview: Option<Image>,
 	pub failed: bool,
 }
@@ -249,13 +248,10 @@ fn empty<S>(cx: &Context<S>, kind: &ThreadKind) -> El {
 			.items_center()
 			.gap(SPACING * 3.0)
 			.child(Face::still(&agent.name, agent.hue).draw(EMPTY_FACE, t))
-			.child(
-				text(agent.name.clone())
-					.font(crate::tokens::TEXT_BASE_SEMIBOLD)
-					.color(t.foreground),
-			),
-		ThreadKind::Group { title } => col()
-			.child(text(title.clone()).font(crate::tokens::TEXT_BASE_SEMIBOLD).color(t.foreground)),
+			.child(text(agent.name.clone()).font(TEXT_BASE_SEMIBOLD).color(t.foreground)),
+		ThreadKind::Group { title } => {
+			col().child(text(title.clone()).font(TEXT_BASE_SEMIBOLD).color(t.foreground))
+		}
 		ThreadKind::Mission { objective } => {
 			col().child(text(objective.clone()).font(TEXT_SM).color(t.muted_foreground).wrap())
 		}

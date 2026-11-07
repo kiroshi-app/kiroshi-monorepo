@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use rune::{Cursor, El, Icon, TextStyle, col, el, icon, row, text};
 
-use super::turn::{AGENT_BUBBLE_WIDTH, author_name};
+use super::turn::{AGENT_BUBBLE_WIDTH, author_name, retry};
 use super::{Agent, Context, ThreadEvent, fill};
 use crate::avatar::{Activity, Face, Motion};
 use crate::icons;
@@ -257,8 +257,6 @@ fn detail<S>(cx: &Context<S>, working: &[&WorkingAgent]) -> El {
 
 fn failed_line<S: 'static>(cx: &Context<S>, agent: &WorkingAgent) -> El {
 	let t = cx.t;
-	let emit = Rc::clone(cx.emit);
-	let id = agent.agent.id.clone();
 	let label = fill(cx.say(chat::work_line::RETRY), &[("name", &agent.agent.name)]);
 	row()
 		.h(LINE)
@@ -270,26 +268,7 @@ fn failed_line<S: 'static>(cx: &Context<S>, agent: &WorkingAgent) -> El {
 		.child(
 			text(cx.say(chat::turn::footer::FAILED)).font(LINE_XS).color(t.destructive).truncate(),
 		)
-		.child(
-			instant(
-				row()
-					.h(SPACING * 5.5)
-					.px(SPACING * 2.0)
-					.radius(RADIUS_SM)
-					.border(1.0, t.foreground.alpha(0.15))
-					.center()
-					.hover(t.muted)
-					.role("button")
-					.label(&label)
-					.child(
-						text(cx.say(chat::turn::RETRY)).font(LINE_XS_MEDIUM).color(t.foreground),
-					),
-			)
-			.focusable(true)
-			.cursor(Cursor::Pointer)
-			.focus_ring(FOCUS_RING_WIDTH, 0.0, ring_tint(t, 0.3))
-			.on_press(move |s: &mut S| emit(s, ThreadEvent::Retry(id.clone()))),
-		)
+		.child(retry(cx, &agent.agent.id, &label))
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

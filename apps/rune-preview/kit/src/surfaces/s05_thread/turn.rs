@@ -11,7 +11,7 @@ use crate::primitives::{FOCUS_RING_WIDTH, instant, ring_tint};
 use crate::strings::chat;
 use crate::tokens::{
 	RADIUS_BUBBLE, RADIUS_CONTROL, RADIUS_LG, RADIUS_SM, RADIUS_XL, SPACING, TEXT_11,
-	TEXT_COMPACT_SEMIBOLD, TEXT_XS, TEXT_XS_MEDIUM, Tokens, tone,
+	TEXT_BASE_SEMIBOLD, TEXT_COMPACT_SEMIBOLD, TEXT_XS, TEXT_XS_MEDIUM, Tokens, tone,
 };
 
 const BUBBLE_PADDING: f32 = SPACING * 4.5;
@@ -132,7 +132,7 @@ pub fn author_line<S: 'static>(cx: &Context<S>, data: &Turn) -> El {
 						.color(t.destructive)
 						.truncate(),
 				)
-				.child(retry(cx, &data.id));
+				.child(retry(cx, &data.id, cx.say(chat::turn::RETRY)));
 		}
 		_ => {}
 	}
@@ -193,11 +193,10 @@ fn title_badge(t: &Tokens, title: &str) -> El {
 	)
 }
 
-fn retry<S: 'static>(cx: &Context<S>, id: &str) -> El {
+pub(super) fn retry<S: 'static>(cx: &Context<S>, id: &str, label: &str) -> El {
 	let t = cx.t;
 	let emit = Rc::clone(cx.emit);
 	let id = id.to_owned();
-	let label = cx.say(chat::turn::RETRY);
 	instant(
 		row()
 			.h(SPACING * 5.5)
@@ -209,7 +208,7 @@ fn retry<S: 'static>(cx: &Context<S>, id: &str) -> El {
 			.role("button")
 			.label(label)
 			.child(
-				text(label)
+				text(cx.say(chat::turn::RETRY))
 					.font(TextStyle { line_height: AUTHOR_LINE, ..TEXT_XS_MEDIUM })
 					.color(t.foreground),
 			),
@@ -445,9 +444,13 @@ fn image_tile<S: 'static>(
 			.child(icon(&icons::IMAGE_OFF, SPACING * 5.0).color(t.muted_foreground)),
 	};
 	if more > 0 {
-		tile = tile.child(el().w_full().h_full().fill(Color::BLACK.alpha(0.55)).center().child(
-			text(format!("+{more}")).font(crate::tokens::TEXT_BASE_SEMIBOLD).color(Color::WHITE),
-		));
+		tile = tile.child(
+			el().w_full()
+				.h_full()
+				.fill(Color::BLACK.alpha(0.55))
+				.center()
+				.child(text(format!("+{more}")).font(TEXT_BASE_SEMIBOLD).color(Color::WHITE)),
+		);
 	}
 	tile.focusable(true)
 		.cursor(Cursor::Pointer)
