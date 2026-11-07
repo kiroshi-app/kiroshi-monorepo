@@ -78,7 +78,13 @@ fn a_profile_of_the_tauri_app(data: &Path) -> PathBuf {
 	migrations::apply(&mut written).expect("the profile reaches the shipped schema");
 	written.execute_batch(A_PROFILE_OF_THE_TAURI_APP).expect("the profile is filled");
 	drop(written);
+	drop(opened(data));
 	store
+}
+
+fn opened(data: &Path) -> LocalCore {
+	LocalCore::open(data.to_path_buf())
+		.unwrap_or_else(|failure| panic!("the core did not open the profile: {failure}"))
 }
 
 fn schema_version(store: &[u8]) -> u32 {
@@ -115,8 +121,7 @@ fn the_core_lists_every_row_of_an_existing_profile_and_writes_nothing_to_its_sto
 	let store = a_profile_of_the_tauri_app(&data);
 	let before = std::fs::read(&store).expect("the profile store reads");
 
-	let core = LocalCore::open(data.to_path_buf())
-		.unwrap_or_else(|failure| panic!("the Rune core did not open the profile: {failure}"));
+	let core = opened(&data);
 	let (spaces, agents, conversations) = listed_by_space(&core);
 	drop(core);
 
@@ -162,12 +167,12 @@ fn a_dev_build_with_no_data_override_opens_the_dev_profile_of_kiroshi() {
 	);
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(all(debug_assertions, target_os = "macos"))]
 fn data_root_under(home: &Path) -> PathBuf {
 	home.join("Library/Application Support")
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(all(debug_assertions, not(target_os = "macos")))]
 fn data_root_under(home: &Path) -> PathBuf {
 	home.to_path_buf()
 }
