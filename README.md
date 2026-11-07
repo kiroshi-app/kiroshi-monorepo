@@ -30,7 +30,7 @@ A routine is a standing instruction of one Conversation: a trigger fires, the Ag
 
 ### Spaces
 
-- **Work kept apart.** Each Space has its own name, colour, Agents, Conversations, missions, Applications and Secrets. Personal and Work never mix.
+- **Work kept apart.** Each Space has its own name, colour, Agents, Conversations, missions, Applications and Secrets.
 - **Shared Spaces.** Host a Space from your computer and invite people by e-mail: they reach it through the relay while Kiroshi is open on your computer. Join a Space someone hosts for you from an invitation. The owner sees the members and removes them.
 - **Your devices.** A new device signed in to your Kiroshi account waits until you approve it from a device you already use, or with a code sent by e-mail. You see and remove your devices from Settings.
 
@@ -68,7 +68,7 @@ The provider Kiroshi ships today is Claude. When you first open Kiroshi, sign-in
 - **A Claude account.** Sign in with Claude in your browser, with your Claude Pro or Max subscription, or use the account already signed in on your computer.
 - **An API key.** Paste an Anthropic API key and pay per use.
 
-Your Conversations stay on your computer. What you send goes to the model provider through your account with it.
+What you send goes to the model provider through your account with it.
 
 ## Pricing
 
