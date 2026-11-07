@@ -318,7 +318,6 @@ pub static SCENES: &[Scene] = &[
 		missions::card_with_and_without_pill,
 	),
 	scene("conversation-missions-missionturn--working", STORY, missions::turn_working),
-	scene("conversation-missions-missionturn--working-dark", STORY, missions::turn_working),
 	scene("conversation-missions-missionturn--states", missions::TURNS, missions::turn_states),
 	focused(
 		"conversation-missions-missionturn--waiting-for-the-reader",
@@ -333,14 +332,8 @@ pub static SCENES: &[Scene] = &[
 	),
 	scene("conversation-missions-missionturn--failed", STORY, missions::turn_failed),
 	scene("conversation-missions-missionturn--done", STORY, missions::turn_done),
-	scene("conversation-missions-missionturn--done-dark", STORY, missions::turn_done),
 	scene(
 		"conversation-missions-missionturn--long-objective",
-		STORY,
-		missions::turn_long_objective,
-	),
-	scene(
-		"conversation-missions-missionturn--long-objective-dark",
 		STORY,
 		missions::turn_long_objective,
 	),
@@ -352,11 +345,6 @@ pub static SCENES: &[Scene] = &[
 	),
 	scene(
 		"conversation-missions-missionturn--in-a-solo-thread",
-		STORY,
-		missions::turn_under_an_opening_turn,
-	),
-	scene(
-		"conversation-missions-missionturn--in-a-solo-thread-dark",
 		STORY,
 		missions::turn_under_an_opening_turn,
 	),
@@ -429,11 +417,6 @@ pub static SCENES: &[Scene] = &[
 	),
 	scene(
 		"conversation-missions-missioneventrow--agent-asked-on-warning",
-		STORY,
-		missions::event_from_the_agent,
-	),
-	scene(
-		"conversation-missions-missioneventrow--agent-asked-on-warning-dark",
 		STORY,
 		missions::event_from_the_agent,
 	),
@@ -526,18 +509,10 @@ pub static SCENES: &[Scene] = &[
 	scene("navigation-missionspanel--selected-row", missions::PANEL, missions::panel_selected_row),
 	scene("navigation-missionspanel--row-menu", missions::PANEL, missions::panel_row_menu),
 	scene("navigation-missionspanel--reading-more", missions::PANEL, missions::panel_reading_more),
-	scene(
-		"navigation-missionspanel--reading-more-dark",
-		missions::PANEL,
-		missions::panel_reading_more,
-	),
 	scene("navigation-missionspanel--complete", missions::PANEL, missions::panel_complete),
-	scene("navigation-missionspanel--complete-dark", missions::PANEL, missions::panel_complete),
 	scene("navigation-missionspanel--idle", missions::PANEL, missions::panel_idle),
 	scene("feedback-missiondetailskeleton--light", missions::FULL, missions::detail_skeleton),
-	scene("feedback-missiondetailskeleton--dark", missions::FULL, missions::detail_skeleton),
 	scene("feedback-missionsfeedskeleton--light", missions::FULL, missions::feed_skeleton),
-	scene("feedback-missionsfeedskeleton--dark", missions::FULL, missions::feed_skeleton),
 ];
 
 pub struct SceneState {
