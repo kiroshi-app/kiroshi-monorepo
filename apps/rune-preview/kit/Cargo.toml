@@ -9,3 +9,6 @@ rune.workspace = true
 rune-motion.workspace = true
 rune-kit.workspace = true
 katex-native = { version = "0.1.1", features = ["raster"] }
+
+[dev-dependencies]
+png = "0.18"

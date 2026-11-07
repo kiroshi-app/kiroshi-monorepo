@@ -65,6 +65,7 @@ pub const TEXT_SM_MEDIUM: TextStyle = style(14.0, 20.0, 500.0);
 pub const TEXT_SM_SEMIBOLD: TextStyle = style(14.0, 20.0, 600.0);
 pub const TEXT_BUBBLE: TextStyle = style(14.0, 24.0, 400.0);
 pub const TEXT_READING: TextStyle = style(15.0, 22.0, 400.0);
+pub const TEXT_BASE_MEDIUM: TextStyle = style(16.0, 24.0, 500.0);
 pub const TEXT_BASE_SEMIBOLD: TextStyle = style(16.0, 22.0, 600.0);
 pub const TEXT_INITIALS: TextStyle = style(28.0, 32.0, 600.0);
 pub const TEXT_TITLE: TextStyle = TextStyle { tracking: -0.22, ..style(22.0, 28.0, 600.0) };
@@ -622,11 +623,11 @@ fn bytes([r, g, b]: [u8; 3]) -> Color {
 	srgb(u32::from(r) << 16 | u32::from(g) << 8 | u32::from(b))
 }
 
-fn faded(colour: Color, share: f32) -> Color {
+pub fn faded(colour: Color, share: f32) -> Color {
 	colour.alpha(colour.a * share)
 }
 
-fn mix(first: Color, second: Color, first_share: f32) -> Color {
+pub fn mix(first: Color, second: Color, first_share: f32) -> Color {
 	let alpha = first.a * first_share + second.a * (1.0 - first_share);
 	if alpha == 0.0 {
 		return Color::TRANSPARENT;

@@ -2236,6 +2236,7 @@ name = "kiroshi-rune-kit"
 version = "0.0.0"
 dependencies = [
  "katex-native",
+ "png 0.18.1",
  "rune",
  "rune-kit",
  "rune-motion",
