@@ -1174,15 +1174,12 @@ pub(super) fn menu_every_copy_choice(t: &Tokens, _: &SceneState) -> El {
 
 const PANEL_HEIGHT: f32 = PANEL.1;
 
+fn in_panel(t: &Tokens, body: El, layers: Vec<El>) -> El {
+	rune_kit::root(row().w_full().h_full().fill(t.card).child(panel_frame(t, body)), layers)
+}
+
 fn panel_scene(t: &Tokens, panel: Panel) -> El {
-	rune_kit::root(
-		row()
-			.w_full()
-			.h_full()
-			.fill(t.card)
-			.child(panel_frame(t, missions_panel(t, EN, &panel, &emit()))),
-		Vec::new(),
-	)
+	in_panel(t, missions_panel(t, EN, &panel, &emit()), Vec::new())
 }
 
 const DEFAULT_PANEL: Panel = Panel {
@@ -1203,14 +1200,7 @@ pub(super) fn panel_empty(t: &Tokens, _: &SceneState) -> El {
 
 pub(super) fn panel_loading(t: &Tokens, _: &SceneState) -> El {
 	let inner = PANEL_HEIGHT - SPACING * 6.0;
-	rune_kit::root(
-		row()
-			.w_full()
-			.h_full()
-			.fill(t.card)
-			.child(panel_frame(t, missions_feed_skeleton(t, inner))),
-		Vec::new(),
-	)
+	in_panel(t, missions_feed_skeleton(t, inner), Vec::new())
 }
 
 pub(super) fn panel_one_group(t: &Tokens, _: &SceneState) -> El {
@@ -1243,14 +1233,7 @@ pub(super) fn panel_row_menu(t: &Tokens, _: &SceneState) -> El {
 		Align::Start,
 		MENU_POINTER_DROP,
 	);
-	rune_kit::root(
-		row()
-			.w_full()
-			.h_full()
-			.fill(t.card)
-			.child(panel_frame(t, missions_panel(t, EN, &DEFAULT_PANEL, &emit()))),
-		vec![menu],
-	)
+	in_panel(t, missions_panel(t, EN, &DEFAULT_PANEL, &emit()), vec![menu])
 }
 
 pub(super) fn panel_reading_more(t: &Tokens, _: &SceneState) -> El {
