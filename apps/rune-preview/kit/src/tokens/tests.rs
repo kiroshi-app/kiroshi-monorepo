@@ -177,10 +177,17 @@ fn radius_spacing_type_and_stroke_tokens_are_the_css_values() {
 	assert_eq!(value(theme, "--font-heading"), format!("\"{} Variable\", sans-serif", FAMILIES.0));
 	assert_eq!(value(theme, "--font-mono"), format!("\"{} Variable\", monospace", FAMILIES.1));
 	assert_eq!(value(root, "--icon-stroke"), format!("{ICON_STROKE_EM}em"));
-	let story_font_size = 16.0;
-	let story_glyph_size = 16.0;
-	let stroke = ICON_STROKE_EM * story_font_size * 24.0 / story_glyph_size;
-	assert!((ICON_STROKE - stroke).abs() < 1e-4);
+	let story_text = TextStyle::new(16.0, 400.0);
+	assert!((ICON_STROKE - icon_stroke_in(story_text)).abs() < 1e-4);
+	let globals = generated::read(&format!("{PACKAGES_UI}/src/styles/globals.css"));
+	let Some(rule) = globals.find("svg[focusable=\"false\"] {") else {
+		panic!("no Keyline stroke rule")
+	};
+	let stroke_width = declared_in(&globals[rule..], "stroke-width");
+	let Some(ratio) = stroke_width.strip_prefix("calc(var(--icon-stroke) * ") else {
+		panic!("{stroke_width} is not a share of --icon-stroke")
+	};
+	assert_eq!(quotient(&format!("calc({ratio}")), ICON_STROKE_GLYPH_RATIO);
 }
 
 fn declared_in(block: &str, name: &str) -> String {
@@ -214,4 +221,10 @@ fn the_bubble_text_is_the_chat_typeset_at_48rem_and_up() {
 	let leading = quotient(&declared_in(chat, "--typeset-leading"));
 	assert_eq!(TEXT_BUBBLE.size, size);
 	assert!((TEXT_BUBBLE.line_height - size * leading).abs() < 1e-4);
+}
+
+#[test]
+fn the_onboarding_arrows_stroke_as_the_browser_draws_them_in_a_text_sm_button() {
+	let measured_in_storybook = 1.89;
+	assert!((icon_stroke_in(TEXT_SM) - measured_in_storybook).abs() < 1e-3);
 }

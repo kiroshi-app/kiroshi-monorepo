@@ -22,7 +22,12 @@ pub const SHELL_INSET: f32 = SPACING * 2.0;
 pub const SIDEBAR_RAIL: f32 = 68.0;
 
 pub const ICON_STROKE_EM: f32 = 0.09;
+pub const ICON_STROKE_GLYPH_RATIO: f32 = 24.0 / 16.0;
 pub const ICON_STROKE: f32 = 2.16;
+
+pub fn icon_stroke_in(text: TextStyle) -> f32 {
+	ICON_STROKE_EM * text.size * ICON_STROKE_GLYPH_RATIO
+}
 
 pub const RADIUS: f32 = 10.0;
 pub const RADIUS_ROOT: f32 = RADIUS;

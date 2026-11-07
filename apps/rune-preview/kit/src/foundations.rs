@@ -1,3 +1,4 @@
+use rune::image::Image;
 use rune::{El, Icon, ScrollSpec, col, el, icon, row, text};
 
 use crate::avatar::{Face, Person};
@@ -17,6 +18,7 @@ const EVERY_TINT: &str = "branding-botidentityavatar--every-tint";
 const EVERY_SIZE: &str = "branding-botidentityavatar--every-size";
 const NO_CHOSEN_COLOUR: &str = "branding-botidentityavatar--no-chosen-colour";
 const PERSON: &str = "primitives-initialsavatar--default";
+const PERSON_WITH_PICTURE: &str = "primitives-initialsavatar--with-picture";
 
 const SHOWCASED_TINTS: [Preset; 2] = [Preset::Yellow, Preset::Purple];
 const RECIPE_HUES: [f32; 7] = [42.0, 82.0, 186.0, 257.0, 7.0, 150.0, 320.0];
@@ -24,6 +26,7 @@ const RECIPE_COLUMNS: [f32; 5] = [48.0, 128.0, 128.0, 96.0, 64.0];
 const AVATAR_NAME: &str = "Atlas";
 const PERSON_NAME: &str = "Ada Martin";
 const EVERY_SIZE_SIDES: [f32; 3] = [40.0, 96.0, 24.0];
+pub const PICTURE_SIDE: f32 = 96.0;
 const EVERY_TINT_SIDE: f32 = 96.0;
 const EVERY_TINT_ORDER: [Preset; 8] = [
 	Preset::Red,
@@ -52,7 +55,7 @@ const GLYPH_SIDE: f32 = 16.0;
 const SWATCH_WIDTH: f32 = 264.0;
 const STORY_PADDING: f32 = SPACING * 6.0;
 
-pub fn comparison(t: &Tokens) -> El {
+pub fn comparison(t: &Tokens, picture: Option<&Image>) -> El {
 	let tinted_primary = if t.dark {
 		"foundations-token-contrast--tinted-primary-dark"
 	} else {
@@ -71,7 +74,8 @@ pub fn comparison(t: &Tokens) -> El {
 		.child(block(t, EVERY_TINT, every_tint(t)))
 		.child(block(t, EVERY_SIZE, every_size(t, Some(Preset::Blue.hue()))))
 		.child(block(t, NO_CHOSEN_COLOUR, every_size(t, None)))
-		.child(block(t, PERSON, people(t)))
+		.child(block(t, PERSON, people(t, None)))
+		.child(block(t, PERSON_WITH_PICTURE, people(t, picture)))
 		.child(block(t, TOKEN_SHEET, token_sheet(t)))
 }
 
@@ -199,9 +203,9 @@ fn every_size(t: &Tokens, hue: Option<f32>) -> El {
 	})
 }
 
-fn people(t: &Tokens) -> El {
+fn people(t: &Tokens, image: Option<&Image>) -> El {
 	EVERY_SIZE_SIDES.iter().fold(row().center_y().gap(SPACING * 4.0), |avatars, side| {
-		avatars.child(Person { name: PERSON_NAME, image: None }.draw(*side, t))
+		avatars.child(Person { name: PERSON_NAME, image }.draw(*side, t))
 	})
 }
 
