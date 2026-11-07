@@ -5,7 +5,7 @@ use crate::icons;
 use crate::primitives::button::{Button, ButtonSize, ButtonVariant};
 use crate::primitives::skeleton::skeleton;
 use crate::primitives::{FOCUS_RING_WIDTH, Interaction, Paint, tight};
-use crate::strings::{Key, Language, bots};
+use crate::strings::{Language, bots};
 use crate::tokens::{
 	RADIUS_2XL, RADIUS_LG, RADIUS_SM, RADIUS_XL, SPACING, TEXT_10_MEDIUM, TEXT_11, TEXT_SM,
 	TEXT_SM_MEDIUM, TEXT_XS, TEXT_XS_MEDIUM, Tokens, faded,
@@ -177,10 +177,6 @@ pub struct Roster<'a> {
 	pub is_reading_more: bool,
 }
 
-fn copy(key: Key, language: Language) -> &'static str {
-	key.text(language)
-}
-
 fn tabular(style: TextStyle) -> TextStyle {
 	TextStyle { features: TABULAR, ..style }
 }
@@ -248,7 +244,7 @@ fn title_badge(t: &Tokens, title: &str) -> El {
 fn timestamp(t: &Tokens, item: &Row, language: Language) -> Option<El> {
 	if item.is_not_sent {
 		return Some(
-			text(copy(bots::roster::conversation::NOT_SENT, language).to_owned())
+			text(bots::roster::conversation::NOT_SENT.text(language).to_owned())
 				.font(TEXT_XS_MEDIUM)
 				.color(t.destructive)
 				.single_line(),
@@ -300,7 +296,7 @@ fn pile(t: &Tokens, members: &[Face], ground: Color, language: Language) -> Opti
 	if overflow {
 		let left = (PILE_LIMIT - 1) as f32 * PILE_STEP;
 		let count = (members.len() - shown.len()).to_string();
-		let label = copy(bots::roster::conversation::OTHERS, language).replace("{{count}}", &count);
+		let label = bots::roster::conversation::OTHERS.text(language).replace("{{count}}", &count);
 		let counter = TextStyle {
 			line_height: PILE_MEMBER,
 			..tabular(weighted(TextStyle::new(PILE_MEMBER * 0.45, BOLD), BOLD))
@@ -344,7 +340,7 @@ fn needs_you_line(t: &Tokens, question: &str, trailing: Option<El>, language: La
 		.center_y()
 		.child(glyph)
 		.child(
-			text(copy(bots::roster::NEEDS_YOU, language).to_owned())
+			text(bots::roster::NEEDS_YOU.text(language).to_owned())
 				.font(weighted(TEXT_XS, SEMIBOLD))
 				.color(t.warning)
 				.single_line(),
@@ -589,7 +585,7 @@ pub fn section_drop(t: &Tokens, name: &str, language: Language) -> El {
 			Face::still(name, None).draw(DROP_AVATAR, t).opacity(DROP_AVATAR_OPACITY).a11y_hidden(),
 		)
 		.child(
-			text(copy(bots::roster::section::EMPTY, language).to_owned())
+			text(bots::roster::section::EMPTY.text(language).to_owned())
 				.font(TEXT_XS)
 				.color(t.muted_foreground),
 		)
@@ -632,7 +628,7 @@ pub fn unreadable<S: 'static>(t: &Tokens, retry: Option<Emit<S>>, language: Lang
 	let ink = resting_ink(t);
 	let Some(emit) = retry else {
 		return row().w_full().padding(UNREADABLE_PADDING).justify_center().child(
-			text(copy(bots::roster::UNAVAILABLE, language).to_owned())
+			text(bots::roster::UNAVAILABLE.text(language).to_owned())
 				.font(TEXT_SM)
 				.color(ink)
 				.align(Align::Center)
@@ -645,14 +641,14 @@ pub fn unreadable<S: 'static>(t: &Tokens, retry: Option<Emit<S>>, language: Lang
 		.gap(SPACING * 2.0)
 		.items_center()
 		.child(
-			text(copy(bots::roster::FAILED, language).to_owned())
+			text(bots::roster::FAILED.text(language).to_owned())
 				.font(TEXT_SM)
 				.color(ink)
 				.align(Align::Center)
 				.wrap(),
 		)
 		.child(
-			Button::new(copy(bots::roster::RETRY, language))
+			Button::new(bots::roster::RETRY.text(language))
 				.variant(ButtonVariant::Outline)
 				.size(ButtonSize::Xs)
 				.view(t)
