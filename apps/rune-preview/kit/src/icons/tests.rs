@@ -226,3 +226,15 @@ fn the_named_glyphs_are_the_keyline_glyphs_of_packages_ui() {
 	assert_eq!(CONVERSATIONS.name, "keyline-Message-fill");
 	assert!(ICONS.iter().any(|(name, icon)| *name == "Previous" && icon.name == PREVIOUS.name));
 }
+
+#[test]
+fn a_caller_restrokes_any_icon_and_the_default_stays_the_icon_stroke() {
+	assert!(std::ptr::eq(stroked(&PREVIOUS, ICON_STROKE), &PREVIOUS));
+	let thin = stroked(&PREVIOUS, 1.6);
+	assert!(thin.body.contains("stroke-width=\"1.6\""));
+	assert!(!thin.body.contains(&format!("stroke-width=\"{ICON_STROKE}\"")));
+	assert_eq!(thin.body.replace("1.6", "2.16"), PREVIOUS.body);
+	assert_ne!(thin.name, PREVIOUS.name);
+	assert!(std::ptr::eq(stroked(&PREVIOUS, 1.6), thin));
+	assert!(stroked(&SUPERSET, 1.0).body.contains("stroke-width=\"1\""));
+}

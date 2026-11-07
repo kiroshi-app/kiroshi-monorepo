@@ -5,6 +5,7 @@ use rune::color::srgb_encode;
 
 use super::*;
 use crate::css::{self, Declarations, Rgba, Sheet};
+use crate::generated::{self, PACKAGES_UI};
 use crate::hues::Preset;
 
 const TOLERANCE: i16 = 1;
@@ -180,4 +181,37 @@ fn radius_spacing_type_and_stroke_tokens_are_the_css_values() {
 	let story_glyph_size = 16.0;
 	let stroke = ICON_STROKE_EM * story_font_size * 24.0 / story_glyph_size;
 	assert!((ICON_STROKE - stroke).abs() < 1e-4);
+}
+
+fn declared_in(block: &str, name: &str) -> String {
+	let Some(start) = block.find(&format!("{name}:")) else { panic!("{name} is missing") };
+	let value = &block[start + name.len() + 1..];
+	value[..value.find(';').unwrap_or(value.len())].trim().to_string()
+}
+
+fn quotient(value: &str) -> f32 {
+	let Some(inner) = value.strip_prefix("calc(").and_then(|v| v.strip_suffix(')')) else {
+		panic!("{value} is not a calc()")
+	};
+	let Some((dividend, divisor)) = inner.split_once(" / ") else {
+		panic!("{value} divides nothing")
+	};
+	let number = |text: &str| text.trim().parse::<f32>().unwrap_or_else(|_| panic!("{value}"));
+	number(dividend) / number(divisor)
+}
+
+#[test]
+fn the_bubble_text_is_the_chat_typeset_at_48rem_and_up() {
+	let globals = generated::read(&format!("{PACKAGES_UI}/src/styles/globals.css"));
+	let Some(start) = globals.find(".typeset-chat {") else {
+		panic!("globals.css has no .typeset-chat")
+	};
+	let chat = &globals[start..];
+	let Some(wide) = chat.find("@media (min-width: 48rem)") else {
+		panic!(".typeset-chat has no 48rem query")
+	};
+	let size = rem(&declared_in(&chat[wide..], "--typeset-size"));
+	let leading = quotient(&declared_in(chat, "--typeset-leading"));
+	assert_eq!(TEXT_BUBBLE.size, size);
+	assert!((TEXT_BUBBLE.line_height - size * leading).abs() < 1e-4);
 }

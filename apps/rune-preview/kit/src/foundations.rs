@@ -201,7 +201,7 @@ fn every_size(t: &Tokens, hue: Option<f32>) -> El {
 
 fn people(t: &Tokens) -> El {
 	EVERY_SIZE_SIDES.iter().fold(row().center_y().gap(SPACING * 4.0), |avatars, side| {
-		avatars.child(Person { name: PERSON_NAME }.draw(*side, t))
+		avatars.child(Person { name: PERSON_NAME, image: None }.draw(*side, t))
 	})
 }
 

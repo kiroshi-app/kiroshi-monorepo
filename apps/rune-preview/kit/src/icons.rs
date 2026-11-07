@@ -1,4 +1,9 @@
+use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock, PoisonError};
+
 use rune::Icon;
+
+use crate::tokens::ICON_STROKE;
 
 #[rustfmt::skip]
 mod keyline;
@@ -13,6 +18,34 @@ pub use keyline::{
 	MESSAGE_SQUARE as MESSAGE, SPARKLES as SKILL, SQUARE_ARROW_UP_RIGHT as EXTERNAL_LINK,
 	WRENCH as TOOL, X as CLOSE,
 };
+
+const STROKE_WIDTH: &str = "stroke-width=\"";
+
+pub fn stroked(glyph: &'static Icon, width: f32) -> &'static Icon {
+	if width.to_bits() == ICON_STROKE.to_bits() {
+		return glyph;
+	}
+	static STROKED: OnceLock<Mutex<HashMap<(&str, u32), &'static Icon>>> = OnceLock::new();
+	let mut stroked =
+		STROKED.get_or_init(Mutex::default).lock().unwrap_or_else(PoisonError::into_inner);
+	stroked.entry((glyph.name, width.to_bits())).or_insert_with(|| {
+		Box::leak(Box::new(Icon {
+			name: Box::leak(format!("{}@{width}", glyph.name).into_boxed_str()),
+			view: glyph.view,
+			body: Box::leak(with_stroke_width(glyph.body, width).into_boxed_str()),
+		}))
+	})
+}
+
+fn with_stroke_width(body: &str, width: f32) -> String {
+	let mut parts = body.split(STROKE_WIDTH);
+	let mut restroked = parts.next().unwrap_or_default().to_string();
+	for part in parts {
+		let after_value = part.find('"').map_or("", |end| &part[end..]);
+		restroked.push_str(&format!("{STROKE_WIDTH}{width}{after_value}"));
+	}
+	restroked
+}
 
 pub static KIROSHI_RING: Icon = Icon {
 	name: "kiroshi-kiroshi-ring",
