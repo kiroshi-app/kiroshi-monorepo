@@ -74,7 +74,6 @@ export const WEBSITE_COPY = {
 				"Agents, skills and conversations",
 				"Rooms, missions and routines",
 				"Applications, Secrets and Approvals",
-				"Spaces shared on your own network",
 			],
 		},
 		pro: {
@@ -87,7 +86,7 @@ export const WEBSITE_COPY = {
 			billing: "Billed yearly. $20 / user / month when billed monthly.",
 			features: [
 				"Everything in Local",
-				"Host a space for people who aren’t on your network",
+				"Host a space for other people",
 				"Join a space someone hosts for you",
 				"Kiroshi on your iPhone",
 			],
