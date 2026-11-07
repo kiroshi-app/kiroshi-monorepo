@@ -163,9 +163,12 @@ fn unreachable(detail: String) -> MissionError {
 #[cfg(test)]
 mod tests {
 	use std::collections::BTreeSet;
+	#[cfg(unix)]
 	use std::net::Ipv4Addr;
+	#[cfg(unix)]
 	use std::time::Duration;
 
+	#[cfg(unix)]
 	use tokio::net::TcpListener;
 
 	use super::*;
@@ -432,6 +435,7 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
+	#[cfg(unix)]
 	async fn carried_by(script: &Path, hook: &Value) -> std::process::ExitStatus {
 		let mut running = tokio::process::Command::new("bash")
 			.arg(script)
@@ -451,6 +455,7 @@ mod tests {
 			.expect("the script is waited on")
 	}
 
+	#[cfg(unix)]
 	async fn one_call_to(listener: TcpListener) -> String {
 		let (mut stream, _) = listener.accept().await.expect("the call lands");
 		let mut held = Vec::new();
@@ -476,10 +481,12 @@ mod tests {
 		}
 	}
 
+	#[cfg(unix)]
 	fn length_of(head: &str) -> Option<usize> {
 		head.lines().find_map(|line| line.strip_prefix("Content-Length: "))?.trim().parse().ok()
 	}
 
+	#[cfg(unix)]
 	#[tokio::test]
 	async fn the_installed_script_reads_its_config_at_call_time_keeps_the_message_and_exits_zero() {
 		let dir = a_dir("called");
@@ -531,6 +538,7 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
+	#[cfg(unix)]
 	async fn a_listening_hook(name: &str) -> (RemovedOnDrop, PathBuf, TcpListener) {
 		let dir = a_dir(name);
 		let hook_dir = dir.join("hook");
@@ -546,11 +554,13 @@ mod tests {
 		(dir, hook_dir, listener)
 	}
 
+	#[cfg(unix)]
 	fn body_of(request: &str) -> Value {
 		let (_, body) = request.split_once("\r\n\r\n").expect("the call carries a body");
 		serde_json::from_str(body).expect("the body is JSON")
 	}
 
+	#[cfg(unix)]
 	async fn tool_call_body(tool: &str, input: Value) -> Value {
 		let (dir, hook_dir, listener) = a_listening_hook(&format!("tool-{tool}")).await;
 		let called = tokio::spawn(one_call_to(listener));
@@ -576,6 +586,7 @@ mod tests {
 		body_of(&request)
 	}
 
+	#[cfg(unix)]
 	#[tokio::test]
 	async fn a_tool_call_carries_the_tool_and_the_target_its_kind_names() {
 		let long = "a".repeat(200);
@@ -628,6 +639,7 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
+	#[cfg(unix)]
 	#[tokio::test]
 	async fn a_payload_carrying_an_agent_id_sends_no_call() {
 		let (dir, hook_dir, listener) = a_listening_hook("subagent").await;
@@ -655,6 +667,7 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
+	#[cfg(unix)]
 	#[tokio::test]
 	async fn the_installed_script_ends_well_when_its_config_names_a_url_nothing_answers() {
 		let dir = a_dir("unanswered");

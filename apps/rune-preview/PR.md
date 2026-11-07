@@ -261,3 +261,16 @@ CodeQL reports three alerts on `ae115e9c0`. They are pre-existing code that the 
   Imports and helpers used only by those tests are gated with them. kiroshi-core's tests and the preview now type-check for `x86_64-pc-windows-gnu` locally with no warning.
 - **libxkbcommon on Linux.** The preview binary links `libxkbcommon`, which the Ubuntu runner doesn't ship. kiroshi-core's tests passed there; only the preview's link failed. The `core` job installs `libxkbcommon-dev` on Linux before building the preview. It was the only library the link was missing.
 
+### kiroshi-core's tests on Windows: 86 failures and their causes
+
+Once kiroshi-core's tests compiled on Windows (run 42329567223 on `d718c65d9`), 86 of 1,791 failed. Each cause is fixed where it lives, not per test:
+
+- **Open databases at cleanup (71 tests).** Tests in `catalogue`, `application_installs`, `messages`, `missions::checkout` and `missions::github` removed their temporary folder while their `Database` was still alive. Windows refuses to delete an open SQLite file. Each of those tests now drops its database before the cleanup, which still fails loudly if it can't remove the folder.
+- **CRLF checkouts (9 tests).** Through `* text=auto` and the runner's `core.autocrlf`, Windows checked out with CRLF the skills the crates embed, the board fixtures, and the TypeScript sources the mirror tests parse. `.gitattributes` now pins LF for the trees the crates embed or parse: `apps/app/src-tauri`, `apps/app/src/lib`, `crates`, `packages/shared`, the markdown renderer and `.claude/settings.json`. The index was already LF everywhere, and renormalizing changes no file.
+- **Bundle repositories followed the machine's git config (1 test).** libgit2 applied the global `core.autocrlf` when it reverted a run, so agent files came back with CRLF. `bundles::git::init` now sets `core.autocrlf = false` in the repositories it creates. That is a product fix: a Windows machine with Git's default config would have rewritten agent memory.
+- **`private_files::write` overwrote on Windows (1 test).** Its unix branch creates with `create_new`, but the Windows branch called `fs::write`, so a second launch replaced a person's hand-edited skill. Both platforms now share the `create_new` path. Also a product fix.
+- **A unix path in a fixture (1 test).** `avatars::tests::a_sweep_ignores_a_reference_that_points_outside_the_directory` relied on `/etc/passwd`. It now writes a real file outside the avatar folder on every OS.
+- **Genuinely unix-only features (5 tests), gated `cfg(unix)` with only the helpers they use:**
+  - `missions::hook::tests::the_installed_script_reads_its_config_at_call_time_keeps_the_message_and_exits_zero`, `a_tool_call_carries_the_tool_and_the_target_its_kind_names`, `a_payload_carrying_an_agent_id_sends_no_call` and `the_installed_script_ends_well_when_its_config_names_a_url_nothing_answers`: they run the mission hook the app installs, which is a POSIX shell script.
+  - `missions::hook::permissions::tests::the_dev_app_data_is_editable_under_the_expanded_home`: it checks the rule for the dev app's data folder under a unix home (`//<home>/Library/Application Support/...`).
+

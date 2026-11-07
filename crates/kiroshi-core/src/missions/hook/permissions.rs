@@ -623,6 +623,7 @@ mod tests {
 		}
 	}
 
+	#[cfg(unix)]
 	#[test]
 	fn the_dev_app_data_is_editable_under_the_expanded_home() {
 		let root = a_checkout("dev-data");
