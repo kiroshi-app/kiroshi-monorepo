@@ -3,17 +3,26 @@ use rune::{
 	Align, Color, Cursor, El, Key as KeyName, KeyEvent, ScrollSpec, Side, SurfaceFit, TextEdit,
 	TextStyle, Tx, col, el, icon, row, text, text_input,
 };
-use rune_kit::{PopupItem, PopupList};
+use rune::{Block, Mark, MarkRange, Span};
 
+use crate::avatar::{Face, Person};
 use crate::icons;
 use crate::primitives::button::{Button, ButtonSize, ButtonVariant};
-use crate::primitives::dialog::scrim;
-use crate::primitives::{FOCUS_RING_WIDTH, elevated, equal_padding, instant, ring_tint, tight};
+use crate::primitives::context_menu::{
+	Mark as MenuMark, MenuItem, MenuRow, Shortcut, context_menu,
+};
+use crate::primitives::dialog::{DialogContent, dialog, scrim};
+use crate::primitives::dropdown_menu::dropdown_menu;
+use crate::primitives::toast::{Toast, ToastType, toast};
+use crate::primitives::{
+	DISABLED_OPACITY, FOCUS_RING_WIDTH, elevated, equal_padding, instant, ring_tint, tight,
+};
 use crate::strings::{Key, Language, common};
 use crate::tokens::{
-	RADIUS_CONTROL, RADIUS_MD, RADIUS_SM, RADIUS_XL, RADIUS_XS, SPACING, TEXT_10_MEDIUM,
-	TEXT_BASE_SEMIBOLD, TEXT_COMPACT, TEXT_COMPACT_MEDIUM, TEXT_COMPACT_MONO, TEXT_READING,
-	TEXT_SM_MEDIUM, TEXT_TITLE, TEXT_XS, TEXT_XS_MEDIUM, TEXT_XS_MONO, Tokens, faded,
+	RADIUS_CONTROL, RADIUS_LG, RADIUS_MD, RADIUS_SM, RADIUS_XL, RADIUS_XS, SPACING, TEXT_10_MEDIUM,
+	TEXT_BASE_SEMIBOLD, TEXT_COMPACT, TEXT_COMPACT_MEDIUM, TEXT_COMPACT_MONO,
+	TEXT_COMPACT_SEMIBOLD, TEXT_READING, TEXT_SM, TEXT_SM_MEDIUM, TEXT_SM_SEMIBOLD, TEXT_TITLE,
+	TEXT_XS, TEXT_XS_MEDIUM, TEXT_XS_MONO, Tokens, faded,
 };
 
 pub const BLOCK_ID_LENGTH: usize = 6;
@@ -113,7 +122,7 @@ impl LibraryBlockType {
 
 	fn glyph(self) -> &'static rune::Icon {
 		match self {
-			LibraryBlockType::Paragraph => &icons::TYPE,
+			LibraryBlockType::Paragraph => &icons::ALIGN_LEFT,
 			LibraryBlockType::Heading => &icons::HEADING,
 			LibraryBlockType::List => &icons::LIST,
 			LibraryBlockType::Checklist => &icons::LIST_TODO,
@@ -124,7 +133,7 @@ impl LibraryBlockType {
 			LibraryBlockType::Code => &icons::CODE,
 			LibraryBlockType::WebPage => &icons::GLOBE,
 			LibraryBlockType::Collapsible => &icons::LIST_COLLAPSE,
-			LibraryBlockType::Other => &icons::SQUARE,
+			LibraryBlockType::Other => &icons::FILE,
 		}
 	}
 
@@ -314,6 +323,7 @@ pub enum RowMark {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BlockRow {
 	pub mark: RowMark,
+	pub depth: usize,
 	pub text: String,
 }
 
@@ -325,7 +335,11 @@ pub fn rows_of(source: &str) -> Vec<BlockRow> {
 	}
 	if matches!(kind, LibraryBlockType::Code) {
 		let body = lines.iter().skip(1).take(lines.len().saturating_sub(2)).copied();
-		return vec![BlockRow { mark: RowMark::None, text: body.collect::<Vec<_>>().join("\n") }];
+		return vec![BlockRow {
+			mark: RowMark::None,
+			depth: 0,
+			text: body.collect::<Vec<_>>().join("\n"),
+		}];
 	}
 	let mut number = 0;
 	lines
@@ -352,7 +366,7 @@ pub fn rows_of(source: &str) -> Vec<BlockRow> {
 				}
 				_ => (RowMark::None, 0),
 			};
-			BlockRow { mark, text: bare[at..].to_owned() }
+			BlockRow { mark, depth: indent / 2, text: bare[at..].to_owned() }
 		})
 		.collect()
 }
@@ -484,44 +498,63 @@ pub enum ItemEvent {
 	Back,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BarActions {
+	pub shown: bool,
+	pub is_copied: bool,
+}
+
+impl BarActions {
+	pub const EVERY: BarActions = BarActions { shown: true, is_copied: false };
+	pub const NONE: BarActions = BarActions { shown: false, is_copied: false };
+}
+
+pub const MORE_KEY: &str = "bar-More";
+
 fn item_actions<S: 'static>(
 	t: &Tokens,
 	lang: Language,
 	surface: ItemSurface,
 	leading: Vec<El>,
+	bar: BarActions,
 	on: impl Fn(&mut S, ItemEvent) + Clone + 'static,
 ) -> El {
 	use common::library::{document, lightbox};
-	let [download, copy, more, close] = match surface {
+	let [download, copy, copied, more, close] = match surface {
 		ItemSurface::Document => {
-			[document::DOWNLOAD, document::COPY, document::MORE, document::CLOSE]
+			[document::DOWNLOAD, document::COPY, document::COPIED, document::MORE, document::CLOSE]
 		}
 		ItemSurface::Lightbox => {
-			[lightbox::DOWNLOAD, lightbox::COPY, lightbox::MORE, lightbox::CLOSE]
+			[lightbox::DOWNLOAD, lightbox::COPY, lightbox::COPIED, lightbox::MORE, lightbox::CLOSE]
 		}
 	};
 	let emit = |event: ItemEvent| emitter(&on, event);
-	row()
-		.gap(SPACING * 2.0)
-		.center_y()
-		.children(leading)
-		.child(bar_action(
-			t,
-			&icons::DOWNLOAD,
-			say(download, lang),
-			false,
-			emit(ItemEvent::Download),
-		))
-		.child(bar_action(t, &icons::COPY, say(copy, lang), false, emit(ItemEvent::Copy)))
-		.child(bar_action(
-			t,
-			&icons::MORE_HORIZONTAL,
-			say(more, lang),
-			false,
-			emit(ItemEvent::More),
-		))
-		.child(bar_divider(t))
-		.child(bar_action(t, &icons::CLOSE, say(close, lang), true, emit(ItemEvent::Close)))
+	let mut actions = row().gap(SPACING * 2.0).center_y().children(leading);
+	if bar.shown {
+		let copy_glyph = if bar.is_copied { &icons::CHECK } else { &icons::COPY };
+		let mut copy = bar_action(t, copy_glyph, say(copy, lang), false, emit(ItemEvent::Copy));
+		if bar.is_copied {
+			copy = copy.live_region(rune::LiveRegion::Polite).description(say(copied, lang));
+		}
+		actions = actions
+			.child(bar_action(
+				t,
+				&icons::DOWNLOAD,
+				say(download, lang),
+				false,
+				emit(ItemEvent::Download),
+			))
+			.child(copy)
+			.child(bar_action(
+				t,
+				&icons::MORE_HORIZONTAL,
+				say(more, lang),
+				false,
+				emit(ItemEvent::More),
+			))
+			.child(bar_divider(t));
+	}
+	actions.child(bar_action(t, &icons::CLOSE, say(close, lang), true, emit(ItemEvent::Close)))
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -771,13 +804,13 @@ fn library_heading<S: 'static>(
 	}
 	if panel.actions.import {
 		actions = actions.child(
-			outlined_pill(t, &icons::DOWNLOAD, say(library::IMPORT, lang))
+			outlined_pill(t, &icons::UPLOAD, say(library::IMPORT, lang))
 				.on_press(emit(LibraryEvent::Import)),
 		);
 	}
 	if panel.actions.new_board {
 		actions = actions.child(
-			outlined_pill(t, &icons::LAYOUT_DASHBOARD, say(library::NEW_BOARD, lang))
+			outlined_pill(t, &icons::STICKY_NOTE, say(library::NEW_BOARD, lang))
 				.on_press(emit(LibraryEvent::NewBoard)),
 		);
 	}
@@ -1139,7 +1172,7 @@ fn empty_state<S: 'static>(
 					.radius(RADIUS_MD)
 					.fill(faded(t.foreground, 0.06))
 					.center()
-					.child(icon(&icons::DOWNLOAD, SPACING * 4.5).color(t.muted_foreground)),
+					.child(icon(&icons::UPLOAD, SPACING * 4.5).color(t.muted_foreground)),
 			)
 			.child(
 				col()
@@ -1157,7 +1190,7 @@ fn empty_state<S: 'static>(
 					)),
 			)
 			.child(
-				outlined_pill(t, &icons::DOWNLOAD, say(library::bring_in::ACTION, lang))
+				outlined_pill(t, &icons::UPLOAD, say(library::bring_in::ACTION, lang))
 					.on_press(emit(LibraryEvent::Import)),
 			);
 		sections = sections.child(library_section(t, say(library::bring_in::TITLE, lang), strip));
@@ -1381,6 +1414,7 @@ pub struct DocumentBar<'a> {
 	pub name: &'a str,
 	pub is_read_only: bool,
 	pub presence: Option<El>,
+	pub actions: BarActions,
 }
 
 pub fn document_bar<S: 'static>(
@@ -1451,7 +1485,7 @@ pub fn document_bar<S: 'static>(
 				)),
 		);
 	}
-	library_bar(crumbs, item_actions(t, lang, ItemSurface::Document, leading, on))
+	library_bar(crumbs, item_actions(t, lang, ItemSurface::Document, leading, bar.actions, on))
 }
 
 pub fn document_column(t: &Tokens, heading: El, detail: &str, body: El) -> El {
@@ -1484,23 +1518,16 @@ pub fn document_title(t: &Tokens, name: &str) -> El {
 	text(name.to_owned()).font(TEXT_TITLE).color(t.foreground).wrap().role("heading")
 }
 
-pub fn document_body(t: &Tokens, markdown: &str) -> El {
-	let blocks = markdown.split(BLOCK_GAP).filter(|block| !block.trim().is_empty()).map(|source| {
-		let kind = block_type_of(source);
-		let rows = rows_of(source)
-			.into_iter()
-			.map(|line| {
-				(
-					line.mark,
-					text(plain_of(&line.text))
-						.font(block_style(kind))
-						.color(block_ink(t, kind))
-						.wrap(),
-				)
-			})
-			.collect();
-		block_frame(t, kind, rows)
-	});
+pub fn document_body<'a>(
+	t: &Tokens,
+	lang: Language,
+	markdown: &str,
+	runs: &[Run],
+	picture: &dyn Fn(&str) -> TileImage<'a>,
+) -> El {
+	let blocks = parse_blocks(markdown, String::new)
+		.into_iter()
+		.map(|block| body_block(t, lang, &block.source, runs, picture));
 	col().key("library-document-body").w_full().gap(SPACING * 3.5).children(blocks)
 }
 
@@ -1516,7 +1543,7 @@ fn block_ink(t: &Tokens, kind: LibraryBlockType) -> Color {
 	if kind == LibraryBlockType::Heading { t.foreground } else { t.soft_foreground }
 }
 
-fn row_glyph(t: &Tokens, mark: RowMark) -> Option<El> {
+fn row_glyph(t: &Tokens, mark: RowMark, is_ringed: bool) -> Option<El> {
 	let glyph = match mark {
 		RowMark::None | RowMark::Quote => return None,
 		RowMark::Bullet => label_text("•", TEXT_READING, t.muted_foreground),
@@ -1529,6 +1556,8 @@ fn row_glyph(t: &Tokens, mark: RowMark) -> Option<El> {
 				.size(side, side)
 				.radius(RADIUS_XS * 2.0)
 				.border(1.0, if done { t.primary } else { t.input });
+			let check =
+				if is_ringed { check.outline(3.0, 0.0, faded(t.primary, 0.3)) } else { check };
 			if done {
 				check
 					.fill(t.primary)
@@ -1543,9 +1572,18 @@ fn row_glyph(t: &Tokens, mark: RowMark) -> Option<El> {
 }
 
 fn block_frame(t: &Tokens, kind: LibraryBlockType, rows: Vec<(RowMark, El)>) -> El {
-	let lines = rows.into_iter().map(|(mark, body)| {
-		let mut line = row().w_full().gap(SPACING * 2.0).items_start();
-		if let Some(glyph) = row_glyph(t, mark) {
+	block_frame_ringed(t, kind, rows, None)
+}
+
+fn block_frame_ringed(
+	t: &Tokens,
+	kind: LibraryBlockType,
+	rows: Vec<(RowMark, El)>,
+	ringed_row: Option<usize>,
+) -> El {
+	let lines = rows.into_iter().enumerate().map(|(index, (mark, body))| {
+		let mut line = row().w_full().gap(SPACING * 2.5).items_start();
+		if let Some(glyph) = row_glyph(t, mark, ringed_row == Some(index)) {
 			line = line.child(glyph);
 		}
 		line.child(col().grow(1.0).min_w(0.0).child(body))
@@ -1670,7 +1708,7 @@ pub fn drop_line(t: &Tokens, lang: Language, count: usize) -> El {
 		.radius(SPACING * 3.5)
 		.fill(t.primary)
 		.shadow(SPACING, SPACING * 3.0, Color::BLACK.alpha(0.25))
-		.child(icon(&icons::DOWNLOAD, SPACING * 3.5).color(t.primary_foreground))
+		.child(icon(&icons::UPLOAD, SPACING * 3.5).color(t.primary_foreground))
 		.child(label_text(
 			&filled(template, "count", &count.to_string()),
 			TEXT_COMPACT_MEDIUM,
@@ -1724,6 +1762,38 @@ pub struct EditorBlock<'a> {
 	pub kind: LibraryBlockType,
 	pub rows: Vec<(RowMark, &'a TextEdit)>,
 	pub source: &'a str,
+	pub placeholder: Option<&'a str>,
+	pub drawn: Option<El>,
+	pub above: Option<El>,
+	pub start: Option<El>,
+	pub end: Option<El>,
+	pub handle: Option<El>,
+	pub ringed_row: Option<usize>,
+	pub depths: Vec<usize>,
+}
+
+impl<'a> EditorBlock<'a> {
+	pub fn new(
+		id: &'a str,
+		kind: LibraryBlockType,
+		rows: Vec<(RowMark, &'a TextEdit)>,
+		source: &'a str,
+	) -> EditorBlock<'a> {
+		EditorBlock {
+			id,
+			kind,
+			rows,
+			source,
+			placeholder: None,
+			drawn: None,
+			above: None,
+			start: None,
+			end: None,
+			handle: None,
+			ringed_row: None,
+			depths: Vec::new(),
+		}
+	}
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1732,6 +1802,8 @@ pub enum BlockEvent {
 	Enter { block: String, field: usize },
 	Backspace { block: String, field: usize },
 	SlashOpened { block: String, field: usize },
+	SlashMoved(i32),
+	SlashConfirmed,
 	SlashChosen(LibraryBlockType),
 	SlashClosed,
 }
@@ -1740,15 +1812,25 @@ pub enum BlockEvent {
 pub struct Slash<'a> {
 	pub block: &'a str,
 	pub field: usize,
+	pub query: &'a str,
 	pub active: usize,
 	pub is_above: bool,
+}
+
+impl Slash<'_> {
+	pub fn shown(&self, lang: Language) -> Vec<LibraryBlockType> {
+		let query = self.query.to_lowercase();
+		LibraryBlockType::SLASH
+			.into_iter()
+			.filter(|kind| say(kind.label(), lang).to_lowercase().contains(&query))
+			.collect()
+	}
 }
 
 pub type FieldAccess<S> = for<'a> fn(&'a mut S, &str, usize) -> &'a mut TextEdit;
 
 pub const SLASH_MENU: &str = "library-slash-menu";
 const SLASH_WIDTH: f32 = SPACING * 75.0;
-const SLASH_HEIGHT: f32 = SPACING * 100.0;
 
 pub fn field_key(block: &str, field: usize) -> String {
 	format!("library-block-{block}:{field}")
@@ -1757,7 +1839,7 @@ pub fn field_key(block: &str, field: usize) -> String {
 pub fn block_editor<S: 'static>(
 	t: &Tokens,
 	lang: Language,
-	blocks: &[EditorBlock],
+	blocks: &mut [EditorBlock],
 	slash: Option<Slash>,
 	access: FieldAccess<S>,
 	on: impl Fn(&mut S, BlockEvent) -> bool + Clone + 'static,
@@ -1767,53 +1849,91 @@ pub fn block_editor<S: 'static>(
 		.w_full()
 		.gap(SPACING * 3.5)
 		.label(say(common::library::editor::BODY, lang))
-		.children(blocks.iter().map(|block| editor_block(t, lang, block, access, on.clone())));
-	let mut layers = Vec::new();
-	if let Some(slash) = slash {
-		slash_menu(t, lang, slash, on).build(&t.kit(), &mut layers);
-	}
+		.children(
+			blocks.iter_mut().map(|block| editor_block(t, lang, block, slash, access, on.clone())),
+		);
+	let layers = slash.map(|slash| slash_menu(t, lang, slash, on)).into_iter().collect();
 	(body, layers)
 }
 
 fn editor_block<S: 'static>(
 	t: &Tokens,
 	lang: Language,
-	block: &EditorBlock,
+	block: &mut EditorBlock,
+	slash: Option<Slash>,
 	access: FieldAccess<S>,
 	on: impl Fn(&mut S, BlockEvent) -> bool + Clone + 'static,
 ) -> El {
-	if !block.kind.is_text() && block.rows.is_empty() {
-		let source =
-			text(block.source.to_owned()).font(TEXT_COMPACT_MONO).color(t.muted_foreground).wrap();
-		return block_frame(t, block.kind, vec![(RowMark::None, source)]);
+	let drawn = match block.drawn.take() {
+		Some(drawn) => drawn,
+		None if !block.kind.is_text() && block.rows.is_empty() => {
+			body_block(t, lang, block.source, &[], &|_| TileImage::Resolving)
+		}
+		None => {
+			let last = block.rows.len().saturating_sub(1);
+			let fills = block.rows.len() > 1 || block.start.is_none() && block.end.is_none();
+			let (mut start, mut end) = (block.start.take(), block.end.take());
+			let rows = block
+				.rows
+				.iter()
+				.enumerate()
+				.map(|(index, (mark, edit))| {
+					let is_slash =
+						slash.is_some_and(|slash| slash.block == block.id && slash.field == index);
+					let look = FieldLook { row: index, fills, is_slash };
+					let field = block_field(t, lang, block, edit, look, access, on.clone());
+					let lead = if index == 0 { start.take() } else { None };
+					let trail = if index == last { end.take() } else { None };
+					let depth = block.depths.get(index).copied().unwrap_or(0);
+					(*mark, indented(with_carets(field, lead, trail), depth))
+				})
+				.collect();
+			block_frame_ringed(t, block.kind, rows, block.ringed_row)
+		}
+	};
+	let mut column = col().key(format!("library-block-{}", block.id)).w_full().gap(SPACING * 3.5);
+	if let Some(above) = block.above.take() {
+		column = column.child(above);
 	}
-	let rows = block
-		.rows
-		.iter()
-		.enumerate()
-		.map(|(index, (mark, edit))| {
-			(*mark, block_field(t, lang, block, index, edit, access, on.clone()))
-		})
-		.collect();
-	block_frame(t, block.kind, rows)
+	let mut framed = el().w_full().child(drawn);
+	if let Some(handle) = block.handle.take() {
+		framed = framed.child(handle.pin(Some(-HANDLE_REACH), Some(0.0), None, None));
+	}
+	column.child(framed)
+}
+
+const HANDLE_REACH: f32 = SPACING * 14.0;
+
+fn with_carets(field: El, start: Option<El>, end: Option<El>) -> El {
+	if start.is_none() && end.is_none() {
+		return field;
+	}
+	row().w_full().items_start().children(start).child(field).children(end).child(el().grow(1.0))
 }
 
 fn block_field<S: 'static>(
 	t: &Tokens,
 	lang: Language,
 	block: &EditorBlock,
-	field: usize,
 	edit: &TextEdit,
+	look: FieldLook,
 	access: FieldAccess<S>,
 	on: impl Fn(&mut S, BlockEvent) -> bool + Clone + 'static,
 ) -> El {
+	let field = look.row;
 	let (edit_id, key_id, change_id) =
 		(block.id.to_owned(), block.id.to_owned(), block.id.to_owned());
 	let change_on = on.clone();
-	text_input(edit, block_style(block.kind))
+	let mut input = text_input(edit, block_style(block.kind))
 		.key(field_key(block.id, field))
-		.w_full()
-		.color(block_ink(t, block.kind))
+		.color(block_ink(t, block.kind));
+	if let Some(placeholder) = block.placeholder {
+		input = input.placeholder(placeholder, t.placeholder_foreground);
+	}
+	if look.fills {
+		input = input.w_full();
+	}
+	input
 		.caret(t.foreground, t.selection)
 		.label(say(block.kind.label(), lang))
 		.on_edit(move |s: &mut S| access(s, &edit_id, field))
@@ -1821,6 +1941,10 @@ fn block_field<S: 'static>(
 			let block = key_id.clone();
 			let plain = event.mods == rune::Mods::default();
 			let event = match &event.key {
+				KeyName::Up if plain && look.is_slash => BlockEvent::SlashMoved(-1),
+				KeyName::Down if plain && look.is_slash => BlockEvent::SlashMoved(1),
+				KeyName::Escape if look.is_slash => BlockEvent::SlashClosed,
+				KeyName::Enter if plain && look.is_slash => BlockEvent::SlashConfirmed,
 				KeyName::Enter if plain => BlockEvent::Enter { block, field },
 				KeyName::Backspace if plain => BlockEvent::Backspace { block, field },
 				KeyName::Text(typed) if typed == "/" => BlockEvent::SlashOpened { block, field },
@@ -1833,44 +1957,113 @@ fn block_field<S: 'static>(
 		})
 }
 
+pub fn block_text<S: 'static>(
+	t: &Tokens,
+	lang: Language,
+	block: &EditorBlock,
+	row: usize,
+	edit: &TextEdit,
+	access: FieldAccess<S>,
+	on: impl Fn(&mut S, BlockEvent) -> bool + Clone + 'static,
+) -> El {
+	block_field(t, lang, block, edit, FieldLook { row, fills: true, is_slash: false }, access, on)
+}
+
+#[derive(Clone, Copy)]
+struct FieldLook {
+	row: usize,
+	fills: bool,
+	is_slash: bool,
+}
+
 fn slash_menu<S: 'static>(
 	t: &Tokens,
 	lang: Language,
 	slash: Slash,
 	on: impl Fn(&mut S, BlockEvent) -> bool + Clone + 'static,
-) -> PopupList<S> {
-	let items = LibraryBlockType::SLASH.map(|kind| {
-		let glyph = row()
-			.size(SPACING * 6.0, SPACING * 6.0)
-			.radius(RADIUS_SM)
-			.border(1.0, t.border)
-			.center()
-			.child(icon(kind.glyph(), SPACING * 3.5).color(t.foreground));
-		let mut item = PopupItem::new(kind.name(), say(kind.label(), lang)).leading(glyph);
-		if let Some(hint) = kind.markdown_hint() {
-			item =
-				item.trailing(text(hint.to_owned()).font(TEXT_XS_MONO).color(t.muted_foreground));
+) -> El {
+	use common::library::editor::blocks::slash as copy;
+	let shown = slash.shown(lang);
+	let mut list = col().w_full().role("listbox").label(say(copy::LABEL, lang));
+	for (group, is_text) in [(copy::TEXT, true), (copy::RICH, false)] {
+		let members: Vec<(usize, LibraryBlockType)> = shown
+			.iter()
+			.copied()
+			.enumerate()
+			.filter(|(_, kind)| kind.is_text() == is_text)
+			.collect();
+		if members.is_empty() {
+			continue;
 		}
-		item
+		list = list.child(row().px(SPACING * 2.0).pt(SPACING * 2.0).pb(SPACING).child(label_text(
+			say(group, lang),
+			TEXT_XS_MEDIUM,
+			t.muted_foreground,
+		)));
+		for (index, kind) in members {
+			let on = on.clone();
+			list = list.child(slash_row(t, lang, kind, index == slash.active).on_press(
+				move |s: &mut S| {
+					on(s, BlockEvent::SlashChosen(kind));
+				},
+			));
+		}
+	}
+	let hints = [
+		(copy::MOVE_KEYS, copy::MOVE),
+		(copy::INSERT_KEY, copy::INSERT),
+		(copy::CLOSE_KEY, copy::CLOSE),
+	]
+	.map(|(keys, action)| {
+		row()
+			.gap(SPACING)
+			.center_y()
+			.child(label_text(say(keys, lang), TEXT_XS_MONO, t.muted_foreground))
+			.child(label_text(say(action, lang), TEXT_XS, t.muted_foreground))
 	});
-	let (choose_on, close_on) = (on.clone(), on);
-	PopupList::new(SLASH_MENU, field_key(slash.block, slash.field))
-		.side(if slash.is_above { Side::Top } else { Side::Bottom })
-		.align(Align::Start)
-		.offset(SPACING)
-		.width(SLASH_WIDTH)
-		.max_height(SLASH_HEIGHT)
-		.label(say(common::library::editor::blocks::slash::LABEL, lang))
-		.items(items)
-		.active(Some(slash.active))
-		.on_choose(move |s: &mut S, id: &str, _: &mut Tx| {
-			if let Some(kind) = LibraryBlockType::SLASH.into_iter().find(|kind| kind.name() == id) {
-				choose_on(s, BlockEvent::SlashChosen(kind));
-			}
-		})
-		.on_close(move |s: &mut S| {
-			close_on(s, BlockEvent::SlashClosed);
-		})
+	let footer = row()
+		.mx(-SPACING)
+		.mb(-SPACING)
+		.h(SPACING * 8.0)
+		.px(SPACING * 3.0)
+		.gap(SPACING * 3.0)
+		.center_y()
+		.children(hints);
+	let side = if slash.is_above { Side::Top } else { Side::Bottom };
+	popup_panel(t, SLASH_WIDTH)
+		.key(SLASH_MENU)
+		.child(list)
+		.child(el().h(1.0).mx(-SPACING).mt(SPACING).fill(t.border))
+		.child(footer)
+		.anchored(field_key(slash.block, slash.field), side, Align::Start, SPACING)
+}
+
+fn slash_row(t: &Tokens, lang: Language, kind: LibraryBlockType, is_active: bool) -> El {
+	let label = say(kind.label(), lang);
+	let glyph = row()
+		.size(SPACING * 6.0, SPACING * 6.0)
+		.radius(RADIUS_SM)
+		.border(1.0, t.border)
+		.center()
+		.child(icon(kind.glyph(), SPACING * 3.5).color(t.foreground));
+	let mut item = row()
+		.key(format!("library-slash-{}", kind.name()))
+		.w_full()
+		.h(SPACING * 9.0)
+		.px(SPACING * 2.0)
+		.gap(SPACING * 2.5)
+		.center_y()
+		.radius(RADIUS_MD)
+		.role("option")
+		.checked(is_active)
+		.label(label)
+		.child(glyph)
+		.child(label_text(label, TEXT_COMPACT, t.foreground).grow(1.0).min_w(0.0).truncate());
+	if let Some(hint) = kind.markdown_hint() {
+		item = item.child(label_text(hint, TEXT_XS_MONO, t.muted_foreground));
+	}
+	let item = if is_active { item.fill(t.accent) } else { item.hover(t.accent) };
+	instant(item)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -2128,13 +2321,21 @@ const STEP: f32 = SPACING * 10.0;
 const ZOOM_HEIGHT: f32 = SPACING * 9.0;
 const ZOOM_CONTROL: f32 = SPACING * 7.0;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LightboxLook {
+	pub position: usize,
+	pub count: usize,
+	pub zoom_percent: Option<u32>,
+	pub actions: BarActions,
+}
+
 pub fn lightbox<S: 'static>(
 	lang: Language,
 	shown: &LightboxImage,
-	position: usize,
-	count: usize,
+	look: LightboxLook,
 	on: impl Fn(&mut S, LightboxEvent) + Clone + 'static,
 ) -> El {
+	let LightboxLook { position, count, zoom_percent, actions } = look;
 	use common::library::lightbox as copy;
 	let t = &Tokens::new(true);
 	let emit = |event: LightboxEvent| emitter(&on, event);
@@ -2166,27 +2367,25 @@ pub fn lightbox<S: 'static>(
 				)
 				.child(label_text(shown.detail, TEXT_COMPACT, t.muted_foreground)),
 		);
-	let step = |glyph: &'static rune::Icon, label: &str, event: LightboxEvent| {
-		focus_ring(
-			t,
-			instant(
-				row()
-					.key(format!("lightbox-{label}"))
-					.size(STEP, STEP)
-					.radius(STEP / 2.0)
-					.center()
-					.fill(faded(t.foreground, 0.1))
-					.hover(faded(t.foreground, 0.16))
-					.role("button")
-					.label(label)
-					.child(icon(glyph, SPACING * 4.5).color(t.foreground)),
-			),
-		)
-		.on_press(emit(event))
+	let step = |glyph: &'static rune::Icon, label: &str, event: LightboxEvent, is_shut: bool| {
+		let button = row()
+			.key(format!("lightbox-{label}"))
+			.size(STEP, STEP)
+			.radius(STEP / 2.0)
+			.center()
+			.fill(faded(t.foreground, 0.1))
+			.role("button")
+			.label(label)
+			.child(icon(glyph, SPACING * 4.5).color(t.foreground));
+		if is_shut {
+			return instant(button).disabled(true).opacity(DISABLED_OPACITY);
+		}
+		focus_ring(t, instant(button.hover(faded(t.foreground, 0.16)))).on_press(emit(event))
 	};
-	let picture = el().w_full().h_full().radius(RADIUS_MD);
+	let fit = if zoom_percent.is_some() { SurfaceFit::Fill } else { SurfaceFit::Fit };
+	let picture = el().w_full().h_full().radius(RADIUS_MD).clip_rounded(RADIUS_MD);
 	let picture = match shown.image.filter(|image| image.size().is_some()) {
-		Some(image) => picture.pixels_fit(image.pixels(), SurfaceFit::Fit),
+		Some(image) => picture.pixels_fit(image.pixels(), fit),
 		None => picture.fill(faded(t.border, 0.6)),
 	};
 	let stage = row()
@@ -2197,9 +2396,14 @@ pub fn lightbox<S: 'static>(
 		.pb(SPACING * 18.0)
 		.gap(SPACING * 5.0)
 		.center_y()
-		.child(step(&icons::PREVIOUS, say(copy::PREVIOUS, lang), LightboxEvent::Previous))
+		.child(step(
+			&icons::PREVIOUS,
+			say(copy::PREVIOUS, lang),
+			LightboxEvent::Previous,
+			position <= 1,
+		))
 		.child(col().grow(1.0).min_w(0.0).h_full().child(picture))
-		.child(step(&icons::NEXT, say(copy::NEXT, lang), LightboxEvent::Next));
+		.child(step(&icons::NEXT, say(copy::NEXT, lang), LightboxEvent::Next, position >= count));
 	let zoom_button = |glyph: &'static rune::Icon, label: &str, event: LightboxEvent| {
 		focus_ring(
 			t,
@@ -2217,7 +2421,13 @@ pub fn lightbox<S: 'static>(
 		)
 		.on_press(emit(event))
 	};
-	let fit_label = say(copy::FIT, lang);
+	let (fit_label, fit_name) = match zoom_percent {
+		Some(percent) => {
+			let shown = filled(say(copy::ZOOM, lang), "percent", &percent.to_string());
+			(shown, filled(say(copy::ZOOM_THEN_FIT, lang), "percent", &percent.to_string()))
+		}
+		None => (say(copy::FIT, lang).to_owned(), say(copy::FIT_TO_STAGE, lang).to_owned()),
+	};
 	let fit = focus_ring(
 		t,
 		instant(
@@ -2229,8 +2439,8 @@ pub fn lightbox<S: 'static>(
 				.center()
 				.hover(faded(t.foreground, 0.08))
 				.role("button")
-				.label(say(copy::FIT_TO_STAGE, lang))
-				.child(label_text(fit_label, TEXT_COMPACT_MEDIUM, t.foreground)),
+				.label(fit_name)
+				.child(label_text(&fit_label, TEXT_COMPACT_MEDIUM, t.foreground)),
 		),
 	)
 	.on_press(emit(LightboxEvent::Fit));
@@ -2261,7 +2471,7 @@ pub fn lightbox<S: 'static>(
 		.label(name)
 		.child(library_bar(
 			leading,
-			item_actions(t, lang, ItemSurface::Lightbox, Vec::new(), item_on),
+			item_actions(t, lang, ItemSurface::Lightbox, Vec::new(), actions, item_on),
 		))
 		.child(stage)
 		.child(
@@ -2277,16 +2487,41 @@ pub enum DocumentPanelEvent {
 
 pub const DOCUMENT_PANEL_WIDTH: f32 = SPACING * 150.0;
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PanelLook<'a> {
+	pub title: &'a str,
+	pub width: f32,
+	pub min_width: f32,
+	pub max_width: f32,
+	pub is_board: bool,
+}
+
+impl<'a> PanelLook<'a> {
+	pub fn document(title: &'a str) -> PanelLook<'a> {
+		PanelLook {
+			title,
+			width: DOCUMENT_PANEL_WIDTH,
+			min_width: DOCUMENT_PANEL_MIN_WIDTH,
+			max_width: DOCUMENT_PANEL_MAX_WIDTH,
+			is_board: false,
+		}
+	}
+}
+
+pub const DOCUMENT_PANEL_MIN_WIDTH: f32 = SPACING * 100.0;
+pub const DOCUMENT_PANEL_MAX_WIDTH: f32 = SPACING * 200.0;
+const PANEL_GRIP: f32 = SPACING * 2.0;
+
 pub fn document_panel<S: 'static>(
 	t: &Tokens,
 	lang: Language,
-	title: &str,
+	look: PanelLook,
 	presence: Option<El>,
 	body: El,
 	on: impl Fn(&mut S, DocumentPanelEvent) + Clone + 'static,
 ) -> El {
 	use common::library::panel;
-	let title = shown_name(title, lang);
+	let title = shown_name(look.title, lang);
 	let emit = |event: DocumentPanelEvent| emitter(&on, event);
 	let button = |glyph: &'static rune::Icon, label: &str, event: DocumentPanelEvent| {
 		Button::icon(glyph, label)
@@ -2295,6 +2530,7 @@ pub fn document_panel<S: 'static>(
 			.view(t)
 			.on_press(emit(event))
 	};
+	let glyph = if look.is_board { &icons::STICKY_NOTE } else { &icons::FILE };
 	let header = row()
 		.w_full()
 		.h(SPACING * 12.0)
@@ -2307,7 +2543,7 @@ pub fn document_panel<S: 'static>(
 				.radius(RADIUS_MD)
 				.fill(t.muted)
 				.center()
-				.child(icon(&icons::FILE, SPACING * 4.0).color(t.foreground))
+				.child(icon(glyph, SPACING * 4.0).color(t.foreground))
 				.a11y_hidden(),
 		)
 		.child(label_text(title, TEXT_SM_MEDIUM, t.foreground).truncate().grow(1.0).min_w(0.0))
@@ -2319,7 +2555,9 @@ pub fn document_panel<S: 'static>(
 		))
 		.child(button(&icons::CLOSE, say(panel::CLOSE, lang), DocumentPanelEvent::Close));
 	let divider = el().w_full().h(1.0).fill(faded(t.foreground, 0.06));
-	let content =
+	let content = if look.is_board {
+		col().w_full().grow(1.0).min_h(0.0).child(body)
+	} else {
 		col().w_full().grow(1.0).min_h(0.0).scroll(ScrollSpec { stick_bottom: false }).child(
 			col()
 				.w_full()
@@ -2327,17 +2565,29 @@ pub fn document_panel<S: 'static>(
 				.padding(SPACING * 8.0)
 				.child(document_title(t, title))
 				.child(body),
-		);
+		)
+	};
+	let grip = el()
+		.key("document-panel-grip")
+		.pin(Some(-PANEL_GRIP / 2.0), Some(0.0), None, Some(0.0))
+		.w(PANEL_GRIP)
+		.role("separator")
+		.label(say(panel::RESIZE, lang))
+		.range_value(f64::from(look.width), f64::from(look.min_width), f64::from(look.max_width))
+		.focusable(true)
+		.cursor(Cursor::ResizeColumn)
+		.focus_ring(2.0, -SPACING * 0.75, t.sidebar_ring);
 	row()
 		.key("document-panel")
-		.w(DOCUMENT_PANEL_WIDTH)
-		.max_w(DOCUMENT_PANEL_WIDTH)
+		.w(look.width)
+		.max_w(look.width)
 		.h_full()
 		.fill(t.card)
 		.role("complementary")
 		.label(title)
 		.child(el().w(1.0).h_full().fill(faded(t.foreground, 0.08)))
 		.child(col().grow(1.0).min_w(0.0).h_full().child(header).child(divider).child(content))
+		.child(grip)
 }
 
 #[cfg(test)]
@@ -2442,11 +2692,11 @@ mod tests {
 		let rows = rows_of("- [x] Copy is **final**\n- [ ] Release notes");
 		assert_eq!(
 			rows[0],
-			BlockRow { mark: RowMark::Task(true), text: "Copy is **final**".to_owned() }
+			BlockRow { mark: RowMark::Task(true), depth: 0, text: "Copy is **final**".to_owned() }
 		);
 		assert_eq!(
 			rows[1],
-			BlockRow { mark: RowMark::Task(false), text: "Release notes".to_owned() }
+			BlockRow { mark: RowMark::Task(false), depth: 0, text: "Release notes".to_owned() }
 		);
 		assert_eq!(plain_of(&rows[0].text), "Copy is final");
 	}
@@ -2463,4 +2713,1627 @@ mod tests {
 		assert_eq!(grid_columns(1280.0 - 60.0 - 6.0), 4);
 		assert_eq!(grid_columns(320.0), 1);
 	}
+}
+
+pub fn inline_field(markdown: &str) -> TextEdit {
+	const SIGNS: [(&str, Mark); 6] = [
+		("**", Mark::Bold),
+		("~~", Mark::Strike),
+		("*", Mark::Italic),
+		("_", Mark::Italic),
+		("`", Mark::Code),
+		("__", Mark::Bold),
+	];
+	let mut text = String::new();
+	let mut marks = Vec::new();
+	let mut rest = markdown;
+	'scan: while !rest.is_empty() {
+		if let Some(after) = rest.strip_prefix('\\')
+			&& let Some(escaped) = after.chars().next()
+		{
+			text.push(escaped);
+			rest = &after[escaped.len_utf8()..];
+			continue;
+		}
+		let image = rest.strip_prefix("![");
+		if let Some(after) = image.or_else(|| rest.strip_prefix('['))
+			&& let Some((label, tail)) = after.split_once("](")
+			&& let Some((target, tail)) = tail.split_once(')')
+		{
+			let start = text.len();
+			text.push_str(label);
+			let mark = if image.is_some() {
+				Mark::Pill(target.to_owned())
+			} else {
+				Mark::Link(target.to_owned())
+			};
+			marks.push(MarkRange::new(start..text.len(), mark));
+			rest = tail;
+			continue;
+		}
+		if let Some(after) = rest.strip_prefix('<')
+			&& let Some((target, tail)) = after.split_once('>')
+			&& (target.contains("://") || target.contains('@'))
+		{
+			let start = text.len();
+			text.push_str(target);
+			marks.push(MarkRange::new(start..text.len(), Mark::Link(target.to_owned())));
+			rest = tail;
+			continue;
+		}
+		for (sign, mark) in SIGNS {
+			if let Some(after) = rest.strip_prefix(sign)
+				&& let Some(end) = after.find(sign)
+				&& end > 0
+			{
+				let start = text.len();
+				text.push_str(&after[..end]);
+				marks.push(MarkRange::new(start..text.len(), mark));
+				rest = &after[end + sign.len()..];
+				continue 'scan;
+			}
+		}
+		let next = rest.chars().next().map_or(1, char::len_utf8);
+		text.push_str(&rest[..next]);
+		rest = &rest[next..];
+	}
+	let lines = text.matches('\n').count() + 1;
+	TextEdit::from_parts(text, marks, vec![Block::Paragraph; lines]).allow_marks([
+		Mark::Bold,
+		Mark::Italic,
+		Mark::Strike,
+		Mark::Code,
+		Mark::Link(String::new()),
+	])
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Agent<'a> {
+	pub name: &'a str,
+	pub hue: Option<f32>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Run<'a> {
+	pub agent: Agent<'a>,
+	pub sentence: &'a str,
+	pub is_held: bool,
+}
+
+#[derive(Clone, Copy)]
+pub enum TileImage<'a> {
+	Ready(&'a Image),
+	Resolving,
+	Failed,
+}
+
+pub struct Tile<'a> {
+	pub image: TileImage<'a>,
+	pub alt: &'a str,
+	pub caption: &'a str,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CalloutTone {
+	Note,
+	Tip,
+	Warning,
+}
+
+impl CalloutTone {
+	pub const ALL: [CalloutTone; 3] = [CalloutTone::Note, CalloutTone::Tip, CalloutTone::Warning];
+
+	pub fn of(source: &str) -> CalloutTone {
+		let first = source.split('\n').next().unwrap_or_default();
+		if first.contains("[!TIP]") {
+			CalloutTone::Tip
+		} else if first.contains("[!WARNING]") {
+			CalloutTone::Warning
+		} else {
+			CalloutTone::Note
+		}
+	}
+
+	fn name(self) -> Key {
+		use crate::strings::chat::answer_block::callout;
+		match self {
+			CalloutTone::Note => callout::NOTE,
+			CalloutTone::Tip => callout::TIP,
+			CalloutTone::Warning => callout::WARNING,
+		}
+	}
+
+	fn ink(self, t: &Tokens) -> Color {
+		match self {
+			CalloutTone::Note => t.primary_strong,
+			CalloutTone::Tip => t.success,
+			CalloutTone::Warning => t.warning,
+		}
+	}
+
+	fn glyph(self) -> &'static rune::Icon {
+		match self {
+			CalloutTone::Note => &icons::INFO,
+			CalloutTone::Tip => &icons::LIGHTBULB,
+			CalloutTone::Warning => &icons::TRIANGLE_ALERT,
+		}
+	}
+}
+
+pub type Record = Vec<(String, String)>;
+
+pub fn fence_body(source: &str) -> (&str, String) {
+	let mut lines = source.split('\n');
+	let open = lines.next().unwrap_or_default().trim_start();
+	let info = open.trim_start_matches(['`', '~']).split_whitespace().next().unwrap_or_default();
+	let mut body: Vec<&str> = lines.collect();
+	if body.last().is_some_and(|last| fence_of(last.trim_start()).is_some()) {
+		body.pop();
+	}
+	(info, body.join("\n"))
+}
+
+pub fn records_of(body: &str) -> Vec<Record> {
+	let mut records: Vec<Record> = Vec::new();
+	for line in body.split('\n') {
+		let starts = line.starts_with("- ");
+		let bare = line.trim_start_matches("- ").trim_start();
+		let Some((key, value)) = bare.split_once(':') else { continue };
+		if !key.chars().all(|c| c.is_ascii_lowercase() || c == '-') {
+			continue;
+		}
+		if starts || records.is_empty() {
+			records.push(Vec::new());
+		}
+		if let Some(record) = records.last_mut() {
+			record.push((key.to_owned(), value.trim().to_owned()));
+		}
+	}
+	records
+}
+
+pub fn field_of<'r>(record: &'r Record, key: &str) -> &'r str {
+	record.iter().find(|(name, _)| name == key).map_or("", |(_, value)| value)
+}
+
+pub fn table_cells(source: &str) -> Vec<Vec<String>> {
+	source
+		.split('\n')
+		.enumerate()
+		.filter(|(index, _)| *index != 1)
+		.map(|(_, line)| {
+			let inner = line.trim().trim_start_matches('|').trim_end_matches('|');
+			inner.split('|').map(|cell| cell.trim().to_owned()).collect()
+		})
+		.collect()
+}
+
+fn agent_tokens(t: &Tokens, agent: Agent) -> Tokens {
+	t.in_space(agent.hue)
+}
+
+fn run_span(t: &Tokens, run: &Run, start: usize) -> Span {
+	let ink = agent_tokens(t, run.agent).primary;
+	Span {
+		bg: Some(faded(ink, 0.12)),
+		bg_pad: 2.0,
+		underline: Some(faded(ink, 0.5)),
+		..Span::new(start, start + run.sentence.len())
+	}
+}
+
+pub fn read_text(t: &Tokens, kind: LibraryBlockType, markdown: &str, runs: &[Run]) -> El {
+	read_text_in(t, block_style(kind), block_ink(t, kind), markdown, runs)
+}
+
+fn read_text_in(t: &Tokens, style: TextStyle, ink: Color, markdown: &str, runs: &[Run]) -> El {
+	let edit = inline_field(markdown);
+	let shown: Vec<(&Run, usize)> = runs
+		.iter()
+		.filter_map(|run| edit.text.find(run.sentence).map(|start| (run, start)))
+		.collect();
+	let field = text_input(&edit, style)
+		.read_only(true)
+		.focusable(false)
+		.color(ink)
+		.spans(shown.iter().map(|(run, start)| run_span(t, run, *start)).collect::<Vec<_>>());
+	let flags: Vec<El> = shown
+		.iter()
+		.filter(|(run, _)| !run.is_held)
+		.map(|(run, _)| agent_caret(t, run.agent))
+		.collect();
+	if flags.is_empty() {
+		return field.w_full();
+	}
+	row().w_full().items_start().child(field).children(flags).child(el().grow(1.0))
+}
+
+pub fn body_block<'a>(
+	t: &Tokens,
+	lang: Language,
+	source: &str,
+	runs: &[Run],
+	picture: &dyn Fn(&str) -> TileImage<'a>,
+) -> El {
+	let kind = block_type_of(source);
+	match kind {
+		LibraryBlockType::Callout => {
+			let text = rows_of(source)
+				.into_iter()
+				.map(|line| read_text_in(t, TEXT_READING, t.muted_foreground, &line.text, runs));
+			callout_view(t, lang, CalloutTone::of(source), col().w_full().children(text))
+		}
+		LibraryBlockType::Code => {
+			let (language, body) = fence_body(source);
+			let body = text(body).font(TEXT_COMPACT_MONO).color(t.foreground).wrap();
+			code_view(t, lang, language, body, false)
+		}
+		LibraryBlockType::Table => {
+			let rows = table_cells(source)
+				.into_iter()
+				.enumerate()
+				.map(|(index, cells)| {
+					let style = if index == 0 { TEXT_SM_SEMIBOLD } else { TEXT_SM };
+					cells
+						.iter()
+						.map(|cell| read_text_in(t, style, t.foreground, cell, runs))
+						.collect()
+				})
+				.collect();
+			table_view(t, rows)
+		}
+		LibraryBlockType::WebPage => {
+			let (_, body) = fence_body(source);
+			let record = records_of(&body).into_iter().next().unwrap_or_default();
+			web_page_view(t, lang, field_of(&record, "url"), field_of(&record, "title"))
+		}
+		LibraryBlockType::Collapsible => {
+			let (_, body) = fence_body(source);
+			let title =
+				body.split('\n').find_map(|line| line.strip_prefix("title: ")).unwrap_or_default();
+			collapsible_view(t, title)
+		}
+		LibraryBlockType::Gallery => {
+			let (_, body) = fence_body(source);
+			let records = records_of(&body);
+			let tiles: Vec<Tile> = records
+				.iter()
+				.map(|record| Tile {
+					image: picture(field_of(record, "image")),
+					alt: "",
+					caption: "",
+				})
+				.collect();
+			gallery_view(t, lang, &tiles)
+		}
+		LibraryBlockType::Other => block_frame(
+			t,
+			kind,
+			vec![(
+				RowMark::None,
+				text(source.to_owned()).font(TEXT_COMPACT_MONO).color(t.muted_foreground).wrap(),
+			)],
+		),
+		_ => {
+			let rows = rows_of(source)
+				.into_iter()
+				.map(|line| (line.mark, indented(read_text(t, kind, &line.text, runs), line.depth)))
+				.collect();
+			block_frame(t, kind, rows)
+		}
+	}
+}
+
+pub const INDENT: f32 = SPACING * 6.0;
+
+fn indented(body: El, depth: usize) -> El {
+	if depth == 0 { body } else { col().w_full().pl(INDENT * depth as f32).child(body) }
+}
+
+pub fn callout_view(t: &Tokens, lang: Language, tone: CalloutTone, body: El) -> El {
+	let ink = tone.ink(t);
+	row()
+		.w_full()
+		.gap(SPACING * 3.0)
+		.padding(SPACING * 3.0)
+		.radius(RADIUS_CONTROL)
+		.border(1.0, faded(ink, 0.18))
+		.fill(faded(ink, if t.dark { 0.08 } else { 0.05 }))
+		.role("note")
+		.child(
+			row()
+				.w(SPACING * 5.0)
+				.h(SPACING * 6.0)
+				.center()
+				.child(icon(tone.glyph(), SPACING * 4.5).color(ink))
+				.a11y_hidden(),
+		)
+		.child(
+			col()
+				.grow(1.0)
+				.min_w(0.0)
+				.gap(SPACING * 0.5)
+				.child(label_text(say(tone.name(), lang), TEXT_SM_SEMIBOLD, t.foreground))
+				.child(body),
+		)
+}
+
+pub fn code_view(t: &Tokens, lang: Language, language: &str, body: El, is_editing: bool) -> El {
+	let mut code = col().w_full().padding(SPACING * 3.0).radius(RADIUS_CONTROL).fill(t.muted);
+	if is_editing {
+		code =
+			code.child(row().pb(SPACING * 2.0).child(language_trigger(t, lang, language, false)));
+	}
+	code.child(body)
+}
+
+pub fn language_name(lang: Language, language: &str) -> &'static str {
+	use common::library::editor::blocks::code::languages;
+	let key = match language {
+		"bash" | "sh" | "shell" => languages::BASH,
+		"json" => languages::JSON,
+		"ts" | "typescript" => languages::TYPESCRIPT,
+		"py" | "python" => languages::PYTHON,
+		"css" => languages::CSS,
+		"diff" => languages::DIFF,
+		"html" => languages::HTML,
+		"md" | "markdown" => languages::MARKDOWN,
+		"rs" | "rust" => languages::RUST,
+		"tsx" => languages::TSX,
+		"yaml" | "yml" => languages::YAML,
+		_ => languages::TEXT,
+	};
+	say(key, lang)
+}
+
+pub const LANGUAGES: [&str; 12] = [
+	"text",
+	"bash",
+	"json",
+	"typescript",
+	"python",
+	"css",
+	"diff",
+	"html",
+	"markdown",
+	"rust",
+	"tsx",
+	"yaml",
+];
+
+pub fn language_trigger(t: &Tokens, lang: Language, language: &str, is_open: bool) -> El {
+	let name = language_name(lang, language);
+	let label = filled(say(common::library::editor::blocks::code::LANGUAGE, lang), "name", name);
+	let trigger = row()
+		.key("library-code-language")
+		.h(SPACING * 6.0)
+		.padding(SPACING)
+		.gap(SPACING)
+		.center_y()
+		.radius(RADIUS_SM)
+		.fill(faded(t.foreground, if is_open { 0.1 } else { 0.06 }))
+		.hover(faded(t.foreground, 0.1))
+		.role("button")
+		.expanded(is_open)
+		.label(label)
+		.child(label_text(name, TEXT_XS_MEDIUM, t.foreground))
+		.child(icon(&icons::CHEVRON_DOWN, SPACING * 3.0).color(t.foreground));
+	focus_ring(t, instant(trigger))
+}
+
+pub fn language_menu(t: &Tokens, lang: Language, chosen: &str, query: &str) -> El {
+	use common::library::editor::blocks::code;
+	let shown: Vec<&str> = LANGUAGES
+		.into_iter()
+		.filter(|language| {
+			language_name(lang, language).to_lowercase().contains(&query.to_lowercase())
+		})
+		.collect();
+	let search = row()
+		.h(SPACING * 8.0)
+		.padding(SPACING * 2.0)
+		.gap(SPACING * 2.0)
+		.center_y()
+		.child(icon(&icons::SEARCH, SPACING * 3.5).color(t.muted_foreground))
+		.child(if query.is_empty() {
+			label_text(say(code::SEARCH, lang), TEXT_COMPACT, t.placeholder_foreground)
+		} else {
+			label_text(query, TEXT_COMPACT, t.foreground)
+		});
+	let mut list = col().w_full().role("listbox").label(say(code::SEARCH, lang));
+	if shown.is_empty() {
+		list =
+			list.child(row().h(SPACING * 8.0).padding(SPACING * 2.0).center_y().child(label_text(
+				say(code::NO_MATCH, lang),
+				TEXT_COMPACT,
+				t.muted_foreground,
+			)));
+	}
+	for (index, language) in shown.iter().enumerate() {
+		let is_chosen = *language == chosen;
+		let mut option = row()
+			.h(SPACING * 8.0)
+			.padding(SPACING * 2.0)
+			.gap(SPACING * 2.0)
+			.center_y()
+			.justify_between()
+			.radius(RADIUS_MD)
+			.role("option")
+			.checked(is_chosen)
+			.child(label_text(language_name(lang, language), TEXT_COMPACT, t.foreground));
+		if index == 0 {
+			option = option.fill(t.accent);
+		}
+		if is_chosen {
+			option = option.child(icon(&icons::CHECK, SPACING * 3.5).color(t.primary));
+		}
+		list = list.child(option);
+	}
+	popup_panel(t, SPACING * 50.0)
+		.child(search)
+		.child(el().h(1.0).mx(-SPACING).my(SPACING).fill(t.border))
+		.child(list)
+}
+
+fn popup_panel(t: &Tokens, width: f32) -> El {
+	elevated(t, col().w(width).padding(SPACING).radius(RADIUS_XL).fill(t.popover))
+}
+
+pub fn table_view(t: &Tokens, rows: Vec<Vec<El>>) -> El {
+	table_grid(t, rows, None)
+}
+
+fn table_grid(t: &Tokens, rows: Vec<Vec<El>>, focused: Option<(usize, usize)>) -> El {
+	let count = rows.len();
+	let lines = rows.into_iter().enumerate().map(|(row_index, cells)| {
+		let mut line = row().w_full();
+		for (column, cell) in cells.into_iter().enumerate() {
+			let mut cell =
+				col().grow(1.0).w(0.0).min_w(SPACING * 6.0).padding(SPACING * 2.5).child(cell);
+			if focused == Some((row_index, column)) {
+				cell = cell.fill(t.card).outline(2.0, -2.0, t.primary);
+			}
+			line = line.child(cell);
+		}
+		if row_index == 0 {
+			line = line.fill(t.muted);
+		}
+		if row_index + 1 < count {
+			col().w_full().child(line).child(el().w_full().h(1.0).fill(t.border))
+		} else {
+			line
+		}
+	});
+	col().w_full().radius(RADIUS_MD).clip_rounded(RADIUS_MD).border(1.0, t.border).children(lines)
+}
+
+pub fn table_editor(t: &Tokens, lang: Language, rows: Vec<Vec<El>>, focused: (usize, usize)) -> El {
+	use common::library::editor::blocks::table;
+	let add = |content: El| {
+		instant(
+			row()
+				.radius(RADIUS_SM)
+				.fill(faded(t.foreground, 0.04))
+				.hover(faded(t.foreground, 0.08))
+				.center()
+				.gap(SPACING)
+				.child(content),
+		)
+	};
+	let column = add(icon(&icons::PLUS, SPACING * 3.0).color(t.muted_foreground))
+		.key("library-table-add-column")
+		.w(SPACING * 6.0)
+		.mb(SPACING * 2.0)
+		.role("button")
+		.label(say(table::ADD_COLUMN, lang));
+	let add_row = add(row()
+		.gap(SPACING)
+		.center_y()
+		.child(icon(&icons::PLUS, SPACING * 3.0).color(t.muted_foreground))
+		.child(label_text(say(table::ADD_ROW, lang), TEXT_XS_MEDIUM, t.muted_foreground)))
+	.key("library-table-add-row")
+	.h(SPACING * 6.0)
+	.w_full()
+	.role("button")
+	.label(say(table::ADD_ROW, lang));
+	col()
+		.w_full()
+		.gap(SPACING)
+		.child(
+			row()
+				.w_full()
+				.gap(SPACING * 3.0)
+				.child(col().grow(1.0).min_w(0.0).child(table_grid(t, rows, Some(focused))))
+				.child(column),
+		)
+		.child(row().w_full().pr(SPACING * 9.0).child(add_row))
+}
+
+pub fn web_page_view(t: &Tokens, lang: Language, url: &str, title: &str) -> El {
+	let domain = url.split("://").nth(1).unwrap_or(url).split('/').next().unwrap_or_default();
+	let open = say(crate::strings::chat::answer_block::web_page::OPEN, lang);
+	row()
+		.w_full()
+		.gap(SPACING * 3.0)
+		.padding(SPACING * 3.0)
+		.center_y()
+		.radius(RADIUS_XL)
+		.border(1.0, faded(t.foreground, 0.12))
+		.fill(t.card)
+		.child(
+			col()
+				.grow(1.0)
+				.min_w(0.0)
+				.gap(SPACING * 0.5)
+				.child(label_text(domain, TEXT_XS, t.muted_foreground).truncate())
+				.child(label_text(title, TEXT_SM_SEMIBOLD, t.foreground).wrap()),
+		)
+		.child(focus_ring(
+			t,
+			instant(
+				row()
+					.padding(SPACING * 2.0)
+					.radius(RADIUS_MD)
+					.border(1.0, faded(t.foreground, 0.12))
+					.hover(faded(t.foreground, 0.08))
+					.role("button")
+					.label(open)
+					.child(label_text(open, TEXT_COMPACT_MEDIUM, t.foreground)),
+			),
+		))
+}
+
+pub fn web_page_editor(t: &Tokens, lang: Language, link: &str, card: El, has_failed: bool) -> El {
+	use common::library::editor::blocks::web_page;
+	let field = row()
+		.key("library-web-page-link")
+		.w_full()
+		.h(SPACING * 9.0)
+		.padding(SPACING * 1.75)
+		.gap(SPACING * 2.0)
+		.center_y()
+		.radius(RADIUS_LG)
+		.border(1.0, t.primary)
+		.outline(3.0, 0.0, faded(t.primary, 0.3))
+		.fill(t.card)
+		.role("textbox")
+		.label(say(web_page::LINK, lang))
+		.child(icon(&icons::LINK, SPACING * 3.5).color(t.muted_foreground))
+		.child(label_text(link, TEXT_SM, t.foreground).grow(1.0).min_w(0.0).truncate())
+		.child(
+			row()
+				.gap(SPACING)
+				.center_y()
+				.child(kbd(t, say(web_page::UPDATE_KEY, lang)))
+				.child(label_text(say(web_page::UPDATE, lang), TEXT_XS, t.muted_foreground)),
+		);
+	let mut top = col().w_full().child(field);
+	if has_failed {
+		top = top.child(
+			label_text(say(web_page::FAILED, lang), TEXT_XS, t.destructive)
+				.wrap()
+				.pt(SPACING * 1.5)
+				.role("alert"),
+		);
+	}
+	col().w_full().gap(SPACING * 2.5).child(top).child(card)
+}
+
+fn kbd(t: &Tokens, keys: &str) -> El {
+	row()
+		.h(SPACING * 5.0)
+		.px(SPACING)
+		.radius(RADIUS_SM)
+		.fill(faded(t.foreground, 0.08))
+		.center()
+		.child(label_text(keys, TEXT_XS_MEDIUM, t.muted_foreground))
+}
+
+pub fn collapsible_view(t: &Tokens, title: &str) -> El {
+	row()
+		.w_full()
+		.padding(SPACING * 3.0)
+		.gap(SPACING * 2.0)
+		.center_y()
+		.radius(RADIUS_CONTROL)
+		.border(1.0, t.border)
+		.child(icon(&icons::CHEVRON_RIGHT, SPACING * 4.0).color(t.muted_foreground))
+		.child(label_text(title, TEXT_SM_MEDIUM, t.foreground))
+}
+
+const GALLERY_HEIGHT: f32 = SPACING * 75.0;
+const GALLERY_SHOWN: usize = 5;
+
+fn tile_view(t: &Tokens, tile: &Tile) -> El {
+	let frame = el().w_full().h_full().radius(RADIUS_XS * 2.0).clip_rounded(RADIUS_XS * 2.0);
+	match tile.image {
+		TileImage::Ready(image) => {
+			frame.pixels_fit(image.pixels(), SurfaceFit::Fill).label(tile.alt)
+		}
+		TileImage::Resolving => frame.fill(faded(t.foreground, 0.1)),
+		TileImage::Failed => frame
+			.fill(faded(t.foreground, 0.1))
+			.center()
+			.child(icon(&icons::IMAGE, SPACING * 5.0).color(t.muted_foreground)),
+	}
+}
+
+pub fn gallery_view(t: &Tokens, lang: Language, tiles: &[Tile]) -> El {
+	let shown: Vec<El> = tiles.iter().take(GALLERY_SHOWN).map(|tile| tile_view(t, tile)).collect();
+	let more = tiles.len().saturating_sub(GALLERY_SHOWN);
+	let mut shown = shown.into_iter();
+	let lead = shown.next().unwrap_or_else(el);
+	let rest: Vec<El> = shown.collect();
+	let mut rest_cells: Vec<El> = rest
+		.into_iter()
+		.map(|tile| col().grow(1.0).w(0.0).h_full().min_w(0.0).child(tile))
+		.collect();
+	if more > 0
+		&& let Some(last) = rest_cells.pop()
+	{
+		use crate::strings::chat::answer_block::gallery;
+		let template = say(if more == 1 { gallery::MORE_ONE } else { gallery::MORE_OTHER }, lang);
+		rest_cells.push(
+			last.child(
+				row()
+					.pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+					.radius(RADIUS_XS * 2.0)
+					.fill(Color::BLACK.alpha(0.55))
+					.center()
+					.label(filled(template, "count", &more.to_string()))
+					.child(label_text(&format!("+{more}"), TEXT_TITLE, Color::WHITE)),
+			),
+		);
+	}
+	let side = match rest_cells.len() {
+		0 => None,
+		1 | 2 => Some(col().grow(1.0).w(0.0).h_full().gap(SPACING * 1.5).children(rest_cells)),
+		_ => {
+			let mut cells = rest_cells.into_iter();
+			let top: Vec<El> = cells.by_ref().take(2).collect();
+			let bottom: Vec<El> = cells.collect();
+			Some(
+				col()
+					.grow(1.0)
+					.w(0.0)
+					.h_full()
+					.gap(SPACING * 1.5)
+					.child(row().w_full().grow(1.0).gap(SPACING * 1.5).children(top))
+					.child(row().w_full().grow(1.0).gap(SPACING * 1.5).children(bottom)),
+			)
+		}
+	};
+	row()
+		.w_full()
+		.h(GALLERY_HEIGHT)
+		.gap(SPACING * 1.5)
+		.child(col().grow(1.0).w(0.0).h_full().child(lead))
+		.children(side)
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct GalleryDrag {
+	pub from: usize,
+	pub to: usize,
+}
+
+pub fn gallery_editor(
+	t: &Tokens,
+	lang: Language,
+	tiles: &[Tile],
+	columns: usize,
+	drag: Option<GalleryDrag>,
+	has_add_failed: bool,
+) -> (El, Option<El>) {
+	use common::library::editor::blocks::gallery;
+	let count = tiles.len().to_string();
+	let edited = tiles.iter().enumerate().map(|(index, tile)| {
+		let position = (index + 1).to_string();
+		let caption = if tile.caption.is_empty() {
+			label_text(
+				say(gallery::CAPTION_PLACEHOLDER, lang),
+				TEXT_XS_MEDIUM,
+				t.placeholder_foreground,
+			)
+		} else {
+			label_text(tile.caption, TEXT_XS_MEDIUM, t.foreground).truncate()
+		};
+		let remove = row()
+			.pin(None, Some(SPACING * 2.0), Some(SPACING * 2.0), None)
+			.size(SPACING * 6.0, SPACING * 6.0)
+			.radius(SPACING * 3.0)
+			.fill(Color::BLACK.alpha(0.6))
+			.center()
+			.role("button")
+			.label(filled(say(gallery::REMOVE, lang), "position", &position))
+			.child(icon(&icons::CLOSE, SPACING * 3.0).color(Color::WHITE));
+		let caption = row()
+			.pin(Some(SPACING * 2.0), None, Some(SPACING * 2.0), Some(SPACING * 2.0))
+			.padding(SPACING * 1.5)
+			.radius(RADIUS_SM)
+			.fill(faded(t.card, 0.92))
+			.role("textbox")
+			.label(filled(say(gallery::CAPTION, lang), "position", &position))
+			.child(caption);
+		let mut cell = el()
+			.w_full()
+			.h(SPACING * 28.0)
+			.label(filled(
+				&filled(say(gallery::TILE, lang), "position", &position),
+				"count",
+				&count,
+			))
+			.child(tile_view(t, tile))
+			.child(remove)
+			.child(caption);
+		if let Some(drag) = drag {
+			if drag.from == index {
+				cell = el().w_full().h(SPACING * 28.0).radius(RADIUS_XS * 2.0).fill(t.card);
+			} else if drag.to == index {
+				cell = cell.child(
+					el().pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+						.radius(RADIUS_XS * 2.0)
+						.border(2.0, t.primary)
+						.border_dash(SPACING * 1.5, SPACING)
+						.fill(faded(t.primary, 0.06)),
+				);
+			}
+		}
+		cell
+	});
+	let cells: Vec<El> = edited.collect();
+	let mut lines = col().w_full().gap(SPACING * 1.5);
+	for line in cells.chunks(columns.max(1)) {
+		let mut line: Vec<El> = line.to_vec();
+		line.resize_with(columns.max(1), el);
+		lines =
+			lines.child(row().w_full().gap(SPACING * 1.5).children(
+				line.into_iter().map(|cell| col().grow(1.0).w(0.0).min_w(0.0).child(cell)),
+			));
+	}
+	let ring = el()
+		.w_full()
+		.padding(SPACING)
+		.radius(RADIUS_CONTROL + SPACING)
+		.outline(2.0, SPACING, t.primary)
+		.child(lines);
+	let add = focus_ring(
+		t,
+		instant(
+			row()
+				.key("library-gallery-add")
+				.h(SPACING * 7.0)
+				.padding(SPACING * 1.5)
+				.gap(SPACING)
+				.center_y()
+				.radius(SPACING * 3.5)
+				.fill(faded(t.foreground, 0.06))
+				.hover(faded(t.foreground, 0.1))
+				.role("button")
+				.label(say(gallery::ADD, lang))
+				.child(icon(&icons::PLUS, SPACING * 3.5).color(t.foreground))
+				.child(label_text(say(gallery::ADD, lang), TEXT_COMPACT_MEDIUM, t.foreground)),
+		),
+	);
+	let hint = if has_add_failed {
+		label_text(say(gallery::ADD_FAILED, lang), TEXT_XS, t.destructive).role("alert")
+	} else {
+		label_text(say(gallery::HINT, lang), TEXT_XS, t.muted_foreground)
+	};
+	let lifted = drag.and_then(|drag| tiles.get(drag.from)).map(|tile| {
+		el().size(SPACING * 60.0, 170.0)
+			.radius(RADIUS_XL)
+			.clip_rounded(RADIUS_XL)
+			.fill(t.muted)
+			.rotate(-2.0_f32.to_radians())
+			.shadow(SPACING * 3.0, SPACING * 8.0, Color::BLACK.alpha(0.3))
+			.a11y_hidden()
+			.child(tile_view(t, tile))
+	});
+	let editor = col()
+		.w_full()
+		.gap(SPACING * 2.0)
+		.child(
+			row()
+				.w_full()
+				.flex_wrap()
+				.gaps(SPACING, SPACING * 3.0)
+				.center_y()
+				.child(add)
+				.child(hint),
+		)
+		.child(ring);
+	(editor, lifted)
+}
+
+pub fn callout_editor(t: &Tokens, lang: Language, tone: CalloutTone, field: El) -> El {
+	use common::library::editor::blocks::callout;
+	let segments = CalloutTone::ALL.map(|each| {
+		let name = say(each.name(), lang);
+		let is_chosen = each == tone;
+		let segment = row()
+			.key(format!("library-callout-{name}"))
+			.h(SPACING * 6.0)
+			.px(SPACING * 2.5)
+			.center()
+			.radius(SPACING * 3.0)
+			.role("button")
+			.checked(is_chosen)
+			.label(name)
+			.child(label_text(
+				name,
+				TEXT_XS_MEDIUM,
+				if is_chosen { t.foreground } else { t.muted_foreground },
+			));
+		let segment = if is_chosen {
+			segment.fill(t.card).outline(1.0, -1.0, faded(t.foreground, 0.1))
+		} else {
+			segment
+		};
+		focus_ring(t, instant(segment))
+	});
+	let track = row()
+		.padding(3.0)
+		.radius(SPACING * 4.0)
+		.fill(faded(t.card, 0.7))
+		.role("group")
+		.label(say(callout::TONE, lang))
+		.children(segments);
+	callout_view(
+		t,
+		lang,
+		tone,
+		col().w_full().items_start().gap(SPACING * 2.0).child(field).child(track),
+	)
+}
+
+pub fn agent_caret(t: &Tokens, agent: Agent) -> El {
+	let ink = agent_tokens(t, agent);
+	let flag = row()
+		.pin(Some(0.0), Some(-SPACING * 5.5), None, None)
+		.h(SPACING * 5.0)
+		.pl(SPACING * 0.5)
+		.pr(SPACING * 1.75)
+		.gap(SPACING)
+		.center_y()
+		.corners([5.0, 5.0, 5.0, 0.0])
+		.fill(ink.primary)
+		.role("button")
+		.label(filled(
+			say(common::library::document::agents::CARET, Language::En),
+			"name",
+			agent.name,
+		))
+		.child(Face::still(agent.name, agent.hue).draw(SPACING * 4.0, &ink))
+		.child(
+			label_text(agent.name, TEXT_XS_MEDIUM, ink.bot_avatar_ground)
+				.max_w(SPACING * 40.0)
+				.truncate(),
+		);
+	el().w(2.0).h(SPACING * 6.0).radius(1.0).fill(ink.primary).child(flag)
+}
+
+pub fn person_caret(t: &Tokens, name: &str) -> El {
+	let flag = row()
+		.pin(Some(0.0), Some(SPACING * 6.5), None, None)
+		.h(SPACING * 5.0)
+		.pl(SPACING * 0.5)
+		.pr(SPACING * 1.75)
+		.gap(SPACING)
+		.center_y()
+		.corners([0.0, 5.0, 5.0, 5.0])
+		.fill(t.primary)
+		.child(Person { name, image: None }.draw(SPACING * 4.0, t))
+		.child(
+			label_text(name, TEXT_XS_MEDIUM, t.primary_foreground).max_w(SPACING * 40.0).truncate(),
+		);
+	el().w(2.0).h(SPACING * 6.0).mr(-2.0).radius(1.0).fill(t.primary).child(flag)
+}
+
+pub const PEOPLE_SHOWN: usize = 3;
+
+pub fn presence<S: 'static>(
+	t: &Tokens,
+	lang: Language,
+	writers: &[Agent],
+	people: &[&str],
+	on_stop_all: Option<impl Fn(&mut S) + 'static>,
+) -> El {
+	use common::library::document::agents;
+	let mut bar = row().gap(SPACING * 2.0).center_y();
+	if !people.is_empty() {
+		let stack = people.iter().take(PEOPLE_SHOWN).enumerate().map(|(index, name)| {
+			let avatar = el()
+				.radius(SPACING * 3.5)
+				.border(2.0, t.card)
+				.child(Person { name, image: None }.draw(SPACING * 6.0, t));
+			if index > 0 { avatar.ml(-SPACING * 1.5) } else { avatar }
+		});
+		bar = bar.child(row().children(stack));
+	}
+	if writers.is_empty() {
+		return bar;
+	}
+	let faces = writers.iter().enumerate().map(|(index, agent)| {
+		let face = Face::still(agent.name, agent.hue).draw(SPACING * 6.0, &agent_tokens(t, *agent));
+		if index > 0 { face.ml(-SPACING * 1.5) } else { face }
+	});
+	let template =
+		say(if writers.len() == 1 { agents::WRITING_ONE } else { agents::WRITING_OTHER }, lang);
+	let mut pill = row()
+		.key("library-document-presence")
+		.h(SPACING * 8.0)
+		.pl(SPACING)
+		.pr(SPACING * 2.5)
+		.gap(SPACING * 2.0)
+		.center_y()
+		.radius(SPACING * 4.0)
+		.border(1.0, faded(t.foreground, 0.08))
+		.fill(faded(t.foreground, 0.04))
+		.child(row().children(faces).a11y_hidden())
+		.child(label_text(
+			&filled(template, "count", &writers.len().to_string()),
+			TEXT_COMPACT_MEDIUM,
+			t.soft_foreground,
+		));
+	if let Some(stop) = on_stop_all {
+		pill = pill
+			.pr(SPACING)
+			.child(chip(t, say(agents::STOP_ALL, lang), SPACING * 6.0).on_press(stop));
+	}
+	bar.child(pill)
+}
+
+fn chip(t: &Tokens, label: &str, height: f32) -> El {
+	focus_ring(
+		t,
+		instant(
+			row()
+				.key(format!("chip-{label}"))
+				.h(height)
+				.pl(SPACING * 2.0)
+				.pr(SPACING * 2.5)
+				.gap(SPACING * 1.5)
+				.center_y()
+				.radius(height / 2.0)
+				.fill(faded(t.foreground, 0.08))
+				.hover(faded(t.foreground, 0.12))
+				.role("button")
+				.label(label)
+				.child(label_text(
+					label,
+					if height < SPACING * 7.0 { TEXT_XS_MEDIUM } else { TEXT_COMPACT_MEDIUM },
+					t.foreground,
+				)),
+		),
+	)
+}
+
+pub struct Writer<'a> {
+	pub agent: Agent<'a>,
+	pub elapsed_seconds: u32,
+	pub sentences: usize,
+	pub section: &'a str,
+}
+
+pub fn agent_card(t: &Tokens, lang: Language, writer: &Writer) -> El {
+	use common::library::document::agents;
+	let ink = agent_tokens(t, writer.agent);
+	let elapsed = format!("{}:{:02}", writer.elapsed_seconds / 60, writer.elapsed_seconds % 60);
+	let summary = filled(
+		&filled(
+			say(
+				if writer.sentences == 1 { agents::SUMMARY_ONE } else { agents::SUMMARY_OTHER },
+				lang,
+			),
+			"count",
+			&writer.sentences.to_string(),
+		),
+		"section",
+		writer.section,
+	);
+	let stop = filled(say(agents::STOP, lang), "name", writer.agent.name);
+	col()
+		.key("library-document-agent-card")
+		.w(SPACING * 75.0)
+		.padding(SPACING * 3.0)
+		.gap(SPACING * 3.0)
+		.radius(SPACING * 3.0)
+		.fill(t.card_raised)
+		.shadow(SPACING * 3.0, SPACING * 8.0, Color::BLACK.alpha(if t.dark { 0.5 } else { 0.12 }))
+		.role("dialog")
+		.child(
+			row()
+				.gap(SPACING * 2.0)
+				.center_y()
+				.child(
+					label_text(
+						&filled(say(agents::TITLE, lang), "name", writer.agent.name),
+						TEXT_COMPACT_SEMIBOLD,
+						t.foreground,
+					)
+					.grow(1.0)
+					.min_w(0.0)
+					.truncate(),
+				)
+				.child(label_text(&elapsed, TEXT_XS, t.muted_foreground)),
+		)
+		.child(
+			row()
+				.gap(SPACING * 2.0)
+				.items_start()
+				.child(
+					el().mt(SPACING)
+						.size(SPACING * 2.5, SPACING * 2.5)
+						.radius(RADIUS_XS)
+						.border(1.0, faded(ink.primary, 0.5))
+						.fill(faded(ink.primary, 0.2)),
+				)
+				.child(
+					label_text(&summary, TEXT_COMPACT, t.soft_foreground)
+						.wrap()
+						.grow(1.0)
+						.min_w(0.0),
+				),
+		)
+		.child(row().gap(SPACING * 2.0).child(chip(t, &stop, SPACING * 7.0)).child(chip(
+			t,
+			say(agents::OPEN_CONVERSATION, lang),
+			SPACING * 7.0,
+		)))
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ItemAction {
+	Open,
+	OpenInNewTab,
+	Rename,
+	Copy,
+	Download,
+	ShowInFolder,
+	Delete,
+}
+
+impl ItemAction {
+	pub const ALL: [ItemAction; 7] = [
+		ItemAction::Open,
+		ItemAction::OpenInNewTab,
+		ItemAction::Rename,
+		ItemAction::Copy,
+		ItemAction::Download,
+		ItemAction::ShowInFolder,
+		ItemAction::Delete,
+	];
+
+	pub const BAR_MENU: [ItemAction; 5] = [
+		ItemAction::Open,
+		ItemAction::OpenInNewTab,
+		ItemAction::Rename,
+		ItemAction::ShowInFolder,
+		ItemAction::Delete,
+	];
+
+	fn label(self) -> Key {
+		use common::library::item_menu;
+		match self {
+			ItemAction::Open => item_menu::OPEN,
+			ItemAction::OpenInNewTab => item_menu::OPEN_IN_NEW_TAB,
+			ItemAction::Rename => item_menu::RENAME,
+			ItemAction::Copy => item_menu::COPY,
+			ItemAction::Download => item_menu::DOWNLOAD,
+			ItemAction::ShowInFolder => item_menu::SHOW_IN_FOLDER,
+			ItemAction::Delete => item_menu::DELETE,
+		}
+	}
+
+	fn glyph(self) -> &'static rune::Icon {
+		match self {
+			ItemAction::Open => &icons::EYE,
+			ItemAction::OpenInNewTab => &icons::SQUARE_PLUS,
+			ItemAction::Rename => &icons::PEN,
+			ItemAction::Copy => &icons::COPY,
+			ItemAction::Download => &icons::DOWNLOAD,
+			ItemAction::ShowInFolder => &icons::FOLDER,
+			ItemAction::Delete => &icons::BIN,
+		}
+	}
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ImageMenu {
+	pub is_saving: bool,
+}
+
+pub const ITEM_MENU_KEY: &str = "library-item-menu";
+
+pub fn item_menu(
+	t: &Tokens,
+	lang: Language,
+	name: &str,
+	actions: &[ItemAction],
+	image: Option<ImageMenu>,
+) -> El {
+	use common::library::{image_menu, item_menu};
+	let label = filled(say(item_menu::LABEL, lang), "name", shown_name(name, lang));
+	let mut rows: Vec<MenuRow> = actions
+		.iter()
+		.filter(|action| **action != ItemAction::Delete)
+		.map(|action| MenuRow::Item(MenuItem::new(say(action.label(), lang)).glyph(action.glyph())))
+		.collect();
+	if actions.contains(&ItemAction::Delete) {
+		rows.push(MenuRow::Separator);
+		rows.push(MenuRow::Item(
+			MenuItem::new(say(item_menu::DELETE, lang)).glyph(&icons::BIN).destructive(),
+		));
+	}
+	if let Some(image) = image {
+		let save = MenuItem::new(say(image_menu::SAVE_TO_LIBRARY, lang)).glyph(&icons::BOOK);
+		rows.push(MenuRow::Separator);
+		rows.push(MenuRow::Item(if image.is_saving { save.disabled() } else { save }));
+		rows.push(MenuRow::Item(
+			MenuItem::new(say(image_menu::COPY_IMAGE, lang)).glyph(&icons::COPY),
+		));
+	}
+	context_menu(t, &label, rows).key(ITEM_MENU_KEY)
+}
+
+pub fn delete_confirmation<S: 'static>(
+	t: &Tokens,
+	lang: Language,
+	name: &str,
+	has_failed: bool,
+	on: impl Fn(&mut S, bool) + Clone + 'static,
+) -> Vec<El> {
+	use common::library::item_menu::{self, delete_confirm};
+	let shown = shown_name(name, lang);
+	let title = filled(say(delete_confirm::TITLE, lang), "name", shown);
+	let (cancel_on, confirm_on, dismiss_on) = (on.clone(), on.clone(), on);
+	let mut footer = Vec::new();
+	if has_failed {
+		footer.push(
+			label_text(
+				&filled(say(delete_confirm::FAILURE, lang), "name", shown),
+				TEXT_XS,
+				t.destructive,
+			)
+			.wrap()
+			.grow(1.0)
+			.min_w(0.0)
+			.role("alert"),
+		);
+	}
+	footer.push(
+		Button::new(say(common::library::picker::CANCEL, lang))
+			.variant(ButtonVariant::Outline)
+			.view(t)
+			.on_press(move |s: &mut S| cancel_on(s, false)),
+	);
+	footer.push(
+		Button::new(say(item_menu::DELETE, lang))
+			.variant(ButtonVariant::Destructive)
+			.view(t)
+			.on_press(move |s: &mut S| confirm_on(s, true)),
+	);
+	vec![
+		scrim(t),
+		dialog(
+			t,
+			DialogContent {
+				title: &title,
+				description: say(delete_confirm::DESCRIPTION, lang),
+				footer,
+			},
+			move |s: &mut S| dismiss_on(s, false),
+		),
+	]
+}
+
+pub fn drop_overlay(t: &Tokens, lang: Language, count: usize) -> El {
+	use common::library::{bring_in, drop};
+	let template = say(if count == 1 { drop::TITLE_ONE } else { drop::TITLE_OTHER }, lang);
+	let zone = col()
+		.grow(1.0)
+		.gap(SPACING * 4.0)
+		.padding(SPACING * 4.0)
+		.center()
+		.radius(RADIUS_CONTROL)
+		.border(2.0, t.primary)
+		.border_dash(SPACING * 2.0, SPACING * 1.5)
+		.fill(faded(t.primary, 0.08))
+		.live_region(rune::LiveRegion::Polite)
+		.child(
+			row()
+				.size(SPACING * 14.0, SPACING * 14.0)
+				.radius(SPACING * 7.0)
+				.fill(t.primary)
+				.center()
+				.child(icon(&icons::UPLOAD, SPACING * 6.0).color(t.primary_foreground)),
+		)
+		.child(
+			col()
+				.gap(SPACING)
+				.items_center()
+				.child(
+					label_text(
+						&filled(template, "count", &count.to_string()),
+						TEXT_TITLE,
+						t.foreground,
+					)
+					.wrap(),
+				)
+				.child(label_text(say(bring_in::FORMATS, lang), TEXT_SM, t.soft_foreground)),
+		);
+	row()
+		.key("library-drop-overlay")
+		.pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+		.padding(SPACING * 4.0)
+		.fill(faded(t.card, 0.86))
+		.a11y_hidden()
+		.child(zone)
+}
+
+pub const GHOST_BELOW_CURSOR: f32 = SPACING * 3.5;
+
+pub fn drag_ghost(
+	t: &Tokens,
+	lang: Language,
+	names: &[&str],
+	preview: Option<&Image>,
+	cursor: (f32, f32),
+) -> El {
+	let mut thumb =
+		el().size(SPACING * 8.0, SPACING * 8.0).radius(RADIUS_SM).clip_rounded(RADIUS_SM);
+	thumb = match preview.filter(|image| image.size().is_some()) {
+		Some(image) => thumb.pixels_fit(image.pixels(), SurfaceFit::Fill),
+		None => thumb
+			.fill(t.muted)
+			.center()
+			.child(icon(&icons::FILE, SPACING * 4.0).color(t.muted_foreground)),
+	};
+	let first = names.first().copied().unwrap_or_default();
+	let mut lines = col().grow(1.0).min_w(0.0).child(
+		label_text(first, TEXT_COMPACT_MEDIUM, t.foreground)
+			.truncate()
+			.help_when_truncated(first.to_owned()),
+	);
+	let others = names.len().saturating_sub(1);
+	if others > 0 {
+		let template = say(
+			if others == 1 {
+				common::library::drop::MORE_ONE
+			} else {
+				common::library::drop::MORE_OTHER
+			},
+			lang,
+		);
+		lines = lines.child(
+			label_text(
+				&filled(template, "count", &others.to_string()),
+				TEXT_XS,
+				t.muted_foreground,
+			)
+			.truncate(),
+		);
+	}
+	let count = row()
+		.h(SPACING * 5.0)
+		.min_w(SPACING * 5.0)
+		.px(SPACING * 1.5)
+		.radius(SPACING * 2.5)
+		.fill(t.primary)
+		.center()
+		.child(label_text(&names.len().to_string(), TEXT_XS_MEDIUM, t.primary_foreground));
+	row()
+		.key("library-drag-ghost")
+		.absolute(cursor.0, cursor.1 + GHOST_BELOW_CURSOR)
+		.max_w(SPACING * 72.0)
+		.py(SPACING * 1.5)
+		.pl(SPACING * 1.5)
+		.pr(SPACING * 2.5)
+		.gap(SPACING * 2.0)
+		.center_y()
+		.radius(RADIUS_LG)
+		.fill(t.card_raised)
+		.shadow(SPACING * 2.0, SPACING * 6.0, t.popover_shadow)
+		.a11y_hidden()
+		.child(thumb)
+		.child(lines)
+		.child(count)
+}
+
+pub fn failure_notice(t: &Tokens, lang: Language, title: &str, description: &str) -> El {
+	let notice = toast(
+		t,
+		Toast {
+			kind: ToastType::Error,
+			title,
+			description,
+			action: Some(say(common::notice::COPY, lang)),
+		},
+	);
+	col()
+		.key("library-failure-notice")
+		.pin(None, None, Some(SPACING * 4.0), Some(SPACING * 4.0))
+		.w(SPACING * 96.0)
+		.child(notice)
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Format {
+	Bold,
+	Italic,
+	Strikethrough,
+	Code,
+	Link,
+	Heading,
+	List,
+}
+
+impl Format {
+	pub const INLINE: [Format; 5] =
+		[Format::Bold, Format::Italic, Format::Strikethrough, Format::Code, Format::Link];
+	pub const BLOCK: [Format; 2] = [Format::Heading, Format::List];
+
+	fn label(self) -> Key {
+		use common::library::editor::toolbar;
+		match self {
+			Format::Bold => toolbar::BOLD,
+			Format::Italic => toolbar::ITALIC,
+			Format::Strikethrough => toolbar::STRIKETHROUGH,
+			Format::Code => toolbar::CODE,
+			Format::Link => toolbar::LINK,
+			Format::Heading => toolbar::HEADING,
+			Format::List => toolbar::LIST,
+		}
+	}
+
+	fn shortcut(self) -> Option<Key> {
+		use common::library::editor::toolbar;
+		match self {
+			Format::Bold => Some(toolbar::BOLD_SHORTCUT),
+			Format::Italic => Some(toolbar::ITALIC_SHORTCUT),
+			Format::Strikethrough => Some(toolbar::STRIKETHROUGH_SHORTCUT),
+			Format::Code => Some(toolbar::CODE_SHORTCUT),
+			Format::Link => Some(toolbar::LINK_SHORTCUT),
+			Format::Heading | Format::List => None,
+		}
+	}
+
+	fn glyph(self) -> &'static rune::Icon {
+		match self {
+			Format::Bold => &icons::BOLD,
+			Format::Italic => &icons::ITALIC,
+			Format::Strikethrough => &icons::STRIKETHROUGH,
+			Format::Code => &icons::CODE,
+			Format::Link => &icons::LINK,
+			Format::Heading => &icons::HEADING,
+			Format::List => &icons::LIST,
+		}
+	}
+}
+
+pub const TOOLBAR_GAP: f32 = SPACING * 2.0;
+pub const TOOLBAR_KEY: &str = "selection-toolbar";
+
+fn toolbar_surface(t: &Tokens) -> El {
+	row()
+		.padding(SPACING)
+		.radius(RADIUS_CONTROL)
+		.border(1.0, faded(t.foreground, if t.dark { 0.1 } else { 0.08 }))
+		.fill(t.card_raised)
+		.shadow(SPACING * 2.0, SPACING * 6.0, t.popover_shadow)
+}
+
+pub fn format_toolbar<S: 'static>(
+	t: &Tokens,
+	lang: Language,
+	pressed: &[Format],
+	hovered: Option<Format>,
+	on: impl Fn(&mut S, Format) + Clone + 'static,
+) -> El {
+	let highlight = faded(t.foreground, if t.dark { 0.08 } else { 0.06 });
+	let button = |format: Format| {
+		let label = say(format.label(), lang);
+		let is_pressed = pressed.contains(&format);
+		let (fill, ink) = if is_pressed {
+			(faded(t.user_bubble, 0.15), t.user_bubble)
+		} else if hovered == Some(format) {
+			(highlight, t.foreground)
+		} else {
+			(t.foreground.alpha(0.0), t.foreground)
+		};
+		let on = on.clone();
+		focus_ring(
+			t,
+			instant(
+				row()
+					.key(format!("toolbar-{label}"))
+					.size(SPACING * 7.0, SPACING * 7.0)
+					.radius(RADIUS_MD)
+					.center()
+					.fill(fill)
+					.hover(if is_pressed { fill } else { highlight })
+					.role("button")
+					.checked(is_pressed)
+					.label(label)
+					.child(icon(format.glyph(), SPACING * 4.0).color(ink)),
+			),
+		)
+		.on_press(move |s: &mut S| on(s, format))
+	};
+	toolbar_surface(t)
+		.key(TOOLBAR_KEY)
+		.gap(SPACING * 0.5)
+		.center_y()
+		.role("toolbar")
+		.label(say(common::library::editor::toolbar::LABEL, lang))
+		.children(Format::INLINE.map(button))
+		.child(
+			el().w(1.0)
+				.h(SPACING * 4.0)
+				.mx(SPACING)
+				.fill(faded(t.foreground, if t.dark { 0.1 } else { 0.08 })),
+		)
+		.children(Format::BLOCK.map(button))
+}
+
+pub fn format_tooltip(t: &Tokens, lang: Language, format: Format) -> El {
+	let mut tip = row()
+		.padding(SPACING * 1.5)
+		.gap(SPACING * 1.5)
+		.center_y()
+		.radius(RADIUS_CONTROL)
+		.fill(t.foreground)
+		.child(label_text(say(format.label(), lang), TEXT_XS_MEDIUM, t.card));
+	if let Some(shortcut) = format.shortcut() {
+		tip = tip.child(
+			row()
+				.h(SPACING * 5.0)
+				.px(SPACING * 0.5)
+				.radius(RADIUS_MD)
+				.fill(faded(t.card, 0.1))
+				.center()
+				.child(label_text(say(shortcut, lang), TEXT_XS_MEDIUM, t.card)),
+		);
+	}
+	tip.key("toolbar-tooltip")
+}
+
+pub fn link_field(t: &Tokens, lang: Language, address: &str) -> El {
+	use common::library::editor::toolbar;
+	let shown = if address.is_empty() {
+		label_text(say(toolbar::LINK_FIELD, lang), TEXT_COMPACT, t.placeholder_foreground)
+	} else {
+		label_text(address, TEXT_COMPACT, t.foreground)
+	};
+	toolbar_surface(t)
+		.key(TOOLBAR_KEY)
+		.w(SPACING * 85.0)
+		.gap(SPACING)
+		.center_y()
+		.role("group")
+		.label(say(toolbar::LINK, lang))
+		.child(
+			row()
+				.size(SPACING * 7.0, SPACING * 7.0)
+				.center()
+				.child(icon(&icons::LINK, SPACING * 4.0).color(t.muted_foreground)),
+		)
+		.child(
+			row()
+				.h(SPACING * 7.0)
+				.grow(1.0)
+				.min_w(0.0)
+				.center_y()
+				.role("textbox")
+				.label(say(toolbar::LINK_FIELD, lang))
+				.child(shown)
+				.child(el().w(1.0).h(SPACING * 4.5).fill(t.foreground)),
+		)
+		.child(
+			row()
+				.padding(SPACING * 0.5)
+				.radius(RADIUS_MD)
+				.fill(faded(t.foreground, if t.dark { 0.08 } else { 0.06 }))
+				.child(icon(&icons::CORNER_DOWN_LEFT, SPACING * 3.5).color(t.muted_foreground)),
+		)
+		.child(focus_ring(
+			t,
+			instant(
+				row()
+					.size(SPACING * 7.0, SPACING * 7.0)
+					.radius(RADIUS_MD)
+					.center()
+					.hover(faded(t.foreground, 0.06))
+					.role("button")
+					.label(say(toolbar::CONFIRM_LINK, lang))
+					.child(icon(&icons::CHECK, SPACING * 4.0).color(t.foreground)),
+			),
+		))
+}
+
+pub fn block_handle(t: &Tokens, lang: Language, is_pressed: bool) -> El {
+	use common::library::editor::blocks::handle;
+	let button = |glyph: &'static rune::Icon, label: &str, width: f32, is_on: bool| {
+		let control = row()
+			.key(format!("library-handle-{label}"))
+			.w(width)
+			.h(SPACING * 6.0)
+			.radius(RADIUS_SM)
+			.center()
+			.hover(t.accent)
+			.role("button")
+			.label(label)
+			.child(icon(glyph, SPACING * 4.0).color(if is_on {
+				t.foreground
+			} else {
+				t.muted_foreground
+			}));
+		focus_ring(t, instant(if is_on { control.fill(t.accent) } else { control }))
+	};
+	row()
+		.key("library-block-handle")
+		.gap(SPACING * 0.5)
+		.child(button(&icons::PLUS, say(handle::INSERT, lang), SPACING * 6.0, false))
+		.child(button(&icons::GRIP_VERTICAL, say(handle::MENU, lang), SPACING * 5.0, is_pressed))
+}
+
+pub fn block_menu(t: &Tokens, lang: Language, kind: LibraryBlockType, is_mac: bool) -> El {
+	use common::library::editor::blocks::menu;
+	let shortcut = |mac: Key, other: Key| Shortcut {
+		command: false,
+		key: say(if is_mac { mac } else { other }, lang),
+	};
+	let rows = [
+		MenuRow::Label(say(kind.label(), lang)),
+		MenuRow::Item(
+			MenuItem::new(say(menu::TURN_INTO, lang))
+				.glyph(&icons::REFRESH_CW)
+				.mark(MenuMark::Submenu),
+		),
+		MenuRow::Item(MenuItem::new(say(menu::DUPLICATE, lang)).glyph(&icons::COPY).shortcut(
+			shortcut(menu::shortcuts::mac::DUPLICATE, menu::shortcuts::other::DUPLICATE),
+		)),
+		MenuRow::Item(
+			MenuItem::new(say(menu::MOVE_UP, lang))
+				.glyph(&icons::ARROW_UP)
+				.shortcut(shortcut(menu::shortcuts::mac::MOVE_UP, menu::shortcuts::other::MOVE_UP)),
+		),
+		MenuRow::Item(
+			MenuItem::new(say(menu::MOVE_DOWN, lang)).glyph(&icons::ARROW_DOWN).shortcut(shortcut(
+				menu::shortcuts::mac::MOVE_DOWN,
+				menu::shortcuts::other::MOVE_DOWN,
+			)),
+		),
+		MenuRow::Separator,
+		MenuRow::Item(
+			MenuItem::new(say(menu::DELETE, lang))
+				.glyph(&icons::BIN)
+				.destructive()
+				.shortcut(shortcut(menu::shortcuts::mac::DELETE, menu::shortcuts::other::DELETE)),
+		),
+	];
+	dropdown_menu(t, say(common::library::editor::blocks::handle::MENU, lang), rows)
+		.key("library-block-menu")
+}
+
+pub fn drop_indicator(t: &Tokens) -> El {
+	el().key("library-drop-indicator").w_full().h(2.0).radius(1.0).fill(t.primary).a11y_hidden()
+}
+
+pub fn title_field<S: 'static>(
+	t: &Tokens,
+	lang: Language,
+	edit: &TextEdit,
+	access: Access<S>,
+) -> El {
+	let untitled = say(common::library::editor::UNTITLED, lang);
+	text_input(edit, TEXT_TITLE)
+		.key("library-document-title")
+		.w_full()
+		.color(t.foreground)
+		.placeholder(untitled, t.title_placeholder_foreground)
+		.caret(t.foreground, t.selection)
+		.label(say(common::library::editor::TITLE, lang))
+		.on_edit(access)
 }
