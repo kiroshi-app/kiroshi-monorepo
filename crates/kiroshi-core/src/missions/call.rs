@@ -12,7 +12,7 @@ use crate::conversations::commands::ready;
 use crate::db;
 use crate::routines::webhook::{self, Calls, DeliveryId};
 
-pub use kiroshi_core::routines::local_server::MISSION_CALL_PATH as PATH;
+pub use crate::routines::local_server::MISSION_CALL_PATH as PATH;
 
 pub const SOURCE: &str = "agent-hook";
 
@@ -36,7 +36,7 @@ const ACTIVITY_BUDGET: &str = ":activity";
 
 const FAILED: (StatusCode, &str) = (StatusCode::INTERNAL_SERVER_ERROR, "the call was not carried");
 
-pub(crate) async fn called(
+pub async fn called(
 	State(calls): State<Calls>,
 	headers: HeaderMap,
 	body: Result<String, StringRejection>,
@@ -178,10 +178,7 @@ mod tests {
 	use std::sync::atomic::{AtomicI64, Ordering};
 	use std::sync::mpsc::{channel, Receiver};
 	use std::sync::Arc;
-	use tauri::Manager;
 
-	use tauri::test::{mock_builder, MockRuntime};
-	use tauri::{App, Listener as _};
 	use tokio::io::{AsyncReadExt, AsyncWriteExt};
 	use tokio::net::TcpStream;
 
@@ -194,7 +191,7 @@ mod tests {
 	use crate::routines::rate_limit::{CALLS_PER_WINDOW, WINDOW_MS};
 	use crate::routines::runner::Runner;
 	use crate::routines::webhook::{started, Webhook, DELIVERY_ID_HEADER, HEADER};
-	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
+	use crate::test_core::{a_core_of_its_own, CoreOfItsOwn};
 
 	const NOON: i64 = 1_800_000_000_000;
 
@@ -231,11 +228,11 @@ mod tests {
 		}
 	}
 
-	async fn a_host(name: &str) -> AppOfItsOwn {
-		let app = an_app_of_its_own(&format!("mission-call-{name}"), mock_builder());
-		crate::db::install(crate::events::core(app.handle()));
+	async fn a_host(name: &str) -> CoreOfItsOwn {
+		let app = a_core_of_its_own(&format!("mission-call-{name}"));
+		crate::db::install(&*app);
 		{
-			let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
+			let state = app.state::<db::DatabaseState>();
 			ready(&state)
 				.expect("the database opens")
 				.call_mut(|connection| Ok(connection.execute_batch(A_PARTICIPANT)?))
@@ -245,8 +242,8 @@ mod tests {
 		app
 	}
 
-	async fn an_armed_mission(app: &App<MockRuntime>, key: &str) -> Mission {
-		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
+	async fn an_armed_mission(app: &crate::core_context::Core, key: &str) -> Mission {
+		let state = app.state::<db::DatabaseState>();
 		let database = ready(&state).expect("the database opens");
 		let opened = database
 			.missions()
@@ -281,8 +278,8 @@ mod tests {
 		armed
 	}
 
-	async fn closed(app: &App<MockRuntime>, mission_id: &str) {
-		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
+	async fn closed(app: &crate::core_context::Core, mission_id: &str) {
+		let state = app.state::<db::DatabaseState>();
 		ready(&state)
 			.expect("the database opens")
 			.missions()
@@ -297,8 +294,8 @@ mod tests {
 			.expect("the mission closes");
 	}
 
-	async fn events_of(app: &App<MockRuntime>, mission_id: &str) -> Vec<MissionEvent> {
-		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
+	async fn events_of(app: &crate::core_context::Core, mission_id: &str) -> Vec<MissionEvent> {
+		let state = app.state::<db::DatabaseState>();
 		ready(&state)
 			.expect("the database opens")
 			.missions()
@@ -308,7 +305,7 @@ mod tests {
 			.events
 	}
 
-	async fn hook_events_of(app: &App<MockRuntime>, mission_id: &str) -> Vec<MissionEvent> {
+	async fn hook_events_of(app: &crate::core_context::Core, mission_id: &str) -> Vec<MissionEvent> {
 		events_of(app, mission_id)
 			.await
 			.into_iter()
@@ -348,12 +345,12 @@ mod tests {
 		(held.0.as_u16(), held.1.to_owned())
 	}
 
-	fn listening(app: &App<MockRuntime>, clock: Arc<Ticking>) -> Webhook {
+	fn listening(app: &crate::core_context::Core, clock: Arc<Ticking>) -> Webhook {
 		started(
-			crate::events::core(app.handle()).clone(),
+			app.clone(),
 			clock,
-			Arc::new(Runner::new(crate::events::core(app.handle()).clone())),
-			crate::host_api::routes(app.handle().clone()),
+			Arc::new(Runner::new(app.clone())),
+			crate::host_api::routes(&*app),
 		)
 	}
 
@@ -382,10 +379,10 @@ mod tests {
 		webhook.stop();
 	}
 
-	fn heard(app: &App<MockRuntime>) -> Receiver<String> {
+	fn heard(app: &crate::core_context::Core) -> Receiver<String> {
 		let (sender, received) = channel();
-		app.handle().listen(CHANGED_EVENT, move |event| {
-			let _ = sender.send(event.payload().to_owned());
+		crate::test_core::listen_to(&*app, CHANGED_EVENT, move |event| {
+			let _ = sender.send(event.to_owned());
 		});
 		received
 	}
@@ -397,8 +394,8 @@ mod tests {
 			.collect()
 	}
 
-	async fn state_of(app: &App<MockRuntime>, mission_id: &str) -> (MissionState, i64) {
-		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
+	async fn state_of(app: &crate::core_context::Core, mission_id: &str) -> (MissionState, i64) {
+		let state = app.state::<db::DatabaseState>();
 		let held = ready(&state)
 			.expect("the database opens")
 			.missions()
@@ -461,8 +458,8 @@ mod tests {
 		webhook.stop();
 	}
 
-	async fn kinds_of(app: &App<MockRuntime>, mission_id: &str) -> Vec<MissionEventKind> {
-		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
+	async fn kinds_of(app: &crate::core_context::Core, mission_id: &str) -> Vec<MissionEventKind> {
+		let state = app.state::<db::DatabaseState>();
 		let mission_id = mission_id.to_owned();
 		ready(&state)
 			.expect("the database opens")
@@ -538,7 +535,7 @@ mod tests {
 		let app = a_host("still-waiting").await;
 		let mission = an_armed_mission(&app, A_KEY).await;
 		{
-			let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
+			let state = app.state::<db::DatabaseState>();
 			ready(&state)
 				.expect("the database opens")
 				.missions()
@@ -696,7 +693,7 @@ mod tests {
 
 		assert_eq!(held, answer(ACCEPTED));
 		assert_eq!(events_of(&app, &mission.id).await, before, "a tool call wrote a thread line");
-		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
+		let state = app.state::<db::DatabaseState>();
 		let written = ready(&state)
 			.expect("the database opens")
 			.missions()
@@ -754,7 +751,7 @@ mod tests {
 			kinds_of(&app, &mission.id).await,
 			vec![MissionEventKind::AgentStopped, MissionEventKind::AgentAsked],
 		);
-		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
+		let state = app.state::<db::DatabaseState>();
 		let written = ready(&state)
 			.expect("the database opens")
 			.missions()

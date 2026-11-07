@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 
 use serde_json::Value;
-use tauri::{AppHandle, Manager, Runtime, State};
 
 use super::contract::{
 	BotTriggerSources, Filter, ReportedRun, Routine, RoutineDraft, RoutineEdit, RoutineError,
@@ -17,19 +16,17 @@ use crate::bundles;
 use crate::conversations::commands::{oldest_space, ready, space_of_the_conversation};
 use crate::conversations::contract::TranscriptStoreError;
 use crate::db;
-pub use kiroshi_core::routines::changes::announce_change;
-pub use kiroshi_core::routines::contract::{RoutineChanged, CHANGED_EVENT};
+pub use crate::routines::changes::announce_change;
+pub use crate::routines::contract::{RoutineChanged, CHANGED_EVENT};
 
-#[tauri::command]
-#[specta::specta]
 pub async fn routine_trigger_sources(
-	core: State<'_, crate::core_context::Core>,
+	core: &crate::core_context::Core,
 	bot_id: String,
 ) -> Result<Vec<TriggerSource>, TranscriptStoreError> {
-	trigger_sources_of(core.inner(), bot_id).await
+	trigger_sources_of(core, bot_id).await
 }
 
-pub(crate) async fn trigger_sources_of(
+pub async fn trigger_sources_of(
 	core: &crate::core_context::Core,
 	bot_id: String,
 ) -> Result<Vec<TriggerSource>, TranscriptStoreError> {
@@ -39,20 +36,17 @@ pub(crate) async fn trigger_sources_of(
 	sources::stacked(&stacked_bundles(core, &space_id, &bot_id))
 }
 
-#[tauri::command]
-#[specta::specta]
-pub async fn routine_trigger_sources_of_space<R: Runtime>(
-	app: AppHandle<R>,
-	core: State<'_, crate::core_context::Core>,
+pub async fn routine_trigger_sources_of_space(
+	core: &crate::core_context::Core,
 	space_id: String,
 ) -> Result<Vec<BotTriggerSources>, TranscriptStoreError> {
 	let state = core.state::<db::DatabaseState>();
 	let mut bots = ready(&state)?.conversations().bots(Some(space_id.clone())).await?;
 	bots.sort_by(|left, right| left.id.cmp(&right.id));
-	let shared = sources::stacked(&space_bundles(crate::events::core(&app), &space_id))?;
+	let shared = sources::stacked(&space_bundles(core, &space_id))?;
 	Ok(bots
 		.into_iter()
-		.map(|bot| sources_of_bot(crate::events::core(&app), &shared, bot.id))
+		.map(|bot| sources_of_bot(core, &shared, bot.id))
 		.collect())
 }
 
@@ -90,7 +84,7 @@ fn bot_bundle(core: &crate::core_context::Core, bot_id: &str) -> Option<PathBuf>
 	bundles::root(core).and_then(|root| bundles::dir(&root, bot_id).ok())
 }
 
-pub(crate) async fn declared_source(
+pub async fn declared_source(
 	core: &crate::core_context::Core,
 	database: &db::Database,
 	conversation_id: &str,
@@ -128,16 +122,14 @@ fn refuse_unreadable_expression(
 	schedule::validated(trigger_config)
 }
 
-#[tauri::command]
-#[specta::specta]
 pub async fn routine_create(
-	core: State<'_, crate::core_context::Core>,
+	core: &crate::core_context::Core,
 	draft: RoutineDraft,
 ) -> Result<Routine, RoutineError> {
-	create_routine(core.inner(), draft).await
+	create_routine(core, draft).await
 }
 
-pub(crate) async fn create_routine(
+pub async fn create_routine(
 	core: &crate::core_context::Core,
 	draft: RoutineDraft,
 ) -> Result<Routine, RoutineError> {
@@ -160,17 +152,15 @@ pub(crate) async fn create_routine(
 	Ok(stored)
 }
 
-#[tauri::command]
-#[specta::specta]
 pub async fn routine_update(
-	core: State<'_, crate::core_context::Core>,
+	core: &crate::core_context::Core,
 	id: String,
 	edit: RoutineEdit,
 ) -> Result<Routine, RoutineError> {
-	update_routine(core.inner(), id, edit).await
+	update_routine(core, id, edit).await
 }
 
-pub(crate) async fn update_routine(
+pub async fn update_routine(
 	core: &crate::core_context::Core,
 	id: String,
 	edit: RoutineEdit,
@@ -194,16 +184,14 @@ pub(crate) async fn update_routine(
 	Ok(stored)
 }
 
-#[tauri::command]
-#[specta::specta]
 pub async fn routine_delete(
-	core: State<'_, crate::core_context::Core>,
+	core: &crate::core_context::Core,
 	id: String,
 ) -> Result<(), RoutineError> {
-	delete_routine(core.inner(), id).await
+	delete_routine(core, id).await
 }
 
-pub(crate) async fn delete_routine(
+pub async fn delete_routine(
 	core: &crate::core_context::Core,
 	id: String,
 ) -> Result<(), RoutineError> {
@@ -214,16 +202,14 @@ pub(crate) async fn delete_routine(
 	announce_change(core, &held.conversation_id)
 }
 
-#[tauri::command]
-#[specta::specta]
 pub async fn routine_list(
-	core: State<'_, crate::core_context::Core>,
+	core: &crate::core_context::Core,
 	conversation_id: String,
 ) -> Result<Vec<Routine>, RoutineError> {
-	routines_of(core.inner(), conversation_id).await
+	routines_of(core, conversation_id).await
 }
 
-pub(crate) async fn routines_of(
+pub async fn routines_of(
 	core: &crate::core_context::Core,
 	conversation_id: String,
 ) -> Result<Vec<Routine>, RoutineError> {
@@ -231,10 +217,8 @@ pub(crate) async fn routines_of(
 	ready(&state)?.routines().of_conversation(conversation_id).await
 }
 
-#[tauri::command]
-#[specta::specta]
 pub async fn routine_runs(
-	core: State<'_, crate::core_context::Core>,
+	core: &crate::core_context::Core,
 	routine_id: String,
 	limit: u32,
 ) -> Result<Vec<RoutineRun>, RoutineError> {
@@ -242,10 +226,8 @@ pub async fn routine_runs(
 	ready(&state)?.routines().runs(routine_id, limit).await
 }
 
-#[tauri::command]
-#[specta::specta]
 pub async fn routine_runs_of_space(
-	core: State<'_, crate::core_context::Core>,
+	core: &crate::core_context::Core,
 	space_id: String,
 	limit: u32,
 ) -> Result<Vec<RoutineRuns>, RoutineError> {
@@ -253,26 +235,22 @@ pub async fn routine_runs_of_space(
 	ready(&state)?.routines().runs_of_space(space_id, limit).await
 }
 
-#[tauri::command]
-#[specta::specta]
 pub async fn routine_reported_runs(
-	core: State<'_, crate::core_context::Core>,
+	core: &crate::core_context::Core,
 	conversation_id: String,
 ) -> Result<Vec<ReportedRun>, RoutineError> {
 	let state = core.state::<db::DatabaseState>();
 	ready(&state)?.routines().reported(conversation_id).await
 }
 
-#[tauri::command]
-#[specta::specta]
 pub async fn routine_run_now(
-	core: State<'_, crate::core_context::Core>,
+	core: &crate::core_context::Core,
 	id: String,
 ) -> Result<TriggerDecision, RoutineError> {
-	run_routine_now(core.inner(), id).await
+	run_routine_now(core, id).await
 }
 
-pub(crate) async fn run_routine_now(
+pub async fn run_routine_now(
 	core: &crate::core_context::Core,
 	id: String,
 ) -> Result<TriggerDecision, RoutineError> {
@@ -284,20 +262,16 @@ pub(crate) async fn run_routine_now(
 	Ok(decision)
 }
 
-#[tauri::command]
-#[specta::specta]
 pub async fn routine_renew_lease(
-	core: State<'_, crate::core_context::Core>,
+	core: &crate::core_context::Core,
 	run_id: String,
 ) -> Result<(), RoutineError> {
 	let state = core.state::<db::DatabaseState>();
 	ready(&state)?.routines().renew_lease(run_id, SystemClock.now_ms()).await
 }
 
-#[tauri::command]
-#[specta::specta]
 pub async fn routine_close_run(
-	core: State<'_, crate::core_context::Core>,
+	core: &crate::core_context::Core,
 	run_id: String,
 	closing: RunClosing,
 ) -> Result<RoutineRun, RoutineError> {
@@ -305,18 +279,15 @@ pub async fn routine_close_run(
 	ready(&state)?.routines().close_run(run_id, closing, SystemClock.now_ms()).await
 }
 
-#[tauri::command]
-#[specta::specta]
-pub async fn routine_key<R: Runtime>(
-	app: AppHandle<R>,
-	core: State<'_, crate::core_context::Core>,
+pub async fn routine_key(
+	core: &crate::core_context::Core,
 	id: String,
 ) -> Result<RoutineKey, RoutineError> {
 	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	let held = routine_row(database, &id).await?;
 	let source = declared_source(
-		crate::events::core(&app),
+		core,
 		database,
 		&held.conversation_id,
 		&held.bot_id,
@@ -324,7 +295,7 @@ pub async fn routine_key<R: Runtime>(
 	)
 	.await?;
 	let key = database.routines().key_of(id).await?;
-	let url = called_at(crate::events::core(app.app_handle()), &held.trigger_source_id);
+	let url = called_at(core, &held.trigger_source_id);
 	Ok(RoutineKey { key, header: source.header, url })
 }
 
@@ -335,7 +306,7 @@ fn called_at(core: &crate::core_context::Core, trigger_source_id: &str) -> Optio
 	core.try_state::<webhook::Webhook>().and_then(|webhook| webhook.url())
 }
 
-pub(crate) async fn routine_row(
+pub async fn routine_row(
 	database: &db::Database,
 	id: &str,
 ) -> Result<Routine, RoutineError> {
@@ -351,12 +322,10 @@ mod tests {
 	use std::fs;
 
 	use serde_json::json;
-	use tauri::test::{mock_builder, MockRuntime};
-	use tauri::App;
 
 	use super::*;
 	use crate::routines::contract::{FilterMatchMode, RoutineDraft};
-	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
+	use crate::test_core::{a_core_of_its_own, CoreOfItsOwn};
 
 	const A_PARTICIPANT: &str = "
 		INSERT INTO bots (id, name, model, created_at)
@@ -368,13 +337,13 @@ mod tests {
 			VALUES ('c1', 'b1', 'assistant', 1, 0);
 	";
 
-	async fn a_host(name: &str) -> AppOfItsOwn {
-		let app = an_app_of_its_own(&format!("routine-commands-{name}"), mock_builder());
-		crate::db::install(crate::events::core(app.handle()));
-		let system = bundles::system::path(crate::events::core(app.handle()))
+	async fn a_host(name: &str) -> CoreOfItsOwn {
+		let app = a_core_of_its_own(&format!("routine-commands-{name}"));
+		crate::db::install(&*app);
+		let system = bundles::system::path(&*app)
 			.expect("the system bundle is named");
 		bundles::system::write(&system).expect("the system bundle lands");
-		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
+		ready(&app.state::<db::DatabaseState>())
 			.expect("the database opens")
 			.call_mut(|connection| Ok(connection.execute_batch(A_PARTICIPANT)?))
 			.await
@@ -405,39 +374,39 @@ mod tests {
 	#[tokio::test]
 	async fn only_a_routine_the_local_route_fires_is_answered_the_url_it_is_called_on() {
 		let app = a_host("called-at").await;
-		crate::events::core(app.app_handle()).manage(webhook::start(
-			crate::events::core(app.handle()).clone(),
-			crate::host_api::routes(app.handle().clone()),
+		app.manage(webhook::start(
+			app.clone(),
+			crate::host_api::routes(&*app),
 		));
-		let called = routine_create(app.state(), a_called_draft())
+		let called = routine_create(&*app, a_called_draft())
 			.await
 			.expect("the called routine is created");
-		let scheduled = routine_create(app.state(), a_draft("0 * * * *"))
+		let scheduled = routine_create(&*app, a_draft("0 * * * *"))
 			.await
 			.expect("the scheduled routine is created");
 
-		let answered = routine_key(app.handle().clone(), app.state(), called.id)
+		let answered = routine_key(&*app, called.id)
 			.await
 			.expect("the called routine answers its key");
-		let silent = routine_key(app.handle().clone(), app.state(), scheduled.id)
+		let silent = routine_key(&*app, scheduled.id)
 			.await
 			.expect("the scheduled routine answers its key");
 
 		assert_eq!(
 			answered.url,
-			crate::events::core(app.app_handle()).state::<webhook::Webhook>().url(),
+			app.state::<webhook::Webhook>().url(),
 			"the answer names the address the listener bound"
 		);
 		assert!(answered.url.is_some_and(|url| url.starts_with("http://127.0.0.1:")));
 		assert_eq!(silent.url, None, "a scheduled routine is handed no address");
-		crate::events::core(app.app_handle()).state::<webhook::Webhook>().stop();
+		app.state::<webhook::Webhook>().stop();
 	}
 
 	#[tokio::test]
 	async fn a_schedule_whose_expression_croner_refuses_is_named_and_never_stored() {
 		let app = a_host("refused").await;
 
-		let failure = routine_create(app.state(), a_draft("every tuesday"))
+		let failure = routine_create(&*app, a_draft("every tuesday"))
 			.await
 			.expect_err("the routine is refused");
 
@@ -446,7 +415,7 @@ mod tests {
 		};
 		assert_eq!(expression, "every tuesday");
 		assert!(!reason.is_empty(), "the reason is carried");
-		let stored = routine_list(app.state(), "c1".to_owned()).await.expect("the routines read");
+		let stored = routine_list(&*app, "c1".to_owned()).await.expect("the routines read");
 		assert!(stored.is_empty(), "got {stored:?}");
 	}
 
@@ -454,12 +423,12 @@ mod tests {
 	async fn an_expression_croner_reads_is_stored_and_can_be_edited_but_not_broken() {
 		let app = a_host("stored").await;
 
-		let stored = routine_create(app.state(), a_draft("0 * * * *"))
+		let stored = routine_create(&*app, a_draft("0 * * * *"))
 			.await
 			.expect("the routine is created");
 
 		let broken = routine_update(
-			app.state(),
+			&*app,
 			stored.id.clone(),
 			RoutineEdit {
 				title: stored.title.clone(),
@@ -477,7 +446,7 @@ mod tests {
 				if expression == "not a cron"),
 			"got {broken:?}"
 		);
-		let held = routine_list(app.state(), "c1".to_owned()).await.expect("the routines read");
+		let held = routine_list(&*app, "c1".to_owned()).await.expect("the routines read");
 		assert_eq!(held.len(), 1, "got {held:?}");
 		assert_eq!(held[0].trigger_config, json!({ "expression": "0 * * * *" }));
 	}
@@ -498,10 +467,10 @@ mod tests {
 
 	const SHIFT_LOG: &str = "shift-log";
 
-	fn declaring_shift_log(app: &App<MockRuntime>, space_id: &str) {
-		bundles::space::lay_down(crate::events::core(app.handle()), space_id)
+	fn declaring_shift_log(app: &crate::core_context::Core, space_id: &str) {
+		bundles::space::lay_down(&*app, space_id)
 			.expect("the plugin is laid down");
-		let plugin = bundles::space::path(crate::events::core(app.handle()), space_id)
+		let plugin = bundles::space::path(&*app, space_id)
 			.expect("the plugin is named");
 		let declaration = json!({
 			"sources": [{
@@ -518,7 +487,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_trigger_source_is_read_from_the_space_the_conversation_stands_in() {
 		let app = a_host("second-space").await;
-		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
+		let state = app.state::<db::DatabaseState>();
 		let database = ready(&state).expect("the database opens");
 		database
 			.call_mut(|connection| Ok(connection.execute_batch(A_SECOND_SPACE)?))
@@ -528,7 +497,7 @@ mod tests {
 
 		let source_of = |conversation| {
 			declared_source(
-				crate::events::core(app.handle()),
+				&*app,
 				database,
 				conversation,
 				"b1",
@@ -563,14 +532,14 @@ mod tests {
 				('b1', 'writers', 2), ('b2', 'writers', 1);
 	";
 
-	async fn sources_of_space(app: &App<MockRuntime>, space_id: &str) -> Vec<BotTriggerSources> {
-		routine_trigger_sources_of_space(app.handle().clone(), app.state(), space_id.to_owned())
+	async fn sources_of_space(app: &crate::core_context::Core, space_id: &str) -> Vec<BotTriggerSources> {
+		routine_trigger_sources_of_space(&*app, space_id.to_owned())
 			.await
 			.expect("the trigger sources of the space read")
 	}
 
-	async fn sources_of_bot(app: &App<MockRuntime>, bot_id: &str) -> Vec<TriggerSource> {
-		routine_trigger_sources(app.state(), bot_id.to_owned())
+	async fn sources_of_bot(app: &crate::core_context::Core, bot_id: &str) -> Vec<TriggerSource> {
+		routine_trigger_sources(&*app, bot_id.to_owned())
 			.await
 			.expect("the trigger sources of the bot read")
 	}
@@ -586,7 +555,7 @@ mod tests {
 	#[tokio::test]
 	async fn each_space_answers_the_trigger_sources_of_its_own_seated_bots_ordered_by_id() {
 		let app = a_host("sources-of-space").await;
-		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
+		ready(&app.state::<db::DatabaseState>())
 			.expect("the database opens")
 			.call_mut(|connection| Ok(connection.execute_batch(SEATS_IN_TWO_SPACES)?))
 			.await
@@ -619,7 +588,7 @@ mod tests {
 	async fn an_unreadable_bot_bundle_fails_its_own_entry_and_an_unreadable_space_bundle_the_call()
 	{
 		let app = a_host("unreadable-sources").await;
-		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
+		ready(&app.state::<db::DatabaseState>())
 			.expect("the database opens")
 			.call_mut(|connection| Ok(connection.execute_batch(SEATS_IN_TWO_SPACES)?))
 			.await
@@ -627,7 +596,7 @@ mod tests {
 		declaring_shift_log(&app, "writers");
 		let readable = sources_of_space(&app, "writers").await;
 		let root =
-			bundles::root(crate::events::core(app.handle())).expect("the bundles are rooted");
+			bundles::root(&*app).expect("the bundles are rooted");
 
 		declaring_unreadable_sources(
 			&bundles::placed_dir(&root, "b2", "Second").expect("the bundle is placed"),
@@ -644,12 +613,11 @@ mod tests {
 		);
 
 		declaring_unreadable_sources(
-			&bundles::space::path(crate::events::core(app.handle()), "writers")
+			&bundles::space::path(&*app, "writers")
 				.expect("the plugin is named"),
 		);
 		let failed = routine_trigger_sources_of_space(
-			app.handle().clone(),
-			app.state(),
+			&*app,
 			"writers".to_owned(),
 		)
 		.await

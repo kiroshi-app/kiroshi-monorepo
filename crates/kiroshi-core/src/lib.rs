@@ -15,6 +15,7 @@ pub mod devices;
 pub mod environment;
 pub mod events;
 pub mod file_store;
+pub mod host_api;
 pub mod hosting;
 pub mod invitations;
 pub mod invoke;

@@ -170,15 +170,13 @@ mod tests {
 	use std::time::Duration;
 
 	use serde_json::json;
-	use tauri::test::{mock_builder, MockRuntime};
-	use tauri::{App, Listener as _, Manager as _};
 
 	use super::super::commands::CHANGED_EVENT;
 	use super::super::contract::Routine;
 	use super::*;
 	use crate::agent::protocol::HostAnswer;
 	use crate::bundles;
-	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
+	use crate::test_core::{a_core_of_its_own, CoreOfItsOwn};
 
 	const A_SPACE: &str = "
 		INSERT INTO bots (id, name, model, created_at)
@@ -195,13 +193,13 @@ mod tests {
 				('c2', 'b1', 'assistant', 1, 0), ('m1', 'b1', 'assistant', 1, 0);
 	";
 
-	async fn a_host(name: &str) -> AppOfItsOwn {
-		let app = an_app_of_its_own(&format!("routine-host-{name}"), mock_builder());
-		crate::db::install(crate::events::core(app.handle()));
-		let system = bundles::system::path(crate::events::core(app.handle()))
+	async fn a_host(name: &str) -> CoreOfItsOwn {
+		let app = a_core_of_its_own(&format!("routine-host-{name}"));
+		crate::db::install(&*app);
+		let system = bundles::system::path(&*app)
 			.expect("the system bundle is named");
 		bundles::system::write(&system).expect("the system bundle lands");
-		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
+		ready(&app.state::<db::DatabaseState>())
 			.expect("the database opens")
 			.call_mut(|connection| Ok(connection.execute_batch(A_SPACE)?))
 			.await
@@ -209,9 +207,9 @@ mod tests {
 		app
 	}
 
-	fn serving(app: &App<MockRuntime>, conversation_id: &str) -> RoutineHost {
+	fn serving(app: &crate::core_context::Core, conversation_id: &str) -> RoutineHost {
 		RoutineHost::new(
-			crate::events::core(app.handle()).clone(),
+			app.clone(),
 			conversation_id.to_owned(),
 			"b1".to_owned(),
 		)
@@ -258,9 +256,9 @@ mod tests {
 		answer.expect_err("the operation is refused")
 	}
 
-	async fn a_routine_of(app: &App<MockRuntime>, conversation_id: &str, bot_id: &str) -> Routine {
+	async fn a_routine_of(app: &crate::core_context::Core, conversation_id: &str, bot_id: &str) -> Routine {
 		routine_create(
-			app.state(),
+			&*app,
 			RoutineDraft {
 				conversation_id: conversation_id.to_owned(),
 				bot_id: bot_id.to_owned(),
@@ -275,8 +273,8 @@ mod tests {
 		.expect("the routine is created")
 	}
 
-	async fn listed(app: &App<MockRuntime>, conversation_id: &str) -> Vec<Routine> {
-		routine_list(app.state(), conversation_id.to_owned()).await.expect("the routines read")
+	async fn listed(app: &crate::core_context::Core, conversation_id: &str) -> Vec<Routine> {
+		routine_list(&*app, conversation_id.to_owned()).await.expect("the routines read")
 	}
 
 	#[tokio::test]
@@ -406,8 +404,8 @@ mod tests {
 	async fn every_write_announces_the_conversation_whose_routines_changed() {
 		let app = a_host("announced").await;
 		let (changed, arriving) = mpsc::channel();
-		app.listen(CHANGED_EVENT, move |event| {
-			changed.send(event.payload().to_owned()).expect("the test is listening");
+		crate::test_core::listen_to(&*app, CHANGED_EVENT, move |event| {
+			changed.send(event.to_owned()).expect("the test is listening");
 		});
 		let host = serving(&app, "c1");
 

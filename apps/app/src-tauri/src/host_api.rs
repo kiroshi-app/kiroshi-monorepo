@@ -1,8 +1,8 @@
-pub mod cors;
+pub use kiroshi_core::host_api::cors;
 pub mod events;
 pub mod files;
 pub mod invoke;
-pub mod token;
+pub use kiroshi_core::host_api::token;
 
 use axum::Router;
 use tauri::{AppHandle, Runtime};

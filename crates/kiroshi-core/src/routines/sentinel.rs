@@ -35,7 +35,7 @@ pub fn spawn(core: crate::core_context::Core) -> Sentinel {
 	Sentinel { stop }
 }
 
-pub(crate) async fn keeping_watch(
+pub async fn keeping_watch(
 	core: crate::core_context::Core,
 	mut halted: signal::Receiver<bool>,
 ) {
@@ -258,15 +258,14 @@ fn report(routine_id: &str, failure: &RoutineError) {
 mod tests {
 	use std::fs;
 
-	use tauri::test::mock_builder;
 
 	use super::*;
 	use crate::db::connection::temp_dir;
-	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
+	use crate::test_core::{a_core_of_its_own, CoreOfItsOwn};
 
-	fn a_host(name: &str) -> AppOfItsOwn {
-		let app = an_app_of_its_own(&format!("sentinel-{name}"), mock_builder());
-		crate::db::install(crate::events::core(app.handle()));
+	fn a_host(name: &str) -> CoreOfItsOwn {
+		let app = a_core_of_its_own(&format!("sentinel-{name}"));
+		crate::db::install(&*app);
 		app
 	}
 
@@ -274,7 +273,7 @@ mod tests {
 	async fn the_task_ends_when_its_stop_signal_fires() {
 		let app = a_host("stopped");
 		let (stop, halted) = signal::channel(false);
-		let task = tokio::spawn(keeping_watch(crate::events::core(app.handle()).clone(), halted));
+		let task = tokio::spawn(keeping_watch(app.clone(), halted));
 
 		stop.send_replace(true);
 
