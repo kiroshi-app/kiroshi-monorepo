@@ -1,6 +1,6 @@
 use std::path::Path;
-use std::process::{Command, Stdio};
 
+use git2::Repository;
 use serde_json::{Map, Value};
 
 use super::super::contract::MissionError;
@@ -21,7 +21,7 @@ const HEAD_PUSHES: [&str; 2] = ["Bash(git push -u origin HEAD)", "Bash(git push 
 
 const DEV_DATA: &str = "Library/Application Support/com.kiroshi.app.dev/**";
 
-const CURRENT_BRANCH: [&str; 4] = ["symbolic-ref", "--quiet", "--short", "HEAD"];
+const BRANCH_REFS: &str = "refs/heads/";
 
 const MISSION_GESTURES: [&str; 10] = [
 	"Bash(gh pr create *)",
@@ -135,23 +135,19 @@ fn leasable(branch: &str) -> bool {
 }
 
 fn checked_out(root: &Path) -> Option<String> {
-	let mut command = Command::new("git");
-	command
-		.args(super::super::checkout::UNMONITORED)
-		.arg("-C")
-		.arg(root)
-		.args(CURRENT_BRANCH)
-		.stdin(Stdio::null())
-		.stderr(Stdio::null());
+	match Repository::discover(root).and_then(|repository| branch_of(&repository)) {
+		Ok(branch) => branch,
+		Err(error) => {
+			eprintln!("the branch of the mission checkout was not read: {}", error.message());
+			None
+		}
+	}
+}
 
-	#[cfg(windows)]
-	std::os::windows::process::CommandExt::creation_flags(
-		&mut command,
-		super::super::checkout::CREATE_NO_WINDOW,
-	);
-
-	let output = command.output().ok().filter(|output| output.status.success())?;
-	String::from_utf8(output.stdout).ok().map(|branch| branch.trim().to_owned())
+fn branch_of(repository: &Repository) -> Result<Option<String>, git2::Error> {
+	let head = repository.find_reference("HEAD")?;
+	let target = head.symbolic_target()?;
+	Ok(target.and_then(|target| target.strip_prefix(BRANCH_REFS)).map(str::to_owned))
 }
 
 fn dev_data_edits() -> Vec<String> {
@@ -187,7 +183,7 @@ mod tests {
 
 	fn on_branch(name: &str, branch: &str) -> RemovedOnDrop {
 		let root = a_checkout(name);
-		let ran = Command::new("git")
+		let ran = std::process::Command::new("git")
 			.arg("-C")
 			.arg(&*root)
 			.args(["init", "--quiet", "--initial-branch", branch])
@@ -703,6 +699,47 @@ mod tests {
 		assert!(head_pushes_in(&settings).is_empty(), "got {:?}", head_pushes_in(&settings));
 		assert_eq!(rules_of(&settings, ALLOW_KEY).len(), MISSION_GESTURES.len() + 2);
 		assert_eq!(rules_of(&settings, DENY_KEY), REFUSED_BY_DESIGN);
+	}
+
+	fn git_in(dir: &Path, arguments: &[&str]) {
+		let ran = std::process::Command::new("git")
+			.arg("-C")
+			.arg(dir)
+			.args(arguments)
+			.env("GIT_AUTHOR_NAME", "Kiroshi")
+			.env("GIT_AUTHOR_EMAIL", "kiroshi@kiroshi.test")
+			.env("GIT_COMMITTER_NAME", "Kiroshi")
+			.env("GIT_COMMITTER_EMAIL", "kiroshi@kiroshi.test")
+			.output()
+			.expect("git runs");
+		assert!(
+			ran.status.success(),
+			"git {arguments:?}: {}",
+			String::from_utf8_lossy(&ran.stderr)
+		);
+	}
+
+	#[test]
+	fn the_branch_is_read_on_a_named_branch_from_a_subfolder_and_from_a_linked_worktree() {
+		let root = on_branch("branch-read", A_BRANCH);
+		git_in(&root, &["commit", "--quiet", "--allow-empty", "-m", "base"]);
+		let subfolder = root.join("deep/er");
+		fs::create_dir_all(&subfolder).expect("the subfolder is there");
+		let linked = a_checkout("branch-read-linked");
+		fs::remove_dir_all(&*linked).expect("the worktree path is free");
+		git_in(
+			&root,
+			&["worktree", "add", "--quiet", "-b", "linked/branch", &linked.to_string_lossy()],
+		);
+
+		assert_eq!(checked_out(&root).as_deref(), Some(A_BRANCH));
+		assert_eq!(checked_out(&subfolder).as_deref(), Some(A_BRANCH));
+		assert_eq!(checked_out(&linked).as_deref(), Some("linked/branch"));
+
+		git_in(&root, &["checkout", "--quiet", "--detach"]);
+
+		assert_eq!(checked_out(&root), None);
+		assert_eq!(checked_out(&linked).as_deref(), Some("linked/branch"));
 	}
 
 	#[test]
