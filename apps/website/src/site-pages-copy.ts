@@ -20,7 +20,7 @@ export const SITE_PAGES_COPY = {
 				body: [
 					"Kiroshi, an independent project run from France by Steve Puget, is responsible for the personal data this policy describes.",
 					"This policy covers the Kiroshi desktop app, the Kiroshi iPhone app, the relay at api.kiroshi.app and the website kiroshi.app.",
-					"The desktop app is free and keeps everything on your computer. The online mode is the Pro plan, free during the beta: it covers the relay at api.kiroshi.app, Spaces reached from outside your local network, and the iPhone app.",
+					"The desktop app is free and keeps everything on your computer. The online mode is the Pro plan, free during the beta: it covers the relay at api.kiroshi.app, shared Spaces, and the iPhone app.",
 				],
 			},
 			{
@@ -231,8 +231,8 @@ export const SITE_PAGES_COPY = {
 			{
 				heading: "What the service is",
 				body: [
-					"Kiroshi is a desktop app where you talk with Agents in Conversations. The desktop app is free to use locally, on your computer and in Spaces shared on your own network.",
-					`The online mode runs through our relay at ${RELAY_HOST}. It lets you host a Space for people who aren’t on your network and join a Space off your local network.`,
+					"Kiroshi is a desktop app where you talk with Agents in Conversations. The desktop app is free to use locally, on your computer.",
+					`The online mode runs through our relay at ${RELAY_HOST}. It lets you host a Space for other people and join a Space someone hosts for you.`,
 					"The iPhone app is part of the online mode. It signs in to your Kiroshi account and reaches your Spaces through the relay.",
 				],
 			},
