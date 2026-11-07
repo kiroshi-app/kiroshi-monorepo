@@ -154,33 +154,31 @@ fn the_capability_grants_no_window_command_the_front_leaves_uncalled() {
 	assert!(unused.is_empty(), "the capability grants {} that nothing calls", listed(unused));
 }
 
-#[test]
-fn the_capability_grants_only_the_archive_pickers_of_the_dialog_plugin() {
+fn granted_identifiers_starting_with(prefix: &str) -> BTreeSet<String> {
 	let parsed: Value = serde_json::from_str(CAPABILITY).expect("the capability is valid JSON");
-	let granted: BTreeSet<&str> = parsed["permissions"]
+	parsed["permissions"]
 		.as_array()
 		.expect("the capability lists its permissions")
 		.iter()
 		.filter_map(|entry| entry.as_str().or_else(|| entry["identifier"].as_str()))
-		.filter(|identifier| identifier.starts_with(DIALOG_PREFIX))
-		.collect();
-	let expected: BTreeSet<&str> =
-		DIALOG_PERMISSIONS_OF_THE_ARCHIVE_PICKERS.iter().copied().collect();
+		.filter(|identifier| identifier.starts_with(prefix))
+		.map(ToString::to_string)
+		.collect()
+}
+
+#[test]
+fn the_capability_grants_only_the_archive_pickers_of_the_dialog_plugin() {
+	let granted = granted_identifiers_starting_with(DIALOG_PREFIX);
+	let expected: BTreeSet<String> =
+		DIALOG_PERMISSIONS_OF_THE_ARCHIVE_PICKERS.iter().map(ToString::to_string).collect();
 	assert_eq!(granted, expected, "the capability grants a dialog permission beyond save and open");
 }
 
 #[test]
 fn the_capability_grants_exactly_the_opener_permissions_of_the_links_and_attachments() {
-	let parsed: Value = serde_json::from_str(CAPABILITY).expect("the capability is valid JSON");
-	let granted: BTreeSet<&str> = parsed["permissions"]
-		.as_array()
-		.expect("the capability lists its permissions")
-		.iter()
-		.filter_map(|entry| entry.as_str().or_else(|| entry["identifier"].as_str()))
-		.filter(|identifier| identifier.starts_with(OPENER_PREFIX))
-		.collect();
-	let expected: BTreeSet<&str> =
-		OPENER_PERMISSIONS_OF_THE_LINKS_AND_ATTACHMENTS.iter().copied().collect();
+	let granted = granted_identifiers_starting_with(OPENER_PREFIX);
+	let expected: BTreeSet<String> =
+		OPENER_PERMISSIONS_OF_THE_LINKS_AND_ATTACHMENTS.iter().map(ToString::to_string).collect();
 	assert_eq!(
 		granted, expected,
 		"the capability's opener grants drifted from the links and attachments"
