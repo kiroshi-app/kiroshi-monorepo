@@ -293,9 +293,8 @@ impl Core {
 	}
 
 	pub fn state<T: Send + Sync + 'static>(&self) -> Managed<'_, T> {
-		self.try_state().unwrap_or_else(|| {
-			panic!("{UNMANAGED}{}{UNMANAGED_ADVICE}", type_name::<T>())
-		})
+		self.try_state()
+			.unwrap_or_else(|| panic!("{UNMANAGED}{}{UNMANAGED_ADVICE}", type_name::<T>()))
 	}
 
 	pub fn listen(

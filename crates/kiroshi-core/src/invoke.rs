@@ -40,6 +40,7 @@ use crate::mcp_oauth::commands::{
 };
 use crate::missions::commands::*;
 use crate::missions::run_claims::{mission_run_claim, mission_run_release};
+use crate::search::contract::MessageSearchQuery;
 use crate::sections::commands::*;
 use crate::sections::contract::RosterPin;
 use crate::spaces::read::list_spaces;
@@ -421,6 +422,13 @@ table! { core, client;
 	claude_import_inventory() => answered(claude_import_inventory(core).await);
 	claude_import_run(selection: Vec<String>, space_id: String) =>
 		answered(claude_import_run(core, selection, space_id).await);
+
+	search_messages(query: MessageSearchQuery) =>
+		answered(crate::search::commands::search_messages(core, query).await);
+	search_catalogue(query: String, space_id: String) =>
+		answered(crate::search::commands::search_catalogue(core, query, space_id).await);
+	search_recent(space_id: String) =>
+		answered(crate::search::commands::search_recent(core, space_id).await);
 }
 
 pub async fn dispatch(core: &Core, command: &str, arguments: Value) -> Option<Answer> {
@@ -545,7 +553,7 @@ mod tests {
 
 	const OS_SHELL_MODULES: [&str; 4] = ["badge", "notifications", "updates", "window_controls"];
 
-	const NOT_YET_IN_CORE: [&str; 109] = [
+	const NOT_YET_IN_CORE: [&str; 106] = [
 		"application_catalogue",
 		"application_search",
 		"application_named",
@@ -640,9 +648,6 @@ mod tests {
 		"routine_renew_lease",
 		"routine_close_run",
 		"routine_key",
-		"search_catalogue",
-		"search_messages",
-		"search_recent",
 		"space_create",
 		"space_update",
 		"space_reorder",
