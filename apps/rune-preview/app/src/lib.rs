@@ -13,6 +13,7 @@ pub mod menu;
 mod mission;
 mod model;
 pub mod navigation;
+mod notices;
 pub mod onboarding;
 mod runs;
 pub mod scenes;

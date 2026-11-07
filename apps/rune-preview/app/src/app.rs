@@ -1,5 +1,6 @@
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
+use std::time::Duration;
 
 use rune::image::{Image, ImageCache};
 use rune::{ClipboardContent, TextEdit, Waker};
@@ -8,6 +9,8 @@ use serde_json::json;
 
 use kiroshi_rune_kit::avatar::Motion;
 use kiroshi_rune_kit::math::Typesetter;
+use kiroshi_rune_os::policy::{NoticeKind, NoticeTarget};
+use kiroshi_rune_os::{BannerOutcome, Notifier};
 
 use crate::content;
 use crate::dev_profile::{self, DevProfile};
@@ -19,9 +22,10 @@ use crate::longest::{self, Longest};
 use crate::model::{
 	Agent, AgentEvent, Conversation, ConversationMissions, ConversationPage, KiroshiAccountState,
 	Message, MessagePage, Mission, MissionChanged, MissionDetail, MissionEvent, MissionOnBoard,
-	Role, Space,
+	Role, RuntimeScope, Space,
 };
 use crate::navigation::{Navigation, Route};
+use crate::notices::Notices;
 use crate::onboarding::{Method, Step};
 use crate::runs::Runs;
 use crate::source::Source;
@@ -35,6 +39,8 @@ const MAX_THREAD_MESSAGES: usize = 10_000;
 pub const AGENT_PILL: &str = "agent:";
 
 const IMAGES_NOT_SENT: &str = "The preview doesn't upload images. Remove them to send the text.";
+
+const UNKNOWN_AGENT: &str = "An agent";
 
 const SENDING_OFF: &str = "Sending is off on the installed Kiroshi: the preview only reads it. Sending is proven on Kiroshi Dev.";
 
@@ -243,6 +249,7 @@ pub enum Inbound {
 	Image(Fetched),
 	DevProfile(DevProfile),
 	Longest(Result<Option<Longest>, HostError>),
+	Banner(BannerOutcome),
 }
 
 #[derive(Clone)]
@@ -282,6 +289,7 @@ pub struct App {
 	pub uses_host_api: bool,
 	pub board: Board,
 	pub mission: Option<OpenMission>,
+	notices: Notices,
 	outbox: Option<Outbox>,
 	inbox: Receiver<Inbound>,
 	pending: Sender<Inbound>,
@@ -323,6 +331,7 @@ impl App {
 			uses_host_api: false,
 			board: Board::Unread,
 			mission: None,
+			notices: Notices::default(),
 			clock_ms: 0.0,
 			outbox: None,
 			inbox,
@@ -332,7 +341,13 @@ impl App {
 
 	pub fn setup(&mut self, waker: Waker) {
 		self.images.start(ImageCache::new(waker.clone()));
-		self.outbox = Some(Outbox { sender: self.pending.clone(), waker });
+		let outbox = Outbox { sender: self.pending.clone(), waker };
+		let heard = outbox.clone();
+		self.notices
+			.attach(Box::new(Notifier::new(self.host_profile.identifier(), move |outcome| {
+				heard.deliver(Inbound::Banner(outcome))
+			})));
+		self.outbox = Some(outbox);
 		if matches!(self.workspace, Workspace::Connecting) {
 			self.connect();
 		}
@@ -744,6 +759,10 @@ impl App {
 			Inbound::SendFailed(failure) => self.notice = Some(format!("Couldn't send. {failure}")),
 			Inbound::Host(event) => self.host_event(event),
 			Inbound::Image(fetched) => self.images.landed(fetched),
+			Inbound::Banner(BannerOutcome::Clicked(target)) => self.notice_clicked(target),
+			Inbound::Banner(BannerOutcome::Refused { target, failure }) => {
+				self.notices.banner_refused(&target, &failure)
+			}
 			Inbound::DevProfile(profile) => {
 				self.import_selected =
 					profile.import.as_ref().map(|choices| choices.keys()).unwrap_or_default();
@@ -806,6 +825,7 @@ impl App {
 			HostEvent::Agent(scoped) => {
 				let Some(scope) = scoped.scope else { return };
 				self.runs.heard(&scope, &scoped.event);
+				self.notify_of(&scope, &scoped.event);
 				let Some(thread) = self.thread.as_mut() else { return };
 				if thread.shows(&scope.conversation_id) {
 					thread.streamed(&scope.bot_id, scoped.event);
@@ -831,6 +851,40 @@ impl App {
 				))
 			}
 		}
+	}
+
+	fn notify_of(&mut self, scope: &RuntimeScope, event: &AgentEvent) {
+		match event {
+			AgentEvent::MessageCompleted { message } => {
+				let reply = self.mention_names(&message.text);
+				self.notices.replied(scope, reply);
+			}
+			AgentEvent::TurnEnded { ended } => {
+				let name =
+					self.agent_name(&scope.bot_id).unwrap_or_else(|| UNKNOWN_AGENT.to_owned());
+				self.notices.turn_ended(scope, &ended.outcome, &name);
+			}
+			AgentEvent::MessageStarted { .. }
+			| AgentEvent::MessageDelta { .. }
+			| AgentEvent::TurnChanged { .. }
+			| AgentEvent::Activity { .. }
+			| AgentEvent::Failed { .. }
+			| AgentEvent::Other => {}
+		}
+	}
+
+	fn notice_clicked(&mut self, target: NoticeTarget) {
+		self.notices.bring_to_front();
+		if target.kind != NoticeKind::Conversation {
+			return;
+		}
+		self.navigation.navigate_main(Route::Conversations);
+		self.show_conversations();
+		self.open(&target.id);
+	}
+
+	pub fn focus_wake(&mut self) -> Option<Duration> {
+		self.notices.focus_wake()
 	}
 
 	fn request_images(&mut self) {
@@ -972,8 +1026,16 @@ fn outgoing(edit: &TextEdit) -> (String, Vec<String>) {
 
 #[cfg(test)]
 mod tests {
+	use std::cell::RefCell;
+	use std::rc::Rc;
+
+	use kiroshi_rune_os::policy::Notice;
+	use kiroshi_rune_os::{Gesture, GestureFailure};
+
 	use super::*;
-	use crate::model::StreamedMessage;
+	use crate::model::{ScopedEvent, StreamedMessage, TurnEnded};
+	use crate::notices::fake::{FakeDesktop, Record};
+	use crate::source::Source;
 
 	fn thread() -> Thread {
 		Thread {
@@ -1043,5 +1105,199 @@ mod tests {
 		let (content, summoned) = outgoing(&edit);
 		assert_eq!(content, "Ask <@wren> for notes");
 		assert_eq!(summoned, ["wren"]);
+	}
+
+	fn conversation(id: &str) -> Conversation {
+		Conversation {
+			id: id.into(),
+			title: id.into(),
+			color: None,
+			participants: Vec::new(),
+			last_activity_at: None,
+			last_word: None,
+			solo_bot_id: Some("wren".into()),
+		}
+	}
+
+	fn notifying_app(is_focused: bool) -> (App, Rc<RefCell<Record>>) {
+		let record = Rc::new(RefCell::new(Record { is_focused, ..Record::default() }));
+		let mut app = App::new();
+		app.notices.attach(Box::new(FakeDesktop(Rc::clone(&record))));
+		app.workspace = Workspace::Ready(Ready {
+			source: Source::Running(Host::detached()),
+			space: Space { id: "space".into(), name: "Personal".into(), colour: None },
+			agents: vec![Agent {
+				id: "wren".into(),
+				name: "Wren".into(),
+				title: String::new(),
+				avatar_blot: None,
+			}],
+			conversations: vec![conversation("c-1"), conversation("c-2")],
+			person: None,
+			longest: None,
+		});
+		(app, record)
+	}
+
+	fn heard(app: &mut App, event: AgentEvent) {
+		let scope = RuntimeScope { conversation_id: "c-2".into(), bot_id: "wren".into() };
+		app.host_event(HostEvent::Agent(ScopedEvent { scope: Some(scope), event }));
+	}
+
+	fn turn_ended(outcome: &str) -> AgentEvent {
+		AgentEvent::TurnEnded { ended: TurnEnded { outcome: outcome.into() } }
+	}
+
+	fn replied(text: &str) -> AgentEvent {
+		AgentEvent::MessageCompleted {
+			message: StreamedMessage { id: "s1".into(), text: text.into() },
+		}
+	}
+
+	fn of_conversation(id: &str) -> NoticeTarget {
+		NoticeTarget { kind: NoticeKind::Conversation, id: id.into() }
+	}
+
+	#[test]
+	fn a_turn_ending_out_of_focus_posts_one_notice_and_raises_the_badge_to_one() {
+		let (mut app, record) = notifying_app(false);
+
+		heard(&mut app, replied("The tests pass."));
+		heard(&mut app, turn_ended("completed"));
+
+		let record = record.borrow();
+		assert_eq!(
+			record.shown,
+			[Notice {
+				title: "Wren".into(),
+				body: "The tests pass.".into(),
+				target: of_conversation("c-2"),
+			}]
+		);
+		assert_eq!(record.badges, [1]);
+	}
+
+	#[test]
+	fn a_turn_ending_in_focus_posts_nothing_and_leaves_the_badge() {
+		let (mut app, record) = notifying_app(true);
+
+		heard(&mut app, replied("The tests pass."));
+		heard(&mut app, turn_ended("completed"));
+
+		assert!(record.borrow().shown.is_empty());
+		assert!(record.borrow().badges.is_empty());
+	}
+
+	#[test]
+	fn each_notice_posted_raises_the_badge_by_one() {
+		let (mut app, record) = notifying_app(false);
+
+		heard(&mut app, turn_ended("completed"));
+		heard(&mut app, turn_ended("completed"));
+
+		assert_eq!(record.borrow().badges, [1, 2]);
+		assert_eq!(record.borrow().shown[0].body, "Finished its turn");
+	}
+
+	#[test]
+	fn a_stopped_or_failed_turn_posts_nothing() {
+		let (mut app, record) = notifying_app(false);
+
+		heard(&mut app, replied("Stopped."));
+		heard(&mut app, turn_ended("cancelled"));
+		heard(&mut app, replied("Broke."));
+		heard(&mut app, turn_ended("failed"));
+
+		assert!(record.borrow().shown.is_empty());
+		assert!(record.borrow().badges.is_empty());
+	}
+
+	#[test]
+	fn the_badge_clears_within_a_second_once_a_window_of_the_app_holds_focus() {
+		let (mut app, record) = notifying_app(false);
+		heard(&mut app, turn_ended("completed"));
+
+		let wake = app.focus_wake().expect("a focus wake while the badge shows");
+		assert!(wake <= Duration::from_secs(1), "{wake:?}");
+		record.borrow_mut().is_focused = true;
+		assert_eq!(app.focus_wake(), None);
+
+		assert_eq!(record.borrow().badges, [1, 0]);
+	}
+
+	#[test]
+	fn a_zero_badge_schedules_no_focus_wake() {
+		let (mut app, record) = notifying_app(false);
+
+		assert_eq!(app.focus_wake(), None);
+		heard(&mut app, turn_ended("completed"));
+		record.borrow_mut().is_focused = true;
+		app.focus_wake();
+		record.borrow_mut().is_focused = false;
+
+		assert_eq!(app.focus_wake(), None);
+		assert_eq!(record.borrow().badges, [1, 0]);
+	}
+
+	#[test]
+	fn a_banner_refused_at_once_leaves_the_badge() {
+		let (mut app, record) = notifying_app(false);
+		record.borrow_mut().refusing = Some(Gesture::Banner);
+
+		heard(&mut app, turn_ended("completed"));
+
+		assert!(record.borrow().badges.is_empty());
+		assert_eq!(app.focus_wake(), None);
+	}
+
+	#[test]
+	fn a_banner_refused_later_takes_its_badge_back() {
+		let (mut app, record) = notifying_app(false);
+		heard(&mut app, turn_ended("completed"));
+
+		app.received(Inbound::Banner(BannerOutcome::Refused {
+			target: of_conversation("c-2"),
+			failure: GestureFailure { gesture: Gesture::Banner, answer: "denied".into() },
+		}));
+
+		assert_eq!(record.borrow().badges, [1, 0]);
+		assert_eq!(app.focus_wake(), None);
+	}
+
+	#[test]
+	fn a_refused_chime_still_raises_the_badge_of_the_posted_banner() {
+		let (mut app, record) = notifying_app(false);
+		record.borrow_mut().refusing = Some(Gesture::Chime);
+
+		heard(&mut app, turn_ended("completed"));
+
+		assert_eq!(record.borrow().shown.len(), 1);
+		assert_eq!(record.borrow().badges, [1]);
+	}
+
+	#[test]
+	fn a_refused_badge_keeps_the_app_notifying() {
+		let (mut app, record) = notifying_app(false);
+		record.borrow_mut().refusing = Some(Gesture::Badge);
+
+		heard(&mut app, turn_ended("completed"));
+		heard(&mut app, turn_ended("completed"));
+
+		assert_eq!(record.borrow().shown.len(), 2);
+		assert!(app.focus_wake().is_some());
+	}
+
+	#[test]
+	fn a_clicked_notice_brings_the_main_window_to_its_conversation() {
+		let (mut app, record) = notifying_app(false);
+		app.navigation.navigate_main(Route::Missions);
+		app.pane = Pane::Missions;
+
+		app.received(Inbound::Banner(BannerOutcome::Clicked(of_conversation("c-2"))));
+
+		assert!(app.navigation.main_route() == Route::Conversations);
+		assert!(matches!(app.pane, Pane::Conversations));
+		assert_eq!(app.thread.as_ref().map(|thread| thread.conversation_id.as_str()), Some("c-2"));
+		assert_eq!(record.borrow().raised, 1);
 	}
 }

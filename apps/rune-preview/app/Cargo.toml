@@ -19,6 +19,7 @@ required-features = ["fake-claude"]
 
 [dependencies]
 kiroshi-rune-kit = { path = "../kit" }
+kiroshi-rune-os = { path = "../os" }
 rune.workspace = true
 rune-kit.workspace = true
 kiroshi-core = { path = "../../../crates/kiroshi-core" }
