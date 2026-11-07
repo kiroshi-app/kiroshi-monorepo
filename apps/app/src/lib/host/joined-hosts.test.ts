@@ -19,7 +19,7 @@ import {
 	type JoinedSpaceReconnected,
 } from "../bindings"
 import type { ReporterFacts } from "../failure-report"
-import reachSource from "../../../src-tauri/src/hosting/reach.rs?raw"
+import reachSource from "../../../../../crates/kiroshi-core/src/hosting/reach.rs?raw"
 
 const HOST = "http://192.168.1.20:45367"
 
