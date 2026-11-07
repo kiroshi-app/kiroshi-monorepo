@@ -39,7 +39,7 @@ type TranscriptSkeletonProps = {
 }
 
 const TranscriptSkeleton = ({ row }: TranscriptSkeletonProps) => (
-	<ListSkeleton anchor="bottom" className="gap-4 px-6 pt-8 pb-4" row={row} />
+	<ListSkeleton anchor="bottom" className="gap-4 pt-8 pb-4" row={row} />
 )
 
 type TurnAuthor = "agent" | "user" | "person"
@@ -158,7 +158,7 @@ const threadItemAt = (index: number) =>
 const ThreadTranscriptSkeleton = () => (
 	<ListSkeleton
 		anchor="bottom"
-		className="gap-3 px-6 pt-8 pb-4"
+		className="gap-3 pt-8 pb-4"
 		row={threadItemAt}
 	/>
 )

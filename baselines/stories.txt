@@ -1249,6 +1249,7 @@ layout-threadlayout--older-messages
 layout-threadlayout--outside-content-card
 layout-threadlayout--pending
 layout-threadlayout--prompt-overhangs-the-thread
+layout-threadlayout--skeleton-in-the-transcript-column
 layout-threadlayout--start-of-older-messages
 layout-threadlayout--streaming-into-short-transcript
 layout-threadlayout--user-message-above-the-prompt
