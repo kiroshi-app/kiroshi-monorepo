@@ -10,8 +10,8 @@ use super::contract::{
 use crate::db;
 use crate::db::repositories::conversations::{Activity, StoredPrompt};
 use crate::events::CONVERSATION_STATE_CHANGED;
-use crate::missions::commands::observed as mission_observed;
 use crate::missions::contract::MissionLiveness;
+use crate::missions::liveness::observed as mission_observed;
 
 #[derive(Default)]
 struct Observed(Mutex<States>);

@@ -10,8 +10,8 @@ use serde_json::json;
 use tokio::sync::watch as signal;
 
 use super::checkout;
-use super::commands::announce_change;
 use super::contract::{Mission, MissionEntry, MissionError, MissionEventKind, WatchedMission};
+use super::liveness::announce_change;
 use crate::conversations::commands::ready;
 use crate::db;
 use crate::routines::core::{Clock, SystemClock};

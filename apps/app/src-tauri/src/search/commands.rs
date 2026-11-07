@@ -7,7 +7,7 @@ use super::contract::{
 use crate::conversations::contract::{state_in, StorageFailure};
 use crate::conversations::state as conversation_state;
 use crate::db;
-use crate::missions::commands::present;
+use crate::missions::liveness::present;
 
 fn ready(state: &db::DatabaseState) -> Result<&db::Database, StorageFailure> {
 	state.as_ref().map_err(StorageFailure::from)

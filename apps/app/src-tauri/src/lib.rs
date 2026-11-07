@@ -93,7 +93,7 @@ pub fn run() {
 		.plugin(crate::events::in_core(mcp_oauth::commands::McpOauthState::default()))
 		.plugin(crate::events::in_core(mcp_oauth::reports::ApplicationReports::default()))
 		.plugin(crate::events::in_core(mcp_oauth::asking::AuthorizationAnswers::default()))
-		.plugin(crate::events::in_core(missions::commands::AnnouncedLiveness::default()))
+		.plugin(crate::events::in_core(missions::liveness::AnnouncedLiveness::default()))
 		.plugin(crate::events::in_core_client_scoped(
 			missions::run_claims::MissionRunClaims::default(),
 		))

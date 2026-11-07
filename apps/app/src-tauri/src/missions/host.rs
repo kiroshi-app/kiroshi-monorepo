@@ -3,13 +3,14 @@ use serde_json::Value;
 
 use super::commands::{
 	mission_conclude, mission_escalate, mission_handoff, mission_note, mission_open,
-	mission_reopen_unmerged, mission_row, mission_status, mission_update, mission_watch, observed,
+	mission_reopen_unmerged, mission_row, mission_status, mission_update, mission_watch,
 };
 use super::contract::{
 	Mission, MissionClosing, MissionDossier, MissionDraft, MissionEntry, MissionError,
 	MissionEvent, MissionEventKind, MissionFilter, MissionLiveness, MissionNote, MissionOutcome,
 	MissionRecord, MissionScope, MissionState, MissionStatus, MissionUpdate, MissionWatch, Ticket,
 };
+use super::liveness::observed;
 use crate::agent::host::Host;
 use crate::conversations::commands::{ready, space_of_the_conversation};
 use crate::db;

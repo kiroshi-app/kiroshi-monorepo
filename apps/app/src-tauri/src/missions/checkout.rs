@@ -5,8 +5,8 @@ use std::time::Duration;
 
 use tokio::process::Command;
 
-use super::commands::{announce_change, announce_when};
 use super::contract::{CheckoutCounts, Mission, MissionError};
+use super::liveness::{announce_change, announce_when};
 use crate::db;
 
 pub const GIT_TIMEOUT: Duration = Duration::from_secs(5);
@@ -143,10 +143,11 @@ mod tests {
 	use tauri::test::mock_builder;
 	use tauri::{Listener as _, Manager as _};
 
-	use super::super::commands::{AnnouncedLiveness, CHANGED_EVENT};
+	use super::super::commands::CHANGED_EVENT;
 	use super::super::contract::{
 		MissionDraft, MissionEntry, MissionEventKind, MissionNote, Ticket,
 	};
+	use super::super::liveness::AnnouncedLiveness;
 	use super::*;
 	use crate::db::connection::temp_dir;
 	use crate::db::{open, Database};
