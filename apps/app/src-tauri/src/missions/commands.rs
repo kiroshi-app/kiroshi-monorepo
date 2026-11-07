@@ -650,16 +650,13 @@ mod tests {
 	use crate::missions::liveness::AnnouncedLiveness;
 	use std::fs;
 	use std::sync::mpsc::channel;
-	use tauri::Manager;
 
 	use serde_json::json;
-	use tauri::test::{mock_builder, MockRuntime};
-	use tauri::{App, Listener as _};
 
 	use super::super::contract::{MissionOutcome, Ticket};
 	use super::*;
 	use crate::removed_on_drop::RemovedOnDrop;
-	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
+	use crate::test_core::{a_core_of_its_own, CoreOfItsOwn};
 
 	const TWO_SPACES: &str = "
 		INSERT INTO spaces (id, name, colour, position, created_at)
@@ -675,15 +672,15 @@ mod tests {
 			VALUES ('c1', 'b1', 'lead', 1, 0), ('c2', 'b2', 'lead', 1, 0);
 	";
 
-	async fn a_host(name: &str) -> AppOfItsOwn {
-		let app = an_app_of_its_own(&format!("mission-commands-{name}"), mock_builder());
-		crate::db::install(crate::events::core(app.handle()));
-		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
+	async fn a_host(name: &str) -> CoreOfItsOwn {
+		let core = a_core_of_its_own(&format!("mission-commands-{name}"));
+		crate::db::install(&core);
+		ready(&core.state::<db::DatabaseState>())
 			.expect("the database opens")
 			.call_mut(|connection| Ok(connection.execute_batch(TWO_SPACES)?))
 			.await
 			.expect("the spaces are planted");
-		app
+		core
 	}
 
 	fn a_draft(conversation_id: &str, bot_id: &str, objective: &str) -> MissionDraft {
@@ -703,11 +700,8 @@ mod tests {
 		}
 	}
 
-	async fn a_mission(app: &App<MockRuntime>, draft: MissionDraft) -> Mission {
-		mission_open(crate::events::core(app.handle()), draft)
-			.await
-			.expect("the mission opens")
-			.mission
+	async fn a_mission(core: &CoreOfItsOwn, draft: MissionDraft) -> Mission {
+		mission_open(core, draft).await.expect("the mission opens").mission
 	}
 
 	fn a_note() -> MissionNote {
@@ -724,27 +718,21 @@ mod tests {
 
 	#[tokio::test]
 	async fn the_board_holds_every_open_mission_of_every_space_with_its_bot_and_its_state() {
-		let app = a_host("board").await;
-		let here = a_mission(&app, a_draft("c1", "b1", "Fix it")).await;
-		let there = a_mission(&app, a_draft("c2", "b2", "Ship it")).await;
-		let done = a_mission(&app, a_draft("c2", "b2", "Old work")).await;
-		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
+		let core = a_host("board").await;
+		let here = a_mission(&core, a_draft("c1", "b1", "Fix it")).await;
+		let there = a_mission(&core, a_draft("c2", "b2", "Ship it")).await;
+		let done = a_mission(&core, a_draft("c2", "b2", "Old work")).await;
+		let state = core.state::<db::DatabaseState>();
 		let database = ready(&state).expect("the store is open");
 		db::opened_on(database, &here.id, 1).await;
 		db::opened_on(database, &there.id, 2).await;
 		db::opened_on(database, &done.id, 3).await;
-		mission_escalate(crate::events::core(app.handle()), here.id.clone(), a_note())
+		mission_escalate(&core, here.id.clone(), a_note()).await.expect("the mission is escalated");
+		mission_conclude(&core, done.id, a_closing(MissionOutcome::Done))
 			.await
-			.expect("the mission is escalated");
-		mission_conclude(
-			crate::events::core(app.handle()),
-			done.id,
-			a_closing(MissionOutcome::Done),
-		)
-		.await
-		.expect("the mission is closed");
+			.expect("the mission is closed");
 
-		let board = mission_board(app.state()).await.expect("the board reads");
+		let board = missions_board(&core).await.expect("the board reads");
 
 		assert_eq!(
 			board
@@ -761,28 +749,23 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_closed_mission_owes_a_report_until_one_is_recorded_and_recording_stays_silent() {
-		let app = a_host("unreported").await;
-		let opened = a_mission(&app, a_draft("c1", "b1", "Fix it")).await;
-		let open = a_mission(&app, a_draft("c1", "b1", "Ship it")).await;
-		mission_conclude(
-			crate::events::core(app.handle()),
-			opened.id.clone(),
-			a_closing(MissionOutcome::Done),
-		)
-		.await
-		.expect("the mission closes");
-		a_turn_in(&app, "t1", "c1").await;
+		let core = a_host("unreported").await;
+		let opened = a_mission(&core, a_draft("c1", "b1", "Fix it")).await;
+		let open = a_mission(&core, a_draft("c1", "b1", "Ship it")).await;
+		mission_conclude(&core, opened.id.clone(), a_closing(MissionOutcome::Done))
+			.await
+			.expect("the mission closes");
+		a_turn_in(&core, "t1", "c1").await;
 		let (sender, received) = channel();
-		app.handle().listen(CHANGED_EVENT, move |event| {
-			let _ = sender.send(event.payload().to_owned());
+		core.listen_to(CHANGED_EVENT, move |payload| {
+			let _ = sender.send(payload.to_owned());
 		});
 
-		let owed = mission_unreported(app.state()).await.expect("the missions owing a report read");
-		let recorded = mission_reported(app.state(), opened.id.clone(), Some("t1".to_owned()))
+		let owed = unreported_missions(&core).await.expect("the missions owing a report read");
+		let recorded = mark_reported(&core, opened.id.clone(), Some("t1".to_owned()))
 			.await
 			.expect("the report is recorded");
-		let settled =
-			mission_unreported(app.state()).await.expect("the missions owing a report read");
+		let settled = unreported_missions(&core).await.expect("the missions owing a report read");
 
 		assert_eq!(
 			owed.iter().map(|held| held.mission.id.clone()).collect::<Vec<_>>(),
@@ -797,7 +780,7 @@ mod tests {
 			received.try_recv().is_err(),
 			"recording a report told the front the mission moved"
 		);
-		let board = mission_board(app.state()).await.expect("the board reads");
+		let board = missions_board(&core).await.expect("the board reads");
 		assert_eq!(
 			board.iter().map(|held| held.mission.id.clone()).collect::<Vec<_>>(),
 			vec![open.id],
@@ -805,12 +788,12 @@ mod tests {
 		);
 	}
 
-	async fn a_turn_in(app: &App<MockRuntime>, id: &str, conversation_id: &str) {
+	async fn a_turn_in(core: &CoreOfItsOwn, id: &str, conversation_id: &str) {
 		let statement = format!(
 			"INSERT INTO turns (id, conversation_id, seq, started_at)
 				VALUES ('{id}', '{conversation_id}', 1, 1)"
 		);
-		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
+		ready(&core.state::<db::DatabaseState>())
 			.expect("the database opens")
 			.call_mut(move |connection| Ok(connection.execute_batch(&statement)?))
 			.await
@@ -820,21 +803,17 @@ mod tests {
 	#[tokio::test]
 	async fn closing_on_a_failed_outcome_appends_failed_carries_the_summary_and_shuts_the_mission()
 	{
-		let app = a_host("failed-close").await;
-		let opened = a_mission(&app, a_draft("c1", "b1", "Fix it")).await;
+		let core = a_host("failed-close").await;
+		let opened = a_mission(&core, a_draft("c1", "b1", "Fix it")).await;
 
-		let closed = mission_conclude(
-			crate::events::core(app.handle()),
-			opened.id.clone(),
-			a_closing(MissionOutcome::Failed),
-		)
-		.await
-		.expect("the mission closes");
+		let closed = mission_conclude(&core, opened.id.clone(), a_closing(MissionOutcome::Failed))
+			.await
+			.expect("the mission closes");
 
 		assert_eq!(closed.state, MissionState::Failed, "got {:?}", closed.state);
 		assert!(closed.closed_at.is_some(), "the failed close left the mission open");
 		let detail =
-			mission_detail(app.state(), opened.id.clone()).await.expect("the mission detail reads");
+			mission_detail_of(&core, opened.id.clone()).await.expect("the mission detail reads");
 		assert_eq!(detail.mission.closed_at, closed.closed_at, "the moment it closed moved");
 		let last = detail.events.last().expect("the close event is there");
 		assert_eq!(last.kind, MissionEventKind::Failed, "got {:?}", last.kind);
@@ -845,7 +824,7 @@ mod tests {
 		);
 
 		let refused = mission_note(
-			crate::events::core(app.handle()),
+			&core,
 			opened.id.clone(),
 			MissionEntry::of(MissionEventKind::Note, a_note()),
 		)
@@ -856,21 +835,16 @@ mod tests {
 
 	#[tokio::test]
 	async fn closing_on_a_done_outcome_appends_closed_and_carries_the_summary() {
-		let app = a_host("done-close").await;
-		let opened = a_mission(&app, a_draft("c1", "b1", "Fix it")).await;
+		let core = a_host("done-close").await;
+		let opened = a_mission(&core, a_draft("c1", "b1", "Fix it")).await;
 
-		let closed = mission_conclude(
-			crate::events::core(app.handle()),
-			opened.id.clone(),
-			a_closing(MissionOutcome::Done),
-		)
-		.await
-		.expect("the mission closes");
+		let closed = mission_conclude(&core, opened.id.clone(), a_closing(MissionOutcome::Done))
+			.await
+			.expect("the mission closes");
 
 		assert_eq!(closed.state, MissionState::Done, "got {:?}", closed.state);
 		assert!(closed.closed_at.is_some(), "the done close left the mission open");
-		let detail =
-			mission_detail(app.state(), opened.id).await.expect("the mission detail reads");
+		let detail = mission_detail_of(&core, opened.id).await.expect("the mission detail reads");
 		let last = detail.events.last().expect("the close event is there");
 		assert_eq!(last.kind, MissionEventKind::Closed, "got {:?}", last.kind);
 		assert_eq!(
@@ -880,9 +854,9 @@ mod tests {
 		);
 	}
 
-	async fn an_agent_question(app: &App<MockRuntime>, mission_id: &str) -> Mission {
+	async fn an_agent_question(core: &CoreOfItsOwn, mission_id: &str) -> Mission {
 		mission_note(
-			crate::events::core(app.handle()),
+			core,
 			mission_id.to_owned(),
 			MissionEntry::of(MissionEventKind::AgentAsked, a_note()),
 		)
@@ -892,18 +866,18 @@ mod tests {
 
 	#[tokio::test]
 	async fn the_answer_at_the_standing_seq_works_the_mission_again_and_a_new_question_waits_it() {
-		let app = a_host("answered").await;
-		let opened = a_mission(&app, a_draft("c1", "b1", "Fix it")).await;
+		let core = a_host("answered").await;
+		let opened = a_mission(&core, a_draft("c1", "b1", "Fix it")).await;
 		let (sender, received) = channel();
-		app.handle().listen(CHANGED_EVENT, move |event| {
-			let _ = sender.send(event.payload().to_owned());
+		core.listen_to(CHANGED_EVENT, move |payload| {
+			let _ = sender.send(payload.to_owned());
 		});
 
-		let asked = an_agent_question(&app, &opened.id).await;
-		let answered = mission_answered(app.state(), opened.id.clone(), asked.state_seq)
+		let asked = an_agent_question(&core, &opened.id).await;
+		let answered = mark_answered(&core, opened.id.clone(), asked.state_seq)
 			.await
 			.expect("the answer is recorded");
-		let asked_again = an_agent_question(&app, &opened.id).await;
+		let asked_again = an_agent_question(&core, &opened.id).await;
 
 		assert_eq!(
 			[asked.state, answered.state, asked_again.state],
@@ -964,21 +938,20 @@ mod tests {
 
 	#[tokio::test]
 	async fn an_answer_older_than_the_standing_seq_appends_nothing_and_says_nothing() {
-		let app = a_host("stale-answer").await;
-		let opened = a_mission(&app, a_draft("c1", "b1", "Fix it")).await;
-		let asked = an_agent_question(&app, &opened.id).await;
-		let before =
-			mission_detail(app.state(), opened.id.clone()).await.expect("the detail reads");
+		let core = a_host("stale-answer").await;
+		let opened = a_mission(&core, a_draft("c1", "b1", "Fix it")).await;
+		let asked = an_agent_question(&core, &opened.id).await;
+		let before = mission_detail_of(&core, opened.id.clone()).await.expect("the detail reads");
 		let (sender, received) = channel();
-		app.handle().listen(CHANGED_EVENT, move |event| {
-			let _ = sender.send(event.payload().to_owned());
+		core.listen_to(CHANGED_EVENT, move |payload| {
+			let _ = sender.send(payload.to_owned());
 		});
 
-		let answered = mission_answered(app.state(), opened.id.clone(), asked.state_seq - 1)
+		let answered = mark_answered(&core, opened.id.clone(), asked.state_seq - 1)
 			.await
 			.expect("the stale answer is taken");
 
-		let after = mission_detail(app.state(), opened.id).await.expect("the detail reads");
+		let after = mission_detail_of(&core, opened.id).await.expect("the detail reads");
 		assert_eq!(after.events.len(), before.events.len(), "the stale answer appended an event");
 		assert_eq!(
 			(answered.state, answered.state_seq),
@@ -990,27 +963,22 @@ mod tests {
 
 	#[tokio::test]
 	async fn an_answer_at_the_standing_seq_of_a_closed_mission_appends_nothing_and_says_nothing() {
-		let app = a_host("closed-answer").await;
-		let opened = a_mission(&app, a_draft("c1", "b1", "Fix it")).await;
-		let closed = mission_conclude(
-			crate::events::core(app.handle()),
-			opened.id.clone(),
-			a_closing(MissionOutcome::Done),
-		)
-		.await
-		.expect("the mission closes");
-		let before =
-			mission_detail(app.state(), opened.id.clone()).await.expect("the detail reads");
+		let core = a_host("closed-answer").await;
+		let opened = a_mission(&core, a_draft("c1", "b1", "Fix it")).await;
+		let closed = mission_conclude(&core, opened.id.clone(), a_closing(MissionOutcome::Done))
+			.await
+			.expect("the mission closes");
+		let before = mission_detail_of(&core, opened.id.clone()).await.expect("the detail reads");
 		let (sender, received) = channel();
-		app.handle().listen(CHANGED_EVENT, move |event| {
-			let _ = sender.send(event.payload().to_owned());
+		core.listen_to(CHANGED_EVENT, move |payload| {
+			let _ = sender.send(payload.to_owned());
 		});
 
-		let answered = mission_answered(app.state(), opened.id.clone(), closed.state_seq)
+		let answered = mark_answered(&core, opened.id.clone(), closed.state_seq)
 			.await
 			.expect("the closed mission takes the answer quietly");
 
-		let after = mission_detail(app.state(), opened.id).await.expect("the detail reads");
+		let after = mission_detail_of(&core, opened.id).await.expect("the detail reads");
 		assert_eq!(
 			after.events.len(),
 			before.events.len(),
@@ -1029,14 +997,14 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_write_tells_the_front_which_mission_moved_and_where_it_stands() {
-		let app = a_host("announced").await;
+		let core = a_host("announced").await;
 		let (sender, received) = channel();
-		app.handle().listen(CHANGED_EVENT, move |event| {
-			let _ = sender.send(event.payload().to_owned());
+		core.listen_to(CHANGED_EVENT, move |payload| {
+			let _ = sender.send(payload.to_owned());
 		});
 
-		let opened = a_mission(&app, a_draft("c1", "b1", "Fix it")).await;
-		mission_escalate(crate::events::core(app.handle()), opened.id.clone(), a_note())
+		let opened = a_mission(&core, a_draft("c1", "b1", "Fix it")).await;
+		mission_escalate(&core, opened.id.clone(), a_note())
 			.await
 			.expect("the mission is escalated");
 
@@ -1072,7 +1040,7 @@ mod tests {
 			],
 			"the front was not told which mission moved and where it stands"
 		);
-		let read = mission_detail(app.state(), opened.id).await.expect("the mission detail reads");
+		let read = mission_detail_of(&core, opened.id).await.expect("the mission detail reads");
 		assert_eq!(
 			read.mission.space_id.as_deref(),
 			Some("personal"),
@@ -1118,22 +1086,18 @@ mod tests {
 
 	#[tokio::test]
 	async fn opening_on_a_checkout_installs_the_hook_there_and_answers_that_the_agent_is_heard() {
-		let app = a_host("opened-hook").await;
-		crate::events::core(app.app_handle()).manage(crate::routines::webhook::start(
-			crate::events::core(app.handle()).clone(),
-			crate::host_api::routes(app.handle().clone()),
-		));
+		let core = a_host("opened-hook").await;
+		core.manage(kiroshi_core::routines::local_server::a_loopback_webhook());
 		let workspace = a_checkout("opened-hook");
 
-		let opened =
-			mission_open(crate::events::core(app.handle()), drafted_in("Fix it", Some(&workspace)))
-				.await
-				.expect("the mission opens");
+		let opened = mission_open(&core, drafted_in("Fix it", Some(&workspace)))
+			.await
+			.expect("the mission opens");
 
 		assert_eq!(opened.reach, HEARD, "the answer did not tell the mission hears its agent");
 		let settings = hooked_in(&workspace);
 		assert!(settings.contains("kiroshi-agent-hook.sh"), "got {settings}");
-		let hooked = ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
+		let hooked = ready(&core.state::<db::DatabaseState>())
 			.expect("the database opens")
 			.missions()
 			.hooked()
@@ -1146,16 +1110,12 @@ mod tests {
 		);
 		assert!(!hooked[0].delivery_key.is_empty(), "the open call minted no delivery key");
 
-		let armed = mission_watch(
-			crate::events::core(app.handle()),
-			opened.mission.id.clone(),
-			a_watch("feature/ope-56"),
-		)
-		.await
-		.expect("the mission is armed");
+		let armed = mission_watch(&core, opened.mission.id.clone(), a_watch("feature/ope-56"))
+			.await
+			.expect("the mission is armed");
 
 		assert_eq!(armed.key, hooked[0].delivery_key, "arming minted another key");
-		let still = ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
+		let still = ready(&core.state::<db::DatabaseState>())
 			.expect("the database opens")
 			.missions()
 			.hooked()
@@ -1163,9 +1123,7 @@ mod tests {
 			.expect("the missions holding a checkout read");
 		assert_eq!(still, hooked, "arming lost the checkout or the key the open call wrote");
 
-		if let Some(webhook) =
-			crate::events::core(app.app_handle()).try_state::<crate::routines::webhook::Webhook>()
-		{
+		if let Some(webhook) = core.try_state::<kiroshi_core::routines::local_server::Webhook>() {
 			webhook.stop();
 		}
 		fs::remove_dir_all(&workspace).expect("cleanup");
@@ -1198,24 +1156,16 @@ mod tests {
 
 	#[tokio::test]
 	async fn arming_a_mission_counts_its_checkout_at_once() {
-		let app = a_host("armed-counts").await;
-		crate::events::core(app.app_handle()).manage(crate::routines::webhook::start(
-			crate::events::core(app.handle()).clone(),
-			crate::host_api::routes(app.handle().clone()),
-		));
+		let core = a_host("armed-counts").await;
+		core.manage(kiroshi_core::routines::local_server::a_loopback_webhook());
 		let workspace = a_repository("armed-counts");
-		let opened =
-			mission_open(crate::events::core(app.handle()), drafted_in("Fix it", Some(&workspace)))
-				.await
-				.expect("the mission opens");
+		let opened = mission_open(&core, drafted_in("Fix it", Some(&workspace)))
+			.await
+			.expect("the mission opens");
 
-		let armed = mission_watch(
-			crate::events::core(app.handle()),
-			opened.mission.id.clone(),
-			a_watch("feature/ope-56"),
-		)
-		.await
-		.expect("the mission is armed");
+		let armed = mission_watch(&core, opened.mission.id.clone(), a_watch("feature/ope-56"))
+			.await
+			.expect("the mission is armed");
 
 		assert_eq!(
 			(armed.mission.commits_ahead, armed.mission.dirty_files),
@@ -1223,9 +1173,7 @@ mod tests {
 			"the checkout was not counted on arming"
 		);
 
-		if let Some(webhook) =
-			crate::events::core(app.app_handle()).try_state::<crate::routines::webhook::Webhook>()
-		{
+		if let Some(webhook) = core.try_state::<kiroshi_core::routines::local_server::Webhook>() {
 			webhook.stop();
 		}
 		fs::remove_dir_all(&workspace).expect("cleanup");
@@ -1234,39 +1182,28 @@ mod tests {
 	async fn an_open_mission(
 		name: &str,
 		workspace: Option<&std::path::Path>,
-	) -> (AppOfItsOwn, String) {
-		let app = a_host(name).await;
-		crate::events::core(app.app_handle()).manage(crate::routines::webhook::start(
-			crate::events::core(app.handle()).clone(),
-			crate::host_api::routes(app.handle().clone()),
-		));
+	) -> (CoreOfItsOwn, String) {
+		let core = a_host(name).await;
+		core.manage(kiroshi_core::routines::local_server::a_loopback_webhook());
 		let opened =
-			mission_open(crate::events::core(app.handle()), drafted_in("Fix it", workspace))
-				.await
-				.expect("the mission opens");
-		(app, opened.mission.id)
+			mission_open(&core, drafted_in("Fix it", workspace)).await.expect("the mission opens");
+		(core, opened.mission.id)
 	}
 
 	async fn armed_and_announced(
-		app: &AppOfItsOwn,
+		core: &CoreOfItsOwn,
 		mission_id: String,
 	) -> (MissionWatching, Vec<serde_json::Value>) {
 		let (sender, received) = channel();
-		app.handle().listen(CHANGED_EVENT, move |event| {
-			sender.send(event.payload().to_owned()).expect("the test hears the changes");
+		core.listen_to(CHANGED_EVENT, move |payload| {
+			sender.send(payload.to_owned()).expect("the test hears the changes");
 		});
 
-		let armed = mission_watch(
-			crate::events::core(app.handle()),
-			mission_id,
-			a_watch("feature/ope-602"),
-		)
-		.await
-		.expect("the mission is armed");
+		let armed = mission_watch(core, mission_id, a_watch("feature/ope-602"))
+			.await
+			.expect("the mission is armed");
 
-		if let Some(webhook) =
-			crate::events::core(app.app_handle()).try_state::<crate::routines::webhook::Webhook>()
-		{
+		if let Some(webhook) = core.try_state::<kiroshi_core::routines::local_server::Webhook>() {
 			webhook.stop();
 		}
 		let announced = received
@@ -1288,19 +1225,19 @@ mod tests {
 	#[tokio::test]
 	async fn arming_a_mission_whose_checkout_is_gone_announces_it_once() {
 		let workspace = a_repository("gone-checkout");
-		let (app, mission_id) = an_open_mission("gone-checkout", Some(&workspace)).await;
+		let (core, mission_id) = an_open_mission("gone-checkout", Some(&workspace)).await;
 		fs::remove_dir_all(&workspace).expect("the checkout is deleted");
 
-		let (armed, announced) = armed_and_announced(&app, mission_id).await;
+		let (armed, announced) = armed_and_announced(&core, mission_id).await;
 
 		assert_announced_once(&armed, &announced);
 	}
 
 	#[tokio::test]
 	async fn arming_a_mission_opened_without_a_workspace_announces_it_once() {
-		let (app, mission_id) = an_open_mission("bare-watch", None).await;
+		let (core, mission_id) = an_open_mission("bare-watch", None).await;
 
-		let (armed, announced) = armed_and_announced(&app, mission_id).await;
+		let (armed, announced) = armed_and_announced(&core, mission_id).await;
 
 		assert_announced_once(&armed, &announced);
 	}
@@ -1308,9 +1245,9 @@ mod tests {
 	#[tokio::test]
 	async fn arming_a_mission_on_a_live_checkout_announces_it_once() {
 		let workspace = a_repository("live-checkout");
-		let (app, mission_id) = an_open_mission("live-checkout", Some(&workspace)).await;
+		let (core, mission_id) = an_open_mission("live-checkout", Some(&workspace)).await;
 
-		let (armed, announced) = armed_and_announced(&app, mission_id).await;
+		let (armed, announced) = armed_and_announced(&core, mission_id).await;
 
 		assert_announced_once(&armed, &announced);
 		fs::remove_dir_all(&workspace).expect("cleanup");
@@ -1318,19 +1255,15 @@ mod tests {
 
 	#[tokio::test]
 	async fn opening_without_a_checkout_writes_the_mission_and_answers_that_no_agent_reaches_it() {
-		let app = a_host("opened-bare").await;
-		crate::events::core(app.app_handle()).manage(crate::routines::webhook::start(
-			crate::events::core(app.handle()).clone(),
-			crate::host_api::routes(app.handle().clone()),
-		));
+		let core = a_host("opened-bare").await;
+		core.manage(kiroshi_core::routines::local_server::a_loopback_webhook());
 
-		let opened = mission_open(crate::events::core(app.handle()), drafted_in("Fix it", None))
-			.await
-			.expect("the mission opens");
+		let opened =
+			mission_open(&core, drafted_in("Fix it", None)).await.expect("the mission opens");
 
 		assert_eq!(opened.reach, UNHEARD, "got {}", opened.reach);
 		assert_eq!(opened.mission.state, MissionState::Working);
-		let hooked = ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
+		let hooked = ready(&core.state::<db::DatabaseState>())
 			.expect("the database opens")
 			.missions()
 			.hooked()
@@ -1338,22 +1271,19 @@ mod tests {
 			.expect("the missions holding a checkout read");
 		assert!(hooked.is_empty(), "got {hooked:?}");
 
-		if let Some(webhook) =
-			crate::events::core(app.app_handle()).try_state::<crate::routines::webhook::Webhook>()
-		{
+		if let Some(webhook) = core.try_state::<kiroshi_core::routines::local_server::Webhook>() {
 			webhook.stop();
 		}
 	}
 
 	#[tokio::test]
 	async fn opening_with_no_local_server_keeps_the_mission_and_answers_why_no_agent_reaches_it() {
-		let app = a_host("opened-serverless").await;
+		let core = a_host("opened-serverless").await;
 		let workspace = a_checkout("opened-serverless");
 
-		let opened =
-			mission_open(crate::events::core(app.handle()), drafted_in("Fix it", Some(&workspace)))
-				.await
-				.expect("the mission opens");
+		let opened = mission_open(&core, drafted_in("Fix it", Some(&workspace)))
+			.await
+			.expect("the mission opens");
 
 		assert!(opened.reach.starts_with(UNHEARD), "got {}", opened.reach);
 		assert!(opened.reach.contains("local server answers no call"), "got {}", opened.reach);
@@ -1366,34 +1296,28 @@ mod tests {
 
 	#[tokio::test]
 	async fn opening_on_a_workspace_that_is_no_git_checkout_refuses_and_writes_no_mission() {
-		let app = a_host("no-git").await;
-		crate::events::core(app.app_handle()).manage(crate::routines::webhook::start(
-			crate::events::core(app.handle()).clone(),
-			crate::host_api::routes(app.handle().clone()),
-		));
+		let core = a_host("no-git").await;
+		core.manage(kiroshi_core::routines::local_server::a_loopback_webhook());
 		let workspace = a_workspace("no-git");
 
-		let refused =
-			mission_open(crate::events::core(app.handle()), drafted_in("Fix it", Some(&workspace)))
-				.await
-				.expect_err("the workspace that is no git checkout is refused");
+		let refused = mission_open(&core, drafted_in("Fix it", Some(&workspace)))
+			.await
+			.expect_err("the workspace that is no git checkout is refused");
 
 		assert!(matches!(refused, MissionError::Undeliverable { .. }), "got {refused:?}");
 		assert!(!workspace.join(".claude").exists(), "the refused workspace was written in");
-		let board = mission_board(app.state()).await.expect("the board reads");
+		let board = missions_board(&core).await.expect("the board reads");
 		assert!(board.is_empty(), "got {board:?}");
 
-		if let Some(webhook) =
-			crate::events::core(app.app_handle()).try_state::<crate::routines::webhook::Webhook>()
-		{
+		if let Some(webhook) = core.try_state::<kiroshi_core::routines::local_server::Webhook>() {
 			webhook.stop();
 		}
 		fs::remove_dir_all(&workspace).expect("cleanup");
 	}
 
-	async fn read_first(app: &App<MockRuntime>, mission_id: &str) {
+	async fn read_first(core: &CoreOfItsOwn, mission_id: &str) {
 		let statement = format!("UPDATE missions SET opened_at = 1 WHERE id = '{mission_id}'");
-		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
+		ready(&core.state::<db::DatabaseState>())
 			.expect("the database opens")
 			.call_mut(move |connection| Ok(connection.execute_batch(&statement)?))
 			.await
@@ -1403,32 +1327,24 @@ mod tests {
 	#[tokio::test]
 	async fn a_launch_hooks_every_open_mission_holding_a_checkout_and_reports_the_one_that_is_gone()
 	{
-		let app = a_host("launch").await;
-		crate::events::core(app.app_handle()).manage(crate::routines::webhook::start(
-			crate::events::core(app.handle()).clone(),
-			crate::host_api::routes(app.handle().clone()),
-		));
+		let core = a_host("launch").await;
+		core.manage(kiroshi_core::routines::local_server::a_loopback_webhook());
 		let gone = a_checkout("launch-gone");
 		let here = a_checkout("launch-here");
-		let leaving =
-			mission_open(crate::events::core(app.handle()), drafted_in("Ship it", Some(&gone)))
-				.await
-				.expect("the mission opens");
-		mission_open(crate::events::core(app.handle()), drafted_in("Fix it", Some(&here)))
+		let leaving = mission_open(&core, drafted_in("Ship it", Some(&gone)))
 			.await
 			.expect("the mission opens");
-		read_first(&app, &leaving.mission.id).await;
+		mission_open(&core, drafted_in("Fix it", Some(&here))).await.expect("the mission opens");
+		read_first(&core, &leaving.mission.id).await;
 		fs::remove_dir_all(here.join(".claude")).expect("the settings are wiped");
 		fs::remove_dir_all(&gone).expect("the checkout is gone");
 
-		install_hooks_at_launch(crate::events::core(app.handle())).await;
+		install_hooks_at_launch(&core).await;
 
 		let settings = hooked_in(&here);
 		assert!(settings.contains("kiroshi-agent-hook.sh"), "got {settings}");
 
-		if let Some(webhook) =
-			crate::events::core(app.app_handle()).try_state::<crate::routines::webhook::Webhook>()
-		{
+		if let Some(webhook) = core.try_state::<kiroshi_core::routines::local_server::Webhook>() {
 			webhook.stop();
 		}
 		fs::remove_dir_all(&here).expect("cleanup");
@@ -1436,18 +1352,13 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_launch_replaces_the_reader_of_an_open_mission_and_keeps_its_settings_and_its_key() {
-		let app = a_host("launch-reader").await;
-		crate::events::core(app.app_handle()).manage(crate::routines::webhook::start(
-			crate::events::core(app.handle()).clone(),
-			crate::host_api::routes(app.handle().clone()),
-		));
+		let core = a_host("launch-reader").await;
+		core.manage(kiroshi_core::routines::local_server::a_loopback_webhook());
 		let workspace = a_checkout("launch-reader");
-		let opened =
-			mission_open(crate::events::core(app.handle()), drafted_in("Fix it", Some(&workspace)))
-				.await
-				.expect("the mission opens");
-		let dir = hook::dir(crate::events::core(app.handle()), &opened.mission.id)
-			.expect("the hook dir is named");
+		let opened = mission_open(&core, drafted_in("Fix it", Some(&workspace)))
+			.await
+			.expect("the mission opens");
+		let dir = hook::dir(&core, &opened.mission.id).expect("the hook dir is named");
 		let reader = dir.join("kiroshi-agent-hook.py");
 		fs::write(&reader, "print('an older reader')").expect("an older reader stands");
 		let config = || fs::read_to_string(dir.join("agent-hook.json")).expect("the config reads");
@@ -1455,7 +1366,7 @@ mod tests {
 			serde_json::from_str(&config()).expect("the config is JSON");
 		let settings_before = hooked_in(&workspace);
 
-		install_hooks_at_launch(crate::events::core(app.handle())).await;
+		install_hooks_at_launch(&core).await;
 
 		let key_after: serde_json::Value =
 			serde_json::from_str(&config()).expect("the config is JSON");
@@ -1467,46 +1378,29 @@ mod tests {
 		assert_eq!(key_after["key"], key_before["key"], "the launch moved the delivery key");
 		assert_eq!(hooked_in(&workspace), settings_before, "the launch moved the settings");
 
-		if let Some(webhook) =
-			crate::events::core(app.app_handle()).try_state::<crate::routines::webhook::Webhook>()
-		{
+		if let Some(webhook) = core.try_state::<kiroshi_core::routines::local_server::Webhook>() {
 			webhook.stop();
 		}
 	}
 
 	#[tokio::test]
 	async fn arming_refuses_an_unknown_mission_a_closed_one_and_a_repository_without_an_owner() {
-		let app = a_host("refused").await;
-		crate::events::core(app.app_handle()).manage(crate::routines::webhook::start(
-			crate::events::core(app.handle()).clone(),
-			crate::host_api::routes(app.handle().clone()),
-		));
-		let opened = a_mission(&app, a_draft("c1", "b1", "Fix it")).await;
-		let done = a_mission(&app, a_draft("c1", "b1", "Old work")).await;
-		mission_conclude(
-			crate::events::core(app.handle()),
-			done.id.clone(),
-			a_closing(MissionOutcome::Done),
-		)
-		.await
-		.expect("the mission closes");
+		let core = a_host("refused").await;
+		core.manage(kiroshi_core::routines::local_server::a_loopback_webhook());
+		let opened = a_mission(&core, a_draft("c1", "b1", "Fix it")).await;
+		let done = a_mission(&core, a_draft("c1", "b1", "Old work")).await;
+		mission_conclude(&core, done.id.clone(), a_closing(MissionOutcome::Done))
+			.await
+			.expect("the mission closes");
 
-		let unknown = mission_watch(
-			crate::events::core(app.handle()),
-			"x9".to_owned(),
-			a_watch("feature/ope-27"),
-		)
-		.await
-		.expect_err("the unknown mission is refused");
-		let closed = mission_watch(
-			crate::events::core(app.handle()),
-			done.id.clone(),
-			a_watch("feature/ope-27"),
-		)
-		.await
-		.expect_err("the closed mission is refused");
+		let unknown = mission_watch(&core, "x9".to_owned(), a_watch("feature/ope-27"))
+			.await
+			.expect_err("the unknown mission is refused");
+		let closed = mission_watch(&core, done.id.clone(), a_watch("feature/ope-27"))
+			.await
+			.expect_err("the closed mission is refused");
 		let unnamed = mission_watch(
-			crate::events::core(app.handle()),
+			&core,
 			opened.id,
 			MissionWatch { branch: "feature/ope-27".to_owned(), repository: "Kiroshi".to_owned() },
 		)
@@ -1517,27 +1411,21 @@ mod tests {
 		assert_eq!(closed, MissionError::MissionAlreadyClosed { id: done.id });
 		assert!(matches!(unnamed, MissionError::Undeliverable { .. }), "got {unnamed:?}");
 
-		if let Some(webhook) =
-			crate::events::core(app.app_handle()).try_state::<crate::routines::webhook::Webhook>()
-		{
+		if let Some(webhook) = core.try_state::<kiroshi_core::routines::local_server::Webhook>() {
 			webhook.stop();
 		}
 	}
 
 	#[tokio::test]
 	async fn a_command_naming_a_mission_no_row_holds_refuses_and_writes_nothing() {
-		let app = a_host("unknown").await;
+		let core = a_host("unknown").await;
 
-		let refused = mission_conclude(
-			crate::events::core(app.handle()),
-			"x9".to_owned(),
-			a_closing(MissionOutcome::Done),
-		)
-		.await
-		.expect_err("the close is refused");
+		let refused = mission_conclude(&core, "x9".to_owned(), a_closing(MissionOutcome::Done))
+			.await
+			.expect_err("the close is refused");
 
 		assert_eq!(refused, MissionError::UnknownMission { id: "x9".to_owned() });
-		let board = mission_board(app.state()).await.expect("the board reads");
+		let board = missions_board(&core).await.expect("the board reads");
 		assert!(board.is_empty(), "got {board:?}");
 	}
 
@@ -1548,7 +1436,7 @@ mod tests {
 		use serde_json::Value;
 
 		use super::*;
-		use crate::agent::commands::{a_run_held_by_the_app, agent_shutdown};
+		use crate::agent::commands::{a_run_held_by_the_app, shut_down_agent};
 		use crate::agent::contract::{
 			AgentEvent, PermissionDecision, PermissionRequest, QuestionRequest, RuntimeScope,
 			TurnEnded, TurnOutcome, TurnState,
@@ -1560,10 +1448,10 @@ mod tests {
 
 		const QUIET: Duration = Duration::from_millis(300);
 
-		async fn a_watched_host(name: &str) -> AppOfItsOwn {
-			let app = a_host(&format!("liveness-{name}")).await;
-			crate::events::core(app.app_handle()).manage(AnnouncedLiveness::default());
-			app
+		async fn a_watched_host(name: &str) -> CoreOfItsOwn {
+			let core = a_host(&format!("liveness-{name}")).await;
+			core.manage(AnnouncedLiveness::default());
+			core
 		}
 
 		fn the_thread_of(mission: &Mission) -> RuntimeScope {
@@ -1620,8 +1508,8 @@ mod tests {
 			}
 		}
 
-		async fn on_the_board(app: &App<MockRuntime>, id: &str) -> MissionLiveness {
-			mission_board(app.state())
+		async fn on_the_board(core: &CoreOfItsOwn, id: &str) -> MissionLiveness {
+			missions_board(core)
 				.await
 				.expect("the board reads")
 				.into_iter()
@@ -1631,19 +1519,16 @@ mod tests {
 				.liveness
 		}
 
-		async fn on_every_read(app: &App<MockRuntime>, id: &str) -> Vec<MissionLiveness> {
+		async fn on_every_read(core: &CoreOfItsOwn, id: &str) -> Vec<MissionLiveness> {
 			let listed =
-				mission_list(app.state(), "c1".to_owned()).await.expect("the conversation lists");
-			let detail =
-				mission_detail(app.state(), id.to_owned()).await.expect("the detail reads");
-			let feed = mission_space_feed(app.state(), "personal".to_owned(), 0)
-				.await
-				.expect("the feed reads");
-			let page = mission_space_page(app.state(), "personal".to_owned(), 0, None, None)
+				list_missions(core, "c1".to_owned()).await.expect("the conversation lists");
+			let detail = mission_detail_of(core, id.to_owned()).await.expect("the detail reads");
+			let feed = space_feed(core, "personal".to_owned(), 0).await.expect("the feed reads");
+			let page = space_page(core, "personal".to_owned(), 0, None, None)
 				.await
 				.expect("the page reads");
 			vec![
-				on_the_board(app, id).await,
+				on_the_board(core, id).await,
 				listed.open[0].liveness,
 				detail.mission.liveness,
 				feed[0].mission.liveness,
@@ -1651,10 +1536,10 @@ mod tests {
 			]
 		}
 
-		fn listening(app: &App<MockRuntime>) -> Receiver<Value> {
+		fn listening(core: &CoreOfItsOwn) -> Receiver<Value> {
 			let (sender, received) = channel();
-			app.handle().listen(CHANGED_EVENT, move |event| {
-				let payload = serde_json::from_str(event.payload()).expect("the payload is JSON");
+			core.listen_to(CHANGED_EVENT, move |payload| {
+				let payload = serde_json::from_str(payload).expect("the payload is JSON");
 				let _ = sender.send(payload);
 			});
 			received
@@ -1678,15 +1563,14 @@ mod tests {
 
 		#[tokio::test]
 		async fn a_thread_turn_alone_reads_working_on_every_read_and_idle_once_it_ends() {
-			let app = a_watched_host("turn").await;
-			let opened = a_mission(&app, a_draft("c1", "b1", "Fix it")).await;
-			let run =
-				a_run_held_by_the_app(crate::events::core(app.handle()), the_thread_of(&opened));
+			let core = a_watched_host("turn").await;
+			let opened = a_mission(&core, a_draft("c1", "b1", "Fix it")).await;
+			let run = a_run_held_by_the_app(&core, the_thread_of(&opened));
 
 			run.emit(turned(TurnState::Running), None);
-			let running = on_every_read(&app, &opened.id).await;
+			let running = on_every_read(&core, &opened.id).await;
 			run.emit(ended(), None);
-			let over = on_every_read(&app, &opened.id).await;
+			let over = on_every_read(&core, &opened.id).await;
 
 			assert_eq!(running, vec![MissionLiveness::Working; 5]);
 			assert_eq!(over, vec![MissionLiveness::Idle; 5]);
@@ -1694,19 +1578,18 @@ mod tests {
 
 		#[tokio::test]
 		async fn a_question_or_a_permission_of_the_thread_alone_reads_needs_you_until_resolved() {
-			let app = a_watched_host("prompt").await;
-			let opened = a_mission(&app, a_draft("c1", "b1", "Fix it")).await;
-			let run =
-				a_run_held_by_the_app(crate::events::core(app.handle()), the_thread_of(&opened));
+			let core = a_watched_host("prompt").await;
+			let opened = a_mission(&core, a_draft("c1", "b1", "Fix it")).await;
+			let run = a_run_held_by_the_app(&core, the_thread_of(&opened));
 			let mut walked = Vec::new();
 
 			for (raised, settled) in
 				[(a_question("q1"), resolved("q1")), (a_permission("p1"), resolved("p1"))]
 			{
 				run.emit(raised, None);
-				walked.push(on_the_board(&app, &opened.id).await);
+				walked.push(on_the_board(&core, &opened.id).await);
 				run.emit(settled, None);
-				walked.push(on_the_board(&app, &opened.id).await);
+				walked.push(on_the_board(&core, &opened.id).await);
 			}
 
 			assert_eq!(
@@ -1718,24 +1601,22 @@ mod tests {
 
 		#[tokio::test]
 		async fn a_checkout_agent_waiting_on_its_bot_reads_working_only_while_the_thread_answers() {
-			let app = a_watched_host("waiting-bot").await;
-			let opened = a_mission(&app, a_draft("c1", "b1", "Fix it")).await;
-			let run =
-				a_run_held_by_the_app(crate::events::core(app.handle()), the_thread_of(&opened));
+			let core = a_watched_host("waiting-bot").await;
+			let opened = a_mission(&core, a_draft("c1", "b1", "Fix it")).await;
+			let run = a_run_held_by_the_app(&core, the_thread_of(&opened));
 			let mut walked = Vec::new();
 
 			for waiting in [MissionEventKind::AgentAsked, MissionEventKind::ChecksFailed] {
 				let entry = MissionEntry::of(waiting, a_note());
-				let asked =
-					mission_note(crate::events::core(app.handle()), opened.id.clone(), entry)
-						.await
-						.expect("the mission waits on its bot");
+				let asked = mission_note(&core, opened.id.clone(), entry)
+					.await
+					.expect("the mission waits on its bot");
 				assert_eq!(asked.state, MissionState::WaitingBot);
 				walked.push(asked.liveness);
 				run.emit(turned(TurnState::Running), None);
-				walked.push(on_the_board(&app, &opened.id).await);
+				walked.push(on_the_board(&core, &opened.id).await);
 				run.emit(ended(), None);
-				walked.push(on_the_board(&app, &opened.id).await);
+				walked.push(on_the_board(&core, &opened.id).await);
 			}
 
 			assert_eq!(
@@ -1746,21 +1627,19 @@ mod tests {
 
 		#[tokio::test]
 		async fn a_status_is_stored_with_its_moment_and_leaves_the_state_and_the_liveness() {
-			let app = a_watched_host("status").await;
-			let quiet = a_mission(&app, a_draft("c1", "b1", "Fix it")).await;
-			let escalated = a_mission(&app, a_draft("c1", "b1", "Ship it")).await;
-			let escalated =
-				mission_escalate(crate::events::core(app.handle()), escalated.id, a_note())
-					.await
-					.expect("the mission is escalated");
-			let run =
-				a_run_held_by_the_app(crate::events::core(app.handle()), the_thread_of(&quiet));
+			let core = a_watched_host("status").await;
+			let quiet = a_mission(&core, a_draft("c1", "b1", "Fix it")).await;
+			let escalated = a_mission(&core, a_draft("c1", "b1", "Ship it")).await;
+			let escalated = mission_escalate(&core, escalated.id, a_note())
+				.await
+				.expect("the mission is escalated");
+			let run = a_run_held_by_the_app(&core, the_thread_of(&quiet));
 			run.emit(turned(TurnState::Running), None);
-			let quiet = observed(crate::events::core(app.handle()), quiet);
+			let quiet = observed(&core, quiet);
 
 			for before in [quiet, escalated] {
 				let stated = mission_status(
-					crate::events::core(app.handle()),
+					&core,
 					before.id.clone(),
 					"bot".to_owned(),
 					"Waiting on review".to_owned(),
@@ -1781,29 +1660,27 @@ mod tests {
 
 		#[tokio::test]
 		async fn a_run_dropped_mid_turn_tells_the_front_its_mission_is_idle() {
-			let app = a_watched_host("dropped").await;
-			let opened = a_mission(&app, a_draft("c1", "b1", "Fix it")).await;
-			let run =
-				a_run_held_by_the_app(crate::events::core(app.handle()), the_thread_of(&opened));
-			let received = listening(&app);
+			let core = a_watched_host("dropped").await;
+			let opened = a_mission(&core, a_draft("c1", "b1", "Fix it")).await;
+			let run = a_run_held_by_the_app(&core, the_thread_of(&opened));
+			let received = listening(&core);
 			run.emit(turned(TurnState::Running), None);
 			let started = heard(&received, 1);
 
-			agent_shutdown(app.state(), the_thread_of(&opened)).await.expect("the run is dropped");
+			shut_down_agent(&core, the_thread_of(&opened)).await.expect("the run is dropped");
 			let dropped = heard(&received, 1);
 
 			assert_eq!(liveness_of(&started), vec![json!("working")], "got {started:?}");
 			assert_eq!(liveness_of(&dropped), vec![json!("idle")], "got {dropped:?}");
-			assert_eq!(on_the_board(&app, &opened.id).await, MissionLiveness::Idle);
+			assert_eq!(on_the_board(&core, &opened.id).await, MissionLiveness::Idle);
 		}
 
 		#[tokio::test]
 		async fn the_front_hears_once_per_liveness_change_of_the_thread() {
-			let app = a_watched_host("once").await;
-			let opened = a_mission(&app, a_draft("c1", "b1", "Fix it")).await;
-			let run =
-				a_run_held_by_the_app(crate::events::core(app.handle()), the_thread_of(&opened));
-			let received = listening(&app);
+			let core = a_watched_host("once").await;
+			let opened = a_mission(&core, a_draft("c1", "b1", "Fix it")).await;
+			let run = a_run_held_by_the_app(&core, the_thread_of(&opened));
+			let received = listening(&core);
 
 			run.emit(turned(TurnState::Submitting), None);
 			run.emit(turned(TurnState::Running), None);
@@ -1827,8 +1704,8 @@ mod tests {
 			);
 		}
 
-		async fn on_the_board_whole(app: &App<MockRuntime>, id: &str) -> Value {
-			let mission = mission_board(app.state())
+		async fn on_the_board_whole(core: &CoreOfItsOwn, id: &str) -> Value {
+			let mission = missions_board(core)
 				.await
 				.expect("the board reads")
 				.into_iter()
@@ -1852,11 +1729,10 @@ mod tests {
 
 		#[tokio::test]
 		async fn the_thread_prompt_and_its_working_companion_ride_on_every_read_and_event() {
-			let app = a_watched_host("presence").await;
-			let opened = a_mission(&app, a_draft("c1", "b1", "Fix it")).await;
-			let run =
-				a_run_held_by_the_app(crate::events::core(app.handle()), the_thread_of(&opened));
-			let received = listening(&app);
+			let core = a_watched_host("presence").await;
+			let opened = a_mission(&core, a_draft("c1", "b1", "Fix it")).await;
+			let run = a_run_held_by_the_app(&core, the_thread_of(&opened));
+			let received = listening(&core);
 			let permission =
 				json!({ "promptId": "p1", "kind": "permission", "text": "Run a command" });
 
@@ -1864,10 +1740,10 @@ mod tests {
 
 			run.emit(turned(TurnState::Running), None);
 			told.extend(heard(&received, 1));
-			let running = on_the_board_whole(&app, &opened.id).await;
+			let running = on_the_board_whole(&core, &opened.id).await;
 			run.emit(a_permission("p1"), None);
 			told.extend(heard(&received, 1));
-			let asked = on_the_board_whole(&app, &opened.id).await;
+			let asked = on_the_board_whole(&core, &opened.id).await;
 			run.emit(resolved("p1"), None);
 			told.extend(heard(&received, 1));
 			run.emit(ended(), None);
@@ -1888,16 +1764,15 @@ mod tests {
 
 		#[tokio::test]
 		async fn an_escalated_question_is_the_pending_prompt_while_the_mission_waits_on_a_human() {
-			let app = a_watched_host("escalated-question").await;
-			let opened = a_mission(&app, a_draft("c1", "b1", "Fix it")).await;
+			let core = a_watched_host("escalated-question").await;
+			let opened = a_mission(&core, a_draft("c1", "b1", "Fix it")).await;
 			let note = MissionNote {
 				source: "bot".to_owned(),
 				payload: json!({ "question": "Which branch ships?", "reason": "Two are ready" }),
 			};
 
-			let escalated = mission_escalate(crate::events::core(app.handle()), opened.id, note)
-				.await
-				.expect("the mission is escalated");
+			let escalated =
+				mission_escalate(&core, opened.id, note).await.expect("the mission is escalated");
 
 			let prompt = escalated.pending_prompt.expect("the escalation is pending");
 			assert_eq!(escalated.liveness, MissionLiveness::NeedsYou);

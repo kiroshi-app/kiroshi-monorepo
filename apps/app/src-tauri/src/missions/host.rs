@@ -395,11 +395,8 @@ mod tests {
 
 	use serde_json::json;
 	use std::sync::mpsc::channel;
-	use tauri::test::{mock_builder, MockRuntime};
 
-	use tauri::{App, Listener as _, Manager as _};
-
-	use super::super::commands::{mission_detail, mission_open as opened};
+	use super::super::commands::{mission_detail_of, mission_open as opened};
 	use super::super::contract::{MissionEvent, MissionState};
 	use super::*;
 	use crate::removed_on_drop::RemovedOnDrop;
@@ -409,7 +406,7 @@ mod tests {
 	use crate::agent::stub_session::a_session_held_for;
 	use crate::conversations::contract::{SummonsDropped, SUMMONS_DROPPED_EVENT};
 	use crate::conversations::summons::SummonsDropReason;
-	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
+	use crate::test_core::{a_core_of_its_own, CoreOfItsOwn};
 	use crate::test_log::{capturing, infos_naming, warnings_naming};
 
 	const A_SPACE: &str = "
@@ -433,32 +430,28 @@ mod tests {
 			VALUES ('c3', 'b3', 'assistant', 1, 0);
 	";
 
-	async fn a_host(name: &str) -> AppOfItsOwn {
-		let app = an_app_of_its_own(&format!("mission-host-{name}"), mock_builder());
-		crate::db::install(crate::events::core(app.handle()));
-		crate::events::core(app.app_handle()).manage(crate::agent::AgentState::default());
-		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
+	async fn a_host(name: &str) -> CoreOfItsOwn {
+		let core = a_core_of_its_own(&format!("mission-host-{name}"));
+		crate::db::install(&core);
+		core.manage(crate::agent::AgentState::default());
+		ready(&core.state::<db::DatabaseState>())
 			.expect("the database opens")
 			.call_mut(|connection| Ok(connection.execute_batch(A_SPACE)?))
 			.await
 			.expect("the space is planted");
-		app
+		core
 	}
 
-	fn serving(app: &App<MockRuntime>, conversation_id: &str) -> MissionHost {
-		serving_as(app, conversation_id, "b1")
+	fn serving(core: &CoreOfItsOwn, conversation_id: &str) -> MissionHost {
+		serving_as(core, conversation_id, "b1")
 	}
 
-	fn serving_as(app: &App<MockRuntime>, conversation_id: &str, bot_id: &str) -> MissionHost {
-		MissionHost::new(
-			crate::events::core(app.handle()).clone(),
-			conversation_id.to_owned(),
-			bot_id.to_owned(),
-		)
+	fn serving_as(core: &CoreOfItsOwn, conversation_id: &str, bot_id: &str) -> MissionHost {
+		MissionHost::new(core.core().clone(), conversation_id.to_owned(), bot_id.to_owned())
 	}
 
-	async fn closed_by_its_bot(app: &App<MockRuntime>, held: &Mission) {
-		serving_as(app, &held.origin_conversation_id, &held.bot_id)
+	async fn closed_by_its_bot(core: &CoreOfItsOwn, held: &Mission) {
+		serving_as(core, &held.origin_conversation_id, &held.bot_id)
 			.answer(asking(
 				"close",
 				json!({ "id": held.id, "outcome": "done", "summary": "Already served" }),
@@ -497,9 +490,9 @@ mod tests {
 		)
 	}
 
-	async fn a_mission_of(app: &App<MockRuntime>, conversation_id: &str, bot_id: &str) -> Mission {
+	async fn a_mission_of(core: &CoreOfItsOwn, conversation_id: &str, bot_id: &str) -> Mission {
 		opened(
-			crate::events::core(app.handle()),
+			core,
 			MissionDraft {
 				origin_conversation_id: conversation_id.to_owned(),
 				bot_id: bot_id.to_owned(),
@@ -520,12 +513,12 @@ mod tests {
 		.mission
 	}
 
-	async fn events(app: &App<MockRuntime>, id: &str) -> Vec<MissionEvent> {
-		mission_detail(app.state(), id.to_owned()).await.expect("the mission reads").events
+	async fn events(core: &CoreOfItsOwn, id: &str) -> Vec<MissionEvent> {
+		mission_detail_of(core, id.to_owned()).await.expect("the mission reads").events
 	}
 
-	async fn armed_missions(app: &App<MockRuntime>) -> Vec<String> {
-		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
+	async fn armed_missions(core: &CoreOfItsOwn) -> Vec<String> {
+		ready(&core.state::<db::DatabaseState>())
 			.expect("the database opens")
 			.missions()
 			.watched()
@@ -570,8 +563,8 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_mission_is_opened_noted_escalated_and_closed_by_the_bot_of_the_session() {
-		let app = a_host("lifecycle").await;
-		let host = serving(&app, "c1");
+		let core = a_host("lifecycle").await;
+		let host = serving(&core, "c1");
 
 		let opened = host.answer(an_open()).await.expect("the mission opens");
 		let id = opened["mission"]["id"].as_str().expect("the mission is named").to_owned();
@@ -607,7 +600,7 @@ mod tests {
 		assert_eq!(escalated["state"], json!("waiting_human"));
 		assert_eq!(closed["state"], json!("done"));
 		assert_eq!(
-			events(&app, &id)
+			events(&core, &id)
 				.await
 				.into_iter()
 				.map(|held| (held.kind, held.source, held.payload))
@@ -631,9 +624,9 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_mission_is_served_from_its_own_thread_where_its_bot_carries_the_work_out() {
-		let app = a_host("own-thread").await;
-		let opened = a_mission_of(&app, "c1", "b1").await;
-		let host = serving(&app, &opened.thread_conversation_id);
+		let core = a_host("own-thread").await;
+		let opened = a_mission_of(&core, "c1", "b1").await;
+		let host = serving(&core, &opened.thread_conversation_id);
 
 		host.answer(asking("note", json!({ "id": opened.id, "line": "The work moved" })))
 			.await
@@ -654,7 +647,7 @@ mod tests {
 
 		assert_eq!(closed["state"], json!("done"));
 		assert_eq!(
-			events(&app, &opened.id).await.into_iter().map(|event| event.kind).collect::<Vec<_>>(),
+			events(&core, &opened.id).await.into_iter().map(|event| event.kind).collect::<Vec<_>>(),
 			vec![
 				MissionEventKind::Opened,
 				MissionEventKind::Note,
@@ -666,9 +659,9 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_mission_of_another_conversation_is_refused_and_nothing_is_appended() {
-		let app = a_host("foreign-conversation").await;
-		let held = a_mission_of(&app, "c2", "b1").await;
-		let host = serving(&app, "c1");
+		let core = a_host("foreign-conversation").await;
+		let held = a_mission_of(&core, "c2", "b1").await;
+		let host = serving(&core, "c1");
 
 		for asked in [
 			asking("note", json!({ "id": held.id, "line": "Sneaking in" })),
@@ -683,17 +676,17 @@ mod tests {
 			assert_eq!(refused["id"], json!(held.id));
 		}
 		assert_eq!(
-			events(&app, &held.id).await.into_iter().map(|event| event.kind).collect::<Vec<_>>(),
+			events(&core, &held.id).await.into_iter().map(|event| event.kind).collect::<Vec<_>>(),
 			vec![MissionEventKind::Opened]
 		);
-		assert!(armed_missions(&app).await.is_empty());
+		assert!(armed_missions(&core).await.is_empty());
 	}
 
 	#[tokio::test]
 	async fn a_mission_of_another_bot_is_refused_and_nothing_is_appended() {
-		let app = a_host("foreign-bot").await;
-		let held = a_mission_of(&app, "c1", "b2").await;
-		let host = serving(&app, "c1");
+		let core = a_host("foreign-bot").await;
+		let held = a_mission_of(&core, "c1", "b2").await;
+		let host = serving(&core, "c1");
 
 		for asked in [
 			asking("note", json!({ "id": held.id, "line": "Sneaking in" })),
@@ -708,21 +701,21 @@ mod tests {
 			assert_eq!(refused["id"], json!(held.id));
 		}
 		assert_eq!(
-			events(&app, &held.id).await.into_iter().map(|event| event.kind).collect::<Vec<_>>(),
+			events(&core, &held.id).await.into_iter().map(|event| event.kind).collect::<Vec<_>>(),
 			vec![MissionEventKind::Opened]
 		);
-		assert!(armed_missions(&app).await.is_empty());
+		assert!(armed_missions(&core).await.is_empty());
 	}
 
 	#[tokio::test]
 	async fn list_answers_every_mission_of_the_room_of_every_bot_open_and_closed() {
-		let app = a_host("listed").await;
-		let open = a_mission_of(&app, "c1", "b2").await;
-		let closed = a_mission_of(&app, "c1", "b2").await;
-		a_mission_of(&app, "c2", "b1").await;
-		closed_by_its_bot(&app, &closed).await;
+		let core = a_host("listed").await;
+		let open = a_mission_of(&core, "c1", "b2").await;
+		let closed = a_mission_of(&core, "c1", "b2").await;
+		a_mission_of(&core, "c2", "b1").await;
+		closed_by_its_bot(&core, &closed).await;
 
-		let answered = serving(&app, "c1")
+		let answered = serving(&core, "c1")
 			.answer(asking("list", json!({})))
 			.await
 			.expect("the missions are listed");
@@ -743,12 +736,12 @@ mod tests {
 
 	#[tokio::test]
 	async fn list_narrows_on_a_conversation_a_state_and_a_bot() {
-		let app = a_host("narrowed").await;
-		let of_b1 = a_mission_of(&app, "c1", "b1").await;
-		let of_b2 = a_mission_of(&app, "c1", "b2").await;
-		let elsewhere = a_mission_of(&app, "c2", "b1").await;
-		closed_by_its_bot(&app, &of_b2).await;
-		let host = serving(&app, &of_b1.thread_conversation_id);
+		let core = a_host("narrowed").await;
+		let of_b1 = a_mission_of(&core, "c1", "b1").await;
+		let of_b2 = a_mission_of(&core, "c1", "b2").await;
+		let elsewhere = a_mission_of(&core, "c2", "b1").await;
+		closed_by_its_bot(&core, &of_b2).await;
+		let host = serving(&core, &of_b1.thread_conversation_id);
 
 		let of_the_bot = host
 			.answer(asking("list", json!({ "conversation": "c1", "bot": "b2" })))
@@ -770,16 +763,16 @@ mod tests {
 
 	#[tokio::test]
 	async fn list_on_the_space_answers_its_closed_missions_and_none_of_another_space() {
-		let app = a_host("space").await;
-		let closed_here = a_mission_of(&app, "c1", "b2").await;
-		let closed_there = a_mission_of(&app, "c2", "b1").await;
-		a_mission_of(&app, "c1", "b1").await;
-		let closed_in_work = a_mission_of(&app, "c3", "b3").await;
+		let core = a_host("space").await;
+		let closed_here = a_mission_of(&core, "c1", "b2").await;
+		let closed_there = a_mission_of(&core, "c2", "b1").await;
+		a_mission_of(&core, "c1", "b1").await;
+		let closed_in_work = a_mission_of(&core, "c3", "b3").await;
 		for held in [&closed_here, &closed_there, &closed_in_work] {
-			closed_by_its_bot(&app, held).await;
+			closed_by_its_bot(&core, held).await;
 		}
 
-		let answered = serving(&app, "c1")
+		let answered = serving(&core, "c1")
 			.answer(asking("list", json!({ "space": true, "conversation": "c3", "state": "done" })))
 			.await
 			.expect("the missions of the space are listed");
@@ -789,9 +782,9 @@ mod tests {
 
 	#[tokio::test]
 	async fn list_refuses_a_conversation_of_another_space_and_an_unknown_one() {
-		let app = a_host("foreign-space").await;
-		a_mission_of(&app, "c3", "b3").await;
-		let host = serving(&app, "c1");
+		let core = a_host("foreign-space").await;
+		a_mission_of(&core, "c3", "b3").await;
+		let host = serving(&core, "c1");
 
 		let foreign = host
 			.answer(asking("list", json!({ "conversation": "c3" })))
@@ -810,13 +803,10 @@ mod tests {
 
 	#[tokio::test]
 	async fn read_answers_the_whole_of_a_mission_of_another_bot() {
-		let app = a_host("read").await;
-		crate::events::core(app.app_handle()).manage(crate::routines::webhook::start(
-			crate::events::core(app.handle()).clone(),
-			crate::host_api::routes(app.handle().clone()),
-		));
-		let held = a_mission_of(&app, "c1", "b2").await;
-		let its_bot = serving_as(&app, "c1", "b2");
+		let core = a_host("read").await;
+		core.manage(kiroshi_core::routines::local_server::a_loopback_webhook());
+		let held = a_mission_of(&core, "c1", "b2").await;
+		let its_bot = serving_as(&core, "c1", "b2");
 		its_bot
 			.answer(asking("note", json!({ "id": held.id, "line": "Half way" })))
 			.await
@@ -827,7 +817,7 @@ mod tests {
 			.expect("the status lands");
 		its_bot.answer(an_arming(&held.id)).await.expect("the mission is armed");
 
-		let read = serving(&app, "c2")
+		let read = serving(&core, "c2")
 			.answer(asking("read", json!({ "id": held.id })))
 			.await
 			.expect("the mission reads");
@@ -854,18 +844,16 @@ mod tests {
 		assert_eq!(kinds, vec![json!("opened"), json!("note"), json!("status")]);
 		assert_eq!(read["events"][1]["payload"]["line"], json!("Half way"));
 
-		if let Some(webhook) =
-			crate::events::core(app.app_handle()).try_state::<crate::routines::webhook::Webhook>()
-		{
+		if let Some(webhook) = core.try_state::<kiroshi_core::routines::local_server::Webhook>() {
 			webhook.stop();
 		}
 	}
 
 	#[tokio::test]
 	async fn list_and_read_carry_the_liveness_the_host_observes() {
-		let app = a_host("liveness").await;
-		let held = a_mission_of(&app, "c1", "b1").await;
-		let its_bot = serving(&app, "c1");
+		let core = a_host("liveness").await;
+		let held = a_mission_of(&core, "c1", "b1").await;
+		let its_bot = serving(&core, "c1");
 		let listed = its_bot.answer(asking("list", json!({}))).await.expect("the room lists");
 		its_bot
 			.answer(asking(
@@ -884,9 +872,9 @@ mod tests {
 
 	#[tokio::test]
 	async fn read_refuses_a_mission_of_another_space_and_an_unknown_one() {
-		let app = a_host("read-foreign").await;
-		let foreign = a_mission_of(&app, "c3", "b3").await;
-		let host = serving(&app, "c1");
+		let core = a_host("read-foreign").await;
+		let foreign = a_mission_of(&core, "c3", "b3").await;
+		let host = serving(&core, "c1");
 
 		let refused = host
 			.answer(asking("read", json!({ "id": foreign.id })))
@@ -906,13 +894,10 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_mission_is_armed_and_listed_from_its_own_thread() {
-		let app = a_host("armed").await;
-		crate::events::core(app.app_handle()).manage(crate::routines::webhook::start(
-			crate::events::core(app.handle()).clone(),
-			crate::host_api::routes(app.handle().clone()),
-		));
-		let opened = a_mission_of(&app, "c1", "b1").await;
-		let host = serving(&app, &opened.thread_conversation_id);
+		let core = a_host("armed").await;
+		core.manage(kiroshi_core::routines::local_server::a_loopback_webhook());
+		let opened = a_mission_of(&core, "c1", "b1").await;
+		let host = serving(&core, &opened.thread_conversation_id);
 
 		let armed = host.answer(an_arming(&opened.id)).await.expect("the mission is armed");
 		let answered =
@@ -924,25 +909,20 @@ mod tests {
 		);
 		assert_eq!(armed["header"], json!(crate::routines::webhook::HEADER));
 		assert!(armed["key"].as_str().is_some_and(|key| !key.is_empty()), "got {armed}");
-		assert_eq!(armed_missions(&app).await, vec![opened.id.clone()]);
+		assert_eq!(armed_missions(&core).await, vec![opened.id.clone()]);
 		assert_eq!(ids(&answered), vec![opened.id]);
 
-		if let Some(webhook) =
-			crate::events::core(app.app_handle()).try_state::<crate::routines::webhook::Webhook>()
-		{
+		if let Some(webhook) = core.try_state::<kiroshi_core::routines::local_server::Webhook>() {
 			webhook.stop();
 		}
 	}
 
 	#[tokio::test]
 	async fn a_mission_opened_on_a_checkout_carries_the_hook_and_the_line_on_its_agent() {
-		let app = a_host("opened-hook").await;
-		crate::events::core(app.app_handle()).manage(crate::routines::webhook::start(
-			crate::events::core(app.handle()).clone(),
-			crate::host_api::routes(app.handle().clone()),
-		));
+		let core = a_host("opened-hook").await;
+		core.manage(kiroshi_core::routines::local_server::a_loopback_webhook());
 		let workspace = a_workspace("opened-hook");
-		let host = serving(&app, "c1");
+		let host = serving(&core, "c1");
 
 		let opened = host.answer(an_open_in(Some(&workspace))).await.expect("the mission opens");
 
@@ -957,9 +937,7 @@ mod tests {
 			.expect("the settings of the workspace read");
 		assert!(settings.contains("kiroshi-agent-hook.sh"), "got {settings}");
 
-		if let Some(webhook) =
-			crate::events::core(app.app_handle()).try_state::<crate::routines::webhook::Webhook>()
-		{
+		if let Some(webhook) = core.try_state::<kiroshi_core::routines::local_server::Webhook>() {
 			webhook.stop();
 		}
 		fs::remove_dir_all(&workspace).expect("cleanup");
@@ -967,8 +945,8 @@ mod tests {
 
 	#[tokio::test]
 	async fn an_opened_mission_answers_its_thread_and_the_lines_that_end_the_turn() {
-		let app = a_host("opened-thread").await;
-		let host = serving(&app, "c1");
+		let core = a_host("opened-thread").await;
+		let host = serving(&core, "c1");
 
 		let opened = host.answer(an_open()).await.expect("the mission opens");
 
@@ -986,8 +964,8 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_field_the_operation_does_not_declare_is_named_and_refused() {
-		let app = a_host("undeclared").await;
-		let host = serving(&app, "c1");
+		let core = a_host("undeclared").await;
+		let host = serving(&core, "c1");
 
 		let refused = host
 			.answer(asking(
@@ -1016,8 +994,8 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_mission_closed_on_a_failed_outcome_stands_failed_and_carries_a_closing_moment() {
-		let app = a_host("derived").await;
-		let host = serving(&app, "c1");
+		let core = a_host("derived").await;
+		let host = serving(&core, "c1");
 		let opened = host.answer(an_open()).await.expect("the mission opens");
 		let id = opened["mission"]["id"].as_str().expect("the mission is named").to_owned();
 
@@ -1028,19 +1006,19 @@ mod tests {
 		.await
 		.expect("the mission is closed");
 
-		let mission = mission_detail(app.state(), id).await.expect("the mission reads").mission;
+		let mission = mission_detail_of(&core, id).await.expect("the mission reads").mission;
 		assert_eq!(mission.state, MissionState::Failed);
 		assert!(mission.closed_at.is_some(), "the failed close left the mission open");
 	}
 
 	#[tokio::test]
 	async fn a_status_lands_on_the_mission_from_its_bot_and_moves_nothing_but_itself() {
-		let app = a_host("status").await;
-		let opened = a_mission_of(&app, "c1", "b1").await;
-		let host = serving(&app, &opened.thread_conversation_id);
+		let core = a_host("status").await;
+		let opened = a_mission_of(&core, "c1", "b1").await;
+		let host = serving(&core, &opened.thread_conversation_id);
 		let (sender, received) = channel();
-		app.handle().listen(super::super::commands::CHANGED_EVENT, move |event| {
-			let _ = sender.send(event.payload().to_owned());
+		core.listen_to(super::super::commands::CHANGED_EVENT, move |payload| {
+			let _ = sender.send(payload.to_owned());
 		});
 
 		let stated = host
@@ -1061,7 +1039,7 @@ mod tests {
 		assert_eq!(answered[0]["status"], stated["status"], "got {answered}");
 		assert!(received.try_recv().is_ok(), "the status was not announced");
 		assert_eq!(
-			events(&app, &opened.id)
+			events(&core, &opened.id)
 				.await
 				.into_iter()
 				.map(|held| (held.kind, held.source, held.payload))
@@ -1079,9 +1057,9 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_blank_status_and_a_status_on_a_closed_mission_are_refused() {
-		let app = a_host("status-refused").await;
-		let opened = a_mission_of(&app, "c1", "b1").await;
-		let host = serving(&app, "c1");
+		let core = a_host("status-refused").await;
+		let opened = a_mission_of(&core, "c1", "b1").await;
+		let host = serving(&core, "c1");
 
 		let blank = host
 			.answer(asking("status", json!({ "id": opened.id, "text": "  " })))
@@ -1102,7 +1080,7 @@ mod tests {
 		assert_eq!(blank["field"], json!("text"));
 		assert_eq!(shut["kind"], json!("missionAlreadyClosed"));
 		assert_eq!(
-			events(&app, &opened.id).await.into_iter().map(|event| event.kind).collect::<Vec<_>>(),
+			events(&core, &opened.id).await.into_iter().map(|event| event.kind).collect::<Vec<_>>(),
 			vec![MissionEventKind::Opened, MissionEventKind::Closed]
 		);
 	}
@@ -1110,17 +1088,17 @@ mod tests {
 	const A_MERGED_PULL_REQUEST: &str =
 		r#"{"number":7,"state":"closed","headSha":"abc","checks":"passed","merged":true}"#;
 
-	async fn planted(app: &App<MockRuntime>, statements: &'static str) {
-		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
+	async fn planted(core: &CoreOfItsOwn, statements: &'static str) {
+		ready(&core.state::<db::DatabaseState>())
 			.expect("the database opens")
 			.call_mut(move |connection| Ok(connection.execute_batch(statements)?))
 			.await
 			.expect("the rows are planted");
 	}
 
-	async fn title_of(app: &App<MockRuntime>, conversation_id: &str) -> String {
+	async fn title_of(core: &CoreOfItsOwn, conversation_id: &str) -> String {
 		let id = conversation_id.to_owned();
-		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
+		ready(&core.state::<db::DatabaseState>())
 			.expect("the database opens")
 			.call(move |connection| {
 				Ok(connection.query_row(
@@ -1133,8 +1111,8 @@ mod tests {
 			.expect("the title reads")
 	}
 
-	async fn seated_in(app: &App<MockRuntime>, conversation_id: &str) -> Vec<String> {
-		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
+	async fn seated_in(core: &CoreOfItsOwn, conversation_id: &str) -> Vec<String> {
+		ready(&core.state::<db::DatabaseState>())
 			.expect("the database opens")
 			.conversations()
 			.seats(conversation_id.to_owned())
@@ -1150,10 +1128,10 @@ mod tests {
 		events.into_iter().map(|event| event.kind).collect()
 	}
 
-	fn listening(app: &App<MockRuntime>, event: &str) -> std::sync::mpsc::Receiver<Value> {
+	fn listening(core: &CoreOfItsOwn, event: &'static str) -> std::sync::mpsc::Receiver<Value> {
 		let (sender, received) = channel();
-		app.handle().listen(event, move |heard| {
-			let payload = serde_json::from_str(heard.payload()).expect("the payload is JSON");
+		core.listen_to(event, move |payload| {
+			let payload = serde_json::from_str(payload).expect("the payload is JSON");
 			let _ = sender.send(payload);
 		});
 		received
@@ -1167,31 +1145,28 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_closed_mission_is_reopened_by_its_bot_and_its_watch_is_read_again() {
-		let app = a_host("reopen").await;
-		crate::events::core(app.app_handle()).manage(crate::routines::webhook::start(
-			crate::events::core(app.handle()).clone(),
-			crate::host_api::routes(app.handle().clone()),
-		));
-		let opened = a_mission_of(&app, "c1", "b1").await;
-		let failed = a_mission_of(&app, "c1", "b1").await;
-		let host = serving(&app, &opened.thread_conversation_id);
+		let core = a_host("reopen").await;
+		core.manage(kiroshi_core::routines::local_server::a_loopback_webhook());
+		let opened = a_mission_of(&core, "c1", "b1").await;
+		let failed = a_mission_of(&core, "c1", "b1").await;
+		let host = serving(&core, &opened.thread_conversation_id);
 		host.answer(an_arming(&opened.id)).await.expect("the mission is armed");
 		closed_through(&host, &opened.id).await;
-		serving(&app, "c1")
+		serving(&core, "c1")
 			.answer(asking(
 				"close",
 				json!({ "id": failed.id, "outcome": "failed", "summary": "Out of reach" }),
 			))
 			.await
 			.expect("the mission fails");
-		assert!(armed_missions(&app).await.is_empty(), "a closed mission is still watched");
-		let changed = listening(&app, super::super::commands::CHANGED_EVENT);
+		assert!(armed_missions(&core).await.is_empty(), "a closed mission is still watched");
+		let changed = listening(&core, super::super::commands::CHANGED_EVENT);
 
 		let reopened = host
 			.answer(asking("reopen", json!({ "id": opened.id })))
 			.await
 			.expect("the done mission reopens");
-		let revived = serving(&app, "c1")
+		let revived = serving(&core, "c1")
 			.answer(asking("reopen", json!({ "id": failed.id })))
 			.await
 			.expect("the failed mission reopens");
@@ -1200,29 +1175,27 @@ mod tests {
 		assert_eq!(reopened["closedAt"], Value::Null);
 		assert_eq!(reopened["branch"], json!("feature/ope-37"));
 		assert_eq!(revived["state"], json!("working"));
-		assert_eq!(armed_missions(&app).await, vec![opened.id.clone()]);
+		assert_eq!(armed_missions(&core).await, vec![opened.id.clone()]);
 		assert!(changed.try_recv().is_ok(), "the reopening was not announced");
 		assert_eq!(
-			events(&app, &opened.id).await.last().map(|event| (event.kind, event.source.clone())),
+			events(&core, &opened.id).await.last().map(|event| (event.kind, event.source.clone())),
 			Some((MissionEventKind::Reopened, BOT.to_owned()))
 		);
 
-		if let Some(webhook) =
-			crate::events::core(app.app_handle()).try_state::<crate::routines::webhook::Webhook>()
-		{
+		if let Some(webhook) = core.try_state::<kiroshi_core::routines::local_server::Webhook>() {
 			webhook.stop();
 		}
 	}
 
 	#[tokio::test]
 	async fn a_mission_whose_pull_request_was_merged_or_still_open_is_not_reopened() {
-		let app = a_host("reopen-refused").await;
-		let merged = a_mission_of(&app, "c1", "b1").await;
-		let open = a_mission_of(&app, "c1", "b1").await;
-		let host = serving(&app, "c1");
+		let core = a_host("reopen-refused").await;
+		let merged = a_mission_of(&core, "c1", "b1").await;
+		let open = a_mission_of(&core, "c1", "b1").await;
+		let host = serving(&core, "c1");
 		closed_through(&host, &merged.id).await;
 		let id = merged.id.clone();
-		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
+		ready(&core.state::<db::DatabaseState>())
 			.expect("the database opens")
 			.call_mut(move |connection| {
 				Ok(connection.execute(
@@ -1248,18 +1221,18 @@ mod tests {
 		assert_eq!(refused_merged["url"], json!("https://github.test/pull/7"));
 		assert_eq!(refused_open["kind"], json!("missionStillOpen"));
 		assert_eq!(
-			kinds(events(&app, &merged.id).await),
+			kinds(events(&core, &merged.id).await),
 			vec![MissionEventKind::Opened, MissionEventKind::Closed]
 		);
-		assert_eq!(kinds(events(&app, &open.id).await), vec![MissionEventKind::Opened]);
+		assert_eq!(kinds(events(&core, &open.id).await), vec![MissionEventKind::Opened]);
 	}
 
 	#[tokio::test]
 	async fn an_update_rewrites_only_the_fields_given_and_retitles_the_thread_on_a_new_objective() {
-		let app = a_host("update").await;
-		let opened = a_mission_of(&app, "c1", "b1").await;
-		let host = serving(&app, &opened.thread_conversation_id);
-		let changed = listening(&app, super::super::commands::CHANGED_EVENT);
+		let core = a_host("update").await;
+		let opened = a_mission_of(&core, "c1", "b1").await;
+		let host = serving(&core, &opened.thread_conversation_id);
+		let changed = listening(&core, super::super::commands::CHANGED_EVENT);
 
 		let tooled = host
 			.answer(asking("update", json!({ "id": opened.id, "tools": ["gh", "linear"] })))
@@ -1277,11 +1250,11 @@ mod tests {
 		assert_eq!(retitled["tools"], json!(["gh", "linear"]));
 		assert_eq!(retitled["state"], json!(opened.state));
 		assert_eq!(retitled["stateSeq"], json!(opened.state_seq));
-		assert_eq!(title_of(&app, &opened.thread_conversation_id).await, "Ship it twice");
-		assert_eq!(title_of(&app, "c1").await, "First");
+		assert_eq!(title_of(&core, &opened.thread_conversation_id).await, "Ship it twice");
+		assert_eq!(title_of(&core, "c1").await, "First");
 		assert_eq!(changed.try_iter().count(), 2, "an update was not announced");
 		assert_eq!(
-			events(&app, &opened.id)
+			events(&core, &opened.id)
 				.await
 				.into_iter()
 				.map(|held| (held.kind, held.payload))
@@ -1296,9 +1269,9 @@ mod tests {
 
 	#[tokio::test]
 	async fn an_update_carrying_no_field_or_a_blank_objective_is_refused_and_writes_nothing() {
-		let app = a_host("update-refused").await;
-		let opened = a_mission_of(&app, "c1", "b1").await;
-		let host = serving(&app, "c1");
+		let core = a_host("update-refused").await;
+		let opened = a_mission_of(&core, "c1", "b1").await;
+		let host = serving(&core, "c1");
 
 		let empty = host
 			.answer(asking("update", json!({ "id": opened.id })))
@@ -1312,14 +1285,14 @@ mod tests {
 		assert_eq!(empty["kind"], json!("nothingToUpdate"));
 		assert_eq!(blank["kind"], json!("blankField"));
 		assert_eq!(blank["field"], json!("objective"));
-		let held = mission_detail(app.state(), opened.id.clone()).await.expect("it reads");
+		let held = mission_detail_of(&core, opened.id.clone()).await.expect("it reads");
 		assert_eq!(held.mission, opened);
 		assert_eq!(kinds(held.events), vec![MissionEventKind::Opened]);
-		assert_eq!(title_of(&app, &opened.thread_conversation_id).await, "Held");
+		assert_eq!(title_of(&core, &opened.thread_conversation_id).await, "Held");
 	}
 
 	async fn thread_messages(
-		app: &App<MockRuntime>,
+		core: &CoreOfItsOwn,
 		thread_id: &str,
 	) -> Vec<crate::db::repositories::messages::StoredMessage> {
 		let query = crate::db::repositories::messages::MessagePageQuery {
@@ -1327,7 +1300,7 @@ mod tests {
 			before_seq: None,
 			limit: 10,
 		};
-		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
+		let state = core.state::<db::DatabaseState>();
 		let messages = ready(state.inner()).expect("it opens").messages();
 		messages.page_messages(query).await.expect("the thread reads").messages
 	}
@@ -1339,10 +1312,10 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_handoff_seats_the_new_owner_records_both_owners_and_summons_it_in_the_thread() {
-		let app = a_host("handoff").await;
-		planted(&app, A_FOURTH_COMPANION).await;
-		let opened = a_mission_of(&app, "c1", "b1").await;
-		let host = serving(&app, &opened.thread_conversation_id);
+		let core = a_host("handoff").await;
+		planted(&core, A_FOURTH_COMPANION).await;
+		let opened = a_mission_of(&core, "c1", "b1").await;
+		let host = serving(&core, &opened.thread_conversation_id);
 		capturing();
 
 		let handed = host
@@ -1352,12 +1325,12 @@ mod tests {
 
 		assert_eq!(handed["botId"], json!("b4"));
 		assert_eq!(handed["stateSeq"], json!(opened.state_seq));
-		let thread = seated_in(&app, &opened.thread_conversation_id).await;
-		let origin = seated_in(&app, "c1").await;
+		let thread = seated_in(&core, &opened.thread_conversation_id).await;
+		let origin = seated_in(&core, "c1").await;
 		assert!(thread.contains(&"b1".to_owned()) && thread.contains(&"b4".to_owned()));
 		assert!(origin.contains(&"b1".to_owned()) && origin.contains(&"b4".to_owned()));
 		assert_eq!(
-			events(&app, &opened.id)
+			events(&core, &opened.id)
 				.await
 				.into_iter()
 				.map(|held| (held.kind, held.source, held.payload))
@@ -1367,14 +1340,14 @@ mod tests {
 				(MissionEventKind::HandedOff, BOT.to_owned(), json!({ "from": "b1", "to": "b4" })),
 			]
 		);
-		let read = crate::conversations::commands::conversation_mission_thread(
-			app.state(),
+		let read = kiroshi_core::conversations::commands::conversation_mission_thread(
+			&core,
 			opened.thread_conversation_id.clone(),
 		)
 		.await
 		.expect("the thread reads with its seats");
-		let topic = crate::conversations::commands::conversation_mission_thread(
-			app.state(),
+		let topic = kiroshi_core::conversations::commands::conversation_mission_thread(
+			&core,
 			"c1".to_owned(),
 		)
 		.await
@@ -1390,7 +1363,7 @@ mod tests {
 			),
 			"got {topic:?}"
 		);
-		let written = thread_messages(&app, &opened.thread_conversation_id).await;
+		let written = thread_messages(&core, &opened.thread_conversation_id).await;
 		let summons = written.last().expect("the new owner is summoned");
 		assert_eq!(summons.author_bot_id.as_deref(), Some("b1"));
 		assert!(summons.content.starts_with("<@b4> "), "got {}", summons.content);
@@ -1407,9 +1380,9 @@ mod tests {
 	#[tokio::test]
 	async fn a_handoff_answers_while_the_turn_of_its_successor_still_runs() {
 		capturing();
-		let app = a_host("handoff-running").await;
-		planted(&app, A_FOURTH_COMPANION).await;
-		let opened = a_mission_of(&app, "c1", "b1").await;
+		let core = a_host("handoff-running").await;
+		planted(&core, A_FOURTH_COMPANION).await;
+		let opened = a_mission_of(&core, "c1", "b1").await;
 		let thread_id = opened.thread_conversation_id.clone();
 		let fourth = RuntimeScope {
 			conversation_id: thread_id.clone(),
@@ -1417,8 +1390,8 @@ mod tests {
 			runtime_session_id: "session-of-b4".to_owned(),
 			epoch: 1,
 		};
-		let successor = a_session_held_for(crate::events::core(app.handle()), &fourth).await;
-		let host = serving(&app, &thread_id);
+		let successor = a_session_held_for(&core, &fourth).await;
+		let host = serving(&core, &thread_id);
 
 		let asked = asking("handoff", json!({ "id": opened.id, "companion": "Fourth" }));
 		let answered = tokio::time::timeout(Duration::from_secs(10), host.answer(asked))
@@ -1437,20 +1410,19 @@ mod tests {
 	#[tokio::test]
 	async fn a_handoff_whose_summons_cannot_be_written_drops_it_and_names_the_mission() {
 		capturing();
-		let app = a_host("handoff-unwritten").await;
-		planted(&app, A_FOURTH_COMPANION).await;
-		let opened = a_mission_of(&app, "c1", "b1").await;
+		let core = a_host("handoff-unwritten").await;
+		planted(&core, A_FOURTH_COMPANION).await;
+		let opened = a_mission_of(&core, "c1", "b1").await;
 		planted(
-			&app,
+			&core,
 			"CREATE TRIGGER no_handing_turn BEFORE INSERT ON turns
 				BEGIN SELECT RAISE(ABORT, 'the turn breaks'); END;",
 		)
 		.await;
-		let host = serving(&app, &opened.thread_conversation_id);
+		let host = serving(&core, &opened.thread_conversation_id);
 		let (announced, drops) = channel();
-		app.listen(SUMMONS_DROPPED_EVENT, move |event| {
-			let dropped: SummonsDropped =
-				serde_json::from_str(event.payload()).expect("a dropped summons");
+		core.listen_to(SUMMONS_DROPPED_EVENT, move |payload| {
+			let dropped: SummonsDropped = serde_json::from_str(payload).expect("a dropped summons");
 			announced.send(dropped).expect("the test listens");
 		});
 
@@ -1458,7 +1430,7 @@ mod tests {
 			.await
 			.expect_err("the unwritten summons is answered as a failure");
 
-		let held = mission_detail(app.state(), opened.id.clone()).await.expect("it reads");
+		let held = mission_detail_of(&core, opened.id.clone()).await.expect("it reads");
 		assert_eq!(held.mission.bot_id, "b4");
 		let thread_id = &opened.thread_conversation_id;
 		let dropped =
@@ -1478,11 +1450,11 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_handoff_of_a_closed_mission_summons_nobody() {
-		let app = a_host("handoff-closed").await;
-		let opened = a_mission_of(&app, "c1", "b1").await;
-		let host = serving(&app, "c1");
+		let core = a_host("handoff-closed").await;
+		let opened = a_mission_of(&core, "c1", "b1").await;
+		let host = serving(&core, "c1");
 		closed_through(&host, &opened.id).await;
-		let before = thread_messages(&app, &opened.thread_conversation_id).await.len();
+		let before = thread_messages(&core, &opened.thread_conversation_id).await.len();
 
 		let handed = host
 			.answer(asking("handoff", json!({ "id": opened.id, "companion": "b2" })))
@@ -1490,15 +1462,15 @@ mod tests {
 			.expect("the closed mission is handed off");
 
 		assert_eq!(handed["botId"], json!("b2"));
-		let after = thread_messages(&app, &opened.thread_conversation_id).await.len();
+		let after = thread_messages(&core, &opened.thread_conversation_id).await.len();
 		assert_eq!(after, before, "a closed mission summoned its new owner");
 	}
 
 	#[tokio::test]
 	async fn a_handoff_to_an_unknown_an_ambiguous_companion_or_the_owner_is_refused() {
-		let app = a_host("handoff-refused").await;
+		let core = a_host("handoff-refused").await;
 		planted(
-			&app,
+			&core,
 			"INSERT INTO bots (id, name, model, created_at)
 				VALUES ('t1', 'Twin', 'sonnet', 1), ('t2', 'Twin', 'sonnet', 1),
 					('away', 'Away', 'sonnet', 1);
@@ -1506,10 +1478,10 @@ mod tests {
 				VALUES ('t1', 'personal', 1), ('t2', 'personal', 1);",
 		)
 		.await;
-		let opened = a_mission_of(&app, "c1", "b1").await;
-		let host = serving(&app, "c1");
-		let thread_seats = seated_in(&app, &opened.thread_conversation_id).await;
-		let origin_seats = seated_in(&app, "c1").await;
+		let opened = a_mission_of(&core, "c1", "b1").await;
+		let host = serving(&core, "c1");
+		let thread_seats = seated_in(&core, &opened.thread_conversation_id).await;
+		let origin_seats = seated_in(&core, "c1").await;
 
 		let mut refused = Vec::new();
 		for companion in ["Nobody", "Away", "Twin", "First", "b1"] {
@@ -1530,19 +1502,19 @@ mod tests {
 				json!("alreadyTheOwner"),
 			]
 		);
-		let held = mission_detail(app.state(), opened.id.clone()).await.expect("it reads");
+		let held = mission_detail_of(&core, opened.id.clone()).await.expect("it reads");
 		assert_eq!(held.mission.bot_id, "b1");
 		assert_eq!(kinds(held.events), vec![MissionEventKind::Opened]);
-		assert_eq!(seated_in(&app, &opened.thread_conversation_id).await, thread_seats);
-		assert_eq!(seated_in(&app, "c1").await, origin_seats);
+		assert_eq!(seated_in(&core, &opened.thread_conversation_id).await, thread_seats);
+		assert_eq!(seated_in(&core, "c1").await, origin_seats);
 	}
 
 	#[tokio::test]
 	async fn the_previous_owner_of_a_handed_off_mission_is_refused_every_write() {
-		let app = a_host("handoff-guard").await;
-		planted(&app, A_FOURTH_COMPANION).await;
-		let opened = a_mission_of(&app, "c1", "b1").await;
-		let previous = serving(&app, &opened.thread_conversation_id);
+		let core = a_host("handoff-guard").await;
+		planted(&core, A_FOURTH_COMPANION).await;
+		let opened = a_mission_of(&core, "c1", "b1").await;
+		let previous = serving(&core, &opened.thread_conversation_id);
 		previous
 			.answer(asking("handoff", json!({ "id": opened.id, "companion": "Fourth" })))
 			.await
@@ -1563,17 +1535,14 @@ mod tests {
 			assert_eq!(refused["kind"], json!("missionOfAnotherBot"));
 			assert_eq!(refused["id"], json!(opened.id));
 		}
-		let successor = MissionHost::new(
-			crate::events::core(app.handle()).clone(),
-			opened.thread_conversation_id.clone(),
-			"b4".to_owned(),
-		);
+		let successor =
+			MissionHost::new(core.clone(), opened.thread_conversation_id.clone(), "b4".to_owned());
 		successor
 			.answer(asking("note", json!({ "id": opened.id, "line": "Taken over" })))
 			.await
 			.expect("the new owner writes on it");
 		assert_eq!(
-			kinds(events(&app, &opened.id).await),
+			kinds(events(&core, &opened.id).await),
 			vec![MissionEventKind::Opened, MissionEventKind::HandedOff, MissionEventKind::Note]
 		);
 	}

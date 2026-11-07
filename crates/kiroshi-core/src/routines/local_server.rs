@@ -38,6 +38,11 @@ impl Webhook {
 	}
 }
 
+#[cfg(any(test, feature = "test-support"))]
+pub fn a_loopback_webhook() -> Webhook {
+	Webhook::new(Some(SocketAddr::from(([127, 0, 0, 1], 45_367))), watch::channel(false).0)
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;

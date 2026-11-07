@@ -1236,8 +1236,6 @@ mod tests {
 	use axum::Router;
 	use reqwest::header::AUTHORIZATION;
 	use serde_json::Value;
-	use tauri::test::mock_builder;
-	use tauri::Listener as _;
 	use tokio::sync::Mutex;
 
 	use super::super::commands::CHANGED_EVENT;
@@ -1248,7 +1246,7 @@ mod tests {
 	use crate::db::connection::temp_dir;
 	use crate::db::{open, Database};
 	use crate::removed_on_drop::RemovedOnDrop;
-	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
+	use crate::test_core::{a_core_of_its_own, CoreOfItsOwn};
 
 	const NOON: i64 = 1_800_000_000_000;
 
@@ -1966,8 +1964,8 @@ mod tests {
 		(held.state, held.closed_at.is_some())
 	}
 
-	fn a_host() -> AppOfItsOwn {
-		an_app_of_its_own("mission-github", mock_builder())
+	fn a_host() -> CoreOfItsOwn {
+		a_core_of_its_own("mission-github")
 	}
 
 	async fn announced_by(
@@ -1976,12 +1974,12 @@ mod tests {
 		kept: &mut Kept,
 		clock: &Ticking,
 	) -> Vec<Value> {
-		let app = a_host();
+		let core = a_host();
 		let (sender, received) = channel();
-		app.handle().listen(CHANGED_EVENT, move |event| {
-			let _ = sender.send(event.payload().to_owned());
+		core.listen_to(CHANGED_EVENT, move |payload| {
+			let _ = sender.send(payload.to_owned());
 		});
-		pass(crate::events::core(app.handle()), reach, database, kept, clock).await;
+		pass(&core, reach, database, kept, clock).await;
 		received
 			.try_iter()
 			.map(|payload| serde_json::from_str(&payload).expect("the payload is JSON"))
@@ -2527,12 +2525,12 @@ mod tests {
 		kept: &mut Kept,
 		from_ms: i64,
 	) -> Vec<(i64, Vec<String>)> {
-		let app = a_host();
+		let core = a_host();
 		let reach = stub.reach();
 		let mut asked = Vec::new();
 		for at in (from_ms..from_ms + HOUR_MS).step_by(TICK_MS as usize) {
 			let before = stub.asked().await.len();
-			pass(crate::events::core(app.handle()), &reach, database, kept, &Ticking::at(at)).await;
+			pass(&core, &reach, database, kept, &Ticking::at(at)).await;
 			let paths = stub.asked_paths(before).await;
 			if !paths.is_empty() {
 				asked.push((at - from_ms, paths));

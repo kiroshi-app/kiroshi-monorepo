@@ -140,8 +140,6 @@ mod tests {
 	use std::sync::mpsc::channel;
 
 	use serde_json::{json, Value};
-	use tauri::test::mock_builder;
-	use tauri::{Listener as _, Manager as _};
 
 	use super::super::commands::CHANGED_EVENT;
 	use super::super::contract::{
@@ -152,7 +150,7 @@ mod tests {
 	use crate::db::connection::temp_dir;
 	use crate::db::{open, Database};
 	use crate::removed_on_drop::RemovedOnDrop;
-	use crate::test_app::an_app_of_its_own;
+	use crate::test_core::a_core_of_its_own;
 
 	const A_PARTICIPANT: &str = "
 		INSERT INTO bots (id, name, model, created_at) VALUES ('b1', 'First', 'sonnet', 1);
@@ -313,9 +311,9 @@ mod tests {
 			.await
 			.expect("stale counts are planted");
 		let events_before = events_in(&database).await;
-		let app = an_app_of_its_own("mission-checkout", mock_builder());
+		let core = a_core_of_its_own("mission-checkout");
 
-		pass(crate::events::core(app.handle()), &database).await;
+		pass(&core, &database).await;
 
 		assert_eq!(counts_of(&database, &counted.id).await, (Some(2), Some(2)));
 		assert_eq!(counts_of(&database, &gone.id).await, (None, None));
@@ -329,10 +327,10 @@ mod tests {
 		let (database, dir) = planted().await;
 		let quiet = a_mission_in(&database, None).await;
 		let started = a_mission_in(&database, None).await;
-		let app = an_app_of_its_own("mission-checkout", mock_builder());
-		crate::events::core(app.app_handle()).manage(AnnouncedLiveness::default());
-		told(crate::events::core(app.handle()), &quiet);
-		told(crate::events::core(app.handle()), &started);
+		let core = a_core_of_its_own("mission-checkout");
+		core.manage(AnnouncedLiveness::default());
+		told(&core, &quiet);
+		told(&core, &started);
 		database
 			.missions()
 			.append(
@@ -345,12 +343,12 @@ mod tests {
 			.await
 			.expect("the agent starts");
 		let (sender, received) = channel();
-		app.handle().listen(CHANGED_EVENT, move |event| {
-			let _ = sender.send(event.payload().to_owned());
+		core.listen_to(CHANGED_EVENT, move |payload| {
+			let _ = sender.send(payload.to_owned());
 		});
 
-		pass(crate::events::core(app.handle()), &database).await;
-		pass(crate::events::core(app.handle()), &database).await;
+		pass(&core, &database).await;
+		pass(&core, &database).await;
 
 		let announced: Vec<Value> = received
 			.try_iter()
