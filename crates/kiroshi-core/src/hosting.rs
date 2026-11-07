@@ -1,23 +1,23 @@
-pub mod authors;
-pub mod caller;
-pub mod contract;
 mod admission;
+pub mod authors;
 pub mod authorship;
 pub mod bridge;
+pub mod caller;
 pub mod commands;
+pub mod contract;
 mod devices;
+pub mod handover;
 #[cfg(test)]
 mod member_socket;
 mod members;
 mod reach;
+pub mod relay;
+pub mod replay;
 pub mod roster;
 #[cfg(test)]
 mod sealing_member;
 #[cfg(test)]
 mod tests;
-pub mod handover;
-pub mod relay;
-pub mod replay;
 pub mod wire;
 
 pub use members::MEMBERS_EVERY;
@@ -353,4 +353,3 @@ async fn flagged(core: &crate::core_context::Core) -> Vec<String> {
 		Vec::new()
 	})
 }
-

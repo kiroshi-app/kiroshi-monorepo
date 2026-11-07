@@ -77,6 +77,7 @@ use crate::db::repositories::messages::{
 	EndedRun, MessagePageQuery, MessageRole, NewAssistantMessage, NewTurn, WebSource,
 };
 use crate::db::{self, DatabaseState};
+use crate::environment::commands::env_list;
 use crate::environment::commands::writable_root;
 use crate::environment::connection;
 use crate::environment::contract::{ConnectionKind, EnvError, EnvOwner, EnvScope, ACCOUNT_BEARER};
@@ -103,7 +104,6 @@ use crate::spaces::commands::{
 use crate::spaces::contract::{Space as SpaceShown, SpaceError, DESCRIBED_EVENT};
 use crate::test_core::{a_core_of_its_own, CoreOfItsOwn};
 use crate::test_log::{capturing, warnings_naming};
-use crate::environment::commands::env_list;
 
 const BEARER: &str = "bearer-that-never-leaves";
 const LOCAL_TOKEN: &str = "host-token-of-the-loopback";
@@ -932,21 +932,12 @@ impl Harness {
 		}
 		let app = a_core_of_its_own(&format!("hosting-{name}"));
 		core.manage::<DatabaseState>(Ok(db::open(&database)));
-		core
-			.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
+		core.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
 		let profile = app.data_dir().to_path_buf();
 		let identifier = app.config().identifier.clone();
-		core.manage(SpaceKeys::new(
-			InstallKind::Dev,
-			identifier,
-			Some(profile),
-		));
-		core
-			.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &cloud));
-		crate::account::session::install_signed_in_work(
-			core,
-			crate::account::AppSignedInWork,
-		);
+		core.manage(SpaceKeys::new(InstallKind::Dev, identifier, Some(profile)));
+		core.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &cloud));
+		crate::account::session::install_signed_in_work(core, crate::account::AppSignedInWork);
 		core.manage(RelayGuests::new(&cloud));
 		core.manage(
 			Hosting::new(
@@ -1006,8 +997,7 @@ impl Harness {
 	}
 
 	async fn reached_by(&self, space_id: &str, expected: HostingState) {
-		let current =
-			|| self.app.state::<Hosting>().current(space_id);
+		let current = || self.app.state::<Hosting>().current(space_id);
 		let awaited = format!("space {space_id} reaching {expected:?}");
 		self.noticed_until(&awaited, || (current() == expected).then_some(())).await;
 	}
@@ -1028,15 +1018,11 @@ impl Harness {
 	}
 
 	async fn started(&self) -> HostingState {
-		start(&*self.app, PERSONAL.to_owned())
-			.await
-			.expect("the hosting starts")
+		start(&*self.app, PERSONAL.to_owned()).await.expect("the hosting starts")
 	}
 
 	async fn stopped(&self) -> HostingState {
-		stop(&*self.app, PERSONAL.to_owned())
-			.await
-			.expect("the hosting stops")
+		stop(&*self.app, PERSONAL.to_owned()).await.expect("the hosting stops")
 	}
 
 	async fn member(&mut self) -> MemberWire {
@@ -1073,9 +1059,7 @@ impl Harness {
 	}
 
 	fn space_key(&self, space_id: &str) -> HeldSpaceKey {
-		let held = self.app.state::<SpaceKeys>()
-			.held(space_id)
-			.expect("the space key reads");
+		let held = self.app.state::<SpaceKeys>().held(space_id).expect("the space key reads");
 		held.expect("the hosted space holds a key")
 	}
 
@@ -1119,14 +1103,7 @@ impl Harness {
 
 	async fn updated(&self, name: &str, colour: Option<Hue>) -> Result<SpaceShown, SpaceError> {
 		let colour = colour.map(|hue| i64::from(hue.value()));
-		space_update(
-			&*self.app,
-			self.&*app,
-			PERSONAL.to_owned(),
-			name.to_owned(),
-			colour,
-		)
-		.await
+		space_update(&*self.app, PERSONAL.to_owned(), name.to_owned(), colour).await
 	}
 
 	async fn stored(&self) -> (Option<String>, Vec<String>) {
@@ -1644,16 +1621,9 @@ fn each_unmet_precondition_of_a_start_maps_to_its_own_state() {
 fn host_keys_without_device_keys_or_without_a_space_key_store_fail_with_their_own_kind() {
 	run(async {
 		let app = a_core_of_its_own("hosting-keys");
-		let without_device = host_keys(core, PERSONAL)
-			.await
-			.err()
-			.map(|(kind, _)| kind);
-		core
-			.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
-		let without_space = host_keys(core, PERSONAL)
-			.await
-			.err()
-			.map(|(kind, _)| kind);
+		let without_device = host_keys(core, PERSONAL).await.err().map(|(kind, _)| kind);
+		core.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
+		let without_space = host_keys(core, PERSONAL).await.err().map(|(kind, _)| kind);
 
 		assert_eq!(without_device, Some(HostingFailureKind::DeviceKeysNotLoaded));
 		assert_eq!(without_space, Some(HostingFailureKind::SpaceKeyNotRead));
@@ -2405,26 +2375,19 @@ fn deleting_a_hosted_space_closes_its_relay_with_1000_and_reads_off() {
 			let database = state.as_ref().expect("the database");
 			database.spaces().create("Work".to_owned()).await.expect("the space").id
 		};
-		start(&*harness.app, work.clone())
-			.await
-			.expect("the hosting starts");
+		start(&*harness.app, work.clone()).await.expect("the hosting starts");
 		let mut member = harness.member_in(&work, MEMBER_ACCOUNT).await;
 		harness.reached_by(&work, HostingState::Online).await;
 		members_heard(&mut member).await;
 
-		space_delete(&*harness.app, harness.&*app, work.clone())
-			.await
-			.expect("the space is deleted");
+		space_delete(&*harness.app, work.clone()).await.expect("the space is deleted");
 		let closed = member.close_frame().await;
 
 		let Some(close) = closed else {
 			panic!("the relay took no close frame: {closed:?}");
 		};
 		assert_eq!(close.code, 1000);
-		assert_eq!(
-			harness.app.state::<Hosting>().current(&work),
-			HostingState::Off
-		);
+		assert_eq!(harness.app.state::<Hosting>().current(&work), HostingState::Off);
 		let state = harness.app.state::<DatabaseState>();
 		let hosting = state.as_ref().expect("the database").space_hosting();
 		assert!(hosting.hosted_space_ids().await.expect("the flags").is_empty());
@@ -2510,35 +2473,19 @@ impl Harness {
 	}
 
 	async fn withdrawn(&self, invitation_id: &str) -> Result<SpaceMembers, MembersError> {
-		withdraw(
-			&*self.app,
-			PERSONAL.to_owned(),
-			invitation_id.to_owned(),
-		)
-		.await
+		withdraw(&*self.app, PERSONAL.to_owned(), invitation_id.to_owned()).await
 	}
 
 	async fn resent(&self, invitation_id: &str) -> Result<SpaceMembers, MembersError> {
-		resend(
-			&*self.app,
-			PERSONAL.to_owned(),
-			invitation_id.to_owned(),
-		)
-		.await
+		resend(&*self.app, PERSONAL.to_owned(), invitation_id.to_owned()).await
 	}
 
 	async fn removed(&self, user_id: &str) -> Result<SpaceMembers, MembersError> {
-		remove(&*self.app, PERSONAL.to_owned(), user_id.to_owned())
-			.await
+		remove(&*self.app, PERSONAL.to_owned(), user_id.to_owned()).await
 	}
 
 	async fn invited_again(&self, user_id: &str) -> Result<SpaceMembers, MembersError> {
-		invite_again(
-			&*self.app,
-			PERSONAL.to_owned(),
-			user_id.to_owned(),
-		)
-		.await
+		invite_again(&*self.app, PERSONAL.to_owned(), user_id.to_owned()).await
 	}
 
 	async fn rostered_account(&self, account_id: &str) {
@@ -3033,12 +2980,8 @@ fn an_unreachable_cloud_is_unreachable_with_its_cause() {
 		let database = temp_dir();
 		let app = a_core_of_its_own("hosting-down");
 		core.manage::<DatabaseState>(Ok(db::open(&database)));
-		core
-			.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &cloud));
-		crate::account::session::install_signed_in_work(
-			core,
-			crate::account::AppSignedInWork,
-		);
+		core.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &cloud));
+		crate::account::session::install_signed_in_work(core, crate::account::AppSignedInWork);
 		core.manage(Hosting::new(&cloud, None));
 		let state = core.state::<DatabaseState>();
 		let hosting = state.as_ref().expect("the database").space_hosting();
@@ -3203,7 +3146,7 @@ async fn kept_in_the_shared_space(command: &str, other: Value, shared: Value) {
 	guest.forwarded(command, shared).await;
 
 	assert_eq!(guest.effects.reached(), [command]);
-	assert_eq!(guest.&*harness, HostingState::Online);
+	assert_eq!(&*guest.harness, HostingState::Online);
 }
 
 async fn kept_in_the_space_named(command: &str, args: impl Fn(&str) -> Value) {
@@ -3984,14 +3927,8 @@ fn the_host_and_a_member_edit_one_library_document_and_every_update_merges_and_i
 		let base = opened["body"]["update"].as_str().expect("a yjs state").to_owned();
 		let host = YjsClient::of(&base).inserted(0, "Host. ");
 		let member = YjsClient::of(&base).inserted(17, " Member.");
-		library::apply_update(
-			core,
-			&library,
-			ELSEWHERE,
-			"notes.md",
-			AN_EMPTY_UPDATE,
-		)
-		.expect("the other space merges");
+		library::apply_update(core, &library, ELSEWHERE, "notes.md", AN_EMPTY_UPDATE)
+			.expect("the other space merges");
 		library::apply_update(core, &library, PERSONAL, "notes.md", &host)
 			.expect("the host update merges");
 		let heard_from_the_host = next_text(&mut guest.member, is_a_library_update).await;
@@ -4277,8 +4214,7 @@ fn a_relay_guest_hears_a_question_of_the_shared_space_and_its_answer_without_rea
 		let app = &*guest.harness.app;
 		let scope = a_live_scope_of("c-mine");
 		let run = commands::a_live_run(core, scope.clone());
-		let elsewhere =
-			commands::a_live_run(core, a_live_scope_of("c-theirs"));
+		let elsewhere = commands::a_live_run(core, a_live_scope_of("c-theirs"));
 
 		elsewhere.emit(a_question("q-theirs"), a_turn_in("c-theirs"));
 		run.emit(a_question("q-mine"), a_turn_in("c-mine"));
@@ -4312,12 +4248,7 @@ fn a_relay_guest_hears_a_pending_question_settled_when_the_host_shuts_its_sessio
 		commands::a_run_held_by_the_app(core, scope.clone())
 			.emit(a_question("q-mine"), a_turn_in("c-mine"));
 
-		commands::shutdown_session(
-			core,
-			&&*core,
-			&scope,
-		)
-		.await;
+		commands::shutdown_session(core, &&*core, &scope).await;
 		let heard = guest.events_until_the_marker().await;
 
 		let denied = agent::AgentEvent::PermissionResolved {
@@ -4351,14 +4282,9 @@ fn held_of(command: &str, index: usize) -> reach::Held {
 }
 
 async fn shared_space_refusal(guest: &Guest, command: &str, args: Value) -> reach::Refusal {
-	reach::stays_in_the_shared_space(
-		&*guest.harness.app,
-		PERSONAL,
-		command,
-		&args,
-	)
-	.await
-	.expect_err("the call is refused")
+	reach::stays_in_the_shared_space(&*guest.harness.app, PERSONAL, command, &args)
+		.await
+		.expect_err("the call is refused")
 }
 
 #[test]
@@ -4908,7 +4834,7 @@ fn a_child_lookup_the_store_fails_is_refused() {
 		guest.refused("section_rename", json!({ "id": "s-mine", "name": "n" })).await;
 
 		assert!(guest.effects.reached().is_empty());
-		assert_eq!(guest.&*harness, HostingState::Online);
+		assert_eq!(&*guest.harness, HostingState::Online);
 	});
 }
 
@@ -5409,8 +5335,7 @@ fn a_relay_guest_hears_every_event_of_a_host_turn_in_the_shared_conversation_in_
 		let checking =
 			agent::AgentEvent::ConnectionChanged { state: agent::ConnectionState::Checking };
 
-		let elsewhere =
-			commands::a_live_run(core, a_live_scope_of("c-theirs"));
+		let elsewhere = commands::a_live_run(core, a_live_scope_of("c-theirs"));
 		let turn_elsewhere = agent::EventTurn {
 			turn_id: "t-theirs".to_owned(),
 			conversation_id: "c-theirs".to_owned(),
@@ -5517,11 +5442,7 @@ fn a_relay_guest_hears_the_end_of_a_host_turn_once_when_its_evolution_lands_befo
 		};
 
 		run.emit(a_completed_turn_end(), Some(turn.clone()));
-		commands::announce(
-			core,
-			Some(scope.clone()),
-			evolution_failed.clone(),
-		);
+		commands::announce(core, Some(scope.clone()), evolution_failed.clone());
 		let heard = guest.events_until_the_marker().await;
 
 		assert!(heard.contains(&a_forwarded_agent_event(&scope, None, evolution_failed)));
@@ -5546,9 +5467,7 @@ fn a_relay_guest_hears_the_state_change_of_a_main_conversation_of_the_shared_spa
 		let prompt = a_pending_prompt(&main.id, PromptKind::Permission);
 		conversations.hold_prompt(prompt).await.expect("the prompt is held");
 
-		conversation_state::observe(core, &database, &main.id)
-			.await
-			.expect("the state reads");
+		conversation_state::observe(core, &database, &main.id).await.expect("the state reads");
 		let heard = guest.events_until_the_marker().await;
 
 		let changed = json!({
@@ -5615,34 +5534,22 @@ impl Authoring {
 			store::set(&root, &EnvScope::Account, ACCOUNT_BEARER, bearer)
 				.expect("the bearer is kept");
 		}
-		core
-			.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &cloud));
-		crate::account::session::install_signed_in_work(
-			core,
-			crate::account::AppSignedInWork,
-		);
+		core.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &cloud));
+		crate::account::session::install_signed_in_work(core, crate::account::AppSignedInWork);
 		restore(core.clone()).await;
-		core.manage(webhook::start(
-			core.clone(),
-			crate::host_api::routes(&*app),
-		));
-		let local = super::local_api(core)
-			.expect("the local host api listens");
+		core.manage(webhook::start(core.clone(), crate::host_api::routes(&*app)));
+		let local = super::local_api(core).expect("the local host api listens");
 		core.manage(Hosting::new(&cloud, Some(local.clone())));
-		core
-			.state::<Hosting>()
-			.hosts()
-			.entry(PERSONAL.to_owned())
-			.or_default()
-			.members = Some(SpaceMembers {
-			members: vec![Member {
-				user_id: GUEST.to_owned(),
-				name: None,
-				email: GUEST_EMAIL.to_owned(),
-				status: MemberStatus::Joined,
-			}],
-			invitations: Vec::new(),
-		});
+		core.state::<Hosting>().hosts().entry(PERSONAL.to_owned()).or_default().members =
+			Some(SpaceMembers {
+				members: vec![Member {
+					user_id: GUEST.to_owned(),
+					name: None,
+					email: GUEST_EMAIL.to_owned(),
+					status: MemberStatus::Joined,
+				}],
+				invitations: Vec::new(),
+			});
 		let window = WebviewWindowBuilder::new(app.handle(), "main", Default::default())
 			.build()
 			.expect("the window builds");
@@ -5701,13 +5608,9 @@ impl Authoring {
 	async fn answered_by(&self, account_id: &str, frame: Value) -> Value {
 		let call =
 			super::bridge::member_call(&frame.to_string(), account_id).expect("a member call");
-		let answer = super::bridge::bridged(
-			self.app.clone(),
-			self.local.clone(),
-			PERSONAL.to_owned(),
-			call,
-		)
-		.await;
+		let answer =
+			super::bridge::bridged(self.app.clone(), self.local.clone(), PERSONAL.to_owned(), call)
+				.await;
 		serde_json::from_str(&answer).expect("a json answer")
 	}
 
@@ -5716,8 +5619,7 @@ impl Authoring {
 	}
 
 	fn reopened_store(&self) -> db::Database {
-		let file = db::connection::file(self.app.data_dir())
-			.expect("the store file is known");
+		let file = db::connection::file(self.app.data_dir()).expect("the store file is known");
 		db::open(file.parent().expect("the store lives in a directory"))
 	}
 
@@ -5955,13 +5857,7 @@ fn a_hosted_space_with_a_joined_member_names_every_member_to_a_session_and_marks
 	run(async {
 		let host = Authoring::new(Some(BEARER)).await;
 		let database = host.reopened_store();
-		let members_of = || {
-			super::authorship::members_of(
-				&*host.app,
-				&database,
-				PERSONAL,
-			)
-		};
+		let members_of = || super::authorship::members_of(&*host.app, &database, PERSONAL);
 		let hosted_with = |members: Vec<Member>| {
 			let hosting = host.app.state::<Hosting>();
 			let mut hosts = hosting.hosts();
@@ -6036,7 +5932,7 @@ fn a_human_message_records_whether_it_was_written_here_or_came_through_the_relay
 		let unvouched = serde_json::from_value(host.unstarted("unvouched")["message"].clone())
 			.expect("the message parses");
 		conversation_send_user_message(
-			host.&*app,
+			&*host.app,
 			CommandCaller(Caller::Relayed(None)),
 			unvouched,
 			vec![],
@@ -6395,8 +6291,7 @@ fn a_guest_reads_the_turn_as_not_working_once_a_handed_bot_misses_its_start_dead
 		};
 		let (announced, mut updates) = mpsc::unbounded_channel();
 		crate::test_core::listen_to(&*host.app, CONVERSATION_UPDATED_EVENT, move |event| {
-			let payload: Value =
-				serde_json::from_str(event).expect("the payload is JSON");
+			let payload: Value = serde_json::from_str(event).expect("the payload is JSON");
 			announced
 				.send(payload["conversation"]["activeTurn"].clone())
 				.expect("the test listens");
@@ -6410,12 +6305,7 @@ fn a_guest_reads_the_turn_as_not_working_once_a_handed_bot_misses_its_start_dead
 
 		messages.end_run(handed).await.expect("the run ends handing over");
 		let while_awaited = read_by_the_guest().await;
-		arm_start_deadlines(
-			&*host.app,
-			&room_id,
-			"t1",
-			std::slice::from_ref(&ada),
-		);
+		arm_start_deadlines(&*host.app, &room_id, "t1", std::slice::from_ref(&ada));
 		let announced_at_the_deadline = tokio::time::timeout(PATIENCE, updates.recv())
 			.await
 			.expect("the deadline announced in time");
@@ -6607,19 +6497,13 @@ impl Guest {
 	}
 
 	async fn conversation_created_in(&self, space_id: &str) -> Conversation {
-		conversation_create(
-			self.harness.&*app,
-			space_id.to_owned(),
-			None,
-			"New".to_owned(),
-			vec![],
-		)
-		.await
-		.expect("the conversation is created")
+		conversation_create(&*self.harness.app, space_id.to_owned(), None, "New".to_owned(), vec![])
+			.await
+			.expect("the conversation is created")
 	}
 
 	async fn conversation_updated(&self, conversation_id: &str) -> Conversation {
-		let state = self.harness.&*app;
+		let state = &*self.harness.app;
 		conversation_update(
 			state,
 			conversation_id.to_owned(),
@@ -6634,13 +6518,13 @@ impl Guest {
 	}
 
 	async fn conversation_deleted(&self, conversation_id: &str) {
-		conversation_delete(self.harness.&*app, conversation_id.to_owned())
+		conversation_delete(&*self.harness.app, conversation_id.to_owned())
 			.await
 			.expect("the conversation is deleted");
 	}
 
 	async fn paged_row(&self, conversation_id: &str) -> ConversationInPage {
-		let page = conversation_page(self.harness.&*app, PERSONAL.to_owned(), None, None)
+		let page = conversation_page(&*self.harness.app, PERSONAL.to_owned(), None, None)
 			.await
 			.expect("the page is read");
 		page.conversations
@@ -6661,7 +6545,7 @@ impl Guest {
 		invited_by_bot_id: Option<&str>,
 	) -> Result<Conversation, TranscriptStoreError> {
 		conversation_add_participant(
-			self.harness.&*app,
+			&*self.harness.app,
 			conversation_id.to_owned(),
 			bot_id.to_owned(),
 			invited_by_bot_id.map(str::to_owned),
@@ -6674,7 +6558,7 @@ impl Guest {
 		conversation_id: &str,
 		bot_id: &str,
 	) -> Result<Conversation, TranscriptStoreError> {
-		let state = self.harness.&*app;
+		let state = &*self.harness.app;
 		conversation_remove_participant(state, conversation_id.to_owned(), bot_id.to_owned()).await
 	}
 
@@ -6683,19 +6567,15 @@ impl Guest {
 		conversation_id: &str,
 		bot_id: &str,
 	) -> Result<Conversation, TranscriptStoreError> {
-		let state = self.harness.&*app;
+		let state = &*self.harness.app;
 		conversation_set_lead(state, conversation_id.to_owned(), bot_id.to_owned()).await
 	}
 
 	async fn user_message_appended(&self, conversation_id: &str, turn_id: &str) -> i64 {
 		let message = a_user_message(conversation_id, turn_id);
-		conversation_append_user_message(
-			self.harness.&*app,
-			CommandCaller(Caller::Host),
-			message,
-		)
-		.await
-		.expect("the message is appended")
+		conversation_append_user_message(&*self.harness.app, CommandCaller(Caller::Host), message)
+			.await
+			.expect("the message is appended")
 	}
 
 	async fn host_named(&self, display_name: &str) {
@@ -6708,7 +6588,7 @@ impl Guest {
 	async fn user_message_sent(&self, conversation_id: &str) -> i64 {
 		let message = a_user_message(conversation_id, &format!("t-new-{conversation_id}"));
 		conversation_send_user_message(
-			self.harness.&*app,
+			&*self.harness.app,
 			CommandCaller(Caller::Host),
 			message,
 			vec![],
@@ -6720,19 +6600,19 @@ impl Guest {
 	async fn bot_created_in(&self, space_id: &str) -> Bot {
 		let draft =
 			BotDraft { name: "Fresh".to_owned(), job: String::new(), description: String::new() };
-		conversation_create_bot_from_draft(self.harness.&*app, draft, space_id.to_owned())
+		conversation_create_bot_from_draft(&*self.harness.app, draft, space_id.to_owned())
 			.await
 			.expect("the bot is created")
 	}
 
 	async fn bot_updated(&self, bot_id: &str) -> Bot {
-		conversation_update_bot(self.harness.&*app, bot_id.to_owned(), a_bot_identity())
+		conversation_update_bot(&*self.harness.app, bot_id.to_owned(), a_bot_identity())
 			.await
 			.expect("the bot is updated")
 	}
 
 	async fn bot_deleted(&self, bot_id: &str) {
-		conversation_delete_bot(self.harness.&*app, bot_id.to_owned())
+		conversation_delete_bot(&*self.harness.app, bot_id.to_owned())
 			.await
 			.expect("the bot is deleted");
 	}
@@ -7079,41 +6959,30 @@ impl Guest {
 
 	async fn bot_duplicated_into(&self, bot_id: &str, space_id: &str) -> Bot {
 		let destination = Some(space_id.to_owned());
-		conversation_duplicate_bot(self.harness.&*app, bot_id.to_owned(), destination)
+		conversation_duplicate_bot(&*self.harness.app, bot_id.to_owned(), destination)
 			.await
 			.expect("the bot is duplicated")
 	}
 
 	async fn bot_added(&self, bot_id: &str, space_id: &str) {
 		let app = &*self.harness.app;
-		bot_add_to_space(
-			app,
-			self.harness.&*app,
-			bot_id.to_owned(),
-			space_id.to_owned(),
-			None,
-		)
-		.await
-		.expect("the bot is added");
+		bot_add_to_space(app, &*self.harness.app, bot_id.to_owned(), space_id.to_owned(), None)
+			.await
+			.expect("the bot is added");
 	}
 
 	async fn bot_moved(&self, bot_id: &str, space_id: &str) {
 		let app = &*self.harness.app;
-		bot_move_to_space(app, self.harness.&*app, bot_id.to_owned(), space_id.to_owned())
+		bot_move_to_space(app, &*self.harness.app, bot_id.to_owned(), space_id.to_owned())
 			.await
 			.expect("the bot is moved");
 	}
 
 	async fn bot_removed(&self, bot_id: &str, space_id: &str) {
 		let app = &*self.harness.app;
-		bot_remove_from_space(
-			app,
-			self.harness.&*app,
-			bot_id.to_owned(),
-			space_id.to_owned(),
-		)
-		.await
-		.expect("the bot is removed");
+		bot_remove_from_space(app, &*self.harness.app, bot_id.to_owned(), space_id.to_owned())
+			.await
+			.expect("the bot is removed");
 	}
 }
 
@@ -7199,7 +7068,7 @@ fn a_relay_guest_hears_nothing_of_a_refused_companion_removal() {
 
 		let refused = bot_remove_from_space(
 			app,
-			guest.harness.&*app,
+			&*guest.harness.app,
 			"b-mine".to_owned(),
 			PERSONAL.to_owned(),
 		)
@@ -7276,8 +7145,7 @@ impl Authoring {
 	}
 
 	fn reading_applications(&self) {
-		let person = bundles::user::path(&*self.app)
-			.expect("the plugin has a home");
+		let person = bundles::user::path(&*self.app).expect("the plugin has a home");
 		bundles::user::lay_down(&person).expect("the plugin is laid down");
 		self.app.manage(McpOauthState::default());
 		self.app.manage(ApplicationReports::default());
@@ -7293,8 +7161,7 @@ impl Authoring {
 			.await
 			.expect("the bot reads")
 			.expect("the default bot is planted");
-		let root =
-			bundles::root(&*self.app).expect("the bundles have a root");
+		let root = bundles::root(&*self.app).expect("the bundles have a root");
 		bundles::lay_down(&root, &bot).expect("the bot bundle lands");
 	}
 
@@ -7347,8 +7214,7 @@ fn a_relayed_env_list_of_a_server_of_the_host_person_answers_no_entry() {
 		let host = Authoring::new(Some(BEARER)).await;
 		let scope = granted_to_the_host_person("granola");
 		store::set(&host.env_root(), &scope, "PLANTED", "host").expect("the host sets");
-		let listed =
-			|caller| env_list(&*host.app, caller, scope.clone());
+		let listed = |caller| env_list(&*host.app, caller, scope.clone());
 
 		let relayed = listed(Caller::Relayed(None)).await.expect("the list reads");
 		let on_the_host = listed(Caller::Host).await.expect("the list reads");
@@ -7395,9 +7261,8 @@ fn a_relayed_status_of_the_host_person_plugin_answers_no_row() {
 		let host = Authoring::new(Some(BEARER)).await;
 		host.reading_applications();
 		host.declared(json!({ "kind": "user" }), "notion");
-		let status = |caller| {
-			mcp_application_status(&*host.app, CommandCaller(caller), EnvOwner::User)
-		};
+		let status =
+			|caller| mcp_application_status(&*host.app, CommandCaller(caller), EnvOwner::User);
 
 		let relayed = status(Caller::Relayed(None)).await.expect("the status reads");
 		let on_the_host = status(Caller::Host).await.expect("the status reads");
@@ -7511,9 +7376,7 @@ fn bearer_stored(harness: &Harness, bearer: &str) {
 }
 
 fn bearer_held(harness: &Harness) -> Option<String> {
-	harness.app.state::<AccountSession>()
-		.bearer()
-		.expect("the bearer reads")
+	harness.app.state::<AccountSession>().bearer().expect("the bearer reads")
 }
 
 #[test]
@@ -7647,8 +7510,7 @@ fn a_signature_the_relay_cannot_verify_fails_naming_403_and_keeps_the_account_si
 		assert!(detail.contains("403 DEVICE_PROOF_INVALID"), "{detail}");
 		assert_eq!(harness.relay.device.statuses(), vec![StatusCode::FORBIDDEN]);
 		assert_eq!(harness.attempts(), 0);
-		let account =
-			harness.app.state::<AccountSession>().current();
+		let account = harness.app.state::<AccountSession>().current();
 		assert!(matches!(account, AccountState::SignedIn(_)), "the account was signed out");
 		assert_eq!(bearer_held(&harness).as_deref(), Some(BEARER));
 		assert_eq!(held_relay_device(&harness).await, None);
@@ -7736,8 +7598,7 @@ fn signing_out_deletes_the_relay_device_first_and_still_signs_out_when_the_relay
 			harness.relay.device.account_calls(),
 			vec![format!("DELETE {relay_device_id}"), "sign-out".to_owned()]
 		);
-		let account =
-			harness.app.state::<AccountSession>().current();
+		let account = harness.app.state::<AccountSession>().current();
 		assert_eq!(account, AccountState::SignedOut { reason: None });
 		assert_eq!(bearer_held(&harness), None);
 		assert_eq!(held_relay_device(&harness).await, None);
@@ -8139,9 +8000,7 @@ impl Harness {
 	}
 
 	async fn devices(&self) -> Vec<AccountDevices> {
-		devices(&*self.app, PERSONAL.to_owned())
-			.await
-			.expect("the roster reads")
+		devices(&*self.app, PERSONAL.to_owned()).await.expect("the roster reads")
 	}
 
 	#[cfg(unix)]
@@ -8151,9 +8010,7 @@ impl Harness {
 	) -> Result<Vec<AccountDevices>, MembersError> {
 		self.profile_locked(true);
 		let device_id = device.keys.device_id().to_string();
-		let removed =
-			remove_device(&*self.app, PERSONAL.to_owned(), device_id)
-				.await;
+		let removed = remove_device(&*self.app, PERSONAL.to_owned(), device_id).await;
 		self.profile_locked(false);
 		removed
 	}
@@ -8467,9 +8324,8 @@ fn removing_the_host_device_or_an_unknown_device_is_refused_and_changes_nothing(
 		let mut relay = harness.relay_side().await;
 		harness.joined(&mut relay, "guest").await;
 		let before = harness.devices().await;
-		let removed = |device_id: String| {
-			remove_device(&*harness.app, PERSONAL.to_owned(), device_id)
-		};
+		let removed =
+			|device_id: String| remove_device(&*harness.app, PERSONAL.to_owned(), device_id);
 
 		let host = removed(harness.host_keys().device_id().to_string()).await;
 		let unknown = removed("0".repeat(32)).await;

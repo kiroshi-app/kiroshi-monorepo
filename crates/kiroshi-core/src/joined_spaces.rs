@@ -1,5 +1,5 @@
-pub mod contract;
 pub mod commands;
+pub mod contract;
 mod description;
 mod held;
 pub mod join;
@@ -10,8 +10,8 @@ mod proxy;
 pub mod relay;
 mod roster_set;
 #[cfg(test)]
+pub mod test_host;
+#[cfg(test)]
 mod tests;
 mod wait_reason;
 mod waiting;
-#[cfg(test)]
-pub mod test_host;

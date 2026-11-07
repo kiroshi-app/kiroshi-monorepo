@@ -91,11 +91,7 @@ impl Extent {
 	}
 }
 
-pub fn create_board(
-	root: &Path,
-	space_id: &str,
-	name: &str,
-) -> Result<LibraryItem, LibraryError> {
+pub fn create_board(root: &Path, space_id: &str, name: &str) -> Result<LibraryItem, LibraryError> {
 	let file_name = format!("{name}.{EXTENSION}");
 	let is_a_board = matches!(accepted_type(&file_name), Some(AcceptedType::Board));
 	if !is_a_board || !is_plain_name(&file_name) {

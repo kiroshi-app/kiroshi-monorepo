@@ -1,13 +1,13 @@
-pub mod contract;
-pub mod items;
 mod blocks;
 mod canvas;
 pub mod commands;
+pub mod contract;
 mod documents;
 pub mod host;
+pub mod items;
 pub mod link_preview;
-mod templates;
 pub mod presence;
+mod templates;
 pub mod url_import;
 
 use crate::core_context::Managed;
@@ -36,11 +36,11 @@ use crate::attachments::{self, attached_content, Attachments};
 use crate::db;
 use crate::db::repositories::messages::TranscriptError;
 use crate::file_store::FileStore;
-use crate::{events, private_files};
 use crate::library::items::{
 	a_document, accepted_type, is_plain_name, refusal, resolve, root, space_dir, unreadable,
 	AcceptedType, ResolvedItem,
 };
+use crate::{events, private_files};
 
 const MAX_DOCUMENT_BYTES: u64 = 5 * 1024 * 1024;
 
@@ -135,11 +135,7 @@ fn utf8_text(name: &str, bytes: Vec<u8>) -> Result<String, LibraryError> {
 	String::from_utf8(bytes).map_err(|_| LibraryError::NotUtf8 { name: name.to_owned() })
 }
 
-pub fn read_image(
-	root: &Path,
-	space_id: &str,
-	name: &str,
-) -> Result<LibraryImage, LibraryError> {
+pub fn read_image(root: &Path, space_id: &str, name: &str) -> Result<LibraryImage, LibraryError> {
 	let item = resolve(root, space_id, name)?;
 	let AcceptedType::Image { mime_type } = item.accepted else {
 		return Err(LibraryError::NotAnImage { name: name.to_owned() });
@@ -151,11 +147,7 @@ pub fn read_image(
 	})
 }
 
-pub fn read_file(
-	root: &Path,
-	space_id: &str,
-	name: &str,
-) -> Result<LibraryFile, LibraryError> {
+pub fn read_file(root: &Path, space_id: &str, name: &str) -> Result<LibraryFile, LibraryError> {
 	let item = resolve(root, space_id, name)?;
 	Ok(LibraryFile {
 		name: name.to_owned(),

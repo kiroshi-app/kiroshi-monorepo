@@ -1,4 +1,3 @@
-
 use super::contract::{AccountDevice, DeviceApproval, DeviceError};
 use super::Devices;
 
@@ -7,11 +6,15 @@ pub fn device_approval(core: &crate::core_context::Core) -> DeviceApproval {
 	devices.current()
 }
 
-pub async fn device_approval_retry(core: &crate::core_context::Core) -> Result<DeviceApproval, DeviceError> {
+pub async fn device_approval_retry(
+	core: &crate::core_context::Core,
+) -> Result<DeviceApproval, DeviceError> {
 	super::retried(core).await
 }
 
-pub async fn device_approval_code_request(core: &crate::core_context::Core) -> Result<(), DeviceError> {
+pub async fn device_approval_code_request(
+	core: &crate::core_context::Core,
+) -> Result<(), DeviceError> {
 	super::code_requested(core).await
 }
 
@@ -36,7 +39,9 @@ pub async fn device_refuse(
 	super::refused(core, &device_id).await
 }
 
-pub async fn devices_list(core: &crate::core_context::Core) -> Result<Vec<AccountDevice>, DeviceError> {
+pub async fn devices_list(
+	core: &crate::core_context::Core,
+) -> Result<Vec<AccountDevice>, DeviceError> {
 	super::listed(core).await
 }
 

@@ -102,12 +102,7 @@ impl Presences {
 		(presence_of(space_id, name, writers), !was_there)
 	}
 
-	pub fn left(
-		&self,
-		space_id: &str,
-		name: &str,
-		seat: &Seat,
-	) -> Option<LibraryDocumentPresence> {
+	pub fn left(&self, space_id: &str, name: &str, seat: &Seat) -> Option<LibraryDocumentPresence> {
 		unseated(&mut self.held(), &(space_id.to_owned(), name.to_owned()), seat)
 	}
 
@@ -306,12 +301,7 @@ pub fn seat_writer(
 	is_new
 }
 
-pub fn unseat_writer(
-	core: &crate::core_context::Core,
-	space_id: &str,
-	name: &str,
-	seat: &Seat,
-) {
+pub fn unseat_writer(core: &crate::core_context::Core, space_id: &str, name: &str, seat: &Seat) {
 	if let Some(presence) = presences(core).left(space_id, name, seat) {
 		published(core, presence);
 	}

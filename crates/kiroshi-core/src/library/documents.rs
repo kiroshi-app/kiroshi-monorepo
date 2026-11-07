@@ -168,12 +168,7 @@ impl Documents {
 		Self { held: Arc::default(), on_board_file_replaced: Arc::new(on_board_file_replaced) }
 	}
 
-	pub fn open(
-		&self,
-		root: &Path,
-		space_id: &str,
-		name: &str,
-	) -> Result<Opened, LibraryError> {
+	pub fn open(&self, root: &Path, space_id: &str, name: &str) -> Result<Opened, LibraryError> {
 		let mut held = self.held();
 		let file = document_file(root, space_id, name)?;
 		match file.kind {
@@ -263,12 +258,7 @@ impl Documents {
 		Ok(())
 	}
 
-	pub fn board(
-		&self,
-		root: &Path,
-		space_id: &str,
-		name: &str,
-	) -> Result<Board, LibraryError> {
+	pub fn board(&self, root: &Path, space_id: &str, name: &str) -> Result<Board, LibraryError> {
 		let mut held = self.held();
 		let file = held.located(root, space_id, name)?;
 		let doc = held.board_doc(root, space_id, &file, &self.on_board_file_replaced)?;
@@ -426,12 +416,7 @@ impl Documents {
 		Ok(landed)
 	}
 
-	pub fn delete(
-		&self,
-		root: &Path,
-		space_id: &str,
-		name: &str,
-	) -> Result<(), LibraryError> {
+	pub fn delete(&self, root: &Path, space_id: &str, name: &str) -> Result<(), LibraryError> {
 		let mut held = self.held();
 		let item = resolve(root, space_id, name)?;
 		let thumbnail = match item.accepted {

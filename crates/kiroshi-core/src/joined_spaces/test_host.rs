@@ -78,12 +78,7 @@ impl SealingHost {
 		self.rekey_of(&self.host, &self.space, version, &self.devices_admitting(newcomer))
 	}
 
-	pub fn rekey_admitting(
-		&self,
-		newcomer: &DeviceKeys,
-		key_id: u32,
-		version: u64,
-	) -> String {
+	pub fn rekey_admitting(&self, newcomer: &DeviceKeys, key_id: u32, version: u64) -> String {
 		let space = HeldSpaceKey::under(key_id).expect("randomness");
 		self.rekey_of(&self.host, &space, version, &self.devices_admitting(newcomer))
 	}

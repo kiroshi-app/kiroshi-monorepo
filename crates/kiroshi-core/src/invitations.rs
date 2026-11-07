@@ -1,5 +1,5 @@
-pub mod contract;
 pub mod commands;
+pub mod contract;
 #[cfg(test)]
 mod tests;
 
@@ -232,4 +232,3 @@ fn announced(
 		eprintln!("the invitations did not reach the front: {error}");
 	}
 }
-

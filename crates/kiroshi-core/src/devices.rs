@@ -1,5 +1,5 @@
-pub mod contract;
 pub mod commands;
+pub mod contract;
 #[cfg(test)]
 mod tests;
 
@@ -493,4 +493,3 @@ pub async fn removed(core: &crate::core_context::Core, device_id: &str) -> Resul
 	let answer = core.state::<Devices>().cloud.delete_device(&bearer, device_id).await;
 	answered(core, &bearer, answer)
 }
-

@@ -297,15 +297,10 @@ impl Harness {
 			store::set(&folder, &EnvScope::Account, ACCOUNT_BEARER, bearer)
 				.expect("the bearer is kept");
 		}
-		core
-			.manage(AccountSession::new(Ok::<PathBuf, _>(folder.to_path_buf()), api));
-		crate::account::session::install_signed_in_work(
-			core,
-			crate::account::AppSignedInWork,
-		);
+		core.manage(AccountSession::new(Ok::<PathBuf, _>(folder.to_path_buf()), api));
+		crate::account::session::install_signed_in_work(core, crate::account::AppSignedInWork);
 		crate::db::install(core);
-		core
-			.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
+		core.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
 		core.manage(Hosting::new(api, None));
 		core.manage(RelayGuests::new(api));
 		core.manage(Devices::new(api).polling_every(TICK, TICK));
@@ -337,7 +332,7 @@ impl Harness {
 	}
 
 	fn approval(&self) -> DeviceApproval {
-		device_approval(self.&*app)
+		device_approval(&*self.app)
 	}
 
 	async fn approval_until(&self, is_reached: impl Fn(&DeviceApproval) -> bool) -> DeviceApproval {
@@ -471,9 +466,7 @@ fn a_completed_sign_in_registers_the_device() {
 	run(async {
 		let harness = Harness::new(Relay::approved(), None).await;
 
-		sign_in(&*harness, |_| Ok(()))
-			.await
-			.expect("the sign-in starts");
+		sign_in(&*harness, |_| Ok(())).await.expect("the sign-in starts");
 		harness.approved().await;
 
 		assert!(matches!(harness.account(), AccountState::SignedIn(_)));
@@ -577,12 +570,7 @@ fn a_401_while_pending_signs_out_locally_as_device_refused() {
 		let refused = AccountState::SignedOut { reason: Some(SignedOutReason::DeviceRefused) };
 		until(PATIENCE, || (harness.account() == refused).then_some(())).await;
 
-		assert_eq!(
-			harness.app.state::<AccountSession>()
-				.bearer()
-				.expect("the store reads"),
-			None
-		);
+		assert_eq!(harness.app.state::<AccountSession>().bearer().expect("the store reads"), None);
 		assert_eq!(harness.approval(), DeviceApproval::None);
 	});
 }
@@ -609,9 +597,7 @@ fn while_pending_no_host_starts_and_the_approval_resumes_the_hosted_spaces() {
 		harness.pending().await;
 
 		let started =
-			crate::hosting::start(&*harness, PERSONAL.to_owned())
-				.await
-				.expect("the start settles");
+			crate::hosting::start(&*harness, PERSONAL.to_owned()).await.expect("the start settles");
 		assert_eq!(
 			started,
 			HostingState::Failed {
@@ -653,14 +639,8 @@ fn while_pending_no_member_socket_opens() {
 			.expect("the joined space is stored");
 
 		let connected = joined_space_connect(harness.handle(), joined.id.clone()).await;
-		let accepted_join = join::joined(
-			&*harness,
-			"i1".to_owned(),
-			joined.name,
-			None,
-			Default::default(),
-		)
-		.await;
+		let accepted_join =
+			join::joined(&*harness, "i1".to_owned(), joined.name, None, Default::default()).await;
 
 		assert_eq!(connected.err(), Some(JoinedSpaceError::HostOffline { id: joined.id }));
 		assert!(

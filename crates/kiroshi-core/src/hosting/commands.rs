@@ -1,4 +1,3 @@
-
 use super::contract::{AccountDevices, HostingState, MembersError, SpaceMembers};
 use super::{devices, members, Hosting};
 use crate::spaces::contract::SpaceError;

@@ -17,9 +17,9 @@ use crate::agent::protocol::SpaceMember;
 use crate::db::repositories::messages::AccountAuthor;
 use crate::db::{Database, DatabaseError};
 use crate::host_api::invoke::RELAYED_MEMBER_HEADER;
-use futures_util::future::BoxFuture;
 use crate::hosting::authors::Authors;
 pub use crate::hosting::caller::{Caller, RelayedMember};
+use futures_util::future::BoxFuture;
 
 const MEMBERS_READ_BOUND: Duration = Duration::from_secs(3);
 

@@ -4,12 +4,12 @@ use std::hash::{BuildHasher, Hasher};
 use std::sync::Arc;
 use std::time::Duration;
 
+use axum::http::{header, HeaderValue};
 use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
 use reqwest::StatusCode;
 use serde::Deserialize;
 use serde_json::Value;
-use axum::http::{header, HeaderValue};
 use tokio::net::TcpStream;
 use tokio::sync::{watch, Mutex};
 use tokio::task::JoinSet;

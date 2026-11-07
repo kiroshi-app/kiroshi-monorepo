@@ -1,4 +1,3 @@
-
 use super::contract::{
 	colour_shown, hosted_by, JoinedSpace, JoinedSpaceConnection, JoinedSpaceError,
 };
@@ -52,7 +51,9 @@ pub(super) fn announce_reconnection(
 		.map_err(|error| JoinedSpaceError::Undeliverable { detail: error.to_string() })
 }
 
-pub async fn joined_spaces_list(core: &crate::core_context::Core) -> Result<Vec<JoinedSpace>, JoinedSpaceError> {
+pub async fn joined_spaces_list(
+	core: &crate::core_context::Core,
+) -> Result<Vec<JoinedSpace>, JoinedSpaceError> {
 	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	let stored = database.joined_spaces().list().await?;
@@ -147,17 +148,10 @@ mod tests {
 		let app = a_core_of_its_own("joined-spaces");
 		app.manage::<db::DatabaseState>(Ok(db::open(dir)));
 		app.manage(AccountSession::new(Ok::<PathBuf, _>(dir.join("account")), api_url));
-		crate::account::session::install_signed_in_work(
-			&*app,
-			crate::account::AppSignedInWork,
-		);
+		crate::account::session::install_signed_in_work(&*app, crate::account::AppSignedInWork);
 		app.manage(RelayGuests::new(api_url));
 		let identifier = app.config().identifier.clone();
-		app.manage(SpaceKeys::new(
-			InstallKind::Dev,
-			identifier,
-			Some(dir.join("keys")),
-		));
+		app.manage(SpaceKeys::new(InstallKind::Dev, identifier, Some(dir.join("keys"))));
 		app
 	}
 
@@ -243,9 +237,8 @@ mod tests {
 		let app = app_reaching(dir, api_url);
 		let added = held(&app).await;
 
-		let refused = joined_space_remove(&*app, added.id.clone())
-			.await
-			.expect_err("the removal is refused");
+		let refused =
+			joined_space_remove(&*app, added.id.clone()).await.expect_err("the removal is refused");
 
 		assert_eq!(list(&app).await, vec![added]);
 		refused
@@ -297,10 +290,12 @@ mod tests {
 		}
 	}
 
-	async fn announced(app: &crate::core_context::Core, hearing: &Receiver<String>, id: &str) -> Value {
-		announce_change(&*app, id.to_owned())
-			.await
-			.expect("the change is announced");
+	async fn announced(
+		app: &crate::core_context::Core,
+		hearing: &Receiver<String>,
+		id: &str,
+	) -> Value {
+		announce_change(&*app, id.to_owned()).await.expect("the change is announced");
 		serde_json::from_str(&hearing.recv().expect("the change was heard")).expect("json")
 	}
 
@@ -358,9 +353,7 @@ mod tests {
 		let app = app_over(&dir);
 		let keyless = held(&app).await;
 		let space = HeldSpaceKey::first().expect("randomness");
-		app.state::<SpaceKeys>()
-			.stored("joined-instance-2", space)
-			.expect("the key is kept");
+		app.state::<SpaceKeys>().stored("joined-instance-2", space).expect("the key is kept");
 		let keyed = held_over(&app, "instance-2", None).await;
 		let unreadable = held_over(&app, "instance.3", None).await;
 
@@ -401,9 +394,7 @@ mod tests {
 		let app = app_over(&dir);
 		let added = held(&app).await;
 
-		let connection = joined_space_connect(&*app, added.id.clone())
-			.await
-			.map(|found| found.id);
+		let connection = joined_space_connect(&*app, added.id.clone()).await.map(|found| found.id);
 
 		assert_eq!(connection, Err(JoinedSpaceError::HostOffline { id: added.id }));
 	}
@@ -424,9 +415,7 @@ mod tests {
 		);
 		left_once(&relay);
 		assert_eq!(
-			joined_space_connect(&*app, added.id.clone())
-				.await
-				.map(|found| found.id),
+			joined_space_connect(&*app, added.id.clone()).await.map(|found| found.id),
 			Err(JoinedSpaceError::UnknownJoinedSpace { id: added.id })
 		);
 	}
@@ -503,11 +492,7 @@ mod tests {
 		assert_eq!(refused, Err(JoinedSpaceError::SessionRevoked));
 		left_once(&relay);
 		tokio::time::timeout(Duration::from_secs(60), async {
-			while app.state::<AccountSession>()
-				.bearer()
-				.expect("the store reads")
-				.is_some()
-			{
+			while app.state::<AccountSession>().bearer().expect("the store reads").is_some() {
 				tokio::time::sleep(Duration::from_millis(10)).await;
 			}
 		})

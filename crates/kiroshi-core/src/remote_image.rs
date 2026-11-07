@@ -1,5 +1,5 @@
-pub mod contract;
 pub mod commands;
+pub mod contract;
 #[cfg(test)]
 mod tests;
 
@@ -124,10 +124,7 @@ pub async fn read(
 		.unwrap_or(Err(RemoteImageError::NetworkFailure { status: None }))
 }
 
-pub async fn fetched(
-	url: &str,
-	admission: &Admission<'_>,
-) -> Result<Response, FetchRefusal> {
+pub async fn fetched(url: &str, admission: &Admission<'_>) -> Result<Response, FetchRefusal> {
 	let url = Url::parse(url).map_err(|_| FetchRefusal::UnsupportedScheme)?;
 	admitted(&url, admission)?;
 	installed_tls_provider();
@@ -220,9 +217,7 @@ async fn image_of(response: Response) -> Result<RemoteImage, RemoteImageError> {
 	Ok(RemoteImage { media_type: image.media_type, base64: STANDARD.encode(image.bytes) })
 }
 
-pub async fn image_bytes_of(
-	mut response: Response,
-) -> Result<FetchedImage, RemoteImageError> {
+pub async fn image_bytes_of(mut response: Response) -> Result<FetchedImage, RemoteImageError> {
 	let status = response.status();
 	if !status.is_success() {
 		return Err(RemoteImageError::NetworkFailure { status: Some(status.as_u16()) });

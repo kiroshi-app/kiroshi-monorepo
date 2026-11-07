@@ -363,24 +363,9 @@ async fn an_unknown_space_is_refused_by_every_command() {
 	let app = a_host("unknown");
 
 	let listed = library_list(&*app, "nowhere".to_owned()).await;
-	let read = library_read_document(
-		&*app,
-		"nowhere".to_owned(),
-		"notes.md".to_owned(),
-	)
-	.await;
-	let image = library_read_image(
-		&*app,
-		"nowhere".to_owned(),
-		"cover.png".to_owned(),
-	)
-	.await;
-	let file = library_read_file(
-		&*app,
-		"nowhere".to_owned(),
-		"notes.md".to_owned(),
-	)
-	.await;
+	let read = library_read_document(&*app, "nowhere".to_owned(), "notes.md".to_owned()).await;
+	let image = library_read_image(&*app, "nowhere".to_owned(), "cover.png".to_owned()).await;
+	let file = library_read_file(&*app, "nowhere".to_owned(), "notes.md".to_owned()).await;
 
 	assert_eq!(listed, Err(LibraryError::UnknownSpace { id: "nowhere".to_owned() }));
 	assert_eq!(read, Err(LibraryError::UnknownSpace { id: "nowhere".to_owned() }));
@@ -399,20 +384,12 @@ async fn a_known_space_lists_and_reads_from_its_folder_under_app_data() {
 	touch(&root, &space_id, "notes.md", 2_000);
 	touch(&root, &space_id, "cover.png", 1_000);
 
-	let listed = library_list(&*app, space_id.clone())
+	let listed = library_list(&*app, space_id.clone()).await.expect("the library lists");
+	let read = library_read_document(&*app, space_id.clone(), "notes.md".to_owned())
 		.await
-		.expect("the library lists");
-	let read = library_read_document(
-		&*app,
-		space_id.clone(),
-		"notes.md".to_owned(),
-	)
-	.await
-	.expect("the document reads");
+		.expect("the document reads");
 	let image =
-		library_read_image(&*app, space_id, "cover.png".to_owned())
-			.await
-			.expect("the image reads");
+		library_read_image(&*app, space_id, "cover.png".to_owned()).await.expect("the image reads");
 
 	assert_eq!(
 		listed.iter().map(|item| item.name.as_str()).collect::<Vec<_>>(),
@@ -431,9 +408,7 @@ async fn deleting_a_space_removes_its_library_folder_only() {
 	put(&root, &kept, "kept.md", b"kept");
 	put(&root, &deleted, "gone.md", b"gone");
 
-	space_delete(&*app, deleted.clone())
-		.await
-		.expect("the space is deleted");
+	space_delete(&*app, deleted.clone()).await.expect("the space is deleted");
 
 	assert!(!space_dir(&root, &deleted).exists());
 	assert_eq!(names(&root, &kept), ["kept.md"]);
@@ -664,15 +639,9 @@ async fn refusals_of_each_action(
 	space_id: &str,
 	name: &str,
 ) -> [Result<(), LibraryError>; 3] {
-	let saved =
-		library_save(&*app, space_id.to_owned(), name.to_owned())
-			.await
-			.map(|_| ());
-	let copied =
-		library_copy(&*app, space_id.to_owned(), name.to_owned()).await;
-	let revealed =
-		library_reveal(&*app, space_id.to_owned(), name.to_owned())
-			.await;
+	let saved = library_save(&*app, space_id.to_owned(), name.to_owned()).await.map(|_| ());
+	let copied = library_copy(&*app, space_id.to_owned(), name.to_owned()).await;
+	let revealed = library_reveal(&*app, space_id.to_owned(), name.to_owned()).await;
 	[saved, copied, revealed]
 }
 
@@ -1101,13 +1070,7 @@ async fn applied(
 	name: &str,
 	update: &str,
 ) -> Result<(), LibraryError> {
-	library_apply_update(
-		&*app,
-		space_id.to_owned(),
-		name.to_owned(),
-		update.to_owned(),
-	)
-	.await
+	library_apply_update(&*app, space_id.to_owned(), name.to_owned(), update.to_owned()).await
 }
 
 async fn created(
@@ -1214,13 +1177,9 @@ async fn merged_in_order(is_host_first: bool) {
 	}
 
 	let merged = "Host. base Member.";
-	let read = library_read_document(
-		&*app,
-		space_id.clone(),
-		"notes.md".to_owned(),
-	)
-	.await
-	.expect("the document reads");
+	let read = library_read_document(&*app, space_id.clone(), "notes.md".to_owned())
+		.await
+		.expect("the document reads");
 	assert_eq!(read.content, merged);
 	assert_eq!(
 		fs::read_to_string(space_dir(&root, &space_id).join("notes.md")).expect("read"),
@@ -1253,12 +1212,7 @@ async fn host_and_member_edits_on_one_base_merge_with_the_member_first() {
 async fn an_unknown_space_is_refused_an_open_or_an_update() {
 	let app = a_host("documents-unknown");
 
-	let open = library_open_document(
-		&*app,
-		"nowhere".to_owned(),
-		"notes.md".to_owned(),
-	)
-	.await;
+	let open = library_open_document(&*app, "nowhere".to_owned(), "notes.md".to_owned()).await;
 	let update = applied(&app, "nowhere", "notes.md", "AAA=").await;
 
 	assert_eq!(open, Err(LibraryError::UnknownSpace { id: "nowhere".to_owned() }));
@@ -1445,9 +1399,7 @@ async fn deleting_a_space_removes_the_stored_state_of_its_documents() {
 	opened(&app, &space_id, "notes.md").await;
 	assert!(root.join(".documents").join(&space_id).exists());
 
-	space_delete(&*app, space_id.clone())
-		.await
-		.expect("the space is deleted");
+	space_delete(&*app, space_id.clone()).await.expect("the space is deleted");
 
 	assert!(!root.join(".documents").join(&space_id).exists());
 }
@@ -1781,8 +1733,7 @@ async fn the_import_commands_refuse_an_unknown_space_and_land_in_a_known_one() {
 	)
 	.await;
 	let refused_thumbnail =
-		library_read_thumbnail(handle(), &*app, "nowhere".to_owned(), "cover.png".to_owned())
-			.await;
+		library_read_thumbnail(handle(), &*app, "nowhere".to_owned(), "cover.png".to_owned()).await;
 	let sent = library_import(
 		handle(),
 		&*app,
@@ -1792,14 +1743,10 @@ async fn the_import_commands_refuse_an_unknown_space_and_land_in_a_known_one() {
 	)
 	.await
 	.expect("the sent image lands");
-	let dropped_outcomes = library_import_paths(
-		handle(),
-		&*app,
-		space_id.clone(),
-		vec![dropped.join("dropped.md")],
-	)
-	.await
-	.expect("the drop is read");
+	let dropped_outcomes =
+		library_import_paths(handle(), &*app, space_id.clone(), vec![dropped.join("dropped.md")])
+			.await
+			.expect("the drop is read");
 	let thumbnail =
 		library_read_thumbnail(handle(), &*app, space_id.clone(), "cover.png".to_owned())
 			.await
@@ -1962,13 +1909,7 @@ async fn renamed(
 	name: &str,
 	new_name: &str,
 ) -> Result<contract::LibraryItem, LibraryError> {
-	library_rename_document(
-		&*app,
-		space_id.to_owned(),
-		name.to_owned(),
-		new_name.to_owned(),
-	)
-	.await
+	library_rename_document(&*app, space_id.to_owned(), name.to_owned(), new_name.to_owned()).await
 }
 
 fn on_disk(root: &Path, space_id: &str, name: &str) -> String {
@@ -2287,8 +2228,7 @@ async fn an_update_to_the_landed_name_racing_a_rename_returns_only_after_the_ren
 		let (space_id, told) = (shared_space.clone(), told.clone());
 		let landed = renamed.name.clone();
 		std::thread::spawn(move || {
-			let result =
-				apply_update(&*handle, &library, &space_id, &landed, "AAA=");
+			let result = apply_update(&*handle, &library, &space_id, &landed, "AAA=");
 			racing.lock().expect("the order").push(format!("updated {landed}"));
 			told.send(result).expect("the test listens");
 		});
@@ -2303,7 +2243,11 @@ async fn an_update_to_the_landed_name_racing_a_rename_returns_only_after_the_ren
 	assert_eq!(*order.lock().expect("the order"), ["renamed plan.md", "updated plan.md"]);
 }
 
-async fn deleted(app: &crate::core_context::Core, space_id: &str, name: &str) -> Result<(), LibraryError> {
+async fn deleted(
+	app: &crate::core_context::Core,
+	space_id: &str,
+	name: &str,
+) -> Result<(), LibraryError> {
 	library_delete(&*app, space_id.to_owned(), name.to_owned()).await
 }
 
@@ -2371,8 +2315,7 @@ const PERSONAL: &str = "personal";
 
 async fn a_host_with_a_room(name: &str) -> CoreOfItsOwn {
 	let app = a_host(name);
-	core
-		.state::<db::DatabaseState>()
+	core.state::<db::DatabaseState>()
 		.as_ref()
 		.expect("the database opens")
 		.call_mut(|connection| Ok(connection.execute_batch(A_ROOM)?))
@@ -2404,15 +2347,13 @@ async fn sent(
 }
 
 async fn linked_documents(app: &crate::core_context::Core) -> Vec<(String, Vec<String>)> {
-	let page = conversation_message_page(&*app, ROOM.to_owned(), None, 20)
-		.await
-		.expect("the page reads");
+	let page =
+		conversation_message_page(&*app, ROOM.to_owned(), None, 20).await.expect("the page reads");
 	page.messages.into_iter().map(|message| (message.id, message.documents)).collect()
 }
 
 fn attached(app: &crate::core_context::Core, files: &[(&str, Vec<u8>)]) -> Vec<PathBuf> {
-	let store =
-		Attachments::dir(core).expect("the attachment store resolves");
+	let store = Attachments::dir(core).expect("the attachment store resolves");
 	let submitted: Vec<SubmittedAttachment> = files
 		.iter()
 		.map(|(name, bytes)| SubmittedAttachment {
@@ -2428,8 +2369,7 @@ async fn saved_message(
 	app: &crate::core_context::Core,
 	message_id: &str,
 ) -> Result<contract::LibraryItem, LibraryError> {
-	library_save_message(&*app, ROOM.to_owned(), message_id.to_owned())
-		.await
+	library_save_message(&*app, ROOM.to_owned(), message_id.to_owned()).await
 }
 
 #[tokio::test]
@@ -2608,8 +2548,7 @@ async fn summary_of(
 	space_id: &str,
 	name: &str,
 ) -> Result<LibraryBoardSummary, LibraryError> {
-	library_board_summary(&*app, space_id.to_owned(), name.to_owned())
-		.await
+	library_board_summary(&*app, space_id.to_owned(), name.to_owned()).await
 }
 
 async fn board_renamed(
@@ -2618,13 +2557,7 @@ async fn board_renamed(
 	name: &str,
 	new_name: &str,
 ) -> Result<LibraryItem, LibraryError> {
-	library_rename_board(
-		&*app,
-		space_id.to_owned(),
-		name.to_owned(),
-		new_name.to_owned(),
-	)
-	.await
+	library_rename_board(&*app, space_id.to_owned(), name.to_owned(), new_name.to_owned()).await
 }
 
 fn text_node(index: i64) -> serde_json::Value {
@@ -2673,9 +2606,7 @@ async fn a_board_created_by_name_is_a_blank_canvas_and_a_taken_name_is_refused()
 	let app = a_host("board-create");
 	let space_id = a_space(&app, "Work").await;
 	let root = root(core).expect("the library root resolves");
-	let create = |name: &str| {
-		library_create_board(&*app, space_id.clone(), name.to_owned())
-	};
+	let create = |name: &str| library_create_board(&*app, space_id.clone(), name.to_owned());
 
 	let item = create("Plan").await.expect("the board lands");
 	let again = create("Plan").await;

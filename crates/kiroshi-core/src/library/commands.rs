@@ -27,10 +27,10 @@ use crate::agent::contract::CancelOutcome;
 use crate::agent::AgentState;
 use crate::conversations::host_turn::merged;
 use crate::db;
+use crate::hosting::authors;
 use crate::hosting::authorship::{Caller, CommandCaller};
 use crate::joined_spaces::relay::RelayGuests;
 use crate::logging::scrub::scrubbed;
-use crate::hosting::authors;
 
 async fn known_space(state: &db::DatabaseState, space_id: &str) -> Result<(), LibraryError> {
 	let database =
@@ -134,13 +134,7 @@ pub async fn library_apply_update(
 ) -> Result<(), LibraryError> {
 	let state = core.state::<db::DatabaseState>();
 	known_space(&state, &space_id).await?;
-	apply_update(
-		core,
-		&root(core)?,
-		&space_id,
-		&name,
-		&update,
-	)
+	apply_update(core, &root(core)?, &space_id, &name, &update)
 }
 
 pub async fn library_rename_document(
@@ -153,15 +147,7 @@ pub async fn library_rename_document(
 	known_space(&state, &space_id).await?;
 	let database =
 		state.as_ref().map_err(|failure| LibraryError::Unavailable { failure: failure.into() })?;
-	rename_linked_document(
-		core,
-		database,
-		&root(core)?,
-		&space_id,
-		&name,
-		&new_name,
-	)
-	.await
+	rename_linked_document(core, database, &root(core)?, &space_id, &name, &new_name).await
 }
 
 pub async fn library_rename_board(
@@ -172,13 +158,7 @@ pub async fn library_rename_board(
 ) -> Result<LibraryItem, LibraryError> {
 	let state = core.state::<db::DatabaseState>();
 	known_space(&state, &space_id).await?;
-	rename_board(
-		core,
-		&root(core)?,
-		&space_id,
-		&name,
-		&new_name,
-	)
+	rename_board(core, &root(core)?, &space_id, &name, &new_name)
 }
 
 pub async fn library_save_message(
@@ -224,21 +204,10 @@ pub async fn library_share_presence(
 			let database = state
 				.as_ref()
 				.map_err(|failure| LibraryError::Unavailable { failure: failure.into() })?;
-			Identity::of_person(
-				authors::author(caller, core, database).await?,
-				&seat,
-			)
+			Identity::of_person(authors::author(caller, core, database).await?, &seat)
 		}
 	};
-	share_presence(
-		core,
-		&root(core)?,
-		&space_id,
-		&name,
-		seat,
-		identity,
-		at,
-	)
+	share_presence(core, &root(core)?, &space_id, &name, seat, identity, at)
 }
 
 pub async fn library_stop_writers(
@@ -250,15 +219,12 @@ pub async fn library_stop_writers(
 	let agent = core.state::<AgentState>();
 	let state = core.state::<db::DatabaseState>();
 	known_space(&state, &space_id).await?;
-	let stopped =
-		stop_writers(core, &space_id, &name, agent_id.as_deref()).await;
+	let stopped = stop_writers(core, &space_id, &name, agent_id.as_deref()).await;
 	if stopped.is_empty() {
 		return Ok(CancelOutcome::NothingToCancel);
 	}
-	let mut outcomes = join_all(
-		stopped.iter().map(|scope| cancel_session_turn(core, &agent, scope)),
-	)
-	.await;
+	let mut outcomes =
+		join_all(stopped.iter().map(|scope| cancel_session_turn(core, &agent, scope))).await;
 	outcomes.push(CancelOutcome::Cancelled);
 	Ok(merged(outcomes))
 }
@@ -313,13 +279,7 @@ pub async fn library_import_url(
 	let imported = async {
 		known_space(&state, &space_id).await?;
 		let proxy_bearers = guests.proxy_bearers();
-		import_url(
-			root(core)?,
-			space_id,
-			&url,
-			&admission_for(&caller, &proxy_bearers),
-		)
-		.await
+		import_url(root(core)?, space_id, &url, &admission_for(&caller, &proxy_bearers)).await
 	};
 	imported.await.inspect_err(|refusal| {
 		let parsed = Url::parse(&url).ok();

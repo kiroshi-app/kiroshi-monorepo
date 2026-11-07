@@ -242,11 +242,7 @@ mod tests {
 		app.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
 		let profile = app.data_dir().to_path_buf();
 		let identifier = app.config().identifier.clone();
-		app.manage(SpaceKeys::new(
-			InstallKind::Dev,
-			identifier,
-			Some(profile),
-		));
+		app.manage(SpaceKeys::new(InstallKind::Dev, identifier, Some(profile)));
 		let host = SealingHost::planted(&*app, INSTANCE).await;
 		Member { app, host, _database: database }
 	}
@@ -257,10 +253,7 @@ mod tests {
 	}
 
 	async fn held_of(app: &crate::core_context::Core) -> Held {
-		held::held(&*app, INSTANCE)
-			.await
-			.expect("the keys read")
-			.expect("the keys are held")
+		held::held(&*app, INSTANCE).await.expect("the keys read").expect("the keys are held")
 	}
 
 	fn ctr_of(sealed: &str) -> u64 {
@@ -351,9 +344,7 @@ mod tests {
 			panic!("the newer rekey is taken");
 		};
 		assert_eq!((handed.space.key_id, handed.roster.set.version), (2, 1));
-		assert!(held::kept(&*member.app, INSTANCE, &handed)
-			.await
-			.expect("the rekey is kept"));
+		assert!(held::kept(&*member.app, INSTANCE, &handed).await.expect("the rekey is kept"));
 		wire.rekeyed(*handed);
 		let sealed = wire.sealed(CALL).await.expect("the call seals under the new key");
 		let envelope: Value = serde_json::from_str(&sealed).expect("json");

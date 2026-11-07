@@ -1,8 +1,9 @@
-
 use super::contract::{Invitation, InvitationError};
 use crate::joined_spaces::contract::{JoinedSpace, JoinedSpaceError};
 
-pub async fn invitations_list(core: &crate::core_context::Core) -> Result<Vec<Invitation>, InvitationError> {
+pub async fn invitations_list(
+	core: &crate::core_context::Core,
+) -> Result<Vec<Invitation>, InvitationError> {
 	super::read(core).await
 }
 

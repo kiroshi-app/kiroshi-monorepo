@@ -157,12 +157,7 @@ pub(super) fn signed_set(
 	}
 }
 
-pub fn set_bytes(
-	space_id: &str,
-	version: u64,
-	key_id: u32,
-	device_ids: &[DeviceId],
-) -> Vec<u8> {
+pub fn set_bytes(space_id: &str, version: u64, key_id: u32, device_ids: &[DeviceId]) -> Vec<u8> {
 	let mut sorted: Vec<&[u8; 16]> = device_ids.iter().map(DeviceId::as_bytes).collect();
 	sorted.sort_unstable();
 	let mut bytes = ROSTER_SET_DOMAIN.to_vec();

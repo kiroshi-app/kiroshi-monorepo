@@ -1,10 +1,10 @@
 use image::{Rgb, RgbImage};
 
 use super::*;
-use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
+use crate::test_core::{a_core_of_its_own, CoreOfItsOwn};
 
-fn an_app(name: &str) -> AppOfItsOwn {
-	an_app_of_its_own(&format!("screenshot-{name}"), mock_builder())
+fn an_app(name: &str) -> CoreOfItsOwn {
+	a_core_of_its_own(&format!("screenshot-{name}"))
 }
 
 fn a_document() -> ScreenshotTarget {
@@ -67,13 +67,11 @@ fn rendered(png: String) -> ScreenshotRendered {
 #[tokio::test(flavor = "current_thread")]
 async fn concurrent_screenshots_each_answer_the_image_their_own_window_rendered() {
 	let app = an_app("concurrent");
-	let handle = app.handle().clone();
+	let handle = &*app;
 	let shoot = |handle: AppHandle<MockRuntime>| {
-		tokio::spawn(async move {
-			render(crate::events::core(&handle), "personal", Scale(1), a_document()).await
-		})
+		tokio::spawn(async move { render(&*handle, "personal", Scale(1), a_document()).await })
 	};
-	let (first, second) = (shoot(handle.clone()), shoot(handle.clone()));
+	let (first, second) = (shoot(handle), shoot(handle));
 	let ids = requests_in_flight(&handle, 2).await;
 	let size_of = |id: &String| if *id == ids[0] { (10, 20) } else { (30, 40) };
 	for id in ids.iter().rev() {
@@ -102,10 +100,10 @@ async fn concurrent_screenshots_each_answer_the_image_their_own_window_rendered(
 #[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn a_render_silent_for_15_s_is_refused_as_render_timed_out_and_its_request_dropped() {
 	let app = an_app("timeout");
-	let handle = app.handle().clone();
+	let handle = &*app;
 	let shot = tokio::spawn({
-		let handle = handle.clone();
-		async move { render(crate::events::core(&handle), "personal", Scale(1), a_document()).await }
+		let handle = handle;
+		async move { render(&*handle, "personal", Scale(1), a_document()).await }
 	});
 	let id = requests_in_flight(&handle, 1).await.remove(0);
 	assert!(handle.get_webview_window(&window_label(&id)).is_some());
@@ -119,13 +117,11 @@ async fn a_render_silent_for_15_s_is_refused_as_render_timed_out_and_its_request
 #[tokio::test(flavor = "current_thread")]
 async fn a_window_reads_and_answers_only_its_own_request() {
 	let app = an_app("own-request");
-	let handle = app.handle().clone();
+	let handle = &*app;
 	let shoot = |handle: AppHandle<MockRuntime>| {
-		tokio::spawn(async move {
-			render(crate::events::core(&handle), "personal", Scale(1), a_document()).await
-		})
+		tokio::spawn(async move { render(&*handle, "personal", Scale(1), a_document()).await })
 	};
-	let (first, second) = (shoot(handle.clone()), shoot(handle.clone()));
+	let (first, second) = (shoot(handle), shoot(handle));
 	let ids = requests_in_flight(&handle, 2).await;
 	let main = WebviewWindowBuilder::new(&handle, "main", WebviewUrl::default())
 		.build()

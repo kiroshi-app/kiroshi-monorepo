@@ -1,6 +1,5 @@
 use std::path::{Path, PathBuf};
 
-
 use super::archive;
 use super::contract::{CompanionCounts, Space, SpaceDescribed, SpaceError, SpacePreferences};
 use crate::bundles;
@@ -16,9 +15,7 @@ pub fn ready(state: &db::DatabaseState) -> Result<&db::Database, SpaceError> {
 	state.as_ref().map_err(|failure| SpaceError::Unavailable { failure: failure.into() })
 }
 
-pub async fn space_list(
-	core: &crate::core_context::Core,
-) -> Result<Vec<Space>, SpaceError> {
+pub async fn space_list(core: &crate::core_context::Core) -> Result<Vec<Space>, SpaceError> {
 	crate::spaces::read::list_spaces(core).await
 }
 
@@ -56,11 +53,7 @@ pub async fn space_update(
 			name: updated.name.clone(),
 			colour: updated.colour,
 		};
-		core.clone().spawn(announced_once_listed(
-			core.clone(),
-			previous.instance_id,
-			described,
-		));
+		core.clone().spawn(announced_once_listed(core.clone(), previous.instance_id, described));
 	}
 	let hostings = database.space_hosting().hostings().await?;
 	Ok(Space::presented(updated, &hostings))
@@ -88,10 +81,7 @@ pub async fn space_reorder(
 	Ok(ready(&state)?.spaces().reorder(ids).await?)
 }
 
-pub async fn space_delete(
-	core: &crate::core_context::Core,
-	id: String,
-) -> Result<(), SpaceError> {
+pub async fn space_delete(core: &crate::core_context::Core, id: String) -> Result<(), SpaceError> {
 	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	hosting::forgotten(core, &id).await;
@@ -121,12 +111,8 @@ pub async fn space_import(
 ) -> Result<Space, SpaceError> {
 	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
-	let imported = archive::import(
-		archive::Places::of(core)?,
-		database,
-		PathBuf::from(path),
-	)
-	.await?;
+	let imported =
+		archive::import(archive::Places::of(core)?, database, PathBuf::from(path)).await?;
 	list_bundles(bundles::root(core).as_deref(), database).await;
 	Ok(imported)
 }
@@ -238,10 +224,10 @@ mod tests {
 	use super::*;
 	use crate::db::connection::fixture_root;
 	use crate::db::repositories::conversations::{Bot, BotIdentity};
+	use crate::plugins::commands::{plugin_mcp_servers, plugin_skills};
 	use crate::plugins::contract::PluginScope;
 	use crate::removed_on_drop::RemovedOnDrop;
 	use crate::test_core::{a_core_of_its_own, CoreOfItsOwn};
-	use crate::plugins::commands::{plugin_mcp_servers, plugin_skills};
 
 	fn a_root(name: &str) -> RemovedOnDrop {
 		fixture_root(&format!("space-bundles-{name}"))
@@ -315,12 +301,8 @@ mod tests {
 	#[tokio::test]
 	async fn every_companion_of_a_space_answers_its_skills_and_applications_counts() {
 		let app = a_host("companion-counts");
-		let database = app.state::<db::DatabaseState>()
-			.inner()
-			.as_ref()
-			.expect("the database");
-		let root =
-			bundles::root(&*app).expect("the bundles have a home");
+		let database = app.state::<db::DatabaseState>().inner().as_ref().expect("the database");
+		let root = bundles::root(&*app).expect("the bundles have a home");
 		let vocca = database.spaces().create("Vocca".to_owned()).await.expect("a space");
 		let elsewhere = database.spaces().create("Elsewhere".to_owned()).await.expect("a space");
 
@@ -340,9 +322,8 @@ mod tests {
 			.expect("the bot is shared");
 		a_bot_of(database, &elsewhere.id, "Stranger").await;
 
-		let counts = space_companion_counts(&*app, vocca.id.clone())
-			.await
-			.expect("the counts read");
+		let counts =
+			space_companion_counts(&*app, vocca.id.clone()).await.expect("the counts read");
 
 		let by_bot = |bot_id: &str| {
 			counts
@@ -368,10 +349,9 @@ mod tests {
 	async fn an_unknown_space_answers_an_error_rather_than_no_companion() {
 		let app = a_host("companion-counts-unknown");
 
-		let failure =
-			space_companion_counts(&*app, "nowhere".to_owned())
-				.await
-				.expect_err("the space is unknown");
+		let failure = space_companion_counts(&*app, "nowhere".to_owned())
+			.await
+			.expect_err("the space is unknown");
 
 		assert_eq!(failure, SpaceError::UnknownSpace { id: "nowhere".to_owned() });
 	}
@@ -383,9 +363,8 @@ mod tests {
 		fs::create_dir_all(&data).expect("the data dir stands");
 		fs::write(data.join("spaces"), "not a directory").expect("the blocking file lands");
 
-		let failure = space_create(&*app, "Vocca".to_owned())
-			.await
-			.expect_err("the space is refused");
+		let failure =
+			space_create(&*app, "Vocca".to_owned()).await.expect_err("the space is refused");
 
 		assert!(matches!(failure, SpaceError::UnwritableBundle { .. }), "got {failure:?}");
 		let listed = space_list(&*app).await.expect("the spaces read");

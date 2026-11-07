@@ -12,8 +12,7 @@ pub const PATH: &str = "/api/invoke/{command}";
 
 pub const MAX_BODY_BYTES: usize = 128 * 1024 * 1024;
 
-pub const RELAYED_MEMBER_HEADER: HeaderName =
-	HeaderName::from_static("kiroshi-relayed-member");
+pub const RELAYED_MEMBER_HEADER: HeaderName = HeaderName::from_static("kiroshi-relayed-member");
 
 const BEARER: &str = "Bearer ";
 
@@ -21,14 +20,12 @@ pub const JSON: &str = "application/json";
 
 pub const BYTES: &str = "application/octet-stream";
 
-pub const REFUSED: (StatusCode, &str) =
-	(StatusCode::NOT_FOUND, "no host api answers this call");
+pub const REFUSED: (StatusCode, &str) = (StatusCode::NOT_FOUND, "no host api answers this call");
 
 pub const UNAUTHORIZED: (StatusCode, &str) =
 	(StatusCode::UNAUTHORIZED, "the call carried no valid bearer token");
 
-pub const UNREGISTERED: (StatusCode, &str) =
-	(StatusCode::NOT_FOUND, "no command bears this name");
+pub const UNREGISTERED: (StatusCode, &str) = (StatusCode::NOT_FOUND, "no command bears this name");
 
 pub const TOO_LARGE: (StatusCode, &str) =
 	(StatusCode::PAYLOAD_TOO_LARGE, "the call carried more than the cap");

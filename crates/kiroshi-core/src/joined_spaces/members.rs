@@ -230,17 +230,10 @@ mod tests {
 		let app = a_core_of_its_own("joined-space-members");
 		app.manage::<db::DatabaseState>(Ok(db::open(dir)));
 		app.manage(AccountSession::new(Ok::<PathBuf, _>(dir.join("account")), api_url));
-		crate::account::session::install_signed_in_work(
-			&*app,
-			crate::account::AppSignedInWork,
-		);
+		crate::account::session::install_signed_in_work(&*app, crate::account::AppSignedInWork);
 		app.manage(RelayGuests::new(api_url));
 		app.manage(DeviceKeysState::new(Ok(DeviceKeys::from_secret(&DEVICE_SECRET))));
-		app.manage(SpaceKeys::new(
-			InstallKind::Dev,
-			"members".to_owned(),
-			Some(dir.join("keys")),
-		));
+		app.manage(SpaceKeys::new(InstallKind::Dev, "members".to_owned(), Some(dir.join("keys"))));
 		app
 	}
 
@@ -307,9 +300,7 @@ mod tests {
 		);
 		let roster = verified_set(set, None, &own.device_id()).expect("the roster verifies");
 		let handed = Handed { space: HeldSpaceKey::first().expect("randomness"), roster };
-		assert!(kept(&*app, INSTANCE, &handed)
-			.await
-			.expect("the roster is kept"));
+		assert!(kept(&*app, INSTANCE, &handed).await.expect("the roster is kept"));
 	}
 
 	async fn joined_space(app: &crate::core_context::Core) -> JoinedSpace {
@@ -575,11 +566,7 @@ mod tests {
 		read(&*app, &joined).await;
 
 		timeout(HEARD_WITHIN, async {
-			while app.state::<AccountSession>()
-				.bearer()
-				.expect("the store reads")
-				.is_some()
-			{
+			while app.state::<AccountSession>().bearer().expect("the store reads").is_some() {
 				tokio::time::sleep(Duration::from_millis(10)).await;
 			}
 		})
@@ -593,15 +580,9 @@ mod tests {
 		let (api_url, _relay) = relay_answering(listed(&[("bob", "Bob")])).await;
 		signed_in(&dir);
 		let app = app_reaching(&dir, &api_url);
-		relay::joined(
-			&*app,
-			INSTANCE.to_owned(),
-			None,
-			None,
-			Default::default(),
-		)
-		.await
-		.expect("the join");
+		relay::joined(&*app, INSTANCE.to_owned(), None, None, Default::default())
+			.await
+			.expect("the join");
 		let state = app.state::<db::DatabaseState>();
 		let held = ready(&state).expect("the database").joined_spaces().list().await;
 		let joined = held.expect("the list").into_iter().next().expect("the joined space");

@@ -318,33 +318,21 @@ impl Harness {
 		let database = database.map(|()| db::open(&database_dir));
 		let is_database_open = database.is_ok();
 		core.manage::<DatabaseState>(database);
-		core
-			.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
+		core.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
 		let profile = app.data_dir().to_path_buf();
 		let identifier = app.config().identifier.clone();
-		core.manage(SpaceKeys::new(
-			InstallKind::Dev,
-			identifier,
-			Some(profile),
-		));
+		core.manage(SpaceKeys::new(InstallKind::Dev, identifier, Some(profile)));
 		let host = match is_database_open {
-			true => Some(Arc::new(
-				SealingHost::planted(core, INSTANCE).await,
-			)),
+			true => Some(Arc::new(SealingHost::planted(core, INSTANCE).await)),
 			false => None,
 		};
 		if let Some(host) = &host {
 			*cloud.admission.lock().expect("the cloud") = Some(host.admitted());
 			registered_as_the_member(&app).await;
 		}
-		core
-			.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &api_url));
-		crate::account::session::install_signed_in_work(
-			core,
-			crate::account::AppSignedInWork,
-		);
-		core
-			.manage(Invitations::new(&api_url).polling_every(every));
+		core.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &api_url));
+		crate::account::session::install_signed_in_work(core, crate::account::AppSignedInWork);
+		core.manage(Invitations::new(&api_url).polling_every(every));
 		core.manage(RelayGuests::new(&api_url));
 		let heard = Arc::new(Mutex::new(Vec::new()));
 		for event in [CHANGED_EVENT, JOINED_CHANGED, REMOVED_EVENT, RECONNECTED_EVENT] {
@@ -473,10 +461,7 @@ impl Harness {
 	}
 
 	async fn accepted(&self) -> String {
-		accept(&*self.app, INVITATION.to_owned())
-			.await
-			.expect("the accept")
-			.id
+		accept(&*self.app, INVITATION.to_owned()).await.expect("the accept").id
 	}
 
 	async fn connect(&self, id: &str) -> Result<JoinedSpaceConnection, JoinedSpaceError> {
@@ -601,28 +586,17 @@ fn the_pending_invitations_are_read_oldest_first_as_the_cloud_answers_them() {
 fn every_refusal_of_the_cloud_is_answered_by_its_kind() {
 	run(async {
 		let unsigned = Harness::new(None).await;
+		assert_eq!(read(&*unsigned.app).await, Err(InvitationError::NotSignedIn));
 		assert_eq!(
-			read(&*unsigned.app).await,
-			Err(InvitationError::NotSignedIn)
-		);
-		assert_eq!(
-			accept(&*unsigned.app, INVITATION.to_owned())
-				.await
-				.map(|joined| joined.id),
+			accept(&*unsigned.app, INVITATION.to_owned()).await.map(|joined| joined.id),
 			Err(JoinedSpaceError::NeedsSignIn)
 		);
 
 		let revoked = Harness::new(Some("a-bearer-the-cloud-forgot")).await;
-		assert_eq!(
-			read(&*revoked.app).await,
-			Err(InvitationError::NotSignedIn)
-		);
+		assert_eq!(read(&*revoked.app).await, Err(InvitationError::NotSignedIn));
 
 		let offline = Harness::over(Some(BEARER), Some(a_closed_port().await), Ok(())).await;
-		assert!(matches!(
-			read(&*offline.app).await,
-			Err(InvitationError::Offline { .. })
-		));
+		assert!(matches!(read(&*offline.app).await, Err(InvitationError::Offline { .. })));
 
 		let harness = Harness::new(Some(BEARER)).await;
 		*harness.cloud.invitations_status.lock().expect("the cloud") =
@@ -667,15 +641,10 @@ fn every_refusal_of_the_cloud_is_answered_by_its_kind() {
 		] {
 			harness.answering(answer.0, answer.1);
 			assert_eq!(
-				accept(&*harness.app, INVITATION.to_owned())
-					.await
-					.map(|joined| joined.id),
+				accept(&*harness.app, INVITATION.to_owned()).await.map(|joined| joined.id),
 				Err(accepted)
 			);
-			assert_eq!(
-				decline(&*harness.app, INVITATION.to_owned()).await,
-				Err(declined)
-			);
+			assert_eq!(decline(&*harness.app, INVITATION.to_owned()).await, Err(declined));
 		}
 		assert!(harness.joins().is_empty());
 		assert!(harness.stored().await.is_empty());
@@ -688,8 +657,7 @@ fn an_accept_the_store_cannot_keep_is_answered_storage() {
 	run(async {
 		let harness = Harness::over(Some(BEARER), None, Err(DatabaseError::AppDataDir)).await;
 
-		let refused =
-			accept(&*harness.app, INVITATION.to_owned()).await;
+		let refused = accept(&*harness.app, INVITATION.to_owned()).await;
 
 		assert!(matches!(refused, Err(JoinedSpaceError::Unavailable { .. })), "{refused:?}");
 	});
@@ -700,9 +668,7 @@ fn an_accept_writes_one_relay_entry_named_by_the_instance_and_announces_it() {
 	run(async {
 		let harness = Harness::new(Some(BEARER)).await;
 
-		let joined = accept(&*harness.app, INVITATION.to_owned())
-			.await
-			.expect("the accept");
+		let joined = accept(&*harness.app, INVITATION.to_owned()).await.expect("the accept");
 
 		assert_eq!(joined.name, "Studio");
 		assert_eq!(joined.state, JoinedSpaceState::Online);
@@ -733,9 +699,7 @@ fn an_accept_of_a_read_invitation_names_its_inviter_as_who_hosts_the_space() {
 		let harness = Harness::new(Some(BEARER)).await;
 		read(&*harness.app).await.expect("the invitations are read");
 
-		let joined = accept(&*harness.app, INVITATION.to_owned())
-			.await
-			.expect("the accept");
+		let joined = accept(&*harness.app, INVITATION.to_owned()).await.expect("the accept");
 
 		let presented = serde_json::to_value(&joined).expect("the joined space serializes");
 		assert_eq!(presented["hostedBy"], "owner@example.com");
@@ -760,12 +724,8 @@ fn an_accept_answered_already_joined_writes_the_entry_once_under_the_same_id() {
 		read(&*harness.app).await.expect("the invitations are read");
 		harness.answering(StatusCode::CONFLICT, refusal(StatusCode::CONFLICT, "ALREADY_JOINED").1);
 
-		let first = accept(&*harness.app, INVITATION.to_owned())
-			.await
-			.expect("the accept");
-		let second = accept(&*harness.app, INVITATION.to_owned())
-			.await
-			.expect("the replay");
+		let first = accept(&*harness.app, INVITATION.to_owned()).await.expect("the accept");
+		let second = accept(&*harness.app, INVITATION.to_owned()).await.expect("the replay");
 
 		assert_eq!(first, second);
 		assert_eq!(first.name, "Studio");
@@ -780,9 +740,7 @@ fn a_decline_leaves_the_joined_spaces_unchanged() {
 		let harness = Harness::new(Some(BEARER)).await;
 		harness.answering(StatusCode::NO_CONTENT, Value::Null);
 
-		decline(&*harness.app, INVITATION.to_owned())
-			.await
-			.expect("the decline");
+		decline(&*harness.app, INVITATION.to_owned()).await.expect("the decline");
 
 		assert!(harness.stored().await.is_empty());
 		assert!(harness.heard(JOINED_CHANGED).is_empty());
@@ -940,8 +898,7 @@ fn a_relay_restarting_4005_drops_the_link_reopens_and_keeps_the_entry() {
 		let id = harness.accepted().await;
 		let (_connection, mut member) = connected(&mut harness, &id).await;
 
-		let dropped =
-			harness.app.state::<RelayGuests>().link_dropped(&id);
+		let dropped = harness.app.state::<RelayGuests>().link_dropped(&id);
 		closed_with(&mut member, 4005).await;
 		tokio::time::timeout(PATIENCE, dropped).await.expect("the link dropped in time");
 		let _reopened = harness.member().await;
@@ -957,8 +914,7 @@ async fn closed_offline(
 	member: &mut Member,
 	connection: &JoinedSpaceConnection,
 ) {
-	let dropped =
-		harness.app.state::<RelayGuests>().link_dropped(id);
+	let dropped = harness.app.state::<RelayGuests>().link_dropped(id);
 	harness.refusing_members(refusal(StatusCode::SERVICE_UNAVAILABLE, "HOST_ABSENT"));
 	closed_with(member, 4002).await;
 	tokio::time::timeout(PATIENCE, dropped).await.expect("the link dropped in time");
@@ -1390,9 +1346,7 @@ async fn port_held(connection: &JoinedSpaceConnection) -> Option<TcpListener> {
 }
 
 fn stopping(harness: &Harness, id: &str) -> watch::Receiver<bool> {
-	harness.app.state::<RelayGuests>()
-		.stopping(id)
-		.expect("a guest runs")
+	harness.app.state::<RelayGuests>().stopping(id).expect("a guest runs")
 }
 
 async fn guest_ended(harness: &Harness, id: &str, mut stopping: watch::Receiver<bool>) -> bool {
@@ -1673,9 +1627,7 @@ fn an_accept_stores_the_host_name_email_and_colour_its_invitation_carried() {
 			json!([hosted_by_ann(an_invitation(INSTANCE, "Studio"), json!("pink"))]);
 		read(&*harness.app).await.expect("the invitations are read");
 
-		let joined = accept(&*harness.app, INVITATION.to_owned())
-			.await
-			.expect("the accept");
+		let joined = accept(&*harness.app, INVITATION.to_owned()).await.expect("the accept");
 
 		let presented = serde_json::to_value(&joined).expect("the joined space serializes");
 		assert_eq!((&presented["hostedBy"], &presented["colour"]), (&json!("Ann"), &json!(358)));
@@ -1702,10 +1654,7 @@ async fn accepted_from_ann(harness: &Harness, colour: &str) -> String {
 	*harness.cloud.invitations.lock().expect("the cloud") =
 		json!([hosted_by_ann(an_invitation(INSTANCE, "Studio"), json!(colour))]);
 	read(&*harness.app).await.expect("the invitations are read");
-	accept(&*harness.app, INVITATION.to_owned())
-		.await
-		.expect("the accept")
-		.id
+	accept(&*harness.app, INVITATION.to_owned()).await.expect("the accept").id
 }
 
 #[test]
@@ -1829,7 +1778,9 @@ fn a_failed_listing_leaves_the_entries_unchanged_and_its_failure_carries_no_bear
 		] {
 			*harness.cloud.instances.lock().expect("the cloud") = answer;
 			reconciled(&*harness.app).await;
-			let failure = harness.app.state::<RelayGuests>()
+			let failure = harness
+				.app
+				.state::<RelayGuests>()
 				.cloud()
 				.instances(BEARER)
 				.await
@@ -1838,7 +1789,9 @@ fn a_failed_listing_leaves_the_entries_unchanged_and_its_failure_carries_no_bear
 			assert!(!format!("{failure:?}").contains(BEARER), "{failure:?}");
 		}
 		let offline = Harness::over(Some(BEARER), Some(a_closed_port().await), Ok(())).await;
-		let failure = offline.app.state::<RelayGuests>()
+		let failure = offline
+			.app
+			.state::<RelayGuests>()
 			.cloud()
 			.instances(BEARER)
 			.await
