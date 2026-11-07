@@ -62,8 +62,16 @@ pub fn mission_run_claim<R: Runtime>(
 	core: State<'_, crate::core_context::Core>,
 	mission_id: String,
 ) -> MissionRunClaim {
+	claim_run(core.inner(), &crate::events::client_of(&webview.window()), mission_id)
+}
+
+pub(crate) fn claim_run(
+	core: &crate::core_context::Core,
+	client: &crate::core_context::ClientId,
+	mission_id: String,
+) -> MissionRunClaim {
 	let claims = core.state::<MissionRunClaims>();
-	claims.claim(mission_id, &crate::events::client_of(&webview.window()))
+	claims.claim(mission_id, client)
 }
 
 #[tauri::command]

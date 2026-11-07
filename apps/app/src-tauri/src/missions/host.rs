@@ -521,10 +521,7 @@ mod tests {
 	}
 
 	async fn events(app: &App<MockRuntime>, id: &str) -> Vec<MissionEvent> {
-		mission_detail(app.handle().clone(), app.state(), id.to_owned())
-			.await
-			.expect("the mission reads")
-			.events
+		mission_detail(app.state(), id.to_owned()).await.expect("the mission reads").events
 	}
 
 	async fn armed_missions(app: &App<MockRuntime>) -> Vec<String> {
@@ -1031,10 +1028,7 @@ mod tests {
 		.await
 		.expect("the mission is closed");
 
-		let mission = mission_detail(app.handle().clone(), app.state(), id)
-			.await
-			.expect("the mission reads")
-			.mission;
+		let mission = mission_detail(app.state(), id).await.expect("the mission reads").mission;
 		assert_eq!(mission.state, MissionState::Failed);
 		assert!(mission.closed_at.is_some(), "the failed close left the mission open");
 	}
@@ -1318,9 +1312,7 @@ mod tests {
 		assert_eq!(empty["kind"], json!("nothingToUpdate"));
 		assert_eq!(blank["kind"], json!("blankField"));
 		assert_eq!(blank["field"], json!("objective"));
-		let held = mission_detail(app.handle().clone(), app.state(), opened.id.clone())
-			.await
-			.expect("it reads");
+		let held = mission_detail(app.state(), opened.id.clone()).await.expect("it reads");
 		assert_eq!(held.mission, opened);
 		assert_eq!(kinds(held.events), vec![MissionEventKind::Opened]);
 		assert_eq!(title_of(&app, &opened.thread_conversation_id).await, "Held");
@@ -1466,9 +1458,7 @@ mod tests {
 			.await
 			.expect_err("the unwritten summons is answered as a failure");
 
-		let held = mission_detail(app.handle().clone(), app.state(), opened.id.clone())
-			.await
-			.expect("it reads");
+		let held = mission_detail(app.state(), opened.id.clone()).await.expect("it reads");
 		assert_eq!(held.mission.bot_id, "b4");
 		let thread_id = &opened.thread_conversation_id;
 		let dropped =
@@ -1540,9 +1530,7 @@ mod tests {
 				json!("alreadyTheOwner"),
 			]
 		);
-		let held = mission_detail(app.handle().clone(), app.state(), opened.id.clone())
-			.await
-			.expect("it reads");
+		let held = mission_detail(app.state(), opened.id.clone()).await.expect("it reads");
 		assert_eq!(held.mission.bot_id, "b1");
 		assert_eq!(kinds(held.events), vec![MissionEventKind::Opened]);
 		assert_eq!(seated_in(&app, &opened.thread_conversation_id).await, thread_seats);

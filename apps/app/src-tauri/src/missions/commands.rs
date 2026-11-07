@@ -363,15 +363,22 @@ async fn appended(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn mission_answered<R: Runtime>(
-	app: AppHandle<R>,
+pub async fn mission_answered(
 	core: State<'_, crate::core_context::Core>,
+	mission_id: String,
+	seq: i64,
+) -> Result<Mission, MissionError> {
+	mark_answered(core.inner(), mission_id, seq).await
+}
+
+pub(crate) async fn mark_answered(
+	core: &crate::core_context::Core,
 	mission_id: String,
 	seq: i64,
 ) -> Result<Mission, MissionError> {
 	let state = core.state::<db::DatabaseState>();
 	match ready(&state)?.missions().answer(mission_id, seq, BOT.to_owned()).await? {
-		MissionAnswer::Appended(written) => announce_change(crate::events::core(&app), written),
+		MissionAnswer::Appended(written) => announce_change(core, written),
 		MissionAnswer::Stale(stored) => Ok(stored),
 	}
 }
@@ -460,62 +467,91 @@ fn hook_url(core: &crate::core_context::Core) -> Result<String, MissionError> {
 
 #[tauri::command]
 #[specta::specta]
-pub async fn mission_list<R: Runtime>(
-	app: AppHandle<R>,
+pub async fn mission_list(
 	core: State<'_, crate::core_context::Core>,
+	conversation_id: String,
+) -> Result<ConversationMissions, MissionError> {
+	list_missions(core.inner(), conversation_id).await
+}
+
+pub(crate) async fn list_missions(
+	core: &crate::core_context::Core,
 	conversation_id: String,
 ) -> Result<ConversationMissions, MissionError> {
 	let state = core.state::<db::DatabaseState>();
 	let ConversationMissions { open, done } =
 		ready(&state)?.missions().of_conversation(conversation_id).await?;
-	Ok(ConversationMissions {
-		open: observed_all(crate::events::core(&app), open),
-		done: observed_all(crate::events::core(&app), done),
-	})
+	Ok(ConversationMissions { open: observed_all(core, open), done: observed_all(core, done) })
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn mission_detail<R: Runtime>(
-	app: AppHandle<R>,
+pub async fn mission_detail(
 	core: State<'_, crate::core_context::Core>,
+	mission_id: String,
+) -> Result<MissionDetail, MissionError> {
+	mission_detail_of(core.inner(), mission_id).await
+}
+
+pub(crate) async fn mission_detail_of(
+	core: &crate::core_context::Core,
 	mission_id: String,
 ) -> Result<MissionDetail, MissionError> {
 	let state = core.state::<db::DatabaseState>();
 	let MissionDetail { mission, events } = ready(&state)?.missions().detail(mission_id).await?;
-	Ok(MissionDetail { mission: observed(crate::events::core(&app), mission), events })
+	Ok(MissionDetail { mission: observed(core, mission), events })
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn mission_board<R: Runtime>(
-	app: AppHandle<R>,
+pub async fn mission_board(
 	core: State<'_, crate::core_context::Core>,
+) -> Result<Vec<MissionOnBoard>, MissionError> {
+	missions_board(core.inner()).await
+}
+
+pub(crate) async fn missions_board(
+	core: &crate::core_context::Core,
 ) -> Result<Vec<MissionOnBoard>, MissionError> {
 	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
-	with_their_bots(crate::events::core(&app), database, database.missions().still_open().await?)
-		.await
+	with_their_bots(core, database, database.missions().still_open().await?).await
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn mission_space_feed<R: Runtime>(
-	app: AppHandle<R>,
+pub async fn mission_space_feed(
 	core: State<'_, crate::core_context::Core>,
+	space_id: String,
+	closed_since: i64,
+) -> Result<Vec<MissionInSpace>, MissionError> {
+	space_feed(core.inner(), space_id, closed_since).await
+}
+
+pub(crate) async fn space_feed(
+	core: &crate::core_context::Core,
 	space_id: String,
 	closed_since: i64,
 ) -> Result<Vec<MissionInSpace>, MissionError> {
 	let state = core.state::<db::DatabaseState>();
 	let feed = ready(&state)?.missions().of_space(space_id, closed_since).await?;
-	Ok(observed_in_space(crate::events::core(&app), feed))
+	Ok(observed_in_space(core, feed))
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn mission_space_page<R: Runtime>(
-	app: AppHandle<R>,
+pub async fn mission_space_page(
 	core: State<'_, crate::core_context::Core>,
+	space_id: String,
+	closed_since: i64,
+	cursor: Option<String>,
+	limit: Option<u32>,
+) -> Result<MissionSpacePage, MissionError> {
+	space_page(core.inner(), space_id, closed_since, cursor, limit).await
+}
+
+pub(crate) async fn space_page(
+	core: &crate::core_context::Core,
 	space_id: String,
 	closed_since: i64,
 	cursor: Option<String>,
@@ -529,31 +565,39 @@ pub async fn mission_space_page<R: Runtime>(
 		.space_page(space_id, closed_since, after, keyset::page_size(limit))
 		.await?;
 	Ok(MissionSpacePage {
-		missions: observed_in_space(crate::events::core(&app), page.rows),
+		missions: observed_in_space(core, page.rows),
 		next_cursor: page.next.map(|keyset| keyset.encoded()),
 	})
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn mission_unreported<R: Runtime>(
-	app: AppHandle<R>,
+pub async fn mission_unreported(
 	core: State<'_, crate::core_context::Core>,
+) -> Result<Vec<MissionOnBoard>, MissionError> {
+	unreported_missions(core.inner()).await
+}
+
+pub(crate) async fn unreported_missions(
+	core: &crate::core_context::Core,
 ) -> Result<Vec<MissionOnBoard>, MissionError> {
 	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
-	with_their_bots(
-		crate::events::core(&app),
-		database,
-		database.missions().closed_without_report().await?,
-	)
-	.await
+	with_their_bots(core, database, database.missions().closed_without_report().await?).await
 }
 
 #[tauri::command]
 #[specta::specta]
 pub async fn mission_reported(
 	core: State<'_, crate::core_context::Core>,
+	mission_id: String,
+	turn_id: Option<String>,
+) -> Result<Mission, MissionError> {
+	mark_reported(core.inner(), mission_id, turn_id).await
+}
+
+pub(crate) async fn mark_reported(
+	core: &crate::core_context::Core,
 	mission_id: String,
 	turn_id: Option<String>,
 ) -> Result<Mission, MissionError> {
@@ -700,8 +744,7 @@ mod tests {
 		.await
 		.expect("the mission is closed");
 
-		let board =
-			mission_board(app.handle().clone(), app.state()).await.expect("the board reads");
+		let board = mission_board(app.state()).await.expect("the board reads");
 
 		assert_eq!(
 			board
@@ -734,15 +777,12 @@ mod tests {
 			let _ = sender.send(event.payload().to_owned());
 		});
 
-		let owed = mission_unreported(app.handle().clone(), app.state())
-			.await
-			.expect("the missions owing a report read");
+		let owed = mission_unreported(app.state()).await.expect("the missions owing a report read");
 		let recorded = mission_reported(app.state(), opened.id.clone(), Some("t1".to_owned()))
 			.await
 			.expect("the report is recorded");
-		let settled = mission_unreported(app.handle().clone(), app.state())
-			.await
-			.expect("the missions owing a report read");
+		let settled =
+			mission_unreported(app.state()).await.expect("the missions owing a report read");
 
 		assert_eq!(
 			owed.iter().map(|held| held.mission.id.clone()).collect::<Vec<_>>(),
@@ -757,8 +797,7 @@ mod tests {
 			received.try_recv().is_err(),
 			"recording a report told the front the mission moved"
 		);
-		let board =
-			mission_board(app.handle().clone(), app.state()).await.expect("the board reads");
+		let board = mission_board(app.state()).await.expect("the board reads");
 		assert_eq!(
 			board.iter().map(|held| held.mission.id.clone()).collect::<Vec<_>>(),
 			vec![open.id],
@@ -794,9 +833,8 @@ mod tests {
 
 		assert_eq!(closed.state, MissionState::Failed, "got {:?}", closed.state);
 		assert!(closed.closed_at.is_some(), "the failed close left the mission open");
-		let detail = mission_detail(app.handle().clone(), app.state(), opened.id.clone())
-			.await
-			.expect("the mission detail reads");
+		let detail =
+			mission_detail(app.state(), opened.id.clone()).await.expect("the mission detail reads");
 		assert_eq!(detail.mission.closed_at, closed.closed_at, "the moment it closed moved");
 		let last = detail.events.last().expect("the close event is there");
 		assert_eq!(last.kind, MissionEventKind::Failed, "got {:?}", last.kind);
@@ -831,9 +869,8 @@ mod tests {
 
 		assert_eq!(closed.state, MissionState::Done, "got {:?}", closed.state);
 		assert!(closed.closed_at.is_some(), "the done close left the mission open");
-		let detail = mission_detail(app.handle().clone(), app.state(), opened.id)
-			.await
-			.expect("the mission detail reads");
+		let detail =
+			mission_detail(app.state(), opened.id).await.expect("the mission detail reads");
 		let last = detail.events.last().expect("the close event is there");
 		assert_eq!(last.kind, MissionEventKind::Closed, "got {:?}", last.kind);
 		assert_eq!(
@@ -863,10 +900,9 @@ mod tests {
 		});
 
 		let asked = an_agent_question(&app, &opened.id).await;
-		let answered =
-			mission_answered(app.handle().clone(), app.state(), opened.id.clone(), asked.state_seq)
-				.await
-				.expect("the answer is recorded");
+		let answered = mission_answered(app.state(), opened.id.clone(), asked.state_seq)
+			.await
+			.expect("the answer is recorded");
 		let asked_again = an_agent_question(&app, &opened.id).await;
 
 		assert_eq!(
@@ -931,26 +967,18 @@ mod tests {
 		let app = a_host("stale-answer").await;
 		let opened = a_mission(&app, a_draft("c1", "b1", "Fix it")).await;
 		let asked = an_agent_question(&app, &opened.id).await;
-		let before = mission_detail(app.handle().clone(), app.state(), opened.id.clone())
-			.await
-			.expect("the detail reads");
+		let before =
+			mission_detail(app.state(), opened.id.clone()).await.expect("the detail reads");
 		let (sender, received) = channel();
 		app.handle().listen(CHANGED_EVENT, move |event| {
 			let _ = sender.send(event.payload().to_owned());
 		});
 
-		let answered = mission_answered(
-			app.handle().clone(),
-			app.state(),
-			opened.id.clone(),
-			asked.state_seq - 1,
-		)
-		.await
-		.expect("the stale answer is taken");
-
-		let after = mission_detail(app.handle().clone(), app.state(), opened.id)
+		let answered = mission_answered(app.state(), opened.id.clone(), asked.state_seq - 1)
 			.await
-			.expect("the detail reads");
+			.expect("the stale answer is taken");
+
+		let after = mission_detail(app.state(), opened.id).await.expect("the detail reads");
 		assert_eq!(after.events.len(), before.events.len(), "the stale answer appended an event");
 		assert_eq!(
 			(answered.state, answered.state_seq),
@@ -971,26 +999,18 @@ mod tests {
 		)
 		.await
 		.expect("the mission closes");
-		let before = mission_detail(app.handle().clone(), app.state(), opened.id.clone())
-			.await
-			.expect("the detail reads");
+		let before =
+			mission_detail(app.state(), opened.id.clone()).await.expect("the detail reads");
 		let (sender, received) = channel();
 		app.handle().listen(CHANGED_EVENT, move |event| {
 			let _ = sender.send(event.payload().to_owned());
 		});
 
-		let answered = mission_answered(
-			app.handle().clone(),
-			app.state(),
-			opened.id.clone(),
-			closed.state_seq,
-		)
-		.await
-		.expect("the closed mission takes the answer quietly");
-
-		let after = mission_detail(app.handle().clone(), app.state(), opened.id)
+		let answered = mission_answered(app.state(), opened.id.clone(), closed.state_seq)
 			.await
-			.expect("the detail reads");
+			.expect("the closed mission takes the answer quietly");
+
+		let after = mission_detail(app.state(), opened.id).await.expect("the detail reads");
 		assert_eq!(
 			after.events.len(),
 			before.events.len(),
@@ -1052,9 +1072,7 @@ mod tests {
 			],
 			"the front was not told which mission moved and where it stands"
 		);
-		let read = mission_detail(app.handle().clone(), app.state(), opened.id)
-			.await
-			.expect("the mission detail reads");
+		let read = mission_detail(app.state(), opened.id).await.expect("the mission detail reads");
 		assert_eq!(
 			read.mission.space_id.as_deref(),
 			Some("personal"),
@@ -1362,8 +1380,7 @@ mod tests {
 
 		assert!(matches!(refused, MissionError::Undeliverable { .. }), "got {refused:?}");
 		assert!(!workspace.join(".claude").exists(), "the refused workspace was written in");
-		let board =
-			mission_board(app.handle().clone(), app.state()).await.expect("the board reads");
+		let board = mission_board(app.state()).await.expect("the board reads");
 		assert!(board.is_empty(), "got {board:?}");
 
 		if let Some(webhook) =
@@ -1520,8 +1537,7 @@ mod tests {
 		.expect_err("the close is refused");
 
 		assert_eq!(refused, MissionError::UnknownMission { id: "x9".to_owned() });
-		let board =
-			mission_board(app.handle().clone(), app.state()).await.expect("the board reads");
+		let board = mission_board(app.state()).await.expect("the board reads");
 		assert!(board.is_empty(), "got {board:?}");
 	}
 
@@ -1605,7 +1621,7 @@ mod tests {
 		}
 
 		async fn on_the_board(app: &App<MockRuntime>, id: &str) -> MissionLiveness {
-			mission_board(app.handle().clone(), app.state())
+			mission_board(app.state())
 				.await
 				.expect("the board reads")
 				.into_iter()
@@ -1616,20 +1632,16 @@ mod tests {
 		}
 
 		async fn on_every_read(app: &App<MockRuntime>, id: &str) -> Vec<MissionLiveness> {
-			let handle = app.handle().clone();
-			let listed = mission_list(handle.clone(), app.state(), "c1".to_owned())
-				.await
-				.expect("the conversation lists");
-			let detail = mission_detail(handle.clone(), app.state(), id.to_owned())
-				.await
-				.expect("the detail reads");
-			let feed = mission_space_feed(handle.clone(), app.state(), "personal".to_owned(), 0)
+			let listed =
+				mission_list(app.state(), "c1".to_owned()).await.expect("the conversation lists");
+			let detail =
+				mission_detail(app.state(), id.to_owned()).await.expect("the detail reads");
+			let feed = mission_space_feed(app.state(), "personal".to_owned(), 0)
 				.await
 				.expect("the feed reads");
-			let page =
-				mission_space_page(handle, app.state(), "personal".to_owned(), 0, None, None)
-					.await
-					.expect("the page reads");
+			let page = mission_space_page(app.state(), "personal".to_owned(), 0, None, None)
+				.await
+				.expect("the page reads");
 			vec![
 				on_the_board(app, id).await,
 				listed.open[0].liveness,
@@ -1816,7 +1828,7 @@ mod tests {
 		}
 
 		async fn on_the_board_whole(app: &App<MockRuntime>, id: &str) -> Value {
-			let mission = mission_board(app.handle().clone(), app.state())
+			let mission = mission_board(app.state())
 				.await
 				.expect("the board reads")
 				.into_iter()
