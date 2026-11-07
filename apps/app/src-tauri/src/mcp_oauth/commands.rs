@@ -32,6 +32,9 @@ use crate::hosting::authorship::Caller;
 
 const NOTHING_STORED: &str = "no access token was stored for that server";
 
+const NOT_REVOKED_UNBOUND: &str =
+	"the grant names no server URL, so it was forgotten here and not revoked at the provider";
+
 const NO_BUNDLES: &str = "the bundle directory is unavailable";
 
 const OPENABLE_SCHEMES: [&str; 2] = ["http://", "https://"];
@@ -196,12 +199,12 @@ pub async fn mcp_oauth_connect<R: Runtime>(
 	let stored = store::values(&root, &scope).map_err(|error| {
 		written(Step::ReadingTheStoredClient.refused(error.into()), &Values::new())
 	})?;
-	let credentials = connected(&app, authorize_request(url, &stored), &stored)
+	let credentials = connected(&app, authorize_request(url.clone(), &stored), &stored)
 		.await
 		.map_err(|refused| written(refused, &stored))?;
-	kept(&root, &scope, &name, &credentials, &app.state::<ApplicationReports>()).map_err(|error| {
-		written(Step::StoringTheGrant.refused(error), &credentials::held(&credentials))
-	})
+	kept(&root, &scope, &name, &url, &credentials, &app.state::<ApplicationReports>()).map_err(
+		|error| written(Step::StoringTheGrant.refused(error), &credentials::held(&credentials)),
+	)
 }
 
 fn refuse_what_kiroshi_does_not_authorize<R: Runtime>(
@@ -240,10 +243,12 @@ fn kept(
 	root: &Path,
 	scope: &EnvScope,
 	name: &str,
+	url: &str,
 	grant: &OauthCredentials,
 	reports: &ApplicationReports,
 ) -> Result<(), OauthError> {
 	credentials::store(root, scope, grant)?;
+	credentials::bind(root, scope, url)?;
 	reports.forget(name);
 	Ok(())
 }
@@ -271,23 +276,32 @@ pub async fn mcp_oauth_disconnect<R: Runtime>(
 	}
 	let state = app.state::<McpOauthState>();
 	let _running = state.begin(Flow::Revoking)?;
-	let settled = disconnected(&app, &owner, &name, &url).await;
+	let settled = disconnected(&app, &caller, &owner, &name, &url).await;
 	app.state::<ApplicationReports>().forget(&name);
 	settled
 }
 
 async fn disconnected<R: Runtime>(
 	app: &AppHandle<R>,
+	caller: &Caller,
 	owner: &EnvOwner,
 	name: &str,
-	url: &str,
+	asked: &str,
 ) -> Result<Disconnected, OauthError> {
 	let root = writable_root(app)?;
 	let scope = held_at(&root, owner, name)?;
 	let held = store::values(&root, &scope)?;
-	let revocation = revoked(app, url, &held).await;
+	let revocation = revoked(app, revocation_url(&held, asked, caller), &held).await;
 	credentials::forget(&root, &scope)?;
 	Ok(revocation)
+}
+
+fn revocation_url<'a>(held: &'a Values, asked: &'a str, caller: &Caller) -> Option<&'a str> {
+	match (credentials::bound_url(held), caller) {
+		(Some(bound), _) => Some(bound),
+		(None, Caller::Host) => Some(asked),
+		(None, Caller::Relayed(_)) => None,
+	}
 }
 
 fn held_at(root: &Path, owner: &EnvOwner, name: &str) -> Result<EnvScope, EnvError> {
@@ -458,9 +472,12 @@ pub(super) fn declared_servers<R: Runtime>(
 	}
 }
 
-async fn revoked<R: Runtime>(app: &AppHandle<R>, url: &str, held: &Values) -> Disconnected {
+async fn revoked<R: Runtime>(app: &AppHandle<R>, url: Option<&str>, held: &Values) -> Disconnected {
 	let Some(token) = held.get(OAUTH_ACCESS_TOKEN) else {
 		return Disconnected { revoked: false, detail: Some(NOTHING_STORED.to_owned()) };
+	};
+	let Some(url) = url else {
+		return Disconnected { revoked: false, detail: Some(NOT_REVOKED_UNBOUND.to_owned()) };
 	};
 	let request = RevocationRequest {
 		url: url.to_owned(),
@@ -483,6 +500,7 @@ mod tests {
 	use super::*;
 	use crate::agent::protocol::{OauthFailure, OauthFailureKind};
 	use crate::db::connection::fixture_root;
+	use crate::environment::contract::OAUTH_SERVER_URL;
 	use crate::mcp_oauth::status::ApplicationStatus;
 	use crate::removed_on_drop::RemovedOnDrop;
 	use crate::test_app::an_app_of_its_own;
@@ -518,6 +536,8 @@ mod tests {
 		let notion = EnvScope::Server { name: "notion".to_owned(), owner: EnvOwner::User };
 		credentials::store(&root, &notion, &an_aging_grant(Some("held-refresh")))
 			.expect("the grant is written");
+		credentials::bind(&root, &notion, "https://mcp.notion.test/mcp")
+			.expect("the grant is bound");
 
 		let rows = mcp_application_status(app.handle().clone(), Caller::Host, EnvOwner::User)
 			.await
@@ -651,7 +671,7 @@ mod tests {
 		reports.record("b2", "granola", Standing::NeedsAuth { reason: None });
 		reports.record("b1", "clock", Standing::Holding);
 
-		kept(&root, &a_server("granola"), "granola", &a_live_grant(), &reports)
+		kept(&root, &a_server("granola"), "granola", GRANOLA_URL, &a_live_grant(), &reports)
 			.expect("the grant is stored");
 
 		let grants = credentials::served(&root, &owner).expect("the grants are readable");
@@ -748,6 +768,7 @@ mod tests {
 			&root,
 			&a_server("granola"),
 			"granola",
+			GRANOLA_URL,
 			&a_live_grant(),
 			&ApplicationReports::default(),
 		)
@@ -757,6 +778,55 @@ mod tests {
 		assert!(store::values(&root, &a_server("granola"))
 			.expect("the scope is readable")
 			.contains_key(OAUTH_ACCESS_TOKEN));
+	}
+
+	#[test]
+	fn a_connect_binds_the_grant_to_the_url_its_flow_ran_against_in_the_scope_of_the_grant() {
+		let root = a_root("connect-binds");
+
+		kept(
+			&root,
+			&granola_of_the_space(),
+			"granola",
+			GRANOLA_URL,
+			&a_live_grant(),
+			&ApplicationReports::default(),
+		)
+		.expect("the grant is stored");
+
+		let held = store::values(&root, &granola_of_the_space()).expect("the scope is readable");
+		assert_eq!(credentials::bound_url(&held), Some(GRANOLA_URL));
+		assert!(held.contains_key(OAUTH_ACCESS_TOKEN));
+	}
+
+	const NAMED_ELSEWHERE: &str = "https://collector.test/revoke";
+
+	fn bound_to_granola() -> Values {
+		Values::from([(OAUTH_SERVER_URL.to_owned(), GRANOLA_URL.to_owned())])
+	}
+
+	#[test]
+	fn a_relayed_disconnect_revokes_at_the_bound_url_not_the_one_it_names() {
+		let held = bound_to_granola();
+
+		assert_eq!(
+			revocation_url(&held, NAMED_ELSEWHERE, &Caller::Relayed(None)),
+			Some(GRANOLA_URL)
+		);
+		assert_eq!(revocation_url(&held, NAMED_ELSEWHERE, &Caller::Host), Some(GRANOLA_URL));
+	}
+
+	#[test]
+	fn a_relayed_disconnect_of_an_unbound_grant_revokes_nowhere() {
+		assert_eq!(revocation_url(&Values::new(), NAMED_ELSEWHERE, &Caller::Relayed(None)), None);
+	}
+
+	#[test]
+	fn a_host_disconnect_of_an_unbound_grant_revokes_at_the_url_it_names() {
+		assert_eq!(
+			revocation_url(&Values::new(), NAMED_ELSEWHERE, &Caller::Host),
+			Some(NAMED_ELSEWHERE)
+		);
 	}
 
 	#[test]
@@ -813,6 +883,33 @@ mod tests {
 		assert_eq!(reports.last("b-disconnect-test", "clock"), Some(Standing::Holding));
 	}
 
+	#[tokio::test]
+	async fn a_relayed_disconnect_of_an_unbound_grant_sends_nothing_and_forgets_the_grant() {
+		let app = an_app_of_its_own("mcp-oauth-relayed-unbound", mock_builder());
+		app.manage(McpOauthState::default());
+		app.manage(ApplicationReports::default());
+		let root = writable_root(app.handle()).expect("the data dir is writable");
+		credentials::store(&root, &granola_of_the_space(), &a_live_grant())
+			.expect("the grant is written");
+
+		let settled = mcp_oauth_disconnect(
+			app.handle().clone(),
+			Caller::Relayed(None),
+			EnvOwner::Space { id: "s1".to_owned() },
+			"granola".to_owned(),
+			NAMED_ELSEWHERE.to_owned(),
+		)
+		.await;
+
+		assert_eq!(
+			settled,
+			Ok(Disconnected { revoked: false, detail: Some(NOT_REVOKED_UNBOUND.to_owned()) })
+		);
+		assert!(store::values(&root, &granola_of_the_space())
+			.expect("the scope is readable")
+			.is_empty());
+	}
+
 	fn granola_declared() -> Vec<McpServer> {
 		vec![a_granola()]
 	}
@@ -852,7 +949,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_renewal_that_lands_reads_connected_and_drops_the_standing_a_session_reported() {
 		let root = a_root("renewal-lands");
-		credentials::store(&root, &a_server("granola"), &an_aging_grant(Some("held-refresh")))
+		granted(&root, "granola", &an_aging_grant(Some("held-refresh")))
 			.expect("the grant is written");
 		let reports = ApplicationReports::default();
 		reports.record("b1", "granola", Standing::NeedsAuth { reason: None });
@@ -883,7 +980,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_renewal_the_store_refused_needs_authorization_over_the_standing_last_reported() {
 		let root = a_root("renewal-lost");
-		credentials::store(&root, &a_server("granola"), &an_aging_grant(Some("held-refresh")))
+		granted(&root, "granola", &an_aging_grant(Some("held-refresh")))
 			.expect("the grant is written");
 		let reports = ApplicationReports::default();
 		reports.record("b1", "granola", Standing::Holding);
@@ -913,7 +1010,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_refused_renewal_needs_authorization_and_carries_the_reason_with_no_secret_in_it() {
 		let root = a_root("renewal-refused");
-		credentials::store(&root, &a_server("granola"), &an_aging_grant(Some("held-refresh")))
+		granted(&root, "granola", &an_aging_grant(Some("held-refresh")))
 			.expect("the grant is written");
 
 		let rows = renewed_rows(
@@ -955,7 +1052,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_renewal_the_sidecar_never_answered_leaves_the_row_on_the_grant_on_disk() {
 		let root = a_root("renewal-unreachable");
-		credentials::store(&root, &a_server("granola"), &an_aging_grant(Some("held-refresh")))
+		granted(&root, "granola", &an_aging_grant(Some("held-refresh")))
 			.expect("the grant is written");
 
 		let rows = renewed_rows(
@@ -983,8 +1080,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_grant_outside_the_renewal_window_sends_no_request_and_reads_from_disk() {
 		let root = a_root("renewal-untouched");
-		credentials::store(&root, &a_server("granola"), &a_live_grant())
-			.expect("the grant is written");
+		granted(&root, "granola", &a_live_grant()).expect("the grant is written");
 		let asked = std::cell::Cell::new(0);
 
 		let rows = renewed_rows(
@@ -1011,8 +1107,7 @@ mod tests {
 		answers: &AuthorizationAnswers,
 	) -> Vec<ApplicationRow> {
 		let root = a_root(root_name);
-		credentials::store(&root, &a_server("granola"), &an_aging_grant(None))
-			.expect("the grant is written");
+		granted(&root, "granola", &an_aging_grant(None)).expect("the grant is written");
 		renewed_rows(
 			&root,
 			&a_bot(),
@@ -1080,6 +1175,12 @@ mod tests {
 		}
 	}
 
+	fn granted(root: &Path, name: &str, grant: &OauthCredentials) -> Result<(), EnvError> {
+		let scope = a_server(name);
+		credentials::store(root, &scope, grant)?;
+		credentials::bind(root, &scope, a_remote(name).url().expect("a remote declares its url"))
+	}
+
 	#[tokio::test]
 	async fn a_status_read_sends_no_request_to_a_server_whose_row_reads_no_answer() {
 		let root = a_root("asked-only-where-read");
@@ -1088,8 +1189,7 @@ mod tests {
 		reports.record("b1", "waiting", Standing::NeedsAuth { reason: None });
 		credentials::remember_refusal(&root, &a_server("refused"), "invalid_grant")
 			.expect("the reason is written");
-		credentials::store(&root, &a_server("granted"), &a_live_grant())
-			.expect("the grant is written");
+		granted(&root, "granted", &a_live_grant()).expect("the grant is written");
 		let flows = McpOauthState::default();
 		let _running =
 			flows.begin(Flow::Authorizing(a_server("authorizing"))).expect("the flow claims");
@@ -1164,8 +1264,7 @@ mod tests {
 	#[tokio::test]
 	async fn an_application_a_session_left_out_holding_a_usable_grant_reads_failed() {
 		let root = a_root("left-out-holding");
-		credentials::store(&root, &a_server("granola"), &a_live_grant())
-			.expect("the grant is written");
+		granted(&root, "granola", &a_live_grant()).expect("the grant is written");
 		let reports = ApplicationReports::default();
 		left_out_by_a_session(&reports);
 
