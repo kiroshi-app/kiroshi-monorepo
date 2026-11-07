@@ -5,7 +5,7 @@ on:
     branches: [main]
     tags: ["v*"]
   pull_request:
-    branches: [main]
+    branches: [main, feature/ope-1933-exploration-a-mini-kiroshi-in-rune-onboarding-and-the]
 
 permissions:
   contents: read

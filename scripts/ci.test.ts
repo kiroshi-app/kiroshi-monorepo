@@ -1109,7 +1109,12 @@ describe("the jobs of ci.yml", () => {
 	it("triggers on a push and a pull_request only", () => {
 		expect(workflow.on).toEqual({
 			push: { branches: ["main"], tags: ["v*"] },
-			pull_request: { branches: ["main"] },
+			pull_request: {
+				branches: [
+					"main",
+					"feature/ope-1933-exploration-a-mini-kiroshi-in-rune-onboarding-and-the",
+				],
+			},
 		})
 	})
 
