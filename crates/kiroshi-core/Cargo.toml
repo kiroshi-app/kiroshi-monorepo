@@ -25,6 +25,7 @@ log = "0.4"
 regex = "1"
 reqwest = { version = "0.13", default-features = false, features = ["json", "rustls-no-provider"] }
 rusqlite = { version = "0.40", features = ["bundled"] }
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["raw_value"] }
 sha2 = "0.10"
@@ -44,4 +45,5 @@ security-framework = "3"
 libc = "0.2"
 
 [dev-dependencies]
+axum = { version = "0.8", default-features = false, features = ["http1", "tokio", "ws"] }
 tokio = { version = "1", features = ["macros", "process", "io-util", "sync", "time", "rt-multi-thread", "test-util"] }

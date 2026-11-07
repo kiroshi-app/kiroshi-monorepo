@@ -108,13 +108,13 @@ async fn polling(
 	}
 }
 
-pub(crate) struct Reach {
+pub struct Reach {
 	client: Client,
 	base: String,
 }
 
 impl Reach {
-	pub(crate) fn at(base: String) -> Result<Self, String> {
+	pub fn at(base: String) -> Result<Self, String> {
 		installed_tls_provider();
 		let client = Client::builder()
 			.timeout(TIMEOUT)
@@ -298,7 +298,7 @@ impl Reply {
 }
 
 #[derive(Default)]
-pub(crate) struct Replies {
+pub struct Replies {
 	stored: HashMap<String, Reply>,
 	this_pass: HashMap<String, Result<Reply, String>>,
 	held_until_ms: Option<i64>,
@@ -328,7 +328,7 @@ impl Replies {
 }
 
 #[derive(Default)]
-pub(crate) struct Kept {
+pub struct Kept {
 	etags: HashMap<(String, Resource), String>,
 	read_at_ms: HashMap<String, i64>,
 	noted_hold_until_ms: Option<i64>,
@@ -603,13 +603,13 @@ impl Queue {
 	}
 }
 
-pub(crate) fn merged_pull_request(stored: &str) -> Result<Option<u64>, MissionError> {
+pub fn merged_pull_request(stored: &str) -> Result<Option<u64>, MissionError> {
 	let held = Fingerprint::held(stored)
 		.map_err(|failure| MissionError::Unexpected { detail: failure.to_string() })?;
 	Ok(held.filter(|held| held.merged).map(|held| held.number))
 }
 
-pub(crate) async fn pass(
+pub async fn pass(
 	core: &crate::core_context::Core,
 	reach: &Reach,
 	database: &db::Database,
@@ -1205,7 +1205,7 @@ fn owner_of(repository: &str) -> Result<&str, Failure> {
 		.ok_or_else(|| Failure::Unreadable("a repository named without an owner".to_owned()))
 }
 
-pub(crate) fn installed_tls_provider() {
+pub fn installed_tls_provider() {
 	static ONCE: std::sync::Once = std::sync::Once::new();
 	ONCE.call_once(|| {
 		if rustls::crypto::ring::default_provider().install_default().is_err() {
@@ -1214,7 +1214,7 @@ pub(crate) fn installed_tls_provider() {
 	});
 }
 
-pub(crate) fn headers() -> HeaderMap {
+pub fn headers() -> HeaderMap {
 	let mut headers = HeaderMap::new();
 	headers.insert(USER_AGENT, HeaderValue::from_static(AGENT));
 	headers.insert(ACCEPT, HeaderValue::from_static("application/vnd.github+json"));

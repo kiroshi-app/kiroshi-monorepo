@@ -2,6 +2,8 @@ use std::net::SocketAddr;
 
 use tokio::sync::watch;
 
+pub const HEADER: &str = "X-Kiroshi-Delivery";
+
 pub const ROUTINE_CALL_PATH: &str = "/routines/call";
 
 pub const MISSION_CALL_PATH: &str = "/missions/call";

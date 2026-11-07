@@ -804,7 +804,7 @@ mod tests {
 	#[tokio::test]
 	async fn read_answers_the_whole_of_a_mission_of_another_bot() {
 		let core = a_host("read").await;
-		core.manage(kiroshi_core::routines::local_server::a_loopback_webhook());
+		core.manage(crate::routines::local_server::a_loopback_webhook());
 		let held = a_mission_of(&core, "c1", "b2").await;
 		let its_bot = serving_as(&core, "c1", "b2");
 		its_bot
@@ -844,7 +844,7 @@ mod tests {
 		assert_eq!(kinds, vec![json!("opened"), json!("note"), json!("status")]);
 		assert_eq!(read["events"][1]["payload"]["line"], json!("Half way"));
 
-		if let Some(webhook) = core.try_state::<kiroshi_core::routines::local_server::Webhook>() {
+		if let Some(webhook) = core.try_state::<crate::routines::local_server::Webhook>() {
 			webhook.stop();
 		}
 	}
@@ -895,7 +895,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_mission_is_armed_and_listed_from_its_own_thread() {
 		let core = a_host("armed").await;
-		core.manage(kiroshi_core::routines::local_server::a_loopback_webhook());
+		core.manage(crate::routines::local_server::a_loopback_webhook());
 		let opened = a_mission_of(&core, "c1", "b1").await;
 		let host = serving(&core, &opened.thread_conversation_id);
 
@@ -907,12 +907,12 @@ mod tests {
 			armed["url"].as_str().is_some_and(|url| url.starts_with("http://127.0.0.1:")),
 			"got {armed}"
 		);
-		assert_eq!(armed["header"], json!(crate::routines::webhook::HEADER));
+		assert_eq!(armed["header"], json!(crate::routines::local_server::HEADER));
 		assert!(armed["key"].as_str().is_some_and(|key| !key.is_empty()), "got {armed}");
 		assert_eq!(armed_missions(&core).await, vec![opened.id.clone()]);
 		assert_eq!(ids(&answered), vec![opened.id]);
 
-		if let Some(webhook) = core.try_state::<kiroshi_core::routines::local_server::Webhook>() {
+		if let Some(webhook) = core.try_state::<crate::routines::local_server::Webhook>() {
 			webhook.stop();
 		}
 	}
@@ -920,7 +920,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_mission_opened_on_a_checkout_carries_the_hook_and_the_line_on_its_agent() {
 		let core = a_host("opened-hook").await;
-		core.manage(kiroshi_core::routines::local_server::a_loopback_webhook());
+		core.manage(crate::routines::local_server::a_loopback_webhook());
 		let workspace = a_workspace("opened-hook");
 		let host = serving(&core, "c1");
 
@@ -937,7 +937,7 @@ mod tests {
 			.expect("the settings of the workspace read");
 		assert!(settings.contains("kiroshi-agent-hook.sh"), "got {settings}");
 
-		if let Some(webhook) = core.try_state::<kiroshi_core::routines::local_server::Webhook>() {
+		if let Some(webhook) = core.try_state::<crate::routines::local_server::Webhook>() {
 			webhook.stop();
 		}
 		fs::remove_dir_all(&workspace).expect("cleanup");
@@ -1146,7 +1146,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_closed_mission_is_reopened_by_its_bot_and_its_watch_is_read_again() {
 		let core = a_host("reopen").await;
-		core.manage(kiroshi_core::routines::local_server::a_loopback_webhook());
+		core.manage(crate::routines::local_server::a_loopback_webhook());
 		let opened = a_mission_of(&core, "c1", "b1").await;
 		let failed = a_mission_of(&core, "c1", "b1").await;
 		let host = serving(&core, &opened.thread_conversation_id);
@@ -1182,7 +1182,7 @@ mod tests {
 			Some((MissionEventKind::Reopened, BOT.to_owned()))
 		);
 
-		if let Some(webhook) = core.try_state::<kiroshi_core::routines::local_server::Webhook>() {
+		if let Some(webhook) = core.try_state::<crate::routines::local_server::Webhook>() {
 			webhook.stop();
 		}
 	}
@@ -1340,18 +1340,16 @@ mod tests {
 				(MissionEventKind::HandedOff, BOT.to_owned(), json!({ "from": "b1", "to": "b4" })),
 			]
 		);
-		let read = kiroshi_core::conversations::commands::conversation_mission_thread(
+		let read = crate::conversations::commands::conversation_mission_thread(
 			&core,
 			opened.thread_conversation_id.clone(),
 		)
 		.await
 		.expect("the thread reads with its seats");
-		let topic = kiroshi_core::conversations::commands::conversation_mission_thread(
-			&core,
-			"c1".to_owned(),
-		)
-		.await
-		.expect_err("a topic is no mission thread");
+		let topic =
+			crate::conversations::commands::conversation_mission_thread(&core, "c1".to_owned())
+				.await
+				.expect_err("a topic is no mission thread");
 		assert_eq!(
 			read.participants.iter().map(|seat| seat.bot_id.as_str()).collect::<Vec<_>>(),
 			vec!["b1", "b4"]

@@ -25,12 +25,10 @@ use crate::db;
 use crate::host_api::cors;
 use crate::host_api::token::{self, HostToken};
 use crate::missions;
-pub use kiroshi_core::routines::local_server::Webhook;
 use kiroshi_core::routines::local_server::ROUTINE_CALL_PATH as PATH;
+pub use kiroshi_core::routines::local_server::{Webhook, HEADER};
 
 pub const SOURCE_ID: &str = "local-webhook";
-
-pub const HEADER: &str = "X-Kiroshi-Delivery";
 
 pub const DELIVERY_ID_HEADER: &str = "X-Kiroshi-Delivery-Id";
 

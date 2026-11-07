@@ -326,7 +326,7 @@ mod tests {
 	}
 
 	fn tracked_settings() -> Value {
-		serde_json::from_str(include_str!("../../../../../../.claude/settings.json"))
+		serde_json::from_str(include_str!("../../../../../.claude/settings.json"))
 			.expect("the tracked settings are json")
 	}
 

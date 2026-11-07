@@ -16,7 +16,7 @@ const AHEAD_OF_MAIN: [&str; 3] = ["rev-list", "--count", "origin/main..HEAD"];
 const STATUS: [&str; 2] = ["status", "--porcelain"];
 
 #[cfg(windows)]
-pub(super) const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+pub const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 #[derive(Debug, PartialEq, Eq)]
 enum Read {
@@ -25,7 +25,7 @@ enum Read {
 	Abandoned,
 }
 
-pub(crate) async fn pass(core: &crate::core_context::Core, database: &db::Database) {
+pub async fn pass(core: &crate::core_context::Core, database: &db::Database) {
 	let moved = recounted_all(database).await;
 	let open = match database.missions().still_open().await {
 		Ok(open) => open,
@@ -64,7 +64,7 @@ async fn recounted_all(database: &db::Database) -> HashSet<String> {
 	moved
 }
 
-pub(crate) async fn recounted(
+pub async fn recounted(
 	database: &db::Database,
 	mission_id: &str,
 	workspace: &str,
@@ -83,7 +83,7 @@ pub(crate) async fn recounted(
 	database.missions().record_checkout(mission_id.to_owned(), counts).await
 }
 
-pub(crate) fn told(core: &crate::core_context::Core, mission: &Mission) {
+pub fn told(core: &crate::core_context::Core, mission: &Mission) {
 	if let Err(failure) = announce_change(core, mission.clone()) {
 		eprintln!("mission {} moved and the front was not told: {failure:?}", mission.id);
 	}
