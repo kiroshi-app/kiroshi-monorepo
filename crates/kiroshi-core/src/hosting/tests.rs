@@ -16,7 +16,7 @@ use serde_json::{json, Value};
 use tokio::net::TcpListener;
 use tokio::sync::{mpsc, watch};
 
-use super::authorship::{Caller, CommandCaller};
+use super::authorship::Caller;
 use super::bridge::{self, belongs_to_the_host, LocalApi, RelayedFile, ATTACHMENT_COMMAND};
 use super::contract::{AccountDevices, RosterDevice};
 use super::contract::{
@@ -860,7 +860,7 @@ impl Harness {
 		let every = super::members::MEMBERS_EVERY;
 		let mut harness = Self::serving(name, None, Some(BEARER), every, database, local).await;
 		harness._temporary.push(env_root);
-		assert!(effects.app.set(&*harness.app).is_ok());
+		assert!(effects.app.set(harness.app.clone()).is_ok());
 		(harness, effects)
 	}
 
@@ -2087,7 +2087,7 @@ fn a_lagged_event_broadcast_closes_with_1013_and_reconnects() {
 
 		let (held, is_held) = tokio::sync::oneshot::channel();
 		let (release, released) = std::sync::mpsc::channel::<()>();
-		let app = &*harness.app;
+		let app = harness.app.clone();
 		let holding = tokio::spawn(async move {
 			let state = app.state::<DatabaseState>();
 			let database = state.as_ref().expect("the database");
@@ -3907,7 +3907,7 @@ fn a_member_creates_a_document_from_a_template_in_the_library_folder_of_the_shar
 fn the_host_and_a_member_edit_one_library_document_and_every_update_merges_and_is_heard() {
 	run(async {
 		let mut guest = Guest::of_two_spaces("library-shared-edit").await;
-		let app = &*guest.harness.app;
+		let app = &guest.harness.app.clone();
 		let library = guest.effects.library();
 		let (told, host_heard) = std::sync::mpsc::channel();
 		crate::test_core::listen_to(&*app, DOCUMENT_UPDATED_EVENT, move |event| {
@@ -4047,7 +4047,7 @@ fn a_member_reaches_no_env_or_application_of_the_host_person_or_outside_the_shar
 fn the_live_sessions_in_a_space_hold_only_the_sessions_of_its_conversations() {
 	run(async {
 		let guest = Guest::of_two_spaces("live-sessions-in-space").await;
-		let app = &*guest.harness.app;
+		let app = &guest.harness.app.clone();
 		commands::a_run_held_by_the_app(app, a_held_scope_in("c-mine", "b-mine"));
 		commands::a_run_held_by_the_app(app, a_held_scope_in("c-theirs", "b-theirs"));
 		commands::a_run_held_by_the_app(app, a_held_scope_in("c-shared", "b-shared"));
@@ -4116,7 +4116,7 @@ async fn pending_in_the_conversation(
 fn the_pending_questions_in_a_space_hold_the_questions_of_each_of_its_conversations_only() {
 	run(async {
 		let guest = Guest::of_two_spaces("pending-questions-in-space").await;
-		let app = &*guest.harness.app;
+		let app = &guest.harness.app.clone();
 		for (conversation_id, bot_id) in
 			[("c-theirs", "b-theirs"), ("c-shared", "b-shared"), ("c-mine", "b-mine")]
 		{
@@ -4141,7 +4141,7 @@ fn the_pending_questions_in_a_space_hold_the_questions_of_each_of_its_conversati
 fn the_pending_questions_in_a_space_leave_out_every_question_settled_or_let_go() {
 	run(async {
 		let guest = Guest::of_two_spaces("pending-questions-settled").await;
-		let app = &*guest.harness.app;
+		let app = &guest.harness.app.clone();
 		let scope = a_held_scope_in("c-theirs", "b-theirs");
 		let cancelled = agent::AgentEvent::TurnEnded {
 			ended: agent::TurnEnded {
@@ -4167,7 +4167,14 @@ fn the_pending_questions_in_a_space_leave_out_every_question_settled_or_let_go()
 			match settled {
 				"answered" => run.emit(its_answer(settled), a_turn_in("c-theirs")),
 				"cancelled" => run.emit(cancelled.clone(), a_turn_in("c-theirs")),
-				"shut down" => commands::shutdown_session(app, &&*app, &scope).await,
+				"shut down" => {
+					commands::shutdown_session(
+						app,
+						&app.state::<crate::agent::AgentState>(),
+						&scope,
+					)
+					.await
+				}
 				_ => {
 					commands::a_run_held_by_the_app(app, scope.clone());
 				}
@@ -4186,7 +4193,7 @@ fn a_relay_guest_hears_a_question_of_the_shared_space_and_its_answer_without_rea
 ) {
 	run(async {
 		let mut guest = Guest::of_two_spaces("question-heard").await;
-		let app = &*guest.harness.app;
+		let app = &guest.harness.app.clone();
 		let scope = a_live_scope_of("c-mine");
 		let run = commands::a_live_run(&*app, scope.clone());
 		let elsewhere = commands::a_live_run(&*app, a_live_scope_of("c-theirs"));
@@ -4218,12 +4225,12 @@ fn a_relay_guest_hears_a_question_of_the_shared_space_and_its_answer_without_rea
 fn a_relay_guest_hears_a_pending_question_settled_when_the_host_shuts_its_session_down() {
 	run(async {
 		let mut guest = Guest::of_two_spaces("question-shut-down").await;
-		let app = &*guest.harness.app;
+		let app = &guest.harness.app.clone();
 		let scope = a_held_scope_in("c-mine", "b-mine");
 		commands::a_run_held_by_the_app(&*app, scope.clone())
 			.emit(a_question("q-mine"), a_turn_in("c-mine"));
 
-		commands::shutdown_session(&*app, &&*&*app, &scope).await;
+		commands::shutdown_session(&*app, &app.state::<crate::agent::AgentState>(), &scope).await;
 		let heard = guest.events_until_the_marker().await;
 
 		let denied = agent::AgentEvent::PermissionResolved {
@@ -5295,7 +5302,7 @@ fn a_live_scope_of(conversation_id: &str) -> agent::RuntimeScope {
 fn a_relay_guest_hears_every_event_of_a_host_turn_in_the_shared_conversation_in_order() {
 	run(async {
 		let mut guest = Guest::of_two_spaces("live-turn").await;
-		let app = &*guest.harness.app;
+		let app = &guest.harness.app.clone();
 		let scope = a_live_scope_of("c-mine");
 		let run = commands::a_live_run(&*app, scope.clone());
 		let turn = agent::EventTurn {
@@ -5376,7 +5383,7 @@ fn the_turn_ends_of(heard: &[Value], turn_id: &str) -> Vec<Value> {
 fn a_relay_guest_hears_the_end_of_a_host_turn_in_the_shared_conversation() {
 	run(async {
 		let mut guest = Guest::of_two_spaces("turn-ended").await;
-		let app = &*guest.harness.app;
+		let app = &guest.harness.app.clone();
 		let scope = a_live_scope_of("c-mine");
 		let run = commands::a_live_run(&*app, scope.clone());
 		let turn = agent::EventTurn {
@@ -5399,7 +5406,7 @@ fn a_relay_guest_hears_the_end_of_a_host_turn_in_the_shared_conversation() {
 fn a_relay_guest_hears_the_end_of_a_host_turn_once_when_its_evolution_lands_before_the_marker() {
 	run(async {
 		let mut guest = Guest::of_two_spaces("turn-ended-evolved").await;
-		let app = &*guest.harness.app;
+		let app = &guest.harness.app.clone();
 		let scope = a_live_scope_of("c-mine");
 		let run = commands::a_live_run(&*app, scope.clone());
 		let turn = agent::EventTurn {
@@ -5428,7 +5435,7 @@ fn a_relay_guest_hears_the_end_of_a_host_turn_once_when_its_evolution_lands_befo
 fn a_relay_guest_hears_the_state_change_of_a_main_conversation_of_the_shared_space() {
 	run(async {
 		let mut guest = Guest::of_two_spaces("main-state").await;
-		let app = &*guest.harness.app;
+		let app = &guest.harness.app.clone();
 		let database = db::open(&guest.effects.database);
 		let conversations = database.conversations();
 		let main = conversations
@@ -5456,7 +5463,7 @@ fn a_relay_guest_hears_the_state_change_of_a_main_conversation_of_the_shared_spa
 fn a_host_wide_connection_check_reaches_no_relay_guest_and_is_not_logged_as_kept_off() {
 	run(async {
 		let mut guest = Guest::of_two_spaces("host-wide-check").await;
-		let app = &*guest.harness.app;
+		let app = &guest.harness.app.clone();
 		let mut published = app.subscribe_frames();
 
 		commands::a_host_wide_announce(
@@ -5950,22 +5957,22 @@ impl Guest {
 	}
 
 	async fn bot_added(&self, bot_id: &str, space_id: &str) {
-		let app = &*self.harness.app;
-		bot_add_to_space(app, &*self.harness.app, bot_id.to_owned(), space_id.to_owned(), None)
+		let app = &self.harness.app.clone();
+		bot_add_to_space(app, bot_id.to_owned(), space_id.to_owned(), None)
 			.await
 			.expect("the bot is added");
 	}
 
 	async fn bot_moved(&self, bot_id: &str, space_id: &str) {
-		let app = &*self.harness.app;
-		bot_move_to_space(app, &*self.harness.app, bot_id.to_owned(), space_id.to_owned())
+		let app = &self.harness.app.clone();
+		bot_move_to_space(app, bot_id.to_owned(), space_id.to_owned())
 			.await
 			.expect("the bot is moved");
 	}
 
 	async fn bot_removed(&self, bot_id: &str, space_id: &str) {
-		let app = &*self.harness.app;
-		bot_remove_from_space(app, &*self.harness.app, bot_id.to_owned(), space_id.to_owned())
+		let app = &self.harness.app.clone();
+		bot_remove_from_space(app, bot_id.to_owned(), space_id.to_owned())
 			.await
 			.expect("the bot is removed");
 	}
@@ -6049,15 +6056,9 @@ fn a_relay_guest_hears_a_companion_moved_into_and_out_of_the_shared_space_only()
 fn a_relay_guest_hears_nothing_of_a_refused_companion_removal() {
 	run(async {
 		let mut guest = Guest::of_two_spaces("companion-removal-refused").await;
-		let app = &*guest.harness.app;
+		let app = &guest.harness.app.clone();
 
-		let refused = bot_remove_from_space(
-			app,
-			&*guest.harness.app,
-			"b-mine".to_owned(),
-			PERSONAL.to_owned(),
-		)
-		.await;
+		let refused = bot_remove_from_space(app, "b-mine".to_owned(), PERSONAL.to_owned()).await;
 		let heard = guest.first_event_after(vec![a_shared_space_marker()]).await;
 
 		assert!(refused.is_err());
