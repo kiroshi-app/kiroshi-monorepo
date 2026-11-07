@@ -9,7 +9,7 @@ use crate::db::repositories::space_children::SpaceChild::{
 use crate::db::{DatabaseError, DatabaseState};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub(super) enum Reach {
+pub enum Reach {
 	HostOnly,
 	Free,
 	Scoped(&'static [Held]),
@@ -109,7 +109,7 @@ const ROUTINE_AS_ID: &[Held] = &[child(Routine, "/id")];
 const ROUTINE_RUN_ID: &[Held] = &[child(RoutineRun, "/runId")];
 const SECTION_AS_ID: &[Held] = &[child(Section, "/id")];
 
-pub(super) const REACHES: &[(&str, Reach)] = &[
+pub const REACHES: &[(&str, Reach)] = &[
 	("account_state", Reach::HostOnly),
 	("account_sign_in", Reach::HostOnly),
 	("account_sign_out", Reach::HostOnly),
@@ -432,7 +432,7 @@ pub(super) const REACHES: &[(&str, Reach)] = &[
 ];
 
 #[derive(Clone, Copy)]
-pub(super) enum Audience {
+pub enum Audience {
 	HostOnly,
 	Scoped(Held),
 	ScopedOrHostWide(Held),
@@ -441,7 +441,7 @@ pub(super) enum Audience {
 const IN_THE_CONVERSATION: Audience = Audience::Scoped(child(Conversation, "/conversationId"));
 const IN_THE_SPACE: Audience = Audience::Scoped(space("/spaceId"));
 
-pub(super) const AUDIENCES: &[(&str, Audience)] = &[
+pub const AUDIENCES: &[(&str, Audience)] = &[
 	(crate::account::contract::CHANGED_EVENT, Audience::HostOnly),
 	(crate::devices::contract::APPROVAL_CHANGED_EVENT, Audience::HostOnly),
 	(crate::devices::contract::APPROVAL_REQUESTED_EVENT, Audience::HostOnly),

@@ -7,10 +7,8 @@ pub mod commands;
 pub mod contract;
 mod devices;
 pub mod handover;
-#[cfg(test)]
-mod member_socket;
 mod members;
-mod reach;
+pub mod reach;
 pub mod relay;
 pub mod replay;
 pub mod roster;

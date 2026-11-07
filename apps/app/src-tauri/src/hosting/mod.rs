@@ -1,3 +1,5 @@
 pub use kiroshi_core::hosting::*;
 pub mod authorship;
 pub mod commands;
+#[cfg(test)]
+mod member_socket;
