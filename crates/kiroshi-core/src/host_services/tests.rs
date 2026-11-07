@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use axum::http::header;
 use reqwest::{Client, RequestBuilder};
 use serde_json::{json, Value};
@@ -6,10 +8,9 @@ use super::*;
 use crate::host_api::invoke::RELAYED_MEMBER_HEADER;
 use crate::host_api::token;
 use crate::hosting::contract::REFUSED_TO_A_MEMBER;
+use crate::logging::DEV_IDENTIFIER_SUFFIX;
 use crate::removed_on_drop::RemovedOnDrop;
 use crate::test_core::runtime;
-
-const DEV_SUFFIX: &str = ".dev";
 
 struct Served {
 	core: Core,
@@ -21,7 +22,8 @@ struct Served {
 impl Served {
 	fn started(name: &str) -> Self {
 		crate::missions::github::installed_tls_provider();
-		let identifier = format!("com.kiroshi.{name}-{}{DEV_SUFFIX}", uuid::Uuid::new_v4());
+		let identifier =
+			format!("com.kiroshi.{name}-{}{DEV_IDENTIFIER_SUFFIX}", uuid::Uuid::new_v4());
 		let folder = std::env::temp_dir().join(&identifier);
 		let core = Core::new(&folder, identifier, runtime());
 		start(&core);
@@ -95,13 +97,13 @@ async fn a_stopped_host_api_no_longer_answers_its_token() {
 
 	stop(&served.core);
 
-	let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
+	let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
 	loop {
 		let answered = served.authorized("get_device_identity").send().await;
 		if answered.map_or(true, |answer| answer.status().as_u16() != 200) {
 			return;
 		}
 		assert!(tokio::time::Instant::now() < deadline, "the stopped host api still answers");
-		tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+		tokio::time::sleep(Duration::from_millis(20)).await;
 	}
 }
