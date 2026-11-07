@@ -429,9 +429,6 @@ pub const REACHES: &[(&str, Reach)] = &[
 	("install_update", Reach::HostOnly),
 	("release_notes", Reach::HostOnly),
 	("running_companions", Reach::HostOnly),
-	("restart_to_update", Reach::HostOnly),
-	("whats_new", Reach::HostOnly),
-	("acknowledge_whats_new", Reach::HostOnly),
 ];
 
 #[derive(Clone, Copy)]
@@ -736,5 +733,17 @@ impl Lookup<'_> {
 			self.relayed, self.shared_space_id
 		);
 		None
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn the_update_commands_with_no_tauri_twin_stay_unclassified_so_a_member_is_refused() {
+		for command in ["restart_to_update", "whats_new", "acknowledge_whats_new"] {
+			assert!(reach_of(command).is_none(), "{command} is classified");
+		}
 	}
 }
