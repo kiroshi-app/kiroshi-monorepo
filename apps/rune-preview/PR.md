@@ -303,3 +303,32 @@ By surface:
 - **Window, account rail.** In-process, the rail shows no signed-in account, because the account session lives in src-tauri.
 - **Window, onboarding profile.** In-process, onboarding starts from an empty profile. The Claude account, Claude import inventory and other onboarding reads (`dev_profile.rs`) still come from a running Kiroshi Dev, behind `--host-api` or `--dev-host`.
 
+
+## App skeleton: a kit crate and an app crate (OPE-1966)
+
+`apps/rune-preview` is a Cargo workspace with two members and one `Cargo.lock`. `cargo run --release --manifest-path apps/rune-preview/Cargo.toml` still launches the preview, and the binary keeps its name.
+
+- **`kit/` (`kiroshi-rune-kit`, San).** Pure views over plain data and tokens: `tokens`, `hues`, `icons`, `avatar`, `widgets`, `math`. Depends on rune, rune-kit, rune-motion and katex-native only: no kiroshi-core, tokio, ureq or tungstenite.
+- **`app/` (`kiroshi-rune-preview`, Ichi).** `App`, the host client, the source, every core call, the screens, the scenes and the binary. A library (`src/lib.rs`) plus the binary (`src/main.rs`), so a surface's state and the navigation compile before anything reads them.
+- **Navigation.** `app/src/navigation.rs`. `App::navigation` holds every open window, its id and its route: the main window, always open, and the secondary windows. `open`, `close`, `navigate` and `navigate_main` are the only writers. `navigate` or `close` on an id that isn't open returns `NavigationError::NotOpen` and changes nothing; closing the main window returns `NavigationError::MainWindowStaysOpen`. An id is never given twice. `Navigation` doesn't open native windows yet: a Rune secondary window is declared before `run` with its own state type, which the first ticket that opens one will wire.
+- **Surface state.** `App::surfaces` holds one `State` per surface, so a surface ticket adds its state in its own file without touching `app.rs`.
+
+| Surface | Kit file | App file |
+|---|---|---|
+| S1 chrome, tabs, tab detach, drag ghost | `kit/src/surfaces/s01_chrome.rs` | `app/src/surfaces/s01_chrome.rs` |
+| S2 rail, carousel, Space picker | `kit/src/surfaces/s02_rail.rs` | `app/src/surfaces/s02_rail.rs` |
+| S3 roster | `kit/src/surfaces/s03_roster.rs` | `app/src/surfaces/s03_roster.rs` |
+| S4 boot, onboarding, notices, bare layouts | `kit/src/surfaces/s04_boot.rs` | `app/src/surfaces/s04_boot.rs` |
+| S5 thread | `kit/src/surfaces/s05_thread.rs` | `app/src/surfaces/s05_thread.rs` |
+| S6 composer | `kit/src/surfaces/s06_composer.rs` | `app/src/surfaces/s06_composer.rs` |
+| S7 approvals | `kit/src/surfaces/s07_approvals.rs` | `app/src/surfaces/s07_approvals.rs` |
+| S8 missions | `kit/src/surfaces/s08_missions.rs` | `app/src/surfaces/s08_missions.rs` |
+| S9 routines | `kit/src/surfaces/s09_routines.rs` | `app/src/surfaces/s09_routines.rs` |
+| S10 agent settings, Skills, History | `kit/src/surfaces/s10_agent_settings.rs` | `app/src/surfaces/s10_agent_settings.rs` |
+| S11 Applications, Secrets | `kit/src/surfaces/s11_applications.rs` | `app/src/surfaces/s11_applications.rs` |
+| S12 person settings, search | `kit/src/surfaces/s12_person_settings.rs` | `app/src/surfaces/s12_person_settings.rs` |
+| S13 Space settings, sharing, join | `kit/src/surfaces/s13_space_settings.rs` | `app/src/surfaces/s13_space_settings.rs` |
+| S14 library, documents | `kit/src/surfaces/s14_library.rs` | `app/src/surfaces/s14_library.rs` |
+| S15 boards | `kit/src/surfaces/s15_boards.rs` | `app/src/surfaces/s15_boards.rs` |
+
+The screens that exist today (`onboarding.rs`, `conversations.rs`, `composer.rs`, `mission.rs`, `spike/`) stay in the app crate as they were: they read `App`, so they move into the kit only once a surface ticket splits them into a view over plain data.

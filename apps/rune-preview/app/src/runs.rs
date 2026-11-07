@@ -1,4 +1,5 @@
-use crate::avatar::Activity;
+use kiroshi_rune_kit::avatar::Activity;
+
 use crate::model::{ActivityStatus, AgentEvent, RuntimeScope, TurnState};
 
 const SEARCH_TOOLS: [&str; 6] = ["glob", "grep", "ls", "read", "webfetch", "websearch"];

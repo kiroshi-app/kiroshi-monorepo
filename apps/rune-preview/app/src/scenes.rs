@@ -3,7 +3,7 @@ use rune::TextEdit;
 use serde_json::json;
 
 use crate::app::{
-	App, Board, Live, Pane, Person, Ready, Screen, Thread, Workspace, connected, whole_thread,
+	App, Board, Live, Pane, Person, Ready, Thread, Workspace, connected, whole_thread,
 };
 use crate::dev_profile::{ClaudeLogin, DevProfile, ImportChoices, KiroshiSignIn};
 use crate::host::{Host, HostError, Profile};
@@ -11,6 +11,7 @@ use crate::longest;
 use crate::model::{Agent, Conversation, LastWord, Message, Participant, Role, Space};
 use crate::model::{AgentEvent, ClaudeItem, RuntimeScope};
 use crate::model::{ConversationMissions, MissionDetail, MissionOnBoard};
+use crate::navigation::Route;
 use crate::onboarding::{Account, Connect, Page, Step};
 use crate::source::Source;
 
@@ -46,12 +47,12 @@ pub const SCENES: &[Scene] = &[
 fn block_spike(s: &mut App) {
 	s.spike = crate::spike::editor::Editor::from_markdown(crate::spike::SAMPLE);
 	s.spike.focus(1, 0, 0);
-	s.screen = Screen::BlockSpike;
+	s.navigation.navigate_main(Route::BlockSpike);
 }
 
 fn welcome(s: &mut App, page: Page) {
 	s.dev_profile = Some(DevProfile::default());
-	s.screen = Screen::Onboarding(Step::Welcome(page));
+	s.navigation.navigate_main(Route::Onboarding(Step::Welcome(page)));
 }
 
 fn connect(s: &mut App, connect: Connect) {
@@ -62,7 +63,7 @@ fn connect(s: &mut App, connect: Connect) {
 		}),
 		..DevProfile::default()
 	});
-	s.screen = Screen::Onboarding(Step::Connect(connect));
+	s.navigation.navigate_main(Route::Onboarding(Step::Connect(connect)));
 }
 
 fn item(key: &str, name: &str, description: &str) -> ClaudeItem {
@@ -92,12 +93,12 @@ fn import_list(s: &mut App) {
 	};
 	s.import_selected = choices.keys();
 	s.dev_profile = Some(DevProfile { import: Some(choices), ..DevProfile::default() });
-	s.screen = Screen::Onboarding(Step::Import);
+	s.navigation.navigate_main(Route::Onboarding(Step::Import));
 }
 
 fn account(s: &mut App, account: Account) {
 	s.dev_profile = Some(DevProfile::default());
-	s.screen = Screen::Onboarding(Step::Account(account));
+	s.navigation.navigate_main(Route::Onboarding(Step::Account(account)));
 }
 
 fn account_signed_in(s: &mut App) {
@@ -108,11 +109,11 @@ fn account_signed_in(s: &mut App) {
 		}),
 		..DevProfile::default()
 	});
-	s.screen = Screen::Onboarding(Step::Account(Account::SignedOut));
+	s.navigation.navigate_main(Route::Onboarding(Step::Account(Account::SignedOut)));
 }
 
 fn host_failed(s: &mut App) {
-	s.screen = Screen::Conversations;
+	s.navigation.navigate_main(Route::Conversations);
 	s.workspace = Workspace::Failed(HostError::NotRunning { profile: Profile::Installed });
 }
 
@@ -193,7 +194,7 @@ fn workspace(s: &mut App) -> i64 {
 			solo_bot_id: Some((*id).into()),
 		})
 		.collect();
-	s.screen = Screen::Conversations;
+	s.navigation.navigate_main(Route::Conversations);
 	s.dev_profile = Some(DevProfile::default());
 	s.workspace = Workspace::Ready(Ready {
 		source: Source::Running(Host::detached()),
@@ -330,7 +331,7 @@ fn thread_mention(s: &mut App) {
 }
 
 fn read_the_installed_host_before_the_first_frame(s: &mut App) -> Option<Ready> {
-	s.screen = Screen::Conversations;
+	s.navigation.navigate_main(Route::Conversations);
 	match connected(Profile::Installed) {
 		Ok(ready) => Some(ready),
 		Err(failure) => {

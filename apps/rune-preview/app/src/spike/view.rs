@@ -8,12 +8,13 @@ use rune::{
 use rune_kit::syntax::{SyntaxTheme, highlight};
 use rune_kit::{PopupItem, PopupList};
 
+use kiroshi_rune_kit::tokens::{
+	RADIUS_MD, SPACING, TEXT_BUBBLE, TEXT_COMPACT_MONO, TEXT_SM_SEMIBOLD, TEXT_TITLE, Tokens,
+};
+
 use super::editor::{EditorBlock, KeyOutcome, SLASH_CHOICES, Shape};
 use super::model::LibraryBlockType;
 use crate::app::App;
-use crate::tokens::{
-	RADIUS_MD, SPACING, TEXT_BUBBLE, TEXT_COMPACT_MONO, TEXT_SM_SEMIBOLD, TEXT_TITLE, Tokens,
-};
 
 pub const EDITOR: &str = "spike-editor";
 pub const CARET_ANCHOR: &str = "spike-caret";
