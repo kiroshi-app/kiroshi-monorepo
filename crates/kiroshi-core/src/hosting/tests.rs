@@ -5481,26 +5481,6 @@ const GUEST: &str = "guest-account";
 const GUEST_EMAIL: &str = "guest@example.com";
 const HOST_NAME: &str = "Ada on the host";
 
-#[test]
-#[test]
-#[test]
-#[test]
-#[test]
-#[test]
-#[test]
-#[test]
-#[test]
-#[test]
-#[test]
-#[test]
-#[test]
-#[test]
-#[test]
-#[test]
-#[test]
-#[test]
-#[test]
-#[test]
 impl Guest {
 	async fn first_event(&mut self) -> Value {
 		next_text(&mut self.member, |frame| frame.get("event").is_some()).await
@@ -6144,11 +6124,15 @@ fn granted_to_the_host_person(name: &str) -> EnvScope {
 	EnvScope::Server { name: name.to_owned(), owner: EnvOwner::User }
 }
 
-#[test]
-#[test]
-#[test]
-#[test]
-#[test]
+fn names_of(listed: &Value) -> Vec<&str> {
+	listed
+		.as_array()
+		.expect("a list")
+		.iter()
+		.map(|item| item["name"].as_str().expect("a name"))
+		.collect()
+}
+
 fn relay_database(harness: &Harness) -> &crate::db::Database {
 	let state = harness.app.state::<DatabaseState>().inner();
 	state.as_ref().expect("the database")

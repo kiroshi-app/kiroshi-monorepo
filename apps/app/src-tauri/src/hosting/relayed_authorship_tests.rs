@@ -107,14 +107,22 @@ use crate::spaces::commands::{
 };
 use crate::spaces::contract::{Space as SpaceShown, SpaceError, DESCRIBED_EVENT};
 use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
+use crate::test_log::{capturing, warnings_naming};
+use kiroshi_core::environment::commands::env_list;
 
 const BEARER: &str = "bearer-that-never-leaves";
-
+const LOCAL_TOKEN: &str = "host-token-of-the-loopback";
 const PERSONAL: &str = "personal";
-
+const JOINED_SPACE_TOKEN: &str = "joined-space-token-of-the-host";
+const INVOKE_ROUTE: &str = "/api/invoke/{command}";
 const PATIENCE: Duration = Duration::from_secs(60);
-
 const OWNER_EMAIL: &str = "owner@example.com";
+const POLL_EVERY: Duration = Duration::from_millis(100);
+const MEMBER_ACCOUNT: &str = "member-account";
+const OWNER_ACCOUNT: &str = "owner";
+const OTHER_BEARER: &str = "bearer-of-another-account";
+const OTHER_ACCOUNT: &str = "another-account";
+const DEVICE_REGISTER_CONTEXT: &[u8] = b"kiroshi-device-register-v1";
 
 async fn me(headers: HeaderMap) -> Response {
 	let Some(account_id) = account_of(&headers) else {
@@ -155,12 +163,8 @@ fn run(test: impl std::future::Future<Output = ()>) {
 	tauri::async_runtime::block_on(test);
 }
 
-const OTHER_SPACE_REFUSAL: &str = "this command reaches outside the shared space";
-
 const GUEST: &str = "guest-account";
-
 const GUEST_EMAIL: &str = "guest@example.com";
-
 const HOST_NAME: &str = "Ada on the host";
 
 struct Authoring {
@@ -357,6 +361,7 @@ fn direct(window: &WebviewWindow<MockRuntime>, command: &str, body: Value) -> Va
 	.expect("the answer is JSON")
 }
 
+#[test]
 fn a_message_typed_on_the_host_and_one_relayed_from_a_guest_carry_two_authors_read_by_either_side()
 {
 	run(async {
@@ -385,6 +390,7 @@ fn a_message_typed_on_the_host_and_one_relayed_from_a_guest_carry_two_authors_re
 	});
 }
 
+#[test]
 fn one_account_reads_as_one_name_on_the_host_or_through_the_relay_and_each_line_names_its_computer()
 {
 	run(async {
@@ -432,6 +438,7 @@ fn one_account_reads_as_one_name_on_the_host_or_through_the_relay_and_each_line_
 	});
 }
 
+#[test]
 fn a_member_replying_with_an_excerpt_through_the_relay_stores_it_as_the_host_would() {
 	run(async {
 		let host = Authoring::new(Some(BEARER)).await;
@@ -462,6 +469,7 @@ fn a_member_replying_with_an_excerpt_through_the_relay_stores_it_as_the_host_wou
 	});
 }
 
+#[test]
 fn a_member_reads_the_web_sources_of_a_reply_through_the_relay_as_the_host_does() {
 	run(async {
 		let host = Authoring::new(Some(BEARER)).await;
@@ -518,6 +526,7 @@ fn a_member_reads_the_web_sources_of_a_reply_through_the_relay_as_the_host_does(
 	});
 }
 
+#[test]
 fn a_hosted_space_with_a_joined_member_names_every_member_to_a_session_and_marks_the_host() {
 	run(async {
 		let host = Authoring::new(Some(BEARER)).await;
@@ -565,6 +574,7 @@ fn a_hosted_space_with_a_joined_member_names_every_member_to_a_session_and_marks
 	});
 }
 
+#[test]
 fn a_relayed_frame_stores_its_roster_account_over_a_forged_author() {
 	run(async {
 		let host = Authoring::new(Some(BEARER)).await;
@@ -588,6 +598,7 @@ fn a_relayed_frame_stores_its_roster_account_over_a_forged_author() {
 	});
 }
 
+#[test]
 fn a_human_message_records_whether_it_was_written_here_or_came_through_the_relay() {
 	run(async {
 		let host = Authoring::new(Some(BEARER)).await;
@@ -634,6 +645,7 @@ fn a_human_message_records_whether_it_was_written_here_or_came_through_the_relay
 	});
 }
 
+#[test]
 fn a_message_written_on_a_signed_out_host_carries_no_account() {
 	run(async {
 		let host = Authoring::new(None).await;
@@ -652,6 +664,7 @@ fn a_message_written_on_a_signed_out_host_carries_no_account() {
 	});
 }
 
+#[test]
 fn a_guest_message_sent_on_a_turn_it_opens_lands_on_the_host_with_its_author() {
 	run(async {
 		let host = Authoring::new(Some(BEARER)).await;
@@ -673,6 +686,7 @@ fn a_guest_message_sent_on_a_turn_it_opens_lands_on_the_host_with_its_author() {
 	});
 }
 
+#[test]
 fn a_guest_message_refused_by_the_host_answers_a_text_naming_the_refusal() {
 	run(async {
 		let host = Authoring::new(Some(BEARER)).await;
@@ -692,6 +706,7 @@ fn a_guest_message_refused_by_the_host_answers_a_text_naming_the_refusal() {
 	});
 }
 
+#[test]
 fn a_guest_reads_the_same_conversation_page_as_the_host_solo_rows_included() {
 	run(async {
 		let host = Authoring::new(Some(BEARER)).await;
@@ -726,6 +741,7 @@ fn a_guest_reads_the_same_conversation_page_as_the_host_solo_rows_included() {
 	});
 }
 
+#[test]
 fn a_guest_reads_the_state_the_host_computed_for_each_conversation() {
 	run(async {
 		let host = Authoring::new(Some(BEARER)).await;
@@ -769,6 +785,7 @@ fn a_guest_reads_the_state_the_host_computed_for_each_conversation() {
 	});
 }
 
+#[test]
 fn a_guest_reads_the_same_solo_states_as_the_host() {
 	run(async {
 		let host = Authoring::new(Some(BEARER)).await;
@@ -791,6 +808,7 @@ fn a_guest_reads_the_same_solo_states_as_the_host() {
 	});
 }
 
+#[test]
 fn a_guest_reads_the_open_turn_of_a_conversation_until_it_completes() {
 	run(async {
 		let host = Authoring::new(Some(BEARER)).await;
@@ -840,6 +858,7 @@ fn a_guest_reads_the_open_turn_of_a_conversation_until_it_completes() {
 	});
 }
 
+#[test]
 fn a_guest_reads_the_open_turn_of_a_room_while_the_second_of_its_two_bots_still_writes() {
 	run(async {
 		let host = Authoring::new(Some(BEARER)).await;
@@ -914,6 +933,7 @@ fn a_guest_reads_the_open_turn_of_a_room_while_the_second_of_its_two_bots_still_
 	});
 }
 
+#[test]
 fn a_guest_reads_the_turn_as_not_working_once_a_handed_bot_misses_its_start_deadline() {
 	run(async {
 		let host = Authoring::new(Some(BEARER)).await;
@@ -983,6 +1003,7 @@ fn a_guest_reads_the_turn_as_not_working_once_a_handed_bot_misses_its_start_dead
 	});
 }
 
+#[test]
 fn a_guest_message_naming_a_turn_of_another_conversation_is_refused_and_not_written() {
 	run(async {
 		let host = Authoring::new(Some(BEARER)).await;
@@ -1012,6 +1033,7 @@ fn a_guest_message_naming_a_turn_of_another_conversation_is_refused_and_not_writ
 	});
 }
 
+#[test]
 fn a_relayed_guest_message_keeps_its_author_in_a_reopened_store_read_by_either_side() {
 	run(async {
 		let host = Authoring::new(Some(BEARER)).await;
@@ -1040,6 +1062,7 @@ fn a_relayed_guest_message_keeps_its_author_in_a_reopened_store_read_by_either_s
 	});
 }
 
+#[test]
 fn every_later_write_on_a_relayed_guest_message_or_its_turn_leaves_its_author_unchanged() {
 	run(async {
 		let host = Authoring::new(Some(BEARER)).await;
@@ -1123,6 +1146,7 @@ fn every_later_write_on_a_relayed_guest_message_or_its_turn_leaves_its_author_un
 	});
 }
 
+#[test]
 fn a_relayed_frame_stores_the_roster_account_whatever_its_plaintext_from_or_sender_says() {
 	run(async {
 		let host = Authoring::new(Some(BEARER)).await;
@@ -1230,15 +1254,7 @@ impl Authoring {
 	}
 }
 
-fn names_of(listed: &Value) -> Vec<&str> {
-	listed
-		.as_array()
-		.expect("a list")
-		.iter()
-		.map(|item| item["name"].as_str().expect("a name"))
-		.collect()
-}
-
+#[test]
 fn a_member_lists_a_bot_env_without_any_entry_defined_in_or_served_from_the_host_person() {
 	run(async {
 		let host = Authoring::new(Some(BEARER)).await;
@@ -1263,6 +1279,7 @@ fn a_member_lists_a_bot_env_without_any_entry_defined_in_or_served_from_the_host
 	});
 }
 
+#[test]
 fn a_relayed_env_list_of_a_server_of_the_host_person_answers_no_entry() {
 	run(async {
 		let host = Authoring::new(Some(BEARER)).await;
@@ -1282,6 +1299,7 @@ fn a_relayed_env_list_of_a_server_of_the_host_person_answers_no_entry() {
 	});
 }
 
+#[test]
 fn a_member_reads_no_application_served_by_a_grant_of_the_host_person_nor_one_of_its_plugin() {
 	run(async {
 		let host = Authoring::new(Some(BEARER)).await;
@@ -1309,6 +1327,7 @@ fn a_member_reads_no_application_served_by_a_grant_of_the_host_person_nor_one_of
 	});
 }
 
+#[test]
 fn a_relayed_status_of_the_host_person_plugin_answers_no_row() {
 	run(async {
 		let host = Authoring::new(Some(BEARER)).await;
@@ -1326,6 +1345,7 @@ fn a_relayed_status_of_the_host_person_plugin_answers_no_row() {
 	});
 }
 
+#[test]
 fn a_member_disconnecting_through_a_bot_served_by_a_grant_of_the_host_person_is_refused() {
 	run(async {
 		let host = Authoring::new(Some(BEARER)).await;
