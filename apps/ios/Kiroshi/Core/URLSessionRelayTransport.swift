@@ -2,8 +2,18 @@ import Foundation
 import Synchronization
 
 struct URLSessionRelayTransport: RelayTransport {
+    // Keep in step with the relay's MAX_FRAME_BYTES (kiroshi-cloud)
+    // and the desktop sockets' max_frame_size (hosting::relay::opened).
+    static let maximumFrameBytes = 64 * 1024 * 1024
+
+    static func webSocketTask(for request: URLRequest) -> URLSessionWebSocketTask {
+        let task = URLSession.shared.webSocketTask(with: request)
+        task.maximumMessageSize = maximumFrameBytes
+        return task
+    }
+
     func open(_ request: URLRequest) async throws -> any RelaySocket {
-        let socket = URLSessionRelaySocket(task: URLSession.shared.webSocketTask(with: request))
+        let socket = URLSessionRelaySocket(task: Self.webSocketTask(for: request))
         socket.task.resume()
         do {
             try await socket.ping()
