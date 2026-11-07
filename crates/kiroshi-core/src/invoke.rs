@@ -18,12 +18,14 @@ use crate::agent::contract::{AgentCommand, PermissionDecision, RuntimeScope, Sub
 use crate::agent::sign_in::{agent_sign_in, agent_sign_in_cancel, agent_sign_in_code};
 use crate::attachments::commands::chat_store_attachments;
 use crate::attachments::contract::SubmittedAttachment;
+use crate::bundles::ApplicationMark;
 use crate::claude_import::commands::{claude_import_inventory, claude_import_run};
 use crate::companions::launch::launch_outcome;
 use crate::conversations::awaited_runs::{
 	conversation_claim_unseen_drops, conversation_serve_awaited_runs,
 };
 use crate::conversations::commands::*;
+use crate::conversations::contract::SkillDraft;
 use crate::conversations::contract::{
 	BotDraft, BotIdentity, NewAssistantMessage, NewTurn, NewUserMessage, SentMessage,
 	SummonsDropReason, TerminalCompletion,
@@ -40,6 +42,7 @@ use crate::mcp_oauth::commands::{
 };
 use crate::missions::commands::*;
 use crate::missions::run_claims::{mission_run_claim, mission_run_release};
+use crate::plugins::contract::PluginScope;
 use crate::search::contract::MessageSearchQuery;
 use crate::sections::commands::*;
 use crate::sections::contract::RosterPin;
@@ -429,6 +432,35 @@ table! { core, client;
 		answered(crate::search::commands::search_catalogue(core, query, space_id).await);
 	search_recent(space_id: String) =>
 		answered(crate::search::commands::search_recent(core, space_id).await);
+
+	plugin_skills(scope: PluginScope) =>
+		answered(crate::plugins::commands::plugin_skills(core, scope).await);
+	plugin_create_skill(scope: PluginScope, draft: SkillDraft) =>
+		answered(crate::plugins::commands::plugin_create_skill(core, scope, draft).await);
+	plugin_update_skill(scope: PluginScope, skill_id: String, draft: SkillDraft) =>
+		answered(crate::plugins::commands::plugin_update_skill(core, scope, skill_id, draft).await);
+	plugin_set_skill_preloaded(scope: PluginScope, skill_id: String, is_preloaded: bool) =>
+		answered(crate::plugins::commands::plugin_set_skill_preloaded(core, scope, skill_id, is_preloaded).await);
+	plugin_delete_skill(scope: PluginScope, skill_id: String) =>
+		answered(crate::plugins::commands::plugin_delete_skill(core, scope, skill_id).await);
+	plugin_skill_file(scope: PluginScope, skill_id: String, path: String) =>
+		answered(crate::plugins::commands::plugin_skill_file(core, scope, skill_id, path).await);
+	plugin_write_skill_file(scope: PluginScope, skill_id: String, path: String, text: String) =>
+		answered(crate::plugins::commands::plugin_write_skill_file(core, scope, skill_id, path, text).await);
+	plugin_delete_skill_file(scope: PluginScope, skill_id: String, path: String) =>
+		answered(crate::plugins::commands::plugin_delete_skill_file(core, scope, skill_id, path).await);
+	plugin_mcp_servers(scope: PluginScope) =>
+		answered(crate::plugins::commands::plugin_mcp_servers(core, scope).await);
+	plugin_set_mcp_server(scope: PluginScope, name: String, config: JsonValue, mark: Option<ApplicationMark>) =>
+		answered(crate::plugins::commands::plugin_set_mcp_server(core, scope, name, config, mark).await);
+	plugin_delete_mcp_server(scope: PluginScope, name: String) =>
+		answered(crate::plugins::commands::plugin_delete_mcp_server(core, scope, name).await);
+	plugin_history(scope: PluginScope) =>
+		answered(crate::plugins::commands::plugin_history(core, scope).await);
+	plugin_history_diff(scope: PluginScope, oldest_commit_id: String, newest_commit_id: String) =>
+		answered(crate::plugins::commands::plugin_history_diff(core, scope, oldest_commit_id, newest_commit_id).await);
+	plugin_revert(scope: PluginScope, oldest_commit_id: String, newest_commit_id: String) =>
+		answered(crate::plugins::commands::plugin_revert(core, scope, oldest_commit_id, newest_commit_id).await);
 }
 
 pub async fn dispatch(core: &Core, command: &str, arguments: Value) -> Option<Answer> {
@@ -553,7 +585,7 @@ mod tests {
 
 	const OS_SHELL_MODULES: [&str; 4] = ["badge", "notifications", "updates", "window_controls"];
 
-	const NOT_YET_IN_CORE: [&str; 106] = [
+	const NOT_YET_IN_CORE: [&str; 92] = [
 		"application_catalogue",
 		"application_search",
 		"application_named",
@@ -621,20 +653,6 @@ mod tests {
 		"joined_space_describe",
 		"join_link_listen",
 		"joined_space_members",
-		"plugin_skills",
-		"plugin_create_skill",
-		"plugin_update_skill",
-		"plugin_set_skill_preloaded",
-		"plugin_delete_skill",
-		"plugin_skill_file",
-		"plugin_write_skill_file",
-		"plugin_delete_skill_file",
-		"plugin_mcp_servers",
-		"plugin_set_mcp_server",
-		"plugin_delete_mcp_server",
-		"plugin_history",
-		"plugin_history_diff",
-		"plugin_revert",
 		"routine_trigger_sources",
 		"routine_trigger_sources_of_space",
 		"routine_create",
