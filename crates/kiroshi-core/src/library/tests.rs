@@ -2215,7 +2215,7 @@ async fn an_update_to_the_landed_name_racing_a_rename_returns_only_after_the_ren
 	crate::test_core::listen_to(&*app, events::LIBRARY_DOCUMENT_RENAMED.name(), move |event| {
 		let renamed: LibraryDocumentRenamed =
 			serde_json::from_str(event).expect("a rename payload");
-		let (racing, handle, library) = (Arc::clone(&heard), handle, library.clone());
+		let (racing, handle, library) = (Arc::clone(&heard), handle.clone(), library.clone());
 		let (space_id, told) = (shared_space.clone(), told.clone());
 		let landed = renamed.name.clone();
 		std::thread::spawn(move || {

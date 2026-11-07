@@ -1,10 +1,60 @@
 use image::{Rgb, RgbImage};
 
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
 use super::*;
+use crate::core_context::{ChosenPath, Copied, Desktop};
 use crate::test_core::{a_core_of_its_own, CoreOfItsOwn};
 
+#[derive(Clone, Default)]
+struct RenderWindows(Arc<Mutex<Vec<String>>>);
+
+impl RenderWindows {
+	fn is_open(&self, label: &str) -> bool {
+		self.0.lock().expect("the windows").iter().any(|open| open == label)
+	}
+}
+
+impl Desktop for RenderWindows {
+	fn open_url(&self, _url: &str) -> Result<(), String> {
+		Ok(())
+	}
+
+	fn raise_main_window(&self) {}
+
+	fn open_render_window(&self, window: &RenderWindow) -> Result<(), String> {
+		self.0.lock().expect("the windows").push(window.label.clone());
+		Ok(())
+	}
+
+	fn close_window(&self, label: &str) -> Result<(), String> {
+		self.0.lock().expect("the windows").retain(|open| open != label);
+		Ok(())
+	}
+
+	fn reveal(&self, _path: &Path) -> Result<(), String> {
+		Ok(())
+	}
+
+	fn copy(&self, _copied: Copied) -> Result<(), String> {
+		Ok(())
+	}
+
+	fn chosen_save_path(&self, _suggested: String) -> ChosenPath {
+		Box::pin(async { Ok(None::<PathBuf>) })
+	}
+}
+
 fn an_app(name: &str) -> CoreOfItsOwn {
-	a_core_of_its_own(&format!("screenshot-{name}"))
+	an_app_with_windows(name).0
+}
+
+fn an_app_with_windows(name: &str) -> (CoreOfItsOwn, RenderWindows) {
+	let app = a_core_of_its_own(&format!("screenshot-{name}"));
+	let windows = RenderWindows::default();
+	app.install_desktop(windows.clone());
+	(app, windows)
 }
 
 fn a_document() -> ScreenshotTarget {
@@ -42,11 +92,11 @@ fn noise(edge: u32) -> String {
 	}))
 }
 
-fn pending_ids(app: &AppHandle<MockRuntime>) -> Vec<String> {
+fn pending_ids(app: &Core) -> Vec<String> {
 	screenshots(app).held().keys().cloned().collect()
 }
 
-async fn requests_in_flight(app: &AppHandle<MockRuntime>, count: usize) -> Vec<String> {
+async fn requests_in_flight(app: &Core, count: usize) -> Vec<String> {
 	loop {
 		let ids = pending_ids(app);
 		if ids.len() == count {
@@ -56,8 +106,8 @@ async fn requests_in_flight(app: &AppHandle<MockRuntime>, count: usize) -> Vec<S
 	}
 }
 
-fn window_of(app: &AppHandle<MockRuntime>, request_id: &str) -> WebviewWindow<MockRuntime> {
-	app.get_webview_window(&window_label(request_id)).expect("the hidden window is open")
+fn window_of(request_id: &str) -> ClientId {
+	ClientId::new(window_label(request_id))
 }
 
 fn rendered(png: String) -> ScreenshotRendered {
@@ -67,19 +117,20 @@ fn rendered(png: String) -> ScreenshotRendered {
 #[tokio::test(flavor = "current_thread")]
 async fn concurrent_screenshots_each_answer_the_image_their_own_window_rendered() {
 	let app = an_app("concurrent");
-	let handle = &*app;
-	let shoot = |handle: AppHandle<MockRuntime>| {
-		tokio::spawn(async move { render(&*handle, "personal", Scale(1), a_document()).await })
+	let handle = app.core().clone();
+	let shoot = |handle: Core| {
+		tokio::spawn(async move { render(&handle, "personal", Scale(1), a_document()).await })
 	};
-	let (first, second) = (shoot(handle), shoot(handle));
+	let (first, second) = (shoot(handle.clone()), shoot(handle.clone()));
 	let ids = requests_in_flight(&handle, 2).await;
 	let size_of = |id: &String| if *id == ids[0] { (10, 20) } else { (30, 40) };
 	for id in ids.iter().rev() {
-		let job = library_screenshot_job(window_of(&handle, id)).expect("the job is handed");
+		let job = library_screenshot_job(&handle, &window_of(id)).expect("the job is handed");
 		assert_eq!(job.request_id, *id);
 		let (width, height) = size_of(id);
 		library_screenshot_answer(
-			window_of(&handle, id),
+			&handle,
+			&window_of(id),
 			id.clone(),
 			rendered(drawn(width, height)),
 		)
@@ -99,14 +150,14 @@ async fn concurrent_screenshots_each_answer_the_image_their_own_window_rendered(
 
 #[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn a_render_silent_for_15_s_is_refused_as_render_timed_out_and_its_request_dropped() {
-	let app = an_app("timeout");
-	let handle = &*app;
+	let (app, windows) = an_app_with_windows("timeout");
+	let handle = app.core().clone();
 	let shot = tokio::spawn({
-		let handle = handle;
-		async move { render(&*handle, "personal", Scale(1), a_document()).await }
+		let handle = handle.clone();
+		async move { render(&handle, "personal", Scale(1), a_document()).await }
 	});
 	let id = requests_in_flight(&handle, 1).await.remove(0);
-	assert!(handle.get_webview_window(&window_label(&id)).is_some());
+	assert!(windows.is_open(&window_label(&id)));
 
 	let refused = shot.await.expect("the task ends").expect_err("timed out");
 
@@ -117,29 +168,32 @@ async fn a_render_silent_for_15_s_is_refused_as_render_timed_out_and_its_request
 #[tokio::test(flavor = "current_thread")]
 async fn a_window_reads_and_answers_only_its_own_request() {
 	let app = an_app("own-request");
-	let handle = &*app;
-	let shoot = |handle: AppHandle<MockRuntime>| {
-		tokio::spawn(async move { render(&*handle, "personal", Scale(1), a_document()).await })
+	let handle = app.core().clone();
+	let shoot = |handle: Core| {
+		tokio::spawn(async move { render(&handle, "personal", Scale(1), a_document()).await })
 	};
-	let (first, second) = (shoot(handle), shoot(handle));
+	let (first, second) = (shoot(handle.clone()), shoot(handle.clone()));
 	let ids = requests_in_flight(&handle, 2).await;
-	let main = WebviewWindowBuilder::new(&handle, "main", WebviewUrl::default())
-		.build()
-		.expect("the main window opens");
+	let main = ClientId::new("main");
 
 	let forged = library_screenshot_answer(
-		window_of(&handle, &ids[0]),
+		&handle,
+		&window_of(&ids[0]),
 		ids[1].clone(),
 		rendered(drawn(2, 1)),
 	);
-	let from_main = library_screenshot_answer(main.clone(), ids[0].clone(), rendered(drawn(2, 1)));
+	let from_main =
+		library_screenshot_answer(&handle, &main, ids[0].clone(), rendered(drawn(2, 1)));
 
 	assert_eq!(forged, Err(ScreenshotRequestError::UnknownRequest { request_id: ids[1].clone() }));
 	assert_eq!(from_main, Err(ScreenshotRequestError::NotAScreenshotWindow));
-	assert_eq!(library_screenshot_job(main), Err(ScreenshotRequestError::NotAScreenshotWindow));
+	assert_eq!(
+		library_screenshot_job(&handle, &main),
+		Err(ScreenshotRequestError::NotAScreenshotWindow)
+	);
 	for id in &ids {
 		let failure = ScreenshotRendered::Failed { reason: "no canvas".to_owned() };
-		library_screenshot_answer(window_of(&handle, id), id.clone(), failure).expect("answered");
+		library_screenshot_answer(&handle, &window_of(id), id.clone(), failure).expect("answered");
 	}
 	for shot in [first, second] {
 		let refused = shot.await.expect("the task ends").expect_err("failed");

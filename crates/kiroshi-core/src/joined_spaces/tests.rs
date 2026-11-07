@@ -1206,7 +1206,7 @@ fn a_join_a_leave_and_a_sign_out_complete_while_the_instance_list_never_answers(
 		let other = tokio::time::timeout(
 			PATIENCE,
 			relay::joined(
-				app,
+				&app,
 				OTHER_INSTANCE.to_owned(),
 				Some("Harbour".into()),
 				None,
@@ -1214,8 +1214,8 @@ fn a_join_a_leave_and_a_sign_out_complete_while_the_instance_list_never_answers(
 			),
 		)
 		.await;
-		let left = tokio::time::timeout(PATIENCE, relay::left(app, &joined.id)).await;
-		let signed_out = tokio::time::timeout(PATIENCE, relay::signed_out(app)).await;
+		let left = tokio::time::timeout(PATIENCE, relay::left(&app, &joined.id)).await;
+		let signed_out = tokio::time::timeout(PATIENCE, relay::signed_out(&app)).await;
 		reconciliation.abort();
 
 		assert!(other.expect("the join is not held by the stalled list").is_ok());
@@ -1241,10 +1241,10 @@ fn a_join_and_a_leave_answer_while_the_relay_never_answers_a_sign_out() {
 		let app = member.app.core().clone();
 		let again = tokio::time::timeout(
 			PATIENCE,
-			relay::joined(app, INSTANCE.to_owned(), None, None, Default::default()),
+			relay::joined(&app, INSTANCE.to_owned(), None, None, Default::default()),
 		)
 		.await;
-		let left = tokio::time::timeout(PATIENCE, relay::left(app, &joined.id)).await;
+		let left = tokio::time::timeout(PATIENCE, relay::left(&app, &joined.id)).await;
 		sign_out.abort();
 
 		let again = again.expect("the join is not held by the stalled sign-out");
@@ -1954,7 +1954,7 @@ fn a_description_the_host_never_answers_is_host_offline_and_leaves_the_row_uncha
 
 		let app = member.app.core().clone();
 		let silent =
-			joined_space_describe(app, joined.id.clone(), "Lab".to_owned(), Some(200)).await;
+			joined_space_describe(&app, joined.id.clone(), "Lab".to_owned(), Some(200)).await;
 
 		assert_eq!(silent, Err(JoinedSpaceError::HostOffline { id: joined.id.clone() }));
 		assert_eq!(member.listed().await, before);
@@ -2037,7 +2037,7 @@ fn a_description_the_link_drops_before_its_event_still_lists_the_answered_name_a
 		member.relay.hosting(dropping);
 
 		let app = member.app.core().clone();
-		let answered = joined_space_describe(app, joined.id.clone(), "Lab".to_owned(), Some(200))
+		let answered = joined_space_describe(&app, joined.id.clone(), "Lab".to_owned(), Some(200))
 			.await
 			.expect("the description");
 
