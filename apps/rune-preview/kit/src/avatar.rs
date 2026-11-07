@@ -3,7 +3,7 @@ use std::f64::consts::{PI, SQRT_2, TAU};
 use std::sync::OnceLock;
 
 use rune::color::srgb_decode;
-use rune::{Color, El, LineCap, Path, Shape, canvas};
+use rune::{Color, El, LineCap, Path, Shape, TextStyle, canvas, el, text};
 
 use crate::hues::Role;
 use crate::tokens::{Tokens, srgb, tone};
@@ -49,6 +49,42 @@ impl<'a> Face<'a> {
 		}
 		canvas(glazed(shape, &outline, side, dark)).size(size, size).label(self.name)
 	}
+}
+
+pub struct Person<'a> {
+	pub name: &'a str,
+}
+
+impl Person<'_> {
+	pub fn draw(&self, size: f32, t: &Tokens) -> El {
+		let font_size = (size * INITIALS_RATIO).round();
+		let initials = TextStyle { line_height: font_size, ..TextStyle::new(font_size, 500.0) };
+		el().size(size, size)
+			.radius(size / 2.0)
+			.fill(t.sidebar_accent)
+			.center()
+			.label(display_name(self.name))
+			.child(text(initials_of(self.name)).font(initials).color(t.sidebar_accent_foreground))
+	}
+}
+
+const INITIALS_RATIO: f32 = 0.4;
+const FALLBACK_NAME: &str = "You";
+
+fn display_name(name: &str) -> &str {
+	match name.trim() {
+		"" => FALLBACK_NAME,
+		trimmed => trimmed,
+	}
+}
+
+pub fn initials_of(name: &str) -> String {
+	display_name(name)
+		.split_whitespace()
+		.take(2)
+		.filter_map(|word| word.chars().next())
+		.collect::<String>()
+		.to_uppercase()
 }
 
 const FIELD_CELLS: usize = 16;
@@ -565,6 +601,14 @@ mod tests {
 				Tone::Full => 'f',
 			})
 			.collect()
+	}
+
+	#[test]
+	fn a_person_wears_the_initials_of_two_words_or_of_you() {
+		assert_eq!(initials_of("alex martin"), "AM");
+		assert_eq!(initials_of("Ana María Lopez"), "AM");
+		assert_eq!(initials_of("  "), "Y");
+		assert_eq!(initials_of("émile"), "É");
 	}
 
 	#[test]

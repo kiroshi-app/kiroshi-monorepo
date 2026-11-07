@@ -4,10 +4,86 @@ use std::f64::consts::PI;
 pub enum Role {
 	Bubble,
 	Accent,
+	NewLine,
 	AvatarInk,
 	AvatarGround,
 	ConversationIcon,
 	ConversationIconForeground,
+}
+
+impl Role {
+	pub const ALL: [Role; 7] = [
+		Role::Bubble,
+		Role::Accent,
+		Role::NewLine,
+		Role::AvatarInk,
+		Role::AvatarGround,
+		Role::ConversationIcon,
+		Role::ConversationIconForeground,
+	];
+
+	pub fn css_name(self) -> &'static str {
+		match self {
+			Role::Bubble => "bubble",
+			Role::Accent => "accent",
+			Role::NewLine => "new-line",
+			Role::AvatarInk => "avatar-ink",
+			Role::AvatarGround => "avatar-ground",
+			Role::ConversationIcon => "conversation-icon",
+			Role::ConversationIconForeground => "conversation-icon-foreground",
+		}
+	}
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Preset {
+	Red,
+	Orange,
+	Yellow,
+	Green,
+	Cyan,
+	Blue,
+	Purple,
+	Pink,
+}
+
+impl Preset {
+	pub const ALL: [Preset; 8] = [
+		Preset::Red,
+		Preset::Orange,
+		Preset::Yellow,
+		Preset::Green,
+		Preset::Cyan,
+		Preset::Blue,
+		Preset::Purple,
+		Preset::Pink,
+	];
+
+	pub fn hue(self) -> f32 {
+		match self {
+			Preset::Red => 42.0,
+			Preset::Orange => 63.0,
+			Preset::Yellow => 82.0,
+			Preset::Green => 132.0,
+			Preset::Cyan => 186.0,
+			Preset::Blue => 257.0,
+			Preset::Purple => 296.0,
+			Preset::Pink => 358.0,
+		}
+	}
+
+	pub fn css_name(self) -> &'static str {
+		match self {
+			Preset::Red => "red",
+			Preset::Orange => "orange",
+			Preset::Yellow => "yellow",
+			Preset::Green => "green",
+			Preset::Cyan => "cyan",
+			Preset::Blue => "blue",
+			Preset::Purple => "purple",
+			Preset::Pink => "pink",
+		}
+	}
 }
 
 struct Yellow {
@@ -47,6 +123,7 @@ fn spec(dark: bool, role: Role) -> ToneSpec {
 			yellow: Some(Yellow { hue: 75.0, lightness: 0.54, chroma: 0.115 }),
 			..plain(0.5, 0.13)
 		},
+		(false, Role::NewLine) => plain(0.8, 0.06),
 		(false, Role::AvatarInk) => plain(0.56, 0.13),
 		(false, Role::AvatarGround) => plain(0.93, 0.035),
 		(false, Role::ConversationIcon) => plain(0.92, 0.033),
@@ -59,11 +136,16 @@ fn spec(dark: bool, role: Role) -> ToneSpec {
 			contrast: Some(Contrast { with: [0x12, 0x12, 0x13], ratio: 4.5 }),
 			..plain(0.78, 0.12)
 		},
+		(true, Role::NewLine) => plain(0.4, 0.06),
 		(true, Role::AvatarInk) => plain(0.8, 0.12),
 		(true, Role::AvatarGround) => plain(0.3, 0.04),
 		(true, Role::ConversationIcon) => plain(0.385, 0.033),
 		(true, Role::ConversationIconForeground) => plain(0.8, 0.054),
 	}
+}
+
+pub fn bubble_foreground(dark: bool) -> [u8; 3] {
+	spec(dark, Role::Bubble).contrast.map_or([0, 0, 0], |contrast| contrast.with)
 }
 
 pub fn tone(hue: f32, dark: bool, role: Role) -> [u8; 3] {
@@ -171,12 +253,73 @@ fn contrast_ratio(first: [u8; 3], second: [u8; 3]) -> f64 {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::css;
+
+	fn hex(bytes: [u8; 3]) -> String {
+		format!("#{:02x}{:02x}{:02x}", bytes[0], bytes[1], bytes[2])
+	}
 
 	#[test]
-	fn the_presets_match_the_css_tokens() {
-		assert_eq!(tone(257.0, false, Role::Accent), [0x2d, 0x62, 0xac]);
-		assert_eq!(tone(42.0, false, Role::Bubble), [0xff, 0xc5, 0xaf]);
-		assert_eq!(tone(82.0, false, Role::AvatarInk), [0x96, 0x6c, 0x00]);
-		assert_eq!(tone(358.0, false, Role::AvatarGround), [0xfd, 0xdf, 0xe8]);
+	fn every_preset_tone_is_its_data_hue_value_in_both_themes() {
+		let sheet = css::Sheet::read();
+		for dark in [false, true] {
+			let declared = sheet.theme(dark);
+			for preset in Preset::ALL {
+				for role in Role::ALL {
+					let name = format!("--hue-{}-{}", preset.css_name(), role.css_name());
+					let Some(value) = declared.get(&name) else {
+						panic!("{name} is missing from tokens.css");
+					};
+					assert_eq!(&hex(tone(preset.hue(), dark, role)), value, "{name}, dark: {dark}");
+				}
+			}
+		}
+	}
+
+	#[test]
+	fn arbitrary_hues_follow_the_typescript_recipe() {
+		let from_hue_style: [(f32, bool, [&str; 7]); 6] = [
+			(
+				15.0,
+				false,
+				["#ffc2c5", "#9f3e4b", "#e2afb1", "#b3505b", "#ffdfe0", "#fadcdd", "#70494c"],
+			),
+			(
+				15.0,
+				true,
+				["#833b43", "#fa969f", "#643a3d", "#ff9ea6", "#402527", "#543d3e", "#deb0b3"],
+			),
+			(
+				210.0,
+				false,
+				["#99e2f0", "#00707e", "#90c9d3", "#008394", "#ceeff5", "#ccebf1", "#2d5e66"],
+			),
+			(
+				210.0,
+				true,
+				["#005a66", "#3ecce2", "#16505a", "#47d2e8", "#113339", "#2e494d", "#95c8d1"],
+			),
+			(
+				320.0,
+				false,
+				["#ebc5f3", "#834791", "#cfb2d6", "#9558a3", "#f3e1f7", "#efdef3", "#634c68"],
+			),
+			(
+				320.0,
+				true,
+				["#6d4177", "#d99ee7", "#563d5c", "#e0a4ee", "#37273a", "#4c3e4f", "#ceb3d4"],
+			),
+		];
+		for (hue, dark, expected) in from_hue_style {
+			for (role, value) in Role::ALL.into_iter().zip(expected) {
+				assert_eq!(hex(tone(hue, dark, role)), value, "hue {hue}, {role:?}, dark: {dark}");
+			}
+		}
+	}
+
+	#[test]
+	fn the_bubble_foreground_is_the_contrast_reference_of_the_bubble() {
+		assert_eq!(bubble_foreground(false), [0x02, 0x02, 0x02]);
+		assert_eq!(bubble_foreground(true), [0xf5, 0xf5, 0xf5]);
 	}
 }
