@@ -2219,7 +2219,7 @@ async fn an_update_to_the_landed_name_racing_a_rename_returns_only_after_the_ren
 		let (space_id, told) = (shared_space.clone(), told.clone());
 		let landed = renamed.name.clone();
 		std::thread::spawn(move || {
-			let result = apply_update(&*handle, &library, &space_id, &landed, "AAA=");
+			let result = apply_update(&handle, &library, &space_id, &landed, "AAA=");
 			racing.lock().expect("the order").push(format!("updated {landed}"));
 			told.send(result).expect("the test listens");
 		});

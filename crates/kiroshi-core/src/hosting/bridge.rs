@@ -548,9 +548,10 @@ mod tests {
 
 	#[test]
 	fn a_plugin_command_on_the_host_person_plugin_is_refused_and_on_a_space_or_bot_forwarded() {
-		let plugin_commands: Vec<String> = registered_commands()
-			.into_iter()
+		let plugin_commands: Vec<String> = crate::invoke::COMMANDS
+			.iter()
 			.filter(|command| command.starts_with("plugin_"))
+			.map(|command| (*command).to_owned())
 			.collect();
 		assert!(!plugin_commands.is_empty());
 

@@ -571,7 +571,7 @@ fn changes_heard(app: &crate::core_context::Core) -> Arc<Mutex<Vec<Value>>> {
 fn heard_on(app: &crate::core_context::Core, event: &'static str) -> Arc<Mutex<Vec<Value>>> {
 	let heard = Arc::new(Mutex::new(Vec::new()));
 	let hearing = Arc::clone(&heard);
-	crate::test_core::listen_to(&*app, event, move |event| {
+	crate::test_core::listen_to(&app, event, move |event| {
 		let payload = serde_json::from_str(event).expect("a json payload");
 		hearing.lock().expect("the events").push(payload);
 	});
@@ -1012,8 +1012,8 @@ async fn unlisted_during_a_pause(member: &Member, pause: Duration) -> UnlistedDu
 	assert!(guests.is_running(&joined.id));
 	let pause_ends = Instant::now() + pause;
 	guests.cloud().rate_limited("/instances", pause);
-	let app = &member.app.clone();
-	let reconciliation = tokio::spawn(async move { relay::reconciled(&*app).await });
+	let app = member.app.core().clone();
+	let reconciliation = tokio::spawn(async move { relay::reconciled(&app).await });
 	until("the unlisted guest to stop", || async {
 		(!guests.is_running(&joined.id)).then_some(())
 	})
@@ -1195,14 +1195,14 @@ fn a_join_a_leave_and_a_sign_out_complete_while_the_instance_list_never_answers(
 			room.is_instance_list_stalled = true;
 			room.instance_reads
 		};
-		let app = &member.app.clone();
-		let reconciliation = tokio::spawn(async move { relay::reconciled(&*app).await });
+		let app = member.app.core().clone();
+		let reconciliation = tokio::spawn(async move { relay::reconciled(&app).await });
 		until("the instance list to be asked", || async {
 			(member.relay.room().instance_reads > reads).then_some(())
 		})
 		.await;
 
-		let app = &member.app.clone();
+		let app = member.app.core().clone();
 		let other = tokio::time::timeout(
 			PATIENCE,
 			relay::joined(
@@ -1231,14 +1231,14 @@ fn a_join_and_a_leave_answer_while_the_relay_never_answers_a_sign_out() {
 		let joined = online_with_two_members(&member, &member.host()).await;
 		session::restore(member.app.clone()).await;
 		member.relay.room().is_sign_out_stalled = true;
-		let app = &member.app.clone();
-		let sign_out = tokio::spawn(async move { session::sign_out(&*app).await });
+		let app = member.app.core().clone();
+		let sign_out = tokio::spawn(async move { session::sign_out(&app).await });
 		until("the stalled device deletion", || async {
 			(!member.relay.room().sign_out_calls.is_empty()).then_some(())
 		})
 		.await;
 
-		let app = &member.app.clone();
+		let app = member.app.core().clone();
 		let again = tokio::time::timeout(
 			PATIENCE,
 			relay::joined(app, INSTANCE.to_owned(), None, None, Default::default()),
@@ -1952,7 +1952,7 @@ fn a_description_the_host_never_answers_is_host_offline_and_leaves_the_row_uncha
 		let joined = online_and_greeted(&member, &host).await;
 		let before = member.listed().await;
 
-		let app = &member.app.clone();
+		let app = member.app.core().clone();
 		let silent =
 			joined_space_describe(app, joined.id.clone(), "Lab".to_owned(), Some(200)).await;
 
@@ -1987,8 +1987,8 @@ fn a_description_taken_while_a_reconciliation_reads_the_older_listing_is_kept() 
 		let gate = Arc::clone(&member.relay.room().is_instance_list_open);
 		gate.send_replace(false);
 		let reads = member.relay.room().instance_reads;
-		let app = &member.app.clone();
-		let reconciling = tokio::spawn(async move { relay::reconciled(&*app).await });
+		let app = member.app.core().clone();
+		let reconciling = tokio::spawn(async move { relay::reconciled(&app).await });
 		until("the listing read", || async {
 			(member.relay.room().instance_reads > reads).then_some(())
 		})
@@ -2036,7 +2036,7 @@ fn a_description_the_link_drops_before_its_event_still_lists_the_answered_name_a
 		let dropping = HostSide::DroppingAfterItsAnswer { host, command: "space_update", body };
 		member.relay.hosting(dropping);
 
-		let app = &member.app.clone();
+		let app = member.app.core().clone();
 		let answered = joined_space_describe(app, joined.id.clone(), "Lab".to_owned(), Some(200))
 			.await
 			.expect("the description");
