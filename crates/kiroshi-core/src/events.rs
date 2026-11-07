@@ -72,6 +72,7 @@ declared! {
 	JOINED_SPACE_CHANGED: joined_spaces::contract::JoinedSpaceChanged = joined_spaces::contract::CHANGED_EVENT,
 	JOINED_SPACE_REMOVED: joined_spaces::contract::JoinedSpaceRemoved = joined_spaces::contract::REMOVED_EVENT,
 	JOINED_SPACE_RECONNECTED: joined_spaces::contract::JoinedSpaceReconnected = joined_spaces::contract::RECONNECTED_EVENT,
+	JOIN_LINK_OPENED: joined_spaces::join_links::JoinLinkOpened = crate::desktop_events::JOIN_LINK_OPENED_EVENT,
 	JOINED_SPACE_MEMBERS_CHANGED: joined_spaces::contract::JoinedSpaceMembersChanged = joined_spaces::contract::MEMBERS_CHANGED_EVENT,
 	LIBRARY_DOCUMENT_UPDATED: library::contract::LibraryDocumentUpdated = library::contract::DOCUMENT_UPDATED_EVENT,
 	LIBRARY_DOCUMENT_RENAMED: library::contract::LibraryDocumentRenamed = library::contract::DOCUMENT_RENAMED_EVENT,

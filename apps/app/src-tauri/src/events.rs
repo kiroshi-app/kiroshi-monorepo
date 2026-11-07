@@ -19,7 +19,7 @@ pub use kiroshi_core::events::*;
 use crate::agent::host::install_session_hosts;
 use crate::hosting::authorship::DesktopAuthors;
 use crate::session_hosts::DesktopHosts;
-use crate::{joined_spaces, menu_contract, notifications, window_controls};
+use crate::{menu_contract, notifications, window_controls};
 use kiroshi_core::hosting::authors::install_authors;
 
 macro_rules! declared {
@@ -32,7 +32,6 @@ macro_rules! declared {
 }
 
 declared! {
-	JOIN_LINK_OPENED: joined_spaces::deep_link::JoinLinkOpened = joined_spaces::deep_link::OPENED_EVENT,
 	NOTIFICATION_ACTIVATED: notifications::commands::NotificationTarget = notifications::commands::ACTIVATED_EVENT,
 	NATIVE_MOVE_ENDED: window_controls::native_move::NativeMoveEnded = window_controls::native_move::NATIVE_MOVE_ENDED_EVENT,
 	NATIVE_MOVE_FAILED: window_controls::native_move::NativeMoveFailed = window_controls::native_move::NATIVE_MOVE_FAILED_EVENT,

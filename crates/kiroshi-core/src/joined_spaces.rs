@@ -3,6 +3,7 @@ pub mod contract;
 mod description;
 mod held;
 pub mod join;
+pub mod join_links;
 mod member_link;
 mod member_wire;
 pub mod members;

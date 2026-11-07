@@ -2,7 +2,7 @@ use super::contract::{
 	colour_shown, hosted_by, JoinedSpace, JoinedSpaceConnection, JoinedSpaceError,
 };
 use super::relay::{self, RelayGuests};
-use super::{deep_link, description, held};
+use super::{description, held, join_links};
 use crate::db;
 use crate::db::repositories::joined_spaces::{self, JoinedReach};
 use crate::events::{JOINED_SPACE_CHANGED, JOINED_SPACE_RECONNECTED, JOINED_SPACE_REMOVED};
@@ -83,8 +83,8 @@ pub async fn joined_space_connect(
 	relay::connected(core, id).await
 }
 
-pub fn join_link_listen<R: Runtime>(window: WebviewWindow<R>) {
-	deep_link::listened(window.app_handle(), window.label());
+pub fn join_link_listen(core: &crate::core_context::Core, client: &crate::core_context::ClientId) {
+	join_links::listened(core, client);
 }
 
 pub async fn joined_space_remove(

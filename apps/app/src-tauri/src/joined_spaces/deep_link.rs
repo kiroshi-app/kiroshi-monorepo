@@ -1,11 +1,9 @@
-use std::sync::{Mutex, MutexGuard, PoisonError};
-
-use serde::Serialize;
 use tauri::{AppHandle, Manager, Runtime, Url};
 use tauri_plugin_deep_link::DeepLinkExt;
 
-use crate::events::{self, JOIN_LINK_OPENED};
+use crate::core_context::ClientId;
 use crate::window_controls;
+pub use kiroshi_core::joined_spaces::join_links::{self, JoinLinkOpened, JoinLinks};
 
 pub use kiroshi_core::desktop_events::JOIN_LINK_OPENED_EVENT as OPENED_EVENT;
 
@@ -17,29 +15,8 @@ const INVITATION_QUERY: &str = "invitation=";
 
 const INVITATION_REF_LENGTH: usize = 128;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub struct JoinLinkOpened {
-	pub invitation_id: String,
-}
-
-#[derive(Default)]
-pub struct JoinLinks(Mutex<Inbox>);
-
-#[derive(Default)]
-struct Inbox {
-	is_listened: bool,
-	held: Vec<String>,
-}
-
-impl JoinLinks {
-	fn inbox(&self) -> MutexGuard<'_, Inbox> {
-		self.0.lock().unwrap_or_else(PoisonError::into_inner)
-	}
-}
-
 pub fn install<R: Runtime>(app: &AppHandle<R>) {
-	app.manage(JoinLinks::default());
+	crate::events::core(app).manage(JoinLinks::default());
 	let deep_link = app.deep_link();
 	#[cfg(any(windows, target_os = "linux"))]
 	if let Err(failure) = deep_link.register_all() {
@@ -84,41 +61,13 @@ fn invitation_of(url: &Url) -> Option<String> {
 }
 
 fn received<R: Runtime>(app: &AppHandle<R>, invitations: Vec<String>) {
-	let Some(join_links) = app.try_state::<JoinLinks>() else {
-		return log::warn!("a join link arrived before its inbox was installed");
-	};
-	let mut inbox = join_links.inbox();
-	if !inbox.is_listened {
-		for invitation in invitations {
-			if !inbox.held.contains(&invitation) {
-				inbox.held.push(invitation);
-			}
-		}
-		return;
-	}
-	drop(inbox);
-	let target = window_controls::receiving_window(app);
-	invitations.into_iter().for_each(|invitation| announced(app, &target, invitation));
+	let target = ClientId::new(window_controls::receiving_window(app));
+	join_links::received(crate::events::core(app), invitations, &target);
 }
 
+#[cfg(test)]
 pub(super) fn listened<R: Runtime>(app: &AppHandle<R>, listener: &str) {
-	let Some(join_links) = app.try_state::<JoinLinks>() else {
-		return log::warn!("the front listens for join links before their inbox was installed");
-	};
-	let held = {
-		let mut inbox = join_links.inbox();
-		inbox.is_listened = true;
-		std::mem::take(&mut inbox.held)
-	};
-	held.into_iter().for_each(|invitation| announced(app, listener, invitation));
-}
-
-fn announced<R: Runtime>(app: &AppHandle<R>, target: &str, invitation_id: String) {
-	if let Err(failure) =
-		events::emit_to(app, target, JOIN_LINK_OPENED, JoinLinkOpened { invitation_id })
-	{
-		log::warn!("a join link did not reach the front: {failure}");
-	}
+	join_links::listened(crate::events::core(app), &ClientId::new(listener));
 }
 
 #[cfg(test)]
@@ -163,7 +112,7 @@ mod tests {
 	#[test]
 	fn an_invitation_link_opened_before_the_front_listens_is_announced_once_it_listens() {
 		let app = an_app_of_its_own("join-links-held", mock_builder());
-		app.manage(JoinLinks::default());
+		crate::events::core(app).manage(JoinLinks::default());
 		let hearing = heard(&app);
 
 		received(app.handle(), invitations_of(&urls(&[LINK, LINK])));
@@ -180,7 +129,7 @@ mod tests {
 	#[test]
 	fn an_invitation_link_opened_while_the_front_listens_is_announced_with_its_invitation() {
 		let app = an_app_of_its_own("join-links-live", mock_builder());
-		app.manage(JoinLinks::default());
+		crate::events::core(app).manage(JoinLinks::default());
 		let hearing = heard(&app);
 		listened(app.handle(), window_controls::MAIN_WINDOW);
 
@@ -195,7 +144,7 @@ mod tests {
 	#[test]
 	fn an_invitation_link_reaches_main_alone_when_no_app_window_is_focused() {
 		let app = an_app_of_its_own("join-links-one-window", mock_builder());
-		app.manage(JoinLinks::default());
+		crate::events::core(app).manage(JoinLinks::default());
 		let main = heard_by(&opened(&app, window_controls::MAIN_WINDOW));
 		let secondary = heard_by(&opened(&app, "window-1"));
 		listened(app.handle(), window_controls::MAIN_WINDOW);
@@ -209,7 +158,7 @@ mod tests {
 	#[test]
 	fn a_held_invitation_link_reaches_the_window_that_listens_alone() {
 		let app = an_app_of_its_own("join-links-held-one-window", mock_builder());
-		app.manage(JoinLinks::default());
+		crate::events::core(app).manage(JoinLinks::default());
 		let main = heard_by(&opened(&app, window_controls::MAIN_WINDOW));
 		let secondary = heard_by(&opened(&app, "window-1"));
 
