@@ -161,6 +161,10 @@ jobs:
       - name: Test kiroshi-core
         run: cargo test -p kiroshi-core --locked
 
+      - name: Install the keyboard library the Rune preview links on Linux
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install --yes --no-install-recommends libxkbcommon-dev
+
       - name: Build the Rune preview
         run: cargo build --manifest-path apps/rune-preview/Cargo.toml --features fake-claude --locked
 

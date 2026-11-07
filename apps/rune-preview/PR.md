@@ -259,4 +259,5 @@ CodeQL reports three alerts on `ae115e9c0`. They are pre-existing code that the 
   - `bundles::tests::a_turn_git_refuses_reports_the_error_and_is_recorded_once_git_is_repaired` and `bundles::plugin::tests::a_turn_git_refuses_reports_the_error_and_is_recorded_once_git_is_repaired`: they turn a git objects folder read-only through unix permission bits (`read_only_objects`).
 
   Imports and helpers used only by those tests are gated with them. kiroshi-core's tests and the preview now type-check for `x86_64-pc-windows-gnu` locally with no warning.
+- **libxkbcommon on Linux.** The preview binary links `libxkbcommon`, which the Ubuntu runner doesn't ship. kiroshi-core's tests passed there; only the preview's link failed. The `core` job installs `libxkbcommon-dev` on Linux before building the preview. It was the only library the link was missing.
 
