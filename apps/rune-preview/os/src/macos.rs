@@ -11,7 +11,7 @@ use objc2::{AnyThread, MainThreadMarker};
 use objc2_app_kit::{NSApplication, NSApplicationActivationOptions, NSRunningApplication, NSSound};
 use objc2_foundation::{NSData, NSString};
 
-use crate::policy::{Notice, NoticeTarget};
+use crate::policy::Notice;
 use crate::{BannerOutcome, CHIME, Heard, post_waiting, report};
 
 pub fn holds_focus() -> Result<bool, String> {
@@ -106,7 +106,7 @@ fn through_notification_center(notice: Notice, heard: Heard) {
 
 fn through_notification_sys(app_id: String, notice: Notice, heard: Heard) {
 	let Notice { title, body, target } = notice;
-	post_waiting(heard, target, move |heard, target: NoticeTarget| {
+	post_waiting(heard, target, move |heard, target| {
 		if let Err(answer) = impersonate(&app_id) {
 			return report(heard, target, answer);
 		}

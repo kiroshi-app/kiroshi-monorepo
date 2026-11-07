@@ -99,14 +99,6 @@ pub fn bring_to_front() -> Result<(), GestureFailure> {
 	platform::bring_to_front().map_err(GestureFailure::of(Gesture::Raise))
 }
 
-fn spawn_waiting(job: impl FnOnce() + Send + 'static) -> Result<(), String> {
-	std::thread::Builder::new()
-		.name("notice-banner".into())
-		.spawn(job)
-		.map(drop)
-		.map_err(|failure| format!("the banner thread did not start: {failure}"))
-}
-
 fn report(heard: &Heard, target: NoticeTarget, answer: String) {
 	heard(BannerOutcome::Refused { target, failure: GestureFailure::of(Gesture::Banner)(answer) });
 }
@@ -118,7 +110,10 @@ fn post_waiting(
 ) {
 	let waiting = Arc::clone(&heard);
 	let held = target.clone();
-	if let Err(answer) = spawn_waiting(move || wait(&waiting, held)) {
-		report(&heard, target, answer);
+	let spawned = std::thread::Builder::new()
+		.name("notice-banner".into())
+		.spawn(move || wait(&waiting, held));
+	if let Err(failure) = spawned {
+		report(&heard, target, format!("the banner thread did not start: {failure}"));
 	}
 }
