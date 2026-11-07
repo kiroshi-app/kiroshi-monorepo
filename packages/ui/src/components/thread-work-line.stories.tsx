@@ -309,12 +309,11 @@ export const Final10 = meta.story({
 		const toggles = togglesIn(canvasElement)
 		const [toggle] = toggles
 		const line = lineOf(toggle)
-		const [lineClock] = within(
-			slotIn(line, "thread-work-line-tail"),
-		).getAllByText("12s")
-		await expect(
-			slotIn(line, "thread-work-line-tail").getBoundingClientRect().right,
-		).toBe(lineClock.getBoundingClientRect().right)
+		const tail = slotIn(line, "thread-work-line-tail")
+		const [lineClock] = within(tail).getAllByText("12s")
+		await expect(tail.getBoundingClientRect().right).toBe(
+			lineClock.getBoundingClientRect().right,
+		)
 		await expect(lineClock.getBoundingClientRect().right).toBeLessThan(
 			toggle.getBoundingClientRect().left - 8,
 		)
