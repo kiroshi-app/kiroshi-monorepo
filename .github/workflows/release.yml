@@ -48,6 +48,7 @@ jobs:
           done
 
   draft:
+    needs: ci-green
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -152,7 +153,7 @@ jobs:
           echo "id=$id" >> "$GITHUB_OUTPUT"
 
   release:
-    needs: [ci-green, draft]
+    needs: draft
     permissions:
       contents: write
     strategy:
@@ -246,7 +247,7 @@ jobs:
           args: ${{ matrix.args }}
 
   rune:
-    needs: draft
+    needs: [ci-green, draft]
     permissions:
       contents: write
     strategy:

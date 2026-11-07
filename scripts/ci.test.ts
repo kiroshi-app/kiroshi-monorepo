@@ -1443,10 +1443,9 @@ describe("the jobs of ci.yml", () => {
 		expect(releaseWorkflow.jobs.publish?.needs).toEqual(["draft", "release"])
 	})
 
-	it("has release.yml gate the desktop jobs on ci-green and the Rune jobs on the draft alone", () => {
-		expect(releaseWorkflow.jobs.draft?.needs).toBeUndefined()
-		expect(releaseWorkflow.jobs.release?.needs).toEqual(["ci-green", "draft"])
-		expect(releaseWorkflow.jobs.rune?.needs).toBe("draft")
+	it("has release.yml build the Rune packages only once ci-green passed and the draft exists", () => {
+		expect(releaseWorkflow.jobs.draft?.needs).toBe("ci-green")
+		expect(releaseWorkflow.jobs.rune?.needs).toEqual(["ci-green", "draft"])
 	})
 
 	it("has every Rune job sign its package with the updater key and attach it to the tag", () => {
