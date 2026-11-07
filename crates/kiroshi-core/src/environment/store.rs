@@ -23,6 +23,12 @@ static WRITES: Mutex<()> = Mutex::new(());
 type Assignments = Vec<(String, String)>;
 type Entries = Vec<(String, Option<String>)>;
 
+pub fn writable_root(core: &crate::core_context::Core) -> Result<PathBuf, EnvError> {
+	root(core).ok_or_else(|| EnvError::Unwritable {
+		detail: "the application data directory is unavailable".to_owned(),
+	})
+}
+
 pub fn root(core: &crate::core_context::Core) -> Option<PathBuf> {
 	Some(core.data_dir().join(DIR_NAME))
 }

@@ -1,17 +1,10 @@
-use std::path::PathBuf;
-
 use tauri::{AppHandle, Runtime};
 
 use crate::hosting::authorship::CommandCaller;
 
 use super::contract::{is_reserved, ConnectionKind, EnvEntry, EnvError, EnvScope};
 use super::{connection, store};
-
-pub fn writable_root(core: &crate::core_context::Core) -> Result<PathBuf, EnvError> {
-	store::root(core).ok_or_else(|| EnvError::Unwritable {
-		detail: "the application data directory is unavailable".to_owned(),
-	})
-}
+pub use crate::environment::store::writable_root;
 
 #[tauri::command]
 #[specta::specta]

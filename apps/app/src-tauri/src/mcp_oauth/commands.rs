@@ -182,31 +182,32 @@ pub async fn mcp_oauth_connect<R: Runtime>(
 	name: String,
 	url: String,
 ) -> Result<(), OauthError> {
-	refuse_what_kiroshi_does_not_authorize(crate::events::core(&app), &owner, &name, &url)
+	connect_application(crate::events::core(&app), owner, name, url).await
+}
+
+pub(crate) async fn connect_application(
+	core: &crate::core_context::Core,
+	owner: EnvOwner,
+	name: String,
+	url: String,
+) -> Result<(), OauthError> {
+	refuse_what_kiroshi_does_not_authorize(core, &owner, &name, &url)
 		.map_err(|refused| written(refused, &Values::new()))?;
-	let state = crate::events::core(app.app_handle()).state::<McpOauthState>();
+	let state = core.state::<McpOauthState>();
 	let scope = EnvScope::Server { name: name.clone(), owner };
 	let _running = state
 		.begin(Flow::Authorizing(scope.clone()))
 		.map_err(|error| written(Step::ClaimingTheState.refused(error), &Values::new()))?;
-	let root = writable_root(crate::events::core(&app)).map_err(|error| {
+	let root = writable_root(core).map_err(|error| {
 		written(Step::WritingTheStoreRoot.refused(error.into()), &Values::new())
 	})?;
 	let stored = store::values(&root, &scope).map_err(|error| {
 		written(Step::ReadingTheStoredClient.refused(error.into()), &Values::new())
 	})?;
-	let credentials =
-		connected(crate::events::core(&app), authorize_request(url, &stored), &stored)
-			.await
-			.map_err(|refused| written(refused, &stored))?;
-	kept(
-		&root,
-		&scope,
-		&name,
-		&credentials,
-		&crate::events::core(app.app_handle()).state::<ApplicationReports>(),
-	)
-	.map_err(|error| {
+	let credentials = connected(core, authorize_request(url, &stored), &stored)
+		.await
+		.map_err(|refused| written(refused, &stored))?;
+	kept(&root, &scope, &name, &credentials, &core.state::<ApplicationReports>()).map_err(|error| {
 		written(Step::StoringTheGrant.refused(error), &credentials::held(&credentials))
 	})
 }
@@ -277,15 +278,23 @@ pub async fn mcp_oauth_disconnect<R: Runtime>(
 	name: String,
 	url: String,
 ) -> Result<Disconnected, OauthError> {
-	if caller.is_relayed()
-		&& held_at(&writable_root(crate::events::core(&app))?, &owner, &name)?.is_personal()
-	{
+	disconnect_application(crate::events::core(&app), caller.0, owner, name, url).await
+}
+
+pub(crate) async fn disconnect_application(
+	core: &crate::core_context::Core,
+	caller: kiroshi_core::hosting::caller::Caller,
+	owner: EnvOwner,
+	name: String,
+	url: String,
+) -> Result<Disconnected, OauthError> {
+	if caller.is_relayed() && held_at(&writable_root(core)?, &owner, &name)?.is_personal() {
 		return Err(OauthError::RefusedToAMember);
 	}
-	let state = crate::events::core(app.app_handle()).state::<McpOauthState>();
+	let state = core.state::<McpOauthState>();
 	let _running = state.begin(Flow::Revoking)?;
-	let settled = disconnected(crate::events::core(&app), &owner, &name, &url).await;
-	crate::events::core(app.app_handle()).state::<ApplicationReports>().forget(&name);
+	let settled = disconnected(core, &owner, &name, &url).await;
+	core.state::<ApplicationReports>().forget(&name);
 	settled
 }
 
@@ -318,13 +327,21 @@ pub async fn mcp_application_status<R: Runtime>(
 	caller: CommandCaller,
 	owner: EnvOwner,
 ) -> Result<Vec<ApplicationRow>, EnvError> {
+	application_status(crate::events::core(&app), caller.0, owner).await
+}
+
+pub(crate) async fn application_status(
+	core: &crate::core_context::Core,
+	caller: kiroshi_core::hosting::caller::Caller,
+	owner: EnvOwner,
+) -> Result<Vec<ApplicationRow>, EnvError> {
 	if !caller.is_relayed() {
-		return application_rows(crate::events::core(&app).clone(), owner).await;
+		return application_rows(core.clone(), owner).await;
 	}
 	if owner == EnvOwner::User {
 		return Ok(Vec::new());
 	}
-	let rows = application_rows(crate::events::core(&app).clone(), owner).await?;
+	let rows = application_rows(core.clone(), owner).await?;
 	Ok(rows
 		.into_iter()
 		.filter(|row| !row.scope.as_ref().is_some_and(EnvScope::is_personal))
