@@ -10,7 +10,6 @@ use axum::response::IntoResponse;
 use axum::routing::post;
 use axum::Router;
 use serde_json::{json, Value};
-use tauri::{AppHandle, Manager, Runtime};
 use tokio::net::TcpListener;
 use tokio::sync::watch as signal;
 use uuid::Uuid;
@@ -23,13 +22,13 @@ use super::runner::Runner;
 use super::silence::Silence;
 use crate::conversations::commands::ready;
 use crate::db;
+use crate::host_api::cors;
 use crate::host_api::token::{self, HostToken};
-use crate::host_api::{cors, events, files, invoke};
 use crate::missions;
+use kiroshi_core::routines::local_server::ROUTINE_CALL_PATH as PATH;
+pub use kiroshi_core::routines::local_server::{Webhook, HEADER};
 
 pub const SOURCE_ID: &str = "local-webhook";
-
-pub const HEADER: &str = "X-Kiroshi-Delivery";
 
 pub const DELIVERY_ID_HEADER: &str = "X-Kiroshi-Delivery-Id";
 
@@ -38,8 +37,6 @@ pub const MAX_DELIVERY_ID_BYTES: usize = 200;
 pub const PREFERRED_PORT: u16 = 45_367;
 
 pub const MAX_BODY_BYTES: usize = 64 * 1024;
-
-const PATH: &str = "/routines/call";
 
 const ACCEPTED: (StatusCode, &str) = (StatusCode::ACCEPTED, "the routine was told");
 
@@ -58,58 +55,35 @@ const FAILED: (StatusCode, &str) = (StatusCode::INTERNAL_SERVER_ERROR, "the call
 
 const LOOPBACK_NAMES: [&str; 2] = ["127.0.0.1", "localhost"];
 
-pub struct Webhook {
-	address: Option<SocketAddr>,
-	stop: signal::Sender<bool>,
-}
-
-impl Webhook {
-	pub fn url(&self) -> Option<String> {
-		self.address.map(|address| format!("http://{address}{PATH}"))
-	}
-
-	pub fn origin(&self) -> Option<String> {
-		self.address.map(|address| format!("http://{address}"))
-	}
-
-	pub fn mission_url(&self) -> Option<String> {
-		self.address.map(|address| format!("http://{address}{}", missions::call::PATH))
-	}
-
-	pub fn stop(&self) {
-		self.stop.send_replace(true);
-	}
-
-	#[cfg(test)]
-	pub(crate) fn address(&self) -> SocketAddr {
-		self.address.expect("the webhook bound an address")
-	}
-}
-
-pub fn start<R: Runtime>(app: AppHandle<R>) -> Webhook {
-	let runs = Arc::new(Runner::new(app.clone()));
-	started(app, Arc::new(SystemClock), runs)
-}
-
-pub(crate) fn started<R: Runtime>(
-	app: AppHandle<R>,
-	clock: Arc<dyn Clock>,
-	runs: Arc<dyn RunSink + Send + Sync>,
+pub fn start(
+	core: crate::core_context::Core,
+	host_api: impl FnOnce(&Calls) -> Router<Calls>,
 ) -> Webhook {
-	opened(app, clock, runs, listening())
+	let runs = Arc::new(Runner::new(core.clone()));
+	started(core, Arc::new(SystemClock), runs, host_api)
 }
 
-fn opened<R: Runtime>(
-	app: AppHandle<R>,
+pub(crate) fn started(
+	core: crate::core_context::Core,
 	clock: Arc<dyn Clock>,
 	runs: Arc<dyn RunSink + Send + Sync>,
+	host_api: impl FnOnce(&Calls) -> Router<Calls>,
+) -> Webhook {
+	opened(core, clock, runs, host_api, listening())
+}
+
+fn opened(
+	core: crate::core_context::Core,
+	clock: Arc<dyn Clock>,
+	runs: Arc<dyn RunSink + Send + Sync>,
+	host_api: impl FnOnce(&Calls) -> Router<Calls>,
 	bound: Result<(StandardListener, SocketAddr), std::io::Error>,
 ) -> Webhook {
 	let (stop, halted) = signal::channel(false);
-	legacy_web_link_cleared(&app);
-	let token = host_token(&app);
+	legacy_web_link_cleared(&core);
+	let token = host_token(&core);
 	let calls = Calls {
-		app,
+		core: core.clone(),
 		clock,
 		runs,
 		limit: Arc::new(RateLimit::default()),
@@ -118,7 +92,8 @@ fn opened<R: Runtime>(
 	};
 	let address = match bound {
 		Ok((listener, address)) => {
-			tauri::async_runtime::spawn(answering(calls, listener, halted));
+			let routes = route(host_api(&calls), calls);
+			core.spawn(answering(routes, listener, halted));
 			Some(address)
 		}
 		Err(failure) => {
@@ -126,11 +101,11 @@ fn opened<R: Runtime>(
 			None
 		}
 	};
-	Webhook { address, stop }
+	Webhook::new(address, stop)
 }
 
-fn host_token<R: Runtime>(app: &AppHandle<R>) -> Option<Arc<HostToken>> {
-	match token::loaded(app) {
+fn host_token(core: &crate::core_context::Core) -> Option<Arc<HostToken>> {
+	match token::loaded(core) {
 		Ok(token) => Some(Arc::new(token)),
 		Err(failure) => {
 			eprintln!("no host api call is answered: the token was not loaded: {failure:?}");
@@ -139,8 +114,8 @@ fn host_token<R: Runtime>(app: &AppHandle<R>) -> Option<Arc<HostToken>> {
 	}
 }
 
-fn legacy_web_link_cleared<R: Runtime>(app: &AppHandle<R>) {
-	if let Err(failure) = token::legacy_web_link_removed(app) {
+fn legacy_web_link_cleared(core: &crate::core_context::Core) {
+	if let Err(failure) = token::legacy_web_link_removed(core) {
 		eprintln!("the legacy web link of the host api was left in place: {failure:?}");
 	}
 }
@@ -161,16 +136,12 @@ fn bound() -> Result<StandardListener, std::io::Error> {
 	}
 }
 
-async fn answering<R: Runtime>(
-	calls: Calls<R>,
-	listener: StandardListener,
-	halted: signal::Receiver<bool>,
-) {
+async fn answering(routes: Router, listener: StandardListener, halted: signal::Receiver<bool>) {
 	let listener = match TcpListener::from_std(listener) {
 		Ok(listener) => listener,
 		Err(failure) => return eprintln!("the local webhook kept no socket: {failure}"),
 	};
-	let served = axum::serve(listener, route(calls)).with_graceful_shutdown(stopping(halted)).await;
+	let served = axum::serve(listener, routes).with_graceful_shutdown(stopping(halted)).await;
 	if let Err(failure) = served {
 		eprintln!("the local webhook stopped answering: {failure}");
 	}
@@ -182,8 +153,8 @@ async fn stopping(mut halted: signal::Receiver<bool>) {
 	}
 }
 
-pub(crate) struct Calls<R: Runtime> {
-	pub(crate) app: AppHandle<R>,
+pub struct Calls {
+	pub(crate) core: crate::core_context::Core,
 	pub(crate) clock: Arc<dyn Clock>,
 	runs: Arc<dyn RunSink + Send + Sync>,
 	pub(crate) limit: Arc<RateLimit>,
@@ -191,10 +162,10 @@ pub(crate) struct Calls<R: Runtime> {
 	pub(crate) token: Option<Arc<HostToken>>,
 }
 
-impl<R: Runtime> Clone for Calls<R> {
+impl Clone for Calls {
 	fn clone(&self) -> Self {
 		Calls {
-			app: self.app.clone(),
+			core: self.core.clone(),
 			clock: self.clock.clone(),
 			runs: self.runs.clone(),
 			limit: self.limit.clone(),
@@ -210,20 +181,18 @@ pub(crate) enum DeliveryId {
 	Refused,
 }
 
-fn route<R: Runtime>(calls: Calls<R>) -> Router {
+fn route(host_api: Router<Calls>, calls: Calls) -> Router {
 	Router::new()
-		.route(PATH, post(called::<R>))
-		.route(missions::call::PATH, post(missions::call::called::<R>))
+		.route(PATH, post(called))
+		.route(missions::call::PATH, post(missions::call::called))
 		.layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
-		.merge(invoke::route(calls.clone()))
-		.merge(events::route(calls.clone()))
-		.merge(files::route(calls.clone()))
+		.merge(host_api)
 		.layer(middleware::from_fn(cors::shared))
 		.with_state(calls)
 }
 
-async fn called<R: Runtime>(
-	State(calls): State<Calls<R>>,
+async fn called(
+	State(calls): State<Calls>,
 	headers: HeaderMap,
 	body: Result<String, StringRejection>,
 ) -> (StatusCode, &'static str) {
@@ -248,8 +217,8 @@ async fn called<R: Runtime>(
 	}
 }
 
-async fn carried<R: Runtime>(
-	calls: &Calls<R>,
+async fn carried(
+	calls: &Calls,
 	headers: &HeaderMap,
 	delivery_id: Option<String>,
 	body: String,
@@ -257,7 +226,7 @@ async fn carried<R: Runtime>(
 	let Some(key) = presented(headers) else {
 		return Ok(REFUSED);
 	};
-	let state = calls.app.state::<db::DatabaseState>();
+	let state = calls.core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	let held = database.routines().keyed_on_source(key, SOURCE_ID.to_owned()).await?;
 	let Some(routine) = held else {
@@ -270,9 +239,8 @@ async fn carried<R: Runtime>(
 	if !calls.limit.admits(&routine.id, calls.clock.as_ref()).await {
 		return Ok(FLOODED);
 	}
-	let app = &calls.app;
 	let source = declared_source(
-		app,
+		&calls.core,
 		database,
 		&routine.conversation_id,
 		&routine.bot_id,
@@ -343,6 +311,8 @@ mod tests {
 	use std::sync::atomic::{AtomicI64, Ordering};
 	use std::sync::mpsc;
 	use std::time::Duration;
+	use tauri::AppHandle;
+	use tauri::Manager;
 
 	use tauri::test::{mock_builder, MockRuntime};
 	use tauri::App;
@@ -404,11 +374,12 @@ mod tests {
 
 	async fn a_host(name: &str) -> AppOfItsOwn {
 		let app = an_app_of_its_own(&format!("routine-webhook-{name}"), mock_builder());
-		app.manage(db::bootstrap(app.handle()));
-		let system = bundles::system::path(app.handle()).expect("the system bundle is named");
+		crate::db::install(crate::events::core(app.handle()));
+		let system = bundles::system::path(crate::events::core(app.handle()))
+			.expect("the system bundle is named");
 		bundles::system::write(&system).expect("the system bundle lands");
 		{
-			let state = app.state::<db::DatabaseState>();
+			let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 			let database = ready(&state).expect("the database opens");
 			database
 				.call_mut(|connection| Ok(connection.execute_batch(A_PARTICIPANT)?))
@@ -493,7 +464,7 @@ mod tests {
 	}
 
 	fn address_of(webhook: &Webhook) -> SocketAddr {
-		webhook.address.expect("the webhook bound an address")
+		webhook.address()
 	}
 
 	struct HeldOpen;
@@ -517,13 +488,26 @@ mod tests {
 	}
 
 	fn start(app: AppHandle<MockRuntime>) -> Webhook {
-		started(app, Arc::new(SystemClock), Arc::new(HeldOpen))
+		started(
+			crate::events::core(&app).clone(),
+			Arc::new(SystemClock),
+			Arc::new(HeldOpen),
+			crate::host_api::routes(app),
+		)
 	}
 
 	fn recording(app: AppHandle<MockRuntime>) -> (Webhook, mpsc::Receiver<RunRequested>) {
 		let (requested, arriving) = mpsc::channel();
 		let runs = Arc::new(Recorded(std::sync::Mutex::new(requested)));
-		(started(app, Arc::new(SystemClock), runs), arriving)
+		(
+			started(
+				crate::events::core(&app).clone(),
+				Arc::new(SystemClock),
+				runs,
+				crate::host_api::routes(app),
+			),
+			arriving,
+		)
 	}
 
 	fn delivery_id_of(arriving: &mpsc::Receiver<RunRequested>) -> String {
@@ -593,7 +577,7 @@ mod tests {
 	}
 
 	async fn closed_open_runs(app: &App<MockRuntime>, key: &str, at: i64) {
-		let state = app.state::<db::DatabaseState>();
+		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 		let database = ready(&state).expect("the database opens");
 		let open = runs_of_key(app, key).await.into_iter().filter(|run| run.ended_at.is_none());
 		for run in open {
@@ -602,7 +586,7 @@ mod tests {
 	}
 
 	async fn runs_of_key(app: &App<MockRuntime>, key: &str) -> Vec<RoutineRun> {
-		let state = app.state::<db::DatabaseState>();
+		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 		let database = ready(&state).expect("the database opens");
 		let routine = database
 			.routines()
@@ -632,19 +616,19 @@ mod tests {
 	}
 
 	async fn runs_of(app: &App<MockRuntime>) -> i64 {
-		let state = app.state::<db::DatabaseState>();
+		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 		let database = ready(&state).expect("the database opens");
 		counted(database, "SELECT count(*) FROM routine_runs").await
 	}
 
 	async fn dedupe_values_of(app: &App<MockRuntime>) -> i64 {
-		let state = app.state::<db::DatabaseState>();
+		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 		let database = ready(&state).expect("the database opens");
 		counted(database, "SELECT count(*) FROM routine_dedupe_values").await
 	}
 
 	async fn no_row_was_written(app: &App<MockRuntime>) {
-		let state = app.state::<db::DatabaseState>();
+		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 		let database = ready(&state).expect("the database opens");
 		assert_eq!(counted(database, "SELECT count(*) FROM routine_runs").await, 0);
 		assert_eq!(counted(database, "SELECT count(*) FROM routine_dedupe_values").await, 0);
@@ -679,13 +663,23 @@ mod tests {
 		let taken = std::io::Error::from(ErrorKind::AddrInUse);
 
 		legacy_link_seeded(&host);
-		let unbound =
-			opened(app.handle().clone(), Arc::new(SystemClock), Arc::new(HeldOpen), Err(taken));
+		let unbound = opened(
+			crate::events::core(app.handle()).clone(),
+			Arc::new(SystemClock),
+			Arc::new(HeldOpen),
+			crate::host_api::routes(app.handle().clone()),
+			Err(taken),
+		);
 		let after_unbound = host_files_of(&host);
 		unbound.stop();
 		legacy_link_seeded(&host);
-		let bound =
-			opened(app.handle().clone(), Arc::new(SystemClock), Arc::new(HeldOpen), listening());
+		let bound = opened(
+			crate::events::core(app.handle()).clone(),
+			Arc::new(SystemClock),
+			Arc::new(HeldOpen),
+			crate::host_api::routes(app.handle().clone()),
+			listening(),
+		);
 		let after_bound = host_files_of(&host);
 		bound.stop();
 
@@ -701,8 +695,13 @@ mod tests {
 		let host = seeded_host_dir_of(&app);
 		fs::create_dir_all(host.join("web-link.txt").join("held")).expect("a directory blocks it");
 
-		let webhook =
-			opened(app.handle().clone(), Arc::new(SystemClock), Arc::new(HeldOpen), listening());
+		let webhook = opened(
+			crate::events::core(app.handle()).clone(),
+			Arc::new(SystemClock),
+			Arc::new(HeldOpen),
+			crate::host_api::routes(app.handle().clone()),
+			listening(),
+		);
 		let answer = answered(webhook.address(), calling(None, "{}")).await;
 		webhook.stop();
 
@@ -726,7 +725,7 @@ mod tests {
 			payload["receivedAt"].as_str().is_some_and(|at| at.ends_with('Z')),
 			"got {payload}"
 		);
-		let state = app.state::<db::DatabaseState>();
+		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 		let database = ready(&state).expect("the database opens");
 		assert_eq!(counted(database, "SELECT count(*) FROM routine_runs").await, 1);
 
@@ -789,7 +788,12 @@ mod tests {
 	async fn a_call_naming_the_loopback_with_or_without_the_bound_port_is_carried() {
 		let app = a_host("loopback").await;
 		let clock = Ticking::at(NOON);
-		let webhook = started(app.handle().clone(), clock.clone(), Arc::new(HeldOpen));
+		let webhook = started(
+			crate::events::core(app.handle()).clone(),
+			clock.clone(),
+			Arc::new(HeldOpen),
+			crate::host_api::routes(app.handle().clone()),
+		);
 		let address = address_of(&webhook);
 
 		for host in ["localhost", "127.0.0.1", &format!("localhost:{}", address.port())] {
@@ -826,7 +830,12 @@ mod tests {
 	{
 		let app = a_host("flooded").await;
 		let clock = Ticking::at(NOON);
-		let webhook = started(app.handle().clone(), clock.clone(), Arc::new(HeldOpen));
+		let webhook = started(
+			crate::events::core(app.handle()).clone(),
+			clock.clone(),
+			Arc::new(HeldOpen),
+			crate::host_api::routes(app.handle().clone()),
+		);
 		let address = address_of(&webhook);
 		for _ in 0..CALLS_PER_WINDOW {
 			let answer = answered(address, delivering(Some(A_KEY), "delivery-1", "{}")).await;
@@ -859,7 +868,12 @@ mod tests {
 	async fn a_hundred_calls_inside_one_hour_write_the_cap_in_starts_and_one_skip_naming_the_cap() {
 		let app = a_host("hourly-flood").await;
 		let clock = Ticking::at(NOON);
-		let webhook = started(app.handle().clone(), clock.clone(), Arc::new(HeldOpen));
+		let webhook = started(
+			crate::events::core(app.handle()).clone(),
+			clock.clone(),
+			Arc::new(HeldOpen),
+			crate::host_api::routes(app.handle().clone()),
+		);
 		let started_runs = HOURLY_CAP as usize;
 		let silenced = A_HUNDRED_CALLS - started_runs - 1;
 
@@ -883,7 +897,12 @@ mod tests {
 	async fn a_call_landing_after_the_hour_of_silence_writes_a_second_skip_naming_the_cap() {
 		let app = a_host("hourly-forgotten").await;
 		let clock = Ticking::at(NOON);
-		let webhook = started(app.handle().clone(), clock.clone(), Arc::new(HeldOpen));
+		let webhook = started(
+			crate::events::core(app.handle()).clone(),
+			clock.clone(),
+			Arc::new(HeldOpen),
+			crate::host_api::routes(app.handle().clone()),
+		);
 		let address = address_of(&webhook);
 		let to_the_cap = HOURLY_CAP as usize + 1;
 		calling_with_each_run_closed(&app, address, &clock, A_KEY, to_the_cap).await;
@@ -902,7 +921,12 @@ mod tests {
 	async fn two_routines_flooded_in_the_same_hour_each_keep_their_own_skip_naming_the_cap() {
 		let app = a_host("hourly-two").await;
 		let clock = Ticking::at(NOON);
-		let webhook = started(app.handle().clone(), clock.clone(), Arc::new(HeldOpen));
+		let webhook = started(
+			crate::events::core(app.handle()).clone(),
+			clock.clone(),
+			Arc::new(HeldOpen),
+			crate::host_api::routes(app.handle().clone()),
+		);
 		let address = address_of(&webhook);
 		let to_the_cap = HOURLY_CAP as usize + 1;
 
@@ -922,7 +946,12 @@ mod tests {
 	async fn a_hundred_calls_while_the_first_run_stays_open_write_one_start_and_one_skip() {
 		let app = a_host("leased-flood").await;
 		let clock = Ticking::at(NOON);
-		let webhook = started(app.handle().clone(), clock.clone(), Arc::new(HeldOpen));
+		let webhook = started(
+			crate::events::core(app.handle()).clone(),
+			clock.clone(),
+			Arc::new(HeldOpen),
+			crate::host_api::routes(app.handle().clone()),
+		);
 
 		let answers =
 			calling_with_the_run_left_open(address_of(&webhook), &clock, A_KEY, A_HUNDRED_CALLS)
@@ -939,7 +968,12 @@ mod tests {
 	async fn calls_fired_at_once_while_the_first_run_stays_open_write_one_start_and_one_skip() {
 		let app = a_host("leased-at-once").await;
 		let clock = Ticking::at(NOON);
-		let webhook = started(app.handle().clone(), clock.clone(), Arc::new(HeldOpen));
+		let webhook = started(
+			crate::events::core(app.handle()).clone(),
+			clock.clone(),
+			Arc::new(HeldOpen),
+			crate::host_api::routes(app.handle().clone()),
+		);
 		let address = address_of(&webhook);
 		let silenced = CALLS_PER_WINDOW - 2;
 
@@ -964,7 +998,12 @@ mod tests {
 	async fn a_call_landing_after_the_length_of_a_lease_reaches_the_admission_again() {
 		let app = a_host("leased-forgotten").await;
 		let clock = Ticking::at(NOON);
-		let webhook = started(app.handle().clone(), clock.clone(), Arc::new(HeldOpen));
+		let webhook = started(
+			crate::events::core(app.handle()).clone(),
+			clock.clone(),
+			Arc::new(HeldOpen),
+			crate::host_api::routes(app.handle().clone()),
+		);
 		let address = address_of(&webhook);
 		calling_with_the_run_left_open(address, &clock, A_KEY, 2).await;
 		assert_eq!(skipped_rows(&app, A_KEY, SkipReason::LeaseHeld).await, 1);
@@ -1004,7 +1043,12 @@ mod tests {
 	async fn one_delivery_id_carried_twice_opens_one_run_and_two_delivery_ids_open_two() {
 		let app = a_host("delivered").await;
 		let clock = Ticking::at(NOON);
-		let webhook = started(app.handle().clone(), clock.clone(), Arc::new(HeldOpen));
+		let webhook = started(
+			crate::events::core(app.handle()).clone(),
+			clock.clone(),
+			Arc::new(HeldOpen),
+			crate::host_api::routes(app.handle().clone()),
+		);
 		let address = address_of(&webhook);
 
 		for _ in 0..2 {

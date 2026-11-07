@@ -2,7 +2,6 @@ use std::path::Path;
 
 use serde::Deserialize;
 use serde_json::{Map, Value};
-use tauri::{AppHandle, Runtime};
 
 use super::contract::{
 	LibraryBoardBounds, LibraryBoardNode, LibraryBoardSummary, LibraryError, LibraryItem,
@@ -105,15 +104,15 @@ pub(crate) fn create_board(
 	created(root, space_id, &file_name, BLANK.as_bytes())
 }
 
-pub(crate) fn rename_board<R: Runtime>(
-	app: &AppHandle<R>,
+pub(crate) fn rename_board(
+	core: &crate::core_context::Core,
 	root: &Path,
 	space_id: &str,
 	name: &str,
 	new_name: &str,
 ) -> Result<LibraryItem, LibraryError> {
 	a_board(root, space_id, name)?;
-	rename_document(app, root, space_id, name, new_name)
+	rename_document(core, root, space_id, name, new_name)
 }
 
 pub(crate) fn summarise_board(

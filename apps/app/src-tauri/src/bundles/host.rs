@@ -1,10 +1,7 @@
 use serde::Deserialize;
 use serde_json::Value;
-use tauri::{AppHandle, Runtime};
 
-use super::own_write::{
-	write_own_file, BundleWrite, BundleWriteRefusal, BundleWritten, RefusalKind,
-};
+use super::own_write::{write_own_file, BundleWrite, BundleWriteRefusal, BundleWritten};
 use crate::agent::commands::{announce, learned_block, reconcile_bot, store_a_changed_block};
 use crate::agent::contract::{AgentEvent, EvolvedBundle, RuntimeScope};
 use crate::agent::host::{Host, Refusal};
@@ -18,14 +15,14 @@ const NO_ROOT: &str = "this session has no bundles directory";
 const UNSTORED_MEMORY: &str = "the write was recorded but the memory it holds was not stored";
 
 #[derive(Debug)]
-pub struct BundleHost<R: Runtime> {
-	app: AppHandle<R>,
+pub struct BundleHost {
+	core: crate::core_context::Core,
 	scope: RuntimeScope,
 }
 
-impl<R: Runtime> BundleHost<R> {
-	pub fn new(app: AppHandle<R>, scope: RuntimeScope) -> Self {
-		Self { app, scope }
+impl BundleHost {
+	pub fn new(core: crate::core_context::Core, scope: RuntimeScope) -> Self {
+		Self { core, scope }
 	}
 
 	async fn written(
@@ -40,7 +37,7 @@ impl<R: Runtime> BundleHost<R> {
 			.await
 			.map_err(|error| BundleWriteRefusal::unexpected(format!("{UNREAD_BOT}: {error:?}")))?
 			.ok_or_else(|| BundleWriteRefusal::unexpected(NO_BOT.to_owned()))?;
-		let root = super::root(&self.app)
+		let root = super::root(&self.core)
 			.ok_or_else(|| BundleWriteRefusal::unexpected(NO_ROOT.to_owned()))?;
 		let held = learned_block(&root, &bot.id);
 		let written = write_own_file(&root, &bot, asked)?;
@@ -48,7 +45,7 @@ impl<R: Runtime> BundleHost<R> {
 			reconcile_bot(database, &root, &bot).await;
 			let stored = store_a_changed_block(database, &root, &bot.id, held).await;
 			announce(
-				&self.app,
+				&self.core,
 				Some(self.scope.clone()),
 				AgentEvent::BotEvolved {
 					bundle: EvolvedBundle::Bot,
@@ -64,7 +61,7 @@ impl<R: Runtime> BundleHost<R> {
 	}
 }
 
-impl<R: Runtime> Host for BundleHost<R> {
+impl Host for BundleHost {
 	const SUBTYPE: &'static str = "bundle";
 
 	type Operation = Operation;
@@ -76,8 +73,8 @@ impl<R: Runtime> Host for BundleHost<R> {
 		operation: Operation,
 		payload: Value,
 	) -> Result<Value, BundleWriteRefusal> {
-		let state = Self::database(&self.app)?;
-		let database = ready(&state)
+		let state = Self::database(&self.core)?;
+		let database = ready(state.state::<crate::db::DatabaseState>().inner())
 			.map_err(|error| BundleWriteRefusal::unexpected(format!("{NO_STORE}: {error:?}")))?;
 		match operation {
 			Operation::Write => {
@@ -85,16 +82,6 @@ impl<R: Runtime> Host for BundleHost<R> {
 				Self::answered(self.written(database, asked).await?)
 			}
 		}
-	}
-}
-
-impl Refusal for BundleWriteRefusal {
-	fn unreadable(detail: String) -> Self {
-		Self::new(RefusalKind::UnreadableRequest, detail)
-	}
-
-	fn unexpected(detail: String) -> Self {
-		Self::new(RefusalKind::Unexpected, detail)
 	}
 }
 
@@ -130,14 +117,15 @@ mod tests {
 
 	async fn an_app_with_two_bundles(name: &str) -> AppOfItsOwn {
 		let app = an_app_of_its_own(&format!("bundle-host-{name}"), mock_builder());
-		app.manage(db::bootstrap(app.handle()));
-		let state = app.state::<db::DatabaseState>();
-		let database = ready(&state).expect("the database opens");
+		crate::db::install(crate::events::core(app.handle()));
+		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
+		let database = ready(state.inner()).expect("the database opens");
 		database
 			.call_mut(|connection| Ok(connection.execute_batch(TWO_BOTS)?))
 			.await
 			.expect("the bots are planted");
-		let root = bundles::root(app.handle()).expect("the bundles directory resolves");
+		let root = bundles::root(crate::events::core(app.handle()))
+			.expect("the bundles directory resolves");
 		for id in ["b1", "b2"] {
 			let bot = database
 				.conversations()
@@ -150,9 +138,9 @@ mod tests {
 		app
 	}
 
-	fn serving(app: &App<MockRuntime>, bot_id: &str) -> BundleHost<MockRuntime> {
+	fn serving(app: &App<MockRuntime>, bot_id: &str) -> BundleHost {
 		BundleHost::new(
-			app.handle().clone(),
+			crate::events::core(app.handle()).clone(),
 			RuntimeScope {
 				conversation_id: "c1".to_owned(),
 				bot_id: bot_id.to_owned(),
@@ -180,7 +168,8 @@ mod tests {
 	}
 
 	fn skill_of(app: &App<MockRuntime>, bot_id: &str) -> Option<String> {
-		let root = bundles::root(app.handle()).expect("the bundles directory resolves");
+		let root = bundles::root(crate::events::core(app.handle()))
+			.expect("the bundles directory resolves");
 		let bundle = bundles::dir(&root, bot_id).expect("the bundle is held");
 		std::fs::read_to_string(bundle.join(A_SKILL)).ok()
 	}
@@ -230,12 +219,13 @@ mod tests {
 		let answer = serving(&app, "b1").answer(asked).await.expect("the write is served");
 
 		assert_eq!(answer["outcome"], "recorded");
-		let root = bundles::root(app.handle()).expect("the bundles directory resolves");
+		let root = bundles::root(crate::events::core(app.handle()))
+			.expect("the bundles directory resolves");
 		let agent = bundles::agent_file(&root, "b1").expect("the agent file is there");
 		let text = std::fs::read_to_string(agent).expect("the agent file reads");
 		assert!(!text.contains("They bake on Sundays."), "got {text}");
-		let state = app.state::<db::DatabaseState>();
-		let stored = ready(&state)
+		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
+		let stored = ready(state.inner())
 			.expect("the database opens")
 			.conversations()
 			.bot("b1".to_owned())

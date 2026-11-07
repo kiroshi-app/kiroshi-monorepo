@@ -13,12 +13,13 @@ const DEV_IDENTIFIER_SUFFIX: &str = ".dev";
 #[tauri::command]
 #[specta::specta]
 pub async fn diagnostics<R: Runtime>(app: AppHandle<R>) -> Diagnostics {
-	let (agent_version, provider, agent_error) = match app.state::<AgentState>().sidecar().await {
-		Ok(sidecar) => {
-			(Some(sidecar.version().to_owned()), Some(sidecar.provider().to_owned()), None)
-		}
-		Err(error) => (None, None, Some(error)),
-	};
+	let (agent_version, provider, agent_error) =
+		match crate::events::core(app.app_handle()).state::<AgentState>().sidecar().await {
+			Ok(sidecar) => {
+				(Some(sidecar.version().to_owned()), Some(sidecar.provider().to_owned()), None)
+			}
+			Err(error) => (None, None, Some(error)),
+		};
 	Diagnostics {
 		app_version: app.package_info().version.to_string(),
 		git_commit: env!("KIROSHI_GIT_COMMIT").to_owned(),
@@ -30,7 +31,7 @@ pub async fn diagnostics<R: Runtime>(app: AppHandle<R>) -> Diagnostics {
 		agent_version,
 		provider,
 		agent_error,
-		side: side(&app),
+		side: side(crate::events::core(app.app_handle())),
 		plan: plan(&app),
 	}
 }
@@ -69,18 +70,18 @@ pub(crate) fn install_kind(identifier: &str) -> InstallKind {
 	InstallKind::Installed
 }
 
-fn side<R: Runtime>(app: &AppHandle<R>) -> Side {
-	if app.try_state::<Hosting>().is_some_and(|hosting| hosting.is_hosting()) {
+fn side(core: &crate::core_context::Core) -> Side {
+	if core.try_state::<Hosting>().is_some_and(|hosting| hosting.is_hosting()) {
 		return Side::Host;
 	}
-	if app.try_state::<RelayGuests>().is_some_and(|guests| guests.is_joined()) {
+	if core.try_state::<RelayGuests>().is_some_and(|guests| guests.is_joined()) {
 		return Side::Member;
 	}
 	Side::Local
 }
 
 fn plan<R: Runtime>(app: &AppHandle<R>) -> Option<AccountPlan> {
-	match app.try_state::<AccountSession>()?.current() {
+	match crate::events::core(app.app_handle()).try_state::<AccountSession>()?.current() {
 		AccountState::SignedIn(account) => account.plan,
 		_ => None,
 	}

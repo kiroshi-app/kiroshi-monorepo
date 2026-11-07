@@ -1,4 +1,3 @@
-use serde::Serialize;
 use tauri::{AppHandle, Manager, Runtime, WebviewWindow};
 
 use super::contract::{
@@ -6,57 +5,24 @@ use super::contract::{
 };
 use super::relay::{self, RelayGuests};
 use super::{deep_link, description, held};
-use crate::conversations::contract::Hue;
 use crate::db;
 use crate::db::repositories::joined_spaces::{self, JoinedReach};
-use crate::events::{self, JOINED_SPACE_CHANGED, JOINED_SPACE_RECONNECTED, JOINED_SPACE_REMOVED};
-
-pub const CHANGED_EVENT: &str = "joined-space://changed";
-
-pub const REMOVED_EVENT: &str = "joined-space://removed";
-
-pub const RECONNECTED_EVENT: &str = "joined-space://reconnected";
-
-#[derive(Debug, Clone, Serialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub struct JoinedSpaceChanged {
-	pub id: String,
-	pub hosted_by: Option<String>,
-	pub colour: Option<Hue>,
-}
-
-#[derive(Debug, Clone, Serialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub struct JoinedSpaceRemoved {
-	pub id: String,
-	pub name: String,
-	pub reason: JoinedSpaceRemovalReason,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub enum JoinedSpaceRemovalReason {
-	Deleted,
-	Removed,
-	Left,
-	Unknown,
-}
-
-#[derive(Debug, Clone, Serialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub struct JoinedSpaceReconnected {
-	pub id: String,
-}
+use crate::events::{JOINED_SPACE_CHANGED, JOINED_SPACE_RECONNECTED, JOINED_SPACE_REMOVED};
+pub use kiroshi_core::joined_spaces::contract::JoinedSpaceRemovalReason;
+pub use kiroshi_core::joined_spaces::contract::{
+	JoinedSpaceChanged, JoinedSpaceReconnected, JoinedSpaceRemoved, CHANGED_EVENT,
+	RECONNECTED_EVENT, REMOVED_EVENT,
+};
 
 pub(super) fn ready(state: &db::DatabaseState) -> Result<&db::Database, JoinedSpaceError> {
 	state.as_ref().map_err(|failure| JoinedSpaceError::Unavailable { failure: failure.into() })
 }
 
-pub(super) async fn announce_change<R: Runtime>(
-	app: &AppHandle<R>,
+pub(super) async fn announce_change(
+	core: &crate::core_context::Core,
 	id: String,
 ) -> Result<(), JoinedSpaceError> {
-	let state = app.state::<db::DatabaseState>();
+	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	let held = database.joined_spaces().find(id.clone()).await?;
 	let roster = database.joined_space_members().members(id.clone()).await?;
@@ -67,23 +33,23 @@ pub(super) async fn announce_change<R: Runtime>(
 		colour: colour_shown(&listing),
 		id,
 	};
-	events::emit(app, JOINED_SPACE_CHANGED, changed)
+	core.emit(JOINED_SPACE_CHANGED, changed)
 		.map_err(|error| JoinedSpaceError::Undeliverable { detail: error.to_string() })
 }
 
-pub(super) fn announce_removal<R: Runtime>(
-	app: &AppHandle<R>,
+pub(super) fn announce_removal(
+	core: &crate::core_context::Core,
 	removed: JoinedSpaceRemoved,
 ) -> Result<(), JoinedSpaceError> {
-	events::emit(app, JOINED_SPACE_REMOVED, removed)
+	core.emit(JOINED_SPACE_REMOVED, removed)
 		.map_err(|error| JoinedSpaceError::Undeliverable { detail: error.to_string() })
 }
 
-pub(super) fn announce_reconnection<R: Runtime>(
-	app: &AppHandle<R>,
+pub(super) fn announce_reconnection(
+	core: &crate::core_context::Core,
 	id: String,
 ) -> Result<(), JoinedSpaceError> {
-	events::emit(app, JOINED_SPACE_RECONNECTED, JoinedSpaceReconnected { id })
+	core.emit(JOINED_SPACE_RECONNECTED, JoinedSpaceReconnected { id })
 		.map_err(|error| JoinedSpaceError::Undeliverable { detail: error.to_string() })
 }
 
@@ -92,25 +58,25 @@ pub(super) fn announce_reconnection<R: Runtime>(
 pub async fn joined_spaces_list<R: Runtime>(
 	app: AppHandle<R>,
 ) -> Result<Vec<JoinedSpace>, JoinedSpaceError> {
-	let state = app.state::<db::DatabaseState>();
+	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	let stored = database.joined_spaces().list().await?;
 	let mut listed = Vec::with_capacity(stored.len());
 	for joined in stored {
-		listed.push(presented(&app, database, joined).await?);
+		listed.push(presented(crate::events::core(&app), database, joined).await?);
 	}
 	Ok(listed)
 }
 
-pub(super) async fn presented<R: Runtime>(
-	app: &AppHandle<R>,
+pub(super) async fn presented(
+	core: &crate::core_context::Core,
 	database: &db::Database,
 	joined: joined_spaces::JoinedSpace,
 ) -> Result<JoinedSpace, JoinedSpaceError> {
 	let roster = database.joined_space_members().members(joined.id.clone()).await?;
 	let JoinedReach::Relay { instance_id } = &joined.reach;
-	let wait = held::wait_or_unread(app, &joined.id, instance_id);
-	let cloud = app.state::<RelayGuests>().inner().cloud();
+	let wait = held::wait_or_unread(core, &joined.id, instance_id);
+	let cloud = core.state::<RelayGuests>().inner().cloud();
 	Ok(JoinedSpace::presented(joined, cloud, wait, &roster))
 }
 
@@ -120,7 +86,7 @@ pub async fn joined_space_connect<R: Runtime>(
 	app: AppHandle<R>,
 	id: String,
 ) -> Result<JoinedSpaceConnection, JoinedSpaceError> {
-	relay::connected(&app, id).await
+	relay::connected(crate::events::core(&app), id).await
 }
 
 #[tauri::command]
@@ -135,8 +101,8 @@ pub async fn joined_space_remove<R: Runtime>(
 	app: AppHandle<R>,
 	id: String,
 ) -> Result<(), JoinedSpaceError> {
-	relay::left(&app, &id).await?;
-	announce_change(&app, id).await
+	relay::left(crate::events::core(&app), &id).await?;
+	announce_change(crate::events::core(&app), id).await
 }
 
 #[tauri::command]
@@ -147,7 +113,7 @@ pub async fn joined_space_describe<R: Runtime>(
 	name: String,
 	colour: Option<i64>,
 ) -> Result<JoinedSpace, JoinedSpaceError> {
-	description::asked(&app, id, name, colour).await
+	description::asked(crate::events::core(&app), id, name, colour).await
 }
 
 #[cfg(test)]
@@ -194,11 +160,16 @@ mod tests {
 
 	fn app_reaching(dir: &Path, api_url: &str) -> AppOfItsOwn {
 		let app = an_app_of_its_own("joined-spaces", mock_builder());
-		app.manage::<db::DatabaseState>(Ok(db::open(dir)));
-		app.manage(AccountSession::new(Ok::<PathBuf, _>(dir.join("account")), api_url));
-		app.manage(RelayGuests::new(api_url));
+		crate::events::core(app.app_handle()).manage::<db::DatabaseState>(Ok(db::open(dir)));
+		crate::events::core(app.app_handle())
+			.manage(AccountSession::new(Ok::<PathBuf, _>(dir.join("account")), api_url));
+		crate::events::core(app.app_handle()).manage(RelayGuests::new(api_url));
 		let identifier = app.config().identifier.clone();
-		app.manage(SpaceKeys::new(InstallKind::Dev, identifier, Some(dir.join("keys"))));
+		crate::events::core(app.app_handle()).manage(SpaceKeys::new(
+			InstallKind::Dev,
+			identifier,
+			Some(dir.join("keys")),
+		));
 		app
 	}
 
@@ -317,9 +288,9 @@ mod tests {
 			inviter_email: None,
 			listing: Default::default(),
 		};
-		let database = app.state::<db::DatabaseState>();
+		let database = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 		let joined = ready(&database).expect("the database").joined_spaces().join(candidate).await;
-		let guests = app.state::<RelayGuests>();
+		let guests = crate::events::core(app.app_handle()).state::<RelayGuests>();
 		JoinedSpace::presented(joined.expect("the join"), guests.cloud(), wait, &[])
 	}
 
@@ -339,7 +310,9 @@ mod tests {
 	}
 
 	async fn announced(app: &App<MockRuntime>, hearing: &Receiver<String>, id: &str) -> Value {
-		announce_change(app.handle(), id.to_owned()).await.expect("the change is announced");
+		announce_change(crate::events::core(app.handle()), id.to_owned())
+			.await
+			.expect("the change is announced");
 		serde_json::from_str(&hearing.recv().expect("the change was heard")).expect("json")
 	}
 
@@ -349,7 +322,7 @@ mod tests {
 		let dir = temp_dir();
 		let app = app_over(&dir);
 		let added = held(&app).await;
-		let state = app.state::<db::DatabaseState>();
+		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 		let members = ready(&state).expect("the database").joined_space_members();
 		members.replaced(added.id.clone(), vec![the_host("Ann")]).await.expect("the roster");
 		let hearing = heard(&app);
@@ -376,7 +349,7 @@ mod tests {
 			inviter_email: Some("owner@example.com".to_owned()),
 			listing: Default::default(),
 		};
-		let state = app.state::<db::DatabaseState>();
+		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 		let database = ready(&state).expect("the database");
 		database.joined_spaces().join(candidate).await.expect("the join");
 		let hearing = heard(&app);
@@ -397,7 +370,10 @@ mod tests {
 		let app = app_over(&dir);
 		let keyless = held(&app).await;
 		let space = HeldSpaceKey::first().expect("randomness");
-		app.state::<SpaceKeys>().stored("joined-instance-2", space).expect("the key is kept");
+		crate::events::core(app.app_handle())
+			.state::<SpaceKeys>()
+			.stored("joined-instance-2", space)
+			.expect("the key is kept");
 		let keyed = held_over(&app, "instance-2", None).await;
 		let unreadable = held_over(&app, "instance.3", None).await;
 
@@ -540,7 +516,12 @@ mod tests {
 		assert_eq!(refused, Err(JoinedSpaceError::SessionRevoked));
 		left_once(&relay);
 		tokio::time::timeout(Duration::from_secs(60), async {
-			while app.state::<AccountSession>().bearer().expect("the store reads").is_some() {
+			while crate::events::core(app.app_handle())
+				.state::<AccountSession>()
+				.bearer()
+				.expect("the store reads")
+				.is_some()
+			{
 				tokio::time::sleep(Duration::from_millis(10)).await;
 			}
 		})

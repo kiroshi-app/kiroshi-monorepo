@@ -30,28 +30,28 @@ impl Plugin {
 	}
 }
 
-fn located<R: Runtime>(app: &AppHandle<R>, scope: &PluginScope) -> Option<Plugin> {
+fn located(core: &crate::core_context::Core, scope: &PluginScope) -> Option<Plugin> {
 	match scope {
 		PluginScope::Bot { id } => {
-			bundles::root(app).map(|root| Plugin::Bot { root, id: id.clone() })
+			bundles::root(core).map(|root| Plugin::Bot { root, id: id.clone() })
 		}
-		PluginScope::Space { id } => bundles::space::laid_down(app, id)
+		PluginScope::Space { id } => bundles::space::laid_down(core, id)
 			.map(|path| Plugin::Owned { path, owner: EnvOwner::Space { id: id.clone() } }),
 		PluginScope::User => {
-			bundles::user::laid_down(app).map(|path| Plugin::Owned { path, owner: EnvOwner::User })
+			bundles::user::laid_down(core).map(|path| Plugin::Owned { path, owner: EnvOwner::User })
 		}
 	}
 }
 
-fn laid_down<R: Runtime>(app: &AppHandle<R>, scope: &PluginScope) -> Option<Plugin> {
-	located(app, scope).filter(Plugin::is_laid_down)
+fn laid_down(core: &crate::core_context::Core, scope: &PluginScope) -> Option<Plugin> {
+	located(core, scope).filter(Plugin::is_laid_down)
 }
 
-fn writable<R: Runtime>(
-	app: &AppHandle<R>,
+fn writable(
+	core: &crate::core_context::Core,
 	scope: &PluginScope,
 ) -> Result<Plugin, TranscriptStoreError> {
-	located(app, scope)
+	located(core, scope)
 		.ok_or_else(|| TranscriptStoreError::UnwritableBundle { detail: absent(scope).to_owned() })
 }
 
@@ -95,7 +95,7 @@ pub async fn plugin_skills<R: Runtime>(
 	app: AppHandle<R>,
 	scope: PluginScope,
 ) -> Result<Vec<Skill>, TranscriptStoreError> {
-	let skills = match laid_down(&app, &scope) {
+	let skills = match laid_down(crate::events::core(&app), &scope) {
 		None => Vec::new(),
 		Some(Plugin::Bot { root, id }) => bundles::skills(&root, &id),
 		Some(Plugin::Owned { path, .. }) => plugin::skills(&path),
@@ -107,11 +107,12 @@ pub async fn plugin_skills<R: Runtime>(
 #[specta::specta]
 pub async fn plugin_create_skill<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	scope: PluginScope,
 	draft: SkillDraft,
 ) -> Result<Skill, TranscriptStoreError> {
-	let created = match writable(&app, &scope)? {
+	let state = core.state::<db::DatabaseState>();
+	let created = match writable(crate::events::core(&app), &scope)? {
 		Plugin::Bot { root, id } => {
 			let bot = stored_bot(&state, &id).await?;
 			bundles::create_skill(&root, &bot, &draft.into())
@@ -125,12 +126,13 @@ pub async fn plugin_create_skill<R: Runtime>(
 #[specta::specta]
 pub async fn plugin_update_skill<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	scope: PluginScope,
 	skill_id: String,
 	draft: SkillDraft,
 ) -> Result<Skill, TranscriptStoreError> {
-	let updated = match writable(&app, &scope)? {
+	let state = core.state::<db::DatabaseState>();
+	let updated = match writable(crate::events::core(&app), &scope)? {
 		Plugin::Bot { root, id } => {
 			refuse_system_skill(&root, &id, &skill_id)?;
 			let bot = stored_bot(&state, &id).await?;
@@ -145,12 +147,13 @@ pub async fn plugin_update_skill<R: Runtime>(
 #[specta::specta]
 pub async fn plugin_set_skill_preloaded<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	scope: PluginScope,
 	skill_id: String,
 	is_preloaded: bool,
 ) -> Result<Skill, TranscriptStoreError> {
-	let set = match writable(&app, &scope)? {
+	let state = core.state::<db::DatabaseState>();
+	let set = match writable(crate::events::core(&app), &scope)? {
 		Plugin::Bot { root, id } => {
 			refuse_system_skill(&root, &id, &skill_id)?;
 			let bot = stored_bot(&state, &id).await?;
@@ -165,11 +168,12 @@ pub async fn plugin_set_skill_preloaded<R: Runtime>(
 #[specta::specta]
 pub async fn plugin_delete_skill<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	scope: PluginScope,
 	skill_id: String,
 ) -> Result<(), TranscriptStoreError> {
-	let removed = match writable(&app, &scope)? {
+	let state = core.state::<db::DatabaseState>();
+	let removed = match writable(crate::events::core(&app), &scope)? {
 		Plugin::Bot { root, id } => {
 			refuse_system_skill(&root, &id, &skill_id)?;
 			let bot = stored_bot(&state, &id).await?;
@@ -188,7 +192,7 @@ pub async fn plugin_skill_file<R: Runtime>(
 	skill_id: String,
 	path: String,
 ) -> Result<String, TranscriptStoreError> {
-	let read = match writable(&app, &scope)? {
+	let read = match writable(crate::events::core(&app), &scope)? {
 		Plugin::Bot { root, id } => bundles::skill_file(&root, &id, &skill_id, &path),
 		Plugin::Owned { path: bundle, .. } => plugin::skill_file(&bundle, &skill_id, &path),
 	};
@@ -204,7 +208,7 @@ pub async fn plugin_write_skill_file<R: Runtime>(
 	path: String,
 	text: String,
 ) -> Result<Skill, TranscriptStoreError> {
-	let written = match writable(&app, &scope)? {
+	let written = match writable(crate::events::core(&app), &scope)? {
 		Plugin::Bot { root, id } => {
 			refuse_system_skill(&root, &id, &skill_id)?;
 			bundles::write_skill_file(&root, &id, &skill_id, &path, &text)
@@ -224,7 +228,7 @@ pub async fn plugin_delete_skill_file<R: Runtime>(
 	skill_id: String,
 	path: String,
 ) -> Result<(), TranscriptStoreError> {
-	let removed = match writable(&app, &scope)? {
+	let removed = match writable(crate::events::core(&app), &scope)? {
 		Plugin::Bot { root, id } => {
 			refuse_system_skill(&root, &id, &skill_id)?;
 			bundles::remove_skill_file(&root, &id, &skill_id, &path)
@@ -240,31 +244,47 @@ pub async fn plugin_mcp_servers<R: Runtime>(
 	app: AppHandle<R>,
 	scope: PluginScope,
 ) -> Result<Vec<McpServer>, TranscriptStoreError> {
-	let servers = match laid_down(&app, &scope) {
+	Ok(declared_mcp_servers(crate::events::core(&app), &scope))
+}
+
+pub(crate) fn declared_mcp_servers(
+	core: &crate::core_context::Core,
+	scope: &PluginScope,
+) -> Vec<McpServer> {
+	let servers = match laid_down(core, scope) {
 		None => Vec::new(),
 		Some(Plugin::Bot { root, id }) => bundles::mcp_servers(&root, &id),
 		Some(Plugin::Owned { path, .. }) => plugin::mcp_servers(&path),
 	};
-	Ok(servers.into_iter().map(McpServer::from).collect())
+	servers.into_iter().map(McpServer::from).collect()
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn plugin_set_mcp_server<R: Runtime>(
-	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+pub async fn plugin_set_mcp_server(
+	core: State<'_, crate::core_context::Core>,
 	scope: PluginScope,
 	name: String,
 	config: JsonValue,
 	mark: Option<ApplicationMark>,
 ) -> Result<McpServer, TranscriptStoreError> {
-	let config = config.0;
-	let set = match writable(&app, &scope)? {
+	declare_mcp_server(core.inner(), &scope, &name, &config.0, mark.as_ref()).await
+}
+
+pub(crate) async fn declare_mcp_server(
+	core: &crate::core_context::Core,
+	scope: &PluginScope,
+	name: &str,
+	config: &serde_json::Value,
+	mark: Option<&ApplicationMark>,
+) -> Result<McpServer, TranscriptStoreError> {
+	let state = core.state::<db::DatabaseState>();
+	let set = match writable(core, scope)? {
 		Plugin::Bot { root, id } => {
 			let bot = stored_bot(&state, &id).await?;
-			bundles::set_mcp_server(&root, &bot, &name, &config, mark.as_ref())
+			bundles::set_mcp_server(&root, &bot, name, config, mark)
 		}
-		Plugin::Owned { path, .. } => plugin::set_mcp_server(&path, &name, &config, mark.as_ref()),
+		Plugin::Owned { path, .. } => plugin::set_mcp_server(&path, name, config, mark),
 	};
 	bundled(set).map(McpServer::from)
 }
@@ -273,11 +293,12 @@ pub async fn plugin_set_mcp_server<R: Runtime>(
 #[specta::specta]
 pub async fn plugin_delete_mcp_server<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	scope: PluginScope,
 	name: String,
 ) -> Result<(), TranscriptStoreError> {
-	let owner = match writable(&app, &scope)? {
+	let state = core.state::<db::DatabaseState>();
+	let owner = match writable(crate::events::core(&app), &scope)? {
 		Plugin::Bot { root, id } => {
 			let database = ready(&state)?;
 			let bot = bot_row(database, &id).await?;
@@ -289,7 +310,7 @@ pub async fn plugin_delete_mcp_server<R: Runtime>(
 			owner
 		}
 	};
-	environment::store::forget_server(&app, &owner, &name);
+	environment::store::forget_server(crate::events::core(&app), &owner, &name);
 	Ok(())
 }
 
@@ -299,7 +320,7 @@ pub async fn plugin_history<R: Runtime>(
 	app: AppHandle<R>,
 	scope: PluginScope,
 ) -> Result<Vec<BotHistoryEntry>, TranscriptStoreError> {
-	match laid_down(&app, &scope) {
+	match laid_down(crate::events::core(&app), &scope) {
 		None => Ok(Vec::new()),
 		Some(target) => history_of(&target),
 	}
@@ -313,7 +334,7 @@ pub async fn plugin_history_diff<R: Runtime>(
 	oldest_commit_id: String,
 	newest_commit_id: String,
 ) -> Result<Vec<BotChangedFile>, TranscriptStoreError> {
-	let files = match writable(&app, &scope)? {
+	let files = match writable(crate::events::core(&app), &scope)? {
 		Plugin::Bot { root, id } => {
 			bundles::changed_files(&root, &id, &oldest_commit_id, &newest_commit_id)
 		}
@@ -328,12 +349,13 @@ pub async fn plugin_history_diff<R: Runtime>(
 #[specta::specta]
 pub async fn plugin_revert<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	scope: PluginScope,
 	oldest_commit_id: String,
 	newest_commit_id: String,
 ) -> Result<Vec<BotHistoryEntry>, TranscriptStoreError> {
-	let target = writable(&app, &scope)?;
+	let state = core.state::<db::DatabaseState>();
+	let target = writable(crate::events::core(&app), &scope)?;
 	match &target {
 		Plugin::Bot { root, id } => {
 			let database = ready(&state)?;
@@ -396,18 +418,23 @@ mod tests {
 
 	fn a_host(name: &str) -> AppOfItsOwn {
 		let app = a_bare_host(name);
-		app.manage(db::bootstrap(app.handle()));
+		crate::db::install(crate::events::core(app.handle()));
 		app
 	}
 
 	fn a_host_without_a_database(name: &str) -> AppOfItsOwn {
 		let app = a_bare_host(name);
-		app.manage::<db::DatabaseState>(Err(DatabaseError::AppDataDir));
+		crate::events::core(app.app_handle())
+			.manage::<db::DatabaseState>(Err(DatabaseError::AppDataDir));
 		app
 	}
 
 	fn database(app: &App<MockRuntime>) -> &db::Database {
-		app.state::<db::DatabaseState>().inner().as_ref().expect("the database opens")
+		crate::events::core(app.app_handle())
+			.state::<db::DatabaseState>()
+			.inner()
+			.as_ref()
+			.expect("the database opens")
 	}
 
 	async fn a_bot_in_a_space(app: &App<MockRuntime>) -> (String, String) {
@@ -428,17 +455,20 @@ mod tests {
 			.create_bot(identity, Some(space.id.clone()), None)
 			.await
 			.expect("the bot lands");
-		let root = bundles::root(app.handle()).expect("the bundles have a home");
+		let root =
+			bundles::root(crate::events::core(app.handle())).expect("the bundles have a home");
 		bundles::write(&root, &bot).expect("the bundle is written");
 		(bot.id, space.id)
 	}
 
 	fn a_space_laid_down(app: &App<MockRuntime>, space_id: &str) {
-		bundles::space::lay_down(app.handle(), space_id).expect("the space plugin is laid down");
+		bundles::space::lay_down(crate::events::core(app.handle()), space_id)
+			.expect("the space plugin is laid down");
 	}
 
 	fn the_person_laid_down(app: &App<MockRuntime>) {
-		let path = bundles::user::path(app.handle()).expect("the plugin has a home");
+		let path =
+			bundles::user::path(crate::events::core(app.handle())).expect("the plugin has a home");
 		bundles::user::lay_down(&path).expect("the person plugin is laid down");
 	}
 
@@ -468,7 +498,6 @@ mod tests {
 
 	async fn set_clock(app: &App<MockRuntime>, scope: &PluginScope) {
 		plugin_set_mcp_server(
-			app.handle().clone(),
 			app.state(),
 			scope.clone(),
 			"clock".to_owned(),
@@ -480,7 +509,8 @@ mod tests {
 	}
 
 	async fn forgets_the_clock_of(app: &App<MockRuntime>, scope: PluginScope, owner: EnvOwner) {
-		let root = environment::store::root(app.handle()).expect("the store has a home");
+		let root = environment::store::root(crate::events::core(app.handle()))
+			.expect("the store has a home");
 		let server = EnvScope::Server { name: "clock".to_owned(), owner };
 		set_clock(app, &scope).await;
 		environment::store::set(&root, &server, "REGION", "eu").expect("the value is written");
@@ -550,7 +580,8 @@ mod tests {
 	async fn deleting_a_server_the_person_never_declared_is_refused_and_forgets_nothing() {
 		let app = a_host_without_a_database("user-undeclared");
 		the_person_laid_down(&app);
-		let root = environment::store::root(app.handle()).expect("the store has a home");
+		let root = environment::store::root(crate::events::core(app.handle()))
+			.expect("the store has a home");
 		let server = EnvScope::Server { name: "clock".to_owned(), owner: EnvOwner::User };
 		environment::store::set(&root, &server, "REGION", "eu").expect("the value is written");
 
@@ -572,11 +603,11 @@ mod tests {
 		let app = a_host_without_a_database("user-not-an-object");
 		the_person_laid_down(&app);
 		set_clock(&app, &PluginScope::User).await;
-		let path = bundles::user::laid_down(app.handle()).expect("the plugin is laid down");
+		let path = bundles::user::laid_down(crate::events::core(app.handle()))
+			.expect("the plugin is laid down");
 		let held = fs::read_to_string(path.join(".mcp.json")).expect("the file reads");
 
 		let refused = plugin_set_mcp_server(
-			app.handle().clone(),
 			app.state(),
 			PluginScope::User,
 			"broken".to_owned(),
@@ -627,7 +658,6 @@ mod tests {
 		let app = a_host_without_a_database("bot-needs-database");
 
 		let refused = plugin_set_mcp_server(
-			app.handle().clone(),
 			app.state(),
 			bot("b1"),
 			"clock".to_owned(),
@@ -646,7 +676,8 @@ mod tests {
 	async fn a_bot_skill_write_that_names_a_system_skill_is_refused_and_writes_nothing() {
 		let app = a_host("bot-system-skill");
 		let (bot_id, _) = a_bot_in_a_space(&app).await;
-		let root = bundles::root(app.handle()).expect("the bundles have a home");
+		let root =
+			bundles::root(crate::events::core(app.handle())).expect("the bundles have a home");
 		let marked = bundles::dir(&root, &bot_id)
 			.expect("the bundle is held")
 			.join("skills")
@@ -685,7 +716,8 @@ mod tests {
 	}
 
 	async fn a_bot_write(app: &App<MockRuntime>, bot_id: &str, path: &str, text: &str) -> String {
-		let session = BundleHost::new(app.handle().clone(), a_session_of(bot_id));
+		let session =
+			BundleHost::new(crate::events::core(app.handle()).clone(), a_session_of(bot_id));
 		let answer = session
 			.answer(serde_json::json!({
 				"subtype": "bundle",
@@ -726,7 +758,7 @@ mod tests {
 	) -> Result<Vec<BotHistoryEntry>, TranscriptStoreError> {
 		plugin_revert(
 			app.handle().clone(),
-			app.state::<db::DatabaseState>(),
+			app.state(),
 			bot(bot_id),
 			commit_id.to_owned(),
 			commit_id.to_owned(),
@@ -738,7 +770,8 @@ mod tests {
 	async fn undoing_the_learned_block_s_creation_holds_across_the_next_session_start() {
 		let app = a_host("undo-learned-block");
 		let (bot_id, _) = a_bot_in_a_space(&app).await;
-		let root = bundles::root(app.handle()).expect("the bundles have a home");
+		let root =
+			bundles::root(crate::events::core(app.handle())).expect("the bundles have a home");
 		let created = a_learned_write(&app, &bot_id, "They bake on Sundays.").await;
 		assert_eq!(stored(&app, &bot_id).await.memory, "They bake on Sundays.");
 
@@ -760,7 +793,8 @@ mod tests {
 	async fn a_session_starting_between_the_revert_and_the_stored_memory_leaves_the_block_undone() {
 		let app = a_host("undo-learned-block-mid-session-start");
 		let (bot_id, _) = a_bot_in_a_space(&app).await;
-		let root = bundles::root(app.handle()).expect("the bundles have a home");
+		let root =
+			bundles::root(crate::events::core(app.handle())).expect("the bundles have a home");
 		let created = a_learned_write(&app, &bot_id, "They bake on Sundays.").await;
 		let scope = a_session_of(&bot_id);
 		let (reverted, paused) = oneshot::channel();
@@ -772,7 +806,8 @@ mod tests {
 		let undo = revert_a_bot(database(&app), &root, &bot_id, &created, &created, before_storing);
 		let a_session_in_the_window = async {
 			paused.await.expect("the undo pauses after its revert");
-			let mut starting = pin!(laid_down_session(app.handle(), database(&app), &scope));
+			let mut starting =
+				pin!(laid_down_session(crate::events::core(app.handle()), database(&app), &scope));
 			let early = tokio::time::timeout(A_SESSION_START, starting.as_mut()).await;
 			resumed.send(()).expect("the undo is resumed");
 			match early {
@@ -793,7 +828,8 @@ mod tests {
 	async fn a_bundle_write_leaves_a_memory_stored_without_a_learned_block_as_it_was() {
 		let app = a_host("stored-memory-without-a-block");
 		let (bot_id, _) = a_bot_in_a_space(&app).await;
-		let root = bundles::root(app.handle()).expect("the bundles have a home");
+		let root =
+			bundles::root(crate::events::core(app.handle())).expect("the bundles have a home");
 		database(&app)
 			.conversations()
 			.set_memory(bot_id.clone(), "They bake on Sundays.".to_owned())
@@ -810,7 +846,8 @@ mod tests {
 	async fn undoing_a_later_learned_write_stores_the_memory_the_restored_block_holds() {
 		let app = a_host("undo-later-learned-block");
 		let (bot_id, _) = a_bot_in_a_space(&app).await;
-		let root = bundles::root(app.handle()).expect("the bundles have a home");
+		let root =
+			bundles::root(crate::events::core(app.handle())).expect("the bundles have a home");
 		a_learned_write(&app, &bot_id, "They bake on Sundays.").await;
 		let moved = a_learned_write(&app, &bot_id, "They bake on Saturdays.").await;
 
@@ -837,7 +874,8 @@ mod tests {
 	async fn undoing_a_skill_write_leaves_a_memory_stored_alone_as_it_was() {
 		let app = a_host("undo-skill-stored-memory");
 		let (bot_id, _) = a_bot_in_a_space(&app).await;
-		let root = bundles::root(app.handle()).expect("the bundles have a home");
+		let root =
+			bundles::root(crate::events::core(app.handle())).expect("the bundles have a home");
 		database(&app)
 			.conversations()
 			.set_memory(bot_id.clone(), "They bake on Sundays.".to_owned())

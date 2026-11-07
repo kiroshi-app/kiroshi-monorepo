@@ -3,8 +3,6 @@ use std::path::Path;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
-use tauri::webview::{PageLoadEvent, PageLoadPayload};
-use tauri::{AppHandle, Manager, Runtime, State, Webview, Window, WindowEvent};
 use tokio::time::Instant;
 use yrs::updates::decoder::Decode;
 use yrs::StickyIndex;
@@ -14,6 +12,7 @@ use super::contract::{
 	LibraryDocumentPresence, LibraryError, LibraryPresenceAt, LibraryWriter, LibraryWriterKind,
 };
 use super::{a_document, decoded_content, undecodable};
+use crate::core_context::{ClientId, ClientScoped, Core, Managed};
 use crate::db::repositories::messages::AccountAuthor;
 use crate::events;
 
@@ -112,8 +111,8 @@ impl Presences {
 		unseated(&mut self.held(), &(space_id.to_owned(), name.to_owned()), seat)
 	}
 
-	pub(crate) fn window_closed(&self, label: &str) -> Vec<LibraryDocumentPresence> {
-		let seat = Seat::Window(label.to_owned());
+	pub(crate) fn window_closed(&self, client: &ClientId) -> Vec<LibraryDocumentPresence> {
+		let seat = Seat::Window(client.as_str().to_owned());
 		let mut held = self.held();
 		let keys: Vec<Key> = held.keys().cloned().collect();
 		keys.iter().filter_map(|key| unseated(&mut held, key, &seat)).collect()
@@ -209,8 +208,8 @@ const BOARD_PRESENCE_PACE: Duration = Duration::from_millis(50);
 
 const MAX_NODE_ID_BYTES: usize = 256;
 
-pub(crate) fn share_presence<R: Runtime>(
-	app: &AppHandle<R>,
+pub(crate) fn share_presence(
+	core: &crate::core_context::Core,
 	root: &Path,
 	space_id: &str,
 	name: &str,
@@ -223,15 +222,15 @@ pub(crate) fn share_presence<R: Runtime>(
 		matches!(seat, Seat::Member(_)).then(|| Instant::now() + MEMBER_PRESENCE_LEASE);
 	let seated = Seated { seat, name: identity.name, hue: identity.hue, at, lease_ends_at };
 	if lease_ends_at.is_some() {
-		seat_leased(app, space_id, name, seated);
+		seat_leased(core, space_id, name, seated);
 	} else {
-		seat_writer(app, space_id, name, seated);
+		seat_writer(core, space_id, name, seated);
 	}
 	Ok(())
 }
 
-pub(crate) fn seat_agent_on_board<R: Runtime>(
-	app: &AppHandle<R>,
+pub(crate) fn seat_agent_on_board(
+	core: &crate::core_context::Core,
 	space_id: &str,
 	name: &str,
 	agent_id: &str,
@@ -245,13 +244,13 @@ pub(crate) fn seat_agent_on_board<R: Runtime>(
 		at,
 		lease_ends_at: Some(Instant::now() + AGENT_BOARD_LEASE),
 	};
-	seat_leased(app, space_id, name, seated);
+	seat_leased(core, space_id, name, seated);
 }
 
-fn seat_leased<R: Runtime>(app: &AppHandle<R>, space_id: &str, name: &str, seated: Seated) {
+fn seat_leased(core: &crate::core_context::Core, space_id: &str, name: &str, seated: Seated) {
 	let seat = seated.seat.clone();
-	if seat_writer(app, space_id, name, seated) {
-		tokio::spawn(lapsing(app.clone(), space_id.to_owned(), name.to_owned(), seat));
+	if seat_writer(core, space_id, name, seated) {
+		tokio::spawn(lapsing(core.clone(), space_id.to_owned(), name.to_owned(), seat));
 	}
 }
 
@@ -281,91 +280,82 @@ fn placed(
 	}
 }
 
-pub(crate) fn seated_identity<R: Runtime>(
-	app: &AppHandle<R>,
+pub(crate) fn seated_identity(
+	core: &crate::core_context::Core,
 	space_id: &str,
 	name: &str,
 	seat: &Seat,
 ) -> Option<Identity> {
-	presences(app).identity_of(space_id, name, seat)
+	presences(core).identity_of(space_id, name, seat)
 }
 
-pub(crate) fn seat_writer<R: Runtime>(
-	app: &AppHandle<R>,
+pub(crate) fn seat_writer(
+	core: &crate::core_context::Core,
 	space_id: &str,
 	name: &str,
 	seated: Seated,
 ) -> bool {
 	let is_paced = matches!(seated.at, LibraryPresenceAt::Board { .. });
-	let presences = presences(app);
+	let presences = presences(core);
 	let (presence, is_new) = presences.seated(space_id, name, seated);
 	if !is_paced {
-		published(app, presence);
+		published(core, presence);
 	} else if presences.is_first_to_trail(space_id, name) {
-		tokio::spawn(trailing(app.clone(), space_id.to_owned(), name.to_owned()));
+		tokio::spawn(trailing(core.clone(), space_id.to_owned(), name.to_owned()));
 	}
 	is_new
 }
 
-pub(crate) fn unseat_writer<R: Runtime>(
-	app: &AppHandle<R>,
+pub(crate) fn unseat_writer(
+	core: &crate::core_context::Core,
 	space_id: &str,
 	name: &str,
 	seat: &Seat,
 ) {
-	if let Some(presence) = presences(app).left(space_id, name, seat) {
-		published(app, presence);
+	if let Some(presence) = presences(core).left(space_id, name, seat) {
+		published(core, presence);
 	}
 }
 
-pub fn forget_on_destroyed<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
-	if matches!(event, WindowEvent::Destroyed) {
-		forget(window);
-	}
-}
-
-pub fn forget_on_page_load<R: Runtime>(webview: &Webview<R>, payload: &PageLoadPayload<'_>) {
-	if payload.event() == PageLoadEvent::Started {
-		forget(&webview.window());
-	}
-}
-
-fn forget<R: Runtime>(window: &Window<R>) {
-	let Some(presences) = window.try_state::<Presences>() else {
-		return;
-	};
-	for presence in presences.window_closed(window.label()) {
-		published(window.app_handle(), presence);
-	}
-}
-
-async fn lapsing<R: Runtime>(app: AppHandle<R>, space_id: String, name: String, seat: Seat) {
+async fn lapsing(core: crate::core_context::Core, space_id: String, name: String, seat: Seat) {
 	loop {
-		match presences(&app).lease(&space_id, &name, &seat, Instant::now()) {
+		match presences(&core).lease(&space_id, &name, &seat, Instant::now()) {
 			Lease::Gone => return,
 			Lease::RunsUntil(ends_at) => tokio::time::sleep_until(ends_at).await,
-			Lease::Lapsed(presence) => return published(&app, presence),
+			Lease::Lapsed(presence) => return published(&core, presence),
 		}
 	}
 }
 
-async fn trailing<R: Runtime>(app: AppHandle<R>, space_id: String, name: String) {
+async fn trailing(core: crate::core_context::Core, space_id: String, name: String) {
 	tokio::time::sleep(BOARD_PRESENCE_PACE).await;
-	published(&app, presences(&app).trailed(&space_id, &name));
+	published(&core, presences(&core).trailed(&space_id, &name));
 }
 
-fn published<R: Runtime>(app: &AppHandle<R>, presence: LibraryDocumentPresence) {
+impl ClientScoped for Presences {
+	fn forget_client(&self, core: &Core, client: &ClientId) {
+		for presence in self.window_closed(client) {
+			published_in(core, presence);
+		}
+	}
+}
+
+fn published(core: &crate::core_context::Core, presence: LibraryDocumentPresence) {
+	published_in(core, presence);
+}
+
+fn published_in(core: &Core, presence: LibraryDocumentPresence) {
 	let space_id = presence.space_id.clone();
-	if let Err(error) = events::emit(app, events::LIBRARY_DOCUMENT_PRESENCE, presence) {
+	if let Err(error) = core.emit(events::LIBRARY_DOCUMENT_PRESENCE, presence) {
 		log::warn!(
 			"the writers of a library document of space {space_id} were not published: {error}"
 		);
 	}
 }
 
-fn presences<R: Runtime>(app: &AppHandle<R>) -> State<'_, Presences> {
-	if app.try_state::<Presences>().is_none() {
-		app.manage(Presences::default());
+fn presences(core: &crate::core_context::Core) -> Managed<'_, Presences> {
+	if core.try_state::<Presences>().is_none() {
+		core.manage_client_scoped(Presences::default());
 	}
-	app.state::<Presences>()
+	core.state::<Presences>()
 }

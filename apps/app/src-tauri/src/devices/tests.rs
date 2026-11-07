@@ -2,6 +2,7 @@ use std::net::Ipv4Addr;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+use tauri::AppHandle;
 
 use axum::extract::{Path as Route, State as Served};
 use axum::http::{header, HeaderMap, StatusCode};
@@ -23,7 +24,6 @@ use super::*;
 use crate::account::contract::{AccountState, SignedOutReason};
 use crate::account::session::{restore, sign_in, sign_out, AccountSession};
 use crate::crypto::device_keys::DeviceKeys;
-use crate::db;
 use crate::db::repositories::joined_spaces::{JoinedReach, JoinedSpace};
 use crate::environment::contract::{EnvScope, ACCOUNT_BEARER};
 use crate::environment::store;
@@ -300,12 +300,14 @@ impl Harness {
 			store::set(&folder, &EnvScope::Account, ACCOUNT_BEARER, bearer)
 				.expect("the bearer is kept");
 		}
-		app.manage(AccountSession::new(Ok::<PathBuf, _>(folder.to_path_buf()), api));
-		app.manage(db::bootstrap(app.handle()));
-		app.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
-		app.manage(Hosting::new(api, None));
-		app.manage(RelayGuests::new(api));
-		app.manage(Devices::new(api).polling_every(TICK, TICK));
+		crate::events::core(app.app_handle())
+			.manage(AccountSession::new(Ok::<PathBuf, _>(folder.to_path_buf()), api));
+		crate::db::install(crate::events::core(app.handle()));
+		crate::events::core(app.app_handle())
+			.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
+		crate::events::core(app.app_handle()).manage(Hosting::new(api, None));
+		crate::events::core(app.app_handle()).manage(RelayGuests::new(api));
+		crate::events::core(app.app_handle()).manage(Devices::new(api).polling_every(TICK, TICK));
 		let heard = Arc::new(Mutex::new(Vec::new()));
 		for name in [
 			ACCOUNT_CHANGED.name(),
@@ -325,7 +327,7 @@ impl Harness {
 
 	async fn restored(relay: Relay) -> Self {
 		let harness = Self::new(relay, Some(BEARER)).await;
-		restore(harness.app.handle().clone()).await;
+		restore(crate::events::core(harness.app.handle()).clone()).await;
 		harness
 	}
 
@@ -368,19 +370,19 @@ impl Harness {
 	}
 
 	fn account(&self) -> AccountState {
-		self.app.state::<AccountSession>().current()
+		crate::events::core(self.app.app_handle()).state::<AccountSession>().current()
 	}
 
 	async fn held_relay_device(&self) -> Option<String> {
 		let device_id = self.keys().device_id().to_string();
-		let state = self.app.state::<DatabaseState>();
+		let state = crate::events::core(self.app.app_handle()).state::<DatabaseState>();
 		let devices = state.as_ref().expect("the database").relay_devices();
 		devices.relay_device_id(ACCOUNT_ID.to_owned(), device_id).await.expect("the id reads")
 	}
 
 	async fn holding_relay_device(&self, relay_device_id: &str) {
 		let device_id = self.keys().device_id().to_string();
-		let state = self.app.state::<DatabaseState>();
+		let state = crate::events::core(self.app.app_handle()).state::<DatabaseState>();
 		let devices = state.as_ref().expect("the database").relay_devices();
 		devices
 			.registered(ACCOUNT_ID.to_owned(), device_id, relay_device_id.to_owned())
@@ -389,12 +391,12 @@ impl Harness {
 	}
 
 	fn keys(&self) -> DeviceKeys {
-		let state = self.app.state::<DeviceKeysState>();
+		let state = crate::events::core(self.app.app_handle()).state::<DeviceKeysState>();
 		DeviceKeys::from_secret(&state.keys().expect("the device keys").secret())
 	}
 
 	fn hosting(&self) -> HostingState {
-		self.app.state::<Hosting>().current(PERSONAL)
+		crate::events::core(self.app.app_handle()).state::<Hosting>().current(PERSONAL)
 	}
 }
 
@@ -451,7 +453,7 @@ fn a_launch_signed_in_registers_the_device_and_stores_its_id_even_with_one_held(
 		let harness = Harness::new(Relay::approved(), Some(BEARER)).await;
 		harness.holding_relay_device("a-stale-relay-device-id").await;
 
-		restore(harness.handle()).await;
+		restore(crate::events::core(&harness.handle()).clone()).await;
 		harness.approved().await;
 
 		assert_eq!(harness.relay.count("POST /devices"), 1);
@@ -468,7 +470,9 @@ fn a_completed_sign_in_registers_the_device() {
 	run(async {
 		let harness = Harness::new(Relay::approved(), None).await;
 
-		sign_in(&harness.handle(), |_| Ok(())).await.expect("the sign-in starts");
+		sign_in(crate::events::core(&harness.handle()), |_| Ok(()))
+			.await
+			.expect("the sign-in starts");
 		harness.approved().await;
 
 		assert!(matches!(harness.account(), AccountState::SignedIn(_)));
@@ -481,14 +485,14 @@ fn a_completed_sign_in_registers_the_device() {
 fn the_approval_is_none_while_signed_out_and_back_to_none_on_sign_out() {
 	run(async {
 		let harness = Harness::new(Relay::approved(), None).await;
-		restore(harness.handle()).await;
+		restore(crate::events::core(&harness.handle()).clone()).await;
 
 		assert_eq!(harness.approval(), DeviceApproval::None);
 		assert!(harness.relay.calls().is_empty());
 
 		let harness = Harness::restored(Relay::approved()).await;
 		harness.approved().await;
-		sign_out(&harness.handle()).await.expect("signed out");
+		sign_out(crate::events::core(&harness.handle())).await.expect("signed out");
 
 		assert_eq!(harness.approval(), DeviceApproval::None);
 		assert_eq!(
@@ -572,7 +576,13 @@ fn a_401_while_pending_signs_out_locally_as_device_refused() {
 		let refused = AccountState::SignedOut { reason: Some(SignedOutReason::DeviceRefused) };
 		until(PATIENCE, || (harness.account() == refused).then_some(())).await;
 
-		assert_eq!(harness.app.state::<AccountSession>().bearer().expect("the store reads"), None);
+		assert_eq!(
+			crate::events::core(harness.app.app_handle())
+				.state::<AccountSession>()
+				.bearer()
+				.expect("the store reads"),
+			None
+		);
 		assert_eq!(harness.approval(), DeviceApproval::None);
 	});
 }
@@ -598,9 +608,10 @@ fn while_pending_no_host_starts_and_the_approval_resumes_the_hosted_spaces() {
 		let harness = Harness::restored(Relay::pending_until(&in_minutes(30))).await;
 		harness.pending().await;
 
-		let started = crate::hosting::start(&harness.handle(), PERSONAL.to_owned())
-			.await
-			.expect("the start settles");
+		let started =
+			crate::hosting::start(crate::events::core(&harness.handle()), PERSONAL.to_owned())
+				.await
+				.expect("the start settles");
 		assert_eq!(
 			started,
 			HostingState::Failed {
@@ -625,7 +636,7 @@ fn while_pending_no_member_socket_opens() {
 	run(async {
 		let harness = Harness::restored(Relay::pending_until(&in_minutes(30))).await;
 		harness.pending().await;
-		let state = harness.app.state::<DatabaseState>();
+		let state = crate::events::core(harness.app.app_handle()).state::<DatabaseState>();
 		let joined = state
 			.as_ref()
 			.expect("the database")
@@ -642,9 +653,14 @@ fn while_pending_no_member_socket_opens() {
 			.expect("the joined space is stored");
 
 		let connected = joined_space_connect(harness.handle(), joined.id.clone()).await;
-		let accepted_join =
-			join::joined(&harness.handle(), "i1".to_owned(), joined.name, None, Default::default())
-				.await;
+		let accepted_join = join::joined(
+			crate::events::core(&harness.handle()),
+			"i1".to_owned(),
+			joined.name,
+			None,
+			Default::default(),
+		)
+		.await;
 
 		assert_eq!(connected.err(), Some(JoinedSpaceError::HostOffline { id: joined.id }));
 		assert!(
@@ -946,11 +962,11 @@ fn a_refused_registration_resumes_the_hosted_spaces_once_and_keeps_the_approval_
 		let relay = Relay::approved();
 		relay.refuses_registration(StatusCode::BAD_REQUEST, "DEVICE_PROOF_INVALID");
 		let harness = Harness::new(relay, Some(BEARER)).await;
-		let state = harness.app.state::<DatabaseState>();
+		let state = crate::events::core(harness.app.app_handle()).state::<DatabaseState>();
 		let hosting = state.as_ref().expect("the database").space_hosting();
 		hosting.set_hosted(PERSONAL.to_owned(), true).await.expect("the space is flagged");
 
-		restore(harness.handle()).await;
+		restore(crate::events::core(&harness.handle()).clone()).await;
 		let not_listening = HostingState::Failed {
 			failure: HostingFailureKind::LocalHostApiNotListening,
 			detail: "the local host api is not listening".to_owned(),

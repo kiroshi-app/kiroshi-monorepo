@@ -36,9 +36,11 @@ struct Harness {
 fn launch() -> Harness {
 	let app = an_app_of_its_own(
 		"bundle-evolution",
-		mock_builder().manage(AgentState::default()).invoke_handler(invoke_handler()),
+		mock_builder()
+			.plugin(kiroshi_app::events::in_core(AgentState::default()))
+			.invoke_handler(invoke_handler()),
 	);
-	app.manage(db::bootstrap(app.handle()));
+	kiroshi_app::db::install(kiroshi_app::events::core(app.handle()));
 	let window = WebviewWindowBuilder::new(app.handle(), "main", Default::default())
 		.build()
 		.expect("window builds");
@@ -147,7 +149,7 @@ impl Harness {
 	}
 
 	fn recorded_space(&self, bot: &str) -> String {
-		let state = self.app.state::<db::DatabaseState>();
+		let state = kiroshi_app::events::core(self.app.app_handle()).state::<db::DatabaseState>();
 		let database = state.inner().as_ref().expect("the database is open");
 		tokio::runtime::Runtime::new()
 			.expect("runtime")
@@ -157,7 +159,7 @@ impl Harness {
 	}
 
 	fn recorded_bot(&self, bot: &str) -> StoredBot {
-		let state = self.app.state::<db::DatabaseState>();
+		let state = kiroshi_app::events::core(self.app.app_handle()).state::<db::DatabaseState>();
 		let database = state.inner().as_ref().expect("the database is open");
 		tokio::runtime::Runtime::new()
 			.expect("runtime")
@@ -213,19 +215,22 @@ fn scenario(name: &str) -> RemovedOnDrop {
 }
 
 fn user_plugin(harness: &Harness) -> PathBuf {
-	let path = bundles::user::path(harness.app.handle()).expect("the person's plugin path");
+	let path = bundles::user::path(kiroshi_app::events::core(harness.app.handle()))
+		.expect("the person's plugin path");
 	bundles::user::lay_down(&path).expect("the person's plugin is laid down");
 	path
 }
 
 fn space_plugin(harness: &Harness, space: &str) -> PathBuf {
-	let path = bundles::space::path(harness.app.handle(), space).expect("the space's plugin path");
+	let path = bundles::space::path(kiroshi_app::events::core(harness.app.handle()), space)
+		.expect("the space's plugin path");
 	bundles::space::lay_down_at(&path).expect("the space's plugin is laid down");
 	path
 }
 
 fn bot_bundle(harness: &Harness, bot: &str) -> PathBuf {
-	let root = bundles::root(harness.app.handle()).expect("the bundle root");
+	let root =
+		bundles::root(kiroshi_app::events::core(harness.app.handle())).expect("the bundle root");
 	bundles::dir(&root, bot).expect("the bundle is held")
 }
 

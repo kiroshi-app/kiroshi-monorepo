@@ -1,8 +1,7 @@
 use std::convert::Infallible;
 use std::future::Future;
 
-use serde::Serialize;
-use tauri::{AppHandle, Manager, Runtime, State};
+use tauri::State;
 use tokio::time::{interval, MissedTickBehavior};
 
 use super::commands::{announce_change, ready};
@@ -15,25 +14,18 @@ use crate::crypto::fingerprint::fingerprint;
 use crate::db;
 use crate::db::repositories::joined_space_members::{JoinedSpaceMember, JoinedSpaceRole};
 use crate::db::repositories::joined_spaces::{JoinedReach, JoinedSpace};
-use crate::events::{self, JOINED_SPACE_MEMBERS_CHANGED};
+use crate::events::JOINED_SPACE_MEMBERS_CHANGED;
 use crate::hosting::roster::Rostered;
 use crate::hosting::MEMBERS_EVERY;
-
-pub const MEMBERS_CHANGED_EVENT: &str = "joined-space://members-changed";
-
-#[derive(Debug, Clone, Serialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub struct JoinedSpaceMembersChanged {
-	pub id: String,
-	pub members: Vec<JoinedSpaceMember>,
-}
+pub use kiroshi_core::joined_spaces::contract::{JoinedSpaceMembersChanged, MEMBERS_CHANGED_EVENT};
 
 #[tauri::command]
 #[specta::specta]
 pub async fn joined_space_members(
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	id: String,
 ) -> Result<Vec<JoinedSpaceMember>, JoinedSpaceError> {
+	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	if database.joined_spaces().find(id.clone()).await?.is_none() {
 		return Err(JoinedSpaceError::UnknownJoinedSpace { id });
@@ -41,13 +33,13 @@ pub async fn joined_space_members(
 	Ok(database.joined_space_members().members(id).await?)
 }
 
-pub(super) fn read_soon<R: Runtime>(app: &AppHandle<R>, joined: &JoinedSpace) {
-	let (app, joined) = (app.clone(), joined.clone());
-	tauri::async_runtime::spawn(async move { read(&app, &joined).await });
+pub(super) fn read_soon(core: &crate::core_context::Core, joined: &JoinedSpace) {
+	let (core, joined) = (core.clone(), joined.clone());
+	core.clone().spawn(async move { read(&core, &joined).await });
 }
 
-pub(super) fn alongside<R: Runtime>(
-	app: AppHandle<R>,
+pub(super) fn alongside(
+	core: crate::core_context::Core,
 	joined: &JoinedSpace,
 	link: impl Future<Output = ()>,
 ) -> impl Future<Output = ()> {
@@ -55,28 +47,28 @@ pub(super) fn alongside<R: Runtime>(
 	async move {
 		tokio::select! {
 			() = link => {}
-			never = polled(&app, &joined) => match never {},
+			never = polled(&core, &joined) => match never {},
 		}
 	}
 }
 
-async fn polled<R: Runtime>(app: &AppHandle<R>, joined: &JoinedSpace) -> Infallible {
+async fn polled(core: &crate::core_context::Core, joined: &JoinedSpace) -> Infallible {
 	let mut reads = interval(MEMBERS_EVERY);
 	reads.set_missed_tick_behavior(MissedTickBehavior::Delay);
 	loop {
 		reads.tick().await;
-		read(app, joined).await;
+		read(core, joined).await;
 	}
 }
 
-async fn read<R: Runtime>(app: &AppHandle<R>, joined: &JoinedSpace) {
-	let guests = app.state::<RelayGuests>();
+async fn read(core: &crate::core_context::Core, joined: &JoinedSpace) {
+	let guests = core.state::<RelayGuests>();
 	let Some(mut reading) = guests.members_read_started(&joined.id) else {
 		return;
 	};
 	loop {
 		guests.cloud().unpaused().await;
-		if let Err(failure) = refreshed(app, joined).await {
+		if let Err(failure) = refreshed(core, joined).await {
 			let JoinedReach::Relay { instance_id } = &joined.reach;
 			log::warn!(
 				"the members of joined space {} (instance {instance_id}) were not read: {failure:?}",
@@ -89,12 +81,12 @@ async fn read<R: Runtime>(app: &AppHandle<R>, joined: &JoinedSpace) {
 	}
 }
 
-async fn refreshed<R: Runtime>(
-	app: &AppHandle<R>,
+async fn refreshed(
+	core: &crate::core_context::Core,
 	joined: &JoinedSpace,
 ) -> Result<(), JoinedSpaceError> {
-	let members = roster_of(app, joined).await?;
-	let state = app.state::<db::DatabaseState>();
+	let members = roster_of(core, joined).await?;
+	let state = core.state::<db::DatabaseState>();
 	let repository = ready(&state)?.joined_space_members();
 	let id = joined.id.clone();
 	let previous = repository.members(id.clone()).await?;
@@ -105,31 +97,31 @@ async fn refreshed<R: Runtime>(
 		|roster| hosted_by(&joined.listing, joined.inviter_email.clone(), roster);
 	let is_host_renamed = hosted_by_roster(&previous) != hosted_by_roster(&members);
 	let changed = JoinedSpaceMembersChanged { id: id.clone(), members };
-	events::emit(app, JOINED_SPACE_MEMBERS_CHANGED, changed)
+	core.emit(JOINED_SPACE_MEMBERS_CHANGED, changed)
 		.map_err(|error| JoinedSpaceError::Undeliverable { detail: error.to_string() })?;
 	if is_host_renamed {
-		announce_change(app, id).await?;
+		announce_change(core, id).await?;
 	}
 	Ok(())
 }
 
-async fn roster_of<R: Runtime>(
-	app: &AppHandle<R>,
+async fn roster_of(
+	core: &crate::core_context::Core,
 	joined: &JoinedSpace,
 ) -> Result<Vec<JoinedSpaceMember>, JoinedSpaceError> {
-	let bearer = match app.state::<AccountSession>().bearer() {
+	let bearer = match core.state::<AccountSession>().bearer() {
 		Ok(Some(bearer)) => bearer,
 		Ok(None) => return Err(JoinedSpaceError::NeedsSignIn),
 		Err(error) => return Err(JoinedSpaceError::SessionStore { detail: format!("{error:?}") }),
 	};
 	let JoinedReach::Relay { instance_id } = &joined.reach;
-	let Some(roster) = held::roster(app, instance_id).await? else {
+	let Some(roster) = held::roster(core, instance_id).await? else {
 		return Ok(Vec::new());
 	};
-	let listed = match app.state::<RelayGuests>().cloud().roster(&bearer, instance_id).await {
+	let listed = match core.state::<RelayGuests>().cloud().roster(&bearer, instance_id).await {
 		Ok(listed) => listed,
 		Err(MemberCallError::Revoked) => {
-			session::revoked(app, &bearer);
+			session::revoked(core, &bearer);
 			return Err(JoinedSpaceError::SessionRevoked);
 		}
 		Err(MemberCallError::Unreachable { reason, detail }) => {
@@ -170,6 +162,7 @@ mod tests {
 	use std::path::{Path, PathBuf};
 	use std::sync::{Arc, Mutex};
 	use std::time::Duration;
+	use tauri::Manager;
 
 	use axum::extract::State as Extracted;
 	use axum::http::header::CONTENT_TYPE;
@@ -241,11 +234,17 @@ mod tests {
 
 	fn app_reaching(dir: &Path, api_url: &str) -> AppOfItsOwn {
 		let app = an_app_of_its_own("joined-space-members", mock_builder());
-		app.manage::<db::DatabaseState>(Ok(db::open(dir)));
-		app.manage(AccountSession::new(Ok::<PathBuf, _>(dir.join("account")), api_url));
-		app.manage(RelayGuests::new(api_url));
-		app.manage(DeviceKeysState::new(Ok(DeviceKeys::from_secret(&DEVICE_SECRET))));
-		app.manage(SpaceKeys::new(InstallKind::Dev, "members".to_owned(), Some(dir.join("keys"))));
+		crate::events::core(app.app_handle()).manage::<db::DatabaseState>(Ok(db::open(dir)));
+		crate::events::core(app.app_handle())
+			.manage(AccountSession::new(Ok::<PathBuf, _>(dir.join("account")), api_url));
+		crate::events::core(app.app_handle()).manage(RelayGuests::new(api_url));
+		crate::events::core(app.app_handle())
+			.manage(DeviceKeysState::new(Ok(DeviceKeys::from_secret(&DEVICE_SECRET))));
+		crate::events::core(app.app_handle()).manage(SpaceKeys::new(
+			InstallKind::Dev,
+			"members".to_owned(),
+			Some(dir.join("keys")),
+		));
 		app
 	}
 
@@ -297,7 +296,7 @@ mod tests {
 	}
 
 	async fn signed_roster_planted(app: &App<MockRuntime>) {
-		let own = device_keys(app.handle()).expect("the device keys");
+		let own = device_keys(crate::events::core(app.handle())).expect("the device keys");
 		let host = DeviceKeys::generate().expect("randomness");
 		let eve = DeviceKeys::generate().expect("randomness");
 		let set = signed_set(
@@ -312,13 +311,15 @@ mod tests {
 		);
 		let roster = verified_set(set, None, &own.device_id()).expect("the roster verifies");
 		let handed = Handed { space: HeldSpaceKey::first().expect("randomness"), roster };
-		assert!(kept(app.handle(), INSTANCE, &handed).await.expect("the roster is kept"));
+		assert!(kept(crate::events::core(app.handle()), INSTANCE, &handed)
+			.await
+			.expect("the roster is kept"));
 	}
 
 	async fn joined_space(app: &App<MockRuntime>) -> JoinedSpace {
 		signed_roster_planted(app).await;
 		relay::joined(
-			app.handle(),
+			crate::events::core(app.handle()),
 			INSTANCE.to_owned(),
 			Some("Studio".to_owned()),
 			None,
@@ -326,7 +327,7 @@ mod tests {
 		)
 		.await
 		.expect("the join");
-		let state = app.state::<db::DatabaseState>();
+		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 		let held = ready(&state).expect("the database").joined_spaces().list().await;
 		held.expect("the list").into_iter().next().expect("the joined space is held")
 	}
@@ -407,7 +408,7 @@ mod tests {
 		next(&mut hearing).await;
 
 		relay.answers(StatusCode::OK, listed(&[("bob", "Robert")]));
-		read(app.handle(), &joined).await;
+		read(crate::events::core(app.handle()), &joined).await;
 		let changed = next(&mut hearing).await;
 
 		assert_eq!(
@@ -437,7 +438,7 @@ mod tests {
 				{ "userId": "bob", "name": "Bob", "role": "member" }
 			]),
 		);
-		read(app.handle(), &joined).await;
+		read(crate::events::core(app.handle()), &joined).await;
 
 		assert_eq!(
 			hosted_by_heard(&mut changes, "Annie").await,
@@ -458,7 +459,7 @@ mod tests {
 		hosted_by_heard(&mut changes, "Ann").await;
 
 		relay.answers(StatusCode::OK, listed(&[("bob", "Robert")]));
-		read(app.handle(), &joined).await;
+		read(crate::events::core(app.handle()), &joined).await;
 		next(&mut members).await;
 
 		assert!(is_silent(&mut changes).await);
@@ -474,7 +475,7 @@ mod tests {
 		let joined = joined_space(&app).await;
 		next(&mut hearing).await;
 
-		read(app.handle(), &joined).await;
+		read(crate::events::core(app.handle()), &joined).await;
 
 		assert!(is_silent(&mut hearing).await);
 	}
@@ -494,7 +495,7 @@ mod tests {
 			[StatusCode::FORBIDDEN, StatusCode::NOT_FOUND, StatusCode::INTERNAL_SERVER_ERROR]
 		{
 			relay.answers(status, json!({}));
-			read(app.handle(), &joined).await;
+			read(crate::events::core(app.handle()), &joined).await;
 			assert!(is_silent(&mut hearing).await, "{status}");
 		}
 
@@ -521,7 +522,7 @@ mod tests {
 		let app = app_reaching(&dir, &unreached);
 		let mut hearing = heard(&app);
 
-		read(app.handle(), &joined).await;
+		read(crate::events::core(app.handle()), &joined).await;
 
 		assert!(is_silent(&mut hearing).await);
 		assert_eq!(stored_json(&app, &joined.id).await, before);
@@ -575,10 +576,15 @@ mod tests {
 		next(&mut hearing).await;
 		relay.answers(StatusCode::UNAUTHORIZED, json!({}));
 
-		read(app.handle(), &joined).await;
+		read(crate::events::core(app.handle()), &joined).await;
 
 		timeout(HEARD_WITHIN, async {
-			while app.state::<AccountSession>().bearer().expect("the store reads").is_some() {
+			while crate::events::core(app.app_handle())
+				.state::<AccountSession>()
+				.bearer()
+				.expect("the store reads")
+				.is_some()
+			{
 				tokio::time::sleep(Duration::from_millis(10)).await;
 			}
 		})
@@ -592,14 +598,20 @@ mod tests {
 		let (api_url, _relay) = relay_answering(listed(&[("bob", "Bob")])).await;
 		signed_in(&dir);
 		let app = app_reaching(&dir, &api_url);
-		relay::joined(app.handle(), INSTANCE.to_owned(), None, None, Default::default())
-			.await
-			.expect("the join");
-		let state = app.state::<db::DatabaseState>();
+		relay::joined(
+			crate::events::core(app.handle()),
+			INSTANCE.to_owned(),
+			None,
+			None,
+			Default::default(),
+		)
+		.await
+		.expect("the join");
+		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 		let held = ready(&state).expect("the database").joined_spaces().list().await;
 		let joined = held.expect("the list").into_iter().next().expect("the joined space");
 
-		read(app.handle(), &joined).await;
+		read(crate::events::core(app.handle()), &joined).await;
 
 		assert_eq!(stored(&app, &joined.id).await, Ok(Vec::new()));
 	}
@@ -618,7 +630,7 @@ mod tests {
 			inviter_email: None,
 			listing: Default::default(),
 		};
-		let state = app.state::<db::DatabaseState>();
+		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 		let joined = ready(&state).expect("the database").joined_spaces().join(candidate).await;
 		let joined = joined.expect("the join");
 
@@ -636,7 +648,7 @@ mod tests {
 			};
 			assert_eq!(connection.map(|found| found.id), Err(waiting));
 		}
-		let guests = app.state::<RelayGuests>();
+		let guests = crate::events::core(app.app_handle()).state::<RelayGuests>();
 		assert!(!guests.is_running(&joined.id));
 	}
 }

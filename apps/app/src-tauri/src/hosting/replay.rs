@@ -3,7 +3,6 @@ use std::collections::VecDeque;
 use reqwest::StatusCode;
 use serde::Deserialize;
 use serde_json::{json, Value};
-use tauri::{AppHandle, Runtime};
 use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::watch;
 
@@ -161,23 +160,23 @@ pub(super) fn resume_call(text: &str) -> Option<Result<ResumeCall, String>> {
 	})
 }
 
-pub(super) async fn recorded<R: Runtime>(
-	app: &AppHandle<R>,
+pub(super) async fn recorded(
+	core: &crate::core_context::Core,
 	space_id: &str,
 	ring: &watch::Sender<Ring>,
 ) {
 	let mut guest_events = GuestEvents::new(space_id);
 	loop {
-		let (pending, mut heard) = subscribed_with_pending_questions(app);
+		let (pending, mut heard) = subscribed_with_pending_questions(core);
 		for frame in pending {
-			if guest_events.reach_the_guest(app, &frame).await {
+			if guest_events.reach_the_guest(core, &frame).await {
 				ring.send_modify(|ring| ring.recorded(&frame));
 			}
 		}
 		let missed = loop {
 			match heard.recv().await {
 				Ok(frame) => {
-					if guest_events.reach_the_guest(app, &frame).await {
+					if guest_events.reach_the_guest(core, &frame).await {
 						ring.send_modify(|ring| ring.recorded(&frame));
 					}
 				}

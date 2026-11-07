@@ -31,9 +31,11 @@ const QUIT_HELD_OPEN: Duration = Duration::from_secs(3600);
 fn app() -> AppOfItsOwn {
 	let app = an_app_of_its_own(
 		"commands",
-		mock_builder().manage(AgentState::default()).invoke_handler(invoke_handler()),
+		mock_builder()
+			.plugin(kiroshi_app::events::in_core(AgentState::default()))
+			.invoke_handler(invoke_handler()),
 	);
-	app.manage(db::bootstrap(app.handle()));
+	kiroshi_app::db::install(kiroshi_app::events::core(app.handle()));
 	bundled_bots(&app, &["default", "other"]);
 	app
 }
@@ -151,9 +153,7 @@ fn shutting_down_a_session_never_queues_behind_the_quit() {
 	let finished: Mutex<Vec<&str>> = Mutex::new(Vec::new());
 	runtime.block_on(async {
 		agent_start_or_resume_session(
-			app.handle().clone(),
-			app.state::<AgentState>(),
-			app.state::<db::DatabaseState>(),
+			app.state::<kiroshi_app::core_context::Core>(),
 			a_scope_value(),
 			None,
 			Some(std::env::temp_dir().to_string_lossy().into_owned()),
@@ -162,14 +162,18 @@ fn shutting_down_a_session_never_queues_behind_the_quit() {
 		.await
 		.expect("session starts");
 
-		let state = app.state::<AgentState>();
+		let state = kiroshi_app::events::core(app.app_handle()).state::<AgentState>();
 		let sidecar = state.sidecar().await.expect("the sidecar runs");
 		sidecar.set_terminate_grace(QUIT_HELD_OPEN);
 		tokio::join!(
 			async {
 				tokio::time::timeout(
 					PATIENCE,
-					shutdown_session(app.handle(), &state, &a_scope_value()),
+					shutdown_session(
+						kiroshi_app::events::core(app.handle()),
+						&state,
+						&a_scope_value(),
+					),
 				)
 				.await
 				.expect("the shutdown never waited on the quit held open");
@@ -178,9 +182,12 @@ fn shutting_down_a_session_never_queues_behind_the_quit() {
 				assert_eq!(killed, 0, "the sidecar ends: {}", std::io::Error::last_os_error());
 			},
 			async {
-				tokio::time::timeout(PATIENCE, terminate_session(app.handle(), &state))
-					.await
-					.expect("the quit ends once its sidecar is gone");
+				tokio::time::timeout(
+					PATIENCE,
+					terminate_session(kiroshi_app::events::core(app.handle()), &state),
+				)
+				.await
+				.expect("the quit ends once its sidecar is gone");
 				finished.lock().expect("order").push("terminate");
 			},
 		);
@@ -195,7 +202,8 @@ fn shutting_down_a_session_never_queues_behind_the_quit() {
 fn bootstrapping_leaves_a_migrated_file_in_the_app_data_directory() {
 	let app = app();
 
-	let _database = db::bootstrap(app.handle()).expect("the database opens");
+	let _database =
+		db::bootstrap(kiroshi_app::events::core(app.handle())).expect("the database opens");
 
 	let dir = app.path().app_data_dir().expect("data dir");
 	let file = dir.join(FILE_NAME);

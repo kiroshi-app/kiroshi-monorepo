@@ -3,43 +3,14 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{AppHandle, Manager, Runtime};
 
 use super::commands::AgentState;
-use super::contract::{SignInError, SignInStarted, TransportError};
-use super::protocol::{SignInFailure, SignInFailureKind, SignedIn};
-use super::sidecar::{OauthFlowError, Opening};
-use crate::events::{self, SIGN_IN_STARTED};
+use super::contract::{SignInError, SignInStarted};
+use super::protocol::SignedIn;
+use super::sidecar::Opening;
+use crate::events::SIGN_IN_STARTED;
 use crate::mcp_oauth::commands::is_openable;
-
-pub const SIGN_IN_STARTED_CHANNEL: &str = "agent://sign-in-started";
+pub use kiroshi_core::agent::contract::SIGN_IN_STARTED_CHANNEL;
 
 const NO_REASON: &str = "the sign-in settled with no reason";
-
-impl From<TransportError> for SignInError {
-	fn from(error: TransportError) -> Self {
-		Self::Transport { error }
-	}
-}
-
-impl From<OauthFlowError> for SignInError {
-	fn from(error: OauthFlowError) -> Self {
-		match error {
-			OauthFlowError::Outlasted { timeout_ms } => Self::FlowTimedOut { timeout_ms },
-			OauthFlowError::Transport(error) => Self::Transport { error },
-		}
-	}
-}
-
-impl From<SignInFailure> for SignInError {
-	fn from(failure: SignInFailure) -> Self {
-		match failure.kind {
-			SignInFailureKind::Busy => Self::AlreadyRunning,
-			SignInFailureKind::Cancelled => Self::Cancelled,
-			SignInFailureKind::TimedOut => Self::TimedOut,
-			SignInFailureKind::Failed => {
-				Self::Failed { detail: failure.detail.unwrap_or_else(|| NO_REASON.to_owned()) }
-			}
-		}
-	}
-}
 
 #[derive(Default)]
 pub struct SignInState {
@@ -72,25 +43,25 @@ impl Drop for Running<'_> {
 #[tauri::command]
 #[specta::specta]
 pub async fn agent_sign_in<R: Runtime>(app: AppHandle<R>) -> Result<(), SignInError> {
-	let state = app.state::<SignInState>();
+	let state = crate::events::core(app.app_handle()).state::<SignInState>();
 	let _running = state.begin()?;
-	let sidecar = app.state::<AgentState>().sidecar().await?;
+	let sidecar = crate::events::core(app.app_handle()).state::<AgentState>().sidecar().await?;
 	let mut flow = sidecar.begin_sign_in()?;
 	let settled = match flow.opened().await? {
 		Opening::Settled(settled) => settled,
 		Opening::Authorization(url) => {
-			announce_started(&app, url)?;
+			announce_started(crate::events::core(app.app_handle()), url)?;
 			flow.settled().await?
 		}
 	};
 	outcome(settled)
 }
 
-fn announce_started<R: Runtime>(app: &AppHandle<R>, url: String) -> Result<(), SignInError> {
+fn announce_started(core: &crate::core_context::Core, url: String) -> Result<(), SignInError> {
 	if !is_openable(&url) {
 		return Err(SignInError::RefusedUrl { url });
 	}
-	events::emit(app, SIGN_IN_STARTED, SignInStarted { url })
+	core.emit(SIGN_IN_STARTED, SignInStarted { url })
 		.map_err(|error| SignInError::Failed { detail: error.to_string() })
 }
 
@@ -109,23 +80,32 @@ pub async fn agent_sign_in_code<R: Runtime>(
 	app: AppHandle<R>,
 	text: String,
 ) -> Result<(), SignInError> {
-	if !app.state::<SignInState>().is_running() {
+	if !crate::events::core(app.app_handle()).state::<SignInState>().is_running() {
 		return Err(SignInError::NotRunning);
 	}
-	Ok(app.state::<AgentState>().sidecar().await?.enter_sign_in_code(&text)?)
+	Ok(crate::events::core(app.app_handle())
+		.state::<AgentState>()
+		.sidecar()
+		.await?
+		.enter_sign_in_code(&text)?)
 }
 
 #[tauri::command]
 #[specta::specta]
 pub async fn agent_sign_in_cancel<R: Runtime>(app: AppHandle<R>) -> Result<(), SignInError> {
-	if !app.state::<SignInState>().is_running() {
+	if !crate::events::core(app.app_handle()).state::<SignInState>().is_running() {
 		return Err(SignInError::NotRunning);
 	}
-	Ok(app.state::<AgentState>().sidecar().await?.cancel_sign_in()?)
+	Ok(crate::events::core(app.app_handle())
+		.state::<AgentState>()
+		.sidecar()
+		.await?
+		.cancel_sign_in()?)
 }
 
 #[cfg(test)]
 mod tests {
+	use crate::agent::protocol::{SignInFailure, SignInFailureKind};
 	use serde_json::{json, to_value};
 
 	use super::*;

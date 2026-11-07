@@ -8,7 +8,6 @@ use reqwest::header::CONTENT_TYPE;
 use reqwest::{Client, IntoUrl, StatusCode, Url};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
-use tauri::{AppHandle, Manager, Runtime};
 use tokio::sync::{Mutex, OwnedMutexGuard};
 
 use super::authorship::RelayedMember;
@@ -206,19 +205,19 @@ pub(super) fn replayed(frame: &str, epoch: &str, seq: u64, token: &str) -> Strin
 	format!("{{\"event\":{frame},\"epoch\":\"{epoch}\",\"seq\":{seq},\"token\":{token}}}")
 }
 
-pub(super) async fn bridged<R: Runtime>(
-	app: AppHandle<R>,
+pub(super) async fn bridged(
+	core: crate::core_context::Core,
 	local: LocalApi,
 	shared_space_id: String,
 	call: MemberCall,
 ) -> String {
 	if let Err(refusal) =
-		reach::stays_in_the_shared_space(&app, &shared_space_id, &call.command, &call.args).await
+		reach::stays_in_the_shared_space(&core, &shared_space_id, &call.command, &call.args).await
 	{
 		log::warn!("{}", reach::refusal_line(&call.command, &shared_space_id, &refusal));
 		return answer(call.id, StatusCode::FORBIDDEN, json!(OTHER_SPACE_REFUSAL));
 	}
-	let hosting = app.state::<Hosting>();
+	let hosting = core.state::<Hosting>();
 	let member = RelayedMember {
 		space_id: shared_space_id.clone(),
 		user_id: call.sender.clone(),
@@ -258,15 +257,15 @@ pub(super) struct FileAnswer {
 	pub(super) turn: OwnedMutexGuard<()>,
 }
 
-pub(super) async fn avatar_bridged<R: Runtime>(
-	app: AppHandle<R>,
+pub(super) async fn avatar_bridged(
+	core: crate::core_context::Core,
 	local: LocalApi,
 	shared_space_id: String,
 	turn: Arc<Mutex<()>>,
 	call: AvatarCall,
 ) -> FileAnswer {
-	let state = app.state::<DatabaseState>();
-	let (Ok(database), Some(dir)) = (state.as_ref(), Avatars::dir(&app)) else {
+	let state = core.state::<DatabaseState>();
+	let (Ok(database), Some(dir)) = (state.as_ref(), Avatars::dir(&core)) else {
 		log::error!("a relayed avatar was not read: the database or the data directory is missing");
 		let frame =
 			answer(call.id, StatusCode::INTERNAL_SERVER_ERROR, json!({ "error": AVATAR_UNREAD }));
@@ -301,14 +300,14 @@ async fn relayed_avatar(
 	(relayed, turn)
 }
 
-pub(super) async fn attachment_bridged<R: Runtime>(
-	app: AppHandle<R>,
+pub(super) async fn attachment_bridged(
+	core: crate::core_context::Core,
 	local: LocalApi,
 	shared_space_id: String,
 	turn: Arc<Mutex<()>>,
 	call: AttachmentCall,
 ) -> FileAnswer {
-	let state = app.state::<DatabaseState>();
+	let state = core.state::<DatabaseState>();
 	let Ok(database) = state.as_ref() else {
 		log::error!("a relayed attachment was not read: the database is missing");
 		let frame = answer(
@@ -584,12 +583,14 @@ mod tests {
 		(is_an_event && !name.contains(char::is_whitespace)).then_some(name)
 	}
 
+	const CORE_SOURCES: &str = "../../../crates/kiroshi-core/src";
+
 	#[test]
 	fn the_audience_table_classifies_every_published_event_once_and_nothing_else() {
-		let sources =
-			crate::events::tests::rust_files(&Path::new(env!("CARGO_MANIFEST_DIR")).join("src"));
-		let mut published: Vec<String> = sources
+		let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
+		let mut published: Vec<String> = [manifest.join("src"), manifest.join(CORE_SOURCES)]
 			.iter()
+			.flat_map(|root| crate::events::tests::rust_files(root))
 			.flat_map(|path| {
 				let source = std::fs::read_to_string(path).expect("the file reads");
 				source

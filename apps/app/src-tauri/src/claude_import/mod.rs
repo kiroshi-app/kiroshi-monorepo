@@ -1,8 +1,8 @@
 pub mod commands;
-pub mod contract;
-mod import;
-mod inventory;
-mod source;
+pub use kiroshi_core::claude_import::contract;
+use kiroshi_core::claude_import::import;
+pub use kiroshi_core::claude_import::inventory;
+pub use kiroshi_core::claude_import::source;
 
 #[cfg(test)]
 mod tests;

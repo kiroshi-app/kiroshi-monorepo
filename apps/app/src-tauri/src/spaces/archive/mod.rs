@@ -6,7 +6,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Runtime};
 use uuid::Uuid;
 
 use super::contract::{Space, SpaceError};
@@ -104,16 +103,16 @@ pub struct Places {
 }
 
 impl Places {
-	pub fn of<R: Runtime>(app: &AppHandle<R>) -> Result<Self, SpaceError> {
+	pub fn of(core: &crate::core_context::Core) -> Result<Self, SpaceError> {
 		let homeless = || SpaceError::UnwritableBundle {
 			detail: "there is no application data directory".to_owned(),
 		};
 		Ok(Self {
-			spaces: bundles::space::root(app).ok_or_else(homeless)?,
-			bots: bundles::root(app).ok_or_else(homeless)?,
-			env: store::root(app).ok_or_else(homeless)?,
-			attachments: Attachments::dir(app).ok_or_else(homeless)?,
-			avatars: Avatars::dir(app).ok_or_else(homeless)?,
+			spaces: bundles::space::root(core).ok_or_else(homeless)?,
+			bots: bundles::root(core).ok_or_else(homeless)?,
+			env: store::root(core).ok_or_else(homeless)?,
+			attachments: Attachments::dir(core).ok_or_else(homeless)?,
+			avatars: Avatars::dir(core).ok_or_else(homeless)?,
 		})
 	}
 }

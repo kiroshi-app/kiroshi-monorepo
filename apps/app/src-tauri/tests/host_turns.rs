@@ -1,5 +1,4 @@
-#[path = "../src/removed_on_drop.rs"]
-mod removed_on_drop;
+use kiroshi_core::removed_on_drop;
 mod runtime_pick;
 
 use std::path::PathBuf;
@@ -46,7 +45,7 @@ use kiroshi_app::db::repositories::messages::{
 use kiroshi_app::environment::contract::{EnvScope, ACCOUNT_BEARER};
 use kiroshi_app::environment::store;
 use kiroshi_app::events::{self, BUFFERED_FRAMES, MISSION_CHANGED};
-use kiroshi_app::hosting::authorship::Caller;
+use kiroshi_app::hosting::authorship::{Caller, CommandCaller};
 use kiroshi_app::hosting::commands::hosting_start;
 use kiroshi_app::hosting::roster::{signed_row, Enrolled};
 use kiroshi_app::hosting::{local_api, Hosting};
@@ -158,7 +157,7 @@ async fn me() -> Response {
 }
 
 async fn guest_rostered(app: &App<MockRuntime>) -> GuestDevice {
-	let host_keys = app.state::<DeviceKeysState>();
+	let host_keys = kiroshi_app::events::core(app.app_handle()).state::<DeviceKeysState>();
 	let host = host_keys.keys().expect("the host device keys");
 	let keys = DeviceKeys::generate().expect("randomness");
 	let agreement = keys.agreement_public();
@@ -175,7 +174,11 @@ async fn guest_rostered(app: &App<MockRuntime>) -> GuestDevice {
 		.rostered(PERSONAL.to_owned(), row)
 		.await
 		.expect("the guest is rostered");
-	let space = app.state::<SpaceKeys>().held(PERSONAL).expect("the key reads").expect("a key");
+	let space = kiroshi_app::events::core(app.app_handle())
+		.state::<SpaceKeys>()
+		.held(PERSONAL)
+		.expect("the key reads")
+		.expect("a key");
 	GuestDevice { keys, host: host.signing_public(), space, ctr: 0, challenge: None }
 }
 
@@ -348,8 +351,8 @@ impl Host {
 		context.config_mut().identifier =
 			format!("com.kiroshi.host-turns-{name}-{}", std::process::id());
 		let app = mock_builder()
-			.manage(AgentState::default())
-			.manage(TurnWindows::default())
+			.plugin(kiroshi_app::events::in_core(AgentState::default()))
+			.plugin(kiroshi_app::events::in_core_client_scoped(TurnWindows::default()))
 			.invoke_handler(invoke_handler())
 			.build(context)
 			.expect("the app builds");
@@ -357,17 +360,28 @@ impl Host {
 		if data_dir.exists() {
 			std::fs::remove_dir_all(&data_dir).expect("the previous data dir is cleared");
 		}
-		app.manage(db::bootstrap(app.handle()));
-		app.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
+		kiroshi_app::events::install_core(app.handle()).expect("the core installs");
+		kiroshi_app::db::install(kiroshi_app::events::core(app.handle()));
+		kiroshi_app::events::core(app.app_handle())
+			.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
 		let identifier = app.config().identifier.clone();
-		app.manage(SpaceKeys::new(InstallKind::Dev, identifier, Some(data_dir.clone())));
+		kiroshi_app::events::core(app.app_handle()).manage(SpaceKeys::new(
+			InstallKind::Dev,
+			identifier,
+			Some(data_dir.clone()),
+		));
 		let root = data_dir.join("environment");
 		store::set(&root, &EnvScope::Account, ACCOUNT_BEARER, BEARER).expect("the bearer is kept");
-		app.manage(AccountSession::new(Ok::<PathBuf, _>(root), &cloud));
-		restore(app.handle().clone()).await;
-		app.manage(webhook::start(app.handle().clone()));
-		let local = local_api(app.handle()).expect("the local host api listens");
-		app.manage(Hosting::new(&cloud, Some(local)));
+		kiroshi_app::events::core(app.app_handle())
+			.manage(AccountSession::new(Ok::<PathBuf, _>(root), &cloud));
+		restore(kiroshi_app::events::core(app.handle()).clone()).await;
+		kiroshi_app::events::core(app.app_handle()).manage(webhook::start(
+			kiroshi_app::events::core(app.handle()).clone(),
+			kiroshi_app::host_api::routes(app.handle().clone()),
+		));
+		let local =
+			local_api(kiroshi_app::events::core(app.handle())).expect("the local host api listens");
+		kiroshi_app::events::core(app.app_handle()).manage(Hosting::new(&cloud, Some(local)));
 		let window = WebviewWindowBuilder::new(&app, "main", Default::default())
 			.build()
 			.expect("the window builds");
@@ -437,8 +451,12 @@ impl Host {
 
 	async fn session_gone_while_lagging(&self, scope: &RuntimeScope) {
 		let stall = Stall::every_worker();
-		let state = self.app.state::<AgentState>();
-		let mut shutting = std::pin::pin!(shutdown_session(self.app.handle(), &state, scope));
+		let state = kiroshi_app::events::core(self.app.app_handle()).state::<AgentState>();
+		let mut shutting = std::pin::pin!(shutdown_session(
+			kiroshi_app::events::core(self.app.handle()),
+			&state,
+			scope
+		));
 		tokio::select! {
 			biased;
 			() = &mut shutting => {}
@@ -585,17 +603,9 @@ impl Host {
 			runtime_session_id: opened.id,
 			epoch: opened.seq,
 		};
-		agent_start_or_resume_session(
-			self.app.handle().clone(),
-			self.app.state(),
-			self.app.state(),
-			scope.clone(),
-			None,
-			None,
-			None,
-		)
-		.await
-		.expect("the host run starts");
+		agent_start_or_resume_session(self.app.state(), scope.clone(), None, None, None)
+			.await
+			.expect("the host run starts");
 		scope
 	}
 
@@ -614,18 +624,22 @@ impl Host {
 		};
 		let summoned = vec![scope.bot_id.clone()];
 		conversation_send_user_message(
-			self.app.handle().clone(),
 			self.app.state(),
-			Caller::Host,
+			CommandCaller(Caller::Host),
 			message,
 			summoned,
 		)
 		.await
 		.expect("the host message is stored");
 		let turn = SubmittedTurn { turn_id: turn_id.to_owned(), prompt_id: id.to_owned() };
-		submit_prompt(self.app.state(), scope.clone(), content.to_owned(), Some(turn))
-			.await
-			.expect("the host prompt is submitted");
+		submit_prompt(
+			kiroshi_app::events::core(self.app.handle()).state(),
+			scope.clone(),
+			content.to_owned(),
+			Some(turn),
+		)
+		.await
+		.expect("the host prompt is submitted");
 	}
 
 	async fn allow_write(&mut self, bot_id: &str, nth: usize) {
@@ -721,8 +735,12 @@ impl Host {
 	}
 
 	async fn quit(self) {
-		terminate_session(self.app.handle(), &self.app.state::<AgentState>()).await;
-		self.app.state::<Webhook>().stop();
+		terminate_session(
+			kiroshi_app::events::core(self.app.handle()),
+			&kiroshi_app::events::core(self.app.app_handle()).state::<AgentState>(),
+		)
+		.await;
+		kiroshi_app::events::core(self.app.app_handle()).state::<Webhook>().stop();
 		if let Ok(dir) = self.app.path().app_data_dir() {
 			if let Err(failure) = std::fs::remove_dir_all(&dir) {
 				eprintln!("the test data dir was not removed: {failure}");
@@ -826,7 +844,8 @@ fn turns_closed_in(frames: &[Value], bot_id: &str) -> usize {
 }
 
 async fn bundled(app: &App<MockRuntime>, bot_ids: &[&str]) {
-	let root = bundles::root(app.handle()).expect("the bundles have a root");
+	let root =
+		bundles::root(kiroshi_app::events::core(app.handle())).expect("the bundles have a root");
 	for bot_id in bot_ids {
 		let bot = database_of(app)
 			.conversations()
@@ -839,7 +858,11 @@ async fn bundled(app: &App<MockRuntime>, bot_ids: &[&str]) {
 }
 
 fn database_of(app: &App<MockRuntime>) -> &db::Database {
-	app.state::<db::DatabaseState>().inner().as_ref().expect("the database is open")
+	kiroshi_app::events::core(app.app_handle())
+		.state::<db::DatabaseState>()
+		.inner()
+		.as_ref()
+		.expect("the database is open")
 }
 
 fn replies_of<'a>(transcript: &'a [StoredMessage], bot_id: &str) -> Vec<&'a StoredMessage> {
@@ -1005,12 +1028,7 @@ fn a_stop_after_a_handover_cancels_the_companion_handed_the_work_and_closes_the_
 		let heard_before_stop = host.frames.len();
 		let handed_over: RuntimeScope =
 			serde_json::from_value(host.scope_of(ADA)).expect("a runtime scope");
-		let outcome = agent_cancel_turn(
-			host.app.handle().clone(),
-			host.app.state::<AgentState>(),
-			handed_over,
-		)
-		.await;
+		let outcome = agent_cancel_turn(host.app.state(), handed_over).await;
 
 		assert_eq!(outcome, Ok(CancelOutcome::Cancelled));
 
@@ -1067,7 +1085,12 @@ fn a_speaker_whose_session_shuts_down_mid_turn_releases_the_turn_for_the_next_se
 		host.speaking(ADA).await;
 		let held: RuntimeScope =
 			serde_json::from_value(host.scope_of(ADA)).expect("a runtime scope");
-		shutdown_session(host.app.handle(), &host.app.state::<AgentState>(), &held).await;
+		shutdown_session(
+			kiroshi_app::events::core(host.app.handle()),
+			&kiroshi_app::events::core(host.app.app_handle()).state::<AgentState>(),
+			&held,
+		)
+		.await;
 		host.turn_ended_for(ADA).await;
 
 		let ada_ended: Vec<Value> = host
@@ -1255,7 +1278,8 @@ fn a_member_turn_queued_past_its_start_deadline_keeps_its_run_until_it_is_answer
 	let _serial = serial();
 	block_on(async {
 		let mut host = Host::hosting("queued-past-deadline", "held_echo").await;
-		host.app.manage(TurnRunDeadlines::after(SHORT_START_DEADLINE));
+		kiroshi_app::events::core(host.app.app_handle())
+			.manage(TurnRunDeadlines::after(SHORT_START_DEADLINE));
 		let held = host.host_run(ROOM, ADA).await;
 		host.host_says(&held, "h1", "t0", "host first").await;
 		host.heard_until(|frames| !asked_to_write(frames, ADA).is_empty()).await;
@@ -1295,9 +1319,7 @@ fn a_queued_member_turn_withdrawn_by_a_stop_leaves_its_run_cancelled_and_not_awa
 		host.heard_until(|frames| !asked_to_write(frames, ADA).is_empty()).await;
 		host.send_turn(sent("p1", "t1", "member second"), &[ADA]).await;
 
-		let outcome =
-			agent_cancel_turn(host.app.handle().clone(), host.app.state::<AgentState>(), held)
-				.await;
+		let outcome = agent_cancel_turn(host.app.state(), held).await;
 
 		assert_eq!(outcome, Ok(CancelOutcome::Cancelled));
 		assert_eq!(host.runs_of("t1").await, 0, "the withdrawn run was left awaited");
@@ -1428,8 +1450,7 @@ fn a_member_turn_sent_during_a_runtime_write_opens_on_the_written_model_and_effo
 			.expect("the bot is planted");
 		let pick = picked(stored, "opus", EffortLevel::High);
 		let earlier_write = bundles::holding_the_memory(ADA).await;
-		let mut writing =
-			pin!(conversation_update_bot(app.clone(), app.state(), ADA.to_owned(), pick));
+		let mut writing = pin!(conversation_update_bot(app.state(), ADA.to_owned(), pick));
 
 		let landed = timeout(HELD_FOR, writing.as_mut()).await;
 		assert!(landed.is_err(), "the pick landed past the write in flight");
@@ -1455,7 +1476,8 @@ fn a_summons_the_front_drops_is_released_at_once_and_never_expires_as_never_star
 	let _serial = serial();
 	block_on(async {
 		let mut host = Host::hosting("front-drop", "room_handover").await;
-		host.app.manage(TurnRunDeadlines::after(SHORT_START_DEADLINE));
+		kiroshi_app::events::core(host.app.app_handle())
+			.manage(TurnRunDeadlines::after(SHORT_START_DEADLINE));
 		let held = host.host_run(ROOM, ADA).await;
 		host.host_says(&held, "h1", "t1", "who takes the walls?").await;
 		host.turn_ended_for(ADA).await;
@@ -1490,7 +1512,8 @@ fn two_agents_mentioning_each_other_with_no_window_stop_at_the_bound_and_keep_th
 	let _serial = serial();
 	block_on(async {
 		let mut host = Host::hosting("summon-limit", "room_ping_pong").await;
-		host.app.manage(TurnRunDeadlines::after(SHORT_START_DEADLINE));
+		kiroshi_app::events::core(host.app.app_handle())
+			.manage(TurnRunDeadlines::after(SHORT_START_DEADLINE));
 
 		let answer = host.send_turn(sent("p1", "t1", "<@b-ada> who takes the walls?"), &[]).await;
 		host.heard_until(|frames| drops_of(frames, GRACE).contains(&"summonLimit")).await;

@@ -26,7 +26,7 @@ impl DataDirectory {
 
 	fn launch(&self) -> App<MockRuntime> {
 		let app = self.launch_without_a_store();
-		app.manage(db::bootstrap(app.handle()));
+		kiroshi_app::db::install(kiroshi_app::events::core(app.handle()));
 		app
 	}
 
@@ -35,7 +35,14 @@ impl DataDirectory {
 		let config = context.config_mut();
 		config.identifier = self.0.config().identifier.clone();
 		config.app.windows.push(WindowConfig { label: MAIN.to_owned(), ..WindowConfig::default() });
-		mock_builder().invoke_handler(invoke_handler()).build(context).expect("the app builds")
+		{
+			let app = mock_builder()
+				.invoke_handler(invoke_handler())
+				.build(context)
+				.expect("the app builds");
+			kiroshi_app::events::install_core(app.handle()).expect("the core installs");
+			app
+		}
 	}
 }
 
@@ -194,7 +201,8 @@ fn windows_opened_at_once_each_take_a_label_of_their_own() {
 fn a_launch_whose_label_store_did_not_open_opens_no_window() {
 	let home = DataDirectory::new();
 	let app = home.launch_without_a_store();
-	app.manage(db::DatabaseState::Err(db::DatabaseError::AppDataDir));
+	kiroshi_app::events::core(app.app_handle())
+		.manage(db::DatabaseState::Err(db::DatabaseError::AppDataDir));
 	assert_no_window_opens(&app);
 }
 

@@ -206,11 +206,11 @@ fn clearing_leaves_one_empty_log_file() {
 fn a_held_connection_value_reaches_the_log_from_stderr_as_its_placeholder_only() {
 	let folder = a_log_folder("connection", 1 << 20);
 	let app = an_app_of_its_own("logging-connection", mock_builder());
-	let root = environment::root(app.handle()).expect("the env root resolves");
+	let root = environment::root(crate::events::core(app.handle())).expect("the env root resolves");
 	connection::hold(&root, ConnectionKind::ApiKey, "log-held-connection-key")
 		.expect("the key is stored");
 
-	held_connection(app.handle());
+	held_connection(crate::events::core(app.handle()));
 	let mut lines = StderrLines::default();
 	for line in lines.fed(b"[agent title] refused log-held-connection-key\n") {
 		folder.line(&line);
@@ -254,7 +254,7 @@ fn a_log_folder_whose_mode_cannot_be_tightened_fails_the_preparation() {
 fn a_connection_value_read_by_the_account_probe_reaches_the_log_as_its_placeholder_only() {
 	let folder = a_log_folder("probe", 1 << 20);
 	let app = an_app_of_its_own("logging-probe", mock_builder());
-	let root = environment::root(app.handle()).expect("the env root resolves");
+	let root = environment::root(crate::events::core(app.handle())).expect("the env root resolves");
 	connection::hold(&root, ConnectionKind::ApiKey, "log-probed-connection-key")
 		.expect("the key is stored");
 

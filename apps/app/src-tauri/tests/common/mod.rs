@@ -1,5 +1,4 @@
-#[path = "../../src/removed_on_drop.rs"]
-pub mod removed_on_drop;
+pub use kiroshi_core::removed_on_drop;
 
 use std::ops::Deref;
 
@@ -25,6 +24,7 @@ pub fn an_app_of_its_own(name: &str, builder: Builder<MockRuntime>) -> AppOfItsO
 	let mut context = mock_context(noop_assets());
 	context.config_mut().identifier = format!("com.kiroshi.{name}-{}", uuid::Uuid::new_v4());
 	let app = builder.build(context).expect("the app builds");
+	kiroshi_app::events::install_core(app.handle()).expect("the core installs");
 	let folder = RemovedOnDrop(app.path().app_data_dir().expect("the data folder resolves"));
 	AppOfItsOwn { app, _folder: folder }
 }

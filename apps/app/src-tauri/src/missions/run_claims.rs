@@ -3,8 +3,9 @@ use std::collections::HashMap;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use serde::Serialize;
-use tauri::webview::{PageLoadEvent, PageLoadPayload};
-use tauri::{Manager, Runtime, State, Webview, Window, WindowEvent};
+use tauri::{Runtime, State, Webview};
+
+use crate::core_context::{ClientId, ClientScoped, Core};
 
 #[derive(Debug, PartialEq, Serialize, specta::Type)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -18,7 +19,7 @@ pub enum MissionRunClaim {
 
 struct Claim {
 	token: String,
-	window: String,
+	client: ClientId,
 }
 
 #[derive(Default)]
@@ -29,13 +30,13 @@ impl MissionRunClaims {
 		self.0.lock().unwrap_or_else(PoisonError::into_inner)
 	}
 
-	fn claim(&self, mission_id: String, window: &str) -> MissionRunClaim {
+	fn claim(&self, mission_id: String, client: &ClientId) -> MissionRunClaim {
 		let mut held = self.held();
 		let Entry::Vacant(free) = held.entry(mission_id) else {
 			return MissionRunClaim::AlreadyRunning;
 		};
 		let token = uuid::Uuid::new_v4().to_string();
-		free.insert(Claim { token: token.clone(), window: window.to_owned() });
+		free.insert(Claim { token: token.clone(), client: client.clone() });
 		MissionRunClaim::Claimed { token }
 	}
 
@@ -43,8 +44,14 @@ impl MissionRunClaims {
 		self.held().retain(|_, claim| claim.token != token);
 	}
 
-	fn forget_window(&self, window: &str) {
-		self.held().retain(|_, claim| claim.window != window);
+	fn forget_window(&self, client: &ClientId) {
+		self.held().retain(|_, claim| claim.client != *client);
+	}
+}
+
+impl ClientScoped for MissionRunClaims {
+	fn forget_client(&self, _: &Core, client: &ClientId) {
+		self.forget_window(client);
 	}
 }
 
@@ -52,34 +59,26 @@ impl MissionRunClaims {
 #[specta::specta]
 pub fn mission_run_claim<R: Runtime>(
 	webview: Webview<R>,
-	claims: State<'_, MissionRunClaims>,
+	core: State<'_, crate::core_context::Core>,
 	mission_id: String,
 ) -> MissionRunClaim {
-	claims.claim(mission_id, webview.window().label())
+	claim_run(core.inner(), &crate::events::client_of(&webview.window()), mission_id)
+}
+
+pub(crate) fn claim_run(
+	core: &crate::core_context::Core,
+	client: &crate::core_context::ClientId,
+	mission_id: String,
+) -> MissionRunClaim {
+	let claims = core.state::<MissionRunClaims>();
+	claims.claim(mission_id, client)
 }
 
 #[tauri::command]
 #[specta::specta]
-pub fn mission_run_release(claims: State<'_, MissionRunClaims>, token: String) {
+pub fn mission_run_release(core: State<'_, crate::core_context::Core>, token: String) {
+	let claims = core.state::<MissionRunClaims>();
 	claims.release(&token);
-}
-
-pub fn forget_on_page_load<R: Runtime>(webview: &Webview<R>, payload: &PageLoadPayload<'_>) {
-	if payload.event() == PageLoadEvent::Started {
-		forget(&webview.window());
-	}
-}
-
-pub fn forget_on_destroyed<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
-	if matches!(event, WindowEvent::Destroyed) {
-		forget(window);
-	}
-}
-
-fn forget<R: Runtime>(window: &Window<R>) {
-	if let Some(claims) = window.try_state::<MissionRunClaims>() {
-		claims.forget_window(window.label());
-	}
 }
 
 #[cfg(test)]
@@ -91,7 +90,7 @@ mod tests {
 	use tauri::ipc::CallbackFn;
 	use tauri::test::{get_ipc_response, mock_builder, MockRuntime, INVOKE_KEY};
 	use tauri::webview::InvokeRequest;
-	use tauri::{WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+	use tauri::{Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent};
 
 	use super::*;
 	use crate::test_app::an_app_of_its_own;
@@ -131,7 +130,7 @@ mod tests {
 				let (claims, start) = (Arc::clone(&claims), Arc::clone(&start));
 				thread::spawn(move || {
 					start.wait();
-					claims.claim("m1".to_owned(), window)
+					claims.claim("m1".to_owned(), &ClientId::new(window))
 				})
 			})
 			.collect();
@@ -149,45 +148,57 @@ mod tests {
 	#[test]
 	fn a_live_claim_refuses_every_other_window_until_its_token_releases_it() {
 		let claims = MissionRunClaims::default();
-		let token = token_of(claims.claim("m1".to_owned(), "main"));
+		let token = token_of(claims.claim("m1".to_owned(), &ClientId::new("main")));
 
-		assert_eq!(claims.claim("m1".to_owned(), "main"), MissionRunClaim::AlreadyRunning);
-		assert_eq!(claims.claim("m1".to_owned(), "second"), MissionRunClaim::AlreadyRunning);
-		token_of(claims.claim("m2".to_owned(), "second"));
+		assert_eq!(
+			claims.claim("m1".to_owned(), &ClientId::new("main")),
+			MissionRunClaim::AlreadyRunning
+		);
+		assert_eq!(
+			claims.claim("m1".to_owned(), &ClientId::new("second")),
+			MissionRunClaim::AlreadyRunning
+		);
+		token_of(claims.claim("m2".to_owned(), &ClientId::new("second")));
 
 		claims.release(&token);
 
-		token_of(claims.claim("m1".to_owned(), "second"));
+		token_of(claims.claim("m1".to_owned(), &ClientId::new("second")));
 	}
 
 	#[test]
 	fn a_foreign_token_leaves_the_live_claim_in_place() {
 		let claims = MissionRunClaims::default();
-		let token = token_of(claims.claim("m1".to_owned(), "main"));
+		let token = token_of(claims.claim("m1".to_owned(), &ClientId::new("main")));
 
 		claims.release("not-the-live-claim");
 		claims.release(&token);
 		claims.release(&token);
-		let next = token_of(claims.claim("m1".to_owned(), "main"));
+		let next = token_of(claims.claim("m1".to_owned(), &ClientId::new("main")));
 		claims.release(&token);
 
-		assert_eq!(claims.claim("m1".to_owned(), "main"), MissionRunClaim::AlreadyRunning);
+		assert_eq!(
+			claims.claim("m1".to_owned(), &ClientId::new("main")),
+			MissionRunClaim::AlreadyRunning
+		);
 		claims.release(&next);
-		token_of(claims.claim("m1".to_owned(), "main"));
+		token_of(claims.claim("m1".to_owned(), &ClientId::new("main")));
 	}
 
 	#[test]
 	fn forgetting_a_window_frees_its_claims_and_keeps_the_others() {
 		let claims = MissionRunClaims::default();
-		token_of(claims.claim("m1".to_owned(), "second"));
-		token_of(claims.claim("m2".to_owned(), "second"));
-		token_of(claims.claim("m3".to_owned(), "main"));
+		token_of(claims.claim("m1".to_owned(), &ClientId::new("second")));
+		token_of(claims.claim("m2".to_owned(), &ClientId::new("second")));
+		token_of(claims.claim("m3".to_owned(), &ClientId::new("main")));
 
-		claims.forget_window("second");
+		claims.forget_window(&ClientId::new("second"));
 
-		token_of(claims.claim("m1".to_owned(), "main"));
-		token_of(claims.claim("m2".to_owned(), "main"));
-		assert_eq!(claims.claim("m3".to_owned(), "second"), MissionRunClaim::AlreadyRunning);
+		token_of(claims.claim("m1".to_owned(), &ClientId::new("main")));
+		token_of(claims.claim("m2".to_owned(), &ClientId::new("main")));
+		assert_eq!(
+			claims.claim("m3".to_owned(), &ClientId::new("second")),
+			MissionRunClaim::AlreadyRunning
+		);
 	}
 
 	#[test]
@@ -196,7 +207,7 @@ mod tests {
 			"mission-run-claims",
 			mock_builder().invoke_handler(crate::commands::invoke_handler()),
 		);
-		app.manage(MissionRunClaims::default());
+		crate::events::core(app.app_handle()).manage_client_scoped(MissionRunClaims::default());
 		let window_of = |label: &str| {
 			WebviewWindowBuilder::new(app.handle(), label, WebviewUrl::default())
 				.build()
@@ -206,9 +217,15 @@ mod tests {
 
 		let claimed = invoked(&second, "mission_run_claim", json!({ "missionId": "m1" }));
 		let refused = invoked(&main, "mission_run_claim", json!({ "missionId": "m1" }));
-		forget_on_destroyed(&second.as_ref().window(), &WindowEvent::Focused(false));
+		crate::events::clear_client_on_destroyed(
+			&second.as_ref().window(),
+			&WindowEvent::Focused(false),
+		);
 		let still_held = invoked(&main, "mission_run_claim", json!({ "missionId": "m1" }));
-		forget_on_destroyed(&second.as_ref().window(), &WindowEvent::Destroyed);
+		crate::events::clear_client_on_destroyed(
+			&second.as_ref().window(),
+			&WindowEvent::Destroyed,
+		);
 		let reclaimed = invoked(&main, "mission_run_claim", json!({ "missionId": "m1" }));
 
 		assert_eq!(claimed["kind"], "claimed", "the first claim answered {claimed}");

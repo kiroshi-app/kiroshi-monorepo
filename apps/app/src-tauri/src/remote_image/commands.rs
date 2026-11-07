@@ -8,9 +8,10 @@ use crate::joined_spaces::relay::RelayGuests;
 #[tauri::command]
 #[specta::specta]
 pub async fn remote_image_read(
-	guests: State<'_, RelayGuests>,
+	core: State<'_, crate::core_context::Core>,
 	url: String,
 ) -> Result<RemoteImage, RemoteImageError> {
+	let guests = core.state::<RelayGuests>();
 	let proxy_bearers = guests.proxy_bearers();
 	super::read(&url, &proxy_bearers, READ_BOUND).await.inspect_err(|refusal| {
 		let parsed = Url::parse(&url).ok();

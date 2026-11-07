@@ -6,7 +6,7 @@ const FILES = {
 	tauriConf: `${ROOT}apps/app/src-tauri/tauri.conf.json`,
 	appPkg: `${ROOT}apps/app/package.json`,
 	cargoToml: `${ROOT}apps/app/src-tauri/Cargo.toml`,
-	cargoLock: `${ROOT}apps/app/src-tauri/Cargo.lock`,
+	cargoLock: `${ROOT}Cargo.lock`,
 	systemPlugin: `${ROOT}apps/app/src-tauri/plugins/kiroshi/.claude-plugin/plugin.json`,
 	bunLock: `${ROOT}bun.lock`,
 }

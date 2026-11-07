@@ -36,12 +36,13 @@ pub async fn release_notes<R: Runtime>(
 
 #[tauri::command]
 #[specta::specta]
-pub fn running_companions(agent: State<'_, AgentState>) -> usize {
+pub fn running_companions(core: State<'_, crate::core_context::Core>) -> usize {
+	let agent = core.state::<AgentState>();
 	agent.live_session_count()
 }
 
 async fn current_channel<R: Runtime>(app: &AppHandle<R>) -> Result<UpdateChannel, String> {
-	let state = app.state::<db::DatabaseState>();
+	let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 	let database = state.as_ref().map_err(|failure| format!("{failure:?}"))?;
 	let preferences = database.user().preferences().await.map_err(|error| format!("{error:?}"))?;
 	Ok(preferences.update_channel.into())

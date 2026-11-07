@@ -1,17 +1,16 @@
 pub mod commands;
-pub mod contract;
+pub use kiroshi_core::invitations::contract;
 
 use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
-use tauri::async_runtime::JoinHandle;
-use tauri::{AppHandle, Manager, Runtime};
+use tokio::task::JoinHandle;
 use tokio::time::{interval, MissedTickBehavior};
 
 use crate::account::cloud::{Cloud, InvitationCallError, JoinedInstance, ListedInvitation};
 use crate::account::session::{self, AccountSession};
 use crate::db::repositories::joined_spaces::HostListing;
-use crate::events::{self, INVITATION_CHANGED};
+use crate::events::INVITATION_CHANGED;
 use crate::joined_spaces;
 use crate::joined_spaces::contract::{JoinedSpace, JoinedSpaceError};
 use contract::{Invitation, InvitationError, InvitationsChanged};
@@ -62,49 +61,49 @@ impl Invitations {
 	}
 }
 
-pub async fn read<R: Runtime>(app: &AppHandle<R>) -> Result<Vec<Invitation>, InvitationError> {
-	let invitations = app.state::<Invitations>();
+pub async fn read(core: &crate::core_context::Core) -> Result<Vec<Invitation>, InvitationError> {
+	let invitations = core.state::<Invitations>();
 	let _turn = invitations.turn.lock().await;
-	let bearer = bearer_of(app)?;
+	let bearer = bearer_of(core)?;
 	let listed = invitations
 		.cloud
 		.invitations(&bearer)
 		.await
-		.inspect_err(|failure| signed_out_if_revoked(app, &bearer, failure))?;
+		.inspect_err(|failure| signed_out_if_revoked(core, &bearer, failure))?;
 	if invitations.last().as_ref() != Some(&listed) {
-		announced(app, &invitations, listed.clone());
+		announced(core, &invitations, listed.clone());
 	}
 	Ok(listed.into_iter().map(|listed| listed.invitation).collect())
 }
 
-pub async fn accept<R: Runtime>(
-	app: &AppHandle<R>,
+pub async fn accept(
+	core: &crate::core_context::Core,
 	invitation_id: String,
 ) -> Result<JoinedSpace, JoinedSpaceError> {
-	let accepted = accepted(app, &invitation_id).await?;
-	let invitation = app.state::<Invitations>().listed(&invitation_id);
+	let accepted = accepted(core, &invitation_id).await?;
+	let invitation = core.state::<Invitations>().listed(&invitation_id);
 	let (inviter_email, listing) = match invitation {
 		Some(listed) => (Some(listed.invitation.inviter_email), listed.listing),
 		None => (None, HostListing::default()),
 	};
 	let joined = joined_spaces::join::joined(
-		app,
+		core,
 		accepted.instance_id,
 		accepted.name,
 		inviter_email,
 		listing,
 	)
 	.await;
-	reread(app).await;
+	reread(core).await;
 	joined
 }
 
-async fn accepted<R: Runtime>(
-	app: &AppHandle<R>,
+async fn accepted(
+	core: &crate::core_context::Core,
 	invitation_id: &str,
 ) -> Result<JoinedInstance, JoinedSpaceError> {
-	let invitations = app.state::<Invitations>();
-	let bearer = bearer_of(app).map_err(|failure| match failure {
+	let invitations = core.state::<Invitations>();
+	let bearer = bearer_of(core).map_err(|failure| match failure {
 		InvitationError::NotSignedIn => JoinedSpaceError::NeedsSignIn,
 		failure => JoinedSpaceError::SessionStore { detail: format!("{failure:?}") },
 	})?;
@@ -118,7 +117,7 @@ async fn accepted<R: Runtime>(
 			})
 		}
 		Err(failure) => {
-			signed_out_if_revoked(app, &bearer, &failure);
+			signed_out_if_revoked(core, &bearer, &failure);
 			Err(acceptance_refused(failure))
 		}
 	}
@@ -141,93 +140,93 @@ fn acceptance_refused(failure: InvitationCallError) -> JoinedSpaceError {
 	}
 }
 
-pub async fn decline<R: Runtime>(
-	app: &AppHandle<R>,
+pub async fn decline(
+	core: &crate::core_context::Core,
 	invitation_id: String,
 ) -> Result<(), InvitationError> {
-	let bearer = bearer_of(app)?;
-	app.state::<Invitations>()
+	let bearer = bearer_of(core)?;
+	core.state::<Invitations>()
 		.cloud
 		.decline_invitation(&bearer, &invitation_id)
 		.await
-		.inspect_err(|failure| signed_out_if_revoked(app, &bearer, failure))?;
-	reread(app).await;
+		.inspect_err(|failure| signed_out_if_revoked(core, &bearer, failure))?;
+	reread(core).await;
 	Ok(())
 }
 
-async fn reread<R: Runtime>(app: &AppHandle<R>) {
-	if let Err(failure) = read(app).await {
+async fn reread(core: &crate::core_context::Core) {
+	if let Err(failure) = read(core).await {
 		eprintln!("the invitations were not read back: {failure:?}");
 	}
 }
 
-pub fn resumed<R: Runtime>(app: &AppHandle<R>) {
-	let Some(invitations) = app.try_state::<Invitations>() else {
+pub fn resumed(core: &crate::core_context::Core) {
+	let Some(invitations) = core.try_state::<Invitations>() else {
 		return;
 	};
 	let mut poll = invitations.poll();
 	if poll.is_none() {
-		*poll = Some(tauri::async_runtime::spawn(polled(app.clone())));
+		*poll = Some(core.spawn(polled(core.clone())));
 	}
 }
 
-async fn polled<R: Runtime>(app: AppHandle<R>) {
-	let mut polls = interval(app.state::<Invitations>().every);
+async fn polled(core: crate::core_context::Core) {
+	let mut polls = interval(core.state::<Invitations>().every);
 	polls.set_missed_tick_behavior(MissedTickBehavior::Delay);
 	loop {
 		polls.tick().await;
-		app.state::<Invitations>().cloud.unpaused().await;
-		if let Err(failure) = read(&app).await {
+		core.state::<Invitations>().cloud.unpaused().await;
+		if let Err(failure) = read(&core).await {
 			eprintln!("the invitations were not polled: {failure:?}");
 		}
-		joined_spaces::relay::reconciled(&app).await;
+		joined_spaces::relay::reconciled(&core).await;
 	}
 }
 
-pub async fn signed_out<R: Runtime>(app: &AppHandle<R>) {
-	let Some(invitations) = app.try_state::<Invitations>() else {
+pub async fn signed_out(core: &crate::core_context::Core) {
+	let Some(invitations) = core.try_state::<Invitations>() else {
 		return;
 	};
 	let poll = invitations.poll().take();
 	if let Some(poll) = poll {
 		poll.abort();
 		if let Err(error) = poll.await {
-			if !matches!(&error, tauri::Error::JoinError(joined) if joined.is_cancelled()) {
+			if !error.is_cancelled() {
 				eprintln!("the invitation poll ended abnormally: {error}");
 			}
 		}
 	}
 	let _turn = invitations.turn.lock().await;
-	announced(app, &invitations, Vec::new());
+	announced(core, &invitations, Vec::new());
 }
 
-fn signed_out_if_revoked<R: Runtime>(
-	app: &AppHandle<R>,
+fn signed_out_if_revoked(
+	core: &crate::core_context::Core,
 	bearer: &str,
 	failure: &InvitationCallError,
 ) {
 	if matches!(failure, InvitationCallError::Revoked) {
-		session::revoked(app, bearer);
+		session::revoked(core, bearer);
 	}
 }
 
-fn bearer_of<R: Runtime>(app: &AppHandle<R>) -> Result<String, InvitationError> {
-	match app.state::<AccountSession>().bearer() {
+fn bearer_of(core: &crate::core_context::Core) -> Result<String, InvitationError> {
+	match core.state::<AccountSession>().bearer() {
 		Ok(Some(bearer)) => Ok(bearer),
 		Ok(None) => Err(InvitationError::NotSignedIn),
 		Err(error) => Err(InvitationError::Storage { detail: format!("{error:?}") }),
 	}
 }
 
-fn announced<R: Runtime>(
-	app: &AppHandle<R>,
+fn announced(
+	core: &crate::core_context::Core,
 	invitations: &Invitations,
 	listed: Vec<ListedInvitation>,
 ) {
 	let shown = listed.iter().map(|listed| listed.invitation.clone()).collect();
 	*invitations.last() = Some(listed);
 	let changed = InvitationsChanged { invitations: shown };
-	if let Err(error) = events::emit(app, INVITATION_CHANGED, changed) {
+	if let Err(error) = core.emit(INVITATION_CHANGED, changed) {
 		eprintln!("the invitations did not reach the front: {error}");
 	}
 }

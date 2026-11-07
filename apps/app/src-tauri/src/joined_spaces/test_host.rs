@@ -2,7 +2,6 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use base64::prelude::{Engine as _, BASE64_STANDARD};
 use serde_json::{json, Value};
-use tauri::{AppHandle, Runtime};
 
 use super::held::{device_keys, kept};
 use super::roster_set::fixtures::{handover_of, signed_set, Device};
@@ -37,23 +36,23 @@ pub(crate) struct MemberFrame {
 }
 
 impl SealingHost {
-	pub(crate) fn new<R: Runtime>(app: &AppHandle<R>, instance_id: &str) -> Self {
+	pub(crate) fn new(core: &crate::core_context::Core, instance_id: &str) -> Self {
 		Self {
 			instance_id: instance_id.to_owned(),
 			host: DeviceKeys::generate().expect("randomness"),
-			member: device_keys(app).expect("the member device keys"),
+			member: device_keys(core).expect("the member device keys"),
 			space: HeldSpaceKey::first().expect("randomness"),
 			ctr: AtomicU64::new(0),
 		}
 	}
 
-	pub(crate) async fn planted<R: Runtime>(app: &AppHandle<R>, instance_id: &str) -> Self {
-		let planted = Self::new(app, instance_id);
+	pub(crate) async fn planted(core: &crate::core_context::Core, instance_id: &str) -> Self {
+		let planted = Self::new(core, instance_id);
 		let set = signed_set(&planted.host, 1, 1, &planted.devices());
 		let roster = verified_set(set, None, &planted.member.device_id()).expect("a verified set");
 		let space = HeldSpaceKey { key_id: planted.space.key_id, key: planted.space.key.clone() };
 		let handed = Handed { space, roster };
-		assert!(kept(app, instance_id, &handed).await.expect("the roster is kept"));
+		assert!(kept(core, instance_id, &handed).await.expect("the roster is kept"));
 		planted
 	}
 

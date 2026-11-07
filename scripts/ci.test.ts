@@ -97,7 +97,7 @@ const SETUP_STEPS = new Set([
 	"Read the changed test files against the base the merge ref was built on",
 ])
 
-const UNGATED_JOBS = new Set(["changes", "verify"])
+const UNGATED_JOBS = new Set(["changes", "core", "verify"])
 
 const LOCAL_ONLY_GROUPS: Group[] = ["rust-check"]
 
@@ -263,10 +263,18 @@ const storybookEnvOn = (github: GitHubContext) =>
 		),
 	)
 
-const PULL_REQUEST_JOB_SET = ["changes", "lint", "rust", "verify", "vitest"]
+const PULL_REQUEST_JOB_SET = [
+	"changes",
+	"core",
+	"lint",
+	"rust",
+	"verify",
+	"vitest",
+]
 
 const PUSH_TO_MAIN_JOB_SET = [
 	"changes",
+	"core",
 	"ios",
 	"lint",
 	"rust",
@@ -307,7 +315,7 @@ describe("the gate", () => {
 			GATE[group].map((step) => step.command)
 
 		expect(commands("rust")).toContain(
-			"cargo test --manifest-path src-tauri/Cargo.toml --features fake-claude",
+			"cargo test --manifest-path src-tauri/Cargo.toml --workspace --features fake-claude",
 		)
 		expect(commands("rust-check")).toContain(
 			"cargo test --manifest-path src-tauri/Cargo.toml --features fake-claude --test bindings",
@@ -326,10 +334,10 @@ describe("the gate", () => {
 
 	it("runs rustfmt, clippy, the library tests, every integration target and the bindings check on a pull_request", () => {
 		expect(RUST_PULL_REQUEST_STEPS.map((step) => step.command)).toEqual([
-			"cargo fmt --manifest-path src-tauri/Cargo.toml --check",
+			"cargo fmt --all --manifest-path src-tauri/Cargo.toml --check",
 			"bun run --filter sidecar build",
-			"cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --features fake-claude -- -D warnings",
-			"cargo test --manifest-path src-tauri/Cargo.toml --features fake-claude --lib",
+			"cargo clippy --manifest-path src-tauri/Cargo.toml --workspace --all-targets --features fake-claude -- -D warnings",
+			"cargo test --manifest-path src-tauri/Cargo.toml --workspace --features fake-claude --lib",
 			"cargo test --manifest-path src-tauri/Cargo.toml --features fake-claude --test '*'",
 			"git diff --exit-code apps/app/src/lib/bindings.ts",
 		])
@@ -829,7 +837,7 @@ describe("the push to main retry", () => {
 		expect(loggedCargoStep(RUST_TEST, "/tmp/run/cargo-test.log")).toEqual({
 			...RUST_TEST,
 			command:
-				"set -o pipefail; cargo test --manifest-path src-tauri/Cargo.toml --features fake-claude --no-fail-fast 2>&1 | tee '/tmp/run/cargo-test.log'",
+				"set -o pipefail; cargo test --manifest-path src-tauri/Cargo.toml --workspace --features fake-claude --no-fail-fast 2>&1 | tee '/tmp/run/cargo-test.log'",
 		})
 	})
 
@@ -841,7 +849,7 @@ describe("the push to main retry", () => {
 		})
 
 		expect(rerun.command).toBe(
-			"cargo test --manifest-path src-tauri/Cargo.toml --features fake-claude --test other -- --exact 'src/lib.rs - it'\\''s (line 3)'",
+			"cargo test --manifest-path src-tauri/Cargo.toml --workspace --features fake-claude --test other -- --exact 'src/lib.rs - it'\\''s (line 3)'",
 		)
 		expect(rerun.heavy).toBe(true)
 		expect(rerun.cwd).toBe("apps/app")
@@ -855,7 +863,7 @@ describe("the push to main retry", () => {
 		})
 
 		expect(rerun.command).toBe(
-			"cargo test --manifest-path src-tauri/Cargo.toml --features fake-claude --doc -- 'src/lib.rs - documented (line 11)'",
+			"cargo test --manifest-path src-tauri/Cargo.toml --workspace --features fake-claude --doc -- 'src/lib.rs - documented (line 11)'",
 		)
 	})
 
@@ -1105,7 +1113,7 @@ describe("the jobs of ci.yml", () => {
 		})
 	})
 
-	it("runs only changes, lint, vitest and rust on a pull_request", () => {
+	it("runs only changes, lint, vitest, rust and core on a pull_request", () => {
 		expect(jobsRunningOn(A_PULL_REQUEST)).toEqual(PULL_REQUEST_JOB_SET)
 	})
 
@@ -1156,11 +1164,11 @@ describe("the jobs of ci.yml", () => {
 		expect(gate?.run).toContain('tee "$RUNNER_TEMP/storybook-debug.log"')
 	})
 
-	it("runs every desktop job and ios on a push to main", () => {
+	it("runs every desktop job, core and ios on a push to main", () => {
 		expect(jobsRunningOn(A_PUSH_TO_MAIN)).toEqual(PUSH_TO_MAIN_JOB_SET)
 	})
 
-	it("keeps the desktop jobs on a v* tag, never ios", () => {
+	it("keeps the desktop jobs on a v* tag, never ios nor core", () => {
 		expect(jobsRunningOn(A_RELEASE_TAG)).toEqual([
 			"changes",
 			"lint",
@@ -1381,6 +1389,7 @@ describe("the jobs of ci.yml", () => {
 			"vitest",
 			"website",
 			"rust",
+			"core",
 			"storybook",
 			"ios",
 		])

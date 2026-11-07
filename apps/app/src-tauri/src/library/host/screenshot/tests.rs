@@ -1,6 +1,6 @@
 use image::{Rgb, RgbImage};
 use tauri::test::{mock_builder, MockRuntime};
-use tauri::WebviewWindowBuilder;
+use tauri::{AppHandle, WebviewUrl, WebviewWindowBuilder};
 
 use super::*;
 use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
@@ -45,7 +45,7 @@ fn noise(edge: u32) -> String {
 }
 
 fn pending_ids(app: &AppHandle<MockRuntime>) -> Vec<String> {
-	screenshots(app).held().keys().cloned().collect()
+	screenshots(crate::events::core(app)).held().keys().cloned().collect()
 }
 
 async fn requests_in_flight(app: &AppHandle<MockRuntime>, count: usize) -> Vec<String> {
@@ -71,7 +71,9 @@ async fn concurrent_screenshots_each_answer_the_image_their_own_window_rendered(
 	let app = an_app("concurrent");
 	let handle = app.handle().clone();
 	let shoot = |handle: AppHandle<MockRuntime>| {
-		tokio::spawn(async move { render(&handle, "personal", Scale(1), a_document()).await })
+		tokio::spawn(async move {
+			render(crate::events::core(&handle), "personal", Scale(1), a_document()).await
+		})
 	};
 	let (first, second) = (shoot(handle.clone()), shoot(handle.clone()));
 	let ids = requests_in_flight(&handle, 2).await;
@@ -105,7 +107,7 @@ async fn a_render_silent_for_15_s_is_refused_as_render_timed_out_and_its_request
 	let handle = app.handle().clone();
 	let shot = tokio::spawn({
 		let handle = handle.clone();
-		async move { render(&handle, "personal", Scale(1), a_document()).await }
+		async move { render(crate::events::core(&handle), "personal", Scale(1), a_document()).await }
 	});
 	let id = requests_in_flight(&handle, 1).await.remove(0);
 	assert!(handle.get_webview_window(&window_label(&id)).is_some());
@@ -121,7 +123,9 @@ async fn a_window_reads_and_answers_only_its_own_request() {
 	let app = an_app("own-request");
 	let handle = app.handle().clone();
 	let shoot = |handle: AppHandle<MockRuntime>| {
-		tokio::spawn(async move { render(&handle, "personal", Scale(1), a_document()).await })
+		tokio::spawn(async move {
+			render(crate::events::core(&handle), "personal", Scale(1), a_document()).await
+		})
 	};
 	let (first, second) = (shoot(handle.clone()), shoot(handle.clone()));
 	let ids = requests_in_flight(&handle, 2).await;

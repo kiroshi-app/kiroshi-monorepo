@@ -22,6 +22,7 @@ pub(crate) fn an_app_of_its_own(name: &str, builder: Builder<MockRuntime>) -> Ap
 	let mut context = mock_context(noop_assets());
 	context.config_mut().identifier = format!("com.kiroshi.{name}-{}", uuid::Uuid::new_v4());
 	let app = builder.build(context).expect("the app builds");
+	crate::events::install_core(app.handle()).expect("the core installs");
 	let folder = RemovedOnDrop(app.path().app_data_dir().expect("the data folder resolves"));
 	AppOfItsOwn { app, _folder: folder }
 }

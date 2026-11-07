@@ -8,7 +8,7 @@ use crate::joined_spaces::contract::{JoinedSpace, JoinedSpaceError};
 pub async fn invitations_list<R: Runtime>(
 	app: AppHandle<R>,
 ) -> Result<Vec<Invitation>, InvitationError> {
-	super::read(&app).await
+	super::read(crate::events::core(&app)).await
 }
 
 #[tauri::command]
@@ -17,7 +17,7 @@ pub async fn invitation_accept<R: Runtime>(
 	app: AppHandle<R>,
 	invitation_id: String,
 ) -> Result<JoinedSpace, JoinedSpaceError> {
-	super::accept(&app, invitation_id).await
+	super::accept(crate::events::core(&app), invitation_id).await
 }
 
 #[tauri::command]
@@ -26,5 +26,5 @@ pub async fn invitation_decline<R: Runtime>(
 	app: AppHandle<R>,
 	invitation_id: String,
 ) -> Result<(), InvitationError> {
-	super::decline(&app, invitation_id).await
+	super::decline(crate::events::core(&app), invitation_id).await
 }

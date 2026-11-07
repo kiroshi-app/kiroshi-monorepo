@@ -18,6 +18,7 @@ const none = {
 	website: false,
 	storybook: false,
 	ios: false,
+	core: false,
 }
 const every = {
 	rust: true,
@@ -25,6 +26,7 @@ const every = {
 	website: true,
 	storybook: true,
 	ios: true,
+	core: true,
 }
 const CI_EVENTS = ["pull_request", "push", "tag"] as const
 
@@ -47,21 +49,24 @@ const touching = (...paths: string[]) => touchedJobs(paths)
 
 const REPO = fileURLToPath(new URL("..", import.meta.url))
 
-const SRC_TAURI = join(REPO, "apps/app/src-tauri")
+const RUST_SOURCES = [
+	"apps/app/src-tauri/{src,tests}/**/*.rs",
+	"crates/*/{src,tests}/**/*.rs",
+]
 
 const EMBEDDED_PATH = /include_(?:str|bytes)!\(\s*"([^"]+)"\s*\)/g
 
 const embeddedPathsOf = (source: string) => {
-	const file = join(SRC_TAURI, source)
+	const file = join(REPO, source)
 	return [...readFileSync(file, "utf8").matchAll(EMBEDDED_PATH)].map(
 		([, embedded]) => relative(REPO, join(dirname(file), embedded ?? "")),
 	)
 }
 
-const filesSrcTauriEmbeds = () =>
-	[...new Bun.Glob("{src,tests}/**/*.rs").scanSync({ cwd: SRC_TAURI })].flatMap(
-		embeddedPathsOf,
-	)
+const filesTheRustCratesEmbed = () =>
+	RUST_SOURCES.flatMap((pattern) => [
+		...new Bun.Glob(pattern).scanSync({ cwd: REPO }),
+	]).flatMap(embeddedPathsOf)
 
 const runChangeDetectorIn = (cwd: string, ...args: string[]) =>
 	Bun.spawnSync(
@@ -124,12 +129,13 @@ const ABSENT_SHA = "0123456789abcdef0123456789abcdef01234567"
 
 describe("ci jobs per event", () => {
 	it.each(PATH_MIXES)(
-		"selects only vitest and rust on a pull_request, on the paths they watch, on %p",
+		"selects only vitest, rust and core on a pull_request, on the paths they watch, on %p",
 		(...paths) => {
 			expect(decideJobs({ event: "pull_request", paths })).toEqual({
 				...none,
 				vitest: touchedJobs(paths).vitest,
 				rust: touchedJobs(paths).rust,
+				core: touchedJobs(paths).core,
 			})
 		},
 	)
@@ -137,7 +143,7 @@ describe("ci jobs per event", () => {
 	it("skips storybook, website and ios on a pull_request touching every path", () => {
 		const jobs = decideJobs({ event: "pull_request", paths: ["bun.lock"] })
 
-		expect(jobs).toEqual({ ...none, vitest: true, rust: true })
+		expect(jobs).toEqual({ ...none, vitest: true, rust: true, core: true })
 	})
 
 	it.each(PATH_MIXES)(
@@ -155,11 +161,12 @@ describe("ci jobs per event", () => {
 	})
 
 	it.each(PATH_MIXES)(
-		"selects vitest, website, rust and storybook on a v* tag, never ios, on %p",
+		"selects vitest, website, rust and storybook on a v* tag, never ios nor core, on %p",
 		(...paths) => {
 			expect(decideJobs({ event: "tag", paths })).toEqual({
 				...every,
 				ios: false,
+				core: false,
 			})
 		},
 	)
@@ -288,10 +295,11 @@ describe("the paths each job watches", () => {
 		expect(touching("crates/relay/Cargo.toml").rust).toBe(true)
 	})
 
-	it("runs every job but ios on paths only under packages/shared", () => {
+	it("runs every job but ios and core on paths only under packages/shared", () => {
 		expect(touching(...SHARED_ONLY_PATHS)).toEqual({
 			...every,
 			ios: false,
+			core: false,
 		})
 	})
 
@@ -301,6 +309,33 @@ describe("the paths each job watches", () => {
 
 	it("runs website on paths only under packages/shared, since apps/website resolves it through packages/ui", () => {
 		expect(touching(...SHARED_ONLY_PATHS).website).toBe(true)
+	})
+
+	it("runs rust and core on a Rust file under crates", () => {
+		expect(touching("crates/kiroshi-core/src/lib.rs")).toEqual({
+			...touching("apps/app/src-tauri/src/lib.rs"),
+			core: true,
+		})
+	})
+
+	it("runs only core on the Rune preview", () => {
+		expect(touching("apps/rune-preview/src/local.rs")).toEqual({
+			...none,
+			core: true,
+		})
+	})
+
+	it("runs rust and core on the fake sidecar the Rune preview builds", () => {
+		expect(touching("apps/app/src-tauri/src/bin/fake_sidecar.rs")).toEqual({
+			...none,
+			rust: true,
+			core: true,
+		})
+	})
+
+	it("runs core on the workspace manifest and lockfile", () => {
+		expect(touching("Cargo.toml").core).toBe(true)
+		expect(touching("Cargo.lock").core).toBe(true)
 	})
 
 	it("runs rust on packages/shared/permission-modes.json alone, since src-tauri embeds it", () => {
@@ -319,8 +354,8 @@ describe("the paths each job watches", () => {
 		})
 	})
 
-	it("runs rust on every file src-tauri embeds with include_str! or include_bytes!", () => {
-		const embedded = filesSrcTauriEmbeds()
+	it("runs rust on every file the Rust crates embed with include_str! or include_bytes!", () => {
+		const embedded = filesTheRustCratesEmbed()
 
 		expect(embedded).toContain(".claude/settings.json")
 		expect(embedded.filter((path) => !touching(path).rust)).toEqual([])

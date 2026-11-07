@@ -37,7 +37,7 @@ impl Home {
 		let app =
 			an_app_of_its_own("space-bundle", mock_builder().invoke_handler(invoke_handler()));
 		let dir = app.path().app_data_dir().expect("data dir");
-		app.manage(db::bootstrap(app.handle()));
+		kiroshi_app::db::install(kiroshi_app::events::core(app.handle()));
 		let window = WebviewWindowBuilder::new(app.handle(), "main", Default::default())
 			.build()
 			.expect("window");
@@ -69,7 +69,7 @@ impl Home {
 	}
 
 	fn count(&self, sql: &'static str) -> i64 {
-		let state = self.app.state::<db::DatabaseState>();
+		let state = kiroshi_app::events::core(self.app.app_handle()).state::<db::DatabaseState>();
 		let database = state.inner().as_ref().expect("the database opened");
 		tauri::async_runtime::block_on(
 			database.call(move |connection| Ok(connection.query_row(sql, [], |row| row.get(0))?)),
@@ -78,7 +78,7 @@ impl Home {
 	}
 
 	fn table_counts(&self) -> BTreeMap<String, i64> {
-		let state = self.app.state::<db::DatabaseState>();
+		let state = kiroshi_app::events::core(self.app.app_handle()).state::<db::DatabaseState>();
 		let database = state.inner().as_ref().expect("the database opened");
 		tauri::async_runtime::block_on(database.call(|connection| {
 			let mut statement = connection.prepare(
@@ -122,7 +122,7 @@ impl Home {
 	}
 
 	fn env_root(&self) -> PathBuf {
-		store::root(self.app.handle()).expect("an env root")
+		store::root(kiroshi_app::events::core(self.app.handle())).expect("an env root")
 	}
 
 	fn env_entries(&self, scope: Value) -> Vec<(String, bool)> {
@@ -139,11 +139,11 @@ impl Home {
 	}
 
 	fn bot_root(&self) -> PathBuf {
-		bundles::root(self.app.handle()).expect("a bot root")
+		bundles::root(kiroshi_app::events::core(self.app.handle())).expect("a bot root")
 	}
 
 	fn avatar_dir(&self) -> PathBuf {
-		Avatars::dir(self.app.handle()).expect("an avatar dir")
+		Avatars::dir(kiroshi_app::events::core(self.app.handle())).expect("an avatar dir")
 	}
 
 	fn avatar_of(&self, space_id: &str, bot_id: &str) -> Value {

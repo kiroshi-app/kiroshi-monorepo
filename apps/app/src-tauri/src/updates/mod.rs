@@ -1,5 +1,5 @@
 pub mod commands;
-pub mod contract;
+pub use kiroshi_core::updates::contract;
 mod flow;
 mod release_notes;
 

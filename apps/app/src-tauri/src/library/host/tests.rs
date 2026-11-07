@@ -9,7 +9,7 @@ use image::{DynamicImage, ImageFormat, Rgb, RgbImage};
 use serde::de::DeserializeOwned;
 use serde_json::{json, Value};
 use tauri::test::{mock_builder, MockRuntime};
-use tauri::{App, Listener as _};
+use tauri::{App, AppHandle, Listener as _};
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::Encode;
 use yrs::{Doc, GetString, IndexedSequence, Map, ReadTxn, Text, Transact, Update};
@@ -27,6 +27,7 @@ use crate::library::contract::{
 use crate::library::presence::{hue_of, share_presence, Identity, Presences, AGENT_BOARD_LEASE};
 use crate::library::{apply_update, open_document, read_thumbnail};
 use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
+use tauri::Manager;
 
 const A_CONVERSATION: &str = "
 	INSERT INTO bots (id, name, model, created_at) VALUES ('b1', 'Bean', 'sonnet', 1);
@@ -48,13 +49,13 @@ async fn a_host(name: &str) -> (AppOfItsOwn, PathBuf) {
 
 async fn a_host_built(name: &str, builder: tauri::Builder<MockRuntime>) -> (AppOfItsOwn, PathBuf) {
 	let app = an_app_of_its_own(&format!("library-host-{name}"), builder);
-	app.manage(db::bootstrap(app.handle()));
-	ready(&app.state::<db::DatabaseState>())
+	crate::db::install(crate::events::core(app.handle()));
+	ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 		.expect("the database opens")
 		.call_mut(|connection| Ok(connection.execute_batch(A_CONVERSATION)?))
 		.await
 		.expect("the conversation is planted");
-	let root = root(app.handle()).expect("the library resolves");
+	let root = root(crate::events::core(app.handle())).expect("the library resolves");
 	(app, root)
 }
 
@@ -68,18 +69,18 @@ fn on_disk(root: &Path, name: &str) -> String {
 	std::fs::read_to_string(root.join(SPACE).join(name)).expect("the document reads")
 }
 
-fn the_host(app: &App<MockRuntime>) -> LibraryHost<MockRuntime> {
+fn the_host(app: &App<MockRuntime>) -> LibraryHost {
 	the_host_of(app, "b1")
 }
 
-fn the_host_of(app: &App<MockRuntime>, bot_id: &str) -> LibraryHost<MockRuntime> {
+fn the_host_of(app: &App<MockRuntime>, bot_id: &str) -> LibraryHost {
 	let scope = RuntimeScope {
 		conversation_id: "c1".to_owned(),
 		bot_id: bot_id.to_owned(),
 		runtime_session_id: format!("r-{bot_id}"),
 		epoch: 0,
 	};
-	LibraryHost::new(app.handle().clone(), scope)
+	LibraryHost::new(crate::events::core(app.handle()).clone(), scope)
 }
 
 fn heard<P: DeserializeOwned + Send + 'static>(
@@ -107,9 +108,14 @@ fn refusal_of(answer: Result<Value, DocumentRefusal>) -> Value {
 }
 
 fn caret_of_a_member(app: &App<MockRuntime>, name: &str) -> LibraryPresenceAt {
-	let state = open_document(app.handle(), &root(app.handle()).expect("root"), SPACE, name)
-		.expect("the document opens")
-		.update;
+	let state = open_document(
+		crate::events::core(app.handle()),
+		&root(crate::events::core(app.handle())).expect("root"),
+		SPACE,
+		name,
+	)
+	.expect("the document opens")
+	.update;
 	let doc = Doc::new();
 	let update = BASE64_STANDARD.decode(state).expect("base64");
 	doc.transact_mut().apply_update(Update::decode_v1(&update).expect("yjs")).expect("applies");
@@ -118,12 +124,12 @@ fn caret_of_a_member(app: &App<MockRuntime>, name: &str) -> LibraryPresenceAt {
 	LibraryPresenceAt::Text { anchor: BASE64_STANDARD.encode(caret.encode_v1()) }
 }
 
-async fn tree_of(host: &LibraryHost<MockRuntime>, name: &str) -> Vec<Value> {
+async fn tree_of(host: &LibraryHost, name: &str) -> Vec<Value> {
 	let tree = host.served(Operation::DocumentTree, json!({ "name": name })).await.expect("reads");
 	tree["blocks"].as_array().expect("the tree lists its blocks").clone()
 }
 
-async fn ids_of(host: &LibraryHost<MockRuntime>, name: &str) -> Vec<String> {
+async fn ids_of(host: &LibraryHost, name: &str) -> Vec<String> {
 	tree_of(host, name)
 		.await
 		.iter()
@@ -165,7 +171,7 @@ async fn an_agent_and_a_member_are_published_with_their_names_then_the_agent_fin
 	);
 	let caret = caret_of_a_member(&app, "notes.md");
 	share_presence(
-		app.handle(),
+		crate::events::core(app.handle()),
 		&root,
 		SPACE,
 		"notes.md",
@@ -295,7 +301,9 @@ fn person_typed_at_the_end(app: &App<MockRuntime>, root: &Path, person: &Doc) {
 }
 
 fn person_typed(app: &App<MockRuntime>, root: &Path, person: &Doc, at: fn(&str) -> usize) {
-	let state = open_document(app.handle(), root, SPACE, "notes.md").expect("opens").update;
+	let state = open_document(crate::events::core(app.handle()), root, SPACE, "notes.md")
+		.expect("opens")
+		.update;
 	let update = BASE64_STANDARD.decode(state).expect("base64");
 	person.transact_mut().apply_update(Update::decode_v1(&update).expect("yjs")).expect("applies");
 	let before = person.transact().state_vector();
@@ -305,15 +313,21 @@ fn person_typed(app: &App<MockRuntime>, root: &Path, person: &Doc, at: fn(&str) 
 	text.insert(&mut txn, index, "#");
 	drop(txn);
 	let typed = person.transact().encode_state_as_update_v1(&before);
-	apply_update(app.handle(), root, SPACE, "notes.md", &BASE64_STANDARD.encode(typed))
-		.expect("the person update merges");
+	apply_update(
+		crate::events::core(app.handle()),
+		root,
+		SPACE,
+		"notes.md",
+		&BASE64_STANDARD.encode(typed),
+	)
+	.expect("the person update merges");
 }
 
 #[tokio::test]
 async fn a_block_id_absent_from_the_document_is_refused_by_name_and_writes_nothing() {
 	let (app, root) = a_host("absent").await;
 	put(&root, SPACE, "notes.md", "# Plan\n\nBody.");
-	open_document(app.handle(), &root, SPACE, "notes.md").expect("opens");
+	open_document(crate::events::core(app.handle()), &root, SPACE, "notes.md").expect("opens");
 	let published = heard_in_order(&app);
 	let updates = heard::<Value>(&app, events::LIBRARY_DOCUMENT_UPDATED.name());
 	let host = the_host(&app);
@@ -929,7 +943,8 @@ async fn a_rename_moves_the_document_and_its_shared_state_as_the_person_rename_d
 	assert_eq!(on_disk(&root, "final.md"), "Base.#");
 	assert!(state_file(&root, "final.md").exists());
 	assert!(!state_file(&root, "notes.md").exists());
-	let opened = open_document(app.handle(), &root, SPACE, "final.md").expect("opens");
+	let opened =
+		open_document(crate::events::core(app.handle()), &root, SPACE, "final.md").expect("opens");
 	let doc = Doc::new();
 	let update = BASE64_STANDARD.decode(opened.update).expect("base64");
 	doc.transact_mut().apply_update(Update::decode_v1(&update).expect("yjs")).expect("applies");
@@ -976,14 +991,16 @@ async fn a_delete_removes_the_item_its_thumbnail_and_its_shared_state() {
 	assert_eq!(all_of(&changes), [changed.clone(), changed]);
 	put(&root, SPACE, "notes.md", "Fresh.");
 	assert_eq!(
-		open_document(app.handle(), &root, SPACE, "notes.md").map(|opened| opened.name),
+		open_document(crate::events::core(app.handle()), &root, SPACE, "notes.md")
+			.map(|opened| opened.name),
 		Ok("notes.md".to_owned())
 	);
 	assert_eq!(on_disk(&root, "notes.md"), "Fresh.");
 }
 
 fn an_open_editor(app: &App<MockRuntime>, root: &Path, name: &str) -> Doc {
-	let state = open_document(app.handle(), root, SPACE, name).expect("opens").update;
+	let state =
+		open_document(crate::events::core(app.handle()), root, SPACE, name).expect("opens").update;
 	let editor = Doc::with_client_id(PERSON_CLIENT);
 	let update = BASE64_STANDARD.decode(state).expect("base64");
 	editor.transact_mut().apply_update(Update::decode_v1(&update).expect("yjs")).expect("applies");
@@ -1309,8 +1326,17 @@ async fn a_member_caret_lapses_unless_it_is_sent_again() {
 		heard::<LibraryDocumentPresence>(&app, events::LIBRARY_DOCUMENT_PRESENCE.name());
 	let caret = caret_of_a_member(&app, "notes.md");
 	let member = || Seat::Member("u2".to_owned());
-	let shared =
-		|| share_presence(app.handle(), &root, SPACE, "notes.md", member(), ana(), caret.clone());
+	let shared = || {
+		share_presence(
+			crate::events::core(app.handle()),
+			&root,
+			SPACE,
+			"notes.md",
+			member(),
+			ana(),
+			caret.clone(),
+		)
+	};
 	shared().expect("the caret is published");
 	tokio::time::sleep(Duration::from_secs(20)).await;
 	shared().expect("the caret is published again");
@@ -1344,7 +1370,7 @@ fn shared_by_a_member(
 	at: LibraryPresenceAt,
 ) -> Result<(), LibraryError> {
 	let member = Seat::Member("u2".to_owned());
-	share_presence(app.handle(), root, SPACE, name, member, ana(), at)
+	share_presence(crate::events::core(app.handle()), root, SPACE, name, member, ana(), at)
 }
 
 fn positions(presences: &[LibraryDocumentPresence]) -> Vec<Vec<LibraryPresenceAt>> {
@@ -1435,11 +1461,34 @@ async fn the_host_and_a_member_of_the_same_account_share_a_hue_and_an_agent_has_
 	let host = Identity::of_person(author(), &window);
 	let joined = Identity::of_person(author(), &member);
 
-	share_presence(app.handle(), &root, SPACE, BOARD, window, host, on_the_board(0, 0, None))
-		.expect("the host pointer is seated");
-	share_presence(app.handle(), &root, SPACE, BOARD, member, joined, on_the_board(5, 5, None))
-		.expect("the member pointer is seated");
-	seat_agent_on_board(app.handle(), SPACE, BOARD, "b1", "Bean", on_the_board(9, 9, None));
+	share_presence(
+		crate::events::core(app.handle()),
+		&root,
+		SPACE,
+		BOARD,
+		window,
+		host,
+		on_the_board(0, 0, None),
+	)
+	.expect("the host pointer is seated");
+	share_presence(
+		crate::events::core(app.handle()),
+		&root,
+		SPACE,
+		BOARD,
+		member,
+		joined,
+		on_the_board(5, 5, None),
+	)
+	.expect("the member pointer is seated");
+	seat_agent_on_board(
+		crate::events::core(app.handle()),
+		SPACE,
+		BOARD,
+		"b1",
+		"Bean",
+		on_the_board(9, 9, None),
+	);
 	tokio::time::sleep(BOARD_PACE_PASSED).await;
 
 	let published = all_of(&presences);
@@ -1478,8 +1527,16 @@ async fn a_seated_window_keeps_its_hue_when_it_shares_again_through_the_command(
 		heard::<LibraryDocumentPresence>(&app, events::LIBRARY_DOCUMENT_PRESENCE.name());
 	let seated = Identity { name: Some("Kept".to_owned()), hue: Some(7) };
 	let seat = Seat::Window("main".to_owned());
-	share_presence(app.handle(), &root, SPACE, BOARD, seat, seated, on_the_board(0, 0, None))
-		.expect("the window is seated");
+	share_presence(
+		crate::events::core(app.handle()),
+		&root,
+		SPACE,
+		BOARD,
+		seat,
+		seated,
+		on_the_board(0, 0, None),
+	)
+	.expect("the window is seated");
 	tokio::time::sleep(BOARD_PACE_PASSED).await;
 	presences.try_iter().for_each(drop);
 
@@ -1502,7 +1559,7 @@ async fn an_agent_board_seat_publishes_its_node_and_point_and_stays_after_it_fin
 		events::LIBRARY_DOCUMENT_WRITER_FINISHED.name(),
 	);
 	let agent = Agent { id: "b1".to_owned(), name: "Bean".to_owned() };
-	let mut seat = BoardWriting::of(app.handle(), SPACE, BOARD, &agent);
+	let mut seat = BoardWriting::of(crate::events::core(app.handle()), SPACE, BOARD, &agent);
 
 	seat.at(&Touched { node_id: Some("n1".to_owned()), x: 40, y: 80 });
 	tokio::time::sleep(BOARD_PACE_PASSED).await;
@@ -1553,8 +1610,16 @@ async fn a_burst_of_board_positions_is_published_once_with_the_latest_of_every_s
 		heard::<LibraryDocumentPresence>(&app, events::LIBRARY_DOCUMENT_PRESENCE.name());
 	let window = Seat::Window("main".to_owned());
 	let nameless = Identity { name: None, hue: None };
-	share_presence(app.handle(), &root, SPACE, BOARD, window, nameless, on_the_board(0, 0, None))
-		.expect("the window position is seated");
+	share_presence(
+		crate::events::core(app.handle()),
+		&root,
+		SPACE,
+		BOARD,
+		window,
+		nameless,
+		on_the_board(0, 0, None),
+	)
+	.expect("the window position is seated");
 
 	for step in 1..=5 {
 		let at = on_the_board(step, 0, Some("n1"));
@@ -1661,7 +1726,7 @@ fn a_closed_window_leaves_every_document_it_stood_in() {
 	presences.seated(SPACE, "b.md", seated(Seat::Window("main".to_owned())));
 	presences.seated(SPACE, "b.md", seated(Seat::Window("second".to_owned())));
 
-	let left = presences.window_closed("main");
+	let left = presences.window_closed(&crate::core_context::ClientId::new("main"));
 
 	let mut remaining: Vec<_> = left
 		.iter()
@@ -1695,7 +1760,7 @@ async fn an_agent_posts_a_document_of_the_space_as_its_own_message_announced_liv
 		.await
 		.expect("the document is posted");
 
-	let page = ready(&app.state::<db::DatabaseState>())
+	let page = ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 		.expect("the database opens")
 		.messages()
 		.page_messages(MessagePageQuery {
@@ -1737,7 +1802,7 @@ async fn an_agent_posting_what_is_not_a_document_of_the_space_is_refused_by_name
 	};
 	assert_eq!(refused(missing), json!({ "kind": "missing", "name": "theirs.md" }));
 	assert_eq!(refused(image), json!({ "kind": "notADocument", "name": "cover.png" }));
-	let page = ready(&app.state::<db::DatabaseState>())
+	let page = ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 		.expect("the database opens")
 		.messages()
 		.page_messages(MessagePageQuery {
@@ -1759,8 +1824,8 @@ const A_SECOND_AGENT_IN_THE_CONVERSATION: &str = "
 
 async fn two_agents_writing(name: &str) -> (AppOfItsOwn, PathBuf) {
 	let (app, root) = a_host(name).await;
-	app.manage(AgentState::default());
-	ready(&app.state::<db::DatabaseState>())
+	crate::events::core(app.app_handle()).manage(AgentState::default());
+	ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 		.expect("the database opens")
 		.call_mut(|connection| Ok(connection.execute_batch(A_SECOND_AGENT_IN_THE_CONVERSATION)?))
 		.await
@@ -1782,7 +1847,6 @@ fn writing(
 async fn stopped(app: &App<MockRuntime>, agent_id: Option<&str>) -> CancelOutcome {
 	library_stop_writers(
 		app.handle().clone(),
-		app.state(),
 		app.state(),
 		SPACE.to_owned(),
 		"notes.md".to_owned(),
@@ -1812,7 +1876,7 @@ async fn a_stop_without_an_agent_stops_every_agent_writing_and_leaves_the_member
 	);
 	let caret = caret_of_a_member(&app, "notes.md");
 	share_presence(
-		app.handle(),
+		crate::events::core(app.handle()),
 		&root,
 		SPACE,
 		"notes.md",
@@ -1903,7 +1967,8 @@ async fn a_stop_in_a_document_nobody_writes_in_has_nothing_to_cancel() {
 
 async fn enlisted_by(app: &App<MockRuntime>, agent_id: &str, count: usize) {
 	let key = (SPACE.to_owned(), "notes.md".to_owned(), agent_id.to_owned());
-	while writes(app.handle()).writing().get(&key).map_or(0, Vec::len) < count {
+	while writes(crate::events::core(app.handle())).writing().get(&key).map_or(0, Vec::len) < count
+	{
 		tokio::time::sleep(Duration::from_millis(1)).await;
 	}
 }
@@ -1988,7 +2053,7 @@ fn written(nodes: Value, arrows: Value) -> Value {
 
 fn agent_seated(app: &App<MockRuntime>) -> Option<Option<String>> {
 	crate::library::presence::seated_identity(
-		app.handle(),
+		crate::events::core(app.handle()),
 		SPACE,
 		BOARD,
 		&Seat::Agent("b1".to_owned()),
@@ -2090,7 +2155,9 @@ async fn every_board_answer_carries_a_header_whose_hash_moves_only_with_the_cont
 async fn a_refused_batch_leaves_the_board_byte_identical_and_announces_nothing() {
 	let (app, root) = a_host("board-refused").await;
 	put(&root, SPACE, BOARD, A_BOARD_WITH_ONE_NODE);
-	let state_before = open_document(app.handle(), &root, SPACE, BOARD).expect("opens").update;
+	let state_before = open_document(crate::events::core(app.handle()), &root, SPACE, BOARD)
+		.expect("opens")
+		.update;
 	let updates = heard::<Value>(&app, events::LIBRARY_DOCUMENT_UPDATED.name());
 	let batch = written(
 		json!([
@@ -2145,7 +2212,9 @@ async fn a_refused_batch_leaves_the_board_byte_identical_and_announces_nothing()
 	}
 	assert!(all_of(&updates).is_empty());
 	assert_eq!(on_disk(&root, BOARD), A_BOARD_WITH_ONE_NODE);
-	let state_after = open_document(app.handle(), &root, SPACE, BOARD).expect("opens").update;
+	let state_after = open_document(crate::events::core(app.handle()), &root, SPACE, BOARD)
+		.expect("opens")
+		.update;
 	assert_eq!(state_after, state_before);
 }
 
@@ -2440,7 +2509,7 @@ async fn an_agent_posts_a_board_of_the_space_as_its_own_message() {
 		.await
 		.expect("the board is posted");
 
-	let page = ready(&app.state::<db::DatabaseState>())
+	let page = ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 		.expect("the database opens")
 		.messages()
 		.page_messages(MessagePageQuery {
@@ -2565,7 +2634,9 @@ fn a_drawn_png() -> Vec<u8> {
 
 async fn the_page_renders(app: &AppHandle<MockRuntime>, png: &[u8]) -> screenshot::ScreenshotJob {
 	let request_id = loop {
-		if let Some(id) = screenshot::screenshots(app).held().keys().next().cloned() {
+		if let Some(id) =
+			screenshot::screenshots(crate::events::core(app)).held().keys().next().cloned()
+		{
 			break id;
 		}
 		tokio::time::sleep(Duration::from_millis(5)).await;
@@ -2580,7 +2651,7 @@ async fn the_page_renders(app: &AppHandle<MockRuntime>, png: &[u8]) -> screensho
 }
 
 fn no_render_asked(app: &App<MockRuntime>) -> bool {
-	screenshot::screenshots(app.handle()).held().is_empty()
+	screenshot::screenshots(crate::events::core(app.handle())).held().is_empty()
 }
 
 fn a_board_target(job: &screenshot::ScreenshotJob) -> (Value, crate::board::Frame) {

@@ -11,7 +11,6 @@ use common::{an_app_of_its_own, AppOfItsOwn};
 use kiroshi_app::agent::contract::TransportError;
 use kiroshi_app::agent::AgentState;
 use kiroshi_app::commands::invoke_handler;
-use kiroshi_app::db;
 use kiroshi_app::events::{self, BUFFERED_FRAMES, MISSION_CHANGED};
 use kiroshi_app::host_api::cors;
 use kiroshi_app::host_api::events::SEND_PATIENCE;
@@ -50,7 +49,7 @@ impl Host {
 	fn new() -> Self {
 		let app = an_app_of_its_own("host-api", mock_builder().invoke_handler(invoke_handler()));
 		let dir = app.path().app_data_dir().expect("data dir");
-		app.manage(db::bootstrap(app.handle()));
+		kiroshi_app::db::install(kiroshi_app::events::core(app.handle()));
 		Self { app, dir }
 	}
 
@@ -61,7 +60,10 @@ impl Host {
 	}
 
 	fn started(&self) -> Server {
-		Server(webhook::start(self.app.handle().clone()))
+		Server(webhook::start(
+			kiroshi_app::events::core(self.app.handle()).clone(),
+			kiroshi_app::host_api::routes(self.app.handle().clone()),
+		))
 	}
 
 	fn token_path(&self) -> PathBuf {
@@ -539,7 +541,7 @@ async fn without_any_window_a_command_answers_what_the_window_answers() {
 #[tokio::test(flavor = "multi_thread")]
 async fn a_permission_answer_reaches_its_handler_without_any_window() {
 	let host = Host::new();
-	host.app.manage(AgentState::default());
+	kiroshi_app::events::core(host.app.app_handle()).manage(AgentState::default());
 	let server = host.started();
 	let answer = json!({
 		"scope": {

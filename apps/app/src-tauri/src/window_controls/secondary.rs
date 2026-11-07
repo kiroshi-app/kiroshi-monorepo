@@ -301,7 +301,7 @@ fn is_app_page(href: &str) -> bool {
 }
 
 async fn fresh_label<R: Runtime>(app: &AppHandle<R>) -> Result<String, WindowOpenError> {
-	let Some(state) = app.try_state::<DatabaseState>() else {
+	let Some(state) = crate::events::core(app.app_handle()).try_state::<DatabaseState>() else {
 		eprintln!("no store is open to record the label of a new window");
 		return Err(WindowOpenError::Unavailable);
 	};

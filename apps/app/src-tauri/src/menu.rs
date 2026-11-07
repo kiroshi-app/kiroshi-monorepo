@@ -358,7 +358,8 @@ fn act_on_choice<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
 fn act_on<R: Runtime>(window: &WebviewWindow<R>, entry: Entry) -> tauri::Result<()> {
 	if let Some(action) = entry.file_action() {
 		let app = window.app_handle();
-		return events::emit_to(app, window.label(), events::FILE_MENU, FileMenuChosen { action });
+		return events::emit_to(app, window.label(), events::FILE_MENU, FileMenuChosen { action })
+			.map_err(|failure| tauri::Error::Anyhow(failure.into()));
 	}
 	match entry {
 		Entry::CloseWindow => window.close(),

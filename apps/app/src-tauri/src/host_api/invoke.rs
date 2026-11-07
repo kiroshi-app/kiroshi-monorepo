@@ -17,6 +17,7 @@ use tokio::sync::oneshot;
 use super::cors::WINDOW_ORIGIN;
 use super::token::HostToken;
 use crate::attachments::contract::AttachmentStoreError;
+use crate::hosting::contract::REFUSED_TO_A_MEMBER;
 use crate::routines::webhook::{named_here, Calls};
 
 pub const PATH: &str = "/api/invoke/{command}";
@@ -29,8 +30,6 @@ pub(crate) const DISPATCHER_WEBVIEW: &str = "dispatcher";
 
 pub(crate) const RELAYED_MEMBER_HEADER: HeaderName =
 	HeaderName::from_static("kiroshi-relayed-member");
-
-pub(crate) const REFUSED_TO_A_MEMBER: &str = "refusedToAMember";
 
 const STORE_ATTACHMENTS: &str = "chat_store_attachments";
 
@@ -62,17 +61,18 @@ pub(crate) const UNREADABLE: (StatusCode, &str) =
 const UNANSWERED: (StatusCode, &str) =
 	(StatusCode::INTERNAL_SERVER_ERROR, "the command gave no answer");
 
-pub(crate) fn route<R: Runtime>(calls: Calls<R>) -> Router<Calls<R>> {
+pub(crate) fn route<R: Runtime>(calls: Calls, app: AppHandle<R>) -> Router<Calls> {
+	let answering = move |Path(command): Path<String>,
+	                      headers: HeaderMap,
+	                      body: Result<Bytes, BytesRejection>| {
+		invoked(app.clone(), command, headers, body)
+	};
 	Router::new()
-		.route(PATH, post(invoked::<R>).layer(DefaultBodyLimit::max(MAX_BODY_BYTES)))
-		.route_layer(middleware::from_fn_with_state(calls, guarded::<R>))
+		.route(PATH, post(answering).layer(DefaultBodyLimit::max(MAX_BODY_BYTES)))
+		.route_layer(middleware::from_fn_with_state(calls, guarded))
 }
 
-async fn guarded<R: Runtime>(
-	State(calls): State<Calls<R>>,
-	request: Request,
-	next: Next,
-) -> Response {
+async fn guarded(State(calls): State<Calls>, request: Request, next: Next) -> Response {
 	if !named_here(request.headers()) {
 		return REFUSED.into_response();
 	}
@@ -93,7 +93,7 @@ pub(crate) fn declares_more_than_the_cap(headers: &HeaderMap) -> bool {
 		.is_some_and(|declared| declared > MAX_BODY_BYTES)
 }
 
-pub(crate) fn authorized<R: Runtime>(calls: &Calls<R>, headers: &HeaderMap) -> bool {
+pub(crate) fn authorized(calls: &Calls, headers: &HeaderMap) -> bool {
 	calls.token.as_ref().is_some_and(|token| bearer_admitted(token, headers))
 }
 
@@ -106,8 +106,8 @@ pub(crate) fn bearer_admitted(token: &HostToken, headers: &HeaderMap) -> bool {
 }
 
 async fn invoked<R: Runtime>(
-	State(calls): State<Calls<R>>,
-	Path(command): Path<String>,
+	app: AppHandle<R>,
+	command: String,
 	headers: HeaderMap,
 	body: Result<Bytes, BytesRejection>,
 ) -> Response {
@@ -125,7 +125,14 @@ async fn invoked<R: Runtime>(
 		.get(&RELAYED_MEMBER_HEADER)
 		.cloned()
 		.unwrap_or_else(|| HeaderValue::from_static(""));
-	match dispatched(calls.app.clone(), command.clone(), arguments, relayed_member).await {
+	if relayed_member.is_empty() && kiroshi_core::invoke::handles(&command) {
+		let core = crate::events::core(&app);
+		if let Some(answer) = kiroshi_core::invoke::dispatch(core, &command, arguments).await {
+			return answer.into_response();
+		}
+		return UNREGISTERED.into_response();
+	}
+	match dispatched(app, command.clone(), arguments, relayed_member).await {
 		Some(response) => answered(&command, response),
 		None => UNANSWERED.into_response(),
 	}

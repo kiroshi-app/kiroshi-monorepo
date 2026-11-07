@@ -4,7 +4,6 @@ use std::time::Duration;
 
 use notify_debouncer_full::notify::{self, RecursiveMode};
 use notify_debouncer_full::{new_debouncer, DebounceEventResult, Debouncer, RecommendedCache};
-use tauri::{AppHandle, Manager, Runtime};
 use tokio::sync::{mpsc, watch as signal};
 
 use super::commands::declared_source;
@@ -30,17 +29,17 @@ impl Sentinel {
 	}
 }
 
-pub fn spawn<R: Runtime>(app: AppHandle<R>) -> Sentinel {
+pub fn spawn(core: crate::core_context::Core) -> Sentinel {
 	let (stop, halted) = signal::channel(false);
-	tauri::async_runtime::spawn(keeping_watch(app, halted));
+	core.clone().spawn(keeping_watch(core, halted));
 	Sentinel { stop }
 }
 
-pub(crate) async fn keeping_watch<R: Runtime>(
-	app: AppHandle<R>,
+pub(crate) async fn keeping_watch(
+	core: crate::core_context::Core,
 	mut halted: signal::Receiver<bool>,
 ) {
-	let state = app.state::<db::DatabaseState>();
+	let state = core.state::<db::DatabaseState>();
 	let database = match ready(&state) {
 		Ok(database) => database,
 		Err(failure) => return eprintln!("no routine is watched for: {failure:?}"),
@@ -53,9 +52,9 @@ pub(crate) async fn keeping_watch<R: Runtime>(
 	loop {
 		tokio::select! {
 			_ = halted.changed() => return,
-			_ = ticker.tick() => on_tick(&app, database, &mut watched).await,
+			_ = ticker.tick() => on_tick(&core, database, &mut watched).await,
 			batch = settling.recv() => match batch {
-				Some(batch) => on_settled(&app, database, batch).await,
+				Some(batch) => on_settled(&core, database, batch).await,
 				None => return,
 			},
 		}
@@ -110,16 +109,16 @@ impl Watched {
 	}
 }
 
-async fn on_tick<R: Runtime>(app: &AppHandle<R>, database: &db::Database, watched: &mut Watched) {
-	fire_due_occurrences(app, database).await;
+async fn on_tick(core: &crate::core_context::Core, database: &db::Database, watched: &mut Watched) {
+	fire_due_occurrences(core, database).await;
 	match wanted_paths(database).await {
 		Ok(wanted) => watched.settle_on(wanted),
 		Err(failure) => eprintln!("the watched paths were not read: {failure:?}"),
 	}
 }
 
-async fn on_settled<R: Runtime>(
-	app: &AppHandle<R>,
+async fn on_settled(
+	core: &crate::core_context::Core,
 	database: &db::Database,
 	batch: DebounceEventResult,
 ) {
@@ -134,55 +133,55 @@ async fn on_settled<R: Runtime>(
 	};
 	let changes = watch::settled(&watch::observed(&events, SystemClock.now_ms()));
 	match database.routines().enabled_on_source(watch::SOURCE_ID.to_owned()).await {
-		Ok(held) => fire_changes(app, database, &held, &changes).await,
+		Ok(held) => fire_changes(core, database, &held, &changes).await,
 		Err(failure) => eprintln!("the watching routines were not read: {failure:?}"),
 	}
 }
 
-async fn fire_due_occurrences<R: Runtime>(app: &AppHandle<R>, database: &db::Database) {
+async fn fire_due_occurrences(core: &crate::core_context::Core, database: &db::Database) {
 	let held = match database.routines().enabled_on_source(schedule::SOURCE_ID.to_owned()).await {
 		Ok(held) => held,
 		Err(failure) => return eprintln!("the scheduled routines were not read: {failure:?}"),
 	};
 	for routine in &held {
-		if let Err(failure) = fired(app, database, routine).await {
+		if let Err(failure) = fired(core, database, routine).await {
 			report(&routine.routine.id, &failure);
 		}
 	}
 }
 
-async fn fired<R: Runtime>(
-	app: &AppHandle<R>,
+async fn fired(
+	core: &crate::core_context::Core,
 	database: &db::Database,
 	held: &EnabledRoutine,
 ) -> Result<(), RoutineError> {
 	let Some(occurrence) = schedule::due_for(held, SystemClock.now_ms())? else {
 		return Ok(());
 	};
-	let Some(source) = source_of(app, database, &held.routine).await? else {
+	let Some(source) = source_of(core, database, &held.routine).await? else {
 		return Ok(());
 	};
-	let runner = Runner::new(app.clone());
+	let runner = Runner::new(core.clone());
 	schedule::fire(database, &runner, &SystemClock, &held.routine, &source, &occurrence)
 		.await
 		.map(drop)
 }
 
-async fn fire_changes<R: Runtime>(
-	app: &AppHandle<R>,
+async fn fire_changes(
+	core: &crate::core_context::Core,
 	database: &db::Database,
 	held: &[EnabledRoutine],
 	changes: &[watch::Settled],
 ) {
 	for routine in held {
-		if let Err(failure) = notified(app, database, &routine.routine, changes).await {
+		if let Err(failure) = notified(core, database, &routine.routine, changes).await {
 			report(&routine.routine.id, &failure);
 		}
 	}
 }
 
-async fn notified<R: Runtime>(
-	app: &AppHandle<R>,
+async fn notified(
+	core: &crate::core_context::Core,
 	database: &db::Database,
 	routine: &Routine,
 	changes: &[watch::Settled],
@@ -193,7 +192,7 @@ async fn notified<R: Runtime>(
 	if matching.is_empty() {
 		return Ok(());
 	}
-	let Some(source) = source_of(app, database, routine).await? else {
+	let Some(source) = source_of(core, database, routine).await? else {
 		return Ok(());
 	};
 	for change in matching {
@@ -202,7 +201,7 @@ async fn notified<R: Runtime>(
 			source: source.clone(),
 			payload: watch::payload(change)?,
 		};
-		core::on_trigger(database, &Runner::new(app.clone()), &SystemClock, event).await?;
+		core::on_trigger(database, &Runner::new(core.clone()), &SystemClock, event).await?;
 	}
 	Ok(())
 }
@@ -221,13 +220,13 @@ async fn wanted_paths(database: &db::Database) -> Result<BTreeMap<PathBuf, Strin
 	Ok(wanted)
 }
 
-async fn source_of<R: Runtime>(
-	app: &AppHandle<R>,
+async fn source_of(
+	core: &crate::core_context::Core,
 	database: &db::Database,
 	routine: &Routine,
 ) -> Result<Option<TriggerSource>, RoutineError> {
 	match declared_source(
-		app,
+		core,
 		database,
 		&routine.conversation_id,
 		&routine.bot_id,
@@ -267,7 +266,7 @@ mod tests {
 
 	fn a_host(name: &str) -> AppOfItsOwn {
 		let app = an_app_of_its_own(&format!("sentinel-{name}"), mock_builder());
-		app.manage(db::bootstrap(app.handle()));
+		crate::db::install(crate::events::core(app.handle()));
 		app
 	}
 
@@ -275,7 +274,7 @@ mod tests {
 	async fn the_task_ends_when_its_stop_signal_fires() {
 		let app = a_host("stopped");
 		let (stop, halted) = signal::channel(false);
-		let task = tokio::spawn(keeping_watch(app.handle().clone(), halted));
+		let task = tokio::spawn(keeping_watch(crate::events::core(app.handle()).clone(), halted));
 
 		stop.send_replace(true);
 

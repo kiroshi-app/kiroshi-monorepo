@@ -1,5 +1,5 @@
 pub mod commands;
-pub mod contract;
+pub use kiroshi_core::devices::contract;
 
 use std::collections::HashMap;
 use std::sync::{Mutex, MutexGuard, PoisonError};
@@ -8,9 +8,8 @@ use std::time::Duration;
 use base64::prelude::{Engine as _, BASE64_URL_SAFE_NO_PAD};
 use chrono::{DateTime, SecondsFormat, TimeDelta, Utc};
 use ed25519_dalek::VerifyingKey;
-use tauri::async_runtime::JoinHandle;
-use tauri::{AppHandle, Manager, Runtime};
 use tokio::sync::watch;
+use tokio::task::JoinHandle;
 use tokio::time::sleep;
 
 use crate::account::cloud::{
@@ -21,9 +20,7 @@ use crate::account::session::{self, AccountSession};
 use crate::crypto::commands::DeviceKeysState;
 use crate::crypto::fingerprint::fingerprint;
 use crate::db::DatabaseState;
-use crate::events::{
-	self, DEVICE_APPROVAL_CHANGED, DEVICE_APPROVAL_REQUESTED, DEVICE_APPROVAL_SETTLED,
-};
+use crate::events::{DEVICE_APPROVAL_CHANGED, DEVICE_APPROVAL_REQUESTED, DEVICE_APPROVAL_SETTLED};
 use crate::hosting;
 use contract::{
 	AccountDevice, DeviceApproval, DeviceApprovalRequested, DeviceApprovalSettled, DeviceError,
@@ -98,23 +95,23 @@ impl Devices {
 	}
 }
 
-pub fn is_awaiting_approval<R: Runtime>(app: &AppHandle<R>) -> bool {
-	app.try_state::<Devices>().is_some_and(|devices| {
+pub fn is_awaiting_approval(core: &crate::core_context::Core) -> bool {
+	core.try_state::<Devices>().is_some_and(|devices| {
 		matches!(devices.current(), DeviceApproval::Pending { .. } | DeviceApproval::Expired)
 	})
 }
 
-pub async fn signed_in<R: Runtime>(app: &AppHandle<R>) {
-	let Some(devices) = app.try_state::<Devices>() else {
+pub async fn signed_in(core: &crate::core_context::Core) {
+	let Some(devices) = core.try_state::<Devices>() else {
 		return;
 	};
 	let previous = devices.follow().take();
 	stopped(previous).await;
-	*devices.follow() = Some(tauri::async_runtime::spawn(followed(app.clone())));
+	*devices.follow() = Some(core.spawn(followed(core.clone())));
 }
 
-pub async fn signed_out<R: Runtime>(app: &AppHandle<R>) {
-	let Some(devices) = app.try_state::<Devices>() else {
+pub async fn signed_out(core: &crate::core_context::Core) {
+	let Some(devices) = core.try_state::<Devices>() else {
 		return;
 	};
 	let follow = devices.follow().take();
@@ -126,7 +123,7 @@ pub async fn signed_out<R: Runtime>(app: &AppHandle<R>) {
 		}
 	}
 	devices.announced().clear();
-	entered(app, &devices, DeviceApproval::None);
+	entered(core, &devices, DeviceApproval::None);
 }
 
 async fn stopped(follow: Option<JoinHandle<()>>) {
@@ -135,13 +132,13 @@ async fn stopped(follow: Option<JoinHandle<()>>) {
 	};
 	follow.abort();
 	if let Err(error) = follow.await {
-		if !matches!(&error, tauri::Error::JoinError(joined) if joined.is_cancelled()) {
+		if !error.is_cancelled() {
 			eprintln!("the device approval follow ended abnormally: {error}");
 		}
 	}
 }
 
-fn entered<R: Runtime>(app: &AppHandle<R>, devices: &Devices, next: DeviceApproval) {
+fn entered(core: &crate::core_context::Core, devices: &Devices, next: DeviceApproval) {
 	let is_changed = devices.approval.send_if_modified(|held| {
 		let is_kept =
 			*held == next || (*held == DeviceApproval::Approved && next != DeviceApproval::None);
@@ -155,22 +152,21 @@ fn entered<R: Runtime>(app: &AppHandle<R>, devices: &Devices, next: DeviceApprov
 	}
 	eprintln!("this device entered approval {next:?}");
 	if next == DeviceApproval::Approved {
-		hosts_resumed(app, devices);
+		hosts_resumed(core, devices);
 	}
-	if let Err(error) = events::emit(app, DEVICE_APPROVAL_CHANGED, next) {
+	if let Err(error) = core.emit(DEVICE_APPROVAL_CHANGED, next) {
 		eprintln!("the device approval did not reach the front: {error}");
 	}
 }
 
-fn hosts_resumed<R: Runtime>(app: &AppHandle<R>, devices: &Devices) {
-	let resuming = app.clone();
-	*devices.hosts_resuming() =
-		Some(tauri::async_runtime::spawn(async move { hosting::resumed(&resuming).await }));
+fn hosts_resumed(core: &crate::core_context::Core, devices: &Devices) {
+	let resuming = core.clone();
+	*devices.hosts_resuming() = Some(core.spawn(async move { hosting::resumed(&resuming).await }));
 }
 
-async fn followed<R: Runtime>(app: AppHandle<R>) {
-	let devices = app.state::<Devices>();
-	if !registered_once_answered(&app, &devices).await {
+async fn followed(core: crate::core_context::Core) {
+	let devices = core.state::<Devices>();
+	if !registered_once_answered(&core, &devices).await {
 		return;
 	}
 	let mut approval = devices.approval.subscribe();
@@ -180,10 +176,10 @@ async fn followed<R: Runtime>(app: AppHandle<R>) {
 		match held {
 			DeviceApproval::Pending { expires_at } => {
 				sleep(devices.pending_every).await;
-				pending_followed(&app, &devices, &expires_at).await;
+				pending_followed(&core, &devices, &expires_at).await;
 			}
 			DeviceApproval::Approved => {
-				requests_followed(&app, &devices).await;
+				requests_followed(&core, &devices).await;
 				sleep(devices.approved_every).await;
 			}
 			DeviceApproval::Expired | DeviceApproval::None => {
@@ -195,12 +191,12 @@ async fn followed<R: Runtime>(app: AppHandle<R>) {
 	}
 }
 
-async fn registered_once_answered<R: Runtime>(app: &AppHandle<R>, devices: &Devices) -> bool {
+async fn registered_once_answered(core: &crate::core_context::Core, devices: &Devices) -> bool {
 	loop {
 		devices.cloud.unpaused().await;
-		match registration(app, devices).await {
+		match registration(core, devices).await {
 			Ok(approval) => {
-				entered(app, devices, approval);
+				entered(core, devices, approval);
 				return true;
 			}
 			Err(Unregistered::Unreachable(reason)) => {
@@ -209,7 +205,7 @@ async fn registered_once_answered<R: Runtime>(app: &AppHandle<R>, devices: &Devi
 			}
 			Err(Unregistered::Refused(reason)) => {
 				eprintln!("this device did not register with the relay: {reason}");
-				hosts_resumed(app, devices);
+				hosts_resumed(core, devices);
 				return false;
 			}
 			Err(Unregistered::SignedOut) => return false,
@@ -217,18 +213,18 @@ async fn registered_once_answered<R: Runtime>(app: &AppHandle<R>, devices: &Devi
 	}
 }
 
-async fn registration<R: Runtime>(
-	app: &AppHandle<R>,
+async fn registration(
+	core: &crate::core_context::Core,
 	devices: &Devices,
 ) -> Result<DeviceApproval, Unregistered> {
-	let bearer = bearer_of(app).map_err(|failure| match failure {
+	let bearer = bearer_of(core).map_err(|failure| match failure {
 		DeviceError::SignedOut => Unregistered::SignedOut,
 		failure => Unregistered::Refused(format!("{failure:?}")),
 	})?;
-	let AccountState::SignedIn(account) = app.state::<AccountSession>().current() else {
+	let AccountState::SignedIn(account) = core.state::<AccountSession>().current() else {
 		return Err(Unregistered::SignedOut);
 	};
-	let keys_state = app
+	let keys_state = core
 		.try_state::<DeviceKeysState>()
 		.ok_or_else(|| Unregistered::Refused("the device keys are not loaded".to_owned()))?;
 	let keys = keys_state.keys().map_err(|failure| {
@@ -237,7 +233,7 @@ async fn registration<R: Runtime>(
 	let registered = match devices.cloud.register_device(&bearer, &account.id, keys).await {
 		Ok(registered) => registered,
 		Err(DeviceRegisterError::Revoked) => {
-			signed_out_on_401(app, &bearer);
+			signed_out_on_401(core, &bearer);
 			return Err(Unregistered::SignedOut);
 		}
 		Err(DeviceRegisterError::Refused(refusal)) => {
@@ -247,7 +243,7 @@ async fn registration<R: Runtime>(
 			return Err(Unregistered::Unreachable(reason))
 		}
 	};
-	let database_state = app
+	let database_state = core
 		.try_state::<DatabaseState>()
 		.ok_or_else(|| Unregistered::Refused("the database is not loaded".to_owned()))?;
 	let database = database_state.inner().as_ref().map_err(|failure| {
@@ -305,38 +301,38 @@ fn instant_of(stamp: &str) -> Option<DateTime<Utc>> {
 		.ok()
 }
 
-async fn pending_followed<R: Runtime>(app: &AppHandle<R>, devices: &Devices, expires_at: &str) {
-	let Ok(bearer) = bearer_of(app) else {
+async fn pending_followed(core: &crate::core_context::Core, devices: &Devices, expires_at: &str) {
+	let Ok(bearer) = bearer_of(core) else {
 		return;
 	};
 	let next = match devices.cloud.current_device(&bearer).await {
 		Ok(current) => approval_of(current),
-		Err(DeviceCallError::Revoked) => return signed_out_on_401(app, &bearer),
+		Err(DeviceCallError::Revoked) => return signed_out_on_401(core, &bearer),
 		Err(failure) => {
 			eprintln!("the approval of this device was not read: {failure}");
 			pending_or_expired(expires_at)
 		}
 	};
-	entered(app, devices, next);
+	entered(core, devices, next);
 }
 
-async fn requests_followed<R: Runtime>(app: &AppHandle<R>, devices: &Devices) {
-	let Ok(bearer) = bearer_of(app) else {
+async fn requests_followed(core: &crate::core_context::Core, devices: &Devices) {
+	let Ok(bearer) = bearer_of(core) else {
 		return;
 	};
-	let listed = match answered(app, &bearer, devices.cloud.account_devices(&bearer).await) {
+	let listed = match answered(core, &bearer, devices.cloud.account_devices(&bearer).await) {
 		Ok(listed) => listed,
 		Err(failure) => return eprintln!("the devices of the account were not read: {failure:?}"),
 	};
 	let (requested, settled) = announcements(&mut devices.announced(), &listed, Utc::now());
 	for request in requested {
-		if let Err(error) = events::emit(app, DEVICE_APPROVAL_REQUESTED, request) {
+		if let Err(error) = core.emit(DEVICE_APPROVAL_REQUESTED, request) {
 			eprintln!("a device approval request did not reach the front: {error}");
 		}
 	}
 	for device_id in settled {
 		let settled = DeviceApprovalSettled { device_id };
-		if let Err(error) = events::emit(app, DEVICE_APPROVAL_SETTLED, settled) {
+		if let Err(error) = core.emit(DEVICE_APPROVAL_SETTLED, settled) {
 			eprintln!("a settled device approval request did not reach the front: {error}");
 		}
 	}
@@ -410,15 +406,15 @@ fn fingerprint_of(device: &CloudAccountDevice) -> Option<Vec<String>> {
 	Some(fingerprint(&signing).map(str::to_owned).to_vec())
 }
 
-fn signed_out_on_401<R: Runtime>(app: &AppHandle<R>, bearer: &str) {
-	match app.state::<Devices>().current() {
-		DeviceApproval::Pending { .. } => session::device_refused(app, bearer),
-		_ => session::revoked(app, bearer),
+fn signed_out_on_401(core: &crate::core_context::Core, bearer: &str) {
+	match core.state::<Devices>().current() {
+		DeviceApproval::Pending { .. } => session::device_refused(core, bearer),
+		_ => session::revoked(core, bearer),
 	}
 }
 
-fn bearer_of<R: Runtime>(app: &AppHandle<R>) -> Result<String, DeviceError> {
-	match app.state::<AccountSession>().bearer() {
+fn bearer_of(core: &crate::core_context::Core) -> Result<String, DeviceError> {
+	match core.state::<AccountSession>().bearer() {
 		Ok(Some(bearer)) => Ok(bearer),
 		Ok(None) => Err(DeviceError::SignedOut),
 		Err(error) => {
@@ -427,67 +423,73 @@ fn bearer_of<R: Runtime>(app: &AppHandle<R>) -> Result<String, DeviceError> {
 	}
 }
 
-fn answered<R: Runtime, T>(
-	app: &AppHandle<R>,
+fn answered<T>(
+	core: &crate::core_context::Core,
 	bearer: &str,
 	answer: Result<T, DeviceCallError>,
 ) -> Result<T, DeviceError> {
 	answer.map_err(|failure| {
 		if failure == DeviceCallError::Revoked {
-			signed_out_on_401(app, bearer);
+			signed_out_on_401(core, bearer);
 		}
 		DeviceError::from(failure)
 	})
 }
 
-pub async fn retried<R: Runtime>(app: &AppHandle<R>) -> Result<DeviceApproval, DeviceError> {
-	let devices = app.state::<Devices>();
+pub async fn retried(core: &crate::core_context::Core) -> Result<DeviceApproval, DeviceError> {
+	let devices = core.state::<Devices>();
 	let current = devices.current();
 	if current != DeviceApproval::Expired {
 		return Ok(current);
 	}
-	let approval = registration(app, &devices).await?;
-	entered(app, &devices, approval);
+	let approval = registration(core, &devices).await?;
+	entered(core, &devices, approval);
 	Ok(devices.current())
 }
 
-pub async fn code_requested<R: Runtime>(app: &AppHandle<R>) -> Result<(), DeviceError> {
-	let bearer = bearer_of(app)?;
-	let answer = app.state::<Devices>().cloud.request_approval_code(&bearer).await;
-	answered(app, &bearer, answer)
+pub async fn code_requested(core: &crate::core_context::Core) -> Result<(), DeviceError> {
+	let bearer = bearer_of(core)?;
+	let answer = core.state::<Devices>().cloud.request_approval_code(&bearer).await;
+	answered(core, &bearer, answer)
 }
 
-pub async fn code_submitted<R: Runtime>(app: &AppHandle<R>, code: &str) -> Result<(), DeviceError> {
-	let devices = app.state::<Devices>();
-	let bearer = bearer_of(app)?;
+pub async fn code_submitted(
+	core: &crate::core_context::Core,
+	code: &str,
+) -> Result<(), DeviceError> {
+	let devices = core.state::<Devices>();
+	let bearer = bearer_of(core)?;
 	let answer = devices.cloud.verify_approval_code(&bearer, code).await;
-	answered(app, &bearer, answer)?;
-	entered(app, &devices, DeviceApproval::Approved);
+	answered(core, &bearer, answer)?;
+	entered(core, &devices, DeviceApproval::Approved);
 	Ok(())
 }
 
-pub async fn approved<R: Runtime>(app: &AppHandle<R>, device_id: &str) -> Result<(), DeviceError> {
-	let bearer = bearer_of(app)?;
-	let answer = app.state::<Devices>().cloud.approve_device(&bearer, device_id).await;
-	answered(app, &bearer, answer)
+pub async fn approved(
+	core: &crate::core_context::Core,
+	device_id: &str,
+) -> Result<(), DeviceError> {
+	let bearer = bearer_of(core)?;
+	let answer = core.state::<Devices>().cloud.approve_device(&bearer, device_id).await;
+	answered(core, &bearer, answer)
 }
 
-pub async fn refused<R: Runtime>(app: &AppHandle<R>, device_id: &str) -> Result<(), DeviceError> {
-	let bearer = bearer_of(app)?;
-	let answer = app.state::<Devices>().cloud.reject_device(&bearer, device_id).await;
-	answered(app, &bearer, answer)
+pub async fn refused(core: &crate::core_context::Core, device_id: &str) -> Result<(), DeviceError> {
+	let bearer = bearer_of(core)?;
+	let answer = core.state::<Devices>().cloud.reject_device(&bearer, device_id).await;
+	answered(core, &bearer, answer)
 }
 
-pub async fn listed<R: Runtime>(app: &AppHandle<R>) -> Result<Vec<AccountDevice>, DeviceError> {
-	let bearer = bearer_of(app)?;
-	let answer = app.state::<Devices>().cloud.account_devices(&bearer).await;
-	Ok(answered(app, &bearer, answer)?.into_iter().map(presented).collect())
+pub async fn listed(core: &crate::core_context::Core) -> Result<Vec<AccountDevice>, DeviceError> {
+	let bearer = bearer_of(core)?;
+	let answer = core.state::<Devices>().cloud.account_devices(&bearer).await;
+	Ok(answered(core, &bearer, answer)?.into_iter().map(presented).collect())
 }
 
-pub async fn removed<R: Runtime>(app: &AppHandle<R>, device_id: &str) -> Result<(), DeviceError> {
-	let bearer = bearer_of(app)?;
-	let answer = app.state::<Devices>().cloud.delete_device(&bearer, device_id).await;
-	answered(app, &bearer, answer)
+pub async fn removed(core: &crate::core_context::Core, device_id: &str) -> Result<(), DeviceError> {
+	let bearer = bearer_of(core)?;
+	let answer = core.state::<Devices>().cloud.delete_device(&bearer, device_id).await;
+	answered(core, &bearer, answer)
 }
 
 #[cfg(test)]

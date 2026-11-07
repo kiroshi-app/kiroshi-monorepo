@@ -1,6 +1,6 @@
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
-use tauri::{AppHandle, Manager, Runtime, State};
+use tauri::State;
 use tokio::sync::watch;
 
 use std::collections::HashMap;
@@ -31,14 +31,12 @@ impl DeviceKeysState {
 	}
 }
 
-pub fn load<R: Runtime>(app: &AppHandle<R>) -> DeviceKeysState {
-	let keys = app.path().app_data_dir().map_err(|_| DeviceKeysError::NoProfileDirectory).and_then(
-		|profile| {
-			let identifier = &app.config().identifier;
-			let system = system_store(install_kind(identifier), identifier, DEVICE_KEYS_ITEM);
-			load_or_create(system.as_deref(), &FileStore::at(profile.join(DEVICE_KEYS_ITEM)))
-		},
-	);
+pub fn load(core: &crate::core_context::Core) -> DeviceKeysState {
+	let keys = Ok::<_, DeviceKeysError>(core.data_dir().to_path_buf()).and_then(|profile| {
+		let identifier = core.identifier();
+		let system = system_store(install_kind(identifier), identifier, DEVICE_KEYS_ITEM);
+		load_or_create(system.as_deref(), &FileStore::at(profile.join(DEVICE_KEYS_ITEM)))
+	});
 	if let Err(failure) = &keys {
 		log::error!("the device keys are unavailable: {failure:?}");
 	}
@@ -108,9 +106,9 @@ impl SpaceKeys {
 	}
 }
 
-pub fn space_keys<R: Runtime>(app: &AppHandle<R>) -> SpaceKeys {
-	let identifier = app.config().identifier.clone();
-	let directory = app.path().app_data_dir().ok();
+pub fn space_keys(core: &crate::core_context::Core) -> SpaceKeys {
+	let identifier = core.identifier().to_owned();
+	let directory = Some(core.data_dir().to_path_buf());
 	SpaceKeys::new(install_kind(&identifier), identifier, directory)
 }
 
@@ -132,8 +130,9 @@ fn system_store(_kind: InstallKind, _service: &str, _item: &str) -> Option<Box<d
 #[tauri::command]
 #[specta::specta]
 pub fn get_device_identity(
-	state: State<'_, DeviceKeysState>,
+	core: State<'_, crate::core_context::Core>,
 ) -> Result<DeviceIdentity, DeviceKeysError> {
+	let state = core.state::<DeviceKeysState>();
 	state.keys().map(identity_of)
 }
 

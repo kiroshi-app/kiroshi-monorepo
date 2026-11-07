@@ -44,7 +44,9 @@ fn the_catalogue_crosses_as_the_sidecar_offers_it() {
 
 	let app = an_app_of_its_own(
 		"model-catalogue",
-		mock_builder().manage(AgentState::default()).invoke_handler(invoke_handler()),
+		mock_builder()
+			.plugin(kiroshi_app::events::in_core(AgentState::default()))
+			.invoke_handler(invoke_handler()),
 	);
 	let window = window(&app);
 
@@ -64,8 +66,8 @@ fn the_catalogue_crosses_as_the_sidecar_offers_it() {
 	assert_eq!(call(&window, "agent_models"), Ok(offered), "a second ask reached the sidecar");
 
 	tauri::async_runtime::block_on(terminate_session(
-		app.handle(),
-		app.state::<AgentState>().inner(),
+		kiroshi_app::events::core(app.handle()),
+		kiroshi_app::events::core(app.app_handle()).state::<AgentState>().inner(),
 	));
 	std::env::remove_var("FAKE_AGENT_MODELS");
 	std::env::remove_var(SIDECAR_OVERRIDE_ENV);

@@ -6,7 +6,6 @@ use kiroshi_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
 use kiroshi_app::agent::AgentState;
 use kiroshi_app::bundles::{self, EffortLevel};
 use kiroshi_app::commands::invoke_handler;
-use kiroshi_app::db;
 use serde_json::{json, Value};
 use tauri::test::{mock_builder, MockRuntime, INVOKE_KEY};
 use tauri::webview::InvokeRequest;
@@ -19,9 +18,11 @@ const OFFERED: &str = "sonnet=low+high,haiku";
 fn host() -> AppOfItsOwn {
 	let app = an_app_of_its_own(
 		"companion-effort",
-		mock_builder().manage(AgentState::default()).invoke_handler(invoke_handler()),
+		mock_builder()
+			.plugin(kiroshi_app::events::in_core(AgentState::default()))
+			.invoke_handler(invoke_handler()),
 	);
-	app.manage(db::bootstrap(app.handle()));
+	kiroshi_app::db::install(kiroshi_app::events::core(app.handle()));
 	app
 }
 
@@ -62,7 +63,7 @@ fn a_companion_on(model: &str, effort: &str) -> Value {
 }
 
 fn written_effort(app: &App<MockRuntime>, bot: &Value) -> Option<EffortLevel> {
-	let root = bundles::root(app.handle()).expect("the bundle root");
+	let root = bundles::root(kiroshi_app::events::core(app.handle())).expect("the bundle root");
 	let id = bot["id"].as_str().expect("the companion holds an id");
 	bundles::generated(&root, id).expect("the agent file is written").effort
 }
@@ -130,8 +131,8 @@ fn the_agent_file_carries_only_an_effort_the_catalogue_offers_for_the_model() {
 	);
 
 	tauri::async_runtime::block_on(terminate_session(
-		app.handle(),
-		app.state::<AgentState>().inner(),
+		kiroshi_app::events::core(app.handle()),
+		kiroshi_app::events::core(app.app_handle()).state::<AgentState>().inner(),
 	));
 	std::env::remove_var("FAKE_AGENT_MODELS");
 	std::env::remove_var(SIDECAR_OVERRIDE_ENV);

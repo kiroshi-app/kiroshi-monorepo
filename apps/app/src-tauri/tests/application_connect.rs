@@ -87,11 +87,12 @@ fn connected_holding(
 	let app = an_app_of_its_own(
 		&format!("application-connect-{case}"),
 		mock_builder()
-			.manage(AgentState::default())
-			.manage(McpOauthState::default())
-			.manage(ApplicationReports::default()),
+			.plugin(kiroshi_app::events::in_core(AgentState::default()))
+			.plugin(kiroshi_app::events::in_core(McpOauthState::default()))
+			.plugin(kiroshi_app::events::in_core(ApplicationReports::default())),
 	);
-	let root = store::root(app.handle()).expect("the store root is named");
+	let root =
+		store::root(kiroshi_app::events::core(app.handle())).expect("the store root is named");
 	let owner = EnvOwner::Bot { id: "b1".to_owned(), space_id: "s1".to_owned() };
 	let scope = EnvScope::Server { name: "granola".to_owned(), owner: owner.clone() };
 	credentials::store(&root, &scope, held).expect("the grant is written");
@@ -106,8 +107,8 @@ fn connected_holding(
 	));
 	let kept = store::values(&root, &scope).expect("the scope is readable");
 	tauri::async_runtime::block_on(terminate_session(
-		app.handle(),
-		app.state::<AgentState>().inner(),
+		kiroshi_app::events::core(app.handle()),
+		kiroshi_app::events::core(app.app_handle()).state::<AgentState>().inner(),
 	));
 	let flows = fs::read_to_string(&log).unwrap_or_default().lines().map(str::to_owned).collect();
 	let _ = fs::remove_file(&log);

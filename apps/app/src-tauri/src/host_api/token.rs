@@ -2,7 +2,6 @@ use std::fs;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 
-use tauri::{AppHandle, Manager, Runtime};
 use uuid::Uuid;
 
 use crate::private_files;
@@ -17,7 +16,6 @@ const RANDOM_PARTS: usize = 3;
 
 #[derive(Debug)]
 pub enum TokenError {
-	NoDataDir,
 	Unreadable(std::io::Error),
 	Unwritable(std::io::Error),
 	Blank,
@@ -45,20 +43,19 @@ impl HostToken {
 	}
 }
 
-fn host_file<R: Runtime>(app: &AppHandle<R>, name: &str) -> Result<PathBuf, TokenError> {
-	let data = app.path().app_data_dir().map_err(|_| TokenError::NoDataDir)?;
-	Ok(data.join(HOST_DIR).join(name))
+fn host_file(core: &crate::core_context::Core, name: &str) -> PathBuf {
+	core.data_dir().join(HOST_DIR).join(name)
 }
 
-pub fn legacy_web_link_removed<R: Runtime>(app: &AppHandle<R>) -> Result<(), TokenError> {
-	match fs::remove_file(host_file(app, LEGACY_WEB_LINK_NAME)?) {
+pub fn legacy_web_link_removed(core: &crate::core_context::Core) -> Result<(), TokenError> {
+	match fs::remove_file(host_file(core, LEGACY_WEB_LINK_NAME)) {
 		Err(missing) if missing.kind() == ErrorKind::NotFound => Ok(()),
 		removed => removed.map_err(TokenError::Unwritable),
 	}
 }
 
-pub fn loaded<R: Runtime>(app: &AppHandle<R>) -> Result<HostToken, TokenError> {
-	let path = host_file(app, TOKEN_NAME)?;
+pub fn loaded(core: &crate::core_context::Core) -> Result<HostToken, TokenError> {
+	let path = host_file(core, TOKEN_NAME);
 	match fs::read_to_string(&path) {
 		Ok(held) => held_token(&held),
 		Err(missing) if missing.kind() == ErrorKind::NotFound => written(&path),

@@ -1,5 +1,5 @@
 pub mod commands;
-pub mod contract;
+pub use kiroshi_core::library::link_preview::contract;
 #[cfg(test)]
 mod tests;
 

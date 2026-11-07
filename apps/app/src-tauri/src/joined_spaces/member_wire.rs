@@ -240,22 +240,30 @@ mod tests {
 	async fn a_member() -> Member {
 		let database = temp_dir();
 		let app = an_app_of_its_own("member-wire", mock_builder());
-		app.manage::<DatabaseState>(Ok(db::open(&database)));
-		app.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
+		crate::events::core(app.app_handle()).manage::<DatabaseState>(Ok(db::open(&database)));
+		crate::events::core(app.app_handle())
+			.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
 		let profile = app.path().app_data_dir().expect("the data folder resolves");
 		let identifier = app.config().identifier.clone();
-		app.manage(SpaceKeys::new(InstallKind::Dev, identifier, Some(profile)));
-		let host = SealingHost::planted(app.handle(), INSTANCE).await;
+		crate::events::core(app.app_handle()).manage(SpaceKeys::new(
+			InstallKind::Dev,
+			identifier,
+			Some(profile),
+		));
+		let host = SealingHost::planted(crate::events::core(app.handle()), INSTANCE).await;
 		Member { app, host, _database: database }
 	}
 
 	fn relay_of(app: &App<MockRuntime>) -> &JoinedSpaceRelayRepository {
-		let state = app.state::<DatabaseState>().inner();
+		let state = crate::events::core(app.app_handle()).state::<DatabaseState>().inner();
 		state.as_ref().expect("the database").joined_space_relay()
 	}
 
 	async fn held_of(app: &App<MockRuntime>) -> Held {
-		held::held(app.handle(), INSTANCE).await.expect("the keys read").expect("the keys are held")
+		held::held(crate::events::core(app.handle()), INSTANCE)
+			.await
+			.expect("the keys read")
+			.expect("the keys are held")
 	}
 
 	fn ctr_of(sealed: &str) -> u64 {
@@ -346,7 +354,7 @@ mod tests {
 			panic!("the newer rekey is taken");
 		};
 		assert_eq!((handed.space.key_id, handed.roster.set.version), (2, 1));
-		assert!(held::kept(member.app.handle(), INSTANCE, &handed)
+		assert!(held::kept(crate::events::core(member.app.handle()), INSTANCE, &handed)
 			.await
 			.expect("the rekey is kept"));
 		wire.rekeyed(*handed);
@@ -371,7 +379,7 @@ mod tests {
 		let Ok(Heard::Roster(roster)) = taken else {
 			panic!("the newer roster under the held key_id is taken");
 		};
-		assert!(held::roster_kept(member.app.handle(), INSTANCE, &roster)
+		assert!(held::roster_kept(crate::events::core(member.app.handle()), INSTANCE, &roster)
 			.await
 			.expect("the roster is stored"));
 		wire.roster_taken(*roster);

@@ -1,5 +1,5 @@
 pub mod commands;
-pub mod contract;
+pub use kiroshi_core::joined_spaces::contract;
 pub mod deep_link;
 mod description;
 mod held;

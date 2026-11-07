@@ -14,7 +14,6 @@ use kiroshi_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
 use kiroshi_app::agent::AgentState;
 use kiroshi_app::bundles;
 use kiroshi_app::commands::invoke_handler;
-use kiroshi_app::db;
 use serde_json::{json, Value};
 use tauri::test::{mock_builder, MockRuntime, INVOKE_KEY};
 use tauri::webview::InvokeRequest;
@@ -44,9 +43,11 @@ fn launch() -> Harness {
 fn launch_as(name: &str) -> Harness {
 	let app = an_app_of_its_own(
 		name,
-		mock_builder().manage(AgentState::default()).invoke_handler(invoke_handler()),
+		mock_builder()
+			.plugin(kiroshi_app::events::in_core(AgentState::default()))
+			.invoke_handler(invoke_handler()),
 	);
-	app.manage(db::bootstrap(app.handle()));
+	kiroshi_app::db::install(kiroshi_app::events::core(app.handle()));
 	let window = WebviewWindowBuilder::new(app.handle(), "main", Default::default())
 		.build()
 		.expect("window builds");
@@ -255,7 +256,8 @@ fn bundle_name_of(harness: &Harness, bot: &str) -> String {
 }
 
 fn bundle_of(harness: &Harness, bot: &str) -> PathBuf {
-	let root = bundles::root(harness.app.handle()).expect("the bundle root");
+	let root =
+		bundles::root(kiroshi_app::events::core(harness.app.handle())).expect("the bundle root");
 	bundles::dir(&root, bot).expect("the bundle is held")
 }
 
@@ -278,7 +280,8 @@ fn rewrite_the_brief(agent: &Path, brief: &str) {
 }
 
 fn listed_plugins(harness: &Harness) -> Vec<(String, String)> {
-	let root = bundles::root(harness.app.handle()).expect("the bundle root");
+	let root =
+		bundles::root(kiroshi_app::events::core(harness.app.handle())).expect("the bundle root");
 	let text = std::fs::read_to_string(bundles::marketplace_file(&root)).unwrap_or_default();
 	let listed: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
 	listed["plugins"]
@@ -509,7 +512,8 @@ fn a_run_stacks_the_space_of_the_thread_it_speaks_in() {
 }
 
 fn plugin_of(harness: &Harness, space: &str) -> PathBuf {
-	let path = bundles::space::path(harness.app.handle(), space).expect("the space's plugin path");
+	let path = bundles::space::path(kiroshi_app::events::core(harness.app.handle()), space)
+		.expect("the space's plugin path");
 	bundles::space::lay_down_at(&path).expect("the space's plugin is laid down");
 	path
 }

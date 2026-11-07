@@ -609,7 +609,7 @@ fn on_open(key: &str, runs: &mut HashMap<String, Run>, command: &Value) {
 		"startup_timeout" => return,
 		"startup_crash" => return emit_closed(key, "the agent exited during startup"),
 		"room_grace_cannot_start" if run.runs_as(GRACE) => {
-			return emit_closed(key, "the agent exited during startup")
+			return emit_closed(key, "the agent exited during startup");
 		}
 		"open_exit" => {
 			eprintln!("loading the providers");
@@ -617,7 +617,7 @@ fn on_open(key: &str, runs: &mut HashMap<String, Run>, command: &Value) {
 			std::process::exit(71);
 		}
 		"resume_crash" if run.resumed => {
-			return emit_closed(key, "the agent exited during startup")
+			return emit_closed(key, "the agent exited during startup");
 		}
 		"resume_timeout" if run.resumed => return,
 		"resume_timeout_then_crash" => {
@@ -1035,10 +1035,9 @@ fn serve() {
 		}
 	}
 
-	if let Ok(path) = std::env::var("FAKE_AGENT_EOF_FILE") {
-		if let Err(error) = std::fs::write(path, "eof") {
-			eprintln!("the fake did not record the end of its stdin: {error}");
-		}
+	let recorded = std::env::var("FAKE_AGENT_EOF_FILE").map(|path| std::fs::write(path, "eof"));
+	if let Ok(Err(error)) = recorded {
+		eprintln!("the fake did not record the end of its stdin: {error}");
 	}
 
 	while ignores_eof() {

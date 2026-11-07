@@ -33,7 +33,7 @@ impl Home {
 
 	fn app(&self) -> App<MockRuntime> {
 		let app = host(&self.0.config().identifier);
-		app.manage(db::bootstrap(app.handle()));
+		kiroshi_app::db::install(kiroshi_app::events::core(app.handle()));
 		app
 	}
 }
@@ -41,16 +41,22 @@ impl Home {
 fn host(identifier: &str) -> App<MockRuntime> {
 	let mut context = mock_context(noop_assets());
 	context.config_mut().identifier = identifier.into();
-	mock_builder().invoke_handler(invoke_handler()).build(context).expect("app builds")
+	{
+		let app =
+			mock_builder().invoke_handler(invoke_handler()).build(context).expect("app builds");
+		kiroshi_app::events::install_core(app.handle()).expect("the core installs");
+		app
+	}
 }
 
 fn app_without_a_database() -> AppOfItsOwn {
-	an_app_of_its_own(
+	let app = an_app_of_its_own(
 		"conversation-commands-no-database",
-		mock_builder()
-			.invoke_handler(invoke_handler())
-			.manage(db::DatabaseState::Err(db::DatabaseError::AppDataDir)),
-	)
+		mock_builder().invoke_handler(invoke_handler()),
+	);
+	kiroshi_app::events::core(app.handle())
+		.manage(db::DatabaseState::Err(db::DatabaseError::AppDataDir));
+	app
 }
 
 fn window(app: &App<MockRuntime>) -> WebviewWindow<MockRuntime> {
@@ -1034,7 +1040,7 @@ fn the_rules_a_bot_is_given_are_written_to_its_settings_file_and_read_back_from_
 
 	assert_eq!(created["permissions"], ruled["permissions"]);
 
-	let root = bundles::root(app.handle()).expect("the bundle root");
+	let root = bundles::root(kiroshi_app::events::core(app.handle())).expect("the bundle root");
 	let path = bundles::dir(&root, &id).expect("the bundle is held").join("settings.json");
 	std::fs::write(
 		&path,
@@ -1084,7 +1090,7 @@ fn the_rules_the_panel_reads_are_the_stored_ones_and_never_the_file_it_writes() 
 			.expect("the bot is created");
 	let id = created["id"].as_str().expect("the bot holds an id").to_owned();
 
-	let root = bundles::root(app.handle()).expect("the bundle root");
+	let root = bundles::root(kiroshi_app::events::core(app.handle())).expect("the bundle root");
 	std::fs::remove_file(
 		bundles::dir(&root, &id).expect("the bundle is held").join("settings.json"),
 	)
@@ -1787,7 +1793,7 @@ fn readers_skills(window: &WebviewWindow<MockRuntime>, bot_id: &str) -> Value {
 }
 
 fn bundle_of(app: &App<MockRuntime>, bot_id: &str) -> PathBuf {
-	let root = bundles::root(app.handle()).expect("the bundle root");
+	let root = bundles::root(kiroshi_app::events::core(app.handle())).expect("the bundle root");
 	bundles::dir(&root, bot_id).expect("the bundle is held")
 }
 
@@ -2015,7 +2021,7 @@ fn a_duplicated_bot_carries_the_bundle_and_none_of_the_transcript() {
 		"what the source remembered did not come over"
 	);
 
-	let root = bundles::root(app.handle()).expect("the bundle root");
+	let root = bundles::root(kiroshi_app::events::core(app.handle())).expect("the bundle root");
 	let manifest = json_at(&bundle.join(".claude-plugin").join("plugin.json"));
 	assert_eq!(manifest["name"], json!(bundle.file_name().and_then(|it| it.to_str())));
 	assert_eq!(manifest["mcpServers"], json!("./.mcp.json"));
@@ -2255,7 +2261,7 @@ fn a_duplicate_into_a_space_that_is_gone_leaves_every_bot_and_every_bundle_alone
 
 	assert_eq!(refusal["kind"], json!("storage"));
 	assert_eq!(call(&window, "conversation_bots", json!({})), Ok(before));
-	let root = bundles::root(app.handle()).expect("the bundle root");
+	let root = bundles::root(kiroshi_app::events::core(app.handle())).expect("the bundle root");
 	assert_eq!(
 		std::fs::read_dir(root.join("plugins")).map(|entries| entries.count()).unwrap_or_default(),
 		1,
@@ -2278,7 +2284,7 @@ fn titles_of(window: &WebviewWindow<MockRuntime>, bot_id: &str) -> Vec<Value> {
 }
 
 fn env_of(app: &App<MockRuntime>, bot_id: &str, space_id: &str) -> ResolvedEnv {
-	let root = store::root(app.handle()).expect("the environment root");
+	let root = store::root(kiroshi_app::events::core(app.handle())).expect("the environment root");
 	let owner = EnvOwner::Bot { id: bot_id.to_owned(), space_id: space_id.to_owned() };
 	store::resolve(&root, &owner).expect("the store reads")
 }
@@ -2407,7 +2413,7 @@ fn a_duplicate_carries_the_memory_the_source_row_holds_when_its_bundle_carries_n
 		json!({ "id": source_id, "memory": "Nyx bakes on Sundays." }),
 	)
 	.expect("the memory is written");
-	let root = bundles::root(app.handle()).expect("the bundle root");
+	let root = bundles::root(kiroshi_app::events::core(app.handle())).expect("the bundle root");
 	let agent = bundles::agent_file(&root, &source_id).expect("the agent file");
 	std::fs::write(
 		&agent,
@@ -2495,8 +2501,10 @@ fn a_copy_that_fails_leaves_no_row_no_bundle_and_no_environment_under_the_new_id
 		json!({ "scope": a_bot_scope(&source_id, &held), "name": "TOKEN", "value": "figs" }),
 	)
 	.expect("the bot keeps its value");
-	let bundle_root = bundles::root(app.handle()).expect("the bundle root");
-	let env_root = store::root(app.handle()).expect("the environment root");
+	let bundle_root =
+		bundles::root(kiroshi_app::events::core(app.handle())).expect("the bundle root");
+	let env_root =
+		store::root(kiroshi_app::events::core(app.handle())).expect("the environment root");
 	let agent = bundles::agent_file(&bundle_root, &source_id).expect("the agent file");
 	std::fs::write(
 		&agent,
@@ -3217,7 +3225,7 @@ fn sections_in(window: &WebviewWindow<MockRuntime>, space_id: &str) -> Vec<Value
 }
 fn a_host_with_agents(home: &Home) -> App<MockRuntime> {
 	let app = home.app();
-	app.manage(AgentState::default());
+	kiroshi_app::events::core(app.app_handle()).manage(AgentState::default());
 	app
 }
 
@@ -3245,7 +3253,7 @@ fn a_message_nobody_is_summoned_to(
 }
 
 fn a_turn_row(app: &App<MockRuntime>, turn_id: &str) -> Option<(i64, Option<i64>)> {
-	let state = app.state::<db::DatabaseState>();
+	let state = kiroshi_app::events::core(app.app_handle()).state::<db::DatabaseState>();
 	let database = state.as_ref().expect("the database is open");
 	let turn_id = turn_id.to_owned();
 	tauri::async_runtime::block_on(database.messages().call(move |connection| {
@@ -3307,7 +3315,10 @@ fn sending_opens_the_turn_with_the_message_and_hands_the_turn_to_the_host() {
 		.expect("the page");
 	assert_eq!(seqs(&page), vec![1]);
 	assert!(
-		app.state::<AgentState>().host_writes().owns_turn("t1"),
+		kiroshi_app::events::core(app.app_handle())
+			.state::<AgentState>()
+			.host_writes()
+			.owns_turn("t1"),
 		"the host does not own the turn"
 	);
 
@@ -3348,7 +3359,10 @@ fn a_refused_message_leaves_no_turn_behind() {
 		"the refusal did not say what disagreed"
 	);
 	assert_eq!(a_turn_row(&app, "t2"), None, "the refused send left its turn behind");
-	assert!(!app.state::<AgentState>().host_writes().owns_turn("t2"));
+	assert!(!kiroshi_app::events::core(app.app_handle())
+		.state::<AgentState>()
+		.host_writes()
+		.owns_turn("t2"));
 }
 
 #[test]
@@ -3402,7 +3416,7 @@ fn opening_the_database_interrupts_open_replies_then_closes_every_open_turn() {
 	let orphan = completed_at(&app, "t1").expect("the orphan turn was left open");
 	let answered = completed_at(&app, "t2").expect("the turn of the streaming reply was left open");
 	assert!(orphan >= before && answered >= before, "a turn was not stamped with the open time");
-	let state = app.state::<db::DatabaseState>();
+	let state = kiroshi_app::events::core(app.app_handle()).state::<db::DatabaseState>();
 	let database = state.as_ref().expect("the database is open");
 	let reply = tauri::async_runtime::block_on(database.messages().call(|connection| {
 		Ok(connection.query_row(
@@ -3526,18 +3540,21 @@ fn a_companion_cancelling_before_its_submit_spares_the_turn_another_companion_wa
 		Ok(json!({ "kind": "nothingToCancel" })),
 		"a cancel with nothing submitted was reported as done"
 	);
-	let writes = app.state::<AgentState>();
+	let writes = kiroshi_app::events::core(app.app_handle()).state::<AgentState>();
 	assert!(
 		writes.host_writes().was_submitted("t1"),
 		"the handed turn was not recorded as submitted"
 	);
 	assert_eq!(completed_at(&app, "t1"), None, "the cancel closed a turn another companion holds");
-	tauri::async_runtime::block_on(terminate_session(app.handle(), &writes));
+	tauri::async_runtime::block_on(terminate_session(
+		kiroshi_app::events::core(app.handle()),
+		&writes,
+	));
 }
 
 #[cfg(feature = "fake-claude")]
 fn a_question_row(app: &App<MockRuntime>) -> Option<(String, i64, String, String)> {
-	let state = app.state::<db::DatabaseState>();
+	let state = kiroshi_app::events::core(app.app_handle()).state::<db::DatabaseState>();
 	let database = state.as_ref().expect("the database is open");
 	tauri::async_runtime::block_on(database.messages().call(|connection| {
 		Ok(connection
@@ -3616,11 +3633,14 @@ fn a_question_line_the_host_wrote_answers_its_seq_and_refuses_every_front_write(
 
 	assert_eq!(opened, json!(seq), "the front open did not answer the stored seq");
 	assert_eq!(a_question_row(&app), Some(stored), "a front write reached the host question line");
-	tauri::async_runtime::block_on(terminate_session(app.handle(), &app.state::<AgentState>()));
+	tauri::async_runtime::block_on(terminate_session(
+		kiroshi_app::events::core(app.handle()),
+		&kiroshi_app::events::core(app.app_handle()).state::<AgentState>(),
+	));
 }
 
 fn agent_text(app: &App<MockRuntime>, bot_id: &str) -> String {
-	let root = bundles::root(app.handle()).expect("the bundle root");
+	let root = bundles::root(kiroshi_app::events::core(app.handle())).expect("the bundle root");
 	let path = bundles::agent_file(&root, bot_id).expect("the agent file is written");
 	std::fs::read_to_string(path).expect("the agent file reads")
 }

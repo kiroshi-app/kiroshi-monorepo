@@ -74,9 +74,11 @@ fn serial() -> MutexGuard<'static, ()> {
 fn launch() -> Harness {
 	let app = an_app_of_its_own(
 		"e2e",
-		mock_builder().manage(AgentState::default()).invoke_handler(invoke_handler()),
+		mock_builder()
+			.plugin(kiroshi_app::events::in_core(AgentState::default()))
+			.invoke_handler(invoke_handler()),
 	);
-	app.manage(db::bootstrap(app.handle()));
+	kiroshi_app::db::install(kiroshi_app::events::core(app.handle()));
 	bundled_bots(&app, &["default"]);
 	let window = WebviewWindowBuilder::new(app.handle(), "main", Default::default())
 		.build()
@@ -100,7 +102,10 @@ impl Harness {
 
 	fn quit(&self) {
 		let runtime = tokio::runtime::Runtime::new().expect("runtime");
-		runtime.block_on(terminate_session(self.app.handle(), &self.app.state::<AgentState>()));
+		runtime.block_on(terminate_session(
+			kiroshi_app::events::core(self.app.handle()),
+			&kiroshi_app::events::core(self.app.app_handle()).state::<AgentState>(),
+		));
 	}
 
 	fn scope(&self) -> Value {
@@ -381,9 +386,9 @@ fn launch_stored_with(name: &str, played: &str, state: AgentState) -> Stored {
 	let scenario = scenario(played);
 	let app = an_app_of_its_own(
 		&format!("e2e-{name}"),
-		mock_builder().manage(state).invoke_handler(invoke_handler()),
+		mock_builder().plugin(kiroshi_app::events::in_core(state)).invoke_handler(invoke_handler()),
 	);
-	app.manage(db::bootstrap(app.handle()));
+	kiroshi_app::db::install(kiroshi_app::events::core(app.handle()));
 	bundled_bots(&app, &["default"]);
 	let window = WebviewWindowBuilder::new(app.handle(), "main", Default::default())
 		.build()
@@ -456,7 +461,11 @@ impl Stored {
 	}
 
 	fn database(&self) -> &db::Database {
-		self.app.state::<db::DatabaseState>().inner().as_ref().expect("the database is open")
+		kiroshi_app::events::core(self.app.app_handle())
+			.state::<db::DatabaseState>()
+			.inner()
+			.as_ref()
+			.expect("the database is open")
 	}
 
 	fn replies(&self) -> Vec<StoredMessage> {
@@ -513,8 +522,8 @@ impl Stored {
 
 	fn close(self) {
 		tauri::async_runtime::block_on(terminate_session(
-			self.app.handle(),
-			&self.app.state::<AgentState>(),
+			kiroshi_app::events::core(self.app.handle()),
+			&kiroshi_app::events::core(self.app.app_handle()).state::<AgentState>(),
 		));
 	}
 
@@ -583,7 +592,8 @@ impl Stored {
 	}
 
 	fn transcript_after_a_relaunch(&self) -> Vec<TranscriptMessage> {
-		let reopened = db::bootstrap(self.app.handle()).expect("the database reopens");
+		let reopened = db::bootstrap(kiroshi_app::events::core(self.app.handle()))
+			.expect("the database reopens");
 		let query = MessagePageQuery {
 			conversation_id: self.conversation_id.clone(),
 			before_seq: None,
@@ -1079,8 +1089,10 @@ fn a_prompt_the_sidecar_never_received_leaves_its_turn_completed() {
 	let _serial = serial();
 	let stored = launch_stored("unsent", "normal");
 	stored.start();
-	let sidecar = tauri::async_runtime::block_on(stored.app.state::<AgentState>().sidecar())
-		.expect("the sidecar runs");
+	let sidecar = tauri::async_runtime::block_on(
+		kiroshi_app::events::core(stored.app.app_handle()).state::<AgentState>().sidecar(),
+	)
+	.expect("the sidecar runs");
 	tauri::async_runtime::block_on(sidecar.shutdown());
 
 	stored.store_prompt("t4", "p4");

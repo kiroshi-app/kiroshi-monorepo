@@ -1,11 +1,11 @@
 pub mod commands;
-pub mod contract;
-pub mod core;
-pub mod filter;
+pub use kiroshi_core::routines::contract;
+pub use kiroshi_core::routines::core;
+pub use kiroshi_core::routines::filter;
 pub mod host;
 pub mod rate_limit;
-pub mod run;
-pub mod runner;
+pub use kiroshi_core::routines::run;
+pub use kiroshi_core::routines::runner;
 pub mod schedule;
 pub mod sentinel;
 pub mod silence;

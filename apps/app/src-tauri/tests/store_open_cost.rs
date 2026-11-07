@@ -46,7 +46,7 @@ impl Home {
 	fn new() -> Self {
 		let app =
 			an_app_of_its_own("store-open-cost", mock_builder().invoke_handler(invoke_handler()));
-		app.manage(db::bootstrap(app.handle()));
+		kiroshi_app::db::install(kiroshi_app::events::core(app.handle()));
 		Self { app }
 	}
 
@@ -62,7 +62,11 @@ impl Home {
 }
 
 fn database_of<M: Manager<MockRuntime>>(manager: &M) -> &db::Database {
-	manager.state::<db::DatabaseState>().inner().as_ref().expect("the database opens")
+	kiroshi_app::events::core(manager.app_handle())
+		.state::<db::DatabaseState>()
+		.inner()
+		.as_ref()
+		.expect("the database opens")
 }
 
 fn conversation_of(index: usize) -> String {

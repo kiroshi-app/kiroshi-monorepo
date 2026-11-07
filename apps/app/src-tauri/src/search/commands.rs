@@ -7,7 +7,7 @@ use super::contract::{
 use crate::conversations::contract::{state_in, StorageFailure};
 use crate::conversations::state as conversation_state;
 use crate::db;
-use crate::missions::commands::present;
+use crate::missions::liveness::present;
 
 fn ready(state: &db::DatabaseState) -> Result<&db::Database, StorageFailure> {
 	state.as_ref().map_err(StorageFailure::from)
@@ -16,9 +16,10 @@ fn ready(state: &db::DatabaseState) -> Result<&db::Database, StorageFailure> {
 #[tauri::command]
 #[specta::specta]
 pub async fn search_messages(
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	query: MessageSearchQuery,
 ) -> Result<Vec<MessageHit>, MessageSearchError> {
+	let state = core.state::<db::DatabaseState>();
 	ready(&state)
 		.map_err(|failure| MessageSearchError::Unavailable { failure })?
 		.search()
@@ -30,15 +31,20 @@ pub async fn search_messages(
 #[specta::specta]
 pub async fn search_catalogue<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	query: String,
 	space_id: String,
 ) -> Result<Catalogue, CatalogueError> {
+	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state).map_err(|failure| CatalogueError::Unavailable { failure })?;
 	let hits = database.catalogue().search(CatalogueScope { query, space_id, kind: None }).await?;
 	Ok(Catalogue {
-		chats: observed_chats(&app, database, hits.chats).await?,
-		missions: hits.missions.into_iter().map(|hit| observed_mission(&app, hit)).collect(),
+		chats: observed_chats(crate::events::core(&app), database, hits.chats).await?,
+		missions: hits
+			.missions
+			.into_iter()
+			.map(|hit| observed_mission(crate::events::core(&app), hit))
+			.collect(),
 		routines: hits.routines,
 	})
 }
@@ -47,21 +53,22 @@ pub async fn search_catalogue<R: Runtime>(
 #[specta::specta]
 pub async fn search_recent<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	space_id: String,
 ) -> Result<Vec<CatalogueChat>, CatalogueError> {
+	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state).map_err(|failure| CatalogueError::Unavailable { failure })?;
 	let hits = database.catalogue().recent(space_id).await?;
-	observed_chats(&app, database, hits).await
+	observed_chats(crate::events::core(&app), database, hits).await
 }
 
-async fn observed_chats<R: Runtime>(
-	app: &AppHandle<R>,
+async fn observed_chats(
+	core: &crate::core_context::Core,
 	database: &db::Database,
 	hits: Vec<ChatHit>,
 ) -> Result<Vec<CatalogueChat>, CatalogueError> {
 	let ids = hits.iter().map(|hit| hit.conversation_id.clone()).collect();
-	let states = conversation_state::listed(app, database, ids).await?;
+	let states = conversation_state::listed(core, database, ids).await?;
 	Ok(hits
 		.into_iter()
 		.map(|hit| {
@@ -71,8 +78,8 @@ async fn observed_chats<R: Runtime>(
 		.collect())
 }
 
-fn observed_mission<R: Runtime>(app: &AppHandle<R>, hit: CatalogueMission) -> CatalogueMission {
-	let observed = present(app, &hit.thread_conversation_id, &hit.bot_id, hit.presence());
+fn observed_mission(core: &crate::core_context::Core, hit: CatalogueMission) -> CatalogueMission {
+	let observed = present(core, &hit.thread_conversation_id, &hit.bot_id, hit.presence());
 	hit.with_presence(observed)
 }
 
@@ -112,14 +119,14 @@ mod tests {
 
 	async fn a_host(name: &str) -> AppOfItsOwn {
 		let app = an_app_of_its_own(&format!("search-commands-{name}"), mock_builder());
-		app.manage(db::bootstrap(app.handle()));
+		crate::db::install(crate::events::core(app.handle()));
 		plant(&app, A_SPACE_EACH).await;
 		app
 	}
 
 	async fn plant(app: &App<MockRuntime>, statements: &str) {
 		let statements = statements.to_owned();
-		ready(&app.state::<db::DatabaseState>())
+		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 			.expect("the database opens")
 			.call_mut(move |connection| Ok(connection.execute_batch(&statements)?))
 			.await
@@ -143,7 +150,7 @@ mod tests {
 
 	async fn indexed_rows(app: &App<MockRuntime>, message_id: &str) -> i64 {
 		let message_id = message_id.to_owned();
-		ready(&app.state::<db::DatabaseState>())
+		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 			.expect("the database opens")
 			.call(move |connection| {
 				Ok(connection.query_row(
@@ -189,7 +196,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_message_reaches_the_index_once_it_settles_and_holds_a_single_row() {
 		let app = a_host("settle").await;
-		let state = app.state::<db::DatabaseState>();
+		let state = crate::events::core(app.app_handle()).state::<db::DatabaseState>();
 		let database = ready(&state).expect("the database opens");
 		database
 			.messages()
@@ -387,7 +394,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_mission_hit_reads_working_while_its_thread_runs_a_turn() {
 		let app = a_host("mission-working").await;
-		let opened = ready(&app.state::<db::DatabaseState>())
+		let opened = ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 			.expect("the database opens")
 			.missions()
 			.open(a_draft_for_c1(), "k1".to_owned())
@@ -399,7 +406,7 @@ mod tests {
 			runtime_session_id: "r1".to_owned(),
 			epoch: 1,
 		};
-		let run = a_run_held_by_the_app(app.handle(), thread);
+		let run = a_run_held_by_the_app(crate::events::core(app.handle()), thread);
 		run.emit(AgentEvent::TurnChanged { state: TurnState::Running }, None);
 
 		let found = search_catalogue(
@@ -433,10 +440,9 @@ mod tests {
 		let recent = search_recent(app.handle().clone(), app.state(), "work".to_owned())
 			.await
 			.expect("the recent chats answer");
-		let page =
-			conversation_page(app.handle().clone(), app.state(), "work".to_owned(), None, None)
-				.await
-				.expect("the page reads");
+		let page = conversation_page(app.state(), "work".to_owned(), None, None)
+			.await
+			.expect("the page reads");
 
 		let paged = page.conversations.into_iter().find(|row| row.conversation.id == "c2");
 		let paged = paged.expect("the room is on the page").observed;

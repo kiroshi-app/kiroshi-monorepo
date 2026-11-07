@@ -1,5 +1,5 @@
 pub mod commands;
-pub mod contract;
+pub use kiroshi_core::applications::contract;
 pub mod directory;
 pub mod host;
 pub mod registry;

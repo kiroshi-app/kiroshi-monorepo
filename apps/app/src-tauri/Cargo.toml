@@ -34,6 +34,7 @@ fake-claude = []
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+kiroshi-core = { path = "../../../crates/kiroshi-core" }
 tauri = { version = "2", features = ["protocol-asset", "macos-private-api"] }
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 tauri-plugin-deep-link = "2"
@@ -54,7 +55,7 @@ tauri-specta = { version = "=2.0.0-rc.25", features = ["derive", "typescript"] }
 specta = { version = "=2.0.0-rc.25", features = ["derive", "serde_json"] }
 specta-typescript = "=0.0.12"
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde_json = { version = "1", features = ["raw_value"] }
 tokio = { version = "1", features = ["macros", "process", "io-util", "net", "signal", "sync", "time", "rt-multi-thread"] }
 uuid = { version = "1", features = ["v4"] }
 rusqlite = { version = "0.40", features = ["bundled"] }
@@ -171,6 +172,7 @@ windows = { version = "0.62", features = [
 gtk = "0.18"
 
 [dev-dependencies]
+kiroshi-core = { path = "../../../crates/kiroshi-core", features = ["test-support"] }
 tauri = { version = "2", features = ["test"] }
 # Already a dependency; named again so an integration test can build the pictures it
 # uploads and decode the ones the host stored, rather than checking bytes in.

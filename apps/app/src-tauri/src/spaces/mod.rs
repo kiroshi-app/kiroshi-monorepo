@@ -1,3 +1,3 @@
 pub mod archive;
 pub mod commands;
-pub mod contract;
+pub use kiroshi_core::spaces::contract;

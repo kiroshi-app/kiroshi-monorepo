@@ -15,9 +15,10 @@ fn ready(state: &db::DatabaseState) -> Result<&db::Database, UserPreferencesErro
 #[specta::specta]
 pub async fn user_preferences<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 ) -> Result<UserPreferences, UserPreferencesError> {
-	let dir = avatars::Avatars::dir(&app);
+	let state = core.state::<db::DatabaseState>();
+	let dir = avatars::Avatars::dir(crate::events::core(&app));
 	let stored = ready(&state)?.user().preferences().await?;
 	Ok(UserPreferences::of(stored, dir.as_deref()))
 }
@@ -26,10 +27,11 @@ pub async fn user_preferences<R: Runtime>(
 #[specta::specta]
 pub async fn user_set_preferences<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	preferences: UserPreferences,
 ) -> Result<UserPreferences, UserPreferencesError> {
-	let dir = avatars::Avatars::dir(&app);
+	let state = core.state::<db::DatabaseState>();
+	let dir = avatars::Avatars::dir(crate::events::core(&app));
 	let database = ready(&state)?;
 	let previous = database.user().preferences().await?;
 	let stored = database.user().set_preferences(preferences.into()).await?;
@@ -37,7 +39,7 @@ pub async fn user_set_preferences<R: Runtime>(
 		updates::check_on(&app, stored.update_channel.into());
 	}
 	if stored.display_name != previous.display_name {
-		session::renamed_name_sent(&app, stored.display_name.clone());
+		session::renamed_name_sent(crate::events::core(&app), stored.display_name.clone());
 	}
 	avatars::Avatars::sweep_referenced(database, dir.as_deref()).await;
 	Ok(UserPreferences::of(stored, dir.as_deref()))
@@ -47,14 +49,16 @@ pub async fn user_set_preferences<R: Runtime>(
 #[specta::specta]
 pub async fn user_set_profile_picture<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	bytes: Vec<u8>,
 ) -> Result<UserPreferences, UserPreferencesError> {
+	let state = core.state::<db::DatabaseState>();
 	let normalised = avatars::picture::normalised(&bytes)?;
 	let database = ready(&state)?;
-	let dir = avatars::Avatars::dir(&app).ok_or(avatars::Rejection::Unwritable {
-		detail: "there is no application data directory to store avatars in".to_owned(),
-	})?;
+	let dir =
+		avatars::Avatars::dir(crate::events::core(&app)).ok_or(avatars::Rejection::Unwritable {
+			detail: "there is no application data directory to store avatars in".to_owned(),
+		})?;
 	let path = avatars::minted_path(&dir);
 	let recorded = path.to_string_lossy().into_owned();
 	let swapped = database.user().swap_avatar_image_path(Some(recorded)).await?;
@@ -71,10 +75,11 @@ pub async fn user_set_profile_picture<R: Runtime>(
 #[specta::specta]
 pub async fn user_set_onboarding_step<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	step: OnboardingStep,
 ) -> Result<UserPreferences, UserPreferencesError> {
-	let dir = avatars::Avatars::dir(&app);
+	let state = core.state::<db::DatabaseState>();
+	let dir = avatars::Avatars::dir(crate::events::core(&app));
 	let stored = ready(&state)?.user().set_onboarding_step(step.into()).await?;
 	Ok(UserPreferences::of(stored, dir.as_deref()))
 }
@@ -83,9 +88,10 @@ pub async fn user_set_onboarding_step<R: Runtime>(
 #[specta::specta]
 pub async fn user_replay_onboarding<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 ) -> Result<UserPreferences, UserPreferencesError> {
-	let dir = avatars::Avatars::dir(&app);
+	let state = core.state::<db::DatabaseState>();
+	let dir = avatars::Avatars::dir(crate::events::core(&app));
 	let stored = ready(&state)?.user().replay_onboarding().await?;
 	Ok(UserPreferences::of(stored, dir.as_deref()))
 }
@@ -94,10 +100,11 @@ pub async fn user_replay_onboarding<R: Runtime>(
 #[specta::specta]
 pub async fn user_set_onboarding_first_companion<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	bot_id: String,
 ) -> Result<UserPreferences, UserPreferencesError> {
-	let dir = avatars::Avatars::dir(&app);
+	let state = core.state::<db::DatabaseState>();
+	let dir = avatars::Avatars::dir(crate::events::core(&app));
 	let stored = ready(&state)?.user().set_onboarding_first_companion(bot_id).await?;
 	Ok(UserPreferences::of(stored, dir.as_deref()))
 }
@@ -106,9 +113,10 @@ pub async fn user_set_onboarding_first_companion<R: Runtime>(
 #[specta::specta]
 pub async fn user_mark_onboarding_import_seen<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 ) -> Result<UserPreferences, UserPreferencesError> {
-	let dir = avatars::Avatars::dir(&app);
+	let state = core.state::<db::DatabaseState>();
+	let dir = avatars::Avatars::dir(crate::events::core(&app));
 	let stored = ready(&state)?.user().mark_onboarding_import_seen().await?;
 	Ok(UserPreferences::of(stored, dir.as_deref()))
 }

@@ -6,14 +6,15 @@ use super::session::{self, AccountSession};
 
 #[tauri::command]
 #[specta::specta]
-pub fn account_state(session: State<'_, AccountSession>) -> AccountState {
+pub fn account_state(core: State<'_, crate::core_context::Core>) -> AccountState {
+	let session = core.state::<AccountSession>();
 	session.current()
 }
 
 #[tauri::command]
 #[specta::specta]
 pub async fn account_sign_in<R: Runtime>(app: AppHandle<R>) -> Result<(), AccountError> {
-	session::sign_in(&app, |url| match app.try_state::<Opener<R>>() {
+	session::sign_in(crate::events::core(&app), |url| match app.try_state::<Opener<R>>() {
 		Some(opener) => opener.open_url(url, None::<&str>).map_err(|error| error.to_string()),
 		None => Err("the opener plugin is not installed".to_owned()),
 	})
@@ -23,5 +24,5 @@ pub async fn account_sign_in<R: Runtime>(app: AppHandle<R>) -> Result<(), Accoun
 #[tauri::command]
 #[specta::specta]
 pub async fn account_sign_out<R: Runtime>(app: AppHandle<R>) -> Result<(), AccountError> {
-	session::sign_out(&app).await
+	session::sign_out(crate::events::core(&app)).await
 }

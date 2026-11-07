@@ -89,18 +89,16 @@ const REFUSED_TURNS: &str = "
 fn launch(name: &str, played: &str) -> Host {
 	let scenario = scenario(played);
 	let app = booted(name);
-	let chat =
-		block_on(conversation_main_chat(app.handle().clone(), app.state(), BOT.to_owned(), None))
-			.expect("the main chat opens");
+	let chat = block_on(conversation_main_chat(app.state(), BOT.to_owned(), None))
+		.expect("the main chat opens");
 	hosting(app, scenario, name, chat.id)
 }
 
 fn launch_leased(name: &str, played: &str, lease: RunLease) -> Host {
 	let scenario = scenario(played);
 	let app = booted_with(name, AgentState::leasing(lease));
-	let chat =
-		block_on(conversation_main_chat(app.handle().clone(), app.state(), BOT.to_owned(), None))
-			.expect("the main chat opens");
+	let chat = block_on(conversation_main_chat(app.state(), BOT.to_owned(), None))
+		.expect("the main chat opens");
 	hosting(app, scenario, name, chat.id)
 }
 
@@ -125,8 +123,11 @@ fn booted(name: &str) -> AppOfItsOwn {
 
 fn booted_with(name: &str, agent: AgentState) -> AppOfItsOwn {
 	std::env::set_var(SIDECAR_OVERRIDE_ENV, FAKE_SIDECAR);
-	let app = an_app_of_its_own(&format!("routine-runs-{name}"), mock_builder().manage(agent));
-	app.manage(db::bootstrap(app.handle()));
+	let app = an_app_of_its_own(
+		&format!("routine-runs-{name}"),
+		mock_builder().plugin(kiroshi_app::events::in_core(agent)),
+	);
+	kiroshi_app::db::install(kiroshi_app::events::core(app.handle()));
 	bundled_bots(&app, &["default"]);
 	app
 }
@@ -169,7 +170,11 @@ fn routine_on(app: &App<MockRuntime>, conversation_id: &str, bot_id: &str, name:
 }
 
 fn database_of(app: &App<MockRuntime>) -> &db::Database {
-	app.state::<db::DatabaseState>().inner().as_ref().expect("the database is open")
+	kiroshi_app::events::core(app.app_handle())
+		.state::<db::DatabaseState>()
+		.inner()
+		.as_ref()
+		.expect("the database is open")
 }
 
 fn the_schedule_source() -> TriggerSource {
@@ -197,8 +202,8 @@ impl Host {
 			.expect("the bot is seated")
 	}
 
-	fn runner(&self) -> Runner<MockRuntime> {
-		Runner::new(self.app.handle().clone())
+	fn runner(&self) -> Runner {
+		Runner::new(kiroshi_app::events::core(self.app.handle()).clone())
 	}
 
 	fn fire_the_schedule(&self) -> TriggerDecision {
@@ -216,12 +221,8 @@ impl Host {
 	}
 
 	fn run_now(&self) -> TriggerDecision {
-		block_on(routine_run_now(
-			self.app.handle().clone(),
-			self.app.state(),
-			self.routine.id.clone(),
-		))
-		.expect("the routine runs now")
+		block_on(routine_run_now(self.app.state(), self.routine.id.clone()))
+			.expect("the routine runs now")
 	}
 
 	fn run_now_timed(&self, timing: RunTiming) -> TriggerDecision {
@@ -229,7 +230,7 @@ impl Host {
 	}
 
 	fn run_routine_now(&self, routine: &Routine, timing: RunTiming) -> TriggerDecision {
-		let runner = Runner::timed(self.app.handle().clone(), timing);
+		let runner = Runner::timed(kiroshi_app::events::core(self.app.handle()).clone(), timing);
 		block_on(core::run_now(self.database(), &runner, &SystemClock, routine.id.clone()))
 			.expect("the routine runs now")
 	}
@@ -324,7 +325,10 @@ impl Host {
 	}
 
 	fn quit(self) {
-		block_on(terminate_session(self.app.handle(), &self.app.state::<AgentState>()));
+		block_on(terminate_session(
+			kiroshi_app::events::core(self.app.handle()),
+			&kiroshi_app::events::core(self.app.app_handle()).state::<AgentState>(),
+		));
 	}
 }
 
@@ -600,13 +604,9 @@ fn two_bots_running_a_routine_at_once_each_report_their_own_turn_on_their_own_co
 	let _serial = serial();
 	let host = launch("two-bots", "routine_report_own");
 	bundled_bots(&host.app, &[SECOND_BOT]);
-	let second_chat = block_on(conversation_main_chat(
-		host.app.handle().clone(),
-		host.app.state(),
-		SECOND_BOT.to_owned(),
-		None,
-	))
-	.expect("the second bot's main chat opens");
+	let second_chat =
+		block_on(conversation_main_chat(host.app.state(), SECOND_BOT.to_owned(), None))
+			.expect("the second bot's main chat opens");
 	let second = routine_on(&host.app, &second_chat.id, SECOND_BOT, "two-bots");
 
 	assert!(is_started(&host.run_routine_now(&host.routine, RUN_TIMING)));
@@ -626,8 +626,7 @@ fn a_run_now_fired_during_a_runtime_write_opens_on_the_written_model_and_effort(
 	let app = host.app.handle().clone();
 	let pick = picked(host.stored_bot(BOT), "sonnet", EffortLevel::High);
 	let earlier_write = block_on(bundles::holding_the_memory(BOT));
-	let mut writing =
-		Box::pin(conversation_update_bot(app.clone(), app.state(), BOT.to_owned(), pick));
+	let mut writing = Box::pin(conversation_update_bot(app.state(), BOT.to_owned(), pick));
 
 	let landed = block_on(async { timeout(HELD_FOR, writing.as_mut()).await });
 	assert!(landed.is_err(), "the pick landed past the write in flight");
@@ -663,13 +662,9 @@ fn a_runtime_write_held_on_one_bot_holds_no_run_of_another() {
 	let opened = opened_runtimes("routine-other-bot");
 	let host = launch("runtime-write-other-bot", "routine_report_own");
 	bundled_bots(&host.app, &[SECOND_BOT]);
-	let second_chat = block_on(conversation_main_chat(
-		host.app.handle().clone(),
-		host.app.state(),
-		SECOND_BOT.to_owned(),
-		None,
-	))
-	.expect("the second bot's main chat opens");
+	let second_chat =
+		block_on(conversation_main_chat(host.app.state(), SECOND_BOT.to_owned(), None))
+			.expect("the second bot's main chat opens");
 	let second = routine_on(&host.app, &second_chat.id, SECOND_BOT, "runtime-write-other-bot");
 	let write_in_flight = block_on(bundles::holding_the_memory(BOT));
 

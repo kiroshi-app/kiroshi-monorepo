@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use serde::Deserialize;
 use serde_json::Value;
-use tauri::{AppHandle, Manager, Runtime};
 
 use super::contract::{
 	Application, ApplicationCallError, ApplicationInstall, ApplicationInstalled, ApplicationSearch,
@@ -13,37 +12,37 @@ use super::directory::Directory;
 use super::runnable::{refusal, Runners};
 use super::search::terms;
 use crate::account::cloud::api_url;
-use crate::agent::host::{Host, Refusal};
+use crate::agent::host::Host;
 use crate::bundles::ApplicationMark;
 use crate::conversations::commands::ready;
 use crate::conversations::contract::McpServer;
 use crate::environment::contract::EnvOwner;
-use crate::events::{self, APPLICATION_INSTALLED};
+use crate::events::APPLICATION_INSTALLED;
 use crate::mcp_oauth::commands::application_rows;
-use crate::plugins::commands::{plugin_mcp_servers, plugin_set_mcp_server};
+use crate::plugins::commands::{declare_mcp_server, declared_mcp_servers};
 
 const OFFERS: usize = 9;
 
 #[derive(Debug)]
-pub struct ApplicationHost<R: Runtime> {
-	app: AppHandle<R>,
+pub struct ApplicationHost {
+	core: crate::core_context::Core,
 	conversation_id: String,
 	bot_id: String,
 	runners: Runners,
 	directory: Arc<Directory>,
 }
 
-fn held_directory<R: Runtime>(app: &AppHandle<R>) -> Arc<Directory> {
-	match app.try_state::<Arc<Directory>>() {
+fn held_directory(core: &crate::core_context::Core) -> Arc<Directory> {
+	match core.try_state::<Arc<Directory>>() {
 		Some(state) => state.inner().clone(),
 		None => Directory::at(api_url(), None),
 	}
 }
 
-impl<R: Runtime> ApplicationHost<R> {
-	pub fn new(app: AppHandle<R>, conversation_id: String, bot_id: String) -> Self {
-		let directory = held_directory(&app);
-		Self { app, conversation_id, bot_id, runners: Runners::default(), directory }
+impl ApplicationHost {
+	pub fn new(core: crate::core_context::Core, conversation_id: String, bot_id: String) -> Self {
+		let directory = held_directory(&core);
+		Self { core, conversation_id, bot_id, runners: Runners::default(), directory }
 	}
 
 	async fn search(&self, query: &str) -> Result<ApplicationSearch, ApplicationCallError> {
@@ -115,13 +114,16 @@ impl<R: Runtime> ApplicationHost<R> {
 		&self,
 		draft: InstallDraft,
 	) -> Result<ApplicationInstall, ApplicationCallError> {
-		let state = Self::database(&self.app)?;
-		Ok(ready(&state)?.application_installs().record(draft).await?)
+		let state = Self::database(&self.core)?;
+		Ok(ready(state.state::<crate::db::DatabaseState>().inner())?
+			.application_installs()
+			.record(draft)
+			.await?)
 	}
 
 	async fn status(&self, asked: Named) -> Result<ApplicationState, ApplicationCallError> {
 		let owner = self.owner(destination(&asked.scope)?).await?;
-		let rows = application_rows(self.app.clone(), owner).await?;
+		let rows = application_rows(self.core.clone(), owner).await?;
 		Ok(rows
 			.into_iter()
 			.find(|row| row.name == asked.application)
@@ -145,7 +147,7 @@ impl<R: Runtime> ApplicationHost<R> {
 	}
 
 	async fn declared(&self, owner: &EnvOwner) -> Result<Vec<McpServer>, ApplicationCallError> {
-		Ok(plugin_mcp_servers(self.app.clone(), owner.into()).await?)
+		Ok(declared_mcp_servers(&self.core, &owner.into()))
 	}
 
 	async fn declare(
@@ -156,20 +158,13 @@ impl<R: Runtime> ApplicationHost<R> {
 		let name = application.name.clone();
 		let config = application.config.clone();
 		let mark = Some(mark_of(application));
-		Ok(plugin_set_mcp_server(
-			self.app.clone(),
-			Self::database(&self.app)?,
-			owner.into(),
-			name,
-			config.into(),
-			mark,
-		)
-		.await?)
+		Self::database(&self.core)?;
+		Ok(declare_mcp_server(&self.core, &owner.into(), &name, &config, mark.as_ref()).await?)
 	}
 
 	async fn space(&self) -> Result<String, ApplicationCallError> {
-		let state = Self::database(&self.app)?;
-		let database = ready(&state)?;
+		let state = Self::database(&self.core)?;
+		let database = ready(state.state::<crate::db::DatabaseState>().inner())?;
 		database.conversations().space(self.conversation_id.clone()).await?.ok_or_else(|| {
 			ApplicationCallError::ConversationWithoutSpace {
 				conversation_id: self.conversation_id.clone(),
@@ -178,12 +173,13 @@ impl<R: Runtime> ApplicationHost<R> {
 	}
 
 	fn announce(&self, installed: ApplicationInstalled) -> Result<(), ApplicationCallError> {
-		events::emit(&self.app, APPLICATION_INSTALLED, installed)
+		self.core
+			.emit(APPLICATION_INSTALLED, installed)
 			.map_err(|error| ApplicationCallError::Undeliverable { detail: error.to_string() })
 	}
 }
 
-impl<R: Runtime> Host for ApplicationHost<R> {
+impl Host for ApplicationHost {
 	const SUBTYPE: &'static str = "application";
 
 	const IS_PAYLOAD_REQUIRED: bool = true;
@@ -211,16 +207,6 @@ impl<R: Runtime> Host for ApplicationHost<R> {
 				Self::answered(self.status(asked).await?)
 			}
 		}
-	}
-}
-
-impl Refusal for ApplicationCallError {
-	fn unreadable(detail: String) -> Self {
-		Self::UnreadableRequest { detail }
-	}
-
-	fn unexpected(detail: String) -> Self {
-		Self::Unexpected { detail }
 	}
 }
 
@@ -302,6 +288,7 @@ mod tests {
 	use std::path::PathBuf;
 	use std::sync::mpsc;
 	use std::time::Duration;
+	use tauri::Manager;
 
 	use serde_json::json;
 	use tauri::test::{mock_builder, MockRuntime};
@@ -339,48 +326,48 @@ mod tests {
 
 	async fn a_host(name: &str) -> AppOfItsOwn {
 		let app = an_app_of_its_own(&format!("application-host-{name}"), mock_builder());
-		app.manage(db::bootstrap(app.handle()));
-		app.manage(McpOauthState::default());
-		app.manage(ApplicationReports::default());
-		app.manage(AuthorizationAnswers::default());
-		ready(&app.state::<db::DatabaseState>())
+		crate::db::install(crate::events::core(app.handle()));
+		crate::events::core(app.app_handle()).manage(McpOauthState::default());
+		crate::events::core(app.app_handle()).manage(ApplicationReports::default());
+		crate::events::core(app.app_handle()).manage(AuthorizationAnswers::default());
+		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 			.expect("the database opens")
 			.call_mut(|connection| Ok(connection.execute_batch(A_SPACE)?))
 			.await
 			.expect("the space is planted");
-		bundles::space::lay_down(app.handle(), "personal").expect("the space plugin lands");
+		bundles::space::lay_down(crate::events::core(app.handle()), "personal")
+			.expect("the space plugin lands");
 		bundles::user::lay_down(&user_plugin(&app)).expect("the person plugin lands");
-		let bot = ready(&app.state::<db::DatabaseState>())
+		let bot = ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 			.expect("the database opens")
 			.conversations()
 			.bot("b1".to_owned())
 			.await
 			.expect("the bot reads")
 			.expect("the bot is planted");
-		let root = bundles::root(app.handle()).expect("the bundles have a root");
+		let root =
+			bundles::root(crate::events::core(app.handle())).expect("the bundles have a root");
 		bundles::lay_down(&root, &bot).expect("the bot bundle lands");
 		app
 	}
 
 	fn user_plugin(app: &App<MockRuntime>) -> PathBuf {
-		bundles::user::path(app.handle()).expect("the person plugin has a home")
+		bundles::user::path(crate::events::core(app.handle()))
+			.expect("the person plugin has a home")
 	}
 
 	fn space_plugin(app: &App<MockRuntime>) -> PathBuf {
-		bundles::space::path(app.handle(), "personal").expect("the space plugin has a home")
+		bundles::space::path(crate::events::core(app.handle()), "personal")
+			.expect("the space plugin has a home")
 	}
 
-	fn reading(app: &App<MockRuntime>, conversation_id: &str) -> ApplicationHost<MockRuntime> {
+	fn reading(app: &App<MockRuntime>, conversation_id: &str) -> ApplicationHost {
 		holding(app, conversation_id, the_catalogue().into_iter().chain(the_others()).collect())
 	}
 
-	fn holding(
-		app: &App<MockRuntime>,
-		conversation_id: &str,
-		rows: Vec<Value>,
-	) -> ApplicationHost<MockRuntime> {
+	fn holding(app: &App<MockRuntime>, conversation_id: &str, rows: Vec<Value>) -> ApplicationHost {
 		ApplicationHost {
-			app: app.handle().clone(),
+			core: crate::events::core(app.handle()).clone(),
 			conversation_id: conversation_id.to_owned(),
 			bot_id: "b1".to_owned(),
 			runners: runners_carrying(app, &[NPX, UVX]),
@@ -493,7 +480,8 @@ mod tests {
 	}
 
 	fn declarations(app: &App<MockRuntime>) -> [Vec<(String, Value)>; 3] {
-		let root = bundles::root(app.handle()).expect("the bundles have a root");
+		let root =
+			bundles::root(crate::events::core(app.handle())).expect("the bundles have a root");
 		[
 			bundles::mcp_servers(&root, "b1"),
 			bundles::plugin::mcp_servers(&space_plugin(app)),
@@ -503,7 +491,8 @@ mod tests {
 	}
 
 	fn marks(app: &App<MockRuntime>) -> [Vec<(String, ApplicationMark)>; 3] {
-		let root = bundles::root(app.handle()).expect("the bundles have a root");
+		let root =
+			bundles::root(crate::events::core(app.handle())).expect("the bundles have a root");
 		[
 			bundles::mcp_servers(&root, "b1"),
 			bundles::plugin::mcp_servers(&space_plugin(app)),
@@ -559,7 +548,7 @@ mod tests {
 		"zinc-10", "zinc-11", "zinc-12",
 	];
 
-	fn a_host_reading(app: &App<MockRuntime>, page: &[&str]) -> ApplicationHost<MockRuntime> {
+	fn a_host_reading(app: &App<MockRuntime>, page: &[&str]) -> ApplicationHost {
 		let page = a_page(page).as_array().cloned().expect("a page is a list");
 		holding(app, "c1", the_catalogue().into_iter().chain(page).collect())
 	}
@@ -726,7 +715,7 @@ mod tests {
 	}
 
 	async fn recorded_in(app: &App<MockRuntime>, conversation_id: &str) -> Vec<ApplicationInstall> {
-		ready(&app.state::<db::DatabaseState>())
+		ready(&crate::events::core(app.app_handle()).state::<db::DatabaseState>())
 			.expect("the database opens")
 			.application_installs()
 			.of_conversation(conversation_id.to_owned())
@@ -1069,10 +1058,14 @@ mod tests {
 		let from_the_directory =
 			host.answer(an_install("com.notion/mcp", "user")).await.expect("the install answers");
 		assert_eq!(from_the_directory["install"], json!({ "kind": "oauth" }));
-		let reports = app.state::<ApplicationReports>();
+		let reports = crate::events::core(app.app_handle()).state::<ApplicationReports>();
 		reports.record("b1", "superset", Standing::Holding);
 		reports.record("b1", "paper", Standing::LeftOut { reason: Some("refused".to_owned()) });
-		app.state::<AuthorizationAnswers>().answered("https://mcp.notion.test/mcp", true, now_ms());
+		crate::events::core(app.app_handle()).state::<AuthorizationAnswers>().answered(
+			"https://mcp.notion.test/mcp",
+			true,
+			now_ms(),
+		);
 
 		let host = &host;
 		let read = move |application: &'static str, scope: &'static str| async move {

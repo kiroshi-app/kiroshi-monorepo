@@ -21,8 +21,9 @@ fn claude_root() -> Option<PathBuf> {
 #[tauri::command]
 #[specta::specta]
 pub async fn claude_import_inventory(
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 ) -> Result<ClaudeInventory, TranscriptStoreError> {
+	let state = core.state::<db::DatabaseState>();
 	let imported = ready(&state)?.user().claude_imported().await?;
 	Ok(match claude_root() {
 		Some(root) => inventory(&root, &imported),
@@ -34,17 +35,18 @@ pub async fn claude_import_inventory(
 #[specta::specta]
 pub async fn claude_import_run<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
+	core: State<'_, crate::core_context::Core>,
 	selection: Vec<String>,
 	space_id: String,
 ) -> Result<Vec<ClaudeImportOutcome>, TranscriptStoreError> {
+	let state = core.state::<db::DatabaseState>();
 	let root = claude_root().ok_or_else(|| TranscriptStoreError::UnreadableSources {
 		path: format!("~/{CLAUDE_DIR}"),
 		reason: NO_HOME.to_owned(),
 	})?;
-	let person = bundles::user::laid_down(&app);
+	let person = bundles::user::laid_down(crate::events::core(&app));
 	let importer = Importer {
-		app: &app,
+		core: crate::events::core(&app),
 		database: ready(&state)?,
 		root: &root,
 		person: person.as_deref(),
