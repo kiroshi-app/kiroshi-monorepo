@@ -39,7 +39,7 @@ pub struct MaximizeButtonBounds {
 	pub height: f64,
 }
 
-pub const MAXIMIZE_BUTTON_EVENT: &str = "window-maximize-button";
+pub use kiroshi_core::desktop_events::MAXIMIZE_BUTTON_EVENT;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]

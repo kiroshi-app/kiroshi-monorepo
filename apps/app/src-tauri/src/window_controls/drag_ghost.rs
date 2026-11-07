@@ -15,9 +15,9 @@ pub const DRAG_GHOST: &str = "drag-ghost";
 
 pub const DRAG_GHOST_ROUTE: &str = "/drag-ghost.html";
 
-pub const TAB_EVENT: &str = "drag-ghost-tab";
+pub use kiroshi_core::desktop_events::DRAG_GHOST_TAB_EVENT as TAB_EVENT;
 
-pub const ENDED_EVENT: &str = "drag-ghost-ended";
+pub use kiroshi_core::desktop_events::DRAG_GHOST_ENDED_EVENT as ENDED_EVENT;
 
 const THUMBNAIL_SCHEME: &str = "data:image/";
 

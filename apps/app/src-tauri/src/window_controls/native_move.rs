@@ -10,9 +10,9 @@ use super::secondary::ScreenPosition;
 use super::tab_drag::NativeWindowError;
 use crate::events::{self, NATIVE_MOVE_ENDED, NATIVE_MOVE_FAILED};
 
-pub const NATIVE_MOVE_ENDED_EVENT: &str = "window://native-move-ended";
+pub use kiroshi_core::desktop_events::NATIVE_MOVE_ENDED_EVENT;
 
-pub const NATIVE_MOVE_FAILED_EVENT: &str = "window://native-move-failed";
+pub use kiroshi_core::desktop_events::NATIVE_MOVE_FAILED_EVENT;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]

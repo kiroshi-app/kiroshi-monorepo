@@ -11,6 +11,7 @@ pub mod core_context;
 pub mod crypto;
 pub mod db;
 pub mod descriptors;
+pub mod desktop_events;
 pub mod devices;
 pub mod environment;
 pub mod events;

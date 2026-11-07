@@ -7,7 +7,7 @@ use tauri_plugin_deep_link::DeepLinkExt;
 use crate::events::{self, JOIN_LINK_OPENED};
 use crate::window_controls;
 
-pub const OPENED_EVENT: &str = "join-link://opened";
+pub use kiroshi_core::desktop_events::JOIN_LINK_OPENED_EVENT as OPENED_EVENT;
 
 const SCHEME: &str = "kiroshi";
 

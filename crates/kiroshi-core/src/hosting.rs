@@ -69,6 +69,10 @@ struct Run {
 }
 
 impl Hosting {
+	pub fn relayed_member(&self, nonce: &str) -> Option<crate::hosting::caller::RelayedMember> {
+		self.relayed.vouched(nonce)
+	}
+
 	pub fn new(api_url: &str, local: Option<LocalApi>) -> Self {
 		Self {
 			cloud: Cloud::new(api_url),

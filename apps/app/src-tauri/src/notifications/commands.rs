@@ -1,7 +1,7 @@
 use serde::{de, Deserialize, Deserializer, Serialize};
 use tauri::{AppHandle, Runtime};
 
-pub const ACTIVATED_EVENT: &str = "notification://activated";
+pub use kiroshi_core::desktop_events::NOTIFICATION_ACTIVATED_EVENT as ACTIVATED_EVENT;
 
 #[derive(Clone, Debug, Deserialize, Serialize, specta::Type)]
 pub struct NotificationTarget {

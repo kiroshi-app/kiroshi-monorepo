@@ -1,12 +1,8 @@
 use std::collections::HashMap;
 use std::future::Future;
-use std::ops::Deref;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
-use specta::datatype::DataType;
-use specta::function::FunctionArg;
-use specta::Types;
 use uuid::Uuid;
 
 use super::contract::{Member, MemberStatus, MembersError, SpaceMembers};
@@ -16,7 +12,6 @@ use crate::account::session::{this_computer, AccountSession};
 use crate::agent::protocol::SpaceMember;
 use crate::db::repositories::messages::AccountAuthor;
 use crate::db::{Database, DatabaseError};
-use crate::host_api::invoke::RELAYED_MEMBER_HEADER;
 use crate::hosting::authors::Authors;
 pub use crate::hosting::caller::{Caller, RelayedMember};
 use futures_util::future::BoxFuture;
@@ -38,7 +33,7 @@ impl RelayedMembers {
 		Vouched { members: self, nonce }
 	}
 
-	fn vouched(&self, nonce: &str) -> Option<RelayedMember> {
+	pub(super) fn vouched(&self, nonce: &str) -> Option<RelayedMember> {
 		self.held().get(nonce).cloned()
 	}
 
@@ -55,37 +50,6 @@ impl RelayedMembers {
 impl Drop for Vouched<'_> {
 	fn drop(&mut self) {
 		self.members.held().remove(&self.nonce);
-	}
-}
-
-pub struct CommandCaller(pub Caller);
-
-impl Deref for CommandCaller {
-	type Target = Caller;
-
-	fn deref(&self) -> &Caller {
-		&self.0
-	}
-}
-
-impl<'de, R: Runtime> CommandArg<'de, R> for CommandCaller {
-	fn from_command(command: CommandItem<'de, R>) -> Result<Self, InvokeError> {
-		let Some(nonce) = command.message.headers().get(&RELAYED_MEMBER_HEADER) else {
-			return Ok(CommandCaller(Caller::Host));
-		};
-		let webview = command.message.webview();
-		let member = nonce
-			.to_str()
-			.ok()
-			.zip(crate::events::core(webview.app_handle()).try_state::<Hosting>())
-			.and_then(|(nonce, hosting)| hosting.relayed.vouched(nonce));
-		Ok(CommandCaller(Caller::Relayed(member)))
-	}
-}
-
-impl FunctionArg for CommandCaller {
-	fn to_datatype(_: &mut Types) -> Option<DataType> {
-		None
 	}
 }
 
