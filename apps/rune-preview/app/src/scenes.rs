@@ -2,7 +2,9 @@ use rune::TextEdit;
 
 use serde_json::json;
 
-use crate::app::{App, Board, Live, Pane, Ready, Thread, Workspace, connected, whole_thread};
+use crate::app::{
+	App, Board, Live, Pane, Person, Ready, Thread, Workspace, connected, whole_thread,
+};
 use crate::dev_profile::{ClaudeLogin, DevProfile, ImportChoices, KiroshiSignIn};
 use crate::host::{Host, HostError, Profile};
 use crate::longest;
@@ -199,7 +201,7 @@ fn workspace(s: &mut App) -> i64 {
 		space: Space { id: "space".into(), name: "Personal".into(), colour: None },
 		agents,
 		conversations,
-		person: Some("ada.martin@example.com".into()),
+		person: Person::SignedIn("ada.martin@example.com".into()),
 		longest: None,
 	});
 	now

@@ -12,6 +12,7 @@ use crate::private_files;
 mod effort;
 mod front;
 mod git;
+pub mod host;
 mod mcp;
 pub mod own_write;
 mod permissions;

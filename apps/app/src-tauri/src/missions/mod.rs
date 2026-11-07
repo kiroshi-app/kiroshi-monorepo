@@ -1,4 +1,4 @@
-pub mod call;
+pub use kiroshi_core::missions::call;
 pub use kiroshi_core::missions::checkout;
 pub mod commands;
 pub use kiroshi_core::missions::contract;

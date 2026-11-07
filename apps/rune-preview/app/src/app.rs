@@ -44,12 +44,19 @@ pub enum Workspace {
 	Ready(Ready),
 }
 
+#[derive(Clone)]
+pub enum Person {
+	SignedIn(String),
+	SignedOut,
+	Unread,
+}
+
 pub struct Ready {
 	pub source: Source,
 	pub space: Space,
 	pub agents: Vec<Agent>,
 	pub conversations: Vec<Conversation>,
-	pub person: Option<String>,
+	pub person: Person,
 	pub longest: Option<Longest>,
 }
 
@@ -397,6 +404,13 @@ impl App {
 
 	pub fn ready(&self) -> Option<&Ready> {
 		match &self.workspace {
+			Workspace::Ready(ready) => Some(ready),
+			_ => None,
+		}
+	}
+
+	fn ready_mut(&mut self) -> Option<&mut Ready> {
+		match &mut self.workspace {
 			Workspace::Ready(ready) => Some(ready),
 			_ => None,
 		}
@@ -777,6 +791,11 @@ impl App {
 		}
 	}
 
+	fn reload_visible_thread(&self) {
+		let (Some(ready), Some(thread)) = (self.ready(), self.thread.as_ref()) else { return };
+		self.read_thread(ready.source.clone(), thread.conversation_id.clone());
+	}
+
 	fn read_thread(&self, host: Source, conversation_id: String) {
 		self.work(move |outbox| {
 			let messages = whole_thread(&host, &conversation_id);
@@ -821,6 +840,12 @@ impl App {
 				self.request_images();
 			}
 			HostEvent::MissionChanged(changed) => self.mission_changed(changed),
+			HostEvent::AccountChanged(account) => {
+				if let Some(ready) = self.ready_mut() {
+					ready.person = person_of(account);
+				}
+			}
+			HostEvent::Lagged => self.reload_visible_thread(),
 			HostEvent::Listening => {}
 			HostEvent::Unreadable { event, cause } => {
 				self.notice = Some(format!("Couldn't read a {event} event: {cause}"))
@@ -876,20 +901,21 @@ pub fn ready_on(source: Source) -> Result<Ready, HostError> {
 	};
 	let agents = source.invoke("conversation_bots", json!({ "spaceId": space.id }))?;
 	let conversations = roster(&source, &space.id)?;
-	let person = match &source {
-		Source::InProcess(_) => None,
-		Source::Running(host) => {
-			match host.invoke::<KiroshiAccountState>("account_state", json!({})) {
-				Ok(KiroshiAccountState::SignedIn { email, .. }) => Some(email),
-				Ok(KiroshiAccountState::SignedOut) => None,
-				Err(failure) => {
-					eprintln!("the rail shows no account: {}", failure.detail());
-					None
-				}
-			}
+	let person = match source.invoke::<KiroshiAccountState>("account_state", json!({})) {
+		Ok(account) => person_of(account),
+		Err(failure) => {
+			eprintln!("the account did not read: {}", failure.detail());
+			Person::Unread
 		}
 	};
 	Ok(Ready { source, space, agents, conversations, person, longest: None })
+}
+
+fn person_of(account: KiroshiAccountState) -> Person {
+	match account {
+		KiroshiAccountState::SignedIn { email, .. } => Person::SignedIn(email),
+		KiroshiAccountState::SignedOut => Person::SignedOut,
+	}
 }
 
 const ROSTER_PAGE: u32 = 100;

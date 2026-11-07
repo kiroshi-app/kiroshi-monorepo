@@ -16,7 +16,7 @@ use super::session::{Drained, EventSink, FollowUp};
 use super::translate::now_ms;
 use crate::attachments::{markdown_destination, markdown_line};
 use crate::conversations::awaited_runs::{forget_settled_turns, serve_handed};
-use crate::conversations::commands::{announce_conversation, ready};
+use crate::conversations::commands::{announce_conversation, announce_message_stored, ready};
 use crate::conversations::context::mentioned_bot_ids;
 use crate::conversations::contract::{TranscriptStoreError, WebSource};
 use crate::conversations::host_turn::present_bot_ids;
@@ -890,7 +890,17 @@ impl Store {
 		settled_text: Option<String>,
 	) -> Result<(), TranscriptStoreError> {
 		let database = self.database()?;
-		database.messages().finalize_message(id.to_owned(), completion, settled_text).await?;
+		let has_closed =
+			database.messages().finalize_message(id.to_owned(), completion, settled_text).await?;
+		if has_closed {
+			announce_message_stored(
+				&self.core,
+				database,
+				self.conversation_id.clone(),
+				id.to_owned(),
+			)
+			.await;
+		}
 		self.announce_updated(database).await;
 		Ok(())
 	}

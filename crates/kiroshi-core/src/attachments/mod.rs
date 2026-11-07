@@ -1,3 +1,4 @@
+pub mod commands;
 pub mod contract;
 
 use std::borrow::Cow;

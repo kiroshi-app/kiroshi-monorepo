@@ -339,21 +339,41 @@ async fn announce_stored(
 	conversation_id: String,
 	id: String,
 ) {
-	let failure = match database.messages().message(conversation_id.clone(), id.clone()).await {
-		Ok(Some(stored)) => {
-			summons::note_received(&conversation_id, &id, &stored.content);
-			let message = TranscriptMessage::of(&conversation_id, stored);
-			match core.emit(MESSAGE_STORED, message) {
-				Ok(()) => return,
-				Err(failure) => failure.to_string(),
-			}
-		}
-		Ok(None) => "the stored message was not found again".to_owned(),
-		Err(failure) => format!("the stored message did not read back: {failure:?}"),
+	if let Some(content) =
+		announce_message_stored(core, database, conversation_id.clone(), id.clone()).await
+	{
+		summons::note_received(&conversation_id, &id, &content);
+	}
+}
+
+pub async fn announce_message_stored(
+	core: &crate::core_context::Core,
+	database: &db::Database,
+	conversation_id: String,
+	id: String,
+) -> Option<String> {
+	let unannounced = |failure: String| {
+		eprintln!(
+			"{MESSAGE_STORED_EVENT} was not announced for message {id} of conversation {conversation_id}: {failure}"
+		);
 	};
-	eprintln!(
-		"{MESSAGE_STORED_EVENT} was not announced for message {id} of conversation {conversation_id}: {failure}"
-	);
+	let stored = match database.messages().message(conversation_id.clone(), id.clone()).await {
+		Ok(Some(stored)) => stored,
+		Ok(None) => {
+			unannounced("the stored message was not found again".to_owned());
+			return None;
+		}
+		Err(failure) => {
+			unannounced(format!("the stored message did not read back: {failure:?}"));
+			return None;
+		}
+	};
+	let content = stored.content.clone();
+	if let Err(failure) = core.emit(MESSAGE_STORED, TranscriptMessage::of(&conversation_id, stored))
+	{
+		unannounced(failure.to_string());
+	}
+	Some(content)
 }
 
 pub async fn open_assistant_message(

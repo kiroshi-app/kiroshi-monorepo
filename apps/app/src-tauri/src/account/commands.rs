@@ -1,28 +1,25 @@
-use tauri::{AppHandle, Manager, Runtime, State};
-use tauri_plugin_opener::Opener;
+use tauri::State;
 
 use super::contract::{AccountError, AccountState};
-use super::session::{self, AccountSession};
 
 #[tauri::command]
 #[specta::specta]
 pub fn account_state(core: State<'_, crate::core_context::Core>) -> AccountState {
-	let session = core.state::<AccountSession>();
-	session.current()
+	kiroshi_core::account::commands::account_state(core.inner())
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn account_sign_in<R: Runtime>(app: AppHandle<R>) -> Result<(), AccountError> {
-	session::sign_in(crate::events::core(&app), |url| match app.try_state::<Opener<R>>() {
-		Some(opener) => opener.open_url(url, None::<&str>).map_err(|error| error.to_string()),
-		None => Err("the opener plugin is not installed".to_owned()),
-	})
-	.await
+pub async fn account_sign_in(
+	core: State<'_, crate::core_context::Core>,
+) -> Result<(), AccountError> {
+	kiroshi_core::account::commands::account_sign_in(core.inner()).await
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn account_sign_out<R: Runtime>(app: AppHandle<R>) -> Result<(), AccountError> {
-	session::sign_out(crate::events::core(&app)).await
+pub async fn account_sign_out(
+	core: State<'_, crate::core_context::Core>,
+) -> Result<(), AccountError> {
+	kiroshi_core::account::commands::account_sign_out(core.inner()).await
 }

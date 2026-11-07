@@ -1,27 +1,7 @@
 use tauri::{AppHandle, Runtime, State};
 
 use super::contract::{OnboardingStep, UserPreferences, UserPreferencesError};
-use crate::account::session;
-use crate::avatars;
-use crate::db;
-use crate::file_store::FileStore;
 use crate::updates;
-
-fn ready(state: &db::DatabaseState) -> Result<&db::Database, UserPreferencesError> {
-	state.as_ref().map_err(|failure| UserPreferencesError::Unavailable { failure: failure.into() })
-}
-
-#[tauri::command]
-#[specta::specta]
-pub async fn user_preferences<R: Runtime>(
-	app: AppHandle<R>,
-	core: State<'_, crate::core_context::Core>,
-) -> Result<UserPreferences, UserPreferencesError> {
-	let state = core.state::<db::DatabaseState>();
-	let dir = avatars::Avatars::dir(crate::events::core(&app));
-	let stored = ready(&state)?.user().preferences().await?;
-	Ok(UserPreferences::of(stored, dir.as_deref()))
-}
 
 #[tauri::command]
 #[specta::specta]
@@ -30,93 +10,62 @@ pub async fn user_set_preferences<R: Runtime>(
 	core: State<'_, crate::core_context::Core>,
 	preferences: UserPreferences,
 ) -> Result<UserPreferences, UserPreferencesError> {
-	let state = core.state::<db::DatabaseState>();
-	let dir = avatars::Avatars::dir(crate::events::core(&app));
-	let database = ready(&state)?;
-	let previous = database.user().preferences().await?;
-	let stored = database.user().set_preferences(preferences.into()).await?;
+	let previous = kiroshi_core::user::commands::user_preferences(core.inner()).await?;
+	let stored =
+		kiroshi_core::user::commands::user_set_preferences(core.inner(), preferences).await?;
 	if stored.update_channel != previous.update_channel {
-		updates::check_on(&app, stored.update_channel.into());
+		updates::check_on(&app, stored.update_channel);
 	}
-	if stored.display_name != previous.display_name {
-		session::renamed_name_sent(crate::events::core(&app), stored.display_name.clone());
-	}
-	avatars::Avatars::sweep_referenced(database, dir.as_deref()).await;
-	Ok(UserPreferences::of(stored, dir.as_deref()))
+	Ok(stored)
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn user_set_profile_picture<R: Runtime>(
-	app: AppHandle<R>,
+pub async fn user_preferences(
+	core: State<'_, crate::core_context::Core>,
+) -> Result<UserPreferences, UserPreferencesError> {
+	kiroshi_core::user::commands::user_preferences(core.inner()).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn user_set_profile_picture(
 	core: State<'_, crate::core_context::Core>,
 	bytes: Vec<u8>,
 ) -> Result<UserPreferences, UserPreferencesError> {
-	let state = core.state::<db::DatabaseState>();
-	let normalised = avatars::picture::normalised(&bytes)?;
-	let database = ready(&state)?;
-	let dir =
-		avatars::Avatars::dir(crate::events::core(&app)).ok_or(avatars::Rejection::Unwritable {
-			detail: "there is no application data directory to store avatars in".to_owned(),
-		})?;
-	let path = avatars::minted_path(&dir);
-	let recorded = path.to_string_lossy().into_owned();
-	let swapped = database.user().swap_avatar_image_path(Some(recorded)).await?;
-	if let Err(rejection) = avatars::write(&path, &normalised) {
-		let _ = database.user().swap_avatar_image_path(swapped.previous).await;
-		avatars::Avatars::sweep_referenced(database, Some(&dir)).await;
-		return Err(rejection.into());
-	}
-	avatars::Avatars::sweep_referenced(database, Some(&dir)).await;
-	Ok(UserPreferences::of(swapped.stored, Some(&dir)))
+	kiroshi_core::user::commands::user_set_profile_picture(core.inner(), bytes).await
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn user_set_onboarding_step<R: Runtime>(
-	app: AppHandle<R>,
+pub async fn user_set_onboarding_step(
 	core: State<'_, crate::core_context::Core>,
 	step: OnboardingStep,
 ) -> Result<UserPreferences, UserPreferencesError> {
-	let state = core.state::<db::DatabaseState>();
-	let dir = avatars::Avatars::dir(crate::events::core(&app));
-	let stored = ready(&state)?.user().set_onboarding_step(step.into()).await?;
-	Ok(UserPreferences::of(stored, dir.as_deref()))
+	kiroshi_core::user::commands::user_set_onboarding_step(core.inner(), step).await
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn user_replay_onboarding<R: Runtime>(
-	app: AppHandle<R>,
+pub async fn user_replay_onboarding(
 	core: State<'_, crate::core_context::Core>,
 ) -> Result<UserPreferences, UserPreferencesError> {
-	let state = core.state::<db::DatabaseState>();
-	let dir = avatars::Avatars::dir(crate::events::core(&app));
-	let stored = ready(&state)?.user().replay_onboarding().await?;
-	Ok(UserPreferences::of(stored, dir.as_deref()))
+	kiroshi_core::user::commands::user_replay_onboarding(core.inner()).await
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn user_set_onboarding_first_companion<R: Runtime>(
-	app: AppHandle<R>,
+pub async fn user_set_onboarding_first_companion(
 	core: State<'_, crate::core_context::Core>,
 	bot_id: String,
 ) -> Result<UserPreferences, UserPreferencesError> {
-	let state = core.state::<db::DatabaseState>();
-	let dir = avatars::Avatars::dir(crate::events::core(&app));
-	let stored = ready(&state)?.user().set_onboarding_first_companion(bot_id).await?;
-	Ok(UserPreferences::of(stored, dir.as_deref()))
+	kiroshi_core::user::commands::user_set_onboarding_first_companion(core.inner(), bot_id).await
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn user_mark_onboarding_import_seen<R: Runtime>(
-	app: AppHandle<R>,
+pub async fn user_mark_onboarding_import_seen(
 	core: State<'_, crate::core_context::Core>,
 ) -> Result<UserPreferences, UserPreferencesError> {
-	let state = core.state::<db::DatabaseState>();
-	let dir = avatars::Avatars::dir(crate::events::core(&app));
-	let stored = ready(&state)?.user().mark_onboarding_import_seen().await?;
-	Ok(UserPreferences::of(stored, dir.as_deref()))
+	kiroshi_core::user::commands::user_mark_onboarding_import_seen(core.inner()).await
 }

@@ -8,14 +8,12 @@ use common::{an_app_of_its_own, AppOfItsOwn};
 use kiroshi_app::agent::commands::terminate_session;
 use kiroshi_app::agent::contract::SignInError;
 use kiroshi_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
-use kiroshi_app::agent::sign_in::{
-	agent_sign_in, agent_sign_in_cancel, agent_sign_in_code, SignInState, SIGN_IN_STARTED_CHANNEL,
-};
+use kiroshi_app::agent::sign_in::{SignInState, SIGN_IN_STARTED_CHANNEL};
 use kiroshi_app::agent::AgentState;
 use kiroshi_app::environment::contract::Values;
 use serde_json::{json, Value};
 use tauri::test::{mock_builder, MockRuntime};
-use tauri::{App, Listener, Manager};
+use tauri::{App, AppHandle, Listener, Manager};
 use tokio::sync::mpsc;
 use tokio::time::timeout;
 
@@ -28,6 +26,18 @@ const ACCEPTED_CODE: &str = "accepted-code";
 const DEADLINE: Duration = Duration::from_secs(60);
 
 static SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+async fn agent_sign_in(app: AppHandle<MockRuntime>) -> Result<(), SignInError> {
+	kiroshi_core::agent::sign_in::agent_sign_in(kiroshi_app::events::core(&app)).await
+}
+
+async fn agent_sign_in_code(app: AppHandle<MockRuntime>, text: String) -> Result<(), SignInError> {
+	kiroshi_core::agent::sign_in::agent_sign_in_code(kiroshi_app::events::core(&app), text).await
+}
+
+async fn agent_sign_in_cancel(app: AppHandle<MockRuntime>) -> Result<(), SignInError> {
+	kiroshi_core::agent::sign_in::agent_sign_in_cancel(kiroshi_app::events::core(&app)).await
+}
 
 fn serial() -> std::sync::MutexGuard<'static, ()> {
 	SERIAL.lock().unwrap_or_else(|error| error.into_inner())
