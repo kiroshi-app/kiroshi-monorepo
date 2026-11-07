@@ -298,7 +298,7 @@ impl Harness {
 				.expect("the bearer is kept");
 		}
 		app.manage(AccountSession::new(Ok::<PathBuf, _>(folder.to_path_buf()), api));
-		crate::db::install(&*app);
+		crate::db::install(&app);
 		app.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
 		app.manage(Hosting::new(api, None));
 		app.manage(RelayGuests::new(api));
@@ -312,7 +312,7 @@ impl Harness {
 			HOSTING_CHANGED.name(),
 		] {
 			let hearing = Arc::clone(&heard);
-			crate::test_core::listen_to(&*app, name, move |event| {
+			crate::test_core::listen_to(&app, name, move |event| {
 				let payload = serde_json::from_str(event).expect("a json payload");
 				hearing.lock().expect("the events").push((name.to_owned(), payload));
 			});
@@ -331,7 +331,7 @@ impl Harness {
 	}
 
 	fn approval(&self) -> DeviceApproval {
-		device_approval(&*self.app)
+		device_approval(&self.app)
 	}
 
 	async fn approval_until(&self, is_reached: impl Fn(&DeviceApproval) -> bool) -> DeviceApproval {

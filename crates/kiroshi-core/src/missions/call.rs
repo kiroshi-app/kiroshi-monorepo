@@ -230,7 +230,7 @@ mod tests {
 
 	async fn a_host(name: &str) -> CoreOfItsOwn {
 		let app = a_core_of_its_own(&format!("mission-call-{name}"));
-		crate::db::install(&*app);
+		crate::db::install(&app);
 		{
 			let state = app.state::<db::DatabaseState>();
 			ready(&state)
@@ -384,7 +384,7 @@ mod tests {
 
 	fn heard(app: &crate::core_context::Core) -> Receiver<String> {
 		let (sender, received) = channel();
-		crate::test_core::listen_to(&*app, CHANGED_EVENT, move |event| {
+		crate::test_core::listen_to(app, CHANGED_EVENT, move |event| {
 			let _ = sender.send(event.to_owned());
 		});
 		received

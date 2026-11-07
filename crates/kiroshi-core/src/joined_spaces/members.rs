@@ -243,7 +243,7 @@ mod tests {
 
 	fn heard(app: &crate::core_context::Core) -> UnboundedReceiver<Value> {
 		let (told, hearing) = unbounded_channel();
-		crate::test_core::listen_to(&*app, MEMBERS_CHANGED_EVENT, move |event| {
+		crate::test_core::listen_to(app, MEMBERS_CHANGED_EVENT, move |event| {
 			let payload = serde_json::from_str(event).expect("the payload is json");
 			told.send(payload).expect("the test listens");
 		});
@@ -252,7 +252,7 @@ mod tests {
 
 	fn changes_heard(app: &crate::core_context::Core) -> UnboundedReceiver<Value> {
 		let (told, hearing) = unbounded_channel();
-		crate::test_core::listen_to(&*app, CHANGED_EVENT, move |event| {
+		crate::test_core::listen_to(app, CHANGED_EVENT, move |event| {
 			let payload = serde_json::from_str(event).expect("the payload is json");
 			told.send(payload).expect("the test listens");
 		});
@@ -280,11 +280,11 @@ mod tests {
 		app: &crate::core_context::Core,
 		id: &str,
 	) -> Result<Vec<JoinedSpaceMember>, JoinedSpaceError> {
-		joined_space_members(&*app, id.to_owned()).await
+		joined_space_members(app, id.to_owned()).await
 	}
 
 	async fn signed_roster_planted(app: &crate::core_context::Core) {
-		let own = device_keys(&*app).expect("the device keys");
+		let own = device_keys(app).expect("the device keys");
 		let host = DeviceKeys::generate().expect("randomness");
 		let eve = DeviceKeys::generate().expect("randomness");
 		let set = signed_set(
@@ -299,13 +299,13 @@ mod tests {
 		);
 		let roster = verified_set(set, None, &own.device_id()).expect("the roster verifies");
 		let handed = Handed { space: HeldSpaceKey::first().expect("randomness"), roster };
-		assert!(kept(&*app, INSTANCE, &handed).await.expect("the roster is kept"));
+		assert!(kept(app, INSTANCE, &handed).await.expect("the roster is kept"));
 	}
 
 	async fn joined_space(app: &crate::core_context::Core) -> JoinedSpace {
 		signed_roster_planted(app).await;
 		relay::joined(
-			&*app,
+			app,
 			INSTANCE.to_owned(),
 			Some("Studio".to_owned()),
 			None,
@@ -394,7 +394,7 @@ mod tests {
 		next(&mut hearing).await;
 
 		relay.answers(StatusCode::OK, listed(&[("bob", "Robert")]));
-		read(&*app, &joined).await;
+		read(&app, &joined).await;
 		let changed = next(&mut hearing).await;
 
 		assert_eq!(
@@ -424,7 +424,7 @@ mod tests {
 				{ "userId": "bob", "name": "Bob", "role": "member" }
 			]),
 		);
-		read(&*app, &joined).await;
+		read(&app, &joined).await;
 
 		assert_eq!(
 			hosted_by_heard(&mut changes, "Annie").await,
@@ -445,7 +445,7 @@ mod tests {
 		hosted_by_heard(&mut changes, "Ann").await;
 
 		relay.answers(StatusCode::OK, listed(&[("bob", "Robert")]));
-		read(&*app, &joined).await;
+		read(&app, &joined).await;
 		next(&mut members).await;
 
 		assert!(is_silent(&mut changes).await);
@@ -461,7 +461,7 @@ mod tests {
 		let joined = joined_space(&app).await;
 		next(&mut hearing).await;
 
-		read(&*app, &joined).await;
+		read(&app, &joined).await;
 
 		assert!(is_silent(&mut hearing).await);
 	}
@@ -481,7 +481,7 @@ mod tests {
 			[StatusCode::FORBIDDEN, StatusCode::NOT_FOUND, StatusCode::INTERNAL_SERVER_ERROR]
 		{
 			relay.answers(status, json!({}));
-			read(&*app, &joined).await;
+			read(&app, &joined).await;
 			assert!(is_silent(&mut hearing).await, "{status}");
 		}
 
@@ -508,7 +508,7 @@ mod tests {
 		let app = app_reaching(&dir, &unreached);
 		let mut hearing = heard(&app);
 
-		read(&*app, &joined).await;
+		read(&app, &joined).await;
 
 		assert!(is_silent(&mut hearing).await);
 		assert_eq!(stored_json(&app, &joined.id).await, before);
@@ -562,7 +562,7 @@ mod tests {
 		next(&mut hearing).await;
 		relay.answers(StatusCode::UNAUTHORIZED, json!({}));
 
-		read(&*app, &joined).await;
+		read(&app, &joined).await;
 
 		timeout(HEARD_WITHIN, async {
 			while app.state::<AccountSession>().bearer().expect("the store reads").is_some() {
@@ -579,14 +579,14 @@ mod tests {
 		let (api_url, _relay) = relay_answering(listed(&[("bob", "Bob")])).await;
 		signed_in(&dir);
 		let app = app_reaching(&dir, &api_url);
-		relay::joined(&*app, INSTANCE.to_owned(), None, None, Default::default())
+		relay::joined(&app, INSTANCE.to_owned(), None, None, Default::default())
 			.await
 			.expect("the join");
 		let state = app.state::<db::DatabaseState>();
 		let held = ready(&state).expect("the database").joined_spaces().list().await;
 		let joined = held.expect("the list").into_iter().next().expect("the joined space");
 
-		read(&*app, &joined).await;
+		read(&app, &joined).await;
 
 		assert_eq!(stored(&app, &joined.id).await, Ok(Vec::new()));
 	}
@@ -610,8 +610,8 @@ mod tests {
 		let joined = joined.expect("the join");
 
 		let connections = [
-			joined_space_connect(&*app, joined.id.clone()).await,
-			joined_space_connect(&*app, joined.id.clone()).await,
+			joined_space_connect(&app, joined.id.clone()).await,
+			joined_space_connect(&app, joined.id.clone()).await,
 		];
 
 		for connection in connections {

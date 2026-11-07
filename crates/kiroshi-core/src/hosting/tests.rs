@@ -42,10 +42,9 @@ use crate::account::session::{sign_out, AccountSession};
 use crate::agent::commands;
 use crate::agent::contract as agent;
 use crate::agent::protocol::OauthCredentials;
-use crate::agent::protocol::SpaceMember;
 use crate::agent::reply_writer::TurnSink;
 use crate::attachments;
-use crate::bundles::{self, BotPermissions, DEFAULT_OUTPUT_STYLE};
+use crate::bundles::{BotPermissions, DEFAULT_OUTPUT_STYLE};
 use crate::companions::contract::{
 	CREATED_EVENT as COMPANION_CREATED_EVENT, DELETED_EVENT as COMPANION_DELETED_EVENT,
 	UPDATED_EVENT as COMPANION_UPDATED_EVENT,
@@ -63,7 +62,6 @@ use crate::conversations::contract::{
 	MESSAGE_STORED_EVENT, STATE_CHANGED_EVENT, UPDATED_EVENT as CONVERSATION_UPDATED_EVENT,
 };
 use crate::conversations::state as conversation_state;
-use crate::conversations::turn_run_deadline::{arm_start_deadlines, TurnRunDeadlines};
 use crate::crypto::commands::{DeviceKeysState, SpaceKeys};
 use crate::crypto::device_keys::{verify, DeviceKeys};
 use crate::crypto::error::CryptoError;
@@ -72,16 +70,11 @@ use crate::crypto::space_key::HeldSpaceKey;
 use crate::db::connection::temp_dir;
 use crate::db::repositories::conversations::{a_pending_prompt, PromptKind};
 use crate::db::repositories::joined_spaces::{JoinedReach, JoinedSpace};
-use crate::db::repositories::messages::{
-	EndedRun, MessagePageQuery, MessageRole, NewAssistantMessage, NewTurn, WebSource,
-};
 use crate::db::{self, DatabaseState};
-use crate::environment::commands::env_list;
-use crate::environment::commands::writable_root;
 use crate::environment::connection;
 use crate::environment::contract::{ConnectionKind, EnvError, EnvOwner, EnvScope, ACCOUNT_BEARER};
 use crate::environment::store;
-use crate::events::{self, Event, BUFFERED_FRAMES};
+use crate::events::{Event, BUFFERED_FRAMES};
 use crate::host_api::files::ATTACHMENT_PATH;
 use crate::joined_spaces::contract::JoinedSpaceConnection;
 use crate::joined_spaces::relay::RelayGuests;
@@ -89,13 +82,9 @@ use crate::library;
 use crate::library::contract::{LibraryError, DOCUMENT_RENAMED_EVENT, DOCUMENT_UPDATED_EVENT};
 use crate::library::tests::YjsClient;
 use crate::logging::contract::InstallKind;
-use crate::mcp_oauth::asking::AuthorizationAnswers;
-use crate::mcp_oauth::commands::{application_status, McpOauthState};
 use crate::mcp_oauth::credentials;
-use crate::mcp_oauth::reports::ApplicationReports;
 use crate::removed_on_drop::RemovedOnDrop;
 use crate::routines::commands::CHANGED_EVENT as ROUTINE_CHANGED_EVENT;
-use crate::routines::webhook::{self, Webhook};
 use crate::search::contract::{CatalogueScope, MessageSearchQuery};
 use crate::spaces::commands::{
 	bot_add_to_space, bot_move_to_space, bot_remove_from_space, space_delete, space_update,
@@ -949,7 +938,7 @@ impl Harness {
 		let heard = Arc::new(Mutex::new(Vec::new()));
 		let hearing = Arc::clone(&heard);
 		let noticing = Arc::clone(&relay.noticed);
-		crate::test_core::listen_to(&*app, CHANGED_EVENT, move |event| {
+		crate::test_core::listen_to(&app, CHANGED_EVENT, move |event| {
 			let payload = serde_json::from_str(event).expect("a json payload");
 			hearing.lock().expect("the events").push(payload);
 			noticing.send_replace(());
@@ -957,13 +946,13 @@ impl Harness {
 		let heard_members = Arc::new(Mutex::new(Vec::new()));
 		let hearing_members = Arc::clone(&heard_members);
 		let noticing = Arc::clone(&relay.noticed);
-		crate::test_core::listen_to(&*app, MEMBERS_CHANGED_EVENT, move |event| {
+		crate::test_core::listen_to(&app, MEMBERS_CHANGED_EVENT, move |event| {
 			let payload = serde_json::from_str(event).expect("a json payload");
 			hearing_members.lock().expect("the events").push(payload);
 			noticing.send_replace(());
 		});
 		let noticing = Arc::clone(&relay.noticed);
-		crate::test_core::listen_to(&*app, ACCOUNT_CHANGED_EVENT, move |_| {
+		crate::test_core::listen_to(&app, ACCOUNT_CHANGED_EVENT, move |_| {
 			noticing.send_replace(());
 		});
 		Self { app, relay, sockets, heard, heard_members, _temporary: vec![database, root] }
@@ -1016,11 +1005,11 @@ impl Harness {
 	}
 
 	async fn started(&self) -> HostingState {
-		start(&*self.app, PERSONAL.to_owned()).await.expect("the hosting starts")
+		start(&self.app, PERSONAL.to_owned()).await.expect("the hosting starts")
 	}
 
 	async fn stopped(&self) -> HostingState {
-		stop(&*self.app, PERSONAL.to_owned()).await.expect("the hosting stops")
+		stop(&self.app, PERSONAL.to_owned()).await.expect("the hosting stops")
 	}
 
 	async fn member(&mut self) -> MemberWire {
@@ -1101,7 +1090,7 @@ impl Harness {
 
 	async fn updated(&self, name: &str, colour: Option<Hue>) -> Result<SpaceShown, SpaceError> {
 		let colour = colour.map(|hue| i64::from(hue.value()));
-		space_update(&*self.app, PERSONAL.to_owned(), name.to_owned(), colour).await
+		space_update(&self.app, PERSONAL.to_owned(), name.to_owned(), colour).await
 	}
 
 	async fn stored(&self) -> (Option<String>, Vec<String>) {
@@ -1619,9 +1608,9 @@ fn each_unmet_precondition_of_a_start_maps_to_its_own_state() {
 fn host_keys_without_device_keys_or_without_a_space_key_store_fail_with_their_own_kind() {
 	run(async {
 		let app = a_core_of_its_own("hosting-keys");
-		let without_device = host_keys(&*app, PERSONAL).await.err().map(|(kind, _)| kind);
+		let without_device = host_keys(&app, PERSONAL).await.err().map(|(kind, _)| kind);
 		app.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
-		let without_space = host_keys(&*app, PERSONAL).await.err().map(|(kind, _)| kind);
+		let without_space = host_keys(&app, PERSONAL).await.err().map(|(kind, _)| kind);
 
 		assert_eq!(without_device, Some(HostingFailureKind::DeviceKeysNotLoaded));
 		assert_eq!(without_space, Some(HostingFailureKind::SpaceKeyNotRead));
@@ -2004,7 +1993,7 @@ fn a_relabelled_space_is_described_once_to_the_front_and_its_members_after_the_r
 		let described = Arc::new(Mutex::new(Vec::new()));
 		let hearing = Arc::clone(&described);
 		let noticing = Arc::clone(&harness.relay.noticed);
-		crate::test_core::listen_to(&*harness.app, DESCRIBED_EVENT, move |event| {
+		crate::test_core::listen_to(&harness.app, DESCRIBED_EVENT, move |event| {
 			let payload: Value = serde_json::from_str(event).expect("a json payload");
 			hearing.lock().expect("the events").push(payload);
 			noticing.send_replace(());
@@ -2295,7 +2284,7 @@ fn signing_out_closes_the_relay_and_needs_a_sign_in_keeping_the_flag() {
 		harness.reached(HostingState::Online).await;
 		members_heard(&mut member).await;
 
-		signed_out(&*harness.app).await;
+		signed_out(&harness.app).await;
 		member.close_frame().await;
 
 		assert_eq!(harness.state(), HostingState::NeedsSignIn);
@@ -2311,7 +2300,7 @@ fn a_flagged_space_comes_back_online_when_the_account_is_restored() {
 		harness.relay.known.lock().expect("the relay").insert(known.clone());
 		harness.plant(&known).await;
 
-		resumed(&*harness.app).await;
+		resumed(&harness.app).await;
 		let _member = harness.member().await;
 		harness.reached(HostingState::Online).await;
 
@@ -2371,12 +2360,12 @@ fn deleting_a_hosted_space_closes_its_relay_with_1000_and_reads_off() {
 			let database = state.as_ref().expect("the database");
 			database.spaces().create("Work".to_owned()).await.expect("the space").id
 		};
-		start(&*harness.app, work.clone()).await.expect("the hosting starts");
+		start(&harness.app, work.clone()).await.expect("the hosting starts");
 		let mut member = harness.member_in(&work, MEMBER_ACCOUNT).await;
 		harness.reached_by(&work, HostingState::Online).await;
 		members_heard(&mut member).await;
 
-		space_delete(&*harness.app, work.clone()).await.expect("the space is deleted");
+		space_delete(&harness.app, work.clone()).await.expect("the space is deleted");
 		let closed = member.close_frame().await;
 
 		let Some(close) = closed else {
@@ -2411,7 +2400,7 @@ fn a_space_whose_registration_never_succeeded_is_resumed_and_registered() {
 		let hosting = state.as_ref().expect("the database").space_hosting();
 		hosting.set_hosted(PERSONAL.to_owned(), true).await.expect("the intent is kept");
 
-		resumed(&*harness.app).await;
+		resumed(&harness.app).await;
 		let _member = harness.member().await;
 		harness.reached(HostingState::Online).await;
 
@@ -2461,27 +2450,27 @@ impl Harness {
 	}
 
 	async fn listed(&self) -> Result<SpaceMembers, MembersError> {
-		list(&*self.app, PERSONAL.to_owned()).await
+		list(&self.app, PERSONAL.to_owned()).await
 	}
 
 	async fn invited(&self, email: &str) -> Result<SpaceMembers, MembersError> {
-		invite(&*self.app, PERSONAL.to_owned(), email.to_owned()).await
+		invite(&self.app, PERSONAL.to_owned(), email.to_owned()).await
 	}
 
 	async fn withdrawn(&self, invitation_id: &str) -> Result<SpaceMembers, MembersError> {
-		withdraw(&*self.app, PERSONAL.to_owned(), invitation_id.to_owned()).await
+		withdraw(&self.app, PERSONAL.to_owned(), invitation_id.to_owned()).await
 	}
 
 	async fn resent(&self, invitation_id: &str) -> Result<SpaceMembers, MembersError> {
-		resend(&*self.app, PERSONAL.to_owned(), invitation_id.to_owned()).await
+		resend(&self.app, PERSONAL.to_owned(), invitation_id.to_owned()).await
 	}
 
 	async fn removed(&self, user_id: &str) -> Result<SpaceMembers, MembersError> {
-		remove(&*self.app, PERSONAL.to_owned(), user_id.to_owned()).await
+		remove(&self.app, PERSONAL.to_owned(), user_id.to_owned()).await
 	}
 
 	async fn invited_again(&self, user_id: &str) -> Result<SpaceMembers, MembersError> {
-		invite_again(&*self.app, PERSONAL.to_owned(), user_id.to_owned()).await
+		invite_again(&self.app, PERSONAL.to_owned(), user_id.to_owned()).await
 	}
 
 	async fn rostered_account(&self, account_id: &str) {
@@ -2860,7 +2849,7 @@ fn a_sent_name_announces_the_unchanged_member_list_again_on_the_next_read() {
 		harness.listed().await.expect("the members list");
 		assert_eq!(harness.heard_member_lists().len(), 1);
 
-		renamed(&*harness.app);
+		renamed(&harness.app);
 		harness.listed().await.expect("the members list");
 
 		let announced = harness.heard_member_lists();
@@ -2982,7 +2971,7 @@ fn an_unreachable_cloud_is_unreachable_with_its_cause() {
 		let hosting = state.as_ref().expect("the database").space_hosting();
 		hosting.registered(PERSONAL.to_owned(), INSTANCE.to_owned()).await.expect("planted");
 
-		let listed = list(&*app, PERSONAL.to_owned()).await;
+		let listed = list(&app, PERSONAL.to_owned()).await;
 
 		let Err(MembersError::Unreachable { reason, detail }) = listed else {
 			panic!("a closed port is unreachable");
@@ -3457,7 +3446,7 @@ fn a_device_removed_from_the_space_is_refused_a_library_import_with_nothing_writ
 				.await;
 		relay.addressed(&removed.member, "rekey").await;
 		let removed_id = removed.member.keys.device_id().to_string();
-		remove_device(&*harness.app, PERSONAL.to_owned(), removed_id)
+		remove_device(&harness.app, PERSONAL.to_owned(), removed_id)
 			.await
 			.expect("the device is removed");
 		let rekey = relay.addressed(&kept.member, "rekey").await;
@@ -3596,7 +3585,7 @@ fn a_device_removed_from_the_space_is_answered_no_attachment_byte() {
 			called_with(&mut relay, &mut removed, &host, &an_attachment_asked("before")).await;
 		relay.addressed(&removed.member, "rekey").await;
 		let removed_id = removed.member.keys.device_id().to_string();
-		remove_device(&*harness.app, PERSONAL.to_owned(), removed_id)
+		remove_device(&harness.app, PERSONAL.to_owned(), removed_id)
 			.await
 			.expect("the device is removed");
 		let rekey = relay.addressed(&kept.member, "rekey").await;
@@ -3910,7 +3899,7 @@ fn the_host_and_a_member_edit_one_library_document_and_every_update_merges_and_i
 		let app = &guest.harness.app.clone();
 		let library = guest.effects.library();
 		let (told, host_heard) = std::sync::mpsc::channel();
-		crate::test_core::listen_to(&*app, DOCUMENT_UPDATED_EVENT, move |event| {
+		crate::test_core::listen_to(app, DOCUMENT_UPDATED_EVENT, move |event| {
 			let payload: Value = serde_json::from_str(event).expect("a payload");
 			told.send(payload).expect("the test listens");
 		});
@@ -3921,9 +3910,9 @@ fn the_host_and_a_member_edit_one_library_document_and_every_update_merges_and_i
 		let base = opened["body"]["update"].as_str().expect("a yjs state").to_owned();
 		let host = YjsClient::of(&base).inserted(0, "Host. ");
 		let member = YjsClient::of(&base).inserted(17, " Member.");
-		library::apply_update(&*app, &library, ELSEWHERE, "notes.md", AN_EMPTY_UPDATE)
+		library::apply_update(app, &library, ELSEWHERE, "notes.md", AN_EMPTY_UPDATE)
 			.expect("the other space merges");
-		library::apply_update(&*app, &library, PERSONAL, "notes.md", &host)
+		library::apply_update(app, &library, PERSONAL, "notes.md", &host)
 			.expect("the host update merges");
 		let heard_from_the_host = next_text(&mut guest.member, is_a_library_update).await;
 		let member_update = json!({ "spaceId": PERSONAL, "name": "notes.md", "update": member });
@@ -4052,7 +4041,7 @@ fn the_live_sessions_in_a_space_hold_only_the_sessions_of_its_conversations() {
 		commands::a_run_held_by_the_app(app, a_held_scope_in("c-theirs", "b-theirs"));
 		commands::a_run_held_by_the_app(app, a_held_scope_in("c-shared", "b-shared"));
 
-		let listed = commands::agent_live_sessions_in_space(&*app, PERSONAL.to_owned())
+		let listed = commands::agent_live_sessions_in_space(app, PERSONAL.to_owned())
 			.await
 			.expect("the sessions read");
 
@@ -4098,7 +4087,7 @@ async fn pending_in_the_space(
 	app: &crate::core_context::Core,
 	space_id: &str,
 ) -> Vec<agent::ScopedEvent> {
-	commands::agent_pending_questions_in_space(&*app, space_id.to_owned())
+	commands::agent_pending_questions_in_space(app, space_id.to_owned())
 		.await
 		.expect("the questions read")
 }
@@ -4107,9 +4096,7 @@ async fn pending_in_the_conversation(
 	app: &crate::core_context::Core,
 	conversation_id: &str,
 ) -> Vec<agent::ScopedEvent> {
-	commands::pending_questions(&*app, conversation_id.to_owned())
-		.await
-		.expect("the questions read")
+	commands::pending_questions(app, conversation_id.to_owned()).await.expect("the questions read")
 }
 
 #[test]
@@ -4195,8 +4182,8 @@ fn a_relay_guest_hears_a_question_of_the_shared_space_and_its_answer_without_rea
 		let mut guest = Guest::of_two_spaces("question-heard").await;
 		let app = &guest.harness.app.clone();
 		let scope = a_live_scope_of("c-mine");
-		let run = commands::a_live_run(&*app, scope.clone());
-		let elsewhere = commands::a_live_run(&*app, a_live_scope_of("c-theirs"));
+		let run = commands::a_live_run(app, scope.clone());
+		let elsewhere = commands::a_live_run(app, a_live_scope_of("c-theirs"));
 
 		elsewhere.emit(a_question("q-theirs"), a_turn_in("c-theirs"));
 		run.emit(a_question("q-mine"), a_turn_in("c-mine"));
@@ -4227,10 +4214,10 @@ fn a_relay_guest_hears_a_pending_question_settled_when_the_host_shuts_its_sessio
 		let mut guest = Guest::of_two_spaces("question-shut-down").await;
 		let app = &guest.harness.app.clone();
 		let scope = a_held_scope_in("c-mine", "b-mine");
-		commands::a_run_held_by_the_app(&*app, scope.clone())
+		commands::a_run_held_by_the_app(app, scope.clone())
 			.emit(a_question("q-mine"), a_turn_in("c-mine"));
 
-		commands::shutdown_session(&*app, &app.state::<crate::agent::AgentState>(), &scope).await;
+		commands::shutdown_session(app, &app.state::<crate::agent::AgentState>(), &scope).await;
 		let heard = guest.events_until_the_marker().await;
 
 		let denied = agent::AgentEvent::PermissionResolved {
@@ -4252,7 +4239,7 @@ fn a_relay_guest_hears_a_pending_question_settled_when_the_host_shuts_its_sessio
 			})
 			.collect();
 		assert_eq!(heard, expected);
-		assert!(pending_in_the_space(&app, PERSONAL).await.is_empty());
+		assert!(pending_in_the_space(app, PERSONAL).await.is_empty());
 	});
 }
 
@@ -4264,7 +4251,7 @@ fn held_of(command: &str, index: usize) -> reach::Held {
 }
 
 async fn shared_space_refusal(guest: &Guest, command: &str, args: Value) -> reach::Refusal {
-	reach::stays_in_the_shared_space(&*guest.harness.app, PERSONAL, command, &args)
+	reach::stays_in_the_shared_space(&guest.harness.app, PERSONAL, command, &args)
 		.await
 		.expect_err("the call is refused")
 }
@@ -5304,7 +5291,7 @@ fn a_relay_guest_hears_every_event_of_a_host_turn_in_the_shared_conversation_in_
 		let mut guest = Guest::of_two_spaces("live-turn").await;
 		let app = &guest.harness.app.clone();
 		let scope = a_live_scope_of("c-mine");
-		let run = commands::a_live_run(&*app, scope.clone());
+		let run = commands::a_live_run(app, scope.clone());
 		let turn = agent::EventTurn {
 			turn_id: "t-mine".to_owned(),
 			conversation_id: "c-mine".to_owned(),
@@ -5313,15 +5300,15 @@ fn a_relay_guest_hears_every_event_of_a_host_turn_in_the_shared_conversation_in_
 		let checking =
 			agent::AgentEvent::ConnectionChanged { state: agent::ConnectionState::Checking };
 
-		let elsewhere = commands::a_live_run(&*app, a_live_scope_of("c-theirs"));
+		let elsewhere = commands::a_live_run(app, a_live_scope_of("c-theirs"));
 		let turn_elsewhere = agent::EventTurn {
 			turn_id: "t-theirs".to_owned(),
 			conversation_id: "c-theirs".to_owned(),
 			continues_turn_id: None,
 		};
 
-		commands::a_host_wide_announce(&*app, checking.clone());
-		commands::a_host_wide_announce(&*app, checking);
+		commands::a_host_wide_announce(app, checking.clone());
+		commands::a_host_wide_announce(app, checking);
 		for event in a_turn_of_the_shared_conversation() {
 			elsewhere.emit(event.clone(), Some(turn_elsewhere.clone()));
 			run.emit(event, Some(turn.clone()));
@@ -5385,7 +5372,7 @@ fn a_relay_guest_hears_the_end_of_a_host_turn_in_the_shared_conversation() {
 		let mut guest = Guest::of_two_spaces("turn-ended").await;
 		let app = &guest.harness.app.clone();
 		let scope = a_live_scope_of("c-mine");
-		let run = commands::a_live_run(&*app, scope.clone());
+		let run = commands::a_live_run(app, scope.clone());
 		let turn = agent::EventTurn {
 			turn_id: "t-mine".to_owned(),
 			conversation_id: "c-mine".to_owned(),
@@ -5408,7 +5395,7 @@ fn a_relay_guest_hears_the_end_of_a_host_turn_once_when_its_evolution_lands_befo
 		let mut guest = Guest::of_two_spaces("turn-ended-evolved").await;
 		let app = &guest.harness.app.clone();
 		let scope = a_live_scope_of("c-mine");
-		let run = commands::a_live_run(&*app, scope.clone());
+		let run = commands::a_live_run(app, scope.clone());
 		let turn = agent::EventTurn {
 			turn_id: "t-mine".to_owned(),
 			conversation_id: "c-mine".to_owned(),
@@ -5420,7 +5407,7 @@ fn a_relay_guest_hears_the_end_of_a_host_turn_once_when_its_evolution_lands_befo
 		};
 
 		run.emit(a_completed_turn_end(), Some(turn.clone()));
-		commands::announce(&*app, Some(scope.clone()), evolution_failed.clone());
+		commands::announce(app, Some(scope.clone()), evolution_failed.clone());
 		let heard = guest.events_until_the_marker().await;
 
 		assert!(heard.contains(&a_forwarded_agent_event(&scope, None, evolution_failed)));
@@ -5445,7 +5432,7 @@ fn a_relay_guest_hears_the_state_change_of_a_main_conversation_of_the_shared_spa
 		let prompt = a_pending_prompt(&main.id, PromptKind::Permission);
 		conversations.hold_prompt(prompt).await.expect("the prompt is held");
 
-		conversation_state::observe(&*app, &database, &main.id).await.expect("the state reads");
+		conversation_state::observe(app, &database, &main.id).await.expect("the state reads");
 		let heard = guest.events_until_the_marker().await;
 
 		let changed = json!({
@@ -5467,7 +5454,7 @@ fn a_host_wide_connection_check_reaches_no_relay_guest_and_is_not_logged_as_kept
 		let mut published = app.subscribe_frames();
 
 		commands::a_host_wide_announce(
-			&*app,
+			app,
 			agent::AgentEvent::ConnectionChanged { state: agent::ConnectionState::Checking },
 		);
 		let heard = guest.events_until_the_marker().await;
@@ -5494,7 +5481,7 @@ impl Guest {
 	}
 
 	async fn conversation_created_in(&self, space_id: &str) -> Conversation {
-		conversation_create(&*self.harness.app, space_id.to_owned(), None, "New".to_owned(), vec![])
+		conversation_create(&self.harness.app, space_id.to_owned(), None, "New".to_owned(), vec![])
 			.await
 			.expect("the conversation is created")
 	}
@@ -5515,13 +5502,13 @@ impl Guest {
 	}
 
 	async fn conversation_deleted(&self, conversation_id: &str) {
-		delete_conversation(&*self.harness.app, conversation_id.to_owned())
+		delete_conversation(&self.harness.app, conversation_id.to_owned())
 			.await
 			.expect("the conversation is deleted");
 	}
 
 	async fn paged_row(&self, conversation_id: &str) -> ConversationInPage {
-		let page = conversations_page(&*self.harness.app, PERSONAL.to_owned(), None, None)
+		let page = conversations_page(&self.harness.app, PERSONAL.to_owned(), None, None)
 			.await
 			.expect("the page is read");
 		page.conversations
@@ -5542,7 +5529,7 @@ impl Guest {
 		invited_by_bot_id: Option<&str>,
 	) -> Result<Conversation, TranscriptStoreError> {
 		conversation_add_participant(
-			&*self.harness.app,
+			&self.harness.app,
 			conversation_id.to_owned(),
 			bot_id.to_owned(),
 			invited_by_bot_id.map(str::to_owned),
@@ -5570,7 +5557,7 @@ impl Guest {
 
 	async fn user_message_appended(&self, conversation_id: &str, turn_id: &str) -> i64 {
 		let message = a_user_message(conversation_id, turn_id);
-		conversation_append_user_message(&*self.harness.app, Caller::Host, message)
+		conversation_append_user_message(&self.harness.app, Caller::Host, message)
 			.await
 			.expect("the message is appended")
 	}
@@ -5584,7 +5571,7 @@ impl Guest {
 
 	async fn user_message_sent(&self, conversation_id: &str) -> i64 {
 		let message = a_user_message(conversation_id, &format!("t-new-{conversation_id}"));
-		send_user_message(&*self.harness.app, Caller::Host, message, vec![])
+		send_user_message(&self.harness.app, Caller::Host, message, vec![])
 			.await
 			.expect("the message is sent")
 	}
@@ -5592,19 +5579,19 @@ impl Guest {
 	async fn bot_created_in(&self, space_id: &str) -> Bot {
 		let draft =
 			BotDraft { name: "Fresh".to_owned(), job: String::new(), description: String::new() };
-		create_bot_from_draft(&*self.harness.app, draft, space_id.to_owned())
+		create_bot_from_draft(&self.harness.app, draft, space_id.to_owned())
 			.await
 			.expect("the bot is created")
 	}
 
 	async fn bot_updated(&self, bot_id: &str) -> Bot {
-		conversation_update_bot(&*self.harness.app, bot_id.to_owned(), a_bot_identity())
+		conversation_update_bot(&self.harness.app, bot_id.to_owned(), a_bot_identity())
 			.await
 			.expect("the bot is updated")
 	}
 
 	async fn bot_deleted(&self, bot_id: &str) {
-		conversation_delete_bot(&*self.harness.app, bot_id.to_owned())
+		conversation_delete_bot(&self.harness.app, bot_id.to_owned())
 			.await
 			.expect("the bot is deleted");
 	}
@@ -5951,7 +5938,7 @@ impl Guest {
 
 	async fn bot_duplicated_into(&self, bot_id: &str, space_id: &str) -> Bot {
 		let destination = Some(space_id.to_owned());
-		conversation_duplicate_bot(&*self.harness.app, bot_id.to_owned(), destination)
+		conversation_duplicate_bot(&self.harness.app, bot_id.to_owned(), destination)
 			.await
 			.expect("the bot is duplicated")
 	}
@@ -6425,7 +6412,7 @@ fn signing_out_deletes_the_relay_device_first_and_still_signs_out_when_the_relay
 		*harness.relay.device.deletion_status.lock().expect("the relay") =
 			Some(StatusCode::INTERNAL_SERVER_ERROR);
 
-		sign_out(&*harness.app).await.expect("the sign-out settles");
+		sign_out(&harness.app).await.expect("the sign-out settles");
 
 		assert_eq!(
 			harness.relay.device.account_calls(),
@@ -6833,7 +6820,7 @@ impl Harness {
 	}
 
 	async fn devices(&self) -> Vec<AccountDevices> {
-		devices(&*self.app, PERSONAL.to_owned()).await.expect("the roster reads")
+		devices(&self.app, PERSONAL.to_owned()).await.expect("the roster reads")
 	}
 
 	#[cfg(unix)]
@@ -6843,7 +6830,7 @@ impl Harness {
 	) -> Result<Vec<AccountDevices>, MembersError> {
 		self.profile_locked(true);
 		let device_id = device.keys.device_id().to_string();
-		let removed = remove_device(&*self.app, PERSONAL.to_owned(), device_id).await;
+		let removed = remove_device(&self.app, PERSONAL.to_owned(), device_id).await;
 		self.profile_locked(false);
 		removed
 	}
@@ -6962,7 +6949,7 @@ fn removing_a_member_rekeys_the_remaining_device_while_the_removed_one_is_droppe
 		relay.addressed(&guest.member, "rekey").await;
 		harness.flagged_joined("guest");
 
-		remove(&*harness.app, PERSONAL.to_owned(), "guest".to_owned())
+		remove(&harness.app, PERSONAL.to_owned(), "guest".to_owned())
 			.await
 			.expect("the guest is removed");
 		let rekey = relay.addressed(&joiner.member, "rekey").await;
@@ -7053,7 +7040,7 @@ fn a_removed_member_applying_a_library_update_is_refused_and_the_file_is_unchang
 		.await;
 		harness.flagged_joined("guest");
 
-		remove(&*harness.app, PERSONAL.to_owned(), "guest".to_owned())
+		remove(&harness.app, PERSONAL.to_owned(), "guest".to_owned())
 			.await
 			.expect("the guest is removed");
 		let rekey = relay.addressed(&joiner.member, "rekey").await;
@@ -7111,7 +7098,7 @@ fn a_second_device_of_the_host_account_is_admitted_without_invitation_and_removi
 		let own = harness.joined(&mut relay, OWNER_ACCOUNT).await;
 		let listed = harness.devices().await;
 		let removed = remove_device(
-			&*harness.app,
+			&harness.app,
 			PERSONAL.to_owned(),
 			own.member.keys.device_id().to_string(),
 		)
@@ -7158,7 +7145,7 @@ fn removing_the_host_device_or_an_unknown_device_is_refused_and_changes_nothing(
 		harness.joined(&mut relay, "guest").await;
 		let before = harness.devices().await;
 		let removed =
-			|device_id: String| remove_device(&*harness.app, PERSONAL.to_owned(), device_id);
+			|device_id: String| remove_device(&harness.app, PERSONAL.to_owned(), device_id);
 
 		let host = removed(harness.host_keys().device_id().to_string()).await;
 		let unknown = removed("0".repeat(32)).await;
@@ -7207,7 +7194,7 @@ fn withdrawing_an_invitation_keeps_the_key_id_and_the_roster() {
 		harness.joined(&mut relay, "joiner").await;
 		let before = harness.devices().await;
 
-		withdraw(&*harness.app, PERSONAL.to_owned(), "i1".to_owned())
+		withdraw(&harness.app, PERSONAL.to_owned(), "i1".to_owned())
 			.await
 			.expect("the invitation is withdrawn");
 
@@ -7824,7 +7811,7 @@ fn a_device_removed_from_the_space_stays_out_while_listed_and_its_new_keys_are_a
 		let kept = harness.joined(&mut relay, "joiner").await;
 		relay.addressed(&removed.member, "rekey").await;
 		let removed_id = removed.member.keys.device_id().to_string();
-		remove_device(&*harness.app, PERSONAL.to_owned(), removed_id)
+		remove_device(&harness.app, PERSONAL.to_owned(), removed_id)
 			.await
 			.expect("the device is removed");
 		relay.addressed(&kept.member, "rekey").await;

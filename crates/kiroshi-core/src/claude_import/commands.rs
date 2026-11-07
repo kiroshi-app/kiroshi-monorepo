@@ -39,7 +39,7 @@ pub async fn claude_import_run(
 	})?;
 	let person = bundles::user::laid_down(core);
 	let importer = Importer {
-		core: core,
+		core,
 		database: ready(&state)?,
 		root: &root,
 		person: person.as_deref(),

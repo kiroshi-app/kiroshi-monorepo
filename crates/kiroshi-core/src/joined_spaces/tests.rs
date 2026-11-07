@@ -462,15 +462,15 @@ impl Member {
 	}
 
 	fn host(&self) -> SealingHost {
-		SealingHost::new(&*self.app, INSTANCE)
+		SealingHost::new(&self.app, INSTANCE)
 	}
 
 	async fn accepted(&self) -> Result<JoinedSpace, JoinedSpaceError> {
-		invitations::accept(&*self.app, INVITATION.to_owned()).await
+		invitations::accept(&self.app, INVITATION.to_owned()).await
 	}
 
 	async fn listed(&self) -> Vec<JoinedSpace> {
-		joined_spaces_list(&*self.app).await.expect("the list")
+		joined_spaces_list(&self.app).await.expect("the list")
 	}
 
 	fn held_key_id(&self) -> Option<u32> {
@@ -571,7 +571,7 @@ fn changes_heard(app: &crate::core_context::Core) -> Arc<Mutex<Vec<Value>>> {
 fn heard_on(app: &crate::core_context::Core, event: &'static str) -> Arc<Mutex<Vec<Value>>> {
 	let heard = Arc::new(Mutex::new(Vec::new()));
 	let hearing = Arc::clone(&heard);
-	crate::test_core::listen_to(&app, event, move |event| {
+	crate::test_core::listen_to(app, event, move |event| {
 		let payload = serde_json::from_str(event).expect("a json payload");
 		hearing.lock().expect("the events").push(payload);
 	});
@@ -597,7 +597,7 @@ fn an_accepted_invitation_joins_holds_the_key_feeds_the_members_and_answers_onli
 
 		let joined = member.accepted().await.expect("the join");
 		let members = until("the roster of two devices", || async {
-			let members = joined_space_members(&*member.app, joined.id.clone()).await;
+			let members = joined_space_members(&member.app, joined.id.clone()).await;
 			let members = members.expect("the members read");
 			(members.len() == 2).then_some(members)
 		})
@@ -625,7 +625,7 @@ async fn online_with_two_members(member: &Member, host: &SealingHost) -> JoinedS
 	member.relay.hosting(HostSide::Answering(host.admitted()));
 	let joined = member.accepted().await.expect("the join");
 	until("the roster of two devices", || async {
-		let members = joined_space_members(&*member.app, joined.id.clone()).await;
+		let members = joined_space_members(&member.app, joined.id.clone()).await;
 		(members.expect("the members read").len() == 2).then_some(())
 	})
 	.await;
@@ -666,7 +666,7 @@ fn a_session_takes_the_roster_sent_before_the_hello_keeps_its_key_and_lists_the_
 		let greeting = vec![host.roster_admitting(&newcomer, 2), host.hello()];
 		member.relay.greets_after_the_next_members_read(greeting);
 
-		let connection = joined_space_connect(&*member.app, joined.id.clone()).await;
+		let connection = joined_space_connect(&member.app, joined.id.clone()).await;
 		let changed = members_listed_within(&heard, &joined.id, 3).await;
 
 		assert_eq!(connection.map(|connection| connection.id), Ok(joined.id.clone()));
@@ -710,7 +710,7 @@ fn a_host_frame_whose_v_is_absent_or_one_is_dropped_without_taking_its_roster() 
 		];
 		member.relay.greets_after_the_next_members_read(greeting);
 
-		let connection = joined_space_connect(&*member.app, joined.id.clone()).await;
+		let connection = joined_space_connect(&member.app, joined.id.clone()).await;
 		let changed = members_listed_within(&heard, &joined.id, 3).await;
 
 		assert_eq!(connection.map(|connection| connection.id), Ok(joined.id.clone()));
@@ -732,7 +732,7 @@ fn a_session_taking_a_rekey_under_a_greater_key_id_lists_its_roster() {
 			.relay
 			.greets_after_the_next_members_read(vec![host.rekey_admitting(&newcomer, 2, 2)]);
 
-		let connection = joined_space_connect(&*member.app, joined.id.clone()).await;
+		let connection = joined_space_connect(&member.app, joined.id.clone()).await;
 		let changed = members_listed_within(&heard, &joined.id, 3).await;
 
 		assert_eq!(connection.map(|connection| connection.id), Ok(joined.id.clone()));
@@ -792,7 +792,7 @@ fn an_accept_answered_already_joined_continues_the_join_under_the_listed_instanc
 		member
 			.relay
 			.accepting(StatusCode::CONFLICT, refusal(StatusCode::CONFLICT, "ALREADY_JOINED").1);
-		invitations::read(&*member.app).await.expect("the invitations are listed");
+		invitations::read(&member.app).await.expect("the invitations are listed");
 
 		let joined = member.accepted().await.expect("the join");
 
@@ -822,7 +822,7 @@ fn a_joined_roster_omitting_this_device_answers_not_in_roster_and_stores_no_key(
 fn a_joined_host_other_than_the_held_one_answers_bad_signature_and_keeps_the_held_roster() {
 	run(async {
 		let member = Member::new("join-other-host").await;
-		SealingHost::planted(&*member.app, INSTANCE).await;
+		SealingHost::planted(&member.app, INSTANCE).await;
 		let held = member.held_roster().await;
 		member.relay.hosting(HostSide::Answering(member.host().admitted()));
 
@@ -851,7 +851,7 @@ fn an_absent_a_silent_or_a_forged_host_leaves_the_joined_space_waiting_on_its_re
 
 			let joined = member.accepted().await.expect("the join waits");
 			let connection =
-				joined_space_connect(&*member.app, joined.id.clone()).await.map(|found| found.id);
+				joined_space_connect(&member.app, joined.id.clone()).await.map(|found| found.id);
 			let JoinedSpaceWait { reason: waited_on, detail } =
 				joined.wait.clone().expect("a wait");
 
@@ -887,7 +887,7 @@ fn a_waiting_socket_names_a_host_offline_on_4002_and_no_close_code_on_a_bare_dro
 			member.accepted().await.expect("the join waits");
 			member.relay.hosting(host);
 
-			relay::reconciled(&*member.app).await;
+			relay::reconciled(&member.app).await;
 			let waited = until("the waiting socket to record its end", || async {
 				member.last_waited().filter(|wait| wait.detail.contains(expected))
 			})
@@ -907,7 +907,7 @@ fn a_waiting_socket_held_open_asks_again_for_its_rekey_and_comes_online_once_adm
 		let joined = member.accepted().await.expect("the join waits");
 		let answer = member.host().admitted();
 
-		relay::reconciled(&*member.app).await;
+		relay::reconciled(&member.app).await;
 		until("the missed rekey frame resent on the open socket", || async {
 			(member.relay.joins().len() >= 3).then_some(())
 		})
@@ -946,7 +946,7 @@ fn an_unreadable_key_still_starts_every_waiting_join_and_its_space_comes_online_
 		let harbour = json!({ "id": OTHER_INSTANCE, "name": "Harbour" });
 		member.relay.room().other_memberships.push(harbour);
 
-		relay::reconciled(&*member.app).await;
+		relay::reconciled(&member.app).await;
 		let listed = member.listed().await;
 		let other = listed.iter().find(|joined| joined.name == "Harbour").expect("the other space");
 		let is_waiting = [member.is_waiting(&unreadable.id), member.is_waiting(&other.id)];
@@ -972,7 +972,7 @@ fn a_waiting_join_the_relay_answers_403_on_settles_waiting_as_not_a_member() {
 		let forbidden = refusal(StatusCode::FORBIDDEN, "NOT_A_MEMBER");
 		member.relay.room().member_refusal = Some(forbidden);
 
-		relay::reconciled(&*member.app).await;
+		relay::reconciled(&member.app).await;
 		let listed = until("the wait read as not a member", || async {
 			let listed = member.listed().await.into_iter().find(|found| found.id == joined.id);
 			listed.filter(|found| {
@@ -998,7 +998,7 @@ async fn unlisted_during_a_pause(member: &Member, pause: Duration) -> UnlistedDu
 	let host = member.host();
 	let joined = online_with_two_members(member, &host).await;
 	let connections = member.relay.connections();
-	joined_space_connect(&*member.app, joined.id.clone()).await.expect("the joined space connects");
+	joined_space_connect(&member.app, joined.id.clone()).await.expect("the joined space connects");
 	until("the guest socket to open", || async {
 		(member.relay.connections() > connections).then_some(())
 	})
@@ -1030,7 +1030,7 @@ fn a_join_completes_while_a_reconciliation_waits_on_a_429_pause() {
 		let joined = tokio::time::timeout(
 			PATIENCE,
 			relay::joined(
-				&*member.app,
+				&member.app,
 				OTHER_INSTANCE.to_owned(),
 				Some("Harbour".into()),
 				None,
@@ -1054,7 +1054,7 @@ fn a_leave_completes_while_a_reconciliation_waits_on_a_429_pause() {
 		let paused = unlisted_during_a_pause(&member, LONG_PAUSE).await;
 
 		let left =
-			tokio::time::timeout(PATIENCE, relay::left(&*member.app, &paused.joined.id)).await;
+			tokio::time::timeout(PATIENCE, relay::left(&member.app, &paused.joined.id)).await;
 		paused.reconciliation.abort();
 
 		assert_eq!(left.expect("the leave is not held by the pause"), Ok(()));
@@ -1068,7 +1068,7 @@ fn a_sign_out_completes_while_a_reconciliation_waits_on_a_429_pause() {
 		let member = Member::new("sign-out-during-pause").await;
 		let paused = unlisted_during_a_pause(&member, LONG_PAUSE).await;
 
-		let signed_out = tokio::time::timeout(PATIENCE, relay::signed_out(&*member.app)).await;
+		let signed_out = tokio::time::timeout(PATIENCE, relay::signed_out(&member.app)).await;
 		paused.reconciliation.abort();
 
 		assert!(signed_out.expect("the sign out is not held by the pause").is_some());
@@ -1086,7 +1086,7 @@ fn an_unlisted_space_is_evicted_with_its_departure_reason_once_the_429_pause_end
 		let other = tokio::time::timeout(
 			PATIENCE,
 			relay::joined(
-				&*member.app,
+				&member.app,
 				OTHER_INSTANCE.to_owned(),
 				Some("Harbour".into()),
 				None,
@@ -1120,7 +1120,7 @@ fn an_unlisted_space_joined_again_during_the_429_pause_is_kept() {
 
 		let again = tokio::time::timeout(
 			PATIENCE,
-			relay::joined(&*member.app, INSTANCE.to_owned(), None, None, Default::default()),
+			relay::joined(&member.app, INSTANCE.to_owned(), None, None, Default::default()),
 		)
 		.await;
 		paused.reconciliation.await.expect("the reconciliation ends");
@@ -1173,7 +1173,7 @@ fn a_guest_stopped_by_a_reconciliation_runs_again_until_online_once_connected_ag
 		member.signed_in_again();
 		member.relay.greets_after_the_next_members_read(vec![paused.host.hello()]);
 
-		let connection = joined_space_connect(&*member.app, paused.joined.id.clone()).await;
+		let connection = joined_space_connect(&member.app, paused.joined.id.clone()).await;
 		let guests = member.app.state::<RelayGuests>();
 		until("the restarted link to be online", || async {
 			(guests.presence(&paused.joined.id) == Some(Presence::Online)).then_some(())
@@ -1267,8 +1267,8 @@ fn a_leave_the_relay_fails_keeps_the_space_connectable() {
 		let joined = online_with_two_members(&member, &member.host()).await;
 		member.relay.room().leave = refusal(StatusCode::SERVICE_UNAVAILABLE, "UNAVAILABLE");
 
-		let left = relay::left(&*member.app, &joined.id).await;
-		let connection = joined_space_connect(&*member.app, joined.id.clone()).await;
+		let left = relay::left(&member.app, &joined.id).await;
+		let connection = joined_space_connect(&member.app, joined.id.clone()).await;
 
 		assert!(matches!(left, Err(JoinedSpaceError::RelayRefused { .. })), "{left:?}");
 		let guests = member.app.state::<RelayGuests>();
@@ -1353,7 +1353,7 @@ fn a_waiting_join_refused_on_its_known_relay_device_reads_its_account_again() {
 			(room.upgrades.len(), room.me_reads)
 		};
 
-		relay::reconciled(&*member.app).await;
+		relay::reconciled(&member.app).await;
 		until("a second refused upgrade", || async {
 			(member.relay.room().upgrades.len() >= upgrades + 2).then_some(())
 		})
@@ -1378,13 +1378,13 @@ fn a_members_read_asked_during_another_runs_once_right_after_it() {
 			room.roster_reads
 		};
 
-		members::read_soon(&*member.app, &entry.expect("the joined space is held"));
+		members::read_soon(&member.app, &entry.expect("the joined space is held"));
 		until("the members read after the join", || async {
 			(member.relay.room().rosters_in_flight > 0).then_some(())
 		})
 		.await;
 		let connections = member.relay.connections();
-		joined_space_connect(&*member.app, joined.id.clone())
+		joined_space_connect(&member.app, joined.id.clone())
 			.await
 			.expect("the joined space connects");
 		until("the guest socket, opened once its members read was asked", || async {
@@ -1412,7 +1412,7 @@ fn a_waiting_join_the_relay_answers_410_on_ends_its_wait() {
 			json!({ "error": { "code": "MEMBER_REMOVED", "message": "gone", "status": 410 } });
 		member.relay.room().member_refusal = Some((StatusCode::GONE, gone));
 
-		relay::reconciled(&*member.app).await;
+		relay::reconciled(&member.app).await;
 		let was_waiting = member.is_waiting(&joined.id);
 		until("the entry removed", || async { member.listed().await.is_empty().then_some(()) })
 			.await;
@@ -1437,7 +1437,7 @@ fn a_waiting_join_opens_its_member_socket_on_its_relay_device_and_sends_a_v2_mis
 		let member = Member::facing_a_silent_host("join-handshake").await;
 		member.relay.hosting(HostSide::Silent);
 		member.accepted().await.expect("the join waits");
-		relay::reconciled(&*member.app).await;
+		relay::reconciled(&member.app).await;
 		until("the waiting socket", || async { (member.relay.connections() >= 2).then_some(()) })
 			.await;
 
@@ -1456,7 +1456,7 @@ fn a_waiting_socket_the_relay_closes_as_deleted_or_ended_evicts_the_space_and_re
 			let removed = heard_on(&member.app, REMOVED_EVENT);
 			member.relay.hosting(HostSide::Silent);
 			let joined = member.accepted().await.expect("the join waits");
-			relay::reconciled(&*member.app).await;
+			relay::reconciled(&member.app).await;
 			let was_waiting = member.is_waiting(&joined.id);
 
 			member.relay.hosting(HostSide::Closing(code));
@@ -1482,7 +1482,7 @@ fn a_waiting_join_that_ended_signed_out_starts_again_on_the_next_reconciliation(
 	run(async {
 		let member = Member::new("join-ended").await;
 		let joined = member.accepted().await.expect("the join waits");
-		relay::reconciled(&*member.app).await;
+		relay::reconciled(&member.app).await;
 		let was_waiting = member.is_waiting(&joined.id);
 
 		member.signed_out_of_the_store();
@@ -1491,7 +1491,7 @@ fn a_waiting_join_that_ended_signed_out_starts_again_on_the_next_reconciliation(
 		})
 		.await;
 		member.signed_in_again();
-		relay::reconciled(&*member.app).await;
+		relay::reconciled(&member.app).await;
 
 		assert!(was_waiting);
 		assert!(member.is_waiting(&joined.id));
@@ -1504,16 +1504,16 @@ fn a_waiting_socket_stops_on_removal_and_on_sign_out() {
 		let member = Member::facing_a_silent_host("join-stopped").await;
 		member.relay.hosting(HostSide::Silent);
 		let removed = member.accepted().await.expect("the join waits");
-		relay::reconciled(&*member.app).await;
+		relay::reconciled(&member.app).await;
 		let was_waiting = member.is_waiting(&removed.id);
 
-		joined_space_remove(&*member.app, removed.id.clone()).await.expect("removed");
+		joined_space_remove(&member.app, removed.id.clone()).await.expect("removed");
 		let after_removal = member.is_waiting(&removed.id);
 		let kept = member.accepted().await.expect("the join waits again");
-		relay::reconciled(&*member.app).await;
+		relay::reconciled(&member.app).await;
 		let was_waiting_again = member.is_waiting(&kept.id);
 		let waited_before = member.last_wait();
-		drop(relay::signed_out(&*member.app).await);
+		drop(relay::signed_out(&member.app).await);
 
 		assert!(was_waiting && !after_removal);
 		assert!(was_waiting_again);
@@ -1818,7 +1818,7 @@ fn a_member_the_host_admits_from_the_device_list_joins_on_its_first_rekey_and_pi
 		let (member, _root, _temporary) =
 			signed_in("joined-admission-member", MEMBER_BEARER, &peers.cloud, PATIENCE);
 
-		let joined = invitations::accept(&*member, INVITATION.to_owned()).await;
+		let joined = invitations::accept(&member, INVITATION.to_owned()).await;
 		let joined = joined.expect("the join");
 		until("the roster of two devices", || async {
 			let members = joined_space_members(&member, joined.id.clone()).await;
@@ -1844,7 +1844,7 @@ fn a_member_the_host_admits_from_the_device_list_joins_on_its_first_rekey_and_pi
 
 async fn joined_by(peers: &Peers, name: &str) -> (CoreOfItsOwn, JoinedSpace, Vec<RemovedOnDrop>) {
 	let (member, _root, temporary) = signed_in(name, MEMBER_BEARER, &peers.cloud, PATIENCE);
-	let joined = invitations::accept(&*member, INVITATION.to_owned()).await;
+	let joined = invitations::accept(&member, INVITATION.to_owned()).await;
 	(member, joined.expect("the join"), temporary)
 }
 
@@ -1865,7 +1865,7 @@ async fn host_space(peers: &Peers) -> (String, Option<Hue>) {
 }
 
 async fn named_and_coloured(member: &CoreOfItsOwn) -> Vec<(String, Option<Hue>)> {
-	let listed = joined_spaces_list(&member).await.expect("the list");
+	let listed = joined_spaces_list(member).await.expect("the list");
 	listed.into_iter().map(|joined| (joined.name, joined.colour)).collect()
 }
 
@@ -1897,8 +1897,8 @@ fn a_member_describes_its_joined_space_and_the_host_and_every_member_take_it_thr
 		let lab = vec![("Lab".to_owned(), Hue::new(200))];
 		listed_as(&other, &lab).await;
 		listed_as(&member, &lab).await;
-		relay::reconciled(&*other).await;
-		relay::reconciled(&*member).await;
+		relay::reconciled(&other).await;
+		relay::reconciled(&member).await;
 
 		assert_eq!(joined.remote_space_id, None);
 		assert_eq!(
@@ -1969,7 +1969,7 @@ fn a_call_over_a_link_that_is_down_is_host_offline_without_being_sent() {
 		link.closed(Presence::Down);
 		let call = HostCall { command: "space_update", args: json!({}), bound: PATIENCE };
 
-		let answered = relay::host_answered(&*member.app, "joined-1", &link, call).await;
+		let answered = relay::host_answered(&member.app, "joined-1", &link, call).await;
 
 		assert_eq!(
 			answered.err(),
@@ -1999,7 +1999,7 @@ fn a_description_taken_while_a_reconciliation_reads_the_older_listing_is_kept() 
 			name: "Lab".to_owned(),
 			colour: Hue::new(200),
 		};
-		relay::description_adopted(&*member.app, &joined.id, lab)
+		relay::description_adopted(&member.app, &joined.id, lab)
 			.await
 			.expect("the description is taken");
 		gate.send_replace(true);
@@ -2013,7 +2013,7 @@ fn a_description_taken_while_a_reconciliation_reads_the_older_listing_is_kept() 
 async fn online_and_greeted(member: &Member, host: &SealingHost) -> JoinedSpace {
 	let joined = online_with_two_members(member, host).await;
 	member.relay.greets_after_the_next_members_read(vec![host.hello()]);
-	joined_space_connect(&*member.app, joined.id.clone()).await.expect("the connection");
+	joined_space_connect(&member.app, joined.id.clone()).await.expect("the connection");
 	let guests = member.app.state::<RelayGuests>();
 	until("the link online", || async {
 		(guests.presence(&joined.id) == Some(Presence::Online)).then_some(())
@@ -2063,8 +2063,8 @@ fn a_description_heard_again_with_the_same_name_and_hue_writes_nothing_and_annou
 			colour: Hue::new(200),
 		};
 
-		relay::description_adopted(&*member.app, &joined.id, lab()).await.expect("first");
-		relay::description_adopted(&*member.app, &joined.id, lab()).await.expect("again");
+		relay::description_adopted(&member.app, &joined.id, lab()).await.expect("first");
+		relay::description_adopted(&member.app, &joined.id, lab()).await.expect("again");
 
 		let heard = changes.lock().expect("the events").clone();
 		assert_eq!(heard, vec![json!({ "id": joined.id, "hostedBy": "Ann", "colour": 200 })]);

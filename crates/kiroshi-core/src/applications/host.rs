@@ -323,7 +323,7 @@ mod tests {
 
 	async fn a_host(name: &str) -> CoreOfItsOwn {
 		let app = a_core_of_its_own(&format!("application-host-{name}"));
-		crate::db::install(&*app);
+		crate::db::install(&app);
 		app.manage(McpOauthState::default());
 		app.manage(ApplicationReports::default());
 		app.manage(AuthorizationAnswers::default());
@@ -332,7 +332,7 @@ mod tests {
 			.call_mut(|connection| Ok(connection.execute_batch(A_SPACE)?))
 			.await
 			.expect("the space is planted");
-		bundles::space::lay_down(&*app, "personal").expect("the space plugin lands");
+		bundles::space::lay_down(&app, "personal").expect("the space plugin lands");
 		bundles::user::lay_down(&user_plugin(&app)).expect("the person plugin lands");
 		let bot = ready(&app.state::<db::DatabaseState>())
 			.expect("the database opens")
@@ -341,17 +341,17 @@ mod tests {
 			.await
 			.expect("the bot reads")
 			.expect("the bot is planted");
-		let root = bundles::root(&*app).expect("the bundles have a root");
+		let root = bundles::root(&app).expect("the bundles have a root");
 		bundles::lay_down(&root, &bot).expect("the bot bundle lands");
 		app
 	}
 
 	fn user_plugin(app: &crate::core_context::Core) -> PathBuf {
-		bundles::user::path(&*app).expect("the person plugin has a home")
+		bundles::user::path(app).expect("the person plugin has a home")
 	}
 
 	fn space_plugin(app: &crate::core_context::Core) -> PathBuf {
-		bundles::space::path(&*app, "personal").expect("the space plugin has a home")
+		bundles::space::path(app, "personal").expect("the space plugin has a home")
 	}
 
 	fn reading(app: &crate::core_context::Core, conversation_id: &str) -> ApplicationHost {
@@ -477,7 +477,7 @@ mod tests {
 	}
 
 	fn declarations(app: &crate::core_context::Core) -> [Vec<(String, Value)>; 3] {
-		let root = bundles::root(&*app).expect("the bundles have a root");
+		let root = bundles::root(app).expect("the bundles have a root");
 		[
 			bundles::mcp_servers(&root, "b1"),
 			bundles::plugin::mcp_servers(&space_plugin(app)),
@@ -487,7 +487,7 @@ mod tests {
 	}
 
 	fn marks(app: &crate::core_context::Core) -> [Vec<(String, ApplicationMark)>; 3] {
-		let root = bundles::root(&*app).expect("the bundles have a root");
+		let root = bundles::root(app).expect("the bundles have a root");
 		[
 			bundles::mcp_servers(&root, "b1"),
 			bundles::plugin::mcp_servers(&space_plugin(app)),
@@ -517,7 +517,7 @@ mod tests {
 
 	fn heard(app: &crate::core_context::Core) -> mpsc::Receiver<String> {
 		let (announced, arriving) = mpsc::channel();
-		crate::test_core::listen_to(&*app, APPLICATION_INSTALLED.name(), move |event| {
+		crate::test_core::listen_to(app, APPLICATION_INSTALLED.name(), move |event| {
 			announced.send(event.to_owned()).expect("the test is listening");
 		});
 		arriving

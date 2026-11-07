@@ -261,7 +261,7 @@ mod tests {
 
 	fn a_host(name: &str) -> CoreOfItsOwn {
 		let app = a_core_of_its_own(&format!("sentinel-{name}"));
-		crate::db::install(&*app);
+		crate::db::install(&app);
 		app
 	}
 

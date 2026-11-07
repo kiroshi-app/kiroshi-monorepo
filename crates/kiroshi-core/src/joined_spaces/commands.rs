@@ -221,7 +221,7 @@ mod tests {
 		let added = held(&app).await;
 		let hearing = heard(&app);
 
-		joined_space_remove(&*app, added.id.clone()).await.expect("the removal");
+		joined_space_remove(&app, added.id.clone()).await.expect("the removal");
 
 		left_once(&relay);
 		assert!(list(&app).await.is_empty());
@@ -237,7 +237,7 @@ mod tests {
 		let added = held(&app).await;
 
 		let refused =
-			joined_space_remove(&*app, added.id.clone()).await.expect_err("the removal is refused");
+			joined_space_remove(&app, added.id.clone()).await.expect_err("the removal is refused");
 
 		assert_eq!(list(&app).await, vec![added]);
 		refused
@@ -245,7 +245,7 @@ mod tests {
 
 	fn heard(app: &crate::core_context::Core) -> Receiver<String> {
 		let (told, hearing) = channel();
-		crate::test_core::listen_to(&*app, CHANGED_EVENT, move |event| {
+		crate::test_core::listen_to(app, CHANGED_EVENT, move |event| {
 			told.send(event.to_owned()).expect("the test listens");
 		});
 		hearing
@@ -275,7 +275,7 @@ mod tests {
 	}
 
 	async fn list(app: &crate::core_context::Core) -> Vec<JoinedSpace> {
-		joined_spaces_list(&*app).await.expect("the list")
+		joined_spaces_list(app).await.expect("the list")
 	}
 
 	fn the_host(name: &str) -> JoinedSpaceMember {
@@ -294,7 +294,7 @@ mod tests {
 		hearing: &Receiver<String>,
 		id: &str,
 	) -> Value {
-		announce_change(&*app, id.to_owned()).await.expect("the change is announced");
+		announce_change(app, id.to_owned()).await.expect("the change is announced");
 		serde_json::from_str(&hearing.recv().expect("the change was heard")).expect("json")
 	}
 
@@ -393,7 +393,7 @@ mod tests {
 		let app = app_over(&dir);
 		let added = held(&app).await;
 
-		let connection = joined_space_connect(&*app, added.id.clone()).await.map(|found| found.id);
+		let connection = joined_space_connect(&app, added.id.clone()).await.map(|found| found.id);
 
 		assert_eq!(connection, Err(JoinedSpaceError::HostOffline { id: added.id }));
 	}
@@ -406,15 +406,15 @@ mod tests {
 		let app = app_reaching(&dir, &api_url);
 		let added = held(&app).await;
 
-		joined_space_remove(&*app, added.id.clone()).await.expect("the removal");
+		joined_space_remove(&app, added.id.clone()).await.expect("the removal");
 
 		assert_eq!(
-			joined_space_remove(&*app, added.id.clone()).await,
+			joined_space_remove(&app, added.id.clone()).await,
 			Err(JoinedSpaceError::UnknownJoinedSpace { id: added.id.clone() })
 		);
 		left_once(&relay);
 		assert_eq!(
-			joined_space_connect(&*app, added.id.clone()).await.map(|found| found.id),
+			joined_space_connect(&app, added.id.clone()).await.map(|found| found.id),
 			Err(JoinedSpaceError::UnknownJoinedSpace { id: added.id })
 		);
 	}
@@ -486,7 +486,7 @@ mod tests {
 		let app = app_reaching(&dir, &api_url);
 		let added = held(&app).await;
 
-		let refused = joined_space_remove(&*app, added.id.clone()).await;
+		let refused = joined_space_remove(&app, added.id.clone()).await;
 
 		assert_eq!(refused, Err(JoinedSpaceError::SessionRevoked));
 		left_once(&relay);

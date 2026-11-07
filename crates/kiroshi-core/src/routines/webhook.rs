@@ -375,8 +375,8 @@ mod tests {
 
 	async fn a_host(name: &str) -> CoreOfItsOwn {
 		let app = a_core_of_its_own(&format!("routine-webhook-{name}"));
-		crate::db::install(&*app);
-		let system = bundles::system::path(&*app).expect("the system bundle is named");
+		crate::db::install(&app);
+		let system = bundles::system::path(&app).expect("the system bundle is named");
 		bundles::system::write(&system).expect("the system bundle lands");
 		{
 			let state = app.state::<db::DatabaseState>();
@@ -699,7 +699,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_call_carrying_the_key_of_a_webhook_routine_opens_a_run_from_what_it_carried() {
 		let app = a_host("fired").await;
-		let (webhook, arriving) = recording(&*app);
+		let (webhook, arriving) = recording(&app);
 
 		let answer = answered(address_of(&webhook), calling(Some(A_KEY), "{\"ok\":true}")).await;
 
@@ -722,7 +722,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_call_no_webhook_routine_holds_the_key_of_opens_nothing() {
 		let app = a_host("refused").await;
-		let webhook = start(&*app);
+		let webhook = start(&app);
 		let address = address_of(&webhook);
 
 		for request in [
@@ -741,7 +741,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_body_longer_than_the_cap_is_answered_its_size_not_the_key_refusal() {
 		let app = a_host("capped").await;
-		let webhook = start(&*app);
+		let webhook = start(&app);
 
 		let long = "a".repeat(MAX_BODY_BYTES + 1);
 		let answer = answered(address_of(&webhook), calling(Some(A_KEY), &long)).await;
@@ -755,7 +755,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_call_naming_another_host_or_naming_none_is_refused_and_reads_no_routine() {
 		let app = a_host("hosted").await;
-		let webhook = start(&*app);
+		let webhook = start(&app);
 		let address = address_of(&webhook);
 
 		for request in [
@@ -796,7 +796,7 @@ mod tests {
 	#[tokio::test]
 	async fn another_method_and_another_path_write_no_row() {
 		let app = a_host("elsewhere").await;
-		let webhook = start(&*app);
+		let webhook = start(&app);
 		let address = address_of(&webhook);
 
 		for request in [
@@ -1011,7 +1011,7 @@ mod tests {
 	async fn a_flood_carrying_a_key_no_routine_holds_stays_refused_and_is_never_answered_too_many()
 	{
 		let app = a_host("unheld").await;
-		let webhook = start(&*app);
+		let webhook = start(&app);
 		let address = address_of(&webhook);
 
 		for _ in 0..CALLS_PER_WINDOW + 10 {
@@ -1062,7 +1062,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_carried_delivery_id_reaches_the_payload_and_a_blank_one_is_generated() {
 		let app = a_host("named").await;
-		let (webhook, arriving) = recording(&*app);
+		let (webhook, arriving) = recording(&app);
 		let address = address_of(&webhook);
 
 		answered(address, delivering(Some(A_KEY), "delivery-1", "{}")).await;
@@ -1079,7 +1079,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_delivery_id_longer_than_the_cap_is_answered_before_any_routine_is_read() {
 		let app = a_host("overlong").await;
-		let webhook = start(&*app);
+		let webhook = start(&app);
 		let address = address_of(&webhook);
 		let long = "d".repeat(MAX_DELIVERY_ID_BYTES + 1);
 
@@ -1104,7 +1104,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_delivery_id_carrying_a_byte_that_is_not_utf8_is_refused_and_writes_no_row() {
 		let app = a_host("undecodable").await;
-		let webhook = start(&*app);
+		let webhook = start(&app);
 		let request = delivering_raw(Some(A_KEY), &[b'd', 0xff, b'1'], "{}");
 
 		let answer = answered(address_of(&webhook), request).await;
@@ -1118,7 +1118,7 @@ mod tests {
 	#[tokio::test]
 	async fn the_listener_stops_answering_once_the_webhook_is_stopped() {
 		let app = a_host("stopped").await;
-		let webhook = start(&*app);
+		let webhook = start(&app);
 		let address = address_of(&webhook);
 		assert_eq!(answered(address, calling(None, "{}")).await, refused());
 

@@ -115,14 +115,14 @@ mod tests {
 
 	async fn an_app_with_two_bundles(name: &str) -> CoreOfItsOwn {
 		let app = a_core_of_its_own(&format!("bundle-host-{name}"));
-		crate::db::install(&*app);
+		crate::db::install(&app);
 		let state = app.state::<db::DatabaseState>();
 		let database = ready(state.inner()).expect("the database opens");
 		database
 			.call_mut(|connection| Ok(connection.execute_batch(TWO_BOTS)?))
 			.await
 			.expect("the bots are planted");
-		let root = bundles::root(&*app).expect("the bundles directory resolves");
+		let root = bundles::root(&app).expect("the bundles directory resolves");
 		for id in ["b1", "b2"] {
 			let bot = database
 				.conversations()
@@ -170,7 +170,7 @@ mod tests {
 	}
 
 	fn skill_of(app: &crate::core_context::Core, bot_id: &str) -> Option<String> {
-		let root = bundles::root(&*app).expect("the bundles directory resolves");
+		let root = bundles::root(app).expect("the bundles directory resolves");
 		let bundle = bundles::dir(&root, bot_id).expect("the bundle is held");
 		std::fs::read_to_string(bundle.join(A_SKILL)).ok()
 	}
@@ -220,7 +220,7 @@ mod tests {
 		let answer = serving(&app, "b1").answer(asked).await.expect("the write is served");
 
 		assert_eq!(answer["outcome"], "recorded");
-		let root = bundles::root(&*app).expect("the bundles directory resolves");
+		let root = bundles::root(&app).expect("the bundles directory resolves");
 		let agent = bundles::agent_file(&root, "b1").expect("the agent file is there");
 		let text = std::fs::read_to_string(agent).expect("the agent file reads");
 		assert!(!text.contains("They bake on Sundays."), "got {text}");

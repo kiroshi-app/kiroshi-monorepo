@@ -333,8 +333,8 @@ mod tests {
 
 	async fn a_host(name: &str) -> CoreOfItsOwn {
 		let app = a_core_of_its_own(&format!("routine-commands-{name}"));
-		crate::db::install(&*app);
-		let system = bundles::system::path(&*app).expect("the system bundle is named");
+		crate::db::install(&app);
+		let system = bundles::system::path(&app).expect("the system bundle is named");
 		bundles::system::write(&system).expect("the system bundle lands");
 		ready(&app.state::<db::DatabaseState>())
 			.expect("the database opens")
@@ -369,15 +369,15 @@ mod tests {
 		let app = a_host("called-at").await;
 		app.manage(webhook::start(app.clone(), crate::routines::webhook::without_host_api()));
 		let called =
-			routine_create(&*app, a_called_draft()).await.expect("the called routine is created");
-		let scheduled = routine_create(&*app, a_draft("0 * * * *"))
+			routine_create(&app, a_called_draft()).await.expect("the called routine is created");
+		let scheduled = routine_create(&app, a_draft("0 * * * *"))
 			.await
 			.expect("the scheduled routine is created");
 
 		let answered =
-			routine_key(&*app, called.id).await.expect("the called routine answers its key");
+			routine_key(&app, called.id).await.expect("the called routine answers its key");
 		let silent =
-			routine_key(&*app, scheduled.id).await.expect("the scheduled routine answers its key");
+			routine_key(&app, scheduled.id).await.expect("the scheduled routine answers its key");
 
 		assert_eq!(
 			answered.url,
@@ -393,7 +393,7 @@ mod tests {
 	async fn a_schedule_whose_expression_croner_refuses_is_named_and_never_stored() {
 		let app = a_host("refused").await;
 
-		let failure = routine_create(&*app, a_draft("every tuesday"))
+		let failure = routine_create(&app, a_draft("every tuesday"))
 			.await
 			.expect_err("the routine is refused");
 
@@ -402,7 +402,7 @@ mod tests {
 		};
 		assert_eq!(expression, "every tuesday");
 		assert!(!reason.is_empty(), "the reason is carried");
-		let stored = routine_list(&*app, "c1".to_owned()).await.expect("the routines read");
+		let stored = routine_list(&app, "c1".to_owned()).await.expect("the routines read");
 		assert!(stored.is_empty(), "got {stored:?}");
 	}
 
@@ -411,10 +411,10 @@ mod tests {
 		let app = a_host("stored").await;
 
 		let stored =
-			routine_create(&*app, a_draft("0 * * * *")).await.expect("the routine is created");
+			routine_create(&app, a_draft("0 * * * *")).await.expect("the routine is created");
 
 		let broken = routine_update(
-			&*app,
+			&app,
 			stored.id.clone(),
 			RoutineEdit {
 				title: stored.title.clone(),
@@ -432,7 +432,7 @@ mod tests {
 				if expression == "not a cron"),
 			"got {broken:?}"
 		);
-		let held = routine_list(&*app, "c1".to_owned()).await.expect("the routines read");
+		let held = routine_list(&app, "c1".to_owned()).await.expect("the routines read");
 		assert_eq!(held.len(), 1, "got {held:?}");
 		assert_eq!(held[0].trigger_config, json!({ "expression": "0 * * * *" }));
 	}
@@ -454,8 +454,8 @@ mod tests {
 	const SHIFT_LOG: &str = "shift-log";
 
 	fn declaring_shift_log(app: &crate::core_context::Core, space_id: &str) {
-		bundles::space::lay_down(&*app, space_id).expect("the plugin is laid down");
-		let plugin = bundles::space::path(&*app, space_id).expect("the plugin is named");
+		bundles::space::lay_down(app, space_id).expect("the plugin is laid down");
+		let plugin = bundles::space::path(app, space_id).expect("the plugin is named");
 		let declaration = json!({
 			"sources": [{
 				"id": SHIFT_LOG,
@@ -480,7 +480,7 @@ mod tests {
 		declaring_shift_log(&app, "writers");
 
 		let source_of =
-			|conversation| declared_source(&*app, database, conversation, "b1", SHIFT_LOG);
+			|conversation| declared_source(&app, database, conversation, "b1", SHIFT_LOG);
 		let found = source_of("c2").await.expect("the source of the second space is stacked");
 		let in_the_oldest =
 			source_of("c3").await.expect_err("the source of another space is stacked");
@@ -513,13 +513,13 @@ mod tests {
 		app: &crate::core_context::Core,
 		space_id: &str,
 	) -> Vec<BotTriggerSources> {
-		routine_trigger_sources_of_space(&*app, space_id.to_owned())
+		routine_trigger_sources_of_space(app, space_id.to_owned())
 			.await
 			.expect("the trigger sources of the space read")
 	}
 
 	async fn sources_of_bot(app: &crate::core_context::Core, bot_id: &str) -> Vec<TriggerSource> {
-		routine_trigger_sources(&*app, bot_id.to_owned())
+		routine_trigger_sources(app, bot_id.to_owned())
 			.await
 			.expect("the trigger sources of the bot read")
 	}
@@ -575,7 +575,7 @@ mod tests {
 			.expect("the seats are planted");
 		declaring_shift_log(&app, "writers");
 		let readable = sources_of_space(&app, "writers").await;
-		let root = bundles::root(&*app).expect("the bundles are rooted");
+		let root = bundles::root(&app).expect("the bundles are rooted");
 
 		declaring_unreadable_sources(
 			&bundles::placed_dir(&root, "b2", "Second").expect("the bundle is placed"),
@@ -592,9 +592,9 @@ mod tests {
 		);
 
 		declaring_unreadable_sources(
-			&bundles::space::path(&*app, "writers").expect("the plugin is named"),
+			&bundles::space::path(&app, "writers").expect("the plugin is named"),
 		);
-		let failed = routine_trigger_sources_of_space(&*app, "writers".to_owned())
+		let failed = routine_trigger_sources_of_space(&app, "writers".to_owned())
 			.await
 			.expect_err("the space bundle fails the call");
 

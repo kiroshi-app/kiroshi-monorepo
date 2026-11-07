@@ -103,14 +103,14 @@ mod tests {
 
 	async fn a_host(name: &str) -> CoreOfItsOwn {
 		let app = a_core_of_its_own(&format!("search-commands-{name}"));
-		crate::db::install(&*app);
+		crate::db::install(&app);
 		plant(&app, A_SPACE_EACH).await;
 		app
 	}
 
 	async fn plant(app: &crate::core_context::Core, statements: &str) {
 		let statements = statements.to_owned();
-		ready(&&*app.state::<db::DatabaseState>())
+		ready(&app.state::<db::DatabaseState>())
 			.expect("the database opens")
 			.call_mut(move |connection| Ok(connection.execute_batch(&statements)?))
 			.await
@@ -140,7 +140,7 @@ mod tests {
 
 	async fn indexed_rows(app: &crate::core_context::Core, message_id: &str) -> i64 {
 		let message_id = message_id.to_owned();
-		ready(&&*app.state::<db::DatabaseState>())
+		ready(&app.state::<db::DatabaseState>())
 			.expect("the database opens")
 			.call(move |connection| {
 				Ok(connection.query_row(
@@ -158,7 +158,7 @@ mod tests {
 	}
 
 	async fn found(app: &crate::core_context::Core, query: MessageSearchQuery) -> Vec<MessageHit> {
-		search_messages(&*app, query).await.expect("the search answers")
+		search_messages(app, query).await.expect("the search answers")
 	}
 
 	fn ids(hits: &[MessageHit]) -> Vec<String> {
@@ -187,7 +187,7 @@ mod tests {
 	async fn a_message_reaches_the_index_once_it_settles_and_holds_a_single_row() {
 		let app = a_host("settle").await;
 		let state = &*app.state::<db::DatabaseState>();
-		let database = ready(&state).expect("the database opens");
+		let database = ready(state).expect("the database opens");
 		database
 			.messages()
 			.open_assistant_message(NewAssistantMessage {
@@ -343,20 +343,20 @@ mod tests {
 		let over = "a".repeat(MAX_QUERY_CHARS + 1);
 
 		assert!(
-			search_messages(&*app, in_space(&held, "personal")).await.is_ok(),
+			search_messages(&app, in_space(&held, "personal")).await.is_ok(),
 			"a query at the cap was refused"
 		);
 		assert!(
-			search_catalogue(&*app, held, "personal".to_owned()).await.is_ok(),
+			search_catalogue(&app, held, "personal".to_owned()).await.is_ok(),
 			"a query at the cap was refused"
 		);
 		assert_eq!(
-			search_messages(&*app, in_space(&over, "personal")).await,
+			search_messages(&app, in_space(&over, "personal")).await,
 			Err(MessageSearchError::QueryTooLong { limit: MAX_QUERY_CHARS }),
 			"the message search read a query past the cap"
 		);
 		assert_eq!(
-			search_catalogue(&*app, over, "personal".to_owned()).await,
+			search_catalogue(&app, over, "personal".to_owned()).await,
 			Err(CatalogueError::QueryTooLong { limit: MAX_QUERY_CHARS }),
 			"the catalogue read a query past the cap"
 		);
@@ -382,7 +382,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_mission_hit_reads_working_while_its_thread_runs_a_turn() {
 		let app = a_host("mission-working").await;
-		let opened = ready(&&*app.state::<db::DatabaseState>())
+		let opened = ready(&app.state::<db::DatabaseState>())
 			.expect("the database opens")
 			.missions()
 			.open(a_draft_for_c1(), "k1".to_owned())
@@ -394,10 +394,10 @@ mod tests {
 			runtime_session_id: "r1".to_owned(),
 			epoch: 1,
 		};
-		let run = a_run_held_by_the_app(&*app, thread);
+		let run = a_run_held_by_the_app(&app, thread);
 		run.emit(AgentEvent::TurnChanged { state: TurnState::Running }, None);
 
-		let found = search_catalogue(&*app, "crash".to_owned(), "personal".to_owned())
+		let found = search_catalogue(&app, "crash".to_owned(), "personal".to_owned())
 			.await
 			.expect("the catalogue answers");
 
@@ -412,13 +412,12 @@ mod tests {
 	async fn a_conversation_hit_carries_the_state_its_page_row_carries() {
 		let app = a_host("chat-state").await;
 
-		let found = search_catalogue(&*app, "room".to_owned(), "work".to_owned())
+		let found = search_catalogue(&app, "room".to_owned(), "work".to_owned())
 			.await
 			.expect("the catalogue answers");
-		let recent =
-			search_recent(&*app, "work".to_owned()).await.expect("the recent chats answer");
+		let recent = search_recent(&app, "work".to_owned()).await.expect("the recent chats answer");
 		let page =
-			conversations_page(&*app, "work".to_owned(), None, None).await.expect("the page reads");
+			conversations_page(&app, "work".to_owned(), None, None).await.expect("the page reads");
 
 		let paged = page.conversations.into_iter().find(|row| row.conversation.id == "c2");
 		let paged = paged.expect("the room is on the page").observed;

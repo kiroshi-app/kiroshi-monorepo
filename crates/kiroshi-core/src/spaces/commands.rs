@@ -272,7 +272,7 @@ mod tests {
 
 	fn a_host(name: &str) -> CoreOfItsOwn {
 		let app = a_core_of_its_own(&format!("space-commands-{name}"));
-		crate::db::install(&*app);
+		crate::db::install(&app);
 		app
 	}
 
@@ -292,7 +292,7 @@ mod tests {
 
 	async fn counted_by_plugin(app: &CoreOfItsOwn, bot_id: &str) -> (u64, u64) {
 		let scope = PluginScope::Bot { id: bot_id.to_owned() };
-		let core = &*app;
+		let core = app;
 		let skills = plugin_skills(core, scope.clone()).await.expect("the skills read");
 		let servers = plugin_mcp_servers(core, scope).await.expect("the servers read");
 		(skills.len() as u64, servers.len() as u64)
@@ -302,7 +302,7 @@ mod tests {
 	async fn every_companion_of_a_space_answers_its_skills_and_applications_counts() {
 		let app = a_host("companion-counts");
 		let database = app.state::<db::DatabaseState>().inner().as_ref().expect("the database");
-		let root = bundles::root(&*app).expect("the bundles have a home");
+		let root = bundles::root(&app).expect("the bundles have a home");
 		let vocca = database.spaces().create("Vocca".to_owned()).await.expect("a space");
 		let elsewhere = database.spaces().create("Elsewhere".to_owned()).await.expect("a space");
 
@@ -322,8 +322,7 @@ mod tests {
 			.expect("the bot is shared");
 		a_bot_of(database, &elsewhere.id, "Stranger").await;
 
-		let counts =
-			space_companion_counts(&*app, vocca.id.clone()).await.expect("the counts read");
+		let counts = space_companion_counts(&app, vocca.id.clone()).await.expect("the counts read");
 
 		let by_bot = |bot_id: &str| {
 			counts
@@ -349,7 +348,7 @@ mod tests {
 	async fn an_unknown_space_answers_an_error_rather_than_no_companion() {
 		let app = a_host("companion-counts-unknown");
 
-		let failure = space_companion_counts(&*app, "nowhere".to_owned())
+		let failure = space_companion_counts(&app, "nowhere".to_owned())
 			.await
 			.expect_err("the space is unknown");
 
@@ -364,15 +363,15 @@ mod tests {
 		fs::write(data.join("spaces"), "not a directory").expect("the blocking file lands");
 
 		let failure =
-			space_create(&*app, "Vocca".to_owned()).await.expect_err("the space is refused");
+			space_create(&app, "Vocca".to_owned()).await.expect_err("the space is refused");
 
 		assert!(matches!(failure, SpaceError::UnwritableBundle { .. }), "got {failure:?}");
-		let listed = space_list(&*app).await.expect("the spaces read");
+		let listed = space_list(&app).await.expect("the spaces read");
 		assert!(!listed.iter().any(|space| space.name == "Vocca"), "got {listed:?}");
 	}
 
 	async fn shared_by_name(app: &CoreOfItsOwn) -> Vec<(String, bool)> {
-		let listed = space_list(&*app).await.expect("the spaces read");
+		let listed = space_list(app).await.expect("the spaces read");
 		let listed = serde_json::to_value(listed).expect("the spaces serialize");
 		let rows = listed.as_array().expect("a space list");
 		rows.iter()
@@ -413,7 +412,7 @@ mod tests {
 		hosting.registered(vocca.id.clone(), "instance-vocca".to_owned()).await.expect("stored");
 		hosting.set_hosted(vocca.id.clone(), false).await.expect("unhosted");
 
-		let listed = space_list(&*app).await.expect("the spaces read");
+		let listed = space_list(&app).await.expect("the spaces read");
 		let instance_of = |id: &str| {
 			listed.iter().find(|space| space.id == id).expect("listed").instance_id.clone()
 		};

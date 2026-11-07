@@ -439,7 +439,6 @@ mod tests {
 	use std::sync::atomic::{AtomicUsize, Ordering};
 
 	use super::*;
-	use crate::removed_on_drop::RemovedOnDrop;
 
 	fn status_of(answer: &str) -> (Value, Value) {
 		let answer: Value = serde_json::from_str(answer).expect("a json answer");

@@ -380,7 +380,7 @@ mod tests {
 
 	fn a_host(name: &str) -> CoreOfItsOwn {
 		let app = a_bare_host(name);
-		crate::db::install(&*app);
+		crate::db::install(&app);
 		app
 	}
 
@@ -391,7 +391,7 @@ mod tests {
 	}
 
 	fn database(app: &crate::core_context::Core) -> &db::Database {
-		&*app.state::<db::DatabaseState>().inner().as_ref().expect("the database opens")
+		app.state::<db::DatabaseState>().inner().as_ref().expect("the database opens")
 	}
 
 	async fn a_bot_in_a_space(app: &crate::core_context::Core) -> (String, String) {
@@ -412,17 +412,17 @@ mod tests {
 			.create_bot(identity, Some(space.id.clone()), None)
 			.await
 			.expect("the bot lands");
-		let root = bundles::root(&*app).expect("the bundles have a home");
+		let root = bundles::root(app).expect("the bundles have a home");
 		bundles::write(&root, &bot).expect("the bundle is written");
 		(bot.id, space.id)
 	}
 
 	fn a_space_laid_down(app: &crate::core_context::Core, space_id: &str) {
-		bundles::space::lay_down(&*app, space_id).expect("the space plugin is laid down");
+		bundles::space::lay_down(app, space_id).expect("the space plugin is laid down");
 	}
 
 	fn the_person_laid_down(app: &crate::core_context::Core) {
-		let path = bundles::user::path(&*app).expect("the plugin has a home");
+		let path = bundles::user::path(app).expect("the plugin has a home");
 		bundles::user::lay_down(&path).expect("the person plugin is laid down");
 	}
 
@@ -439,7 +439,7 @@ mod tests {
 	}
 
 	async fn reads_empty(app: &crate::core_context::Core, scope: PluginScope) {
-		let handle = &*app;
+		let handle = app;
 		let skills = plugin_skills(handle, scope.clone()).await.expect("the skills read");
 		let servers = plugin_mcp_servers(handle, scope.clone()).await.expect("the servers read");
 		let history = plugin_history(handle, scope).await.expect("the history reads");
@@ -450,7 +450,7 @@ mod tests {
 	}
 
 	async fn set_clock(app: &crate::core_context::Core, scope: &PluginScope) {
-		plugin_set_mcp_server(&*app, scope.clone(), "clock".to_owned(), a_clock().into(), None)
+		plugin_set_mcp_server(app, scope.clone(), "clock".to_owned(), a_clock().into(), None)
 			.await
 			.expect("the server lands");
 	}
@@ -460,16 +460,16 @@ mod tests {
 		scope: PluginScope,
 		owner: EnvOwner,
 	) {
-		let root = environment::store::root(&*app).expect("the store has a home");
+		let root = environment::store::root(app).expect("the store has a home");
 		let server = EnvScope::Server { name: "clock".to_owned(), owner };
 		set_clock(app, &scope).await;
 		environment::store::set(&root, &server, "REGION", "eu").expect("the value is written");
 
-		plugin_delete_mcp_server(&*app, scope.clone(), "clock".to_owned())
+		plugin_delete_mcp_server(app, scope.clone(), "clock".to_owned())
 			.await
 			.expect("the server is removed");
 
-		let listed = plugin_mcp_servers(&*app, scope).await.expect("the servers read");
+		let listed = plugin_mcp_servers(app, scope).await.expect("the servers read");
 		assert!(listed.is_empty(), "got {listed:?}");
 		assert!(environment::store::values(&root, &server).expect("the store reads").is_empty());
 	}
@@ -524,11 +524,11 @@ mod tests {
 	async fn deleting_a_server_the_person_never_declared_is_refused_and_forgets_nothing() {
 		let app = a_host_without_a_database("user-undeclared");
 		the_person_laid_down(&app);
-		let root = environment::store::root(&*app).expect("the store has a home");
+		let root = environment::store::root(&app).expect("the store has a home");
 		let server = EnvScope::Server { name: "clock".to_owned(), owner: EnvOwner::User };
 		environment::store::set(&root, &server, "REGION", "eu").expect("the value is written");
 
-		let refused = plugin_delete_mcp_server(&*app, PluginScope::User, "clock".to_owned()).await;
+		let refused = plugin_delete_mcp_server(&app, PluginScope::User, "clock".to_owned()).await;
 
 		assert!(matches!(refused, Err(TranscriptStoreError::UnwritableBundle { .. })));
 		let held = environment::store::values(&root, &server).expect("the store reads");
@@ -540,11 +540,11 @@ mod tests {
 		let app = a_host_without_a_database("user-not-an-object");
 		the_person_laid_down(&app);
 		set_clock(&app, &PluginScope::User).await;
-		let path = bundles::user::laid_down(&*app).expect("the plugin is laid down");
+		let path = bundles::user::laid_down(&app).expect("the plugin is laid down");
 		let held = fs::read_to_string(path.join(".mcp.json")).expect("the file reads");
 
 		let refused = plugin_set_mcp_server(
-			&*app,
+			&app,
 			PluginScope::User,
 			"broken".to_owned(),
 			serde_json::json!(["clock"]).into(),
@@ -561,13 +561,13 @@ mod tests {
 		let app = a_host_without_a_database("never-laid-write");
 
 		let on_space = plugin_skill_file(
-			&*app,
+			&app,
 			space("s-absent"),
 			"about-this-space".to_owned(),
 			"SKILL.md".to_owned(),
 		)
 		.await;
-		let on_person = plugin_delete_skill(&*app, PluginScope::User, "about-me".to_owned()).await;
+		let on_person = plugin_delete_skill(&app, PluginScope::User, "about-me".to_owned()).await;
 
 		assert_eq!(
 			on_space,
@@ -588,7 +588,7 @@ mod tests {
 		let app = a_host_without_a_database("bot-needs-database");
 
 		let refused =
-			plugin_set_mcp_server(&*app, bot("b1"), "clock".to_owned(), a_clock().into(), None)
+			plugin_set_mcp_server(&app, bot("b1"), "clock".to_owned(), a_clock().into(), None)
 				.await;
 
 		assert!(
@@ -601,7 +601,7 @@ mod tests {
 	async fn a_bot_skill_write_that_names_a_system_skill_is_refused_and_writes_nothing() {
 		let app = a_host("bot-system-skill");
 		let (bot_id, _) = a_bot_in_a_space(&app).await;
-		let root = bundles::root(&*app).expect("the bundles have a home");
+		let root = bundles::root(&app).expect("the bundles have a home");
 		let marked = bundles::dir(&root, &bot_id)
 			.expect("the bundle is held")
 			.join("skills")
@@ -612,7 +612,7 @@ mod tests {
 		fs::write(marked.join("SKILL.md"), held).expect("the marked skill lands");
 
 		let refused = plugin_write_skill_file(
-			&*app,
+			&app,
 			bot(&bot_id),
 			"remembering".to_owned(),
 			"SKILL.md".to_owned(),
@@ -688,14 +688,14 @@ mod tests {
 		bot_id: &str,
 		commit_id: &str,
 	) -> Result<Vec<BotHistoryEntry>, TranscriptStoreError> {
-		plugin_revert(&*app, bot(bot_id), commit_id.to_owned(), commit_id.to_owned()).await
+		plugin_revert(app, bot(bot_id), commit_id.to_owned(), commit_id.to_owned()).await
 	}
 
 	#[tokio::test]
 	async fn undoing_the_learned_block_s_creation_holds_across_the_next_session_start() {
 		let app = a_host("undo-learned-block");
 		let (bot_id, _) = a_bot_in_a_space(&app).await;
-		let root = bundles::root(&*app).expect("the bundles have a home");
+		let root = bundles::root(&app).expect("the bundles have a home");
 		let created = a_learned_write(&app, &bot_id, "They bake on Sundays.").await;
 		assert_eq!(stored(&app, &bot_id).await.memory, "They bake on Sundays.");
 
@@ -717,7 +717,7 @@ mod tests {
 	async fn a_session_starting_between_the_revert_and_the_stored_memory_leaves_the_block_undone() {
 		let app = a_host("undo-learned-block-mid-session-start");
 		let (bot_id, _) = a_bot_in_a_space(&app).await;
-		let root = bundles::root(&*app).expect("the bundles have a home");
+		let root = bundles::root(&app).expect("the bundles have a home");
 		let created = a_learned_write(&app, &bot_id, "They bake on Sundays.").await;
 		let scope = a_session_of(&bot_id);
 		let (reverted, paused) = oneshot::channel();
@@ -729,7 +729,7 @@ mod tests {
 		let undo = revert_a_bot(database(&app), &root, &bot_id, &created, &created, before_storing);
 		let a_session_in_the_window = async {
 			paused.await.expect("the undo pauses after its revert");
-			let mut starting = pin!(laid_down_session(&*app, database(&app), &scope));
+			let mut starting = pin!(laid_down_session(&app, database(&app), &scope));
 			let early = tokio::time::timeout(A_SESSION_START, starting.as_mut()).await;
 			resumed.send(()).expect("the undo is resumed");
 			match early {
@@ -750,7 +750,7 @@ mod tests {
 	async fn a_bundle_write_leaves_a_memory_stored_without_a_learned_block_as_it_was() {
 		let app = a_host("stored-memory-without-a-block");
 		let (bot_id, _) = a_bot_in_a_space(&app).await;
-		let root = bundles::root(&*app).expect("the bundles have a home");
+		let root = bundles::root(&app).expect("the bundles have a home");
 		database(&app)
 			.conversations()
 			.set_memory(bot_id.clone(), "They bake on Sundays.".to_owned())
@@ -767,7 +767,7 @@ mod tests {
 	async fn undoing_a_later_learned_write_stores_the_memory_the_restored_block_holds() {
 		let app = a_host("undo-later-learned-block");
 		let (bot_id, _) = a_bot_in_a_space(&app).await;
-		let root = bundles::root(&*app).expect("the bundles have a home");
+		let root = bundles::root(&app).expect("the bundles have a home");
 		a_learned_write(&app, &bot_id, "They bake on Sundays.").await;
 		let moved = a_learned_write(&app, &bot_id, "They bake on Saturdays.").await;
 
@@ -794,7 +794,7 @@ mod tests {
 	async fn undoing_a_skill_write_leaves_a_memory_stored_alone_as_it_was() {
 		let app = a_host("undo-skill-stored-memory");
 		let (bot_id, _) = a_bot_in_a_space(&app).await;
-		let root = bundles::root(&*app).expect("the bundles have a home");
+		let root = bundles::root(&app).expect("the bundles have a home");
 		database(&app)
 			.conversations()
 			.set_memory(bot_id.clone(), "They bake on Sundays.".to_owned())
@@ -805,7 +805,7 @@ mod tests {
 		fs::write(skill.join("SKILL.md"), "---\nname: baking\n---\n\nBake.\n")
 			.expect("the skill lands");
 		plugin_write_skill_file(
-			&*app,
+			&app,
 			bot(&bot_id),
 			"baking".to_owned(),
 			"SKILL.md".to_owned(),

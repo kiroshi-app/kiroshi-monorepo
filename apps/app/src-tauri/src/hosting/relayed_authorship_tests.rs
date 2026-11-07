@@ -1,103 +1,45 @@
-use std::collections::{HashSet, VecDeque};
 use std::net::Ipv4Addr;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
-use axum::extract::ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade};
-use axum::extract::{Path, RawQuery, State as Served};
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{delete, get, patch, post};
+use axum::routing::get;
 use axum::Router;
-use base64::prelude::{Engine as _, BASE64_STANDARD, BASE64_URL_SAFE_NO_PAD};
 use serde_json::{json, Value};
 use tauri::test::{mock_builder, MockRuntime, INVOKE_KEY};
 use tauri::webview::InvokeRequest;
 use tauri::{Listener, Manager, WebviewWindow, WebviewWindowBuilder};
 use tokio::net::TcpListener;
-use tokio::sync::{mpsc, watch};
+use tokio::sync::mpsc;
 
-use crate::account::contract::SignedOutReason;
-use crate::account::contract::{AccountState, CHANGED_EVENT as ACCOUNT_CHANGED_EVENT};
 use crate::account::session::restore;
-use crate::account::session::{sign_out, AccountSession};
-use crate::agent::commands;
-use crate::agent::contract as agent;
+use crate::account::session::AccountSession;
 use crate::agent::protocol::OauthCredentials;
 use crate::agent::protocol::SpaceMember;
-use crate::agent::reply_writer::TurnSink;
-use crate::attachments;
 use crate::bundles::{self, BotPermissions, DEFAULT_OUTPUT_STYLE};
-use crate::companions::contract::{
-	CREATED_EVENT as COMPANION_CREATED_EVENT, DELETED_EVENT as COMPANION_DELETED_EVENT,
-	UPDATED_EVENT as COMPANION_UPDATED_EVENT,
-};
-use crate::conversations::commands::{
-	conversation_add_participant, conversation_append_user_message, conversation_create,
-	conversation_create_bot_from_draft, conversation_delete, conversation_delete_bot,
-	conversation_duplicate_bot, conversation_page, conversation_remove_participant,
-	conversation_send_user_message, conversation_set_lead, conversation_update,
-	conversation_update_bot,
-};
-use crate::conversations::contract::{
-	Bot, BotDraft, BotIdentity, Conversation, ConversationInPage, Hue, LastWord, NewUserMessage,
-	ObservedState, ParticipantRole, TranscriptStoreError, WrittenFrom,
-	CREATED_EVENT as CONVERSATION_CREATED_EVENT, DELETED_EVENT as CONVERSATION_DELETED_EVENT,
-	MESSAGE_STORED_EVENT, STATE_CHANGED_EVENT, UPDATED_EVENT as CONVERSATION_UPDATED_EVENT,
-};
-use crate::conversations::state as conversation_state;
+use crate::conversations::commands::conversation_send_user_message;
+use crate::conversations::contract::{BotIdentity, UPDATED_EVENT as CONVERSATION_UPDATED_EVENT};
 use crate::conversations::turn_run_deadline::{arm_start_deadlines, TurnRunDeadlines};
-use crate::crypto::commands::{DeviceKeysState, SpaceKeys};
-use crate::crypto::device_keys::{verify, DeviceKeys};
-use crate::crypto::error::CryptoError;
-use crate::crypto::frame::CHALLENGE_LENGTH;
-use crate::crypto::space_key::HeldSpaceKey;
-use crate::db::connection::temp_dir;
 use crate::db::repositories::conversations::{a_pending_prompt, PromptKind};
-use crate::db::repositories::joined_spaces::{JoinedReach, JoinedSpace};
 use crate::db::repositories::messages::{
 	EndedRun, MessagePageQuery, MessageRole, NewAssistantMessage, NewTurn, WebSource,
 };
 use crate::db::{self, DatabaseState};
 use crate::environment::commands::writable_root;
-use crate::environment::connection;
-use crate::environment::contract::{ConnectionKind, EnvError, EnvOwner, EnvScope, ACCOUNT_BEARER};
+use crate::environment::contract::{EnvOwner, EnvScope, ACCOUNT_BEARER};
 use crate::environment::store;
-use crate::events::{self, Event, BUFFERED_FRAMES};
-use crate::host_api::files::ATTACHMENT_PATH;
 use crate::hosting::authorship::{Caller, CommandCaller};
-use crate::hosting::bridge::{self, LocalApi, RelayedFile, ATTACHMENT_COMMAND};
+use crate::hosting::bridge::LocalApi;
+use crate::hosting::contract::{HostingState, Member, MemberStatus, SpaceMembers};
 use crate::hosting::Hosting;
-use crate::hosting::contract::{AccountDevices, RosterDevice};
-use crate::hosting::contract::{
-	HostingFailureKind, HostingState, InvitationState, Member, MemberStatus, MembersError,
-	SpaceInvitation, SpaceMembers, TransportFailure, UnreachableReason, CHANGED_EVENT,
-	MEMBERS_CHANGED_EVENT,
-};
-use crate::hosting::reach;
-use crate::hosting::relay::relay_socket_config;
-use crate::hosting::roster::SignedRow;
-use crate::joined_spaces::contract::JoinedSpaceConnection;
-use crate::joined_spaces::relay::RelayGuests;
-use crate::library;
-use crate::library::contract::{LibraryError, DOCUMENT_RENAMED_EVENT, DOCUMENT_UPDATED_EVENT};
-use crate::logging::contract::InstallKind;
 use crate::mcp_oauth::asking::AuthorizationAnswers;
 use crate::mcp_oauth::commands::{mcp_application_status, McpOauthState};
 use crate::mcp_oauth::credentials;
 use crate::mcp_oauth::reports::ApplicationReports;
 use crate::removed_on_drop::RemovedOnDrop;
-use crate::routines::commands::CHANGED_EVENT as ROUTINE_CHANGED_EVENT;
 use crate::routines::webhook::{self, Webhook};
-use crate::search::contract::{CatalogueScope, MessageSearchQuery};
-use crate::spaces::commands::{
-	bot_add_to_space, bot_move_to_space, bot_remove_from_space, space_delete, space_update,
-};
-use crate::spaces::contract::{Space as SpaceShown, SpaceError, DESCRIBED_EVENT};
 use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
-use crate::test_log::{capturing, warnings_naming};
 use kiroshi_core::environment::commands::env_list;
 
 const BEARER: &str = "bearer-that-never-leaves";

@@ -195,8 +195,8 @@ mod tests {
 
 	async fn a_host(name: &str) -> CoreOfItsOwn {
 		let app = a_core_of_its_own(&format!("routine-host-{name}"));
-		crate::db::install(&*app);
-		let system = bundles::system::path(&*app).expect("the system bundle is named");
+		crate::db::install(&app);
+		let system = bundles::system::path(&app).expect("the system bundle is named");
 		bundles::system::write(&system).expect("the system bundle lands");
 		ready(&app.state::<db::DatabaseState>())
 			.expect("the database opens")
@@ -257,7 +257,7 @@ mod tests {
 		bot_id: &str,
 	) -> Routine {
 		routine_create(
-			&*app,
+			app,
 			RoutineDraft {
 				conversation_id: conversation_id.to_owned(),
 				bot_id: bot_id.to_owned(),
@@ -273,7 +273,7 @@ mod tests {
 	}
 
 	async fn listed(app: &crate::core_context::Core, conversation_id: &str) -> Vec<Routine> {
-		routine_list(&*app, conversation_id.to_owned()).await.expect("the routines read")
+		routine_list(app, conversation_id.to_owned()).await.expect("the routines read")
 	}
 
 	#[tokio::test]
@@ -403,7 +403,7 @@ mod tests {
 	async fn every_write_announces_the_conversation_whose_routines_changed() {
 		let app = a_host("announced").await;
 		let (changed, arriving) = mpsc::channel();
-		crate::test_core::listen_to(&*app, CHANGED_EVENT, move |event| {
+		crate::test_core::listen_to(&app, CHANGED_EVENT, move |event| {
 			changed.send(event.to_owned()).expect("the test is listening");
 		});
 		let host = serving(&app, "c1");
