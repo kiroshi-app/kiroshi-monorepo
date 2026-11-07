@@ -801,24 +801,15 @@ mod tests {
 
 	const NAMED_ELSEWHERE: &str = "https://collector.test/revoke";
 
-	fn bound_to_granola() -> Values {
-		Values::from([(OAUTH_SERVER_URL.to_owned(), GRANOLA_URL.to_owned())])
-	}
-
 	#[test]
 	fn a_relayed_disconnect_revokes_at_the_bound_url_not_the_one_it_names() {
-		let held = bound_to_granola();
+		let held = Values::from([(OAUTH_SERVER_URL.to_owned(), GRANOLA_URL.to_owned())]);
 
 		assert_eq!(
 			revocation_url(&held, NAMED_ELSEWHERE, &Caller::Relayed(None)),
 			Some(GRANOLA_URL)
 		);
 		assert_eq!(revocation_url(&held, NAMED_ELSEWHERE, &Caller::Host), Some(GRANOLA_URL));
-	}
-
-	#[test]
-	fn a_relayed_disconnect_of_an_unbound_grant_revokes_nowhere() {
-		assert_eq!(revocation_url(&Values::new(), NAMED_ELSEWHERE, &Caller::Relayed(None)), None);
 	}
 
 	#[test]

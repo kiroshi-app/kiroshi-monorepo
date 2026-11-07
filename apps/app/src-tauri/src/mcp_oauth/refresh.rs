@@ -211,9 +211,11 @@ fn unbound_reason(held: &Values, declared: &str) -> Option<&'static str> {
 }
 
 fn refreshable(held: &Values, declared: &str) -> Option<RefreshRequest> {
-	let bound = credentials::bound_url(held).filter(|bound| *bound == declared)?;
+	if unbound_reason(held, declared).is_some() {
+		return None;
+	}
 	Some(RefreshRequest {
-		url: bound.to_owned(),
+		url: declared.to_owned(),
 		refresh_token: held.get(OAUTH_REFRESH_TOKEN)?.clone(),
 		client_id: held.get(OAUTH_CLIENT_ID).cloned(),
 		client_secret: held.get(OAUTH_CLIENT_SECRET).cloned(),
