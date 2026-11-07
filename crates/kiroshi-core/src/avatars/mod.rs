@@ -216,11 +216,15 @@ mod tests {
 	fn a_sweep_ignores_a_reference_that_points_outside_the_directory() {
 		let dir = temp_dir();
 		let stored = a_stored_avatar(&dir);
+		let outside = temp_dir();
+		let elsewhere = outside.join("elsewhere.png");
+		write(&elsewhere, &picture::normalised(&a_png(8, 8)).expect("accepted"))
+			.expect("the picture outside is written");
 
-		Avatars::sweep(&dir, &["/etc/passwd".to_owned(), stored.clone()]);
+		Avatars::sweep(&dir, &[elsewhere.to_string_lossy().into_owned(), stored.clone()]);
 
 		assert!(Path::new(&stored).exists(), "a referenced picture was swept");
-		assert!(Path::new("/etc/passwd").exists(), "the sweep reached outside its directory");
+		assert!(elsewhere.exists(), "the sweep reached outside its directory");
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
