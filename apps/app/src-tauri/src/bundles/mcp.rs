@@ -150,7 +150,7 @@ pub fn set_mcp_server_at(
 	let path = bundle.join(MCP_NAME);
 	let mut servers = declared(&path, SERVERS_KEY);
 	servers.insert(name.to_owned(), config.clone());
-	write_declared(&path, SERVERS_KEY, servers)?;
+	write_declared(bundle, MCP_NAME, SERVERS_KEY, servers)?;
 	let kept = match mark {
 		Some(given) => written_mark(bundle, name, given)?,
 		None => mark_under(&marks_at(bundle), name),
@@ -166,7 +166,7 @@ fn written_mark(
 	let path = bundle.join(MARKS_NAME);
 	let mut marks = declared(&path, MARKS_KEY);
 	marks.insert(name.to_owned(), serde_json::to_value(mark)?);
-	write_declared(&path, MARKS_KEY, marks)?;
+	write_declared(bundle, MARKS_NAME, MARKS_KEY, marks)?;
 	Ok(mark.clone())
 }
 
@@ -186,7 +186,7 @@ pub fn remove_mcp_server_at(bundle: &Path, name: &str) -> std::io::Result<()> {
 	if servers.remove(name).is_none() {
 		return Err(std::io::Error::new(std::io::ErrorKind::NotFound, "no such server"));
 	}
-	write_declared(&path, SERVERS_KEY, servers)?;
+	write_declared(bundle, MCP_NAME, SERVERS_KEY, servers)?;
 	remove_mark(bundle, name)
 }
 
@@ -196,7 +196,7 @@ fn remove_mark(bundle: &Path, name: &str) -> std::io::Result<()> {
 	if marks.remove(name).is_none() {
 		return Ok(());
 	}
-	write_declared(&path, MARKS_KEY, marks)
+	write_declared(bundle, MARKS_NAME, MARKS_KEY, marks)
 }
 
 #[cfg(test)]
