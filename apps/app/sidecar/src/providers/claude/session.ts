@@ -139,6 +139,7 @@ export const buildOptions = (
 					agent: request.agent,
 					mcpServers: kiroshiServer({
 						cwd: request.cwd,
+						env: sessionEnv(request.connection),
 						floor,
 						managedSettings,
 						session: request.session,

@@ -17,6 +17,7 @@ import { KIROSHI_LAYER } from "./system-layer"
 
 const scope: KiroshiScope = {
 	cwd: "/tmp",
+	env: {},
 	floor: {
 		home: "/home",
 		platform: "darwin",
