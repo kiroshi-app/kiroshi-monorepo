@@ -213,7 +213,7 @@ pub fn relative_time(at: i64, now: i64) -> String {
 		if elapsed.abs() < span {
 			continue;
 		}
-		let count = (elapsed as f64 / span as f64).round() as i64;
+		let count = (elapsed as f64 / span as f64 + 0.5).floor() as i64;
 		let is_clock_unit = unit == "hour" || unit == "minute";
 		return match (count, unit) {
 			(-1, "day") => "yesterday".to_owned(),
@@ -303,6 +303,20 @@ fn link<S: 'static>(control: El, t: &Tokens, emit: &Emit<S>, url: &str) -> El {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LinkStyle {
+	Plain,
+	Underlined,
+}
+
+fn link_text(content: String, style: TextStyle, ink: Color, link_style: LinkStyle) -> El {
+	let spans = match link_style {
+		LinkStyle::Plain => Vec::new(),
+		LinkStyle::Underlined => vec![Span::new(0, content.len()).underline(ink)],
+	};
+	rich(content, spans).font(style).color(ink)
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TicketLayout {
 	Wrap,
 	Line,
@@ -312,15 +326,18 @@ pub fn ticket_line<S: 'static>(
 	t: &Tokens,
 	ticket: Ticket,
 	layout: TicketLayout,
+	link_style: LinkStyle,
 	emit: &Emit<S>,
 ) -> El {
 	let (glyph, _) = platform_mark(ticket.platform);
+	let link_style = if ticket.url.is_empty() { LinkStyle::Plain } else { link_style };
 	let mut line = match layout {
 		TicketLayout::Wrap => row()
 			.w_full()
-			.gap(SPACING * 1.5)
-			.items_start()
-			.child(icon(glyph, SPACING * 3.0).color(t.muted_foreground).mt(SPACING * 0.5)),
+			.flex_wrap()
+			.gaps(0.0, SPACING * 1.5)
+			.center_y()
+			.child(icon(glyph, SPACING * 3.0).color(t.muted_foreground)),
 		TicketLayout::Line => row()
 			.shrink()
 			.min_w(0.0)
@@ -330,10 +347,11 @@ pub fn ticket_line<S: 'static>(
 	};
 	if !ticket.external_id.is_empty() {
 		let ink = if layout == TicketLayout::Line { t.foreground } else { t.muted_foreground };
-		line = line.child(text(ticket.external_id.to_owned()).font(TEXT_XS_MEDIUM).color(ink));
+		line =
+			line.child(link_text(ticket.external_id.to_owned(), TEXT_XS_MEDIUM, ink, link_style));
 	}
 	if !ticket.title.is_empty() {
-		let title = text(ticket.title.to_owned()).font(TEXT_XS).color(t.muted_foreground);
+		let title = link_text(ticket.title.to_owned(), TEXT_XS, t.muted_foreground, link_style);
 		line = line.child(match layout {
 			TicketLayout::Wrap => title.wrap_anywhere().shrink().min_w(0.0),
 			TicketLayout::Line => title.truncate().shrink().min_w(0.0),
@@ -352,12 +370,13 @@ pub fn pull_request_link<S: 'static>(
 	t: &Tokens,
 	language: Language,
 	pull_request: PullRequest,
+	link_style: LinkStyle,
 	emit: &Emit<S>,
 ) -> El {
 	let number = pull_request.number.to_string();
 	let shown = filled(chat::missions::pull_request::LABEL, language, &[("number", &number)]);
 	let named = filled(chat::missions::pull_request::OPEN, language, &[("number", &number)]);
-	let label = text(shown).font(TEXT_XS_MEDIUM).color(t.foreground);
+	let label = link_text(shown, TEXT_XS_MEDIUM, t.foreground, link_style);
 	link(label, t, emit, pull_request.url).label(named)
 }
 
@@ -390,6 +409,7 @@ pub fn activity_line<S: 'static>(
 	language: Language,
 	commits_ahead: u32,
 	pull_request: Option<PullRequest>,
+	link_style: LinkStyle,
 	emit: &Emit<S>,
 ) -> El {
 	let mut line = row().h(SPACING * 4.0).min_w(0.0).center_y();
@@ -404,7 +424,7 @@ pub fn activity_line<S: 'static>(
 		if commits_ahead > 0 {
 			line = line.child(text(SEPARATOR).font(TEXT_XS).color(t.muted_foreground));
 		}
-		line = line.child(pull_request_link(t, language, pull_request, emit));
+		line = line.child(pull_request_link(t, language, pull_request, link_style, emit));
 	}
 	line
 }
@@ -530,16 +550,14 @@ pub fn mission_row<S: 'static>(
 		.min_w(0.0)
 		.grow(1.0);
 	let mut name_line = row().h(SPACING * 5.0).min_w(0.0).gap(SPACING * 1.5).center_y().child(name);
-	if !mission.timestamp.is_empty() {
-		name_line = name_line.child(
-			text(mission.timestamp.to_owned())
-				.font(STAMP)
-				.color(t.muted_foreground)
-				.align(rune::Align::End)
-				.truncate()
-				.w(ROW_STAMP),
-		);
-	}
+	name_line = name_line.child(
+		text(mission.timestamp.to_owned())
+			.font(STAMP)
+			.color(t.muted_foreground)
+			.align(rune::Align::End)
+			.truncate()
+			.w(ROW_STAMP),
+	);
 	let dot_slot = row().w(ROW_PREVIEW_END).h(SPACING * 4.0).justify_end().center_y();
 	let dot_slot = match mission.state.row_dot(t) {
 		Some(dot) => dot_slot
@@ -566,6 +584,7 @@ pub fn mission_row<S: 'static>(
 			language,
 			mission.commits_ahead,
 			mission.pull_request,
+			LinkStyle::Plain,
 			emit,
 		));
 	}
@@ -607,6 +626,7 @@ pub fn mission_row<S: 'static>(
 const CARD_INSET: f32 = SPACING * 4.5;
 const CARD_MAX_WIDTH: f32 = SPACING * 145.0;
 const CARD_PRESS_SCALE: f32 = 0.98;
+const BUBBLE_SHARE: f32 = 0.85;
 const AUTHOR_AVATAR: f32 = SPACING * 5.0;
 
 pub fn soft_bubble(t: &Tokens, content: El) -> El {
@@ -681,7 +701,13 @@ fn card_body<S: 'static>(t: &Tokens, language: Language, mission: &Mission, emit
 		text(mission.objective.to_owned()).font(TEXT_BUBBLE).color(objective_ink).wrap_anywhere(),
 	);
 	if mission.ticket.is_named() {
-		lead = lead.child(ticket_line(t, mission.ticket, TicketLayout::Wrap, emit));
+		lead = lead.child(ticket_line(
+			t,
+			mission.ticket,
+			TicketLayout::Wrap,
+			LinkStyle::Underlined,
+			emit,
+		));
 	}
 	if let Some(call) = mission.live_activity() {
 		lead = lead.child(live_activity(t, call));
@@ -708,6 +734,7 @@ fn card_body<S: 'static>(t: &Tokens, language: Language, mission: &Mission, emit
 			language,
 			mission.commits_ahead,
 			mission.pull_request,
+			LinkStyle::Underlined,
 			emit,
 		));
 	}
@@ -715,6 +742,15 @@ fn card_body<S: 'static>(t: &Tokens, language: Language, mission: &Mission, emit
 }
 
 pub fn mission_card<S: 'static>(
+	t: &Tokens,
+	language: Language,
+	mission: &Mission,
+	emit: &Emit<S>,
+) -> El {
+	bubble_lane(card_bubble(t, language, mission, None, emit))
+}
+
+fn card_bubble<S: 'static>(
 	t: &Tokens,
 	language: Language,
 	mission: &Mission,
@@ -740,6 +776,14 @@ pub fn mission_card<S: 'static>(
 	)
 }
 
+fn bubble_lane(bubble: El) -> El {
+	row().w_frac(BUBBLE_SHARE).min_w(0.0).items_start().child(bubble)
+}
+
+pub fn turn_lane(bubble: El) -> El {
+	row().w_full().max_w(CARD_MAX_WIDTH).min_w(0.0).items_start().child(bubble)
+}
+
 pub fn mission_turn<S: 'static>(
 	t: &Tokens,
 	language: Language,
@@ -759,7 +803,7 @@ pub fn mission_turn<S: 'static>(
 		.items_start()
 		.role("article")
 		.label(chat::transcript::message::MISSION.text(language))
-		.child(mission_card(t, language, mission, Some(foot), emit))
+		.child(turn_lane(card_bubble(t, language, mission, Some(foot), emit)))
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -858,7 +902,13 @@ pub fn mission_header<S: 'static>(
 	let has_tools = !header.tools.is_empty();
 	let mut ticket_band = band(BAND_HEIGHT);
 	if has_ticket {
-		ticket_band = ticket_band.child(ticket_line(t, header.ticket, TicketLayout::Line, emit));
+		ticket_band = ticket_band.child(ticket_line(
+			t,
+			header.ticket,
+			TicketLayout::Line,
+			LinkStyle::Plain,
+			emit,
+		));
 	}
 	if has_ticket && has_tools {
 		ticket_band = ticket_band.child(band_rule(t));
@@ -911,6 +961,7 @@ pub fn mission_header<S: 'static>(
 				language,
 				header.commits_ahead,
 				header.pull_request,
+				LinkStyle::Plain,
 				emit,
 			)))
 			.child(rule(t));
@@ -958,28 +1009,30 @@ pub fn mission_header_skeleton<S: 'static>(t: &Tokens, language: Language, emit:
 					.child(bar(t, SPACING * 48.0)),
 			),
 		);
-	let ticket_band = band(BAND_HEIGHT).child(pulsing(
-		t,
-		row()
-			.w_full()
-			.gap(SPACING * 2.0)
-			.center_y()
-			.child(bar(t, SPACING * 40.0))
-			.child(spacer())
-			.child(faint_bar(t, SPACING * 16.0)),
-	));
+	let ticket_band = band(BAND_HEIGHT).child(
+		pulsing(
+			t,
+			row()
+				.w_full()
+				.gap(SPACING * 2.0)
+				.center_y()
+				.child(bar(t, SPACING * 40.0))
+				.child(spacer())
+				.child(faint_bar(t, SPACING * 16.0)),
+		)
+		.grow(1.0),
+	);
 	col()
 		.w_full()
 		.role("status")
 		.child(app_header(leading, None, t))
-		.child(ticket_band.grow(0.0))
+		.child(ticket_band.grow(0.0).min_h(BAND_HEIGHT))
 		.child(rule(t))
 }
 
 const EVENT_GUTTER: f32 = SPACING * 10.0;
 const EVENT_GUTTER_MARK: f32 = 18.0;
 const EVENT_DOT: f32 = SPACING * 1.5;
-const EVENT_BUBBLE_SHARE: f32 = 0.85;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EventKind {
@@ -1111,7 +1164,13 @@ fn event_time(t: &Tokens, event: &MissionEvent, now: i64) -> El {
 
 fn event_link<S: 'static>(t: &Tokens, language: Language, link: EventLink, emit: &Emit<S>) -> El {
 	match link.pull_request {
-		Some(number) => pull_request_link(t, language, PullRequest { url: link.url, number }, emit),
+		Some(number) => pull_request_link(
+			t,
+			language,
+			PullRequest { url: link.url, number },
+			LinkStyle::Plain,
+			emit,
+		),
 		None => host_link(t, language, link.url, emit),
 	}
 }
@@ -1212,7 +1271,7 @@ pub fn event_row<S: 'static>(
 		t,
 		text(said.to_owned()).font(TEXT_BUBBLE).color(t.bubble_foreground).wrap_anywhere(),
 	);
-	let bubble = row().w_frac(EVENT_BUBBLE_SHARE).child(bubble);
+	let bubble = bubble_lane(bubble);
 	row()
 		.w_full()
 		.min_w(0.0)
@@ -1709,7 +1768,8 @@ mod tests {
 		assert_eq!(relative_time(NOW - 20_000, NOW), "now");
 		assert_eq!(relative_time(NOW - 60_000, NOW), "1 minute ago");
 		assert_eq!(relative_time(NOW - 4 * 60_000, NOW), "4 minutes ago");
-		assert_eq!(relative_time(NOW - 5_400_000, NOW), "2 hours ago");
+		assert_eq!(relative_time(NOW - 5_400_000, NOW), "1 hour ago");
+		assert_eq!(relative_time(NOW - 330_000, NOW), "5 minutes ago");
 		assert_eq!(relative_time(NOW - 86_400_000, NOW), "yesterday");
 		assert_eq!(relative_time(NOW - 604_800_000, NOW), "last week");
 	}

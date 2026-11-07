@@ -2,28 +2,29 @@ use std::rc::Rc;
 
 use rune::{Align, El, Side, col, row, text};
 
-use super::{SceneState, stage, staged};
+use super::SceneState;
 use crate::avatar::Face;
 use crate::strings::{Language, chat};
 use crate::surfaces::s08_missions::{
-	Bot, Emit, EventKind, EventLink, Header, ListEnd, MenuFacts, Mission, MissionEvent,
+	Bot, Emit, EventKind, EventLink, Header, LinkStyle, ListEnd, MenuFacts, Mission, MissionEvent,
 	MissionState, PANEL_WIDTH, Panel, PanelMission, PullRequest, Status, Ticket, TicketLayout,
 	ToolCall, activity_line, author_line, event_row, mission_card, mission_copy_menu,
 	mission_detail_skeleton, mission_header, mission_header_skeleton, mission_menu, mission_row,
 	mission_turn, missions_feed_skeleton, missions_panel, panel_frame, soft_bubble, state_pill,
-	ticket_line, tool_mark,
+	ticket_line, tool_mark, turn_lane,
 };
 use crate::tokens::{SPACING, TEXT_BUBBLE, Tokens};
 use crate::widgets::not_drawn;
 
 pub(super) const ROWS: (f32, f32) = (640.0, 820.0);
+pub(super) const TURN: (f32, f32) = (720.0, 360.0);
 pub(super) const TURNS: (f32, f32) = (720.0, 2640.0);
 pub(super) const HEADERS: (f32, f32) = (640.0, 1420.0);
 pub(super) const EVENTS: (f32, f32) = (640.0, 1720.0);
 pub(super) const THREAD: (f32, f32) = (640.0, 1040.0);
 pub(super) const PANEL: (f32, f32) = (640.0, 760.0);
 pub(super) const MENU: (f32, f32) = (720.0, 520.0);
-pub(super) const FULL: (f32, f32) = (960.0, 560.0);
+pub(super) const FULL: (f32, f32) = (1180.0, 900.0);
 
 const EN: Language = Language::En;
 const NOW: i64 = 1_772_616_600_000;
@@ -369,8 +370,19 @@ fn emit() -> Emit<SceneState> {
 }
 
 fn padded(t: &Tokens, content: El) -> El {
+	padded_with(t, content, Vec::new())
+}
+
+fn padded_with(t: &Tokens, content: El, layers: Vec<El>) -> El {
 	rune_kit::root(
-		col().w_full().h_full().padding(PADDED).fill(t.background).items_start().child(content),
+		col().w_full().h_full().padding(PADDED).fill(t.card).items_start().child(content),
+		layers,
+	)
+}
+
+fn stage(t: &Tokens, content: El) -> El {
+	rune_kit::root(
+		row().w_full().h_full().fill(t.card).center().child(col().child(content)),
 		Vec::new(),
 	)
 }
@@ -380,7 +392,7 @@ fn card_of(state: MissionState) -> Mission<'static> {
 }
 
 fn card(t: &Tokens, mission: Mission) -> El {
-	mission_card(t, EN, &mission, None, &emit())
+	mission_card(t, EN, &mission, &emit())
 }
 
 fn row_panel(t: &Tokens, rows: impl IntoIterator<Item = El>) -> El {
@@ -413,7 +425,7 @@ pub(super) fn marks_default(t: &Tokens, _: &SceneState) -> El {
 		col()
 			.w(NARROW)
 			.gap(SPACING * 2.0)
-			.child(ticket_line(t, MISSION_TICKET, TicketLayout::Wrap, &emit()))
+			.child(ticket_line(t, MISSION_TICKET, TicketLayout::Wrap, LinkStyle::Plain, &emit()))
 			.child(
 				row()
 					.gap(SPACING * 2.0)
@@ -424,13 +436,29 @@ pub(super) fn marks_default(t: &Tokens, _: &SceneState) -> El {
 }
 
 pub(super) fn marks_as_line(t: &Tokens, _: &SceneState) -> El {
-	padded(t, row().w(SQUEEZED).child(ticket_line(t, MISSION_TICKET, TicketLayout::Line, &emit())))
+	padded(
+		t,
+		row().w(SQUEEZED).child(ticket_line(
+			t,
+			MISSION_TICKET,
+			TicketLayout::Line,
+			LinkStyle::Plain,
+			&emit(),
+		)),
+	)
 }
 
 pub(super) fn activity_line_default(t: &Tokens, _: &SceneState) -> El {
 	padded(
 		t,
-		row().w(ACTIVITY_WIDTH).child(activity_line(t, EN, 1, Some(MISSION_PULL_REQUEST), &emit())),
+		row().w(ACTIVITY_WIDTH).child(activity_line(
+			t,
+			EN,
+			1,
+			Some(MISSION_PULL_REQUEST),
+			LinkStyle::Plain,
+			&emit(),
+		)),
 	)
 }
 
@@ -537,14 +565,7 @@ pub(super) fn card_long_status(t: &Tokens, _: &SceneState) -> El {
 			.w(SQUEEZED)
 			.gap(SPACING * 4.0)
 			.items_start()
-			.child(card(
-				t,
-				Mission {
-					status: Some(LONG_MISSION_STATUS),
-					now: Some(NOW),
-					..WAITING_MISSION_CARD
-				},
-			))
+			.child(card(t, Mission { status: Some(LONG_MISSION_STATUS), now: Some(NOW), ..short }))
 			.child(card(t, short)),
 	)
 }
@@ -662,11 +683,11 @@ pub(super) fn row_long_content(t: &Tokens, _: &SceneState) -> El {
 }
 
 pub(super) fn row_with_status(t: &Tokens, _: &SceneState) -> El {
-	rows_scene(t, [Mission { status: Some(MISSION_STATUS), ..WORKING_MISSION }])
+	rows_scene(t, [Mission { status: Some(MISSION_STATUS), ..WAITING_HUMAN_MISSION }])
 }
 
 pub(super) fn row_long_status(t: &Tokens, _: &SceneState) -> El {
-	rows_scene(t, [Mission { status: Some(LONG_MISSION_STATUS), ..WORKING_MISSION }])
+	rows_scene(t, [Mission { status: Some(LONG_MISSION_STATUS), ..WAITING_HUMAN_MISSION }])
 }
 
 pub(super) fn row_with_and_without_pill(t: &Tokens, _: &SceneState) -> El {
@@ -742,11 +763,13 @@ pub(super) fn turn_working_without_tools(t: &Tokens, _: &SceneState) -> El {
 
 fn opening_turn(t: &Tokens) -> El {
 	let still = Face::still(AUTHOR.name, AUTHOR.hue).draw(SPACING * 5.0, t);
-	soft_bubble(
-		t,
-		text(OPENING_ANSWER.to_owned()).font(TEXT_BUBBLE).color(t.bubble_foreground).wrap(),
+	turn_lane(
+		soft_bubble(
+			t,
+			text(OPENING_ANSWER.to_owned()).font(TEXT_BUBBLE).color(t.bubble_foreground).wrap(),
+		)
+		.child(author_line(t, AUTHOR, still)),
 	)
-	.child(author_line(t, AUTHOR, still))
 }
 
 pub(super) fn turn_under_an_opening_turn(t: &Tokens, _: &SceneState) -> El {
@@ -1061,14 +1084,11 @@ fn menu_card(state: MissionState) -> Mission<'static> {
 
 fn densities(t: &Tokens, state: MissionState) -> El {
 	let mission = menu_card(state);
-	padded(
-		t,
-		col()
-			.w(MENU_WIDTH)
-			.gap(SPACING * 6.0)
-			.child(row_panel(t, [mission_row_of(t, Mission { id: "menu-row", ..mission })]))
-			.child(card(t, mission)),
-	)
+	col()
+		.w(MENU_WIDTH)
+		.gap(SPACING * 6.0)
+		.child(row_panel(t, [mission_row_of(t, Mission { id: "menu-row", ..mission })]))
+		.child(card(t, mission))
 }
 
 fn at_the_row(menu: El) -> El {
@@ -1076,7 +1096,7 @@ fn at_the_row(menu: El) -> El {
 }
 
 fn menu_scene(t: &Tokens, facts: MenuFacts) -> El {
-	staged(t, densities(t, facts.state), vec![at_the_row(mission_menu(t, EN, facts, false))])
+	padded_with(t, densities(t, facts.state), vec![at_the_row(mission_menu(t, EN, facts, false))])
 }
 
 const fn facts(state: MissionState, has_pull_request: bool) -> MenuFacts {
@@ -1121,7 +1141,7 @@ pub(super) fn menu_done_without_a_pull_request(t: &Tokens, _: &SceneState) -> El
 
 fn copy_scene(t: &Tokens, facts: MenuFacts) -> El {
 	let copy = chat::missions::menu::COPY.text(EN);
-	staged(
+	padded_with(
 		t,
 		densities(t, facts.state),
 		vec![
@@ -1159,7 +1179,7 @@ fn panel_scene(t: &Tokens, panel: Panel) -> El {
 		row()
 			.w_full()
 			.h_full()
-			.fill(t.background)
+			.fill(t.card)
 			.child(panel_frame(t, missions_panel(t, EN, &panel, &emit()))),
 		Vec::new(),
 	)
@@ -1187,7 +1207,7 @@ pub(super) fn panel_loading(t: &Tokens, _: &SceneState) -> El {
 		row()
 			.w_full()
 			.h_full()
-			.fill(t.background)
+			.fill(t.card)
 			.child(panel_frame(t, missions_feed_skeleton(t, inner))),
 		Vec::new(),
 	)
@@ -1227,7 +1247,7 @@ pub(super) fn panel_row_menu(t: &Tokens, _: &SceneState) -> El {
 		row()
 			.w_full()
 			.h_full()
-			.fill(t.background)
+			.fill(t.card)
 			.child(panel_frame(t, missions_panel(t, EN, &DEFAULT_PANEL, &emit()))),
 		vec![menu],
 	)
@@ -1257,7 +1277,7 @@ pub(super) fn detail_skeleton(t: &Tokens, _: &SceneState) -> El {
 		col()
 			.w_full()
 			.h_full()
-			.fill(t.background)
+			.fill(t.card)
 			.child(shown)
 			.child(mission_detail_skeleton(t, room))
 			.child(
@@ -1275,7 +1295,7 @@ pub(super) fn detail_skeleton(t: &Tokens, _: &SceneState) -> El {
 
 pub(super) fn feed_skeleton(t: &Tokens, _: &SceneState) -> El {
 	rune_kit::root(
-		row().w_full().h_full().fill(t.background).child(
+		row().w_full().h_full().fill(t.card).child(
 			col()
 				.w(PANEL_WIDTH)
 				.h_full()

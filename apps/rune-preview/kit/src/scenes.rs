@@ -220,9 +220,10 @@ pub static SCENES: &[Scene] = &[
 		STORY,
 		missions::activity_line_default,
 	),
-	scene(
+	focused(
 		"conversation-missions-missioncard--card-waiting-human",
 		STORY,
+		2,
 		missions::card_waiting_human,
 	),
 	scene("conversation-missions-missioncard--card-working", STORY, missions::card_working),
@@ -317,49 +318,53 @@ pub static SCENES: &[Scene] = &[
 		missions::THREAD,
 		missions::card_with_and_without_pill,
 	),
-	scene("conversation-missions-missionturn--working", STORY, missions::turn_working),
+	scene("conversation-missions-missionturn--working", missions::TURN, missions::turn_working),
 	scene("conversation-missions-missionturn--states", missions::TURNS, missions::turn_states),
 	focused(
 		"conversation-missions-missionturn--waiting-for-the-reader",
-		STORY,
+		missions::TURN,
 		1,
 		missions::turn_waiting_for_the_reader,
 	),
 	scene(
 		"conversation-missions-missionturn--ready-to-merge",
-		STORY,
+		missions::TURN,
 		missions::turn_ready_to_merge,
 	),
-	scene("conversation-missions-missionturn--failed", STORY, missions::turn_failed),
-	scene("conversation-missions-missionturn--done", STORY, missions::turn_done),
+	scene("conversation-missions-missionturn--failed", missions::TURN, missions::turn_failed),
+	scene("conversation-missions-missionturn--done", missions::TURN, missions::turn_done),
 	scene(
 		"conversation-missions-missionturn--long-objective",
-		STORY,
+		missions::TURN,
 		missions::turn_long_objective,
 	),
-	scene("conversation-missions-missionturn--without-tools", STORY, missions::turn_without_tools),
+	scene(
+		"conversation-missions-missionturn--without-tools",
+		missions::TURN,
+		missions::turn_without_tools,
+	),
 	scene(
 		"conversation-missions-missionturn--working-without-tools",
-		STORY,
+		missions::TURN,
 		missions::turn_working_without_tools,
 	),
 	scene(
 		"conversation-missions-missionturn--in-a-solo-thread",
-		STORY,
+		missions::TURN,
 		missions::turn_under_an_opening_turn,
 	),
 	scene(
 		"conversation-missions-missionturn--with-an-unknown-tool",
-		STORY,
+		missions::TURN,
 		missions::turn_with_an_unknown_tool,
 	),
 	scene(
 		"conversation-missions-missionturn--under-the-turn-that-opened-it",
-		STORY,
+		missions::TURN,
 		missions::turn_under_an_opening_turn,
 	),
-	scene("conversation-missions-missionheader--default", STORY, missions::header_default),
-	scene("conversation-missions-missionheader--loading", STORY, missions::header_loading),
+	focused("conversation-missions-missionheader--default", STORY, 1, missions::header_default),
+	focused("conversation-missions-missionheader--loading", STORY, 1, missions::header_loading),
 	scene(
 		"conversation-missions-missionheader--states",
 		missions::HEADERS,
@@ -384,9 +389,10 @@ pub static SCENES: &[Scene] = &[
 	),
 	scene("conversation-missions-missionheader--with-status", STORY, missions::header_with_status),
 	scene("conversation-missions-missionheader--long-status", STORY, missions::header_long_status),
-	scene(
+	focused(
 		"conversation-missions-missionheader--with-pull-request",
 		STORY,
+		3,
 		missions::header_with_pull_request,
 	),
 	scene(
@@ -501,9 +507,10 @@ pub static SCENES: &[Scene] = &[
 	scene("navigation-missionspanel--empty", missions::PANEL, missions::panel_empty),
 	scene("navigation-missionspanel--loading", missions::PANEL, missions::panel_loading),
 	scene("navigation-missionspanel--one-group", missions::PANEL, missions::panel_one_group),
-	scene(
+	focused(
 		"navigation-missionspanel--earlier-today-unfolded",
 		missions::PANEL,
+		6,
 		missions::panel_earlier_today_unfolded,
 	),
 	scene("navigation-missionspanel--selected-row", missions::PANEL, missions::panel_selected_row),
