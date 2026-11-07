@@ -334,9 +334,6 @@ describe("resolvedServers", () => {
 describe("bound grants", () => {
 	const grant = { [ACCESS_TOKEN]: "granted", [SERVER_URL]: granola.url }
 	const elsewhere = { type: "http" as const, url: "https://elsewhere.test/mcp" }
-	const grantKeysOf = (values: Record<string, string> = {}) =>
-		Object.keys(values).filter((name) => name.startsWith("KIROSHI_OAUTH_"))
-
 	it("attaches the bearer to the url the grant was issued for", () => {
 		const { servers } = resolveServers(
 			{ granola },
@@ -355,9 +352,7 @@ describe("bound grants", () => {
 		const { servers } = resolveServers({ granola: elsewhere }, env)
 
 		expect(servers.granola).toEqual(elsewhere)
-		expect(
-			grantKeysOf(boundEnv({ granola: elsewhere }, env).perServer?.granola),
-		).toEqual([])
+		expect(boundEnv({ granola: elsewhere }, env).perServer?.granola).toEqual({})
 	})
 
 	it("keeps the grant of a server declaring the url it was issued for", () => {
