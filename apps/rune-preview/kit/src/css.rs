@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::f64::consts::PI;
 
-const STYLES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../packages/ui/src/styles");
+use crate::generated::{self, PACKAGES_UI};
 
 const LIGHT_BLOCKS: [(&str, &str); 2] =
 	[("tokens.css", ":root,\n[data-hue] {"), ("globals.css", "\n:root {")];
@@ -30,15 +30,10 @@ impl Sheet {
 	}
 }
 
-pub fn read_style(file: &str) -> String {
-	let path = format!("{STYLES}/{file}");
-	std::fs::read_to_string(&path).unwrap_or_else(|error| panic!("{path}: {error}"))
-}
-
 fn declarations(blocks: &[(&str, &str)]) -> Declarations {
 	let mut found = Declarations::new();
 	for (file, selector) in blocks {
-		let source = read_style(file);
+		let source = generated::read(&format!("{PACKAGES_UI}/src/styles/{file}"));
 		let Some(start) = source.find(selector) else { panic!("{file} has no `{selector}` block") };
 		let body = &source[start + selector.len()..];
 		let body = &body[..closing_brace(body)];

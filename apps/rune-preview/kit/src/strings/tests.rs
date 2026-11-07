@@ -18,6 +18,11 @@ const STALE_IN_FRENCH: [&str; 7] = [
 	"bots.approvals.directories.remove",
 ];
 
+const RUST_KEYWORDS: [&str; 18] = [
+	"as", "box", "crate", "fn", "impl", "in", "loop", "match", "mod", "move", "ref", "return",
+	"self", "static", "super", "type", "use", "where",
+];
+
 type Entries = Vec<(String, String)>;
 
 struct Reader<'a> {
@@ -151,10 +156,7 @@ fn catalogue(language: &str) -> Entries {
 
 fn module_name(segment: &str) -> String {
 	let name = words(segment).join("_");
-	let keywords =
-		["as", "box", "crate", "fn", "impl", "in", "loop", "match", "mod", "move", "ref"];
-	let keywords = [&keywords[..], &["return", "self", "static", "super", "type", "use", "where"]];
-	if keywords.concat().contains(&name.as_str()) { format!("r#{name}") } else { name }
+	if RUST_KEYWORDS.contains(&name.as_str()) { format!("r#{name}") } else { name }
 }
 
 #[derive(Default)]
