@@ -423,9 +423,9 @@ table! { core, client;
 		answered(mark_answered(core, mission_id, seq).await);
 	mission_run_claim(mission_id: String) => plain(mission_run_claim(core, client, mission_id));
 	mission_run_release(token: String) => {
-	 mission_run_release(core, token);
-	 plain(())
- };
+		mission_run_release(core, token);
+		plain(())
+	};
 
 	chat_store_attachments(conversation_id: String, attachments: Vec<SubmittedAttachment>) =>
 		answered(chat_store_attachments(core, conversation_id, attachments).await);
@@ -576,9 +576,9 @@ table! { core, client;
 	joined_space_describe(id: String, name: String, colour: Option<i64>) =>
 		answered(crate::joined_spaces::commands::joined_space_describe(core, id, name, colour).await);
 	join_link_listen() => {
-	 crate::joined_spaces::commands::join_link_listen(core, client);
-	 plain(())
- };
+		crate::joined_spaces::commands::join_link_listen(core, client);
+		plain(())
+	};
 
 	joined_space_members(id: String) =>
 		answered(crate::joined_spaces::members::joined_space_members(core, id).await);
