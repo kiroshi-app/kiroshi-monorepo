@@ -1,4 +1,4 @@
-use rune::{Align, Color, Cursor, El, Icon, ScrollSpec, Span, TextStyle, col, el, row, text};
+use rune::{Align, Color, Cursor, El, ScrollSpec, Span, TextStyle, col, el, row, text};
 
 use crate::primitives::{FOCUS_RING_WIDTH, instant, ring_tint};
 use crate::strings::{Key, Language};
@@ -15,7 +15,7 @@ pub mod welcome;
 
 pub type Emit<S, E> = fn(&mut S, E);
 
-pub const DRAG_STRIP: f32 = SPACING * 12.0;
+const DRAG_STRIP: f32 = SPACING * 12.0;
 const CONTENT_HEIGHT: f32 = SPACING * 88.0;
 const CONTROLS_HEIGHT: f32 = SPACING * 30.0;
 const SPINNER_SIDE: f32 = SPACING * 3.5;
@@ -110,16 +110,6 @@ pub fn primary<S: 'static, E: Copy + 'static>(
 	if disabled { pill } else { ringed(t, pill) }
 }
 
-pub fn primary_with<S: 'static, E: Copy + 'static>(
-	t: &Tokens,
-	label: &str,
-	trailing: &'static Icon,
-	emit: Emit<S, E>,
-	event: E,
-) -> El {
-	ringed(t, Pill::new(label).trailing(trailing).primary(t, move |s: &mut S| emit(s, event)))
-}
-
 pub fn secondary<S: 'static, E: Copy + 'static>(
 	t: &Tokens,
 	label: &str,
@@ -127,15 +117,6 @@ pub fn secondary<S: 'static, E: Copy + 'static>(
 	event: E,
 ) -> El {
 	ringed(t, Pill::new(label).secondary(t, move |s: &mut S| emit(s, event)))
-}
-
-pub fn outline<S: 'static, E: Copy + 'static>(
-	t: &Tokens,
-	label: &str,
-	emit: Emit<S, E>,
-	event: E,
-) -> El {
-	ringed(t, Pill::new(label).outline(t, move |s: &mut S| emit(s, event)))
 }
 
 pub fn link<S: 'static, E: Copy + 'static>(

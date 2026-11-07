@@ -14,7 +14,7 @@ use crate::surfaces::s04_boot::connect::{
 	ClaudeAccount, Connect, ConnectMethod, ConnectStep, Entry, connect_screen,
 };
 use crate::surfaces::s04_boot::import::{
-	Import, ImportItem, ImportKind, ImportRow, ImportStatus, ImportStep, import_row, import_screen,
+	Import, ImportItem, ImportKind, ImportStatus, ImportStep, import_row, import_screen,
 };
 use crate::surfaces::s04_boot::layouts::{
 	EmptyState, Screen, ScreenWidth, empty_state_shell, screen_layout,
@@ -439,22 +439,12 @@ fn row_frame(t: &Tokens, rows: Vec<El>) -> El {
 	stage(t, framed)
 }
 
-const ROW_ATLAS: ImportRow = ImportRow {
-	kind: ImportKind::Agent,
-	title: "Atlas",
-	detail: "Reviews pull requests and flags risky changes.",
-	hue: None,
-	checked: true,
-	in_kiroshi: false,
-	status: None,
-};
-
-fn drawn_row(t: &Tokens, r: &ImportRow) -> El {
+fn drawn_row(t: &Tokens, r: &ImportItem) -> El {
 	import_row(t, EN, r, |_: &mut SceneState| {})
 }
 
 pub(super) fn import_row_default(t: &Tokens, _: &SceneState) -> El {
-	row_frame(t, vec![drawn_row(t, &ROW_ATLAS)])
+	row_frame(t, vec![drawn_row(t, &ATLAS)])
 }
 
 pub(super) fn import_row_states(t: &Tokens, _: &SceneState) -> El {
@@ -466,59 +456,59 @@ pub(super) fn import_row_states(t: &Tokens, _: &SceneState) -> El {
 	);
 	let unparsable = say(common::claude_import::row::UNPARSABLE, EN, &[("file", "SKILL.md")]);
 	let rows = [
-		ROW_ATLAS,
-		ImportRow {
+		ATLAS,
+		ImportItem {
 			checked: false,
 			detail: "Writes release notes from merged work.",
 			hue: Some(150.0),
 			title: "Wren",
-			..ROW_ATLAS
+			..ATLAS
 		},
-		ImportRow {
+		ImportItem {
 			checked: false,
 			detail: "Your standing instructions, 42 lines. Kept as yours, for every agent.",
 			in_kiroshi: true,
 			kind: ImportKind::Instructions,
 			title: "CLAUDE.md",
-			..ROW_ATLAS
+			..ATLAS
 		},
-		ImportRow {
+		ImportItem {
 			detail: "commit-style, test-first, review-checklist, changelog",
 			kind: ImportKind::Skill,
 			title: &skills,
-			..ROW_ATLAS
+			..ATLAS
 		},
-		ImportRow {
+		ImportItem {
 			detail: "Triages new issues every morning.",
 			hue: Some(30.0),
 			status: Some(ImportStatus::Done),
 			title: "Bramble",
-			..ROW_ATLAS
+			..ATLAS
 		},
-		ImportRow {
+		ImportItem {
 			detail: "Keeps the API reference in sync.",
 			hue: Some(280.0),
 			status: Some(ImportStatus::Pending),
 			title: "Cedar",
-			..ROW_ATLAS
+			..ATLAS
 		},
-		ImportRow {
+		ImportItem {
 			detail: &unparsable,
 			kind: ImportKind::Skill,
 			status: Some(ImportStatus::Failed),
 			title: "changelog",
-			..ROW_ATLAS
+			..ATLAS
 		},
 	];
 	row_frame(t, rows.iter().map(|r| drawn_row(t, r)).collect())
 }
 
 pub(super) fn import_row_long_content(t: &Tokens, _: &SceneState) -> El {
-	let long = ImportRow {
+	let long = ImportItem {
 		kind: ImportKind::Skill,
 		title: "release-notes-from-every-merged-pull-request-since-the-last-tag",
 		detail: "Reads every merged pull request since the last tag, groups them by scope, writes the release notes in the voice of the changelog, then opens a draft for review before anything ships. It never tags on its own.",
-		..ROW_ATLAS
+		..ATLAS
 	};
 	row_frame(t, vec![drawn_row(t, &long)])
 }

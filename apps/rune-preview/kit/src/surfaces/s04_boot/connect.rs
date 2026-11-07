@@ -3,6 +3,7 @@ use rune::{Cursor, El, TextEdit, col, el, row, text};
 use super::{
 	Emit, Frame, centred, heading, onboarding_shell, primary, ringed, say, secondary, status_line,
 };
+use crate::primitives::FOCUS_RING_WIDTH;
 use crate::strings::chat::onboarding;
 use crate::strings::{Key, Language};
 use crate::tokens::{
@@ -17,7 +18,6 @@ const ACCOUNT_CARD_WIDTH: f32 = SPACING * 90.0;
 const ACCOUNT_CARD_INSET: f32 = SPACING * 7.0;
 const INITIALS_SIDE: f32 = SPACING * 22.0;
 const OPTION_INSET: f32 = SPACING * 3.5;
-const INVALID_RING: f32 = 3.0;
 const INVALID_RING_SHARE: f32 = 0.3;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -305,7 +305,7 @@ fn key_field<S: 'static>(t: &Tokens, language: Language, key: &Entry<S>, refused
 	let entry = if refused {
 		entry
 			.border(1.0, t.destructive)
-			.outline(INVALID_RING, 0.0, faded(t.destructive, INVALID_RING_SHARE))
+			.outline(FOCUS_RING_WIDTH, 0.0, faded(t.destructive, INVALID_RING_SHARE))
 			.invalid(true)
 	} else {
 		entry

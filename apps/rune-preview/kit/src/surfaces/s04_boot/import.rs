@@ -138,20 +138,10 @@ pub fn import_screen<S: 'static>(t: &Tokens, import: &Import, emit: Emit<S, Impo
 	)
 }
 
-pub struct ImportRow<'a> {
-	pub kind: ImportKind,
-	pub title: &'a str,
-	pub detail: &'a str,
-	pub hue: Option<f32>,
-	pub checked: bool,
-	pub in_kiroshi: bool,
-	pub status: Option<ImportStatus>,
-}
-
 pub fn import_row<S: 'static>(
 	t: &Tokens,
 	language: Language,
-	r: &ImportRow,
+	r: &ImportItem,
 	toggle: impl Fn(&mut S) + 'static,
 ) -> El {
 	let slot = match r.status {
@@ -207,7 +197,7 @@ pub fn import_row<S: 'static>(
 		.child(text(kind.text(language).to_owned()).font(TEXT_XS).color(t.muted_foreground))
 }
 
-fn tick<S: 'static>(t: &Tokens, r: &ImportRow, toggle: impl Fn(&mut S) + 'static) -> El {
+fn tick<S: 'static>(t: &Tokens, r: &ImportItem, toggle: impl Fn(&mut S) + 'static) -> El {
 	let tick = checkbox(t, r.checked || r.in_kiroshi)
 		.role("checkbox")
 		.label(r.title)
@@ -233,24 +223,15 @@ fn status_mark(t: &Tokens, status: ImportStatus) -> El {
 }
 
 struct ListRow<'a> {
-	row: ImportRow<'a>,
+	row: ImportItem<'a>,
 	toggle: ImportEvent,
 	title: Option<String>,
 	detail: Option<String>,
 }
 
 fn rows_of<'a>(items: &[(usize, &ImportItem<'a>)], language: Language) -> Vec<ListRow<'a>> {
-	let as_row = |item: &ImportItem<'a>| ImportRow {
-		kind: item.kind,
-		title: item.title,
-		detail: item.detail,
-		hue: item.hue,
-		checked: item.checked,
-		in_kiroshi: item.in_kiroshi,
-		status: item.status,
-	};
 	let single = |&(index, item): &(usize, &ImportItem<'a>)| ListRow {
-		row: as_row(item),
+		row: item.clone(),
 		toggle: ImportEvent::Toggle { item: index, checked: !item.checked },
 		title: None,
 		detail: None,
@@ -273,7 +254,7 @@ fn rows_of<'a>(items: &[(usize, &ImportItem<'a>)], language: Language) -> Vec<Li
 		let checked = grouped.iter().all(|skill| skill.checked);
 		let all_done = grouped.iter().all(|skill| skill.status == Some(ImportStatus::Done));
 		rows.push(ListRow {
-			row: ImportRow {
+			row: ImportItem {
 				kind: ImportKind::Skill,
 				title: first.title,
 				detail: first.detail,
@@ -317,7 +298,7 @@ fn list<S: 'static>(
 		let drawn = import_row(
 			t,
 			language,
-			&ImportRow { title, detail, status, ..list_row.row },
+			&ImportItem { title, detail, status, ..list_row.row },
 			move |s: &mut S| emit(s, event),
 		);
 		if index > 0 {
