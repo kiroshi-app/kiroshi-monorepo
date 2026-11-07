@@ -19,6 +19,7 @@ const SELECT_END: f32 = SPACING * 2.5 + BORDER;
 const CHEVRON: f32 = SPACING * 4.0;
 const INSTRUCTION_ROWS: f32 = 5.0;
 const FILTER_ROW_INSET: f32 = SPACING * 2.5 + BORDER;
+const UNREAD: WebhookValues = WebhookValues { address: "", key: "", header: "" };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FormField {
@@ -378,15 +379,9 @@ fn copy_field<S: 'static>(
 fn webhook_block<S: 'static>(t: &Tokens, lang: Language, webhook: Webhook, emit: Emit<S>) -> El {
 	let (values, line) = match webhook {
 		Webhook::Read(values) => (values, None),
-		Webhook::Unwritten => {
-			(WebhookValues { address: "", key: "", header: "" }, Some(copy::webhook::PENDING))
-		}
-		Webhook::Reading => {
-			(WebhookValues { address: "", key: "", header: "" }, Some(copy::webhook::READING))
-		}
-		Webhook::Unreadable => {
-			(WebhookValues { address: "", key: "", header: "" }, Some(copy::webhook::FAILURE))
-		}
+		Webhook::Unwritten => (UNREAD, Some(copy::webhook::PENDING)),
+		Webhook::Reading => (UNREAD, Some(copy::webhook::READING)),
+		Webhook::Unreadable => (UNREAD, Some(copy::webhook::FAILURE)),
 	};
 	let ink =
 		if matches!(webhook, Webhook::Unreadable) { t.destructive } else { t.muted_foreground };

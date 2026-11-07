@@ -40,7 +40,7 @@ fn frame(t: &Tokens) -> El {
 		.center_y()
 		.padding(INSET)
 		.radius(RADIUS_XL)
-		.border(1.0, t.border)
+		.border(BORDER, t.border)
 		.fill(faded(t.muted, 0.4))
 }
 

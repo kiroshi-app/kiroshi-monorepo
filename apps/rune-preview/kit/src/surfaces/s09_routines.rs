@@ -47,6 +47,8 @@ const EMPTY_MEASURE: f32 = 448.0;
 const EMPTY_TITLE: TextStyle = TextStyle::new(18.0, 600.0).lh(28.0);
 const NOTICE_GLYPH: f32 = SPACING * 4.0;
 const TABULAR: &str = "'tnum' 1";
+const BAR: f32 = SPACING * 3.0;
+const FAINT_BAR: f32 = SPACING * 2.25;
 
 fn say(key: Key, lang: Language) -> &'static str {
 	key.text(lang)
@@ -125,7 +127,7 @@ fn notice<S: 'static>(
 		.items_start()
 		.padding(SPACING * 3.0 + BORDER)
 		.radius(RADIUS_2XL)
-		.border(1.0, faded(t.destructive, 0.3))
+		.border(BORDER, faded(t.destructive, 0.3))
 		.fill(faded(t.destructive, 0.1))
 		.role("alert")
 		.label(title)
@@ -188,9 +190,6 @@ fn empty_state(t: &Tokens, mark: &'static Icon, title: &str, description: &str) 
 				),
 		)
 }
-
-const BAR: f32 = SPACING * 3.0;
-const FAINT_BAR: f32 = SPACING * 2.25;
 
 fn bar(t: &Tokens, width: f32) -> El {
 	skeleton(t).size(width, BAR).radius(BAR).fill(t.border)

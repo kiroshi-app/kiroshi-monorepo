@@ -192,12 +192,8 @@ fn scene_edit(s: &mut SceneState, field: FormField) -> &mut TextEdit {
 	}
 }
 
-fn column(width: f32, content: El) -> El {
-	col().w(width).child(content)
-}
-
 fn in_panel_width(content: El) -> El {
-	column(PANEL_WIDTH, content)
+	col().w(PANEL_WIDTH).child(content)
 }
 
 fn at_height(t: &Tokens, content: El) -> El {

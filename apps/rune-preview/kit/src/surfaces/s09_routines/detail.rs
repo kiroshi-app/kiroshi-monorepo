@@ -113,7 +113,7 @@ fn run_frame(t: &Tokens) -> El {
 		.gap(SPACING)
 		.padding(RUN_INSET)
 		.radius(RADIUS_XL)
-		.border(1.0, t.border)
+		.border(BORDER, t.border)
 		.fill(faded(t.muted, 0.4))
 }
 
