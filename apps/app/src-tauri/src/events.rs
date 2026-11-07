@@ -17,8 +17,10 @@ use crate::core_context::{
 pub use kiroshi_core::events::*;
 
 use crate::agent::host::install_session_hosts;
+use crate::hosting::authorship::DesktopAuthors;
 use crate::session_hosts::DesktopHosts;
 use crate::{joined_spaces, menu_contract, notifications, window_controls};
+use kiroshi_core::hosting::authors::install_authors;
 
 macro_rules! declared {
 	($($handle:ident: $payload:ty = $name:expr,)*) => {
@@ -90,6 +92,7 @@ pub fn install_core<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Core> {
 	);
 	core.install_desktop(TauriDesktop(app.clone()));
 	install_session_hosts(&core, DesktopHosts);
+	install_authors(&core, DesktopAuthors);
 	let windows = app.clone();
 	core.listen(move |event| {
 		let sent = match &event.audience {

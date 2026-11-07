@@ -37,7 +37,7 @@ use crate::environment::connection;
 use crate::environment::contract::{EnvError, EnvOwner, ResolvedEnv, Values};
 use crate::environment::store as environment;
 use crate::events::{self, Frame, AGENT_EVENT, CONVERSATION_UPDATED};
-use crate::hosting::authorship::{self, Caller, CommandCaller};
+use crate::hosting::authorship::{Caller, CommandCaller};
 use crate::json::JsonValue;
 use crate::logging;
 use crate::mcp_oauth::refresh;
@@ -45,6 +45,7 @@ use crate::missions::commands::announce_thread_moved;
 use crate::missions::contract::LivenessSigns;
 use crate::private_files;
 pub use kiroshi_core::agent::contract::EVENT_CHANNEL;
+use kiroshi_core::hosting::authors;
 
 const RUNS_DIR: &str = "runs";
 
@@ -1110,7 +1111,7 @@ async fn members_reading(
 	let Ok(database) = state.as_ref() else {
 		return Vec::new();
 	};
-	authorship::members_of(core, database, space_id).await.unwrap_or_else(|failure| {
+	authors::members_of(core, database, space_id).await.unwrap_or_else(|failure| {
 		log::warn!("the members of space {space_id} were not named to a session: {failure:?}");
 		Vec::new()
 	})

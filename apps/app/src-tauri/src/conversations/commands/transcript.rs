@@ -18,8 +18,9 @@ use crate::db::repositories::messages::{
 	self, AccountAuthor, MessagePageQuery, MessagesAroundQuery, TerminalState, WrittenFrom,
 };
 use crate::events::{CONVERSATION_UPDATED, MESSAGE_STORED};
-use crate::hosting::authorship::{self, Caller, CommandCaller};
+use crate::hosting::authorship::{Caller, CommandCaller};
 use crate::library::{self, contract::LibraryError};
+use kiroshi_core::hosting::authors;
 
 #[tauri::command]
 #[specta::specta]
@@ -198,7 +199,7 @@ pub async fn conversation_append_user_message<R: Runtime>(
 	)
 	.await?;
 	let written_from = caller.written_from();
-	let author = authorship::author(caller.0, crate::events::core(&app), database).await?;
+	let author = authors::author(caller.0, crate::events::core(&app), database).await?;
 	let (conversation_id, id) = (message.conversation_id.clone(), message.id.clone());
 	let seq =
 		database.messages().append_user_message(message.written_by(author, written_from)).await?;
@@ -333,7 +334,7 @@ async fn store_sent(
 	let turn_id = message.turn_id.clone();
 	let completed_at = summoned.is_empty().then_some(message.created_at);
 	let written_from = caller.written_from();
-	let author = authorship::author(caller, core, database).await?;
+	let author = authors::author(caller, core, database).await?;
 	let (conversation_id, id) = (message.conversation_id.clone(), message.id.clone());
 	let seq = database
 		.messages()

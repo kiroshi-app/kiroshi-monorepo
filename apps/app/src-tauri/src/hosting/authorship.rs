@@ -19,6 +19,8 @@ use crate::agent::protocol::SpaceMember;
 use crate::db::repositories::messages::AccountAuthor;
 use crate::db::{Database, DatabaseError};
 use crate::host_api::invoke::RELAYED_MEMBER_HEADER;
+use futures_util::future::BoxFuture;
+use kiroshi_core::hosting::authors::Authors;
 pub use kiroshi_core::hosting::caller::{Caller, RelayedMember};
 
 const MEMBERS_READ_BOUND: Duration = Duration::from_secs(3);
@@ -89,7 +91,29 @@ impl FunctionArg for CommandCaller {
 	}
 }
 
-pub async fn author(
+pub struct DesktopAuthors;
+
+impl Authors for DesktopAuthors {
+	fn author<'a>(
+		&'a self,
+		caller: Caller,
+		core: &'a crate::core_context::Core,
+		database: &'a Database,
+	) -> BoxFuture<'a, Result<AccountAuthor, DatabaseError>> {
+		Box::pin(author(caller, core, database))
+	}
+
+	fn members_of<'a>(
+		&'a self,
+		core: &'a crate::core_context::Core,
+		database: &'a Database,
+		space_id: &'a str,
+	) -> BoxFuture<'a, Result<Vec<SpaceMember>, DatabaseError>> {
+		Box::pin(members_of(core, database, space_id))
+	}
+}
+
+pub(crate) async fn author(
 	caller: Caller,
 	core: &crate::core_context::Core,
 	database: &Database,
@@ -130,7 +154,7 @@ async fn host_display_name(database: &Database) -> Result<Option<String>, Databa
 	Ok(Some(display_name).filter(|name| !name.is_empty()))
 }
 
-pub async fn members_of(
+pub(crate) async fn members_of(
 	core: &crate::core_context::Core,
 	database: &Database,
 	space_id: &str,

@@ -29,9 +29,10 @@ use crate::agent::contract::CancelOutcome;
 use crate::agent::AgentState;
 use crate::conversations::host_turn::merged;
 use crate::db;
-use crate::hosting::authorship::{self, Caller, CommandCaller};
+use crate::hosting::authorship::{Caller, CommandCaller};
 use crate::joined_spaces::relay::RelayGuests;
 use crate::logging::scrub::scrubbed;
+use kiroshi_core::hosting::authors;
 
 async fn known_space(state: &db::DatabaseState, space_id: &str) -> Result<(), LibraryError> {
 	let database =
@@ -269,7 +270,7 @@ pub async fn library_share_presence<R: Runtime>(
 				.as_ref()
 				.map_err(|failure| LibraryError::Unavailable { failure: failure.into() })?;
 			Identity::of_person(
-				authorship::author(caller.0, crate::events::core(&app), database).await?,
+				authors::author(caller.0, crate::events::core(&app), database).await?,
 				&seat,
 			)
 		}
