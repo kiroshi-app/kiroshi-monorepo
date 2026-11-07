@@ -35,6 +35,7 @@ static CONVERSATION: Icon = Icon {
 pub enum ChromeEvent {
 	SelectTab(String),
 	CloseTab(String),
+	RevealClose(Option<String>),
 	OpenTabMenu { id: String, at: (f32, f32) },
 	OpenOverflow,
 	NewTab,

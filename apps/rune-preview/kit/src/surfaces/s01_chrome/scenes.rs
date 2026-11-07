@@ -179,6 +179,7 @@ fn bar<'a>(tabs: &'a [ChromeTab<'a>], active: &'a str) -> TitleBar<'a> {
 		traffic_lights: true,
 		window_controls: None,
 		lift: None,
+		revealed_close: None,
 		incoming: None,
 		overflow_open: false,
 	}
@@ -294,7 +295,8 @@ fn with_window_controls(t: &Tokens, _: &SceneState) -> El {
 }
 
 fn inactive_tab_hover(t: &Tokens, _: &SceneState) -> El {
-	shown(t, &bar(&A4, RELEASE_NOTES.id), None)
+	let bar = TitleBar { revealed_close: Some(LOGIN_REDIRECT.id), ..bar(&A4, RELEASE_NOTES.id) };
+	shown(t, &bar, None)
 }
 
 fn library_document_tab(t: &Tokens, _: &SceneState) -> El {
@@ -443,13 +445,11 @@ pub static SCENES: &[Scene] = &[
 	scene("navigation-apptitlebar--t-23-inserted", BAR, t23_inserted),
 	scene("navigation-apptitlebar--t-43-last-tab-parted", BAR, t43_last_tab_parted),
 	scene("navigation-apptitlebar--with-window-controls", BAR, with_window_controls),
-	pointed(
-		"navigation-apptitlebar--inactive-tab-hover",
-		BAR,
-		"tab-close-login-redirect",
-		inactive_tab_hover,
-	),
-	Scene { tabs: 3, ..scene("navigation-apptitlebar--focus-visible", BAR, a1_tabs) },
+	Scene {
+		tabs: 6,
+		..scene("navigation-apptitlebar--inactive-tab-hover", BAR, inactive_tab_hover)
+	},
+	Scene { tabs: 4, ..scene("navigation-apptitlebar--focus-visible", BAR, a1_tabs) },
 	scene("navigation-titlebartabs--library-document-tab", BAR, library_document_tab),
 	scene(
 		"navigation-titlebartabs--whitespace-document-name-reads-untitled",

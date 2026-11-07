@@ -25,6 +25,7 @@ struct Window {
 	menu: Option<TabMenu<'static>>,
 	controls: Option<WindowControls>,
 	lift: Option<Lift>,
+	revealed: Option<String>,
 	events: Vec<ChromeEvent>,
 }
 
@@ -32,6 +33,7 @@ fn record(s: &mut Window, event: ChromeEvent) {
 	match &event {
 		ChromeEvent::LiftMoved(lift) => s.lift = Some(lift.clone()),
 		ChromeEvent::LiftEnded(_) => s.lift = None,
+		ChromeEvent::RevealClose(id) => s.revealed = id.clone(),
 		_ => {}
 	}
 	s.events.push(event);
@@ -49,6 +51,7 @@ fn bar(s: &Window) -> TitleBar<'_> {
 		traffic_lights: s.controls.is_none(),
 		window_controls: s.controls,
 		lift: s.lift.as_ref(),
+		revealed_close: s.revealed.as_deref(),
 		incoming: None,
 		overflow_open: false,
 	}
@@ -62,7 +65,14 @@ fn view(s: &Window, _: &mut Cx<Window>) -> El {
 }
 
 fn window(can_reorder: bool) -> Runtime<Window> {
-	window_with(Window { can_reorder, menu: None, controls: None, lift: None, events: Vec::new() })
+	window_with(Window {
+		can_reorder,
+		menu: None,
+		controls: None,
+		lift: None,
+		revealed: None,
+		events: Vec::new(),
+	})
 }
 
 fn window_with(state: Window) -> Runtime<Window> {
@@ -112,6 +122,7 @@ fn focus(rt: &mut Runtime<Window>, key: &str) {
 	for _ in 0..20 {
 		let focused = rt.elements().into_iter().find(|element| element.focused);
 		if focused.and_then(|element| element.key).as_deref() == Some(key) {
+			rt.state.events.clear();
 			return;
 		}
 		rt.key(KeyEvent { key: Key::Tab, mods: Mods::default() });
@@ -191,6 +202,7 @@ fn each_tab_menu_row_reports_its_tab_and_a_pinned_tab_cannot_close() {
 		menu: Some(menu),
 		controls: None,
 		lift: None,
+		revealed: None,
 		events: Vec::new(),
 	});
 	for row in
@@ -368,6 +380,7 @@ fn the_caption_buttons_report_minimize_maximize_and_close() {
 		menu: None,
 		controls: Some(WindowControls::default()),
 		lift: None,
+		revealed: None,
 		events: Vec::new(),
 	});
 	for key in ["caption-minimize", "caption-maximize", "caption-close"] {
@@ -393,6 +406,7 @@ fn an_incoming_tab_reports_its_index_in_the_full_tab_order() {
 		traffic_lights: true,
 		window_controls: None,
 		lift: None,
+		revealed_close: None,
 		incoming: Some(Incoming { tab: PRICING, x }),
 		overflow_open: false,
 	};
@@ -407,4 +421,70 @@ fn the_drag_ghost_hides_over_its_own_space() {
 	assert!(drag_ghost(&t, Language::En, &LOGIN, DockTarget::SameSpace).is_none());
 	assert!(drag_ghost(&t, Language::En, &LOGIN, DockTarget::Outside).is_some());
 	assert!(drag_ghost(&t, Language::En, &LOGIN, DockTarget::OtherSpace).is_some());
+}
+
+fn press(rt: &mut Runtime<Window>, key: Key, shift: bool) {
+	rt.key(KeyEvent { key, mods: Mods { shift, ..Mods::default() } });
+	rt.frame(FRAME);
+}
+
+fn focused(rt: &Runtime<Window>) -> Option<String> {
+	rt.elements().into_iter().find(|element| element.focused).and_then(|element| element.key)
+}
+
+fn opacity_of(rt: &Runtime<Window>, key: &str) -> f32 {
+	rt.presented(key).map_or(0.0, |(_, opacity)| opacity)
+}
+
+#[test]
+fn each_unpinned_close_button_is_focusable_and_a_pinned_tab_has_none() {
+	let rt = window(true);
+	let elements = rt.elements();
+	let focusable = |key: &str| {
+		elements.iter().find(|element| element.key.as_deref() == Some(key)).map(|e| e.focusable)
+	};
+	for close in ["tab-close-release", "tab-close-login", "tab-close-weekly", "tab-close-invoice"] {
+		assert_eq!(focusable(close), Some(true), "{close}");
+	}
+	assert_eq!(focusable("tab-close-inbox"), None);
+}
+
+#[test]
+fn tab_moves_from_a_tab_to_its_close_button_and_shift_tab_returns() {
+	let mut rt = window(true);
+	focus(&mut rt, "tab-login");
+	press(&mut rt, Key::Tab, false);
+	assert_eq!(focused(&rt).as_deref(), Some("tab-close-login"));
+	press(&mut rt, Key::Tab, true);
+	assert_eq!(focused(&rt).as_deref(), Some("tab-login"));
+	assert_eq!(
+		rt.state.events,
+		[ChromeEvent::RevealClose(Some("login".to_owned())), ChromeEvent::RevealClose(None)]
+	);
+}
+
+#[test]
+fn a_close_button_holding_keyboard_focus_is_drawn_at_full_opacity() {
+	let mut rt = window(true);
+	focus(&mut rt, "tab-login");
+	assert_eq!(opacity_of(&rt, "tab-close-login"), 0.0);
+	press(&mut rt, Key::Tab, false);
+	rt.frame(1.0);
+	assert_eq!(opacity_of(&rt, "tab-close-login"), 1.0);
+	press(&mut rt, Key::Tab, false);
+	rt.frame(1.0);
+	assert_eq!(focused(&rt).as_deref(), Some("tab-weekly"));
+	assert_eq!(opacity_of(&rt, "tab-close-login"), 0.0);
+}
+
+#[test]
+fn enter_or_space_on_a_focused_close_button_closes_its_tab() {
+	for key in [Key::Enter, Key::Text(" ".to_owned())] {
+		let mut rt = window(true);
+		focus(&mut rt, "tab-login");
+		press(&mut rt, Key::Tab, false);
+		rt.state.events.clear();
+		press(&mut rt, key, false);
+		assert_eq!(rt.state.events, [ChromeEvent::CloseTab("login".to_owned())]);
+	}
 }

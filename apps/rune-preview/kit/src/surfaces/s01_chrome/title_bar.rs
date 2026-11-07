@@ -131,6 +131,7 @@ pub struct TitleBar<'a> {
 	pub traffic_lights: bool,
 	pub window_controls: Option<WindowControls>,
 	pub lift: Option<&'a Lift>,
+	pub revealed_close: Option<&'a str>,
 	pub incoming: Option<Incoming<'a>>,
 	pub overflow_open: bool,
 }
@@ -488,7 +489,8 @@ fn tab_view<S: 'static>(
 		view = view.child(text(title.clone()).font(TAB_TITLE).color(ink).truncate().shrink());
 		let shows_close = lift.is_none() && (is_active || bar.lift.is_none());
 		if shows_close {
-			view = view.child(close_button(t, language, tab.id, &title, is_active, emit));
+			let is_shown = is_active || bar.revealed_close == Some(tab.id);
+			view = view.child(close_button(t, language, tab.id, &title, is_shown, emit));
 		}
 	}
 	let rest = if tab.is_pinned { t.title_bar_pinned } else { t.title_bar_tab };
@@ -534,10 +536,9 @@ fn close_button<S: 'static>(
 		.label(copy(copy_keys::CLOSE_TAB_NAMED, language, &[("title", title)]))
 		.hover(t.title_bar_highlight)
 		.child(icon(&icons::CLOSE, CLOSE_GLYPH).color(t.muted_foreground).group_color(t.foreground))
-		.cursor(Cursor::Default)
 		.on_press(move |s: &mut S| emit(s, ChromeEvent::CloseTab(id.clone())));
 	let slot = el().pin(None, Some((TAB_HEIGHT - CLOSE) / 2.0), Some(CLOSE_END), None);
-	let slot = slot.child(instant(button.hover_group()));
+	let slot = slot.child(focusable(instant(button.hover_group()), t));
 	if is_shown { slot } else { slot.group_opacity(0.0, 1.0) }
 }
 
@@ -603,9 +604,6 @@ fn gestures<S: 'static>(
 		.on_secondary_press(move |s: &mut S, at, _: &mut Tx| {
 			emit(s, ChromeEvent::OpenTabMenu { id: menu.clone(), at: (at.x, at.y) })
 		});
-	if !bar.can_reorder {
-		return view;
-	}
 	let zone: Vec<String> = strip.zone(is_pinned).iter().map(|tab| tab.id.to_owned()).collect();
 	let slide = Slide {
 		ids: bar.tabs.iter().map(|tab| tab.id.to_owned()).collect(),
@@ -619,42 +617,73 @@ fn gestures<S: 'static>(
 	let position_offset = if is_pinned { 0 } else { strip.pinned.len() };
 	let count = strip.pinned.len() + strip.kept.len();
 	let keyed = slide.clone();
-	view.on_drag(move |s: &mut S, drag: &mut Drag, tx: &mut Tx| {
-		if tx.button() != PointerButton::Primary {
-			return;
-		}
-		let is_held = is_lifted || drag.dx.hypot(drag.dy) >= LIFT_SLOP;
-		if !is_held {
-			return;
-		}
-		let landing = slide.landing(drag);
-		match drag.phase {
-			Phase::Down => {}
-			Phase::Move => {
-				emit(s, ChromeEvent::LiftMoved(Lift { id: slide.id.clone(), dx: drag.dx, landing }))
+	let can_reorder = bar.can_reorder;
+	let can_reveal = !is_pinned && bar.lift.is_none();
+	let tab_key = format!("tab-{id}");
+	let close_key = format!("tab-close-{id}");
+	let view = if can_reorder {
+		view.on_drag(move |s: &mut S, drag: &mut Drag, tx: &mut Tx| {
+			if tx.button() != PointerButton::Primary {
+				return;
 			}
-			Phase::Up => {
-				emit(s, ChromeEvent::LiftEnded(slide.id.clone()));
-				if drag.cancelled() {
-					return;
-				}
-				match landing {
-					Landing::TornOff => emit(
-						s,
-						ChromeEvent::TearOffTab {
-							id: slide.id.clone(),
-							travel: (drag.dx, drag.dy),
-						},
-					),
-					Landing::Slot(at) if at != slide.rank => {
-						emit(s, ChromeEvent::ReorderTabs(slide.reordered(at)))
+			let is_held = is_lifted || drag.dx.hypot(drag.dy) >= LIFT_SLOP;
+			if !is_held {
+				return;
+			}
+			let landing = slide.landing(drag);
+			match drag.phase {
+				Phase::Down => {}
+				Phase::Move => emit(
+					s,
+					ChromeEvent::LiftMoved(Lift { id: slide.id.clone(), dx: drag.dx, landing }),
+				),
+				Phase::Up => {
+					emit(s, ChromeEvent::LiftEnded(slide.id.clone()));
+					if drag.cancelled() {
+						return;
 					}
-					Landing::Slot(_) => {}
+					match landing {
+						Landing::TornOff => emit(
+							s,
+							ChromeEvent::TearOffTab {
+								id: slide.id.clone(),
+								travel: (drag.dx, drag.dy),
+							},
+						),
+						Landing::Slot(at) if at != slide.rank => {
+							emit(s, ChromeEvent::ReorderTabs(slide.reordered(at)))
+						}
+						Landing::Slot(_) => {}
+					}
 				}
 			}
+		})
+	} else {
+		view
+	};
+	view.on_key(move |s: &mut S, event: &KeyEvent, tx: &mut Tx| {
+		let plain = !(event.mods.alt || event.mods.cmd || event.mods.ctrl);
+		if tx.focused() == Some(close_key.as_str()) {
+			match event.key {
+				Key::Enter if plain => {
+					emit(s, ChromeEvent::CloseTab(keyed.id.clone()));
+					return true;
+				}
+				Key::Tab if plain => emit(s, ChromeEvent::RevealClose(None)),
+				_ => {}
+			}
+			return false;
 		}
-	})
-	.on_key(move |s: &mut S, event: &KeyEvent, _: &mut Tx| {
+		if tx.focused() != Some(tab_key.as_str()) {
+			return false;
+		}
+		if event.key == Key::Tab && plain && !event.mods.shift && can_reveal {
+			emit(s, ChromeEvent::RevealClose(Some(keyed.id.clone())));
+			return false;
+		}
+		if !can_reorder {
+			return false;
+		}
 		let step: isize = match (&event.key, event.mods) {
 			(Key::Left, mods) if mods.alt && !mods.cmd && !mods.ctrl && !mods.shift => -1,
 			(Key::Right, mods) if mods.alt && !mods.cmd && !mods.ctrl && !mods.shift => 1,
