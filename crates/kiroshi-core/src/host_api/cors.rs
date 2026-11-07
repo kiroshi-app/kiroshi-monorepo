@@ -19,7 +19,7 @@ const ALLOWED_METHODS: &str = "GET, POST, OPTIONS";
 
 const ALLOWED_HEADERS: &str = "Authorization, Content-Type";
 
-pub(crate) async fn shared(request: Request, next: Next) -> Response {
+pub async fn shared(request: Request, next: Next) -> Response {
 	let Some(origin) = accepted_origin(&request) else {
 		return next.run(request).await;
 	};
