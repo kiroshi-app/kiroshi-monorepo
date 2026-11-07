@@ -262,7 +262,8 @@ struct SpaceRow<'a> {
 impl SpaceRow<'_> {
 	fn view(&self, t: &Tokens, look: Look, language: Language) -> El {
 		let style = tight(if look == Look::TitleBar { TEXT_COMPACT } else { TEXT_SM });
-		let (highlight, ink, highlight_ink) = highlight_of(t, look);
+		let (highlight, ink, highlight_ink) =
+			(highlight_of(t, look), t.popover_foreground, t.accent_foreground);
 		let avatar = SpaceAvatar {
 			space_id: self.space.avatar_seed,
 			name: self.space.name,
@@ -309,10 +310,10 @@ impl SpaceRow<'_> {
 	}
 }
 
-fn highlight_of(t: &Tokens, look: Look) -> (Color, Color, Color) {
+fn highlight_of(t: &Tokens, look: Look) -> Color {
 	match look {
-		Look::Picker => (t.accent, t.popover_foreground, t.accent_foreground),
-		Look::TitleBar => (t.title_bar_highlight, t.popover_foreground, t.accent_foreground),
+		Look::Picker => t.accent,
+		Look::TitleBar => t.title_bar_highlight,
 	}
 }
 
@@ -352,7 +353,8 @@ fn item<S: 'static>(
 		Look::Picker => (ITEM_ROW, tight(TEXT_SM), RADIUS_XL),
 		Look::TitleBar => (TITLE_BAR_ROW, tight(TEXT_COMPACT), RADIUS_MD),
 	};
-	let (highlight, ink, highlight_ink) = highlight_of(t, look);
+	let (highlight, ink, highlight_ink) =
+		(highlight_of(t, look), t.popover_foreground, t.accent_foreground);
 	let menu_row = row()
 		.key(format!("menu-item-{label}"))
 		.padding(equal_padding(height, style.size))

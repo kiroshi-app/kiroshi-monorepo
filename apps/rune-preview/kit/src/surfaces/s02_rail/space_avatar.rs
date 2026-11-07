@@ -180,7 +180,7 @@ impl SpaceAvatar<'_> {
 	fn layers(&self, t: &Tokens) -> Layers {
 		let key = LayerKey {
 			seed: self.space_id.to_owned(),
-			colour: self.colour.map(f32::to_bits),
+			colour: self.shown_colour().map(f32::to_bits),
 			size: self.size,
 			state: self.state,
 			has_attention: self.has_attention,
@@ -543,7 +543,7 @@ impl Recipe {
 			state: avatar.state,
 			has_attention: avatar.has_attention,
 			dark: t.dark,
-			colour: avatar.colour,
+			colour: avatar.shown_colour(),
 			anchor: ANCHORS[(seed & 0b11) as usize],
 			radii,
 			warning: t.warning,
@@ -607,17 +607,15 @@ impl Recipe {
 	}
 
 	fn tones(&self) -> Vec<Color> {
-		let colour = if self.state == SpaceAvatarState::Offline { None } else { self.colour };
 		let full: &[[f64; 2]] = if self.dark { &DARK_FULL } else { &LIGHT_FULL };
 		let compact: &[[f64; 2]] = if self.dark { &DARK_COMPACT } else { &LIGHT_COMPACT };
 		let tones = if self.size.is_compact() { compact } else { full };
-		tones.iter().map(|&pair| tone(pair, colour)).collect()
+		tones.iter().map(|&pair| tone(pair, self.colour)).collect()
 	}
 
 	fn line_colour(&self) -> Color {
 		let compact = if self.dark { DARK_COMPACT } else { LIGHT_COMPACT };
-		let colour = if self.state == SpaceAvatarState::Offline { None } else { self.colour };
-		tone(compact[2], colour)
+		tone(compact[2], self.colour)
 	}
 
 	fn badge_centre(&self) -> [f64; 2] {

@@ -11,7 +11,7 @@ use crate::primitives::context_menu::COMMAND;
 use crate::primitives::tooltip::SIDE_OFFSET;
 use crate::primitives::{FOCUS_RING_WIDTH, equal_padding, instant, popup_motion, ring_tint, tight};
 use crate::strings::{Language, bots, search};
-use crate::tokens::{RADIUS_LG, RADIUS_XL, SPACING, TEXT_XS, TEXT_XS_MEDIUM, Tokens};
+use crate::tokens::{RADIUS_LG, RADIUS_XL, SPACING, TEXT_XS, TEXT_XS_MEDIUM, Tokens, faded};
 
 pub const WIDTH: f32 = SPACING * 15.0;
 const ENTRY: f32 = SPACING * 11.0;
@@ -354,7 +354,7 @@ impl Entry {
 		entry = if is_marked {
 			entry.fill(t.rail_item_selected)
 		} else {
-			entry.hover(faded_by(t.rail_item_selected, HOVER_SHARE))
+			entry.hover(faded(t.rail_item_selected, HOVER_SHARE))
 		};
 		if let Some(badge) = self.badge {
 			entry = entry.child(dot(t, badge_fill(t, badge), badge == BotBadge::Attention));
@@ -367,10 +367,6 @@ impl Entry {
 			ring_tint(t, 0.3),
 		)
 	}
-}
-
-fn faded_by(colour: Color, share: f32) -> Color {
-	colour.alpha(colour.a * share)
 }
 
 pub(super) fn badge_fill(t: &Tokens, badge: BotBadge) -> Color {
