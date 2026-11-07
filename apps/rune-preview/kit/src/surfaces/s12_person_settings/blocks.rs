@@ -1,6 +1,7 @@
 use rune::{Color, El, Icon, col, el, icon, row, text};
 
 use super::{Emit, control, pressed};
+use crate::primitives::skeleton::skeleton;
 use crate::primitives::switch::{SwitchSize, switch};
 use crate::tokens::{RADIUS_XL, SPACING, TEXT_XS, TEXT_XS_MEDIUM, Tokens, faded};
 
@@ -8,14 +9,19 @@ pub const GROUP_GAP: f32 = SPACING * 2.0;
 pub const SECTIONS_GAP: f32 = SPACING * 5.0;
 const ROW_INSET: f32 = SPACING * 3.0;
 const ROW_GAP: f32 = SPACING * 4.0;
-const ROW_TEXT_GAP: f32 = SPACING * 0.5;
+pub const ROW_TEXT_GAP: f32 = SPACING * 0.5;
 const SWITCH_TEXT_GAP: f32 = SPACING;
 const TRAILING_GLYPH: f32 = SPACING * 4.0;
 const BOX_SHARE: f32 = 0.4;
 pub const HAIRLINE: f32 = 1.0;
+pub const TABULAR: &str = "'tnum' 1";
 
 pub fn boxed(t: &Tokens) -> Color {
 	faded(t.muted, BOX_SHARE)
+}
+
+pub fn pulsing(t: &Tokens, content: El) -> El {
+	skeleton(t).fill(Color::TRANSPARENT).radius(0.0).w_full().child(content)
 }
 
 pub fn hairline(t: &Tokens) -> El {

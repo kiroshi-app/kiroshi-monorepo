@@ -2,8 +2,8 @@ use rune::image::Image;
 use rune::{Color, El, Icon, Span, TextStyle, col, el, icon, rich, row, text};
 
 use super::blocks::{
-	GROUP_GAP, HAIRLINE, boxed, detail, group, hairline, link_row, rows, sections, setting_row,
-	switch_row, title, toggle,
+	GROUP_GAP, HAIRLINE, ROW_TEXT_GAP, TABULAR, boxed, detail, group, hairline, link_row, pulsing,
+	rows, sections, setting_row, switch_row, title, toggle,
 };
 use super::{Emit, Look, SettingsEvent, control, pressed};
 use crate::avatar::{Face, Person};
@@ -11,8 +11,7 @@ use crate::icons;
 use crate::primitives::badge::{BadgeVariant, badge};
 use crate::primitives::button::{Button, ButtonSize, ButtonVariant};
 use crate::primitives::dialog::{DialogContent, dialog, scrim};
-use crate::primitives::skeleton::skeleton;
-use crate::primitives::tight;
+use crate::primitives::{equal_padding, tight};
 use crate::strings::{Language, settings};
 use crate::tokens::{
 	RADIUS_CONTROL, RADIUS_LG, RADIUS_MD, RADIUS_XL, SPACING, TEXT_COMPACT, TEXT_SM,
@@ -71,7 +70,6 @@ const SKELETON_BAR: f32 = SPACING * 3.0;
 const SKELETON_FAINT_BAR: f32 = SPACING * 2.25;
 const PICTURE_SIDE: f32 = SPACING * 10.0;
 const PICTURE_GLYPH: f32 = SPACING * 6.0;
-const TABULAR: &str = "'tnum' 1";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ColorScheme {
@@ -485,8 +483,6 @@ fn update_status(look: Look, update: Update) -> El {
 	status
 }
 
-const ROW_TEXT_GAP: f32 = SPACING * 0.5;
-
 fn update_action<S: 'static>(look: Look, update: Update, emit: Emit<S, SettingsEvent>) -> El {
 	use settings::about::action;
 	let t = look.t;
@@ -559,7 +555,7 @@ fn channel_control<S: 'static>(look: Look, channel: Channel, emit: Emit<S, Setti
 				.key(format!("channel-{label}"))
 				.min_w(min_width)
 				.h(height)
-				.padding(crate::primitives::equal_padding(height, style.size))
+				.padding(equal_padding(height, style.size))
 				.radius(RADIUS_MD)
 				.center()
 				.fill(if is_checked { t.selection } else { Color::TRANSPARENT })
@@ -896,10 +892,6 @@ fn account_card(
 
 fn bone(width: f32, height: f32, fill: Color) -> El {
 	el().size(width, height).radius(height / 2.0).fill(fill)
-}
-
-fn pulsing(t: &Tokens, content: El) -> El {
-	skeleton(t).fill(Color::TRANSPARENT).radius(0.0).w_full().child(content)
 }
 
 fn account_card_skeleton(t: &Tokens) -> El {

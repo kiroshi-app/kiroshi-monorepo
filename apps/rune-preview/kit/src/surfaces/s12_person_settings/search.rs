@@ -3,12 +3,11 @@ use rune::{
 	Align, Color, El, Icon, Span, TextEdit, TextStyle, col, el, icon, rich, row, text, text_input,
 };
 
-use super::blocks::{HAIRLINE, hairline};
+use super::blocks::{HAIRLINE, TABULAR, hairline, pulsing};
 use super::{Emit, Look, control, dot, hexagon, pressed};
 use crate::avatar::{Face, Person};
 use crate::icons;
-use crate::primitives::skeleton::skeleton;
-use crate::primitives::{elevated, tight};
+use crate::primitives::{elevated, equal_padding, tight};
 use crate::strings::search;
 use crate::tokens::{
 	RADIUS_2XL, RADIUS_XL, SPACING, TEXT_11, TEXT_BASE_SEMIBOLD, TEXT_READING, TEXT_SM,
@@ -29,7 +28,6 @@ const ROW_GLYPH: f32 = SPACING * 2.75;
 const MATCH_PAD: f32 = SPACING * 0.5;
 const LIST_GAP: f32 = SPACING * 0.5;
 const PART_SEPARATOR: &str = " · ";
-const TABULAR: &str = "'tnum' 1";
 
 const PALETTE_WIDTH: f32 = SPACING * 160.0;
 pub const PALETTE_HEIGHT: f32 = SPACING * 146.0;
@@ -477,10 +475,6 @@ fn rows_to_fill(room: f32) -> usize {
 	((room + LIST_GAP) / (ROW_MIN_HEIGHT + LIST_GAP)).ceil() as usize
 }
 
-fn pulsing(t: &Tokens, content: El) -> El {
-	skeleton(t).fill(Color::TRANSPARENT).radius(0.0).w_full().child(content)
-}
-
 fn skeleton_rows(t: &Tokens, widths: [(f32, f32); 3], count: usize) -> El {
 	col()
 		.w_full()
@@ -605,7 +599,7 @@ fn tab_strip<S: 'static>(look: Look, current: SearchTab, emit: Emit<S, SearchEve
 		let trigger = row()
 			.key(format!("search-tab-{tab:?}"))
 			.h(TAB_HEIGHT)
-			.padding(crate::primitives::equal_padding(TAB_HEIGHT, style.size))
+			.padding(equal_padding(TAB_HEIGHT, style.size))
 			.radius(RADIUS_2XL)
 			.center()
 			.fill(if is_current { t.selection } else { Color::TRANSPARENT })
@@ -647,7 +641,7 @@ pub fn palette<S: 'static>(
 	let query_line = row()
 		.w_full()
 		.h(QUERY_LINE - HAIRLINE)
-		.padding(crate::primitives::equal_padding(QUERY_LINE, style.size))
+		.padding(equal_padding(QUERY_LINE, style.size))
 		.gap(QUERY_GAP)
 		.center_y()
 		.child(icon(&icons::SEARCH, QUERY_GLYPH).color(t.muted_foreground))
@@ -655,7 +649,7 @@ pub fn palette<S: 'static>(
 	let tabs = row()
 		.w_full()
 		.h(TAB_ROW)
-		.padding(crate::primitives::equal_padding(TAB_ROW, TAB_HEIGHT))
+		.padding(equal_padding(TAB_ROW, TAB_HEIGHT))
 		.center_y()
 		.child(tab_strip(look, p.tab, emit));
 	let mut body = col().w_full().grow(1.0).padding(BODY_INSET).gap(LIST_GAP).clip_rounded(0.0);

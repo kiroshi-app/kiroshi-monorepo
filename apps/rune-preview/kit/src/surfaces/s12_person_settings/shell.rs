@@ -7,7 +7,7 @@ use crate::avatar::Person;
 use crate::icons;
 use crate::primitives::button::{Button, ButtonSize, ButtonVariant};
 use crate::primitives::dialog::scrim;
-use crate::primitives::{elevated, tight};
+use crate::primitives::{elevated, equal_padding, tight};
 use crate::strings::{Key, settings};
 use crate::tokens::{
 	RADIUS_2XL, RADIUS_CONTROL, RADIUS_MD, RADIUS_XL, SHELL_INSET, SPACING, TEXT_BASE_SEMIBOLD,
@@ -31,7 +31,6 @@ const BREADCRUMB_GAP: f32 = SPACING * 1.5;
 const BREADCRUMB_AVATAR: f32 = SPACING * 8.0;
 const BREADCRUMB_GLYPH: f32 = SPACING * 3.5;
 const CLOSE_INSET: f32 = SPACING * 4.0;
-const SCREEN_GAP: f32 = 0.0;
 pub const MENU_WIDTH: f32 = SPACING * 76.0;
 const MENU_INSET: f32 = SPACING * 2.0;
 const MENU_GAP: f32 = SPACING * 2.0;
@@ -518,10 +517,7 @@ pub fn screen<S: 'static>(look: Look, screen: Screen, emit: Emit<S, SettingsEven
 			row()
 				.w_full()
 				.h(CONTENT_HEADER)
-				.padding(crate::primitives::equal_padding(
-					CONTENT_HEADER,
-					TEXT_SM_MEDIUM.line_height,
-				))
+				.padding(equal_padding(CONTENT_HEADER, TEXT_SM_MEDIUM.line_height))
 				.center_y()
 				.child(
 					text(heading.to_owned())
@@ -533,14 +529,7 @@ pub fn screen<S: 'static>(look: Look, screen: Screen, emit: Emit<S, SettingsEven
 		)
 		.child(el().w_full().h(HAIRLINE).fill(t.border))
 		.child(content_body.child(column));
-	row()
-		.w_full()
-		.h_full()
-		.padding(SHELL_INSET)
-		.gap(SCREEN_GAP)
-		.fill(t.background)
-		.child(menu)
-		.child(content)
+	row().w_full().h_full().padding(SHELL_INSET).fill(t.background).child(menu).child(content)
 }
 
 pub fn notice_layer(notice: El) -> El {
