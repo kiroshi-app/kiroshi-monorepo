@@ -393,6 +393,14 @@ pub fn shown_name(name: &str, lang: Language) -> &str {
 	if name.trim().is_empty() { say(common::library::editor::UNTITLED, lang) } else { name }
 }
 
+fn emitter<S: 'static, E: Clone + 'static>(
+	on: &(impl Fn(&mut S, E) + Clone + 'static),
+	event: E,
+) -> impl Fn(&mut S) + 'static {
+	let on = on.clone();
+	move |s: &mut S| on(s, event.clone())
+}
+
 fn label_text(content: &str, style: TextStyle, colour: Color) -> El {
 	text(content.to_owned()).font(style).color(colour)
 }
@@ -492,10 +500,7 @@ fn item_actions<S: 'static>(
 			[lightbox::DOWNLOAD, lightbox::COPY, lightbox::MORE, lightbox::CLOSE]
 		}
 	};
-	let emit = |event: ItemEvent| {
-		let on = on.clone();
-		move |s: &mut S| on(s, event.clone())
-	};
+	let emit = |event: ItemEvent| emitter(&on, event);
 	row()
 		.gap(SPACING * 2.0)
 		.center_y()
@@ -759,10 +764,7 @@ fn library_heading<S: 'static>(
 		.gap(SPACING)
 		.child(label_text(say(library::TITLE, lang), TEXT_TITLE, t.foreground).role("heading"))
 		.child(label_text(say(library::SUBTITLE, lang), TEXT_COMPACT, t.muted_foreground));
-	let emit = |event: LibraryEvent| {
-		let on = on.clone();
-		move |s: &mut S| on(s, event.clone())
-	};
+	let emit = |event: LibraryEvent| emitter(&on, event);
 	let mut actions = row().gap(SPACING * 2.0).center_y();
 	if panel.actions.search {
 		actions = actions.child(search_field(t, lang, panel.query, query));
@@ -1078,10 +1080,7 @@ fn empty_state<S: 'static>(
 	on: impl Fn(&mut S, LibraryEvent) + Clone + 'static,
 ) -> El {
 	use common::library;
-	let emit = |event: LibraryEvent| {
-		let on = on.clone();
-		move |s: &mut S| on(s, event.clone())
-	};
+	let emit = |event: LibraryEvent| emitter(&on, event);
 	let mut sections = col().px(GRID_INSET).pt(SPACING * 4.0).pb(GRID_INSET).gap(SPACING * 8.0);
 	if actions.new_document || actions.templates {
 		let mut cards = row().flex_wrap().gap(SPACING * 4.0);
@@ -1927,10 +1926,7 @@ pub fn new_document_dialog<S: 'static>(
 	on: impl Fn(&mut S, NewDocumentEvent) + Clone + 'static,
 ) -> Vec<El> {
 	use common::library;
-	let emit = |event: NewDocumentEvent| {
-		let on = on.clone();
-		move |s: &mut S| on(s, event)
-	};
+	let emit = |event: NewDocumentEvent| emitter(&on, event);
 	let title = say(library::NEW_DOCUMENT, lang);
 	let tiles = NewDocumentTemplate::ALL.map(|template| {
 		template_tile(t, lang, template, template == selected)
@@ -2141,10 +2137,7 @@ pub fn lightbox<S: 'static>(
 ) -> El {
 	use common::library::lightbox as copy;
 	let t = &Tokens::new(true);
-	let emit = |event: LightboxEvent| {
-		let on = on.clone();
-		move |s: &mut S| on(s, event.clone())
-	};
+	let emit = |event: LightboxEvent| emitter(&on, event);
 	let item_on = {
 		let on = on.clone();
 		move |s: &mut S, event: ItemEvent| on(s, LightboxEvent::Item(event))
@@ -2294,10 +2287,7 @@ pub fn document_panel<S: 'static>(
 ) -> El {
 	use common::library::panel;
 	let title = shown_name(title, lang);
-	let emit = |event: DocumentPanelEvent| {
-		let on = on.clone();
-		move |s: &mut S| on(s, event)
-	};
+	let emit = |event: DocumentPanelEvent| emitter(&on, event);
 	let button = |glyph: &'static rune::Icon, label: &str, event: DocumentPanelEvent| {
 		Button::icon(glyph, label)
 			.variant(ButtonVariant::Ghost)
@@ -2311,7 +2301,6 @@ pub fn document_panel<S: 'static>(
 		.px(SPACING * 3.0)
 		.gap(SPACING * 2.0)
 		.center_y()
-		.border(0.0, t.border)
 		.child(
 			row()
 				.size(SPACING * 7.0, SPACING * 7.0)
