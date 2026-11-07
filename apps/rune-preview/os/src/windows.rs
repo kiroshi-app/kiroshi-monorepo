@@ -61,7 +61,7 @@ pub fn post_banner(_app_id: &str, notice: Notice, heard: Heard) {
 pub fn wear_badge(_app_id: &str, count: u32) -> Result<(), String> {
 	let windows = own_windows()?;
 	if windows.is_empty() {
-		return Ok(());
+		return Err("the process shows no visible window to wear it on".into());
 	}
 	let _apartment = ComApartment::enter()?;
 	let taskbar: ITaskbarList3 =
