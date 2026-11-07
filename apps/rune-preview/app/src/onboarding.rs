@@ -8,7 +8,7 @@ use kiroshi_rune_kit::tokens::{
 	RADIUS_BUBBLE, RADIUS_CONTROL, SPACING, TEXT_10_MEDIUM, TEXT_BASE_SEMIBOLD, TEXT_COMPACT,
 	TEXT_COMPACT_MEDIUM, TEXT_COMPACT_MONO_MEDIUM, TEXT_COMPACT_SEMIBOLD, TEXT_INITIALS, TEXT_SM,
 	TEXT_SM_MEDIUM, TEXT_SM_SEMIBOLD, TEXT_TITLE, TEXT_XS, TEXT_XS_MEDIUM, TEXT_XS_MONO, Tokens,
-	tone,
+	icon_stroke_in, tone,
 };
 use kiroshi_rune_kit::widgets::{Pill, checkbox, field, radio, spinner};
 
@@ -235,9 +235,9 @@ fn welcome_footer(page: Page, t: &Tokens) -> Vec<El> {
 		.center_y()
 		.pt(SPACING * 3.0)
 		.pb(SPACING * 6.0)
-		.child(arrow(&icons::PREVIOUS, back, false))
+		.child(arrow(icons::stroked(&icons::PREVIOUS, icon_stroke_in(TEXT_SM)), back, false))
 		.child(segments)
-		.child(arrow(&icons::NEXT, next, true));
+		.child(arrow(icons::stroked(&icons::NEXT, icon_stroke_in(TEXT_SM)), next, true));
 	let action = if next.is_none() {
 		Pill::new("Get started").primary(t, leave_intro)
 	} else {
