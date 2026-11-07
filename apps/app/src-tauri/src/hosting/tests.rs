@@ -6598,9 +6598,7 @@ impl Guest {
 	}
 
 	async fn conversation_created_in(&self, space_id: &str) -> Conversation {
-		let app = self.harness.app.handle().clone();
 		conversation_create(
-			app,
 			self.harness.app.state(),
 			space_id.to_owned(),
 			None,
@@ -6612,10 +6610,8 @@ impl Guest {
 	}
 
 	async fn conversation_updated(&self, conversation_id: &str) -> Conversation {
-		let app = self.harness.app.handle().clone();
 		let state = self.harness.app.state();
 		conversation_update(
-			app,
 			state,
 			conversation_id.to_owned(),
 			"Renamed".to_owned(),
@@ -6655,9 +6651,7 @@ impl Guest {
 		bot_id: &str,
 		invited_by_bot_id: Option<&str>,
 	) -> Result<Conversation, TranscriptStoreError> {
-		let app = self.harness.app.handle().clone();
 		conversation_add_participant(
-			app,
 			self.harness.app.state(),
 			conversation_id.to_owned(),
 			bot_id.to_owned(),
@@ -6671,10 +6665,8 @@ impl Guest {
 		conversation_id: &str,
 		bot_id: &str,
 	) -> Result<Conversation, TranscriptStoreError> {
-		let app = self.harness.app.handle().clone();
 		let state = self.harness.app.state();
-		conversation_remove_participant(app, state, conversation_id.to_owned(), bot_id.to_owned())
-			.await
+		conversation_remove_participant(state, conversation_id.to_owned(), bot_id.to_owned()).await
 	}
 
 	async fn lead_given(
@@ -6682,16 +6674,13 @@ impl Guest {
 		conversation_id: &str,
 		bot_id: &str,
 	) -> Result<Conversation, TranscriptStoreError> {
-		let app = self.harness.app.handle().clone();
 		let state = self.harness.app.state();
-		conversation_set_lead(app, state, conversation_id.to_owned(), bot_id.to_owned()).await
+		conversation_set_lead(state, conversation_id.to_owned(), bot_id.to_owned()).await
 	}
 
 	async fn user_message_appended(&self, conversation_id: &str, turn_id: &str) -> i64 {
-		let app = self.harness.app.handle().clone();
 		let message = a_user_message(conversation_id, turn_id);
 		conversation_append_user_message(
-			app,
 			self.harness.app.state(),
 			CommandCaller(Caller::Host),
 			message,
@@ -6734,8 +6723,7 @@ impl Guest {
 	}
 
 	async fn bot_deleted(&self, bot_id: &str) {
-		let app = self.harness.app.handle().clone();
-		conversation_delete_bot(app, self.harness.app.state(), bot_id.to_owned())
+		conversation_delete_bot(self.harness.app.state(), bot_id.to_owned())
 			.await
 			.expect("the bot is deleted");
 	}
@@ -7081,9 +7069,8 @@ impl Guest {
 	}
 
 	async fn bot_duplicated_into(&self, bot_id: &str, space_id: &str) -> Bot {
-		let app = self.harness.app.handle().clone();
 		let destination = Some(space_id.to_owned());
-		conversation_duplicate_bot(app, self.harness.app.state(), bot_id.to_owned(), destination)
+		conversation_duplicate_bot(self.harness.app.state(), bot_id.to_owned(), destination)
 			.await
 			.expect("the bot is duplicated")
 	}

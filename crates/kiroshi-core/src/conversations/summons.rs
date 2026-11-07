@@ -2,18 +2,18 @@ use super::awaited_runs::TurnWindows;
 use super::context::mentioned_bot_ids;
 use super::contract::SummonsDropped;
 use crate::agent::contract::TransportError;
+pub use crate::conversations::contract::SummonsDropReason;
 use crate::events::SUMMONS_DROPPED;
-pub use kiroshi_core::conversations::contract::SummonsDropReason;
 
 pub const MAX_SUMMONS_PER_CHAIN: usize = 5;
 
-pub(crate) struct SummonsRun<'a> {
-	pub(crate) conversation_id: &'a str,
-	pub(crate) turn_id: &'a str,
-	pub(crate) bot_id: &'a str,
+pub struct SummonsRun<'a> {
+	pub conversation_id: &'a str,
+	pub turn_id: &'a str,
+	pub bot_id: &'a str,
 }
 
-pub(crate) fn note_received(conversation_id: &str, message_id: &str, content: &str) {
+pub fn note_received(conversation_id: &str, message_id: &str, content: &str) {
 	for bot_id in mentioned_bot_ids(content) {
 		log::info!(
 			"summons received | conversation: {conversation_id} | message: {message_id} | bot: {bot_id}"
@@ -21,7 +21,7 @@ pub(crate) fn note_received(conversation_id: &str, message_id: &str, content: &s
 	}
 }
 
-pub(crate) fn note_queued(run: &SummonsRun<'_>) {
+pub fn note_queued(run: &SummonsRun<'_>) {
 	log::info!(
 		"summons queued | conversation: {} | turn: {} | bot: {}",
 		run.conversation_id,
@@ -30,7 +30,7 @@ pub(crate) fn note_queued(run: &SummonsRun<'_>) {
 	);
 }
 
-pub(crate) fn note_started(run: &SummonsRun<'_>) {
+pub fn note_started(run: &SummonsRun<'_>) {
 	log::info!(
 		"summons started | conversation: {} | turn: {} | bot: {}",
 		run.conversation_id,
@@ -39,7 +39,7 @@ pub(crate) fn note_started(run: &SummonsRun<'_>) {
 	);
 }
 
-pub(crate) fn note_dropped(
+pub fn note_dropped(
 	core: &crate::core_context::Core,
 	run: &SummonsRun<'_>,
 	reason: SummonsDropReason,
@@ -95,8 +95,8 @@ fn dropped_of(
 	}
 }
 
-#[cfg(test)]
-pub(crate) fn traced_steps(conversation_id: &str, bot_id: &str) -> Vec<String> {
+#[cfg(any(test, feature = "test-support"))]
+pub fn traced_steps(conversation_id: &str, bot_id: &str) -> Vec<String> {
 	let of_the_bot = format!("| bot: {bot_id}");
 	let of_the_bot_and_more = format!("{of_the_bot} |");
 	let mut steps: Vec<String> =
@@ -110,7 +110,7 @@ pub(crate) fn traced_steps(conversation_id: &str, bot_id: &str) -> Vec<String> {
 	steps
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 fn step_of(line: &str) -> String {
 	let step = line.split(' ').nth(1).unwrap_or(line);
 	match line.split("| reason: ").nth(1) {

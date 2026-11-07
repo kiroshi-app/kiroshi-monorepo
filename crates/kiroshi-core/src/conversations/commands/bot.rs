@@ -1,7 +1,5 @@
 use std::path::Path;
 
-use tauri::{AppHandle, Runtime, State};
-
 use super::super::contract::{Bot, BotDraft, BotIdentity, Hue, SuggestedBot, TranscriptStoreError};
 use super::super::seed;
 use crate::agent::commands::supported_effort_levels;
@@ -22,7 +20,7 @@ use crate::file_store::FileStore;
 
 const DUPLICATE_SUFFIX: &str = " copy";
 
-pub(crate) const CODER_JOB: &str = "a coding agent";
+pub const CODER_JOB: &str = "a coding agent";
 
 const SUGGESTED_BOTS: [SuggestedBot; 4] = [
 	SuggestedBot {
@@ -55,7 +53,7 @@ const SUGGESTED_BOTS: [SuggestedBot; 4] = [
 	},
 ];
 
-pub(crate) fn ready(state: &db::DatabaseState) -> Result<&db::Database, TranscriptStoreError> {
+pub fn ready(state: &db::DatabaseState) -> Result<&db::Database, TranscriptStoreError> {
 	state.as_ref().map_err(|failure| TranscriptStoreError::Unavailable { failure: failure.into() })
 }
 
@@ -164,7 +162,7 @@ fn unlaid_reason(bundle: &str, failure: &std::io::Error) -> String {
 	format!("{bundle} was not laid down: {failure}")
 }
 
-pub(crate) async fn list_bundles(root: Option<&Path>, database: &db::Database) {
+pub async fn list_bundles(root: Option<&Path>, database: &db::Database) {
 	let Some(root) = root else {
 		return;
 	};
@@ -190,62 +188,42 @@ fn reconciled_identity(
 	BotIdentity { instructions, ..identity }
 }
 
-#[tauri::command]
-#[specta::specta]
-pub async fn conversation_bots<R: Runtime>(
-	app: AppHandle<R>,
-	core: State<'_, crate::core_context::Core>,
+pub async fn conversation_bots(
+	core: &crate::core_context::Core,
 	space_id: Option<String>,
 ) -> Result<Vec<Bot>, TranscriptStoreError> {
 	let state = core.state::<db::DatabaseState>();
-	let dir = avatars::Avatars::dir(crate::events::core(&app));
-	let bundle_root = bundles::root(crate::events::core(&app));
+	let dir = avatars::Avatars::dir(core);
+	let bundle_root = bundles::root(core);
 	let stored = ready(&state)?.conversations().bots(space_id).await?;
 	Ok(stored.into_iter().map(|bot| Bot::of(bot, dir.as_deref(), bundle_root.as_deref())).collect())
 }
 
-#[tauri::command]
-#[specta::specta]
-pub async fn conversation_bots_by_presence<R: Runtime>(
-	app: AppHandle<R>,
-	core: State<'_, crate::core_context::Core>,
+pub async fn conversation_bots_by_presence(
+	core: &crate::core_context::Core,
 	space_id: String,
 	excluded_conversation_id: Option<String>,
 ) -> Result<Vec<Bot>, TranscriptStoreError> {
 	let state = core.state::<db::DatabaseState>();
-	let dir = avatars::Avatars::dir(crate::events::core(&app));
-	let bundle_root = bundles::root(crate::events::core(&app));
+	let dir = avatars::Avatars::dir(core);
+	let bundle_root = bundles::root(core);
 	let stored =
 		ready(&state)?.conversations().bots_by_presence(space_id, excluded_conversation_id).await?;
 	Ok(stored.into_iter().map(|bot| Bot::of(bot, dir.as_deref(), bundle_root.as_deref())).collect())
 }
 
-#[tauri::command]
-#[specta::specta]
-pub async fn conversation_create_bot<R: Runtime>(
-	app: AppHandle<R>,
-	core: State<'_, crate::core_context::Core>,
+pub async fn conversation_create_bot(
+	core: &crate::core_context::Core,
 	identity: BotIdentity,
 	space_id: Option<String>,
 ) -> Result<Bot, TranscriptStoreError> {
 	let state = core.state::<db::DatabaseState>();
-	let created =
-		create_bundled_bot(crate::events::core(&app), ready(&state)?, identity, space_id).await?;
-	announce_created(crate::events::core(&app), &created);
+	let created = create_bundled_bot(core, ready(&state)?, identity, space_id).await?;
+	announce_created(core, &created);
 	Ok(created)
 }
 
-#[tauri::command]
-#[specta::specta]
-pub async fn conversation_create_bot_from_draft(
-	core: State<'_, crate::core_context::Core>,
-	draft: BotDraft,
-	space_id: String,
-) -> Result<Bot, TranscriptStoreError> {
-	create_bot_from_draft(core.inner(), draft, space_id).await
-}
-
-pub(crate) async fn create_bot_from_draft(
+pub async fn create_bot_from_draft(
 	core: &crate::core_context::Core,
 	draft: BotDraft,
 	space_id: String,
@@ -254,7 +232,7 @@ pub(crate) async fn create_bot_from_draft(
 	create_drafted_bot(core, ready(&state)?, draft, space_id).await
 }
 
-pub(crate) async fn create_drafted_bot(
+pub async fn create_drafted_bot(
 	core: &crate::core_context::Core,
 	database: &db::Database,
 	draft: BotDraft,
@@ -272,7 +250,7 @@ fn announce_created(core: &crate::core_context::Core, created: &Bot) {
 	launch::announce(core, COMPANION_CREATED, companion);
 }
 
-pub(crate) async fn announce_joined(
+pub async fn announce_joined(
 	core: &crate::core_context::Core,
 	database: &db::Database,
 	bot_id: &str,
@@ -288,19 +266,13 @@ pub(crate) async fn announce_joined(
 	eprintln!("{CREATED_EVENT} was not announced for bot {bot_id}: {failure}");
 }
 
-pub(crate) fn announce_left(core: &crate::core_context::Core, bot_id: &str, space_id: String) {
+pub fn announce_left(core: &crate::core_context::Core, bot_id: &str, space_id: String) {
 	launch::announce(core, COMPANION_DELETED, CompanionDeleted { id: bot_id.to_owned(), space_id });
 }
 
 fn announce_updated(core: &crate::core_context::Core, updated: &Bot) {
 	let companion = CompanionUpdated { id: updated.id.clone(), bot: updated.clone() };
 	launch::announce(core, COMPANION_UPDATED, companion);
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn conversation_suggested_bots() -> Vec<SuggestedBot> {
-	suggested_bots()
 }
 
 pub fn suggested_bots() -> Vec<SuggestedBot> {
@@ -335,7 +307,7 @@ fn unworn(worn: &[Hue], crowd: usize) -> Hue {
 	presets.into_iter().find(|blot| !worn.contains(blot)).unwrap_or(presets[crowd % presets.len()])
 }
 
-pub(in crate::conversations) async fn create_bundled_bot(
+pub async fn create_bundled_bot(
 	core: &crate::core_context::Core,
 	database: &db::Database,
 	identity: BotIdentity,
@@ -358,17 +330,14 @@ pub(in crate::conversations) async fn create_bundled_bot(
 	Ok(Bot::of(ruled, dir.as_deref(), bundle_root.as_deref()))
 }
 
-#[tauri::command]
-#[specta::specta]
-pub async fn conversation_duplicate_bot<R: Runtime>(
-	app: AppHandle<R>,
-	core: State<'_, crate::core_context::Core>,
+pub async fn conversation_duplicate_bot(
+	core: &crate::core_context::Core,
 	bot_id: String,
 	space_id: Option<String>,
 ) -> Result<Bot, TranscriptStoreError> {
 	let state = core.state::<db::DatabaseState>();
-	let dir = avatars::Avatars::dir(crate::events::core(&app));
-	let bundle_root = bundles::root(crate::events::core(&app));
+	let dir = avatars::Avatars::dir(core);
+	let bundle_root = bundles::root(core);
 	let database = ready(&state)?;
 	let source = database
 		.conversations()
@@ -404,18 +373,18 @@ pub async fn conversation_duplicate_bot<R: Runtime>(
 	let created =
 		database.conversations().create_bot(identity.into(), Some(destination), section).await?;
 	avatars::Avatars::sweep_referenced(database, dir.as_deref()).await;
-	let ruled = match copied_onto(crate::events::core(&app), database, &created, &carried).await {
+	let ruled = match copied_onto(core, database, &created, &carried).await {
 		Ok(ruled) => ruled,
 		Err(refusal) => {
 			let _ = database.conversations().delete_bot(created.id.clone()).await;
 			forget_bundle(bundle_root.as_deref(), database, &created.id).await;
-			environment::store::forget_bot(crate::events::core(&app), &created.id);
+			environment::store::forget_bot(core, &created.id);
 			avatars::Avatars::sweep_referenced(database, dir.as_deref()).await;
 			return Err(refusal);
 		}
 	};
 	let copy = Bot::of(ruled, dir.as_deref(), bundle_root.as_deref());
-	announce_created(crate::events::core(&app), &copy);
+	announce_created(core, &copy);
 	Ok(copy)
 }
 
@@ -463,14 +432,14 @@ async fn copied_environment(
 		.map_err(|failure| TranscriptStoreError::UnwritableEnvironment { failure })
 }
 
-pub(crate) async fn bot_owner(
+pub async fn bot_owner(
 	database: &db::Database,
 	bot_id: &str,
 ) -> Result<EnvOwner, TranscriptStoreError> {
 	Ok(EnvOwner::Bot { id: bot_id.to_owned(), space_id: oldest_space(database, bot_id).await? })
 }
 
-pub(crate) async fn space_of_the_conversation(
+pub async fn space_of_the_conversation(
 	database: &db::Database,
 	conversation_id: &str,
 	bot_id: &str,
@@ -481,7 +450,7 @@ pub(crate) async fn space_of_the_conversation(
 	}
 }
 
-pub(crate) async fn oldest_space(
+pub async fn oldest_space(
 	database: &db::Database,
 	bot_id: &str,
 ) -> Result<String, TranscriptStoreError> {
@@ -522,15 +491,13 @@ fn unshared_name(wanted: String, taken: &[String]) -> String {
 	}
 }
 
-#[tauri::command]
-#[specta::specta]
 pub async fn conversation_update_bot(
-	core: State<'_, crate::core_context::Core>,
+	core: &crate::core_context::Core,
 	id: String,
 	identity: BotIdentity,
 ) -> Result<Bot, TranscriptStoreError> {
 	let _memory = bundles::holding_the_memory(&id).await;
-	let written = rewritten_bot(core.inner(), id.clone(), identity).await;
+	let written = rewritten_bot(core, id.clone(), identity).await;
 	if let Err(refusal) = &written {
 		log::warn!(
 			"the write of bot {id} did not land, its sessions open on what is stored: {refusal:?}"
@@ -569,17 +536,14 @@ async fn rewritten_bot(
 	Ok(updated)
 }
 
-#[tauri::command]
-#[specta::specta]
-pub async fn conversation_set_bot_memory<R: Runtime>(
-	app: AppHandle<R>,
-	core: State<'_, crate::core_context::Core>,
+pub async fn conversation_set_bot_memory(
+	core: &crate::core_context::Core,
 	id: String,
 	memory: String,
 ) -> Result<Bot, TranscriptStoreError> {
 	let state = core.state::<db::DatabaseState>();
-	let dir = avatars::Avatars::dir(crate::events::core(&app));
-	let bundle_root = bundles::root(crate::events::core(&app));
+	let dir = avatars::Avatars::dir(core);
+	let bundle_root = bundles::root(core);
 	let database = ready(&state)?;
 	let repository = database.conversations();
 	let _memory = bundles::holding_the_memory(&id).await;
@@ -595,11 +559,8 @@ pub async fn conversation_set_bot_memory<R: Runtime>(
 	Ok(Bot::of(updated, dir.as_deref(), bundle_root.as_deref()))
 }
 
-#[tauri::command]
-#[specta::specta]
-pub async fn conversation_set_bot_avatar_image<R: Runtime>(
-	app: AppHandle<R>,
-	core: State<'_, crate::core_context::Core>,
+pub async fn conversation_set_bot_avatar_image(
+	core: &crate::core_context::Core,
 	id: String,
 	bytes: Vec<u8>,
 ) -> Result<Bot, TranscriptStoreError> {
@@ -607,10 +568,9 @@ pub async fn conversation_set_bot_avatar_image<R: Runtime>(
 	let normalised = avatars::picture::normalised(&bytes)?;
 	let database = ready(&state)?;
 	let repository = database.conversations();
-	let dir =
-		avatars::Avatars::dir(crate::events::core(&app)).ok_or(avatars::Rejection::Unwritable {
-			detail: "there is no application data directory to store avatars in".to_owned(),
-		})?;
+	let dir = avatars::Avatars::dir(core).ok_or(avatars::Rejection::Unwritable {
+		detail: "there is no application data directory to store avatars in".to_owned(),
+	})?;
 	let path = avatars::minted_path(&dir);
 	let recorded = path.to_string_lossy().into_owned();
 	let updated = repository.set_avatar_image_path(id.clone(), Some(recorded)).await?;
@@ -620,40 +580,37 @@ pub async fn conversation_set_bot_avatar_image<R: Runtime>(
 		return Err(rejection.into());
 	}
 	avatars::Avatars::sweep_referenced(database, Some(&dir)).await;
-	let updated = Bot::of(updated, Some(&dir), bundles::root(crate::events::core(&app)).as_deref());
-	announce_updated(crate::events::core(&app), &updated);
+	let updated = Bot::of(updated, Some(&dir), bundles::root(core).as_deref());
+	announce_updated(core, &updated);
 	Ok(updated)
 }
 
-#[tauri::command]
-#[specta::specta]
-pub async fn conversation_delete_bot<R: Runtime>(
-	app: AppHandle<R>,
-	core: State<'_, crate::core_context::Core>,
+pub async fn conversation_delete_bot(
+	core: &crate::core_context::Core,
 	id: String,
 ) -> Result<(), TranscriptStoreError> {
 	let state = core.state::<db::DatabaseState>();
-	let dir = avatars::Avatars::dir(crate::events::core(&app));
-	let attachment_dir = attachments::Attachments::dir(crate::events::core(&app));
-	let bundle_root = bundles::root(crate::events::core(&app));
+	let dir = avatars::Avatars::dir(core);
+	let attachment_dir = attachments::Attachments::dir(core);
+	let bundle_root = bundles::root(core);
 	let database = ready(&state)?;
 	let held_by = database.conversations().bot_space_ids(id.clone()).await?;
 	database.conversations().delete_bot(id.clone()).await?;
 	forget_bundle(bundle_root.as_deref(), database, &id).await;
-	environment::store::forget_bot(crate::events::core(&app), &id);
+	environment::store::forget_bot(core, &id);
 	avatars::Avatars::sweep_referenced(database, dir.as_deref()).await;
 	attachments::Attachments::sweep_referenced(database, attachment_dir.as_deref()).await;
 	for space_id in held_by {
-		announce_left(crate::events::core(&app), &id, space_id);
+		announce_left(core, &id, space_id);
 	}
 	Ok(())
 }
 
-pub(crate) fn recounted<T>(outcome: Result<T, git2::Error>) -> Result<T, TranscriptStoreError> {
+pub fn recounted<T>(outcome: Result<T, git2::Error>) -> Result<T, TranscriptStoreError> {
 	outcome.map_err(|error| TranscriptStoreError::UnreadableHistory { detail: error.to_string() })
 }
 
-pub(crate) async fn bot_row(
+pub async fn bot_row(
 	database: &db::Database,
 	bot_id: &str,
 ) -> Result<StoredBot, TranscriptStoreError> {
@@ -664,14 +621,12 @@ pub(crate) async fn bot_row(
 		.ok_or_else(|| TranscriptStoreError::UnknownBot { id: bot_id.to_owned() })
 }
 
-pub(crate) fn bundled<T>(outcome: std::io::Result<T>) -> Result<T, TranscriptStoreError> {
+pub fn bundled<T>(outcome: std::io::Result<T>) -> Result<T, TranscriptStoreError> {
 	outcome.map_err(|error| TranscriptStoreError::UnwritableBundle { detail: error.to_string() })
 }
 
-#[tauri::command]
-#[specta::specta]
 pub async fn conversation_record_bot_commands(
-	core: State<'_, crate::core_context::Core>,
+	core: &crate::core_context::Core,
 	bot_id: String,
 	commands: Vec<AgentCommand>,
 ) -> Result<(), TranscriptStoreError> {
@@ -679,10 +634,8 @@ pub async fn conversation_record_bot_commands(
 	Ok(ready(&state)?.conversations().record_bot_commands(bot_id, commands).await?)
 }
 
-#[tauri::command]
-#[specta::specta]
 pub async fn conversation_bot_commands(
-	core: State<'_, crate::core_context::Core>,
+	core: &crate::core_context::Core,
 	bot_id: String,
 ) -> Result<Vec<AgentCommand>, TranscriptStoreError> {
 	let state = core.state::<db::DatabaseState>();
@@ -920,7 +873,7 @@ mod tests {
 	#[tokio::test]
 	async fn every_suggested_bot_is_distinct_complete_and_creates_what_it_describes() {
 		let core = a_host("suggested");
-		let suggested = conversation_suggested_bots();
+		let suggested = suggested_bots();
 		let ids: std::collections::HashSet<&str> = suggested.iter().map(|bot| bot.id).collect();
 
 		assert!(suggested.len() >= 3);
@@ -942,7 +895,7 @@ mod tests {
 	#[tokio::test]
 	async fn the_coder_suggestion_creates_a_coding_agent() {
 		let core = a_host("suggested-coder");
-		let coder = conversation_suggested_bots()
+		let coder = suggested_bots()
 			.into_iter()
 			.find(|bot| bot.id == "coder")
 			.expect("the coder is suggested");

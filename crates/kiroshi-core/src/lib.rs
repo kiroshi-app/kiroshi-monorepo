@@ -39,3 +39,5 @@ pub mod user;
 
 const APP_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../apps/app/src-tauri");
 pub mod board;
+#[cfg(all(any(test, feature = "test-support"), unix))]
+pub mod executable_script;

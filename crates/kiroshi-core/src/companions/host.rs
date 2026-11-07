@@ -19,7 +19,7 @@ use crate::attachments::{
 	markdown_line, refuse_block, refuse_file, store, Attachments, Rejection, SizedFile,
 };
 use crate::conversations::commands::{
-	announce_conversation, conversation_suggested_bots, create_bot_from_draft, ready,
+	announce_conversation, create_bot_from_draft, ready, suggested_bots,
 };
 use crate::conversations::contract::{
 	BotDraft, CompanionArrival, CompanionSpoke, ConversationDeleted, TranscriptStoreError,
@@ -663,7 +663,7 @@ impl Host for CompanionHost {
 		match operation {
 			Operation::Suggestions => {
 				let _: Bare = Self::read(payload)?;
-				Self::answered(conversation_suggested_bots())
+				Self::answered(suggested_bots())
 			}
 			Operation::Create => {
 				let asked: Drafted = Self::read(payload)?;
@@ -832,7 +832,7 @@ fn present<'de, D: Deserializer<'de>, T: Deserialize<'de>>(
 	T::deserialize(deserializer).map(Some)
 }
 
-pub(crate) fn picked<'a>(
+pub fn picked<'a>(
 	roster: &'a [StoredBot],
 	companion: &str,
 ) -> Result<&'a StoredBot, CompanionError> {
@@ -1245,10 +1245,7 @@ mod tests {
 		let answered =
 			serving(&core, "c1").answer(asking("suggestions")).await.expect("they are answered");
 
-		assert_eq!(
-			answered,
-			serde_json::to_value(conversation_suggested_bots()).expect("the list serialises")
-		);
+		assert_eq!(answered, serde_json::to_value(suggested_bots()).expect("the list serialises"));
 	}
 
 	#[tokio::test]

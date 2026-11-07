@@ -31,9 +31,9 @@ use crate::events::CONVERSATION_UPDATED;
 
 const MENTION_SIGN: char = '@';
 const MENTION_OPEN: char = '<';
-pub(crate) const QUESTION_ID_PREFIX: &str = "question-";
-pub(crate) const QUESTION_LINE_PREFIX: &str = "### ";
-pub(crate) const OPTION_LINE_PREFIX: &str = "- ";
+pub const QUESTION_ID_PREFIX: &str = "question-";
+pub const QUESTION_LINE_PREFIX: &str = "### ";
+pub const OPTION_LINE_PREFIX: &str = "- ";
 const OPTION_SEPARATOR: char = '\u{2014}';
 
 #[derive(Default)]
@@ -56,11 +56,11 @@ impl HostWrites {
 		held(&self.messages).contains(id)
 	}
 
-	pub(crate) fn claim_turn(&self, id: &str) {
+	pub fn claim_turn(&self, id: &str) {
 		held(&self.turns).insert(id.to_owned());
 	}
 
-	pub(crate) fn record_submitted(&self, turn_id: &str) {
+	pub fn record_submitted(&self, turn_id: &str) {
 		held(&self.submitted).insert(turn_id.to_owned());
 	}
 
@@ -104,7 +104,7 @@ impl TurnAttachments {
 		Ok(attached)
 	}
 
-	pub(crate) fn take(&self) -> Vec<HeldAttachment> {
+	pub fn take(&self) -> Vec<HeldAttachment> {
 		std::mem::take(&mut *self.held.lock().unwrap_or_else(PoisonError::into_inner))
 	}
 }
@@ -129,12 +129,12 @@ enum Entry {
 	Drained(oneshot::Sender<()>),
 }
 
-pub(crate) enum SettledPrompts<'a> {
+pub enum SettledPrompts<'a> {
 	One(&'a str),
 	Every,
 }
 
-pub(crate) fn prompts_settled_by(event: &AgentEvent) -> Option<SettledPrompts<'_>> {
+pub fn prompts_settled_by(event: &AgentEvent) -> Option<SettledPrompts<'_>> {
 	match event {
 		AgentEvent::PermissionResolved { id, .. } => Some(SettledPrompts::One(id)),
 		AgentEvent::TurnEnded { .. } => Some(SettledPrompts::Every),
@@ -998,7 +998,7 @@ fn unread_handover(author: &str, named: &[&str]) -> Handover {
 	Handover { handed: Vec::new(), dropped }
 }
 
-pub(crate) async fn settled_mentions(
+pub async fn settled_mentions(
 	database: &db::Database,
 	conversation_id: &str,
 	written: &str,
@@ -1937,7 +1937,7 @@ mod tests {
 		};
 		crate::conversations::commands::send_user_message(
 			&written.core,
-			crate::hosting::authorship::Caller::Host,
+			crate::hosting::caller::Caller::Host,
 			message,
 			vec![DEFAULT_BOT_ID.to_owned()],
 		)

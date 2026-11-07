@@ -1,0 +1,3117 @@
+use std::collections::{BTreeSet, HashMap, HashSet};
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, MutexGuard, PoisonError};
+
+use serde::de::DeserializeOwned;
+use tokio::sync::{broadcast, Mutex};
+
+use super::contract::{
+	AccountReport, AgentEvent, CancelFailureReason, CancelOutcome, CheckReport, ConnectionState,
+	ConversationNaming, EventTurn, EvolvedBundle, LiveSession, OfferedModel, PermissionDecision,
+	PermissionRequest, QuestionRequest, RuntimeScope, ScopedEvent, SessionHandle, SubmittedTurn,
+	TransportError, TurnOutcome, TurnState,
+};
+use super::host::{hosted, session_hosts};
+use super::lease::RunLease;
+use super::protocol::{self, Checked, SpaceMember};
+use super::reply_writer::{
+	prompts_settled_by, HostWrites, ReplyWriter, SettledPrompts, TurnAttachments, TurnSink,
+};
+use super::session::{Bundle, EventSink, GatedSink, Handed, LinePlace, Session, SessionOptions};
+use super::sidecar::{self, Sidecar, SidecarOptions};
+use super::translate::now_ms;
+pub use crate::agent::contract::EVENT_CHANNEL;
+use crate::bundles;
+use crate::companions::host::CompanionHost;
+use crate::conversations::awaited_runs::{forget_settled_turns, TurnWindows};
+use crate::conversations::commands::{announce_conversation, ready, space_of_the_conversation};
+use crate::conversations::contract::{PendingPrompt, PendingPromptKind, TranscriptStoreError};
+use crate::conversations::host_turn::{ended_as, HostTurns};
+use crate::conversations::state as conversation_state;
+use crate::db;
+use crate::db::repositories::conversations::{Bot as StoredBot, ConversationError, MISSION_KIND};
+use crate::db::repositories::messages::{NewTurn, RunClaim};
+use crate::db::repositories::runtime_context::ParticipantKey;
+use crate::db::repositories::space_children::SpaceChild;
+use crate::environment::connection;
+use crate::environment::contract::{EnvError, EnvOwner, ResolvedEnv, Values};
+use crate::environment::store as environment;
+use crate::events::{self, Frame, AGENT_EVENT, CONVERSATION_UPDATED};
+use crate::hosting::authors;
+use crate::hosting::caller::Caller;
+use crate::json::JsonValue;
+use crate::logging;
+use crate::mcp_oauth::refresh;
+use crate::missions::contract::LivenessSigns;
+use crate::missions::liveness::announce_thread_moved;
+use crate::private_files;
+
+const RUNS_DIR: &str = "runs";
+
+pub fn announce(core: &crate::core_context::Core, scope: Option<RuntimeScope>, event: AgentEvent) {
+	announce_in_turn(core, scope, None, event);
+}
+
+pub fn announce_in_turn(
+	core: &crate::core_context::Core,
+	scope: Option<RuntimeScope>,
+	turn: Option<EventTurn>,
+	event: AgentEvent,
+) {
+	announce_scoped(core, ScopedEvent { scope, turn, event });
+}
+
+fn announce_denied(core: &crate::core_context::Core, dropped: &[PendingQuestion]) {
+	for question in dropped {
+		announce_scoped(core, question.denied());
+	}
+}
+
+fn announce_scoped(core: &crate::core_context::Core, scoped: ScopedEvent) {
+	if let Err(failure) = core.emit(AGENT_EVENT, scoped) {
+		log::warn!("a turn event was not announced: {failure}");
+	}
+}
+
+pub fn subscribed_with_pending_questions(
+	core: &crate::core_context::Core,
+) -> (Vec<Frame>, broadcast::Receiver<Frame>) {
+	let Some(state) = core.try_state::<AgentState>() else {
+		return (Vec::new(), core.subscribe_frames());
+	};
+	let (pending, heard) = state.live.questions_pending_at(|| core.subscribe_frames());
+	(pending.into_iter().filter_map(|question| framed_question(question.scoped())).collect(), heard)
+}
+
+fn framed_question(asked: ScopedEvent) -> Option<Frame> {
+	match events::frame(AGENT_EVENT, &asked) {
+		Ok(frame) => Some(frame),
+		Err(failure) => {
+			log::warn!("a pending question did not serialize for a new listener: {failure}");
+			None
+		}
+	}
+}
+
+type Participant = (String, String);
+
+type RunKey = String;
+
+fn run_key(scope: &RuntimeScope) -> RunKey {
+	scope.runtime_session_id.clone()
+}
+
+fn participant(scope: &RuntimeScope) -> Participant {
+	(scope.conversation_id.clone(), scope.bot_id.clone())
+}
+
+fn participant_key(scope: &RuntimeScope) -> ParticipantKey {
+	ParticipantKey { conversation_id: scope.conversation_id.clone(), bot_id: scope.bot_id.clone() }
+}
+
+struct Live<S = Arc<Session>> {
+	runs: std::sync::Mutex<HashMap<RunKey, Run<S>>>,
+	questions: std::sync::Mutex<Vec<PendingQuestion>>,
+}
+
+#[derive(Clone)]
+struct PendingQuestion {
+	scope: RuntimeScope,
+	turn: Option<EventTurn>,
+	request: QuestionRequest,
+}
+
+impl PendingQuestion {
+	fn scoped(self) -> ScopedEvent {
+		ScopedEvent {
+			scope: Some(self.scope),
+			turn: self.turn,
+			event: AgentEvent::QuestionRequested { request: self.request },
+		}
+	}
+
+	fn denied(&self) -> ScopedEvent {
+		ScopedEvent {
+			scope: Some(self.scope.clone()),
+			turn: self.turn.clone(),
+			event: AgentEvent::PermissionResolved {
+				id: self.request.id.clone(),
+				decision: PermissionDecision::Deny,
+			},
+		}
+	}
+
+	fn asked_by(&self, scope: &RuntimeScope) -> bool {
+		run_key(&self.scope) == run_key(scope)
+	}
+}
+
+struct Run<S> {
+	scope: RuntimeScope,
+	session: Option<S>,
+	started_at: i64,
+	is_mid_turn: bool,
+	permissions: Vec<PermissionRequest>,
+}
+
+impl<S> Run<S> {
+	fn settle(&mut self) {
+		self.is_mid_turn = false;
+		self.permissions.clear();
+	}
+
+	fn reported(&self) -> LiveSession {
+		LiveSession {
+			bot_id: self.scope.bot_id.clone(),
+			conversation_id: self.scope.conversation_id.clone(),
+			runtime_session_id: self.scope.runtime_session_id.clone(),
+			started_at: self.started_at,
+		}
+	}
+}
+
+struct Admission<S> {
+	replaced: Option<S>,
+	keeps_lineage: bool,
+	dropped: Vec<PendingQuestion>,
+}
+
+struct Cleared<T> {
+	ended: T,
+	dropped: Vec<PendingQuestion>,
+}
+
+impl<S> Admission<S> {
+	fn resume(&self, asked: Option<String>) -> Option<String> {
+		asked.filter(|_| self.keeps_lineage)
+	}
+}
+
+impl<S> Default for Live<S> {
+	fn default() -> Self {
+		Self {
+			runs: std::sync::Mutex::new(HashMap::new()),
+			questions: std::sync::Mutex::new(Vec::new()),
+		}
+	}
+}
+
+impl<S> Live<S> {
+	fn questions(&self) -> MutexGuard<'_, Vec<PendingQuestion>> {
+		self.questions.lock().unwrap_or_else(PoisonError::into_inner)
+	}
+
+	fn release_question(&self, scope: &RuntimeScope, id: &str) {
+		self.questions()
+			.retain(|question| !(question.asked_by(scope) && question.request.id == id));
+	}
+
+	fn drop_questions(&self, scope: &RuntimeScope) -> Vec<PendingQuestion> {
+		self.questions().extract_if(.., |question| question.asked_by(scope)).collect()
+	}
+
+	fn pending_questions(&self) -> Vec<PendingQuestion> {
+		self.questions().clone()
+	}
+
+	fn questions_in(&self, conversation_id: &str) -> Vec<ScopedEvent> {
+		self.questions()
+			.iter()
+			.filter(|question| question.scope.conversation_id == conversation_id)
+			.cloned()
+			.map(PendingQuestion::scoped)
+			.collect()
+	}
+
+	fn questions_pending_at<T>(&self, subscribe: impl FnOnce() -> T) -> (Vec<PendingQuestion>, T) {
+		let questions = self.questions();
+		(questions.clone(), subscribe())
+	}
+
+	fn runs(&self) -> MutexGuard<'_, HashMap<RunKey, Run<S>>> {
+		self.runs.lock().unwrap_or_else(PoisonError::into_inner)
+	}
+
+	fn moved_by(&self, scope: &RuntimeScope, event: &AgentEvent) -> bool {
+		let mut runs = self.runs();
+		let Some(run) = runs.get_mut(&run_key(scope)).filter(|run| &run.scope == scope) else {
+			return false;
+		};
+		match event {
+			AgentEvent::TurnChanged { state } => {
+				run.is_mid_turn = matches!(
+					state,
+					TurnState::Submitting | TurnState::Running | TurnState::Stopping
+				)
+			}
+			AgentEvent::PermissionRequested { request } => {
+				if run.permissions.iter().all(|held| held.id != request.id) {
+					run.permissions.push(request.clone());
+				}
+			}
+			AgentEvent::PermissionResolved { id, .. } => {
+				run.permissions.retain(|held| &held.id != id);
+			}
+			AgentEvent::TurnEnded { .. } => run.settle(),
+			AgentEvent::Failed { error } if error.is_fatal() => run.settle(),
+			AgentEvent::QuestionRequested { .. } => {}
+			_ => return false,
+		}
+		true
+	}
+
+	fn thread_signs(&self, conversation_id: &str) -> LivenessSigns {
+		let (is_turn_running, is_permission_pending) = {
+			let runs = self.runs();
+			let in_thread =
+				|| runs.values().filter(|run| run.scope.conversation_id == conversation_id);
+			(
+				in_thread().any(|run| run.is_mid_turn),
+				in_thread().any(|run| !run.permissions.is_empty()),
+			)
+		};
+		let is_question_pending = self
+			.questions()
+			.iter()
+			.any(|question| question.scope.conversation_id == conversation_id);
+		LivenessSigns {
+			is_prompt_pending: is_permission_pending || is_question_pending,
+			is_turn_running,
+		}
+	}
+
+	fn thread_prompt(&self, conversation_id: &str) -> Option<PendingPrompt> {
+		let asked = self
+			.questions()
+			.iter()
+			.find(|question| question.scope.conversation_id == conversation_id)
+			.map(|question| PendingPrompt {
+				prompt_id: question.request.id.clone(),
+				kind: PendingPromptKind::Question,
+				text: question.request.text(),
+			});
+		asked.or_else(|| {
+			let runs = self.runs();
+			let mut in_thread: Vec<&Run<S>> =
+				runs.values().filter(|run| run.scope.conversation_id == conversation_id).collect();
+			in_thread.sort_by_key(|run| run.started_at);
+			in_thread.into_iter().find_map(|run| run.permissions.first()).map(|request| {
+				PendingPrompt {
+					prompt_id: request.id.clone(),
+					kind: PendingPromptKind::Permission,
+					text: request.title.clone(),
+				}
+			})
+		})
+	}
+}
+
+impl<S: Clone> Live<S> {
+	fn take_over(&self, scope: RuntimeScope) -> Admission<S> {
+		let mut runs = self.runs.lock().expect("live runs");
+		let key = run_key(&scope);
+		let keeps_lineage = !runs
+			.iter()
+			.any(|(held, run)| held != &key && participant(&run.scope) == participant(&scope));
+		let replaced = runs
+			.insert(
+				key,
+				Run {
+					scope: scope.clone(),
+					session: None,
+					started_at: now_ms(),
+					is_mid_turn: false,
+					permissions: Vec::new(),
+				},
+			)
+			.and_then(|replaced| replaced.session);
+		drop(runs);
+		let dropped = self.drop_questions(&scope);
+		Admission { replaced, keeps_lineage, dropped }
+	}
+
+	fn install(&self, scope: &RuntimeScope, session: S) -> bool {
+		let mut runs = self.runs.lock().expect("live runs");
+		let Some(run) = runs.get_mut(&run_key(scope)) else {
+			return false;
+		};
+		if &run.scope != scope {
+			return false;
+		}
+		run.session = Some(session);
+		true
+	}
+
+	fn clear(&self, scope: &RuntimeScope) -> Cleared<Option<S>> {
+		let ended = self
+			.runs
+			.lock()
+			.expect("live runs")
+			.remove(&run_key(scope))
+			.and_then(|run| run.session);
+		Cleared { ended, dropped: self.drop_questions(scope) }
+	}
+
+	fn clear_all(&self) -> Cleared<Vec<S>> {
+		let cleared = std::mem::take(&mut *self.runs.lock().expect("live runs"));
+		let dropped = std::mem::take(&mut *self.questions());
+		Cleared { ended: cleared.into_values().filter_map(|run| run.session).collect(), dropped }
+	}
+
+	fn hold_question(&self, asked: PendingQuestion, announce: impl FnOnce(PendingQuestion)) {
+		let mut questions = self.questions();
+		if !self.holds(&asked.scope) {
+			return;
+		}
+		questions.push(asked.clone());
+		announce(asked);
+	}
+
+	fn report(&self) -> Vec<LiveSession> {
+		let mut held: Vec<LiveSession> =
+			self.runs.lock().expect("live runs").values().map(Run::reported).collect();
+		held.sort_by(|left, right| {
+			(left.started_at, &left.runtime_session_id)
+				.cmp(&(right.started_at, &right.runtime_session_id))
+		});
+		held
+	}
+
+	fn sessions_beside(&self, scope: &RuntimeScope) -> Vec<RunKey> {
+		let admitted = run_key(scope);
+		self.runs
+			.lock()
+			.expect("live runs")
+			.iter()
+			.filter(|(held, run)| {
+				**held != admitted && run.scope.conversation_id == scope.conversation_id
+			})
+			.map(|(held, _)| held.clone())
+			.collect()
+	}
+
+	fn holds(&self, scope: &RuntimeScope) -> bool {
+		self.runs.lock().expect("live runs").values().any(|run| &run.scope == scope)
+	}
+
+	fn live_scope_of(&self, held_by: &ParticipantKey) -> Option<RuntimeScope> {
+		self.runs
+			.lock()
+			.expect("live runs")
+			.values()
+			.filter(|run| run.session.is_some() && &participant_key(&run.scope) == held_by)
+			.max_by_key(|run| run.started_at)
+			.map(|run| run.scope.clone())
+	}
+
+	fn is_foreign(&self, scope: &RuntimeScope) -> bool {
+		self.runs
+			.lock()
+			.expect("live runs")
+			.get(&run_key(scope))
+			.is_some_and(|run| &run.scope != scope)
+	}
+
+	fn session_for(&self, scope: &RuntimeScope) -> Result<S, TransportError> {
+		let runs = self.runs.lock().expect("live runs");
+		let Some(run) = runs.get(&run_key(scope)) else {
+			return Err(TransportError::NotStarted);
+		};
+		if &run.scope != scope {
+			return Err(stale(scope));
+		}
+		run.session.clone().ok_or(TransportError::NotStarted)
+	}
+}
+
+struct RunSink {
+	core: crate::core_context::Core,
+	scope: RuntimeScope,
+	live: Arc<Live>,
+	records_its_own_lineage: bool,
+}
+
+impl TurnSink for RunSink {
+	fn emit(&self, event: AgentEvent, turn: Option<EventTurn>) {
+		if !self.live.holds(&self.scope) && !closes_the_run(&event) {
+			return;
+		}
+		let moves_the_thread = self.live.moved_by(&self.scope, &event);
+		if let AgentEvent::QuestionRequested { request } = &event {
+			let asked =
+				PendingQuestion { scope: self.scope.clone(), turn, request: request.clone() };
+			self.live.hold_question(asked, |asked| announce_scoped(&self.core, asked.scoped()));
+			return retell_the_mission(&self.core, self.scope.conversation_id.clone());
+		}
+		self.release_questions_settled_by(&event);
+		if moves_the_thread {
+			retell_the_mission(&self.core, self.scope.conversation_id.clone());
+		}
+		if let AgentEvent::SessionReady { session_id, .. } = &event {
+			self.record_its_own_lineage(session_id.clone());
+		}
+		let ended = matches!(event, AgentEvent::TurnEnded { .. });
+		announce_in_turn(&self.core, Some(self.scope.clone()), turn, event);
+		if ended {
+			self.record_writes();
+		}
+	}
+}
+
+fn closes_the_run(event: &AgentEvent) -> bool {
+	matches!(
+		event,
+		AgentEvent::TurnEnded { .. }
+			| AgentEvent::Failed { error: TransportError::WriteFailed { .. } }
+	)
+}
+
+impl RunSink {
+	fn release_questions_settled_by(&self, event: &AgentEvent) {
+		match prompts_settled_by(event) {
+			Some(SettledPrompts::One(id)) => self.live.release_question(&self.scope, id),
+			Some(SettledPrompts::Every) => self.drop_questions(),
+			None => {}
+		}
+	}
+
+	fn drop_questions(&self) {
+		announce_denied(&self.core, &self.live.drop_questions(&self.scope));
+	}
+
+	fn record_its_own_lineage(&self, provider_session_id: String) {
+		if !self.records_its_own_lineage {
+			return;
+		}
+		let core = self.core.clone();
+		let scope = self.scope.clone();
+		self.core.spawn(async move {
+			let refused = match bot_database(&core) {
+				Some(database) => {
+					record_its_own_provider_session(database, &scope, provider_session_id)
+						.await
+						.err()
+				}
+				None => Some(TransportError::WriteFailed {
+					detail: NO_DATABASE_FOR_THE_LINEAGE.to_owned(),
+				}),
+			};
+			if let Some(error) = refused {
+				announce(&core, Some(scope), AgentEvent::Failed { error });
+			}
+		});
+	}
+
+	fn record_writes(&self) {
+		let core = self.core.clone();
+		let scope = self.scope.clone();
+		let live = self.live.clone();
+		self.core.spawn(async move {
+			for (bundle, evolved) in evolutions(&core, &scope).await {
+				if !live.holds(&scope) {
+					return;
+				}
+				if let Some(event) = evolution_announced(bundle, evolved) {
+					announce(&core, Some(scope.clone()), event);
+				}
+			}
+		});
+	}
+}
+
+fn retell_the_mission(core: &crate::core_context::Core, conversation_id: String) {
+	let core = core.clone();
+	core.clone().spawn(async move {
+		let Some(database) = bot_database(&core) else {
+			return log::warn!("a thread moved and its mission was not read without the store");
+		};
+		if let Err(failure) = announce_thread_moved(&core, database, conversation_id).await {
+			log::warn!("a thread moved and the front was not told of its mission: {failure:?}");
+		}
+	});
+}
+
+fn retell_when_moved(
+	core: &crate::core_context::Core,
+	state: &AgentState,
+	scope: &RuntimeScope,
+	before: LivenessSigns,
+) {
+	if state.thread_signs(&scope.conversation_id) != before {
+		retell_the_mission(core, scope.conversation_id.clone());
+	}
+}
+
+fn evolution_announced(bundle: EvolvedBundle, evolved: bundles::Evolved) -> Option<AgentEvent> {
+	match evolved {
+		bundles::Evolved::Unchanged => None,
+		bundles::Evolved::Recorded(evolution) => Some(AgentEvent::BotEvolved {
+			bundle,
+			commit_id: evolution.commit_id,
+			title: evolution.title,
+		}),
+		bundles::Evolved::Failed(error) => {
+			Some(AgentEvent::BotEvolutionFailed { bundle, detail: error.message().to_owned() })
+		}
+	}
+}
+
+async fn evolutions(
+	core: &crate::core_context::Core,
+	scope: &RuntimeScope,
+) -> Vec<(EvolvedBundle, bundles::Evolved)> {
+	let mut announced = Vec::new();
+	if let Some(path) = bundles::user::laid_down(core) {
+		announced.push((EvolvedBundle::User, bundles::user::evolve(&path)));
+	}
+	let Some(database) = bot_database(core) else {
+		return announced;
+	};
+	let Ok(Some(bot)) = database.conversations().bot(scope.bot_id.clone()).await else {
+		return announced;
+	};
+	if let Ok(space_id) =
+		space_of_the_conversation(database, &scope.conversation_id, &scope.bot_id).await
+	{
+		if let Some(path) = bundles::space::laid_down(core, &space_id) {
+			announced.push((EvolvedBundle::Space, bundles::space::evolve(&path)));
+		}
+	}
+	let Some(root) = bundles::root(core) else {
+		return announced;
+	};
+	let evolved = bundles::evolve(&root, &bot);
+	if matches!(evolved, bundles::Evolved::Recorded(_)) {
+		reconcile_bot(database, &root, &bot).await;
+	}
+	announced.push((EvolvedBundle::Bot, evolved));
+	announced
+}
+
+const NO_DATABASE_FOR_THE_LINEAGE: &str =
+	"the provider session id could not be recorded without the store";
+
+async fn record_its_own_provider_session(
+	database: &db::Database,
+	scope: &RuntimeScope,
+	provider_session_id: String,
+) -> Result<(), TransportError> {
+	database
+		.runtime_context()
+		.record_provider_session(
+			participant_key(scope),
+			scope.runtime_session_id.clone(),
+			provider_session_id,
+		)
+		.await
+		.map_err(|error| TransportError::WriteFailed {
+			detail: format!("the provider session id could not be recorded: {error:?}"),
+		})
+}
+
+fn bot_database(core: &crate::core_context::Core) -> Option<&db::Database> {
+	core.try_state::<db::DatabaseState>()?.inner().as_ref().ok()
+}
+
+pub async fn reconcile_bot(database: &db::Database, root: &Path, bot: &StoredBot) {
+	if let Some(found) = bundles::adopted(root, bot) {
+		let _ = database.conversations().adopt_instructions(bot.id.clone(), found).await;
+	}
+	if let Some(learned) = bundles::adopted_memory(root, bot) {
+		let _ = database.conversations().adopt_memory(bot.id.clone(), learned).await;
+	}
+}
+
+pub fn learned_block(root: &Path, bot_id: &str) -> Option<String> {
+	bundles::generated(root, bot_id).map(|written| written.memory)
+}
+
+pub async fn store_a_changed_block(
+	database: &db::Database,
+	root: &Path,
+	bot_id: &str,
+	held: Option<String>,
+) -> Result<(), ConversationError> {
+	let Some(changed) =
+		learned_block(root, bot_id).filter(|changed| held.as_ref() != Some(changed))
+	else {
+		return Ok(());
+	};
+	database.conversations().adopt_memory(bot_id.to_owned(), changed).await
+}
+
+#[derive(Default)]
+struct Gate {
+	quitting: bool,
+	busy: HashSet<RunKey>,
+}
+
+pub struct AgentState {
+	gate: std::sync::Mutex<Gate>,
+	live: Arc<Live>,
+	sidecar: Mutex<Option<Arc<Sidecar>>>,
+	models: Catalogue<OfferedModel>,
+	tools: Catalogue<String>,
+	host_writes: Arc<HostWrites>,
+	host_turns: HostTurns,
+	lease: RunLease,
+}
+
+struct Catalogue<Item> {
+	command: &'static str,
+	computed: Mutex<Option<ComputedCatalogue<Item>>>,
+}
+
+struct ComputedCatalogue<Item> {
+	source: Values,
+	list: Vec<Item>,
+}
+
+impl Default for AgentState {
+	fn default() -> Self {
+		Self {
+			gate: std::sync::Mutex::default(),
+			live: Arc::default(),
+			sidecar: Mutex::default(),
+			models: Catalogue::of(protocol::MODELS),
+			tools: Catalogue::of(protocol::TOOLS),
+			host_writes: Arc::default(),
+			host_turns: HostTurns::default(),
+			lease: RunLease::default(),
+		}
+	}
+}
+
+impl<Item: Clone> Catalogue<Item> {
+	fn of(command: &'static str) -> Self {
+		Self { command, computed: Mutex::default() }
+	}
+
+	async fn held(&self, connection: &Values) -> Option<Vec<Item>> {
+		let computed = self.computed.lock().await;
+		computed.as_ref().filter(|held| &held.source == connection).map(|held| held.list.clone())
+	}
+
+	async fn served<Computing>(
+		&self,
+		connection: &Values,
+		computing: impl FnOnce() -> Computing,
+	) -> Vec<Item>
+	where
+		Computing: std::future::Future<Output = Vec<Item>>,
+	{
+		let mut computed = self.computed.lock().await;
+		if let Some(held) = computed.as_ref().filter(|held| &held.source == connection) {
+			return held.list.clone();
+		}
+		let list = computing().await;
+		*computed = match list.is_empty() {
+			true => None,
+			false => Some(ComputedCatalogue { source: connection.clone(), list: list.clone() }),
+		};
+		list
+	}
+}
+
+impl AgentState {
+	pub fn leasing(lease: RunLease) -> Self {
+		Self { lease, ..Self::default() }
+	}
+
+	async fn admit(
+		&self,
+		core: &crate::core_context::Core,
+		scope: RuntimeScope,
+	) -> Admission<Arc<Session>> {
+		let admitted_at = now_ms();
+		let admitted = self.live.take_over(scope.clone());
+		announce_denied(core, &admitted.dropped);
+		let live_beside = self.live.sessions_beside(&scope);
+		release_orphan_prompts(core, &scope.conversation_id, live_beside, admitted_at).await;
+		admitted
+	}
+
+	pub fn host_writes(&self) -> &HostWrites {
+		&self.host_writes
+	}
+
+	pub fn host_turns(&self) -> &HostTurns {
+		&self.host_turns
+	}
+
+	pub fn thread_signs(&self, conversation_id: &str) -> LivenessSigns {
+		self.live.thread_signs(conversation_id)
+	}
+
+	pub fn thread_prompt(&self, conversation_id: &str) -> Option<PendingPrompt> {
+		self.live.thread_prompt(conversation_id)
+	}
+
+	pub fn live_session_count(&self) -> usize {
+		self.live.report().len()
+	}
+
+	fn claim(&self, scope: &RuntimeScope) -> Result<Claim<'_>, TransportError> {
+		let mut gate = self.gate.lock().expect("gate");
+		let run = run_key(scope);
+		if gate.quitting || !gate.busy.insert(run.clone()) {
+			return Err(TransportError::TransitionInProgress);
+		}
+		Ok(Claim { state: self, run })
+	}
+
+	fn enter_quit(&self) {
+		self.gate.lock().expect("gate").quitting = true;
+	}
+
+	pub fn is_quitting(&self) -> bool {
+		self.gate.lock().unwrap_or_else(PoisonError::into_inner).quitting
+	}
+
+	pub async fn sidecar(&self) -> Result<Arc<Sidecar>, TransportError> {
+		let mut slot = self.sidecar.lock().await;
+		if let Some(running) = slot.as_ref().filter(|running| running.is_live()) {
+			return Ok(running.clone());
+		}
+		let started = Sidecar::start(SidecarOptions::new(sidecar::resolve()?)).await?;
+		*slot = Some(started.clone());
+		Ok(started)
+	}
+
+	async fn take_sidecar(&self) -> Option<Arc<Sidecar>> {
+		self.sidecar.lock().await.take()
+	}
+
+	async fn offered<Item: Clone + DeserializeOwned>(
+		&self,
+		catalogue: &Catalogue<Item>,
+		connection: &Values,
+	) -> Vec<Item> {
+		catalogue
+			.served(connection, || async {
+				let Ok(sidecar) = self.sidecar().await else {
+					return Vec::new();
+				};
+				let Ok(offered) = sidecar.offered(catalogue.command, connection).await else {
+					return Vec::new();
+				};
+				offered
+			})
+			.await
+	}
+
+	async fn title(&self, text: &str, connection: &Values) -> Option<ConversationNaming> {
+		let sidecar = self.sidecar().await.ok()?;
+		sidecar.title(text, connection).await.ok().flatten()
+	}
+}
+
+struct Claim<'a> {
+	state: &'a AgentState,
+	run: RunKey,
+}
+
+impl Drop for Claim<'_> {
+	fn drop(&mut self) {
+		self.state.gate.lock().expect("gate").busy.remove(&self.run);
+	}
+}
+
+fn stale(scope: &RuntimeScope) -> TransportError {
+	TransportError::StaleRuntimeSession { runtime_session_id: scope.runtime_session_id.clone() }
+}
+
+pub async fn agent_models(core: &crate::core_context::Core) -> Vec<OfferedModel> {
+	let state = core.state::<AgentState>();
+	state.offered(&state.models, &held_connection(core)).await
+}
+
+pub async fn supported_effort_levels(
+	core: &crate::core_context::Core,
+	model: &str,
+) -> Option<Vec<bundles::EffortLevel>> {
+	let state = core.try_state::<AgentState>()?;
+	let offered = state.models.held(&held_connection(core)).await?;
+	offered
+		.into_iter()
+		.find(|offered| offered.value == model)
+		.map(|offered| offered.supported_effort_levels)
+}
+
+pub async fn agent_tools(core: &crate::core_context::Core) -> Vec<String> {
+	let state = core.state::<AgentState>();
+	state.offered(&state.tools, &held_connection(core)).await
+}
+
+pub async fn agent_title(
+	core: &crate::core_context::Core,
+	text: String,
+) -> Option<ConversationNaming> {
+	core.state::<AgentState>().title(&text, &held_connection(core)).await
+}
+
+pub fn held_connection(core: &crate::core_context::Core) -> Values {
+	let Some(root) = environment::root(core) else {
+		return Values::new();
+	};
+	held_and_redacted(&root).unwrap_or_else(|failure| {
+		log::warn!("{ENV_UNREADABLE}: {failure:?}");
+		Values::new()
+	})
+}
+
+pub fn held_and_redacted(root: &Path) -> Result<Values, EnvError> {
+	let held = connection::held(root)?;
+	logging::scrub::remember_env_values(held.values());
+	Ok(held)
+}
+
+pub async fn agent_check(
+	core: &crate::core_context::Core,
+	scope: Option<RuntimeScope>,
+) -> CheckReport {
+	announce(
+		core,
+		scope.clone(),
+		AgentEvent::ConnectionChanged { state: ConnectionState::Checking },
+	);
+	let env_root = environment::root(core);
+	let report = check(core.state::<AgentState>().inner(), env_root.as_deref()).await;
+	announce(core, scope, AgentEvent::ConnectionChanged { state: report.connection });
+	report
+}
+
+pub async fn agent_account(core: &crate::core_context::Core) -> AccountReport {
+	announce(core, None, AgentEvent::ConnectionChanged { state: ConnectionState::Checking });
+	let env_root = environment::root(core);
+	let read = account(core.state::<AgentState>().inner(), env_root.as_deref()).await;
+	announce(core, None, AgentEvent::ConnectionChanged { state: read.report.connection });
+	read
+}
+
+pub async fn check(state: &AgentState, env_root: Option<&Path>) -> CheckReport {
+	let (binary_version, probe) = probed(state, env_root).await;
+	reported(binary_version, probe)
+}
+
+pub async fn account(state: &AgentState, env_root: Option<&Path>) -> AccountReport {
+	let (binary_version, probe) = probed(state, env_root).await;
+	let account = probe.as_ref().ok().and_then(|checked| checked.account.clone());
+	AccountReport { report: reported(binary_version, probe), account }
+}
+
+async fn probed(
+	state: &AgentState,
+	env_root: Option<&Path>,
+) -> (Option<String>, Result<Checked, TransportError>) {
+	let sidecar = match state.sidecar().await {
+		Ok(sidecar) => sidecar,
+		Err(error) => return (None, Err(error)),
+	};
+	let version = sidecar.version().to_owned();
+	let connection = match env_root.map(held_and_redacted).transpose() {
+		Ok(held) => held.unwrap_or_default(),
+		Err(error) => {
+			let detail = format!("{ENV_UNREADABLE}: {error:?}");
+			return (Some(version), Err(TransportError::AuthCheckFailed { detail }));
+		}
+	};
+	(Some(version), sidecar.checked(&connection).await)
+}
+
+fn reported(binary_version: Option<String>, probe: Result<Checked, TransportError>) -> CheckReport {
+	let (auth_method, error) = match probe {
+		Ok(checked) if checked.authenticated => (checked.auth_method, None),
+		Ok(checked) => (checked.auth_method, Some(TransportError::NotAuthenticated)),
+		Err(error) => (None, Some(error)),
+	};
+	CheckReport {
+		connection: match error {
+			None => ConnectionState::Ready,
+			Some(_) => ConnectionState::Unavailable,
+		},
+		binary_version,
+		authenticated: error.is_none(),
+		auth_method,
+		error,
+	}
+}
+
+struct RuntimeIdentity {
+	bundle: Bundle,
+	server_env: ResolvedEnv,
+	space_id: String,
+}
+
+struct ResolvedRun {
+	bot: StoredBot,
+	space_id: String,
+	root: PathBuf,
+}
+
+const DATABASE_UNREACHED: &str = "the database could not be reached";
+const ROW_MISSING: &str = "its row is missing";
+const ROW_UNREADABLE: &str = "its row could not be read";
+const SPACE_UNRESOLVED: &str = "the space of the conversation could not be resolved";
+const ROOT_UNRESOLVED: &str = "the bundle root could not be resolved";
+
+pub const ENV_UNREADABLE: &str = "the environment store could not be read";
+
+async fn served_environment(
+	core: &crate::core_context::Core,
+	sidecar: &Sidecar,
+	bot_id: &str,
+	space_id: &str,
+	serving: &[PathBuf],
+) -> ResolvedEnv {
+	let Some(root) = environment::root(core) else {
+		return ResolvedEnv::failed(ENV_UNREADABLE);
+	};
+	let owner = EnvOwner::Bot { id: bot_id.to_owned(), space_id: space_id.to_owned() };
+	let needs_authorization = refresh::before_open(&root, &owner, serving, sidecar).await;
+	let resolved = environment::resolve(&root, &owner);
+	if let Ok(served) = &resolved {
+		redacted_from_the_log(served);
+	}
+	awaiting_served(resolved, needs_authorization)
+}
+
+fn redacted_from_the_log(served: &ResolvedEnv) {
+	let per_server = served.per_server.values().flat_map(|own| own.values());
+	logging::scrub::remember_env_values(served.base.values().chain(per_server));
+}
+
+fn awaiting_served(
+	resolved: Result<ResolvedEnv, EnvError>,
+	needs_authorization: BTreeSet<String>,
+) -> ResolvedEnv {
+	let resolved = resolved.unwrap_or_else(|_| ResolvedEnv::failed(ENV_UNREADABLE));
+	ResolvedEnv { needs_authorization, ..resolved }
+}
+
+async fn runtime_identity(
+	core: &crate::core_context::Core,
+	state: &db::DatabaseState,
+	scope: &RuntimeScope,
+	sidecar: &Sidecar,
+) -> Result<RuntimeIdentity, TransportError> {
+	let database = state.as_ref().map_err(|failure| {
+		identity_refused(&scope.bot_id, &format!("{DATABASE_UNREACHED}: {failure:?}"))
+	})?;
+	let LaidDownSession { bundle, space_id, serving } =
+		laid_down_session(core, database, scope).await?;
+	let server_env = served_environment(core, sidecar, &scope.bot_id, &space_id, &serving).await;
+	Ok(RuntimeIdentity { bundle, server_env, space_id })
+}
+
+pub struct LaidDownSession {
+	bundle: Bundle,
+	space_id: String,
+	serving: Vec<PathBuf>,
+}
+
+pub async fn laid_down_session(
+	core: &crate::core_context::Core,
+	database: &db::Database,
+	scope: &RuntimeScope,
+) -> Result<LaidDownSession, TransportError> {
+	let _memory = bundles::holding_the_memory(&scope.bot_id).await;
+	let ResolvedRun { bot, space_id, root } =
+		resolved_run(database, bundles::root(core), scope).await?;
+	let system = bundles::system::laid_down(core);
+	let user = bundles::user::laid_down(core);
+	let space = bundles::space::laid_down(core, &space_id);
+	let permissions = settled_permissions(database, Some(&root), &bot).await;
+	let bundle = laid_down_bundle(
+		&root,
+		&bot,
+		&permissions,
+		system.as_deref(),
+		user.as_deref(),
+		space.as_deref(),
+	)
+	.map_err(unavailable_bundle)?;
+	reconcile_bot(database, &root, &bot).await;
+	let serving: Vec<PathBuf> =
+		[system, user, space, Some(PathBuf::from(&bundle.path))].into_iter().flatten().collect();
+	Ok(LaidDownSession { bundle, space_id, serving })
+}
+
+async fn resolved_run(
+	database: &db::Database,
+	root: Option<PathBuf>,
+	scope: &RuntimeScope,
+) -> Result<ResolvedRun, TransportError> {
+	let refused = |step: String| identity_refused(&scope.bot_id, &step);
+	let bot = match database.conversations().bot(scope.bot_id.clone()).await {
+		Ok(Some(bot)) => bot,
+		Ok(None) => return Err(refused(ROW_MISSING.to_owned())),
+		Err(error) => return Err(refused(format!("{ROW_UNREADABLE}: {error:?}"))),
+	};
+	let space_id = space_of_the_conversation(database, &scope.conversation_id, &scope.bot_id)
+		.await
+		.map_err(|error| refused(format!("{SPACE_UNRESOLVED}: {error:?}")))?;
+	let root = root.ok_or_else(|| refused(ROOT_UNRESOLVED.to_owned()))?;
+	Ok(ResolvedRun { bot, space_id, root })
+}
+
+fn unavailable_bundle(error: bundles::BundleUnavailable) -> TransportError {
+	identity_refused(&error.bot_id, &format!("its bundle is unavailable: {}", error.cause))
+}
+
+fn identity_refused(bot_id: &str, step: &str) -> TransportError {
+	let detail = format!("the session of bot {bot_id} did not start: {step}");
+	log::warn!("{detail}");
+	TransportError::SpawnFailed { detail }
+}
+
+async fn members_reading(
+	core: &crate::core_context::Core,
+	state: &db::DatabaseState,
+	space_id: &str,
+) -> Vec<SpaceMember> {
+	let Ok(database) = state.as_ref() else {
+		return Vec::new();
+	};
+	authors::members_of(core, database, space_id).await.unwrap_or_else(|failure| {
+		log::warn!("the members of space {space_id} were not named to a session: {failure:?}");
+		Vec::new()
+	})
+}
+
+async fn opens_on_a_mission_thread(state: &db::DatabaseState, conversation_id: &str) -> bool {
+	let Ok(database) = state.as_ref() else {
+		return false;
+	};
+	matches!(
+		database.conversations().kind(conversation_id.to_owned()).await,
+		Ok(Some(kind)) if kind == MISSION_KIND
+	)
+}
+
+async fn settled_permissions(
+	database: &db::Database,
+	root: Option<&Path>,
+	bot: &StoredBot,
+) -> bundles::BotPermissions {
+	if let Some(stored) = bot.permissions.clone() {
+		return stored;
+	}
+	let carried = root
+		.and_then(|root| bundles::permissions(root, &bot.id))
+		.unwrap_or_else(|| bundles::BotPermissions::unruled_like(&bot.denied_tools));
+	let _ = database.conversations().adopt_permissions(bot.id.clone(), carried.clone()).await;
+	carried
+}
+
+fn laid_down_bundle(
+	root: &Path,
+	bot: &StoredBot,
+	permissions: &bundles::BotPermissions,
+	system: Option<&Path>,
+	user: Option<&Path>,
+	space: Option<&Path>,
+) -> Result<Bundle, bundles::BundleUnavailable> {
+	bundles::set_permissions(root, bot, permissions)
+		.map_err(|cause| bundles::BundleUnavailable { bot_id: bot.id.clone(), cause })?;
+	let held = bundles::ensure(root, bot)?;
+	Ok(Bundle {
+		path: held.to_string_lossy().into_owned(),
+		system_path: system.map(|path| path.to_string_lossy().into_owned()),
+		user_path: user.map(|path| path.to_string_lossy().into_owned()),
+		space_path: space.map(|path| path.to_string_lossy().into_owned()),
+		agent: bundles::agent_ref(bot),
+		identity: bundles::identity(bot),
+		output_style: bundles::session_output_style(root, &bot.id),
+		settings_path: bundles::settings_file(root, &bot.id)
+			.map(|path| path.to_string_lossy().into_owned()),
+	})
+}
+
+fn its_own_directory(core: &crate::core_context::Core, bot_id: &str) -> PathBuf {
+	reserved_directory(core.data_dir().to_path_buf(), bot_id)
+}
+
+fn reserved_directory(app_data: PathBuf, bot_id: &str) -> PathBuf {
+	let mine = app_data.join(RUNS_DIR).join(bot_id);
+	if private_files::create_dir(&mine).is_ok() {
+		mine
+	} else {
+		app_data
+	}
+}
+
+pub async fn start_or_resume_session(
+	core: &crate::core_context::Core,
+	scope: RuntimeScope,
+	resume: Option<String>,
+	cwd: Option<String>,
+	output_schema: Option<JsonValue>,
+) -> Result<SessionHandle, TransportError> {
+	let state = core.state::<AgentState>();
+	let database = core.state::<db::DatabaseState>();
+	let start = RunStart {
+		scope,
+		resume,
+		cwd,
+		output_schema: output_schema.map(JsonValue::into),
+		lineage: Lineage::RecordedByTheCaller,
+	};
+	start_run(core.clone(), &state, &database, start).await
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Lineage {
+	RecordedByTheCaller,
+	RecordedByTheRun,
+}
+
+pub struct RunStart {
+	pub scope: RuntimeScope,
+	pub resume: Option<String>,
+	pub cwd: Option<String>,
+	pub output_schema: Option<serde_json::Value>,
+	pub lineage: Lineage,
+}
+
+pub async fn start_run(
+	core: crate::core_context::Core,
+	state: &AgentState,
+	database: &db::DatabaseState,
+	start: RunStart,
+) -> Result<SessionHandle, TransportError> {
+	let RunStart { scope, resume, cwd, output_schema, lineage } = start;
+	let _claim = state.claim(&scope)?;
+
+	let before = state.thread_signs(&scope.conversation_id);
+	let admitted = state.admit(&core, scope.clone()).await;
+	retell_when_moved(&core, state, &scope, before);
+	let lineage_is_held_elsewhere = resume.is_some() && !admitted.keeps_lineage;
+	let resume = admitted.resume(resume);
+	if let Some(previous) = admitted.replaced {
+		previous.shutdown().await;
+	}
+
+	let sidecar = state.sidecar().await?;
+	let mission_thread = opens_on_a_mission_thread(database, &scope.conversation_id).await;
+	let running_in =
+		cwd.map(PathBuf::from).unwrap_or_else(|| its_own_directory(&core, &scope.bot_id));
+
+	let announcing: Arc<dyn TurnSink> = Arc::new(RunSink {
+		core: core.clone(),
+		scope: scope.clone(),
+		live: state.live.clone(),
+		records_its_own_lineage: lineage_is_held_elsewhere || lineage == Lineage::RecordedByTheRun,
+	});
+	let attachments = Arc::new(TurnAttachments::default());
+	let sink: Arc<dyn EventSink> = Arc::new(ReplyWriter::spawn(
+		core.clone(),
+		&scope,
+		state.host_writes.clone(),
+		attachments.clone(),
+		announcing,
+	));
+	let identity = match runtime_identity(&core, database, &scope, &sidecar).await {
+		Ok(identity) => identity,
+		Err(error) => return Err(refused(sink.as_ref(), error)),
+	};
+	let members = members_reading(&core, database, &identity.space_id).await;
+	let options = SessionOptions::new(running_in)
+		.bundled(Some(identity.bundle))
+		.serving(identity.server_env)
+		.connected(held_connection(&core))
+		.with_app_data(Some(core.data_dir().to_path_buf()))
+		.in_conversation(scope.conversation_id.clone())
+		.hosting(hosted(CompanionHost::new(
+			core.clone(),
+			scope.conversation_id.clone(),
+			scope.bot_id.clone(),
+			attachments,
+		)))
+		.hosting_all(session_hosts(&core, &scope, &identity.space_id))
+		.answering(output_schema)
+		.on_mission_thread(mission_thread)
+		.read_by(members)
+		.leased(state.lease);
+
+	let refused_id = resume.clone();
+	let started = match start_with_fallback(sidecar, options, resume, sink.clone()).await {
+		Ok(started) => started,
+		Err(error) => return Err(refused(sink.as_ref(), error)),
+	};
+
+	if lineage_is_held_elsewhere {
+		sink.emit(AgentEvent::Failed {
+			error: TransportError::ResumeFailed { forgot_session_id: false },
+		});
+	}
+
+	if let Some(refusal) = &started.resume_refusal {
+		let forgot_session_id =
+			forget_the_id_a_refusal_blames(database, &scope, refused_id, refusal).await;
+		sink.emit(AgentEvent::Failed { error: TransportError::ResumeFailed { forgot_session_id } });
+	}
+
+	let session = Arc::new(started.session);
+	let handle = SessionHandle { resumed: session.resumed() };
+	if !state.live.install(&scope, session.clone()) {
+		session.shutdown().await;
+		return Err(TransportError::TransitionInProgress);
+	}
+	sink.emit(AgentEvent::ConnectionChanged { state: ConnectionState::Ready });
+	Ok(handle)
+}
+
+fn refused(sink: &dyn EventSink, error: TransportError) -> TransportError {
+	sink.emit(AgentEvent::ConnectionChanged { state: ConnectionState::Unavailable });
+	sink.emit(AgentEvent::Failed { error: error.clone() });
+	error
+}
+
+async fn forget_the_id_a_refusal_blames(
+	state: &db::DatabaseState,
+	scope: &RuntimeScope,
+	refused_id: Option<String>,
+	refusal: &TransportError,
+) -> bool {
+	if !matches!(refusal, TransportError::Crashed { .. }) {
+		return false;
+	}
+	let (Ok(database), Some(refused_id)) = (state.as_ref(), refused_id) else {
+		return true;
+	};
+	let _ = database
+		.runtime_context()
+		.forget_provider_session(participant_key(scope), refused_id)
+		.await;
+	true
+}
+
+pub struct Started {
+	pub session: Session,
+	pub resume_refusal: Option<TransportError>,
+}
+
+pub async fn start_with_fallback(
+	sidecar: Arc<Sidecar>,
+	options: SessionOptions,
+	resume: Option<String>,
+	sink: Arc<dyn EventSink>,
+) -> Result<Started, TransportError> {
+	if resume.is_none() {
+		let session = Session::start(sidecar, options, sink).await?;
+		return Ok(Started { session, resume_refusal: None });
+	}
+
+	let gated = Arc::new(GatedSink::new(sink.clone()));
+	let resuming = Session::start(sidecar.clone(), options.clone().resuming(resume), gated.clone());
+	let refusal = match resuming.await {
+		Ok(session) => {
+			gated.promote();
+			return Ok(Started { session, resume_refusal: None });
+		}
+		Err(error) => error,
+	};
+
+	gated.discard();
+	let session = Session::start(sidecar, options, sink).await?;
+	Ok(Started { session, resume_refusal: Some(refusal) })
+}
+
+pub async fn agent_submit_prompt(
+	core: &crate::core_context::Core,
+	client: &crate::core_context::ClientId,
+	caller: crate::hosting::caller::Caller,
+	scope: RuntimeScope,
+	text: String,
+	turn: Option<SubmittedTurn>,
+) -> Result<(), TransportError> {
+	let state = core.state::<AgentState>();
+	let turn_id = turn.as_ref().map(|handed| handed.turn_id.clone());
+	let database = core.try_state::<db::DatabaseState>();
+	submit_claimed_prompt(database.as_deref(), state, scope, text, turn).await?;
+	if let (Some(turn_id), Caller::Host, Some(windows)) =
+		(turn_id, caller, core.try_state::<TurnWindows>())
+	{
+		windows.submitted_from(client, &turn_id);
+	}
+	Ok(())
+}
+
+pub async fn submit_claimed_prompt(
+	database: Option<&db::DatabaseState>,
+	state: crate::core_context::Managed<'_, AgentState>,
+	scope: RuntimeScope,
+	text: String,
+	turn: Option<SubmittedTurn>,
+) -> Result<(), TransportError> {
+	let (Some(database), Some(turn_id)) =
+		(database, turn.as_ref().map(|handed| handed.turn_id.clone()))
+	else {
+		return submit_prompt(state, scope, text, turn).await;
+	};
+	let database = ready(database).map_err(|unready| unclaimed(&scope, &turn_id, &unready))?;
+	let claim = claim_run(database, &scope, &turn_id).await?;
+	let submitted = submit_prompt(state, scope.clone(), text, turn).await;
+	if submitted.is_err() {
+		give_back_run(database, &scope, &turn_id, claim).await;
+	}
+	submitted
+}
+
+async fn claim_run(
+	database: &db::Database,
+	scope: &RuntimeScope,
+	turn_id: &str,
+) -> Result<RunClaim, TransportError> {
+	let turn = NewTurn {
+		id: turn_id.to_owned(),
+		conversation_id: scope.conversation_id.clone(),
+		started_at: now_ms(),
+	};
+	database
+		.messages()
+		.claim_run(turn, scope.bot_id.clone())
+		.await
+		.map_err(|failure| unclaimed(scope, turn_id, &failure))?
+		.ok_or(TransportError::TurnAlreadyRunning)
+}
+
+fn unclaimed(scope: &RuntimeScope, turn_id: &str, failure: &dyn std::fmt::Debug) -> TransportError {
+	TransportError::WriteFailed {
+		detail: format!(
+			"the run of {} in turn {turn_id} could not be claimed: {failure:?}",
+			scope.bot_id
+		),
+	}
+}
+
+async fn give_back_run(
+	database: &db::Database,
+	scope: &RuntimeScope,
+	turn_id: &str,
+	claim: RunClaim,
+) {
+	let given_back = database
+		.messages()
+		.unclaim_run(turn_id.to_owned(), scope.bot_id.clone(), claim, now_ms())
+		.await;
+	if let Err(failure) = given_back {
+		log::warn!(
+			"the run of {} in turn {turn_id} of conversation {} kept its claim after its prompt was refused: {failure:?}",
+			scope.bot_id,
+			scope.conversation_id
+		);
+	}
+}
+
+pub async fn submit_prompt(
+	state: crate::core_context::Managed<'_, AgentState>,
+	scope: RuntimeScope,
+	text: String,
+	turn: Option<SubmittedTurn>,
+) -> Result<(), TransportError> {
+	let turn_id = turn.as_ref().map(|handed| handed.turn_id.clone());
+	state.live.session_for(&scope)?.submit(&text, turn).await?;
+	if let Some(turn_id) = turn_id {
+		state.host_writes.record_submitted(&turn_id);
+	}
+	Ok(())
+}
+
+pub fn live_run_of(state: &AgentState, participant: &ParticipantKey) -> Option<RuntimeScope> {
+	state.live.live_scope_of(participant)
+}
+
+pub async fn submit_in_line(
+	state: &AgentState,
+	scope: &RuntimeScope,
+	text: &str,
+	turn: SubmittedTurn,
+) -> Result<Handed, TransportError> {
+	let turn_id = turn.turn_id.clone();
+	let handed = state.live.session_for(scope)?.submit_in_line(text, turn).await?;
+	state.host_writes.record_submitted(&turn_id);
+	Ok(handed)
+}
+
+pub async fn withdraw_queued(state: &AgentState, scope: &RuntimeScope, turn_id: &str) -> bool {
+	match state.live.session_for(scope) {
+		Ok(session) => session.withdraw(turn_id).await,
+		Err(_) => false,
+	}
+}
+
+pub async fn line_place_of(
+	state: &AgentState,
+	scope: &RuntimeScope,
+	turn_id: &str,
+) -> Result<LinePlace, TransportError> {
+	Ok(state.live.session_for(scope)?.place_of(turn_id).await)
+}
+
+pub async fn run_is_idle(state: &AgentState, scope: &RuntimeScope) -> bool {
+	match state.live.session_for(scope) {
+		Ok(session) => session.is_idle().await,
+		Err(_) => true,
+	}
+}
+
+pub async fn cancel_turn(
+	core: &crate::core_context::Core,
+	scope: RuntimeScope,
+) -> Result<CancelOutcome, TransportError> {
+	let state = core.state::<AgentState>();
+	if let Some(outcome) = state.host_turns().stop(&scope).await {
+		return Ok(outcome);
+	}
+	Ok(cancel_session_turn(core, &state, &scope).await)
+}
+
+pub async fn cancel_session_turn(
+	core: &crate::core_context::Core,
+	state: &AgentState,
+	scope: &RuntimeScope,
+) -> CancelOutcome {
+	let interrupted = match state.live.session_for(scope) {
+		Ok(session) => session.cancel_turn().await,
+		Err(refused) => Err(refused),
+	};
+	match interrupted {
+		Ok(()) => CancelOutcome::Cancelled,
+		Err(TransportError::NoActiveTurn | TransportError::NotStarted) => {
+			match close_stored_runs(core, &state.host_writes, scope).await {
+				Ok(0) => CancelOutcome::NothingToCancel,
+				Ok(_) => CancelOutcome::Cancelled,
+				Err(error) => {
+					CancelOutcome::failed(&scope.bot_id, CancelFailureReason::Store(error))
+				}
+			}
+		}
+		Err(error) => CancelOutcome::failed(&scope.bot_id, CancelFailureReason::Session(error)),
+	}
+}
+
+async fn close_stored_runs(
+	core: &crate::core_context::Core,
+	owned: &HostWrites,
+	scope: &RuntimeScope,
+) -> Result<usize, TranscriptStoreError> {
+	let Some(state) = core.try_state::<db::DatabaseState>() else {
+		return Err(TranscriptStoreError::Unavailable {
+			failure: (&db::DatabaseError::AppDataDir).into(),
+		});
+	};
+	let database = ready(state.inner())?;
+	let conversation_id = &scope.conversation_id;
+	let has_completed = complete_unsubmitted_turns(database, owned, conversation_id).await?;
+	let closed = database
+		.messages()
+		.cancel_open_runs(conversation_id.clone(), scope.bot_id.clone(), now_ms())
+		.await?;
+	if closed > 0 {
+		announce(core, Some(scope.clone()), ended_as(TurnOutcome::Cancelled));
+		forget_settled_turns(core).await;
+	}
+	if has_completed || closed > 0 {
+		announce_conversation(core, database, CONVERSATION_UPDATED, conversation_id).await;
+	}
+	Ok(closed)
+}
+
+async fn complete_unsubmitted_turns(
+	database: &db::Database,
+	owned: &HostWrites,
+	conversation_id: &str,
+) -> Result<bool, TranscriptStoreError> {
+	let messages = database.messages();
+	let mut has_completed = false;
+	for id in messages.open_turns_without_reply(conversation_id.to_owned()).await? {
+		if owned.owns_turn(&id) && !owned.was_submitted(&id) {
+			messages.complete_turn(id, now_ms()).await?;
+			has_completed = true;
+		}
+	}
+	Ok(has_completed)
+}
+
+pub async fn agent_respond_to_permission(
+	core: &crate::core_context::Core,
+	scope: RuntimeScope,
+	id: String,
+	decision: PermissionDecision,
+) -> Result<(), TransportError> {
+	let state = core.state::<AgentState>();
+	state.live.session_for(&scope)?.respond_to_permission(&id, decision).await
+}
+
+pub async fn agent_answer_question(
+	core: &crate::core_context::Core,
+	scope: RuntimeScope,
+	id: String,
+	answers: HashMap<String, String>,
+	annotations: Option<JsonValue>,
+) -> Result<(), TransportError> {
+	let state = core.state::<AgentState>();
+	let annotations = annotations.map(JsonValue::into);
+	state.live.session_for(&scope)?.answer_question(&id, answers, annotations).await
+}
+
+pub async fn agent_live_sessions(
+	core: &crate::core_context::Core,
+) -> Result<Vec<LiveSession>, TransportError> {
+	let state = core.state::<AgentState>();
+	Ok(state.live.report())
+}
+
+pub async fn agent_live_sessions_in_space(
+	core: &crate::core_context::Core,
+	space_id: String,
+) -> Result<Vec<LiveSession>, TranscriptStoreError> {
+	let state = core.state::<AgentState>();
+	let database = core.state::<db::DatabaseState>();
+	let children = ready(&database)?.space_children();
+	let mut in_the_space = Vec::new();
+	for session in state.live.report() {
+		let conversation_id = session.conversation_id.clone();
+		if children.holds(space_id.clone(), SpaceChild::Conversation, conversation_id).await? {
+			in_the_space.push(session);
+		}
+	}
+	Ok(in_the_space)
+}
+
+pub async fn pending_questions(
+	core: &crate::core_context::Core,
+	conversation_id: String,
+) -> Result<Vec<ScopedEvent>, TransportError> {
+	let state = core.state::<AgentState>();
+	Ok(state.live.questions_in(&conversation_id))
+}
+
+pub async fn agent_pending_questions_in_space(
+	core: &crate::core_context::Core,
+	space_id: String,
+) -> Result<Vec<ScopedEvent>, TranscriptStoreError> {
+	let state = core.state::<AgentState>();
+	let database = core.state::<db::DatabaseState>();
+	let children = ready(&database)?.space_children();
+	let mut in_the_space = Vec::new();
+	for question in state.live.pending_questions() {
+		let conversation_id = question.scope.conversation_id.clone();
+		if children.holds(space_id.clone(), SpaceChild::Conversation, conversation_id).await? {
+			in_the_space.push(question.scoped());
+		}
+	}
+	Ok(in_the_space)
+}
+
+pub async fn shutdown_session(
+	core: &crate::core_context::Core,
+	state: &AgentState,
+	scope: &RuntimeScope,
+) {
+	let cleared = state.live.clear(scope);
+	announce_denied(core, &cleared.dropped);
+	if let Some(session) = cleared.ended {
+		session.shutdown().await;
+	}
+	release_stored_prompts(core, scope).await;
+}
+
+async fn release_stored_prompts(core: &crate::core_context::Core, scope: &RuntimeScope) {
+	let conversation = &scope.conversation_id;
+	let Some(database) = bot_database(core) else {
+		return log::warn!("the stored prompts of conversation {conversation} stay: no database");
+	};
+	let session = scope.runtime_session_id.clone();
+	match database.conversations().release_prompts_of_session(session).await {
+		Ok(()) => conversation_state::observe_reporting(core, database, conversation).await,
+		Err(failure) => {
+			log::warn!("the stored prompts of conversation {conversation} stay: {failure:?}")
+		}
+	}
+}
+
+async fn release_orphan_prompts(
+	core: &crate::core_context::Core,
+	conversation: &str,
+	live_sessions: Vec<RunKey>,
+	asked_before: i64,
+) {
+	let Some(database) = bot_database(core) else {
+		return log::warn!("the orphan prompts of conversation {conversation} stay: no database");
+	};
+	let released = database.conversations().release_orphan_prompts(
+		conversation.to_owned(),
+		live_sessions,
+		asked_before,
+	);
+	match released.await {
+		Ok(()) => conversation_state::observe_reporting(core, database, conversation).await,
+		Err(failure) => {
+			log::warn!("the orphan prompts of conversation {conversation} stay: {failure:?}")
+		}
+	}
+}
+
+pub async fn terminate_session(core: &crate::core_context::Core, state: &AgentState) {
+	end_every_session(core, state).await;
+	if let Some(sidecar) = state.take_sidecar().await {
+		sidecar.terminate().await;
+	}
+	sidecar::sweep_live_groups();
+}
+
+async fn end_every_session(core: &crate::core_context::Core, state: &AgentState) {
+	state.enter_quit();
+	let cleared = state.live.clear_all();
+	announce_denied(core, &cleared.dropped);
+	let ending: Vec<_> = cleared
+		.ended
+		.into_iter()
+		.map(|session| core.clone().spawn(async move { session.shutdown().await }))
+		.collect();
+	for termination in ending {
+		if let Err(failure) = termination.await {
+			log::warn!("a session did not shut down at quit: {failure}");
+		}
+	}
+	release_every_stored_prompt(core).await;
+}
+
+async fn release_every_stored_prompt(core: &crate::core_context::Core) {
+	let Some(database) = bot_database(core) else {
+		return log::warn!("the stored prompts stay at quit: no database");
+	};
+	if let Err(failure) = database.conversations().release_every_prompt().await {
+		log::warn!("the stored prompts stay at quit: {failure:?}");
+	}
+}
+
+pub async fn shut_down_agent(
+	core: &crate::core_context::Core,
+	scope: RuntimeScope,
+) -> Result<(), TransportError> {
+	let state = core.state::<AgentState>();
+	let _claim = state.claim(&scope)?;
+	if state.live.is_foreign(&scope) {
+		return Err(stale(&scope));
+	}
+	let before = state.thread_signs(&scope.conversation_id);
+	shutdown_session(core, &state, &scope).await;
+	retell_when_moved(core, &state, &scope, before);
+	announce(core, Some(scope), AgentEvent::ConnectionChanged { state: ConnectionState::Checking });
+	Ok(())
+}
+
+#[cfg(any(test, feature = "test-support"))]
+pub fn a_quitting_host(core: &crate::core_context::Core) {
+	core.manage(AgentState::default());
+	core.state::<AgentState>().enter_quit();
+}
+
+#[cfg(any(test, feature = "test-support"))]
+pub fn a_live_run(core: &crate::core_context::Core, scope: RuntimeScope) -> impl TurnSink {
+	let live = Arc::new(Live::default());
+	live.take_over(scope.clone());
+	RunSink { core: core.clone(), scope, live, records_its_own_lineage: false }
+}
+
+#[cfg(any(test, feature = "test-support"))]
+pub fn a_run_held_by_the_app(
+	core: &crate::core_context::Core,
+	scope: RuntimeScope,
+) -> impl TurnSink {
+	if core.try_state::<AgentState>().is_none() {
+		core.manage(AgentState::default());
+	}
+	let live = core.state::<AgentState>().live.clone();
+	live.take_over(scope.clone());
+	RunSink { core: core.clone(), scope, live, records_its_own_lineage: false }
+}
+
+#[cfg(any(test, feature = "test-support"))]
+pub fn a_session_held_by_the_app(
+	core: &crate::core_context::Core,
+	scope: &RuntimeScope,
+	session: Arc<Session>,
+) {
+	let live = &core.state::<AgentState>().live;
+	live.take_over(scope.clone());
+	live.install(scope, session);
+}
+
+#[cfg(any(test, feature = "test-support"))]
+pub fn a_host_wide_announce(core: &crate::core_context::Core, event: AgentEvent) {
+	announce(core, None, event);
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::db::connection::fixture_root;
+	use crate::db::repositories::runtime_context::RuntimeSessionStatus;
+	use crate::removed_on_drop::RemovedOnDrop;
+
+	#[test]
+	fn a_bundle_git_refused_is_announced_as_its_own_failure_and_not_as_a_failed_turn() {
+		let announced = evolution_announced(
+			EvolvedBundle::Space,
+			bundles::Evolved::Failed(git2::Error::from_str("the objects are read-only")),
+		);
+
+		assert_eq!(
+			announced,
+			Some(AgentEvent::BotEvolutionFailed {
+				bundle: EvolvedBundle::Space,
+				detail: "the objects are read-only".to_owned(),
+			})
+		);
+	}
+
+	#[test]
+	fn a_bundle_left_alone_announces_nothing_and_a_recorded_one_announces_its_commit() {
+		assert_eq!(evolution_announced(EvolvedBundle::Bot, bundles::Evolved::Unchanged), None);
+		let recorded = bundles::Evolved::Recorded(bundles::Evolution {
+			commit_id: "abc".to_owned(),
+			title: "Bean learned about figs".to_owned(),
+		});
+
+		assert_eq!(
+			evolution_announced(EvolvedBundle::User, recorded),
+			Some(AgentEvent::BotEvolved {
+				bundle: EvolvedBundle::User,
+				commit_id: "abc".to_owned(),
+				title: "Bean learned about figs".to_owned(),
+			})
+		);
+	}
+
+	fn a_source(name: &str, value: &str) -> Values {
+		Values::from([(name.to_owned(), value.to_owned())])
+	}
+
+	async fn computed(
+		catalogue: &Catalogue<String>,
+		connection: &Values,
+		asks: &std::sync::atomic::AtomicUsize,
+		list: &[&str],
+	) -> Vec<String> {
+		catalogue
+			.served(connection, || async {
+				asks.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+				list.iter().map(|named| (*named).to_owned()).collect()
+			})
+			.await
+	}
+
+	#[tokio::test]
+	async fn a_catalogue_is_computed_again_once_the_held_source_changes() {
+		let catalogue = Catalogue::of(protocol::MODELS);
+		let asks = std::sync::atomic::AtomicUsize::new(0);
+		let key = a_source("ANTHROPIC_API_KEY", "sk-held");
+		let token = a_source("CLAUDE_CODE_OAUTH_TOKEN", "held-token");
+
+		assert_eq!(computed(&catalogue, &key, &asks, &["quasar"]).await, ["quasar"]);
+		assert_eq!(computed(&catalogue, &token, &asks, &["nimbus"]).await, ["nimbus"]);
+		assert_eq!(asks.load(std::sync::atomic::Ordering::Relaxed), 2);
+
+		assert_eq!(computed(&catalogue, &token, &asks, &["never asked"]).await, ["nimbus"]);
+		assert_eq!(
+			asks.load(std::sync::atomic::Ordering::Relaxed),
+			2,
+			"the sidecar was asked for a list already computed with that source"
+		);
+	}
+
+	#[tokio::test]
+	async fn an_empty_list_is_computed_again_on_the_next_ask() {
+		let catalogue = Catalogue::of(protocol::MODELS);
+		let asks = std::sync::atomic::AtomicUsize::new(0);
+		let nothing_held = Values::new();
+
+		assert!(computed(&catalogue, &nothing_held, &asks, &[]).await.is_empty());
+		assert_eq!(computed(&catalogue, &nothing_held, &asks, &["quasar"]).await, ["quasar"]);
+		assert_eq!(asks.load(std::sync::atomic::Ordering::Relaxed), 2);
+	}
+
+	#[test]
+	fn the_names_awaiting_authorization_reach_the_session_when_the_store_cannot_be_read() {
+		let awaiting = BTreeSet::from(["granola".to_owned()]);
+
+		let served = awaiting_served(
+			Err(EnvError::Unreadable { detail: "the disk is gone".to_owned() }),
+			awaiting.clone(),
+		);
+
+		assert_eq!(served.needs_authorization, awaiting);
+		assert_eq!(served.failure.as_deref(), Some(ENV_UNREADABLE));
+	}
+
+	#[test]
+	fn the_names_awaiting_authorization_ride_a_store_that_was_read() {
+		let awaiting = BTreeSet::from(["granola".to_owned()]);
+
+		let served = awaiting_served(Ok(ResolvedEnv::default()), awaiting.clone());
+
+		assert_eq!(served.needs_authorization, awaiting);
+		assert_eq!(served.failure, None);
+	}
+
+	fn a_fresh_app_data(name: &str) -> RemovedOnDrop {
+		let app_data = fixture_root(&format!("app-data-{name}"));
+		std::fs::create_dir_all(&app_data).expect("the app data directory is there");
+		app_data
+	}
+
+	#[test]
+	fn a_bot_with_no_directory_runs_in_one_reserved_for_it_inside_the_app_data() {
+		let app_data = a_fresh_app_data("reserved");
+
+		let running_in = reserved_directory(app_data.to_path_buf(), "bot-a");
+
+		assert_eq!(running_in, app_data.join(RUNS_DIR).join("bot-a"));
+		assert!(running_in.is_dir(), "the reserved directory was not created");
+		std::fs::remove_dir_all(&app_data).expect("cleanup");
+	}
+
+	#[test]
+	fn two_bots_with_no_directory_never_share_one() {
+		let app_data = a_fresh_app_data("distinct");
+
+		let first = reserved_directory(app_data.to_path_buf(), "bot-a");
+		let second = reserved_directory(app_data.to_path_buf(), "bot-b");
+
+		assert_ne!(first, second);
+		assert!(first.is_dir() && second.is_dir());
+		std::fs::remove_dir_all(&app_data).expect("cleanup");
+	}
+
+	#[test]
+	fn a_reserved_directory_that_cannot_be_created_falls_back_to_the_app_data() {
+		let app_data = a_fresh_app_data("blocked");
+		std::fs::write(app_data.join(RUNS_DIR), b"i am a file").expect("the file is written");
+
+		let running_in = reserved_directory(app_data.to_path_buf(), "bot-a");
+
+		assert_eq!(running_in, *app_data);
+		std::fs::remove_dir_all(&app_data).expect("cleanup");
+	}
+
+	fn a_stored_bot() -> StoredBot {
+		StoredBot {
+			id: "b1".to_owned(),
+			section_id: None,
+			pin_position: None,
+			name: "Bean".to_owned(),
+			title: String::new(),
+			model: "sonnet".to_owned(),
+			avatar_blot: None,
+			avatar_image_path: None,
+			instructions: "Answer briefly.".to_owned(),
+			memory: String::new(),
+			denied_tools: Vec::new(),
+			permissions: None,
+			created_at: 1,
+			effort: None,
+		}
+	}
+
+	fn a_fresh_bundle_root(name: &str) -> RemovedOnDrop {
+		fixture_root(&format!("session-rules-{name}"))
+	}
+
+	fn a_rule(allow: &str) -> bundles::BotPermissions {
+		bundles::BotPermissions { allow: vec![allow.to_owned()], ..Default::default() }
+	}
+
+	fn a_settings_path(root: &Path, bot: &StoredBot) -> PathBuf {
+		bundles::dir(root, &bot.id).expect("the bundle is held").join("settings.json")
+	}
+
+	fn what_the_bot_wrote(root: &Path, bot: &StoredBot, allow: &str) {
+		private_files::replace(
+			&a_settings_path(root, bot),
+			serde_json::json!({
+				"env": { "TZ": "UTC" },
+				"permissions": { "allow": [allow], "defaultMode": "acceptEdits" }
+			})
+			.to_string()
+			.as_bytes(),
+		)
+		.expect("the settings file is written");
+	}
+
+	fn settings_of(root: &Path, bot: &StoredBot) -> serde_json::Value {
+		let read = std::fs::read(a_settings_path(root, bot)).expect("the settings file is read");
+		serde_json::from_slice(&read).expect("the settings file parses")
+	}
+
+	fn heard_refusal_of(error: TransportError) -> Vec<AgentEvent> {
+		let (sink, mut heard) = tokio::sync::mpsc::unbounded_channel();
+		refused(&sink, error);
+		std::iter::from_fn(|| heard.try_recv().ok()).collect()
+	}
+
+	fn assert_refused_naming(error: TransportError, bot_id: &str, step: &str) {
+		let heard = heard_refusal_of(error);
+		assert_eq!(
+			heard.first(),
+			Some(&AgentEvent::ConnectionChanged { state: ConnectionState::Unavailable })
+		);
+		let Some(AgentEvent::Failed { error: TransportError::SpawnFailed { detail } }) =
+			heard.get(1)
+		else {
+			panic!("no spawnFailed was heard: {heard:?}");
+		};
+		assert!(detail.contains(bot_id), "the bot is not named: {detail}");
+		assert!(detail.contains(step), "the step is not named: {detail}");
+	}
+
+	async fn a_run_of_a_seated_bot(database: &crate::db::Database) -> RuntimeScope {
+		let bot = database
+			.conversations()
+			.create_bot(a_stored_bot().into(), None, None)
+			.await
+			.expect("the bot");
+		RuntimeScope { bot_id: bot.id, ..a_scope() }
+	}
+
+	#[tokio::test]
+	async fn a_run_whose_bot_row_is_missing_is_refused_naming_the_step() {
+		let dir = crate::db::connection::temp_dir();
+		let database = crate::db::open(&dir);
+		let root = a_fresh_bundle_root("no-row");
+
+		let Err(error) = resolved_run(&database, Some(root.to_path_buf()), &a_scope()).await else {
+			panic!("a run with no bot row was resolved");
+		};
+
+		assert_refused_naming(error, &a_scope().bot_id, ROW_MISSING);
+	}
+
+	#[tokio::test]
+	async fn a_run_whose_space_cannot_be_resolved_is_refused_naming_the_step() {
+		let dir = crate::db::connection::temp_dir();
+		let database = crate::db::open(&dir);
+		let scope = a_run_of_a_seated_bot(&database).await;
+		database
+			.call_mut(|connection| {
+				Ok(connection.execute_batch("ALTER TABLE conversations RENAME TO unreadable")?)
+			})
+			.await
+			.expect("the conversations are made unreadable");
+		let root = a_fresh_bundle_root("no-space");
+
+		let Err(error) = resolved_run(&database, Some(root.to_path_buf()), &scope).await else {
+			panic!("a run with no readable space was resolved");
+		};
+
+		assert_refused_naming(error, &scope.bot_id, SPACE_UNRESOLVED);
+	}
+
+	#[tokio::test]
+	async fn a_run_with_no_bundle_root_is_refused_naming_the_step() {
+		let dir = crate::db::connection::temp_dir();
+		let database = crate::db::open(&dir);
+		let scope = a_run_of_a_seated_bot(&database).await;
+
+		let Err(error) = resolved_run(&database, None, &scope).await else {
+			panic!("a run with no bundle root was resolved");
+		};
+
+		assert_refused_naming(error, &scope.bot_id, ROOT_UNRESOLVED);
+	}
+
+	#[test]
+	fn a_session_start_on_a_bot_with_no_bundle_fails_by_name_and_lays_down_nothing() {
+		let root = a_fresh_bundle_root("unbundled");
+		std::fs::create_dir_all(root.join("plugins")).expect("the plugins directory stands");
+		let bot = a_stored_bot();
+
+		let refused = laid_down_bundle(&root, &bot, &a_rule("Read"), None, None, None)
+			.expect_err("the session start is refused");
+
+		assert_eq!(refused.bot_id, bot.id);
+		assert_eq!(refused.cause.kind(), std::io::ErrorKind::NotFound);
+		assert_eq!(std::fs::read_dir(root.join("plugins")).expect("the plugins list").count(), 0);
+		assert!(matches!(
+			unavailable_bundle(refused),
+			TransportError::SpawnFailed { detail } if detail.contains(&bot.id)
+		));
+	}
+
+	#[test]
+	fn a_session_start_writes_the_stored_rules_over_the_ones_the_bot_gave_itself() {
+		let root = a_fresh_bundle_root("replaced");
+		let bot = a_stored_bot();
+		bundles::write(&root, &bot).expect("the bundle is written");
+		what_the_bot_wrote(&root, &bot, "Bash");
+
+		laid_down_bundle(&root, &bot, &a_rule("Read"), None, None, None)
+			.expect("the bundle is laid down");
+
+		assert_eq!(bundles::permissions(&root, &bot.id), Some(a_rule("Read")));
+		assert_eq!(
+			settings_of(&root, &bot)["env"]["TZ"],
+			serde_json::json!("UTC"),
+			"a key the app does not own was rewritten"
+		);
+
+		let _ = std::fs::remove_dir_all(&root);
+	}
+
+	#[test]
+	fn a_session_start_that_changes_nothing_leaves_the_history_where_it_was() {
+		let root = a_fresh_bundle_root("quiet");
+		let bot = a_stored_bot();
+		bundles::write(&root, &bot).expect("the bundle is written");
+		what_the_bot_wrote(&root, &bot, "Bash");
+
+		laid_down_bundle(&root, &bot, &a_rule("Read"), None, None, None)
+			.expect("the bundle is laid down");
+		let after_the_rewrite = bundles::history(&root, &bot.id).expect("the history reads").len();
+
+		laid_down_bundle(&root, &bot, &a_rule("Read"), None, None, None)
+			.expect("the bundle is laid down");
+
+		assert_eq!(
+			bundles::history(&root, &bot.id).expect("the history reads").len(),
+			after_the_rewrite
+		);
+
+		let _ = std::fs::remove_dir_all(&root);
+	}
+
+	#[tokio::test]
+	async fn the_rules_a_bundle_carries_become_the_stored_ones_once() {
+		let root = a_fresh_bundle_root("adopted");
+		let dir = crate::db::connection::temp_dir();
+		let database = crate::db::open(&dir);
+		let bot = database
+			.conversations()
+			.create_bot(a_stored_bot().into(), None, None)
+			.await
+			.expect("the bot");
+		bundles::write(&root, &bot).expect("the bundle is written");
+		what_the_bot_wrote(&root, &bot, "Bash");
+
+		let settled = settled_permissions(&database, Some(&root), &bot).await;
+		assert_eq!(settled.allow, ["Bash"]);
+
+		let held =
+			database.conversations().bot(bot.id.clone()).await.expect("the bot").expect("a row");
+		assert_eq!(held.permissions.as_ref(), Some(&settled));
+
+		what_the_bot_wrote(&root, &bot, "Write");
+
+		assert_eq!(
+			settled_permissions(&database, Some(&root), &held).await.allow,
+			["Bash"],
+			"the file was adopted a second time"
+		);
+
+		drop(database);
+		let _ = std::fs::remove_dir_all(&root);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	const REPLACED_SESSION: &str = "the session that was replaced";
+	const REPLACEMENT_SESSION: &str = "the session that replaced it";
+
+	fn a_scope() -> RuntimeScope {
+		RuntimeScope {
+			conversation_id: "c1".into(),
+			bot_id: "b1".into(),
+			runtime_session_id: "r1".into(),
+			epoch: 1,
+		}
+	}
+
+	fn the_next_run() -> RuntimeScope {
+		RuntimeScope { runtime_session_id: "r2".into(), epoch: 2, ..a_scope() }
+	}
+
+	fn another_bots_run() -> RuntimeScope {
+		RuntimeScope {
+			conversation_id: "c2".into(),
+			bot_id: "b2".into(),
+			runtime_session_id: "r9".into(),
+			epoch: 1,
+		}
+	}
+
+	const ANOTHER_BOTS_SESSION: &str = "the session of the bot next door";
+
+	fn a_run_named(runtime_session_id: &str) -> RuntimeScope {
+		RuntimeScope { runtime_session_id: runtime_session_id.into(), ..a_scope() }
+	}
+
+	fn is_stale(outcome: &Result<&str, TransportError>) -> bool {
+		matches!(outcome, Err(TransportError::StaleRuntimeSession { .. }))
+	}
+
+	fn is_unheld(outcome: &Result<&str, TransportError>) -> bool {
+		matches!(outcome, Err(TransportError::NotStarted))
+	}
+
+	#[test]
+	fn a_participant_rides_its_installed_run_and_another_conversation_of_the_bot_does_not() {
+		let live = Live::<&str>::default();
+		let held_by = participant_key(&a_scope());
+		live.take_over(a_scope());
+		assert_eq!(live.live_scope_of(&held_by), None, "a run still starting was offered");
+
+		assert!(live.install(&a_scope(), REPLACED_SESSION));
+		let elsewhere = ParticipantKey { conversation_id: "c2".into(), ..held_by.clone() };
+
+		assert_eq!(live.live_scope_of(&held_by), Some(a_scope()));
+		assert_eq!(live.live_scope_of(&elsewhere), None, "another conversation shared the run");
+	}
+
+	#[test]
+	fn a_scope_differing_on_the_epoch_is_stale_and_one_naming_another_run_is_not_held() {
+		let live = Live::<&str>::default();
+		live.take_over(a_scope());
+		assert!(live.install(&a_scope(), REPLACED_SESSION));
+
+		assert!(live.holds(&a_scope()), "the host stopped recognising the run it holds");
+		assert!(!live.is_foreign(&a_scope()), "the live run was refused as somebody else's");
+
+		let drifted = RuntimeScope { epoch: 2, ..a_scope() };
+		assert!(live.is_foreign(&drifted), "a scope naming another epoch reached the run");
+		assert!(!live.holds(&drifted), "a run the host never held was taken for it");
+		assert!(
+			is_stale(&live.session_for(&drifted)),
+			"a scope naming another epoch was handed the session"
+		);
+
+		for other in [
+			the_next_run(),
+			another_bots_run(),
+			RuntimeScope { bot_id: "b2".into(), runtime_session_id: "r3".into(), ..a_scope() },
+		] {
+			assert!(!live.holds(&other), "a run the host never held was taken for it: {other:?}");
+			assert!(
+				!live.is_foreign(&other),
+				"a run the host never held was refused as a stale one: {other:?}"
+			);
+			assert!(
+				is_unheld(&live.session_for(&other)),
+				"a run the host never held was handed another's session: {other:?}"
+			);
+		}
+	}
+
+	#[test]
+	fn two_runs_of_one_bot_are_held_at_the_same_time_and_only_the_first_keeps_the_lineage() {
+		let live = Live::<&str>::default();
+
+		let first = live.take_over(a_scope());
+		assert!(live.install(&a_scope(), REPLACED_SESSION));
+		let second = live.take_over(the_next_run());
+		assert!(live.install(&the_next_run(), REPLACEMENT_SESSION));
+
+		assert!(first.keeps_lineage, "the first instance of a bot was refused the lineage");
+		assert!(
+			second.replaced.is_none(),
+			"a second instance handed back the first one's child to be shut down"
+		);
+		assert!(!second.keeps_lineage, "two instances of one bot both kept the lineage");
+		assert_eq!(
+			live.session_for(&a_scope()).ok(),
+			Some(REPLACED_SESSION),
+			"the first instance lost its session to the second one"
+		);
+		assert_eq!(live.session_for(&the_next_run()).ok(), Some(REPLACEMENT_SESSION));
+		assert!(live.holds(&a_scope()) && live.holds(&the_next_run()));
+	}
+
+	#[test]
+	fn a_run_started_again_under_its_own_id_hands_back_the_child_it_replaces() {
+		let live = Live::<&str>::default();
+		live.take_over(a_scope());
+		assert!(live.install(&a_scope(), REPLACED_SESSION));
+
+		let again = live.take_over(a_scope());
+
+		assert_eq!(
+			again.replaced,
+			Some(REPLACED_SESSION),
+			"a restart of one run left its child behind"
+		);
+		assert!(again.keeps_lineage, "a run restarting under its own id was refused the lineage");
+		assert!(
+			is_unheld(&live.session_for(&a_scope())),
+			"a restarted run answered with the child it replaced"
+		);
+	}
+
+	#[test]
+	fn the_lineage_comes_back_to_the_next_run_once_the_bot_holds_none() {
+		let live = Live::<&str>::default();
+		live.take_over(a_scope());
+		assert!(!live.take_over(the_next_run()).keeps_lineage);
+
+		live.clear(&a_scope());
+		live.clear(&the_next_run());
+
+		assert!(
+			live.take_over(a_scope()).keeps_lineage,
+			"the lineage stayed with a run the host had let go"
+		);
+	}
+
+	#[test]
+	fn ten_runs_admitted_in_a_row_are_all_held_live() {
+		let live = Live::<&str>::default();
+		let runs: Vec<RuntimeScope> =
+			(0..10).map(|index| a_run_named(&format!("r{index}"))).collect();
+
+		for scope in &runs {
+			live.take_over(scope.clone());
+			assert!(live.install(scope, REPLACED_SESSION));
+		}
+
+		for scope in &runs {
+			assert!(live.holds(scope), "a run the host admitted was not held live");
+		}
+		assert_eq!(
+			live.clear_all().ended.len(),
+			runs.len(),
+			"the host let go of a run it had admitted"
+		);
+	}
+
+	#[test]
+	fn two_bots_each_hold_their_own_session_at_the_same_time() {
+		let live = Live::<&str>::default();
+
+		assert!(live.take_over(a_scope()).replaced.is_none());
+		assert!(live.install(&a_scope(), REPLACED_SESSION));
+		assert!(
+			live.take_over(another_bots_run()).replaced.is_none(),
+			"starting one bot handed back another bot's child to be shut down"
+		);
+		assert!(live.install(&another_bots_run(), ANOTHER_BOTS_SESSION));
+
+		assert_eq!(live.session_for(&a_scope()).ok(), Some(REPLACED_SESSION));
+		assert_eq!(live.session_for(&another_bots_run()).ok(), Some(ANOTHER_BOTS_SESSION));
+		assert!(live.holds(&a_scope()) && live.holds(&another_bots_run()));
+
+		assert_eq!(live.clear(&a_scope()).ended, Some(REPLACED_SESSION));
+		assert!(
+			live.holds(&another_bots_run()),
+			"ending one bot's run ended the run of the bot beside it"
+		);
+		assert_eq!(
+			live.session_for(&another_bots_run()).ok(),
+			Some(ANOTHER_BOTS_SESSION),
+			"a bot lost its own session when another bot's was shut down"
+		);
+	}
+
+	#[test]
+	fn the_exit_gives_up_every_bots_child_at_once() {
+		let live = Live::<&str>::default();
+		live.take_over(a_scope());
+		live.install(&a_scope(), REPLACED_SESSION);
+		live.take_over(another_bots_run());
+		live.install(&another_bots_run(), ANOTHER_BOTS_SESSION);
+		live.take_over(a_run_named("r7"));
+
+		let mut ended = live.clear_all().ended;
+		ended.sort_unstable();
+		assert_eq!(
+			ended,
+			vec![ANOTHER_BOTS_SESSION, REPLACED_SESSION],
+			"the exit left a live child behind"
+		);
+		assert!(!live.holds(&a_scope()) && !live.holds(&another_bots_run()));
+		assert!(
+			is_unheld(&live.session_for(&another_bots_run())),
+			"a command reached a session after the exit gave it up"
+		);
+	}
+
+	const ONE_START: i64 = 1_700_000_000_000;
+
+	fn held_since<S>(live: &Live<S>, scope: RuntimeScope, started_at: i64) {
+		live.runs.lock().expect("live runs").insert(
+			run_key(&scope),
+			Run { scope, session: None, started_at, is_mid_turn: false, permissions: Vec::new() },
+		);
+	}
+
+	fn reported_runs<S: Clone>(live: &Live<S>) -> Vec<String> {
+		live.report().into_iter().map(|held| held.runtime_session_id).collect()
+	}
+
+	#[test]
+	fn the_report_names_every_run_the_host_holds_in_the_order_they_started() {
+		let live = Live::<&str>::default();
+		held_since(&live, another_bots_run(), ONE_START);
+		let before = now_ms();
+		live.take_over(a_scope());
+		let after = now_ms();
+
+		let held = live.report();
+
+		assert_eq!(
+			held.iter().map(|run| run.runtime_session_id.as_str()).collect::<Vec<_>>(),
+			["r9", "r1"],
+			"the runs were not reported in the order they started"
+		);
+		assert_eq!((held[0].bot_id.as_str(), held[0].conversation_id.as_str()), ("b2", "c2"));
+		assert_eq!((held[1].bot_id.as_str(), held[1].conversation_id.as_str()), ("b1", "c1"));
+		assert!(
+			(before..=after).contains(&held[1].started_at),
+			"a run took over without the moment it started"
+		);
+	}
+
+	#[test]
+	fn runs_sharing_one_start_are_reported_by_id_and_in_the_same_order_twice() {
+		let live = Live::<&str>::default();
+		held_since(&live, the_next_run(), ONE_START);
+		held_since(&live, a_scope(), ONE_START);
+
+		let held = live.report();
+
+		assert_eq!(
+			held.iter().map(|run| run.runtime_session_id.as_str()).collect::<Vec<_>>(),
+			["r1", "r2"],
+			"runs sharing a start were not reported by their runtime session id"
+		);
+		assert_eq!(live.report(), held, "two reports of the same runs disagreed on the order");
+	}
+
+	#[test]
+	fn a_run_started_again_under_its_own_id_is_reported_once_and_installing_keeps_its_start() {
+		let live = Live::<&str>::default();
+		live.take_over(a_scope());
+		let started_at = live.report()[0].started_at;
+
+		assert!(live.install(&a_scope(), REPLACED_SESSION));
+		assert_eq!(
+			live.report()[0].started_at,
+			started_at,
+			"installing a session moved the start of the run it was installed on"
+		);
+
+		live.take_over(a_scope());
+		assert!(live.install(&a_scope(), REPLACEMENT_SESSION));
+
+		assert_eq!(
+			reported_runs(&live),
+			["r1"],
+			"a run started again under its own id was reported twice"
+		);
+	}
+
+	#[test]
+	fn a_run_the_host_let_go_leaves_the_report_and_the_exit_empties_it() {
+		let live = Live::<&str>::default();
+		assert!(live.report().is_empty(), "a host holding no run reported one");
+
+		live.take_over(a_scope());
+		live.take_over(another_bots_run());
+		live.clear(&a_scope());
+
+		assert_eq!(reported_runs(&live), ["r9"], "a run the host let go stayed in the report");
+
+		live.clear_all();
+
+		assert!(live.report().is_empty(), "the exit left a run in the report");
+	}
+
+	#[test]
+	fn a_child_built_for_a_run_the_host_has_left_is_never_installed() {
+		let live = Live::<&str>::default();
+		live.take_over(a_scope());
+
+		live.clear_all();
+
+		assert!(
+			!live.install(&a_scope(), REPLACED_SESSION),
+			"a start installed its child into a host that had let its run go"
+		);
+		assert!(
+			matches!(live.session_for(&a_scope()), Err(TransportError::NotStarted)),
+			"a host standing for no run answered with a session all the same"
+		);
+	}
+
+	#[test]
+	fn a_transition_holds_one_run_and_lets_every_other_run_through() {
+		let state = AgentState::default();
+
+		let held = state.claim(&a_scope()).expect("the first claim is free");
+		assert!(
+			matches!(state.claim(&a_scope()), Err(TransportError::TransitionInProgress)),
+			"one run took two transitions at once"
+		);
+		assert!(
+			state.claim(&the_next_run()).is_ok(),
+			"one instance's transition refused another instance of the same bot"
+		);
+		assert!(
+			state.claim(&another_bots_run()).is_ok(),
+			"one bot's transition refused another bot's"
+		);
+
+		drop(held);
+		assert!(state.claim(&a_scope()).is_ok(), "a spent transition kept its seat");
+	}
+
+	#[test]
+	fn nothing_starts_for_any_bot_once_the_host_is_quitting() {
+		let state = AgentState::default();
+		state.enter_quit();
+
+		for scope in [a_scope(), another_bots_run()] {
+			assert!(
+				matches!(state.claim(&scope), Err(TransportError::TransitionInProgress)),
+				"a start was let through after the quit: {scope:?}"
+			);
+		}
+	}
+
+	const A_CONVERSATION: &str = "
+		INSERT INTO bots (id, name, model, created_at)
+			VALUES ('b1', 'First', 'sonnet', 1);
+		INSERT INTO bot_spaces (bot_id, space_id, joined_at) VALUES ('b1', 'personal', 1);
+		INSERT INTO conversations (id, kind, title, created_at, updated_at)
+			VALUES ('c1', 'main', 'First', 1, 1);
+		INSERT INTO conversation_participants
+			(conversation_id, bot_id, role, joined_at, join_seq)
+			VALUES ('c1', 'b1', 'assistant', 1, 0);
+	";
+
+	async fn a_database_resuming(provider_session_id: &str) -> (db::DatabaseState, RemovedOnDrop) {
+		let dir = crate::db::connection::temp_dir();
+		let database = crate::db::open(&dir);
+		database
+			.call_mut(|connection| Ok(connection.execute_batch(A_CONVERSATION)?))
+			.await
+			.expect("the conversation is there");
+		let participant = participant_key(&a_scope());
+		let session = database
+			.runtime_context()
+			.open(participant.clone(), 1, None)
+			.await
+			.expect("the runtime session opens");
+		database
+			.runtime_context()
+			.record_provider_session(participant, session.id, provider_session_id.to_owned())
+			.await
+			.expect("the provider session is recorded");
+		(Ok(database), dir)
+	}
+
+	async fn stored_id(state: &db::DatabaseState) -> Option<String> {
+		state
+			.as_ref()
+			.expect("the database opens")
+			.runtime_context()
+			.active_session(participant_key(&a_scope()))
+			.await
+			.expect("the live session")
+			.and_then(|session| session.provider_session_id)
+	}
+
+	async fn a_conversation_of_two_instances(
+	) -> (db::DatabaseState, RuntimeScope, RuntimeScope, RemovedOnDrop) {
+		let dir = crate::db::connection::temp_dir();
+		let database = crate::db::open(&dir);
+		database
+			.call_mut(|connection| Ok(connection.execute_batch(A_CONVERSATION)?))
+			.await
+			.expect("the conversation is there");
+		let participant = participant_key(&a_scope());
+		let runtime = database.runtime_context();
+		let first = runtime.open(participant.clone(), 1, None).await.expect("the first instance");
+		let second = runtime.open(participant.clone(), 2, None).await.expect("the second instance");
+		runtime
+			.record_provider_session(participant, first.id.clone(), "session-1".to_owned())
+			.await
+			.expect("the lineage is recorded");
+		let scope_of =
+			|id: String, seq: i64| RuntimeScope { runtime_session_id: id, epoch: seq, ..a_scope() };
+		(Ok(database), scope_of(first.id, first.seq), scope_of(second.id, second.seq), dir)
+	}
+
+	#[tokio::test]
+	async fn only_a_mission_conversation_opens_on_a_mission_thread() {
+		let dir = crate::db::connection::temp_dir();
+		let database = crate::db::open(&dir);
+		database
+			.call_mut(|connection| {
+				Ok(connection.execute_batch(
+					"INSERT INTO conversations (id, kind, title, created_at, updated_at)
+						VALUES ('m1', 'mission', 'Ship it', 1, 1);
+					INSERT INTO conversations (id, kind, title, created_at, updated_at)
+						VALUES ('c1', 'main', 'First', 1, 1);",
+				)?)
+			})
+			.await
+			.expect("the conversations are there");
+		let state: db::DatabaseState = Ok(database);
+
+		assert!(opens_on_a_mission_thread(&state, "m1").await);
+		assert!(!opens_on_a_mission_thread(&state, "c1").await);
+		assert!(!opens_on_a_mission_thread(&state, "missing").await);
+	}
+
+	#[tokio::test]
+	async fn a_second_instance_starts_cold_and_records_its_own_provider_session() {
+		let (state, lineage, beside_it, _dir) = a_conversation_of_two_instances().await;
+		let live = Live::<&str>::default();
+
+		let holder = live.take_over(lineage.clone());
+		let cold = live.take_over(beside_it.clone());
+
+		assert_eq!(
+			holder.resume(Some("session-1".to_owned())),
+			Some("session-1".to_owned()),
+			"the instance holding the lineage was refused its own resume id"
+		);
+		assert_eq!(
+			cold.resume(Some("session-1".to_owned())),
+			None,
+			"a second instance was handed the resume id the first one is running on"
+		);
+
+		let database = state.as_ref().expect("the database opens");
+		record_its_own_provider_session(database, &beside_it, "session-2".to_owned())
+			.await
+			.expect("the second instance records its own provider session");
+
+		let sessions = database
+			.runtime_context()
+			.sessions_for(participant_key(&a_scope()))
+			.await
+			.expect("the sessions");
+		let recorded: Vec<_> = sessions
+			.iter()
+			.map(|session| (session.provider_session_id.as_deref(), session.status))
+			.collect();
+		assert_eq!(
+			recorded,
+			vec![
+				(Some("session-1"), RuntimeSessionStatus::Active),
+				(Some("session-2"), RuntimeSessionStatus::Active)
+			],
+			"the second instance did not write its own id on its own live row"
+		);
+	}
+
+	#[tokio::test]
+	async fn a_timed_out_resume_keeps_the_stored_id_and_a_crashed_one_spends_it() {
+		let (state, _dir) = a_database_resuming("session-1").await;
+
+		let spent = forget_the_id_a_refusal_blames(
+			&state,
+			&a_scope(),
+			Some("session-1".into()),
+			&TransportError::StartupTimeout { timeout_ms: 30_000 },
+		)
+		.await;
+		assert!(!spent, "a slow resume was reported to the frontend as a spent id");
+		assert_eq!(
+			stored_id(&state).await.as_deref(),
+			Some("session-1"),
+			"a slow resume cost the id"
+		);
+
+		let spent = forget_the_id_a_refusal_blames(
+			&state,
+			&a_scope(),
+			Some("session-1".into()),
+			&TransportError::Crashed { code: Some(4), detail: None },
+		)
+		.await;
+		assert!(spent, "the frontend was left holding an id the host gave up on");
+		assert_eq!(
+			stored_id(&state).await,
+			None,
+			"a refused id outlived the crash that proved it dead"
+		);
+	}
+
+	mod pending_questions {
+
+		use super::super::super::contract::{TurnEnded, TurnOutcome};
+		use super::*;
+		use crate::conversations::commands::list_conversations;
+		use crate::conversations::contract::{ConversationState, STATE_CHANGED_EVENT};
+		use crate::db::repositories::conversations::{a_pending_prompt, PendingPrompt, PromptKind};
+		use crate::test_core::{a_core_of_its_own, CoreOfItsOwn};
+
+		fn an_app(name: &str) -> CoreOfItsOwn {
+			a_core_of_its_own(&format!("pending-question-{name}"))
+		}
+
+		fn the_turn() -> Option<EventTurn> {
+			Some(EventTurn {
+				turn_id: "t1".into(),
+				conversation_id: "c1".into(),
+				continues_turn_id: None,
+			})
+		}
+
+		fn question(id: &str) -> AgentEvent {
+			AgentEvent::QuestionRequested {
+				request: QuestionRequest { id: id.into(), questions: Vec::new(), subject: None },
+			}
+		}
+
+		fn answered(id: &str) -> AgentEvent {
+			AgentEvent::PermissionResolved {
+				id: id.into(),
+				decision: PermissionDecision::AllowOnce,
+			}
+		}
+
+		fn turn_ended() -> AgentEvent {
+			AgentEvent::TurnEnded {
+				ended: TurnEnded {
+					session_id: None,
+					outcome: TurnOutcome::Completed,
+					structured_output: None,
+					total_cost_usd: None,
+					model_usage: None,
+					web_sources: Vec::new(),
+				},
+			}
+		}
+
+		fn crashed() -> AgentEvent {
+			AgentEvent::Failed { error: TransportError::Crashed { code: Some(1), detail: None } }
+		}
+
+		fn a_late_listener(core: &crate::core_context::Core) -> Vec<Frame> {
+			let (pending, mut heard) = subscribed_with_pending_questions(core);
+			assert!(heard.try_recv().is_err(), "the late listener heard a live frame");
+			pending
+		}
+
+		async fn pending_in(
+			core: &crate::core_context::Core,
+			conversation_id: &str,
+		) -> Vec<ScopedEvent> {
+			pending_questions(core, conversation_id.to_owned()).await.expect("the command answers")
+		}
+
+		#[tokio::test]
+		async fn the_command_returns_a_pending_question_as_it_was_announced() {
+			let core = an_app("command-asked");
+			let mut original = core.subscribe_frames();
+			let run = a_run_held_by_the_app(&core, a_scope());
+			run.emit(question("q1"), the_turn());
+			let announced = original.try_recv().expect("the question was emitted");
+
+			let pending = pending_in(&core, "c1").await;
+
+			let returned: Vec<Frame> = pending
+				.iter()
+				.map(|question| events::frame(AGENT_EVENT, question).expect("a frame"))
+				.collect();
+			assert_eq!(returned, vec![announced]);
+		}
+
+		#[tokio::test]
+		async fn the_command_returns_an_empty_list_when_no_question_waits() {
+			let core = an_app("command-empty");
+			a_run_held_by_the_app(&core, a_scope());
+
+			assert!(pending_in(&core, "c1").await.is_empty());
+		}
+
+		#[tokio::test]
+		async fn the_command_returns_no_question_of_another_conversation() {
+			let core = an_app("command-elsewhere");
+			let here = a_run_held_by_the_app(&core, a_scope());
+			let elsewhere = a_run_held_by_the_app(&core, another_bots_run());
+			here.emit(question("q1"), the_turn());
+			elsewhere.emit(
+				question("q9"),
+				Some(EventTurn {
+					turn_id: "t9".into(),
+					conversation_id: "c2".into(),
+					continues_turn_id: None,
+				}),
+			);
+
+			let pending = pending_in(&core, "c1").await;
+
+			assert_eq!(pending.len(), 1);
+			assert!(pending.iter().all(|question| question
+				.scope
+				.as_ref()
+				.is_some_and(|scope| scope.conversation_id == "c1")));
+		}
+
+		#[test]
+		fn a_listener_subscribing_after_a_question_hears_it_once_in_its_turn() {
+			let core = an_app("asked");
+			let mut original = core.subscribe_frames();
+			let run = a_run_held_by_the_app(&core, a_scope());
+
+			run.emit(question("q1"), the_turn());
+
+			let emitted = original.try_recv().expect("the question was emitted");
+			assert_eq!(a_late_listener(&core), vec![emitted]);
+		}
+
+		#[test]
+		fn a_question_asked_after_a_listener_subscribed_reaches_it_live_only() {
+			let core = an_app("asked-live");
+			let run = a_run_held_by_the_app(&core, a_scope());
+			let (pending, mut heard) = subscribed_with_pending_questions(&core);
+
+			run.emit(question("q1"), the_turn());
+
+			assert!(pending.is_empty());
+			assert!(heard.try_recv().is_ok());
+			assert!(heard.try_recv().is_err(), "the question reached the listener twice");
+		}
+
+		#[tokio::test]
+		async fn a_question_answered_or_ended_with_its_turn_reaches_no_later_listener() {
+			for (name, settling) in
+				[("answered", answered("q1")), ("ended", turn_ended()), ("crashed", crashed())]
+			{
+				let core = an_app(name);
+				let run = a_run_held_by_the_app(&core, a_scope());
+				run.emit(question("q1"), the_turn());
+
+				run.emit(settling, the_turn());
+
+				assert!(a_late_listener(&core).is_empty(), "{name} left the question pending");
+				assert!(pending_in(&core, "c1").await.is_empty(), "{name} kept it listed");
+			}
+		}
+
+		#[test]
+		fn an_answer_releases_its_own_question_and_keeps_the_other() {
+			let core = an_app("answered-one");
+			let mut original = core.subscribe_frames();
+			let run = a_run_held_by_the_app(&core, a_scope());
+			run.emit(question("q1"), the_turn());
+			run.emit(question("q2"), the_turn());
+			let kept = original.try_recv().and_then(|_| original.try_recv()).expect("q2 emitted");
+
+			run.emit(answered("q1"), the_turn());
+
+			assert_eq!(a_late_listener(&core), vec![kept]);
+		}
+
+		fn denied(id: &str) -> Frame {
+			framed(AgentEvent::PermissionResolved {
+				id: id.into(),
+				decision: PermissionDecision::Deny,
+			})
+		}
+
+		fn framed(event: AgentEvent) -> Frame {
+			let scoped = ScopedEvent { scope: Some(a_scope()), turn: the_turn(), event };
+			events::frame(AGENT_EVENT, &scoped).expect("a frame")
+		}
+
+		fn everything_heard(heard: &mut broadcast::Receiver<Frame>) -> Vec<Frame> {
+			std::iter::from_fn(|| heard.try_recv().ok()).collect()
+		}
+
+		fn two_questions_and_one_elsewhere(core: &crate::core_context::Core) {
+			let run = a_run_held_by_the_app(core, a_scope());
+			run.emit(question("q1"), the_turn());
+			run.emit(question("q2"), the_turn());
+			a_run_held_by_the_app(core, another_bots_run()).emit(
+				question("q9"),
+				Some(EventTurn {
+					turn_id: "t9".into(),
+					conversation_id: "c2".into(),
+					continues_turn_id: None,
+				}),
+			);
+		}
+
+		#[tokio::test]
+		async fn a_stopped_session_announces_each_of_its_questions_denied_once_and_lists_none() {
+			let core = an_app("stopped");
+			two_questions_and_one_elsewhere(&core);
+			let mut heard = core.subscribe_frames();
+
+			shutdown_session(&core, &core.state::<AgentState>(), &a_scope()).await;
+			shutdown_session(&core, &core.state::<AgentState>(), &a_scope()).await;
+
+			assert_eq!(everything_heard(&mut heard), vec![denied("q1"), denied("q2")]);
+			assert!(pending_in(&core, "c1").await.is_empty());
+			assert_eq!(pending_in(&core, "c2").await.len(), 1, "another run lost its question");
+		}
+
+		#[tokio::test]
+		async fn a_quit_announces_every_pending_question_denied_and_lists_none() {
+			let core = an_app("quit");
+			two_questions_and_one_elsewhere(&core);
+			let mut heard = core.subscribe_frames();
+
+			end_every_session(&core, &core.state::<AgentState>()).await;
+
+			let elsewhere = ScopedEvent {
+				scope: Some(another_bots_run()),
+				turn: Some(EventTurn {
+					turn_id: "t9".into(),
+					conversation_id: "c2".into(),
+					continues_turn_id: None,
+				}),
+				event: AgentEvent::PermissionResolved {
+					id: "q9".into(),
+					decision: PermissionDecision::Deny,
+				},
+			};
+			assert_eq!(
+				everything_heard(&mut heard),
+				vec![
+					denied("q1"),
+					denied("q2"),
+					events::frame(AGENT_EVENT, &elsewhere).expect("a frame")
+				]
+			);
+			assert!(a_late_listener(&core).is_empty());
+			assert!(pending_in(&core, "c1").await.is_empty());
+			assert!(pending_in(&core, "c2").await.is_empty());
+		}
+
+		#[tokio::test]
+		async fn a_run_taken_over_announces_the_questions_it_held_denied() {
+			let core = an_app("taken-over");
+			two_questions_and_one_elsewhere(&core);
+			let mut heard = core.subscribe_frames();
+
+			core.state::<AgentState>().admit(&core, a_scope()).await;
+
+			assert_eq!(everything_heard(&mut heard), vec![denied("q1"), denied("q2")]);
+			assert!(pending_in(&core, "c1").await.is_empty());
+		}
+
+		#[test]
+		fn a_turn_that_ends_or_crashes_announces_its_questions_denied_before_its_end() {
+			for (name, settling) in [("ended-denied", turn_ended()), ("crashed-denied", crashed())]
+			{
+				let core = an_app(name);
+				let run = a_run_held_by_the_app(&core, a_scope());
+				run.emit(question("q1"), the_turn());
+				let mut heard = core.subscribe_frames();
+
+				run.emit(settling.clone(), the_turn());
+
+				assert_eq!(
+					everything_heard(&mut heard),
+					vec![denied("q1"), framed(settling)],
+					"{name} did not settle its question"
+				);
+			}
+		}
+
+		#[tokio::test]
+		async fn a_question_answered_before_the_shutdown_is_not_announced_again() {
+			let core = an_app("answered-then-stopped");
+			let run = a_run_held_by_the_app(&core, a_scope());
+			run.emit(question("q1"), the_turn());
+			run.emit(answered("q1"), the_turn());
+			let mut heard = core.subscribe_frames();
+
+			shutdown_session(&core, &core.state::<AgentState>(), &a_scope()).await;
+			run.emit(turn_ended(), the_turn());
+
+			assert_eq!(everything_heard(&mut heard), vec![framed(turn_ended())]);
+		}
+
+		#[tokio::test]
+		async fn a_replaced_or_cleared_session_leaves_no_question_pending() {
+			let replaced = an_app("replaced");
+			a_run_held_by_the_app(replaced.core(), a_scope()).emit(question("q1"), the_turn());
+			let cleared = an_app("cleared");
+			a_run_held_by_the_app(cleared.core(), a_scope()).emit(question("q1"), the_turn());
+
+			replaced.core().state::<AgentState>().live.take_over(a_scope());
+			cleared.core().state::<AgentState>().live.clear_all();
+
+			for core in [&replaced, &cleared] {
+				assert!(a_late_listener(core).is_empty());
+				assert!(pending_in(core, "c1").await.is_empty());
+			}
+		}
+
+		#[test]
+		fn a_question_of_a_run_already_let_go_is_neither_held_nor_emitted() {
+			let core = an_app("let-go");
+			let run = a_run_held_by_the_app(&core, a_scope());
+			let mut original = core.subscribe_frames();
+			core.state::<AgentState>().live.clear(&a_scope());
+
+			run.emit(question("q1"), the_turn());
+
+			assert!(original.try_recv().is_err());
+			assert!(a_late_listener(&core).is_empty());
+		}
+
+		const ONE_SEATED_ROOM: &str = "
+			INSERT INTO bots (id, name, model, created_at) VALUES ('b1', 'First', 'sonnet', 1);
+			INSERT INTO bot_spaces (bot_id, space_id, joined_at) VALUES ('b1', 'personal', 1);
+			INSERT INTO conversations (id, space_id, kind, title, created_at, updated_at)
+				VALUES ('c1', 'personal', 'topic', 'First', 1, 1);
+			INSERT INTO conversation_participants
+				(conversation_id, bot_id, role, joined_at, join_seq)
+				VALUES ('c1', 'b1', 'lead', 1, 0);
+		";
+
+		fn stored(runtime_session_id: &str, prompt_id: &str) -> PendingPrompt {
+			PendingPrompt {
+				runtime_session_id: runtime_session_id.to_owned(),
+				prompt_id: prompt_id.to_owned(),
+				..a_pending_prompt("c1", PromptKind::Permission)
+			}
+		}
+
+		async fn an_app_storing(name: &str, prompts: Vec<PendingPrompt>) -> CoreOfItsOwn {
+			let core = an_app(name);
+			core.manage(AgentState::default());
+			crate::db::install(&core);
+			let database = bot_database(&core).expect("the database opens");
+			database
+				.call_mut(|connection| Ok(connection.execute_batch(ONE_SEATED_ROOM)?))
+				.await
+				.expect("the room is planted");
+			for prompt in prompts {
+				database.conversations().hold_prompt(prompt).await.expect("the prompt is stored");
+			}
+			core
+		}
+
+		async fn stored_prompts(core: &CoreOfItsOwn) -> i64 {
+			bot_database(core)
+				.expect("the database opens")
+				.call(|connection| {
+					Ok(connection
+						.query_row("SELECT COUNT(*) FROM pending_prompts", [], |row| row.get(0))?)
+				})
+				.await
+				.expect("the prompts are counted")
+		}
+
+		async fn listed_state(core: &CoreOfItsOwn) -> ConversationState {
+			let rows =
+				list_conversations(core, "personal".to_owned()).await.expect("the list reads");
+			rows.into_iter()
+				.find(|row| row.conversation.id == "c1")
+				.expect("c1 is listed")
+				.observed
+				.state
+		}
+
+		fn heard_states(core: &CoreOfItsOwn) -> Arc<std::sync::Mutex<Vec<serde_json::Value>>> {
+			let heard = Arc::new(std::sync::Mutex::new(Vec::new()));
+			let kept = heard.clone();
+			core.listen_to(STATE_CHANGED_EVENT, move |payload| {
+				let payload: serde_json::Value =
+					serde_json::from_str(payload).expect("the payload is JSON");
+				kept.lock().expect("the list is kept").push(payload["state"].clone());
+			});
+			heard
+		}
+
+		#[tokio::test]
+		async fn a_stopped_session_releases_its_stored_prompts_and_its_conversation_reads_idle() {
+			let core = an_app_storing("stored-stopped", vec![stored("r1", "w1")]).await;
+			a_run_held_by_the_app(&core, a_scope()).emit(question("q1"), the_turn());
+			assert_eq!(listed_state(&core).await, ConversationState::NeedsYou);
+			let heard = heard_states(&core);
+
+			shutdown_session(&core, &core.state::<AgentState>(), &a_scope()).await;
+			shutdown_session(&core, &core.state::<AgentState>(), &a_scope()).await;
+
+			assert_eq!(stored_prompts(&core).await, 0);
+			assert_eq!(listed_state(&core).await, ConversationState::Idle);
+			assert_eq!(*heard.lock().expect("the list is kept"), [serde_json::json!("idle")]);
+		}
+
+		fn another_bot_in_the_room() -> RuntimeScope {
+			RuntimeScope { bot_id: "b2".into(), runtime_session_id: "r9".into(), ..a_scope() }
+		}
+
+		async fn stored_sessions(core: &CoreOfItsOwn) -> Vec<String> {
+			bot_database(core)
+				.expect("the database opens")
+				.call(|connection| {
+					let mut statement = connection.prepare(
+						"SELECT runtime_session_id FROM pending_prompts ORDER BY runtime_session_id",
+					)?;
+					let held = statement.query_map([], |row| row.get(0))?;
+					Ok(held.collect::<rusqlite::Result<Vec<String>>>()?)
+				})
+				.await
+				.expect("the prompts are read")
+		}
+
+		#[tokio::test]
+		async fn a_run_taken_over_releases_its_own_and_dead_prompts_and_keeps_a_live_bots_one() {
+			let core = an_app_storing(
+				"stored-taken-over",
+				vec![stored("r1", "w1"), stored("r5", "w5"), stored("r9", "w9")],
+			)
+			.await;
+			core.state::<AgentState>().live.take_over(another_bot_in_the_room());
+			assert_eq!(listed_state(&core).await, ConversationState::NeedsYou);
+			let heard = heard_states(&core);
+
+			core.state::<AgentState>().admit(&core, a_scope()).await;
+
+			assert_eq!(stored_sessions(&core).await, ["r9"]);
+			assert_eq!(listed_state(&core).await, ConversationState::NeedsYou);
+			assert_eq!(
+				*heard.lock().expect("the list is kept"),
+				[serde_json::json!("needs_you")],
+				"the pending prompt moved to the live bot's one, the state stayed"
+			);
+		}
+
+		#[tokio::test]
+		async fn a_run_taken_over_releases_the_prompt_a_crashed_host_left() {
+			let core = an_app_storing("stored-orphan", vec![stored("r5", "w5")]).await;
+
+			core.state::<AgentState>().admit(&core, a_scope()).await;
+
+			assert!(stored_sessions(&core).await.is_empty());
+			assert_eq!(listed_state(&core).await, ConversationState::Idle);
+		}
+
+		#[tokio::test]
+		async fn a_purge_that_fails_still_admits_the_run() {
+			let core = an_app_storing("stored-unpurgeable", vec![stored("r5", "w5")]).await;
+			bot_database(&core)
+				.expect("the database opens")
+				.call(|connection| Ok(connection.execute_batch("DROP TABLE pending_prompts")?))
+				.await
+				.expect("the table is dropped");
+
+			core.state::<AgentState>().admit(&core, a_scope()).await;
+
+			assert!(core.state::<AgentState>().live.holds(&a_scope()), "the run was not admitted");
+		}
+
+		#[tokio::test]
+		async fn a_quit_leaves_no_stored_prompt_behind() {
+			let core =
+				an_app_storing("stored-quit", vec![stored("r1", "w1"), stored("r9", "w9")]).await;
+
+			end_every_session(&core, &core.state::<AgentState>()).await;
+
+			assert_eq!(stored_prompts(&core).await, 0);
+			assert_eq!(listed_state(&core).await, ConversationState::Idle);
+		}
+	}
+}

@@ -5,5 +5,5 @@ pub use kiroshi_core::missions::contract;
 pub mod github;
 pub mod hook;
 pub mod host;
-pub mod liveness;
+pub use kiroshi_core::missions::liveness;
 pub mod run_claims;

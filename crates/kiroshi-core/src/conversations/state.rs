@@ -16,7 +16,7 @@ use crate::missions::liveness::observed as mission_observed;
 #[derive(Default)]
 struct Observed(Mutex<States>);
 
-pub(crate) async fn listed(
+pub async fn listed(
 	core: &crate::core_context::Core,
 	database: &db::Database,
 	ids: Vec<String>,
@@ -30,7 +30,7 @@ pub(crate) async fn listed(
 	Ok(states)
 }
 
-pub(crate) async fn observe(
+pub async fn observe(
 	core: &crate::core_context::Core,
 	database: &db::Database,
 	conversation_id: &str,
@@ -62,7 +62,7 @@ pub(crate) async fn observe(
 	Ok(state)
 }
 
-pub(crate) async fn observe_reporting(
+pub async fn observe_reporting(
 	core: &crate::core_context::Core,
 	database: &db::Database,
 	conversation_id: &str,
@@ -72,7 +72,7 @@ pub(crate) async fn observe_reporting(
 	}
 }
 
-pub(crate) fn observe_later(core: &crate::core_context::Core, conversation_id: String) {
+pub fn observe_later(core: &crate::core_context::Core, conversation_id: String) {
 	let core = core.clone();
 	core.clone().spawn(async move {
 		let Some(database) = core.try_state::<db::DatabaseState>() else {

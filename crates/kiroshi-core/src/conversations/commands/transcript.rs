@@ -1,4 +1,3 @@
-use tauri::{AppHandle, Manager, Runtime, State};
 use uuid::Uuid;
 
 use super::super::contract::{
@@ -18,22 +17,11 @@ use crate::db::repositories::messages::{
 	self, AccountAuthor, MessagePageQuery, MessagesAroundQuery, TerminalState, WrittenFrom,
 };
 use crate::events::{CONVERSATION_UPDATED, MESSAGE_STORED};
-use crate::hosting::authorship::{Caller, CommandCaller};
+use crate::hosting::authors;
+use crate::hosting::caller::Caller;
 use crate::library::{self, contract::LibraryError};
-use kiroshi_core::hosting::authors;
 
-#[tauri::command]
-#[specta::specta]
-pub async fn conversation_message_page(
-	core: State<'_, crate::core_context::Core>,
-	conversation_id: String,
-	before_seq: Option<i64>,
-	limit: u32,
-) -> Result<TranscriptPage, TranscriptStoreError> {
-	message_page(core.inner(), conversation_id, before_seq, limit).await
-}
-
-pub(crate) async fn message_page(
+pub async fn message_page(
 	core: &crate::core_context::Core,
 	conversation_id: String,
 	before_seq: Option<i64>,
@@ -45,10 +33,8 @@ pub(crate) async fn message_page(
 	Ok(TranscriptPage::of(conversation_id, page))
 }
 
-#[tauri::command]
-#[specta::specta]
 pub async fn conversation_message_page_around(
-	core: State<'_, crate::core_context::Core>,
+	core: &crate::core_context::Core,
 	conversation_id: String,
 	seq: i64,
 	limit: u32,
@@ -61,10 +47,8 @@ pub async fn conversation_message_page_around(
 	Ok(TranscriptWindow::of(conversation_id, around))
 }
 
-#[tauri::command]
-#[specta::specta]
 pub async fn conversation_message_reference(
-	core: State<'_, crate::core_context::Core>,
+	core: &crate::core_context::Core,
 	conversation_id: String,
 	message_id: String,
 ) -> Result<Option<MessageReference>, TranscriptStoreError> {
@@ -78,10 +62,8 @@ pub async fn conversation_message_reference(
 	Ok(Some(MessageReference::of(conversation_id, stored, run)))
 }
 
-#[tauri::command]
-#[specta::specta]
 pub async fn conversation_message_header(
-	core: State<'_, crate::core_context::Core>,
+	core: &crate::core_context::Core,
 	conversation_id: String,
 	message_id: String,
 ) -> Result<String, TranscriptStoreError> {
@@ -89,10 +71,8 @@ pub async fn conversation_message_header(
 	context::message_header(ready(&state)?, conversation_id, message_id).await
 }
 
-#[tauri::command]
-#[specta::specta]
 pub async fn conversation_pin_message(
-	core: State<'_, crate::core_context::Core>,
+	core: &crate::core_context::Core,
 	conversation_id: String,
 	message_id: String,
 	block_index: i64,
@@ -105,10 +85,8 @@ pub async fn conversation_pin_message(
 		.await?)
 }
 
-#[tauri::command]
-#[specta::specta]
 pub async fn conversation_unpin_message(
-	core: State<'_, crate::core_context::Core>,
+	core: &crate::core_context::Core,
 	conversation_id: String,
 	message_id: String,
 	block_index: i64,
@@ -117,10 +95,8 @@ pub async fn conversation_unpin_message(
 	Ok(ready(&state)?.messages().unpin_message(conversation_id, message_id, block_index).await?)
 }
 
-#[tauri::command]
-#[specta::specta]
 pub async fn conversation_pinned_messages(
-	core: State<'_, crate::core_context::Core>,
+	core: &crate::core_context::Core,
 	conversation_id: String,
 ) -> Result<Vec<PinnedBubble>, TranscriptStoreError> {
 	let state = core.state::<db::DatabaseState>();
@@ -128,16 +104,7 @@ pub async fn conversation_pinned_messages(
 	Ok(stored.into_iter().map(|pin| PinnedBubble::of(&conversation_id, pin)).collect())
 }
 
-#[tauri::command]
-#[specta::specta]
-pub async fn conversation_start_turn(
-	core: State<'_, crate::core_context::Core>,
-	turn: NewTurn,
-) -> Result<i64, TranscriptStoreError> {
-	start_turn(core.inner(), turn).await
-}
-
-pub(crate) async fn start_turn(
+pub async fn start_turn(
 	core: &crate::core_context::Core,
 	turn: NewTurn,
 ) -> Result<i64, TranscriptStoreError> {
@@ -152,17 +119,7 @@ pub(crate) async fn start_turn(
 	Ok(seq)
 }
 
-#[tauri::command]
-#[specta::specta]
-pub async fn conversation_complete_turn(
-	core: State<'_, crate::core_context::Core>,
-	id: String,
-	completed_at: i64,
-) -> Result<(), TranscriptStoreError> {
-	complete_turn(core.inner(), id, completed_at).await
-}
-
-pub(crate) async fn complete_turn(
+pub async fn complete_turn(
 	core: &crate::core_context::Core,
 	id: String,
 	completed_at: i64,
@@ -180,53 +137,32 @@ pub(crate) async fn complete_turn(
 	Ok(())
 }
 
-#[tauri::command]
-#[specta::specta]
-pub async fn conversation_append_user_message<R: Runtime>(
-	app: AppHandle<R>,
-	core: State<'_, crate::core_context::Core>,
-	caller: CommandCaller,
+pub async fn conversation_append_user_message(
+	core: &crate::core_context::Core,
+	caller: crate::hosting::caller::Caller,
 	message: NewUserMessage,
 ) -> Result<i64, TranscriptStoreError> {
 	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	refuse_unheld(
-		crate::events::core(&app),
+		core,
 		database,
 		&message.conversation_id,
 		&message.documents,
-		library::held_document,
+		library::items::held_document,
 	)
 	.await?;
 	let written_from = caller.written_from();
-	let author = authors::author(caller.0, crate::events::core(&app), database).await?;
+	let author = authors::author(caller, core, database).await?;
 	let (conversation_id, id) = (message.conversation_id.clone(), message.id.clone());
 	let seq =
 		database.messages().append_user_message(message.written_by(author, written_from)).await?;
-	announce_stored(crate::events::core(app.app_handle()), database, conversation_id.clone(), id)
-		.await;
-	announce_conversation(
-		crate::events::core(&app),
-		database,
-		CONVERSATION_UPDATED,
-		&conversation_id,
-	)
-	.await;
+	announce_stored(core, database, conversation_id.clone(), id).await;
+	announce_conversation(core, database, CONVERSATION_UPDATED, &conversation_id).await;
 	Ok(seq)
 }
 
-#[tauri::command]
-#[specta::specta]
-pub async fn conversation_send_user_message(
-	core: State<'_, crate::core_context::Core>,
-	caller: CommandCaller,
-	message: NewUserMessage,
-	summoned: Vec<String>,
-) -> Result<i64, TranscriptStoreError> {
-	send_user_message(core.inner(), caller.0, message, summoned).await
-}
-
-pub(crate) async fn send_user_message(
+pub async fn send_user_message(
 	core: &crate::core_context::Core,
 	caller: Caller,
 	message: NewUserMessage,
@@ -236,12 +172,9 @@ pub(crate) async fn send_user_message(
 	store_sent(core, ready(&state)?, caller, message, &summoned).await
 }
 
-#[tauri::command]
-#[specta::specta]
-pub async fn conversation_send_turn<R: Runtime>(
-	app: AppHandle<R>,
-	core: State<'_, crate::core_context::Core>,
-	caller: CommandCaller,
+pub async fn conversation_send_turn(
+	core: &crate::core_context::Core,
+	caller: crate::hosting::caller::Caller,
 	message: SentMessage,
 	summoned: Vec<String>,
 ) -> Result<i64, TranscriptStoreError> {
@@ -250,27 +183,20 @@ pub async fn conversation_send_turn<R: Runtime>(
 	let database = ready(&state)?;
 	let held = agent.host_turns().hold(&message.conversation_id, &message.turn_id)?;
 	let summoned = host_turn::summoned_for(database, &message, summoned).await?;
-	let seq = store_sent(
-		crate::events::core(&app),
-		database,
-		caller.0,
-		message.clone().into(),
-		&summoned,
-	)
-	.await?;
-	host_turn::run(crate::events::core(&app).clone(), held, message, summoned).await;
+	let seq = store_sent(core, database, caller, message.clone().into(), &summoned).await?;
+	host_turn::run(core.clone(), held, message, summoned).await;
 	Ok(seq)
 }
 
-pub(crate) struct HandedTurn {
-	pub(crate) conversation_id: String,
-	pub(crate) turn_id: String,
-	pub(crate) author_bot_id: String,
-	pub(crate) text: String,
-	pub(crate) summoned: String,
+pub struct HandedTurn {
+	pub conversation_id: String,
+	pub turn_id: String,
+	pub author_bot_id: String,
+	pub text: String,
+	pub summoned: String,
 }
 
-pub(crate) async fn run_handed_turn(
+pub async fn run_handed_turn(
 	core: &crate::core_context::Core,
 	database: &db::Database,
 	agent: &AgentState,
@@ -328,7 +254,7 @@ async fn store_sent(
 		database,
 		&message.conversation_id,
 		&message.documents,
-		library::held_document,
+		library::items::held_document,
 	)
 	.await?;
 	let turn_id = message.turn_id.clone();
@@ -348,7 +274,7 @@ async fn store_sent(
 	Ok(seq)
 }
 
-pub(crate) async fn post_document(
+pub async fn post_document(
 	core: &crate::core_context::Core,
 	database: &db::Database,
 	conversation_id: &str,
@@ -356,8 +282,14 @@ pub(crate) async fn post_document(
 	name: &str,
 ) -> Result<String, TranscriptStoreError> {
 	let documents = vec![name.to_owned()];
-	refuse_unheld(core, database, conversation_id, &documents, library::held_document_or_board)
-		.await?;
+	refuse_unheld(
+		core,
+		database,
+		conversation_id,
+		&documents,
+		library::items::held_document_or_board,
+	)
+	.await?;
 	let id = Uuid::new_v4().to_string();
 	let posted = messages::NewUserMessage {
 		id: id.clone(),
@@ -424,16 +356,7 @@ async fn announce_stored(
 	);
 }
 
-#[tauri::command]
-#[specta::specta]
-pub async fn conversation_open_assistant_message(
-	core: State<'_, crate::core_context::Core>,
-	message: NewAssistantMessage,
-) -> Result<i64, TranscriptStoreError> {
-	open_assistant_message(core.inner(), message).await
-}
-
-pub(crate) async fn open_assistant_message(
+pub async fn open_assistant_message(
 	core: &crate::core_context::Core,
 	message: NewAssistantMessage,
 ) -> Result<i64, TranscriptStoreError> {
@@ -452,17 +375,7 @@ pub(crate) async fn open_assistant_message(
 	}
 }
 
-#[tauri::command]
-#[specta::specta]
-pub async fn conversation_append_text(
-	core: State<'_, crate::core_context::Core>,
-	id: String,
-	delta: String,
-) -> Result<(), TranscriptStoreError> {
-	append_text(core.inner(), id, delta).await
-}
-
-pub(crate) async fn append_text(
+pub async fn append_text(
 	core: &crate::core_context::Core,
 	id: String,
 	delta: String,
@@ -475,18 +388,7 @@ pub(crate) async fn append_text(
 	Ok(messages.append_text(id, delta).await?)
 }
 
-#[tauri::command]
-#[specta::specta]
-pub async fn conversation_finalize_message(
-	core: State<'_, crate::core_context::Core>,
-	id: String,
-	completion: TerminalCompletion,
-	settled_text: Option<String>,
-) -> Result<(), TranscriptStoreError> {
-	finalize_message(core.inner(), id, completion, settled_text).await
-}
-
-pub(crate) async fn finalize_message(
+pub async fn finalize_message(
 	core: &crate::core_context::Core,
 	id: String,
 	completion: TerminalCompletion,

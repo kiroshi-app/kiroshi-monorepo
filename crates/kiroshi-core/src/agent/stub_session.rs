@@ -25,19 +25,19 @@ impl EventSink for Unheard {
 	fn emit(&self, _event: AgentEvent) {}
 }
 
-pub(crate) struct HeldSession {
-	pub(crate) session: Arc<Session>,
+pub struct HeldSession {
+	pub session: Arc<Session>,
 	_sidecar: RemovedOnDrop,
 }
 
-pub(crate) async fn a_session_held_for(
+pub async fn a_session_held_for(
 	core: &crate::core_context::Core,
 	scope: &RuntimeScope,
 ) -> HeldSession {
 	a_session_running(core, scope, OPENING_SIDECAR).await
 }
 
-pub(crate) async fn a_session_running(
+pub async fn a_session_running(
 	core: &crate::core_context::Core,
 	scope: &RuntimeScope,
 	sidecar_script: &str,

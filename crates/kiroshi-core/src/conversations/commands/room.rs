@@ -1,5 +1,3 @@
-use tauri::{AppHandle, Runtime, State};
-
 use super::super::context;
 use super::super::contract::{
 	state_in, Chat, CompanionArrival, ContextCheckpoint, Conversation, ConversationDeleted,
@@ -21,17 +19,7 @@ use crate::events::{
 };
 use crate::file_store::FileStore;
 
-#[tauri::command]
-#[specta::specta]
-pub async fn conversation_main_chat(
-	core: State<'_, crate::core_context::Core>,
-	bot_id: String,
-	space_id: Option<String>,
-) -> Result<Chat, TranscriptStoreError> {
-	main_chat(core.inner(), bot_id, space_id).await
-}
-
-pub(crate) async fn main_chat(
+pub async fn main_chat(
 	core: &crate::core_context::Core,
 	bot_id: String,
 	space_id: Option<String>,
@@ -44,16 +32,7 @@ pub(crate) async fn main_chat(
 	Ok(Chat::of(chat, observed))
 }
 
-#[tauri::command]
-#[specta::specta]
-pub async fn conversation_solo_states(
-	core: State<'_, crate::core_context::Core>,
-	space_id: String,
-) -> Result<Vec<SoloState>, TranscriptStoreError> {
-	solo_states(core.inner(), space_id).await
-}
-
-pub(crate) async fn solo_states(
+pub async fn solo_states(
 	core: &crate::core_context::Core,
 	space_id: String,
 ) -> Result<Vec<SoloState>, TranscriptStoreError> {
@@ -72,11 +51,8 @@ pub(crate) async fn solo_states(
 		.collect())
 }
 
-#[tauri::command]
-#[specta::specta]
-pub async fn conversation_create<R: Runtime>(
-	app: AppHandle<R>,
-	core: State<'_, crate::core_context::Core>,
+pub async fn conversation_create(
+	core: &crate::core_context::Core,
 	space_id: String,
 	section_id: Option<String>,
 	title: String,
@@ -85,25 +61,12 @@ pub async fn conversation_create<R: Runtime>(
 	let state = core.state::<db::DatabaseState>();
 	let draft = ConversationDraft { space_id, section_id, title, icon: None, bot_ids };
 	let database = ready(&state)?;
-	let created = drawn(
-		crate::events::core(&app),
-		database.conversations().create_conversation(draft).await?,
-	);
-	announce_conversation(crate::events::core(&app), database, CONVERSATION_CREATED, &created.id)
-		.await;
+	let created = drawn(core, database.conversations().create_conversation(draft).await?);
+	announce_conversation(core, database, CONVERSATION_CREATED, &created.id).await;
 	Ok(created)
 }
 
-#[tauri::command]
-#[specta::specta]
-pub async fn conversation_list(
-	core: State<'_, crate::core_context::Core>,
-	space_id: String,
-) -> Result<Vec<ConversationInList>, TranscriptStoreError> {
-	list_conversations(core.inner(), space_id).await
-}
-
-pub(crate) async fn list_conversations(
+pub async fn list_conversations(
 	core: &crate::core_context::Core,
 	space_id: String,
 ) -> Result<Vec<ConversationInList>, TranscriptStoreError> {
@@ -122,30 +85,16 @@ pub(crate) async fn list_conversations(
 		.collect())
 }
 
-#[tauri::command]
-#[specta::specta]
-pub async fn conversation_mission_thread<R: Runtime>(
-	app: AppHandle<R>,
-	core: State<'_, crate::core_context::Core>,
+pub async fn conversation_mission_thread(
+	core: &crate::core_context::Core,
 	conversation_id: String,
 ) -> Result<Conversation, TranscriptStoreError> {
 	let state = core.state::<db::DatabaseState>();
 	let thread = ready(&state)?.conversations().mission_thread(conversation_id).await?;
-	Ok(drawn(crate::events::core(&app), thread))
+	Ok(drawn(core, thread))
 }
 
-#[tauri::command]
-#[specta::specta]
-pub async fn conversation_page(
-	core: State<'_, crate::core_context::Core>,
-	space_id: String,
-	cursor: Option<String>,
-	limit: Option<u32>,
-) -> Result<ConversationPage, TranscriptStoreError> {
-	conversations_page(core.inner(), space_id, cursor, limit).await
-}
-
-pub(crate) async fn conversations_page(
+pub async fn conversations_page(
 	core: &crate::core_context::Core,
 	space_id: String,
 	cursor: Option<String>,
@@ -164,10 +113,8 @@ pub(crate) async fn conversations_page(
 	Ok(ConversationPage::of(read, &states, avatars::Avatars::dir(core).as_deref()))
 }
 
-#[tauri::command]
-#[specta::specta]
 pub async fn conversation_local_ids(
-	core: State<'_, crate::core_context::Core>,
+	core: &crate::core_context::Core,
 ) -> Result<Vec<String>, TranscriptStoreError> {
 	let state = core.state::<db::DatabaseState>();
 	let mut ids = ready(&state)?.conversations().conversation_ids().await?;
@@ -175,15 +122,8 @@ pub async fn conversation_local_ids(
 	Ok(ids)
 }
 
-#[tauri::command]
-#[specta::specta]
-#[expect(
-	clippy::too_many_arguments,
-	reason = "each field is a flat argument of the shipped conversation_update wire shape"
-)]
-pub async fn conversation_update<R: Runtime>(
-	app: AppHandle<R>,
-	core: State<'_, crate::core_context::Core>,
+pub async fn conversation_update(
+	core: &crate::core_context::Core,
 	conversation_id: String,
 	title: String,
 	instructions: String,
@@ -200,22 +140,12 @@ pub async fn conversation_update<R: Runtime>(
 	let edit = ConversationEdit { title, instructions, section_id, icon, color };
 	let database = ready(&state)?;
 	let updated = database.conversations().update_conversation(conversation_id, edit).await?;
-	let updated = drawn(crate::events::core(&app), updated);
-	announce_conversation(crate::events::core(&app), database, CONVERSATION_UPDATED, &updated.id)
-		.await;
+	let updated = drawn(core, updated);
+	announce_conversation(core, database, CONVERSATION_UPDATED, &updated.id).await;
 	Ok(updated)
 }
 
-#[tauri::command]
-#[specta::specta]
-pub async fn conversation_delete(
-	core: State<'_, crate::core_context::Core>,
-	conversation_id: String,
-) -> Result<(), TranscriptStoreError> {
-	delete_conversation(core.inner(), conversation_id).await
-}
-
-pub(crate) async fn delete_conversation(
+pub async fn delete_conversation(
 	core: &crate::core_context::Core,
 	conversation_id: String,
 ) -> Result<(), TranscriptStoreError> {
@@ -227,28 +157,19 @@ pub(crate) async fn delete_conversation(
 	Ok(())
 }
 
-#[tauri::command]
-#[specta::specta]
-pub async fn conversation_add_participant<R: Runtime>(
-	app: AppHandle<R>,
-	core: State<'_, crate::core_context::Core>,
+pub async fn conversation_add_participant(
+	core: &crate::core_context::Core,
 	conversation_id: String,
 	bot_id: String,
 	invited_by_bot_id: Option<String>,
 ) -> Result<Conversation, TranscriptStoreError> {
 	let state = core.state::<db::DatabaseState>();
-	let joined = seat_participant(
-		crate::events::core(&app),
-		ready(&state)?,
-		conversation_id,
-		bot_id,
-		invited_by_bot_id,
-	)
-	.await?;
-	Ok(drawn(crate::events::core(&app), joined.conversation))
+	let joined =
+		seat_participant(core, ready(&state)?, conversation_id, bot_id, invited_by_bot_id).await?;
+	Ok(drawn(core, joined.conversation))
 }
 
-pub(crate) async fn seat_participant(
+pub async fn seat_participant(
 	core: &crate::core_context::Core,
 	database: &db::Database,
 	conversation_id: String,
@@ -266,40 +187,33 @@ pub(crate) async fn seat_participant(
 	Ok(joined)
 }
 
-#[tauri::command]
-#[specta::specta]
-pub async fn conversation_remove_participant<R: Runtime>(
-	app: AppHandle<R>,
-	core: State<'_, crate::core_context::Core>,
+pub async fn conversation_remove_participant(
+	core: &crate::core_context::Core,
 	conversation_id: String,
 	bot_id: String,
 ) -> Result<Conversation, TranscriptStoreError> {
 	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	let left = database.conversations().remove_participant(conversation_id, bot_id).await?;
-	let left = drawn(crate::events::core(&app), left);
-	announce_conversation(crate::events::core(&app), database, CONVERSATION_UPDATED, &left.id)
-		.await;
+	let left = drawn(core, left);
+	announce_conversation(core, database, CONVERSATION_UPDATED, &left.id).await;
 	Ok(left)
 }
 
-#[tauri::command]
-#[specta::specta]
-pub async fn conversation_set_lead<R: Runtime>(
-	app: AppHandle<R>,
-	core: State<'_, crate::core_context::Core>,
+pub async fn conversation_set_lead(
+	core: &crate::core_context::Core,
 	conversation_id: String,
 	bot_id: String,
 ) -> Result<Conversation, TranscriptStoreError> {
 	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	let led = database.conversations().set_lead(conversation_id, bot_id).await?;
-	let led = drawn(crate::events::core(&app), led);
-	announce_conversation(crate::events::core(&app), database, CONVERSATION_UPDATED, &led.id).await;
+	let led = drawn(core, led);
+	announce_conversation(core, database, CONVERSATION_UPDATED, &led.id).await;
 	Ok(led)
 }
 
-pub(crate) async fn announce_conversation(
+pub async fn announce_conversation(
 	core: &crate::core_context::Core,
 	database: &db::Database,
 	event: Event<ConversationStored>,
@@ -344,10 +258,8 @@ fn drawn(core: &crate::core_context::Core, room: StoredConversation) -> Conversa
 	Conversation::of(room, avatars::Avatars::dir(core).as_deref())
 }
 
-#[tauri::command]
-#[specta::specta]
 pub async fn conversation_open_runtime_session(
-	core: State<'_, crate::core_context::Core>,
+	core: &crate::core_context::Core,
 	conversation_id: String,
 	bot_id: String,
 	started_at: i64,
@@ -356,10 +268,10 @@ pub async fn conversation_open_runtime_session(
 ) -> Result<RuntimeSession, TranscriptStoreError> {
 	let participant = ParticipantKey { conversation_id, bot_id };
 	let handover = runtime_session_id.map(|session_id| Handover { session_id, reason });
-	open_runtime_session(core.inner(), participant, started_at, handover).await
+	open_runtime_session(core, participant, started_at, handover).await
 }
 
-pub(crate) async fn open_runtime_session(
+pub async fn open_runtime_session(
 	core: &crate::core_context::Core,
 	participant: ParticipantKey,
 	started_at: i64,
@@ -369,10 +281,8 @@ pub(crate) async fn open_runtime_session(
 	Ok(ready(&state)?.runtime_context().open(participant, started_at, handover).await?.into())
 }
 
-#[tauri::command]
-#[specta::specta]
 pub async fn conversation_record_provider_session(
-	core: State<'_, crate::core_context::Core>,
+	core: &crate::core_context::Core,
 	conversation_id: String,
 	bot_id: String,
 	runtime_session_id: String,
@@ -386,10 +296,8 @@ pub async fn conversation_record_provider_session(
 		.await?)
 }
 
-#[tauri::command]
-#[specta::specta]
 pub async fn conversation_bounded_context(
-	core: State<'_, crate::core_context::Core>,
+	core: &crate::core_context::Core,
 	conversation_id: String,
 	bot_id: String,
 	runtime_session_id: String,
@@ -401,10 +309,8 @@ pub async fn conversation_bounded_context(
 		.await
 }
 
-#[tauri::command]
-#[specta::specta]
 pub async fn conversation_roster_block(
-	core: State<'_, crate::core_context::Core>,
+	core: &crate::core_context::Core,
 	conversation_id: String,
 	bot_id: String,
 ) -> Result<Option<String>, TranscriptStoreError> {
@@ -413,10 +319,8 @@ pub async fn conversation_roster_block(
 	context::roster_block(ready(&state)?, participant).await
 }
 
-#[tauri::command]
-#[specta::specta]
 pub async fn conversation_capture_checkpoint(
-	core: State<'_, crate::core_context::Core>,
+	core: &crate::core_context::Core,
 	conversation_id: String,
 	bot_id: String,
 	runtime_session_id: String,

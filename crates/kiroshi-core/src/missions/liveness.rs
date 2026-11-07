@@ -28,7 +28,7 @@ impl AnnouncedLiveness {
 	}
 }
 
-pub(crate) fn observed(core: &crate::core_context::Core, mission: Mission) -> Mission {
+pub fn observed(core: &crate::core_context::Core, mission: Mission) -> Mission {
 	let stored = MissionPresence::of(&mission);
 	let present = present(core, &mission.thread_conversation_id, &mission.bot_id, stored);
 	Mission {
@@ -39,7 +39,7 @@ pub(crate) fn observed(core: &crate::core_context::Core, mission: Mission) -> Mi
 	}
 }
 
-pub(crate) fn present(
+pub fn present(
 	core: &crate::core_context::Core,
 	thread_conversation_id: &str,
 	bot_id: &str,
@@ -61,21 +61,18 @@ pub(crate) fn present(
 	MissionPresence { liveness, pending_prompt, working_bot_ids }
 }
 
-pub(super) fn observed_all(
-	core: &crate::core_context::Core,
-	missions: Vec<Mission>,
-) -> Vec<Mission> {
+pub fn observed_all(core: &crate::core_context::Core, missions: Vec<Mission>) -> Vec<Mission> {
 	missions.into_iter().map(|mission| observed(core, mission)).collect()
 }
 
-pub(super) fn announce_change(
+pub fn announce_change(
 	core: &crate::core_context::Core,
 	mission: Mission,
 ) -> Result<Mission, MissionError> {
 	announce_when(core, mission, |_, _| true)
 }
 
-pub(super) fn announce_when(
+pub fn announce_when(
 	core: &crate::core_context::Core,
 	mission: Mission,
 	is_news: impl FnOnce(&Mission, bool) -> bool,
@@ -96,7 +93,7 @@ pub(super) fn announce_when(
 	Ok(mission)
 }
 
-pub(crate) async fn announce_thread_moved(
+pub async fn announce_thread_moved(
 	core: &crate::core_context::Core,
 	database: &db::Database,
 	conversation_id: String,

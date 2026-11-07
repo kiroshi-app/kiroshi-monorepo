@@ -1376,14 +1376,12 @@ mod tests {
 			]
 		);
 		let read = crate::conversations::commands::conversation_mission_thread(
-			app.handle().clone(),
 			app.state(),
 			opened.thread_conversation_id.clone(),
 		)
 		.await
 		.expect("the thread reads with its seats");
 		let topic = crate::conversations::commands::conversation_mission_thread(
-			app.handle().clone(),
 			app.state(),
 			"c1".to_owned(),
 		)

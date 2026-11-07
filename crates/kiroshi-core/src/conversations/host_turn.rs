@@ -51,14 +51,14 @@ struct RunningTurn {
 }
 
 #[derive(Default)]
-pub(crate) struct HostTurns {
+pub struct HostTurns {
 	running: Running,
 	orders: Mutex<HashMap<(String, String), SpeakingOrder>>,
 	started: Mutex<HashSet<String>>,
 }
 
 impl HostTurns {
-	pub(crate) fn hold(
+	pub fn hold(
 		&self,
 		conversation_id: &str,
 		turn_id: &str,
@@ -81,7 +81,7 @@ impl HostTurns {
 		Ok(HeldTurn { running: self.running.clone(), turn_id: turn_id.to_owned(), stopped })
 	}
 
-	pub(crate) async fn stop(&self, scope: &RuntimeScope) -> Option<CancelOutcome> {
+	pub async fn stop(&self, scope: &RuntimeScope) -> Option<CancelOutcome> {
 		let asked = self.request_stop(&scope.conversation_id);
 		if asked.is_empty() {
 			return None;
@@ -152,7 +152,7 @@ impl HostTurns {
 	}
 }
 
-pub(crate) fn merged(outcomes: Vec<CancelOutcome>) -> CancelOutcome {
+pub fn merged(outcomes: Vec<CancelOutcome>) -> CancelOutcome {
 	let mut has_cancelled = false;
 	let mut failures = Vec::new();
 	for outcome in outcomes {
@@ -171,7 +171,7 @@ pub(crate) fn merged(outcomes: Vec<CancelOutcome>) -> CancelOutcome {
 	CancelOutcome::NothingToCancel
 }
 
-pub(crate) struct HeldTurn {
+pub struct HeldTurn {
 	running: Running,
 	turn_id: String,
 	stopped: watch::Receiver<bool>,
@@ -222,7 +222,7 @@ fn locked<T>(held: &Mutex<T>) -> MutexGuard<'_, T> {
 	held.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-pub(crate) async fn summoned_for(
+pub async fn summoned_for(
 	database: &db::Database,
 	message: &SentMessage,
 	summoned: Vec<String>,
@@ -288,7 +288,7 @@ fn seated_mentions<'a>(text: &'a str, present: &[&str]) -> Vec<&'a str> {
 	mentioned_bot_ids(text).into_iter().filter(|bot_id| present.contains(bot_id)).collect()
 }
 
-pub(crate) fn present_bot_ids(seats: &[Seat]) -> Vec<&str> {
+pub fn present_bot_ids(seats: &[Seat]) -> Vec<&str> {
 	seats
 		.iter()
 		.filter(|seat| seat.left_at.is_none() && !seat.is_deleted)
@@ -296,7 +296,7 @@ pub(crate) fn present_bot_ids(seats: &[Seat]) -> Vec<&str> {
 		.collect()
 }
 
-pub(crate) async fn run(
+pub async fn run(
 	core: crate::core_context::Core,
 	held: HeldTurn,
 	message: SentMessage,
@@ -320,7 +320,7 @@ pub(crate) async fn run(
 	drive_from(turn, held, first).await;
 }
 
-pub(crate) async fn serve_awaited(
+pub async fn serve_awaited(
 	core: crate::core_context::Core,
 	held: HeldTurn,
 	awaited: Vec<AwaitedRun>,
@@ -1163,7 +1163,7 @@ fn hand_over(
 	None
 }
 
-pub(crate) fn ended_as(outcome: TurnOutcome) -> AgentEvent {
+pub fn ended_as(outcome: TurnOutcome) -> AgentEvent {
 	AgentEvent::TurnEnded {
 		ended: TurnEnded {
 			session_id: None,

@@ -25,7 +25,7 @@ use sha2::{Digest, Sha256};
 use contract::{
 	LibraryBoardFileReplaced, LibraryChanged, LibraryDocument, LibraryDocumentFormat,
 	LibraryDocumentRenamed, LibraryDocumentState, LibraryDocumentUpdated, LibraryError,
-	LibraryFile, LibraryImage, LibraryImport, LibraryItem, LibraryItemKind, LibraryOverwritten,
+	LibraryFile, LibraryImage, LibraryImport, LibraryItem, LibraryOverwritten,
 };
 use documents::Documents;
 
@@ -36,8 +36,10 @@ use crate::db;
 use crate::db::repositories::messages::TranscriptError;
 use crate::file_store::FileStore;
 use crate::{events, private_files};
-
-const DIR_NAME: &str = "library";
+use kiroshi_core::library::items::{
+	a_document, accepted_type, is_plain_name, refusal, resolve, root, space_dir, unreadable,
+	AcceptedType, ResolvedItem,
+};
 
 const MAX_DOCUMENT_BYTES: u64 = 5 * 1024 * 1024;
 
@@ -61,49 +63,10 @@ const MAX_TITLE_CHARS: usize = 100;
 
 const UNSAFE_IN_A_NAME: [char; 9] = ['/', '\\', ':', '*', '?', '"', '<', '>', '|'];
 
-enum AcceptedType {
-	Image { mime_type: &'static str },
-	Document(LibraryDocumentFormat),
-	Board,
-}
-
-impl AcceptedType {
-	fn mime_type(&self) -> &'static str {
-		match self {
-			AcceptedType::Image { mime_type } => mime_type,
-			AcceptedType::Document(LibraryDocumentFormat::Markdown) => "text/markdown",
-			AcceptedType::Document(LibraryDocumentFormat::Text) => "text/plain",
-			AcceptedType::Board => "application/json",
-		}
-	}
-
-	fn item_kind(&self) -> LibraryItemKind {
-		match self {
-			AcceptedType::Image { .. } => LibraryItemKind::Image,
-			AcceptedType::Document(_) => LibraryItemKind::Document,
-			AcceptedType::Board => LibraryItemKind::Board,
-		}
-	}
-}
-
-struct ResolvedItem {
-	path: PathBuf,
-	accepted: AcceptedType,
-	bytes: u64,
-}
-
 #[derive(Debug, PartialEq, Eq)]
 enum ClipboardPayload {
 	Text(String),
 	Image { rgba: Vec<u8>, width: u32, height: u32 },
-}
-
-fn root(core: &crate::core_context::Core) -> Result<PathBuf, LibraryError> {
-	Ok(core.data_dir().join(DIR_NAME))
-}
-
-fn space_dir(root: &Path, space_id: &str) -> PathBuf {
-	root.join(space_id)
 }
 
 pub(crate) fn list(root: &Path, space_id: &str) -> Result<Vec<LibraryItem>, LibraryError> {
@@ -149,27 +112,6 @@ fn item_at(path: &Path, name: String) -> Result<Option<LibraryItem>, LibraryErro
 	}))
 }
 
-fn resolve(root: &Path, space_id: &str, name: &str) -> Result<ResolvedItem, LibraryError> {
-	let missing = || LibraryError::Missing { name: name.to_owned() };
-	if !is_plain_name(name) {
-		return Err(LibraryError::InvalidName { name: name.to_owned() });
-	}
-	let dir = space_dir(root, space_id);
-	let path = dir.join(name);
-	let resolved = fs::canonicalize(&path).map_err(|error| refusal(&error, missing()))?;
-	let resolved_dir = fs::canonicalize(&dir).map_err(|error| refusal(&error, missing()))?;
-	if resolved.parent() != Some(resolved_dir.as_path()) {
-		return Err(LibraryError::InvalidName { name: name.to_owned() });
-	}
-	let metadata = fs::symlink_metadata(&path).map_err(|error| refusal(&error, missing()))?;
-	match (metadata.is_file(), accepted_type(name)) {
-		(true, Some(accepted)) => {
-			Ok(ResolvedItem { path: resolved, accepted, bytes: metadata.len() })
-		}
-		_ => Err(missing()),
-	}
-}
-
 pub(crate) fn read_document(
 	root: &Path,
 	space_id: &str,
@@ -181,34 +123,6 @@ pub(crate) fn read_document(
 	};
 	let content = document_text(&item, name)?;
 	Ok(LibraryDocument { name: name.to_owned(), format, content })
-}
-
-fn a_document(root: &Path, space_id: &str, name: &str) -> Result<(), LibraryError> {
-	match resolve(root, space_id, name)?.accepted {
-		AcceptedType::Document(_) => Ok(()),
-		AcceptedType::Image { .. } | AcceptedType::Board => {
-			Err(LibraryError::NotADocument { name: name.to_owned() })
-		}
-	}
-}
-
-pub(crate) fn held_document(
-	core: &crate::core_context::Core,
-	space_id: &str,
-	name: &str,
-) -> Result<(), LibraryError> {
-	a_document(&root(core)?, space_id, name)
-}
-
-pub(crate) fn held_document_or_board(
-	core: &crate::core_context::Core,
-	space_id: &str,
-	name: &str,
-) -> Result<(), LibraryError> {
-	match resolve(&root(core)?, space_id, name)?.accepted {
-		AcceptedType::Document(_) | AcceptedType::Board => Ok(()),
-		AcceptedType::Image { .. } => Err(LibraryError::NotADocument { name: name.to_owned() }),
-	}
 }
 
 fn document_text(item: &ResolvedItem, name: &str) -> Result<String, LibraryError> {
@@ -1059,38 +973,6 @@ fn remove_space_dir(root: &Path, space_id: &str) -> io::Result<()> {
 		Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
 		removed => removed,
 	}
-}
-
-fn accepted_type(name: &str) -> Option<AcceptedType> {
-	if name.starts_with('.') {
-		return None;
-	}
-	let extension = Path::new(name).extension()?.to_str()?.to_ascii_lowercase();
-	match extension.as_str() {
-		"png" => Some(AcceptedType::Image { mime_type: "image/png" }),
-		"jpg" | "jpeg" => Some(AcceptedType::Image { mime_type: "image/jpeg" }),
-		"gif" => Some(AcceptedType::Image { mime_type: "image/gif" }),
-		"webp" => Some(AcceptedType::Image { mime_type: "image/webp" }),
-		"md" | "markdown" => Some(AcceptedType::Document(LibraryDocumentFormat::Markdown)),
-		"txt" => Some(AcceptedType::Document(LibraryDocumentFormat::Text)),
-		"canvas" => Some(AcceptedType::Board),
-		_ => None,
-	}
-}
-
-fn is_plain_name(name: &str) -> bool {
-	!name.is_empty() && name != "." && name != ".." && !name.contains(['/', '\\', '\0'])
-}
-
-fn refusal(error: &io::Error, when_absent: LibraryError) -> LibraryError {
-	match error.kind() {
-		io::ErrorKind::NotFound => when_absent,
-		_ => unreadable(error),
-	}
-}
-
-fn unreadable(error: &io::Error) -> LibraryError {
-	LibraryError::Unreadable { detail: error.to_string() }
 }
 
 fn epoch_millis(time: SystemTime) -> i64 {

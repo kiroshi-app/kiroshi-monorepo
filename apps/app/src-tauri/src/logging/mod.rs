@@ -1,6 +1,6 @@
 pub mod commands;
 pub use kiroshi_core::logging::contract;
-pub mod scrub;
+pub use kiroshi_core::logging::scrub;
 pub use kiroshi_core::logging::stderr_lines;
 
 use std::fs;

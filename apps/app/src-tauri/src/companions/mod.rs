@@ -1,3 +1,3 @@
-pub use kiroshi_core::companions::contract;
-pub mod host;
+pub use kiroshi_core::companions::*;
+
 pub mod launch;

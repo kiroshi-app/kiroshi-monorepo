@@ -191,4 +191,20 @@ The kept core of `apps/app/src-tauri` moves to a crate with no Tauri dependency,
 - **`Caller` cut (done).** The `Caller` enum, `RelayedMember` and the pure methods (`is_relayed`, `relayed_account`, `written_from`) are in `kiroshi_core::hosting::caller`. Tauri builds a command's caller from the invoke headers, and src-tauri can't implement `CommandArg` for a kiroshi-core type, so commands take a local `CommandCaller(Caller)`. It derefs to `Caller` and keeps `FunctionArg` returning no type, so `bindings.ts` is unchanged. Tests that call a command directly pass `CommandCaller(Caller::Host)`. `Caller::author` reads the account session and the hosting member lists, so for now it's a src-tauri function, `authorship::author(caller, core, database)`. The authorship port carries it next.
 - **Authorship port (done).** `kiroshi_core::hosting::authors::Authors` carries both `members_of` and `author`, because both read the hosting member lists and the account session. src-tauri's `DesktopAuthors` installs it from `events::install_core`, and `agent::commands`, the transcript commands and the library commands call it. A Core with no authors installed, such as the test `Core` or a future Rune preview, writes messages with an empty account author and opens sessions with no member list. That configuration is valid, not an error. The src-tauri functions behind the port stay `pub(crate)`, and the hosting tests still cover them.
 - **Mission liveness cut (done).** `observed` and `announce_thread_moved` read `AgentState` and `conversations::state`, both in the cycle, so they can't go to kiroshi-core ahead of it. They left `missions/commands.rs` for `missions/liveness.rs`, together with what they share: `present`, `observed_all`, `announce_change`, `announce_when`, `AnnouncedLiveness` and the change event. That file reaches only the cycle and kiroshi-core, so it moves into kiroshi-core in the shared move. The cycle no longer reaches `missions::commands`.
+- **The shared move (done).** The following moved into kiroshi-core in one commit:
+  - `conversations` and `companions`;
+  - `agent::commands`, `agent::reply_writer` and `agent::stub_session`;
+  - `routines::runner` and `missions::liveness`.
+
+  What they reach came with them, because none of it reaches back into src-tauri:
+  - `routines::run` and a new `routines::changes` holding `announce_change`;
+  - `mcp_oauth::refresh`, `credentials` and `refusal`;
+  - `logging::scrub` and `executable_script` (the latter behind `test-support`);
+  - a new `library::items` with the library's item resolution (`resolve`, `AcceptedType`, `ResolvedItem`, the library root, `held_document` and `held_document_or_board`). The transcript commands check message documents through it, and src-tauri's library imports it.
+- **Commands across the boundary.** Every `#[tauri::command]` of the moved modules stays in src-tauri, in shadow modules (`conversations`, `conversations::commands`, `awaited_runs`, `turn_run_deadline`, `companions::launch`, `agent::commands`). Each shadow re-exports its kiroshi-core module and declares the wrappers.
+  - A command that was already one call to a Core function kept its text as is.
+  - Every other command left its body in kiroshi-core as a Core function with the command's own name, taking `&Core`. Its wrapper resolves the Core from `State` or the `AppHandle` and delegates. A webview becomes the client id, and `CommandCaller` is unwrapped to `Caller`.
+  - Where a command took both an `AppHandle` and the Core `State`, the wrapper keeps only the `State`. The `::<tauri::Wry>` turbofish went from the registry for those 15 commands, and the tests that called them with an app handle now pass only the state.
+  - `bindings.ts` and the contract snapshots are unchanged.
+- **After the shared move:** the full workspace suite passes `--no-fail-fast` (37 targets, 3,496 passed, 0 failed, 18 ignored as before). `cargo tree -p kiroshi-core -e normal,dev` shows no tauri crate. There are 3,460 test attributes.
 

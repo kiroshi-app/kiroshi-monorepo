@@ -17,16 +17,8 @@ use crate::bundles;
 use crate::conversations::commands::{oldest_space, ready, space_of_the_conversation};
 use crate::conversations::contract::TranscriptStoreError;
 use crate::db;
-use crate::events::ROUTINE_CHANGED;
+pub use kiroshi_core::routines::changes::announce_change;
 pub use kiroshi_core::routines::contract::{RoutineChanged, CHANGED_EVENT};
-
-pub(crate) fn announce_change(
-	core: &crate::core_context::Core,
-	conversation_id: &str,
-) -> Result<(), RoutineError> {
-	core.emit(ROUTINE_CHANGED, RoutineChanged { conversation_id: conversation_id.to_owned() })
-		.map_err(|error| RoutineError::Undeliverable { detail: error.to_string() })
-}
 
 #[tauri::command]
 #[specta::specta]

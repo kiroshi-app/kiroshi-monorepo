@@ -18,7 +18,7 @@ pub mod devices;
 pub mod environment;
 pub mod events;
 #[cfg(all(test, unix))]
-mod executable_script;
+pub use kiroshi_core::executable_script;
 pub use kiroshi_core::file_store;
 pub mod host_api;
 pub mod hosting;

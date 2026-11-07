@@ -68,7 +68,7 @@ impl From<DatabaseError> for Refusal {
 	}
 }
 
-pub(super) async fn plant_first_companion(
+pub async fn plant_first_companion(
 	core: &crate::core_context::Core,
 	database: &db::Database,
 	mut unlaid: Vec<String>,

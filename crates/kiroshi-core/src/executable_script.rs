@@ -3,7 +3,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::process::Command;
 
-pub(crate) fn an_executable_script(path: &Path, body: &str) {
+pub fn an_executable_script(path: &Path, body: &str) {
 	if let Err(failure) = written_by_a_child_process(path, body) {
 		panic!("the script {} is not written: {failure}", path.display());
 	}
@@ -27,6 +27,7 @@ fn written_by_a_child_process(path: &Path, body: &str) -> io::Result<()> {
 	std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))
 }
 
+#[cfg(test)]
 mod tests {
 	use std::process::Command;
 

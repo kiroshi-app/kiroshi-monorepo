@@ -10,7 +10,7 @@ use tokio::task::JoinHandle;
 use tokio::time::{self, Instant, Sleep};
 use uuid::Uuid;
 
-use super::commands::announce_change;
+use super::changes::announce_change;
 use super::contract::{RoutineError, RunClosing, RunOutcome, RunRequested};
 use super::core::{Clock, RunSink, SystemClock};
 use super::run::{read_run_report, run_output_schema, run_prompt_for, RunReport};
@@ -55,9 +55,9 @@ const EVENTS_LOST_REASON: &str = "the run's session events stopped arriving";
 
 const UNKNOWN_KIND: &str = "unknownFailure";
 
-pub(crate) const NO_AGENT: &str = "the host holds no agent state";
+pub const NO_AGENT: &str = "the host holds no agent state";
 
-pub(crate) const NO_DATABASE: &str = "the host holds no database";
+pub const NO_DATABASE: &str = "the host holds no database";
 
 #[derive(Debug, Clone, Copy)]
 pub struct RunTiming {
@@ -434,9 +434,9 @@ async fn closed(
 	Ok(())
 }
 
-pub(crate) struct RelayReader(JoinHandle<ReadFailure>);
+pub struct RelayReader(JoinHandle<ReadFailure>);
 
-pub(crate) enum ReadFailure {
+pub enum ReadFailure {
 	Lagged { missed: u64 },
 	Ended(String),
 }
@@ -453,7 +453,7 @@ impl fmt::Display for ReadFailure {
 }
 
 impl RelayReader {
-	pub(crate) async fn failure(&mut self) -> ReadFailure {
+	pub async fn failure(&mut self) -> ReadFailure {
 		match (&mut self.0).await {
 			Ok(failure) => failure,
 			Err(error) => ReadFailure::Ended(format!("the relay reader stopped: {error}")),
@@ -467,7 +467,7 @@ impl Drop for RelayReader {
 	}
 }
 
-pub(crate) fn listen(
+pub fn listen(
 	core: &crate::core_context::Core,
 	keeps: impl Fn(&RuntimeScope) -> bool + Send + 'static,
 	events: mpsc::UnboundedSender<ScopedEvent>,
@@ -475,7 +475,7 @@ pub(crate) fn listen(
 	read(core.subscribe_frames(), keeps, events)
 }
 
-pub(crate) fn read(
+pub fn read(
 	heard: broadcast::Receiver<Frame>,
 	keeps: impl Fn(&RuntimeScope) -> bool + Send + 'static,
 	events: mpsc::UnboundedSender<ScopedEvent>,
@@ -529,7 +529,7 @@ fn agent_event(frame: &str) -> Result<Option<ScopedEvent>, String> {
 		.map_err(|error| format!("an agent event does not parse: {error}"))
 }
 
-pub(crate) fn ends_the_session(error: &TransportError) -> bool {
+pub fn ends_the_session(error: &TransportError) -> bool {
 	error.is_fatal()
 		|| matches!(error, TransportError::AuthCheckFailed { .. } | TransportError::NotStarted)
 }
@@ -560,20 +560,18 @@ fn failed(reason: &str) -> RunClosing {
 	RunClosing { reason: Some(reason.to_owned()), ..closing(RunOutcome::Failed) }
 }
 
-pub(crate) fn detail_of(error: &impl Serialize) -> String {
+pub fn detail_of(error: &impl Serialize) -> String {
 	serde_json::to_string(error).unwrap_or_else(|failure| failure.to_string())
 }
 
-pub(crate) fn held<'a, T: Send + Sync + 'static>(
+pub fn held<'a, T: Send + Sync + 'static>(
 	core: &'a crate::core_context::Core,
 	missing: &str,
 ) -> Result<crate::core_context::Managed<'a, T>, String> {
 	core.try_state::<T>().ok_or_else(|| missing.to_owned())
 }
 
-pub(crate) fn database(
-	core: &crate::core_context::Core,
-) -> Result<&db::Database, TranscriptStoreError> {
+pub fn database(core: &crate::core_context::Core) -> Result<&db::Database, TranscriptStoreError> {
 	match core.try_state::<db::DatabaseState>() {
 		Some(state) => ready(state.inner()),
 		None => Err(TranscriptStoreError::Unavailable {
