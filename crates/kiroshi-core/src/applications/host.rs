@@ -447,7 +447,7 @@ mod tests {
 	}
 
 	fn runners_carrying(app: &crate::core_context::Core, commands: &[&str]) -> Runners {
-		let home = app.path().app_data_dir().expect("the data folder resolves");
+		let home = app.data_dir().to_path_buf();
 		Runners {
 			path: a_path_carrying(&home, commands),
 			npm: NO_PACKAGE_REGISTRY.to_owned(),

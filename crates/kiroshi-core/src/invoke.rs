@@ -471,7 +471,7 @@ table! { core, client;
 	application_installs(conversation_id: String) =>
 		answered(crate::applications::commands::application_installs(core, conversation_id).await);
 	application_runnable(config: JsonValue) =>
-		plain(crate::applications::commands::application_runnable(core, config).await);
+		plain(crate::applications::commands::application_runnable(config).await);
 }
 
 pub async fn dispatch(core: &Core, command: &str, arguments: Value) -> Option<Answer> {
