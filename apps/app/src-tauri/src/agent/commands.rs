@@ -1,25 +1,14 @@
 pub use kiroshi_core::agent::commands::*;
 
-use crate::agent::contract::AccountReport;
-use crate::agent::contract::CancelOutcome;
-use crate::agent::contract::CheckReport;
-use crate::agent::contract::ConversationNaming;
-use crate::agent::contract::LiveSession;
-use crate::agent::contract::OfferedModel;
-use crate::agent::contract::PermissionDecision;
-use crate::agent::contract::RuntimeScope;
-use crate::agent::contract::ScopedEvent;
-use crate::agent::contract::SessionHandle;
-use crate::agent::contract::SubmittedTurn;
-use crate::agent::contract::TransportError;
+use crate::agent::contract::{
+	AccountReport, CancelOutcome, CheckReport, ConversationNaming, LiveSession, OfferedModel,
+	PermissionDecision, RuntimeScope, ScopedEvent, SessionHandle, SubmittedTurn, TransportError,
+};
 use crate::conversations::contract::TranscriptStoreError;
 use crate::hosting::authorship::CommandCaller;
 use crate::json::JsonValue;
 use std::collections::HashMap;
-use tauri::AppHandle;
-use tauri::Runtime;
-use tauri::State;
-use tauri::Webview;
+use tauri::{AppHandle, Runtime, State, Webview};
 
 #[tauri::command]
 #[specta::specta]

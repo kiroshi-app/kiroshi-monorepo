@@ -1,12 +1,9 @@
 pub use kiroshi_core::missions::commands::*;
 
-use crate::missions::contract::ConversationMissions;
-use crate::missions::contract::Mission;
-use crate::missions::contract::MissionDetail;
-use crate::missions::contract::MissionError;
-use crate::missions::contract::MissionInSpace;
-use crate::missions::contract::MissionOnBoard;
-use crate::missions::contract::MissionSpacePage;
+use crate::missions::contract::{
+	ConversationMissions, Mission, MissionDetail, MissionError, MissionInSpace, MissionOnBoard,
+	MissionSpacePage,
+};
 use tauri::State;
 
 #[tauri::command]

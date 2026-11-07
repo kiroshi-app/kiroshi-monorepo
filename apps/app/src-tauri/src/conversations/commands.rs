@@ -1,27 +1,12 @@
 pub use kiroshi_core::conversations::commands::*;
 
 use crate::agent::contract::AgentCommand;
-use crate::conversations::contract::Bot;
-use crate::conversations::contract::BotDraft;
-use crate::conversations::contract::BotIdentity;
-use crate::conversations::contract::Chat;
-use crate::conversations::contract::ContextCheckpoint;
-use crate::conversations::contract::Conversation;
-use crate::conversations::contract::ConversationInList;
-use crate::conversations::contract::ConversationPage;
-use crate::conversations::contract::MessageReference;
-use crate::conversations::contract::NewAssistantMessage;
-use crate::conversations::contract::NewTurn;
-use crate::conversations::contract::NewUserMessage;
-use crate::conversations::contract::PinnedBubble;
-use crate::conversations::contract::RuntimeSession;
-use crate::conversations::contract::SentMessage;
-use crate::conversations::contract::SoloState;
-use crate::conversations::contract::SuggestedBot;
-use crate::conversations::contract::TerminalCompletion;
-use crate::conversations::contract::TranscriptPage;
-use crate::conversations::contract::TranscriptStoreError;
-use crate::conversations::contract::TranscriptWindow;
+use crate::conversations::contract::{
+	Bot, BotDraft, BotIdentity, Chat, ContextCheckpoint, Conversation, ConversationInList,
+	ConversationPage, MessageReference, NewAssistantMessage, NewTurn, NewUserMessage, PinnedBubble,
+	RuntimeSession, SentMessage, SoloState, SuggestedBot, TerminalCompletion, TranscriptPage,
+	TranscriptStoreError, TranscriptWindow,
+};
 use crate::hosting::authorship::CommandCaller;
 use tauri::State;
 

@@ -2,8 +2,7 @@ pub use kiroshi_core::conversations::turn_run_deadline::*;
 
 use crate::conversations::contract::TranscriptStoreError;
 use crate::conversations::summons::SummonsDropReason;
-use tauri::AppHandle;
-use tauri::Runtime;
+use tauri::{AppHandle, Runtime};
 
 #[tauri::command]
 #[specta::specta]

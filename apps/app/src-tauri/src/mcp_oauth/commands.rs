@@ -1,13 +1,10 @@
 pub use kiroshi_core::mcp_oauth::commands::*;
 
-use crate::environment::contract::EnvError;
-use crate::environment::contract::EnvOwner;
+use crate::environment::contract::{EnvError, EnvOwner};
 use crate::hosting::authorship::CommandCaller;
-use crate::mcp_oauth::contract::Disconnected;
-use crate::mcp_oauth::contract::OauthError;
+use crate::mcp_oauth::contract::{Disconnected, OauthError};
 use crate::mcp_oauth::status::ApplicationRow;
-use tauri::AppHandle;
-use tauri::Runtime;
+use tauri::{AppHandle, Runtime};
 
 #[tauri::command]
 #[specta::specta]
