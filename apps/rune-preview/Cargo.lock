@@ -2091,15 +2091,24 @@ dependencies = [
 ]
 
 [[package]]
-name = "kiroshi-rune-preview"
+name = "kiroshi-rune-kit"
 version = "0.0.0"
 dependencies = [
  "katex-native",
- "kiroshi-core",
- "libc",
  "rune",
  "rune-kit",
  "rune-motion",
+]
+
+[[package]]
+name = "kiroshi-rune-preview"
+version = "0.0.0"
+dependencies = [
+ "kiroshi-core",
+ "kiroshi-rune-kit",
+ "libc",
+ "rune",
+ "rune-kit",
  "serde",
  "serde_json",
  "tokio",

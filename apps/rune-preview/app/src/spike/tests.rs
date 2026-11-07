@@ -7,8 +7,9 @@ use rune_kit::syntax::SyntaxTheme;
 use super::editor::Editor;
 use super::model::{LibraryBlockType, block_type_of};
 use super::view::{self, code_decorations, field_key};
-use crate::app::{App, Screen};
-use crate::tokens::{self, Tokens};
+use crate::app::App;
+use crate::navigation::Route;
+use kiroshi_rune_kit::tokens::{self, Tokens};
 
 const FRAME_BUDGET: Duration = Duration::from_millis(16);
 
@@ -19,7 +20,7 @@ fn spike_view(s: &App, cx: &mut Cx<App>) -> El {
 fn runtime(markdown: &str) -> Runtime<App> {
 	let mut app = App::new();
 	app.spike = Editor::from_markdown(markdown);
-	app.screen = Screen::BlockSpike;
+	app.navigation.navigate_main(Route::BlockSpike);
 	let text = TextSystem::new(tokens::FONTS, tokens::FAMILIES);
 	let mut rt = Runtime::with_text(app, spike_view, (1180.0, 780.0), Env::new(true, 2.0), text);
 	rt.frame(0.0);
@@ -261,7 +262,7 @@ fn spike_a_document_of_2000_blocks_lays_out_and_paints_its_first_frame_within_16
 	let opening = Instant::now();
 	let mut app = App::new();
 	app.spike = Editor::from_markdown(&markdown);
-	app.screen = Screen::BlockSpike;
+	app.navigation.navigate_main(Route::BlockSpike);
 	let opened = opening.elapsed();
 	assert_eq!(app.spike.blocks.len(), 2000);
 	let text = TextSystem::new(tokens::FONTS, tokens::FAMILIES);

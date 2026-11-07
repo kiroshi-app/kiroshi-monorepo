@@ -1,11 +1,11 @@
 use rune::{Color, Cursor, El, Icon, TextStyle, Tx, col, el, icon, oklcha, row, text};
 
 use crate::app::{App, Board, OpenMission};
-use crate::avatar::{Activity, Face, Motion};
 use crate::conversations::title_badge;
-use crate::icons;
 use crate::model::{Agent, Mission, MissionEvent, MissionState, Ticket};
-use crate::tokens::{
+use kiroshi_rune_kit::avatar::{Activity, Face, Motion};
+use kiroshi_rune_kit::icons;
+use kiroshi_rune_kit::tokens::{
 	RADIUS_BUBBLE, SPACING, TEXT_11, TEXT_BUBBLE, TEXT_SM, TEXT_SM_MEDIUM, TEXT_XS, TEXT_XS_MEDIUM,
 	Tokens,
 };
@@ -517,17 +517,15 @@ pub fn event_row(s: &App, open: &OpenMission, event: &MissionEvent, t: &Tokens, 
 }
 
 pub fn roster(s: &App, t: &Tokens, now: i64) -> El {
-	let header = row()
-		.h(32.0)
-		.pl(SPACING * 2.0)
-		.center_y()
-		.child(text("Missions").font(crate::tokens::TEXT_BASE_SEMIBOLD).color(t.foreground));
+	let header = row().h(32.0).pl(SPACING * 2.0).center_y().child(
+		text("Missions").font(kiroshi_rune_kit::tokens::TEXT_BASE_SEMIBOLD).color(t.foreground),
+	);
 	let list = match &s.board {
 		Board::Unread | Board::Reading => col()
 			.w_full()
 			.pt(SPACING * 4.0)
 			.items_center()
-			.child(crate::widgets::spinner(t.input, t.muted_foreground)),
+			.child(kiroshi_rune_kit::widgets::spinner(t.input, t.muted_foreground)),
 		Board::Failed(failure) => col().w_full().padding(SPACING * 2.0).child(
 			text(format!("Couldn't read the missions. {}: {}", failure.title(), failure.detail()))
 				.font(TEXT_XS)

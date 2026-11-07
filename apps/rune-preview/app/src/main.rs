@@ -1,49 +1,25 @@
-mod app;
-mod avatar;
-mod composer;
-mod content;
-mod conversations;
-mod dev_profile;
-mod discovery;
-mod events;
-mod host;
-mod hues;
-mod icons;
-mod images;
-mod local;
-mod longest;
-mod math;
-mod mission;
-mod model;
-mod onboarding;
-mod runs;
-mod scenes;
-mod smoke;
-mod source;
-mod spike;
-mod tokens;
-mod turn;
-mod widgets;
-
 use std::process::ExitCode;
 use std::time::Duration;
 
 use rune::{AppSpec, Cx, El, KeyEvent, Tx, Waker, el};
 use rune_kit::shell;
 
-use crate::app::{App, Screen};
-use crate::host::Profile;
+use kiroshi_rune_kit::tokens;
+use kiroshi_rune_preview::app::App;
+use kiroshi_rune_preview::host::Profile;
+use kiroshi_rune_preview::navigation::Route;
+use kiroshi_rune_preview::{composer, conversations, local, onboarding, scenes, smoke, spike};
 
 fn view(s: &App, cx: &mut Cx<App>) -> El {
 	let dark = cx.system_dark();
 	let t = tokens::Tokens { reduced_motion: cx.is_reduced_motion(), ..tokens::Tokens::new(dark) };
-	if let Screen::BlockSpike = s.screen {
+	if let Route::BlockSpike = s.navigation.main_route() {
 		return spike::view::view(s, cx, &t);
 	}
 	let k = t.kit();
-	let body = match s.screen {
-		Screen::Onboarding(step) => onboarding::view(step, s, &k, &t.in_space(Some(tokens::BLUE))),
-		Screen::Conversations => {
+	let body = match s.navigation.main_route() {
+		Route::Onboarding(step) => onboarding::view(step, s, &k, &t.in_space(Some(tokens::BLUE))),
+		Route::Conversations => {
 			let viewport = conversations::Viewport {
 				inset: cx.titlebar_inset(),
 				transcript_height: cx.layout(conversations::TRANSCRIPT).map(|rect| rect[3]),
@@ -54,7 +30,22 @@ fn view(s: &App, cx: &mut Cx<App>) -> El {
 			};
 			conversations::view(s, &k, &t, &viewport)
 		}
-		Screen::BlockSpike => el(),
+		Route::BlockSpike
+		| Route::Chrome
+		| Route::Rail
+		| Route::Roster
+		| Route::Boot
+		| Route::Thread
+		| Route::Composer
+		| Route::Approvals
+		| Route::Missions
+		| Route::Routines
+		| Route::AgentSettings
+		| Route::Applications
+		| Route::PersonSettings
+		| Route::SpaceSettings
+		| Route::Library
+		| Route::Boards => el(),
 	};
 	rune_kit::root(body, Vec::new())
 }
@@ -72,7 +63,7 @@ fn setup(s: &mut App, waker: Waker) {
 	}
 	s.uses_host_api = flagged(DEV_HOST) || flagged(HOST_API);
 	if flagged(DEV_HOST) || flagged(SKIP_ONBOARDING) {
-		s.screen = Screen::Conversations;
+		s.navigation.navigate_main(Route::Conversations);
 	}
 	s.setup(waker);
 }

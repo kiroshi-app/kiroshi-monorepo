@@ -11,7 +11,7 @@ use rune_kit::{PopupItem, PopupList};
 use super::editor::{EditorBlock, KeyOutcome, SLASH_CHOICES, Shape};
 use super::model::LibraryBlockType;
 use crate::app::App;
-use crate::tokens::{
+use kiroshi_rune_kit::tokens::{
 	RADIUS_MD, SPACING, TEXT_BUBBLE, TEXT_COMPACT_MONO, TEXT_SM_SEMIBOLD, TEXT_TITLE, Tokens,
 };
 
