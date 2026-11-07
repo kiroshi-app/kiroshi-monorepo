@@ -4288,8 +4288,12 @@ fn the_shared_space_check_names_a_missing_required_id_as_absent() {
 		let guest = Guest::of_two_spaces("refusal-absent").await;
 
 		let missing = shared_space_refusal(&guest, "conversation_message_page", json!({})).await;
-		let null =
-			shared_space_refusal(&guest, "conversation_message_page", json!({ "conversationId": null })).await;
+		let null = shared_space_refusal(
+			&guest,
+			"conversation_message_page",
+			json!({ "conversationId": null }),
+		)
+		.await;
 
 		let absent = reach::Refusal::Unheld {
 			held: held_of("conversation_message_page", 0),

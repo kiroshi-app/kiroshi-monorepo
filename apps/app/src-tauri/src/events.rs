@@ -11,9 +11,9 @@ use tauri::{
 use tokio::sync::{broadcast, oneshot};
 
 use tauri::image::Image;
-use tauri_plugin_clipboard_manager::ClipboardExt;
-use tauri_plugin_dialog::DialogExt;
-use tauri_plugin_opener::OpenerExt;
+use tauri_plugin_clipboard_manager::Clipboard;
+use tauri_plugin_dialog::Dialog;
+use tauri_plugin_opener::Opener;
 
 use crate::core_context::{
 	Audience, ChosenPath, ClientId, ClientScoped, Copied, Core, Desktop, EmitError, RenderWindow,
@@ -110,11 +110,18 @@ pub fn install_core<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Core> {
 	Ok(core)
 }
 
+const NO_OPENER: &str = "the opener plugin is not installed";
+
+const NO_CLIPBOARD: &str = "the clipboard plugin is not installed";
+
+const NO_DIALOG: &str = "the dialog plugin is not installed";
+
 struct TauriDesktop<R: Runtime>(AppHandle<R>);
 
 impl<R: Runtime> Desktop for TauriDesktop<R> {
 	fn open_url(&self, url: &str) -> Result<(), String> {
-		self.0.opener().open_url(url, None::<&str>).map_err(|failure| failure.to_string())
+		let opener = self.0.try_state::<Opener<R>>().ok_or(NO_OPENER)?;
+		opener.open_url(url, None::<&str>).map_err(|failure| failure.to_string())
 	}
 
 	fn raise_main_window(&self) {
@@ -144,11 +151,12 @@ impl<R: Runtime> Desktop for TauriDesktop<R> {
 	}
 
 	fn reveal(&self, path: &Path) -> Result<(), String> {
-		self.0.opener().reveal_item_in_dir(path).map_err(|failure| failure.to_string())
+		let opener = self.0.try_state::<Opener<R>>().ok_or(NO_OPENER)?;
+		opener.reveal_item_in_dir(path).map_err(|failure| failure.to_string())
 	}
 
 	fn copy(&self, copied: Copied) -> Result<(), String> {
-		let clipboard = self.0.clipboard();
+		let clipboard = self.0.try_state::<Clipboard<R>>().ok_or(NO_CLIPBOARD)?;
 		let written = match copied {
 			Copied::Text(text) => clipboard.write_text(text),
 			Copied::Image { rgba, width, height } => {
@@ -159,8 +167,11 @@ impl<R: Runtime> Desktop for TauriDesktop<R> {
 	}
 
 	fn chosen_save_path(&self, suggested: String) -> ChosenPath {
+		let Some(dialog) = self.0.try_state::<Dialog<R>>() else {
+			return Box::pin(async { Err(NO_DIALOG.to_owned()) });
+		};
 		let (answer, answered) = oneshot::channel();
-		self.0.dialog().file().set_file_name(suggested).save_file(move |chosen| {
+		dialog.file().set_file_name(suggested).save_file(move |chosen| {
 			if answer.send(chosen).is_err() {
 				log::warn!("a save dialog answered after its caller was dropped");
 			}
