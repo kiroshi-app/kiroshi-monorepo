@@ -192,7 +192,7 @@ fn emitting<S: 'static>(control: El, emit: &Emit<S>, event: MissionsEvent) -> El
 	control.on_press(move |s: &mut S| emit(s, event.clone()))
 }
 
-pub fn filled(key: Key, language: Language, values: &[(&str, &str)]) -> String {
+fn filled(key: Key, language: Language, values: &[(&str, &str)]) -> String {
 	values.iter().fold(key.text(language).to_owned(), |line, (name, value)| {
 		line.replace(&format!("{{{{{name}}}}}"), value)
 	})
@@ -244,7 +244,7 @@ fn named_tool_mark(tool: &str) -> Option<&'static Icon> {
 	}
 }
 
-pub fn tool_glyph(tool: &str) -> &'static Icon {
+fn tool_glyph(tool: &str) -> &'static Icon {
 	named_tool_mark(tool).unwrap_or(&icons::TOOL)
 }
 
@@ -540,17 +540,26 @@ pub fn mission_row<S: 'static>(
 				.w(ROW_STAMP),
 		);
 	}
-	let mut preview_line = row().h(SPACING * 4.0).min_w(0.0).center_y();
-	preview_line = preview_line.child(row_preview(t, language, mission));
 	let dot_slot = row().w(ROW_PREVIEW_END).h(SPACING * 4.0).justify_end().center_y();
-	preview_line = preview_line.child(match mission.state.row_dot(t) {
+	let dot_slot = match mission.state.row_dot(t) {
 		Some(dot) => dot_slot
 			.child(el().size(ROW_DOT, ROW_DOT).radius(ROW_DOT / 2.0).fill(dot).a11y_hidden()),
 		None => dot_slot,
-	});
-	let mut stack =
-		col().min_h(ROW_STACK).min_w(0.0).grow(1.0).shrink().justify_center().child(name_line);
-	stack = stack.child(preview_line);
+	};
+	let preview_line = row()
+		.h(SPACING * 4.0)
+		.min_w(0.0)
+		.center_y()
+		.child(row_preview(t, language, mission))
+		.child(dot_slot);
+	let mut stack = col()
+		.min_h(ROW_STACK)
+		.min_w(0.0)
+		.grow(1.0)
+		.shrink()
+		.justify_center()
+		.child(name_line)
+		.child(preview_line);
 	if has_activity_line(mission.commits_ahead, mission.pull_request) {
 		stack = stack.child(activity_line(
 			t,
@@ -967,7 +976,7 @@ pub fn mission_header_skeleton<S: 'static>(t: &Tokens, language: Language, emit:
 		.child(rule(t))
 }
 
-pub const EVENT_GUTTER: f32 = SPACING * 10.0;
+const EVENT_GUTTER: f32 = SPACING * 10.0;
 const EVENT_GUTTER_MARK: f32 = 18.0;
 const EVENT_DOT: f32 = SPACING * 1.5;
 const EVENT_BUBBLE_SHARE: f32 = 0.85;
@@ -1362,7 +1371,7 @@ fn fold_head<S: 'static>(
 	emitting(head, emit, MissionsEvent::ToggleEarlierToday)
 }
 
-pub fn panel_rows<S: 'static>(
+fn panel_rows<S: 'static>(
 	t: &Tokens,
 	language: Language,
 	missions: &[PanelMission],
