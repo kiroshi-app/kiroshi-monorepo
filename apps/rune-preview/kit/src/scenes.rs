@@ -213,6 +213,12 @@ pub static SCENES: &[Scene] = &[
 	scene("overlays-tooltip--on-dark-surface", OVERLAY, overlays::tooltip_default),
 ];
 
+pub static SURFACES: &[&[Scene]] = &[crate::surfaces::s01_chrome::SCENES];
+
+pub fn every_scene() -> impl Iterator<Item = &'static Scene> {
+	SCENES.iter().chain(SURFACES.iter().flat_map(|surface| surface.iter()))
+}
+
 pub struct SceneState {
 	pub scene: &'static Scene,
 	pub edit: TextEdit,
