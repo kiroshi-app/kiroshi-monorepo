@@ -252,4 +252,5 @@ CodeQL reports three alerts on `ae115e9c0`. They are pre-existing code that the 
 - `crates/kiroshi-core/src/crypto/frame.rs:92`: hard-coded nonce. The line is the zeroed buffer the nonce is built in (`let mut nonce = [0u8; NONCE_LENGTH];`).
 - `crates/kiroshi-core/src/mcp_oauth/refresh.rs:266`: cleartext logging, the `eprintln!` reporting that a grant was not refreshed.
 - `crates/kiroshi-core/src/mcp_oauth/refresh.rs:269`: cleartext logging, the `eprintln!` reporting that the authorization server refused a refresh.
+- **No rustc wrapper in `core`.** `.cargo/config.toml` routes rustc through `.cargo/rustc-wrapper.sh`, a shell script Windows can't execute, so the first Windows run failed before compiling anything. The `core` job sets `RUSTC_WRAPPER: ""`, as `release.yml` does. In CI the wrapper only passes rustc through anyway.
 
