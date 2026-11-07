@@ -231,6 +231,8 @@ Never push to `main`. Always work on feature branches.
 
 Right after `gh pr create`, run `scripts/pr-enqueue.sh` alone in its own Bash call: it arms auto-merge with the squash method on the PR of the current branch and fails if it is not armed. The PR squash-merges as soon as its fast gate is green: lint, types, baseline, the touched tests and `verify`.
 
+A PR whose base is not main is merged by `scripts/pr-merge-sub.sh` alone in its own Bash call: it squash-merges the PR of the current branch once every check on its head is green, and refuses a base of main, a draft, a conflict or a file owned in `.github/CODEOWNERS`.
+
 Auto-merge armed and a fix must land: run `scripts/pr-dequeue.sh` to disarm it, push, then run `scripts/pr-enqueue.sh` again. Never close the PR.
 
 Every push to main runs the full verify: lint, then vitest, website, rust and storybook on the paths it changed, then ios. A red run opens the Red main ticket. A fix PR merges on its own fast gate whatever the state of main.
