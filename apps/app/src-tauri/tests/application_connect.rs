@@ -11,7 +11,7 @@ use kiroshi_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
 use kiroshi_app::agent::AgentState;
 use kiroshi_app::environment::contract::{
 	EnvOwner, EnvScope, Values, OAUTH_ACCESS_TOKEN, OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET,
-	OAUTH_REASON, OAUTH_REDIRECT_URI,
+	OAUTH_REASON, OAUTH_REDIRECT_URI, OAUTH_SERVER_URL,
 };
 use kiroshi_app::environment::store;
 use kiroshi_app::mcp_oauth::commands::{mcp_oauth_connect, McpOauthState};
@@ -120,6 +120,7 @@ fn granted_anew() -> Values {
 		(OAUTH_CLIENT_ID.to_owned(), "registered-anew".to_owned()),
 		(OAUTH_CLIENT_SECRET.to_owned(), "confidential-anew".to_owned()),
 		(OAUTH_REDIRECT_URI.to_owned(), "http://127.0.0.1:61000/oauth/callback".to_owned()),
+		(OAUTH_SERVER_URL.to_owned(), URL.to_owned()),
 	])
 }
 
