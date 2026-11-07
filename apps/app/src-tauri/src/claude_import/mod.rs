@@ -1,6 +1,6 @@
 pub mod commands;
 pub use kiroshi_core::claude_import::contract;
-mod import;
+use kiroshi_core::claude_import::import;
 pub use kiroshi_core::claude_import::inventory;
 pub use kiroshi_core::claude_import::source;
 

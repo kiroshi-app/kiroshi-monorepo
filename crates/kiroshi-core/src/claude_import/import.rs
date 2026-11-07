@@ -16,12 +16,12 @@ const CLAUDE_MD_DESCRIPTION: &str = "The person's own instructions, carried over
 const FINDER_LITTER: &str = ".DS_Store";
 const IMPORT_REASON: &str = "imported from Claude Code";
 
-pub(super) struct Importer<'a> {
-	pub(super) core: &'a crate::core_context::Core,
-	pub(super) database: &'a db::Database,
-	pub(super) root: &'a Path,
-	pub(super) person: Option<&'a Path>,
-	pub(super) space_id: &'a str,
+pub struct Importer<'a> {
+	pub core: &'a crate::core_context::Core,
+	pub database: &'a db::Database,
+	pub root: &'a Path,
+	pub person: Option<&'a Path>,
+	pub space_id: &'a str,
 }
 
 struct Created {
@@ -64,7 +64,7 @@ impl From<TranscriptStoreError> for Unimported {
 }
 
 impl Importer<'_> {
-	pub(super) async fn run(
+	pub async fn run(
 		&self,
 		selection: Vec<String>,
 	) -> Result<Vec<ClaudeImportOutcome>, TranscriptStoreError> {
