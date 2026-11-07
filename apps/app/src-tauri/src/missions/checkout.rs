@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::future::Future;
 use std::path::Path;
 use std::process::Stdio;
 use std::time::Duration;
@@ -15,6 +16,8 @@ pub const GIT_TIMEOUT: Duration = Duration::from_secs(5);
 const AHEAD_OF_MAIN: [&str; 3] = ["rev-list", "--count", "origin/main..HEAD"];
 
 const STATUS: [&str; 2] = ["status", "--porcelain"];
+
+pub(super) const UNMONITORED: [&str; 2] = ["-c", "core.fsmonitor=false"];
 
 #[cfg(windows)]
 pub(super) const CREATE_NO_WINDOW: u32 = 0x0800_0000;
@@ -91,7 +94,14 @@ pub(crate) fn told<R: Runtime>(app: &AppHandle<R>, mission: &Mission) {
 }
 
 async fn read(workspace: &str, limit: Duration) -> Read {
-	match tokio::time::timeout(limit, counts(workspace)).await {
+	bounded(limit, counts(workspace)).await
+}
+
+async fn bounded(
+	limit: Duration,
+	counting: impl Future<Output = Result<CheckoutCounts, String>>,
+) -> Read {
+	match tokio::time::timeout(limit, counting).await {
 		Ok(Ok(counts)) => Read::Counted(counts),
 		Ok(Err(detail)) => Read::Unread(detail),
 		Err(_) => Read::Abandoned,
@@ -113,6 +123,7 @@ async fn counts(workspace: &str) -> Result<CheckoutCounts, String> {
 async fn answered(workspace: &str, arguments: &[&str]) -> Result<String, String> {
 	let mut command = Command::new("git");
 	command
+		.args(UNMONITORED)
 		.arg("-C")
 		.arg(workspace)
 		.args(arguments)
@@ -278,22 +289,29 @@ mod tests {
 		fs::remove_dir_all(&root).expect("cleanup");
 	}
 
+	#[tokio::test]
+	async fn a_read_past_its_limit_is_abandoned() {
+		let held = bounded(Duration::from_millis(50), std::future::pending()).await;
+
+		assert_eq!(held, Read::Abandoned);
+	}
+
 	#[cfg(unix)]
 	#[tokio::test]
-	async fn a_git_read_past_its_limit_is_abandoned() {
+	async fn a_checkout_read_never_runs_the_fsmonitor_the_repository_names() {
 		use crate::executable_script::an_executable_script;
 
 		let root = temp_dir();
 		let checkout = a_checkout(&root);
-		let monitor = root.join("slow-monitor.sh");
-		an_executable_script(&monitor, "#!/bin/sh\nsleep 30\n");
+		let marker = root.join("monitor-ran");
+		let monitor = root.join("monitor.sh");
+		an_executable_script(&monitor, &format!("#!/bin/sh\ntouch {}\n", marker.display()));
 		git(&checkout, &["config", "core.fsmonitor", &monitor.to_string_lossy()]);
 
-		let started = std::time::Instant::now();
-		let held = read(&checkout.to_string_lossy(), Duration::from_millis(500)).await;
+		let held = read(&checkout.to_string_lossy(), GIT_TIMEOUT).await;
 
-		assert_eq!(held, Read::Abandoned);
-		assert!(started.elapsed() < Duration::from_secs(10), "the read was not abandoned");
+		assert_eq!(held, Read::Counted(CheckoutCounts { commits_ahead: 2, dirty_files: 2 }));
+		assert!(!marker.exists(), "the fsmonitor of the repository ran");
 
 		fs::remove_dir_all(&root).expect("cleanup");
 	}

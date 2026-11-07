@@ -136,7 +136,13 @@ fn leasable(branch: &str) -> bool {
 
 fn checked_out(root: &Path) -> Option<String> {
 	let mut command = Command::new("git");
-	command.arg("-C").arg(root).args(CURRENT_BRANCH).stdin(Stdio::null()).stderr(Stdio::null());
+	command
+		.args(super::super::checkout::UNMONITORED)
+		.arg("-C")
+		.arg(root)
+		.args(CURRENT_BRANCH)
+		.stdin(Stdio::null())
+		.stderr(Stdio::null());
 
 	#[cfg(windows)]
 	std::os::windows::process::CommandExt::creation_flags(
