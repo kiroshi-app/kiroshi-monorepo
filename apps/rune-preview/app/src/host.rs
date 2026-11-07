@@ -47,7 +47,10 @@ pub enum Profile {
 }
 
 impl Profile {
-	pub fn identifier(self) -> &'static str {
+	pub const BUILT: Profile =
+		if cfg!(debug_assertions) { Profile::Dev } else { Profile::Installed };
+
+	pub const fn identifier(self) -> &'static str {
 		match self {
 			Profile::Dev => "com.kiroshi.app.dev",
 			Profile::Installed => "com.kiroshi.app",

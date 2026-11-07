@@ -220,9 +220,9 @@ The kept core of `apps/app/src-tauri` moves to a crate with no Tauri dependency,
 
 ## Step 3: the Rune preview on an in-process kiroshi-core
 
-- **The in-process Core.** `apps/rune-preview` depends on `crates/kiroshi-core`. `src/local.rs` builds a `Core` on a tokio runtime the preview owns, over a data folder of its own:
+- **The in-process Core.** `apps/rune-preview` depends on `crates/kiroshi-core`. `src/local.rs` builds a `Core` on a tokio runtime the preview owns, over the data folder of the Kiroshi app:
   - `KIROSHI_PREVIEW_DATA` if set;
-  - otherwise `com.kiroshi.rune-preview` under the platform's data root, so it never writes into the installed app's database.
+  - otherwise, under the platform's data root, `com.kiroshi.app` from a release build and `com.kiroshi.app.dev` from a dev build, the profiles the Tauri app writes, opened as they are.
 
   It installs the database and the states the conversation path reads (`AgentState`, `TurnRunDeadlines`, `TurnWindows`, `LaunchOutcomeState`). It then runs the app's own launch step, `list_bundles_at_launch`, which lays the plugins down and plants the first companion.
 - **The path.** Every call is a kiroshi-core function, with no Tauri, no IPC and no fabricated data:

@@ -1443,6 +1443,23 @@ describe("the jobs of ci.yml", () => {
 		expect(releaseWorkflow.jobs.publish?.needs).toEqual(["draft", "release"])
 	})
 
+	it("has release.yml gate the desktop jobs on ci-green and the Rune jobs on the draft alone", () => {
+		expect(releaseWorkflow.jobs.draft?.needs).toBeUndefined()
+		expect(releaseWorkflow.jobs.release?.needs).toEqual(["ci-green", "draft"])
+		expect(releaseWorkflow.jobs.rune?.needs).toBe("draft")
+	})
+
+	it("has every Rune job sign its package with the updater key and attach it to the tag", () => {
+		const runs = (releaseWorkflow.jobs.rune?.steps ?? []).map(
+			(step) => step.run ?? "",
+		)
+
+		expect(runs.some((run) => run.includes("tauri signer sign"))).toBe(true)
+		expect(
+			runs.some((run) => run.includes('gh release upload "$GITHUB_REF_NAME"')),
+		).toBe(true)
+	})
+
 	it("has both tauri-action steps upload into the draft job's release, kept a draft", () => {
 		const tauriSteps = (releaseWorkflow.jobs.release?.steps ?? []).filter(
 			(step) => step.uses?.startsWith("tauri-apps/tauri-action@"),
