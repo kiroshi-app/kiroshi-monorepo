@@ -274,10 +274,10 @@ mod tests {
 	use super::*;
 	use crate::db::connection::fixture_root;
 	use crate::db::repositories::conversations::{Bot, BotIdentity};
-	use crate::plugins::commands::{plugin_mcp_servers, plugin_skills};
 	use crate::plugins::contract::PluginScope;
 	use crate::removed_on_drop::RemovedOnDrop;
 	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
+	use kiroshi_core::plugins::commands::{plugin_mcp_servers, plugin_skills};
 	use tauri::test::mock_builder;
 	use tauri::Manager;
 
@@ -344,9 +344,9 @@ mod tests {
 
 	async fn counted_by_plugin(app: &AppOfItsOwn, bot_id: &str) -> (u64, u64) {
 		let scope = PluginScope::Bot { id: bot_id.to_owned() };
-		let handle = app.handle().clone();
-		let skills = plugin_skills(handle.clone(), scope.clone()).await.expect("the skills read");
-		let servers = plugin_mcp_servers(handle, scope).await.expect("the servers read");
+		let core = crate::events::core(app.handle());
+		let skills = plugin_skills(core, scope.clone()).await.expect("the skills read");
+		let servers = plugin_mcp_servers(core, scope).await.expect("the servers read");
 		(skills.len() as u64, servers.len() as u64)
 	}
 

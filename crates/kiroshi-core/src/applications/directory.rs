@@ -1034,8 +1034,8 @@ pub mod tests {
 
 	fn refreshes_heard(app: &CoreOfItsOwn) -> tokio::sync::mpsc::UnboundedReceiver<String> {
 		let (told, heard) = tokio::sync::mpsc::unbounded_channel();
-		app.listen_any(APPLICATION_DIRECTORY_REFRESHED.name(), move |event| {
-			told.send(event.payload().to_owned()).expect("the test listens");
+		app.listen_to(APPLICATION_DIRECTORY_REFRESHED.name(), move |payload| {
+			told.send(payload.to_owned()).expect("the test listens");
 		});
 		heard
 	}
