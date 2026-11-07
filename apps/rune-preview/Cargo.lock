@@ -2265,6 +2265,7 @@ dependencies = [
 name = "kiroshi-rune-preview"
 version = "0.0.0"
 dependencies = [
+ "base64 0.22.1",
  "kiroshi-core",
  "kiroshi-rune-kit",
  "kiroshi-rune-os",
@@ -2277,6 +2278,7 @@ dependencies = [
  "tungstenite",
  "ureq",
  "uuid",
+ "yrs",
 ]
 
 [[package]]
