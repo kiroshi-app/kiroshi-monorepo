@@ -72,6 +72,11 @@ impl<S: 'static> Wiring<S> {
 		let emit = self.emit;
 		control.on_press(move |s: &mut S| emit(s, event.clone()))
 	}
+
+	fn on_submit(self, control: El) -> El {
+		let emit = self.emit;
+		control.on_submit(move |s: &mut S, _| emit(s, SpaceEvent::Save))
+	}
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -342,7 +347,6 @@ fn field_box<S: 'static>(
 	edit: &TextEdit,
 	label: &str,
 	placeholder: &str,
-	plain: bool,
 	access: fn(&mut S) -> &mut TextEdit,
 ) -> El {
 	let style = TextStyle { line_height: TEXT_SM.size, ..TEXT_SM };
@@ -355,14 +359,14 @@ fn field_box<S: 'static>(
 		.py((FIELD_HEIGHT - style.size) / 2.0)
 		.radius(RADIUS_CONTROL)
 		.border(1.0, t.input)
-		.fill(if plain { Color::TRANSPARENT } else { t.muted })
+		.fill(t.muted)
 		.color(t.foreground)
 		.placeholder(placeholder, t.muted_foreground)
 		.caret(t.foreground, t.selection)
 		.label(label)
 		.focus_ring(FOCUS_RING_WIDTH, 0.0, ring_tint(t, 0.3))
 		.on_edit(access);
-	instant(if plain { control.read_only(true) } else { control })
+	instant(control)
 }
 
 fn read_only_box(t: &Tokens, value: &str, label: &str) -> El {
@@ -620,17 +624,9 @@ pub fn space_fields<S: 'static>(
 			name,
 			say(settings::space::name::LABEL),
 			say(settings::space::name::PLACEHOLDER),
-			false,
 			w.name,
 		)));
 	col().w_full().gap(SPACING * 5.0).child(name_field).child(colour_field(t, value.colour, w))
-}
-
-impl<S: 'static> Wiring<S> {
-	fn on_submit(self, control: El) -> El {
-		let emit = self.emit;
-		control.on_submit(move |s: &mut S, _| emit(s, SpaceEvent::Save))
-	}
 }
 
 pub fn joined_fields(t: &Tokens, value: SpaceValue, host: &str) -> El {
@@ -784,16 +780,18 @@ fn question<S: 'static>(t: &Tokens, asked: Question, w: Wiring<S>) -> El {
 }
 
 fn danger_question<S: 'static>(t: &Tokens, danger: Danger, name: &str, w: Wiring<S>) -> El {
-	let (action, description, _) = danger_copy(danger);
-	let (title, event) = match danger {
-		Danger::Delete { .. } => {
-			(fill(settings::space::danger::confirm::TITLE, &[("name", name)]), SpaceEvent::Delete)
-		}
-		Danger::Leave => (fill(common::spaces::leave::TITLE, &[("name", name)]), SpaceEvent::Leave),
-	};
-	let description = match danger {
-		Danger::Delete { .. } => say(settings::space::danger::DESCRIPTION),
-		Danger::Leave => description,
+	let (action, _, _) = danger_copy(danger);
+	let (title, description, event) = match danger {
+		Danger::Delete { .. } => (
+			fill(settings::space::danger::confirm::TITLE, &[("name", name)]),
+			say(settings::space::danger::DESCRIPTION),
+			SpaceEvent::Delete,
+		),
+		Danger::Leave => (
+			fill(common::spaces::leave::TITLE, &[("name", name)]),
+			say(common::spaces::leave::DESCRIPTION),
+			SpaceEvent::Leave,
+		),
 	};
 	question(
 		t,
@@ -990,16 +988,10 @@ fn invite_field<S: 'static>(t: &Tokens, m: &Members, host: &str, w: Wiring<S>) -
 		None => fill(settings::space::members::invite::NOT_SHARED, &[("name", m.space)]),
 	};
 	let label = say(settings::space::members::invite::LABEL);
-	let input = field_box(
-		t,
-		m.email,
-		label,
-		say(settings::space::members::invite::PLACEHOLDER),
-		false,
-		w.email,
-	)
-	.invalid(message.is_some())
-	.description(message.clone().unwrap_or_else(|| hint.clone()));
+	let input =
+		field_box(t, m.email, label, say(settings::space::members::invite::PLACEHOLDER), w.email)
+			.invalid(message.is_some())
+			.description(message.clone().unwrap_or_else(|| hint.clone()));
 	let input = if blocked { input.disabled(true).opacity(DISABLED_OPACITY) } else { input };
 	let invite = Button::new(say(settings::space::members::invite::ACTION))
 		.disabled(blocked || empty)
