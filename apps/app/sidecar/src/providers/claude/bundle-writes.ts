@@ -57,9 +57,15 @@ const pathInside = (
 	return inside
 }
 
+const asFilesystemResolvesIt = (entry: string): string =>
+	entry
+		.normalize("NFKC")
+		.toLowerCase()
+		.replace(/[. ]+$/, "")
+
 const isOpenEntry = (inside: string): boolean => {
 	const [entry = ""] = inside.split(sep)
-	return !RESERVED.has(entry)
+	return !RESERVED.has(asFilesystemResolvesIt(entry))
 }
 
 export const isBundleWrite = (
