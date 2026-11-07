@@ -1203,7 +1203,6 @@ mod tests {
 	use crate::events::Frame;
 	use crate::routines::runner::read;
 	use crate::test_core::a_core_of_its_own;
-	use crate::test_log::{capturing, infos_naming};
 	fn speaking_as(scope: RuntimeScope) -> Speaker {
 		Speaker { scope, written: Vec::new(), is_in_line: false }
 	}
@@ -1382,10 +1381,12 @@ mod tests {
 		page.messages.iter().map(|message| message.state).collect()
 	}
 
+	#[cfg(unix)]
 	fn summons_steps(room: &Room, bot_id: &str) -> Vec<String> {
 		summons::traced_steps(&room.id, bot_id)
 	}
 
+	#[cfg(unix)]
 	fn received_from_ada(room: &Room) {
 		let handing = format!("<@{}> over to you", room.bot_ids[1]);
 		summons::note_received(&room.id, &format!("reply-of-{}", room.bot_ids[0]), &handing);
@@ -2131,6 +2132,7 @@ mod tests {
 		use super::*;
 		use crate::agent::stub_session::{a_session_held_for, a_session_running, HeldSession};
 		use crate::removed_on_drop::RemovedOnDrop;
+		use crate::test_log::{capturing, infos_naming};
 
 		fn submitted(turn_id: &str, prompt_id: &str) -> SubmittedTurn {
 			SubmittedTurn { turn_id: turn_id.to_owned(), prompt_id: prompt_id.to_owned() }

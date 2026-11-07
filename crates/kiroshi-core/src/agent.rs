@@ -7,7 +7,7 @@ pub mod redact;
 pub mod reply_writer;
 pub mod session;
 pub mod sidecar;
-#[cfg(any(test, feature = "test-support"))]
+#[cfg(all(any(test, feature = "test-support"), unix))]
 pub mod stub_session;
 pub mod translate;
 pub mod web_sources;

@@ -253,4 +253,10 @@ CodeQL reports three alerts on `ae115e9c0`. They are pre-existing code that the 
 - `crates/kiroshi-core/src/mcp_oauth/refresh.rs:266`: cleartext logging, the `eprintln!` reporting that a grant was not refreshed.
 - `crates/kiroshi-core/src/mcp_oauth/refresh.rs:269`: cleartext logging, the `eprintln!` reporting that the authorization server refused a refresh.
 - **No rustc wrapper in `core`.** `.cargo/config.toml` routes rustc through `.cargo/rustc-wrapper.sh`, a shell script Windows can't execute, so the first Windows run failed before compiling anything. The `core` job sets `RUSTC_WRAPPER: ""`, as `release.yml` does. In CI the wrapper only passes rustc through anyway.
+- **Tests gated to unix.** kiroshi-core's tests had never been compiled for Windows. In src-tauri they only ever ran on macOS and Linux, and some test code assumed unix without saying so. That code is now `cfg(unix)`; no test was deleted or ignored, and on Windows the tests below are compiled out:
+  - `agent::stub_session` (test-support): its stub agent is an executable shell script written through the unix-only `executable_script`.
+  - The tests that hold a session through it: every test in `conversations::host_turn::tests::in_a_session_queue` (already `cfg(unix)`), and `missions::host::tests::a_handoff_answers_while_the_turn_of_its_successor_still_runs`.
+  - `bundles::tests::a_turn_git_refuses_reports_the_error_and_is_recorded_once_git_is_repaired` and `bundles::plugin::tests::a_turn_git_refuses_reports_the_error_and_is_recorded_once_git_is_repaired`: they turn a git objects folder read-only through unix permission bits (`read_only_objects`).
+
+  Imports and helpers used only by those tests are gated with them. kiroshi-core's tests and the preview now type-check for `x86_64-pc-windows-gnu` locally with no warning.
 

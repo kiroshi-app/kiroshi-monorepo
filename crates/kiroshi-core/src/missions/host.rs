@@ -400,14 +400,19 @@ mod tests {
 	use super::super::contract::{MissionEvent, MissionState};
 	use super::*;
 	use crate::removed_on_drop::RemovedOnDrop;
+	#[cfg(unix)]
 	use std::time::Duration;
 
+	#[cfg(unix)]
 	use crate::agent::contract::RuntimeScope;
+	#[cfg(unix)]
 	use crate::agent::stub_session::a_session_held_for;
 	use crate::conversations::contract::{SummonsDropped, SUMMONS_DROPPED_EVENT};
 	use crate::conversations::summons::SummonsDropReason;
 	use crate::test_core::{a_core_of_its_own, CoreOfItsOwn};
-	use crate::test_log::{capturing, infos_naming, warnings_naming};
+	#[cfg(unix)]
+	use crate::test_log::infos_naming;
+	use crate::test_log::{capturing, warnings_naming};
 
 	const A_SPACE: &str = "
 		INSERT INTO bots (id, name, model, created_at)
@@ -1375,6 +1380,7 @@ mod tests {
 		);
 	}
 
+	#[cfg(unix)]
 	#[tokio::test]
 	async fn a_handoff_answers_while_the_turn_of_its_successor_still_runs() {
 		capturing();

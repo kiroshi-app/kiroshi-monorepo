@@ -170,7 +170,9 @@ fn about(descriptor: &Descriptor) -> std::io::Result<String> {
 #[cfg(test)]
 mod tests {
 	use super::super::space::PLUGIN;
-	use super::super::tests::{an_unreadable_index, read_only_objects, recorded};
+	#[cfg(unix)]
+	use super::super::tests::read_only_objects;
+	use super::super::tests::{an_unreadable_index, recorded};
 	use super::super::user;
 	use super::super::{INVOCATION_KEY, LEARNED_NAME};
 	use super::*;
@@ -290,6 +292,7 @@ mod tests {
 		let _ = fs::remove_dir_all(&path);
 	}
 
+	#[cfg(unix)]
 	#[test]
 	fn a_turn_git_refuses_reports_the_error_and_is_recorded_once_git_is_repaired() {
 		let path = a_path("objects-read-only");

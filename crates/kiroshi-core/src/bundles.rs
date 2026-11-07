@@ -3145,11 +3145,13 @@ mod tests {
 		}
 	}
 
+	#[cfg(unix)]
 	pub struct ReadOnlyObjects {
 		objects: PathBuf,
 		mode: u32,
 	}
 
+	#[cfg(unix)]
 	impl Drop for ReadOnlyObjects {
 		fn drop(&mut self) {
 			use std::os::unix::fs::PermissionsExt;
@@ -3161,6 +3163,7 @@ mod tests {
 		}
 	}
 
+	#[cfg(unix)]
 	pub fn read_only_objects(bundle: &Path) -> ReadOnlyObjects {
 		use std::os::unix::fs::PermissionsExt;
 
@@ -3445,6 +3448,7 @@ They said figs, not dates.
 		let _ = fs::remove_dir_all(&root);
 	}
 
+	#[cfg(unix)]
 	#[test]
 	fn a_turn_git_refuses_reports_the_error_and_is_recorded_once_git_is_repaired() {
 		let root = a_root("evolve-objects-read-only");

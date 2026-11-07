@@ -8,7 +8,7 @@ pub use kiroshi_core::agent::reply_writer;
 pub use kiroshi_core::agent::session;
 pub use kiroshi_core::agent::sidecar;
 pub mod sign_in;
-#[cfg(test)]
+#[cfg(all(test, unix))]
 pub use kiroshi_core::agent::stub_session;
 pub use kiroshi_core::agent::translate;
 pub use kiroshi_core::agent::web_sources;
