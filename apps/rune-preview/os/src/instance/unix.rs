@@ -122,11 +122,10 @@ pub(super) fn claim(endpoint: &Endpoint, forward: &Forward) -> Result<Claim, Cla
 }
 
 fn bound(socket: PathBuf) -> Result<UnixListener, ClaimError> {
-	match fs::remove_file(&socket) {
-		Err(failure) if failure.kind() != io::ErrorKind::NotFound => {
-			return Err(ClaimError::Endpoint(failure));
-		}
-		_ => {}
+	if let Err(failure) = fs::remove_file(&socket)
+		&& failure.kind() != io::ErrorKind::NotFound
+	{
+		return Err(ClaimError::Endpoint(failure));
 	}
 	UnixListener::bind(&socket).map_err(ClaimError::Endpoint)
 }
