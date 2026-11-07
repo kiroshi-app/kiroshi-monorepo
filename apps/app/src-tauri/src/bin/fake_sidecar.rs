@@ -3,9 +3,7 @@ use std::io::{BufRead, Write};
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use serde_json::json;
-
-use serde_json::Value;
+use serde_json::{json, Value};
 
 const DEFAULT_SESSION: &str = "fake-session-0001";
 const ADA: &str = "b-ada";
