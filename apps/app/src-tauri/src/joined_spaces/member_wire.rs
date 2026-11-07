@@ -223,6 +223,7 @@ mod tests {
 	use crate::crypto::device_keys::DeviceKeys;
 	use crate::db::connection::temp_dir;
 	use crate::db::{self, DatabaseState};
+	use crate::hosting::wire::nonce_sealed_in;
 	use crate::logging::contract::InstallKind;
 	use crate::removed_on_drop::RemovedOnDrop;
 	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
@@ -234,7 +235,7 @@ mod tests {
 	struct Member {
 		app: AppOfItsOwn,
 		host: SealingHost,
-		_database: RemovedOnDrop,
+		database: RemovedOnDrop,
 	}
 
 	async fn a_member() -> Member {
@@ -246,7 +247,7 @@ mod tests {
 		let identifier = app.config().identifier.clone();
 		app.manage(SpaceKeys::new(InstallKind::Dev, identifier, Some(profile)));
 		let host = SealingHost::planted(app.handle(), INSTANCE).await;
-		Member { app, host, _database: database }
+		Member { app, host, database }
 	}
 
 	fn relay_of(app: &App<MockRuntime>) -> &JoinedSpaceRelayRepository {
@@ -292,6 +293,20 @@ mod tests {
 		let ctrs = [ctr_of(&hello), ctr_of(&first), ctr_of(&second), ctr_of(&after_restart)];
 		assert!(ctrs.windows(2).all(|pair| pair[0] < pair[1]), "{ctrs:?}");
 		assert!(serde_json::from_str::<Value>(&first).expect("json").get("to").is_none());
+	}
+
+	#[tokio::test]
+	async fn two_frames_sealed_on_either_side_of_a_restart_carry_different_nonces() {
+		let member = a_member().await;
+		let mut wire = MemberWire::new(relay_of(&member.app), INSTANCE, held_of(&member.app).await);
+		let before_restart = wire.sealed(CALL).await.expect("the call seals");
+
+		let reopened = db::open(&member.database);
+		let mut restarted =
+			MemberWire::new(reopened.joined_space_relay(), INSTANCE, wire.into_held());
+		let after_restart = restarted.sealed(CALL).await.expect("the call seals");
+
+		assert_ne!(nonce_sealed_in(&before_restart), nonce_sealed_in(&after_restart));
 	}
 
 	#[tokio::test]

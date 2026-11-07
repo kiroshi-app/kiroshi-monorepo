@@ -16,6 +16,7 @@ use crate::environment::contract::{
 	OAUTH_REDIRECT_URI, OAUTH_REFRESH_TOKEN,
 };
 use crate::environment::store;
+use crate::logging::scrub;
 
 const REFRESH_AHEAD_MS: i64 = 60_000;
 
@@ -68,7 +69,8 @@ pub async fn before_open(
 		move |request: RefreshRequest| async move { sidecar.refresh_oauth(&request).await };
 	renewals(root, owner, &server_urls(serving), now_ms(), exchange).await.map_or_else(
 		|error| {
-			eprintln!("the grants served to this session could not be read: {error:?}");
+			let unread = format!("the grants served to this session could not be read: {error:?}");
+			eprintln!("{}", redacted(&unread, &[]));
 			BTreeSet::new()
 		},
 		awaiting,
@@ -224,7 +226,8 @@ fn renewal(
 		Ok(Authorized { credentials: Some(grant), .. }) => Some(stored(root, scope, sent, &grant)),
 		Ok(Authorized { error, .. }) => refused(root, scope, sent, error),
 		Err(error) => {
-			eprintln!("the grant of {scope:?} was not refreshed: {error:?}");
+			let unsent = format!("the grant of {scope:?} was not refreshed: {error:?}");
+			eprintln!("{}", redacted(&unsent, &[sent]));
 			None
 		}
 	}
@@ -242,7 +245,7 @@ fn stored(root: &Path, scope: &EnvScope, sent: &Values, grant: &OauthCredentials
 	let Err(error) = credentials::store(root, scope, &renewed) else {
 		return Renewal::Renewed;
 	};
-	let lost = credentials::scrubbed(format!("{NOT_STORED}: {error:?}"), sent);
+	let lost = redacted(&format!("{NOT_STORED}: {error:?}"), &[sent, &credentials::held(&renewed)]);
 	eprintln!("the refreshed grant of {scope:?} was lost: {lost}");
 	Renewal::Awaiting { reason: Some(lost) }
 }
@@ -261,7 +264,7 @@ fn refused(
 	failure: Option<OauthFailure>,
 ) -> Option<Renewal> {
 	let cost = failure.as_ref().and_then(cost_of);
-	let refusal = credentials::scrubbed(told(failure), sent);
+	let refusal = redacted(&told(failure), &[sent]);
 	let Some(cost) = cost else {
 		eprintln!("the grant of {scope:?} was not refreshed: {refusal}");
 		return None;
@@ -274,7 +277,9 @@ fn refused(
 		}
 		Ok(_) => None,
 		Err(error) => {
-			eprintln!("the grant of {scope:?} could not be read again, so it stands: {error:?}");
+			let unread =
+				format!("the grant of {scope:?} could not be read again, so it stands: {error:?}");
+			eprintln!("{}", redacted(&unread, &[sent]));
 			None
 		}
 	}
@@ -287,8 +292,16 @@ fn paid(root: &Path, scope: &EnvScope, cost: Cost, refusal: &str) {
 	};
 	let remembered = forgotten.and_then(|()| credentials::remember_refusal(root, scope, refusal));
 	if let Err(error) = remembered {
-		eprintln!("the refusal of {scope:?} could not be written to the store: {error:?}");
+		let unwritten =
+			format!("the refusal of {scope:?} could not be written to the store: {error:?}");
+		eprintln!("{}", redacted(&unwritten, &[]));
 	}
+}
+
+fn redacted(text: &str, grants: &[&Values]) -> String {
+	let unnamed =
+		grants.iter().fold(text.to_owned(), |text, held| credentials::scrubbed(text, held));
+	scrub::scrubbed(&unnamed)
 }
 
 fn reason(detail: Option<String>) -> String {
@@ -794,6 +807,49 @@ mod tests {
 				reason: Some(format!("{REFUSED_DETAIL}: [redacted] is no token of this client"))
 			})
 		);
+	}
+
+	#[test]
+	fn a_token_of_the_grant_sent_or_of_the_grant_renewed_is_redacted_from_a_logged_text() {
+		let sent = credentials::held(&a_grant(NOW, Some("held-refresh")));
+		let renewed = credentials::held(&renewed());
+		let told = "held-access held-refresh confidential renewed-access renewed-refresh \
+			{\"access_token\":\"unnamed-access\"} refresh_token=unnamed-refresh";
+
+		let logged = redacted(told, &[&sent, &renewed]);
+
+		let tokens = [
+			"held-access",
+			"held-refresh",
+			"confidential",
+			"renewed-access",
+			"renewed-refresh",
+			"unnamed-access",
+			"unnamed-refresh",
+		];
+		assert!(tokens.iter().all(|token| !logged.contains(token)), "{logged}");
+	}
+
+	#[tokio::test]
+	async fn a_rejection_whose_body_carries_a_token_never_seen_comes_out_redacted() {
+		let root = a_root("refusal-body-unseen-token");
+		credentials::store(&root, &granola(), &a_grant(NOW, Some("held-refresh")))
+			.expect("the grant is written");
+
+		let settled = renewals(&root, &a_bot(), &declared(), NOW, |_| async {
+			Ok(Authorized {
+				credentials: None,
+				error: Some(rejected(Some(r#"{"access_token":"unnamed-access"}"#))),
+			})
+		})
+		.await
+		.expect("the pass reads the store");
+
+		let reason = match settled.get("granola") {
+			Some(Renewal::Awaiting { reason: Some(reason) }) => reason.clone(),
+			other => panic!("the refusal is kept: {other:?}"),
+		};
+		assert!(!reason.contains("unnamed-access"), "{reason}");
 	}
 
 	#[tokio::test]
