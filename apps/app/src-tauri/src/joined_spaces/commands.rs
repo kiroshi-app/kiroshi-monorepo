@@ -1,7 +1,7 @@
 use tauri::{Runtime, State, Webview};
 
 use super::contract::*;
-use super::members::JoinedSpaceMember;
+use crate::db::repositories::joined_space_members::JoinedSpaceMember;
 
 #[tauri::command]
 #[specta::specta]
