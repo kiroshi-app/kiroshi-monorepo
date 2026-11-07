@@ -513,11 +513,10 @@ mod tests {
 	use super::*;
 	use crate::agent::protocol::{OauthFailure, OauthFailureKind};
 	use crate::db::connection::fixture_root;
-	use crate::hosting::authorship::Caller;
 	use crate::mcp_oauth::status::ApplicationStatus;
 	use crate::removed_on_drop::RemovedOnDrop;
-	use crate::test_app::an_app_of_its_own;
-	use tauri::test::mock_builder;
+	use crate::test_core::a_core_of_its_own;
+	use kiroshi_core::hosting::caller::Caller;
 
 	fn a_server(name: &str) -> EnvScope {
 		EnvScope::Server {
@@ -528,12 +527,11 @@ mod tests {
 
 	#[tokio::test]
 	async fn the_applications_of_the_user_are_the_servers_the_user_plugin_declares() {
-		let app = an_app_of_its_own("mcp-oauth-user-applications", mock_builder());
-		crate::events::core(app.app_handle()).manage(McpOauthState::default());
-		crate::events::core(app.app_handle()).manage(ApplicationReports::default());
-		crate::events::core(app.app_handle()).manage(AuthorizationAnswers::default());
-		let path =
-			bundles::user::path(crate::events::core(app.handle())).expect("the plugin has a home");
+		let core = a_core_of_its_own("mcp-oauth-user-applications");
+		core.manage(McpOauthState::default());
+		core.manage(ApplicationReports::default());
+		core.manage(AuthorizationAnswers::default());
+		let path = bundles::user::path(&core).expect("the plugin has a home");
 		bundles::user::lay_down(&path).expect("the plugin is laid down");
 		for name in ["clock", "granola"] {
 			let config = serde_json::json!({ "command": name });
@@ -546,19 +544,14 @@ mod tests {
 			None,
 		)
 		.expect("the server lands");
-		let root =
-			writable_root(crate::events::core(app.handle())).expect("the data dir is writable");
+		let root = writable_root(&core).expect("the data dir is writable");
 		let notion = EnvScope::Server { name: "notion".to_owned(), owner: EnvOwner::User };
 		credentials::store(&root, &notion, &an_aging_grant(Some("held-refresh")))
 			.expect("the grant is written");
 
-		let rows = mcp_application_status(
-			app.handle().clone(),
-			CommandCaller(Caller::Host),
-			EnvOwner::User,
-		)
-		.await
-		.expect("the status reads");
+		let rows = application_status(&core, Caller::Host, EnvOwner::User)
+			.await
+			.expect("the status reads");
 
 		assert_eq!(
 			rows.iter().map(|row| row.name.as_str()).collect::<Vec<_>>(),
@@ -577,11 +570,10 @@ mod tests {
 	#[tokio::test]
 	async fn a_connect_to_a_server_kiroshi_does_not_authorize_is_refused_naming_why_and_opens_no_flow(
 	) {
-		let app = an_app_of_its_own("mcp-oauth-withheld", mock_builder());
-		crate::events::core(app.app_handle()).manage(McpOauthState::default());
-		crate::events::core(app.app_handle()).manage(ApplicationReports::default());
-		let path =
-			bundles::user::path(crate::events::core(app.handle())).expect("the plugin has a home");
+		let core = a_core_of_its_own("mcp-oauth-withheld");
+		core.manage(McpOauthState::default());
+		core.manage(ApplicationReports::default());
+		let path = bundles::user::path(&core).expect("the plugin has a home");
 		bundles::user::lay_down(&path).expect("the plugin is laid down");
 		let declared = [
 			("paper", serde_json::json!({ "url": "http://127.0.0.1:29979/mcp" })),
@@ -611,20 +603,12 @@ mod tests {
 		];
 
 		for (name, url, carries) in asked {
-			let refused = mcp_oauth_connect(
-				app.handle().clone(),
-				EnvOwner::User,
-				name.to_owned(),
-				url.to_owned(),
-			)
-			.await;
+			let refused =
+				connect_application(&core, EnvOwner::User, name.to_owned(), url.to_owned()).await;
 
 			let detail = withheld_reason(carries).to_owned();
 			assert_eq!(refused, Err(OauthError::NotAuthorizable { carries, detail }), "{name}");
-			assert!(
-				!crate::events::core(app.app_handle()).state::<McpOauthState>().is_running(),
-				"{name}"
-			);
+			assert!(!core.state::<McpOauthState>().is_running(), "{name}");
 		}
 		assert_eq!(
 			serde_json::to_value(OauthError::NotAuthorizable {
@@ -826,19 +810,19 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_settled_disconnect_forgets_every_standing_of_that_server() {
-		let app = an_app_of_its_own("mcp-oauth-disconnect", mock_builder());
-		crate::events::core(app.app_handle()).manage(McpOauthState::default());
-		crate::events::core(app.app_handle()).manage(ApplicationReports::default());
-		let reports = crate::events::core(app.app_handle()).state::<ApplicationReports>();
+		let core = a_core_of_its_own("mcp-oauth-disconnect");
+		core.manage(McpOauthState::default());
+		core.manage(ApplicationReports::default());
+		let reports = core.state::<ApplicationReports>();
 		reports.record("b-disconnect-test", "granola", Standing::Holding);
 		reports.record("b-other", "granola", Standing::NeedsAuth { reason: None });
 		reports.record("b-disconnect-test", "clock", Standing::Holding);
 		let owner =
 			EnvOwner::Bot { id: "b-disconnect-test".to_owned(), space_id: "s-test".to_owned() };
 
-		let settled = mcp_oauth_disconnect(
-			app.handle().clone(),
-			CommandCaller(Caller::Host),
+		let settled = disconnect_application(
+			&core,
+			Caller::Host,
 			owner,
 			"granola".to_owned(),
 			"https://mcp.granola.test/mcp".to_owned(),
