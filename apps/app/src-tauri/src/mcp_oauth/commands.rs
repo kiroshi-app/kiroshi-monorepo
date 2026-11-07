@@ -114,12 +114,16 @@ fn calls_for_a_new_client(settled: &Authorized) -> bool {
 	})
 }
 
-fn authorize_request(url: String, stored: &Values) -> AuthorizeRequest {
+fn authorize_request(name: &str, url: String, stored: &Values) -> AuthorizeRequest {
 	let (Some(client_id), Some(redirect_uri)) =
 		(stored.get(OAUTH_CLIENT_ID), stored.get(OAUTH_REDIRECT_URI))
 	else {
 		return AuthorizeRequest { url, ..AuthorizeRequest::default() };
 	};
+	if credentials::bound_url(stored) != Some(url.as_str()) {
+		eprintln!("the stored client of {name} was withheld: its grant is bound to another url");
+		return AuthorizeRequest { url, ..AuthorizeRequest::default() };
+	}
 	AuthorizeRequest {
 		url,
 		client_id: Some(client_id.clone()),
@@ -199,7 +203,7 @@ pub async fn mcp_oauth_connect<R: Runtime>(
 	let stored = store::values(&root, &scope).map_err(|error| {
 		written(Step::ReadingTheStoredClient.refused(error.into()), &Values::new())
 	})?;
-	let credentials = connected(&app, authorize_request(url.clone(), &stored), &stored)
+	let credentials = connected(&app, authorize_request(&name, url.clone(), &stored), &stored)
 		.await
 		.map_err(|refused| written(refused, &stored))?;
 	kept(&root, &scope, &name, &url, &credentials, &app.state::<ApplicationReports>()).map_err(
@@ -701,22 +705,29 @@ mod tests {
 		}
 	}
 
+	fn a_registered_client_bound_to(url: Option<&str>) -> Values {
+		let client = [
+			(OAUTH_CLIENT_ID, "registered"),
+			(OAUTH_CLIENT_SECRET, "confidential"),
+			(OAUTH_REDIRECT_URI, "http://127.0.0.1:53682/oauth/callback"),
+		];
+		client
+			.into_iter()
+			.chain(url.map(|url| (OAUTH_SERVER_URL, url)))
+			.map(|(name, value)| (name.to_owned(), value.to_owned()))
+			.collect()
+	}
+
+	fn registering(url: &str) -> AuthorizeRequest {
+		AuthorizeRequest { url: url.to_owned(), ..Default::default() }
+	}
+
 	#[test]
-	fn a_connect_hands_the_stored_client_only_beside_its_redirect_uri() {
-		let stored = Values::from([
-			(OAUTH_CLIENT_ID.to_owned(), "registered".to_owned()),
-			(OAUTH_CLIENT_SECRET.to_owned(), "confidential".to_owned()),
-			(OAUTH_REDIRECT_URI.to_owned(), "http://127.0.0.1:53682/oauth/callback".to_owned()),
-		]);
-		let no_redirect = Values::from([
-			(OAUTH_CLIENT_ID.to_owned(), "registered".to_owned()),
-			(OAUTH_CLIENT_SECRET.to_owned(), "confidential".to_owned()),
-		]);
-		let orphan = Values::from([(OAUTH_CLIENT_SECRET.to_owned(), "confidential".to_owned())]);
-		let registering = AuthorizeRequest { url: "https://a".to_owned(), ..Default::default() };
+	fn a_connect_to_the_bound_url_reuses_the_stored_registration() {
+		let stored = a_registered_client_bound_to(Some("https://a"));
 
 		assert_eq!(
-			authorize_request("https://a".to_owned(), &stored),
+			authorize_request("granola", "https://a".to_owned(), &stored),
 			AuthorizeRequest {
 				url: "https://a".to_owned(),
 				client_id: Some("registered".to_owned()),
@@ -724,8 +735,63 @@ mod tests {
 				redirect_uri: Some("http://127.0.0.1:53682/oauth/callback".to_owned()),
 			}
 		);
-		assert_eq!(authorize_request("https://a".to_owned(), &no_redirect), registering);
-		assert_eq!(authorize_request("https://a".to_owned(), &orphan), registering);
+	}
+
+	#[test]
+	fn a_connect_hands_the_stored_client_only_beside_its_redirect_uri() {
+		let mut no_redirect = a_registered_client_bound_to(Some("https://a"));
+		no_redirect.remove(OAUTH_REDIRECT_URI);
+		let mut orphan = no_redirect.clone();
+		orphan.remove(OAUTH_CLIENT_ID);
+
+		assert_eq!(
+			authorize_request("granola", "https://a".to_owned(), &no_redirect),
+			registering("https://a")
+		);
+		assert_eq!(
+			authorize_request("granola", "https://a".to_owned(), &orphan),
+			registering("https://a")
+		);
+	}
+
+	#[test]
+	fn a_connect_to_another_url_than_the_bound_one_sends_no_stored_client() {
+		let stored = a_registered_client_bound_to(Some("https://a"));
+
+		assert_eq!(
+			authorize_request("granola", "https://b".to_owned(), &stored),
+			registering("https://b")
+		);
+	}
+
+	#[test]
+	fn a_connect_over_an_unbound_grant_sends_no_stored_client() {
+		let stored = a_registered_client_bound_to(None);
+
+		assert_eq!(
+			authorize_request("granola", "https://a".to_owned(), &stored),
+			registering("https://a")
+		);
+	}
+
+	#[test]
+	fn a_grant_settled_after_a_url_mismatch_holds_the_new_client_bound_to_the_new_url() {
+		let root = a_root("connect-moved");
+		let scope = granola_of_the_space();
+		for (name, value) in a_registered_client_bound_to(Some("https://a")) {
+			store::set(&root, &scope, &name, &value).expect("the previous client is written");
+		}
+		let reregistered =
+			OauthCredentials { client_id: "reregistered".to_owned(), ..a_live_grant() };
+
+		kept(&root, &scope, "granola", "https://b", &reregistered, &ApplicationReports::default())
+			.expect("the grant is stored");
+
+		let held = store::values(&root, &scope).expect("the scope is readable");
+		assert_eq!(credentials::bound_url(&held), Some("https://b"));
+		assert_eq!(held.get(OAUTH_CLIENT_ID).map(String::as_str), Some("reregistered"));
+		assert!(!held.contains_key(OAUTH_CLIENT_SECRET));
+		assert!(!held.contains_key(OAUTH_REDIRECT_URI));
 	}
 
 	fn a_root(name: &str) -> RemovedOnDrop {
