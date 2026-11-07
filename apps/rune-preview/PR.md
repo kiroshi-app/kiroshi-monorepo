@@ -278,3 +278,8 @@ Run 42332394181 on `3a13f7e66`: 2 of 1,786 still failed on Windows, both from on
 
 - **The rich-answer reference was checked out with CRLF (2 tests).** `bundles::system::tests::the_rich_answers_skill_is_preloaded_and_names_every_block_of_the_reference` and `the_rich_answers_skill_states_the_syntax_of_the_reference` split `docs/chat/rich-answer-blocks.md` on `"\n## Blocks\n"`. That file lies outside the trees pinned to LF. It is pinned now, and so is `apps/app/shared`, the only other tree kiroshi-core's tests read. Its JSON parsed either way.
 
+Run 42334518683 on `2493b2914`:
+- **kiroshi-core on Windows:** 1,786 passed, 0 failed.
+- **The Rune preview on Windows:** 1 of 36 tests failed (34 passed, 1 ignored as before). `host::tests::each_profile_reads_only_its_host_token` checks the path of a running Kiroshi's host token, `$HOME/Library/Application Support/<id>/host/token`. That's the macOS app's home layout, a unix-only feature, and Windows has no `HOME`. It is now `cfg(unix)`.
+- **The `rust` job:** it stopped on "No space left on device" while compiling the `bounded_rotation` integration test, after the library tests had passed (1,836). The commit only touched `.gitattributes` and this file, so the build output didn't grow. The next head runs the job again, and that run serves as its one rerun.
+

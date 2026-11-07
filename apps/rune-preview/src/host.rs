@@ -298,6 +298,7 @@ mod tests {
 		assert!(sent_commands().iter().all(|(_, command)| is_read(command)));
 	}
 
+	#[cfg(unix)]
 	#[test]
 	fn each_profile_reads_only_its_host_token() {
 		let dev = token_path(Profile::Dev).expect("HOME on the test machine");
