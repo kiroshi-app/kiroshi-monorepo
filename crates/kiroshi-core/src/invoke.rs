@@ -770,7 +770,7 @@ mod tests {
 		let base = served(core.core().clone()).await;
 
 		let answered = reqwest::Client::new()
-			.post(format!("{base}/api/invoke/library_list"))
+			.post(format!("{base}/api/invoke/a_command_nobody_registered"))
 			.send()
 			.await
 			.expect("the router answers");

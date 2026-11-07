@@ -2530,7 +2530,7 @@ const A_BOARD: &str = r#"{
 }"#;
 
 fn board_fixtures() -> PathBuf {
-	Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../packages/shared/board/fixtures")
+	Path::new(crate::APP_DIR).join("../../../packages/shared/board/fixtures")
 }
 
 async fn summary_of(

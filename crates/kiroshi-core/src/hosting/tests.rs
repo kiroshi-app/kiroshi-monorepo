@@ -3179,7 +3179,7 @@ fn a_member_launches_an_agent() {
 #[test]
 fn a_member_reads_a_conversation_page() {
 	run(answered_as_today(
-		"message_page",
+		"conversation_message_page",
 		json!({ "conversationId": "c-mine", "beforeSeq": null, "limit": 50 }),
 	));
 }
@@ -3986,7 +3986,7 @@ fn a_member_deletes_an_env_entry_of_a_bot_of_the_shared_space_only() {
 #[test]
 fn a_member_reads_the_application_status_of_the_shared_space_only() {
 	run(kept_in_the_shared_space(
-		"application_status",
+		"mcp_application_status",
 		json!({ "owner": an_env_scope_of(ELSEWHERE) }),
 		json!({ "owner": an_env_scope_of(PERSONAL) }),
 	));
@@ -4016,7 +4016,7 @@ fn a_member_reaches_no_env_or_application_of_the_host_person_or_outside_the_shar
 
 		for scope in outside.clone() {
 			guest.refused("env_list", json!({ "scope": scope })).await;
-			guest.refused("application_status", json!({ "owner": scope })).await;
+			guest.refused("mcp_application_status", json!({ "owner": scope })).await;
 		}
 		for scope in outside.into_iter().chain([held_with_another_space]) {
 			guest.refused("env_set", json!({ "scope": scope, "name": "A", "value": "b" })).await;
@@ -4264,7 +4264,7 @@ fn the_shared_space_check_names_a_conversation_of_another_space() {
 
 		let refusal = shared_space_refusal(
 			&guest,
-			"message_page",
+			"conversation_message_page",
 			json!({ "conversationId": "c-theirs", "beforeSeq": null, "limit": 10 }),
 		)
 		.await;
@@ -4272,7 +4272,7 @@ fn the_shared_space_check_names_a_conversation_of_another_space() {
 		assert_eq!(
 			refusal,
 			reach::Refusal::Unheld {
-				held: held_of("message_page", 0),
+				held: held_of("conversation_message_page", 0),
 				offending: reach::Offending::Value(json!("c-theirs")),
 			}
 		);
@@ -4284,12 +4284,12 @@ fn the_shared_space_check_names_a_missing_required_id_as_absent() {
 	run(async {
 		let guest = Guest::of_two_spaces("refusal-absent").await;
 
-		let missing = shared_space_refusal(&guest, "message_page", json!({})).await;
+		let missing = shared_space_refusal(&guest, "conversation_message_page", json!({})).await;
 		let null =
-			shared_space_refusal(&guest, "message_page", json!({ "conversationId": null })).await;
+			shared_space_refusal(&guest, "conversation_message_page", json!({ "conversationId": null })).await;
 
 		let absent = reach::Refusal::Unheld {
-			held: held_of("message_page", 0),
+			held: held_of("conversation_message_page", 0),
 			offending: reach::Offending::Absent,
 		};
 		assert_eq!(missing, absent);
@@ -4322,12 +4322,12 @@ fn the_shared_space_check_names_the_first_unheld_id_of_an_array() {
 #[test]
 fn the_refusal_line_names_the_command_space_argument_check_and_value_and_no_account() {
 	let refusal = reach::Refusal::Unheld {
-		held: held_of("message_page", 0),
+		held: held_of("conversation_message_page", 0),
 		offending: reach::Offending::Value(json!("c-theirs")),
 	};
 
 	assert_eq!(
-		reach::refusal_line("message_page", PERSONAL, &refusal),
+		reach::refusal_line("conversation_message_page", PERSONAL, &refusal),
 		"the relayed message_page was refused outside shared space personal: \
 		 /conversationId failed the Conversation check with \"c-theirs\""
 	);
@@ -4362,11 +4362,11 @@ fn the_refusal_line_names_the_reach_when_there_is_no_argument() {
 #[test]
 fn the_refusal_line_caps_the_value_at_200_characters() {
 	let refusal = reach::Refusal::Unheld {
-		held: held_of("message_page", 0),
+		held: held_of("conversation_message_page", 0),
 		offending: reach::Offending::Value(json!("x".repeat(500))),
 	};
 
-	let line = reach::refusal_line("message_page", PERSONAL, &refusal);
+	let line = reach::refusal_line("conversation_message_page", PERSONAL, &refusal);
 
 	let value = line.rsplit(" with ").next().expect("a value is logged");
 	assert_eq!(value, format!("\"{}", "x".repeat(199)));
@@ -4396,7 +4396,7 @@ fn a_relay_guest_creates_a_bot_in_the_shared_space_only() {
 #[test]
 fn a_relay_guest_creates_a_bot_from_a_draft_in_the_shared_space_only() {
 	run(kept_in_the_space_named(
-		"create_bot_from_draft",
+		"conversation_create_bot_from_draft",
 		|space_id| json!({ "spaceId": space_id, "draft": {} }),
 	));
 }
@@ -4438,7 +4438,7 @@ fn a_relay_guest_lists_the_conversations_of_the_shared_space_only() {
 #[test]
 fn a_relay_guest_pages_the_conversations_of_the_shared_space_only() {
 	run(kept_in_the_space_named(
-		"conversations_page",
+		"conversation_page",
 		|space_id| json!({ "spaceId": space_id, "cursor": null, "limit": null }),
 	));
 }
@@ -4642,7 +4642,7 @@ fn a_relay_guest_omitting_the_space_id_is_refused() {
 #[test]
 fn a_relay_guest_reads_a_conversation_of_the_shared_space_only() {
 	run(kept_in_the_shared_space(
-		"message_page",
+		"conversation_message_page",
 		json!({ "conversationId": "c-theirs", "beforeSeq": null, "limit": 10 }),
 		json!({ "conversationId": "c-mine", "beforeSeq": null, "limit": 10 }),
 	));
@@ -4726,7 +4726,7 @@ fn a_relay_guest_sends_a_message_with_documents_in_the_shared_space_only() {
 		}, "summoned": [] })
 	};
 	run(kept_in_the_shared_space(
-		"send_user_message",
+		"conversation_send_user_message",
 		with_documents("c-theirs"),
 		with_documents("c-mine"),
 	));
@@ -4776,7 +4776,7 @@ fn a_relay_guest_naming_a_row_the_host_does_not_hold_is_refused() {
 	run(async {
 		let mut guest = Guest::of_two_spaces("unknown-child").await;
 
-		guest.refused("delete_conversation", json!({ "conversationId": "c-unknown" })).await;
+		guest.refused("conversation_delete", json!({ "conversationId": "c-unknown" })).await;
 		guest.refused("conversation_delete_bot", json!({ "id": "b-unknown" })).await;
 		guest.refused("mission_detail", json!({ "missionId": "mi-unknown" })).await;
 		guest.refused("routine_key", json!({ "id": "r-unknown" })).await;
@@ -6064,7 +6064,7 @@ fn a_guest_reads_the_installs_of_a_shared_conversation_and_not_of_its_own() {
 #[test]
 fn a_guest_reads_the_pending_questions_of_a_shared_conversation_and_not_of_its_own() {
 	run(kept_in_the_shared_space(
-		"pending_questions",
+		"agent_pending_questions",
 		json!({ "conversationId": GUEST_LOCAL_CONVERSATION }),
 		json!({ "conversationId": "c-mine" }),
 	));
