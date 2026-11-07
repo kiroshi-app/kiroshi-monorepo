@@ -196,8 +196,7 @@ mod tests {
 	async fn a_host(name: &str) -> CoreOfItsOwn {
 		let app = a_core_of_its_own(&format!("routine-host-{name}"));
 		crate::db::install(&*app);
-		let system = bundles::system::path(&*app)
-			.expect("the system bundle is named");
+		let system = bundles::system::path(&*app).expect("the system bundle is named");
 		bundles::system::write(&system).expect("the system bundle lands");
 		ready(&app.state::<db::DatabaseState>())
 			.expect("the database opens")
@@ -208,11 +207,7 @@ mod tests {
 	}
 
 	fn serving(app: &crate::core_context::Core, conversation_id: &str) -> RoutineHost {
-		RoutineHost::new(
-			app.clone(),
-			conversation_id.to_owned(),
-			"b1".to_owned(),
-		)
+		RoutineHost::new(app.clone(), conversation_id.to_owned(), "b1".to_owned())
 	}
 
 	fn a_create(extra: Value) -> Value {
@@ -256,7 +251,11 @@ mod tests {
 		answer.expect_err("the operation is refused")
 	}
 
-	async fn a_routine_of(app: &crate::core_context::Core, conversation_id: &str, bot_id: &str) -> Routine {
+	async fn a_routine_of(
+		app: &crate::core_context::Core,
+		conversation_id: &str,
+		bot_id: &str,
+	) -> Routine {
 		routine_create(
 			&*app,
 			RoutineDraft {

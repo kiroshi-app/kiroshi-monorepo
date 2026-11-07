@@ -305,7 +305,10 @@ mod tests {
 			.events
 	}
 
-	async fn hook_events_of(app: &crate::core_context::Core, mission_id: &str) -> Vec<MissionEvent> {
+	async fn hook_events_of(
+		app: &crate::core_context::Core,
+		mission_id: &str,
+	) -> Vec<MissionEvent> {
 		events_of(app, mission_id)
 			.await
 			.into_iter()

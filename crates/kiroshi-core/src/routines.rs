@@ -1,13 +1,13 @@
 pub mod changes;
+pub mod commands;
 pub mod contract;
 pub mod core;
 pub mod filter;
+pub mod host;
 pub mod local_server;
+pub mod rate_limit;
 pub mod run;
 pub mod runner;
-pub mod commands;
-pub mod host;
-pub mod rate_limit;
 pub mod schedule;
 pub mod sentinel;
 pub mod silence;

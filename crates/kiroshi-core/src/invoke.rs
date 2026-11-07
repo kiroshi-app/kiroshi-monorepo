@@ -43,6 +43,7 @@ use crate::mcp_oauth::commands::{
 use crate::missions::commands::*;
 use crate::missions::run_claims::{mission_run_claim, mission_run_release};
 use crate::plugins::contract::PluginScope;
+use crate::routines::contract::{RoutineDraft, RoutineEdit, RunClosing};
 use crate::search::contract::MessageSearchQuery;
 use crate::sections::commands::*;
 use crate::sections::contract::RosterPin;
@@ -472,6 +473,32 @@ table! { core, client;
 		answered(crate::applications::commands::application_installs(core, conversation_id).await);
 	application_runnable(config: JsonValue) =>
 		plain(crate::applications::commands::application_runnable(config).await);
+
+	routine_trigger_sources(bot_id: String) =>
+		answered(crate::routines::commands::routine_trigger_sources(core, bot_id).await);
+	routine_trigger_sources_of_space(space_id: String) =>
+		answered(crate::routines::commands::routine_trigger_sources_of_space(core, space_id).await);
+	routine_create(draft: RoutineDraft) =>
+		answered(crate::routines::commands::routine_create(core, draft).await);
+	routine_update(id: String, edit: RoutineEdit) =>
+		answered(crate::routines::commands::routine_update(core, id, edit).await);
+	routine_delete(id: String) =>
+		answered(crate::routines::commands::routine_delete(core, id).await);
+	routine_list(conversation_id: String) =>
+		answered(crate::routines::commands::routine_list(core, conversation_id).await);
+	routine_runs(routine_id: String, limit: u32) =>
+		answered(crate::routines::commands::routine_runs(core, routine_id, limit).await);
+	routine_runs_of_space(space_id: String, limit: u32) =>
+		answered(crate::routines::commands::routine_runs_of_space(core, space_id, limit).await);
+	routine_reported_runs(conversation_id: String) =>
+		answered(crate::routines::commands::routine_reported_runs(core, conversation_id).await);
+	routine_run_now(id: String) =>
+		answered(crate::routines::commands::routine_run_now(core, id).await);
+	routine_renew_lease(run_id: String) =>
+		answered(crate::routines::commands::routine_renew_lease(core, run_id).await);
+	routine_close_run(run_id: String, closing: RunClosing) =>
+		answered(crate::routines::commands::routine_close_run(core, run_id, closing).await);
+	routine_key(id: String) => answered(crate::routines::commands::routine_key(core, id).await);
 }
 
 pub async fn dispatch(core: &Core, command: &str, arguments: Value) -> Option<Answer> {
@@ -596,7 +623,7 @@ mod tests {
 
 	const OS_SHELL_MODULES: [&str; 4] = ["badge", "notifications", "updates", "window_controls"];
 
-	const NOT_YET_IN_CORE: [&str; 87] = [
+	const NOT_YET_IN_CORE: [&str; 74] = [
 		"remote_image_read",
 		"library_list",
 		"library_read_document",
@@ -659,19 +686,6 @@ mod tests {
 		"joined_space_describe",
 		"join_link_listen",
 		"joined_space_members",
-		"routine_trigger_sources",
-		"routine_trigger_sources_of_space",
-		"routine_create",
-		"routine_update",
-		"routine_delete",
-		"routine_list",
-		"routine_runs",
-		"routine_runs_of_space",
-		"routine_reported_runs",
-		"routine_run_now",
-		"routine_renew_lease",
-		"routine_close_run",
-		"routine_key",
 		"space_create",
 		"space_update",
 		"space_reorder",

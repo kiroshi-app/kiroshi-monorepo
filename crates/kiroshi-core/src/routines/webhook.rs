@@ -371,8 +371,7 @@ mod tests {
 	async fn a_host(name: &str) -> CoreOfItsOwn {
 		let app = a_core_of_its_own(&format!("routine-webhook-{name}"));
 		crate::db::install(&*app);
-		let system = bundles::system::path(&*app)
-			.expect("the system bundle is named");
+		let system = bundles::system::path(&*app).expect("the system bundle is named");
 		bundles::system::write(&system).expect("the system bundle lands");
 		{
 			let state = app.state::<db::DatabaseState>();
@@ -496,12 +495,7 @@ mod tests {
 		let (requested, arriving) = mpsc::channel();
 		let runs = Arc::new(Recorded(std::sync::Mutex::new(requested)));
 		(
-			started(
-				&*app.clone(),
-				Arc::new(SystemClock),
-				runs,
-				crate::host_api::routes(app),
-			),
+			started(&*app.clone(), Arc::new(SystemClock), runs, crate::host_api::routes(app)),
 			arriving,
 		)
 	}
@@ -784,12 +778,8 @@ mod tests {
 	async fn a_call_naming_the_loopback_with_or_without_the_bound_port_is_carried() {
 		let app = a_host("loopback").await;
 		let clock = Ticking::at(NOON);
-		let webhook = started(
-			app.clone(),
-			clock.clone(),
-			Arc::new(HeldOpen),
-			crate::host_api::routes(&*app),
-		);
+		let webhook =
+			started(app.clone(), clock.clone(), Arc::new(HeldOpen), crate::host_api::routes(&*app));
 		let address = address_of(&webhook);
 
 		for host in ["localhost", "127.0.0.1", &format!("localhost:{}", address.port())] {
@@ -826,12 +816,8 @@ mod tests {
 	{
 		let app = a_host("flooded").await;
 		let clock = Ticking::at(NOON);
-		let webhook = started(
-			app.clone(),
-			clock.clone(),
-			Arc::new(HeldOpen),
-			crate::host_api::routes(&*app),
-		);
+		let webhook =
+			started(app.clone(), clock.clone(), Arc::new(HeldOpen), crate::host_api::routes(&*app));
 		let address = address_of(&webhook);
 		for _ in 0..CALLS_PER_WINDOW {
 			let answer = answered(address, delivering(Some(A_KEY), "delivery-1", "{}")).await;
@@ -864,12 +850,8 @@ mod tests {
 	async fn a_hundred_calls_inside_one_hour_write_the_cap_in_starts_and_one_skip_naming_the_cap() {
 		let app = a_host("hourly-flood").await;
 		let clock = Ticking::at(NOON);
-		let webhook = started(
-			app.clone(),
-			clock.clone(),
-			Arc::new(HeldOpen),
-			crate::host_api::routes(&*app),
-		);
+		let webhook =
+			started(app.clone(), clock.clone(), Arc::new(HeldOpen), crate::host_api::routes(&*app));
 		let started_runs = HOURLY_CAP as usize;
 		let silenced = A_HUNDRED_CALLS - started_runs - 1;
 
@@ -893,12 +875,8 @@ mod tests {
 	async fn a_call_landing_after_the_hour_of_silence_writes_a_second_skip_naming_the_cap() {
 		let app = a_host("hourly-forgotten").await;
 		let clock = Ticking::at(NOON);
-		let webhook = started(
-			app.clone(),
-			clock.clone(),
-			Arc::new(HeldOpen),
-			crate::host_api::routes(&*app),
-		);
+		let webhook =
+			started(app.clone(), clock.clone(), Arc::new(HeldOpen), crate::host_api::routes(&*app));
 		let address = address_of(&webhook);
 		let to_the_cap = HOURLY_CAP as usize + 1;
 		calling_with_each_run_closed(&app, address, &clock, A_KEY, to_the_cap).await;
@@ -917,12 +895,8 @@ mod tests {
 	async fn two_routines_flooded_in_the_same_hour_each_keep_their_own_skip_naming_the_cap() {
 		let app = a_host("hourly-two").await;
 		let clock = Ticking::at(NOON);
-		let webhook = started(
-			app.clone(),
-			clock.clone(),
-			Arc::new(HeldOpen),
-			crate::host_api::routes(&*app),
-		);
+		let webhook =
+			started(app.clone(), clock.clone(), Arc::new(HeldOpen), crate::host_api::routes(&*app));
 		let address = address_of(&webhook);
 		let to_the_cap = HOURLY_CAP as usize + 1;
 
@@ -942,12 +916,8 @@ mod tests {
 	async fn a_hundred_calls_while_the_first_run_stays_open_write_one_start_and_one_skip() {
 		let app = a_host("leased-flood").await;
 		let clock = Ticking::at(NOON);
-		let webhook = started(
-			app.clone(),
-			clock.clone(),
-			Arc::new(HeldOpen),
-			crate::host_api::routes(&*app),
-		);
+		let webhook =
+			started(app.clone(), clock.clone(), Arc::new(HeldOpen), crate::host_api::routes(&*app));
 
 		let answers =
 			calling_with_the_run_left_open(address_of(&webhook), &clock, A_KEY, A_HUNDRED_CALLS)
@@ -964,12 +934,8 @@ mod tests {
 	async fn calls_fired_at_once_while_the_first_run_stays_open_write_one_start_and_one_skip() {
 		let app = a_host("leased-at-once").await;
 		let clock = Ticking::at(NOON);
-		let webhook = started(
-			app.clone(),
-			clock.clone(),
-			Arc::new(HeldOpen),
-			crate::host_api::routes(&*app),
-		);
+		let webhook =
+			started(app.clone(), clock.clone(), Arc::new(HeldOpen), crate::host_api::routes(&*app));
 		let address = address_of(&webhook);
 		let silenced = CALLS_PER_WINDOW - 2;
 
@@ -994,12 +960,8 @@ mod tests {
 	async fn a_call_landing_after_the_length_of_a_lease_reaches_the_admission_again() {
 		let app = a_host("leased-forgotten").await;
 		let clock = Ticking::at(NOON);
-		let webhook = started(
-			app.clone(),
-			clock.clone(),
-			Arc::new(HeldOpen),
-			crate::host_api::routes(&*app),
-		);
+		let webhook =
+			started(app.clone(), clock.clone(), Arc::new(HeldOpen), crate::host_api::routes(&*app));
 		let address = address_of(&webhook);
 		calling_with_the_run_left_open(address, &clock, A_KEY, 2).await;
 		assert_eq!(skipped_rows(&app, A_KEY, SkipReason::LeaseHeld).await, 1);
@@ -1039,12 +1001,8 @@ mod tests {
 	async fn one_delivery_id_carried_twice_opens_one_run_and_two_delivery_ids_open_two() {
 		let app = a_host("delivered").await;
 		let clock = Ticking::at(NOON);
-		let webhook = started(
-			app.clone(),
-			clock.clone(),
-			Arc::new(HeldOpen),
-			crate::host_api::routes(&*app),
-		);
+		let webhook =
+			started(app.clone(), clock.clone(), Arc::new(HeldOpen), crate::host_api::routes(&*app));
 		let address = address_of(&webhook);
 
 		for _ in 0..2 {

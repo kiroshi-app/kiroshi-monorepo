@@ -35,10 +35,7 @@ pub fn spawn(core: crate::core_context::Core) -> Sentinel {
 	Sentinel { stop }
 }
 
-pub async fn keeping_watch(
-	core: crate::core_context::Core,
-	mut halted: signal::Receiver<bool>,
-) {
+pub async fn keeping_watch(core: crate::core_context::Core, mut halted: signal::Receiver<bool>) {
 	let state = core.state::<db::DatabaseState>();
 	let database = match ready(&state) {
 		Ok(database) => database,
@@ -257,7 +254,6 @@ fn report(routine_id: &str, failure: &RoutineError) {
 #[cfg(test)]
 mod tests {
 	use std::fs;
-
 
 	use super::*;
 	use crate::db::connection::temp_dir;
