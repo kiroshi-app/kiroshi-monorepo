@@ -817,7 +817,7 @@ pub fn write_marketplace(root: &Path, bots: &[Bot]) -> std::io::Result<()> {
 		"owner": { "name": OWNER },
 		"plugins": plugins,
 	});
-	private_files::replace(&marketplace_file(root), indented_json(&listed).as_bytes())
+	private_files::replace_atomically(&marketplace_file(root), indented_json(&listed).as_bytes())
 }
 
 fn describe(bot: &Bot) -> &str {
