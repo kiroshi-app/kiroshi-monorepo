@@ -2133,7 +2133,6 @@ version = "0.0.0"
 dependencies = [
  "kiroshi-core",
  "kiroshi-rune-kit",
- "kiroshi-rune-os",
  "libc",
  "rune",
  "rune-kit",
