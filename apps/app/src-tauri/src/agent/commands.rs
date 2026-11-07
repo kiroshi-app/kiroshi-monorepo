@@ -12,7 +12,7 @@ use super::contract::{
 	PermissionRequest, QuestionRequest, RuntimeScope, ScopedEvent, SessionHandle, SubmittedTurn,
 	TransportError, TurnOutcome, TurnState,
 };
-use super::host::hosted;
+use super::host::{hosted, session_hosts};
 use super::lease::RunLease;
 use super::protocol::{self, Checked, SpaceMember};
 use super::reply_writer::{
@@ -21,9 +21,7 @@ use super::reply_writer::{
 use super::session::{Bundle, EventSink, GatedSink, Handed, LinePlace, Session, SessionOptions};
 use super::sidecar::{self, Sidecar, SidecarOptions};
 use super::translate::now_ms;
-use crate::applications::host::ApplicationHost;
 use crate::bundles;
-use crate::bundles::host::BundleHost;
 use crate::companions::host::CompanionHost;
 use crate::conversations::awaited_runs::{forget_settled_turns, TurnWindows};
 use crate::conversations::commands::{announce_conversation, ready, space_of_the_conversation};
@@ -41,15 +39,11 @@ use crate::environment::store as environment;
 use crate::events::{self, Frame, AGENT_EVENT, CONVERSATION_UPDATED};
 use crate::hosting::authorship::{self, Caller};
 use crate::json::JsonValue;
-use crate::library::host::LibraryHost;
 use crate::logging;
 use crate::mcp_oauth::refresh;
-use crate::mcp_oauth::reports::StandingHost;
 use crate::missions::commands::announce_thread_moved;
 use crate::missions::contract::LivenessSigns;
-use crate::missions::host::MissionHost;
 use crate::private_files;
-use crate::routines::host::RoutineHost;
 pub use kiroshi_core::agent::contract::EVENT_CHANNEL;
 
 const RUNS_DIR: &str = "runs";
@@ -1277,34 +1271,13 @@ pub(crate) async fn start_run(
 		.connected(held_connection(&core))
 		.with_app_data(Some(core.data_dir().to_path_buf()))
 		.in_conversation(scope.conversation_id.clone())
-		.hosting(hosted(RoutineHost::new(
-			core.clone(),
-			scope.conversation_id.clone(),
-			scope.bot_id.clone(),
-		)))
-		.hosting(hosted(MissionHost::new(
-			core.clone(),
-			scope.conversation_id.clone(),
-			scope.bot_id.clone(),
-		)))
 		.hosting(hosted(CompanionHost::new(
 			core.clone(),
 			scope.conversation_id.clone(),
 			scope.bot_id.clone(),
 			attachments,
 		)))
-		.hosting(hosted(StandingHost::new(
-			core.clone(),
-			scope.bot_id.clone(),
-			Some(identity.space_id),
-		)))
-		.hosting(hosted(ApplicationHost::new(
-			core.clone(),
-			scope.conversation_id.clone(),
-			scope.bot_id.clone(),
-		)))
-		.hosting(hosted(BundleHost::new(core.clone(), scope.clone())))
-		.hosting(hosted(LibraryHost::new(core.clone(), scope.clone())))
+		.hosting_all(session_hosts(&core, &scope, &identity.space_id))
 		.answering(output_schema)
 		.on_mission_thread(mission_thread)
 		.read_by(members)

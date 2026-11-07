@@ -40,6 +40,7 @@ pub use kiroshi_core::removed_on_drop;
 pub mod routines;
 pub mod search;
 pub mod sections;
+mod session_hosts;
 pub mod spaces;
 pub mod termination;
 #[cfg(test)]

@@ -214,6 +214,11 @@ impl SessionOptions {
 		self
 	}
 
+	pub fn hosting_all(mut self, hosts: Vec<Arc<dyn HostRequests>>) -> Self {
+		self.hosts.extend(hosts);
+		self
+	}
+
 	pub fn answering(mut self, output_schema: Option<serde_json::Value>) -> Self {
 		self.output_schema = output_schema;
 		self

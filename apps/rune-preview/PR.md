@@ -187,4 +187,5 @@ The kept core of `apps/app/src-tauri` moves to a crate with no Tauri dependency,
   - **`authorship::members_of`.** It reads the hosting relay and the account session. It goes behind a members-reader port, or `hosting` moves first.
   - **`missions::commands::observed` and `announce_thread_moved`.** These become Core functions in kiroshi-core's `missions`, in missions' split commit.
   - **`mcp_oauth::refresh`.** It reaches nothing in src-tauri and moves on its own.
+- **Session hosts port (done).** `kiroshi_core::agent::host::SessionHosts` hands a session the hosts that live outside kiroshi-core, and `SessionOptions::hosting_all` mounts them. src-tauri's `DesktopHosts` installs six hosts (routine, mission, standing, application, bundle, library) from `events::install_core`, so the app and every mock app get them. The companion host is still mounted directly, because it moves with the cycle. A Core with no hosts installed, such as the test `Core`, runs sessions without those hosts. Hosts are picked by subtype, so their order doesn't matter.
 
