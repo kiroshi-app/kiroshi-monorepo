@@ -78,7 +78,7 @@ mod tests {
 	use crate::agent::commands::a_run_held_by_the_app;
 	use crate::agent::contract::{AgentEvent, RuntimeScope, TurnState};
 	use crate::agent::reply_writer::TurnSink;
-	use crate::conversations::commands::conversation_page;
+	use crate::conversations::commands::conversations_page;
 	use crate::conversations::contract::ConversationState;
 	use crate::db::repositories::messages::{NewAssistantMessage, TerminalState};
 	use crate::db::repositories::search::MAX_HITS;
@@ -103,14 +103,14 @@ mod tests {
 
 	async fn a_host(name: &str) -> CoreOfItsOwn {
 		let app = a_core_of_its_own(&format!("search-commands-{name}"));
-		crate::db::install(core);
+		crate::db::install(&*app);
 		plant(&app, A_SPACE_EACH).await;
 		app
 	}
 
 	async fn plant(app: &crate::core_context::Core, statements: &str) {
 		let statements = statements.to_owned();
-		ready(&core.state::<db::DatabaseState>())
+		ready(&&*app.state::<db::DatabaseState>())
 			.expect("the database opens")
 			.call_mut(move |connection| Ok(connection.execute_batch(&statements)?))
 			.await
@@ -140,7 +140,7 @@ mod tests {
 
 	async fn indexed_rows(app: &crate::core_context::Core, message_id: &str) -> i64 {
 		let message_id = message_id.to_owned();
-		ready(&core.state::<db::DatabaseState>())
+		ready(&&*app.state::<db::DatabaseState>())
 			.expect("the database opens")
 			.call(move |connection| {
 				Ok(connection.query_row(
@@ -186,7 +186,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_message_reaches_the_index_once_it_settles_and_holds_a_single_row() {
 		let app = a_host("settle").await;
-		let state = core.state::<db::DatabaseState>();
+		let state = &*app.state::<db::DatabaseState>();
 		let database = ready(&state).expect("the database opens");
 		database
 			.messages()
@@ -382,7 +382,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_mission_hit_reads_working_while_its_thread_runs_a_turn() {
 		let app = a_host("mission-working").await;
-		let opened = ready(&core.state::<db::DatabaseState>())
+		let opened = ready(&&*app.state::<db::DatabaseState>())
 			.expect("the database opens")
 			.missions()
 			.open(a_draft_for_c1(), "k1".to_owned())
@@ -394,7 +394,7 @@ mod tests {
 			runtime_session_id: "r1".to_owned(),
 			epoch: 1,
 		};
-		let run = a_run_held_by_the_app(core, thread);
+		let run = a_run_held_by_the_app(&*app, thread);
 		run.emit(AgentEvent::TurnChanged { state: TurnState::Running }, None);
 
 		let found = search_catalogue(&*app, "crash".to_owned(), "personal".to_owned())
@@ -418,7 +418,7 @@ mod tests {
 		let recent =
 			search_recent(&*app, "work".to_owned()).await.expect("the recent chats answer");
 		let page =
-			conversation_page(&*app, "work".to_owned(), None, None).await.expect("the page reads");
+			conversations_page(&*app, "work".to_owned(), None, None).await.expect("the page reads");
 
 		let paged = page.conversations.into_iter().find(|row| row.conversation.id == "c2");
 		let paged = paged.expect("the room is on the page").observed;
