@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 
+use crate::conversations::contract::StorageFailure;
 use crate::db::repositories::user;
+use crate::db::DatabaseError;
 
 pub const CHANGED_EVENT: &str = "update://changed";
 
@@ -70,4 +72,27 @@ pub enum ReleaseNotesError {
 	InvalidVersion { version: String },
 	#[serde(rename_all = "camelCase")]
 	Unavailable { version: String, detail: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum WhatsNewError {
+	#[serde(rename_all = "camelCase")]
+	Unavailable { failure: StorageFailure },
+	#[serde(rename_all = "camelCase")]
+	Storage { failure: StorageFailure },
+	#[serde(rename_all = "camelCase")]
+	ReleaseNotes { failure: ReleaseNotesError },
+}
+
+impl From<DatabaseError> for WhatsNewError {
+	fn from(error: DatabaseError) -> Self {
+		WhatsNewError::Storage { failure: StorageFailure::from(&error) }
+	}
+}
+
+impl From<ReleaseNotesError> for WhatsNewError {
+	fn from(failure: ReleaseNotesError) -> Self {
+		WhatsNewError::ReleaseNotes { failure }
+	}
 }

@@ -17,10 +17,14 @@ use crate::core_context::Core;
 use crate::hosting::caller::Caller;
 use crate::missions::commands::{list_missions, mission_detail_of, missions_board};
 use crate::spaces::read::list_spaces;
+use crate::updates::commands::{
+	acknowledge_whats_new, check_for_updates, install_update, release_notes, restart_to_update,
+	update_state, whats_new,
+};
 
 pub const PATH: &str = "/api/invoke/{command}";
 
-pub const COMMANDS: [&str; 10] = [
+pub const COMMANDS: [&str; 17] = [
 	"space_list",
 	"conversation_bots",
 	"conversation_list",
@@ -31,6 +35,13 @@ pub const COMMANDS: [&str; 10] = [
 	"mission_list",
 	"mission_board",
 	"mission_detail",
+	"update_state",
+	"check_for_updates",
+	"install_update",
+	"restart_to_update",
+	"release_notes",
+	"whats_new",
+	"acknowledge_whats_new",
 ];
 
 const JSON: &str = "application/json";
@@ -121,6 +132,11 @@ struct OfMission {
 	mission_id: String,
 }
 
+#[derive(Deserialize)]
+struct OfVersion {
+	version: String,
+}
+
 pub fn handles(command: &str) -> bool {
 	COMMANDS.contains(&command)
 }
@@ -167,6 +183,16 @@ pub async fn dispatch(core: &Core, command: &str, arguments: Value) -> Option<An
 			Ok(asked) => answered(mission_detail_of(core, asked.mission_id).await),
 			Err(unread) => unread,
 		},
+		"update_state" => settled(update_state(core)),
+		"check_for_updates" => settled(check_for_updates(core).await),
+		"install_update" => settled(install_update(core).await),
+		"restart_to_update" => settled(restart_to_update(core)),
+		"release_notes" => match read::<OfVersion>(command, arguments) {
+			Ok(asked) => answered(release_notes(core, asked.version).await),
+			Err(unread) => unread,
+		},
+		"whats_new" => answered(whats_new(core).await),
+		"acknowledge_whats_new" => answered(acknowledge_whats_new(core).await),
 		_ => return None,
 	})
 }
@@ -194,6 +220,10 @@ fn read<T: DeserializeOwned>(command: &str, arguments: Value) -> Result<T, Answe
 	serde_json::from_value(arguments).map_err(|failure| {
 		Answer::Unanswerable(format!("invalid args for command {command}: {failure}"))
 	})
+}
+
+fn settled<T: Serialize>(answer: T) -> Answer {
+	answered(Ok::<T, ()>(answer))
 }
 
 fn answered<T: Serialize, E: Serialize>(result: Result<T, E>) -> Answer {

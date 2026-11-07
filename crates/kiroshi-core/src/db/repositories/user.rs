@@ -366,6 +366,17 @@ impl UserRepository {
 			.await
 	}
 
+	pub async fn mark_version_seen(&self, version: String) -> Result<(), DatabaseError> {
+		self.access
+			.call_mut(move |connection| {
+				let transaction = write_transaction(connection)?;
+				write_optional_in(&transaction, LAST_SEEN_VERSION_KEY, Some(&version))?;
+				transaction.commit()?;
+				Ok(())
+			})
+			.await
+	}
+
 	pub async fn set_onboarding_step(
 		&self,
 		step: OnboardingStep,
