@@ -11,7 +11,7 @@ use crate::routines::webhook::Calls;
 
 pub fn routes<R: Runtime>(app: AppHandle<R>) -> impl FnOnce(&Calls) -> Router<Calls> {
 	move |calls| {
-		invoke::route(calls.clone(), app)
+		invoke::route_with_webview(calls.clone(), app)
 			.merge(events::route(calls.clone()))
 			.merge(files::route(calls.clone()))
 	}

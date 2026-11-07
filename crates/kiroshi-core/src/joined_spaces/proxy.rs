@@ -19,8 +19,8 @@ use super::member_link::{MemberLink, Presence};
 use crate::events::Frame;
 use crate::host_api::files::{ATTACHMENT_PATH, AVATAR_PATH, INERT, NO_SNIFF};
 use crate::host_api::invoke::{
-	self, arguments, bearer_admitted, declares_more_than_the_cap, names_an_app_command, unread,
-	JSON, MAX_BODY_BYTES, REFUSED, TOO_LARGE, UNAUTHORIZED, UNREADABLE, UNREGISTERED,
+	self, bearer_admitted, called_arguments, declares_more_than_the_cap, JSON, MAX_BODY_BYTES,
+	REFUSED, TOO_LARGE, UNAUTHORIZED,
 };
 use crate::host_api::token::HostToken;
 use crate::host_api::{cors, events};
@@ -112,15 +112,9 @@ async fn invoked(
 	Path(command): Path<String>,
 	body: Result<Bytes, BytesRejection>,
 ) -> Response {
-	if !names_an_app_command(&command) {
-		return UNREGISTERED.into_response();
-	}
-	let arguments = match body {
-		Ok(body) => arguments(&body),
-		Err(rejection) => return unread(rejection),
-	};
-	let Some(arguments) = arguments else {
-		return UNREADABLE.into_response();
+	let arguments = match called_arguments(&command, body) {
+		Ok(arguments) => arguments,
+		Err(refused) => return refused.into_response(),
 	};
 	if proxy.link.settled().await != Presence::Online {
 		return HOST_OFFLINE.into_response();

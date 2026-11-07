@@ -6,7 +6,7 @@ pub mod stderr_lines;
 
 use contract::InstallKind;
 
-const DEV_IDENTIFIER_SUFFIX: &str = ".dev";
+pub(crate) const DEV_IDENTIFIER_SUFFIX: &str = ".dev";
 
 pub fn install_kind(identifier: &str) -> InstallKind {
 	if identifier.ends_with(DEV_IDENTIFIER_SUFFIX) {

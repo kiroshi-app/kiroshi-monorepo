@@ -120,10 +120,10 @@ pub fn run() {
 			#[cfg(target_os = "macos")]
 			menu::install(app.handle())?;
 			crate::db::install(crate::events::core(app.handle()));
-			crate::events::core(app.app_handle())
-				.manage(crypto::commands::load(crate::events::core(app.handle())));
-			crate::events::core(app.app_handle())
-				.manage(crypto::commands::space_keys(crate::events::core(app.handle())));
+			kiroshi_core::host_services::started_with(
+				crate::events::core(app.handle()),
+				host_api::routes(app.handle().clone()),
+			);
 			if !window_controls::is_headless(std::env::args()) {
 				window_controls::open_main(app.handle());
 				window_controls::drag_ghost::open(app.handle());
@@ -131,10 +131,6 @@ pub fn run() {
 			joined_spaces::deep_link::install(app.handle());
 			crate::events::core(app.app_handle())
 				.manage(routines::sentinel::spawn(crate::events::core(app.handle()).clone()));
-			crate::events::core(app.app_handle()).manage(routines::webhook::start(
-				crate::events::core(app.handle()).clone(),
-				host_api::routes(app.handle().clone()),
-			));
 			crate::events::core(app.app_handle())
 				.manage(missions::github::spawn(crate::events::core(app.handle()).clone()));
 			crate::events::core(app.app_handle())
@@ -143,16 +139,6 @@ pub fn run() {
 				environment::commands::writable_root(crate::events::core(app.handle())),
 				&account::cloud::api_url(),
 			));
-			crate::events::core(app.app_handle()).manage(hosting::Hosting::new(
-				&account::cloud::api_url(),
-				hosting::local_api(crate::events::core(app.handle())),
-			));
-			crate::events::core(app.app_handle())
-				.manage(invitations::Invitations::new(&account::cloud::api_url()));
-			crate::events::core(app.app_handle())
-				.manage(devices::Devices::new(&account::cloud::api_url()));
-			crate::events::core(app.app_handle())
-				.manage(joined_spaces::relay::RelayGuests::new(&account::cloud::api_url()));
 			tauri::async_runtime::spawn(account::session::restore(
 				crate::events::core(app.handle()).clone(),
 			));
@@ -184,11 +170,7 @@ pub fn run() {
 				{
 					sentinel.stop();
 				}
-				if let Some(webhook) =
-					crate::events::core(app.app_handle()).try_state::<routines::webhook::Webhook>()
-				{
-					webhook.stop();
-				}
+				kiroshi_core::host_services::stop(crate::events::core(app.app_handle()));
 				if let Some(poller) =
 					crate::events::core(app.app_handle()).try_state::<missions::github::Poller>()
 				{
