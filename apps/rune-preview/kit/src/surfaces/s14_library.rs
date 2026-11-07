@@ -2922,10 +2922,6 @@ fn run_span(t: &Tokens, run: &Run, start: usize) -> Span {
 	}
 }
 
-pub fn read_text(t: &Tokens, kind: LibraryBlockType, markdown: &str, runs: &[Run]) -> El {
-	read_text_in(t, block_style(kind), block_ink(t, kind), markdown, runs)
-}
-
 fn read_text_in(t: &Tokens, style: TextStyle, ink: Color, markdown: &str, runs: &[Run]) -> El {
 	let edit = inline_field(markdown);
 	let shown: Vec<(&Run, usize)> = runs
@@ -3017,7 +3013,21 @@ pub fn body_block<'a>(
 		_ => {
 			let rows = rows_of(source)
 				.into_iter()
-				.map(|line| (line.mark, indented(read_text(t, kind, &line.text, runs), line.depth)))
+				.map(|line| {
+					(
+						line.mark,
+						indented(
+							read_text_in(
+								t,
+								block_style(kind),
+								block_ink(t, kind),
+								&line.text,
+								runs,
+							),
+							line.depth,
+						),
+					)
+				})
 				.collect();
 			block_frame(t, kind, rows)
 		}
@@ -4115,11 +4125,19 @@ impl Format {
 pub const TOOLBAR_GAP: f32 = SPACING * 2.0;
 pub const TOOLBAR_KEY: &str = "selection-toolbar";
 
+fn toolbar_hairline(t: &Tokens) -> Color {
+	faded(t.foreground, if t.dark { 0.1 } else { 0.08 })
+}
+
+fn toolbar_highlight(t: &Tokens) -> Color {
+	faded(t.foreground, if t.dark { 0.08 } else { 0.06 })
+}
+
 fn toolbar_surface(t: &Tokens) -> El {
 	row()
 		.padding(SPACING)
 		.radius(RADIUS_CONTROL)
-		.border(1.0, faded(t.foreground, if t.dark { 0.1 } else { 0.08 }))
+		.border(1.0, toolbar_hairline(t))
 		.fill(t.card_raised)
 		.shadow(SPACING * 2.0, SPACING * 6.0, t.popover_shadow)
 }
@@ -4131,7 +4149,7 @@ pub fn format_toolbar<S: 'static>(
 	hovered: Option<Format>,
 	on: impl Fn(&mut S, Format) + Clone + 'static,
 ) -> El {
-	let highlight = faded(t.foreground, if t.dark { 0.08 } else { 0.06 });
+	let highlight = toolbar_highlight(t);
 	let button = |format: Format| {
 		let label = say(format.label(), lang);
 		let is_pressed = pressed.contains(&format);
@@ -4168,12 +4186,7 @@ pub fn format_toolbar<S: 'static>(
 		.role("toolbar")
 		.label(say(common::library::editor::toolbar::LABEL, lang))
 		.children(Format::INLINE.map(button))
-		.child(
-			el().w(1.0)
-				.h(SPACING * 4.0)
-				.mx(SPACING)
-				.fill(faded(t.foreground, if t.dark { 0.1 } else { 0.08 })),
-		)
+		.child(el().w(1.0).h(SPACING * 4.0).mx(SPACING).fill(toolbar_hairline(t)))
 		.children(Format::BLOCK.map(button))
 }
 
@@ -4234,7 +4247,7 @@ pub fn link_field(t: &Tokens, lang: Language, address: &str) -> El {
 			row()
 				.padding(SPACING * 0.5)
 				.radius(RADIUS_MD)
-				.fill(faded(t.foreground, if t.dark { 0.08 } else { 0.06 }))
+				.fill(toolbar_highlight(t))
 				.child(icon(&icons::CORNER_DOWN_LEFT, SPACING * 3.5).color(t.muted_foreground)),
 		)
 		.child(focus_ring(
