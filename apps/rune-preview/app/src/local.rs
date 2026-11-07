@@ -16,7 +16,9 @@ use kiroshi_core::conversations::awaited_runs::TurnWindows;
 use kiroshi_core::conversations::commands::{conversation_bots, list_bundles_at_launch};
 use kiroshi_core::conversations::contract::TranscriptStoreError;
 use kiroshi_core::conversations::turn_run_deadline::TurnRunDeadlines;
-use kiroshi_core::core_context::{ChosenPath, Copied, Core, Desktop, RenderWindow};
+use kiroshi_core::core_context::{
+	ChosenPath, Copied, Core, Desktop, RenderWindow, RenderWindowError,
+};
 use kiroshi_core::db;
 use kiroshi_core::environment::store::writable_root;
 use kiroshi_core::hosting::authors::install_authors;
@@ -158,6 +160,14 @@ impl LocalCore {
 		if let Err(failure) = spawned {
 			eprintln!("the core frame listener did not start: {failure}");
 		}
+	}
+
+	pub fn open_render_window(&self, window: &RenderWindow) -> Result<(), RenderWindowError> {
+		self.core.open_render_window(window)
+	}
+
+	pub fn close_window(&self, label: &str) -> Result<(), String> {
+		self.core.close_window(label)
 	}
 
 	pub fn first_agent(&self) -> Result<String, LocalError> {

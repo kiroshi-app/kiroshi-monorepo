@@ -29,7 +29,7 @@ use crate::notices::Notices;
 use crate::onboarding::{Method, Step};
 use crate::runs::Runs;
 use crate::source::Source;
-use crate::surfaces::Surfaces;
+use crate::surfaces::{Surfaces, s01_chrome};
 use crate::turn::{self, SendError};
 
 const PAGE_LIMIT: u32 = 200;
@@ -355,6 +355,7 @@ impl App {
 				heard.deliver(Inbound::Banner(outcome))
 			})));
 		self.outbox = Some(outbox);
+		s01_chrome::restore(self);
 		if matches!(self.workspace, Workspace::Connecting) {
 			self.connect();
 		}
@@ -751,6 +752,7 @@ impl App {
 				let host = ready.source.clone();
 				let conversations = ready.conversations.clone();
 				self.workspace = Workspace::Ready(ready);
+				s01_chrome::reopen_kept_windows(self);
 				self.work(move |outbox| {
 					outbox.deliver(Inbound::Longest(longest::longest(&host, &conversations)))
 				});
