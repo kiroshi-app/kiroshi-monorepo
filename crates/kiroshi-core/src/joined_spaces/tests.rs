@@ -527,16 +527,16 @@ fn signed_in(
 	let root = temp_dir();
 	store::set(&root, &EnvScope::Account, ACCOUNT_BEARER, bearer).expect("the bearer is kept");
 	let app = a_core_of_its_own(name);
-	core.manage::<DatabaseState>(Ok(db::open(&database)));
-	core.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
+	app.manage::<DatabaseState>(Ok(db::open(&database)));
+	app.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
 	let profile = app.data_dir().to_path_buf();
 	let identifier = app.config().identifier.clone();
-	core.manage(SpaceKeys::new(InstallKind::Dev, identifier, Some(profile)));
-	core.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), cloud));
-	crate::account::session::install_signed_in_work(core, crate::account::AppSignedInWork);
+	app.manage(SpaceKeys::new(InstallKind::Dev, identifier, Some(profile)));
+	app.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), cloud));
+	crate::account::session::install_signed_in_work(&*app, crate::account::AppSignedInWork);
 	let guests = RelayGuests::new(cloud).answering_within(answer_bound);
-	core.manage(guests.resending_every(RESEND_EVERY));
-	core.manage(Invitations::new(cloud));
+	app.manage(guests.resending_every(RESEND_EVERY));
+	app.manage(Invitations::new(cloud));
 	let root_path = root.to_path_buf();
 	(app, root_path, vec![database, root])
 }
@@ -1014,7 +1014,7 @@ async fn unlisted_during_a_pause(member: &Member, pause: Duration) -> UnlistedDu
 	let pause_ends = Instant::now() + pause;
 	guests.cloud().rate_limited("/instances", pause);
 	let app = &*member.app;
-	let reconciliation = tokio::spawn(async move { relay::reconciled(core).await });
+	let reconciliation = tokio::spawn(async move { relay::reconciled(&*app).await });
 	until("the unlisted guest to stop", || async {
 		(!guests.is_running(&joined.id)).then_some(())
 	})
@@ -1197,7 +1197,7 @@ fn a_join_a_leave_and_a_sign_out_complete_while_the_instance_list_never_answers(
 			room.instance_reads
 		};
 		let app = &*member.app;
-		let reconciliation = tokio::spawn(async move { relay::reconciled(core).await });
+		let reconciliation = tokio::spawn(async move { relay::reconciled(&*app).await });
 		until("the instance list to be asked", || async {
 			(member.relay.room().instance_reads > reads).then_some(())
 		})
@@ -1235,7 +1235,7 @@ fn a_join_and_a_leave_answer_while_the_relay_never_answers_a_sign_out() {
 		session::restore(member.app.clone()).await;
 		member.relay.room().is_sign_out_stalled = true;
 		let app = &*member.app;
-		let sign_out = tokio::spawn(async move { session::sign_out(core).await });
+		let sign_out = tokio::spawn(async move { session::sign_out(&*app).await });
 		until("the stalled device deletion", || async {
 			(!member.relay.room().sign_out_calls.is_empty()).then_some(())
 		})
@@ -1998,7 +1998,7 @@ fn a_description_taken_while_a_reconciliation_reads_the_older_listing_is_kept() 
 		gate.send_replace(false);
 		let reads = member.relay.room().instance_reads;
 		let app = &*member.app;
-		let reconciling = tokio::spawn(async move { relay::reconciled(core).await });
+		let reconciling = tokio::spawn(async move { relay::reconciled(&*app).await });
 		until("the listing read", || async {
 			(member.relay.room().instance_reads > reads).then_some(())
 		})

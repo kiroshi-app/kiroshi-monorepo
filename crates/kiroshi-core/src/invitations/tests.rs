@@ -317,23 +317,23 @@ impl Harness {
 		let database_dir = temp_dir();
 		let database = database.map(|()| db::open(&database_dir));
 		let is_database_open = database.is_ok();
-		core.manage::<DatabaseState>(database);
-		core.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
+		app.manage::<DatabaseState>(database);
+		app.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
 		let profile = app.data_dir().to_path_buf();
 		let identifier = app.config().identifier.clone();
-		core.manage(SpaceKeys::new(InstallKind::Dev, identifier, Some(profile)));
+		app.manage(SpaceKeys::new(InstallKind::Dev, identifier, Some(profile)));
 		let host = match is_database_open {
-			true => Some(Arc::new(SealingHost::planted(core, INSTANCE).await)),
+			true => Some(Arc::new(SealingHost::planted(&*app, INSTANCE).await)),
 			false => None,
 		};
 		if let Some(host) = &host {
 			*cloud.admission.lock().expect("the cloud") = Some(host.admitted());
 			registered_as_the_member(&app).await;
 		}
-		core.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &api_url));
-		crate::account::session::install_signed_in_work(core, crate::account::AppSignedInWork);
-		core.manage(Invitations::new(&api_url).polling_every(every));
-		core.manage(RelayGuests::new(&api_url));
+		app.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &api_url));
+		crate::account::session::install_signed_in_work(&*app, crate::account::AppSignedInWork);
+		app.manage(Invitations::new(&api_url).polling_every(every));
+		app.manage(RelayGuests::new(&api_url));
 		let heard = Arc::new(Mutex::new(Vec::new()));
 		for event in [CHANGED_EVENT, JOINED_CHANGED, REMOVED_EVENT, RECONNECTED_EVENT] {
 			let hearing = Arc::clone(&heard);
@@ -486,9 +486,9 @@ struct Member {
 }
 
 async fn registered_as_the_member(app: &crate::core_context::Core) {
-	let state = core.state::<DeviceKeysState>();
+	let state = app.state::<DeviceKeysState>();
 	let device = DeviceKeys::from_secret(&state.keys().expect("the device keys").secret());
-	let database = core.state::<DatabaseState>();
+	let database = app.state::<DatabaseState>();
 	let devices = database.as_ref().expect("the database").relay_devices();
 	let (account, device_id) = ("u1".to_owned(), device.device_id().to_string());
 	devices.registered(account, device_id, MEMBER_RELAY_ID.to_owned()).await.expect("registered");

@@ -297,13 +297,13 @@ impl Harness {
 			store::set(&folder, &EnvScope::Account, ACCOUNT_BEARER, bearer)
 				.expect("the bearer is kept");
 		}
-		core.manage(AccountSession::new(Ok::<PathBuf, _>(folder.to_path_buf()), api));
-		crate::account::session::install_signed_in_work(core, crate::account::AppSignedInWork);
-		crate::db::install(core);
-		core.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
-		core.manage(Hosting::new(api, None));
-		core.manage(RelayGuests::new(api));
-		core.manage(Devices::new(api).polling_every(TICK, TICK));
+		app.manage(AccountSession::new(Ok::<PathBuf, _>(folder.to_path_buf()), api));
+		crate::account::session::install_signed_in_work(&*app, crate::account::AppSignedInWork);
+		crate::db::install(&*app);
+		app.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
+		app.manage(Hosting::new(api, None));
+		app.manage(RelayGuests::new(api));
+		app.manage(Devices::new(api).polling_every(TICK, TICK));
 		let heard = Arc::new(Mutex::new(Vec::new()));
 		for name in [
 			ACCOUNT_CHANGED.name(),

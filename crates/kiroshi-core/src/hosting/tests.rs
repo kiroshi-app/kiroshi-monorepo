@@ -931,15 +931,15 @@ impl Harness {
 				.expect("the bearer is kept");
 		}
 		let app = a_core_of_its_own(&format!("hosting-{name}"));
-		core.manage::<DatabaseState>(Ok(db::open(&database)));
-		core.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
+		app.manage::<DatabaseState>(Ok(db::open(&database)));
+		app.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
 		let profile = app.data_dir().to_path_buf();
 		let identifier = app.config().identifier.clone();
-		core.manage(SpaceKeys::new(InstallKind::Dev, identifier, Some(profile)));
-		core.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &cloud));
-		crate::account::session::install_signed_in_work(core, crate::account::AppSignedInWork);
-		core.manage(RelayGuests::new(&cloud));
-		core.manage(
+		app.manage(SpaceKeys::new(InstallKind::Dev, identifier, Some(profile)));
+		app.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &cloud));
+		crate::account::session::install_signed_in_work(&*app, crate::account::AppSignedInWork);
+		app.manage(RelayGuests::new(&cloud));
+		app.manage(
 			Hosting::new(
 				&cloud,
 				Some(
@@ -1621,9 +1621,9 @@ fn each_unmet_precondition_of_a_start_maps_to_its_own_state() {
 fn host_keys_without_device_keys_or_without_a_space_key_store_fail_with_their_own_kind() {
 	run(async {
 		let app = a_core_of_its_own("hosting-keys");
-		let without_device = host_keys(core, PERSONAL).await.err().map(|(kind, _)| kind);
-		core.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
-		let without_space = host_keys(core, PERSONAL).await.err().map(|(kind, _)| kind);
+		let without_device = host_keys(&*app, PERSONAL).await.err().map(|(kind, _)| kind);
+		app.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
+		let without_space = host_keys(&*app, PERSONAL).await.err().map(|(kind, _)| kind);
 
 		assert_eq!(without_device, Some(HostingFailureKind::DeviceKeysNotLoaded));
 		assert_eq!(without_space, Some(HostingFailureKind::SpaceKeyNotRead));
@@ -2091,7 +2091,7 @@ fn a_lagged_event_broadcast_closes_with_1013_and_reconnects() {
 		let (release, released) = std::sync::mpsc::channel::<()>();
 		let app = &*harness.app;
 		let holding = tokio::spawn(async move {
-			let state = core.state::<DatabaseState>();
+			let state = app.state::<DatabaseState>();
 			let database = state.as_ref().expect("the database");
 			database
 				.call(move |_| {
@@ -2979,15 +2979,15 @@ fn an_unreachable_cloud_is_unreachable_with_its_cause() {
 		let cloud = format!("http://{address}");
 		let database = temp_dir();
 		let app = a_core_of_its_own("hosting-down");
-		core.manage::<DatabaseState>(Ok(db::open(&database)));
-		core.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &cloud));
-		crate::account::session::install_signed_in_work(core, crate::account::AppSignedInWork);
-		core.manage(Hosting::new(&cloud, None));
-		let state = core.state::<DatabaseState>();
+		app.manage::<DatabaseState>(Ok(db::open(&database)));
+		app.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &cloud));
+		crate::account::session::install_signed_in_work(&*app, crate::account::AppSignedInWork);
+		app.manage(Hosting::new(&cloud, None));
+		let state = app.state::<DatabaseState>();
 		let hosting = state.as_ref().expect("the database").space_hosting();
 		hosting.registered(PERSONAL.to_owned(), INSTANCE.to_owned()).await.expect("planted");
 
-		let listed = list(core, PERSONAL.to_owned()).await;
+		let listed = list(&*app, PERSONAL.to_owned()).await;
 
 		let Err(MembersError::Unreachable { reason, detail }) = listed else {
 			panic!("a closed port is unreachable");
@@ -3927,9 +3927,9 @@ fn the_host_and_a_member_edit_one_library_document_and_every_update_merges_and_i
 		let base = opened["body"]["update"].as_str().expect("a yjs state").to_owned();
 		let host = YjsClient::of(&base).inserted(0, "Host. ");
 		let member = YjsClient::of(&base).inserted(17, " Member.");
-		library::apply_update(core, &library, ELSEWHERE, "notes.md", AN_EMPTY_UPDATE)
+		library::apply_update(&*app, &library, ELSEWHERE, "notes.md", AN_EMPTY_UPDATE)
 			.expect("the other space merges");
-		library::apply_update(core, &library, PERSONAL, "notes.md", &host)
+		library::apply_update(&*app, &library, PERSONAL, "notes.md", &host)
 			.expect("the host update merges");
 		let heard_from_the_host = next_text(&mut guest.member, is_a_library_update).await;
 		let member_update = json!({ "spaceId": PERSONAL, "name": "notes.md", "update": member });
@@ -4213,8 +4213,8 @@ fn a_relay_guest_hears_a_question_of_the_shared_space_and_its_answer_without_rea
 		let mut guest = Guest::of_two_spaces("question-heard").await;
 		let app = &*guest.harness.app;
 		let scope = a_live_scope_of("c-mine");
-		let run = commands::a_live_run(core, scope.clone());
-		let elsewhere = commands::a_live_run(core, a_live_scope_of("c-theirs"));
+		let run = commands::a_live_run(&*app, scope.clone());
+		let elsewhere = commands::a_live_run(&*app, a_live_scope_of("c-theirs"));
 
 		elsewhere.emit(a_question("q-theirs"), a_turn_in("c-theirs"));
 		run.emit(a_question("q-mine"), a_turn_in("c-mine"));
@@ -4245,10 +4245,10 @@ fn a_relay_guest_hears_a_pending_question_settled_when_the_host_shuts_its_sessio
 		let mut guest = Guest::of_two_spaces("question-shut-down").await;
 		let app = &*guest.harness.app;
 		let scope = a_held_scope_in("c-mine", "b-mine");
-		commands::a_run_held_by_the_app(core, scope.clone())
+		commands::a_run_held_by_the_app(&*app, scope.clone())
 			.emit(a_question("q-mine"), a_turn_in("c-mine"));
 
-		commands::shutdown_session(core, &&*core, &scope).await;
+		commands::shutdown_session(&*app, &&*app.state(), &scope).await;
 		let heard = guest.events_until_the_marker().await;
 
 		let denied = agent::AgentEvent::PermissionResolved {
@@ -5326,7 +5326,7 @@ fn a_relay_guest_hears_every_event_of_a_host_turn_in_the_shared_conversation_in_
 		let mut guest = Guest::of_two_spaces("live-turn").await;
 		let app = &*guest.harness.app;
 		let scope = a_live_scope_of("c-mine");
-		let run = commands::a_live_run(core, scope.clone());
+		let run = commands::a_live_run(&*app, scope.clone());
 		let turn = agent::EventTurn {
 			turn_id: "t-mine".to_owned(),
 			conversation_id: "c-mine".to_owned(),
@@ -5335,15 +5335,15 @@ fn a_relay_guest_hears_every_event_of_a_host_turn_in_the_shared_conversation_in_
 		let checking =
 			agent::AgentEvent::ConnectionChanged { state: agent::ConnectionState::Checking };
 
-		let elsewhere = commands::a_live_run(core, a_live_scope_of("c-theirs"));
+		let elsewhere = commands::a_live_run(&*app, a_live_scope_of("c-theirs"));
 		let turn_elsewhere = agent::EventTurn {
 			turn_id: "t-theirs".to_owned(),
 			conversation_id: "c-theirs".to_owned(),
 			continues_turn_id: None,
 		};
 
-		commands::a_host_wide_announce(core, checking.clone());
-		commands::a_host_wide_announce(core, checking);
+		commands::a_host_wide_announce(&*app, checking.clone());
+		commands::a_host_wide_announce(&*app, checking);
 		for event in a_turn_of_the_shared_conversation() {
 			elsewhere.emit(event.clone(), Some(turn_elsewhere.clone()));
 			run.emit(event, Some(turn.clone()));
@@ -5407,7 +5407,7 @@ fn a_relay_guest_hears_the_end_of_a_host_turn_in_the_shared_conversation() {
 		let mut guest = Guest::of_two_spaces("turn-ended").await;
 		let app = &*guest.harness.app;
 		let scope = a_live_scope_of("c-mine");
-		let run = commands::a_live_run(core, scope.clone());
+		let run = commands::a_live_run(&*app, scope.clone());
 		let turn = agent::EventTurn {
 			turn_id: "t-mine".to_owned(),
 			conversation_id: "c-mine".to_owned(),
@@ -5430,7 +5430,7 @@ fn a_relay_guest_hears_the_end_of_a_host_turn_once_when_its_evolution_lands_befo
 		let mut guest = Guest::of_two_spaces("turn-ended-evolved").await;
 		let app = &*guest.harness.app;
 		let scope = a_live_scope_of("c-mine");
-		let run = commands::a_live_run(core, scope.clone());
+		let run = commands::a_live_run(&*app, scope.clone());
 		let turn = agent::EventTurn {
 			turn_id: "t-mine".to_owned(),
 			conversation_id: "c-mine".to_owned(),
@@ -5442,7 +5442,7 @@ fn a_relay_guest_hears_the_end_of_a_host_turn_once_when_its_evolution_lands_befo
 		};
 
 		run.emit(a_completed_turn_end(), Some(turn.clone()));
-		commands::announce(core, Some(scope.clone()), evolution_failed.clone());
+		commands::announce(&*app, Some(scope.clone()), evolution_failed.clone());
 		let heard = guest.events_until_the_marker().await;
 
 		assert!(heard.contains(&a_forwarded_agent_event(&scope, None, evolution_failed)));
@@ -5467,7 +5467,7 @@ fn a_relay_guest_hears_the_state_change_of_a_main_conversation_of_the_shared_spa
 		let prompt = a_pending_prompt(&main.id, PromptKind::Permission);
 		conversations.hold_prompt(prompt).await.expect("the prompt is held");
 
-		conversation_state::observe(core, &database, &main.id).await.expect("the state reads");
+		conversation_state::observe(&*app, &database, &main.id).await.expect("the state reads");
 		let heard = guest.events_until_the_marker().await;
 
 		let changed = json!({
@@ -5489,7 +5489,7 @@ fn a_host_wide_connection_check_reaches_no_relay_guest_and_is_not_logged_as_kept
 		let mut published = events::subscribed(&app);
 
 		commands::a_host_wide_announce(
-			core,
+			&*app,
 			agent::AgentEvent::ConnectionChanged { state: agent::ConnectionState::Checking },
 		);
 		let heard = guest.events_until_the_marker().await;
@@ -5525,7 +5525,7 @@ impl Authoring {
 			"hosting-authorship",
 			mock_builder().invoke_handler(crate::commands::invoke_handler()),
 		);
-		crate::db::install(core);
+		crate::db::install(&*app);
 		let root = RemovedOnDrop(
 			std::env::temp_dir()
 				.join(format!("kiroshi-hosting-authorship-{}", uuid::Uuid::new_v4())),
@@ -5534,13 +5534,13 @@ impl Authoring {
 			store::set(&root, &EnvScope::Account, ACCOUNT_BEARER, bearer)
 				.expect("the bearer is kept");
 		}
-		core.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &cloud));
-		crate::account::session::install_signed_in_work(core, crate::account::AppSignedInWork);
-		restore(core.clone()).await;
-		core.manage(webhook::start(core.clone(), crate::host_api::routes(&*app)));
-		let local = super::local_api(core).expect("the local host api listens");
-		core.manage(Hosting::new(&cloud, Some(local.clone())));
-		core.state::<Hosting>().hosts().entry(PERSONAL.to_owned()).or_default().members =
+		app.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &cloud));
+		crate::account::session::install_signed_in_work(&*app, crate::account::AppSignedInWork);
+		restore(app.clone()).await;
+		app.manage(webhook::start(app.clone(), crate::host_api::routes(&*app)));
+		let local = super::local_api(&*app).expect("the local host api listens");
+		app.manage(Hosting::new(&cloud, Some(local.clone())));
+		app.state::<Hosting>().hosts().entry(PERSONAL.to_owned()).or_default().members =
 			Some(SpaceMembers {
 				members: vec![Member {
 					user_id: GUEST.to_owned(),

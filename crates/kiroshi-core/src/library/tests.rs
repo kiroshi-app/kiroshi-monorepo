@@ -348,12 +348,12 @@ fn an_oversized_image_is_refused_without_reading_its_bytes() {
 
 fn a_host(name: &str) -> CoreOfItsOwn {
 	let app = a_core_of_its_own(&format!("library-{name}"));
-	crate::db::install(core);
+	crate::db::install(&*app);
 	app
 }
 
 async fn a_space(app: &crate::core_context::Core, name: &str) -> String {
-	let state = core.state::<db::DatabaseState>();
+	let state = app.state::<db::DatabaseState>();
 	let database = state.as_ref().expect("the database opens");
 	database.spaces().create(name.to_owned()).await.expect("the space lands").id
 }
@@ -377,7 +377,7 @@ async fn an_unknown_space_is_refused_by_every_command() {
 async fn a_known_space_lists_and_reads_from_its_folder_under_app_data() {
 	let app = a_host("known");
 	let space_id = a_space(&app, "Work").await;
-	let root = root(core).expect("the library root resolves");
+	let root = root(&*app).expect("the library root resolves");
 	assert_eq!(root, app.data_dir().to_path_buf().join("library"));
 	put(&root, &space_id, "notes.md", b"notes");
 	put(&root, &space_id, "cover.png", b"png");
@@ -404,7 +404,7 @@ async fn deleting_a_space_removes_its_library_folder_only() {
 	let app = a_host("deleted");
 	let kept = a_space(&app, "Kept").await;
 	let deleted = a_space(&app, "Deleted").await;
-	let root = root(core).expect("the library root resolves");
+	let root = root(&*app).expect("the library root resolves");
 	put(&root, &kept, "kept.md", b"kept");
 	put(&root, &deleted, "gone.md", b"gone");
 
@@ -650,7 +650,7 @@ async fn a_name_that_leaves_the_folder_is_refused_by_save_copy_and_reveal() {
 	let app = a_host("escape-actions");
 	let mine = a_space(&app, "Mine").await;
 	let theirs = a_space(&app, "Theirs").await;
-	let root = root(core).expect("the library root resolves");
+	let root = root(&*app).expect("the library root resolves");
 	put(&root, &mine, "notes.md", b"notes");
 	put(&root, &theirs, "theirs.md", b"theirs");
 
@@ -676,7 +676,7 @@ async fn a_link_out_of_the_folder_is_refused_by_save_copy_and_reveal() {
 	let app = a_host("link-actions");
 	let mine = a_space(&app, "Mine").await;
 	let theirs = a_space(&app, "Theirs").await;
-	let root = root(core).expect("the library root resolves");
+	let root = root(&*app).expect("the library root resolves");
 	put(&root, &theirs, "theirs.png", &encoded(ImageFormat::Png));
 	fs::create_dir_all(space_dir(&root, &mine)).expect("the space folder lands");
 	std::os::unix::fs::symlink(
@@ -1109,7 +1109,7 @@ fn the_templates_list_as_id_and_title() {
 async fn a_blank_document_is_an_empty_markdown_file_listed_as_a_document() {
 	let app = a_host("create-blank");
 	let space_id = a_space(&app, "Work").await;
-	let root = root(core).expect("the library root resolves");
+	let root = root(&*app).expect("the library root resolves");
 
 	let item = created(&app, &space_id, "Plan.md", None).await.expect("the document lands");
 
@@ -1125,7 +1125,7 @@ async fn a_blank_document_is_an_empty_markdown_file_listed_as_a_document() {
 async fn a_document_from_a_template_holds_the_template_markdown() {
 	let app = a_host("create-template");
 	let space_id = a_space(&app, "Work").await;
-	let root = root(core).expect("the library root resolves");
+	let root = root(&*app).expect("the library root resolves");
 
 	let item = created(&app, &space_id, "Brief.md", Some("project-brief")).await.expect("lands");
 
@@ -1140,7 +1140,7 @@ async fn a_document_from_a_template_holds_the_template_markdown() {
 async fn a_taken_unsafe_or_unknown_creation_is_refused_and_writes_nothing() {
 	let app = a_host("create-refused");
 	let space_id = a_space(&app, "Work").await;
-	let root = root(core).expect("the library root resolves");
+	let root = root(&*app).expect("the library root resolves");
 	put(&root, &space_id, "Plan.md", b"kept");
 
 	let refusals = [
@@ -1164,7 +1164,7 @@ async fn a_taken_unsafe_or_unknown_creation_is_refused_and_writes_nothing() {
 async fn merged_in_order(is_host_first: bool) {
 	let app = a_host(&format!("merge-{is_host_first}"));
 	let space_id = a_space(&app, "Work").await;
-	let root = root(core).expect("the library root resolves");
+	let root = root(&*app).expect("the library root resolves");
 	put(&root, &space_id, "notes.md", b"base");
 	let heard = heard_updates(&app);
 	let base = opened(&app, &space_id, "notes.md").await;
@@ -1394,7 +1394,7 @@ fn a_forgotten_space_drops_its_documents_and_their_stored_state() {
 async fn deleting_a_space_removes_the_stored_state_of_its_documents() {
 	let app = a_host("documents-deleted");
 	let space_id = a_space(&app, "Gone").await;
-	let root = root(core).expect("the library root resolves");
+	let root = root(&*app).expect("the library root resolves");
 	put(&root, &space_id, "notes.md", b"base");
 	opened(&app, &space_id, "notes.md").await;
 	assert!(root.join(".documents").join(&space_id).exists());
@@ -1920,7 +1920,7 @@ fn on_disk(root: &Path, space_id: &str, name: &str) -> String {
 async fn a_renamed_document_moves_with_its_shared_state_and_is_announced() {
 	let app = a_host("rename");
 	let space_id = a_space(&app, "Work").await;
-	let root = root(core).expect("the library root resolves");
+	let root = root(&*app).expect("the library root resolves");
 	put(&root, &space_id, "notes.md", b"base");
 	let heard = heard_renames(&app);
 	let before = opened(&app, &space_id, "notes.md").await;
@@ -1965,7 +1965,7 @@ fn a_renamed_document_opens_on_its_stored_state_after_a_restart() {
 async fn a_rename_onto_a_taken_name_lands_on_the_first_free_numbered_name() {
 	let app = a_host("rename-taken");
 	let space_id = a_space(&app, "Work").await;
-	let root = root(core).expect("the library root resolves");
+	let root = root(&*app).expect("the library root resolves");
 	put(&root, &space_id, "notes.md", b"older");
 	put(&root, &space_id, "draft.md", b"draft");
 	put(&root, &space_id, "sketch.md", b"sketch");
@@ -1986,7 +1986,7 @@ async fn a_rename_onto_a_taken_name_lands_on_the_first_free_numbered_name() {
 async fn updates_sent_before_and_to_the_former_name_after_a_rename_both_land_in_the_file() {
 	let app = a_host("rename-updates");
 	let space_id = a_space(&app, "Work").await;
-	let root = root(core).expect("the library root resolves");
+	let root = root(&*app).expect("the library root resolves");
 	put(&root, &space_id, "notes.md", b"base");
 	let heard = heard_updates(&app);
 	let member = YjsClient::of(&opened(&app, &space_id, "notes.md").await);
@@ -2054,7 +2054,7 @@ fn an_update_to_the_first_name_follows_a_document_renamed_twice() {
 async fn a_rename_to_the_same_name_answers_the_document_and_changes_nothing() {
 	let app = a_host("rename-same");
 	let space_id = a_space(&app, "Work").await;
-	let root = root(core).expect("the library root resolves");
+	let root = root(&*app).expect("the library root resolves");
 	put(&root, &space_id, "notes.md", b"base");
 	let heard = heard_renames(&app);
 
@@ -2070,7 +2070,7 @@ async fn a_rename_to_the_same_name_answers_the_document_and_changes_nothing() {
 async fn a_refused_rename_answers_why_and_changes_nothing() {
 	let app = a_host("rename-refused");
 	let space_id = a_space(&app, "Work").await;
-	let root = root(core).expect("the library root resolves");
+	let root = root(&*app).expect("the library root resolves");
 	put(&root, &space_id, "notes.md", b"base");
 	put(&root, &space_id, "todo.txt", b"todo");
 	put(&root, &space_id, "cover.png", b"png");
@@ -2135,7 +2135,7 @@ fn state_names(root: &Path, space_id: &str) -> Vec<String> {
 async fn a_case_only_rename_lands_on_the_exact_name_with_its_state_and_takes_late_updates() {
 	let app = a_host("rename-case");
 	let space_id = a_space(&app, "Work").await;
-	let root = root(core).expect("the library root resolves");
+	let root = root(&*app).expect("the library root resolves");
 	put(&root, &space_id, "notes.md", b"base");
 	let heard = heard_renames(&app);
 	let heard_edits = heard_updates(&app);
@@ -2172,7 +2172,7 @@ async fn a_case_only_rename_lands_on_the_exact_name_with_its_state_and_takes_lat
 async fn a_rename_onto_the_case_variant_of_another_file_keeps_the_numbered_rule() {
 	let app = a_host("rename-case-other");
 	let space_id = a_space(&app, "Work").await;
-	let root = root(core).expect("the library root resolves");
+	let root = root(&*app).expect("the library root resolves");
 	put(&root, &space_id, "notes.md", b"older");
 	put(&root, &space_id, "draft.md", b"draft");
 	let is_case_sensitive = !space_dir(&root, &space_id).join("NOTES.md").exists();
@@ -2215,7 +2215,7 @@ fn a_case_only_rename_that_cannot_move_the_file_keeps_it_and_its_state_under_the
 async fn an_update_to_the_landed_name_racing_a_rename_returns_only_after_the_rename_is_announced() {
 	let app = a_host("rename-race");
 	let space_id = a_space(&app, "Work").await;
-	let root = root(core).expect("the library root resolves");
+	let root = root(&*app).expect("the library root resolves");
 	put(&root, &space_id, "notes.md", b"base");
 	let order = Arc::new(Mutex::new(Vec::new()));
 	let (told, applied) = mpsc::channel();
@@ -2264,7 +2264,7 @@ fn heard_changes(app: &crate::core_context::Core) -> mpsc::Receiver<LibraryChang
 async fn a_deleted_item_leaves_the_library_with_its_shared_state_and_is_announced() {
 	let app = a_host("delete");
 	let space_id = a_space(&app, "Work").await;
-	let root = root(core).expect("the library root resolves");
+	let root = root(&*app).expect("the library root resolves");
 	put(&root, &space_id, "notes.md", b"base");
 	put(&root, &space_id, "plan.md", b"kept");
 	opened(&app, &space_id, "notes.md").await;
@@ -2291,7 +2291,7 @@ async fn a_delete_that_cannot_remove_the_file_keeps_the_item_listed() {
 
 	let app = a_host("delete-locked");
 	let space_id = a_space(&app, "Work").await;
-	let root = root(core).expect("the library root resolves");
+	let root = root(&*app).expect("the library root resolves");
 	put(&root, &space_id, "notes.md", b"base");
 	let dir = space_dir(&root, &space_id);
 	let set_mode = |mode| {
@@ -2315,7 +2315,7 @@ const PERSONAL: &str = "personal";
 
 async fn a_host_with_a_room(name: &str) -> CoreOfItsOwn {
 	let app = a_host(name);
-	core.state::<db::DatabaseState>()
+	app.state::<db::DatabaseState>()
 		.as_ref()
 		.expect("the database opens")
 		.call_mut(|connection| Ok(connection.execute_batch(A_ROOM)?))
@@ -2353,7 +2353,7 @@ async fn linked_documents(app: &crate::core_context::Core) -> Vec<(String, Vec<S
 }
 
 fn attached(app: &crate::core_context::Core, files: &[(&str, Vec<u8>)]) -> Vec<PathBuf> {
-	let store = Attachments::dir(core).expect("the attachment store resolves");
+	let store = Attachments::dir(&*app).expect("the attachment store resolves");
 	let submitted: Vec<SubmittedAttachment> = files
 		.iter()
 		.map(|(name, bytes)| SubmittedAttachment {
@@ -2375,7 +2375,7 @@ async fn saved_message(
 #[tokio::test]
 async fn a_message_with_two_images_saves_as_a_document_named_after_its_heading_with_both_images() {
 	let app = a_host_with_a_room("save-message").await;
-	let root = root(core).expect("the library root resolves");
+	let root = root(&*app).expect("the library root resolves");
 	let paths = attached(
 		&app,
 		&[
@@ -2428,7 +2428,7 @@ async fn a_message_with_two_images_saves_as_a_document_named_after_its_heading_w
 #[tokio::test]
 async fn a_message_missing_from_the_conversation_or_an_attachment_gone_leaves_the_library_empty() {
 	let app = a_host_with_a_room("save-refused").await;
-	let root = root(core).expect("the library root resolves");
+	let root = root(&*app).expect("the library root resolves");
 	let paths = attached(&app, &[("shot.png", encoded(ImageFormat::Png))]);
 	fs::remove_file(&paths[0]).expect("the attachment leaves");
 	let content = format!("Look.\n{}", attachment_block(&paths, Utc::now()));
@@ -2497,7 +2497,7 @@ fn a_message_without_text_or_images_saves_as_an_empty_untitled_document() {
 #[tokio::test]
 async fn a_document_attached_to_a_sent_message_reads_back_with_it_and_follows_its_rename() {
 	let app = a_host_with_a_room("attach").await;
-	let root = root(core).expect("the library root resolves");
+	let root = root(&*app).expect("the library root resolves");
 	put(&root, PERSONAL, "notes.md", b"notes");
 	put(&root, PERSONAL, "brief.md", b"brief");
 	put(&root, PERSONAL, "cover.png", b"png");
@@ -2605,7 +2605,7 @@ fn a_canvas_file_is_listed_as_a_board_beside_documents_and_images() {
 async fn a_board_created_by_name_is_a_blank_canvas_and_a_taken_name_is_refused() {
 	let app = a_host("board-create");
 	let space_id = a_space(&app, "Work").await;
-	let root = root(core).expect("the library root resolves");
+	let root = root(&*app).expect("the library root resolves");
 	let create = |name: &str| library_create_board(&*app, space_id.clone(), name.to_owned());
 
 	let item = create("Plan").await.expect("the board lands");
@@ -2625,7 +2625,7 @@ async fn a_board_created_by_name_is_a_blank_canvas_and_a_taken_name_is_refused()
 async fn a_renamed_board_keeps_its_bytes_and_is_announced_as_a_document_rename_is() {
 	let app = a_host("board-rename");
 	let space_id = a_space(&app, "Work").await;
-	let root = root(core).expect("the library root resolves");
+	let root = root(&*app).expect("the library root resolves");
 	put(&root, &space_id, "plan.canvas", A_BOARD.as_bytes());
 	put(&root, &space_id, "notes.md", b"notes");
 	let renames = heard_renames(&app);
@@ -2659,7 +2659,7 @@ async fn a_renamed_board_keeps_its_bytes_and_is_announced_as_a_document_rename_i
 async fn a_deleted_board_leaves_the_library_and_is_announced_as_a_document_delete_is() {
 	let app = a_host("board-delete");
 	let space_id = a_space(&app, "Work").await;
-	let root = root(core).expect("the library root resolves");
+	let root = root(&*app).expect("the library root resolves");
 	put(&root, &space_id, "plan.canvas", A_BOARD.as_bytes());
 	let heard = heard_changes(&app);
 
@@ -2675,7 +2675,7 @@ async fn a_deleted_board_leaves_the_library_and_is_announced_as_a_document_delet
 async fn a_board_summary_answers_its_nodes_as_stored_and_their_bounding_box() {
 	let app = a_host("board-summary");
 	let space_id = a_space(&app, "Work").await;
-	let root = root(core).expect("the library root resolves");
+	let root = root(&*app).expect("the library root resolves");
 	put(&root, &space_id, "plan.canvas", A_BOARD.as_bytes());
 	put(&root, &space_id, "blank.canvas", br#"{"nodes":[],"edges":[]}"#);
 	put(&root, &space_id, "notes.md", b"notes");
