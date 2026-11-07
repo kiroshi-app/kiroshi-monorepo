@@ -662,14 +662,14 @@ fn gestures<S: 'static>(
 		view
 	};
 	view.on_key(move |s: &mut S, event: &KeyEvent, tx: &mut Tx| {
-		let plain = !(event.mods.alt || event.mods.cmd || event.mods.ctrl);
+		let is_unmodified = !(event.mods.alt || event.mods.cmd || event.mods.ctrl);
 		if tx.focused() == Some(close_key.as_str()) {
 			match event.key {
-				Key::Enter if plain => {
+				Key::Enter if is_unmodified => {
 					emit(s, ChromeEvent::CloseTab(keyed.id.clone()));
 					return true;
 				}
-				Key::Tab if plain => emit(s, ChromeEvent::RevealClose(None)),
+				Key::Tab if is_unmodified => emit(s, ChromeEvent::RevealClose(None)),
 				_ => {}
 			}
 			return false;
@@ -677,7 +677,7 @@ fn gestures<S: 'static>(
 		if tx.focused() != Some(tab_key.as_str()) {
 			return false;
 		}
-		if event.key == Key::Tab && plain && !event.mods.shift && can_reveal {
+		if event.key == Key::Tab && is_unmodified && !event.mods.shift && can_reveal {
 			emit(s, ChromeEvent::RevealClose(Some(keyed.id.clone())));
 			return false;
 		}
