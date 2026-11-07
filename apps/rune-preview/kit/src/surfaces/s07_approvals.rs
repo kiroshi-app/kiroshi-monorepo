@@ -5,6 +5,7 @@ use rune::{
 	Color, Cursor, El, Icon, Key, KeyEvent, PhysicalKeyCode, SurfaceFit, TextEdit, TextStyle, Tx,
 };
 use rune::{col, el, icon, row, text, text_input};
+use rune_kit::syntax::{self, SyntaxTheme};
 
 use crate::avatar::Person;
 use crate::icons;
@@ -56,6 +57,7 @@ const DENIED_BORDER: f32 = 0.4;
 
 const OPTION_KEY: &str = "question-option-";
 const NAME: &str = "{{name}}";
+const SHELL: &str = "bash";
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum ApprovalStatus {
@@ -448,7 +450,15 @@ fn code_block(t: &Tokens, code: &str) -> El {
 		.radius(RADIUS_XL)
 		.border(1.0, t.border)
 		.fill(faded(t.muted, CODE_SURFACE))
-		.child(text(code.to_owned()).font(TEXT_XS_MONO).color(faded(t.foreground, CODE_INK)).wrap())
+		.child(
+			text(code.to_owned())
+				.font(TEXT_XS_MONO)
+				.color(faded(t.foreground, CODE_INK))
+				.spans(
+					SyntaxTheme::from_kit(&t.kit()).spans(&syntax::highlight(Some(SHELL), code), 0),
+				)
+				.wrap(),
+		)
 }
 
 fn input_toggle<S: 'static>(
@@ -488,7 +498,7 @@ fn parameter_rows(t: &Tokens, language: Language, parameters: &[ApprovalParamete
 					text(value.to_owned()).font(TEXT_XS_MONO).color(t.foreground)
 				}
 				ParameterValue::Sensitive => text(copy(tool_approval::SENSITIVE, language))
-					.font(TEXT_XS)
+					.font(TEXT_XS_MONO.italic())
 					.color(t.muted_foreground),
 			};
 			row()
