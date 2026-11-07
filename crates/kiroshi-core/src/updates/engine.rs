@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use reqwest::header::{HeaderValue, ACCEPT};
 use reqwest::Client;
+use tokio::time::Instant;
 
 use super::contract::{UpdateChannel, UpdateState};
 use super::feed::{Feed, Offer};
@@ -17,6 +18,7 @@ const CHECK_BOUND: Duration = Duration::from_secs(30);
 const DOWNLOAD_BOUND: Duration = Duration::from_secs(15 * 60);
 const CHECK_EXCEEDED: &str = "the update check took longer than 30 s";
 const DOWNLOAD_EXCEEDED: &str = "the update download took longer than 15 min";
+const PROGRESS_INTERVAL: Duration = Duration::from_millis(250);
 const USER_AGENT: &str = concat!("kiroshi-updater/", env!("CARGO_PKG_VERSION"));
 
 pub struct Updates {
@@ -223,7 +225,6 @@ async fn installed_offer(core: &Core, offer: &Offer) -> Result<Relaunch, String>
 }
 
 async fn downloaded(core: &Core, url: &str) -> Result<Vec<u8>, String> {
-	let updates = core.state::<Updates>();
 	let unread = |error: reqwest::Error| format!("the update was not downloaded: {error}");
 	let mut response = client()?
 		.get(url)
@@ -232,16 +233,41 @@ async fn downloaded(core: &Core, url: &str) -> Result<Vec<u8>, String> {
 		.await
 		.and_then(|response| response.error_for_status())
 		.map_err(unread)?;
-	let total_bytes = response.content_length();
+	let mut progress = Progress::started(core, response.content_length());
 	let mut artifact = Vec::new();
 	while let Some(chunk) = response.chunk().await.map_err(unread)? {
 		artifact.extend_from_slice(&chunk);
-		let progress =
-			UpdateState::Downloading { downloaded_bytes: artifact.len() as u64, total_bytes };
-		updates.settle(progress.clone());
-		announced(core, progress);
+		progress.received(chunk.len());
 	}
 	Ok(artifact)
+}
+
+struct Progress<'a> {
+	core: &'a Core,
+	total_bytes: Option<u64>,
+	downloaded_bytes: u64,
+	announced_at: Instant,
+}
+
+impl<'a> Progress<'a> {
+	fn started(core: &'a Core, total_bytes: Option<u64>) -> Self {
+		Self { core, total_bytes, downloaded_bytes: 0, announced_at: Instant::now() }
+	}
+
+	fn received(&mut self, bytes: usize) {
+		self.downloaded_bytes += bytes as u64;
+		let progress = UpdateState::Downloading {
+			downloaded_bytes: self.downloaded_bytes,
+			total_bytes: self.total_bytes,
+		};
+		self.core.state::<Updates>().settle(progress.clone());
+		let is_complete = self.total_bytes == Some(self.downloaded_bytes);
+		let now = Instant::now();
+		if is_complete || now.duration_since(self.announced_at) >= PROGRESS_INTERVAL {
+			self.announced_at = now;
+			announced(self.core, progress);
+		}
+	}
 }
 
 pub(super) fn restart(core: &Core) -> UpdateState {
@@ -408,6 +434,62 @@ mod tests {
 				.await;
 
 		assert_eq!(answered, Err("the update download took longer than 15 min".to_owned()));
+	}
+
+	fn announcements_heard(core: &CoreOfItsOwn) -> Arc<Mutex<Vec<String>>> {
+		let heard = Arc::<Mutex<Vec<String>>>::default();
+		let kept = heard.clone();
+		core.listen_to(events::UPDATE_CHANGED.name(), move |payload| {
+			kept.lock().expect("the heard announcements").push(payload.to_owned());
+		});
+		heard
+	}
+
+	#[tokio::test(start_paused = true)]
+	async fn a_download_announces_its_progress_at_most_every_250_ms_and_once_complete() {
+		let core = a_core();
+		let heard = announcements_heard(&core);
+		let mut progress = Progress::started(&core, Some(100));
+
+		for _ in 0..99 {
+			tokio::time::advance(Duration::from_millis(10)).await;
+			progress.received(1);
+		}
+		let between = core.state::<Updates>().state();
+		tokio::time::advance(Duration::from_millis(10)).await;
+		progress.received(1);
+
+		let heard = heard.lock().expect("the heard announcements").clone();
+		assert_eq!(
+			heard,
+			[25, 50, 75, 100].map(|downloaded| {
+				format!(
+					r#"{{"kind":"downloading","downloadedBytes":{downloaded},"totalBytes":100}}"#
+				)
+			})
+		);
+		assert_eq!(
+			between,
+			UpdateState::Downloading { downloaded_bytes: 99, total_bytes: Some(100) }
+		);
+	}
+
+	#[tokio::test(start_paused = true)]
+	async fn a_download_of_unknown_size_announces_only_on_the_interval() {
+		let core = a_core();
+		let heard = announcements_heard(&core);
+		let mut progress = Progress::started(&core, None);
+
+		for _ in 0..60 {
+			tokio::time::advance(Duration::from_millis(10)).await;
+			progress.received(1);
+		}
+
+		assert_eq!(heard.lock().expect("the heard announcements").len(), 2);
+		assert_eq!(
+			core.state::<Updates>().state(),
+			UpdateState::Downloading { downloaded_bytes: 60, total_bytes: None }
+		);
 	}
 
 	struct HeldCheck {
