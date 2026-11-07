@@ -367,7 +367,7 @@ mod tests {
 	#[tokio::test]
 	async fn only_a_routine_the_local_route_fires_is_answered_the_url_it_is_called_on() {
 		let app = a_host("called-at").await;
-		app.manage(webhook::start(app.clone(), crate::host_api::routes(&*app)));
+		app.manage(webhook::start(app.clone(), crate::routines::webhook::without_host_api()));
 		let called =
 			routine_create(&*app, a_called_draft()).await.expect("the called routine is created");
 		let scheduled = routine_create(&*app, a_draft("0 * * * *"))

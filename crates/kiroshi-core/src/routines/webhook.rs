@@ -305,6 +305,11 @@ fn payload(body: String, delivery_id: Option<String>, at: i64) -> Result<Value, 
 }
 
 #[cfg(test)]
+pub fn without_host_api() -> impl FnOnce(&Calls) -> Router<Calls> {
+	|_| Router::new()
+}
+
+#[cfg(test)]
 mod tests {
 	use std::fs;
 	use std::path::{Path, PathBuf};
@@ -482,20 +487,15 @@ mod tests {
 		}
 	}
 
-	fn start(app: AppHandle<MockRuntime>) -> Webhook {
-		started(
-			&*app.clone(),
-			Arc::new(SystemClock),
-			Arc::new(HeldOpen),
-			crate::host_api::routes(app),
-		)
+	fn start(app: &crate::core_context::Core) -> Webhook {
+		started(app.clone(), Arc::new(SystemClock), Arc::new(HeldOpen), without_host_api())
 	}
 
-	fn recording(app: AppHandle<MockRuntime>) -> (Webhook, mpsc::Receiver<RunRequested>) {
+	fn recording(app: &crate::core_context::Core) -> (Webhook, mpsc::Receiver<RunRequested>) {
 		let (requested, arriving) = mpsc::channel();
 		let runs = Arc::new(Recorded(std::sync::Mutex::new(requested)));
 		(
-			started(&*app.clone(), Arc::new(SystemClock), runs, crate::host_api::routes(app)),
+			started(app.clone(), Arc::new(SystemClock), runs, without_host_api()),
 			arriving,
 		)
 	}
@@ -657,7 +657,7 @@ mod tests {
 			app.clone(),
 			Arc::new(SystemClock),
 			Arc::new(HeldOpen),
-			crate::host_api::routes(&*app),
+			crate::routines::webhook::without_host_api(),
 			Err(taken),
 		);
 		let after_unbound = host_files_of(&host);
@@ -667,7 +667,7 @@ mod tests {
 			app.clone(),
 			Arc::new(SystemClock),
 			Arc::new(HeldOpen),
-			crate::host_api::routes(&*app),
+			crate::routines::webhook::without_host_api(),
 			listening(),
 		);
 		let after_bound = host_files_of(&host);
@@ -689,7 +689,7 @@ mod tests {
 			app.clone(),
 			Arc::new(SystemClock),
 			Arc::new(HeldOpen),
-			crate::host_api::routes(&*app),
+			crate::routines::webhook::without_host_api(),
 			listening(),
 		);
 		let answer = answered(webhook.address(), calling(None, "{}")).await;
@@ -779,7 +779,7 @@ mod tests {
 		let app = a_host("loopback").await;
 		let clock = Ticking::at(NOON);
 		let webhook =
-			started(app.clone(), clock.clone(), Arc::new(HeldOpen), crate::host_api::routes(&*app));
+			started(app.clone(), clock.clone(), Arc::new(HeldOpen), crate::routines::webhook::without_host_api());
 		let address = address_of(&webhook);
 
 		for host in ["localhost", "127.0.0.1", &format!("localhost:{}", address.port())] {
@@ -817,7 +817,7 @@ mod tests {
 		let app = a_host("flooded").await;
 		let clock = Ticking::at(NOON);
 		let webhook =
-			started(app.clone(), clock.clone(), Arc::new(HeldOpen), crate::host_api::routes(&*app));
+			started(app.clone(), clock.clone(), Arc::new(HeldOpen), crate::routines::webhook::without_host_api());
 		let address = address_of(&webhook);
 		for _ in 0..CALLS_PER_WINDOW {
 			let answer = answered(address, delivering(Some(A_KEY), "delivery-1", "{}")).await;
@@ -851,7 +851,7 @@ mod tests {
 		let app = a_host("hourly-flood").await;
 		let clock = Ticking::at(NOON);
 		let webhook =
-			started(app.clone(), clock.clone(), Arc::new(HeldOpen), crate::host_api::routes(&*app));
+			started(app.clone(), clock.clone(), Arc::new(HeldOpen), crate::routines::webhook::without_host_api());
 		let started_runs = HOURLY_CAP as usize;
 		let silenced = A_HUNDRED_CALLS - started_runs - 1;
 
@@ -876,7 +876,7 @@ mod tests {
 		let app = a_host("hourly-forgotten").await;
 		let clock = Ticking::at(NOON);
 		let webhook =
-			started(app.clone(), clock.clone(), Arc::new(HeldOpen), crate::host_api::routes(&*app));
+			started(app.clone(), clock.clone(), Arc::new(HeldOpen), crate::routines::webhook::without_host_api());
 		let address = address_of(&webhook);
 		let to_the_cap = HOURLY_CAP as usize + 1;
 		calling_with_each_run_closed(&app, address, &clock, A_KEY, to_the_cap).await;
@@ -896,7 +896,7 @@ mod tests {
 		let app = a_host("hourly-two").await;
 		let clock = Ticking::at(NOON);
 		let webhook =
-			started(app.clone(), clock.clone(), Arc::new(HeldOpen), crate::host_api::routes(&*app));
+			started(app.clone(), clock.clone(), Arc::new(HeldOpen), crate::routines::webhook::without_host_api());
 		let address = address_of(&webhook);
 		let to_the_cap = HOURLY_CAP as usize + 1;
 
@@ -917,7 +917,7 @@ mod tests {
 		let app = a_host("leased-flood").await;
 		let clock = Ticking::at(NOON);
 		let webhook =
-			started(app.clone(), clock.clone(), Arc::new(HeldOpen), crate::host_api::routes(&*app));
+			started(app.clone(), clock.clone(), Arc::new(HeldOpen), crate::routines::webhook::without_host_api());
 
 		let answers =
 			calling_with_the_run_left_open(address_of(&webhook), &clock, A_KEY, A_HUNDRED_CALLS)
@@ -935,7 +935,7 @@ mod tests {
 		let app = a_host("leased-at-once").await;
 		let clock = Ticking::at(NOON);
 		let webhook =
-			started(app.clone(), clock.clone(), Arc::new(HeldOpen), crate::host_api::routes(&*app));
+			started(app.clone(), clock.clone(), Arc::new(HeldOpen), crate::routines::webhook::without_host_api());
 		let address = address_of(&webhook);
 		let silenced = CALLS_PER_WINDOW - 2;
 
@@ -961,7 +961,7 @@ mod tests {
 		let app = a_host("leased-forgotten").await;
 		let clock = Ticking::at(NOON);
 		let webhook =
-			started(app.clone(), clock.clone(), Arc::new(HeldOpen), crate::host_api::routes(&*app));
+			started(app.clone(), clock.clone(), Arc::new(HeldOpen), crate::routines::webhook::without_host_api());
 		let address = address_of(&webhook);
 		calling_with_the_run_left_open(address, &clock, A_KEY, 2).await;
 		assert_eq!(skipped_rows(&app, A_KEY, SkipReason::LeaseHeld).await, 1);
@@ -1002,7 +1002,7 @@ mod tests {
 		let app = a_host("delivered").await;
 		let clock = Ticking::at(NOON);
 		let webhook =
-			started(app.clone(), clock.clone(), Arc::new(HeldOpen), crate::host_api::routes(&*app));
+			started(app.clone(), clock.clone(), Arc::new(HeldOpen), crate::routines::webhook::without_host_api());
 		let address = address_of(&webhook);
 
 		for _ in 0..2 {

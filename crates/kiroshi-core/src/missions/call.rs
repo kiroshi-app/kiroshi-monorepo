@@ -353,7 +353,7 @@ mod tests {
 			app.clone(),
 			clock,
 			Arc::new(Runner::new(app.clone())),
-			crate::host_api::routes(&*app),
+			crate::routines::webhook::without_host_api(),
 		)
 	}
 
