@@ -4,8 +4,10 @@ use rune::{AppSpec, Cx, El, TextEdit, Waker, row};
 use crate::foundations::{self, PICTURE_SCALE, PICTURE_SIDE, UPLOADED_AVATAR_IMAGE};
 use crate::tokens::{self, SPACING, Tokens};
 
+mod boards;
 mod feedback;
 mod forms;
+mod library;
 mod navigation;
 mod overlays;
 mod person_settings;
@@ -544,18 +546,887 @@ pub static SCENES: &[Scene] = &[
 		SCREEN,
 		person_settings::screen_maximum_width,
 	),
+	library::library("navigation-librarypanel--grid-all", library::grid_all),
+	library::library("navigation-librarypanel--grid-middle-click", library::grid_all),
+	library::library("navigation-librarypanel--grid-context-menu", library::grid_context_menu),
+	library::library(
+		"navigation-librarypanel--grid-actions-per-item",
+		library::grid_actions_per_item,
+	),
+	library::library("navigation-librarypanel--grid-image-menu", library::grid_image_menu),
+	library::library("navigation-librarypanel--grid-images", library::grid_images),
+	library::library("navigation-librarypanel--grid-documents", library::grid_documents),
+	library::library("navigation-librarypanel--new-board-action", library::grid_all),
+	library::library("navigation-librarypanel--new-board-action-light", library::grid_all),
+	library::library(
+		"navigation-librarypanel--grid-document-preview-holds-no-control",
+		library::preview_holds_no_control,
+	),
+	library::library(
+		"navigation-librarypanel--grid-documents-across-spaces",
+		library::documents_across_spaces,
+	),
+	library::library(
+		"navigation-librarypanel--grid-documents-across-spaces-light",
+		library::documents_across_spaces,
+	),
+	library::library(
+		"navigation-librarypanel--filter-with-no-match",
+		library::filter_with_no_match,
+	),
+	library::library(
+		"navigation-librarypanel--empty-with-no-callbacks",
+		library::empty_with_no_callbacks,
+	),
+	library::library(
+		"navigation-librarypanel--empty-with-every-callback",
+		library::empty_with_every_callback,
+	),
+	library::library(
+		"navigation-librarypanel--empty-with-every-callback-light",
+		library::empty_with_every_callback,
+	),
+	library::library("navigation-librarypanel--loading", library::loading),
+	library::library("navigation-librarypanel--loading-light", library::loading),
+	library::library(
+		"navigation-librarypanel--whitespace-name-reads-untitled",
+		library::whitespace_name,
+	),
+	library::library("navigation-librarypanel--long-names", library::long_names),
+	library::library("navigation-librarypanel--dropping-files", library::dropping_files),
+	library::library("navigation-librarypanel--dropping-one-file", library::dropping_one_file),
+	library::library("navigation-librarypanel--added-to-the-grid", library::added_to_the_grid),
+	library::library("navigation-librarypanel--import-long-names", library::import_long_names),
+	library::library("navigation-librarypanel--import-failures", library::import_failures),
+	library::searched(
+		"navigation-librarypanel--search-with-no-match",
+		"quarterly roadmap",
+		library::search,
+	),
+	library::searched("navigation-librarypanel--search-filled", "dashboard", library::search),
+	library::tabbed("navigation-librarypanel--focus-visible", 9, library::grid_all),
+	library::library("navigation-librarytabstates--document-loading", library::document_loading),
+	library::library(
+		"navigation-librarytabstates--document-loading-dark",
+		library::document_loading,
+	),
+	library::library("navigation-librarytabstates--image-loading", library::image_loading),
+	library::library("navigation-librarytabstates--missing-item", library::missing_item),
+	library::library("navigation-librarytabstates--missing-item-dark", library::missing_item),
+	library::library("navigation-librarytabstates--unreadable-item", library::unreadable_item),
+	library::library("navigation-librarytabstates--unreadable-item-dark", library::unreadable_item),
+	library::library("navigation-librarydocumentview--default", library::document_default),
+	library::library(
+		"navigation-librarydocumentview--bar-matches-image-bar",
+		library::document_default,
+	),
+	library::library("navigation-librarydocumentview--more-menu", library::document_more_menu),
+	library::library(
+		"navigation-librarydocumentview--whitespace-name-reads-untitled",
+		library::document_whitespace_name,
+	),
+	library::library("navigation-librarydocumentview--member", library::document_member),
+	library::library(
+		"navigation-librarydocumentview--agents-writing",
+		library::document_agents_writing,
+	),
+	library::library(
+		"navigation-librarydocumentview--gallery-of-stored-images",
+		library::document_gallery_of_stored_images,
+	),
+	library::tabbed(
+		"navigation-librarydocumentview--rename-without-focus-target",
+		4,
+		library::document_default,
+	),
+	library::tabbed("navigation-librarydocumentview--focus-visible", 1, library::document_default),
+	library::library("navigation-librarydocumentstates--empty-document", library::document_empty),
+	library::library(
+		"navigation-librarydocumentstates--files-dropped-in",
+		library::document_files_dropped,
+	),
+	library::library(
+		"navigation-librarydocumentstates--failed-import",
+		library::document_failed_import,
+	),
+	library::library("navigation-librarydocumentstates--read-only", library::document_read_only),
+	library::library(
+		"navigation-librarynewdocumentdialog--meeting-notes-selected",
+		library::meeting_notes_selected,
+	),
+	library::library(
+		"navigation-librarynewdocumentdialog--blank-selected",
+		library::blank_selected,
+	),
+	library::narrow(
+		"navigation-librarynewdocumentdialog--narrow-window",
+		library::meeting_notes_selected,
+	),
+	library::library("overlays-librarylightbox--default", library::lightbox_default),
+	library::library("overlays-librarylightbox--host-more-menu", library::lightbox_host_more_menu),
+	library::library(
+		"overlays-librarylightbox--member-more-menu",
+		library::lightbox_member_more_menu,
+	),
+	library::library(
+		"overlays-librarylightbox--image-without-rename",
+		library::lightbox_without_rename,
+	),
+	library::library(
+		"overlays-librarylightbox--delete-confirmation",
+		library::lightbox_delete_confirmation,
+	),
+	library::library("overlays-librarylightbox--back-button", library::lightbox_back_button),
+	library::library("overlays-librarylightbox--backdrop-click", library::lightbox_first),
+	library::library("overlays-librarylightbox--copy-check", library::lightbox_copy_check),
+	library::library("overlays-librarylightbox--at-the-first-image", library::lightbox_first),
+	library::library("overlays-librarylightbox--opened-with-the-panel", library::lightbox_default),
+	library::library("overlays-librarylightbox--zoomed", library::lightbox_zoomed),
+	library::library(
+		"overlays-librarylightbox--image-menu-open",
+		library::lightbox_image_menu_open,
+	),
+	library::library(
+		"overlays-librarylightbox--image-menu-saving",
+		library::lightbox_image_menu_saving,
+	),
+	library::threaded("navigation-documentpanel--in-thread", 0, library::document_panel_in_thread),
+	library::threaded(
+		"navigation-documentpanel--keeps-the-thread-when-toggled",
+		0,
+		library::document_panel_in_thread,
+	),
+	library::threaded(
+		"navigation-documentpanel--after-a-drag",
+		0,
+		library::document_panel_after_a_drag,
+	),
+	library::threaded(
+		"navigation-documentpanel--handle-with-keyboard-focus",
+		1,
+		library::document_panel_in_thread,
+	),
+	library::threaded(
+		"navigation-documentpanel--header-aligned-with-the-thread-header",
+		0,
+		library::document_panel_in_thread,
+	),
+	library::threaded(
+		"navigation-documentpanel--asked-under-the-room-left",
+		0,
+		library::document_panel_asked_under_the_room,
+	),
+	library::threaded(
+		"navigation-documentpanel--capped-by-the-room-left",
+		0,
+		library::document_panel_capped,
+	),
+	library::threaded(
+		"navigation-documentpanel--handle-with-keyboard-focus-dark",
+		1,
+		library::document_panel_in_thread,
+	),
+	library::threaded(
+		"navigation-documentpanel--consecutive-answers-at-the-thread-floor",
+		0,
+		library::document_panel_capped,
+	),
+	library::threaded(
+		"navigation-documentpanel--board-one-agent",
+		0,
+		library::document_board_panel,
+	),
+	library::threaded(
+		"navigation-documentpanel--board-one-agent-dark",
+		0,
+		library::document_board_panel,
+	),
+	library::threaded(
+		"navigation-documentpanel--board-several-agents",
+		0,
+		library::document_board_panel,
+	),
+	library::threaded(
+		"navigation-documentpanel--board-several-agents-dark",
+		0,
+		library::document_board_panel,
+	),
+	library::threaded(
+		"navigation-documentpanel--board-header-aligned-with-the-thread-header",
+		0,
+		library::document_board_panel,
+	),
+	library::small_window(
+		"navigation-documentpanel--held-at-its-floor-in-the-smallest-window",
+		library::document_panel_at_its_floor,
+	),
+	library::library("navigation-librarydocumenteditor--blank", library::editor),
+	library::library(
+		"navigation-librarydocumenteditor--whitespace-title-reads-untitled",
+		library::editor,
+	),
+	library::library("navigation-librarydocumenteditor--title-at-rest", library::editor),
+	library::library("navigation-librarydocumenteditor--title-focused-by-rename", library::editor),
+	library::library(
+		"navigation-librarydocumenteditor--rename-focuses-title-from-handle",
+		library::editor,
+	),
+	library::library(
+		"navigation-librarydocumenteditor--title-enter-moves-to-body",
+		library::editor,
+	),
+	library::library("navigation-librarydocumenteditor--title-escape-restores", library::editor),
+	library::library("navigation-librarydocumenteditor--title-click-away-keeps", library::editor),
+	library::library("navigation-librarydocumenteditor--title-emptied-restores", library::editor),
+	library::library(
+		"navigation-librarydocumenteditor--title-restored-after-refused-rename",
+		library::editor,
+	),
+	library::library("navigation-librarydocumenteditor--from-meeting-notes", library::editor),
+	library::library("navigation-librarydocumenteditor--with-typed-text", library::editor),
+	library::library("navigation-librarydocumenteditor--existing-document", library::editor),
+	library::library("navigation-librarydocumenteditor--column-at-maximum-width", library::editor),
+	library::library("navigation-librarydocumenteditor--round-trip-fixture", library::editor),
+	library::library("navigation-librarydocumenteditor--blocks-rendered", library::editor),
+	library::library("navigation-librarydocumenteditor--blocks-rendered-light", library::editor),
+	library::library("navigation-librarydocumenteditor--bold-typed-then-rendered", library::editor),
+	library::library("navigation-librarydocumenteditor--task-toggle", library::editor),
+	library::library(
+		"navigation-librarydocumenteditor--outside-change-while-typing",
+		library::editor,
+	),
+	library::library("navigation-librarydocumenteditor--multi-paragraph-paste", library::editor),
+	library::library("navigation-librarydocumenteditor--outside-title-change", library::editor),
+	library::library("navigation-librarydocumenteditor--caret-moves", library::editor),
+	library::library(
+		"navigation-librarydocumenteditor--click-below-the-last-line",
+		library::editor,
+	),
+	library::library("navigation-librarydocumenteditor--agents-writing", library::editor),
+	library::library(
+		"navigation-librarydocumenteditor--agent-run-held-then-fades",
+		library::editor,
+	),
+	library::library(
+		"navigation-librarydocumenteditor--person-caret-beside-agent",
+		library::editor,
+	),
+	library::library("navigation-librarydocumenteditor--presence-people-only", library::editor),
+	library::library("navigation-librarydocumenteditor--presence-agents-only", library::editor),
+	library::library(
+		"navigation-librarydocumenteditor--presence-agents-and-people",
+		library::editor,
+	),
+	library::library("navigation-librarydocumenteditor--create-failure", library::editor),
+	library::library("navigation-librarydocumenteditor--open-failure", library::editor),
+	library::library("navigation-librarydocumenteditor--save-failure", library::editor),
+	library::library("navigation-librarydocumenteditor--write-failure", library::editor),
+	library::library("navigation-librarydocumenteditor--caret-share-failure", library::editor),
+	library::library("navigation-librarydocumenteditor--format-without-change", library::editor),
+	library::library(
+		"navigation-librarydocumenteditor--a-1-toolbar-above-selection",
+		library::editor,
+	),
+	library::library(
+		"navigation-librarydocumenteditor--a-2-toolbar-over-two-lines",
+		library::editor,
+	),
+	library::library("navigation-librarydocumenteditor--a-3-toolbar-button-hover", library::editor),
+	library::library("navigation-librarydocumenteditor--a-4-toolbar-format-on", library::editor),
+	library::library("navigation-librarydocumenteditor--a-5-toolbar-link-field", library::editor),
+	library::library(
+		"navigation-librarydocumenteditor--a-6-toolbar-flipped-below",
+		library::editor,
+	),
+	library::library("navigation-librarydocumenteditor--bold-shortcut", library::editor),
+	library::library("navigation-librarydocumenteditor--italic-shortcut", library::editor),
+	library::library("navigation-librarydocumenteditor--strikethrough-shortcut", library::editor),
+	library::library("navigation-librarydocumenteditor--code-shortcut", library::editor),
+	library::library("navigation-librarydocumenteditor--link-shortcut", library::editor),
+	library::library("navigation-librarydocumenteditor--escape-closes-toolbar", library::editor),
+	library::library("navigation-librarydocumenteditor--toolbar-after-drag", library::editor),
+	library::library(
+		"navigation-librarydocumenteditor--toolbar-after-keyboard-selection",
+		library::editor,
+	),
+	library::library("navigation-librarydocumenteditor--format-bold", library::editor),
+	library::library("navigation-librarydocumenteditor--format-italic", library::editor),
+	library::library("navigation-librarydocumenteditor--format-strikethrough", library::editor),
+	library::library("navigation-librarydocumenteditor--format-inline-code", library::editor),
+	library::library("navigation-librarydocumenteditor--format-link", library::editor),
+	library::library("navigation-librarydocumenteditor--format-heading-2", library::editor),
+	library::library("navigation-librarydocumenteditor--format-bullet-list", library::editor),
+	library::library("navigation-librarydocumenteditor--gallery-images-resolved", library::editor),
+	library::library(
+		"navigation-librarydocumentblockeditor--slash-menu-near-bottom",
+		library::editor,
+	),
+	library::library(
+		"navigation-librarydocumentblockeditor--slash-menu-near-bottom-dark",
+		library::editor,
+	),
+	library::library("navigation-librarydocumentblockeditor--slash-menu-filtered", library::editor),
+	library::library("navigation-librarydocumentblockeditor--block-handle-menu", library::editor),
+	library::library(
+		"navigation-librarydocumentblockeditor--drag-with-drop-indicator",
+		library::editor,
+	),
+	library::library(
+		"navigation-librarydocumentblockeditor--bubble-and-document-parity",
+		library::editor,
+	),
+	library::library("navigation-librarydocumentblockeditor--agents-writing", library::editor),
+	library::library("navigation-librarydocumentblockeditor--focused-heading", library::editor),
+	library::library(
+		"navigation-librarydocumentblockeditor--focused-heading-dark",
+		library::editor,
+	),
+	library::library("navigation-librarydocumentblockeditor--focused-list-item", library::editor),
+	library::library(
+		"navigation-librarydocumentblockeditor--focused-list-item-dark",
+		library::editor,
+	),
+	library::library("navigation-librarydocumentblockeditor--focused-to-do-item", library::editor),
+	library::library(
+		"navigation-librarydocumentblockeditor--focused-to-do-item-dark",
+		library::editor,
+	),
+	library::library("navigation-librarydocumentblockeditor--focused-quote", library::editor),
+	library::library("navigation-librarydocumentblockeditor--focused-quote-dark", library::editor),
+	library::library(
+		"navigation-librarydocumentblockeditor--focused-every-inline-mark",
+		library::editor,
+	),
+	library::library(
+		"navigation-librarydocumentblockeditor--focused-every-inline-mark-dark",
+		library::editor,
+	),
+	library::library(
+		"navigation-librarydocumentblockeditor--callout-body-shows-its-marks",
+		library::editor,
+	),
+	library::library(
+		"navigation-librarydocumentblockeditor--table-cell-shows-its-marks",
+		library::editor,
+	),
+	library::library(
+		"navigation-librarydocumentblockeditor--escape-shows-the-character",
+		library::editor,
+	),
+	library::library(
+		"navigation-librarydocumentblockeditor--autolink-shows-its-text",
+		library::editor,
+	),
+	library::library(
+		"navigation-librarydocumentblockeditor--inline-image-is-one-node",
+		library::editor,
+	),
+	library::library(
+		"navigation-librarydocumentblockeditor--nested-list-keeps-its-indent",
+		library::editor,
+	),
+	library::library(
+		"navigation-librarydocumentblockeditor--emptied-blocks-keep-their-type",
+		library::editor,
+	),
+	library::library(
+		"navigation-librarydocumentblockeditor--person-caret-at-block-edges",
+		library::editor,
+	),
+	library::library("navigation-librarydocumentblockeditor--gallery-editing", library::editor),
+	library::library(
+		"navigation-librarydocumentblockeditor--gallery-editing-dark",
+		library::editor,
+	),
+	library::library(
+		"navigation-librarydocumentblockeditor--gallery-tile-dragged",
+		library::editor,
+	),
+	library::library(
+		"navigation-librarydocumentblockeditor--gallery-images-resolved",
+		library::editor,
+	),
+	library::library(
+		"navigation-librarydocumentblockeditor--gallery-image-resolving",
+		library::editor,
+	),
+	library::library(
+		"navigation-librarydocumentblockeditor--gallery-image-failing",
+		library::editor,
+	),
+	library::library("navigation-librarydocumentblockeditor--checklist-editing", library::editor),
+	library::library(
+		"navigation-librarydocumentblockeditor--checklist-item-moved",
+		library::editor,
+	),
+	library::library("navigation-librarydocumentblockeditor--callout-tone-switch", library::editor),
+	library::library("navigation-librarydocumentblockeditor--table-editing", library::editor),
+	library::library("navigation-librarydocumentblockeditor--table-editing-dark", library::editor),
+	library::library(
+		"navigation-librarydocumentblockeditor--code-language-chosen",
+		library::editor,
+	),
+	library::library(
+		"navigation-librarydocumentblockeditor--web-page-link-updated",
+		library::editor,
+	),
+	library::library(
+		"navigation-librarydocumentblockeditor--web-page-link-failed",
+		library::editor,
+	),
+	library::library("navigation-librarydocumentblockeditor--gallery-beyond-five", library::editor),
+	library::narrow("navigation-librarydocumentblockeditor--narrow-column", library::editor),
+	library::narrow(
+		"navigation-librarydocumentblockeditor--gallery-editing-at-320",
+		library::editor,
+	),
+	library::narrow("navigation-librarydocumentblockeditor--table-editing-at-320", library::editor),
+	scene("board-boardcard--at-rest", boards::ANSWER, boards::card_at_rest),
+	scene("board-boardcard--drawing", boards::ANSWER, boards::card_drawing),
+	scene(
+		"board-boardcard--drawing-without-object",
+		boards::ANSWER,
+		boards::card_drawing_without_object,
+	),
+	scene("board-boardcard--failed", boards::ANSWER, boards::card_failed),
+	scene("board-boardcard--loading", boards::ANSWER, boards::card_loading),
+	scene("board-boardcard--long-title", boards::NARROW_ANSWER, boards::card_long_title),
+	scene("board-boardcard--open-beside", boards::ANSWER, boards::card_open_beside),
+	scene("board-boardcard--owner-without-hue", boards::ANSWER, boards::card_owner_without_hue),
+	scene("board-boardconnectorflyout--elbow", STORY, boards::flyout_elbow),
+	scene(
+		"board-boardconnectorflyout--elbow-in-yellow-space",
+		STORY,
+		boards::flyout_elbow_in_yellow_space,
+	),
+	scene("board-boardconnectorflyout--straight", STORY, boards::flyout_straight),
+	scene("board-boarddock--connector-active", boards::DOCK_FRAME, boards::dock_connector),
+	scene("board-boarddock--hand-active", boards::DOCK_FRAME, boards::dock_hand),
+	scene("board-boarddock--image-active", boards::DOCK_FRAME, boards::dock_image),
+	scene("board-boarddock--library-picker", boards::DOCK_FRAME, boards::dock_library),
+	scene("board-boarddock--library-picker-empty", boards::DOCK_FRAME, boards::dock_library_empty),
+	scene("board-boarddock--section-active", boards::DOCK_FRAME, boards::dock_section),
+	focused("board-boarddock--select-active", boards::DOCK_FRAME, 1, boards::dock_select),
+	scene("board-boarddock--shape-active", boards::DOCK_FRAME, boards::dock_shape),
+	scene("board-boarddock--sticky-active", boards::DOCK_FRAME, boards::dock_sticky),
+	scene("board-boarddock--text-active", boards::DOCK_FRAME, boards::dock_text),
+	scene("board-boardimage--default", STORY, boards::image_default),
+	scene("board-boardimage--with-source", STORY, boards::image_with_source),
+	scene("board-boardlibrarycard--dragging", STORY, boards::library_card_dragging),
+	scene("board-boardlibrarycard--resting", STORY, boards::library_card_resting),
+	scene("board-boardlinkcard--default", STORY, boards::link_card_default),
+	scene("board-boardlinkcard--long-content", STORY, boards::link_card_long_content),
+	scene("board-boardminiature--empty-board", STORY, boards::miniature_empty_board),
+	scene("board-boardminiature--every-object-kind", STORY, boards::miniature_every_object_kind),
+	scene("board-boardminiature--wide-board", STORY, boards::miniature_wide_board),
+	scene(
+		"board-boardobjects--document-card-narrower-and-taller",
+		boards::CANVAS,
+		boards::objects_document_card_narrower,
+	),
+	scene(
+		"board-boardobjects--document-card-wider-and-shorter",
+		boards::CANVAS,
+		boards::objects_document_card_wider,
+	),
+	scene(
+		"board-boardobjects--image-narrower-and-taller",
+		boards::CANVAS,
+		boards::objects_image_narrower,
+	),
+	scene(
+		"board-boardobjects--image-wider-and-shorter",
+		boards::CANVAS,
+		boards::objects_image_wider,
+	),
+	scene(
+		"board-boardobjects--library-card-narrower-and-taller",
+		boards::CANVAS,
+		boards::objects_library_card_narrower,
+	),
+	scene(
+		"board-boardobjects--library-card-wider-and-shorter",
+		boards::CANVAS,
+		boards::objects_library_card_wider,
+	),
+	scene(
+		"board-boardobjects--link-and-image-pasted",
+		boards::EVERY_OBJECT,
+		boards::objects_link_and_image_pasted,
+	),
+	scene(
+		"board-boardobjects--link-card-narrower-and-taller",
+		boards::CANVAS,
+		boards::objects_link_card_narrower,
+	),
+	scene(
+		"board-boardobjects--link-card-wider-and-shorter",
+		boards::CANVAS,
+		boards::objects_link_card_wider,
+	),
+	scene(
+		"board-boardobjects--section-narrower-and-taller",
+		boards::CANVAS,
+		boards::objects_section_narrower,
+	),
+	scene(
+		"board-boardobjects--section-wider-and-shorter",
+		boards::CANVAS,
+		boards::objects_section_wider,
+	),
+	scene(
+		"board-boardobjects--shape-narrower-and-taller",
+		boards::CANVAS,
+		boards::objects_shape_narrower,
+	),
+	scene(
+		"board-boardobjects--shape-wider-and-shorter",
+		boards::CANVAS,
+		boards::objects_shape_wider,
+	),
+	scene(
+		"board-boardobjects--sticky-narrower-and-taller",
+		boards::CANVAS,
+		boards::objects_sticky_narrower,
+	),
+	scene(
+		"board-boardobjects--sticky-wider-and-shorter",
+		boards::CANVAS,
+		boards::objects_sticky_wider,
+	),
+	scene(
+		"board-boardobjects--text-narrower-and-taller",
+		boards::CANVAS,
+		boards::objects_text_narrower,
+	),
+	scene("board-boardobjects--text-wider-and-shorter", boards::CANVAS, boards::objects_text_wider),
+	scene(
+		"board-boardpresence--agents-finished",
+		boards::PRESENCE,
+		boards::presence_agents_finished,
+	),
+	scene("board-boardpresence--long-content", boards::PRESENCE, boards::presence_long_content),
+	scene("board-boardpresence--one-agent", boards::PRESENCE, boards::presence_one_agent),
+	scene(
+		"board-boardpresence--person-with-agents",
+		boards::PRESENCE,
+		boards::presence_person_with_agents,
+	),
+	scene("board-boardpresence--several-agents", boards::PRESENCE, boards::presence_several_agents),
+	scene(
+		"board-boardpresence--stop-all-failure",
+		boards::PRESENCE,
+		boards::presence_stop_all_failure,
+	),
+	scene("board-boardsection--blue", boards::SECTION, boards::section_blue),
+	scene("board-boardsection--purple", boards::SECTION, boards::section_purple),
+	scene("board-boardselectionbar--default", STORY, boards::selection_bar_default),
+	scene("board-boardshape--ellipse", STORY, boards::shape_ellipse),
+	scene("board-boardshape--fill-blue", STORY, boards::shape_fill_blue),
+	scene("board-boardshape--fill-green", STORY, boards::shape_fill_green),
+	scene("board-boardshape--fill-pink", STORY, boards::shape_fill_pink),
+	scene("board-boardshape--fill-yellow", STORY, boards::shape_fill_yellow),
+	scene("board-boardshape--rounded-rectangle", STORY, boards::shape_rounded_rectangle),
+	scene("board-boardsticky--agent-author", STORY, boards::sticky_agent_author),
+	scene("board-boardsticky--agent-writing-without-outline", STORY, boards::sticky_agent_writing),
+	scene("board-boardsticky--colours", boards::COLOURS, boards::sticky_colours),
+	scene("board-boardsticky--long-content", STORY, boards::sticky_long_content),
+	scene("board-boardsticky--person-author", STORY, boards::sticky_person_author),
+	scene("board-boardtext--body-only", STORY, boards::text_body_only),
+	scene("board-boardtext--default", STORY, boards::text_default),
+	scene("board-boardtext--heading-only", STORY, boards::text_heading_only),
+	scene(
+		"foundations-board-palette--stickies-and-sections-in-both-themes",
+		boards::PALETTE,
+		boards::board_palette,
+	),
+	scene(
+		"navigation-boardcanvas--arrow-aimed-at-shape",
+		boards::CANVAS,
+		boards::arrow_aimed_at_shape,
+	),
+	scene("navigation-boardcanvas--arrow-bent-by-hand", boards::CANVAS, boards::arrow_bent_by_hand),
+	scene(
+		"navigation-boardcanvas--arrow-crossing-shape",
+		boards::CANVAS,
+		boards::arrow_crossing_shape,
+	),
+	scene("navigation-boardcanvas--arrow-curve", boards::CANVAS, boards::arrow_curve),
+	scene(
+		"navigation-boardcanvas--arrow-drawn-with-alt",
+		boards::CANVAS,
+		boards::arrow_drawn_with_alt,
+	),
+	scene(
+		"navigation-boardcanvas--arrow-drawn-with-ctrl",
+		boards::CANVAS,
+		boards::arrow_drawn_with_ctrl,
+	),
+	scene("navigation-boardcanvas--arrow-elbow", boards::CANVAS, boards::arrow_elbow),
+	scene("navigation-boardcanvas--arrow-exact-point", boards::CANVAS, boards::arrow_exact_point),
+	scene(
+		"navigation-boardcanvas--arrow-follows-moved-shape",
+		boards::CANVAS,
+		boards::arrow_follows_moved_shape,
+	),
+	scene(
+		"navigation-boardcanvas--arrow-gesture-cancelled",
+		boards::CANVAS,
+		boards::arrow_gesture_cancelled,
+	),
+	scene("navigation-boardcanvas--arrow-head-sizes", boards::CANVAS, boards::arrow_head_sizes),
+	scene(
+		"navigation-boardcanvas--arrow-held-on-exact-point",
+		boards::CANVAS,
+		boards::arrow_held_on_exact_point,
+	),
+	scene("navigation-boardcanvas--arrow-label", boards::CANVAS, boards::arrow_label),
+	scene("navigation-boardcanvas--arrow-label-edited", boards::CANVAS, boards::arrow_label_edited),
+	scene("navigation-boardcanvas--arrow-label-slid", boards::CANVAS, boards::arrow_label_slid),
+	scene("navigation-boardcanvas--arrow-loose-end", boards::CANVAS, boards::arrow_loose_end),
+	scene(
+		"navigation-boardcanvas--arrow-quick-release",
+		boards::CANVAS,
+		boards::arrow_quick_release,
+	),
+	scene(
+		"navigation-boardcanvas--arrow-released-on-centre",
+		boards::CANVAS,
+		boards::arrow_released_on_centre,
+	),
+	scene(
+		"navigation-boardcanvas--arrow-rerouted-by-hand",
+		boards::CANVAS,
+		boards::arrow_rerouted_by_hand,
+	),
+	scene("navigation-boardcanvas--arrows-after-board", boards::LAPTOP, boards::arrows_after_board),
+	scene(
+		"navigation-boardcanvas--cancel-draft-by-escape",
+		boards::LAPTOP,
+		boards::canvas_cancel_draft_by_escape,
+	),
+	scene(
+		"navigation-boardcanvas--connector-being-drawn",
+		boards::LAPTOP,
+		boards::canvas_connector_being_drawn,
+	),
+	scene(
+		"navigation-boardcanvas--connector-by-keyboard",
+		boards::LAPTOP,
+		boards::canvas_connector_by_keyboard,
+	),
+	scene(
+		"navigation-boardcanvas--connector-with-presence-outline",
+		boards::LAPTOP,
+		boards::canvas_connector_with_presence_outline,
+	),
+	scene(
+		"navigation-boardcanvas--create-connector",
+		boards::LAPTOP,
+		boards::canvas_create_connector,
+	),
+	scene(
+		"navigation-boardcanvas--create-straight-connector",
+		boards::LAPTOP,
+		boards::canvas_create_straight_connector,
+	),
+	scene(
+		"navigation-boardcanvas--draw-connector-with-tool",
+		boards::LAPTOP,
+		boards::canvas_draw_connector_with_tool,
+	),
+	Scene {
+		id: "navigation-boardcanvas--edit-by-keyboard",
+		size: boards::LAPTOP,
+		tabs: 1,
+		pointer: Pointer::Away,
+		typed: boards::EDITED_TEXT,
+		view: boards::canvas_edit,
+	},
+	Scene {
+		id: "navigation-boardcanvas--edit-by-pointer",
+		size: boards::LAPTOP,
+		tabs: 1,
+		pointer: Pointer::Away,
+		typed: boards::EDITED_TEXT,
+		view: boards::canvas_edit,
+	},
+	scene("navigation-boardcanvas--empty", boards::CANVAS, boards::canvas_empty),
+	scene(
+		"navigation-boardcanvas--files-dragged-over-images",
+		boards::CANVAS,
+		boards::canvas_files_images,
+	),
+	scene(
+		"navigation-boardcanvas--files-dragged-over-mixed",
+		boards::CANVAS,
+		boards::canvas_files_mixed,
+	),
+	scene(
+		"navigation-boardcanvas--files-dragged-over-one-file",
+		boards::CANVAS,
+		boards::canvas_files_one,
+	),
+	scene(
+		"navigation-boardcanvas--files-dragged-over-unknown-count",
+		boards::CANVAS,
+		boards::canvas_files_unknown,
+	),
+	scene(
+		"navigation-boardcanvas--five-hundred-objects",
+		boards::CANVAS,
+		boards::canvas_five_hundred_objects,
+	),
+	scene("navigation-boardcanvas--image-pasted", boards::LAPTOP, boards::canvas_image_pasted),
+	scene(
+		"navigation-boardcanvas--library-item-picked-on-second-canvas",
+		boards::CANVAS,
+		boards::canvas_library_picker,
+	),
+	scene("navigation-boardcanvas--link-pasted", boards::LAPTOP, boards::canvas_link_pasted),
+	scene(
+		"navigation-boardcanvas--loaded-with-objects",
+		boards::CANVAS,
+		boards::canvas_loaded_with_objects,
+	),
+	scene("navigation-boardcanvas--loading", boards::CANVAS, boards::canvas_loading),
+	focused(
+		"navigation-boardcanvas--move-by-keyboard",
+		boards::LAPTOP,
+		1,
+		boards::canvas_move_by_keyboard,
+	),
+	scene(
+		"navigation-boardcanvas--move-by-pointer",
+		boards::LAPTOP,
+		boards::canvas_move_by_pointer,
+	),
+	scene(
+		"navigation-boardcanvas--move-connected-object",
+		boards::LAPTOP,
+		boards::canvas_move_connected_object,
+	),
+	scene(
+		"navigation-boardcanvas--opens-at-full-size-on-two-stickies",
+		boards::CANVAS,
+		boards::canvas_opens_at_full_size_on_two_stickies,
+	),
+	scene(
+		"navigation-boardcanvas--opens-framed-on-spread-content",
+		boards::CANVAS,
+		boards::canvas_opens_framed_on_spread_content,
+	),
+	scene(
+		"navigation-boardcanvas--opens-framed-through-consumer-padding",
+		boards::CANVAS,
+		boards::canvas_opens_framed_through_consumer_padding,
+	),
+	scene(
+		"navigation-boardcanvas--pan-with-hand-tool",
+		boards::LAPTOP,
+		boards::canvas_pan_with_hand_tool,
+	),
+	scene(
+		"navigation-boardcanvas--place-images-with-tool",
+		boards::LAPTOP,
+		boards::canvas_place_images,
+	),
+	scene(
+		"navigation-boardcanvas--place-section-with-tool",
+		boards::LAPTOP,
+		boards::canvas_place_section,
+	),
+	scene(
+		"navigation-boardcanvas--place-shape-with-tool",
+		boards::LAPTOP,
+		boards::canvas_place_shape,
+	),
+	scene(
+		"navigation-boardcanvas--place-sticky-with-tool",
+		boards::LAPTOP,
+		boards::canvas_place_sticky,
+	),
+	focused(
+		"navigation-boardcanvas--place-text-with-tool",
+		boards::LAPTOP,
+		1,
+		boards::canvas_place_text,
+	),
+	focused(
+		"navigation-boardcanvas--resize-by-keyboard",
+		boards::LAPTOP,
+		2,
+		boards::canvas_resize_by_keyboard,
+	),
+	scene(
+		"navigation-boardcanvas--resize-by-pointer",
+		boards::LAPTOP,
+		boards::canvas_resize_by_pointer,
+	),
+	focused(
+		"navigation-boardcanvas--select-by-keyboard",
+		boards::LAPTOP,
+		1,
+		boards::canvas_sticky_selected,
+	),
+	scene(
+		"navigation-boardcanvas--select-by-pointer",
+		boards::LAPTOP,
+		boards::canvas_sticky_selected,
+	),
+	scene(
+		"navigation-boardcanvas--selected-object-removed-elsewhere",
+		boards::LAPTOP,
+		boards::canvas_selected_object_removed_elsewhere,
+	),
+	scene("navigation-boardcanvas--shape-selected", boards::LAPTOP, boards::canvas_shape_selected),
+	scene(
+		"navigation-boardcanvas--switch-connector-routing",
+		boards::LAPTOP,
+		boards::canvas_switch_connector_routing,
+	),
+	scene("navigation-boardcanvas--tile-dragged", boards::CANVAS, boards::canvas_tile_dragged),
+	scene(
+		"navigation-boardcanvas--tool-picked-while-selected",
+		boards::LAPTOP,
+		boards::canvas_tool_picked_while_selected,
+	),
+	scene(
+		"navigation-boardcanvas--url-dragged-over",
+		boards::CANVAS,
+		boards::canvas_url_dragged_over,
+	),
+	scene(
+		"navigation-boardcanvas--zoom-at-maximum",
+		boards::CANVAS,
+		boards::canvas_zoom_at_maximum,
+	),
+	scene(
+		"navigation-boardcanvas--zoom-at-minimum",
+		boards::CANVAS,
+		boards::canvas_zoom_at_minimum,
+	),
 ];
 
 pub struct SceneState {
 	pub scene: &'static Scene,
 	pub edit: TextEdit,
 	pub picture: Option<Image>,
+	pub library: library::LibraryScene,
+	pub board_pictures: Vec<Image>,
 	images: Option<ImageCache>,
 }
 
 impl SceneState {
 	pub fn new(scene: &'static Scene) -> SceneState {
-		SceneState { scene, edit: TextEdit::new(scene.typed), picture: None, images: None }
+		SceneState {
+			scene,
+			edit: TextEdit::new(scene.typed),
+			picture: None,
+			library: library::LibraryScene::new(scene),
+			board_pictures: Vec::new(),
+			images: None,
+		}
 	}
 }
 
@@ -566,6 +1437,18 @@ pub fn setup(s: &mut SceneState, waker: Waker) {
 		eprintln!("the avatar picture didn't decode: {}", failure.0);
 	}
 	s.picture = Some(picture);
+	s.library.decode(&images);
+	s.board_pictures =
+		[boards::fixtures::TERRACE_SVG, boards::fixtures::POOL_SVG, boards::fixtures::PATIO_SVG]
+			.map(|svg| {
+				let board_picture =
+					images.svg(svg.as_bytes(), boards::fixtures::PICTURE_SIDE, PICTURE_SCALE);
+				if let Err(failure) = board_picture.wait() {
+					eprintln!("a board picture didn't decode: {}", failure.0);
+				}
+				board_picture
+			})
+			.to_vec();
 	s.images = Some(images);
 }
 
