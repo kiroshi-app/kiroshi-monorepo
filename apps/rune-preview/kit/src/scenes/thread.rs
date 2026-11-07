@@ -1,19 +1,20 @@
 use std::rc::Rc;
 
-use rune::{El, col, row};
+use rune::{El, col, row, text};
 
 use super::{SceneState, stage};
 use crate::hues::Preset;
 use crate::icons;
+use crate::primitives::context_menu::{MenuItem, MenuRow, context_menu};
 use crate::strings::Language;
 use crate::surfaces::s05_thread::{
-	Agent, Attachment, Author, Body, Context, Emit, EventSource, MissionEvent, MissionEventKind,
-	MissionLink, PinnedMessage, Quote, Row, SelectionToolbar, Surface, Thread, ThreadKind,
-	ToolbarAction, Transcript, Turn, TurnState, WorkLine, WorkState, WorkingAgent, body, column,
-	day_separator, mission_event, pinned_messages, selection_toolbar, thread, transcript_skeleton,
-	turn, work_line,
+	Agent, Attachment, Author, Body, Context, Emit, MissionEvent, PinnedMessage, Quote, Row,
+	SelectionToolbar, Surface, Thread, ThreadKind, ToolbarAction, Transcript, Turn, TurnState,
+	WorkLine, WorkState, WorkingAgent, body, column, day_separator, message_menu, pinned_messages,
+	selection_toolbar, thread, transcript_skeleton, turn, work_line,
 };
-use crate::tokens::{SPACING, Tokens};
+use crate::surfaces::s08_missions::EventKind;
+use crate::tokens::{RADIUS_XL, SPACING, TEXT_COMPACT, Tokens};
 
 mod sources;
 
@@ -26,7 +27,6 @@ pub(super) const PANEL: (f32, f32) = (1072.0, 847.0);
 pub(super) const LINE: (f32, f32) = (760.0, 240.0);
 
 const PROSE_WIDTH: f32 = 704.0;
-const MISSION_WIDTH: f32 = 640.0;
 
 fn agent(id: &str, name: &str, hue: Preset, badge: Option<&str>) -> Agent {
 	Agent {
@@ -462,237 +462,39 @@ pub(super) fn work_17(t: &Tokens, s: &SceneState) -> El {
 	work_scene(t, s, eight_agents(), true, PROSE_WIDTH)
 }
 
-fn event(
-	id: &str,
-	kind: MissionEventKind,
-	source: EventSource,
-	said: Option<&str>,
-	time: &str,
-) -> MissionEvent {
-	MissionEvent {
-		id: id.to_owned(),
-		kind,
-		source,
-		text: said.map(str::to_owned),
-		link: None,
-		time: time.to_owned(),
-	}
-}
+const NOW: i64 = 1_772_618_400_000;
+const MINUTE: i64 = 60_000;
+const ASKED: &str =
+	"The migration drops the invites table. Should I keep a backup of the rows before it runs?";
 
 fn mission_bot() -> Agent {
 	agent("bot-atlas", "Atlas", Preset::Blue, None)
 }
 
-fn events_scene(t: &Tokens, s: &SceneState, events: Vec<MissionEvent>) -> El {
-	with_cx(t, s, |cx| {
-		padded(
-			t,
-			col()
-				.w(MISSION_WIDTH)
-				.gap(SPACING * 3.0)
-				.children(events.iter().map(|shown| mission_event(cx, shown))),
-		)
-	})
-}
-
-const ASKED: &str =
-	"The migration drops the invites table. Should I keep a backup of the rows before it runs?";
-const NOTE: &str = "Paused the deploy until the backup lands. The branch is rebased on main and the checks are green.";
-
-pub(super) fn event_machine_line(t: &Tokens, s: &SceneState) -> El {
-	events_scene(
-		t,
-		s,
-		vec![event(
-			"e1",
-			MissionEventKind::Opened,
-			EventSource::Agent(Some(mission_bot())),
-			None,
-			"2 min ago",
-		)],
-	)
-}
-
-fn with_link(mut shown: MissionEvent, label: &str) -> MissionEvent {
-	shown.link = Some(MissionLink {
-		label: label.to_owned(),
-		url: "https://github.com/kiroshi/app/pull/2112".to_owned(),
-	});
-	shown
-}
-
-pub(super) fn event_with_pull_request_link(t: &Tokens, s: &SceneState) -> El {
-	let ready =
-		event("e1", MissionEventKind::Ready, EventSource::CodingSession(None), None, "2 min ago");
-	events_scene(t, s, vec![with_link(ready, "#2112")])
-}
-
-pub(super) fn event_with_an_unnumbered_link(t: &Tokens, s: &SceneState) -> El {
-	let ready =
-		event("e1", MissionEventKind::Ready, EventSource::CodingSession(None), None, "2 min ago");
-	events_scene(t, s, vec![with_link(ready, "Pull request")])
-}
-
-pub(super) fn event_authored(t: &Tokens, s: &SceneState) -> El {
-	events_scene(
-		t,
-		s,
-		vec![event(
-			"e1",
-			MissionEventKind::Note,
-			EventSource::Agent(Some(mission_bot())),
-			Some(NOTE),
-			"5 min ago",
-		)],
-	)
-}
-
-pub(super) fn event_from_the_agent(t: &Tokens, s: &SceneState) -> El {
-	let session = EventSource::CodingSession(Some(("Superset".to_owned(), &icons::SUPERSET)));
-	events_scene(t, s, vec![event("e1", MissionEventKind::Note, session, Some(NOTE), "5 min ago")])
-}
-
-pub(super) fn event_agent_asked(t: &Tokens, s: &SceneState) -> El {
-	let session = EventSource::CodingSession(Some(("Superset".to_owned(), &icons::SUPERSET)));
-	events_scene(
-		t,
-		s,
-		vec![event("e1", MissionEventKind::AgentAsked, session, Some(ASKED), "1 min ago")],
-	)
-}
-
-pub(super) fn event_from_the_agent_without_a_tool(t: &Tokens, s: &SceneState) -> El {
-	events_scene(
-		t,
-		s,
-		vec![event(
-			"e1",
-			MissionEventKind::Note,
-			EventSource::CodingSession(None),
-			Some(NOTE),
-			"5 min ago",
-		)],
-	)
-}
-
-pub(super) fn event_from_github(t: &Tokens, s: &SceneState) -> El {
-	events_scene(
-		t,
-		s,
-		vec![event(
-			"e1",
-			MissionEventKind::ChecksFailed,
-			EventSource::GitHub,
-			Some("2 checks failed on the last push: types and vitest."),
-			"3 min ago",
-		)],
-	)
-}
-
-pub(super) fn event_from_the_reader(t: &Tokens, s: &SceneState) -> El {
-	events_scene(
-		t,
-		s,
-		vec![event(
-			"e1",
-			MissionEventKind::Answered,
-			EventSource::Reader,
-			Some("Keep a backup, then drop it."),
-			"Just now",
-		)],
-	)
-}
-
-pub(super) fn event_closed_by_you(t: &Tokens, s: &SceneState) -> El {
-	events_scene(
-		t,
-		s,
-		vec![event("e1", MissionEventKind::Dismissed, EventSource::Reader, None, "Just now")],
-	)
-}
-
-pub(super) fn event_kinds(t: &Tokens, s: &SceneState) -> El {
-	let bot = || EventSource::Agent(Some(mission_bot()));
-	let kinds = [
-		MissionEventKind::Opened,
-		MissionEventKind::Note,
-		MissionEventKind::AgentAsked,
-		MissionEventKind::Answered,
-		MissionEventKind::Escalated,
-		MissionEventKind::Ready,
-		MissionEventKind::ChecksFailed,
-		MissionEventKind::Failed,
-		MissionEventKind::Closed,
-		MissionEventKind::Dismissed,
-		MissionEventKind::Reopened,
-	];
-	events_scene(
-		t,
-		s,
-		kinds
-			.into_iter()
-			.enumerate()
-			.map(|(index, kind)| event(&format!("e{index}"), kind, bot(), None, "2 min ago"))
-			.collect(),
-	)
-}
-
-pub(super) fn event_authored_events(t: &Tokens, s: &SceneState) -> El {
-	let session = EventSource::CodingSession(Some(("Superset".to_owned(), &icons::SUPERSET)));
-	events_scene(
-		t,
-		s,
-		vec![
-			event(
-				"e1",
-				MissionEventKind::Note,
-				EventSource::Agent(Some(mission_bot())),
-				Some(NOTE),
-				"6 min ago",
-			),
-			event("e2", MissionEventKind::AgentAsked, session, Some(ASKED), "4 min ago"),
-			event(
-				"e3",
-				MissionEventKind::Answered,
-				EventSource::Reader,
-				Some("Keep a backup, then drop it."),
-				"Just now",
-			),
-		],
-	)
-}
-
-pub(super) fn event_without_a_bot(t: &Tokens, s: &SceneState) -> El {
-	events_scene(
-		t,
-		s,
-		vec![
-			event("e1", MissionEventKind::Opened, EventSource::Agent(None), None, "8 min ago"),
-			event("e2", MissionEventKind::Note, EventSource::Agent(None), Some(NOTE), "5 min ago"),
-		],
-	)
-}
-
-pub(super) fn event_long_content(t: &Tokens, s: &SceneState) -> El {
-	let long = "The migration drops the invites table, rewrites every membership row to point at the new workspace id, and backfills the audit log so the history of each invite survives the drop. It runs inside one transaction, so a failure rolls every statement back, including the drop, and leaves the old tables exactly as they were before the run started.";
-	events_scene(
-		t,
-		s,
-		vec![event(
-			"e1",
-			MissionEventKind::Note,
-			EventSource::Agent(Some(mission_bot())),
-			Some(long),
-			"5 min ago",
-		)],
-	)
+fn event(
+	id: &str,
+	kind: EventKind,
+	source: &str,
+	minutes_ago: i64,
+	said: Option<&str>,
+) -> MissionEvent {
+	MissionEvent {
+		id: id.to_owned(),
+		kind,
+		source: source.to_owned(),
+		created_at: NOW - minutes_ago * MINUTE,
+		text: said.map(str::to_owned),
+		link: None,
+	}
 }
 
 fn mission_rows() -> Vec<Row> {
-	let bot = || EventSource::Agent(Some(mission_bot()));
-	let session = EventSource::CodingSession(Some(("Superset".to_owned(), &icons::SUPERSET)));
+	let ready = MissionEvent {
+		link: Some(("https://github.com/kiroshi/app/pull/2112".to_owned(), Some(2112))),
+		..event("e4", EventKind::Ready, "agent-hook", 0, None)
+	};
 	vec![
-		Row::Event(event("e1", MissionEventKind::Opened, bot(), None, "12 min ago")),
+		Row::Event(event("e1", EventKind::Opened, "bot", 12, None)),
 		Row::Turn(
 			Turn::new(
 				"m1",
@@ -701,19 +503,10 @@ fn mission_rows() -> Vec<Row> {
 			)
 			.at("09:12"),
 		),
-		Row::Event(event("e2", MissionEventKind::AgentAsked, session, Some(ASKED), "4 min ago")),
+		Row::Event(event("e2", EventKind::AgentAsked, "agent-hook", 4, Some(ASKED))),
 		Row::Turn(Turn::new("m2", Author::You, "Keep a backup, then drop it.").at("09:20")),
-		Row::Event(event("e3", MissionEventKind::Answered, EventSource::Reader, None, "3 min ago")),
-		Row::Event(with_link(
-			event(
-				"e4",
-				MissionEventKind::Ready,
-				EventSource::CodingSession(None),
-				None,
-				"Just now",
-			),
-			"#2112",
-		)),
+		Row::Event(event("e3", EventKind::Answered, "human", 3, None)),
+		Row::Event(ready),
 	]
 }
 
@@ -732,10 +525,13 @@ fn thread_scene(t: &Tokens, s: &SceneState, kind: ThreadKind, transcript: Transc
 fn mission_kind() -> ThreadKind {
 	ThreadKind::Mission {
 		objective: "Drop the invites table without losing a pending invite".to_owned(),
+		tools: vec!["superset".to_owned()],
+		bot: Some(mission_bot()),
+		now: NOW,
 	}
 }
 
-pub(super) fn event_in_a_mission_thread(t: &Tokens, s: &SceneState) -> El {
+pub(super) fn thread_in_a_mission(t: &Tokens, s: &SceneState) -> El {
 	thread_scene(t, s, mission_kind(), Transcript::Rows(mission_rows()))
 }
 
@@ -1317,15 +1113,85 @@ pub(super) fn actions_default(t: &Tokens, s: &SceneState) -> El {
 	)
 }
 
-pub(super) fn actions_in_french(t: &Tokens, s: &SceneState) -> El {
+fn atlas_answer() -> Turn {
+	Turn::new("t1", Author::Agent(atlas()), "Yes, all 14 checks passed at 9:12.").at("09:20")
+}
+
+pub(super) fn actions_square_icon_buttons(t: &Tokens, s: &SceneState) -> El {
+	turns_scene(
+		t,
+		s,
+		vec![
+			Turn { shows_actions: true, ..atlas_answer() },
+			Turn {
+				state: TurnState::Queued,
+				..Turn::new("t2", Author::You, "Can you split it by country?")
+			},
+		],
+	)
+}
+
+fn menu_scene(t: &Tokens, s: &SceneState, language: Language) -> El {
 	let roster = roster();
 	let emit: Emit<SceneState> = Rc::new(|_, _| {});
-	let cx = Context { t, math: &s.math, language: Language::Fr, roster: &roster, emit: &emit };
-	let shown = Turn {
-		shows_actions: true,
-		..Turn::new("t1", Author::You, "Qui a la vidéo de démo ?").at("09:22")
-	};
-	padded(t, col().w(PROSE_WIDTH).child(turn(&cx, &shown)))
+	let cx = Context { t, math: &s.math, language, roster: &roster, emit: &emit };
+	let shown = atlas_answer();
+	padded(
+		t,
+		col()
+			.gap(SPACING * 2.0)
+			.child(turn(&cx, &shown))
+			.child(row().pl(SPACING * 12.0).child(message_menu(&cx, &shown))),
+	)
+}
+
+pub(super) fn actions_menu(t: &Tokens, s: &SceneState) -> El {
+	menu_scene(t, s, Language::En)
+}
+
+pub(super) fn actions_menu_in_french(t: &Tokens, s: &SceneState) -> El {
+	menu_scene(t, s, Language::Fr)
+}
+
+const IMAGE_NAME: &str = "release-checklist.png";
+const THUMBNAIL: (f32, f32) = (SPACING * 32.0, SPACING * 24.0);
+
+pub(super) fn actions_same_surface_as_image_menu(t: &Tokens, s: &SceneState) -> El {
+	with_cx(t, s, |cx| {
+		let shown = atlas_answer();
+		let thumbnail = col()
+			.size(THUMBNAIL.0, THUMBNAIL.1)
+			.radius(RADIUS_XL)
+			.fill(t.muted)
+			.center()
+			.child(text(IMAGE_NAME).font(TEXT_COMPACT).color(t.muted_foreground));
+		let image_menu = context_menu(
+			t,
+			&format!("Actions for {IMAGE_NAME}"),
+			[
+				MenuRow::Item(MenuItem::new("Save to Library").glyph(&icons::BOOK)),
+				MenuRow::Item(MenuItem::new("Copy image").glyph(&icons::COPY)),
+			],
+		);
+		padded(
+			t,
+			row()
+				.gap(SPACING * 6.0)
+				.items_start()
+				.child(
+					col()
+						.gap(SPACING * 2.0)
+						.child(turn(cx, &shown))
+						.child(row().pl(SPACING * 12.0).child(message_menu(cx, &shown))),
+				)
+				.child(
+					col()
+						.gap(SPACING * 2.0)
+						.child(thumbnail)
+						.child(row().pl(SPACING * 2.0).child(image_menu)),
+				),
+		)
+	})
 }
 
 pub(super) fn focus_ring(t: &Tokens, s: &SceneState) -> El {

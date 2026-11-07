@@ -6,6 +6,7 @@ use rune::{El, ScrollSpec, col, row, text};
 use crate::avatar::Face;
 use crate::math::Typesetter;
 use crate::strings::{Language, chat};
+use crate::surfaces::s08_missions::{self, Bot, EventKind, EventLink, MissionsEvent};
 use crate::tokens::{SPACING, TEXT_BASE_SEMIBOLD, TEXT_SM, Tokens};
 use crate::widgets::not_drawn;
 
@@ -19,11 +20,8 @@ pub use furniture::{
 	PinnedMessage, SelectionToolbar, ToolbarAction, pinned_messages, selection_toolbar,
 	transcript_skeleton,
 };
-pub use rows::{
-	EventSource, MissionEvent, MissionEventKind, MissionLink, WorkLine, WorkState, WorkingAgent,
-	day_separator, mission_event, new_messages, work_line,
-};
-pub use turn::{author_line, message_actions, message_quote, turn};
+pub use rows::{WorkLine, WorkState, WorkingAgent, day_separator, new_messages, work_line};
+pub use turn::{author_line, message_actions, message_menu, message_quote, turn};
 
 pub type Emit<S, E = ThreadEvent> = Rc<dyn Fn(&mut S, E)>;
 
@@ -43,6 +41,7 @@ pub enum ThreadEvent {
 	JumpToPinned(String),
 	QuoteSelection,
 	ClearSelection,
+	Mission(MissionsEvent),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -57,7 +56,17 @@ pub struct Agent {
 pub enum ThreadKind {
 	Solo(Agent),
 	Group { title: String },
-	Mission { objective: String },
+	Mission { objective: String, tools: Vec<String>, bot: Option<Agent>, now: i64 },
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct MissionEvent {
+	pub id: String,
+	pub kind: EventKind,
+	pub source: String,
+	pub created_at: i64,
+	pub text: Option<String>,
+	pub link: Option<(String, Option<u32>)>,
 }
 
 #[derive(Clone)]
@@ -207,7 +216,7 @@ pub fn thread<S: 'static>(t: &Tokens, math: &Typesetter, data: &Thread, emit: &E
 						.pt(SPACING * 8.0)
 						.pb(SPACING * 4.0)
 						.justify_end()
-						.children(rows.iter().map(|shown| row_view(&cx, shown))),
+						.children(rows.iter().map(|shown| row_view(&cx, &data.kind, shown))),
 				)),
 		),
 	}
@@ -222,15 +231,44 @@ pub fn column(content: El) -> El {
 		.child(col().w_full().max_w(COLUMN).h_full().justify_end().child(content))
 }
 
-fn row_view<S: 'static>(cx: &Context<S>, shown: &Row) -> El {
+fn row_view<S: 'static>(cx: &Context<S>, kind: &ThreadKind, shown: &Row) -> El {
 	match shown {
 		Row::Turn(data) => turn(cx, data),
 		Row::Day(label) => day_separator(cx.t, label),
 		Row::NewMessages => new_messages(cx.t, cx.say(chat::transcript::NEW_MESSAGES)),
 		Row::StartOfHistory => day_separator(cx.t, cx.say(chat::transcript::START_OF_HISTORY)),
 		Row::Work(line) => work_line(cx, line),
-		Row::Event(event) => mission_event(cx, event),
+		Row::Event(event) => mission_event(cx, kind, event),
 	}
+}
+
+fn mission_event<S: 'static>(cx: &Context<S>, kind: &ThreadKind, event: &MissionEvent) -> El {
+	let (tools, bot, now) = match kind {
+		ThreadKind::Mission { tools, bot, now, .. } => (tools.as_slice(), bot.as_ref(), *now),
+		_ => (&[][..], None, event.created_at),
+	};
+	let tools: Vec<&str> = tools.iter().map(String::as_str).collect();
+	let bot = bot.map(|agent| Bot {
+		id: &agent.id,
+		name: &agent.name,
+		title: agent.badge.as_deref().unwrap_or_default(),
+		hue: agent.hue,
+	});
+	let shown = s08_missions::MissionEvent {
+		id: &event.id,
+		kind: event.kind,
+		source: &event.source,
+		created_at: event.created_at,
+		text: event.text.as_deref(),
+		link: event
+			.link
+			.as_ref()
+			.map(|(url, pull_request)| EventLink { url, pull_request: *pull_request }),
+	};
+	let emit = Rc::clone(cx.emit);
+	let forwarded: s08_missions::Emit<S> =
+		Rc::new(move |s: &mut S, event| emit(s, ThreadEvent::Mission(event)));
+	s08_missions::event_row(cx.t, cx.language, &shown, &tools, bot, now, &forwarded)
 }
 
 fn fill(template: &str, values: &[(&str, &str)]) -> String {
@@ -252,7 +290,7 @@ fn empty<S>(cx: &Context<S>, kind: &ThreadKind) -> El {
 		ThreadKind::Group { title } => {
 			col().child(text(title.clone()).font(TEXT_BASE_SEMIBOLD).color(t.foreground))
 		}
-		ThreadKind::Mission { objective } => {
+		ThreadKind::Mission { objective, .. } => {
 			col().child(text(objective.clone()).font(TEXT_SM).color(t.muted_foreground).wrap())
 		}
 	};

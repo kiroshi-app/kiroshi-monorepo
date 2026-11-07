@@ -7,6 +7,7 @@ use super::{Attachment, Author, Context, Quote, ThreadEvent, Turn, TurnState};
 use crate::avatar::{Activity, Face, Motion, Person};
 use crate::hues::Role;
 use crate::icons;
+use crate::primitives::context_menu::{MenuItem, MenuRow, context_menu};
 use crate::primitives::{FOCUS_RING_WIDTH, instant, ring_tint};
 use crate::strings::chat;
 use crate::tokens::{
@@ -15,7 +16,7 @@ use crate::tokens::{
 };
 
 const BUBBLE_PADDING: f32 = SPACING * 4.5;
-pub(super) const AGENT_BUBBLE_WIDTH: f32 = 580.0;
+const AGENT_BUBBLE_WIDTH: f32 = 580.0;
 const PEOPLE_BUBBLE_WIDTH: f32 = 480.0;
 const AUTHOR_LINE: f32 = SPACING * 5.0;
 const AVATAR: f32 = SPACING * 5.0;
@@ -252,18 +253,46 @@ pub fn message_actions<S: 'static>(cx: &Context<S>, data: &Turn, own: bool) -> E
 	} else {
 		(&icons::PIN, chat::turn::PIN, ThreadEvent::Pin(id()))
 	};
-	let buttons = [
-		(&icons::COPY, chat::turn::COPY, ThreadEvent::Copy(id())),
-		(&icons::REPLY, chat::turn::REPLY, ThreadEvent::Reply(id())),
+	let mut buttons = vec![
 		(pin_glyph, pin_label, pin_event),
+		(&icons::REPLY, chat::turn::REPLY, ThreadEvent::Reply(id())),
+		(&icons::COPY, chat::turn::COPY, ThreadEvent::Copy(id())),
 	];
+	let end_side = data.author.is_end_side();
+	if end_side {
+		buttons.reverse();
+	}
 	let ink = if own { cx.t.user_bubble_foreground } else { cx.t.foreground };
-	row().gap(SPACING * 2.0).center_y().child(divider(ink)).child(
-		row().gap(SPACING * 0.5).children(
-			buttons
-				.into_iter()
-				.map(|(glyph, label, event)| action(cx, glyph, cx.say(label), own, event)),
-		),
+	let buttons = row().gap(SPACING * 0.5).children(
+		buttons
+			.into_iter()
+			.map(|(glyph, label, event)| action(cx, glyph, cx.say(label), own, event)),
+	);
+	let line = row().gap(SPACING * 2.0).center_y();
+	if end_side {
+		line.child(buttons).child(divider(ink))
+	} else {
+		line.child(divider(ink)).child(buttons)
+	}
+}
+
+pub fn message_menu<S>(cx: &Context<S>, data: &Turn) -> El {
+	let item = |key, glyph| MenuRow::Item(MenuItem::new(cx.say(key)).glyph(glyph));
+	let pin = if data.pinned {
+		item(chat::turn::UNPIN, &icons::PIN_OFF)
+	} else {
+		item(chat::turn::PIN, &icons::PIN)
+	};
+	context_menu(
+		cx.t,
+		cx.say(chat::transcript::message::ACTIONS),
+		[
+			item(chat::turn::REPLY, &icons::REPLY),
+			item(chat::turn::COPY, &icons::COPY),
+			pin,
+			MenuRow::Separator,
+			item(chat::turn::SAVE_AS_DOCUMENT, &icons::FILE),
+		],
 	)
 }
 

@@ -773,12 +773,27 @@ pub static SCENES: &[Scene] = &[
 	scene(
 		"conversation-message-messageactions--square-icon-buttons",
 		thread::LINE,
-		thread::actions_default,
+		thread::actions_square_icon_buttons,
+	),
+	scene(
+		"conversation-message-messageactions--every-label-on-one-line",
+		thread::PROSE,
+		thread::actions_menu,
 	),
 	scene(
 		"conversation-message-messageactions--every-label-on-one-line-in-french",
-		thread::LINE,
-		thread::actions_in_french,
+		thread::PROSE,
+		thread::actions_menu_in_french,
+	),
+	scene(
+		"conversation-message-messageactions--same-surface-as-image-menu",
+		thread::PROSE,
+		thread::actions_same_surface_as_image_menu,
+	),
+	scene(
+		"conversation-message-messageactions--same-surface-as-image-menu-in-dark",
+		thread::PROSE,
+		thread::actions_same_surface_as_image_menu,
 	),
 	scene("conversation-message-message--variants", thread::PROSE, thread::message_variants),
 	scene("conversation-message-message--with-metadata", thread::PROSE, thread::message_variants),
@@ -846,6 +861,11 @@ pub static SCENES: &[Scene] = &[
 	scene("layout-threadlayout--error", thread::PANEL, thread::layout_error),
 	scene("layout-threadlayout--pending", thread::PANEL, thread::layout_pending),
 	focused("conversation-message-turn--focus-visible", thread::LINE, 1, thread::focus_ring),
+	scene(
+		"conversation-message-thread--in-a-mission-thread",
+		thread::PANEL,
+		thread::thread_in_a_mission,
+	),
 	scene("navigation-searchresultrow--message", STORY, person_settings::row_message),
 	scene(
 		"navigation-searchresultrow--message-from-you",

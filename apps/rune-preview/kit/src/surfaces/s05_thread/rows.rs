@@ -1,16 +1,16 @@
 use std::rc::Rc;
 
-use rune::{Cursor, El, Icon, TextStyle, col, el, icon, row, text};
+use rune::{Cursor, El, TextStyle, col, el, icon, row, text};
 
-use super::turn::{AGENT_BUBBLE_WIDTH, author_name, retry};
+use super::turn::{author_name, retry};
 use super::{Agent, Context, ThreadEvent, fill};
 use crate::avatar::{Activity, Face, Motion};
 use crate::icons;
 use crate::primitives::{FOCUS_RING_WIDTH, instant, ring_tint};
 use crate::strings::{Key, chat};
 use crate::tokens::{
-	RADIUS_BUBBLE, RADIUS_CONTROL, RADIUS_SM, SPACING, TEXT_COMPACT, TEXT_COMPACT_SEMIBOLD,
-	TEXT_XS, TEXT_XS_MEDIUM, Tokens,
+	RADIUS_CONTROL, RADIUS_SM, SPACING, TEXT_COMPACT, TEXT_COMPACT_SEMIBOLD, TEXT_XS,
+	TEXT_XS_MEDIUM, Tokens,
 };
 
 const LINE: f32 = SPACING * 5.0;
@@ -18,7 +18,6 @@ const LINE_XS: TextStyle = TextStyle { line_height: LINE, ..TEXT_XS };
 const LINE_XS_MEDIUM: TextStyle = TextStyle { line_height: LINE, ..TEXT_XS_MEDIUM };
 const LINE_COMPACT: TextStyle = TextStyle { line_height: LINE, ..TEXT_COMPACT };
 const LINE_COMPACT_SEMIBOLD: TextStyle = TextStyle { line_height: LINE, ..TEXT_COMPACT_SEMIBOLD };
-const STAMP: TextStyle = TextStyle { line_height: SPACING * 4.0, ..TEXT_XS };
 const GLYPH: f32 = SPACING * 3.5;
 const BUBBLE_INSET: f32 = SPACING * 4.5;
 
@@ -269,217 +268,4 @@ fn failed_line<S: 'static>(cx: &Context<S>, agent: &WorkingAgent) -> El {
 			text(cx.say(chat::turn::footer::FAILED)).font(LINE_XS).color(t.destructive).truncate(),
 		)
 		.child(retry(cx, &agent.agent.id, &label))
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum MissionEventKind {
-	Opened,
-	Note,
-	AgentAsked,
-	Answered,
-	Escalated,
-	Ready,
-	ChecksFailed,
-	Failed,
-	Closed,
-	Dismissed,
-	Reopened,
-}
-
-impl MissionEventKind {
-	fn line(self) -> Key {
-		use chat::missions::event::line;
-		match self {
-			MissionEventKind::Opened => line::OPENED,
-			MissionEventKind::Note => line::NOTE,
-			MissionEventKind::AgentAsked => line::AGENT_ASKED,
-			MissionEventKind::Answered => line::ANSWERED,
-			MissionEventKind::Escalated => line::ESCALATED,
-			MissionEventKind::Ready => line::READY,
-			MissionEventKind::ChecksFailed => line::CHECKS_FAILED,
-			MissionEventKind::Failed => line::FAILED,
-			MissionEventKind::Closed => line::CLOSED,
-			MissionEventKind::Dismissed => line::DISMISSED,
-			MissionEventKind::Reopened => line::REOPENED,
-		}
-	}
-
-	fn badge(self) -> Key {
-		use chat::missions::event::kind;
-		match self {
-			MissionEventKind::Opened => kind::OPENED,
-			MissionEventKind::Note => kind::NOTE,
-			MissionEventKind::AgentAsked => kind::AGENT_ASKED,
-			MissionEventKind::Answered => kind::ANSWERED,
-			MissionEventKind::Escalated => kind::ESCALATED,
-			MissionEventKind::Ready => kind::READY,
-			MissionEventKind::ChecksFailed => kind::CHECKS_FAILED,
-			MissionEventKind::Failed => kind::FAILED,
-			MissionEventKind::Closed => kind::CLOSED,
-			MissionEventKind::Dismissed => kind::DISMISSED,
-			MissionEventKind::Reopened => kind::REOPENED,
-		}
-	}
-}
-
-#[derive(Clone)]
-pub enum EventSource {
-	Agent(Option<Agent>),
-	Reader,
-	CodingSession(Option<(String, &'static Icon)>),
-	GitHub,
-	Named(String),
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct MissionLink {
-	pub label: String,
-	pub url: String,
-}
-
-#[derive(Clone)]
-pub struct MissionEvent {
-	pub id: String,
-	pub kind: MissionEventKind,
-	pub source: EventSource,
-	pub text: Option<String>,
-	pub link: Option<MissionLink>,
-	pub time: String,
-}
-
-const GUTTER: f32 = SPACING * 10.0;
-const GUTTER_MARK: f32 = 18.0;
-const DOT: f32 = SPACING * 1.5;
-
-struct EventFace {
-	label: String,
-	mark: Option<&'static Icon>,
-	agent: Option<Agent>,
-}
-
-fn face_of<S>(cx: &Context<S>, source: &EventSource) -> EventFace {
-	use chat::missions::event::source;
-	let said = |key: Key, mark| EventFace { label: cx.say(key).to_owned(), mark, agent: None };
-	match source {
-		EventSource::Agent(Some(agent)) => {
-			EventFace { label: agent.name.clone(), mark: None, agent: Some(agent.clone()) }
-		}
-		EventSource::Agent(None) => said(source::BOT, None),
-		EventSource::Reader => said(source::READER, None),
-		EventSource::CodingSession(Some((tool, mark))) => {
-			EventFace { label: tool.clone(), mark: Some(mark), agent: None }
-		}
-		EventSource::CodingSession(None) => said(source::AGENT, Some(&icons::TERMINAL)),
-		EventSource::GitHub => said(source::GITHUB, Some(&icons::GITHUB)),
-		EventSource::Named(name) => EventFace { label: name.clone(), mark: None, agent: None },
-	}
-}
-
-pub fn mission_event<S: 'static>(cx: &Context<S>, event: &MissionEvent) -> El {
-	let face = face_of(cx, &event.source);
-	match &event.text {
-		None => machine_line(cx, event, &face),
-		Some(said) => authored(cx, event, &face, said),
-	}
-}
-
-fn machine_line<S: 'static>(cx: &Context<S>, event: &MissionEvent, face: &EventFace) -> El {
-	let t = cx.t;
-	let dot = if event.kind == MissionEventKind::Ready { t.success } else { t.muted_foreground };
-	let mut line = row()
-		.h(LINE)
-		.w_full()
-		.min_w(0.0)
-		.px(SPACING)
-		.gap(SPACING * 2.0)
-		.justify_center()
-		.center_y()
-		.child(el().size(DOT, DOT).radius(DOT / 2.0).fill(dot).a11y_hidden())
-		.child(
-			text(fill(cx.say(event.kind.line()), &[("source", &face.label)]))
-				.font(STAMP)
-				.color(t.muted_foreground)
-				.truncate(),
-		);
-	if let Some(link) = &event.link {
-		line = line.child(mission_link(cx, link));
-	}
-	line.child(text(event.time.clone()).font(STAMP).color(t.muted_foreground))
-}
-
-fn mission_link<S: 'static>(cx: &Context<S>, link: &MissionLink) -> El {
-	let t = cx.t;
-	let emit = Rc::clone(cx.emit);
-	let url = link.url.clone();
-	instant(
-		row()
-			.gap(SPACING)
-			.center_y()
-			.radius(RADIUS_SM)
-			.hover_group()
-			.role("link")
-			.label(&link.label)
-			.child(text(link.label.clone()).font(STAMP).color(t.primary))
-			.child(icon(&icons::EXTERNAL_LINK, SPACING * 3.0).color(t.primary)),
-	)
-	.focusable(true)
-	.cursor(Cursor::Pointer)
-	.focus_ring(FOCUS_RING_WIDTH, 2.0, ring_tint(t, 0.3))
-	.on_press(move |s: &mut S| emit(s, ThreadEvent::OpenLink(url.clone())))
-}
-
-fn authored<S: 'static>(cx: &Context<S>, event: &MissionEvent, face: &EventFace, said: &str) -> El {
-	let t = cx.t;
-	let gutter = match (face.mark, &face.agent) {
-		(Some(mark), _) => el()
-			.size(GUTTER, GUTTER)
-			.radius(GUTTER / 2.0)
-			.fill(t.muted)
-			.center()
-			.child(icon(mark, GUTTER_MARK).color(t.muted_foreground)),
-		(None, agent) => {
-			let name = agent.as_ref().map_or(face.label.as_str(), |agent| agent.name.as_str());
-			Face::still(name, agent.as_ref().and_then(|agent| agent.hue)).draw(GUTTER, t)
-		}
-	};
-	let badge_fill = if event.kind == MissionEventKind::AgentAsked {
-		t.warning.alpha(0.18)
-	} else {
-		t.secondary
-	};
-	let header = row()
-		.h(LINE)
-		.min_w(0.0)
-		.gap(SPACING * 2.0)
-		.center_y()
-		.child(
-			text(face.label.clone())
-				.font(TextStyle { weight: 500.0, ..LINE_XS })
-				.color(t.foreground.alpha(0.8))
-				.truncate(),
-		)
-		.child(row().h(LINE).px(SPACING * 1.5).radius(RADIUS_SM).fill(badge_fill).center_y().child(
-			text(cx.say(event.kind.badge())).font(LINE_XS_MEDIUM).color(t.secondary_foreground),
-		))
-		.child(text(event.time.clone()).font(STAMP).color(t.muted_foreground));
-	let bubble = col()
-		.max_w(AGENT_BUBBLE_WIDTH)
-		.padding(BUBBLE_INSET)
-		.radius(RADIUS_BUBBLE)
-		.fill(t.bubble)
-		.hover(t.bubble_hover)
-		.child(
-			text(said.to_owned())
-				.font(crate::tokens::TEXT_BUBBLE)
-				.color(t.bubble_foreground)
-				.wrap()
-				.selectable(true),
-		);
-	row()
-		.w_full()
-		.min_w(0.0)
-		.gap(SPACING * 2.0)
-		.items_end()
-		.child(gutter)
-		.child(col().grow(1.0).min_w(0.0).gap(SPACING).child(header).child(instant(bubble)))
 }
