@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import { type ReactNode, useState } from "react"
 import { expect, fn, userEvent, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
@@ -7,6 +7,7 @@ import {
 	realPointer,
 	slotIn,
 	slotsIn,
+	tokenStyleIn,
 	UPLOADED_AVATAR_IMAGE,
 } from "@workspace/storybook/story-utils"
 import { THEME_CLASS_NAMES } from "@workspace/storybook/themed-docs-container"
@@ -75,21 +76,28 @@ const Column = ({ width = COLUMN, children }: ColumnProps) => (
 
 type LineProps = {
 	agents: ThreadWorkLineAgent[]
-	isOpen?: boolean
+	isInitiallyOpen?: boolean
 	width?: string
 }
 
 const onOpenChange = fn()
 
-const Line = ({ agents, isOpen = false, width }: LineProps) => (
-	<Column width={width}>
-		<ThreadWorkLine
-			agents={agents}
-			isOpen={isOpen}
-			onOpenChange={onOpenChange}
-		/>
-	</Column>
-)
+const Line = ({ agents, isInitiallyOpen = false, width }: LineProps) => {
+	const [isOpen, setIsOpen] = useState(isInitiallyOpen)
+
+	return (
+		<Column width={width}>
+			<ThreadWorkLine
+				agents={agents}
+				isOpen={isOpen}
+				onOpenChange={(next) => {
+					onOpenChange(next)
+					setIsOpen(next)
+				}}
+			/>
+		</Column>
+	)
+}
 
 const expectTextInBothThemes = async (
 	canvasElement: HTMLElement,
@@ -108,6 +116,52 @@ const expectInstantColours = async (control: HTMLElement) => {
 	await expect(
 		transitionProperty === "none" || transitionDuration === "0s",
 	).toBe(true)
+}
+
+const LINE_MIDDLE = LINE_HEIGHT / 2
+
+const EDGE_INSET = 2
+
+const HOVER_FILL_INSET = 6
+
+const togglesIn = (canvasElement: HTMLElement) =>
+	within(canvasElement).getAllByRole("button", { name: "Each agent’s work" })
+
+const lineOf = (toggle: HTMLElement) => {
+	const line = toggle.closest<HTMLElement>(
+		'[data-slot="thread-work-line-line"]',
+	)
+	if (!line) throw new Error("The toggle sits in no line")
+	return line
+}
+
+const expectChevronAtRightEnd = async (canvasElement: HTMLElement) => {
+	for (const toggle of togglesIn(canvasElement)) {
+		await expect(toggle).toBeVisible()
+		await expect(toggle.getBoundingClientRect().right).toBe(
+			lineOf(toggle).getBoundingClientRect().right,
+		)
+	}
+}
+
+type LineSpot = "left" | "middle" | "right"
+
+const xOf = (spot: LineSpot, width: number) => {
+	switch (spot) {
+		case "left":
+			return EDGE_INSET
+		case "middle":
+			return width / 2
+		default:
+			return width - EDGE_INSET
+	}
+}
+
+const clickLineAt = async (toggle: HTMLElement, spot: LineSpot) => {
+	const line = lineOf(toggle)
+	const x = xOf(spot, line.getBoundingClientRect().width)
+	const pointer = await realPointer()
+	await pointer.click(line, { position: { x, y: LINE_MIDDLE } })
 }
 
 const isDropped = (breakdown: HTMLElement) => {
@@ -145,7 +199,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The thread's work line, artboards Final 7 to 17 of the Paper file Kiroshi, Chat rethought, one story per artboard and named after it. One agent draws the ActivityIndicator line; two or more draw the agent pile, a headline, the breakdown by state, the clock of the longest run and the toggle that opens one row per agent. Light and dark render one above the other, each column at its own width.",
+					"The thread's work line, artboards Final 7 to 17 of the Paper file Kiroshi, Chat rethought, one story per artboard and named after it. One agent draws the ActivityIndicator line; two or more draw the agent pile, a headline, the breakdown by state, the clock of the longest run and the chevron at the right end; the whole line is the button that opens one row per agent. Light and dark render one above the other, each column at its own width.",
 			},
 		},
 	},
@@ -168,6 +222,10 @@ export const Final7 = meta.story({
 		await expect(
 			slotsIn(canvasElement, "thread-work-line-toggle"),
 		).toHaveLength(0)
+		await expect(within(canvasElement).queryAllByRole("button")).toHaveLength(0)
+		for (const line of slotsIn(canvasElement, "thread-work-line-line")) {
+			await expect(getComputedStyle(line).cursor).not.toBe("pointer")
+		}
 		for (const shimmer of slotsIn(canvasElement, "text-shimmer"))
 			await expect(getComputedStyle(shimmer).animationName).toBe("none")
 	},
@@ -232,7 +290,7 @@ export const Final10 = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard Final 10: two agents. Both names in their colours, the breakdown, the clock of the longest run and the closed toggle. The toggle is a keyboard reachable button that names itself and says it is collapsed; hover and press change its fill at once.",
+					"Artboard Final 10: two agents. Both names in their colours, the breakdown, the clock of the longest run and the closed chevron at the right end. The whole line is one keyboard reachable button that names itself and says it is collapsed: a click anywhere on it opens the detail, a second click closes it. Hover tints one surface around the line, 6 past its content on every side, with no colour transition; the chevron keeps its resting fill.",
 			},
 		},
 	},
@@ -249,26 +307,76 @@ export const Final10 = meta.story({
 			THEMES,
 		)
 		await expectBreakdownShown(canvasElement)
-		const [toggle] = within(canvasElement).getAllByRole("button", {
-			name: "Each agent’s work",
-		})
+		await expectChevronAtRightEnd(canvasElement)
+		const toggles = togglesIn(canvasElement)
+		const [toggle] = toggles
+		const line = lineOf(toggle)
+		const tail = slotIn(line, "thread-work-line-tail")
+		const [lineClock] = within(tail).getAllByText("12s")
+		await expect(tail.getBoundingClientRect().right).toBe(
+			lineClock.getBoundingClientRect().right,
+		)
+		await expect(lineClock.getBoundingClientRect().right).toBeLessThan(
+			toggle.getBoundingClientRect().left - 8,
+		)
 		await expect(toggle).toHaveAttribute("aria-expanded", "false")
 		await expectInstantColours(toggle)
+		await expectInstantColours(line)
 		await expect(toggle.getBoundingClientRect().width).toBe(LINE_HEIGHT)
 		onOpenChange.mockClear()
 		await userEvent.tab()
 		await expect(toggle).toHaveFocus()
-		await expect(getComputedStyle(toggle).boxShadow).not.toBe("none")
+		const ring = getComputedStyle(toggle, "::after")
+		await expect(ring.boxShadow).not.toBe("none")
+		await expect(Number.parseFloat(ring.width)).toBe(
+			line.getBoundingClientRect().width,
+		)
 		await userEvent.keyboard("{Enter}")
-		await expect(onOpenChange).toHaveBeenCalledWith(true)
+		await expect(onOpenChange).toHaveBeenLastCalledWith(true)
+		await expect(toggle).toHaveAttribute("aria-expanded", "true")
+		await userEvent.keyboard(" ")
+		await expect(onOpenChange).toHaveBeenLastCalledWith(false)
+		await expect(toggle).toHaveAttribute("aria-expanded", "false")
 		if (isInBrowserRunner()) {
 			toggle.blur()
 			const pointer = await realPointer()
-			await pointer.click(toggle)
-			await expect(toggle).toHaveFocus()
-			await expect(getComputedStyle(toggle).boxShadow).toBe("none")
-			await expect(getComputedStyle(toggle).outlineStyle).toBe("none")
-			await pointer.unhover(toggle)
+			const restingChevron = getComputedStyle(toggle).backgroundColor
+			const restingLine = getComputedStyle(line).backgroundColor
+			const restingBounds = line.getBoundingClientRect().toJSON()
+			await pointer.hover(line, { position: { x: EDGE_INSET, y: LINE_MIDDLE } })
+			await expect(getComputedStyle(toggle, "::after").cursor).toBe("pointer")
+			const fill = getComputedStyle(line, "::before")
+			await expect(fill.backgroundColor).toBe(
+				tokenStyleIn(line, "bg-muted/50", "backgroundColor"),
+			)
+			for (const side of [fill.top, fill.right, fill.bottom, fill.left])
+				await expect(side).toBe(`-${HOVER_FILL_INSET}px`)
+			await expect(fill.transitionDuration).toBe("0s")
+			await expect(fill.zIndex).toBe("-1")
+			await expect(getComputedStyle(line).backgroundColor).toBe(restingLine)
+			await expect(getComputedStyle(toggle).backgroundColor).toBe(
+				restingChevron,
+			)
+			await expect(line.getBoundingClientRect().toJSON()).toEqual(restingBounds)
+			await expectInstantColours(toggle)
+			for (const each of toggles) {
+				await clickLineAt(each, "right")
+				await expect(each).toHaveAttribute("aria-expanded", "true")
+				const detail = document.getElementById(
+					each.getAttribute("aria-controls") ?? "",
+				)
+				await expect(detail).toBeInstanceOf(HTMLUListElement)
+				await clickLineAt(each, "left")
+				await expect(each).toHaveAttribute("aria-expanded", "false")
+				await expect(each).toHaveFocus()
+				await expect(getComputedStyle(each, "::after").boxShadow).toBe("none")
+				await expect(getComputedStyle(each).outlineStyle).toBe("none")
+			}
+			await clickLineAt(toggle, "middle")
+			await expect(toggle).toHaveAttribute("aria-expanded", "true")
+			await clickLineAt(toggle, "middle")
+			await expect(toggle).toHaveAttribute("aria-expanded", "false")
+			await pointer.unhover(line)
 		}
 	},
 })
@@ -394,9 +502,17 @@ export const Final14 = meta.story({
 		})
 		await expect(retry.getBoundingClientRect().height).toBe(22)
 		await expectInstantColours(retry)
+		const [toggle] = togglesIn(canvasElement)
+		await expect(toggle).toHaveAttribute("aria-expanded", "false")
+		retry.focus()
+		await expect(retry).toHaveFocus()
 		retrySable.mockClear()
-		await userEvent.click(retry)
+		onOpenChange.mockClear()
+		if (isInBrowserRunner()) await (await realPointer()).click(retry)
+		else await userEvent.click(retry)
 		await expect(retrySable).toHaveBeenCalledOnce()
+		await expect(onOpenChange).not.toHaveBeenCalled()
+		await expect(toggle).toHaveAttribute("aria-expanded", "false")
 	},
 })
 
@@ -433,7 +549,7 @@ export const Final16 = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard Final 16: a narrow window. The breakdown drops first, the pile, headline, clock and toggle stay on one line, never wrapped.",
+					"Artboard Final 16: a narrow window. The breakdown drops first, the pile, headline and clock stay on one line, never wrapped, the chevron at the right end.",
 			},
 		},
 	},
@@ -449,13 +565,12 @@ export const Final16 = meta.story({
 			"thread-work-line-breakdown",
 		))
 			await expect(isDropped(breakdown)).toBe(true)
-		for (const toggle of slotsIn(canvasElement, "thread-work-line-toggle"))
-			await expect(toggle).toBeVisible()
+		await expectChevronAtRightEnd(canvasElement)
 	},
 })
 
 export const Final17 = meta.story({
-	render: () => <Line agents={EIGHT_AGENTS} isOpen />,
+	render: () => <Line agents={EIGHT_AGENTS} isInitiallyOpen />,
 	parameters: {
 		docs: {
 			description: {
@@ -466,10 +581,12 @@ export const Final17 = meta.story({
 	},
 	play: async ({ canvasElement }) => {
 		const canvas = within(canvasElement)
-		const [toggle] = canvas.getAllByRole("button", {
-			name: "Each agent’s work",
-		})
+		const [toggle] = togglesIn(canvasElement)
 		await expect(toggle).toHaveAttribute("aria-expanded", "true")
+		await expect(getComputedStyle(toggle).backgroundColor).toBe(
+			tokenStyleIn(toggle, "bg-foreground/8", "backgroundColor"),
+		)
+		await expectChevronAtRightEnd(canvasElement)
 		const [lineClock] = within(
 			slotIn(canvasElement, "thread-work-line-tail"),
 		).getAllByText("41s")
