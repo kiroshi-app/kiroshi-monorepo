@@ -1,50 +1,7 @@
 use image::{Rgb, RgbImage};
 
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
-
 use super::*;
-use crate::core_context::{ChosenPath, Copied, Desktop};
-use crate::test_core::{a_core_of_its_own, CoreOfItsOwn};
-
-#[derive(Clone, Default)]
-struct RenderWindows(Arc<Mutex<Vec<String>>>);
-
-impl RenderWindows {
-	fn is_open(&self, label: &str) -> bool {
-		self.0.lock().expect("the windows").iter().any(|open| open == label)
-	}
-}
-
-impl Desktop for RenderWindows {
-	fn open_url(&self, _url: &str) -> Result<(), String> {
-		Ok(())
-	}
-
-	fn raise_main_window(&self) {}
-
-	fn open_render_window(&self, window: &RenderWindow) -> Result<(), String> {
-		self.0.lock().expect("the windows").push(window.label.clone());
-		Ok(())
-	}
-
-	fn close_window(&self, label: &str) -> Result<(), String> {
-		self.0.lock().expect("the windows").retain(|open| open != label);
-		Ok(())
-	}
-
-	fn reveal(&self, _path: &Path) -> Result<(), String> {
-		Ok(())
-	}
-
-	fn copy(&self, _copied: Copied) -> Result<(), String> {
-		Ok(())
-	}
-
-	fn chosen_save_path(&self, _suggested: String) -> ChosenPath {
-		Box::pin(async { Ok(None::<PathBuf>) })
-	}
-}
+use crate::test_core::{a_core_of_its_own, CoreOfItsOwn, RenderWindows};
 
 fn an_app(name: &str) -> CoreOfItsOwn {
 	an_app_with_windows(name).0

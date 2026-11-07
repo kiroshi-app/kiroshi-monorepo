@@ -16,7 +16,9 @@ use super::*;
 use crate::agent::contract::CancelOutcome;
 use crate::agent::AgentState;
 use crate::conversations::contract::TranscriptMessage;
+use crate::core_context::{ClientId, Core};
 use crate::db::repositories::messages::{AccountAuthor, MessagePageQuery};
+use crate::invoke::{Answer, IN_PROCESS_CLIENT};
 use crate::library::commands::library_stop_writers;
 use crate::library::contract::{
 	LibraryBoardPoint, LibraryChanged, LibraryDocumentPresence, LibraryDocumentRenamed,
@@ -24,7 +26,7 @@ use crate::library::contract::{
 };
 use crate::library::presence::{hue_of, share_presence, Identity, Presences, AGENT_BOARD_LEASE};
 use crate::library::{apply_update, open_document, read_thumbnail};
-use crate::test_core::{a_core_of_its_own, CoreOfItsOwn};
+use crate::test_core::{a_core_of_its_own, CoreOfItsOwn, RenderWindows};
 
 const A_CONVERSATION: &str = "
 	INSERT INTO bots (id, name, model, created_at) VALUES ('b1', 'Bean', 'sonnet', 1);
@@ -41,11 +43,8 @@ const SPACE: &str = "personal";
 const PERSON_CLIENT: u64 = 7;
 
 async fn a_host(name: &str) -> (CoreOfItsOwn, PathBuf) {
-	a_host_built(name, mock_builder()).await
-}
-
-async fn a_host_built(name: &str, builder: tauri::Builder<MockRuntime>) -> (CoreOfItsOwn, PathBuf) {
-	let app = an_app_of_its_own(&format!("library-host-{name}"), builder);
+	let app = a_core_of_its_own(&format!("library-host-{name}"));
+	app.install_desktop(RenderWindows::default());
 	crate::db::install(&*app);
 	ready(&app.state::<db::DatabaseState>())
 		.expect("the database opens")
@@ -1346,55 +1345,34 @@ fn positions(presences: &[LibraryDocumentPresence]) -> Vec<Vec<LibraryPresenceAt
 		.collect()
 }
 
-fn shared_through_the_command(
-	window: &tauri::WebviewWindow<MockRuntime>,
-	name: &str,
-	at: &LibraryPresenceAt,
-) -> Value {
-	invoked_with(window, name, json!(at))
+async fn shared_through_the_command(app: &Core, name: &str, at: &LibraryPresenceAt) -> Value {
+	invoked_with(app, name, json!(at))
+		.await
 		.unwrap_or_else(|error| panic!("the presence was refused: {error:?}"))
 }
 
-fn invoked_with(
-	window: &tauri::WebviewWindow<MockRuntime>,
-	name: &str,
-	at: Value,
-) -> Result<Value, Value> {
-	tauri::test::get_ipc_response(
-		window,
-		tauri::webview::InvokeRequest {
-			cmd: "library_share_presence".into(),
-			callback: tauri::ipc::CallbackFn(0),
-			error: tauri::ipc::CallbackFn(1),
-			url: "tauri://localhost".parse().expect("a url"),
-			body: json!({ "spaceId": SPACE, "name": name, "at": at }).into(),
-			headers: Default::default(),
-			invoke_key: tauri::test::INVOKE_KEY.to_string(),
-		},
-	)
-	.map(|answer| answer.deserialize::<Value>().expect("the answer reads"))
-}
-
-fn a_window_of(app: &crate::core_context::Core) -> tauri::WebviewWindow<MockRuntime> {
-	tauri::WebviewWindowBuilder::new(&*app, "main", tauri::WebviewUrl::default())
-		.build()
-		.expect("the window opens")
+async fn invoked_with(app: &Core, name: &str, at: Value) -> Result<Value, Value> {
+	let arguments = json!({ "spaceId": SPACE, "name": name, "at": at });
+	match crate::invoke::dispatch(app, "library_share_presence", arguments).await {
+		Some(Answer::Answered(answer)) => Ok(answer),
+		Some(Answer::Refused(refusal)) => Err(refusal),
+		Some(Answer::Unanswerable(detail)) => Err(Value::String(detail)),
+		None => panic!("the core holds no library_share_presence"),
+	}
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_text_anchor_and_a_board_point_shared_through_the_command_are_published() {
-	let builder = mock_builder().invoke_handler(crate::commands::invoke_handler());
-	let (app, root) = a_host_built("share-presence", builder).await;
+	let (app, root) = a_host("share-presence").await;
 	put(&root, SPACE, "notes.md", "Notes.");
 	put(&root, SPACE, BOARD, EMPTY_BOARD);
-	let window = a_window_of(&app);
 	let presences =
 		heard::<LibraryDocumentPresence>(&app, events::LIBRARY_DOCUMENT_PRESENCE.name());
 	let anchor = caret_of_a_member(&app, "notes.md");
 	let point = on_the_board(12, -4, Some("n1"));
 
-	shared_through_the_command(&window, "notes.md", &anchor);
-	shared_through_the_command(&window, BOARD, &point);
+	shared_through_the_command(&app, "notes.md", &anchor).await;
+	shared_through_the_command(&app, BOARD, &point).await;
 
 	let wait = Duration::from_secs(5);
 	let in_the_document = presences.recv_timeout(wait).expect("the anchor is published");
@@ -1447,35 +1425,31 @@ async fn the_host_and_a_member_of_the_same_account_share_a_hue_and_an_agent_has_
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_signed_out_host_is_hued_from_its_window_through_the_command() {
-	let builder = mock_builder().invoke_handler(crate::commands::invoke_handler());
-	let (app, root) = a_host_built("share-presence-hue", builder).await;
+	let (app, root) = a_host("share-presence-hue").await;
 	put(&root, SPACE, BOARD, EMPTY_BOARD);
-	let window = a_window_of(&app);
 	let presences =
 		heard::<LibraryDocumentPresence>(&app, events::LIBRARY_DOCUMENT_PRESENCE.name());
 
-	shared_through_the_command(&window, BOARD, &on_the_board(1, 1, None));
+	shared_through_the_command(&app, BOARD, &on_the_board(1, 1, None)).await;
 
 	let published = presences.recv_timeout(Duration::from_secs(5)).expect("the point is published");
-	assert_eq!(hues(&published), [(LibraryWriterKind::Person, Some(hue_of("main")))]);
+	assert_eq!(hues(&published), [(LibraryWriterKind::Person, Some(hue_of(IN_PROCESS_CLIENT)))]);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_seated_window_keeps_its_hue_when_it_shares_again_through_the_command() {
-	let builder = mock_builder().invoke_handler(crate::commands::invoke_handler());
-	let (app, root) = a_host_built("share-presence-kept-hue", builder).await;
+	let (app, root) = a_host("share-presence-kept-hue").await;
 	put(&root, SPACE, BOARD, EMPTY_BOARD);
-	let window = a_window_of(&app);
 	let presences =
 		heard::<LibraryDocumentPresence>(&app, events::LIBRARY_DOCUMENT_PRESENCE.name());
 	let seated = Identity { name: Some("Kept".to_owned()), hue: Some(7) };
-	let seat = Seat::Window("main".to_owned());
+	let seat = Seat::Window(IN_PROCESS_CLIENT.to_owned());
 	share_presence(&*app, &root, SPACE, BOARD, seat, seated, on_the_board(0, 0, None))
 		.expect("the window is seated");
 	tokio::time::sleep(BOARD_PACE_PASSED).await;
 	presences.try_iter().for_each(drop);
 
-	shared_through_the_command(&window, BOARD, &on_the_board(1, 1, None));
+	shared_through_the_command(&app, BOARD, &on_the_board(1, 1, None)).await;
 
 	let shared_again =
 		presences.recv_timeout(Duration::from_secs(5)).expect("the move is published");
@@ -1596,10 +1570,8 @@ async fn a_negative_board_point_is_seated_and_published() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_fractional_or_non_numeric_board_coordinate_is_refused_before_the_command_runs() {
-	let builder = mock_builder().invoke_handler(crate::commands::invoke_handler());
-	let (app, root) = a_host_built("fractional-point", builder).await;
+	let (app, root) = a_host("fractional-point").await;
 	put(&root, SPACE, BOARD, EMPTY_BOARD);
-	let window = a_window_of(&app);
 	let presences =
 		heard::<LibraryDocumentPresence>(&app, events::LIBRARY_DOCUMENT_PRESENCE.name());
 	let refused = [
@@ -1608,9 +1580,11 @@ async fn a_fractional_or_non_numeric_board_coordinate_is_refused_before_the_comm
 	];
 
 	for at in refused {
-		let refusal = invoked_with(&window, BOARD, at).expect_err("the point is refused");
+		let refusal = invoked_with(&app, BOARD, at).await.expect_err("the point is refused");
 		assert!(
-			refusal.as_str().is_some_and(|detail| detail.contains("invalid args `at`")),
+			refusal.as_str().is_some_and(
+				|detail| detail.contains("invalid args for command library_share_presence")
+			),
 			"got {refusal}"
 		);
 	}
@@ -2540,19 +2514,18 @@ fn a_drawn_png() -> Vec<u8> {
 	png
 }
 
-async fn the_page_renders(app: &AppHandle<MockRuntime>, png: &[u8]) -> screenshot::ScreenshotJob {
+async fn the_page_renders(app: &Core, png: &[u8]) -> screenshot::ScreenshotJob {
 	let request_id = loop {
 		if let Some(id) = screenshot::screenshots(app).held().keys().next().cloned() {
 			break id;
 		}
 		tokio::time::sleep(Duration::from_millis(5)).await;
 	};
-	let window = app
-		.get_webview_window(&screenshot::window_label(&request_id))
-		.expect("the hidden window is open");
-	let job = screenshot::library_screenshot_job(window.clone()).expect("the job is handed");
+	let window = ClientId::new(screenshot::window_label(&request_id));
+	let job = screenshot::library_screenshot_job(app, &window).expect("the job is handed");
 	let rendered = screenshot::ScreenshotRendered::Rendered { png: BASE64_STANDARD.encode(png) };
-	screenshot::library_screenshot_answer(window, request_id, rendered).expect("the answer lands");
+	screenshot::library_screenshot_answer(app, &window, request_id, rendered)
+		.expect("the answer lands");
 	job
 }
 
