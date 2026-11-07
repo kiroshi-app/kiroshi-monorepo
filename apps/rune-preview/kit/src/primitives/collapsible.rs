@@ -1,6 +1,6 @@
 use rune::{Cursor, El, col, text};
 
-use super::{FOCUS_RING_WIDTH, focus_ring};
+use super::{FOCUS_RING_WIDTH, ring_tint};
 use crate::tokens::{SPACING, TEXT_SM, TEXT_SM_MEDIUM, Tokens};
 
 pub fn collapsible(t: &Tokens, title: &str, body: &str, open: bool) -> El {
@@ -13,7 +13,7 @@ pub fn collapsible(t: &Tokens, title: &str, body: &str, open: bool) -> El {
 		.expanded(open)
 		.focusable(true)
 		.cursor(Cursor::Pointer)
-		.focus_ring(FOCUS_RING_WIDTH, 0.0, focus_ring(t, 0.5));
+		.focus_ring(FOCUS_RING_WIDTH, 0.0, ring_tint(t, 0.5));
 	let mut collapsible = col().gap(SPACING * 2.0).child(trigger);
 	if open {
 		collapsible = collapsible.child(text(body.to_owned()).font(TEXT_SM).color(t.foreground));

@@ -1,6 +1,6 @@
 use rune::{Cursor, El, Icon, icon, row, text};
 
-use super::{FOCUS_RING_WIDTH, Paint, equal_padding, focus_ring, tight};
+use super::{FOCUS_RING_WIDTH, Paint, equal_padding, ring_tint, tight};
 use crate::tokens::{RADIUS_2XL, SPACING, TEXT_SM_MEDIUM, Tokens};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -49,6 +49,6 @@ pub fn toggle(t: &Tokens, face: ToggleFace, variant: ToggleVariant, pressed: boo
 	paint.apply(toggle).focusable(true).cursor(Cursor::Pointer).focus_ring(
 		FOCUS_RING_WIDTH,
 		0.0,
-		focus_ring(t, 0.3),
+		ring_tint(t, 0.3),
 	)
 }

@@ -1,7 +1,7 @@
 use rune::{Cursor, El, Icon, icon, row, text};
 
 use super::{
-	DISABLED_OPACITY, FOCUS_RING_WIDTH, Interaction, Paint, equal_padding, focus_ring, tight,
+	DISABLED_OPACITY, FOCUS_RING_WIDTH, Interaction, Paint, equal_padding, ring_tint, tight,
 };
 use crate::tokens::{RADIUS_2XL, SPACING, TEXT_SM_MEDIUM, TEXT_XS_MEDIUM, Tokens, faded, mix};
 
@@ -228,7 +228,7 @@ impl<'a> Button<'a> {
 		button.focusable(true).cursor(Cursor::Pointer).focus_ring(
 			FOCUS_RING_WIDTH,
 			0.0,
-			focus_ring(t, 0.3),
+			ring_tint(t, 0.3),
 		)
 	}
 }

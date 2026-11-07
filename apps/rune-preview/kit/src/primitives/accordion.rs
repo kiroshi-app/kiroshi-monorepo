@@ -1,6 +1,6 @@
 use rune::{Cursor, El, col, icon, row, text};
 
-use super::{FOCUS_RING_WIDTH, focus_ring, instant};
+use super::{FOCUS_RING_WIDTH, instant, ring_tint};
 use crate::icons;
 use crate::tokens::{RADIUS_2XL, SPACING, TEXT_SM, TEXT_SM_MEDIUM, Tokens, faded};
 
@@ -35,7 +35,7 @@ fn item(t: &Tokens, section: Section, is_last: bool) -> El {
 			.expanded(section.open)
 			.focusable(true)
 			.cursor(Cursor::Pointer)
-			.focus_ring(FOCUS_RING_WIDTH, 0.0, focus_ring(t, 0.5))
+			.focus_ring(FOCUS_RING_WIDTH, 0.0, ring_tint(t, 0.5))
 			.child(text(section.title.to_owned()).font(TEXT_SM_MEDIUM).color(t.foreground))
 			.child(icon(glyph, GLYPH).color(t.muted_foreground)),
 	);

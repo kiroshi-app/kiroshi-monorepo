@@ -1,6 +1,6 @@
 use rune::{Color, Cursor, El, el};
 
-use super::{DISABLED_OPACITY, focus_ring, instant};
+use super::{DISABLED_OPACITY, instant, ring_tint};
 use crate::tokens::{RADIUS_2XL, SPACING, Tokens, faded};
 
 const TRACK: f32 = SPACING;
@@ -17,7 +17,7 @@ pub fn slider(t: &Tokens, label: &str, value: f32, width: f32, disabled: bool) -
 		.fill(Color::WHITE)
 		.outline(1.0, 0.0, Color::BLACK.alpha(0.1))
 		.shadow(2.0, 6.0, t.popover_shadow)
-		.focus_ring(THUMB_RING, 0.0, focus_ring(t, 0.3))
+		.focus_ring(THUMB_RING, 0.0, ring_tint(t, 0.3))
 		.absolute(travel, 0.0);
 	let slider = el()
 		.key(format!("slider-{label}"))

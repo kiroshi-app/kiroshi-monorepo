@@ -1,6 +1,6 @@
 use rune::{Cursor, El, el};
 
-use super::{DISABLED_OPACITY, FOCUS_RING_WIDTH, focus_ring, instant};
+use super::{DISABLED_OPACITY, FOCUS_RING_WIDTH, instant, ring_tint};
 use crate::tokens::{RADIUS_2XL, SPACING, Tokens, faded};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -52,6 +52,6 @@ pub fn switch(t: &Tokens, label: &str, checked: bool, disabled: bool, size: Swit
 	track.focusable(true).cursor(Cursor::Pointer).focus_ring(
 		FOCUS_RING_WIDTH,
 		0.0,
-		focus_ring(t, 0.3),
+		ring_tint(t, 0.3),
 	)
 }

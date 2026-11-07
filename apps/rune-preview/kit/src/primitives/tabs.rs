@@ -1,6 +1,6 @@
 use rune::{Cursor, El, col, el, row, text};
 
-use super::{DISABLED_OPACITY, FOCUS_RING_WIDTH, equal_padding, focus_ring, instant, tight};
+use super::{DISABLED_OPACITY, FOCUS_RING_WIDTH, equal_padding, instant, ring_tint, tight};
 use crate::tokens::{RADIUS_2XL, SPACING, TEXT_SM, TEXT_SM_MEDIUM, Tokens, faded};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -89,7 +89,7 @@ fn trigger(t: &Tokens, variant: TabsVariant, tab: Tab) -> El {
 	trigger.focusable(true).cursor(Cursor::Pointer).focus_ring(
 		FOCUS_RING_WIDTH,
 		0.0,
-		focus_ring(t, 0.5),
+		ring_tint(t, 0.5),
 	)
 }
 

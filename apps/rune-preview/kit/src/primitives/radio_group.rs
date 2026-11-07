@@ -1,6 +1,6 @@
 use rune::{Cursor, El, col, el};
 
-use super::{DISABLED_OPACITY, FOCUS_RING_WIDTH, focus_ring, instant};
+use super::{DISABLED_OPACITY, FOCUS_RING_WIDTH, instant, ring_tint};
 use crate::tokens::{SPACING, Tokens, faded};
 
 const SIDE: f32 = SPACING * 4.0;
@@ -31,6 +31,6 @@ pub fn radio_item(t: &Tokens, label: &str, checked: bool, disabled: bool) -> El 
 	ring.focusable(true).cursor(Cursor::Pointer).focus_ring(
 		FOCUS_RING_WIDTH,
 		0.0,
-		focus_ring(t, 0.3),
+		ring_tint(t, 0.3),
 	)
 }

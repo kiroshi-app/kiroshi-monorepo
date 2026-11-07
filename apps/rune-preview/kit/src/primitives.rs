@@ -51,7 +51,7 @@ pub fn equal_padding(height: f32, content: f32) -> f32 {
 	(height - content) / 2.0
 }
 
-pub fn focus_ring(t: &Tokens, share: f32) -> Color {
+pub fn ring_tint(t: &Tokens, share: f32) -> Color {
 	t.ring.alpha(t.ring.a * share)
 }
 
@@ -110,6 +110,6 @@ pub fn elevated(t: &Tokens, surface: El) -> El {
 	)
 }
 
-pub fn hairline(t: &Tokens) -> Color {
+fn hairline(t: &Tokens) -> Color {
 	t.foreground.alpha(if t.dark { 0.1 } else { 0.05 })
 }

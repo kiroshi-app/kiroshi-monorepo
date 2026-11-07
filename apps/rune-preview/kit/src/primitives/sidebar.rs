@@ -1,7 +1,7 @@
 use rune::{Cursor, El, Icon, col, el, icon, row, text};
 
 use super::button::{Button, ButtonSize, ButtonVariant};
-use super::{FOCUS_RING_WIDTH, Paint, equal_padding, focus_ring, tight};
+use super::{FOCUS_RING_WIDTH, Paint, equal_padding, ring_tint, tight};
 use crate::icons;
 use crate::tokens::{RADIUS_XL, SPACING, TEXT_SM, TEXT_SM_MEDIUM, TEXT_XS_MEDIUM, Tokens, faded};
 
@@ -85,7 +85,7 @@ pub fn menu_button(t: &Tokens, glyph: &'static Icon, label: &str, active: bool) 
 	paint.apply(button).focusable(true).cursor(Cursor::Pointer).focus_ring(
 		FOCUS_RING_WIDTH,
 		0.0,
-		focus_ring(t, 0.3),
+		ring_tint(t, 0.3),
 	)
 }
 

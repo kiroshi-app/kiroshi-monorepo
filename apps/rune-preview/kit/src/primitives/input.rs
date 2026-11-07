@@ -1,6 +1,6 @@
 use rune::{El, TextEdit, text_input};
 
-use super::{FOCUS_RING_WIDTH, equal_padding, focus_ring, instant, tight};
+use super::{FOCUS_RING_WIDTH, equal_padding, instant, ring_tint, tight};
 use crate::tokens::{RADIUS_2XL, SPACING, TEXT_SM, Tokens, faded};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -39,7 +39,7 @@ pub fn input<S: 'static>(
 			.placeholder(placeholder, t.muted_foreground)
 			.caret(t.foreground, t.selection)
 			.label(placeholder)
-			.focus_ring(FOCUS_RING_WIDTH, 0.0, focus_ring(t, 0.3))
+			.focus_ring(FOCUS_RING_WIDTH, 0.0, ring_tint(t, 0.3))
 			.on_edit(access),
 	)
 }

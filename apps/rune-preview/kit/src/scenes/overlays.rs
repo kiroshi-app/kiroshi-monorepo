@@ -13,7 +13,7 @@ use crate::primitives::popover::popover;
 use crate::primitives::sheet::sheet;
 use crate::primitives::sidebar::{inset, trigger};
 use crate::primitives::tooltip::{TooltipSide, tooltip};
-use crate::primitives::{FOCUS_RING_WIDTH, focus_ring};
+use crate::primitives::{FOCUS_RING_WIDTH, ring_tint};
 use crate::tokens::{RADIUS_XL, SPACING, TEXT_SM, Tokens};
 
 const MENU_LABEL: &str = "Transcript actions";
@@ -38,7 +38,7 @@ fn card(t: &Tokens) -> El {
 		.label("Right-click this card")
 		.focusable(true)
 		.cursor(Cursor::Pointer)
-		.focus_ring(FOCUS_RING_WIDTH, 0.0, focus_ring(t, 0.3))
+		.focus_ring(FOCUS_RING_WIDTH, 0.0, ring_tint(t, 0.3))
 		.child(text("Right-click this card".to_owned()).font(TEXT_SM).color(t.muted_foreground))
 }
 
