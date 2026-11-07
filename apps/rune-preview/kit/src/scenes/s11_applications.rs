@@ -5,7 +5,7 @@ use std::sync::Arc;
 use rune::image::{Image, ImageCache};
 use rune::{El, Icon, TextEdit, col};
 
-use super::SceneState;
+use super::{Pointer, Scene, SceneState};
 use crate::strings::Language;
 use crate::surfaces::s11_applications::HAIRLINE;
 use crate::surfaces::s11_applications::catalogue::{
@@ -120,6 +120,15 @@ static DRAWN_MARK: Icon = Icon {
 };
 
 fn ignore<E>(_: &mut SceneState, _: E) {}
+
+pub(super) const fn typed_in(
+	id: &'static str,
+	size: (f32, f32),
+	text: &'static str,
+	view: fn(&Tokens, &SceneState) -> El,
+) -> Scene {
+	Scene { id, size, tabs: 0, pointer: Pointer::Away, typed: text, view }
+}
 
 fn framed(t: &Tokens, content: El) -> El {
 	rune_kit::root(
