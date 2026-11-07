@@ -75,6 +75,8 @@ const DEV_HOST: &str = "--dev-host";
 
 const SKIP_ONBOARDING: &str = "--skip-onboarding";
 
+const CHROME: &str = "--chrome";
+
 const HOST_API: &str = "--host-api";
 
 fn setup(s: &mut App, waker: Waker) {
@@ -85,6 +87,9 @@ fn setup(s: &mut App, waker: Waker) {
 	s.uses_host_api = flagged(DEV_HOST) || flagged(HOST_API);
 	if flagged(DEV_HOST) || flagged(SKIP_ONBOARDING) {
 		s.navigation.navigate_main(Route::Conversations);
+	}
+	if flagged(CHROME) {
+		s.navigation.navigate_main(Route::Chrome);
 	}
 	s.setup(waker);
 }
