@@ -6,6 +6,7 @@ use kiroshi_rune_kit::surfaces::s11_applications::install::InstallEvent;
 use kiroshi_rune_kit::surfaces::s11_applications::panel::{
 	ApplicationsEvent, Connection, ConnectionReason,
 };
+use kiroshi_rune_kit::surfaces::s11_applications::search::SEARCH_TEXT;
 use kiroshi_rune_kit::surfaces::s11_applications::secrets::{Scope as SecretScope, SecretsEvent};
 use serde_json::{Value, json};
 
@@ -612,4 +613,32 @@ fn an_oauth_install_left_unconnected_shows_the_connection_state_and_stops_connec
 	assert!(state.connecting.is_none());
 	let failure = state.catalogue.as_ref().and_then(|catalogue| catalogue.failure.clone());
 	assert_eq!(failure, Some(InstallFailure::Unconnected(Connection::NeedsAuthorization)));
+}
+
+fn shown_names(state: &State, which: Which) -> Vec<String> {
+	let scope = state.scope(which).expect("the scope");
+	super::view::shown_rows(state, scope).into_iter().map(|row| row.name).collect()
+}
+
+#[test]
+fn the_panel_search_shows_the_typed_text_in_the_kit_style_and_filters_then_clears() {
+	let mut state = opened();
+	installed(&mut state, Which::Space, &["linear", "github"]);
+	let typed = rune::TextEdit::new("LIN");
+	state.scope_mut(Which::Space).expect("the scope").installed.query = typed;
+	assert_eq!(shown_names(&state, Which::Space), ["linear"]);
+	let scope = state.scope(Which::Space).expect("the scope");
+	let rows = super::view::shown_rows(&state, scope);
+	let shown: Vec<_> = rows.iter().map(super::view::panel_application).collect();
+	let panel = super::view::panel_of(scope, &shown, kiroshi_rune_kit::strings::Language::En);
+	assert_eq!(panel.query.text, "LIN");
+	assert_eq!(panel.search_text, SEARCH_TEXT);
+	assert_eq!(panel.applications.iter().map(|row| row.name).collect::<Vec<_>>(), ["linear"]);
+	state.scope_mut(Which::Space).expect("the scope").installed.query = rune::TextEdit::new("");
+	assert_eq!(shown_names(&state, Which::Space), ["linear", "github"]);
+	let scope = state.scope(Which::Space).expect("the scope");
+	assert_eq!(
+		super::view::panel_of(scope, &[], kiroshi_rune_kit::strings::Language::En).query.text,
+		""
+	);
 }

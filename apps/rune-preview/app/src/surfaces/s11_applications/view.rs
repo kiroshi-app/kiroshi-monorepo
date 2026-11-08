@@ -15,7 +15,7 @@ use kiroshi_rune_kit::surfaces::s11_applications::panel::{
 	Application as PanelApplication, Applications, ApplicationsEvent, Connection, Owner,
 	applications,
 };
-use kiroshi_rune_kit::surfaces::s11_applications::search::SEARCH_HEIGHT;
+use kiroshi_rune_kit::surfaces::s11_applications::search::{SEARCH_HEIGHT, SEARCH_TEXT};
 use kiroshi_rune_kit::surfaces::s11_applications::secrets::{
 	Scope as SecretScope, SecretField, SecretRemoval, SecretWrite, Secrets as SecretsPanel,
 	SecretsDialog, SecretsEvent, secrets, secrets_dialog,
@@ -28,6 +28,7 @@ use kiroshi_rune_kit::tokens::Tokens;
 
 use super::calls::InstallFailure;
 use super::catalogue::Catalogue;
+use super::installed::Row;
 use super::secrets::Dialog;
 use super::{Notice, Scope, State, Which, state};
 use crate::app::App;
@@ -155,11 +156,7 @@ fn secret_field(app: &mut App, field: SecretField) -> &mut TextEdit {
 	}
 }
 
-fn panel_view(t: &Tokens, applications_state: &State, scope: &Scope, language: Language) -> El {
-	let installed = &scope.installed;
-	if installed.is_loading() {
-		return skeleton_list(t, PANEL_GAP, |_| skeleton_bar(t, RAIL_WIDTH, SEARCH_HEIGHT, false));
-	}
+pub(super) fn shown_rows(applications_state: &State, scope: &Scope) -> Vec<Row> {
 	let curated =
 		applications_state.catalogue.as_ref().map(|catalogue| catalogue.curated.as_slice());
 	let connecting = applications_state
@@ -172,25 +169,42 @@ fn panel_view(t: &Tokens, applications_state: &State, scope: &Scope, language: L
 		.as_ref()
 		.filter(|(which, _)| *which == scope.which)
 		.map(|(_, failure)| failure);
-	let rows = installed.rows(curated.unwrap_or_default(), connecting, failure);
-	let shown: Vec<PanelApplication> = rows
-		.iter()
-		.map(|row| PanelApplication {
-			name: &row.name,
-			display_name: row.display_name.as_deref(),
-			mark: Mark::Absent,
-			connection: row.connection,
-			reason: row.reason.clone(),
-		})
-		.collect();
-	let panel = Applications {
+	scope.installed.rows(curated.unwrap_or_default(), connecting, failure)
+}
+
+pub(super) fn panel_of<'a>(
+	scope: &'a Scope,
+	rows: &'a [PanelApplication<'a>],
+	language: Language,
+) -> Applications<'a> {
+	Applications {
 		owner: owner_of(scope),
-		applications: &shown,
-		query: &installed.query,
-		has_failed_to_load: installed.has_failed(),
+		applications: rows,
+		query: &scope.installed.query,
+		search_text: SEARCH_TEXT,
+		has_failed_to_load: scope.installed.has_failed(),
 		can_connect: true,
 		language,
-	};
+	}
+}
+
+pub(super) fn panel_application(row: &Row) -> PanelApplication<'_> {
+	PanelApplication {
+		name: &row.name,
+		display_name: row.display_name.as_deref(),
+		mark: Mark::Absent,
+		connection: row.connection,
+		reason: row.reason.clone(),
+	}
+}
+
+fn panel_view(t: &Tokens, applications_state: &State, scope: &Scope, language: Language) -> El {
+	if scope.installed.is_loading() {
+		return skeleton_list(t, PANEL_GAP, |_| skeleton_bar(t, RAIL_WIDTH, SEARCH_HEIGHT, false));
+	}
+	let rows = shown_rows(applications_state, scope);
+	let shown: Vec<PanelApplication> = rows.iter().map(panel_application).collect();
+	let panel = panel_of(scope, &shown, language);
 	let which = scope.which;
 	applications(t, &panel, move |app: &mut App| panel_query(app, which), panel_emit(which))
 }
