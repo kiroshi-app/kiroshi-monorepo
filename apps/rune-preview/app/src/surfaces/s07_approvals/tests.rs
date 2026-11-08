@@ -602,7 +602,7 @@ fn a_refused_skip_keeps_the_question_with_its_failure() {
 }
 
 #[test]
-fn opening_a_conversation_reads_its_pending_questions() {
+fn opening_a_conversation_reads_its_pending_prompts() {
 	let mut state = State::default();
 
 	state.opened(CONVERSATION);
@@ -669,6 +669,158 @@ fn a_failed_pending_read_is_shown_and_retried() {
 		drained(&mut state),
 		vec![Call::Pending { conversation_id: CONVERSATION.to_owned() }]
 	);
+}
+
+fn pending_permission(scope: RuntimeScope, id: &str) -> ScopedEvent {
+	ScopedEvent {
+		scope: Some(scope),
+		turn: None,
+		event: AgentEvent::PermissionRequested { request: permission(id) },
+	}
+}
+
+fn pending_question(scope: RuntimeScope, request: QuestionRequest) -> ScopedEvent {
+	ScopedEvent {
+		scope: Some(scope),
+		turn: Some(EventTurn {
+			turn_id: TURN.to_owned(),
+			conversation_id: CONVERSATION.to_owned(),
+			continues_turn_id: None,
+		}),
+		event: AgentEvent::QuestionRequested { request },
+	}
+}
+
+fn reopened_with(state: &mut State, pending: Vec<ScopedEvent>) {
+	state.opened(CONVERSATION);
+	drained(state);
+	state.received(
+		Answer::Pending { conversation_id: CONVERSATION.to_owned(), read: Ok(pending) },
+		NOW,
+		&nothing_shown,
+	);
+}
+
+#[test]
+fn a_pending_permission_read_on_reopen_is_shown_under_its_id() {
+	let mut state = State::default();
+
+	reopened_with(&mut state, vec![pending_permission(scope_in(CONVERSATION), "p1")]);
+
+	assert_eq!(approval_ids(&state), vec!["p1"]);
+	assert_eq!(state.approvals[0].request, permission("p1"));
+	assert!(state.approvals[0].resolved.is_none());
+}
+
+#[test]
+fn a_pending_question_read_on_reopen_keeps_its_id_and_turn() {
+	let mut state = State::default();
+
+	reopened_with(&mut state, vec![pending_question(scope_in(CONVERSATION), question("q1"))]);
+
+	assert_eq!(state.questions.len(), 1);
+	assert_eq!(state.questions[0].request, question("q1"));
+	assert_eq!(state.questions[0].turn_id.as_deref(), Some(TURN));
+}
+
+#[test]
+fn approving_a_permission_read_on_reopen_sends_its_original_id_and_scope() {
+	let mut state = State::default();
+	reopened_with(&mut state, vec![pending_permission(foreign_scope(), "p1")]);
+
+	state.approval_event("p1", ApprovalEvent::AllowOnce);
+
+	assert_eq!(
+		drained(&mut state),
+		vec![Call::Respond {
+			scope: foreign_scope(),
+			id: "p1".to_owned(),
+			decision: PermissionDecision::AllowOnce,
+		}]
+	);
+}
+
+#[test]
+fn answering_a_question_read_on_reopen_sends_its_original_id_and_scope() {
+	let mut state = State::default();
+	reopened_with(&mut state, vec![pending_question(foreign_scope(), single_question("q1"))]);
+	state.question_event("q1", QuestionEvent::Choose(0));
+
+	state.question_event("q1", QuestionEvent::Submit);
+
+	let answers = HashMap::from([("Which plan?".to_owned(), "Free".to_owned())]);
+	assert_eq!(
+		drained(&mut state),
+		vec![Call::Answer { scope: foreign_scope(), id: "q1".to_owned(), answers }]
+	);
+}
+
+#[test]
+fn a_permission_heard_live_then_read_is_shown_once_with_its_call_in_flight() {
+	let mut state = State::default();
+	requesting(&mut state, "p1");
+	state.approval_event("p1", ApprovalEvent::AllowOnce);
+
+	reopened_with(&mut state, vec![pending_permission(scope_in(CONVERSATION), "p1")]);
+
+	assert_eq!(approval_ids(&state), vec!["p1"]);
+	assert!(state.approvals[0].call.is_sending());
+}
+
+#[test]
+fn a_permission_read_then_heard_live_is_shown_once() {
+	let mut state = State::default();
+	reopened_with(&mut state, vec![pending_permission(scope_in(CONVERSATION), "p1")]);
+
+	requesting(&mut state, "p1");
+
+	assert_eq!(approval_ids(&state), vec!["p1"]);
+}
+
+#[test]
+fn a_question_read_then_heard_live_keeps_its_drafts() {
+	let mut state = State::default();
+	reopened_with(&mut state, vec![pending_question(scope_in(CONVERSATION), question("q1"))]);
+	state.question_event("q1", QuestionEvent::Choose(1));
+
+	asking(&mut state, scope_in(CONVERSATION), question("q1"));
+
+	assert_eq!(state.questions.len(), 1);
+	assert_eq!(state.questions[0].drafts[0].chosen, vec![1]);
+}
+
+#[test]
+fn a_prompt_resolved_before_the_read_answers_is_not_shown_again() {
+	let mut state = State::default();
+	state.opened(CONVERSATION);
+	state.heard(Heard::Resolved { id: "p1".to_owned(), decision: PermissionDecision::Deny });
+	state.heard(Heard::Resolved { id: "q1".to_owned(), decision: PermissionDecision::Deny });
+
+	state.received(
+		Answer::Pending {
+			conversation_id: CONVERSATION.to_owned(),
+			read: Ok(vec![
+				pending_permission(scope_in(CONVERSATION), "p1"),
+				pending_question(scope_in(CONVERSATION), question("q1")),
+			]),
+		},
+		NOW,
+		&nothing_shown,
+	);
+
+	assert!(state.approvals.is_empty());
+	assert!(state.questions.is_empty());
+}
+
+#[test]
+fn an_empty_read_on_reopen_shows_no_prompt() {
+	let mut state = State::default();
+
+	reopened_with(&mut state, Vec::new());
+
+	assert!(state.approvals.is_empty());
+	assert!(state.questions.is_empty());
+	assert!(state.read_failure.is_none());
 }
 
 #[test]
