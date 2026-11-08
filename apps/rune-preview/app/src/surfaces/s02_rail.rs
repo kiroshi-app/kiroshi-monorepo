@@ -266,13 +266,15 @@ impl State {
 	}
 
 	pub fn accept(&mut self, instance_id: &str) {
-		let accepted = self.invitations.accept(instance_id, &self.joined);
-		self.queue_some(accepted.map(Call::Accept));
+		if let Some(invitation) = self.invitations.accept(instance_id, &self.joined) {
+			self.queue(Call::Accept(invitation));
+		}
 	}
 
 	pub fn decline(&mut self, instance_id: &str) {
-		let declined = self.invitations.decline(instance_id, &self.joined);
-		self.queue_some(declined.map(Call::Decline));
+		if let Some(invitation) = self.invitations.decline(instance_id, &self.joined) {
+			self.queue(Call::Decline(invitation));
+		}
 	}
 
 	pub fn dismiss(&mut self, index: usize) {
@@ -423,11 +425,6 @@ impl State {
 
 	fn queue(&mut self, call: Call) {
 		self.queued.push(call);
-		self.flush();
-	}
-
-	fn queue_some(&mut self, call: Option<Call>) {
-		self.queued.extend(call);
 		self.flush();
 	}
 

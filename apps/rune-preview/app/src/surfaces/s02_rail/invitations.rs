@@ -17,7 +17,7 @@ enum Status {
 	Failed(InvitationFailure),
 }
 
-pub fn refusal_kind(failure: &HostError) -> Option<String> {
+fn refusal_kind(failure: &HostError) -> Option<String> {
 	let HostError::CommandFailed { body, .. } = failure else { return None };
 	let refusal: serde_json::Value = serde_json::from_str(body).ok()?;
 	refusal.get("kind")?.as_str().map(str::to_owned)
