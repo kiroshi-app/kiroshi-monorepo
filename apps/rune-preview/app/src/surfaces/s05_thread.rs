@@ -121,6 +121,7 @@ impl State {
 			HostEvent::Lagged => self.refresh(),
 			HostEvent::MessageStored(_)
 			| HostEvent::MissionChanged(_)
+			| HostEvent::Companion(_)
 			| HostEvent::AccountChanged(_)
 			| HostEvent::Listening
 			| HostEvent::Unreadable { .. }

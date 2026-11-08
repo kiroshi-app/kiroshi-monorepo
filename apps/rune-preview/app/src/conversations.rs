@@ -18,7 +18,7 @@ use crate::composer;
 use crate::host::{DEV_START_COMMAND, HostError, Profile};
 use crate::mission;
 use crate::model::{Agent, Conversation};
-use crate::surfaces::s05_thread;
+use crate::surfaces::{s05_thread, s10_agent_settings};
 
 pub const CHROME: Chrome =
 	Chrome { full_size_content: true, traffic_lights: Some((16.0, 14.0)), drag_regions: true };
@@ -311,6 +311,12 @@ fn roster_row(s: &App, i: usize, t: &Tokens, now: i64) -> El {
 			),
 		);
 	let tile = if selected { tile.fill(t.muted) } else { tile.hover(t.muted) };
+	let tile = match solo.map(|agent| agent.id) {
+		Some(bot_id) => tile.on_secondary_press(move |s: &mut App, _, _| {
+			s10_agent_settings::open_agent_settings(s, &bot_id)
+		}),
+		None => tile,
+	};
 	el().w_full().pb(ROW_GAP).child(tile)
 }
 

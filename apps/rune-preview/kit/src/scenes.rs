@@ -30,11 +30,15 @@ mod overlays;
 mod person_settings;
 mod primitives;
 mod rail;
+mod roster;
+mod routines;
+mod s11_applications;
 mod space_avatar;
 mod space_picker;
 mod thread;
 
 pub const THEMES: [Theme; 2] = [Theme::Light, Theme::Dark];
+pub const DARK: [Theme; 1] = [Theme::Dark];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Theme {
@@ -65,6 +69,7 @@ pub struct Scene {
 	pub pointer: Pointer,
 	pub typed: &'static str,
 	pub keys: &'static str,
+	pub themes: &'static [Theme],
 	pub view: fn(&Tokens, &SceneState) -> El,
 }
 
@@ -80,6 +85,14 @@ const SHELL: (f32, f32) = (960.0, 560.0);
 const MOBILE: (f32, f32) = (390.0, 640.0);
 const TOASTS: (f32, f32) = (560.0, 640.0);
 const COMPARISON: (f32, f32) = (1180.0, 3700.0);
+const ROUTINES_PANEL: (f32, f32) = (320.0, 576.0);
+const ROUTINES_PANEL_TALL: (f32, f32) = (320.0, 608.0);
+const ROUTINES_PANEL_DIALOG: (f32, f32) = (720.0, 576.0);
+const ROUTINE_ROW: (f32, f32) = (400.0, 120.0);
+const ROUTINE_DETAIL: (f32, f32) = (400.0, 640.0);
+const ROUTINE_DETAILS: (f32, f32) = (400.0, 1040.0);
+const ROUTINE_FORM: (f32, f32) = (400.0, 760.0);
+const ROUTINE_FORM_TALL: (f32, f32) = (400.0, 1240.0);
 const PALETTE: (f32, f32) = (800.0, 720.0);
 const FIELDS: (f32, f32) = (512.0, 520.0);
 const ABOUT: (f32, f32) = (640.0, 760.0);
@@ -94,9 +107,12 @@ const NARROW: (f32, f32) = (352.0, 640.0);
 const ANSWERED: (f32, f32) = (704.0, 420.0);
 const ANSWERED_LONG: (f32, f32) = (512.0, 360.0);
 const MARK_SIDE: f32 = 22.0;
+const SETTINGS_PANEL: (f32, f32) = (576.0, 448.0);
+const CATALOGUE: (f32, f32) = (832.0, 544.0);
+const STORY_VIEWPORT: (f32, f32) = (1180.0, 900.0);
 
 const fn scene(id: &'static str, size: (f32, f32), view: fn(&Tokens, &SceneState) -> El) -> Scene {
-	Scene { id, size, tabs: 0, pointer: Pointer::Away, typed: "", keys: "", view }
+	Scene { id, size, tabs: 0, pointer: Pointer::Away, typed: "", keys: "", themes: &THEMES, view }
 }
 
 const fn focused(
@@ -105,7 +121,7 @@ const fn focused(
 	tabs: usize,
 	view: fn(&Tokens, &SceneState) -> El,
 ) -> Scene {
-	Scene { id, size, tabs, pointer: Pointer::Away, typed: "", keys: "", view }
+	Scene { id, size, tabs, pointer: Pointer::Away, typed: "", keys: "", themes: &THEMES, view }
 }
 
 const fn typed(
@@ -114,7 +130,16 @@ const fn typed(
 	text: &'static str,
 	view: fn(&Tokens, &SceneState) -> El,
 ) -> Scene {
-	Scene { id, size: STORY, tabs, pointer: Pointer::Away, typed: text, keys: "", view }
+	Scene {
+		id,
+		size: STORY,
+		tabs,
+		pointer: Pointer::Away,
+		typed: text,
+		keys: "",
+		themes: &THEMES,
+		view,
+	}
 }
 
 const fn queried(
@@ -123,7 +148,16 @@ const fn queried(
 	text: &'static str,
 	view: fn(&Tokens, &SceneState) -> El,
 ) -> Scene {
-	Scene { id, size: PALETTE, tabs, pointer: Pointer::Away, typed: text, keys: "", view }
+	Scene {
+		id,
+		size: PALETTE,
+		tabs,
+		pointer: Pointer::Away,
+		typed: text,
+		keys: "",
+		themes: &THEMES,
+		view,
+	}
 }
 
 const fn keyed(
@@ -134,7 +168,7 @@ const fn keyed(
 	keys: &'static str,
 	view: fn(&Tokens, &SceneState) -> El,
 ) -> Scene {
-	Scene { id, size, tabs, pointer: Pointer::Away, typed, keys, view }
+	Scene { id, size, tabs, pointer: Pointer::Away, typed, keys, themes: &THEMES, view }
 }
 
 const fn hovered(
@@ -143,7 +177,16 @@ const fn hovered(
 	key: &'static str,
 	view: fn(&Tokens, &SceneState) -> El,
 ) -> Scene {
-	Scene { id, size, tabs: 0, pointer: Pointer::EntersAtSnap(key), typed: "", keys: "", view }
+	Scene {
+		id,
+		size,
+		tabs: 0,
+		pointer: Pointer::EntersAtSnap(key),
+		typed: "",
+		keys: "",
+		themes: &THEMES,
+		view,
+	}
 }
 
 const fn pointed(
@@ -151,7 +194,7 @@ const fn pointed(
 	pointer: Pointer,
 	view: fn(&Tokens, &SceneState) -> El,
 ) -> Scene {
-	Scene { id, size: STORY, tabs: 0, pointer, typed: "", keys: "", view }
+	Scene { id, size: STORY, tabs: 0, pointer, typed: "", keys: "", themes: &THEMES, view }
 }
 
 pub static SCENES: &[Scene] = &[
@@ -222,6 +265,354 @@ pub static SCENES: &[Scene] = &[
 	scene("forms-togglegroup--single-selection", STORY, forms::toggle_group_single_selection),
 	focused("forms-togglegroup--focus-visible", STORY, 1, forms::toggle_group_single_selection),
 	scene("feedback-skeleton--loading", STORY, feedback::skeleton_loading),
+	scene("feedback-sidebarlistskeleton--light", roster::SKELETON, roster::skeleton),
+	scene("navigation-appsidebar--loading-roster", roster::PANEL, roster::panel_loading),
+	focused("navigation-appsidebar--roster", roster::PANEL, 2, roster::panel_roster_loaded),
+	scene(
+		"navigation-appsidebar--roster-reading-next-page",
+		roster::PANEL,
+		roster::panel_roster_reading_next_page,
+	),
+	scene("navigation-appsidebar--unreadable-roster", roster::PANEL, roster::panel_unreadable),
+	focused(
+		"navigation-appsidebar--unreadable-roster-with-retry",
+		roster::PANEL,
+		1,
+		roster::panel_unreadable_with_retry,
+	),
+	scene("navigation-appsidebarbotrow--bot-answered", roster::ROW, roster::bot_answered),
+	scene(
+		"navigation-appsidebarbotrow--bot-long-question-stays-on-one-line",
+		roster::ROW,
+		roster::bot_long_question,
+	),
+	scene("navigation-appsidebarbotrow--bot-needing-you", roster::ROW, roster::bot_needing_you),
+	scene(
+		"navigation-appsidebarbotrow--bot-own-row-keeps-its-avatar-and-no-pile",
+		roster::ROW,
+		roster::bot_answered,
+	),
+	scene(
+		"navigation-appsidebarbotrow--idle-bot-ignores-its-background-tasks",
+		roster::ROW,
+		roster::bot_idle,
+	),
+	scene("navigation-appsidebarbotrow--selected-bot", roster::ROW, roster::bot_selected),
+	scene(
+		"navigation-appsidebarbotrow--working-bot-keeps-its-timestamp",
+		roster::ROW,
+		roster::bot_working,
+	),
+	scene(
+		"navigation-appsidebarbotrow--working-bot-waiting-on-one-background-task",
+		roster::ROW,
+		roster::bot_waiting_on_one,
+	),
+	scene(
+		"navigation-appsidebarbotrow--working-bot-waiting-on-two-background-tasks",
+		roster::ROW,
+		roster::bot_waiting_on_two,
+	),
+	scene(
+		"navigation-appsidebarconversationrow--conversation-answered",
+		roster::ROW,
+		roster::room_answered,
+	),
+	scene(
+		"navigation-appsidebarconversationrow--conversation-long-question-at-the-narrowest-sidebar",
+		roster::NARROW_ROW,
+		roster::room_long_question_narrow,
+	),
+	scene(
+		"navigation-appsidebarconversationrow--conversation-needing-you",
+		roster::ROW,
+		roster::room_needing_you,
+	),
+	scene(
+		"navigation-appsidebarconversationrow--idle-conversation-ignores-background-tasks",
+		roster::ROW,
+		roster::room_idle,
+	),
+	scene(
+		"navigation-appsidebarconversationrow--knockout-wears-the-row-at-rest-and-hovered",
+		roster::ROW,
+		roster::room_hovered_five_bots,
+	),
+	scene(
+		"navigation-appsidebarconversationrow--long-title-and-preview-truncate",
+		roster::ROW,
+		roster::room_long_title,
+	),
+	scene(
+		"navigation-appsidebarconversationrow--monochrome-row",
+		roster::ROW,
+		roster::room_answered,
+	),
+	scene(
+		"navigation-appsidebarconversationrow--muted-tint-row",
+		roster::ROW,
+		roster::room_shield_key,
+	),
+	scene(
+		"navigation-appsidebarconversationrow--muted-tint-row-free-hue",
+		roster::ROW,
+		roster::room_free_hue,
+	),
+	scene(
+		"navigation-appsidebarconversationrow--not-sent-selected",
+		roster::ROW,
+		roster::room_not_sent_selected,
+	),
+	scene(
+		"navigation-appsidebarconversationrow--open-row-with-mission-strips",
+		roster::ROW_WITH_STRIPS,
+		roster::room_with_strips,
+	),
+	scene(
+		"navigation-appsidebarconversationrow--pile-whole-at-the-default-sidebar",
+		roster::ROW,
+		roster::room_five_bots,
+	),
+	scene(
+		"navigation-appsidebarconversationrow--pile-whole-at-the-narrowest-sidebar",
+		roster::NARROW_ROW,
+		roster::room_five_bots,
+	),
+	scene(
+		"navigation-appsidebarconversationrow--pinned-conversation-with-a-working-bot",
+		roster::ROW,
+		roster::room_answered,
+	),
+	scene(
+		"navigation-appsidebarconversationrow--red-shield-key-row",
+		roster::ROW,
+		roster::room_shield_key,
+	),
+	scene("navigation-appsidebarconversationrow--row-in-blue", roster::ROW, roster::room_in_blue),
+	scene("navigation-appsidebarconversationrow--row-in-cyan", roster::ROW, roster::room_in_cyan),
+	scene("navigation-appsidebarconversationrow--row-in-green", roster::ROW, roster::room_in_green),
+	scene(
+		"navigation-appsidebarconversationrow--row-in-orange",
+		roster::ROW,
+		roster::room_in_orange,
+	),
+	scene("navigation-appsidebarconversationrow--row-in-pink", roster::ROW, roster::room_in_pink),
+	scene(
+		"navigation-appsidebarconversationrow--row-in-purple",
+		roster::ROW,
+		roster::room_in_purple,
+	),
+	scene("navigation-appsidebarconversationrow--row-in-red", roster::ROW, roster::room_in_red),
+	scene(
+		"navigation-appsidebarconversationrow--row-in-yellow",
+		roster::ROW,
+		roster::room_in_yellow,
+	),
+	scene(
+		"navigation-appsidebarconversationrow--row-menu-opens-in-a-new-tab",
+		roster::ROW,
+		roster::room_answered,
+	),
+	scene(
+		"navigation-appsidebarconversationrow--row-with-a-badge-and-a-pile",
+		roster::ROW,
+		roster::room_badge_and_pile,
+	),
+	scene(
+		"navigation-appsidebarconversationrow--row-with-five-bots",
+		roster::ROW,
+		roster::room_five_bots,
+	),
+	scene(
+		"navigation-appsidebarconversationrow--row-with-one-bot",
+		roster::ROW,
+		roster::room_one_bot,
+	),
+	scene(
+		"navigation-appsidebarconversationrow--row-with-three-bots",
+		roster::ROW,
+		roster::room_three_bots,
+	),
+	scene(
+		"navigation-appsidebarconversationrow--row-with-two-bots",
+		roster::ROW,
+		roster::room_answered,
+	),
+	scene(
+		"navigation-appsidebarconversationrow--row-without-icon-or-colour",
+		roster::ROW,
+		roster::room_answered,
+	),
+	scene(
+		"navigation-appsidebarconversationrow--working-conversation-keeps-its-timestamp",
+		roster::ROW,
+		roster::room_answered,
+	),
+	scene(
+		"navigation-appsidebarconversationrow--working-conversation-waiting-on-one-background-task",
+		roster::ROW,
+		roster::room_waiting_on_one,
+	),
+	scene(
+		"navigation-appsidebarconversationrow--working-conversation-waiting-on-two-background-tasks",
+		roster::ROW,
+		roster::room_waiting_on_two,
+	),
+	hovered(
+		"navigation-appsidebarroster--border-on-hovered-and-selected-rows",
+		roster::ROSTER,
+		"roster-row-desk-room",
+		roster::roster_complete,
+	),
+	scene(
+		"navigation-appsidebarroster--collapsed-section-skipped",
+		roster::COLLAPSED_ROSTER,
+		roster::roster_collapsed_section,
+	),
+	scene("navigation-appsidebarroster--complete", roster::ROSTER, roster::roster_complete),
+	scene(
+		"navigation-appsidebarroster--drag-over-the-sorted-zone",
+		roster::TALL_ROSTER,
+		roster::roster_drag_over_sorted,
+	),
+	scene("navigation-appsidebarroster--idle", roster::ROSTER, roster::roster_complete),
+	focused(
+		"navigation-appsidebarroster--keyboard-moves-a-pinned-row-or-section",
+		roster::TALL_ROSTER,
+		2,
+		roster::roster_keyboard_moved,
+	),
+	scene(
+		"navigation-appsidebarroster--lifted-row-with-neighbours-shifted",
+		roster::TALL_ROSTER,
+		roster::roster_lifted_row,
+	),
+	scene(
+		"navigation-appsidebarroster--lifted-section",
+		roster::TALL_ROSTER,
+		roster::roster_lifted_section,
+	),
+	scene(
+		"navigation-appsidebarroster--pinned-row-lifted-out-of-its-section",
+		roster::TALL_ROSTER,
+		roster::roster_lifted_out_of_section,
+	),
+	scene(
+		"navigation-appsidebarroster--pinned-zone-then-sorted-zone",
+		roster::ROSTER,
+		roster::roster_complete,
+	),
+	scene(
+		"navigation-appsidebarroster--reading-more",
+		roster::TALL_ROSTER,
+		roster::roster_reading_more,
+	),
+	scene(
+		"navigation-appsidebarroster--roster-needing-you",
+		roster::TALL_ROSTER,
+		roster::roster_needing_you,
+	),
+	scene(
+		"navigation-appsidebarroster--row-renders-only-when-its-own-props-change",
+		roster::ROSTER,
+		roster::roster_renamed,
+	),
+	scene(
+		"navigation-appsidebarrostermenu--loose-run-section-then-loose-run",
+		roster::MENU,
+		roster::menu_loose_run,
+	),
+	scene(
+		"navigation-appsidebarrostermenu--pinned-section-then-pinned-conversation",
+		roster::MENU,
+		roster::menu_pinned_section_then_room,
+	),
+	scene(
+		"navigation-appsidebarrosterparts--empty-section-drop",
+		roster::PART,
+		roster::parts_empty_section_drop,
+	),
+	scene(
+		"navigation-appsidebarrosterparts--working-bot-avatar",
+		roster::PART,
+		roster::parts_working_avatar,
+	),
+	scene(
+		"navigation-appsidebarrosterparts--zone-separator",
+		roster::PART,
+		roster::parts_zone_separator,
+	),
+	scene(
+		"navigation-appsidebarsection--label-around-a-name",
+		roster::SECTION,
+		roster::section_label,
+	),
+	keyed(
+		"navigation-appsidebarsection--name-field-commits-on-enter",
+		roster::SECTION,
+		1,
+		"Desk",
+		"",
+		roster::section_name_field_on_enter,
+	),
+	scene("navigation-appsidebarsection--open-section", roster::SECTION, roster::section_open),
+	scene("navigation-sidebarlistrow--all-slots", roster::LIST_ROW, roster::list_row_all_slots),
+	scene("navigation-sidebarlistrow--box-metrics", roster::LIST_ROW, roster::list_row_box_metrics),
+	scene(
+		"navigation-sidebarlistrow--height-without-a-detail",
+		roster::LIST_ROW,
+		roster::list_row_height_without_detail,
+	),
+	scene(
+		"navigation-sidebarlistrow--long-content",
+		roster::LIST_ROW,
+		roster::list_row_long_content,
+	),
+	scene("navigation-sidebarlistrow--muted-name", roster::LIST_ROW, roster::list_row_muted_name),
+	focused(
+		"navigation-sidebarlistrow--name-only",
+		roster::LIST_ROW,
+		1,
+		roster::list_row_name_only,
+	),
+	scene("navigation-sidebarlistrow--pressed", roster::LIST_ROW, roster::list_row_pressed),
+	scene(
+		"navigation-sidebarlistrow--preview-from-nodes",
+		roster::LIST_ROW,
+		roster::list_row_preview_from_nodes,
+	),
+	scene(
+		"navigation-sidebarlistrow--skin-matches-menu-button",
+		roster::LIST_ROW,
+		roster::list_row_skin_matches_menu_button,
+	),
+	scene(
+		"navigation-sidebarlistrow--with-badge-dot",
+		roster::LIST_ROW,
+		roster::list_row_badge_dot,
+	),
+	scene(
+		"navigation-sidebarlistrow--with-full-title",
+		roster::LIST_ROW,
+		roster::list_row_full_title,
+	),
+	scene(
+		"navigation-sidebarlistrow--with-preview",
+		roster::LIST_ROW,
+		roster::list_row_with_preview,
+	),
+	scene("navigation-sidebarlistrow--with-strips", roster::LIST_ROW, roster::list_row_with_strips),
+	scene(
+		"navigation-sidebarlistrow--with-title-cut-before-name",
+		roster::LIST_ROW,
+		roster::list_row_title_cut,
+	),
+	scene(
+		"navigation-sidebarlistrow--with-trailing-badge-and-timestamp",
+		roster::LIST_ROW,
+		roster::list_row_trailing_badge,
+	),
+	scene("navigation-sidebarlistrow--working-preview", roster::LIST_ROW, roster::list_row_working),
 	scene("navigation-sidebar--expanded", SHELL, navigation::sidebar_expanded),
 	scene("navigation-sidebar--right-side", SHELL, navigation::sidebar_right_side),
 	focused("navigation-sidebar--focus-visible", SHELL, 2, navigation::sidebar_expanded),
@@ -279,6 +670,288 @@ pub static SCENES: &[Scene] = &[
 	scene("overlays-tooltip--with-side", OVERLAY, overlays::tooltip_with_side),
 	scene("overlays-tooltip--long-content", OVERLAY, overlays::tooltip_long_content),
 	scene("overlays-tooltip--on-dark-surface", OVERLAY, overlays::tooltip_default),
+	scene("conversation-routines-routinespanel--default", ROUTINES_PANEL, routines::panel_default),
+	scene(
+		"conversation-routines-routinespanel--one-mission",
+		ROUTINES_PANEL,
+		routines::panel_one_mission,
+	),
+	scene(
+		"conversation-routines-routinespanel--earlier-today-unfolded",
+		ROUTINES_PANEL,
+		routines::panel_earlier_today_unfolded,
+	),
+	scene("conversation-routines-routinespanel--empty", ROUTINES_PANEL, routines::panel_empty),
+	scene(
+		"conversation-routines-routinespanel--no-mission",
+		ROUTINES_PANEL,
+		routines::panel_no_mission,
+	),
+	scene(
+		"conversation-routines-routinespanel--opening-the-routines",
+		ROUTINES_PANEL,
+		routines::panel_opening_the_routines,
+	),
+	scene(
+		"conversation-routines-routinespanel--routines-read-failed",
+		ROUTINES_PANEL,
+		routines::panel_routines_read_failed,
+	),
+	scene(
+		"conversation-routines-routinespanel--routines-loading",
+		ROUTINES_PANEL,
+		routines::panel_routines_loading,
+	),
+	scene(
+		"conversation-routines-routinespanel--missions-loading",
+		ROUTINES_PANEL_TALL,
+		routines::panel_missions_loading,
+	),
+	scene(
+		"conversation-routines-routinespanel--missions-read-failed",
+		ROUTINES_PANEL,
+		routines::panel_missions_read_failed,
+	),
+	scene(
+		"conversation-routines-routinespanel--activity-read-failed",
+		ROUTINES_PANEL,
+		routines::panel_activity_read_failed,
+	),
+	scene(
+		"conversation-routines-routinespanel--write-failed",
+		ROUTINES_PANEL,
+		routines::panel_write_failed,
+	),
+	scene(
+		"conversation-routines-routinespanel--creating",
+		ROUTINES_PANEL,
+		routines::panel_creating,
+	),
+	scene("conversation-routines-routinespanel--opening", ROUTINES_PANEL, routines::panel_opening),
+	scene("conversation-routines-routinespanel--editing", ROUTINES_PANEL, routines::panel_editing),
+	scene(
+		"conversation-routines-routinespanel--leaving-an-unsaved-form-by-back",
+		ROUTINES_PANEL_DIALOG,
+		routines::panel_leaving_an_unsaved_form,
+	),
+	scene(
+		"conversation-routines-routinespanel--run-now-failed",
+		ROUTINES_PANEL,
+		routines::panel_run_now_failed,
+	),
+	scene(
+		"conversation-routines-routinespanel--without-seated-lead",
+		ROUTINES_PANEL,
+		routines::panel_without_seated_lead,
+	),
+	scene(
+		"conversation-routines-routinespanel--on-shell-surface-tinted",
+		ROUTINES_PANEL,
+		routines::panel_tinted,
+	),
+	focused(
+		"conversation-routines-routinespanel--focus-visible",
+		ROUTINES_PANEL,
+		2,
+		routines::panel_default,
+	),
+	focused(
+		"conversation-routines-routinespanel--entry-focus-visible",
+		ROUTINES_PANEL,
+		3,
+		routines::panel_default,
+	),
+	scene("conversation-routines-routinerow--default", ROUTINE_ROW, routines::row_default),
+	scene(
+		"conversation-routines-routinerow--stopped-itself",
+		ROUTINE_ROW,
+		routines::row_stopped_itself,
+	),
+	scene(
+		"conversation-routines-routinerow--long-content",
+		ROUTINE_ROW,
+		routines::row_long_content,
+	),
+	scene("conversation-routines-routinerow--deleting", OVERLAY, routines::row_deleting),
+	focused(
+		"conversation-routines-routinerow--focus-visible",
+		ROUTINE_ROW,
+		1,
+		routines::row_default,
+	),
+	focused(
+		"conversation-routines-routinerow--switch-focus-visible",
+		ROUTINE_ROW,
+		2,
+		routines::row_default,
+	),
+	scene("conversation-routines-reportedrunrow--reported", ROUTINE_ROW, routines::run_reported),
+	scene(
+		"conversation-routines-reportedrunrow--another-bot",
+		ROUTINE_ROW,
+		routines::run_another_bot,
+	),
+	scene(
+		"conversation-routines-reportedrunrow--long-content",
+		ROUTINE_ROW,
+		routines::run_long_content,
+	),
+	scene("conversation-routines-routinedetail--default", ROUTINE_DETAIL, routines::detail_default),
+	scene(
+		"conversation-routines-routinedetail--outcomes",
+		ROUTINE_DETAIL,
+		routines::detail_outcomes,
+	),
+	scene("conversation-routines-routinedetail--running", ROUTINE_DETAIL, routines::detail_running),
+	scene(
+		"conversation-routines-routinedetail--without-reason",
+		ROUTINE_DETAIL,
+		routines::detail_without_reason,
+	),
+	scene(
+		"conversation-routines-routinedetail--full-page-read",
+		ROUTINE_DETAIL,
+		routines::detail_full_page_read,
+	),
+	scene(
+		"conversation-routines-routinedetail--stopped-itself",
+		ROUTINE_DETAIL,
+		routines::detail_stopped_itself,
+	),
+	scene("conversation-routines-routinedetail--loading", ROUTINE_DETAIL, routines::detail_loading),
+	scene("conversation-routines-routinedetail--empty", ROUTINE_DETAIL, routines::detail_empty),
+	scene("conversation-routines-routinedetail--error", ROUTINE_DETAIL, routines::detail_error),
+	scene(
+		"conversation-routines-routinedetail--error-over-history",
+		ROUTINE_DETAIL,
+		routines::detail_error_over_history,
+	),
+	focused(
+		"conversation-routines-routinedetail--run-now-in-flight",
+		ROUTINE_DETAIL,
+		2,
+		routines::detail_run_now_in_flight,
+	),
+	scene(
+		"conversation-routines-routinedetail--run-now-refused",
+		ROUTINE_DETAILS,
+		routines::detail_run_now_refused,
+	),
+	scene(
+		"conversation-routines-routinedetail--long-content",
+		ROUTINE_DETAIL,
+		routines::detail_long_content,
+	),
+	focused(
+		"conversation-routines-routinedetail--focus-visible",
+		ROUTINE_DETAIL,
+		1,
+		routines::detail_default,
+	),
+	scene("conversation-routines-routineform--default", ROUTINE_FORM, routines::form_default),
+	scene(
+		"conversation-routines-routineform--on-a-schedule",
+		ROUTINE_FORM,
+		routines::form_on_a_schedule,
+	),
+	scene(
+		"conversation-routines-routineform--on-a-watched-file",
+		ROUTINE_FORM,
+		routines::form_on_a_watched_file,
+	),
+	scene(
+		"conversation-routines-routineform--on-a-webhook-call",
+		ROUTINE_FORM_TALL,
+		routines::form_on_a_webhook_call,
+	),
+	scene(
+		"conversation-routines-routineform--before-its-first-write",
+		ROUTINE_FORM_TALL,
+		routines::form_before_its_first_write,
+	),
+	scene(
+		"conversation-routines-routineform--key-still-reading",
+		ROUTINE_FORM_TALL,
+		routines::form_key_still_reading,
+	),
+	scene(
+		"conversation-routines-routineform--on-a-source-with-no-configuration",
+		ROUTINE_FORM,
+		routines::form_on_a_source_with_no_configuration,
+	),
+	scene("conversation-routines-routineform--refused", ROUTINE_FORM, routines::form_refused),
+	scene(
+		"conversation-routines-routineform--refused-blank-title",
+		ROUTINE_FORM,
+		routines::form_refused_blank_title,
+	),
+	scene(
+		"conversation-routines-routineform--key-unreadable",
+		ROUTINE_FORM_TALL,
+		routines::form_key_unreadable,
+	),
+	scene(
+		"conversation-routines-routineform--filter-on-two-rows",
+		ROUTINE_FORM_TALL,
+		routines::form_filter_on_two_rows,
+	),
+	scene(
+		"conversation-routines-routineform--filter-on-a-present-field",
+		ROUTINE_FORM_TALL,
+		routines::form_filter_on_a_present_field,
+	),
+	scene(
+		"conversation-routines-routineform--filter-on-a-boolean-field",
+		ROUTINE_FORM_TALL,
+		routines::form_filter_on_a_boolean_field,
+	),
+	scene(
+		"conversation-routines-routineform--filter-on-another-path",
+		ROUTINE_FORM_TALL,
+		routines::form_filter_on_another_path,
+	),
+	scene(
+		"conversation-routines-routineform--filter-on-a-number-field",
+		ROUTINE_FORM_TALL,
+		routines::form_filter_on_a_number_field,
+	),
+	scene(
+		"conversation-routines-routineform--filter-missing-a-value",
+		ROUTINE_FORM_TALL,
+		routines::form_filter_missing_a_value,
+	),
+	scene(
+		"conversation-routines-routineform--filter-refused-for-its-operator",
+		ROUTINE_FORM_TALL,
+		routines::form_filter_refused_for_its_operator,
+	),
+	scene(
+		"conversation-routines-routineform--filter-at-the-panel-width",
+		ROUTINE_FORM_TALL,
+		routines::form_filter_at_the_panel_width,
+	),
+	scene(
+		"conversation-routines-routineform--filter-on-an-undescribed-source",
+		ROUTINE_FORM_TALL,
+		routines::form_filter_on_an_undescribed_source,
+	),
+	scene(
+		"conversation-routines-routineform--filter-value-refused-on-an-undescribed-source",
+		ROUTINE_FORM_TALL,
+		routines::form_filter_value_refused_on_an_undescribed_source,
+	),
+	focused(
+		"conversation-routines-routineform--focus-visible",
+		ROUTINE_FORM,
+		1,
+		routines::form_default,
+	),
+	focused(
+		"conversation-routines-routineform--select-focus-visible",
+		ROUTINE_FORM,
+		3,
+		routines::form_default,
+	),
 	scene("feedback-appbootscreen--window-surface", boot::WINDOW, boot::boot_screen_scene),
 	scene("feedback-appbootscreen--window-surface-dark", boot::WINDOW, boot::boot_screen_scene),
 	scene(
@@ -2612,6 +3285,7 @@ pub static SCENES: &[Scene] = &[
 		pointer: Pointer::Away,
 		typed: boards::EDITED_TEXT,
 		keys: "",
+		themes: &THEMES,
 		view: boards::canvas_edit,
 	},
 	Scene {
@@ -2621,6 +3295,7 @@ pub static SCENES: &[Scene] = &[
 		pointer: Pointer::Away,
 		typed: boards::EDITED_TEXT,
 		keys: "",
+		themes: &THEMES,
 		view: boards::canvas_edit,
 	},
 	scene("navigation-boardcanvas--empty", boards::CANVAS, boards::canvas_empty),
@@ -3714,6 +4389,453 @@ pub static SCENES: &[Scene] = &[
 		ANSWERED_LONG,
 		approvals::answered_long_content,
 	),
+	scene("settings-environment--default", SETTINGS_PANEL, s11_applications::secrets_default),
+	scene("settings-environment--empty", SETTINGS_PANEL, s11_applications::secrets_empty),
+	scene("settings-environment--loading", SETTINGS_PANEL, s11_applications::secrets_loading),
+	scene(
+		"settings-environment--long-content",
+		SETTINGS_PANEL,
+		s11_applications::secrets_long_content,
+	),
+	scene(
+		"settings-environment--server-scope",
+		SETTINGS_PANEL,
+		s11_applications::secrets_server_scope,
+	),
+	scene(
+		"settings-environment--space-scope",
+		SETTINGS_PANEL,
+		s11_applications::secrets_space_scope,
+	),
+	scene("settings-environment--unreadable", SETTINGS_PANEL, s11_applications::secrets_unreadable),
+	focused(
+		"settings-environment--refused-name",
+		STORY_VIEWPORT,
+		0,
+		s11_applications::secrets_refused_name,
+	),
+	focused("settings-environment--error", STORY_VIEWPORT, 0, s11_applications::secrets_error),
+	focused(
+		"settings-environment--rejected-delete",
+		STORY_VIEWPORT,
+		3,
+		s11_applications::secrets_rejected_delete,
+	),
+	scene(
+		"settings-environment--unreadable-with-entries",
+		SETTINGS_PANEL,
+		s11_applications::secrets_unreadable_with_entries,
+	),
+	scene(
+		"settings-environment--unset-needs-value",
+		SETTINGS_PANEL,
+		s11_applications::secrets_unset_needs_value,
+	),
+	scene(
+		"settings-environment--unset-served-elsewhere",
+		SETTINGS_PANEL,
+		s11_applications::secrets_unset_served_elsewhere,
+	),
+	scene(
+		"settings-plugins-applicationspanel--companion",
+		SETTINGS_PANEL,
+		s11_applications::applications_agent,
+	),
+	scene(
+		"settings-plugins-applicationspanel--connected",
+		SETTINGS_PANEL,
+		s11_applications::applications_connected,
+	),
+	Scene {
+		themes: &DARK,
+		..scene(
+			"settings-plugins-applicationspanel--connected-dark",
+			SETTINGS_PANEL,
+			s11_applications::applications_connected,
+		)
+	},
+	scene(
+		"settings-plugins-applicationspanel--connecting",
+		SETTINGS_PANEL,
+		s11_applications::applications_connecting,
+	),
+	scene(
+		"settings-plugins-applicationspanel--empty-companion",
+		SETTINGS_PANEL,
+		s11_applications::applications_empty_agent,
+	),
+	scene(
+		"settings-plugins-applicationspanel--empty-profile",
+		SETTINGS_PANEL,
+		s11_applications::applications_empty_profile,
+	),
+	scene(
+		"settings-plugins-applicationspanel--empty-space",
+		SETTINGS_PANEL,
+		s11_applications::applications_empty_space,
+	),
+	scene(
+		"settings-plugins-applicationspanel--failed",
+		SETTINGS_PANEL,
+		s11_applications::applications_failed,
+	),
+	scene(
+		"settings-plugins-applicationspanel--failed-with-long-reason",
+		SETTINGS_PANEL,
+		s11_applications::applications_failed_with_long_reason,
+	),
+	scene(
+		"settings-plugins-applicationspanel--failed-with-reason",
+		SETTINGS_PANEL,
+		s11_applications::applications_failed_with_reason,
+	),
+	scene(
+		"settings-plugins-applicationspanel--long-content",
+		SETTINGS_PANEL,
+		s11_applications::applications_long_content,
+	),
+	focused(
+		"settings-plugins-applicationspanel--needs-authorization",
+		SETTINGS_PANEL,
+		5,
+		s11_applications::applications_needs_authorization,
+	),
+	Scene {
+		themes: &DARK,
+		..focused(
+			"settings-plugins-applicationspanel--needs-authorization-dark",
+			SETTINGS_PANEL,
+			5,
+			s11_applications::applications_needs_authorization,
+		)
+	},
+	scene(
+		"settings-plugins-applicationspanel--profile",
+		SETTINGS_PANEL,
+		s11_applications::applications_profile,
+	),
+	scene(
+		"settings-plugins-applicationspanel--search-row",
+		SETTINGS_PANEL,
+		s11_applications::applications_agent,
+	),
+	scene(
+		"settings-plugins-applicationspanel--search-row-at-largest-text-size",
+		SETTINGS_PANEL,
+		s11_applications::applications_search_row_at_largest_text,
+	),
+	s11_applications::typed_in(
+		"settings-plugins-applicationspanel--search-text-is-given",
+		SETTINGS_PANEL,
+		"linear",
+		s11_applications::applications_agent,
+	),
+	scene(
+		"settings-plugins-applicationspanel--space",
+		SETTINGS_PANEL,
+		s11_applications::applications_space,
+	),
+	scene(
+		"settings-plugins-applicationspanel--unanswered",
+		SETTINGS_PANEL,
+		s11_applications::applications_unanswered,
+	),
+	scene(
+		"settings-plugins-applicationspanel--unreadable",
+		SETTINGS_PANEL,
+		s11_applications::applications_unreadable,
+	),
+	scene(
+		"settings-plugins-applicationspanel--without-display-name",
+		SETTINGS_PANEL,
+		s11_applications::applications_without_display_name,
+	),
+	scene(
+		"settings-plugins-applicationidentity--hosted-result",
+		STORY,
+		s11_applications::identity_hosted_result,
+	),
+	scene(
+		"settings-plugins-applicationidentity--nothing-to-say",
+		STORY,
+		s11_applications::identity_nothing_to_say,
+	),
+	scene(
+		"settings-plugins-applicationidentity--one-use",
+		STORY,
+		s11_applications::identity_one_use,
+	),
+	scene(
+		"settings-plugins-applicationidentity--package-result",
+		STORY,
+		s11_applications::identity_package_result,
+	),
+	scene(
+		"settings-plugins-applicationidentity--source-and-uses",
+		STORY,
+		s11_applications::identity_source_and_uses,
+	),
+	scene(
+		"settings-plugins-applicationidentity--verified",
+		STORY,
+		s11_applications::identity_verified,
+	),
+	scene("settings-plugins-applicationmark--card", STORY, s11_applications::mark_card),
+	scene(
+		"settings-plugins-applicationmark--extra-small",
+		STORY,
+		s11_applications::mark_extra_small,
+	),
+	scene("settings-plugins-applicationmark--inline", STORY, s11_applications::mark_inline),
+	scene("settings-plugins-applicationmark--medium", STORY, s11_applications::mark_with_mark),
+	scene("settings-plugins-applicationmark--small", STORY, s11_applications::mark_small),
+	scene(
+		"settings-plugins-applicationmark--with-drawn-mark",
+		STORY,
+		s11_applications::mark_with_drawn_mark,
+	),
+	scene("settings-plugins-applicationmark--with-mark", STORY, s11_applications::mark_with_mark),
+	scene(
+		"settings-plugins-applicationmark--with-unreachable-mark",
+		STORY,
+		s11_applications::mark_with_unreachable_mark,
+	),
+	scene(
+		"settings-plugins-applicationmark--without-mark",
+		STORY,
+		s11_applications::mark_without_mark,
+	),
+	scene(
+		"settings-plugins-applicationmark--with-hostile-mark",
+		STORY,
+		s11_applications::mark_without_mark,
+	),
+	scene(
+		"settings-plugins-applicationmark--with-mark-pinned-to-the-viewport",
+		STORY,
+		s11_applications::mark_with_drawn_mark,
+	),
+	scene(
+		"settings-plugins-applicationssearchfield--at-rest",
+		STORY,
+		s11_applications::search_field_story,
+	),
+	typed(
+		"settings-plugins-applicationssearchfield--typed",
+		0,
+		"linear",
+		s11_applications::search_field_story,
+	),
+	typed(
+		"settings-plugins-applicationssearchfield--largest-text-size",
+		1,
+		"typography",
+		s11_applications::search_field_at_largest_text,
+	),
+	scene(
+		"settings-plugins-applicationssearchfield--themes-at-rest",
+		STORY,
+		s11_applications::search_field_theme_cell,
+	),
+	typed(
+		"settings-plugins-applicationssearchfield--themes-filled",
+		0,
+		"linear",
+		s11_applications::search_field_theme_cell,
+	),
+	typed(
+		"settings-plugins-applicationssearchfield--themes-focus-visible",
+		1,
+		"",
+		s11_applications::search_field_theme_cell,
+	),
+	scene(
+		"settings-plugins-applicationscatalogue--at-rest",
+		CATALOGUE,
+		s11_applications::catalogue_at_rest,
+	),
+	scene(
+		"settings-plugins-applicationscatalogue--card-description-clamps",
+		CATALOGUE,
+		s11_applications::catalogue_card_description_clamps,
+	),
+	focused(
+		"settings-plugins-applicationscatalogue--card-focused",
+		CATALOGUE,
+		4,
+		s11_applications::catalogue_at_rest,
+	),
+	Scene {
+		id: "settings-plugins-applicationscatalogue--card-hovered",
+		size: CATALOGUE,
+		tabs: 0,
+		pointer: Pointer::EntersAtSnap("catalogue-card-linear"),
+		typed: "",
+		keys: "",
+		themes: &THEMES,
+		view: s11_applications::catalogue_at_rest,
+	},
+	scene(
+		"settings-plugins-applicationscatalogue--card-name-too-long",
+		CATALOGUE,
+		s11_applications::catalogue_card_name_too_long,
+	),
+	scene(
+		"settings-plugins-applicationscatalogue--card-without-description",
+		CATALOGUE,
+		s11_applications::catalogue_card_without_description,
+	),
+	scene(
+		"settings-plugins-applicationscatalogue--category-empty",
+		CATALOGUE,
+		s11_applications::catalogue_category_empty,
+	),
+	scene(
+		"settings-plugins-applicationscatalogue--category-selected",
+		CATALOGUE,
+		s11_applications::catalogue_category_selected,
+	),
+	scene(
+		"settings-plugins-applicationscatalogue--loading",
+		CATALOGUE,
+		s11_applications::catalogue_loading,
+	),
+	s11_applications::typed_in(
+		"settings-plugins-applicationscatalogue--nothing-matched",
+		CATALOGUE,
+		"zebra",
+		s11_applications::catalogue_nothing_matched,
+	),
+	scene(
+		"settings-plugins-applicationscatalogue--on-this-machine-selected",
+		CATALOGUE,
+		s11_applications::catalogue_on_this_machine_selected,
+	),
+	scene(
+		"settings-plugins-applicationscatalogue--partly-unreadable",
+		CATALOGUE,
+		s11_applications::catalogue_partly_unreadable,
+	),
+	scene(
+		"settings-plugins-applicationscatalogue--rail-scrolls",
+		CATALOGUE,
+		s11_applications::catalogue_at_rest,
+	),
+	s11_applications::typed_in(
+		"settings-plugins-applicationscatalogue--searching",
+		CATALOGUE,
+		"lin",
+		s11_applications::catalogue_at_rest,
+	),
+	scene(
+		"settings-plugins-applicationscatalogue--served-stale",
+		CATALOGUE,
+		s11_applications::catalogue_served_stale,
+	),
+	scene(
+		"settings-plugins-applicationscatalogue--setup-unavailable",
+		CATALOGUE,
+		s11_applications::catalogue_setup_unavailable,
+	),
+	scene(
+		"settings-plugins-applicationscatalogue--unreadable",
+		CATALOGUE,
+		s11_applications::catalogue_unreadable,
+	),
+	scene(
+		"settings-plugins-applicationscatalogue--every-category-is-named",
+		CATALOGUE,
+		s11_applications::catalogue_at_rest,
+	),
+	scene(
+		"settings-plugins-applicationinstallpage--asks-for-every-value",
+		CATALOGUE,
+		s11_applications::install_asks_for_every_value,
+	),
+	scene(
+		"settings-plugins-applicationinstallpage--empty-tool-list",
+		CATALOGUE,
+		s11_applications::install_empty_tool_list,
+	),
+	scene(
+		"settings-plugins-applicationinstallpage--for-space",
+		CATALOGUE,
+		s11_applications::install_for_space,
+	),
+	scene(
+		"settings-plugins-applicationinstallpage--hosted-nothing-to-set-up",
+		CATALOGUE,
+		s11_applications::install_hosted_nothing_to_set_up,
+	),
+	focused(
+		"settings-plugins-applicationinstallpage--install-failed-from-keyboard",
+		CATALOGUE,
+		3,
+		s11_applications::install_failed_from_keyboard,
+	),
+	focused(
+		"settings-plugins-applicationinstallpage--install-added-from-keyboard",
+		CATALOGUE,
+		0,
+		s11_applications::install_added_from_keyboard,
+	),
+	scene(
+		"settings-plugins-applicationinstallpage--install-running",
+		CATALOGUE,
+		s11_applications::install_running,
+	),
+	scene(
+		"settings-plugins-applicationinstallpage--long-content",
+		CATALOGUE,
+		s11_applications::install_long_content,
+	),
+	scene(
+		"settings-plugins-applicationinstallpage--needs-api-key",
+		CATALOGUE,
+		s11_applications::install_needs_api_key,
+	),
+	scene(
+		"settings-plugins-applicationinstallpage--nothing-to-set-up",
+		CATALOGUE,
+		s11_applications::install_nothing_to_set_up,
+	),
+	scene(
+		"settings-plugins-applicationinstallpage--refused",
+		CATALOGUE,
+		s11_applications::install_refused,
+	),
+	scene(
+		"settings-plugins-applicationinstallpage--refused-without-reason",
+		CATALOGUE,
+		s11_applications::install_refused_without_reason,
+	),
+	scene(
+		"settings-plugins-applicationinstallpage--runs-on-its-host",
+		CATALOGUE,
+		s11_applications::install_runs_on_its_host,
+	),
+	scene(
+		"settings-plugins-applicationinstallpage--signs-you-in",
+		CATALOGUE,
+		s11_applications::install_signs_you_in,
+	),
+	scene(
+		"settings-plugins-applicationinstallpage--themes-key-field-at-rest",
+		CATALOGUE,
+		s11_applications::install_needs_api_key,
+	),
+	focused(
+		"settings-plugins-applicationinstallpage--key-field-focus-visible",
+		CATALOGUE,
+		4,
+		s11_applications::install_needs_api_key,
+	),
+	focused(
+		"settings-plugins-applicationinstallpage--conceals-the-secret-field-alone",
+		CATALOGUE,
+		6,
+		s11_applications::install_conceals_the_secret_field_alone,
+	),
 ];
 
 pub static SURFACES: &[&[Scene]] =
@@ -3726,12 +4848,14 @@ pub fn every_scene() -> impl Iterator<Item = &'static Scene> {
 pub struct SceneState {
 	pub scene: &'static Scene,
 	pub edit: TextEdit,
+	pub routine_fields: [TextEdit; 2],
 	pub chosen: Vec<usize>,
 	pub picture: Option<Image>,
 	pub math: Typesetter,
 	pub mark: Option<Image>,
 	pub library: library::LibraryScene,
 	pub board_pictures: Vec<Image>,
+	pub secrets: s11_applications::SecretsScene,
 	images: Option<ImageCache>,
 	fields: RefCell<HashMap<Field, TextEdit>>,
 }
@@ -3741,12 +4865,14 @@ impl SceneState {
 		SceneState {
 			scene,
 			edit: TextEdit::new(scene.typed),
+			routine_fields: [TextEdit::new(""), TextEdit::new("")],
 			chosen: Vec::new(),
 			picture: None,
 			math: Typesetter::default(),
 			mark: None,
 			library: library::LibraryScene::new(scene),
 			board_pictures: Vec::new(),
+			secrets: s11_applications::SecretsScene::new(scene.id),
 			images: None,
 			fields: RefCell::default(),
 		}

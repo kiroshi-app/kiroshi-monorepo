@@ -84,7 +84,7 @@ const BASE: Mission = Mission {
 	last_activity: None,
 };
 
-const WAITING_HUMAN_MISSION: Mission = Mission {
+pub(super) const WAITING_HUMAN_MISSION: Mission = Mission {
 	id: "mission-migration",
 	objective: "Migrate the run history table",
 	ticket: ticket("linear", "OPE-51", "Move the run history off the shared database"),
@@ -94,7 +94,7 @@ const WAITING_HUMAN_MISSION: Mission = Mission {
 	..BASE
 };
 
-const READY_MISSION: Mission = Mission {
+pub(super) const READY_MISSION: Mission = Mission {
 	id: "mission-badges",
 	bot: NOOR,
 	objective: "Draw the badge dots of the roster",
@@ -105,7 +105,7 @@ const READY_MISSION: Mission = Mission {
 	..BASE
 };
 
-const WORKING_MISSION: Mission = Mission {
+pub(super) const WORKING_MISSION: Mission = Mission {
 	id: "mission-parser",
 	objective: "Rewrite the changelog parser",
 	ticket: ticket("linear", "OPE-42", "Changelog parser"),
@@ -117,7 +117,7 @@ const WORKING_MISSION: Mission = Mission {
 	..BASE
 };
 
-const WAITING_BOT_MISSION: Mission = Mission {
+pub(super) const WAITING_BOT_MISSION: Mission = Mission {
 	id: "mission-transcript",
 	bot: IRIS,
 	objective: "Store the transcript of a mission thread",
@@ -127,7 +127,7 @@ const WAITING_BOT_MISSION: Mission = Mission {
 	..BASE
 };
 
-const FAILED_MISSION: Mission = Mission {
+pub(super) const FAILED_MISSION: Mission = Mission {
 	id: "mission-upgrade",
 	bot: IRIS,
 	objective: "Upgrade the desktop shell",
@@ -138,7 +138,7 @@ const FAILED_MISSION: Mission = Mission {
 	..BASE
 };
 
-const CLOSED_MISSION: Mission = Mission {
+pub(super) const CLOSED_MISSION: Mission = Mission {
 	id: "mission-tools",
 	bot: NOOR,
 	objective: "Let a bot manage its routines through MCP",
