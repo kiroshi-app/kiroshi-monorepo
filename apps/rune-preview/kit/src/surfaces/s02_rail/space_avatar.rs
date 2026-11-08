@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::f64::consts::{PI, TAU};
 
 use rune::color::srgb_encode;
@@ -189,13 +189,37 @@ impl SpaceAvatar<'_> {
 			online: bits_of(t.presence_online),
 		};
 		LAYERS.with(|cache| {
-			cache.borrow_mut().entry(key).or_insert_with(|| Recipe::new(self, t).layers()).clone()
+			let mut cache = cache.borrow_mut();
+			if let Some(layers) = cache.get(&key) {
+				return layers.clone();
+			}
+			if cache.len() >= LAYER_CAP {
+				cache.clear();
+			}
+			let layers = Recipe::new(self, t).layers();
+			cache.insert(key, layers.clone());
+			layers
 		})
 	}
 }
 
+const LAYER_CAP: usize = 256;
+
 thread_local! {
 	static LAYERS: RefCell<HashMap<LayerKey, Layers>> = RefCell::new(HashMap::new());
+	static BODIES: RefCell<HashSet<&'static str>> = RefCell::new(HashSet::new());
+}
+
+fn interned(body: String) -> &'static str {
+	BODIES.with(|bodies| {
+		let mut bodies = bodies.borrow_mut();
+		if let Some(&held) = bodies.get(body.as_str()) {
+			return held;
+		}
+		let leaked: &'static str = Box::leak(body.into_boxed_str());
+		bodies.insert(leaked);
+		leaked
+	})
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -558,8 +582,10 @@ impl Recipe {
 	}
 
 	fn cover(&self, element: String) -> Vec<u8> {
-		let body: &'static str = Box::leak(element.into_boxed_str());
-		icon_coverage(&Icon { name: "space-avatar", view: self.view, body }, self.px)
+		icon_coverage(
+			&Icon { name: "space-avatar", view: self.view, body: interned(element) },
+			self.px,
+		)
 	}
 
 	fn polygon(&self, points: &[[f64; 2]], closed: bool) -> String {
@@ -936,6 +962,26 @@ mod tests {
 			.map(hex),
 			["#3d3d3d", "#f2f2f2", "#1b3d6b", "#fcf0dc"]
 		);
+	}
+
+	#[test]
+	fn a_dragged_hue_keeps_the_cache_under_its_cap_and_leaks_nothing_new() {
+		let t = Tokens::new(false);
+		let face = |colour: f32| SpaceAvatar {
+			space_id: "vocca",
+			name: "Vocca",
+			colour: Some(colour),
+			size: SpaceAvatarSize::Px26,
+			state: SpaceAvatarState::Local,
+			has_attention: false,
+		};
+		face(0.0).draw(&t);
+		let leaked = BODIES.with(|bodies| bodies.borrow().len());
+		for step in 0..1000 {
+			face(step as f32 * 0.36).draw(&t);
+			assert!(LAYERS.with(|cache| cache.borrow().len()) <= LAYER_CAP);
+		}
+		assert_eq!(BODIES.with(|bodies| bodies.borrow().len()), leaked);
 	}
 
 	#[test]
