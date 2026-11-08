@@ -77,6 +77,10 @@ impl Scope {
 		Scope { which, owner, name, installed: Installed::default(), secrets: Secrets::default() }
 	}
 
+	fn has_key(&self, key: &ScopeKey) -> bool {
+		self.which == key.which && self.owner == key.owner
+	}
+
 	pub fn key(&self) -> ScopeKey {
 		ScopeKey { which: self.which, owner: self.owner.clone() }
 	}
@@ -134,7 +138,7 @@ impl State {
 	}
 
 	fn shown(&self, key: &ScopeKey) -> Option<&Scope> {
-		self.scopes.iter().find(|scope| scope.which == key.which && scope.owner == key.owner)
+		self.scopes.iter().find(|scope| scope.has_key(key))
 	}
 
 	fn is_shown(&self, key: &ScopeKey) -> bool {
@@ -142,7 +146,7 @@ impl State {
 	}
 
 	fn shown_mut(&mut self, key: &ScopeKey) -> Option<&mut Scope> {
-		self.scopes.iter_mut().find(|scope| scope.which == key.which && scope.owner == key.owner)
+		self.scopes.iter_mut().find(|scope| scope.has_key(key))
 	}
 
 	fn shown_keys(&self) -> Vec<ScopeKey> {
