@@ -2,7 +2,7 @@
 
 ## Scene baselines
 
-`macos/` and `linux/` hold one PNG per registered scene and theme, `<scene id>-<light|dark>.png`, rendered at 2x. Scenes live in `src/scenes.rs`: the `SCENES` registry is the only list the harness reads.
+`macos/` and `linux/` hold one PNG per registered scene and theme, `<scene id>-<light|dark>.png`, rendered at 2x. Scenes live in `src/scenes.rs` and in each surface module under `src/surfaces/`: `scenes::every_scene()`, the `SCENES` registry followed by every surface list `SURFACES` names, is the only list the harness reads.
 
 `cargo test -p kiroshi-rune-kit --test scenes` renders every registered scene in both themes, headless, through Rune's own `--snap` path, and compares each image with the baseline of the platform it runs on, pixel for pixel. The test fails when:
 
