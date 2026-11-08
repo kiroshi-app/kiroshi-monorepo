@@ -9,6 +9,7 @@ use crate::strings::chat::{attachments, composer};
 use crate::tokens::{RADIUS_3XL, SPACING, TEXT_BUBBLE, Tokens, faded};
 
 pub const COMPOSER_KEY: &str = "composer";
+pub(super) const FIELD_KEY: &str = "composer-field";
 const PADDING: f32 = SPACING * 2.0;
 const GAP: f32 = SPACING;
 const BORDER: f32 = 1.0;
@@ -102,6 +103,14 @@ impl<'a> PromptInput<'a> {
 			PILL_RADIUS
 		}
 	}
+}
+
+pub fn focus_prompt(edit: &mut TextEdit, is_blocked: bool) {
+	if is_blocked {
+		return;
+	}
+	edit.focused = true;
+	edit.set_caret(edit.text.len());
 }
 
 pub(super) fn surface(t: &Tokens, input: &PromptInput) -> (rune::Color, rune::Color) {
@@ -204,7 +213,7 @@ fn field<S: 'static>(
 	let can_send = input.can_send();
 	let menu_open = input.menu_open;
 	let mut editor = text_input(input.edit, TEXT_BUBBLE)
-		.key("composer-field")
+		.key(FIELD_KEY)
 		.w_full()
 		.px(FIELD_INSET_X)
 		.color(t.foreground)

@@ -1,10 +1,13 @@
-use rune::{Key, KeyEvent, Mods, TextEdit};
+use rune::{Cx, El, Env, Key, KeyEvent, Mods, Runtime, TextEdit, TextStyle, col, text_input};
 
 use super::chips::formatted_size;
 use super::menus::{Command, MentionFace, Mentionable, command_matches, mention_matches};
-use super::prompt::{Offline, PromptInput, menu_key, surface};
+use super::prompt::{
+	FIELD_KEY, Offline, PromptInput, focus_prompt, menu_key, prompt_input, surface,
+};
 use super::queue::focused_item;
-use super::{ComposerIntent, filled};
+use super::{ComposerIntent, Scope, filled};
+use crate::strings::Language;
 use crate::tokens::Tokens;
 
 const fn member(id: &'static str, is_outside: bool) -> Mentionable<'static> {
@@ -104,4 +107,111 @@ fn a_focused_queue_key_names_its_queued_message() {
 	assert_eq!(focused_item("queue-send-now-top"), Some("top"));
 	assert_eq!(focused_item("queue-remove-city"), Some("city"));
 	assert_eq!(focused_item("composer-send"), None);
+}
+
+const DRAFT: &str = "Summarise the notes";
+const ELSEWHERE: &str = "elsewhere";
+
+#[derive(Clone, Copy, PartialEq)]
+enum Block {
+	Live,
+	Disabled,
+	Offline,
+}
+
+struct Screen {
+	edit: TextEdit,
+	elsewhere: TextEdit,
+	block: Block,
+	sent: usize,
+}
+
+fn heard(screen: &mut Screen, intent: ComposerIntent) {
+	if intent == ComposerIntent::Send {
+		screen.sent += 1;
+	}
+}
+
+fn screen_view(screen: &Screen, _: &mut Cx<Screen>) -> El {
+	let t = Tokens::new(false);
+	let scope = Scope { t: &t, language: Language::En, emit: heard };
+	let input = PromptInput {
+		disabled: screen.block == Block::Disabled,
+		offline: (screen.block == Block::Offline)
+			.then_some(Offline { space: "Studio", host: "Steve" }),
+		focused: screen.edit.focused,
+		..PromptInput::new(&screen.edit, 544.0)
+	};
+	col()
+		.child(
+			text_input(&screen.elsewhere, TextStyle::new(14.0, 400.0))
+				.key(ELSEWHERE)
+				.size(240.0, 32.0)
+				.on_edit(|screen: &mut Screen| &mut screen.elsewhere),
+		)
+		.child(prompt_input(scope, input, |screen: &mut Screen| &mut screen.edit))
+}
+
+fn composer_with(draft: &str, block: Block) -> Runtime<Screen> {
+	let mut edit = TextEdit::new(draft);
+	edit.set_caret(0);
+	let mut elsewhere = TextEdit::new("");
+	elsewhere.focused = true;
+	let screen = Screen { edit, elsewhere, block, sent: 0 };
+	let mut runtime = Runtime::new(screen, screen_view, (640.0, 360.0), Env::new(false, 1.0));
+	runtime.frame(0.0);
+	runtime
+}
+
+fn step(runtime: &mut Runtime<Screen>) {
+	runtime.frame(0.0);
+	runtime.frame(1.0);
+}
+
+fn focused_key(runtime: &Runtime<Screen>) -> Option<String> {
+	runtime.elements().into_iter().find(|element| element.focused).and_then(|element| element.key)
+}
+
+fn call_focus(runtime: &mut Runtime<Screen>) {
+	runtime.update(|screen, _| {
+		let is_blocked = screen.block != Block::Live;
+		focus_prompt(&mut screen.edit, is_blocked);
+	});
+	step(runtime);
+}
+
+#[test]
+fn the_app_call_focuses_the_field_with_the_caret_after_the_draft() {
+	for draft in ["", DRAFT] {
+		let mut runtime = composer_with(draft, Block::Live);
+		assert_eq!(focused_key(&runtime).as_deref(), Some(ELSEWHERE));
+		call_focus(&mut runtime);
+		assert_eq!(focused_key(&runtime).as_deref(), Some(FIELD_KEY), "draft {draft:?}");
+		let edit = &runtime.state.edit;
+		assert_eq!(edit.text, draft);
+		assert_eq!((edit.anchor, edit.focus), (draft.len(), draft.len()), "draft {draft:?}");
+	}
+}
+
+#[test]
+fn a_blocked_composer_leaves_focus_where_it_was() {
+	for block in [Block::Disabled, Block::Offline] {
+		let mut runtime = composer_with(DRAFT, block);
+		call_focus(&mut runtime);
+		assert_eq!(focused_key(&runtime).as_deref(), Some(ELSEWHERE));
+		assert!(!runtime.state.edit.focused);
+	}
+}
+
+#[test]
+fn typing_paste_and_enter_after_the_app_call_act_as_after_a_click() {
+	let mut runtime = composer_with(DRAFT, Block::Live);
+	call_focus(&mut runtime);
+	runtime.key(KeyEvent { key: Key::Text("!".into()), mods: Mods::default() });
+	runtime.paste(" Now.");
+	step(&mut runtime);
+	assert_eq!(runtime.state.edit.text, format!("{DRAFT}! Now."));
+	runtime.key(KeyEvent { key: Key::Enter, mods: Mods::default() });
+	step(&mut runtime);
+	assert_eq!(runtime.state.sent, 1);
 }
