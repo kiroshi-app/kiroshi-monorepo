@@ -9,6 +9,7 @@ use super::{
 use crate::icons;
 use crate::primitives::Paint;
 use crate::primitives::button::{Button, ButtonSize, ButtonVariant};
+use crate::primitives::skeleton::skeleton;
 use crate::strings::{Key, Language, bots};
 use crate::tokens::{RADIUS_XL, SPACING, TEXT_SM_MEDIUM, TEXT_XS, Tokens};
 
@@ -279,7 +280,8 @@ fn application_row<S: 'static>(
 		.child(text(name.to_owned()).font(title_style).color(t.foreground).truncate());
 	let mut state = row().h(SPACING * 4.0).min_w(0.0).gap(SPACING * 1.5).center_y();
 	if let Some(connection) = app.connection {
-		state = state.child(round(el().size(DOT, DOT).fill(connection.dot(t)), DOT)).child(
+		let dot = if connection == Connection::Connecting { skeleton(t) } else { el() };
+		state = state.child(round(dot.size(DOT, DOT).fill(connection.dot(t)), DOT)).child(
 			text(say(connection.state(), language).to_owned())
 				.font(TEXT_XS)
 				.color(t.muted_foreground)

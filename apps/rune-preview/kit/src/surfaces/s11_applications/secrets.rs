@@ -1,14 +1,17 @@
-use rune::{Align, El, col, icon, row, text};
+use rune::{Align, Color, El, TextEdit, col, el, icon, row, text, text_input};
 
 use super::{
-	HAIRLINE, PANEL_GAP, empty_description, empty_state, empty_title, fill, inset, mono, outlined,
-	round, say, skeleton_bar, skeleton_list,
+	HAIRLINE, PANEL_GAP, empty_description, empty_state, empty_title, fill, inset, kit_ring, mono,
+	outlined, round, say, skeleton_bar, skeleton_list,
 };
 use crate::icons;
 use crate::primitives::button::{Button, ButtonSize, ButtonVariant};
-use crate::strings::{Language, bots};
+use crate::primitives::dialog::SCRIM_SHARE;
+use crate::primitives::{elevated, instant, tight};
+use crate::strings::{Language, bots, common};
 use crate::tokens::{
-	RADIUS_2XL, RADIUS_XL, SPACING, TEXT_SM, TEXT_SM_MEDIUM, TEXT_XS, TEXT_XS_MEDIUM, Tokens, faded,
+	RADIUS_2XL, RADIUS_CONTROL, RADIUS_XL, SPACING, TEXT_BASE_SEMIBOLD, TEXT_SM, TEXT_SM_MEDIUM,
+	TEXT_XS, TEXT_XS_MEDIUM, Tokens, faded,
 };
 
 const ROW_GAP: f32 = SPACING * 2.0;
@@ -27,6 +30,11 @@ const SUB_BAR: f32 = SPACING * 2.25;
 const FAILURE_FILL: f32 = 0.1;
 const FAILURE_BORDER: f32 = 0.3;
 const FAILURE_INK: f32 = 0.8;
+const WRITE_WIDTH: f32 = SPACING * 100.0;
+const REMOVE_WIDTH: f32 = SPACING * 88.0;
+const DESCRIPTION_MEASURE: f32 = SPACING * 80.0;
+const CLOSE_INSET: f32 = SPACING * 4.0;
+const FIELD_HEIGHT: f32 = SPACING * 9.5;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Scope {
@@ -59,19 +67,52 @@ pub struct Secret {
 	pub is_unset: bool,
 }
 
+pub struct SecretWrite<'a> {
+	pub replacing: Option<&'a str>,
+	pub name: &'a TextEdit,
+	pub value: &'a TextEdit,
+	pub is_refused: bool,
+	pub has_failed: bool,
+	pub is_writing: bool,
+}
+
+pub struct SecretRemoval<'a> {
+	pub name: &'a str,
+	pub has_failed: bool,
+	pub is_removing: bool,
+}
+
+pub enum SecretsDialog<'a> {
+	Write(SecretWrite<'a>),
+	Remove(SecretRemoval<'a>),
+}
+
 pub struct Secrets<'a> {
 	pub scope: Scope,
 	pub entries: &'a [Secret],
 	pub is_pending: bool,
 	pub has_failed_to_read: bool,
+	pub dialog: Option<SecretsDialog<'a>>,
 	pub language: Language,
 }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SecretField {
+	Name,
+	Value,
+}
+
+pub type SecretFieldAccess<S> = for<'a> fn(&'a mut S, SecretField) -> &'a mut TextEdit;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SecretsEvent {
 	Add,
 	Replace(String),
 	Remove(String),
+	Save,
+	CloseWrite,
+	ConfirmRemove,
+	CancelRemove,
 }
 
 pub fn secrets<S: 'static>(t: &Tokens, panel: &Secrets, emit: fn(&mut S, SecretsEvent)) -> El {
@@ -285,4 +326,234 @@ fn unreadable(t: &Tokens, language: Language) -> El {
 						.align(Align::Start),
 				),
 		)
+}
+
+pub fn secrets_dialog<S: 'static>(
+	t: &Tokens,
+	panel: &Secrets,
+	access: SecretFieldAccess<S>,
+	emit: fn(&mut S, SecretsEvent),
+) -> Option<El> {
+	let language = panel.language;
+	let (surface, dismissed) = match panel.dialog.as_ref()? {
+		SecretsDialog::Write(write) => {
+			(write_dialog(t, write, language, access, emit), SecretsEvent::CloseWrite)
+		}
+		SecretsDialog::Remove(removal) => {
+			(remove_question(t, removal, language, emit), SecretsEvent::CancelRemove)
+		}
+	};
+	Some(
+		el().absolute(0.0, 0.0)
+			.w_full()
+			.h_full()
+			.padding(SPACING * 4.0)
+			.center()
+			.modal(true, move |s: &mut S| emit(s, dismissed.clone()))
+			.child(el().absolute(0.0, 0.0).w_full().h_full().fill(Color::BLACK.alpha(SCRIM_SHARE)))
+			.child(elevated(t, surface)),
+	)
+}
+
+fn heading(t: &Tokens, title: &str, description: &str, end_room: f32) -> El {
+	col()
+		.w_full()
+		.gap(SPACING)
+		.pr(end_room)
+		.child(
+			text(title.to_owned())
+				.font(tight(TEXT_BASE_SEMIBOLD))
+				.color(t.popover_foreground)
+				.role("heading")
+				.wrap_anywhere(),
+		)
+		.child(
+			text(description.to_owned())
+				.font(TEXT_SM)
+				.color(t.muted_foreground)
+				.wrap()
+				.max_w(DESCRIPTION_MEASURE),
+		)
+}
+
+fn failure(t: &Tokens, copy: &str) -> El {
+	text(copy.to_owned()).font(TEXT_XS).color(t.destructive).wrap().role("alert")
+}
+
+fn write_dialog<S: 'static>(
+	t: &Tokens,
+	write: &SecretWrite,
+	language: Language,
+	access: SecretFieldAccess<S>,
+	emit: fn(&mut S, SecretsEvent),
+) -> El {
+	use bots::secrets::set;
+	let (title, description) = match write.replacing {
+		Some(name) => (
+			say(set::replace::TITLE, language).to_owned(),
+			fill(set::replace::DESCRIPTION, language, &[("name", name)]),
+		),
+		None => (
+			say(set::add::TITLE, language).to_owned(),
+			say(set::add::DESCRIPTION, language).to_owned(),
+		),
+	};
+	let close = Button::icon(&icons::CLOSE, say(common::dialog::CLOSE, language))
+		.variant(ButtonVariant::Ghost)
+		.size(ButtonSize::IconSm)
+		.view(t)
+		.on_press(move |s: &mut S| emit(s, SecretsEvent::CloseWrite))
+		.pin(None, Some(CLOSE_INSET), Some(CLOSE_INSET), None);
+	let name = field(
+		t,
+		FieldSpec {
+			label: say(set::name::LABEL, language),
+			hint: say(set::name::HINT, language),
+			error: write.is_refused.then(|| say(set::name::INVALID, language)),
+			placeholder: Some(say(set::name::PLACEHOLDER, language)),
+			is_read_only: write.replacing.is_some(),
+			is_masked: false,
+		},
+		write.name,
+		move |s: &mut S| access(s, SecretField::Name),
+	);
+	let value = field(
+		t,
+		FieldSpec {
+			label: say(set::value::LABEL, language),
+			hint: say(set::value::HINT, language),
+			error: None,
+			placeholder: None,
+			is_read_only: false,
+			is_masked: true,
+		},
+		write.value,
+		move |s: &mut S| access(s, SecretField::Value),
+	);
+	let mut form = col().w_full().gap(SPACING * 4.0).child(name).child(value);
+	if write.has_failed {
+		form = form.child(failure(t, say(set::FAILED, language)));
+	}
+	let save = Button::new(say(set::SUBMIT, language))
+		.size(ButtonSize::Sm)
+		.leading(&icons::CHECK)
+		.disabled(write.is_writing)
+		.view(t);
+	let save = if write.is_writing {
+		save
+	} else {
+		save.on_press(move |s: &mut S| emit(s, SecretsEvent::Save))
+	};
+	let form = form.child(row().w_full().justify_end().child(save));
+	col()
+		.key("secrets-write")
+		.w(WRITE_WIDTH)
+		.gap(SPACING * 4.0)
+		.padding(SPACING * 6.0)
+		.radius(RADIUS_2XL)
+		.fill(t.popover)
+		.role("dialog")
+		.label(&title)
+		.child(heading(t, &title, &description, SPACING * 8.0))
+		.child(form)
+		.child(close)
+}
+
+struct FieldSpec<'a> {
+	label: &'a str,
+	hint: &'a str,
+	error: Option<&'a str>,
+	placeholder: Option<&'a str>,
+	is_read_only: bool,
+	is_masked: bool,
+}
+
+fn field<S: 'static>(
+	t: &Tokens,
+	spec: FieldSpec,
+	edit: &TextEdit,
+	access: impl for<'a> Fn(&'a mut S) -> &'a mut TextEdit + 'static,
+) -> El {
+	let style = TEXT_SM;
+	let border = if spec.error.is_some() { t.destructive } else { t.input };
+	let ground = if spec.is_read_only { t.popover.alpha(0.0) } else { t.muted };
+	let mut input = text_input(edit, style)
+		.single_line()
+		.key(format!("secrets-field-{}", spec.label))
+		.w_full()
+		.h(FIELD_HEIGHT)
+		.py((FIELD_HEIGHT - style.line_height) / 2.0)
+		.px(SPACING * 3.0 + HAIRLINE)
+		.radius(RADIUS_CONTROL)
+		.fill(ground)
+		.border(HAIRLINE, border)
+		.color(t.foreground)
+		.caret(t.foreground, t.selection)
+		.label(spec.label)
+		.invalid(spec.error.is_some());
+	if let Some(placeholder) = spec.placeholder
+		&& edit.text.is_empty()
+	{
+		input = input.placeholder(placeholder, t.muted_foreground);
+	}
+	if spec.is_read_only {
+		input = input.read_only(true);
+	} else {
+		input = input.on_edit(access);
+	}
+	if spec.is_masked {
+		input = input.secure();
+	}
+	let mut column = col()
+		.w_full()
+		.gap(SPACING * 1.5)
+		.child(text(spec.label.to_owned()).font(TEXT_XS_MEDIUM).color(t.foreground))
+		.child(kit_ring(t, instant(input)))
+		.child(text(spec.hint.to_owned()).font(TEXT_XS).color(t.muted_foreground).wrap());
+	if let Some(error) = spec.error {
+		column = column.child(failure(t, error));
+	}
+	column
+}
+
+fn remove_question<S: 'static>(
+	t: &Tokens,
+	removal: &SecretRemoval,
+	language: Language,
+	emit: fn(&mut S, SecretsEvent),
+) -> El {
+	use bots::secrets::remove;
+	let title = fill(remove::TITLE, language, &[("name", removal.name)]);
+	let cancel = Button::new(say(common::confirm::CANCEL, language))
+		.variant(ButtonVariant::Outline)
+		.size(ButtonSize::Sm)
+		.disabled(removal.is_removing)
+		.view(t);
+	let confirm = Button::new(say(remove::ACTION, language))
+		.variant(ButtonVariant::Destructive)
+		.size(ButtonSize::Sm)
+		.disabled(removal.is_removing)
+		.view(t);
+	let (cancel, confirm) = if removal.is_removing {
+		(cancel, confirm)
+	} else {
+		(
+			cancel.on_press(move |s: &mut S| emit(s, SecretsEvent::CancelRemove)),
+			confirm.on_press(move |s: &mut S| emit(s, SecretsEvent::ConfirmRemove)),
+		)
+	};
+	let mut question = col()
+		.key("secrets-remove")
+		.w(REMOVE_WIDTH)
+		.gap(SPACING * 4.0)
+		.padding(SPACING * 5.0)
+		.radius(RADIUS_2XL)
+		.fill(t.popover)
+		.role("alertdialog")
+		.label(&title)
+		.child(heading(t, &title, say(remove::DESCRIPTION, language), 0.0));
+	if removal.has_failed {
+		question = question.child(failure(t, say(remove::FAILED, language)));
+	}
+	question.child(row().w_full().gap(SPACING * 2.0).justify_end().child(cancel).child(confirm))
 }

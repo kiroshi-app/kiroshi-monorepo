@@ -5,7 +5,7 @@ use std::fs::{self, File};
 use std::io::BufWriter;
 use std::path::{Path, PathBuf};
 
-use kiroshi_rune_kit::scenes::{self, Pointer, Scene, SceneState, THEMES, Theme};
+use kiroshi_rune_kit::scenes::{self, Pointer, Scene, SceneState, Theme};
 use rune::tooling::{self, Args};
 use rune::{App, FontSmoothing};
 
@@ -177,8 +177,9 @@ fn check(
 }
 
 fn orphans() -> Vec<String> {
-	let registered: BTreeSet<String> =
-		scenes::every_scene().flat_map(|scene| THEMES.map(|theme| scene.baseline(theme))).collect();
+	let registered: BTreeSet<String> = scenes::every_scene()
+		.flat_map(|scene| scene.themes().iter().map(|&theme| scene.baseline(theme)))
+		.collect();
 	let Ok(entries) = fs::read_dir(baselines()) else { return Vec::new() };
 	entries
 		.filter_map(|entry| entry.ok()?.file_name().into_string().ok())
@@ -200,7 +201,7 @@ fn every_registered_scene_matches_its_baseline() {
 		fs::create_dir_all(baselines()).expect("the baseline folder exists");
 	}
 	let mut failures: Vec<String> = scenes::every_scene()
-		.flat_map(|scene| THEMES.map(|theme| (scene, theme)))
+		.flat_map(|scene| scene.themes().iter().map(move |&theme| (scene, theme)))
 		.filter_map(|(scene, theme)| check(scene, theme, bless, &rendered, &failed))
 		.collect();
 	failures.extend(orphans());

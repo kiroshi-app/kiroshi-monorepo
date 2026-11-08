@@ -52,6 +52,10 @@ impl Scene {
 	pub fn baseline(&self, theme: Theme) -> String {
 		format!("{}-{}.png", self.id, theme.name())
 	}
+
+	pub fn themes(&self) -> &'static [Theme] {
+		if s11_applications::DARK_ONLY.contains(&self.id) { &[Theme::Dark] } else { &THEMES }
+	}
 }
 
 const STORY: (f32, f32) = (640.0, 360.0);
@@ -67,6 +71,7 @@ const SETTINGS: (f32, f32) = person_settings::DIALOG_SCENE;
 const SCREEN: (f32, f32) = (1180.0, 720.0);
 const SETTINGS_PANEL: (f32, f32) = (576.0, 448.0);
 const CATALOGUE: (f32, f32) = (832.0, 544.0);
+const STORY_VIEWPORT: (f32, f32) = (1180.0, 900.0);
 
 const fn scene(id: &'static str, size: (f32, f32), view: fn(&Tokens, &SceneState) -> El) -> Scene {
 	Scene { id, size, tabs: 0, pointer: Pointer::Away, typed: "", view }
@@ -1737,6 +1742,19 @@ pub static SCENES: &[Scene] = &[
 		s11_applications::secrets_space_scope,
 	),
 	scene("settings-environment--unreadable", SETTINGS_PANEL, s11_applications::secrets_unreadable),
+	focused(
+		"settings-environment--refused-name",
+		STORY_VIEWPORT,
+		0,
+		s11_applications::secrets_refused_name,
+	),
+	focused("settings-environment--error", STORY_VIEWPORT, 0, s11_applications::secrets_error),
+	focused(
+		"settings-environment--rejected-delete",
+		STORY_VIEWPORT,
+		3,
+		s11_applications::secrets_rejected_delete,
+	),
 	scene(
 		"settings-environment--unreadable-with-entries",
 		SETTINGS_PANEL,
@@ -2049,6 +2067,18 @@ pub static SCENES: &[Scene] = &[
 		CATALOGUE,
 		s11_applications::install_hosted_nothing_to_set_up,
 	),
+	focused(
+		"settings-plugins-applicationinstallpage--install-failed-from-keyboard",
+		CATALOGUE,
+		3,
+		s11_applications::install_failed_from_keyboard,
+	),
+	focused(
+		"settings-plugins-applicationinstallpage--install-added-from-keyboard",
+		CATALOGUE,
+		0,
+		s11_applications::install_added_from_keyboard,
+	),
 	scene(
 		"settings-plugins-applicationinstallpage--install-running",
 		CATALOGUE,
@@ -2103,6 +2133,7 @@ pub struct SceneState {
 	pub picture: Option<Image>,
 	pub library: library::LibraryScene,
 	pub board_pictures: Vec<Image>,
+	pub secrets: s11_applications::SecretsScene,
 	images: Option<ImageCache>,
 }
 
@@ -2114,6 +2145,7 @@ impl SceneState {
 			picture: None,
 			library: library::LibraryScene::new(scene),
 			board_pictures: Vec::new(),
+			secrets: s11_applications::SecretsScene::new(scene.id),
 			images: None,
 		}
 	}

@@ -20,7 +20,10 @@ use crate::surfaces::s11_applications::panel::{
 	Application, Applications, Connection, ConnectionReason, Owner, applications,
 };
 use crate::surfaces::s11_applications::search::search_field;
-use crate::surfaces::s11_applications::secrets::{Scope, Secret, Secrets, secrets};
+use crate::surfaces::s11_applications::secrets::{
+	Scope, Secret, SecretField, SecretRemoval, SecretWrite, Secrets, SecretsDialog, secrets,
+	secrets_dialog,
+};
 use crate::tokens::{RADIUS_2XL, SPACING, Tokens};
 
 const MARK_SIDE: f32 = 36.0;
@@ -107,8 +110,13 @@ fn query(s: &mut SceneState) -> &mut TextEdit {
 	&mut s.edit
 }
 
+pub(super) const DARK_ONLY: &[&str] = &[
+	"settings-plugins-applicationspanel--connected-dark",
+	"settings-plugins-applicationspanel--needs-authorization-dark",
+];
 const PANEL_INSET: f32 = SPACING * 5.0;
 const NARROW_FRAME: f32 = SPACING * 80.0;
+const STORY_FRAME: (f32, f32) = (SPACING * 144.0, SPACING * 112.0);
 const STORY_PADDING: f32 = SPACING * 4.0;
 const SEARCH_FRAME: f32 = SPACING * 96.0;
 const THEME_CELL_PADDING: f32 = SPACING * 6.0;
@@ -159,6 +167,7 @@ fn secrets_scene(t: &Tokens, scope: Scope, entries: &[Secret], pending: bool, fa
 		entries,
 		is_pending: pending,
 		has_failed_to_read: failed,
+		dialog: None,
 		language: Language::En,
 	};
 	framed(t, secrets(t, &panel, ignore))
@@ -723,14 +732,25 @@ fn installable<'a>(
 	}
 }
 
-fn install_scene(t: &Tokens, owner: Owner, application: &Installable, is_installing: bool) -> El {
+#[derive(Clone, Copy)]
+enum Progress {
+	Idle,
+	Installing,
+	Installed,
+	Failed(&'static str),
+}
+
+fn install_scene(t: &Tokens, owner: Owner, application: &Installable, progress: Progress) -> El {
 	let page = InstallPage {
 		category: Category::Everything,
 		application,
 		owner,
-		is_installing,
-		is_installed: false,
-		failure: None,
+		is_installing: matches!(progress, Progress::Installing),
+		is_installed: matches!(progress, Progress::Installed),
+		failure: match progress {
+			Progress::Failed(failure) => Some(failure),
+			Progress::Idle | Progress::Installing | Progress::Installed => None,
+		},
 		language: Language::En,
 	};
 	bordered(t, install_page(t, &page, field_value, ignore))
@@ -747,7 +767,7 @@ fn granola<'a>(mark: &'a Image, name: &'a str, tools: &'a [&'a str]) -> Installa
 
 pub(super) fn install_signs_you_in(t: &Tokens, _: &SceneState) -> El {
 	let mark = picture(GRANOLA_MARK);
-	install_scene(t, INSTALL_AGENT, &granola(&mark, "Granola", &GRANOLA_TOOLS), false)
+	install_scene(t, INSTALL_AGENT, &granola(&mark, "Granola", &GRANOLA_TOOLS), Progress::Idle)
 }
 
 pub(super) fn install_long_content(t: &Tokens, _: &SceneState) -> El {
@@ -755,17 +775,17 @@ pub(super) fn install_long_content(t: &Tokens, _: &SceneState) -> El {
 	let tools: Vec<String> = (1..=40).map(|index| format!("tool_number_{index}")).collect();
 	let tools: Vec<&str> = tools.iter().map(String::as_str).collect();
 	let name = "a-very-long-application-name-that-keeps-going-on-and-on-well";
-	install_scene(t, INSTALL_AGENT, &granola(&mark, name, &tools), false)
+	install_scene(t, INSTALL_AGENT, &granola(&mark, name, &tools), Progress::Idle)
 }
 
-fn sentry_scene(t: &Tokens, s: &SceneState, owner: Owner, is_installing: bool) -> El {
+fn sentry_scene(t: &Tokens, value: &TextEdit, owner: Owner, progress: Progress) -> El {
 	let mark = picture(SENTRY_MARK);
 	let fields = [KeyField {
 		name: "Authorization",
 		description: Some("A Sentry user auth token."),
 		is_concealed: true,
 		is_revealed: false,
-		value: &s.edit,
+		value,
 	}];
 	let sentry = Installable {
 		description: Some("Pulls the errors and traces behind a release."),
@@ -774,19 +794,19 @@ fn sentry_scene(t: &Tokens, s: &SceneState, owner: Owner, is_installing: bool) -
 		fields: &fields,
 		..installable("sentry", "Sentry", "https://mcp.sentry.dev/mcp", Setup::ApiKey)
 	};
-	install_scene(t, owner, &sentry, is_installing)
+	install_scene(t, owner, &sentry, progress)
 }
 
 pub(super) fn install_needs_api_key(t: &Tokens, s: &SceneState) -> El {
-	sentry_scene(t, s, INSTALL_AGENT, false)
+	sentry_scene(t, &s.edit, INSTALL_AGENT, Progress::Idle)
 }
 
 pub(super) fn install_running(t: &Tokens, s: &SceneState) -> El {
-	sentry_scene(t, s, INSTALL_AGENT, true)
+	sentry_scene(t, &s.edit, INSTALL_AGENT, Progress::Installing)
 }
 
 pub(super) fn install_for_space(t: &Tokens, s: &SceneState) -> El {
-	sentry_scene(t, s, INSTALL_SPACE, false)
+	sentry_scene(t, &s.edit, INSTALL_SPACE, Progress::Idle)
 }
 
 pub(super) fn install_asks_for_every_value(t: &Tokens, s: &SceneState) -> El {
@@ -815,13 +835,13 @@ pub(super) fn install_asks_for_every_value(t: &Tokens, s: &SceneState) -> El {
 			Setup::ApiKey,
 		)
 	};
-	install_scene(t, INSTALL_AGENT, &godot, false)
+	install_scene(t, INSTALL_AGENT, &godot, Progress::Idle)
 }
 
 pub(super) fn install_nothing_to_set_up(t: &Tokens, _: &SceneState) -> El {
 	let tasklog =
 		installable("io.github.kwn/tasklog", "tasklog", "npx -y @kwn/tasklog-mcp", Setup::Nothing);
-	install_scene(t, INSTALL_AGENT, &tasklog, false)
+	install_scene(t, INSTALL_AGENT, &tasklog, Progress::Idle)
 }
 
 pub(super) fn install_empty_tool_list(t: &Tokens, _: &SceneState) -> El {
@@ -830,7 +850,7 @@ pub(super) fn install_empty_tool_list(t: &Tokens, _: &SceneState) -> El {
 		tools: Some(&[]),
 		..installable("meshvault", "Meshvault", "https://mcp.meshvault.dev/mcp", Setup::Nothing)
 	};
-	install_scene(t, INSTALL_AGENT, &meshvault, false)
+	install_scene(t, INSTALL_AGENT, &meshvault, Progress::Idle)
 }
 
 pub(super) fn install_refused(t: &Tokens, _: &SceneState) -> El {
@@ -849,7 +869,7 @@ pub(super) fn install_refused(t: &Tokens, _: &SceneState) -> El {
 			Setup::Unavailable,
 		)
 	};
-	install_scene(t, INSTALL_AGENT, &queried, false)
+	install_scene(t, INSTALL_AGENT, &queried, Progress::Idle)
 }
 
 fn slack_scene(t: &Tokens, setup: Setup) -> El {
@@ -864,7 +884,7 @@ fn slack_scene(t: &Tokens, setup: Setup) -> El {
 		tools: Some(&SLACK_TOOLS),
 		..installable("smithery/slack", "Slack", "https://slack.run.tools/mcp", setup)
 	};
-	install_scene(t, INSTALL_AGENT, &slack, false)
+	install_scene(t, INSTALL_AGENT, &slack, Progress::Idle)
 }
 
 pub(super) fn install_runs_on_its_host(t: &Tokens, _: &SceneState) -> El {
@@ -873,4 +893,94 @@ pub(super) fn install_runs_on_its_host(t: &Tokens, _: &SceneState) -> El {
 
 pub(super) fn install_hosted_nothing_to_set_up(t: &Tokens, _: &SceneState) -> El {
 	slack_scene(t, Setup::Nothing)
+}
+
+pub(super) fn install_failed_from_keyboard(t: &Tokens, _: &SceneState) -> El {
+	let typed = TextEdit::new("sntryu_wrong");
+	sentry_scene(
+		t,
+		&typed,
+		INSTALL_AGENT,
+		Progress::Failed("Sentry refused the key: 401 invalid token."),
+	)
+}
+
+pub(super) fn install_added_from_keyboard(t: &Tokens, _: &SceneState) -> El {
+	let mark = picture(GRANOLA_MARK);
+	install_scene(t, INSTALL_AGENT, &granola(&mark, "Granola", &GRANOLA_TOOLS), Progress::Installed)
+}
+
+pub struct SecretsScene {
+	name: TextEdit,
+	value: TextEdit,
+}
+
+impl SecretsScene {
+	pub fn new(id: &str) -> SecretsScene {
+		let (name, value) = match id {
+			"settings-environment--refused-name" => ("atlas token", "s3cret"),
+			"settings-environment--error" => ("NEW_TOKEN", "s3cret"),
+			_ => ("", ""),
+		};
+		SecretsScene { name: TextEdit::new(name), value: TextEdit::new(value) }
+	}
+}
+
+fn secret_value(s: &mut SceneState, field: SecretField) -> &mut TextEdit {
+	match field {
+		SecretField::Name => &mut s.secrets.name,
+		SecretField::Value => &mut s.secrets.value,
+	}
+}
+
+fn secrets_with_dialog(t: &Tokens, dialog: SecretsDialog) -> El {
+	let entries = agent_secrets();
+	let panel = Secrets {
+		scope: Scope::Agent,
+		entries: &entries,
+		is_pending: false,
+		has_failed_to_read: false,
+		dialog: Some(dialog),
+		language: Language::En,
+	};
+	let frame = col()
+		.w(STORY_FRAME.0)
+		.h(STORY_FRAME.1)
+		.padding(PANEL_INSET)
+		.child(secrets(t, &panel, ignore));
+	let layers: Vec<El> = secrets_dialog(t, &panel, secret_value, ignore).into_iter().collect();
+	rune_kit::root(col().w_full().h_full().fill(t.card).child(frame), layers)
+}
+
+fn write_scene(t: &Tokens, s: &SceneState, is_refused: bool, has_failed: bool) -> El {
+	secrets_with_dialog(
+		t,
+		SecretsDialog::Write(SecretWrite {
+			replacing: None,
+			name: &s.secrets.name,
+			value: &s.secrets.value,
+			is_refused,
+			has_failed,
+			is_writing: false,
+		}),
+	)
+}
+
+pub(super) fn secrets_refused_name(t: &Tokens, s: &SceneState) -> El {
+	write_scene(t, s, true, false)
+}
+
+pub(super) fn secrets_error(t: &Tokens, s: &SceneState) -> El {
+	write_scene(t, s, false, true)
+}
+
+pub(super) fn secrets_rejected_delete(t: &Tokens, _: &SceneState) -> El {
+	secrets_with_dialog(
+		t,
+		SecretsDialog::Remove(SecretRemoval {
+			name: "BOT_SEED",
+			has_failed: true,
+			is_removing: false,
+		}),
+	)
 }
