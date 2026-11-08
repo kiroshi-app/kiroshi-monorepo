@@ -9,6 +9,7 @@ rune.workspace = true
 rune-motion.workspace = true
 rune-kit.workspace = true
 katex-native = { version = "0.1.1", features = ["raster"] }
+zeno = { version = "0.3.3", default-features = false, features = ["eval"] }
 
 [dev-dependencies]
 png = "0.18"
