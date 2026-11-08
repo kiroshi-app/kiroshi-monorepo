@@ -77,8 +77,8 @@ impl Navigation {
 		entered.map(|page| page.held).unwrap_or_default()
 	}
 
-	pub fn keep_pages_of(&mut self, open_tabs: &[String]) {
-		self.left_tabs.retain(|tab, _| open_tabs.contains(tab));
+	pub fn keep_pages_of(&mut self, tabs: &[String]) {
+		self.left_tabs.retain(|tab, _| tabs.contains(tab));
 	}
 
 	pub fn main_route(&self) -> Route {
@@ -282,7 +282,19 @@ mod tests {
 	}
 
 	#[test]
-	fn a_closed_tab_page_is_dropped() {
+	fn a_kept_tab_page_comes_back_when_the_tab_is_entered_again() {
+		let mut navigation = Navigation::new(Route::Library);
+		navigation.switch_tab("first", held("c-1", Pane::Missions), "second");
+
+		navigation.keep_pages_of(&["second".to_owned(), "first".to_owned()]);
+		let entered = navigation.switch_tab("second", HeldPage::default(), "first");
+
+		assert_eq!(entered, held("c-1", Pane::Missions));
+		assert!(navigation.main_route() == Route::Library);
+	}
+
+	#[test]
+	fn a_page_no_longer_kept_is_dropped() {
 		let mut navigation = Navigation::new(Route::Library);
 		navigation.switch_tab("first", held("c-1", Pane::Missions), "second");
 
