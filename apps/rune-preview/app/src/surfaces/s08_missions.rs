@@ -9,7 +9,9 @@ use kiroshi_core::missions::contract::{Mission, MissionDetail, MissionEventKind,
 use kiroshi_rune_kit::strings::{Key, Language, chat};
 use kiroshi_rune_kit::surfaces::s04_boot::notice::{NoticeEvent, NoticeKind, SurfaceEvent};
 use kiroshi_rune_kit::surfaces::s05_thread::MissionEvent as ThreadMissionEvent;
-use kiroshi_rune_kit::surfaces::s08_missions::{CopyKind, EventKind, MissionsEvent};
+use kiroshi_rune_kit::surfaces::s08_missions::{
+	CopyKind, EventKind, MenuAction as KitMenuAction, MissionsEvent,
+};
 use rune::{Tx, Waker};
 use serde_json::Value;
 
@@ -511,6 +513,29 @@ pub fn emitted(app: &mut App, event: MissionsEvent) {
 		MissionsEvent::OpenUrl(url) => state(app).effects.push(Effect::Open { url, refused: None }),
 		MissionsEvent::Back => back(app),
 		MissionsEvent::ToggleEarlierToday => state(app).toggle_earlier_today(),
+		MissionsEvent::MenuChosen { mission, action } => {
+			if let Some(action) = chosen(action) {
+				act(app, &mission, action)
+			}
+		}
+		MissionsEvent::MenuCopied { mission, kind } => act(app, &mission, MenuAction::Copy(kind)),
+		// TODO: OPE-1998 keeps the menu open state and answers these three.
+		MissionsEvent::MenuRequested { .. }
+		| MissionsEvent::CopyChoicesShown { .. }
+		| MissionsEvent::MenuDismissed => {}
+	}
+}
+
+fn chosen(action: KitMenuAction) -> Option<MenuAction> {
+	match action {
+		KitMenuAction::Open => Some(MenuAction::Open),
+		KitMenuAction::OpenPullRequest => Some(MenuAction::OpenPullRequest),
+		KitMenuAction::MessageAgent => Some(MenuAction::MessageAgent),
+		KitMenuAction::Answer => Some(MenuAction::Answer),
+		KitMenuAction::Close => Some(MenuAction::Close),
+		KitMenuAction::Reopen => Some(MenuAction::Reopen),
+		// TODO: OPE-1998 stops the coding session, the app has no stop action yet.
+		KitMenuAction::StopAgent => None,
 	}
 }
 
