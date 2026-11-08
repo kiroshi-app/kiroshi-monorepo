@@ -13,7 +13,7 @@ use kiroshi_rune_os::scheme;
 use kiroshi_rune_preview::app::App;
 use kiroshi_rune_preview::host::Profile;
 use kiroshi_rune_preview::navigation::Route;
-use kiroshi_rune_preview::surfaces::s15_boards;
+use kiroshi_rune_preview::surfaces::{s02_rail, s15_boards};
 use kiroshi_rune_preview::{
 	composer, conversations, local, menu, onboarding, scenes, smoke, spike,
 };
@@ -23,6 +23,10 @@ fn view(s: &App, cx: &mut Cx<App>) -> El {
 	let t = tokens::Tokens { reduced_motion: cx.is_reduced_motion(), ..tokens::Tokens::new(dark) };
 	if let Route::BlockSpike = s.navigation.main_route() {
 		return spike::view::view(s, cx, &t);
+	}
+	if let Route::Rail = s.navigation.main_route() {
+		let (body, layers) = s02_rail::view(s, &t);
+		return rune_kit::root(body, layers);
 	}
 	let k = t.kit();
 	let body = match s.navigation.main_route() {
