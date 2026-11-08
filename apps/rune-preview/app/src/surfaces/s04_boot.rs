@@ -38,6 +38,8 @@ const ACCOUNT_WATCH: Duration = Duration::from_secs(2);
 
 const UNSENT: Key = chat::screen::notice::FAILED;
 
+const LANGUAGE: Language = Language::En;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Step {
 	Boot,
@@ -109,7 +111,7 @@ impl State {
 	}
 
 	fn said(&self, key: Key) -> String {
-		key.text(Language::En).to_owned()
+		key.text(LANGUAGE).to_owned()
 	}
 
 	fn fail(&mut self, title: Key, failure: &HostError, retry: Option<Call>) {
@@ -121,8 +123,8 @@ impl State {
 		self.notices.fail(title, detail, retry);
 	}
 
-	fn tell(&mut self, kind: NoticeKind, title: Key, description: Option<String>) {
-		let id = self.notices.tell(kind, self.said(title), description);
+	fn tell(&mut self, kind: NoticeKind, title: Key) {
+		let id = self.notices.tell(kind, self.said(title));
 		self.queued.push(Call::Wake(TRANSIENT_LIFETIME, Due::Notice(id)));
 	}
 
@@ -420,7 +422,7 @@ fn arrival_failed(app: &mut App, call: Call, failure: &HostError) {
 	};
 	let onboarding = state(app);
 	let title = match name {
-		Some(name) => say(chat::onboarding::arrival::FAILURE, Language::En, &[("name", &name)]),
+		Some(name) => say(chat::onboarding::arrival::FAILURE, LANGUAGE, &[("name", &name)]),
 		None => onboarding.said(UNSENT),
 	};
 	onboarding.fail_with(title, detail_of(failure), Some(call));
@@ -435,7 +437,7 @@ fn run(onboarding: &mut State, effect: Effect, tx: &mut Tx) {
 		}
 		Effect::Copy(link) => {
 			tx.copy(link);
-			onboarding.tell(NoticeKind::Info, settings::account::SIGN_IN_LINK_COPIED, None);
+			onboarding.tell(NoticeKind::Info, settings::account::SIGN_IN_LINK_COPIED);
 		}
 	}
 }

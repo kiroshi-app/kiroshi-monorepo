@@ -678,7 +678,7 @@ fn a_failure_notice_stays_once_while_a_transient_one_leaves_on_its_own() {
 
 	state.fail_with("Couldn’t store".to_owned(), "disk".to_owned(), None);
 	state.fail_with("Couldn’t store".to_owned(), "disk".to_owned(), None);
-	state.tell(NoticeKind::Info, settings::account::SIGN_IN_LINK_COPIED, None);
+	state.tell(NoticeKind::Info, settings::account::SIGN_IN_LINK_COPIED);
 	let expiry = state.queued.iter().find_map(|call| match call {
 		Call::Wake(after, Due::Notice(id)) => Some((*after, *id)),
 		_ => None,

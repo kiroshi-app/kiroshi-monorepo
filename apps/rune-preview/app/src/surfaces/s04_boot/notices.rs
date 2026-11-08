@@ -36,8 +36,8 @@ impl Notices {
 		}
 	}
 
-	pub fn tell(&mut self, kind: NoticeKind, title: String, description: Option<String>) -> u64 {
-		self.push(kind, title, description, None)
+	pub fn tell(&mut self, kind: NoticeKind, title: String) -> u64 {
+		self.push(kind, title, None, None)
 	}
 
 	pub fn expire(&mut self, id: u64) {

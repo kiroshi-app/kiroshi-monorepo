@@ -1,7 +1,7 @@
 use kiroshi_core::account::contract::AccountPlan;
 use rune::{El, TextEdit};
 
-use kiroshi_rune_kit::strings::{Language, chat, common};
+use kiroshi_rune_kit::strings::{chat, common};
 use kiroshi_rune_kit::surfaces::s04_boot::account::{AccountState, Plan, account_screen};
 use kiroshi_rune_kit::surfaces::s04_boot::boot::{BootFailure, boot_notice, boot_screen};
 use kiroshi_rune_kit::surfaces::s04_boot::connect::{
@@ -17,12 +17,10 @@ use super::calls::KiroshiAccount;
 use super::connect::{Connection, initials_of};
 use super::import::Inventory;
 use super::{
-	State, Step, account_event, boot_failure, boot_retried, connect_event, import_event,
+	LANGUAGE, State, Step, account_event, boot_failure, boot_retried, connect_event, import_event,
 	notice_event, welcome_event,
 };
 use crate::app::App;
-
-const LANGUAGE: Language = Language::En;
 
 pub fn view(step: Step, app: &App, t: &Tokens) -> El {
 	let onboarding = &app.surfaces.s04_boot;
