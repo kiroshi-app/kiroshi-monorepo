@@ -5,7 +5,7 @@ use std::sync::Arc;
 use rune::image::{Image, ImageCache};
 use rune::{El, Icon, TextEdit, col};
 
-use super::{Pointer, Scene, SceneState};
+use super::{Pointer, SETTINGS_PANEL, Scene, SceneState};
 use crate::strings::Language;
 use crate::surfaces::s11_applications::HAIRLINE;
 use crate::surfaces::s11_applications::catalogue::{
@@ -116,7 +116,6 @@ pub(super) const DARK_ONLY: &[&str] = &[
 ];
 const PANEL_INSET: f32 = SPACING * 5.0;
 const NARROW_FRAME: f32 = SPACING * 80.0;
-const STORY_FRAME: (f32, f32) = (SPACING * 144.0, SPACING * 112.0);
 const STORY_PADDING: f32 = SPACING * 4.0;
 const SEARCH_FRAME: f32 = SPACING * 96.0;
 const THEME_CELL_PADDING: f32 = SPACING * 6.0;
@@ -944,8 +943,8 @@ fn secrets_with_dialog(t: &Tokens, dialog: SecretsDialog) -> El {
 		language: Language::En,
 	};
 	let frame = col()
-		.w(STORY_FRAME.0)
-		.h(STORY_FRAME.1)
+		.w(SETTINGS_PANEL.0)
+		.h(SETTINGS_PANEL.1)
 		.padding(PANEL_INSET)
 		.child(secrets(t, &panel, ignore));
 	let layers: Vec<El> = secrets_dialog(t, &panel, secret_value, ignore).into_iter().collect();
