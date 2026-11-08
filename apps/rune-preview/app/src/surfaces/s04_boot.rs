@@ -82,7 +82,7 @@ pub struct State {
 	account: Option<KiroshiAccount>,
 	is_watching_account: bool,
 	to_raise: Vec<Notice>,
-	told: Option<(u64, Notice)>,
+	told: Option<Notice>,
 	told_count: u64,
 	effects: Vec<Effect>,
 	queued: Vec<Call>,
@@ -141,14 +141,16 @@ impl State {
 	fn tell(&mut self, kind: NoticeKind, title: Key) {
 		let notice = Notice { kind, ..Notice::error(self.said(title)) };
 		self.told_count += 1;
-		self.told = Some((self.told_count, notice.clone()));
+		self.told = Some(notice.clone());
 		self.to_raise.push(notice);
 		self.queued.push(Call::Wake(TRANSIENT_LIFETIME, Due::Notice(self.told_count)));
 	}
 
 	fn told_expired(&mut self, id: u64) -> Option<Follow> {
-		let (_, notice) = self.told.take_if(|(told_id, _)| *told_id == id)?;
-		Some(Follow::Expire(notice))
+		if id != self.told_count {
+			return None;
+		}
+		self.told.take().map(Follow::Expire)
 	}
 
 	fn store(&mut self, step: OnboardingStep) {
