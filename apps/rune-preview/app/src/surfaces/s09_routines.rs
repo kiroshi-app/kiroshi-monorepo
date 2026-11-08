@@ -355,12 +355,8 @@ impl State {
 		self.form = Some(form);
 	}
 
-	fn open_form_placement(&self) -> Option<u64> {
-		self.form.as_ref().map(|form| form.placement)
-	}
-
 	fn saved(&mut self, placement: u64, saved: Result<Routine, HostError>) {
-		let is_still_open = self.open_form_placement() == Some(placement);
+		let is_still_open = self.form.as_ref().is_some_and(|form| form.placement == placement);
 		match saved {
 			Ok(routine) => {
 				if let Some(held) = self.held.as_mut() {

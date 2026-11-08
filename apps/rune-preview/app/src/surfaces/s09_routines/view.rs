@@ -22,7 +22,7 @@ use kiroshi_rune_kit::tokens::Tokens;
 use super::detail::Detail;
 use super::form::{Form, KeyRead, Row, TriggerKind, fields_of, takes_value};
 use super::listing::{Held, stopped_itself};
-use super::{Leaving, State, edit_of, language, routines_event};
+use super::{State, edit_of, language, routines_event};
 use crate::app::App;
 use crate::mission::relative_time;
 
@@ -270,7 +270,7 @@ pub fn layers(app: &App, t: &Tokens) -> Vec<El> {
 	}
 	let lang = language(app);
 	let confirm = match (&state.leaving, &state.deleting) {
-		(Some(Leaving::Back | Leaving::Close), _) => Confirm::Leave,
+		(Some(_), _) => Confirm::Leave,
 		(None, Some(deleting)) => Confirm::Delete {
 			title: state.routine(&deleting.routine_id).map_or("", |routine| routine.title.as_str()),
 			failed: deleting.has_failed,

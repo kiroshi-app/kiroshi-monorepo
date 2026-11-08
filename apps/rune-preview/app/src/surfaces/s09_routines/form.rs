@@ -276,9 +276,18 @@ pub fn fields_of<'a>(sources: &'a [TriggerSource], source_id: &str) -> &'a [Payl
 }
 
 impl Form {
-	fn placed(placement: u64, routine_id: Option<String>, rows: Vec<Row>) -> Form {
-		let mut form = Form {
-			routine_id,
+	pub fn new_routine(placement: u64) -> Form {
+		let blank = Values {
+			title: String::new(),
+			instruction: String::new(),
+			trigger_source_id: String::new(),
+			expression: String::new(),
+			path: String::new(),
+			match_mode: FilterMatchMode::All,
+			rows: Vec::new(),
+		};
+		Form {
+			routine_id: None,
 			placement,
 			title: TextEdit::new(""),
 			instruction: TextEdit::new(""),
@@ -286,32 +295,19 @@ impl Form {
 			expression: TextEdit::new(""),
 			path: TextEdit::new(""),
 			match_mode: FilterMatchMode::All,
-			rows,
+			rows: Vec::new(),
 			marks_refused_rows: false,
 			key: KeyRead::Unread,
 			is_saving: false,
 			refused: None,
-			saved: Values {
-				title: String::new(),
-				instruction: String::new(),
-				trigger_source_id: String::new(),
-				expression: String::new(),
-				path: String::new(),
-				match_mode: FilterMatchMode::All,
-				rows: Vec::new(),
-			},
-		};
-		form.saved = form.values();
-		form
-	}
-
-	pub fn new_routine(placement: u64) -> Form {
-		Form::placed(placement, None, Vec::new())
+			saved: blank,
+		}
 	}
 
 	pub fn of_routine(routine: &Routine, placement: u64, fields: &[PayloadField]) -> Form {
-		let rows = routine.filter.rows.iter().map(|read| Row::of_read(read, fields)).collect();
-		let mut form = Form::placed(placement, Some(routine.id.clone()), rows);
+		let mut form = Form::new_routine(placement);
+		form.routine_id = Some(routine.id.clone());
+		form.rows = routine.filter.rows.iter().map(|read| Row::of_read(read, fields)).collect();
 		form.title = TextEdit::new(&routine.title);
 		form.instruction = TextEdit::new(&routine.instruction);
 		form.trigger_source_id = routine.trigger_source_id.clone();
