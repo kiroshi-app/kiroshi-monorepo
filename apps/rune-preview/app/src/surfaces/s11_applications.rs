@@ -180,9 +180,19 @@ impl State {
 	fn connect(&mut self, which: Which, name: String) {
 		let Some(scope) = self.scope(which) else { return };
 		let (owner, url) = (scope.owner.clone(), scope.installed.url_of(&name).unwrap_or_default());
-		self.connect_failure = None;
-		self.connecting = Some((which, name.clone()));
+		self.start_connecting(which, name.clone());
 		self.queued.push(Call::Connect { which, owner, name, url });
+	}
+
+	fn start_connecting(&mut self, which: Which, name: String) {
+		self.connect_failure = None;
+		self.connecting = Some((which, name));
+	}
+
+	fn stop_connecting(&mut self, which: Which, name: &str) {
+		if self.connecting.as_ref().is_some_and(|(held, named)| *held == which && named == name) {
+			self.connecting = None;
+		}
 	}
 
 	pub fn cancel_connect(&mut self) {
@@ -248,18 +258,11 @@ impl State {
 		let (owner, application) = (scope.owner.clone(), application.clone());
 		let keys = catalogue.typed_keys();
 		let Some(catalogue) = self.catalogue.as_mut() else { return };
-		let keys = match keys {
-			Ok(keys) => keys,
-			Err(failure) => {
-				catalogue.failure = Some(failure);
-				return;
-			}
-		};
-		catalogue.failure = None;
+		catalogue.failure = keys.as_ref().err().cloned();
+		let Ok(keys) = keys else { return };
 		catalogue.installing = Some(application.name.clone());
 		if matches!(application.install, Install::Oauth) {
-			self.connect_failure = None;
-			self.connecting = Some((which, application.name.clone()));
+			self.start_connecting(which, application.name.clone());
 		}
 		self.queued.push(Call::Install(which, Box::new(InstallRun { owner, application, keys })));
 	}
@@ -380,9 +383,7 @@ impl State {
 	}
 
 	fn installed(&mut self, which: Which, name: String, outcome: InstallOutcome) {
-		if self.connecting.as_ref().is_some_and(|(_, held)| *held == name) {
-			self.connecting = None;
-		}
+		self.stop_connecting(which, &name);
 		let title = self
 			.catalogue
 			.as_ref()
@@ -429,9 +430,7 @@ impl State {
 	}
 
 	fn connected(&mut self, which: Which, name: String, outcome: Result<(), HostError>) {
-		if self.connecting.as_ref() == Some(&(which, name.clone())) {
-			self.connecting = None;
-		}
+		self.stop_connecting(which, &name);
 		if let Err(failure) = outcome {
 			let kind = refusal_kind(&failure);
 			if kind.as_deref() != Some(CANCELLED) {
