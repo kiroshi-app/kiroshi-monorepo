@@ -6,6 +6,7 @@ mod view;
 mod worker;
 
 use kiroshi_core::conversations::contract::{PinnedBubble, ReplyLink, TranscriptPage};
+use kiroshi_rune_kit::surfaces::s05_thread::{Agent, Quote};
 use rune::{Tx, Waker};
 
 use kiroshi_rune_kit::strings::{Key as Copy, Language, chat};
@@ -15,7 +16,7 @@ use crate::app::App;
 use crate::events::HostEvent;
 use crate::host::HostError;
 use crate::source::Source;
-use crate::surfaces::s07_approvals;
+use crate::surfaces::{s06_composer, s07_approvals};
 
 pub use view::{pinned_panel, view};
 
@@ -75,6 +76,26 @@ impl State {
 	pub fn reply_links(&self) -> Vec<ReplyLink> {
 		let replies = self.open.as_ref().map(|open| open.replies.as_slice()).unwrap_or_default();
 		replies.iter().map(|id| ReplyLink { message_id: id.clone(), excerpt: None }).collect()
+	}
+
+	pub fn held_quotes(&self, roster: &[Agent]) -> Vec<Quote> {
+		let Some(open) = self.open.as_ref() else { return Vec::new() };
+		let links = self.reply_links();
+		links.iter().filter_map(|link| projection::quote_of(link, open, roster)).collect()
+	}
+
+	pub fn release_reply(&mut self, message_id: &str) {
+		if let Some(open) = self.open.as_mut() {
+			open.replies.retain(|held| held != message_id);
+		}
+	}
+
+	pub fn holds(&self, message_id: &str) -> bool {
+		self.open.as_ref().is_some_and(|open| open.holds(message_id))
+	}
+
+	pub fn is_working(&self) -> bool {
+		self.open.as_ref().is_some_and(|open| !open.working.is_empty())
 	}
 
 	pub fn open(&mut self, conversation_id: &str) {
@@ -336,6 +357,7 @@ pub fn open_conversation(app: &mut App, conversation_id: &str) {
 	thread.use_source(source);
 	thread.open(conversation_id);
 	s07_approvals::open_conversation(app, conversation_id);
+	s06_composer::opened(app);
 }
 
 pub fn poll(app: &mut App, tx: &mut Tx) -> bool {

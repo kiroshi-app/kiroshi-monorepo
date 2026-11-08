@@ -1,7 +1,6 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use rune::{Chrome, Cursor, El, Icon, TextStyle, col, el, icon, row, text};
-use rune_kit::Kit;
 
 use kiroshi_rune_kit::avatar::Face;
 use kiroshi_rune_kit::icons;
@@ -13,7 +12,6 @@ use kiroshi_rune_kit::tokens::{
 use kiroshi_rune_kit::widgets::{Pill, spinner};
 
 use crate::app::{App, Pane, Person, Ready, Thread, Workspace};
-use crate::composer;
 use crate::host::{DEV_START_COMMAND, HostError, Profile};
 use crate::model::{Agent, Conversation};
 use crate::surfaces::{s03_roster, s05_thread, s08_missions};
@@ -41,12 +39,11 @@ const HEADER_TITLE: TextStyle =
 pub struct Viewport {
 	pub inset: f32,
 	pub transcript_height: Option<f32>,
-	pub composer: composer::Measured,
 }
 
 pub const TRANSCRIPT: &str = "transcript";
 
-pub fn view(s: &App, k: &Kit, t: &Tokens, viewport: &Viewport) -> El {
+pub fn view(s: &App, t: &Tokens, viewport: &Viewport) -> El {
 	match &s.workspace {
 		Workspace::Connecting => centred(
 			t,
@@ -57,7 +54,7 @@ pub fn view(s: &App, k: &Kit, t: &Tokens, viewport: &Viewport) -> El {
 				.child(text("Reaching Kiroshi…").font(TEXT_COMPACT).color(t.muted_foreground)),
 		),
 		Workspace::Failed(failure) => host_failed(t, failure),
-		Workspace::Ready(ready) => frame(s, ready, k, &t.in_space(ready.space.colour), viewport),
+		Workspace::Ready(ready) => frame(s, ready, &t.in_space(ready.space.colour), viewport),
 	}
 }
 
@@ -92,7 +89,7 @@ fn host_failed(t: &Tokens, failure: &HostError) -> El {
 	centred(t, col().items_center().gap(SPACING * 6.0).child(content).child(retry))
 }
 
-fn frame(s: &App, ready: &Ready, k: &Kit, t: &Tokens, viewport: &Viewport) -> El {
+fn frame(s: &App, ready: &Ready, t: &Tokens, viewport: &Viewport) -> El {
 	let card = row()
 		.grow(1.0)
 		.min_w(0.0)
@@ -108,7 +105,7 @@ fn frame(s: &App, ready: &Ready, k: &Kit, t: &Tokens, viewport: &Viewport) -> El
 			Pane::Conversations => roster(s, ready, t),
 		})
 		.child(el().w(1.0).h_full().fill(t.shell_divider))
-		.child(thread_column(s, k, t, viewport));
+		.child(thread_column(s, t));
 	col()
 		.w_full()
 		.h_full()
@@ -305,7 +302,7 @@ fn month_and_day(at: i64) -> String {
 	format!("{month}/{day}")
 }
 
-fn thread_column(s: &App, k: &Kit, t: &Tokens, viewport: &Viewport) -> El {
+fn thread_column(s: &App, t: &Tokens) -> El {
 	col()
 		.key("conversation")
 		.grow(1.0)
@@ -317,7 +314,6 @@ fn thread_column(s: &App, k: &Kit, t: &Tokens, viewport: &Viewport) -> El {
 			None => thread_header(s, t),
 		})
 		.child(thread_body(s, t))
-		.child(composer::view(s, k, t, &viewport.composer))
 }
 
 fn thread_agent(agent: &Agent) -> ThreadAgent {

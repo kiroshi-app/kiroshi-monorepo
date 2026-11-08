@@ -14,11 +14,11 @@ use kiroshi_rune_preview::app::App;
 use kiroshi_rune_preview::host::Profile;
 use kiroshi_rune_preview::navigation::Route;
 use kiroshi_rune_preview::surfaces::{
-	s01_chrome, s02_rail, s03_roster, s04_boot, s05_thread, s07_approvals, s08_missions,
-	s09_routines, s10_agent_settings, s11_applications, s12_person_settings, s13_space_settings,
-	s15_boards,
+	s01_chrome, s02_rail, s03_roster, s04_boot, s05_thread, s06_composer, s07_approvals,
+	s08_missions, s09_routines, s10_agent_settings, s11_applications, s12_person_settings,
+	s13_space_settings, s15_boards,
 };
-use kiroshi_rune_preview::{composer, conversations, local, menu, scenes, smoke, spike};
+use kiroshi_rune_preview::{conversations, local, menu, scenes, smoke, spike};
 
 fn view(s: &App, cx: &mut Cx<App>) -> El {
 	let dark = cx.system_dark();
@@ -37,12 +37,8 @@ fn view(s: &App, cx: &mut Cx<App>) -> El {
 			let viewport = conversations::Viewport {
 				inset: cx.titlebar_inset(),
 				transcript_height: cx.layout(conversations::TRANSCRIPT).map(|rect| rect[3]),
-				composer: composer::Measured {
-					surface_width: cx.layout(composer::COMPOSER_SURFACE).map(|rect| rect[2]),
-					text_width: cx.layout(composer::COMPOSER_MIRROR).map(|rect| rect[2]),
-				},
 			};
-			conversations::view(s, &k, &t, &viewport)
+			conversations::view(s, &t, &viewport)
 		}
 		Route::Chrome => {
 			let measured = s01_chrome::Measured {
@@ -80,8 +76,10 @@ fn view(s: &App, cx: &mut Cx<App>) -> El {
 		.chain(s11_applications::layers(s, &t))
 		.chain(s03_roster::layers(s, &t))
 		.chain(s08_missions::layers(s, &t))
-		.chain(s13_space_settings::layers(s, &t));
+		.chain(s13_space_settings::layers(s, &t))
+		.chain(s06_composer::layers(s, &t));
 	rune_kit::root(body, layers)
+		.on_paste_content(|s: &mut App, content, _: &mut Tx| s06_composer::pasted(s, content))
 }
 
 const KIT_ROOT: &str = "kit-root";
@@ -112,6 +110,7 @@ fn setup(s: &mut App, waker: Waker) {
 		s.navigation.navigate_main(Route::Rail);
 	}
 	s.surfaces.s05_thread.attach(waker.clone());
+	s.surfaces.s06_composer.attach(waker.clone());
 	s.surfaces.s07_approvals.attach(waker.clone());
 	s.surfaces.s11_applications.attach(waker.clone());
 	s.surfaces.s12_person_settings.attach(waker.clone());
@@ -126,6 +125,7 @@ fn setup(s: &mut App, waker: Waker) {
 fn poll(s: &mut App, seconds: f64, tx: &mut Tx) -> bool {
 	let changed = s.poll();
 	let changed = s05_thread::poll(s, tx) || changed;
+	let changed = s06_composer::poll(s, tx) || changed;
 	let changed = s07_approvals::poll(s) || changed;
 	let changed = s11_applications::poll(s) || changed;
 	let changed = s12_person_settings::poll(s, tx) || changed;
@@ -147,6 +147,9 @@ fn poll(s: &mut App, seconds: f64, tx: &mut Tx) -> bool {
 }
 
 fn on_key(s: &mut App, event: &KeyEvent, _: &mut Tx) -> bool {
+	if s06_composer::key_pressed(s, event) {
+		return true;
+	}
 	if s11_applications::key_pressed(s, event) {
 		return true;
 	}

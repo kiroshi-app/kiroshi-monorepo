@@ -11,9 +11,15 @@ use kiroshi_rune_kit::tokens::Tokens;
 use super::{Notice, projection, said};
 use crate::app::App;
 use crate::conversations::now_ms;
-use crate::surfaces::{s07_approvals, s08_missions};
+use crate::surfaces::{s06_composer, s07_approvals, s08_missions};
 
 fn thread_event(app: &mut App, event: ThreadEvent) {
+	if event == ThreadEvent::NoticeAction
+		&& app.surfaces.s05_thread.notice.is_none()
+		&& app.surfaces.s06_composer.dismiss_notice()
+	{
+		return;
+	}
 	match app.surfaces.s05_thread.handle(event, now_ms()) {
 		Some(ThreadEvent::Mission(event)) => s08_missions::emitted(app, event),
 		Some(forwarded) => {
@@ -27,12 +33,21 @@ fn emit() -> Emit<App> {
 	Rc::new(thread_event)
 }
 
-fn thread_notice(notice: &Notice) -> ThreadNotice {
+fn thread_notice(title: &str, description: &str) -> ThreadNotice {
 	ThreadNotice {
-		title: notice.title.clone(),
-		description: notice.description.clone(),
+		title: title.to_owned(),
+		description: description.to_owned(),
 		action: said(chat::notice::DISMISS),
 	}
+}
+
+fn shown_notice(app: &App) -> Option<ThreadNotice> {
+	let thread = app.surfaces.s05_thread.notice.as_ref();
+	let shown = thread.map(|Notice { title, description }| thread_notice(title, description));
+	shown.or_else(|| {
+		let composer = app.surfaces.s06_composer.notice();
+		composer.map(|(title, description)| thread_notice(title, description))
+	})
 }
 
 pub fn view(
@@ -54,13 +69,18 @@ pub fn view(
 		space_hue,
 		transcript,
 		roster,
-		notice: state.notice.as_ref().map(thread_notice),
+		notice: shown_notice(app),
 	};
-	let shown = thread(t, &app.math, &data, &emit());
-	Some(match prompts {
-		Some(prompts) => col().w_full().grow(1.0).min_h(0.0).child(shown).child(prompts),
-		None => shown,
-	})
+	let composer = s06_composer::view(app, t);
+	Some(
+		col()
+			.w_full()
+			.grow(1.0)
+			.min_h(0.0)
+			.child(thread(t, &app.math, &data, &emit()))
+			.children(prompts)
+			.children(composer),
+	)
 }
 
 pub fn pinned_panel(app: &App, t: &Tokens, roster: &[Agent]) -> El {
