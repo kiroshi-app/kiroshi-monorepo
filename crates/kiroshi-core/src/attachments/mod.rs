@@ -8,7 +8,6 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use base64::prelude::{Engine as _, BASE64_STANDARD};
-#[cfg(any(test, feature = "test-support"))]
 use chrono::{DateTime, SecondsFormat, Utc};
 use uuid::Uuid;
 
@@ -173,7 +172,6 @@ fn is_image(path: &Path) -> bool {
 	})
 }
 
-#[cfg(any(test, feature = "test-support"))]
 pub fn attachment_block(paths: &[PathBuf], sent_at: DateTime<Utc>) -> String {
 	let count = paths.len();
 	let noun = match count {
@@ -512,6 +510,27 @@ mod tests {
 		assert_eq!(
 			pair,
 			"Attached to this message, sent 2026-09-28T10:04:05.123Z, 2 files:\n1/2 /data/attachments/c1/a.png\n2/2 /data/attachments/c1/b.gif"
+		);
+	}
+
+	#[test]
+	fn a_block_reads_exactly_as_the_rune_composer_pins_it() {
+		let sent_at =
+			DateTime::from_timestamp_millis(1_762_400_000_123).expect("the instant exists");
+
+		let single = attachment_block(&[PathBuf::from("/a/attachments/c/1.png")], sent_at);
+		let pair = attachment_block(
+			&[PathBuf::from("/a/attachments/c/1.png"), PathBuf::from("/a/attachments/c/2.md")],
+			sent_at,
+		);
+
+		assert_eq!(
+			single,
+			"Attached to this message, sent 2025-11-06T03:33:20.123Z, 1 file:\n1/1 /a/attachments/c/1.png"
+		);
+		assert_eq!(
+			pair,
+			"Attached to this message, sent 2025-11-06T03:33:20.123Z, 2 files:\n1/2 /a/attachments/c/1.png\n2/2 /a/attachments/c/2.md"
 		);
 	}
 
