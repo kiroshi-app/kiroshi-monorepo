@@ -68,6 +68,8 @@ const SKIP_ONBOARDING: &str = "--skip-onboarding";
 
 const HOST_API: &str = "--host-api";
 
+const RAIL: &str = "--rail";
+
 fn setup(s: &mut App, waker: Waker) {
 	let flagged = |flag: &str| launched().flags.iter().any(|arg| arg == flag);
 	if flagged(DEV_HOST) {
@@ -76,6 +78,9 @@ fn setup(s: &mut App, waker: Waker) {
 	s.uses_host_api = flagged(DEV_HOST) || flagged(HOST_API);
 	if flagged(DEV_HOST) || flagged(SKIP_ONBOARDING) {
 		s.navigation.navigate_main(Route::Conversations);
+	}
+	if flagged(RAIL) {
+		s.navigation.navigate_main(Route::Rail);
 	}
 	s.surfaces.s12_person_settings.attach(waker.clone());
 	s.surfaces.s02_rail.attach(waker.clone());
