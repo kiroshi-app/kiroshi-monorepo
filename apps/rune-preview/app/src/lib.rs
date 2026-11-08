@@ -1,5 +1,4 @@
 pub mod app;
-pub mod composer;
 mod content;
 pub mod conversations;
 mod dev_profile;

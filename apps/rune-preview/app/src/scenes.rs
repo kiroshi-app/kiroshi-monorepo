@@ -1,5 +1,3 @@
-use rune::TextEdit;
-
 use serde_json::json;
 
 use crate::app::{
@@ -25,7 +23,6 @@ pub const SCENES: &[Scene] = &[
 	("thread-long", thread_long),
 	("thread-empty", thread_empty),
 	("thread-streaming", thread_streaming),
-	("thread-mention", thread_mention),
 	("thread-math", thread_math),
 	("thread-rich", thread_rich),
 	("block-spike", block_spike),
@@ -245,14 +242,6 @@ fn thread_streaming(s: &mut App) {
 	}
 	let scope = RuntimeScope { conversation_id: "chat-skippy".into(), bot_id: "skippy".into() };
 	s.runs.heard(&scope, &AgentEvent::MessageDelta { id: "live".into(), text: String::new() });
-}
-
-fn thread_mention(s: &mut App) {
-	thread_default(s);
-	s.composer.edit = TextEdit::new("@");
-	s.composer.edit.focused = true;
-	s.composer.edit.set_caret(1);
-	s.composer_changed();
 }
 
 fn read_the_installed_host_before_the_first_frame(s: &mut App) -> Option<Ready> {
