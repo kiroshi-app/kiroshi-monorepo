@@ -15,7 +15,7 @@ use base64::Engine;
 use base64::prelude::BASE64_STANDARD;
 use kiroshi_core::agent::contract::CancelOutcome;
 use kiroshi_core::library::contract::{
-	LibraryDocument, LibraryImage, LibraryImport, LibraryItem, LibraryItemKind, LibraryWriteOutcome,
+	LibraryImage, LibraryImport, LibraryItem, LibraryItemKind, LibraryWriteOutcome,
 };
 use rune::image::Image;
 use rune::{KeyEvent, TextEdit, Waker};
@@ -685,7 +685,7 @@ impl State {
 				self.previews.insert(target.name, preview);
 			}
 			Answer::Excerpt { target, document } => {
-				let preview = document.map_or(Preview::Failed, |document: LibraryDocument| {
+				let preview = document.map_or(Preview::Failed, |document| {
 					Preview::Excerpt(excerpt_of(&document.content))
 				});
 				self.previews.insert(target.name, preview);

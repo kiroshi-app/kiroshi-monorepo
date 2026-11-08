@@ -13,7 +13,7 @@ use yrs::{Doc, ReadTxn, Text, Transact};
 
 use kiroshi_rune_kit::surfaces::s14_library::{
 	BlockEvent, DOCUMENT_PANEL_MAX_WIDTH, DOCUMENT_PANEL_MIN_WIDTH, DocumentPanelEvent, ItemAction,
-	ItemEvent, LibraryEvent, NewDocumentEvent, NewDocumentTemplate,
+	ItemEvent, LibraryEvent, LightboxEvent, NewDocumentEvent, NewDocumentTemplate,
 };
 
 use super::blocks::{self, Format};
@@ -188,7 +188,7 @@ fn an_image_opens_in_the_lightbox_from_a_click_or_its_menu() {
 		);
 		assert_eq!(calls(state), vec![Call::Image(target("dunes.png"))]);
 	}
-	clicked.handle_lightbox(kiroshi_rune_kit::surfaces::s14_library::LightboxEvent::Next);
+	clicked.handle_lightbox(LightboxEvent::Next);
 	assert!(matches!(&clicked.shown, Some(Shown::Image(lightbox)) if lightbox.name == "fern.png"));
 }
 

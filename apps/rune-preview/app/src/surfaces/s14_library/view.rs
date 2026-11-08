@@ -1,4 +1,4 @@
-use kiroshi_core::library::contract::{LibraryItem, LibraryItemKind};
+use kiroshi_core::library::contract::{LibraryItem, LibraryItemKind, LibraryWriter};
 use rune::{El, TextEdit, col};
 
 use kiroshi_rune_kit::strings::{Language, common};
@@ -117,16 +117,15 @@ fn panel_view(state: &State, t: &Tokens, width: Option<f32>) -> El {
 	})
 }
 
+fn face_of(app: &App, writer: &LibraryWriter) -> (String, Option<f32>) {
+	let name = app.agent_name(&writer.id).or_else(|| writer.name.clone()).unwrap_or_default();
+	let hue = app.agent_hue(&writer.id).or(writer.hue.map(f32::from));
+	(name, hue)
+}
+
 fn presence_of(app: &App, t: &Tokens, document: &Document, is_beside: bool) -> Option<El> {
-	let names: Vec<(String, Option<f32>)> = document
-		.agents()
-		.map(|writer| {
-			let name =
-				app.agent_name(&writer.id).or_else(|| writer.name.clone()).unwrap_or_default();
-			let hue = app.agent_hue(&writer.id).or(writer.hue.map(f32::from));
-			(name, hue)
-		})
-		.collect();
+	let names: Vec<(String, Option<f32>)> =
+		document.agents().map(|writer| face_of(app, writer)).collect();
 	let people: Vec<&str> = document.people().collect();
 	if names.is_empty() && people.is_empty() {
 		return None;
@@ -161,8 +160,7 @@ fn editor(app: &App, t: &Tokens, document: &Document, is_beside: bool) -> El {
 		.collect();
 	for writer in document.agents() {
 		let Some(id) = document.block_of_writer(writer) else { continue };
-		let name = app.agent_name(&writer.id).or_else(|| writer.name.clone()).unwrap_or_default();
-		let hue = app.agent_hue(&writer.id).or(writer.hue.map(f32::from));
+		let (name, hue) = face_of(app, writer);
 		if let Some(view) = views.iter_mut().find(|view| view.id == id) {
 			view.end = Some(agent_caret(t, Agent { name: &name, hue }));
 		}
