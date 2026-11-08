@@ -655,15 +655,8 @@ impl Recipe {
 		path.move_to(start);
 		let mut to = start;
 		for chord in [2.0 * radius, -2.0 * radius] {
-			to = Point::new(chord, 0.0) + to;
-			path.arc_to(
-				radius,
-				radius,
-				Angle::from_degrees(0.0),
-				ArcSize::Large,
-				ArcSweep::Negative,
-				to,
-			);
+			to.x += chord;
+			path.arc_to(radius, radius, Angle::ZERO, ArcSize::Large, ArcSweep::Negative, to);
 			if let Some(Command::CurveTo(_, _, end)) = path.last_mut() {
 				*end = to;
 			}
