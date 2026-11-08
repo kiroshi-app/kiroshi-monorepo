@@ -35,6 +35,8 @@ const DOWNLOAD_PAGE_URL: &str = "https://kiroshi.app";
 
 const ACCOUNT_WATCH: Duration = Duration::from_secs(2);
 
+const TRANSIENT_LIFETIME: Duration = Duration::from_secs(5);
+
 const UNSENT: Key = chat::screen::notice::FAILED;
 
 const LANGUAGE: Language = Language::En;
@@ -80,6 +82,8 @@ pub struct State {
 	account: Option<KiroshiAccount>,
 	is_watching_account: bool,
 	to_raise: Vec<Notice>,
+	told: Option<(u64, Notice)>,
+	told_count: u64,
 	effects: Vec<Effect>,
 	queued: Vec<Call>,
 	source: Option<Source>,
@@ -88,6 +92,7 @@ pub struct State {
 }
 
 enum Follow {
+	Expire(Notice),
 	Go(Step),
 	Land,
 	Landed { call: Call, landing: Result<(String, Box<Ready>), HostError> },
@@ -134,7 +139,16 @@ impl State {
 	}
 
 	fn tell(&mut self, kind: NoticeKind, title: Key) {
-		self.to_raise.push(Notice { kind, ..Notice::error(self.said(title)) });
+		let notice = Notice { kind, ..Notice::error(self.said(title)) };
+		self.told_count += 1;
+		self.told = Some((self.told_count, notice.clone()));
+		self.to_raise.push(notice);
+		self.queued.push(Call::Wake(TRANSIENT_LIFETIME, Due::Notice(self.told_count)));
+	}
+
+	fn told_expired(&mut self, id: u64) -> Option<Follow> {
+		let (_, notice) = self.told.take_if(|(told_id, _)| *told_id == id)?;
+		Some(Follow::Expire(notice))
 	}
 
 	fn store(&mut self, step: OnboardingStep) {
@@ -261,14 +275,10 @@ impl State {
 		self.fail_with(self.said(UNSENT), detail, None);
 	}
 
-	fn due(&mut self, due: Due) {
-		match due {
-			Due::AccountWatch => {
-				self.is_watching_account = false;
-				if matches!(self.account, Some(KiroshiAccount::Waiting { .. })) {
-					self.queued.push(Call::ReadKiroshiAccount);
-				}
-			}
+	fn account_watch_due(&mut self) {
+		self.is_watching_account = false;
+		if matches!(self.account, Some(KiroshiAccount::Waiting { .. })) {
+			self.queued.push(Call::ReadKiroshiAccount);
 		}
 	}
 
@@ -331,7 +341,8 @@ impl State {
 					landing.map(|(conversation_id, ready)| (conversation_id, Box::new(ready)));
 				return Some(Follow::Landed { call, landing });
 			}
-			Answer::Due(due) => self.due(due),
+			Answer::Due(Due::Notice(id)) => return self.told_expired(id),
+			Answer::Due(Due::AccountWatch) => self.account_watch_due(),
 		}
 		None
 	}
@@ -412,6 +423,7 @@ fn land(app: &mut App) {
 
 fn follow(app: &mut App, follow: Follow) {
 	match follow {
+		Follow::Expire(notice) => app.expire(&notice),
 		Follow::Go(step) => go(app, step),
 		Follow::Land => land(app),
 		Follow::Landed { landing: Ok((conversation_id, ready)), .. } => {

@@ -97,6 +97,16 @@ impl NoticeBoard {
 		of_space.into_iter().chain(self.of_window.as_ref()).collect()
 	}
 
+	fn expire(&mut self, notice: &Notice) {
+		match notice.space_id.as_deref() {
+			Some(space_id) if self.of_spaces.get(space_id) == Some(notice) => {
+				self.of_spaces.remove(space_id);
+			}
+			None if self.of_window.as_ref() == Some(notice) => self.of_window = None,
+			Some(_) | None => {}
+		}
+	}
+
 	fn close(&mut self, index: usize, space_on_screen: Option<&str>) -> Option<Notice> {
 		let shown_space = space_on_screen.filter(|space_id| self.of_spaces.contains_key(*space_id));
 		match (index, shown_space) {
@@ -112,6 +122,10 @@ impl App {
 			eprintln!("a notice of a Space not on screen: {}", notice.logged());
 		}
 		self.notice.raise(notice);
+	}
+
+	pub fn expire(&mut self, notice: &Notice) {
+		self.notice.expire(notice);
 	}
 
 	pub fn raise_all(&mut self, notices: Vec<Notice>) {

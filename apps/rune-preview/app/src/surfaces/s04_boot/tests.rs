@@ -7,7 +7,7 @@ use kiroshi_rune_kit::surfaces::s04_boot::import::{ImportEvent, ImportStatus, Im
 use kiroshi_rune_kit::surfaces::s04_boot::notice::{NoticeEvent, NoticeKind, SurfaceEvent};
 use kiroshi_rune_kit::surfaces::s04_boot::welcome::{WelcomeEvent, WelcomeStep};
 
-use super::calls::{Answer, Call, ClaudeReport, ImportOutcome, Inventoried, KiroshiAccount};
+use super::calls::{Answer, Call, ClaudeReport, Due, ImportOutcome, Inventoried, KiroshiAccount};
 use super::connect::initials_of;
 use super::*;
 use crate::app::notice::{closed, shown};
@@ -669,6 +669,46 @@ fn a_failed_landing_names_the_agent_keeps_the_account_step_and_retries() {
 	assert_eq!(failure_titles(&app), vec!["Shoto couldn’t say hello".to_owned()]);
 	closed(&mut app, SurfaceEvent::Act(0));
 	assert_eq!(drained(&mut app), vec![land]);
+}
+
+fn told_lifetime(app: &mut App) -> (Duration, u64) {
+	let state = onboarding(app);
+	state.tell(NoticeKind::Info, settings::account::SIGN_IN_LINK_COPIED);
+	let lifetime = state.queued.iter().rev().find_map(|call| match call {
+		Call::Wake(after, Due::Notice(id)) => Some((*after, *id)),
+		_ => None,
+	});
+	raise_queued(app);
+	lifetime.expect("the told notice is timed")
+}
+
+#[test]
+fn a_told_notice_closes_itself_five_seconds_later() {
+	let mut app = ready_app();
+	let (after, id) = told_lifetime(&mut app);
+	let told = shown(&app).len();
+
+	heard(&mut app, Answer::Due(Due::Notice(id)));
+
+	assert_eq!(after, Duration::from_secs(5));
+	assert_eq!(told, 1);
+	assert!(shown(&app).is_empty());
+}
+
+#[test]
+fn an_earlier_lifetime_leaves_a_newer_told_notice_and_a_failure_on_screen() {
+	let mut app = ready_app();
+	let (_, first) = told_lifetime(&mut app);
+	let (_, second) = told_lifetime(&mut app);
+
+	heard(&mut app, Answer::Due(Due::Notice(first)));
+	let after_first = shown(&app).len();
+	onboarding(&mut app).fail_with("Couldn’t store".to_owned(), "disk".to_owned(), None);
+	raise_queued(&mut app);
+	heard(&mut app, Answer::Due(Due::Notice(second)));
+
+	assert_eq!(after_first, 1);
+	assert_eq!(failure_titles(&app), vec!["Couldn’t store".to_owned()]);
 }
 
 #[test]
