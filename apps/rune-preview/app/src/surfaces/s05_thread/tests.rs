@@ -107,6 +107,7 @@ fn label(row: &Row) -> String {
 		Row::StartOfHistory => "start".to_owned(),
 		Row::Work(line) => line.id.clone(),
 		Row::Event(event) => event.id.clone(),
+		Row::Mission(mission) => mission.id.clone(),
 	}
 }
 
