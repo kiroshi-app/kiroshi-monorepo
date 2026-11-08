@@ -3,14 +3,17 @@ use std::collections::HashSet;
 use kiroshi_core::library::contract::{LibraryPresenceAt, LibraryWriter, LibraryWriterKind};
 use rune::TextEdit;
 
-use kiroshi_rune_kit::surfaces::s14_library::{BLOCK_GAP, LibraryBlockType, inline_field};
+use kiroshi_rune_kit::surfaces::s14_library::{BLOCK_GAP, LibraryBlockType};
 
 use super::blocks::{
-	self, Block, Format, continued_line, fresh_id, inline_markdown, is_editable, line_count,
-	markdown_of, rewritten, texts_of, with_line_after, without_line,
+	self, Block, Format, continued_line, converted, field_of, fresh_id, is_editable, lead_of,
+	line_count, markdown_before_caret, markdown_of, markdown_of_field, rewritten, row_start,
+	texts_of, with_line_after, without_line,
 };
 use super::session::Session;
 use super::worker::Target;
+
+const SENTENCE_ENDS: [char; 4] = ['.', '!', '?', '…'];
 
 pub enum Phase {
 	Opening,
@@ -25,14 +28,40 @@ pub struct Field {
 	built_from: String,
 }
 
+struct Seat {
+	id: String,
+	start: String,
+	first_seen: i64,
+	last_seen: i64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Cut {
+	pub row: usize,
+	pub from: usize,
+	pub to: usize,
+}
+
+pub struct Card {
+	pub agent_id: String,
+	pub name: Option<String>,
+	pub block: String,
+	pub elapsed_seconds: u32,
+	pub sentences: usize,
+	pub section: String,
+}
+
 pub struct Document {
 	pub target: Target,
 	pub format: Format,
 	pub title: TextEdit,
 	pub phase: Phase,
+	pub lead: String,
 	pub blocks: Vec<Block>,
 	pub fields: Vec<Field>,
 	pub writers: Vec<LibraryWriter>,
+	seats: Vec<Seat>,
+	is_dirty: bool,
 	heard_early: Vec<String>,
 }
 
@@ -47,22 +76,21 @@ fn named_as(name: &str, title: &str) -> String {
 	format!("{title}{}", &name[title_of(name).len()..])
 }
 
-fn field_edit(kind: LibraryBlockType, text: &str) -> TextEdit {
-	match kind {
-		LibraryBlockType::Code => TextEdit::new(text),
-		_ => inline_field(text),
-	}
-}
-
-fn field_text(kind: LibraryBlockType, edit: &TextEdit) -> String {
-	match kind {
-		LibraryBlockType::Code => edit.text.clone(),
-		_ => inline_markdown(edit),
-	}
-}
-
 fn empty_paragraph(taken: &HashSet<String>, gap: String) -> Block {
 	Block { id: fresh_id(taken), source: String::new(), marker: String::new(), gap }
+}
+
+fn sentence_count(text: &str) -> usize {
+	text.split_inclusive(SENTENCE_ENDS).filter(|sentence| !sentence.trim().is_empty()).count()
+}
+
+fn section_before(markdown: &str, offset: usize) -> Option<String> {
+	let before = markdown.get(..offset)?;
+	before.lines().rev().find_map(|line| {
+		let hashes = line.len() - line.trim_start_matches('#').len();
+		let heading = line[hashes..].strip_prefix(' ')?;
+		((1..=6).contains(&hashes) && !heading.trim().is_empty()).then(|| heading.trim().to_owned())
+	})
 }
 
 impl Document {
@@ -73,9 +101,12 @@ impl Document {
 			target,
 			title,
 			phase: Phase::Opening,
+			lead: String::new(),
 			blocks: Vec::new(),
 			fields: Vec::new(),
 			writers: Vec::new(),
+			seats: Vec::new(),
+			is_dirty: false,
 			heard_early: Vec::new(),
 		}
 	}
@@ -106,26 +137,31 @@ impl Document {
 			.iter()
 			.try_for_each(|update| session.received(update));
 		self.phase = Phase::Open(session);
+		self.is_dirty = false;
 		self.project();
 		caught_up
 	}
 
-	pub fn heard_update(&mut self, update: String) -> Result<(), String> {
-		let Some(session) = self.session_mut() else {
+	pub fn heard_update(&mut self, update: String) -> Result<Option<String>, String> {
+		if self.session().is_none() {
 			self.heard_early.push(update);
-			return Ok(());
-		};
-		session.received(&update)?;
+			return Ok(None);
+		}
+		let pending = self.flushed();
+		if let Some(session) = self.session_mut() {
+			session.received(&update)?;
+		}
 		self.project();
-		Ok(())
+		Ok(pending)
 	}
 
 	pub fn markdown(&self) -> String {
-		markdown_of(&self.blocks, self.format)
+		markdown_of(&self.lead, &self.blocks, self.format)
 	}
 
 	fn project(&mut self) {
 		let Some(markdown) = self.session().map(Session::markdown) else { return };
+		self.lead = lead_of(&markdown).to_owned();
 		self.blocks = blocks::blocks_of(&markdown, &self.blocks);
 		if self.blocks.is_empty() {
 			self.blocks.push(empty_paragraph(&HashSet::new(), String::new()));
@@ -146,7 +182,7 @@ impl Document {
 				});
 				let edit = match kept {
 					Some(at) => held.swap_remove(at).edit,
-					None => field_edit(kind, text),
+					None => field_of(kind, text),
 				};
 				let built_from = block.source.clone();
 				self.fields.push(Field { block: block.id.clone(), row, edit, built_from });
@@ -164,6 +200,10 @@ impl Document {
 		field.map(|field| &field.edit)
 	}
 
+	pub fn focused(&self) -> Option<&Field> {
+		self.fields.iter().find(|field| field.edit.focused)
+	}
+
 	fn block_at(&self, block: &str) -> Option<usize> {
 		self.blocks.iter().position(|held| held.id == block)
 	}
@@ -178,21 +218,27 @@ impl Document {
 		}
 	}
 
-	fn saved(&mut self) -> Option<String> {
+	pub fn flushed(&mut self) -> Option<String> {
+		if !self.is_dirty {
+			return None;
+		}
+		self.is_dirty = false;
 		let markdown = self.markdown();
 		self.session_mut()?.edited(&markdown)
 	}
 
-	pub fn typed(&mut self, block: &str, row: usize) -> Option<String> {
-		let at = self.block_at(block)?;
+	pub fn typed(&mut self, block: &str, row: usize) {
+		let Some(at) = self.block_at(block) else { return };
 		let kind = self.blocks[at].kind();
-		let text = field_text(kind, self.field(block, row)?);
+		let Some(text) = self.field(block, row).map(|edit| markdown_of_field(kind, edit)) else {
+			return;
+		};
 		let source = rewritten(&self.blocks[at].source, row, &text);
 		self.blocks[at].source.clone_from(&source);
 		for field in self.fields.iter_mut().filter(|field| field.block == block) {
 			field.built_from.clone_from(&source);
 		}
-		self.saved()
+		self.is_dirty = true;
 	}
 
 	pub fn entered(&mut self, block: &str, row: usize) -> Option<String> {
@@ -202,7 +248,8 @@ impl Document {
 			self.blocks[at].source = with_line_after(&source, row, &line);
 			self.rebuild_fields();
 			self.focus(block, row + 1);
-			return self.saved();
+			self.is_dirty = true;
+			return self.flushed();
 		}
 		let taken: HashSet<String> = self.blocks.iter().map(|held| held.id.clone()).collect();
 		let gap = std::mem::replace(&mut self.blocks[at].gap, BLOCK_GAP.to_owned());
@@ -211,7 +258,8 @@ impl Document {
 		self.blocks.insert(at + 1, added);
 		self.rebuild_fields();
 		self.focus(&id, 0);
-		self.saved()
+		self.is_dirty = true;
+		self.flushed()
 	}
 
 	pub fn backspaced(&mut self, block: &str, row: usize) -> Option<String> {
@@ -225,7 +273,8 @@ impl Document {
 			self.blocks[at].source = without_line(&source, row);
 			self.rebuild_fields();
 			self.focus(block, row.saturating_sub(1));
-			return self.saved();
+			self.is_dirty = true;
+			return self.flushed();
 		}
 		if at == 0 {
 			return None;
@@ -236,7 +285,26 @@ impl Document {
 		let last_row = texts_of(&self.blocks[at - 1].source).len().saturating_sub(1);
 		self.rebuild_fields();
 		self.focus(&previous, last_row);
-		self.saved()
+		self.is_dirty = true;
+		self.flushed()
+	}
+
+	pub fn convert(&mut self, block: &str, kind: LibraryBlockType, cut: Option<Cut>) {
+		let Some(at) = self.block_at(block) else { return };
+		let current = self.blocks[at].kind();
+		let rows: Vec<String> = texts_of(&self.blocks[at].source)
+			.iter()
+			.enumerate()
+			.map(|(row, text)| match self.field(block, row) {
+				Some(edit) => cut_markdown(current, edit, cut.filter(|cut| cut.row == row)),
+				None => text.clone(),
+			})
+			.collect();
+		let kind = if current == kind { LibraryBlockType::Paragraph } else { kind };
+		self.blocks[at].source = converted(kind, &rows);
+		self.rebuild_fields();
+		self.focus(block, 0);
+		self.is_dirty = true;
 	}
 
 	pub fn new_name(&self) -> Option<String> {
@@ -255,9 +323,23 @@ impl Document {
 		}
 	}
 
-	pub fn writers_heard(&mut self, writers: Vec<LibraryWriter>) {
+	pub fn writers_heard(&mut self, writers: Vec<LibraryWriter>, now: i64) {
 		self.writers =
 			writers.into_iter().filter(|writer| writer.kind != LibraryWriterKind::Person).collect();
+		let held = std::mem::take(&mut self.seats);
+		self.seats = self
+			.agents()
+			.filter_map(|writer| {
+				let LibraryPresenceAt::Text { anchor } = &writer.at else { return None };
+				let seated = held.iter().find(|seat| seat.id == writer.id);
+				Some(Seat {
+					id: writer.id.clone(),
+					start: seated.map_or_else(|| anchor.clone(), |seat| seat.start.clone()),
+					first_seen: seated.map_or(now, |seat| seat.first_seen),
+					last_seen: now,
+				})
+			})
+			.collect();
 	}
 
 	pub fn agents(&self) -> impl Iterator<Item = &LibraryWriter> {
@@ -271,16 +353,63 @@ impl Document {
 			.map(|writer| writer.name.as_deref().unwrap_or_default())
 	}
 
-	pub fn block_of_writer(&self, writer: &LibraryWriter) -> Option<&str> {
+	fn offset_of_anchor(&self, writer: &LibraryWriter) -> Option<usize> {
 		let LibraryPresenceAt::Text { anchor } = &writer.at else { return None };
-		let offset = self.session()?.offset_of(anchor)?;
-		let mut start = 0;
+		self.session()?.offset_of(anchor)
+	}
+
+	fn block_at_offset(&self, offset: usize) -> Option<&str> {
+		let mut end = self.lead.len();
 		for block in &self.blocks {
-			start += block.source.len() + block.marker.len() + block.gap.len();
-			if offset <= start {
+			end += block.written_len(self.format);
+			if offset <= end {
 				return Some(block.id.as_str());
 			}
 		}
 		self.blocks.last().map(|block| block.id.as_str())
 	}
+
+	pub fn block_of_writer(&self, writer: &LibraryWriter) -> Option<&str> {
+		self.block_at_offset(self.offset_of_anchor(writer)?)
+	}
+
+	pub fn cards(&self) -> Vec<Card> {
+		let Some(session) = self.session() else { return Vec::new() };
+		let markdown = session.markdown();
+		let title = title_of(&self.target.name);
+		self.agents()
+			.filter_map(|writer| {
+				let seat = self.seats.iter().find(|seat| seat.id == writer.id)?;
+				let end = self.offset_of_anchor(writer)?;
+				let start = session.offset_of(&seat.start).unwrap_or(end).min(end);
+				let written = markdown.get(start..end).unwrap_or_default();
+				Some(Card {
+					agent_id: writer.id.clone(),
+					name: writer.name.clone(),
+					block: self.block_at_offset(end)?.to_owned(),
+					elapsed_seconds: ((seat.last_seen - seat.first_seen).max(0) / 1000) as u32,
+					sentences: sentence_count(written),
+					section: section_before(&markdown, start).unwrap_or_else(|| title.to_owned()),
+				})
+			})
+			.collect()
+	}
+
+	pub fn caret_offset(&self) -> Option<usize> {
+		let field = self.focused()?;
+		let at = self.block_at(&field.block)?;
+		let before: usize =
+			self.blocks[..at].iter().map(|block| block.written_len(self.format)).sum();
+		let block = &self.blocks[at];
+		let in_row = markdown_before_caret(block.kind(), &field.edit);
+		Some(self.lead.len() + before + row_start(&block.source, field.row) + in_row)
+	}
+}
+
+fn cut_markdown(kind: LibraryBlockType, edit: &TextEdit, cut: Option<Cut>) -> String {
+	let Some(Cut { from, to, .. }) = cut else { return markdown_of_field(kind, edit) };
+	let mut kept = edit.clone();
+	kept.set_selection(from, to.min(kept.text.len()));
+	kept.insert("");
+	markdown_of_field(kind, &kept)
 }

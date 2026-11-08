@@ -12,19 +12,23 @@ use serde_json::json;
 use yrs::{Doc, ReadTxn, Text, Transact};
 
 use kiroshi_rune_kit::surfaces::s14_library::{
-	BlockEvent, DOCUMENT_PANEL_MAX_WIDTH, DOCUMENT_PANEL_MIN_WIDTH, DocumentPanelEvent, ItemAction,
-	ItemEvent, LibraryEvent, LightboxEvent, NewDocumentEvent, NewDocumentTemplate,
+	BlockEvent, DOCUMENT_PANEL_MAX_WIDTH, DOCUMENT_PANEL_MIN_WIDTH, DocumentPanelEvent,
+	Format as Toolbar, ItemAction, ItemEvent, LibraryEvent, LightboxEvent, NewDocumentEvent,
+	NewDocumentTemplate,
 };
 
 use super::blocks::{self, Format};
 use super::document::Phase;
+use super::editing::SEND_INTERVAL;
 use super::imports::{self, HOSTED_LIMIT, JOINED_LIMIT};
 use super::session::Session;
-use super::worker::{Answer, Call, Target, free_name};
+use super::worker::{Answer, Call, Due, Target, free_name};
 use super::{Dialog, Heard, Listing, Shown, State, heard_of};
 use crate::host::HostError;
 
 const SPACE: &str = "space-1";
+
+const NOW: i64 = 1_794_139_200_000;
 
 fn state_of(markdown: &str) -> String {
 	let doc = Doc::new();
@@ -107,6 +111,14 @@ fn saved_markdown(initial: &str, calls: &[Call]) -> String {
 fn type_into(state: &mut State, block: &str, text: &str) {
 	state.field_mut(false, block, 0).replace_text(text);
 	state.handle_block(false, BlockEvent::Typed { block: block.to_owned(), field: 0 });
+}
+
+fn flush_due(state: &mut State) {
+	answer(state, Answer::Due(Due::Flush));
+}
+
+fn applies(calls: &[Call]) -> usize {
+	calls.iter().filter(|call| matches!(call, Call::Apply { .. })).count()
 }
 
 #[test]
@@ -278,6 +290,7 @@ fn an_edit_saves_a_markdown_document_with_its_block_markers() {
 	let block = first_block(&state);
 
 	type_into(&mut state, &block, "First line, edited.");
+	flush_due(&mut state);
 	let sent = calls(&mut state);
 
 	let saved = saved_markdown(&initial, &sent);
@@ -289,8 +302,11 @@ fn an_edit_saves_a_markdown_document_with_its_block_markers() {
 		.map(|block| block.id.clone())
 		.collect();
 	assert_eq!(saved, format!("First line, edited. ^{}\n\n- one\n- two\n\n^{}", ids[0], ids[1]));
+	assert_eq!(applies(&sent), 1);
 	assert!(
-		matches!(sent.as_slice(), [Call::Apply { target: sent, .. }] if *sent == target("brief.md"))
+		sent.iter().any(
+			|call| matches!(call, Call::Apply { target: to, .. } if *to == target("brief.md"))
+		)
 	);
 }
 
@@ -301,6 +317,7 @@ fn an_edit_saves_a_plain_document_with_no_block_marker() {
 	let block = first_block(&state);
 
 	type_into(&mut state, &block, "First line, edited.");
+	flush_due(&mut state);
 
 	assert_eq!(saved_markdown(&initial, &calls(&mut state)), "First line, edited.\n\nSecond line.");
 }
@@ -313,9 +330,12 @@ fn existing_markers_keep_their_ids_and_their_place() {
 
 	let ids: Vec<&str> = parsed.iter().map(|block| block.id.as_str()).collect();
 	assert_eq!(&ids[..2], ["head01", "code01"]);
-	assert_eq!(blocks::markdown_of(&parsed, Format::Markdown), format!("{markdown} ^{}", ids[2]));
 	assert_eq!(
-		blocks::markdown_of(&parsed, Format::Plain),
+		blocks::markdown_of("", &parsed, Format::Markdown),
+		format!("{markdown} ^{}", ids[2])
+	);
+	assert_eq!(
+		blocks::markdown_of("", &parsed, Format::Plain),
 		"# Brief\n\n```ts\nship()\n```\n\nTail."
 	);
 }
@@ -340,15 +360,15 @@ fn enter_continues_a_list_and_backspace_removes_an_empty_row() {
 fn new_document_with_a_template_creates_the_document_then_opens_it() {
 	let mut state = library_with(Vec::new());
 	state.handle_library(LibraryEvent::NewDocument);
-	state.handle_new_document(NewDocumentEvent::Select(NewDocumentTemplate::MeetingNotes));
+	state.handle_new_document(NewDocumentEvent::Select(NewDocumentTemplate::MeetingNotes), NOW);
 
-	state.handle_new_document(NewDocumentEvent::Create(NewDocumentTemplate::MeetingNotes));
+	state.handle_new_document(NewDocumentEvent::Create(NewDocumentTemplate::MeetingNotes), NOW);
 	let created = calls(&mut state);
 	let item = item("Meeting notes.md", LibraryItemKind::Document);
 	answer(&mut state, Answer::Created { space_id: SPACE.to_owned(), item: Ok(item) });
 
 	assert!(
-		matches!(created.as_slice(), [Call::Create(new)] if new.title == "Meeting notes" && new.body.contains("## Decisions"))
+		matches!(created.as_slice(), [Call::Create(new)] if new.title == "Meeting notes, 8 November" && new.body.contains("## Decisions"))
 	);
 	assert!(state.dialog.is_none());
 	assert!(
@@ -358,7 +378,7 @@ fn new_document_with_a_template_creates_the_document_then_opens_it() {
 		calls(&mut state),
 		vec![Call::Open(target("Meeting notes.md")), Call::List { space_id: SPACE.to_owned() },]
 	);
-	assert_eq!(free_name("Untitled", 2), "Untitled 2.md");
+	assert_eq!(free_name("Untitled", 2, ".md"), "Untitled 2.md");
 }
 
 #[test]
@@ -482,16 +502,22 @@ fn an_agent_writing_the_open_document_lands_live_and_shows_as_a_writer() {
 	let mut agent = Session::opened(&initial).expect("the agent session");
 	let update = agent.edited("Body.\n\nAn agent sentence.").expect("an agent update");
 
-	state.heard(Heard::Updated(LibraryDocumentUpdated {
-		space_id: SPACE.to_owned(),
-		name: "brief.md".to_owned(),
-		update,
-	}));
-	state.heard(Heard::Presence(LibraryDocumentPresence {
-		space_id: SPACE.to_owned(),
-		name: "brief.md".to_owned(),
-		writers: vec![agent_writer(String::new())],
-	}));
+	state.heard(
+		Heard::Updated(LibraryDocumentUpdated {
+			space_id: SPACE.to_owned(),
+			name: "brief.md".to_owned(),
+			update,
+		}),
+		NOW,
+	);
+	state.heard(
+		Heard::Presence(LibraryDocumentPresence {
+			space_id: SPACE.to_owned(),
+			name: "brief.md".to_owned(),
+			writers: vec![agent_writer(String::new())],
+		}),
+		NOW,
+	);
 	state.stop_all(false);
 
 	assert_eq!(shown_markdown(&state).as_deref(), Some("Body.\n\nAn agent sentence."));
@@ -504,12 +530,18 @@ fn a_library_or_title_change_refreshes_without_closing_the_open_document() {
 	let mut state = opened_document("brief.md", "Body.");
 	calls(&mut state);
 
-	state.heard(Heard::Changed(LibraryChanged { space_id: SPACE.to_owned(), overwritten: None }));
-	state.heard(Heard::Renamed(LibraryDocumentRenamed {
-		space_id: SPACE.to_owned(),
-		former_name: "brief.md".to_owned(),
-		name: "Launch brief.md".to_owned(),
-	}));
+	state.heard(
+		Heard::Changed(LibraryChanged { space_id: SPACE.to_owned(), overwritten: None }),
+		NOW,
+	);
+	state.heard(
+		Heard::Renamed(LibraryDocumentRenamed {
+			space_id: SPACE.to_owned(),
+			former_name: "brief.md".to_owned(),
+			name: "Launch brief.md".to_owned(),
+		}),
+		NOW,
+	);
 
 	let document = state.shown_document().expect("the document stays open");
 	assert_eq!(document.target.name, "Launch brief.md");
@@ -543,4 +575,260 @@ fn closing_the_shown_document_returns_to_the_grid() {
 			Call::List { space_id: SPACE.to_owned() },
 		]
 	);
+}
+
+#[test]
+fn ten_keystrokes_inside_the_send_interval_make_one_write() {
+	let initial = state_of("Draft.");
+	let mut state = opened_from("brief.md", &initial);
+	calls(&mut state);
+	let block = first_block(&state);
+
+	for count in 1..=10 {
+		type_into(&mut state, &block, &format!("Draft{}", ".".repeat(count)));
+	}
+	let typed = calls(&mut state);
+	flush_due(&mut state);
+	let flushed = calls(&mut state);
+
+	assert_eq!(typed, vec![Call::Wake(SEND_INTERVAL, Due::Flush)]);
+	assert_eq!(applies(&flushed), 1);
+	assert_eq!(saved_markdown(&initial, &flushed), format!("Draft.......... ^{block}"));
+}
+
+#[test]
+fn a_close_mid_batch_still_writes_the_pending_edit() {
+	let initial = state_of("Draft.");
+	let mut state = opened_from("brief.md", &initial);
+	let block = first_block(&state);
+	type_into(&mut state, &block, "Draft, closed.");
+	calls(&mut state);
+
+	state.handle_document_bar(ItemEvent::Back);
+	let closed = calls(&mut state);
+	flush_due(&mut state);
+
+	assert!(matches!(closed.first(), Some(Call::Apply { .. })));
+	assert!(closed.contains(&Call::Share { target: target("brief.md"), at: None }));
+	assert_eq!(saved_markdown(&initial, &closed), format!("Draft, closed. ^{block}"));
+	assert!(calls(&mut state).is_empty());
+}
+
+#[test]
+fn a_panel_switch_or_a_space_change_mid_batch_writes_the_pending_edit() {
+	let initial = state_of("Beside.");
+	let mut state = library_with(Vec::new());
+	state.open_beside("notes.md");
+	let opened = LibraryDocumentState { name: "notes.md".to_owned(), update: initial.clone() };
+	answer(&mut state, Answer::Opened { target: target("notes.md"), state: Ok(opened) });
+	let block = state.beside.as_ref().expect("the panel document").blocks[0].id.clone();
+	state.field_mut(true, &block, 0).replace_text("Beside, switched.");
+	state.handle_block(true, BlockEvent::Typed { block: block.clone(), field: 0 });
+	calls(&mut state);
+
+	state.open_beside("other.md");
+	let switched = calls(&mut state);
+	let mut moved = opened_document("brief.md", "Body.");
+	let moved_block = first_block(&moved);
+	type_into(&mut moved, &moved_block, "Body, moved.");
+	calls(&mut moved);
+	moved.enter_space("space-2", false);
+
+	assert_eq!(saved_markdown(&initial, &switched), format!("Beside, switched. ^{block}"));
+	assert_eq!(applies(&calls(&mut moved)), 1);
+}
+
+#[test]
+fn enter_and_a_backspace_merge_flush_the_pending_edit_with_them() {
+	let initial = state_of("One.\n\nTwo.");
+	let mut state = opened_from("notes.txt", &initial);
+	let (first, second) = {
+		let blocks = &state.shown_document().expect("an open document").blocks;
+		(blocks[0].id.clone(), blocks[1].id.clone())
+	};
+	type_into(&mut state, &first, "One, typed.");
+	calls(&mut state);
+
+	state.handle_block(false, BlockEvent::Enter { block: first.clone(), field: 0 });
+	let entered = calls(&mut state);
+	state.field_mut(false, &second, 0).replace_text("");
+	state.handle_block(false, BlockEvent::Typed { block: second.clone(), field: 0 });
+	state.handle_block(false, BlockEvent::Backspace { block: second, field: 0 });
+	let merged = calls(&mut state);
+
+	assert_eq!(applies(&entered), 1);
+	assert_eq!(saved_markdown(&initial, &entered), "One, typed.\n\n\n\nTwo.");
+	assert_eq!(applies(&merged), 1);
+}
+
+#[test]
+fn open_then_save_with_no_edit_leaves_a_markdown_document_unchanged() {
+	let markdown = "\n\n# Plan ^head01\n\nBody line. ^body01\n";
+	let mut state = opened_document("plan.md", markdown);
+	calls(&mut state);
+
+	flush_due(&mut state);
+	let saved = state.shown_document().map(|document| document.markdown());
+	state.handle_document_bar(ItemEvent::Back);
+
+	assert_eq!(saved.as_deref(), Some(markdown));
+	assert_eq!(applies(&calls(&mut state)), 0);
+}
+
+#[test]
+fn open_then_save_with_no_edit_leaves_a_plain_document_unchanged() {
+	let text = "\n\n\nFirst line.\n\nSecond line.\n";
+	let mut state = opened_document("notes.txt", text);
+	calls(&mut state);
+
+	flush_due(&mut state);
+	let saved = state.shown_document().map(|document| document.markdown());
+	state.handle_document_bar(ItemEvent::Back);
+
+	assert_eq!(saved.as_deref(), Some(text));
+	assert_eq!(applies(&calls(&mut state)), 0);
+}
+
+#[test]
+fn meeting_notes_carry_the_date_in_their_title() {
+	assert_eq!(super::meeting_notes_title(NOW), "Meeting notes, 8 November");
+	assert_eq!(super::meeting_notes_title(0), "Meeting notes, 1 January");
+}
+
+#[test]
+fn the_slash_menu_turns_the_block_into_the_chosen_type() {
+	let initial = state_of("Intro");
+	let mut state = opened_from("notes.txt", &initial);
+	let block = first_block(&state);
+	state.field_mut(false, &block, 0).set_caret(5);
+
+	state.handle_block(false, BlockEvent::SlashOpened { block: block.clone(), field: 0 });
+	let edit = state.field_mut(false, &block, 0);
+	edit.replace_text("Intro/hea");
+	edit.set_caret(9);
+	state.handle_block(false, BlockEvent::Typed { block: block.clone(), field: 0 });
+	let query = state.slash_query();
+	let is_handled = state.handle_block(false, BlockEvent::SlashConfirmed);
+
+	assert_eq!(query.as_deref(), Some("hea"));
+	assert!(is_handled);
+	assert!(state.slash.is_none());
+	assert_eq!(saved_markdown(&initial, &calls(&mut state)), "# Intro");
+}
+
+#[test]
+fn the_format_toolbar_marks_the_selection_and_turns_a_block_into_a_list() {
+	let initial = state_of("Ship today");
+	let mut state = opened_from("notes.txt", &initial);
+	let block = first_block(&state);
+	let edit = state.field_mut(false, &block, 0);
+	edit.focused = true;
+	edit.set_selection(0, 4);
+
+	state.handle_format(false, Toolbar::Bold);
+	flush_due(&mut state);
+	let bold = saved_markdown(&initial, &calls(&mut state));
+	state.handle_format(false, Toolbar::List);
+
+	assert_eq!(bold, "**Ship** today");
+	assert_eq!(shown_markdown(&state).as_deref(), Some("- **Ship** today"));
+}
+
+#[test]
+fn a_flush_shares_the_caret_of_the_focused_field() {
+	let mut state = opened_document("notes.txt", "Body.");
+	let block = first_block(&state);
+	let edit = state.field_mut(false, &block, 0);
+	edit.focused = true;
+	edit.replace_text("Body, typed.");
+	edit.set_caret(4);
+	state.handle_block(false, BlockEvent::Typed { block, field: 0 });
+	calls(&mut state);
+
+	flush_due(&mut state);
+	let sent = calls(&mut state);
+	let anchor = sent.iter().find_map(|call| match call {
+		Call::Share { at: Some(LibraryPresenceAt::Text { anchor }), .. } => Some(anchor.clone()),
+		_ => None,
+	});
+	let offset = anchor.and_then(|anchor| state.shown_document()?.session()?.offset_of(&anchor));
+
+	assert_eq!(offset, Some(4));
+}
+
+#[test]
+fn download_and_copy_from_the_bar_and_the_lightbox_reach_the_core() {
+	let mut state = opened_document("brief.md", "Body.");
+	calls(&mut state);
+	state.handle_document_bar(ItemEvent::Download);
+	state.handle_document_bar(ItemEvent::Copy);
+	let from_bar = calls(&mut state);
+	answer(&mut state, Answer::Copied { target: target("brief.md"), outcome: Ok(()) });
+	let is_copied = state.is_copied("brief.md");
+	let copied_wake = calls(&mut state);
+	answer(&mut state, Answer::Due(Due::Copied));
+	let mut images = library_with(vec![item("dunes.png", LibraryItemKind::Image)]);
+	images.handle_library(LibraryEvent::Open("dunes.png".to_owned()));
+	calls(&mut images);
+	images.handle_lightbox(LightboxEvent::Item(ItemEvent::Download));
+	answer(&mut images, Answer::Downloaded(Err(refused())));
+
+	assert_eq!(from_bar, vec![Call::Download(target("brief.md")), Call::Copy(target("brief.md"))]);
+	assert!(is_copied);
+	assert!(matches!(copied_wake.as_slice(), [Call::Wake(_, Due::Copied)]));
+	assert!(!state.is_copied("brief.md"));
+	assert_eq!(calls(&mut images), vec![Call::Download(target("dunes.png"))]);
+	assert!(images.notice.is_some());
+}
+
+#[test]
+fn import_opens_the_picker_and_new_board_creates_a_board_for_the_boards_surface() {
+	let mut state = library_with(Vec::new());
+
+	state.handle_library(LibraryEvent::Import);
+	state.handle_library(LibraryEvent::NewBoard);
+	let created = calls(&mut state);
+	let board = item("Untitled.canvas", LibraryItemKind::Board);
+	answer(&mut state, Answer::BoardCreated { space_id: SPACE.to_owned(), item: Ok(board) });
+
+	assert_eq!(state.effects, vec![super::Effect::PickFile]);
+	assert_eq!(
+		created,
+		vec![Call::CreateBoard { space_id: SPACE.to_owned(), untitled: "Untitled".to_owned() }]
+	);
+	assert_eq!(state.board_to_open.as_deref(), Some("Untitled.canvas"));
+}
+
+#[test]
+fn an_agent_card_counts_its_sentences_under_its_section() {
+	let initial = state_of("# Plan\n\nBody.");
+	let mut state = opened_from("plan.md", &initial);
+	calls(&mut state);
+	let mut agent = Session::opened(&initial).expect("the agent session");
+	let start = agent.anchor_at(13).expect("a start anchor");
+	let update = agent.edited("# Plan\n\nBody. One. Two.").expect("an agent update");
+	let end = agent.anchor_at(23).expect("an end anchor");
+	let presence = |anchor: String| {
+		Heard::Presence(LibraryDocumentPresence {
+			space_id: SPACE.to_owned(),
+			name: "plan.md".to_owned(),
+			writers: vec![agent_writer(anchor)],
+		})
+	};
+
+	state.heard(presence(start), NOW);
+	state.heard(
+		Heard::Updated(LibraryDocumentUpdated {
+			space_id: SPACE.to_owned(),
+			name: "plan.md".to_owned(),
+			update,
+		}),
+		NOW,
+	);
+	state.heard(presence(end), NOW + 4_000);
+
+	let cards = state.shown_document().expect("an open document").cards();
+	assert_eq!(cards.len(), 1);
+	assert_eq!((cards[0].sentences, cards[0].elapsed_seconds), (2, 4));
+	assert_eq!(cards[0].section, "Plan");
 }

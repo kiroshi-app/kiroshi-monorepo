@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
+use std::time::Duration;
 
 use kiroshi_core::agent::contract::CancelOutcome;
 use kiroshi_core::library::contract::{
@@ -15,6 +16,14 @@ use crate::host::HostError;
 use crate::source::Source;
 
 const DOCUMENT_EXTENSION: &str = ".md";
+
+const BOARD_EXTENSION_ADDED_BY_HOST: &str = "";
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Due {
+	Flush,
+	Copied,
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Target {
@@ -44,6 +53,10 @@ pub enum Call {
 	Import { space_id: String, paths: Vec<PathBuf> },
 	Share { target: Target, at: Option<LibraryPresenceAt> },
 	Stop(Target),
+	Download(Target),
+	Copy(Target),
+	CreateBoard { space_id: String, untitled: String },
+	Wake(Duration, Due),
 }
 
 pub enum Answer {
@@ -90,6 +103,16 @@ pub enum Answer {
 	},
 	Shared(Result<(), HostError>),
 	Stopped(Result<CancelOutcome, HostError>),
+	Downloaded(Result<Option<String>, HostError>),
+	Copied {
+		target: Target,
+		outcome: Result<(), HostError>,
+	},
+	BoardCreated {
+		space_id: String,
+		item: Result<LibraryItem, HostError>,
+	},
+	Due(Due),
 }
 
 pub fn refusal_of(failure: &HostError) -> Option<LibraryError> {
@@ -99,10 +122,10 @@ pub fn refusal_of(failure: &HostError) -> Option<LibraryError> {
 	}
 }
 
-pub fn free_name(base: &str, copy: usize) -> String {
+pub fn free_name(base: &str, copy: usize, extension: &str) -> String {
 	match copy {
-		1 => format!("{base}{DOCUMENT_EXTENSION}"),
-		_ => format!("{base} {copy}{DOCUMENT_EXTENSION}"),
+		1 => format!("{base}{extension}"),
+		_ => format!("{base} {copy}{extension}"),
 	}
 }
 
@@ -110,26 +133,47 @@ fn located(target: &Target) -> serde_json::Value {
 	json!({ "spaceId": target.space_id, "name": target.name })
 }
 
-fn created_named(source: &Source, new: &NewDocument) -> Result<LibraryItem, HostError> {
-	let trimmed = new.title.trim();
-	let mut base = if trimmed.is_empty() { new.untitled.as_str() } else { trimmed };
+fn freely_named(
+	title: &str,
+	untitled: &str,
+	create: impl Fn(usize, &str) -> Result<LibraryItem, HostError>,
+) -> Result<LibraryItem, HostError> {
+	let trimmed = title.trim();
+	let mut base = if trimmed.is_empty() { untitled } else { trimmed };
 	let mut copy = 1;
 	loop {
-		let arguments =
-			json!({ "spaceId": new.space_id, "name": free_name(base, copy), "templateId": null });
-		let failure = match source.invoke("library_create_document", arguments) {
+		let failure = match create(copy, base) {
 			Ok(item) => return Ok(item),
 			Err(failure) => failure,
 		};
 		match refusal_of(&failure) {
 			Some(LibraryError::AlreadyExists { .. }) => copy += 1,
-			Some(LibraryError::InvalidName { .. }) if base != new.untitled => {
-				base = new.untitled.as_str();
+			Some(LibraryError::InvalidName { .. }) if base != untitled => {
+				base = untitled;
 				copy = 1;
 			}
 			_ => return Err(failure),
 		}
 	}
+}
+
+fn created_named(source: &Source, new: &NewDocument) -> Result<LibraryItem, HostError> {
+	freely_named(&new.title, &new.untitled, |copy, base| {
+		let name = free_name(base, copy, DOCUMENT_EXTENSION);
+		let arguments = json!({ "spaceId": new.space_id, "name": name, "templateId": null });
+		source.invoke("library_create_document", arguments)
+	})
+}
+
+fn board_created(
+	source: &Source,
+	space_id: &str,
+	untitled: &str,
+) -> Result<LibraryItem, HostError> {
+	freely_named(untitled, untitled, |copy, base| {
+		let name = free_name(base, copy, BOARD_EXTENSION_ADDED_BY_HOST);
+		source.invoke("library_create_board", json!({ "spaceId": space_id, "name": name }))
+	})
 }
 
 fn seeded(source: &Source, target: &Target, body: &str) -> Result<(), HostError> {
@@ -208,9 +252,22 @@ fn answered(source: &Source, call: Call) -> Answer {
 				json!({ "spaceId": target.space_id, "name": target.name, "agentId": null });
 			Answer::Stopped(source.invoke("library_stop_writers", arguments))
 		}
+		Call::Download(target) => {
+			Answer::Downloaded(source.invoke("library_save", located(&target)))
+		}
+		Call::Copy(target) => {
+			let outcome = source.invoke("library_copy", located(&target));
+			Answer::Copied { target, outcome }
+		}
+		Call::CreateBoard { space_id, untitled } => {
+			let item = board_created(source, &space_id, &untitled);
+			Answer::BoardCreated { space_id, item }
+		}
+		Call::Wake(_, due) => Answer::Due(due),
 	}
 }
 
+#[derive(Clone)]
 struct Reply {
 	answers: Sender<Answer>,
 	waker: Waker,
@@ -226,8 +283,22 @@ impl Reply {
 	}
 }
 
+fn woken(reply: Reply, after: Duration, due: Due) {
+	let spawned = thread::Builder::new().name("library-wake".into()).spawn(move || {
+		thread::sleep(after);
+		reply.deliver(Answer::Due(due));
+	});
+	if let Err(failure) = spawned {
+		eprintln!("a library wake did not schedule: {failure}");
+	}
+}
+
 fn served(source: &Source, calls: &Receiver<Call>, reply: &Reply) {
 	for call in calls {
+		if let Call::Wake(after, due) = call {
+			woken(reply.clone(), after, due);
+			continue;
+		}
 		if !reply.deliver(answered(source, call)) {
 			return;
 		}

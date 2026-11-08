@@ -1,15 +1,15 @@
 use std::collections::HashSet;
 
-use rune::{Mark, MarkRange, TextEdit};
+use rune::{Block as Line, Mark, MarkRange, TextEdit};
 
 use kiroshi_rune_kit::surfaces::s14_library::{
 	BLOCK_GAP, BLOCK_ID_ALPHABET, BLOCK_ID_LENGTH, LibraryBlockType, block_type_of, is_block_id,
 	parse_blocks, rows_of,
 };
 
-const PLAIN_EXTENSION: &str = ".txt";
+use crate::spike::inline;
 
-const ESCAPED: [char; 7] = ['\\', '*', '_', '`', '~', '[', '<'];
+const PLAIN_EXTENSION: &str = ".txt";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Format {
@@ -40,7 +40,7 @@ impl Block {
 		block_type_of(&self.source)
 	}
 
-	fn written_marker(&self, format: Format) -> String {
+	pub fn written_marker(&self, format: Format) -> String {
 		if format == Format::Plain || self.source.trim().is_empty() {
 			return String::new();
 		}
@@ -51,6 +51,10 @@ impl Block {
 			LibraryBlockType::Paragraph | LibraryBlockType::Heading => format!(" ^{}", self.id),
 			_ => format!("{BLOCK_GAP}^{}", self.id),
 		}
+	}
+
+	pub fn written_len(&self, format: Format) -> usize {
+		self.source.len() + self.written_marker(format).len() + self.gap.len()
 	}
 }
 
@@ -66,6 +70,15 @@ pub fn fresh_id(taken: &HashSet<String>) -> String {
 			return id;
 		}
 	}
+}
+
+pub fn lead_of(markdown: &str) -> &str {
+	let length = markdown
+		.split_inclusive('\n')
+		.take_while(|line| line.trim().is_empty() && line.ends_with('\n'))
+		.map(str::len)
+		.sum();
+	&markdown[..length]
 }
 
 fn lone_marker(source: &str) -> Option<String> {
@@ -144,11 +157,11 @@ fn adopted(previous: Option<&Block>, taken: &mut HashSet<String>) -> String {
 	id
 }
 
-pub fn markdown_of(blocks: &[Block], format: Format) -> String {
-	blocks
+pub fn markdown_of(lead: &str, blocks: &[Block], format: Format) -> String {
+	let written = blocks
 		.iter()
-		.map(|block| format!("{}{}{}", block.source, block.written_marker(format), block.gap))
-		.collect()
+		.map(|block| format!("{}{}{}", block.source, block.written_marker(format), block.gap));
+	std::iter::once(lead.to_owned()).chain(written).collect()
 }
 
 pub fn texts_of(source: &str) -> Vec<String> {
@@ -157,6 +170,60 @@ pub fn texts_of(source: &str) -> Vec<String> {
 
 pub fn is_editable(kind: LibraryBlockType) -> bool {
 	kind.is_text() || matches!(kind, LibraryBlockType::Callout | LibraryBlockType::Code)
+}
+
+pub fn field_of(kind: LibraryBlockType, markdown: &str) -> TextEdit {
+	if kind == LibraryBlockType::Code {
+		return TextEdit::new(markdown);
+	}
+	let (text, marks) = inline::parse(markdown);
+	let lines = text.matches('\n').count() + 1;
+	TextEdit::from_parts(text, marks, vec![Line::Paragraph; lines]).allow_marks([
+		Mark::Bold,
+		Mark::Italic,
+		Mark::Code,
+		Mark::Link(String::new()),
+	])
+}
+
+pub fn markdown_of_field(kind: LibraryBlockType, edit: &TextEdit) -> String {
+	match kind {
+		LibraryBlockType::Code => edit.text.clone(),
+		_ => inline::serialize(&edit.text, edit.marks()),
+	}
+}
+
+pub fn markdown_before_caret(kind: LibraryBlockType, edit: &TextEdit) -> usize {
+	let caret = edit.focus.min(edit.text.len());
+	if kind == LibraryBlockType::Code {
+		return caret;
+	}
+	let marks: Vec<MarkRange> = edit
+		.marks()
+		.iter()
+		.filter(|mark| mark.start < caret)
+		.map(|mark| MarkRange::new(mark.start..mark.end.min(caret), mark.mark.clone()))
+		.collect();
+	inline::serialize(&edit.text[..caret], &marks).len()
+}
+
+fn row_line(kind: LibraryBlockType, row: usize) -> usize {
+	match kind {
+		LibraryBlockType::Code | LibraryBlockType::Callout => row + 1,
+		_ => row,
+	}
+}
+
+pub fn row_start(source: &str, row: usize) -> usize {
+	let kind = block_type_of(source);
+	let line_at = row_line(kind, row);
+	let before: usize = source.split('\n').take(line_at).map(|line| line.len() + 1).sum();
+	if kind == LibraryBlockType::Code {
+		return before;
+	}
+	let line = source.split('\n').nth(line_at).unwrap_or_default();
+	let text = rows_of(source).get(row).map_or(0, |row| row.text.len());
+	before + line.len().saturating_sub(text)
 }
 
 fn closing_fence_of(lines: &[&str]) -> String {
@@ -172,7 +239,7 @@ pub fn rewritten(source: &str, row: usize, text: &str) -> String {
 	if kind == LibraryBlockType::Code {
 		return format!("{}\n{text}\n{}", lines[0], closing_fence_of(&lines));
 	}
-	let line_at = row + usize::from(kind == LibraryBlockType::Callout);
+	let line_at = row_line(kind, row);
 	let rows = rows_of(source);
 	let Some(old) = rows.get(row) else { return source.to_owned() };
 	lines
@@ -184,6 +251,27 @@ pub fn rewritten(source: &str, row: usize, text: &str) -> String {
 		})
 		.collect::<Vec<_>>()
 		.join("\n")
+}
+
+fn prefixed(prefix: &str, rows: &[String]) -> String {
+	rows.iter().map(|row| format!("{prefix}{row}")).collect::<Vec<_>>().join("\n")
+}
+
+pub fn converted(kind: LibraryBlockType, rows: &[String]) -> String {
+	let joined = rows.join(" ");
+	match kind {
+		LibraryBlockType::Heading => format!("# {joined}"),
+		LibraryBlockType::List => prefixed("- ", rows),
+		LibraryBlockType::Checklist => prefixed("- [ ] ", rows),
+		LibraryBlockType::Quote => prefixed("> ", rows),
+		LibraryBlockType::Callout => format!("> [!NOTE]\n{}", prefixed("> ", rows)),
+		LibraryBlockType::Code => format!("```\n{}\n```", rows.join("\n")),
+		LibraryBlockType::Table => format!("| {joined} |  |\n| --- | --- |\n|  |  |"),
+		LibraryBlockType::Gallery => "```gallery\n```".to_owned(),
+		LibraryBlockType::WebPage => format!("```web-page\nurl: {joined}\n```"),
+		LibraryBlockType::Collapsible => format!("```collapsible\ntitle: {joined}\n```"),
+		LibraryBlockType::Paragraph | LibraryBlockType::Other => rows.join("\n"),
+	}
 }
 
 pub fn continued_line(source: &str, row: usize) -> Option<String> {
@@ -216,71 +304,4 @@ pub fn without_line(source: &str, row: usize) -> String {
 
 pub fn line_count(source: &str) -> usize {
 	source.split('\n').count()
-}
-
-fn opener(mark: &Mark) -> &'static str {
-	match mark {
-		Mark::Bold => "**",
-		Mark::Italic => "*",
-		Mark::Strike => "~~",
-		Mark::Code => "`",
-		Mark::Link(_) => "[",
-		Mark::Pill(_) => "![",
-		_ => "",
-	}
-}
-
-fn closer(mark: &Mark) -> String {
-	match mark {
-		Mark::Link(url) | Mark::Pill(url) => format!("]({url})"),
-		other => opener(other).to_owned(),
-	}
-}
-
-fn marks_over(marks: &[MarkRange], from: usize, to: usize) -> Vec<&Mark> {
-	let mut covering: Vec<&MarkRange> = marks
-		.iter()
-		.filter(|mark| mark.start <= from && mark.end >= to && !opener(&mark.mark).is_empty())
-		.collect();
-	covering.sort_by_key(|mark| (mark.mark == Mark::Code, mark.start, std::cmp::Reverse(mark.end)));
-	covering.into_iter().map(|mark| &mark.mark).collect()
-}
-
-fn push_escaped(markdown: &mut String, segment: &str) {
-	for character in segment.chars() {
-		if ESCAPED.contains(&character) {
-			markdown.push('\\');
-		}
-		markdown.push(character);
-	}
-}
-
-pub fn inline_markdown(edit: &TextEdit) -> String {
-	let (text, marks) = (edit.text.as_str(), edit.marks());
-	let mut cuts: Vec<usize> = marks.iter().flat_map(|mark| [mark.start, mark.end]).collect();
-	cuts.extend([0, text.len()]);
-	cuts.retain(|cut| *cut <= text.len() && text.is_char_boundary(*cut));
-	cuts.sort_unstable();
-	cuts.dedup();
-	let mut markdown = String::with_capacity(text.len());
-	let mut open: Vec<&Mark> = Vec::new();
-	for cut in cuts.windows(2) {
-		let wanted = marks_over(marks, cut[0], cut[1]);
-		let kept = open.iter().zip(&wanted).take_while(|(held, want)| held == want).count();
-		while open.len() > kept {
-			open.pop().into_iter().for_each(|mark| markdown.push_str(&closer(mark)));
-		}
-		for mark in &wanted[kept..] {
-			markdown.push_str(opener(mark));
-			open.push(mark);
-		}
-		let segment = &text[cut[0]..cut[1]];
-		if open.contains(&&Mark::Code) {
-			markdown.push_str(segment);
-		} else {
-			push_escaped(&mut markdown, segment);
-		}
-	}
-	open.into_iter().rev().for_each(|mark| markdown.push_str(&closer(mark)));
-	markdown
 }

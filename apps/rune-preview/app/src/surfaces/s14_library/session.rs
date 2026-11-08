@@ -1,7 +1,8 @@
 use base64::Engine;
 use base64::prelude::BASE64_STANDARD;
 use yrs::updates::decoder::Decode;
-use yrs::{Doc, GetString, ReadTxn, StickyIndex, Text, Transact, Update};
+use yrs::updates::encoder::Encode;
+use yrs::{Assoc, Doc, GetString, IndexedSequence, ReadTxn, StickyIndex, Text, Transact, Update};
 
 const TEXT_NAME: &str = "markdown";
 
@@ -61,6 +62,14 @@ impl Session {
 		let caret = StickyIndex::decode_v1(&bytes).ok()?;
 		let offset = caret.get_offset(&self.doc.transact())?;
 		Some(offset.index as usize)
+	}
+
+	pub fn anchor_at(&self, offset: usize) -> Option<String> {
+		let text = self.doc.get_or_insert_text(TEXT_NAME);
+		let txn = self.doc.transact();
+		let index = u32::try_from(offset).ok()?;
+		let caret = text.sticky_index(&txn, index, Assoc::Before)?;
+		Some(BASE64_STANDARD.encode(caret.encode_v1()))
 	}
 
 	fn apply(&self, update: &str) -> Result<(), String> {

@@ -1,5 +1,7 @@
+mod actions;
 mod blocks;
 mod document;
+mod editing;
 mod heard;
 mod imports;
 mod session;
@@ -18,16 +20,17 @@ use kiroshi_core::library::contract::{
 	LibraryImage, LibraryImport, LibraryItem, LibraryItemKind, LibraryWriteOutcome,
 };
 use rune::image::Image;
-use rune::{KeyEvent, TextEdit, Waker};
+use rune::{KeyEvent, TextEdit, Tx, Waker};
 
 use kiroshi_rune_kit::strings::{Key as Copy, Language, common};
 use kiroshi_rune_kit::surfaces::s14_library::{
-	BlockEvent, DOCUMENT_PANEL_MAX_WIDTH, DOCUMENT_PANEL_MIN_WIDTH, DocumentPanelEvent, ItemAction,
-	ItemEvent, LibraryEvent, LibraryFilter, LibraryTemplate, LightboxEvent, NewDocumentEvent,
+	DOCUMENT_PANEL_MAX_WIDTH, DOCUMENT_PANEL_MIN_WIDTH, DocumentPanelEvent, ItemAction, ItemEvent,
+	LibraryEvent, LibraryFilter, LibraryTemplate, LightboxEvent, NewDocumentEvent,
 	NewDocumentTemplate,
 };
 
 use crate::app::App;
+use crate::conversations::now_ms;
 use crate::host::HostError;
 use crate::navigation::Route;
 use crate::source::Source;
@@ -35,9 +38,11 @@ use crate::source::Source;
 pub use heard::{Heard, heard_of};
 pub use view::{GRID, layers, panel, view};
 
+use actions::Effect;
 use document::Document;
+use editing::SlashState;
 use imports::Screened;
-use worker::{Answer, Call, NewDocument, Target, Worker};
+use worker::{Answer, Call, Due, NewDocument, Target, Worker};
 
 const ZOOM_STEP: u32 = 25;
 
@@ -48,6 +53,25 @@ const ZOOM_MAX: u32 = 400;
 const ZOOM_FIT: u32 = 100;
 
 const EXCERPT_CHARS: usize = 280;
+
+const MONTHS: [&str; 12] = [
+	"January",
+	"February",
+	"March",
+	"April",
+	"May",
+	"June",
+	"July",
+	"August",
+	"September",
+	"October",
+	"November",
+	"December",
+];
+
+const DAY_PLACEHOLDER: &str = "{{date, datetime(day: numeric)}}";
+
+const MONTH_PLACEHOLDER: &str = "{{date, datetime(month: long)}}";
 
 #[derive(Clone, Debug, PartialEq)]
 struct Notice {
@@ -104,6 +128,11 @@ pub struct State {
 	is_creating: bool,
 	importing: Vec<String>,
 	notice: Option<Notice>,
+	slash: Option<SlashState>,
+	is_flush_armed: bool,
+	copied: Option<String>,
+	effects: Vec<Effect>,
+	board_to_open: Option<String>,
 	spare: TextEdit,
 	queued: Vec<Call>,
 	source: Option<Source>,
@@ -129,6 +158,11 @@ impl Default for State {
 			is_creating: false,
 			importing: Vec::new(),
 			notice: None,
+			slash: None,
+			is_flush_armed: false,
+			copied: None,
+			effects: Vec::new(),
+			board_to_open: None,
 			spare: TextEdit::default(),
 			queued: Vec::new(),
 			source: None,
@@ -156,11 +190,31 @@ fn is_shown_kind(item: &LibraryItem) -> bool {
 
 fn excerpt_of(content: &str) -> String {
 	let blocks = blocks::blocks_of(content, &[]);
-	let markdown = blocks::markdown_of(&blocks, blocks::Format::Plain);
+	let markdown = blocks::markdown_of("", &blocks, blocks::Format::Plain);
 	markdown.chars().take(EXCERPT_CHARS).collect()
 }
 
-fn template_start(template: NewDocumentTemplate) -> (String, String) {
+fn month_and_day(at_ms: i64) -> (usize, i64) {
+	let days = at_ms.div_euclid(86_400_000) + 719_468;
+	let era = days.div_euclid(146_097);
+	let day_of_era = days - era * 146_097;
+	let year_of_era =
+		(day_of_era - day_of_era / 1460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+	let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+	let month_index = (5 * day_of_year + 2) / 153;
+	let day = day_of_year - (153 * month_index + 2) / 5 + 1;
+	let month = if month_index < 10 { month_index + 3 } else { month_index - 9 };
+	(month as usize, day)
+}
+
+fn meeting_notes_title(at_ms: i64) -> String {
+	let (month, day) = month_and_day(at_ms);
+	said(common::library::templates::meeting_notes::TITLE)
+		.replace(DAY_PLACEHOLDER, &day.to_string())
+		.replace(MONTH_PLACEHOLDER, MONTHS[month - 1])
+}
+
+fn template_start(template: NewDocumentTemplate, now: i64) -> (String, String) {
 	use common::library::templates::{brief, meeting_notes};
 	match template {
 		NewDocumentTemplate::Blank => (String::new(), String::new()),
@@ -173,7 +227,7 @@ fn template_start(template: NewDocumentTemplate) -> (String, String) {
 			),
 		),
 		NewDocumentTemplate::MeetingNotes => (
-			said(meeting_notes::NAME),
+			meeting_notes_title(now),
 			format!(
 				"## {}\n\n## {}\n",
 				said(meeting_notes::decisions::HEADING),
@@ -218,6 +272,8 @@ impl State {
 		self.source.get_or_insert(source);
 	}
 
+	// The joined flag stays false: the preview can't open a joined Space yet (s02_rail
+	// JOINED_UNOPENABLE), so every Library it shows is hosted here and takes the 20 MiB limit.
 	pub fn enter_space(&mut self, space_id: &str, is_joined: bool) {
 		self.is_joined = is_joined;
 		if self.space_id.as_deref() == Some(space_id) {
@@ -230,6 +286,7 @@ impl State {
 		self.previews.clear();
 		self.awaiting_tab = None;
 		self.dialog = None;
+		self.slash = None;
 	}
 
 	pub fn show_library(&mut self) {
@@ -278,9 +335,8 @@ impl State {
 			LibraryEvent::StartTemplate(template) => {
 				self.dialog = Some(Dialog::NewDocument(new_document_template(template)))
 			}
-			LibraryEvent::Import | LibraryEvent::NewBoard => {
-				eprintln!("the Library forwards {event:?}, which this surface doesn't wire")
-			}
+			LibraryEvent::Import => self.effects.push(Effect::PickFile),
+			LibraryEvent::NewBoard => self.create_board(),
 		}
 	}
 
@@ -355,33 +411,46 @@ impl State {
 		self.flush();
 	}
 
-	pub fn handle_new_document(&mut self, event: NewDocumentEvent) {
+	pub fn handle_new_document(&mut self, event: NewDocumentEvent, now: i64) {
 		match event {
 			NewDocumentEvent::Select(template) => self.dialog = Some(Dialog::NewDocument(template)),
 			NewDocumentEvent::Cancel => self.dialog = None,
-			NewDocumentEvent::Create(template) => self.create(template),
+			NewDocumentEvent::Create(template) => self.create(template, now),
 		}
 	}
 
-	fn create(&mut self, template: NewDocumentTemplate) {
+	fn create(&mut self, template: NewDocumentTemplate, now: i64) {
 		let Some(space_id) = self.space_id.clone() else { return };
 		if self.is_creating {
 			return;
 		}
 		self.is_creating = true;
-		let (title, body) = template_start(template);
+		let (title, body) = template_start(template, now);
 		let untitled = said(common::library::editor::UNTITLED);
 		self.queue(Call::Create(NewDocument { space_id, title, untitled, body }));
 		self.flush();
 	}
 
 	pub fn handle_lightbox(&mut self, event: LightboxEvent) {
+		let shown_name = self.shown.as_ref().map(|shown| shown.name().to_owned());
+		if let (LightboxEvent::Item(item @ (ItemEvent::Download | ItemEvent::Copy)), Some(name)) =
+			(&event, shown_name)
+		{
+			match item {
+				ItemEvent::Download => self.download(&name),
+				_ => self.copy(&name),
+			}
+			return;
+		}
 		let images = self.shown_images();
 		let Some(Shown::Image(lightbox)) = self.shown.as_mut() else { return };
 		let position = images.iter().position(|name| *name == lightbox.name);
 		match event {
 			LightboxEvent::Item(ItemEvent::Close | ItemEvent::Back) => self.close_shown(),
-			LightboxEvent::Item(ItemEvent::Download | ItemEvent::Copy | ItemEvent::More) => {}
+			LightboxEvent::Item(ItemEvent::Download | ItemEvent::Copy) => {}
+			LightboxEvent::Item(ItemEvent::More) => {
+				eprintln!("the lightbox forwards More, whose item menu emits no event")
+			}
 			LightboxEvent::Previous => {
 				let previous = position.and_then(|at| at.checked_sub(1));
 				if let Some(name) = previous.and_then(|at| images.get(at)) {
@@ -420,7 +489,20 @@ impl State {
 				self.close_shown();
 				self.list();
 			}
-			ItemEvent::Download | ItemEvent::Copy | ItemEvent::More => {}
+			ItemEvent::Download | ItemEvent::Copy => {
+				let Some(name) = self.shown_document().map(|document| document.target.name.clone())
+				else {
+					return;
+				};
+				if event == ItemEvent::Download {
+					self.download(&name);
+				} else {
+					self.copy(&name);
+				}
+			}
+			ItemEvent::More => {
+				eprintln!("the document bar forwards More, whose item menu emits no event")
+			}
 		}
 	}
 
@@ -435,33 +517,16 @@ impl State {
 		self.flush();
 	}
 
-	pub fn handle_block(&mut self, is_beside: bool, event: BlockEvent) -> bool {
-		let document = if is_beside {
+	fn document_mut(&mut self, is_beside: bool) -> Option<&mut Document> {
+		if is_beside {
 			self.beside.as_mut()
 		} else {
 			self.shown.as_mut().and_then(Shown::document_mut)
-		};
-		let Some(document) = document else { return false };
-		let (update, is_handled) = match &event {
-			BlockEvent::Typed { block, field } => (document.typed(block, *field), true),
-			BlockEvent::Enter { block, field } => (document.entered(block, *field), true),
-			BlockEvent::Backspace { block, field } => {
-				let update = document.backspaced(block, *field);
-				let is_handled = update.is_some();
-				(update, is_handled)
-			}
-			BlockEvent::SlashOpened { .. }
-			| BlockEvent::SlashMoved(_)
-			| BlockEvent::SlashConfirmed
-			| BlockEvent::SlashChosen(_)
-			| BlockEvent::SlashClosed => (None, false),
-		};
-		let target = document.target.clone();
-		if let Some(update) = update {
-			self.queue(Call::Apply { target, update });
-			self.flush();
 		}
-		is_handled
+	}
+
+	fn document(&self, is_beside: bool) -> Option<&Document> {
+		if is_beside { self.beside.as_ref() } else { self.shown_document() }
 	}
 
 	pub fn field_mut(&mut self, is_beside: bool, block: &str, row: usize) -> &mut TextEdit {
@@ -488,8 +553,9 @@ impl State {
 	}
 
 	pub fn stop_all(&mut self, is_beside: bool) {
-		let document = if is_beside { self.beside.as_ref() } else { self.shown_document() };
-		let Some(target) = document.map(|document| document.target.clone()) else { return };
+		let Some(target) = self.document(is_beside).map(|document| document.target.clone()) else {
+			return;
+		};
 		self.queue(Call::Stop(target));
 		self.flush();
 	}
@@ -559,19 +625,24 @@ impl State {
 
 	fn close_shown(&mut self) {
 		let Some(shown) = self.shown.take() else { return };
+		self.slash = self.slash.take().filter(|slash| slash.is_beside);
 		if let Shown::Document(document) = shown {
-			self.leave(&document);
+			self.leave(*document);
 		}
 	}
 
 	fn close_beside(&mut self) {
+		self.slash = self.slash.take().filter(|slash| !slash.is_beside);
 		if let Some(document) = self.beside.take() {
-			self.leave(&document);
+			self.leave(document);
 		}
 	}
 
-	fn leave(&mut self, document: &Document) {
-		self.queue(Call::Share { target: document.target.clone(), at: None });
+	fn leave(&mut self, mut document: Document) {
+		if let Some(update) = document.flushed() {
+			self.queue(Call::Apply { target: document.target.clone(), update });
+		}
+		self.queue(Call::Share { target: document.target, at: None });
 		self.flush();
 	}
 
@@ -584,7 +655,7 @@ impl State {
 			.collect()
 	}
 
-	pub fn heard(&mut self, heard: Heard) {
+	pub fn heard(&mut self, heard: Heard, now: i64) {
 		match heard {
 			Heard::Changed(changed) => {
 				if self.space_id.as_deref() == Some(changed.space_id.as_str())
@@ -595,10 +666,16 @@ impl State {
 			}
 			Heard::Updated(updated) => {
 				let mut refused = Vec::new();
+				let mut pending = Vec::new();
 				for document in self.documents_of(&updated.space_id, &updated.name) {
-					if let Err(failure) = document.heard_update(updated.update.clone()) {
-						refused.push((document.target.clone(), failure));
+					match document.heard_update(updated.update.clone()) {
+						Ok(Some(update)) => pending.push((document.target.clone(), update)),
+						Ok(None) => {}
+						Err(failure) => refused.push((document.target.clone(), failure)),
 					}
+				}
+				for (target, update) in pending {
+					self.queue(Call::Apply { target, update });
 				}
 				for (target, failure) in refused {
 					self.raise(said(common::library::failure::document::OPEN), failure);
@@ -619,7 +696,7 @@ impl State {
 			}
 			Heard::Presence(presence) => {
 				for document in self.documents_of(&presence.space_id, &presence.name) {
-					document.writers_heard(presence.writers.clone());
+					document.writers_heard(presence.writers.clone(), now);
 				}
 			}
 			Heard::Finished(finished) => {
@@ -721,6 +798,11 @@ impl State {
 					self.raise(said(common::library::failure::document::STOP_ALL), failure);
 				}
 			}
+			Answer::Downloaded(outcome) => self.downloaded(outcome),
+			Answer::Copied { target, outcome } => self.copied_answer(&target, outcome),
+			Answer::BoardCreated { space_id, item } => self.board_created(&space_id, item),
+			Answer::Due(Due::Flush) => self.flush_due(),
+			Answer::Due(Due::Copied) => self.copied = None,
 		}
 	}
 
@@ -935,14 +1017,14 @@ pub fn open_beside(app: &mut App, name: &str) {
 }
 
 pub fn heard(app: &mut App, heard: Heard) {
-	app.surfaces.s14_library.heard(heard);
+	app.surfaces.s14_library.heard(heard, now_ms());
 }
 
 pub fn key_pressed(app: &mut App, event: &KeyEvent) -> bool {
 	app.navigation.main_route() == Route::Library && app.surfaces.s14_library.key_pressed(event)
 }
 
-pub fn poll(app: &mut App) -> bool {
+pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
 	let is_library = app.navigation.main_route() == Route::Library;
 	if is_library && entered(app) {
 		app.surfaces.s14_library.show_library();
@@ -953,5 +1035,6 @@ pub fn poll(app: &mut App) -> bool {
 	if wants_library {
 		app.navigation.navigate_main(Route::Library);
 	}
-	has_answers || wants_library
+	let has_effects = actions::perform(app, tx);
+	has_answers || wants_library || has_effects
 }

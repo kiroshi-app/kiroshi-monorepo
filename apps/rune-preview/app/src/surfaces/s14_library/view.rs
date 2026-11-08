@@ -1,18 +1,20 @@
 use kiroshi_core::library::contract::{LibraryItem, LibraryItemKind, LibraryWriter};
-use rune::{El, TextEdit, col};
+use rune::{Align, El, Side, TextEdit, col};
 
 use kiroshi_rune_kit::strings::{Language, common};
 use kiroshi_rune_kit::surfaces::s14_library::{
 	Agent, BarActions, DocumentBar, DocumentPanelEvent, EditorBlock, ItemEvent, ItemLook,
 	LibraryItem as Tile, LibraryPanel, LightboxImage, LightboxLook, PanelActions, PanelLook,
-	PanelState, Unavailable, agent_caret, block_editor, delete_confirmation, document_bar,
-	document_column, document_panel, document_skeleton, failure_notice, grid_columns,
-	item_unavailable, library_panel, lightbox, new_document_dialog, presence, rows_of, title_field,
+	PanelState, TOOLBAR_GAP, Unavailable, Writer, agent_card, agent_caret, block_editor,
+	delete_confirmation, document_bar, document_column, document_panel, document_skeleton,
+	failure_notice, field_key, format_toolbar, grid_columns, item_unavailable, library_panel,
+	lightbox, new_document_dialog, presence, rows_of, title_field,
 };
-use kiroshi_rune_kit::tokens::Tokens;
+use kiroshi_rune_kit::tokens::{SPACING, Tokens};
 
 use super::blocks::is_editable;
 use super::document::{Document, Phase, title_of};
+use super::editing::pressed_of;
 use super::{Dialog, Listing, Preview, Shown, State, said};
 use crate::app::App;
 use crate::conversations::{now_ms, roster_timestamp};
@@ -28,8 +30,8 @@ const KIB: u64 = 1024;
 
 const PANEL_ACTIONS: PanelActions = PanelActions {
 	search: true,
-	import: false,
-	new_board: false,
+	import: true,
+	new_board: true,
 	new_document: true,
 	templates: true,
 };
@@ -117,15 +119,19 @@ fn panel_view(state: &State, t: &Tokens, width: Option<f32>) -> El {
 	})
 }
 
-fn face_of(app: &App, writer: &LibraryWriter) -> (String, Option<f32>) {
-	let name = app.agent_name(&writer.id).or_else(|| writer.name.clone()).unwrap_or_default();
-	let hue = app.agent_hue(&writer.id).or(writer.hue.map(f32::from));
-	(name, hue)
+fn face_of(app: &App, agent_id: &str, named: Option<&str>) -> (String, Option<f32>) {
+	let name = app.agent_name(agent_id).or_else(|| named.map(str::to_owned)).unwrap_or_default();
+	(name, app.agent_hue(agent_id))
+}
+
+fn writer_face(app: &App, writer: &LibraryWriter) -> (String, Option<f32>) {
+	let (name, hue) = face_of(app, &writer.id, writer.name.as_deref());
+	(name, hue.or(writer.hue.map(f32::from)))
 }
 
 fn presence_of(app: &App, t: &Tokens, document: &Document, is_beside: bool) -> Option<El> {
 	let names: Vec<(String, Option<f32>)> =
-		document.agents().map(|writer| face_of(app, writer)).collect();
+		document.agents().map(|writer| writer_face(app, writer)).collect();
 	let people: Vec<&str> = document.people().collect();
 	if names.is_empty() && people.is_empty() {
 		return None;
@@ -135,7 +141,37 @@ fn presence_of(app: &App, t: &Tokens, document: &Document, is_beside: bool) -> O
 	Some(presence(t, LANGUAGE, &agents, &people, (!agents.is_empty()).then_some(stop)))
 }
 
-fn editor(app: &App, t: &Tokens, document: &Document, is_beside: bool) -> El {
+fn toolbar_layer(t: &Tokens, document: &Document, is_beside: bool) -> Option<El> {
+	let field = document.focused()?;
+	let (start, end) = field.edit.range();
+	if start == end {
+		return None;
+	}
+	let pressed = pressed_of(&field.edit.active_marks());
+	let on = move |app: &mut App, format| library(app).handle_format(is_beside, format);
+	let toolbar = format_toolbar(t, LANGUAGE, &pressed, None, on);
+	Some(toolbar.anchored(field_key(&field.block, field.row), Side::Top, Align::Start, TOOLBAR_GAP))
+}
+
+fn card_layers(app: &App, t: &Tokens, document: &Document) -> Vec<El> {
+	document
+		.cards()
+		.into_iter()
+		.map(|card| {
+			let (name, hue) = face_of(app, &card.agent_id, card.name.as_deref());
+			let writer = Writer {
+				agent: Agent { name: &name, hue },
+				elapsed_seconds: card.elapsed_seconds,
+				sentences: card.sentences,
+				section: &card.section,
+			};
+			let anchor = format!("library-block-{}", card.block);
+			agent_card(t, LANGUAGE, &writer).anchored(anchor, Side::Bottom, Align::Start, SPACING)
+		})
+		.collect()
+}
+
+fn editor(app: &App, t: &Tokens, document: &Document, is_beside: bool) -> (El, Vec<El>) {
 	let blocks = &document.blocks;
 	let placeholder = said(common::library::templates::blank::PLACEHOLDER);
 	let is_blank = blocks.len() == 1 && blocks[0].source.is_empty();
@@ -160,67 +196,86 @@ fn editor(app: &App, t: &Tokens, document: &Document, is_beside: bool) -> El {
 		.collect();
 	for writer in document.agents() {
 		let Some(id) = document.block_of_writer(writer) else { continue };
-		let (name, hue) = face_of(app, writer);
+		let (name, hue) = writer_face(app, writer);
 		if let Some(view) = views.iter_mut().find(|view| view.id == id) {
 			view.end = Some(agent_caret(t, Agent { name: &name, hue }));
 		}
 	}
+	let state = &app.surfaces.s14_library;
+	let query = state.slash_query().unwrap_or_default();
+	let slash = state
+		.slash
+		.as_ref()
+		.filter(|slash| slash.is_beside == is_beside)
+		.and_then(|_| state.slash_view(&query));
 	let access = if is_beside { beside_field } else { shown_field };
 	let on = move |app: &mut App, event| library(app).handle_block(is_beside, event);
-	let (body, _) = block_editor(t, LANGUAGE, &mut views, None, access, on);
-	body
+	let (body, mut layers) = block_editor(t, LANGUAGE, &mut views, slash, access, on);
+	layers.extend(toolbar_layer(t, document, is_beside));
+	layers.extend(card_layers(app, t, document));
+	(body, layers)
 }
 
-fn document_screen(app: &App, t: &Tokens, document: &Document) -> El {
+fn bar_actions(state: &State, name: &str) -> BarActions {
+	BarActions { shown: true, is_copied: state.is_copied(name) }
+}
+
+fn document_screen(app: &App, t: &Tokens, document: &Document) -> (El, Vec<El>) {
 	let name = title_of(&document.target.name);
 	let back = |app: &mut App| library(app).handle_document_bar(ItemEvent::Back);
 	match document.phase {
-		Phase::Opening => return document_skeleton(t, LANGUAGE),
-		Phase::Failed => return item_unavailable(t, LANGUAGE, Unavailable::Unreadable, name, back),
+		Phase::Opening => return (document_skeleton(t, LANGUAGE), Vec::new()),
+		Phase::Failed => {
+			let unavailable = item_unavailable(t, LANGUAGE, Unavailable::Unreadable, name, back);
+			return (unavailable, Vec::new());
+		}
 		Phase::Open(_) => {}
 	}
+	let state = &app.surfaces.s14_library;
 	let bar = DocumentBar {
 		name,
 		is_read_only: false,
 		presence: presence_of(app, t, document, false),
-		actions: BarActions::NONE,
+		actions: bar_actions(state, &document.target.name),
 	};
 	let bar = document_bar(t, LANGUAGE, bar, |app: &mut App, event| {
 		library(app).handle_document_bar(event)
 	});
 	let heading = title_field(t, LANGUAGE, &document.title, title_edit)
 		.on_submit(|app: &mut App, _| library(app).confirm_title());
-	let state = &app.surfaces.s14_library;
 	let detail = state.listed(&document.target.name).map(|item| detail_of(item, now_ms()));
-	let body = editor(app, t, document, false);
+	let (body, layers) = editor(app, t, document, false);
 	let column = document_column(t, heading, &detail.unwrap_or_default(), body);
-	col().w_full().h_full().child(bar).child(column)
+	(col().w_full().h_full().child(bar).child(column), layers)
 }
 
-pub fn view(app: &App, t: &Tokens, width: Option<f32>) -> El {
+pub fn view(app: &App, t: &Tokens, width: Option<f32>) -> (El, Vec<El>) {
 	let state = &app.surfaces.s14_library;
-	let body = match state.shown.as_ref() {
+	let (body, layers) = match state.shown.as_ref() {
 		Some(Shown::Document(document)) => document_screen(app, t, document),
-		Some(Shown::Image(_)) | None => panel_view(state, t, width),
+		Some(Shown::Image(_)) | None => (panel_view(state, t, width), Vec::new()),
 	};
-	body.on_drop_files(|app: &mut App, paths, _| library(app).dropped(paths))
+	(body.on_drop_files(|app: &mut App, paths, _| library(app).dropped(paths)), layers)
 }
 
-pub fn panel(app: &App, t: &Tokens, room: f32) -> Option<El> {
+pub fn panel(app: &App, t: &Tokens, room: f32) -> Option<(El, Vec<El>)> {
 	let state = &app.surfaces.s14_library;
 	let document = state.beside.as_ref()?;
 	let title = title_of(&document.target.name);
 	let close = |app: &mut App| library(app).handle_panel(DocumentPanelEvent::Close);
-	let body = match document.phase {
-		Phase::Opening => document_skeleton(t, LANGUAGE),
-		Phase::Failed => item_unavailable(t, LANGUAGE, Unavailable::Unreadable, title, close),
+	let (body, layers) = match document.phase {
+		Phase::Opening => (document_skeleton(t, LANGUAGE), Vec::new()),
+		Phase::Failed => {
+			(item_unavailable(t, LANGUAGE, Unavailable::Unreadable, title, close), Vec::new())
+		}
 		Phase::Open(_) => editor(app, t, document, true),
 	};
 	let look = PanelLook { width: state.panel_width(room), ..PanelLook::document(title) };
 	let presence = presence_of(app, t, document, true);
-	Some(document_panel(t, LANGUAGE, look, presence, body, |app: &mut App, event| {
+	let panel = document_panel(t, LANGUAGE, look, presence, body, |app: &mut App, event| {
 		library(app).handle_panel(event)
-	}))
+	});
+	Some((panel, layers))
 }
 
 fn lightbox_layer(state: &State) -> Option<El> {
@@ -235,7 +290,7 @@ fn lightbox_layer(state: &State) -> Option<El> {
 		position,
 		count: images.len(),
 		zoom_percent: shown.zoom_percent,
-		actions: BarActions::NONE,
+		actions: bar_actions(state, &shown.name),
 	};
 	Some(lightbox(LANGUAGE, &image, look, |app: &mut App, event| {
 		library(app).handle_lightbox(event)
@@ -246,7 +301,7 @@ fn dialog_layers(state: &State, t: &Tokens) -> Vec<El> {
 	match state.dialog.as_ref() {
 		Some(Dialog::NewDocument(selected)) => {
 			new_document_dialog(t, LANGUAGE, *selected, |app: &mut App, event| {
-				library(app).handle_new_document(event)
+				library(app).handle_new_document(event, now_ms())
 			})
 		}
 		Some(Dialog::Delete { target, has_failed }) => {
