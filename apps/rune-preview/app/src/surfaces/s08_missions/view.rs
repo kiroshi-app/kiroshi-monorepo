@@ -14,8 +14,8 @@ use rune::{El, col};
 
 use super::feed::{grouped, is_working, shown_state};
 use super::{
-	Detail, Feed, LANGUAGE, Opened, detail_noticed, emitted, failure_text, noticed, panel_noticed,
-	said,
+	Detail, Feed, LANGUAGE, Opened, Panel, detail_noticed, emitted, failure_text, noticed,
+	panel_noticed, said,
 };
 use crate::app::App;
 use crate::conversations::{now_ms, roster_timestamp};
@@ -174,12 +174,13 @@ fn shown_feed(app: &App, t: &Tokens, entries: &[MissionInSpace], closed_since: i
 pub fn panel(app: &App, t: &Tokens) -> El {
 	let missions = &app.surfaces.s08_missions;
 	let body = match missions.panel.as_ref() {
-		None => missions_feed_skeleton(t, FEED_SKELETON_HEIGHT),
-		Some(panel) => match &panel.feed {
-			Feed::Loading => missions_feed_skeleton(t, FEED_SKELETON_HEIGHT),
-			Feed::Failed(failure) => feed_failure(t, failure),
-			Feed::Shown(entries) => shown_feed(app, t, entries, panel.closed_since),
-		},
+		Some(Panel { feed: Feed::Failed(failure), .. }) => feed_failure(t, failure),
+		Some(Panel { feed: Feed::Shown(entries), closed_since, .. }) => {
+			shown_feed(app, t, entries, *closed_since)
+		}
+		None | Some(Panel { feed: Feed::Loading, .. }) => {
+			missions_feed_skeleton(t, FEED_SKELETON_HEIGHT)
+		}
 	};
 	panel_frame(t, body)
 }

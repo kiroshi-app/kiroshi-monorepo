@@ -9,7 +9,7 @@ use kiroshi_core::missions::contract::{Mission, MissionDetail, MissionEventKind,
 use kiroshi_rune_kit::strings::{Key, Language, chat};
 use kiroshi_rune_kit::surfaces::s04_boot::notice::{NoticeEvent, NoticeKind, SurfaceEvent};
 use kiroshi_rune_kit::surfaces::s05_thread::MissionEvent as ThreadMissionEvent;
-use kiroshi_rune_kit::surfaces::s08_missions::{EventKind, MissionsEvent};
+use kiroshi_rune_kit::surfaces::s08_missions::{CopyKind, EventKind, MissionsEvent};
 use rune::{Tx, Waker};
 use serde_json::Value;
 
@@ -228,6 +228,23 @@ impl State {
 		}
 	}
 
+	fn open_pull_request(&mut self, url: Option<String>) {
+		let refused = chat::missions::menu::failed::OPEN_PULL_REQUEST;
+		match url {
+			Some(url) => self.effects.push(Effect::Open { url, refused: Some(refused) }),
+			None => self.raise(NoticeKind::Error, said(refused), None),
+		}
+	}
+
+	fn copy(&mut self, mission: &Mission, kind: CopyKind) {
+		let Some(text) = copied_value(mission, kind) else {
+			return self.raise(NoticeKind::Error, said(chat::missions::menu::failed::COPY), None);
+		};
+		let copied =
+			said(chat::missions::menu::COPIED).replace("{{kind}}", copy_word(kind).text(LANGUAGE));
+		self.effects.push(Effect::Copy { text: text.to_owned(), copied });
+	}
+
 	fn write(&mut self, command: Command, mission_id: &str) {
 		let profile = self.source.as_ref().and_then(Source::running_profile);
 		if let Some(refused) = refused_before_leaving(profile, command) {
@@ -443,35 +460,14 @@ fn known(app: &App, mission_id: &str) -> Option<Mission> {
 
 pub fn act(app: &mut App, mission_id: &str, action: MenuAction) {
 	let Some(mission) = known(app, mission_id) else { return };
-	if matches!(action, MenuAction::Open | MenuAction::MessageAgent | MenuAction::Answer) {
-		return open(app, &Opening::of(&mission));
-	}
-	let missions = state(app);
 	match action {
-		MenuAction::Open | MenuAction::MessageAgent | MenuAction::Answer => {}
-		MenuAction::OpenPullRequest => match mission.pull_request_url {
-			Some(url) => missions.effects.push(Effect::Open {
-				url,
-				refused: Some(chat::missions::menu::failed::OPEN_PULL_REQUEST),
-			}),
-			None => missions.raise(
-				NoticeKind::Error,
-				said(chat::missions::menu::failed::OPEN_PULL_REQUEST),
-				None,
-			),
-		},
-		MenuAction::Copy(kind) => match copied_value(&mission, kind) {
-			Some(text) => {
-				let copied = said(chat::missions::menu::COPIED)
-					.replace("{{kind}}", copy_word(kind).text(LANGUAGE));
-				missions.effects.push(Effect::Copy { text: text.to_owned(), copied });
-			}
-			None => {
-				missions.raise(NoticeKind::Error, said(chat::missions::menu::failed::COPY), None)
-			}
-		},
-		MenuAction::Close => missions.write(Command::Close, mission_id),
-		MenuAction::Reopen => missions.write(Command::Reopen, mission_id),
+		MenuAction::Open | MenuAction::MessageAgent | MenuAction::Answer => {
+			open(app, &Opening::of(&mission))
+		}
+		MenuAction::OpenPullRequest => state(app).open_pull_request(mission.pull_request_url),
+		MenuAction::Copy(kind) => state(app).copy(&mission, kind),
+		MenuAction::Close => state(app).write(Command::Close, mission_id),
+		MenuAction::Reopen => state(app).write(Command::Reopen, mission_id),
 	}
 }
 
