@@ -378,6 +378,8 @@ mod tests {
 				"Bash(./scripts/pr-dequeue.sh)",
 				"Bash(scripts/pr-enqueue.sh)",
 				"Bash(./scripts/pr-enqueue.sh)",
+				"Bash(scripts/pr-merge-sub.sh)",
+				"Bash(./scripts/pr-merge-sub.sh)",
 			]
 		);
 	}
@@ -391,6 +393,50 @@ mod tests {
 		for command in ["scripts/pr-enqueue.sh", "./scripts/pr-enqueue.sh"] {
 			assert!(matched_by(&allows, command), "{command} is not allowed in {allows:?}");
 			assert_matched_by_no_deny_rule(command);
+		}
+	}
+
+	#[test]
+	fn a_mission_on_the_tracked_settings_runs_the_sub_pr_merge_script_alone_in_both_spellings() {
+		let root = a_checkout("merge-sub");
+
+		let allows = rules_of(&granted(tracked_settings(), &root).expect("granted"), ALLOW_KEY);
+
+		for command in ["scripts/pr-merge-sub.sh", "./scripts/pr-merge-sub.sh"] {
+			assert!(matched_by(&allows, command), "{command} is not allowed in {allows:?}");
+			assert_matched_by_no_deny_rule(command);
+		}
+		for command in [
+			"scripts/pr-merge-sub.sh 12",
+			"./scripts/pr-merge-sub.sh --admin",
+			"scripts/pr-merge-sub.sh && git push origin main",
+			"./scripts/pr-merge-sub.sh; gh pr merge 12 --squash",
+			"bash scripts/pr-merge-sub.sh",
+			"other/scripts/pr-merge-sub.sh",
+		] {
+			assert!(!matched_by(&allows, command), "{command} is allowed by {allows:?}");
+		}
+	}
+
+	#[test]
+	fn a_mission_on_the_tracked_settings_squashes_only_through_pr_merge_sub() {
+		let root = a_checkout("squash-route");
+
+		let denies = rules_of(&granted(tracked_settings(), &root).expect("granted"), DENY_KEY);
+
+		for command in [
+			"gh pr merge 12 --squash",
+			"gh pr merge --squash",
+			"gh pr merge --squash --delete-branch 12",
+			"gh pr merge 12 --merge",
+			"gh pr merge 12 --rebase",
+			"gh pr merge 12 --admin",
+			"gh pr merge 12 --squash --admin",
+		]
+		.into_iter()
+		.chain(PUSHES_TO_MAIN)
+		{
+			assert!(matched_by(&denies, command), "{command} is not denied");
 		}
 	}
 
@@ -429,6 +475,8 @@ mod tests {
 				"Write(/scripts/pr-dequeue.sh)",
 				"Edit(/scripts/pr-enqueue.sh)",
 				"Write(/scripts/pr-enqueue.sh)",
+				"Edit(/scripts/pr-merge-sub.sh)",
+				"Write(/scripts/pr-merge-sub.sh)",
 			]
 			.map(str::to_owned),
 		);
@@ -483,23 +531,25 @@ mod tests {
 		}
 	}
 
+	const PUSHES_TO_MAIN: [&str; 11] = [
+		"git push --force origin main",
+		"git push -f origin main",
+		"git push --force-with-lease origin main",
+		"git push origin feature/ope-1-x:main",
+		"git push origin +main",
+		"git push origin main",
+		"git push -u origin main",
+		"git push origin main --verbose",
+		"git push origin HEAD:main",
+		"git push origin refs/heads/main",
+		"git push origin feature/ope-1-x && git push origin main",
+	];
+
 	#[test]
 	fn the_tracked_settings_deny_every_push_to_main() {
 		let denies = tracked_rules(DENY_KEY);
 
-		for command in [
-			"git push --force origin main",
-			"git push -f origin main",
-			"git push --force-with-lease origin main",
-			"git push origin feature/ope-1-x:main",
-			"git push origin +main",
-			"git push origin main",
-			"git push -u origin main",
-			"git push origin main --verbose",
-			"git push origin HEAD:main",
-			"git push origin refs/heads/main",
-			"git push origin feature/ope-1-x && git push origin main",
-		] {
+		for command in PUSHES_TO_MAIN {
 			assert!(matched_by(&denies, command), "{command} is not denied");
 		}
 	}
