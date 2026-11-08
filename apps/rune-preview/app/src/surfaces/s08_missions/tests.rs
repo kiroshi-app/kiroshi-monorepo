@@ -20,6 +20,7 @@ use super::{
 	Detail, Effect, Feed, State, back, changed, emitted, is_summons, landed, menu_facts, open,
 	refused_before_leaving, show, thread_events,
 };
+use crate::app::notice::{self, Notice};
 use crate::app::{App, Pane, Person, Ready, Workspace};
 use crate::conversations::now_ms;
 use crate::host::{self, Host, HostError, Profile};
@@ -168,7 +169,11 @@ fn refused(command: &str) -> HostError {
 }
 
 fn notice_titles(app: &App) -> Vec<&str> {
-	state(app).notices.iter().map(|notice| notice.title.as_str()).collect()
+	notice::shown(app).into_iter().map(|notice| notice.title.as_str()).collect()
+}
+
+fn notice_kinds(app: &App) -> Vec<NoticeKind> {
+	notice::shown(app).into_iter().map(|notice| notice.kind).collect()
 }
 
 fn change_of(mission_id: &str, state: model::MissionState) -> model::MissionChanged {
@@ -562,7 +567,7 @@ fn a_failed_reread_keeps_the_held_rows_and_raises_an_error_notice() {
 	answer_feed(&mut app, Err(refused("mission_space_feed")));
 	assert_eq!(listed_state(&app, "m-1"), Some(MissionState::WaitingHuman));
 	assert_eq!(notice_titles(&app), vec!["Couldn’t load missions"]);
-	assert_eq!(state(&app).notices[0].kind, NoticeKind::Error);
+	assert_eq!(notice_kinds(&app), vec![NoticeKind::Error]);
 }
 
 #[test]
@@ -635,7 +640,7 @@ fn a_failed_command_keeps_the_mission_as_it_was_and_raises_a_notice() {
 	);
 	assert_eq!(listed_state(&app, "m-1"), Some(MissionState::Working));
 	assert_eq!(notice_titles(&app), vec!["Couldn’t close the mission"]);
-	assert_eq!(state(&app).notices[0].kind, NoticeKind::Error);
+	assert_eq!(notice_kinds(&app), vec![NoticeKind::Error]);
 }
 
 #[test]
@@ -901,16 +906,16 @@ fn stop_agent_cancels_the_turn_of_the_mission_agent_in_its_thread() {
 }
 
 #[test]
-fn a_failed_stop_raises_the_stop_agent_notice() {
+fn a_failed_stop_raises_the_stop_agent_notice_and_a_later_one_replaces_it() {
 	let mut app = shown_panel(vec![mission("m-1", MissionState::Working, 1)]);
-	landed(&mut app, Answer::Stopped(Err(refused("agent_cancel_turn"))));
+	let failure = refused("agent_cancel_turn");
+	landed(&mut app, Answer::Stopped(Err(failure.clone())));
+	let refused_first: Vec<Notice> = notice::shown(&app).into_iter().cloned().collect();
 	landed(&mut app, Answer::Stopped(Ok(CancelOutcome::Failed { failures: Vec::new() })));
-	assert_eq!(
-		notice_titles(&app),
-		vec!["Couldn’t stop the coding session", "Couldn’t stop the coding session"]
-	);
-	assert!(state(&app).notices.iter().all(|notice| notice.kind == NoticeKind::Error));
-	assert!(state(&app).notices[0].description.is_some());
+	let title = "Couldn’t stop the coding session";
+	assert_eq!(refused_first, vec![Notice::of_host_failure(title, &failure)]);
+	let failed_later: Vec<Notice> = notice::shown(&app).into_iter().cloned().collect();
+	assert_eq!(failed_later, vec![Notice::error(title)]);
 }
 
 fn at_seq(mission: Mission, state_seq: i64) -> Mission {

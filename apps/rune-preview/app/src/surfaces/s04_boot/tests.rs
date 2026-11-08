@@ -7,9 +7,10 @@ use kiroshi_rune_kit::surfaces::s04_boot::import::{ImportEvent, ImportStatus, Im
 use kiroshi_rune_kit::surfaces::s04_boot::notice::{NoticeEvent, NoticeKind, SurfaceEvent};
 use kiroshi_rune_kit::surfaces::s04_boot::welcome::{WelcomeEvent, WelcomeStep};
 
-use super::calls::{Answer, Call, ClaudeReport, Due, ImportOutcome, Inventoried, KiroshiAccount};
+use super::calls::{Answer, Call, ClaudeReport, ImportOutcome, Inventoried, KiroshiAccount};
 use super::connect::initials_of;
 use super::*;
+use crate::app::notice::{closed, shown};
 use crate::app::{Ready, Workspace};
 use crate::host::Host;
 use crate::model::{Agent, ClaudeInventory, Conversation, Space};
@@ -114,13 +115,11 @@ fn heard(app: &mut App, answer: Answer) {
 	if let Some(next) = onboarding(app).answered(answer) {
 		follow(app, next);
 	}
+	raise_queued(app);
 }
 
 fn drained(app: &mut App) -> Vec<Call> {
 	std::mem::take(&mut onboarding(app).queued)
-		.into_iter()
-		.filter(|call| !matches!(call, Call::Wake(_, Due::Notice(_))))
-		.collect()
 }
 
 fn route(app: &App) -> Route {
@@ -128,11 +127,10 @@ fn route(app: &App) -> Route {
 }
 
 fn failure_titles(app: &App) -> Vec<String> {
-	let raised = app.surfaces.s04_boot.notices.raised();
-	raised
-		.iter()
-		.filter(|held| held.kind == NoticeKind::Error)
-		.map(|held| held.title.clone())
+	shown(app)
+		.into_iter()
+		.filter(|notice| notice.kind == NoticeKind::Error)
+		.map(|notice| notice.title.clone())
 		.collect()
 }
 
@@ -282,8 +280,10 @@ fn a_step_that_fails_to_store_raises_a_notice_with_its_retry_and_stays() {
 
 	assert!(route(&app) == Route::Onboarding(Step::first()));
 	assert_eq!(failure_titles(&app), vec![UNSENT.text(Language::En).to_owned()]);
+	let retry = Retry(Call::StoreStep(OnboardingStep::Connect));
+	assert!(shown(&app).iter().all(|notice| notice.retry.as_ref() == Some(&retry)));
 
-	notice_event(&mut app, SurfaceEvent::Act(0));
+	closed(&mut app, SurfaceEvent::Act(0));
 
 	assert!(failure_titles(&app).is_empty());
 	assert_eq!(drained(&mut app), vec![Call::StoreStep(OnboardingStep::Connect)]);
@@ -631,7 +631,7 @@ fn a_refused_kiroshi_sign_in_raises_a_notice_whose_retry_signs_in_again() {
 		failure_titles(&app),
 		vec![settings::account::SIGN_IN_FAILED.text(Language::En).to_owned()]
 	);
-	notice_event(&mut app, SurfaceEvent::Act(0));
+	closed(&mut app, SurfaceEvent::Act(0));
 	assert_eq!(drained(&mut app), vec![Call::KiroshiSignIn]);
 }
 
@@ -667,33 +667,24 @@ fn a_failed_landing_names_the_agent_keeps_the_account_step_and_retries() {
 
 	assert!(route(&app) == Route::Onboarding(Step::Account));
 	assert_eq!(failure_titles(&app), vec!["Shoto couldn’t say hello".to_owned()]);
-	notice_event(&mut app, SurfaceEvent::Act(0));
+	closed(&mut app, SurfaceEvent::Act(0));
 	assert_eq!(drained(&mut app), vec![land]);
 }
 
 #[test]
-fn a_failure_notice_stays_once_while_a_transient_one_leaves_on_its_own() {
+fn a_transient_notice_replaces_the_failure_on_screen_until_it_is_closed() {
 	let mut app = ready_app();
 	let state = onboarding(&mut app);
 
 	state.fail_with("Couldn’t store".to_owned(), "disk".to_owned(), None);
-	state.fail_with("Couldn’t store".to_owned(), "disk".to_owned(), None);
 	state.tell(NoticeKind::Info, settings::account::SIGN_IN_LINK_COPIED);
-	let expiry = state.queued.iter().find_map(|call| match call {
-		Call::Wake(after, Due::Notice(id)) => Some((*after, *id)),
-		_ => None,
-	});
+	raise_queued(&mut app);
+	let told: Vec<(String, NoticeKind)> =
+		shown(&app).into_iter().map(|notice| (notice.title.clone(), notice.kind)).collect();
 
-	assert_eq!(state.notices.raised().len(), 2);
-	let (after, id) = expiry.expect("the transient notice is timed");
-	assert_eq!(after, notices::TRANSIENT_LIFETIME);
+	closed(&mut app, SurfaceEvent::Close(0));
 
-	heard(&mut app, Answer::Due(Due::Notice(id)));
-	heard(&mut app, Answer::Due(Due::Notice(1)));
-
-	assert_eq!(failure_titles(&app), vec!["Couldn’t store".to_owned()]);
-
-	notice_event(&mut app, SurfaceEvent::Close(0));
-
-	assert!(app.surfaces.s04_boot.notices.raised().is_empty());
+	let copied = settings::account::SIGN_IN_LINK_COPIED.text(Language::En).to_owned();
+	assert_eq!(told, vec![(copied, NoticeKind::Info)]);
+	assert!(shown(&app).is_empty());
 }

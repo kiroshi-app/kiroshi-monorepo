@@ -1,14 +1,13 @@
 use kiroshi_core::account::contract::AccountPlan;
 use rune::{El, TextEdit};
 
-use kiroshi_rune_kit::strings::{chat, common};
+use kiroshi_rune_kit::strings::common;
 use kiroshi_rune_kit::surfaces::s04_boot::account::{AccountState, Plan, account_screen};
 use kiroshi_rune_kit::surfaces::s04_boot::boot::{BootFailure, boot_notice, boot_screen};
 use kiroshi_rune_kit::surfaces::s04_boot::connect::{
 	ClaudeAccount, Connect, Entry, connect_screen,
 };
 use kiroshi_rune_kit::surfaces::s04_boot::import::{Import, ImportItem, import_screen};
-use kiroshi_rune_kit::surfaces::s04_boot::notice::{RaisedNotice, notice_surface};
 use kiroshi_rune_kit::surfaces::s04_boot::welcome::{Welcome, welcome_screen};
 use kiroshi_rune_kit::surfaces::s04_boot::{Frame, onboarding_shell};
 use kiroshi_rune_kit::tokens::Tokens;
@@ -18,7 +17,7 @@ use super::connect::{Connection, initials_of};
 use super::import::Inventory;
 use super::{
 	LANGUAGE, State, Step, account_event, boot_failure, boot_retried, connect_event, import_event,
-	notice_event, welcome_event,
+	welcome_event,
 };
 use crate::app::App;
 
@@ -33,26 +32,6 @@ pub fn view(step: Step, app: &App, t: &Tokens) -> El {
 		Step::Import => import(onboarding, t),
 		Step::Account => account(onboarding, t),
 	}
-}
-
-pub fn layers(app: &App, t: &Tokens) -> Vec<El> {
-	let raised = app.surfaces.s04_boot.notices.raised();
-	if raised.is_empty() {
-		return Vec::new();
-	}
-	let retry = chat::notice::RETRY.text(LANGUAGE);
-	let shown: Vec<RaisedNotice> = raised
-		.iter()
-		.map(|held| RaisedNotice {
-			kind: held.kind,
-			title: &held.title,
-			description: held.description.as_deref(),
-			action: held.retry.as_ref().map(|_| retry),
-			space_hue: None,
-			report: None,
-		})
-		.collect();
-	vec![notice_surface(t, LANGUAGE, &shown, notice_event)]
 }
 
 fn waiting(t: &Tokens) -> El {

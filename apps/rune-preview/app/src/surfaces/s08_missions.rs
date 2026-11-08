@@ -9,12 +9,13 @@ mod worker;
 use kiroshi_core::agent::contract::CancelOutcome;
 use kiroshi_core::missions::contract::{Mission, MissionDetail, MissionEventKind, MissionInSpace};
 use kiroshi_rune_kit::strings::{Key, Language, chat};
-use kiroshi_rune_kit::surfaces::s04_boot::notice::{NoticeEvent, NoticeKind, SurfaceEvent};
+use kiroshi_rune_kit::surfaces::s04_boot::notice::NoticeEvent;
 use kiroshi_rune_kit::surfaces::s05_thread::MissionEvent as ThreadMissionEvent;
 use kiroshi_rune_kit::surfaces::s08_missions::{CopyKind, EventKind, MenuAction, MissionsEvent};
 use rune::{Tx, Waker};
 use serde_json::Value;
 
+use crate::app::notice::Notice;
 use crate::app::{App, Pane};
 use crate::conversations::now_ms;
 use crate::host::{self, HostError, Profile};
@@ -110,13 +111,6 @@ impl<'a> Opening<'a> {
 	}
 }
 
-#[derive(Clone, Debug, PartialEq)]
-struct Notice {
-	kind: NoticeKind,
-	title: String,
-	description: Option<String>,
-}
-
 #[derive(Debug, PartialEq, Eq)]
 enum Effect {
 	Open { url: String, refused: Option<Key> },
@@ -127,7 +121,7 @@ enum Effect {
 pub struct State {
 	panel: Option<Panel>,
 	is_earlier_today_open: bool,
-	notices: Vec<Notice>,
+	to_raise: Vec<Notice>,
 	menu: Option<HeldMenu>,
 	seqs: MissionSeqs,
 	effects: Vec<Effect>,
@@ -143,6 +137,10 @@ fn failure_text(failure: &HostError) -> String {
 
 fn said(key: Key) -> String {
 	key.text(LANGUAGE).to_owned()
+}
+
+fn failed(title: Key, failure: &HostError) -> Notice {
+	Notice::of_host_failure(&said(title), failure)
 }
 
 fn listed_in<'a>(feed: &'a Feed, mission_id: &str) -> Option<&'a Mission> {
@@ -245,7 +243,8 @@ impl State {
 				panel.feed = Feed::Shown(entries);
 			}
 			(Err(failure), Feed::Shown(_)) => {
-				self.raise_failure(chat::activity::failure::missions::TITLE, &failure)
+				let notice = failed(chat::activity::failure::missions::TITLE, &failure);
+				self.to_raise.push(notice.of_space(space_id.to_owned()))
 			}
 			(Err(failure), _) => panel.feed = Feed::Failed(failure),
 		}
@@ -271,31 +270,17 @@ impl State {
 		self.is_earlier_today_open = !self.is_earlier_today_open;
 	}
 
-	fn raise(&mut self, kind: NoticeKind, title: String, description: Option<String>) {
-		self.notices.push(Notice { kind, title, description });
-	}
-
-	fn raise_failure(&mut self, title: Key, failure: &HostError) {
-		self.raise(NoticeKind::Error, said(title), Some(failure_text(failure)));
-	}
-
-	fn dismiss(&mut self, index: usize) {
-		if index < self.notices.len() {
-			self.notices.remove(index);
-		}
-	}
-
 	fn open_pull_request(&mut self, url: Option<String>) {
 		let refused = chat::missions::menu::failed::OPEN_PULL_REQUEST;
 		match url {
 			Some(url) => self.effects.push(Effect::Open { url, refused: Some(refused) }),
-			None => self.raise(NoticeKind::Error, said(refused), None),
+			None => self.to_raise.push(Notice::error(said(refused))),
 		}
 	}
 
 	fn copy(&mut self, mission: &Mission, kind: CopyKind) {
 		let Some(text) = copied_value(mission, kind) else {
-			return self.raise(NoticeKind::Error, said(chat::missions::menu::failed::COPY), None);
+			return self.to_raise.push(Notice::error(said(chat::missions::menu::failed::COPY)));
 		};
 		let copied =
 			said(chat::missions::menu::COPIED).replace("{{kind}}", copy_word(kind).text(LANGUAGE));
@@ -311,7 +296,7 @@ impl State {
 	fn write(&mut self, command: Command, mission_id: &str) {
 		let profile = self.source.as_ref().and_then(Source::running_profile);
 		if let Some(refused) = refused_before_leaving(profile, command) {
-			self.raise_failure(refusal_of(command), &refused);
+			self.to_raise.push(failed(refusal_of(command), &refused));
 			return;
 		}
 		self.queue(Call::Write { command, mission_id: mission_id.to_owned() });
@@ -387,21 +372,25 @@ fn landed(app: &mut App, answer: Answer) {
 			written(app, &mission_id, mission)
 		}
 		Answer::Written { command, outcome: Err(failure), .. } => {
-			state(app).raise_failure(refusal_of(command), &failure)
+			app.raise(failed(refusal_of(command), &failure))
 		}
 		Answer::Stopped(outcome) => stopped(app, outcome),
 	}
 	close_vanished_menu(app);
+	raise_queued(app);
+}
+
+fn raise_queued(app: &mut App) {
+	let to_raise = std::mem::take(&mut state(app).to_raise);
+	app.raise_all(to_raise);
 }
 
 fn stopped(app: &mut App, outcome: Result<CancelOutcome, HostError>) {
 	let refused = chat::missions::menu::failed::STOP_AGENT;
 	match outcome {
 		Ok(CancelOutcome::Cancelled | CancelOutcome::NothingToCancel) => {}
-		Ok(CancelOutcome::Failed { .. }) => {
-			state(app).raise(NoticeKind::Error, said(refused), None)
-		}
-		Err(failure) => state(app).raise_failure(refused, &failure),
+		Ok(CancelOutcome::Failed { .. }) => app.raise(Notice::error(said(refused))),
+		Err(failure) => app.raise(failed(refused, &failure)),
 	}
 }
 
@@ -416,7 +405,7 @@ fn run(app: &mut App, effect: Effect, tx: &mut Tx) {
 	match effect {
 		Effect::Copy { text, copied } => {
 			tx.copy(text);
-			state(app).raise(NoticeKind::Info, copied, None);
+			app.raise(Notice::info(&copied));
 		}
 		Effect::Open { url, refused } => {
 			if let Err(failure) = tx.open_url(&url) {
@@ -424,7 +413,7 @@ fn run(app: &mut App, effect: Effect, tx: &mut Tx) {
 					Some(key) => (said(key), failure.to_string()),
 					None => (failure.to_string(), url),
 				};
-				state(app).raise(NoticeKind::Error, title, Some(description));
+				app.raise(Notice::failure(title, description));
 			}
 		}
 	}
@@ -505,7 +494,7 @@ fn read(app: &mut App, mission_id: &str, detail: Result<MissionDetail, HostError
 				said(chat::missions::failure::read::DESCRIPTION),
 				failure_text(&failure)
 			);
-			state(app).raise(NoticeKind::Error, title, Some(description));
+			app.raise(Notice::failure(title, description));
 		}
 		Err(failure) => opened.detail = Detail::Failed(failure),
 	}
@@ -570,6 +559,7 @@ fn act(app: &mut App, mission_id: &str, action: MenuAction) {
 		MenuAction::Close => state(app).write(Command::Close, mission_id),
 		MenuAction::Reopen => state(app).write(Command::Reopen, mission_id),
 	}
+	raise_queued(app);
 }
 
 fn open_at_composer(app: &mut App, mission: &Mission) {
@@ -581,6 +571,7 @@ fn open_at_composer(app: &mut App, mission: &Mission) {
 fn copy(app: &mut App, mission_id: &str, kind: CopyKind) {
 	let Some(mission) = known(app, mission_id).cloned() else { return };
 	state(app).copy(&mission, kind);
+	raise_queued(app);
 }
 
 fn close_menu(app: &mut App) {
@@ -623,14 +614,6 @@ fn detail_noticed(app: &mut App, event: NoticeEvent) {
 	match event {
 		NoticeEvent::Retry => reread(app),
 		NoticeEvent::Dismiss => {}
-	}
-}
-
-fn noticed(app: &mut App, event: SurfaceEvent) {
-	match event {
-		SurfaceEvent::Close(index) | SurfaceEvent::Act(index) | SurfaceEvent::CopyReport(index) => {
-			state(app).dismiss(index)
-		}
 	}
 }
 

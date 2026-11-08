@@ -3,7 +3,7 @@ use std::rc::Rc;
 use kiroshi_core::missions::contract::{Mission, MissionInSpace, MissionState};
 use kiroshi_rune_kit::strings::chat;
 use kiroshi_rune_kit::surfaces::s04_boot::notice::{
-	InlineNotice, NoticeRetry, RaisedNotice, Tone, inline_notice, notice_surface,
+	InlineNotice, NoticeRetry, Tone, inline_notice,
 };
 use kiroshi_rune_kit::surfaces::s08_missions::{
 	self as kit, Bot, Emit, Header, ListEnd, OpenMenu, PanelMission, PullRequest, Status, Ticket,
@@ -16,7 +16,7 @@ use rune::{El, col};
 use super::feed::{grouped, is_working, shown_state};
 use super::menu::menu_facts;
 use super::{
-	Detail, Feed, LANGUAGE, Opened, Panel, detail_noticed, emitted, failure_text, known, noticed,
+	Detail, Feed, LANGUAGE, Opened, Panel, detail_noticed, emitted, failure_text, known,
 	panel_noticed, said,
 };
 use crate::app::App;
@@ -243,19 +243,5 @@ pub fn shown_menu(app: &App) -> Option<OpenMenu<'_>> {
 }
 
 pub fn layers(app: &App, t: &Tokens) -> Vec<El> {
-	let mut layers =
-		shown_menu(app).map(|menu| mission_menu(t, LANGUAGE, &menu, &emit())).unwrap_or_default();
-	let raised: Vec<RaisedNotice> = app
-		.surfaces
-		.s08_missions
-		.notices
-		.iter()
-		.map(|notice| {
-			RaisedNotice::transient(notice.kind, &notice.title, notice.description.as_deref())
-		})
-		.collect();
-	if !raised.is_empty() {
-		layers.push(notice_surface(t, LANGUAGE, &raised, noticed));
-	}
-	layers
+	shown_menu(app).map(|menu| mission_menu(t, LANGUAGE, &menu, &emit())).unwrap_or_default()
 }

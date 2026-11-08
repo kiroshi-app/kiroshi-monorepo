@@ -1,7 +1,6 @@
 mod calls;
 mod connect;
 mod import;
-mod notices;
 #[cfg(test)]
 mod tests;
 mod view;
@@ -15,10 +14,11 @@ use kiroshi_rune_kit::strings::{Key, Language, chat, common, settings};
 use kiroshi_rune_kit::surfaces::s04_boot::account::AccountEvent;
 use kiroshi_rune_kit::surfaces::s04_boot::connect::ConnectEvent;
 use kiroshi_rune_kit::surfaces::s04_boot::import::ImportEvent;
-use kiroshi_rune_kit::surfaces::s04_boot::notice::{NoticeEvent, NoticeKind, SurfaceEvent};
+use kiroshi_rune_kit::surfaces::s04_boot::notice::{NoticeEvent, NoticeKind};
 use kiroshi_rune_kit::surfaces::s04_boot::say;
 use kiroshi_rune_kit::surfaces::s04_boot::welcome::{WelcomeEvent, WelcomeStep};
 
+use crate::app::notice::Notice;
 use crate::app::{App, Ready, Workspace};
 use crate::host::HostError;
 use crate::model::ClaudeInventory;
@@ -28,9 +28,8 @@ use crate::source::Source;
 use calls::{Answer, Call, Calls, Due, ImportOutcome, Inventoried, KiroshiAccount};
 use connect::{Next, SignIn, detail_of};
 use import::{Pressed, Session, offers_import};
-use notices::{Notices, TRANSIENT_LIFETIME};
 
-pub use view::{layers, view};
+pub use view::view;
 
 const DOWNLOAD_PAGE_URL: &str = "https://kiroshi.app";
 
@@ -47,6 +46,16 @@ pub enum Step {
 	Connect,
 	Import,
 	Account,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Retry(Call);
+
+impl Retry {
+	pub fn run(self, app: &mut App) {
+		state(app).queued.push(self.0);
+		sent(app);
+	}
 }
 
 impl Step {
@@ -70,7 +79,7 @@ pub struct State {
 	import: Session,
 	account: Option<KiroshiAccount>,
 	is_watching_account: bool,
-	notices: Notices,
+	to_raise: Vec<Notice>,
 	effects: Vec<Effect>,
 	queued: Vec<Call>,
 	source: Option<Source>,
@@ -120,12 +129,15 @@ impl State {
 
 	fn fail_with(&mut self, title: String, detail: String, retry: Option<Call>) {
 		eprintln!("{title}: {detail}");
-		self.notices.fail(title, detail, retry);
+		let notice = Notice::failure(title, detail);
+		self.to_raise.push(match retry {
+			Some(call) => notice.with_retry(Retry(call)),
+			None => notice,
+		});
 	}
 
 	fn tell(&mut self, kind: NoticeKind, title: Key) {
-		let id = self.notices.tell(kind, self.said(title));
-		self.queued.push(Call::Wake(TRANSIENT_LIFETIME, Due::Notice(id)));
+		self.to_raise.push(Notice { kind, ..Notice::error(self.said(title)) });
 	}
 
 	fn store(&mut self, step: OnboardingStep) {
@@ -254,7 +266,6 @@ impl State {
 
 	fn due(&mut self, due: Due) {
 		match due {
-			Due::Notice(id) => self.notices.expire(id),
 			Due::AccountWatch => {
 				self.is_watching_account = false;
 				if matches!(self.account, Some(KiroshiAccount::Waiting { .. })) {
@@ -457,10 +468,17 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
 		run(onboarding, effect, tx);
 	}
 	onboarding.flush();
+	raise_queued(app);
 	is_changed
 }
 
+fn raise_queued(app: &mut App) {
+	let to_raise = std::mem::take(&mut state(app).to_raise);
+	app.raise_all(to_raise);
+}
+
 fn sent(app: &mut App) {
+	raise_queued(app);
 	let onboarding = state(app);
 	onboarding.flush();
 	if let (false, Some(waker)) = (onboarding.effects.is_empty(), onboarding.waker.as_ref()) {
@@ -564,21 +582,6 @@ pub fn account_event(app: &mut App, event: AccountEvent) {
 			}
 		}
 		AccountEvent::Skip | AccountEvent::Continue => onboarding.store(OnboardingStep::Done),
-	}
-	sent(app);
-}
-
-pub fn notice_event(app: &mut App, event: SurfaceEvent) {
-	let onboarding = state(app);
-	match event {
-		SurfaceEvent::Act(index) => {
-			let retry = onboarding.notices.close(index).and_then(|closed| closed.retry);
-			onboarding.queued.extend(retry);
-		}
-		SurfaceEvent::Close(index) => {
-			onboarding.notices.close(index);
-		}
-		SurfaceEvent::CopyReport(_) => {}
 	}
 	sent(app);
 }
