@@ -921,9 +921,9 @@ fn change_at(state: model::MissionState, state_seq: i64) -> model::MissionChange
 	model::MissionChanged { state_seq, ..change_of("m-1", state) }
 }
 
-fn held_states(
-	app: &App,
-) -> (Option<MissionState>, Option<MissionState>, Option<model::MissionState>) {
+type HeldStates = (Option<MissionState>, Option<MissionState>, Option<model::MissionState>);
+
+fn held_states(app: &App) -> HeldStates {
 	let opened = app.mission.as_ref().and_then(super::Opened::mission);
 	(
 		listed_state(app, "m-1"),
@@ -945,7 +945,7 @@ fn opened_at_seq(state_seq: i64) -> App {
 	app
 }
 
-const WAITING_ON_YOU: (Option<MissionState>, Option<MissionState>, Option<model::MissionState>) = (
+const WAITING_ON_YOU: HeldStates = (
 	Some(MissionState::WaitingHuman),
 	Some(MissionState::WaitingHuman),
 	Some(model::MissionState::WaitingHuman),
