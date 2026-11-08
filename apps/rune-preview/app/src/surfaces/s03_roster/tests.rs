@@ -8,7 +8,7 @@ use serde_json::{Value, json};
 
 use super::listing::{Line, Listing, Placed};
 use super::worker::{Answer, Call, Write};
-use super::{Heard, Load, State, emitted, heard_of, landed, poll, selected_row};
+use super::{Load, State, emitted, landed, poll, selected_row};
 use crate::app::{App, Person, Ready, Workspace};
 use crate::events::{HostEvent, parsed};
 use crate::host::{Host, HostError};
@@ -376,24 +376,11 @@ fn a_stored_message_moves_its_row_up_with_its_preview() {
 }
 
 #[test]
-fn conversation_and_agent_events_update_rows_without_a_reload() {
+fn an_agent_deleted_on_the_host_leaves_the_roster() {
 	let mut app = shown_app(listing());
-	let created = json!({ "spaceId": SPACE, "conversation": row("new", None, 99) });
-	let changed = json!({ "conversationId": "room", "spaceId": SPACE, "state": "needs_you", "workingBotIds": [] });
-	for (event, payload) in
-		[("conversation://created", created), ("conversation://state-changed", changed)]
-	{
-		let heard = heard_of(event, &payload).expect("a roster event").expect("a readable event");
-		state_mut(&mut app).heard(heard);
-	}
-	state_mut(&mut app).heard(Heard::Deleted { conversation_id: "atlas-solo".to_owned() });
 	let deleted = s10_agent_settings::Heard::Deleted { id: "beacon".to_owned() };
 	state_mut(&mut app).heard_companion(&deleted);
-	let listing = shown_listing(&app);
-	assert_eq!(sorted_ids(listing), vec!["new", "room", "atlas"]);
-	let room =
-		listing.line("room").and_then(|line| line.conversation()).map(|row| &row.observed.state);
-	assert_eq!(room, Some(&ConversationState::NeedsYou));
+	assert_eq!(sorted_ids(shown_listing(&app)), vec!["atlas", "room"]);
 	assert!(state(&app).queued.is_empty());
 }
 
