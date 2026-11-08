@@ -277,19 +277,9 @@ pub struct MissionOnBoard {
 }
 
 #[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct MissionEvent {
-	pub id: String,
-	pub kind: String,
-	pub source: String,
-	pub payload: serde_json::Value,
-	pub created_at: i64,
-}
-
-#[derive(Clone, Debug, Deserialize)]
 pub struct MissionDetail {
 	pub mission: Mission,
-	pub events: Vec<MissionEvent>,
+	pub events: Vec<serde_json::Value>,
 }
 
 #[derive(Clone, Debug, Deserialize)]

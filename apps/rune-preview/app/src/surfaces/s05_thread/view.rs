@@ -11,11 +11,15 @@ use kiroshi_rune_kit::tokens::Tokens;
 use super::{Notice, projection, said};
 use crate::app::App;
 use crate::conversations::now_ms;
-use crate::mission;
+use crate::surfaces::s08_missions;
 
 fn thread_event(app: &mut App, event: ThreadEvent) {
-	if let Some(forwarded) = app.surfaces.s05_thread.handle(event, now_ms()) {
-		eprintln!("the thread forwards {forwarded:?}, which no surface handles yet");
+	match app.surfaces.s05_thread.handle(event, now_ms()) {
+		Some(ThreadEvent::Mission(event)) => s08_missions::emitted(app, event),
+		Some(forwarded) => {
+			eprintln!("the thread forwards {forwarded:?}, which no surface handles yet")
+		}
+		None => {}
 	}
 }
 
@@ -40,7 +44,7 @@ pub fn view(
 ) -> Option<El> {
 	let state = &app.surfaces.s05_thread;
 	let open = state.open.as_ref()?;
-	let events = app.mission.as_ref().map(mission::thread_events).unwrap_or_default();
+	let events = s08_missions::thread_events(app);
 	let shown = projection::Shown { kind: &kind, roster: &roster, events: &events, now: now_ms() };
 	let transcript = projection::transcript(open, &shown);
 	let data = Thread {
