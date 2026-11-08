@@ -49,6 +49,8 @@ struct Panel {
 	space_id: String,
 	closed_since: i64,
 	feed: Feed,
+	is_reading: bool,
+	is_reread_due: bool,
 }
 
 pub enum Detail {
@@ -162,8 +164,30 @@ impl State {
 
 	fn load(&mut self, space_id: String, now: i64) {
 		let closed_since = feed::start_of_day(now);
-		self.panel = Some(Panel { space_id: space_id.clone(), closed_since, feed: Feed::Loading });
+		self.panel = Some(Panel {
+			space_id: space_id.clone(),
+			closed_since,
+			feed: Feed::Loading,
+			is_reading: true,
+			is_reread_due: false,
+		});
 		self.queue(Call::Feed { space_id, closed_since });
+	}
+
+	fn reread_feed(&mut self, now: i64) {
+		let Some(panel) = self.panel.as_mut().filter(|panel| matches!(panel.feed, Feed::Shown(_)))
+		else {
+			return;
+		};
+		if panel.is_reading {
+			panel.is_reread_due = true;
+			return;
+		}
+		panel.is_reading = true;
+		panel.closed_since = feed::start_of_day(now);
+		let call =
+			Call::Feed { space_id: panel.space_id.clone(), closed_since: panel.closed_since };
+		self.queue(call);
 	}
 
 	fn retry(&mut self, now: i64) {
@@ -190,10 +214,18 @@ impl State {
 		else {
 			return;
 		};
-		panel.feed = match feed {
-			Ok(entries) => Feed::Shown(entries),
-			Err(failure) => Feed::Failed(failure),
-		};
+		panel.is_reading = false;
+		let is_reread_due = std::mem::take(&mut panel.is_reread_due);
+		match (feed, &panel.feed) {
+			(Ok(entries), _) => panel.feed = Feed::Shown(entries),
+			(Err(failure), Feed::Shown(_)) => {
+				self.raise_failure(chat::activity::failure::missions::TITLE, &failure)
+			}
+			(Err(failure), _) => panel.feed = Feed::Failed(failure),
+		}
+		if is_reread_due {
+			self.reread_feed(now_ms());
+		}
 	}
 
 	fn listed(&self, mission_id: &str) -> Option<&Mission> {
@@ -434,6 +466,7 @@ fn written(app: &mut App, mission_id: &str, mission: &Mission) {
 pub fn changed(app: &mut App, changed: &model::MissionChanged) {
 	let mission_id = changed.mission_id.as_str();
 	state(app).each_listed(mission_id, |mission| feed::moved(mission, changed));
+	state(app).reread_feed(now_ms());
 	if let Some(thread) = app.thread.as_mut() {
 		for card in thread.missions.iter_mut().filter(|card| card.id == mission_id) {
 			card.state = changed.state;

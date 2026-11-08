@@ -6,7 +6,9 @@ use kiroshi_rune_kit::surfaces::s04_boot::notice::NoticeKind;
 use kiroshi_rune_kit::surfaces::s08_missions::{self as kit, CopyKind, EventKind, MissionsEvent};
 use serde_json::json;
 
-use super::feed::{grouped, start_of_day};
+use chrono::{FixedOffset, TimeZone};
+
+use super::feed::{grouped, start_of_day, start_of_day_in};
 use super::worker::{Answer, Call, Command};
 use super::{
 	Detail, Effect, Feed, MenuAction, State, act, back, changed, emitted, is_summons, landed,
@@ -14,7 +16,7 @@ use super::{
 };
 use crate::app::{App, Pane, Person, Ready, Workspace};
 use crate::conversations::now_ms;
-use crate::host::{Host, HostError, Profile};
+use crate::host::{self, Host, HostError, Profile};
 use crate::model;
 use crate::source::Source;
 
@@ -353,16 +355,95 @@ fn a_running_agent_reads_as_working_once_its_change_arrives() {
 }
 
 #[test]
-fn a_change_of_another_mission_rereads_nothing() {
+fn a_change_of_a_mission_not_open_rereads_the_feed_and_no_detail() {
 	let mut app = shown_panel(vec![mission("m-1", MissionState::Working, 1)]);
-	let change = model::MissionChanged {
-		mission_id: "m-2".to_owned(),
-		state: model::MissionState::Done,
-		is_agent_running: false,
-	};
-	changed(&mut app, &change);
-	assert!(state(&app).queued.is_empty());
+	changed(&mut app, &change_of("m-2", model::MissionState::Done));
+	assert_eq!(feed_calls(&app), 1);
+	assert!(!state(&app).queued.iter().any(|call| matches!(call, Call::Detail(_))));
 	assert_eq!(listed_state(&app, "m-1"), Some(MissionState::Working));
+}
+
+fn change_of(mission_id: &str, state: model::MissionState) -> model::MissionChanged {
+	model::MissionChanged { mission_id: mission_id.to_owned(), state, is_agent_running: false }
+}
+
+fn feed_calls(app: &App) -> usize {
+	state(app).queued.iter().filter(|call| matches!(call, Call::Feed { .. })).count()
+}
+
+fn answer_feed(app: &mut App, feed: Result<Vec<Mission>, HostError>) {
+	let asked = app.surfaces.s08_missions.queued.drain(..).rev().find_map(|call| match call {
+		Call::Feed { space_id, closed_since } => Some((space_id, closed_since)),
+		Call::Detail(_) | Call::Write { .. } => None,
+	});
+	let Some((space_id, closed_since)) = asked else { panic!("the feed was asked for") };
+	let feed = feed.map(|missions| missions.into_iter().map(in_space).collect());
+	landed(app, Answer::Feed { space_id, closed_since, feed });
+}
+
+#[test]
+fn a_change_patches_the_held_rows_then_rereads_the_feed_with_the_missions_opened_since() {
+	let mut app = shown_panel(vec![mission("m-1", MissionState::Working, 1)]);
+	changed(&mut app, &change_of("m-1", model::MissionState::WaitingHuman));
+	assert_eq!(listed_state(&app, "m-1"), Some(MissionState::WaitingHuman));
+	assert_eq!(
+		last_call(&app),
+		Some(&Call::Feed { space_id: SPACE.to_owned(), closed_since: start_of_day(now_ms()) })
+	);
+	answer_feed(
+		&mut app,
+		Ok(vec![
+			mission("m-1", MissionState::WaitingHuman, 1),
+			mission("m-new", MissionState::Working, 2),
+		]),
+	);
+	assert_eq!(listed_state(&app, "m-new"), Some(MissionState::Working));
+}
+
+#[test]
+fn changes_before_the_reread_answers_send_one_reread_and_keep_the_rows_on_screen() {
+	let mut app = shown_panel(vec![mission("m-1", MissionState::Working, 1)]);
+	changed(&mut app, &change_of("m-1", model::MissionState::WaitingBot));
+	changed(&mut app, &change_of("m-1", model::MissionState::WaitingHuman));
+	changed(&mut app, &change_of("m-2", model::MissionState::Done));
+	assert_eq!(feed_calls(&app), 1);
+	assert!(matches!(state(&app).feed(), Some(Feed::Shown(_))));
+	answer_feed(&mut app, Ok(vec![mission("m-1", MissionState::WaitingHuman, 1)]));
+	assert_eq!(feed_calls(&app), 1, "the changes heard meanwhile are read once more");
+	answer_feed(&mut app, Ok(vec![mission("m-1", MissionState::WaitingHuman, 1)]));
+	assert_eq!(feed_calls(&app), 0);
+}
+
+#[test]
+fn a_failed_reread_keeps_the_held_rows_and_raises_an_error_notice() {
+	let mut app = shown_panel(vec![mission("m-1", MissionState::Working, 1)]);
+	changed(&mut app, &change_of("m-1", model::MissionState::WaitingHuman));
+	answer_feed(&mut app, Err(refused("mission_space_feed")));
+	assert_eq!(listed_state(&app, "m-1"), Some(MissionState::WaitingHuman));
+	assert_eq!(notice_titles(&app), vec!["Couldn’t load missions"]);
+	assert_eq!(state(&app).notices[0].kind, NoticeKind::Error);
+}
+
+#[test]
+fn earlier_today_counts_from_local_midnight_not_utc_midnight() {
+	let paris = FixedOffset::east_opt(2 * 3_600).expect("a valid offset");
+	let one_in_the_morning = paris
+		.with_ymd_and_hms(2026, 11, 8, 1, 0, 0)
+		.single()
+		.expect("a valid time")
+		.timestamp_millis();
+	let local_midnight = paris
+		.with_ymd_and_hms(2026, 11, 8, 0, 0, 0)
+		.single()
+		.expect("a valid time")
+		.timestamp_millis();
+	assert_eq!(start_of_day_in(&paris, one_in_the_morning), local_midnight);
+	assert_ne!(local_midnight % 86_400_000, 0);
+}
+
+#[test]
+fn the_installed_profile_reads_the_space_feed() {
+	assert!(host::is_read("mission_space_feed"));
 }
 
 #[test]

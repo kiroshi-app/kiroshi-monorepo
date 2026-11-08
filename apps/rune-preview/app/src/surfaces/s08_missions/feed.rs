@@ -1,12 +1,11 @@
 use std::cmp::Reverse;
 
+use chrono::{Local, Offset, TimeZone};
 use kiroshi_core::missions::contract::{
 	LivenessSigns, Mission, MissionInSpace, MissionLiveness, MissionState,
 };
 
 use crate::model;
-
-const DAY_MS: i64 = 86_400_000;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Group {
@@ -21,7 +20,16 @@ pub struct Groups<'a> {
 }
 
 pub fn start_of_day(now: i64) -> i64 {
-	now - now.rem_euclid(DAY_MS)
+	start_of_day_in(&Local, now)
+}
+
+pub fn start_of_day_in<Zone: TimeZone>(zone: &Zone, now: i64) -> i64 {
+	let Some(at) = zone.timestamp_millis_opt(now).earliest() else { return now };
+	let Some(midnight) = at.date_naive().and_hms_opt(0, 0, 0) else { return now };
+	match midnight.and_local_timezone(zone.clone()).earliest() {
+		Some(start) => start.timestamp_millis(),
+		None => (midnight - at.offset().fix()).and_utc().timestamp_millis(),
+	}
 }
 
 pub fn shown_state(mission: &Mission) -> MissionState {
