@@ -1489,6 +1489,7 @@ export type MissionChanged = {
 	state: MissionState,
 	stateSeq: number,
 	isAgentRunning: boolean,
+	status?: MissionStatus | null,
 	liveness?: MissionLiveness,
 	pendingPrompt?: PendingPrompt | null,
 	workingBotIds?: string[],
