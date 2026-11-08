@@ -447,16 +447,7 @@ fn thread_kind(s: &App, roster: &[ThreadAgent]) -> ThreadKind {
 	}
 }
 
-fn shows_another_thread(s: &App) -> bool {
-	s.mission.as_ref().is_some_and(|open| {
-		s.surfaces.s05_thread.conversation_id() != Some(&open.mission.thread_conversation_id)
-	})
-}
-
 fn thread_body(s: &App, t: &Tokens) -> El {
-	if shows_another_thread(s) {
-		return no_thread(t);
-	}
 	let roster = thread_roster(s);
 	let kind = thread_kind(s, &roster);
 	let space_hue = s.ready().and_then(|ready| ready.space.colour);
