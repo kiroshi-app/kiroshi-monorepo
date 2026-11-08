@@ -9,6 +9,7 @@ use std::time::{Duration, Instant};
 use kiroshi_core::account::cloud::api_url;
 use kiroshi_core::account::session::{AccountSession, restore};
 use kiroshi_core::agent::AgentState;
+use kiroshi_core::agent::sign_in::SIGN_IN_STARTED_CHANNEL;
 use kiroshi_core::agent::sign_in::SignInState;
 use kiroshi_core::bundles;
 use kiroshi_core::companions::launch::LaunchOutcomeState;
@@ -19,6 +20,7 @@ use kiroshi_core::conversations::turn_run_deadline::TurnRunDeadlines;
 use kiroshi_core::core_context::{ChosenPath, Copied, Core, Desktop, RenderWindow};
 use kiroshi_core::db;
 use kiroshi_core::environment::store::writable_root;
+use kiroshi_core::host_services;
 use kiroshi_core::hosting::authors::install_authors;
 use kiroshi_core::hosting::authorship::DesktopAuthors;
 use kiroshi_core::invoke::{Answer, dispatch};
@@ -107,7 +109,7 @@ impl LocalCore {
 		core.manage(AccountSession::new(writable_root(&core), &api_url()));
 		core.install_desktop(Browser);
 		install_authors(&core, DesktopAuthors);
-		kiroshi_core::host_services::start(&core);
+		host_services::start(&core);
 		let local = LocalCore { core, runtime };
 		local.runtime.block_on(list_bundles_at_launch(&local.core));
 		local.core.spawn(restore(local.core.clone()));
@@ -160,6 +162,28 @@ impl LocalCore {
 		}
 	}
 
+	pub fn on_sign_in_started(&self, deliver: impl Fn(String) + Send + 'static) {
+		let mut frames = self.core.subscribe_frames();
+		let spawned = thread::Builder::new().name("sign-in-started".into()).spawn(move || {
+			loop {
+				match frames.blocking_recv() {
+					Ok(frame) => {
+						if let Some(url) = sign_in_url(&frame) {
+							deliver(url);
+						}
+					}
+					Err(RecvError::Lagged(skipped)) => {
+						eprintln!("the sign-in listener fell behind and skipped {skipped} frames")
+					}
+					Err(RecvError::Closed) => return,
+				}
+			}
+		});
+		if let Err(failure) = spawned {
+			eprintln!("the sign-in listener did not start: {failure}");
+		}
+	}
+
 	pub fn first_agent(&self) -> Result<String, LocalError> {
 		let root = bundles::root(&self.core).ok_or(LocalError::NoAgent)?;
 		let agents = self.runtime.block_on(conversation_bots(&self.core, None))?;
@@ -169,6 +193,26 @@ impl LocalCore {
 			.find(|id| matches!(bundles::lookup(&root, id), Ok(Some(_))))
 			.ok_or(LocalError::NoAgent)
 	}
+}
+
+impl Drop for LocalCore {
+	fn drop(&mut self) {
+		host_services::stop(&self.core);
+	}
+}
+
+fn sign_in_url(frame: &str) -> Option<String> {
+	let heard: Value = match serde_json::from_str(frame) {
+		Ok(heard) => heard,
+		Err(failure) => {
+			eprintln!("a core frame was unreadable: {failure}");
+			return None;
+		}
+	};
+	if heard.get("event")?.as_str()? != SIGN_IN_STARTED_CHANNEL {
+		return None;
+	}
+	heard.get("payload")?.get("url")?.as_str().map(str::to_owned)
 }
 
 pub fn opened() -> Result<Arc<LocalCore>, HostError> {
@@ -355,4 +399,68 @@ fn browser_opening(url: &str) -> Command {
 	let mut opening = Command::new("xdg-open");
 	opening.arg(url);
 	opening
+}
+
+#[cfg(test)]
+mod tests {
+	use std::net::{SocketAddr, TcpStream};
+
+	use kiroshi_core::host_api;
+	use kiroshi_core::removed_on_drop::RemovedOnDrop;
+	use kiroshi_core::routines::webhook::{self, Webhook};
+	use tokio::sync::watch;
+
+	use super::*;
+
+	fn listening_address(local: &LocalCore) -> SocketAddr {
+		let origin = local.core.state::<Webhook>().origin().expect("the host api listens");
+		origin.trim_start_matches("http://").parse().expect("the origin names an address")
+	}
+
+	fn serving_core(folder: &RemovedOnDrop) -> LocalCore {
+		let runtime = Runtime::new().expect("a runtime starts");
+		let core = Core::new(folder.to_path_buf(), IDENTIFIER, runtime.handle().clone());
+		core.manage(webhook::start(core.clone(), host_api::routes));
+		LocalCore { core, runtime }
+	}
+
+	#[test]
+	fn dropping_the_local_core_leaves_nothing_listening_on_its_host_port() {
+		let folder = RemovedOnDrop(
+			std::env::temp_dir().join(format!("kiroshi-rune-local-{}", uuid::Uuid::new_v4())),
+		);
+		let local = serving_core(&folder);
+		let address = listening_address(&local);
+		assert!(TcpStream::connect(address).is_ok(), "the host api was not listening");
+
+		drop(local);
+
+		assert!(TcpStream::connect(address).is_err(), "{address} still listens after the drop");
+	}
+
+	#[test]
+	fn dropping_the_local_core_tells_its_host_listener_to_stop() {
+		let folder = RemovedOnDrop(
+			std::env::temp_dir().join(format!("kiroshi-rune-local-{}", uuid::Uuid::new_v4())),
+		);
+		let runtime = Runtime::new().expect("a runtime starts");
+		let core = Core::new(folder.to_path_buf(), IDENTIFIER, runtime.handle().clone());
+		let (stop, halted) = watch::channel(false);
+		core.manage(Webhook::new(None, stop));
+
+		drop(LocalCore { core, runtime });
+
+		assert!(*halted.borrow(), "the host listener was never told to stop");
+	}
+
+	#[test]
+	fn only_a_sign_in_started_frame_yields_its_link() {
+		let started =
+			r#"{"event":"agent://sign-in-started","payload":{"url":"https://claude.ai/x"}}"#;
+		let other = r#"{"event":"agent://event","payload":{"url":"https://claude.ai/x"}}"#;
+
+		assert_eq!(sign_in_url(started).as_deref(), Some("https://claude.ai/x"));
+		assert_eq!(sign_in_url(other), None);
+		assert_eq!(sign_in_url("not json"), None);
+	}
 }

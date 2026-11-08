@@ -14,7 +14,6 @@ mod mission;
 mod model;
 pub mod navigation;
 mod notices;
-pub mod onboarding;
 mod runs;
 pub mod scenes;
 pub mod smoke;
