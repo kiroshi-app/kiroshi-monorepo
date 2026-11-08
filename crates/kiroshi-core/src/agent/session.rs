@@ -1485,6 +1485,33 @@ mod tests {
 	}
 
 	#[test]
+	fn a_turn_lapsing_on_a_permission_forgets_it_and_ends_before_it_fails() {
+		let mut shared = a_running_turn();
+		let asked = serde_json::from_value::<Frame>(serde_json::json!({
+			"type": "control_request",
+			"request_id": "p1",
+			"request": {
+				"subtype": "can_use_tool",
+				"tool_name": "Bash",
+				"display_name": "Bash",
+				"description": null,
+				"input": { "command": "ls" }
+			}
+		}))
+		.expect("a control request");
+		shared.translator.ingest(asked);
+
+		let events = shared.end_lapsed(Lapse::Silent);
+
+		assert!(!shared.translator.is_waiting_on_person());
+		let ended = events.iter().position(|event| matches!(event, AgentEvent::TurnEnded { .. }));
+		let lapsed = events.iter().position(|event| {
+			matches!(event, AgentEvent::Failed { error: TransportError::RunLapsed { .. } })
+		});
+		assert!(ended.is_some() && ended < lapsed, "{events:?}");
+	}
+
+	#[test]
 	fn a_shutdown_while_held_releases_the_hold_before_the_turn_ends() {
 		let mut shared = a_running_turn();
 		shared.tasks_pending(1);

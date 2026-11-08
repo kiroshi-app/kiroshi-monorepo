@@ -1501,7 +1501,7 @@ mod tests {
 		write_then_forward(queued, written.desk_telling(Arc::new(run))).await;
 
 		assert_eq!(written.stored("question-r1").await, None);
-		let (pending, _) = commands::subscribed_with_pending_questions(&written.core);
+		let (pending, _) = commands::subscribed_with_pending_prompts(&written.core);
 		assert_eq!(pending.len(), 1);
 	}
 
