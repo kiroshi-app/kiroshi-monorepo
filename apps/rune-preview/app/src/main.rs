@@ -14,7 +14,8 @@ use kiroshi_rune_preview::app::App;
 use kiroshi_rune_preview::host::Profile;
 use kiroshi_rune_preview::navigation::Route;
 use kiroshi_rune_preview::surfaces::{
-	s01_chrome, s02_rail, s04_boot, s10_agent_settings, s12_person_settings, s15_boards,
+	s01_chrome, s02_rail, s04_boot, s09_routines, s10_agent_settings, s12_person_settings,
+	s15_boards,
 };
 use kiroshi_rune_preview::{composer, conversations, local, menu, scenes, smoke, spike};
 
@@ -62,10 +63,10 @@ fn view(s: &App, cx: &mut Cx<App>) -> El {
 		| Route::Composer
 		| Route::Approvals
 		| Route::Missions
-		| Route::Routines
 		| Route::Applications
 		| Route::SpaceSettings
 		| Route::Library => el(),
+		Route::Routines => s09_routines::view(s, &t),
 		Route::PersonSettings => s12_person_settings::view(s, &t),
 		Route::Boards => s15_boards::view(s, &t, cx.layout_size(s15_boards::CANVAS)),
 		Route::AgentSettings => s10_agent_settings::view(s, &t),
@@ -73,6 +74,7 @@ fn view(s: &App, cx: &mut Cx<App>) -> El {
 	let layers = s10_agent_settings::layers(s, &t)
 		.into_iter()
 		.chain(s12_person_settings::layers(s, &t))
+		.chain(s09_routines::layers(s, &t))
 		.chain(s04_boot::layers(s, &t));
 	rune_kit::root(body, layers)
 }
@@ -105,6 +107,7 @@ fn setup(s: &mut App, waker: Waker) {
 		s.navigation.navigate_main(Route::Rail);
 	}
 	s.surfaces.s12_person_settings.attach(waker.clone());
+	s.surfaces.s09_routines.attach(waker.clone());
 	s.surfaces.s02_rail.attach(waker.clone());
 	s.setup(waker);
 }
@@ -112,6 +115,7 @@ fn setup(s: &mut App, waker: Waker) {
 fn poll(s: &mut App, seconds: f64, tx: &mut Tx) -> bool {
 	let changed = s.poll();
 	let changed = s12_person_settings::poll(s, tx) || changed;
+	let changed = s09_routines::poll(s, tx) || changed;
 	let changed = s04_boot::poll(s, tx) || changed;
 	let changed = s02_rail::poll(s) || changed;
 	let changed = open_held(s, &mut held_links()) || changed;
