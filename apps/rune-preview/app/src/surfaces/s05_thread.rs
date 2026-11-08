@@ -122,6 +122,7 @@ impl State {
 			HostEvent::MessageStored(_)
 			| HostEvent::MissionChanged(_)
 			| HostEvent::Companion(_)
+			| HostEvent::Roster(_)
 			| HostEvent::AccountChanged(_)
 			| HostEvent::Listening
 			| HostEvent::Unreadable { .. }

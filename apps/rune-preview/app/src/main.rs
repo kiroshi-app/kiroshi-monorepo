@@ -14,7 +14,8 @@ use kiroshi_rune_preview::app::App;
 use kiroshi_rune_preview::host::Profile;
 use kiroshi_rune_preview::navigation::Route;
 use kiroshi_rune_preview::surfaces::{
-	s01_chrome, s02_rail, s04_boot, s05_thread, s10_agent_settings, s12_person_settings, s15_boards,
+	s01_chrome, s02_rail, s03_roster, s04_boot, s05_thread, s09_routines, s10_agent_settings,
+	s11_applications, s12_person_settings, s13_space_settings, s15_boards,
 };
 use kiroshi_rune_preview::{composer, conversations, local, menu, scenes, smoke, spike};
 
@@ -62,10 +63,10 @@ fn view(s: &App, cx: &mut Cx<App>) -> El {
 		| Route::Composer
 		| Route::Approvals
 		| Route::Missions
-		| Route::Routines
-		| Route::Applications
-		| Route::SpaceSettings
 		| Route::Library => el(),
+		Route::SpaceSettings => s13_space_settings::view(s, &t),
+		Route::Routines => s09_routines::view(s, &t),
+		Route::Applications => s11_applications::view(s, &t),
 		Route::PersonSettings => s12_person_settings::view(s, &t),
 		Route::Boards => s15_boards::view(s, &t, cx.layout_size(s15_boards::CANVAS)),
 		Route::AgentSettings => s10_agent_settings::view(s, &t),
@@ -73,7 +74,11 @@ fn view(s: &App, cx: &mut Cx<App>) -> El {
 	let layers = s10_agent_settings::layers(s, &t)
 		.into_iter()
 		.chain(s12_person_settings::layers(s, &t))
-		.chain(s04_boot::layers(s, &t));
+		.chain(s09_routines::layers(s, &t))
+		.chain(s04_boot::layers(s, &t))
+		.chain(s11_applications::layers(s, &t))
+		.chain(s03_roster::layers(s, &t))
+		.chain(s13_space_settings::layers(s, &t));
 	rune_kit::root(body, layers)
 }
 
@@ -105,17 +110,25 @@ fn setup(s: &mut App, waker: Waker) {
 		s.navigation.navigate_main(Route::Rail);
 	}
 	s.surfaces.s05_thread.attach(waker.clone());
+	s.surfaces.s11_applications.attach(waker.clone());
 	s.surfaces.s12_person_settings.attach(waker.clone());
+	s.surfaces.s09_routines.attach(waker.clone());
 	s.surfaces.s02_rail.attach(waker.clone());
+	s.surfaces.s03_roster.attach(waker.clone());
+	s.surfaces.s13_space_settings.attach(waker.clone());
 	s.setup(waker);
 }
 
 fn poll(s: &mut App, seconds: f64, tx: &mut Tx) -> bool {
 	let changed = s.poll();
 	let changed = s05_thread::poll(s, tx) || changed;
+	let changed = s11_applications::poll(s) || changed;
 	let changed = s12_person_settings::poll(s, tx) || changed;
+	let changed = s09_routines::poll(s, tx) || changed;
 	let changed = s04_boot::poll(s, tx) || changed;
 	let changed = s02_rail::poll(s) || changed;
+	let changed = s03_roster::poll(s) || changed;
+	let changed = s13_space_settings::poll(s) || changed;
 	let changed = open_held(s, &mut held_links()) || changed;
 	if let Some(after) = s.focus_wake() {
 		tx.wake_after(after);
@@ -128,7 +141,13 @@ fn poll(s: &mut App, seconds: f64, tx: &mut Tx) -> bool {
 }
 
 fn on_key(s: &mut App, event: &KeyEvent, _: &mut Tx) -> bool {
+	if s11_applications::key_pressed(s, event) {
+		return true;
+	}
 	if s12_person_settings::key_pressed(s, event) {
+		return true;
+	}
+	if s13_space_settings::key_pressed(s, event) {
 		return true;
 	}
 	if shell::is_sidebar_toggle(event) {
@@ -170,11 +189,9 @@ fn routed(s: &mut App, held: &mut Vec<String>, raw: &str) -> bool {
 			open_or_hold(s, held, id);
 			true
 		}
-		Ok(Link::Join(_)) => {
-			eprintln!(
-				"a kiroshi://join link arrived: Rune has no join screen yet, so it goes nowhere"
-			);
-			false
+		Ok(Link::Join(invitation_id)) => {
+			s13_space_settings::open_join_link(s, invitation_id);
+			true
 		}
 		Err(rejected) => {
 			eprintln!("a kiroshi link was ignored: {rejected}");
@@ -411,7 +428,7 @@ mod tests {
 	}
 
 	#[test]
-	fn a_rejected_or_join_link_changes_nothing() {
+	fn a_rejected_link_changes_nothing() {
 		let mut s = App::new();
 		loaded(&mut s);
 		let current = opened(&s).map(str::to_owned);
@@ -419,10 +436,23 @@ mod tests {
 		let target = another_conversation(&s);
 
 		let rejected = routed(&mut s, &mut held, &format!("kiroshi://conversation/{target}?x=1"));
-		let join = routed(&mut s, &mut held, "kiroshi://join?invitation=inv_1");
 		let elsewhere = routed(&mut App::new(), &mut held, "https://kiroshi.app/conversation/a");
 
-		assert_eq!((rejected, join, elsewhere), (false, false, false));
+		assert_eq!((rejected, elsewhere), (false, false));
+		assert_eq!(opened(&s).map(str::to_owned), current);
+		assert!(held.is_empty());
+	}
+
+	#[test]
+	fn a_join_link_is_routed_and_keeps_the_view_until_its_invitation_reads() {
+		let mut s = App::new();
+		loaded(&mut s);
+		let current = opened(&s).map(str::to_owned);
+		let mut held = Vec::new();
+
+		let join = routed(&mut s, &mut held, "kiroshi://join?invitation=inv_1");
+
+		assert!(join);
 		assert_eq!(opened(&s).map(str::to_owned), current);
 		assert!(held.is_empty());
 	}

@@ -1,7 +1,6 @@
-use std::borrow::Cow;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use rune::{Chrome, Cursor, El, GrowthSpec, Icon, ScrollSpec, TextStyle, col, el, icon, row, text};
+use rune::{Chrome, Cursor, El, Icon, TextStyle, col, el, icon, row, text};
 use rune_kit::Kit;
 
 use kiroshi_rune_kit::avatar::Face;
@@ -18,7 +17,7 @@ use crate::composer;
 use crate::host::{DEV_START_COMMAND, HostError, Profile};
 use crate::mission;
 use crate::model::{Agent, Conversation};
-use crate::surfaces::{s05_thread, s10_agent_settings};
+use crate::surfaces::{s03_roster, s05_thread};
 
 pub const CHROME: Chrome =
 	Chrome { full_size_content: true, traffic_lights: Some((16.0, 14.0)), drag_regions: true };
@@ -32,8 +31,6 @@ const ACCOUNT_UNREAD: &str = "Couldn't read your account. Restart the preview to
 const SHELL_INSET: f32 = 8.0;
 const ROSTER: f32 = 304.0;
 const ROSTER_PAD: f32 = 9.0;
-const ROW: f32 = 52.0;
-const ROW_GAP: f32 = 2.0;
 const HEADER: f32 = 48.0;
 
 const PRESENCE_ONLINE: u32 = 0x207144;
@@ -109,7 +106,7 @@ fn frame(s: &App, ready: &Ready, k: &Kit, t: &Tokens, viewport: &Viewport) -> El
 		.border(1.0, t.shell_border)
 		.child(match s.pane {
 			Pane::Missions => mission::roster(s, t, now_ms()),
-			Pane::Conversations => roster(ready, t),
+			Pane::Conversations => roster(s, ready, t),
 		})
 		.child(el().w(1.0).h_full().fill(t.shell_divider))
 		.child(thread_column(s, k, t, viewport));
@@ -203,7 +200,7 @@ fn rail(s: &App, ready: &Ready, t: &Tokens) -> El {
 		)
 }
 
-fn roster(ready: &Ready, t: &Tokens) -> El {
+fn roster(s: &App, ready: &Ready, t: &Tokens) -> El {
 	let header = row()
 		.h(32.0)
 		.pl(SPACING * 2.0)
@@ -218,18 +215,6 @@ fn roster(ready: &Ready, t: &Tokens) -> El {
 				.hover(t.muted)
 				.child(icon(&icons::PLUS, 16.0).color(t.foreground)),
 		);
-	let tokens = *t;
-	let now = now_ms();
-	let rows = col().key("roster-rows").w_full().growth(GrowthSpec::default()).virtual_rows(
-		ready.conversations.len(),
-		ROW + ROW_GAP,
-		|s: &App, i| {
-			s.ready()
-				.and_then(|ready| ready.conversations.get(i))
-				.map_or(Cow::Borrowed("missing"), |held| Cow::Borrowed(held.id.as_str()))
-		},
-		move |s: &App, i| roster_row(s, i, &tokens, now),
-	);
 	let account = match &ready.person {
 		Person::SignedIn(email) => email.clone(),
 		Person::SignedOut => SIGNED_OUT.to_owned(),
@@ -241,90 +226,14 @@ fn roster(ready: &Ready, t: &Tokens) -> El {
 		.padding(ROSTER_PAD)
 		.gap(SPACING * 2.0)
 		.child(header)
-		.child(
-			col()
-				.key("roster")
-				.w_full()
-				.grow(1.0)
-				.min_h(0.0)
-				.scroll(ScrollSpec { stick_bottom: false })
-				.child(rows),
-		)
+		.child(s03_roster::view(s, t))
 		.child(text(account).font(TIMESTAMP).color(t.muted_foreground).truncate())
-}
-
-fn roster_row(s: &App, i: usize, t: &Tokens, now: i64) -> El {
-	let Some(conversation) = s.ready().and_then(|ready| ready.conversations.get(i)) else {
-		return el();
-	};
-	let selected =
-		s.thread.as_ref().is_some_and(|thread| thread.conversation_id == conversation.id);
-	let solo = solo_agent(s, conversation);
-	let media = match &solo {
-		Some(agent) => agent.face(s, &conversation.id).draw(40.0, t),
-		None => subject_icon(conversation, 40.0, t),
-	};
-	let name = solo.as_ref().map_or(conversation.title.clone(), |agent| agent.name.clone());
-	let ink = if selected { t.foreground } else { t.foreground.alpha(0.7) };
-	let mut name_line = row()
-		.w_full()
-		.h(20.0)
-		.gap(SPACING * 1.5)
-		.center_y()
-		.child(text(name).font(TEXT_SM_MEDIUM).color(ink).truncate().shrink());
-	if let Some(agent) = solo.as_ref().filter(|agent| !agent.title.is_empty()) {
-		name_line = name_line.child(title_badge(t, &agent.title));
-	}
-	let stamp =
-		conversation.last_activity_at.map_or_else(String::new, |at| roster_timestamp(at, now));
-	name_line = name_line.child(el().grow(1.0)).child(
-		el().w(44.0)
-			.child(text(stamp).font(TIMESTAMP).color(t.muted_foreground).align(rune::Align::End)),
-	);
-	let preview = conversation
-		.last_word
-		.as_ref()
-		.and_then(|word| word.text.as_deref())
-		.map_or_else(String::new, |words| s.mention_names(words).replace('\n', " "));
-	let id = conversation.id.clone();
-	let tile = row()
-		.key(format!("row-{}", conversation.id))
-		.w_full()
-		.h(ROW)
-		.pl(6.0)
-		.pr(12.0)
-		.py(6.0)
-		.gap(10.0)
-		.center_y()
-		.radius(10.0)
-		.cursor(Cursor::Pointer)
-		.role("button")
-		.on_press(move |s: &mut App| {
-			s.open(&id);
-		})
-		.child(media)
-		.child(
-			col().grow(1.0).shrink().min_w(0.0).justify_center().child(name_line).child(
-				el().w_full()
-					.pr(14.0)
-					.child(text(preview).font(TEXT_XS_MEDIUM).color(t.muted_foreground).truncate()),
-			),
-		);
-	let tile = if selected { tile.fill(t.muted) } else { tile.hover(t.muted) };
-	let tile = match solo.map(|agent| agent.id) {
-		Some(bot_id) => tile.on_secondary_press(move |s: &mut App, _, _| {
-			s10_agent_settings::open_agent_settings(s, &bot_id)
-		}),
-		None => tile,
-	};
-	el().w_full().pb(ROW_GAP).child(tile)
 }
 
 struct SoloAgent {
 	id: String,
 	name: String,
 	hue: Option<f32>,
-	title: String,
 }
 
 impl SoloAgent {
@@ -346,12 +255,7 @@ fn shown_name(s: &App, thread: &Thread) -> String {
 fn solo_agent(s: &App, conversation: &Conversation) -> Option<SoloAgent> {
 	let bot_id = conversation.solo_bot_id.as_deref()?;
 	let agent = s.ready()?.agents.iter().find(|agent| agent.id == bot_id)?;
-	Some(SoloAgent {
-		id: agent.id.clone(),
-		name: agent.name.clone(),
-		hue: agent.avatar_blot,
-		title: agent.title.clone(),
-	})
+	Some(SoloAgent { id: agent.id.clone(), name: agent.name.clone(), hue: agent.avatar_blot })
 }
 
 fn subject_icon(conversation: &Conversation, size: f32, t: &Tokens) -> El {

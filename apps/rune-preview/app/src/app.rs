@@ -842,6 +842,7 @@ impl App {
 				}
 			}
 			HostEvent::MessageStored(message) => {
+				self.surfaces.s03_roster.heard_message(&message);
 				let Some(thread) =
 					self.thread.as_mut().filter(|thread| thread.shows(&message.conversation_id))
 				else {
@@ -851,7 +852,11 @@ impl App {
 				self.request_images();
 			}
 			HostEvent::MissionChanged(changed) => self.mission_changed(changed),
-			HostEvent::Companion(heard) => s10_agent_settings::heard(self, heard),
+			HostEvent::Roster(heard) => self.surfaces.s03_roster.heard(heard),
+			HostEvent::Companion(heard) => {
+				self.surfaces.s03_roster.heard_companion(&heard);
+				s10_agent_settings::heard(self, heard)
+			}
 			HostEvent::AccountChanged(account) => {
 				if let Some(ready) = self.ready_mut() {
 					ready.person = person_of(account);

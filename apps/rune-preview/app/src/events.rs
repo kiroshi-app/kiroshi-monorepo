@@ -8,6 +8,7 @@ use tungstenite::http::header::AUTHORIZATION;
 
 use crate::host::Host;
 use crate::model::{KiroshiAccountState, Message, MissionChanged, ScopedEvent};
+use crate::surfaces::s03_roster;
 use crate::surfaces::s10_agent_settings::{self, Heard};
 
 const ACCOUNT_CHANGED: &str = "account://changed";
@@ -25,6 +26,7 @@ pub enum HostEvent {
 	MessageStored(Message),
 	MissionChanged(MissionChanged),
 	Companion(Heard),
+	Roster(s03_roster::Heard),
 	Lagged,
 	Unreadable { event: String, cause: String },
 	Lost(String),
@@ -104,9 +106,25 @@ fn named(event: &str, payload: Value) -> Option<HostEvent> {
 			serde_json::from_value(payload)
 				.map_or_else(|failure| unreadable(event, failure), HostEvent::MissionChanged),
 		),
-		_ => s10_agent_settings::heard_of(event, payload).map(|heard| {
-			heard.map_or_else(|failure| unreadable(event, failure), HostEvent::Companion)
-		}),
+		_ => match s03_roster::heard_of(event, &payload) {
+			Some(heard) => roster_heard(event, heard),
+			None => s10_agent_settings::heard_of(event, payload).map(|heard| {
+				heard.map_or_else(|failure| unreadable(event, failure), HostEvent::Companion)
+			}),
+		},
+	}
+}
+
+fn roster_heard(
+	event: &str,
+	heard: Result<s03_roster::Heard, serde_json::Error>,
+) -> Option<HostEvent> {
+	match heard {
+		Ok(heard) => Some(HostEvent::Roster(heard)),
+		Err(failure) => {
+			eprintln!("a {event} event did not reach the roster: {failure}");
+			None
+		}
 	}
 }
 
