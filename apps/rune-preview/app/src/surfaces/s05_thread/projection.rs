@@ -7,7 +7,7 @@ use kiroshi_rune_kit::surfaces::s05_thread::{
 	Turn, TurnState, WorkLine, WorkingAgent,
 };
 
-use super::conversation::{Conversation, Live, Phase};
+use super::conversation::{Conversation, Live, Phase, attachments_of};
 use crate::conversations::roster_timestamp;
 use crate::surfaces::s08_missions::is_summons;
 
@@ -156,7 +156,7 @@ fn stored_turn(
 			.iter()
 			.filter_map(|link| quote_of(link, open, roster))
 			.collect(),
-		attachments: message.documents.iter().map(|name| attached_document(name)).collect(),
+		attachments: attachments_of(message).map(attached_document).collect(),
 		pinned: open.is_pinned(&message.id),
 		shows_actions: state != TurnState::Streaming,
 		..Turn::new(&message.id, author_of(message, roster), &message.content)

@@ -245,13 +245,27 @@ fn a_document_opened_from_a_thread_takes_the_widest_room_then_the_width_last_dra
 	let mut state = library_with(Vec::new());
 
 	state.open_beside("brief.md");
-	let widest = (state.panel_width(10_000.0), state.panel_width(700.0));
+	let widest = (state.panel_width(10_000.0), state.panel_width(1_000.0));
 	state.dragged_panel(DOCUMENT_PANEL_MIN_WIDTH + 40.0);
 
 	assert!(state.beside.is_some());
 	assert_eq!(calls(&mut state), vec![Call::Open(target("brief.md"))]);
-	assert_eq!(widest, (DOCUMENT_PANEL_MAX_WIDTH, 700.0));
+	assert_eq!(widest, (DOCUMENT_PANEL_MAX_WIDTH, 680.0));
 	assert_eq!(state.panel_width(10_000.0), DOCUMENT_PANEL_MIN_WIDTH + 40.0);
+}
+
+#[test]
+fn the_panel_leaves_the_thread_its_320_unless_the_panel_would_fall_under_its_floor() {
+	let mut state = library_with(Vec::new());
+	state.open_beside("brief.md");
+
+	assert_eq!(state.panel_width(1_000.0), 680.0);
+	assert_eq!(state.panel_width(320.0 + DOCUMENT_PANEL_MIN_WIDTH), DOCUMENT_PANEL_MIN_WIDTH);
+	assert_eq!(state.panel_width(600.0), DOCUMENT_PANEL_MIN_WIDTH);
+	assert_eq!(state.panel_width(320.0 + DOCUMENT_PANEL_MAX_WIDTH + 1.0), DOCUMENT_PANEL_MAX_WIDTH);
+
+	state.dragged_panel(DOCUMENT_PANEL_MAX_WIDTH);
+	assert_eq!(state.panel_width(1_000.0), 680.0);
 }
 
 #[test]

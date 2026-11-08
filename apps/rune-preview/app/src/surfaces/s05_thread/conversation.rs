@@ -1,4 +1,5 @@
 use kiroshi_core::conversations::contract::{PinnedBubble, TranscriptMessage, TranscriptRole};
+use kiroshi_core::library::items::{AcceptedType, accepted_type};
 use kiroshi_rune_kit::surfaces::s05_thread::WorkState;
 
 use crate::host::HostError;
@@ -14,6 +15,14 @@ pub struct Working {
 	pub bot_id: String,
 	pub state: WorkState,
 	pub label: Option<String>,
+}
+
+fn is_board(name: &str) -> bool {
+	matches!(accepted_type(name), Some(AcceptedType::Board))
+}
+
+pub fn attachments_of(message: &TranscriptMessage) -> impl Iterator<Item = &str> {
+	message.documents.iter().map(String::as_str).filter(|name| !is_board(name))
 }
 
 pub enum Phase {
@@ -67,7 +76,7 @@ impl Conversation {
 
 	pub fn attachment_of(&self, message_id: &str, index: usize) -> Option<&str> {
 		let message = self.messages.iter().find(|message| message.id == message_id)?;
-		message.documents.get(index).map(String::as_str)
+		attachments_of(message).nth(index)
 	}
 
 	pub fn oldest_seq(&self) -> Option<i64> {

@@ -54,6 +54,8 @@ const ZOOM_FIT: u32 = 100;
 
 const EXCERPT_CHARS: usize = 280;
 
+const THREAD_MIN_WIDTH: f32 = 320.0;
+
 const MONTHS: [&str; 12] = [
 	"January",
 	"February",
@@ -595,7 +597,8 @@ impl State {
 	}
 
 	pub fn panel_width(&self, room: f32) -> f32 {
-		let widest = DOCUMENT_PANEL_MAX_WIDTH.min(room).max(DOCUMENT_PANEL_MIN_WIDTH);
+		let widest =
+			(room - THREAD_MIN_WIDTH).clamp(DOCUMENT_PANEL_MIN_WIDTH, DOCUMENT_PANEL_MAX_WIDTH);
 		self.kept_width.map_or(widest, |width| width.clamp(DOCUMENT_PANEL_MIN_WIDTH, widest))
 	}
 

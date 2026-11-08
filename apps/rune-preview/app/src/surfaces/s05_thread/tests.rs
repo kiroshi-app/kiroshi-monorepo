@@ -638,3 +638,19 @@ fn an_attachment_not_found_raises_a_notice_and_leaves_the_panel() {
 	assert!(shows_panel(&app));
 	assert!(app.surfaces.s05_thread.notice.is_some());
 }
+
+#[test]
+fn a_board_listed_on_a_message_shows_no_attachment_and_keeps_the_indexes_true() {
+	let state = opened_with(
+		vec![with_documents(&["plan.canvas", "brief.md", "Map.CANVAS", "notes.md"])],
+		false,
+	);
+	let names: Vec<String> =
+		turn(&state, "m1").attachments.into_iter().map(|attachment| attachment.name).collect();
+
+	assert_eq!(names, ["brief.md", "notes.md"]);
+	let open = state.open.as_ref().expect("a conversation is open");
+	assert_eq!(open.attachment_of("m1", 0), Some("brief.md"));
+	assert_eq!(open.attachment_of("m1", 1), Some("notes.md"));
+	assert_eq!(open.attachment_of("m1", 2), None);
+}
