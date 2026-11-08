@@ -180,8 +180,8 @@ pub(super) fn menu_key(key: &rune::KeyEvent) -> Option<ComposerIntent> {
 }
 
 fn paste_intent(content: &ClipboardContent) -> Option<ComposerIntent> {
-	let holds_files = content.image().is_some() || !content.files().is_empty();
-	holds_files.then(|| ComposerIntent::Paste(content.clone()))
+	let is_attachable = content.image().is_some() || !content.files().is_empty();
+	is_attachable.then(|| ComposerIntent::Paste(content.clone()))
 }
 
 fn field<S: 'static>(

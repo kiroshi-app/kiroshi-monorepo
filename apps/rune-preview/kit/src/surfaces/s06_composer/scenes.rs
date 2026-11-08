@@ -107,8 +107,8 @@ const STAGED: [StagedFile; 2] = [NOTES, SCREENSHOT];
 const PASTED_IMAGE: [StagedFile; 1] = [StagedFile {
 	id: "pasted-image",
 	name: "image.png",
-	bytes: 184_320,
-	preview: Some((0x1e293b, 0xf97316)),
+	bytes: SCREENSHOT.bytes,
+	preview: SCREENSHOT.preview,
 }];
 const LONG_STAGED: [StagedFile; 6] = [
 	NOTES,
