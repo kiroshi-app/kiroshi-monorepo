@@ -192,11 +192,6 @@ fn answer_feed(app: &mut App, feed: Result<Vec<Mission>, HostError>) {
 	landed(app, Answer::Feed { space_id, closed_since, feed });
 }
 
-fn reread_feed_with(app: &mut App, missions: Vec<Mission>) {
-	changed(app, &change_of("m-1", model::MissionState::Working));
-	answer_feed(app, Ok(missions));
-}
-
 fn ids(entries: &[&MissionInSpace]) -> Vec<String> {
 	entries.iter().map(|entry| entry.mission.id.clone()).collect()
 }
@@ -799,9 +794,11 @@ fn dismissing_choosing_or_copying_closes_the_menu() {
 fn the_menu_closes_when_its_mission_leaves_the_list() {
 	let mut app = shown_panel(vec![mission("m-1", MissionState::Working, 1)]);
 	request_menu(&mut app, "m-1", MenuSource::Row, 12.0);
-	reread_feed_with(&mut app, Vec::new());
+	changed(&mut app, &change_of("m-1", model::MissionState::Done));
+	answer_feed(&mut app, Ok(Vec::new()));
 	assert_eq!(shown_menu(&app), None);
-	reread_feed_with(&mut app, vec![mission("m-1", MissionState::Working, 1)]);
+	changed(&mut app, &change_of("m-2", model::MissionState::Working));
+	answer_feed(&mut app, Ok(vec![mission("m-1", MissionState::Working, 1)]));
 	assert_eq!(shown_menu(&app), None);
 }
 
