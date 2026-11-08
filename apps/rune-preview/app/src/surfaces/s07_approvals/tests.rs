@@ -95,6 +95,10 @@ fn requesting(state: &mut State, id: &str) {
 	state.heard(Heard::Permission { scope: scope_in(CONVERSATION), request: permission(id) });
 }
 
+fn approval_ids(state: &State) -> Vec<&str> {
+	state.approvals.iter().map(|approval| approval.request.id.as_str()).collect()
+}
+
 fn drained(state: &mut State) -> Vec<Call> {
 	std::mem::take(&mut state.queued)
 }
@@ -330,8 +334,7 @@ fn a_new_prompt_clears_the_settled_ones_of_its_conversation_only() {
 
 	requesting(&mut state, "p3");
 
-	let ids: Vec<&str> =
-		state.approvals.iter().map(|approval| approval.request.id.as_str()).collect();
+	let ids = approval_ids(&state);
 	assert_eq!(ids, vec!["p2", "p3"]);
 }
 
@@ -832,8 +835,7 @@ fn a_turn_end_drops_the_open_prompts_of_its_run_only() {
 
 	state.heard_agent(&model_scope(CONVERSATION), &turn_ended());
 
-	let approvals: Vec<&str> =
-		state.approvals.iter().map(|approval| approval.request.id.as_str()).collect();
+	let approvals = approval_ids(&state);
 	let questions: Vec<&str> =
 		state.questions.iter().map(|asked| asked.request.id.as_str()).collect();
 	assert_eq!(approvals, vec!["p2", "p3"]);
@@ -901,8 +903,7 @@ fn a_closed_session_drops_the_open_prompts_of_its_scope_only() {
 
 	state.heard(Heard::Closed { scope: scope_in(CONVERSATION) });
 
-	let approvals: Vec<&str> =
-		state.approvals.iter().map(|approval| approval.request.id.as_str()).collect();
+	let approvals = approval_ids(&state);
 	assert_eq!(approvals, vec!["p2"]);
 	assert!(state.questions.is_empty());
 }
