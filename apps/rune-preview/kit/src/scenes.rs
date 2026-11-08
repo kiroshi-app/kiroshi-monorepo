@@ -6,6 +6,7 @@ use rune::{AppSpec, Cx, El, TextEdit, Waker, row};
 
 use crate::foundations::{self, PICTURE_SCALE, PICTURE_SIDE, UPLOADED_AVATAR_IMAGE};
 use crate::math::Typesetter;
+use crate::surfaces::s02_rail;
 use crate::surfaces::s10_agent_settings::Field;
 use crate::surfaces::s10_agent_settings::agent::{Effort, Mode, OutputStyle};
 use crate::surfaces::s10_agent_settings::shell::Entry;
@@ -17,6 +18,7 @@ use agent_settings::{
 };
 
 mod agent_settings;
+mod approvals;
 mod boards;
 mod feedback;
 mod forms;
@@ -26,6 +28,9 @@ mod navigation;
 mod overlays;
 mod person_settings;
 mod primitives;
+mod rail;
+mod space_avatar;
+mod space_picker;
 mod thread;
 
 pub const THEMES: [Theme; 2] = [Theme::Light, Theme::Dark];
@@ -58,6 +63,7 @@ pub struct Scene {
 	pub tabs: usize,
 	pub pointer: Pointer,
 	pub typed: &'static str,
+	pub keys: &'static str,
 	pub view: fn(&Tokens, &SceneState) -> El,
 }
 
@@ -78,9 +84,18 @@ const FIELDS: (f32, f32) = (512.0, 520.0);
 const ABOUT: (f32, f32) = (640.0, 760.0);
 const SETTINGS: (f32, f32) = person_settings::DIALOG_SCENE;
 const SCREEN: (f32, f32) = (1180.0, 720.0);
+const QUESTION_PANEL: (f32, f32) = (608.0, 520.0);
+const QUESTION_PANEL_TALL: (f32, f32) = (608.0, 640.0);
+const SIDE: (f32, f32) = (590.0, 480.0);
+const SIDE_TALL: (f32, f32) = (590.0, 560.0);
+const SIDE_STACK: (f32, f32) = (590.0, 1180.0);
+const NARROW: (f32, f32) = (352.0, 640.0);
+const ANSWERED: (f32, f32) = (704.0, 420.0);
+const ANSWERED_LONG: (f32, f32) = (512.0, 360.0);
+const MARK_SIDE: f32 = 22.0;
 
 const fn scene(id: &'static str, size: (f32, f32), view: fn(&Tokens, &SceneState) -> El) -> Scene {
-	Scene { id, size, tabs: 0, pointer: Pointer::Away, typed: "", view }
+	Scene { id, size, tabs: 0, pointer: Pointer::Away, typed: "", keys: "", view }
 }
 
 const fn focused(
@@ -89,7 +104,7 @@ const fn focused(
 	tabs: usize,
 	view: fn(&Tokens, &SceneState) -> El,
 ) -> Scene {
-	Scene { id, size, tabs, pointer: Pointer::Away, typed: "", view }
+	Scene { id, size, tabs, pointer: Pointer::Away, typed: "", keys: "", view }
 }
 
 const fn typed(
@@ -98,7 +113,7 @@ const fn typed(
 	text: &'static str,
 	view: fn(&Tokens, &SceneState) -> El,
 ) -> Scene {
-	Scene { id, size: STORY, tabs, pointer: Pointer::Away, typed: text, view }
+	Scene { id, size: STORY, tabs, pointer: Pointer::Away, typed: text, keys: "", view }
 }
 
 const fn queried(
@@ -107,7 +122,27 @@ const fn queried(
 	text: &'static str,
 	view: fn(&Tokens, &SceneState) -> El,
 ) -> Scene {
-	Scene { id, size: PALETTE, tabs, pointer: Pointer::Away, typed: text, view }
+	Scene { id, size: PALETTE, tabs, pointer: Pointer::Away, typed: text, keys: "", view }
+}
+
+const fn keyed(
+	id: &'static str,
+	size: (f32, f32),
+	tabs: usize,
+	typed: &'static str,
+	keys: &'static str,
+	view: fn(&Tokens, &SceneState) -> El,
+) -> Scene {
+	Scene { id, size, tabs, pointer: Pointer::Away, typed, keys, view }
+}
+
+const fn hovered(
+	id: &'static str,
+	size: (f32, f32),
+	key: &'static str,
+	view: fn(&Tokens, &SceneState) -> El,
+) -> Scene {
+	Scene { id, size, tabs: 0, pointer: Pointer::EntersAtSnap(key), typed: "", keys: "", view }
 }
 
 const fn pointed(
@@ -115,7 +150,7 @@ const fn pointed(
 	pointer: Pointer,
 	view: fn(&Tokens, &SceneState) -> El,
 ) -> Scene {
-	Scene { id, size: STORY, tabs: 0, pointer, typed: "", view }
+	Scene { id, size: STORY, tabs: 0, pointer, typed: "", keys: "", view }
 }
 
 pub static SCENES: &[Scene] = &[
@@ -879,6 +914,246 @@ pub static SCENES: &[Scene] = &[
 		thread::PANEL,
 		thread::thread_in_a_mission,
 	),
+	scene("navigation-apprail--a-7-spaces-menu", rail::SPACES_WINDOW, rail::a7_spaces_menu),
+	scene(
+		"navigation-apprail--a-7-spaces-menu-attention-row",
+		rail::SPACES_WINDOW,
+		rail::a7_spaces_menu_attention_row,
+	),
+	scene("navigation-apprail--a-7-spaces-menu-dark", rail::SPACES_WINDOW, rail::a7_spaces_menu),
+	scene("navigation-apprail--attention-dot", rail::RAIL_STAGE, rail::attention_dot),
+	scene("navigation-apprail--attention-dot-dark", rail::RAIL_STAGE, rail::attention_dot),
+	scene("navigation-apprail--conversations", rail::RAIL_STAGE, rail::conversations),
+	scene("navigation-apprail--current-beside-idle-dark", rail::RAIL_STAGE, rail::conversations),
+	scene("navigation-apprail--dark", rail::RAIL_STAGE, rail::with_dot),
+	scene("navigation-apprail--done-dot", rail::RAIL_STAGE, rail::done_dot),
+	scene("navigation-apprail--done-dot-dark", rail::RAIL_STAGE, rail::done_dot),
+	scene("navigation-apprail--failed-dot", rail::RAIL_STAGE, rail::failed_dot),
+	scene("navigation-apprail--failed-dot-dark", rail::RAIL_STAGE, rail::failed_dot),
+	scene(
+		"navigation-apprail--first-tab-under-title-bar",
+		rail::SIDEBAR_STAGE,
+		rail::rail_in_sidebar,
+	),
+	scene(
+		"navigation-apprail--icon-states-side-by-side",
+		rail::RAIL_STAGE,
+		rail::icon_states_side_by_side,
+	),
+	hovered(
+		"navigation-apprail--idle-entry-hovered",
+		rail::RAIL_STAGE,
+		s02_rail::RailPanel::Missions.key(),
+		rail::conversations,
+	),
+	focused("navigation-apprail--keyboard-reach", rail::RAIL_STAGE, 1, rail::keyboard_reach),
+	scene("navigation-apprail--library-dot", rail::RAIL_STAGE, rail::library_dot),
+	scene("navigation-apprail--library-selected", rail::RAIL_STAGE, rail::library_selected),
+	scene("navigation-apprail--missions-selected", rail::RAIL_STAGE, rail::missions_selected),
+	scene("navigation-apprail--on-tinted-space", rail::RAIL_STAGE, rail::on_tinted_space),
+	scene(
+		"navigation-apprail--removed-panel-falls-back-to-conversations",
+		rail::SIDEBAR_STAGE,
+		rail::rail_in_sidebar,
+	),
+	scene("navigation-apprail--search-entry-at-rest", rail::RAIL_STAGE, rail::conversations),
+	hovered(
+		"navigation-apprail--search-entry-hovered",
+		rail::RAIL_STAGE,
+		s02_rail::SEARCH_KEY,
+		rail::search_entry_hovered,
+	),
+	scene(
+		"navigation-apprail--selection-moves-to-missions",
+		rail::RAIL_STAGE,
+		rail::missions_selected,
+	),
+	hovered(
+		"navigation-apprail--space-logo-hovered",
+		rail::RAIL_STAGE,
+		s02_rail::SPACE_LOGO_KEY,
+		rail::space_logo_hovered,
+	),
+	scene(
+		"navigation-apprail--space-logo-without-space",
+		rail::RAIL_STAGE,
+		rail::space_logo_without_space,
+	),
+	scene(
+		"navigation-apprail--space-settings-over-conversations",
+		rail::RAIL_STAGE,
+		rail::space_settings_over_conversations,
+	),
+	scene("navigation-apprail--spaces-menu-gestures", rail::RAIL_STAGE, rail::spaces_menu_gestures),
+	scene("navigation-apprail--update-downloading", rail::RAIL_STAGE, rail::update_downloading),
+	scene("navigation-apprail--update-idle", rail::RAIL_STAGE, rail::update_idle),
+	scene("navigation-apprail--update-ready", rail::RAIL_STAGE, rail::update_ready),
+	scene("navigation-apprail--update-waiting", rail::RAIL_STAGE, rail::update_waiting),
+	scene("navigation-apprail--update-waiting-dark", rail::RAIL_STAGE, rail::update_waiting),
+	scene(
+		"navigation-apprail--user-settings-over-missions",
+		rail::RAIL_STAGE,
+		rail::user_settings_over_missions,
+	),
+	scene("navigation-apprail--with-dot", rail::RAIL_STAGE, rail::with_dot),
+	scene(
+		"navigation-apprail--without-library-handler",
+		rail::RAIL_STAGE,
+		rail::without_library_handler,
+	),
+	scene(
+		"navigation-apprail--without-search-handler",
+		rail::RAIL_STAGE,
+		rail::without_search_handler,
+	),
+	scene(
+		"navigation-appsidebarcarousel--list-per-space",
+		rail::SIDEBAR_STAGE,
+		rail::carousel_list_per_space,
+	),
+	scene(
+		"navigation-spaceswitcher--badge-and-long-name",
+		STORY,
+		space_picker::badge_and_long_name,
+	),
+	scene(
+		"navigation-spaceswitcher--badge-done-elsewhere",
+		STORY,
+		space_picker::badge_done_elsewhere,
+	),
+	scene(
+		"navigation-spaceswitcher--badge-here",
+		space_picker::MENU_STAGE,
+		space_picker::badge_here,
+	),
+	scene("navigation-spaceswitcher--badge-ranking", STORY, space_picker::badge_ranking),
+	scene("navigation-spaceswitcher--badges", STORY, space_picker::badges),
+	scene("navigation-spaceswitcher--colourless", STORY, space_picker::colourless),
+	scene("navigation-spaceswitcher--default", STORY, space_picker::default),
+	scene("navigation-spaceswitcher--drag-dot-nowhere", STORY, space_picker::with_dots),
+	scene("navigation-spaceswitcher--drag-dot-to-place", STORY, space_picker::with_dots),
+	scene("navigation-spaceswitcher--free-hue", space_picker::MENU_STAGE, space_picker::free_hue),
+	scene(
+		"navigation-spaceswitcher--hosted-long-names",
+		space_picker::MENU_STAGE,
+		space_picker::hosted_long_names,
+	),
+	scene("navigation-spaceswitcher--invitation-at-rest", STORY, space_picker::invitation_at_rest),
+	scene(
+		"navigation-spaceswitcher--invitation-expired",
+		space_picker::MENU_STAGE,
+		space_picker::invitation_expired,
+	),
+	scene(
+		"navigation-spaceswitcher--invitation-host-offline",
+		space_picker::MENU_STAGE,
+		space_picker::invitation_host_offline,
+	),
+	scene(
+		"navigation-spaceswitcher--invitation-long-content",
+		space_picker::MENU_STAGE,
+		space_picker::invitation_long_content,
+	),
+	scene(
+		"navigation-spaceswitcher--invitation-over-bot-badge",
+		space_picker::MENU_STAGE,
+		space_picker::invitation_over_bot_badge,
+	),
+	scene(
+		"navigation-spaceswitcher--invitation-without-join-entry",
+		space_picker::MENU_STAGE,
+		space_picker::invitation_without_join_entry,
+	),
+	focused(
+		"navigation-spaceswitcher--keyboard",
+		space_picker::MENU_STAGE,
+		1,
+		space_picker::keyboard,
+	),
+	scene("navigation-spaceswitcher--long-content", STORY, space_picker::long_content),
+	scene(
+		"navigation-spaceswitcher--m-1-no-invitation",
+		space_picker::MENU_STAGE,
+		space_picker::m1_no_invitation,
+	),
+	scene(
+		"navigation-spaceswitcher--m-10-failed-offline",
+		space_picker::MENU_STAGE,
+		space_picker::m10_failed_offline,
+	),
+	scene(
+		"navigation-spaceswitcher--m-11-withdrawn",
+		space_picker::MENU_STAGE,
+		space_picker::m11_withdrawn,
+	),
+	scene(
+		"navigation-spaceswitcher--m-2-invitation-waiting",
+		space_picker::MENU_STAGE,
+		space_picker::m2_invitation_waiting,
+	),
+	scene(
+		"navigation-spaceswitcher--m-3-two-invitations-waiting",
+		space_picker::MENU_STAGE,
+		space_picker::m3_two_invitations_waiting,
+	),
+	scene(
+		"navigation-spaceswitcher--m-4-accepting",
+		space_picker::MENU_STAGE,
+		space_picker::m4_accepting,
+	),
+	scene("navigation-spaceswitcher--m-5-joined", STORY, space_picker::m5_joined),
+	scene(
+		"navigation-spaceswitcher--m-6-unreachable",
+		space_picker::MENU_STAGE,
+		space_picker::m6_unreachable,
+	),
+	scene(
+		"navigation-spaceswitcher--m-9-failed-servers",
+		space_picker::MENU_STAGE,
+		space_picker::m9_failed_servers,
+	),
+	scene("navigation-spaceswitcher--open", space_picker::MENU_STAGE, space_picker::open),
+	focused(
+		"navigation-spaceswitcher--opened-on-invitation",
+		space_picker::MENU_STAGE,
+		1,
+		space_picker::opened_on_invitation,
+	),
+	scene(
+		"navigation-spaceswitcher--single-space",
+		space_picker::MENU_STAGE,
+		space_picker::single_space,
+	),
+	scene(
+		"navigation-spaceswitcher--themes-joined-space-menu",
+		space_picker::MENU_STAGE,
+		space_picker::themes_joined_space_menu,
+	),
+	scene(
+		"navigation-spaceswitcher--themes-local-space-menu",
+		space_picker::MENU_STAGE,
+		space_picker::themes_local_space_menu,
+	),
+	scene(
+		"navigation-spaceswitcher--themes-title-bar-hosts",
+		STORY,
+		space_picker::themes_title_bar_hosts,
+	),
+	scene("navigation-spaceswitcher--with-dots", STORY, space_picker::with_dots),
+	scene("navigation-spaceswitcher--wrapped-dots", STORY, space_picker::wrapped_dots),
+	scene("branding-spaceavatar--free-hue", STORY, space_avatar::free_hue),
+	scene("branding-spaceavatar--local", STORY, space_avatar::local),
+	scene("branding-spaceavatar--offline", STORY, space_avatar::offline),
+	scene("branding-spaceavatar--rail-mixed-states", STORY, space_avatar::rail_mixed_states),
+	scene("branding-spaceavatar--shared-online", STORY, space_avatar::shared_online),
+	scene("branding-spaceavatar--sizes", STORY, space_avatar::sizes),
+	scene(
+		"branding-spaceavatar--spaces-menu-mixed-states",
+		STORY,
+		space_avatar::spaces_menu_mixed_states,
+	),
+	scene("branding-spaceavatar--states", space_avatar::STATES_STAGE, space_avatar::states),
+	scene("branding-spaceavatar--without-name", STORY, space_avatar::without_name),
 	scene("navigation-searchresultrow--message", STORY, person_settings::row_message),
 	scene(
 		"navigation-searchresultrow--message-from-you",
@@ -1892,6 +2167,7 @@ pub static SCENES: &[Scene] = &[
 		tabs: 1,
 		pointer: Pointer::Away,
 		typed: boards::EDITED_TEXT,
+		keys: "",
 		view: boards::canvas_edit,
 	},
 	Scene {
@@ -1900,6 +2176,7 @@ pub static SCENES: &[Scene] = &[
 		tabs: 1,
 		pointer: Pointer::Away,
 		typed: boards::EDITED_TEXT,
+		keys: "",
 		view: boards::canvas_edit,
 	},
 	scene("navigation-boardcanvas--empty", boards::CANVAS, boards::canvas_empty),
@@ -2783,6 +3060,216 @@ pub static SCENES: &[Scene] = &[
 	scene("settings-plugins-skillspanel--with-system-skill", PANEL, |t, _| {
 		agent_settings::skills_panel(t, SkillsCase::WithSystem)
 	}),
+	focused(
+		"conversation-tools-toolapproval--default",
+		QUESTION_PANEL,
+		2,
+		approvals::approval_default,
+	),
+	scene(
+		"conversation-tools-toolapproval--with-path",
+		QUESTION_PANEL,
+		approvals::approval_with_path,
+	),
+	focused("conversation-tools-toolquestion--nothing-chosen", SIDE, 1, approvals::nothing_chosen),
+	scene("conversation-tools-toolquestion--option-chosen", SIDE, approvals::option_chosen),
+	scene(
+		"conversation-tools-toolquestion--chosen-row-follows-space-tint",
+		QUESTION_PANEL,
+		approvals::chosen_row_follows_space_tint,
+	),
+	hovered(
+		"conversation-tools-toolquestion--option-row-hovered",
+		SIDE,
+		"question-option-Plan-0",
+		approvals::option_row_hovered,
+	),
+	scene("conversation-tools-toolquestion--several-checked", SIDE, approvals::several_checked),
+	keyed(
+		"conversation-tools-toolquestion--own-answer-typing",
+		SIDE,
+		3,
+		approvals::OWN_ANSWER,
+		"",
+		approvals::own_answer_typing,
+	),
+	scene("conversation-tools-toolquestion--several-questions", SIDE, approvals::several_questions),
+	focused("conversation-tools-toolquestion--waiting-bar", SIDE, 1, approvals::waiting_bar_wide),
+	focused("conversation-tools-toolquestion--answer-pressed", SIDE, 2, approvals::answer_pressed),
+	scene(
+		"conversation-tools-toolquestion--waiting-bar-narrow",
+		NARROW,
+		approvals::waiting_bar_narrow,
+	),
+	focused(
+		"conversation-tools-toolquestion--long-question-narrow",
+		NARROW,
+		2,
+		approvals::long_question_narrow,
+	),
+	focused(
+		"conversation-tools-toolquestion--keyboard-focus-rings",
+		QUESTION_PANEL,
+		6,
+		approvals::keyboard_focus_rings,
+	),
+	scene(
+		"conversation-tools-toolquestion--single-select",
+		QUESTION_PANEL,
+		approvals::single_select,
+	),
+	scene(
+		"conversation-tools-toolquestion--multi-select",
+		QUESTION_PANEL_TALL,
+		approvals::multi_select,
+	),
+	keyed(
+		"conversation-tools-toolquestion--free-text",
+		QUESTION_PANEL,
+		0,
+		approvals::FREE_TEXT,
+		"",
+		approvals::free_text,
+	),
+	keyed(
+		"conversation-tools-toolquestion--digit-keys-choose",
+		QUESTION_PANEL,
+		1,
+		"",
+		"1",
+		approvals::digit_keys_choose,
+	),
+	keyed(
+		"conversation-tools-toolquestion--digit-keys-toggle",
+		QUESTION_PANEL,
+		1,
+		"",
+		"22",
+		approvals::digit_keys_toggle,
+	),
+	keyed(
+		"conversation-tools-toolquestion--digit-typed-into-own-answer",
+		QUESTION_PANEL,
+		2,
+		"",
+		"2",
+		approvals::digit_keys_choose,
+	),
+	focused(
+		"conversation-tools-toolquestion--keyboard-only",
+		QUESTION_PANEL,
+		2,
+		approvals::keyboard_only,
+	),
+	keyed(
+		"conversation-tools-toolquestion--four-questions",
+		QUESTION_PANEL,
+		0,
+		approvals::PACKAGE_NAME,
+		"",
+		approvals::four_questions,
+	),
+	scene("conversation-tools-toolquestion--narrow", NARROW, approvals::narrow_four),
+	scene(
+		"conversation-tools-toolquestion--long-header-scrolls",
+		NARROW,
+		approvals::long_header_scrolls,
+	),
+	focused(
+		"conversation-tools-toolquestion--arrow-key-tabs",
+		QUESTION_PANEL,
+		1,
+		approvals::arrow_key_tabs,
+	),
+	scene(
+		"conversation-tools-toolquestion--options-as-whole-answer",
+		QUESTION_PANEL,
+		approvals::options_as_whole_answer,
+	),
+	focused("conversation-tools-toolquestion--no-skip", QUESTION_PANEL, 1, approvals::no_skip),
+	focused(
+		"conversation-tools-toolquestion--entry-with-link",
+		NARROW,
+		1,
+		approvals::entry_with_link,
+	),
+	keyed(
+		"conversation-tools-toolquestion--entry-with-secret",
+		QUESTION_PANEL,
+		1,
+		approvals::SECRET,
+		"",
+		approvals::entry_with_secret,
+	),
+	focused("conversation-tools-toolquestion--failure", QUESTION_PANEL, 1, approvals::failure),
+	scene("conversation-tools-toolquestion--entry-narrow", NARROW, approvals::entry_narrow),
+	scene(
+		"conversation-tools-toolquestion--application-scope",
+		QUESTION_PANEL,
+		approvals::application_scope,
+	),
+	scene(
+		"conversation-tools-toolquestion--failure-with-action",
+		QUESTION_PANEL,
+		approvals::failure_with_action,
+	),
+	scene(
+		"conversation-tools-toolquestion--notice-in-queue",
+		QUESTION_PANEL,
+		approvals::notice_in_queue,
+	),
+	scene(
+		"conversation-tools-toolquestion--inverse-buttons-idle",
+		SIDE_STACK,
+		approvals::inverse_buttons,
+	),
+	hovered(
+		"conversation-tools-toolquestion--inverse-buttons-hover",
+		SIDE_STACK,
+		"pill-Framework-Send",
+		approvals::inverse_buttons,
+	),
+	focused(
+		"conversation-tools-toolquestion--inverse-buttons-focus-visible",
+		SIDE_STACK,
+		4,
+		approvals::inverse_buttons,
+	),
+	scene(
+		"conversation-tools-toolquestion--inverse-buttons-pending",
+		SIDE_TALL,
+		approvals::inverse_buttons_pending,
+	),
+	scene(
+		"conversation-tools-toolquestion--themes-link-row-at-rest",
+		SIDE,
+		approvals::themes_link_row_at_rest,
+	),
+	scene(
+		"conversation-tools-answeredquestioncard--you-answered",
+		ANSWERED,
+		approvals::you_answered,
+	),
+	scene(
+		"conversation-tools-answeredquestioncard--member-answered",
+		ANSWERED,
+		approvals::member_answered,
+	),
+	scene(
+		"conversation-tools-answeredquestioncard--multi-select",
+		ANSWERED,
+		approvals::answered_multi_select,
+	),
+	scene(
+		"conversation-tools-answeredquestioncard--free-text",
+		ANSWERED,
+		approvals::answered_free_text,
+	),
+	scene(
+		"conversation-tools-answeredquestioncard--long-content",
+		ANSWERED_LONG,
+		approvals::answered_long_content,
+	),
 ];
 
 pub static SURFACES: &[&[Scene]] = &[crate::surfaces::s01_chrome::SCENES];
@@ -2794,8 +3281,10 @@ pub fn every_scene() -> impl Iterator<Item = &'static Scene> {
 pub struct SceneState {
 	pub scene: &'static Scene,
 	pub edit: TextEdit,
+	pub chosen: Vec<usize>,
 	pub picture: Option<Image>,
 	pub math: Typesetter,
+	pub mark: Option<Image>,
 	pub library: library::LibraryScene,
 	pub board_pictures: Vec<Image>,
 	images: Option<ImageCache>,
@@ -2807,8 +3296,10 @@ impl SceneState {
 		SceneState {
 			scene,
 			edit: TextEdit::new(scene.typed),
+			chosen: Vec::new(),
 			picture: None,
 			math: Typesetter::default(),
+			mark: None,
 			library: library::LibraryScene::new(scene),
 			board_pictures: Vec::new(),
 			images: None,
@@ -2823,7 +3314,12 @@ pub fn setup(s: &mut SceneState, waker: Waker) {
 	if let Err(failure) = picture.wait() {
 		eprintln!("the avatar picture didn't decode: {}", failure.0);
 	}
+	let mark = images.svg(approvals::LINEAR_MARK.as_bytes(), MARK_SIDE, PICTURE_SCALE);
+	if let Err(failure) = mark.wait() {
+		eprintln!("the application mark didn't decode: {}", failure.0);
+	}
 	s.picture = Some(picture);
+	s.mark = Some(mark);
 	s.library.decode(&images);
 	s.board_pictures =
 		[boards::fixtures::TERRACE_SVG, boards::fixtures::POOL_SVG, boards::fixtures::PATIO_SVG]

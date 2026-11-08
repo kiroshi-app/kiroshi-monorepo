@@ -12,7 +12,7 @@
 
 `KIROSHI_BLESS=1 cargo test -p kiroshi-rune-kit --test scenes` rewrites the baselines of the platform it runs on instead of comparing.
 
-A scene renders with the bundled Geist fonts only, font smoothing on, Tab visiting every control, and the clock at 2 s. A scene with `tabs` presses Tab that many times first, so its focus ring is the real keyboard one. A scene with `pointer` moves the real pointer onto or off an element one frame before the snap.
+A scene renders with the bundled Geist fonts only, font smoothing on, Tab visiting every control, and the clock at 2 s. A scene with `tabs` presses Tab that many times first, so its focus ring is the real keyboard one. A scene with `keys` presses each of its characters after the tabs, through the same focus routing a person's key takes. A scene with `pointer` moves the real pointer onto or off an element one frame before the snap.
 
 ### One set per platform
 
@@ -20,4 +20,4 @@ macOS draws through Metal, Linux through Mesa's lavapipe (Vulkan on the CPU). Th
 
 ## Storybook references
 
-The other PNGs here are Storybook captures (Chromium, 1180 px, 2x) of the stories a scene stands for. The harness doesn't read them.
+The other PNGs here are Storybook captures (Chromium, 1180 px, 2x) of the stories a scene stands for, `<story id>-<light|dark>.png`. A story that renders one theme whatever the global, a dark-only story for one, has a single capture, in that theme. The harness doesn't read them.
