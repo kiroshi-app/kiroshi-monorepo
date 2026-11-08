@@ -151,6 +151,24 @@ fn notice_titles(app: &App) -> Vec<&str> {
 	state(app).notices.iter().map(|notice| notice.title.as_str()).collect()
 }
 
+fn change_of(mission_id: &str, state: model::MissionState) -> model::MissionChanged {
+	model::MissionChanged { mission_id: mission_id.to_owned(), state, is_agent_running: false }
+}
+
+fn feed_calls(app: &App) -> usize {
+	state(app).queued.iter().filter(|call| matches!(call, Call::Feed { .. })).count()
+}
+
+fn answer_feed(app: &mut App, feed: Result<Vec<Mission>, HostError>) {
+	let asked = app.surfaces.s08_missions.queued.drain(..).rev().find_map(|call| match call {
+		Call::Feed { space_id, closed_since } => Some((space_id, closed_since)),
+		Call::Detail(_) | Call::Write { .. } => None,
+	});
+	let Some((space_id, closed_since)) = asked else { panic!("the feed was asked for") };
+	let feed = feed.map(|missions| missions.into_iter().map(in_space).collect());
+	landed(app, Answer::Feed { space_id, closed_since, feed });
+}
+
 fn ids(entries: &[&MissionInSpace]) -> Vec<String> {
 	entries.iter().map(|entry| entry.mission.id.clone()).collect()
 }
@@ -361,24 +379,6 @@ fn a_change_of_a_mission_not_open_rereads_the_feed_and_no_detail() {
 	assert_eq!(feed_calls(&app), 1);
 	assert!(!state(&app).queued.iter().any(|call| matches!(call, Call::Detail(_))));
 	assert_eq!(listed_state(&app, "m-1"), Some(MissionState::Working));
-}
-
-fn change_of(mission_id: &str, state: model::MissionState) -> model::MissionChanged {
-	model::MissionChanged { mission_id: mission_id.to_owned(), state, is_agent_running: false }
-}
-
-fn feed_calls(app: &App) -> usize {
-	state(app).queued.iter().filter(|call| matches!(call, Call::Feed { .. })).count()
-}
-
-fn answer_feed(app: &mut App, feed: Result<Vec<Mission>, HostError>) {
-	let asked = app.surfaces.s08_missions.queued.drain(..).rev().find_map(|call| match call {
-		Call::Feed { space_id, closed_since } => Some((space_id, closed_since)),
-		Call::Detail(_) | Call::Write { .. } => None,
-	});
-	let Some((space_id, closed_since)) = asked else { panic!("the feed was asked for") };
-	let feed = feed.map(|missions| missions.into_iter().map(in_space).collect());
-	landed(app, Answer::Feed { space_id, closed_since, feed });
 }
 
 #[test]
