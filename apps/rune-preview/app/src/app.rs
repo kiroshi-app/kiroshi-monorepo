@@ -31,7 +31,9 @@ use crate::runs::Runs;
 use crate::source::Source;
 use crate::surfaces::s04_boot::{self, Step};
 use crate::surfaces::s08_missions::{self, Opened, Opening};
-use crate::surfaces::{Surfaces, s01_chrome, s02_rail, s05_thread, s10_agent_settings};
+use crate::surfaces::{
+	Surfaces, s01_chrome, s02_rail, s05_thread, s10_agent_settings, s14_library,
+};
 
 const PAGE_LIMIT: u32 = 200;
 
@@ -555,6 +557,7 @@ impl App {
 			}
 			HostEvent::MissionChanged(changed) => s08_missions::changed(self, &changed),
 			HostEvent::Roster(heard) => self.surfaces.s03_roster.heard(heard),
+			HostEvent::Library(heard) => s14_library::heard(self, heard),
 			HostEvent::Approvals(heard) => self.surfaces.s07_approvals.heard(heard),
 			HostEvent::Companion(heard) => {
 				self.surfaces.s03_roster.heard_companion(&heard);
