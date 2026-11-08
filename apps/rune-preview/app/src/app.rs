@@ -536,6 +536,7 @@ impl App {
 			HostEvent::Agent(scoped) => {
 				let Some(scope) = scoped.scope else { return };
 				self.runs.heard(&scope, &scoped.event);
+				self.surfaces.s07_approvals.heard_agent(&scope, &scoped.event);
 				self.notify_of(&scope, &scoped.event);
 				let Some(thread) = self.thread.as_mut() else { return };
 				if thread.shows(&scope.conversation_id) {
@@ -554,6 +555,7 @@ impl App {
 			}
 			HostEvent::MissionChanged(changed) => s08_missions::changed(self, &changed),
 			HostEvent::Roster(heard) => self.surfaces.s03_roster.heard(heard),
+			HostEvent::Approvals(heard) => self.surfaces.s07_approvals.heard(heard),
 			HostEvent::Companion(heard) => {
 				self.surfaces.s03_roster.heard_companion(&heard);
 				s10_agent_settings::heard(self, heard)
