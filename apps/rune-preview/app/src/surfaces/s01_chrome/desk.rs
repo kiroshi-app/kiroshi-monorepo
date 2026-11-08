@@ -94,13 +94,14 @@ pub(super) fn with_desk_on(
 	{
 		app.switch_tab(&leaving, &entering);
 	}
-	let still_open = open_tabs(app);
-	app.navigation.keep_pages_of(&still_open);
+	let restorable = restorable_tabs(app);
+	app.navigation.keep_pages_of(&restorable);
 }
 
-fn open_tabs(app: &App) -> Vec<String> {
-	let tabs = app.surfaces.s01_chrome.tabs_of(MAIN_WINDOW);
-	tabs.map(|tabs| tabs.tabs().iter().map(|tab| tab.id.clone()).collect()).unwrap_or_default()
+fn restorable_tabs(app: &App) -> Vec<String> {
+	let Some(tabs) = app.surfaces.s01_chrome.tabs_of(MAIN_WINDOW) else { return Vec::new() };
+	let open = tabs.tabs().iter().map(|tab| tab.id.as_str());
+	open.chain(tabs.closed_ids()).map(str::to_owned).collect()
 }
 
 pub fn on_chrome(app: &mut App, event: ChromeEvent) {

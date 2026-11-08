@@ -8,9 +8,10 @@ use kiroshi_rune_kit::surfaces::s02_rail::{RailMessage, RailPanel};
 use super::desk::with_desk_on;
 use super::{Desk, Failure, Menu, Shelf, State, Windows};
 use crate::app::{App, Pane};
-use crate::navigation::{MAIN_WINDOW, Navigation, Route, WindowId};
+use crate::navigation::{HeldPage, MAIN_WINDOW, Navigation, Route, WindowId};
 use crate::scenes;
 use crate::surfaces::s02_rail;
+use crate::surfaces::s08_missions::{self, Opening};
 
 #[derive(Default)]
 struct FakeWindows {
@@ -530,18 +531,106 @@ fn a_tab_left_on_missions_shows_missions_when_entered_again() {
 	assert_eq!(app.pane, Pane::Missions);
 }
 
-#[test]
-fn a_closed_tab_drops_its_page_so_reopening_it_starts_empty() {
+fn page_of(app: &App) -> (Route, Pane, Option<String>) {
+	(app.navigation.main_route(), app.pane, opened_in(app).map(str::to_owned))
+}
+
+fn on_library_with_a_conversation() -> (App, String) {
 	let mut app = loaded_app();
 	let first = active_of(&app);
 	s02_rail::railed(&mut app, RailMessage::SelectPanel(RailPanel::Library));
-	app.show_missions();
+	(app, first)
+}
+
+#[test]
+fn a_closed_active_tab_reopens_on_the_conversation_pane_and_route_it_showed() {
+	let (mut app, first) = on_library_with_a_conversation();
+	let left = page_of(&app);
+	heard_by(&mut app, ChromeEvent::NewTab);
+	heard_by(&mut app, ChromeEvent::SelectTab(first.clone()));
+
+	heard_by(&mut app, ChromeEvent::CloseTab(first.clone()));
+	let after_close = (opened_in(&app).map(str::to_owned), app.mission.is_none());
+	heard_by(&mut app, ChromeEvent::ReopenClosedTab);
+
+	assert!(left.2.is_some());
+	assert_eq!(after_close, (None, true));
+	assert_eq!(active_of(&app), first);
+	assert!(page_of(&app) == left);
+}
+
+#[test]
+fn a_closed_background_tab_reopens_on_the_page_it_was_left_on() {
+	let (mut app, first) = on_library_with_a_conversation();
+	let left = page_of(&app);
 	heard_by(&mut app, ChromeEvent::NewTab);
 
 	heard_by(&mut app, ChromeEvent::CloseTab(first.clone()));
 	heard_by(&mut app, ChromeEvent::ReopenClosedTab);
 
 	assert_eq!(active_of(&app), first);
-	assert!(app.navigation.main_route() == Route::Conversations);
-	assert_eq!((app.pane, opened_in(&app)), (Pane::Conversations, None));
+	assert!(page_of(&app) == left);
+}
+
+#[test]
+fn tabs_closed_by_close_other_tabs_each_reopen_on_their_own_page() {
+	let (mut app, first) = on_library_with_a_conversation();
+	let first_page = page_of(&app);
+	heard_by(&mut app, ChromeEvent::NewTab);
+	let second = active_of(&app);
+	app.open("chat-atlas");
+	app.show_missions();
+	let second_page = page_of(&app);
+	heard_by(&mut app, ChromeEvent::NewTab);
+	let third = active_of(&app);
+
+	heard_by(&mut app, ChromeEvent::CloseOtherTabs(third));
+	heard_by(&mut app, ChromeEvent::ReopenClosedTab);
+	let reopened_first = (active_of(&app), page_of(&app));
+	heard_by(&mut app, ChromeEvent::ReopenClosedTab);
+
+	assert!(first_page != second_page);
+	assert!(reopened_first == (first, first_page));
+	assert_eq!(active_of(&app), second);
+	assert!(page_of(&app) == second_page);
+}
+
+#[test]
+fn a_tab_closed_on_a_mission_thread_reopens_on_its_pane_and_route() {
+	let mut app = loaded_app();
+	let first = active_of(&app);
+	app.show_missions();
+	let opening = Opening {
+		mission_id: "mission-1",
+		thread_conversation_id: "mission-thread-1",
+		bot_id: "agent-1",
+		objective: "Ship the release",
+		origin_conversation_id: "chat-atlas",
+	};
+	s08_missions::open(&mut app, &opening);
+	heard_by(&mut app, ChromeEvent::NewTab);
+
+	heard_by(&mut app, ChromeEvent::CloseTab(first.clone()));
+	heard_by(&mut app, ChromeEvent::ReopenClosedTab);
+
+	assert_eq!(active_of(&app), first);
+	assert!(page_of(&app) == (Route::Conversations, Pane::Missions, None));
+	assert!(app.mission.is_none());
+}
+
+#[test]
+fn a_closed_tab_pushed_off_the_closed_stack_loses_its_page() {
+	let (mut app, first) = on_library_with_a_conversation();
+	heard_by(&mut app, ChromeEvent::NewTab);
+	heard_by(&mut app, ChromeEvent::CloseTab(first.clone()));
+	for _ in 0..10 {
+		heard_by(&mut app, ChromeEvent::NewTab);
+		let fresh = active_of(&app);
+		heard_by(&mut app, ChromeEvent::CloseTab(fresh));
+	}
+
+	let active = active_of(&app);
+	let entered = app.navigation.clone().switch_tab(&active, HeldPage::default(), &first);
+
+	assert_eq!(entered, HeldPage::default());
 }
