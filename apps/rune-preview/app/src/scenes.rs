@@ -1,16 +1,12 @@
-use rune::TextEdit;
-
 use serde_json::json;
 
-use crate::app::{
-	App, Board, Live, Pane, Person, Ready, Thread, Workspace, connected, whole_thread,
-};
+use crate::app::{App, Live, Person, Ready, Thread, Workspace, connected, whole_thread};
 use crate::dev_profile::DevProfile;
 use crate::host::{Host, HostError, Profile};
 use crate::longest;
 use crate::model::{Agent, Conversation, LastWord, Message, Participant, Role, Space};
 use crate::model::{AgentEvent, RuntimeScope};
-use crate::model::{ConversationMissions, MissionDetail, MissionOnBoard};
+use crate::model::{ConversationMissions, MissionOnBoard};
 use crate::navigation::Route;
 use crate::source::Source;
 
@@ -25,7 +21,6 @@ pub const SCENES: &[Scene] = &[
 	("thread-long", thread_long),
 	("thread-empty", thread_empty),
 	("thread-streaming", thread_streaming),
-	("thread-mention", thread_mention),
 	("thread-math", thread_math),
 	("thread-rich", thread_rich),
 	("block-spike", block_spike),
@@ -247,14 +242,6 @@ fn thread_streaming(s: &mut App) {
 	s.runs.heard(&scope, &AgentEvent::MessageDelta { id: "live".into(), text: String::new() });
 }
 
-fn thread_mention(s: &mut App) {
-	thread_default(s);
-	s.composer.edit = TextEdit::new("@");
-	s.composer.edit.focused = true;
-	s.composer.edit.set_caret(1);
-	s.composer_changed();
-}
-
 fn read_the_installed_host_before_the_first_frame(s: &mut App) -> Option<Ready> {
 	s.navigation.navigate_main(Route::Conversations);
 	match connected(Profile::Installed) {
@@ -300,27 +287,14 @@ fn live_mission(s: &mut App) {
 		ready.source.invoke("mission_board", json!({}));
 	let host = ready.source.clone();
 	s.workspace = Workspace::Ready(ready);
-	s.pane = Pane::Missions;
-	let board = match board {
-		Ok(board) => board,
-		Err(failure) => {
-			s.board = Board::Failed(failure);
-			return;
-		}
-	};
-	let chosen =
-		board.iter().find(|entry| entry.mission.is_agent_running).or(board.first()).cloned();
-	s.board = Board::Read(board);
+	s.show_missions();
+	let chosen = board.ok().and_then(|board| {
+		board.iter().find(|entry| entry.mission.is_agent_running).or(board.first()).cloned()
+	});
 	let Some(entry) = chosen else { return };
-	let detail: Result<MissionDetail, HostError> =
-		host.invoke("mission_detail", json!({ "missionId": entry.mission.id }));
 	s.open_mission(&entry.mission, &entry.bot);
 	if let Some(thread) = s.thread.take() {
 		s.thread = Some(loaded(&host, thread));
-	}
-	if let (Some(open), Ok(detail)) = (s.mission.as_mut(), detail) {
-		open.mission = detail.mission;
-		open.events = detail.events;
 	}
 }
 

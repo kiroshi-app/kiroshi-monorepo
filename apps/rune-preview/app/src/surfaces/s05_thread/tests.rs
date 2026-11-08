@@ -8,14 +8,18 @@ use kiroshi_rune_kit::surfaces::s05_thread::{
 	WorkState,
 };
 use kiroshi_rune_kit::surfaces::s08_missions::EventKind;
+use kiroshi_rune_kit::tokens::Tokens;
 
 use super::conversation::Conversation;
 use super::projection::{self, Shown, WORK_LINE};
 use super::worker::{Answer, Call};
-use super::{Effect, State};
+use super::{Effect, State, open_attachment};
+use crate::app::{App, Person, Ready, Workspace};
 use crate::events::HostEvent;
-use crate::host::HostError;
-use crate::model::{AgentEvent, Message, Role, RuntimeScope, ScopedEvent, StreamedMessage};
+use crate::host::{Host, HostError};
+use crate::model::{self, AgentEvent, Message, Role, RuntimeScope, ScopedEvent, StreamedMessage};
+use crate::source::Source;
+use crate::surfaces::s14_library;
 
 const CONVERSATION: &str = "c-1";
 const BOT: &str = "atlas";
@@ -571,4 +575,82 @@ fn an_answer_for_a_conversation_left_behind_is_dropped() {
 	state.open("c-2");
 	newest(&mut state, Ok(page(vec![said(4)], false)));
 	assert!(matches!(transcript_of(&state, &solo()), Transcript::Loading));
+}
+
+fn with_documents(names: &[&str]) -> TranscriptMessage {
+	TranscriptMessage {
+		documents: names.iter().map(|name| (*name).to_owned()).collect(),
+		..said(1)
+	}
+}
+
+fn thread_app(messages: Vec<TranscriptMessage>) -> App {
+	let mut app = App::new();
+	app.workspace = Workspace::Ready(Ready {
+		source: Source::Running(Host::detached()),
+		space: model::Space { id: "space-1".to_owned(), name: "Space".to_owned(), colour: None },
+		agents: Vec::new(),
+		conversations: Vec::new(),
+		person: Person::Unread,
+		longest: None,
+	});
+	app.surfaces.s05_thread = opened_with(messages, false);
+	app
+}
+
+fn shows_panel(app: &App) -> bool {
+	s14_library::panel(app, &Tokens::new(false), 1_000.0).is_some()
+}
+
+#[test]
+fn the_documents_of_a_message_show_as_its_attachments() {
+	let state = opened_with(vec![with_documents(&["brief.md", "notes.md"])], false);
+	let names: Vec<String> =
+		turn(&state, "m1").attachments.into_iter().map(|attachment| attachment.name).collect();
+
+	assert_eq!(names, ["brief.md", "notes.md"]);
+	let open = state.open.as_ref().expect("a conversation is open");
+	assert_eq!(open.attachment_of("m1", 1), Some("notes.md"));
+}
+
+#[test]
+fn pressing_an_attachment_opens_its_document_beside_the_thread() {
+	let mut app = thread_app(vec![with_documents(&["brief.md", "notes.md"])]);
+	assert!(!shows_panel(&app));
+
+	open_attachment(&mut app, "m1", 1);
+
+	assert!(shows_panel(&app));
+	assert!(app.surfaces.s05_thread.notice.is_none());
+}
+
+#[test]
+fn an_attachment_not_found_raises_a_notice_and_leaves_the_panel() {
+	let mut app = thread_app(vec![with_documents(&["brief.md"])]);
+
+	open_attachment(&mut app, "m1", 3);
+	assert!(!shows_panel(&app));
+	assert!(app.surfaces.s05_thread.notice.is_some());
+
+	app.surfaces.s05_thread.notice = None;
+	open_attachment(&mut app, "m1", 0);
+	open_attachment(&mut app, "m9", 0);
+	assert!(shows_panel(&app));
+	assert!(app.surfaces.s05_thread.notice.is_some());
+}
+
+#[test]
+fn a_board_listed_on_a_message_shows_no_attachment_and_keeps_the_indexes_true() {
+	let state = opened_with(
+		vec![with_documents(&["plan.canvas", "brief.md", "Map.CANVAS", "notes.md"])],
+		false,
+	);
+	let names: Vec<String> =
+		turn(&state, "m1").attachments.into_iter().map(|attachment| attachment.name).collect();
+
+	assert_eq!(names, ["brief.md", "notes.md"]);
+	let open = state.open.as_ref().expect("a conversation is open");
+	assert_eq!(open.attachment_of("m1", 0), Some("brief.md"));
+	assert_eq!(open.attachment_of("m1", 1), Some("notes.md"));
+	assert_eq!(open.attachment_of("m1", 2), None);
 }

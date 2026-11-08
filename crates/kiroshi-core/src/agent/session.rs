@@ -1102,7 +1102,10 @@ async fn on_exit(
 
 #[cfg(test)]
 mod tests {
+	use super::super::sidecar::SidecarOptions;
 	use super::*;
+	use crate::executable_script::an_executable_script;
+	use crate::removed_on_drop::RemovedOnDrop;
 
 	#[derive(Debug)]
 	struct StubHost {
@@ -1463,6 +1466,96 @@ mod tests {
 	}
 
 	#[test]
+	fn a_closing_of_prompts_travels_as_its_permission_and_question_ids() {
+		let closed = AgentEvent::PromptsClosed {
+			permission_ids: vec!["w1".to_owned()],
+			question_ids: vec!["q1".to_owned()],
+		};
+
+		assert_eq!(
+			serde_json::to_value(closed).expect("a closing serializes"),
+			serde_json::json!({ "type": "promptsClosed", "permissionIds": ["w1"], "questionIds": ["q1"] })
+		);
+	}
+
+	const PROMPTING_SIDECAR: &str = r#"#!/bin/sh
+printf '%s\n' '{"type":"ready","provider":"stub","version":"0"}'
+while IFS= read -r line; do
+	key=$(printf '%s' "$line" | sed -n 's/.*"session":"\([^"]*\)".*/\1/p')
+	case "$line" in
+	*'"type":"open"'*)
+		printf '{"session":"%s","frame":{"type":"opened"}}\n' "$key"
+		;;
+	*'"type":"prompt"'*)
+		printf '{"session":"%s","frame":{"type":"control_request","request_id":"w1","request":{"subtype":"can_use_tool","tool_name":"Bash","input":{}}}}\n' "$key"
+		printf '{"session":"%s","frame":{"type":"control_request","request_id":"q1","request":{"subtype":"can_use_tool","tool_name":"AskUserQuestion","input":{"questions":[]}}}}\n' "$key"
+		;;
+	*'"type":"interrupt"'*)
+		printf '{"session":"%s","frame":{"type":"turn_settled","subtype":"error_during_execution"}}\n' "$key"
+		;;
+	esac
+done
+"#;
+
+	async fn heard_until(
+		heard: &mut mpsc::UnboundedReceiver<AgentEvent>,
+		ends: impl Fn(&AgentEvent) -> bool,
+	) -> Vec<AgentEvent> {
+		let mut told = Vec::new();
+		let listening = async {
+			while let Some(event) = heard.recv().await {
+				let has_ended = ends(&event);
+				told.push(event);
+				if has_ended {
+					return;
+				}
+			}
+		};
+		tokio::time::timeout(Duration::from_secs(10), listening).await.expect("heard in time");
+		told
+	}
+
+	#[tokio::test]
+	async fn an_answer_to_a_prompt_its_stop_closed_is_refused_and_resolves_nothing() {
+		let script = RemovedOnDrop(std::env::temp_dir().join(format!(
+			"kiroshi-prompting-sidecar-{}-{}.sh",
+			std::process::id(),
+			uuid::Uuid::new_v4()
+		)));
+		an_executable_script(&script, PROMPTING_SIDECAR);
+		let sidecar = Sidecar::start(SidecarOptions::new(script.to_path_buf()))
+			.await
+			.expect("the sidecar is ready");
+		let (sink, mut heard) = mpsc::unbounded_channel();
+		let session =
+			Session::start(sidecar, SessionOptions::new(std::env::temp_dir()), Arc::new(sink))
+				.await
+				.expect("the session opens");
+		session.submit_prompt("hello").await.expect("the prompt is sent");
+		let mut told =
+			heard_until(&mut heard, |event| matches!(event, AgentEvent::QuestionRequested { .. }))
+				.await;
+		session.cancel_turn().await.expect("the turn stops");
+		told.extend(
+			heard_until(&mut heard, |event| matches!(event, AgentEvent::TurnEnded { .. })).await,
+		);
+
+		let permitted = session.respond_to_permission("w1", PermissionDecision::AllowOnce).await;
+		let answered = session.answer_question("q1", HashMap::new(), None).await;
+		session.shutdown().await;
+		while let Ok(event) = heard.try_recv() {
+			told.push(event);
+		}
+
+		assert_eq!(permitted, Err(TransportError::UnknownPermission { id: "w1".to_owned() }));
+		assert_eq!(answered, Err(TransportError::UnknownPermission { id: "q1".to_owned() }));
+		assert!(
+			!told.iter().any(|event| matches!(event, AgentEvent::PermissionResolved { .. })),
+			"a closed prompt resolved: {told:?}"
+		);
+	}
+
+	#[test]
 	fn a_turn_ending_while_held_releases_its_hold_and_an_unheld_one_releases_nothing() {
 		let mut held_turn = a_running_turn();
 		held_turn.tasks_pending(1);
@@ -1482,6 +1575,33 @@ mod tests {
 
 		assert_eq!(events.first(), Some(&RELEASED));
 		assert!(matches!(events.last(), Some(AgentEvent::Failed { .. })));
+	}
+
+	#[test]
+	fn a_turn_lapsing_on_a_permission_forgets_it_and_ends_before_it_fails() {
+		let mut shared = a_running_turn();
+		let asked = serde_json::from_value::<Frame>(serde_json::json!({
+			"type": "control_request",
+			"request_id": "p1",
+			"request": {
+				"subtype": "can_use_tool",
+				"tool_name": "Bash",
+				"display_name": "Bash",
+				"description": null,
+				"input": { "command": "ls" }
+			}
+		}))
+		.expect("a control request");
+		shared.translator.ingest(asked);
+
+		let events = shared.end_lapsed(Lapse::Silent);
+
+		assert!(!shared.translator.is_waiting_on_person());
+		let ended = events.iter().position(|event| matches!(event, AgentEvent::TurnEnded { .. }));
+		let lapsed = events.iter().position(|event| {
+			matches!(event, AgentEvent::Failed { error: TransportError::RunLapsed { .. } })
+		});
+		assert!(ended.is_some() && ended < lapsed, "{events:?}");
 	}
 
 	#[test]

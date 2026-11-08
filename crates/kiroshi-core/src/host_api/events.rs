@@ -13,7 +13,7 @@ use tokio::time::{error::Elapsed, timeout};
 
 use super::invoke::{self, REFUSED, UNAUTHORIZED};
 use super::token::HostToken;
-use crate::agent::commands::subscribed_with_pending_questions;
+use crate::agent::commands::subscribed_with_pending_prompts;
 use crate::events::Frame;
 use crate::routines::webhook::{named_here, Calls};
 
@@ -54,7 +54,7 @@ pub fn query_admitted(token: &HostToken, uri: &Uri) -> bool {
 }
 
 async fn opened(State(calls): State<Calls>, upgrade: WebSocketUpgrade) -> Response {
-	let (pending, heard) = subscribed_with_pending_questions(&calls.core);
+	let (pending, heard) = subscribed_with_pending_prompts(&calls.core);
 	upgrade
 		.on_failed_upgrade(|failure| {
 			eprintln!("a host api event client never connected: {failure}")

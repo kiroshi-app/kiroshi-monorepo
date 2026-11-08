@@ -170,6 +170,7 @@ fn reopening_a_closed_mission_brings_it_back_to_working_and_tells_the_front() {
 			"state": "working",
 			"stateSeq": reopened["stateSeq"],
 			"isAgentRunning": false,
+			"status": null,
 			"liveness": "idle",
 			"lastActivityAt": null,
 			"pendingPrompt": null,
