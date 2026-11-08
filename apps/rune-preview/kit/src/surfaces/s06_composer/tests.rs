@@ -173,10 +173,7 @@ fn focused_key(runtime: &Runtime<Screen>) -> Option<String> {
 }
 
 fn call_focus(runtime: &mut Runtime<Screen>) {
-	runtime.update(|screen, _| {
-		let is_blocked = screen.block != Block::Live;
-		focus_prompt(&mut screen.edit, is_blocked);
-	});
+	runtime.update(|screen, _| focus_prompt(&mut screen.edit, screen.block != Block::Live));
 	step(runtime);
 }
 
