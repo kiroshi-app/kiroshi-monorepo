@@ -527,7 +527,8 @@ impl State {
 					(filled(stop_failed::TITLE, &[("name", &name)]), said(stop_failed::DESCRIPTION))
 				} else {
 					let title = filled(settings::space::hosting::failed::TITLE, &[("name", &name)]);
-					(title, said(hosting_reason(None)))
+					let refusal = members::refusal_of(&failure);
+					(title, said(hosting_reason(refusal.as_ref())))
 				};
 				return self.raise(true, title, description);
 			}

@@ -302,6 +302,29 @@ fn a_hosting_failure_keeps_sharing_off_and_names_its_reason() {
 }
 
 #[test]
+fn a_refused_start_names_the_reason_its_refusal_carries() {
+	let mut app = opened();
+	let refusal = json!({ "kind": "failed", "failure": "deviceAwaitingApproval", "detail": "" });
+	land(
+		&mut app,
+		Answer::Hosting {
+			space_id: SPACE.to_owned(),
+			state: Err(refused("hosting_start", refusal)),
+			is_stop: false,
+		},
+	);
+
+	let notices = &app.surfaces.s13_space_settings.notices;
+	assert_eq!(notices.len(), 1);
+	assert_eq!(notices[0].1.title, "Couldn’t host Studio");
+	assert_eq!(
+		notices[0].1.description,
+		said(settings::space::hosting::failed::reasons::DEVICE_AWAITING_APPROVAL)
+	);
+	assert!(app.navigation.main_route() == Route::SpaceSettings);
+}
+
+#[test]
 fn a_refused_stop_raises_the_stop_failure() {
 	let mut app = opened();
 	land(
