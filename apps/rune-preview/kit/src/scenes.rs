@@ -16,6 +16,7 @@ use agent_settings::{
 };
 
 mod agent_settings;
+mod approvals;
 mod boards;
 mod feedback;
 mod forms;
@@ -56,6 +57,7 @@ pub struct Scene {
 	pub tabs: usize,
 	pub pointer: Pointer,
 	pub typed: &'static str,
+	pub keys: &'static str,
 	pub view: fn(&Tokens, &SceneState) -> El,
 }
 
@@ -76,9 +78,18 @@ const FIELDS: (f32, f32) = (512.0, 520.0);
 const ABOUT: (f32, f32) = (640.0, 760.0);
 const SETTINGS: (f32, f32) = person_settings::DIALOG_SCENE;
 const SCREEN: (f32, f32) = (1180.0, 720.0);
+const QUESTION_PANEL: (f32, f32) = (608.0, 520.0);
+const QUESTION_PANEL_TALL: (f32, f32) = (608.0, 640.0);
+const SIDE: (f32, f32) = (590.0, 480.0);
+const SIDE_TALL: (f32, f32) = (590.0, 560.0);
+const SIDE_STACK: (f32, f32) = (590.0, 1180.0);
+const NARROW: (f32, f32) = (352.0, 640.0);
+const ANSWERED: (f32, f32) = (704.0, 420.0);
+const ANSWERED_LONG: (f32, f32) = (512.0, 360.0);
+const MARK_SIDE: f32 = 22.0;
 
 const fn scene(id: &'static str, size: (f32, f32), view: fn(&Tokens, &SceneState) -> El) -> Scene {
-	Scene { id, size, tabs: 0, pointer: Pointer::Away, typed: "", view }
+	Scene { id, size, tabs: 0, pointer: Pointer::Away, typed: "", keys: "", view }
 }
 
 const fn focused(
@@ -87,7 +98,7 @@ const fn focused(
 	tabs: usize,
 	view: fn(&Tokens, &SceneState) -> El,
 ) -> Scene {
-	Scene { id, size, tabs, pointer: Pointer::Away, typed: "", view }
+	Scene { id, size, tabs, pointer: Pointer::Away, typed: "", keys: "", view }
 }
 
 const fn typed(
@@ -96,7 +107,7 @@ const fn typed(
 	text: &'static str,
 	view: fn(&Tokens, &SceneState) -> El,
 ) -> Scene {
-	Scene { id, size: STORY, tabs, pointer: Pointer::Away, typed: text, view }
+	Scene { id, size: STORY, tabs, pointer: Pointer::Away, typed: text, keys: "", view }
 }
 
 const fn queried(
@@ -105,7 +116,27 @@ const fn queried(
 	text: &'static str,
 	view: fn(&Tokens, &SceneState) -> El,
 ) -> Scene {
-	Scene { id, size: PALETTE, tabs, pointer: Pointer::Away, typed: text, view }
+	Scene { id, size: PALETTE, tabs, pointer: Pointer::Away, typed: text, keys: "", view }
+}
+
+const fn keyed(
+	id: &'static str,
+	size: (f32, f32),
+	tabs: usize,
+	typed: &'static str,
+	keys: &'static str,
+	view: fn(&Tokens, &SceneState) -> El,
+) -> Scene {
+	Scene { id, size, tabs, pointer: Pointer::Away, typed, keys, view }
+}
+
+const fn hovered(
+	id: &'static str,
+	size: (f32, f32),
+	key: &'static str,
+	view: fn(&Tokens, &SceneState) -> El,
+) -> Scene {
+	Scene { id, size, tabs: 0, pointer: Pointer::EntersAtSnap(key), typed: "", keys: "", view }
 }
 
 const fn pointed(
@@ -113,7 +144,7 @@ const fn pointed(
 	pointer: Pointer,
 	view: fn(&Tokens, &SceneState) -> El,
 ) -> Scene {
-	Scene { id, size: STORY, tabs: 0, pointer, typed: "", view }
+	Scene { id, size: STORY, tabs: 0, pointer, typed: "", keys: "", view }
 }
 
 pub static SCENES: &[Scene] = &[
@@ -1254,6 +1285,7 @@ pub static SCENES: &[Scene] = &[
 		tabs: 1,
 		pointer: Pointer::Away,
 		typed: boards::EDITED_TEXT,
+		keys: "",
 		view: boards::canvas_edit,
 	},
 	Scene {
@@ -1262,6 +1294,7 @@ pub static SCENES: &[Scene] = &[
 		tabs: 1,
 		pointer: Pointer::Away,
 		typed: boards::EDITED_TEXT,
+		keys: "",
 		view: boards::canvas_edit,
 	},
 	scene("navigation-boardcanvas--empty", boards::CANVAS, boards::canvas_empty),
@@ -2145,6 +2178,216 @@ pub static SCENES: &[Scene] = &[
 	scene("settings-plugins-skillspanel--with-system-skill", PANEL, |t, _| {
 		agent_settings::skills_panel(t, SkillsCase::WithSystem)
 	}),
+	focused(
+		"conversation-tools-toolapproval--default",
+		QUESTION_PANEL,
+		2,
+		approvals::approval_default,
+	),
+	scene(
+		"conversation-tools-toolapproval--with-path",
+		QUESTION_PANEL,
+		approvals::approval_with_path,
+	),
+	focused("conversation-tools-toolquestion--nothing-chosen", SIDE, 1, approvals::nothing_chosen),
+	scene("conversation-tools-toolquestion--option-chosen", SIDE, approvals::option_chosen),
+	scene(
+		"conversation-tools-toolquestion--chosen-row-follows-space-tint",
+		QUESTION_PANEL,
+		approvals::chosen_row_follows_space_tint,
+	),
+	hovered(
+		"conversation-tools-toolquestion--option-row-hovered",
+		SIDE,
+		"question-option-Plan-0",
+		approvals::option_row_hovered,
+	),
+	scene("conversation-tools-toolquestion--several-checked", SIDE, approvals::several_checked),
+	keyed(
+		"conversation-tools-toolquestion--own-answer-typing",
+		SIDE,
+		3,
+		approvals::OWN_ANSWER,
+		"",
+		approvals::own_answer_typing,
+	),
+	scene("conversation-tools-toolquestion--several-questions", SIDE, approvals::several_questions),
+	focused("conversation-tools-toolquestion--waiting-bar", SIDE, 1, approvals::waiting_bar_wide),
+	focused("conversation-tools-toolquestion--answer-pressed", SIDE, 2, approvals::answer_pressed),
+	scene(
+		"conversation-tools-toolquestion--waiting-bar-narrow",
+		NARROW,
+		approvals::waiting_bar_narrow,
+	),
+	focused(
+		"conversation-tools-toolquestion--long-question-narrow",
+		NARROW,
+		2,
+		approvals::long_question_narrow,
+	),
+	focused(
+		"conversation-tools-toolquestion--keyboard-focus-rings",
+		QUESTION_PANEL,
+		6,
+		approvals::keyboard_focus_rings,
+	),
+	scene(
+		"conversation-tools-toolquestion--single-select",
+		QUESTION_PANEL,
+		approvals::single_select,
+	),
+	scene(
+		"conversation-tools-toolquestion--multi-select",
+		QUESTION_PANEL_TALL,
+		approvals::multi_select,
+	),
+	keyed(
+		"conversation-tools-toolquestion--free-text",
+		QUESTION_PANEL,
+		0,
+		approvals::FREE_TEXT,
+		"",
+		approvals::free_text,
+	),
+	keyed(
+		"conversation-tools-toolquestion--digit-keys-choose",
+		QUESTION_PANEL,
+		1,
+		"",
+		"1",
+		approvals::digit_keys_choose,
+	),
+	keyed(
+		"conversation-tools-toolquestion--digit-keys-toggle",
+		QUESTION_PANEL,
+		1,
+		"",
+		"22",
+		approvals::digit_keys_toggle,
+	),
+	keyed(
+		"conversation-tools-toolquestion--digit-typed-into-own-answer",
+		QUESTION_PANEL,
+		2,
+		"",
+		"2",
+		approvals::digit_keys_choose,
+	),
+	focused(
+		"conversation-tools-toolquestion--keyboard-only",
+		QUESTION_PANEL,
+		2,
+		approvals::keyboard_only,
+	),
+	keyed(
+		"conversation-tools-toolquestion--four-questions",
+		QUESTION_PANEL,
+		0,
+		approvals::PACKAGE_NAME,
+		"",
+		approvals::four_questions,
+	),
+	scene("conversation-tools-toolquestion--narrow", NARROW, approvals::narrow_four),
+	scene(
+		"conversation-tools-toolquestion--long-header-scrolls",
+		NARROW,
+		approvals::long_header_scrolls,
+	),
+	focused(
+		"conversation-tools-toolquestion--arrow-key-tabs",
+		QUESTION_PANEL,
+		1,
+		approvals::arrow_key_tabs,
+	),
+	scene(
+		"conversation-tools-toolquestion--options-as-whole-answer",
+		QUESTION_PANEL,
+		approvals::options_as_whole_answer,
+	),
+	focused("conversation-tools-toolquestion--no-skip", QUESTION_PANEL, 1, approvals::no_skip),
+	focused(
+		"conversation-tools-toolquestion--entry-with-link",
+		NARROW,
+		1,
+		approvals::entry_with_link,
+	),
+	keyed(
+		"conversation-tools-toolquestion--entry-with-secret",
+		QUESTION_PANEL,
+		1,
+		approvals::SECRET,
+		"",
+		approvals::entry_with_secret,
+	),
+	focused("conversation-tools-toolquestion--failure", QUESTION_PANEL, 1, approvals::failure),
+	scene("conversation-tools-toolquestion--entry-narrow", NARROW, approvals::entry_narrow),
+	scene(
+		"conversation-tools-toolquestion--application-scope",
+		QUESTION_PANEL,
+		approvals::application_scope,
+	),
+	scene(
+		"conversation-tools-toolquestion--failure-with-action",
+		QUESTION_PANEL,
+		approvals::failure_with_action,
+	),
+	scene(
+		"conversation-tools-toolquestion--notice-in-queue",
+		QUESTION_PANEL,
+		approvals::notice_in_queue,
+	),
+	scene(
+		"conversation-tools-toolquestion--inverse-buttons-idle",
+		SIDE_STACK,
+		approvals::inverse_buttons,
+	),
+	hovered(
+		"conversation-tools-toolquestion--inverse-buttons-hover",
+		SIDE_STACK,
+		"pill-Framework-Send",
+		approvals::inverse_buttons,
+	),
+	focused(
+		"conversation-tools-toolquestion--inverse-buttons-focus-visible",
+		SIDE_STACK,
+		4,
+		approvals::inverse_buttons,
+	),
+	scene(
+		"conversation-tools-toolquestion--inverse-buttons-pending",
+		SIDE_TALL,
+		approvals::inverse_buttons_pending,
+	),
+	scene(
+		"conversation-tools-toolquestion--themes-link-row-at-rest",
+		SIDE,
+		approvals::themes_link_row_at_rest,
+	),
+	scene(
+		"conversation-tools-answeredquestioncard--you-answered",
+		ANSWERED,
+		approvals::you_answered,
+	),
+	scene(
+		"conversation-tools-answeredquestioncard--member-answered",
+		ANSWERED,
+		approvals::member_answered,
+	),
+	scene(
+		"conversation-tools-answeredquestioncard--multi-select",
+		ANSWERED,
+		approvals::answered_multi_select,
+	),
+	scene(
+		"conversation-tools-answeredquestioncard--free-text",
+		ANSWERED,
+		approvals::answered_free_text,
+	),
+	scene(
+		"conversation-tools-answeredquestioncard--long-content",
+		ANSWERED_LONG,
+		approvals::answered_long_content,
+	),
 ];
 
 pub static SURFACES: &[&[Scene]] = &[crate::surfaces::s01_chrome::SCENES];
@@ -2156,7 +2399,9 @@ pub fn every_scene() -> impl Iterator<Item = &'static Scene> {
 pub struct SceneState {
 	pub scene: &'static Scene,
 	pub edit: TextEdit,
+	pub chosen: Vec<usize>,
 	pub picture: Option<Image>,
+	pub mark: Option<Image>,
 	pub library: library::LibraryScene,
 	pub board_pictures: Vec<Image>,
 	images: Option<ImageCache>,
@@ -2168,7 +2413,9 @@ impl SceneState {
 		SceneState {
 			scene,
 			edit: TextEdit::new(scene.typed),
+			chosen: Vec::new(),
 			picture: None,
+			mark: None,
 			library: library::LibraryScene::new(scene),
 			board_pictures: Vec::new(),
 			images: None,
@@ -2183,7 +2430,12 @@ pub fn setup(s: &mut SceneState, waker: Waker) {
 	if let Err(failure) = picture.wait() {
 		eprintln!("the avatar picture didn't decode: {}", failure.0);
 	}
+	let mark = images.svg(approvals::LINEAR_MARK.as_bytes(), MARK_SIDE, PICTURE_SCALE);
+	if let Err(failure) = mark.wait() {
+		eprintln!("the application mark didn't decode: {}", failure.0);
+	}
 	s.picture = Some(picture);
+	s.mark = Some(mark);
 	s.library.decode(&images);
 	s.board_pictures =
 		[boards::fixtures::TERRACE_SVG, boards::fixtures::POOL_SVG, boards::fixtures::PATIO_SVG]
