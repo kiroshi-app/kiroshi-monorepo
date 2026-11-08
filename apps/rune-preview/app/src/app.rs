@@ -26,9 +26,9 @@ use crate::model::{
 };
 use crate::navigation::{Navigation, Route};
 use crate::notices::Notices;
-use crate::onboarding::{Method, Step};
 use crate::runs::Runs;
 use crate::source::Source;
+use crate::surfaces::s04_boot::{self, Step};
 use crate::surfaces::{Surfaces, s10_agent_settings};
 use crate::turn::{self, SendError};
 
@@ -283,11 +283,7 @@ pub struct App {
 	pub sidebar: PaneState,
 	pub spike: crate::spike::editor::Editor,
 	pub notice: Option<String>,
-	pub onboarding_code: TextEdit,
-	pub onboarding_key: TextEdit,
 	pub dev_profile: Option<DevProfile>,
-	pub connect_method: Method,
-	pub import_selected: Vec<String>,
 	pub runs: Runs,
 	pub clock_ms: f64,
 	pub math: Typesetter,
@@ -312,7 +308,7 @@ impl App {
 	pub fn new() -> App {
 		let (pending, inbox) = mpsc::channel();
 		App {
-			navigation: Navigation::new(Route::Onboarding(Step::first())),
+			navigation: Navigation::new(Route::Onboarding(Step::Boot)),
 			surfaces: Surfaces::default(),
 			workspace: Workspace::Connecting,
 			thread: None,
@@ -326,11 +322,7 @@ impl App {
 			sidebar: PaneState::new(276.0).range(180.0, 480.0),
 			spike: crate::spike::editor::Editor::default(),
 			notice: None,
-			onboarding_code: TextEdit::new(""),
-			onboarding_key: TextEdit::new(""),
 			dev_profile: None,
-			connect_method: Method::SignIn,
-			import_selected: Vec::new(),
 			runs: Runs::default(),
 			math: Typesetter::default(),
 			pane: Pane::Conversations,
@@ -349,6 +341,7 @@ impl App {
 	pub fn setup(&mut self, waker: Waker) {
 		self.images.start(ImageCache::new(waker.clone()));
 		self.surfaces.s10_agent_settings.attach(waker.clone());
+		self.surfaces.s04_boot.attach(waker.clone());
 		let outbox = Outbox { sender: self.pending.clone(), waker };
 		let heard = outbox.clone();
 		self.notices
@@ -365,15 +358,6 @@ impl App {
 			}
 			(true, false) => self.dev_profile = Some(DevProfile::default()),
 			(false, _) => {}
-		}
-	}
-
-	pub fn toggle_import(&mut self, key: &str) {
-		match self.import_selected.iter().position(|held| held == key) {
-			Some(at) => {
-				self.import_selected.remove(at);
-			}
-			None => self.import_selected.push(key.to_owned()),
 		}
 	}
 
@@ -406,6 +390,7 @@ impl App {
 		let on_board = matches!(self.pane, Pane::Missions)
 			&& matches!(&self.board, Board::Read(board) if board.iter().any(|entry| running(&entry.mission)));
 		!self.runs.is_empty()
+			|| s04_boot::is_animating(self)
 			|| on_board
 			|| self.mission.as_ref().is_some_and(|open| running(&open.mission))
 			|| self.thread.as_ref().is_some_and(|thread| thread.missions.iter().any(running))
@@ -752,6 +737,7 @@ impl App {
 				let host = ready.source.clone();
 				let conversations = ready.conversations.clone();
 				self.workspace = Workspace::Ready(ready);
+				s04_boot::booted(self);
 				self.work(move |outbox| {
 					outbox.deliver(Inbound::Longest(longest::longest(&host, &conversations)))
 				});
@@ -778,11 +764,7 @@ impl App {
 			Inbound::Banner(BannerOutcome::Refused { target, failure }) => {
 				self.notices.banner_refused(&target, &failure)
 			}
-			Inbound::DevProfile(profile) => {
-				self.import_selected =
-					profile.import.as_ref().map(|choices| choices.keys()).unwrap_or_default();
-				self.dev_profile = Some(profile);
-			}
+			Inbound::DevProfile(profile) => self.dev_profile = Some(profile),
 		}
 	}
 
