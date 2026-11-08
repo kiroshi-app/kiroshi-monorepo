@@ -376,12 +376,25 @@ impl App {
 	}
 
 	pub fn show_missions(&mut self) {
+		self.navigation.navigate_main(Route::Conversations);
 		self.pane = Pane::Missions;
 		s08_missions::show(self);
 	}
 
 	pub fn show_conversations(&mut self) {
+		self.navigation.navigate_main(Route::Conversations);
 		self.pane = Pane::Conversations;
+	}
+
+	pub fn switch_tab(&mut self, leaving: &str, entering: &str) {
+		let held = self.thread.as_ref().filter(|_| self.mission.is_none());
+		let held = held.map(|thread| thread.conversation_id.clone());
+		let entered = self.navigation.switch_tab(leaving, held, entering);
+		self.thread = None;
+		self.mission = None;
+		if let Some(conversation_id) = entered {
+			self.open(&conversation_id);
+		}
 	}
 
 	pub fn open_mission(&mut self, mission: &Mission, bot: &Agent) {
@@ -606,7 +619,6 @@ impl App {
 		if target.kind != NoticeKind::Conversation {
 			return;
 		}
-		self.navigation.navigate_main(Route::Conversations);
 		self.show_conversations();
 		self.open(&target.id);
 	}

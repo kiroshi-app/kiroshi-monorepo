@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::surfaces::s04_boot::Step;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -5,8 +7,6 @@ pub enum Route {
 	Onboarding(Step),
 	Conversations,
 	BlockSpike,
-	Chrome,
-	Rail,
 	Roster,
 	Boot,
 	Thread,
@@ -40,15 +40,40 @@ pub struct Window {
 }
 
 #[derive(Clone, PartialEq)]
+struct TabPage {
+	route: Route,
+	conversation_id: Option<String>,
+}
+
+#[derive(Clone, PartialEq)]
 pub struct Navigation {
 	main: Route,
 	secondary: Vec<Window>,
 	next_id: u32,
+	left_tabs: HashMap<String, TabPage>,
 }
 
 impl Navigation {
 	pub fn new(main: Route) -> Navigation {
-		Navigation { main, secondary: Vec::new(), next_id: MAIN_WINDOW.0 + 1 }
+		Navigation {
+			main,
+			secondary: Vec::new(),
+			next_id: MAIN_WINDOW.0 + 1,
+			left_tabs: HashMap::new(),
+		}
+	}
+
+	pub fn switch_tab(
+		&mut self,
+		leaving: &str,
+		held_conversation: Option<String>,
+		entering: &str,
+	) -> Option<String> {
+		let left = TabPage { route: self.main, conversation_id: held_conversation };
+		self.left_tabs.insert(leaving.to_owned(), left);
+		let entered = self.left_tabs.remove(entering);
+		self.main = entered.as_ref().map_or(Route::Conversations, |page| page.route);
+		entered.and_then(|page| page.conversation_id)
 	}
 
 	pub fn main_route(&self) -> Route {
@@ -218,6 +243,30 @@ mod tests {
 
 		assert_eq!(closed_again, Err(NavigationError::NotOpen(closed)));
 		assert!(navigation == before);
+	}
+
+	#[test]
+	fn a_new_tab_enters_on_conversations_with_no_conversation() {
+		let mut navigation = Navigation::new(Route::Library);
+
+		let entered = navigation.switch_tab("first", Some("c-1".to_owned()), "second");
+
+		assert_eq!(entered, None);
+		assert!(navigation.main_route() == Route::Conversations);
+	}
+
+	#[test]
+	fn a_tab_entered_again_gets_back_the_page_it_left() {
+		let mut navigation = Navigation::new(Route::Library);
+		navigation.switch_tab("first", Some("c-1".to_owned()), "second");
+		navigation.navigate_main(Route::SpaceSettings);
+
+		let entered = navigation.switch_tab("second", None, "first");
+
+		assert_eq!(entered.as_deref(), Some("c-1"));
+		assert!(navigation.main_route() == Route::Library);
+		assert_eq!(navigation.switch_tab("first", None, "second"), None);
+		assert!(navigation.main_route() == Route::SpaceSettings);
 	}
 
 	#[test]

@@ -1,6 +1,6 @@
-use rune::{El, el, row};
+use rune::{El, el};
 
-use kiroshi_rune_kit::surfaces::s02_rail::{Rail, SpaceCarousel, SpacesMenu};
+use kiroshi_rune_kit::surfaces::s02_rail::{Rail, SpacesMenu};
 use kiroshi_rune_kit::surfaces::s04_boot::notice::{RaisedNotice, notice_surface};
 use kiroshi_rune_kit::tokens::Tokens;
 
@@ -29,7 +29,6 @@ pub fn view(app: &App, t: &Tokens) -> (El, Vec<El>) {
 		has_search: false,
 		..Rail::new(LANGUAGE, panel)
 	};
-	let carousel = SpaceCarousel { list: panel, spaces: &rows, selected: Some(selected) };
 	let notices: Vec<RaisedNotice> = state
 		.notices
 		.iter()
@@ -39,6 +38,5 @@ pub fn view(app: &App, t: &Tokens) -> (El, Vec<El>) {
 	if !notices.is_empty() {
 		layers.push(notice_surface(t, LANGUAGE, &notices, noticed));
 	}
-	let body = row().w_full().h_full().child(rail.view(t, railed)).child(carousel.view(|_| el()));
-	(body, layers)
+	(rail.view(t, railed), layers)
 }

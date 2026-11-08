@@ -5,7 +5,7 @@ use kiroshi_core::core_context::{RenderWindow, RenderWindowError};
 use kiroshi_rune_kit::surfaces::s01_chrome::ChromeEvent;
 
 use super::{Desk, Shelf, State, Windows};
-use crate::app::{App, Workspace};
+use crate::app::App;
 use crate::local;
 use crate::navigation::MAIN_WINDOW;
 use crate::source::Source;
@@ -18,11 +18,11 @@ const HOST_API_OPENS_NO_WINDOW: &str = "the host API opens no window";
 
 const NO_DESKTOP: &str = "no desktop is installed in the core";
 
-struct CoreWindows<'a>(Option<&'a Source>);
+struct CoreWindows(Option<Source>);
 
-impl Windows for CoreWindows<'_> {
+impl Windows for CoreWindows {
 	fn open(&self, window: &RenderWindow) -> Result<(), String> {
-		match self.0 {
+		match &self.0 {
 			Some(Source::InProcess(core)) => {
 				core.open_render_window(window).map_err(|failure| match failure {
 					RenderWindowError::NoDesktop => NO_DESKTOP.to_owned(),
@@ -35,7 +35,7 @@ impl Windows for CoreWindows<'_> {
 	}
 
 	fn close(&self, label: &str) -> Result<(), String> {
-		match self.0 {
+		match &self.0 {
 			Some(Source::InProcess(core)) => core.close_window(label),
 			Some(Source::Running(_)) => Err(HOST_API_OPENS_NO_WINDOW.to_owned()),
 			None => Err(NOT_CONNECTED.to_owned()),
@@ -71,14 +71,29 @@ impl Shelf for FileShelf {
 	}
 }
 
+fn active_tab(app: &App) -> Option<String> {
+	app.surfaces.s01_chrome.tabs_of(MAIN_WINDOW).map(|tabs| tabs.active().to_owned())
+}
+
 fn with_desk(app: &mut App, act: impl FnOnce(&mut State, &mut Desk)) {
-	let source = match &app.workspace {
-		Workspace::Ready(ready) => Some(&ready.source),
-		_ => None,
-	};
-	let mut desk =
-		Desk { navigation: &mut app.navigation, windows: &CoreWindows(source), shelf: &FileShelf };
+	let windows = CoreWindows(app.ready().map(|ready| ready.source.clone()));
+	with_desk_on(app, &windows, &FileShelf, act);
+}
+
+pub(super) fn with_desk_on(
+	app: &mut App,
+	windows: &dyn Windows,
+	shelf: &dyn Shelf,
+	act: impl FnOnce(&mut State, &mut Desk),
+) {
+	let leaving = active_tab(app);
+	let mut desk = Desk { navigation: &mut app.navigation, windows, shelf };
 	act(&mut app.surfaces.s01_chrome, &mut desk);
+	if let (Some(leaving), Some(entering)) = (leaving, active_tab(app))
+		&& leaving != entering
+	{
+		app.switch_tab(&leaving, &entering);
+	}
 }
 
 pub fn on_chrome(app: &mut App, event: ChromeEvent) {

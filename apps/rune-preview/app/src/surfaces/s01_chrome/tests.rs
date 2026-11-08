@@ -3,8 +3,14 @@ use std::cell::RefCell;
 use kiroshi_core::core_context::RenderWindow;
 use kiroshi_rune_kit::surfaces::s01_chrome::{ChromeEvent, Landing, Lift};
 
+use kiroshi_rune_kit::surfaces::s02_rail::{RailMessage, RailPanel};
+
+use super::desk::with_desk_on;
 use super::{Desk, Failure, Menu, Shelf, State, Windows};
+use crate::app::App;
 use crate::navigation::{MAIN_WINDOW, Navigation, Route, WindowId};
+use crate::scenes;
+use crate::surfaces::s02_rail;
 
 #[derive(Default)]
 struct FakeWindows {
@@ -70,7 +76,7 @@ impl Bench {
 	fn with(windows: FakeWindows, shelf: FakeShelf) -> Bench {
 		Bench {
 			state: State::default(),
-			navigation: Navigation::new(Route::Chrome),
+			navigation: Navigation::new(Route::Conversations),
 			windows,
 			shelf,
 		}
@@ -439,4 +445,64 @@ fn the_next_gesture_clears_a_shown_failure() {
 	bench.hear(MAIN_WINDOW, ChromeEvent::NewTab);
 
 	assert_eq!(bench.state.failure, None);
+}
+
+fn loaded_app() -> App {
+	let mut app = App::new();
+	let (_, thread) =
+		scenes::SCENES.iter().find(|(name, _)| *name == "thread").expect("the thread scene");
+	thread(&mut app);
+	app
+}
+
+fn heard_by(app: &mut App, event: ChromeEvent) {
+	let (windows, shelf) = (FakeWindows::default(), FakeShelf::default());
+	with_desk_on(app, &windows, &shelf, |state, desk| state.heard(MAIN_WINDOW, event, desk));
+}
+
+fn active_of(app: &App) -> String {
+	app.surfaces
+		.s01_chrome
+		.tabs_of(MAIN_WINDOW)
+		.map(|tabs| tabs.active().to_owned())
+		.unwrap_or_default()
+}
+
+fn opened_in(app: &App) -> Option<&str> {
+	app.thread.as_ref().map(|thread| thread.conversation_id.as_str())
+}
+
+#[test]
+fn a_new_tab_is_selected_and_shows_no_conversation_until_one_is_picked() {
+	let mut app = loaded_app();
+	let first = active_of(&app);
+
+	heard_by(&mut app, ChromeEvent::NewTab);
+
+	let second = active_of(&app);
+	let tabs = app.surfaces.s01_chrome.tabs_of(MAIN_WINDOW).expect("the main window tabs");
+	assert_ne!(first, second);
+	assert_eq!(tabs.tabs().len(), 2);
+	assert!(app.navigation.main_route() == Route::Conversations);
+	assert_eq!(opened_in(&app), None);
+}
+
+#[test]
+fn selecting_a_tab_shows_the_conversation_or_surface_it_holds() {
+	let mut app = loaded_app();
+	let first = active_of(&app);
+	let first_conversation = opened_in(&app).map(str::to_owned);
+	s02_rail::railed(&mut app, RailMessage::SelectPanel(RailPanel::Library));
+	heard_by(&mut app, ChromeEvent::NewTab);
+	let second = active_of(&app);
+	app.open("chat-atlas");
+
+	heard_by(&mut app, ChromeEvent::SelectTab(first));
+	let on_first = (app.navigation.main_route(), opened_in(&app).map(str::to_owned));
+	heard_by(&mut app, ChromeEvent::SelectTab(second));
+
+	assert!(first_conversation.is_some());
+	assert!(on_first == (Route::Library, first_conversation));
+	assert!(app.navigation.main_route() == Route::Conversations);
+	assert_eq!(opened_in(&app), Some("chat-atlas"));
 }
