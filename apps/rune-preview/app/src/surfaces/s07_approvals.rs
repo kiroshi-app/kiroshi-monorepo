@@ -37,6 +37,8 @@ const PERMISSION_RESOLVED: &str = "permissionResolved";
 
 const CONNECTION_CHANGED: &str = "connectionChanged";
 
+const PROMPTS_CLOSED: &str = "promptsClosed";
+
 const CLOSED_STATES: [&str; 2] = ["unavailable", "crashed"];
 
 #[derive(Debug, PartialEq)]
@@ -45,6 +47,7 @@ pub enum Heard {
 	Question { scope: RuntimeScope, turn_id: Option<String>, request: QuestionRequest },
 	Resolved { id: String, decision: PermissionDecision },
 	Closed { scope: RuntimeScope },
+	PromptsClosed { scope: RuntimeScope, permission_ids: Vec<String>, question_ids: Vec<String> },
 }
 
 fn heard_from(scoped: ScopedEvent) -> Option<Heard> {
@@ -65,6 +68,9 @@ fn heard_from(scoped: ScopedEvent) -> Option<Heard> {
 			},
 			Some(scope),
 		) => Some(Heard::Closed { scope }),
+		(AgentEvent::PromptsClosed { permission_ids, question_ids }, Some(scope)) => {
+			Some(Heard::PromptsClosed { scope, permission_ids, question_ids })
+		}
 		_ => None,
 	}
 }
@@ -76,7 +82,9 @@ fn is_session_closed(payload: &Value) -> bool {
 
 fn is_heard_here(payload: &Value) -> bool {
 	match payload.pointer("/event/type").and_then(Value::as_str) {
-		Some(PERMISSION_REQUESTED | QUESTION_REQUESTED | PERMISSION_RESOLVED) => true,
+		Some(PERMISSION_REQUESTED | QUESTION_REQUESTED | PERMISSION_RESOLVED | PROMPTS_CLOSED) => {
+			true
+		}
 		Some(CONNECTION_CHANGED) => is_session_closed(payload),
 		_ => false,
 	}
@@ -92,6 +100,15 @@ pub fn heard_of(payload: &Value) -> Option<Result<Heard, serde_json::Error>> {
 	Some(heard)
 }
 
+fn is_same_agent(held: &RuntimeScope, scope: &RuntimeScope) -> bool {
+	held.conversation_id == scope.conversation_id && held.bot_id == scope.bot_id
+}
+
+struct ClosedPrompt {
+	scope: RuntimeScope,
+	id: String,
+}
+
 struct ReadFailure {
 	conversation_id: String,
 	failure: HostError,
@@ -102,6 +119,7 @@ pub struct State {
 	approvals: Vec<Approval>,
 	questions: Vec<Asked>,
 	answered: Vec<Answered>,
+	closed: Vec<ClosedPrompt>,
 	read_failure: Option<ReadFailure>,
 	spare: TextEdit,
 	queued: Vec<Call>,
@@ -134,6 +152,9 @@ impl State {
 			}
 			Heard::Resolved { id, decision } => self.resolved(&id, decision),
 			Heard::Closed { scope } => self.rest(|held| held == &scope),
+			Heard::PromptsClosed { scope, permission_ids, question_ids } => {
+				self.closed_prompts(scope, permission_ids, question_ids)
+			}
 		}
 	}
 
@@ -152,8 +173,31 @@ impl State {
 		self.questions.retain(|asked| asked.call.is_sending() || !is_of_run(&asked.scope));
 	}
 
+	fn closed_prompts(
+		&mut self,
+		scope: RuntimeScope,
+		permission_ids: Vec<String>,
+		question_ids: Vec<String>,
+	) {
+		self.approvals.retain(|approval| {
+			!is_same_agent(&approval.scope, &scope)
+				|| !permission_ids.contains(&approval.request.id)
+		});
+		self.questions.retain(|asked| {
+			!is_same_agent(&asked.scope, &scope) || !question_ids.contains(&asked.request.id)
+		});
+		let closed = permission_ids.into_iter().chain(question_ids);
+		self.closed.extend(closed.map(|id| ClosedPrompt { scope: scope.clone(), id }));
+	}
+
+	fn is_closed(&self, scope: &RuntimeScope, id: &str) -> bool {
+		self.closed.iter().any(|closed| closed.id == id && is_same_agent(&closed.scope, scope))
+	}
+
 	fn asked_permission(&mut self, scope: RuntimeScope, request: PermissionRequest) {
-		if self.approvals.iter().any(|held| held.request.id == request.id) {
+		if self.is_closed(&scope, &request.id)
+			|| self.approvals.iter().any(|held| held.request.id == request.id)
+		{
 			return;
 		}
 		self.settle(&scope.conversation_id);
@@ -166,7 +210,9 @@ impl State {
 		turn_id: Option<String>,
 		request: QuestionRequest,
 	) {
-		if self.questions.iter().any(|held| held.request.id == request.id) {
+		if self.is_closed(&scope, &request.id)
+			|| self.questions.iter().any(|held| held.request.id == request.id)
+		{
 			return;
 		}
 		self.settle(&scope.conversation_id);
