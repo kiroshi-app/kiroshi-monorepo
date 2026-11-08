@@ -61,19 +61,21 @@ fn status_of(resolved: Option<PermissionDecision>) -> ApprovalStatus {
 	}
 }
 
+const RETRY: NoticeRetry = NoticeRetry { label: None, busy: false };
+
 fn failure_notice(
 	t: &Tokens,
-	title: &str,
 	failure: &HostError,
-	has_retry: bool,
+	retry: Option<NoticeRetry>,
 	on: impl Fn(&mut App, NoticeEvent) + Clone + 'static,
 ) -> El {
+	let title = said(notice::FAILED);
 	let description = failure_text(failure);
 	let shown = InlineNotice {
 		tone: Tone::Error,
-		title,
+		title: &title,
 		description: Some(&description),
-		retry: has_retry.then_some(NoticeRetry { label: None, busy: false }),
+		retry,
 		dismissible: true,
 	};
 	inline_notice(t, LANGUAGE, &shown, on)
@@ -105,8 +107,8 @@ fn approval_view(t: &Tokens, approval: &Approval, roster: &[Agent]) -> Vec<El> {
 		changed(app, |state| state.approval_event(&decided, event))
 	})];
 	if let Some(failure) = approval.call.failure() {
-		shown.push(failure_notice(t, &said(notice::FAILED), failure, false, move |app, event| {
-			changed(app, |state| state.approval_notice_event(&id, event))
+		shown.push(failure_notice(t, failure, None, move |app, _| {
+			changed(app, |state| state.dismiss_approval_failure(&id))
 		}));
 	}
 	shown
@@ -197,7 +199,7 @@ fn answered_view(t: &Tokens, answered: &Answered, viewer: &str, now: i64) -> Vec
 	let mut shown = vec![answered_question_card(t, LANGUAGE, &answerer, &answered_at, &questions)];
 	if let Some(failure) = answered.written.failure() {
 		let id = answered.request.id.clone();
-		shown.push(failure_notice(t, &said(notice::FAILED), failure, true, move |app, event| {
+		shown.push(failure_notice(t, failure, Some(RETRY), move |app, event| {
 			changed(app, |state| state.written_notice_event(&id, event))
 		}));
 	}
@@ -207,8 +209,7 @@ fn answered_view(t: &Tokens, answered: &Answered, viewer: &str, now: i64) -> Vec
 fn read_failure_view(t: &Tokens, state: &State, conversation_id: &str) -> Option<El> {
 	let read =
 		state.read_failure.as_ref().filter(|read| read.conversation_id == conversation_id)?;
-	let title = said(notice::FAILED);
-	Some(failure_notice(t, &title, &read.failure, true, |app, event| {
+	Some(failure_notice(t, &read.failure, Some(RETRY), |app, event| {
 		changed(app, |state| state.read_notice_event(event))
 	}))
 }

@@ -228,13 +228,9 @@ impl State {
 		}
 	}
 
-	pub fn approval_notice_event(&mut self, id: &str, event: NoticeEvent) {
-		match event {
-			NoticeEvent::Retry | NoticeEvent::Dismiss => {
-				if let Some(approval) = self.approval_mut(id) {
-					approval.call = prompt::Call::Idle;
-				}
-			}
+	pub fn dismiss_approval_failure(&mut self, id: &str) {
+		if let Some(approval) = self.approval_mut(id) {
+			approval.call = prompt::Call::Idle;
 		}
 	}
 

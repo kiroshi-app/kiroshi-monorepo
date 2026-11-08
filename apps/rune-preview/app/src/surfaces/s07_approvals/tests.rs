@@ -269,7 +269,7 @@ fn dismissing_the_decision_failure_clears_it() {
 	state.approval_event("p1", ApprovalEvent::AllowOnce);
 	state.received(Answer::Responded { id: "p1".to_owned(), outcome: Err(refused()) }, NOW);
 
-	state.approval_notice_event("p1", NoticeEvent::Dismiss);
+	state.dismiss_approval_failure("p1");
 
 	assert!(state.approvals[0].call.failure().is_none());
 }
