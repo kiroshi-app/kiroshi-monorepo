@@ -11,7 +11,7 @@ use kiroshi_rune_kit::tokens::Tokens;
 use super::{Notice, open_attachment, projection, said};
 use crate::app::App;
 use crate::conversations::now_ms;
-use crate::surfaces::{s06_composer, s08_missions};
+use crate::surfaces::{s06_composer, s07_approvals, s08_missions};
 
 fn thread_event(app: &mut App, event: ThreadEvent) {
 	if event == ThreadEvent::NoticeAction
@@ -63,6 +63,7 @@ pub fn view(
 	let events = s08_missions::thread_events(app);
 	let shown = projection::Shown { kind: &kind, roster: &roster, events: &events, now: now_ms() };
 	let transcript = projection::transcript(open, &shown);
+	let prompts = s07_approvals::dock(app, &t.in_space(space_hue), &open.id, &roster);
 	let data = Thread {
 		kind,
 		language: Language::En,
@@ -78,6 +79,7 @@ pub fn view(
 			.grow(1.0)
 			.min_h(0.0)
 			.child(thread(t, &app.math, &data, &emit()))
+			.children(prompts)
 			.children(composer),
 	)
 }

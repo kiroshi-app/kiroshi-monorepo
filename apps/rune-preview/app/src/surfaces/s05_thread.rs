@@ -16,7 +16,7 @@ use crate::app::App;
 use crate::events::HostEvent;
 use crate::host::HostError;
 use crate::source::Source;
-use crate::surfaces::{s06_composer, s14_library};
+use crate::surfaces::{s06_composer, s07_approvals, s14_library};
 
 pub use view::{pinned_panel, view};
 
@@ -146,6 +146,7 @@ impl State {
 			| HostEvent::Companion(_)
 			| HostEvent::Library(_)
 			| HostEvent::Roster(_)
+			| HostEvent::Approvals(_)
 			| HostEvent::AccountChanged(_)
 			| HostEvent::Listening
 			| HostEvent::Unreadable { .. }
@@ -365,6 +366,7 @@ pub fn open_conversation(app: &mut App, conversation_id: &str) {
 	let thread = &mut app.surfaces.s05_thread;
 	thread.use_source(source);
 	thread.open(conversation_id);
+	s07_approvals::open_conversation(app, conversation_id);
 	s06_composer::opened(app);
 }
 
