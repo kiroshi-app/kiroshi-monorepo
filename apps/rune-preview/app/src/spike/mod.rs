@@ -1,5 +1,5 @@
 pub mod editor;
-mod inline;
+pub(crate) mod inline;
 pub mod model;
 pub mod view;
 
