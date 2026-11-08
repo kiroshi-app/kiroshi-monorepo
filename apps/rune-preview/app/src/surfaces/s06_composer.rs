@@ -449,6 +449,7 @@ impl State {
 		match intent {
 			ComposerIntent::Send => self.send(open, now_ms()),
 			ComposerIntent::Attach | ComposerIntent::BrowseFiles => self.browse(),
+			ComposerIntent::Paste(content) => self.pasted(open, &content),
 			ComposerIntent::OpenLibrary => self.toggle_library(open),
 			ComposerIntent::PickDocument(name) => self.pick_document(open, &name),
 			ComposerIntent::PickMention { id, .. } => self.pick_mention(open, &id),
