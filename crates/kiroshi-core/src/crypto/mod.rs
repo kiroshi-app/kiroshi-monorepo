@@ -1,3 +1,4 @@
+mod code_signature;
 pub mod commands;
 pub mod contract;
 pub mod device_keys;
