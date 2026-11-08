@@ -337,7 +337,11 @@ impl State {
 				let still_asked: Vec<Heard> = pending
 					.into_iter()
 					.filter_map(heard_from)
-					.filter(|heard| heard.prompt_id().is_some_and(|id| !self.was_resolved(id)))
+					.filter(|heard| {
+						heard
+							.prompt_id()
+							.is_some_and(|id| !self.resolved_while_reading.contains(id))
+					})
 					.collect();
 				for heard in still_asked {
 					self.heard(heard);
@@ -346,10 +350,6 @@ impl State {
 			Err(failure) => self.read_failure = Some(ReadFailure { conversation_id, failure }),
 		}
 		self.read_answered();
-	}
-
-	fn was_resolved(&self, id: &str) -> bool {
-		self.resolved_while_reading.contains(id)
 	}
 
 	fn read_answered(&mut self) {
