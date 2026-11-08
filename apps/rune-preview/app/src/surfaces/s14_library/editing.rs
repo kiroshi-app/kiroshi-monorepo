@@ -164,7 +164,7 @@ impl State {
 				let update = document.flushed();
 				self.send(is_beside, update);
 			}
-			(Format::Strikethrough | Format::Link, None) | (_, None) => {
+			_ => {
 				eprintln!("the format toolbar forwards {format:?}, which this surface doesn't wire")
 			}
 		}
