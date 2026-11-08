@@ -38,8 +38,11 @@ fn view(s: &App, cx: &mut Cx<App>) -> El {
 			let viewport = conversations::Viewport {
 				inset: cx.titlebar_inset(),
 				transcript_height: cx.layout(conversations::TRANSCRIPT).map(|rect| rect[3]),
+				thread_room: cx.layout(conversations::THREAD_ROOM).map(|rect| rect[2]),
 			};
-			conversations::view(s, &t, &viewport)
+			let (body, layers) = conversations::view(s, &t, &viewport);
+			screen_layers = layers;
+			body
 		}
 		Route::Chrome => {
 			let measured = s01_chrome::Measured {

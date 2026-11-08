@@ -3,11 +3,11 @@ use kiroshi_core::conversations::contract::{
 };
 use kiroshi_rune_kit::strings::{Language, chat};
 use kiroshi_rune_kit::surfaces::s05_thread::{
-	Agent, Author, MissionEvent, PinnedMessage, Quote, Row, ThreadKind, Transcript, Turn,
-	TurnState, WorkLine, WorkingAgent,
+	Agent, Attachment, Author, MissionEvent, PinnedMessage, Quote, Row, ThreadKind, Transcript,
+	Turn, TurnState, WorkLine, WorkingAgent,
 };
 
-use super::conversation::{Conversation, Live, Phase};
+use super::conversation::{Conversation, Live, Phase, attachments_of};
 use crate::conversations::roster_timestamp;
 use crate::surfaces::s08_missions::is_summons;
 
@@ -137,6 +137,10 @@ pub fn quote_of(link: &ReplyLink, open: &Conversation, roster: &[Agent]) -> Opti
 	Some(Quote { id: link.message_id.clone(), author, excerpt })
 }
 
+fn attached_document(name: &str) -> Attachment {
+	Attachment { name: name.to_owned(), preview: None, failed: false }
+}
+
 fn stored_turn(
 	open: &Conversation,
 	message: &TranscriptMessage,
@@ -152,6 +156,7 @@ fn stored_turn(
 			.iter()
 			.filter_map(|link| quote_of(link, open, roster))
 			.collect(),
+		attachments: attachments_of(message).map(attached_document).collect(),
 		pinned: open.is_pinned(&message.id),
 		shows_actions: state != TurnState::Streaming,
 		..Turn::new(&message.id, author_of(message, roster), &message.content)

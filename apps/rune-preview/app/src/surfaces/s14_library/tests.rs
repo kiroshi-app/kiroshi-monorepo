@@ -5,9 +5,11 @@ use base64::Engine;
 use base64::prelude::BASE64_STANDARD;
 use kiroshi_core::library::contract::{
 	LibraryChanged, LibraryDocumentPresence, LibraryDocumentRenamed, LibraryDocumentState,
-	LibraryDocumentUpdated, LibraryError, LibraryImport, LibraryItem, LibraryItemKind,
-	LibraryPresenceAt, LibraryWriter, LibraryWriterKind,
+	LibraryDocumentUpdated, LibraryDocumentWriterFinished, LibraryError, LibraryImport,
+	LibraryItem, LibraryItemKind, LibraryPresenceAt, LibraryWriteOutcome, LibraryWriter,
+	LibraryWriterKind,
 };
+use serde::Serialize;
 use serde_json::json;
 use yrs::{Doc, ReadTxn, Text, Transact};
 
@@ -23,8 +25,12 @@ use super::editing::SEND_INTERVAL;
 use super::imports::{self, HOSTED_LIMIT, JOINED_LIMIT};
 use super::session::Session;
 use super::worker::{Answer, Call, Due, Target, free_name};
-use super::{Dialog, Heard, Listing, Shown, State, heard_of};
-use crate::host::HostError;
+use super::{Dialog, Heard, Listing, Shown, State, THREAD_MIN_WIDTH, heard_of};
+use crate::app::{App, Person, Ready, Workspace};
+use crate::events::{HostEvent, parsed};
+use crate::host::{Host, HostError};
+use crate::model;
+use crate::source::Source;
 
 const SPACE: &str = "space-1";
 
@@ -239,13 +245,33 @@ fn a_document_opened_from_a_thread_takes_the_widest_room_then_the_width_last_dra
 	let mut state = library_with(Vec::new());
 
 	state.open_beside("brief.md");
-	let widest = (state.panel_width(10_000.0), state.panel_width(700.0));
+	let widest = (state.panel_width(10_000.0), state.panel_width(1_000.0));
 	state.dragged_panel(DOCUMENT_PANEL_MIN_WIDTH + 40.0);
 
 	assert!(state.beside.is_some());
 	assert_eq!(calls(&mut state), vec![Call::Open(target("brief.md"))]);
-	assert_eq!(widest, (DOCUMENT_PANEL_MAX_WIDTH, 700.0));
+	assert_eq!(widest, (DOCUMENT_PANEL_MAX_WIDTH, 680.0));
 	assert_eq!(state.panel_width(10_000.0), DOCUMENT_PANEL_MIN_WIDTH + 40.0);
+}
+
+#[test]
+fn the_panel_leaves_the_thread_its_320_unless_the_panel_would_fall_under_its_floor() {
+	let mut state = library_with(Vec::new());
+	state.open_beside("brief.md");
+
+	assert_eq!(state.panel_width(1_000.0), 680.0);
+	assert_eq!(
+		state.panel_width(THREAD_MIN_WIDTH + DOCUMENT_PANEL_MIN_WIDTH),
+		DOCUMENT_PANEL_MIN_WIDTH
+	);
+	assert_eq!(state.panel_width(600.0), DOCUMENT_PANEL_MIN_WIDTH);
+	assert_eq!(
+		state.panel_width(THREAD_MIN_WIDTH + DOCUMENT_PANEL_MAX_WIDTH + 1.0),
+		DOCUMENT_PANEL_MAX_WIDTH
+	);
+
+	state.dragged_panel(DOCUMENT_PANEL_MAX_WIDTH);
+	assert_eq!(state.panel_width(1_000.0), 680.0);
 }
 
 #[test]
@@ -831,4 +857,145 @@ fn an_agent_card_counts_its_sentences_under_its_section() {
 	assert_eq!(cards.len(), 1);
 	assert_eq!((cards[0].sentences, cards[0].elapsed_seconds), (2, 4));
 	assert_eq!(cards[0].section, "Plan");
+}
+
+fn library_app(initial: &str) -> App {
+	let mut app = App::new();
+	app.workspace = Workspace::Ready(Ready {
+		source: Source::Running(Host::detached()),
+		space: model::Space { id: SPACE.to_owned(), name: SPACE.to_owned(), colour: None },
+		agents: Vec::new(),
+		conversations: Vec::new(),
+		person: Person::Unread,
+		longest: None,
+	});
+	app.surfaces.s14_library = opened_from("brief.md", initial);
+	super::open_beside(&mut app, "brief.md");
+	let library = &mut app.surfaces.s14_library;
+	let opened = LibraryDocumentState { name: "brief.md".to_owned(), update: initial.to_owned() };
+	answer(library, Answer::Opened { target: target("brief.md"), state: Ok(opened) });
+	calls(library);
+	app
+}
+
+fn frame(event: &str, payload: impl Serialize) -> String {
+	let payload = serde_json::to_value(payload).expect("a payload writes");
+	json!({ "event": event, "payload": payload }).to_string()
+}
+
+fn heard_in(app: &mut App, text: &str) {
+	match parsed(text) {
+		Some(HostEvent::Library(heard)) => super::heard(app, heard),
+		_ => panic!("the frame is heard as a library event"),
+	}
+}
+
+fn open_documents(app: &App) -> [&super::Document; 2] {
+	let library = &app.surfaces.s14_library;
+	[
+		library.shown_document().expect("the document stays open in the main view"),
+		library.beside.as_ref().expect("the document stays open beside the thread"),
+	]
+}
+
+fn markdown_of(document: &super::Document) -> Option<String> {
+	document.session().map(Session::markdown)
+}
+
+#[test]
+fn an_agent_write_from_the_event_loop_lands_in_the_main_view_and_beside_the_thread() {
+	let initial = state_of("Body.");
+	let mut app = library_app(&initial);
+	let mut agent = Session::opened(&initial).expect("the agent session");
+	let update = agent.edited("Body.\n\nAn agent sentence.").expect("an agent update");
+
+	let updated =
+		LibraryDocumentUpdated { space_id: SPACE.to_owned(), name: "brief.md".to_owned(), update };
+	heard_in(&mut app, &frame("library://document-updated", updated));
+
+	for document in open_documents(&app) {
+		assert_eq!(markdown_of(document).as_deref(), Some("Body.\n\nAn agent sentence."));
+	}
+}
+
+#[test]
+fn a_writer_from_the_event_loop_shows_on_the_open_document_until_it_finishes() {
+	let mut app = library_app(&state_of("Body."));
+	let presence = LibraryDocumentPresence {
+		space_id: SPACE.to_owned(),
+		name: "brief.md".to_owned(),
+		writers: vec![agent_writer(String::new())],
+	};
+	heard_in(&mut app, &frame("library://document-presence", presence));
+	for document in open_documents(&app) {
+		assert_eq!(document.agents().count(), 1);
+	}
+
+	let finished = LibraryDocumentWriterFinished {
+		space_id: SPACE.to_owned(),
+		name: "brief.md".to_owned(),
+		agent_id: "atlas".to_owned(),
+		agent_name: "Atlas".to_owned(),
+		outcome: LibraryWriteOutcome::Finished,
+	};
+	heard_in(&mut app, &frame("library://document-writer-finished", finished));
+
+	for document in open_documents(&app) {
+		assert_eq!(document.agents().count(), 0);
+		assert!(document.cards().is_empty());
+	}
+	assert!(app.surfaces.s14_library.notice.is_none());
+}
+
+#[test]
+fn a_rename_from_the_event_loop_retitles_the_open_document_and_relists_the_library() {
+	let mut app = library_app(&state_of("Body."));
+	let renamed = LibraryDocumentRenamed {
+		space_id: SPACE.to_owned(),
+		former_name: "brief.md".to_owned(),
+		name: "Launch brief.md".to_owned(),
+	};
+	heard_in(&mut app, &frame("library://document-renamed", renamed));
+
+	for document in open_documents(&app) {
+		assert_eq!(document.target.name, "Launch brief.md");
+		assert_eq!(document.title.text, "Launch brief");
+	}
+	assert_eq!(
+		calls(&mut app.surfaces.s14_library),
+		vec![Call::List { space_id: SPACE.to_owned() }]
+	);
+}
+
+#[test]
+fn a_library_change_from_the_event_loop_relists_the_library() {
+	let mut app = library_app(&state_of("Body."));
+	let changed = LibraryChanged { space_id: SPACE.to_owned(), overwritten: None };
+	heard_in(&mut app, &frame("library://changed", changed));
+
+	assert_eq!(
+		calls(&mut app.surfaces.s14_library),
+		vec![Call::List { space_id: SPACE.to_owned() }]
+	);
+}
+
+#[test]
+fn an_unreadable_library_event_takes_the_unreadable_path() {
+	for event in [
+		"library://changed",
+		"library://document-updated",
+		"library://document-renamed",
+		"library://document-presence",
+		"library://document-writer-finished",
+	] {
+		let heard = parsed(&frame(event, json!({ "name": 4 })));
+		assert!(
+			matches!(&heard, Some(HostEvent::Unreadable { event: named, .. }) if named == event),
+			"{event} is reported unreadable"
+		);
+	}
+	assert!(matches!(
+		parsed(&frame("library://changed", json!({ "spaceId": SPACE }))),
+		Some(HostEvent::Library(Heard::Changed(_)))
+	));
 }
