@@ -295,6 +295,7 @@ fn changed(marker: impl Display) -> MissionChanged {
 		state: MissionState::Working,
 		state_seq: 1,
 		is_agent_running: true,
+		status: None,
 		liveness: MissionLiveness::Working,
 		pending_prompt: None,
 		working_bot_ids: Vec::new(),
