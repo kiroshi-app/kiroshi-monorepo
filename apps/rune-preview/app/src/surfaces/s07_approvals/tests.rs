@@ -854,7 +854,7 @@ fn a_turn_end_keeps_the_resolved_approvals_on_show() {
 }
 
 #[test]
-fn a_failed_turn_drops_the_open_prompts_of_its_run() {
+fn a_failed_turn_keeps_the_open_prompts_of_its_run() {
 	let mut state = State::default();
 	requesting(&mut state, "p1");
 	asking(&mut state, scope_in(CONVERSATION), single_question("q1"));
@@ -862,8 +862,10 @@ fn a_failed_turn_drops_the_open_prompts_of_its_run() {
 	let failed = model::AgentEvent::Failed { error: json!({ "kind": "notAuthenticated" }) };
 	state.heard_agent(&model_scope(CONVERSATION), &failed);
 
-	assert!(state.approvals.is_empty());
-	assert!(state.questions.is_empty());
+	assert_eq!(approval_ids(&state), vec!["p1"]);
+	assert_eq!(state.approvals[0].resolved, None);
+	assert_eq!(state.questions.len(), 1);
+	assert_eq!(state.questions[0].request.id, "q1");
 }
 
 #[test]

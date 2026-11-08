@@ -138,7 +138,7 @@ impl State {
 	}
 
 	pub fn heard_agent(&mut self, scope: &model::RuntimeScope, event: &model::AgentEvent) {
-		if let model::AgentEvent::TurnEnded { .. } | model::AgentEvent::Failed { .. } = event {
+		if let model::AgentEvent::TurnEnded { .. } = event {
 			self.rest(|held| {
 				held.conversation_id == scope.conversation_id && held.bot_id == scope.bot_id
 			});
