@@ -9,20 +9,23 @@ pub struct MissionSeqs {
 
 impl MissionSeqs {
 	pub fn admits_change(&mut self, mission_id: &str, state_seq: i64) -> bool {
-		let is_newer = self.last_applied.get(mission_id).is_none_or(|last| state_seq > *last);
-		if is_newer {
-			self.hold(mission_id, state_seq);
+		if self.is_behind(mission_id, state_seq) {
+			return false;
 		}
-		is_newer
+		self.hold(mission_id, state_seq);
+		true
 	}
 
 	pub fn ordered(&mut self, read: Mission, held: Option<&Mission>) -> Mission {
-		let is_behind = self.last_applied.get(&read.id).is_some_and(|last| read.state_seq < *last);
-		if is_behind {
+		if self.is_behind(&read.id, read.state_seq) {
 			return held.cloned().unwrap_or(read);
 		}
 		self.hold(&read.id, read.state_seq);
 		read
+	}
+
+	fn is_behind(&self, mission_id: &str, state_seq: i64) -> bool {
+		self.last_applied.get(mission_id).is_some_and(|last| state_seq < *last)
 	}
 
 	fn hold(&mut self, mission_id: &str, state_seq: i64) {

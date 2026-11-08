@@ -495,7 +495,7 @@ fn a_running_agent_shows_on_the_row_the_detail_and_the_card_then_leaves_them_whe
 	let mut app = opened_with_a_card("m-1");
 	changed(&mut app, &running_change("m-1", true, 2));
 	assert_eq!(running_signs(&app, "m-1"), (true, true, true));
-	changed(&mut app, &running_change("m-1", false, 3));
+	changed(&mut app, &running_change("m-1", false, 2));
 	assert_eq!(running_signs(&app, "m-1"), (false, false, false));
 }
 
@@ -959,9 +959,32 @@ fn a_change_older_than_the_held_one_leaves_the_row_the_card_and_the_detail_uncha
 }
 
 #[test]
-fn a_change_as_old_as_the_held_one_leaves_the_row_the_card_and_the_detail_unchanged() {
+fn a_status_only_change_as_old_as_the_held_one_shows_on_the_row_the_detail_and_the_card() {
 	let mut app = opened_at_seq(5);
-	changed(&mut app, &change_at(model::MissionState::Done, 5));
+	let status = MissionStatus { text: "Tests green".to_owned(), written_at: 42 };
+	let announced = model::MissionChanged {
+		is_agent_running: true,
+		status: Some(status.clone()),
+		..change_at(model::MissionState::WaitingHuman, 5)
+	};
+	changed(&mut app, &announced);
+	assert_eq!(statuses(&app, "m-1"), (Some(status.clone()), Some(status.clone()), Some(status)));
+	assert_eq!(card_of(&app, "m-1").map(|card| card.is_agent_running), Some(true));
+	assert_eq!(held_states(&app), WAITING_ON_YOU);
+}
+
+#[test]
+fn an_older_change_after_a_status_only_change_changes_nothing() {
+	let mut app = opened_at_seq(5);
+	let status = MissionStatus { text: "Tests green".to_owned(), written_at: 42 };
+	let announced = model::MissionChanged {
+		status: Some(status.clone()),
+		..change_at(model::MissionState::WaitingHuman, 5)
+	};
+	changed(&mut app, &announced);
+	changed(&mut app, &running_change("m-1", true, 4));
+	assert_eq!(statuses(&app, "m-1"), (Some(status.clone()), Some(status.clone()), Some(status)));
+	assert_eq!(running_signs(&app, "m-1"), (false, false, false));
 	assert_eq!(held_states(&app), WAITING_ON_YOU);
 }
 
@@ -980,7 +1003,7 @@ fn a_change_newer_than_the_held_one_applies_everywhere_and_is_held() {
 	let done =
 		(Some(MissionState::Done), Some(MissionState::Done), Some(model::MissionState::Done));
 	assert_eq!(held_states(&app), done);
-	changed(&mut app, &change_at(model::MissionState::Working, 6));
+	changed(&mut app, &change_at(model::MissionState::Working, 5));
 	assert_eq!(held_states(&app), done);
 }
 
@@ -1001,7 +1024,7 @@ fn a_change_of_a_mission_with_no_held_seq_applies_and_is_held() {
 		card_of(&app, "m-1").map(|card| card.state),
 		Some(model::MissionState::WaitingHuman)
 	);
-	changed(&mut app, &change_at(model::MissionState::Done, 9));
+	changed(&mut app, &change_at(model::MissionState::Done, 8));
 	assert_eq!(
 		card_of(&app, "m-1").map(|card| card.state),
 		Some(model::MissionState::WaitingHuman)
@@ -1071,7 +1094,7 @@ fn a_feed_reread_newer_than_the_held_seq_applies_and_is_held() {
 	reread_asked(&mut app);
 	answer_feed(&mut app, Ok(vec![at_seq(mission("m-1", MissionState::Done, 1), 6)]));
 	assert_eq!(listed_state(&app, "m-1"), Some(MissionState::Done));
-	changed(&mut app, &change_at(model::MissionState::Working, 6));
+	changed(&mut app, &change_at(model::MissionState::Working, 5));
 	assert_eq!(listed_state(&app, "m-1"), Some(MissionState::Done));
 }
 
@@ -1080,7 +1103,7 @@ fn a_detail_read_newer_than_the_held_seq_applies_and_is_held() {
 	let mut app = opened_at_seq(5);
 	read_detail(&mut app, at_seq(mission("m-1", MissionState::Done, 1), 6));
 	assert_eq!(held_states(&app).1, Some(MissionState::Done));
-	changed(&mut app, &change_at(model::MissionState::Working, 6));
+	changed(&mut app, &change_at(model::MissionState::Working, 5));
 	assert_eq!(held_states(&app).1, Some(MissionState::Done));
 }
 
