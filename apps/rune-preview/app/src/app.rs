@@ -7,6 +7,8 @@ use rune::{ClipboardContent, TextEdit, Waker};
 use rune_kit::shell::PaneState;
 use serde_json::json;
 
+use kiroshi_core::spaces::contract::Space as ListedSpace;
+use kiroshi_core::user::contract::UserPreferences;
 use kiroshi_rune_kit::avatar::Motion;
 use kiroshi_rune_kit::math::Typesetter;
 use kiroshi_rune_os::policy::{NoticeKind, NoticeTarget};
@@ -29,7 +31,7 @@ use crate::notices::Notices;
 use crate::runs::Runs;
 use crate::source::Source;
 use crate::surfaces::s04_boot::{self, Step};
-use crate::surfaces::{Surfaces, s01_chrome};
+use crate::surfaces::{Surfaces, s01_chrome, s02_rail, s10_agent_settings};
 use crate::turn::{self, SendError};
 
 const PAGE_LIMIT: u32 = 200;
@@ -340,6 +342,7 @@ impl App {
 
 	pub fn setup(&mut self, waker: Waker) {
 		self.images.start(ImageCache::new(waker.clone()));
+		self.surfaces.s10_agent_settings.attach(waker.clone());
 		self.surfaces.s04_boot.attach(waker.clone());
 		let outbox = Outbox { sender: self.pending.clone(), waker };
 		let heard = outbox.clone();
@@ -377,7 +380,7 @@ impl App {
 			self.received(inbound);
 			changed = true;
 		}
-		changed
+		s10_agent_settings::poll(self) || changed
 	}
 
 	pub fn tick(&mut self, seconds: f64) -> bool {
@@ -739,6 +742,7 @@ impl App {
 				self.workspace = Workspace::Ready(ready);
 				s04_boot::booted(self);
 				s01_chrome::reopen_kept_windows(self);
+				s02_rail::connected(self);
 				self.work(move |outbox| {
 					outbox.deliver(Inbound::Longest(longest::longest(&host, &conversations)))
 				});
@@ -844,6 +848,7 @@ impl App {
 				self.request_images();
 			}
 			HostEvent::MissionChanged(changed) => self.mission_changed(changed),
+			HostEvent::Companion(heard) => s10_agent_settings::heard(self, heard),
 			HostEvent::AccountChanged(account) => {
 				if let Some(ready) = self.ready_mut() {
 					ready.person = person_of(account);
@@ -928,17 +933,39 @@ pub fn opened_in_process() -> Result<Ready, HostError> {
 	ready_on(Source::InProcess(local::opened()?))
 }
 
+pub struct SpaceContent {
+	pub agents: Vec<Agent>,
+	pub conversations: Vec<Conversation>,
+}
+
+pub fn space_content(source: &Source, space_id: &str) -> Result<SpaceContent, HostError> {
+	let agents = source.invoke("conversation_bots", json!({ "spaceId": space_id }))?;
+	let conversations = roster(source, space_id)?;
+	Ok(SpaceContent { agents, conversations })
+}
+
+fn last_space_id(source: &Source) -> Option<String> {
+	match source.invoke::<UserPreferences>("user_preferences", json!({})) {
+		Ok(preferences) => preferences.last_space_id,
+		Err(failure) => {
+			eprintln!("the last Space did not read, the first Space opens: {}", failure.detail());
+			None
+		}
+	}
+}
+
 pub fn ready_on(source: Source) -> Result<Ready, HostError> {
-	let spaces: Vec<Space> = source.invoke("space_list", json!({}))?;
-	let Some(space) = spaces.into_iter().next() else {
+	let spaces: Vec<ListedSpace> = source.invoke("space_list", json!({}))?;
+	let remembered = last_space_id(&source);
+	let Some(space) = s02_rail::opening_space(&spaces, remembered.as_deref()) else {
 		return Err(HostError::CommandFailed {
 			command: "space_list".into(),
 			status: 200,
 			body: "no Space on the dev profile".into(),
 		});
 	};
-	let agents = source.invoke("conversation_bots", json!({ "spaceId": space.id }))?;
-	let conversations = roster(&source, &space.id)?;
+	let space = s02_rail::shown_space(space);
+	let SpaceContent { agents, conversations } = space_content(&source, &space.id)?;
 	let person = match source.invoke::<KiroshiAccountState>("account_state", json!({})) {
 		Ok(account) => person_of(account),
 		Err(failure) => {

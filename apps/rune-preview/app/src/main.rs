@@ -14,7 +14,8 @@ use kiroshi_rune_preview::app::App;
 use kiroshi_rune_preview::host::Profile;
 use kiroshi_rune_preview::navigation::Route;
 use kiroshi_rune_preview::surfaces::{
-	s01_chrome, s04_boot, s11_applications, s12_person_settings, s15_boards,
+	s01_chrome, s02_rail, s04_boot, s10_agent_settings, s11_applications, s12_person_settings,
+	s15_boards,
 };
 use kiroshi_rune_preview::{composer, conversations, local, menu, scenes, smoke, spike};
 
@@ -23,6 +24,10 @@ fn view(s: &App, cx: &mut Cx<App>) -> El {
 	let t = tokens::Tokens { reduced_motion: cx.is_reduced_motion(), ..tokens::Tokens::new(dark) };
 	if let Route::BlockSpike = s.navigation.main_route() {
 		return spike::view::view(s, cx, &t);
+	}
+	if let Route::Rail = s.navigation.main_route() {
+		let (body, layers) = s02_rail::view(s, &t);
+		return rune_kit::root(body, layers);
 	}
 	let k = t.kit();
 	let body = match s.navigation.main_route() {
@@ -59,15 +64,16 @@ fn view(s: &App, cx: &mut Cx<App>) -> El {
 		| Route::Approvals
 		| Route::Missions
 		| Route::Routines
-		| Route::AgentSettings
 		| Route::SpaceSettings
 		| Route::Library => el(),
 		Route::Applications => s11_applications::view(s, &t),
 		Route::PersonSettings => s12_person_settings::view(s, &t),
 		Route::Boards => s15_boards::view(s, &t, cx.layout_size(s15_boards::CANVAS)),
+		Route::AgentSettings => s10_agent_settings::view(s, &t),
 	};
-	let layers = s12_person_settings::layers(s, &t)
+	let layers = s10_agent_settings::layers(s, &t)
 		.into_iter()
+		.chain(s12_person_settings::layers(s, &t))
 		.chain(s04_boot::layers(s, &t))
 		.chain(s11_applications::layers(s, &t));
 	rune_kit::root(body, layers)
@@ -83,6 +89,8 @@ const CHROME: &str = "--chrome";
 
 const HOST_API: &str = "--host-api";
 
+const RAIL: &str = "--rail";
+
 fn setup(s: &mut App, waker: Waker) {
 	let flagged = |flag: &str| launched().flags.iter().any(|arg| arg == flag);
 	if flagged(DEV_HOST) {
@@ -95,8 +103,12 @@ fn setup(s: &mut App, waker: Waker) {
 	if flagged(CHROME) {
 		s.navigation.navigate_main(Route::Chrome);
 	}
+	if flagged(RAIL) {
+		s.navigation.navigate_main(Route::Rail);
+	}
 	s.surfaces.s11_applications.attach(waker.clone());
 	s.surfaces.s12_person_settings.attach(waker.clone());
+	s.surfaces.s02_rail.attach(waker.clone());
 	s.setup(waker);
 }
 
@@ -105,6 +117,7 @@ fn poll(s: &mut App, seconds: f64, tx: &mut Tx) -> bool {
 	let changed = s11_applications::poll(s) || changed;
 	let changed = s12_person_settings::poll(s, tx) || changed;
 	let changed = s04_boot::poll(s, tx) || changed;
+	let changed = s02_rail::poll(s) || changed;
 	let changed = open_held(s, &mut held_links()) || changed;
 	if let Some(after) = s.focus_wake() {
 		tx.wake_after(after);
