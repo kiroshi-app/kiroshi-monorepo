@@ -306,11 +306,11 @@ const fn scene(
 	pointer: Pointer,
 	view: SceneView,
 ) -> Scene {
-	Scene { id, size, tabs, pointer, typed, view }
+	Scene { id, size, tabs, pointer, typed, keys: "", view }
 }
 
 const fn fixed(id: &'static str, size: (f32, f32), view: SceneView) -> Scene {
-	Scene { id, size, tabs: 0, pointer: Pointer::Away, typed: "", view }
+	Scene { id, size, tabs: 0, pointer: Pointer::Away, typed: "", keys: "", view }
 }
 
 const fn drafted(
@@ -319,7 +319,7 @@ const fn drafted(
 	typed: &'static str,
 	view: SceneView,
 ) -> Scene {
-	Scene { id, size, tabs: 0, pointer: Pointer::Away, typed, view }
+	Scene { id, size, tabs: 0, pointer: Pointer::Away, typed, keys: "", view }
 }
 
 const fn tabbed(
@@ -329,7 +329,7 @@ const fn tabbed(
 	tabs: usize,
 	view: SceneView,
 ) -> Scene {
-	Scene { id, size, tabs, pointer: Pointer::Away, typed, view }
+	Scene { id, size, tabs, pointer: Pointer::Away, typed, keys: "", view }
 }
 
 const fn hovered(
@@ -339,7 +339,7 @@ const fn hovered(
 	key: &'static str,
 	view: SceneView,
 ) -> Scene {
-	Scene { id, size, tabs: 0, pointer: Pointer::EntersAtSnap(key), typed, view }
+	Scene { id, size, tabs: 0, pointer: Pointer::EntersAtSnap(key), typed, keys: "", view }
 }
 
 type SceneView = fn(&Tokens, &SceneState) -> El;
