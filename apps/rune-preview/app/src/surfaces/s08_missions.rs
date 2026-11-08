@@ -5,13 +5,12 @@ mod tests;
 mod view;
 mod worker;
 
+use kiroshi_core::agent::contract::CancelOutcome;
 use kiroshi_core::missions::contract::{Mission, MissionDetail, MissionEventKind, MissionInSpace};
 use kiroshi_rune_kit::strings::{Key, Language, chat};
 use kiroshi_rune_kit::surfaces::s04_boot::notice::{NoticeEvent, NoticeKind, SurfaceEvent};
 use kiroshi_rune_kit::surfaces::s05_thread::MissionEvent as ThreadMissionEvent;
-use kiroshi_rune_kit::surfaces::s08_missions::{
-	CopyKind, EventKind, MenuAction as KitMenuAction, MissionsEvent,
-};
+use kiroshi_rune_kit::surfaces::s08_missions::{CopyKind, EventKind, MenuAction, MissionsEvent};
 use rune::{Tx, Waker};
 use serde_json::Value;
 
@@ -21,10 +20,10 @@ use crate::host::{self, HostError, Profile};
 use crate::model;
 use crate::source::Source;
 
-use menu::{copied_value, copy_word, refusal_of};
+use menu::{HeldMenu, copied_value, copy_word, refusal_of};
 use worker::{Answer, Call, Command, Worker};
 
-pub use menu::{MenuAction, menu_facts};
+pub use menu::menu_facts;
 pub use view::{header, layers, panel};
 
 const LANGUAGE: Language = Language::En;
@@ -126,6 +125,7 @@ pub struct State {
 	panel: Option<Panel>,
 	is_earlier_today_open: bool,
 	notices: Vec<Notice>,
+	menu: Option<HeldMenu>,
 	effects: Vec<Effect>,
 	queued: Vec<Call>,
 	source: Option<Source>,
@@ -279,6 +279,12 @@ impl State {
 		self.effects.push(Effect::Copy { text: text.to_owned(), copied });
 	}
 
+	fn show_copy_choices(&mut self, mission_id: &str, is_shown: bool) {
+		if let Some(menu) = self.menu.as_mut().filter(|menu| menu.mission_id == mission_id) {
+			menu.is_copy_shown = is_shown;
+		}
+	}
+
 	fn write(&mut self, command: Command, mission_id: &str) {
 		let profile = self.source.as_ref().and_then(Source::running_profile);
 		if let Some(refused) = refused_before_leaving(profile, command) {
@@ -359,6 +365,26 @@ fn landed(app: &mut App, answer: Answer) {
 		Answer::Written { command, outcome: Err(failure), .. } => {
 			state(app).raise_failure(refusal_of(command), &failure)
 		}
+		Answer::Stopped(outcome) => stopped(app, outcome),
+	}
+	close_vanished_menu(app);
+}
+
+fn stopped(app: &mut App, outcome: Result<CancelOutcome, HostError>) {
+	let refused = chat::missions::menu::failed::STOP_AGENT;
+	match outcome {
+		Ok(CancelOutcome::Cancelled | CancelOutcome::NothingToCancel) => {}
+		Ok(CancelOutcome::Failed { .. }) => {
+			state(app).raise(NoticeKind::Error, said(refused), None)
+		}
+		Err(failure) => state(app).raise_failure(refused, &failure),
+	}
+}
+
+fn close_vanished_menu(app: &mut App) {
+	let menu = app.surfaces.s08_missions.menu.as_ref();
+	if menu.is_some_and(|menu| known(app, &menu.mission_id).is_none()) {
+		state(app).menu = None;
 	}
 }
 
@@ -485,26 +511,37 @@ pub fn changed(app: &mut App, changed: &model::MissionChanged) {
 	state(app).queue(Call::Detail(mission_id.to_owned()));
 }
 
-fn known(app: &App, mission_id: &str) -> Option<Mission> {
+fn known<'a>(app: &'a App, mission_id: &str) -> Option<&'a Mission> {
 	let opened = app.mission.as_ref().and_then(Opened::mission);
 	app.surfaces
 		.s08_missions
 		.listed(mission_id)
 		.or(opened.filter(|mission| mission.id == mission_id))
-		.cloned()
 }
 
-pub fn act(app: &mut App, mission_id: &str, action: MenuAction) {
-	let Some(mission) = known(app, mission_id) else { return };
+fn act(app: &mut App, mission_id: &str, action: MenuAction) {
+	let Some(mission) = known(app, mission_id).cloned() else { return };
 	match action {
 		MenuAction::Open | MenuAction::MessageAgent | MenuAction::Answer => {
 			open(app, &Opening::of(&mission))
 		}
 		MenuAction::OpenPullRequest => state(app).open_pull_request(mission.pull_request_url),
-		MenuAction::Copy(kind) => state(app).copy(&mission, kind),
+		MenuAction::StopAgent => state(app).queue(Call::Stop {
+			conversation_id: mission.thread_conversation_id,
+			bot_id: mission.bot_id,
+		}),
 		MenuAction::Close => state(app).write(Command::Close, mission_id),
 		MenuAction::Reopen => state(app).write(Command::Reopen, mission_id),
 	}
+}
+
+fn copy(app: &mut App, mission_id: &str, kind: CopyKind) {
+	let Some(mission) = known(app, mission_id).cloned() else { return };
+	state(app).copy(&mission, kind);
+}
+
+fn close_menu(app: &mut App) {
+	state(app).menu = None;
 }
 
 pub fn emitted(app: &mut App, event: MissionsEvent) {
@@ -513,29 +550,22 @@ pub fn emitted(app: &mut App, event: MissionsEvent) {
 		MissionsEvent::OpenUrl(url) => state(app).effects.push(Effect::Open { url, refused: None }),
 		MissionsEvent::Back => back(app),
 		MissionsEvent::ToggleEarlierToday => state(app).toggle_earlier_today(),
-		MissionsEvent::MenuChosen { mission, action } => {
-			if let Some(action) = chosen(action) {
-				act(app, &mission, action)
-			}
+		MissionsEvent::MenuRequested { mission, source, at } => {
+			state(app).menu =
+				Some(HeldMenu { mission_id: mission, source, at, is_copy_shown: false })
 		}
-		MissionsEvent::MenuCopied { mission, kind } => act(app, &mission, MenuAction::Copy(kind)),
-		// TODO: OPE-1998 keeps the menu open state and answers these three.
-		MissionsEvent::MenuRequested { .. }
-		| MissionsEvent::CopyChoicesShown { .. }
-		| MissionsEvent::MenuDismissed => {}
-	}
-}
-
-fn chosen(action: KitMenuAction) -> Option<MenuAction> {
-	match action {
-		KitMenuAction::Open => Some(MenuAction::Open),
-		KitMenuAction::OpenPullRequest => Some(MenuAction::OpenPullRequest),
-		KitMenuAction::MessageAgent => Some(MenuAction::MessageAgent),
-		KitMenuAction::Answer => Some(MenuAction::Answer),
-		KitMenuAction::Close => Some(MenuAction::Close),
-		KitMenuAction::Reopen => Some(MenuAction::Reopen),
-		// TODO: OPE-1998 stops the coding session, the app has no stop action yet.
-		KitMenuAction::StopAgent => None,
+		MissionsEvent::CopyChoicesShown { mission, is_shown } => {
+			state(app).show_copy_choices(&mission, is_shown)
+		}
+		MissionsEvent::MenuChosen { mission, action } => {
+			close_menu(app);
+			act(app, &mission, action)
+		}
+		MissionsEvent::MenuCopied { mission, kind } => {
+			close_menu(app);
+			copy(app, &mission, kind)
+		}
+		MissionsEvent::MenuDismissed => close_menu(app),
 	}
 }
 
