@@ -134,7 +134,7 @@ pub(super) const fn typed_in(
 	text: &'static str,
 	view: fn(&Tokens, &SceneState) -> El,
 ) -> Scene {
-	Scene { id, size, tabs: 0, pointer: Pointer::Away, typed: text, view }
+	Scene { id, size, tabs: 0, pointer: Pointer::Away, typed: text, keys: "", view }
 }
 
 fn framed(t: &Tokens, content: El) -> El {
