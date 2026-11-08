@@ -3,9 +3,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use rune::image::{Image, ImageCache};
-use rune::{El, Icon, TextEdit, col};
+use rune::{El, Icon, TextEdit, TextStyle, col};
 
-use super::{Pointer, SETTINGS_PANEL, Scene, SceneState};
+use super::{Pointer, SETTINGS_PANEL, Scene, SceneState, THEMES};
 use crate::strings::Language;
 use crate::surfaces::s11_applications::HAIRLINE;
 use crate::surfaces::s11_applications::catalogue::{
@@ -13,18 +13,18 @@ use crate::surfaces::s11_applications::catalogue::{
 };
 use crate::surfaces::s11_applications::identity::{Identity, meta_line, verified_pill};
 use crate::surfaces::s11_applications::install::{
-	InstallPage, Installable, KeyField, install_page,
+	FieldAccess, InstallPage, Installable, KeyField, install_page,
 };
 use crate::surfaces::s11_applications::mark::{Mark, MarkSize, mark};
 use crate::surfaces::s11_applications::panel::{
 	Application, Applications, Connection, ConnectionReason, Owner, applications,
 };
-use crate::surfaces::s11_applications::search::search_field;
+use crate::surfaces::s11_applications::search::{SEARCH_TEXT, search_field};
 use crate::surfaces::s11_applications::secrets::{
 	Scope, Secret, SecretField, SecretRemoval, SecretWrite, Secrets, SecretsDialog, secrets,
 	secrets_dialog,
 };
-use crate::tokens::{RADIUS_2XL, SPACING, Tokens};
+use crate::tokens::{RADIUS_2XL, SPACING, TEXT_SM, Tokens};
 
 const MARK_SIDE: f32 = 36.0;
 const MARK_SCALE: f32 = 2.0;
@@ -110,16 +110,18 @@ fn query(s: &mut SceneState) -> &mut TextEdit {
 	&mut s.edit
 }
 
-pub(super) const DARK_ONLY: &[&str] = &[
-	"settings-plugins-applicationspanel--connected-dark",
-	"settings-plugins-applicationspanel--needs-authorization-dark",
-];
 const PANEL_INSET: f32 = SPACING * 5.0;
 const NARROW_FRAME: f32 = SPACING * 80.0;
 const STORY_PADDING: f32 = SPACING * 4.0;
 const SEARCH_FRAME: f32 = SPACING * 96.0;
 const THEME_CELL_PADDING: f32 = SPACING * 6.0;
 const UNREACHABLE: &[u8] = b"NotAnImage";
+const FLOORED_TEXT_SIZE: f32 = 32.0;
+const FLOORED_TEXT: TextStyle = TextStyle {
+	size: FLOORED_TEXT_SIZE,
+	line_height: FLOORED_TEXT_SIZE * TEXT_SM.line_height / TEXT_SM.size,
+	..TEXT_SM
+};
 static DRAWN_MARK: Icon = Icon {
 	name: "s11-drawn-mark",
 	view: 24.0,
@@ -134,7 +136,16 @@ pub(super) const fn typed_in(
 	text: &'static str,
 	view: fn(&Tokens, &SceneState) -> El,
 ) -> Scene {
-	Scene { id, size, tabs: 0, pointer: Pointer::Away, typed: text, keys: "", view }
+	Scene {
+		id,
+		size,
+		tabs: 0,
+		pointer: Pointer::Away,
+		typed: text,
+		keys: "",
+		themes: &THEMES,
+		view,
+	}
 }
 
 fn framed(t: &Tokens, content: El) -> El {
@@ -263,6 +274,7 @@ fn applications_scene(
 		owner,
 		applications: apps,
 		query: &s.edit,
+		search_text: SEARCH_TEXT,
 		has_failed_to_load: failed,
 		can_connect: true,
 		language: Language::En,
@@ -270,23 +282,41 @@ fn applications_scene(
 	framed(t, applications(t, &panel, query, ignore))
 }
 
-fn with_marked(t: &Tokens, s: &SceneState, owner: Owner, first: Vec<Application>) -> El {
-	let linear = picture(LINEAR_MARK);
-	let github = picture(GITHUB_MARK);
-	let marked = [
-		connected(app("linear", Some("Linear"), Mark::Picture(&linear)), Connection::Connected),
+fn marked<'a>(linear: &'a Image, github: &'a Image) -> [Application<'a>; 3] {
+	[
+		connected(app("linear", Some("Linear"), Mark::Picture(linear)), Connection::Connected),
 		connected(
-			app("github", Some("GitHub"), Mark::Picture(&github)),
+			app("github", Some("GitHub"), Mark::Picture(github)),
 			Connection::NeedsAuthorization,
 		),
 		connected(app("atlas", None, Mark::Absent), Connection::Failed),
-	];
-	let apps: Vec<Application> = first.into_iter().chain(marked).collect();
+	]
+}
+
+fn with_marked(t: &Tokens, s: &SceneState, owner: Owner, first: Vec<Application>) -> El {
+	let linear = picture(LINEAR_MARK);
+	let github = picture(GITHUB_MARK);
+	let apps: Vec<Application> = first.into_iter().chain(marked(&linear, &github)).collect();
 	applications_scene(t, s, owner, &apps, false)
 }
 
 pub(super) fn applications_agent(t: &Tokens, s: &SceneState) -> El {
 	with_marked(t, s, AGENT, Vec::new())
+}
+
+pub(super) fn applications_search_row_at_largest_text(t: &Tokens, s: &SceneState) -> El {
+	let linear = picture(LINEAR_MARK);
+	let github = picture(GITHUB_MARK);
+	let panel = Applications {
+		owner: AGENT,
+		applications: &marked(&linear, &github),
+		query: &s.edit,
+		search_text: FLOORED_TEXT,
+		has_failed_to_load: false,
+		can_connect: true,
+		language: Language::En,
+	};
+	framed(t, applications(t, &panel, query, ignore))
 }
 
 pub(super) fn applications_space(t: &Tokens, s: &SceneState) -> El {
@@ -358,6 +388,7 @@ pub(super) fn applications_failed_with_long_reason(t: &Tokens, s: &SceneState) -
 		owner: AGENT,
 		applications: &apps,
 		query: &s.edit,
+		search_text: SEARCH_TEXT,
 		has_failed_to_load: false,
 		can_connect: true,
 		language: Language::En,
@@ -492,11 +523,20 @@ pub(super) fn mark_with_unreachable_mark(t: &Tokens, _: &SceneState) -> El {
 }
 
 pub(super) fn search_field_story(t: &Tokens, s: &SceneState) -> El {
-	padded(t, col().w(SEARCH_FRAME).child(search_field(t, &s.edit, Language::En, query)))
+	search_field_scene(t, s, SEARCH_TEXT)
+}
+
+pub(super) fn search_field_at_largest_text(t: &Tokens, s: &SceneState) -> El {
+	search_field_scene(t, s, FLOORED_TEXT)
+}
+
+fn search_field_scene(t: &Tokens, s: &SceneState, style: TextStyle) -> El {
+	padded(t, col().w(SEARCH_FRAME).child(search_field(t, &s.edit, style, Language::En, query)))
 }
 
 pub(super) fn search_field_theme_cell(t: &Tokens, s: &SceneState) -> El {
-	let field = col().w(SEARCH_FRAME).child(search_field(t, &s.edit, Language::En, query));
+	let field =
+		col().w(SEARCH_FRAME).child(search_field(t, &s.edit, SEARCH_TEXT, Language::En, query));
 	padded(t, col().padding(THEME_CELL_PADDING).child(field))
 }
 
@@ -708,6 +748,10 @@ fn field_value(s: &mut SceneState, _: usize) -> &mut TextEdit {
 	&mut s.edit
 }
 
+fn distinct_value(s: &mut SceneState, index: usize) -> &mut TextEdit {
+	if index == 0 { &mut s.secrets.name } else { &mut s.secrets.value }
+}
+
 fn installable<'a>(
 	id: &'a str,
 	name: &'a str,
@@ -740,6 +784,16 @@ enum Progress {
 }
 
 fn install_scene(t: &Tokens, owner: Owner, application: &Installable, progress: Progress) -> El {
+	install_scene_with(t, owner, application, progress, field_value)
+}
+
+fn install_scene_with(
+	t: &Tokens,
+	owner: Owner,
+	application: &Installable,
+	progress: Progress,
+	access: FieldAccess<SceneState>,
+) -> El {
 	let page = InstallPage {
 		category: Category::Everything,
 		application,
@@ -752,7 +806,7 @@ fn install_scene(t: &Tokens, owner: Owner, application: &Installable, progress: 
 		},
 		language: Language::En,
 	};
-	bordered(t, install_page(t, &page, field_value, ignore))
+	bordered(t, install_page(t, &page, access, ignore))
 }
 
 fn granola<'a>(mark: &'a Image, name: &'a str, tools: &'a [&'a str]) -> Installable<'a> {
@@ -837,6 +891,35 @@ pub(super) fn install_asks_for_every_value(t: &Tokens, s: &SceneState) -> El {
 	install_scene(t, INSTALL_AGENT, &godot, Progress::Idle)
 }
 
+pub(super) fn install_conceals_the_secret_field_alone(t: &Tokens, s: &SceneState) -> El {
+	let fields = [
+		KeyField {
+			name: "GODOT_PATH",
+			description: Some("Path to the Godot executable."),
+			is_concealed: false,
+			is_revealed: false,
+			value: &s.secrets.name,
+		},
+		KeyField {
+			name: "FUNPLAY_GODOT_MCP_TOKEN",
+			description: Some("The local auth token of the Funplay dock."),
+			is_concealed: true,
+			is_revealed: true,
+			value: &s.secrets.value,
+		},
+	];
+	let funplay = Installable {
+		fields: &fields,
+		..installable(
+			"io.github.FunplayAI/funplay-godot-mcp",
+			"funplay-godot-mcp",
+			"io.github.FunplayAI/funplay-godot-mcp",
+			Setup::ApiKey,
+		)
+	};
+	install_scene_with(t, INSTALL_AGENT, &funplay, Progress::Idle, distinct_value)
+}
+
 pub(super) fn install_nothing_to_set_up(t: &Tokens, _: &SceneState) -> El {
 	let tasklog =
 		installable("io.github.kwn/tasklog", "tasklog", "npx -y @kwn/tasklog-mcp", Setup::Nothing);
@@ -853,14 +936,25 @@ pub(super) fn install_empty_tool_list(t: &Tokens, _: &SceneState) -> El {
 }
 
 pub(super) fn install_refused(t: &Tokens, _: &SceneState) -> El {
+	queried_scene(
+		t,
+		Some(
+			"the required field \"apiKey\" names no header to carry it, and a key must never travel in a url",
+		),
+	)
+}
+
+pub(super) fn install_refused_without_reason(t: &Tokens, _: &SceneState) -> El {
+	queried_scene(t, None)
+}
+
+fn queried_scene(t: &Tokens, refusal: Option<&str>) -> El {
 	let queried = Installable {
 		description: Some("Asks for a key its url would carry."),
 		source: Some("Smithery"),
 		host: Some("queried.run.tools"),
 		tools: Some(&["search_records", "read_record"]),
-		refusal: Some(
-			"the required field \"apiKey\" names no header to carry it, and a key must never travel in a url",
-		),
+		refusal,
 		..installable(
 			"smithery/queried",
 			"Queried",

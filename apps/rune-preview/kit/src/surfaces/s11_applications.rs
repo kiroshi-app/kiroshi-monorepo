@@ -53,6 +53,15 @@ pub fn kit_ring(t: &Tokens, control: El) -> El {
 	control.focus_ring(FOCUS_RING_WIDTH, 0.0, ring_tint(t, KIT_RING_SHARE))
 }
 
+pub fn ringed_field(t: &Tokens, field: El, radius: f32) -> El {
+	let focus_border = el()
+		.pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+		.radius(radius)
+		.focus_ring(HAIRLINE, -HAIRLINE, t.ring)
+		.a11y_hidden();
+	kit_ring(t, field.radius(radius).child(focus_border))
+}
+
 pub fn outlined(t: &Tokens, control: El, radius: f32) -> El {
 	control.radius(radius).border(HAIRLINE, t.border)
 }

@@ -182,7 +182,7 @@ fn check(
 
 fn orphans() -> Vec<String> {
 	let registered: BTreeSet<String> = scenes::every_scene()
-		.flat_map(|scene| scene.themes().iter().map(|&theme| scene.baseline(theme)))
+		.flat_map(|scene| scene.themes.iter().map(|&theme| scene.baseline(theme)))
 		.collect();
 	let Ok(entries) = fs::read_dir(baselines()) else { return Vec::new() };
 	entries
@@ -205,7 +205,7 @@ fn every_registered_scene_matches_its_baseline() {
 		fs::create_dir_all(baselines()).expect("the baseline folder exists");
 	}
 	let mut failures: Vec<String> = scenes::every_scene()
-		.flat_map(|scene| scene.themes().iter().map(move |&theme| (scene, theme)))
+		.flat_map(|scene| scene.themes.iter().map(move |&theme| (scene, theme)))
 		.filter_map(|(scene, theme)| check(scene, theme, bless, &rendered, &failed))
 		.collect();
 	failures.extend(orphans());
