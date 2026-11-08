@@ -50,7 +50,7 @@ pub fn inline_notice<S: 'static>(
 	t: &Tokens,
 	language: Language,
 	notice: &InlineNotice,
-	emit: Emit<S, NoticeEvent>,
+	emit: impl Fn(&mut S, NoticeEvent) + Clone + 'static,
 ) -> El {
 	let (ink, mark, glyph) = match notice.tone {
 		Tone::Warning => (t.primary, t.bot_badge_attention, &icons::INFO),
@@ -68,6 +68,7 @@ pub fn inline_notice<S: 'static>(
 	if let Some(retry) = &notice.retry {
 		let label = retry.label.unwrap_or(chat::notice::RETRY.text(language));
 		let button = Button::new(label).variant(ButtonVariant::Outline).size(ButtonSize::Sm);
+		let emit = emit.clone();
 		body = body.child(row().child(if retry.busy {
 			button.disabled(true).view(t).a11y_value("busy")
 		} else {
