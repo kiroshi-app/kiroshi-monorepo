@@ -29,7 +29,9 @@ use crate::conversations::contract::{PendingPrompt, PendingPromptKind, Transcrip
 use crate::conversations::host_turn::{ended_as, HostTurns};
 use crate::conversations::state as conversation_state;
 use crate::db;
-use crate::db::repositories::conversations::{Bot as StoredBot, ConversationError, MISSION_KIND};
+use crate::db::repositories::conversations::{
+	Bot as StoredBot, ConversationError, PromptKind, MISSION_KIND,
+};
 use crate::db::repositories::messages::{NewTurn, RunClaim};
 use crate::db::repositories::runtime_context::ParticipantKey;
 use crate::db::repositories::space_children::SpaceChild;
@@ -206,6 +208,18 @@ impl<S> Live<S> {
 			.retain(|question| !(question.asked_by(scope) && question.request.id == id));
 	}
 
+	fn close_prompts_named_by(&self, scope: &RuntimeScope, event: &AgentEvent) {
+		let AgentEvent::PromptsClosed { permission_ids, question_ids } = event else {
+			return;
+		};
+		self.questions().retain(|question| {
+			!(question.asked_by(scope) && question_ids.contains(&question.request.id))
+		});
+		if let Some(run) = self.runs().get_mut(&run_key(scope)).filter(|run| &run.scope == scope) {
+			run.permissions.retain(|held| !permission_ids.contains(&held.id));
+		}
+	}
+
 	fn drop_questions(&self, scope: &RuntimeScope) -> Vec<PendingQuestion> {
 		self.questions().extract_if(.., |question| question.asked_by(scope)).collect()
 	}
@@ -254,7 +268,7 @@ impl<S> Live<S> {
 			}
 			AgentEvent::TurnEnded { .. } => run.settle(),
 			AgentEvent::Failed { error } if error.is_fatal() => run.settle(),
-			AgentEvent::QuestionRequested { .. } => {}
+			AgentEvent::QuestionRequested { .. } | AgentEvent::PromptsClosed { .. } => {}
 			_ => return false,
 		}
 		true
@@ -437,6 +451,7 @@ impl TurnSink for RunSink {
 			return;
 		}
 		let moves_the_thread = self.live.moved_by(&self.scope, &event);
+		self.live.close_prompts_named_by(&self.scope, &event);
 		if let AgentEvent::QuestionRequested { request } = &event {
 			let asked =
 				PendingQuestion { scope: self.scope.clone(), turn, request: request.clone() };
@@ -462,6 +477,7 @@ fn closes_the_run(event: &AgentEvent) -> bool {
 	matches!(
 		event,
 		AgentEvent::TurnEnded { .. }
+			| AgentEvent::PromptsClosed { .. }
 			| AgentEvent::Failed { error: TransportError::WriteFailed { .. } }
 	)
 }
@@ -1510,6 +1526,7 @@ async fn close_stored_runs(
 		.cancel_open_runs(conversation_id.clone(), scope.bot_id.clone(), now_ms())
 		.await?;
 	if closed > 0 {
+		announce_prompts_closed(core, scope, None).await;
 		announce(core, Some(scope.clone()), ended_as(TurnOutcome::Cancelled));
 		forget_settled_turns(core).await;
 	}
@@ -1616,16 +1633,66 @@ pub async fn shutdown_session(
 	if let Some(session) = cleared.ended {
 		session.shutdown().await;
 	}
-	release_stored_prompts(core, scope).await;
+	release_stored_prompts(core, &scope.conversation_id, &scope.runtime_session_id).await;
 }
 
-async fn release_stored_prompts(core: &crate::core_context::Core, scope: &RuntimeScope) {
-	let conversation = &scope.conversation_id;
+pub async fn announce_prompts_closed(
+	core: &crate::core_context::Core,
+	scope: &RuntimeScope,
+	turn: Option<EventTurn>,
+) {
+	let closed =
+		close_stored_prompts(core, &scope.conversation_id, &scope.runtime_session_id).await;
+	if let Some(state) = core.try_state::<AgentState>() {
+		state.live.close_prompts_named_by(scope, &closed);
+	}
+	announce_in_turn(core, Some(scope.clone()), turn, closed);
+}
+
+pub async fn close_stored_prompts(
+	core: &crate::core_context::Core,
+	conversation: &str,
+	session: &str,
+) -> AgentEvent {
+	let held = stored_prompts_of(core, conversation, session).await;
+	release_stored_prompts(core, conversation, session).await;
+	let (questions, permissions): (Vec<_>, Vec<_>) =
+		held.into_iter().partition(|(kind, _)| *kind == PromptKind::Question);
+	AgentEvent::PromptsClosed {
+		permission_ids: permissions.into_iter().map(|(_, id)| id).collect(),
+		question_ids: questions.into_iter().map(|(_, id)| id).collect(),
+	}
+}
+
+async fn stored_prompts_of(
+	core: &crate::core_context::Core,
+	conversation: &str,
+	session: &str,
+) -> Vec<(PromptKind, String)> {
+	let Some(database) = bot_database(core) else {
+		log::warn!("the stored prompts of conversation {conversation} were not read: no database");
+		return Vec::new();
+	};
+	match database.conversations().prompts_of_session(session.to_owned()).await {
+		Ok(held) => held,
+		Err(failure) => {
+			log::warn!(
+				"the stored prompts of conversation {conversation} were not read: {failure:?}"
+			);
+			Vec::new()
+		}
+	}
+}
+
+async fn release_stored_prompts(
+	core: &crate::core_context::Core,
+	conversation: &str,
+	session: &str,
+) {
 	let Some(database) = bot_database(core) else {
 		return log::warn!("the stored prompts of conversation {conversation} stay: no database");
 	};
-	let session = scope.runtime_session_id.clone();
-	match database.conversations().release_prompts_of_session(session).await {
+	match database.conversations().release_prompts_of_session(session.to_owned()).await {
 		Ok(()) => conversation_state::observe_reporting(core, database, conversation).await,
 		Err(failure) => {
 			log::warn!("the stored prompts of conversation {conversation} stay: {failure:?}")

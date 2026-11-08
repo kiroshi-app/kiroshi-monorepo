@@ -6,7 +6,7 @@ use serde::Serialize;
 use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
 
-use super::commands::AgentState;
+use super::commands::{close_stored_prompts, AgentState};
 use super::contract::{
 	AgentEvent, AskedQuestion, ChatMessage, EventTurn, MessageCompletion, MessageRole,
 	QuestionOption, QuestionRequest, RuntimeScope, SubmittedTurn, TransportError, TurnEnded,
@@ -215,6 +215,7 @@ async fn write_then_forward(mut queued: mpsc::UnboundedReceiver<Entry>, mut desk
 			Entry::Withdrawn => desk.withdraw().await,
 			Entry::Event(event) => {
 				let turn = desk.turn_named_by(&event);
+				desk.close_prompts_stopped_by(&event, turn.clone()).await;
 				desk.record(&event).await;
 				desk.inner.emit(event, turn);
 			}
@@ -402,6 +403,7 @@ impl Desk {
 		}
 		let turn = self.open_turn_named();
 		for event in events {
+			self.close_prompts_stopped_by(&event, turn.clone()).await;
 			self.record_follow_up(&event).await;
 			self.inner.emit(event, turn.clone());
 		}
@@ -592,6 +594,19 @@ impl Desk {
 		if let Err(error) = kept {
 			self.store.report("a pending prompt", &error);
 		}
+	}
+
+	async fn close_prompts_stopped_by(&mut self, event: &AgentEvent, turn: Option<EventTurn>) {
+		if !matches!(event, AgentEvent::TurnEnded { ended } if ended.outcome == TurnOutcome::Cancelled)
+		{
+			return;
+		}
+		self.holds_prompts = false;
+		let store = &self.store;
+		let closed =
+			close_stored_prompts(&store.core, &store.conversation_id, &store.runtime_session_id)
+				.await;
+		self.inner.emit(closed, turn);
 	}
 
 	async fn ask(&mut self, request: &QuestionRequest) {
@@ -2589,6 +2604,135 @@ mod tests {
 		desk.record(&turn_ended()).await;
 
 		assert_eq!(held_prompts(&written).await, []);
+	}
+
+	struct HeardThrough<T> {
+		heard: mpsc::UnboundedSender<Heard>,
+		run: T,
+	}
+
+	impl<T: TurnSink> TurnSink for HeardThrough<T> {
+		fn emit(&self, event: AgentEvent, turn: Option<EventTurn>) {
+			self.heard.send((event.clone(), turn.clone())).expect("the test is listening");
+			self.run.emit(event, turn);
+		}
+	}
+
+	fn closed(permission_ids: &[&str], question_ids: &[&str]) -> AgentEvent {
+		let owned = |ids: &[&str]| ids.iter().map(|id| (*id).to_owned()).collect();
+		AgentEvent::PromptsClosed {
+			permission_ids: owned(permission_ids),
+			question_ids: owned(question_ids),
+		}
+	}
+
+	fn closings_and_endings(events: Vec<AgentEvent>) -> Vec<AgentEvent> {
+		events
+			.into_iter()
+			.filter(|event| {
+				matches!(event, AgentEvent::PromptsClosed { .. } | AgentEvent::TurnEnded { .. })
+			})
+			.collect()
+	}
+
+	fn asked_then_stopped() -> Vec<Entry> {
+		vec![
+			Entry::Submitted(submitted("t1", "p1")),
+			Entry::Event(question("q1")),
+			Entry::Event(a_permission_request("w1")),
+			Entry::Event(cancelled_turn()),
+		]
+	}
+
+	#[tokio::test]
+	async fn a_stopped_turn_closes_its_pending_permission_and_question_before_it_ends() {
+		let written = Written::new("prompts-closed-on-stop").await;
+		let scope = RuntimeScope {
+			conversation_id: written.conversation_id.clone(),
+			bot_id: DEFAULT_BOT_ID.to_owned(),
+			runtime_session_id: RUNTIME_SESSION_ID.to_owned(),
+			epoch: 1,
+		};
+		let run = commands::a_run_held_by_the_app(&written.core, scope);
+		let (heard, mut told) = mpsc::unbounded_channel::<Heard>();
+		let (queue, queued) = mpsc::unbounded_channel();
+		for entry in asked_then_stopped() {
+			queue.send(entry).expect("the entry is queued");
+		}
+		drop(queue);
+
+		write_then_forward(queued, written.desk_telling(Arc::new(HeardThrough { heard, run })))
+			.await;
+
+		let mut events = Vec::new();
+		while let Ok((event, _)) = told.try_recv() {
+			events.push(event);
+		}
+		assert_eq!(closings_and_endings(events), [closed(&["w1"], &["q1"]), cancelled_turn()]);
+		assert_eq!(held_prompts(&written).await, []);
+		let (pending, _) = commands::subscribed_with_pending_questions(&written.core);
+		assert!(pending.is_empty(), "a closed question is still pending: {pending:?}");
+		let reopened = commands::pending_questions(&written.core, written.conversation_id.clone())
+			.await
+			.expect("the pending questions read");
+		assert_eq!(reopened, []);
+	}
+
+	#[tokio::test]
+	async fn a_stopped_turn_with_nothing_pending_closes_no_prompt_before_it_ends() {
+		let written = Written::new("prompts-closed-none").await;
+
+		let events = written
+			.forwarded(vec![
+				Entry::Submitted(submitted("t1", "p1")),
+				Entry::Event(cancelled_turn()),
+			])
+			.await;
+
+		assert_eq!(closings_and_endings(events), [closed(&[], &[]), cancelled_turn()]);
+	}
+
+	#[tokio::test]
+	async fn a_turn_that_completes_or_fails_closes_no_prompt() {
+		for ended in [turn_ended(), crate::conversations::host_turn::ended_as(TurnOutcome::Failed)]
+		{
+			let written = Written::new("prompts-not-closed").await;
+
+			let events = written
+				.forwarded(vec![
+					Entry::Submitted(submitted("t1", "p1")),
+					Entry::Event(a_permission_request("w1")),
+					Entry::Event(ended.clone()),
+				])
+				.await;
+
+			assert_eq!(closings_and_endings(events), [ended]);
+		}
+	}
+
+	#[tokio::test]
+	async fn a_stop_whose_prompts_cannot_be_released_still_closes_them_and_logs_why() {
+		capturing();
+		let written = Written::new("prompts-closed-unreleased").await;
+		written
+			.database()
+			.call(|connection| {
+				Ok(connection.execute(
+					"CREATE TRIGGER kept BEFORE DELETE ON pending_prompts BEGIN SELECT RAISE(ABORT, 'kept'); END",
+					[],
+				)?)
+			})
+			.await
+			.expect("the trigger lands");
+
+		let events = written.forwarded(asked_then_stopped()).await;
+
+		assert_eq!(closings_and_endings(events), [closed(&["w1"], &["q1"]), cancelled_turn()]);
+		let logged = warnings_naming(&written.conversation_id).await;
+		assert!(
+			logged.iter().any(|line| line.contains("stored prompts")),
+			"no warning names the unreleased prompts: {logged:?}"
+		);
 	}
 
 	#[tokio::test]

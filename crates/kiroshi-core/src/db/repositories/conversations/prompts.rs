@@ -74,6 +74,9 @@ const RELEASE_PROMPT: &str =
 const RELEASE_PROMPTS_OF_SESSION: &str =
 	"DELETE FROM pending_prompts WHERE runtime_session_id = ?1";
 
+const PROMPTS_OF_SESSION: &str = "SELECT prompt_id, kind FROM pending_prompts
+	WHERE runtime_session_id = ?1 ORDER BY asked_at, prompt_id";
+
 const RELEASE_EVERY_PROMPT: &str = "DELETE FROM pending_prompts";
 
 const RELEASE_ORPHAN_PROMPTS: &str = "DELETE FROM pending_prompts
@@ -145,6 +148,20 @@ impl ConversationsRepository {
 			.at("release_prompts_of_session", "pending_prompts")?)
 	}
 
+	pub async fn prompts_of_session(
+		&self,
+		runtime_session_id: String,
+	) -> Result<Vec<(PromptKind, String)>, ConversationError> {
+		Ok(self
+			.call(move |connection| {
+				let mut statement = connection.prepare_cached(PROMPTS_OF_SESSION)?;
+				let rows = statement.query_map([runtime_session_id], held_prompt)?;
+				Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+			})
+			.await
+			.at("prompts_of_session", "pending_prompts")?)
+	}
+
 	pub async fn release_every_prompt(&self) -> Result<(), ConversationError> {
 		Ok(self
 			.call(|connection| {
@@ -214,6 +231,15 @@ fn activities(connection: &Connection, ids: &[String]) -> Result<Vec<Activity>, 
 		})
 	})?;
 	Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
+fn held_prompt(row: &Row<'_>) -> rusqlite::Result<(PromptKind, String)> {
+	let stored_kind: String = row.get(1)?;
+	let kind = PromptKind::read(&stored_kind).ok_or_else(|| {
+		let failure = format!("its kind {stored_kind:?} is neither a question nor a permission");
+		rusqlite::Error::FromSqlConversionFailure(1, Type::Text, failure.into())
+	})?;
+	Ok((kind, row.get(0)?))
 }
 
 fn waiting_prompt(row: &Row<'_>) -> rusqlite::Result<Option<StoredPrompt>> {
