@@ -301,7 +301,6 @@ fn roster_row(s: &App, i: usize, t: &Tokens, now: i64) -> El {
 		.role("button")
 		.on_press(move |s: &mut App| {
 			s.open(&id);
-			s05_thread::open_conversation(s, &id);
 		})
 		.child(media)
 		.child(

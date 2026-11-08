@@ -13,7 +13,7 @@ use kiroshi_rune_os::scheme;
 use kiroshi_rune_preview::app::App;
 use kiroshi_rune_preview::host::Profile;
 use kiroshi_rune_preview::navigation::Route;
-use kiroshi_rune_preview::surfaces::{s12_person_settings, s15_boards};
+use kiroshi_rune_preview::surfaces::{s05_thread, s12_person_settings, s15_boards};
 use kiroshi_rune_preview::{
 	composer, conversations, local, menu, onboarding, scenes, smoke, spike,
 };
@@ -73,12 +73,14 @@ fn setup(s: &mut App, waker: Waker) {
 	if flagged(DEV_HOST) || flagged(SKIP_ONBOARDING) {
 		s.navigation.navigate_main(Route::Conversations);
 	}
+	s.surfaces.s05_thread.attach(waker.clone());
 	s.surfaces.s12_person_settings.attach(waker.clone());
 	s.setup(waker);
 }
 
 fn poll(s: &mut App, seconds: f64, tx: &mut Tx) -> bool {
 	let changed = s.poll();
+	let changed = s05_thread::poll(s, tx) || changed;
 	let changed = s12_person_settings::poll(s, tx) || changed;
 	let changed = open_held(s, &mut held_links()) || changed;
 	if let Some(after) = s.focus_wake() {
