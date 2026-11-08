@@ -94,6 +94,13 @@ pub(super) fn with_desk_on(
 	{
 		app.switch_tab(&leaving, &entering);
 	}
+	let open_tabs = open_tabs(app);
+	app.navigation.keep_pages_of(&open_tabs);
+}
+
+fn open_tabs(app: &App) -> Vec<String> {
+	let tabs = app.surfaces.s01_chrome.tabs_of(MAIN_WINDOW);
+	tabs.map(|tabs| tabs.tabs().iter().map(|tab| tab.id.clone()).collect()).unwrap_or_default()
 }
 
 pub fn on_chrome(app: &mut App, event: ChromeEvent) {

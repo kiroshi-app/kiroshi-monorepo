@@ -7,7 +7,7 @@ use kiroshi_rune_kit::surfaces::s02_rail::{RailMessage, RailPanel};
 
 use super::desk::with_desk_on;
 use super::{Desk, Failure, Menu, Shelf, State, Windows};
-use crate::app::App;
+use crate::app::{App, Pane};
 use crate::navigation::{MAIN_WINDOW, Navigation, Route, WindowId};
 use crate::scenes;
 use crate::surfaces::s02_rail;
@@ -505,4 +505,43 @@ fn selecting_a_tab_shows_the_conversation_or_surface_it_holds() {
 	assert!(on_first == (Route::Library, first_conversation));
 	assert!(app.navigation.main_route() == Route::Conversations);
 	assert_eq!(opened_in(&app), Some("chat-atlas"));
+}
+
+#[test]
+fn a_new_tab_entered_from_missions_shows_conversations_with_no_conversation() {
+	let mut app = loaded_app();
+	app.show_missions();
+
+	heard_by(&mut app, ChromeEvent::NewTab);
+
+	assert_eq!(app.pane, Pane::Conversations);
+	assert_eq!(opened_in(&app), None);
+}
+
+#[test]
+fn a_tab_left_on_missions_shows_missions_when_entered_again() {
+	let mut app = loaded_app();
+	let first = active_of(&app);
+	app.show_missions();
+	heard_by(&mut app, ChromeEvent::NewTab);
+
+	heard_by(&mut app, ChromeEvent::SelectTab(first));
+
+	assert_eq!(app.pane, Pane::Missions);
+}
+
+#[test]
+fn a_closed_tab_drops_its_page_so_reopening_it_starts_empty() {
+	let mut app = loaded_app();
+	let first = active_of(&app);
+	s02_rail::railed(&mut app, RailMessage::SelectPanel(RailPanel::Library));
+	app.show_missions();
+	heard_by(&mut app, ChromeEvent::NewTab);
+
+	heard_by(&mut app, ChromeEvent::CloseTab(first.clone()));
+	heard_by(&mut app, ChromeEvent::ReopenClosedTab);
+
+	assert_eq!(active_of(&app), first);
+	assert!(app.navigation.main_route() == Route::Conversations);
+	assert_eq!((app.pane, opened_in(&app)), (Pane::Conversations, None));
 }
