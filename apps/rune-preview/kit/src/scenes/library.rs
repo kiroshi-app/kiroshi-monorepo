@@ -1,7 +1,7 @@
 use rune::image::{Image, ImageCache};
 use rune::{Align, El, Side, TextEdit, col, el, row};
 
-use super::{Pointer, Scene, SceneState};
+use super::{Pointer, Scene, SceneState, THEMES};
 use crate::avatar::Face;
 use crate::hues::Preset;
 use crate::primitives::toast::{Toast, ToastType, toast};
@@ -1889,7 +1889,16 @@ fn block_editor_spec(story: &str) -> Option<Spec> {
 }
 
 pub(super) const fn library(id: &'static str, view: fn(&Tokens, &SceneState) -> El) -> Scene {
-	Scene { id, size: ARTBOARD, tabs: 0, pointer: Pointer::Away, typed: "", keys: "", view }
+	Scene {
+		id,
+		size: ARTBOARD,
+		tabs: 0,
+		pointer: Pointer::Away,
+		typed: "",
+		keys: "",
+		themes: &THEMES,
+		view,
+	}
 }
 
 pub(super) const fn searched(
@@ -1897,7 +1906,16 @@ pub(super) const fn searched(
 	typed: &'static str,
 	view: fn(&Tokens, &SceneState) -> El,
 ) -> Scene {
-	Scene { id, size: ARTBOARD, tabs: 0, pointer: Pointer::Away, typed, keys: "", view }
+	Scene {
+		id,
+		size: ARTBOARD,
+		tabs: 0,
+		pointer: Pointer::Away,
+		typed,
+		keys: "",
+		themes: &THEMES,
+		view,
+	}
 }
 
 pub(super) const fn tabbed(
@@ -1905,11 +1923,29 @@ pub(super) const fn tabbed(
 	tabs: usize,
 	view: fn(&Tokens, &SceneState) -> El,
 ) -> Scene {
-	Scene { id, size: ARTBOARD, tabs, pointer: Pointer::Away, typed: "", keys: "", view }
+	Scene {
+		id,
+		size: ARTBOARD,
+		tabs,
+		pointer: Pointer::Away,
+		typed: "",
+		keys: "",
+		themes: &THEMES,
+		view,
+	}
 }
 
 pub(super) const fn narrow(id: &'static str, view: fn(&Tokens, &SceneState) -> El) -> Scene {
-	Scene { id, size: NARROW, tabs: 0, pointer: Pointer::Away, typed: "", keys: "", view }
+	Scene {
+		id,
+		size: NARROW,
+		tabs: 0,
+		pointer: Pointer::Away,
+		typed: "",
+		keys: "",
+		themes: &THEMES,
+		view,
+	}
 }
 
 pub(super) const fn threaded(
@@ -1917,9 +1953,27 @@ pub(super) const fn threaded(
 	tabs: usize,
 	view: fn(&Tokens, &SceneState) -> El,
 ) -> Scene {
-	Scene { id, size: THREAD, tabs, pointer: Pointer::Away, typed: "", keys: "", view }
+	Scene {
+		id,
+		size: THREAD,
+		tabs,
+		pointer: Pointer::Away,
+		typed: "",
+		keys: "",
+		themes: &THEMES,
+		view,
+	}
 }
 
 pub(super) const fn small_window(id: &'static str, view: fn(&Tokens, &SceneState) -> El) -> Scene {
-	Scene { id, size: SMALL_WINDOW, tabs: 0, pointer: Pointer::Away, typed: "", keys: "", view }
+	Scene {
+		id,
+		size: SMALL_WINDOW,
+		tabs: 0,
+		pointer: Pointer::Away,
+		typed: "",
+		keys: "",
+		themes: &THEMES,
+		view,
+	}
 }

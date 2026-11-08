@@ -6,7 +6,7 @@ use super::catalogue::{
 use super::identity::{Identity, meta_line, verified_pill};
 use super::mark::{Mark, MarkSize, mark};
 use super::panel::Owner;
-use super::{HAIRLINE, fill, hosted_sentence, kit_ring, mono, round, say};
+use super::{HAIRLINE, fill, hosted_sentence, mono, ringed_field, round, say};
 use crate::icons;
 use crate::primitives::button::{Button, ButtonSize, ButtonVariant};
 use crate::primitives::instant;
@@ -415,14 +415,14 @@ fn key_field<S: 'static>(
 		.py((KEY_FIELD_HEIGHT - style.line_height) / 2.0)
 		.pl(SPACING * 3.0 + HAIRLINE)
 		.pr(if field.is_concealed { REVEAL_LANE } else { SPACING * 3.0 })
-		.radius(RADIUS_CONTROL)
 		.fill(t.card)
 		.border(HAIRLINE, t.input)
 		.color(t.foreground)
 		.caret(t.foreground, t.selection)
 		.label(field.name)
 		.on_edit(move |s: &mut S| access(s, index));
-	let input = kit_ring(t, instant(if is_hidden { input.secure() } else { input }));
+	let input =
+		ringed_field(t, instant(if is_hidden { input.secure() } else { input }), RADIUS_CONTROL);
 	let mut shell = row().w_full().child(input);
 	if field.is_concealed {
 		let (label, aria) = if field.is_revealed {

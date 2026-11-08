@@ -1,6 +1,6 @@
 use rune::{El, TextEdit, col, el, icon, row, text};
 
-use super::{Pointer, Scene, SceneState, stage, staged};
+use super::{Pointer, Scene, SceneState, THEMES, stage, staged};
 use crate::avatar::Face;
 use crate::hues::Preset;
 use crate::icons;
@@ -54,7 +54,16 @@ pub(super) const fn typed_in(
 	text: &'static str,
 	view: fn(&Tokens, &SceneState) -> El,
 ) -> Scene {
-	Scene { id, size, tabs: 0, pointer: Pointer::Away, typed: text, keys: "", view }
+	Scene {
+		id,
+		size,
+		tabs: 0,
+		pointer: Pointer::Away,
+		typed: text,
+		keys: "",
+		themes: &THEMES,
+		view,
+	}
 }
 
 fn ignore<E>(_: &mut SceneState, _: E) {}

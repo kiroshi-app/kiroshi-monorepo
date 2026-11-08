@@ -1,7 +1,7 @@
 use rune::{Color, Cursor, El, Icon, TextEdit, TextStyle, col, el, icon, row, text};
 
 use super::mark::{Mark, MarkSize, mark};
-use super::search::search_field;
+use super::search::{SEARCH_TEXT, search_field};
 use super::{HAIRLINE, fill, inset, kit_ring, outlined, say, skeleton_bar, skeleton_list};
 use crate::icons;
 use crate::primitives::Paint;
@@ -292,7 +292,13 @@ pub fn catalogue<S: 'static>(
 		.h_full()
 		.gap(SPACING * 3.5)
 		.padding(PAGE_INSET)
-		.child(row().w_full().center_y().child(search_field(t, page.query, language, access)))
+		.child(row().w_full().center_y().child(search_field(
+			t,
+			page.query,
+			SEARCH_TEXT,
+			language,
+			access,
+		)))
 		.child(section);
 	let body =
 		if page.is_loading { body } else { body.scroll(rune::ScrollSpec { stick_bottom: false }) };
