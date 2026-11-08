@@ -116,6 +116,7 @@ fn emit_change(core: &crate::core_context::Core, mission: &Mission) -> Result<()
 			state: mission.state,
 			state_seq: mission.state_seq,
 			is_agent_running: mission.is_agent_running,
+			status: mission.status.clone(),
 			liveness: mission.liveness,
 			pending_prompt: mission.pending_prompt.clone(),
 			working_bot_ids: mission.working_bot_ids.clone(),

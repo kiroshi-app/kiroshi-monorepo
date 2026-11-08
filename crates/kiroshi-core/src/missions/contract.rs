@@ -563,6 +563,8 @@ pub struct MissionChanged {
 	pub state_seq: i64,
 	pub is_agent_running: bool,
 	#[specta(optional)]
+	pub status: Option<MissionStatus>,
+	#[specta(optional)]
 	pub liveness: MissionLiveness,
 	#[specta(optional)]
 	pub pending_prompt: Option<PendingPrompt>,

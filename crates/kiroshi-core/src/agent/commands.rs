@@ -1,5 +1,6 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, MutexGuard, PoisonError};
 
 use serde::de::DeserializeOwned;
@@ -75,21 +76,21 @@ fn announce_scoped(core: &crate::core_context::Core, scoped: ScopedEvent) {
 	}
 }
 
-pub fn subscribed_with_pending_questions(
+pub fn subscribed_with_pending_prompts(
 	core: &crate::core_context::Core,
 ) -> (Vec<Frame>, broadcast::Receiver<Frame>) {
 	let Some(state) = core.try_state::<AgentState>() else {
 		return (Vec::new(), core.subscribe_frames());
 	};
-	let (pending, heard) = state.live.questions_pending_at(|| core.subscribe_frames());
-	(pending.into_iter().filter_map(|question| framed_question(question.scoped())).collect(), heard)
+	let (pending, heard) = state.live.prompts_pending_at(|| core.subscribe_frames());
+	(pending.into_iter().filter_map(framed_prompt).collect(), heard)
 }
 
-fn framed_question(asked: ScopedEvent) -> Option<Frame> {
+fn framed_prompt(asked: ScopedEvent) -> Option<Frame> {
 	match events::frame(AGENT_EVENT, &asked) {
 		Ok(frame) => Some(frame),
 		Err(failure) => {
-			log::warn!("a pending question did not serialize for a new listener: {failure}");
+			log::warn!("a pending prompt did not serialize for a new listener: {failure}");
 			None
 		}
 	}
@@ -114,6 +115,7 @@ fn participant_key(scope: &RuntimeScope) -> ParticipantKey {
 struct Live<S = Arc<Session>> {
 	runs: std::sync::Mutex<HashMap<RunKey, Run<S>>>,
 	questions: std::sync::Mutex<Vec<PendingQuestion>>,
+	announcements: AtomicU64,
 }
 
 #[derive(Clone)]
@@ -121,6 +123,24 @@ struct PendingQuestion {
 	scope: RuntimeScope,
 	turn: Option<EventTurn>,
 	request: QuestionRequest,
+	announced: u64,
+}
+
+#[derive(Clone)]
+struct PendingPermission {
+	turn: Option<EventTurn>,
+	request: PermissionRequest,
+	announced: u64,
+}
+
+impl PendingPermission {
+	fn scoped(&self, scope: &RuntimeScope) -> ScopedEvent {
+		ScopedEvent {
+			scope: Some(scope.clone()),
+			turn: self.turn.clone(),
+			event: AgentEvent::PermissionRequested { request: self.request.clone() },
+		}
+	}
 }
 
 impl PendingQuestion {
@@ -153,7 +173,7 @@ struct Run<S> {
 	session: Option<S>,
 	started_at: i64,
 	is_mid_turn: bool,
-	permissions: Vec<PermissionRequest>,
+	permissions: Vec<PendingPermission>,
 }
 
 impl<S> Run<S> {
@@ -194,6 +214,7 @@ impl<S> Default for Live<S> {
 		Self {
 			runs: std::sync::Mutex::new(HashMap::new()),
 			questions: std::sync::Mutex::new(Vec::new()),
+			announcements: AtomicU64::new(0),
 		}
 	}
 }
@@ -216,7 +237,7 @@ impl<S> Live<S> {
 			!(question.asked_by(scope) && question_ids.contains(&question.request.id))
 		});
 		if let Some(run) = self.runs().get_mut(&run_key(scope)).filter(|run| &run.scope == scope) {
-			run.permissions.retain(|held| !permission_ids.contains(&held.id));
+			run.permissions.retain(|held| !permission_ids.contains(&held.request.id));
 		}
 	}
 
@@ -237,9 +258,32 @@ impl<S> Live<S> {
 			.collect()
 	}
 
-	fn questions_pending_at<T>(&self, subscribe: impl FnOnce() -> T) -> (Vec<PendingQuestion>, T) {
+	fn prompts_in(&self, conversation_id: &str) -> Vec<ScopedEvent> {
+		let (pending, ()) = self.prompts_pending_at(|| ());
+		pending
+			.into_iter()
+			.filter(|asked| {
+				asked.scope.as_ref().is_some_and(|scope| scope.conversation_id == conversation_id)
+			})
+			.collect()
+	}
+
+	fn prompts_pending_at<T>(&self, subscribe: impl FnOnce() -> T) -> (Vec<ScopedEvent>, T) {
 		let questions = self.questions();
-		(questions.clone(), subscribe())
+		let runs = self.runs();
+		let asked_questions =
+			questions.iter().map(|question| (question.announced, question.clone().scoped()));
+		let asked_permissions = runs.values().flat_map(|run| {
+			run.permissions.iter().map(|held| (held.announced, held.scoped(&run.scope)))
+		});
+		let mut pending: Vec<(u64, ScopedEvent)> =
+			asked_questions.chain(asked_permissions).collect();
+		pending.sort_by_key(|(announced, _)| *announced);
+		(pending.into_iter().map(|(_, asked)| asked).collect(), subscribe())
+	}
+
+	fn next_announcement(&self) -> u64 {
+		self.announcements.fetch_add(1, Ordering::Relaxed)
 	}
 
 	fn runs(&self) -> MutexGuard<'_, HashMap<RunKey, Run<S>>> {
@@ -258,17 +302,14 @@ impl<S> Live<S> {
 					TurnState::Submitting | TurnState::Running | TurnState::Stopping
 				)
 			}
-			AgentEvent::PermissionRequested { request } => {
-				if run.permissions.iter().all(|held| held.id != request.id) {
-					run.permissions.push(request.clone());
-				}
-			}
 			AgentEvent::PermissionResolved { id, .. } => {
-				run.permissions.retain(|held| &held.id != id);
+				run.permissions.retain(|held| &held.request.id != id);
 			}
 			AgentEvent::TurnEnded { .. } => run.settle(),
 			AgentEvent::Failed { error } if error.is_fatal() => run.settle(),
-			AgentEvent::QuestionRequested { .. } | AgentEvent::PromptsClosed { .. } => {}
+			AgentEvent::QuestionRequested { .. }
+			| AgentEvent::PermissionRequested { .. }
+			| AgentEvent::PromptsClosed { .. } => {}
 			_ => return false,
 		}
 		true
@@ -309,11 +350,11 @@ impl<S> Live<S> {
 			let mut in_thread: Vec<&Run<S>> =
 				runs.values().filter(|run| run.scope.conversation_id == conversation_id).collect();
 			in_thread.sort_by_key(|run| run.started_at);
-			in_thread.into_iter().find_map(|run| run.permissions.first()).map(|request| {
+			in_thread.into_iter().find_map(|run| run.permissions.first()).map(|held| {
 				PendingPrompt {
-					prompt_id: request.id.clone(),
+					prompt_id: held.request.id.clone(),
 					kind: PendingPromptKind::Permission,
-					text: request.title.clone(),
+					text: held.request.title.clone(),
 				}
 			})
 		})
@@ -372,13 +413,43 @@ impl<S: Clone> Live<S> {
 		Cleared { ended: cleared.into_values().filter_map(|run| run.session).collect(), dropped }
 	}
 
-	fn hold_question(&self, asked: PendingQuestion, announce: impl FnOnce(PendingQuestion)) {
+	fn hold_question(
+		&self,
+		scope: &RuntimeScope,
+		turn: Option<EventTurn>,
+		request: QuestionRequest,
+		announce: impl FnOnce(PendingQuestion),
+	) {
 		let mut questions = self.questions();
-		if !self.holds(&asked.scope) {
+		if !self.holds(scope) {
 			return;
 		}
+		let announced = self.next_announcement();
+		let asked = PendingQuestion { scope: scope.clone(), turn, request, announced };
 		questions.push(asked.clone());
 		announce(asked);
+	}
+
+	fn hold_permission(
+		&self,
+		scope: &RuntimeScope,
+		turn: Option<EventTurn>,
+		request: PermissionRequest,
+		announce: impl FnOnce(ScopedEvent),
+	) {
+		let _no_listener_subscribes_meanwhile = self.questions();
+		let asked = {
+			let mut runs = self.runs();
+			let Some(run) = runs.get_mut(&run_key(scope)).filter(|run| &run.scope == scope) else {
+				return;
+			};
+			let asked = PendingPermission { turn, request, announced: self.next_announcement() };
+			if run.permissions.iter().all(|held| held.request.id != asked.request.id) {
+				run.permissions.push(asked.clone());
+			}
+			asked
+		};
+		announce(asked.scoped(scope));
 	}
 
 	fn report(&self) -> Vec<LiveSession> {
@@ -452,11 +523,20 @@ impl TurnSink for RunSink {
 		}
 		let moves_the_thread = self.live.moved_by(&self.scope, &event);
 		self.live.close_prompts_named_by(&self.scope, &event);
-		if let AgentEvent::QuestionRequested { request } = &event {
-			let asked =
-				PendingQuestion { scope: self.scope.clone(), turn, request: request.clone() };
-			self.live.hold_question(asked, |asked| announce_scoped(&self.core, asked.scoped()));
-			return retell_the_mission(&self.core, self.scope.conversation_id.clone());
+		match &event {
+			AgentEvent::QuestionRequested { request } => {
+				self.live.hold_question(&self.scope, turn, request.clone(), |asked| {
+					announce_scoped(&self.core, asked.scoped())
+				});
+				return retell_the_mission(&self.core, self.scope.conversation_id.clone());
+			}
+			AgentEvent::PermissionRequested { request } => {
+				self.live.hold_permission(&self.scope, turn, request.clone(), |asked| {
+					announce_scoped(&self.core, asked)
+				});
+				return retell_the_mission(&self.core, self.scope.conversation_id.clone());
+			}
+			_ => {}
 		}
 		self.release_questions_settled_by(&event);
 		if moves_the_thread {
@@ -1604,6 +1684,14 @@ pub async fn pending_questions(
 ) -> Result<Vec<ScopedEvent>, TransportError> {
 	let state = core.state::<AgentState>();
 	Ok(state.live.questions_in(&conversation_id))
+}
+
+pub async fn pending_prompts(
+	core: &crate::core_context::Core,
+	conversation_id: String,
+) -> Result<Vec<ScopedEvent>, TransportError> {
+	let state = core.state::<AgentState>();
+	Ok(state.live.prompts_in(&conversation_id))
 }
 
 pub async fn agent_pending_questions_in_space(
@@ -2757,7 +2845,7 @@ mod tests {
 		}
 
 		fn a_late_listener(core: &crate::core_context::Core) -> Vec<Frame> {
-			let (pending, mut heard) = subscribed_with_pending_questions(core);
+			let (pending, mut heard) = subscribed_with_pending_prompts(core);
 			assert!(heard.try_recv().is_err(), "the late listener heard a live frame");
 			pending
 		}
@@ -2834,7 +2922,7 @@ mod tests {
 		fn a_question_asked_after_a_listener_subscribed_reaches_it_live_only() {
 			let core = an_app("asked-live");
 			let run = a_run_held_by_the_app(&core, a_scope());
-			let (pending, mut heard) = subscribed_with_pending_questions(&core);
+			let (pending, mut heard) = subscribed_with_pending_prompts(&core);
 
 			run.emit(question("q1"), the_turn());
 
@@ -3177,6 +3265,316 @@ mod tests {
 
 			assert_eq!(stored_prompts(&core).await, 0);
 			assert_eq!(listed_state(&core).await, ConversationState::Idle);
+		}
+	}
+
+	mod pending_prompts {
+		use super::super::super::contract::{TurnEnded, TurnOutcome};
+		use super::super::super::lease::Lapse;
+		use super::*;
+		use crate::test_core::{a_core_of_its_own, CoreOfItsOwn};
+
+		fn an_app(name: &str) -> CoreOfItsOwn {
+			a_core_of_its_own(&format!("pending-prompt-{name}"))
+		}
+
+		fn a_turn_of(scope: &RuntimeScope, turn_id: &str) -> Option<EventTurn> {
+			Some(EventTurn {
+				turn_id: turn_id.into(),
+				conversation_id: scope.conversation_id.clone(),
+				continues_turn_id: None,
+			})
+		}
+
+		fn the_turn() -> Option<EventTurn> {
+			a_turn_of(&a_scope(), "t1")
+		}
+
+		fn permission(id: &str) -> AgentEvent {
+			AgentEvent::PermissionRequested {
+				request: PermissionRequest {
+					id: id.into(),
+					tool_name: "Bash".into(),
+					title: format!("Bash {id}"),
+					detail: None,
+				},
+			}
+		}
+
+		fn question(id: &str) -> AgentEvent {
+			AgentEvent::QuestionRequested {
+				request: QuestionRequest { id: id.into(), questions: Vec::new(), subject: None },
+			}
+		}
+
+		fn resolved(id: &str) -> AgentEvent {
+			AgentEvent::PermissionResolved {
+				id: id.into(),
+				decision: PermissionDecision::AllowOnce,
+			}
+		}
+
+		fn turn_ended(outcome: TurnOutcome) -> AgentEvent {
+			AgentEvent::TurnEnded {
+				ended: TurnEnded {
+					session_id: None,
+					outcome,
+					structured_output: None,
+					total_cost_usd: None,
+					model_usage: None,
+					web_sources: Vec::new(),
+				},
+			}
+		}
+
+		fn lapsed() -> AgentEvent {
+			AgentEvent::Failed {
+				error: TransportError::RunLapsed { lapse: Lapse::Silent, bound_ms: 1 },
+			}
+		}
+
+		fn crashed() -> AgentEvent {
+			AgentEvent::Failed { error: TransportError::Crashed { code: Some(1), detail: None } }
+		}
+
+		fn in_the_turn(event: AgentEvent) -> ScopedEvent {
+			ScopedEvent { scope: Some(a_scope()), turn: the_turn(), event }
+		}
+
+		async fn pending_in(
+			core: &crate::core_context::Core,
+			conversation_id: &str,
+		) -> Vec<ScopedEvent> {
+			pending_prompts(core, conversation_id.to_owned()).await.expect("the command answers")
+		}
+
+		fn agent_frames(heard: &mut broadcast::Receiver<Frame>) -> Vec<Frame> {
+			let agent_event = format!(r#"{{"event":"{}""#, AGENT_EVENT.name());
+			std::iter::from_fn(|| heard.try_recv().ok())
+				.filter(|frame| frame.starts_with(&agent_event))
+				.collect()
+		}
+
+		fn framed(asked: &ScopedEvent) -> Frame {
+			events::frame(AGENT_EVENT, asked).expect("a frame")
+		}
+
+		#[tokio::test]
+		async fn the_command_returns_permissions_and_questions_as_announced_in_their_order() {
+			let core = an_app("command-asked");
+			let mut original = core.subscribe_frames();
+			let run = a_run_held_by_the_app(&core, a_scope());
+			run.emit(permission("p1"), the_turn());
+			run.emit(question("q1"), the_turn());
+			run.emit(permission("p2"), the_turn());
+
+			let pending = pending_in(&core, "c1").await;
+
+			assert_eq!(
+				pending,
+				vec![
+					in_the_turn(permission("p1")),
+					in_the_turn(question("q1")),
+					in_the_turn(permission("p2"))
+				]
+			);
+			assert_eq!(pending.iter().map(framed).collect::<Vec<_>>(), agent_frames(&mut original));
+		}
+
+		#[tokio::test]
+		async fn the_order_follows_the_announcements_across_the_runs_of_a_conversation() {
+			let core = an_app("command-across-runs");
+			let second = RuntimeScope { bot_id: "b2".into(), ..a_run_named("r2") };
+			let first_run = a_run_held_by_the_app(&core, a_scope());
+			let second_run = a_run_held_by_the_app(&core, second.clone());
+			second_run.emit(permission("p2"), a_turn_of(&second, "t2"));
+			first_run.emit(permission("p1"), the_turn());
+			second_run.emit(question("q2"), a_turn_of(&second, "t2"));
+
+			let ids: Vec<String> = pending_in(&core, "c1")
+				.await
+				.into_iter()
+				.map(|asked| match asked.event {
+					AgentEvent::PermissionRequested { request } => request.id,
+					AgentEvent::QuestionRequested { request } => request.id,
+					other => panic!("the read returned {other:?}"),
+				})
+				.collect();
+
+			assert_eq!(ids, ["p2", "p1", "q2"]);
+		}
+
+		#[tokio::test]
+		async fn the_command_returns_no_prompt_of_another_conversation() {
+			let core = an_app("command-elsewhere");
+			a_run_held_by_the_app(&core, a_scope()).emit(permission("p1"), the_turn());
+			let elsewhere = a_run_held_by_the_app(&core, another_bots_run());
+			elsewhere.emit(permission("p9"), a_turn_of(&another_bots_run(), "t9"));
+			elsewhere.emit(question("q9"), a_turn_of(&another_bots_run(), "t9"));
+
+			assert_eq!(pending_in(&core, "c1").await, vec![in_the_turn(permission("p1"))]);
+			assert_eq!(pending_in(&core, "c3").await, Vec::new());
+		}
+
+		#[tokio::test]
+		async fn a_permission_resolved_ended_failed_or_lapsed_is_left_out_and_the_other_kept() {
+			let settlings = [
+				("resolved", vec![resolved("p1")]),
+				("ended", vec![turn_ended(TurnOutcome::Completed)]),
+				("crashed", vec![crashed()]),
+				("lapsed", vec![turn_ended(TurnOutcome::Failed), lapsed()]),
+			];
+			for (name, settling) in settlings {
+				let core = an_app(name);
+				let run = a_run_held_by_the_app(&core, a_scope());
+				run.emit(permission("p1"), the_turn());
+				a_run_held_by_the_app(&core, another_bots_run())
+					.emit(permission("p9"), a_turn_of(&another_bots_run(), "t9"));
+
+				for event in settling {
+					run.emit(event, the_turn());
+				}
+
+				assert_eq!(pending_in(&core, "c1").await, Vec::new(), "{name} kept it listed");
+				let (replayed, _) = subscribed_with_pending_prompts(&core);
+				assert_eq!(replayed.len(), 1, "{name} replayed a settled permission");
+				assert_eq!(pending_in(&core, "c2").await.len(), 1, "{name} dropped another run's");
+			}
+		}
+
+		#[tokio::test]
+		async fn a_permission_of_a_session_shut_down_or_taken_over_is_left_out() {
+			let stopped = an_app("stopped");
+			a_run_held_by_the_app(&stopped, a_scope()).emit(permission("p1"), the_turn());
+			let taken_over = an_app("taken-over");
+			a_run_held_by_the_app(&taken_over, a_scope()).emit(permission("p1"), the_turn());
+
+			shutdown_session(&stopped, &stopped.state::<AgentState>(), &a_scope()).await;
+			taken_over.state::<AgentState>().admit(&taken_over, a_scope()).await;
+
+			assert_eq!(pending_in(&stopped, "c1").await, Vec::new());
+			assert_eq!(pending_in(&taken_over, "c1").await, Vec::new());
+		}
+
+		#[test]
+		fn a_new_event_client_hears_a_pending_permission_once_beside_the_questions() {
+			let core = an_app("replayed");
+			let run = a_run_held_by_the_app(&core, a_scope());
+			run.emit(permission("p1"), the_turn());
+			run.emit(question("q1"), the_turn());
+
+			let (replayed, mut heard) = subscribed_with_pending_prompts(&core);
+			run.emit(permission("p2"), the_turn());
+
+			assert_eq!(
+				replayed,
+				vec![framed(&in_the_turn(permission("p1"))), framed(&in_the_turn(question("q1")))]
+			);
+			assert_eq!(agent_frames(&mut heard), vec![framed(&in_the_turn(permission("p2")))]);
+		}
+
+		#[test]
+		fn a_permission_of_a_run_already_let_go_is_neither_held_nor_emitted() {
+			let core = an_app("let-go");
+			let run = a_run_held_by_the_app(&core, a_scope());
+			let mut original = core.subscribe_frames();
+			core.state::<AgentState>().live.clear(&a_scope());
+
+			run.emit(permission("p1"), the_turn());
+
+			assert_eq!(agent_frames(&mut original), Vec::new());
+			assert_eq!(subscribed_with_pending_prompts(&core).0, Vec::new());
+		}
+
+		#[cfg(unix)]
+		mod answered_after_the_read {
+			use std::time::Duration;
+
+			use super::*;
+			use crate::agent::stub_session::a_session_running;
+			use crate::removed_on_drop::RemovedOnDrop;
+
+			const ASKING_SIDECAR: &str = r#"#!/bin/sh
+printf '%s\n' '{"type":"ready","provider":"stub","version":"0"}'
+while IFS= read -r line; do
+	key=$(printf '%s' "$line" | sed -n 's/.*"session":"\([^"]*\)".*/\1/p')
+	case "$line" in
+	*'"type":"open"'*)
+		printf '{"session":"%s","frame":{"type":"opened"}}\n' "$key"
+		printf '{"session":"%s","frame":{"type":"control_request","request_id":"p1","request":{"subtype":"can_use_tool","tool_name":"Bash","display_name":"Bash","description":null,"input":{"command":"ls"}}}}\n' "$key"
+		;;
+	*'"type":"permission"'*)
+		printf '%s\n' "$line" >> 'ANSWERS_HEARD'
+		;;
+	esac
+done
+"#;
+
+			fn heard_by_the_sidecar(answers: &RemovedOnDrop) -> String {
+				std::fs::read_to_string(&**answers).unwrap_or_default()
+			}
+
+			#[tokio::test]
+			async fn an_allow_sent_with_the_scope_and_id_read_back_reaches_the_waiting_turn() {
+				let core = an_app("answered-after-read");
+				core.manage(AgentState::default());
+				let answers = RemovedOnDrop(
+					std::env::temp_dir()
+						.join(format!("kiroshi-answers-heard-{}", uuid::Uuid::new_v4())),
+				);
+				let script =
+					ASKING_SIDECAR.replace("ANSWERS_HEARD", &answers.display().to_string());
+				let held = a_session_running(&core, &a_scope(), &script).await;
+				let run = RunSink {
+					core: core.clone(),
+					scope: a_scope(),
+					live: core.state::<AgentState>().live.clone(),
+					records_its_own_lineage: false,
+				};
+				run.emit(permission("p1"), the_turn());
+
+				let read = pending_in(&core, "c1").await;
+				let (scope, id) = match read.as_slice() {
+					[ScopedEvent {
+						scope: Some(scope),
+						event: AgentEvent::PermissionRequested { request },
+						..
+					}] => (scope.clone(), request.id.clone()),
+					other => panic!("the read returned {other:?}"),
+				};
+				let responded = tokio::time::timeout(Duration::from_secs(10), async {
+					loop {
+						match agent_respond_to_permission(
+							&core,
+							scope.clone(),
+							id.clone(),
+							PermissionDecision::AllowOnce,
+						)
+						.await
+						{
+							Err(TransportError::UnknownPermission { .. }) => {
+								tokio::time::sleep(Duration::from_millis(10)).await
+							}
+							answered => return answered,
+						}
+					}
+				})
+				.await
+				.expect("the session heard the request");
+				tokio::time::timeout(Duration::from_secs(10), async {
+					while heard_by_the_sidecar(&answers).is_empty() {
+						tokio::time::sleep(Duration::from_millis(10)).await;
+					}
+				})
+				.await
+				.expect("the sidecar heard the answer");
+
+				assert_eq!(responded, Ok(()));
+				let heard = heard_by_the_sidecar(&answers);
+				assert!(heard.contains(r#""requestId":"p1""#), "{heard}");
+				assert!(heard.contains(r#""behavior":"allow""#), "{heard}");
+				drop(held);
+			}
 		}
 	}
 }

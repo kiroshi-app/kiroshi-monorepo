@@ -14,10 +14,11 @@ use kiroshi_rune_preview::app::App;
 use kiroshi_rune_preview::host::Profile;
 use kiroshi_rune_preview::navigation::Route;
 use kiroshi_rune_preview::surfaces::{
-	s01_chrome, s02_rail, s03_roster, s04_boot, s05_thread, s08_missions, s09_routines,
-	s10_agent_settings, s11_applications, s12_person_settings, s13_space_settings, s15_boards,
+	s01_chrome, s02_rail, s03_roster, s04_boot, s05_thread, s06_composer, s07_approvals,
+	s08_missions, s09_routines, s10_agent_settings, s11_applications, s12_person_settings,
+	s13_space_settings, s14_library, s15_boards,
 };
-use kiroshi_rune_preview::{composer, conversations, local, menu, scenes, smoke, spike};
+use kiroshi_rune_preview::{conversations, local, menu, scenes, smoke, spike};
 
 fn view(s: &App, cx: &mut Cx<App>) -> El {
 	let dark = cx.system_dark();
@@ -30,18 +31,18 @@ fn view(s: &App, cx: &mut Cx<App>) -> El {
 		return rune_kit::root(body, layers);
 	}
 	let k = t.kit();
+	let mut screen_layers = Vec::new();
 	let body = match s.navigation.main_route() {
 		Route::Onboarding(step) => s04_boot::view(step, s, &t.in_space(Some(tokens::BLUE))),
 		Route::Conversations => {
 			let viewport = conversations::Viewport {
 				inset: cx.titlebar_inset(),
 				transcript_height: cx.layout(conversations::TRANSCRIPT).map(|rect| rect[3]),
-				composer: composer::Measured {
-					surface_width: cx.layout(composer::COMPOSER_SURFACE).map(|rect| rect[2]),
-					text_width: cx.layout(composer::COMPOSER_MIRROR).map(|rect| rect[2]),
-				},
+				thread_room: cx.layout(conversations::THREAD_ROOM).map(|rect| rect[2]),
 			};
-			conversations::view(s, &k, &t, &viewport)
+			let (body, layers) = conversations::view(s, &t, &viewport);
+			screen_layers = layers;
+			body
 		}
 		Route::Chrome => {
 			let measured = s01_chrome::Measured {
@@ -62,8 +63,13 @@ fn view(s: &App, cx: &mut Cx<App>) -> El {
 		| Route::Thread
 		| Route::Composer
 		| Route::Approvals
-		| Route::Missions
-		| Route::Library => el(),
+		| Route::Missions => el(),
+		Route::Library => {
+			let width = cx.layout(s14_library::GRID).map(|rect| rect[2]);
+			let (body, layers) = s14_library::view(s, &t, width);
+			screen_layers = layers;
+			body
+		}
 		Route::SpaceSettings => s13_space_settings::view(s, &t),
 		Route::Routines => s09_routines::view(s, &t),
 		Route::Applications => s11_applications::view(s, &t),
@@ -79,8 +85,12 @@ fn view(s: &App, cx: &mut Cx<App>) -> El {
 		.chain(s11_applications::layers(s, &t))
 		.chain(s03_roster::layers(s, &t))
 		.chain(s08_missions::layers(s, &t))
-		.chain(s13_space_settings::layers(s, &t));
+		.chain(s13_space_settings::layers(s, &t))
+		.chain(s06_composer::layers(s, &t))
+		.chain(screen_layers)
+		.chain(s14_library::layers(s, &t));
 	rune_kit::root(body, layers)
+		.on_paste_content(|s: &mut App, content, _: &mut Tx| s06_composer::pasted(s, content))
 }
 
 const KIT_ROOT: &str = "kit-root";
@@ -111,6 +121,8 @@ fn setup(s: &mut App, waker: Waker) {
 		s.navigation.navigate_main(Route::Rail);
 	}
 	s.surfaces.s05_thread.attach(waker.clone());
+	s.surfaces.s06_composer.attach(waker.clone());
+	s.surfaces.s07_approvals.attach(waker.clone());
 	s.surfaces.s11_applications.attach(waker.clone());
 	s.surfaces.s12_person_settings.attach(waker.clone());
 	s.surfaces.s09_routines.attach(waker.clone());
@@ -118,12 +130,15 @@ fn setup(s: &mut App, waker: Waker) {
 	s.surfaces.s03_roster.attach(waker.clone());
 	s.surfaces.s08_missions.attach(waker.clone());
 	s.surfaces.s13_space_settings.attach(waker.clone());
+	s.surfaces.s14_library.attach(waker.clone());
 	s.setup(waker);
 }
 
 fn poll(s: &mut App, seconds: f64, tx: &mut Tx) -> bool {
 	let changed = s.poll();
 	let changed = s05_thread::poll(s, tx) || changed;
+	let changed = s06_composer::poll(s, tx) || changed;
+	let changed = s07_approvals::poll(s) || changed;
 	let changed = s11_applications::poll(s) || changed;
 	let changed = s12_person_settings::poll(s, tx) || changed;
 	let changed = s09_routines::poll(s, tx) || changed;
@@ -132,6 +147,7 @@ fn poll(s: &mut App, seconds: f64, tx: &mut Tx) -> bool {
 	let changed = s03_roster::poll(s) || changed;
 	let changed = s08_missions::poll(s, tx) || changed;
 	let changed = s13_space_settings::poll(s) || changed;
+	let changed = s14_library::poll(s, tx) || changed;
 	let changed = open_held(s, &mut held_links()) || changed;
 	if let Some(after) = s.focus_wake() {
 		tx.wake_after(after);
@@ -144,6 +160,9 @@ fn poll(s: &mut App, seconds: f64, tx: &mut Tx) -> bool {
 }
 
 fn on_key(s: &mut App, event: &KeyEvent, _: &mut Tx) -> bool {
+	if s06_composer::key_pressed(s, event) {
+		return true;
+	}
 	if s11_applications::key_pressed(s, event) {
 		return true;
 	}
@@ -151,6 +170,9 @@ fn on_key(s: &mut App, event: &KeyEvent, _: &mut Tx) -> bool {
 		return true;
 	}
 	if s13_space_settings::key_pressed(s, event) {
+		return true;
+	}
+	if s14_library::key_pressed(s, event) {
 		return true;
 	}
 	if shell::is_sidebar_toggle(event) {

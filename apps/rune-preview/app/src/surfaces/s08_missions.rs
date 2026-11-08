@@ -471,6 +471,7 @@ pub fn changed(app: &mut App, changed: &model::MissionChanged) {
 		for card in thread.missions.iter_mut().filter(|card| card.id == mission_id) {
 			card.state = changed.state;
 			card.is_agent_running = changed.is_agent_running;
+			card.status.clone_from(&changed.status);
 		}
 	}
 	let Some(opened) = app.mission.as_mut().filter(|opened| opened.mission_id == mission_id) else {

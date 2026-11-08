@@ -6,15 +6,17 @@ mod view;
 mod worker;
 
 use kiroshi_core::conversations::contract::{PinnedBubble, ReplyLink, TranscriptPage};
+use kiroshi_rune_kit::surfaces::s05_thread::{Agent, Quote};
 use rune::{Tx, Waker};
 
-use kiroshi_rune_kit::strings::{Key as Copy, Language, chat};
+use kiroshi_rune_kit::strings::{Key as Copy, Language, chat, common};
 use kiroshi_rune_kit::surfaces::s05_thread::ThreadEvent;
 
 use crate::app::App;
 use crate::events::HostEvent;
 use crate::host::HostError;
 use crate::source::Source;
+use crate::surfaces::{s06_composer, s07_approvals, s14_library};
 
 pub use view::{pinned_panel, view};
 
@@ -76,6 +78,26 @@ impl State {
 		replies.iter().map(|id| ReplyLink { message_id: id.clone(), excerpt: None }).collect()
 	}
 
+	pub fn held_quotes(&self, roster: &[Agent]) -> Vec<Quote> {
+		let Some(open) = self.open.as_ref() else { return Vec::new() };
+		let links = self.reply_links();
+		links.iter().filter_map(|link| projection::quote_of(link, open, roster)).collect()
+	}
+
+	pub fn release_reply(&mut self, message_id: &str) {
+		if let Some(open) = self.open.as_mut() {
+			open.replies.retain(|held| held != message_id);
+		}
+	}
+
+	pub fn holds(&self, message_id: &str) -> bool {
+		self.open.as_ref().is_some_and(|open| open.holds(message_id))
+	}
+
+	pub fn is_working(&self) -> bool {
+		self.open.as_ref().is_some_and(|open| !open.working.is_empty())
+	}
+
 	pub fn open(&mut self, conversation_id: &str) {
 		if self.conversation_id() == Some(conversation_id) {
 			return;
@@ -122,7 +144,9 @@ impl State {
 			HostEvent::MessageStored(_)
 			| HostEvent::MissionChanged(_)
 			| HostEvent::Companion(_)
+			| HostEvent::Library(_)
 			| HostEvent::Roster(_)
+			| HostEvent::Approvals(_)
 			| HostEvent::AccountChanged(_)
 			| HostEvent::Listening
 			| HostEvent::Unreadable { .. }
@@ -151,6 +175,15 @@ impl State {
 		}
 		self.flush();
 		None
+	}
+
+	fn attachment_to_open(&mut self, turn: &str, index: usize) -> Option<String> {
+		let open = self.open.as_ref();
+		let name = open.and_then(|open| open.attachment_of(turn, index)).map(str::to_owned);
+		if name.is_none() {
+			self.raise(said(common::library::failure::document::OPEN), String::new());
+		}
+		name
 	}
 
 	fn perform(&mut self, tx: &mut Tx) -> bool {
@@ -333,6 +366,14 @@ pub fn open_conversation(app: &mut App, conversation_id: &str) {
 	let thread = &mut app.surfaces.s05_thread;
 	thread.use_source(source);
 	thread.open(conversation_id);
+	s07_approvals::open_conversation(app, conversation_id);
+	s06_composer::opened(app);
+}
+
+pub fn open_attachment(app: &mut App, turn: &str, index: usize) {
+	if let Some(name) = app.surfaces.s05_thread.attachment_to_open(turn, index) {
+		s14_library::open_beside(app, &name);
+	}
 }
 
 pub fn poll(app: &mut App, tx: &mut Tx) -> bool {

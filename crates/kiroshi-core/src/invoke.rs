@@ -405,6 +405,8 @@ table! { core, client, caller;
 		answered(pending_questions(core, conversation_id).await);
 	agent_pending_questions_in_space(space_id: String) =>
 		answered(agent_pending_questions_in_space(core, space_id).await);
+	agent_pending_prompts(conversation_id: String) =>
+		answered(pending_prompts(core, conversation_id).await);
 
 	mcp_oauth_connect(owner: EnvOwner, name: String, url: String) =>
 		answered(connect_application(core, owner, name, url).await);
@@ -811,8 +813,8 @@ mod tests {
 
 	const OS_SHELL_MODULES: [&str; 3] = ["badge", "notifications", "window_controls"];
 
-	const RUNE_ONLY_COMMANDS: [&str; 3] =
-		["restart_to_update", "whats_new", "acknowledge_whats_new"];
+	const RUNE_ONLY_COMMANDS: [&str; 4] =
+		["restart_to_update", "whats_new", "acknowledge_whats_new", "agent_pending_prompts"];
 
 	fn tauri_commands() -> Vec<(String, String)> {
 		let table = std::fs::read_to_string(format!("{}/src/commands.rs", crate::APP_DIR))

@@ -1516,7 +1516,7 @@ mod tests {
 		write_then_forward(queued, written.desk_telling(Arc::new(run))).await;
 
 		assert_eq!(written.stored("question-r1").await, None);
-		let (pending, _) = commands::subscribed_with_pending_questions(&written.core);
+		let (pending, _) = commands::subscribed_with_pending_prompts(&written.core);
 		assert_eq!(pending.len(), 1);
 	}
 
@@ -2670,11 +2670,11 @@ mod tests {
 		}
 		assert_eq!(closings_and_endings(events), [closed(&["w1"], &["q1"]), cancelled_turn()]);
 		assert_eq!(held_prompts(&written).await, []);
-		let (pending, _) = commands::subscribed_with_pending_questions(&written.core);
-		assert!(pending.is_empty(), "a closed question is still pending: {pending:?}");
-		let reopened = commands::pending_questions(&written.core, written.conversation_id.clone())
+		let (pending, _) = commands::subscribed_with_pending_prompts(&written.core);
+		assert!(pending.is_empty(), "a closed prompt is still pending: {pending:?}");
+		let reopened = commands::pending_prompts(&written.core, written.conversation_id.clone())
 			.await
-			.expect("the pending questions read");
+			.expect("the pending prompts read");
 		assert_eq!(reopened, []);
 	}
 

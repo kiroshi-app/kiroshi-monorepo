@@ -1,11 +1,11 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use rune::{Chrome, Cursor, El, Icon, TextStyle, col, el, icon, row, text};
-use rune_kit::Kit;
 
 use kiroshi_rune_kit::avatar::Face;
 use kiroshi_rune_kit::icons;
 use kiroshi_rune_kit::surfaces::s05_thread::{Agent as ThreadAgent, ThreadKind};
+use kiroshi_rune_kit::surfaces::s14_library::DOCUMENT_PANEL_MAX_WIDTH;
 use kiroshi_rune_kit::tokens::{
 	RADIUS_LG, SPACING, TEXT_10_MEDIUM, TEXT_COMPACT, TEXT_COMPACT_MONO, TEXT_COMPACT_SEMIBOLD,
 	TEXT_SM, TEXT_SM_MEDIUM, TEXT_TITLE, TEXT_XS_MEDIUM, Tokens, conversation_icon, srgb,
@@ -13,10 +13,9 @@ use kiroshi_rune_kit::tokens::{
 use kiroshi_rune_kit::widgets::{Pill, spinner};
 
 use crate::app::{App, Pane, Person, Ready, Thread, Workspace};
-use crate::composer;
 use crate::host::{DEV_START_COMMAND, HostError, Profile};
 use crate::model::{Agent, Conversation};
-use crate::surfaces::{s03_roster, s05_thread, s08_missions};
+use crate::surfaces::{s03_roster, s05_thread, s08_missions, s14_library};
 
 pub const CHROME: Chrome =
 	Chrome { full_size_content: true, traffic_lights: Some((16.0, 14.0)), drag_regions: true };
@@ -41,23 +40,28 @@ const HEADER_TITLE: TextStyle =
 pub struct Viewport {
 	pub inset: f32,
 	pub transcript_height: Option<f32>,
-	pub composer: composer::Measured,
+	pub thread_room: Option<f32>,
 }
 
 pub const TRANSCRIPT: &str = "transcript";
 
-pub fn view(s: &App, k: &Kit, t: &Tokens, viewport: &Viewport) -> El {
+pub const THREAD_ROOM: &str = "thread-room";
+
+pub fn view(s: &App, t: &Tokens, viewport: &Viewport) -> (El, Vec<El>) {
 	match &s.workspace {
-		Workspace::Connecting => centred(
-			t,
-			row()
-				.gap(SPACING * 2.0)
-				.center_y()
-				.child(spinner(t.input, t.muted_foreground))
-				.child(text("Reaching Kiroshi…").font(TEXT_COMPACT).color(t.muted_foreground)),
+		Workspace::Connecting => (
+			centred(
+				t,
+				row()
+					.gap(SPACING * 2.0)
+					.center_y()
+					.child(spinner(t.input, t.muted_foreground))
+					.child(text("Reaching Kiroshi…").font(TEXT_COMPACT).color(t.muted_foreground)),
+			),
+			Vec::new(),
 		),
-		Workspace::Failed(failure) => host_failed(t, failure),
-		Workspace::Ready(ready) => frame(s, ready, k, &t.in_space(ready.space.colour), viewport),
+		Workspace::Failed(failure) => (host_failed(t, failure), Vec::new()),
+		Workspace::Ready(ready) => frame(s, ready, &t.in_space(ready.space.colour), viewport),
 	}
 }
 
@@ -92,7 +96,9 @@ fn host_failed(t: &Tokens, failure: &HostError) -> El {
 	centred(t, col().items_center().gap(SPACING * 6.0).child(content).child(retry))
 }
 
-fn frame(s: &App, ready: &Ready, k: &Kit, t: &Tokens, viewport: &Viewport) -> El {
+fn frame(s: &App, ready: &Ready, t: &Tokens, viewport: &Viewport) -> (El, Vec<El>) {
+	let room = viewport.thread_room.unwrap_or(DOCUMENT_PANEL_MAX_WIDTH);
+	let (panel, layers) = s14_library::panel(s, t, room).unzip();
 	let card = row()
 		.grow(1.0)
 		.min_w(0.0)
@@ -108,13 +114,22 @@ fn frame(s: &App, ready: &Ready, k: &Kit, t: &Tokens, viewport: &Viewport) -> El
 			Pane::Conversations => roster(s, ready, t),
 		})
 		.child(el().w(1.0).h_full().fill(t.shell_divider))
-		.child(thread_column(s, k, t, viewport));
-	col()
+		.child(
+			row()
+				.key(THREAD_ROOM)
+				.grow(1.0)
+				.min_w(0.0)
+				.h_full()
+				.child(thread_column(s, t))
+				.children(panel),
+		);
+	let body = col()
 		.w_full()
 		.h_full()
 		.fill(t.background)
 		.child(title_bar(s, t, viewport.inset))
-		.child(row().w_full().grow(1.0).min_h(0.0).child(rail(s, ready, t)).child(card))
+		.child(row().w_full().grow(1.0).min_h(0.0).child(rail(s, ready, t)).child(card));
+	(body, layers.unwrap_or_default())
 }
 
 fn title_bar(s: &App, t: &Tokens, inset: f32) -> El {
@@ -305,7 +320,7 @@ fn month_and_day(at: i64) -> String {
 	format!("{month}/{day}")
 }
 
-fn thread_column(s: &App, k: &Kit, t: &Tokens, viewport: &Viewport) -> El {
+fn thread_column(s: &App, t: &Tokens) -> El {
 	col()
 		.key("conversation")
 		.grow(1.0)
@@ -317,7 +332,6 @@ fn thread_column(s: &App, k: &Kit, t: &Tokens, viewport: &Viewport) -> El {
 			None => thread_header(s, t),
 		})
 		.child(thread_body(s, t))
-		.child(composer::view(s, k, t, &viewport.composer))
 }
 
 fn thread_agent(agent: &Agent) -> ThreadAgent {

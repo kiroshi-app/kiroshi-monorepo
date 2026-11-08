@@ -428,6 +428,7 @@ mod tests {
 				"state": state,
 				"stateSeq": state_seq,
 				"isAgentRunning": false,
+				"status": null,
 				"liveness": "idle",
 				"lastActivityAt": null,
 				"pendingPrompt": null,
@@ -510,6 +511,29 @@ mod tests {
 				MissionEventKind::AgentAsked,
 			],
 		);
+
+		webhook.stop();
+	}
+
+	#[tokio::test]
+	async fn a_session_start_then_its_stop_each_tell_the_front_once_whether_it_runs() {
+		let app = a_host("session-announced").await;
+		let mission = an_armed_mission(&app, A_KEY).await;
+		let webhook = listening(&app, Ticking::at(NOON));
+		let received = heard(&app);
+
+		let mut running = Vec::new();
+		for event in [hook::PROMPT_SUBMITTED, hook::TURN_STOPPED] {
+			let held =
+				answered(webhook.address(), calling(Some(A_KEY), None, &a_body(event))).await;
+			assert_eq!(held, answer(ACCEPTED));
+			let announced = announced(&received);
+			assert_eq!(announced.len(), 1, "{event} told the front {announced:?}");
+			assert_eq!(announced[0]["missionId"], json!(mission.id));
+			running.push(announced[0]["isAgentRunning"].clone());
+		}
+
+		assert_eq!(running, vec![json!(true), json!(false)]);
 
 		webhook.stop();
 	}

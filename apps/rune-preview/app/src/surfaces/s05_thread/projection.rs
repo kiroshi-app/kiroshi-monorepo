@@ -3,11 +3,11 @@ use kiroshi_core::conversations::contract::{
 };
 use kiroshi_rune_kit::strings::{Language, chat};
 use kiroshi_rune_kit::surfaces::s05_thread::{
-	Agent, Author, MissionEvent, PinnedMessage, Quote, Row, ThreadKind, Transcript, Turn,
-	TurnState, WorkLine, WorkingAgent,
+	Agent, Attachment, Author, MissionEvent, PinnedMessage, Quote, Row, ThreadKind, Transcript,
+	Turn, TurnState, WorkLine, WorkingAgent,
 };
 
-use super::conversation::{Conversation, Live, Phase};
+use super::conversation::{Conversation, Live, Phase, attachments_of};
 use crate::conversations::roster_timestamp;
 use crate::surfaces::s08_missions::is_summons;
 
@@ -129,12 +129,16 @@ fn state_of(completion: TranscriptCompletion) -> TurnState {
 	}
 }
 
-fn quote_of(link: &ReplyLink, open: &Conversation, roster: &[Agent]) -> Option<Quote> {
+pub fn quote_of(link: &ReplyLink, open: &Conversation, roster: &[Agent]) -> Option<Quote> {
 	let quoted = open.messages.iter().find(|message| message.id == link.message_id);
 	let excerpt =
 		link.excerpt.clone().or_else(|| quoted.map(|message| message.content.trim().to_owned()))?;
 	let author = quoted.map(|message| name_of(&author_of(message, roster))).unwrap_or_default();
 	Some(Quote { id: link.message_id.clone(), author, excerpt })
+}
+
+fn attached_document(name: &str) -> Attachment {
+	Attachment { name: name.to_owned(), preview: None, failed: false }
 }
 
 fn stored_turn(
@@ -152,6 +156,7 @@ fn stored_turn(
 			.iter()
 			.filter_map(|link| quote_of(link, open, roster))
 			.collect(),
+		attachments: attachments_of(message).map(attached_document).collect(),
 		pinned: open.is_pinned(&message.id),
 		shows_actions: state != TurnState::Streaming,
 		..Turn::new(&message.id, author_of(message, roster), &message.content)

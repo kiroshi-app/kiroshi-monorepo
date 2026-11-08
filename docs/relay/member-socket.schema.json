@@ -5402,6 +5402,16 @@
         "stateSeq": {
           "type": "integer"
         },
+        "status": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MissionStatus"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "workingBotIds": {
           "items": {
             "type": "string"

@@ -817,6 +817,7 @@ mod tests {
 					"state": "waiting_bot",
 					"stateSeq": asked.state_seq,
 					"isAgentRunning": false,
+					"status": null,
 					"liveness": "idle",
 					"pendingPrompt": null,
 					"workingBotIds": [],
@@ -828,6 +829,7 @@ mod tests {
 					"state": "working",
 					"stateSeq": answered.state_seq,
 					"isAgentRunning": false,
+					"status": null,
 					"liveness": "idle",
 					"pendingPrompt": null,
 					"workingBotIds": [],
@@ -839,6 +841,7 @@ mod tests {
 					"state": "waiting_bot",
 					"stateSeq": asked_again.state_seq,
 					"isAgentRunning": false,
+					"status": null,
 					"liveness": "idle",
 					"pendingPrompt": null,
 					"workingBotIds": [],
@@ -934,6 +937,7 @@ mod tests {
 					"state": "working",
 					"stateSeq": 1,
 					"isAgentRunning": false,
+					"status": null,
 					"liveness": "idle",
 					"pendingPrompt": null,
 					"workingBotIds": [],
@@ -945,6 +949,7 @@ mod tests {
 					"state": "waiting_human",
 					"stateSeq": 2,
 					"isAgentRunning": false,
+					"status": null,
 					"liveness": "needs_you",
 					"pendingPrompt": null,
 					"workingBotIds": [],
@@ -959,6 +964,88 @@ mod tests {
 			Some("personal"),
 			"the mission read does not name the Space of its conversation"
 		);
+	}
+
+	fn heard_changes(core: &CoreOfItsOwn) -> std::sync::mpsc::Receiver<String> {
+		let (sender, received) = channel();
+		core.listen_to(CHANGED_EVENT, move |payload| {
+			sender.send(payload.to_owned()).expect("the test hears the changes");
+		});
+		received
+	}
+
+	fn changes_of(received: &std::sync::mpsc::Receiver<String>) -> Vec<serde_json::Value> {
+		received
+			.try_iter()
+			.map(|payload| serde_json::from_str(&payload).expect("the payload is JSON"))
+			.collect()
+	}
+
+	#[tokio::test]
+	async fn a_status_written_tells_the_front_once_with_its_text_and_every_field_of_the_change() {
+		let core = a_host("status-announced").await;
+		let opened = a_mission(&core, a_draft("c1", "b1", "Fix it")).await;
+		let received = heard_changes(&core);
+
+		mission_status(
+			&core,
+			opened.id.clone(),
+			"bot".to_owned(),
+			"Paused on the review".to_owned(),
+		)
+		.await
+		.expect("the status is written");
+
+		let announced = changes_of(&received);
+		assert_eq!(announced.len(), 1, "got {announced:?}");
+		let stored = mission_detail_of(&core, opened.id).await.expect("the detail reads").mission;
+		assert_eq!(announced[0]["status"]["text"], json!("Paused on the review"));
+		assert_eq!(announced[0]["status"], json!(stored.status));
+		let mut fields: Vec<&str> = announced[0]
+			.as_object()
+			.expect("the change is an object")
+			.keys()
+			.map(String::as_str)
+			.collect();
+		fields.sort_unstable();
+		assert_eq!(
+			fields,
+			vec![
+				"isAgentRunning",
+				"lastActivityAt",
+				"liveness",
+				"missionId",
+				"pendingPrompt",
+				"spaceId",
+				"state",
+				"stateSeq",
+				"status",
+				"workingBotIds",
+			],
+		);
+	}
+
+	#[tokio::test]
+	async fn a_state_move_tells_the_front_once_with_the_new_state_and_the_stored_status() {
+		let core = a_host("state-announced").await;
+		let opened = a_mission(&core, a_draft("c1", "b1", "Fix it")).await;
+		mission_status(&core, opened.id.clone(), "bot".to_owned(), "Reading the logs".to_owned())
+			.await
+			.expect("the status is written");
+		let received = heard_changes(&core);
+
+		mission_escalate(&core, opened.id.clone(), a_note())
+			.await
+			.expect("the mission is escalated");
+
+		let announced = changes_of(&received);
+		assert_eq!(announced.len(), 1, "got {announced:?}");
+		let stored = mission_detail_of(&core, opened.id).await.expect("the detail reads").mission;
+		assert_eq!(stored.state, MissionState::WaitingHuman);
+		assert_eq!(announced[0]["state"], json!(stored.state));
+		assert_eq!(announced[0]["stateSeq"], json!(stored.state_seq));
+		assert_eq!(announced[0]["status"]["text"], json!("Reading the logs"));
+		assert_eq!(announced[0]["status"], json!(stored.status));
 	}
 
 	fn a_workspace(name: &str) -> RemovedOnDrop {
