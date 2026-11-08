@@ -2,12 +2,14 @@ use rune::{Color, Cursor, El, Icon, Tx, col, el, icon, oklcha, row, text};
 
 use kiroshi_rune_kit::avatar::{Activity, Face, Motion};
 use kiroshi_rune_kit::icons;
+use kiroshi_rune_kit::surfaces::s05_thread::MissionEvent as ThreadMissionEvent;
+use kiroshi_rune_kit::surfaces::s08_missions::EventKind;
 use kiroshi_rune_kit::tokens::{
 	SPACING, TEXT_11, TEXT_SM, TEXT_SM_MEDIUM, TEXT_XS, TEXT_XS_MEDIUM, Tokens,
 };
 
 use crate::app::{App, Board, OpenMission};
-use crate::model::{Agent, Mission, MissionState, Ticket};
+use crate::model::{Agent, Mission, MissionEvent, MissionState, Ticket};
 
 const HEADER: f32 = 48.0;
 const HEADER_AVATAR: f32 = 24.0;
@@ -33,6 +35,44 @@ const SUMMONS: [&str; 3] = [
 
 pub fn is_summons(content: &str) -> bool {
 	SUMMONS.contains(&content)
+}
+
+const SPOKEN_KEYS: [&str; 4] = ["line", "message", "question", "summary"];
+
+fn spoken_text(payload: &serde_json::Value) -> Option<&str> {
+	SPOKEN_KEYS.iter().find_map(|key| {
+		payload.get(key).and_then(|value| value.as_str()).filter(|text| !text.is_empty())
+	})
+}
+
+fn event_link(payload: &serde_json::Value) -> Option<(String, Option<u32>)> {
+	let url = payload.get("url")?.as_str()?;
+	let pull_request = payload
+		.get("pullRequest")
+		.and_then(serde_json::Value::as_u64)
+		.and_then(|number| u32::try_from(number).ok());
+	Some((url.to_owned(), pull_request))
+}
+
+fn event_kind(kind: &str) -> Option<EventKind> {
+	EventKind::ALL.into_iter().find(|known| known.word().replace(' ', "_") == kind)
+}
+
+fn thread_event(event: &MissionEvent) -> Option<ThreadMissionEvent> {
+	Some(ThreadMissionEvent {
+		id: event.id.clone(),
+		kind: event_kind(&event.kind)?,
+		source: event.source.clone(),
+		created_at: event.created_at,
+		text: spoken_text(&event.payload).map(str::to_owned),
+		link: event_link(&event.payload),
+	})
+}
+
+pub fn thread_events(open: &OpenMission) -> Vec<ThreadMissionEvent> {
+	let mut events: Vec<ThreadMissionEvent> = open.events.iter().filter_map(thread_event).collect();
+	events.sort_by_key(|event| event.created_at);
+	events
 }
 
 pub fn relative_time(at: i64, now: i64) -> String {
@@ -426,5 +466,33 @@ mod tests {
 		assert!(!is_summons("Carry out this mission"));
 		assert_eq!(pull_request_number("https://github.com/o/r/pull/2112"), Some("2112"));
 		assert_eq!(pull_request_number("https://github.com/o/r"), None);
+	}
+
+	fn recorded(kind: &str, payload: serde_json::Value) -> MissionEvent {
+		MissionEvent {
+			id: "e-1".to_owned(),
+			kind: kind.to_owned(),
+			source: "bot".to_owned(),
+			payload,
+			created_at: 7,
+		}
+	}
+
+	#[test]
+	fn recorded_events_become_thread_events_like_apps_app() {
+		let asked = recorded(
+			"agent_asked",
+			serde_json::json!({ "message": "", "question": "Which branch?", "url": "https://github.com/o/r/pull/9", "pullRequest": 9 }),
+		);
+		let shown = thread_event(&asked).expect("agent_asked is shown");
+		assert_eq!(shown.kind, EventKind::AgentAsked);
+		assert_eq!(shown.text.as_deref(), Some("Which branch?"));
+		assert_eq!(shown.link, Some(("https://github.com/o/r/pull/9".to_owned(), Some(9))));
+		assert!(thread_event(&recorded("heartbeat", serde_json::json!({}))).is_none());
+		assert_eq!(
+			thread_event(&recorded("checks_failed", serde_json::json!(null)))
+				.map(|event| event.kind),
+			Some(EventKind::ChecksFailed)
+		);
 	}
 }

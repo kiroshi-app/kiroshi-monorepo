@@ -4,8 +4,10 @@ use kiroshi_core::conversations::contract::{
 };
 
 use kiroshi_rune_kit::surfaces::s05_thread::{
-	Agent, Author, Row, ThreadEvent, ThreadKind, Transcript, Turn, TurnState, WorkState,
+	Agent, Author, MissionEvent, Row, ThreadEvent, ThreadKind, Transcript, Turn, TurnState,
+	WorkState,
 };
+use kiroshi_rune_kit::surfaces::s08_missions::EventKind;
 
 use super::conversation::Conversation;
 use super::projection::{self, Shown, WORK_LINE};
@@ -90,7 +92,7 @@ fn opened_with(messages: Vec<TranscriptMessage>, has_more: bool) -> State {
 
 fn transcript_of(state: &State, kind: &ThreadKind) -> Transcript {
 	let open = state.open.as_ref().expect("a conversation is open");
-	projection::transcript(open, &Shown { kind, roster: &[atlas()], now: NOW })
+	projection::transcript(open, &Shown { kind, roster: &[atlas()], events: &[], now: NOW })
 }
 
 fn label(row: &Row) -> String {
@@ -236,6 +238,52 @@ fn a_mission_thread_hides_the_summons_that_opened_it() {
 	let Transcript::Rows(rows) = transcript_of(&state, &mission) else { panic!("no rows") };
 	assert_eq!(rows.iter().map(label).collect::<Vec<_>>(), ["start", "m2"]);
 	assert_eq!(labels(&state), ["start", "m1", "m2"]);
+}
+
+fn mission_event(id: &str, created_at: i64) -> MissionEvent {
+	MissionEvent {
+		id: id.to_owned(),
+		kind: EventKind::Note,
+		source: "bot".to_owned(),
+		created_at,
+		text: None,
+		link: None,
+	}
+}
+
+fn written_at(seq: i64, created_at: i64) -> TranscriptMessage {
+	TranscriptMessage { created_at, ..said(seq) }
+}
+
+fn mission_labels(state: &State, events: &[MissionEvent]) -> Vec<String> {
+	let mission = ThreadKind::Mission {
+		objective: "Ship".to_owned(),
+		tools: Vec::new(),
+		bot: None,
+		now: NOW,
+	};
+	let open = state.open.as_ref().expect("a conversation is open");
+	let shown = Shown { kind: &mission, roster: &[atlas()], events, now: NOW };
+	let Transcript::Rows(rows) = projection::transcript(open, &shown) else { panic!("no rows") };
+	rows.iter().map(label).collect()
+}
+
+#[test]
+fn a_mission_thread_places_its_events_between_the_messages_by_time() {
+	let state = opened_with(vec![written_at(1, 100), written_at(2, 300)], false);
+	let events =
+		[mission_event("e-early", 50), mission_event("e-mid", 200), mission_event("e-late", 400)];
+	assert_eq!(
+		mission_labels(&state, &events),
+		["start", "e-early", "m1", "e-mid", "m2", "e-late"]
+	);
+}
+
+#[test]
+fn events_older_than_the_held_page_wait_for_that_page() {
+	let state = opened_with(vec![written_at(5, 100), written_at(6, 300)], true);
+	let events = [mission_event("e-early", 50), mission_event("e-mid", 200)];
+	assert_eq!(mission_labels(&state, &events), ["m5", "e-mid", "m6"]);
 }
 
 #[test]

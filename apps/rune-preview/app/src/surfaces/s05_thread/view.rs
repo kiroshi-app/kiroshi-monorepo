@@ -11,6 +11,7 @@ use kiroshi_rune_kit::tokens::Tokens;
 use super::{Notice, projection, said};
 use crate::app::App;
 use crate::conversations::now_ms;
+use crate::mission;
 
 fn thread_event(app: &mut App, event: ThreadEvent) {
 	if let Some(forwarded) = app.surfaces.s05_thread.handle(event, now_ms()) {
@@ -39,7 +40,8 @@ pub fn view(
 ) -> Option<El> {
 	let state = &app.surfaces.s05_thread;
 	let open = state.open.as_ref()?;
-	let shown = projection::Shown { kind: &kind, roster: &roster, now: now_ms() };
+	let events = app.mission.as_ref().map(mission::thread_events).unwrap_or_default();
+	let shown = projection::Shown { kind: &kind, roster: &roster, events: &events, now: now_ms() };
 	let transcript = projection::transcript(open, &shown);
 	let data = Thread {
 		kind,

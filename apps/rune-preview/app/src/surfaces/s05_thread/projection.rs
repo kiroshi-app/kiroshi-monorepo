@@ -3,8 +3,8 @@ use kiroshi_core::conversations::contract::{
 };
 use kiroshi_rune_kit::strings::{Language, chat};
 use kiroshi_rune_kit::surfaces::s05_thread::{
-	Agent, Author, PinnedMessage, Quote, Row, ThreadKind, Transcript, Turn, TurnState, WorkLine,
-	WorkingAgent,
+	Agent, Author, MissionEvent, PinnedMessage, Quote, Row, ThreadKind, Transcript, Turn,
+	TurnState, WorkLine, WorkingAgent,
 };
 
 use super::conversation::{Conversation, Live, Phase};
@@ -16,6 +16,7 @@ pub const WORK_LINE: &str = "work";
 pub struct Shown<'a> {
 	pub kind: &'a ThreadKind,
 	pub roster: &'a [Agent],
+	pub events: &'a [MissionEvent],
 	pub now: i64,
 }
 
@@ -49,6 +50,15 @@ fn is_summons_of_mission(message: &TranscriptMessage, kind: &ThreadKind) -> bool
 		&& is_summons(message.content.trim())
 }
 
+fn held_events<'a>(
+	open: &Conversation,
+	events: &'a [MissionEvent],
+) -> impl Iterator<Item = &'a MissionEvent> {
+	let oldest_held =
+		open.messages.first().filter(|_| open.has_older).map(|message| message.created_at);
+	events.iter().filter(move |event| oldest_held.is_none_or(|oldest| event.created_at >= oldest))
+}
+
 fn rows(open: &Conversation, shown: &Shown) -> Vec<Row> {
 	let roster = shown.roster;
 	let mut rows = Vec::new();
@@ -56,14 +66,19 @@ fn rows(open: &Conversation, shown: &Shown) -> Vec<Row> {
 		rows.push(Row::StartOfHistory);
 	}
 	let unseen = open.unseen_from.as_deref();
+	let mut events = held_events(open, shown.events).peekable();
 	let messages =
 		open.messages.iter().filter(|message| !is_summons_of_mission(message, shown.kind));
 	for message in messages {
+		while let Some(event) = events.next_if(|event| event.created_at < message.created_at) {
+			rows.push(Row::Event(event.clone()));
+		}
 		if unseen == Some(message.id.as_str()) {
 			rows.push(Row::NewMessages);
 		}
 		rows.push(Row::Turn(stored_turn(open, message, roster, shown.now)));
 	}
+	rows.extend(events.cloned().map(Row::Event));
 	for live in &open.live {
 		if unseen == Some(live.id.as_str()) {
 			rows.push(Row::NewMessages);
