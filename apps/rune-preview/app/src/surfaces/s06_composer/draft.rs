@@ -14,6 +14,7 @@ pub struct Pending {
 	pub message_id: String,
 	pub text: String,
 	pub file_ids: Vec<String>,
+	pub document_names: Vec<String>,
 	pub reply_ids: Vec<String>,
 	pub queues: bool,
 }
@@ -64,7 +65,7 @@ impl Draft {
 			self.edit.clear();
 		}
 		self.files.retain(|file| !pending.file_ids.contains(&file.id));
-		self.documents.clear();
+		self.documents.retain(|document| !pending.document_names.contains(&document.name));
 		Some(pending.reply_ids)
 	}
 

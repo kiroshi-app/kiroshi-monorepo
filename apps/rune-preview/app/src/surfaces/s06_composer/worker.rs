@@ -6,7 +6,7 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use kiroshi_core::agent::contract::{AgentCommand, CancelOutcome};
 use kiroshi_core::attachments::contract::SubmittedAttachment;
-use kiroshi_core::conversations::contract::ReplyLink;
+use kiroshi_core::conversations::contract::{ReplyLink, TranscriptStoreError};
 use kiroshi_core::library::contract::LibraryItem;
 use rune::Waker;
 use serde_json::{Value, json};
@@ -58,6 +58,12 @@ pub enum Refusal {
 }
 
 #[derive(Debug)]
+pub struct Unsent {
+	pub failure: HostError,
+	pub reached: Result<bool, HostError>,
+}
+
+#[derive(Debug)]
 pub struct Unread {
 	pub name: String,
 	pub cause: String,
@@ -65,7 +71,7 @@ pub struct Unread {
 
 pub enum Answer {
 	Prepared { conversation_id: String, message_id: String, prepared: Result<Outgoing, Refusal> },
-	Sent { conversation_id: String, message_id: String, outcome: Result<(), HostError> },
+	Sent { conversation_id: String, message_id: String, outcome: Result<(), Unsent> },
 	Library { space_id: String, items: Result<Vec<LibraryItem>, HostError> },
 	Commands { bot_id: String, commands: Result<Vec<AgentCommand>, HostError> },
 	Read { conversation_id: String, files: Vec<Result<File, Unread>> },
@@ -126,6 +132,30 @@ fn sent(source: &Source, outgoing: &Outgoing) -> Result<(), HostError> {
 	source.invoke_turn::<Value>("conversation_send_turn", arguments).map(|_| ())
 }
 
+fn names_unknown_message(failure: &HostError) -> bool {
+	let HostError::CommandFailed { body, .. } = failure else { return false };
+	matches!(
+		serde_json::from_str::<TranscriptStoreError>(body),
+		Ok(TranscriptStoreError::UnknownMessage { .. })
+	)
+}
+
+fn reached(source: &Source, outgoing: &Outgoing) -> Result<bool, HostError> {
+	let arguments = json!({
+		"conversationId": outgoing.conversation_id,
+		"messageId": outgoing.message_id,
+	});
+	match source.invoke::<String>("conversation_message_header", arguments) {
+		Ok(_) => Ok(true),
+		Err(failure) if names_unknown_message(&failure) => Ok(false),
+		Err(failure) => Err(failure),
+	}
+}
+
+fn delivered(source: &Source, outgoing: &Outgoing) -> Result<(), Unsent> {
+	sent(source, outgoing).map_err(|failure| Unsent { failure, reached: reached(source, outgoing) })
+}
+
 fn read(path: PathBuf) -> Result<File, Unread> {
 	let name = path
 		.file_name()
@@ -158,7 +188,7 @@ fn answered(source: &Source, call: Call) -> Answer {
 			Answer::Prepared { conversation_id, message_id, prepared: prepared(source, preparing) }
 		}
 		Call::Send(outgoing) => {
-			let outcome = sent(source, &outgoing);
+			let outcome = delivered(source, &outgoing);
 			let Outgoing { conversation_id, message_id, .. } = outgoing;
 			Answer::Sent { conversation_id, message_id, outcome }
 		}
@@ -245,7 +275,8 @@ impl Worker {
 			.name("composer-turn".into())
 			.spawn(move || reply.deliver(answered(&source, Call::Send(outgoing))));
 		if let Err(failure) = spawned {
-			let outcome = Err(HostError::InProcess { cause: failure.to_string() });
+			let failure = HostError::InProcess { cause: failure.to_string() };
+			let outcome = Err(Unsent { failure, reached: Ok(false) });
 			self.reply.deliver(Answer::Sent { conversation_id, message_id, outcome });
 		}
 	}

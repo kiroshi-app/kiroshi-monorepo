@@ -83,10 +83,14 @@ impl Notice {
 		}
 	}
 
-	pub fn unsent(failure: &HostError) -> Notice {
+	pub fn unsent(failure: &HostError, unchecked: Option<&HostError>) -> Notice {
+		let description = match unchecked {
+			Some(unchecked) => format!("{} {}", failure.detail(), failure_text(unchecked)),
+			None => failure.detail(),
+		};
 		Notice::of(
 			filled(said(chat::screen::transport::WRITE_FAILED), &[("detail", &failure.title())]),
-			failure.detail(),
+			description,
 		)
 	}
 

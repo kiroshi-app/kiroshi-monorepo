@@ -4,12 +4,13 @@ use kiroshi_core::library::contract::{LibraryItem, LibraryItemKind};
 use kiroshi_rune_kit::strings::{Language, chat, common};
 use kiroshi_rune_kit::surfaces::s06_composer::ComposerIntent;
 
+use super::draft::Document;
 use super::open::{Candidate, Kind, Open};
 use super::prompt_text::{
 	Named, command_query, iso_utc, mention_counts, mention_query, mentioned_ids,
 	prompt_with_mention, to_mention_tokens, with_attachments,
 };
-use super::worker::{Answer, Call, File, Outgoing, Refusal, Unread};
+use super::worker::{Answer, Call, File, Outgoing, Refusal, Unread, Unsent};
 use super::{Effect, Live, State};
 use crate::host::HostError;
 
@@ -70,6 +71,22 @@ fn prompt(state: &State, open: &Open) -> String {
 
 fn failed(command: &str, body: &str) -> HostError {
 	HostError::CommandFailed { command: command.to_owned(), status: 500, body: body.to_owned() }
+}
+
+fn unsent(reached: Result<bool, HostError>) -> Unsent {
+	Unsent { failure: failed("conversation_send_turn", "down"), reached }
+}
+
+fn sent_back(outgoing: &Outgoing, reached: Result<bool, HostError>) -> Answer {
+	Answer::Sent {
+		conversation_id: outgoing.conversation_id.clone(),
+		message_id: outgoing.message_id.clone(),
+		outcome: Err(unsent(reached)),
+	}
+}
+
+fn document(name: &str) -> Document {
+	Document { name: format!("{name}.md"), title: name.to_owned(), bytes: 2048 }
 }
 
 fn file(id: &str) -> File {
@@ -370,7 +387,7 @@ fn a_failed_send_keeps_the_draft_and_shows_the_failure() {
 	let outgoing = send(&mut state, &open, "hello");
 	prepare(&mut state, &outgoing, &idle());
 
-	state.sent(GROUP, &outgoing.message_id, Err(failed("conversation_send_turn", "down")), &idle());
+	state.sent(GROUP, &outgoing.message_id, Err(unsent(Ok(false))));
 
 	assert_eq!(prompt(&state, &open), "hello");
 	assert!(
@@ -413,7 +430,7 @@ fn while_a_solo_turn_runs_sent_messages_queue_then_leave_in_order() {
 
 	state.settle(Some(&open), &idle());
 	let after_turn = sent_calls(&state).iter().map(|sent| sent.shown.clone()).collect::<Vec<_>>();
-	state.sent(SOLO, &first.message_id, Ok(()), &idle());
+	state.sent(SOLO, &first.message_id, Ok(()));
 	state.settle(Some(&open), &idle());
 
 	assert_eq!(while_running, (String::new(), 0));
@@ -461,21 +478,72 @@ fn remove_takes_one_message_out_of_the_queue() {
 	assert_eq!(state.draft(SOLO).map(|draft| draft.queue.len()), Some(0));
 }
 
+fn queued_and_sent(state: &mut State, text: &str) -> Outgoing {
+	let outgoing = send(state, &solo(), text);
+	prepare(state, &outgoing, &working(SOLO));
+	state.settle(Some(&solo()), &idle());
+	outgoing
+}
+
+fn queued_texts(state: &State) -> Vec<String> {
+	let queue = state.draft(SOLO).map(|draft| draft.queue.as_slice()).unwrap_or_default();
+	queue.iter().map(|queued| queued.shown.clone()).collect()
+}
+
 #[test]
-fn a_failed_queued_send_returns_to_the_front_and_holds_the_queue() {
+fn a_failed_queued_send_that_never_reached_the_thread_returns_to_the_front_held() {
 	let mut state = State::default();
-	let open = solo();
-	let outgoing = send(&mut state, &open, "queued");
-	prepare(&mut state, &outgoing, &working(SOLO));
-	state.settle(Some(&open), &idle());
+	let failing = queued_and_sent(&mut state, "queued");
+	let later = send(&mut state, &solo(), "later");
+	prepare(&mut state, &later, &working(SOLO));
 
-	state.sent(SOLO, &outgoing.message_id, Err(failed("conversation_send_turn", "down")), &idle());
+	state.answered(sent_back(&failing, Ok(false)), &idle());
 	state.queued.clear();
-	state.settle(Some(&open), &idle());
+	state.settle(Some(&solo()), &idle());
 
-	assert_eq!(state.draft(SOLO).map(|draft| draft.queue.len()), Some(1));
+	assert_eq!(queued_texts(&state), ["queued", "later"]);
+	assert_eq!(state.draft(SOLO).map(|draft| draft.is_queue_held), Some(true));
 	assert!(sent_calls(&state).is_empty());
 	assert!(notice_title(&state).is_some());
+}
+
+#[test]
+fn a_failed_send_that_reached_its_thread_is_not_queued_again_while_another_conversation_is_open() {
+	let mut state = State::default();
+	let failing = queued_and_sent(&mut state, "already stored");
+	let open_elsewhere = group();
+	let group_thread_holds = |id: &str| id == "m-in-the-group";
+	let live = Live { working: None, holds: &group_thread_holds };
+
+	state.answered(sent_back(&failing, Ok(true)), &live);
+	state.queued.clear();
+	state.settle(Some(&open_elsewhere), &live);
+
+	assert!(queued_texts(&state).is_empty());
+	assert_eq!(state.draft(SOLO).map(|draft| draft.is_queue_held), Some(false));
+	assert!(sent_calls(&state).is_empty());
+	assert!(
+		notice_title(&state).is_some_and(|title| title.starts_with("Couldn’t send the message"))
+	);
+}
+
+#[test]
+fn an_accepted_send_drops_only_the_documents_it_carried() {
+	let mut state = State::default();
+	let open = group();
+	state.draft_mut(GROUP).stage_document(document("roadmap"));
+	let outgoing = send(&mut state, &open, "read this");
+	prepare(&mut state, &outgoing, &idle());
+
+	state.draft_mut(GROUP).stage_document(document("brief"));
+	state.sent(GROUP, &outgoing.message_id, Ok(()));
+
+	assert_eq!(outgoing.documents, ["roadmap.md"]);
+	assert_eq!(
+		state.draft(GROUP).map(|draft| draft.documents.clone()),
+		Some(vec![document("brief")])
+	);
+	assert_eq!(prompt(&state, &open), "");
 }
 
 #[test]

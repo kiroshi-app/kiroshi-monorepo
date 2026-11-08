@@ -35,7 +35,7 @@ use open::{Kind, Open};
 use prompt_text::{
 	Named, mentioned_ids, prompt_for_command, prompt_with_mention, to_mention_tokens,
 };
-use worker::{Answer, Call, File, Outgoing, Preparing, Refusal, Unread, Worker};
+use worker::{Answer, Call, File, Outgoing, Preparing, Refusal, Unread, Unsent, Worker};
 
 const FIELD_KEY: &str = "composer-field";
 const PASTED_IMAGE_NAME: &str = "image.png";
@@ -197,6 +197,7 @@ impl State {
 			message_id: outgoing.message_id.clone(),
 			text,
 			file_ids: draft.files.iter().map(|file| file.id.clone()).collect(),
+			document_names: outgoing.documents.clone(),
 			reply_ids: open.reply_links.iter().map(|link| link.message_id.clone()).collect(),
 			queues: matches!(open.kind, Kind::Solo { .. }),
 		});
@@ -246,29 +247,25 @@ impl State {
 		self.queue(Call::Send(outgoing));
 	}
 
-	fn sent(
-		&mut self,
-		conversation_id: &str,
-		message_id: &str,
-		outcome: Result<(), HostError>,
-		live: &Live,
-	) {
+	fn sent(&mut self, conversation_id: &str, message_id: &str, outcome: Result<(), Unsent>) {
 		let draft = self.draft_mut(conversation_id);
 		let at = draft.running.iter().position(|running| running.message_id == message_id);
 		let outgoing = at.map(|at| draft.running.remove(at));
-		let failure = match outcome {
+		let Unsent { failure, reached } = match outcome {
 			Ok(()) => return self.accept(conversation_id, message_id),
-			Err(failure) => failure,
+			Err(unsent) => unsent,
 		};
-		let was_pending = draft.refuse(message_id);
-		if !was_pending
-			&& !(live.holds)(message_id)
+		self.notice = Some(Notice::unsent(&failure, reached.as_ref().err()));
+		if reached.is_ok_and(|is_reached| is_reached) {
+			return self.accept(conversation_id, message_id);
+		}
+		let draft = self.draft_mut(conversation_id);
+		if !draft.refuse(message_id)
 			&& let Some(outgoing) = outgoing
 		{
 			draft.hold_front(outgoing);
 			draft.is_queue_held = true;
 		}
-		self.notice = Some(Notice::unsent(&failure));
 	}
 
 	fn staged(&mut self, conversation_id: &str, files: Vec<Result<File, Unread>>) {
@@ -285,7 +282,7 @@ impl State {
 				self.prepared(&conversation_id, &message_id, prepared, live)
 			}
 			Answer::Sent { conversation_id, message_id, outcome } => {
-				self.sent(&conversation_id, &message_id, outcome, live)
+				self.sent(&conversation_id, &message_id, outcome)
 			}
 			Answer::Library { space_id, items } => self.library_read(space_id, items),
 			Answer::Commands { bot_id, commands } => match commands {
