@@ -270,11 +270,22 @@ fn applications_scene(
 	apps: &[Application],
 	failed: bool,
 ) -> El {
+	applications_scene_with(t, s, owner, apps, failed, SEARCH_TEXT)
+}
+
+fn applications_scene_with(
+	t: &Tokens,
+	s: &SceneState,
+	owner: Owner,
+	apps: &[Application],
+	failed: bool,
+	search_text: TextStyle,
+) -> El {
 	let panel = Applications {
 		owner,
 		applications: apps,
 		query: &s.edit,
-		search_text: SEARCH_TEXT,
+		search_text,
 		has_failed_to_load: failed,
 		can_connect: true,
 		language: Language::En,
@@ -307,16 +318,7 @@ pub(super) fn applications_agent(t: &Tokens, s: &SceneState) -> El {
 pub(super) fn applications_search_row_at_largest_text(t: &Tokens, s: &SceneState) -> El {
 	let linear = picture(LINEAR_MARK);
 	let github = picture(GITHUB_MARK);
-	let panel = Applications {
-		owner: AGENT,
-		applications: &marked(&linear, &github),
-		query: &s.edit,
-		search_text: FLOORED_TEXT,
-		has_failed_to_load: false,
-		can_connect: true,
-		language: Language::En,
-	};
-	framed(t, applications(t, &panel, query, ignore))
+	applications_scene_with(t, s, AGENT, &marked(&linear, &github), false, FLOORED_TEXT)
 }
 
 pub(super) fn applications_space(t: &Tokens, s: &SceneState) -> El {
