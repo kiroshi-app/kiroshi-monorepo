@@ -13,7 +13,7 @@ use kiroshi_rune_os::scheme;
 use kiroshi_rune_preview::app::App;
 use kiroshi_rune_preview::host::Profile;
 use kiroshi_rune_preview::navigation::Route;
-use kiroshi_rune_preview::surfaces::s15_boards;
+use kiroshi_rune_preview::surfaces::{s10_agent_settings, s15_boards};
 use kiroshi_rune_preview::{
 	composer, conversations, local, menu, onboarding, scenes, smoke, spike,
 };
@@ -48,14 +48,14 @@ fn view(s: &App, cx: &mut Cx<App>) -> El {
 		| Route::Approvals
 		| Route::Missions
 		| Route::Routines
-		| Route::AgentSettings
 		| Route::Applications
 		| Route::PersonSettings
 		| Route::SpaceSettings
 		| Route::Library => el(),
 		Route::Boards => s15_boards::view(s, &t, cx.layout_size(s15_boards::CANVAS)),
+		Route::AgentSettings => s10_agent_settings::view(s, &t),
 	};
-	rune_kit::root(body, Vec::new())
+	rune_kit::root(body, s10_agent_settings::layers(s, &t))
 }
 
 const DEV_HOST: &str = "--dev-host";

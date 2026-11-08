@@ -12,12 +12,14 @@ use kiroshi_rune_kit::surfaces::s10_agent_settings::history::{
 	self as kit_history, Author, Authors, Change as KitChange, ChangeFile, ChangePage, Day,
 	HistoryList,
 };
-use kiroshi_rune_kit::surfaces::s10_agent_settings::shell::{self, Entry, Frame};
+use kiroshi_rune_kit::surfaces::s10_agent_settings::shell::{
+	self, Entry, MENU_DEFAULT_WIDTH, Menu,
+};
 use kiroshi_rune_kit::surfaces::s10_agent_settings::skills::{
 	self as kit_skills, OpenedFile, SkillEditor, SkillFiles, SkillItem,
 };
 use kiroshi_rune_kit::surfaces::s10_agent_settings::{Confirm, Density, confirmation};
-use kiroshi_rune_kit::tokens::{SPACING, Tokens};
+use kiroshi_rune_kit::tokens::Tokens;
 
 use super::agent::{Fields, ModelOption, effort_of, hue_value, model_options_for};
 use super::history::{
@@ -26,12 +28,11 @@ use super::history::{
 use super::skills::Draft;
 use super::{Change, Confirming, Leaving, Notice, Open, Read, said};
 use crate::app::{App, Person};
+use crate::navigation::Route;
 
 const CONCISE_STYLE: &str = "concise";
 
-const DENSITY: Density = Density::Dialog;
-
-const HISTORY_INSET: f32 = SPACING * 5.0;
+const DENSITY: Density = Density::Page;
 
 fn today() -> i64 {
 	let seconds = SystemTime::now()
@@ -234,14 +235,10 @@ fn body(app: &App, t: &Tokens, open: &Open) -> El {
 	let hue = identity_of(fields.map(AsRef::as_ref)).hue;
 	match (open.entry, &open.draft, &open.change) {
 		(Entry::Skills, Some(draft), _) => skill_editor(app, t, draft),
-		(Entry::Skills, None, _) => shell::scrolling_panel(skills_list(t, open)),
+		(Entry::Skills, None, _) => skills_list(t, open),
 		(Entry::History, _, Some(change)) => change_view(t, open, change, name),
-		(Entry::History, _, None) => col()
-			.w_full()
-			.grow(1.0)
-			.padding(HISTORY_INSET)
-			.child(history_list(app, t, open, name, hue)),
-		_ => shell::scrolling_panel(agent_panel(app, t, open)),
+		(Entry::History, _, None) => history_list(app, t, open, name, hue),
+		_ => agent_panel(app, t, open),
 	}
 }
 
@@ -257,16 +254,27 @@ fn confirmation_of(t: &Tokens, open: &Open) -> Option<El> {
 	}
 }
 
-pub fn view(app: &App, t: &Tokens) -> Vec<El> {
-	let Some(open) = app.surfaces.s10_agent_settings.open.as_ref() else { return Vec::new() };
-	let identity = identity_of(open.agent.loaded().map(AsRef::as_ref));
-	let frame = Frame { identity, has_history: true };
+fn open_of(app: &App) -> Option<&Open> {
+	let is_shown = app.navigation.main_route() == Route::AgentSettings;
+	app.surfaces.s10_agent_settings.open.as_ref().filter(|_| is_shown)
+}
+
+pub fn view(app: &App, t: &Tokens) -> El {
+	let Some(open) = open_of(app) else { return el() };
+	let menu = Menu {
+		back: Menu::back_to_conversations(),
+		identity: identity_of(open.agent.loaded().map(AsRef::as_ref)),
+		width: MENU_DEFAULT_WIDTH,
+		has_history: true,
+	};
 	let page = col()
 		.w_full()
 		.grow(1.0)
-		.h_full()
 		.children(open.notice.as_ref().map(|notice| notice_view(t, notice)))
 		.child(body(app, t, open));
-	let dialog = shell::dialog::<App>(t, &frame, open.entry, page);
-	std::iter::once(dialog).chain(confirmation_of(t, open)).collect()
+	shell::screen::<App>(t, &menu, open.entry, page)
+}
+
+pub fn layers(app: &App, t: &Tokens) -> Vec<El> {
+	open_of(app).and_then(|open| confirmation_of(t, open)).into_iter().collect()
 }

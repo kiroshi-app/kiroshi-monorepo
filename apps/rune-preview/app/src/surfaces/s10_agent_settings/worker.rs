@@ -1,7 +1,7 @@
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 
-use kiroshi_core::agent::contract::{LiveSession, OfferedModel};
+use kiroshi_core::agent::contract::OfferedModel;
 use kiroshi_core::conversations::contract::{
 	Bot, BotChangedFile, BotHistoryEntry, BotIdentity, Skill, SkillDraft,
 };
@@ -29,8 +29,7 @@ pub struct Membership {
 pub enum Call {
 	ReadAgent { space_id: String, bot_id: String },
 	ReadModels,
-	Describe { bot_id: String, identity: Box<BotIdentity>, restarts: bool },
-	Restart { bot_id: String },
+	Describe { bot_id: String, identity: Box<BotIdentity> },
 	ReadSpaces { bot_id: String },
 	Share { bot_id: String, space_id: String, is_shared: bool },
 	ReadSkills { bot_id: String },
@@ -45,8 +44,7 @@ pub enum Call {
 pub enum Answer {
 	Agent { bot_id: String, bots: Result<Vec<Bot>, HostError> },
 	Models(Result<Vec<OfferedModel>, HostError>),
-	Described { bot_id: String, restarts: bool, written: Result<Bot, HostError> },
-	Restarted { bot_id: String, outcome: Result<(), HostError> },
+	Described { bot_id: String, written: Result<Bot, HostError> },
 	Spaces { bot_id: String, memberships: Result<Vec<Membership>, HostError> },
 	Shared { bot_id: String, space_id: String, is_shared: bool, outcome: Result<(), HostError> },
 	Skills { bot_id: String, skills: Result<Vec<Skill>, HostError> },
@@ -60,14 +58,6 @@ pub enum Answer {
 
 fn scope_of(bot_id: &str) -> PluginScope {
 	PluginScope::Bot { id: bot_id.to_owned() }
-}
-
-fn restarted(source: &Source, bot_id: &str) -> Result<(), HostError> {
-	let live: Vec<LiveSession> = source.invoke("agent_live_sessions", json!({}))?;
-	live.into_iter().filter(|session| session.bot_id == bot_id).try_for_each(|session| {
-		let scope = json!({ "conversationId": session.conversation_id, "botId": session.bot_id });
-		source.invoke("agent_shutdown", json!({ "scope": scope }))
-	})
 }
 
 fn memberships_of(source: &Source, bot_id: &str) -> Result<Vec<Membership>, HostError> {
@@ -123,14 +113,10 @@ fn answered(source: &Source, call: Call) -> Answer {
 			Answer::Agent { bot_id, bots }
 		}
 		Call::ReadModels => Answer::Models(source.invoke("agent_models", json!({}))),
-		Call::Describe { bot_id, identity, restarts } => {
+		Call::Describe { bot_id, identity } => {
 			let arguments = json!({ "id": bot_id, "identity": identity });
 			let written = source.invoke("conversation_update_bot", arguments);
-			Answer::Described { bot_id, restarts, written }
-		}
-		Call::Restart { bot_id } => {
-			let outcome = restarted(source, &bot_id);
-			Answer::Restarted { bot_id, outcome }
+			Answer::Described { bot_id, written }
 		}
 		Call::ReadSpaces { bot_id } => {
 			let memberships = memberships_of(source, &bot_id);

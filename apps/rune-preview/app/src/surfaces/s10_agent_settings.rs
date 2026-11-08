@@ -21,10 +21,11 @@ use kiroshi_rune_kit::surfaces::s10_agent_settings::{Event, Field, Host, Picker}
 
 use crate::app::{App, Workspace};
 use crate::host::HostError;
+use crate::navigation::Route;
 use crate::source::Source;
 
 pub use heard::{Heard, heard_of};
-pub use view::view;
+pub use view::{layers, view};
 pub use worker::Membership;
 
 use agent::{Fields, hue_from};
@@ -198,12 +199,8 @@ impl Open {
 
 	fn described(&mut self, change: impl FnOnce(&mut BotIdentity)) -> Vec<Call> {
 		let Some(fields) = self.agent.loaded_mut() else { return Vec::new() };
-		let write = fields.write(change);
-		vec![Call::Describe {
-			bot_id: self.bot_id.clone(),
-			identity: Box::new(write.identity),
-			restarts: write.restarts,
-		}]
+		let identity = fields.write(change);
+		vec![Call::Describe { bot_id: self.bot_id.clone(), identity: Box::new(identity) }]
 	}
 
 	fn is_unsaved(&self) -> bool {
@@ -235,12 +232,15 @@ impl Open {
 				Vec::new()
 			}
 			Event::Close => return Outcome::Close,
-			Event::Back => {
-				if self.change.take().is_none() {
-					self.leave_editor();
-				}
+			Event::Back if self.change.is_some() => {
+				self.change = None;
 				Vec::new()
 			}
+			Event::Back if self.draft.is_some() => {
+				self.leave_editor();
+				Vec::new()
+			}
+			Event::Back => return Outcome::Close,
 			Event::LeaveSkill => {
 				self.leave_editor();
 				Vec::new()
@@ -405,12 +405,8 @@ impl Open {
 	}
 
 	fn due_text_write(&mut self) -> Option<Call> {
-		let write = self.agent.loaded_mut()?.due_text_write()?;
-		Some(Call::Describe {
-			bot_id: self.bot_id.clone(),
-			identity: Box::new(write.identity),
-			restarts: write.restarts,
-		})
+		let identity = self.agent.loaded_mut()?.due_text_write()?;
+		Some(Call::Describe { bot_id: self.bot_id.clone(), identity: Box::new(identity) })
 	}
 
 	fn agent_read(&mut self, bots: Result<Vec<Bot>, HostError>) -> Option<Bot> {
@@ -435,23 +431,18 @@ impl Open {
 		Some(bot)
 	}
 
-	fn described_answer(
-		&mut self,
-		restarts: bool,
-		written: Result<Bot, HostError>,
-	) -> (Vec<Call>, Option<Bot>) {
-		let Some(fields) = self.agent.loaded_mut() else { return (Vec::new(), None) };
+	fn described_answer(&mut self, written: Result<Bot, HostError>) -> Option<Bot> {
+		let fields = self.agent.loaded_mut()?;
 		match written {
 			Ok(bot) => {
 				fields.written(bot.clone());
-				let restart = restarts.then(|| Call::Restart { bot_id: self.bot_id.clone() });
-				(restart.into_iter().collect(), Some(bot))
+				Some(bot)
 			}
 			Err(failure) => {
 				eprintln!("the agent settings were not saved: {}", failure_text(&failure));
 				fields.refused();
 				self.notice = notice_of(roster::SETTINGS_UNSAVED);
-				(Vec::new(), None)
+				None
 			}
 		}
 	}
@@ -565,7 +556,7 @@ impl Open {
 			Ok(entries) => {
 				self.history = Read::Loaded(entries);
 				let skills = self.read_skills();
-				vec![skills, self.read_agent(), Call::Restart { bot_id: self.bot_id.clone() }]
+				vec![skills, self.read_agent()]
 			}
 			Err(failure) => {
 				eprintln!("the change was not undone: {}", failure_text(&failure));
@@ -692,15 +683,8 @@ impl State {
 				self.landed.extend(open.agent_read(bots));
 				Vec::new()
 			}
-			Answer::Described { restarts, written, .. } => {
-				let (calls, saved) = open.described_answer(restarts, written);
-				self.landed.extend(saved);
-				calls
-			}
-			Answer::Restarted { outcome, .. } => {
-				if let Err(failure) = outcome {
-					eprintln!("the agent's session was not restarted: {}", failure_text(&failure));
-				}
+			Answer::Described { written, .. } => {
+				self.landed.extend(open.described_answer(written));
 				Vec::new()
 			}
 			Answer::Spaces { memberships, .. } => {
@@ -774,7 +758,6 @@ fn bot_of(answer: &Answer) -> &str {
 		Answer::Models(_) => "",
 		Answer::Agent { bot_id, .. }
 		| Answer::Described { bot_id, .. }
-		| Answer::Restarted { bot_id, .. }
 		| Answer::Spaces { bot_id, .. }
 		| Answer::Shared { bot_id, .. }
 		| Answer::Skills { bot_id, .. }
@@ -808,6 +791,14 @@ pub fn open_agent_settings(app: &mut App, bot_id: &str) {
 	let settings = &mut app.surfaces.s10_agent_settings;
 	settings.use_source(source);
 	settings.open(&space_id, bot_id);
+	app.navigation.navigate_main(Route::AgentSettings);
+}
+
+fn left_when_closed(app: &mut App) {
+	let is_shown = app.navigation.main_route() == Route::AgentSettings;
+	if is_shown && !app.surfaces.s10_agent_settings.is_open() {
+		app.navigation.navigate_main(Route::Conversations);
+	}
 }
 
 pub fn poll(app: &mut App) -> bool {
@@ -819,6 +810,7 @@ pub fn poll(app: &mut App) -> bool {
 pub fn heard(app: &mut App, heard: Heard) {
 	app.surfaces.s10_agent_settings.heard(heard);
 	landed_in_roster(app);
+	left_when_closed(app);
 }
 
 impl Host for App {
@@ -828,5 +820,6 @@ impl Host for App {
 
 	fn emit(&mut self, event: Event) {
 		self.surfaces.s10_agent_settings.handle(event);
+		left_when_closed(self);
 	}
 }

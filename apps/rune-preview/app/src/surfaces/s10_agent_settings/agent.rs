@@ -1,5 +1,5 @@
 use kiroshi_core::agent::contract::OfferedModel;
-use kiroshi_core::bundles::{BotPermissions, EffortLevel};
+use kiroshi_core::bundles::EffortLevel;
 use kiroshi_core::conversations::contract::{Bot, BotIdentity, Hue};
 use rune::TextEdit;
 
@@ -53,31 +53,6 @@ fn without_changing_tools(denied: &[String]) -> Vec<String> {
 	denied.iter().filter(|tool| !CHANGING_TOOLS.contains(&tool.as_str())).cloned().collect()
 }
 
-fn sorted(items: &[String]) -> Vec<String> {
-	let mut items = items.to_vec();
-	items.sort();
-	items
-}
-
-fn permissions_key(
-	permissions: &BotPermissions,
-) -> (String, Vec<String>, Vec<String>, Vec<String>) {
-	(
-		permissions.default_mode.clone(),
-		sorted(&permissions.allow),
-		sorted(&permissions.ask),
-		sorted(&permissions.deny),
-	)
-}
-
-pub fn changes_runtime(bot: &Bot, next: &BotIdentity) -> bool {
-	next.instructions != bot.instructions
-		|| next.model != bot.model
-		|| next.effort != bot.effort
-		|| sorted(&next.denied_tools) != sorted(&bot.denied_tools)
-		|| permissions_key(&next.permissions) != permissions_key(&bot.permissions)
-}
-
 pub fn effort_of(level: EffortLevel) -> Effort {
 	match level {
 		EffortLevel::Low => Effort::Low,
@@ -118,11 +93,6 @@ pub fn model_options_for(model: &str, catalogue: &[OfferedModel]) -> Vec<ModelOp
 	offered
 }
 
-pub struct Write {
-	pub identity: BotIdentity,
-	pub restarts: bool,
-}
-
 impl Fields {
 	pub fn new(saved: Bot) -> Fields {
 		Fields {
@@ -143,16 +113,16 @@ impl Fields {
 		}
 	}
 
-	pub fn write(&mut self, change: impl FnOnce(&mut BotIdentity)) -> Write {
+	pub fn write(&mut self, change: impl FnOnce(&mut BotIdentity)) -> BotIdentity {
 		let mut identity = self.with_texts();
 		change(&mut identity);
 		self.shown = identity.clone();
 		self.is_edited = false;
 		self.writes += 1;
-		Write { restarts: changes_runtime(&self.saved, &identity), identity }
+		identity
 	}
 
-	pub fn due_text_write(&mut self) -> Option<Write> {
+	pub fn due_text_write(&mut self) -> Option<BotIdentity> {
 		if !self.is_edited || self.writes > 0 {
 			return None;
 		}

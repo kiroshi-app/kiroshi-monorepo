@@ -8,15 +8,23 @@ use serde_json::{Value, json};
 use kiroshi_rune_kit::strings::bots::{roster, runtime, spaces};
 use kiroshi_rune_kit::surfaces::s10_agent_settings::shell::Entry;
 use kiroshi_rune_kit::surfaces::s10_agent_settings::skills::{FileFailure, SkillField};
-use kiroshi_rune_kit::surfaces::s10_agent_settings::{Event, Field, Picker};
+use kiroshi_rune_kit::surfaces::s10_agent_settings::{Event, Field, Host as _, Picker};
 use kiroshi_rune_kit::tokens::Tokens;
 
-use super::agent::{FALLBACK_MODELS, changes_runtime, identity_of, model_options_for};
+use super::agent::{FALLBACK_MODELS, model_options_for};
 use super::history::{days_of, matching, oldest_date, runs_of};
 use super::worker::{Answer, Call, Membership, Range};
-use super::{Confirming, Heard, Leaving, Notice, Read, State, heard_of, said, view};
-use crate::app::App;
+use super::{
+	Confirming, Heard, Leaving, Notice, Read, State, heard, heard_of, layers, open_agent_settings,
+	said, view,
+};
+use crate::app::{App, Person, Ready, Workspace};
+use crate::events::{HostEvent, parsed};
+use crate::host::Host;
 use crate::host::HostError;
+use crate::model::{Agent, Space as HeldSpace};
+use crate::navigation::Route;
+use crate::source::Source;
 
 const SPACE: &str = "space-1";
 const BOT: &str = "bot-1";
@@ -121,9 +129,9 @@ fn typed(state: &mut State, field: Field, text: &str) {
 	*state.edit(field) = TextEdit::new(text);
 }
 
-fn described(state: &State) -> Option<(String, bool)> {
+fn described(state: &State) -> Option<String> {
 	state.queued.iter().find_map(|call| match call {
-		Call::Describe { identity, restarts, .. } => Some((identity.name.clone(), *restarts)),
+		Call::Describe { identity, .. } => Some(identity.name.clone()),
 		_ => None,
 	})
 }
@@ -189,13 +197,9 @@ fn a_typed_name_is_written_on_the_next_poll_and_shown_once_saved() {
 	typed(&mut state, Field::Name, "Archive Keeper");
 	state.poll();
 
-	assert_eq!(described(&state), Some(("Archive Keeper".to_owned(), false)));
+	assert_eq!(described(&state), Some("Archive Keeper".to_owned()));
 	let saved = bot_named(BOT, "Archive Keeper", "sonnet");
-	state.answered(Answer::Described {
-		bot_id: BOT.to_owned(),
-		restarts: false,
-		written: Ok(saved.clone()),
-	});
+	state.answered(Answer::Described { bot_id: BOT.to_owned(), written: Ok(saved.clone()) });
 
 	assert_eq!(shown_name(&state), "Archive Keeper");
 	assert_eq!(state.landed, vec![saved]);
@@ -215,11 +219,7 @@ fn a_refused_write_keeps_the_saved_name_and_raises_the_settings_notice() {
 	let mut state = loaded();
 	typed(&mut state, Field::Name, "Archive Keeper");
 	state.poll();
-	state.answered(Answer::Described {
-		bot_id: BOT.to_owned(),
-		restarts: false,
-		written: Err(refused()),
-	});
+	state.answered(Answer::Described { bot_id: BOT.to_owned(), written: Err(refused()) });
 
 	assert_eq!(shown_name(&state), "Nest Keeper");
 	assert_eq!(open_of(&state).notice, notice(roster::SETTINGS_UNSAVED));
@@ -227,13 +227,13 @@ fn a_refused_write_keeps_the_saved_name_and_raises_the_settings_notice() {
 }
 
 #[test]
-fn a_new_colour_is_shown_at_once_and_does_not_restart_the_session() {
+fn a_new_colour_is_shown_at_once_and_written() {
 	let mut state = loaded();
 	state.handle(Event::Hue(Some(186.0)));
 
 	let fields = open_of(&state).agent.loaded().expect("the agent is read");
 	assert_eq!(fields.shown.avatar_blot.map(|hue| hue.value()), Some(186));
-	assert_eq!(described(&state).map(|(_, restarts)| restarts), Some(false));
+	assert_eq!(described(&state), Some("Nest Keeper".to_owned()));
 }
 
 #[test]
@@ -249,22 +249,29 @@ fn removing_the_picture_writes_no_image() {
 }
 
 #[test]
-fn a_picked_model_restarts_the_session_once_saved() {
+fn a_picked_model_is_written_and_shuts_no_session_down() {
 	let mut state = loaded();
 	state.handle(Event::OpenPicker(Picker::Model));
 	assert_eq!(open_of(&state).picking, Some(Picker::Model));
 
 	state.handle(Event::Pick(Picker::Model, "opus".to_owned()));
 	assert_eq!(open_of(&state).picking, None);
-	assert_eq!(described(&state).map(|(_, restarts)| restarts), Some(true));
+	let model = state.queued.iter().find_map(|call| match call {
+		Call::Describe { identity, .. } => Some(identity.model.clone()),
+		_ => None,
+	});
+	assert_eq!(model, Some("opus".to_owned()));
 
 	state.queued.clear();
 	state.answered(Answer::Described {
 		bot_id: BOT.to_owned(),
-		restarts: true,
 		written: Ok(bot_named(BOT, "Nest Keeper", "opus")),
 	});
-	assert_eq!(state.queued, vec![Call::Restart { bot_id: BOT.to_owned() }]);
+	assert_eq!(
+		open_of(&state).agent.loaded().map(|fields| fields.shown.model.clone()),
+		Some("opus".to_owned())
+	);
+	assert!(state.queued.is_empty());
 }
 
 #[test]
@@ -273,21 +280,7 @@ fn a_pending_name_rides_along_with_a_colour_change() {
 	typed(&mut state, Field::Name, "Archive Keeper");
 	state.handle(Event::Hue(None));
 
-	assert_eq!(described(&state).map(|(name, _)| name), Some("Archive Keeper".to_owned()));
-}
-
-#[test]
-fn the_runtime_rule_matches_changes_runtime_in_apps_app() {
-	let held = bot();
-	let mut next = identity_of(&held);
-	assert!(!changes_runtime(&held, &next));
-
-	next.model = "opus".to_owned();
-	assert!(changes_runtime(&held, &next));
-
-	let mut guarded = bot();
-	guarded.denied_tools = vec!["Bash".to_owned()];
-	assert!(changes_runtime(&guarded, &identity_of(&guarded)));
+	assert_eq!(described(&state), Some("Archive Keeper".to_owned()));
 }
 
 #[test]
@@ -692,7 +685,6 @@ fn an_undone_change_is_marked_and_refreshes_skills_and_agent() {
 		vec![
 			Call::ReadSkills { bot_id: BOT.to_owned() },
 			Call::ReadAgent { space_id: SPACE.to_owned(), bot_id: BOT.to_owned() },
-			Call::Restart { bot_id: BOT.to_owned() },
 		]
 	);
 }
@@ -772,33 +764,139 @@ fn companion_events_are_heard_and_others_are_not() {
 	assert!(heard_of("conversation://message-stored", json!({})).is_none());
 }
 
+fn ready_app() -> App {
+	let mut app = App::new();
+	app.workspace = Workspace::Ready(Ready {
+		source: Source::Running(Host::detached()),
+		space: HeldSpace { id: SPACE.to_owned(), name: "Personal".to_owned(), colour: None },
+		agents: vec![Agent {
+			id: BOT.to_owned(),
+			name: "Nest Keeper".to_owned(),
+			title: "Archivist".to_owned(),
+			avatar_blot: None,
+		}],
+		conversations: Vec::new(),
+		person: Person::Unread,
+		longest: None,
+	});
+	app
+}
+
+fn opened_app() -> App {
+	let mut app = ready_app();
+	open_agent_settings(&mut app, BOT);
+	let settings = &mut app.surfaces.s10_agent_settings;
+	settings.answered(Answer::Agent { bot_id: BOT.to_owned(), bots: Ok(vec![bot()]) });
+	settings.queued.clear();
+	app
+}
+
+fn roster_name(app: &App) -> Option<String> {
+	app.ready()?.agents.iter().find(|agent| agent.id == BOT).map(|agent| agent.name.clone())
+}
+
+#[test]
+fn opening_agent_settings_shows_the_settings_route_and_reads_the_agent() {
+	let mut app = ready_app();
+	open_agent_settings(&mut app, BOT);
+
+	assert!(app.navigation.main_route() == Route::AgentSettings);
+	let read = Call::ReadAgent { space_id: SPACE.to_owned(), bot_id: BOT.to_owned() };
+	assert!(app.surfaces.s10_agent_settings.queued.contains(&read));
+}
+
+#[test]
+fn the_app_poll_writes_a_typed_name_and_the_roster_shows_the_saved_one() {
+	let mut app = opened_app();
+	*app.edit(Field::Name) = TextEdit::new("Archive Keeper");
+	app.poll();
+	assert_eq!(described(&app.surfaces.s10_agent_settings), Some("Archive Keeper".to_owned()));
+
+	let saved = bot_named(BOT, "Archive Keeper", "sonnet");
+	app.surfaces
+		.s10_agent_settings
+		.answered(Answer::Described { bot_id: BOT.to_owned(), written: Ok(saved) });
+	app.poll();
+	assert_eq!(roster_name(&app), Some("Archive Keeper".to_owned()));
+}
+
+#[test]
+fn back_from_the_settings_menu_returns_to_the_conversations() {
+	let mut app = opened_app();
+	app.emit(Event::Back);
+
+	assert!(!app.surfaces.s10_agent_settings.is_open());
+	assert!(app.navigation.main_route() == Route::Conversations);
+}
+
+fn frame(event: &str, payload: Value) -> String {
+	json!({ "event": event, "payload": payload }).to_string()
+}
+
+fn heard_in(app: &mut App, text: &str) {
+	match parsed(text) {
+		Some(HostEvent::Companion(heard_event)) => heard(app, heard_event),
+		_ => panic!("the frame is heard as a companion event"),
+	}
+}
+
+#[test]
+fn a_companion_update_from_the_event_loop_reaches_the_screen_and_the_roster() {
+	let mut app = opened_app();
+	let renamed = serde_json::to_value(bot_named(BOT, "Renamed", "sonnet")).expect("a bot writes");
+	heard_in(&mut app, &frame("companion://updated", json!({ "id": BOT, "bot": renamed })));
+
+	assert_eq!(shown_name(&app.surfaces.s10_agent_settings), "Renamed");
+	assert_eq!(roster_name(&app), Some("Renamed".to_owned()));
+}
+
+#[test]
+fn a_companion_deletion_from_the_event_loop_leaves_the_screen() {
+	let mut app = opened_app();
+	heard_in(&mut app, &frame("companion://deleted", json!({ "id": BOT, "spaceId": SPACE })));
+
+	assert!(!app.surfaces.s10_agent_settings.is_open());
+	assert!(app.navigation.main_route() == Route::Conversations);
+}
+
+#[test]
+fn an_unreadable_companion_event_is_reported_not_dropped() {
+	let heard_event = parsed(&frame("companion://updated", json!({ "id": BOT })));
+
+	assert!(matches!(heard_event, Some(HostEvent::Unreadable { .. })));
+}
+
 #[test]
 fn every_panel_draws_from_its_state() {
 	let t = Tokens::new(false);
-	let mut app = App::new();
-	assert!(view(&app, &t).is_empty());
+	let mut app = ready_app();
+	assert!(layers(&app, &t).is_empty());
 
-	app.surfaces.s10_agent_settings = opened();
-	assert_eq!(view(&app, &t).len(), 1);
+	open_agent_settings(&mut app, BOT);
+	view(&app, &t);
+	assert!(layers(&app, &t).is_empty());
 
 	let mut state = loaded();
 	with_skills(&mut state);
 	state.handle(Event::OpenSkill("release-notes".to_owned()));
 	typed(&mut state, Field::Skill(SkillField::Body), "Draft");
-	state.handle(Event::Close);
+	state.handle(Event::Back);
 	app.surfaces.s10_agent_settings = state;
-	assert_eq!(view(&app, &t).len(), 2);
+	view(&app, &t);
+	assert_eq!(layers(&app, &t).len(), 1);
 
 	let mut state = loaded();
 	with_history(&mut state);
 	state.handle(Event::Undo("c4".to_owned()));
 	app.surfaces.s10_agent_settings = state;
-	assert_eq!(view(&app, &t).len(), 2);
+	view(&app, &t);
+	assert_eq!(layers(&app, &t).len(), 1);
 
 	for entry in [Entry::General, Entry::Appearance, Entry::Runtime] {
 		let mut state = loaded();
 		state.handle(Event::Entry(entry));
 		app.surfaces.s10_agent_settings = state;
-		assert_eq!(view(&app, &t).len(), 1);
+		view(&app, &t);
+		assert!(layers(&app, &t).is_empty());
 	}
 }
