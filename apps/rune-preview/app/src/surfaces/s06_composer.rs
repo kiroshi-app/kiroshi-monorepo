@@ -256,7 +256,7 @@ impl State {
 			Err(unsent) => unsent,
 		};
 		self.notice = Some(Notice::unsent(&failure, reached.as_ref().err()));
-		if reached.is_ok_and(|is_reached| is_reached) {
+		if matches!(reached, Ok(true)) {
 			return self.accept(conversation_id, message_id);
 		}
 		let draft = self.draft_mut(conversation_id);
