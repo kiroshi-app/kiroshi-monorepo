@@ -94,7 +94,7 @@ impl State {
 		self.load_older();
 	}
 
-	pub fn poll(&mut self) -> bool {
+	fn take_answers(&mut self) -> bool {
 		let answers = self.worker.as_ref().map(Worker::answers).unwrap_or_default();
 		let changed = !answers.is_empty();
 		for answer in answers {
@@ -151,7 +151,8 @@ impl State {
 		None
 	}
 
-	pub fn perform(&mut self, tx: &mut Tx) {
+	fn perform(&mut self, tx: &mut Tx) -> bool {
+		let has_effects = !self.effects.is_empty();
 		for effect in std::mem::take(&mut self.effects) {
 			match effect {
 				Effect::Copy(text) => tx.copy(text),
@@ -163,6 +164,7 @@ impl State {
 				Effect::Reveal(id) => tx.scroll_into_view(turn_key(&id)),
 			}
 		}
+		has_effects
 	}
 
 	fn raise(&mut self, title: String, description: String) {
@@ -329,4 +331,10 @@ pub fn open_conversation(app: &mut App, conversation_id: &str) {
 	let thread = &mut app.surfaces.s05_thread;
 	thread.use_source(source);
 	thread.open(conversation_id);
+}
+
+pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
+	let thread = &mut app.surfaces.s05_thread;
+	let has_answers = thread.take_answers();
+	thread.perform(tx) || has_answers
 }
