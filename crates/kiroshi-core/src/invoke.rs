@@ -813,8 +813,8 @@ mod tests {
 
 	const OS_SHELL_MODULES: [&str; 3] = ["badge", "notifications", "window_controls"];
 
-	const RUNE_ONLY_COMMANDS: [&str; 4] =
-		["restart_to_update", "whats_new", "acknowledge_whats_new", "agent_pending_prompts"];
+	const RUNE_ONLY_COMMANDS: [&str; 3] =
+		["restart_to_update", "whats_new", "acknowledge_whats_new"];
 
 	fn tauri_commands() -> Vec<(String, String)> {
 		let table = std::fs::read_to_string(format!("{}/src/commands.rs", crate::APP_DIR))

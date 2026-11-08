@@ -147,6 +147,15 @@ pub async fn agent_pending_questions(
 
 #[tauri::command]
 #[specta::specta]
+pub async fn agent_pending_prompts(
+	core: State<'_, crate::core_context::Core>,
+	conversation_id: String,
+) -> Result<Vec<ScopedEvent>, TransportError> {
+	pending_prompts(core.inner(), conversation_id).await
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn agent_pending_questions_in_space(
 	core: State<'_, crate::core_context::Core>,
 	space_id: String,

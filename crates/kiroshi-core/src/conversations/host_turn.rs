@@ -15,8 +15,9 @@ use super::contract::{SentMessage, TranscriptStoreError};
 use super::summons::{self, SummonsDropReason, SummonsRun, MAX_SUMMONS_PER_CHAIN};
 use super::turn_run_deadline::{arm_start_deadlines, drop_awaited_run, suspend_start_deadline};
 use crate::agent::commands::{
-	announce, announce_in_turn, cancel_session_turn, line_place_of, live_run_of, run_is_idle,
-	shut_down_agent, start_run, submit_in_line, withdraw_queued, Lineage, RunStart,
+	announce, announce_in_turn, announce_prompts_closed, cancel_session_turn, line_place_of,
+	live_run_of, run_is_idle, shut_down_agent, start_run, submit_in_line, withdraw_queued, Lineage,
+	RunStart,
 };
 use crate::agent::contract::{
 	AgentEvent, CancelFailure, CancelFailureReason, CancelOutcome, EventTurn, RuntimeScope,
@@ -1056,7 +1057,11 @@ impl HostTurn {
 		if is_withdrawn {
 			self.end_cancelled_runs(&[scope.bot_id.as_str()]).await;
 		}
-		if is_withdrawn || outcome == CancelOutcome::NothingToCancel {
+		let tells_cancelled = is_withdrawn || outcome == CancelOutcome::NothingToCancel;
+		if tells_cancelled && outcome != CancelOutcome::Cancelled {
+			announce_prompts_closed(&self.core, scope, Some(self.event_turn())).await;
+		}
+		if tells_cancelled {
 			self.tell_cancelled(scope);
 		}
 		match outcome {
@@ -1195,7 +1200,8 @@ mod tests {
 	use crate::conversations::contract::{SummonsDropped, SUMMONS_DROPPED_EVENT, UPDATED_EVENT};
 	use crate::conversations::turn_run_deadline::TurnRunDeadlines;
 	use crate::db::repositories::conversations::{
-		BotIdentity, ConversationDraft, DEFAULT_BOT_ID, DEFAULT_BOT_MODEL,
+		a_pending_prompt, BotIdentity, ConversationDraft, PendingPrompt, PromptKind,
+		DEFAULT_BOT_ID, DEFAULT_BOT_MODEL,
 	};
 	use crate::db::repositories::messages::{
 		MessagePageQuery, MessageState, NewAssistantMessage, NewTurn,
@@ -1894,6 +1900,16 @@ mod tests {
 		let ada = room.bot_ids[0].clone();
 		speaking_in(&core, &room, std::slice::from_ref(&ada)).await;
 		a_streaming_reply(&core, &room, &ada).await;
+		let session = scope_in(&room, &ada).runtime_session_id;
+		let conversations = database(&core).expect("the database opens").conversations();
+		for (prompt_id, kind) in [("w1", PromptKind::Permission), ("q1", PromptKind::Question)] {
+			let prompt = PendingPrompt {
+				runtime_session_id: session.clone(),
+				prompt_id: prompt_id.to_owned(),
+				..a_pending_prompt(&room.id, kind)
+			};
+			conversations.hold_prompt(prompt).await.expect("the prompt is held");
+		}
 		let mut announced = core.subscribe_frames();
 
 		let outcome = stopped(&core, scope_in(&room, &ada)).await;
@@ -1902,12 +1918,17 @@ mod tests {
 		assert_eq!(open_runs(&core).await, 0, "the running run was left open");
 		assert_eq!(reply_states(&core, &room).await, vec![MessageState::Cancelled]);
 		let told = told(&mut announced);
-		let ended = ScopedEvent {
-			scope: Some(scope_in(&room, &ada)),
-			turn: None,
-			event: ended_as(TurnOutcome::Cancelled),
+		let scoped = |event| ScopedEvent { scope: Some(scope_in(&room, &ada)), turn: None, event };
+		let closed = AgentEvent::PromptsClosed {
+			permission_ids: vec!["w1".to_owned()],
+			question_ids: vec!["q1".to_owned()],
 		};
-		assert_eq!(agent_events(&told), vec![ended]);
+		assert_eq!(
+			agent_events(&told),
+			vec![scoped(closed), scoped(ended_as(TurnOutcome::Cancelled))]
+		);
+		let reopened = conversations.activity_of(vec![room.id.clone()]).await.expect("it reads");
+		assert_eq!(reopened[0].pending_prompt, None, "a closed prompt is still stored");
 		assert_eq!(active_turns(&told), vec![Value::Null]);
 	}
 
@@ -1993,12 +2014,14 @@ mod tests {
 			conversation_id: room.id.clone(),
 			continues_turn_id: None,
 		};
-		let ended = ScopedEvent {
-			scope: Some(ada),
-			turn: Some(turn),
-			event: ended_as(TurnOutcome::Cancelled),
-		};
-		assert_eq!(agent_events(&told(&mut announced)), vec![ended]);
+		let scoped =
+			|event| ScopedEvent { scope: Some(ada.clone()), turn: Some(turn.clone()), event };
+		let closed =
+			AgentEvent::PromptsClosed { permission_ids: Vec::new(), question_ids: Vec::new() };
+		assert_eq!(
+			agent_events(&told(&mut announced)),
+			vec![scoped(closed), scoped(ended_as(TurnOutcome::Cancelled))]
+		);
 	}
 
 	#[tokio::test]
