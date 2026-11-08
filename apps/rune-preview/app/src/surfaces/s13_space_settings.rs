@@ -166,10 +166,6 @@ fn hue_of(colour: Option<f32>) -> Option<i64> {
 	colour.map(|hue| hue.round() as i64)
 }
 
-fn colour_of(space: &Space) -> Option<f32> {
-	space.colour.map(|hue| f32::from(hue.value()))
-}
-
 fn today() -> i64 {
 	let seconds =
 		SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |elapsed| elapsed.as_secs());
@@ -245,10 +241,6 @@ fn join_refusal(kind: &str) -> Option<(Key, Key)> {
 	})
 }
 
-fn is_waiting(kind: &str) -> bool {
-	matches!(kind, "hostOffline" | "waitingForHost")
-}
-
 impl State {
 	pub fn attach(&mut self, waker: Waker) {
 		self.waker = Some(waker);
@@ -303,7 +295,7 @@ impl State {
 		let error = members::refusal_of(failure);
 		let kind = members::kind_of(error.as_ref());
 		eprintln!("a joined Space call was refused: {}", failure_text(failure));
-		if is_waiting(kind) {
+		if matches!(kind, "hostOffline" | "waitingForHost") {
 			return;
 		}
 		match join_refusal(kind) {
@@ -890,11 +882,7 @@ fn run_follow(app: &mut App, follow: Follow) {
 			if let Workspace::Ready(ready) = &mut app.workspace
 				&& ready.space.id == space.id
 			{
-				ready.space = model::Space {
-					id: space.id.clone(),
-					name: space.name.clone(),
-					colour: colour_of(&space),
-				};
+				ready.space = s02_rail::shown_space(&space);
 			}
 			app.surfaces.s02_rail.heard(Heard::Spaces);
 		}
