@@ -94,8 +94,8 @@ pub(super) fn with_desk_on(
 	{
 		app.switch_tab(&leaving, &entering);
 	}
-	let open_tabs = open_tabs(app);
-	app.navigation.keep_pages_of(&open_tabs);
+	let still_open = open_tabs(app);
+	app.navigation.keep_pages_of(&still_open);
 }
 
 fn open_tabs(app: &App) -> Vec<String> {
