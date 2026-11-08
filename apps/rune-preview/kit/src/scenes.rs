@@ -31,6 +31,7 @@ mod person_settings;
 mod primitives;
 mod rail;
 mod roster;
+mod s11_applications;
 mod space_avatar;
 mod space_picker;
 mod thread;
@@ -73,6 +74,10 @@ impl Scene {
 	pub fn baseline(&self, theme: Theme) -> String {
 		format!("{}-{}.png", self.id, theme.name())
 	}
+
+	pub fn themes(&self) -> &'static [Theme] {
+		if s11_applications::DARK_ONLY.contains(&self.id) { &[Theme::Dark] } else { &THEMES }
+	}
 }
 
 const STORY: (f32, f32) = (640.0, 360.0);
@@ -95,6 +100,9 @@ const NARROW: (f32, f32) = (352.0, 640.0);
 const ANSWERED: (f32, f32) = (704.0, 420.0);
 const ANSWERED_LONG: (f32, f32) = (512.0, 360.0);
 const MARK_SIDE: f32 = 22.0;
+const SETTINGS_PANEL: (f32, f32) = (576.0, 448.0);
+const CATALOGUE: (f32, f32) = (832.0, 544.0);
+const STORY_VIEWPORT: (f32, f32) = (1180.0, 900.0);
 
 const fn scene(id: &'static str, size: (f32, f32), view: fn(&Tokens, &SceneState) -> El) -> Scene {
 	Scene { id, size, tabs: 0, pointer: Pointer::Away, typed: "", keys: "", view }
@@ -4063,6 +4071,403 @@ pub static SCENES: &[Scene] = &[
 		ANSWERED_LONG,
 		approvals::answered_long_content,
 	),
+	scene("settings-environment--default", SETTINGS_PANEL, s11_applications::secrets_default),
+	scene("settings-environment--empty", SETTINGS_PANEL, s11_applications::secrets_empty),
+	scene("settings-environment--loading", SETTINGS_PANEL, s11_applications::secrets_loading),
+	scene(
+		"settings-environment--long-content",
+		SETTINGS_PANEL,
+		s11_applications::secrets_long_content,
+	),
+	scene(
+		"settings-environment--server-scope",
+		SETTINGS_PANEL,
+		s11_applications::secrets_server_scope,
+	),
+	scene(
+		"settings-environment--space-scope",
+		SETTINGS_PANEL,
+		s11_applications::secrets_space_scope,
+	),
+	scene("settings-environment--unreadable", SETTINGS_PANEL, s11_applications::secrets_unreadable),
+	focused(
+		"settings-environment--refused-name",
+		STORY_VIEWPORT,
+		0,
+		s11_applications::secrets_refused_name,
+	),
+	focused("settings-environment--error", STORY_VIEWPORT, 0, s11_applications::secrets_error),
+	focused(
+		"settings-environment--rejected-delete",
+		STORY_VIEWPORT,
+		3,
+		s11_applications::secrets_rejected_delete,
+	),
+	scene(
+		"settings-environment--unreadable-with-entries",
+		SETTINGS_PANEL,
+		s11_applications::secrets_unreadable_with_entries,
+	),
+	scene(
+		"settings-environment--unset-needs-value",
+		SETTINGS_PANEL,
+		s11_applications::secrets_unset_needs_value,
+	),
+	scene(
+		"settings-environment--unset-served-elsewhere",
+		SETTINGS_PANEL,
+		s11_applications::secrets_unset_served_elsewhere,
+	),
+	scene(
+		"settings-plugins-applicationspanel--companion",
+		SETTINGS_PANEL,
+		s11_applications::applications_agent,
+	),
+	scene(
+		"settings-plugins-applicationspanel--connected",
+		SETTINGS_PANEL,
+		s11_applications::applications_connected,
+	),
+	scene(
+		"settings-plugins-applicationspanel--connected-dark",
+		SETTINGS_PANEL,
+		s11_applications::applications_connected,
+	),
+	scene(
+		"settings-plugins-applicationspanel--connecting",
+		SETTINGS_PANEL,
+		s11_applications::applications_connecting,
+	),
+	scene(
+		"settings-plugins-applicationspanel--empty-companion",
+		SETTINGS_PANEL,
+		s11_applications::applications_empty_agent,
+	),
+	scene(
+		"settings-plugins-applicationspanel--empty-profile",
+		SETTINGS_PANEL,
+		s11_applications::applications_empty_profile,
+	),
+	scene(
+		"settings-plugins-applicationspanel--empty-space",
+		SETTINGS_PANEL,
+		s11_applications::applications_empty_space,
+	),
+	scene(
+		"settings-plugins-applicationspanel--failed",
+		SETTINGS_PANEL,
+		s11_applications::applications_failed,
+	),
+	scene(
+		"settings-plugins-applicationspanel--failed-with-long-reason",
+		SETTINGS_PANEL,
+		s11_applications::applications_failed_with_long_reason,
+	),
+	scene(
+		"settings-plugins-applicationspanel--failed-with-reason",
+		SETTINGS_PANEL,
+		s11_applications::applications_failed_with_reason,
+	),
+	scene(
+		"settings-plugins-applicationspanel--long-content",
+		SETTINGS_PANEL,
+		s11_applications::applications_long_content,
+	),
+	focused(
+		"settings-plugins-applicationspanel--needs-authorization",
+		SETTINGS_PANEL,
+		5,
+		s11_applications::applications_needs_authorization,
+	),
+	focused(
+		"settings-plugins-applicationspanel--needs-authorization-dark",
+		SETTINGS_PANEL,
+		5,
+		s11_applications::applications_needs_authorization,
+	),
+	scene(
+		"settings-plugins-applicationspanel--profile",
+		SETTINGS_PANEL,
+		s11_applications::applications_profile,
+	),
+	scene(
+		"settings-plugins-applicationspanel--search-row",
+		SETTINGS_PANEL,
+		s11_applications::applications_agent,
+	),
+	s11_applications::typed_in(
+		"settings-plugins-applicationspanel--search-text-is-given",
+		SETTINGS_PANEL,
+		"linear",
+		s11_applications::applications_agent,
+	),
+	scene(
+		"settings-plugins-applicationspanel--space",
+		SETTINGS_PANEL,
+		s11_applications::applications_space,
+	),
+	scene(
+		"settings-plugins-applicationspanel--unanswered",
+		SETTINGS_PANEL,
+		s11_applications::applications_unanswered,
+	),
+	scene(
+		"settings-plugins-applicationspanel--unreadable",
+		SETTINGS_PANEL,
+		s11_applications::applications_unreadable,
+	),
+	scene(
+		"settings-plugins-applicationspanel--without-display-name",
+		SETTINGS_PANEL,
+		s11_applications::applications_without_display_name,
+	),
+	scene(
+		"settings-plugins-applicationidentity--hosted-result",
+		STORY,
+		s11_applications::identity_hosted_result,
+	),
+	scene(
+		"settings-plugins-applicationidentity--nothing-to-say",
+		STORY,
+		s11_applications::identity_nothing_to_say,
+	),
+	scene(
+		"settings-plugins-applicationidentity--one-use",
+		STORY,
+		s11_applications::identity_one_use,
+	),
+	scene(
+		"settings-plugins-applicationidentity--package-result",
+		STORY,
+		s11_applications::identity_package_result,
+	),
+	scene(
+		"settings-plugins-applicationidentity--source-and-uses",
+		STORY,
+		s11_applications::identity_source_and_uses,
+	),
+	scene(
+		"settings-plugins-applicationidentity--verified",
+		STORY,
+		s11_applications::identity_verified,
+	),
+	scene("settings-plugins-applicationmark--card", STORY, s11_applications::mark_card),
+	scene(
+		"settings-plugins-applicationmark--extra-small",
+		STORY,
+		s11_applications::mark_extra_small,
+	),
+	scene("settings-plugins-applicationmark--inline", STORY, s11_applications::mark_inline),
+	scene("settings-plugins-applicationmark--medium", STORY, s11_applications::mark_with_mark),
+	scene("settings-plugins-applicationmark--small", STORY, s11_applications::mark_small),
+	scene(
+		"settings-plugins-applicationmark--with-drawn-mark",
+		STORY,
+		s11_applications::mark_with_drawn_mark,
+	),
+	scene("settings-plugins-applicationmark--with-mark", STORY, s11_applications::mark_with_mark),
+	scene(
+		"settings-plugins-applicationmark--with-unreachable-mark",
+		STORY,
+		s11_applications::mark_with_unreachable_mark,
+	),
+	scene(
+		"settings-plugins-applicationmark--without-mark",
+		STORY,
+		s11_applications::mark_without_mark,
+	),
+	scene(
+		"settings-plugins-applicationssearchfield--at-rest",
+		STORY,
+		s11_applications::search_field_story,
+	),
+	typed(
+		"settings-plugins-applicationssearchfield--typed",
+		0,
+		"linear",
+		s11_applications::search_field_story,
+	),
+	scene(
+		"settings-plugins-applicationssearchfield--themes-at-rest",
+		STORY,
+		s11_applications::search_field_theme_cell,
+	),
+	typed(
+		"settings-plugins-applicationssearchfield--themes-filled",
+		0,
+		"linear",
+		s11_applications::search_field_theme_cell,
+	),
+	typed(
+		"settings-plugins-applicationssearchfield--themes-focus-visible",
+		1,
+		"",
+		s11_applications::search_field_theme_cell,
+	),
+	scene(
+		"settings-plugins-applicationscatalogue--at-rest",
+		CATALOGUE,
+		s11_applications::catalogue_at_rest,
+	),
+	scene(
+		"settings-plugins-applicationscatalogue--card-description-clamps",
+		CATALOGUE,
+		s11_applications::catalogue_card_description_clamps,
+	),
+	focused(
+		"settings-plugins-applicationscatalogue--card-focused",
+		CATALOGUE,
+		4,
+		s11_applications::catalogue_at_rest,
+	),
+	Scene {
+		id: "settings-plugins-applicationscatalogue--card-hovered",
+		size: CATALOGUE,
+		tabs: 0,
+		pointer: Pointer::EntersAtSnap("catalogue-card-linear"),
+		typed: "",
+		keys: "",
+		view: s11_applications::catalogue_at_rest,
+	},
+	scene(
+		"settings-plugins-applicationscatalogue--card-name-too-long",
+		CATALOGUE,
+		s11_applications::catalogue_card_name_too_long,
+	),
+	scene(
+		"settings-plugins-applicationscatalogue--card-without-description",
+		CATALOGUE,
+		s11_applications::catalogue_card_without_description,
+	),
+	scene(
+		"settings-plugins-applicationscatalogue--category-empty",
+		CATALOGUE,
+		s11_applications::catalogue_category_empty,
+	),
+	scene(
+		"settings-plugins-applicationscatalogue--category-selected",
+		CATALOGUE,
+		s11_applications::catalogue_category_selected,
+	),
+	scene(
+		"settings-plugins-applicationscatalogue--loading",
+		CATALOGUE,
+		s11_applications::catalogue_loading,
+	),
+	s11_applications::typed_in(
+		"settings-plugins-applicationscatalogue--nothing-matched",
+		CATALOGUE,
+		"zebra",
+		s11_applications::catalogue_nothing_matched,
+	),
+	scene(
+		"settings-plugins-applicationscatalogue--on-this-machine-selected",
+		CATALOGUE,
+		s11_applications::catalogue_on_this_machine_selected,
+	),
+	scene(
+		"settings-plugins-applicationscatalogue--partly-unreadable",
+		CATALOGUE,
+		s11_applications::catalogue_partly_unreadable,
+	),
+	scene(
+		"settings-plugins-applicationscatalogue--rail-scrolls",
+		CATALOGUE,
+		s11_applications::catalogue_at_rest,
+	),
+	s11_applications::typed_in(
+		"settings-plugins-applicationscatalogue--searching",
+		CATALOGUE,
+		"lin",
+		s11_applications::catalogue_at_rest,
+	),
+	scene(
+		"settings-plugins-applicationscatalogue--served-stale",
+		CATALOGUE,
+		s11_applications::catalogue_served_stale,
+	),
+	scene(
+		"settings-plugins-applicationscatalogue--setup-unavailable",
+		CATALOGUE,
+		s11_applications::catalogue_setup_unavailable,
+	),
+	scene(
+		"settings-plugins-applicationscatalogue--unreadable",
+		CATALOGUE,
+		s11_applications::catalogue_unreadable,
+	),
+	scene(
+		"settings-plugins-applicationinstallpage--asks-for-every-value",
+		CATALOGUE,
+		s11_applications::install_asks_for_every_value,
+	),
+	scene(
+		"settings-plugins-applicationinstallpage--empty-tool-list",
+		CATALOGUE,
+		s11_applications::install_empty_tool_list,
+	),
+	scene(
+		"settings-plugins-applicationinstallpage--for-space",
+		CATALOGUE,
+		s11_applications::install_for_space,
+	),
+	scene(
+		"settings-plugins-applicationinstallpage--hosted-nothing-to-set-up",
+		CATALOGUE,
+		s11_applications::install_hosted_nothing_to_set_up,
+	),
+	focused(
+		"settings-plugins-applicationinstallpage--install-failed-from-keyboard",
+		CATALOGUE,
+		3,
+		s11_applications::install_failed_from_keyboard,
+	),
+	focused(
+		"settings-plugins-applicationinstallpage--install-added-from-keyboard",
+		CATALOGUE,
+		0,
+		s11_applications::install_added_from_keyboard,
+	),
+	scene(
+		"settings-plugins-applicationinstallpage--install-running",
+		CATALOGUE,
+		s11_applications::install_running,
+	),
+	scene(
+		"settings-plugins-applicationinstallpage--long-content",
+		CATALOGUE,
+		s11_applications::install_long_content,
+	),
+	scene(
+		"settings-plugins-applicationinstallpage--needs-api-key",
+		CATALOGUE,
+		s11_applications::install_needs_api_key,
+	),
+	scene(
+		"settings-plugins-applicationinstallpage--nothing-to-set-up",
+		CATALOGUE,
+		s11_applications::install_nothing_to_set_up,
+	),
+	scene(
+		"settings-plugins-applicationinstallpage--refused",
+		CATALOGUE,
+		s11_applications::install_refused,
+	),
+	scene(
+		"settings-plugins-applicationinstallpage--runs-on-its-host",
+		CATALOGUE,
+		s11_applications::install_runs_on_its_host,
+	),
+	scene(
+		"settings-plugins-applicationinstallpage--signs-you-in",
+		CATALOGUE,
+		s11_applications::install_signs_you_in,
+	),
+	scene(
+		"settings-plugins-applicationinstallpage--themes-key-field-at-rest",
+		CATALOGUE,
+		s11_applications::install_needs_api_key,
+	),
 ];
 
 pub static SURFACES: &[&[Scene]] =
@@ -4081,6 +4486,7 @@ pub struct SceneState {
 	pub mark: Option<Image>,
 	pub library: library::LibraryScene,
 	pub board_pictures: Vec<Image>,
+	pub secrets: s11_applications::SecretsScene,
 	images: Option<ImageCache>,
 	fields: RefCell<HashMap<Field, TextEdit>>,
 }
@@ -4096,6 +4502,7 @@ impl SceneState {
 			mark: None,
 			library: library::LibraryScene::new(scene),
 			board_pictures: Vec::new(),
+			secrets: s11_applications::SecretsScene::new(scene.id),
 			images: None,
 			fields: RefCell::default(),
 		}
