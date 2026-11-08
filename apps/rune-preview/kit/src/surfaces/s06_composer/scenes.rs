@@ -9,7 +9,7 @@ use super::quote::{ReplyQuote, SelectionQuote, prompt_reply, selection_quote};
 use super::{ComposerIntent, Reach, Scope};
 use crate::hues::Preset;
 use crate::primitives::button::{Button, ButtonSize, ButtonVariant};
-use crate::scenes::{Pointer, Scene, SceneState};
+use crate::scenes::{Pointer, Scene, SceneState, THEMES};
 use crate::strings::Language;
 use crate::tokens::{BLUE, SPACING, TEXT_BASE_MEDIUM, Tokens, srgb};
 
@@ -306,11 +306,11 @@ const fn scene(
 	pointer: Pointer,
 	view: SceneView,
 ) -> Scene {
-	Scene { id, size, tabs, pointer, typed, keys: "", view }
+	Scene { id, size, tabs, pointer, typed, keys: "", themes: &THEMES, view }
 }
 
 const fn fixed(id: &'static str, size: (f32, f32), view: SceneView) -> Scene {
-	Scene { id, size, tabs: 0, pointer: Pointer::Away, typed: "", keys: "", view }
+	Scene { id, size, tabs: 0, pointer: Pointer::Away, typed: "", keys: "", themes: &THEMES, view }
 }
 
 const fn drafted(
@@ -319,7 +319,7 @@ const fn drafted(
 	typed: &'static str,
 	view: SceneView,
 ) -> Scene {
-	Scene { id, size, tabs: 0, pointer: Pointer::Away, typed, keys: "", view }
+	Scene { id, size, tabs: 0, pointer: Pointer::Away, typed, keys: "", themes: &THEMES, view }
 }
 
 const fn tabbed(
@@ -329,7 +329,7 @@ const fn tabbed(
 	tabs: usize,
 	view: SceneView,
 ) -> Scene {
-	Scene { id, size, tabs, pointer: Pointer::Away, typed, keys: "", view }
+	Scene { id, size, tabs, pointer: Pointer::Away, typed, keys: "", themes: &THEMES, view }
 }
 
 const fn hovered(
@@ -339,7 +339,16 @@ const fn hovered(
 	key: &'static str,
 	view: SceneView,
 ) -> Scene {
-	Scene { id, size, tabs: 0, pointer: Pointer::EntersAtSnap(key), typed, keys: "", view }
+	Scene {
+		id,
+		size,
+		tabs: 0,
+		pointer: Pointer::EntersAtSnap(key),
+		typed,
+		keys: "",
+		themes: &THEMES,
+		view,
+	}
 }
 
 type SceneView = fn(&Tokens, &SceneState) -> El;

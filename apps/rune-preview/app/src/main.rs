@@ -13,10 +13,10 @@ use kiroshi_rune_os::scheme;
 use kiroshi_rune_preview::app::App;
 use kiroshi_rune_preview::host::Profile;
 use kiroshi_rune_preview::navigation::Route;
-use kiroshi_rune_preview::surfaces::{s11_applications, s12_person_settings, s15_boards};
-use kiroshi_rune_preview::{
-	composer, conversations, local, menu, onboarding, scenes, smoke, spike,
+use kiroshi_rune_preview::surfaces::{
+	s01_chrome, s04_boot, s11_applications, s12_person_settings, s15_boards,
 };
+use kiroshi_rune_preview::{composer, conversations, local, menu, scenes, smoke, spike};
 
 fn view(s: &App, cx: &mut Cx<App>) -> El {
 	let dark = cx.system_dark();
@@ -26,7 +26,7 @@ fn view(s: &App, cx: &mut Cx<App>) -> El {
 	}
 	let k = t.kit();
 	let body = match s.navigation.main_route() {
-		Route::Onboarding(step) => onboarding::view(step, s, &k, &t.in_space(Some(tokens::BLUE))),
+		Route::Onboarding(step) => s04_boot::view(step, s, &t.in_space(Some(tokens::BLUE))),
 		Route::Conversations => {
 			let viewport = conversations::Viewport {
 				inset: cx.titlebar_inset(),
@@ -38,8 +38,19 @@ fn view(s: &App, cx: &mut Cx<App>) -> El {
 			};
 			conversations::view(s, &k, &t, &viewport)
 		}
+		Route::Chrome => {
+			let measured = s01_chrome::Measured {
+				width: cx.layout(KIT_ROOT).map_or(s01_chrome::WINDOW_SIZE.0, |rect| rect[2]),
+				lifted_tab: s
+					.surfaces
+					.s01_chrome
+					.lift
+					.as_ref()
+					.and_then(|lift| cx.layout(&format!("tab-{}", lift.id))),
+			};
+			s01_chrome::view(s, &k, &t, &measured)
+		}
 		Route::BlockSpike
-		| Route::Chrome
 		| Route::Rail
 		| Route::Roster
 		| Route::Boot
@@ -55,14 +66,20 @@ fn view(s: &App, cx: &mut Cx<App>) -> El {
 		Route::PersonSettings => s12_person_settings::view(s, &t),
 		Route::Boards => s15_boards::view(s, &t, cx.layout_size(s15_boards::CANVAS)),
 	};
-	let mut layers = s12_person_settings::layers(s, &t);
-	layers.extend(s11_applications::layers(s, &t));
+	let layers = s12_person_settings::layers(s, &t)
+		.into_iter()
+		.chain(s04_boot::layers(s, &t))
+		.chain(s11_applications::layers(s, &t));
 	rune_kit::root(body, layers)
 }
+
+const KIT_ROOT: &str = "kit-root";
 
 const DEV_HOST: &str = "--dev-host";
 
 const SKIP_ONBOARDING: &str = "--skip-onboarding";
+
+const CHROME: &str = "--chrome";
 
 const HOST_API: &str = "--host-api";
 
@@ -75,6 +92,9 @@ fn setup(s: &mut App, waker: Waker) {
 	if flagged(DEV_HOST) || flagged(SKIP_ONBOARDING) {
 		s.navigation.navigate_main(Route::Conversations);
 	}
+	if flagged(CHROME) {
+		s.navigation.navigate_main(Route::Chrome);
+	}
 	s.surfaces.s11_applications.attach(waker.clone());
 	s.surfaces.s12_person_settings.attach(waker.clone());
 	s.setup(waker);
@@ -84,6 +104,7 @@ fn poll(s: &mut App, seconds: f64, tx: &mut Tx) -> bool {
 	let changed = s.poll();
 	let changed = s11_applications::poll(s) || changed;
 	let changed = s12_person_settings::poll(s, tx) || changed;
+	let changed = s04_boot::poll(s, tx) || changed;
 	let changed = open_held(s, &mut held_links()) || changed;
 	if let Some(after) = s.focus_wake() {
 		tx.wake_after(after);
@@ -295,7 +316,7 @@ fn main() -> ExitCode {
 		scenes: scenes::SCENES,
 		fonts: tokens::FONTS,
 		families: tokens::FAMILIES,
-		..AppSpec::new("Kiroshi (Rune preview)", (1180.0, 780.0), App::new, view)
+		..AppSpec::new("Kiroshi (Rune preview)", s01_chrome::WINDOW_SIZE, App::new, view)
 	};
 	let app = rune::App::new(spec)
 		.chrome(conversations::CHROME)
