@@ -10,7 +10,7 @@ use kiroshi_core::library::contract::{
 	LibraryWriterKind,
 };
 use serde::Serialize;
-use serde_json::{Value, json};
+use serde_json::json;
 use yrs::{Doc, ReadTxn, Text, Transact};
 
 use kiroshi_rune_kit::surfaces::s14_library::{
@@ -961,7 +961,6 @@ fn a_library_change_from_the_event_loop_relists_the_library() {
 
 #[test]
 fn an_unreadable_library_event_takes_the_unreadable_path() {
-	let broken: Value = json!({ "spaceId": SPACE });
 	for event in [
 		"library://changed",
 		"library://document-updated",
@@ -976,7 +975,7 @@ fn an_unreadable_library_event_takes_the_unreadable_path() {
 		);
 	}
 	assert!(matches!(
-		parsed(&frame("library://changed", broken)),
+		parsed(&frame("library://changed", json!({ "spaceId": SPACE }))),
 		Some(HostEvent::Library(Heard::Changed(_)))
 	));
 }
