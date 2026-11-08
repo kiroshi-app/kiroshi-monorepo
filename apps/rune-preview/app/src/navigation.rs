@@ -1,4 +1,4 @@
-use crate::onboarding::Step;
+use crate::surfaces::s04_boot::Step;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Route {
