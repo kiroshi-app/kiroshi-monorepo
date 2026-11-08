@@ -9,8 +9,9 @@ use kiroshi_rune_kit::surfaces::s11_applications::panel::{
 use kiroshi_rune_kit::surfaces::s11_applications::secrets::{Scope as SecretScope, SecretsEvent};
 use serde_json::{Value, json};
 
-use super::calls::{Answer, Call, Concealed, Found, InstallOutcome, StatusRow, refusal_text};
-use super::catalogue::InstallFailure;
+use super::calls::{
+	Answer, Call, Concealed, Found, InstallFailure, InstallOutcome, StatusRow, refusal_text,
+};
 use super::secrets::{Dialog, is_secret_name};
 use super::{Notice, Scope, State, Which};
 use crate::host::HostError;
@@ -264,7 +265,7 @@ fn a_refused_install_shows_the_refusal_and_its_rollback_notice() {
 	state.install_event(InstallEvent::Install);
 	state.queued.clear();
 	let outcome = InstallOutcome {
-		refusal: Some("npx is missing".to_owned()),
+		refusal: Some(InstallFailure::Refused("npx is missing".to_owned())),
 		rollback_refusal: Some("store: locked".to_owned()),
 	};
 	state.answered(Answer::Installed { which: Which::Agent, name: "linear".to_owned(), outcome });
@@ -593,4 +594,22 @@ fn a_refusal_reads_as_its_kind_and_detail() {
 		"store: locked"
 	);
 	assert_eq!(refusal_text(&refused(json!({ "kind": "timedOut" }))), "timedOut");
+}
+
+#[test]
+fn an_oauth_install_left_unconnected_shows_the_connection_state_and_stops_connecting() {
+	let mut state = opened();
+	installed(&mut state, Which::Space, &[]);
+	browsing(&mut state, Which::Space, vec![application("linear", json!({ "kind": "oauth" }))]);
+	state.catalogue_event(CatalogueEvent::Pick("linear".to_owned()));
+	state.install_event(InstallEvent::Install);
+	assert_eq!(state.connecting, Some((Which::Space, "linear".to_owned())));
+	let outcome = InstallOutcome {
+		refusal: Some(InstallFailure::Unconnected(Connection::NeedsAuthorization)),
+		rollback_refusal: None,
+	};
+	state.answered(Answer::Installed { which: Which::Space, name: "linear".to_owned(), outcome });
+	assert!(state.connecting.is_none());
+	let failure = state.catalogue.as_ref().and_then(|catalogue| catalogue.failure.clone());
+	assert_eq!(failure, Some(InstallFailure::Unconnected(Connection::NeedsAuthorization)));
 }

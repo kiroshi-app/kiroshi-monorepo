@@ -7,6 +7,7 @@ use kiroshi_core::applications::contract::{Application, Install, InstallRefusal}
 use kiroshi_core::conversations::contract::McpServer;
 use kiroshi_core::environment::contract::{EnvEntry, EnvOwner, EnvScope};
 use kiroshi_core::plugins::contract::PluginScope;
+use kiroshi_rune_kit::surfaces::s11_applications::panel::Connection;
 use rune::Waker;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -73,8 +74,15 @@ pub enum Call {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub enum InstallFailure {
+	Refused(String),
+	Missing(Vec<String>),
+	Unconnected(Connection),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct InstallOutcome {
-	pub refusal: Option<String>,
+	pub refusal: Option<InstallFailure>,
 	pub rollback_refusal: Option<String>,
 }
 
@@ -137,19 +145,22 @@ fn mark_of(application: &Application) -> Value {
 	})
 }
 
-fn connect_refusal(source: &Source, owner: &EnvOwner, name: &str) -> Option<String> {
+fn connect_refusal(source: &Source, owner: &EnvOwner, name: &str) -> Option<InstallFailure> {
+	let unconnected = InstallFailure::Unconnected;
 	let rows: Vec<StatusRow> =
 		match source.invoke("mcp_application_status", json!({ "owner": owner })) {
 			Ok(rows) => rows,
-			Err(failure) => return Some(refusal_text(&failure)),
+			Err(failure) => return Some(InstallFailure::Refused(refusal_text(&failure))),
 		};
 	let Some(row) = rows.into_iter().find(|row| row.name == name) else {
-		return Some("failed".to_owned());
+		return Some(unconnected(Connection::Failed));
 	};
-	match row.status.as_str() {
-		"needsAuthorization" | "failed" => Some(row.reason.unwrap_or(row.status)),
-		_ => None,
-	}
+	let connection = match row.status.as_str() {
+		"needsAuthorization" => Connection::NeedsAuthorization,
+		"failed" => Connection::Failed,
+		_ => return None,
+	};
+	Some(row.reason.map_or(unconnected(connection), InstallFailure::Refused))
 }
 
 fn declared_names(source: &Source, owner: &EnvOwner) -> Result<Vec<String>, HostError> {
@@ -177,20 +188,23 @@ fn rolled_back(source: &Source, owner: &EnvOwner, name: &str) -> Option<String> 
 	undeclare_refusal.or(secrets_refusal).map(|refusal| refusal_text(&refusal))
 }
 
-fn declared_with_keys(source: &Source, run: &InstallRun) -> Result<(), String> {
+fn refused_with(failure: HostError) -> InstallFailure {
+	InstallFailure::Refused(refusal_text(&failure))
+}
+
+fn declared_with_keys(source: &Source, run: &InstallRun) -> Result<(), InstallFailure> {
 	let application = &run.application;
 	let scope = server_scope(&run.owner, &application.name);
 	for (secret, value) in &run.keys {
 		let arguments = json!({ "scope": scope, "name": secret, "value": value.0 });
-		done(source.invoke("env_set", arguments)).map_err(|failure| refusal_text(&failure))?;
+		done(source.invoke("env_set", arguments)).map_err(refused_with)?;
 	}
 	if !matches!(application.install, Install::Oauth) {
 		return Ok(());
 	}
 	let url = url_of(&application.config);
 	let arguments = json!({ "owner": run.owner, "name": application.name, "url": url });
-	done(source.invoke("mcp_oauth_connect", arguments))
-		.map_err(|failure| refusal_text(&failure))?;
+	done(source.invoke("mcp_oauth_connect", arguments)).map_err(refused_with)?;
 	match connect_refusal(source, &run.owner, &application.name) {
 		Some(refusal) => Err(refusal),
 		None => Ok(()),
@@ -198,8 +212,10 @@ fn declared_with_keys(source: &Source, run: &InstallRun) -> Result<(), String> {
 }
 
 fn installed(source: &Source, run: &InstallRun) -> InstallOutcome {
-	let refused =
-		|refusal: String| InstallOutcome { refusal: Some(refusal), rollback_refusal: None };
+	let refused = |refusal: String| InstallOutcome {
+		refusal: Some(InstallFailure::Refused(refusal)),
+		rollback_refusal: None,
+	};
 	let application = &run.application;
 	let unrunnable: Result<Option<InstallRefusal>, HostError> =
 		source.invoke("application_runnable", json!({ "config": application.config }));

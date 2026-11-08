@@ -2,7 +2,7 @@ use kiroshi_core::applications::contract::{Application, Install};
 use rune::{El, TextEdit, col, row};
 
 use kiroshi_rune_kit::primitives::toast::{Toast, ToastType, toast};
-use kiroshi_rune_kit::strings::{Language, bots, chat};
+use kiroshi_rune_kit::strings::{Key, Language, bots, chat};
 use kiroshi_rune_kit::surfaces::s11_applications::catalogue::{
 	Catalogue as CataloguePage, CatalogueApplication, CatalogueEvent, PAGE_INSET, RAIL_WIDTH,
 	Setup, catalogue,
@@ -12,7 +12,8 @@ use kiroshi_rune_kit::surfaces::s11_applications::install::{
 };
 use kiroshi_rune_kit::surfaces::s11_applications::mark::Mark;
 use kiroshi_rune_kit::surfaces::s11_applications::panel::{
-	Application as PanelApplication, Applications, ApplicationsEvent, Owner, applications,
+	Application as PanelApplication, Applications, ApplicationsEvent, Connection, Owner,
+	applications,
 };
 use kiroshi_rune_kit::surfaces::s11_applications::search::SEARCH_HEIGHT;
 use kiroshi_rune_kit::surfaces::s11_applications::secrets::{
@@ -25,7 +26,8 @@ use kiroshi_rune_kit::surfaces::s11_applications::{
 use kiroshi_rune_kit::surfaces::s12_person_settings::shell::notice_layer;
 use kiroshi_rune_kit::tokens::Tokens;
 
-use super::catalogue::{Catalogue, InstallFailure};
+use super::calls::InstallFailure;
+use super::catalogue::Catalogue;
 use super::secrets::Dialog;
 use super::{Notice, Scope, State, Which, state};
 use crate::app::App;
@@ -230,6 +232,16 @@ fn scope_column(t: &Tokens, applications_state: &State, scope: &Scope, language:
 		)))
 }
 
+fn state_of(connection: Connection) -> Key {
+	use bots::applications::connection::state;
+	match connection {
+		Connection::Connected => state::CONNECTED,
+		Connection::NeedsAuthorization => state::NEEDS_AUTHORIZATION,
+		Connection::Connecting => state::CONNECTING,
+		Connection::Failed => state::FAILED,
+	}
+}
+
 fn failure_text(failure: &InstallFailure, language: Language) -> String {
 	use bots::applications::install;
 	let reason = match failure {
@@ -237,6 +249,7 @@ fn failure_text(failure: &InstallFailure, language: Language) -> String {
 		InstallFailure::Missing(fields) => {
 			fill(install::MISSING, language, &[("fields", fields.join(", ").as_str())])
 		}
+		InstallFailure::Unconnected(connection) => say(state_of(*connection), language).to_owned(),
 	};
 	fill(install::FAILED, language, &[("reason", reason.as_str())])
 }

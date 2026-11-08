@@ -2,7 +2,7 @@ use kiroshi_core::applications::contract::{Application, Install};
 use kiroshi_rune_kit::surfaces::s11_applications::catalogue::Category;
 use rune::TextEdit;
 
-use super::calls::{Call, Concealed, Found};
+use super::calls::{Call, Concealed, Found, InstallFailure};
 use super::{Reading, Which};
 use crate::host::HostError;
 
@@ -24,12 +24,6 @@ const BUCKETS: [(&str, Category); 16] = [
 	("Travel", Category::Travel),
 	("Other", Category::Other),
 ];
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum InstallFailure {
-	Refused(String),
-	Missing(Vec<String>),
-}
 
 pub enum Landed {
 	Fresh,

@@ -26,7 +26,7 @@ use calls::{
 	Answer, Call, Calls, Concealed, Due, Found, InstallOutcome, InstallRun, refusal_kind,
 	refusal_text,
 };
-use catalogue::{Catalogue, InstallFailure, Landed};
+use catalogue::{Catalogue, Landed};
 use installed::{ConnectFailure, Installed};
 use secrets::{Dialog, Removal, Secrets, Write};
 
@@ -394,10 +394,10 @@ impl State {
 		}
 		match outcome.refusal {
 			Some(refusal) => {
-				eprintln!("{name} was not installed: {refusal}");
+				eprintln!("{name} was not installed: {refusal:?}");
 				if let Some(catalogue) = self.catalogue.as_mut() {
 					catalogue.installing = None;
-					catalogue.failure = Some(InstallFailure::Refused(refusal));
+					catalogue.failure = Some(refusal);
 				}
 				self.reread_installed(which);
 			}
