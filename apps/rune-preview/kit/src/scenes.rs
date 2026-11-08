@@ -114,15 +114,6 @@ const fn typed(
 	Scene { id, size: STORY, tabs, pointer: Pointer::Away, typed: text, keys: "", view }
 }
 
-const fn hovered(
-	id: &'static str,
-	size: (f32, f32),
-	key: &'static str,
-	view: fn(&Tokens, &SceneState) -> El,
-) -> Scene {
-	Scene { id, size, tabs: 0, pointer: Pointer::EntersAtSnap(key), typed: "", view }
-}
-
 const fn queried(
 	id: &'static str,
 	tabs: usize,
