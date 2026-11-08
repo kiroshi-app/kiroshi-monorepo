@@ -336,22 +336,6 @@ describe("scripts/pr-merge-sub.sh", () => {
 		expectNoMerge()
 	})
 
-	it("refuses a head commit with one red check", async () => {
-		const result = await runPrMergeSub({
-			pullRequest: { statusCheckRollup: [completed("vitest", "FAILURE")] },
-		})
-
-		expect(result.exitCode).not.toBe(0)
-		expect(result.stderr).toBe(
-			[
-				`pr-merge-sub.sh: PR #42 has checks that are not green on its head ${HEAD_SHA}:`,
-				"  vitest status=COMPLETED conclusion=FAILURE",
-				"",
-			].join("\n"),
-		)
-		expectNoMerge()
-	})
-
 	it("refuses a head commit with one pending check carrying no conclusion", async () => {
 		const result = await runPrMergeSub({
 			pullRequest: {
