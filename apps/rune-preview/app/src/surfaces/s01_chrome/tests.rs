@@ -553,7 +553,7 @@ fn a_closed_active_tab_reopens_on_the_conversation_pane_and_route_it_showed() {
 	let after_close = (opened_in(&app).map(str::to_owned), app.mission.is_none());
 	heard_by(&mut app, ChromeEvent::ReopenClosedTab);
 
-	assert!(left.2.is_some());
+	assert!(matches!(left, (Route::Library, Pane::Conversations, Some(_))));
 	assert_eq!(after_close, (None, true));
 	assert_eq!(active_of(&app), first);
 	assert!(page_of(&app) == left);
