@@ -25,7 +25,7 @@ use crate::model::{
 	Agent, AgentEvent, Conversation, ConversationMissions, ConversationPage, KiroshiAccountState,
 	Message, MessagePage, Mission, Role, RuntimeScope, Space,
 };
-use crate::navigation::{Navigation, Route};
+use crate::navigation::{HeldPage, Navigation, Route};
 use crate::notices::Notices;
 use crate::runs::Runs;
 use crate::source::Source;
@@ -190,7 +190,9 @@ impl Thread {
 	}
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Pane {
+	#[default]
 	Conversations,
 	Missions,
 }
@@ -376,12 +378,35 @@ impl App {
 	}
 
 	pub fn show_missions(&mut self) {
-		self.pane = Pane::Missions;
-		s08_missions::show(self);
+		self.navigation.navigate_main(Route::Conversations);
+		self.show_pane(Pane::Missions);
 	}
 
 	pub fn show_conversations(&mut self) {
-		self.pane = Pane::Conversations;
+		self.navigation.navigate_main(Route::Conversations);
+		self.show_pane(Pane::Conversations);
+	}
+
+	fn show_pane(&mut self, pane: Pane) {
+		self.pane = pane;
+		if pane == Pane::Missions {
+			s08_missions::show(self);
+		}
+	}
+
+	pub fn switch_tab(&mut self, leaving: &str, entering: &str) {
+		let conversation_id = match (&self.thread, &self.mission) {
+			(Some(thread), None) => Some(thread.conversation_id.clone()),
+			_ => None,
+		};
+		let held = HeldPage { conversation_id, pane: self.pane };
+		let entered = self.navigation.switch_tab(leaving, held, entering);
+		self.thread = None;
+		self.mission = None;
+		self.show_pane(entered.pane);
+		if let Some(conversation_id) = entered.conversation_id {
+			self.open(&conversation_id);
+		}
 	}
 
 	pub fn open_mission(&mut self, mission: &Mission, bot: &Agent) {
@@ -606,7 +631,6 @@ impl App {
 		if target.kind != NoticeKind::Conversation {
 			return;
 		}
-		self.navigation.navigate_main(Route::Conversations);
 		self.show_conversations();
 		self.open(&target.id);
 	}

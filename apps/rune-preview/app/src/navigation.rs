@@ -1,3 +1,6 @@
+use std::collections::HashMap;
+
+use crate::app::Pane;
 use crate::surfaces::s04_boot::Step;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -5,8 +8,6 @@ pub enum Route {
 	Onboarding(Step),
 	Conversations,
 	BlockSpike,
-	Chrome,
-	Rail,
 	Roster,
 	Boot,
 	Thread,
@@ -39,16 +40,45 @@ pub struct Window {
 	pub route: Route,
 }
 
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct HeldPage {
+	pub conversation_id: Option<String>,
+	pub pane: Pane,
+}
+
+#[derive(Clone, PartialEq)]
+struct TabPage {
+	route: Route,
+	held: HeldPage,
+}
+
 #[derive(Clone, PartialEq)]
 pub struct Navigation {
 	main: Route,
 	secondary: Vec<Window>,
 	next_id: u32,
+	left_tabs: HashMap<String, TabPage>,
 }
 
 impl Navigation {
 	pub fn new(main: Route) -> Navigation {
-		Navigation { main, secondary: Vec::new(), next_id: MAIN_WINDOW.0 + 1 }
+		Navigation {
+			main,
+			secondary: Vec::new(),
+			next_id: MAIN_WINDOW.0 + 1,
+			left_tabs: HashMap::new(),
+		}
+	}
+
+	pub fn switch_tab(&mut self, leaving: &str, held: HeldPage, entering: &str) -> HeldPage {
+		self.left_tabs.insert(leaving.to_owned(), TabPage { route: self.main, held });
+		let entered = self.left_tabs.remove(entering);
+		self.main = entered.as_ref().map_or(Route::Conversations, |page| page.route);
+		entered.map(|page| page.held).unwrap_or_default()
+	}
+
+	pub fn keep_pages_of(&mut self, open_tabs: &[String]) {
+		self.left_tabs.retain(|tab, _| open_tabs.contains(tab));
 	}
 
 	pub fn main_route(&self) -> Route {
@@ -218,6 +248,49 @@ mod tests {
 
 		assert_eq!(closed_again, Err(NavigationError::NotOpen(closed)));
 		assert!(navigation == before);
+	}
+
+	fn held(conversation_id: &str, pane: Pane) -> HeldPage {
+		HeldPage { conversation_id: Some(conversation_id.to_owned()), pane }
+	}
+
+	#[test]
+	fn a_new_tab_entered_from_missions_enters_on_conversations_with_no_conversation() {
+		let mut navigation = Navigation::new(Route::Library);
+
+		let entered = navigation.switch_tab("first", held("c-1", Pane::Missions), "second");
+
+		assert_eq!(entered, HeldPage { conversation_id: None, pane: Pane::Conversations });
+		assert!(navigation.main_route() == Route::Conversations);
+	}
+
+	#[test]
+	fn a_tab_entered_again_gets_back_the_page_and_pane_it_left() {
+		let mut navigation = Navigation::new(Route::Library);
+		navigation.switch_tab("first", held("c-1", Pane::Missions), "second");
+		navigation.navigate_main(Route::SpaceSettings);
+
+		let entered = navigation.switch_tab("second", HeldPage::default(), "first");
+
+		assert_eq!(entered, held("c-1", Pane::Missions));
+		assert!(navigation.main_route() == Route::Library);
+		assert_eq!(
+			navigation.switch_tab("first", HeldPage::default(), "second"),
+			HeldPage::default()
+		);
+		assert!(navigation.main_route() == Route::SpaceSettings);
+	}
+
+	#[test]
+	fn a_closed_tab_page_is_dropped() {
+		let mut navigation = Navigation::new(Route::Library);
+		navigation.switch_tab("first", held("c-1", Pane::Missions), "second");
+
+		navigation.keep_pages_of(&["second".to_owned()]);
+		let entered = navigation.switch_tab("second", HeldPage::default(), "first");
+
+		assert_eq!(entered, HeldPage::default());
+		assert!(navigation.main_route() == Route::Conversations);
 	}
 
 	#[test]

@@ -513,7 +513,7 @@ fn picked(app: &mut App, message: PickerMessage) {
 	}
 }
 
-fn railed(app: &mut App, message: RailMessage) {
+pub fn railed(app: &mut App, message: RailMessage) {
 	match message {
 		RailMessage::SpacesMenu(message) => picked(app, message),
 		RailMessage::OpenSpaceSettings => app.navigation.navigate_main(Route::SpaceSettings),
