@@ -12,14 +12,14 @@ use crate::source::Source;
 
 #[derive(Debug, PartialEq)]
 pub enum Call {
-	Pending { conversation_id: String },
+	Pending { conversation_id: String, read_number: u64 },
 	Respond { scope: RuntimeScope, id: String, decision: PermissionDecision },
 	Answer { scope: RuntimeScope, id: String, answers: HashMap<String, String> },
 	Write { request_id: String, message: NewUserMessage },
 }
 
 pub enum Answer {
-	Pending { conversation_id: String, read: Result<Vec<ScopedEvent>, HostError> },
+	Pending { conversation_id: String, read_number: u64, read: Result<Vec<ScopedEvent>, HostError> },
 	Responded { id: String, decision: PermissionDecision, outcome: Result<(), HostError> },
 	Answered { id: String, outcome: Result<(), HostError> },
 	Written { request_id: String, outcome: Result<(), HostError> },
@@ -27,10 +27,10 @@ pub enum Answer {
 
 fn answered(source: &Source, call: Call) -> Answer {
 	match call {
-		Call::Pending { conversation_id } => {
+		Call::Pending { conversation_id, read_number } => {
 			let arguments = json!({ "conversationId": conversation_id });
 			let read = source.invoke("agent_pending_prompts", arguments);
-			Answer::Pending { conversation_id, read }
+			Answer::Pending { conversation_id, read_number, read }
 		}
 		Call::Respond { scope, id, decision } => {
 			let arguments = json!({ "scope": scope, "id": id, "decision": decision });
