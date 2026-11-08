@@ -678,12 +678,12 @@ fn opened_mission(app: &App) -> Option<&str> {
 	app.mission.as_ref().map(|opened| opened.mission_id.as_str())
 }
 
-fn prompt_of<'a>(app: &'a mut App, conversation_id: &str) -> &'a TextEdit {
+fn prompt_of<'a>(app: &'a mut App, conversation_id: &str) -> &'a mut TextEdit {
 	app.surfaces.s06_composer.edit_of(conversation_id)
 }
 
 fn drafted(app: &mut App, conversation_id: &str, draft: &str) {
-	let prompt = app.surfaces.s06_composer.edit_of(conversation_id);
+	let prompt = prompt_of(app, conversation_id);
 	prompt.replace_text(draft);
 	prompt.set_caret(0);
 }
