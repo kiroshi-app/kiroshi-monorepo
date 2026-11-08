@@ -1,11 +1,14 @@
 use std::rc::Rc;
 
-use rune::{Color, Cursor, El, Icon, Span, TextStyle, col, el, icon, rich, row, spacer, text};
+use rune::{
+	Align, Color, Cursor, El, Icon, Key as KeyName, PointerPress, Side, Span, TextStyle, col, el,
+	icon, rich, row, spacer, text,
+};
 
 use crate::avatar::{Activity, Face, Motion};
 use crate::icons;
 use crate::primitives::button::{Button, ButtonSize, ButtonVariant};
-use crate::primitives::context_menu::{Mark, MenuItem, MenuRow, context_menu, submenu};
+use crate::primitives::context_menu::{Mark, MenuItem, MenuRow, wired_context_menu, wired_submenu};
 use crate::primitives::skeleton::skeleton;
 use crate::primitives::{FOCUS_RING_WIDTH, instant, ring_tint, tight};
 use crate::strings::{Key, Language, chat};
@@ -86,7 +89,7 @@ impl MissionState {
 		(self == MissionState::WaitingHuman).then_some(t.warning)
 	}
 
-	fn is_closed(self) -> bool {
+	pub fn is_closed(self) -> bool {
 		matches!(self, MissionState::Done | MissionState::Failed | MissionState::Closed)
 	}
 
@@ -177,12 +180,43 @@ pub enum CopyKind {
 	WorkspacePath,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MenuSource {
+	Card,
+	Row,
+}
+
+impl MenuSource {
+	fn key(self, mission: &str) -> String {
+		match self {
+			MenuSource::Card => format!("mission-card-{mission}"),
+			MenuSource::Row => format!("mission-row-{mission}"),
+		}
+	}
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MenuAction {
+	Open,
+	OpenPullRequest,
+	MessageAgent,
+	StopAgent,
+	Answer,
+	Close,
+	Reopen,
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum MissionsEvent {
 	Open { mission: String, conversation: Option<String> },
 	OpenUrl(String),
 	Back,
 	ToggleEarlierToday,
+	MenuRequested { mission: String, source: MenuSource, at: PointerPress },
+	MenuChosen { mission: String, action: MenuAction },
+	CopyChoicesShown { mission: String, is_shown: bool },
+	MenuCopied { mission: String, kind: CopyKind },
+	MenuDismissed,
 }
 
 pub type Emit<S> = Rc<dyn Fn(&mut S, MissionsEvent)>;
@@ -190,6 +224,29 @@ pub type Emit<S> = Rc<dyn Fn(&mut S, MissionsEvent)>;
 fn emitting<S: 'static>(control: El, emit: &Emit<S>, event: MissionsEvent) -> El {
 	let emit = Rc::clone(emit);
 	control.on_press(move |s: &mut S| emit(s, event.clone()))
+}
+
+fn requesting_menu<S: 'static>(
+	control: El,
+	emit: &Emit<S>,
+	mission: &str,
+	source: MenuSource,
+) -> El {
+	let (emit, mission) = (Rc::clone(emit), mission.to_owned());
+	control.on_secondary_press(move |s: &mut S, at, _| {
+		emit(s, MissionsEvent::MenuRequested { mission: mission.clone(), source, at })
+	})
+}
+
+fn on_arrow<S: 'static>(control: El, emit: &Emit<S>, arrow: KeyName, event: MissionsEvent) -> El {
+	let emit = Rc::clone(emit);
+	control.on_key(move |s: &mut S, key: &rune::KeyEvent, _| {
+		let is_arrow = key.key == arrow;
+		if is_arrow {
+			emit(s, event.clone());
+		}
+		is_arrow
+	})
 }
 
 fn filled(key: Key, language: Language, values: &[(&str, &str)]) -> String {
@@ -614,7 +671,7 @@ pub fn mission_row<S: 'static>(
 		t.sidebar_ring,
 	);
 	emitting(
-		control,
+		requesting_menu(control, emit, mission.id, MenuSource::Row),
 		emit,
 		MissionsEvent::Open {
 			mission: mission.id.to_owned(),
@@ -770,7 +827,7 @@ fn card_bubble<S: 'static>(
 	let bubble =
 		instant(bubble).focusable(true).cursor(Cursor::Pointer).focus_ring(LINK_RING, 0.0, t.ring);
 	emitting(
-		bubble,
+		requesting_menu(bubble, emit, mission.id, MenuSource::Card),
 		emit,
 		MissionsEvent::Open { mission: mission.id.to_owned(), conversation: None },
 	)
@@ -1313,48 +1370,129 @@ fn copy_word(kind: CopyKind) -> Key {
 	}
 }
 
-pub fn mission_menu(t: &Tokens, language: Language, facts: MenuFacts, copy_open: bool) -> El {
-	use chat::missions::menu;
-	let item = |key: Key, glyph: &'static Icon| {
-		MenuRow::Item(MenuItem::new(key.text(language)).glyph(glyph))
-	};
-	let mut rows = vec![item(menu::OPEN, &icons::ARROW_RIGHT)];
-	if facts.has_pull_request {
-		rows.push(item(menu::OPEN_PULL_REQUEST, &icons::EXTERNAL_LINK));
-	}
-	rows.push(MenuRow::Item(
-		MenuItem::new(menu::COPY.text(language))
-			.glyph(&icons::COPY)
-			.mark(Mark::Submenu)
-			.highlighted(copy_open),
-	));
-	if facts.state.runs_an_agent() {
-		rows.push(MenuRow::Separator);
-		rows.push(item(menu::MESSAGE_AGENT, &icons::MESSAGE));
-		rows.push(item(menu::STOP_AGENT, &icons::SQUARE));
-	}
-	if facts.state == MissionState::WaitingHuman {
-		rows.push(MenuRow::Separator);
-		rows.push(item(menu::ANSWER, &icons::REPLY));
-	}
-	rows.push(MenuRow::Separator);
-	rows.push(if facts.state.is_closed() {
-		item(menu::REOPEN, &icons::ROTATE_CW)
-	} else {
-		item(menu::CLOSE, &icons::CLOSE)
-	});
-	context_menu(t, menu::LABEL.text(language), rows)
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum MenuEntry {
+	Chosen(MenuAction),
+	CopyChoices,
 }
 
-pub fn mission_copy_menu(t: &Tokens, language: Language, facts: MenuFacts) -> El {
-	submenu(
-		t,
-		chat::missions::menu::COPY.text(language),
-		facts
-			.copy_kinds()
-			.into_iter()
-			.map(|kind| MenuRow::Item(MenuItem::new(copy_word(kind).text(language)))),
-	)
+fn menu_entries(facts: MenuFacts) -> Vec<Option<MenuEntry>> {
+	let mut entries = vec![Some(MenuEntry::Chosen(MenuAction::Open))];
+	if facts.has_pull_request {
+		entries.push(Some(MenuEntry::Chosen(MenuAction::OpenPullRequest)));
+	}
+	entries.push(Some(MenuEntry::CopyChoices));
+	if facts.state.runs_an_agent() {
+		entries.push(None);
+		entries.push(Some(MenuEntry::Chosen(MenuAction::MessageAgent)));
+		entries.push(Some(MenuEntry::Chosen(MenuAction::StopAgent)));
+	}
+	if facts.state == MissionState::WaitingHuman {
+		entries.push(None);
+		entries.push(Some(MenuEntry::Chosen(MenuAction::Answer)));
+	}
+	entries.push(None);
+	entries.push(Some(MenuEntry::Chosen(if facts.state.is_closed() {
+		MenuAction::Reopen
+	} else {
+		MenuAction::Close
+	})));
+	entries
+}
+
+fn entry_look(entry: MenuEntry) -> (Key, &'static Icon) {
+	use chat::missions::menu;
+	match entry {
+		MenuEntry::Chosen(MenuAction::Open) => (menu::OPEN, &icons::ARROW_RIGHT),
+		MenuEntry::Chosen(MenuAction::OpenPullRequest) => {
+			(menu::OPEN_PULL_REQUEST, &icons::EXTERNAL_LINK)
+		}
+		MenuEntry::CopyChoices => (menu::COPY, &icons::COPY),
+		MenuEntry::Chosen(MenuAction::MessageAgent) => (menu::MESSAGE_AGENT, &icons::MESSAGE),
+		MenuEntry::Chosen(MenuAction::StopAgent) => (menu::STOP_AGENT, &icons::SQUARE),
+		MenuEntry::Chosen(MenuAction::Answer) => (menu::ANSWER, &icons::REPLY),
+		MenuEntry::Chosen(MenuAction::Close) => (menu::CLOSE, &icons::CLOSE),
+		MenuEntry::Chosen(MenuAction::Reopen) => (menu::REOPEN, &icons::ROTATE_CW),
+	}
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct OpenMenu<'a> {
+	pub mission: &'a str,
+	pub source: MenuSource,
+	pub at: PointerPress,
+	pub facts: MenuFacts,
+	pub is_copy_shown: bool,
+}
+
+const MENU_POINT_KEY: &str = "mission-menu-at";
+
+pub fn mission_menu<S: 'static>(
+	t: &Tokens,
+	language: Language,
+	menu: &OpenMenu,
+	emit: &Emit<S>,
+) -> Vec<El> {
+	let dismiss = Rc::clone(emit);
+	let point = el().key(MENU_POINT_KEY).absolute(menu.at.x, menu.at.y).a11y_hidden();
+	let panel = menu_panel(t, language, menu, emit).anchored(
+		MENU_POINT_KEY,
+		Side::Bottom,
+		Align::Start,
+		0.0,
+	);
+	let mut panels = el().absolute(0.0, 0.0).child(panel);
+	if menu.is_copy_shown {
+		panels = panels.child(copy_choices(t, language, menu, emit));
+	}
+	let panels = panels
+		.focus_return(menu.source.key(menu.mission))
+		.modal(true, move |s: &mut S| dismiss(s, MissionsEvent::MenuDismissed));
+	vec![point, panels]
+}
+
+fn menu_panel<S: 'static>(t: &Tokens, language: Language, menu: &OpenMenu, emit: &Emit<S>) -> El {
+	let entries: Vec<MenuEntry> = menu_entries(menu.facts).into_iter().flatten().collect();
+	let rows = menu_entries(menu.facts).into_iter().map(|entry| match entry {
+		None => MenuRow::Separator,
+		Some(entry) => {
+			let (key, glyph) = entry_look(entry);
+			let item = MenuItem::new(key.text(language)).glyph(glyph);
+			MenuRow::Item(match entry {
+				MenuEntry::CopyChoices => item.mark(Mark::Submenu).highlighted(menu.is_copy_shown),
+				MenuEntry::Chosen(_) => item,
+			})
+		}
+	});
+	let mission = menu.mission.to_owned();
+	wired_context_menu(t, chat::missions::menu::LABEL.text(language), rows, |index, item| {
+		match entries[index] {
+			MenuEntry::Chosen(action) => {
+				emitting(item, emit, MissionsEvent::MenuChosen { mission: mission.clone(), action })
+			}
+			MenuEntry::CopyChoices => {
+				let shown =
+					MissionsEvent::CopyChoicesShown { mission: mission.clone(), is_shown: true };
+				on_arrow(emitting(item, emit, shown.clone()), emit, KeyName::Right, shown)
+			}
+		}
+	})
+}
+
+fn copy_choices<S: 'static>(t: &Tokens, language: Language, menu: &OpenMenu, emit: &Emit<S>) -> El {
+	let copy = chat::missions::menu::COPY.text(language);
+	let kinds = menu.facts.copy_kinds();
+	let rows =
+		kinds.iter().map(|kind| MenuRow::Item(MenuItem::new(copy_word(*kind).text(language))));
+	let mission = menu.mission.to_owned();
+	let hidden = MissionsEvent::CopyChoicesShown { mission: mission.clone(), is_shown: false };
+	let dismiss = Rc::clone(emit);
+	wired_submenu(t, copy, rows, |index, item| {
+		let copied = MissionsEvent::MenuCopied { mission: mission.clone(), kind: kinds[index] };
+		on_arrow(emitting(item, emit, copied), emit, KeyName::Left, hidden.clone())
+	})
+	.anchored(format!("menu-item-{copy}"), Side::Right, Align::Start, 0.0)
+	.modal(true, move |s: &mut S| dismiss(s, MissionsEvent::MenuDismissed))
 }
 
 pub const PANEL_WIDTH: f32 = SPACING * 76.0;
@@ -1756,6 +1894,9 @@ pub fn mission_detail_skeleton(t: &Tokens, height: f32) -> El {
 		.h(height)
 		.clip_rounded(0.0)
 }
+
+#[cfg(test)]
+mod menu_tests;
 
 #[cfg(test)]
 mod tests {
