@@ -9,7 +9,7 @@ use kiroshi_rune_kit::surfaces::s05_thread::{
 
 use super::conversation::{Conversation, Live, Phase};
 use crate::conversations::roster_timestamp;
-use crate::mission::is_summons;
+use crate::surfaces::s08_missions::is_summons;
 
 pub const WORK_LINE: &str = "work";
 

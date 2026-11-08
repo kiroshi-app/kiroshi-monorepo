@@ -1,14 +1,12 @@
 use serde_json::json;
 
-use crate::app::{
-	App, Board, Live, Pane, Person, Ready, Thread, Workspace, connected, whole_thread,
-};
+use crate::app::{App, Live, Person, Ready, Thread, Workspace, connected, whole_thread};
 use crate::dev_profile::DevProfile;
 use crate::host::{Host, HostError, Profile};
 use crate::longest;
 use crate::model::{Agent, Conversation, LastWord, Message, Participant, Role, Space};
 use crate::model::{AgentEvent, RuntimeScope};
-use crate::model::{ConversationMissions, MissionDetail, MissionOnBoard};
+use crate::model::{ConversationMissions, MissionOnBoard};
 use crate::navigation::Route;
 use crate::source::Source;
 
@@ -289,27 +287,14 @@ fn live_mission(s: &mut App) {
 		ready.source.invoke("mission_board", json!({}));
 	let host = ready.source.clone();
 	s.workspace = Workspace::Ready(ready);
-	s.pane = Pane::Missions;
-	let board = match board {
-		Ok(board) => board,
-		Err(failure) => {
-			s.board = Board::Failed(failure);
-			return;
-		}
-	};
-	let chosen =
-		board.iter().find(|entry| entry.mission.is_agent_running).or(board.first()).cloned();
-	s.board = Board::Read(board);
+	s.show_missions();
+	let chosen = board.ok().and_then(|board| {
+		board.iter().find(|entry| entry.mission.is_agent_running).or(board.first()).cloned()
+	});
 	let Some(entry) = chosen else { return };
-	let detail: Result<MissionDetail, HostError> =
-		host.invoke("mission_detail", json!({ "missionId": entry.mission.id }));
 	s.open_mission(&entry.mission, &entry.bot);
 	if let Some(thread) = s.thread.take() {
 		s.thread = Some(loaded(&host, thread));
-	}
-	if let (Some(open), Ok(detail)) = (s.mission.as_mut(), detail) {
-		open.mission = detail.mission;
-		open.events = detail.events;
 	}
 }
 

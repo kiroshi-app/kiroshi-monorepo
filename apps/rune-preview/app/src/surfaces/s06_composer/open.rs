@@ -1,8 +1,9 @@
 use kiroshi_core::conversations::contract::ReplyLink;
 use kiroshi_core::library::contract::{LibraryItem, LibraryItemKind};
 
-use crate::app::{App, OpenMission};
-use crate::model::{Agent, MissionState};
+use crate::app::App;
+use crate::model::Agent;
+use crate::surfaces::s08_missions::Opened;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Kind {
@@ -42,8 +43,8 @@ impl Open {
 	}
 }
 
-fn is_closed(open: &OpenMission) -> bool {
-	matches!(open.mission.state, MissionState::Done | MissionState::Closed)
+fn is_closed(opened: &Opened) -> bool {
+	opened.mission().is_some_and(|mission| mission.closed_at.is_some())
 }
 
 fn candidate(agent: &Agent, is_outside: bool) -> Candidate {
@@ -81,7 +82,7 @@ pub fn of(app: &App) -> Option<Open> {
 	let kind = match (&app.mission, solo) {
 		(Some(open), _) => {
 			if present.is_empty() {
-				present.push(open.bot.id.clone());
+				present.push(open.bot_id.clone());
 			}
 			Kind::Mission { is_closed: is_closed(open) }
 		}

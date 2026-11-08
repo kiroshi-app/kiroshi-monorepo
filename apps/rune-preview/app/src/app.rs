@@ -23,14 +23,14 @@ use crate::local;
 use crate::longest::{self, Longest};
 use crate::model::{
 	Agent, AgentEvent, Conversation, ConversationMissions, ConversationPage, KiroshiAccountState,
-	Message, MessagePage, Mission, MissionChanged, MissionDetail, MissionEvent, MissionOnBoard,
-	Role, RuntimeScope, Space,
+	Message, MessagePage, Mission, Role, RuntimeScope, Space,
 };
 use crate::navigation::{Navigation, Route};
 use crate::notices::Notices;
 use crate::runs::Runs;
 use crate::source::Source;
 use crate::surfaces::s04_boot::{self, Step};
+use crate::surfaces::s08_missions::{self, Opened, Opening};
 use crate::surfaces::{Surfaces, s01_chrome, s02_rail, s05_thread, s10_agent_settings};
 
 const PAGE_LIMIT: u32 = 200;
@@ -112,12 +112,16 @@ impl Thread {
 		}
 	}
 
-	fn of_mission(mission: &Mission, bot: &Agent) -> Thread {
-		let seat = Seat { bot_id: bot.id.clone(), name: bot.name.clone(), hue: bot.avatar_blot };
+	fn of_mission(conversation_id: &str, title: &str, bot: Option<&Agent>) -> Thread {
+		let seat = |bot: &Agent| Seat {
+			bot_id: bot.id.clone(),
+			name: bot.name.clone(),
+			hue: bot.avatar_blot,
+		};
 		Thread {
-			conversation_id: mission.thread_conversation_id.clone(),
-			title: mission.objective.clone(),
-			seats: vec![seat],
+			conversation_id: conversation_id.to_owned(),
+			title: title.to_owned(),
+			seats: bot.map(seat).into_iter().collect(),
 			messages: Vec::new(),
 			live: Vec::new(),
 			loaded: false,
@@ -189,23 +193,7 @@ pub enum Pane {
 	Missions,
 }
 
-pub enum Board {
-	Unread,
-	Reading,
-	Read(Vec<MissionOnBoard>),
-	Failed(HostError),
-}
-
-pub struct OpenMission {
-	pub mission: Mission,
-	pub bot: Agent,
-	pub events: Vec<MissionEvent>,
-	pub failure: Option<HostError>,
-}
-
 pub enum Inbound {
-	Board(Result<Vec<MissionOnBoard>, HostError>),
-	MissionRead(Result<MissionDetail, HostError>),
 	MissionsOf { conversation_id: String, missions: Result<ConversationMissions, HostError> },
 	Connected(Result<Ready, HostError>),
 	ThreadRead { conversation_id: String, messages: Result<Vec<Message>, HostError> },
@@ -246,8 +234,7 @@ pub struct App {
 	pub pane: Pane,
 	pub host_profile: Profile,
 	pub uses_host_api: bool,
-	pub board: Board,
-	pub mission: Option<OpenMission>,
+	pub mission: Option<Opened>,
 	notices: Notices,
 	outbox: Option<Outbox>,
 	inbox: Receiver<Inbound>,
@@ -278,7 +265,6 @@ impl App {
 			pane: Pane::Conversations,
 			host_profile: Profile::Installed,
 			uses_host_api: false,
-			board: Board::Unread,
 			mission: None,
 			notices: Notices::default(),
 			clock_ms: 0.0,
@@ -338,12 +324,9 @@ impl App {
 
 	pub fn is_animating(&self) -> bool {
 		let running = |mission: &Mission| mission.is_agent_running;
-		let on_board = matches!(self.pane, Pane::Missions)
-			&& matches!(&self.board, Board::Read(board) if board.iter().any(|entry| running(&entry.mission)));
 		!self.runs.is_empty()
 			|| s04_boot::is_animating(self)
-			|| on_board
-			|| self.mission.as_ref().is_some_and(|open| running(&open.mission))
+			|| s08_missions::is_animating(self)
 			|| self.thread.as_ref().is_some_and(|thread| thread.missions.iter().any(running))
 	}
 
@@ -392,14 +375,7 @@ impl App {
 
 	pub fn show_missions(&mut self) {
 		self.pane = Pane::Missions;
-		if !matches!(self.board, Board::Unread | Board::Failed(_)) {
-			return;
-		}
-		let Some(host) = self.ready().map(|ready| ready.source.clone()) else { return };
-		self.board = Board::Reading;
-		self.work(move |outbox| {
-			outbox.deliver(Inbound::Board(host.invoke("mission_board", json!({}))))
-		});
+		s08_missions::show(self);
 	}
 
 	pub fn show_conversations(&mut self) {
@@ -407,81 +383,15 @@ impl App {
 	}
 
 	pub fn open_mission(&mut self, mission: &Mission, bot: &Agent) {
+		s08_missions::open(self, &Opening { bot_id: &bot.id, ..Opening::of_card(mission) });
+	}
+
+	pub fn open_mission_thread(&mut self, conversation_id: &str, title: &str, bot: Option<&Agent>) {
 		let Some(host) = self.ready().map(|ready| ready.source.clone()) else { return };
 		self.notice = None;
-		self.thread = Some(Thread::of_mission(mission, bot));
-		self.mission = Some(OpenMission {
-			mission: mission.clone(),
-			bot: bot.clone(),
-			events: Vec::new(),
-			failure: None,
-		});
-		self.read_thread(host, mission.thread_conversation_id.clone());
-		s05_thread::open_conversation(self, &mission.thread_conversation_id);
-		self.read_mission(&mission.id);
-	}
-
-	pub fn open_mission_of_turn(&mut self, mission_id: &str) {
-		let found = self.thread.as_ref().and_then(|thread| {
-			thread.missions.iter().find(|mission| mission.id == mission_id).cloned()
-		});
-		let Some(mission) = found else { return };
-		let Some(bot) = self.ready().and_then(|ready| {
-			ready.agents.iter().find(|agent| agent.id == mission.bot_id).cloned()
-		}) else {
-			return;
-		};
-		self.open_mission(&mission, &bot);
-	}
-
-	pub fn leave_mission(&mut self) {
-		let Some(open) = self.mission.take() else { return };
-		self.thread = None;
-		self.open(&open.mission.origin_conversation_id);
-	}
-
-	fn read_mission(&self, mission_id: &str) {
-		let Some(host) = self.ready().map(|ready| ready.source.clone()) else { return };
-		let mission_id = mission_id.to_owned();
-		self.work(move |outbox| {
-			let detail = host.invoke("mission_detail", json!({ "missionId": mission_id }));
-			outbox.deliver(Inbound::MissionRead(detail));
-		});
-	}
-
-	fn mission_changed(&mut self, changed: MissionChanged) {
-		let apply = |mission: &mut Mission| {
-			if mission.id == changed.mission_id {
-				mission.state = changed.state;
-				mission.is_agent_running = changed.is_agent_running;
-			}
-		};
-		if let Board::Read(board) = &mut self.board {
-			board.iter_mut().for_each(|entry| apply(&mut entry.mission));
-		}
-		if let Some(thread) = self.thread.as_mut() {
-			thread.missions.iter_mut().for_each(apply);
-		}
-		let Some(open) = self.mission.as_mut().filter(|open| open.mission.id == changed.mission_id)
-		else {
-			return;
-		};
-		apply(&mut open.mission);
-		let mission_id = open.mission.id.clone();
-		self.read_mission(&mission_id);
-	}
-
-	fn mission_read(&mut self, detail: Result<MissionDetail, HostError>) {
-		let Some(open) = self.mission.as_mut() else { return };
-		match detail {
-			Ok(detail) if detail.mission.id == open.mission.id => {
-				open.mission = detail.mission;
-				open.events = detail.events;
-				open.failure = None;
-			}
-			Ok(_) => {}
-			Err(failure) => open.failure = Some(failure),
-		}
+		self.thread = Some(Thread::of_mission(conversation_id, title, bot));
+		self.read_thread(host, conversation_id.to_owned());
+		s05_thread::open_conversation(self, conversation_id);
 	}
 
 	fn missions_of(
@@ -549,13 +459,6 @@ impl App {
 				});
 			}
 			Inbound::Longest(found) => self.longest_found(found),
-			Inbound::Board(board) => {
-				self.board = match board {
-					Ok(board) => Board::Read(board),
-					Err(failure) => Board::Failed(failure),
-				}
-			}
-			Inbound::MissionRead(detail) => self.mission_read(detail),
 			Inbound::MissionsOf { conversation_id, missions } => {
 				self.missions_of(&conversation_id, missions)
 			}
@@ -649,7 +552,7 @@ impl App {
 				thread.stored(message);
 				self.request_images();
 			}
-			HostEvent::MissionChanged(changed) => self.mission_changed(changed),
+			HostEvent::MissionChanged(changed) => s08_missions::changed(self, &changed),
 			HostEvent::Roster(heard) => self.surfaces.s03_roster.heard(heard),
 			HostEvent::Companion(heard) => {
 				self.surfaces.s03_roster.heard_companion(&heard);
