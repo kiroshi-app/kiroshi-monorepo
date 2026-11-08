@@ -399,10 +399,18 @@ fn change_read(event: serde_json::Value) -> model::MissionChanged {
 	serde_json::from_value(event).expect("a mission://changed payload")
 }
 
-fn statuses(app: &App, id: &str) -> (Option<MissionStatus>, Option<MissionStatus>) {
+type Statuses = (Option<MissionStatus>, Option<MissionStatus>, Option<MissionStatus>);
+
+fn statuses(app: &App, id: &str) -> Statuses {
 	let listed = state(app).listed(id).and_then(|mission| mission.status.clone());
 	let opened = app.mission.as_ref().and_then(super::Opened::mission);
-	(listed, opened.and_then(|mission| mission.status.clone()))
+	let card =
+		app.thread.as_ref().and_then(|thread| thread.missions.iter().find(|card| card.id == id));
+	(
+		listed,
+		opened.and_then(|mission| mission.status.clone()),
+		card.and_then(|card| card.status.clone()),
+	)
 }
 
 fn running_signs(app: &App, id: &str) -> (bool, bool, bool) {
@@ -422,7 +430,7 @@ fn running_change(id: &str, is_agent_running: bool) -> model::MissionChanged {
 }
 
 #[test]
-fn a_change_carrying_a_status_shows_it_on_the_row_and_the_detail_before_any_reread_lands() {
+fn a_change_carrying_a_status_shows_it_on_the_row_the_detail_and_the_card_before_any_reread() {
 	let mut app = opened_with_a_card("m-1");
 	let change = change_read(json!({
 		"missionId": "m-1", "spaceId": SPACE, "state": "working", "stateSeq": 2,
@@ -431,11 +439,11 @@ fn a_change_carrying_a_status_shows_it_on_the_row_and_the_detail_before_any_rere
 	}));
 	changed(&mut app, &change);
 	let status = MissionStatus { text: "Tests green".to_owned(), written_at: 42 };
-	assert_eq!(statuses(&app, "m-1"), (Some(status.clone()), Some(status)));
+	assert_eq!(statuses(&app, "m-1"), (Some(status.clone()), Some(status.clone()), Some(status)));
 }
 
 #[test]
-fn a_change_carrying_a_null_status_clears_the_status_of_the_row_and_the_detail() {
+fn a_change_carrying_a_null_status_clears_the_status_of_the_row_the_detail_and_the_card() {
 	let mut app = opened_with_a_card("m-1");
 	let written = MissionStatus { text: "Tests green".to_owned(), written_at: 42 };
 	changed(
@@ -450,7 +458,7 @@ fn a_change_carrying_a_null_status_clears_the_status_of_the_row_and_the_detail()
 		"isAgentRunning": false, "status": null, "lastActivityAt": null,
 	}));
 	changed(&mut app, &change);
-	assert_eq!(statuses(&app, "m-1"), (None, None));
+	assert_eq!(statuses(&app, "m-1"), (None, None, None));
 }
 
 #[test]
@@ -471,7 +479,7 @@ fn a_change_of_a_mission_not_held_leaves_every_held_mission_as_it_was() {
 		..change_of("m-2", model::MissionState::Done)
 	};
 	changed(&mut app, &change);
-	assert_eq!(statuses(&app, "m-1"), (None, None));
+	assert_eq!(statuses(&app, "m-1"), (None, None, None));
 	assert_eq!(running_signs(&app, "m-1"), (false, false, false));
 	assert_eq!(listed_state(&app, "m-1"), Some(MissionState::Working));
 }
