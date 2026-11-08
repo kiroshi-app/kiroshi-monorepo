@@ -779,6 +779,12 @@ async fn host_effect_applied(
 			let scope = EnvScope::Server { name: text("name"), owner: typed(&args, "owner") };
 			credentials::forget(root, &scope).expect("the host disconnects");
 		}
+		"agent_pending_prompts" => {
+			let pending = commands::pending_prompts(effects.app(), text("conversationId"))
+				.await
+				.expect("the host reads");
+			return answered_json(StatusCode::OK, json!(pending));
+		}
 		_ => {}
 	}
 	answered_json(StatusCode::OK, Value::Null)
@@ -4080,6 +4086,17 @@ fn a_question(id: &str) -> agent::AgentEvent {
 	}
 }
 
+fn a_permission(id: &str) -> agent::AgentEvent {
+	agent::AgentEvent::PermissionRequested {
+		request: agent::PermissionRequest {
+			id: id.to_owned(),
+			tool_name: "Bash".to_owned(),
+			title: format!("Bash {id}"),
+			detail: None,
+		},
+	}
+}
+
 fn its_answer(id: &str) -> agent::AgentEvent {
 	agent::AgentEvent::PermissionResolved {
 		id: id.to_owned(),
@@ -6075,6 +6092,29 @@ fn a_guest_reads_the_pending_questions_of_a_shared_conversation_and_not_of_its_o
 		json!({ "conversationId": GUEST_LOCAL_CONVERSATION }),
 		json!({ "conversationId": "c-mine" }),
 	));
+}
+
+#[test]
+fn a_member_reads_the_pending_prompts_of_a_shared_conversation_and_not_of_its_own() {
+	run(async {
+		let command = "agent_pending_prompts";
+		let mut guest = Guest::of_two_spaces(command).await;
+		let app = guest.harness.app.clone();
+		let run = commands::a_run_held_by_the_app(&app, a_held_scope_in("c-mine", "b-mine"));
+		run.emit(a_permission("p-mine"), a_turn_in("c-mine"));
+		run.emit(a_question("q-mine"), a_turn_in("c-mine"));
+		let pending =
+			commands::pending_prompts(&app, "c-mine".to_owned()).await.expect("the prompts read");
+
+		guest.refused(command, json!({ "conversationId": GUEST_LOCAL_CONVERSATION })).await;
+		let answered = guest.called(command, json!({ "conversationId": "c-mine" })).await;
+
+		assert_eq!(pending.len(), 2);
+		assert_eq!(answered["status"], json!(200), "{answered}");
+		assert_eq!(answered["body"], json!(pending));
+		assert_eq!(guest.effects.reached(), [command]);
+		assert_eq!(guest.harness.state(), HostingState::Online);
+	});
 }
 
 #[test]

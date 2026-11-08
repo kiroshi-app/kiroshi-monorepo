@@ -8,7 +8,7 @@ use tokio::sync::watch;
 
 use super::bridge;
 use super::reach::GuestEvents;
-use crate::agent::commands::subscribed_with_pending_questions;
+use crate::agent::commands::subscribed_with_pending_prompts;
 use crate::events::{Frame, BUFFERED_FRAMES};
 
 pub const RESUME_COMMAND: &str = "relay_resume";
@@ -167,7 +167,7 @@ pub(super) async fn recorded(
 ) {
 	let mut guest_events = GuestEvents::new(space_id);
 	loop {
-		let (pending, mut heard) = subscribed_with_pending_questions(core);
+		let (pending, mut heard) = subscribed_with_pending_prompts(core);
 		for frame in pending {
 			if guest_events.reach_the_guest(core, &frame).await {
 				ring.send_modify(|ring| ring.recorded(&frame));
