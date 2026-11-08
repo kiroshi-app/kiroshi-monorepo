@@ -13,10 +13,11 @@ use kiroshi_rune_os::scheme;
 use kiroshi_rune_preview::app::App;
 use kiroshi_rune_preview::host::Profile;
 use kiroshi_rune_preview::navigation::Route;
-use kiroshi_rune_preview::surfaces::{s09_routines, s12_person_settings, s15_boards};
-use kiroshi_rune_preview::{
-	composer, conversations, local, menu, onboarding, scenes, smoke, spike,
+use kiroshi_rune_preview::surfaces::{
+	s01_chrome, s02_rail, s04_boot, s09_routines, s10_agent_settings, s12_person_settings,
+	s15_boards,
 };
+use kiroshi_rune_preview::{composer, conversations, local, menu, scenes, smoke, spike};
 
 fn view(s: &App, cx: &mut Cx<App>) -> El {
 	let dark = cx.system_dark();
@@ -24,9 +25,13 @@ fn view(s: &App, cx: &mut Cx<App>) -> El {
 	if let Route::BlockSpike = s.navigation.main_route() {
 		return spike::view::view(s, cx, &t);
 	}
+	if let Route::Rail = s.navigation.main_route() {
+		let (body, layers) = s02_rail::view(s, &t);
+		return rune_kit::root(body, layers);
+	}
 	let k = t.kit();
 	let body = match s.navigation.main_route() {
-		Route::Onboarding(step) => onboarding::view(step, s, &k, &t.in_space(Some(tokens::BLUE))),
+		Route::Onboarding(step) => s04_boot::view(step, s, &t.in_space(Some(tokens::BLUE))),
 		Route::Conversations => {
 			let viewport = conversations::Viewport {
 				inset: cx.titlebar_inset(),
@@ -38,8 +43,19 @@ fn view(s: &App, cx: &mut Cx<App>) -> El {
 			};
 			conversations::view(s, &k, &t, &viewport)
 		}
+		Route::Chrome => {
+			let measured = s01_chrome::Measured {
+				width: cx.layout(KIT_ROOT).map_or(s01_chrome::WINDOW_SIZE.0, |rect| rect[2]),
+				lifted_tab: s
+					.surfaces
+					.s01_chrome
+					.lift
+					.as_ref()
+					.and_then(|lift| cx.layout(&format!("tab-{}", lift.id))),
+			};
+			s01_chrome::view(s, &k, &t, &measured)
+		}
 		Route::BlockSpike
-		| Route::Chrome
 		| Route::Rail
 		| Route::Roster
 		| Route::Boot
@@ -47,24 +63,33 @@ fn view(s: &App, cx: &mut Cx<App>) -> El {
 		| Route::Composer
 		| Route::Approvals
 		| Route::Missions
-		| Route::AgentSettings
 		| Route::Applications
 		| Route::SpaceSettings
 		| Route::Library => el(),
 		Route::Routines => s09_routines::view(s, &t),
 		Route::PersonSettings => s12_person_settings::view(s, &t),
 		Route::Boards => s15_boards::view(s, &t, cx.layout_size(s15_boards::CANVAS)),
+		Route::AgentSettings => s10_agent_settings::view(s, &t),
 	};
-	let mut layers = s12_person_settings::layers(s, &t);
-	layers.extend(s09_routines::layers(s, &t));
+	let layers = s10_agent_settings::layers(s, &t)
+		.into_iter()
+		.chain(s12_person_settings::layers(s, &t))
+		.chain(s09_routines::layers(s, &t))
+		.chain(s04_boot::layers(s, &t));
 	rune_kit::root(body, layers)
 }
+
+const KIT_ROOT: &str = "kit-root";
 
 const DEV_HOST: &str = "--dev-host";
 
 const SKIP_ONBOARDING: &str = "--skip-onboarding";
 
+const CHROME: &str = "--chrome";
+
 const HOST_API: &str = "--host-api";
+
+const RAIL: &str = "--rail";
 
 fn setup(s: &mut App, waker: Waker) {
 	let flagged = |flag: &str| launched().flags.iter().any(|arg| arg == flag);
@@ -75,8 +100,15 @@ fn setup(s: &mut App, waker: Waker) {
 	if flagged(DEV_HOST) || flagged(SKIP_ONBOARDING) {
 		s.navigation.navigate_main(Route::Conversations);
 	}
+	if flagged(CHROME) {
+		s.navigation.navigate_main(Route::Chrome);
+	}
+	if flagged(RAIL) {
+		s.navigation.navigate_main(Route::Rail);
+	}
 	s.surfaces.s12_person_settings.attach(waker.clone());
 	s.surfaces.s09_routines.attach(waker.clone());
+	s.surfaces.s02_rail.attach(waker.clone());
 	s.setup(waker);
 }
 
@@ -84,6 +116,8 @@ fn poll(s: &mut App, seconds: f64, tx: &mut Tx) -> bool {
 	let changed = s.poll();
 	let changed = s12_person_settings::poll(s, tx) || changed;
 	let changed = s09_routines::poll(s, tx) || changed;
+	let changed = s04_boot::poll(s, tx) || changed;
+	let changed = s02_rail::poll(s) || changed;
 	let changed = open_held(s, &mut held_links()) || changed;
 	if let Some(after) = s.focus_wake() {
 		tx.wake_after(after);
@@ -292,7 +326,7 @@ fn main() -> ExitCode {
 		scenes: scenes::SCENES,
 		fonts: tokens::FONTS,
 		families: tokens::FAMILIES,
-		..AppSpec::new("Kiroshi (Rune preview)", (1180.0, 780.0), App::new, view)
+		..AppSpec::new("Kiroshi (Rune preview)", s01_chrome::WINDOW_SIZE, App::new, view)
 	};
 	let app = rune::App::new(spec)
 		.chrome(conversations::CHROME)
