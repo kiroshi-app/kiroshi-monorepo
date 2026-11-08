@@ -24,6 +24,8 @@ const TURN: &str = "turn-1";
 
 const NOW: i64 = 1_700_000_000_000;
 
+const FIRST_READ: u64 = 1;
+
 fn scope_in(conversation_id: &str) -> RuntimeScope {
 	RuntimeScope {
 		conversation_id: conversation_id.to_owned(),
@@ -609,7 +611,7 @@ fn opening_a_conversation_reads_its_pending_prompts() {
 
 	assert_eq!(
 		drained(&mut state),
-		vec![Call::Pending { conversation_id: CONVERSATION.to_owned() }]
+		vec![Call::Pending { conversation_id: CONVERSATION.to_owned(), read_number: FIRST_READ }]
 	);
 }
 
@@ -623,7 +625,11 @@ fn pending_questions_read_from_the_core_are_shown() {
 	};
 
 	state.received(
-		Answer::Pending { conversation_id: CONVERSATION.to_owned(), read: Ok(vec![pending]) },
+		Answer::Pending {
+			conversation_id: CONVERSATION.to_owned(),
+			read_number: FIRST_READ,
+			read: Ok(vec![pending]),
+		},
 		NOW,
 		&nothing_shown,
 	);
@@ -643,7 +649,11 @@ fn a_question_already_shown_keeps_its_drafts_when_read_again() {
 	};
 
 	state.received(
-		Answer::Pending { conversation_id: CONVERSATION.to_owned(), read: Ok(vec![pending]) },
+		Answer::Pending {
+			conversation_id: CONVERSATION.to_owned(),
+			read_number: FIRST_READ,
+			read: Ok(vec![pending]),
+		},
 		NOW,
 		&nothing_shown,
 	);
@@ -656,7 +666,11 @@ fn a_question_already_shown_keeps_its_drafts_when_read_again() {
 fn a_failed_pending_read_is_shown_and_retried() {
 	let mut state = State::default();
 	state.received(
-		Answer::Pending { conversation_id: CONVERSATION.to_owned(), read: Err(refused()) },
+		Answer::Pending {
+			conversation_id: CONVERSATION.to_owned(),
+			read_number: FIRST_READ,
+			read: Err(refused()),
+		},
 		NOW,
 		&nothing_shown,
 	);
@@ -667,7 +681,7 @@ fn a_failed_pending_read_is_shown_and_retried() {
 	assert!(is_shown);
 	assert_eq!(
 		drained(&mut state),
-		vec![Call::Pending { conversation_id: CONVERSATION.to_owned() }]
+		vec![Call::Pending { conversation_id: CONVERSATION.to_owned(), read_number: FIRST_READ }]
 	);
 }
 
@@ -695,7 +709,11 @@ fn reopened_with(state: &mut State, pending: Vec<ScopedEvent>) {
 	state.opened(CONVERSATION);
 	drained(state);
 	state.received(
-		Answer::Pending { conversation_id: CONVERSATION.to_owned(), read: Ok(pending) },
+		Answer::Pending {
+			conversation_id: CONVERSATION.to_owned(),
+			read_number: FIRST_READ,
+			read: Ok(pending),
+		},
 		NOW,
 		&nothing_shown,
 	);
@@ -799,6 +817,7 @@ fn a_prompt_resolved_before_the_read_answers_is_not_shown_again() {
 	state.received(
 		Answer::Pending {
 			conversation_id: CONVERSATION.to_owned(),
+			read_number: FIRST_READ,
 			read: Ok(vec![
 				pending_permission(scope_in(CONVERSATION), "p1"),
 				pending_question(scope_in(CONVERSATION), question("q1")),
@@ -1110,7 +1129,11 @@ fn question_ids(state: &State) -> Vec<&str> {
 fn pending_read(state: &mut State, event: AgentEvent) {
 	let pending = ScopedEvent { scope: Some(scope_in(CONVERSATION)), turn: None, event };
 	state.received(
-		Answer::Pending { conversation_id: CONVERSATION.to_owned(), read: Ok(vec![pending]) },
+		Answer::Pending {
+			conversation_id: CONVERSATION.to_owned(),
+			read_number: FIRST_READ,
+			read: Ok(vec![pending]),
+		},
 		NOW,
 		&nothing_shown,
 	);
@@ -1303,4 +1326,163 @@ fn a_closing_keeps_the_same_id_open_for_another_agent() {
 	state.heard(Heard::Permission { scope: foreign_scope(), request: permission("p1") });
 
 	assert_eq!(approval_ids(&state), vec!["p1"]);
+}
+
+fn read_number_of(call: &Call) -> u64 {
+	match call {
+		Call::Pending { read_number, .. } => *read_number,
+		other => panic!("expected a pending read, got {other:?}"),
+	}
+}
+
+fn read_started(state: &mut State, conversation_id: &str) -> u64 {
+	state.opened(conversation_id);
+	let calls = drained(state);
+	read_number_of(&calls[0])
+}
+
+fn read_landed(
+	state: &mut State,
+	conversation_id: &str,
+	read_number: u64,
+	pending: Vec<ScopedEvent>,
+) {
+	state.received(
+		Answer::Pending {
+			conversation_id: conversation_id.to_owned(),
+			read_number,
+			read: Ok(pending),
+		},
+		NOW,
+		&nothing_shown,
+	);
+}
+
+fn session_ended(state: &mut State, state_name: &str) {
+	let payload = json!({
+		"scope": scope_in(CONVERSATION),
+		"event": { "type": "connectionChanged", "state": state_name },
+	});
+	let heard = heard_of(&payload).expect("a closing is heard").expect("a closing is readable");
+	state.heard(heard);
+}
+
+fn prompts_of_the_closed_agent() -> Vec<ScopedEvent> {
+	vec![
+		pending_permission(scope_in(CONVERSATION), "p1"),
+		pending_question(scope_in(CONVERSATION), single_question("q1")),
+	]
+}
+
+#[test]
+fn a_read_landing_after_the_session_became_unavailable_shows_nothing_of_that_agent() {
+	let mut state = State::default();
+	let read = read_started(&mut state, CONVERSATION);
+	session_ended(&mut state, "unavailable");
+
+	read_landed(&mut state, CONVERSATION, read, prompts_of_the_closed_agent());
+
+	assert!(state.approvals.is_empty());
+	assert!(state.questions.is_empty());
+}
+
+#[test]
+fn a_read_landing_after_the_session_crashed_shows_nothing_of_that_agent() {
+	let mut state = State::default();
+	let read = read_started(&mut state, CONVERSATION);
+	session_ended(&mut state, "crashed");
+
+	read_landed(&mut state, CONVERSATION, read, prompts_of_the_closed_agent());
+
+	assert!(state.approvals.is_empty());
+	assert!(state.questions.is_empty());
+}
+
+#[test]
+fn a_read_landing_after_the_turn_ended_shows_nothing_of_that_agent() {
+	let mut state = State::default();
+	let read = read_started(&mut state, CONVERSATION);
+	state.heard_agent(&model_scope(CONVERSATION), &turn_ended());
+
+	read_landed(&mut state, CONVERSATION, read, prompts_of_the_closed_agent());
+
+	assert!(state.approvals.is_empty());
+	assert!(state.questions.is_empty());
+}
+
+#[test]
+fn a_stale_read_still_shows_the_prompts_of_other_agents_and_conversations() {
+	let mut state = State::default();
+	let read = read_started(&mut state, CONVERSATION);
+	session_ended(&mut state, "unavailable");
+
+	read_landed(
+		&mut state,
+		CONVERSATION,
+		read,
+		vec![
+			pending_permission(scope_in(CONVERSATION), "p1"),
+			pending_permission(foreign_scope(), "p2"),
+			pending_permission(scope_in(ELSEWHERE), "p3"),
+			pending_question(foreign_scope(), single_question("q2")),
+			pending_question(scope_in(ELSEWHERE), single_question("q3")),
+		],
+	);
+
+	assert_eq!(approval_ids(&state), vec!["p2", "p3"]);
+	assert_eq!(question_ids(&state), vec!["q2", "q3"]);
+}
+
+#[test]
+fn a_read_started_after_the_close_shows_what_it_carries() {
+	let mut state = State::default();
+	let stale = read_started(&mut state, CONVERSATION);
+	session_ended(&mut state, "unavailable");
+	let fresh = read_started(&mut state, CONVERSATION);
+
+	read_landed(&mut state, CONVERSATION, fresh, prompts_of_the_closed_agent());
+	read_landed(&mut state, CONVERSATION, stale, Vec::new());
+
+	assert_eq!(approval_ids(&state), vec!["p1"]);
+	assert_eq!(question_ids(&state), vec!["q1"]);
+}
+
+#[test]
+fn a_read_started_once_the_session_closed_with_no_read_in_flight_shows_what_it_carries() {
+	let mut state = State::default();
+	session_ended(&mut state, "unavailable");
+	let read = read_started(&mut state, CONVERSATION);
+
+	read_landed(&mut state, CONVERSATION, read, prompts_of_the_closed_agent());
+
+	assert_eq!(approval_ids(&state), vec!["p1"]);
+	assert_eq!(question_ids(&state), vec!["q1"]);
+}
+
+#[test]
+fn a_prompt_heard_live_after_the_close_is_shown_while_the_stale_read_is_in_flight() {
+	let mut state = State::default();
+	let read = read_started(&mut state, CONVERSATION);
+	session_ended(&mut state, "unavailable");
+
+	requesting(&mut state, "p2");
+	asking(&mut state, scope_in(CONVERSATION), single_question("q2"));
+	let shown_before_landing = (approval_ids(&state).len(), question_ids(&state).len());
+	read_landed(&mut state, CONVERSATION, read, prompts_of_the_closed_agent());
+
+	assert_eq!(shown_before_landing, (1, 1));
+	assert_eq!(approval_ids(&state), vec!["p2"]);
+	assert_eq!(question_ids(&state), vec!["q2"]);
+}
+
+#[test]
+fn prompts_closed_during_a_read_stay_hidden_when_it_lands() {
+	let mut state = State::default();
+	let read = read_started(&mut state, CONVERSATION);
+	state.heard(prompts_closed(scope_in(CONVERSATION), &["p1"], &["q1"]));
+
+	read_landed(&mut state, CONVERSATION, read, prompts_of_the_closed_agent());
+
+	assert!(state.approvals.is_empty());
+	assert!(state.questions.is_empty());
 }

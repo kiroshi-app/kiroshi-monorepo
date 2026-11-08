@@ -57,7 +57,7 @@ impl Heard {
 		match self {
 			Heard::Permission { request, .. } => Some(&request.id),
 			Heard::Question { request, .. } => Some(&request.id),
-			Heard::Resolved { .. } | Heard::Closed { .. } => None,
+			Heard::Resolved { .. } | Heard::Closed { .. } | Heard::PromptsClosed { .. } => None,
 		}
 	}
 }
@@ -121,6 +121,20 @@ struct ClosedPrompt {
 	id: String,
 }
 
+struct ClosedSession {
+	conversation_id: String,
+	bot_id: String,
+	reads_started: u64,
+}
+
+impl ClosedSession {
+	fn voids(&self, scope: &RuntimeScope, read_number: u64) -> bool {
+		self.reads_started >= read_number
+			&& self.conversation_id == scope.conversation_id
+			&& self.bot_id == scope.bot_id
+	}
+}
+
 struct ReadFailure {
 	conversation_id: String,
 	failure: HostError,
@@ -134,7 +148,9 @@ pub struct State {
 	closed: Vec<ClosedPrompt>,
 	read_failure: Option<ReadFailure>,
 	reads_in_flight: usize,
+	reads_started: u64,
 	resolved_while_reading: HashSet<String>,
+	closed_while_reading: Vec<ClosedSession>,
 	spare: TextEdit,
 	queued: Vec<Call>,
 	source: Option<Source>,
@@ -156,7 +172,9 @@ impl State {
 		self.settle(conversation_id);
 		self.read_failure = None;
 		self.reads_in_flight += 1;
-		self.queue(Call::Pending { conversation_id: conversation_id.to_owned() });
+		self.reads_started += 1;
+		let read_number = self.reads_started;
+		self.queue(Call::Pending { conversation_id: conversation_id.to_owned(), read_number });
 	}
 
 	pub fn heard(&mut self, heard: Heard) {
@@ -166,7 +184,10 @@ impl State {
 				self.asked_question(scope, turn_id, request)
 			}
 			Heard::Resolved { id, decision } => self.resolved(&id, decision),
-			Heard::Closed { scope } => self.rest(|held| held == &scope),
+			Heard::Closed { scope } => {
+				self.invalidate_reads_of(&scope.conversation_id, &scope.bot_id);
+				self.rest(|held| held == &scope);
+			}
 			Heard::PromptsClosed { scope, permission_ids, question_ids } => {
 				self.closed_prompts(scope, permission_ids, question_ids)
 			}
@@ -175,10 +196,29 @@ impl State {
 
 	pub fn heard_agent(&mut self, scope: &model::RuntimeScope, event: &model::AgentEvent) {
 		if matches!(event, model::AgentEvent::TurnEnded { .. }) {
+			self.invalidate_reads_of(&scope.conversation_id, &scope.bot_id);
 			self.rest(|held| {
 				held.conversation_id == scope.conversation_id && held.bot_id == scope.bot_id
 			});
 		}
+	}
+
+	fn invalidate_reads_of(&mut self, conversation_id: &str, bot_id: &str) {
+		if self.reads_in_flight == 0 {
+			return;
+		}
+		self.closed_while_reading.push(ClosedSession {
+			conversation_id: conversation_id.to_owned(),
+			bot_id: bot_id.to_owned(),
+			reads_started: self.reads_started,
+		});
+	}
+
+	fn is_voided(&self, heard: &Heard, read_number: u64) -> bool {
+		let (Heard::Permission { scope, .. } | Heard::Question { scope, .. }) = heard else {
+			return false;
+		};
+		self.closed_while_reading.iter().any(|closed| closed.voids(scope, read_number))
 	}
 
 	fn rest(&mut self, is_of_run: impl Fn(&RuntimeScope) -> bool) {
@@ -365,7 +405,9 @@ impl State {
 
 	fn received(&mut self, answer: Answer, now: i64, is_shown: &dyn Fn(&str) -> bool) {
 		match answer {
-			Answer::Pending { conversation_id, read } => self.pending_read(conversation_id, read),
+			Answer::Pending { conversation_id, read_number, read } => {
+				self.pending_read(conversation_id, read_number, read)
+			}
 			Answer::Responded { id, decision, outcome } => self.responded(&id, decision, outcome),
 			Answer::Answered { id, outcome } => self.answered_by_agent(&id, outcome, now, is_shown),
 			Answer::Written { request_id, outcome } => {
@@ -377,7 +419,12 @@ impl State {
 		}
 	}
 
-	fn pending_read(&mut self, conversation_id: String, read: Result<Vec<ScopedEvent>, HostError>) {
+	fn pending_read(
+		&mut self,
+		conversation_id: String,
+		read_number: u64,
+		read: Result<Vec<ScopedEvent>, HostError>,
+	) {
 		match read {
 			Ok(pending) => {
 				let still_asked: Vec<Heard> = pending
@@ -388,6 +435,7 @@ impl State {
 							.prompt_id()
 							.is_some_and(|id| !self.resolved_while_reading.contains(id))
 					})
+					.filter(|heard| !self.is_voided(heard, read_number))
 					.collect();
 				for heard in still_asked {
 					self.heard(heard);
@@ -402,6 +450,7 @@ impl State {
 		self.reads_in_flight = self.reads_in_flight.saturating_sub(1);
 		if self.reads_in_flight == 0 {
 			self.resolved_while_reading.clear();
+			self.closed_while_reading.clear();
 		}
 	}
 
