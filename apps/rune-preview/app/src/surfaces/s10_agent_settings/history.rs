@@ -3,7 +3,7 @@ use std::collections::HashSet;
 
 use kiroshi_core::conversations::contract::{BotHistoryEntry, HistoryAuthor};
 
-use kiroshi_rune_kit::strings::bots::history::day;
+use kiroshi_rune_kit::strings::bots::history::{change, day};
 use kiroshi_rune_kit::strings::{Key, Language};
 
 pub const UNDONE_TITLE_PREFIX: &str = "Change undone: ";
@@ -97,6 +97,16 @@ fn day_label(day_number: i64, today: i64) -> String {
 fn time_of(timestamp: i64) -> String {
 	let seconds = timestamp.rem_euclid(SECONDS_PER_DAY);
 	format!("{:02}:{:02}", seconds / 3_600, seconds % 3_600 / 60)
+}
+
+pub fn dated(timestamp: i64, today: i64) -> String {
+	said(change::DATE)
+		.replace("{{day}}", &day_label(day_of(timestamp), today))
+		.replace("{{time}}", &time_of(timestamp))
+}
+
+pub fn retouches_of(run: &Run) -> usize {
+	if run.entry_count > 1 { run.entry_count } else { 0 }
 }
 
 pub fn oldest_date(entries: &[BotHistoryEntry]) -> String {
@@ -206,7 +216,7 @@ fn change_of(run: &Run) -> ShownChange {
 		sentence: run.title.clone(),
 		detail: (!run.body.is_empty()).then(|| run.body.clone()),
 		time: time_of(run.timestamp),
-		retouches: if run.entry_count > 1 { run.entry_count } else { 0 },
+		retouches: retouches_of(run),
 		is_undone: run.is_undone,
 	}
 }

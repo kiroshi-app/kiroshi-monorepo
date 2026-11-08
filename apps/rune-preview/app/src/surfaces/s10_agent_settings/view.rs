@@ -4,7 +4,7 @@ use kiroshi_core::conversations::contract::{BotHistoryEntry, HistoryAuthor};
 use rune::{El, col, el};
 
 use kiroshi_rune_kit::primitives::toast::{Toast, ToastType, toast};
-use kiroshi_rune_kit::strings::bots::history::{author, change};
+use kiroshi_rune_kit::strings::bots::history::author;
 use kiroshi_rune_kit::surfaces::s10_agent_settings::agent::{
 	self as kit_agent, General, Identity, Model, OutputStyle, Runtime,
 };
@@ -19,8 +19,10 @@ use kiroshi_rune_kit::surfaces::s10_agent_settings::skills::{
 use kiroshi_rune_kit::surfaces::s10_agent_settings::{Confirm, Density, confirmation};
 use kiroshi_rune_kit::tokens::{SPACING, Tokens};
 
-use super::agent::{Fields, ModelOption, effort_of, model_options_for};
-use super::history::{ShownDay, day_of, days_of, matching, oldest_date, runs_of};
+use super::agent::{Fields, ModelOption, effort_of, hue_value, model_options_for};
+use super::history::{
+	ShownDay, dated, day_of, days_of, matching, oldest_date, retouches_of, runs_of,
+};
 use super::skills::Draft;
 use super::{Change, Confirming, Leaving, Notice, Open, Read, said};
 use crate::app::{App, Person};
@@ -48,7 +50,7 @@ fn reader_of(app: &App) -> String {
 fn identity_of(fields: Option<&Fields>) -> Identity<'_> {
 	Identity {
 		name: fields.map_or("", |fields| fields.shown.name.as_str()),
-		hue: fields.and_then(|fields| fields.shown.avatar_blot.map(|hue| f32::from(hue.value()))),
+		hue: fields.and_then(|fields| hue_value(fields.shown.avatar_blot)),
 		picture: None,
 		working: false,
 	}
@@ -201,43 +203,24 @@ fn history_list(app: &App, t: &Tokens, open: &Open, name: &str, hue: Option<f32>
 	kit_history::history_panel::<App>(t, DENSITY, &list)
 }
 
-fn change_view(app: &App, t: &Tokens, open: &Open, change: &Change, name: &str) -> El {
+fn change_view(t: &Tokens, open: &Open, change: &Change, name: &str) -> El {
 	let entries: &[BotHistoryEntry] = open.history.loaded().map_or(&[], Vec::as_slice);
 	let run = runs_of(entries).into_iter().find(|run| run.id == change.range.newest);
 	let files: Option<Vec<ChangeFile>> = change.files.loaded().map(|files| {
 		files.iter().map(|file| ChangeFile { path: &file.path, patch: &file.patch }).collect()
 	});
-	let reader = reader_of(app);
-	let (title, author, date, reason, retouches) = match run.as_ref() {
-		Some(run) => {
-			let shown = days_of(&[run], today());
-			let day = shown.first().map_or_else(String::new, |day| day.label.clone());
-			let time = shown
-				.first()
-				.and_then(|day| day.changes.first())
-				.map_or_else(String::new, |change| change.time.clone());
-			let date = said(change::DATE).replace("{{day}}", &day).replace("{{time}}", &time);
-			let author = match run.author {
-				HistoryAuthor::Bot => name.to_owned(),
-				HistoryAuthor::User => said(author::USER),
-			};
-			let retouches = if run.entry_count > 1 { run.entry_count } else { 0 };
-			(
-				run.title.as_str(),
-				author,
-				date,
-				(!run.body.is_empty()).then_some(run.body.as_str()),
-				retouches,
-			)
-		}
-		None => ("", reader, String::new(), None, 0),
+	let Some(run) = run else { return el() };
+	let author = match run.author {
+		HistoryAuthor::Bot => name.to_owned(),
+		HistoryAuthor::User => said(author::USER),
 	};
+	let date = dated(run.timestamp, today());
 	let page = ChangePage {
-		title,
+		title: &run.title,
 		author: &author,
 		date: &date,
-		reason,
-		retouches,
+		reason: (!run.body.is_empty()).then_some(run.body.as_str()),
+		retouches: retouches_of(&run),
 		files: files.as_deref().or(matches!(change.files, Read::Failed).then_some(&[][..])),
 		failed: matches!(change.files, Read::Failed),
 		chosen: change.chosen.as_deref(),
@@ -252,7 +235,7 @@ fn body(app: &App, t: &Tokens, open: &Open) -> El {
 	match (open.entry, &open.draft, &open.change) {
 		(Entry::Skills, Some(draft), _) => skill_editor(app, t, draft),
 		(Entry::Skills, None, _) => shell::scrolling_panel(skills_list(t, open)),
-		(Entry::History, _, Some(change)) => change_view(app, t, open, change, name),
+		(Entry::History, _, Some(change)) => change_view(t, open, change, name),
 		(Entry::History, _, None) => col()
 			.w_full()
 			.grow(1.0)

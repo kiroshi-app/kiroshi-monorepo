@@ -8,7 +8,9 @@ mod view;
 mod worker;
 
 use kiroshi_core::agent::contract::OfferedModel;
-use kiroshi_core::conversations::contract::{Bot, BotChangedFile, BotHistoryEntry, Skill};
+use kiroshi_core::conversations::contract::{
+	Bot, BotChangedFile, BotHistoryEntry, BotIdentity, Skill,
+};
 use rune::{TextEdit, Waker};
 
 use kiroshi_rune_kit::strings::bots::{roster, runtime, spaces};
@@ -194,10 +196,7 @@ impl Open {
 		}
 	}
 
-	fn described(
-		&mut self,
-		change: impl FnOnce(&mut kiroshi_core::conversations::contract::BotIdentity),
-	) -> Vec<Call> {
+	fn described(&mut self, change: impl FnOnce(&mut BotIdentity)) -> Vec<Call> {
 		let Some(fields) = self.agent.loaded_mut() else { return Vec::new() };
 		let write = fields.write(change);
 		vec![Call::Describe {
@@ -793,7 +792,7 @@ fn shown_in_roster(app: &mut App, bot: &Bot) {
 	let Some(agent) = ready.agents.iter_mut().find(|agent| agent.id == bot.id) else { return };
 	agent.name = bot.name.clone();
 	agent.title = bot.title.clone();
-	agent.avatar_blot = agent::hue_of(bot);
+	agent.avatar_blot = agent::hue_value(bot.avatar_blot);
 }
 
 fn landed_in_roster(app: &mut App) {

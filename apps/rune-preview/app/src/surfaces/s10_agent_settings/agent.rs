@@ -26,8 +26,8 @@ pub struct Fields {
 	writes: usize,
 }
 
-pub fn hue_of(bot: &Bot) -> Option<f32> {
-	bot.avatar_blot.map(|hue| f32::from(hue.value()))
+pub fn hue_value(hue: Option<Hue>) -> Option<f32> {
+	hue.map(|hue| f32::from(hue.value()))
 }
 
 pub fn hue_from(hue: Option<f32>) -> Option<Hue> {
