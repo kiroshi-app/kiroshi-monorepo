@@ -15,8 +15,8 @@ use super::agent::{FALLBACK_MODELS, model_options_for};
 use super::history::{days_of, matching, oldest_date, runs_of};
 use super::worker::{Answer, Call, Membership, Range};
 use super::{
-	Confirming, Heard, Leaving, Notice, Read, State, heard, heard_of, layers, open_agent_settings,
-	said, view,
+	Confirming, Heard, Notice, Read, State, heard, heard_of, layers, open_agent_settings, said,
+	view,
 };
 use crate::app::{App, Person, Ready, Workspace};
 use crate::events::{HostEvent, parsed};
@@ -466,44 +466,32 @@ fn a_new_skill_is_created_without_an_id() {
 }
 
 #[test]
-fn closing_over_an_unsaved_skill_asks_and_keeps_the_draft() {
+fn going_back_from_a_saved_skill_returns_to_the_list_at_once() {
 	let mut state = loaded();
 	with_skills(&mut state);
 	state.handle(Event::OpenSkill("release-notes".to_owned()));
-	typed(&mut state, Field::Skill(SkillField::Body), "Draft");
-	state.handle(Event::Close);
+	state.handle(Event::Back);
 
-	assert_eq!(open_of(&state).confirming, Some(Confirming::Leave(Leaving::Dialog)));
-	assert_eq!(draft_body(&state), "Draft");
-
-	state.handle(Event::Dismiss);
+	assert!(open_of(&state).draft.is_none());
 	assert_eq!(open_of(&state).confirming, None);
-	assert_eq!(draft_body(&state), "Draft");
-
-	state.handle(Event::Close);
-	state.handle(Event::ConfirmLeaveSkill);
-	assert!(!state.is_open());
 }
 
 #[test]
-fn closing_over_a_saved_skill_closes_at_once() {
-	let mut state = loaded();
-	with_skills(&mut state);
-	state.handle(Event::OpenSkill("release-notes".to_owned()));
-	state.handle(Event::Close);
-
-	assert!(!state.is_open());
-}
-
-#[test]
-fn going_back_from_an_unsaved_skill_asks_then_returns_to_the_list() {
+fn leaving_an_unsaved_skill_asks_and_keeps_the_draft_until_chosen() {
 	let mut state = loaded();
 	with_skills(&mut state);
 	state.handle(Event::OpenSkill("release-notes".to_owned()));
 	typed(&mut state, Field::Skill(SkillField::Body), "Draft");
 	state.handle(Event::Back);
 
-	assert_eq!(open_of(&state).confirming, Some(Confirming::Leave(Leaving::Editor)));
+	assert_eq!(open_of(&state).confirming, Some(Confirming::LeaveSkill));
+	assert_eq!(draft_body(&state), "Draft");
+
+	state.handle(Event::Dismiss);
+	assert_eq!(open_of(&state).confirming, None);
+	assert_eq!(draft_body(&state), "Draft");
+
+	state.handle(Event::Back);
 	state.handle(Event::ConfirmLeaveSkill);
 	assert!(open_of(&state).draft.is_none());
 	assert!(state.is_open());

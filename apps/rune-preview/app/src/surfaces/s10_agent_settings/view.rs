@@ -26,7 +26,7 @@ use super::history::{
 	ShownDay, dated, day_of, days_of, matching, oldest_date, retouches_of, runs_of,
 };
 use super::skills::Draft;
-use super::{Change, Confirming, Leaving, Notice, Open, Read, said};
+use super::{Change, Confirming, Notice, Open, Read, said};
 use crate::app::{App, Person};
 use crate::navigation::Route;
 
@@ -244,9 +244,7 @@ fn body(app: &App, t: &Tokens, open: &Open) -> El {
 
 fn confirmation_of(t: &Tokens, open: &Open) -> Option<El> {
 	match open.confirming.as_ref()? {
-		Confirming::Leave(Leaving::Dialog | Leaving::Editor) => {
-			Some(confirmation::<App>(t, Confirm::LeaveSkill))
-		}
+		Confirming::LeaveSkill => Some(confirmation::<App>(t, Confirm::LeaveSkill)),
 		Confirming::Undo(id) => {
 			let run = runs_of(open.history.loaded()?).into_iter().find(|run| run.id == *id)?;
 			Some(confirmation::<App>(t, Confirm::Undo(&run.title)))

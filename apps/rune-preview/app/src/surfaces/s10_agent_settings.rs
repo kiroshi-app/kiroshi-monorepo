@@ -77,15 +77,9 @@ pub struct Notice {
 	pub title: String,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Leaving {
-	Dialog,
-	Editor,
-}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Confirming {
-	Leave(Leaving),
+	LeaveSkill,
 	Undo(String),
 }
 
@@ -209,7 +203,7 @@ impl Open {
 
 	fn leave_editor(&mut self) {
 		if self.is_unsaved() {
-			self.confirming = Some(Confirming::Leave(Leaving::Editor));
+			self.confirming = Some(Confirming::LeaveSkill);
 		} else {
 			self.draft = None;
 		}
@@ -227,20 +221,15 @@ impl Open {
 				self.change = None;
 				self.read_panel()
 			}
-			Event::Close if self.is_unsaved() => {
-				self.confirming = Some(Confirming::Leave(Leaving::Dialog));
-				Vec::new()
-			}
-			Event::Close => return Outcome::Close,
-			Event::Back if self.change.is_some() => {
+			Event::Back | Event::Close if self.change.is_some() => {
 				self.change = None;
 				Vec::new()
 			}
-			Event::Back if self.draft.is_some() => {
+			Event::Back | Event::Close if self.draft.is_some() => {
 				self.leave_editor();
 				Vec::new()
 			}
-			Event::Back => return Outcome::Close,
+			Event::Back | Event::Close => return Outcome::Close,
 			Event::LeaveSkill => {
 				self.leave_editor();
 				Vec::new()
@@ -250,17 +239,13 @@ impl Open {
 				self.picking = None;
 				Vec::new()
 			}
-			Event::ConfirmLeaveSkill => match self.confirming.take() {
-				Some(Confirming::Leave(Leaving::Dialog)) => return Outcome::Close,
-				Some(Confirming::Leave(Leaving::Editor)) => {
+			Event::ConfirmLeaveSkill => {
+				if self.confirming == Some(Confirming::LeaveSkill) {
+					self.confirming = None;
 					self.draft = None;
-					Vec::new()
 				}
-				other => {
-					self.confirming = other;
-					Vec::new()
-				}
-			},
+				Vec::new()
+			}
 			Event::Hue(hue) => self.described(|identity| identity.avatar_blot = hue_from(hue)),
 			Event::RemovePicture => self.described(|identity| identity.avatar_image_path = None),
 			Event::OpenPicker(picker) => {
