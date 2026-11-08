@@ -100,11 +100,7 @@ impl NoticeBoard {
 
 impl App {
 	pub fn raise(&mut self, notice: Notice) {
-		if notice
-			.space_id
-			.as_deref()
-			.is_some_and(|space_id| Some(space_id) != space_on_screen(self))
-		{
+		if notice.space_id.is_some() && notice.space_id.as_deref() != space_on_screen(self) {
 			eprintln!("a notice of a Space not on screen: {}", notice.logged());
 		}
 		self.notice.raise(notice);
