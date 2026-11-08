@@ -3,7 +3,7 @@ mod tests;
 
 use std::collections::HashMap;
 
-use kiroshi_rune_kit::strings::Language;
+use kiroshi_rune_kit::strings::{Language, chat};
 use kiroshi_rune_kit::surfaces::s04_boot::notice::{
 	NoticeKind, RaisedNotice, SurfaceEvent, notice_surface,
 };
@@ -12,6 +12,7 @@ use rune::El;
 
 use super::App;
 use crate::host::HostError;
+use crate::surfaces::s04_boot::Retry;
 
 const LANGUAGE: Language = Language::En;
 
@@ -21,6 +22,7 @@ pub struct Notice {
 	pub title: String,
 	pub description: Option<String>,
 	pub space_id: Option<String>,
+	pub retry: Option<Retry>,
 }
 
 impl Notice {
@@ -30,6 +32,7 @@ impl Notice {
 			title: title.into(),
 			description: Some(description.into()),
 			space_id: None,
+			retry: None,
 		}
 	}
 
@@ -38,11 +41,16 @@ impl Notice {
 	}
 
 	pub fn info(title: &str) -> Notice {
+		Notice { kind: NoticeKind::Info, ..Notice::error(title) }
+	}
+
+	pub fn error(title: impl Into<String>) -> Notice {
 		Notice {
-			kind: NoticeKind::Info,
-			title: title.to_owned(),
+			kind: NoticeKind::Error,
+			title: title.into(),
 			description: None,
 			space_id: None,
+			retry: None,
 		}
 	}
 
@@ -52,10 +60,12 @@ impl Notice {
 
 	fn raised(&self) -> RaisedNotice<'_> {
 		let description = self.description.as_deref();
-		match self.kind {
+		let raised = match self.kind {
 			NoticeKind::Error => RaisedNotice::failure(&self.title, description),
 			kind => RaisedNotice::transient(kind, &self.title, description),
-		}
+		};
+		let action = self.retry.as_ref().map(|_| chat::notice::RETRY.text(LANGUAGE));
+		RaisedNotice { action, ..raised }
 	}
 
 	fn logged(&self) -> String {
@@ -87,13 +97,21 @@ impl NoticeBoard {
 		of_space.into_iter().chain(self.of_window.as_ref()).collect()
 	}
 
-	fn close(&mut self, index: usize, space_on_screen: Option<&str>) {
-		let shown_space = space_on_screen.filter(|space_id| self.of_spaces.contains_key(*space_id));
-		match (index, shown_space) {
-			(0, Some(space_id)) => {
+	fn expire(&mut self, notice: &Notice) {
+		match notice.space_id.as_deref() {
+			Some(space_id) if self.of_spaces.get(space_id) == Some(notice) => {
 				self.of_spaces.remove(space_id);
 			}
-			_ => self.of_window = None,
+			None if self.of_window.as_ref() == Some(notice) => self.of_window = None,
+			Some(_) | None => {}
+		}
+	}
+
+	fn close(&mut self, index: usize, space_on_screen: Option<&str>) -> Option<Notice> {
+		let shown_space = space_on_screen.filter(|space_id| self.of_spaces.contains_key(*space_id));
+		match (index, shown_space) {
+			(0, Some(space_id)) => self.of_spaces.remove(space_id),
+			_ => self.of_window.take(),
 		}
 	}
 }
@@ -104,6 +122,16 @@ impl App {
 			eprintln!("a notice of a Space not on screen: {}", notice.logged());
 		}
 		self.notice.raise(notice);
+	}
+
+	pub fn expire(&mut self, notice: &Notice) {
+		self.notice.expire(notice);
+	}
+
+	pub fn raise_all(&mut self, notices: Vec<Notice>) {
+		for notice in notices {
+			self.raise(notice);
+		}
 	}
 }
 
@@ -123,9 +151,12 @@ pub fn layer(app: &App, t: &Tokens) -> Option<El> {
 	Some(notice_surface(t, LANGUAGE, &raised, closed))
 }
 
-fn closed(app: &mut App, event: SurfaceEvent) {
+pub(crate) fn closed(app: &mut App, event: SurfaceEvent) {
 	let (SurfaceEvent::Close(index) | SurfaceEvent::Act(index) | SurfaceEvent::CopyReport(index)) =
 		event;
 	let space_on_screen = space_on_screen(app).map(str::to_owned);
-	app.notice.close(index, space_on_screen.as_deref());
+	let closed = app.notice.close(index, space_on_screen.as_deref());
+	if let (SurfaceEvent::Act(_), Some(retry)) = (event, closed.and_then(|notice| notice.retry)) {
+		retry.run(app);
+	}
 }

@@ -10,6 +10,7 @@ use super::worker::{Answer, Call};
 use super::{
 	Heard, State, Swipe, heard_of, landed, opening_space, picked, railed, select_space, swipe_space,
 };
+use crate::app::notice;
 use crate::app::{App, Person, Ready, SpaceContent, Workspace};
 use crate::host::{Host, HostError};
 use crate::model::{self, Conversation};
@@ -104,7 +105,7 @@ fn empty_content() -> SpaceContent {
 }
 
 fn titles(app: &App) -> Vec<&str> {
-	state(app).notices.iter().map(|notice| notice.title.as_str()).collect()
+	notice::shown(app).into_iter().map(|notice| notice.title.as_str()).collect()
 }
 
 fn row_names(app: &App) -> Vec<&str> {
