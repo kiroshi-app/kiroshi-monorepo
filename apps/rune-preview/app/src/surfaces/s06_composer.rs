@@ -86,7 +86,7 @@ impl State {
 		self.flush();
 	}
 
-	pub fn use_source(&mut self, source: Source) {
+	fn use_source(&mut self, source: Source) {
 		self.source.get_or_insert(source);
 	}
 
@@ -106,7 +106,7 @@ impl State {
 		self.drafts.entry(conversation_id.to_owned()).or_default()
 	}
 
-	pub fn edit_of(&mut self, conversation_id: &str) -> &mut TextEdit {
+	fn edit_of(&mut self, conversation_id: &str) -> &mut TextEdit {
 		&mut self.draft_mut(conversation_id).edit
 	}
 

@@ -35,10 +35,9 @@ impl Open {
 	}
 
 	pub fn outside_name(&self, bot_id: &str) -> Option<String> {
-		let outside = self.candidates.iter().filter(|candidate| candidate.is_outside);
-		outside
-			.into_iter()
-			.find(|candidate| candidate.id == bot_id)
+		self.candidates
+			.iter()
+			.find(|candidate| candidate.is_outside && candidate.id == bot_id)
 			.map(|candidate| candidate.name.clone())
 	}
 }
