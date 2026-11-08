@@ -405,6 +405,11 @@ fn input_empty(t: &Tokens, s: &SceneState) -> El {
 	centered(t, composer(t, PromptInput::new(&s.edit, WIDTH)), Vec::new())
 }
 
+fn input_focused_empty(t: &Tokens, s: &SceneState) -> El {
+	let input = PromptInput { focused: true, ..PromptInput::new(&s.edit, WIDTH) };
+	centered(t, composer(t, input), Vec::new())
+}
+
 fn input_with_controls(t: &Tokens, s: &SceneState) -> El {
 	centered(t, composer(t, with_leading(&s.edit, WIDTH, add_context(t))), Vec::new())
 }
@@ -774,26 +779,28 @@ fn picker_closed(t: &Tokens, _: &SceneState) -> El {
 	picker_stage(&in_blue(t), Vec::new())
 }
 
-fn queue_default(t: &Tokens, _: &SceneState) -> El {
+fn queue(t: &Tokens, items: &[QueuedMessage], focused: Option<&str>) -> El {
 	let queue = PromptQueue {
-		items: &QUEUED_ONE,
+		items,
 		agent: "Atlas",
 		reader: "Sam",
 		reader_picture: None,
 		width: QUEUE_WIDTH,
+		focused,
 	};
 	centered(t, col().w(QUEUE_WIDTH).children(prompt_queue(scope(t), &queue)), Vec::new())
 }
 
+fn queue_default(t: &Tokens, _: &SceneState) -> El {
+	queue(t, &QUEUED_ONE, None)
+}
+
 fn queue_row_hovered(t: &Tokens, _: &SceneState) -> El {
-	let queue = PromptQueue {
-		items: &QUEUED_TWO,
-		agent: "Atlas",
-		reader: "Sam",
-		reader_picture: None,
-		width: QUEUE_WIDTH,
-	};
-	centered(t, col().w(QUEUE_WIDTH).children(prompt_queue(scope(t), &queue)), Vec::new())
+	queue(t, &QUEUED_TWO, None)
+}
+
+fn queue_row_focused(t: &Tokens, _: &SceneState) -> El {
+	queue(t, &QUEUED_TWO, Some(QUEUED_TWO[0].id))
 }
 
 const REPLY_QUOTE: ReplyQuote = ReplyQuote { author: REPLY_AUTHOR, excerpt: REPLY_EXCERPT };
@@ -1091,4 +1098,12 @@ pub static SCENES: &[Scene] = &[
 		NARROW_CARD,
 		selection_narrow_long_content,
 	),
+	tabbed(
+		"conversation-prompt-promptinput--focus-within-empty",
+		COMPOSER,
+		"",
+		1,
+		input_focused_empty,
+	),
+	tabbed("conversation-prompt-promptqueue--row-focused", QUEUE, "", 2, queue_row_focused),
 ];

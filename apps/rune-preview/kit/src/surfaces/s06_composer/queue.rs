@@ -1,7 +1,7 @@
 use rune::image::Image;
 use rune::{Cursor, El, TextStyle, col, icon, row, text};
 
-use super::{ComposerIntent, Reach, RoundControl, Scope, filled};
+use super::{ComposerIntent, ROW_RING, Reach, RoundControl, Scope, filled};
 use crate::avatar::Person;
 use crate::icons;
 use crate::primitives::{FOCUS_RING_WIDTH, Paint, instant, ring_tint};
@@ -32,13 +32,20 @@ pub struct PromptQueue<'a> {
 	pub reader: &'a str,
 	pub reader_picture: Option<&'a Image>,
 	pub width: f32,
+	pub focused: Option<&'a str>,
+}
+
+const ITEM_KEYS: [&str; 3] = ["queue-item-", "queue-send-now-", "queue-remove-"];
+
+pub fn focused_item(key: &str) -> Option<&str> {
+	ITEM_KEYS.iter().find_map(|prefix| key.strip_prefix(prefix))
 }
 
 fn hovered_row(t: &Tokens) -> rune::Color {
 	if t.dark { faded(t.foreground, 0.04) } else { t.prompt_surface }
 }
 
-fn send_now<S: 'static>(scope: Scope<S>, id: &str) -> El {
+fn send_now<S: 'static>(scope: Scope<S>, id: &str, is_reachable: bool) -> El {
 	let t = scope.t;
 	let label = scope.say(queue::SEND_NOW);
 	let compact = TextStyle { line_height: LINE, ..TEXT_COMPACT };
@@ -61,7 +68,7 @@ fn send_now<S: 'static>(scope: Scope<S>, id: &str) -> El {
 				ComposerIntent::SendQueuedNow(id.to_owned()),
 			)
 			.hover_alone()
-			.focusable(true)
+			.focusable(is_reachable)
 			.cursor(Cursor::Pointer)
 			.focus_ring(FOCUS_RING_WIDTH, 0.0, ring_tint(t, 0.3)),
 	)
@@ -75,6 +82,7 @@ fn queued_row<S: 'static>(
 ) -> El {
 	let t = scope.t;
 	let name = [("name", queue_view.agent)];
+	let is_focused = queue_view.focused == Some(item.id);
 	let remove = RoundControl {
 		key: &format!("queue-remove-{}", item.id),
 		label: scope.say(queue::REMOVE),
@@ -89,14 +97,15 @@ fn queued_row<S: 'static>(
 		reach: Reach::Live,
 	}
 	.view(scope, Some(ComposerIntent::RemoveQueued(item.id.to_owned())))
-	.hover_alone();
+	.hover_alone()
+	.focusable(is_focused);
 	let actions = row()
 		.gap(SPACING)
 		.center_y()
 		.pin(None, Some((ROW - ACTION) / 2.0), Some(ACTIONS_END), None)
-		.group_opacity(0.0, 1.0)
-		.child(send_now(scope, item.id))
+		.child(send_now(scope, item.id, is_focused))
 		.child(remove);
+	let actions = if is_focused { actions } else { actions.group_opacity(0.0, 1.0) };
 	let mut line = row()
 		.key(format!("queue-item-{}", item.id))
 		.w_full()
@@ -107,6 +116,9 @@ fn queued_row<S: 'static>(
 		.radius(RADIUS_LG)
 		.hover(hovered_row(t))
 		.role("listitem")
+		.label(item.text)
+		.focusable(true)
+		.focus_ring(ROW_RING, -ROW_RING, t.ring)
 		.child(Person { name: queue_view.reader, image: queue_view.reader_picture }.draw(AVATAR, t))
 		.child(
 			text(scope.say(queue::YOU))
@@ -116,7 +128,9 @@ fn queued_row<S: 'static>(
 		.child(
 			text(item.text.to_owned()).font(TEXT_SM).color(t.muted_foreground).truncate().grow(1.0),
 		);
-	if is_next {
+	if is_focused {
+		line = line.fill(hovered_row(t));
+	} else if is_next {
 		line = line.child(
 			text(filled(scope.say(queue::NEXT), &name))
 				.font(TEXT_XS_MEDIUM)

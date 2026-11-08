@@ -2,8 +2,10 @@ use rune::{Key, KeyEvent, Mods, TextEdit};
 
 use super::chips::formatted_size;
 use super::menus::{Command, MentionFace, Mentionable, command_matches, mention_matches};
-use super::prompt::{Offline, PromptInput, menu_key};
+use super::prompt::{Offline, PromptInput, menu_key, surface};
+use super::queue::focused_item;
 use super::{ComposerIntent, filled};
+use crate::tokens::Tokens;
 
 const fn member(id: &'static str, is_outside: bool) -> Mentionable<'static> {
 	Mentionable { id, name: id, title: None, face: MentionFace::Agent { hue: None }, is_outside }
@@ -81,4 +83,25 @@ fn the_menu_keys_become_travel_choose_and_dismiss() {
 	assert_eq!(press(Key::Tab), Some(ComposerIntent::MenuChoose));
 	assert_eq!(press(Key::Escape), Some(ComposerIntent::MenuDismiss));
 	assert_eq!(press(Key::Left), None);
+}
+
+#[test]
+fn focus_inside_an_empty_composer_draws_the_payload_border() {
+	let t = Tokens::new(false);
+	let blank = TextEdit::new("");
+	let draft = TextEdit::new("Summarise the notes");
+	let (_, at_rest) = surface(&t, &PromptInput::new(&blank, 544.0));
+	let (_, focused) =
+		surface(&t, &PromptInput { focused: true, ..PromptInput::new(&blank, 544.0) });
+	let (_, drafted) = surface(&t, &PromptInput::new(&draft, 544.0));
+	assert_eq!(focused, drafted);
+	assert_ne!(focused, at_rest);
+}
+
+#[test]
+fn a_focused_queue_key_names_its_queued_message() {
+	assert_eq!(focused_item("queue-item-top"), Some("top"));
+	assert_eq!(focused_item("queue-send-now-top"), Some("top"));
+	assert_eq!(focused_item("queue-remove-city"), Some("city"));
+	assert_eq!(focused_item("composer-send"), None);
 }

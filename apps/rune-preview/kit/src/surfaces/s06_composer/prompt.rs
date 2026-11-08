@@ -38,6 +38,7 @@ pub struct PromptInput<'a> {
 	pub offline: Option<Offline<'a>>,
 	pub drop_target: bool,
 	pub menu_open: bool,
+	pub focused: bool,
 }
 
 impl<'a> PromptInput<'a> {
@@ -55,6 +56,7 @@ impl<'a> PromptInput<'a> {
 			offline: None,
 			drop_target: false,
 			menu_open: false,
+			focused: false,
 		}
 	}
 
@@ -102,17 +104,27 @@ impl<'a> PromptInput<'a> {
 	}
 }
 
-fn surface(t: &Tokens, input: &PromptInput) -> (rune::Color, rune::Color) {
+pub(super) fn surface(t: &Tokens, input: &PromptInput) -> (rune::Color, rune::Color) {
 	let is_drop_target = input.drop_target && !input.is_blocked();
-	if input.offline.is_some() {
-		(t.prompt_surface_inert, faded(t.foreground, 0.08))
+	let fill = if input.offline.is_some() {
+		t.prompt_surface_inert
 	} else if is_drop_target {
-		(faded(t.primary, 0.1), t.primary)
-	} else if input.has_payload() {
-		(t.prompt_surface, faded(t.foreground, 0.2))
+		faded(t.primary, 0.1)
 	} else {
-		(t.prompt_surface, faded(t.foreground, 0.1))
-	}
+		t.prompt_surface
+	};
+	let border = if input.offline.is_some() {
+		faded(t.foreground, 0.08)
+	} else if input.focused {
+		faded(t.foreground, 0.2)
+	} else if is_drop_target {
+		t.primary
+	} else if input.has_payload() {
+		faded(t.foreground, 0.2)
+	} else {
+		faded(t.foreground, 0.1)
+	};
+	(fill, border)
 }
 
 pub fn send_button<S: 'static>(scope: Scope<S>, has_payload: bool, reach: Reach) -> El {
