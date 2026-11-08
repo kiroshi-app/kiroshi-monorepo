@@ -1,24 +1,18 @@
-use rune::{Color, Cursor, El, Icon, TextStyle, Tx, col, el, icon, oklcha, row, text};
+use rune::{Color, Cursor, El, Icon, Tx, col, el, icon, oklcha, row, text};
 
 use kiroshi_rune_kit::avatar::{Activity, Face, Motion};
 use kiroshi_rune_kit::icons;
 use kiroshi_rune_kit::tokens::{
-	RADIUS_BUBBLE, SPACING, TEXT_11, TEXT_BUBBLE, TEXT_SM, TEXT_SM_MEDIUM, TEXT_XS, TEXT_XS_MEDIUM,
-	Tokens,
+	SPACING, TEXT_11, TEXT_SM, TEXT_SM_MEDIUM, TEXT_XS, TEXT_XS_MEDIUM, Tokens,
 };
 
 use crate::app::{App, Board, OpenMission};
-use crate::conversations::title_badge;
-use crate::model::{Agent, Mission, MissionEvent, MissionState, Ticket};
+use crate::model::{Agent, Mission, MissionState, Ticket};
 
 const HEADER: f32 = 48.0;
 const HEADER_AVATAR: f32 = 24.0;
 const BAND: f32 = 34.0;
 const BAND_INSET: f32 = 50.0;
-const TURN_AVATAR: f32 = 40.0;
-const TURN_GAP: f32 = 8.0;
-const MARK: f32 = 16.0;
-const TIMESTAMP: TextStyle = TextStyle { line_height: 20.0, ..TextStyle::new(11.0, 400.0) };
 const PILL_HEIGHT: f32 = 20.0;
 const BADGE_DOT: f32 = 8.0;
 
@@ -315,206 +309,6 @@ fn activity_line(mission: &Mission, t: &Tokens) -> Option<El> {
 		line = line.child(text(format!("#{number}")).font(TEXT_XS_MEDIUM).color(t.foreground));
 	}
 	Some(line)
-}
-
-pub fn turn(
-	s: &App,
-	mission: &Mission,
-	bot: &Agent,
-	t: &Tokens,
-	timestamp: String,
-	now: i64,
-) -> El {
-	let mut title_row = row().w_full().gap(SPACING * 2.0).center_y().children(
-		mission.tools.iter().map(|tool| icon(tool_mark(tool), MARK).color(t.muted_foreground)),
-	);
-	if let Some(pill) = state_pill(mission.state, t) {
-		title_row = title_row.child(pill);
-	}
-	title_row = title_row
-		.child(el().grow(1.0))
-		.child(text(timestamp).font(TIMESTAMP).color(t.muted_foreground));
-	let closed = mission.state == MissionState::Closed;
-	let mut body = col().w_full().gap(SPACING).child(
-		text(mission.objective.clone())
-			.font(TEXT_BUBBLE)
-			.color(if closed { t.muted_foreground } else { t.foreground })
-			.wrap(),
-	);
-	if has_ticket(&mission.ticket) {
-		body = body.child(ticket_line(&mission.ticket, t, false));
-	}
-	if let Some(activity) = mission.last_activity.as_ref().filter(|_| mission.is_agent_running) {
-		body = body.child(
-			text(format!("{} · {}", activity.tool, activity.target))
-				.font(TEXT_XS)
-				.color(t.muted_foreground)
-				.truncate()
-				.shrink()
-				.min_w(0.0),
-		);
-	}
-	let mut card = col().w_full().gap(SPACING * 2.0).child(title_row).child(body);
-	if let Some(status) = mission.status.as_ref().filter(|status| !status.text.trim().is_empty()) {
-		card = card.child(
-			col()
-				.w_full()
-				.child(
-					text(status.text.clone())
-						.font(TEXT_XS)
-						.color(t.muted_foreground)
-						.wrap()
-						.max_lines(3),
-				)
-				.child(
-					text(relative_time(status.written_at, now))
-						.font(TEXT_XS)
-						.color(t.muted_foreground),
-				),
-		);
-	}
-	if let Some(activity) = activity_line(mission, t) {
-		card = card.child(activity);
-	}
-	let id = mission.id.clone();
-	let bubble = col()
-		.grow(1.0)
-		.shrink()
-		.min_w(0.0)
-		.padding(18.0)
-		.radius(RADIUS_BUBBLE)
-		.fill(t.bubble)
-		.hover(t.foreground.alpha(0.05))
-		.cursor(Cursor::Pointer)
-		.role("button")
-		.label(format!("Open the mission: {}", mission.objective))
-		.on_press(move |s: &mut App| s.open_mission_of_turn(&id))
-		.child(card);
-	let author = row()
-		.pl(TURN_AVATAR + TURN_GAP + 18.0)
-		.pb(SPACING)
-		.gap(SPACING * 1.5)
-		.center_y()
-		.child(text(bot.name.clone()).font(TEXT_SM_MEDIUM).color(t.foreground))
-		.child(if bot.title.is_empty() { el() } else { title_badge(t, &bot.title) });
-	col().w_full().child(author).child(
-		row()
-			.w_full()
-			.gap(TURN_GAP)
-			.items_end()
-			.child(avatar(mission, bot, TURN_AVATAR, s, t))
-			.child(bubble),
-	)
-}
-
-struct EventFace {
-	line: &'static str,
-	kind: &'static str,
-}
-
-fn event_face(kind: &str) -> Option<EventFace> {
-	let (line, kind) = match kind {
-		"opened" => ("Mission opened by {source}", "Opened"),
-		"note" => ("Note recorded by {source}", "Note"),
-		"agent_asked" => ("Question sent to the coding session by {source}", "Question"),
-		"answered" => ("Answer sent to the coding session", "Answer"),
-		"escalated" => ("Escalated to a human by {source}", "Escalated"),
-		"ready" => ("Marked ready to merge by {source}", "Ready to merge"),
-		"checks_failed" => ("Red checks reported by {source}", "Checks failed"),
-		"failed" => ("Failure reported by {source}", "Failed"),
-		"closed" => ("Mission closed by {source}", "Closed"),
-		"dismissed" => ("Closed by you", "Closed"),
-		"reopened" => ("Mission reopened by {source}", "Reopened"),
-		_ => return None,
-	};
-	Some(EventFace { line, kind })
-}
-
-fn source_name(source: &str, open: &OpenMission) -> String {
-	match source {
-		"bot" => open.bot.name.clone(),
-		"reader" => "You".to_owned(),
-		"github" => "GitHub".to_owned(),
-		_ => open
-			.mission
-			.tools
-			.iter()
-			.find(|tool| matches!(tool.as_str(), "github" | "paper" | "superset"))
-			.map_or_else(|| "The coding session".to_owned(), |tool| capitalised(tool)),
-	}
-}
-
-fn capitalised(word: &str) -> String {
-	let mut chars = word.chars();
-	chars.next().map_or_else(String::new, |first| first.to_uppercase().chain(chars).collect())
-}
-
-const SPOKEN_KEYS: [&str; 4] = ["line", "message", "question", "summary"];
-
-fn spoken_text(payload: &serde_json::Value) -> Option<&str> {
-	SPOKEN_KEYS.iter().find_map(|key| {
-		payload.get(key).and_then(|value| value.as_str()).filter(|text| !text.is_empty())
-	})
-}
-
-pub fn shows_event(event: &MissionEvent) -> bool {
-	event_face(&event.kind).is_some()
-}
-
-pub fn event_row(s: &App, open: &OpenMission, event: &MissionEvent, t: &Tokens, now: i64) -> El {
-	let Some(face) = event_face(&event.kind) else { return el() };
-	let source = source_name(&event.source, open);
-	let when = relative_time(event.created_at, now);
-	let said = spoken_text(&event.payload);
-	let Some(said) = said else {
-		let line = face.line.replace("{source}", &source);
-		return row()
-			.w_full()
-			.pl(TURN_AVATAR + TURN_GAP + 6.0)
-			.py(SPACING * 1.5)
-			.gap(SPACING * 2.0)
-			.center_y()
-			.child(el().size(5.0, 5.0).radius(2.5).fill(t.muted_foreground))
-			.child(text(line).font(TEXT_XS).color(t.muted_foreground))
-			.child(text(when).font(TEXT_XS).color(t.muted_foreground));
-	};
-	let chip_fill = if event.kind == "agent_asked" {
-		oklcha(0.64, 0.16, 60.0, 0.18)
-	} else {
-		t.foreground.alpha(0.08)
-	};
-	let speaker = if event.source == "bot" {
-		avatar(&open.mission, &open.bot, TURN_AVATAR, s, t)
-	} else {
-		el().size(TURN_AVATAR, TURN_AVATAR)
-			.radius(TURN_AVATAR / 2.0)
-			.fill(t.muted)
-			.center()
-			.child(icon(tool_mark(&source), MARK).color(t.muted_foreground))
-	};
-	let author = row()
-		.pl(TURN_AVATAR + TURN_GAP)
-		.pb(SPACING)
-		.gap(SPACING * 1.5)
-		.center_y()
-		.child(text(source).font(TEXT_SM_MEDIUM).color(t.foreground))
-		.child(
-			el().px(6.0)
-				.radius(5.0)
-				.fill(chip_fill)
-				.child(text(face.kind).font(TEXT_11).color(t.foreground)),
-		)
-		.child(text(when).font(TEXT_XS).color(t.muted_foreground));
-
-	let bubble =
-		col().max_w(560.0).shrink().padding(18.0).radius(RADIUS_BUBBLE).fill(t.bubble).child(
-			text(said.to_owned()).font(TEXT_BUBBLE).color(t.foreground).wrap().selectable(true),
-		);
-	col()
-		.w_full()
-		.py(6.0)
-		.child(author)
-		.child(row().w_full().gap(TURN_GAP).items_end().child(speaker).child(bubble))
 }
 
 pub fn roster(s: &App, t: &Tokens, now: i64) -> El {
