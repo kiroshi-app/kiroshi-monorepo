@@ -175,6 +175,7 @@ fn change_of(mission_id: &str, state: model::MissionState) -> model::MissionChan
 	model::MissionChanged {
 		mission_id: mission_id.to_owned(),
 		state,
+		state_seq: 2,
 		is_agent_running: false,
 		status: None,
 	}
@@ -371,6 +372,7 @@ fn a_mission_change_moves_the_panel_the_header_and_the_cards_then_rereads_the_de
 	let change = model::MissionChanged {
 		mission_id: "m-1".to_owned(),
 		state: model::MissionState::WaitingHuman,
+		state_seq: 2,
 		is_agent_running: false,
 		status: None,
 	};
@@ -390,6 +392,7 @@ fn a_running_agent_reads_as_working_once_its_change_arrives() {
 	let change = model::MissionChanged {
 		mission_id: "m-1".to_owned(),
 		state: model::MissionState::WaitingBot,
+		state_seq: 2,
 		is_agent_running: true,
 		status: None,
 	};
@@ -447,8 +450,12 @@ fn running_signs(app: &App, id: &str) -> (bool, bool, bool) {
 	)
 }
 
-fn running_change(id: &str, is_agent_running: bool) -> model::MissionChanged {
-	model::MissionChanged { is_agent_running, ..change_of(id, model::MissionState::WaitingBot) }
+fn running_change(id: &str, is_agent_running: bool, state_seq: i64) -> model::MissionChanged {
+	model::MissionChanged {
+		is_agent_running,
+		state_seq,
+		..change_of(id, model::MissionState::WaitingBot)
+	}
 }
 
 #[test]
@@ -486,9 +493,9 @@ fn a_change_carrying_a_null_status_clears_the_status_of_the_row_the_detail_and_t
 #[test]
 fn a_running_agent_shows_on_the_row_the_detail_and_the_card_then_leaves_them_when_it_stops() {
 	let mut app = opened_with_a_card("m-1");
-	changed(&mut app, &running_change("m-1", true));
+	changed(&mut app, &running_change("m-1", true, 2));
 	assert_eq!(running_signs(&app, "m-1"), (true, true, true));
-	changed(&mut app, &running_change("m-1", false));
+	changed(&mut app, &running_change("m-1", false, 3));
 	assert_eq!(running_signs(&app, "m-1"), (false, false, false));
 }
 
@@ -904,4 +911,193 @@ fn a_failed_stop_raises_the_stop_agent_notice() {
 	);
 	assert!(state(&app).notices.iter().all(|notice| notice.kind == NoticeKind::Error));
 	assert!(state(&app).notices[0].description.is_some());
+}
+
+fn at_seq(mission: Mission, state_seq: i64) -> Mission {
+	Mission { state_seq, ..mission }
+}
+
+fn change_at(state: model::MissionState, state_seq: i64) -> model::MissionChanged {
+	model::MissionChanged { state_seq, ..change_of("m-1", state) }
+}
+
+fn held_states(
+	app: &App,
+) -> (Option<MissionState>, Option<MissionState>, Option<model::MissionState>) {
+	let opened = app.mission.as_ref().and_then(super::Opened::mission);
+	(
+		listed_state(app, "m-1"),
+		opened.map(|mission| mission.state),
+		card_of(app, "m-1").map(|card| card.state),
+	)
+}
+
+fn reread_asked(app: &mut App) {
+	changed(app, &change_of("m-elsewhere", model::MissionState::Done));
+}
+
+fn opened_at_seq(state_seq: i64) -> App {
+	let mut app = opened_with_a_card("m-1");
+	changed(&mut app, &change_at(model::MissionState::WaitingHuman, state_seq));
+	let reread = at_seq(mission("m-1", MissionState::WaitingHuman, 1), state_seq);
+	answer_feed(&mut app, Ok(vec![reread]));
+	app.surfaces.s08_missions.queued.clear();
+	app
+}
+
+const WAITING_ON_YOU: (Option<MissionState>, Option<MissionState>, Option<model::MissionState>) = (
+	Some(MissionState::WaitingHuman),
+	Some(MissionState::WaitingHuman),
+	Some(model::MissionState::WaitingHuman),
+);
+
+#[test]
+fn a_change_older_than_the_held_one_leaves_the_row_the_card_and_the_detail_unchanged() {
+	let mut app = opened_at_seq(5);
+	changed(&mut app, &change_at(model::MissionState::Done, 4));
+	assert_eq!(held_states(&app), WAITING_ON_YOU);
+}
+
+#[test]
+fn a_change_as_old_as_the_held_one_leaves_the_row_the_card_and_the_detail_unchanged() {
+	let mut app = opened_at_seq(5);
+	changed(&mut app, &change_at(model::MissionState::Done, 5));
+	assert_eq!(held_states(&app), WAITING_ON_YOU);
+}
+
+#[test]
+fn a_stale_change_still_rereads_the_feed_and_the_opened_detail() {
+	let mut app = opened_at_seq(5);
+	changed(&mut app, &change_at(model::MissionState::Done, 4));
+	assert_eq!(feed_calls(&app), 1);
+	assert_eq!(last_call(&app), Some(&Call::Detail("m-1".to_owned())));
+}
+
+#[test]
+fn a_change_newer_than_the_held_one_applies_everywhere_and_is_held() {
+	let mut app = opened_at_seq(5);
+	changed(&mut app, &change_at(model::MissionState::Done, 6));
+	let done =
+		(Some(MissionState::Done), Some(MissionState::Done), Some(model::MissionState::Done));
+	assert_eq!(held_states(&app), done);
+	changed(&mut app, &change_at(model::MissionState::Working, 6));
+	assert_eq!(held_states(&app), done);
+}
+
+#[test]
+fn a_change_of_a_mission_with_no_held_seq_applies_and_is_held() {
+	let mut app = ready_app();
+	open(&mut app, &super::Opening::of(&mission("m-1", MissionState::Working, 1)));
+	let card: model::Mission = serde_json::from_value(json!({
+		"id": "m-1", "originConversationId": "room", "botId": "atlas",
+		"threadConversationId": "thread-m-1", "objective": "Ship it", "ticket": {},
+		"tools": [], "state": "working", "isAgentRunning": false, "openedAt": 1,
+		"status": null, "lastActivity": null, "commitsAhead": null, "pullRequestUrl": null,
+	}))
+	.expect("a card fixture");
+	app.thread.as_mut().expect("the mission thread is open").missions.push(card);
+	changed(&mut app, &change_at(model::MissionState::WaitingHuman, 9));
+	assert_eq!(
+		card_of(&app, "m-1").map(|card| card.state),
+		Some(model::MissionState::WaitingHuman)
+	);
+	changed(&mut app, &change_at(model::MissionState::Done, 9));
+	assert_eq!(
+		card_of(&app, "m-1").map(|card| card.state),
+		Some(model::MissionState::WaitingHuman)
+	);
+	read_detail(&mut app, at_seq(mission("m-1", MissionState::Working, 1), 8));
+	let opened = app.mission.as_ref().and_then(super::Opened::mission);
+	assert_eq!(
+		opened.map(|mission| mission.state_seq),
+		Some(8),
+		"no held state to keep, the read shows"
+	);
+}
+
+#[test]
+fn a_feed_reread_older_than_the_held_seq_keeps_that_row_and_applies_the_rest() {
+	let mut app = opened_at_seq(5);
+	reread_asked(&mut app);
+	answer_feed(
+		&mut app,
+		Ok(vec![
+			at_seq(mission("m-1", MissionState::Working, 1), 4),
+			mission("m-new", MissionState::Working, 2),
+		]),
+	);
+	assert_eq!(listed_state(&app, "m-1"), Some(MissionState::WaitingHuman));
+	assert_eq!(listed_state(&app, "m-new"), Some(MissionState::Working));
+}
+
+#[test]
+fn a_detail_read_older_than_the_held_seq_keeps_the_mission_and_shows_its_events() {
+	let mut app = opened_at_seq(5);
+	let event = MissionEvent {
+		id: "e-1".to_owned(),
+		mission_id: "m-1".to_owned(),
+		kind: MissionEventKind::Note,
+		source: "atlas".to_owned(),
+		payload: json!({ "line": "Read the ticket" }),
+		created_at: 10,
+	};
+	let stale = at_seq(mission("m-1", MissionState::Working, 1), 4);
+	let detail = MissionDetail { mission: stale, events: vec![event] };
+	landed(&mut app, Answer::Detail { mission_id: "m-1".to_owned(), detail: Ok(detail) });
+	assert_eq!(held_states(&app), WAITING_ON_YOU);
+	let texts: Vec<Option<String>> =
+		thread_events(&app).into_iter().map(|event| event.text).collect();
+	assert_eq!(texts, vec![Some("Read the ticket".to_owned())]);
+}
+
+#[test]
+fn a_write_result_older_than_the_held_seq_keeps_the_held_mission() {
+	let mut app = opened_at_seq(5);
+	let stale = at_seq(closed("m-1", MissionState::Closed, 5), 4);
+	landed(
+		&mut app,
+		Answer::Written {
+			command: Command::Close,
+			mission_id: "m-1".to_owned(),
+			outcome: Ok(stale),
+		},
+	);
+	assert_eq!(held_states(&app), WAITING_ON_YOU);
+}
+
+#[test]
+fn a_feed_reread_newer_than_the_held_seq_applies_and_is_held() {
+	let mut app = opened_at_seq(5);
+	reread_asked(&mut app);
+	answer_feed(&mut app, Ok(vec![at_seq(mission("m-1", MissionState::Done, 1), 6)]));
+	assert_eq!(listed_state(&app, "m-1"), Some(MissionState::Done));
+	changed(&mut app, &change_at(model::MissionState::Working, 6));
+	assert_eq!(listed_state(&app, "m-1"), Some(MissionState::Done));
+}
+
+#[test]
+fn a_detail_read_newer_than_the_held_seq_applies_and_is_held() {
+	let mut app = opened_at_seq(5);
+	read_detail(&mut app, at_seq(mission("m-1", MissionState::Done, 1), 6));
+	assert_eq!(held_states(&app).1, Some(MissionState::Done));
+	changed(&mut app, &change_at(model::MissionState::Working, 6));
+	assert_eq!(held_states(&app).1, Some(MissionState::Done));
+}
+
+#[test]
+fn a_write_result_newer_than_the_held_seq_applies_and_is_held() {
+	let mut app = opened_at_seq(5);
+	let fresh = at_seq(closed("m-1", MissionState::Closed, 5), 6);
+	landed(
+		&mut app,
+		Answer::Written {
+			command: Command::Close,
+			mission_id: "m-1".to_owned(),
+			outcome: Ok(fresh),
+		},
+	);
+	assert_eq!(listed_state(&app, "m-1"), Some(MissionState::Closed));
+	reread_asked(&mut app);
+	answer_feed(&mut app, Ok(vec![at_seq(mission("m-1", MissionState::Working, 1), 5)]));
+	assert_eq!(listed_state(&app, "m-1"), Some(MissionState::Closed));
 }

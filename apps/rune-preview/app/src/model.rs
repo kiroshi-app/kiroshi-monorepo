@@ -281,6 +281,7 @@ pub struct MissionDetail {
 pub struct MissionChanged {
 	pub mission_id: String,
 	pub state: MissionState,
+	pub state_seq: i64,
 	pub is_agent_running: bool,
 	pub status: Option<MissionStatus>,
 }
