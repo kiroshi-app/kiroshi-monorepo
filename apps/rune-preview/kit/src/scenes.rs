@@ -1,10 +1,22 @@
+use std::cell::RefCell;
+use std::collections::HashMap;
+
 use rune::image::{Image, ImageCache};
 use rune::{AppSpec, Cx, El, TextEdit, Waker, row};
 
 use crate::foundations::{self, PICTURE_SCALE, PICTURE_SIDE, UPLOADED_AVATAR_IMAGE};
 use crate::math::Typesetter;
+use crate::surfaces::s10_agent_settings::Field;
+use crate::surfaces::s10_agent_settings::agent::{Effort, Mode, OutputStyle};
+use crate::surfaces::s10_agent_settings::shell::Entry;
+use crate::surfaces::s10_agent_settings::skills::{FileFailure, Section};
 use crate::tokens::{self, SPACING, Tokens};
+use agent_settings::{
+	ChangeCase, DIALOG, EditorCase, FILES, FilesCase, HistoryCase, Look, PAGE, PANEL, RUNTIME,
+	RuntimeCase, SCREEN as SETTINGS_SCREEN, SkillsCase,
+};
 
+mod agent_settings;
 mod boards;
 mod feedback;
 mod forms;
@@ -2353,6 +2365,424 @@ pub static SCENES: &[Scene] = &[
 	scene("navigation-missionspanel--idle", missions::PANEL, missions::panel_idle),
 	scene("feedback-missiondetailskeleton--light", missions::FULL, missions::detail_skeleton),
 	scene("feedback-missionsfeedskeleton--light", missions::FULL, missions::feed_skeleton),
+	scene("settings-bot-botgeneralfields--default", STORY, agent_settings::general_fields),
+	scene("settings-bot-botidentityfields--chooses-the-same-file-twice", PANEL, |t, s| {
+		agent_settings::identity_fields(t, s, Look::Pictured)
+	}),
+	scene("settings-bot-botidentityfields--default", PANEL, |t, s| {
+		agent_settings::identity_fields(t, s, Look::Default)
+	}),
+	scene("settings-bot-botidentityfields--dropped-and-pasted", PANEL, |t, s| {
+		agent_settings::identity_fields(t, s, Look::Pictured)
+	}),
+	scene("settings-bot-botidentityfields--own-hue", PANEL, |t, s| {
+		agent_settings::identity_fields(t, s, Look::OwnHue)
+	}),
+	scene("settings-bot-botidentityfields--picks-a-blot", PANEL, |t, s| {
+		agent_settings::identity_fields(t, s, Look::Red)
+	}),
+	scene("settings-bot-botidentityfields--removes-the-picture", PANEL, |t, s| {
+		agent_settings::identity_fields(t, s, Look::Default)
+	}),
+	scene("settings-bot-botidentityfields--takes-the-blot-off", PANEL, |t, s| {
+		agent_settings::identity_fields(t, s, Look::NoColour)
+	}),
+	scene("settings-bot-botidentityfields--with-picture", PANEL, |t, s| {
+		agent_settings::identity_fields(t, s, Look::Pictured)
+	}),
+	scene("settings-bot-botidentityfields--working", PANEL, |t, s| {
+		agent_settings::identity_fields(t, s, Look::Working)
+	}),
+	scene(
+		"settings-bot-botinstructionsfields--default",
+		PANEL,
+		agent_settings::instructions_fields,
+	),
+	scene("settings-bot-botsettingsdialog--appearance", DIALOG, |t, s| {
+		agent_settings::dialog_entry(t, s, Entry::Appearance)
+	}),
+	scene("settings-bot-botsettingsdialog--closing", DIALOG, agent_settings::dialog_closed),
+	scene(
+		"settings-bot-botsettingsdialog--closing-over-an-unsaved-skill",
+		DIALOG,
+		agent_settings::dialog_leaving_skill,
+	),
+	scene("settings-bot-botsettingsdialog--danger-zone", DIALOG, |t, s| {
+		agent_settings::dialog_entry(t, s, Entry::Danger)
+	}),
+	scene("settings-bot-botsettingsdialog--default", DIALOG, |t, s| {
+		agent_settings::dialog_entry(t, s, Entry::General)
+	}),
+	scene("settings-bot-botsettingsdialog--empty", DIALOG, agent_settings::dialog_empty),
+	scene("settings-bot-botsettingsdialog--free-hue", DIALOG, agent_settings::dialog_free_hue),
+	scene("settings-bot-botsettingsdialog--history", DIALOG, |t, s| {
+		agent_settings::dialog_entry(t, s, Entry::History)
+	}),
+	scene(
+		"settings-bot-botsettingsdialog--history-change",
+		DIALOG,
+		agent_settings::dialog_history_change,
+	),
+	scene("settings-bot-botsettingsdialog--instructions", DIALOG, |t, s| {
+		agent_settings::dialog_entry(t, s, Entry::Instructions)
+	}),
+	scene("settings-bot-botsettingsdialog--opened-on-danger", DIALOG, |t, s| {
+		agent_settings::dialog_entry(t, s, Entry::Danger)
+	}),
+	scene(
+		"settings-bot-botsettingsdialog--pushed-pages",
+		DIALOG,
+		agent_settings::dialog_pushed_pages,
+	),
+	focused("settings-bot-botsettingsdialog--rail", DIALOG, 2, |t, s| {
+		agent_settings::dialog_entry(t, s, Entry::General)
+	}),
+	scene("settings-bot-botsettingsdialog--runtime", DIALOG, |t, s| {
+		agent_settings::dialog_entry(t, s, Entry::Runtime)
+	}),
+	scene("settings-bot-botsettingsdialog--scrolls-one-tab", DIALOG, |t, s| {
+		agent_settings::dialog_entry(t, s, Entry::Approvals)
+	}),
+	scene(
+		"settings-bot-botsettingsdialog--with-a-long-skill",
+		DIALOG,
+		agent_settings::dialog_long_skill,
+	),
+	scene(
+		"settings-bot-botsettingsdialog--with-memory",
+		DIALOG,
+		agent_settings::dialog_with_memory,
+	),
+	scene(
+		"settings-bot-botsettingsdialog--with-server-open",
+		DIALOG,
+		agent_settings::dialog_server_open,
+	),
+	scene(
+		"settings-bot-botsettingsdialog--with-skill-open",
+		DIALOG,
+		agent_settings::dialog_skill_open,
+	),
+	scene(
+		"settings-bot-botsettingsdialog--without-history",
+		DIALOG,
+		agent_settings::dialog_without_history,
+	),
+	scene("settings-bot-botsettingsdialog--working", DIALOG, agent_settings::dialog_working),
+	scene("settings-bot-companionsettingsscreen--appearance", SETTINGS_SCREEN, |t, s| {
+		agent_settings::screen_entry(t, s, Entry::Appearance)
+	}),
+	scene(
+		"settings-bot-companionsettingsscreen--appearance-at-free-hue",
+		SETTINGS_SCREEN,
+		agent_settings::screen_free_hue,
+	),
+	scene("settings-bot-companionsettingsscreen--applications", SETTINGS_SCREEN, |t, s| {
+		agent_settings::screen_entry(t, s, Entry::Applications)
+	}),
+	scene("settings-bot-companionsettingsscreen--approvals", SETTINGS_SCREEN, |t, s| {
+		agent_settings::screen_entry(t, s, Entry::Approvals)
+	}),
+	scene("settings-bot-companionsettingsscreen--back-to-companions", SETTINGS_SCREEN, |t, s| {
+		agent_settings::screen_entry(t, s, Entry::General)
+	}),
+	scene(
+		"settings-bot-companionsettingsscreen--back-to-conversations",
+		SETTINGS_SCREEN,
+		agent_settings::screen_back_to_conversations,
+	),
+	scene("settings-bot-companionsettingsscreen--companion-general", SETTINGS_SCREEN, |t, s| {
+		agent_settings::screen_entry(t, s, Entry::General)
+	}),
+	scene("settings-bot-companionsettingsscreen--danger-zone", SETTINGS_SCREEN, |t, s| {
+		agent_settings::screen_entry(t, s, Entry::Danger)
+	}),
+	scene("settings-bot-companionsettingsscreen--danger-zone-light", SETTINGS_SCREEN, |t, s| {
+		agent_settings::screen_entry(t, s, Entry::Danger)
+	}),
+	scene("settings-bot-companionsettingsscreen--default-width", SETTINGS_SCREEN, |t, s| {
+		agent_settings::screen_entry(t, s, Entry::General)
+	}),
+	scene(
+		"settings-bot-companionsettingsscreen--delete-failed",
+		SETTINGS_SCREEN,
+		agent_settings::screen_delete_failed,
+	),
+	scene("settings-bot-companionsettingsscreen--general", SETTINGS_SCREEN, |t, s| {
+		agent_settings::screen_entry(t, s, Entry::General)
+	}),
+	scene("settings-bot-companionsettingsscreen--history", SETTINGS_SCREEN, |t, s| {
+		agent_settings::screen_entry(t, s, Entry::History)
+	}),
+	scene("settings-bot-companionsettingsscreen--instructions", SETTINGS_SCREEN, |t, s| {
+		agent_settings::screen_entry(t, s, Entry::Instructions)
+	}),
+	focused("settings-bot-companionsettingsscreen--left-column", SETTINGS_SCREEN, 1, |t, s| {
+		agent_settings::screen_entry(t, s, Entry::General)
+	}),
+	focused(
+		"settings-bot-companionsettingsscreen--left-column-dark",
+		SETTINGS_SCREEN,
+		1,
+		|t, s| agent_settings::screen_entry(t, s, Entry::General),
+	),
+	scene(
+		"settings-bot-companionsettingsscreen--maximum-width",
+		SETTINGS_SCREEN,
+		agent_settings::screen_maximum_width,
+	),
+	scene(
+		"settings-bot-companionsettingsscreen--minimum-width",
+		SETTINGS_SCREEN,
+		agent_settings::screen_minimum_width,
+	),
+	scene("settings-bot-companionsettingsscreen--runtime", SETTINGS_SCREEN, |t, s| {
+		agent_settings::screen_entry(t, s, Entry::Runtime)
+	}),
+	scene("settings-bot-companionsettingsscreen--secrets", SETTINGS_SCREEN, |t, s| {
+		agent_settings::screen_entry(t, s, Entry::Secrets)
+	}),
+	scene("settings-bot-companionsettingsscreen--skills", SETTINGS_SCREEN, |t, s| {
+		agent_settings::screen_entry(t, s, Entry::Skills)
+	}),
+	scene("settings-bot-dangerzone--cancelled", STORY, agent_settings::danger_zone),
+	scene("settings-bot-dangerzone--confirming", OVERLAY, agent_settings::danger_zone_confirming),
+	scene("settings-bot-dangerzone--default", STORY, agent_settings::danger_zone),
+	scene("settings-bot-dangerzone--deleted", STORY, agent_settings::danger_zone),
+	scene("settings-bot-dangerzone--inert", STORY, agent_settings::danger_zone_inert),
+	scene("settings-bot-dangerzone--playground", STORY, agent_settings::danger_zone),
+	focused("settings-bot-dangerzone--focus-visible", STORY, 1, agent_settings::danger_zone),
+	scene("settings-bot-memorypanel--clearing", PANEL, agent_settings::memory_clearing),
+	scene("settings-bot-memorypanel--default", PANEL, agent_settings::memory_panel),
+	scene("settings-bot-memorypanel--empty", PANEL, agent_settings::memory_empty),
+	scene("settings-bot-permissionspanel--accept-edits", PANEL, |t, s| {
+		agent_settings::permissions_scene(t, s, Some(Mode::AcceptEdits), false, false)
+	}),
+	scene("settings-bot-permissionspanel--ask-every-time", PANEL, |t, s| {
+		agent_settings::permissions_scene(t, s, Some(Mode::Default), false, false)
+	}),
+	scene("settings-bot-permissionspanel--decide-alone", PANEL, |t, s| {
+		agent_settings::permissions_scene(t, s, Some(Mode::Auto), false, false)
+	}),
+	scene("settings-bot-permissionspanel--never-ask", PANEL, |t, s| {
+		agent_settings::permissions_scene(t, s, Some(Mode::DontAsk), false, false)
+	}),
+	focused("settings-bot-permissionspanel--picking-the-mode", PANEL, 1, |t, s| {
+		agent_settings::permissions_scene(t, s, None, true, false)
+	}),
+	scene("settings-bot-permissionspanel--plan-first", PANEL, |t, s| {
+		agent_settings::permissions_scene(t, s, Some(Mode::Plan), false, false)
+	}),
+	scene("settings-bot-permissionspanel--playground", PANEL, |t, s| {
+		agent_settings::permissions_scene(t, s, None, false, false)
+	}),
+	scene("settings-bot-permissionspanel--refusing-a-malformed-rule", PANEL, |t, s| {
+		agent_settings::permissions_scene(t, s, None, false, true)
+	}),
+	scene("settings-bot-permissionspanel--untouched", PANEL, |t, s| {
+		agent_settings::permissions_scene(t, s, None, false, false)
+	}),
+	scene("settings-bot-runtimefields--concise", PANEL, |t, _| {
+		agent_settings::runtime_scene(t, &RUNTIME)
+	}),
+	scene("settings-bot-runtimefields--effort-default", PANEL, |t, _| {
+		agent_settings::runtime_scene(t, &RUNTIME)
+	}),
+	scene("settings-bot-runtimefields--effort-picked", PANEL, |t, _| {
+		agent_settings::runtime_scene(t, &RuntimeCase { effort: Some(Effort::High), ..RUNTIME })
+	}),
+	scene("settings-bot-runtimefields--effort-unsupported", PANEL, |t, _| {
+		agent_settings::runtime_scene(t, &RuntimeCase { model: "nest-haiku-4-5", ..RUNTIME })
+	}),
+	scene("settings-bot-runtimefields--empty", PANEL, |t, _| {
+		agent_settings::runtime_scene(t, &RuntimeCase { model: "", ..RUNTIME })
+	}),
+	scene("settings-bot-runtimefields--filled", PANEL, |t, _| {
+		agent_settings::runtime_scene(t, &RuntimeCase { effort: Some(Effort::Medium), ..RUNTIME })
+	}),
+	scene("settings-bot-runtimefields--model-switch-keeps-effort", PANEL, |t, _| {
+		agent_settings::runtime_scene(t, &RuntimeCase { effort: Some(Effort::High), ..RUNTIME })
+	}),
+	scene("settings-bot-runtimefields--model-switch-resets-effort", PANEL, |t, _| {
+		agent_settings::runtime_scene(t, &RUNTIME)
+	}),
+	scene("settings-bot-runtimefields--no-models", PANEL, |t, _| {
+		agent_settings::runtime_scene(t, &RuntimeCase { models: &[], model: "", ..RUNTIME })
+	}),
+	scene("settings-bot-runtimefields--picking-a-model", PANEL, |t, _| {
+		agent_settings::runtime_scene(t, &RuntimeCase { picking: true, ..RUNTIME })
+	}),
+	scene("settings-bot-runtimefields--playground", PANEL, |t, _| {
+		agent_settings::runtime_scene(t, &RUNTIME)
+	}),
+	scene("settings-bot-runtimefields--standard-answers", PANEL, |t, _| {
+		agent_settings::runtime_scene(t, &RuntimeCase { style: OutputStyle::Standard, ..RUNTIME })
+	}),
+	scene("settings-plugins-commitdiff--added-file", PANEL, |t, _| {
+		agent_settings::commit_diff(t, agent_settings::PATCHES[1])
+	}),
+	scene("settings-plugins-commitdiff--default", PANEL, |t, _| {
+		agent_settings::commit_diff(t, agent_settings::PATCHES[0])
+	}),
+	scene("settings-plugins-commitdiff--long-content", PANEL, |t, _| {
+		agent_settings::commit_diff(t, agent_settings::PATCHES[2])
+	}),
+	scene("settings-plugins-commitdiff--unreadable", PANEL, |t, _| {
+		agent_settings::commit_diff(t, agent_settings::PATCHES[3])
+	}),
+	scene("settings-plugins-historychangepage--default", PAGE, |t, _| {
+		agent_settings::change_page(t, ChangeCase::Default)
+	}),
+	scene("settings-plugins-historychangepage--empty", PAGE, |t, _| {
+		agent_settings::change_page(t, ChangeCase::Empty)
+	}),
+	scene("settings-plugins-historychangepage--error", PAGE, |t, _| {
+		agent_settings::change_page(t, ChangeCase::Error)
+	}),
+	scene("settings-plugins-historychangepage--loading", PAGE, |t, _| {
+		agent_settings::change_page(t, ChangeCase::Loading)
+	}),
+	scene("settings-plugins-historychangepage--long-content", PAGE, |t, _| {
+		agent_settings::change_page(t, ChangeCase::Many)
+	}),
+	scene("settings-plugins-historychangepage--retouched", PAGE, |t, _| {
+		agent_settings::change_page(t, ChangeCase::Retouched)
+	}),
+	scene("settings-plugins-historypanel--default", PANEL, |t, s| {
+		agent_settings::history_panel(t, s, HistoryCase::Default)
+	}),
+	scene("settings-plugins-historypanel--empty", PANEL, |t, s| {
+		agent_settings::history_panel(t, s, HistoryCase::Empty)
+	}),
+	Scene {
+		pointer: Pointer::EntersAtSnap("history-change-change-5"),
+		..scene("settings-plugins-historypanel--hovered-row", PANEL, |t, s| {
+			agent_settings::history_panel(t, s, HistoryCase::Default)
+		})
+	},
+	scene("settings-plugins-historypanel--loading", PANEL, |t, s| {
+		agent_settings::history_panel(t, s, HistoryCase::Loading)
+	}),
+	scene("settings-plugins-historypanel--long-content", PANEL, |t, s| {
+		agent_settings::history_panel(t, s, HistoryCase::Long)
+	}),
+	scene("settings-plugins-historypanel--long-content-with-signals", PANEL, |t, s| {
+		agent_settings::history_panel(t, s, HistoryCase::LongSignalled)
+	}),
+	scene("settings-plugins-historypanel--retouched", PANEL, |t, s| {
+		agent_settings::history_panel(t, s, HistoryCase::Default)
+	}),
+	focused("settings-plugins-historypanel--search-returns-focus", PANEL, 1, |t, s| {
+		agent_settings::history_panel(t, s, HistoryCase::Default)
+	}),
+	scene("settings-plugins-historypanel--search-without-match", PANEL, |t, s| {
+		agent_settings::history_panel(t, s, HistoryCase::NoMatch)
+	}),
+	focused("settings-plugins-historypanel--undo-by-keyboard", PANEL, 2, |t, s| {
+		agent_settings::history_panel(t, s, HistoryCase::Openable)
+	}),
+	scene("settings-plugins-historypanel--undoing", PANEL, |t, s| {
+		agent_settings::history_panel(t, s, HistoryCase::Undoing)
+	}),
+	scene("settings-plugins-historypanel--undone", PANEL, |t, s| {
+		agent_settings::history_panel(t, s, HistoryCase::Default)
+	}),
+	scene("settings-plugins-historypanel--unreadable", PANEL, |t, s| {
+		agent_settings::history_panel(t, s, HistoryCase::Unreadable)
+	}),
+	scene("settings-plugins-historypanel--with-open-callback", PANEL, |t, s| {
+		agent_settings::history_panel(t, s, HistoryCase::Openable)
+	}),
+	scene("settings-plugins-skilleditor--advanced", PAGE, |t, s| {
+		agent_settings::skill_editor(t, s, EditorCase::Section(Section::Advanced))
+	}),
+	scene("settings-plugins-skilleditor--default", PAGE, |t, s| {
+		agent_settings::skill_editor(t, s, EditorCase::Section(Section::Instructions))
+	}),
+	scene("settings-plugins-skilleditor--empty", PAGE, |t, s| {
+		agent_settings::skill_editor(t, s, EditorCase::Empty)
+	}),
+	scene("settings-plugins-skilleditor--execution", PAGE, |t, s| {
+		agent_settings::skill_editor(t, s, EditorCase::SharedExecution)
+	}),
+	scene("settings-plugins-skilleditor--file-opened", PAGE, |t, s| {
+		agent_settings::skill_editor(t, s, EditorCase::FileOpened)
+	}),
+	scene("settings-plugins-skilleditor--files", PAGE, |t, s| {
+		agent_settings::skill_editor(t, s, EditorCase::Files)
+	}),
+	scene("settings-plugins-skilleditor--forked-execution", PAGE, |t, s| {
+		agent_settings::skill_editor(t, s, EditorCase::Section(Section::Execution))
+	}),
+	scene("settings-plugins-skilleditor--long-content", PAGE, |t, s| {
+		agent_settings::skill_editor(t, s, EditorCase::Long)
+	}),
+	scene("settings-plugins-skilleditor--over-budget", PAGE, |t, s| {
+		agent_settings::skill_editor(t, s, EditorCase::OverBudget)
+	}),
+	scene("settings-plugins-skilleditor--system", PAGE, |t, s| {
+		agent_settings::skill_editor(t, s, EditorCase::System)
+	}),
+	scene("settings-plugins-skilleditor--tools", PAGE, |t, s| {
+		agent_settings::skill_editor(t, s, EditorCase::Section(Section::Tools))
+	}),
+	scene("settings-plugins-skilleditor--triggering", PAGE, |t, s| {
+		agent_settings::skill_editor(t, s, EditorCase::Section(Section::Triggering))
+	}),
+	scene("settings-plugins-skilleditor--with-confirmation", PAGE, |t, s| {
+		agent_settings::skill_editor(t, s, EditorCase::Confirming)
+	}),
+	scene("settings-plugins-skilleditor--with-leaving", PAGE, |t, s| {
+		agent_settings::skill_editor(t, s, EditorCase::Leaving)
+	}),
+	scene("settings-plugins-skilleditor--zero-value", PAGE, |t, s| {
+		agent_settings::skill_editor(t, s, EditorCase::ZeroValue)
+	}),
+	scene("settings-plugins-skillfilespanel--default", FILES, |t, s| {
+		agent_settings::files_panel(t, s, FilesCase::Default)
+	}),
+	scene("settings-plugins-skillfilespanel--empty", FILES, |t, s| {
+		agent_settings::files_panel(t, s, FilesCase::Empty)
+	}),
+	scene("settings-plugins-skillfilespanel--loading", FILES, |t, s| {
+		agent_settings::files_panel(t, s, FilesCase::LoadingFile)
+	}),
+	scene("settings-plugins-skillfilespanel--loading-paths", FILES, |t, s| {
+		agent_settings::files_panel(t, s, FilesCase::LoadingPaths)
+	}),
+	scene("settings-plugins-skillfilespanel--opened", FILES, |t, s| {
+		agent_settings::files_panel(t, s, FilesCase::Opened)
+	}),
+	scene("settings-plugins-skillfilespanel--refused-delete", FILES, |t, s| {
+		agent_settings::files_panel(t, s, FilesCase::Failed(FileFailure::Delete))
+	}),
+	scene("settings-plugins-skillfilespanel--refused-save", FILES, |t, s| {
+		agent_settings::files_panel(t, s, FilesCase::Failed(FileFailure::Write))
+	}),
+	scene("settings-plugins-skillfilespanel--unreadable-file", FILES, |t, s| {
+		agent_settings::files_panel(t, s, FilesCase::Failed(FileFailure::Read))
+	}),
+	scene("settings-plugins-skillfilespanel--with-confirmation", FILES, |t, s| {
+		agent_settings::files_panel(t, s, FilesCase::Confirming)
+	}),
+	scene("settings-plugins-skillspanel--default", PANEL, |t, _| {
+		agent_settings::skills_panel(t, SkillsCase::Default)
+	}),
+	scene("settings-plugins-skillspanel--empty", PANEL, |t, _| {
+		agent_settings::skills_panel(t, SkillsCase::Empty)
+	}),
+	focused("settings-plugins-skillspanel--focus-visible", PANEL, 2, |t, _| {
+		agent_settings::skills_panel(t, SkillsCase::Default)
+	}),
+	scene("settings-plugins-skillspanel--loading", PANEL, |t, _| {
+		agent_settings::skills_panel(t, SkillsCase::Loading)
+	}),
+	scene("settings-plugins-skillspanel--long-content", PANEL, |t, _| {
+		agent_settings::skills_panel(t, SkillsCase::Long)
+	}),
+	scene("settings-plugins-skillspanel--with-system-skill", PANEL, |t, _| {
+		agent_settings::skills_panel(t, SkillsCase::WithSystem)
+	}),
 ];
 
 pub static SURFACES: &[&[Scene]] = &[crate::surfaces::s01_chrome::SCENES];
@@ -2369,6 +2799,7 @@ pub struct SceneState {
 	pub library: library::LibraryScene,
 	pub board_pictures: Vec<Image>,
 	images: Option<ImageCache>,
+	fields: RefCell<HashMap<Field, TextEdit>>,
 }
 
 impl SceneState {
@@ -2381,6 +2812,7 @@ impl SceneState {
 			library: library::LibraryScene::new(scene),
 			board_pictures: Vec::new(),
 			images: None,
+			fields: RefCell::default(),
 		}
 	}
 }
