@@ -28,8 +28,8 @@ use crate::navigation::{Navigation, Route};
 use crate::notices::Notices;
 use crate::runs::Runs;
 use crate::source::Source;
-use crate::surfaces::Surfaces;
 use crate::surfaces::s04_boot::{self, Step};
+use crate::surfaces::{Surfaces, s01_chrome, s10_agent_settings};
 use crate::turn::{self, SendError};
 
 const PAGE_LIMIT: u32 = 200;
@@ -340,6 +340,7 @@ impl App {
 
 	pub fn setup(&mut self, waker: Waker) {
 		self.images.start(ImageCache::new(waker.clone()));
+		self.surfaces.s10_agent_settings.attach(waker.clone());
 		self.surfaces.s04_boot.attach(waker.clone());
 		let outbox = Outbox { sender: self.pending.clone(), waker };
 		let heard = outbox.clone();
@@ -348,6 +349,7 @@ impl App {
 				heard.deliver(Inbound::Banner(outcome))
 			})));
 		self.outbox = Some(outbox);
+		s01_chrome::restore(self);
 		if matches!(self.workspace, Workspace::Connecting) {
 			self.connect();
 		}
@@ -376,7 +378,7 @@ impl App {
 			self.received(inbound);
 			changed = true;
 		}
-		changed
+		s10_agent_settings::poll(self) || changed
 	}
 
 	pub fn tick(&mut self, seconds: f64) -> bool {
@@ -737,6 +739,7 @@ impl App {
 				let conversations = ready.conversations.clone();
 				self.workspace = Workspace::Ready(ready);
 				s04_boot::booted(self);
+				s01_chrome::reopen_kept_windows(self);
 				self.work(move |outbox| {
 					outbox.deliver(Inbound::Longest(longest::longest(&host, &conversations)))
 				});
@@ -842,6 +845,7 @@ impl App {
 				self.request_images();
 			}
 			HostEvent::MissionChanged(changed) => self.mission_changed(changed),
+			HostEvent::Companion(heard) => s10_agent_settings::heard(self, heard),
 			HostEvent::AccountChanged(account) => {
 				if let Some(ready) = self.ready_mut() {
 					ready.person = person_of(account);

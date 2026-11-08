@@ -38,6 +38,7 @@ mod space_picker;
 mod thread;
 
 pub const THEMES: [Theme; 2] = [Theme::Light, Theme::Dark];
+pub const DARK: [Theme; 1] = [Theme::Dark];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Theme {
@@ -68,16 +69,13 @@ pub struct Scene {
 	pub pointer: Pointer,
 	pub typed: &'static str,
 	pub keys: &'static str,
+	pub themes: &'static [Theme],
 	pub view: fn(&Tokens, &SceneState) -> El,
 }
 
 impl Scene {
 	pub fn baseline(&self, theme: Theme) -> String {
 		format!("{}-{}.png", self.id, theme.name())
-	}
-
-	pub fn themes(&self) -> &'static [Theme] {
-		if s11_applications::DARK_ONLY.contains(&self.id) { &[Theme::Dark] } else { &THEMES }
 	}
 }
 
@@ -114,7 +112,7 @@ const CATALOGUE: (f32, f32) = (832.0, 544.0);
 const STORY_VIEWPORT: (f32, f32) = (1180.0, 900.0);
 
 const fn scene(id: &'static str, size: (f32, f32), view: fn(&Tokens, &SceneState) -> El) -> Scene {
-	Scene { id, size, tabs: 0, pointer: Pointer::Away, typed: "", keys: "", view }
+	Scene { id, size, tabs: 0, pointer: Pointer::Away, typed: "", keys: "", themes: &THEMES, view }
 }
 
 const fn focused(
@@ -123,7 +121,7 @@ const fn focused(
 	tabs: usize,
 	view: fn(&Tokens, &SceneState) -> El,
 ) -> Scene {
-	Scene { id, size, tabs, pointer: Pointer::Away, typed: "", keys: "", view }
+	Scene { id, size, tabs, pointer: Pointer::Away, typed: "", keys: "", themes: &THEMES, view }
 }
 
 const fn typed(
@@ -132,7 +130,16 @@ const fn typed(
 	text: &'static str,
 	view: fn(&Tokens, &SceneState) -> El,
 ) -> Scene {
-	Scene { id, size: STORY, tabs, pointer: Pointer::Away, typed: text, keys: "", view }
+	Scene {
+		id,
+		size: STORY,
+		tabs,
+		pointer: Pointer::Away,
+		typed: text,
+		keys: "",
+		themes: &THEMES,
+		view,
+	}
 }
 
 const fn queried(
@@ -141,7 +148,16 @@ const fn queried(
 	text: &'static str,
 	view: fn(&Tokens, &SceneState) -> El,
 ) -> Scene {
-	Scene { id, size: PALETTE, tabs, pointer: Pointer::Away, typed: text, keys: "", view }
+	Scene {
+		id,
+		size: PALETTE,
+		tabs,
+		pointer: Pointer::Away,
+		typed: text,
+		keys: "",
+		themes: &THEMES,
+		view,
+	}
 }
 
 const fn keyed(
@@ -152,7 +168,7 @@ const fn keyed(
 	keys: &'static str,
 	view: fn(&Tokens, &SceneState) -> El,
 ) -> Scene {
-	Scene { id, size, tabs, pointer: Pointer::Away, typed, keys, view }
+	Scene { id, size, tabs, pointer: Pointer::Away, typed, keys, themes: &THEMES, view }
 }
 
 const fn hovered(
@@ -161,7 +177,16 @@ const fn hovered(
 	key: &'static str,
 	view: fn(&Tokens, &SceneState) -> El,
 ) -> Scene {
-	Scene { id, size, tabs: 0, pointer: Pointer::EntersAtSnap(key), typed: "", keys: "", view }
+	Scene {
+		id,
+		size,
+		tabs: 0,
+		pointer: Pointer::EntersAtSnap(key),
+		typed: "",
+		keys: "",
+		themes: &THEMES,
+		view,
+	}
 }
 
 const fn pointed(
@@ -169,7 +194,7 @@ const fn pointed(
 	pointer: Pointer,
 	view: fn(&Tokens, &SceneState) -> El,
 ) -> Scene {
-	Scene { id, size: STORY, tabs: 0, pointer, typed: "", keys: "", view }
+	Scene { id, size: STORY, tabs: 0, pointer, typed: "", keys: "", themes: &THEMES, view }
 }
 
 pub static SCENES: &[Scene] = &[
@@ -3260,6 +3285,7 @@ pub static SCENES: &[Scene] = &[
 		pointer: Pointer::Away,
 		typed: boards::EDITED_TEXT,
 		keys: "",
+		themes: &THEMES,
 		view: boards::canvas_edit,
 	},
 	Scene {
@@ -3269,6 +3295,7 @@ pub static SCENES: &[Scene] = &[
 		pointer: Pointer::Away,
 		typed: boards::EDITED_TEXT,
 		keys: "",
+		themes: &THEMES,
 		view: boards::canvas_edit,
 	},
 	scene("navigation-boardcanvas--empty", boards::CANVAS, boards::canvas_empty),
@@ -4419,11 +4446,14 @@ pub static SCENES: &[Scene] = &[
 		SETTINGS_PANEL,
 		s11_applications::applications_connected,
 	),
-	scene(
-		"settings-plugins-applicationspanel--connected-dark",
-		SETTINGS_PANEL,
-		s11_applications::applications_connected,
-	),
+	Scene {
+		themes: &DARK,
+		..scene(
+			"settings-plugins-applicationspanel--connected-dark",
+			SETTINGS_PANEL,
+			s11_applications::applications_connected,
+		)
+	},
 	scene(
 		"settings-plugins-applicationspanel--connecting",
 		SETTINGS_PANEL,
@@ -4470,12 +4500,15 @@ pub static SCENES: &[Scene] = &[
 		5,
 		s11_applications::applications_needs_authorization,
 	),
-	focused(
-		"settings-plugins-applicationspanel--needs-authorization-dark",
-		SETTINGS_PANEL,
-		5,
-		s11_applications::applications_needs_authorization,
-	),
+	Scene {
+		themes: &DARK,
+		..focused(
+			"settings-plugins-applicationspanel--needs-authorization-dark",
+			SETTINGS_PANEL,
+			5,
+			s11_applications::applications_needs_authorization,
+		)
+	},
 	scene(
 		"settings-plugins-applicationspanel--profile",
 		SETTINGS_PANEL,
@@ -4485,6 +4518,11 @@ pub static SCENES: &[Scene] = &[
 		"settings-plugins-applicationspanel--search-row",
 		SETTINGS_PANEL,
 		s11_applications::applications_agent,
+	),
+	scene(
+		"settings-plugins-applicationspanel--search-row-at-largest-text-size",
+		SETTINGS_PANEL,
+		s11_applications::applications_search_row_at_largest_text,
 	),
 	s11_applications::typed_in(
 		"settings-plugins-applicationspanel--search-text-is-given",
@@ -4568,6 +4606,16 @@ pub static SCENES: &[Scene] = &[
 		s11_applications::mark_without_mark,
 	),
 	scene(
+		"settings-plugins-applicationmark--with-hostile-mark",
+		STORY,
+		s11_applications::mark_without_mark,
+	),
+	scene(
+		"settings-plugins-applicationmark--with-mark-pinned-to-the-viewport",
+		STORY,
+		s11_applications::mark_with_drawn_mark,
+	),
+	scene(
 		"settings-plugins-applicationssearchfield--at-rest",
 		STORY,
 		s11_applications::search_field_story,
@@ -4577,6 +4625,12 @@ pub static SCENES: &[Scene] = &[
 		0,
 		"linear",
 		s11_applications::search_field_story,
+	),
+	typed(
+		"settings-plugins-applicationssearchfield--largest-text-size",
+		1,
+		"typography",
+		s11_applications::search_field_at_largest_text,
 	),
 	scene(
 		"settings-plugins-applicationssearchfield--themes-at-rest",
@@ -4618,6 +4672,7 @@ pub static SCENES: &[Scene] = &[
 		pointer: Pointer::EntersAtSnap("catalogue-card-linear"),
 		typed: "",
 		keys: "",
+		themes: &THEMES,
 		view: s11_applications::catalogue_at_rest,
 	},
 	scene(
@@ -4688,6 +4743,11 @@ pub static SCENES: &[Scene] = &[
 		s11_applications::catalogue_unreadable,
 	),
 	scene(
+		"settings-plugins-applicationscatalogue--every-category-is-named",
+		CATALOGUE,
+		s11_applications::catalogue_at_rest,
+	),
+	scene(
 		"settings-plugins-applicationinstallpage--asks-for-every-value",
 		CATALOGUE,
 		s11_applications::install_asks_for_every_value,
@@ -4745,6 +4805,11 @@ pub static SCENES: &[Scene] = &[
 		s11_applications::install_refused,
 	),
 	scene(
+		"settings-plugins-applicationinstallpage--refused-without-reason",
+		CATALOGUE,
+		s11_applications::install_refused_without_reason,
+	),
+	scene(
 		"settings-plugins-applicationinstallpage--runs-on-its-host",
 		CATALOGUE,
 		s11_applications::install_runs_on_its_host,
@@ -4758,6 +4823,18 @@ pub static SCENES: &[Scene] = &[
 		"settings-plugins-applicationinstallpage--themes-key-field-at-rest",
 		CATALOGUE,
 		s11_applications::install_needs_api_key,
+	),
+	focused(
+		"settings-plugins-applicationinstallpage--key-field-focus-visible",
+		CATALOGUE,
+		4,
+		s11_applications::install_needs_api_key,
+	),
+	focused(
+		"settings-plugins-applicationinstallpage--conceals-the-secret-field-alone",
+		CATALOGUE,
+		6,
+		s11_applications::install_conceals_the_secret_field_alone,
 	),
 ];
 
