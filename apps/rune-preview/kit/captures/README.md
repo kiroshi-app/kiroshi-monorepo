@@ -20,4 +20,4 @@ macOS draws through Metal, Linux through Mesa's lavapipe (Vulkan on the CPU). Th
 
 ## Storybook references
 
-The other PNGs here are Storybook captures (Chromium, 1180 px, 2x) of the stories a scene stands for. The harness doesn't read them.
+The other PNGs here are Storybook captures (Chromium, 1180 px, 2x) of the stories a scene stands for, `<story id>-<light|dark>.png`. A story that renders one theme whatever the global, a dark-only story for one, has a single capture, in that theme. The harness doesn't read them.
