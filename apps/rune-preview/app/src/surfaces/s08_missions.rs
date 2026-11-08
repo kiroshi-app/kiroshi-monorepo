@@ -19,6 +19,7 @@ use crate::conversations::now_ms;
 use crate::host::{self, HostError, Profile};
 use crate::model;
 use crate::source::Source;
+use crate::surfaces::s06_composer;
 
 use menu::{HeldMenu, copied_value, copy_word, refusal_of};
 use worker::{Answer, Call, Command, Worker};
@@ -522,9 +523,8 @@ fn known<'a>(app: &'a App, mission_id: &str) -> Option<&'a Mission> {
 fn act(app: &mut App, mission_id: &str, action: MenuAction) {
 	let Some(mission) = known(app, mission_id).cloned() else { return };
 	match action {
-		MenuAction::Open | MenuAction::MessageAgent | MenuAction::Answer => {
-			open(app, &Opening::of(&mission))
-		}
+		MenuAction::Open => open(app, &Opening::of(&mission)),
+		MenuAction::MessageAgent | MenuAction::Answer => open_at_composer(app, &mission),
 		MenuAction::OpenPullRequest => state(app).open_pull_request(mission.pull_request_url),
 		MenuAction::StopAgent => state(app).queue(Call::Stop {
 			conversation_id: mission.thread_conversation_id,
@@ -533,6 +533,12 @@ fn act(app: &mut App, mission_id: &str, action: MenuAction) {
 		MenuAction::Close => state(app).write(Command::Close, mission_id),
 		MenuAction::Reopen => state(app).write(Command::Reopen, mission_id),
 	}
+}
+
+fn open_at_composer(app: &mut App, mission: &Mission) {
+	open(app, &Opening::of(mission));
+	let is_blocked = mission.closed_at.is_some();
+	s06_composer::focus_prompt(app, &mission.thread_conversation_id, is_blocked);
 }
 
 fn copy(app: &mut App, mission_id: &str, kind: CopyKind) {

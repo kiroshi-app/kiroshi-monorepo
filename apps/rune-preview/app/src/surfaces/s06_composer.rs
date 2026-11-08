@@ -19,6 +19,7 @@ use rune::{
 
 use kiroshi_rune_kit::surfaces::s05_thread::COLUMN;
 use kiroshi_rune_kit::surfaces::s06_composer::ComposerIntent;
+use kiroshi_rune_kit::surfaces::s06_composer::prompt;
 
 use crate::app::App;
 use crate::conversations::now_ms;
@@ -106,7 +107,7 @@ impl State {
 		self.drafts.entry(conversation_id.to_owned()).or_default()
 	}
 
-	fn edit_of(&mut self, conversation_id: &str) -> &mut TextEdit {
+	pub(crate) fn edit_of(&mut self, conversation_id: &str) -> &mut TextEdit {
 		&mut self.draft_mut(conversation_id).edit
 	}
 
@@ -563,6 +564,10 @@ pub fn opened(app: &mut App) {
 	let Some(source) = app.ready().map(|ready| ready.source.clone()) else { return };
 	app.surfaces.s06_composer.use_source(source);
 	with_open(app, |state, open, _| state.opened(open));
+}
+
+pub fn focus_prompt(app: &mut App, conversation_id: &str, is_blocked: bool) {
+	prompt::focus_prompt(app.surfaces.s06_composer.edit_of(conversation_id), is_blocked);
 }
 
 pub fn intent(app: &mut App, intent: ComposerIntent) {
