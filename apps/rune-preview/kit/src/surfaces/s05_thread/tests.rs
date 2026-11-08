@@ -81,3 +81,51 @@ fn the_load_failure_is_an_alert_whose_retry_reports_a_new_load() {
 	press(&mut runtime, "button-Retry");
 	assert_eq!(runtime.state, [ThreadEvent::RetryLoad]);
 }
+
+fn opened_mission() -> MissionTurn {
+	MissionTurn {
+		id: "mission-parser".to_owned(),
+		bot: atlas(),
+		objective: "Rewrite the changelog parser".to_owned(),
+		ticket: MissionTicket::default(),
+		tools: Vec::new(),
+		state: MissionState::Working,
+		is_working: true,
+		timestamp: "1h".to_owned(),
+		now: None,
+		clock_ms: 0.0,
+		status: None,
+		commits_ahead: 0,
+		pull_request: None,
+		last_activity: None,
+	}
+}
+
+fn with_a_mission_row(_: &Heard, _: &mut Cx<Heard>) -> El {
+	let rows = vec![
+		Row::Turn(Turn::new("o1", Author::Agent(atlas()), "I opened a mission for it.")),
+		Row::Mission(opened_mission()),
+	];
+	let emit: Emit<Heard> = Rc::new(|heard: &mut Heard, event| heard.push(event));
+	thread(&Tokens::new(false), &Typesetter::default(), &shown(Transcript::Rows(rows), None), &emit)
+}
+
+#[test]
+fn a_mission_row_is_the_mission_turn_whose_card_opens_the_mission() {
+	let mut runtime = running(with_a_mission_row);
+	let articles: Vec<String> = runtime
+		.elements()
+		.into_iter()
+		.filter(|element| element.role == "article")
+		.filter_map(|element| element.label)
+		.collect();
+	assert!(articles.iter().any(|label| label == "mission opened"), "{articles:?}");
+	press(&mut runtime, "mission-card-mission-parser");
+	assert_eq!(
+		runtime.state,
+		[ThreadEvent::Mission(MissionsEvent::Open {
+			mission: "mission-parser".to_owned(),
+			conversation: None,
+		})]
+	);
+}
