@@ -5,6 +5,8 @@ mod prompt;
 mod tests;
 mod view;
 
+use std::collections::HashSet;
+
 use kiroshi_core::agent::contract::{
 	AgentEvent, ConnectionState, PermissionDecision, PermissionRequest, QuestionRequest,
 	RuntimeScope, ScopedEvent,
@@ -45,6 +47,16 @@ pub enum Heard {
 	Question { scope: RuntimeScope, turn_id: Option<String>, request: QuestionRequest },
 	Resolved { id: String, decision: PermissionDecision },
 	Closed { scope: RuntimeScope },
+}
+
+impl Heard {
+	fn prompt_id(&self) -> Option<&str> {
+		match self {
+			Heard::Permission { request, .. } => Some(&request.id),
+			Heard::Question { request, .. } => Some(&request.id),
+			Heard::Resolved { .. } | Heard::Closed { .. } => None,
+		}
+	}
 }
 
 fn heard_from(scoped: ScopedEvent) -> Option<Heard> {
@@ -103,6 +115,8 @@ pub struct State {
 	questions: Vec<Asked>,
 	answered: Vec<Answered>,
 	read_failure: Option<ReadFailure>,
+	reads_in_flight: usize,
+	resolved_while_reading: HashSet<String>,
 	spare: TextEdit,
 	queued: Vec<Call>,
 	source: Option<Source>,
@@ -123,6 +137,7 @@ impl State {
 	fn opened(&mut self, conversation_id: &str) {
 		self.settle(conversation_id);
 		self.read_failure = None;
+		self.reads_in_flight += 1;
 		self.queue(Call::Pending { conversation_id: conversation_id.to_owned() });
 	}
 
@@ -174,6 +189,9 @@ impl State {
 	}
 
 	fn resolved(&mut self, id: &str, decision: PermissionDecision) {
+		if self.reads_in_flight > 0 {
+			self.resolved_while_reading.insert(id.to_owned());
+		}
 		if let Some(approval) = self.approval_mut(id) {
 			approval.resolved = Some(decision);
 			if !approval.call.is_sending() {
@@ -316,13 +334,28 @@ impl State {
 	fn pending_read(&mut self, conversation_id: String, read: Result<Vec<ScopedEvent>, HostError>) {
 		match read {
 			Ok(pending) => {
-				for heard in pending.into_iter().filter_map(heard_from) {
-					if let Heard::Question { scope, turn_id, request } = heard {
-						self.asked_question(scope, turn_id, request);
-					}
+				let still_asked: Vec<Heard> = pending
+					.into_iter()
+					.filter_map(heard_from)
+					.filter(|heard| heard.prompt_id().is_some_and(|id| !self.was_resolved(id)))
+					.collect();
+				for heard in still_asked {
+					self.heard(heard);
 				}
 			}
 			Err(failure) => self.read_failure = Some(ReadFailure { conversation_id, failure }),
+		}
+		self.read_answered();
+	}
+
+	fn was_resolved(&self, id: &str) -> bool {
+		self.resolved_while_reading.contains(id)
+	}
+
+	fn read_answered(&mut self) {
+		self.reads_in_flight = self.reads_in_flight.saturating_sub(1);
+		if self.reads_in_flight == 0 {
+			self.resolved_while_reading.clear();
 		}
 	}
 
