@@ -1,9 +1,24 @@
+use std::cell::RefCell;
+use std::collections::HashMap;
+
 use rune::image::{Image, ImageCache};
 use rune::{AppSpec, Cx, El, TextEdit, Waker, row};
 
 use crate::foundations::{self, PICTURE_SCALE, PICTURE_SIDE, UPLOADED_AVATAR_IMAGE};
+use crate::math::Typesetter;
+use crate::surfaces::s02_rail;
+use crate::surfaces::s10_agent_settings::Field;
+use crate::surfaces::s10_agent_settings::agent::{Effort, Mode, OutputStyle};
+use crate::surfaces::s10_agent_settings::shell::Entry;
+use crate::surfaces::s10_agent_settings::skills::{FileFailure, Section};
 use crate::tokens::{self, SPACING, Tokens};
+use agent_settings::{
+	ChangeCase, DIALOG, EditorCase, FILES, FilesCase, HistoryCase, Look, PAGE, PANEL, RUNTIME,
+	RuntimeCase, SCREEN as SETTINGS_SCREEN, SkillsCase,
+};
 
+mod agent_settings;
+mod approvals;
 mod boards;
 mod boot;
 mod feedback;
@@ -14,6 +29,10 @@ mod navigation;
 mod overlays;
 mod person_settings;
 mod primitives;
+mod rail;
+mod space_avatar;
+mod space_picker;
+mod thread;
 
 pub const THEMES: [Theme; 2] = [Theme::Light, Theme::Dark];
 
@@ -45,6 +64,7 @@ pub struct Scene {
 	pub tabs: usize,
 	pub pointer: Pointer,
 	pub typed: &'static str,
+	pub keys: &'static str,
 	pub view: fn(&Tokens, &SceneState) -> El,
 }
 
@@ -65,9 +85,18 @@ const FIELDS: (f32, f32) = (512.0, 520.0);
 const ABOUT: (f32, f32) = (640.0, 760.0);
 const SETTINGS: (f32, f32) = person_settings::DIALOG_SCENE;
 const SCREEN: (f32, f32) = (1180.0, 720.0);
+const QUESTION_PANEL: (f32, f32) = (608.0, 520.0);
+const QUESTION_PANEL_TALL: (f32, f32) = (608.0, 640.0);
+const SIDE: (f32, f32) = (590.0, 480.0);
+const SIDE_TALL: (f32, f32) = (590.0, 560.0);
+const SIDE_STACK: (f32, f32) = (590.0, 1180.0);
+const NARROW: (f32, f32) = (352.0, 640.0);
+const ANSWERED: (f32, f32) = (704.0, 420.0);
+const ANSWERED_LONG: (f32, f32) = (512.0, 360.0);
+const MARK_SIDE: f32 = 22.0;
 
 const fn scene(id: &'static str, size: (f32, f32), view: fn(&Tokens, &SceneState) -> El) -> Scene {
-	Scene { id, size, tabs: 0, pointer: Pointer::Away, typed: "", view }
+	Scene { id, size, tabs: 0, pointer: Pointer::Away, typed: "", keys: "", view }
 }
 
 const fn focused(
@@ -76,7 +105,7 @@ const fn focused(
 	tabs: usize,
 	view: fn(&Tokens, &SceneState) -> El,
 ) -> Scene {
-	Scene { id, size, tabs, pointer: Pointer::Away, typed: "", view }
+	Scene { id, size, tabs, pointer: Pointer::Away, typed: "", keys: "", view }
 }
 
 const fn typed(
@@ -85,7 +114,7 @@ const fn typed(
 	text: &'static str,
 	view: fn(&Tokens, &SceneState) -> El,
 ) -> Scene {
-	Scene { id, size: STORY, tabs, pointer: Pointer::Away, typed: text, view }
+	Scene { id, size: STORY, tabs, pointer: Pointer::Away, typed: text, keys: "", view }
 }
 
 const fn queried(
@@ -94,7 +123,27 @@ const fn queried(
 	text: &'static str,
 	view: fn(&Tokens, &SceneState) -> El,
 ) -> Scene {
-	Scene { id, size: PALETTE, tabs, pointer: Pointer::Away, typed: text, view }
+	Scene { id, size: PALETTE, tabs, pointer: Pointer::Away, typed: text, keys: "", view }
+}
+
+const fn keyed(
+	id: &'static str,
+	size: (f32, f32),
+	tabs: usize,
+	typed: &'static str,
+	keys: &'static str,
+	view: fn(&Tokens, &SceneState) -> El,
+) -> Scene {
+	Scene { id, size, tabs, pointer: Pointer::Away, typed, keys, view }
+}
+
+const fn hovered(
+	id: &'static str,
+	size: (f32, f32),
+	key: &'static str,
+	view: fn(&Tokens, &SceneState) -> El,
+) -> Scene {
+	Scene { id, size, tabs: 0, pointer: Pointer::EntersAtSnap(key), typed: "", keys: "", view }
 }
 
 const fn pointed(
@@ -102,7 +151,7 @@ const fn pointed(
 	pointer: Pointer,
 	view: fn(&Tokens, &SceneState) -> El,
 ) -> Scene {
-	Scene { id, size: STORY, tabs: 0, pointer, typed: "", view }
+	Scene { id, size: STORY, tabs: 0, pointer, typed: "", keys: "", view }
 }
 
 pub static SCENES: &[Scene] = &[
@@ -673,6 +722,882 @@ pub static SCENES: &[Scene] = &[
 	scene("conversation-message-emptystateshell--with-action", OVERLAY, boot::empty_with_action),
 	scene("conversation-message-emptystateshell--without-hint", OVERLAY, boot::empty_without_hint),
 	scene("conversation-message-emptystateshell--long-content", OVERLAY, boot::empty_long_content),
+	scene("conversation-markdown-markdown--default", thread::TALLER, thread::markdown_default),
+	scene("conversation-markdown-markdown--headings", thread::TALL, thread::markdown_headings),
+	scene("conversation-markdown-markdown--emphasis", thread::PROSE, thread::markdown_emphasis),
+	scene("conversation-markdown-markdown--lists", thread::PROSE, thread::markdown_lists),
+	scene(
+		"conversation-markdown-markdown--nested-list",
+		thread::PROSE,
+		thread::markdown_nested_list,
+	),
+	scene("conversation-markdown-markdown--task-list", thread::PROSE, thread::markdown_task_list),
+	scene("conversation-markdown-markdown--blockquote", thread::PROSE, thread::markdown_blockquote),
+	scene(
+		"conversation-markdown-markdown--table-in-blockquote",
+		thread::PROSE,
+		thread::markdown_table_in_blockquote,
+	),
+	scene("conversation-markdown-markdown--table", thread::PROSE, thread::markdown_table),
+	scene("conversation-markdown-markdown--table-wide", thread::PROSE, thread::markdown_table_wide),
+	scene(
+		"conversation-markdown-markdown--table-narrow",
+		thread::PROSE,
+		thread::markdown_table_narrow,
+	),
+	scene("conversation-markdown-markdown--table-copy", thread::PROSE, thread::markdown_table_copy),
+	scene(
+		"conversation-markdown-markdown--table-in-bubble",
+		thread::PROSE,
+		thread::markdown_table_in_bubble,
+	),
+	scene("conversation-markdown-markdown--code-fence", thread::PROSE, thread::markdown_code_fence),
+	scene(
+		"conversation-markdown-markdown--code-fence-rust",
+		thread::PROSE,
+		thread::markdown_code_fence_rust,
+	),
+	scene(
+		"conversation-markdown-markdown--code-fence-python",
+		thread::PROSE,
+		thread::markdown_code_fence_python,
+	),
+	scene(
+		"conversation-markdown-markdown--code-fence-css",
+		thread::PROSE,
+		thread::markdown_code_fence_css,
+	),
+	scene(
+		"conversation-markdown-markdown--code-fence-html",
+		thread::PROSE,
+		thread::markdown_code_fence_html,
+	),
+	scene(
+		"conversation-markdown-markdown--code-fence-yaml",
+		thread::PROSE,
+		thread::markdown_code_fence_yaml,
+	),
+	scene(
+		"conversation-markdown-markdown--code-fence-markdown",
+		thread::PROSE,
+		thread::markdown_code_fence_markdown,
+	),
+	scene(
+		"conversation-markdown-markdown--code-fence-unknown-language",
+		thread::PROSE,
+		thread::markdown_code_fence_unknown_language,
+	),
+	scene(
+		"conversation-markdown-markdown--code-fence-overflow",
+		thread::PROSE,
+		thread::markdown_code_fence_overflow,
+	),
+	scene(
+		"conversation-markdown-markdown--code-fence-copy",
+		thread::PROSE,
+		thread::markdown_code_fence_copy,
+	),
+	scene(
+		"conversation-markdown-markdown--code-fence-long-source",
+		thread::TALLER,
+		thread::markdown_code_fence_long_source,
+	),
+	scene(
+		"conversation-markdown-markdown--math-inline",
+		thread::PROSE,
+		thread::markdown_math_inline,
+	),
+	scene(
+		"conversation-markdown-markdown--math-display",
+		thread::PROSE,
+		thread::markdown_math_display,
+	),
+	scene(
+		"conversation-markdown-markdown--math-malformed",
+		thread::PROSE,
+		thread::markdown_math_malformed,
+	),
+	scene(
+		"conversation-markdown-markdown--math-oversized",
+		thread::TALL,
+		thread::markdown_math_oversized,
+	),
+	scene(
+		"conversation-markdown-markdown--mermaid-flowchart",
+		thread::TALL,
+		thread::markdown_mermaid_flowchart,
+	),
+	scene(
+		"conversation-markdown-markdown--mermaid-malformed",
+		thread::PROSE,
+		thread::markdown_mermaid_malformed,
+	),
+	scene(
+		"conversation-markdown-markdown--mermaid-in-bubble",
+		thread::TALL,
+		thread::markdown_mermaid_in_bubble,
+	),
+	scene(
+		"conversation-markdown-markdown--thematic-break",
+		thread::PROSE,
+		thread::markdown_thematic_break,
+	),
+	scene("conversation-markdown-markdown--footnotes", thread::PROSE, thread::markdown_footnotes),
+	scene(
+		"conversation-markdown-markdown--footnotes-twice",
+		thread::TALL,
+		thread::markdown_footnotes_twice,
+	),
+	scene("conversation-markdown-markdown--autolinks", thread::PROSE, thread::markdown_autolinks),
+	scene(
+		"conversation-markdown-markdown--destinations",
+		thread::PROSE,
+		thread::markdown_destinations,
+	),
+	scene(
+		"conversation-markdown-markdown--destinations-fetch-nothing",
+		thread::TALL,
+		thread::markdown_destinations_fetch_nothing,
+	),
+	scene(
+		"conversation-markdown-markdown--deceptive-links",
+		thread::PROSE,
+		thread::markdown_deceptive_links,
+	),
+	scene(
+		"conversation-markdown-markdown--inert-schemes",
+		thread::PROSE,
+		thread::markdown_inert_schemes,
+	),
+	scene("conversation-markdown-markdown--long-url", thread::PROSE, thread::markdown_long_url),
+	scene(
+		"conversation-markdown-markdown--fragment-link",
+		thread::PROSE,
+		thread::markdown_fragment_link,
+	),
+	scene("conversation-markdown-markdown--raw-html", thread::PROSE, thread::markdown_raw_html),
+	scene(
+		"conversation-markdown-markdown--raw-html-in-list",
+		thread::TALL,
+		thread::markdown_raw_html_in_list,
+	),
+	scene(
+		"conversation-markdown-markdown--hostile-markup",
+		thread::TALL,
+		thread::markdown_hostile_markup,
+	),
+	scene("conversation-markdown-markdown--malformed", thread::PROSE, thread::markdown_malformed),
+	scene(
+		"conversation-markdown-markdown--in-message-bubble",
+		thread::TALLER,
+		thread::markdown_in_message_bubble,
+	),
+	scene(
+		"conversation-markdown-markdown--in-solid-bubble",
+		thread::PROSE,
+		thread::markdown_in_solid_bubble,
+	),
+	scene(
+		"conversation-markdown-markdown--adjacent-blocks",
+		thread::TALLER,
+		thread::markdown_adjacent_blocks,
+	),
+	scene(
+		"conversation-markdown-markdown--nested-blocks",
+		thread::TALL,
+		thread::markdown_nested_blocks,
+	),
+	scene(
+		"conversation-markdown-markdown--preserved-whitespace",
+		thread::TALL,
+		thread::markdown_preserved_whitespace,
+	),
+	scene(
+		"conversation-markdown-markdown--typeset-in-bubble",
+		thread::TALL,
+		thread::markdown_typeset_in_bubble,
+	),
+	scene(
+		"conversation-markdown-markdown--attachment-image-mid-answer",
+		thread::PROSE,
+		thread::markdown_attachment_image_mid_answer,
+	),
+	scene(
+		"conversation-markdown-markdown--attachment-file-mid-answer",
+		thread::PROSE,
+		thread::markdown_attachment_file_mid_answer,
+	),
+	scene(
+		"conversation-markdown-markdown--attachment-file-among-code-paths",
+		thread::PROSE,
+		thread::markdown_attachment_file_among_code_paths,
+	),
+	scene(
+		"conversation-markdown-markdown--attachment-unresolved",
+		thread::PROSE,
+		thread::markdown_attachment_image_mid_answer,
+	),
+	scene(
+		"conversation-markdown-markdown--attachment-path-with-spaces",
+		thread::PROSE,
+		thread::markdown_attachment_path_with_spaces,
+	),
+	scene(
+		"conversation-markdown-markdown--board-link-loaded",
+		thread::PROSE,
+		thread::markdown_board_link_alone,
+	),
+	scene(
+		"conversation-markdown-markdown--board-link-loaded-dark",
+		thread::PROSE,
+		thread::markdown_board_link_alone,
+	),
+	scene(
+		"conversation-markdown-markdown--board-link-loading",
+		thread::PROSE,
+		thread::markdown_board_link_alone,
+	),
+	scene(
+		"conversation-markdown-markdown--board-link-loading-dark",
+		thread::PROSE,
+		thread::markdown_board_link_alone,
+	),
+	scene(
+		"conversation-markdown-markdown--board-link-in-sentence",
+		thread::PROSE,
+		thread::markdown_board_link_in_sentence,
+	),
+	scene(
+		"conversation-markdown-markdown--board-link-in-sentence-dark",
+		thread::PROSE,
+		thread::markdown_board_link_in_sentence,
+	),
+	scene(
+		"conversation-markdown-markdown--board-link-in-checklist",
+		thread::PROSE,
+		thread::markdown_board_link_in_checklist,
+	),
+	scene(
+		"conversation-markdown-markdown--board-link-in-checklist-dark",
+		thread::PROSE,
+		thread::markdown_board_link_in_checklist,
+	),
+	scene(
+		"conversation-markdown-markdown--board-link-in-list-sentence",
+		thread::PROSE,
+		thread::markdown_board_link_in_list_sentence,
+	),
+	scene(
+		"conversation-markdown-markdown--board-link-in-list-sentence-dark",
+		thread::PROSE,
+		thread::markdown_board_link_in_list_sentence,
+	),
+	scene(
+		"conversation-markdown-markdown--board-link-in-table-cell",
+		thread::PROSE,
+		thread::markdown_board_link_in_table_cell,
+	),
+	scene(
+		"conversation-markdown-markdown--board-link-in-table-cell-dark",
+		thread::PROSE,
+		thread::markdown_board_link_in_table_cell,
+	),
+	scene("conversation-markdown-markdownmermaid--default", thread::TALL, thread::mermaid_default),
+	scene(
+		"conversation-markdown-markdownmermaid--wider-than-the-block",
+		thread::PROSE,
+		thread::mermaid_wider_than_the_block,
+	),
+	scene(
+		"conversation-markdown-markdownmermaid--unparseable",
+		thread::PROSE,
+		thread::mermaid_unparseable,
+	),
+	scene("conversation-markdown-markdownmath--default", thread::PROSE, thread::math_default),
+	scene("conversation-markdown-markdownmath--inline", thread::PROSE, thread::math_inline),
+	scene(
+		"conversation-markdown-markdownmath--unparseable",
+		thread::PROSE,
+		thread::math_unparseable,
+	),
+	scene("conversation-markdown-markdowncode--default", thread::PROSE, thread::code_default),
+	scene(
+		"conversation-markdown-markdowncode--unknown-language",
+		thread::PROSE,
+		thread::code_unknown_language,
+	),
+	scene(
+		"conversation-markdown-markdowncode--beyond-highlight-budget",
+		thread::TALLER,
+		thread::code_beyond_highlight_budget,
+	),
+	scene(
+		"conversation-markdown-markdowncode--inline-code",
+		thread::PROSE,
+		thread::code_inline_code,
+	),
+	scene("conversation-markdown-markdowntable--default", thread::PROSE, thread::table_default),
+	scene(
+		"conversation-markdown-markdowntable--wider-than-the-block",
+		thread::PROSE,
+		thread::table_wider_than_the_block,
+	),
+	scene(
+		"conversation-markdown-markdowntable--header-only",
+		thread::PROSE,
+		thread::table_header_only,
+	),
+	scene("conversation-markdown-markdownlink--default", thread::PROSE, thread::link_default),
+	scene(
+		"conversation-markdown-markdownlink--deceptive-text",
+		thread::PROSE,
+		thread::link_deceptive_text,
+	),
+	scene("conversation-markdown-markdownlink--unsafe-url", thread::PROSE, thread::link_unsafe_url),
+	scene("conversation-markdown-markdownlink--fragment", thread::PROSE, thread::link_fragment),
+	scene("conversation-markdown-markdownlink--mail-to", thread::PROSE, thread::link_mail_to),
+	scene(
+		"conversation-markdown-markdownlink--long-destination",
+		thread::PROSE,
+		thread::link_long_destination,
+	),
+	scene(
+		"conversation-markdown-markdownspan--bot-mention",
+		thread::PROSE,
+		thread::span_bot_mention,
+	),
+	scene("conversation-markdown-markdownspan--plain-text", thread::PROSE, thread::span_plain_text),
+	scene(
+		"conversation-markdown-markdowntaskcheckbox--default",
+		thread::PROSE,
+		thread::tasks_default,
+	),
+	scene(
+		"conversation-markdown-markdowntaskcheckbox--loose-checklist",
+		thread::PROSE,
+		thread::tasks_loose_checklist,
+	),
+	scene(
+		"conversation-markdown-markdowntaskcheckbox--loose-checklist-dark",
+		thread::PROSE,
+		thread::tasks_loose_checklist,
+	),
+	scene(
+		"conversation-markdown-markdowntaskcheckbox--ticks-and-unticks-by-click",
+		thread::PROSE,
+		thread::tasks_default,
+	),
+	scene(
+		"conversation-markdown-markdowntaskcheckbox--ticks-and-unticks-by-clicking-the-label",
+		thread::PROSE,
+		thread::tasks_default,
+	),
+	scene(
+		"conversation-markdown-markdowntaskcheckbox--ticks-a-loose-row-by-clicking-the-label",
+		thread::PROSE,
+		thread::tasks_loose_checklist,
+	),
+	scene(
+		"conversation-markdown-markdowntaskcheckbox--opens-a-link-in-the-label-without-ticking",
+		thread::PROSE,
+		thread::tasks_linked,
+	),
+	scene(
+		"conversation-markdown-markdowntaskcheckbox--nested-checklist",
+		thread::PROSE,
+		thread::tasks_nested_checklist,
+	),
+	scene(
+		"conversation-markdown-markdowntaskcheckbox--ticks-a-sub-task-alone",
+		thread::PROSE,
+		thread::tasks_nested_checklist,
+	),
+	scene(
+		"conversation-markdown-codeblock--multi-file-patch",
+		thread::TALL,
+		thread::code_block_patch,
+	),
+	scene("conversation-markdown-codeblock--copy", thread::PROSE, thread::code_block_copy),
+	scene(
+		"conversation-markdown-codesnippet--single-line",
+		thread::PROSE,
+		thread::snippet_single_line,
+	),
+	scene("conversation-markdown-codesnippet--overflow", thread::PROSE, thread::snippet_overflow),
+	scene("feedback-threadtranscriptskeleton--light", thread::PANEL, thread::skeleton),
+	scene("feedback-threadtranscriptskeleton--dark", thread::PANEL, thread::skeleton),
+	focused(
+		"overlays-selectiontoolbar--keyboard-and-pointer",
+		thread::LINE,
+		1,
+		thread::selection_toolbar_keyboard,
+	),
+	scene("conversation-message-pinnedmessages--default", thread::PROSE, thread::pinned_default),
+	scene("conversation-message-pinnedmessages--one-pinned", thread::PROSE, thread::pinned_one),
+	scene("conversation-message-pinnedmessages--empty", thread::PROSE, thread::pinned_empty),
+	scene(
+		"conversation-message-pinnedmessages--overflowing",
+		thread::PROSE,
+		thread::pinned_overflowing,
+	),
+	scene(
+		"conversation-message-pinnedmessages--unpinning",
+		thread::PROSE,
+		thread::pinned_unpinning,
+	),
+	scene("conversation-message-threadworkline--final-7", thread::LINE, thread::work_7),
+	scene("conversation-message-threadworkline--final-8", thread::LINE, thread::work_8),
+	scene("conversation-message-threadworkline--final-9", thread::LINE, thread::work_9),
+	scene("conversation-message-threadworkline--final-10", thread::LINE, thread::work_10),
+	scene("conversation-message-threadworkline--final-11", thread::LINE, thread::work_11),
+	scene("conversation-message-threadworkline--final-12", thread::LINE, thread::work_12),
+	scene("conversation-message-threadworkline--final-13", thread::LINE, thread::work_13),
+	scene("conversation-message-threadworkline--final-14", thread::LINE, thread::work_14),
+	scene("conversation-message-threadworkline--final-15", thread::LINE, thread::work_15),
+	scene("conversation-message-threadworkline--final-16", thread::LINE, thread::work_16),
+	scene("conversation-message-threadworkline--final-17", thread::PROSE, thread::work_17),
+	scene("conversation-message-turn--default", thread::LINE, thread::turn_default),
+	scene("conversation-message-turn--long-content", thread::LINE, thread::turn_long_content),
+	scene(
+		"conversation-message-turn--summoned-by-mission",
+		thread::LINE,
+		thread::turn_summoned_by_mission,
+	),
+	scene(
+		"conversation-message-turn--thread-crossing-a-day",
+		thread::PROSE,
+		thread::turn_crossing_a_day,
+	),
+	scene("conversation-message-turn--speakers", thread::PROSE, thread::turn_speakers),
+	scene(
+		"conversation-message-turn--person-with-custom-image",
+		thread::LINE,
+		thread::turn_person_with_custom_image,
+	),
+	scene(
+		"conversation-message-turn--person-with-custom-image-dark",
+		thread::LINE,
+		thread::turn_person_with_custom_image,
+	),
+	scene("conversation-message-turn--hover-actions", thread::PROSE, thread::turn_hover_actions),
+	scene("conversation-message-turn--endings", thread::PROSE, thread::turn_endings),
+	scene("conversation-message-turn--working", thread::LINE, thread::turn_working),
+	scene("conversation-message-turn--quoted", thread::LINE, thread::turn_quoted),
+	scene("conversation-message-turn--replies-to-two", thread::LINE, thread::turn_replies_to_two),
+	scene("conversation-message-turn--deleted-author", thread::LINE, thread::turn_deleted_author),
+	scene(
+		"conversation-message-turn--reported-by-routine",
+		thread::LINE,
+		thread::turn_reported_by_routine,
+	),
+	scene("conversation-message-turn--not-sent", thread::LINE, thread::turn_not_sent),
+	scene("conversation-message-turn--queued", thread::LINE, thread::turn_queued),
+	scene(
+		"conversation-message-messageattachments--default",
+		thread::PROSE,
+		thread::attachments_default,
+	),
+	scene(
+		"conversation-message-messageattachments--two-images",
+		thread::PROSE,
+		thread::attachments_two_images,
+	),
+	scene(
+		"conversation-message-messageattachments--several-images",
+		thread::PROSE,
+		thread::attachments_several_images,
+	),
+	scene(
+		"conversation-message-messageattachments--many-images",
+		thread::PROSE,
+		thread::attachments_many_images,
+	),
+	scene(
+		"conversation-message-messageattachments--mixed-kinds",
+		thread::PROSE,
+		thread::attachments_mixed_kinds,
+	),
+	scene(
+		"conversation-message-messageattachments--states",
+		thread::PROSE,
+		thread::attachments_states,
+	),
+	scene(
+		"conversation-message-messageattachments--long-content",
+		thread::LINE,
+		thread::attachments_long_content,
+	),
+	scene(
+		"conversation-message-messageattachments--error",
+		thread::PROSE,
+		thread::attachments_error,
+	),
+	scene(
+		"conversation-message-messageattachments--in-transcript",
+		thread::PROSE,
+		thread::attachments_default,
+	),
+	scene(
+		"conversation-message-messageattachments--empty",
+		thread::LINE,
+		thread::attachments_empty,
+	),
+	scene(
+		"conversation-message-messagesidecontext--bot-side",
+		thread::LINE,
+		thread::message_side_bot,
+	),
+	scene(
+		"conversation-message-messagesidecontext--reader-side",
+		thread::LINE,
+		thread::message_side_reader,
+	),
+	scene(
+		"conversation-message-messagesidecontext--without-provider",
+		thread::LINE,
+		thread::message_side_bot,
+	),
+	scene("conversation-message-messagequote--default", thread::LINE, thread::quote_default),
+	scene("conversation-message-messagequote--long-content", thread::LINE, thread::quote_default),
+	scene("conversation-message-messagequote--tones", thread::LINE, thread::quote_tones),
+	scene("conversation-message-messageactions--default", thread::LINE, thread::actions_default),
+	scene(
+		"conversation-message-messageactions--square-icon-buttons",
+		thread::LINE,
+		thread::actions_square_icon_buttons,
+	),
+	scene(
+		"conversation-message-messageactions--every-label-on-one-line",
+		thread::PROSE,
+		thread::actions_menu,
+	),
+	scene(
+		"conversation-message-messageactions--every-label-on-one-line-in-french",
+		thread::PROSE,
+		thread::actions_menu_in_french,
+	),
+	scene(
+		"conversation-message-messageactions--same-surface-as-image-menu",
+		thread::PROSE,
+		thread::actions_same_surface_as_image_menu,
+	),
+	scene(
+		"conversation-message-messageactions--same-surface-as-image-menu-in-dark",
+		thread::PROSE,
+		thread::actions_same_surface_as_image_menu,
+	),
+	scene("conversation-message-message--variants", thread::PROSE, thread::message_variants),
+	scene("conversation-message-message--with-metadata", thread::PROSE, thread::message_variants),
+	scene(
+		"conversation-message-message--long-content",
+		thread::PROSE,
+		thread::message_long_content,
+	),
+	scene("conversation-message-message--authors", thread::PROSE, thread::message_authors),
+	scene(
+		"conversation-message-message--author-with-long-title",
+		thread::LINE,
+		thread::message_author_with_long_title,
+	),
+	scene("conversation-message-messagebubble--default", thread::LINE, thread::bubble_default),
+	scene(
+		"conversation-message-messagebubble--agent-surface-in-both-themes",
+		thread::LINE,
+		thread::bubble_default,
+	),
+	scene(
+		"conversation-message-messagebubble--space-tinted",
+		thread::LINE,
+		thread::bubble_space_tinted,
+	),
+	scene(
+		"conversation-message-messagebubble--narrow-container",
+		thread::PROSE,
+		thread::bubble_narrow,
+	),
+	scene(
+		"conversation-message-messagebubble--body-text-size",
+		thread::LINE,
+		thread::bubble_default,
+	),
+	scene(
+		"conversation-message-messagebubble--content-widths",
+		thread::LINE,
+		thread::bubble_long_words,
+	),
+	scene("conversation-message-thread--conversations-1", thread::PANEL, thread::thread_solo),
+	scene("conversation-message-thread--conversations-2", thread::PANEL, thread::thread_group),
+	scene(
+		"conversation-message-thread--user-author-line-mirrored",
+		thread::PANEL,
+		thread::thread_with_actions,
+	),
+	scene("conversation-message-thread--work-1", thread::PANEL, thread::thread_working),
+	scene("conversation-message-thread--work-2", thread::PANEL, thread::thread_streaming),
+	scene("conversation-message-thread--work-4", thread::PANEL, thread::thread_solo),
+	scene("conversation-message-transcript--default", thread::PANEL, thread::thread_solo),
+	scene(
+		"conversation-message-transcript--marks-new-messages",
+		thread::PANEL,
+		thread::transcript_marks_new_messages,
+	),
+	scene("layout-threadlayout--default", thread::PANEL, thread::thread_solo),
+	scene("layout-threadlayout--empty", thread::PANEL, thread::layout_empty),
+	scene("layout-threadlayout--long-content", thread::PANEL, thread::layout_long_content),
+	scene(
+		"layout-threadlayout--start-of-older-messages",
+		thread::PANEL,
+		thread::layout_start_of_older_messages,
+	),
+	scene("layout-threadlayout--error", thread::PANEL, thread::layout_error),
+	scene("layout-threadlayout--load-failure", thread::PANEL, thread::layout_load_failure),
+	scene("layout-threadlayout--pending", thread::PANEL, thread::layout_pending),
+	focused("conversation-message-turn--focus-visible", thread::LINE, 1, thread::focus_ring),
+	scene(
+		"conversation-message-thread--in-a-mission-thread",
+		thread::PANEL,
+		thread::thread_in_a_mission,
+	),
+	scene("navigation-apprail--a-7-spaces-menu", rail::SPACES_WINDOW, rail::a7_spaces_menu),
+	scene(
+		"navigation-apprail--a-7-spaces-menu-attention-row",
+		rail::SPACES_WINDOW,
+		rail::a7_spaces_menu_attention_row,
+	),
+	scene("navigation-apprail--a-7-spaces-menu-dark", rail::SPACES_WINDOW, rail::a7_spaces_menu),
+	scene("navigation-apprail--attention-dot", rail::RAIL_STAGE, rail::attention_dot),
+	scene("navigation-apprail--attention-dot-dark", rail::RAIL_STAGE, rail::attention_dot),
+	scene("navigation-apprail--conversations", rail::RAIL_STAGE, rail::conversations),
+	scene("navigation-apprail--current-beside-idle-dark", rail::RAIL_STAGE, rail::conversations),
+	scene("navigation-apprail--dark", rail::RAIL_STAGE, rail::with_dot),
+	scene("navigation-apprail--done-dot", rail::RAIL_STAGE, rail::done_dot),
+	scene("navigation-apprail--done-dot-dark", rail::RAIL_STAGE, rail::done_dot),
+	scene("navigation-apprail--failed-dot", rail::RAIL_STAGE, rail::failed_dot),
+	scene("navigation-apprail--failed-dot-dark", rail::RAIL_STAGE, rail::failed_dot),
+	scene(
+		"navigation-apprail--first-tab-under-title-bar",
+		rail::SIDEBAR_STAGE,
+		rail::rail_in_sidebar,
+	),
+	scene(
+		"navigation-apprail--icon-states-side-by-side",
+		rail::RAIL_STAGE,
+		rail::icon_states_side_by_side,
+	),
+	hovered(
+		"navigation-apprail--idle-entry-hovered",
+		rail::RAIL_STAGE,
+		s02_rail::RailPanel::Missions.key(),
+		rail::conversations,
+	),
+	focused("navigation-apprail--keyboard-reach", rail::RAIL_STAGE, 1, rail::keyboard_reach),
+	scene("navigation-apprail--library-dot", rail::RAIL_STAGE, rail::library_dot),
+	scene("navigation-apprail--library-selected", rail::RAIL_STAGE, rail::library_selected),
+	scene("navigation-apprail--missions-selected", rail::RAIL_STAGE, rail::missions_selected),
+	scene("navigation-apprail--on-tinted-space", rail::RAIL_STAGE, rail::on_tinted_space),
+	scene(
+		"navigation-apprail--removed-panel-falls-back-to-conversations",
+		rail::SIDEBAR_STAGE,
+		rail::rail_in_sidebar,
+	),
+	scene("navigation-apprail--search-entry-at-rest", rail::RAIL_STAGE, rail::conversations),
+	hovered(
+		"navigation-apprail--search-entry-hovered",
+		rail::RAIL_STAGE,
+		s02_rail::SEARCH_KEY,
+		rail::search_entry_hovered,
+	),
+	scene(
+		"navigation-apprail--selection-moves-to-missions",
+		rail::RAIL_STAGE,
+		rail::missions_selected,
+	),
+	hovered(
+		"navigation-apprail--space-logo-hovered",
+		rail::RAIL_STAGE,
+		s02_rail::SPACE_LOGO_KEY,
+		rail::space_logo_hovered,
+	),
+	scene(
+		"navigation-apprail--space-logo-without-space",
+		rail::RAIL_STAGE,
+		rail::space_logo_without_space,
+	),
+	scene(
+		"navigation-apprail--space-settings-over-conversations",
+		rail::RAIL_STAGE,
+		rail::space_settings_over_conversations,
+	),
+	scene("navigation-apprail--spaces-menu-gestures", rail::RAIL_STAGE, rail::spaces_menu_gestures),
+	scene("navigation-apprail--update-downloading", rail::RAIL_STAGE, rail::update_downloading),
+	scene("navigation-apprail--update-idle", rail::RAIL_STAGE, rail::update_idle),
+	scene("navigation-apprail--update-ready", rail::RAIL_STAGE, rail::update_ready),
+	scene("navigation-apprail--update-waiting", rail::RAIL_STAGE, rail::update_waiting),
+	scene("navigation-apprail--update-waiting-dark", rail::RAIL_STAGE, rail::update_waiting),
+	scene(
+		"navigation-apprail--user-settings-over-missions",
+		rail::RAIL_STAGE,
+		rail::user_settings_over_missions,
+	),
+	scene("navigation-apprail--with-dot", rail::RAIL_STAGE, rail::with_dot),
+	scene(
+		"navigation-apprail--without-library-handler",
+		rail::RAIL_STAGE,
+		rail::without_library_handler,
+	),
+	scene(
+		"navigation-apprail--without-search-handler",
+		rail::RAIL_STAGE,
+		rail::without_search_handler,
+	),
+	scene(
+		"navigation-appsidebarcarousel--list-per-space",
+		rail::SIDEBAR_STAGE,
+		rail::carousel_list_per_space,
+	),
+	scene(
+		"navigation-spaceswitcher--badge-and-long-name",
+		STORY,
+		space_picker::badge_and_long_name,
+	),
+	scene(
+		"navigation-spaceswitcher--badge-done-elsewhere",
+		STORY,
+		space_picker::badge_done_elsewhere,
+	),
+	scene(
+		"navigation-spaceswitcher--badge-here",
+		space_picker::MENU_STAGE,
+		space_picker::badge_here,
+	),
+	scene("navigation-spaceswitcher--badge-ranking", STORY, space_picker::badge_ranking),
+	scene("navigation-spaceswitcher--badges", STORY, space_picker::badges),
+	scene("navigation-spaceswitcher--colourless", STORY, space_picker::colourless),
+	scene("navigation-spaceswitcher--default", STORY, space_picker::default),
+	scene("navigation-spaceswitcher--drag-dot-nowhere", STORY, space_picker::with_dots),
+	scene("navigation-spaceswitcher--drag-dot-to-place", STORY, space_picker::with_dots),
+	scene("navigation-spaceswitcher--free-hue", space_picker::MENU_STAGE, space_picker::free_hue),
+	scene(
+		"navigation-spaceswitcher--hosted-long-names",
+		space_picker::MENU_STAGE,
+		space_picker::hosted_long_names,
+	),
+	scene("navigation-spaceswitcher--invitation-at-rest", STORY, space_picker::invitation_at_rest),
+	scene(
+		"navigation-spaceswitcher--invitation-expired",
+		space_picker::MENU_STAGE,
+		space_picker::invitation_expired,
+	),
+	scene(
+		"navigation-spaceswitcher--invitation-host-offline",
+		space_picker::MENU_STAGE,
+		space_picker::invitation_host_offline,
+	),
+	scene(
+		"navigation-spaceswitcher--invitation-long-content",
+		space_picker::MENU_STAGE,
+		space_picker::invitation_long_content,
+	),
+	scene(
+		"navigation-spaceswitcher--invitation-over-bot-badge",
+		space_picker::MENU_STAGE,
+		space_picker::invitation_over_bot_badge,
+	),
+	scene(
+		"navigation-spaceswitcher--invitation-without-join-entry",
+		space_picker::MENU_STAGE,
+		space_picker::invitation_without_join_entry,
+	),
+	focused(
+		"navigation-spaceswitcher--keyboard",
+		space_picker::MENU_STAGE,
+		1,
+		space_picker::keyboard,
+	),
+	scene("navigation-spaceswitcher--long-content", STORY, space_picker::long_content),
+	scene(
+		"navigation-spaceswitcher--m-1-no-invitation",
+		space_picker::MENU_STAGE,
+		space_picker::m1_no_invitation,
+	),
+	scene(
+		"navigation-spaceswitcher--m-10-failed-offline",
+		space_picker::MENU_STAGE,
+		space_picker::m10_failed_offline,
+	),
+	scene(
+		"navigation-spaceswitcher--m-11-withdrawn",
+		space_picker::MENU_STAGE,
+		space_picker::m11_withdrawn,
+	),
+	scene(
+		"navigation-spaceswitcher--m-2-invitation-waiting",
+		space_picker::MENU_STAGE,
+		space_picker::m2_invitation_waiting,
+	),
+	scene(
+		"navigation-spaceswitcher--m-3-two-invitations-waiting",
+		space_picker::MENU_STAGE,
+		space_picker::m3_two_invitations_waiting,
+	),
+	scene(
+		"navigation-spaceswitcher--m-4-accepting",
+		space_picker::MENU_STAGE,
+		space_picker::m4_accepting,
+	),
+	scene("navigation-spaceswitcher--m-5-joined", STORY, space_picker::m5_joined),
+	scene(
+		"navigation-spaceswitcher--m-6-unreachable",
+		space_picker::MENU_STAGE,
+		space_picker::m6_unreachable,
+	),
+	scene(
+		"navigation-spaceswitcher--m-9-failed-servers",
+		space_picker::MENU_STAGE,
+		space_picker::m9_failed_servers,
+	),
+	scene("navigation-spaceswitcher--open", space_picker::MENU_STAGE, space_picker::open),
+	focused(
+		"navigation-spaceswitcher--opened-on-invitation",
+		space_picker::MENU_STAGE,
+		1,
+		space_picker::opened_on_invitation,
+	),
+	scene(
+		"navigation-spaceswitcher--single-space",
+		space_picker::MENU_STAGE,
+		space_picker::single_space,
+	),
+	scene(
+		"navigation-spaceswitcher--themes-joined-space-menu",
+		space_picker::MENU_STAGE,
+		space_picker::themes_joined_space_menu,
+	),
+	scene(
+		"navigation-spaceswitcher--themes-local-space-menu",
+		space_picker::MENU_STAGE,
+		space_picker::themes_local_space_menu,
+	),
+	scene(
+		"navigation-spaceswitcher--themes-title-bar-hosts",
+		STORY,
+		space_picker::themes_title_bar_hosts,
+	),
+	scene("navigation-spaceswitcher--with-dots", STORY, space_picker::with_dots),
+	scene("navigation-spaceswitcher--wrapped-dots", STORY, space_picker::wrapped_dots),
+	scene("branding-spaceavatar--free-hue", STORY, space_avatar::free_hue),
+	scene("branding-spaceavatar--local", STORY, space_avatar::local),
+	scene("branding-spaceavatar--offline", STORY, space_avatar::offline),
+	scene("branding-spaceavatar--rail-mixed-states", STORY, space_avatar::rail_mixed_states),
+	scene("branding-spaceavatar--shared-online", STORY, space_avatar::shared_online),
+	scene("branding-spaceavatar--sizes", STORY, space_avatar::sizes),
+	scene(
+		"branding-spaceavatar--spaces-menu-mixed-states",
+		STORY,
+		space_avatar::spaces_menu_mixed_states,
+	),
+	scene("branding-spaceavatar--states", space_avatar::STATES_STAGE, space_avatar::states),
+	scene("branding-spaceavatar--without-name", STORY, space_avatar::without_name),
 	scene("navigation-searchresultrow--message", STORY, person_settings::row_message),
 	scene(
 		"navigation-searchresultrow--message-from-you",
@@ -1686,6 +2611,7 @@ pub static SCENES: &[Scene] = &[
 		tabs: 1,
 		pointer: Pointer::Away,
 		typed: boards::EDITED_TEXT,
+		keys: "",
 		view: boards::canvas_edit,
 	},
 	Scene {
@@ -1694,6 +2620,7 @@ pub static SCENES: &[Scene] = &[
 		tabs: 1,
 		pointer: Pointer::Away,
 		typed: boards::EDITED_TEXT,
+		keys: "",
 		view: boards::canvas_edit,
 	},
 	scene("navigation-boardcanvas--empty", boards::CANVAS, boards::canvas_empty),
@@ -2159,6 +3086,634 @@ pub static SCENES: &[Scene] = &[
 	scene("navigation-missionspanel--idle", missions::PANEL, missions::panel_idle),
 	scene("feedback-missiondetailskeleton--light", missions::FULL, missions::detail_skeleton),
 	scene("feedback-missionsfeedskeleton--light", missions::FULL, missions::feed_skeleton),
+	scene("settings-bot-botgeneralfields--default", STORY, agent_settings::general_fields),
+	scene("settings-bot-botidentityfields--chooses-the-same-file-twice", PANEL, |t, s| {
+		agent_settings::identity_fields(t, s, Look::Pictured)
+	}),
+	scene("settings-bot-botidentityfields--default", PANEL, |t, s| {
+		agent_settings::identity_fields(t, s, Look::Default)
+	}),
+	scene("settings-bot-botidentityfields--dropped-and-pasted", PANEL, |t, s| {
+		agent_settings::identity_fields(t, s, Look::Pictured)
+	}),
+	scene("settings-bot-botidentityfields--own-hue", PANEL, |t, s| {
+		agent_settings::identity_fields(t, s, Look::OwnHue)
+	}),
+	scene("settings-bot-botidentityfields--picks-a-blot", PANEL, |t, s| {
+		agent_settings::identity_fields(t, s, Look::Red)
+	}),
+	scene("settings-bot-botidentityfields--removes-the-picture", PANEL, |t, s| {
+		agent_settings::identity_fields(t, s, Look::Default)
+	}),
+	scene("settings-bot-botidentityfields--takes-the-blot-off", PANEL, |t, s| {
+		agent_settings::identity_fields(t, s, Look::NoColour)
+	}),
+	scene("settings-bot-botidentityfields--with-picture", PANEL, |t, s| {
+		agent_settings::identity_fields(t, s, Look::Pictured)
+	}),
+	scene("settings-bot-botidentityfields--working", PANEL, |t, s| {
+		agent_settings::identity_fields(t, s, Look::Working)
+	}),
+	scene(
+		"settings-bot-botinstructionsfields--default",
+		PANEL,
+		agent_settings::instructions_fields,
+	),
+	scene("settings-bot-botsettingsdialog--appearance", DIALOG, |t, s| {
+		agent_settings::dialog_entry(t, s, Entry::Appearance)
+	}),
+	scene("settings-bot-botsettingsdialog--closing", DIALOG, agent_settings::dialog_closed),
+	scene(
+		"settings-bot-botsettingsdialog--closing-over-an-unsaved-skill",
+		DIALOG,
+		agent_settings::dialog_leaving_skill,
+	),
+	scene("settings-bot-botsettingsdialog--danger-zone", DIALOG, |t, s| {
+		agent_settings::dialog_entry(t, s, Entry::Danger)
+	}),
+	scene("settings-bot-botsettingsdialog--default", DIALOG, |t, s| {
+		agent_settings::dialog_entry(t, s, Entry::General)
+	}),
+	scene("settings-bot-botsettingsdialog--empty", DIALOG, agent_settings::dialog_empty),
+	scene("settings-bot-botsettingsdialog--free-hue", DIALOG, agent_settings::dialog_free_hue),
+	scene("settings-bot-botsettingsdialog--history", DIALOG, |t, s| {
+		agent_settings::dialog_entry(t, s, Entry::History)
+	}),
+	scene(
+		"settings-bot-botsettingsdialog--history-change",
+		DIALOG,
+		agent_settings::dialog_history_change,
+	),
+	scene("settings-bot-botsettingsdialog--instructions", DIALOG, |t, s| {
+		agent_settings::dialog_entry(t, s, Entry::Instructions)
+	}),
+	scene("settings-bot-botsettingsdialog--opened-on-danger", DIALOG, |t, s| {
+		agent_settings::dialog_entry(t, s, Entry::Danger)
+	}),
+	scene(
+		"settings-bot-botsettingsdialog--pushed-pages",
+		DIALOG,
+		agent_settings::dialog_pushed_pages,
+	),
+	focused("settings-bot-botsettingsdialog--rail", DIALOG, 2, |t, s| {
+		agent_settings::dialog_entry(t, s, Entry::General)
+	}),
+	scene("settings-bot-botsettingsdialog--runtime", DIALOG, |t, s| {
+		agent_settings::dialog_entry(t, s, Entry::Runtime)
+	}),
+	scene("settings-bot-botsettingsdialog--scrolls-one-tab", DIALOG, |t, s| {
+		agent_settings::dialog_entry(t, s, Entry::Approvals)
+	}),
+	scene(
+		"settings-bot-botsettingsdialog--with-a-long-skill",
+		DIALOG,
+		agent_settings::dialog_long_skill,
+	),
+	scene(
+		"settings-bot-botsettingsdialog--with-memory",
+		DIALOG,
+		agent_settings::dialog_with_memory,
+	),
+	scene(
+		"settings-bot-botsettingsdialog--with-server-open",
+		DIALOG,
+		agent_settings::dialog_server_open,
+	),
+	scene(
+		"settings-bot-botsettingsdialog--with-skill-open",
+		DIALOG,
+		agent_settings::dialog_skill_open,
+	),
+	scene(
+		"settings-bot-botsettingsdialog--without-history",
+		DIALOG,
+		agent_settings::dialog_without_history,
+	),
+	scene("settings-bot-botsettingsdialog--working", DIALOG, agent_settings::dialog_working),
+	scene("settings-bot-companionsettingsscreen--appearance", SETTINGS_SCREEN, |t, s| {
+		agent_settings::screen_entry(t, s, Entry::Appearance)
+	}),
+	scene(
+		"settings-bot-companionsettingsscreen--appearance-at-free-hue",
+		SETTINGS_SCREEN,
+		agent_settings::screen_free_hue,
+	),
+	scene("settings-bot-companionsettingsscreen--applications", SETTINGS_SCREEN, |t, s| {
+		agent_settings::screen_entry(t, s, Entry::Applications)
+	}),
+	scene("settings-bot-companionsettingsscreen--approvals", SETTINGS_SCREEN, |t, s| {
+		agent_settings::screen_entry(t, s, Entry::Approvals)
+	}),
+	scene("settings-bot-companionsettingsscreen--back-to-companions", SETTINGS_SCREEN, |t, s| {
+		agent_settings::screen_entry(t, s, Entry::General)
+	}),
+	scene(
+		"settings-bot-companionsettingsscreen--back-to-conversations",
+		SETTINGS_SCREEN,
+		agent_settings::screen_back_to_conversations,
+	),
+	scene("settings-bot-companionsettingsscreen--companion-general", SETTINGS_SCREEN, |t, s| {
+		agent_settings::screen_entry(t, s, Entry::General)
+	}),
+	scene("settings-bot-companionsettingsscreen--danger-zone", SETTINGS_SCREEN, |t, s| {
+		agent_settings::screen_entry(t, s, Entry::Danger)
+	}),
+	scene("settings-bot-companionsettingsscreen--danger-zone-light", SETTINGS_SCREEN, |t, s| {
+		agent_settings::screen_entry(t, s, Entry::Danger)
+	}),
+	scene("settings-bot-companionsettingsscreen--default-width", SETTINGS_SCREEN, |t, s| {
+		agent_settings::screen_entry(t, s, Entry::General)
+	}),
+	scene(
+		"settings-bot-companionsettingsscreen--delete-failed",
+		SETTINGS_SCREEN,
+		agent_settings::screen_delete_failed,
+	),
+	scene("settings-bot-companionsettingsscreen--general", SETTINGS_SCREEN, |t, s| {
+		agent_settings::screen_entry(t, s, Entry::General)
+	}),
+	scene("settings-bot-companionsettingsscreen--history", SETTINGS_SCREEN, |t, s| {
+		agent_settings::screen_entry(t, s, Entry::History)
+	}),
+	scene("settings-bot-companionsettingsscreen--instructions", SETTINGS_SCREEN, |t, s| {
+		agent_settings::screen_entry(t, s, Entry::Instructions)
+	}),
+	focused("settings-bot-companionsettingsscreen--left-column", SETTINGS_SCREEN, 1, |t, s| {
+		agent_settings::screen_entry(t, s, Entry::General)
+	}),
+	focused(
+		"settings-bot-companionsettingsscreen--left-column-dark",
+		SETTINGS_SCREEN,
+		1,
+		|t, s| agent_settings::screen_entry(t, s, Entry::General),
+	),
+	scene(
+		"settings-bot-companionsettingsscreen--maximum-width",
+		SETTINGS_SCREEN,
+		agent_settings::screen_maximum_width,
+	),
+	scene(
+		"settings-bot-companionsettingsscreen--minimum-width",
+		SETTINGS_SCREEN,
+		agent_settings::screen_minimum_width,
+	),
+	scene("settings-bot-companionsettingsscreen--runtime", SETTINGS_SCREEN, |t, s| {
+		agent_settings::screen_entry(t, s, Entry::Runtime)
+	}),
+	scene("settings-bot-companionsettingsscreen--secrets", SETTINGS_SCREEN, |t, s| {
+		agent_settings::screen_entry(t, s, Entry::Secrets)
+	}),
+	scene("settings-bot-companionsettingsscreen--skills", SETTINGS_SCREEN, |t, s| {
+		agent_settings::screen_entry(t, s, Entry::Skills)
+	}),
+	scene("settings-bot-dangerzone--cancelled", STORY, agent_settings::danger_zone),
+	scene("settings-bot-dangerzone--confirming", OVERLAY, agent_settings::danger_zone_confirming),
+	scene("settings-bot-dangerzone--default", STORY, agent_settings::danger_zone),
+	scene("settings-bot-dangerzone--deleted", STORY, agent_settings::danger_zone),
+	scene("settings-bot-dangerzone--inert", STORY, agent_settings::danger_zone_inert),
+	scene("settings-bot-dangerzone--playground", STORY, agent_settings::danger_zone),
+	focused("settings-bot-dangerzone--focus-visible", STORY, 1, agent_settings::danger_zone),
+	scene("settings-bot-memorypanel--clearing", PANEL, agent_settings::memory_clearing),
+	scene("settings-bot-memorypanel--default", PANEL, agent_settings::memory_panel),
+	scene("settings-bot-memorypanel--empty", PANEL, agent_settings::memory_empty),
+	scene("settings-bot-permissionspanel--accept-edits", PANEL, |t, s| {
+		agent_settings::permissions_scene(t, s, Some(Mode::AcceptEdits), false, false)
+	}),
+	scene("settings-bot-permissionspanel--ask-every-time", PANEL, |t, s| {
+		agent_settings::permissions_scene(t, s, Some(Mode::Default), false, false)
+	}),
+	scene("settings-bot-permissionspanel--decide-alone", PANEL, |t, s| {
+		agent_settings::permissions_scene(t, s, Some(Mode::Auto), false, false)
+	}),
+	scene("settings-bot-permissionspanel--never-ask", PANEL, |t, s| {
+		agent_settings::permissions_scene(t, s, Some(Mode::DontAsk), false, false)
+	}),
+	focused("settings-bot-permissionspanel--picking-the-mode", PANEL, 1, |t, s| {
+		agent_settings::permissions_scene(t, s, None, true, false)
+	}),
+	scene("settings-bot-permissionspanel--plan-first", PANEL, |t, s| {
+		agent_settings::permissions_scene(t, s, Some(Mode::Plan), false, false)
+	}),
+	scene("settings-bot-permissionspanel--playground", PANEL, |t, s| {
+		agent_settings::permissions_scene(t, s, None, false, false)
+	}),
+	scene("settings-bot-permissionspanel--refusing-a-malformed-rule", PANEL, |t, s| {
+		agent_settings::permissions_scene(t, s, None, false, true)
+	}),
+	scene("settings-bot-permissionspanel--untouched", PANEL, |t, s| {
+		agent_settings::permissions_scene(t, s, None, false, false)
+	}),
+	scene("settings-bot-runtimefields--concise", PANEL, |t, _| {
+		agent_settings::runtime_scene(t, &RUNTIME)
+	}),
+	scene("settings-bot-runtimefields--effort-default", PANEL, |t, _| {
+		agent_settings::runtime_scene(t, &RUNTIME)
+	}),
+	scene("settings-bot-runtimefields--effort-picked", PANEL, |t, _| {
+		agent_settings::runtime_scene(t, &RuntimeCase { effort: Some(Effort::High), ..RUNTIME })
+	}),
+	scene("settings-bot-runtimefields--effort-unsupported", PANEL, |t, _| {
+		agent_settings::runtime_scene(t, &RuntimeCase { model: "nest-haiku-4-5", ..RUNTIME })
+	}),
+	scene("settings-bot-runtimefields--empty", PANEL, |t, _| {
+		agent_settings::runtime_scene(t, &RuntimeCase { model: "", ..RUNTIME })
+	}),
+	scene("settings-bot-runtimefields--filled", PANEL, |t, _| {
+		agent_settings::runtime_scene(t, &RuntimeCase { effort: Some(Effort::Medium), ..RUNTIME })
+	}),
+	scene("settings-bot-runtimefields--model-switch-keeps-effort", PANEL, |t, _| {
+		agent_settings::runtime_scene(t, &RuntimeCase { effort: Some(Effort::High), ..RUNTIME })
+	}),
+	scene("settings-bot-runtimefields--model-switch-resets-effort", PANEL, |t, _| {
+		agent_settings::runtime_scene(t, &RUNTIME)
+	}),
+	scene("settings-bot-runtimefields--no-models", PANEL, |t, _| {
+		agent_settings::runtime_scene(t, &RuntimeCase { models: &[], model: "", ..RUNTIME })
+	}),
+	scene("settings-bot-runtimefields--picking-a-model", PANEL, |t, _| {
+		agent_settings::runtime_scene(t, &RuntimeCase { picking: true, ..RUNTIME })
+	}),
+	scene("settings-bot-runtimefields--playground", PANEL, |t, _| {
+		agent_settings::runtime_scene(t, &RUNTIME)
+	}),
+	scene("settings-bot-runtimefields--standard-answers", PANEL, |t, _| {
+		agent_settings::runtime_scene(t, &RuntimeCase { style: OutputStyle::Standard, ..RUNTIME })
+	}),
+	scene("settings-plugins-commitdiff--added-file", PANEL, |t, _| {
+		agent_settings::commit_diff(t, agent_settings::PATCHES[1])
+	}),
+	scene("settings-plugins-commitdiff--default", PANEL, |t, _| {
+		agent_settings::commit_diff(t, agent_settings::PATCHES[0])
+	}),
+	scene("settings-plugins-commitdiff--long-content", PANEL, |t, _| {
+		agent_settings::commit_diff(t, agent_settings::PATCHES[2])
+	}),
+	scene("settings-plugins-commitdiff--unreadable", PANEL, |t, _| {
+		agent_settings::commit_diff(t, agent_settings::PATCHES[3])
+	}),
+	scene("settings-plugins-historychangepage--default", PAGE, |t, _| {
+		agent_settings::change_page(t, ChangeCase::Default)
+	}),
+	scene("settings-plugins-historychangepage--empty", PAGE, |t, _| {
+		agent_settings::change_page(t, ChangeCase::Empty)
+	}),
+	scene("settings-plugins-historychangepage--error", PAGE, |t, _| {
+		agent_settings::change_page(t, ChangeCase::Error)
+	}),
+	scene("settings-plugins-historychangepage--loading", PAGE, |t, _| {
+		agent_settings::change_page(t, ChangeCase::Loading)
+	}),
+	scene("settings-plugins-historychangepage--long-content", PAGE, |t, _| {
+		agent_settings::change_page(t, ChangeCase::Many)
+	}),
+	scene("settings-plugins-historychangepage--retouched", PAGE, |t, _| {
+		agent_settings::change_page(t, ChangeCase::Retouched)
+	}),
+	scene("settings-plugins-historypanel--default", PANEL, |t, s| {
+		agent_settings::history_panel(t, s, HistoryCase::Default)
+	}),
+	scene("settings-plugins-historypanel--empty", PANEL, |t, s| {
+		agent_settings::history_panel(t, s, HistoryCase::Empty)
+	}),
+	Scene {
+		pointer: Pointer::EntersAtSnap("history-change-change-5"),
+		..scene("settings-plugins-historypanel--hovered-row", PANEL, |t, s| {
+			agent_settings::history_panel(t, s, HistoryCase::Default)
+		})
+	},
+	scene("settings-plugins-historypanel--loading", PANEL, |t, s| {
+		agent_settings::history_panel(t, s, HistoryCase::Loading)
+	}),
+	scene("settings-plugins-historypanel--long-content", PANEL, |t, s| {
+		agent_settings::history_panel(t, s, HistoryCase::Long)
+	}),
+	scene("settings-plugins-historypanel--long-content-with-signals", PANEL, |t, s| {
+		agent_settings::history_panel(t, s, HistoryCase::LongSignalled)
+	}),
+	scene("settings-plugins-historypanel--retouched", PANEL, |t, s| {
+		agent_settings::history_panel(t, s, HistoryCase::Default)
+	}),
+	focused("settings-plugins-historypanel--search-returns-focus", PANEL, 1, |t, s| {
+		agent_settings::history_panel(t, s, HistoryCase::Default)
+	}),
+	scene("settings-plugins-historypanel--search-without-match", PANEL, |t, s| {
+		agent_settings::history_panel(t, s, HistoryCase::NoMatch)
+	}),
+	focused("settings-plugins-historypanel--undo-by-keyboard", PANEL, 2, |t, s| {
+		agent_settings::history_panel(t, s, HistoryCase::Openable)
+	}),
+	scene("settings-plugins-historypanel--undoing", PANEL, |t, s| {
+		agent_settings::history_panel(t, s, HistoryCase::Undoing)
+	}),
+	scene("settings-plugins-historypanel--undone", PANEL, |t, s| {
+		agent_settings::history_panel(t, s, HistoryCase::Default)
+	}),
+	scene("settings-plugins-historypanel--unreadable", PANEL, |t, s| {
+		agent_settings::history_panel(t, s, HistoryCase::Unreadable)
+	}),
+	scene("settings-plugins-historypanel--with-open-callback", PANEL, |t, s| {
+		agent_settings::history_panel(t, s, HistoryCase::Openable)
+	}),
+	scene("settings-plugins-skilleditor--advanced", PAGE, |t, s| {
+		agent_settings::skill_editor(t, s, EditorCase::Section(Section::Advanced))
+	}),
+	scene("settings-plugins-skilleditor--default", PAGE, |t, s| {
+		agent_settings::skill_editor(t, s, EditorCase::Section(Section::Instructions))
+	}),
+	scene("settings-plugins-skilleditor--empty", PAGE, |t, s| {
+		agent_settings::skill_editor(t, s, EditorCase::Empty)
+	}),
+	scene("settings-plugins-skilleditor--execution", PAGE, |t, s| {
+		agent_settings::skill_editor(t, s, EditorCase::SharedExecution)
+	}),
+	scene("settings-plugins-skilleditor--file-opened", PAGE, |t, s| {
+		agent_settings::skill_editor(t, s, EditorCase::FileOpened)
+	}),
+	scene("settings-plugins-skilleditor--files", PAGE, |t, s| {
+		agent_settings::skill_editor(t, s, EditorCase::Files)
+	}),
+	scene("settings-plugins-skilleditor--forked-execution", PAGE, |t, s| {
+		agent_settings::skill_editor(t, s, EditorCase::Section(Section::Execution))
+	}),
+	scene("settings-plugins-skilleditor--long-content", PAGE, |t, s| {
+		agent_settings::skill_editor(t, s, EditorCase::Long)
+	}),
+	scene("settings-plugins-skilleditor--over-budget", PAGE, |t, s| {
+		agent_settings::skill_editor(t, s, EditorCase::OverBudget)
+	}),
+	scene("settings-plugins-skilleditor--system", PAGE, |t, s| {
+		agent_settings::skill_editor(t, s, EditorCase::System)
+	}),
+	scene("settings-plugins-skilleditor--tools", PAGE, |t, s| {
+		agent_settings::skill_editor(t, s, EditorCase::Section(Section::Tools))
+	}),
+	scene("settings-plugins-skilleditor--triggering", PAGE, |t, s| {
+		agent_settings::skill_editor(t, s, EditorCase::Section(Section::Triggering))
+	}),
+	scene("settings-plugins-skilleditor--with-confirmation", PAGE, |t, s| {
+		agent_settings::skill_editor(t, s, EditorCase::Confirming)
+	}),
+	scene("settings-plugins-skilleditor--with-leaving", PAGE, |t, s| {
+		agent_settings::skill_editor(t, s, EditorCase::Leaving)
+	}),
+	scene("settings-plugins-skilleditor--zero-value", PAGE, |t, s| {
+		agent_settings::skill_editor(t, s, EditorCase::ZeroValue)
+	}),
+	scene("settings-plugins-skillfilespanel--default", FILES, |t, s| {
+		agent_settings::files_panel(t, s, FilesCase::Default)
+	}),
+	scene("settings-plugins-skillfilespanel--empty", FILES, |t, s| {
+		agent_settings::files_panel(t, s, FilesCase::Empty)
+	}),
+	scene("settings-plugins-skillfilespanel--loading", FILES, |t, s| {
+		agent_settings::files_panel(t, s, FilesCase::LoadingFile)
+	}),
+	scene("settings-plugins-skillfilespanel--loading-paths", FILES, |t, s| {
+		agent_settings::files_panel(t, s, FilesCase::LoadingPaths)
+	}),
+	scene("settings-plugins-skillfilespanel--opened", FILES, |t, s| {
+		agent_settings::files_panel(t, s, FilesCase::Opened)
+	}),
+	scene("settings-plugins-skillfilespanel--refused-delete", FILES, |t, s| {
+		agent_settings::files_panel(t, s, FilesCase::Failed(FileFailure::Delete))
+	}),
+	scene("settings-plugins-skillfilespanel--refused-save", FILES, |t, s| {
+		agent_settings::files_panel(t, s, FilesCase::Failed(FileFailure::Write))
+	}),
+	scene("settings-plugins-skillfilespanel--unreadable-file", FILES, |t, s| {
+		agent_settings::files_panel(t, s, FilesCase::Failed(FileFailure::Read))
+	}),
+	scene("settings-plugins-skillfilespanel--with-confirmation", FILES, |t, s| {
+		agent_settings::files_panel(t, s, FilesCase::Confirming)
+	}),
+	scene("settings-plugins-skillspanel--default", PANEL, |t, _| {
+		agent_settings::skills_panel(t, SkillsCase::Default)
+	}),
+	scene("settings-plugins-skillspanel--empty", PANEL, |t, _| {
+		agent_settings::skills_panel(t, SkillsCase::Empty)
+	}),
+	focused("settings-plugins-skillspanel--focus-visible", PANEL, 2, |t, _| {
+		agent_settings::skills_panel(t, SkillsCase::Default)
+	}),
+	scene("settings-plugins-skillspanel--loading", PANEL, |t, _| {
+		agent_settings::skills_panel(t, SkillsCase::Loading)
+	}),
+	scene("settings-plugins-skillspanel--long-content", PANEL, |t, _| {
+		agent_settings::skills_panel(t, SkillsCase::Long)
+	}),
+	scene("settings-plugins-skillspanel--with-system-skill", PANEL, |t, _| {
+		agent_settings::skills_panel(t, SkillsCase::WithSystem)
+	}),
+	focused(
+		"conversation-tools-toolapproval--default",
+		QUESTION_PANEL,
+		2,
+		approvals::approval_default,
+	),
+	scene(
+		"conversation-tools-toolapproval--with-path",
+		QUESTION_PANEL,
+		approvals::approval_with_path,
+	),
+	focused("conversation-tools-toolquestion--nothing-chosen", SIDE, 1, approvals::nothing_chosen),
+	scene("conversation-tools-toolquestion--option-chosen", SIDE, approvals::option_chosen),
+	scene(
+		"conversation-tools-toolquestion--chosen-row-follows-space-tint",
+		QUESTION_PANEL,
+		approvals::chosen_row_follows_space_tint,
+	),
+	hovered(
+		"conversation-tools-toolquestion--option-row-hovered",
+		SIDE,
+		"question-option-Plan-0",
+		approvals::option_row_hovered,
+	),
+	scene("conversation-tools-toolquestion--several-checked", SIDE, approvals::several_checked),
+	keyed(
+		"conversation-tools-toolquestion--own-answer-typing",
+		SIDE,
+		3,
+		approvals::OWN_ANSWER,
+		"",
+		approvals::own_answer_typing,
+	),
+	scene("conversation-tools-toolquestion--several-questions", SIDE, approvals::several_questions),
+	focused("conversation-tools-toolquestion--waiting-bar", SIDE, 1, approvals::waiting_bar_wide),
+	focused("conversation-tools-toolquestion--answer-pressed", SIDE, 2, approvals::answer_pressed),
+	scene(
+		"conversation-tools-toolquestion--waiting-bar-narrow",
+		NARROW,
+		approvals::waiting_bar_narrow,
+	),
+	focused(
+		"conversation-tools-toolquestion--long-question-narrow",
+		NARROW,
+		2,
+		approvals::long_question_narrow,
+	),
+	focused(
+		"conversation-tools-toolquestion--keyboard-focus-rings",
+		QUESTION_PANEL,
+		6,
+		approvals::keyboard_focus_rings,
+	),
+	scene(
+		"conversation-tools-toolquestion--single-select",
+		QUESTION_PANEL,
+		approvals::single_select,
+	),
+	scene(
+		"conversation-tools-toolquestion--multi-select",
+		QUESTION_PANEL_TALL,
+		approvals::multi_select,
+	),
+	keyed(
+		"conversation-tools-toolquestion--free-text",
+		QUESTION_PANEL,
+		0,
+		approvals::FREE_TEXT,
+		"",
+		approvals::free_text,
+	),
+	keyed(
+		"conversation-tools-toolquestion--digit-keys-choose",
+		QUESTION_PANEL,
+		1,
+		"",
+		"1",
+		approvals::digit_keys_choose,
+	),
+	keyed(
+		"conversation-tools-toolquestion--digit-keys-toggle",
+		QUESTION_PANEL,
+		1,
+		"",
+		"22",
+		approvals::digit_keys_toggle,
+	),
+	keyed(
+		"conversation-tools-toolquestion--digit-typed-into-own-answer",
+		QUESTION_PANEL,
+		2,
+		"",
+		"2",
+		approvals::digit_keys_choose,
+	),
+	focused(
+		"conversation-tools-toolquestion--keyboard-only",
+		QUESTION_PANEL,
+		2,
+		approvals::keyboard_only,
+	),
+	keyed(
+		"conversation-tools-toolquestion--four-questions",
+		QUESTION_PANEL,
+		0,
+		approvals::PACKAGE_NAME,
+		"",
+		approvals::four_questions,
+	),
+	scene("conversation-tools-toolquestion--narrow", NARROW, approvals::narrow_four),
+	scene(
+		"conversation-tools-toolquestion--long-header-scrolls",
+		NARROW,
+		approvals::long_header_scrolls,
+	),
+	focused(
+		"conversation-tools-toolquestion--arrow-key-tabs",
+		QUESTION_PANEL,
+		1,
+		approvals::arrow_key_tabs,
+	),
+	scene(
+		"conversation-tools-toolquestion--options-as-whole-answer",
+		QUESTION_PANEL,
+		approvals::options_as_whole_answer,
+	),
+	focused("conversation-tools-toolquestion--no-skip", QUESTION_PANEL, 1, approvals::no_skip),
+	focused(
+		"conversation-tools-toolquestion--entry-with-link",
+		NARROW,
+		1,
+		approvals::entry_with_link,
+	),
+	keyed(
+		"conversation-tools-toolquestion--entry-with-secret",
+		QUESTION_PANEL,
+		1,
+		approvals::SECRET,
+		"",
+		approvals::entry_with_secret,
+	),
+	focused("conversation-tools-toolquestion--failure", QUESTION_PANEL, 1, approvals::failure),
+	scene("conversation-tools-toolquestion--entry-narrow", NARROW, approvals::entry_narrow),
+	scene(
+		"conversation-tools-toolquestion--application-scope",
+		QUESTION_PANEL,
+		approvals::application_scope,
+	),
+	scene(
+		"conversation-tools-toolquestion--failure-with-action",
+		QUESTION_PANEL,
+		approvals::failure_with_action,
+	),
+	scene(
+		"conversation-tools-toolquestion--notice-in-queue",
+		QUESTION_PANEL,
+		approvals::notice_in_queue,
+	),
+	scene(
+		"conversation-tools-toolquestion--inverse-buttons-idle",
+		SIDE_STACK,
+		approvals::inverse_buttons,
+	),
+	hovered(
+		"conversation-tools-toolquestion--inverse-buttons-hover",
+		SIDE_STACK,
+		"pill-Framework-Send",
+		approvals::inverse_buttons,
+	),
+	focused(
+		"conversation-tools-toolquestion--inverse-buttons-focus-visible",
+		SIDE_STACK,
+		4,
+		approvals::inverse_buttons,
+	),
+	scene(
+		"conversation-tools-toolquestion--inverse-buttons-pending",
+		SIDE_TALL,
+		approvals::inverse_buttons_pending,
+	),
+	scene(
+		"conversation-tools-toolquestion--themes-link-row-at-rest",
+		SIDE,
+		approvals::themes_link_row_at_rest,
+	),
+	scene(
+		"conversation-tools-answeredquestioncard--you-answered",
+		ANSWERED,
+		approvals::you_answered,
+	),
+	scene(
+		"conversation-tools-answeredquestioncard--member-answered",
+		ANSWERED,
+		approvals::member_answered,
+	),
+	scene(
+		"conversation-tools-answeredquestioncard--multi-select",
+		ANSWERED,
+		approvals::answered_multi_select,
+	),
+	scene(
+		"conversation-tools-answeredquestioncard--free-text",
+		ANSWERED,
+		approvals::answered_free_text,
+	),
+	scene(
+		"conversation-tools-answeredquestioncard--long-content",
+		ANSWERED_LONG,
+		approvals::answered_long_content,
+	),
 ];
 
 pub static SURFACES: &[&[Scene]] = &[crate::surfaces::s01_chrome::SCENES];
@@ -2170,10 +3725,14 @@ pub fn every_scene() -> impl Iterator<Item = &'static Scene> {
 pub struct SceneState {
 	pub scene: &'static Scene,
 	pub edit: TextEdit,
+	pub chosen: Vec<usize>,
 	pub picture: Option<Image>,
+	pub math: Typesetter,
+	pub mark: Option<Image>,
 	pub library: library::LibraryScene,
 	pub board_pictures: Vec<Image>,
 	images: Option<ImageCache>,
+	fields: RefCell<HashMap<Field, TextEdit>>,
 }
 
 impl SceneState {
@@ -2181,10 +3740,14 @@ impl SceneState {
 		SceneState {
 			scene,
 			edit: TextEdit::new(scene.typed),
+			chosen: Vec::new(),
 			picture: None,
+			math: Typesetter::default(),
+			mark: None,
 			library: library::LibraryScene::new(scene),
 			board_pictures: Vec::new(),
 			images: None,
+			fields: RefCell::default(),
 		}
 	}
 }
@@ -2195,7 +3758,12 @@ pub fn setup(s: &mut SceneState, waker: Waker) {
 	if let Err(failure) = picture.wait() {
 		eprintln!("the avatar picture didn't decode: {}", failure.0);
 	}
+	let mark = images.svg(approvals::LINEAR_MARK.as_bytes(), MARK_SIDE, PICTURE_SCALE);
+	if let Err(failure) = mark.wait() {
+		eprintln!("the application mark didn't decode: {}", failure.0);
+	}
 	s.picture = Some(picture);
+	s.mark = Some(mark);
 	s.library.decode(&images);
 	s.board_pictures =
 		[boards::fixtures::TERRACE_SVG, boards::fixtures::POOL_SVG, boards::fixtures::PATIO_SVG]

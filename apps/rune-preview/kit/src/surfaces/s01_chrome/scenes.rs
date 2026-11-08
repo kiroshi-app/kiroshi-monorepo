@@ -413,7 +413,7 @@ fn controls_restore_forced_hover(t: &Tokens, _: &SceneState) -> El {
 }
 
 const fn scene(id: &'static str, size: (f32, f32), view: fn(&Tokens, &SceneState) -> El) -> Scene {
-	Scene { id, size, tabs: 0, pointer: Pointer::Away, typed: "", view }
+	Scene { id, size, tabs: 0, pointer: Pointer::Away, typed: "", keys: "", view }
 }
 
 const fn pointed(
