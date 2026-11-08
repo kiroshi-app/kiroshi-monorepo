@@ -1,4 +1,4 @@
-use rune::{Color, Cursor, El, TextEdit, col, el, icon, row, text};
+use rune::{Color, Cursor, El, TextEdit, TextStyle, col, el, icon, row, text};
 
 use super::mark::{Mark, MarkSize, mark};
 use super::search::search_field;
@@ -140,6 +140,7 @@ pub struct Applications<'a> {
 	pub owner: Owner<'a>,
 	pub applications: &'a [Application<'a>],
 	pub query: &'a TextEdit,
+	pub search_text: TextStyle,
 	pub has_failed_to_load: bool,
 	pub can_connect: bool,
 	pub language: Language,
@@ -245,7 +246,7 @@ fn search_row<S: 'static>(
 		.w_full()
 		.gap(SPACING * 2.0)
 		.center_y()
-		.child(search_field(t, panel.query, panel.language, access))
+		.child(search_field(t, panel.query, panel.search_text, panel.language, access))
 		.child(paste)
 }
 

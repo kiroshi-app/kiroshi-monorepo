@@ -6,7 +6,7 @@ use super::{
 	WindowControls, drag_thumbnail, tab_chip, tab_menu, title_bar, window_controls,
 };
 use crate::icons;
-use crate::scenes::{Pointer, Scene, SceneState};
+use crate::scenes::{Pointer, Scene, SceneState, THEMES};
 use crate::strings::Language;
 use crate::tokens::Tokens;
 
@@ -413,7 +413,7 @@ fn controls_restore_forced_hover(t: &Tokens, _: &SceneState) -> El {
 }
 
 const fn scene(id: &'static str, size: (f32, f32), view: fn(&Tokens, &SceneState) -> El) -> Scene {
-	Scene { id, size, tabs: 0, pointer: Pointer::Away, typed: "", keys: "", view }
+	Scene { id, size, tabs: 0, pointer: Pointer::Away, typed: "", keys: "", themes: &THEMES, view }
 }
 
 const fn pointed(

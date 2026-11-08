@@ -5,31 +5,18 @@ use serde_json::json;
 use crate::app::{
 	App, Board, Live, Pane, Person, Ready, Thread, Workspace, connected, whole_thread,
 };
-use crate::dev_profile::{ClaudeLogin, DevProfile, ImportChoices, KiroshiSignIn};
+use crate::dev_profile::DevProfile;
 use crate::host::{Host, HostError, Profile};
 use crate::longest;
 use crate::model::{Agent, Conversation, LastWord, Message, Participant, Role, Space};
-use crate::model::{AgentEvent, ClaudeItem, RuntimeScope};
+use crate::model::{AgentEvent, RuntimeScope};
 use crate::model::{ConversationMissions, MissionDetail, MissionOnBoard};
 use crate::navigation::Route;
-use crate::onboarding::{Account, Connect, Page, Step};
 use crate::source::Source;
 
 type Scene = (&'static str, fn(&mut App));
 
 pub const SCENES: &[Scene] = &[
-	("welcome-conversations", |s| welcome(s, Page::Conversations)),
-	("welcome-spaces", |s| welcome(s, Page::Spaces)),
-	("welcome-tools", |s| welcome(s, Page::Tools)),
-	("connect-login-found", |s| connect(s, Connect::LoginFound)),
-	("connect-nothing-found", |s| connect(s, Connect::NothingFound)),
-	("connect-another-account", |s| connect(s, Connect::AnotherAccount)),
-	("connect-waiting-for-the-code", |s| connect(s, Connect::WaitingForCode)),
-	("connect-key-field", |s| connect(s, Connect::KeyField)),
-	("import-list", import_list),
-	("account-empty", |s| account(s, Account::SignedOut)),
-	("account-waiting", |s| account(s, Account::Waiting)),
-	("account-signed-in", account_signed_in),
 	("host-failed", host_failed),
 	("live", live_longest),
 	("live-mission", live_mission),
@@ -48,68 +35,6 @@ fn block_spike(s: &mut App) {
 	s.spike = crate::spike::editor::Editor::from_markdown(crate::spike::SAMPLE);
 	s.spike.focus(1, 0, 0);
 	s.navigation.navigate_main(Route::BlockSpike);
-}
-
-fn welcome(s: &mut App, page: Page) {
-	s.dev_profile = Some(DevProfile::default());
-	s.navigation.navigate_main(Route::Onboarding(Step::Welcome(page)));
-}
-
-fn connect(s: &mut App, connect: Connect) {
-	s.dev_profile = Some(DevProfile {
-		claude: Some(ClaudeLogin {
-			email: "alex.martin@example.com".into(),
-			plan: "Claude Max".into(),
-		}),
-		..DevProfile::default()
-	});
-	s.navigation.navigate_main(Route::Onboarding(Step::Connect(connect)));
-}
-
-fn item(key: &str, name: &str, description: &str) -> ClaudeItem {
-	ClaudeItem {
-		key: key.into(),
-		name: name.into(),
-		description: description.into(),
-		already_imported: false,
-	}
-}
-
-fn import_list(s: &mut App) {
-	let choices = ImportChoices {
-		agents: vec![
-			item("agent:atlas", "Atlas", "Reviews pull requests and flags risky changes."),
-			item("agent:wren", "Wren", "Writes release notes from merged work."),
-		],
-		claude_md: Some(item(
-			"claude-md",
-			"CLAUDE.md",
-			"Your standing instructions, 42 lines. Kept as yours, for every agent.",
-		)),
-		skills: ["commit-style", "test-first", "review-checklist", "changelog"]
-			.iter()
-			.map(|name| item(&format!("skill:{name}"), name, ""))
-			.collect(),
-	};
-	s.import_selected = choices.keys();
-	s.dev_profile = Some(DevProfile { import: Some(choices), ..DevProfile::default() });
-	s.navigation.navigate_main(Route::Onboarding(Step::Import));
-}
-
-fn account(s: &mut App, account: Account) {
-	s.dev_profile = Some(DevProfile::default());
-	s.navigation.navigate_main(Route::Onboarding(Step::Account(account)));
-}
-
-fn account_signed_in(s: &mut App) {
-	s.dev_profile = Some(DevProfile {
-		kiroshi: Some(KiroshiSignIn {
-			email: "alex.martin@example.com".into(),
-			plan: Some("pro".into()),
-		}),
-		..DevProfile::default()
-	});
-	s.navigation.navigate_main(Route::Onboarding(Step::Account(Account::SignedOut)));
 }
 
 fn host_failed(s: &mut App) {
