@@ -355,7 +355,7 @@ impl State {
 				self.rosters.insert(space_id, Load::Shown(listing));
 			}
 			Err(failure) if self.listing(&space_id).is_some() => {
-				self.raise(failed_in(REFRESH_UNREAD, &failure, space_id))
+				self.to_raise.push(failed_in(REFRESH_UNREAD, &failure, space_id))
 			}
 			Err(failure) => {
 				self.rosters.insert(space_id, Load::Failed(failure));
@@ -420,10 +420,6 @@ impl State {
 			.unwrap_or_else(|| bot_id.to_owned())
 	}
 
-	fn raise(&mut self, notice: Notice) {
-		self.to_raise.push(notice);
-	}
-
 	fn select(&mut self, id: &str) -> Option<model::Conversation> {
 		self.opening = None;
 		let space_id = self.shown.clone()?;
@@ -458,7 +454,9 @@ impl State {
 					listing.read_more(page);
 				}
 			}
-			Err(failure) => self.raise(failed_in(MORE_UNREAD, &failure, space_id.to_owned())),
+			Err(failure) => {
+				self.to_raise.push(failed_in(MORE_UNREAD, &failure, space_id.to_owned()))
+			}
 		}
 	}
 
@@ -476,7 +474,7 @@ impl State {
 			Ok(chat) => self.listing(&space_id)?.bot(bot_id).map(|bot| main_chat_of(bot, &chat)),
 			Err(failure) => {
 				let name = self.bot_name(&space_id, bot_id);
-				self.raise(failed_in(&named(OPEN_REFUSED, &name), &failure, space_id));
+				self.to_raise.push(failed_in(&named(OPEN_REFUSED, &name), &failure, space_id));
 				None
 			}
 		}
@@ -523,7 +521,7 @@ impl State {
 				failed_in(&named(UNSHARE_UNSAVED, &name), failure, space_id)
 			}
 		};
-		self.raise(notice);
+		self.to_raise.push(notice);
 	}
 
 	fn answers(&self) -> Vec<Answer> {

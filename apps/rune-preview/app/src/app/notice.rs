@@ -58,10 +58,6 @@ impl Notice {
 		Notice { space_id: Some(space_id), ..self }
 	}
 
-	pub fn with_retry(self, retry: Retry) -> Notice {
-		Notice { retry: Some(retry), ..self }
-	}
-
 	fn raised(&self) -> RaisedNotice<'_> {
 		let description = self.description.as_deref();
 		let raised = match self.kind {

@@ -129,11 +129,8 @@ impl State {
 
 	fn fail_with(&mut self, title: String, detail: String, retry: Option<Call>) {
 		eprintln!("{title}: {detail}");
-		let notice = Notice::failure(title, detail);
-		self.to_raise.push(match retry {
-			Some(call) => notice.with_retry(Retry(call)),
-			None => notice,
-		});
+		let retry = retry.map(Retry);
+		self.to_raise.push(Notice { retry, ..Notice::failure(title, detail) });
 	}
 
 	fn tell(&mut self, kind: NoticeKind, title: Key) {
