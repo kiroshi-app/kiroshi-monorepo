@@ -31,7 +31,7 @@ use crate::notices::Notices;
 use crate::runs::Runs;
 use crate::source::Source;
 use crate::surfaces::s04_boot::{self, Step};
-use crate::surfaces::{Surfaces, s01_chrome, s02_rail, s10_agent_settings};
+use crate::surfaces::{Surfaces, s01_chrome, s02_rail, s05_thread, s10_agent_settings};
 use crate::turn::{self, SendError};
 
 const PAGE_LIMIT: u32 = 200;
@@ -434,6 +434,7 @@ impl App {
 		self.mission = None;
 		self.thread = Some(thread);
 		self.read_thread(host.clone(), conversation_id.to_owned());
+		s05_thread::open_conversation(self, conversation_id);
 		let conversation_id = conversation_id.to_owned();
 		self.work(move |outbox| {
 			let missions =
@@ -470,6 +471,7 @@ impl App {
 			failure: None,
 		});
 		self.read_thread(host, mission.thread_conversation_id.clone());
+		s05_thread::open_conversation(self, &mission.thread_conversation_id);
 		self.read_mission(&mission.id);
 	}
 
@@ -828,6 +830,7 @@ impl App {
 	}
 
 	fn host_event(&mut self, event: HostEvent) {
+		self.surfaces.s05_thread.heard(&event);
 		match event {
 			HostEvent::Agent(scoped) => {
 				let Some(scope) = scoped.scope else { return };

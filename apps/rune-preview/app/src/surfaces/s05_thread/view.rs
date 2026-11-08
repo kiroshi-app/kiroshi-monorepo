@@ -1,0 +1,68 @@
+use std::rc::Rc;
+
+use rune::El;
+
+use kiroshi_rune_kit::strings::{Language, chat};
+use kiroshi_rune_kit::surfaces::s05_thread::{
+	Agent, Context, Emit, Thread, ThreadEvent, ThreadKind, ThreadNotice, pinned_messages, thread,
+};
+use kiroshi_rune_kit::tokens::Tokens;
+
+use super::{Notice, projection, said};
+use crate::app::App;
+use crate::conversations::now_ms;
+use crate::mission;
+
+fn thread_event(app: &mut App, event: ThreadEvent) {
+	if let Some(forwarded) = app.surfaces.s05_thread.handle(event, now_ms()) {
+		eprintln!("the thread forwards {forwarded:?}, which no surface handles yet");
+	}
+}
+
+fn emit() -> Emit<App> {
+	Rc::new(thread_event)
+}
+
+fn thread_notice(notice: &Notice) -> ThreadNotice {
+	ThreadNotice {
+		title: notice.title.clone(),
+		description: notice.description.clone(),
+		action: said(chat::notice::DISMISS),
+	}
+}
+
+pub fn view(
+	app: &App,
+	t: &Tokens,
+	kind: ThreadKind,
+	roster: Vec<Agent>,
+	space_hue: Option<f32>,
+) -> Option<El> {
+	let state = &app.surfaces.s05_thread;
+	let open = state.open.as_ref()?;
+	let events = app.mission.as_ref().map(mission::thread_events).unwrap_or_default();
+	let shown = projection::Shown { kind: &kind, roster: &roster, events: &events, now: now_ms() };
+	let transcript = projection::transcript(open, &shown);
+	let data = Thread {
+		kind,
+		language: Language::En,
+		space_hue,
+		transcript,
+		roster,
+		notice: state.notice.as_ref().map(thread_notice),
+	};
+	Some(thread(t, &app.math, &data, &emit()))
+}
+
+pub fn pinned_panel(app: &App, t: &Tokens, roster: &[Agent]) -> El {
+	let pins = app
+		.surfaces
+		.s05_thread
+		.open
+		.as_ref()
+		.map(|open| projection::pinned(open, roster, now_ms()))
+		.unwrap_or_default();
+	let emit = emit();
+	let cx = Context { t, math: &app.math, language: Language::En, roster, emit: &emit };
+	pinned_messages(&cx, &pins, false)
+}
