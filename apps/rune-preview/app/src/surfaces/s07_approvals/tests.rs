@@ -942,3 +942,213 @@ fn a_resolved_approval_in_flight_survives_a_new_prompt_until_it_lands() {
 	assert!(state.approvals.iter().any(|approval| approval.request.id == "p1"));
 	assert!(state.approvals[0].call.is_sending());
 }
+
+fn prompts_closed(scope: RuntimeScope, permission_ids: &[&str], question_ids: &[&str]) -> Heard {
+	Heard::PromptsClosed {
+		scope,
+		permission_ids: permission_ids.iter().map(|id| (*id).to_owned()).collect(),
+		question_ids: question_ids.iter().map(|id| (*id).to_owned()).collect(),
+	}
+}
+
+fn question_ids(state: &State) -> Vec<&str> {
+	state.questions.iter().map(|asked| asked.request.id.as_str()).collect()
+}
+
+fn pending_read(state: &mut State, event: AgentEvent) {
+	let pending = ScopedEvent { scope: Some(scope_in(CONVERSATION)), turn: None, event };
+	state.received(
+		Answer::Pending { conversation_id: CONVERSATION.to_owned(), read: Ok(vec![pending]) },
+		NOW,
+		&nothing_shown,
+	);
+}
+
+#[test]
+fn a_closing_of_prompts_is_heard_from_the_core() {
+	let payload = json!({
+		"scope": scope_in(CONVERSATION),
+		"event": { "type": "promptsClosed", "permissionIds": ["p1"], "questionIds": ["q1"] },
+	});
+
+	let heard = heard_of(&payload).expect("the closing is heard").expect("the closing reads");
+
+	assert_eq!(heard, prompts_closed(scope_in(CONVERSATION), &["p1"], &["q1"]));
+}
+
+#[test]
+fn a_closing_drops_the_named_prompts_even_with_a_call_in_flight() {
+	let mut state = State::default();
+	requesting(&mut state, "p1");
+	requesting(&mut state, "p2");
+	state.approval_event("p1", ApprovalEvent::AllowOnce);
+	asking(&mut state, scope_in(CONVERSATION), single_question("q1"));
+	asking(&mut state, scope_in(CONVERSATION), single_question("q2"));
+	state.question_event("q1", QuestionEvent::Choose(0));
+	state.question_event("q1", QuestionEvent::Submit);
+
+	state.heard(prompts_closed(scope_in(CONVERSATION), &["p1"], &["q1"]));
+
+	assert_eq!(approval_ids(&state), vec!["p2"]);
+	assert_eq!(question_ids(&state), vec!["q2"]);
+}
+
+#[test]
+fn a_closed_prompt_ignores_every_later_gesture() {
+	let mut state = State::default();
+	requesting(&mut state, "p1");
+	asking(&mut state, scope_in(CONVERSATION), single_question("q1"));
+	state.heard(prompts_closed(scope_in(CONVERSATION), &["p1"], &["q1"]));
+
+	state.approval_event("p1", ApprovalEvent::AllowOnce);
+	state.approval_event("p1", ApprovalEvent::Deny);
+	state.question_event("q1", QuestionEvent::Choose(0));
+	state.question_event("q1", QuestionEvent::Submit);
+	state.question_event("q1", QuestionEvent::Skip);
+
+	assert!(drained(&mut state).is_empty());
+	assert!(state.approvals.is_empty());
+	assert!(state.questions.is_empty());
+}
+
+#[test]
+fn a_call_landing_after_the_closing_brings_nothing_back_and_raises_nothing() {
+	let mut state = State::default();
+	requesting(&mut state, "p1");
+	requesting(&mut state, "p2");
+	state.approval_event("p1", ApprovalEvent::AllowOnce);
+	state.approval_event("p2", ApprovalEvent::Deny);
+	asking(&mut state, scope_in(CONVERSATION), single_question("q1"));
+	asking(&mut state, scope_in(CONVERSATION), single_question("q2"));
+	state.question_event("q1", QuestionEvent::Choose(0));
+	state.question_event("q1", QuestionEvent::Submit);
+	state.question_event("q2", QuestionEvent::Skip);
+	drained(&mut state);
+	state.heard(prompts_closed(scope_in(CONVERSATION), &["p1", "p2"], &["q1", "q2"]));
+
+	responded(&mut state, "p1", PermissionDecision::AllowOnce);
+	state.received(
+		Answer::Responded {
+			id: "p2".to_owned(),
+			decision: PermissionDecision::Deny,
+			outcome: Err(refused()),
+		},
+		NOW,
+		&nothing_shown,
+	);
+	answered_with(&mut state, "q1", Ok(()));
+	state.received(
+		Answer::Responded {
+			id: "q2".to_owned(),
+			decision: PermissionDecision::Deny,
+			outcome: Err(refused()),
+		},
+		NOW,
+		&nothing_shown,
+	);
+
+	assert!(state.approvals.is_empty());
+	assert!(state.questions.is_empty());
+	assert!(state.answered.is_empty());
+	assert!(drained(&mut state).is_empty());
+}
+
+#[test]
+fn a_failed_answer_landing_after_the_closing_raises_nothing() {
+	let mut state = State::default();
+	asking(&mut state, scope_in(CONVERSATION), single_question("q1"));
+	state.question_event("q1", QuestionEvent::Choose(0));
+	state.question_event("q1", QuestionEvent::Submit);
+	state.heard(prompts_closed(scope_in(CONVERSATION), &[], &["q1"]));
+
+	answered_with(&mut state, "q1", Err(refused()));
+
+	assert!(state.questions.is_empty());
+	assert!(state.answered.is_empty());
+}
+
+#[test]
+fn a_closing_that_names_nothing_leaves_every_prompt() {
+	let mut state = State::default();
+	requesting(&mut state, "p1");
+	asking(&mut state, scope_in(CONVERSATION), single_question("q1"));
+
+	state.heard(prompts_closed(scope_in(CONVERSATION), &[], &[]));
+
+	assert_eq!(approval_ids(&state), vec!["p1"]);
+	assert_eq!(question_ids(&state), vec!["q1"]);
+}
+
+#[test]
+fn a_closing_ignores_the_ids_it_does_not_hold() {
+	let mut state = State::default();
+	requesting(&mut state, "p1");
+	asking(&mut state, scope_in(CONVERSATION), single_question("q1"));
+
+	state.heard(prompts_closed(scope_in(CONVERSATION), &["p9"], &["q9"]));
+
+	assert_eq!(approval_ids(&state), vec!["p1"]);
+	assert_eq!(question_ids(&state), vec!["q1"]);
+	assert!(drained(&mut state).is_empty());
+}
+
+#[test]
+fn a_closed_prompt_asked_again_is_not_shown() {
+	let mut state = State::default();
+	requesting(&mut state, "p1");
+	asking(&mut state, scope_in(CONVERSATION), single_question("q1"));
+	state.heard(prompts_closed(scope_in(CONVERSATION), &["p1"], &["q1"]));
+
+	requesting(&mut state, "p1");
+	asking(&mut state, scope_in(CONVERSATION), single_question("q1"));
+
+	assert!(state.approvals.is_empty());
+	assert!(state.questions.is_empty());
+}
+
+#[test]
+fn a_closed_question_read_again_on_reopen_is_not_shown() {
+	let mut state = State::default();
+	asking(&mut state, scope_in(CONVERSATION), single_question("q1"));
+	state.heard(prompts_closed(scope_in(CONVERSATION), &[], &["q1"]));
+
+	pending_read(&mut state, AgentEvent::QuestionRequested { request: single_question("q1") });
+
+	assert!(state.questions.is_empty());
+}
+
+#[test]
+fn a_closed_question_not_yet_read_is_not_shown_when_the_read_lands() {
+	let mut state = State::default();
+	state.opened(CONVERSATION);
+	state.heard(prompts_closed(scope_in(CONVERSATION), &[], &["q1"]));
+
+	pending_read(&mut state, AgentEvent::QuestionRequested { request: single_question("q1") });
+
+	assert!(state.questions.is_empty());
+}
+
+#[test]
+fn a_closing_leaves_the_prompts_of_other_conversations_and_agents() {
+	let mut state = State::default();
+	requesting(&mut state, "p1");
+	state.heard(Heard::Permission { scope: scope_in(ELSEWHERE), request: permission("p2") });
+	state.heard(Heard::Permission { scope: foreign_scope(), request: permission("p3") });
+	asking(&mut state, scope_in(ELSEWHERE), single_question("q2"));
+	asking(&mut state, foreign_scope(), single_question("q3"));
+
+	state.heard(prompts_closed(scope_in(CONVERSATION), &["p1", "p2", "p3"], &["q2", "q3"]));
+
+	assert_eq!(approval_ids(&state), vec!["p2", "p3"]);
+	assert_eq!(question_ids(&state), vec!["q2", "q3"]);
+}
+
+#[test]
+fn a_closing_keeps_the_same_id_open_for_another_agent() {
+	let mut state = State::default();
+	state.heard(prompts_closed(scope_in(CONVERSATION), &["p1"], &[]));
+
+	state.heard(Heard::Permission { scope: foreign_scope(), request: permission("p1") });
+
+	assert_eq!(approval_ids(&state), vec!["p1"]);
+}
