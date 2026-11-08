@@ -31,7 +31,7 @@ use crate::notices::Notices;
 use crate::runs::Runs;
 use crate::source::Source;
 use crate::surfaces::s04_boot::{self, Step};
-use crate::surfaces::{Surfaces, s01_chrome, s02_rail, s03_roster, s10_agent_settings};
+use crate::surfaces::{Surfaces, s01_chrome, s02_rail, s10_agent_settings};
 use crate::turn::{self, SendError};
 
 const PAGE_LIMIT: u32 = 200;
@@ -839,7 +839,7 @@ impl App {
 				}
 			}
 			HostEvent::MessageStored(message) => {
-				s03_roster::heard_message(self, &message);
+				self.surfaces.s03_roster.heard_message(&message);
 				let Some(thread) =
 					self.thread.as_mut().filter(|thread| thread.shows(&message.conversation_id))
 				else {
@@ -850,7 +850,7 @@ impl App {
 			}
 			HostEvent::MissionChanged(changed) => self.mission_changed(changed),
 			HostEvent::Companion(heard) => {
-				s03_roster::heard_companion(self, &heard);
+				self.surfaces.s03_roster.heard_companion(&heard);
 				s10_agent_settings::heard(self, heard)
 			}
 			HostEvent::AccountChanged(account) => {

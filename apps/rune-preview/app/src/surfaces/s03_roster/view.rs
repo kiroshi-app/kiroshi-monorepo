@@ -1,4 +1,5 @@
 use kiroshi_core::conversations::contract::{ConversationInPage, ConversationState};
+use kiroshi_core::sections::contract::Section as SavedSection;
 use kiroshi_rune_kit::avatar::{Face, Motion};
 use kiroshi_rune_kit::icons;
 use kiroshi_rune_kit::strings::bots;
@@ -18,159 +19,119 @@ const SCROLL: &str = "roster";
 
 const CONTENT: &str = "roster-content";
 
-enum Look {
-	Agent { bot_id: String, hue: Option<f32> },
-	Topic { hue: Option<f32>, seats: Vec<(String, String, Option<f32>)> },
-}
-
-struct Drawn {
-	id: String,
-	name: String,
-	look: Look,
-	conversation_id: Option<String>,
-	title: Option<String>,
+struct Drawn<'a> {
+	line: Line<'a>,
 	timestamp: Option<String>,
 	preview: Option<String>,
-	lead: Option<String>,
-	question: Option<String>,
-	badge: Option<RowBadge>,
-	is_selected: bool,
 }
 
-enum DrawnPlaced {
-	Line(Drawn),
-	Section { id: String, name: String, is_open: bool, lines: Vec<Drawn> },
+enum DrawnPlaced<'a> {
+	Line(Drawn<'a>),
+	Section { section: &'a SavedSection, lines: Vec<Drawn<'a>> },
 }
 
-fn speaker(row: &ConversationInPage) -> Option<String> {
-	let word = row.last_word.as_ref()?;
-	let seat = word.author_bot_id.as_ref().and_then(|bot_id| {
-		row.conversation.participants.iter().find(|seat| &seat.bot_id == bot_id)
-	});
-	seat.map(|seat| seat.name.clone()).or_else(|| word.author_name.clone())
-}
-
-fn look_of(line: &Line) -> Look {
-	match line {
-		Line::Agent { bot, .. } => {
-			Look::Agent { bot_id: bot.id.clone(), hue: hue_value(bot.avatar_blot) }
-		}
-		Line::Topic(row) => Look::Topic {
-			hue: hue_value(row.conversation.color),
-			seats: row
-				.conversation
-				.participants
-				.iter()
-				.filter(|seat| seat.left_at.is_none() && !seat.is_deleted)
-				.map(|seat| (seat.bot_id.clone(), seat.name.clone(), hue_value(seat.avatar_blot)))
-				.collect(),
-		},
-	}
-}
-
-fn drawn(app: &App, line: &Line, selected: Option<&str>, now: i64) -> Drawn {
-	let row = line.conversation();
-	let word = row.and_then(|row| row.last_word.as_ref());
-	let (name, title, lead) = match line {
-		Line::Agent { bot, .. } => {
-			(bot.name.clone(), Some(bot.title.clone()).filter(|title| !title.is_empty()), None)
-		}
-		Line::Topic(row) => (row.conversation.title.clone(), None, speaker(row)),
-	};
-	let observed = row.map(|row| &row.observed);
+fn drawn<'a>(app: &App, line: &Line<'a>, now: i64) -> Drawn<'a> {
+	let word = line.conversation().and_then(|row| row.last_word.as_ref());
 	Drawn {
-		id: line.id().to_owned(),
-		name,
-		look: look_of(line),
-		conversation_id: row.map(|row| row.conversation.id.clone()),
-		title,
+		line: *line,
 		timestamp: word.map(|word| roster_timestamp(word.at, now)),
 		preview: word
 			.and_then(|word| word.text.as_deref())
 			.map(|text| app.mention_names(text).replace('\n', " ")),
-		lead,
-		question: observed
-			.and_then(|observed| observed.pending_prompt.as_ref())
-			.map(|prompt| prompt.text.clone()),
-		badge: observed
-			.filter(|observed| observed.state == ConversationState::NeedsYou)
-			.map(|_| RowBadge::Attention),
-		is_selected: selected == Some(line.id()),
 	}
 }
 
-fn drawn_placed(
-	app: &App,
-	listing: &Listing,
-	selected: Option<&str>,
-	now: i64,
-) -> Vec<DrawnPlaced> {
+fn drawn_placed<'a>(app: &App, listing: &'a Listing, now: i64) -> Vec<DrawnPlaced<'a>> {
 	listing
 		.pinned()
-		.iter()
+		.into_iter()
 		.map(|placed| match placed {
-			Placed::Line(line) => DrawnPlaced::Line(drawn(app, line, selected, now)),
+			Placed::Line(line) => DrawnPlaced::Line(drawn(app, &line, now)),
 			Placed::Section { section, lines } => DrawnPlaced::Section {
-				id: section.id.clone(),
-				name: section.name.clone(),
-				is_open: listing.is_open(&section.id),
-				lines: lines.iter().map(|line| drawn(app, line, selected, now)).collect(),
+				section,
+				lines: lines.iter().map(|line| drawn(app, line, now)).collect(),
 			},
 		})
 		.collect()
 }
 
-fn motion_of(app: &App, conversation_id: Option<&str>, bot_id: &str) -> Motion {
-	conversation_id.map_or(Motion::Still, |conversation_id| app.motion(conversation_id, bot_id))
+fn speaker(row: &ConversationInPage) -> Option<&str> {
+	let word = row.last_word.as_ref()?;
+	let seat = word.author_bot_id.as_ref().and_then(|bot_id| {
+		row.conversation.participants.iter().find(|seat| &seat.bot_id == bot_id)
+	});
+	seat.map(|seat| seat.name.as_str()).or(word.author_name.as_deref())
 }
 
-fn row_of<'a>(app: &App, drawn: &'a Drawn) -> Row<'a> {
-	let conversation_id = drawn.conversation_id.as_deref();
-	let (media, pile) = match &drawn.look {
-		Look::Agent { bot_id, hue } => {
+fn motion_of(app: &App, row: Option<&ConversationInPage>, bot_id: &str) -> Motion {
+	row.map_or(Motion::Still, |row| app.motion(&row.conversation.id, bot_id))
+}
+
+fn pile_of<'a>(app: &App, row: &'a ConversationInPage) -> Vec<Face<'a>> {
+	row.conversation
+		.participants
+		.iter()
+		.filter(|seat| seat.left_at.is_none() && !seat.is_deleted)
+		.map(|seat| Face {
+			name: &seat.name,
+			hue: hue_value(seat.avatar_blot),
+			motion: motion_of(app, Some(row), &seat.bot_id),
+		})
+		.collect()
+}
+
+fn row_of<'a>(app: &App, drawn: &'a Drawn, selected: Option<&str>) -> Row<'a> {
+	let row = drawn.line.conversation();
+	let observed = row.map(|row| &row.observed);
+	let (name, media, title, lead, pile) = match drawn.line {
+		Line::Agent { bot, solo } => {
 			let face = Face {
-				name: &drawn.name,
-				hue: *hue,
-				motion: motion_of(app, conversation_id, bot_id),
+				name: &bot.name,
+				hue: hue_value(bot.avatar_blot),
+				motion: motion_of(app, solo, &bot.id),
 			};
-			(Media::Agent(face), Vec::new())
+			let title = Some(bot.title.as_str()).filter(|title| !title.is_empty());
+			(bot.name.as_str(), Media::Agent(face), title, None, Vec::new())
 		}
-		Look::Topic { hue, seats } => {
-			let pile = seats
-				.iter()
-				.map(|(bot_id, name, hue)| Face {
-					name,
-					hue: *hue,
-					motion: motion_of(app, conversation_id, bot_id),
-				})
-				.collect();
-			(Media::Subject { glyph: &icons::MESSAGE_SQUARE_FILL, hue: *hue }, pile)
+		Line::Topic(row) => {
+			let hue = hue_value(row.conversation.color);
+			let media = Media::Subject { glyph: &icons::MESSAGE_SQUARE_FILL, hue };
+			(row.conversation.title.as_str(), media, None, speaker(row), pile_of(app, row))
 		}
 	};
 	Row {
 		media: Some(media),
-		title: drawn.title.as_deref(),
+		title,
 		timestamp: drawn.timestamp.as_deref(),
 		preview: drawn.preview.as_deref(),
-		preview_lead: drawn.lead.as_deref(),
-		question: drawn.question.as_deref(),
-		badge: drawn.badge,
+		preview_lead: lead,
+		question: observed
+			.and_then(|observed| observed.pending_prompt.as_ref())
+			.map(|prompt| prompt.text.as_str()),
+		badge: observed
+			.filter(|observed| observed.state == ConversationState::NeedsYou)
+			.map(|_| RowBadge::Attention),
 		pile,
-		is_selected: drawn.is_selected,
-		..Row::new(&drawn.id, &drawn.name)
+		is_selected: selected == Some(drawn.line.id()),
+		..Row::new(drawn.line.id(), name)
 	}
 }
 
-fn entry_of<'a>(app: &App, placed: &'a DrawnPlaced, renaming: Option<&str>) -> Entry<'a> {
+fn entry_of<'a>(
+	app: &App,
+	listing: &Listing,
+	placed: &'a DrawnPlaced,
+	selected: Option<&str>,
+) -> Entry<'a> {
 	match placed {
-		DrawnPlaced::Line(drawn) => Entry::Row(row_of(app, drawn)),
-		DrawnPlaced::Section { id, name, is_open, lines } => Entry::Section(Section {
-			id,
-			name,
-			is_open: *is_open,
+		DrawnPlaced::Line(drawn) => Entry::Row(row_of(app, drawn, selected)),
+		DrawnPlaced::Section { section, lines } => Entry::Section(Section {
+			id: &section.id,
+			name: &section.name,
+			is_open: listing.is_open(&section.id),
 			is_landing: false,
-			is_renaming: renaming == Some(id.as_str()),
-			rows: lines.iter().map(|drawn| row_of(app, drawn)).collect(),
+			is_renaming: app.surfaces.s03_roster.renaming() == Some(section.id.as_str()),
+			rows: lines.iter().map(|drawn| row_of(app, drawn, selected)).collect(),
 			lift: Default::default(),
 		}),
 	}
@@ -179,13 +140,12 @@ fn entry_of<'a>(app: &App, placed: &'a DrawnPlaced, renaming: Option<&str>) -> E
 fn shown_roster(app: &App, t: &Tokens, listing: &Listing) -> El {
 	let state = &app.surfaces.s03_roster;
 	let (selected, now) = (selected_row(app), now_ms());
-	let placed = drawn_placed(app, listing, selected, now);
-	let sorted: Vec<Drawn> =
-		listing.sorted().iter().map(|line| drawn(app, line, selected, now)).collect();
+	let placed = drawn_placed(app, listing, now);
+	let sorted: Vec<Drawn> = listing.sorted().iter().map(|line| drawn(app, line, now)).collect();
 	let model = Roster {
 		space_hue: app.ready().and_then(|ready| ready.space.colour),
-		pinned: placed.iter().map(|placed| entry_of(app, placed, state.renaming())).collect(),
-		sorted: sorted.iter().map(|drawn| row_of(app, drawn)).collect(),
+		pinned: placed.iter().map(|placed| entry_of(app, listing, placed, selected)).collect(),
+		sorted: sorted.iter().map(|drawn| row_of(app, drawn, selected)).collect(),
 		is_sorted_landing: false,
 		is_reading_more: state.is_reading_more(),
 	};

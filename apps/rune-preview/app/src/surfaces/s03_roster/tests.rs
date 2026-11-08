@@ -362,7 +362,7 @@ fn a_stored_message_moves_its_row_up_with_its_preview() {
 		author_name: None,
 		created_at: 90,
 	};
-	super::heard_message(&mut app, &message);
+	state_mut(&mut app).heard_message(&message);
 	let listing = shown_listing(&app);
 	assert_eq!(sorted_ids(listing), vec!["room", "atlas", "beacon"]);
 	let word = listing
@@ -381,13 +381,11 @@ fn conversation_and_agent_events_update_rows_without_a_reload() {
 		[("conversation://created", created), ("conversation://state-changed", changed)]
 	{
 		let heard = heard_of(event, payload).expect("a roster event").expect("a readable event");
-		super::heard(&mut app, heard);
+		state_mut(&mut app).heard(heard);
 	}
-	super::heard(&mut app, Heard::Deleted { conversation_id: "atlas-solo".to_owned() });
-	super::heard_companion(
-		&mut app,
-		&s10_agent_settings::Heard::Deleted { id: "beacon".to_owned() },
-	);
+	state_mut(&mut app).heard(Heard::Deleted { conversation_id: "atlas-solo".to_owned() });
+	let deleted = s10_agent_settings::Heard::Deleted { id: "beacon".to_owned() };
+	state_mut(&mut app).heard_companion(&deleted);
 	let listing = shown_listing(&app);
 	assert_eq!(sorted_ids(listing), vec!["new", "room", "atlas"]);
 	let room =

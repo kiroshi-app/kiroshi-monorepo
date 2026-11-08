@@ -584,18 +584,6 @@ pub fn selected_row(app: &App) -> Option<&str> {
 	Some(conversation.solo_bot_id.as_deref().unwrap_or(&conversation.id))
 }
 
-pub fn heard(app: &mut App, heard: Heard) {
-	app.surfaces.s03_roster.heard(heard);
-}
-
-pub fn heard_message(app: &mut App, message: &Message) {
-	app.surfaces.s03_roster.heard_message(message);
-}
-
-pub fn heard_companion(app: &mut App, heard: &s10_agent_settings::Heard) {
-	app.surfaces.s03_roster.heard_companion(heard);
-}
-
 fn emitted(app: &mut App, event: RosterEvent) {
 	let state = &mut app.surfaces.s03_roster;
 	match event {
