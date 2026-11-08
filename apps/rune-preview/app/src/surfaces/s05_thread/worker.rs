@@ -8,7 +8,7 @@ use serde_json::json;
 use crate::host::HostError;
 use crate::source::Source;
 
-pub const PAGE_SIZE: u32 = 20;
+const PAGE_SIZE: u32 = 20;
 
 #[derive(Debug, PartialEq)]
 pub enum Call {

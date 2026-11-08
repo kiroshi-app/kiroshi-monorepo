@@ -10,7 +10,7 @@ use kiroshi_rune_kit::surfaces::s05_thread::{
 use super::conversation::Conversation;
 use super::projection::{self, Shown, WORK_LINE};
 use super::worker::{Answer, Call};
-use super::{Effect, Notice, State};
+use super::{Effect, State};
 use crate::events::HostEvent;
 use crate::host::HostError;
 use crate::model::{AgentEvent, Message, Role, RuntimeScope, ScopedEvent, StreamedMessage};
@@ -448,7 +448,7 @@ fn unreadable_pins_raise_a_notice_and_the_notice_action_dismisses_it() {
 	pins_landed(&mut state, Err(failed("conversation_pinned_messages")));
 	assert_eq!(notice_title(&state).as_deref(), Some("Couldn’t sync pinned messages"));
 	handled(&mut state, ThreadEvent::NoticeAction);
-	assert_eq!(state.notice, None::<Notice>);
+	assert_eq!(notice_title(&state), None);
 }
 
 #[test]
