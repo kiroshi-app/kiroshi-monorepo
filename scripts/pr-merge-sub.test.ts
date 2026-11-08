@@ -67,7 +67,7 @@ type CheckRun = {
 	__typename: "CheckRun"
 	name: string
 	status: string
-	conclusion: string
+	conclusion: string | null
 }
 
 type StatusContext = {
@@ -332,6 +332,31 @@ describe("scripts/pr-merge-sub.sh", () => {
 		expect(result.exitCode).not.toBe(0)
 		expect(result.stderr).toBe(
 			`pr-merge-sub.sh: PR #42 has no check on its head ${HEAD_SHA}\n`,
+		)
+		expectNoMerge()
+	})
+
+	it("refuses a head commit with one pending check carrying no conclusion", async () => {
+		const result = await runPrMergeSub({
+			pullRequest: {
+				statusCheckRollup: [
+					{
+						__typename: "CheckRun",
+						name: "rust",
+						status: "QUEUED",
+						conclusion: null,
+					},
+				],
+			},
+		})
+
+		expect(result.exitCode).not.toBe(0)
+		expect(result.stderr).toBe(
+			[
+				`pr-merge-sub.sh: PR #42 has checks that are not green on its head ${HEAD_SHA}:`,
+				"  rust status=QUEUED conclusion=",
+				"",
+			].join("\n"),
 		)
 		expectNoMerge()
 	})

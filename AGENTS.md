@@ -231,7 +231,7 @@ Never push to `main`. Always work on feature branches.
 
 Right after `gh pr create`, run `scripts/pr-enqueue.sh` alone in its own Bash call: it arms auto-merge with the squash method on the PR of the current branch and fails if it is not armed. The PR squash-merges as soon as its fast gate is green: lint, types, baseline, the touched tests and `verify`.
 
-A PR whose base is not main is merged by `scripts/pr-merge-sub.sh` alone in its own Bash call: it squash-merges the PR of the current branch once every check on its head is green, and refuses a base of main, a draft, a conflict or a file owned in `.github/CODEOWNERS`.
+A PR whose base is not main is merged by `scripts/pr-merge-sub.sh` alone in its own Bash call: it squash-merges the PR of the current branch once every check on its head is green, and refuses a base of main, a draft, a conflict or a file owned in `.github/CODEOWNERS`. Its refusal `has no check on its head` most likely comes from a push that landed while the PR was in conflict, so Proof never fired: if its `mergeable_state` is `dirty`, rebase on or merge the Rune branch, otherwise push an empty commit, wait for Proof on the new head and run the script again.
 
 Auto-merge armed and a fix must land: run `scripts/pr-dequeue.sh` to disarm it, push, then run `scripts/pr-enqueue.sh` again. Never close the PR.
 
