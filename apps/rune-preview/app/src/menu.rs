@@ -1,6 +1,7 @@
 use rune::{AppHandle, MenuItem, Shortcut, Tx};
 
 use crate::app::App;
+use crate::surfaces::s01_chrome;
 
 const WEBSITE: &str = "https://kiroshi.app";
 
@@ -10,6 +11,10 @@ enum Act {
 	Nothing,
 	CloseWindow,
 	OpenWebsite,
+	NewTab,
+	NewWindow,
+	ReopenClosedTab,
+	CloseTab,
 }
 
 #[derive(Clone, Copy)]
@@ -37,11 +42,11 @@ const MENUS: [(&str, &[Line]); 6] = [
 	(
 		"File",
 		&[
-			Item("New Tab", Some("cmd+t"), Act::Nothing),
-			Item("New Window", Some("shift+cmd+n"), Act::Nothing),
-			Item("Reopen Closed Tab", Some("shift+cmd+t"), Act::Nothing),
+			Item("New Tab", Some("cmd+t"), Act::NewTab),
+			Item("New Window", Some("shift+cmd+n"), Act::NewWindow),
+			Item("Reopen Closed Tab", Some("shift+cmd+t"), Act::ReopenClosedTab),
 			Separator,
-			Item("Close Tab", Some("cmd+w"), Act::Nothing),
+			Item("Close Tab", Some("cmd+w"), Act::CloseTab),
 			Item("Close Window", Some("shift+cmd+w"), Act::CloseWindow),
 		],
 	),
@@ -121,6 +126,10 @@ fn action(act: Act) -> Option<fn(&mut App, &mut Tx)> {
 		Act::Nothing => Some(|_, _| {}),
 		Act::CloseWindow => Some(|_, tx| tx.close_window()),
 		Act::OpenWebsite => Some(open_website),
+		Act::NewTab => Some(|app, _| s01_chrome::new_tab(app)),
+		Act::NewWindow => Some(|app, _| s01_chrome::new_window(app)),
+		Act::ReopenClosedTab => Some(|app, _| s01_chrome::reopen_closed_tab(app)),
+		Act::CloseTab => Some(|app, _| s01_chrome::close_tab(app)),
 	}
 }
 
@@ -210,7 +219,7 @@ mod tests {
 	}
 
 	#[test]
-	fn each_item_is_the_platform_s_own_or_closes_opens_or_does_nothing_yet() {
+	fn each_item_is_the_platform_s_own_acts_on_the_tabs_closes_opens_or_does_nothing_yet() {
 		let acts: Vec<_> = MENUS
 			.iter()
 			.flat_map(|(menu, lines)| lines.iter().map(move |line| (*menu, *line)))
@@ -227,10 +236,10 @@ mod tests {
 				("Kiroshi", "Hide Others", Act::Platform),
 				("Kiroshi", "Show All", Act::Platform),
 				("Kiroshi", "Quit Kiroshi", Act::Platform),
-				("File", "New Tab", Act::Nothing),
-				("File", "New Window", Act::Nothing),
-				("File", "Reopen Closed Tab", Act::Nothing),
-				("File", "Close Tab", Act::Nothing),
+				("File", "New Tab", Act::NewTab),
+				("File", "New Window", Act::NewWindow),
+				("File", "Reopen Closed Tab", Act::ReopenClosedTab),
+				("File", "Close Tab", Act::CloseTab),
 				("File", "Close Window", Act::CloseWindow),
 				("Edit", "Undo", Act::Platform),
 				("Edit", "Redo", Act::Platform),
