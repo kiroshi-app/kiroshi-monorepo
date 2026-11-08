@@ -1,3 +1,5 @@
+pub mod notice;
+
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 use std::time::Duration;
@@ -32,14 +34,24 @@ use crate::source::Source;
 use crate::surfaces::s04_boot::{self, Step};
 use crate::surfaces::s08_missions::{self, Opened, Opening};
 use crate::surfaces::{
-	Surfaces, s01_chrome, s02_rail, s05_thread, s10_agent_settings, s14_library,
+	Surfaces, s01_chrome, s02_rail, s03_roster, s05_thread, s10_agent_settings, s14_library,
 };
+
+use notice::{Notice, NoticeBoard};
 
 const PAGE_LIMIT: u32 = 200;
 
 const MAX_THREAD_MESSAGES: usize = 10_000;
 
 const UNKNOWN_AGENT: &str = "An agent";
+
+const MISSIONS_UNREAD: &str = "Couldn't read the missions of this conversation.";
+
+const LONGEST_UNREAD: &str = "Couldn't find the longest conversation.";
+
+const HOST_LOST: &str = "Stopped hearing from the host.";
+
+const CONVERSATION_DELETED: &str = "The conversation of this tab was deleted.";
 
 pub enum Workspace {
 	Connecting,
@@ -204,7 +216,7 @@ pub enum Inbound {
 	Host(HostEvent),
 	Image(Fetched),
 	DevProfile(DevProfile),
-	Longest(Result<Option<Longest>, HostError>),
+	Longest { space_id: String, found: Result<Option<Longest>, HostError> },
 	Banner(BannerOutcome),
 }
 
@@ -230,7 +242,7 @@ pub struct App {
 	pub images: Images,
 	pub sidebar: PaneState,
 	pub spike: crate::spike::editor::Editor,
-	pub notice: Option<String>,
+	pub notice: NoticeBoard,
 	pub dev_profile: Option<DevProfile>,
 	pub runs: Runs,
 	pub clock_ms: f64,
@@ -262,7 +274,7 @@ impl App {
 			images: Images::default(),
 			sidebar: PaneState::new(276.0).range(180.0, 480.0),
 			spike: crate::spike::editor::Editor::default(),
-			notice: None,
+			notice: NoticeBoard::default(),
 			dev_profile: None,
 			runs: Runs::default(),
 			math: Typesetter::default(),
@@ -364,7 +376,6 @@ impl App {
 		};
 		let thread = Thread::of_conversation(conversation);
 		let host = ready.source.clone();
-		self.notice = None;
 		self.mission = None;
 		self.thread = Some(thread);
 		self.read_thread(host.clone(), conversation_id.to_owned());
@@ -403,10 +414,23 @@ impl App {
 		let entered = self.navigation.switch_tab(leaving, held, entering);
 		self.thread = None;
 		self.mission = None;
+		let entered = self.unless_deleted(entered);
 		self.show_pane(entered.pane);
 		if let Some(conversation_id) = entered.conversation_id {
 			self.open(&conversation_id);
 		}
+	}
+
+	fn unless_deleted(&mut self, entered: HeldPage) -> HeldPage {
+		let shows_deleted = entered
+			.conversation_id
+			.as_deref()
+			.is_some_and(|conversation_id| self.navigation.is_deleted(conversation_id));
+		if !shows_deleted {
+			return entered;
+		}
+		self.raise(Notice::info(CONVERSATION_DELETED));
+		self.navigation.new_tab_page()
 	}
 
 	pub fn open_mission(&mut self, mission: &Mission, bot: &Agent) {
@@ -415,7 +439,6 @@ impl App {
 
 	pub fn open_mission_thread(&mut self, conversation_id: &str, title: &str, bot: Option<&Agent>) {
 		let Some(host) = self.ready().map(|ready| ready.source.clone()) else { return };
-		self.notice = None;
 		self.thread = Some(Thread::of_mission(conversation_id, title, bot));
 		self.read_thread(host, conversation_id.to_owned());
 		s05_thread::open_conversation(self, conversation_id);
@@ -435,13 +458,7 @@ impl App {
 				thread.missions = open.into_iter().chain(done).collect();
 				thread.missions.sort_by_key(|mission| mission.opened_at);
 			}
-			Err(failure) => {
-				self.notice = Some(format!(
-					"Couldn't read the missions of this conversation. {}: {}",
-					failure.title(),
-					failure.detail()
-				))
-			}
+			Err(failure) => self.raise(Notice::of_host_failure(MISSIONS_UNREAD, &failure)),
 		}
 	}
 
@@ -477,15 +494,17 @@ impl App {
 				}
 				let host = ready.source.clone();
 				let conversations = ready.conversations.clone();
+				let space_id = ready.space.id.clone();
 				self.workspace = Workspace::Ready(ready);
 				s04_boot::booted(self);
 				s01_chrome::reopen_kept_windows(self);
 				s02_rail::connected(self);
 				self.work(move |outbox| {
-					outbox.deliver(Inbound::Longest(longest::longest(&host, &conversations)))
+					let found = longest::longest(&host, &conversations);
+					outbox.deliver(Inbound::Longest { space_id, found })
 				});
 			}
-			Inbound::Longest(found) => self.longest_found(found),
+			Inbound::Longest { space_id, found } => self.longest_found(space_id, found),
 			Inbound::MissionsOf { conversation_id, missions } => {
 				self.missions_of(&conversation_id, missions)
 			}
@@ -503,24 +522,24 @@ impl App {
 		}
 	}
 
-	fn longest_found(&mut self, found: Result<Option<Longest>, HostError>) {
-		let Workspace::Ready(ready) = &mut self.workspace else { return };
-		let fallback =
-			ready.first_conversation_with_an_agent().map(|conversation| conversation.id.clone());
+	fn longest_found(&mut self, space_id: String, found: Result<Option<Longest>, HostError>) {
+		let found = found.unwrap_or_else(|failure| {
+			self.raise(
+				Notice::of_host_failure(LONGEST_UNREAD, &failure).of_space(space_id.clone()),
+			);
+			None
+		});
+		let Some(ready) = self.ready_mut().filter(|ready| ready.space.id == space_id) else {
+			return;
+		};
 		let opening = match found {
-			Ok(Some(longest)) => {
+			Some(longest) => {
 				let id = longest.conversation_id.clone();
 				ready.longest = Some(longest);
 				Some(id)
 			}
-			Ok(None) => fallback,
-			Err(failure) => {
-				self.notice = Some(format!(
-					"Couldn't find the longest conversation. {}: {}",
-					failure.title(),
-					failure.detail()
-				));
-				fallback
+			None => {
+				ready.first_conversation_with_an_agent().map(|conversation| conversation.id.clone())
 			}
 		};
 		if let Some(id) = opening.filter(|_| self.thread.is_none()) {
@@ -581,7 +600,12 @@ impl App {
 				self.request_images();
 			}
 			HostEvent::MissionChanged(changed) => s08_missions::changed(self, &changed),
-			HostEvent::Roster(heard) => self.surfaces.s03_roster.heard(heard),
+			HostEvent::Roster(heard) => {
+				if let s03_roster::Heard::Deleted { conversation_id } = &heard {
+					self.navigation.conversation_deleted(conversation_id);
+				}
+				self.surfaces.s03_roster.heard(heard)
+			}
 			HostEvent::Library(heard) => s14_library::heard(self, heard),
 			HostEvent::Approvals(heard) => self.surfaces.s07_approvals.heard(heard),
 			HostEvent::Companion(heard) => {
@@ -596,13 +620,12 @@ impl App {
 			HostEvent::Lagged => self.reload_visible_thread(),
 			HostEvent::Listening => {}
 			HostEvent::Unreadable { event, cause } => {
-				self.notice = Some(format!("Couldn't read a {event} event: {cause}"))
+				self.raise(Notice::failure(format!("Couldn't read a {event} event."), cause))
 			}
-			HostEvent::Lost(reason) => {
-				self.notice = Some(format!(
-					"Stopped hearing from the host: {reason}. Restart the preview to listen again."
-				))
-			}
+			HostEvent::Lost(reason) => self.raise(Notice::failure(
+				HOST_LOST,
+				format!("{reason}. Restart the preview to listen again."),
+			)),
 		}
 	}
 

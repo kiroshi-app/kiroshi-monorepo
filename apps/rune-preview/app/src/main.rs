@@ -10,7 +10,7 @@ use kiroshi_rune_os::instance::{self, Claim, ClaimError, Endpoint, Forward, Inst
 use kiroshi_rune_os::launch::{self, Launch};
 use kiroshi_rune_os::link::{self, Link};
 use kiroshi_rune_os::scheme;
-use kiroshi_rune_preview::app::App;
+use kiroshi_rune_preview::app::{App, notice};
 use kiroshi_rune_preview::host::Profile;
 use kiroshi_rune_preview::navigation::Route;
 use kiroshi_rune_preview::surfaces::{
@@ -58,7 +58,8 @@ fn view(s: &App, cx: &mut Cx<App>) -> El {
 		.chain(s13_space_settings::layers(s, &t))
 		.chain(s06_composer::layers(s, &t))
 		.chain(screen_layers)
-		.chain(s14_library::layers(s, &t));
+		.chain(s14_library::layers(s, &t))
+		.chain(notice::layer(s, &t));
 	rune_kit::root(body, layers)
 		.on_paste_content(|s: &mut App, content, _: &mut Tx| s06_composer::pasted(s, content))
 }
