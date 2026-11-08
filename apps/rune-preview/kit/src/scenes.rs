@@ -30,6 +30,7 @@ mod overlays;
 mod person_settings;
 mod primitives;
 mod rail;
+mod routines;
 mod s11_applications;
 mod space_avatar;
 mod space_picker;
@@ -85,6 +86,14 @@ const SHELL: (f32, f32) = (960.0, 560.0);
 const MOBILE: (f32, f32) = (390.0, 640.0);
 const TOASTS: (f32, f32) = (560.0, 640.0);
 const COMPARISON: (f32, f32) = (1180.0, 3700.0);
+const ROUTINES_PANEL: (f32, f32) = (320.0, 576.0);
+const ROUTINES_PANEL_TALL: (f32, f32) = (320.0, 608.0);
+const ROUTINES_PANEL_DIALOG: (f32, f32) = (720.0, 576.0);
+const ROUTINE_ROW: (f32, f32) = (400.0, 120.0);
+const ROUTINE_DETAIL: (f32, f32) = (400.0, 640.0);
+const ROUTINE_DETAILS: (f32, f32) = (400.0, 1040.0);
+const ROUTINE_FORM: (f32, f32) = (400.0, 760.0);
+const ROUTINE_FORM_TALL: (f32, f32) = (400.0, 1240.0);
 const PALETTE: (f32, f32) = (800.0, 720.0);
 const FIELDS: (f32, f32) = (512.0, 520.0);
 const ABOUT: (f32, f32) = (640.0, 760.0);
@@ -287,6 +296,288 @@ pub static SCENES: &[Scene] = &[
 	scene("overlays-tooltip--with-side", OVERLAY, overlays::tooltip_with_side),
 	scene("overlays-tooltip--long-content", OVERLAY, overlays::tooltip_long_content),
 	scene("overlays-tooltip--on-dark-surface", OVERLAY, overlays::tooltip_default),
+	scene("conversation-routines-routinespanel--default", ROUTINES_PANEL, routines::panel_default),
+	scene(
+		"conversation-routines-routinespanel--one-mission",
+		ROUTINES_PANEL,
+		routines::panel_one_mission,
+	),
+	scene(
+		"conversation-routines-routinespanel--earlier-today-unfolded",
+		ROUTINES_PANEL,
+		routines::panel_earlier_today_unfolded,
+	),
+	scene("conversation-routines-routinespanel--empty", ROUTINES_PANEL, routines::panel_empty),
+	scene(
+		"conversation-routines-routinespanel--no-mission",
+		ROUTINES_PANEL,
+		routines::panel_no_mission,
+	),
+	scene(
+		"conversation-routines-routinespanel--opening-the-routines",
+		ROUTINES_PANEL,
+		routines::panel_opening_the_routines,
+	),
+	scene(
+		"conversation-routines-routinespanel--routines-read-failed",
+		ROUTINES_PANEL,
+		routines::panel_routines_read_failed,
+	),
+	scene(
+		"conversation-routines-routinespanel--routines-loading",
+		ROUTINES_PANEL,
+		routines::panel_routines_loading,
+	),
+	scene(
+		"conversation-routines-routinespanel--missions-loading",
+		ROUTINES_PANEL_TALL,
+		routines::panel_missions_loading,
+	),
+	scene(
+		"conversation-routines-routinespanel--missions-read-failed",
+		ROUTINES_PANEL,
+		routines::panel_missions_read_failed,
+	),
+	scene(
+		"conversation-routines-routinespanel--activity-read-failed",
+		ROUTINES_PANEL,
+		routines::panel_activity_read_failed,
+	),
+	scene(
+		"conversation-routines-routinespanel--write-failed",
+		ROUTINES_PANEL,
+		routines::panel_write_failed,
+	),
+	scene(
+		"conversation-routines-routinespanel--creating",
+		ROUTINES_PANEL,
+		routines::panel_creating,
+	),
+	scene("conversation-routines-routinespanel--opening", ROUTINES_PANEL, routines::panel_opening),
+	scene("conversation-routines-routinespanel--editing", ROUTINES_PANEL, routines::panel_editing),
+	scene(
+		"conversation-routines-routinespanel--leaving-an-unsaved-form-by-back",
+		ROUTINES_PANEL_DIALOG,
+		routines::panel_leaving_an_unsaved_form,
+	),
+	scene(
+		"conversation-routines-routinespanel--run-now-failed",
+		ROUTINES_PANEL,
+		routines::panel_run_now_failed,
+	),
+	scene(
+		"conversation-routines-routinespanel--without-seated-lead",
+		ROUTINES_PANEL,
+		routines::panel_without_seated_lead,
+	),
+	scene(
+		"conversation-routines-routinespanel--on-shell-surface-tinted",
+		ROUTINES_PANEL,
+		routines::panel_tinted,
+	),
+	focused(
+		"conversation-routines-routinespanel--focus-visible",
+		ROUTINES_PANEL,
+		2,
+		routines::panel_default,
+	),
+	focused(
+		"conversation-routines-routinespanel--entry-focus-visible",
+		ROUTINES_PANEL,
+		3,
+		routines::panel_default,
+	),
+	scene("conversation-routines-routinerow--default", ROUTINE_ROW, routines::row_default),
+	scene(
+		"conversation-routines-routinerow--stopped-itself",
+		ROUTINE_ROW,
+		routines::row_stopped_itself,
+	),
+	scene(
+		"conversation-routines-routinerow--long-content",
+		ROUTINE_ROW,
+		routines::row_long_content,
+	),
+	scene("conversation-routines-routinerow--deleting", OVERLAY, routines::row_deleting),
+	focused(
+		"conversation-routines-routinerow--focus-visible",
+		ROUTINE_ROW,
+		1,
+		routines::row_default,
+	),
+	focused(
+		"conversation-routines-routinerow--switch-focus-visible",
+		ROUTINE_ROW,
+		2,
+		routines::row_default,
+	),
+	scene("conversation-routines-reportedrunrow--reported", ROUTINE_ROW, routines::run_reported),
+	scene(
+		"conversation-routines-reportedrunrow--another-bot",
+		ROUTINE_ROW,
+		routines::run_another_bot,
+	),
+	scene(
+		"conversation-routines-reportedrunrow--long-content",
+		ROUTINE_ROW,
+		routines::run_long_content,
+	),
+	scene("conversation-routines-routinedetail--default", ROUTINE_DETAIL, routines::detail_default),
+	scene(
+		"conversation-routines-routinedetail--outcomes",
+		ROUTINE_DETAIL,
+		routines::detail_outcomes,
+	),
+	scene("conversation-routines-routinedetail--running", ROUTINE_DETAIL, routines::detail_running),
+	scene(
+		"conversation-routines-routinedetail--without-reason",
+		ROUTINE_DETAIL,
+		routines::detail_without_reason,
+	),
+	scene(
+		"conversation-routines-routinedetail--full-page-read",
+		ROUTINE_DETAIL,
+		routines::detail_full_page_read,
+	),
+	scene(
+		"conversation-routines-routinedetail--stopped-itself",
+		ROUTINE_DETAIL,
+		routines::detail_stopped_itself,
+	),
+	scene("conversation-routines-routinedetail--loading", ROUTINE_DETAIL, routines::detail_loading),
+	scene("conversation-routines-routinedetail--empty", ROUTINE_DETAIL, routines::detail_empty),
+	scene("conversation-routines-routinedetail--error", ROUTINE_DETAIL, routines::detail_error),
+	scene(
+		"conversation-routines-routinedetail--error-over-history",
+		ROUTINE_DETAIL,
+		routines::detail_error_over_history,
+	),
+	focused(
+		"conversation-routines-routinedetail--run-now-in-flight",
+		ROUTINE_DETAIL,
+		2,
+		routines::detail_run_now_in_flight,
+	),
+	scene(
+		"conversation-routines-routinedetail--run-now-refused",
+		ROUTINE_DETAILS,
+		routines::detail_run_now_refused,
+	),
+	scene(
+		"conversation-routines-routinedetail--long-content",
+		ROUTINE_DETAIL,
+		routines::detail_long_content,
+	),
+	focused(
+		"conversation-routines-routinedetail--focus-visible",
+		ROUTINE_DETAIL,
+		1,
+		routines::detail_default,
+	),
+	scene("conversation-routines-routineform--default", ROUTINE_FORM, routines::form_default),
+	scene(
+		"conversation-routines-routineform--on-a-schedule",
+		ROUTINE_FORM,
+		routines::form_on_a_schedule,
+	),
+	scene(
+		"conversation-routines-routineform--on-a-watched-file",
+		ROUTINE_FORM,
+		routines::form_on_a_watched_file,
+	),
+	scene(
+		"conversation-routines-routineform--on-a-webhook-call",
+		ROUTINE_FORM_TALL,
+		routines::form_on_a_webhook_call,
+	),
+	scene(
+		"conversation-routines-routineform--before-its-first-write",
+		ROUTINE_FORM_TALL,
+		routines::form_before_its_first_write,
+	),
+	scene(
+		"conversation-routines-routineform--key-still-reading",
+		ROUTINE_FORM_TALL,
+		routines::form_key_still_reading,
+	),
+	scene(
+		"conversation-routines-routineform--on-a-source-with-no-configuration",
+		ROUTINE_FORM,
+		routines::form_on_a_source_with_no_configuration,
+	),
+	scene("conversation-routines-routineform--refused", ROUTINE_FORM, routines::form_refused),
+	scene(
+		"conversation-routines-routineform--refused-blank-title",
+		ROUTINE_FORM,
+		routines::form_refused_blank_title,
+	),
+	scene(
+		"conversation-routines-routineform--key-unreadable",
+		ROUTINE_FORM_TALL,
+		routines::form_key_unreadable,
+	),
+	scene(
+		"conversation-routines-routineform--filter-on-two-rows",
+		ROUTINE_FORM_TALL,
+		routines::form_filter_on_two_rows,
+	),
+	scene(
+		"conversation-routines-routineform--filter-on-a-present-field",
+		ROUTINE_FORM_TALL,
+		routines::form_filter_on_a_present_field,
+	),
+	scene(
+		"conversation-routines-routineform--filter-on-a-boolean-field",
+		ROUTINE_FORM_TALL,
+		routines::form_filter_on_a_boolean_field,
+	),
+	scene(
+		"conversation-routines-routineform--filter-on-another-path",
+		ROUTINE_FORM_TALL,
+		routines::form_filter_on_another_path,
+	),
+	scene(
+		"conversation-routines-routineform--filter-on-a-number-field",
+		ROUTINE_FORM_TALL,
+		routines::form_filter_on_a_number_field,
+	),
+	scene(
+		"conversation-routines-routineform--filter-missing-a-value",
+		ROUTINE_FORM_TALL,
+		routines::form_filter_missing_a_value,
+	),
+	scene(
+		"conversation-routines-routineform--filter-refused-for-its-operator",
+		ROUTINE_FORM_TALL,
+		routines::form_filter_refused_for_its_operator,
+	),
+	scene(
+		"conversation-routines-routineform--filter-at-the-panel-width",
+		ROUTINE_FORM_TALL,
+		routines::form_filter_at_the_panel_width,
+	),
+	scene(
+		"conversation-routines-routineform--filter-on-an-undescribed-source",
+		ROUTINE_FORM_TALL,
+		routines::form_filter_on_an_undescribed_source,
+	),
+	scene(
+		"conversation-routines-routineform--filter-value-refused-on-an-undescribed-source",
+		ROUTINE_FORM_TALL,
+		routines::form_filter_value_refused_on_an_undescribed_source,
+	),
+	focused(
+		"conversation-routines-routineform--focus-visible",
+		ROUTINE_FORM,
+		1,
+		routines::form_default,
+	),
+	focused(
+		"conversation-routines-routineform--select-focus-visible",
+		ROUTINE_FORM,
+		3,
+		routines::form_default,
+	),
 	scene("feedback-appbootscreen--window-surface", boot::WINDOW, boot::boot_screen_scene),
 	scene("feedback-appbootscreen--window-surface-dark", boot::WINDOW, boot::boot_screen_scene),
 	scene(
@@ -4131,6 +4422,7 @@ pub fn every_scene() -> impl Iterator<Item = &'static Scene> {
 pub struct SceneState {
 	pub scene: &'static Scene,
 	pub edit: TextEdit,
+	pub routine_fields: [TextEdit; 2],
 	pub chosen: Vec<usize>,
 	pub picture: Option<Image>,
 	pub math: Typesetter,
@@ -4147,6 +4439,7 @@ impl SceneState {
 		SceneState {
 			scene,
 			edit: TextEdit::new(scene.typed),
+			routine_fields: [TextEdit::new(""), TextEdit::new("")],
 			chosen: Vec::new(),
 			picture: None,
 			math: Typesetter::default(),
