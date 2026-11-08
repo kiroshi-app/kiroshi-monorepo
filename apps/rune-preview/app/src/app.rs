@@ -350,7 +350,6 @@ impl App {
 
 	pub fn setup(&mut self, waker: Waker) {
 		self.images.start(ImageCache::new(waker.clone()));
-		self.surfaces.s02_rail.attach(waker.clone());
 		let outbox = Outbox { sender: self.pending.clone(), waker };
 		let heard = outbox.clone();
 		self.notices
@@ -395,7 +394,7 @@ impl App {
 			self.received(inbound);
 			changed = true;
 		}
-		s02_rail::poll(self) || changed
+		changed
 	}
 
 	pub fn tick(&mut self, seconds: f64) -> bool {
