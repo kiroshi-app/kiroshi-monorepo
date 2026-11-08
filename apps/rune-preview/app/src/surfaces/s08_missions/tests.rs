@@ -399,13 +399,16 @@ fn change_read(event: serde_json::Value) -> model::MissionChanged {
 	serde_json::from_value(event).expect("a mission://changed payload")
 }
 
+fn card_of<'a>(app: &'a App, id: &str) -> Option<&'a model::Mission> {
+	app.thread.as_ref().and_then(|thread| thread.missions.iter().find(|card| card.id == id))
+}
+
 type Statuses = (Option<MissionStatus>, Option<MissionStatus>, Option<MissionStatus>);
 
 fn statuses(app: &App, id: &str) -> Statuses {
 	let listed = state(app).listed(id).and_then(|mission| mission.status.clone());
 	let opened = app.mission.as_ref().and_then(super::Opened::mission);
-	let card =
-		app.thread.as_ref().and_then(|thread| thread.missions.iter().find(|card| card.id == id));
+	let card = card_of(app, id);
 	(
 		listed,
 		opened.and_then(|mission| mission.status.clone()),
@@ -416,8 +419,7 @@ fn statuses(app: &App, id: &str) -> Statuses {
 fn running_signs(app: &App, id: &str) -> (bool, bool, bool) {
 	let listed = state(app).listed(id).is_some_and(super::feed::is_working);
 	let opened = app.mission.as_ref().and_then(super::Opened::mission);
-	let card =
-		app.thread.as_ref().and_then(|thread| thread.missions.iter().find(|card| card.id == id));
+	let card = card_of(app, id);
 	(
 		listed,
 		opened.is_some_and(super::feed::is_working),
