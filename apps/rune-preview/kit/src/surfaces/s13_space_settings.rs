@@ -18,10 +18,15 @@ use crate::primitives::{
 };
 use crate::scenes::SceneState;
 use crate::strings::{Key, Language, bots, common, settings};
+use crate::surfaces::s01_chrome::{ChromeEvent, TitleBar, title_bar};
+use crate::surfaces::s12_person_settings::blocks::HAIRLINE;
+use crate::surfaces::s12_person_settings::shell::{
+	Dialog, Item, MENU_WIDTH, Menu, Page, PanelLayout, Tone, dialog, screen_body,
+};
 use crate::tokens::{
-	RADIUS_2XL, RADIUS_CONTROL, RADIUS_MD, RADIUS_XL, SIDEBAR_RAIL, SPACING, TEXT_BASE_MEDIUM,
-	TEXT_BASE_SEMIBOLD, TEXT_COMPACT, TEXT_COMPACT_MEDIUM, TEXT_COMPACT_MONO, TEXT_SM,
-	TEXT_SM_MEDIUM, TEXT_SM_SEMIBOLD, TEXT_XS, TEXT_XS_MEDIUM, Tokens, faded, tone,
+	RADIUS_2XL, RADIUS_CONTROL, RADIUS_MD, RADIUS_XL, SHELL_INSET, SIDEBAR_RAIL, SPACING,
+	TEXT_BASE_MEDIUM, TEXT_COMPACT, TEXT_COMPACT_MEDIUM, TEXT_COMPACT_MONO, TEXT_SM,
+	TEXT_SM_MEDIUM, TEXT_XS, TEXT_XS_MEDIUM, Tokens, faded, tone,
 };
 use crate::widgets::not_drawn;
 
@@ -106,24 +111,16 @@ impl Entry {
 		})
 	}
 
-	fn glyph(self, selected: bool) -> &'static Icon {
-		match (self, selected) {
-			(Entry::Space, false) => &icons::FOLDER,
-			(Entry::Space, true) => &icons::FOLDER_FILL,
-			(Entry::Members, false) => &icons::USERS,
-			(Entry::Members, true) => &icons::USERS_FILL,
-			(Entry::Agents, false) => &icons::HEXAGONS,
-			(Entry::Agents, true) => &icons::HEXAGONS_FILL,
-			(Entry::Secrets, false) => &icons::CODE,
-			(Entry::Secrets, true) => &icons::CODE_FILL,
-			(Entry::Skills, false) => &icons::SPARKLES,
-			(Entry::Skills, true) => &icons::SPARKLES_FILL,
-			(Entry::Applications, false) => &icons::SERVER,
-			(Entry::Applications, true) => &icons::SERVER_FILL,
-			(Entry::History, false) => &icons::HISTORY,
-			(Entry::History, true) => &icons::HISTORY_FILL,
-			(Entry::Danger, false) => &icons::TRIANGLE_ALERT,
-			(Entry::Danger, true) => &icons::TRIANGLE_ALERT_FILL,
+	fn glyphs(self) -> (&'static Icon, &'static Icon) {
+		match self {
+			Entry::Space => (&icons::FOLDER, &icons::FOLDER_FILL),
+			Entry::Members => (&icons::USERS, &icons::USERS_FILL),
+			Entry::Agents => (&icons::HEXAGONS, &icons::HEXAGONS_FILL),
+			Entry::Secrets => (&icons::CODE, &icons::CODE_FILL),
+			Entry::Skills => (&icons::SPARKLES, &icons::SPARKLES_FILL),
+			Entry::Applications => (&icons::SERVER, &icons::SERVER_FILL),
+			Entry::History => (&icons::HISTORY, &icons::HISTORY_FILL),
+			Entry::Danger => (&icons::TRIANGLE_ALERT, &icons::TRIANGLE_ALERT_FILL),
 		}
 	}
 
@@ -341,6 +338,7 @@ fn helper(t: &Tokens, copy: &str, failed: bool) -> El {
 }
 
 const FIELD_HEIGHT: f32 = SPACING * 9.5;
+const INVITE_WIDTH: f32 = SPACING * 15.0;
 
 fn field_box<S: 'static>(
 	t: &Tokens,
@@ -355,7 +353,7 @@ fn field_box<S: 'static>(
 		.key(format!("field-{label}"))
 		.w_full()
 		.h(FIELD_HEIGHT)
-		.px(SPACING * 3.0)
+		.px(SPACING * 3.0 + HAIRLINE)
 		.py((FIELD_HEIGHT - style.size) / 2.0)
 		.radius(RADIUS_CONTROL)
 		.border(1.0, t.input)
@@ -373,7 +371,7 @@ fn read_only_box(t: &Tokens, value: &str, label: &str) -> El {
 	row()
 		.w_full()
 		.h(FIELD_HEIGHT)
-		.px(SPACING * 3.0)
+		.px(SPACING * 3.0 + HAIRLINE)
 		.radius(RADIUS_CONTROL)
 		.border(1.0, t.input)
 		.center_y()
@@ -512,7 +510,7 @@ fn own_hue_box<S: 'static>(t: &Tokens, hue: f32, w: Wiring<S>) -> El {
 	let tinted = t.in_space(Some(hue));
 	let readout = row()
 		.h(SPACING * 7.0)
-		.px(SPACING * 2.5)
+		.px(SPACING * 2.5 + HAIRLINE)
 		.gap(SPACING * 0.5)
 		.radius(RADIUS_MD)
 		.border(1.0, t.border)
@@ -551,7 +549,7 @@ fn own_hue_box<S: 'static>(t: &Tokens, hue: f32, w: Wiring<S>) -> El {
 	col()
 		.w_full()
 		.gap(SPACING * 2.5)
-		.padding(SPACING * 3.5)
+		.padding(SPACING * 3.5 + HAIRLINE)
 		.radius(RADIUS_CONTROL)
 		.border(1.0, t.border)
 		.child(
@@ -703,7 +701,7 @@ pub fn danger_zone<S: 'static>(t: &Tokens, danger: Danger, w: Wiring<S>) -> El {
 	col()
 		.w_full()
 		.gap(SPACING * 3.0)
-		.padding(SPACING * 4.0)
+		.padding(SPACING * 4.0 + HAIRLINE)
 		.radius(RADIUS_XL)
 		.border(1.0, faded(t.destructive, 0.3))
 		.child(
@@ -886,7 +884,7 @@ pub fn share_card<S: 'static>(t: &Tokens, name: &str, sharing: Sharing, w: Wirin
 	row()
 		.w_full()
 		.gap(SPACING * 4.0)
-		.padding(SPACING * 3.5)
+		.padding(SPACING * 3.5 + HAIRLINE)
 		.radius(RADIUS_CONTROL)
 		.border(1.0, t.border)
 		.child(words)
@@ -995,7 +993,10 @@ fn invite_field<S: 'static>(t: &Tokens, m: &Members, host: &str, w: Wiring<S>) -
 	let input = if blocked { input.disabled(true).opacity(DISABLED_OPACITY) } else { input };
 	let invite = Button::new(say(settings::space::members::invite::ACTION))
 		.disabled(blocked || empty)
-		.view(t);
+		.view(t)
+		.w(INVITE_WIDTH)
+		.h(FIELD_HEIGHT)
+		.radius(RADIUS_CONTROL);
 	let invite = if blocked || empty { invite } else { w.on(invite, SpaceEvent::Invite) };
 	let label = field_label(t, label);
 	col()
@@ -1174,6 +1175,7 @@ fn members_list(t: &Tokens, label: &str, rows: Vec<El>) -> El {
 			.w_full()
 			.radius(RADIUS_XL)
 			.border(1.0, t.border)
+			.padding(HAIRLINE)
 			.role("list")
 			.label(label)
 			.children(rows),
@@ -1228,6 +1230,7 @@ fn members_skeleton(t: &Tokens) -> El {
 				.min_h(0.0)
 				.radius(RADIUS_XL)
 				.border(1.0, t.border)
+				.padding(HAIRLINE)
 				.clip_rounded(RADIUS_XL)
 				.role("progressbar")
 				.label(say(settings::space::members::LIST))
@@ -1369,7 +1372,7 @@ fn agent_card<S: 'static>(t: &Tokens, agent: &Agent, w: Wiring<S>) -> El {
 		.key(format!("agent-{}", agent.id))
 		.w_full()
 		.gap(SPACING * 3.5)
-		.padding(SPACING * 4.0)
+		.padding(SPACING * 4.0 + HAIRLINE)
 		.radius(RADIUS_XL)
 		.border(1.0, t.border)
 		.fill(faded(t.muted, 0.4))
@@ -1446,11 +1449,6 @@ pub fn agents_section<S: 'static>(
 	col().w_full().gap(SPACING * 8.0).child(head).child(body)
 }
 
-const DIALOG_SIZE: (f32, f32) = (832.0, 544.0);
-const DIALOG_TITLE: TextStyle = TextStyle { line_height: 20.0, ..TEXT_BASE_SEMIBOLD };
-const DIALOG_RAIL: f32 = SPACING * 52.0;
-const RAIL_ITEM_RADIUS: f32 = RADIUS_XL;
-
 fn dialog_entries(settings: &SpaceSettings) -> Vec<Entry> {
 	let mut entries = vec![Entry::Space];
 	if settings.members.is_some() {
@@ -1469,37 +1467,36 @@ fn dialog_entries(settings: &SpaceSettings) -> Vec<Entry> {
 	entries
 }
 
-fn rail_item<S: 'static>(t: &Tokens, entry: Entry, selected: bool, w: Wiring<S>) -> El {
-	let danger = entry == Entry::Danger;
-	let (rest_ink, picked_fill, picked_ink) = if danger {
-		(t.destructive, t.destructive_tint, t.destructive_tint_foreground)
-	} else {
-		(t.muted_foreground, t.muted, t.foreground)
-	};
-	let label = entry.label(false);
-	let ink = if selected { picked_ink } else { rest_ink };
-	let item = row()
-		.key(format!("rail-{label}"))
-		.w_full()
-		.px(SPACING * 2.5)
-		.py(SPACING * 2.0)
-		.gap(SPACING * 2.5)
-		.radius(RAIL_ITEM_RADIUS)
-		.center_y()
-		.role("tab")
-		.label(label)
-		.checked(selected)
-		.focus_selected(selected)
-		.child(icon(entry.glyph(selected), SPACING * 4.0).color(ink))
-		.child(
-			text(label.to_owned()).font(if selected { TEXT_SM_MEDIUM } else { TEXT_SM }).color(ink),
-		);
-	let item = if selected {
-		item.fill(picked_fill)
-	} else {
-		item.hover(picked_fill).group_color(picked_ink)
-	};
-	ring(t, w.on(instant(item.hover_group()), SpaceEvent::Select(entry)))
+const DIALOG_PANEL: f32 = 832.0 - SPACING * 52.0 - 1.0 - SPACING * 10.0;
+const SCREEN_COLUMN: f32 = SPACING * 200.0 - SPACING * 12.0;
+
+fn shell_items<'a>(
+	entries: &[Entry],
+	current: Entry,
+	invitation: bool,
+	disabled: impl Fn(Entry) -> bool,
+	count: impl Fn(Entry) -> Option<String>,
+) -> Vec<Item<'a, SpaceEvent>> {
+	entries
+		.iter()
+		.map(|&entry| Item {
+			is_current: entry == current,
+			count: count(entry),
+			tone: if entry == Entry::Danger { Tone::Danger } else { Tone::Plain },
+			is_disabled: disabled(entry),
+			..Item::new(entry.label(invitation), entry.glyphs(), SpaceEvent::Select(entry))
+		})
+		.collect()
+}
+
+fn layout_of(settings: &SpaceSettings) -> PanelLayout {
+	let loading = settings.members.as_ref().is_some_and(|members| members.loading);
+	match settings.entry {
+		Entry::Members if loading => PanelLayout::Fixed,
+		Entry::Secrets | Entry::Skills | Entry::Applications => PanelLayout::Fixed,
+		Entry::History => PanelLayout::Flush,
+		_ => PanelLayout::Scrolling,
+	}
 }
 
 fn entry_panel<S: 'static>(t: &Tokens, settings: &SpaceSettings, width: f32, w: Wiring<S>) -> El {
@@ -1569,101 +1566,26 @@ pub fn space_settings_dialog<S: 'static>(t: &Tokens, settings: &SpaceSettings, w
 	let t = &t.in_space(settings.value.colour);
 	let name = settings.value.shown_name();
 	let breadcrumb = say(settings::breadcrumb::TITLE);
-	let close = Button::icon(&icons::CLOSE, say(common::dialog::CLOSE))
-		.variant(ButtonVariant::Ghost)
-		.size(ButtonSize::IconSm)
-		.view(t);
-	let header = row()
-		.w_full()
-		.gap(SPACING * 2.5)
-		.py(SPACING * 4.0)
-		.pl(SPACING * 4.0)
-		.pr(SPACING * 14.0)
-		.center_y()
-		.child(space_tint(t, settings.value.colour, SPACING * 5.0))
-		.child(
-			row()
-				.shrink()
-				.min_w(0.0)
-				.gap(SPACING * 1.5)
-				.center_y()
-				.role("heading")
-				.child(
-					text(name.to_owned())
-						.font(DIALOG_TITLE)
-						.color(t.popover_foreground)
-						.max_lines(1)
-						.truncate(),
-				)
-				.child(icon(&icons::NEXT, SPACING * 3.5).color(t.muted_foreground))
-				.child(text(breadcrumb.to_owned()).font(DIALOG_TITLE).color(t.muted_foreground)),
-		);
-	let entries = dialog_entries(settings);
-	let rail = col()
-		.w(DIALOG_RAIL)
-		.h_full()
-		.padding(SPACING * 2.0)
-		.gap(SPACING)
-		.role("tablist")
-		.focus_group()
-		.children(entries.iter().flat_map(|&entry| {
-			let separator = (entry == Entry::Danger).then(|| {
-				el().h(1.0).self_stretch().mx(SPACING).my(SPACING).fill(t.border).a11y_hidden()
-			});
-			separator.into_iter().chain(std::iter::once(rail_item(
-				t,
-				entry,
-				entry == settings.entry,
-				w,
-			)))
-		}));
-	let panel_width = DIALOG_SIZE.0 - DIALOG_RAIL - 1.0 - SPACING * 10.0;
-	let panel = col()
-		.grow(1.0)
-		.shrink()
-		.h_full()
-		.min_h(0.0)
-		.padding(SPACING * 5.0)
-		.gap(SPACING * 4.0)
-		.role("tabpanel")
-		.label(settings.entry.label(false))
-		.child(entry_panel(t, settings, panel_width, w));
-	let surface = col()
-		.key(format!("space-settings-{name}"))
-		.size(DIALOG_SIZE.0, DIALOG_SIZE.1)
-		.radius(RADIUS_2XL)
-		.fill(t.popover)
-		.clip_rounded(RADIUS_2XL)
-		.role("dialog")
-		.label(format!("{name} {breadcrumb}"))
-		.transition(popup_motion(t))
-		.child(w.on(close, SpaceEvent::Close).pin(
-			None,
-			Some(SPACING * 4.0),
-			Some(SPACING * 4.0),
-			None,
-		))
-		.child(header)
-		.child(el().w_full().h(1.0).fill(t.border))
-		.child(
-			row()
-				.w_full()
-				.grow(1.0)
-				.min_h(0.0)
-				.child(rail)
-				.child(el().w(1.0).h_full().fill(t.border))
-				.child(panel),
-		);
-	let dialog = el()
-		.absolute(0.0, 0.0)
-		.w_full()
-		.h_full()
-		.center()
-		.modal(true, move |s: &mut S| (w.emit)(s, SpaceEvent::Close))
-		.child(elevated(t, surface));
-	let mut all = vec![scrim(t), dialog];
-	all.extend(layers(t, settings, w));
-	rune_kit::root(el().w_full().h_full().fill(t.background), all)
+	let items = shell_items(&dialog_entries(settings), settings.entry, false, |_| false, |_| None);
+	let label = format!("{name} {breadcrumb}");
+	let mut layers = dialog(
+		t,
+		Dialog {
+			key: "space-settings-dialog",
+			mark: space_tint(t, settings.value.colour, SPACING * 5.0),
+			name,
+			label: &label,
+			breadcrumb,
+			close_label: say(common::dialog::CLOSE),
+			close: SpaceEvent::Close,
+			items: &items,
+			layout: layout_of(settings),
+			content: entry_panel(t, settings, DIALOG_PANEL, w),
+		},
+		w.emit,
+	);
+	layers.extend(self::layers(t, settings, w));
+	rune_kit::root(el().w_full().h_full().fill(t.background), layers)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1760,7 +1682,7 @@ fn not_shared_card<S: 'static>(t: &Tokens, name: &str, w: Wiring<S>) -> El {
 	col()
 		.w_full()
 		.gap(SPACING * 3.0)
-		.padding(SPACING * 4.0)
+		.padding(SPACING * 4.0 + HAIRLINE)
 		.radius(RADIUS_CONTROL)
 		.border(1.0, t.shell_divider)
 		.fill(t.card_raised)
@@ -1900,237 +1822,62 @@ pub struct SpaceScreen<'a> {
 	pub leaving: bool,
 }
 
-pub const MENU_WIDTH: f32 = 304.0;
-const TITLE_BAR: f32 = 41.0;
-const WINDOW_INSET: f32 = 9.0;
-const CONTENT_HEADER: f32 = 47.0;
-const MENU_ROW: f32 = SPACING * 9.0;
-
-struct MenuRow<'a> {
-	glyph: &'static Icon,
-	label: &'a str,
-	trailing: Option<String>,
-	tone: MenuTone,
-	disabled: bool,
-	event: SpaceEvent,
-}
-
-fn menu_row<S: 'static>(t: &Tokens, item: MenuRow, w: Wiring<S>) -> El {
-	let MenuRow { glyph, label, trailing, tone, disabled, event } = item;
-	let selected = tone == MenuTone::Selected;
-	let (ink, fill_on, ink_on) = match tone {
-		MenuTone::Danger | MenuTone::DangerSelected => {
-			(t.destructive, t.destructive_tint, t.destructive_tint_foreground)
-		}
-		MenuTone::Quiet => (t.soft_foreground, t.muted, t.foreground),
-		MenuTone::Rest | MenuTone::Selected => (t.muted_foreground, t.muted, t.foreground),
-	};
-	let picked = selected || tone == MenuTone::DangerSelected;
-	let ink = if picked { ink_on } else { ink };
-	let glyph_ink = if tone == MenuTone::Quiet { t.muted_foreground } else { ink };
-	let mut item = row()
-		.key(format!("menu-{label}"))
-		.w_full()
-		.h(MENU_ROW)
-		.px(SPACING * 2.0)
-		.gap(SPACING * 2.5)
-		.radius(RADIUS_CONTROL)
-		.center_y()
-		.role("button")
-		.label(match &trailing {
-			Some(count) => format!("{label} {count}"),
-			None => label.to_owned(),
-		})
-		.child(icon(icons::stroked(glyph, 1.8), SPACING * 4.0).color(glyph_ink))
-		.child(
-			text(label.to_owned())
-				.font(if picked && tone != MenuTone::DangerSelected {
-					TEXT_SM_MEDIUM
-				} else {
-					TEXT_SM
-				})
-				.color(ink)
-				.grow(1.0)
-				.max_lines(1)
-				.truncate(),
-		);
-	if let Some(count) = trailing {
-		item = item.child(
-			row()
-				.h(SPACING * 5.5)
-				.min_w(SPACING * 5.5)
-				.px(SPACING * 1.5)
-				.radius(SPACING * 2.75)
-				.border(1.0, t.border)
-				.fill(t.card)
-				.center()
-				.child(text(count).font(tight(TEXT_XS)).color(t.muted_foreground)),
-		);
-	}
-	item = if picked {
-		item.fill(fill_on).checked(true)
-	} else {
-		item.hover(fill_on).group_color(ink_on)
-	};
-	if disabled {
-		return item.disabled(true).opacity(0.4);
-	}
-	ring(t, w.on(instant(item.hover_group()), event))
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum MenuTone {
-	Rest,
-	Selected,
-	Danger,
-	DangerSelected,
-	Quiet,
-}
-
-fn settings_menu<S: 'static>(t: &Tokens, screen: &SpaceScreen, w: Wiring<S>) -> El {
+fn screen_items<'a>(screen: &SpaceScreen) -> Vec<Item<'a, SpaceEvent>> {
 	let settings = &screen.settings;
 	let invitation = matches!(screen.standing, Standing::Invitation { .. });
 	let unreachable = matches!(screen.standing, Standing::Joined { connected: false, .. });
-	let session_bound = |entry: Entry| {
-		matches!(entry, Entry::Secrets | Entry::Skills | Entry::Applications | Entry::History)
-	};
 	let entries: Vec<Entry> = if invitation {
 		vec![Entry::Space]
 	} else {
 		dialog_entries(settings).into_iter().filter(|entry| *entry != Entry::Danger).collect()
 	};
-	let back = row()
-		.key("menu-back")
-		.h(SPACING * 8.0)
-		.px(SPACING * 2.0)
-		.gap(SPACING * 2.5)
-		.radius(RADIUS_CONTROL)
-		.center_y()
-		.role("button")
-		.label(say(settings::screen::BACK_TO_SETTINGS))
-		.hover(t.muted)
-		.child(icon(&icons::PREVIOUS, SPACING * 4.0).color(t.muted_foreground))
-		.child(
-			text(say(settings::screen::BACK_TO_SETTINGS).to_owned())
-				.font(TextStyle { line_height: 18.0, ..TEXT_COMPACT_MEDIUM })
-				.color(t.muted_foreground),
-		);
-	let identity = row()
-		.w_full()
-		.px(SPACING * 2.0)
-		.gap(SPACING * 2.5)
-		.center_y()
-		.child(space_avatar(t, settings.value, screen.standing, SPACING * 9.0))
-		.child(
-			col()
-				.shrink()
-				.min_w(0.0)
-				.child(
-					text(settings.value.shown_name().to_owned())
-						.font(TEXT_SM_SEMIBOLD)
-						.color(t.foreground)
-						.max_lines(1)
-						.truncate(),
-				)
-				.child(
-					text(
-						say(if invitation {
-							settings::screen::subtitle::INVITATION
-						} else {
-							settings::screen::subtitle::SPACE
-						})
-						.to_owned(),
-					)
-					.font(TEXT_XS)
-					.color(t.muted_foreground),
-				),
-		);
-	let group = col()
-		.w_full()
-		.gap(SPACING * 0.5)
-		.role("list")
-		.label(say(settings::screen::group::SETTINGS))
-		.child(
-			row().h(SPACING * 8.0).px(SPACING * 2.0).pb(SPACING).center_y().child(
-				text(say(settings::screen::group::SETTINGS).to_owned())
-					.font(TEXT_XS_MEDIUM)
-					.color(t.muted_foreground),
-			),
-		)
-		.children(entries.iter().map(|&entry| {
-			let count = (entry == Entry::Agents)
-				.then(|| settings.agents.map(|agents| agents.len().to_string()))
-				.flatten();
-			menu_row(
-				t,
-				MenuRow {
-					glyph: entry.glyph(entry == settings.entry),
-					label: entry.label(invitation),
-					trailing: count,
-					tone: if entry == settings.entry { MenuTone::Selected } else { MenuTone::Rest },
-					disabled: entry != Entry::Space
-						&& (unreachable || (screen.session_unavailable && session_bound(entry))),
-					event: SpaceEvent::Select(entry),
-				},
-				w,
-			)
-		}));
-	let pinned = match screen.standing {
-		Standing::Invitation { .. } => menu_row(
-			t,
-			MenuRow {
-				glyph: &icons::CLOSE,
-				label: say(bots::spaces::invitations::DECLINE),
-				trailing: None,
-				tone: MenuTone::Quiet,
-				disabled: false,
-				event: SpaceEvent::Decline,
-			},
-			w,
-		),
-		Standing::Joined { .. } => menu_row(
-			t,
-			MenuRow {
-				glyph: &icons::BRACKET_ARROW_RIGHT,
-				label: say(common::spaces::leave::ACTION),
-				trailing: None,
-				tone: MenuTone::Danger,
-				disabled: false,
-				event: SpaceEvent::AskDanger,
-			},
-			w,
-		),
-		Standing::Yours { .. } => menu_row(
-			t,
-			MenuRow {
-				glyph: Entry::Danger.glyph(settings.entry == Entry::Danger),
-				label: Entry::Danger.label(false),
-				trailing: None,
-				tone: if settings.entry == Entry::Danger {
-					MenuTone::DangerSelected
-				} else {
-					MenuTone::Danger
-				},
-				disabled: false,
-				event: SpaceEvent::Select(Entry::Danger),
-			},
-			w,
-		),
+	let session_bound = |entry: Entry| {
+		matches!(entry, Entry::Secrets | Entry::Skills | Entry::Applications | Entry::History)
 	};
-	col()
-		.w(screen.menu_width)
-		.h_full()
-		.pt(SPACING * 2.0)
-		.pb(SPACING * 3.0)
-		.px(SPACING * 2.0)
-		.gap(SPACING * 2.0)
-		.role("navigation")
-		.label(say(settings::screen::MENU))
-		.child(row().child(ring(t, w.on(instant(back), SpaceEvent::Back))))
-		.child(identity)
-		.child(group)
-		.child(el().grow(1.0))
-		.child(pinned)
+	shell_items(
+		&entries,
+		settings.entry,
+		invitation,
+		|entry| {
+			entry != Entry::Space
+				&& (unreachable || (screen.session_unavailable && session_bound(entry)))
+		},
+		|entry| {
+			(entry == Entry::Agents)
+				.then(|| settings.agents.map(|agents| agents.len().to_string()))
+				.flatten()
+		},
+	)
+}
+
+fn pinned<'a>(screen: &SpaceScreen) -> Item<'a, SpaceEvent> {
+	match screen.standing {
+		Standing::Invitation { .. } => Item {
+			tone: Tone::Quiet,
+			..Item::new(
+				say(bots::spaces::invitations::DECLINE),
+				(&icons::CLOSE, &icons::CLOSE),
+				SpaceEvent::Decline,
+			)
+		},
+		Standing::Joined { .. } => Item {
+			tone: Tone::Danger,
+			..Item::new(
+				say(common::spaces::leave::ACTION),
+				(&icons::BRACKET_ARROW_RIGHT, &icons::BRACKET_ARROW_RIGHT),
+				SpaceEvent::AskDanger,
+			)
+		},
+		Standing::Yours { .. } => Item {
+			is_current: screen.settings.entry == Entry::Danger,
+			tone: Tone::Danger,
+			..Item::new(
+				Entry::Danger.label(false),
+				Entry::Danger.glyphs(),
+				SpaceEvent::Select(Entry::Danger),
+			)
+		},
+	}
 }
 
 pub fn space_settings_screen<S: 'static>(t: &Tokens, screen: &SpaceScreen, w: Wiring<S>) -> El {
@@ -2144,60 +1891,44 @@ pub fn space_settings_screen<S: 'static>(t: &Tokens, screen: &SpaceScreen, w: Wi
 		rank: screen.rank,
 		transfer: settings.transfer,
 	};
-	let content_width = 1180.0 - SIDEBAR_RAIL - screen.menu_width - WINDOW_INSET - SPACING * 12.0;
-	let body = match settings.entry {
+	let content = match settings.entry {
 		Entry::Space => focused_space_page(t, &page, w),
-		_ => entry_panel(t, settings, content_width, w),
+		_ => entry_panel(t, settings, SCREEN_COLUMN, w),
 	};
-	let content = col()
-		.grow(1.0)
-		.shrink()
-		.h_full()
-		.role("main")
-		.child(
-			row().w_full().h(CONTENT_HEADER).pl(SPACING * 6.0).center_y().child(
-				text(settings.entry.label(invitation).to_owned())
-					.font(TEXT_SM_SEMIBOLD)
-					.color(t.foreground)
-					.role("heading"),
-			),
-		)
-		.child(el().w_full().h(1.0).fill(t.border))
-		.child(
-			col()
-				.w_full()
-				.grow(1.0)
-				.min_h(0.0)
-				.pt(SPACING * 8.0)
-				.px(SPACING * 6.0)
-				.gap(SPACING * 6.0)
-				.child(body),
-		);
-	let card = row()
-		.grow(1.0)
-		.h_full()
-		.radius(RADIUS_CONTROL)
-		.fill(t.card)
-		.border(1.0, t.shell_border)
-		.clip_rounded(RADIUS_CONTROL)
-		.child(settings_menu(t, screen, w))
-		.child(el().w(1.0).h_full().fill(t.shell_divider))
-		.child(content);
-	let frame = row()
-		.w_full()
-		.h_full()
-		.fill(t.background)
-		.pt(TITLE_BAR)
-		.pr(WINDOW_INSET)
-		.pb(WINDOW_INSET)
-		.child(el().w(SIDEBAR_RAIL - WINDOW_INSET).h_full().a11y_hidden())
-		.child(card);
-	let mut layers = layers(t, settings, w);
+	let items = screen_items(screen);
+	let menu = Menu {
+		label: say(settings::screen::MENU),
+		back_label: say(settings::screen::BACK_TO_SETTINGS),
+		back: SpaceEvent::Back,
+		avatar: space_avatar(t, settings.value, screen.standing, SPACING * 9.0),
+		name: settings.value.shown_name(),
+		subtitle: say(if invitation {
+			settings::screen::subtitle::INVITATION
+		} else {
+			settings::screen::subtitle::SPACE
+		}),
+		group_title: say(settings::screen::group::SETTINGS),
+		items: &items,
+		below: None,
+		pinned: Some(pinned(screen)),
+		width: screen.menu_width,
+	};
+	let page = Page { heading: settings.entry.label(invitation), content };
+	screen_body(t, menu, page, w.emit)
+}
+
+pub fn space_settings_screen_layers<S: 'static>(
+	t: &Tokens,
+	screen: &SpaceScreen,
+	w: Wiring<S>,
+) -> Vec<El> {
+	let t = &t.in_space(screen.settings.value.colour);
+	let mut layers = layers(t, &screen.settings, w);
 	if screen.leaving {
 		layers.push(scrim(t));
-		layers.push(danger_question(t, Danger::Leave, settings.value.shown_name(), w));
+		layers.push(danger_question(t, Danger::Leave, screen.settings.value.shown_name(), w));
 	}
-	rune_kit::root(frame, layers)
+	layers
 }
 
 pub const DIALOG_SCENE: (f32, f32) = (1180.0, 800.0);
@@ -2714,7 +2445,7 @@ fn failure_region(t: &Tokens, s: &SceneState, failure: Failure) -> El {
 				},
 				SCENE,
 			);
-			col().w_full().radius(RADIUS_XL).border(1.0, t.border).child(line)
+			col().w_full().radius(RADIUS_XL).border(1.0, t.border).padding(HAIRLINE).child(line)
 		}
 	}
 }
@@ -3055,8 +2786,41 @@ pub fn page_connecting(t: &Tokens, s: &SceneState) -> El {
 
 const SCREEN_MEMBERS: [Member; 2] = [STEVE, MAYA];
 
+fn chrome_unheard(_: &mut SceneState, _: ChromeEvent) {}
+
 fn screen_of(t: &Tokens, screen: SpaceScreen) -> El {
-	space_settings_screen(t, &screen, SCENE)
+	let bar = TitleBar {
+		width: SCREEN_SCENE.0,
+		language: Language::En,
+		tabs: &[],
+		active: None,
+		can_go_back: false,
+		can_go_forward: false,
+		can_reorder: false,
+		traffic_lights: true,
+		window_controls: None,
+		lift: None,
+		revealed_close: None,
+		incoming: None,
+		overflow_open: false,
+	};
+	let body = row()
+		.w_full()
+		.grow(1.0)
+		.min_h(0.0)
+		.pl(SIDEBAR_RAIL - SHELL_INSET)
+		.pr(SHELL_INSET)
+		.pb(SHELL_INSET)
+		.child(space_settings_screen(t, &screen, SCENE));
+	rune_kit::root(
+		col()
+			.w_full()
+			.h_full()
+			.fill(t.background)
+			.child(title_bar(t, &bar, chrome_unheard))
+			.child(body),
+		space_settings_screen_layers(t, &screen, SCENE),
+	)
 }
 
 fn release_desk_screen<'a>(
@@ -3234,6 +2998,6 @@ pub fn screen_invitation(t: &Tokens, s: &SceneState) -> El {
 	)
 }
 
-pub const MEMBERS_INVITE_TABS: usize = 3;
+pub const MEMBERS_INVITE_TABS: usize = 8;
 pub const SCREEN_MENU_TABS: usize = 2;
 pub const AGENT_CARD_TABS: usize = 2;
