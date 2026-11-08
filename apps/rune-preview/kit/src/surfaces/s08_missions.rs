@@ -1452,8 +1452,9 @@ pub fn mission_menu<S: 'static>(
 }
 
 fn menu_panel<S: 'static>(t: &Tokens, language: Language, menu: &OpenMenu, emit: &Emit<S>) -> El {
-	let entries: Vec<MenuEntry> = menu_entries(menu.facts).into_iter().flatten().collect();
-	let rows = menu_entries(menu.facts).into_iter().map(|entry| match entry {
+	let laid_out = menu_entries(menu.facts);
+	let entries: Vec<MenuEntry> = laid_out.iter().flatten().copied().collect();
+	let rows = laid_out.into_iter().map(|entry| match entry {
 		None => MenuRow::Separator,
 		Some(entry) => {
 			let (key, glyph) = entry_look(entry);
