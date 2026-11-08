@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
+use super::code_signature::{running_signature, Signature};
 use super::contract::{DeviceIdentity, DeviceKeysError};
 use super::device_keys::DeviceKeys;
 use super::fingerprint::fingerprint;
@@ -33,7 +34,9 @@ impl DeviceKeysState {
 pub fn load(core: &crate::core_context::Core) -> DeviceKeysState {
 	let keys = Ok::<_, DeviceKeysError>(core.data_dir().to_path_buf()).and_then(|profile| {
 		let identifier = core.identifier();
-		let system = system_store(install_kind(identifier), identifier, DEVICE_KEYS_ITEM);
+		let choice = key_store_choice(install_kind(identifier), running_signature());
+		log::info!("the device keys and space keys live in the {}", choice.reason());
+		let system = system_store(choice, identifier, DEVICE_KEYS_ITEM);
 		load_or_create(system.as_deref(), &FileStore::at(profile.join(DEVICE_KEYS_ITEM)))
 	});
 	if let Err(failure) = &keys {
@@ -97,7 +100,8 @@ impl SpaceKeys {
 			return Err(DeviceKeysError::Malformed);
 		}
 		let item = format!("{SPACE_KEY_ITEM_PREFIX}{space_id}");
-		if let Some(system) = system_store(self.kind, &self.service, &item) {
+		let choice = key_store_choice(self.kind, running_signature());
+		if let Some(system) = system_store(choice, &self.service, &item) {
 			return Ok(system);
 		}
 		let directory = self.directory.as_ref().ok_or(DeviceKeysError::NoProfileDirectory)?;
@@ -111,18 +115,48 @@ pub fn space_keys(core: &crate::core_context::Core) -> SpaceKeys {
 	SpaceKeys::new(install_kind(&identifier), identifier, directory)
 }
 
-#[cfg(target_os = "macos")]
-fn system_store(kind: InstallKind, service: &str, item: &str) -> Option<Box<dyn KeyStore>> {
-	match kind {
-		InstallKind::Dev => None,
-		InstallKind::Installed => {
-			Some(Box::new(super::key_store::KeychainStore::item(service, item)))
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum KeyStoreChoice {
+	Keychain,
+	KeychainForUnverified,
+	FileForDev,
+	FileForUnsigned,
+}
+
+impl KeyStoreChoice {
+	fn reason(self) -> &'static str {
+		match self {
+			Self::Keychain => "Keychain: an installed build signed with a Team ID",
+			Self::KeychainForUnverified => {
+				"Keychain: an installed build whose code signature could not be checked"
+			}
+			Self::FileForDev => "file store: a dev build",
+			Self::FileForUnsigned => "file store: the executable carries no Team ID signature",
 		}
 	}
 }
 
+fn key_store_choice(kind: InstallKind, signature: Signature) -> KeyStoreChoice {
+	match (kind, signature) {
+		(InstallKind::Dev, _) => KeyStoreChoice::FileForDev,
+		(InstallKind::Installed, Signature::TeamSigned) => KeyStoreChoice::Keychain,
+		(InstallKind::Installed, Signature::Unsigned) => KeyStoreChoice::FileForUnsigned,
+		(InstallKind::Installed, Signature::Unverified) => KeyStoreChoice::KeychainForUnverified,
+	}
+}
+
+#[cfg(target_os = "macos")]
+fn system_store(choice: KeyStoreChoice, service: &str, item: &str) -> Option<Box<dyn KeyStore>> {
+	match choice {
+		KeyStoreChoice::Keychain | KeyStoreChoice::KeychainForUnverified => {
+			Some(Box::new(super::key_store::KeychainStore::item(service, item)))
+		}
+		KeyStoreChoice::FileForDev | KeyStoreChoice::FileForUnsigned => None,
+	}
+}
+
 #[cfg(not(target_os = "macos"))]
-fn system_store(_kind: InstallKind, _service: &str, _item: &str) -> Option<Box<dyn KeyStore>> {
+fn system_store(_choice: KeyStoreChoice, _service: &str, _item: &str) -> Option<Box<dyn KeyStore>> {
 	None
 }
 
@@ -149,21 +183,45 @@ mod tests {
 	use crate::crypto::space_key::FIRST_KEY_ID;
 
 	#[test]
-	fn the_dev_profile_never_reaches_a_system_store() {
-		assert!(system_store(InstallKind::Dev, "com.kiroshi.app.dev", DEVICE_KEYS_ITEM).is_none());
+	fn only_an_installed_build_signed_with_a_team_id_chooses_the_keychain() {
+		let chosen = [
+			(InstallKind::Installed, Signature::TeamSigned, KeyStoreChoice::Keychain),
+			(InstallKind::Installed, Signature::Unsigned, KeyStoreChoice::FileForUnsigned),
+			(InstallKind::Installed, Signature::Unverified, KeyStoreChoice::KeychainForUnverified),
+			(InstallKind::Dev, Signature::TeamSigned, KeyStoreChoice::FileForDev),
+			(InstallKind::Dev, Signature::Unsigned, KeyStoreChoice::FileForDev),
+			(InstallKind::Dev, Signature::Unverified, KeyStoreChoice::FileForDev),
+		];
+		for (kind, signature, expected) in chosen {
+			assert_eq!(key_store_choice(kind, signature), expected, "{kind:?} {signature:?}");
+		}
+	}
+
+	#[test]
+	fn a_file_choice_never_reaches_a_system_store() {
+		for choice in [KeyStoreChoice::FileForDev, KeyStoreChoice::FileForUnsigned] {
+			assert!(
+				system_store(choice, "com.kiroshi.app", DEVICE_KEYS_ITEM).is_none(),
+				"{choice:?}"
+			);
+		}
 	}
 
 	#[cfg(target_os = "macos")]
 	#[test]
-	fn an_installed_macos_build_keeps_its_keys_in_the_keychain() {
-		let store = system_store(InstallKind::Installed, "com.kiroshi.app", DEVICE_KEYS_ITEM);
-		assert_eq!(store.map(|store| store.name()), Some("Keychain"));
+	fn the_keychain_choices_keep_the_keys_in_the_keychain_on_macos() {
+		for choice in [KeyStoreChoice::Keychain, KeyStoreChoice::KeychainForUnverified] {
+			let store = system_store(choice, "com.kiroshi.app", DEVICE_KEYS_ITEM);
+			assert_eq!(store.map(|store| store.name()), Some("Keychain"), "{choice:?}");
+		}
 	}
 
 	#[cfg(not(target_os = "macos"))]
 	#[test]
-	fn an_installed_build_off_macos_keeps_its_keys_in_the_file() {
-		assert!(system_store(InstallKind::Installed, "com.kiroshi.app", DEVICE_KEYS_ITEM).is_none());
+	fn the_keychain_choice_off_macos_keeps_the_keys_in_the_file() {
+		assert!(
+			system_store(KeyStoreChoice::Keychain, "com.kiroshi.app", DEVICE_KEYS_ITEM).is_none()
+		);
 	}
 
 	#[cfg(unix)]
