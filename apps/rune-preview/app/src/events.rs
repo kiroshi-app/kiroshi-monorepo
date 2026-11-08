@@ -8,8 +8,8 @@ use tungstenite::http::header::AUTHORIZATION;
 
 use crate::host::Host;
 use crate::model::{KiroshiAccountState, Message, MissionChanged, ScopedEvent};
-use crate::surfaces::s03_roster;
 use crate::surfaces::s10_agent_settings::{self, Heard};
+use crate::surfaces::{s03_roster, s07_approvals};
 
 const ACCOUNT_CHANGED: &str = "account://changed";
 
@@ -27,6 +27,7 @@ pub enum HostEvent {
 	MissionChanged(MissionChanged),
 	Companion(Heard),
 	Roster(s03_roster::Heard),
+	Approvals(s07_approvals::Heard),
 	Lagged,
 	Unreadable { event: String, cause: String },
 	Lost(String),
@@ -94,10 +95,13 @@ fn named(event: &str, payload: Value) -> Option<HostEvent> {
 			serde_json::from_value(payload)
 				.map_or_else(|failure| unreadable(event, failure), HostEvent::AccountChanged),
 		),
-		AGENT_EVENT => Some(
-			serde_json::from_value(payload)
+		AGENT_EVENT => Some(match s07_approvals::heard_of(&payload) {
+			Some(heard) => {
+				heard.map_or_else(|failure| unreadable(event, failure), HostEvent::Approvals)
+			}
+			None => serde_json::from_value(payload)
 				.map_or_else(|failure| unreadable(event, failure), HostEvent::Agent),
-		),
+		}),
 		MESSAGE_STORED => Some(
 			serde_json::from_value(payload)
 				.map_or_else(|failure| unreadable(event, failure), HostEvent::MessageStored),

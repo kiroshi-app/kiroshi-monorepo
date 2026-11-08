@@ -14,8 +14,8 @@ use kiroshi_rune_preview::app::App;
 use kiroshi_rune_preview::host::Profile;
 use kiroshi_rune_preview::navigation::Route;
 use kiroshi_rune_preview::surfaces::{
-	s01_chrome, s02_rail, s03_roster, s04_boot, s05_thread, s09_routines, s10_agent_settings,
-	s11_applications, s12_person_settings, s13_space_settings, s15_boards,
+	s01_chrome, s02_rail, s03_roster, s04_boot, s05_thread, s07_approvals, s09_routines,
+	s10_agent_settings, s11_applications, s12_person_settings, s13_space_settings, s15_boards,
 };
 use kiroshi_rune_preview::{composer, conversations, local, menu, scenes, smoke, spike};
 
@@ -110,6 +110,7 @@ fn setup(s: &mut App, waker: Waker) {
 		s.navigation.navigate_main(Route::Rail);
 	}
 	s.surfaces.s05_thread.attach(waker.clone());
+	s.surfaces.s07_approvals.attach(waker.clone());
 	s.surfaces.s11_applications.attach(waker.clone());
 	s.surfaces.s12_person_settings.attach(waker.clone());
 	s.surfaces.s09_routines.attach(waker.clone());
@@ -122,6 +123,7 @@ fn setup(s: &mut App, waker: Waker) {
 fn poll(s: &mut App, seconds: f64, tx: &mut Tx) -> bool {
 	let changed = s.poll();
 	let changed = s05_thread::poll(s, tx) || changed;
+	let changed = s07_approvals::poll(s) || changed;
 	let changed = s11_applications::poll(s) || changed;
 	let changed = s12_person_settings::poll(s, tx) || changed;
 	let changed = s09_routines::poll(s, tx) || changed;
