@@ -71,6 +71,10 @@ fn script(scene: &Scene, beside: &Path) -> Option<PathBuf> {
 			format!(r#"{{"t": {}, "type": "key", "name": "Tab"}}"#, press as f64 * KEY_STEP)
 		})
 		.collect();
+	events.extend(scene.keys.chars().enumerate().map(|(press, key)| {
+		let at = (scene.tabs + press) as f64 * KEY_STEP;
+		format!(r#"{{"t": {at}, "type": "key", "name": "{key}"}}"#)
+	}));
 	match scene.pointer {
 		Pointer::Away => {}
 		Pointer::EntersAtSnap(key) => events.push(hover(last_frame, key)),
