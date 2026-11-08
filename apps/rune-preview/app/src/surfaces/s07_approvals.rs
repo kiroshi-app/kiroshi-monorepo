@@ -57,7 +57,7 @@ impl Heard {
 		match self {
 			Heard::Permission { request, .. } => Some(&request.id),
 			Heard::Question { request, .. } => Some(&request.id),
-			Heard::Resolved { .. } | Heard::Closed { .. } => None,
+			Heard::Resolved { .. } | Heard::Closed { .. } | Heard::PromptsClosed { .. } => None,
 		}
 	}
 }
