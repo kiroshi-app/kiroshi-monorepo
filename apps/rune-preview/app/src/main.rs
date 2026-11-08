@@ -13,7 +13,7 @@ use kiroshi_rune_os::scheme;
 use kiroshi_rune_preview::app::App;
 use kiroshi_rune_preview::host::Profile;
 use kiroshi_rune_preview::navigation::Route;
-use kiroshi_rune_preview::surfaces::{s12_person_settings, s15_boards};
+use kiroshi_rune_preview::surfaces::{s11_applications, s12_person_settings, s15_boards};
 use kiroshi_rune_preview::{
 	composer, conversations, local, menu, onboarding, scenes, smoke, spike,
 };
@@ -49,13 +49,15 @@ fn view(s: &App, cx: &mut Cx<App>) -> El {
 		| Route::Missions
 		| Route::Routines
 		| Route::AgentSettings
-		| Route::Applications
 		| Route::SpaceSettings
 		| Route::Library => el(),
+		Route::Applications => s11_applications::view(s, &t),
 		Route::PersonSettings => s12_person_settings::view(s, &t),
 		Route::Boards => s15_boards::view(s, &t, cx.layout_size(s15_boards::CANVAS)),
 	};
-	rune_kit::root(body, s12_person_settings::layers(s, &t))
+	let mut layers = s12_person_settings::layers(s, &t);
+	layers.extend(s11_applications::layers(s, &t));
+	rune_kit::root(body, layers)
 }
 
 const DEV_HOST: &str = "--dev-host";
@@ -73,12 +75,14 @@ fn setup(s: &mut App, waker: Waker) {
 	if flagged(DEV_HOST) || flagged(SKIP_ONBOARDING) {
 		s.navigation.navigate_main(Route::Conversations);
 	}
+	s.surfaces.s11_applications.attach(waker.clone());
 	s.surfaces.s12_person_settings.attach(waker.clone());
 	s.setup(waker);
 }
 
 fn poll(s: &mut App, seconds: f64, tx: &mut Tx) -> bool {
 	let changed = s.poll();
+	let changed = s11_applications::poll(s) || changed;
 	let changed = s12_person_settings::poll(s, tx) || changed;
 	let changed = open_held(s, &mut held_links()) || changed;
 	if let Some(after) = s.focus_wake() {
@@ -92,6 +96,9 @@ fn poll(s: &mut App, seconds: f64, tx: &mut Tx) -> bool {
 }
 
 fn on_key(s: &mut App, event: &KeyEvent, _: &mut Tx) -> bool {
+	if s11_applications::key_pressed(s, event) {
+		return true;
+	}
 	if s12_person_settings::key_pressed(s, event) {
 		return true;
 	}
