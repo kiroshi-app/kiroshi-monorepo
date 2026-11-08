@@ -29,7 +29,7 @@ use crate::notices::Notices;
 use crate::runs::Runs;
 use crate::source::Source;
 use crate::surfaces::s04_boot::{self, Step};
-use crate::surfaces::{Surfaces, s01_chrome};
+use crate::surfaces::{Surfaces, s01_chrome, s10_agent_settings};
 use crate::turn::{self, SendError};
 
 const PAGE_LIMIT: u32 = 200;
@@ -340,6 +340,7 @@ impl App {
 
 	pub fn setup(&mut self, waker: Waker) {
 		self.images.start(ImageCache::new(waker.clone()));
+		self.surfaces.s10_agent_settings.attach(waker.clone());
 		self.surfaces.s04_boot.attach(waker.clone());
 		let outbox = Outbox { sender: self.pending.clone(), waker };
 		let heard = outbox.clone();
@@ -377,7 +378,7 @@ impl App {
 			self.received(inbound);
 			changed = true;
 		}
-		changed
+		s10_agent_settings::poll(self) || changed
 	}
 
 	pub fn tick(&mut self, seconds: f64) -> bool {
@@ -844,6 +845,7 @@ impl App {
 				self.request_images();
 			}
 			HostEvent::MissionChanged(changed) => self.mission_changed(changed),
+			HostEvent::Companion(heard) => s10_agent_settings::heard(self, heard),
 			HostEvent::AccountChanged(account) => {
 				if let Some(ready) = self.ready_mut() {
 					ready.person = person_of(account);
