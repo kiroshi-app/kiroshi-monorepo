@@ -1328,17 +1328,12 @@ fn a_closing_keeps_the_same_id_open_for_another_agent() {
 	assert_eq!(approval_ids(&state), vec!["p1"]);
 }
 
-fn read_number_of(call: &Call) -> u64 {
-	match call {
-		Call::Pending { read_number, .. } => *read_number,
-		other => panic!("expected a pending read, got {other:?}"),
-	}
-}
-
 fn read_started(state: &mut State, conversation_id: &str) -> u64 {
 	state.opened(conversation_id);
-	let calls = drained(state);
-	read_number_of(&calls[0])
+	match drained(state).as_slice() {
+		[Call::Pending { read_number, .. }] => *read_number,
+		calls => panic!("expected one pending read, got {calls:?}"),
+	}
 }
 
 fn read_landed(
