@@ -1,6 +1,6 @@
 use kiroshi_core::applications::contract::Application;
 use kiroshi_core::conversations::contract::McpServer;
-use kiroshi_core::environment::contract::{EnvEntry, EnvOwner, EnvScope};
+use kiroshi_core::environment::contract::{EnvEntry, EnvOwner};
 use kiroshi_rune_kit::strings::Language;
 use kiroshi_rune_kit::surfaces::s11_applications::catalogue::{CatalogueEvent, Category};
 use kiroshi_rune_kit::surfaces::s11_applications::install::InstallEvent;
@@ -15,7 +15,7 @@ use super::calls::{
 	Answer, Call, Concealed, Found, InstallFailure, InstallOutcome, StatusRow, refusal_text,
 };
 use super::secrets::{Dialog, is_secret_name};
-use super::{Notice, Scope, State, Which};
+use super::{Notice, Scope, ScopeKey, State, Which};
 use crate::host::HostError;
 
 const SPACE_ID: &str = "space-1";
@@ -28,16 +28,33 @@ fn space_owner() -> EnvOwner {
 	EnvOwner::Space { id: SPACE_ID.to_owned() }
 }
 
+fn agent_key() -> ScopeKey {
+	ScopeKey { which: Which::Agent, owner: agent_owner() }
+}
+
+fn space_key() -> ScopeKey {
+	ScopeKey { which: Which::Space, owner: space_owner() }
+}
+
+fn person_key() -> ScopeKey {
+	ScopeKey { which: Which::Person, owner: EnvOwner::User }
+}
+
+fn key_of(which: Which) -> ScopeKey {
+	match which {
+		Which::Agent => agent_key(),
+		Which::Space => space_key(),
+		Which::Person => person_key(),
+	}
+}
+
 fn opened() -> State {
 	let mut state = State::default();
-	state.opened(
-		SPACE_ID.to_owned(),
-		vec![
-			Scope::new(Which::Agent, agent_owner(), "Rei".to_owned()),
-			Scope::new(Which::Space, space_owner(), "Atlas".to_owned()),
-			Scope::new(Which::Person, EnvOwner::User, String::new()),
-		],
-	);
+	state.opened(vec![
+		Scope::new(Which::Agent, agent_owner(), "Rei".to_owned()),
+		Scope::new(Which::Space, space_owner(), "Atlas".to_owned()),
+		Scope::new(Which::Person, EnvOwner::User, String::new()),
+	]);
 	state.queued.clear();
 	state
 }
@@ -77,7 +94,7 @@ fn entry(name: &str, defined_in: Value, served_from: Value) -> EnvEntry {
 
 fn installed(state: &mut State, which: Which, names: &[&str]) {
 	let servers = names.iter().map(|name| server(name)).collect();
-	state.answered(Answer::Servers(which, Ok(servers)));
+	state.answered(Answer::Servers(key_of(which), Ok(servers)));
 }
 
 fn status(name: &str, status: &str) -> StatusRow {
@@ -103,16 +120,16 @@ fn opening_reads_the_applications_status_and_secrets_of_each_scope() {
 		Scope::new(Which::Space, space_owner(), "Atlas".to_owned()),
 		Scope::new(Which::Person, EnvOwner::User, String::new()),
 	];
-	state.opened(SPACE_ID.to_owned(), scopes);
+	state.opened(scopes);
 	assert_eq!(
 		taken(&mut state),
 		vec![
-			Call::ReadServers(Which::Space, space_owner()),
-			Call::ReadStatus(Which::Space, space_owner()),
-			Call::ReadSecrets(Which::Space, EnvScope::Space { id: SPACE_ID.to_owned() }),
-			Call::ReadServers(Which::Person, EnvOwner::User),
-			Call::ReadStatus(Which::Person, EnvOwner::User),
-			Call::ReadSecrets(Which::Person, EnvScope::User),
+			Call::ReadServers(space_key()),
+			Call::ReadStatus(space_key()),
+			Call::ReadSecrets(space_key()),
+			Call::ReadServers(person_key()),
+			Call::ReadStatus(person_key()),
+			Call::ReadSecrets(person_key()),
 		]
 	);
 }
@@ -122,7 +139,7 @@ fn a_panel_loads_until_its_applications_land_with_their_connection_state() {
 	let mut state = opened();
 	assert!(panel(&state, Which::Space).is_loading());
 	installed(&mut state, Which::Space, &["linear", "github"]);
-	state.answered(Answer::Status(Which::Space, Ok(vec![status("linear", "connected")])));
+	state.answered(Answer::Status(space_key(), Ok(vec![status("linear", "connected")])));
 	let rows = panel(&state, Which::Space).rows(&[], None, None);
 	assert!(!panel(&state, Which::Space).is_loading());
 	assert_eq!(rows.iter().map(|row| row.name.as_str()).collect::<Vec<_>>(), ["linear", "github"]);
@@ -134,7 +151,7 @@ fn a_panel_loads_until_its_applications_land_with_their_connection_state() {
 #[test]
 fn a_panel_whose_read_fails_shows_the_failure_and_never_an_empty_list() {
 	let mut state = opened();
-	state.answered(Answer::Servers(Which::Person, Err(refused(json!({ "kind": "unreadable" })))));
+	state.answered(Answer::Servers(person_key(), Err(refused(json!({ "kind": "unreadable" })))));
 	assert!(panel(&state, Which::Person).has_failed());
 	assert!(!panel(&state, Which::Person).is_loading());
 }
@@ -232,10 +249,8 @@ fn installing_writes_in_the_chosen_scope_only_and_shows_it_installed_once_read()
 	state.catalogue_event(CatalogueEvent::Pick("linear".to_owned()));
 	state.install_event(InstallEvent::Install);
 	let calls = taken(&mut state);
-	let [Call::Install(Which::Space, run)] = calls.as_slice() else {
-		panic!("one install, got {calls:?}")
-	};
-	assert_eq!(run.owner, space_owner());
+	let [Call::Install(key, _)] = calls.as_slice() else { panic!("one install, got {calls:?}") };
+	assert_eq!(*key, space_key());
 	assert_eq!(
 		state.catalogue.as_ref().expect("the catalogue").installing.as_deref(),
 		Some("linear")
@@ -243,13 +258,10 @@ fn installing_writes_in_the_chosen_scope_only_and_shows_it_installed_once_read()
 	state.install_event(InstallEvent::Install);
 	assert!(taken(&mut state).is_empty());
 	let outcome = InstallOutcome { refusal: None, rollback_refusal: None };
-	state.answered(Answer::Installed { which: Which::Space, name: "linear".to_owned(), outcome });
+	state.answered(Answer::Installed { key: space_key(), name: "linear".to_owned(), outcome });
 	assert_eq!(
 		taken(&mut state),
-		vec![
-			Call::ReadServers(Which::Space, space_owner()),
-			Call::ReadStatus(Which::Space, space_owner())
-		]
+		vec![Call::ReadServers(space_key()), Call::ReadStatus(space_key())]
 	);
 	assert!(state.catalogue.as_ref().expect("the catalogue").installing.is_some());
 	installed(&mut state, Which::Space, &["linear"]);
@@ -270,7 +282,7 @@ fn a_refused_install_shows_the_refusal_and_its_rollback_notice() {
 		refusal: Some(InstallFailure::Refused("npx is missing".to_owned())),
 		rollback_refusal: Some("store: locked".to_owned()),
 	};
-	state.answered(Answer::Installed { which: Which::Agent, name: "linear".to_owned(), outcome });
+	state.answered(Answer::Installed { key: agent_key(), name: "linear".to_owned(), outcome });
 	let catalogue = state.catalogue.as_ref().expect("the catalogue");
 	assert_eq!(catalogue.failure, Some(InstallFailure::Refused("npx is missing".to_owned())));
 	assert!(catalogue.installing.is_none());
@@ -311,10 +323,8 @@ fn a_key_is_asked_then_stored_as_a_secret_of_that_scope_and_never_printed() {
 		rune::TextEdit::new("lin_secret_42");
 	state.install_event(InstallEvent::Install);
 	let calls = taken(&mut state);
-	let [Call::Install(Which::Person, run)] = calls.as_slice() else {
-		panic!("one install, got {calls:?}")
-	};
-	assert_eq!(run.owner, EnvOwner::User);
+	let [Call::Install(key, run)] = calls.as_slice() else { panic!("one install, got {calls:?}") };
+	assert_eq!(*key, person_key());
 	assert_eq!(run.keys, vec![("LINEAR_KEY".to_owned(), Concealed("lin_secret_42".to_owned()))]);
 	assert!(!format!("{calls:?}").contains("lin_secret_42"));
 	assert!(state.catalogue.as_ref().expect("the catalogue").failure.is_none());
@@ -343,8 +353,7 @@ fn connect_shows_connecting_can_be_cancelled_and_settles_on_the_core_answer() {
 	assert_eq!(
 		taken(&mut state),
 		vec![Call::Connect {
-			which: Which::Space,
-			owner: space_owner(),
+			key: space_key(),
 			name: "linear".to_owned(),
 			url: "https://linear.example".to_owned(),
 		}]
@@ -355,7 +364,7 @@ fn connect_shows_connecting_can_be_cancelled_and_settles_on_the_core_answer() {
 	assert_eq!(taken(&mut state), vec![Call::CancelConnect]);
 	let cancelled = refused(json!({ "kind": "cancelled" }));
 	state.answered(Answer::Connected {
-		which: Which::Space,
+		key: space_key(),
 		name: "linear".to_owned(),
 		outcome: Err(cancelled),
 	});
@@ -363,10 +372,7 @@ fn connect_shows_connecting_can_be_cancelled_and_settles_on_the_core_answer() {
 	assert!(state.connect_failure.is_none());
 	assert_eq!(
 		taken(&mut state),
-		vec![
-			Call::ReadServers(Which::Space, space_owner()),
-			Call::ReadStatus(Which::Space, space_owner())
-		]
+		vec![Call::ReadServers(space_key()), Call::ReadStatus(space_key())]
 	);
 }
 
@@ -377,7 +383,7 @@ fn a_failed_connection_shows_its_reason_on_the_row() {
 	state.applications_event(Which::Space, ApplicationsEvent::Connect("linear".to_owned()));
 	let timed_out = refused(json!({ "kind": "flowTimedOut", "timeoutMs": 1 }));
 	state.answered(Answer::Connected {
-		which: Which::Space,
+		key: space_key(),
 		name: "linear".to_owned(),
 		outcome: Err(timed_out),
 	});
@@ -387,7 +393,7 @@ fn a_failed_connection_shows_its_reason_on_the_row() {
 	assert_eq!(rows[0].reason, Some(ConnectionReason::TimedOut));
 	state.applications_event(Which::Space, ApplicationsEvent::Connect("linear".to_owned()));
 	state.answered(Answer::Connected {
-		which: Which::Space,
+		key: space_key(),
 		name: "linear".to_owned(),
 		outcome: Ok(()),
 	});
@@ -401,7 +407,7 @@ fn an_unknown_refusal_reads_its_detail() {
 	state.applications_event(Which::Space, ApplicationsEvent::Connect("linear".to_owned()));
 	let denied = refused(json!({ "kind": "denied", "detail": "access_denied" }));
 	state.answered(Answer::Connected {
-		which: Which::Space,
+		key: space_key(),
 		name: "linear".to_owned(),
 		outcome: Err(denied),
 	});
@@ -418,21 +424,16 @@ fn a_refused_disconnect_keeps_the_row_and_raises_a_notice() {
 	assert_eq!(
 		taken(&mut state),
 		vec![Call::Disconnect {
-			which: Which::Space,
-			owner: space_owner(),
+			key: space_key(),
 			name: "linear".to_owned(),
 			url: "https://linear.example".to_owned(),
 		}]
 	);
 	let outcome = Err(refused(json!({ "kind": "store" })));
-	state.answered(Answer::Disconnected {
-		which: Which::Space,
-		name: "linear".to_owned(),
-		outcome,
-	});
+	state.answered(Answer::Disconnected { key: space_key(), name: "linear".to_owned(), outcome });
 	assert!(panel(&state, Which::Space).declares("linear"));
 	assert_eq!(state.notice.as_ref().map(|(_, notice)| notice), Some(&Notice::Failed));
-	assert!(taken(&mut state).contains(&Call::ReadStatus(Which::Space, space_owner())));
+	assert!(taken(&mut state).contains(&Call::ReadStatus(space_key())));
 }
 
 #[test]
@@ -442,20 +443,20 @@ fn removing_calls_the_core_and_keeps_the_row_with_a_notice_on_refusal() {
 	state.remove(Which::Agent, "linear".to_owned());
 	assert_eq!(
 		taken(&mut state),
-		vec![Call::Remove { which: Which::Agent, owner: agent_owner(), name: "linear".to_owned() }]
+		vec![Call::Remove { key: agent_key(), name: "linear".to_owned() }]
 	);
 	let outcome = Err(refused(json!({ "kind": "notFound" })));
-	state.answered(Answer::Removed { which: Which::Agent, name: "linear".to_owned(), outcome });
+	state.answered(Answer::Removed { key: agent_key(), name: "linear".to_owned(), outcome });
 	assert!(panel(&state, Which::Agent).declares("linear"));
 	assert_eq!(state.notice.as_ref().map(|(_, notice)| notice), Some(&Notice::Failed));
 	state.queued.clear();
 	state.remove(Which::Agent, "linear".to_owned());
 	state.answered(Answer::Removed {
-		which: Which::Agent,
+		key: agent_key(),
 		name: "linear".to_owned(),
 		outcome: Ok(()),
 	});
-	assert!(taken(&mut state).contains(&Call::ReadServers(Which::Agent, agent_owner())));
+	assert!(taken(&mut state).contains(&Call::ReadServers(agent_key())));
 }
 
 #[test]
@@ -470,16 +471,16 @@ fn secrets_list_by_name_with_their_loading_and_empty_states() {
 		entry("API_KEY", user.clone(), space.clone()),
 		entry("TOKEN", user.clone(), user),
 	];
-	state.answered(Answer::Secrets(Which::Space, Ok(entries)));
+	state.answered(Answer::Secrets(space_key(), Ok(entries)));
 	let rows = state.scope(Which::Space).expect("the scope").secrets.rows();
 	assert_eq!(rows.iter().map(|row| row.name.as_str()).collect::<Vec<_>>(), ["API_KEY", "TOKEN"]);
 	assert_eq!(rows[0].overrides, Some(SecretScope::User));
 	assert_eq!(rows[1].defined_in, SecretScope::User);
-	state.answered(Answer::Secrets(Which::Person, Ok(Vec::new())));
+	state.answered(Answer::Secrets(person_key(), Ok(Vec::new())));
 	let empty = &state.scope(Which::Person).expect("the scope").secrets;
 	assert!(!empty.is_pending());
 	assert!(empty.rows().is_empty());
-	state.answered(Answer::Secrets(Which::Agent, Err(refused(json!({ "kind": "unreadable" })))));
+	state.answered(Answer::Secrets(agent_key(), Err(refused(json!({ "kind": "unreadable" })))));
 	assert!(state.scope(Which::Agent).expect("the scope").secrets.has_failed());
 }
 
@@ -515,12 +516,10 @@ fn adding_a_secret_refuses_a_bad_name_writes_through_env_set_and_closes_only_on_
 		write.name = rune::TextEdit::new("  API_KEY ");
 	}
 	state.secrets_event(Which::Space, SecretsEvent::Save);
-	let scope = EnvScope::Space { id: SPACE_ID.to_owned() };
 	assert_eq!(
 		taken(&mut state),
 		vec![Call::SetSecret {
-			which: Which::Space,
-			scope: scope.clone(),
+			key: space_key(),
 			name: "API_KEY".to_owned(),
 			value: Concealed("s3cret".to_owned()),
 		}]
@@ -529,14 +528,14 @@ fn adding_a_secret_refuses_a_bad_name_writes_through_env_set_and_closes_only_on_
 	state.secrets_event(Which::Space, SecretsEvent::CloseWrite);
 	assert!(state.dialog.is_some());
 	state.answered(Answer::SecretSet {
-		which: Which::Space,
+		key: space_key(),
 		outcome: Err(refused(json!({ "kind": "invalidName" }))),
 	});
 	assert!(write_dialog(&state).has_failed);
 	assert!(!write_dialog(&state).is_writing);
-	assert_eq!(taken(&mut state), vec![Call::ReadSecrets(Which::Space, scope)]);
+	assert_eq!(taken(&mut state), vec![Call::ReadSecrets(space_key())]);
 	state.secrets_event(Which::Space, SecretsEvent::Save);
-	state.answered(Answer::SecretSet { which: Which::Space, outcome: Ok(()) });
+	state.answered(Answer::SecretSet { key: space_key(), outcome: Ok(()) });
 	assert!(state.dialog.is_none());
 }
 
@@ -552,20 +551,15 @@ fn editing_a_secret_keeps_its_name() {
 fn removing_a_secret_asks_first_and_keeps_the_row_when_refused() {
 	let mut state = opened();
 	state.secrets_event(Which::Agent, SecretsEvent::Remove("TOKEN".to_owned()));
-	assert!(matches!(state.dialog, Some((Which::Agent, Dialog::Remove(_)))));
+	assert!(matches!(&state.dialog, Some((key, Dialog::Remove(_))) if *key == agent_key()));
 	assert!(taken(&mut state).is_empty());
 	state.secrets_event(Which::Agent, SecretsEvent::ConfirmRemove);
-	let scope = EnvScope::Bot { id: "bot-1".to_owned(), space_id: SPACE_ID.to_owned() };
 	assert_eq!(
 		taken(&mut state),
-		vec![Call::DeleteSecret {
-			which: Which::Agent,
-			scope: scope.clone(),
-			name: "TOKEN".to_owned()
-		}]
+		vec![Call::DeleteSecret { key: agent_key(), name: "TOKEN".to_owned() }]
 	);
 	state.answered(Answer::SecretDeleted {
-		which: Which::Agent,
+		key: agent_key(),
 		outcome: Err(refused(json!({ "kind": "unwritable" }))),
 	});
 	let Some((_, Dialog::Remove(removal))) = state.dialog.as_ref() else {
@@ -605,12 +599,12 @@ fn an_oauth_install_left_unconnected_shows_the_connection_state_and_stops_connec
 	browsing(&mut state, Which::Space, vec![application("linear", json!({ "kind": "oauth" }))]);
 	state.catalogue_event(CatalogueEvent::Pick("linear".to_owned()));
 	state.install_event(InstallEvent::Install);
-	assert_eq!(state.connecting, Some((Which::Space, "linear".to_owned())));
+	assert_eq!(state.connecting, Some((space_key(), "linear".to_owned())));
 	let outcome = InstallOutcome {
 		refusal: Some(InstallFailure::Unconnected(Connection::NeedsAuthorization)),
 		rollback_refusal: None,
 	};
-	state.answered(Answer::Installed { which: Which::Space, name: "linear".to_owned(), outcome });
+	state.answered(Answer::Installed { key: space_key(), name: "linear".to_owned(), outcome });
 	assert!(state.connecting.is_none());
 	let failure = state.catalogue.as_ref().and_then(|catalogue| catalogue.failure.clone());
 	assert_eq!(failure, Some(InstallFailure::Unconnected(Connection::NeedsAuthorization)));
@@ -626,7 +620,7 @@ fn the_panel_search_shows_the_typed_text_in_the_kit_style_and_filters_then_clear
 	let mut state = opened();
 	installed(&mut state, Which::Space, &["linear", "github"]);
 	let typed = rune::TextEdit::new("LIN");
-	state.scope_mut(Which::Space).expect("the scope").installed.query = typed;
+	state.shown_mut(&space_key()).expect("the scope").installed.query = typed;
 	assert_eq!(shown_names(&state, Which::Space), ["linear"]);
 	let scope = state.scope(Which::Space).expect("the scope");
 	let rows = super::view::shown_rows(&state, scope);
@@ -635,8 +629,158 @@ fn the_panel_search_shows_the_typed_text_in_the_kit_style_and_filters_then_clear
 	assert_eq!(panel.query.text, "LIN");
 	assert_eq!(panel.search_text, SEARCH_TEXT);
 	assert_eq!(panel.applications.iter().map(|row| row.name).collect::<Vec<_>>(), ["linear"]);
-	state.scope_mut(Which::Space).expect("the scope").installed.query = rune::TextEdit::new("");
+	state.shown_mut(&space_key()).expect("the scope").installed.query = rune::TextEdit::new("");
 	assert_eq!(shown_names(&state, Which::Space), ["linear", "github"]);
 	let scope = state.scope(Which::Space).expect("the scope");
 	assert_eq!(super::view::panel_of(scope, &[], Language::En).query.text, "");
+}
+
+const OTHER_SPACE_ID: &str = "space-2";
+
+fn other_agent_owner() -> EnvOwner {
+	EnvOwner::Bot { id: "bot-2".to_owned(), space_id: OTHER_SPACE_ID.to_owned() }
+}
+
+fn other_space_key() -> ScopeKey {
+	ScopeKey { which: Which::Space, owner: EnvOwner::Space { id: OTHER_SPACE_ID.to_owned() } }
+}
+
+fn other_agent_key() -> ScopeKey {
+	ScopeKey { which: Which::Agent, owner: other_agent_owner() }
+}
+
+fn moved_to_another_space(state: &mut State) {
+	state.left();
+	state.opened(vec![
+		Scope::new(Which::Agent, other_agent_owner(), "Kai".to_owned()),
+		Scope::new(
+			Which::Space,
+			EnvOwner::Space { id: OTHER_SPACE_ID.to_owned() },
+			"Harbor".to_owned(),
+		),
+		Scope::new(Which::Person, EnvOwner::User, String::new()),
+	]);
+	state.queued.clear();
+}
+
+#[test]
+fn reads_answered_for_the_previous_space_leave_the_new_panels_alone() {
+	let mut state = opened();
+	moved_to_another_space(&mut state);
+	state.answered(Answer::Servers(space_key(), Ok(vec![server("linear")])));
+	state.answered(Answer::Status(space_key(), Ok(vec![status("linear", "connected")])));
+	let old_secret =
+		entry("TOKEN", json!({ "kind": "space", "id": SPACE_ID }), json!({ "kind": "user" }));
+	state.answered(Answer::Secrets(space_key(), Ok(vec![old_secret])));
+	state.answered(Answer::Servers(agent_key(), Err(refused(json!({ "kind": "unreadable" })))));
+	let space = state.shown(&other_space_key()).expect("the new space");
+	assert!(space.installed.is_loading());
+	assert!(space.installed.status.is_empty());
+	assert!(space.secrets.is_pending());
+	let agent = state.shown(&other_agent_key()).expect("the new agent");
+	assert!(agent.installed.is_loading());
+	assert!(!agent.installed.has_failed());
+	assert!(taken(&mut state).is_empty());
+}
+
+#[test]
+fn writes_answered_for_the_previous_space_leave_dialog_settling_and_connecting_alone() {
+	let mut state = opened();
+	moved_to_another_space(&mut state);
+	state.answered(Answer::Servers(other_space_key(), Ok(vec![server("linear")])));
+	state.applications_event(Which::Space, ApplicationsEvent::Connect("linear".to_owned()));
+	state.settling = Some((other_space_key(), "github".to_owned()));
+	state.secrets_event(Which::Space, SecretsEvent::Add);
+	if let Some((_, Dialog::Write(write))) = state.dialog.as_mut() {
+		write.name = rune::TextEdit::new("API_KEY");
+	}
+	state.secrets_event(Which::Space, SecretsEvent::Save);
+	state.queued.clear();
+	let failed = || Err(refused(json!({ "kind": "store" })));
+	let linear = || "linear".to_owned();
+	let outcome = InstallOutcome { refusal: None, rollback_refusal: None };
+	state.answered(Answer::Installed { key: space_key(), name: linear(), outcome });
+	state.answered(Answer::Connected { key: space_key(), name: linear(), outcome: failed() });
+	state.answered(Answer::Disconnected { key: space_key(), name: linear(), outcome: failed() });
+	state.answered(Answer::Removed { key: space_key(), name: linear(), outcome: failed() });
+	state.answered(Answer::SecretSet { key: space_key(), outcome: Ok(()) });
+	state.answered(Answer::SecretDeleted { key: space_key(), outcome: Ok(()) });
+	state.answered(Answer::Servers(space_key(), Ok(Vec::new())));
+	assert_eq!(state.connecting, Some((other_space_key(), "linear".to_owned())));
+	assert!(state.connect_failure.is_none());
+	assert_eq!(state.settling, Some((other_space_key(), "github".to_owned())));
+	assert!(write_dialog(&state).is_writing);
+	assert!(state.notice.is_none());
+	assert!(taken(&mut state).is_empty());
+	assert!(state.shown(&other_space_key()).expect("the new space").installed.declares("linear"));
+}
+
+#[test]
+fn reopening_for_another_space_clears_settling_connecting_and_the_connect_failure() {
+	let mut state = opened();
+	installed(&mut state, Which::Space, &["linear", "github"]);
+	state.applications_event(Which::Space, ApplicationsEvent::Connect("linear".to_owned()));
+	state.settling = Some((space_key(), "github".to_owned()));
+	state.connect_failure = state.connecting.clone().map(|(key, name)| {
+		(key, super::installed::ConnectFailure { name, kind: None, detail: String::new() })
+	});
+	moved_to_another_space(&mut state);
+	assert!(state.settling.is_none());
+	assert!(state.connecting.is_none());
+	assert!(state.connect_failure.is_none());
+	state.answered(Answer::Connected {
+		key: space_key(),
+		name: "linear".to_owned(),
+		outcome: Ok(()),
+	});
+	assert!(state.connecting.is_none());
+	assert!(taken(&mut state).is_empty());
+}
+
+#[test]
+fn reopening_for_another_agent_of_the_same_space_clears_the_connection_state() {
+	let mut state = opened();
+	installed(&mut state, Which::Agent, &["linear"]);
+	state.applications_event(Which::Agent, ApplicationsEvent::Connect("linear".to_owned()));
+	state.left();
+	let other_agent = EnvOwner::Bot { id: "bot-3".to_owned(), space_id: SPACE_ID.to_owned() };
+	state.opened(vec![
+		Scope::new(Which::Agent, other_agent, "Mio".to_owned()),
+		Scope::new(Which::Space, space_owner(), "Atlas".to_owned()),
+		Scope::new(Which::Person, EnvOwner::User, String::new()),
+	]);
+	assert!(state.connecting.is_none());
+	state.answered(Answer::Connected {
+		key: agent_key(),
+		name: "linear".to_owned(),
+		outcome: Err(refused(json!({ "kind": "transport" }))),
+	});
+	assert!(state.connect_failure.is_none());
+}
+
+#[test]
+fn a_new_agent_while_shown_is_read_and_shown_and_the_old_agent_answer_is_dropped() {
+	let mut state = opened();
+	installed(&mut state, Which::Space, &["linear"]);
+	let other_agent = EnvOwner::Bot { id: "bot-3".to_owned(), space_id: SPACE_ID.to_owned() };
+	let other_key = ScopeKey { which: Which::Agent, owner: other_agent.clone() };
+	state.opened(vec![
+		Scope::new(Which::Agent, other_agent, "Mio".to_owned()),
+		Scope::new(Which::Space, space_owner(), "Atlas".to_owned()),
+		Scope::new(Which::Person, EnvOwner::User, String::new()),
+	]);
+	assert_eq!(
+		taken(&mut state),
+		vec![
+			Call::ReadServers(other_key.clone()),
+			Call::ReadStatus(other_key.clone()),
+			Call::ReadSecrets(other_key.clone()),
+		]
+	);
+	assert_eq!(state.scope(Which::Agent).map(|scope| scope.name.as_str()), Some("Mio"));
+	assert!(panel(&state, Which::Space).declares("linear"));
+	state.answered(Answer::Servers(agent_key(), Ok(vec![server("github")])));
+	assert!(panel(&state, Which::Agent).is_loading());
+	state.answered(Answer::Servers(other_key, Ok(vec![server("notion")])));
+	assert!(panel(&state, Which::Agent).declares("notion"));
 }

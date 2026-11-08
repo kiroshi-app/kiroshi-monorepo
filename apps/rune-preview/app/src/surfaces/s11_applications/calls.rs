@@ -12,7 +12,7 @@ use rune::Waker;
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use super::Which;
+use super::ScopeKey;
 use crate::host::HostError;
 use crate::source::Source;
 
@@ -46,7 +46,6 @@ pub struct Found {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct InstallRun {
-	pub owner: EnvOwner,
 	pub application: Application,
 	pub keys: Vec<(String, Concealed)>,
 }
@@ -58,18 +57,18 @@ pub enum Due {
 
 #[derive(Debug, PartialEq)]
 pub enum Call {
-	ReadServers(Which, EnvOwner),
-	ReadStatus(Which, EnvOwner),
-	ReadSecrets(Which, EnvScope),
+	ReadServers(ScopeKey),
+	ReadStatus(ScopeKey),
+	ReadSecrets(ScopeKey),
 	ReadCatalogue,
 	Search { generation: u64, query: String },
-	Install(Which, Box<InstallRun>),
-	Connect { which: Which, owner: EnvOwner, name: String, url: String },
+	Install(ScopeKey, Box<InstallRun>),
+	Connect { key: ScopeKey, name: String, url: String },
 	CancelConnect,
-	Disconnect { which: Which, owner: EnvOwner, name: String, url: String },
-	Remove { which: Which, owner: EnvOwner, name: String },
-	SetSecret { which: Which, scope: EnvScope, name: String, value: Concealed },
-	DeleteSecret { which: Which, scope: EnvScope, name: String },
+	Disconnect { key: ScopeKey, name: String, url: String },
+	Remove { key: ScopeKey, name: String },
+	SetSecret { key: ScopeKey, name: String, value: Concealed },
+	DeleteSecret { key: ScopeKey, name: String },
 	Wake(Duration, Due),
 }
 
@@ -87,18 +86,18 @@ pub struct InstallOutcome {
 }
 
 pub enum Answer {
-	Servers(Which, Result<Vec<McpServer>, HostError>),
-	Status(Which, Result<Vec<StatusRow>, HostError>),
-	Secrets(Which, Result<Vec<EnvEntry>, HostError>),
+	Servers(ScopeKey, Result<Vec<McpServer>, HostError>),
+	Status(ScopeKey, Result<Vec<StatusRow>, HostError>),
+	Secrets(ScopeKey, Result<Vec<EnvEntry>, HostError>),
 	Catalogue(Result<Vec<Application>, HostError>),
 	Searched { generation: u64, found: Result<Found, HostError> },
-	Installed { which: Which, name: String, outcome: InstallOutcome },
-	Connected { which: Which, name: String, outcome: Result<(), HostError> },
+	Installed { key: ScopeKey, name: String, outcome: InstallOutcome },
+	Connected { key: ScopeKey, name: String, outcome: Result<(), HostError> },
 	Cancelled(Result<(), HostError>),
-	Disconnected { which: Which, name: String, outcome: Result<(), HostError> },
-	Removed { which: Which, name: String, outcome: Result<(), HostError> },
-	SecretSet { which: Which, outcome: Result<(), HostError> },
-	SecretDeleted { which: Which, outcome: Result<(), HostError> },
+	Disconnected { key: ScopeKey, name: String, outcome: Result<(), HostError> },
+	Removed { key: ScopeKey, name: String, outcome: Result<(), HostError> },
+	SecretSet { key: ScopeKey, outcome: Result<(), HostError> },
+	SecretDeleted { key: ScopeKey, outcome: Result<(), HostError> },
 	Due(Due),
 }
 
@@ -123,6 +122,16 @@ pub fn refusal_kind(failure: &HostError) -> Option<String> {
 
 pub fn url_of(config: &Value) -> String {
 	config.get("url").and_then(Value::as_str).unwrap_or_default().trim().to_owned()
+}
+
+pub fn env_scope_of(owner: &EnvOwner) -> EnvScope {
+	match owner {
+		EnvOwner::User => EnvScope::User,
+		EnvOwner::Space { id } => EnvScope::Space { id: id.clone() },
+		EnvOwner::Bot { id, space_id } => {
+			EnvScope::Bot { id: id.clone(), space_id: space_id.clone() }
+		}
+	}
 }
 
 fn server_scope(owner: &EnvOwner, name: &str) -> EnvScope {
@@ -192,9 +201,13 @@ fn refused_with(failure: HostError) -> InstallFailure {
 	InstallFailure::Refused(refusal_text(&failure))
 }
 
-fn declared_with_keys(source: &Source, run: &InstallRun) -> Result<(), InstallFailure> {
+fn declared_with_keys(
+	source: &Source,
+	owner: &EnvOwner,
+	run: &InstallRun,
+) -> Result<(), InstallFailure> {
 	let application = &run.application;
-	let scope = server_scope(&run.owner, &application.name);
+	let scope = server_scope(owner, &application.name);
 	for (secret, value) in &run.keys {
 		let arguments = json!({ "scope": scope, "name": secret, "value": value.0 });
 		done(source.invoke("env_set", arguments)).map_err(refused_with)?;
@@ -203,15 +216,15 @@ fn declared_with_keys(source: &Source, run: &InstallRun) -> Result<(), InstallFa
 		return Ok(());
 	}
 	let url = url_of(&application.config);
-	let arguments = json!({ "owner": run.owner, "name": application.name, "url": url });
+	let arguments = json!({ "owner": owner, "name": application.name, "url": url });
 	done(source.invoke("mcp_oauth_connect", arguments)).map_err(refused_with)?;
-	match connect_refusal(source, &run.owner, &application.name) {
+	match connect_refusal(source, owner, &application.name) {
 		Some(refusal) => Err(refusal),
 		None => Ok(()),
 	}
 }
 
-fn installed(source: &Source, run: &InstallRun) -> InstallOutcome {
+fn installed(source: &Source, owner: &EnvOwner, run: &InstallRun) -> InstallOutcome {
 	let refused = |refusal: String| InstallOutcome {
 		refusal: Some(InstallFailure::Refused(refusal)),
 		rollback_refusal: None,
@@ -224,23 +237,22 @@ fn installed(source: &Source, run: &InstallRun) -> InstallOutcome {
 		Err(failure) => return refused(refusal_text(&failure)),
 		Ok(None) => {}
 	}
-	let was_declared = match declared_names(source, &run.owner) {
+	let was_declared = match declared_names(source, owner) {
 		Ok(names) => names.contains(&application.name),
 		Err(failure) => return refused(refusal_text(&failure)),
 	};
-	let mut arguments = plugin_scope(&run.owner);
+	let mut arguments = plugin_scope(owner);
 	arguments["name"] = json!(application.name);
 	arguments["config"] = application.config.clone();
 	arguments["mark"] = mark_of(application);
 	if let Err(failure) = done(source.invoke("plugin_set_mcp_server", arguments)) {
 		return refused(refusal_text(&failure));
 	}
-	match declared_with_keys(source, run) {
+	match declared_with_keys(source, owner, run) {
 		Ok(()) => InstallOutcome { refusal: None, rollback_refusal: None },
 		Err(refusal) => {
-			let rollback_refusal = (!was_declared)
-				.then(|| rolled_back(source, &run.owner, &application.name))
-				.flatten();
+			let rollback_refusal =
+				(!was_declared).then(|| rolled_back(source, owner, &application.name)).flatten();
 			InstallOutcome { refusal: Some(refusal), rollback_refusal }
 		}
 	}
@@ -248,54 +260,54 @@ fn installed(source: &Source, run: &InstallRun) -> InstallOutcome {
 
 fn answered(source: &Source, call: Call) -> Answer {
 	match call {
-		Call::ReadServers(which, owner) => {
-			Answer::Servers(which, source.invoke("plugin_mcp_servers", plugin_scope(&owner)))
+		Call::ReadServers(key) => {
+			let read = source.invoke("plugin_mcp_servers", plugin_scope(&key.owner));
+			Answer::Servers(key, read)
 		}
-		Call::ReadStatus(which, owner) => Answer::Status(
-			which,
-			source.invoke("mcp_application_status", json!({ "owner": owner })),
-		),
-		Call::ReadSecrets(which, scope) => {
-			Answer::Secrets(which, source.invoke("env_list", json!({ "scope": scope })))
+		Call::ReadStatus(key) => {
+			let read = source.invoke("mcp_application_status", json!({ "owner": key.owner }));
+			Answer::Status(key, read)
+		}
+		Call::ReadSecrets(key) => {
+			let read = source.invoke("env_list", json!({ "scope": env_scope_of(&key.owner) }));
+			Answer::Secrets(key, read)
 		}
 		Call::ReadCatalogue => Answer::Catalogue(source.invoke("application_catalogue", json!({}))),
 		Call::Search { generation, query } => {
 			let found = source.invoke("application_search", json!({ "query": query }));
 			Answer::Searched { generation, found }
 		}
-		Call::Install(which, run) => {
-			let outcome = installed(source, &run);
-			Answer::Installed { which, name: run.application.name.clone(), outcome }
+		Call::Install(key, run) => {
+			let outcome = installed(source, &key.owner, &run);
+			Answer::Installed { key, name: run.application.name.clone(), outcome }
 		}
-		Call::Connect { which, owner, name, url } => {
-			let arguments = json!({ "owner": owner, "name": name, "url": url });
-			Answer::Connected {
-				which,
-				name,
-				outcome: done(source.invoke("mcp_oauth_connect", arguments)),
-			}
+		Call::Connect { key, name, url } => {
+			let arguments = json!({ "owner": key.owner, "name": name, "url": url });
+			let outcome = done(source.invoke("mcp_oauth_connect", arguments));
+			Answer::Connected { key, name, outcome }
 		}
 		Call::CancelConnect => {
 			Answer::Cancelled(done(source.invoke("mcp_oauth_cancel", json!({}))))
 		}
-		Call::Disconnect { which, owner, name, url } => {
-			let arguments = json!({ "owner": owner, "name": name, "url": url });
+		Call::Disconnect { key, name, url } => {
+			let arguments = json!({ "owner": key.owner, "name": name, "url": url });
 			let outcome = done(source.invoke("mcp_oauth_disconnect", arguments));
-			Answer::Disconnected { which, name, outcome }
+			Answer::Disconnected { key, name, outcome }
 		}
-		Call::Remove { which, owner, name } => {
-			let mut arguments = plugin_scope(&owner);
+		Call::Remove { key, name } => {
+			let mut arguments = plugin_scope(&key.owner);
 			arguments["name"] = json!(name);
 			let outcome = done(source.invoke("plugin_delete_mcp_server", arguments));
-			Answer::Removed { which, name, outcome }
+			Answer::Removed { key, name, outcome }
 		}
-		Call::SetSecret { which, scope, name, value } => {
+		Call::SetSecret { key, name, value } => {
+			let scope = env_scope_of(&key.owner);
 			let arguments = json!({ "scope": scope, "name": name, "value": value.0 });
-			Answer::SecretSet { which, outcome: done(source.invoke("env_set", arguments)) }
+			Answer::SecretSet { key, outcome: done(source.invoke("env_set", arguments)) }
 		}
-		Call::DeleteSecret { which, scope, name } => {
-			let arguments = json!({ "scope": scope, "name": name });
-			Answer::SecretDeleted { which, outcome: done(source.invoke("env_delete", arguments)) }
+		Call::DeleteSecret { key, name } => {
+			let arguments = json!({ "scope": env_scope_of(&key.owner), "name": name });
+			Answer::SecretDeleted { key, outcome: done(source.invoke("env_delete", arguments)) }
 		}
 		Call::Wake(after, due) => {
 			thread::sleep(after);

@@ -10,7 +10,7 @@ use std::time::Duration;
 
 use kiroshi_core::applications::contract::Install;
 use kiroshi_core::conversations::contract::McpServer;
-use kiroshi_core::environment::contract::{EnvOwner, EnvScope};
+use kiroshi_core::environment::contract::EnvOwner;
 use kiroshi_rune_kit::surfaces::s11_applications::catalogue::CatalogueEvent;
 use kiroshi_rune_kit::surfaces::s11_applications::install::InstallEvent;
 use kiroshi_rune_kit::surfaces::s11_applications::panel::ApplicationsEvent;
@@ -58,6 +58,12 @@ pub enum Notice {
 	RolledBack { name: String, reason: String },
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ScopeKey {
+	pub which: Which,
+	pub owner: EnvOwner,
+}
+
 pub struct Scope {
 	pub which: Which,
 	pub owner: EnvOwner,
@@ -71,34 +77,24 @@ impl Scope {
 		Scope { which, owner, name, installed: Installed::default(), secrets: Secrets::default() }
 	}
 
-	fn env_scope(&self) -> EnvScope {
-		match &self.owner {
-			EnvOwner::User => EnvScope::User,
-			EnvOwner::Space { id } => EnvScope::Space { id: id.clone() },
-			EnvOwner::Bot { id, space_id } => {
-				EnvScope::Bot { id: id.clone(), space_id: space_id.clone() }
-			}
-		}
+	pub fn key(&self) -> ScopeKey {
+		ScopeKey { which: self.which, owner: self.owner.clone() }
 	}
 
 	fn reads(&self) -> [Call; 3] {
-		[
-			Call::ReadServers(self.which, self.owner.clone()),
-			Call::ReadStatus(self.which, self.owner.clone()),
-			Call::ReadSecrets(self.which, self.env_scope()),
-		]
+		[Call::ReadServers(self.key()), Call::ReadStatus(self.key()), Call::ReadSecrets(self.key())]
 	}
 }
 
 #[derive(Default)]
 pub struct State {
 	scopes: Vec<Scope>,
-	opened_for: Option<String>,
+	is_open: bool,
 	catalogue: Option<Catalogue>,
-	settling: Option<(Which, String)>,
-	connecting: Option<(Which, String)>,
-	connect_failure: Option<(Which, ConnectFailure)>,
-	dialog: Option<(Which, Dialog)>,
+	settling: Option<(ScopeKey, String)>,
+	connecting: Option<(ScopeKey, String)>,
+	connect_failure: Option<(ScopeKey, ConnectFailure)>,
+	dialog: Option<(ScopeKey, Dialog)>,
 	notice: Option<(u64, Notice)>,
 	notices_raised: u64,
 	spare: rune::TextEdit,
@@ -133,8 +129,24 @@ impl State {
 		self.scopes.iter().find(|scope| scope.which == which)
 	}
 
-	fn scope_mut(&mut self, which: Which) -> Option<&mut Scope> {
-		self.scopes.iter_mut().find(|scope| scope.which == which)
+	fn key_of(&self, which: Which) -> Option<ScopeKey> {
+		self.scope(which).map(Scope::key)
+	}
+
+	fn shown(&self, key: &ScopeKey) -> Option<&Scope> {
+		self.scopes.iter().find(|scope| scope.which == key.which && scope.owner == key.owner)
+	}
+
+	fn is_shown(&self, key: &ScopeKey) -> bool {
+		self.shown(key).is_some()
+	}
+
+	fn shown_mut(&mut self, key: &ScopeKey) -> Option<&mut Scope> {
+		self.scopes.iter_mut().find(|scope| scope.which == key.which && scope.owner == key.owner)
+	}
+
+	fn shown_keys(&self) -> Vec<ScopeKey> {
+		self.scopes.iter().map(Scope::key).collect()
 	}
 
 	fn raise(&mut self, notice: Notice) {
@@ -148,49 +160,58 @@ impl State {
 		self.raise(Notice::Failed);
 	}
 
-	pub fn opened(&mut self, space_id: String, scopes: Vec<Scope>) {
-		self.opened_for = Some(space_id);
-		self.catalogue = None;
-		self.dialog = None;
-		self.queued.extend(scopes.iter().flat_map(Scope::reads));
-		self.scopes = scopes;
+	pub fn opened(&mut self, scopes: Vec<Scope>) {
+		let was_open = std::mem::replace(&mut self.is_open, true);
+		let keys: Vec<ScopeKey> = scopes.iter().map(Scope::key).collect();
+		if self.shown_keys() != keys {
+			self.settling = None;
+			self.connecting = None;
+			self.connect_failure = None;
+		}
+		let mut previous = std::mem::take(&mut self.scopes);
+		for scope in scopes {
+			let kept = previous.iter().position(|held| was_open && held.key() == scope.key());
+			match kept {
+				Some(at) => self.scopes.push(previous.swap_remove(at)),
+				None => {
+					self.queued.extend(scope.reads());
+					self.scopes.push(scope);
+				}
+			}
+		}
+		if !was_open || self.catalogue.as_ref().is_some_and(|held| !keys.contains(&held.target)) {
+			self.catalogue = None;
+		}
+		if !was_open || self.dialog.as_ref().is_some_and(|(key, _)| !keys.contains(key)) {
+			self.dialog = None;
+		}
 	}
 
 	pub fn left(&mut self) {
-		self.opened_for = None;
+		self.is_open = false;
 		self.catalogue = None;
 		self.dialog = None;
 		self.notice = None;
 	}
 
-	fn reread_installed(&mut self, which: Which) {
-		if let Some(scope) = self.scope(which) {
-			let owner = scope.owner.clone();
-			self.queued
-				.extend([Call::ReadServers(which, owner.clone()), Call::ReadStatus(which, owner)]);
-		}
-	}
-
-	fn reread_secrets(&mut self, which: Which) {
-		if let Some(scope) = self.scope(which) {
-			self.queued.push(Call::ReadSecrets(which, scope.env_scope()));
-		}
+	fn reread_installed(&mut self, key: ScopeKey) {
+		self.queued.extend([Call::ReadServers(key.clone()), Call::ReadStatus(key)]);
 	}
 
 	fn connect(&mut self, which: Which, name: String) {
 		let Some(scope) = self.scope(which) else { return };
-		let (owner, url) = (scope.owner.clone(), scope.installed.url_of(&name).unwrap_or_default());
-		self.start_connecting(which, name.clone());
-		self.queued.push(Call::Connect { which, owner, name, url });
+		let (key, url) = (scope.key(), scope.installed.url_of(&name).unwrap_or_default());
+		self.start_connecting(key.clone(), name.clone());
+		self.queued.push(Call::Connect { key, name, url });
 	}
 
-	fn start_connecting(&mut self, which: Which, name: String) {
+	fn start_connecting(&mut self, key: ScopeKey, name: String) {
 		self.connect_failure = None;
-		self.connecting = Some((which, name));
+		self.connecting = Some((key, name));
 	}
 
-	fn stop_connecting(&mut self, which: Which, name: &str) {
-		if self.connecting.as_ref().is_some_and(|(held, named)| *held == which && named == name) {
+	fn stop_connecting(&mut self, key: &ScopeKey, name: &str) {
+		if self.connecting.as_ref().is_some_and(|(held, named)| held == key && named == name) {
 			self.connecting = None;
 		}
 	}
@@ -203,21 +224,21 @@ impl State {
 
 	pub fn disconnect(&mut self, which: Which, name: String) {
 		let Some(scope) = self.scope(which) else { return };
-		let (owner, url) = (scope.owner.clone(), scope.installed.url_of(&name).unwrap_or_default());
-		self.queued.push(Call::Disconnect { which, owner, name, url });
+		let (key, url) = (scope.key(), scope.installed.url_of(&name).unwrap_or_default());
+		self.queued.push(Call::Disconnect { key, name, url });
 	}
 
 	pub fn remove(&mut self, which: Which, name: String) {
-		let Some(scope) = self.scope(which) else { return };
-		let owner = scope.owner.clone();
-		self.queued.push(Call::Remove { which, owner, name });
+		let Some(key) = self.key_of(which) else { return };
+		self.queued.push(Call::Remove { key, name });
 	}
 
 	pub fn applications_event(&mut self, which: Which, event: ApplicationsEvent) {
 		match event {
 			ApplicationsEvent::Connect(name) => self.connect(which, name),
 			ApplicationsEvent::Add => {
-				let (catalogue, calls) = Catalogue::opened(which);
+				let Some(key) = self.key_of(which) else { return };
+				let (catalogue, calls) = Catalogue::opened(key);
 				self.catalogue = Some(catalogue);
 				self.queued.extend(calls);
 			}
@@ -241,30 +262,30 @@ impl State {
 		}
 	}
 
-	fn declared(&self, which: Which) -> Vec<String> {
+	fn declared(&self, key: &ScopeKey) -> Vec<String> {
 		let servers =
-			self.scope(which).map(|scope| scope.installed.servers.as_slice()).unwrap_or_default();
+			self.shown(key).map(|scope| scope.installed.servers.as_slice()).unwrap_or_default();
 		servers.iter().map(|server| server.name.clone()).collect()
 	}
 
 	fn install(&mut self) {
 		let Some(catalogue) = self.catalogue.as_ref() else { return };
-		let which = catalogue.which;
-		let Some(scope) = self.scope(which) else { return };
+		let key = catalogue.target.clone();
+		let Some(scope) = self.shown(&key) else { return };
 		let Some(application) = catalogue.picked_application() else { return };
 		if catalogue.installing.is_some() || scope.installed.declares(&application.name) {
 			return;
 		}
-		let (owner, application) = (scope.owner.clone(), application.clone());
+		let application = application.clone();
 		let keys = catalogue.typed_keys();
 		let Some(catalogue) = self.catalogue.as_mut() else { return };
 		catalogue.failure = keys.as_ref().err().cloned();
 		let Ok(keys) = keys else { return };
 		catalogue.installing = Some(application.name.clone());
 		if matches!(application.install, Install::Oauth) {
-			self.start_connecting(which, application.name.clone());
+			self.start_connecting(key.clone(), application.name.clone());
 		}
-		self.queued.push(Call::Install(which, Box::new(InstallRun { owner, application, keys })));
+		self.queued.push(Call::Install(key, Box::new(InstallRun { application, keys })));
 	}
 
 	pub fn install_event(&mut self, event: InstallEvent) {
@@ -285,26 +306,25 @@ impl State {
 	}
 
 	fn save_secret(&mut self, which: Which) {
-		let Some(scope) = self.scope(which).map(Scope::env_scope) else { return };
-		let Some((held, Dialog::Write(write))) = self.dialog.as_mut() else { return };
-		if *held != which {
+		let Some((key, Dialog::Write(write))) = self.dialog.as_mut() else { return };
+		if key.which != which {
 			return;
 		}
 		let Some(name) = write.submitted() else { return };
 		let value = Concealed(write.value.text.clone());
-		self.queued.push(Call::SetSecret { which, scope, name, value });
+		let key = key.clone();
+		self.queued.push(Call::SetSecret { key, name, value });
 	}
 
 	fn confirm_removal(&mut self, which: Which) {
-		let Some(scope) = self.scope(which).map(Scope::env_scope) else { return };
-		let Some((held, Dialog::Remove(removal))) = self.dialog.as_mut() else { return };
-		if *held != which || removal.is_removing {
+		let Some((key, Dialog::Remove(removal))) = self.dialog.as_mut() else { return };
+		if key.which != which || removal.is_removing {
 			return;
 		}
 		removal.is_removing = true;
 		removal.has_failed = false;
-		let name = removal.name.clone();
-		self.queued.push(Call::DeleteSecret { which, scope, name });
+		let (key, name) = (key.clone(), removal.name.clone());
+		self.queued.push(Call::DeleteSecret { key, name });
 	}
 
 	fn is_dialog_busy(&self) -> bool {
@@ -321,17 +341,21 @@ impl State {
 		}
 	}
 
+	fn open_dialog(&mut self, which: Which, dialog: Dialog) {
+		if let Some(key) = self.key_of(which) {
+			self.dialog = Some((key, dialog));
+		}
+	}
+
 	pub fn secrets_event(&mut self, which: Which, event: SecretsEvent) {
 		match event {
-			SecretsEvent::Add => {
-				self.dialog = Some((which, Dialog::Write(Box::new(Write::new(None)))))
-			}
+			SecretsEvent::Add => self.open_dialog(which, Dialog::Write(Box::new(Write::new(None)))),
 			SecretsEvent::Replace(name) => {
-				self.dialog = Some((which, Dialog::Write(Box::new(Write::new(Some(name))))));
+				self.open_dialog(which, Dialog::Write(Box::new(Write::new(Some(name)))));
 			}
 			SecretsEvent::Remove(name) => {
 				let removal = Removal { name, has_failed: false, is_removing: false };
-				self.dialog = Some((which, Dialog::Remove(removal)));
+				self.open_dialog(which, Dialog::Remove(removal));
 			}
 			SecretsEvent::Save => self.save_secret(which),
 			SecretsEvent::ConfirmRemove => self.confirm_removal(which),
@@ -382,8 +406,11 @@ impl State {
 		}
 	}
 
-	fn installed(&mut self, which: Which, name: String, outcome: InstallOutcome) {
-		self.stop_connecting(which, &name);
+	fn installed(&mut self, key: ScopeKey, name: String, outcome: InstallOutcome) {
+		if !self.is_shown(&key) {
+			return;
+		}
+		self.stop_connecting(&key, &name);
 		let title = self
 			.catalogue
 			.as_ref()
@@ -400,23 +427,26 @@ impl State {
 					catalogue.installing = None;
 					catalogue.failure = Some(refusal);
 				}
-				self.reread_installed(which);
+				self.reread_installed(key);
 			}
 			None => {
-				self.settling = Some((which, name));
-				self.reread_installed(which);
+				self.settling = Some((key.clone(), name));
+				self.reread_installed(key);
 			}
 		}
 	}
 
-	fn servers_read(&mut self, which: Which, read: Result<Vec<McpServer>, HostError>) {
-		if self.settling.as_ref().is_some_and(|(held, _)| *held == which) {
+	fn servers_read(&mut self, key: ScopeKey, read: Result<Vec<McpServer>, HostError>) {
+		if !self.is_shown(&key) {
+			return;
+		}
+		if self.settling.as_ref().is_some_and(|(held, _)| *held == key) {
 			self.settling = None;
 			if let Some(catalogue) = self.catalogue.as_mut() {
 				catalogue.installing = None;
 			}
 		}
-		let Some(scope) = self.scope_mut(which) else { return };
+		let Some(scope) = self.shown_mut(&key) else { return };
 		match read {
 			Ok(servers) => {
 				scope.installed.servers = servers;
@@ -429,32 +459,36 @@ impl State {
 		}
 	}
 
-	fn connected(&mut self, which: Which, name: String, outcome: Result<(), HostError>) {
-		self.stop_connecting(which, &name);
+	fn connected(&mut self, key: ScopeKey, name: String, outcome: Result<(), HostError>) {
+		if !self.is_shown(&key) {
+			return;
+		}
+		self.stop_connecting(&key, &name);
 		if let Err(failure) = outcome {
 			let kind = refusal_kind(&failure);
 			if kind.as_deref() != Some(CANCELLED) {
 				eprintln!("{name} was not connected: {}", failure_text(&failure));
 				let detail = refusal_text(&failure);
-				self.connect_failure = Some((which, ConnectFailure { name, kind, detail }));
+				let failure = ConnectFailure { name, kind, detail };
+				self.connect_failure = Some((key.clone(), failure));
 			}
 		}
-		self.reread_installed(which);
+		self.reread_installed(key);
 	}
 
 	fn answered(&mut self, answer: Answer) {
 		match answer {
-			Answer::Servers(which, read) => self.servers_read(which, read),
-			Answer::Status(which, Ok(rows)) => {
-				if let Some(scope) = self.scope_mut(which) {
+			Answer::Servers(key, read) => self.servers_read(key, read),
+			Answer::Status(key, Ok(rows)) => {
+				if let Some(scope) = self.shown_mut(&key) {
 					scope.installed.status = rows;
 				}
 			}
 			Answer::Status(_, Err(failure)) => {
 				eprintln!("the connection states were not read: {}", failure_text(&failure));
 			}
-			Answer::Secrets(which, read) => {
-				let Some(scope) = self.scope_mut(which) else { return };
+			Answer::Secrets(key, read) => {
+				let Some(scope) = self.shown_mut(&key) else { return };
 				match read {
 					Ok(entries) => {
 						scope.secrets.entries = entries;
@@ -478,26 +512,20 @@ impl State {
 				}
 			}
 			Answer::Searched { generation, found } => self.searched(generation, found),
-			Answer::Installed { which, name, outcome } => self.installed(which, name, outcome),
-			Answer::Connected { which, name, outcome } => self.connected(which, name, outcome),
+			Answer::Installed { key, name, outcome } => self.installed(key, name, outcome),
+			Answer::Connected { key, name, outcome } => self.connected(key, name, outcome),
 			Answer::Cancelled(Ok(())) => {}
 			Answer::Cancelled(Err(failure)) => {
 				self.fail("the connection was not cancelled", &failure)
 			}
-			Answer::Disconnected { which, name, outcome } => {
-				if let Err(failure) = outcome {
-					self.fail(&format!("{name} was not disconnected"), &failure);
-				}
-				self.reread_installed(which);
+			Answer::Disconnected { key, name, outcome } => {
+				self.settled(key, outcome, &format!("{name} was not disconnected"))
 			}
-			Answer::Removed { which, name, outcome } => {
-				if let Err(failure) = outcome {
-					self.fail(&format!("{name} was not removed"), &failure);
-				}
-				self.reread_installed(which);
+			Answer::Removed { key, name, outcome } => {
+				self.settled(key, outcome, &format!("{name} was not removed"))
 			}
-			Answer::SecretSet { which, outcome } => self.secret_written(which, outcome),
-			Answer::SecretDeleted { which, outcome } => self.secret_deleted(which, outcome),
+			Answer::SecretSet { key, outcome } => self.secret_written(key, outcome),
+			Answer::SecretDeleted { key, outcome } => self.secret_deleted(key, outcome),
 			Answer::Due(Due::Notice(raised)) => {
 				if self.notice.as_ref().is_some_and(|(held, _)| *held == raised) {
 					self.notice = None;
@@ -506,9 +534,22 @@ impl State {
 		}
 	}
 
-	fn secret_written(&mut self, which: Which, outcome: Result<(), HostError>) {
+	fn settled(&mut self, key: ScopeKey, outcome: Result<(), HostError>, what: &str) {
+		if !self.is_shown(&key) {
+			return;
+		}
+		if let Err(failure) = outcome {
+			self.fail(what, &failure);
+		}
+		self.reread_installed(key);
+	}
+
+	fn secret_written(&mut self, key: ScopeKey, outcome: Result<(), HostError>) {
+		if !self.is_shown(&key) {
+			return;
+		}
 		if let Some((held, Dialog::Write(write))) = self.dialog.as_mut()
-			&& *held == which
+			&& *held == key
 		{
 			write.is_writing = false;
 			match &outcome {
@@ -519,12 +560,15 @@ impl State {
 		if let Err(failure) = outcome {
 			eprintln!("a secret was not written: {}", failure_text(&failure));
 		}
-		self.reread_secrets(which);
+		self.queued.push(Call::ReadSecrets(key));
 	}
 
-	fn secret_deleted(&mut self, which: Which, outcome: Result<(), HostError>) {
+	fn secret_deleted(&mut self, key: ScopeKey, outcome: Result<(), HostError>) {
+		if !self.is_shown(&key) {
+			return;
+		}
 		if let Some((held, Dialog::Remove(removal))) = self.dialog.as_mut()
-			&& *held == which
+			&& *held == key
 		{
 			removal.is_removing = false;
 			match &outcome {
@@ -535,7 +579,7 @@ impl State {
 		if let Err(failure) = outcome {
 			eprintln!("a secret was not removed: {}", failure_text(&failure));
 		}
-		self.reread_secrets(which);
+		self.queued.push(Call::ReadSecrets(key));
 	}
 
 	fn take_answers(&mut self) -> Vec<Answer> {
@@ -568,7 +612,7 @@ fn agent_of(app: &App) -> Option<(String, String)> {
 	Some((agent.id.clone(), agent.name.clone()))
 }
 
-fn scopes_of(app: &App) -> Option<(String, Vec<Scope>)> {
+fn scopes_of(app: &App) -> Option<Vec<Scope>> {
 	let ready = app.ready()?;
 	let space = &ready.space;
 	let mut scopes = Vec::new();
@@ -582,18 +626,19 @@ fn scopes_of(app: &App) -> Option<(String, Vec<Scope>)> {
 		space.name.clone(),
 	));
 	scopes.push(Scope::new(Which::Person, EnvOwner::User, String::new()));
-	Some((space.id.clone(), scopes))
+	Some(scopes)
 }
 
 fn open_when_moved(app: &mut App) -> bool {
 	let Some(source) = app.ready().map(|ready| ready.source.clone()) else { return false };
-	let Some((space_id, scopes)) = scopes_of(app) else { return false };
+	let Some(scopes) = scopes_of(app) else { return false };
 	let applications = state(app);
-	if applications.opened_for.as_deref() == Some(space_id.as_str()) {
+	let keys: Vec<ScopeKey> = scopes.iter().map(Scope::key).collect();
+	if applications.is_open && applications.shown_keys() == keys {
 		return false;
 	}
 	applications.use_source(source);
-	applications.opened(space_id, scopes);
+	applications.opened(scopes);
 	true
 }
 
@@ -601,7 +646,7 @@ pub fn poll(app: &mut App) -> bool {
 	let is_shown = app.navigation.main_route() == Route::Applications;
 	let has_opened = is_shown && open_when_moved(app);
 	let applications = state(app);
-	if !is_shown && applications.opened_for.is_some() {
+	if !is_shown && applications.is_open {
 		applications.left();
 	}
 	applications.typed();

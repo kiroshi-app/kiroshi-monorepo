@@ -94,7 +94,7 @@ fn emit_person_secrets(app: &mut App, event: SecretsEvent) {
 }
 
 fn emit_dialog(app: &mut App, event: SecretsEvent) {
-	let Some(which) = state(app).dialog.as_ref().map(|(which, _)| *which) else { return };
+	let Some(which) = state(app).dialog.as_ref().map(|(key, _)| key.which) else { return };
 	flushed(app, |applications| applications.secrets_event(which, event));
 }
 
@@ -162,12 +162,12 @@ pub(super) fn shown_rows(applications_state: &State, scope: &Scope) -> Vec<Row> 
 	let connecting = applications_state
 		.connecting
 		.as_ref()
-		.filter(|(which, _)| *which == scope.which)
+		.filter(|(key, _)| *key == scope.key())
 		.map(|(_, name)| name.as_str());
 	let failure = applications_state
 		.connect_failure
 		.as_ref()
-		.filter(|(which, _)| *which == scope.which)
+		.filter(|(key, _)| *key == scope.key())
 		.map(|(_, failure)| failure);
 	scope.installed.rows(curated.unwrap_or_default(), connecting, failure)
 }
@@ -333,11 +333,11 @@ fn catalogue_view(
 	catalogue_state: &Catalogue,
 	language: Language,
 ) -> El {
-	let scope = applications_state.scope(catalogue_state.which);
+	let scope = applications_state.shown(&catalogue_state.target);
 	if let (Some(scope), Some(application)) = (scope, catalogue_state.picked_application()) {
 		return install_view(t, catalogue_state, scope, application, language);
 	}
-	let declared = applications_state.declared(catalogue_state.which);
+	let declared = applications_state.declared(&catalogue_state.target);
 	let visible = catalogue_state.visible(&declared);
 	let cards: Vec<CatalogueApplication> = visible
 		.iter()
@@ -395,8 +395,8 @@ fn notice_copy(notice: &Notice, language: Language) -> (String, String) {
 }
 
 fn dialog_layer(t: &Tokens, applications_state: &State, language: Language) -> Option<El> {
-	let (which, dialog) = applications_state.dialog.as_ref()?;
-	let scope = applications_state.scope(*which)?;
+	let (key, dialog) = applications_state.dialog.as_ref()?;
+	let scope = applications_state.shown(key)?;
 	let shown = match dialog {
 		Dialog::Write(write) => SecretsDialog::Write(SecretWrite {
 			replacing: write.replacing.as_deref(),

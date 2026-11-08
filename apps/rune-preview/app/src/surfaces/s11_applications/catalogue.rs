@@ -3,7 +3,7 @@ use kiroshi_rune_kit::surfaces::s11_applications::catalogue::Category;
 use rune::TextEdit;
 
 use super::calls::{Call, Concealed, Found, InstallFailure};
-use super::{Reading, Which};
+use super::{Reading, ScopeKey};
 use crate::host::HostError;
 
 const BUCKETS: [(&str, Category); 16] = [
@@ -38,7 +38,7 @@ pub struct Picked {
 }
 
 pub struct Catalogue {
-	pub which: Which,
+	pub target: ScopeKey,
 	pub curated: Vec<Application>,
 	pub curated_read: Reading,
 	pub directory: Vec<Application>,
@@ -100,9 +100,9 @@ fn key_names(application: &Application) -> Vec<(String, String)> {
 }
 
 impl Catalogue {
-	pub fn opened(which: Which) -> (Catalogue, Vec<Call>) {
+	pub fn opened(target: ScopeKey) -> (Catalogue, Vec<Call>) {
 		let catalogue = Catalogue {
-			which,
+			target,
 			curated: Vec::new(),
 			curated_read: Reading::Pending,
 			directory: Vec::new(),
