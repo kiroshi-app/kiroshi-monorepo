@@ -129,7 +129,7 @@ fn state_of(completion: TranscriptCompletion) -> TurnState {
 	}
 }
 
-fn quote_of(link: &ReplyLink, open: &Conversation, roster: &[Agent]) -> Option<Quote> {
+pub fn quote_of(link: &ReplyLink, open: &Conversation, roster: &[Agent]) -> Option<Quote> {
 	let quoted = open.messages.iter().find(|message| message.id == link.message_id);
 	let excerpt =
 		link.excerpt.clone().or_else(|| quoted.map(|message| message.content.trim().to_owned()))?;
