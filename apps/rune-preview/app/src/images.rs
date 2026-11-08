@@ -35,10 +35,6 @@ impl Images {
 		self.cache = Some(cache);
 	}
 
-	pub fn decode(&self, encoded: &[u8]) -> Option<Image> {
-		self.cache.as_ref().map(|cache| cache.load(encoded.to_vec()))
-	}
-
 	pub fn slot(&self, url: &str) -> Option<&Slot> {
 		self.slots.get(url)
 	}
