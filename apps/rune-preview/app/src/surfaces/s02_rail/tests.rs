@@ -12,7 +12,7 @@ use super::{
 };
 use crate::app::{App, Person, Ready, SpaceContent, Workspace};
 use crate::host::{Host, HostError};
-use crate::model;
+use crate::model::{self, Conversation};
 use crate::navigation::Route;
 use crate::source::Source;
 
@@ -398,4 +398,44 @@ fn space_events_map_to_rereads() {
 	assert_eq!(heard_of("invitation://changed"), Some(Heard::Invitations));
 	assert_eq!(heard_of("hosting://changed"), Some(Heard::Hosting));
 	assert_eq!(heard_of("mission://changed"), None);
+}
+
+fn solo_conversation(id: &str, bot_id: &str) -> Conversation {
+	serde_json::from_value(json!({
+		"id": id,
+		"title": bot_id,
+		"color": null,
+		"participants": [{
+			"botId": bot_id,
+			"name": bot_id,
+			"avatarBlot": null,
+			"leftAt": null,
+			"isDeleted": false,
+		}],
+		"soloBotId": bot_id,
+	}))
+	.expect("a conversation fixture")
+}
+
+#[test]
+fn another_space_from_the_rail_swaps_roster_thread_and_accent_in_the_same_window() {
+	let mut app = listed_app();
+	app.navigation.navigate_main(Route::Conversations);
+	let content = SpaceContent {
+		agents: Vec::new(),
+		conversations: vec![solo_conversation("work-chat", "atlas")],
+	};
+
+	railed(&mut app, RailMessage::SpacesMenu(PickerMessage::SelectSpace("work".to_owned())));
+	landed(&mut app, Answer::Loaded { space_id: "work".to_owned(), content: Ok(content) });
+
+	let ready = app.ready().expect("a ready workspace");
+	let roster: Vec<&str> = ready.conversations.iter().map(|held| held.id.as_str()).collect();
+	assert!(app.navigation.main_route() == Route::Conversations);
+	assert_eq!((ready.space.id.as_str(), ready.space.colour), ("work", Some(257.0)));
+	assert_eq!(roster, ["work-chat"]);
+	assert_eq!(
+		app.thread.as_ref().map(|thread| thread.conversation_id.as_str()),
+		Some("work-chat")
+	);
 }

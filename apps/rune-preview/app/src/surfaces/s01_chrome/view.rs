@@ -1,4 +1,4 @@
-use rune::{El, col};
+use rune::{El, el};
 use rune_kit::{Kit, ToastRegion};
 
 use kiroshi_rune_kit::icons;
@@ -18,9 +18,9 @@ pub struct Measured {
 	pub lifted_tab: Option<[f32; 4]>,
 }
 
-pub fn view(s: &App, k: &Kit, t: &Tokens, measured: &Measured) -> El {
+pub fn view(s: &App, k: &Kit, t: &Tokens, measured: &Measured) -> (El, Vec<El>) {
 	let state = &s.surfaces.s01_chrome;
-	let Some(tabs) = state.tabs_of(MAIN_WINDOW) else { return col() };
+	let Some(tabs) = state.tabs_of(MAIN_WINDOW) else { return (el(), Vec::new()) };
 	let title = NEW_TAB.text(LANGUAGE);
 	let shown: Vec<ChromeTab> = tabs
 		.tabs()
@@ -54,12 +54,8 @@ pub fn view(s: &App, k: &Kit, t: &Tokens, measured: &Measured) -> El {
 		};
 		tab_menu(t, &bar, shown_menu, on_chrome)
 	});
-	let overlays = [menu, ghost(state, t, &shown, measured), failure(state, k, t)];
-	col()
-		.w_full()
-		.h_full()
-		.child(title_bar(t, &bar, on_chrome))
-		.children(overlays.into_iter().flatten())
+	let layers = [menu, ghost(state, t, &shown, measured), failure(state, k, t)];
+	(title_bar(t, &bar, on_chrome), layers.into_iter().flatten().collect())
 }
 
 fn ghost(state: &State, t: &Tokens, shown: &[ChromeTab], measured: &Measured) -> Option<El> {
