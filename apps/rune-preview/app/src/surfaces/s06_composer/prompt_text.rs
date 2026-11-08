@@ -6,8 +6,6 @@ use kiroshi_core::attachments::attachment_block;
 const ARROBASE: char = '@';
 const COMMAND_MARK: char = '/';
 const TOKEN_OPENING: char = '<';
-#[cfg(test)]
-const DAY_MS: i64 = 86_400_000;
 
 pub struct Named<'a> {
 	pub id: &'a str,
@@ -123,30 +121,6 @@ fn sent_instant(sent_at: i64) -> DateTime<Utc> {
 	let calendar_edge =
 		if sent_at < 0 { DateTime::<Utc>::MIN_UTC } else { DateTime::<Utc>::MAX_UTC };
 	DateTime::from_timestamp_millis(sent_at).unwrap_or(calendar_edge)
-}
-
-#[cfg(test)]
-fn civil_date(days: i64) -> (i64, i64, i64) {
-	let shifted = days + 719_468;
-	let era = shifted.div_euclid(146_097);
-	let day_of_era = shifted.rem_euclid(146_097);
-	let year_of_era =
-		(day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
-	let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
-	let shifted_month = (5 * day_of_year + 2) / 153;
-	let day = day_of_year - (153 * shifted_month + 2) / 5 + 1;
-	let month = if shifted_month < 10 { shifted_month + 3 } else { shifted_month - 9 };
-	let year = year_of_era + era * 400 + i64::from(month <= 2);
-	(year, month, day)
-}
-
-#[cfg(test)]
-pub fn iso_utc(at: i64) -> String {
-	let (year, month, day) = civil_date(at.div_euclid(DAY_MS));
-	let of_day = at.rem_euclid(DAY_MS);
-	let (hours, minutes) = (of_day / 3_600_000, of_day / 60_000 % 60);
-	let (seconds, millis) = (of_day / 1_000 % 60, of_day % 1_000);
-	format!("{year:04}-{month:02}-{day:02}T{hours:02}:{minutes:02}:{seconds:02}.{millis:03}Z")
 }
 
 #[cfg(test)]
