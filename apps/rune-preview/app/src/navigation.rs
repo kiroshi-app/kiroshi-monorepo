@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::app::Pane;
 use crate::surfaces::s04_boot::Step;
@@ -58,6 +58,7 @@ pub struct Navigation {
 	secondary: Vec<Window>,
 	next_id: u32,
 	left_tabs: HashMap<String, TabPage>,
+	deleted_conversations: HashSet<String>,
 }
 
 impl Navigation {
@@ -67,14 +68,28 @@ impl Navigation {
 			secondary: Vec::new(),
 			next_id: MAIN_WINDOW.0 + 1,
 			left_tabs: HashMap::new(),
+			deleted_conversations: HashSet::new(),
 		}
 	}
 
 	pub fn switch_tab(&mut self, leaving: &str, held: HeldPage, entering: &str) -> HeldPage {
 		self.left_tabs.insert(leaving.to_owned(), TabPage { route: self.main, held });
-		let entered = self.left_tabs.remove(entering);
-		self.main = entered.as_ref().map_or(Route::Conversations, |page| page.route);
-		entered.map(|page| page.held).unwrap_or_default()
+		let Some(entered) = self.left_tabs.remove(entering) else { return self.new_tab_page() };
+		self.main = entered.route;
+		entered.held
+	}
+
+	pub fn new_tab_page(&mut self) -> HeldPage {
+		self.main = Route::Conversations;
+		HeldPage::default()
+	}
+
+	pub fn conversation_deleted(&mut self, conversation_id: &str) {
+		self.deleted_conversations.insert(conversation_id.to_owned());
+	}
+
+	pub fn is_deleted(&self, conversation_id: &str) -> bool {
+		self.deleted_conversations.contains(conversation_id)
 	}
 
 	pub fn keep_pages_of(&mut self, tabs: &[String]) {

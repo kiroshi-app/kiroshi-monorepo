@@ -1,5 +1,6 @@
 use serde_json::json;
 
+use crate::app::notice::Notice;
 use crate::app::{App, Live, Person, Ready, Thread, Workspace, connected, whole_thread};
 use crate::dev_profile::DevProfile;
 use crate::host::{Host, HostError, Profile};
@@ -276,7 +277,7 @@ fn live_longest(s: &mut App) {
 			ready.longest = Some(found);
 		}
 		Ok(None) => {}
-		Err(failure) => s.notice = Some(format!("{}: {}", failure.title(), failure.detail())),
+		Err(failure) => s.raise(Notice::failure(failure.title(), failure.detail())),
 	}
 	s.workspace = Workspace::Ready(ready);
 }

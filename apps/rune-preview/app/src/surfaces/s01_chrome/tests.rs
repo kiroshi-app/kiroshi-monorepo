@@ -4,10 +4,11 @@ use kiroshi_core::core_context::RenderWindow;
 use kiroshi_rune_kit::surfaces::s01_chrome::{ChromeEvent, Landing, Lift};
 
 use kiroshi_rune_kit::surfaces::s02_rail::{RailMessage, RailPanel};
+use kiroshi_rune_kit::surfaces::s04_boot::notice::NoticeKind;
 
 use super::desk::with_desk_on;
 use super::{Desk, Failure, Menu, Shelf, State, Windows};
-use crate::app::{App, Pane};
+use crate::app::{App, Pane, notice};
 use crate::navigation::{HeldPage, MAIN_WINDOW, Navigation, Route, WindowId};
 use crate::scenes;
 use crate::surfaces::s02_rail;
@@ -633,4 +634,56 @@ fn a_closed_tab_pushed_off_the_closed_stack_loses_its_page() {
 	let entered = app.navigation.clone().switch_tab(&active, HeldPage::default(), &first);
 
 	assert_eq!(entered, HeldPage::default());
+}
+
+fn closed_on_a_conversation_deleted_meanwhile() -> (App, String) {
+	let (mut app, first) = on_library_with_a_conversation();
+	let deleted = opened_in(&app).map(str::to_owned).expect("a conversation on screen");
+	heard_by(&mut app, ChromeEvent::NewTab);
+	heard_by(&mut app, ChromeEvent::CloseTab(first.clone()));
+	app.navigation.conversation_deleted(&deleted);
+	(app, first)
+}
+
+fn shown_notice(app: &App) -> Option<(&str, NoticeKind)> {
+	notice::shown(app).map(|shown| (shown.title.as_str(), shown.kind))
+}
+
+#[test]
+fn a_reopened_tab_whose_conversation_was_deleted_opens_on_the_new_tab_page_with_a_notice() {
+	let (mut app, first) = closed_on_a_conversation_deleted_meanwhile();
+
+	heard_by(&mut app, ChromeEvent::ReopenClosedTab);
+
+	assert_eq!(active_of(&app), first);
+	assert!(page_of(&app) == (Route::Conversations, Pane::Conversations, None));
+	assert_eq!(
+		shown_notice(&app),
+		Some(("The conversation of this tab was deleted.", NoticeKind::Info))
+	);
+}
+
+#[test]
+fn a_tab_reopened_on_a_deleted_conversation_keeps_the_new_tab_page_once_entered_again() {
+	let (mut app, first) = closed_on_a_conversation_deleted_meanwhile();
+	heard_by(&mut app, ChromeEvent::ReopenClosedTab);
+	app.notice = None;
+
+	heard_by(&mut app, ChromeEvent::NewTab);
+	heard_by(&mut app, ChromeEvent::SelectTab(first.clone()));
+
+	assert_eq!(active_of(&app), first);
+	assert!(page_of(&app) == (Route::Conversations, Pane::Conversations, None));
+	assert!(app.notice.is_none());
+}
+
+#[test]
+fn a_reopened_tab_whose_conversation_still_exists_raises_no_notice() {
+	let (mut app, first) = on_library_with_a_conversation();
+	heard_by(&mut app, ChromeEvent::NewTab);
+	heard_by(&mut app, ChromeEvent::CloseTab(first));
+
+	heard_by(&mut app, ChromeEvent::ReopenClosedTab);
+
+	assert!(app.notice.is_none());
 }
