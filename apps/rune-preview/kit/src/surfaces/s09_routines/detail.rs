@@ -1,10 +1,7 @@
 use rune::{Color, El, Icon, col, el, icon, row, text};
 
 use super::row::stopped_badge;
-use super::{
-	BORDER, Emit, Retry, RoutinesEvent, bar, bar_line, emits, empty_state, faint_bar,
-	filling_skeleton, notice, plural, say, tabular,
-};
+use super::{BORDER, Emit, Retry, RoutinesEvent, emits, empty_state, notice, plural, say, tabular};
 use crate::icons;
 use crate::primitives::DISABLED_OPACITY;
 use crate::primitives::button::{Button, ButtonVariant};
@@ -15,13 +12,6 @@ use chat::routines::detail::{history, run_now};
 
 const RUN_MARK: f32 = SPACING * 3.5;
 const RUN_INSET: f32 = SPACING * 2.5 + BORDER;
-const RUN_LINE: f32 = SPACING * 4.0;
-const SKELETON_ROWS: usize = 16;
-const SKELETON_WIDTHS: [(f32, f32); 3] = [
-	(SPACING * 20.0, SPACING * 18.0),
-	(SPACING * 26.0, SPACING * 16.0),
-	(SPACING * 16.0, SPACING * 20.0),
-];
 const AGGREGATE_SEPARATOR: &str = " \u{b7} ";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -148,18 +138,6 @@ fn run_row(t: &Tokens, lang: Language, run: &Run) -> El {
 	frame
 }
 
-fn run_skeleton(t: &Tokens, rank: usize) -> El {
-	let (outcome, time) = SKELETON_WIDTHS[rank % SKELETON_WIDTHS.len()];
-	run_frame(t).a11y_hidden().child(
-		row()
-			.w_full()
-			.justify_between()
-			.center_y()
-			.child(bar_line(RUN_LINE, bar(t, outcome)))
-			.child(bar_line(RUN_LINE, faint_bar(t, time))),
-	)
-}
-
 fn aggregate(t: &Tokens, lang: Language, history: &History, latest: &Run) -> El {
 	let read = history.newest_first.len();
 	let reports =
@@ -207,10 +185,18 @@ fn run_history<S: 'static>(t: &Tokens, lang: Language, history: &History, emit: 
 		return body.child(failure);
 	}
 	if history.reading {
-		return body.role("status").label(say(history::READING, lang)).child(filling_skeleton(
-			(0..SKELETON_ROWS).map(|rank| run_skeleton(t, rank)),
-			SPACING * 2.0,
-		));
+		let reading = say(history::READING, lang);
+		return body.child(
+			row()
+				.gap(SPACING * 2.0)
+				.center_y()
+				.role("status")
+				.label(reading)
+				.child(
+					icon(&icons::LOADER_CIRCLE, RUN_MARK).color(t.muted_foreground).a11y_hidden(),
+				)
+				.child(text(reading).font(TEXT_XS).color(t.muted_foreground)),
+		);
 	}
 	body.child(empty_state(
 		t,
