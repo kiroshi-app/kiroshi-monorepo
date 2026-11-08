@@ -180,7 +180,7 @@ const WORKING_MISSIONS: [Mission; 3] =
 fn ignore(_: &mut SceneState, _: RoutinesEvent) {}
 
 fn scene_edit(s: &mut SceneState, field: FormField) -> &mut TextEdit {
-	let [title, instruction] = &mut s.fields;
+	let [title, instruction] = &mut s.routine_fields;
 	match field {
 		FormField::Title => title,
 		FormField::Instruction => instruction,
@@ -547,7 +547,7 @@ fn form_scene(t: &Tokens, form: &RoutineForm) -> El {
 }
 
 pub(super) fn form_default(t: &Tokens, s: &SceneState) -> El {
-	let [title, instruction] = &s.fields;
+	let [title, instruction] = &s.routine_fields;
 	form_scene(
 		t,
 		&new_form(title, instruction, TriggerField::Picking(None), Configuration::Nothing),
