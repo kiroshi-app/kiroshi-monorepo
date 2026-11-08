@@ -29,7 +29,7 @@ fn answered(source: &Source, call: Call) -> Answer {
 	match call {
 		Call::Pending { conversation_id } => {
 			let arguments = json!({ "conversationId": conversation_id });
-			let read = source.invoke("agent_pending_questions", arguments);
+			let read = source.invoke("agent_pending_prompts", arguments);
 			Answer::Pending { conversation_id, read }
 		}
 		Call::Respond { scope, id, decision } => {
