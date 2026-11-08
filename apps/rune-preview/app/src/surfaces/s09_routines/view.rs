@@ -24,7 +24,7 @@ use super::form::{Form, KeyRead, Row, TriggerKind, fields_of, takes_value};
 use super::listing::{Held, stopped_itself};
 use super::{State, edit_of, language, routines_event};
 use crate::app::App;
-use crate::mission::relative_time;
+use kiroshi_rune_kit::surfaces::s08_missions::relative_time;
 
 fn emit(app: &mut App, event: RoutinesEvent) {
 	routines_event(app, event);

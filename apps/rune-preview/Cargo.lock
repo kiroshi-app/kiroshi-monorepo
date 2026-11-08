@@ -2266,6 +2266,7 @@ name = "kiroshi-rune-preview"
 version = "0.0.0"
 dependencies = [
  "base64 0.22.1",
+ "chrono",
  "kiroshi-core",
  "kiroshi-rune-kit",
  "kiroshi-rune-os",
