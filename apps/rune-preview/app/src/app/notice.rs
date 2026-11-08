@@ -1,6 +1,8 @@
 #[cfg(test)]
 mod tests;
 
+use std::collections::HashMap;
+
 use kiroshi_rune_kit::strings::Language;
 use kiroshi_rune_kit::surfaces::s04_boot::notice::{
 	NoticeKind, RaisedNotice, SurfaceEvent, notice_surface,
@@ -64,31 +66,70 @@ impl Notice {
 	}
 }
 
+#[derive(Debug, Default)]
+pub struct NoticeBoard {
+	of_window: Option<Notice>,
+	of_spaces: HashMap<String, Notice>,
+}
+
+impl NoticeBoard {
+	fn raise(&mut self, notice: Notice) {
+		match notice.space_id.clone() {
+			Some(space_id) => {
+				self.of_spaces.insert(space_id, notice);
+			}
+			None => self.of_window = Some(notice),
+		}
+	}
+
+	fn shown(&self, space_on_screen: Option<&str>) -> Vec<&Notice> {
+		let of_space = space_on_screen.and_then(|space_id| self.of_spaces.get(space_id));
+		of_space.into_iter().chain(self.of_window.as_ref()).collect()
+	}
+
+	fn close(&mut self, index: usize, space_on_screen: Option<&str>) {
+		let shown_space = space_on_screen.filter(|space_id| self.of_spaces.contains_key(*space_id));
+		match (index, shown_space) {
+			(0, Some(space_id)) => {
+				self.of_spaces.remove(space_id);
+			}
+			_ => self.of_window = None,
+		}
+	}
+}
+
 impl App {
 	pub fn raise(&mut self, notice: Notice) {
-		if !is_on_screen(self, &notice) {
+		if notice
+			.space_id
+			.as_deref()
+			.is_some_and(|space_id| Some(space_id) != space_on_screen(self))
+		{
 			eprintln!("a notice of a Space not on screen: {}", notice.logged());
 		}
-		self.notice = Some(notice);
+		self.notice.raise(notice);
 	}
 }
 
-fn is_on_screen(app: &App, notice: &Notice) -> bool {
-	match &notice.space_id {
-		None => true,
-		Some(space_id) => app.ready().is_some_and(|ready| ready.space.id == *space_id),
-	}
+fn space_on_screen(app: &App) -> Option<&str> {
+	app.ready().map(|ready| ready.space.id.as_str())
 }
 
-pub fn shown(app: &App) -> Option<&Notice> {
-	app.notice.as_ref().filter(|notice| is_on_screen(app, notice))
+pub fn shown(app: &App) -> Vec<&Notice> {
+	app.notice.shown(space_on_screen(app))
 }
 
 pub fn layer(app: &App, t: &Tokens) -> Option<El> {
-	let notice = shown(app)?;
-	Some(notice_surface(t, LANGUAGE, &[notice.raised()], closed))
+	let raised: Vec<RaisedNotice> = shown(app).into_iter().map(Notice::raised).collect();
+	if raised.is_empty() {
+		return None;
+	}
+	Some(notice_surface(t, LANGUAGE, &raised, closed))
 }
 
-fn closed(app: &mut App, _: SurfaceEvent) {
-	app.notice = None;
+fn closed(app: &mut App, event: SurfaceEvent) {
+	let (SurfaceEvent::Close(index) | SurfaceEvent::Act(index) | SurfaceEvent::CopyReport(index)) =
+		event;
+	let space_on_screen = space_on_screen(app).map(str::to_owned);
+	app.notice.close(index, space_on_screen.as_deref());
 }

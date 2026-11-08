@@ -8,7 +8,8 @@ use kiroshi_rune_kit::surfaces::s04_boot::notice::NoticeKind;
 
 use super::desk::with_desk_on;
 use super::{Desk, Failure, Menu, Shelf, State, Windows};
-use crate::app::{App, Pane, notice};
+use crate::app::notice::{self, NoticeBoard};
+use crate::app::{App, Pane};
 use crate::navigation::{HeldPage, MAIN_WINDOW, Navigation, Route, WindowId};
 use crate::scenes;
 use crate::surfaces::s02_rail;
@@ -645,8 +646,8 @@ fn closed_on_a_conversation_deleted_meanwhile() -> (App, String) {
 	(app, first)
 }
 
-fn shown_notice(app: &App) -> Option<(&str, NoticeKind)> {
-	notice::shown(app).map(|shown| (shown.title.as_str(), shown.kind))
+fn shown_notices(app: &App) -> Vec<(&str, NoticeKind)> {
+	notice::shown(app).into_iter().map(|shown| (shown.title.as_str(), shown.kind)).collect()
 }
 
 #[test]
@@ -658,8 +659,8 @@ fn a_reopened_tab_whose_conversation_was_deleted_opens_on_the_new_tab_page_with_
 	assert_eq!(active_of(&app), first);
 	assert!(page_of(&app) == (Route::Conversations, Pane::Conversations, None));
 	assert_eq!(
-		shown_notice(&app),
-		Some(("The conversation of this tab was deleted.", NoticeKind::Info))
+		shown_notices(&app),
+		vec![("The conversation of this tab was deleted.", NoticeKind::Info)]
 	);
 }
 
@@ -667,14 +668,14 @@ fn a_reopened_tab_whose_conversation_was_deleted_opens_on_the_new_tab_page_with_
 fn a_tab_reopened_on_a_deleted_conversation_keeps_the_new_tab_page_once_entered_again() {
 	let (mut app, first) = closed_on_a_conversation_deleted_meanwhile();
 	heard_by(&mut app, ChromeEvent::ReopenClosedTab);
-	app.notice = None;
+	app.notice = NoticeBoard::default();
 
 	heard_by(&mut app, ChromeEvent::NewTab);
 	heard_by(&mut app, ChromeEvent::SelectTab(first.clone()));
 
 	assert_eq!(active_of(&app), first);
 	assert!(page_of(&app) == (Route::Conversations, Pane::Conversations, None));
-	assert!(app.notice.is_none());
+	assert!(shown_notices(&app).is_empty());
 }
 
 #[test]
@@ -685,5 +686,5 @@ fn a_reopened_tab_whose_conversation_still_exists_raises_no_notice() {
 
 	heard_by(&mut app, ChromeEvent::ReopenClosedTab);
 
-	assert!(app.notice.is_none());
+	assert!(shown_notices(&app).is_empty());
 }

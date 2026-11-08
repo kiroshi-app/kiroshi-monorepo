@@ -37,7 +37,7 @@ use crate::surfaces::{
 	Surfaces, s01_chrome, s02_rail, s03_roster, s05_thread, s10_agent_settings, s14_library,
 };
 
-use notice::Notice;
+use notice::{Notice, NoticeBoard};
 
 const PAGE_LIMIT: u32 = 200;
 
@@ -242,7 +242,7 @@ pub struct App {
 	pub images: Images,
 	pub sidebar: PaneState,
 	pub spike: crate::spike::editor::Editor,
-	pub notice: Option<Notice>,
+	pub notice: NoticeBoard,
 	pub dev_profile: Option<DevProfile>,
 	pub runs: Runs,
 	pub clock_ms: f64,
@@ -274,7 +274,7 @@ impl App {
 			images: Images::default(),
 			sidebar: PaneState::new(276.0).range(180.0, 480.0),
 			spike: crate::spike::editor::Editor::default(),
-			notice: None,
+			notice: NoticeBoard::default(),
 			dev_profile: None,
 			runs: Runs::default(),
 			math: Typesetter::default(),
@@ -523,19 +523,23 @@ impl App {
 	}
 
 	fn longest_found(&mut self, space_id: String, found: Result<Option<Longest>, HostError>) {
-		let Workspace::Ready(ready) = &mut self.workspace else { return };
-		let fallback =
-			ready.first_conversation_with_an_agent().map(|conversation| conversation.id.clone());
+		let found = found.unwrap_or_else(|failure| {
+			self.raise(
+				Notice::of_host_failure(LONGEST_UNREAD, &failure).of_space(space_id.clone()),
+			);
+			None
+		});
+		let Some(ready) = self.ready_mut().filter(|ready| ready.space.id == space_id) else {
+			return;
+		};
 		let opening = match found {
-			Ok(Some(longest)) => {
+			Some(longest) => {
 				let id = longest.conversation_id.clone();
 				ready.longest = Some(longest);
 				Some(id)
 			}
-			Ok(None) => fallback,
-			Err(failure) => {
-				self.raise(Notice::of_host_failure(LONGEST_UNREAD, &failure).of_space(space_id));
-				fallback
+			None => {
+				ready.first_conversation_with_an_agent().map(|conversation| conversation.id.clone())
 			}
 		};
 		if let Some(id) = opening.filter(|_| self.thread.is_none()) {
