@@ -118,18 +118,20 @@ pub fn space_keys(core: &crate::core_context::Core) -> SpaceKeys {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum KeyStoreChoice {
 	Keychain,
+	KeychainForUnverified,
 	FileForDev,
 	FileForUnsigned,
-	FileForUnverified,
 }
 
 impl KeyStoreChoice {
 	fn reason(self) -> &'static str {
 		match self {
 			Self::Keychain => "Keychain: an installed build signed with a Team ID",
+			Self::KeychainForUnverified => {
+				"Keychain: an installed build whose code signature could not be checked"
+			}
 			Self::FileForDev => "file store: a dev build",
 			Self::FileForUnsigned => "file store: the executable carries no Team ID signature",
-			Self::FileForUnverified => "file store: the code signature could not be checked",
 		}
 	}
 }
@@ -139,19 +141,17 @@ fn key_store_choice(kind: InstallKind, signature: Signature) -> KeyStoreChoice {
 		(InstallKind::Dev, _) => KeyStoreChoice::FileForDev,
 		(InstallKind::Installed, Signature::TeamSigned) => KeyStoreChoice::Keychain,
 		(InstallKind::Installed, Signature::Unsigned) => KeyStoreChoice::FileForUnsigned,
-		(InstallKind::Installed, Signature::Unverified) => KeyStoreChoice::FileForUnverified,
+		(InstallKind::Installed, Signature::Unverified) => KeyStoreChoice::KeychainForUnverified,
 	}
 }
 
 #[cfg(target_os = "macos")]
 fn system_store(choice: KeyStoreChoice, service: &str, item: &str) -> Option<Box<dyn KeyStore>> {
 	match choice {
-		KeyStoreChoice::Keychain => {
+		KeyStoreChoice::Keychain | KeyStoreChoice::KeychainForUnverified => {
 			Some(Box::new(super::key_store::KeychainStore::item(service, item)))
 		}
-		KeyStoreChoice::FileForDev
-		| KeyStoreChoice::FileForUnsigned
-		| KeyStoreChoice::FileForUnverified => None,
+		KeyStoreChoice::FileForDev | KeyStoreChoice::FileForUnsigned => None,
 	}
 }
 
@@ -187,7 +187,7 @@ mod tests {
 		let chosen = [
 			(InstallKind::Installed, Signature::TeamSigned, KeyStoreChoice::Keychain),
 			(InstallKind::Installed, Signature::Unsigned, KeyStoreChoice::FileForUnsigned),
-			(InstallKind::Installed, Signature::Unverified, KeyStoreChoice::FileForUnverified),
+			(InstallKind::Installed, Signature::Unverified, KeyStoreChoice::KeychainForUnverified),
 			(InstallKind::Dev, Signature::TeamSigned, KeyStoreChoice::FileForDev),
 			(InstallKind::Dev, Signature::Unsigned, KeyStoreChoice::FileForDev),
 			(InstallKind::Dev, Signature::Unverified, KeyStoreChoice::FileForDev),
@@ -199,12 +199,7 @@ mod tests {
 
 	#[test]
 	fn a_file_choice_never_reaches_a_system_store() {
-		let choices = [
-			KeyStoreChoice::FileForDev,
-			KeyStoreChoice::FileForUnsigned,
-			KeyStoreChoice::FileForUnverified,
-		];
-		for choice in choices {
+		for choice in [KeyStoreChoice::FileForDev, KeyStoreChoice::FileForUnsigned] {
 			assert!(
 				system_store(choice, "com.kiroshi.app", DEVICE_KEYS_ITEM).is_none(),
 				"{choice:?}"
@@ -214,9 +209,11 @@ mod tests {
 
 	#[cfg(target_os = "macos")]
 	#[test]
-	fn the_keychain_choice_keeps_the_keys_in_the_keychain_on_macos() {
-		let store = system_store(KeyStoreChoice::Keychain, "com.kiroshi.app", DEVICE_KEYS_ITEM);
-		assert_eq!(store.map(|store| store.name()), Some("Keychain"));
+	fn the_keychain_choices_keep_the_keys_in_the_keychain_on_macos() {
+		for choice in [KeyStoreChoice::Keychain, KeyStoreChoice::KeychainForUnverified] {
+			let store = system_store(choice, "com.kiroshi.app", DEVICE_KEYS_ITEM);
+			assert_eq!(store.map(|store| store.name()), Some("Keychain"), "{choice:?}");
+		}
 	}
 
 	#[cfg(not(target_os = "macos"))]

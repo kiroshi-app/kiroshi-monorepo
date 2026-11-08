@@ -10,7 +10,7 @@ pub(super) fn running_signature() -> Signature {
 	static RUNNING: std::sync::OnceLock<Signature> = std::sync::OnceLock::new();
 	*RUNNING.get_or_init(|| {
 		checked().unwrap_or_else(|error| {
-			log::warn!("the code signature check failed, the keys stay in the file store: {error}");
+			log::warn!("the code signature check failed with code {}: {error}", error.code());
 			Signature::Unverified
 		})
 	})
