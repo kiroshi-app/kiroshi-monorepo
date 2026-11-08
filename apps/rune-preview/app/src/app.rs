@@ -387,8 +387,10 @@ impl App {
 	}
 
 	pub fn switch_tab(&mut self, leaving: &str, entering: &str) {
-		let held = self.thread.as_ref().filter(|_| self.mission.is_none());
-		let held = held.map(|thread| thread.conversation_id.clone());
+		let held = match (&self.thread, &self.mission) {
+			(Some(thread), None) => Some(thread.conversation_id.clone()),
+			_ => None,
+		};
 		let entered = self.navigation.switch_tab(leaving, held, entering);
 		self.thread = None;
 		self.mission = None;
