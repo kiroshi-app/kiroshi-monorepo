@@ -24,8 +24,8 @@ use crate::app::{App, Person};
 use crate::host::HostError;
 use crate::model::{MissionDetail, Space};
 use crate::navigation::Route;
-use crate::onboarding::Step;
 use crate::source::Source;
+use crate::surfaces::s04_boot::Step;
 
 use about::Updater;
 use account::{Account, Devices, DevicesRead, Watched};
