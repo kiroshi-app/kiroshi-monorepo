@@ -89,10 +89,6 @@ pub fn layer(app: &App, t: &Tokens) -> Option<El> {
 	Some(notice_surface(t, LANGUAGE, &[notice.raised()], closed))
 }
 
-fn closed(app: &mut App, event: SurfaceEvent) {
-	match event {
-		SurfaceEvent::Close(_) | SurfaceEvent::Act(_) | SurfaceEvent::CopyReport(_) => {
-			app.notice = None
-		}
-	}
+fn closed(app: &mut App, _: SurfaceEvent) {
+	app.notice = None;
 }
