@@ -1,6 +1,7 @@
 use kiroshi_core::applications::contract::Application;
 use kiroshi_core::conversations::contract::McpServer;
 use kiroshi_core::environment::contract::{EnvEntry, EnvOwner, EnvScope};
+use kiroshi_rune_kit::strings::Language;
 use kiroshi_rune_kit::surfaces::s11_applications::catalogue::{CatalogueEvent, Category};
 use kiroshi_rune_kit::surfaces::s11_applications::install::InstallEvent;
 use kiroshi_rune_kit::surfaces::s11_applications::panel::{
@@ -630,15 +631,12 @@ fn the_panel_search_shows_the_typed_text_in_the_kit_style_and_filters_then_clear
 	let scope = state.scope(Which::Space).expect("the scope");
 	let rows = super::view::shown_rows(&state, scope);
 	let shown: Vec<_> = rows.iter().map(super::view::panel_application).collect();
-	let panel = super::view::panel_of(scope, &shown, kiroshi_rune_kit::strings::Language::En);
+	let panel = super::view::panel_of(scope, &shown, Language::En);
 	assert_eq!(panel.query.text, "LIN");
 	assert_eq!(panel.search_text, SEARCH_TEXT);
 	assert_eq!(panel.applications.iter().map(|row| row.name).collect::<Vec<_>>(), ["linear"]);
 	state.scope_mut(Which::Space).expect("the scope").installed.query = rune::TextEdit::new("");
 	assert_eq!(shown_names(&state, Which::Space), ["linear", "github"]);
 	let scope = state.scope(Which::Space).expect("the scope");
-	assert_eq!(
-		super::view::panel_of(scope, &[], kiroshi_rune_kit::strings::Language::En).query.text,
-		""
-	);
+	assert_eq!(super::view::panel_of(scope, &[], Language::En).query.text, "");
 }
