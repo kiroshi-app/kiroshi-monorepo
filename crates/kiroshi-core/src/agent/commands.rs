@@ -1633,7 +1633,7 @@ pub async fn shutdown_session(
 	if let Some(session) = cleared.ended {
 		session.shutdown().await;
 	}
-	release_stored_prompts(core, &scope.conversation_id, &scope.runtime_session_id).await;
+	release_stored_prompts(core, scope).await;
 }
 
 pub async fn announce_prompts_closed(
@@ -1654,45 +1654,43 @@ pub async fn close_stored_prompts(
 	conversation: &str,
 	session: &str,
 ) -> AgentEvent {
-	let held = stored_prompts_of(core, conversation, session).await;
-	release_stored_prompts(core, conversation, session).await;
+	let released = released_prompts_of(core, conversation, session).await;
 	let (questions, permissions): (Vec<_>, Vec<_>) =
-		held.into_iter().partition(|(kind, _)| *kind == PromptKind::Question);
+		released.into_iter().partition(|(kind, _)| *kind == PromptKind::Question);
 	AgentEvent::PromptsClosed {
 		permission_ids: permissions.into_iter().map(|(_, id)| id).collect(),
 		question_ids: questions.into_iter().map(|(_, id)| id).collect(),
 	}
 }
 
-async fn stored_prompts_of(
+async fn released_prompts_of(
 	core: &crate::core_context::Core,
 	conversation: &str,
 	session: &str,
 ) -> Vec<(PromptKind, String)> {
 	let Some(database) = bot_database(core) else {
-		log::warn!("the stored prompts of conversation {conversation} were not read: no database");
+		log::warn!("the stored prompts of conversation {conversation} stay: no database");
 		return Vec::new();
 	};
-	match database.conversations().prompts_of_session(session.to_owned()).await {
-		Ok(held) => held,
+	match database.conversations().close_prompts_of_session(session.to_owned()).await {
+		Ok(released) => {
+			conversation_state::observe_reporting(core, database, conversation).await;
+			released
+		}
 		Err(failure) => {
-			log::warn!(
-				"the stored prompts of conversation {conversation} were not read: {failure:?}"
-			);
+			log::warn!("the stored prompts of conversation {conversation} stay: {failure:?}");
 			Vec::new()
 		}
 	}
 }
 
-async fn release_stored_prompts(
-	core: &crate::core_context::Core,
-	conversation: &str,
-	session: &str,
-) {
+async fn release_stored_prompts(core: &crate::core_context::Core, scope: &RuntimeScope) {
+	let conversation = &scope.conversation_id;
 	let Some(database) = bot_database(core) else {
 		return log::warn!("the stored prompts of conversation {conversation} stay: no database");
 	};
-	match database.conversations().release_prompts_of_session(session.to_owned()).await {
+	let session = scope.runtime_session_id.clone();
+	match database.conversations().release_prompts_of_session(session).await {
 		Ok(()) => conversation_state::observe_reporting(core, database, conversation).await,
 		Err(failure) => {
 			log::warn!("the stored prompts of conversation {conversation} stay: {failure:?}")

@@ -1927,8 +1927,8 @@ mod tests {
 			agent_events(&told),
 			vec![scoped(closed), scoped(ended_as(TurnOutcome::Cancelled))]
 		);
-		let left = conversations.prompts_of_session(session).await.expect("the prompts read");
-		assert_eq!(left, Vec::new(), "a closed prompt is still stored");
+		let reopened = conversations.activity_of(vec![room.id.clone()]).await.expect("it reads");
+		assert_eq!(reopened[0].pending_prompt, None, "a closed prompt is still stored");
 		assert_eq!(active_turns(&told), vec![Value::Null]);
 	}
 

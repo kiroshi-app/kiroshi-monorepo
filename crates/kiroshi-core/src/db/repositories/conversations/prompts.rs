@@ -74,8 +74,8 @@ const RELEASE_PROMPT: &str =
 const RELEASE_PROMPTS_OF_SESSION: &str =
 	"DELETE FROM pending_prompts WHERE runtime_session_id = ?1";
 
-const PROMPTS_OF_SESSION: &str = "SELECT prompt_id, kind FROM pending_prompts
-	WHERE runtime_session_id = ?1 ORDER BY asked_at, prompt_id";
+const CLOSE_PROMPTS_OF_SESSION: &str =
+	"DELETE FROM pending_prompts WHERE runtime_session_id = ?1 RETURNING prompt_id, kind";
 
 const RELEASE_EVERY_PROMPT: &str = "DELETE FROM pending_prompts";
 
@@ -148,18 +148,18 @@ impl ConversationsRepository {
 			.at("release_prompts_of_session", "pending_prompts")?)
 	}
 
-	pub async fn prompts_of_session(
+	pub async fn close_prompts_of_session(
 		&self,
 		runtime_session_id: String,
 	) -> Result<Vec<(PromptKind, String)>, ConversationError> {
 		Ok(self
 			.call(move |connection| {
-				let mut statement = connection.prepare_cached(PROMPTS_OF_SESSION)?;
+				let mut statement = connection.prepare_cached(CLOSE_PROMPTS_OF_SESSION)?;
 				let rows = statement.query_map([runtime_session_id], held_prompt)?;
 				Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
 			})
 			.await
-			.at("prompts_of_session", "pending_prompts")?)
+			.at("close_prompts_of_session", "pending_prompts")?)
 	}
 
 	pub async fn release_every_prompt(&self) -> Result<(), ConversationError> {

@@ -2711,7 +2711,7 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn a_stop_whose_prompts_cannot_be_released_still_closes_them_and_logs_why() {
+	async fn a_stop_whose_prompts_cannot_be_released_closes_none_and_logs_why() {
 		capturing();
 		let written = Written::new("prompts-closed-unreleased").await;
 		written
@@ -2727,12 +2727,23 @@ mod tests {
 
 		let events = written.forwarded(asked_then_stopped()).await;
 
-		assert_eq!(closings_and_endings(events), [closed(&["w1"], &["q1"]), cancelled_turn()]);
+		assert_eq!(closings_and_endings(events), [closed(&[], &[]), cancelled_turn()]);
 		let logged = warnings_naming(&written.conversation_id).await;
 		assert!(
 			logged.iter().any(|line| line.contains("stored prompts")),
 			"no warning names the unreleased prompts: {logged:?}"
 		);
+		assert_eq!(
+			held_prompts(&written).await,
+			[held("q1", "question"), held("w1", "permission")]
+		);
+		let reopened = written
+			.database()
+			.conversations()
+			.activity_of(vec![written.conversation_id.clone()])
+			.await
+			.expect("the conversation reads");
+		assert!(reopened[0].pending_prompt.is_some(), "the unreleased prompt is not read back");
 	}
 
 	#[tokio::test]
