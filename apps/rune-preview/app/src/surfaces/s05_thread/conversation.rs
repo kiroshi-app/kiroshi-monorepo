@@ -65,6 +65,11 @@ impl Conversation {
 		self.messages.iter().any(|message| message.id == message_id)
 	}
 
+	pub fn attachment_of(&self, message_id: &str, index: usize) -> Option<&str> {
+		let message = self.messages.iter().find(|message| message.id == message_id)?;
+		message.documents.get(index).map(String::as_str)
+	}
+
 	pub fn oldest_seq(&self) -> Option<i64> {
 		self.messages.first().map(|message| message.seq)
 	}

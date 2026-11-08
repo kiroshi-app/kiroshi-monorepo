@@ -703,7 +703,11 @@ impl State {
 				}
 			}
 			Heard::Finished(finished) => {
-				let is_open = !self.documents_of(&finished.space_id, &finished.name).is_empty();
+				let documents = self.documents_of(&finished.space_id, &finished.name);
+				let is_open = !documents.is_empty();
+				for document in documents {
+					document.writer_finished(&finished.agent_id);
+				}
 				if is_open && finished.outcome == LibraryWriteOutcome::Failed {
 					let title = filled(
 						common::library::failure::document::WRITE,

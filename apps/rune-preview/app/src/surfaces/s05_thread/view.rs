@@ -8,7 +8,7 @@ use kiroshi_rune_kit::surfaces::s05_thread::{
 };
 use kiroshi_rune_kit::tokens::Tokens;
 
-use super::{Notice, projection, said};
+use super::{Notice, open_attachment, projection, said};
 use crate::app::App;
 use crate::conversations::now_ms;
 use crate::surfaces::{s06_composer, s08_missions};
@@ -22,6 +22,7 @@ fn thread_event(app: &mut App, event: ThreadEvent) {
 	}
 	match app.surfaces.s05_thread.handle(event, now_ms()) {
 		Some(ThreadEvent::Mission(event)) => s08_missions::emitted(app, event),
+		Some(ThreadEvent::OpenAttachment { turn, index }) => open_attachment(app, &turn, index),
 		Some(forwarded) => {
 			eprintln!("the thread forwards {forwarded:?}, which no surface handles yet")
 		}

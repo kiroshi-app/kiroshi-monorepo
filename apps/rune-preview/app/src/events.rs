@@ -8,8 +8,8 @@ use tungstenite::http::header::AUTHORIZATION;
 
 use crate::host::Host;
 use crate::model::{KiroshiAccountState, Message, MissionChanged, ScopedEvent};
-use crate::surfaces::s03_roster;
 use crate::surfaces::s10_agent_settings::{self, Heard};
+use crate::surfaces::{s03_roster, s14_library};
 
 const ACCOUNT_CHANGED: &str = "account://changed";
 
@@ -19,6 +19,8 @@ const MESSAGE_STORED: &str = "conversation://message-stored";
 
 const MISSION_CHANGED: &str = "mission://changed";
 
+const LIBRARY: &str = "library://";
+
 pub enum HostEvent {
 	Listening,
 	AccountChanged(KiroshiAccountState),
@@ -27,6 +29,7 @@ pub enum HostEvent {
 	MissionChanged(MissionChanged),
 	Companion(Heard),
 	Roster(s03_roster::Heard),
+	Library(s14_library::Heard),
 	Lagged,
 	Unreadable { event: String, cause: String },
 	Lost(String),
@@ -106,6 +109,9 @@ fn named(event: &str, payload: Value) -> Option<HostEvent> {
 			serde_json::from_value(payload)
 				.map_or_else(|failure| unreadable(event, failure), HostEvent::MissionChanged),
 		),
+		_ if event.starts_with(LIBRARY) => s14_library::heard_of(event, payload).map(|heard| {
+			heard.map_or_else(|failure| unreadable(event, failure), HostEvent::Library)
+		}),
 		_ => match s03_roster::heard_of(event, &payload) {
 			Some(heard) => roster_heard(event, heard),
 			None => s10_agent_settings::heard_of(event, payload).map(|heard| {

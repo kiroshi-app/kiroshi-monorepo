@@ -342,6 +342,11 @@ impl Document {
 			.collect();
 	}
 
+	pub fn writer_finished(&mut self, agent_id: &str) {
+		self.writers.retain(|writer| writer.id != agent_id);
+		self.seats.retain(|seat| seat.id != agent_id);
+	}
+
 	pub fn agents(&self) -> impl Iterator<Item = &LibraryWriter> {
 		self.writers.iter().filter(|writer| writer.kind == LibraryWriterKind::Agent)
 	}
