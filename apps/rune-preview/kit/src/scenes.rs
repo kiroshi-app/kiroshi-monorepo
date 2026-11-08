@@ -859,6 +859,7 @@ pub static SCENES: &[Scene] = &[
 		thread::layout_start_of_older_messages,
 	),
 	scene("layout-threadlayout--error", thread::PANEL, thread::layout_error),
+	scene("layout-threadlayout--load-failure", thread::PANEL, thread::layout_load_failure),
 	scene("layout-threadlayout--pending", thread::PANEL, thread::layout_pending),
 	focused("conversation-message-turn--focus-visible", thread::LINE, 1, thread::focus_ring),
 	scene(

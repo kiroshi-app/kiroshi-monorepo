@@ -9,9 +9,9 @@ use crate::primitives::context_menu::{MenuItem, MenuRow, context_menu};
 use crate::strings::Language;
 use crate::surfaces::s05_thread::{
 	Agent, Attachment, Author, Body, Context, Emit, MissionEvent, PinnedMessage, Quote, Row,
-	SelectionToolbar, Surface, Thread, ThreadKind, ToolbarAction, Transcript, Turn, TurnState,
-	WorkLine, WorkState, WorkingAgent, body, column, day_separator, message_menu, pinned_messages,
-	selection_toolbar, thread, transcript_skeleton, turn, work_line,
+	SelectionToolbar, Surface, Thread, ThreadKind, ThreadNotice, ToolbarAction, Transcript, Turn,
+	TurnState, WorkLine, WorkState, WorkingAgent, body, column, day_separator, message_menu,
+	pinned_messages, selection_toolbar, thread, transcript_skeleton, turn, work_line,
 };
 use crate::surfaces::s08_missions::EventKind;
 use crate::tokens::{RADIUS_XL, SPACING, TEXT_COMPACT, Tokens};
@@ -520,12 +520,23 @@ fn mission_rows() -> Vec<Row> {
 }
 
 fn thread_scene(t: &Tokens, s: &SceneState, kind: ThreadKind, transcript: Transcript) -> El {
+	noticed_thread_scene(t, s, kind, transcript, None)
+}
+
+fn noticed_thread_scene(
+	t: &Tokens,
+	s: &SceneState,
+	kind: ThreadKind,
+	transcript: Transcript,
+	notice: Option<ThreadNotice>,
+) -> El {
 	let data = Thread {
 		kind,
 		language: Language::En,
 		space_hue: Some(Preset::Blue.hue()),
 		roster: roster(),
 		transcript,
+		notice,
 	};
 	let emit: Emit<SceneState> = Rc::new(|_, _| {});
 	rune_kit::root(thread(t, &s.math, &data, &emit), Vec::new())
@@ -626,6 +637,19 @@ pub(super) fn layout_empty(t: &Tokens, s: &SceneState) -> El {
 }
 
 pub(super) fn layout_error(t: &Tokens, s: &SceneState) -> El {
+	let rows = vec![
+		Row::Turn(Turn::new("e1", Author::You, "How is this workspace laid out?")),
+		Row::Turn(Turn { state: TurnState::Failed, ..Turn::new("e2", Author::Agent(atlas()), "") }),
+	];
+	let notice = ThreadNotice {
+		title: "The agent stopped".to_owned(),
+		description: "The agent exited (code 1). Restart the session.".to_owned(),
+		action: "Restart session".to_owned(),
+	};
+	noticed_thread_scene(t, s, ThreadKind::Solo(atlas()), Transcript::Rows(rows), Some(notice))
+}
+
+pub(super) fn layout_load_failure(t: &Tokens, s: &SceneState) -> El {
 	let failure = Transcript::Failed {
 		title: "Couldn't load this conversation.".to_owned(),
 		detail: "The host didn't answer. Try again in a moment.".to_owned(),

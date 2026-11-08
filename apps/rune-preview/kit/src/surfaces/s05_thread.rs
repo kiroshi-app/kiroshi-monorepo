@@ -1,14 +1,15 @@
 use std::rc::Rc;
 
 use rune::image::Image;
-use rune::{El, ScrollSpec, col, row, text};
+use rune::{El, ScrollSpec, col, icon, row, text};
 
 use crate::avatar::Face;
+use crate::icons;
 use crate::math::Typesetter;
+use crate::primitives::button::{Button, ButtonSize, ButtonVariant};
 use crate::strings::{Language, chat};
 use crate::surfaces::s08_missions::{self, Bot, EventKind, EventLink, MissionsEvent};
-use crate::tokens::{SPACING, TEXT_BASE_SEMIBOLD, TEXT_SM, Tokens};
-use crate::widgets::not_drawn;
+use crate::tokens::{RADIUS_2XL, SPACING, TEXT_BASE_SEMIBOLD, TEXT_SM, TEXT_SM_MEDIUM, Tokens};
 
 mod body;
 mod furniture;
@@ -41,6 +42,8 @@ pub enum ThreadEvent {
 	JumpToPinned(String),
 	QuoteSelection,
 	ClearSelection,
+	NoticeAction,
+	RetryLoad,
 	Mission(MissionsEvent),
 }
 
@@ -168,6 +171,14 @@ pub struct Thread {
 	pub space_hue: Option<f32>,
 	pub roster: Vec<Agent>,
 	pub transcript: Transcript,
+	pub notice: Option<ThreadNotice>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ThreadNotice {
+	pub title: String,
+	pub description: String,
+	pub action: String,
 }
 
 pub struct Context<'a, S> {
@@ -196,10 +207,12 @@ pub fn thread<S: 'static>(t: &Tokens, math: &Typesetter, data: &Thread, emit: &E
 		_ => chat::transcript::LABEL,
 	};
 	let surface = col().w_full().h_full().min_h(0.0).fill(t.background).label(cx.say(label));
-	match &data.transcript {
+	let surface = match &data.transcript {
 		Transcript::Loading => surface.child(column(transcript_skeleton(t))),
 		Transcript::Failed { title, detail } => {
-			surface.center().padding(SPACING * 6.0).child(not_drawn(t, title, detail))
+			let failure =
+				Notice { title, description: detail, action: cx.say(chat::notice::RETRY) };
+			surface.center().child(notice_row(&cx, &failure, ThreadEvent::RetryLoad))
 		}
 		Transcript::Rows(rows) if rows.is_empty() => surface.center().child(empty(&cx, &data.kind)),
 		Transcript::Rows(rows) => surface.child(
@@ -219,7 +232,77 @@ pub fn thread<S: 'static>(t: &Tokens, math: &Typesetter, data: &Thread, emit: &E
 						.children(rows.iter().map(|shown| row_view(&cx, &data.kind, shown))),
 				)),
 		),
+	};
+	match &data.notice {
+		Some(shown) => {
+			let shown = Notice {
+				title: &shown.title,
+				description: &shown.description,
+				action: &shown.action,
+			};
+			surface.child(notice_row(&cx, &shown, ThreadEvent::NoticeAction))
+		}
+		None => surface,
 	}
+}
+
+struct Notice<'a> {
+	title: &'a str,
+	description: &'a str,
+	action: &'a str,
+}
+
+const NOTICE_GLYPH: f32 = SPACING * 4.0;
+
+fn notice_row<S: 'static>(cx: &Context<S>, shown: &Notice, event: ThreadEvent) -> El {
+	let t = cx.t;
+	let emit = Rc::clone(cx.emit);
+	let action = Button::new(shown.action)
+		.variant(ButtonVariant::Outline)
+		.size(ButtonSize::Sm)
+		.view(t)
+		.on_press(move |s: &mut S| emit(s, event.clone()));
+	let notice = row()
+		.w_full()
+		.gap(SPACING * 3.0)
+		.padding(SPACING * 3.0)
+		.radius(RADIUS_2XL)
+		.border(1.0, t.destructive.alpha(0.3))
+		.fill(t.destructive.alpha(0.1))
+		.items_start()
+		.role("alert")
+		.child(icon(&icons::TRIANGLE_ALERT, NOTICE_GLYPH).color(t.destructive).mt(SPACING * 0.5))
+		.child(
+			col()
+				.grow(1.0)
+				.min_w(0.0)
+				.gap(SPACING * 2.0)
+				.items_start()
+				.child(
+					col()
+						.w_full()
+						.gap(SPACING)
+						.child(
+							text(shown.title.to_owned())
+								.font(TEXT_SM_MEDIUM)
+								.color(t.foreground)
+								.wrap(),
+						)
+						.child(
+							text(shown.description.to_owned())
+								.font(TEXT_SM)
+								.color(t.soft_foreground)
+								.wrap(),
+						),
+				)
+				.child(action),
+		);
+	row()
+		.w_full()
+		.justify_center()
+		.px(COLUMN_INSET)
+		.pb(SPACING * 4.0)
+		.child(col().w_full().max_w(COLUMN).child(notice))
 }
 
 pub fn column(content: El) -> El {

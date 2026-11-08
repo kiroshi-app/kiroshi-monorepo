@@ -128,6 +128,7 @@ pub struct PinnedMessage {
 }
 
 const PANEL_WIDTH: f32 = SPACING * 80.0;
+const PANEL_PADDING: f32 = SPACING * 4.0;
 const PANEL_LIST: f32 = SPACING * 80.0;
 const PINNED_AVATAR: f32 = SPACING * 6.0;
 const EXCERPT_LINES: usize = 3;
@@ -176,14 +177,12 @@ fn panel<S: 'static>(cx: &Context<S>, pinned: &[PinnedMessage], title: &str) -> 
 	let t = cx.t;
 	let heading = row()
 		.w_full()
-		.px(SPACING * 4.0)
-		.py(SPACING * 3.0)
+		.padding(PANEL_PADDING)
 		.child(text(title.to_owned()).font(TEXT_SM_MEDIUM).color(t.popover_foreground));
 	let body = if pinned.is_empty() {
 		row()
 			.w_full()
-			.px(SPACING * 4.0)
-			.py(SPACING * 3.0)
+			.padding(PANEL_PADDING)
 			.child(text(cx.say(chat::pinned::EMPTY)).font(TEXT_SM).color(t.muted_foreground).wrap())
 	} else {
 		let mut list = col().w_full().max_h(PANEL_LIST).scroll(ScrollSpec { stick_bottom: false });
@@ -262,8 +261,7 @@ fn pinned_row<S: 'static>(cx: &Context<S>, message: &PinnedMessage) -> El {
 		row()
 			.w_full()
 			.gap(SPACING * 2.5)
-			.px(SPACING * 4.0)
-			.py(SPACING * 3.0)
+			.padding(PANEL_PADDING)
 			.hover(t.muted.alpha(t.muted.a * 0.4))
 			.items_start()
 			.child(face.a11y_hidden())
