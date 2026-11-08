@@ -20,7 +20,7 @@ pub enum Call {
 
 pub enum Answer {
 	Pending { conversation_id: String, read: Result<Vec<ScopedEvent>, HostError> },
-	Responded { id: String, outcome: Result<(), HostError> },
+	Responded { id: String, decision: PermissionDecision, outcome: Result<(), HostError> },
 	Answered { id: String, outcome: Result<(), HostError> },
 	Written { request_id: String, outcome: Result<(), HostError> },
 }
@@ -35,7 +35,7 @@ fn answered(source: &Source, call: Call) -> Answer {
 		Call::Respond { scope, id, decision } => {
 			let arguments = json!({ "scope": scope, "id": id, "decision": decision });
 			let outcome = source.invoke("agent_respond_to_permission", arguments);
-			Answer::Responded { id, outcome }
+			Answer::Responded { id, decision, outcome }
 		}
 		Call::Answer { scope, id, answers } => {
 			let arguments =

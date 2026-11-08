@@ -15,7 +15,7 @@ use kiroshi_rune_kit::surfaces::s07_approvals::{
 use kiroshi_rune_kit::tokens::{SPACING, Tokens};
 
 use super::prompt::{Answered, Approval, Asked};
-use super::{State, changed};
+use super::{State, changed, written_notice};
 use crate::app::{App, Person};
 use crate::conversations::{now_ms, roster_timestamp};
 use crate::host::HostError;
@@ -200,7 +200,7 @@ fn answered_view(t: &Tokens, answered: &Answered, viewer: &str, now: i64) -> Vec
 	if let Some(failure) = answered.written.failure() {
 		let id = answered.request.id.clone();
 		shown.push(failure_notice(t, failure, Some(RETRY), move |app, event| {
-			changed(app, |state| state.written_notice_event(&id, event))
+			written_notice(app, &id, event)
 		}));
 	}
 	shown

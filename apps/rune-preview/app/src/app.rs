@@ -835,6 +835,7 @@ impl App {
 			HostEvent::Agent(scoped) => {
 				let Some(scope) = scoped.scope else { return };
 				self.runs.heard(&scope, &scoped.event);
+				self.surfaces.s07_approvals.heard_agent(&scope, &scoped.event);
 				self.notify_of(&scope, &scoped.event);
 				let Some(thread) = self.thread.as_mut() else { return };
 				if thread.shows(&scope.conversation_id) {

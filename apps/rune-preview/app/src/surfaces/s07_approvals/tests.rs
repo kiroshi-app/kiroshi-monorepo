@@ -14,6 +14,7 @@ use kiroshi_rune_kit::surfaces::s07_approvals::{ApprovalEvent, QuestionEvent};
 use super::calls::{Answer, Call};
 use super::{Heard, State, heard_of};
 use crate::host::HostError;
+use crate::model;
 
 const CONVERSATION: &str = "conversation-1";
 
@@ -98,8 +99,16 @@ fn drained(state: &mut State) -> Vec<Call> {
 	std::mem::take(&mut state.queued)
 }
 
+fn nothing_shown(_: &str) -> bool {
+	false
+}
+
+fn asking_shown(message_id: &str) -> bool {
+	message_id == "question-q1"
+}
+
 fn answered_with(state: &mut State, id: &str, outcome: Result<(), HostError>) {
-	state.received(Answer::Answered { id: id.to_owned(), outcome }, NOW);
+	state.received(Answer::Answered { id: id.to_owned(), outcome }, NOW, &asking_shown);
 }
 
 fn written(state: &mut State) -> NewUserMessage {
@@ -236,7 +245,15 @@ fn the_resolved_event_shows_the_decision_and_closes_the_choice() {
 	let mut state = State::default();
 	requesting(&mut state, "p1");
 	state.approval_event("p1", ApprovalEvent::AllowOnce);
-	state.received(Answer::Responded { id: "p1".to_owned(), outcome: Ok(()) }, NOW);
+	state.received(
+		Answer::Responded {
+			id: "p1".to_owned(),
+			decision: PermissionDecision::AllowOnce,
+			outcome: Ok(()),
+		},
+		NOW,
+		&nothing_shown,
+	);
 
 	state.heard(Heard::Resolved { id: "p1".to_owned(), decision: PermissionDecision::AllowOnce });
 	drained(&mut state);
@@ -253,7 +270,15 @@ fn a_refused_decision_keeps_the_approval_open_with_its_failure() {
 	state.approval_event("p1", ApprovalEvent::AllowOnce);
 	drained(&mut state);
 
-	state.received(Answer::Responded { id: "p1".to_owned(), outcome: Err(refused()) }, NOW);
+	state.received(
+		Answer::Responded {
+			id: "p1".to_owned(),
+			decision: PermissionDecision::AllowOnce,
+			outcome: Err(refused()),
+		},
+		NOW,
+		&nothing_shown,
+	);
 	let is_failure_shown = state.approvals[0].call.failure().is_some();
 	state.approval_event("p1", ApprovalEvent::AllowOnce);
 
@@ -267,7 +292,15 @@ fn dismissing_the_decision_failure_clears_it() {
 	let mut state = State::default();
 	requesting(&mut state, "p1");
 	state.approval_event("p1", ApprovalEvent::AllowOnce);
-	state.received(Answer::Responded { id: "p1".to_owned(), outcome: Err(refused()) }, NOW);
+	state.received(
+		Answer::Responded {
+			id: "p1".to_owned(),
+			decision: PermissionDecision::AllowOnce,
+			outcome: Err(refused()),
+		},
+		NOW,
+		&nothing_shown,
+	);
 
 	state.dismiss_approval_failure("p1");
 
@@ -525,7 +558,15 @@ fn skipping_a_question_denies_it_through_its_scope_and_closes_it() {
 
 	state.question_event("q1", QuestionEvent::Skip);
 	let calls = drained(&mut state);
-	state.received(Answer::Responded { id: "q1".to_owned(), outcome: Ok(()) }, NOW);
+	state.received(
+		Answer::Responded {
+			id: "q1".to_owned(),
+			decision: PermissionDecision::Deny,
+			outcome: Ok(()),
+		},
+		NOW,
+		&nothing_shown,
+	);
 
 	assert_eq!(
 		calls,
@@ -544,7 +585,15 @@ fn a_refused_skip_keeps_the_question_with_its_failure() {
 	asking(&mut state, scope_in(CONVERSATION), single_question("q1"));
 	state.question_event("q1", QuestionEvent::Skip);
 
-	state.received(Answer::Responded { id: "q1".to_owned(), outcome: Err(refused()) }, NOW);
+	state.received(
+		Answer::Responded {
+			id: "q1".to_owned(),
+			decision: PermissionDecision::Deny,
+			outcome: Err(refused()),
+		},
+		NOW,
+		&nothing_shown,
+	);
 
 	assert!(state.questions[0].call.failure().is_some());
 }
@@ -573,6 +622,7 @@ fn pending_questions_read_from_the_core_are_shown() {
 	state.received(
 		Answer::Pending { conversation_id: CONVERSATION.to_owned(), read: Ok(vec![pending]) },
 		NOW,
+		&nothing_shown,
 	);
 
 	assert_eq!(state.questions[0].request, question("q1"));
@@ -592,6 +642,7 @@ fn a_question_already_shown_keeps_its_drafts_when_read_again() {
 	state.received(
 		Answer::Pending { conversation_id: CONVERSATION.to_owned(), read: Ok(vec![pending]) },
 		NOW,
+		&nothing_shown,
 	);
 
 	assert_eq!(state.questions.len(), 1);
@@ -604,6 +655,7 @@ fn a_failed_pending_read_is_shown_and_retried() {
 	state.received(
 		Answer::Pending { conversation_id: CONVERSATION.to_owned(), read: Err(refused()) },
 		NOW,
+		&nothing_shown,
 	);
 	let is_shown = state.read_failure.is_some();
 
@@ -655,9 +707,13 @@ fn a_failed_write_is_kept_on_the_answered_card_and_retried() {
 	answered_with(&mut state, "q1", Ok(()));
 	drained(&mut state);
 
-	state.received(Answer::Written { request_id: "q1".to_owned(), outcome: Err(refused()) }, NOW);
+	state.received(
+		Answer::Written { request_id: "q1".to_owned(), outcome: Err(refused()) },
+		NOW,
+		&nothing_shown,
+	);
 	let is_shown = state.answered[0].written.failure().is_some();
-	state.written_notice_event("q1", NoticeEvent::Retry);
+	state.written_notice_event("q1", NoticeEvent::Retry, &asking_shown);
 
 	assert!(is_shown);
 	assert!(matches!(drained(&mut state).as_slice(), [Call::Write { .. }]));
@@ -674,4 +730,212 @@ fn minimising_shows_the_waiting_bar_and_expanding_brings_the_prompt_back() {
 
 	assert!(is_minimised);
 	assert!(!state.questions[0].is_minimised);
+}
+
+fn model_scope(conversation_id: &str) -> model::RuntimeScope {
+	model::RuntimeScope { conversation_id: conversation_id.to_owned(), bot_id: "bot-1".to_owned() }
+}
+
+fn turn_ended() -> model::AgentEvent {
+	model::AgentEvent::TurnEnded { ended: model::TurnEnded { outcome: "completed".to_owned() } }
+}
+
+fn responded(state: &mut State, id: &str, decision: PermissionDecision) {
+	let answer = Answer::Responded { id: id.to_owned(), decision, outcome: Ok(()) };
+	state.received(answer, NOW, &nothing_shown);
+}
+
+fn answered_but_not_shown(state: &mut State) {
+	let answer = Answer::Answered { id: "q1".to_owned(), outcome: Ok(()) };
+	state.received(answer, NOW, &nothing_shown);
+}
+
+#[test]
+fn an_answer_whose_question_is_not_in_the_transcript_replies_to_nothing() {
+	let mut state = State::default();
+	asking(&mut state, scope_in(CONVERSATION), single_question("q1"));
+	state.question_event("q1", QuestionEvent::Choose(0));
+	state.question_event("q1", QuestionEvent::Submit);
+	drained(&mut state);
+
+	answered_but_not_shown(&mut state);
+
+	let message = written(&mut state);
+	assert_eq!(message.replied_to_message_id, None);
+	assert_eq!(message.content, "Free");
+}
+
+#[test]
+fn a_retried_write_checks_the_transcript_again() {
+	let mut state = State::default();
+	asking(&mut state, scope_in(CONVERSATION), single_question("q1"));
+	state.question_event("q1", QuestionEvent::Choose(0));
+	state.question_event("q1", QuestionEvent::Submit);
+	answered_but_not_shown(&mut state);
+	drained(&mut state);
+	let refusal = Answer::Written { request_id: "q1".to_owned(), outcome: Err(refused()) };
+	state.received(refusal, NOW, &nothing_shown);
+
+	state.written_notice_event("q1", NoticeEvent::Retry, &asking_shown);
+
+	assert_eq!(written(&mut state).replied_to_message_id.as_deref(), Some("question-q1"));
+}
+
+#[test]
+fn an_accepted_decision_resolves_the_approval_before_the_core_event() {
+	let mut state = State::default();
+	requesting(&mut state, "p1");
+	state.approval_event("p1", ApprovalEvent::Deny);
+	drained(&mut state);
+
+	responded(&mut state, "p1", PermissionDecision::Deny);
+	state.approval_event("p1", ApprovalEvent::AllowOnce);
+	state.approval_event("p1", ApprovalEvent::Deny);
+
+	assert_eq!(state.approvals[0].resolved, Some(PermissionDecision::Deny));
+	assert!(drained(&mut state).is_empty());
+}
+
+#[test]
+fn a_later_resolved_event_shows_its_decision_over_the_local_one() {
+	let mut state = State::default();
+	requesting(&mut state, "p1");
+	state.approval_event("p1", ApprovalEvent::AllowOnce);
+	responded(&mut state, "p1", PermissionDecision::AllowOnce);
+
+	state.heard(Heard::Resolved { id: "p1".to_owned(), decision: PermissionDecision::Deny });
+
+	assert_eq!(state.approvals[0].resolved, Some(PermissionDecision::Deny));
+}
+
+#[test]
+fn a_resolved_event_heard_before_the_core_answers_keeps_its_decision() {
+	let mut state = State::default();
+	requesting(&mut state, "p1");
+	state.approval_event("p1", ApprovalEvent::AllowOnce);
+
+	state.heard(Heard::Resolved { id: "p1".to_owned(), decision: PermissionDecision::Deny });
+	responded(&mut state, "p1", PermissionDecision::AllowOnce);
+
+	assert_eq!(state.approvals[0].resolved, Some(PermissionDecision::Deny));
+	assert!(!state.approvals[0].call.is_sending());
+}
+
+#[test]
+fn a_turn_end_drops_the_open_prompts_of_its_run_only() {
+	let mut state = State::default();
+	requesting(&mut state, "p1");
+	state.heard(Heard::Permission { scope: scope_in(ELSEWHERE), request: permission("p2") });
+	state.heard(Heard::Permission { scope: foreign_scope(), request: permission("p3") });
+	asking(&mut state, scope_in(CONVERSATION), single_question("q1"));
+	asking(&mut state, scope_in(ELSEWHERE), single_question("q2"));
+
+	state.heard_agent(&model_scope(CONVERSATION), &turn_ended());
+
+	let approvals: Vec<&str> =
+		state.approvals.iter().map(|approval| approval.request.id.as_str()).collect();
+	let questions: Vec<&str> =
+		state.questions.iter().map(|asked| asked.request.id.as_str()).collect();
+	assert_eq!(approvals, vec!["p2", "p3"]);
+	assert_eq!(questions, vec!["q2"]);
+}
+
+#[test]
+fn a_turn_end_keeps_the_resolved_approvals_on_show() {
+	let mut state = State::default();
+	requesting(&mut state, "p1");
+	state.heard(Heard::Resolved { id: "p1".to_owned(), decision: PermissionDecision::AllowOnce });
+
+	state.heard_agent(&model_scope(CONVERSATION), &turn_ended());
+
+	assert_eq!(state.approvals[0].resolved, Some(PermissionDecision::AllowOnce));
+}
+
+#[test]
+fn a_failed_turn_drops_the_open_prompts_of_its_run() {
+	let mut state = State::default();
+	requesting(&mut state, "p1");
+	asking(&mut state, scope_in(CONVERSATION), single_question("q1"));
+
+	let failed = model::AgentEvent::Failed { error: json!({ "kind": "notAuthenticated" }) };
+	state.heard_agent(&model_scope(CONVERSATION), &failed);
+
+	assert!(state.approvals.is_empty());
+	assert!(state.questions.is_empty());
+}
+
+#[test]
+fn other_agent_events_leave_the_prompts() {
+	let mut state = State::default();
+	requesting(&mut state, "p1");
+
+	let running = model::AgentEvent::TurnChanged { state: model::TurnState::Running };
+	state.heard_agent(&model_scope(CONVERSATION), &running);
+
+	assert_eq!(state.approvals.len(), 1);
+}
+
+#[test]
+fn a_closed_session_is_heard_from_the_core() {
+	let crashed = json!({
+		"scope": scope_in(CONVERSATION),
+		"event": { "type": "connectionChanged", "state": "crashed" },
+	});
+	let ready = json!({
+		"scope": scope_in(CONVERSATION),
+		"event": { "type": "connectionChanged", "state": "ready" },
+	});
+
+	let heard = heard_of(&crashed).expect("the close is heard").expect("the close reads");
+
+	assert_eq!(heard, Heard::Closed { scope: scope_in(CONVERSATION) });
+	assert!(heard_of(&ready).is_none());
+}
+
+#[test]
+fn a_closed_session_drops_the_open_prompts_of_its_scope_only() {
+	let mut state = State::default();
+	requesting(&mut state, "p1");
+	state.heard(Heard::Permission { scope: foreign_scope(), request: permission("p2") });
+	asking(&mut state, scope_in(CONVERSATION), single_question("q1"));
+
+	state.heard(Heard::Closed { scope: scope_in(CONVERSATION) });
+
+	let approvals: Vec<&str> =
+		state.approvals.iter().map(|approval| approval.request.id.as_str()).collect();
+	assert_eq!(approvals, vec!["p2"]);
+	assert!(state.questions.is_empty());
+}
+
+#[test]
+fn a_turn_end_keeps_the_prompts_whose_call_is_in_flight_until_it_lands() {
+	let mut state = State::default();
+	requesting(&mut state, "p1");
+	state.approval_event("p1", ApprovalEvent::AllowOnce);
+	asking(&mut state, scope_in(CONVERSATION), single_question("q1"));
+	state.question_event("q1", QuestionEvent::Choose(0));
+	state.question_event("q1", QuestionEvent::Submit);
+
+	state.heard_agent(&model_scope(CONVERSATION), &turn_ended());
+	state.heard(Heard::Closed { scope: scope_in(CONVERSATION) });
+	let are_kept = state.approvals.len() == 1 && state.questions.len() == 1;
+	responded(&mut state, "p1", PermissionDecision::AllowOnce);
+	answered_with(&mut state, "q1", Ok(()));
+
+	assert!(are_kept);
+	assert_eq!(state.approvals[0].resolved, Some(PermissionDecision::AllowOnce));
+	assert_eq!(state.answered.len(), 1);
+}
+
+#[test]
+fn a_resolved_approval_in_flight_survives_a_new_prompt_until_it_lands() {
+	let mut state = State::default();
+	requesting(&mut state, "p1");
+	state.approval_event("p1", ApprovalEvent::AllowOnce);
+	state.heard(Heard::Resolved { id: "p1".to_owned(), decision: PermissionDecision::AllowOnce });
+
+	requesting(&mut state, "p2");
+
+	assert!(state.approvals.iter().any(|approval| approval.request.id == "p1"));
+	assert!(state.approvals[0].call.is_sending());
 }

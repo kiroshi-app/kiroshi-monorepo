@@ -6,7 +6,8 @@ mod tests;
 mod view;
 
 use kiroshi_core::agent::contract::{
-	AgentEvent, PermissionDecision, PermissionRequest, QuestionRequest, RuntimeScope, ScopedEvent,
+	AgentEvent, ConnectionState, PermissionDecision, PermissionRequest, QuestionRequest,
+	RuntimeScope, ScopedEvent,
 };
 use kiroshi_core::conversations::contract::NewUserMessage;
 use rune::{TextEdit, Waker};
@@ -16,9 +17,10 @@ use serde_json::Value;
 use kiroshi_rune_kit::surfaces::s04_boot::notice::NoticeEvent;
 use kiroshi_rune_kit::surfaces::s07_approvals::{ApprovalEvent, QuestionEvent};
 
-use crate::app::App;
+use crate::app::{App, Thread};
 use crate::conversations::now_ms;
 use crate::host::HostError;
+use crate::model;
 use crate::source::Source;
 
 pub use view::dock;
@@ -33,11 +35,16 @@ const QUESTION_REQUESTED: &str = "questionRequested";
 
 const PERMISSION_RESOLVED: &str = "permissionResolved";
 
+const CONNECTION_CHANGED: &str = "connectionChanged";
+
+const CLOSED_STATES: [&str; 2] = ["unavailable", "crashed"];
+
 #[derive(Debug, PartialEq)]
 pub enum Heard {
 	Permission { scope: RuntimeScope, request: PermissionRequest },
 	Question { scope: RuntimeScope, turn_id: Option<String>, request: QuestionRequest },
 	Resolved { id: String, decision: PermissionDecision },
+	Closed { scope: RuntimeScope },
 }
 
 fn heard_from(scoped: ScopedEvent) -> Option<Heard> {
@@ -52,13 +59,27 @@ fn heard_from(scoped: ScopedEvent) -> Option<Heard> {
 		(AgentEvent::PermissionResolved { id, decision }, _) => {
 			Some(Heard::Resolved { id, decision })
 		}
+		(
+			AgentEvent::ConnectionChanged {
+				state: ConnectionState::Unavailable | ConnectionState::Crashed,
+			},
+			Some(scope),
+		) => Some(Heard::Closed { scope }),
 		_ => None,
 	}
 }
 
+fn is_session_closed(payload: &Value) -> bool {
+	let state = payload.pointer("/event/state").and_then(Value::as_str);
+	state.is_some_and(|state| CLOSED_STATES.contains(&state))
+}
+
 fn is_heard_here(payload: &Value) -> bool {
-	let kind = payload.pointer("/event/type").and_then(Value::as_str);
-	matches!(kind, Some(PERMISSION_REQUESTED | QUESTION_REQUESTED | PERMISSION_RESOLVED))
+	match payload.pointer("/event/type").and_then(Value::as_str) {
+		Some(PERMISSION_REQUESTED | QUESTION_REQUESTED | PERMISSION_RESOLVED) => true,
+		Some(CONNECTION_CHANGED) => is_session_closed(payload),
+		_ => false,
+	}
 }
 
 pub fn heard_of(payload: &Value) -> Option<Result<Heard, serde_json::Error>> {
@@ -112,7 +133,23 @@ impl State {
 				self.asked_question(scope, turn_id, request)
 			}
 			Heard::Resolved { id, decision } => self.resolved(&id, decision),
+			Heard::Closed { scope } => self.rest(|held| held == &scope),
 		}
+	}
+
+	pub fn heard_agent(&mut self, scope: &model::RuntimeScope, event: &model::AgentEvent) {
+		if let model::AgentEvent::TurnEnded { .. } | model::AgentEvent::Failed { .. } = event {
+			self.rest(|held| {
+				held.conversation_id == scope.conversation_id && held.bot_id == scope.bot_id
+			});
+		}
+	}
+
+	fn rest(&mut self, is_of_run: impl Fn(&RuntimeScope) -> bool) {
+		self.approvals.retain(|approval| {
+			approval.resolved.is_some() || approval.call.is_sending() || !is_of_run(&approval.scope)
+		});
+		self.questions.retain(|asked| asked.call.is_sending() || !is_of_run(&asked.scope));
 	}
 
 	fn asked_permission(&mut self, scope: RuntimeScope, request: PermissionRequest) {
@@ -139,14 +176,18 @@ impl State {
 	fn resolved(&mut self, id: &str, decision: PermissionDecision) {
 		if let Some(approval) = self.approval_mut(id) {
 			approval.resolved = Some(decision);
-			approval.call = prompt::Call::Idle;
+			if !approval.call.is_sending() {
+				approval.call = prompt::Call::Idle;
+			}
 		}
 		self.questions.retain(|asked| asked.request.id != id || asked.call.is_sending());
 	}
 
 	fn settle(&mut self, conversation_id: &str) {
 		self.approvals.retain(|approval| {
-			approval.resolved.is_none() || approval.scope.conversation_id != conversation_id
+			approval.resolved.is_none()
+				|| approval.call.is_sending()
+				|| approval.scope.conversation_id != conversation_id
 		});
 		self.answered.retain(|answered| answered.conversation_id != conversation_id);
 	}
@@ -234,9 +275,14 @@ impl State {
 		}
 	}
 
-	pub fn written_notice_event(&mut self, request_id: &str, event: NoticeEvent) {
+	fn written_notice_event(
+		&mut self,
+		request_id: &str,
+		event: NoticeEvent,
+		is_shown: &dyn Fn(&str) -> bool,
+	) {
 		match event {
-			NoticeEvent::Retry => self.write(request_id),
+			NoticeEvent::Retry => self.write(request_id, is_shown),
 			NoticeEvent::Dismiss => {
 				if let Some(answered) = self.answered_mut(request_id) {
 					answered.written = prompt::Call::Idle;
@@ -253,11 +299,11 @@ impl State {
 		}
 	}
 
-	fn received(&mut self, answer: Answer, now: i64) {
+	fn received(&mut self, answer: Answer, now: i64, is_shown: &dyn Fn(&str) -> bool) {
 		match answer {
 			Answer::Pending { conversation_id, read } => self.pending_read(conversation_id, read),
-			Answer::Responded { id, outcome } => self.responded(&id, outcome),
-			Answer::Answered { id, outcome } => self.answered_by_agent(&id, outcome, now),
+			Answer::Responded { id, decision, outcome } => self.responded(&id, decision, outcome),
+			Answer::Answered { id, outcome } => self.answered_by_agent(&id, outcome, now, is_shown),
 			Answer::Written { request_id, outcome } => {
 				if let Some(answered) = self.answered_mut(&request_id) {
 					answered.written =
@@ -280,10 +326,18 @@ impl State {
 		}
 	}
 
-	fn responded(&mut self, id: &str, outcome: Result<(), HostError>) {
+	fn responded(
+		&mut self,
+		id: &str,
+		decision: PermissionDecision,
+		outcome: Result<(), HostError>,
+	) {
 		if let Some(approval) = self.approval_mut(id) {
 			approval.call = match outcome {
-				Ok(()) => prompt::Call::Idle,
+				Ok(()) => {
+					approval.resolved.get_or_insert(decision);
+					prompt::Call::Idle
+				}
 				Err(failure) => prompt::Call::Failed(failure),
 			};
 			return;
@@ -298,7 +352,13 @@ impl State {
 		}
 	}
 
-	fn answered_by_agent(&mut self, id: &str, outcome: Result<(), HostError>, now: i64) {
+	fn answered_by_agent(
+		&mut self,
+		id: &str,
+		outcome: Result<(), HostError>,
+		now: i64,
+		is_shown: &dyn Fn(&str) -> bool,
+	) {
 		if let Err(failure) = outcome {
 			if let Some(asked) = self.question_mut(id) {
 				asked.call = prompt::Call::Failed(failure);
@@ -317,23 +377,24 @@ impl State {
 			answered_at: now,
 			written: prompt::Call::Idle,
 		});
-		self.write(id);
+		self.write(id, is_shown);
 	}
 
-	fn write(&mut self, request_id: &str) {
+	fn write(&mut self, request_id: &str, is_shown: &dyn Fn(&str) -> bool) {
+		let asking = question_message_id_of(request_id);
+		let replied_to = is_shown(&asking).then_some(asking);
 		let Some(answered) = self.answered_mut(request_id) else { return };
-		let Some(message) = answer_message(answered, uuid::Uuid::new_v4().to_string()) else {
-			return;
-		};
+		let id = uuid::Uuid::new_v4().to_string();
+		let Some(message) = answer_message(answered, id, replied_to) else { return };
 		answered.written = prompt::Call::Sending;
 		self.queue(Call::Write { request_id: request_id.to_owned(), message });
 	}
 
-	fn take_answers(&mut self, now: i64) -> bool {
+	fn take_answers(&mut self, now: i64, is_shown: &dyn Fn(&str) -> bool) -> bool {
 		let answers = self.calls.as_ref().map(Calls::answers).unwrap_or_default();
 		let has_answers = !answers.is_empty();
 		for answer in answers {
-			self.received(answer, now);
+			self.received(answer, now, is_shown);
 		}
 		self.flush();
 		has_answers
@@ -356,7 +417,11 @@ impl State {
 	}
 }
 
-fn answer_message(answered: &Answered, id: String) -> Option<NewUserMessage> {
+fn answer_message(
+	answered: &Answered,
+	id: String,
+	replied_to: Option<String>,
+) -> Option<NewUserMessage> {
 	let turn_id = answered.turn_id.clone()?;
 	let answers = answers_of(&answered.request, &answered.picks);
 	let content = answered_text(&answered.request, &answers);
@@ -368,7 +433,7 @@ fn answer_message(answered: &Answered, id: String) -> Option<NewUserMessage> {
 		conversation_id: answered.conversation_id.clone(),
 		turn_id,
 		author_bot_id: None,
-		replied_to_message_id: Some(question_message_id_of(&answered.request.id)),
+		replied_to_message_id: replied_to,
 		replied_to_message_ids: Vec::new(),
 		reply_links: Vec::new(),
 		documents: Vec::new(),
@@ -385,8 +450,22 @@ pub fn open_conversation(app: &mut App, conversation_id: &str) {
 	approvals.flush();
 }
 
+fn is_in_transcript(thread: Option<&Thread>, message_id: &str) -> bool {
+	thread.is_some_and(|thread| thread.messages.iter().any(|message| message.id == message_id))
+}
+
 pub fn poll(app: &mut App) -> bool {
-	app.surfaces.s07_approvals.take_answers(now_ms())
+	let thread = app.thread.as_ref();
+	let is_shown = |message_id: &str| is_in_transcript(thread, message_id);
+	app.surfaces.s07_approvals.take_answers(now_ms(), &is_shown)
+}
+
+fn written_notice(app: &mut App, request_id: &str, event: NoticeEvent) {
+	let thread = app.thread.as_ref();
+	let is_shown = |message_id: &str| is_in_transcript(thread, message_id);
+	let approvals = &mut app.surfaces.s07_approvals;
+	approvals.written_notice_event(request_id, event, &is_shown);
+	approvals.flush();
 }
 
 fn changed(app: &mut App, change: impl FnOnce(&mut State)) {
