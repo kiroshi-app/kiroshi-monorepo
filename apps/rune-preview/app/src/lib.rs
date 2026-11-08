@@ -1,5 +1,4 @@
 pub mod app;
-pub mod composer;
 mod content;
 pub mod conversations;
 mod dev_profile;
@@ -10,7 +9,6 @@ mod images;
 pub mod local;
 mod longest;
 pub mod menu;
-mod mission;
 mod model;
 pub mod navigation;
 mod notices;

@@ -2,8 +2,8 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 use std::time::Duration;
 
-use rune::image::{Image, ImageCache};
-use rune::{ClipboardContent, TextEdit, Waker};
+use rune::Waker;
+use rune::image::ImageCache;
 use rune_kit::shell::PaneState;
 use serde_json::json;
 
@@ -23,28 +23,21 @@ use crate::local;
 use crate::longest::{self, Longest};
 use crate::model::{
 	Agent, AgentEvent, Conversation, ConversationMissions, ConversationPage, KiroshiAccountState,
-	Message, MessagePage, Mission, MissionChanged, MissionDetail, MissionEvent, MissionOnBoard,
-	Role, RuntimeScope, Space,
+	Message, MessagePage, Mission, Role, RuntimeScope, Space,
 };
 use crate::navigation::{Navigation, Route};
 use crate::notices::Notices;
 use crate::runs::Runs;
 use crate::source::Source;
 use crate::surfaces::s04_boot::{self, Step};
+use crate::surfaces::s08_missions::{self, Opened, Opening};
 use crate::surfaces::{Surfaces, s01_chrome, s02_rail, s05_thread, s10_agent_settings};
-use crate::turn::{self, SendError};
 
 const PAGE_LIMIT: u32 = 200;
 
 const MAX_THREAD_MESSAGES: usize = 10_000;
 
-pub const AGENT_PILL: &str = "agent:";
-
-const IMAGES_NOT_SENT: &str = "The preview doesn't upload images. Remove them to send the text.";
-
 const UNKNOWN_AGENT: &str = "An agent";
-
-const SENDING_OFF: &str = "Sending is off on the installed Kiroshi: the preview only reads it. Sending is proven on Kiroshi Dev.";
 
 pub enum Workspace {
 	Connecting,
@@ -119,12 +112,16 @@ impl Thread {
 		}
 	}
 
-	fn of_mission(mission: &Mission, bot: &Agent) -> Thread {
-		let seat = Seat { bot_id: bot.id.clone(), name: bot.name.clone(), hue: bot.avatar_blot };
+	fn of_mission(conversation_id: &str, title: &str, bot: Option<&Agent>) -> Thread {
+		let seat = |bot: &Agent| Seat {
+			bot_id: bot.id.clone(),
+			name: bot.name.clone(),
+			hue: bot.avatar_blot,
+		};
 		Thread {
-			conversation_id: mission.thread_conversation_id.clone(),
-			title: mission.objective.clone(),
-			seats: vec![seat],
+			conversation_id: conversation_id.to_owned(),
+			title: title.to_owned(),
+			seats: bot.map(seat).into_iter().collect(),
 			messages: Vec::new(),
 			live: Vec::new(),
 			loaded: false,
@@ -191,69 +188,15 @@ impl Thread {
 	}
 }
 
-pub struct Mention {
-	pub start: usize,
-	pub query: String,
-	pub active: usize,
-}
-
-pub struct Attachment {
-	pub id: u64,
-	pub name: String,
-	pub bytes: usize,
-	pub image: Image,
-}
-
-pub struct Composer {
-	pub edit: TextEdit,
-	pub mention: Option<Mention>,
-	pub attachments: Vec<Attachment>,
-	next_attachment: u64,
-}
-
-pub struct Mentionable {
-	pub bot_id: String,
-	pub name: String,
-	pub hue: Option<f32>,
-	pub title: String,
-	pub outside: bool,
-}
-
-pub struct MentionMenu {
-	pub rows: Vec<Mentionable>,
-	pub further: usize,
-}
-
-const OPENING_MENTIONS: usize = 6;
-
-const PASTED_IMAGE_NAME: &str = "image.png";
-
 pub enum Pane {
 	Conversations,
 	Missions,
 }
 
-pub enum Board {
-	Unread,
-	Reading,
-	Read(Vec<MissionOnBoard>),
-	Failed(HostError),
-}
-
-pub struct OpenMission {
-	pub mission: Mission,
-	pub bot: Agent,
-	pub events: Vec<MissionEvent>,
-	pub failure: Option<HostError>,
-}
-
 pub enum Inbound {
-	Board(Result<Vec<MissionOnBoard>, HostError>),
-	MissionRead(Result<MissionDetail, HostError>),
 	MissionsOf { conversation_id: String, missions: Result<ConversationMissions, HostError> },
 	Connected(Result<Ready, HostError>),
 	ThreadRead { conversation_id: String, messages: Result<Vec<Message>, HostError> },
-	SendFailed(SendError),
 	Host(HostEvent),
 	Image(Fetched),
 	DevProfile(DevProfile),
@@ -280,7 +223,6 @@ pub struct App {
 	pub surfaces: Surfaces,
 	pub workspace: Workspace,
 	pub thread: Option<Thread>,
-	pub composer: Composer,
 	pub images: Images,
 	pub sidebar: PaneState,
 	pub spike: crate::spike::editor::Editor,
@@ -292,8 +234,7 @@ pub struct App {
 	pub pane: Pane,
 	pub host_profile: Profile,
 	pub uses_host_api: bool,
-	pub board: Board,
-	pub mission: Option<OpenMission>,
+	pub mission: Option<Opened>,
 	notices: Notices,
 	outbox: Option<Outbox>,
 	inbox: Receiver<Inbound>,
@@ -314,12 +255,6 @@ impl App {
 			surfaces: Surfaces::default(),
 			workspace: Workspace::Connecting,
 			thread: None,
-			composer: Composer {
-				edit: TextEdit::new(""),
-				mention: None,
-				attachments: Vec::new(),
-				next_attachment: 0,
-			},
 			images: Images::default(),
 			sidebar: PaneState::new(276.0).range(180.0, 480.0),
 			spike: crate::spike::editor::Editor::default(),
@@ -330,7 +265,6 @@ impl App {
 			pane: Pane::Conversations,
 			host_profile: Profile::Installed,
 			uses_host_api: false,
-			board: Board::Unread,
 			mission: None,
 			notices: Notices::default(),
 			clock_ms: 0.0,
@@ -390,12 +324,9 @@ impl App {
 
 	pub fn is_animating(&self) -> bool {
 		let running = |mission: &Mission| mission.is_agent_running;
-		let on_board = matches!(self.pane, Pane::Missions)
-			&& matches!(&self.board, Board::Read(board) if board.iter().any(|entry| running(&entry.mission)));
 		!self.runs.is_empty()
 			|| s04_boot::is_animating(self)
-			|| on_board
-			|| self.mission.as_ref().is_some_and(|open| running(&open.mission))
+			|| s08_missions::is_animating(self)
 			|| self.thread.as_ref().is_some_and(|thread| thread.missions.iter().any(running))
 	}
 
@@ -429,7 +360,6 @@ impl App {
 		};
 		let thread = Thread::of_conversation(conversation);
 		let host = ready.source.clone();
-		self.composer.mention = None;
 		self.notice = None;
 		self.mission = None;
 		self.thread = Some(thread);
@@ -445,14 +375,7 @@ impl App {
 
 	pub fn show_missions(&mut self) {
 		self.pane = Pane::Missions;
-		if !matches!(self.board, Board::Unread | Board::Failed(_)) {
-			return;
-		}
-		let Some(host) = self.ready().map(|ready| ready.source.clone()) else { return };
-		self.board = Board::Reading;
-		self.work(move |outbox| {
-			outbox.deliver(Inbound::Board(host.invoke("mission_board", json!({}))))
-		});
+		s08_missions::show(self);
 	}
 
 	pub fn show_conversations(&mut self) {
@@ -460,82 +383,15 @@ impl App {
 	}
 
 	pub fn open_mission(&mut self, mission: &Mission, bot: &Agent) {
+		s08_missions::open(self, &Opening { bot_id: &bot.id, ..Opening::of_card(mission) });
+	}
+
+	pub fn open_mission_thread(&mut self, conversation_id: &str, title: &str, bot: Option<&Agent>) {
 		let Some(host) = self.ready().map(|ready| ready.source.clone()) else { return };
-		self.composer.mention = None;
 		self.notice = None;
-		self.thread = Some(Thread::of_mission(mission, bot));
-		self.mission = Some(OpenMission {
-			mission: mission.clone(),
-			bot: bot.clone(),
-			events: Vec::new(),
-			failure: None,
-		});
-		self.read_thread(host, mission.thread_conversation_id.clone());
-		s05_thread::open_conversation(self, &mission.thread_conversation_id);
-		self.read_mission(&mission.id);
-	}
-
-	pub fn open_mission_of_turn(&mut self, mission_id: &str) {
-		let found = self.thread.as_ref().and_then(|thread| {
-			thread.missions.iter().find(|mission| mission.id == mission_id).cloned()
-		});
-		let Some(mission) = found else { return };
-		let Some(bot) = self.ready().and_then(|ready| {
-			ready.agents.iter().find(|agent| agent.id == mission.bot_id).cloned()
-		}) else {
-			return;
-		};
-		self.open_mission(&mission, &bot);
-	}
-
-	pub fn leave_mission(&mut self) {
-		let Some(open) = self.mission.take() else { return };
-		self.thread = None;
-		self.open(&open.mission.origin_conversation_id);
-	}
-
-	fn read_mission(&self, mission_id: &str) {
-		let Some(host) = self.ready().map(|ready| ready.source.clone()) else { return };
-		let mission_id = mission_id.to_owned();
-		self.work(move |outbox| {
-			let detail = host.invoke("mission_detail", json!({ "missionId": mission_id }));
-			outbox.deliver(Inbound::MissionRead(detail));
-		});
-	}
-
-	fn mission_changed(&mut self, changed: MissionChanged) {
-		let apply = |mission: &mut Mission| {
-			if mission.id == changed.mission_id {
-				mission.state = changed.state;
-				mission.is_agent_running = changed.is_agent_running;
-			}
-		};
-		if let Board::Read(board) = &mut self.board {
-			board.iter_mut().for_each(|entry| apply(&mut entry.mission));
-		}
-		if let Some(thread) = self.thread.as_mut() {
-			thread.missions.iter_mut().for_each(apply);
-		}
-		let Some(open) = self.mission.as_mut().filter(|open| open.mission.id == changed.mission_id)
-		else {
-			return;
-		};
-		apply(&mut open.mission);
-		let mission_id = open.mission.id.clone();
-		self.read_mission(&mission_id);
-	}
-
-	fn mission_read(&mut self, detail: Result<MissionDetail, HostError>) {
-		let Some(open) = self.mission.as_mut() else { return };
-		match detail {
-			Ok(detail) if detail.mission.id == open.mission.id => {
-				open.mission = detail.mission;
-				open.events = detail.events;
-				open.failure = None;
-			}
-			Ok(_) => {}
-			Err(failure) => open.failure = Some(failure),
-		}
+		self.thread = Some(Thread::of_mission(conversation_id, title, bot));
+		self.read_thread(host, conversation_id.to_owned());
+		s05_thread::open_conversation(self, conversation_id);
 	}
 
 	fn missions_of(
@@ -586,153 +442,6 @@ impl App {
 		Some((agent.name.as_str(), agent.avatar_blot))
 	}
 
-	pub fn mention_menu(&self) -> Option<MentionMenu> {
-		let thread = self.thread.as_ref()?;
-		let needle = self.composer.mention.as_ref()?.query.to_lowercase();
-		let agents = self.ready().map_or(&[][..], |ready| ready.agents.as_slice());
-		let title_of = |bot_id: &str| {
-			agents
-				.iter()
-				.find(|agent| agent.id == bot_id)
-				.map_or(String::new(), |agent| agent.title.clone())
-		};
-		let seated: Vec<Mentionable> = thread
-			.seats
-			.iter()
-			.map(|seat| Mentionable {
-				bot_id: seat.bot_id.clone(),
-				name: seat.name.clone(),
-				hue: seat.hue,
-				title: title_of(&seat.bot_id),
-				outside: false,
-			})
-			.collect();
-		let unseated: Vec<Mentionable> = agents
-			.iter()
-			.filter(|agent| !thread.seats.iter().any(|seat| seat.bot_id == agent.id))
-			.map(|agent| Mentionable {
-				bot_id: agent.id.clone(),
-				name: agent.name.clone(),
-				hue: agent.avatar_blot,
-				title: agent.title.clone(),
-				outside: true,
-			})
-			.collect();
-		let mentionable = seated.len() + unseated.len();
-		let named = |row: &Mentionable| row.name.to_lowercase().contains(&needle);
-		let mut rows: Vec<Mentionable> = seated.into_iter().filter(named).collect();
-		if needle.is_empty() {
-			rows.truncate(OPENING_MENTIONS);
-		} else {
-			rows.extend(unseated.into_iter().filter(named));
-		}
-		let further = if needle.is_empty() { mentionable - rows.len() } else { 0 };
-		(!rows.is_empty()).then_some(MentionMenu { rows, further })
-	}
-
-	fn mention_count(&self) -> usize {
-		self.mention_menu().map_or(0, |menu| menu.rows.len())
-	}
-
-	pub fn pasted(&mut self, content: &ClipboardContent) -> bool {
-		let Some(image) = content.image().filter(|_| content.text().is_empty()) else {
-			return false;
-		};
-		let Some(decoded) = self.images.decode(image.png()) else { return false };
-		let composer = &mut self.composer;
-		composer.next_attachment += 1;
-		composer.attachments.push(Attachment {
-			id: composer.next_attachment,
-			name: PASTED_IMAGE_NAME.to_owned(),
-			bytes: image.png().len(),
-			image: decoded,
-		});
-		true
-	}
-
-	pub fn remove_attachment(&mut self, id: u64) {
-		self.composer.attachments.retain(|attachment| attachment.id != id);
-	}
-
-	pub fn composer_changed(&mut self) {
-		let edit = &self.composer.edit;
-		let (caret, end) = edit.range();
-		let typed = (caret == end).then(|| mention_query(edit, caret)).flatten();
-		let held = self.composer.mention.take();
-		self.composer.mention = typed.map(|(start, query)| {
-			let active =
-				held.as_ref().filter(|held| held.start == start).map_or(0, |held| held.active);
-			Mention { start, query, active }
-		});
-		let count = self.mention_count();
-		if let Some(mention) = self.composer.mention.as_mut() {
-			mention.active = mention.active.min(count.saturating_sub(1));
-		}
-	}
-
-	pub fn move_mention(&mut self, step: isize) {
-		let count = self.mention_count();
-		if let Some(mention) = self.composer.mention.as_mut().filter(|_| count > 0) {
-			mention.active = (mention.active as isize + step).rem_euclid(count as isize) as usize;
-		}
-	}
-
-	pub fn choose_active_mention(&mut self) -> bool {
-		let Some(active) = self.composer.mention.as_ref().map(|mention| mention.active) else {
-			return false;
-		};
-		let chosen = self.mention_menu().and_then(|menu| menu.rows.into_iter().nth(active));
-		let Some(bot_id) = chosen.map(|row| row.bot_id) else {
-			return false;
-		};
-		self.choose_mention(&bot_id);
-		true
-	}
-
-	pub fn choose_mention(&mut self, bot_id: &str) {
-		let Some(mention) = self.composer.mention.take() else { return };
-		let Some(name) = self.agent_name(bot_id) else { return };
-		let (caret, _) = self.composer.edit.range();
-		self.composer.edit.undo_group(|edit| {
-			edit.replace_with_pill(
-				mention.start..caret,
-				format!("{AGENT_PILL}{bot_id}"),
-				&format!("@{name}"),
-			);
-			edit.insert(" ");
-		});
-	}
-
-	pub fn send(&mut self) {
-		let Some(ready) = self.ready() else { return };
-		let Some(conversation_id) =
-			self.thread.as_ref().map(|thread| thread.conversation_id.clone())
-		else {
-			return;
-		};
-		let (content, summoned) = outgoing(&self.composer.edit);
-		if content.trim().is_empty() {
-			return;
-		}
-		if ready.source.running_profile() == Some(Profile::Installed) {
-			self.notice = Some(SENDING_OFF.to_owned());
-			return;
-		}
-		if !self.composer.attachments.is_empty() {
-			self.notice = Some(IMAGES_NOT_SENT.to_owned());
-			return;
-		}
-		let host = ready.source.clone();
-		self.composer.edit.clear();
-		self.composer.mention = None;
-		self.notice = None;
-		self.work(move |outbox| {
-			if let Err(failure) = turn::send_turn(&host, &conversation_id, &content, &summoned) {
-				outbox.deliver(Inbound::SendFailed(failure));
-			}
-		});
-	}
-
 	fn received(&mut self, inbound: Inbound) {
 		match inbound {
 			Inbound::Connected(Ok(ready)) => {
@@ -750,13 +459,6 @@ impl App {
 				});
 			}
 			Inbound::Longest(found) => self.longest_found(found),
-			Inbound::Board(board) => {
-				self.board = match board {
-					Ok(board) => Board::Read(board),
-					Err(failure) => Board::Failed(failure),
-				}
-			}
-			Inbound::MissionRead(detail) => self.mission_read(detail),
 			Inbound::MissionsOf { conversation_id, missions } => {
 				self.missions_of(&conversation_id, missions)
 			}
@@ -764,7 +466,6 @@ impl App {
 			Inbound::ThreadRead { conversation_id, messages } => {
 				self.thread_read(&conversation_id, messages)
 			}
-			Inbound::SendFailed(failure) => self.notice = Some(format!("Couldn't send. {failure}")),
 			Inbound::Host(event) => self.host_event(event),
 			Inbound::Image(fetched) => self.images.landed(fetched),
 			Inbound::Banner(BannerOutcome::Clicked(target)) => self.notice_clicked(target),
@@ -851,7 +552,7 @@ impl App {
 				thread.stored(message);
 				self.request_images();
 			}
-			HostEvent::MissionChanged(changed) => self.mission_changed(changed),
+			HostEvent::MissionChanged(changed) => s08_missions::changed(self, &changed),
 			HostEvent::Roster(heard) => self.surfaces.s03_roster.heard(heard),
 			HostEvent::Companion(heard) => {
 				self.surfaces.s03_roster.heard_companion(&heard);
@@ -1036,39 +737,6 @@ pub fn whole_thread(host: &Source, conversation_id: &str) -> Result<Vec<Message>
 	Ok(messages)
 }
 
-fn mention_query(edit: &TextEdit, caret: usize) -> Option<(usize, String)> {
-	let before = edit.text.get(..caret)?;
-	let at = before.rfind('@')?;
-	let query = &before[at + 1..];
-	let opens_a_word = before[..at].chars().next_back().is_none_or(char::is_whitespace);
-	let inside_a_pill = edit.pills().any(|(range, _)| range.contains(&at));
-	(opens_a_word && !inside_a_pill && !query.contains(char::is_whitespace))
-		.then(|| (at, query.to_owned()))
-}
-
-fn outgoing(edit: &TextEdit) -> (String, Vec<String>) {
-	let mut pills: Vec<(std::ops::Range<usize>, String)> = edit
-		.pills()
-		.filter_map(|(range, id)| {
-			id.strip_prefix(AGENT_PILL).map(|bot_id| (range, bot_id.to_owned()))
-		})
-		.collect();
-	pills.sort_by_key(|(range, _)| range.start);
-	let mut content = String::with_capacity(edit.text.len());
-	let mut summoned: Vec<String> = Vec::new();
-	let mut read = 0;
-	for (range, bot_id) in pills {
-		content.push_str(&edit.text[read..range.start]);
-		content.push_str(&format!("<@{bot_id}>"));
-		read = range.end;
-		if !summoned.contains(&bot_id) {
-			summoned.push(bot_id);
-		}
-	}
-	content.push_str(&edit.text[read..]);
-	(content, summoned)
-}
-
 #[cfg(test)]
 mod tests {
 	use std::cell::RefCell;
@@ -1139,17 +807,6 @@ mod tests {
 			thread.messages.iter().map(|m| m.content.as_str()).collect::<Vec<_>>(),
 			["first", "second, edited"]
 		);
-	}
-
-	#[test]
-	fn agent_pills_leave_as_mention_tokens_and_summon_their_agent() {
-		let mut edit = TextEdit::new("Ask ");
-		edit.set_caret(4);
-		edit.insert_pill(format!("{AGENT_PILL}wren"), "@Wren");
-		edit.insert(" for notes");
-		let (content, summoned) = outgoing(&edit);
-		assert_eq!(content, "Ask <@wren> for notes");
-		assert_eq!(summoned, ["wren"]);
 	}
 
 	fn conversation(id: &str) -> Conversation {

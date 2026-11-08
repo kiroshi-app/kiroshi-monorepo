@@ -19,7 +19,7 @@ use kiroshi_core::agent::contract::CancelOutcome;
 use kiroshi_core::library::contract::{
 	LibraryImage, LibraryImport, LibraryItem, LibraryItemKind, LibraryWriteOutcome,
 };
-use rune::image::Image;
+use rune::image::{Image, ImageCache};
 use rune::{KeyEvent, TextEdit, Tx, Waker};
 
 use kiroshi_rune_kit::strings::{Key as Copy, Language, common};
@@ -138,6 +138,7 @@ pub struct State {
 	source: Option<Source>,
 	waker: Option<Waker>,
 	worker: Option<Worker>,
+	images: Option<ImageCache>,
 }
 
 impl Default for State {
@@ -168,6 +169,7 @@ impl Default for State {
 			source: None,
 			waker: None,
 			worker: None,
+			images: None,
 		}
 	}
 }
@@ -264,6 +266,7 @@ impl Shown {
 
 impl State {
 	pub fn attach(&mut self, waker: Waker) {
+		self.images = Some(ImageCache::new(waker.clone()));
 		self.waker = Some(waker);
 		self.flush();
 	}
@@ -1029,8 +1032,11 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
 	if is_library && entered(app) {
 		app.surfaces.s14_library.show_library();
 	}
-	let images = &app.images;
-	let has_answers = app.surfaces.s14_library.take_answers(&|bytes| images.decode(bytes));
+	let library = &mut app.surfaces.s14_library;
+	let images = library.images.take();
+	let has_answers =
+		library.take_answers(&|bytes| images.as_ref().map(|cache| cache.load(bytes.to_vec())));
+	library.images = images;
 	let wants_library = app.surfaces.s14_library.take_library_wish();
 	if wants_library {
 		app.navigation.navigate_main(Route::Library);
