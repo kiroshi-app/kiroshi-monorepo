@@ -1,5 +1,6 @@
 mod feed;
 mod menu;
+mod seqs;
 #[cfg(test)]
 mod tests;
 mod view;
@@ -19,8 +20,10 @@ use crate::conversations::now_ms;
 use crate::host::{self, HostError, Profile};
 use crate::model;
 use crate::source::Source;
+use crate::surfaces::s06_composer;
 
 use menu::{HeldMenu, copied_value, copy_word, refusal_of};
+use seqs::MissionSeqs;
 use worker::{Answer, Call, Command, Worker};
 
 pub use menu::menu_facts;
@@ -126,6 +129,7 @@ pub struct State {
 	is_earlier_today_open: bool,
 	notices: Vec<Notice>,
 	menu: Option<HeldMenu>,
+	seqs: MissionSeqs,
 	effects: Vec<Effect>,
 	queued: Vec<Call>,
 	source: Option<Source>,
@@ -139,6 +143,11 @@ fn failure_text(failure: &HostError) -> String {
 
 fn said(key: Key) -> String {
 	key.text(LANGUAGE).to_owned()
+}
+
+fn listed_in<'a>(feed: &'a Feed, mission_id: &str) -> Option<&'a Mission> {
+	let Feed::Shown(entries) = feed else { return None };
+	entries.iter().map(|entry| &entry.mission).find(|mission| mission.id == mission_id)
 }
 
 fn refused_before_leaving(profile: Option<Profile>, command: Command) -> Option<HostError> {
@@ -208,6 +217,7 @@ impl State {
 		space_id: &str,
 		closed_since: i64,
 		feed: Result<Vec<MissionInSpace>, HostError>,
+		opened: Option<&Mission>,
 	) {
 		let Some(panel) = self
 			.panel
@@ -219,7 +229,21 @@ impl State {
 		panel.is_reading = false;
 		let is_reread_due = std::mem::take(&mut panel.is_reread_due);
 		match (feed, &panel.feed) {
-			(Ok(entries), _) => panel.feed = Feed::Shown(entries),
+			(Ok(entries), held) => {
+				let held_of = |mission_id: &str| {
+					listed_in(held, mission_id)
+						.or(opened.filter(|mission| mission.id == mission_id))
+				};
+				let entries = entries
+					.into_iter()
+					.map(|mut entry| {
+						let held = held_of(&entry.mission.id);
+						entry.mission = self.seqs.ordered(entry.mission, held);
+						entry
+					})
+					.collect();
+				panel.feed = Feed::Shown(entries);
+			}
 			(Err(failure), Feed::Shown(_)) => {
 				self.raise_failure(chat::activity::failure::missions::TITLE, &failure)
 			}
@@ -231,8 +255,7 @@ impl State {
 	}
 
 	fn listed(&self, mission_id: &str) -> Option<&Mission> {
-		let Some(Feed::Shown(entries)) = self.feed() else { return None };
-		entries.iter().map(|entry| &entry.mission).find(|mission| mission.id == mission_id)
+		listed_in(self.feed()?, mission_id)
 	}
 
 	fn each_listed(&mut self, mission_id: &str, mut change: impl FnMut(&mut Mission)) {
@@ -356,11 +379,12 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
 fn landed(app: &mut App, answer: Answer) {
 	match answer {
 		Answer::Feed { space_id, closed_since, feed } => {
-			state(app).fed(&space_id, closed_since, feed)
+			let opened = app.mission.as_ref().and_then(Opened::mission);
+			app.surfaces.s08_missions.fed(&space_id, closed_since, feed, opened)
 		}
 		Answer::Detail { mission_id, detail } => read(app, &mission_id, detail),
 		Answer::Written { mission_id, outcome: Ok(mission), .. } => {
-			written(app, &mission_id, &mission)
+			written(app, &mission_id, mission)
 		}
 		Answer::Written { command, outcome: Err(failure), .. } => {
 			state(app).raise_failure(refusal_of(command), &failure)
@@ -465,11 +489,15 @@ fn reread(app: &mut App) {
 }
 
 fn read(app: &mut App, mission_id: &str, detail: Result<MissionDetail, HostError>) {
+	let held = known(app, mission_id).cloned();
 	let Some(opened) = app.mission.as_mut().filter(|opened| opened.mission_id == mission_id) else {
 		return;
 	};
 	match detail {
-		Ok(detail) => opened.detail = Detail::Read(Box::new(detail)),
+		Ok(mut detail) => {
+			detail.mission = app.surfaces.s08_missions.seqs.ordered(detail.mission, held.as_ref());
+			opened.detail = Detail::Read(Box::new(detail));
+		}
 		Err(failure) if matches!(opened.detail, Detail::Read(_)) => {
 			let title = said(chat::missions::failure::read::TITLE);
 			let description = format!(
@@ -483,18 +511,31 @@ fn read(app: &mut App, mission_id: &str, detail: Result<MissionDetail, HostError
 	}
 }
 
-fn written(app: &mut App, mission_id: &str, mission: &Mission) {
+fn written(app: &mut App, mission_id: &str, mission: Mission) {
+	let held = known(app, mission_id).cloned();
+	let mission = state(app).seqs.ordered(mission, held.as_ref());
 	state(app).each_listed(mission_id, |held| *held = mission.clone());
 	let opened = app.mission.as_mut().filter(|opened| opened.mission_id == mission_id);
 	if let Some(Opened { detail: Detail::Read(detail), .. }) = opened {
-		detail.mission = mission.clone();
+		detail.mission = mission;
 	}
 }
 
 pub fn changed(app: &mut App, changed: &model::MissionChanged) {
 	let mission_id = changed.mission_id.as_str();
-	state(app).each_listed(mission_id, |mission| feed::moved(mission, changed));
+	if state(app).seqs.admits_change(mission_id, changed.state_seq) {
+		apply_change(app, changed);
+	}
 	state(app).reread_feed(now_ms());
+	let is_opened = app.mission.as_ref().is_some_and(|opened| opened.mission_id == mission_id);
+	if is_opened {
+		state(app).queue(Call::Detail(mission_id.to_owned()));
+	}
+}
+
+fn apply_change(app: &mut App, changed: &model::MissionChanged) {
+	let mission_id = changed.mission_id.as_str();
+	state(app).each_listed(mission_id, |mission| feed::moved(mission, changed));
 	if let Some(thread) = app.thread.as_mut() {
 		for card in thread.missions.iter_mut().filter(|card| card.id == mission_id) {
 			card.state = changed.state;
@@ -502,13 +543,10 @@ pub fn changed(app: &mut App, changed: &model::MissionChanged) {
 			card.status.clone_from(&changed.status);
 		}
 	}
-	let Some(opened) = app.mission.as_mut().filter(|opened| opened.mission_id == mission_id) else {
-		return;
-	};
-	if let Detail::Read(detail) = &mut opened.detail {
+	let opened = app.mission.as_mut().filter(|opened| opened.mission_id == mission_id);
+	if let Some(Opened { detail: Detail::Read(detail), .. }) = opened {
 		feed::moved(&mut detail.mission, changed);
 	}
-	state(app).queue(Call::Detail(mission_id.to_owned()));
 }
 
 fn known<'a>(app: &'a App, mission_id: &str) -> Option<&'a Mission> {
@@ -522,9 +560,8 @@ fn known<'a>(app: &'a App, mission_id: &str) -> Option<&'a Mission> {
 fn act(app: &mut App, mission_id: &str, action: MenuAction) {
 	let Some(mission) = known(app, mission_id).cloned() else { return };
 	match action {
-		MenuAction::Open | MenuAction::MessageAgent | MenuAction::Answer => {
-			open(app, &Opening::of(&mission))
-		}
+		MenuAction::Open => open(app, &Opening::of(&mission)),
+		MenuAction::MessageAgent | MenuAction::Answer => open_at_composer(app, &mission),
 		MenuAction::OpenPullRequest => state(app).open_pull_request(mission.pull_request_url),
 		MenuAction::StopAgent => state(app).queue(Call::Stop {
 			conversation_id: mission.thread_conversation_id,
@@ -533,6 +570,12 @@ fn act(app: &mut App, mission_id: &str, action: MenuAction) {
 		MenuAction::Close => state(app).write(Command::Close, mission_id),
 		MenuAction::Reopen => state(app).write(Command::Reopen, mission_id),
 	}
+}
+
+fn open_at_composer(app: &mut App, mission: &Mission) {
+	open(app, &Opening::of(mission));
+	let is_blocked = mission.closed_at.is_some();
+	s06_composer::focus_prompt(app, &mission.thread_conversation_id, is_blocked);
 }
 
 fn copy(app: &mut App, mission_id: &str, kind: CopyKind) {
