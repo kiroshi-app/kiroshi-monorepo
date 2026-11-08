@@ -180,11 +180,11 @@ impl State {
 		question_ids: Vec<String>,
 	) {
 		self.approvals.retain(|approval| {
-			!is_same_agent(&approval.scope, &scope)
-				|| !permission_ids.contains(&approval.request.id)
+			!(is_same_agent(&approval.scope, &scope)
+				&& permission_ids.contains(&approval.request.id))
 		});
 		self.questions.retain(|asked| {
-			!is_same_agent(&asked.scope, &scope) || !question_ids.contains(&asked.request.id)
+			!(is_same_agent(&asked.scope, &scope) && question_ids.contains(&asked.request.id))
 		});
 		let closed = permission_ids.into_iter().chain(question_ids);
 		self.closed.extend(closed.map(|id| ClosedPrompt { scope: scope.clone(), id }));
