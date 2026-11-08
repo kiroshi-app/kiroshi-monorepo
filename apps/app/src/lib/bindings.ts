@@ -98,6 +98,7 @@ export const commands = {
 	agentLiveSessions: () => typedError<LiveSession[], TransportError>(__TAURI_INVOKE("agent_live_sessions")),
 	agentLiveSessionsInSpace: (spaceId: string) => typedError<LiveSession[], TranscriptStoreError>(__TAURI_INVOKE("agent_live_sessions_in_space", { spaceId })),
 	agentPendingQuestions: (conversationId: string) => typedError<ScopedEvent_Serialize[], TransportError>(__TAURI_INVOKE("agent_pending_questions", { conversationId })),
+	agentPendingPrompts: (conversationId: string) => typedError<ScopedEvent_Serialize[], TransportError>(__TAURI_INVOKE("agent_pending_prompts", { conversationId })),
 	agentPendingQuestionsInSpace: (spaceId: string) => typedError<ScopedEvent_Serialize[], TranscriptStoreError>(__TAURI_INVOKE("agent_pending_questions_in_space", { spaceId })),
 	conversationBots: (spaceId: string | null) => typedError<Bot[], TranscriptStoreError>(__TAURI_INVOKE("conversation_bots", { spaceId })),
 	conversationBotsByPresence: (spaceId: string, excludedConversationId: string | null) => typedError<Bot[], TranscriptStoreError>(__TAURI_INVOKE("conversation_bots_by_presence", { spaceId, excludedConversationId })),
