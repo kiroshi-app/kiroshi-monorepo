@@ -1102,7 +1102,10 @@ async fn on_exit(
 
 #[cfg(test)]
 mod tests {
+	use super::super::sidecar::SidecarOptions;
 	use super::*;
+	use crate::executable_script::an_executable_script;
+	use crate::removed_on_drop::RemovedOnDrop;
 
 	#[derive(Debug)]
 	struct StubHost {
@@ -1514,16 +1517,15 @@ done
 
 	#[tokio::test]
 	async fn an_answer_to_a_prompt_its_stop_closed_is_refused_and_resolves_nothing() {
-		let script = crate::removed_on_drop::RemovedOnDrop(std::env::temp_dir().join(format!(
+		let script = RemovedOnDrop(std::env::temp_dir().join(format!(
 			"kiroshi-prompting-sidecar-{}-{}.sh",
 			std::process::id(),
 			uuid::Uuid::new_v4()
 		)));
-		crate::executable_script::an_executable_script(&script, PROMPTING_SIDECAR);
-		let sidecar =
-			Sidecar::start(super::super::sidecar::SidecarOptions::new(script.to_path_buf()))
-				.await
-				.expect("the sidecar is ready");
+		an_executable_script(&script, PROMPTING_SIDECAR);
+		let sidecar = Sidecar::start(SidecarOptions::new(script.to_path_buf()))
+			.await
+			.expect("the sidecar is ready");
 		let (sink, mut heard) = mpsc::unbounded_channel();
 		let session =
 			Session::start(sidecar, SessionOptions::new(std::env::temp_dir()), Arc::new(sink))
