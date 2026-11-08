@@ -1,18 +1,23 @@
+use kiroshi_core::agent::contract::CancelOutcome;
 use kiroshi_core::missions::contract::{
 	Mission, MissionDetail, MissionEvent, MissionEventKind, MissionInSpace, MissionLiveness,
 	MissionState, MissionStatus, Ticket,
 };
 use kiroshi_rune_kit::surfaces::s04_boot::notice::NoticeKind;
-use kiroshi_rune_kit::surfaces::s08_missions::{self as kit, CopyKind, EventKind, MissionsEvent};
+use kiroshi_rune_kit::surfaces::s08_missions::{
+	self as kit, CopyKind, EventKind, MenuAction, MenuSource, MissionsEvent,
+};
+use rune::PointerPress;
 use serde_json::json;
 
 use chrono::{FixedOffset, TimeZone};
 
 use super::feed::{grouped, start_of_day, start_of_day_in};
+use super::view::shown_menu;
 use super::worker::{Answer, Call, Command};
 use super::{
-	Detail, Effect, Feed, MenuAction, State, act, back, changed, emitted, is_summons, landed,
-	menu_facts, open, refused_before_leaving, show, thread_events,
+	Detail, Effect, Feed, State, back, changed, emitted, is_summons, landed, menu_facts, open,
+	refused_before_leaving, show, thread_events,
 };
 use crate::app::{App, Pane, Person, Ready, Workspace};
 use crate::conversations::now_ms;
@@ -116,6 +121,19 @@ fn last_call(app: &App) -> Option<&Call> {
 	state(app).queued.last()
 }
 
+fn chosen(app: &mut App, mission: &str, action: MenuAction) {
+	emitted(app, MissionsEvent::MenuChosen { mission: mission.to_owned(), action });
+}
+
+fn copied(app: &mut App, mission: &str, kind: CopyKind) {
+	emitted(app, MissionsEvent::MenuCopied { mission: mission.to_owned(), kind });
+}
+
+fn request_menu(app: &mut App, mission: &str, source: MenuSource, x: f32) {
+	let at = PointerPress { x, y: 40.0 };
+	emitted(app, MissionsEvent::MenuRequested { mission: mission.to_owned(), source, at });
+}
+
 fn shown_panel(entries: Vec<Mission>) -> App {
 	let mut app = ready_app();
 	app.pane = Pane::Missions;
@@ -167,11 +185,16 @@ fn feed_calls(app: &App) -> usize {
 fn answer_feed(app: &mut App, feed: Result<Vec<Mission>, HostError>) {
 	let asked = app.surfaces.s08_missions.queued.drain(..).rev().find_map(|call| match call {
 		Call::Feed { space_id, closed_since } => Some((space_id, closed_since)),
-		Call::Detail(_) | Call::Write { .. } => None,
+		Call::Detail(_) | Call::Write { .. } | Call::Stop { .. } => None,
 	});
 	let Some((space_id, closed_since)) = asked else { panic!("the feed was asked for") };
 	let feed = feed.map(|missions| missions.into_iter().map(in_space).collect());
 	landed(app, Answer::Feed { space_id, closed_since, feed });
+}
+
+fn reread_feed_with(app: &mut App, missions: Vec<Mission>) {
+	changed(app, &change_of("m-1", model::MissionState::Working));
+	answer_feed(app, Ok(missions));
 }
 
 fn ids(entries: &[&MissionInSpace]) -> Vec<String> {
@@ -580,12 +603,12 @@ fn the_menu_offers_what_the_mission_carries_in_its_state() {
 #[test]
 fn close_and_reopen_call_their_core_commands() {
 	let mut app = shown_panel(vec![mission("m-1", MissionState::Working, 1)]);
-	act(&mut app, "m-1", MenuAction::Close);
+	chosen(&mut app, "m-1", MenuAction::Close);
 	assert_eq!(
 		last_call(&app),
 		Some(&Call::Write { command: Command::Close, mission_id: "m-1".to_owned() })
 	);
-	act(&mut app, "m-1", MenuAction::Reopen);
+	chosen(&mut app, "m-1", MenuAction::Reopen);
 	assert_eq!(
 		last_call(&app),
 		Some(&Call::Write { command: Command::Reopen, mission_id: "m-1".to_owned() })
@@ -597,7 +620,7 @@ fn close_and_reopen_call_their_core_commands() {
 #[test]
 fn a_failed_command_keeps_the_mission_as_it_was_and_raises_a_notice() {
 	let mut app = shown_panel(vec![mission("m-1", MissionState::Working, 1)]);
-	act(&mut app, "m-1", MenuAction::Close);
+	chosen(&mut app, "m-1", MenuAction::Close);
 	landed(
 		&mut app,
 		Answer::Written {
@@ -636,9 +659,9 @@ fn copy_and_open_pull_request_hand_their_value_to_the_window() {
 		..mission("m-1", MissionState::Working, 1)
 	};
 	let mut app = shown_panel(vec![carried]);
-	act(&mut app, "m-1", MenuAction::Copy(CopyKind::IssueId));
-	act(&mut app, "m-1", MenuAction::OpenPullRequest);
-	act(&mut app, "m-1", MenuAction::Copy(CopyKind::Branch));
+	copied(&mut app, "m-1", CopyKind::IssueId);
+	chosen(&mut app, "m-1", MenuAction::OpenPullRequest);
+	copied(&mut app, "m-1", CopyKind::Branch);
 	assert_eq!(
 		state(&app).effects,
 		vec![
@@ -657,7 +680,7 @@ fn copy_and_open_pull_request_hand_their_value_to_the_window() {
 #[test]
 fn message_agent_and_answer_open_the_mission() {
 	let mut app = shown_panel(vec![mission("m-1", MissionState::WaitingHuman, 1)]);
-	act(&mut app, "m-1", MenuAction::Answer);
+	chosen(&mut app, "m-1", MenuAction::Answer);
 	assert_eq!(app.mission.as_ref().map(|opened| opened.mission_id.as_str()), Some("m-1"));
 }
 
@@ -718,4 +741,112 @@ fn recorded_events_become_thread_events_in_time_order() {
 fn summons_are_recognised_to_be_hidden_from_the_thread() {
 	assert!(is_summons("Carry out this mission."));
 	assert!(!is_summons("Carry out this mission"));
+}
+
+#[test]
+fn a_requested_menu_is_held_and_drawn_for_its_mission() {
+	let mut app = shown_panel(vec![mission("m-1", MissionState::WaitingHuman, 1)]);
+	assert_eq!(shown_menu(&app), None);
+	request_menu(&mut app, "m-1", MenuSource::Row, 12.0);
+	let menu = shown_menu(&app).expect("an open menu");
+	assert_eq!(menu.mission, "m-1");
+	assert_eq!(menu.source, MenuSource::Row);
+	assert_eq!(menu.at, PointerPress { x: 12.0, y: 40.0 });
+	assert_eq!(menu.facts.state, kit::MissionState::WaitingHuman);
+	assert!(!menu.is_copy_shown);
+}
+
+#[test]
+fn a_second_request_replaces_the_open_menu() {
+	let entries =
+		vec![mission("m-1", MissionState::Working, 1), mission("m-2", MissionState::Working, 2)];
+	let mut app = shown_panel(entries);
+	request_menu(&mut app, "m-1", MenuSource::Row, 12.0);
+	request_menu(&mut app, "m-2", MenuSource::Card, 80.0);
+	let menu = shown_menu(&app).expect("an open menu");
+	assert_eq!((menu.mission, menu.source, menu.at.x), ("m-2", MenuSource::Card, 80.0));
+}
+
+#[test]
+fn the_copy_choices_show_and_hide_in_the_open_menu() {
+	let mut app = shown_panel(vec![mission("m-1", MissionState::Working, 1)]);
+	request_menu(&mut app, "m-1", MenuSource::Row, 12.0);
+	let shown = |is_shown| MissionsEvent::CopyChoicesShown { mission: "m-1".to_owned(), is_shown };
+	emitted(&mut app, shown(true));
+	assert!(shown_menu(&app).is_some_and(|menu| menu.is_copy_shown));
+	emitted(&mut app, shown(false));
+	assert!(shown_menu(&app).is_some_and(|menu| !menu.is_copy_shown));
+}
+
+#[test]
+fn dismissing_choosing_or_copying_closes_the_menu() {
+	let entries = vec![mission("m-1", MissionState::Working, 1)];
+	let closing = [
+		MissionsEvent::MenuDismissed,
+		MissionsEvent::MenuChosen { mission: "m-1".to_owned(), action: MenuAction::Close },
+		MissionsEvent::MenuCopied { mission: "m-1".to_owned(), kind: CopyKind::IssueId },
+	];
+	for event in closing {
+		let mut app = shown_panel(entries.clone());
+		request_menu(&mut app, "m-1", MenuSource::Row, 12.0);
+		emitted(&mut app, event.clone());
+		assert_eq!(shown_menu(&app), None, "{event:?}");
+		assert!(state(&app).menu.is_none(), "{event:?}");
+	}
+}
+
+#[test]
+fn the_menu_closes_when_its_mission_leaves_the_list() {
+	let mut app = shown_panel(vec![mission("m-1", MissionState::Working, 1)]);
+	request_menu(&mut app, "m-1", MenuSource::Row, 12.0);
+	reread_feed_with(&mut app, Vec::new());
+	assert_eq!(shown_menu(&app), None);
+	reread_feed_with(&mut app, vec![mission("m-1", MissionState::Working, 1)]);
+	assert_eq!(shown_menu(&app), None);
+}
+
+#[test]
+fn the_menu_facts_follow_the_current_mission() {
+	let mut app = shown_panel(vec![mission("m-1", MissionState::Working, 1)]);
+	request_menu(&mut app, "m-1", MenuSource::Row, 12.0);
+	landed(
+		&mut app,
+		Answer::Written {
+			command: Command::Close,
+			mission_id: "m-1".to_owned(),
+			outcome: Ok(Mission {
+				branch: Some("feature/x".to_owned()),
+				..closed("m-1", MissionState::Closed, 5)
+			}),
+		},
+	);
+	let menu = shown_menu(&app).expect("an open menu");
+	assert_eq!(menu.facts.state, kit::MissionState::Closed);
+	assert!(menu.facts.has_branch);
+}
+
+#[test]
+fn stop_agent_cancels_the_turn_of_the_mission_agent_in_its_thread() {
+	let mut app = shown_panel(vec![mission("m-1", MissionState::Working, 1)]);
+	chosen(&mut app, "m-1", MenuAction::StopAgent);
+	assert_eq!(
+		last_call(&app),
+		Some(&Call::Stop { conversation_id: "thread-m-1".to_owned(), bot_id: "atlas".to_owned() })
+	);
+	landed(&mut app, Answer::Stopped(Ok(CancelOutcome::Cancelled)));
+	landed(&mut app, Answer::Stopped(Ok(CancelOutcome::NothingToCancel)));
+	assert!(notice_titles(&app).is_empty());
+}
+
+#[test]
+fn a_failed_stop_raises_the_stop_agent_notice() {
+	let mut app = shown_panel(vec![mission("m-1", MissionState::Working, 1)]);
+	landed(&mut app, Answer::Stopped(Err(refused("agent_cancel_turn"))));
+	landed(&mut app, Answer::Stopped(Ok(CancelOutcome::Failed { failures: Vec::new() })));
+	assert_eq!(
+		notice_titles(&app),
+		vec!["Couldn’t stop the coding session", "Couldn’t stop the coding session"]
+	);
+	assert!(state(&app).notices.iter().all(|notice| notice.kind == NoticeKind::Error));
+	assert!(state(&app).notices[0].description.is_some());
 }

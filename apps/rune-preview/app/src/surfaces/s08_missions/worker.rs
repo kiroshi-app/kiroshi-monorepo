@@ -1,6 +1,7 @@
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 
+use kiroshi_core::agent::contract::CancelOutcome;
 use kiroshi_core::missions::contract::{Mission, MissionDetail, MissionInSpace};
 use rune::Waker;
 use serde_json::json;
@@ -28,12 +29,28 @@ pub enum Call {
 	Feed { space_id: String, closed_since: i64 },
 	Detail(String),
 	Write { command: Command, mission_id: String },
+	Stop { conversation_id: String, bot_id: String },
 }
 
 pub enum Answer {
 	Feed { space_id: String, closed_since: i64, feed: Result<Vec<MissionInSpace>, HostError> },
 	Detail { mission_id: String, detail: Result<MissionDetail, HostError> },
 	Written { command: Command, mission_id: String, outcome: Result<Mission, HostError> },
+	Stopped(Result<CancelOutcome, HostError>),
+}
+
+fn stopped(
+	source: &Source,
+	conversation_id: &str,
+	bot_id: &str,
+) -> Result<CancelOutcome, HostError> {
+	let scope = json!({
+		"conversationId": conversation_id,
+		"botId": bot_id,
+		"runtimeSessionId": "",
+		"epoch": 0,
+	});
+	source.invoke("agent_cancel_turn", json!({ "scope": scope }))
 }
 
 fn answered(source: &Source, call: Call) -> Answer {
@@ -52,6 +69,9 @@ fn answered(source: &Source, call: Call) -> Answer {
 		Call::Write { command, mission_id } => {
 			let outcome = source.invoke(command.name(), json!({ "missionId": mission_id }));
 			Answer::Written { command, mission_id, outcome }
+		}
+		Call::Stop { conversation_id, bot_id } => {
+			Answer::Stopped(stopped(source, &conversation_id, &bot_id))
 		}
 	}
 }
