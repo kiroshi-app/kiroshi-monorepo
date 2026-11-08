@@ -288,6 +288,7 @@ pub struct MissionChanged {
 	pub mission_id: String,
 	pub state: MissionState,
 	pub is_agent_running: bool,
+	pub status: Option<kiroshi_core::missions::contract::MissionStatus>,
 }
 
 #[derive(Clone, Debug, Deserialize)]

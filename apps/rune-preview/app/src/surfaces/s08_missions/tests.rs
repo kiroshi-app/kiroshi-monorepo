@@ -1,6 +1,6 @@
 use kiroshi_core::missions::contract::{
 	Mission, MissionDetail, MissionEvent, MissionEventKind, MissionInSpace, MissionLiveness,
-	MissionState, Ticket,
+	MissionState, MissionStatus, Ticket,
 };
 use kiroshi_rune_kit::surfaces::s04_boot::notice::NoticeKind;
 use kiroshi_rune_kit::surfaces::s08_missions::{self as kit, CopyKind, EventKind, MissionsEvent};
@@ -152,7 +152,12 @@ fn notice_titles(app: &App) -> Vec<&str> {
 }
 
 fn change_of(mission_id: &str, state: model::MissionState) -> model::MissionChanged {
-	model::MissionChanged { mission_id: mission_id.to_owned(), state, is_agent_running: false }
+	model::MissionChanged {
+		mission_id: mission_id.to_owned(),
+		state,
+		is_agent_running: false,
+		status: None,
+	}
 }
 
 fn feed_calls(app: &App) -> usize {
@@ -347,6 +352,7 @@ fn a_mission_change_moves_the_panel_the_header_and_the_cards_then_rereads_the_de
 		mission_id: "m-1".to_owned(),
 		state: model::MissionState::WaitingHuman,
 		is_agent_running: false,
+		status: None,
 	};
 	changed(&mut app, &change);
 	assert_eq!(listed_state(&app, "m-1"), Some(MissionState::WaitingHuman));
@@ -365,11 +371,109 @@ fn a_running_agent_reads_as_working_once_its_change_arrives() {
 		mission_id: "m-1".to_owned(),
 		state: model::MissionState::WaitingBot,
 		is_agent_running: true,
+		status: None,
 	};
 	changed(&mut app, &change);
 	let listed = state(&app).listed("m-1").expect("listed");
 	assert!(super::feed::is_working(listed));
 	assert!(super::is_animating(&app));
+}
+
+fn opened_with_a_card(id: &str) -> App {
+	let mut app = shown_panel(vec![mission(id, MissionState::Working, 1)]);
+	open(&mut app, &super::Opening::of(&mission(id, MissionState::Working, 1)));
+	read_detail(&mut app, mission(id, MissionState::Working, 1));
+	let card: model::Mission = serde_json::from_value(json!({
+		"id": id, "originConversationId": "room", "botId": "atlas",
+		"threadConversationId": format!("thread-{id}"), "objective": "Ship it", "ticket": {},
+		"tools": [], "state": "working", "isAgentRunning": false, "openedAt": 1,
+		"status": null, "lastActivity": null, "commitsAhead": null, "pullRequestUrl": null,
+	}))
+	.expect("a card fixture");
+	app.thread.as_mut().expect("the mission thread is open").missions.push(card);
+	app.surfaces.s08_missions.queued.clear();
+	app
+}
+
+fn change_read(event: serde_json::Value) -> model::MissionChanged {
+	serde_json::from_value(event).expect("a mission://changed payload")
+}
+
+fn statuses(app: &App, id: &str) -> (Option<MissionStatus>, Option<MissionStatus>) {
+	let listed = state(app).listed(id).and_then(|mission| mission.status.clone());
+	let opened = app.mission.as_ref().and_then(super::Opened::mission);
+	(listed, opened.and_then(|mission| mission.status.clone()))
+}
+
+fn running_signs(app: &App, id: &str) -> (bool, bool, bool) {
+	let listed = state(app).listed(id).is_some_and(super::feed::is_working);
+	let opened = app.mission.as_ref().and_then(super::Opened::mission);
+	let card =
+		app.thread.as_ref().and_then(|thread| thread.missions.iter().find(|card| card.id == id));
+	(
+		listed,
+		opened.is_some_and(super::feed::is_working),
+		card.is_some_and(|card| card.is_agent_running),
+	)
+}
+
+fn running_change(id: &str, is_agent_running: bool) -> model::MissionChanged {
+	model::MissionChanged { is_agent_running, ..change_of(id, model::MissionState::WaitingBot) }
+}
+
+#[test]
+fn a_change_carrying_a_status_shows_it_on_the_row_and_the_detail_before_any_reread_lands() {
+	let mut app = opened_with_a_card("m-1");
+	let change = change_read(json!({
+		"missionId": "m-1", "spaceId": SPACE, "state": "working", "stateSeq": 2,
+		"isAgentRunning": false, "status": { "text": "Tests green", "writtenAt": 42 },
+		"liveness": "idle", "workingBotIds": [], "lastActivityAt": null,
+	}));
+	changed(&mut app, &change);
+	let status = MissionStatus { text: "Tests green".to_owned(), written_at: 42 };
+	assert_eq!(statuses(&app, "m-1"), (Some(status.clone()), Some(status)));
+}
+
+#[test]
+fn a_change_carrying_a_null_status_clears_the_status_of_the_row_and_the_detail() {
+	let mut app = opened_with_a_card("m-1");
+	let written = MissionStatus { text: "Tests green".to_owned(), written_at: 42 };
+	changed(
+		&mut app,
+		&model::MissionChanged {
+			status: Some(written),
+			..change_of("m-1", model::MissionState::Working)
+		},
+	);
+	let change = change_read(json!({
+		"missionId": "m-1", "spaceId": SPACE, "state": "working", "stateSeq": 3,
+		"isAgentRunning": false, "status": null, "lastActivityAt": null,
+	}));
+	changed(&mut app, &change);
+	assert_eq!(statuses(&app, "m-1"), (None, None));
+}
+
+#[test]
+fn a_running_agent_shows_on_the_row_the_detail_and_the_card_then_leaves_them_when_it_stops() {
+	let mut app = opened_with_a_card("m-1");
+	changed(&mut app, &running_change("m-1", true));
+	assert_eq!(running_signs(&app, "m-1"), (true, true, true));
+	changed(&mut app, &running_change("m-1", false));
+	assert_eq!(running_signs(&app, "m-1"), (false, false, false));
+}
+
+#[test]
+fn a_change_of_a_mission_not_held_leaves_every_held_mission_as_it_was() {
+	let mut app = opened_with_a_card("m-1");
+	let change = model::MissionChanged {
+		is_agent_running: true,
+		status: Some(MissionStatus { text: "Elsewhere".to_owned(), written_at: 7 }),
+		..change_of("m-2", model::MissionState::Done)
+	};
+	changed(&mut app, &change);
+	assert_eq!(statuses(&app, "m-1"), (None, None));
+	assert_eq!(running_signs(&app, "m-1"), (false, false, false));
+	assert_eq!(listed_state(&app, "m-1"), Some(MissionState::Working));
 }
 
 #[test]
