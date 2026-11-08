@@ -1,0 +1,274 @@
+use kiroshi_core::library::contract::{LibraryItem, LibraryItemKind};
+use rune::{El, TextEdit, col};
+
+use kiroshi_rune_kit::strings::{Language, common};
+use kiroshi_rune_kit::surfaces::s14_library::{
+	Agent, BarActions, DocumentBar, DocumentPanelEvent, EditorBlock, ItemEvent, ItemLook,
+	LibraryItem as Tile, LibraryPanel, LightboxImage, LightboxLook, PanelActions, PanelLook,
+	PanelState, Unavailable, agent_caret, block_editor, delete_confirmation, document_bar,
+	document_column, document_panel, document_skeleton, failure_notice, grid_columns,
+	item_unavailable, library_panel, lightbox, new_document_dialog, presence, rows_of, title_field,
+};
+use kiroshi_rune_kit::tokens::Tokens;
+
+use super::blocks::is_editable;
+use super::document::{Document, Phase, title_of};
+use super::{Dialog, Listing, Preview, Shown, State, said};
+use crate::app::App;
+use crate::conversations::{now_ms, roster_timestamp};
+use crate::navigation::Route;
+
+pub const GRID: &str = "library-panel";
+
+const LANGUAGE: Language = Language::En;
+
+const DEFAULT_COLUMNS: usize = 4;
+
+const KIB: u64 = 1024;
+
+const PANEL_ACTIONS: PanelActions = PanelActions {
+	search: true,
+	import: false,
+	new_board: false,
+	new_document: true,
+	templates: true,
+};
+
+fn library(app: &mut App) -> &mut State {
+	&mut app.surfaces.s14_library
+}
+
+fn shown_field<'a>(app: &'a mut App, block: &str, row: usize) -> &'a mut TextEdit {
+	library(app).field_mut(false, block, row)
+}
+
+fn beside_field<'a>(app: &'a mut App, block: &str, row: usize) -> &'a mut TextEdit {
+	library(app).field_mut(true, block, row)
+}
+
+fn title_edit(app: &mut App) -> &mut TextEdit {
+	library(app).title_mut()
+}
+
+fn query_edit(app: &mut App) -> &mut TextEdit {
+	library(app).query_mut()
+}
+
+fn size_of(bytes: u64) -> String {
+	match bytes {
+		_ if bytes < KIB => format!("{bytes} B"),
+		_ if bytes < KIB * KIB => format!("{} KB", bytes / KIB),
+		_ => format!("{:.1} MB", bytes as f64 / (KIB * KIB) as f64),
+	}
+}
+
+fn detail_of(item: &LibraryItem, now: i64) -> String {
+	let format = item.name.rsplit_once('.').map(|(_, extension)| extension.to_uppercase());
+	let size = size_of(item.bytes);
+	let edited = roster_timestamp(item.modified_at, now);
+	format.into_iter().chain([size, edited]).collect::<Vec<_>>().join(" · ")
+}
+
+fn tile<'a>(state: &'a State, item: &'a LibraryItem, detail: &'a str) -> Tile<'a> {
+	let look = match (item.kind, state.previews.get(&item.name)) {
+		(LibraryItemKind::Image, Some(Preview::Image(image))) => ItemLook::Image(Some(image)),
+		(LibraryItemKind::Image, _) => ItemLook::Image(None),
+		(_, Some(Preview::Excerpt(excerpt))) => ItemLook::Page(excerpt),
+		(_, _) => ItemLook::Page(""),
+	};
+	Tile { id: &item.name, name: title_of(&item.name), detail, look, import_progress: None }
+}
+
+fn importing_tile(name: &str) -> Tile<'_> {
+	Tile { id: name, name, detail: "", look: ItemLook::Page(""), import_progress: Some(0.0) }
+}
+
+fn panel_view(state: &State, t: &Tokens, width: Option<f32>) -> El {
+	let items = match &state.listing {
+		Listing::Failed => {
+			let retry = |app: &mut App| library(app).retry_list();
+			let name = said(common::library::TITLE);
+			return item_unavailable(t, LANGUAGE, Unavailable::Unreadable, &name, retry);
+		}
+		Listing::Idle | Listing::Loading => &[][..],
+		Listing::Loaded(items) => items.as_slice(),
+	};
+	let now = now_ms();
+	let shown: Vec<&LibraryItem> =
+		items.iter().filter(|item| super::matches_query(item, &state.query.text)).collect();
+	let details: Vec<String> = shown.iter().map(|item| detail_of(item, now)).collect();
+	let tiles: Vec<Tile> = state
+		.importing
+		.iter()
+		.map(|name| importing_tile(name))
+		.chain(shown.iter().zip(&details).map(|(item, detail)| tile(state, item, detail)))
+		.collect();
+	let is_loading = matches!(state.listing, Listing::Idle | Listing::Loading);
+	let panel = LibraryPanel {
+		state: if is_loading { PanelState::Loading } else { PanelState::Ready },
+		items: &tiles,
+		filter: state.filter,
+		query: &state.query,
+		actions: PANEL_ACTIONS,
+		columns: width.map_or(DEFAULT_COLUMNS, grid_columns),
+	};
+	library_panel(t, LANGUAGE, &panel, query_edit, |app: &mut App, event| {
+		library(app).handle_library(event)
+	})
+}
+
+fn presence_of(app: &App, t: &Tokens, document: &Document, is_beside: bool) -> Option<El> {
+	let names: Vec<(String, Option<f32>)> = document
+		.agents()
+		.map(|writer| {
+			let name =
+				app.agent_name(&writer.id).or_else(|| writer.name.clone()).unwrap_or_default();
+			let hue = app.agent_hue(&writer.id).or(writer.hue.map(f32::from));
+			(name, hue)
+		})
+		.collect();
+	let people: Vec<&str> = document.people().collect();
+	if names.is_empty() && people.is_empty() {
+		return None;
+	}
+	let agents: Vec<Agent> = names.iter().map(|(name, hue)| Agent { name, hue: *hue }).collect();
+	let stop = move |app: &mut App| library(app).stop_all(is_beside);
+	Some(presence(t, LANGUAGE, &agents, &people, (!agents.is_empty()).then_some(stop)))
+}
+
+fn editor(app: &App, t: &Tokens, document: &Document, is_beside: bool) -> El {
+	let blocks = &document.blocks;
+	let placeholder = said(common::library::templates::blank::PLACEHOLDER);
+	let is_blank = blocks.len() == 1 && blocks[0].source.is_empty();
+	let mut views: Vec<EditorBlock> = blocks
+		.iter()
+		.map(|block| {
+			let kind = block.kind();
+			let lines = rows_of(&block.source);
+			let rows = match is_editable(kind) {
+				true => lines
+					.iter()
+					.enumerate()
+					.filter_map(|(row, line)| Some((line.mark, document.field(&block.id, row)?)))
+					.collect(),
+				false => Vec::new(),
+			};
+			let mut view = EditorBlock::new(&block.id, kind, rows, &block.source);
+			view.depths = lines.iter().map(|line| line.depth).collect();
+			view.placeholder = is_blank.then_some(placeholder.as_str());
+			view
+		})
+		.collect();
+	for writer in document.agents() {
+		let Some(id) = document.block_of_writer(writer) else { continue };
+		let name = app.agent_name(&writer.id).or_else(|| writer.name.clone()).unwrap_or_default();
+		let hue = app.agent_hue(&writer.id).or(writer.hue.map(f32::from));
+		if let Some(view) = views.iter_mut().find(|view| view.id == id) {
+			view.end = Some(agent_caret(t, Agent { name: &name, hue }));
+		}
+	}
+	let access = if is_beside { beside_field } else { shown_field };
+	let on = move |app: &mut App, event| library(app).handle_block(is_beside, event);
+	let (body, _) = block_editor(t, LANGUAGE, &mut views, None, access, on);
+	body
+}
+
+fn document_screen(app: &App, t: &Tokens, document: &Document) -> El {
+	let name = title_of(&document.target.name);
+	let back = |app: &mut App| library(app).handle_document_bar(ItemEvent::Back);
+	match document.phase {
+		Phase::Opening => return document_skeleton(t, LANGUAGE),
+		Phase::Failed => return item_unavailable(t, LANGUAGE, Unavailable::Unreadable, name, back),
+		Phase::Open(_) => {}
+	}
+	let bar = DocumentBar {
+		name,
+		is_read_only: false,
+		presence: presence_of(app, t, document, false),
+		actions: BarActions::NONE,
+	};
+	let bar = document_bar(t, LANGUAGE, bar, |app: &mut App, event| {
+		library(app).handle_document_bar(event)
+	});
+	let heading = title_field(t, LANGUAGE, &document.title, title_edit)
+		.on_submit(|app: &mut App, _| library(app).confirm_title());
+	let state = &app.surfaces.s14_library;
+	let detail = state.listed(&document.target.name).map(|item| detail_of(item, now_ms()));
+	let body = editor(app, t, document, false);
+	let column = document_column(t, heading, &detail.unwrap_or_default(), body);
+	col().w_full().h_full().child(bar).child(column)
+}
+
+pub fn view(app: &App, t: &Tokens, width: Option<f32>) -> El {
+	let state = &app.surfaces.s14_library;
+	let body = match state.shown.as_ref() {
+		Some(Shown::Document(document)) => document_screen(app, t, document),
+		Some(Shown::Image(_)) | None => panel_view(state, t, width),
+	};
+	body.on_drop_files(|app: &mut App, paths, _| library(app).dropped(paths))
+}
+
+pub fn panel(app: &App, t: &Tokens, room: f32) -> Option<El> {
+	let state = &app.surfaces.s14_library;
+	let document = state.beside.as_ref()?;
+	let title = title_of(&document.target.name);
+	let close = |app: &mut App| library(app).handle_panel(DocumentPanelEvent::Close);
+	let body = match document.phase {
+		Phase::Opening => document_skeleton(t, LANGUAGE),
+		Phase::Failed => item_unavailable(t, LANGUAGE, Unavailable::Unreadable, title, close),
+		Phase::Open(_) => editor(app, t, document, true),
+	};
+	let look = PanelLook { width: state.panel_width(room), ..PanelLook::document(title) };
+	let presence = presence_of(app, t, document, true);
+	Some(document_panel(t, LANGUAGE, look, presence, body, |app: &mut App, event| {
+		library(app).handle_panel(event)
+	}))
+}
+
+fn lightbox_layer(state: &State) -> Option<El> {
+	let Some(Shown::Image(shown)) = state.shown.as_ref() else { return None };
+	let images = state.shown_images();
+	let position = images.iter().position(|name| *name == shown.name).map_or(0, |at| at + 1);
+	let detail =
+		state.listed(&shown.name).map(|item| detail_of(item, now_ms())).unwrap_or_default();
+	let image =
+		LightboxImage { name: title_of(&shown.name), detail: &detail, image: shown.image.as_ref() };
+	let look = LightboxLook {
+		position,
+		count: images.len(),
+		zoom_percent: shown.zoom_percent,
+		actions: BarActions::NONE,
+	};
+	Some(lightbox(LANGUAGE, &image, look, |app: &mut App, event| {
+		library(app).handle_lightbox(event)
+	}))
+}
+
+fn dialog_layers(state: &State, t: &Tokens) -> Vec<El> {
+	match state.dialog.as_ref() {
+		Some(Dialog::NewDocument(selected)) => {
+			new_document_dialog(t, LANGUAGE, *selected, |app: &mut App, event| {
+				library(app).handle_new_document(event)
+			})
+		}
+		Some(Dialog::Delete { target, has_failed }) => {
+			let name = title_of(&target.name);
+			delete_confirmation(t, LANGUAGE, name, *has_failed, |app: &mut App, is_confirmed| {
+				library(app).confirm_delete(is_confirmed)
+			})
+		}
+		None => Vec::new(),
+	}
+}
+
+pub fn layers(app: &App, t: &Tokens) -> Vec<El> {
+	let state = &app.surfaces.s14_library;
+	let notice = state.notice.as_ref().map(|notice| {
+		failure_notice(t, LANGUAGE, &notice.title, &notice.description)
+			.on_press(|app: &mut App| library(app).dismiss_notice())
+	});
+	if app.navigation.main_route() != Route::Library {
+		return notice.into_iter().collect();
+	}
+	lightbox_layer(state).into_iter().chain(dialog_layers(state, t)).chain(notice).collect()
+}

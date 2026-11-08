@@ -15,7 +15,7 @@ use kiroshi_rune_preview::host::Profile;
 use kiroshi_rune_preview::navigation::Route;
 use kiroshi_rune_preview::surfaces::{
 	s01_chrome, s02_rail, s03_roster, s04_boot, s05_thread, s09_routines, s10_agent_settings,
-	s11_applications, s12_person_settings, s13_space_settings, s15_boards,
+	s11_applications, s12_person_settings, s13_space_settings, s14_library, s15_boards,
 };
 use kiroshi_rune_preview::{composer, conversations, local, menu, scenes, smoke, spike};
 
@@ -62,8 +62,10 @@ fn view(s: &App, cx: &mut Cx<App>) -> El {
 		| Route::Thread
 		| Route::Composer
 		| Route::Approvals
-		| Route::Missions
-		| Route::Library => el(),
+		| Route::Missions => el(),
+		Route::Library => {
+			s14_library::view(s, &t, cx.layout(s14_library::GRID).map(|rect| rect[2]))
+		}
 		Route::SpaceSettings => s13_space_settings::view(s, &t),
 		Route::Routines => s09_routines::view(s, &t),
 		Route::Applications => s11_applications::view(s, &t),
@@ -78,7 +80,8 @@ fn view(s: &App, cx: &mut Cx<App>) -> El {
 		.chain(s04_boot::layers(s, &t))
 		.chain(s11_applications::layers(s, &t))
 		.chain(s03_roster::layers(s, &t))
-		.chain(s13_space_settings::layers(s, &t));
+		.chain(s13_space_settings::layers(s, &t))
+		.chain(s14_library::layers(s, &t));
 	rune_kit::root(body, layers)
 }
 
@@ -116,6 +119,7 @@ fn setup(s: &mut App, waker: Waker) {
 	s.surfaces.s02_rail.attach(waker.clone());
 	s.surfaces.s03_roster.attach(waker.clone());
 	s.surfaces.s13_space_settings.attach(waker.clone());
+	s.surfaces.s14_library.attach(waker.clone());
 	s.setup(waker);
 }
 
@@ -129,6 +133,7 @@ fn poll(s: &mut App, seconds: f64, tx: &mut Tx) -> bool {
 	let changed = s02_rail::poll(s) || changed;
 	let changed = s03_roster::poll(s) || changed;
 	let changed = s13_space_settings::poll(s) || changed;
+	let changed = s14_library::poll(s) || changed;
 	let changed = open_held(s, &mut held_links()) || changed;
 	if let Some(after) = s.focus_wake() {
 		tx.wake_after(after);
@@ -148,6 +153,9 @@ fn on_key(s: &mut App, event: &KeyEvent, _: &mut Tx) -> bool {
 		return true;
 	}
 	if s13_space_settings::key_pressed(s, event) {
+		return true;
+	}
+	if s14_library::key_pressed(s, event) {
 		return true;
 	}
 	if shell::is_sidebar_toggle(event) {
