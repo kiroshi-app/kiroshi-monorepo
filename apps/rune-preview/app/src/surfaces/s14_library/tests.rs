@@ -25,7 +25,7 @@ use super::editing::SEND_INTERVAL;
 use super::imports::{self, HOSTED_LIMIT, JOINED_LIMIT};
 use super::session::Session;
 use super::worker::{Answer, Call, Due, Target, free_name};
-use super::{Dialog, Heard, Listing, Shown, State, heard_of};
+use super::{Dialog, Heard, Listing, Shown, State, THREAD_MIN_WIDTH, heard_of};
 use crate::app::{App, Person, Ready, Workspace};
 use crate::events::{HostEvent, parsed};
 use crate::host::{Host, HostError};
@@ -260,9 +260,15 @@ fn the_panel_leaves_the_thread_its_320_unless_the_panel_would_fall_under_its_flo
 	state.open_beside("brief.md");
 
 	assert_eq!(state.panel_width(1_000.0), 680.0);
-	assert_eq!(state.panel_width(320.0 + DOCUMENT_PANEL_MIN_WIDTH), DOCUMENT_PANEL_MIN_WIDTH);
+	assert_eq!(
+		state.panel_width(THREAD_MIN_WIDTH + DOCUMENT_PANEL_MIN_WIDTH),
+		DOCUMENT_PANEL_MIN_WIDTH
+	);
 	assert_eq!(state.panel_width(600.0), DOCUMENT_PANEL_MIN_WIDTH);
-	assert_eq!(state.panel_width(320.0 + DOCUMENT_PANEL_MAX_WIDTH + 1.0), DOCUMENT_PANEL_MAX_WIDTH);
+	assert_eq!(
+		state.panel_width(THREAD_MIN_WIDTH + DOCUMENT_PANEL_MAX_WIDTH + 1.0),
+		DOCUMENT_PANEL_MAX_WIDTH
+	);
 
 	state.dragged_panel(DOCUMENT_PANEL_MAX_WIDTH);
 	assert_eq!(state.panel_width(1_000.0), 680.0);
