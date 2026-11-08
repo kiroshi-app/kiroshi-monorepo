@@ -7,7 +7,8 @@ use kiroshi_rune_kit::surfaces::s04_boot::notice::NoticeKind;
 use kiroshi_rune_kit::surfaces::s08_missions::{
 	self as kit, CopyKind, EventKind, MenuAction, MenuSource, MissionsEvent,
 };
-use rune::PointerPress;
+use kiroshi_rune_kit::tokens::Tokens;
+use rune::{Cx, El, Env, Key, KeyEvent, Mods, PointerPress, Runtime, TextEdit, el};
 use serde_json::json;
 
 use chrono::{FixedOffset, TimeZone};
@@ -24,6 +25,7 @@ use crate::conversations::now_ms;
 use crate::host::{self, Host, HostError, Profile};
 use crate::model;
 use crate::source::Source;
+use crate::surfaces::s06_composer;
 
 const SPACE: &str = "perso";
 
@@ -672,11 +674,67 @@ fn copy_and_open_pull_request_hand_their_value_to_the_window() {
 	assert_eq!(notice_titles(&app), vec!["Couldn’t copy to the clipboard"]);
 }
 
+fn opened_mission(app: &App) -> Option<&str> {
+	app.mission.as_ref().map(|opened| opened.mission_id.as_str())
+}
+
+fn prompt_of<'a>(app: &'a mut App, conversation_id: &str) -> &'a mut TextEdit {
+	app.surfaces.s06_composer.edit_of(conversation_id)
+}
+
+fn drafted(app: &mut App, conversation_id: &str, draft: &str) {
+	let prompt = prompt_of(app, conversation_id);
+	prompt.replace_text(draft);
+	prompt.set_caret(0);
+}
+
+fn composer_view(app: &App, _: &mut Cx<App>) -> El {
+	let body = s06_composer::view(app, &Tokens::new(false)).unwrap_or_else(el);
+	rune_kit::root(body, Vec::new())
+}
+
 #[test]
-fn message_agent_and_answer_open_the_mission() {
+fn message_agent_and_answer_open_the_mission_with_the_caret_after_the_draft_of_its_prompt() {
+	for action in [MenuAction::MessageAgent, MenuAction::Answer] {
+		let mut app = shown_panel(vec![mission("m-1", MissionState::WaitingHuman, 1)]);
+		drafted(&mut app, "thread-m-1", "half a reply");
+		chosen(&mut app, "m-1", action);
+		assert_eq!(opened_mission(&app), Some("m-1"), "{action:?}");
+		let prompt = prompt_of(&mut app, "thread-m-1");
+		assert!(prompt.focused, "{action:?}");
+		assert_eq!(prompt.range(), ("half a reply".len(), "half a reply".len()), "{action:?}");
+	}
+}
+
+#[test]
+fn open_opens_the_mission_and_leaves_its_prompt_unfocused() {
 	let mut app = shown_panel(vec![mission("m-1", MissionState::WaitingHuman, 1)]);
-	chosen(&mut app, "m-1", MenuAction::Answer);
-	assert_eq!(app.mission.as_ref().map(|opened| opened.mission_id.as_str()), Some("m-1"));
+	chosen(&mut app, "m-1", MenuAction::Open);
+	assert_eq!(opened_mission(&app), Some("m-1"));
+	assert!(!prompt_of(&mut app, "thread-m-1").focused);
+}
+
+#[test]
+fn a_closed_mission_opens_at_its_blocked_prompt_without_focusing_it() {
+	for action in [MenuAction::MessageAgent, MenuAction::Answer] {
+		let mut app = shown_panel(vec![closed("m-1", MissionState::Done, HOUR)]);
+		chosen(&mut app, "m-1", action);
+		assert_eq!(opened_mission(&app), Some("m-1"), "{action:?}");
+		assert!(!prompt_of(&mut app, "thread-m-1").focused, "{action:?}");
+	}
+}
+
+#[test]
+fn the_first_key_typed_after_message_agent_or_answer_lands_in_the_mission_prompt() {
+	for action in [MenuAction::MessageAgent, MenuAction::Answer] {
+		let mut app = shown_panel(vec![mission("m-1", MissionState::WaitingHuman, 1)]);
+		chosen(&mut app, "m-1", action);
+		let mut runtime = Runtime::new(app, composer_view, (900.0, 600.0), Env::new(false, 1.0));
+		runtime.frame(0.0);
+		runtime.key(KeyEvent { key: Key::Text("y".to_owned()), mods: Mods::default() });
+		runtime.frame(1.0);
+		assert_eq!(prompt_of(&mut runtime.state, "thread-m-1").text, "y", "{action:?}");
+	}
 }
 
 #[test]
