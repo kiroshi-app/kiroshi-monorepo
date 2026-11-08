@@ -9,7 +9,7 @@ use kiroshi_rune_kit::surfaces::s05_thread::{
 
 use super::conversation::{Conversation, Live, Phase};
 use crate::conversations::roster_timestamp;
-use crate::mission::is_summons;
+use crate::surfaces::s08_missions::is_summons;
 
 pub const WORK_LINE: &str = "work";
 
@@ -129,7 +129,7 @@ fn state_of(completion: TranscriptCompletion) -> TurnState {
 	}
 }
 
-fn quote_of(link: &ReplyLink, open: &Conversation, roster: &[Agent]) -> Option<Quote> {
+pub fn quote_of(link: &ReplyLink, open: &Conversation, roster: &[Agent]) -> Option<Quote> {
 	let quoted = open.messages.iter().find(|message| message.id == link.message_id);
 	let excerpt =
 		link.excerpt.clone().or_else(|| quoted.map(|message| message.content.trim().to_owned()))?;

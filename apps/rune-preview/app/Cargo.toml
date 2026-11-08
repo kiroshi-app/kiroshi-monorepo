@@ -19,6 +19,7 @@ required-features = ["fake-claude"]
 
 [dependencies]
 base64 = "0.22"
+chrono = "0.4"
 kiroshi-rune-kit = { path = "../kit" }
 kiroshi-rune-os = { path = "../os" }
 rune.workspace = true
