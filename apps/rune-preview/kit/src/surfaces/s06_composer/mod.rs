@@ -86,12 +86,6 @@ pub enum Reach {
 	Blank,
 }
 
-impl Reach {
-	pub fn takes_input(self) -> bool {
-		self == Reach::Live
-	}
-}
-
 pub const CONTROL: f32 = SPACING * 8.0;
 pub const SMALL_CONTROL: f32 = SPACING * 6.0;
 pub const GLYPH: f32 = SPACING * 4.0;

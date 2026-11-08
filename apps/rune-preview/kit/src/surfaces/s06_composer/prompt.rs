@@ -70,16 +70,6 @@ impl<'a> PromptInput<'a> {
 		self.has_payload() && !self.is_blocked()
 	}
 
-	pub fn leading_reach(&self) -> Reach {
-		if self.offline.is_some() {
-			Reach::Blank
-		} else if self.disabled {
-			Reach::Inert
-		} else {
-			Reach::Live
-		}
-	}
-
 	fn send_reach(&self) -> Reach {
 		if self.offline.is_some() {
 			Reach::Blank

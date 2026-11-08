@@ -20,30 +20,29 @@ const QUEUE_WIDTH: f32 = SPACING * 180.0;
 const MENU_BOX: f32 = SPACING * 128.0;
 const SHRUNK_COMPOSER: f32 = 249.0;
 
-pub const COMPOSER: (f32, f32) = (640.0, 200.0);
-pub const TALL: (f32, f32) = (640.0, 320.0);
-pub const PAIR: (f32, f32) = (640.0, 360.0);
-pub const MENU: (f32, f32) = (640.0, 560.0);
-pub const PICKER: (f32, f32) = (560.0, 480.0);
-pub const QUOTED: (f32, f32) = (720.0, 220.0);
-pub const QUEUE: (f32, f32) = (760.0, 200.0);
-pub const CONTROL: (f32, f32) = (240.0, 120.0);
-pub const NARROW_CARD: (f32, f32) = (400.0, 200.0);
+const COMPOSER: (f32, f32) = (640.0, 200.0);
+const TALL: (f32, f32) = (640.0, 320.0);
+const PAIR: (f32, f32) = (640.0, 360.0);
+const MENU: (f32, f32) = (640.0, 560.0);
+const PICKER: (f32, f32) = (560.0, 480.0);
+const QUOTED: (f32, f32) = (720.0, 220.0);
+const QUEUE: (f32, f32) = (760.0, 200.0);
+const CONTROL: (f32, f32) = (240.0, 120.0);
+const NARROW_CARD: (f32, f32) = (400.0, 200.0);
 
-pub const DRAFT: &str = "Summarise the release notes for v0.1";
-pub const FILLING_DRAFT: &str =
-	"Summarise the release notes and flag every public export that moved";
-pub const WRAPPED_DRAFT: &str =
+const DRAFT: &str = "Summarise the release notes for v0.1";
+const FILLING_DRAFT: &str = "Summarise the release notes and flag every public export that moved";
+const WRAPPED_DRAFT: &str =
 	"Summarise the release notes for v0.1 and tell me which entries changed a public export";
-pub const LONG_DRAFT: &str = "Review the release branch and write the changelog for v0.1.\n\nCover the desktop shell, the design foundations and the chat surface.\nGroup the entries by package, newest first, and keep each line under\ntwelve words so the notes stay scannable in the terminal.\n\nFlag anything that changes a public export, then list the follow-ups\nwe deliberately left out of this milestone.\n\nName the packages that gained a public surface, and say in one line\nwhat a reader of the notes is expected to do with each entry.";
-pub const QUOTE_REPLY: &str = "Can we start this at 14:00? Lunch runs long.";
-pub const STAGED_DRAFT: &str = "Compare these two against the spec";
-pub const REPLY_PROMPT: &str = "Then what happens to the invites table?";
-pub const NAMED_PROMPT: &str = "Then what happens to the invites table? Twice?";
-pub const SLASH: &str = "/";
-pub const SLASH_QUERY: &str = "/co";
-pub const AT: &str = "@";
-pub const AT_QUERY: &str = "@do";
+const LONG_DRAFT: &str = "Review the release branch and write the changelog for v0.1.\n\nCover the desktop shell, the design foundations and the chat surface.\nGroup the entries by package, newest first, and keep each line under\ntwelve words so the notes stay scannable in the terminal.\n\nFlag anything that changes a public export, then list the follow-ups\nwe deliberately left out of this milestone.\n\nName the packages that gained a public surface, and say in one line\nwhat a reader of the notes is expected to do with each entry.";
+const QUOTE_REPLY: &str = "Can we start this at 14:00? Lunch runs long.";
+const STAGED_DRAFT: &str = "Compare these two against the spec";
+const REPLY_PROMPT: &str = "Then what happens to the invites table?";
+const NAMED_PROMPT: &str = "Then what happens to the invites table? Twice?";
+const SLASH: &str = "/";
+const SLASH_QUERY: &str = "/co";
+const AT: &str = "@";
+const AT_QUERY: &str = "@do";
 
 const ADD_CONTEXT: &str = "Add context";
 const REPLY_TO_BEACON: &str = "Reply to Beacon";
@@ -295,11 +294,11 @@ const QUEUED_TWO: [QueuedMessage; 2] = [
 	QueuedMessage { id: "top", text: "Top three only." },
 ];
 
-pub const SEND_KEY: &str = "composer-send";
-pub const HOVERED_ATTACH_KEY: &str = "attach-hover";
-pub const SECOND_QUEUED_KEY: &str = "queue-item-top";
+const SEND_KEY: &str = "composer-send";
+const HOVERED_ATTACH_KEY: &str = "attach-hover";
+const SECOND_QUEUED_KEY: &str = "queue-item-top";
 
-pub const fn scene(
+const fn scene(
 	id: &'static str,
 	size: (f32, f32),
 	typed: &'static str,
@@ -310,11 +309,11 @@ pub const fn scene(
 	Scene { id, size, tabs, pointer, typed, view }
 }
 
-pub const fn fixed(id: &'static str, size: (f32, f32), view: SceneView) -> Scene {
+const fn fixed(id: &'static str, size: (f32, f32), view: SceneView) -> Scene {
 	Scene { id, size, tabs: 0, pointer: Pointer::Away, typed: "", view }
 }
 
-pub const fn drafted(
+const fn drafted(
 	id: &'static str,
 	size: (f32, f32),
 	typed: &'static str,
@@ -323,7 +322,7 @@ pub const fn drafted(
 	Scene { id, size, tabs: 0, pointer: Pointer::Away, typed, view }
 }
 
-pub const fn tabbed(
+const fn tabbed(
 	id: &'static str,
 	size: (f32, f32),
 	typed: &'static str,
@@ -333,7 +332,7 @@ pub const fn tabbed(
 	Scene { id, size, tabs, pointer: Pointer::Away, typed, view }
 }
 
-pub const fn hovered(
+const fn hovered(
 	id: &'static str,
 	size: (f32, f32),
 	typed: &'static str,
@@ -402,25 +401,25 @@ fn with_leading(edit: &TextEdit, width: f32, leading: El) -> PromptInput<'_> {
 	PromptInput { leading: vec![leading], ..PromptInput::new(edit, width) }
 }
 
-pub fn input_empty(t: &Tokens, s: &SceneState) -> El {
+fn input_empty(t: &Tokens, s: &SceneState) -> El {
 	centered(t, composer(t, PromptInput::new(&s.edit, WIDTH)), Vec::new())
 }
 
-pub fn input_with_controls(t: &Tokens, s: &SceneState) -> El {
+fn input_with_controls(t: &Tokens, s: &SceneState) -> El {
 	centered(t, composer(t, with_leading(&s.edit, WIDTH, add_context(t))), Vec::new())
 }
 
-pub fn input_disabled(t: &Tokens, s: &SceneState) -> El {
+fn input_disabled(t: &Tokens, s: &SceneState) -> El {
 	let input = PromptInput { disabled: true, ..PromptInput::new(&s.edit, WIDTH) };
 	centered(t, composer(t, input), Vec::new())
 }
 
-pub fn input_themes_disabled(t: &Tokens, s: &SceneState) -> El {
+fn input_themes_disabled(t: &Tokens, s: &SceneState) -> El {
 	let input = PromptInput { disabled: true, ..with_leading(&s.edit, WIDTH, add_context(t)) };
 	centered(t, composer(t, input), Vec::new())
 }
 
-pub fn input_states(t: &Tokens, s: &SceneState) -> El {
+fn input_states(t: &Tokens, s: &SceneState) -> El {
 	let idle = TextEdit::new("");
 	let disabled = TextEdit::new(DRAFT);
 	let idle_input = PromptInput { label: Some("Idle prompt"), ..PromptInput::new(&idle, WIDTH) };
@@ -438,7 +437,7 @@ pub fn input_states(t: &Tokens, s: &SceneState) -> El {
 	)
 }
 
-pub fn input_with_attachments(t: &Tokens, s: &SceneState) -> El {
+fn input_with_attachments(t: &Tokens, s: &SceneState) -> El {
 	let input = PromptInput {
 		attachments: staged(t, &STAGED, Reach::Live),
 		..with_leading(&s.edit, WIDTH, attach(t, Reach::Live))
@@ -446,11 +445,11 @@ pub fn input_with_attachments(t: &Tokens, s: &SceneState) -> El {
 	centered(t, composer(t, input), Vec::new())
 }
 
-pub fn input_with_attach(t: &Tokens, s: &SceneState) -> El {
+fn input_with_attach(t: &Tokens, s: &SceneState) -> El {
 	centered(t, composer(t, with_leading(&s.edit, WIDTH, attach(t, Reach::Live))), Vec::new())
 }
 
-pub fn input_replies_and_attachments(t: &Tokens, s: &SceneState) -> El {
+fn input_replies_and_attachments(t: &Tokens, s: &SceneState) -> El {
 	let replies = [ATLAS_REPLY, BEACON_REPLY];
 	let input = PromptInput {
 		replies: &replies,
@@ -470,7 +469,7 @@ fn quote(text: &str) -> SelectionQuote<'_> {
 	SelectionQuote { agent: "Atlas", text }
 }
 
-pub fn input_with_quote(t: &Tokens, s: &SceneState) -> El {
+fn input_with_quote(t: &Tokens, s: &SceneState) -> El {
 	let input = PromptInput {
 		quote: Some(quote(QUOTE_TEXT)),
 		..with_leading(&s.edit, WIDTH, attach(t, Reach::Live))
@@ -478,7 +477,7 @@ pub fn input_with_quote(t: &Tokens, s: &SceneState) -> El {
 	centered(t, composer(t, input), Vec::new())
 }
 
-pub fn input_with_quote_and_attachments(t: &Tokens, s: &SceneState) -> El {
+fn input_with_quote_and_attachments(t: &Tokens, s: &SceneState) -> El {
 	let input = PromptInput {
 		quote: Some(quote(QUOTE_TEXT)),
 		attachments: staged(t, &STAGED, Reach::Live),
@@ -487,7 +486,7 @@ pub fn input_with_quote_and_attachments(t: &Tokens, s: &SceneState) -> El {
 	centered(t, composer(t, input), Vec::new())
 }
 
-pub fn input_with_long_quote(t: &Tokens, s: &SceneState) -> El {
+fn input_with_long_quote(t: &Tokens, s: &SceneState) -> El {
 	let input = PromptInput {
 		quote: Some(quote(LONG_QUOTE)),
 		..with_leading(&s.edit, NARROW, attach(t, Reach::Live))
@@ -495,7 +494,7 @@ pub fn input_with_long_quote(t: &Tokens, s: &SceneState) -> El {
 	centered(t, composer(t, input), Vec::new())
 }
 
-pub fn input_with_quote_blocked(t: &Tokens, s: &SceneState) -> El {
+fn input_with_quote_blocked(t: &Tokens, s: &SceneState) -> El {
 	let disabled = TextEdit::new(DRAFT);
 	let offline = PromptInput {
 		quote: Some(quote(QUOTE_TEXT)),
@@ -510,7 +509,7 @@ pub fn input_with_quote_blocked(t: &Tokens, s: &SceneState) -> El {
 	centered(t, stacked([composer(t, offline), composer(t, blocked)]), Vec::new())
 }
 
-pub fn input_marked_from_outside(t: &Tokens, s: &SceneState) -> El {
+fn input_marked_from_outside(t: &Tokens, s: &SceneState) -> El {
 	let disabled = TextEdit::new(DRAFT);
 	let marked =
 		PromptInput { drop_target: true, ..with_leading(&s.edit, WIDTH, attach(t, Reach::Live)) };
@@ -523,7 +522,7 @@ pub fn input_marked_from_outside(t: &Tokens, s: &SceneState) -> El {
 	centered(t, stacked([composer(t, marked), composer(t, blocked)]), Vec::new())
 }
 
-pub fn input_files_only(t: &Tokens, s: &SceneState) -> El {
+fn input_files_only(t: &Tokens, s: &SceneState) -> El {
 	let input = PromptInput {
 		attachments: staged(t, &STAGED, Reach::Live),
 		..with_leading(&s.edit, WIDTH, attach(t, Reach::Live))
@@ -531,7 +530,7 @@ pub fn input_files_only(t: &Tokens, s: &SceneState) -> El {
 	centered(t, composer(t, input), Vec::new())
 }
 
-pub fn input_offline(t: &Tokens, s: &SceneState) -> El {
+fn input_offline(t: &Tokens, s: &SceneState) -> El {
 	let input = PromptInput {
 		offline: Some(OFFLINE),
 		..with_leading(&s.edit, WIDTH, attach(t, Reach::Blank))
@@ -539,11 +538,11 @@ pub fn input_offline(t: &Tokens, s: &SceneState) -> El {
 	centered(t, composer(t, input), Vec::new())
 }
 
-pub fn attach_default(t: &Tokens, _: &SceneState) -> El {
+fn attach_default(t: &Tokens, _: &SceneState) -> El {
 	centered(t, attach(t, Reach::Live), Vec::new())
 }
 
-pub fn attach_states(t: &Tokens, _: &SceneState) -> El {
+fn attach_states(t: &Tokens, _: &SceneState) -> El {
 	let control =
 		|key: &'static str, reach| attach_control(scope(t), key, reach, ComposerIntent::Attach);
 	centered(
@@ -563,15 +562,15 @@ fn listed(t: &Tokens, content: Option<El>, width: f32) -> El {
 	centered(t, col().w(width).children(content), Vec::new())
 }
 
-pub fn attachments_default(t: &Tokens, _: &SceneState) -> El {
+fn attachments_default(t: &Tokens, _: &SceneState) -> El {
 	listed(t, staged(t, &STAGED, Reach::Live), WIDTH)
 }
 
-pub fn attachments_long_content(t: &Tokens, _: &SceneState) -> El {
+fn attachments_long_content(t: &Tokens, _: &SceneState) -> El {
 	listed(t, staged(t, &LONG_STAGED, Reach::Live), WIDTH)
 }
 
-pub fn attachments_empty(t: &Tokens, _: &SceneState) -> El {
+fn attachments_empty(t: &Tokens, _: &SceneState) -> El {
 	listed(t, staged(t, &[], Reach::Live), WIDTH)
 }
 
@@ -579,23 +578,23 @@ fn replies(t: &Tokens, chips: &[ReplyChip], width: f32) -> El {
 	listed(t, Some(reply_list(scope(t), chips, Reach::Live)), width)
 }
 
-pub fn attachments_reply_excerpt(t: &Tokens, _: &SceneState) -> El {
+fn attachments_reply_excerpt(t: &Tokens, _: &SceneState) -> El {
 	replies(t, &[EXCERPT_REPLY], WIDTH)
 }
 
-pub fn attachments_reply_whole(t: &Tokens, _: &SceneState) -> El {
+fn attachments_reply_whole(t: &Tokens, _: &SceneState) -> El {
 	replies(t, &[WHOLE_REPLY], WIDTH)
 }
 
-pub fn attachments_two_replies(t: &Tokens, _: &SceneState) -> El {
+fn attachments_two_replies(t: &Tokens, _: &SceneState) -> El {
 	replies(t, &[EXCERPT_REPLY, WHOLE_REPLY], WIDTH)
 }
 
-pub fn attachments_reply_unbreakable(t: &Tokens, _: &SceneState) -> El {
+fn attachments_reply_unbreakable(t: &Tokens, _: &SceneState) -> El {
 	replies(t, &[UNBREAKABLE_REPLY], WIDTH)
 }
 
-pub fn attachments_reply_unbreakable_narrow(t: &Tokens, _: &SceneState) -> El {
+fn attachments_reply_unbreakable_narrow(t: &Tokens, _: &SceneState) -> El {
 	replies(t, &[UNBREAKABLE_REPLY], NARROW)
 }
 
@@ -614,31 +613,31 @@ fn command_scene(t: &Tokens, s: &SceneState, list: &[Command], query: &str, acti
 	over_composer(t, s, command_menu(scope(t), list, query, active, SHRUNK_COMPOSER))
 }
 
-pub fn commands_default(t: &Tokens, s: &SceneState) -> El {
+fn commands_default(t: &Tokens, s: &SceneState) -> El {
 	command_scene(t, s, &commands(&NAMES), "", 0)
 }
 
-pub fn commands_described(t: &Tokens, s: &SceneState) -> El {
+fn commands_described(t: &Tokens, s: &SceneState) -> El {
 	command_scene(t, s, &DESCRIBED, "", 0)
 }
 
-pub fn commands_empty(t: &Tokens, s: &SceneState) -> El {
+fn commands_empty(t: &Tokens, s: &SceneState) -> El {
 	command_scene(t, s, &commands(&NAMES), "zzz", 0)
 }
 
-pub fn commands_filtered(t: &Tokens, s: &SceneState) -> El {
+fn commands_filtered(t: &Tokens, s: &SceneState) -> El {
 	command_scene(t, s, &commands(&NAMES), "co", 2)
 }
 
-pub fn commands_keyboard_travel(t: &Tokens, s: &SceneState) -> El {
+fn commands_keyboard_travel(t: &Tokens, s: &SceneState) -> El {
 	command_scene(t, s, &commands(&NAMES), "", 2)
 }
 
-pub fn commands_long_content(t: &Tokens, s: &SceneState) -> El {
+fn commands_long_content(t: &Tokens, s: &SceneState) -> El {
 	command_scene(t, s, &commands(&LONG_NAMES), "", LONG_NAMES.len() - 1)
 }
 
-pub fn commands_query_changed(t: &Tokens, s: &SceneState) -> El {
+fn commands_query_changed(t: &Tokens, s: &SceneState) -> El {
 	command_scene(t, s, &commands(&NAMES), "co", 0)
 }
 
@@ -667,35 +666,35 @@ fn mention_scene(t: &Tokens, s: &SceneState, mentioning: Mentioning) -> El {
 	over_composer(t, s, mention_menu(scope(t), &menu))
 }
 
-pub fn mentions_default(t: &Tokens, s: &SceneState) -> El {
+fn mentions_default(t: &Tokens, s: &SceneState) -> El {
 	mention_scene(t, s, MENTIONING)
 }
 
-pub fn mentions_filtered(t: &Tokens, s: &SceneState) -> El {
+fn mentions_filtered(t: &Tokens, s: &SceneState) -> El {
 	mention_scene(t, s, Mentioning { query: "a", active: 1, ..MENTIONING })
 }
 
-pub fn mentions_lead_filtered_out(t: &Tokens, s: &SceneState) -> El {
+fn mentions_lead_filtered_out(t: &Tokens, s: &SceneState) -> El {
 	mention_scene(t, s, Mentioning { query: "e", ..MENTIONING })
 }
 
-pub fn mentions_keyboard_travel(t: &Tokens, s: &SceneState) -> El {
+fn mentions_keyboard_travel(t: &Tokens, s: &SceneState) -> El {
 	mention_scene(t, s, Mentioning { active: 2, ..MENTIONING })
 }
 
-pub fn mentions_space_opened(t: &Tokens, s: &SceneState) -> El {
+fn mentions_space_opened(t: &Tokens, s: &SceneState) -> El {
 	mention_scene(t, s, Mentioning { candidates: &SPACE, ..MENTIONING })
 }
 
-pub fn mentions_space_queried(t: &Tokens, s: &SceneState) -> El {
+fn mentions_space_queried(t: &Tokens, s: &SceneState) -> El {
 	mention_scene(t, s, Mentioning { candidates: &SPACE, query: "AR", active: 1, ..MENTIONING })
 }
 
-pub fn mentions_space_matches_inside(t: &Tokens, s: &SceneState) -> El {
+fn mentions_space_matches_inside(t: &Tokens, s: &SceneState) -> El {
 	mention_scene(t, s, Mentioning { candidates: &SPACE, query: "atl", ..MENTIONING })
 }
 
-pub fn mentions_space_keyboard_travel(t: &Tokens, s: &SceneState) -> El {
+fn mentions_space_keyboard_travel(t: &Tokens, s: &SceneState) -> El {
 	let reached = super::menus::mention_matches(&mentionables(&SPACE), "e").len();
 	mention_scene(
 		t,
@@ -704,7 +703,7 @@ pub fn mentions_space_keyboard_travel(t: &Tokens, s: &SceneState) -> El {
 	)
 }
 
-pub fn mentions_long_content(t: &Tokens, s: &SceneState) -> El {
+fn mentions_long_content(t: &Tokens, s: &SceneState) -> El {
 	mention_scene(
 		t,
 		s,
@@ -712,15 +711,15 @@ pub fn mentions_long_content(t: &Tokens, s: &SceneState) -> El {
 	)
 }
 
-pub fn mentions_query_changed(t: &Tokens, s: &SceneState) -> El {
+fn mentions_query_changed(t: &Tokens, s: &SceneState) -> El {
 	mention_scene(t, s, Mentioning { query: "do", ..MENTIONING })
 }
 
-pub fn mentions_empty(t: &Tokens, s: &SceneState) -> El {
+fn mentions_empty(t: &Tokens, s: &SceneState) -> El {
 	mention_scene(t, s, Mentioning { query: "zzz", ..MENTIONING })
 }
 
-pub fn mentions_counted(t: &Tokens, s: &SceneState) -> El {
+fn mentions_counted(t: &Tokens, s: &SceneState) -> El {
 	mention_scene(
 		t,
 		s,
@@ -728,11 +727,11 @@ pub fn mentions_counted(t: &Tokens, s: &SceneState) -> El {
 	)
 }
 
-pub fn mentions_counted_lead(t: &Tokens, s: &SceneState) -> El {
+fn mentions_counted_lead(t: &Tokens, s: &SceneState) -> El {
 	mention_scene(t, s, Mentioning { counts: &[(ATLAS, 2)], ..MENTIONING })
 }
 
-pub fn mentions_counted_long_name(t: &Tokens, s: &SceneState) -> El {
+fn mentions_counted_long_name(t: &Tokens, s: &SceneState) -> El {
 	mention_scene(
 		t,
 		s,
@@ -740,7 +739,7 @@ pub fn mentions_counted_long_name(t: &Tokens, s: &SceneState) -> El {
 	)
 }
 
-pub fn mentions_counted_titled(t: &Tokens, s: &SceneState) -> El {
+fn mentions_counted_titled(t: &Tokens, s: &SceneState) -> El {
 	mention_scene(
 		t,
 		s,
@@ -764,18 +763,18 @@ fn in_blue(t: &Tokens) -> Tokens {
 	t.in_space(Some(BLUE))
 }
 
-pub fn picker_highlighted_row(t: &Tokens, _: &SceneState) -> El {
+fn picker_highlighted_row(t: &Tokens, _: &SceneState) -> El {
 	let t = &in_blue(t);
 	let query = TextEdit::new("");
 	let picker = LibraryPicker { documents: &DOCUMENTS, query: &query, highlighted: Some(1) };
 	picker_stage(t, vec![library_picker(scope(t), &picker, draft)])
 }
 
-pub fn picker_closed(t: &Tokens, _: &SceneState) -> El {
+fn picker_closed(t: &Tokens, _: &SceneState) -> El {
 	picker_stage(&in_blue(t), Vec::new())
 }
 
-pub fn queue_default(t: &Tokens, _: &SceneState) -> El {
+fn queue_default(t: &Tokens, _: &SceneState) -> El {
 	let queue = PromptQueue {
 		items: &QUEUED_ONE,
 		agent: "Atlas",
@@ -786,7 +785,7 @@ pub fn queue_default(t: &Tokens, _: &SceneState) -> El {
 	centered(t, col().w(QUEUE_WIDTH).children(prompt_queue(scope(t), &queue)), Vec::new())
 }
 
-pub fn queue_row_hovered(t: &Tokens, _: &SceneState) -> El {
+fn queue_row_hovered(t: &Tokens, _: &SceneState) -> El {
 	let queue = PromptQueue {
 		items: &QUEUED_TWO,
 		agent: "Atlas",
@@ -805,15 +804,15 @@ fn reply_scene(t: &Tokens, s: &SceneState, quote: Option<&ReplyQuote>) -> El {
 	centered(t, prompt_reply(scope(t), quote, WIDTH, composer(t, input)), Vec::new())
 }
 
-pub fn reply_default(t: &Tokens, s: &SceneState) -> El {
+fn reply_default(t: &Tokens, s: &SceneState) -> El {
 	reply_scene(t, s, Some(&REPLY_QUOTE))
 }
 
-pub fn reply_dismissed(t: &Tokens, s: &SceneState) -> El {
+fn reply_dismissed(t: &Tokens, s: &SceneState) -> El {
 	reply_scene(t, s, None)
 }
 
-pub fn reply_naming(t: &Tokens, s: &SceneState) -> El {
+fn reply_naming(t: &Tokens, s: &SceneState) -> El {
 	let toggle = text(TOGGLE_REPLY)
 		.font(TextStyle { weight: 400.0, ..TEXT_BASE_MEDIUM })
 		.color(t.foreground)
@@ -835,15 +834,15 @@ fn quoted_composer(t: &Tokens, s: &SceneState, text: &str) -> El {
 	centered(t, composer(t, input), Vec::new())
 }
 
-pub fn selection_default(t: &Tokens, s: &SceneState) -> El {
+fn selection_default(t: &Tokens, s: &SceneState) -> El {
 	quoted_composer(t, s, SELECTION)
 }
 
-pub fn selection_long_content(t: &Tokens, s: &SceneState) -> El {
+fn selection_long_content(t: &Tokens, s: &SceneState) -> El {
 	quoted_composer(t, s, LONG_SELECTION)
 }
 
-pub fn selection_narrow_long_content(t: &Tokens, _: &SceneState) -> El {
+fn selection_narrow_long_content(t: &Tokens, _: &SceneState) -> El {
 	let card = selection_quote(
 		scope(t),
 		&SelectionQuote { agent: LONG_AGENT, text: NARROW_SELECTION },
