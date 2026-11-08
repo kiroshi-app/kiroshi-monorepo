@@ -849,6 +849,7 @@ impl App {
 				self.request_images();
 			}
 			HostEvent::MissionChanged(changed) => self.mission_changed(changed),
+			HostEvent::Roster(heard) => self.surfaces.s03_roster.heard(heard),
 			HostEvent::Companion(heard) => {
 				self.surfaces.s03_roster.heard_companion(&heard);
 				s10_agent_settings::heard(self, heard)

@@ -1,4 +1,6 @@
-use kiroshi_core::conversations::contract::{Bot, Chat, ConversationInPage, ConversationPage};
+use kiroshi_core::conversations::contract::{
+	Bot, Chat, ConversationInPage, ConversationPage, ConversationState,
+};
 use kiroshi_core::sections::contract::{RosterPin, Section};
 use kiroshi_rune_kit::surfaces::s03_roster::RosterEvent;
 use serde::de::DeserializeOwned;
@@ -8,6 +10,7 @@ use super::listing::{Line, Listing, Placed};
 use super::worker::{Answer, Call, Write};
 use super::{Heard, Load, State, emitted, heard_of, landed, poll, selected_row};
 use crate::app::{App, Person, Ready, Workspace};
+use crate::events::{HostEvent, parsed};
 use crate::host::{Host, HostError};
 use crate::model::{self, Message, Role};
 use crate::source::Source;
@@ -380,7 +383,7 @@ fn conversation_and_agent_events_update_rows_without_a_reload() {
 	for (event, payload) in
 		[("conversation://created", created), ("conversation://state-changed", changed)]
 	{
-		let heard = heard_of(event, payload).expect("a roster event").expect("a readable event");
+		let heard = heard_of(event, &payload).expect("a roster event").expect("a readable event");
 		state_mut(&mut app).heard(heard);
 	}
 	state_mut(&mut app).heard(Heard::Deleted { conversation_id: "atlas-solo".to_owned() });
@@ -390,7 +393,7 @@ fn conversation_and_agent_events_update_rows_without_a_reload() {
 	assert_eq!(sorted_ids(listing), vec!["new", "room", "atlas"]);
 	let room =
 		listing.line("room").and_then(|line| line.conversation()).map(|row| &row.observed.state);
-	assert_eq!(room, Some(&kiroshi_core::conversations::contract::ConversationState::NeedsYou));
+	assert_eq!(room, Some(&ConversationState::NeedsYou));
 	assert!(state(&app).queued.is_empty());
 }
 
@@ -424,4 +427,88 @@ fn a_background_failure_stays_silent_until_its_space_is_shown() {
 	switch_to(&mut app, SPACE);
 	assert!(matches!(state(&app).shown(), Some(Load::Failed(_))));
 	assert!(state(&app).queued.is_empty());
+}
+
+fn frame(event: &str, payload: Value) -> String {
+	json!({ "event": event, "payload": payload }).to_string()
+}
+
+fn delivered(app: &mut App, event: &str, payload: Value) {
+	match parsed(&frame(event, payload)) {
+		Some(HostEvent::Roster(heard)) => state_mut(app).heard(heard),
+		_ => panic!("{event} reaches the roster"),
+	}
+}
+
+fn loads_of(app: &App, space_id: &str) -> usize {
+	let load = Call::Load(space_id.to_owned());
+	state(app).queued.iter().filter(|call| **call == load).count()
+}
+
+fn shown_and_back(app: &mut App) {
+	switch_to(app, OTHER_SPACE);
+	let other = Listing::of(Vec::new(), page(Vec::new(), None), Vec::new(), Vec::new());
+	landed(app, Answer::Loaded { space_id: OTHER_SPACE.to_owned(), listing: Ok(other) });
+	state_mut(app).queued.clear();
+	switch_to(app, SPACE);
+}
+
+#[test]
+fn conversation_events_from_the_host_reach_the_roster_rows() {
+	let mut app = shown_app(listing());
+	let created = json!({ "spaceId": SPACE, "conversation": row("new", None, 99) });
+	let updated = json!({ "spaceId": SPACE, "conversation": row("room", None, 120) });
+	let changed = json!({ "conversationId": "room", "spaceId": SPACE, "state": "needs_you",
+		"workingBotIds": [] });
+	let deleted = json!({ "spaceId": SPACE, "conversationId": "new" });
+	delivered(&mut app, "conversation://created", created);
+	assert!(shown_listing(&app).line("new").is_some());
+	delivered(&mut app, "conversation://updated", updated);
+	delivered(&mut app, "conversation://state-changed", changed);
+	delivered(&mut app, "conversation://deleted", deleted);
+	let listing = shown_listing(&app);
+	assert_eq!(sorted_ids(listing), vec!["room", "atlas", "beacon"]);
+	let room = listing.line("room").and_then(|line| line.conversation());
+	assert_eq!(room.map(|row| row.observed.state), Some(ConversationState::NeedsYou));
+	assert!(state(&app).queued.is_empty());
+}
+
+#[test]
+fn an_unreadable_conversation_event_leaves_the_roster_as_it_was() {
+	let app = shown_app(listing());
+	let broken = json!({ "spaceId": SPACE, "conversation": { "id": 3 } });
+	assert!(parsed(&frame("conversation://updated", broken)).is_none());
+	assert_eq!(shown_listing(&app), &listing());
+}
+
+#[test]
+fn switching_back_to_a_shown_space_keeps_its_roster_while_it_reloads() {
+	let mut app = shown_app(listing());
+	shown_and_back(&mut app);
+	assert!(matches!(state(&app).shown(), Some(Load::Shown(_))));
+	assert_eq!(state(&app).queued, vec![Call::Load(SPACE.to_owned())]);
+}
+
+#[test]
+fn a_space_already_loading_is_not_loaded_twice() {
+	let mut app = app_on(SPACE);
+	poll(&mut app);
+	switch_to(&mut app, OTHER_SPACE);
+	switch_to(&mut app, SPACE);
+	state_mut(&mut app).retry();
+	assert_eq!(loads_of(&app, SPACE), 1);
+	landed(&mut app, Answer::Loaded { space_id: SPACE.to_owned(), listing: Ok(listing()) });
+	switch_to(&mut app, OTHER_SPACE);
+	switch_to(&mut app, SPACE);
+	assert_eq!(loads_of(&app, SPACE), 2);
+}
+
+#[test]
+fn a_failed_reload_keeps_the_shown_roster_and_says_so() {
+	let mut app = shown_app(listing());
+	shown_and_back(&mut app);
+	let failure = Err(refused("conversation_page"));
+	landed(&mut app, Answer::Loaded { space_id: SPACE.to_owned(), listing: failure });
+	assert_eq!(shown_listing(&app), &listing());
+	assert_eq!(notice_titles(&app), vec![super::REFRESH_UNREAD]);
 }

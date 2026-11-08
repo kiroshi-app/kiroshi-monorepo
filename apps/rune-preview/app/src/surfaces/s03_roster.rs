@@ -5,7 +5,7 @@ mod tests;
 mod view;
 mod worker;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use kiroshi_core::conversations::contract::{
 	Bot, Chat, ConversationInPage, ConversationPage, Hue, LastWord,
@@ -33,6 +33,8 @@ const LANGUAGE: Language = Language::En;
 const END_MARGIN: f32 = 120.0;
 
 const MORE_UNREAD: &str = "Couldn't read more of your roster. Scroll to the end again to retry.";
+
+const REFRESH_UNREAD: &str = "Couldn't refresh your roster, so it shows what was read before. Open the Space again to retry.";
 
 const OPEN_REFUSED: &str = "Couldn't open {name}. Select it again to retry.";
 
@@ -63,6 +65,7 @@ struct Notice {
 #[derive(Default)]
 pub struct State {
 	rosters: HashMap<String, Load>,
+	loading: HashSet<String>,
 	shown: Option<String>,
 	reading_more: Option<String>,
 	opening: Option<String>,
@@ -348,8 +351,28 @@ impl State {
 	}
 
 	fn load(&mut self, space_id: String) {
-		self.rosters.insert(space_id.clone(), Load::Loading);
+		if !self.loading.insert(space_id.clone()) {
+			return;
+		}
+		if self.listing(&space_id).is_none() {
+			self.rosters.insert(space_id.clone(), Load::Loading);
+		}
 		self.queue(Call::Load(space_id));
+	}
+
+	fn loaded(&mut self, space_id: String, listing: Result<Listing, HostError>) {
+		self.loading.remove(&space_id);
+		match listing {
+			Ok(listing) => {
+				self.rosters.insert(space_id, Load::Shown(listing));
+			}
+			Err(failure) if self.listing(&space_id).is_some() => {
+				self.raise(REFRESH_UNREAD.to_owned(), &failure)
+			}
+			Err(failure) => {
+				self.rosters.insert(space_id, Load::Failed(failure));
+			}
+		}
 	}
 
 	fn read_more_at_end(&mut self) -> bool {
@@ -428,10 +451,7 @@ impl State {
 
 	fn answered(&mut self, answer: Answer) -> Option<model::Conversation> {
 		match answer {
-			Answer::Loaded { space_id, listing } => {
-				let load = listing.map_or_else(Load::Failed, Load::Shown);
-				self.rosters.insert(space_id, load);
-			}
+			Answer::Loaded { space_id, listing } => self.loaded(space_id, listing),
 			Answer::ReadMore { space_id, page } => self.read(&space_id, page),
 			Answer::MainChat { bot_id, chat } => return self.main_chat(&bot_id, chat),
 			Answer::Written { outcome: Ok(()), .. } => {}
