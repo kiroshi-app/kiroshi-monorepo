@@ -4746,16 +4746,15 @@ pub fn block_handle<S: 'static>(
 			}));
 		focus_ring(t, instant(if is_on { control.fill(t.accent) } else { control }))
 	};
-	let (from, pitches, drag_on, press_on) =
-		(place.index, place.pitches.to_vec(), on.clone(), on.clone());
+	let (from, pitches, drag_on) = (place.index, place.pitches.to_vec(), on.clone());
 	let has_dragged = Rc::new(Cell::new(false));
 	let grip = button(&icons::GRIP_VERTICAL, say(handle::MENU, lang), SPACING * 5.0, is_pressed)
 		.cursor(Cursor::Grab)
 		.on_press({
-			let has_dragged = has_dragged.clone();
+			let (has_dragged, on) = (has_dragged.clone(), on.clone());
 			move |s: &mut S| {
 				if !has_dragged.replace(false) {
-					press_on(s, HandleEvent::Press);
+					on(s, HandleEvent::Press);
 				}
 			}
 		})
