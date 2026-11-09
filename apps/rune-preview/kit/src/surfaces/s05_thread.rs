@@ -17,7 +17,9 @@ use crate::tokens::{SPACING, TEXT_BASE_SEMIBOLD, TEXT_SM, Tokens};
 
 mod body;
 mod furniture;
+mod header_identity;
 mod rows;
+mod scenes;
 #[cfg(test)]
 mod tests;
 mod turn;
@@ -27,7 +29,9 @@ pub use furniture::{
 	PinnedMessage, SelectionToolbar, ToolbarAction, pinned_messages, selection_toolbar,
 	transcript_skeleton,
 };
+pub use header_identity::{HeaderIdentity, header_identity};
 pub use rows::{WorkLine, WorkState, WorkingAgent, day_separator, new_messages, work_line};
+pub use scenes::SCENES;
 pub use turn::{author_line, message_actions, message_menu, message_quote, turn};
 
 pub type Emit<S, E = ThreadEvent> = Rc<dyn Fn(&mut S, E)>;
