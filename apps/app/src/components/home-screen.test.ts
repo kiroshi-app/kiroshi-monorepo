@@ -131,6 +131,8 @@ const conversationStageOf = (
 		transcript: { rows: [{ key: "turn-1", render: () => LAST_TURN }] },
 		request: null,
 		overlay: null,
+		notice: null,
+		queue: null,
 		isReadOnly: false,
 		openedAt: 0,
 		roomLinesOf: (workingIds) => fixture.roomLog.linesOf("atlas", workingIds),
@@ -293,6 +295,27 @@ it("puts a question waiting in a room in place of the composer, under who asked 
 	expect(screen.getAllByRole("link", { name: "Lisbon offsite" })).toHaveLength(
 		2,
 	)
+})
+
+it("opens a runtime only for the rooms the agent works in", async () => {
+	const idle = await fixture.store.createConversation({
+		spaceId: SPACE,
+		sectionId: null,
+		title: "Quarterly review",
+		botIds: [fixture.atlas.id],
+	})
+	workingIn([fixture.room.id])
+
+	render(
+		conversationStageOf(fixture, { conversations: [fixture.room, idle] }),
+		{
+			wrapper: createQueryTestWrapper().wrapper,
+		},
+	)
+
+	await screen.findByText("Atlas is working in")
+	expect(fixture.runtimes.heldFor(fixture.room.id)).not.toBeNull()
+	expect(fixture.runtimes.heldFor(idle.id)).toBeNull()
 })
 
 it("no longer lists a question waiting in a room among the lines", async () => {

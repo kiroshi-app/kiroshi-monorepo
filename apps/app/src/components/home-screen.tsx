@@ -327,6 +327,8 @@ export type HomeConversation = HomeSend & {
 	transcript: HomeTranscriptProps
 	request: ReactNode
 	overlay: ReactNode
+	notice: ReactNode
+	queue: ReactNode
 	isReadOnly: boolean
 }
 
@@ -499,6 +501,8 @@ export const HomeConversationStage = ({
 	transcript,
 	request,
 	overlay,
+	notice,
+	queue,
 	isReadOnly,
 	agent,
 	bots,
@@ -525,26 +529,30 @@ export const HomeConversationStage = ({
 	return (
 		<HomeLayout
 			composer={
-				isReadOnly ? null : (
-					<HomeComposerSlot
-						agent={agent}
-						bots={bots}
-						composer={
-							<HomeDraftComposer
-								{...send}
-								agent={agent}
-								bots={bots}
-								onSelectAgent={onSelectAgent}
-							/>
-						}
-						conversations={conversations}
-						onOpenRoom={onOpenRoom}
-						request={request}
-						runtimes={runtimes}
-						spaceId={spaceId}
-						store={store}
-					/>
-				)
+				<>
+					{notice}
+					{isReadOnly ? null : queue}
+					{isReadOnly ? null : (
+						<HomeComposerSlot
+							agent={agent}
+							bots={bots}
+							composer={
+								<HomeDraftComposer
+									{...send}
+									agent={agent}
+									bots={bots}
+									onSelectAgent={onSelectAgent}
+								/>
+							}
+							conversations={conversations}
+							onOpenRoom={onOpenRoom}
+							request={request}
+							runtimes={runtimes}
+							spaceId={spaceId}
+							store={store}
+						/>
+					)}
+				</>
 			}
 			stage="conversation"
 			transcript={

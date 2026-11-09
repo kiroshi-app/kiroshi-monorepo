@@ -77,6 +77,7 @@ import { type PromptHandle, ThreadComposer } from "@/components/thread-composer"
 import {
 	ThreadBoardDrawers,
 	ThreadDocumentsContext,
+	ThreadDocumentsInTabs,
 	ThreadOpenedItemPanel,
 	useThreadDocuments,
 } from "@/components/thread-documents"
@@ -1347,6 +1348,8 @@ type HomeConversationInput = {
 	approval: ReactNode
 	permission: ThreadPermission | null
 	overlay: ReactNode
+	notice: ReactNode
+	queue: ReactNode
 	isReadOnly: boolean
 }
 
@@ -1369,6 +1372,8 @@ const homeConversationOf = (
 	transcript: { ...input.transcript, rows: homeRowsOf(input) },
 	request: input.askedPrompt ?? (input.permission ? input.approval : null),
 	overlay: input.overlay,
+	notice: input.notice,
+	queue: input.queue,
 	isReadOnly: input.isReadOnly,
 })
 
@@ -1394,10 +1399,12 @@ const HomeThreadStage = ({
 	}
 	if (stage === "conversation") {
 		return (
-			<ScreenLayout
-				header={header}
-				scroller={() => home.conversationStage(conversation)}
-			/>
+			<ThreadDocumentsInTabs>
+				<ScreenLayout
+					header={header}
+					scroller={() => home.conversationStage(conversation)}
+				/>
+			</ThreadDocumentsInTabs>
 		)
 	}
 	return (
@@ -2088,6 +2095,20 @@ function ThreadView(props: ThreadViewProps) {
 		/>
 	)
 
+	const notice =
+		joinedHost && access ? (
+			<SpaceAccessBanner
+				host={joinedHost.hostName}
+				reason={access.reason}
+				space={joinedHost.spaceName}
+				waitReason={access.waitReason}
+			/>
+		) : (
+			<ThreadNotices pins={view.pins} staged={view.staged} />
+		)
+
+	const queue = <ThreadQueue readerName={view.reader} thread={thread} />
+
 	const layout = (
 		<ThreadLayout
 			{...transcript}
@@ -2122,21 +2143,10 @@ function ThreadView(props: ThreadViewProps) {
 						))
 			}
 			header={header}
-			notice={
-				joinedHost && access ? (
-					<SpaceAccessBanner
-						host={joinedHost.hostName}
-						reason={access.reason}
-						space={joinedHost.spaceName}
-						waitReason={access.waitReason}
-					/>
-				) : (
-					<ThreadNotices pins={view.pins} staged={view.staged} />
-				)
-			}
+			notice={notice}
 			overlay={overlay}
 			pending={departure ? undefined : approval}
-			queue={<ThreadQueue readerName={view.reader} thread={thread} />}
+			queue={queue}
 			rootRef={view.rootRef}
 			skeleton={transcriptSkeleton}
 		>
@@ -2172,6 +2182,15 @@ function ThreadView(props: ThreadViewProps) {
 		onRemoveAttachment: view.staged.remove,
 	}
 
+	const homeStage = homeStageOf({
+		home,
+		thread,
+		isFirstLoadPending: view.facts.isFirstLoadPending,
+		hasMessages: view.state.messages.length > 0,
+		isTranscriptEmpty,
+		isHeldBack: Boolean(departure || view.facts.latestError),
+	})
+
 	const screen = (
 		<HomeThreadStage
 			conversation={homeConversationOf({
@@ -2184,20 +2203,15 @@ function ThreadView(props: ThreadViewProps) {
 				approval,
 				permission: view.facts.permission,
 				overlay,
+				notice,
+				queue,
 				isReadOnly: Boolean(departure),
 			})}
 			header={header}
 			home={home}
 			layout={layout}
 			send={homeSend}
-			stage={homeStageOf({
-				home,
-				thread,
-				isFirstLoadPending: view.facts.isFirstLoadPending,
-				hasMessages: view.state.messages.length > 0,
-				isTranscriptEmpty,
-				isHeldBack: Boolean(departure || view.facts.latestError),
-			})}
+			stage={homeStage}
 		/>
 	)
 
