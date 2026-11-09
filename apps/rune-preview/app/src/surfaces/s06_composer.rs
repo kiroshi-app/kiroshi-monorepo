@@ -28,7 +28,7 @@ use crate::host::HostError;
 use crate::source::Source;
 use crate::surfaces::Surfaces;
 
-pub use view::{layers, view};
+pub use view::{access_view, layers, view};
 
 use draft::{Document, Draft, Pending};
 use menu::{Menu, Trigger};

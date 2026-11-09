@@ -864,16 +864,21 @@ fn an_agent_card_counts_its_sentences_under_its_section() {
 	assert_eq!(cards[0].section, "Plan");
 }
 
-fn library_app(initial: &str) -> App {
+fn shown_app(space_id: &str, name: &str) -> App {
 	let mut app = App::new();
 	app.workspace = Workspace::Ready(Ready {
 		source: Source::Running(Host::detached()),
-		space: model::Space { id: SPACE.to_owned(), name: SPACE.to_owned(), colour: None },
+		space: model::Space { id: space_id.to_owned(), name: name.to_owned(), colour: None },
 		agents: Vec::new(),
 		conversations: Vec::new(),
 		person: Person::Unread,
 		longest: None,
 	});
+	app
+}
+
+fn library_app(initial: &str) -> App {
+	let mut app = shown_app(SPACE, SPACE);
 	app.surfaces.s14_library = opened_from("brief.md", initial);
 	super::open_beside(&mut app, "brief.md");
 	let library = &mut app.surfaces.s14_library;
@@ -1598,4 +1603,32 @@ fn right_clicking_the_lightbox_picture_opens_the_image_menu_at_the_pointer() {
 		vec![Call::SaveToLibrary(target("dunes.png")), Call::Copy(target("dunes.png"))]
 	);
 	assert!(state.to_raise.iter().any(|notice| notice.title.contains("dunes.png")));
+}
+
+fn app_showing(space_id: &str) -> App {
+	let mut app = shown_app(space_id, "Studio");
+	let joined = serde_json::from_value(json!({
+		"id": "joined-studio",
+		"hostUrl": "https://relay.test/relay/member",
+		"remoteSpaceId": null,
+		"name": "Studio",
+		"state": "online",
+		"hostedBy": "Noa",
+		"colour": null,
+		"instanceId": "instance-studio",
+	}))
+	.expect("a joined Space fixture");
+	app.surfaces.s02_rail.hold_joined(vec![joined]);
+	app
+}
+
+#[test]
+fn a_joined_space_enters_its_library_as_joined_and_a_hosted_one_as_hosted() {
+	let mut joined = app_showing("joined-studio");
+	assert!(super::entered(&mut joined));
+	assert!(joined.surfaces.s14_library.is_joined);
+
+	let mut hosted = app_showing(SPACE);
+	assert!(super::entered(&mut hosted));
+	assert!(!hosted.surfaces.s14_library.is_joined);
 }

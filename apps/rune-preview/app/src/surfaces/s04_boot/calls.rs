@@ -74,7 +74,6 @@ struct Opened {
 pub enum Due {
 	Notice(u64),
 	AccountWatch,
-	DeviceWatch,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

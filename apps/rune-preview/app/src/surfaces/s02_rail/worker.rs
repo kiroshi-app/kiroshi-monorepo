@@ -2,7 +2,7 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 
 use kiroshi_core::invitations::contract::Invitation;
-use kiroshi_core::joined_spaces::contract::JoinedSpace;
+use kiroshi_core::joined_spaces::contract::{JoinedSpace, JoinedSpaceConnection};
 use kiroshi_core::spaces::contract::Space;
 use kiroshi_core::user::contract::UserPreferences;
 use rune::Waker;
@@ -19,6 +19,7 @@ pub enum Call {
 	ListInvitations,
 	Hosting(String),
 	Load(String),
+	Connect(String),
 	Remember(String),
 	Create(String),
 	Describe { id: String, name: String, colour: Option<i64> },
@@ -34,6 +35,7 @@ pub enum Answer {
 	Invitations(Result<Vec<Invitation>, HostError>),
 	Hosting { space_id: String, state: Result<Value, HostError> },
 	Loaded { space_id: String, content: Result<SpaceContent, HostError> },
+	Connected { joined_id: String, outcome: Result<(), HostError> },
 	Remembered(Result<(), HostError>),
 	Created(Result<Space, HostError>),
 	Described(Result<Space, HostError>),
@@ -63,6 +65,11 @@ fn answered(source: &Source, call: Call) -> Answer {
 		Call::Load(space_id) => {
 			let content = app::space_content(source, &space_id);
 			Answer::Loaded { space_id, content }
+		}
+		Call::Connect(joined_id) => {
+			let connection: Result<JoinedSpaceConnection, HostError> =
+				source.invoke("joined_space_connect", json!({ "id": joined_id }));
+			Answer::Connected { joined_id, outcome: connection.map(|_| ()) }
 		}
 		Call::Remember(space_id) => Answer::Remembered(remembered(source, space_id)),
 		Call::Create(name) => {
