@@ -15,6 +15,7 @@ use super::{members, Hosting};
 use crate::account::contract::{AccountState, KiroshiAccount};
 use crate::account::session::{this_computer, AccountSession};
 use crate::agent::protocol::SpaceMember;
+use crate::db::repositories::conversations::ChatOwner;
 use crate::db::repositories::messages::{AccountAuthor, WrittenFrom};
 use crate::db::{Database, DatabaseError};
 use crate::host_api::invoke::RELAYED_MEMBER_HEADER;
@@ -101,6 +102,14 @@ impl Caller {
 		}
 	}
 
+	pub fn chat_owner<R: Runtime>(&self, app: &AppHandle<R>) -> Option<ChatOwner> {
+		match self {
+			Caller::Host => Some(ChatOwner::Host),
+			Caller::Relayed(None) => None,
+			Caller::Relayed(Some(member)) => Some(person_of(app, &member.user_id)),
+		}
+	}
+
 	pub fn written_from(&self) -> WrittenFrom {
 		match self {
 			Caller::Host => WrittenFrom::Here,
@@ -129,6 +138,20 @@ fn signed_in_account<R: Runtime>(app: &AppHandle<R>) -> Option<KiroshiAccount> {
 		AccountState::SignedIn(account) => Some(account),
 		_ => None,
 	})
+}
+
+pub(super) fn person_of<R: Runtime>(app: &AppHandle<R>, account_id: &str) -> ChatOwner {
+	match signed_in_account(app) {
+		Some(host) if host.id == account_id => ChatOwner::Host,
+		_ => ChatOwner::Member(account_id.to_owned()),
+	}
+}
+
+pub(super) fn account_of<R: Runtime>(app: &AppHandle<R>, owner: &ChatOwner) -> Option<String> {
+	match owner {
+		ChatOwner::Host => signed_in_account(app).map(|host| host.id),
+		ChatOwner::Member(account_id) => Some(account_id.clone()),
+	}
 }
 
 async fn host_author<R: Runtime>(

@@ -1905,6 +1905,17 @@
             "detail"
           ],
           "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "unvouchedMember"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -5145,6 +5156,17 @@
           "required": [
             "kind",
             "limit"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "unvouchedMember"
+            }
+          },
+          "required": [
+            "kind"
           ],
           "type": "object"
         }
@@ -9374,6 +9396,17 @@
             "failure"
           ],
           "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "unvouchedMember"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -11516,6 +11549,29 @@
       },
       "ok": {
         "$ref": "#/$defs/Conversation"
+      }
+    },
+    "conversation_renew_main_chat": {
+      "args": {
+        "properties": {
+          "botId": {
+            "type": "string"
+          },
+          "spaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "botId",
+          "spaceId"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/TranscriptStoreError"
+      },
+      "ok": {
+        "$ref": "#/$defs/Chat"
       }
     },
     "conversation_roster_block": {

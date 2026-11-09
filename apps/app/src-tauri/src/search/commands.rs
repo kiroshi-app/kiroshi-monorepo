@@ -7,6 +7,7 @@ use super::contract::{
 use crate::conversations::contract::{state_in, StorageFailure};
 use crate::conversations::state as conversation_state;
 use crate::db;
+use crate::hosting::authorship::Caller;
 use crate::missions::commands::present;
 
 fn ready(state: &db::DatabaseState) -> Result<&db::Database, StorageFailure> {
@@ -15,14 +16,17 @@ fn ready(state: &db::DatabaseState) -> Result<&db::Database, StorageFailure> {
 
 #[tauri::command]
 #[specta::specta]
-pub async fn search_messages(
+pub async fn search_messages<R: Runtime>(
+	app: AppHandle<R>,
 	state: State<'_, db::DatabaseState>,
+	caller: Caller,
 	query: MessageSearchQuery,
 ) -> Result<Vec<MessageHit>, MessageSearchError> {
+	let reader = caller.chat_owner(&app).ok_or(MessageSearchError::UnvouchedMember)?;
 	ready(&state)
 		.map_err(|failure| MessageSearchError::Unavailable { failure })?
 		.search()
-		.messages(query)
+		.messages(query, Some(reader))
 		.await
 }
 
@@ -31,11 +35,14 @@ pub async fn search_messages(
 pub async fn search_catalogue<R: Runtime>(
 	app: AppHandle<R>,
 	state: State<'_, db::DatabaseState>,
+	caller: Caller,
 	query: String,
 	space_id: String,
 ) -> Result<Catalogue, CatalogueError> {
+	let reader = caller.chat_owner(&app).ok_or(CatalogueError::UnvouchedMember)?;
 	let database = ready(&state).map_err(|failure| CatalogueError::Unavailable { failure })?;
-	let hits = database.catalogue().search(CatalogueScope { query, space_id, kind: None }).await?;
+	let scope = CatalogueScope { query, space_id, kind: None };
+	let hits = database.catalogue().search(scope, Some(reader)).await?;
 	Ok(Catalogue {
 		chats: observed_chats(&app, database, hits.chats).await?,
 		missions: hits.missions.into_iter().map(|hit| observed_mission(&app, hit)).collect(),
@@ -48,10 +55,12 @@ pub async fn search_catalogue<R: Runtime>(
 pub async fn search_recent<R: Runtime>(
 	app: AppHandle<R>,
 	state: State<'_, db::DatabaseState>,
+	caller: Caller,
 	space_id: String,
 ) -> Result<Vec<CatalogueChat>, CatalogueError> {
+	let reader = caller.chat_owner(&app).ok_or(CatalogueError::UnvouchedMember)?;
 	let database = ready(&state).map_err(|failure| CatalogueError::Unavailable { failure })?;
-	let hits = database.catalogue().recent(space_id).await?;
+	let hits = database.catalogue().recent(space_id, Some(reader)).await?;
 	observed_chats(&app, database, hits).await
 }
 
@@ -78,6 +87,7 @@ fn observed_mission<R: Runtime>(app: &AppHandle<R>, hit: CatalogueMission) -> Ca
 
 #[cfg(test)]
 mod tests {
+	use crate::db::repositories::conversations::ChatOwner;
 
 	use rusqlite::params;
 	use tauri::test::{mock_builder, MockRuntime};
@@ -161,7 +171,9 @@ mod tests {
 	}
 
 	async fn found(app: &App<MockRuntime>, query: MessageSearchQuery) -> Vec<MessageHit> {
-		search_messages(app.state(), query).await.expect("the search answers")
+		search_messages(app.handle().clone(), app.state(), Caller::Host, query)
+			.await
+			.expect("the search answers")
 	}
 
 	fn ids(hits: &[MessageHit]) -> Vec<String> {
@@ -184,6 +196,26 @@ mod tests {
 		assert_eq!(here[0].author_bot_id.as_deref(), Some("b1"), "the author of the hit moved");
 		assert_eq!(here[0].seq, 1, "the seq of the hit moved");
 		assert_eq!(ids(&there), vec!["m2".to_owned()], "the scope let another space through");
+	}
+
+	#[tokio::test]
+	async fn a_search_reaches_no_main_conversation_of_another_person_but_the_agent_reaches_all() {
+		let app = a_host("owner").await;
+		plant(&app, "UPDATE conversations SET owner = 'bea', archived_at = 5 WHERE id = 'c1';")
+			.await;
+		a_settled_message(&app, "m1", "c1", "the cafe opens at dawn", 1).await;
+		let state = app.state::<db::DatabaseState>();
+		let search = ready(&state).expect("the database opens").search();
+		let found_by = |owner| search.messages(in_space("cafe", "personal"), owner);
+
+		let of_bea = found_by(Some(ChatOwner::Member("bea".to_owned()))).await;
+		let of_cy = found_by(Some(ChatOwner::Member("cy".to_owned()))).await;
+		let of_the_agent = found_by(None).await;
+
+		assert_eq!(ids(&of_bea.expect("bea searches")), vec!["m1".to_owned()]);
+		assert_eq!(ids(&of_cy.expect("cy searches")), Vec::<String>::new());
+		assert_eq!(ids(&found(&app, in_space("cafe", "personal")).await), Vec::<String>::new());
+		assert_eq!(ids(&of_the_agent.expect("the agent searches")), vec!["m1".to_owned()]);
 	}
 
 	#[tokio::test]
@@ -346,22 +378,48 @@ mod tests {
 		let over = "a".repeat(MAX_QUERY_CHARS + 1);
 
 		assert!(
-			search_messages(app.state(), in_space(&held, "personal")).await.is_ok(),
+			search_messages(
+				app.handle().clone(),
+				app.state(),
+				Caller::Host,
+				in_space(&held, "personal")
+			)
+			.await
+			.is_ok(),
 			"a query at the cap was refused"
 		);
 		assert!(
-			search_catalogue(app.handle().clone(), app.state(), held, "personal".to_owned())
-				.await
-				.is_ok(),
+			search_catalogue(
+				app.handle().clone(),
+				app.state(),
+				Caller::Host,
+				held,
+				"personal".to_owned()
+			)
+			.await
+			.is_ok(),
 			"a query at the cap was refused"
 		);
 		assert_eq!(
-			search_messages(app.state(), in_space(&over, "personal")).await,
+			search_messages(
+				app.handle().clone(),
+				app.state(),
+				Caller::Host,
+				in_space(&over, "personal")
+			)
+			.await,
 			Err(MessageSearchError::QueryTooLong { limit: MAX_QUERY_CHARS }),
 			"the message search read a query past the cap"
 		);
 		assert_eq!(
-			search_catalogue(app.handle().clone(), app.state(), over, "personal".to_owned()).await,
+			search_catalogue(
+				app.handle().clone(),
+				app.state(),
+				Caller::Host,
+				over,
+				"personal".to_owned()
+			)
+			.await,
 			Err(CatalogueError::QueryTooLong { limit: MAX_QUERY_CHARS }),
 			"the catalogue read a query past the cap"
 		);
@@ -405,6 +463,7 @@ mod tests {
 		let found = search_catalogue(
 			app.handle().clone(),
 			app.state(),
+			Caller::Host,
 			"crash".to_owned(),
 			"personal".to_owned(),
 		)
@@ -425,18 +484,26 @@ mod tests {
 		let found = search_catalogue(
 			app.handle().clone(),
 			app.state(),
+			Caller::Host,
 			"room".to_owned(),
 			"work".to_owned(),
 		)
 		.await
 		.expect("the catalogue answers");
-		let recent = search_recent(app.handle().clone(), app.state(), "work".to_owned())
-			.await
-			.expect("the recent chats answer");
-		let page =
-			conversation_page(app.handle().clone(), app.state(), "work".to_owned(), None, None)
+		let recent =
+			search_recent(app.handle().clone(), app.state(), Caller::Host, "work".to_owned())
 				.await
-				.expect("the page reads");
+				.expect("the recent chats answer");
+		let page = conversation_page(
+			app.handle().clone(),
+			app.state(),
+			Caller::Host,
+			"work".to_owned(),
+			None,
+			None,
+		)
+		.await
+		.expect("the page reads");
 
 		let paged = page.conversations.into_iter().find(|row| row.conversation.id == "c2");
 		let paged = paged.expect("the room is on the page").observed;

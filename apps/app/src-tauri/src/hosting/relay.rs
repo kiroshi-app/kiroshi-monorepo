@@ -25,7 +25,7 @@ use super::bridge::{self, LocalApi};
 use super::contract::{HostingFailureKind, HostingState};
 use super::devices::Revocation;
 use super::handover::{self, Handover};
-use super::replay::{self, LastSent, Relaying, Ring, Stamped};
+use super::replay::{self, Addressee, LastSent, Relaying, Ring, Stamped};
 use super::roster::{self, Rostered};
 use super::wire::{self, Dropped, HostKeys, Opened as OpenedFrame, Refusal, Wire};
 use super::{admission, devices, entered, members, Hosting};
@@ -569,7 +569,7 @@ async fn online<R: Runtime>(
 	let last_sent = &mut relaying.last_sent;
 	let mut recorded = relaying.ring.subscribe();
 	let unsent = recorded.borrow_and_update().rejoined(last_sent);
-	if let Err(ended) = all_recorded_sent(&mut sink, &mut wire, unsent, last_sent).await {
+	if let Err(ended) = all_recorded_sent(&mut sink, &mut wire, &hosted, unsent, last_sent).await {
 		return ended;
 	}
 	let mut pings = interval_at(Instant::now() + PING_EVERY, PING_EVERY);
@@ -646,7 +646,7 @@ async fn online<R: Runtime>(
 					}
 					Received::Stale(sender) => Outgoing::Rechallenge(sender),
 					Received::Resume(sender, call) => {
-						let resumed = recorded.borrow().resumed(&call, last_sent.seq);
+						let resumed = recorded.borrow().resumed(&call, last_sent.seq, &sender.account_id);
 						if let Err(ended) = all_sent(&mut sink, &mut wire, &sender, resumed.frames).await {
 							return ended;
 						}
@@ -697,7 +697,7 @@ async fn online<R: Runtime>(
 					Ok(unsent) => unsent,
 					Err(missed) => return fell_behind(&mut sink, missed).await,
 				};
-				if let Err(ended) = all_recorded_sent(&mut sink, &mut wire, unsent, last_sent).await {
+				if let Err(ended) = all_recorded_sent(&mut sink, &mut wire, &hosted, unsent, last_sent).await {
 					return ended;
 				}
 				continue;
@@ -969,14 +969,33 @@ async fn all_sent(
 async fn all_recorded_sent(
 	sink: &mut MeasuredSink<'_>,
 	wire: &mut Wire<'_>,
+	hosted: &HostedSpace<'_>,
 	unsent: Vec<Stamped>,
 	last_sent: &mut LastSent,
 ) -> Result<(), Ended> {
 	for stamped in unsent {
-		sealed_sent(sink, wire, &stamped.frame, None).await?;
+		match &stamped.addressee {
+			Addressee::Everyone => sealed_sent(sink, wire, &stamped.frame, None).await?,
+			Addressee::Account(account_id) => {
+				for device in devices_of(hosted, account_id).await? {
+					sealed_sent(sink, wire, &stamped.frame, Some(&device)).await?;
+				}
+			}
+		}
 		last_sent.seq = stamped.seq;
 	}
 	Ok(())
+}
+
+async fn devices_of(hosted: &HostedSpace<'_>, account_id: &str) -> Result<Vec<Rostered>, Ended> {
+	roster::devices_of_account(hosted.database, hosted.space_id, &hosted.keys.device, account_id)
+		.await
+		.map_err(|failure| {
+			Ended::Dropped(format!(
+				"the devices an event is addressed to did not read from the roster of space {}: {failure:?}",
+				hosted.space_id
+			))
+		})
 }
 
 pub(crate) async fn sent(sink: &mut Sink, message: Message) -> Result<(), String> {

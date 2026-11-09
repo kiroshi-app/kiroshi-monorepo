@@ -6,6 +6,7 @@ use unicode_normalization::char::is_combining_mark;
 use unicode_normalization::UnicodeNormalization;
 
 use super::missions::{mission, MISSION_COLUMNS};
+use crate::db::repositories::conversations::ChatOwner;
 use crate::db::{Access, DatabaseError};
 use crate::missions::contract::Mission;
 use crate::search::contract::{
@@ -36,7 +37,8 @@ fn chats() -> String {
 			WHERE messages.conversation_id = conversations.id
 			ORDER BY messages.seq DESC LIMIT 1),
 			conversations.created_at) AS spoken_at
-	FROM conversations WHERE conversations.archived_at IS NULL)
+	FROM conversations WHERE conversations.archived_at IS NULL
+		AND (?2 IS NULL OR conversations.owner IS NULL OR conversations.owner = ?2))
 	SELECT id, kind, title, space_id FROM chat"
 	)
 }
@@ -89,38 +91,55 @@ impl CatalogueRepository {
 		Self { access }
 	}
 
-	pub async fn search(&self, scope: CatalogueScope) -> Result<CatalogueHits, CatalogueError> {
+	pub async fn search(
+		&self,
+		scope: CatalogueScope,
+		owned_by: Option<ChatOwner>,
+	) -> Result<CatalogueHits, CatalogueError> {
 		if scope.query.chars().count() > MAX_QUERY_CHARS {
 			return Err(CatalogueError::QueryTooLong { limit: MAX_QUERY_CHARS });
 		}
 		let needle = folded(scope.query.trim());
-		self.access.call(move |connection| Ok(searched(connection, &scope, &needle))).await?
+		self.access
+			.call(move |connection| Ok(searched(connection, &scope, owned_by.as_ref(), &needle)))
+			.await?
 	}
 
-	pub async fn recent(&self, space_id: String) -> Result<Vec<ChatHit>, CatalogueError> {
-		self.access.call(move |connection| Ok(recent_chats(connection, &space_id))).await?
+	pub async fn recent(
+		&self,
+		space_id: String,
+		owned_by: Option<ChatOwner>,
+	) -> Result<Vec<ChatHit>, CatalogueError> {
+		self.access
+			.call(move |connection| Ok(recent_chats(connection, &space_id, owned_by.as_ref())))
+			.await?
 	}
 }
 
 fn searched(
 	connection: &Connection,
 	scope: &CatalogueScope,
+	owned_by: Option<&ChatOwner>,
 	needle: &str,
 ) -> Result<CatalogueHits, CatalogueError> {
 	let seated = seated_bots(connection)?;
 	let spaces = bot_spaces(connection)?;
 	Ok(CatalogueHits {
-		chats: matching_chats(connection, scope, needle, &seated)?,
+		chats: matching_chats(connection, scope, owned_by, needle, &seated)?,
 		missions: matching_missions(connection, scope, needle, &spaces)?,
 		routines: matching_routines(connection, scope, needle, &spaces)?,
 	})
 }
 
-fn recent_chats(connection: &Connection, space_id: &str) -> Result<Vec<ChatHit>, CatalogueError> {
+fn recent_chats(
+	connection: &Connection,
+	space_id: &str,
+	owned_by: Option<&ChatOwner>,
+) -> Result<Vec<ChatHit>, CatalogueError> {
 	let seated = seated_bots(connection)?;
 	let mut statement =
 		connection.prepare_cached(&format!("{} {RECENT_CHATS_OF_SCOPE} {CHAT_ORDER}", chats()))?;
-	let rows = statement.query_map(params![space_id], chat_row)?;
+	let rows = statement.query_map(params![space_id, owned_by], chat_row)?;
 	Ok(rows
 		.collect::<rusqlite::Result<Vec<_>>>()?
 		.into_iter()
@@ -132,12 +151,13 @@ fn recent_chats(connection: &Connection, space_id: &str) -> Result<Vec<ChatHit>,
 fn matching_chats(
 	connection: &Connection,
 	scope: &CatalogueScope,
+	owned_by: Option<&ChatOwner>,
 	needle: &str,
 	seated: &Seated,
 ) -> Result<Vec<ChatHit>, CatalogueError> {
 	let mut statement =
 		connection.prepare_cached(&format!("{} {CHATS_OF_KIND} {CHAT_ORDER}", chats()))?;
-	let rows = statement.query_map(params![scope.kind], chat_row)?;
+	let rows = statement.query_map(params![scope.kind, owned_by], chat_row)?;
 	Ok(rows
 		.collect::<rusqlite::Result<Vec<_>>>()?
 		.into_iter()
@@ -509,7 +529,7 @@ mod tests {
 
 		let held = database
 			.catalogue()
-			.search(scope("roadmap", PERSONAL))
+			.search(scope("roadmap", PERSONAL), None)
 			.await
 			.expect("the catalogue reads");
 
@@ -531,7 +551,7 @@ mod tests {
 
 		let held = database
 			.catalogue()
-			.search(scope("AMELIE", PERSONAL))
+			.search(scope("AMELIE", PERSONAL), None)
 			.await
 			.expect("the catalogue reads");
 
@@ -556,7 +576,7 @@ mod tests {
 
 		let held = database
 			.catalogue()
-			.search(scope("crash", PERSONAL))
+			.search(scope("crash", PERSONAL), None)
 			.await
 			.expect("the catalogue reads");
 
@@ -588,7 +608,7 @@ mod tests {
 
 		let held = database
 			.catalogue()
-			.search(scope("nightly", PERSONAL))
+			.search(scope("nightly", PERSONAL), None)
 			.await
 			.expect("the catalogue reads");
 
@@ -619,12 +639,12 @@ mod tests {
 
 		let held = database
 			.catalogue()
-			.search(scope("nightly", PERSONAL))
+			.search(scope("nightly", PERSONAL), None)
 			.await
 			.expect("the catalogue reads");
 		let wide = database
 			.catalogue()
-			.search(scope("roadmap", PERSONAL))
+			.search(scope("roadmap", PERSONAL), None)
 			.await
 			.expect("the catalogue reads");
 
@@ -718,7 +738,7 @@ mod tests {
 		for query in ["clement", "damien"] {
 			let held = database
 				.catalogue()
-				.search(scope(query, PERSONAL))
+				.search(scope(query, PERSONAL), None)
 				.await
 				.expect("the catalogue reads");
 
@@ -727,7 +747,7 @@ mod tests {
 
 		let rooms = database
 			.catalogue()
-			.search(scope("room", PERSONAL))
+			.search(scope("room", PERSONAL), None)
 			.await
 			.expect("the catalogue reads");
 		assert!(
@@ -738,7 +758,7 @@ mod tests {
 
 		let scoped = database
 			.catalogue()
-			.search(scope("orphan room", PERSONAL))
+			.search(scope("orphan room", PERSONAL), None)
 			.await
 			.expect("the catalogue reads");
 		assert_eq!(
@@ -747,7 +767,8 @@ mod tests {
 			"a space-less room lent itself the space of a seat that left it"
 		);
 
-		let recent = database.catalogue().recent(PERSONAL.to_owned()).await.expect("recent reads");
+		let recent =
+			database.catalogue().recent(PERSONAL.to_owned(), None).await.expect("recent reads");
 		assert!(
 			!recent.iter().any(|chat| chat.conversation_id == "main-3"),
 			"a solo chat no present seat names answered as recent"
@@ -764,15 +785,18 @@ mod tests {
 
 		let held = database
 			.catalogue()
-			.search(scope("crowd", PERSONAL))
+			.search(scope("crowd", PERSONAL), None)
 			.await
 			.expect("the catalogue reads");
 
 		assert_eq!(held.chats.len(), MAX_MATCHES_PER_LIST, "the chats ran past their bound");
 		assert_eq!(held.routines.len(), MAX_MATCHES_PER_LIST, "the routines ran past their bound");
 
-		let rest =
-			database.catalogue().search(scope("", PERSONAL)).await.expect("the catalogue reads");
+		let rest = database
+			.catalogue()
+			.search(scope("", PERSONAL), None)
+			.await
+			.expect("the catalogue reads");
 
 		assert_eq!(rest.chats.len(), MAX_MATCHES_PER_LIST, "the rest chats ran past their bound");
 		assert_eq!(
@@ -790,7 +814,7 @@ mod tests {
 		a_crowd_of_topics(&database, MAX_RECENT_CHATS + 3).await;
 
 		let held =
-			database.catalogue().recent(PERSONAL.to_owned()).await.expect("the recent reads");
+			database.catalogue().recent(PERSONAL.to_owned(), None).await.expect("the recent reads");
 
 		assert_eq!(held.len(), MAX_RECENT_CHATS, "the recent chats ran past their bound");
 
@@ -836,12 +860,12 @@ mod tests {
 
 		let padded = database
 			.catalogue()
-			.search(scope("  roadmap  ", PERSONAL))
+			.search(scope("  roadmap  ", PERSONAL), None)
 			.await
 			.expect("the catalogue reads");
 		let bare = database
 			.catalogue()
-			.search(scope("roadmap", PERSONAL))
+			.search(scope("roadmap", PERSONAL), None)
 			.await
 			.expect("the catalogue reads");
 
@@ -861,7 +885,7 @@ mod tests {
 		for query in ["", " "] {
 			let held = database
 				.catalogue()
-				.search(scope(query, PERSONAL))
+				.search(scope(query, PERSONAL), None)
 				.await
 				.expect("the catalogue reads");
 
@@ -889,7 +913,8 @@ mod tests {
 	async fn an_empty_query_of_the_other_space_answers_its_rows_and_none_of_this_one() {
 		let (database, dir) = planted().await;
 
-		let held = database.catalogue().search(scope("", WORK)).await.expect("the catalogue reads");
+		let held =
+			database.catalogue().search(scope("", WORK), None).await.expect("the catalogue reads");
 
 		assert_eq!(
 			sorted(titles(&held.chats)),
@@ -919,7 +944,7 @@ mod tests {
 			.expect("the quiet space is planted");
 
 		let held =
-			database.catalogue().search(scope("", "lab")).await.expect("the catalogue reads");
+			database.catalogue().search(scope("", "lab"), None).await.expect("the catalogue reads");
 
 		assert_eq!(titles(&held.chats), vec!["Bench notes"], "the quiet space lost its chat");
 		assert_eq!(held.missions, vec![], "a space holding no mission answered one");
@@ -932,21 +957,24 @@ mod tests {
 	async fn an_empty_query_orders_its_rows_the_way_a_matching_query_orders_them() {
 		let (database, dir) = planted().await;
 
-		let rest =
-			database.catalogue().search(scope("", PERSONAL)).await.expect("the catalogue reads");
+		let rest = database
+			.catalogue()
+			.search(scope("", PERSONAL), None)
+			.await
+			.expect("the catalogue reads");
 		let matched = database
 			.catalogue()
-			.search(scope("roadmap", PERSONAL))
+			.search(scope("roadmap", PERSONAL), None)
 			.await
 			.expect("the catalogue reads");
 		let renamed = database
 			.catalogue()
-			.search(scope("rename the sidecar", PERSONAL))
+			.search(scope("rename the sidecar", PERSONAL), None)
 			.await
 			.expect("the catalogue reads");
 		let nightly = database
 			.catalogue()
-			.search(scope("nightly", PERSONAL))
+			.search(scope("nightly", PERSONAL), None)
 			.await
 			.expect("the catalogue reads");
 
@@ -975,7 +1003,7 @@ mod tests {
 
 		let held = database
 			.catalogue()
-			.search(scope("rename the sidecar", PERSONAL))
+			.search(scope("rename the sidecar", PERSONAL), None)
 			.await
 			.expect("the catalogue reads");
 
@@ -1001,12 +1029,12 @@ mod tests {
 
 		let here = database
 			.catalogue()
-			.search(scope("rename the sidecar", PERSONAL))
+			.search(scope("rename the sidecar", PERSONAL), None)
 			.await
 			.expect("the catalogue reads");
 		let there = database
 			.catalogue()
-			.search(scope("rename the sidecar", WORK))
+			.search(scope("rename the sidecar", WORK), None)
 			.await
 			.expect("the catalogue reads");
 
@@ -1036,10 +1064,16 @@ mod tests {
 			.await
 			.expect("the bot joins the other space");
 
-		let held =
-			database.catalogue().search(scope("crash", WORK)).await.expect("the catalogue reads");
-		let nightly =
-			database.catalogue().search(scope("nightly", WORK)).await.expect("the catalogue reads");
+		let held = database
+			.catalogue()
+			.search(scope("crash", WORK), None)
+			.await
+			.expect("the catalogue reads");
+		let nightly = database
+			.catalogue()
+			.search(scope("nightly", WORK), None)
+			.await
+			.expect("the catalogue reads");
 
 		assert_eq!(
 			held.missions
@@ -1072,7 +1106,7 @@ mod tests {
 		] {
 			let held = database
 				.catalogue()
-				.search(scope(query, PERSONAL))
+				.search(scope(query, PERSONAL), None)
 				.await
 				.expect("the catalogue reads");
 
@@ -1093,8 +1127,10 @@ mod tests {
 	async fn a_query_over_the_limit_is_refused_by_the_limit_it_names() {
 		let (database, dir) = planted().await;
 
-		let held =
-			database.catalogue().search(scope(&"a".repeat(MAX_QUERY_CHARS + 1), PERSONAL)).await;
+		let held = database
+			.catalogue()
+			.search(scope(&"a".repeat(MAX_QUERY_CHARS + 1), PERSONAL), None)
+			.await;
 
 		assert_eq!(held, Err(CatalogueError::QueryTooLong { limit: MAX_QUERY_CHARS }));
 
@@ -1106,7 +1142,7 @@ mod tests {
 		let (database, dir) = planted().await;
 
 		let held =
-			database.catalogue().recent(PERSONAL.to_owned()).await.expect("the recent reads");
+			database.catalogue().recent(PERSONAL.to_owned(), None).await.expect("the recent reads");
 
 		assert_eq!(
 			named(&held),
@@ -1124,7 +1160,8 @@ mod tests {
 	async fn the_recent_chats_of_the_other_space_answer_its_chats_and_none_of_this_one() {
 		let (database, dir) = planted().await;
 
-		let held = database.catalogue().recent(WORK.to_owned()).await.expect("the recent reads");
+		let held =
+			database.catalogue().recent(WORK.to_owned(), None).await.expect("the recent reads");
 
 		assert_eq!(
 			named(&held),

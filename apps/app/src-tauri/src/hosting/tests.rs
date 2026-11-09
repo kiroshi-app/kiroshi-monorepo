@@ -19,7 +19,7 @@ use tauri::{Listener, Manager, WebviewWindow, WebviewWindowBuilder};
 use tokio::net::TcpListener;
 use tokio::sync::{mpsc, watch};
 
-use super::authorship::Caller;
+use super::authorship::{Caller, RelayedMember};
 use super::bridge::{self, belongs_to_the_host, LocalApi, RelayedFile, ATTACHMENT_COMMAND};
 use super::contract::{AccountDevices, RosterDevice};
 use super::contract::{
@@ -57,8 +57,8 @@ use crate::conversations::commands::{
 	conversation_add_participant, conversation_append_user_message, conversation_create,
 	conversation_create_bot_from_draft, conversation_delete, conversation_delete_bot,
 	conversation_duplicate_bot, conversation_page, conversation_remove_participant,
-	conversation_send_user_message, conversation_set_lead, conversation_update,
-	conversation_update_bot,
+	conversation_renew_main_chat, conversation_send_user_message, conversation_set_lead,
+	conversation_update, conversation_update_bot,
 };
 use crate::conversations::contract::{
 	Bot, BotDraft, BotIdentity, Conversation, ConversationInPage, Hue, LastWord, NewUserMessage,
@@ -74,6 +74,7 @@ use crate::crypto::error::CryptoError;
 use crate::crypto::frame::CHALLENGE_LENGTH;
 use crate::crypto::space_key::HeldSpaceKey;
 use crate::db::connection::temp_dir;
+use crate::db::repositories::conversations::ChatOwner;
 use crate::db::repositories::conversations::{a_pending_prompt, PromptKind};
 use crate::db::repositories::joined_spaces::{JoinedReach, JoinedSpace};
 use crate::db::repositories::messages::{
@@ -99,7 +100,8 @@ use crate::mcp_oauth::reports::ApplicationReports;
 use crate::removed_on_drop::RemovedOnDrop;
 use crate::routines::commands::CHANGED_EVENT as ROUTINE_CHANGED_EVENT;
 use crate::routines::webhook::{self, Webhook};
-use crate::search::contract::{CatalogueScope, MessageSearchQuery};
+use crate::search::commands::{search_catalogue, search_recent};
+use crate::search::contract::{CatalogueChat, CatalogueError, CatalogueScope, MessageSearchQuery};
 use crate::spaces::commands::{
 	bot_add_to_space, bot_move_to_space, bot_remove_from_space, space_delete, space_update,
 };
@@ -660,16 +662,17 @@ async fn host_effect_applied(
 		"search_catalogue" => {
 			let scope =
 				CatalogueScope { query: text("query"), space_id: text("spaceId"), kind: None };
-			let found = database.catalogue().search(scope).await.expect("the host searches");
+			let found = database.catalogue().search(scope, None).await.expect("the host searches");
 			return answered_json(StatusCode::OK, json!(found));
 		}
 		"search_recent" => {
-			let found = database.catalogue().recent(text("spaceId")).await.expect("the host reads");
+			let found =
+				database.catalogue().recent(text("spaceId"), None).await.expect("the host reads");
 			return answered_json(StatusCode::OK, json!(found));
 		}
 		"search_messages" => {
 			let query: MessageSearchQuery = typed(&args, "query");
-			let found = database.search().messages(query).await.expect("the host searches");
+			let found = database.search().messages(query, None).await.expect("the host searches");
 			return answered_json(StatusCode::OK, json!(found));
 		}
 		"library_list" => {
@@ -4067,10 +4070,15 @@ fn the_live_sessions_in_a_space_hold_only_the_sessions_of_its_conversations() {
 		commands::a_run_held_by_the_app(app, a_held_scope_in("c-theirs", "b-theirs"));
 		commands::a_run_held_by_the_app(app, a_held_scope_in("c-shared", "b-shared"));
 
-		let listed =
-			commands::agent_live_sessions_in_space(app.state(), app.state(), PERSONAL.to_owned())
-				.await
-				.expect("the sessions read");
+		let listed = commands::agent_live_sessions_in_space(
+			app.clone(),
+			app.state(),
+			app.state(),
+			Caller::Host,
+			PERSONAL.to_owned(),
+		)
+		.await
+		.expect("the sessions read");
 
 		let conversations: Vec<&str> =
 			listed.iter().map(|session| session.conversation_id.as_str()).collect();
@@ -4114,9 +4122,15 @@ async fn pending_in_the_space(
 	app: &tauri::AppHandle<MockRuntime>,
 	space_id: &str,
 ) -> Vec<agent::ScopedEvent> {
-	commands::agent_pending_questions_in_space(app.state(), app.state(), space_id.to_owned())
-		.await
-		.expect("the questions read")
+	commands::agent_pending_questions_in_space(
+		app.clone(),
+		app.state(),
+		app.state(),
+		Caller::Host,
+		space_id.to_owned(),
+	)
+	.await
+	.expect("the questions read")
 }
 
 async fn pending_in_the_conversation(
@@ -4149,6 +4163,207 @@ fn the_pending_questions_in_a_space_hold_the_questions_of_each_of_its_conversati
 		assert_eq!(
 			pending_in_the_space(app, PERSONAL).await,
 			pending_in_the_conversation(app, "c-mine").await
+		);
+	});
+}
+
+const BEA: &str = "bea-account";
+
+fn relayed_as(account_id: &str) -> Caller {
+	Caller::Relayed(Some(RelayedMember {
+		space_id: PERSONAL.to_owned(),
+		user_id: account_id.to_owned(),
+		computer: None,
+	}))
+}
+
+struct MainsOfTwoPeople {
+	of_the_host: String,
+	of_bea: String,
+}
+
+async fn mains_of_the_host_and_bea(guest: &Guest) -> MainsOfTwoPeople {
+	let database = db::open(&guest.effects.database);
+	let main_of = |owner| {
+		let conversations = database.conversations();
+		async move {
+			conversations
+				.ensure_chat("b-mine".to_owned(), Some(PERSONAL.to_owned()), owner)
+				.await
+				.expect("the main conversation opens")
+				.id
+		}
+	};
+	MainsOfTwoPeople {
+		of_the_host: main_of(ChatOwner::Host).await,
+		of_bea: main_of(ChatOwner::Member(BEA.to_owned())).await,
+	}
+}
+
+fn sorted(mut ids: Vec<String>) -> Vec<String> {
+	ids.sort();
+	ids
+}
+
+#[test]
+fn the_live_sessions_in_a_space_leave_out_the_main_conversation_of_another_person() {
+	run(async {
+		let guest = Guest::of_two_spaces("live-sessions-of-a-person").await;
+		let app = guest.harness.app.handle();
+		let mains = mains_of_the_host_and_bea(&guest).await;
+		for conversation_id in ["c-mine", &mains.of_the_host, &mains.of_bea] {
+			commands::a_run_held_by_the_app(app, a_held_scope_in(conversation_id, "b-mine"));
+		}
+		let listed_for = |caller| {
+			commands::agent_live_sessions_in_space(
+				app.clone(),
+				app.state(),
+				app.state(),
+				caller,
+				PERSONAL.to_owned(),
+			)
+		};
+		let ids = |listed: Vec<agent::LiveSession>| {
+			sorted(listed.into_iter().map(|session| session.conversation_id).collect())
+		};
+
+		let of_bea = ids(listed_for(relayed_as(BEA)).await.expect("bea reads"));
+		let of_the_host = ids(listed_for(Caller::Host).await.expect("the host reads"));
+		let unvouched = listed_for(Caller::Relayed(None)).await;
+
+		assert_eq!(of_bea, sorted(vec!["c-mine".to_owned(), mains.of_bea]));
+		assert_eq!(of_the_host, sorted(vec!["c-mine".to_owned(), mains.of_the_host]));
+		assert_eq!(unvouched, Err(TranscriptStoreError::UnvouchedMember));
+	});
+}
+
+#[test]
+fn the_pending_questions_in_a_space_leave_out_the_main_conversation_of_another_person() {
+	run(async {
+		let guest = Guest::of_two_spaces("pending-questions-of-a-person").await;
+		let app = guest.harness.app.handle();
+		let mains = mains_of_the_host_and_bea(&guest).await;
+		for conversation_id in ["c-mine", &mains.of_the_host, &mains.of_bea] {
+			commands::a_run_held_by_the_app(app, a_held_scope_in(conversation_id, "b-mine"))
+				.emit(a_question(&format!("q-{conversation_id}")), a_turn_in(conversation_id));
+		}
+		let listed_for = |caller| {
+			commands::agent_pending_questions_in_space(
+				app.clone(),
+				app.state(),
+				app.state(),
+				caller,
+				PERSONAL.to_owned(),
+			)
+		};
+		let ids = |listed: Vec<agent::ScopedEvent>| {
+			sorted(
+				listed
+					.into_iter()
+					.filter_map(|question| question.scope.map(|scope| scope.conversation_id))
+					.collect(),
+			)
+		};
+
+		let of_bea = ids(listed_for(relayed_as(BEA)).await.expect("bea reads"));
+		let of_the_host = ids(listed_for(Caller::Host).await.expect("the host reads"));
+		let unvouched = listed_for(Caller::Relayed(None)).await;
+
+		assert_eq!(of_bea, sorted(vec!["c-mine".to_owned(), mains.of_bea]));
+		assert_eq!(of_the_host, sorted(vec!["c-mine".to_owned(), mains.of_the_host]));
+		assert_eq!(unvouched, Err(TranscriptStoreError::UnvouchedMember));
+	});
+}
+
+fn chat_ids(chats: Vec<CatalogueChat>) -> Vec<String> {
+	sorted(chats.into_iter().map(|chat| chat.hit.conversation_id).collect())
+}
+
+#[test]
+fn the_catalogue_search_of_a_space_leaves_out_the_main_conversation_of_another_person() {
+	run(async {
+		let guest = Guest::of_two_spaces("catalogue-of-a-person").await;
+		let app = guest.harness.app.handle();
+		let mains = mains_of_the_host_and_bea(&guest).await;
+		let searched_by = |caller| {
+			search_catalogue(
+				app.clone(),
+				app.state(),
+				caller,
+				"Mine".to_owned(),
+				PERSONAL.to_owned(),
+			)
+		};
+
+		let of_bea = searched_by(relayed_as(BEA)).await.expect("bea searches");
+		let of_the_host = searched_by(Caller::Host).await.expect("the host searches");
+		let unvouched = searched_by(Caller::Relayed(None)).await;
+
+		assert_eq!(chat_ids(of_bea.chats), sorted(vec!["c-mine".to_owned(), mains.of_bea]));
+		assert_eq!(
+			chat_ids(of_the_host.chats),
+			sorted(vec!["c-mine".to_owned(), mains.of_the_host])
+		);
+		assert_eq!(unvouched.err(), Some(CatalogueError::UnvouchedMember));
+	});
+}
+
+#[test]
+fn the_recent_conversations_of_a_space_leave_out_the_main_conversation_of_another_person() {
+	run(async {
+		let guest = Guest::of_two_spaces("recent-of-a-person").await;
+		let app = guest.harness.app.handle();
+		let mains = mains_of_the_host_and_bea(&guest).await;
+		let read_by = |caller| search_recent(app.clone(), app.state(), caller, PERSONAL.to_owned());
+
+		let of_bea = chat_ids(read_by(relayed_as(BEA)).await.expect("bea reads"));
+		let of_the_host = chat_ids(read_by(Caller::Host).await.expect("the host reads"));
+		let unvouched = read_by(Caller::Relayed(None)).await;
+
+		assert_eq!(of_bea, sorted(vec!["c-mine".to_owned(), mains.of_bea]));
+		assert_eq!(of_the_host, sorted(vec!["c-mine".to_owned(), mains.of_the_host]));
+		assert_eq!(unvouched, Err(CatalogueError::UnvouchedMember));
+	});
+}
+
+#[test]
+fn a_renewed_main_conversation_is_announced_archived_as_a_closed_room_is() {
+	run(async {
+		let guest = Guest::of_two_spaces("renew-announced").await;
+		let app = guest.harness.app.handle();
+		let former = mains_of_the_host_and_bea(&guest).await.of_the_host;
+		let mut published = events::subscribed(app);
+
+		let fresh = conversation_renew_main_chat(
+			app.clone(),
+			app.state(),
+			Caller::Host,
+			"b-mine".to_owned(),
+			PERSONAL.to_owned(),
+		)
+		.await
+		.expect("the main conversation is renewed");
+
+		let mut announced = Vec::new();
+		while let Ok(frame) = published.try_recv() {
+			let frame: Value = serde_json::from_str(&frame).expect("a json frame");
+			announced.push((frame["event"].clone(), frame["payload"].clone()));
+		}
+		let archived = announced
+			.iter()
+			.filter(|(event, _)| *event == json!(CONVERSATION_DELETED_EVENT))
+			.collect::<Vec<_>>();
+		assert_eq!(
+			archived,
+			[&(
+				json!(CONVERSATION_DELETED_EVENT),
+				json!({ "spaceId": PERSONAL, "conversationId": former }),
+			)]
+		);
+		assert!(
+			announced.iter().any(|(event, payload)| *event == json!(CONVERSATION_CREATED_EVENT)
+				&& payload["conversation"]["id"] == json!(fresh.id)),
+			"the fresh main was not announced: {announced:?}"
 		);
 	});
 }
@@ -4273,9 +4488,15 @@ fn held_of(command: &str, index: usize) -> reach::Held {
 }
 
 async fn shared_space_refusal(guest: &Guest, command: &str, args: Value) -> reach::Refusal {
-	reach::stays_in_the_shared_space(guest.harness.app.handle(), PERSONAL, command, &args)
-		.await
-		.expect_err("the call is refused")
+	reach::stays_in_the_shared_space(
+		guest.harness.app.handle(),
+		PERSONAL,
+		&ChatOwner::Member(MEMBER_ACCOUNT.to_owned()),
+		command,
+		&args,
+	)
+	.await
+	.expect_err("the call is refused")
 }
 
 #[test]
@@ -5492,25 +5713,31 @@ fn a_relay_guest_hears_the_end_of_a_host_turn_once_when_its_evolution_lands_befo
 	});
 }
 
+async fn a_main_conversation_waiting_on(guest: &Guest, owner: ChatOwner) -> String {
+	let database = db::open(&guest.effects.database);
+	let conversations = database.conversations();
+	let main = conversations
+		.ensure_chat("b-mine".to_owned(), Some(PERSONAL.to_owned()), owner)
+		.await
+		.expect("the main conversation opens");
+	let prompt = a_pending_prompt(&main.id, PromptKind::Permission);
+	conversations.hold_prompt(prompt).await.expect("the prompt is held");
+	let app = guest.harness.app.handle();
+	conversation_state::observe(app, &database, &main.id).await.expect("the state reads");
+	main.id
+}
+
 #[test]
-fn a_relay_guest_hears_the_state_change_of_a_main_conversation_of_the_shared_space() {
+fn a_relay_guest_hears_the_state_change_of_its_own_main_conversation() {
 	run(async {
 		let mut guest = Guest::of_two_spaces("main-state").await;
-		let app = guest.harness.app.handle().clone();
-		let database = db::open(&guest.effects.database);
-		let conversations = database.conversations();
-		let main = conversations
-			.ensure_chat("b-mine".to_owned(), Some(PERSONAL.to_owned()))
-			.await
-			.expect("the main conversation opens");
-		let prompt = a_pending_prompt(&main.id, PromptKind::Permission);
-		conversations.hold_prompt(prompt).await.expect("the prompt is held");
 
-		conversation_state::observe(&app, &database, &main.id).await.expect("the state reads");
+		let main_id =
+			a_main_conversation_waiting_on(&guest, ChatOwner::Member(A_JOINER.to_owned())).await;
 		let heard = guest.events_until_the_marker().await;
 
 		let changed = json!({
-			"conversationId": main.id,
+			"conversationId": main_id,
 			"spaceId": PERSONAL,
 			"state": "needs_you",
 			"pendingPrompt": { "promptId": "p1", "kind": "permission", "text": "Run git push" },
@@ -5547,6 +5774,54 @@ fn a_relay_guest_hears_the_rooms_of_an_agent_in_the_shared_space_only() {
 			.filter(|frame| frame["event"]["event"] == json!(AGENT_ROOMS_CHANGED_EVENT))
 			.collect();
 		assert_eq!(rooms_heard, [&as_forwarded((AGENT_ROOMS_CHANGED_EVENT, rooms))]);
+	});
+}
+
+#[test]
+fn a_relay_guest_does_not_hear_the_state_change_of_a_main_conversation_the_host_owns() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("host-main-state").await;
+
+		a_main_conversation_waiting_on(&guest, ChatOwner::Host).await;
+		let heard = guest.events_until_the_marker().await;
+
+		assert_eq!(heard, Vec::<Value>::new());
+	});
+}
+
+#[test]
+fn a_relay_guest_is_refused_on_the_main_conversation_of_another_person_and_served_on_its_own() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("main-of-another").await;
+		let database = db::open(&guest.effects.database);
+		let main_of = |owner| {
+			let conversations = database.conversations();
+			async move {
+				conversations
+					.ensure_chat("b-mine".to_owned(), Some(PERSONAL.to_owned()), owner)
+					.await
+					.expect("the main conversation opens")
+					.id
+			}
+		};
+		let of_the_host = main_of(ChatOwner::Host).await;
+		let of_another = main_of(ChatOwner::Member(OTHER_ACCOUNT.to_owned())).await;
+		let its_own = main_of(ChatOwner::Member(A_JOINER.to_owned())).await;
+		let page_of = |id: &str| json!({ "conversationId": id, "beforeSeq": null, "limit": 10 });
+
+		for refused in [&of_the_host, &of_another] {
+			assert_eq!(
+				guest.called("conversation_message_page", page_of(refused)).await,
+				json!({
+					"id": "conversation_message_page",
+					"status": 403,
+					"body": "this command reaches the main conversation of another person",
+				}),
+			);
+		}
+		guest.forwarded("conversation_message_page", page_of(&its_own)).await;
+
+		assert_eq!(guest.effects.reached(), ["conversation_message_page"]);
 	});
 }
 
@@ -5624,9 +5899,26 @@ impl Authoring {
 		let mut preferences = direct(&window, "user_preferences", json!({}));
 		preferences["displayName"] = json!(HOST_NAME);
 		direct(&window, "user_set_preferences", json!({ "preferences": preferences }));
-		let chat = direct(&window, "conversation_main_chat", json!({ "botId": "default" }));
-		let conversation_id = chat["id"].as_str().expect("the chat holds an id").to_owned();
+		direct(&window, "conversation_main_chat", json!({ "botId": "default" }));
+		let room = direct(
+			&window,
+			"conversation_create",
+			json!({ "spaceId": PERSONAL, "sectionId": null, "title": "Shared", "botIds": ["default"] }),
+		);
+		let conversation_id = room["id"].as_str().expect("the room holds an id").to_owned();
 		Self { app, window, local, conversation_id, _root: root }
+	}
+
+	async fn main_of(&self, owner: ChatOwner) -> String {
+		self.app
+			.state::<DatabaseState>()
+			.as_ref()
+			.expect("the database")
+			.conversations()
+			.ensure_chat("default".to_owned(), Some(PERSONAL.to_owned()), owner)
+			.await
+			.expect("the main conversation opens")
+			.id
 	}
 
 	fn turn(&self, turn_id: &str) {
@@ -6100,14 +6392,11 @@ fn a_guest_message_refused_by_the_host_answers_a_text_naming_the_refusal() {
 }
 
 #[test]
-fn a_guest_reads_the_same_conversation_page_as_the_host_solo_rows_included() {
+fn a_guest_and_the_host_each_page_their_own_main_conversation_beside_the_shared_rooms() {
 	run(async {
 		let host = Authoring::new(Some(BEARER)).await;
-		let room = direct(
-			&host.window,
-			"conversation_create",
-			json!({ "spaceId": PERSONAL, "sectionId": null, "title": "Room", "botIds": [] }),
-		);
+		let main_of_the_host = host.main_of(ChatOwner::Host).await;
+		let main_of_the_guest = host.main_of(ChatOwner::Member(GUEST.to_owned())).await;
 		let args = json!({ "spaceId": PERSONAL, "cursor": null, "limit": null });
 
 		let read_by_the_guest = host
@@ -6119,18 +6408,24 @@ fn a_guest_reads_the_same_conversation_page_as_the_host_solo_rows_included() {
 			.await;
 		let read_by_the_host = direct(&host.window, "conversation_page", args);
 
-		let solo_bot_of = |id: &Value| {
-			read_by_the_guest["conversations"]
+		let solo_bots_of = |page: &Value| {
+			let mut rows: Vec<(Value, Value)> = page["conversations"]
 				.as_array()
 				.expect("the page holds a list")
 				.iter()
-				.find(|row| row["id"] == *id)
-				.map(|row| row["soloBotId"].clone())
+				.map(|row| (row["id"].clone(), row["soloBotId"].clone()))
+				.collect();
+			rows.sort_by_key(|(id, _)| id.to_string());
+			rows
 		};
-		assert_eq!(read_by_the_guest, read_by_the_host);
-		assert_eq!(read_by_the_guest["conversations"].as_array().map(Vec::len), Some(2));
-		assert_eq!(solo_bot_of(&room["id"]), Some(Value::Null));
-		assert_eq!(solo_bot_of(&json!(host.conversation_id)), Some(json!("default")));
+		let expected = |main: &str| {
+			let mut rows =
+				vec![(json!(host.conversation_id), Value::Null), (json!(main), json!("default"))];
+			rows.sort_by_key(|(id, _)| id.to_string());
+			rows
+		};
+		assert_eq!(solo_bots_of(&read_by_the_guest), expected(&main_of_the_guest));
+		assert_eq!(solo_bots_of(&read_by_the_host), expected(&main_of_the_host));
 	});
 }
 
@@ -6179,12 +6474,14 @@ fn a_guest_reads_the_state_the_host_computed_for_each_conversation() {
 }
 
 #[test]
-fn a_guest_reads_the_same_solo_states_as_the_host() {
+fn a_guest_and_the_host_each_read_the_solo_state_of_their_own_main_conversation() {
 	run(async {
 		let host = Authoring::new(Some(BEARER)).await;
+		let main_of_the_host = host.main_of(ChatOwner::Host).await;
+		let main_of_the_guest = host.main_of(ChatOwner::Member(GUEST.to_owned())).await;
 		let state = host.app.state::<DatabaseState>();
 		let conversations = state.as_ref().expect("the database").conversations();
-		let prompt = a_pending_prompt(&host.conversation_id, PromptKind::Question);
+		let prompt = a_pending_prompt(&main_of_the_guest, PromptKind::Question);
 		conversations.hold_prompt(prompt).await.expect("the prompt is held");
 		let args = json!({ "spaceId": PERSONAL });
 
@@ -6193,11 +6490,19 @@ fn a_guest_reads_the_same_solo_states_as_the_host() {
 			.await;
 		let read_by_the_host = direct(&host.window, "conversation_solo_states", args);
 
-		assert_eq!(read_by_the_guest, read_by_the_host);
-		assert_eq!(read_by_the_guest.as_array().map(Vec::len), Some(1), "{read_by_the_guest}");
-		assert_eq!(read_by_the_guest[0]["botId"], json!("default"));
-		assert_eq!(read_by_the_guest[0]["conversationId"], json!(host.conversation_id));
-		assert_eq!(read_by_the_guest[0]["state"], json!("needs_you"));
+		let solo_of = |read: &Value| {
+			let rows = read.as_array().expect("the read holds a list");
+			assert_eq!(rows.len(), 1, "{read}");
+			(rows[0]["botId"].clone(), rows[0]["conversationId"].clone(), rows[0]["state"].clone())
+		};
+		assert_eq!(
+			solo_of(&read_by_the_guest),
+			(json!("default"), json!(main_of_the_guest), json!("needs_you"))
+		);
+		assert_eq!(
+			solo_of(&read_by_the_host),
+			(json!("default"), json!(main_of_the_host), json!("idle"))
+		);
 	});
 }
 
@@ -6610,10 +6915,16 @@ impl Guest {
 
 	async fn paged_row(&self, conversation_id: &str) -> ConversationInPage {
 		let app = self.harness.app.handle().clone();
-		let page =
-			conversation_page(app, self.harness.app.state(), PERSONAL.to_owned(), None, None)
-				.await
-				.expect("the page is read");
+		let page = conversation_page(
+			app,
+			self.harness.app.state(),
+			Caller::Host,
+			PERSONAL.to_owned(),
+			None,
+			None,
+		)
+		.await
+		.expect("the page is read");
 		page.conversations
 			.into_iter()
 			.find(|row| row.conversation.id == conversation_id)

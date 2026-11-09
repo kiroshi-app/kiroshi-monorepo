@@ -11,7 +11,7 @@ use serde_json::{json, Map, Value};
 use tauri::{AppHandle, Manager, Runtime};
 use tokio::sync::{Mutex, OwnedMutexGuard};
 
-use super::authorship::RelayedMember;
+use super::authorship::{self, RelayedMember};
 use super::reach::{self, Reach};
 use super::Hosting;
 
@@ -30,6 +30,8 @@ const INVOKE_BOUND: Duration = Duration::from_secs(300);
 const HOST_ONLY_REFUSAL: &str = "this command belongs to the host";
 
 const OTHER_SPACE_REFUSAL: &str = "this command reaches outside the shared space";
+
+const OTHER_PERSON_REFUSAL: &str = "this command reaches the main conversation of another person";
 
 pub(crate) const SHARED_SPACE_COMMAND: &str = "relay_shared_space";
 
@@ -212,11 +214,22 @@ pub(super) async fn bridged<R: Runtime>(
 	shared_space_id: String,
 	call: MemberCall,
 ) -> String {
-	if let Err(refusal) =
-		reach::stays_in_the_shared_space(&app, &shared_space_id, &call.command, &call.args).await
-	{
+	let caller = authorship::person_of(&app, &call.sender);
+	let reached = reach::stays_in_the_shared_space(
+		&app,
+		&shared_space_id,
+		&caller,
+		&call.command,
+		&call.args,
+	)
+	.await;
+	if let Err(refusal) = reached {
 		log::warn!("{}", reach::refusal_line(&call.command, &shared_space_id, &refusal));
-		return answer(call.id, StatusCode::FORBIDDEN, json!(OTHER_SPACE_REFUSAL));
+		let reason = match refusal {
+			reach::Refusal::NotOwned { .. } => OTHER_PERSON_REFUSAL,
+			_ => OTHER_SPACE_REFUSAL,
+		};
+		return answer(call.id, StatusCode::FORBIDDEN, json!(reason));
 	}
 	let hosting = app.state::<Hosting>();
 	let member = RelayedMember {

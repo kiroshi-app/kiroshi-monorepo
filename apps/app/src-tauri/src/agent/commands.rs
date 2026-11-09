@@ -34,7 +34,6 @@ use crate::db;
 use crate::db::repositories::conversations::{Bot as StoredBot, ConversationError, MISSION_KIND};
 use crate::db::repositories::messages::{NewTurn, RunClaim};
 use crate::db::repositories::runtime_context::ParticipantKey;
-use crate::db::repositories::space_children::SpaceChild;
 use crate::environment::connection;
 use crate::environment::contract::{EnvError, EnvOwner, ResolvedEnv, Values};
 use crate::environment::store as environment;
@@ -1650,16 +1649,19 @@ pub async fn agent_live_sessions(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn agent_live_sessions_in_space(
+pub async fn agent_live_sessions_in_space<R: Runtime>(
+	app: AppHandle<R>,
 	state: State<'_, AgentState>,
 	database: State<'_, db::DatabaseState>,
+	caller: Caller,
 	space_id: String,
 ) -> Result<Vec<LiveSession>, TranscriptStoreError> {
+	let reader = caller.chat_owner(&app).ok_or(TranscriptStoreError::UnvouchedMember)?;
 	let children = ready(&database)?.space_children();
 	let mut in_the_space = Vec::new();
 	for session in state.live.report() {
 		let conversation_id = session.conversation_id.clone();
-		if children.holds(space_id.clone(), SpaceChild::Conversation, conversation_id).await? {
+		if children.shows_conversation(space_id.clone(), conversation_id, reader.clone()).await? {
 			in_the_space.push(session);
 		}
 	}
@@ -1677,16 +1679,19 @@ pub async fn agent_pending_questions(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn agent_pending_questions_in_space(
+pub async fn agent_pending_questions_in_space<R: Runtime>(
+	app: AppHandle<R>,
 	state: State<'_, AgentState>,
 	database: State<'_, db::DatabaseState>,
+	caller: Caller,
 	space_id: String,
 ) -> Result<Vec<ScopedEvent>, TranscriptStoreError> {
+	let reader = caller.chat_owner(&app).ok_or(TranscriptStoreError::UnvouchedMember)?;
 	let children = ready(&database)?.space_children();
 	let mut in_the_space = Vec::new();
 	for question in state.live.pending_questions() {
 		let conversation_id = question.scope.conversation_id.clone();
-		if children.holds(space_id.clone(), SpaceChild::Conversation, conversation_id).await? {
+		if children.shows_conversation(space_id.clone(), conversation_id, reader.clone()).await? {
 			in_the_space.push(question.scoped());
 		}
 	}
