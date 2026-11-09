@@ -245,25 +245,32 @@ export type HomeEmptyStageProps = HomeSend & {
 	onDismissBand: () => void
 }
 
-const SHOWN_MARKS = 5
+type ApplicationsBandInput = {
+	store: TranscriptStore
+	agent: Bot
+	spaceId: string | null
+	isDismissed: boolean
+	onDismiss: () => void
+}
 
-const useApplicationsBand = (
-	store: TranscriptStore,
-	agent: Bot,
-	spaceId: string | null,
-	onDismiss: () => void,
-): ReactNode => {
+const useApplicationsBand = ({
+	store,
+	agent,
+	spaceId,
+	isDismissed,
+	onDismiss,
+}: ApplicationsBandInput): ReactNode => {
 	const curated = useContext(ConversationApplicationsContext)?.curated ?? []
 	const { servers, isPending, hasFailedToLoad } = useMcpServers(
 		store,
 		spaceId === null ? null : { kind: "bot", id: agent.id, spaceId },
 	)
-	if (spaceId === null || isPending || hasFailedToLoad || servers.length > 0) {
+	const hasNoApplication =
+		!isPending && !hasFailedToLoad && servers.length === 0
+	if (isDismissed || !hasNoApplication) {
 		return undefined
 	}
-	const marks = curated
-		.flatMap(({ logo }) => (logo ? [logo] : []))
-		.slice(0, SHOWN_MARKS)
+	const marks = curated.flatMap(({ logo }) => (logo ? [logo] : []))
 	return (
 		<HomeApplicationsBand
 			agentName={agent.name}
@@ -297,7 +304,13 @@ export const HomeEmptyStage = ({
 	onSubmit,
 	onAttach,
 }: HomeEmptyStageProps) => {
-	const band = useApplicationsBand(store, agent, spaceId, onDismissBand)
+	const band = useApplicationsBand({
+		store,
+		agent,
+		spaceId,
+		isDismissed: isBandDismissed,
+		onDismiss: onDismissBand,
+	})
 
 	return (
 		<HomeLayout stage="empty">
@@ -308,7 +321,7 @@ export const HomeEmptyStage = ({
 			/>
 			<HomeComposer
 				agents={agents.map(homeAgentOf)}
-				band={isBandDismissed ? undefined : band}
+				band={band}
 				defaultValue={draft}
 				onAttach={onAttach}
 				onSelectAgent={onSelectAgent}
