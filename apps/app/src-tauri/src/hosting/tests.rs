@@ -19,7 +19,7 @@ use tauri::{Listener, Manager, WebviewWindow, WebviewWindowBuilder};
 use tokio::net::TcpListener;
 use tokio::sync::{mpsc, watch};
 
-use super::authorship::Caller;
+use super::authorship::{Caller, RelayedMember};
 use super::bridge::{self, belongs_to_the_host, LocalApi, RelayedFile, ATTACHMENT_COMMAND};
 use super::contract::{AccountDevices, RosterDevice};
 use super::contract::{
@@ -57,8 +57,8 @@ use crate::conversations::commands::{
 	conversation_add_participant, conversation_append_user_message, conversation_create,
 	conversation_create_bot_from_draft, conversation_delete, conversation_delete_bot,
 	conversation_duplicate_bot, conversation_page, conversation_remove_participant,
-	conversation_send_user_message, conversation_set_lead, conversation_update,
-	conversation_update_bot,
+	conversation_renew_main_chat, conversation_send_user_message, conversation_set_lead,
+	conversation_update, conversation_update_bot,
 };
 use crate::conversations::contract::{
 	Bot, BotDraft, BotIdentity, Conversation, ConversationInPage, Hue, LastWord, NewUserMessage,
@@ -100,7 +100,8 @@ use crate::mcp_oauth::reports::ApplicationReports;
 use crate::removed_on_drop::RemovedOnDrop;
 use crate::routines::commands::CHANGED_EVENT as ROUTINE_CHANGED_EVENT;
 use crate::routines::webhook::{self, Webhook};
-use crate::search::contract::{CatalogueScope, MessageSearchQuery};
+use crate::search::commands::{search_catalogue, search_recent};
+use crate::search::contract::{CatalogueChat, CatalogueError, CatalogueScope, MessageSearchQuery};
 use crate::spaces::commands::{
 	bot_add_to_space, bot_move_to_space, bot_remove_from_space, space_delete, space_update,
 };
@@ -661,11 +662,12 @@ async fn host_effect_applied(
 		"search_catalogue" => {
 			let scope =
 				CatalogueScope { query: text("query"), space_id: text("spaceId"), kind: None };
-			let found = database.catalogue().search(scope).await.expect("the host searches");
+			let found = database.catalogue().search(scope, None).await.expect("the host searches");
 			return answered_json(StatusCode::OK, json!(found));
 		}
 		"search_recent" => {
-			let found = database.catalogue().recent(text("spaceId")).await.expect("the host reads");
+			let found =
+				database.catalogue().recent(text("spaceId"), None).await.expect("the host reads");
 			return answered_json(StatusCode::OK, json!(found));
 		}
 		"search_messages" => {
@@ -4068,10 +4070,15 @@ fn the_live_sessions_in_a_space_hold_only_the_sessions_of_its_conversations() {
 		commands::a_run_held_by_the_app(app, a_held_scope_in("c-theirs", "b-theirs"));
 		commands::a_run_held_by_the_app(app, a_held_scope_in("c-shared", "b-shared"));
 
-		let listed =
-			commands::agent_live_sessions_in_space(app.state(), app.state(), PERSONAL.to_owned())
-				.await
-				.expect("the sessions read");
+		let listed = commands::agent_live_sessions_in_space(
+			app.clone(),
+			app.state(),
+			app.state(),
+			Caller::Host,
+			PERSONAL.to_owned(),
+		)
+		.await
+		.expect("the sessions read");
 
 		let conversations: Vec<&str> =
 			listed.iter().map(|session| session.conversation_id.as_str()).collect();
@@ -4115,9 +4122,15 @@ async fn pending_in_the_space(
 	app: &tauri::AppHandle<MockRuntime>,
 	space_id: &str,
 ) -> Vec<agent::ScopedEvent> {
-	commands::agent_pending_questions_in_space(app.state(), app.state(), space_id.to_owned())
-		.await
-		.expect("the questions read")
+	commands::agent_pending_questions_in_space(
+		app.clone(),
+		app.state(),
+		app.state(),
+		Caller::Host,
+		space_id.to_owned(),
+	)
+	.await
+	.expect("the questions read")
 }
 
 async fn pending_in_the_conversation(
@@ -4150,6 +4163,207 @@ fn the_pending_questions_in_a_space_hold_the_questions_of_each_of_its_conversati
 		assert_eq!(
 			pending_in_the_space(app, PERSONAL).await,
 			pending_in_the_conversation(app, "c-mine").await
+		);
+	});
+}
+
+const BEA: &str = "bea-account";
+
+fn relayed_as(account_id: &str) -> Caller {
+	Caller::Relayed(Some(RelayedMember {
+		space_id: PERSONAL.to_owned(),
+		user_id: account_id.to_owned(),
+		computer: None,
+	}))
+}
+
+struct MainsOfTwoPeople {
+	of_the_host: String,
+	of_bea: String,
+}
+
+async fn mains_of_the_host_and_bea(guest: &Guest) -> MainsOfTwoPeople {
+	let database = db::open(&guest.effects.database);
+	let main_of = |owner| {
+		let conversations = database.conversations();
+		async move {
+			conversations
+				.ensure_chat("b-mine".to_owned(), Some(PERSONAL.to_owned()), owner)
+				.await
+				.expect("the main conversation opens")
+				.id
+		}
+	};
+	MainsOfTwoPeople {
+		of_the_host: main_of(ChatOwner::Host).await,
+		of_bea: main_of(ChatOwner::Member(BEA.to_owned())).await,
+	}
+}
+
+fn sorted(mut ids: Vec<String>) -> Vec<String> {
+	ids.sort();
+	ids
+}
+
+#[test]
+fn the_live_sessions_in_a_space_leave_out_the_main_conversation_of_another_person() {
+	run(async {
+		let guest = Guest::of_two_spaces("live-sessions-of-a-person").await;
+		let app = guest.harness.app.handle();
+		let mains = mains_of_the_host_and_bea(&guest).await;
+		for conversation_id in ["c-mine", &mains.of_the_host, &mains.of_bea] {
+			commands::a_run_held_by_the_app(app, a_held_scope_in(conversation_id, "b-mine"));
+		}
+		let listed_for = |caller| {
+			commands::agent_live_sessions_in_space(
+				app.clone(),
+				app.state(),
+				app.state(),
+				caller,
+				PERSONAL.to_owned(),
+			)
+		};
+		let ids = |listed: Vec<agent::LiveSession>| {
+			sorted(listed.into_iter().map(|session| session.conversation_id).collect())
+		};
+
+		let of_bea = ids(listed_for(relayed_as(BEA)).await.expect("bea reads"));
+		let of_the_host = ids(listed_for(Caller::Host).await.expect("the host reads"));
+		let unvouched = listed_for(Caller::Relayed(None)).await;
+
+		assert_eq!(of_bea, sorted(vec!["c-mine".to_owned(), mains.of_bea]));
+		assert_eq!(of_the_host, sorted(vec!["c-mine".to_owned(), mains.of_the_host]));
+		assert_eq!(unvouched, Err(TranscriptStoreError::UnvouchedMember));
+	});
+}
+
+#[test]
+fn the_pending_questions_in_a_space_leave_out_the_main_conversation_of_another_person() {
+	run(async {
+		let guest = Guest::of_two_spaces("pending-questions-of-a-person").await;
+		let app = guest.harness.app.handle();
+		let mains = mains_of_the_host_and_bea(&guest).await;
+		for conversation_id in ["c-mine", &mains.of_the_host, &mains.of_bea] {
+			commands::a_run_held_by_the_app(app, a_held_scope_in(conversation_id, "b-mine"))
+				.emit(a_question(&format!("q-{conversation_id}")), a_turn_in(conversation_id));
+		}
+		let listed_for = |caller| {
+			commands::agent_pending_questions_in_space(
+				app.clone(),
+				app.state(),
+				app.state(),
+				caller,
+				PERSONAL.to_owned(),
+			)
+		};
+		let ids = |listed: Vec<agent::ScopedEvent>| {
+			sorted(
+				listed
+					.into_iter()
+					.filter_map(|question| question.scope.map(|scope| scope.conversation_id))
+					.collect(),
+			)
+		};
+
+		let of_bea = ids(listed_for(relayed_as(BEA)).await.expect("bea reads"));
+		let of_the_host = ids(listed_for(Caller::Host).await.expect("the host reads"));
+		let unvouched = listed_for(Caller::Relayed(None)).await;
+
+		assert_eq!(of_bea, sorted(vec!["c-mine".to_owned(), mains.of_bea]));
+		assert_eq!(of_the_host, sorted(vec!["c-mine".to_owned(), mains.of_the_host]));
+		assert_eq!(unvouched, Err(TranscriptStoreError::UnvouchedMember));
+	});
+}
+
+fn chat_ids(chats: Vec<CatalogueChat>) -> Vec<String> {
+	sorted(chats.into_iter().map(|chat| chat.hit.conversation_id).collect())
+}
+
+#[test]
+fn the_catalogue_search_of_a_space_leaves_out_the_main_conversation_of_another_person() {
+	run(async {
+		let guest = Guest::of_two_spaces("catalogue-of-a-person").await;
+		let app = guest.harness.app.handle();
+		let mains = mains_of_the_host_and_bea(&guest).await;
+		let searched_by = |caller| {
+			search_catalogue(
+				app.clone(),
+				app.state(),
+				caller,
+				"Mine".to_owned(),
+				PERSONAL.to_owned(),
+			)
+		};
+
+		let of_bea = searched_by(relayed_as(BEA)).await.expect("bea searches");
+		let of_the_host = searched_by(Caller::Host).await.expect("the host searches");
+		let unvouched = searched_by(Caller::Relayed(None)).await;
+
+		assert_eq!(chat_ids(of_bea.chats), sorted(vec!["c-mine".to_owned(), mains.of_bea]));
+		assert_eq!(
+			chat_ids(of_the_host.chats),
+			sorted(vec!["c-mine".to_owned(), mains.of_the_host])
+		);
+		assert_eq!(unvouched.err(), Some(CatalogueError::UnvouchedMember));
+	});
+}
+
+#[test]
+fn the_recent_conversations_of_a_space_leave_out_the_main_conversation_of_another_person() {
+	run(async {
+		let guest = Guest::of_two_spaces("recent-of-a-person").await;
+		let app = guest.harness.app.handle();
+		let mains = mains_of_the_host_and_bea(&guest).await;
+		let read_by = |caller| search_recent(app.clone(), app.state(), caller, PERSONAL.to_owned());
+
+		let of_bea = chat_ids(read_by(relayed_as(BEA)).await.expect("bea reads"));
+		let of_the_host = chat_ids(read_by(Caller::Host).await.expect("the host reads"));
+		let unvouched = read_by(Caller::Relayed(None)).await;
+
+		assert_eq!(of_bea, sorted(vec!["c-mine".to_owned(), mains.of_bea]));
+		assert_eq!(of_the_host, sorted(vec!["c-mine".to_owned(), mains.of_the_host]));
+		assert_eq!(unvouched, Err(CatalogueError::UnvouchedMember));
+	});
+}
+
+#[test]
+fn a_renewed_main_conversation_is_announced_archived_as_a_closed_room_is() {
+	run(async {
+		let guest = Guest::of_two_spaces("renew-announced").await;
+		let app = guest.harness.app.handle();
+		let former = mains_of_the_host_and_bea(&guest).await.of_the_host;
+		let mut published = events::subscribed(app);
+
+		let fresh = conversation_renew_main_chat(
+			app.clone(),
+			app.state(),
+			Caller::Host,
+			"b-mine".to_owned(),
+			PERSONAL.to_owned(),
+		)
+		.await
+		.expect("the main conversation is renewed");
+
+		let mut announced = Vec::new();
+		while let Ok(frame) = published.try_recv() {
+			let frame: Value = serde_json::from_str(&frame).expect("a json frame");
+			announced.push((frame["event"].clone(), frame["payload"].clone()));
+		}
+		let archived = announced
+			.iter()
+			.filter(|(event, _)| *event == json!(CONVERSATION_DELETED_EVENT))
+			.collect::<Vec<_>>();
+		assert_eq!(
+			archived,
+			[&(
+				json!(CONVERSATION_DELETED_EVENT),
+				json!({ "spaceId": PERSONAL, "conversationId": former }),
+			)]
+		);
+		assert!(
+			announced.iter().any(|(event, payload)| *event == json!(CONVERSATION_CREATED_EVENT)
+				&& payload["conversation"]["id"] == json!(fresh.id)),
+			"the fresh main was not announced: {announced:?}"
 		);
 	});
 }

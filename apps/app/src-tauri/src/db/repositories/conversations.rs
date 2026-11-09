@@ -2369,11 +2369,10 @@ mod tests {
 	async fn catalogued_ids(database: &Database, space_id: &str) -> Vec<String> {
 		database
 			.catalogue()
-			.search(CatalogueScope {
-				query: String::new(),
-				space_id: space_id.to_owned(),
-				kind: None,
-			})
+			.search(
+				CatalogueScope { query: String::new(), space_id: space_id.to_owned(), kind: None },
+				None,
+			)
 			.await
 			.expect("the catalogue is read")
 			.chats

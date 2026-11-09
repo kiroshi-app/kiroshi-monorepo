@@ -1905,6 +1905,17 @@
             "detail"
           ],
           "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "unvouchedMember"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
         }
       ]
     },

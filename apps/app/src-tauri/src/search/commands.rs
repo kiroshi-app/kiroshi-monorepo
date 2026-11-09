@@ -35,11 +35,14 @@ pub async fn search_messages<R: Runtime>(
 pub async fn search_catalogue<R: Runtime>(
 	app: AppHandle<R>,
 	state: State<'_, db::DatabaseState>,
+	caller: Caller,
 	query: String,
 	space_id: String,
 ) -> Result<Catalogue, CatalogueError> {
+	let reader = caller.chat_owner(&app).ok_or(CatalogueError::UnvouchedMember)?;
 	let database = ready(&state).map_err(|failure| CatalogueError::Unavailable { failure })?;
-	let hits = database.catalogue().search(CatalogueScope { query, space_id, kind: None }).await?;
+	let scope = CatalogueScope { query, space_id, kind: None };
+	let hits = database.catalogue().search(scope, Some(reader)).await?;
 	Ok(Catalogue {
 		chats: observed_chats(&app, database, hits.chats).await?,
 		missions: hits.missions.into_iter().map(|hit| observed_mission(&app, hit)).collect(),
@@ -52,10 +55,12 @@ pub async fn search_catalogue<R: Runtime>(
 pub async fn search_recent<R: Runtime>(
 	app: AppHandle<R>,
 	state: State<'_, db::DatabaseState>,
+	caller: Caller,
 	space_id: String,
 ) -> Result<Vec<CatalogueChat>, CatalogueError> {
+	let reader = caller.chat_owner(&app).ok_or(CatalogueError::UnvouchedMember)?;
 	let database = ready(&state).map_err(|failure| CatalogueError::Unavailable { failure })?;
-	let hits = database.catalogue().recent(space_id).await?;
+	let hits = database.catalogue().recent(space_id, Some(reader)).await?;
 	observed_chats(&app, database, hits).await
 }
 
@@ -384,9 +389,15 @@ mod tests {
 			"a query at the cap was refused"
 		);
 		assert!(
-			search_catalogue(app.handle().clone(), app.state(), held, "personal".to_owned())
-				.await
-				.is_ok(),
+			search_catalogue(
+				app.handle().clone(),
+				app.state(),
+				Caller::Host,
+				held,
+				"personal".to_owned()
+			)
+			.await
+			.is_ok(),
 			"a query at the cap was refused"
 		);
 		assert_eq!(
@@ -401,7 +412,14 @@ mod tests {
 			"the message search read a query past the cap"
 		);
 		assert_eq!(
-			search_catalogue(app.handle().clone(), app.state(), over, "personal".to_owned()).await,
+			search_catalogue(
+				app.handle().clone(),
+				app.state(),
+				Caller::Host,
+				over,
+				"personal".to_owned()
+			)
+			.await,
 			Err(CatalogueError::QueryTooLong { limit: MAX_QUERY_CHARS }),
 			"the catalogue read a query past the cap"
 		);
@@ -445,6 +463,7 @@ mod tests {
 		let found = search_catalogue(
 			app.handle().clone(),
 			app.state(),
+			Caller::Host,
 			"crash".to_owned(),
 			"personal".to_owned(),
 		)
@@ -465,14 +484,16 @@ mod tests {
 		let found = search_catalogue(
 			app.handle().clone(),
 			app.state(),
+			Caller::Host,
 			"room".to_owned(),
 			"work".to_owned(),
 		)
 		.await
 		.expect("the catalogue answers");
-		let recent = search_recent(app.handle().clone(), app.state(), "work".to_owned())
-			.await
-			.expect("the recent chats answer");
+		let recent =
+			search_recent(app.handle().clone(), app.state(), Caller::Host, "work".to_owned())
+				.await
+				.expect("the recent chats answer");
 		let page = conversation_page(
 			app.handle().clone(),
 			app.state(),

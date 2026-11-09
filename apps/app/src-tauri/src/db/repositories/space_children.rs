@@ -43,6 +43,24 @@ impl SpaceChildrenRepository {
 		self.access.call(move |connection| Ok(main_owner_of(connection, child, &child_id)?)).await
 	}
 
+	pub async fn shows_conversation(
+		&self,
+		space_id: String,
+		conversation_id: String,
+		reader: ChatOwner,
+	) -> Result<bool, DatabaseError> {
+		self.access
+			.call(move |connection| {
+				Ok(connection
+					.prepare_cached(
+						"SELECT EXISTS (SELECT 1 FROM conversations
+							WHERE id = ?1 AND space_id = ?2 AND (owner IS NULL OR owner = ?3))",
+					)?
+					.query_row(params![conversation_id, space_id, reader], |row| row.get(0))?)
+			})
+			.await
+	}
+
 	pub async fn holds_avatar(
 		&self,
 		space_id: String,

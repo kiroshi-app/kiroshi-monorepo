@@ -334,6 +334,9 @@ impl From<CatalogueError> for CompanionError {
 			CatalogueError::Unavailable { failure } => CompanionError::Unavailable { failure },
 			CatalogueError::Storage { failure } => CompanionError::Storage { failure },
 			CatalogueError::QueryTooLong { limit } => CompanionError::QueryTooLong { limit },
+			CatalogueError::UnvouchedMember => CompanionError::Unexpected {
+				detail: "the catalogue search named no vouched member".to_owned(),
+			},
 			CatalogueError::UnknownBot { id } => {
 				CompanionError::Unexpected { detail: format!("the catalogue names no bot {id}") }
 			}

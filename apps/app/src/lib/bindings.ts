@@ -735,7 +735,7 @@ export type CatalogueChat = {
 	workingBotIds?: string[],
 } & ChatHit;
 
-export type CatalogueError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "queryTooLong"; limit: number } | { kind: "unknownBot"; id: string } | { kind: "unreadableState"; detail: string };
+export type CatalogueError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "queryTooLong"; limit: number } | { kind: "unknownBot"; id: string } | { kind: "unreadableState"; detail: string } | { kind: "unvouchedMember" };
 
 export type CatalogueMission = {
 	id: string,

@@ -233,7 +233,7 @@ impl<R: Runtime> CompanionHost<R> {
 			.await?;
 		let catalogue = database
 			.catalogue()
-			.search(CatalogueScope { query: asked.query, space_id, kind: asked.kind })
+			.search(CatalogueScope { query: asked.query, space_id, kind: asked.kind }, None)
 			.await?;
 		Ok(ConversationsFound {
 			conversations: catalogue.chats.into_iter().map(found_conversation).collect(),
