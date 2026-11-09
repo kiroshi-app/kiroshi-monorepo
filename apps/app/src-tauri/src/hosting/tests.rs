@@ -47,6 +47,7 @@ use crate::agent::contract as agent;
 use crate::agent::protocol::OauthCredentials;
 use crate::agent::protocol::SpaceMember;
 use crate::agent::reply_writer::TurnSink;
+use crate::applications::contract::INSTALLED_EVENT as APPLICATION_INSTALLED_EVENT;
 use crate::attachments;
 use crate::bundles::{self, BotPermissions, DEFAULT_OUTPUT_STYLE};
 use crate::companions::contract::{
@@ -63,8 +64,9 @@ use crate::conversations::commands::{
 use crate::conversations::contract::{
 	Bot, BotDraft, BotIdentity, Conversation, ConversationInPage, Hue, LastWord, NewUserMessage,
 	ObservedState, ParticipantRole, TranscriptStoreError, WrittenFrom, AGENT_ROOMS_CHANGED_EVENT,
-	CREATED_EVENT as CONVERSATION_CREATED_EVENT, DELETED_EVENT as CONVERSATION_DELETED_EVENT,
-	MESSAGE_STORED_EVENT, STATE_CHANGED_EVENT, UPDATED_EVENT as CONVERSATION_UPDATED_EVENT,
+	COMPANION_ARRIVED_EVENT, COMPANION_SPOKE_EVENT, CREATED_EVENT as CONVERSATION_CREATED_EVENT,
+	DELETED_EVENT as CONVERSATION_DELETED_EVENT, MESSAGE_STORED_EVENT, STATE_CHANGED_EVENT,
+	SUMMONS_DROPPED_EVENT, UPDATED_EVENT as CONVERSATION_UPDATED_EVENT,
 };
 use crate::conversations::state as conversation_state;
 use crate::conversations::turn_run_deadline::{arm_start_deadlines, TurnRunDeadlines};
@@ -97,6 +99,7 @@ use crate::mcp_oauth::asking::AuthorizationAnswers;
 use crate::mcp_oauth::commands::{mcp_application_status, McpOauthState};
 use crate::mcp_oauth::credentials;
 use crate::mcp_oauth::reports::ApplicationReports;
+use crate::missions::contract::{MissionDraft, Ticket};
 use crate::removed_on_drop::RemovedOnDrop;
 use crate::routines::commands::CHANGED_EVENT as ROUTINE_CHANGED_EVENT;
 use crate::routines::webhook::{self, Webhook};
@@ -9547,10 +9550,10 @@ fn naming_the_main(main: &str) -> Vec<(&'static str, Value)> {
 		(CONVERSATION_CREATED_EVENT, stored.clone()),
 		(CONVERSATION_UPDATED_EVENT, stored),
 		(MESSAGE_STORED_EVENT, in_the_conversation.clone()),
-		(crate::conversations::contract::COMPANION_ARRIVED_EVENT, in_the_conversation.clone()),
-		(crate::conversations::contract::COMPANION_SPOKE_EVENT, in_the_conversation.clone()),
-		(crate::conversations::contract::SUMMONS_DROPPED_EVENT, in_the_conversation.clone()),
-		(crate::applications::contract::INSTALLED_EVENT, in_the_conversation.clone()),
+		(COMPANION_ARRIVED_EVENT, in_the_conversation.clone()),
+		(COMPANION_SPOKE_EVENT, in_the_conversation.clone()),
+		(SUMMONS_DROPPED_EVENT, in_the_conversation.clone()),
+		(APPLICATION_INSTALLED_EVENT, in_the_conversation.clone()),
 		(ROUTINE_CHANGED_EVENT, in_the_conversation),
 		an_agent_event_of(a_runtime_scope(main)),
 		(
@@ -9587,11 +9590,11 @@ impl Authoring {
 	}
 
 	async fn mission_from(&self, origin_conversation_id: &str) -> String {
-		let draft = crate::missions::contract::MissionDraft {
+		let draft = MissionDraft {
 			origin_conversation_id: origin_conversation_id.to_owned(),
 			bot_id: "default".to_owned(),
 			objective: "Fix the crash".to_owned(),
-			ticket: crate::missions::contract::Ticket {
+			ticket: Ticket {
 				platform: "github".to_owned(),
 				external_id: "42".to_owned(),
 				url: "https://kiroshi.test/tickets/42".to_owned(),
