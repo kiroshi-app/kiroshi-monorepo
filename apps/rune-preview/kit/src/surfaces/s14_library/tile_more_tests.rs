@@ -1,4 +1,4 @@
-use rune::{Cx, Env, Mods, Runtime};
+use rune::{Cx, Env, Runtime};
 
 use super::*;
 

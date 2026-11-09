@@ -1,7 +1,7 @@
 use rune::image::Image;
 use rune::{
-	Align, Color, Cursor, El, Key as KeyName, KeyEvent, ScrollSpec, Side, SurfaceFit, TextEdit,
-	TextStyle, Tx, col, el, icon, row, text, text_input,
+	Align, Color, Cursor, El, Key as KeyName, KeyEvent, Mods, ScrollSpec, Side, SurfaceFit,
+	TextEdit, TextStyle, Tx, col, el, icon, row, text, text_input,
 };
 use rune::{Block, Mark, MarkRange, Span};
 
@@ -419,7 +419,7 @@ fn pressed_on_return<S: 'static>(
 	press: impl Fn(&mut S) + 'static,
 ) -> impl Fn(&mut S, &KeyEvent, &mut Tx) -> bool + 'static {
 	move |s: &mut S, event: &KeyEvent, _: &mut Tx| {
-		let is_return = event.key == KeyName::Enter && event.mods == rune::Mods::default();
+		let is_return = event.key == KeyName::Enter && event.mods == Mods::default();
 		if is_return {
 			press(s);
 		}
@@ -2003,7 +2003,7 @@ fn block_field<S: 'static>(
 		.on_edit(move |s: &mut S| access(s, &edit_id, field))
 		.on_input_key(move |s: &mut S, event: &KeyEvent, _: &mut Tx| {
 			let block = key_id.clone();
-			let plain = event.mods == rune::Mods::default();
+			let plain = event.mods == Mods::default();
 			let event = match &event.key {
 				KeyName::Up if plain && look.is_slash => BlockEvent::SlashMoved(-1),
 				KeyName::Down if plain && look.is_slash => BlockEvent::SlashMoved(1),
