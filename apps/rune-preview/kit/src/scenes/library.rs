@@ -1356,8 +1356,8 @@ impl Spec {
 					next.above = Some(drop_indicator(t));
 				}
 				let held = Spec::texts_of(&blocks[from]);
-				let names: Vec<&str> = held.iter().take(1).map(String::as_str).collect();
-				layers.push(drag_ghost(t, LANG, &names, None, BLOCK_DRAG_CURSOR));
+				let name = held.first().map(String::as_str);
+				layers.push(drag_ghost(t, LANG, name.as_slice(), None, BLOCK_DRAG_CURSOR));
 			}
 			Overlay::Handle | Overlay::HandleMenu | Overlay::TurnInto => {
 				if let Some(view) = views.get_mut(focus.0) {
