@@ -13,7 +13,7 @@ use kiroshi_app::agent::contract::{
 	TransportError, TurnOutcome, TurnState,
 };
 use kiroshi_app::agent::protocol::AuthorizeRequest;
-use kiroshi_app::agent::session::{EventSink, Session, SessionOptions, PARTIAL_MESSAGES};
+use kiroshi_app::agent::session::{EventSink, Handed, Session, SessionOptions, PARTIAL_MESSAGES};
 use kiroshi_app::agent::sidecar::{self, Opening, Sidecar, SidecarOptions};
 use kiroshi_app::environment::contract::Values;
 use removed_on_drop::RemovedOnDrop;
@@ -728,6 +728,112 @@ async fn a_question_can_be_denied() {
 		AgentEvent::Activity { activity } if activity.status == ActivityStatus::Failed
 	)));
 	harness.session.shutdown().await;
+}
+
+fn resolution_of(events: &[AgentEvent], request_id: &str) -> Option<PermissionDecision> {
+	events.iter().find_map(|event| match event {
+		AgentEvent::PermissionResolved { id, decision } if id == request_id => Some(*decision),
+		_ => None,
+	})
+}
+
+fn ends_a_turn(events: &[AgentEvent]) -> bool {
+	events.iter().any(|event| matches!(event, AgentEvent::TurnEnded { .. }))
+}
+
+fn ended_outcome(events: &[AgentEvent]) -> Option<TurnOutcome> {
+	events.iter().find_map(|event| match event {
+		AgentEvent::TurnEnded { ended } => Some(ended.outcome),
+		_ => None,
+	})
+}
+
+fn emitted_so_far(harness: &mut Harness) -> Vec<AgentEvent> {
+	std::iter::from_fn(|| harness.events.try_recv().ok()).collect()
+}
+
+const BOTH_ANSWERED_DATE_FNS: &str =
+	"Which extras do you want?=date-fns | Which library should we use?=date-fns";
+
+#[tokio::test]
+async fn a_typed_message_answers_the_pending_question_and_takes_the_asking_turn_over() {
+	let mut harness = start(options("question")).await.expect("session starts");
+	harness.session.submit_in_line("choisis", a_turn("t1")).await.expect("prompt accepted");
+	let request = harness.wait_for_question().await;
+
+	let handed =
+		harness.session.submit_in_line("date-fns", a_turn("t2")).await.expect("message taken");
+
+	assert_eq!(handed, Handed::Delivered);
+	let asking_turn = harness.wait_for("the asking turn to end", ends_a_turn).await;
+	assert_eq!(resolution_of(&asking_turn, &request.id), Some(PermissionDecision::AllowOnce));
+	assert_eq!(ended_outcome(&asking_turn), Some(TurnOutcome::Completed));
+	let answered = harness.drain_turn().await;
+	assert!(answered
+		.iter()
+		.any(|event| matches!(event, AgentEvent::TurnChanged { state: TurnState::Running })));
+	assert_eq!(assistant_text(&answered), BOTH_ANSWERED_DATE_FNS);
+	assert_eq!(ended_outcome(&answered), Some(TurnOutcome::Completed));
+	harness.session.shutdown().await;
+}
+
+#[tokio::test]
+async fn a_typed_message_answers_a_question_asked_after_the_turn_settled() {
+	let mut harness = start(options("question_after_settle")).await.expect("session starts");
+	harness.session.submit_in_line("choisis", a_turn("t1")).await.expect("prompt accepted");
+	let request = harness.wait_for_question().await;
+
+	let handed =
+		harness.session.submit_in_line("date-fns", a_turn("t2")).await.expect("message taken");
+
+	assert_eq!(handed, Handed::Delivered);
+	let answered = harness.drain_turn().await;
+	assert_eq!(resolution_of(&answered, &request.id), Some(PermissionDecision::AllowOnce));
+	assert_eq!(assistant_text(&answered), BOTH_ANSWERED_DATE_FNS);
+	assert_eq!(ended_outcome(&answered), Some(TurnOutcome::Completed));
+	harness.session.shutdown().await;
+}
+
+#[tokio::test]
+async fn a_typed_message_answers_the_question_of_its_own_session_only() {
+	let sidecar = sidecar().await;
+	let mut asking = start_on(sidecar.clone(), options("question")).await.expect("starts");
+	let mut beside = start_on(sidecar, options("question")).await.expect("starts");
+	asking.submit("choisis").await.expect("prompt accepted");
+	beside.submit("choisis").await.expect("prompt accepted");
+	let answered = asking.wait_for_question().await;
+	let untouched = beside.wait_for_question().await;
+
+	asking.session.submit_prompt("date-fns").await.expect("message taken");
+
+	let events = asking.drain_turn().await;
+	assert_eq!(resolution_of(&events, &answered.id), Some(PermissionDecision::AllowOnce));
+	assert_eq!(resolution_of(&emitted_so_far(&mut beside), &untouched.id), None);
+	beside
+		.session
+		.answer_question(&untouched.id, HashMap::new(), None)
+		.await
+		.expect("the other session still waits on its question");
+	asking.session.shutdown().await;
+	beside.session.shutdown().await;
+}
+
+#[tokio::test]
+async fn shutting_a_session_down_releases_the_question_it_still_holds() {
+	for scenario in ["question", "question_after_settle"] {
+		let mut harness = start(options(scenario)).await.expect("session starts");
+		harness.submit("choisis").await.expect("prompt accepted");
+		let request = harness.wait_for_question().await;
+
+		harness.session.shutdown().await;
+
+		let released = emitted_so_far(&mut harness);
+		assert_eq!(
+			resolution_of(&released, &request.id),
+			Some(PermissionDecision::Deny),
+			"{scenario}: {released:#?}"
+		);
+	}
 }
 
 #[tokio::test]

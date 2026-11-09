@@ -614,6 +614,15 @@ true` and the turn continues. A session closing settles every promise it still
 holds as a denial: an unanswered one would block its tool forever, since a
 permission prompt has no deadline of its own.
 
+A prompt the host submits while a question is pending is that question's answer,
+never a new turn on the SDK: the host allows the tool with the prompt's text as
+the answer of every question it carries, and emits `permissionResolved` with
+`allowOnce`, as a card answer does. When a turn is running, the asking turn ends
+`completed` and the submitted turn takes the running SDK turn over; a question
+asked by a follow-up folds that follow-up into the submitted turn. A session the
+host shuts down emits `permissionResolved` with `deny` for every prompt it still
+holds, so no stored prompt outlives the session that asked it.
+
 ## Host requests
 
 `canUseTool` asks the reader; `host_request` asks the host itself. The sidecar
