@@ -363,14 +363,10 @@ impl State {
 			ItemAction::OpenInNewTab => self.open_in_new_tab(name),
 			ItemAction::Rename => self.open_to_rename(name),
 			ItemAction::Delete => self.ask_delete(name),
-			ItemAction::Copy => self.copy(name),
+			ItemAction::Copy | ItemAction::CopyImage => self.copy(name),
 			ItemAction::Download => self.download(name),
 			ItemAction::ShowInFolder => self.reveal(name),
-			ItemAction::SaveToLibrary | ItemAction::CopyImage => {
-				eprintln!(
-					"the Library item menu forwards {action:?}, which this surface doesn't wire"
-				)
-			}
+			ItemAction::SaveToLibrary => self.save_to_library(name),
 		}
 	}
 
@@ -843,6 +839,7 @@ impl State {
 			Answer::Downloaded(outcome) => self.downloaded(outcome),
 			Answer::Copied { target, outcome } => self.copied_answer(&target, outcome),
 			Answer::Revealed(outcome) => self.revealed(outcome),
+			Answer::SavedToLibrary { target, item } => self.saved_to_library(&target, item),
 			Answer::GalleryImported { target, add, path, imports } => {
 				self.gallery_imported(&target, add, &path, imports)
 			}

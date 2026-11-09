@@ -1472,3 +1472,34 @@ fn a_refused_gallery_import_keeps_the_gallery_marks_the_add_failed_and_raises_a_
 	state.handle_gallery(false, &block, GalleryEvent::Add);
 	assert!(!state.has_gallery_add_failed(false, &block));
 }
+
+#[test]
+fn copy_image_copies_and_save_to_library_saves_a_copy_through_the_core() {
+	let mut state = library_with(vec![item("dunes.png", LibraryItemKind::Image)]);
+
+	state.act("dunes.png", ItemAction::CopyImage);
+	state.act("dunes.png", ItemAction::SaveToLibrary);
+	let asked = calls(&mut state);
+	let copy = item("dunes 2.png", LibraryItemKind::Image);
+	answer(&mut state, Answer::SavedToLibrary { target: target("dunes.png"), item: Ok(copy) });
+
+	assert_eq!(
+		asked,
+		vec![Call::Copy(target("dunes.png")), Call::SaveToLibrary(target("dunes.png"))]
+	);
+	assert_eq!(calls(&mut state), vec![Call::List { space_id: SPACE.to_owned() }]);
+	assert!(state.to_raise.is_empty());
+}
+
+#[test]
+fn a_refused_save_to_library_keeps_the_library_and_names_the_image() {
+	let mut state = library_with(vec![item("dunes.png", LibraryItemKind::Image)]);
+
+	answer(
+		&mut state,
+		Answer::SavedToLibrary { target: target("dunes.png"), item: Err(refused()) },
+	);
+
+	assert!(matches!(state.listing, Listing::Loaded(ref items) if items.len() == 1));
+	assert!(state.to_raise.iter().any(|notice| notice.title.contains("dunes.png")));
+}

@@ -5,8 +5,8 @@ use std::time::Duration;
 
 use kiroshi_core::agent::contract::CancelOutcome;
 use kiroshi_core::library::contract::{
-	LibraryDocument, LibraryDocumentState, LibraryError, LibraryImage, LibraryImport, LibraryItem,
-	LibraryPresenceAt,
+	LibraryDocument, LibraryDocumentState, LibraryError, LibraryFile, LibraryImage, LibraryImport,
+	LibraryItem, LibraryPresenceAt,
 };
 use rune::Waker;
 use serde_json::json;
@@ -57,6 +57,7 @@ pub enum Call {
 	Download(Target),
 	Copy(Target),
 	Reveal(Target),
+	SaveToLibrary(Target),
 	GalleryImport { target: Target, add: GalleryAdd, path: PathBuf },
 	CreateBoard { space_id: String, untitled: String },
 	Wake(Duration, Due),
@@ -112,6 +113,10 @@ pub enum Answer {
 		outcome: Result<(), HostError>,
 	},
 	Revealed(Result<(), HostError>),
+	SavedToLibrary {
+		target: Target,
+		item: Result<LibraryItem, HostError>,
+	},
 	GalleryImported {
 		target: Target,
 		add: GalleryAdd,
@@ -206,6 +211,13 @@ fn created(source: &Source, new: &NewDocument) -> Result<LibraryItem, HostError>
 	Ok(item)
 }
 
+fn saved_to_library(source: &Source, target: &Target) -> Result<LibraryItem, HostError> {
+	let file: LibraryFile = source.invoke("library_read_file", located(target))?;
+	let arguments =
+		json!({ "spaceId": target.space_id, "name": file.name, "content": file.content });
+	source.invoke("library_import", arguments)
+}
+
 fn answered(source: &Source, call: Call) -> Answer {
 	match call {
 		Call::List { space_id } => {
@@ -273,6 +285,10 @@ fn answered(source: &Source, call: Call) -> Answer {
 			let arguments = json!({ "spaceId": target.space_id, "paths": [path] });
 			let imports = source.invoke("library_import_paths", arguments);
 			Answer::GalleryImported { target, add, path, imports }
+		}
+		Call::SaveToLibrary(target) => {
+			let item = saved_to_library(source, &target);
+			Answer::SavedToLibrary { target, item }
 		}
 		Call::Reveal(target) => Answer::Revealed(source.invoke("library_reveal", located(&target))),
 		Call::CreateBoard { space_id, untitled } => {

@@ -1,9 +1,10 @@
-use kiroshi_core::library::contract::LibraryItemKind;
+use kiroshi_core::library::contract::{LibraryItem, LibraryItemKind};
 
 use kiroshi_rune_kit::strings::common;
 use kiroshi_rune_kit::surfaces::s14_library::{ItemAction, MORE_KEY};
 
-use super::worker::Call;
+use super::imports;
+use super::worker::{Call, Target};
 use super::{State, failure_text, said};
 use crate::host::HostError;
 
@@ -71,6 +72,26 @@ impl State {
 		let Some(target) = self.target_of(name) else { return };
 		self.queue(Call::Reveal(target));
 		self.flush();
+	}
+
+	pub(super) fn save_to_library(&mut self, name: &str) {
+		let Some(target) = self.target_of(name) else { return };
+		self.queue(Call::SaveToLibrary(target));
+		self.flush();
+	}
+
+	pub(super) fn saved_to_library(
+		&mut self,
+		target: &Target,
+		item: Result<LibraryItem, HostError>,
+	) {
+		if let Err(failure) = item {
+			let refused = imports::refusals_of(std::slice::from_ref(&target.name), Err(failure));
+			self.raise_refused_imports(&refused);
+		}
+		if self.space_id.as_deref() == Some(target.space_id.as_str()) {
+			self.list();
+		}
 	}
 
 	pub(super) fn revealed(&mut self, outcome: Result<(), HostError>) {
