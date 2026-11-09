@@ -2230,8 +2230,23 @@ pub static SCENES: &[Scene] = &[
 	),
 	scene("feedback-importscreen--importing", boot::IMPORT_WINDOW, boot::import_importing),
 	scene("feedback-importscreen--importing-dark", boot::IMPORT_WINDOW, boot::import_importing),
+	scene(
+		"feedback-importscreen--importing-picked-only",
+		boot::IMPORT_WINDOW,
+		boot::import_importing_picked_only,
+	),
 	scene("feedback-importscreen--done", boot::IMPORT_WINDOW, boot::import_done),
 	scene("feedback-importscreen--done-dark", boot::IMPORT_WINDOW, boot::import_done),
+	scene(
+		"feedback-importscreen--done-one-companion",
+		boot::IMPORT_WINDOW,
+		boot::import_done_one_companion,
+	),
+	scene(
+		"feedback-importscreen--done-without-instructions",
+		boot::IMPORT_WINDOW,
+		boot::import_done_without_instructions,
+	),
 	scene("feedback-importscreen--only-agents", boot::IMPORT_WINDOW, boot::import_only_agents),
 	scene("feedback-importscreen--only-agents-dark", boot::IMPORT_WINDOW, boot::import_only_agents),
 	scene(
@@ -2281,6 +2296,16 @@ pub static SCENES: &[Scene] = &[
 		"feedback-importscreen--partly-failed-dark",
 		boot::IMPORT_WINDOW,
 		boot::import_partly_failed,
+	),
+	scene(
+		"feedback-importscreen--partly-failed-companion",
+		boot::IMPORT_WINDOW,
+		boot::import_partly_failed_companion,
+	),
+	scene(
+		"feedback-importscreen--partly-failed-instructions",
+		boot::IMPORT_WINDOW,
+		boot::import_partly_failed_instructions,
 	),
 	scene(
 		"feedback-importscreen--again-from-settings",

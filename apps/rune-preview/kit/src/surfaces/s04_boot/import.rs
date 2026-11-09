@@ -419,6 +419,44 @@ mod tests {
 	}
 
 	#[test]
+	fn the_done_summary_turns_singular_and_leaves_out_what_did_not_come_in() {
+		let skills = ["commit-style", "test-first", "review-checklist", "changelog"]
+			.map(|title| item(ImportKind::Skill, title));
+		let summary = |head: &[ImportItem]| {
+			let items: Vec<ImportItem> = head.iter().cloned().chain(skills.clone()).collect();
+			let indexed: Vec<(usize, &ImportItem)> = items.iter().enumerate().collect();
+			done_summary(&indexed, Language::En)
+		};
+		assert_eq!(
+			summary(&[
+				item(ImportKind::Agent, "Atlas"),
+				item(ImportKind::Instructions, "CLAUDE.md")
+			]),
+			"Atlas is ready, with your CLAUDE.md and 4 skills."
+		);
+		assert_eq!(
+			summary(&[item(ImportKind::Agent, "Atlas"), item(ImportKind::Agent, "Wren")]),
+			"Atlas and Wren are ready, with 4 skills."
+		);
+	}
+
+	#[test]
+	fn a_failed_agent_or_claude_md_names_itself_in_the_summary() {
+		for (kind, title) in [(ImportKind::Agent, "Wren"), (ImportKind::Instructions, "CLAUDE.md")]
+		{
+			let mut failed = item(kind, title);
+			failed.status = Some(ImportStatus::Failed);
+			let items =
+				[item(ImportKind::Agent, "Atlas"), failed, item(ImportKind::Skill, "changelog")];
+			let indexed: Vec<(usize, &ImportItem)> = items.iter().enumerate().collect();
+			assert_eq!(
+				done_summary(&indexed, Language::En),
+				format!("{title} didn’t come in. Try it again, or add it later from Settings.")
+			);
+		}
+	}
+
+	#[test]
 	fn a_failed_skill_names_itself_in_the_summary_and_keeps_its_own_row() {
 		let mut failed = item(ImportKind::Skill, "changelog");
 		failed.status = Some(ImportStatus::Failed);
