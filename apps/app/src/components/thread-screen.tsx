@@ -1,4 +1,5 @@
 import {
+	type ReactNode,
 	type RefObject,
 	useCallback,
 	useContext,
@@ -40,6 +41,7 @@ import {
 } from "@workspace/ui/components/prompt-queue"
 import { type RosterBot, RosterProvider } from "@workspace/ui/components/roster"
 import { RoutinesPanelTrigger } from "@workspace/ui/components/routines-panel"
+import { ScreenLayout } from "@workspace/ui/components/screen-layout"
 import { SpaceAccessBanner } from "@workspace/ui/components/space-access-banner"
 import { ThreadLayout } from "@workspace/ui/components/thread-layout"
 import { ThreadTranscriptSkeleton } from "@workspace/ui/components/thread-transcript-skeleton"
@@ -63,6 +65,11 @@ import {
 } from "@/components/answer-image-viewer"
 import { ApplicationInstallRow } from "@/components/application-install-row"
 import { FaceAvatar } from "@/components/face-avatar"
+import {
+	HomeLoadingStage,
+	type HomeSend,
+	type ThreadHome,
+} from "@/components/home-screen"
 import { useMissionCardMenus } from "@/components/mission-card-menu"
 import { type PromptHandle, ThreadComposer } from "@/components/thread-composer"
 import {
@@ -1287,6 +1294,67 @@ const signInOfferOf = (
 	botId: string | undefined,
 ) => (signIn && botId ? () => signIn.controller.offer(botId) : undefined)
 
+const showsOwnChat = (thread: LoadedThread) =>
+	thread.kind !== "bot" ||
+	thread.state === thread.controller.stateFor(thread.bot.id)
+
+type HomeStage = "loading" | "empty"
+
+type HomeStageFacts = {
+	home: ThreadHome | undefined
+	thread: LoadedThread
+	isFirstLoadPending: boolean
+	hasMessages: boolean
+	isTranscriptEmpty: boolean
+	isHeldBack: boolean
+}
+
+const homeStageOf = ({
+	home,
+	thread,
+	isFirstLoadPending,
+	hasMessages,
+	isTranscriptEmpty,
+	isHeldBack,
+}: HomeStageFacts): HomeStage | null => {
+	if (!home) {
+		return null
+	}
+	if (
+		home.isSettling ||
+		!showsOwnChat(thread) ||
+		(isFirstLoadPending && !hasMessages)
+	) {
+		return "loading"
+	}
+	return isTranscriptEmpty && !isHeldBack ? "empty" : null
+}
+
+type HomeThreadStageProps = {
+	home: ThreadHome | undefined
+	stage: HomeStage | null
+	header: ReactNode
+	layout: ReactNode
+	send: HomeSend
+}
+
+const HomeThreadStage = ({
+	home,
+	stage,
+	header,
+	layout,
+	send,
+}: HomeThreadStageProps) => {
+	if (!home || !stage) {
+		return layout
+	}
+	return (
+		<ScreenLayout header={header} width="full">
+			{stage === "loading" ? <HomeLoadingStage /> : home.emptyStage(send)}
+		</ScreenLayout>
+	)
+}
+
 const showsEmptyState = (
 	rows: TranscriptItem[],
 	signInStep: SignInStep | null,
@@ -1372,6 +1440,7 @@ type ThreadViewProps = {
 	signIn?: SignIn
 	onOpenMission: OpenMission
 	onOpenMissionInNewTab: OpenMissionInNewTab
+	home?: ThreadHome
 }
 
 const useThreadSeats = ({
@@ -1862,6 +1931,7 @@ function ThreadView(props: ThreadViewProps) {
 		bots: known,
 		onOpenMission,
 		onOpenMissionInNewTab,
+		home,
 	} = props
 	const view = useThreadView(props)
 	const conversationId = shownConversationIdOf(thread)
@@ -1881,9 +1951,29 @@ function ThreadView(props: ThreadViewProps) {
 		"thread open",
 		view.facts.isFirstLoadPending ? null : shownConversationIdOf(thread),
 	)
+	const isTranscriptEmpty = showsEmptyState(
+		view.transcriptRows,
+		view.signInStep,
+		view.facts.isFirstLoadPending,
+	)
 	const transcriptSkeleton = useSkeletonSlot(
 		view.facts.isFirstLoadPending && view.state.messages.length === 0,
 		view.missionSeat ? MISSION_TRANSCRIPT_SKELETON : THREAD_TRANSCRIPT_SKELETON,
+	)
+
+	const header = (
+		<ThreadHeader
+			botImage={view.botImage}
+			botWork={view.facts.botWork}
+			hasRoutines={view.routinesScope.conversationId !== null}
+			liveMissionIds={view.liveMissionIds}
+			mission={view.missionSeat}
+			onJumpToPin={view.jumpToMessage}
+			onUnpin={view.pins.unpin}
+			pinnedRows={view.pinnedRows}
+			present={view.present}
+			thread={thread}
+		/>
 	)
 
 	const layout = (
@@ -1925,20 +2015,7 @@ function ThreadView(props: ThreadViewProps) {
 					/>
 				)
 			}
-			header={
-				<ThreadHeader
-					botImage={view.botImage}
-					botWork={view.facts.botWork}
-					hasRoutines={view.routinesScope.conversationId !== null}
-					liveMissionIds={view.liveMissionIds}
-					mission={view.missionSeat}
-					onJumpToPin={view.jumpToMessage}
-					onUnpin={view.pins.unpin}
-					pinnedRows={view.pinnedRows}
-					present={view.present}
-					thread={thread}
-				/>
-			}
+			header={header}
 			highlightedMessageId={view.highlightedMessageId}
 			label={
 				view.missionSeat
@@ -1991,11 +2068,7 @@ function ThreadView(props: ThreadViewProps) {
 			skeleton={transcriptSkeleton}
 			transcriptKey={view.facts.id}
 		>
-			{showsEmptyState(
-				view.transcriptRows,
-				view.signInStep,
-				view.facts.isFirstLoadPending,
-			) ? (
+			{isTranscriptEmpty ? (
 				<ThreadEmptyState
 					botImage={view.botImage}
 					latestError={view.facts.latestError}
@@ -2016,7 +2089,36 @@ function ThreadView(props: ThreadViewProps) {
 				signInStep={view.signInStep}
 				thread={thread}
 			/>
+			{home?.lines}
 		</ThreadLayout>
+	)
+
+	const sendFromHome = async (text: string) => {
+		if (await view.submitPrompt(text)) {
+			view.rememberDraft("")
+		}
+	}
+
+	const screen = (
+		<HomeThreadStage
+			header={header}
+			home={home}
+			layout={layout}
+			send={{
+				draft: view.readDraft(),
+				onDraftChange: view.rememberDraft,
+				onSubmit: (text) => void sendFromHome(text),
+				onAttach: view.staged.stage,
+			}}
+			stage={homeStageOf({
+				home,
+				thread,
+				isFirstLoadPending: view.facts.isFirstLoadPending,
+				hasMessages: view.state.messages.length > 0,
+				isTranscriptEmpty,
+				isHeldBack: Boolean(departure || view.facts.latestError),
+			})}
+		/>
 	)
 
 	return (
@@ -2039,7 +2141,7 @@ function ThreadView(props: ThreadViewProps) {
 							spaceId={documents?.spaceId}
 							workingAgentIds={workingAgentIds}
 						>
-							{layout}
+							{screen}
 						</ThreadBoardDrawers>
 					</ThreadDocumentsContext>
 				</AnswerActionsContext>
@@ -2062,6 +2164,7 @@ type ThreadScreenProps = {
 	signIn?: SignIn
 	onOpenMission: OpenMission
 	onOpenMissionInNewTab: OpenMissionInNewTab
+	home?: ThreadHome
 }
 
 type ConversationThreadViewProps = Omit<ThreadScreenProps, "thread"> & {
@@ -2123,6 +2226,7 @@ function BotThreadView({
 	onOpenMission,
 	onOpenMissionInNewTab,
 	spaceId,
+	home,
 }: BotThreadViewProps) {
 	const { controller } = thread.chat
 	const botId = thread.bot.id
@@ -2138,6 +2242,7 @@ function BotThreadView({
 			attachments={attachments}
 			bots={bots}
 			drafts={drafts}
+			home={home}
 			landings={landings}
 			onboardingCreation={onboardingCreation}
 			onOpenMission={onOpenMission}
@@ -2165,6 +2270,7 @@ export function ThreadScreen({
 	onOpenMission,
 	onOpenMissionInNewTab,
 	spaceId,
+	home,
 }: ThreadScreenProps) {
 	if (thread.kind === "conversation") {
 		return (
@@ -2191,6 +2297,7 @@ export function ThreadScreen({
 			attachments={attachments}
 			bots={bots}
 			drafts={drafts}
+			home={home}
 			key={thread.bot.id}
 			landings={landings}
 			onboardingCreation={onboardingCreation}

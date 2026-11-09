@@ -19,6 +19,7 @@ import type { FakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
+import { keepMainChatsAtLaunch } from "@/lib/conversations/transcript-fixtures"
 import { type FakeLayout, fakeLayout } from "@/lib/perf/fake-layout"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 import { MAIN_WINDOW_LABEL, writeSpaceTabs } from "@/lib/tabs/tabs-mirror"
@@ -267,7 +268,7 @@ const mountApp = async ({
 		)
 	}
 	await openOnFirstCompanion(store)
-	const trace = traceStore(store, delayMs)
+	const trace = traceStore(keepMainChatsAtLaunch(store), delayMs)
 	harness.store = trace.store
 	harness.driver = createFakeChatDriver({ stepMs: STEP_MS })
 	const commits = countCommits()
@@ -420,9 +421,13 @@ describe("PRF5 chat open baseline", () => {
 		expect(await measureOpenings(0)).toMatchInlineSnapshot(`
 			{
 			  "busyOpen": {
-			    "commits": 5,
+			    "commits": 7,
 			    "elapsedMs": 0,
 			    "storeCalls": [
+			      "mainChat",
+			      "loadPage",
+			      "renewMainChat",
+			      "pluginMcpServers",
 			      "mainChat",
 			      "botCommands",
 			      "loadPage",
@@ -430,9 +435,13 @@ describe("PRF5 chat open baseline", () => {
 			    "writesAhead": 0,
 			  },
 			  "coldOpen": {
-			    "commits": 5,
+			    "commits": 7,
 			    "elapsedMs": 0,
 			    "storeCalls": [
+			      "mainChat",
+			      "loadPage",
+			      "renewMainChat",
+			      "pluginMcpServers",
 			      "mainChat",
 			      "botCommands",
 			      "loadPage",
@@ -440,7 +449,7 @@ describe("PRF5 chat open baseline", () => {
 			    "writesAhead": 0,
 			  },
 			  "warmOpen": {
-			    "commits": 1,
+			    "commits": 2,
 			    "elapsedMs": 0,
 			    "storeCalls": [],
 			    "writesAhead": 0,
@@ -455,21 +464,32 @@ describe("PRF5 chat open baseline", () => {
 		expect(await measureOpenings(CALL_DELAY_MS)).toMatchInlineSnapshot(`
 			{
 			  "busyOpen": {
-			    "commits": 8,
-			    "elapsedMs": 10,
+			    "commits": 16,
+			    "elapsedMs": 25,
 			    "storeCalls": [
 			      "mainChat",
 			      "captureCheckpoint",
-			      "botCommands",
 			      "loadPage",
 			      "boundedContext",
+			      "renewMainChat",
+			      "recordProviderSession",
+			      "pluginMcpServers",
+			      "mainChat",
+			      "openAssistantMessage",
+			      "botCommands",
+			      "loadPage",
+			      "appendText",
 			    ],
 			    "writesAhead": 0,
 			  },
 			  "coldOpen": {
-			    "commits": 7,
-			    "elapsedMs": 10,
+			    "commits": 11,
+			    "elapsedMs": 25,
 			    "storeCalls": [
+			      "mainChat",
+			      "loadPage",
+			      "renewMainChat",
+			      "pluginMcpServers",
 			      "mainChat",
 			      "botCommands",
 			      "loadPage",
@@ -477,7 +497,7 @@ describe("PRF5 chat open baseline", () => {
 			    "writesAhead": 0,
 			  },
 			  "warmOpen": {
-			    "commits": 1,
+			    "commits": 2,
 			    "elapsedMs": 0,
 			    "storeCalls": [],
 			    "writesAhead": 0,
@@ -491,11 +511,11 @@ describe("PRF5 chat open baseline", () => {
 
 		expect(await measurePage()).toMatchInlineSnapshot(`
 			{
-			  "commitsToFirstRow": 5,
-			  "commitsToSettled": 13,
+			  "commitsToFirstRow": 7,
+			  "commitsToSettled": 15,
 			  "highlightCalls": 10,
 			  "highlighterBuilds": 0,
-			  "markdownProcessors": 22,
+			  "markdownProcessors": 20,
 			  "paintedRows": 20,
 			}
 		`)

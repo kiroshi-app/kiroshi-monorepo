@@ -43,8 +43,10 @@ export const ConversationsScreen = () => {
 					chat={core.chat}
 					conversation={rosterView.selectedConversation}
 					conversationRuntimes={core.conversationRuntimes}
+					conversations={rosterView.conversations}
 					drafts={core.drafts}
 					haveSpacesFailed={spaces.state.hasFailedToLoad}
+					homeVisits={core.homeVisits}
 					isMissionsPanelOpen={sidebarTab.openTab === "missions"}
 					isOverlayOpen={overlay.isOverlayOpen}
 					landings={core.messageLandings}
@@ -57,11 +59,13 @@ export const ConversationsScreen = () => {
 					}
 					onOpenThreadInNewTab={navigation.openThreadInNewTab}
 					onRetrySpaces={loadSpaces}
+					onSelectBot={core.roster.controller.select}
 					onToggleSettings={overlay.toggleSettings}
 					readerName={preferences.displayName}
 					signIn={drivers.signIn}
 					spaceId={rosteredHostSpaceId}
 					spaceRowId={rosterView.rosteredSpaceId}
+					store={core.store}
 				/>
 			</ContentCard>
 		</>
