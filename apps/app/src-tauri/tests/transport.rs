@@ -737,10 +737,6 @@ fn resolution_of(events: &[AgentEvent], request_id: &str) -> Option<PermissionDe
 	})
 }
 
-fn ends_a_turn(events: &[AgentEvent]) -> bool {
-	events.iter().any(|event| matches!(event, AgentEvent::TurnEnded { .. }))
-}
-
 fn ended_outcome(events: &[AgentEvent]) -> Option<TurnOutcome> {
 	events.iter().find_map(|event| match event {
 		AgentEvent::TurnEnded { ended } => Some(ended.outcome),
@@ -765,7 +761,8 @@ async fn a_typed_message_answers_the_pending_question_and_takes_the_asking_turn_
 		harness.session.submit_in_line("date-fns", a_turn("t2")).await.expect("message taken");
 
 	assert_eq!(handed, Handed::Delivered);
-	let asking_turn = harness.wait_for("the asking turn to end", ends_a_turn).await;
+	let asking_turn =
+		harness.wait_for("the asking turn to end", |events| ended_outcome(events).is_some()).await;
 	assert_eq!(resolution_of(&asking_turn, &request.id), Some(PermissionDecision::AllowOnce));
 	assert_eq!(ended_outcome(&asking_turn), Some(TurnOutcome::Completed));
 	let answered = harness.drain_turn().await;
