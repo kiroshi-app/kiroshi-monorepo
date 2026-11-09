@@ -54,5 +54,5 @@ pub fn connection_status(t: &Tokens, language: Language, status: ConnectionStatu
 		ConnectionState::Ready => dot.fill(t.success),
 		ConnectionState::Unavailable | ConnectionState::Crashed => dot.fill(t.destructive),
 	};
-	row().key("connection-status").items_center().role("status").label(announced).child(dot)
+	row().key("connection-status").role("status").label(announced).child(dot)
 }
