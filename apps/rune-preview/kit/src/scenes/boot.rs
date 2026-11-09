@@ -1022,7 +1022,8 @@ fn new_device_rejected(t: &Tokens, _: &SceneState) -> El {
 }
 
 fn approval(t: &Tokens, status: ApprovalStatus) -> El {
-	staged(t, el(), vec![device_approval_dialog(t, EN, &ASKING_PHONE, status, ignore)])
+	let canvas = el().w_full().h_full().fill(t.card);
+	rune_kit::root(canvas, vec![device_approval_dialog(t, EN, &ASKING_PHONE, status, ignore)])
 }
 
 fn approval_asking(t: &Tokens, _: &SceneState) -> El {
