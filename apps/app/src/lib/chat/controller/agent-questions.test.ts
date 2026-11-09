@@ -298,4 +298,55 @@ describe("createChatController", () => {
 			).toBe(decision === "allowOnce" ? "succeeded" : "failed")
 		}
 	})
+
+	it("holds a question asked after the turn ended, until it is answered", async () => {
+		let listen: ((event: ScopedEvent) => void) | null = null
+		const answerQuestion = vi.fn((scope, id: string) => {
+			listen?.({
+				scope,
+				event: { type: "permissionResolved", id, decision: "allowOnce" },
+			})
+			return Promise.resolve()
+		})
+		const { controller } = await bootedHarness({
+			driver: (fake) => ({
+				...fake,
+				subscribe: (onEvent) => {
+					listen = onEvent
+					return fake.subscribe(onEvent)
+				},
+				answerQuestion,
+			}),
+		})
+		await controller.send("hello")
+		await vi.runAllTimersAsync()
+		expect(controller.getState().turn).toBe("idle")
+		const askLate = async () => {
+			listen?.({
+				scope: runOf(controller),
+				turn: {
+					turnId: "turn-continued",
+					continuesTurnId: "turn-asked",
+					conversationId: controller.getState().conversationId ?? "",
+				},
+				event: { type: "questionRequested", request: ASKED },
+			})
+			await vi.runAllTimersAsync()
+		}
+
+		await askLate()
+		expect(controller.getState().question?.id).toBe(ASKED.id)
+
+		await controller.answer(ASKED.id, {
+			"Which framework should it use?": "React",
+		})
+		await vi.runAllTimersAsync()
+		expect(answerQuestion).toHaveBeenCalledWith(expect.anything(), ASKED.id, {
+			"Which framework should it use?": "React",
+		})
+		expect(controller.getState().question).toBeNull()
+
+		await askLate()
+		expect(controller.getState().question).toBeNull()
+	})
 })
