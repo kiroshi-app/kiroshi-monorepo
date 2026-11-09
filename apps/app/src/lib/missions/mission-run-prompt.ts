@@ -24,7 +24,7 @@ const INSTRUCTION_OF: Record<MissionRunCause, string> = {
 }
 
 const UNATTENDED_NOTICE =
-	"Nobody answers a question during this run. When a question blocks you, ask it through mission_escalate and never ask one any other way. No permission is granted during this run either: a tool call that needs one is refused, so work with the tools you already may use."
+	"Nobody answers a question during this run. When a question blocks you, ask it through mission_escalate and never ask one any other way. No permission is granted during this run either: a tool call that needs one is refused, so work with what you are already allowed to use."
 
 const UNTRUSTED_NOTICE = untrustedNoticeOf(
 	"the mission, its events and the last message of the agent",
