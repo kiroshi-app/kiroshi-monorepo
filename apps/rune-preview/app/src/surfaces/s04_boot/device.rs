@@ -29,20 +29,20 @@ pub enum Approval {
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ListedDevice {
-	pub id: String,
-	pub name: Option<String>,
-	pub kind: CoreDeviceKind,
-	pub status: DeviceStatus,
-	pub approval_expires_at: Option<String>,
-	pub current: bool,
+	id: String,
+	name: Option<String>,
+	kind: CoreDeviceKind,
+	status: DeviceStatus,
+	approval_expires_at: Option<String>,
+	current: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Asking {
-	pub device_id: String,
-	pub name: Option<String>,
+	device_id: String,
+	name: Option<String>,
 	pub kind: CoreDeviceKind,
-	pub expires_at: String,
+	expires_at: String,
 }
 
 impl Asking {
@@ -56,9 +56,9 @@ impl Asking {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Run {
-	pub device_id: String,
-	pub has_failed: bool,
+struct Run {
+	device_id: String,
+	has_failed: bool,
 }
 
 #[derive(Default)]
@@ -74,7 +74,7 @@ pub struct Devices {
 	run: Option<Run>,
 }
 
-pub fn step_of(
+fn step_of(
 	approval: Option<&Approval>,
 	account: Option<&KiroshiAccount>,
 	is_code_asked: bool,
@@ -99,7 +99,7 @@ pub fn device_kind_of(kind: CoreDeviceKind) -> DeviceKind {
 	}
 }
 
-pub fn approval_status_of(run: Option<&Run>, asked: &Asking) -> ApprovalStatus {
+fn approval_status_of(run: Option<&Run>, asked: &Asking) -> ApprovalStatus {
 	match run {
 		Some(run) if run.device_id == asked.device_id && run.has_failed => ApprovalStatus::Failed,
 		Some(run) if run.device_id == asked.device_id => ApprovalStatus::Approving,
@@ -114,7 +114,7 @@ fn is_asking_before(device: &ListedDevice, now: DateTime<Utc>) -> bool {
 		&& matches!(expires_at, Some(Ok(at)) if at > now)
 }
 
-pub fn asking_devices_of(devices: Vec<ListedDevice>, now: DateTime<Utc>) -> Vec<Asking> {
+fn asking_devices_of(devices: Vec<ListedDevice>, now: DateTime<Utc>) -> Vec<Asking> {
 	devices
 		.into_iter()
 		.filter(|device| is_asking_before(device, now))

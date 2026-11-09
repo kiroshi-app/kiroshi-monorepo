@@ -699,12 +699,12 @@ pub fn new_device_event(app: &mut App, event: NewDeviceEvent) {
 }
 
 pub fn approval_event(app: &mut App, event: ApprovalEvent) {
-	let devices = &mut state(app).devices;
+	let onboarding = state(app);
 	let call = match event {
-		ApprovalEvent::Approve => devices.approve(),
-		ApprovalEvent::Reject => devices.refuse(),
+		ApprovalEvent::Approve => onboarding.devices.approve(),
+		ApprovalEvent::Reject => onboarding.devices.refuse(),
 	};
-	state(app).queued.extend(call);
+	onboarding.queued.extend(call);
 	sent(app);
 }
 
