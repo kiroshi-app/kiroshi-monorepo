@@ -7,15 +7,18 @@ mod worker;
 use std::collections::HashMap;
 
 use kiroshi_core::joined_spaces::contract::{
-	self as joined_contract, JoinedSpace, JoinedSpaceState,
+	self as joined_contract, JoinedSpace, JoinedSpaceError, JoinedSpaceRemovalReason,
+	JoinedSpaceState,
 };
 use kiroshi_core::spaces::contract::{DESCRIBED_EVENT, Space};
 use kiroshi_core::{hosting, invitations as invitation_contract};
-use kiroshi_rune_kit::strings::{Key, Language, chat, settings};
+use kiroshi_rune_kit::strings::{Key, Language, chat, common, settings};
 use kiroshi_rune_kit::surfaces::s02_rail::{
 	PickerMessage, RailMessage, RailPanel, Space as Row, SpaceHost, SpaceInvitation,
 };
+use kiroshi_rune_kit::surfaces::s06_composer::space_access::SpaceAccess;
 use rune::Waker;
+use serde::Deserialize;
 use serde_json::Value;
 
 use crate::app::notice::Notice;
@@ -24,6 +27,7 @@ use crate::host::HostError;
 use crate::model;
 use crate::navigation::Route;
 use crate::source::Source;
+use crate::surfaces::s06_composer::access::access_reason_of;
 
 use invitations::{Invitations, is_signed_out};
 use worker::{Answer, Call, Worker};
@@ -42,8 +46,6 @@ const OPEN_REFUSED: &str = "Couldn't open {name}. Pick it again to try once more
 const REMEMBER_REFUSED: &str =
 	"Couldn't keep {name} as the Space to reopen. The preview opens the first Space next time.";
 
-const JOINED_UNOPENABLE: &str = "{name} is a Space you joined, and the preview can't open a joined Space yet. Open it in Kiroshi.";
-
 const HOSTING_ONLINE: &str = "online";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -56,8 +58,24 @@ pub enum Swipe {
 pub enum Heard {
 	Spaces,
 	Joined,
+	Departed { id: String, reason: JoinedSpaceRemovalReason },
 	Invitations,
 	Hosting,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+enum RemovalReason {
+	Deleted,
+	Removed,
+	Left,
+	Unknown,
+}
+
+#[derive(Deserialize)]
+struct Removal {
+	id: String,
+	reason: RemovalReason,
 }
 
 struct Opened {
@@ -65,10 +83,16 @@ struct Opened {
 	content: SpaceContent,
 }
 
+struct Departed {
+	joined: JoinedSpace,
+	reason: JoinedSpaceRemovalReason,
+}
+
 #[derive(Default)]
 pub struct State {
 	spaces: Option<Vec<Space>>,
 	joined: Vec<JoinedSpace>,
+	departed: Option<Departed>,
 	online_hosting: HashMap<String, bool>,
 	invitations: Invitations,
 	opening: Option<String>,
@@ -92,16 +116,35 @@ pub fn shown_space(space: &Space) -> model::Space {
 	}
 }
 
-pub fn heard_of(event: &str) -> Option<Heard> {
-	match event {
-		DESCRIBED_EVENT => Some(Heard::Spaces),
-		joined_contract::CHANGED_EVENT
-		| joined_contract::REMOVED_EVENT
-		| joined_contract::RECONNECTED_EVENT => Some(Heard::Joined),
-		invitation_contract::contract::CHANGED_EVENT => Some(Heard::Invitations),
-		hosting::contract::CHANGED_EVENT => Some(Heard::Hosting),
-		_ => None,
+pub fn heard_of(event: &str, payload: &Value) -> Option<Result<Heard, serde_json::Error>> {
+	let heard = match event {
+		DESCRIBED_EVENT => Heard::Spaces,
+		joined_contract::CHANGED_EVENT | joined_contract::RECONNECTED_EVENT => Heard::Joined,
+		joined_contract::REMOVED_EVENT => return Some(departed_of(payload)),
+		invitation_contract::contract::CHANGED_EVENT => Heard::Invitations,
+		hosting::contract::CHANGED_EVENT => Heard::Hosting,
+		_ => return None,
+	};
+	Some(Ok(heard))
+}
+
+fn departed_of(payload: &Value) -> Result<Heard, serde_json::Error> {
+	let Removal { id, reason } = Removal::deserialize(payload)?;
+	Ok(Heard::Departed { id, reason: removal_reason_of(reason) })
+}
+
+fn removal_reason_of(reason: RemovalReason) -> JoinedSpaceRemovalReason {
+	match reason {
+		RemovalReason::Deleted => JoinedSpaceRemovalReason::Deleted,
+		RemovalReason::Removed => JoinedSpaceRemovalReason::Removed,
+		RemovalReason::Left => JoinedSpaceRemovalReason::Left,
+		RemovalReason::Unknown => JoinedSpaceRemovalReason::Unknown,
 	}
+}
+
+fn is_waiting_for_host(failure: &HostError) -> bool {
+	let HostError::CommandFailed { body, .. } = failure else { return false };
+	matches!(serde_json::from_str(body), Ok(JoinedSpaceError::WaitingForHost { .. }))
 }
 
 fn said(key: Key) -> String {
@@ -134,6 +177,19 @@ fn joined_row_of(joined: &JoinedSpace) -> Row<'_> {
 	}
 }
 
+fn joined_shown_space(joined: &JoinedSpace) -> model::Space {
+	model::Space {
+		id: joined.id.clone(),
+		name: joined.name.clone(),
+		colour: joined.colour.map(|hue| f32::from(hue.value())),
+	}
+}
+
+fn host_name_of(joined: &JoinedSpace) -> &str {
+	let hosted_by = joined.hosted_by.as_deref().filter(|name| !name.is_empty());
+	hosted_by.unwrap_or(common::spaces::unnamed::HOST.text(LANGUAGE))
+}
+
 fn joined_host_of(joined: &JoinedSpace) -> SpaceHost {
 	match joined.state {
 		JoinedSpaceState::Online => SpaceHost::Up,
@@ -162,6 +218,10 @@ impl State {
 		match heard {
 			Heard::Spaces => self.queue(Call::ListSpaces),
 			Heard::Joined => self.queue(Call::ListJoined),
+			Heard::Departed { id, reason } => {
+				self.depart(&id, reason);
+				self.queue(Call::ListJoined);
+			}
 			Heard::Invitations => self.queue(Call::ListInvitations),
 			Heard::Hosting => self.read_hosting(),
 		}
@@ -197,13 +257,40 @@ impl State {
 		self.is_picker_open
 	}
 
+	pub fn access_of(&self, shown: &str) -> Option<SpaceAccess<'_>> {
+		let (joined, departure) = match self.departed_from(shown) {
+			Some(departed) => (&departed.joined, Some(departed.reason)),
+			None => (self.joined_space(shown)?, None),
+		};
+		let reason = access_reason_of(joined, departure)?;
+		Some(SpaceAccess { reason, space: &joined.name, host: host_name_of(joined) })
+	}
+
+	pub fn is_joined(&self, id: &str) -> bool {
+		self.joined_space(id).is_some() || self.departed_from(id).is_some()
+	}
+
+	#[cfg(test)]
+	pub fn hold_joined(&mut self, joined: Vec<JoinedSpace>) {
+		self.joined = joined;
+	}
+
+	fn open_joined(&mut self, id: &str, shown: &str) -> Option<Opened> {
+		if id == self.selected(shown) {
+			return None;
+		}
+		let space = joined_shown_space(self.joined_space(id)?);
+		self.opening = None;
+		self.departed = None;
+		self.queue(Call::Connect(id.to_owned()));
+		Some(Opened {
+			space,
+			content: SpaceContent { agents: Vec::new(), conversations: Vec::new() },
+		})
+	}
+
 	pub fn select(&mut self, id: &str, shown: &str) {
 		if id == self.selected(shown) {
-			return;
-		}
-		if let Some(joined) = self.joined.iter().find(|joined| joined.id == id) {
-			let title = named(JOINED_UNOPENABLE, &joined.name);
-			self.to_raise.push(Notice::error(title));
 			return;
 		}
 		if self.space(id).is_none() {
@@ -275,6 +362,38 @@ impl State {
 		self.listed().iter().find(|space| space.id == id)
 	}
 
+	fn joined_space(&self, id: &str) -> Option<&JoinedSpace> {
+		self.joined.iter().find(|joined| joined.id == id)
+	}
+
+	fn departed_from(&self, id: &str) -> Option<&Departed> {
+		self.departed.as_ref().filter(|departed| departed.joined.id == id)
+	}
+
+	fn depart(&mut self, id: &str, reason: JoinedSpaceRemovalReason) {
+		if reason == JoinedSpaceRemovalReason::Left {
+			return;
+		}
+		let Some(joined) = self.joined_space(id).cloned() else { return };
+		self.departed = Some(Departed { joined, reason });
+	}
+
+	fn connection_refused(&mut self, joined_id: &str, failure: &HostError, shown: &str) {
+		if is_waiting_for_host(failure) {
+			self.queue(Call::ListJoined);
+			return;
+		}
+		if joined_id != shown {
+			eprintln!(
+				"{joined_id} was left before its connection was refused: {}",
+				failure.detail()
+			);
+			return;
+		}
+		let name = self.joined_space(joined_id).map_or(joined_id, |joined| &joined.name).to_owned();
+		self.raise(named(OPEN_REFUSED, &name), failure);
+	}
+
 	fn read_hosting(&mut self) {
 		let shared: Vec<Call> = self
 			.listed()
@@ -305,6 +424,12 @@ impl State {
 		if let Some(space) = spaces.iter().find(|space| space.id == shown) {
 			return Some(shown_space(space));
 		}
+		if let Some(joined) = self.joined_space(shown) {
+			return Some(joined_shown_space(joined));
+		}
+		if self.departed_from(shown).is_some() {
+			return None;
+		}
 		let first = spaces.first()?.id.clone();
 		if self.opening.is_none() {
 			self.select(&first, shown);
@@ -333,6 +458,10 @@ impl State {
 				self.online_hosting.insert(space_id, is_up);
 			}
 			Answer::Loaded { space_id, content } => return self.loaded(&space_id, content),
+			Answer::Connected { outcome: Ok(()), .. } => {}
+			Answer::Connected { joined_id, outcome: Err(failure) } => {
+				self.connection_refused(&joined_id, &failure, shown)
+			}
 			Answer::Remembered(Ok(())) => {}
 			Answer::Remembered(Err(failure)) => {
 				let name = self.space(shown).map_or(shown, |space| &space.name).to_owned();
@@ -480,9 +609,17 @@ fn show(app: &mut App, opened: Opened) {
 	}
 }
 
+pub fn space_access(app: &App) -> Option<SpaceAccess<'_>> {
+	let shown = &app.ready()?.space.id;
+	app.surfaces.s02_rail.access_of(shown)
+}
+
 pub fn select_space(app: &mut App, id: &str) {
 	let Some(shown) = shown_id(app) else { return };
-	app.surfaces.s02_rail.select(id, &shown);
+	match app.surfaces.s02_rail.open_joined(id, &shown) {
+		Some(opened) => show(app, opened),
+		None => app.surfaces.s02_rail.select(id, &shown),
+	}
 	raise_queued(app);
 }
 

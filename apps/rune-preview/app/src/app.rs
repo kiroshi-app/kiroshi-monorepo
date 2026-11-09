@@ -608,6 +608,8 @@ impl App {
 			}
 			HostEvent::Library(heard) => s14_library::heard(self, heard),
 			HostEvent::Approvals(heard) => self.surfaces.s07_approvals.heard(heard),
+			HostEvent::Device(heard) => s04_boot::heard(self, heard),
+			HostEvent::Spaces(heard) => self.surfaces.s02_rail.heard(heard),
 			HostEvent::Companion(heard) => {
 				self.surfaces.s03_roster.heard_companion(&heard);
 				s10_agent_settings::heard(self, heard)

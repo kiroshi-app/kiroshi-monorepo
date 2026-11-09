@@ -142,6 +142,8 @@ fn stream(hearing: &mpsc::Receiver<Heard>, conversation_id: &str) -> Result<(), 
 				| HostEvent::Library(_)
 				| HostEvent::Roster(_)
 				| HostEvent::Approvals(_)
+				| HostEvent::Device(_)
+				| HostEvent::Spaces(_)
 				| HostEvent::MissionChanged(_)
 				| HostEvent::Lagged,
 			) => {}
