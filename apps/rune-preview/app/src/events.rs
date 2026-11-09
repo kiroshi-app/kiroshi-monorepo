@@ -209,11 +209,11 @@ fn opened(url: &str, bearer: &str) -> Result<Socket, Closed> {
 	let authorization = HeaderValue::from_str(bearer)
 		.map_err(|failure| Closed::Lost(format!("the token is not a header value: {failure}")))?;
 	request.headers_mut().insert(AUTHORIZATION, authorization);
-	let stream = connected(&request)
-		.map_err(|failure| Closed::Lost(format!("the event socket did not open: {failure}")))?;
-	let polled = stream
-		.try_clone()
-		.map_err(|failure| Closed::Lost(format!("the event socket did not open: {failure}")))?;
+	let did_not_open = |failure: &dyn std::fmt::Display| {
+		Closed::Lost(format!("the event socket did not open: {failure}"))
+	};
+	let stream = connected(&request).map_err(|failure| did_not_open(&failure))?;
+	let polled = stream.try_clone().map_err(|failure| did_not_open(&failure))?;
 	let socket = match tungstenite::client_tls_with_config(request, stream, None, None) {
 		Ok((socket, _)) => socket,
 		Err(HandshakeError::Failure(tungstenite::Error::Http(response)))
@@ -221,9 +221,7 @@ fn opened(url: &str, bearer: &str) -> Result<Socket, Closed> {
 		{
 			return Err(Closed::Refused);
 		}
-		Err(failure) => {
-			return Err(Closed::Lost(format!("the event socket did not open: {failure}")));
-		}
+		Err(failure) => return Err(did_not_open(&failure)),
 	};
 	polled
 		.set_read_timeout(Some(READ_POLL))
