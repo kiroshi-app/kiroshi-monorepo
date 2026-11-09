@@ -15,15 +15,16 @@ use yrs::{Doc, ReadTxn, Text, Transact};
 
 use kiroshi_rune_kit::surfaces::s14_library::{
 	BlockEvent, BlockMenuAction, DOCUMENT_PANEL_MIN_WIDTH, DOCUMENT_PANEL_OPENING_WIDTH,
-	DocumentPanelEvent, Format as Toolbar, HandleEvent, ItemAction, ItemEvent, LibraryEvent,
-	LightboxEvent, LinkEvent, MORE_KEY, NewDocumentEvent, NewDocumentTemplate, TableEvent,
-	panel_max_width, tile_more_key,
+	DocumentPanelEvent, Format as Toolbar, GalleryEvent, HandleEvent, ItemAction, ItemEvent,
+	LibraryBlockType, LibraryEvent, LightboxEvent, LinkEvent, MORE_KEY, NewDocumentEvent,
+	NewDocumentTemplate, TableEvent, panel_max_width, tile_more_key,
 };
 
 use super::blocks::{self, Format};
 use super::document::Phase;
 use super::editing::SEND_INTERVAL;
 use super::imports::{self, HOSTED_LIMIT, JOINED_LIMIT};
+use super::rich::GalleryAdd;
 use super::session::Session;
 use super::worker::{Answer, Call, Due, Target, free_name};
 use kiroshi_rune_kit::surfaces::s14_library::THREAD_MIN_WIDTH;
@@ -1363,4 +1364,111 @@ fn an_escaped_pipe_stays_inside_its_cell_on_the_next_edit() {
 		saved_markdown(&initial, &calls(&mut state)),
 		"| Name | Role |\n| --- | --- |\n| Ada \\| Grace | Leads |"
 	);
+}
+
+const GALLERY: &str =
+	"```gallery\n- image: dunes.png\n  alt: Dunes\n- image: fern.png\n  alt: Fern\n```";
+
+fn gallery_block(state: &State) -> String {
+	let document = state.shown_document().expect("an open document");
+	let gallery = document.blocks.iter().find(|block| block.kind() == LibraryBlockType::Gallery);
+	gallery.expect("a gallery block").id.clone()
+}
+
+fn gallery_saved(initial: &str, event: GalleryEvent) -> String {
+	let initial = state_of(initial);
+	let mut state = opened_from("notes.txt", &initial);
+	let block = gallery_block(&state);
+	state.handle_gallery(false, &block, event);
+	flush_due(&mut state);
+	saved_markdown(&initial, &calls(&mut state))
+}
+
+#[test]
+fn removing_or_moving_a_gallery_tile_changes_the_gallery_and_saves_it() {
+	let removed = gallery_saved(GALLERY, GalleryEvent::Remove(0));
+	let moved = gallery_saved(GALLERY, GalleryEvent::Move { from: 0, to: 1 });
+	let last = gallery_saved(
+		"Intro\n\n```gallery\n- image: dunes.png\n  alt: Dunes\n```",
+		GalleryEvent::Remove(0),
+	);
+
+	assert_eq!(removed, "```gallery\n- image: fern.png\n  alt: Fern\n```");
+	assert_eq!(
+		moved,
+		"```gallery\n- image: fern.png\n  alt: Fern\n- image: dunes.png\n  alt: Dunes\n```"
+	);
+	assert_eq!(last, "Intro");
+}
+
+#[test]
+fn a_gallery_caption_is_written_into_its_tile_and_an_empty_one_drops_it() {
+	let initial = state_of(GALLERY);
+	let mut state = opened_from("notes.txt", &initial);
+	let block = first_block(&state);
+
+	state.field_mut(false, &block, 1).replace_text("A fern, *close*");
+	state.handle_gallery(false, &block, GalleryEvent::Caption(1));
+	flush_due(&mut state);
+	let captioned = saved_markdown(&initial, &calls(&mut state));
+	state.field_mut(false, &block, 1).replace_text("  ");
+	state.handle_gallery(false, &block, GalleryEvent::Caption(1));
+	flush_due(&mut state);
+
+	assert_eq!(
+		captioned,
+		"```gallery\n- image: dunes.png\n  alt: Dunes\n- image: fern.png\n  alt: Fern\n  caption: A fern, *close*\n```"
+	);
+	assert_eq!(shown_markdown(&state).as_deref(), Some(GALLERY));
+}
+
+#[test]
+fn add_picks_an_image_imports_it_then_appends_its_tile_and_saves() {
+	let initial = state_of(GALLERY);
+	let mut state = opened_from("notes.txt", &initial);
+	let block = first_block(&state);
+	let add = GalleryAdd { is_beside: false, block: block.clone() };
+	let path = PathBuf::from("/photos/Desert road.png");
+
+	state.handle_gallery(false, &block, GalleryEvent::Add);
+	let picks = std::mem::take(&mut state.effects);
+	state.import_into_gallery(add.clone(), path.clone());
+	let imported = calls(&mut state);
+	let item = item("Desert road.png", LibraryItemKind::Image);
+	let imports = Ok(vec![LibraryImport::Imported { item }]);
+	answer(
+		&mut state,
+		Answer::GalleryImported { target: target("notes.txt"), add: add.clone(), path, imports },
+	);
+	let landed = calls(&mut state);
+
+	assert_eq!(picks, vec![super::Effect::PickGalleryImage(add.clone())]);
+	assert!(
+		matches!(imported.as_slice(), [Call::GalleryImport { add: asked, .. }] if *asked == add)
+	);
+	assert!(landed.contains(&Call::List { space_id: SPACE.to_owned() }));
+	assert_eq!(
+		saved_markdown(&initial, &landed),
+		"```gallery\n- image: dunes.png\n  alt: Dunes\n- image: fern.png\n  alt: Fern\n- image: Desert road.png\n  alt: Desert road\n```"
+	);
+}
+
+#[test]
+fn a_refused_gallery_import_keeps_the_gallery_marks_the_add_failed_and_raises_a_notice() {
+	let mut state = opened_document("notes.txt", GALLERY);
+	let block = first_block(&state);
+	let add = GalleryAdd { is_beside: false, block: block.clone() };
+	let path = PathBuf::from("/photos/huge.png");
+
+	answer(
+		&mut state,
+		Answer::GalleryImported { target: target("notes.txt"), add, path, imports: Err(refused()) },
+	);
+
+	assert!(state.has_gallery_add_failed(false, &block));
+	assert!(state.to_raise.iter().any(|notice| notice.title.contains("huge.png")));
+	assert_eq!(applies(&calls(&mut state)), 0);
+	assert_eq!(shown_markdown(&state).as_deref(), Some(GALLERY));
+	state.handle_gallery(false, &block, GalleryEvent::Add);
+	assert!(!state.has_gallery_add_failed(false, &block));
 }

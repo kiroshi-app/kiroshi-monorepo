@@ -11,6 +11,7 @@ use kiroshi_core::library::contract::{
 use rune::Waker;
 use serde_json::json;
 
+use super::rich::GalleryAdd;
 use super::session::Session;
 use crate::host::HostError;
 use crate::source::Source;
@@ -56,6 +57,7 @@ pub enum Call {
 	Download(Target),
 	Copy(Target),
 	Reveal(Target),
+	GalleryImport { target: Target, add: GalleryAdd, path: PathBuf },
 	CreateBoard { space_id: String, untitled: String },
 	Wake(Duration, Due),
 }
@@ -110,6 +112,12 @@ pub enum Answer {
 		outcome: Result<(), HostError>,
 	},
 	Revealed(Result<(), HostError>),
+	GalleryImported {
+		target: Target,
+		add: GalleryAdd,
+		path: PathBuf,
+		imports: Result<Vec<LibraryImport>, HostError>,
+	},
 	BoardCreated {
 		space_id: String,
 		item: Result<LibraryItem, HostError>,
@@ -260,6 +268,11 @@ fn answered(source: &Source, call: Call) -> Answer {
 		Call::Copy(target) => {
 			let outcome = source.invoke("library_copy", located(&target));
 			Answer::Copied { target, outcome }
+		}
+		Call::GalleryImport { target, add, path } => {
+			let arguments = json!({ "spaceId": target.space_id, "paths": [path] });
+			let imports = source.invoke("library_import_paths", arguments);
+			Answer::GalleryImported { target, add, path, imports }
 		}
 		Call::Reveal(target) => Answer::Revealed(source.invoke("library_reveal", located(&target))),
 		Call::CreateBoard { space_id, untitled } => {

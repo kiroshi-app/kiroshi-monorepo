@@ -3,17 +3,18 @@ use rune::{Align, El, Side, TextEdit, col};
 
 use kiroshi_rune_kit::strings::{Language, common};
 use kiroshi_rune_kit::surfaces::s14_library::{
-	Agent, BarActions, DocumentBar, DocumentPanelEvent, EditorBlock, HandlePlace, ItemEvent,
-	ItemLook, LibraryBlockType, LibraryItem as Tile, LibraryPanel, LightboxImage, LightboxLook,
-	PanelActions, PanelLook, PanelState, TOOLBAR_GAP, TableCells, Unavailable, Writer, agent_card,
-	agent_caret, block_editor, block_handle, block_menu, delete_confirmation, document_bar,
-	document_column, document_panel, document_skeleton, field_key, format_toolbar, grid_columns,
-	item_menu, item_unavailable, library_panel, lightbox, link_field, new_document_dialog,
-	presence, rows_of, table_editor, title_field,
+	Agent, BarActions, DocumentBar, DocumentPanelEvent, EditorBlock, GalleryEdit, HandlePlace,
+	ItemEvent, ItemLook, LibraryBlockType, LibraryItem as Tile, LibraryPanel, LightboxImage,
+	LightboxLook, PanelActions, PanelLook, PanelState, TOOLBAR_GAP, TableCells,
+	Tile as GalleryTile, TileImage, Unavailable, Writer, agent_card, agent_caret, block_editor,
+	block_handle, block_menu, delete_confirmation, document_bar, document_column, document_panel,
+	document_skeleton, field_key, field_of as record_field, format_toolbar, gallery_editor,
+	grid_columns, item_menu, item_unavailable, library_panel, lightbox, link_field,
+	new_document_dialog, presence, rows_of, table_editor, title_field,
 };
 use kiroshi_rune_kit::tokens::{SPACING, Tokens};
 
-use super::blocks::{Block, field_texts_of, is_editable, table_columns};
+use super::blocks::{Block, field_texts_of, gallery_records, is_editable, table_columns};
 use super::document::{Document, Phase, title_of};
 use super::editing::pressed_of;
 use super::item_menu::MenuSurface;
@@ -31,6 +32,12 @@ const DEFAULT_COLUMNS: usize = 4;
 const KIB: u64 = 1024;
 
 const UNMEASURED_PITCH: f32 = SPACING * 14.0;
+
+const GALLERY_TILE_MIN: f32 = SPACING * 30.0;
+
+const GALLERY_TILE_GAP: f32 = SPACING * 1.5;
+
+const UNMEASURED_GALLERY_COLUMNS: usize = 4;
 
 const PANEL_ACTIONS: PanelActions = PanelActions {
 	search: true,
@@ -249,7 +256,44 @@ fn table_view(t: &Tokens, document: &Document, block: &Block, is_beside: bool) -
 	Some(table_editor(t, LANGUAGE, &cells, access, on))
 }
 
+fn gallery_columns(block: &str) -> usize {
+	let width = rune::memo::layout(&format!("library-block-{block}")).map(|rect| rect[2]);
+	width.map_or(UNMEASURED_GALLERY_COLUMNS, |width| {
+		(((width + GALLERY_TILE_GAP) / (GALLERY_TILE_MIN + GALLERY_TILE_GAP)).floor() as usize)
+			.max(1)
+	})
+}
+
+fn gallery_view(
+	state: &State,
+	t: &Tokens,
+	document: &Document,
+	block: &Block,
+	is_beside: bool,
+) -> Option<El> {
+	let records = gallery_records(&block.source);
+	let captions: Vec<&TextEdit> =
+		(0..records.len()).map(|at| document.field(&block.id, at)).collect::<Option<_>>()?;
+	let tiles: Vec<GalleryTile> = records
+		.iter()
+		.map(|record| GalleryTile { image: TileImage::Resolving, alt: record_field(record, "alt") })
+		.collect();
+	let edit = GalleryEdit {
+		block: &block.id,
+		tiles: &tiles,
+		captions,
+		columns: gallery_columns(&block.id),
+		drag: None,
+		has_add_failed: state.has_gallery_add_failed(is_beside, &block.id),
+	};
+	let access = if is_beside { beside_field } else { shown_field };
+	let id = block.id.clone();
+	let on = move |app: &mut App, event| library(app).handle_gallery(is_beside, &id, event);
+	Some(gallery_editor(t, LANGUAGE, &edit, access, on).0)
+}
+
 fn editor(app: &App, t: &Tokens, document: &Document, is_beside: bool) -> (El, Vec<El>) {
+	let state = &app.surfaces.s14_library;
 	let blocks = &document.blocks;
 	let placeholder = said(common::library::templates::blank::PLACEHOLDER);
 	let is_blank = blocks.len() == 1 && blocks[0].source.is_empty();
@@ -268,9 +312,11 @@ fn editor(app: &App, t: &Tokens, document: &Document, is_beside: bool) -> (El, V
 			};
 			let mut view = EditorBlock::new(&block.id, kind, rows, &block.source);
 			view.depths = lines.iter().map(|line| line.depth).collect();
-			if kind == LibraryBlockType::Table {
-				view.drawn = table_view(t, document, block, is_beside);
-			}
+			view.drawn = match kind {
+				LibraryBlockType::Table => table_view(t, document, block, is_beside),
+				LibraryBlockType::Gallery => gallery_view(state, t, document, block, is_beside),
+				_ => None,
+			};
 			view.placeholder = is_blank.then_some(placeholder.as_str());
 			view
 		})
@@ -282,7 +328,6 @@ fn editor(app: &App, t: &Tokens, document: &Document, is_beside: bool) -> (El, V
 			view.end = Some(agent_caret(t, Agent { name: &name, hue }));
 		}
 	}
-	let state = &app.surfaces.s14_library;
 	with_handle(state, t, &mut views, blocks, is_beside);
 	let query = state.slash_query().unwrap_or_default();
 	let slash = state

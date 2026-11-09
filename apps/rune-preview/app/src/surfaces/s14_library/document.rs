@@ -3,12 +3,13 @@ use std::collections::HashSet;
 use kiroshi_core::library::contract::{LibraryPresenceAt, LibraryWriter, LibraryWriterKind};
 use rune::TextEdit;
 
-use kiroshi_rune_kit::surfaces::s14_library::{BLOCK_GAP, LibraryBlockType};
+use kiroshi_rune_kit::surfaces::s14_library::{BLOCK_GAP, LibraryBlockType, Record};
 
 use super::blocks::{
-	self, Block, Format, continued_line, converted, field_of, field_texts_of, fresh_id, has_fields,
-	is_editable, lead_of, line_count, markdown_before_caret, markdown_of, markdown_of_field,
-	rewritten, row_start, texts_of, with_line_after, without_line,
+	self, Block, Format, continued_line, converted, field_of, field_texts_of, fresh_id,
+	gallery_records, has_fields, is_editable, lead_of, line_count, markdown_before_caret,
+	markdown_of, markdown_of_field, rewritten, row_start, texts_of, with_line_after, with_records,
+	without_line,
 };
 use super::session::Session;
 use super::worker::Target;
@@ -350,6 +351,18 @@ impl Document {
 			left if at == left => self.blocks[at - 1].gap = removed.gap,
 			_ => {}
 		}
+		self.restructured()
+	}
+
+	pub fn edit_gallery(
+		&mut self,
+		block: &str,
+		change: impl FnOnce(&mut Vec<Record>),
+	) -> Option<String> {
+		let at = self.block_at(block)?;
+		let mut records = gallery_records(&self.blocks[at].source);
+		change(&mut records);
+		self.blocks[at].source = with_records(&self.blocks[at].source, &records);
 		self.restructured()
 	}
 

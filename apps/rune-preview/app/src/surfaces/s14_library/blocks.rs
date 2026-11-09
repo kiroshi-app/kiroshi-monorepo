@@ -3,8 +3,8 @@ use std::collections::HashSet;
 use rune::{Block as Line, Mark, MarkRange, TextEdit};
 
 use kiroshi_rune_kit::surfaces::s14_library::{
-	BLOCK_GAP, BLOCK_ID_ALPHABET, BLOCK_ID_LENGTH, LibraryBlockType, block_type_of, is_block_id,
-	parse_blocks, rows_of,
+	BLOCK_GAP, BLOCK_ID_ALPHABET, BLOCK_ID_LENGTH, LibraryBlockType, Record, block_type_of,
+	fence_body, field_of as record_field, is_block_id, parse_blocks, records_of, rows_of,
 };
 
 use crate::spike::inline;
@@ -202,8 +202,43 @@ fn table_rows_of(source: &str) -> Vec<Vec<String>> {
 		.collect()
 }
 
+pub fn gallery_records(source: &str) -> Vec<Record> {
+	records_of(&fence_body(source).1)
+}
+
+fn record_lines(record: &Record) -> String {
+	record
+		.iter()
+		.enumerate()
+		.map(|(at, (key, value))| format!("{}{key}: {value}", if at == 0 { "- " } else { "  " }))
+		.collect::<Vec<_>>()
+		.join("\n")
+}
+
+pub fn with_records(source: &str, records: &[Record]) -> String {
+	let open = source.split('\n').next().unwrap_or_default();
+	let marker: String = open.trim_start().chars().take_while(|c| matches!(c, '`' | '~')).collect();
+	let body = records.iter().map(record_lines).collect::<Vec<_>>();
+	std::iter::once(open.to_owned()).chain(body).chain([marker]).collect::<Vec<_>>().join("\n")
+}
+
+fn with_caption(source: &str, index: usize, caption: &str) -> String {
+	let mut records = gallery_records(source);
+	let Some(record) = records.get_mut(index) else { return source.to_owned() };
+	record.retain(|(key, _)| key != "caption");
+	let value = one_line(caption);
+	if !value.trim().is_empty() {
+		record.push(("caption".to_owned(), value));
+	}
+	with_records(source, &records)
+}
+
 pub fn field_texts_of(source: &str) -> Vec<String> {
 	match block_type_of(source) {
+		LibraryBlockType::Gallery => gallery_records(source)
+			.iter()
+			.map(|record| record_field(record, "caption").to_owned())
+			.collect(),
 		LibraryBlockType::Table => {
 			let columns = table_columns(source);
 			table_rows_of(source)
@@ -223,7 +258,11 @@ pub fn is_editable(kind: LibraryBlockType) -> bool {
 }
 
 pub fn has_fields(kind: LibraryBlockType) -> bool {
-	is_editable(kind) || kind == LibraryBlockType::Table
+	is_editable(kind) || matches!(kind, LibraryBlockType::Table | LibraryBlockType::Gallery)
+}
+
+fn is_raw(kind: LibraryBlockType) -> bool {
+	matches!(kind, LibraryBlockType::Code | LibraryBlockType::Gallery)
 }
 
 pub fn table_columns(source: &str) -> usize {
@@ -278,7 +317,7 @@ fn with_cell(source: &str, field: usize, text: &str) -> String {
 }
 
 pub fn field_of(kind: LibraryBlockType, markdown: &str) -> TextEdit {
-	if kind == LibraryBlockType::Code {
+	if is_raw(kind) {
 		return TextEdit::new(markdown);
 	}
 	let (text, marks) = inline::parse(markdown);
@@ -292,15 +331,15 @@ pub fn field_of(kind: LibraryBlockType, markdown: &str) -> TextEdit {
 }
 
 pub fn markdown_of_field(kind: LibraryBlockType, edit: &TextEdit) -> String {
-	match kind {
-		LibraryBlockType::Code => edit.text.clone(),
-		_ => inline::serialize(&edit.text, edit.marks()),
+	match is_raw(kind) {
+		true => edit.text.clone(),
+		false => inline::serialize(&edit.text, edit.marks()),
 	}
 }
 
 pub fn markdown_before_caret(kind: LibraryBlockType, edit: &TextEdit) -> usize {
 	let caret = edit.focus.min(edit.text.len());
-	if kind == LibraryBlockType::Code {
+	if is_raw(kind) {
 		return caret;
 	}
 	let marks: Vec<MarkRange> = edit
@@ -340,8 +379,10 @@ fn closing_fence_of(lines: &[&str]) -> String {
 
 pub fn rewritten(source: &str, row: usize, text: &str) -> String {
 	let kind = block_type_of(source);
-	if kind == LibraryBlockType::Table {
-		return with_cell(source, row, text);
+	match kind {
+		LibraryBlockType::Table => return with_cell(source, row, text),
+		LibraryBlockType::Gallery => return with_caption(source, row, text),
+		_ => {}
 	}
 	let lines: Vec<&str> = source.split('\n').collect();
 	if kind == LibraryBlockType::Code {

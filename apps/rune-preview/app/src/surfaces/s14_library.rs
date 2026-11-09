@@ -48,6 +48,7 @@ use editing::{LinkState, SlashState};
 use handle::BlockMenu;
 use imports::Screened;
 use item_menu::{ItemMenu, MenuSurface};
+use rich::GalleryAdd;
 use worker::{Answer, Call, Due, NewDocument, Target, Worker};
 
 const ZOOM_STEP: u32 = 25;
@@ -132,6 +133,7 @@ pub struct State {
 	slash: Option<SlashState>,
 	link: Option<LinkState>,
 	block_menu: Option<BlockMenu>,
+	gallery_add_failed: Option<GalleryAdd>,
 	is_flush_armed: bool,
 	copied: Option<String>,
 	effects: Vec<Effect>,
@@ -166,6 +168,7 @@ impl Default for State {
 			slash: None,
 			link: None,
 			block_menu: None,
+			gallery_add_failed: None,
 			is_flush_armed: false,
 			copied: None,
 			effects: Vec::new(),
@@ -840,6 +843,9 @@ impl State {
 			Answer::Downloaded(outcome) => self.downloaded(outcome),
 			Answer::Copied { target, outcome } => self.copied_answer(&target, outcome),
 			Answer::Revealed(outcome) => self.revealed(outcome),
+			Answer::GalleryImported { target, add, path, imports } => {
+				self.gallery_imported(&target, add, &path, imports)
+			}
 			Answer::BoardCreated { space_id, item } => self.board_created(&space_id, item),
 			Answer::Due(Due::Flush) => self.flush_due(),
 			Answer::Due(Due::Copied) => self.copied = None,
