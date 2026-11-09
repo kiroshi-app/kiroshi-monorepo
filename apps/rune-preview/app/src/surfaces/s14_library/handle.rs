@@ -18,7 +18,7 @@ impl State {
 		let update = match event {
 			HandleEvent::Insert => document.insert_below(block),
 			HandleEvent::Move { from, to } => document.move_block(from, to),
-			HandleEvent::Press => None,
+			HandleEvent::Press | HandleEvent::Drag { .. } | HandleEvent::DragEnd => None,
 		};
 		self.send(is_beside, update);
 	}
@@ -28,7 +28,9 @@ impl State {
 		let Some(document) = self.document_mut(is_beside) else { return };
 		let Some(at) = document.block_at(&block) else { return };
 		let update = match action {
-			BlockMenuAction::TurnInto => None,
+			BlockMenuAction::TurnIntoShown
+			| BlockMenuAction::TurnIntoHidden
+			| BlockMenuAction::TurnInto(_) => None,
 			BlockMenuAction::Duplicate => document.duplicate(&block),
 			BlockMenuAction::MoveUp => at.checked_sub(1).and_then(|to| document.move_block(at, to)),
 			BlockMenuAction::MoveDown => document.move_block(at, at + 1),

@@ -3,13 +3,13 @@ use rune::{Align, El, Side, TextEdit, col};
 
 use kiroshi_rune_kit::strings::{Language, common};
 use kiroshi_rune_kit::surfaces::s14_library::{
-	Agent, BarActions, DocumentBar, DocumentPanelEvent, EditorBlock, FieldAccess, GalleryEdit,
-	HandlePlace, ItemEvent, ItemLook, LibraryBlockType, LibraryItem as Tile, LibraryPanel,
-	LightboxImage, LightboxLook, PanelActions, PanelLook, PanelState, TOOLBAR_GAP, TableCells,
-	Tile as GalleryTile, TileImage, Unavailable, Writer, agent_card, agent_caret, block_editor,
-	block_handle, block_menu, delete_confirmation, document_bar, document_column, document_panel,
-	document_skeleton, field_key, field_of as record_field, format_toolbar, gallery_editor,
-	grid_columns, item_menu, item_unavailable, library_panel, lightbox, link_field,
+	Agent, BarActions, BlockMenuLook, DocumentBar, DocumentPanelEvent, EditorBlock, FieldAccess,
+	GalleryEdit, HandlePlace, ItemEvent, ItemLook, LibraryBlockType, LibraryItem as Tile,
+	LibraryPanel, LightboxImage, LightboxLook, PanelActions, PanelLook, PanelState, TOOLBAR_GAP,
+	TableCells, Tile as GalleryTile, TileImage, Unavailable, Writer, agent_card, agent_caret,
+	block_editor, block_handle, block_menu, delete_confirmation, document_bar, document_column,
+	document_panel, document_skeleton, field_key, field_of as record_field, format_toolbar,
+	gallery_editor, grid_columns, item_menu, item_unavailable, library_panel, lightbox, link_field,
 	new_document_dialog, presence, rows_of, table_editor, title_field,
 };
 use kiroshi_rune_kit::tokens::{SPACING, Tokens};
@@ -238,10 +238,17 @@ fn with_handle(
 
 fn block_menu_layer(state: &State, t: &Tokens, document: &Document, is_beside: bool) -> Option<El> {
 	let menu = state.block_menu.as_ref().filter(|menu| menu.is_beside == is_beside)?;
-	let kind = document.blocks.iter().find(|block| block.id == menu.block)?.kind();
+	let at = document.blocks.iter().position(|block| block.id == menu.block)?;
+	let look = BlockMenuLook {
+		kind: document.blocks[at].kind(),
+		is_mac: cfg!(target_os = "macos"),
+		can_move_up: at > 0,
+		can_move_down: at + 1 < document.blocks.len(),
+		is_turn_into_shown: false,
+	};
 	let handle = format!("library-handle-{}", said(common::library::editor::blocks::handle::MENU));
 	let on = |app: &mut App, action| library(app).handle_block_menu(action);
-	let shown = block_menu(t, LANGUAGE, kind, cfg!(target_os = "macos"), on)
+	let shown = block_menu(t, LANGUAGE, look, on)
 		.modal(true, |app: &mut App| library(app).close_block_menu());
 	Some(shown.anchored(handle, Side::Bottom, Align::Start, SPACING))
 }

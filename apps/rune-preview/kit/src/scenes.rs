@@ -62,6 +62,7 @@ pub enum Pointer {
 	EntersAtSnap(&'static str),
 	LeavesAtSnap(&'static str),
 	Taps(&'static str),
+	RightClicks(&'static str),
 	Drags(&'static str, i32, i32),
 }
 
@@ -3784,6 +3785,14 @@ pub static SCENES: &[Scene] = &[
 		library::meeting_notes_selected,
 	),
 	library::library("overlays-librarylightbox--default", library::lightbox_default),
+	library::acted(
+		"overlays-librarylightbox--picture-right-clicked",
+		library::ARTBOARD,
+		0,
+		"",
+		Pointer::RightClicks("lightbox-picture"),
+		library::lightbox_default,
+	),
 	library::library("overlays-librarylightbox--host-more-menu", library::lightbox_host_more_menu),
 	library::library(
 		"overlays-librarylightbox--member-more-menu",
@@ -4051,6 +4060,15 @@ pub static SCENES: &[Scene] = &[
 	),
 	library::library(
 		"navigation-librarydocumentblockeditor--drag-with-drop-indicator",
+		library::editor,
+	),
+	library::library("navigation-librarydocumentblockeditor--turn-into-open", library::editor),
+	library::library(
+		"navigation-librarydocumentblockeditor--block-drag-in-progress",
+		library::editor,
+	),
+	library::library(
+		"navigation-librarydocumentblockeditor--move-down-disabled-at-the-last-block",
 		library::editor,
 	),
 	library::library(
@@ -6102,7 +6120,9 @@ pub fn view(s: &SceneState, cx: &mut Cx<SceneState>) -> El {
 	let t = Tokens { reduced_motion: cx.is_reduced_motion(), ..Tokens::new(cx.system_dark()) };
 	let shown = (s.scene.view)(&t, s);
 	match s.scene.pointer {
-		Pointer::Taps(_) | Pointer::Drags(..) => rune_kit::root(shown, library::heard_echo(&t, s)),
+		Pointer::Taps(_) | Pointer::RightClicks(_) | Pointer::Drags(..) => {
+			rune_kit::root(shown, library::heard_echo(&t, s))
+		}
 		Pointer::Away | Pointer::EntersAtSnap(_) | Pointer::LeavesAtSnap(_) => shown,
 	}
 }
