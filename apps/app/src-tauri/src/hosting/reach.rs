@@ -1,6 +1,6 @@
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tauri::{AppHandle, Manager, Runtime};
 
@@ -11,6 +11,7 @@ use crate::db::repositories::space_children::SpaceChild::{
 	self, Bot, BotHeldAlone, Conversation, Message, Mission, Routine, RoutineRun, Section, Turn,
 };
 use crate::db::{DatabaseError, DatabaseState};
+use crate::events::Frame;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(super) enum Reach {
@@ -575,15 +576,103 @@ pub(super) async fn stays_in_the_shared_space<R: Runtime>(
 	Ok(())
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct Published {
 	event: String,
 	#[serde(default)]
 	payload: Value,
 }
 
+impl Published {
+	fn with_list(&self, conversation_ids: Vec<Value>) -> serde_json::Result<Frame> {
+		let mut payload = self.payload.clone();
+		if let Some(listed) = payload.pointer_mut(CONVERSATION_LIST_POINTER) {
+			*listed = Value::Array(conversation_ids);
+		}
+		let tailored = Published { event: self.event.clone(), payload };
+		Ok(serde_json::to_string(&tailored)?.into())
+	}
+}
+
 const CONVERSATION_POINTERS: [&str; 3] =
 	["/conversationId", "/conversation/id", "/scope/conversationId"];
+
+const CONVERSATION_LIST_POINTER: &str = "/conversationIds";
+
+#[derive(Clone, Copy)]
+enum Naming {
+	One(&'static str),
+	Each(&'static str),
+}
+
+struct AnswerList {
+	command: &'static str,
+	items: &'static str,
+	naming: Naming,
+}
+
+const ANSWER_LISTS: &[AnswerList] = &[
+	AnswerList {
+		command: "conversation_agent_rooms",
+		items: "",
+		naming: Naming::Each(CONVERSATION_LIST_POINTER),
+	},
+	AnswerList { command: "mission_space_feed", items: "", naming: Naming::One("/conversationId") },
+	AnswerList {
+		command: "mission_space_page",
+		items: "/missions",
+		naming: Naming::One("/conversationId"),
+	},
+];
+
+pub(super) async fn answer_shown_to<R: Runtime>(
+	app: &AppHandle<R>,
+	shared_space_id: &str,
+	caller: &ChatOwner,
+	command: &str,
+	mut body: Value,
+) -> Option<Value> {
+	let Some(list) = ANSWER_LISTS.iter().find(|list| list.command == command) else {
+		return Some(body);
+	};
+	let Some(Value::Array(listed)) = body.pointer_mut(list.items) else {
+		log::warn!("the relayed {command} answer holds no list at {}", list.items);
+		return None;
+	};
+	let lookup = Lookup { app, shared_space_id, relayed: command };
+	let mut kept = Vec::with_capacity(listed.len());
+	for mut item in std::mem::take(listed) {
+		if lookup.item_shown_to(caller, list.naming, &mut item).await? {
+			kept.push(item);
+		}
+	}
+	*listed = kept;
+	Some(body)
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum Readers {
+	Everyone,
+	Owner(String),
+	Nobody,
+}
+
+impl Readers {
+	fn owner(&self) -> Option<&str> {
+		match self {
+			Readers::Owner(account_id) => Some(account_id),
+			_ => None,
+		}
+	}
+
+	fn is_shown_to(&self, reader: Option<&str>) -> bool {
+		match self {
+			Readers::Everyone => true,
+			Readers::Owner(account_id) => reader == Some(account_id.as_str()),
+			Readers::Nobody => false,
+		}
+	}
+}
 
 pub(super) struct GuestEvents {
 	shared_space_id: String,
@@ -603,19 +692,23 @@ impl GuestEvents {
 	pub(super) async fn reach_the_guest<R: Runtime>(
 		&mut self,
 		app: &AppHandle<R>,
-		frame: &str,
-	) -> Option<Addressee> {
+		frame: &Frame,
+	) -> Vec<(Frame, Addressee)> {
 		let published = match serde_json::from_str::<Published>(frame) {
 			Ok(published) => published,
 			Err(error) => {
 				self.kept_off("without a readable name", &error.to_string());
-				return None;
+				return Vec::new();
 			}
 		};
 		if !self.holds_the_guest(app, &published).await {
-			return None;
+			return Vec::new();
 		}
-		self.addressee(app, &published).await
+		if let Some(Value::Array(listed)) = published.payload.pointer(CONVERSATION_LIST_POINTER) {
+			return self.tailored(app, frame, &published, listed).await;
+		}
+		let addressee = self.addressee(app, &published).await;
+		addressee.map(|addressee| (frame.clone(), addressee)).into_iter().collect()
 	}
 
 	async fn addressee<R: Runtime>(
@@ -629,23 +722,91 @@ impl GuestEvents {
 		let Some(conversation_id) = named else {
 			return Some(Addressee::Everyone);
 		};
+		match self.shown(app, &published.event, conversation_id).await? {
+			Readers::Everyone => Some(Addressee::Everyone),
+			Readers::Owner(account_id) => Some(Addressee::Account(account_id)),
+			Readers::Nobody => None,
+		}
+	}
+
+	async fn tailored<R: Runtime>(
+		&mut self,
+		app: &AppHandle<R>,
+		frame: &Frame,
+		published: &Published,
+		listed: &[Value],
+	) -> Vec<(Frame, Addressee)> {
+		let Some(shown) = self.all_shown(app, &published.event, listed).await else {
+			return Vec::new();
+		};
+		if shown.iter().all(|(_, seen)| *seen == Readers::Everyone) {
+			return vec![(frame.clone(), Addressee::Everyone)];
+		}
+		let owners: BTreeSet<&str> = shown.iter().filter_map(|(_, seen)| seen.owner()).collect();
+		let rest = if owners.is_empty() {
+			Addressee::Everyone
+		} else {
+			Addressee::EveryoneBut(owners.iter().map(|owner| (*owner).to_owned()).collect())
+		};
+		let mut frames = Vec::with_capacity(owners.len() + 1);
+		for reader in owners.iter().map(|owner| Some(*owner)).chain([None]) {
+			let ids = shown
+				.iter()
+				.filter(|(_, seen)| seen.is_shown_to(reader))
+				.map(|(conversation_id, _)| Value::from(conversation_id.as_str()))
+				.collect();
+			let addressee =
+				reader.map_or(rest.clone(), |owner| Addressee::Account(owner.to_owned()));
+			match published.with_list(ids) {
+				Ok(tailored) => frames.push((tailored, addressee)),
+				Err(error) => {
+					self.kept_off(&published.event, &error.to_string());
+					return Vec::new();
+				}
+			}
+		}
+		frames
+	}
+
+	async fn all_shown<R: Runtime>(
+		&mut self,
+		app: &AppHandle<R>,
+		event: &str,
+		listed: &[Value],
+	) -> Option<Vec<(String, Readers)>> {
+		let mut shown = Vec::with_capacity(listed.len());
+		for conversation_id in listed {
+			let Some(conversation_id) = conversation_id.as_str() else {
+				self.kept_off(event, "its conversationIds hold a value that is no id");
+				return None;
+			};
+			let seen = self.shown(app, event, conversation_id).await?;
+			shown.push((conversation_id.to_owned(), seen));
+		}
+		Some(shown)
+	}
+
+	async fn shown<R: Runtime>(
+		&mut self,
+		app: &AppHandle<R>,
+		event: &str,
+		conversation_id: &str,
+	) -> Option<Readers> {
 		let owner = match self.main_owners.get(conversation_id) {
 			Some(owner) => owner.clone(),
 			None => {
-				let lookup = Lookup {
-					app,
-					shared_space_id: &self.shared_space_id,
-					relayed: &published.event,
-				};
+				let lookup = Lookup { app, shared_space_id: &self.shared_space_id, relayed: event };
 				let owner = lookup.resolved_owner(Conversation, conversation_id).await?;
 				self.main_owners.insert(conversation_id.to_owned(), owner.clone());
 				owner
 			}
 		};
-		match owner {
-			None => Some(Addressee::Everyone),
-			Some(owner) => authorship::account_of(app, &owner).map(Addressee::Account),
-		}
+		Some(match owner {
+			None => Readers::Everyone,
+			Some(owner) => {
+				authorship::account_of(app, &owner).map_or(Readers::Nobody, Readers::Owner)
+			}
+		})
 	}
 
 	async fn holds_the_guest<R: Runtime>(
@@ -766,9 +927,49 @@ impl<R: Runtime> Lookup<'_, R> {
 		let (Check::Child(kind), Some(Value::String(child_id))) = (held.check, value) else {
 			return true;
 		};
-		match self.resolved_owner(kind, child_id).await {
-			Some(owner) => owner.is_none_or(|owner| &owner == caller),
-			None => false,
+		self.is_shown_to(caller, kind, child_id).await == Some(true)
+	}
+
+	async fn is_shown_to(
+		&self,
+		caller: &ChatOwner,
+		kind: SpaceChild,
+		child_id: &str,
+	) -> Option<bool> {
+		let owner = self.resolved_owner(kind, child_id).await?;
+		Some(owner.is_none_or(|owner| &owner == caller))
+	}
+
+	async fn item_shown_to(
+		&self,
+		caller: &ChatOwner,
+		naming: Naming,
+		item: &mut Value,
+	) -> Option<bool> {
+		match naming {
+			Naming::One(pointer) => match item.pointer(pointer).and_then(Value::as_str) {
+				Some(conversation_id) => {
+					self.is_shown_to(caller, Conversation, conversation_id).await
+				}
+				None => Some(false),
+			},
+			Naming::Each(pointer) => {
+				let Some(Value::Array(listed)) = item.pointer_mut(pointer) else {
+					return Some(false);
+				};
+				let mut kept = Vec::with_capacity(listed.len());
+				for named in std::mem::take(listed) {
+					let Some(conversation_id) = named.as_str() else {
+						continue;
+					};
+					if self.is_shown_to(caller, Conversation, conversation_id).await? {
+						kept.push(named);
+					}
+				}
+				let is_shown = !kept.is_empty();
+				*listed = kept;
+				Some(is_shown)
+			}
 		}
 	}
 

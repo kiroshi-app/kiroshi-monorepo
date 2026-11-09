@@ -221,11 +221,11 @@ pub(super) async fn host_rostered(
 	roster.rostered(space_id.to_owned(), signed_row(host, space_id, &enrolled)).await
 }
 
-pub(super) async fn devices_of_account(
+pub(super) async fn devices_of_accounts(
 	database: &Database,
 	space_id: &str,
 	host: &DeviceKeys,
-	account_id: &str,
+	is_reached: impl Fn(&str) -> bool,
 ) -> Result<Vec<Rostered>, DatabaseError> {
 	let roster = verified_roster(database, space_id, &host.signing_public()).await?;
 	Ok(roster
@@ -233,7 +233,7 @@ pub(super) async fn devices_of_account(
 		.into_iter()
 		.map(|row| row.rostered)
 		.filter(|rostered| {
-			rostered.account_id == account_id && rostered.device_id != host.device_id()
+			is_reached(&rostered.account_id) && rostered.device_id != host.device_id()
 		})
 		.collect())
 }

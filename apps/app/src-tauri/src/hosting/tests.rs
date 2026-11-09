@@ -9472,3 +9472,209 @@ fn a_failed_admission_keeps_the_host_socket_open_and_the_next_device_approved_ad
 		assert_eq!(harness.state(), HostingState::Online);
 	});
 }
+
+fn the_rooms_lists_of(frames: &[Value]) -> Vec<Value> {
+	frames
+		.iter()
+		.filter(|frame| frame["event"]["event"] == json!(AGENT_ROOMS_CHANGED_EVENT))
+		.map(|frame| frame["event"]["payload"]["conversationIds"].clone())
+		.collect()
+}
+
+fn opened_by(device: &SealingMember, member: &MemberWire) -> Vec<Value> {
+	let space = member.space();
+	member
+		.texts
+		.iter()
+		.filter_map(|text| device.opened(&space, text))
+		.map(|frame| unstamped(frame.plaintext))
+		.collect()
+}
+
+async fn open_turns_in(database: &db::Database, bot_id: &str, conversation_ids: &[&str]) {
+	for (started_at, conversation_id) in (1..).zip(conversation_ids) {
+		let turn = NewTurn {
+			id: format!("t-{conversation_id}"),
+			conversation_id: (*conversation_id).to_owned(),
+			started_at,
+		};
+		database.messages().start_run(turn, bot_id.to_owned()).await.expect("it runs");
+	}
+}
+
+#[test]
+fn each_member_hears_the_agent_rooms_without_the_main_conversation_of_another_person() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("agent-rooms-of-each-member").await;
+		let bea = SealingMember::new(BEA);
+		guest.harness.rostered(PERSONAL, &bea).await;
+		let mains = mains_of_the_host_and_bea(&guest).await;
+		let database = db::open(&guest.effects.database);
+		let of_the_guest = database
+			.conversations()
+			.ensure_chat("b-mine".to_owned(), Some(PERSONAL.to_owned()), owned_by(A_JOINER))
+			.await
+			.expect("the main conversation opens")
+			.id;
+		let rooms = ["c-mine", &mains.of_the_host, &of_the_guest, &mains.of_bea];
+		open_turns_in(&database, "b-mine", &rooms).await;
+
+		let app = guest.harness.app.handle().clone();
+		conversation_state::observe(&app, &database, "c-mine").await.expect("the state reads");
+		let heard = guest.events_until_the_marker().await;
+
+		assert_eq!(the_rooms_lists_of(&heard), [json!([of_the_guest, "c-mine"])]);
+		assert_eq!(
+			the_rooms_lists_of(&opened_by(&bea, &guest.member)),
+			[json!([mains.of_bea, "c-mine"])]
+		);
+		let said = Value::from(heard).to_string();
+		assert!(!said.contains(&mains.of_bea) && !said.contains(&mains.of_the_host), "{said}");
+	});
+}
+
+fn owned_by(account_id: &str) -> ChatOwner {
+	ChatOwner::Member(account_id.to_owned())
+}
+
+fn naming_the_main(main: &str) -> Vec<(&'static str, Value)> {
+	let in_the_space = json!({ "spaceId": PERSONAL, "conversationId": main });
+	let stored = json!({ "spaceId": PERSONAL, "conversation": { "id": main } });
+	let in_the_conversation = json!({ "conversationId": main });
+	vec![
+		(STATE_CHANGED_EVENT, in_the_space.clone()),
+		(CONVERSATION_DELETED_EVENT, in_the_space),
+		(CONVERSATION_CREATED_EVENT, stored.clone()),
+		(CONVERSATION_UPDATED_EVENT, stored),
+		(MESSAGE_STORED_EVENT, in_the_conversation.clone()),
+		(crate::conversations::contract::COMPANION_ARRIVED_EVENT, in_the_conversation.clone()),
+		(crate::conversations::contract::COMPANION_SPOKE_EVENT, in_the_conversation.clone()),
+		(crate::conversations::contract::SUMMONS_DROPPED_EVENT, in_the_conversation.clone()),
+		(crate::applications::contract::INSTALLED_EVENT, in_the_conversation.clone()),
+		(ROUTINE_CHANGED_EVENT, in_the_conversation),
+		an_agent_event_of(a_runtime_scope(main)),
+		(
+			AGENT_ROOMS_CHANGED_EVENT,
+			json!({ "botId": "b-mine", "spaceId": PERSONAL, "conversationIds": [main] }),
+		),
+	]
+}
+
+#[test]
+fn a_second_member_hears_no_event_that_names_the_main_conversation_of_another_person() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("events-naming-a-main").await;
+		let mains = mains_of_the_host_and_bea(&guest).await;
+
+		for main in [&mains.of_bea, &mains.of_the_host] {
+			for (event, payload) in naming_the_main(main) {
+				events::emit(guest.harness.app.handle(), Event::untyped(event), payload)
+					.expect("emitted");
+			}
+		}
+		let heard = guest.events_until_the_marker().await;
+
+		let said = Value::from(heard.clone()).to_string();
+		assert!(!said.contains(&mains.of_bea) && !said.contains(&mains.of_the_host), "{said}");
+		assert_eq!(the_rooms_lists_of(&heard), [json!([]), json!([])]);
+	});
+}
+
+impl Authoring {
+	async fn open_turns_in(&self, conversation_ids: &[&str]) {
+		let state = self.app.state::<DatabaseState>();
+		open_turns_in(state.as_ref().expect("the database"), "default", conversation_ids).await;
+	}
+
+	async fn mission_from(&self, origin_conversation_id: &str) -> String {
+		let draft = crate::missions::contract::MissionDraft {
+			origin_conversation_id: origin_conversation_id.to_owned(),
+			bot_id: "default".to_owned(),
+			objective: "Fix the crash".to_owned(),
+			ticket: crate::missions::contract::Ticket {
+				platform: "github".to_owned(),
+				external_id: "42".to_owned(),
+				url: "https://kiroshi.test/tickets/42".to_owned(),
+				title: "Crash on open".to_owned(),
+			},
+			tools: Vec::new(),
+			source: "bot".to_owned(),
+			workspace_path: None,
+		};
+		let state = self.app.state::<DatabaseState>();
+		let missions = state.as_ref().expect("the database").missions();
+		let key = format!("k-{origin_conversation_id}");
+		missions.open(draft, key).await.expect("the mission opens").id
+	}
+}
+
+#[test]
+fn a_relayed_member_reads_the_agent_rooms_without_the_main_conversation_of_another_person() {
+	run(async {
+		let host = Authoring::new(Some(BEARER)).await;
+		let of_the_host = host.main_of(ChatOwner::Host).await;
+		let of_the_guest = host.main_of(owned_by(GUEST)).await;
+		let of_bea = host.main_of(owned_by(BEA)).await;
+		let args = json!({ "spaceId": PERSONAL });
+		let read = json!({ "id": 1, "command": "conversation_agent_rooms", "args": args });
+
+		host.open_turns_in(&[&of_bea]).await;
+		let only_bea_works = host.relayed(read.clone()).await;
+		host.open_turns_in(&[&host.conversation_id, &of_the_host, &of_the_guest]).await;
+		let read_by_the_guest = host.relayed(read).await;
+		let read_by_the_host = direct(&host.window, "conversation_agent_rooms", args);
+
+		assert_eq!(only_bea_works, json!([]));
+		assert_eq!(
+			read_by_the_guest,
+			json!([{ "botId": "default", "conversationIds": [of_the_guest, host.conversation_id] }])
+		);
+		let listed_for_the_host: Vec<String> =
+			serde_json::from_value(read_by_the_host[0]["conversationIds"].clone())
+				.expect("a list of ids");
+		let every_room = vec![of_the_guest, of_the_host, of_bea, host.conversation_id.clone()];
+		assert_eq!(sorted(listed_for_the_host), sorted(every_room));
+	});
+}
+
+#[test]
+fn a_relayed_member_reads_no_mission_born_in_the_main_conversation_of_another_person() {
+	run(async {
+		let host = Authoring::new(Some(BEARER)).await;
+		let shared = host.mission_from(&host.conversation_id.clone()).await;
+		let of_the_host = host.mission_from(&host.main_of(ChatOwner::Host).await).await;
+		let of_the_guest = host.mission_from(&host.main_of(owned_by(GUEST)).await).await;
+		let mission_ids = |listed: &Value| {
+			let listed = listed.as_array().expect("a list of missions");
+			sorted(
+				listed
+					.iter()
+					.filter_map(|row| row["mission"]["id"].as_str())
+					.map(str::to_owned)
+					.collect(),
+			)
+		};
+		let call =
+			|command: &str, args: Value| json!({ "id": 1, "command": command, "args": args });
+
+		let feed = host
+			.relayed(call("mission_space_feed", json!({ "spaceId": PERSONAL, "closedSince": 0 })))
+			.await;
+		let page_args =
+			json!({ "spaceId": PERSONAL, "closedSince": 0, "cursor": null, "limit": null });
+		let page = host.relayed(call("mission_space_page", page_args)).await;
+		let detail_of =
+			|mission_id: &str| call("mission_detail", json!({ "missionId": mission_id }));
+		let refused = host.answered(detail_of(&of_the_host)).await;
+		let served = host.answered(detail_of(&of_the_guest)).await;
+
+		let expected = sorted(vec![shared, of_the_guest]);
+		assert_eq!(mission_ids(&feed), expected);
+		assert_eq!(mission_ids(&page["missions"]), expected);
+		assert_eq!(
+			(refused["status"].clone(), refused["body"].clone()),
+			(json!(403), json!("this command reaches the main conversation of another person"))
+		);
+		assert_eq!(served["status"], json!(200), "{served}");
+	});
+}

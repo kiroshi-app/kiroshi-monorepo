@@ -976,8 +976,8 @@ async fn all_recorded_sent(
 	for stamped in unsent {
 		match &stamped.addressee {
 			Addressee::Everyone => sealed_sent(sink, wire, &stamped.frame, None).await?,
-			Addressee::Account(account_id) => {
-				for device in devices_of(hosted, account_id).await? {
+			addressee => {
+				for device in devices_of(hosted, addressee).await? {
 					sealed_sent(sink, wire, &stamped.frame, Some(&device)).await?;
 				}
 			}
@@ -987,8 +987,12 @@ async fn all_recorded_sent(
 	Ok(())
 }
 
-async fn devices_of(hosted: &HostedSpace<'_>, account_id: &str) -> Result<Vec<Rostered>, Ended> {
-	roster::devices_of_account(hosted.database, hosted.space_id, &hosted.keys.device, account_id)
+async fn devices_of(
+	hosted: &HostedSpace<'_>,
+	addressee: &Addressee,
+) -> Result<Vec<Rostered>, Ended> {
+	let is_reached = |account_id: &str| addressee.reaches(account_id);
+	roster::devices_of_accounts(hosted.database, hosted.space_id, &hosted.keys.device, is_reached)
 		.await
 		.map_err(|failure| {
 			Ended::Dropped(format!(

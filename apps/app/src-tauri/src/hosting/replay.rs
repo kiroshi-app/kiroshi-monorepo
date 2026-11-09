@@ -22,13 +22,15 @@ pub(super) const RING_BYTES: usize = 4 * 1024 * 1024;
 pub(super) enum Addressee {
 	Everyone,
 	Account(String),
+	EveryoneBut(Vec<String>),
 }
 
 impl Addressee {
-	fn reaches(&self, account_id: &str) -> bool {
+	pub(super) fn reaches(&self, account_id: &str) -> bool {
 		match self {
 			Addressee::Everyone => true,
 			Addressee::Account(addressed) => addressed == account_id,
+			Addressee::EveryoneBut(left_out) => !left_out.iter().any(|left| left == account_id),
 		}
 	}
 }
@@ -91,6 +93,12 @@ impl Ring {
 				break;
 			};
 			self.bytes -= evicted.published.len();
+		}
+	}
+
+	fn all_recorded(&mut self, addressed: Vec<(Frame, Addressee)>) {
+		for (frame, addressee) in addressed {
+			self.recorded(&frame, addressee);
 		}
 	}
 
@@ -190,16 +198,14 @@ pub(super) async fn recorded<R: Runtime>(
 	loop {
 		let (pending, mut heard) = subscribed_with_pending_questions(app);
 		for frame in pending {
-			if let Some(addressee) = guest_events.reach_the_guest(app, &frame).await {
-				ring.send_modify(|ring| ring.recorded(&frame, addressee));
-			}
+			let addressed = guest_events.reach_the_guest(app, &frame).await;
+			ring.send_modify(|ring| ring.all_recorded(addressed));
 		}
 		let missed = loop {
 			match heard.recv().await {
 				Ok(frame) => {
-					if let Some(addressee) = guest_events.reach_the_guest(app, &frame).await {
-						ring.send_modify(|ring| ring.recorded(&frame, addressee));
-					}
+					let addressed = guest_events.reach_the_guest(app, &frame).await;
+					ring.send_modify(|ring| ring.all_recorded(addressed));
 				}
 				Err(RecvError::Lagged(missed)) => break missed,
 				Err(RecvError::Closed) => return,
@@ -360,6 +366,27 @@ mod tests {
 
 		assert_eq!(seqs_replayed_to("owner"), [json!(1), json!(2), json!(3)]);
 		assert_eq!(seqs_replayed_to("someone-else"), [json!(1), json!(3)]);
+	}
+
+	#[test]
+	fn a_resume_replays_to_each_account_only_the_frame_tailored_for_it() {
+		let mut ring = Ring::started();
+		let tailored = [
+			(Frame::from(r#"{"for":"owner"}"#), Addressee::Account("owner".to_owned())),
+			(
+				Frame::from(r#"{"for":"the rest"}"#),
+				Addressee::EveryoneBut(vec!["owner".to_owned()]),
+			),
+		];
+		ring.all_recorded(tailored.to_vec());
+
+		let replayed_to = |account_id| {
+			let resumed = ring.resumed(&a_resume(&ring.epoch, 0), ring.last_seq, account_id);
+			resumed.frames.iter().map(|frame| parsed(frame)["event"].clone()).collect::<Vec<_>>()
+		};
+
+		assert_eq!(replayed_to("owner"), [json!({ "for": "owner" })]);
+		assert_eq!(replayed_to("someone-else"), [json!({ "for": "the rest" })]);
 	}
 
 	#[test]
