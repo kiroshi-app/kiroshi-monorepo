@@ -4,7 +4,7 @@ use tauri::{AppHandle, Manager, Runtime, State};
 
 use super::super::contract::{Bot, BotDraft, BotIdentity, Hue, SuggestedBot, TranscriptStoreError};
 use super::super::seed;
-use crate::agent::commands::supported_effort_levels;
+use crate::agent::commands::{shut_asking_runs_down, supported_effort_levels};
 use crate::agent::contract::AgentCommand;
 use crate::attachments;
 use crate::avatars;
@@ -619,6 +619,7 @@ pub async fn conversation_delete_bot<R: Runtime>(
 	let database = ready(&state)?;
 	let held_by = database.conversations().bot_space_ids(id.clone()).await?;
 	database.conversations().delete_bot(id.clone()).await?;
+	shut_asking_runs_down(&app, |scope| scope.bot_id == id).await;
 	forget_bundle(bundle_root.as_deref(), database, &id).await;
 	environment::store::forget_bot(&app, &id);
 	avatars::Avatars::sweep_referenced(database, dir.as_deref()).await;

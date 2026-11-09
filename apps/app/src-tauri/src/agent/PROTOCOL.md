@@ -623,6 +623,14 @@ asked by a follow-up folds that follow-up into the submitted turn. A session the
 host shuts down emits `permissionResolved` with `deny` for every prompt it still
 holds, so no stored prompt outlives the session that asked it.
 
+A host turn of a group conversation releases a speaker's session once its turn
+ends, unless that run still holds a question: one asked by a follow-up after the
+turn ended survives `turnEnded`, so the release keeps the session open and the
+question listed. A card answer or the next message summoning that bot, which
+rides the live run, answers it as above. Deleting the bot, the conversation or
+its space, or removing the bot from the conversation, shuts every run of it that
+holds a question down, which denies the question.
+
 ## Host requests
 
 `canUseTool` asks the reader; `host_request` asks the host itself. The sidecar

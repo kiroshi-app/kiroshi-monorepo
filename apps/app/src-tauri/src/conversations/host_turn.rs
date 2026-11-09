@@ -2282,7 +2282,8 @@ mod tests {
 				conversation_id: room.id.clone(),
 				continues_turn_id: Some("t1".to_owned()),
 			};
-			let late = QuestionRequest { id: "q-late".into(), questions: Vec::new(), subject: None };
+			let late =
+				QuestionRequest { id: "q-late".into(), questions: Vec::new(), subject: None };
 			let mut announced = events::subscribed(app.handle());
 			asking.emit(ended_as(TurnOutcome::Completed), Some(host_turn.event_turn()));
 			asking.emit(AgentEvent::QuestionRequested { request: late }, Some(follow_up));

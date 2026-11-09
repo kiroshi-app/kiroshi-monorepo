@@ -225,6 +225,20 @@ impl<S> Live<S> {
 		self.questions().clone()
 	}
 
+	fn is_asking(&self, scope: &RuntimeScope) -> bool {
+		self.questions().iter().any(|question| question.asked_by(scope))
+	}
+
+	fn asking_runs(&self) -> Vec<RuntimeScope> {
+		let mut asking: Vec<RuntimeScope> = Vec::new();
+		for question in self.questions().iter() {
+			if !asking.contains(&question.scope) {
+				asking.push(question.scope.clone());
+			}
+		}
+		asking
+	}
+
 	fn questions_in(&self, conversation_id: &str) -> Vec<ScopedEvent> {
 		self.questions()
 			.iter()
@@ -1530,9 +1544,39 @@ pub(crate) async fn line_place_of(
 }
 
 pub(crate) async fn run_is_idle(state: &AgentState, scope: &RuntimeScope) -> bool {
+	if state.live.is_asking(scope) {
+		return false;
+	}
 	match state.live.session_for(scope) {
 		Ok(session) => session.is_idle().await,
 		Err(_) => true,
+	}
+}
+
+pub(crate) fn asking_runs<R: Runtime>(app: &AppHandle<R>) -> Vec<RuntimeScope> {
+	match app.try_state::<AgentState>() {
+		Some(state) => state.live.asking_runs(),
+		None => Vec::new(),
+	}
+}
+
+pub(crate) async fn shut_asking_runs_down<R: Runtime>(
+	app: &AppHandle<R>,
+	is_gone: impl Fn(&RuntimeScope) -> bool,
+) {
+	let gone = asking_runs(app).into_iter().filter(|scope| is_gone(scope)).collect();
+	shut_runs_down(app, gone).await;
+}
+
+pub(crate) async fn shut_runs_down<R: Runtime>(app: &AppHandle<R>, gone: Vec<RuntimeScope>) {
+	let Some(state) = app.try_state::<AgentState>() else {
+		return;
+	};
+	for scope in gone {
+		let bot_id = scope.bot_id.clone();
+		if let Err(error) = agent_shutdown(app.clone(), state.clone(), scope).await {
+			log::warn!("the asking session of {bot_id} could not shut down: {error:?}");
+		}
 	}
 }
 
@@ -2989,6 +3033,23 @@ mod tests {
 				1,
 				"another run lost its question"
 			);
+		}
+
+		#[tokio::test]
+		async fn an_agent_gone_denies_the_questions_its_kept_run_holds_and_spares_the_others() {
+			let app = an_app("gone");
+			two_questions_and_one_elsewhere(app.handle());
+			let mut heard = events::subscribed(app.handle());
+
+			shut_asking_runs_down(app.handle(), |scope| scope.bot_id == a_scope().bot_id).await;
+
+			let resolved: Vec<Frame> = everything_heard(&mut heard)
+				.into_iter()
+				.filter(|frame| frame.contains("permissionResolved"))
+				.collect();
+			assert_eq!(resolved, vec![denied("q1"), denied("q2")]);
+			assert!(pending_in(app.handle(), "c1").await.is_empty());
+			assert_eq!(pending_in(app.handle(), "c2").await.len(), 1, "another run was shut");
 		}
 
 		#[tokio::test]
