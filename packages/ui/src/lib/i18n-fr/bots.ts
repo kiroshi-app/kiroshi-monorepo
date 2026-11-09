@@ -87,6 +87,7 @@ const bots = {
 	},
 	rail: {
 		label: "Navigation",
+		home: "Accueil",
 		conversations: "Conversations",
 		missions: "Missions",
 		library: "Bibliothèque",

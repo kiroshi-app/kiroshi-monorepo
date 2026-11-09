@@ -534,6 +534,170 @@ export const WithoutLibraryHandler = meta.story({
 	},
 })
 
+const HOME = "Home"
+
+const TOP_GROUP_WITH_HOME = [
+	SPACE_SETTINGS,
+	SEARCH,
+	HOME,
+	...PANELS.map((panel) => ENTRY_NAMES[panel]),
+]
+
+const expectHomeEntry = async (
+	canvasElement: HTMLElement,
+	isCurrent: boolean,
+) => {
+	const rail = railIn(canvasElement)
+	const home = entryNamed(canvasElement, HOME)
+	await expect(topGroupEntriesIn(canvasElement)).toEqual(TOP_GROUP_WITH_HOME)
+	if (isCurrent) {
+		await expect(home).toHaveAttribute("aria-current", "true")
+		await expect(fillOf(home)).toBe(
+			tokenStyleIn(rail, "bg-rail-item-selected", "backgroundColor"),
+		)
+		await expect(iconColourOf(home)).toBe(
+			tokenStyleIn(rail, "text-foreground", "color"),
+		)
+		await expect(iconStyleOf(home)).toBe("fill")
+	} else {
+		await expect(home).not.toHaveAttribute("aria-current")
+		await expect(fillOf(home)).toBe(NO_FILL)
+		await expect(iconColourOf(home)).toBe(
+			tokenStyleIn(rail, "text-muted-foreground", "color"),
+		)
+		await expect(iconStyleOf(home)).toBe("stroke")
+	}
+}
+
+const expectNoPanelCurrent = async (canvasElement: HTMLElement) => {
+	for (const panel of PANELS) {
+		const entry = entryNamed(canvasElement, ENTRY_NAMES[panel])
+		await expect(entry).not.toHaveAttribute("aria-current")
+		await expect(fillOf(entry)).toBe(NO_FILL)
+		await expect(iconStyleOf(entry)).toBe("stroke")
+	}
+}
+
+const expectHomeHoveredLikeIdlePanel = async (canvasElement: HTMLElement) => {
+	if (!isInBrowserRunner()) return
+	const home = entryNamed(canvasElement, HOME)
+	const hoverFill = tokenStyleIn(
+		railIn(canvasElement),
+		"bg-rail-item-selected/50",
+		"backgroundColor",
+	)
+	const pointer = await realPointer()
+	await pointer.hover(home)
+	await waitFor(() => expect(fillOf(home)).toBe(hoverFill))
+	await expect(iconStyleOf(home)).toBe("stroke")
+	const tooltip = await screen.findByRole("tooltip")
+	await expect(tooltip).toHaveTextContent(HOME)
+	await waitFor(() =>
+		expect(tooltip.getBoundingClientRect().left).toBeGreaterThanOrEqual(
+			home.getBoundingClientRect().right,
+		),
+	)
+	await pointer.unhover(home)
+}
+
+const homeSelected = {
+	args: { onSelectHome: fn(), isHomeSelected: true },
+	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+		await expectHomeEntry(canvasElement, true)
+		await expectNoPanelCurrent(canvasElement)
+	},
+}
+
+export const HomeUnselected = meta.story({
+	args: { onSelectHome: fn(), isHomeSelected: false },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Home beside an open Conversations. Check Home sits third in the top group, after the Space logo and Search and directly above Conversations, in the muted ink on no fill with its stroked house, that hovering it lays the half fill with its tooltip on the right, as an idle panel does, that Conversations keeps its current mark, and that a press reports once. Pick `HomeSelected` for Home open.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		await expectHomeEntry(canvasElement, false)
+		await expect(
+			entryNamed(canvasElement, ENTRY_NAMES.conversations),
+		).toHaveAttribute("aria-current", "true")
+		await expectHomeHoveredLikeIdlePanel(canvasElement)
+		await userEvent.click(entryNamed(canvasElement, HOME))
+		await expect(args.onSelectHome).toHaveBeenCalledTimes(1)
+	},
+})
+
+export const HomeSelected = meta.story({
+	...homeSelected,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Home open while `selected` still names Conversations. Check Home, directly above Conversations, is the one entry marked `aria-current`, on the selected fill with the filled house in the foreground ink, and that Conversations, Missions and Library sit on no fill with their stroked icons. Pick `HomeSelectedDark` for the same state in dark.",
+			},
+		},
+	},
+})
+
+export const HomeSelectedDark = meta.story({
+	...homeSelected,
+	globals: { theme: "dark" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Home open, dark: the filled house on the dark selected fill. Pick `HomeSelected` for the light theme.",
+			},
+		},
+	},
+})
+
+export const HomeUnderSpaceSettings = meta.story({
+	tags: ["test-only"],
+	args: { ...homeSelected.args, openSettings: "space" },
+	play: async ({ canvasElement }) => {
+		await expectHomeEntry(canvasElement, false)
+		await expectNoPanelCurrent(canvasElement)
+		await expect(entryNamed(canvasElement, SPACE_SETTINGS)).toHaveAttribute(
+			"aria-current",
+			"true",
+		)
+	},
+})
+
+export const HomeKeyboardReach = meta.story({
+	tags: ["test-only"],
+	args: { onSelectHome: fn() },
+	play: async ({ args, canvasElement, userEvent }) => {
+		await userEvent.tab()
+		await userEvent.tab()
+		await expect(entryNamed(canvasElement, SEARCH)).toHaveFocus()
+		await userEvent.tab()
+		const home = entryNamed(canvasElement, HOME)
+		await expect(home).toHaveFocus()
+		await expect(getComputedStyle(home).boxShadow).not.toBe("none")
+		await userEvent.keyboard("{Enter}")
+		await expect(args.onSelectHome).toHaveBeenCalledTimes(1)
+		await userEvent.tab()
+		await expect(
+			entryNamed(canvasElement, ENTRY_NAMES.conversations),
+		).toHaveFocus()
+	},
+})
+
+export const HomeSelectedWithoutHandler = meta.story({
+	tags: ["test-only"],
+	args: { isHomeSelected: true },
+	play: async ({ canvasElement }) => {
+		await expect(
+			within(railIn(canvasElement)).queryByRole("button", { name: HOME }),
+		).toBeNull()
+		await expectOnlySelected(canvasElement, "conversations")
+	},
+})
+
 const SelectableRail = (args: AppRailProps) => {
 	const [selected, setSelected] = useState(args.selected)
 	return renderRail({
