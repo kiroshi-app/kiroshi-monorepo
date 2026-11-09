@@ -58,6 +58,9 @@ type DroppedRun = {
 	botId: string
 }
 
+const isQuestionLifecycle = ({ type }: AgentEvent) =>
+	type === "questionRequested" || type === "permissionResolved"
+
 const isDroppedRun = ({ scope, turnId }: ForeignTurn, dropped: DroppedRun) =>
 	turnId === dropped.turnId &&
 	scope.conversationId === dropped.conversationId &&
@@ -347,7 +350,7 @@ export const createForeignTurns = (
 			forget(keyOf(scope))
 		},
 		render: (scope, { turnId }, event) => {
-			if (claimed.has(keyOf(scope))) {
+			if (claimed.has(keyOf(scope)) && !isQuestionLifecycle(event)) {
 				return
 			}
 			const turn = turnAt(scope, turnId)

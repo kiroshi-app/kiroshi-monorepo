@@ -65,6 +65,7 @@ export type ChatState = {
 	activities: ActivityEvent[]
 	permission: PermissionRequest | null
 	question: QuestionRequest | null
+	resolvedPromptIds: string[]
 	errors: ChatError[]
 	errorCount: number
 	reportedCauses: ReportedRunsByTurnId
@@ -123,6 +124,7 @@ export const initialChatState: ChatState = {
 	activities: [],
 	permission: null,
 	question: null,
+	resolvedPromptIds: [],
 	errors: [],
 	errorCount: 0,
 	reportedCauses: NO_REPORTED_RUNS,
@@ -333,19 +335,14 @@ function applyActivity(state: ChatState, activity: ActivityEvent): ChatState {
 	return activities === state.activities ? state : { ...state, activities }
 }
 
-function takesRequest(
-	state: ChatState,
-	held: { id: string } | null,
-	id: string,
-): boolean {
-	return canStopTurn(state.turn) && (held === null || held.id === id)
-}
+const isFreeFor = (held: { id: string } | null, id: string): boolean =>
+	held === null || held.id === id
 
 function applyPermissionRequested(
 	state: ChatState,
 	request: PermissionRequest,
 ): ChatState {
-	return takesRequest(state, state.permission, request.id)
+	return canStopTurn(state.turn) && isFreeFor(state.permission, request.id)
 		? { ...state, permission: request }
 		: state
 }
@@ -354,7 +351,8 @@ function applyQuestionRequested(
 	state: ChatState,
 	request: QuestionRequest,
 ): ChatState {
-	return takesRequest(state, state.question, request.id)
+	const isResolved = state.resolvedPromptIds.includes(request.id)
+	return !isResolved && isFreeFor(state.question, request.id)
 		? { ...state, question: request }
 		: state
 }
@@ -381,7 +379,10 @@ function applyPermissionResolved(
 	id: string,
 	decision: PermissionDecision,
 ): ChatState {
-	const cleared = clearRequest(state, id)
+	const cleared = {
+		...clearRequest(state, id),
+		resolvedPromptIds: [...state.resolvedPromptIds, id],
+	}
 	const index = cleared.activities.findIndex((activity) => activity.id === id)
 	if (index === -1) {
 		return cleared

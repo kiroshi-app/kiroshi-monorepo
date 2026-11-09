@@ -30,6 +30,7 @@ import type {
 	ActivityStatus,
 	AgentEvent,
 	ConversationNaming,
+	QuestionRequest,
 	ScopedEvent,
 	TransportError,
 	TurnOutcome,
@@ -3245,6 +3246,61 @@ describe("the mentions a finished turn carries", () => {
 
 		expect(submittedIn(room)).toEqual([room.ada, room.iris])
 		expect(room.reportFailure).not.toHaveBeenCalled()
+		room.detach()
+	})
+
+	it("holds a question asked after the companion's turn ended, until it is answered", async () => {
+		const room = await roomSeating()
+		await room.sent("@Ada take the walls")
+		const asking = room.driver.submissions.find(
+			({ scope }) => scope.botId === room.ada,
+		)
+		await room.spoken(room.ada, "walls up")
+		expect(room.driver.shutdowns).toEqual([room.ada])
+		const request: QuestionRequest = {
+			id: "ask-late",
+			questions: [
+				{
+					header: "Walls",
+					question: "Which wall next?",
+					options: [],
+					multiSelect: false,
+				},
+			],
+		}
+		const askLate = async () => {
+			room.hear({
+				scope: asking?.scope ?? null,
+				turn: {
+					turnId: "turn-continued",
+					continuesTurnId: asking?.turn?.turnId ?? null,
+					conversationId: room.conversation.id,
+				},
+				event: { type: "questionRequested", request },
+			})
+			await settled()
+		}
+
+		await askLate()
+		expect(room.controller.getState().pendingPrompt).toEqual({
+			kind: "question",
+			botId: room.ada,
+			request,
+		})
+
+		await room.controller.answer("ask-late", { "Which wall next?": "north" })
+		await settled()
+		expect(room.driver.answered).toEqual([
+			{
+				botId: room.ada,
+				id: "ask-late",
+				answers: { "Which wall next?": "north" },
+			},
+		])
+		expect(room.controller.getState().pendingPrompt).toBeNull()
+
+		await askLate()
+		expect(room.controller.getState().pendingPrompt).toBeNull()
 		room.detach()
 	})
 
