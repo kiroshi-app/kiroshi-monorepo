@@ -150,4 +150,20 @@ describe("missionRunPromptFor", () => {
 		expect(prompt).not.toContain("[elided]")
 		expect(prompt).toContain("Which branch?")
 	})
+
+	it("sends a blocking question through mission_escalate and no other way", () => {
+		const prompt = missionRunPromptFor(callSaying("Which branch?"))
+
+		expect(prompt).toContain(
+			"When a question blocks you, ask it through mission_escalate and never ask one any other way.",
+		)
+	})
+
+	it("says no permission is granted during the run", () => {
+		const prompt = missionRunPromptFor(callSaying("Which branch?"))
+
+		expect(prompt).toContain(
+			"No permission is granted during this run either: a tool call that needs one is refused",
+		)
+	})
 })

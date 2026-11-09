@@ -18,7 +18,12 @@ import {
 } from "./mission-run-driver"
 import { FAILURE_BURST_MS } from "./mission-run-failure"
 
-import type { AgentEvent, RuntimeScope, TurnEnded } from "../agent/contract"
+import type {
+	AgentEvent,
+	RuntimeScope,
+	TurnEnded,
+	UnattendedStart,
+} from "../agent/contract"
 import { createChatController } from "../chat/chat-controller"
 import type { ChatState } from "../chat/chat-state"
 import { withSettledSettings } from "../chat/with-settled-settings"
@@ -60,6 +65,7 @@ const settled = async () => {
 type Started = {
 	scope: RuntimeScope
 	outputSchema?: Record<string, unknown>
+	unattended?: UnattendedStart
 }
 
 type Harness = {
@@ -132,8 +138,8 @@ const createHarness = async ({
 	const agentCalls: string[] = []
 	const driver: ScriptedDriver = {
 		...scripted,
-		startOrResumeSession: (scope, resume, cwd, outputSchema) => {
-			starts.push({ scope, outputSchema })
+		startOrResumeSession: (scope, resume, cwd, outputSchema, unattended) => {
+			starts.push({ scope, outputSchema, unattended })
 			return scripted.startOrResumeSession(scope, resume, cwd, outputSchema)
 		},
 		cancelTurn: (scope) => {
@@ -556,6 +562,15 @@ describe("startMissionRunDriver", () => {
 		expect(hasLandedBeforeAnyRun).toBe(true)
 		expect(harness.originStarts()).toHaveLength(1)
 		expect(companion).toMatchObject({ model: "sonnet", effort: "high" })
+	})
+
+	it("opens a mission run session with AskUserQuestion denied and no permission prompt", async () => {
+		await harness.enter("done", closedBy("poller"))
+
+		expect(harness.originStarts()[0].unattended).toEqual({
+			deniedTools: ["AskUserQuestion"],
+			permissionMode: "dontAsk",
+		})
 	})
 
 	it("asks a closing run for a report and nothing else", async () => {

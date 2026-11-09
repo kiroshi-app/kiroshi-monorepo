@@ -3,7 +3,14 @@ import type { MissionRunDriverOptions } from "./mission-run-driver"
 import { MISSION_RUN_OUTPUT_SCHEMA } from "./mission-run-output"
 import { type MissionRunCall, missionRunPromptFor } from "./mission-run-prompt"
 
+import type { UnattendedStart } from "../agent/contract"
+
 export const RUN_DEADLINE_MS = 30 * 60_000
+
+const UNATTENDED: UnattendedStart = {
+	deniedTools: ["AskUserQuestion"],
+	permissionMode: "dontAsk",
+}
 
 const failedStart = (thrown: unknown) =>
 	new Error("the mission run could not start", { cause: thrown })
@@ -108,6 +115,7 @@ export const createMissionRunBegin = ({
 				undefined,
 				undefined,
 				MISSION_RUN_OUTPUT_SCHEMA,
+				UNATTENDED,
 			)
 			await driver.submitPrompt(scope, missionRunPromptFor(call))
 		} catch (thrown) {
