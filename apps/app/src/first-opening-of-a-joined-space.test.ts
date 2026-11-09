@@ -124,6 +124,8 @@ const storeAnswer =
 				)
 			case "conversation_main_chat":
 				return store.mainChat(textOf(args.botId), textOf(args.spaceId))
+			case "conversation_renew_main_chat":
+				return store.renewMainChat(textOf(args.botId), textOf(args.spaceId))
 			case "conversation_message_page":
 				return store.loadPage(textOf(args.conversationId), null)
 			case "conversation_open_runtime_session":

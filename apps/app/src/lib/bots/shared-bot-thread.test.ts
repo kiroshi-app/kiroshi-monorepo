@@ -11,6 +11,7 @@ import type { FakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
+import { keepMainChatsAtLaunch } from "@/lib/conversations/transcript-fixtures"
 import {
 	createFakeNotificationPort,
 	type FakeNotificationPort,
@@ -92,7 +93,7 @@ const settle = async (ms: number) => {
 }
 
 const mount = async (store: TranscriptStore) => {
-	harness.store = store
+	harness.store = keepMainChatsAtLaunch(store)
 	harness.driver = createFakeChatDriver({ stepMs: STEP_MS })
 	harness.notifications = createFakeNotificationPort()
 	render(createElement(App), { wrapper: createQueryTestWrapper().wrapper })

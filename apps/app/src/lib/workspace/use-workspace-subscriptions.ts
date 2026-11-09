@@ -1,4 +1,4 @@
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
 
 import type { RosterView } from "./use-roster-view"
 import type { WorkspaceCore } from "./use-workspace-core"
@@ -18,7 +18,7 @@ export const useWorkspaceSubscriptions = ({
 	drivers,
 	rosterView,
 }: WorkspaceSubscriptionsInput) => {
-	const { chat, joinedSpaces, roster, user } = core
+	const { chat, homeRenewals, joinedSpaces, roster, user } = core
 	const { onboarding } = drivers
 	const { bots, rosteredSpaceId, selectedBotId, selectedConversationId } =
 		rosterView
@@ -47,21 +47,36 @@ export const useWorkspaceSubscriptions = ({
 	})
 
 	const holdsSelectedBot = bots.some((bot) => bot.id === selectedBotId)
+	const shownRowId = useRef<string | null>(null)
+	const selectedRowId = selectedBotId ?? selectedConversationId
+
+	useEffect(() => {
+		if (selectedRowId) {
+			shownRowId.current = selectedRowId
+		}
+	}, [selectedRowId])
 
 	useEffect(() => {
 		if (!selectedBotId || !holdsSelectedBot) {
 			return
 		}
-		void chat.controller.open(
-			selectedBotId,
-			rosteredSpaceId && roster.controller.hostSpaceIdOf(rosteredSpaceId),
-		)
+		const spaceId =
+			rosteredSpaceId && roster.controller.hostSpaceIdOf(rosteredSpaceId)
+		const renewed = spaceId
+			? homeRenewals.renew(selectedBotId, spaceId)
+			: Promise.resolve()
+		void renewed.then(() => {
+			if (shownRowId.current === selectedBotId) {
+				void chat.controller.open(selectedBotId, spaceId)
+			}
+		})
 		void user.controller.setLastBot({
 			spaceId: rosteredSpaceId,
 			botId: selectedBotId,
 		})
 	}, [
 		chat.controller,
+		homeRenewals,
 		roster.controller,
 		user.controller,
 		selectedBotId,

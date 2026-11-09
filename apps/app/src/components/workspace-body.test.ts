@@ -50,6 +50,7 @@ import {
 import type { Bot, Conversation } from "@/lib/conversations/store-contract"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import { seatBots } from "@/lib/conversations/transcript-fixtures"
+import { createHomeRenewals } from "@/lib/home/home-renewals"
 import type { Invoke } from "@/lib/host/joined-hosts-invoke"
 import { base64Of } from "@/lib/library/library-document-session"
 import type {
@@ -335,6 +336,10 @@ const workspaceOf = async (store = createFakeTranscriptStore()) => {
 			chat: { state: initialChatState, controller: chatController },
 			conversation: selected,
 			conversationRuntimes: runtimes,
+			conversations: [conversation, otherConversation],
+			store,
+			homeRenewals: createHomeRenewals(store),
+			onSelectBot: () => undefined,
 			drafts: createDraftsController(),
 			haveSpacesFailed: false,
 			isLibraryOpen: false,
@@ -753,6 +758,77 @@ describe("WorkspaceBody frame", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Retry" }))
 
 		expect(onRetrySpaces).toHaveBeenCalledTimes(1)
+	})
+})
+
+describe("WorkspaceBody Home", () => {
+	beforeEach(() => {
+		vi.clearAllMocks()
+		listRoutines.mockResolvedValue([])
+		listRuns.mockResolvedValue([])
+		listSources.mockResolvedValue([])
+		listenToMissions.mockResolvedValue(() => undefined)
+		listMissions.mockResolvedValue({ open: [], done: [] })
+	})
+
+	afterEach(cleanup)
+
+	const homeOf = async (store = createFakeTranscriptStore()) => {
+		const workspace = await workspaceOf(store)
+		const earlier = await store.mainChat(workspace.bot.id, SPACE)
+		const homeRenewals = createHomeRenewals(store)
+		const onOpenThreadInNewTab = vi.fn()
+		render(
+			workspace.body({
+				overrides: {
+					bot: workspace.bot,
+					conversation: undefined,
+					homeRenewals,
+					onOpenThreadInNewTab,
+				},
+			}),
+		)
+		await settle()
+		const relaunch = () =>
+			act(() => homeRenewals.renew(workspace.bot.id, SPACE))
+		const mainChatId = async () =>
+			(await store.mainChat(workspace.bot.id, SPACE)).id
+		return { earlier, relaunch, mainChatId, onOpenThreadInNewTab }
+	}
+
+	it("starts the Home fresh after a relaunch, the earlier Conversation one click away", async () => {
+		const store = createFakeTranscriptStore()
+		const renewal = vi.spyOn(store, "renewMainChat")
+		const home = await homeOf(store)
+		expect(screen.getByRole("heading", { name: /What’s next/ })).toBeTruthy()
+		expect(screen.queryByRole("button", { name: "Open it" })).toBeNull()
+
+		await home.relaunch()
+		await home.relaunch()
+
+		expect(renewal).toHaveBeenCalledOnce()
+		expect(await home.mainChatId()).not.toBe(home.earlier.id)
+		fireEvent.click(screen.getByRole("button", { name: "Open it" }))
+		expect(home.onOpenThreadInNewTab).toHaveBeenCalledWith({
+			conversation: home.earlier.id,
+		})
+	})
+
+	it("keeps the previous main conversation and says what failed when the renewal fails", async () => {
+		const store = createFakeTranscriptStore()
+		vi.spyOn(store, "renewMainChat").mockRejectedValue(new Error("disk full"))
+		render(createElement(NoticeSurface))
+		const home = await homeOf(store)
+
+		await home.relaunch()
+
+		expect(
+			await screen.findAllByText(
+				"Couldn’t load the latest messages. Restart Kiroshi to retry.",
+			),
+		).not.toHaveLength(0)
+		expect(screen.queryByRole("button", { name: "Open it" })).toBeNull()
+		expect(await home.mainChatId()).toBe(home.earlier.id)
 	})
 })
 

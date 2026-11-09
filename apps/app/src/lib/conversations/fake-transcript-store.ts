@@ -685,6 +685,14 @@ export const createFakeTranscriptStore = (
 
 	const homeOf = (botId: string) => [...spacesFor(botId)][0] ?? firstSpace()
 
+	const renewals = new Map<string, number>()
+
+	const mainChatIdOf = (botId: string, spaceId: string) => {
+		const id = chatIdOf(botId, spaceId)
+		const renewal = renewals.get(id)
+		return renewal ? `${id}-${renewal}` : id
+	}
+
 	const participantsOf = (conversationId: string): Participant[] =>
 		(seats.get(conversationId) ?? []).flatMap((seat) => {
 			const bot = bots.get(seat.botId) ?? departed.get(seat.botId)
@@ -1460,11 +1468,26 @@ export const createFakeTranscriptStore = (
 				return refuse({ kind: "foreignBot", id: botId })
 			}
 			return Promise.resolve<Chat>({
-				id: chatIdOf(botId, spaceId ?? homeOf(botId)),
+				id: mainChatIdOf(botId, spaceId ?? homeOf(botId)),
 				createdAt: 0,
 				updatedAt: 0,
 			})
 		},
+
+		renewMainChat: (botId: string, spaceId: string) => {
+			if (!isIn(botId, spaceId)) {
+				return refuse({ kind: "foreignBot", id: botId })
+			}
+			const id = chatIdOf(botId, spaceId)
+			renewals.set(id, (renewals.get(id) ?? 0) + 1)
+			return Promise.resolve<Chat>({
+				id: mainChatIdOf(botId, spaceId),
+				createdAt: 0,
+				updatedAt: 0,
+			})
+		},
+
+		agentRooms: () => Promise.resolve([]),
 
 		conversations: (spaceId: string) =>
 			Promise.resolve(
@@ -1497,7 +1520,7 @@ export const createFakeTranscriptStore = (
 					.map(
 						(bot): SoloState => ({
 							botId: bot.id,
-							conversationId: chatIdOf(bot.id, spaceId),
+							conversationId: mainChatIdOf(bot.id, spaceId),
 							state: "idle",
 						}),
 					),

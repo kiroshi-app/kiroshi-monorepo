@@ -23,6 +23,7 @@ import type { ChatDriver } from "@/lib/chat/driver"
 import { createFakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
+import { keepMainChatsAtLaunch } from "@/lib/conversations/transcript-fixtures"
 import { aMission } from "@/lib/missions/mission-fixtures"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 import { readMirror, writeMirror } from "@/lib/user/preferences-mirror"
@@ -282,7 +283,7 @@ const mountApp = async (change: StoreChange = (store) => store) => {
 	const store = change(createFakeTranscriptStore())
 	const seeded = await seed(store)
 	vi.useFakeTimers()
-	harness.store = store
+	harness.store = keepMainChatsAtLaunch(store)
 	const { queryClient } = launchApp()
 	await settle()
 	return { ...seeded, queryClient }
@@ -634,17 +635,6 @@ it("opens the companion screen on General from the identity button of the solo h
 	)
 
 	expect(companionScreenOf(ATLAS)).toEqual(ON_GENERAL)
-})
-
-it("opens the companion screen on General from the Settings of an empty conversation", async () => {
-	await mountApp()
-	await openRow(NOVA)
-
-	await press(
-		screen.getByRole("button", { name: i18n.t("chat:emptyState.settings") }),
-	)
-
-	expect(companionScreenOf(NOVA)).toEqual(ON_GENERAL)
 })
 
 it("opens the companion screen on Applications from an application install card", async () => {

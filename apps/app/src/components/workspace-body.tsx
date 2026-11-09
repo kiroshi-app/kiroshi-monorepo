@@ -5,6 +5,11 @@ import { ScreenLayout } from "@workspace/ui/components/screen-layout"
 import { useCommonCopy } from "@workspace/ui/hooks/use-common-copy"
 
 import { BareAppHeader } from "@/components/bare-app-header"
+import {
+	HomeEmptyStage,
+	HomeLines,
+	type ThreadHome,
+} from "@/components/home-screen"
 import { MissionThreadScreen } from "@/components/mission-thread-screen"
 import type { ActivityPanel } from "@/components/thread-routines"
 import { ThreadScreen } from "@/components/thread-screen"
@@ -14,6 +19,8 @@ import type { Thread } from "@/lib/chat/thread-contract"
 import type { Chat } from "@/lib/chat/use-chat"
 import type { ConversationRuntimes } from "@/lib/conversations/conversation-runtimes"
 import type { Bot, Conversation } from "@/lib/conversations/store-contract"
+import type { TranscriptStore } from "@/lib/conversations/store-port"
+import { archiveOf, type HomeRenewals } from "@/lib/home/home-renewals"
 import type { MissionLanding } from "@/lib/missions/mission-actions"
 import type { OpenedMissionController } from "@/lib/missions/opened-mission-controller"
 import type { ThreadSearch } from "@/lib/navigation/thread-search"
@@ -28,7 +35,11 @@ type WorkspaceBodyProps = {
 	bot?: Bot
 	bots: Bot[]
 	conversation?: Conversation
+	conversations: Conversation[]
 	conversationRuntimes: ConversationRuntimes
+	store: TranscriptStore
+	homeRenewals: HomeRenewals
+	onSelectBot: (botId: string) => void
 	chat: Chat
 	attachments: AttachmentsController
 	drafts: DraftsController
@@ -89,6 +100,71 @@ const missionThreadOf = (
 	}
 	return null
 }
+
+type HomeSeatInput = WorkspaceBodyProps & { bot: Bot }
+
+const useHomeSeat = (props: HomeSeatInput): ThreadHome => {
+	const { bot, homeRenewals, onOpenThreadInNewTab, spaceId } = props
+	const archives = useSyncExternalStore(
+		homeRenewals.subscribe,
+		homeRenewals.getState,
+	)
+	const openConversation = (conversationId: string) =>
+		onOpenThreadInNewTab({ conversation: conversationId })
+	const lines = (
+		<HomeLines
+			agent={bot}
+			bots={props.bots}
+			conversations={props.conversations}
+			key={bot.id}
+			onOpenRoom={openConversation}
+			runtimes={props.conversationRuntimes}
+			spaceId={spaceId}
+			store={props.store}
+		/>
+	)
+
+	return {
+		lines,
+		emptyStage: (send) => (
+			<HomeEmptyStage
+				{...send}
+				agent={bot}
+				agents={props.bots}
+				archive={archiveOf(archives, bot.id, spaceId)}
+				lines={lines}
+				onOpenArchive={openConversation}
+				onSelectAgent={props.onSelectBot}
+				readerName={props.readerName}
+			/>
+		),
+	}
+}
+
+type BotThreadScreenProps = HomeSeatInput & {
+	thread: Thread
+	onOpenMission: (missionId: string, landing?: MissionLanding) => void
+	onOpenMissionInNewTab: (missionId: string) => void
+}
+
+const BotThreadScreen = (props: BotThreadScreenProps) => (
+	<ThreadScreen
+		activityPanel={props.activityPanel}
+		attachments={props.attachments}
+		bots={props.bots}
+		drafts={props.drafts}
+		home={useHomeSeat(props)}
+		landings={props.landings}
+		onboardingCreation={props.onboardingCreation}
+		onOpenMission={props.onOpenMission}
+		onOpenMissionInNewTab={props.onOpenMissionInNewTab}
+		readerName={props.readerName}
+		runtimes={props.conversationRuntimes}
+		signIn={props.signIn}
+		spaceId={props.spaceId}
+		thread={props.thread}
+	/>
+)
 
 export function WorkspaceBody(props: WorkspaceBodyProps) {
 	const t = useCommonCopy()
@@ -153,6 +229,18 @@ export function WorkspaceBody(props: WorkspaceBodyProps) {
 
 	if (!thread) {
 		return <ScreenLayout header={<BareAppHeader />} />
+	}
+
+	if (thread.kind === "bot") {
+		return (
+			<BotThreadScreen
+				{...props}
+				bot={thread.bot}
+				onOpenMission={openMission}
+				onOpenMissionInNewTab={openMissionInNewTab}
+				thread={thread}
+			/>
+		)
 	}
 
 	return (
