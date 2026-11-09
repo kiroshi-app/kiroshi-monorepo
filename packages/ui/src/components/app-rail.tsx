@@ -274,6 +274,8 @@ type AppRailProps = Omit<ComponentProps<"nav">, "children"> &
 		dots?: AppRailDots
 		user?: UserChipIdentity
 		updateBadge?: ReactNode
+		onSelectHome?: () => void
+		isHomeSelected?: boolean
 		onSelectConversations?: () => void
 		onSelectMissions?: () => void
 		onSelectLibrary?: () => void
@@ -301,6 +303,8 @@ const AppRail = ({
 	dots,
 	user,
 	updateBadge,
+	onSelectHome,
+	isHomeSelected = false,
 	onSelectConversations,
 	onSelectMissions,
 	onSelectLibrary,
@@ -321,8 +325,11 @@ const AppRail = ({
 			state={spaceAvatarStateOf(spaceHost)}
 		/>
 	)
+	const isHomeCurrent = openSettings === undefined && isHomeSelected
+	const HomeIcon = (isHomeCurrent ? FillIcons : Icons).Home
 	const panelEntry = (entry: AppRailPanel) => {
-		const isSelected = openSettings === undefined && selected === entry
+		const isSelected =
+			openSettings === undefined && !isHomeSelected && selected === entry
 		const PanelIcon = (isSelected ? FillIcons : Icons)[PANEL_ICON[entry]]
 		return {
 			children: <PanelIcon aria-hidden="true" />,
@@ -380,6 +387,15 @@ const AppRail = ({
 				)}
 				{onOpenSearch ? (
 					<RailSearchItem isOpen={isSearchOpen} onOpen={onOpenSearch} />
+				) : null}
+				{onSelectHome ? (
+					<RailItem
+						isSelected={isHomeCurrent}
+						name={t("rail.home")}
+						onPress={onSelectHome}
+					>
+						<HomeIcon aria-hidden="true" />
+					</RailItem>
 				) : null}
 				<RailItem
 					{...panelEntry("conversations")}
