@@ -3,8 +3,8 @@ use std::collections::HashSet;
 use rune::{Block as Line, Mark, MarkRange, TextEdit};
 
 use kiroshi_rune_kit::surfaces::s14_library::{
-	BLOCK_GAP, BLOCK_ID_ALPHABET, BLOCK_ID_LENGTH, LibraryBlockType, block_type_of, is_block_id,
-	parse_blocks, rows_of,
+	BLOCK_GAP, BLOCK_ID_ALPHABET, BLOCK_ID_LENGTH, LibraryBlockType, Record, block_type_of,
+	fence_body, field_of as record_field, is_block_id, parse_blocks, records_of, rows_of,
 };
 
 use crate::spike::inline;
@@ -168,12 +168,156 @@ pub fn texts_of(source: &str) -> Vec<String> {
 	rows_of(source).into_iter().map(|row| row.text).collect()
 }
 
+fn unescaped_pipes(line: &str) -> Vec<usize> {
+	let mut previous = None;
+	let mut pipes = Vec::new();
+	for (at, character) in line.char_indices() {
+		if character == '|' && previous != Some('\\') {
+			pipes.push(at);
+		}
+		previous = Some(character);
+	}
+	pipes
+}
+
+fn cells_of(line: &str) -> Vec<String> {
+	let line = line.trim();
+	let line = line.strip_prefix('|').unwrap_or(line);
+	let pipes = unescaped_pipes(line);
+	let end = match pipes.last() {
+		Some(last) if *last + 1 == line.len() => *last,
+		_ => line.len(),
+	};
+	let starts = std::iter::once(0).chain(pipes.iter().map(|pipe| pipe + 1));
+	let ends = pipes.iter().copied().filter(|pipe| *pipe < end).chain(std::iter::once(end));
+	starts.zip(ends).map(|(start, end)| line[start..end].trim().to_owned()).collect()
+}
+
+fn table_rows_of(source: &str) -> Vec<Vec<String>> {
+	source
+		.split('\n')
+		.enumerate()
+		.filter(|(index, _)| *index != 1)
+		.map(|(_, line)| cells_of(line))
+		.collect()
+}
+
+pub fn gallery_records(source: &str) -> Vec<Record> {
+	records_of(&fence_body(source).1)
+}
+
+fn record_lines(record: &Record) -> String {
+	record
+		.iter()
+		.enumerate()
+		.map(|(at, (key, value))| format!("{}{key}: {value}", if at == 0 { "- " } else { "  " }))
+		.collect::<Vec<_>>()
+		.join("\n")
+}
+
+pub fn with_records(source: &str, records: &[Record]) -> String {
+	let open = source.split('\n').next().unwrap_or_default();
+	let marker: String = open.trim_start().chars().take_while(|c| matches!(c, '`' | '~')).collect();
+	let body = records.iter().map(record_lines).collect::<Vec<_>>();
+	std::iter::once(open.to_owned()).chain(body).chain([marker]).collect::<Vec<_>>().join("\n")
+}
+
+fn with_caption(source: &str, index: usize, caption: &str) -> String {
+	let mut records = gallery_records(source);
+	let Some(record) = records.get_mut(index) else { return source.to_owned() };
+	record.retain(|(key, _)| key != "caption");
+	let value = one_line(caption);
+	if !value.trim().is_empty() {
+		record.push(("caption".to_owned(), value));
+	}
+	with_records(source, &records)
+}
+
+pub fn field_texts_of(source: &str) -> Vec<String> {
+	match block_type_of(source) {
+		LibraryBlockType::Gallery => gallery_records(source)
+			.iter()
+			.map(|record| record_field(record, "caption").to_owned())
+			.collect(),
+		LibraryBlockType::Table => {
+			let columns = table_columns(source);
+			table_rows_of(source)
+				.into_iter()
+				.flat_map(|mut cells| {
+					cells.resize(columns, String::new());
+					cells
+				})
+				.collect()
+		}
+		_ => texts_of(source),
+	}
+}
+
 pub fn is_editable(kind: LibraryBlockType) -> bool {
 	kind.is_text() || matches!(kind, LibraryBlockType::Callout | LibraryBlockType::Code)
 }
 
+pub fn has_fields(kind: LibraryBlockType) -> bool {
+	is_editable(kind) || matches!(kind, LibraryBlockType::Table | LibraryBlockType::Gallery)
+}
+
+fn is_raw(kind: LibraryBlockType) -> bool {
+	matches!(kind, LibraryBlockType::Code | LibraryBlockType::Gallery)
+}
+
+pub fn table_columns(source: &str) -> usize {
+	table_rows_of(source).first().map_or(1, Vec::len).max(1)
+}
+
+fn one_line(value: &str) -> String {
+	let pieces: Vec<&str> = value.split('\n').collect();
+	let last = pieces.len() - 1;
+	pieces
+		.iter()
+		.enumerate()
+		.map(|(at, piece)| {
+			let piece = if at < last { piece.trim_end_matches([' ', '\t', '\r']) } else { piece };
+			if at > 0 { piece.trim_start_matches([' ', '\t']) } else { piece }
+		})
+		.collect::<Vec<_>>()
+		.join(" ")
+}
+
+fn as_cell(value: &str) -> String {
+	let mut cell = String::new();
+	let mut previous = None;
+	for character in one_line(value).chars() {
+		if character == '|' && previous != Some('\\') {
+			cell.push('\\');
+		}
+		cell.push(character);
+		previous = Some(character);
+	}
+	cell
+}
+
+fn with_cell(source: &str, field: usize, text: &str) -> String {
+	let columns = table_columns(source);
+	let (row, column) = (field / columns, field % columns);
+	let line_at = if row == 0 { 0 } else { row + 1 };
+	source
+		.split('\n')
+		.enumerate()
+		.map(|(index, line)| {
+			if index != line_at {
+				return line.to_owned();
+			}
+			let mut cells = cells_of(line);
+			cells.resize(cells.len().max(column + 1), String::new());
+			cells[column] = as_cell(text);
+			format!("| {} |", cells.join(" | "))
+		})
+		.collect::<Vec<_>>()
+		.join("\n")
+}
+
 pub fn field_of(kind: LibraryBlockType, markdown: &str) -> TextEdit {
-	if kind == LibraryBlockType::Code {
+	if is_raw(kind) {
 		return TextEdit::new(markdown);
 	}
 	let (text, marks) = inline::parse(markdown);
@@ -187,15 +331,15 @@ pub fn field_of(kind: LibraryBlockType, markdown: &str) -> TextEdit {
 }
 
 pub fn markdown_of_field(kind: LibraryBlockType, edit: &TextEdit) -> String {
-	match kind {
-		LibraryBlockType::Code => edit.text.clone(),
-		_ => inline::serialize(&edit.text, edit.marks()),
+	match is_raw(kind) {
+		true => edit.text.clone(),
+		false => inline::serialize(&edit.text, edit.marks()),
 	}
 }
 
 pub fn markdown_before_caret(kind: LibraryBlockType, edit: &TextEdit) -> usize {
 	let caret = edit.focus.min(edit.text.len());
-	if kind == LibraryBlockType::Code {
+	if is_raw(kind) {
 		return caret;
 	}
 	let marks: Vec<MarkRange> = edit
@@ -235,6 +379,11 @@ fn closing_fence_of(lines: &[&str]) -> String {
 
 pub fn rewritten(source: &str, row: usize, text: &str) -> String {
 	let kind = block_type_of(source);
+	match kind {
+		LibraryBlockType::Table => return with_cell(source, row, text),
+		LibraryBlockType::Gallery => return with_caption(source, row, text),
+		_ => {}
+	}
 	let lines: Vec<&str> = source.split('\n').collect();
 	if kind == LibraryBlockType::Code {
 		return format!("{}\n{text}\n{}", lines[0], closing_fence_of(&lines));
