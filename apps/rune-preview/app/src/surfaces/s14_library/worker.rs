@@ -55,6 +55,7 @@ pub enum Call {
 	Stop(Target),
 	Download(Target),
 	Copy(Target),
+	Reveal(Target),
 	CreateBoard { space_id: String, untitled: String },
 	Wake(Duration, Due),
 }
@@ -108,6 +109,7 @@ pub enum Answer {
 		target: Target,
 		outcome: Result<(), HostError>,
 	},
+	Revealed(Result<(), HostError>),
 	BoardCreated {
 		space_id: String,
 		item: Result<LibraryItem, HostError>,
@@ -259,6 +261,7 @@ fn answered(source: &Source, call: Call) -> Answer {
 			let outcome = source.invoke("library_copy", located(&target));
 			Answer::Copied { target, outcome }
 		}
+		Call::Reveal(target) => Answer::Revealed(source.invoke("library_reveal", located(&target))),
 		Call::CreateBoard { space_id, untitled } => {
 			let item = board_created(source, &space_id, &untitled);
 			Answer::BoardCreated { space_id, item }

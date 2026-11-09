@@ -15,8 +15,8 @@ use yrs::{Doc, ReadTxn, Text, Transact};
 
 use kiroshi_rune_kit::surfaces::s14_library::{
 	BlockEvent, DOCUMENT_PANEL_MIN_WIDTH, DOCUMENT_PANEL_OPENING_WIDTH, DocumentPanelEvent,
-	Format as Toolbar, ItemAction, ItemEvent, LibraryEvent, LightboxEvent, NewDocumentEvent,
-	NewDocumentTemplate,
+	Format as Toolbar, ItemAction, ItemEvent, LibraryEvent, LightboxEvent, MORE_KEY,
+	NewDocumentEvent, NewDocumentTemplate, tile_more_key,
 };
 
 use super::blocks::{self, Format};
@@ -1018,4 +1018,137 @@ fn a_failed_agent_write_raises_its_notice_through_the_app() {
 	let shown = crate::app::notice::shown(&app);
 	assert!(shown.iter().any(|notice| notice.title.contains("Atlas")));
 	assert!(app.surfaces.s14_library.to_raise.is_empty());
+}
+
+fn escape() -> rune::KeyEvent {
+	rune::KeyEvent { key: rune::Key::Escape, mods: rune::Mods::default() }
+}
+
+fn tile_menu(state: &mut State, name: &str) {
+	let anchor = tile_more_key(name);
+	state.handle_library(LibraryEvent::Menu { id: name.to_owned(), anchor });
+}
+
+#[test]
+fn more_on_a_tile_opens_the_item_menu_at_it_with_the_rows_of_its_kind() {
+	let mut state = library_with(vec![
+		item("brief.md", LibraryItemKind::Document),
+		item("dunes.png", LibraryItemKind::Image),
+	]);
+
+	tile_menu(&mut state, "brief.md");
+	let document_rows = state.menu_actions();
+	let anchor = state.menu.as_ref().map(|menu| menu.anchor.clone());
+	tile_menu(&mut state, "dunes.png");
+
+	assert_eq!(document_rows, ItemAction::ALL);
+	assert_eq!(anchor, Some(tile_more_key("brief.md")));
+	assert!(!state.menu_actions().contains(&ItemAction::Rename));
+	assert_eq!(state.menu_actions().len(), ItemAction::ALL.len() - 1);
+}
+
+#[test]
+fn more_on_the_document_bar_and_the_lightbox_opens_their_menu_under_more() {
+	let mut document = opened_document("brief.md", "Body.");
+	let mut images = library_with(vec![item("dunes.png", LibraryItemKind::Image)]);
+	images.handle_library(LibraryEvent::Open("dunes.png".to_owned()));
+
+	document.handle_document_bar(ItemEvent::More);
+	images.handle_lightbox(LightboxEvent::Item(ItemEvent::More));
+
+	for state in [&document, &images] {
+		assert_eq!(state.menu.as_ref().map(|menu| menu.anchor.as_str()), Some(MORE_KEY));
+	}
+	assert_eq!(
+		document.menu_actions(),
+		[
+			ItemAction::OpenInNewTab,
+			ItemAction::Rename,
+			ItemAction::ShowInFolder,
+			ItemAction::Delete
+		]
+	);
+	assert_eq!(
+		images.menu_actions(),
+		[ItemAction::OpenInNewTab, ItemAction::ShowInFolder, ItemAction::Delete]
+	);
+}
+
+#[test]
+fn a_chosen_row_reaches_the_core_and_delete_asks_first() {
+	let mut state = library_with(vec![item("dunes.png", LibraryItemKind::Image)]);
+	let mut chosen = Vec::new();
+	for action in [ItemAction::ShowInFolder, ItemAction::Copy, ItemAction::Download] {
+		tile_menu(&mut state, "dunes.png");
+		state.choose_in_menu(action);
+		chosen.extend(calls(&mut state));
+	}
+	tile_menu(&mut state, "dunes.png");
+	state.choose_in_menu(ItemAction::Delete);
+
+	assert_eq!(
+		chosen,
+		vec![
+			Call::Reveal(target("dunes.png")),
+			Call::Copy(target("dunes.png")),
+			Call::Download(target("dunes.png")),
+		]
+	);
+	assert!(state.menu.is_none());
+	assert!(
+		matches!(&state.dialog, Some(Dialog::Delete { target: asked, .. }) if asked.name == "dunes.png")
+	);
+	assert!(calls(&mut state).is_empty());
+}
+
+#[test]
+fn escape_or_a_click_outside_closes_the_item_menu_without_acting() {
+	let mut state = library_with(vec![item("brief.md", LibraryItemKind::Document)]);
+
+	tile_menu(&mut state, "brief.md");
+	let is_handled = state.key_pressed(&escape());
+	let after_escape = state.menu.is_none();
+	tile_menu(&mut state, "brief.md");
+	state.close_menu();
+
+	assert!(is_handled && after_escape);
+	assert!(state.menu.is_none());
+	assert!(state.shown.is_none() && state.dialog.is_none());
+	assert!(calls(&mut state).is_empty());
+}
+
+#[test]
+fn a_refused_show_in_folder_keeps_the_library_and_raises_a_notice() {
+	let mut state = library_with(vec![item("brief.md", LibraryItemKind::Document)]);
+	tile_menu(&mut state, "brief.md");
+	state.choose_in_menu(ItemAction::ShowInFolder);
+	calls(&mut state);
+
+	answer(&mut state, Answer::Revealed(Err(refused())));
+
+	assert!(matches!(state.listing, Listing::Loaded(ref items) if items.len() == 1));
+	assert!(state.to_raise.iter().any(|notice| notice.title.contains("folder")));
+}
+
+#[test]
+fn retry_on_a_failed_library_reloads_it_showing_loading_then_the_items_or_the_failure() {
+	let mut state = State::default();
+	state.enter_space(SPACE, false);
+	state.show_library();
+	answer(&mut state, Answer::Listed { space_id: SPACE.to_owned(), items: Err(refused()) });
+	calls(&mut state);
+
+	state.handle_library(LibraryEvent::Retry);
+	let is_loading = matches!(state.listing, Listing::Loading);
+	let relisted = calls(&mut state);
+	answer(&mut state, Answer::Listed { space_id: SPACE.to_owned(), items: Err(refused()) });
+	let has_failed_again = matches!(state.listing, Listing::Failed);
+	state.handle_library(LibraryEvent::Retry);
+	let items = Ok(vec![item("brief.md", LibraryItemKind::Document)]);
+	answer(&mut state, Answer::Listed { space_id: SPACE.to_owned(), items });
+
+	assert!(is_loading);
+	assert_eq!(relisted, vec![Call::List { space_id: SPACE.to_owned() }]);
+	assert!(has_failed_again);
+	assert!(matches!(state.listing, Listing::Loaded(ref items) if items.len() == 1));
 }

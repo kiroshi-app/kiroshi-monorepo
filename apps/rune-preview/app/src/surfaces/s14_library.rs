@@ -4,6 +4,7 @@ mod document;
 mod editing;
 mod heard;
 mod imports;
+mod item_menu;
 mod session;
 #[cfg(test)]
 mod tests;
@@ -43,6 +44,7 @@ use actions::Effect;
 use document::Document;
 use editing::SlashState;
 use imports::Screened;
+use item_menu::{ItemMenu, MenuSurface};
 use worker::{Answer, Call, Due, NewDocument, Target, Worker};
 
 const ZOOM_STEP: u32 = 25;
@@ -120,6 +122,7 @@ pub struct State {
 	awaiting_tab: Option<String>,
 	wants_library: bool,
 	dialog: Option<Dialog>,
+	menu: Option<ItemMenu>,
 	is_creating: bool,
 	importing: Vec<String>,
 	to_raise: Vec<Notice>,
@@ -151,6 +154,7 @@ impl Default for State {
 			awaiting_tab: None,
 			wants_library: false,
 			dialog: None,
+			menu: None,
 			is_creating: false,
 			importing: Vec::new(),
 			to_raise: Vec::new(),
@@ -284,6 +288,7 @@ impl State {
 		self.previews.clear();
 		self.awaiting_tab = None;
 		self.dialog = None;
+		self.menu = None;
 		self.slash = None;
 	}
 
@@ -335,7 +340,8 @@ impl State {
 			}
 			LibraryEvent::Import => self.effects.push(Effect::PickFile),
 			LibraryEvent::NewBoard => self.create_board(),
-			LibraryEvent::Menu { .. } | LibraryEvent::Retry => {}
+			LibraryEvent::Menu { id, anchor } => self.open_menu(id, anchor, MenuSurface::Tile),
+			LibraryEvent::Retry => self.retry_list(),
 		}
 	}
 
@@ -345,11 +351,10 @@ impl State {
 			ItemAction::OpenInNewTab => self.open_in_new_tab(name),
 			ItemAction::Rename => self.open_to_rename(name),
 			ItemAction::Delete => self.ask_delete(name),
-			ItemAction::Copy
-			| ItemAction::Download
-			| ItemAction::ShowInFolder
-			| ItemAction::SaveToLibrary
-			| ItemAction::CopyImage => {
+			ItemAction::Copy => self.copy(name),
+			ItemAction::Download => self.download(name),
+			ItemAction::ShowInFolder => self.reveal(name),
+			ItemAction::SaveToLibrary | ItemAction::CopyImage => {
 				eprintln!(
 					"the Library item menu forwards {action:?}, which this surface doesn't wire"
 				)
@@ -452,7 +457,8 @@ impl State {
 			LightboxEvent::Item(ItemEvent::Close | ItemEvent::Back) => self.close_shown(),
 			LightboxEvent::Item(ItemEvent::Download | ItemEvent::Copy) => {}
 			LightboxEvent::Item(ItemEvent::More) => {
-				eprintln!("the lightbox forwards More, whose item menu emits no event")
+				let name = Some(lightbox.name.clone());
+				self.open_bar_menu(name, MenuSurface::Lightbox);
 			}
 			LightboxEvent::Previous => {
 				let previous = position.and_then(|at| at.checked_sub(1));
@@ -504,7 +510,8 @@ impl State {
 				}
 			}
 			ItemEvent::More => {
-				eprintln!("the document bar forwards More, whose item menu emits no event")
+				let name = self.shown_document().map(|document| document.target.name.clone());
+				self.open_bar_menu(name, MenuSurface::Bar);
 			}
 		}
 	}
@@ -725,6 +732,10 @@ impl State {
 
 	pub fn key_pressed(&mut self, event: &KeyEvent) -> bool {
 		use rune::Key as KeyName;
+		if self.menu.is_some() && event.key == KeyName::Escape {
+			self.close_menu();
+			return true;
+		}
 		if self.dialog.is_some() && event.key == KeyName::Escape {
 			self.dialog = None;
 			return true;
@@ -814,6 +825,7 @@ impl State {
 			}
 			Answer::Downloaded(outcome) => self.downloaded(outcome),
 			Answer::Copied { target, outcome } => self.copied_answer(&target, outcome),
+			Answer::Revealed(outcome) => self.revealed(outcome),
 			Answer::BoardCreated { space_id, item } => self.board_created(&space_id, item),
 			Answer::Due(Due::Flush) => self.flush_due(),
 			Answer::Due(Due::Copied) => self.copied = None,

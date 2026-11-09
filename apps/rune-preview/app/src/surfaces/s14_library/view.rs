@@ -7,7 +7,7 @@ use kiroshi_rune_kit::surfaces::s14_library::{
 	LibraryItem as Tile, LibraryPanel, LightboxImage, LightboxLook, PanelActions, PanelLook,
 	PanelState, TOOLBAR_GAP, Unavailable, Writer, agent_card, agent_caret, block_editor,
 	delete_confirmation, document_bar, document_column, document_panel, document_skeleton,
-	field_key, format_toolbar, grid_columns, item_unavailable, library_panel, lightbox,
+	field_key, format_toolbar, grid_columns, item_menu, item_unavailable, library_panel, lightbox,
 	new_document_dialog, presence, rows_of, title_field,
 };
 use kiroshi_rune_kit::tokens::{SPACING, Tokens};
@@ -15,6 +15,7 @@ use kiroshi_rune_kit::tokens::{SPACING, Tokens};
 use super::blocks::is_editable;
 use super::document::{Document, Phase, title_of};
 use super::editing::pressed_of;
+use super::item_menu::MenuSurface;
 use super::{Dialog, Listing, Preview, Shown, State, said};
 use crate::app::App;
 use crate::conversations::{now_ms, roster_timestamp};
@@ -85,14 +86,17 @@ fn importing_tile(name: &str) -> Tile<'_> {
 	Tile { id: name, name, detail: "", look: ItemLook::Page(""), import_progress: Some(0.0) }
 }
 
+fn panel_state_of(listing: &Listing) -> PanelState {
+	match listing {
+		Listing::Idle | Listing::Loading => PanelState::Loading,
+		Listing::Failed => PanelState::Failed,
+		Listing::Loaded(_) => PanelState::Ready,
+	}
+}
+
 fn panel_view(state: &State, t: &Tokens, width: Option<f32>) -> El {
 	let items = match &state.listing {
-		Listing::Failed => {
-			let retry = |app: &mut App| library(app).retry_list();
-			let name = said(common::library::TITLE);
-			return item_unavailable(t, LANGUAGE, Unavailable::Unreadable, &name, retry);
-		}
-		Listing::Idle | Listing::Loading => &[][..],
+		Listing::Idle | Listing::Loading | Listing::Failed => &[][..],
 		Listing::Loaded(items) => items.as_slice(),
 	};
 	let now = now_ms();
@@ -105,9 +109,8 @@ fn panel_view(state: &State, t: &Tokens, width: Option<f32>) -> El {
 		.map(|name| importing_tile(name))
 		.chain(shown.iter().zip(&details).map(|(item, detail)| tile(state, item, detail)))
 		.collect();
-	let is_loading = matches!(state.listing, Listing::Idle | Listing::Loading);
 	let panel = LibraryPanel {
-		state: if is_loading { PanelState::Loading } else { PanelState::Ready },
+		state: panel_state_of(&state.listing),
 		items: &tiles,
 		filter: state.filter,
 		query: &state.query,
@@ -297,6 +300,17 @@ fn lightbox_layer(state: &State) -> Option<El> {
 	}))
 }
 
+fn menu_layer(state: &State, t: &Tokens) -> Option<El> {
+	let menu = state.menu.as_ref()?;
+	let dark = Tokens::new(true);
+	let t = if menu.surface == MenuSurface::Lightbox { &dark } else { t };
+	let actions = state.menu_actions();
+	let chosen = |app: &mut App, action| library(app).choose_in_menu(action);
+	let shown = item_menu(t, LANGUAGE, &menu.name, &actions, None, chosen)
+		.modal(true, |app: &mut App| library(app).close_menu());
+	Some(shown.anchored(menu.anchor.clone(), Side::Bottom, Align::End, SPACING))
+}
+
 fn dialog_layers(state: &State, t: &Tokens) -> Vec<El> {
 	match state.dialog.as_ref() {
 		Some(Dialog::NewDocument(selected)) => {
@@ -319,5 +333,6 @@ pub fn layers(app: &App, t: &Tokens) -> Vec<El> {
 	if app.navigation.main_route() != Route::Library {
 		return Vec::new();
 	}
-	lightbox_layer(state).into_iter().chain(dialog_layers(state, t)).collect()
+	let menu = menu_layer(state, t);
+	lightbox_layer(state).into_iter().chain(menu).chain(dialog_layers(state, t)).collect()
 }
