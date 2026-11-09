@@ -329,6 +329,14 @@ fn field<'a>(s: &'a mut SceneState, block: &str, index: usize) -> &'a mut TextEd
 	}
 }
 
+fn edit_of<'a>(s: &'a SceneState, block: &str, at: usize) -> &'a TextEdit {
+	s.library
+		.fields
+		.iter()
+		.find(|(id, field, _)| id == block && *field == at)
+		.map_or(&s.edit, |(_, _, edit)| edit)
+}
+
 fn query(s: &mut SceneState) -> &mut TextEdit {
 	&mut s.edit
 }
@@ -1436,15 +1444,7 @@ impl Spec {
 			})
 			.collect();
 		let block = format!("blk{:03}", index + 1);
-		let edits = (0..tiles.len())
-			.map(|at| {
-				s.library
-					.fields
-					.iter()
-					.find(|(id, field, _)| *id == block && *field == at)
-					.map_or(&s.edit, |(_, _, edit)| edit)
-			})
-			.collect();
+		let edits = (0..tiles.len()).map(|at| edit_of(s, &block, at)).collect();
 		let edit = GalleryEdit {
 			block: &block,
 			tiles: &tiles,
@@ -1543,15 +1543,12 @@ impl Spec {
 			Rich::Table => {
 				let cells = table_cells(&block.source);
 				let columns = cells.first().map_or(1, Vec::len);
-				let edit_at = |at: usize| {
-					s.library
-						.fields
-						.iter()
-						.find(|(id, field, _)| *id == block.id && *field == at)
-						.map_or(&s.edit, |(_, _, edit)| edit)
-				};
 				let rows = (0..cells.len())
-					.map(|row| (0..columns).map(|column| edit_at(row * columns + column)).collect())
+					.map(|row| {
+						(0..columns)
+							.map(|column| edit_of(s, &block.id, row * columns + column))
+							.collect()
+					})
 					.collect();
 				let focused =
 					self.focus.map_or((0, 0), |(_, row, _)| (row / columns, row % columns));
