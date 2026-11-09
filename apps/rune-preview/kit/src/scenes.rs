@@ -3707,7 +3707,16 @@ pub static SCENES: &[Scene] = &[
 		Pointer::Taps("library-item-more-dunes"),
 		library::grid_all,
 	),
-	library::tabbed("navigation-librarypanel--tile-more-focus-visible", 10, library::grid_all),
+	library::tabbed(
+		"navigation-librarypanel--tile-focus-visible-shows-more",
+		9,
+		library::grid_with_first_tile_focused,
+	),
+	library::tabbed(
+		"navigation-librarypanel--tile-more-focus-visible",
+		10,
+		library::grid_with_first_tile_focused,
+	),
 	library::library("navigation-librarypanel--failed", library::failed),
 	library::acted(
 		"navigation-librarypanel--failed-retry",
