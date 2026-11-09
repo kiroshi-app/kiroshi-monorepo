@@ -35,6 +35,7 @@ use connect::{Next, SignIn, detail_of, kind_of};
 use device::{Approval, Devices, ListedDevice};
 use import::{Pressed, Session, offers_import};
 
+pub use device::{Heard, heard_of};
 pub use view::{layers, new_device, view};
 
 const DOWNLOAD_PAGE_URL: &str = "https://kiroshi.app";
@@ -364,10 +365,6 @@ impl State {
 			Answer::DeviceAnswered { call, outcome } => self.device_answered(call, outcome),
 			Answer::Due(Due::Notice(id)) => return self.told_expired(id),
 			Answer::Due(Due::AccountWatch) => self.account_watch_due(),
-			Answer::Due(Due::DeviceWatch) => {
-				let calls = self.devices.watch_due();
-				self.queued.extend(calls);
-			}
 		}
 		None
 	}
@@ -459,6 +456,13 @@ fn state(app: &mut App) -> &mut State {
 
 fn is_booting(app: &App) -> bool {
 	app.navigation.main_route() == Route::Onboarding(Step::Boot)
+}
+
+pub fn heard(app: &mut App, heard: Heard) {
+	let onboarding = state(app);
+	let calls = onboarding.devices.heard(heard, onboarding.account.as_ref());
+	onboarding.queued.extend(calls);
+	onboarding.flush();
 }
 
 pub fn is_animating(app: &App) -> bool {

@@ -147,6 +147,8 @@ impl State {
 			| HostEvent::Library(_)
 			| HostEvent::Roster(_)
 			| HostEvent::Approvals(_)
+			| HostEvent::Device(_)
+			| HostEvent::Spaces(_)
 			| HostEvent::AccountChanged(_)
 			| HostEvent::Listening
 			| HostEvent::Unreadable { .. }

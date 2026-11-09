@@ -10,7 +10,7 @@ use serde_json::{Value, json};
 
 use crate::app::{self, SpaceContent};
 use crate::host::HostError;
-use crate::source::Source;
+use crate::source::{self, Source};
 
 #[derive(Debug, PartialEq)]
 pub enum Call {
@@ -19,6 +19,7 @@ pub enum Call {
 	ListInvitations,
 	Hosting(String),
 	Load(String),
+	Connect(String),
 	Remember(String),
 	Create(String),
 	Describe { id: String, name: String, colour: Option<i64> },
@@ -34,6 +35,7 @@ pub enum Answer {
 	Invitations(Result<Vec<Invitation>, HostError>),
 	Hosting { space_id: String, state: Result<Value, HostError> },
 	Loaded { space_id: String, content: Result<SpaceContent, HostError> },
+	Connected { joined_id: String, outcome: Result<(), HostError> },
 	Remembered(Result<(), HostError>),
 	Created(Result<Space, HostError>),
 	Described(Result<Space, HostError>),
@@ -63,6 +65,10 @@ fn answered(source: &Source, call: Call) -> Answer {
 		Call::Load(space_id) => {
 			let content = app::space_content(source, &space_id);
 			Answer::Loaded { space_id, content }
+		}
+		Call::Connect(joined_id) => {
+			let connection = source::joined_sources().connect(source, &joined_id);
+			Answer::Connected { joined_id, outcome: connection.map(|_| ()) }
 		}
 		Call::Remember(space_id) => Answer::Remembered(remembered(source, space_id)),
 		Call::Create(name) => {

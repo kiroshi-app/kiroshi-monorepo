@@ -1,6 +1,7 @@
 use serde_json::json;
 
 use super::*;
+use crate::events::{HostEvent, parsed};
 
 const NOW: &str = "2026-11-09T12:00:00Z";
 
@@ -108,18 +109,84 @@ fn only_another_pending_device_still_in_time_asks_for_approval() {
 }
 
 #[test]
-fn a_pending_device_watches_its_approval_once_until_the_watch_is_due() {
+fn a_pending_device_follows_its_approval_from_events_without_a_timer() {
 	let mut devices = Devices::default();
-	let watch = Call::Wake(DEVICE_WATCH, Due::DeviceWatch);
 
-	assert_eq!(devices.read(pending(), Some(&signed_in())), vec![watch.clone()]);
 	assert!(devices.read(pending(), Some(&signed_in())).is_empty());
-	assert_eq!(devices.watch_due(), vec![Call::ReadDeviceApproval, Call::ReadKiroshiAccount]);
-	assert_eq!(devices.read(pending(), Some(&signed_in())), vec![watch]);
+	assert_eq!(devices.step(Some(&signed_in())), Some(NewDeviceStep::Waiting));
 
-	assert_eq!(devices.read(Approval::Approved, Some(&signed_in())), vec![Call::ReadDevices]);
-	assert!(devices.watch_due().is_empty());
-	assert!(devices.read(Approval::Approved, Some(&signed_in())).is_empty());
+	let approved = devices.heard(Heard::Changed(Approval::Approved), Some(&signed_in()));
+	assert_eq!(approved, vec![Call::ReadDevices, Call::ReadKiroshiAccount]);
+	assert_eq!(devices.step(Some(&signed_in())), None);
+	let again = devices.heard(Heard::Changed(Approval::Approved), Some(&signed_in()));
+	assert_eq!(again, vec![Call::ReadKiroshiAccount]);
+}
+
+fn requested(id: &str) -> Heard {
+	let payload = json!({
+		"deviceId": id,
+		"name": format!("{id} phone"),
+		"kind": "phone",
+		"askedAt": NOW,
+		"expiresAt": "2026-11-09T12:30:00Z",
+		"fingerprint": null,
+	});
+	heard_of(APPROVAL_REQUESTED_EVENT, payload).expect("a device event").expect("a request")
+}
+
+fn asked_id(devices: &Devices) -> Option<&str> {
+	devices.asked().map(|asked| asked.device_id.as_str())
+}
+
+#[test]
+fn a_request_heard_after_the_screen_opened_asks_for_approval_until_it_settles() {
+	let mut devices = Devices::default();
+	devices.read(Approval::Approved, Some(&signed_in()));
+	devices.listed(Vec::new(), now());
+	assert_eq!(asked_id(&devices), None);
+
+	assert!(devices.heard(requested("late"), Some(&signed_in())).is_empty());
+	assert_eq!(asked_id(&devices), Some("late"));
+	assert_eq!(devices.asked().map(Asking::name), Some("late phone"));
+
+	devices.heard(Heard::Settled("late".to_owned()), Some(&signed_in()));
+	assert_eq!(asked_id(&devices), None);
+	devices.heard(requested("late"), Some(&signed_in()));
+	assert_eq!(asked_id(&devices), None);
+}
+
+#[test]
+fn the_three_device_events_read_their_payloads() {
+	let settled = heard_of(APPROVAL_SETTLED_EVENT, json!({ "deviceId": "d1" }));
+	assert_eq!(
+		settled.map(|heard| heard.expect("a settlement")),
+		Some(Heard::Settled("d1".into()))
+	);
+	let changed = heard_of(APPROVAL_CHANGED_EVENT, json!({ "kind": "approved" }));
+	assert_eq!(
+		changed.map(|heard| heard.expect("a change")),
+		Some(Heard::Changed(Approval::Approved))
+	);
+	assert!(
+		matches!(requested("d2"), Heard::Requested(asking) if asking.kind == CoreDeviceKind::Phone)
+	);
+	assert!(heard_of("device://unheard-of", json!({})).is_none());
+}
+
+#[test]
+fn every_device_event_reaches_the_app_or_lands_as_unreadable() {
+	let frame = |event: &str, payload: serde_json::Value| {
+		json!({ "event": event, "payload": payload }).to_string()
+	};
+	for event in [APPROVAL_REQUESTED_EVENT, APPROVAL_SETTLED_EVENT, APPROVAL_CHANGED_EVENT] {
+		let heard = parsed(&frame(event, json!({ "kind": 4 })));
+		assert!(
+			matches!(&heard, Some(HostEvent::Unreadable { event: named, .. }) if named == event),
+			"{event} is reported unreadable"
+		);
+	}
+	let settled = parsed(&frame(APPROVAL_SETTLED_EVENT, json!({ "deviceId": "d1" })));
+	assert!(matches!(settled, Some(HostEvent::Device(Heard::Settled(id))) if id == "d1"));
 }
 
 #[test]

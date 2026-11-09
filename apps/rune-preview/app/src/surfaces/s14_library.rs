@@ -286,8 +286,6 @@ impl State {
 		self.source.get_or_insert(source);
 	}
 
-	// The joined flag stays false: the preview can't open a joined Space yet (s02_rail
-	// JOINED_UNOPENABLE), so every Library it shows is hosted here and takes the 20 MiB limit.
 	pub fn enter_space(&mut self, space_id: &str, is_joined: bool) {
 		self.is_joined = is_joined;
 		if self.space_id.as_deref() == Some(space_id) {
@@ -1057,9 +1055,10 @@ fn matches_query(item: &LibraryItem, query: &str) -> bool {
 fn entered(app: &mut App) -> bool {
 	let Some(ready) = app.ready() else { return false };
 	let (source, space_id) = (ready.source.clone(), ready.space.id.clone());
+	let is_joined = app.surfaces.s02_rail.is_joined(&space_id);
 	let library = &mut app.surfaces.s14_library;
 	library.use_source(source);
-	library.enter_space(&space_id, false);
+	library.enter_space(&space_id, is_joined);
 	true
 }
 

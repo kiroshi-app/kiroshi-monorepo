@@ -17,7 +17,8 @@ use crate::host::{DEV_START_COMMAND, HostError, Profile};
 use crate::model::{Agent, Conversation};
 use crate::navigation::Route;
 use crate::surfaces::{
-	s01_chrome, s02_rail, s03_roster, s05_thread, s08_missions, s13_space_settings, s14_library,
+	s01_chrome, s02_rail, s03_roster, s05_thread, s06_composer, s08_missions, s13_space_settings,
+	s14_library,
 };
 
 pub const CHROME: Chrome =
@@ -272,7 +273,7 @@ fn month_and_day(at: i64) -> String {
 fn thread_column(s: &App, t: &Tokens) -> El {
 	let column = col().key("conversation").grow(1.0).h_full().min_w(0.0).fill(t.background);
 	if s.thread.is_none() {
-		return column.child(no_thread(t));
+		return column.child(no_thread(s, t));
 	}
 	column
 		.child(match &s.mission {
@@ -323,16 +324,17 @@ fn thread_body(s: &App, t: &Tokens) -> El {
 	let roster = thread_roster(s);
 	let kind = thread_kind(s, &roster);
 	let space_hue = s.ready().and_then(|ready| ready.space.colour);
-	s05_thread::view(s, t, kind, roster, space_hue).unwrap_or_else(|| no_thread(t))
+	s05_thread::view(s, t, kind, roster, space_hue).unwrap_or_else(|| no_thread(s, t))
 }
 
-fn no_thread(t: &Tokens) -> El {
-	col()
+fn no_thread(s: &App, t: &Tokens) -> El {
+	let hint = col()
 		.w_full()
 		.grow(1.0)
 		.min_h(0.0)
 		.center()
-		.child(text("Pick a conversation.").font(TEXT_SM).color(t.muted_foreground))
+		.child(text("Pick a conversation.").font(TEXT_SM).color(t.muted_foreground));
+	col().w_full().grow(1.0).min_h(0.0).child(hint).children(s06_composer::access_view(s, t))
 }
 
 fn thread_header(s: &App, t: &Tokens) -> El {
