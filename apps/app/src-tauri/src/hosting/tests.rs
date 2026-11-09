@@ -99,7 +99,7 @@ use crate::mcp_oauth::asking::AuthorizationAnswers;
 use crate::mcp_oauth::commands::{mcp_application_status, McpOauthState};
 use crate::mcp_oauth::credentials;
 use crate::mcp_oauth::reports::ApplicationReports;
-use crate::missions::contract::{MissionDraft, Ticket};
+use crate::missions::contract::{MissionDetail, MissionDraft, Ticket};
 use crate::removed_on_drop::RemovedOnDrop;
 use crate::routines::commands::CHANGED_EVENT as ROUTINE_CHANGED_EVENT;
 use crate::routines::webhook::{self, Webhook};
@@ -9679,5 +9679,84 @@ fn a_relayed_member_reads_no_mission_born_in_the_main_conversation_of_another_pe
 			(json!(403), json!("this command reaches the main conversation of another person"))
 		);
 		assert_eq!(served["status"], json!(200), "{served}");
+	});
+}
+
+impl Authoring {
+	async fn stored_mission(&self, mission_id: &str) -> MissionDetail {
+		let state = self.app.state::<DatabaseState>();
+		let missions = state.as_ref().expect("the database").missions();
+		missions.detail(mission_id.to_owned()).await.expect("the mission reads")
+	}
+
+	async fn mission_of_the_host(&self) -> String {
+		self.mission_from(&self.main_of(ChatOwner::Host).await).await
+	}
+
+	async fn refused_leaving_the_mission_unchanged(
+		&self,
+		mission_id: &str,
+		command: &str,
+		args: Value,
+	) {
+		let before = self.stored_mission(mission_id).await;
+
+		let answered = self.answered(json!({ "id": 1, "command": command, "args": args })).await;
+
+		assert_eq!(
+			(answered["status"].clone(), answered["body"].clone()),
+			(json!(403), json!("this command reaches the main conversation of another person"))
+		);
+		assert_eq!(self.stored_mission(mission_id).await, before);
+	}
+}
+
+#[test]
+fn a_relayed_member_cannot_close_a_mission_born_in_the_main_conversation_of_another_person() {
+	run(async {
+		let host = Authoring::new(Some(BEARER)).await;
+		let mission_id = host.mission_of_the_host().await;
+
+		let args = json!({ "missionId": mission_id });
+		host.refused_leaving_the_mission_unchanged(&mission_id, "mission_close", args).await;
+	});
+}
+
+#[test]
+fn a_relayed_member_cannot_reopen_a_mission_born_in_the_main_conversation_of_another_person() {
+	run(async {
+		let host = Authoring::new(Some(BEARER)).await;
+		let mission_id = host.mission_of_the_host().await;
+		let state = host.app.state::<DatabaseState>();
+		let missions = state.as_ref().expect("the database").missions();
+		missions.dismiss(mission_id.clone(), "person".to_owned()).await.expect("it closes");
+
+		let args = json!({ "missionId": mission_id });
+		host.refused_leaving_the_mission_unchanged(&mission_id, "mission_reopen", args).await;
+	});
+}
+
+#[test]
+fn a_relayed_member_cannot_answer_a_mission_born_in_the_main_conversation_of_another_person() {
+	run(async {
+		let host = Authoring::new(Some(BEARER)).await;
+		let mission_id = host.mission_of_the_host().await;
+		let seq = host.stored_mission(&mission_id).await.mission.state_seq;
+
+		let args = json!({ "missionId": mission_id, "seq": seq });
+		host.refused_leaving_the_mission_unchanged(&mission_id, "mission_answered", args).await;
+	});
+}
+
+#[test]
+fn a_relayed_member_cannot_report_on_a_mission_born_in_the_main_conversation_of_another_person() {
+	run(async {
+		let host = Authoring::new(Some(BEARER)).await;
+		let mission_id = host.mission_of_the_host().await;
+		host.open_turns_in(&[&host.conversation_id]).await;
+
+		let turn_id = format!("t-{}", host.conversation_id);
+		let args = json!({ "missionId": mission_id, "turnId": turn_id });
+		host.refused_leaving_the_mission_unchanged(&mission_id, "mission_reported", args).await;
 	});
 }
