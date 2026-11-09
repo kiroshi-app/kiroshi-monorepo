@@ -45,13 +45,12 @@ fn hear_menu(screen: &mut Screen, action: BlockMenuAction) {
 fn view(screen: &Screen, _: &mut Cx<Screen>) -> El {
 	let t = Tokens::new(false);
 	let lang = Language::En;
-	let menu_on = hear_menu;
 	let body = match screen.shows {
-		Shows::Menu(look) => block_menu(&t, lang, look, menu_on),
+		Shows::Menu(look) => block_menu(&t, lang, look, hear_menu),
 		Shows::TurnInto(kind) => {
 			let look = BlockMenuLook { is_turn_into_shown: true, ..look_of(kind, true, true) };
-			let menu = block_menu(&t, lang, look, menu_on);
-			return rune_kit::root(menu, vec![turn_into_menu(&t, lang, kind, menu_on)]);
+			let menu = block_menu(&t, lang, look, hear_menu);
+			return rune_kit::root(menu, vec![turn_into_menu(&t, lang, kind, hear_menu)]);
 		}
 		Shows::Handle => {
 			let place = HandlePlace { index: HELD, pitches: &PITCHES };
