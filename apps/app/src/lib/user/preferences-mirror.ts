@@ -50,7 +50,7 @@ const isBotIdBySpace = (value: unknown): value is BotIdBySpace =>
 const botIdBySpaceOf = (value: unknown): BotIdBySpace =>
 	isBotIdBySpace(value) ? value : {}
 
-const parseBotIdBySpace = (value: string | null): BotIdBySpace => {
+export const parseBotIdBySpace = (value: string | null): BotIdBySpace => {
 	try {
 		return botIdBySpaceOf(JSON.parse(value ?? ""))
 	} catch {

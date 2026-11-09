@@ -425,23 +425,15 @@ describe("PRF5 chat open baseline", () => {
 			    "elapsedMs": 0,
 			    "storeCalls": [
 			      "mainChat",
-			      "loadPage",
-			      "renewMainChat",
-			      "pluginMcpServers",
-			      "mainChat",
 			      "botCommands",
 			      "loadPage",
 			    ],
 			    "writesAhead": 0,
 			  },
 			  "coldOpen": {
-			    "commits": 7,
+			    "commits": 6,
 			    "elapsedMs": 0,
 			    "storeCalls": [
-			      "mainChat",
-			      "loadPage",
-			      "renewMainChat",
-			      "pluginMcpServers",
 			      "mainChat",
 			      "botCommands",
 			      "loadPage",
@@ -449,7 +441,7 @@ describe("PRF5 chat open baseline", () => {
 			    "writesAhead": 0,
 			  },
 			  "warmOpen": {
-			    "commits": 2,
+			    "commits": 3,
 			    "elapsedMs": 0,
 			    "storeCalls": [],
 			    "writesAhead": 0,
@@ -464,32 +456,21 @@ describe("PRF5 chat open baseline", () => {
 		expect(await measureOpenings(CALL_DELAY_MS)).toMatchInlineSnapshot(`
 			{
 			  "busyOpen": {
-			    "commits": 16,
-			    "elapsedMs": 25,
+			    "commits": 10,
+			    "elapsedMs": 10,
 			    "storeCalls": [
 			      "mainChat",
 			      "captureCheckpoint",
-			      "loadPage",
-			      "boundedContext",
-			      "renewMainChat",
-			      "recordProviderSession",
-			      "pluginMcpServers",
-			      "mainChat",
-			      "openAssistantMessage",
 			      "botCommands",
 			      "loadPage",
-			      "appendText",
+			      "boundedContext",
 			    ],
 			    "writesAhead": 0,
 			  },
 			  "coldOpen": {
-			    "commits": 11,
-			    "elapsedMs": 25,
+			    "commits": 8,
+			    "elapsedMs": 10,
 			    "storeCalls": [
-			      "mainChat",
-			      "loadPage",
-			      "renewMainChat",
-			      "pluginMcpServers",
 			      "mainChat",
 			      "botCommands",
 			      "loadPage",
@@ -497,7 +478,7 @@ describe("PRF5 chat open baseline", () => {
 			    "writesAhead": 0,
 			  },
 			  "warmOpen": {
-			    "commits": 2,
+			    "commits": 3,
 			    "elapsedMs": 0,
 			    "storeCalls": [],
 			    "writesAhead": 0,
@@ -511,11 +492,11 @@ describe("PRF5 chat open baseline", () => {
 
 		expect(await measurePage()).toMatchInlineSnapshot(`
 			{
-			  "commitsToFirstRow": 7,
+			  "commitsToFirstRow": 6,
 			  "commitsToSettled": 14,
 			  "highlightCalls": 10,
 			  "highlighterBuilds": 0,
-			  "markdownProcessors": 20,
+			  "markdownProcessors": 22,
 			  "paintedRows": 20,
 			}
 		`)

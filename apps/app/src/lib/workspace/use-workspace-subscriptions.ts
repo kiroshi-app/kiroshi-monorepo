@@ -7,16 +7,23 @@ import type { WorkspaceDrivers } from "./use-workspace-drivers"
 import { useCompanionAnnouncements } from "../companions/use-companion-announcements"
 import { useCompanionArrivals } from "../conversations/use-companion-arrivals"
 
+type ShownHome = {
+	isShown: boolean
+	agentId: string | null
+}
+
 type WorkspaceSubscriptionsInput = {
 	core: WorkspaceCore
 	drivers: WorkspaceDrivers
 	rosterView: RosterView
+	home: ShownHome
 }
 
 export const useWorkspaceSubscriptions = ({
 	core,
 	drivers,
 	rosterView,
+	home,
 }: WorkspaceSubscriptionsInput) => {
 	const { chat, homeVisits, joinedSpaces, roster, user } = core
 	const { onboarding } = drivers
@@ -46,43 +53,54 @@ export const useWorkspaceSubscriptions = ({
 		void roster.controller.reload()
 	})
 
+	const shownBotId = home.isShown ? home.agentId : selectedBotId
+	const holdsShownBot = bots.some((bot) => bot.id === shownBotId)
 	const holdsSelectedBot = bots.some((bot) => bot.id === selectedBotId)
 	const shownRowId = useRef<string | null>(null)
-	const selectedRowId = selectedBotId ?? selectedConversationId
+	const onScreenRowId = home.isShown
+		? home.agentId
+		: (selectedBotId ?? selectedConversationId)
 
 	useEffect(() => {
-		if (selectedRowId) {
-			shownRowId.current = selectedRowId
+		if (onScreenRowId) {
+			shownRowId.current = onScreenRowId
 		}
-	}, [selectedRowId])
+	}, [onScreenRowId])
 
 	useEffect(() => {
-		if (!selectedBotId || !holdsSelectedBot) {
+		if (!shownBotId || !holdsShownBot) {
 			return
 		}
 		const spaceId =
 			rosteredSpaceId && roster.controller.hostSpaceIdOf(rosteredSpaceId)
-		const renewed = spaceId
-			? homeVisits.open(selectedBotId, spaceId)
-			: Promise.resolve()
+		const renewed =
+			home.isShown && spaceId
+				? homeVisits.open(shownBotId, spaceId)
+				: Promise.resolve()
 		void renewed.then(() => {
-			if (shownRowId.current === selectedBotId) {
-				void chat.controller.open(selectedBotId, spaceId)
+			if (shownRowId.current === shownBotId) {
+				void chat.controller.open(shownBotId, spaceId)
 			}
-		})
-		void user.controller.setLastBot({
-			spaceId: rosteredSpaceId,
-			botId: selectedBotId,
 		})
 	}, [
 		chat.controller,
 		homeVisits,
 		roster.controller,
-		user.controller,
-		selectedBotId,
-		holdsSelectedBot,
+		shownBotId,
+		holdsShownBot,
+		home.isShown,
 		rosteredSpaceId,
 	])
+
+	useEffect(() => {
+		if (!selectedBotId || !holdsSelectedBot) {
+			return
+		}
+		void user.controller.setLastBot({
+			spaceId: rosteredSpaceId,
+			botId: selectedBotId,
+		})
+	}, [user.controller, selectedBotId, holdsSelectedBot, rosteredSpaceId])
 
 	useEffect(() => {
 		if (!selectedConversationId) {

@@ -534,3 +534,167 @@ describe.each(OPEN_SPACES)(
 		)
 	},
 )
+
+describe("the Home page", () => {
+	afterEach(() => {
+		vi.useRealTimers()
+		mounted.store = null
+		localStorage.clear()
+	})
+
+	const launchApp = async () => {
+		const router = createWorkspaceRouter()
+		render(createElement(RouterProvider, { router }), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
+		await settle()
+		return router
+	}
+
+	const mountAppWithTwoAgents = async () => {
+		writeMirror({ ...readMirror(), firstRunDone: true })
+		const store = createFakeTranscriptStore()
+		const first = await store.createBot(newBotIdentity([]), PERSONAL_SPACE_ID)
+		const second = await store.createBot(
+			newBotIdentity([first]),
+			PERSONAL_SPACE_ID,
+		)
+		mounted.store = store
+		vi.useFakeTimers()
+		const router = await launchApp()
+		const [firstOfSpace] = await store.bots(PERSONAL_SPACE_ID)
+		return { router, store, first, second, firstOfSpace }
+	}
+
+	type RailEntry = "home" | "conversations" | "missions" | "library"
+
+	const railEntry = (name: RailEntry) =>
+		within(railOf()).getByRole("button", { name: i18n.t(`bots:rail.${name}`) })
+
+	const selectedEntries = () =>
+		within(railOf())
+			.getAllByRole("button")
+			.filter((entry) => entry.getAttribute("aria-current") === "true")
+			.map((entry) => entry.getAttribute("aria-label") ?? entry.textContent)
+
+	const pressInRail = async (name: RailEntry) => {
+		act(() => {
+			fireEvent.click(railEntry(name))
+		})
+		await settle()
+	}
+
+	const pickedAgentName = () =>
+		document.querySelector("[data-slot='home-agent-chip']")?.textContent
+
+	const slot = (name: string) => document.querySelector(`[data-slot='${name}']`)
+
+	it("opens from the rail on the first agent, marking Home and no panel entry", async () => {
+		const { router, firstOfSpace } = await mountAppWithTwoAgents()
+
+		await pressInRail("home")
+
+		expect(router.state.location.pathname).toBe("/home")
+		expect(selectedEntries()).toEqual([i18n.t("bots:rail.home")])
+		expect(pickedAgentName()).toBe(firstOfSpace.name)
+		expect(slot("home-layout")).not.toBeNull()
+	})
+
+	it("opens on the agent last picked on the Home in this Space", async () => {
+		const { second } = await mountAppWithTwoAgents()
+		cleanup()
+		localStorage.setItem(
+			"homeAgentIdBySpace",
+			JSON.stringify({ [PERSONAL_SPACE_ID]: second.id }),
+		)
+		await launchApp()
+
+		await pressInRail("home")
+
+		expect(pickedAgentName()).toBe(second.name)
+	})
+
+	it("shows the Home of the agent picked in the composer, the previous agent chat untouched", async () => {
+		const { firstOfSpace, second, store } = await mountAppWithTwoAgents()
+		await pressInRail("home")
+		const previousChat = await store.mainChat(
+			firstOfSpace.id,
+			PERSONAL_SPACE_ID,
+		)
+
+		act(() => {
+			fireEvent.click(slot("home-agent-chip") as HTMLElement)
+		})
+		await settle()
+		act(() => {
+			fireEvent.click(screen.getByRole("menuitemradio", { name: second.name }))
+		})
+		await settle()
+
+		expect(pickedAgentName()).toBe(second.name)
+		expect((await store.mainChat(firstOfSpace.id, PERSONAL_SPACE_ID)).id).toBe(
+			previousChat.id,
+		)
+		expect(
+			JSON.parse(localStorage.getItem("homeAgentIdBySpace") ?? ""),
+		).toEqual({ [PERSONAL_SPACE_ID]: second.id })
+	})
+
+	it("archives a main chat holding messages only once the Home opens, one click away", async () => {
+		const { router, firstOfSpace, store } = await mountAppWithTwoAgents()
+		const earlier = await store.mainChat(firstOfSpace.id, PERSONAL_SPACE_ID)
+		await store.startTurn({
+			conversationId: earlier.id,
+			id: "said",
+			startedAt: 1,
+		})
+		await store.appendUserMessage({
+			id: "said-message",
+			conversationId: earlier.id,
+			turnId: "said",
+			authorBotId: null,
+			repliedToMessageId: null,
+			content: "Book the flights.",
+			createdAt: 1,
+		})
+
+		await act(() =>
+			router.navigate({ to: "/", search: { bot: firstOfSpace.id } }),
+		)
+		await settle()
+		expect((await store.mainChat(firstOfSpace.id, PERSONAL_SPACE_ID)).id).toBe(
+			earlier.id,
+		)
+
+		await pressInRail("home")
+
+		expect(
+			(await store.mainChat(firstOfSpace.id, PERSONAL_SPACE_ID)).id,
+		).not.toBe(earlier.id)
+		expect(slot("home-layout")?.getAttribute("data-stage")).toBe("empty")
+		expect(screen.getByRole("button", { name: "Open it" })).toBeTruthy()
+	})
+
+	it.each<RailEntry>(["conversations", "missions", "library"])(
+		"leaves the Home for %s, the rail selecting that entry",
+		async (entry) => {
+			await mountAppWithTwoAgents()
+			await pressInRail("home")
+
+			await pressInRail(entry)
+
+			expect(selectedEntries()).toEqual([i18n.t(`bots:rail.${entry}`)])
+			expect(slot("home-layout")).toBeNull()
+		},
+	)
+
+	it("shows an agent opened in Conversations in its thread layout, never a Home view", async () => {
+		const { router, first } = await mountAppWithTwoAgents()
+
+		await act(() => router.navigate({ to: "/", search: { bot: first.id } }))
+		await settle()
+
+		expect(slot("chat-layout")).not.toBeNull()
+		expect(slot("home-layout")).toBeNull()
+	})
+})
