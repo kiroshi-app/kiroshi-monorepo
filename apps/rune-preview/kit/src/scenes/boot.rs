@@ -407,11 +407,10 @@ pub(super) fn import_importing_picked_only(t: &Tokens, _: &SceneState) -> El {
 
 fn done_screen(t: &Tokens, items: Vec<ImportItem>) -> El {
 	let items = with_status(items, ImportStatus::Done);
-	let done = common::claude_import::done::TITLE.text(EN);
 	progress(
 		t,
 		ImportStep::Done,
-		done,
+		common::claude_import::done::TITLE.text(EN),
 		&items,
 		common::claude_import::done::CONTINUE.text(EN),
 		None,
