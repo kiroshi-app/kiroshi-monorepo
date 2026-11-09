@@ -1,3 +1,6 @@
+use std::cell::Cell;
+use std::rc::Rc;
+
 use rune::image::Image;
 use rune::{
 	Align, Color, Cursor, El, Key as KeyName, KeyEvent, Mods, PointerPress, ScrollSpec, Side,
@@ -4744,10 +4747,21 @@ pub fn block_handle<S: 'static>(
 		focus_ring(t, instant(if is_on { control.fill(t.accent) } else { control }))
 	};
 	let (from, pitches, drag_on) = (place.index, place.pitches.to_vec(), on.clone());
+	let has_dragged = Rc::new(Cell::new(false));
 	let grip = button(&icons::GRIP_VERTICAL, say(handle::MENU, lang), SPACING * 5.0, is_pressed)
 		.cursor(Cursor::Grab)
-		.on_press(emitter(&on, HandleEvent::Press))
+		.on_press({
+			let (has_dragged, on) = (has_dragged.clone(), on.clone());
+			move |s: &mut S| {
+				if !has_dragged.replace(false) {
+					on(s, HandleEvent::Press);
+				}
+			}
+		})
 		.on_drag(move |s: &mut S, drag, _| {
+			if matches!(drag.phase, rune::Phase::Down) {
+				has_dragged.set(false);
+			}
 			if drag.dy.abs() >= DRAG_SLOP {
 				drag.data = DRAG_STARTED;
 			}
@@ -4761,6 +4775,7 @@ pub fn block_handle<S: 'static>(
 					drag_on(s, HandleEvent::Drag { from, offset: (drag.dx, drag.dy), to });
 				}
 				rune::Phase::Up => {
+					has_dragged.set(!drag.cancelled());
 					drag_on(s, HandleEvent::DragEnd);
 					if !drag.cancelled() && to != from {
 						drag_on(s, HandleEvent::Move { from, to });
