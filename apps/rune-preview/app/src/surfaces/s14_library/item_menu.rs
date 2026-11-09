@@ -1,7 +1,8 @@
 use kiroshi_core::library::contract::{LibraryItem, LibraryItemKind};
 
 use kiroshi_rune_kit::strings::common;
-use kiroshi_rune_kit::surfaces::s14_library::{ItemAction, MORE_KEY};
+use kiroshi_rune_kit::surfaces::s14_library::{ImageMenu, ItemAction, MORE_KEY};
+use rune::PointerPress;
 
 use super::imports;
 use super::worker::{Call, Target};
@@ -14,17 +15,32 @@ const BAR_ACTIONS: [ItemAction; 4] =
 const LIGHTBOX_ACTIONS: [ItemAction; 3] =
 	[ItemAction::OpenInNewTab, ItemAction::ShowInFolder, ItemAction::Delete];
 
+const PICTURE_ACTIONS: [ItemAction; 5] = [
+	ItemAction::OpenInNewTab,
+	ItemAction::Copy,
+	ItemAction::Download,
+	ItemAction::ShowInFolder,
+	ItemAction::Delete,
+];
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MenuSurface {
 	Tile,
 	Bar,
 	Lightbox,
+	Picture,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum MenuPlace {
+	Under(String),
+	At(PointerPress),
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ItemMenu {
 	pub name: String,
-	pub anchor: String,
+	pub place: MenuPlace,
 	pub surface: MenuSurface,
 }
 
@@ -36,16 +52,16 @@ fn tile_actions(kind: LibraryItemKind) -> Vec<ItemAction> {
 }
 
 impl State {
-	pub(super) fn open_menu(&mut self, name: String, anchor: String, surface: MenuSurface) {
+	pub(super) fn open_menu(&mut self, name: String, place: MenuPlace, surface: MenuSurface) {
 		if self.listed(&name).is_none() {
 			return;
 		}
-		self.menu = Some(ItemMenu { name, anchor, surface });
+		self.menu = Some(ItemMenu { name, place, surface });
 	}
 
 	pub(super) fn open_bar_menu(&mut self, name: Option<String>, surface: MenuSurface) {
 		let Some(name) = name else { return };
-		self.open_menu(name, MORE_KEY.to_owned(), surface);
+		self.open_menu(name, MenuPlace::Under(MORE_KEY.to_owned()), surface);
 	}
 
 	pub fn menu_actions(&self) -> Vec<ItemAction> {
@@ -56,7 +72,13 @@ impl State {
 			}
 			MenuSurface::Bar => BAR_ACTIONS.to_vec(),
 			MenuSurface::Lightbox => LIGHTBOX_ACTIONS.to_vec(),
+			MenuSurface::Picture => PICTURE_ACTIONS.to_vec(),
 		}
+	}
+
+	pub fn menu_image(&self) -> Option<ImageMenu> {
+		let menu = self.menu.as_ref()?;
+		(menu.surface == MenuSurface::Picture).then_some(ImageMenu { is_saving: false })
 	}
 
 	pub fn choose_in_menu(&mut self, action: ItemAction) {

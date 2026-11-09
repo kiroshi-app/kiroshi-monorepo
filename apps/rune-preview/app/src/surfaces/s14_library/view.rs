@@ -8,16 +8,17 @@ use kiroshi_rune_kit::surfaces::s14_library::{
 	LibraryPanel, LightboxImage, LightboxLook, PanelActions, PanelLook, PanelState, TOOLBAR_GAP,
 	TableCells, Tile as GalleryTile, TileImage, Unavailable, Writer, agent_card, agent_caret,
 	block_editor, block_handle, block_menu, delete_confirmation, document_bar, document_column,
-	document_panel, document_skeleton, field_key, field_of as record_field, format_toolbar,
-	gallery_editor, grid_columns, item_menu, item_unavailable, library_panel, lightbox, link_field,
-	new_document_dialog, presence, rows_of, table_editor, title_field,
+	document_panel, document_skeleton, drag_ghost, drop_indicator, field_key,
+	field_of as record_field, format_toolbar, gallery_editor, grid_columns, item_menu,
+	item_unavailable, library_panel, lightbox, link_field, new_document_dialog, presence, rows_of,
+	table_editor, title_field, turn_into_menu,
 };
 use kiroshi_rune_kit::tokens::{SPACING, Tokens};
 
-use super::blocks::{Block, field_texts_of, gallery_records, is_editable, table_columns};
+use super::blocks::{Block, field_texts_of, gallery_records, is_editable, table_columns, texts_of};
 use super::document::{Document, Phase, title_of};
 use super::editing::pressed_of;
-use super::item_menu::MenuSurface;
+use super::item_menu::{MenuPlace, MenuSurface};
 use super::{Dialog, Listing, Preview, Shown, State, said};
 use crate::app::App;
 use crate::conversations::{now_ms, roster_timestamp};
@@ -65,6 +66,10 @@ fn field_access(is_beside: bool) -> FieldAccess<App> {
 
 fn block_key(block: &str) -> String {
 	format!("library-block-{block}")
+}
+
+fn grip_key() -> String {
+	format!("library-handle-{}", said(common::library::editor::blocks::handle::MENU))
 }
 
 fn title_edit(app: &mut App) -> &mut TextEdit {
@@ -232,25 +237,50 @@ fn with_handle(
 	let block = handled.to_owned();
 	let on = move |app: &mut App, event| library(app).handle_block_handle(is_beside, &block, event);
 	let place = HandlePlace { index, pitches: &pitches };
-	let is_pressed = state.block_menu.is_some();
+	let is_pressed = state.block_menu.is_some() || state.dragged(is_beside).is_some();
 	views[index].handle = Some(block_handle(t, LANGUAGE, is_pressed, place, on));
 }
 
-fn block_menu_layer(state: &State, t: &Tokens, document: &Document, is_beside: bool) -> Option<El> {
-	let menu = state.block_menu.as_ref().filter(|menu| menu.is_beside == is_beside)?;
-	let at = document.blocks.iter().position(|block| block.id == menu.block)?;
+fn block_menu_layers(state: &State, t: &Tokens, document: &Document, is_beside: bool) -> Vec<El> {
+	let Some(menu) = state.block_menu.as_ref().filter(|menu| menu.is_beside == is_beside) else {
+		return Vec::new();
+	};
+	let Some(at) = document.block_at(&menu.block) else { return Vec::new() };
+	let kind = document.blocks[at].kind();
 	let look = BlockMenuLook {
-		kind: document.blocks[at].kind(),
+		kind,
 		is_mac: cfg!(target_os = "macos"),
 		can_move_up: at > 0,
 		can_move_down: at + 1 < document.blocks.len(),
-		is_turn_into_shown: false,
+		is_turn_into_shown: menu.is_turn_into_shown,
 	};
-	let handle = format!("library-handle-{}", said(common::library::editor::blocks::handle::MENU));
 	let on = |app: &mut App, action| library(app).handle_block_menu(action);
-	let shown = block_menu(t, LANGUAGE, look, on)
-		.modal(true, |app: &mut App| library(app).close_block_menu());
-	Some(shown.anchored(handle, Side::Bottom, Align::Start, SPACING))
+	let close = |app: &mut App| library(app).close_block_menu();
+	let shown = block_menu(t, LANGUAGE, look, on).modal(true, close).anchored(
+		grip_key(),
+		Side::Bottom,
+		Align::Start,
+		SPACING,
+	);
+	let turn_into =
+		menu.is_turn_into_shown.then(|| turn_into_menu(t, LANGUAGE, kind, on).modal(true, close));
+	std::iter::once(shown).chain(turn_into).collect()
+}
+
+fn with_drop_indicator(state: &State, t: &Tokens, views: &mut [EditorBlock], is_beside: bool) {
+	let Some(drag) = state.dragged(is_beside) else { return };
+	if let Some(view) = views.get_mut(drag.landing()) {
+		view.above = Some(drop_indicator(t));
+	}
+}
+
+fn ghost_layer(state: &State, t: &Tokens, document: &Document, is_beside: bool) -> Option<El> {
+	let drag = state.dragged(is_beside)?;
+	let held = document.blocks.get(drag.from)?;
+	let [x, y, width, height] = rune::memo::window_layout(&grip_key())?;
+	let pointer = (x + width / 2.0 + drag.offset.0, y + height / 2.0 + drag.offset.1);
+	let text = texts_of(&held.source).into_iter().next().unwrap_or_default();
+	Some(drag_ghost(t, LANGUAGE, &[&text], None, pointer))
 }
 
 fn table_view(t: &Tokens, document: &Document, block: &Block, is_beside: bool) -> Option<El> {
@@ -341,6 +371,7 @@ fn editor(app: &App, t: &Tokens, document: &Document, is_beside: bool) -> (El, V
 		}
 	}
 	with_handle(state, t, &mut views, blocks, is_beside);
+	with_drop_indicator(state, t, &mut views, is_beside);
 	let query = state.slash_query().unwrap_or_default();
 	let slash = state
 		.slash
@@ -351,7 +382,8 @@ fn editor(app: &App, t: &Tokens, document: &Document, is_beside: bool) -> (El, V
 	let (body, mut layers) =
 		block_editor(t, LANGUAGE, &mut views, slash, field_access(is_beside), on);
 	layers.extend(toolbar_layer(state, t, document, is_beside));
-	layers.extend(block_menu_layer(state, t, document, is_beside));
+	layers.extend(block_menu_layers(state, t, document, is_beside));
+	layers.extend(ghost_layer(state, t, document, is_beside));
 	layers.extend(card_layers(app, t, document));
 	(body, layers)
 }
@@ -440,12 +472,18 @@ fn lightbox_layer(state: &State) -> Option<El> {
 fn menu_layer(state: &State, t: &Tokens) -> Option<El> {
 	let menu = state.menu.as_ref()?;
 	let dark = Tokens::new(true);
-	let t = if menu.surface == MenuSurface::Lightbox { &dark } else { t };
+	let is_dark = matches!(menu.surface, MenuSurface::Lightbox | MenuSurface::Picture);
+	let t = if is_dark { &dark } else { t };
 	let actions = state.menu_actions();
 	let chosen = |app: &mut App, action| library(app).choose_in_menu(action);
-	let shown = item_menu(t, LANGUAGE, &menu.name, &actions, None, chosen)
+	let shown = item_menu(t, LANGUAGE, &menu.name, &actions, state.menu_image(), chosen)
 		.modal(true, |app: &mut App| library(app).close_menu());
-	Some(shown.anchored(menu.anchor.clone(), Side::Bottom, Align::End, SPACING))
+	Some(match &menu.place {
+		MenuPlace::Under(anchor) => {
+			shown.anchored(anchor.clone(), Side::Bottom, Align::End, SPACING)
+		}
+		MenuPlace::At(at) => shown.absolute(at.x, at.y),
+	})
 }
 
 fn dialog_layers(state: &State, t: &Tokens) -> Vec<El> {
