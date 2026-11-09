@@ -42,6 +42,7 @@ import {
 import { createAttachmentsPort } from "../chat/attachments-port"
 import type { ChatDriver } from "../chat/driver"
 import { attachmentBlock } from "../chat/message-attachments"
+import { questionMessageIdOf } from "../chat/question-message"
 import type { ReportedRun } from "../routines/routine-contract"
 
 const SPACE = "personal"
@@ -3249,47 +3250,66 @@ describe("the mentions a finished turn carries", () => {
 		room.detach()
 	})
 
-	it("holds a question asked after the companion's turn ended, until it is answered", async () => {
+	const lateQuestion = (id: string): QuestionRequest => ({
+		id,
+		questions: [
+			{
+				header: "Walls",
+				question: "Which wall next?",
+				options: [],
+				multiSelect: false,
+			},
+		],
+	})
+
+	const endedRoom = async () => {
 		const room = await roomSeating()
 		await room.sent("@Ada take the walls")
 		const asking = room.driver.submissions.find(
 			({ scope }) => scope.botId === room.ada,
 		)
 		await room.spoken(room.ada, "walls up")
-		expect(room.driver.shutdowns).toEqual([room.ada])
-		const request: QuestionRequest = {
-			id: "ask-late",
-			questions: [
-				{
-					header: "Walls",
-					question: "Which wall next?",
-					options: [],
-					multiSelect: false,
-				},
-			],
-		}
-		const askLate = async () => {
+		const hearLate = async (turnId: string, event: AgentEvent) => {
 			room.hear({
 				scope: asking?.scope ?? null,
 				turn: {
-					turnId: "turn-continued",
+					turnId,
 					continuesTurnId: asking?.turn?.turnId ?? null,
 					conversationId: room.conversation.id,
 				},
-				event: { type: "questionRequested", request },
+				event,
 			})
 			await settled()
 		}
+		const askLate = (turnId: string, request: QuestionRequest) =>
+			hearLate(turnId, { type: "questionRequested", request })
+		const answerLate = async (id: string) => {
+			await room.controller.answer(id, { "Which wall next?": "north" })
+			await settled()
+		}
+		const answerTurnOf = (id: string) =>
+			room.controller
+				.getState()
+				.messages.find(
+					({ role, repliedToMessageId }) =>
+						role === "user" && repliedToMessageId === questionMessageIdOf(id),
+				)?.turnId
+		return { ...room, hearLate, askLate, answerLate, answerTurnOf }
+	}
 
-		await askLate()
+	it("holds a question asked after the companion's turn ended, until it is answered", async () => {
+		const room = await endedRoom()
+		expect(room.driver.shutdowns).toEqual([room.ada])
+		const request = lateQuestion("ask-late")
+
+		await room.askLate("turn-continued", request)
 		expect(room.controller.getState().pendingPrompt).toEqual({
 			kind: "question",
 			botId: room.ada,
 			request,
 		})
 
-		await room.controller.answer("ask-late", { "Which wall next?": "north" })
-		await settled()
+		await room.answerLate("ask-late")
 		expect(room.driver.answered).toEqual([
 			{
 				botId: room.ada,
@@ -3299,8 +3319,37 @@ describe("the mentions a finished turn carries", () => {
 		])
 		expect(room.controller.getState().pendingPrompt).toBeNull()
 
-		await askLate()
+		await room.askLate("turn-continued", request)
 		expect(room.controller.getState().pendingPrompt).toBeNull()
+		room.detach()
+	})
+
+	it("opens no turn for a late resolution, so the next late question keeps its own turn", async () => {
+		const room = await endedRoom()
+
+		await room.hearLate("turn-gone", {
+			type: "permissionResolved",
+			id: "ask-gone",
+			decision: "deny",
+		})
+		expect(room.controller.getState().speakers).toEqual([])
+		await room.askLate("turn-continued", lateQuestion("ask-late"))
+		await room.answerLate("ask-late")
+
+		expect(room.answerTurnOf("ask-late")).toBe("turn-continued")
+		room.detach()
+	})
+
+	it("answers a second late question in the turn it was asked in", async () => {
+		const room = await endedRoom()
+		await room.askLate("turn-continued", lateQuestion("ask-late"))
+		await room.answerLate("ask-late")
+
+		await room.askLate("turn-again", lateQuestion("ask-again"))
+		await room.answerLate("ask-again")
+
+		expect(room.answerTurnOf("ask-late")).toBe("turn-continued")
+		expect(room.answerTurnOf("ask-again")).toBe("turn-again")
 		room.detach()
 	})
 

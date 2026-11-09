@@ -58,9 +58,6 @@ type DroppedRun = {
 	botId: string
 }
 
-const isQuestionLifecycle = ({ type }: AgentEvent) =>
-	type === "questionRequested" || type === "permissionResolved"
-
 const isDroppedRun = ({ scope, turnId }: ForeignTurn, dropped: DroppedRun) =>
 	turnId === dropped.turnId &&
 	scope.conversationId === dropped.conversationId &&
@@ -344,13 +341,52 @@ export const createForeignTurns = (
 		}
 	}
 
+	const releaseClaimed = (scope: RuntimeScope, id: string) => {
+		resolved.add(id)
+		const key = keyOf(scope)
+		const turn = turns.get(key)
+		if (!turn) {
+			return
+		}
+		releasePrompt(turn, id)
+		if (!turn.speaker || !isAwaitingAnswer(turn.speaker)) {
+			forget(key)
+		}
+	}
+
+	const askClaimed = (
+		scope: RuntimeScope,
+		turnId: string,
+		question: QuestionRequest,
+	) => {
+		if (!resolved.has(question.id)) {
+			askQuestion(turnAt(scope, turnId), question)
+		}
+	}
+
+	const renderClaimed = (
+		scope: RuntimeScope,
+		turnId: string,
+		event: AgentEvent,
+	) => {
+		switch (event.type) {
+			case "questionRequested":
+				return askClaimed(scope, turnId, event.request)
+			case "permissionResolved":
+				return releaseClaimed(scope, event.id)
+			default:
+				return
+		}
+	}
+
 	return {
 		claim: (scope) => {
 			claimed.add(keyOf(scope))
 			forget(keyOf(scope))
 		},
 		render: (scope, { turnId }, event) => {
-			if (claimed.has(keyOf(scope)) && !isQuestionLifecycle(event)) {
+			if (claimed.has(keyOf(scope))) {
+				renderClaimed(scope, turnId, event)
 				return
 			}
 			const turn = turnAt(scope, turnId)
@@ -376,6 +412,10 @@ export const createForeignTurns = (
 				: null
 		},
 		release: (scope, id) => {
+			if (claimed.has(keyOf(scope))) {
+				releaseClaimed(scope, id)
+				return
+			}
 			const turn = turns.get(keyOf(scope))
 			if (turn) {
 				releasePrompt(turn, id)
