@@ -3,16 +3,16 @@ use rune::{Align, El, Side, TextEdit, col};
 
 use kiroshi_rune_kit::strings::{Language, common};
 use kiroshi_rune_kit::surfaces::s14_library::{
-	Agent, BarActions, DocumentBar, DocumentPanelEvent, EditorBlock, ItemEvent, ItemLook,
-	LibraryItem as Tile, LibraryPanel, LightboxImage, LightboxLook, PanelActions, PanelLook,
-	PanelState, TOOLBAR_GAP, Unavailable, Writer, agent_card, agent_caret, block_editor,
-	delete_confirmation, document_bar, document_column, document_panel, document_skeleton,
-	field_key, format_toolbar, grid_columns, item_menu, item_unavailable, library_panel, lightbox,
-	link_field, new_document_dialog, presence, rows_of, title_field,
+	Agent, BarActions, DocumentBar, DocumentPanelEvent, EditorBlock, HandlePlace, ItemEvent,
+	ItemLook, LibraryItem as Tile, LibraryPanel, LightboxImage, LightboxLook, PanelActions,
+	PanelLook, PanelState, TOOLBAR_GAP, Unavailable, Writer, agent_card, agent_caret, block_editor,
+	block_handle, block_menu, delete_confirmation, document_bar, document_column, document_panel,
+	document_skeleton, field_key, format_toolbar, grid_columns, item_menu, item_unavailable,
+	library_panel, lightbox, link_field, new_document_dialog, presence, rows_of, title_field,
 };
 use kiroshi_rune_kit::tokens::{SPACING, Tokens};
 
-use super::blocks::is_editable;
+use super::blocks::{Block, is_editable};
 use super::document::{Document, Phase, title_of};
 use super::editing::pressed_of;
 use super::item_menu::MenuSurface;
@@ -28,6 +28,8 @@ const LANGUAGE: Language = Language::En;
 const DEFAULT_COLUMNS: usize = 4;
 
 const KIB: u64 = 1024;
+
+const UNMEASURED_PITCH: f32 = SPACING * 14.0;
 
 const PANEL_ACTIONS: PanelActions = PanelActions {
 	search: true,
@@ -188,6 +190,47 @@ fn card_layers(app: &App, t: &Tokens, document: &Document) -> Vec<El> {
 		.collect()
 }
 
+fn pitches_of(blocks: &[Block]) -> Vec<f32> {
+	let rects: Vec<Option<[f32; 4]>> = blocks
+		.iter()
+		.map(|block| rune::memo::layout(&format!("library-block-{}", block.id)))
+		.collect();
+	(0..rects.len())
+		.map(|at| match (rects[at], rects.get(at + 1).copied().flatten()) {
+			(Some(rect), Some(next)) => next[1] - rect[1],
+			(Some(rect), None) => rect[3],
+			(None, _) => UNMEASURED_PITCH,
+		})
+		.collect()
+}
+
+fn with_handle(
+	state: &State,
+	t: &Tokens,
+	views: &mut [EditorBlock],
+	blocks: &[Block],
+	is_beside: bool,
+) {
+	let Some(handled) = state.handled_block(is_beside) else { return };
+	let Some(index) = views.iter().position(|view| view.id == handled) else { return };
+	let pitches = pitches_of(blocks);
+	let block = handled.to_owned();
+	let on = move |app: &mut App, event| library(app).handle_handle(is_beside, &block, event);
+	let place = HandlePlace { index, pitches: &pitches };
+	let is_pressed = state.block_menu.is_some();
+	views[index].handle = Some(block_handle(t, LANGUAGE, is_pressed, place, on));
+}
+
+fn block_menu_layer(state: &State, t: &Tokens, document: &Document, is_beside: bool) -> Option<El> {
+	let menu = state.block_menu.as_ref().filter(|menu| menu.is_beside == is_beside)?;
+	let kind = document.blocks.iter().find(|block| block.id == menu.block)?.kind();
+	let handle = format!("library-handle-{}", said(common::library::editor::blocks::handle::MENU));
+	let on = |app: &mut App, action| library(app).handle_block_menu(action);
+	let shown = block_menu(t, LANGUAGE, kind, cfg!(target_os = "macos"), on)
+		.modal(true, |app: &mut App| library(app).close_block_menu());
+	Some(shown.anchored(handle, Side::Bottom, Align::Start, SPACING))
+}
+
 fn editor(app: &App, t: &Tokens, document: &Document, is_beside: bool) -> (El, Vec<El>) {
 	let blocks = &document.blocks;
 	let placeholder = said(common::library::templates::blank::PLACEHOLDER);
@@ -219,6 +262,7 @@ fn editor(app: &App, t: &Tokens, document: &Document, is_beside: bool) -> (El, V
 		}
 	}
 	let state = &app.surfaces.s14_library;
+	with_handle(state, t, &mut views, blocks, is_beside);
 	let query = state.slash_query().unwrap_or_default();
 	let slash = state
 		.slash
@@ -229,6 +273,7 @@ fn editor(app: &App, t: &Tokens, document: &Document, is_beside: bool) -> (El, V
 	let on = move |app: &mut App, event| library(app).handle_block(is_beside, event);
 	let (body, mut layers) = block_editor(t, LANGUAGE, &mut views, slash, access, on);
 	layers.extend(toolbar_layer(state, t, document, is_beside));
+	layers.extend(block_menu_layer(state, t, document, is_beside));
 	layers.extend(card_layers(app, t, document));
 	(body, layers)
 }

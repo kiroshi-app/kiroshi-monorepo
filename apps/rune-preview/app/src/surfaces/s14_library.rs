@@ -2,6 +2,7 @@ mod actions;
 mod blocks;
 mod document;
 mod editing;
+mod handle;
 mod heard;
 mod imports;
 mod item_menu;
@@ -43,6 +44,7 @@ pub use view::{GRID, layers, panel, view};
 use actions::Effect;
 use document::Document;
 use editing::{LinkState, SlashState};
+use handle::BlockMenu;
 use imports::Screened;
 use item_menu::{ItemMenu, MenuSurface};
 use worker::{Answer, Call, Due, NewDocument, Target, Worker};
@@ -128,6 +130,7 @@ pub struct State {
 	to_raise: Vec<Notice>,
 	slash: Option<SlashState>,
 	link: Option<LinkState>,
+	block_menu: Option<BlockMenu>,
 	is_flush_armed: bool,
 	copied: Option<String>,
 	effects: Vec<Effect>,
@@ -161,6 +164,7 @@ impl Default for State {
 			to_raise: Vec::new(),
 			slash: None,
 			link: None,
+			block_menu: None,
 			is_flush_armed: false,
 			copied: None,
 			effects: Vec::new(),
@@ -293,6 +297,7 @@ impl State {
 		self.menu = None;
 		self.slash = None;
 		self.link = None;
+		self.block_menu = None;
 	}
 
 	pub fn show_library(&mut self) {
@@ -643,6 +648,7 @@ impl State {
 		let Some(shown) = self.shown.take() else { return };
 		self.slash = self.slash.take().filter(|slash| slash.is_beside);
 		self.link = self.link.take().filter(|link| link.is_beside);
+		self.block_menu = self.block_menu.take().filter(|menu| menu.is_beside);
 		if let Shown::Document(document) = shown {
 			self.leave(*document);
 		}
@@ -651,6 +657,7 @@ impl State {
 	fn close_beside(&mut self) {
 		self.slash = self.slash.take().filter(|slash| !slash.is_beside);
 		self.link = self.link.take().filter(|link| !link.is_beside);
+		self.block_menu = self.block_menu.take().filter(|menu| !menu.is_beside);
 		if let Some(document) = self.beside.take() {
 			self.leave(document);
 		}
@@ -737,8 +744,9 @@ impl State {
 
 	pub fn key_pressed(&mut self, event: &KeyEvent) -> bool {
 		use rune::Key as KeyName;
-		if self.menu.is_some() && event.key == KeyName::Escape {
-			self.close_menu();
+		if event.key == KeyName::Escape
+			&& (self.menu.take().is_some() || self.block_menu.take().is_some())
+		{
 			return true;
 		}
 		if self.dialog.is_some() && event.key == KeyName::Escape {

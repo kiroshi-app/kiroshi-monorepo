@@ -14,9 +14,10 @@ use serde_json::json;
 use yrs::{Doc, ReadTxn, Text, Transact};
 
 use kiroshi_rune_kit::surfaces::s14_library::{
-	BlockEvent, DOCUMENT_PANEL_MIN_WIDTH, DOCUMENT_PANEL_OPENING_WIDTH, DocumentPanelEvent,
-	Format as Toolbar, ItemAction, ItemEvent, LibraryEvent, LightboxEvent, LinkEvent, MORE_KEY,
-	NewDocumentEvent, NewDocumentTemplate, panel_max_width, tile_more_key,
+	BlockEvent, BlockMenuAction, DOCUMENT_PANEL_MIN_WIDTH, DOCUMENT_PANEL_OPENING_WIDTH,
+	DocumentPanelEvent, Format as Toolbar, HandleEvent, ItemAction, ItemEvent, LibraryEvent,
+	LightboxEvent, LinkEvent, MORE_KEY, NewDocumentEvent, NewDocumentTemplate, panel_max_width,
+	tile_more_key,
 };
 
 use super::blocks::{self, Format};
@@ -1228,4 +1229,91 @@ fn cancel_closes_the_link_field_and_leaves_the_text_unchanged() {
 	assert!(
 		state.shown_document().is_some_and(|document| document.fields[0].edit.marks().is_empty())
 	);
+}
+
+fn block_ids(state: &State) -> Vec<String> {
+	let document = state.shown_document().expect("an open document");
+	document.blocks.iter().map(|block| block.id.clone()).collect()
+}
+
+fn saved_after(initial: &str, change: impl FnOnce(&mut State, &[String])) -> String {
+	let initial = state_of(initial);
+	let mut state = opened_from("notes.txt", &initial);
+	let ids = block_ids(&state);
+	change(&mut state, &ids);
+	assert!(state.block_menu.is_none());
+	saved_markdown(&initial, &calls(&mut state))
+}
+
+fn chosen_on(state: &mut State, block: &str, action: BlockMenuAction) {
+	state.handle_handle(false, block, HandleEvent::Press);
+	state.handle_block_menu(action);
+}
+
+#[test]
+fn pressing_a_handle_opens_the_block_menu_on_that_block_and_escape_closes_it() {
+	let mut state = opened_document("notes.txt", "One\n\nTwo");
+	let ids = block_ids(&state);
+
+	state.handle_handle(false, &ids[1], HandleEvent::Press);
+	let handled = state.handled_block(false).map(str::to_owned);
+	let is_handled = state.key_pressed(&escape());
+
+	assert_eq!(handled.as_deref(), Some(ids[1].as_str()));
+	assert!(is_handled);
+	assert!(state.block_menu.is_none());
+	assert!(calls(&mut state).is_empty());
+}
+
+#[test]
+fn each_block_menu_action_changes_the_document_and_saves_it() {
+	let three = "One\n\nTwo\n\nThree";
+	let duplicated =
+		saved_after(three, |state, ids| chosen_on(state, &ids[0], BlockMenuAction::Duplicate));
+	let up = saved_after(three, |state, ids| chosen_on(state, &ids[1], BlockMenuAction::MoveUp));
+	let down =
+		saved_after(three, |state, ids| chosen_on(state, &ids[1], BlockMenuAction::MoveDown));
+	let deleted =
+		saved_after(three, |state, ids| chosen_on(state, &ids[2], BlockMenuAction::Delete));
+	let top = saved_after(three, |state, ids| chosen_on(state, &ids[0], BlockMenuAction::MoveUp));
+
+	assert_eq!(duplicated, "One\n\nOne\n\nTwo\n\nThree");
+	assert_eq!(up, "Two\n\nOne\n\nThree");
+	assert_eq!(down, "One\n\nThree\n\nTwo");
+	assert_eq!(deleted, "One\n\nTwo");
+	assert_eq!(top, three);
+}
+
+#[test]
+fn deleting_the_only_block_leaves_an_empty_paragraph_to_write_in() {
+	let mut state = opened_document("notes.txt", "Only");
+	let ids = block_ids(&state);
+
+	chosen_on(&mut state, &ids[0], BlockMenuAction::Delete);
+
+	let document = state.shown_document().expect("an open document");
+	assert_eq!(document.blocks.len(), 1);
+	assert_eq!(document.markdown(), "");
+	assert_eq!(applies(&calls(&mut state)), 1);
+}
+
+#[test]
+fn insert_on_a_handle_adds_an_empty_paragraph_below_and_focuses_it() {
+	let saved = saved_after("One\n\nTwo", |state, ids| {
+		state.handle_handle(false, &ids[0], HandleEvent::Insert);
+		let document = state.shown_document().expect("an open document");
+		let focused = document.focused().map(|field| field.block.clone());
+		assert_eq!(focused.as_ref(), document.blocks.get(1).map(|block| &block.id));
+	});
+
+	assert_eq!(saved, "One\n\n\n\nTwo");
+}
+
+#[test]
+fn a_dragged_handle_moves_its_block_to_the_slot_and_saves() {
+	let saved = saved_after("One\n\nTwo\n\nThree", |state, ids| {
+		state.handle_handle(false, &ids[0], HandleEvent::Move { from: 0, to: 2 });
+	});
+
+	assert_eq!(saved, "Two\n\nThree\n\nOne");
 }

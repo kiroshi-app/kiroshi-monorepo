@@ -247,7 +247,7 @@ impl State {
 		}
 	}
 
-	fn send(&mut self, is_beside: bool, update: Option<String>) {
+	pub(super) fn send(&mut self, is_beside: bool, update: Option<String>) {
 		let Some(update) = update else { return };
 		let Some(document) = self.document(is_beside) else { return };
 		let target = document.target.clone();

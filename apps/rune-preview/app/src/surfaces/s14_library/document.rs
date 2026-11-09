@@ -204,7 +204,7 @@ impl Document {
 		self.fields.iter().find(|field| field.edit.focused)
 	}
 
-	fn block_at(&self, block: &str) -> Option<usize> {
+	pub fn block_at(&self, block: &str) -> Option<usize> {
 		self.blocks.iter().position(|held| held.id == block)
 	}
 
@@ -287,6 +287,60 @@ impl Document {
 		self.focus(&previous, last_row);
 		self.is_dirty = true;
 		self.flushed()
+	}
+
+	fn restructured(&mut self) -> Option<String> {
+		self.rebuild_fields();
+		self.is_dirty = true;
+		self.flushed()
+	}
+
+	fn inserted_after(&mut self, at: usize, source: String) -> String {
+		let taken: HashSet<String> = self.blocks.iter().map(|held| held.id.clone()).collect();
+		let gap = std::mem::replace(&mut self.blocks[at].gap, BLOCK_GAP.to_owned());
+		let added = Block { source, ..empty_paragraph(&taken, gap) };
+		let id = added.id.clone();
+		self.blocks.insert(at + 1, added);
+		id
+	}
+
+	pub fn insert_below(&mut self, block: &str) -> Option<String> {
+		let at = self.block_at(block)?;
+		let id = self.inserted_after(at, String::new());
+		let update = self.restructured();
+		self.focus(&id, 0);
+		update
+	}
+
+	pub fn duplicate(&mut self, block: &str) -> Option<String> {
+		let at = self.block_at(block)?;
+		let source = self.blocks[at].source.clone();
+		self.inserted_after(at, source);
+		self.restructured()
+	}
+
+	pub fn move_block(&mut self, from: usize, to: usize) -> Option<String> {
+		if from == to || from >= self.blocks.len() || to >= self.blocks.len() {
+			return None;
+		}
+		let gaps: Vec<String> = self.blocks.iter().map(|block| block.gap.clone()).collect();
+		let moved = self.blocks.remove(from);
+		self.blocks.insert(to, moved);
+		for (block, gap) in self.blocks.iter_mut().zip(gaps) {
+			block.gap = gap;
+		}
+		self.restructured()
+	}
+
+	pub fn remove_block(&mut self, block: &str) -> Option<String> {
+		let at = self.block_at(block)?;
+		let removed = self.blocks.remove(at);
+		match self.blocks.len() {
+			0 => self.blocks.push(empty_paragraph(&HashSet::new(), removed.gap)),
+			left if at == left => self.blocks[at - 1].gap = removed.gap,
+			_ => {}
+		}
+		self.restructured()
 	}
 
 	pub fn convert(&mut self, block: &str, kind: LibraryBlockType, cut: Option<Cut>) {
