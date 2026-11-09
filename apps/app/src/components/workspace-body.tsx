@@ -6,6 +6,7 @@ import { useCommonCopy } from "@workspace/ui/hooks/use-common-copy"
 
 import { BareAppHeader } from "@/components/bare-app-header"
 import {
+	HomeConversationStage,
 	HomeEmptyStage,
 	HomeLines,
 	type ThreadHome,
@@ -114,22 +115,23 @@ const homeSeatOf = (
 	const visit = visitOf(visits, bot.id, spaceId)
 	const openConversation = (conversationId: string) =>
 		onOpenThreadInNewTab({ conversation: conversationId })
-	const lines = (
-		<HomeLines
-			agent={bot}
-			bots={props.bots}
-			conversations={props.conversations}
-			key={bot.id}
-			onOpenRoom={openConversation}
-			openedAt={visit?.openedAt ?? null}
-			roomLinesOf={(workingIds) =>
-				homeVisits.roomLinesOf(bot.id, spaceId, workingIds)
-			}
-			runtimes={props.conversationRuntimes}
-			spaceId={spaceId}
-			store={props.store}
-		/>
-	)
+	const rooms = {
+		agent: bot,
+		conversations: props.conversations,
+		store: props.store,
+		spaceId,
+		onOpenRoom: openConversation,
+	}
+	const lineFeed = {
+		openedAt: visit?.openedAt ?? null,
+		roomLinesOf: (workingIds: string[]) =>
+			homeVisits.roomLinesOf(bot.id, spaceId, workingIds),
+	}
+	const requests = {
+		bots: props.bots,
+		runtimes: props.conversationRuntimes,
+	}
+	const lines = <HomeLines {...rooms} {...lineFeed} key={bot.id} />
 
 	return {
 		isSettling: spaceId !== null && !visit?.isSettled,
@@ -137,8 +139,8 @@ const homeSeatOf = (
 		emptyStage: (send) => (
 			<HomeEmptyStage
 				{...send}
-				agent={bot}
-				agents={props.bots}
+				{...rooms}
+				{...requests}
 				archive={visit?.archive ?? null}
 				isBandDismissed={visit?.isBandDismissed ?? false}
 				lines={lines}
@@ -146,8 +148,16 @@ const homeSeatOf = (
 				onOpenArchive={openConversation}
 				onSelectAgent={props.onSelectBot}
 				readerName={props.readerName}
-				spaceId={spaceId}
-				store={props.store}
+			/>
+		),
+		conversationStage: (conversation) => (
+			<HomeConversationStage
+				{...conversation}
+				{...rooms}
+				{...lineFeed}
+				{...requests}
+				key={bot.id}
+				onSelectAgent={props.onSelectBot}
 			/>
 		),
 	}

@@ -49,7 +49,7 @@ import {
 } from "@/lib/conversations/scripted-driver"
 import type { Bot, Conversation } from "@/lib/conversations/store-contract"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
-import { seatBots } from "@/lib/conversations/transcript-fixtures"
+import { message, seatBots } from "@/lib/conversations/transcript-fixtures"
 import { homeQueryKeys } from "@/lib/home/home-query-keys"
 import { createHomeVisits } from "@/lib/home/home-visits"
 import type { Invoke } from "@/lib/host/joined-hosts-invoke"
@@ -957,6 +957,31 @@ describe("WorkspaceBody Home", () => {
 		expect(homeSlot("home-greeting-skeleton")).not.toBeNull()
 		expect(homeSlot("home-composer-skeleton")).not.toBeNull()
 		expect(screen.queryByRole("heading", { name: /What’s next/ })).toBeNull()
+	})
+
+	it("draws the Home conversation, never the thread, once the main conversation holds a message", async () => {
+		const state = {
+			...initialChatState,
+			messages: [message({ content: "Book the flights." })],
+		}
+		const controller = createChatController(
+			createScriptedDriver(),
+			createFakeTranscriptStore(),
+		)
+		const home = await launchHome({
+			overrides: {
+				chat: { state, controller: { ...controller, stateFor: () => state } },
+			},
+		})
+
+		await home.open()
+
+		expect(screen.getByText("Book the flights.")).toBeTruthy()
+		expect(homeSlot("home-layout")?.getAttribute("data-stage")).toBe(
+			"conversation",
+		)
+		expect(homeSlot("home-composer")).not.toBeNull()
+		expect(homeSlot("chat-layout")).toBeNull()
 	})
 
 	it("shows only the missions that completed or blocked after the Home opened", async () => {

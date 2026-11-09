@@ -13,7 +13,11 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest"
 
 import "@workspace/ui/lib/i18n"
 
-import { HomeLines } from "@/components/home-screen"
+import {
+	HomeConversationStage,
+	type HomeConversationStageProps,
+	HomeLines,
+} from "@/components/home-screen"
 import type { MissionInSpace, MissionState } from "@/lib/bindings"
 import { createConversationRuntimes } from "@/lib/conversations/conversation-runtimes"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
@@ -24,6 +28,7 @@ import { homeQueryKeys } from "@/lib/home/home-query-keys"
 import { createRoomLog, type RoomLog } from "@/lib/home/home-room-lines"
 import type { SpaceMissionsView } from "@/lib/missions/use-space-missions"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
+import { conversationHrefOf } from "@/lib/tabs/conversation-tab-opening"
 
 const feed = vi.hoisted(() => ({ entries: [] as MissionInSpace[] }))
 
@@ -104,13 +109,43 @@ const homeLinesOf = (fixture: HomeFixture, onOpenRoom = vi.fn()) =>
 		openedAt: 0,
 		roomLinesOf: (workingIds) => fixture.roomLog.linesOf("atlas", workingIds),
 		agent: fixture.atlas,
+		conversations: [fixture.room],
+		store: fixture.store,
+		spaceId: SPACE,
+		onOpenRoom,
+	})
+
+const LAST_TURN = "Book the Lisbon offsite"
+
+const conversationStageOf = (
+	fixture: HomeFixture,
+	stage: Partial<HomeConversationStageProps> = {},
+) =>
+	createElement(HomeConversationStage, {
+		readDraft: () => "Also the hotel",
+		onDraftChange: vi.fn(),
+		onSubmit: vi.fn(),
+		onAttach: vi.fn(),
+		attachments: [],
+		onRemoveAttachment: vi.fn(),
+		transcript: { rows: [{ key: "turn-1", render: () => LAST_TURN }] },
+		request: null,
+		overlay: null,
+		isReadOnly: false,
+		openedAt: 0,
+		roomLinesOf: (workingIds) => fixture.roomLog.linesOf("atlas", workingIds),
+		agent: fixture.atlas,
 		bots: [fixture.atlas],
 		conversations: [fixture.room],
 		store: fixture.store,
 		runtimes: fixture.runtimes,
 		spaceId: SPACE,
-		onOpenRoom,
+		onOpenRoom: vi.fn(),
+		onSelectAgent: vi.fn(),
+		...stage,
 	})
+
+const composerField = () => screen.queryByPlaceholderText("Message Atlas")
 
 let fixture: HomeFixture
 
@@ -128,7 +163,7 @@ const workingIn = (conversationIds: string[]) =>
 		.spyOn(fixture.store, "agentRooms")
 		.mockResolvedValue([{ botId: fixture.atlas.id, conversationIds }])
 
-it("names the room the agent works in, and opens it in its own tab", async () => {
+it("names the room the agent works in, links its route, and opens it in its own tab", async () => {
 	workingIn([fixture.room.id])
 	const onOpenRoom = vi.fn()
 
@@ -136,7 +171,11 @@ it("names the room the agent works in, and opens it in its own tab", async () =>
 		wrapper: createQueryTestWrapper().wrapper,
 	})
 
-	fireEvent.click(await screen.findByRole("link", { name: "Lisbon offsite" }))
+	const link = await screen.findByRole("link", { name: "Lisbon offsite" })
+	expect(link.getAttribute("href")).toBe(
+		conversationHrefOf({ conversationId: fixture.room.id }),
+	)
+	fireEvent.click(link)
 	expect(screen.getByText("Atlas is working in")).toBeTruthy()
 	expect(onOpenRoom).toHaveBeenCalledWith(fixture.room.id)
 })
@@ -156,8 +195,7 @@ it("turns the room line done when the agent leaves the room", async () => {
 	expect(screen.queryByText("Atlas is working in")).toBeNull()
 })
 
-it("surfaces an approval waiting in a room and resolves it there", async () => {
-	workingIn([fixture.room.id])
+const askApproval = async () => {
 	const room = fixture.runtimes.runtimeFor(fixture.room.id)
 	await room.open(fixture.room)
 	await room.send("@Atlas book the seats")
@@ -173,19 +211,9 @@ it("surfaces an approval waiting in a room and resolves it there", async () => {
 			},
 		},
 	])
+}
 
-	render(homeLinesOf(fixture), { wrapper: createQueryTestWrapper().wrapper })
-
-	fireEvent.click(await screen.findByRole("button", { name: /Allow once/ }))
-	await waitFor(() =>
-		expect(fixture.driver.decided).toEqual([
-			{ botId: fixture.atlas.id, id: "seats-1", decision: "allowOnce" },
-		]),
-	)
-})
-
-it("surfaces a question waiting in a room, under who asked it and where", async () => {
-	workingIn([fixture.room.id])
+const askQuestion = async () => {
 	const room = fixture.runtimes.runtimeFor(fixture.room.id)
 	await room.open(fixture.room)
 	await room.send("@Atlas pick the deposit date")
@@ -206,15 +234,95 @@ it("surfaces a question waiting in a room, under who asked it and where", async 
 			},
 		},
 	])
+}
 
-	render(homeLinesOf(fixture), { wrapper: createQueryTestWrapper().wrapper })
+it("draws the room and mission lines after the last turn of the conversation", async () => {
+	workingIn([fixture.room.id])
+	feed.entries = [missionIn(fixture.room, fixture.atlas.id, "done")]
+
+	render(conversationStageOf(fixture), {
+		wrapper: createQueryTestWrapper().wrapper,
+	})
+
+	const roomLine = await screen.findByText("Atlas is working in")
+	const lastTurn = screen.getByText(LAST_TURN)
+	for (const line of [roomLine, screen.getByText("Completed")]) {
+		expect(
+			lastTurn.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy()
+	}
+})
+
+it("puts an approval waiting in a room in place of the composer, then gives the draft back", async () => {
+	workingIn([fixture.room.id])
+	await askApproval()
+
+	render(conversationStageOf(fixture), {
+		wrapper: createQueryTestWrapper().wrapper,
+	})
+
+	const allowOnce = await screen.findByRole("button", { name: /Allow once/ })
+	expect(composerField()).toBeNull()
+	fireEvent.click(allowOnce)
+	await waitFor(() =>
+		expect(fixture.driver.decided).toEqual([
+			{ botId: fixture.atlas.id, id: "seats-1", decision: "allowOnce" },
+		]),
+	)
+	expect(
+		(
+			(await screen.findByPlaceholderText(
+				"Message Atlas",
+			)) as HTMLTextAreaElement
+		).value,
+	).toBe("Also the hotel")
+})
+
+it("puts a question waiting in a room in place of the composer, under who asked it and where", async () => {
+	workingIn([fixture.room.id])
+	await askQuestion()
+
+	render(conversationStageOf(fixture), {
+		wrapper: createQueryTestWrapper().wrapper,
+	})
 
 	expect(
 		await screen.findByText("When should the deposit go out?"),
 	).toBeTruthy()
+	expect(composerField()).toBeNull()
 	expect(screen.getAllByRole("link", { name: "Lisbon offsite" })).toHaveLength(
 		2,
 	)
+})
+
+it("no longer lists a question waiting in a room among the lines", async () => {
+	workingIn([fixture.room.id])
+	await askQuestion()
+
+	render(homeLinesOf(fixture), { wrapper: createQueryTestWrapper().wrapper })
+
+	await screen.findByText("Atlas is working in")
+	expect(screen.queryByText("When should the deposit go out?")).toBeNull()
+})
+
+it("shows the staged files, unstages a removed one, and sends files alone", async () => {
+	const onRemoveAttachment = vi.fn()
+	const onSubmit = vi.fn()
+
+	render(
+		conversationStageOf(fixture, {
+			readDraft: () => "",
+			attachments: [{ id: "notes", name: "release-notes.md", size: 4212 }],
+			onRemoveAttachment,
+			onSubmit,
+		}),
+		{ wrapper: createQueryTestWrapper().wrapper },
+	)
+
+	fireEvent.click(screen.getByRole("button", { name: "Send" }))
+	expect(onSubmit).toHaveBeenCalledWith("")
+	fireEvent.click(screen.getByRole("button", { name: /release-notes\.md/ }))
+	expect(onRemoveAttachment).toHaveBeenCalledWith("notes")
 })
 
 it("surfaces a mission of the agent once it completes, then once it blocks", async () => {

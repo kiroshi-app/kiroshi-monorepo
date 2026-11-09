@@ -66,7 +66,7 @@ const revealShowing =
 		return tab ? revealTab(space, tab.id, href) : space
 	}
 
-const hrefOf = ({
+export const conversationHrefOf = ({
 	conversationId,
 	mission,
 }: Omit<ConversationTarget, "openInPlace">) =>
@@ -137,7 +137,7 @@ export const createConversationTabOpening = ({
 
 	const open = async (target: ConversationTarget) => {
 		const { conversationId } = target
-		const href = hrefOf(target)
+		const href = conversationHrefOf(target)
 		const spaceId = tabs.findSpace(isShowingIn(conversationId))
 		if (spaceId !== null) {
 			revealHere(spaceId, conversationId, href)
@@ -157,7 +157,7 @@ export const createConversationTabOpening = ({
 	}
 
 	const openInNewTab = (conversationId: string, spaceId: string) => {
-		const href = hrefOf({ conversationId })
+		const href = conversationHrefOf({ conversationId })
 		tabs.changeSpace(spaceId, (space) => openTabOn(space, href))
 		showSpace(spaceId)
 	}
