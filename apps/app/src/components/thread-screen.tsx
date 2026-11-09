@@ -21,6 +21,7 @@ import { ConversationEmptyState } from "@workspace/ui/components/conversation-em
 import { DaySeparator } from "@workspace/ui/components/day-separator"
 import { HeaderConversationButton } from "@workspace/ui/components/header-conversation-button"
 import { HeaderIdentityButton } from "@workspace/ui/components/header-identity-button"
+import type { HomeTranscriptProps } from "@workspace/ui/components/home-transcript"
 import { InitialsAvatar } from "@workspace/ui/components/initials-avatar"
 import type { QuotedMessage } from "@workspace/ui/components/message-quote"
 import type { MissionBot } from "@workspace/ui/components/mission"
@@ -66,6 +67,7 @@ import {
 import { ApplicationInstallRow } from "@/components/application-install-row"
 import { FaceAvatar } from "@/components/face-avatar"
 import {
+	type HomeConversation,
 	HomeLoadingStage,
 	type HomeSend,
 	type ThreadHome,
@@ -75,6 +77,7 @@ import { type PromptHandle, ThreadComposer } from "@/components/thread-composer"
 import {
 	ThreadBoardDrawers,
 	ThreadDocumentsContext,
+	ThreadDocumentsInTabs,
 	ThreadOpenedItemPanel,
 	useThreadDocuments,
 } from "@/components/thread-documents"
@@ -1298,7 +1301,9 @@ const showsOwnChat = (thread: LoadedThread) =>
 	thread.kind !== "bot" ||
 	thread.state === thread.controller.stateFor(thread.bot.id)
 
-type HomeStage = "loading" | "empty"
+type HomeStage = "loading" | "empty" | "conversation"
+
+const HOME_TAIL_KEY = "home-thread-tail"
 
 type HomeStageFacts = {
 	home: ThreadHome | undefined
@@ -1327,8 +1332,50 @@ const homeStageOf = ({
 	) {
 		return "loading"
 	}
+	if (hasMessages) {
+		return "conversation"
+	}
 	return isTranscriptEmpty && !isHeldBack ? "empty" : null
 }
+
+type HomeConversationInput = {
+	send: HomeSend
+	transcript: HomeTranscriptProps
+	tail: ReactNode
+	botWork: WorkingState | null
+	signInStep: SignInStep | null
+	askedPrompt: ReactNode
+	approval: ReactNode
+	permission: ThreadPermission | null
+	overlay: ReactNode
+	notice: ReactNode
+	queue: ReactNode
+	isReadOnly: boolean
+}
+
+const homeRowsOf = ({
+	transcript,
+	tail,
+	botWork,
+	signInStep,
+}: HomeConversationInput) => {
+	const rows = transcript.rows ?? []
+	return botWork || signInStep
+		? [...rows, { key: HOME_TAIL_KEY, render: () => tail }]
+		: rows
+}
+
+const homeConversationOf = (
+	input: HomeConversationInput,
+): HomeConversation => ({
+	...input.send,
+	transcript: { ...input.transcript, rows: homeRowsOf(input) },
+	request: input.askedPrompt ?? (input.permission ? input.approval : null),
+	overlay: input.overlay,
+	notice: input.notice,
+	queue: input.queue,
+	isReadOnly: input.isReadOnly,
+})
 
 type HomeThreadStageProps = {
 	home: ThreadHome | undefined
@@ -1336,6 +1383,7 @@ type HomeThreadStageProps = {
 	header: ReactNode
 	layout: ReactNode
 	send: HomeSend
+	conversation: HomeConversation
 }
 
 const HomeThreadStage = ({
@@ -1344,9 +1392,20 @@ const HomeThreadStage = ({
 	header,
 	layout,
 	send,
+	conversation,
 }: HomeThreadStageProps) => {
 	if (!home || !stage) {
 		return layout
+	}
+	if (stage === "conversation") {
+		return (
+			<ThreadDocumentsInTabs>
+				<ScreenLayout
+					header={header}
+					scroller={() => home.conversationStage(conversation)}
+				/>
+			</ThreadDocumentsInTabs>
+		)
 	}
 	return (
 		<ScreenLayout header={header} width="full">
@@ -1976,9 +2035,83 @@ function ThreadView(props: ThreadViewProps) {
 		/>
 	)
 
+	const transcript = {
+		anchorOnSend: view.isSoloThread,
+		busy: view.facts.isBusy,
+		highlightedMessageId: view.highlightedMessageId,
+		label: view.missionSeat
+			? view.t("missions.feed.label")
+			: view.t("screen.label"),
+		marksNewMessages: !view.isSoloThread,
+		newer: newerControlOf({
+			hasNewer: view.hasNewer,
+			isLoading: view.facts.isLoadingNewer,
+			onLoad: view.loadNewer,
+			onLoadLatest: view.loadLatest,
+		}),
+		older: view.state.messages.length > 0 ? view.older : undefined,
+		onFollowChange: view.controller.follow,
+		rows: view.transcriptRows,
+		scrollerRef: view.scrollerRef,
+		transcriptKey: view.facts.id,
+	}
+
+	const askedPrompt = view.asked ? (
+		<QuestionPrompt
+			companionName={askerNameOf(view)}
+			key={view.asked.request.id}
+			request={view.asked.request}
+			responder={view.promptResponder}
+		/>
+	) : null
+
+	const approval = (
+		<ThreadApproval
+			authors={view.authors}
+			botFace={view.botFace}
+			permission={view.facts.permission}
+			responder={view.promptResponder}
+		/>
+	)
+
+	const overlay = (
+		<AnswerImageViewer
+			imageActions={imageActions}
+			onClose={imageViewer.close}
+			onStep={imageViewer.step}
+			viewed={imageViewer.viewed}
+		/>
+	)
+
+	const tail = (
+		<ThreadTail
+			botWork={view.facts.botWork}
+			bots={view.bots}
+			onStop={view.stop}
+			readerName={view.reader}
+			refusedQuotes={view.refusedTargets?.map(view.toQuote)}
+			signInStep={view.signInStep}
+			thread={thread}
+		/>
+	)
+
+	const notice =
+		joinedHost && access ? (
+			<SpaceAccessBanner
+				host={joinedHost.hostName}
+				reason={access.reason}
+				space={joinedHost.spaceName}
+				waitReason={access.waitReason}
+			/>
+		) : (
+			<ThreadNotices pins={view.pins} staged={view.staged} />
+		)
+
+	const queue = <ThreadQueue readerName={view.reader} thread={thread} />
+
 	const layout = (
 		<ThreadLayout
-			anchorOnSend={view.isSoloThread}
+			{...transcript}
 			aside={
 				documents?.opened ? (
 					<ThreadOpenedItemPanel
@@ -1988,85 +2121,34 @@ function ThreadView(props: ThreadViewProps) {
 					/>
 				) : undefined
 			}
-			busy={view.facts.isBusy}
 			composer={
-				departure ? undefined : view.asked ? (
-					<QuestionPrompt
-						companionName={askerNameOf(view)}
-						key={view.asked.request.id}
-						request={view.asked.request}
-						responder={view.promptResponder}
-					/>
-				) : (
-					<ThreadComposerSlot
-						bots={known}
-						canAttach={view.canAttach}
-						composerRef={view.composerRef}
-						isDisabled={view.isMissionClosed}
-						onPromptChange={view.rememberDraft}
-						onRemoveReply={view.releaseReply}
-						onSubmitPrompt={view.submitPrompt}
-						placeholder={view.composerPlaceholder}
-						promptRef={view.promptRef}
-						readDraft={view.readDraft}
-						replies={view.replyChips}
-						staged={view.staged}
-						thread={thread}
-					/>
-				)
+				departure
+					? undefined
+					: (askedPrompt ?? (
+							<ThreadComposerSlot
+								bots={known}
+								canAttach={view.canAttach}
+								composerRef={view.composerRef}
+								isDisabled={view.isMissionClosed}
+								onPromptChange={view.rememberDraft}
+								onRemoveReply={view.releaseReply}
+								onSubmitPrompt={view.submitPrompt}
+								placeholder={view.composerPlaceholder}
+								promptRef={view.promptRef}
+								readDraft={view.readDraft}
+								replies={view.replyChips}
+								staged={view.staged}
+								thread={thread}
+							/>
+						))
 			}
 			header={header}
-			highlightedMessageId={view.highlightedMessageId}
-			label={
-				view.missionSeat
-					? view.t("missions.feed.label")
-					: view.t("screen.label")
-			}
-			notice={
-				joinedHost && access ? (
-					<SpaceAccessBanner
-						host={joinedHost.hostName}
-						reason={access.reason}
-						space={joinedHost.spaceName}
-						waitReason={access.waitReason}
-					/>
-				) : (
-					<ThreadNotices pins={view.pins} staged={view.staged} />
-				)
-			}
-			marksNewMessages={!view.isSoloThread}
-			newer={newerControlOf({
-				hasNewer: view.hasNewer,
-				isLoading: view.facts.isLoadingNewer,
-				onLoad: view.loadNewer,
-				onLoadLatest: view.loadLatest,
-			})}
-			older={view.state.messages.length > 0 ? view.older : undefined}
-			onFollowChange={view.controller.follow}
-			overlay={
-				<AnswerImageViewer
-					imageActions={imageActions}
-					onClose={imageViewer.close}
-					onStep={imageViewer.step}
-					viewed={imageViewer.viewed}
-				/>
-			}
-			pending={
-				departure ? undefined : (
-					<ThreadApproval
-						authors={view.authors}
-						botFace={view.botFace}
-						permission={view.facts.permission}
-						responder={view.promptResponder}
-					/>
-				)
-			}
-			queue={<ThreadQueue readerName={view.reader} thread={thread} />}
+			notice={notice}
+			overlay={overlay}
+			pending={departure ? undefined : approval}
+			queue={queue}
 			rootRef={view.rootRef}
-			rows={view.transcriptRows}
-			scrollerRef={view.scrollerRef}
 			skeleton={transcriptSkeleton}
-			transcriptKey={view.facts.id}
 		>
 			{isTranscriptEmpty ? (
 				<ThreadEmptyState
@@ -2080,15 +2162,7 @@ function ThreadView(props: ThreadViewProps) {
 				/>
 			) : null}
 
-			<ThreadTail
-				botWork={view.facts.botWork}
-				bots={view.bots}
-				onStop={view.stop}
-				readerName={view.reader}
-				refusedQuotes={view.refusedTargets?.map(view.toQuote)}
-				signInStep={view.signInStep}
-				thread={thread}
-			/>
+			{tail}
 			{home?.lines}
 		</ThreadLayout>
 	)
@@ -2099,25 +2173,45 @@ function ThreadView(props: ThreadViewProps) {
 		}
 	}
 
+	const homeSend: HomeSend = {
+		readDraft: view.readDraft,
+		onDraftChange: view.rememberDraft,
+		onSubmit: (text) => void sendFromHome(text),
+		onAttach: view.staged.stage,
+		attachments: [...view.staged.items, ...view.staged.documents],
+		onRemoveAttachment: view.staged.remove,
+	}
+
+	const homeStage = homeStageOf({
+		home,
+		thread,
+		isFirstLoadPending: view.facts.isFirstLoadPending,
+		hasMessages: view.state.messages.length > 0,
+		isTranscriptEmpty,
+		isHeldBack: Boolean(departure || view.facts.latestError),
+	})
+
 	const screen = (
 		<HomeThreadStage
+			conversation={homeConversationOf({
+				send: homeSend,
+				transcript,
+				tail,
+				botWork: view.facts.botWork,
+				signInStep: view.signInStep,
+				askedPrompt,
+				approval,
+				permission: view.facts.permission,
+				overlay,
+				notice,
+				queue,
+				isReadOnly: Boolean(departure),
+			})}
 			header={header}
 			home={home}
 			layout={layout}
-			send={{
-				draft: view.readDraft(),
-				onDraftChange: view.rememberDraft,
-				onSubmit: (text) => void sendFromHome(text),
-				onAttach: view.staged.stage,
-			}}
-			stage={homeStageOf({
-				home,
-				thread,
-				isFirstLoadPending: view.facts.isFirstLoadPending,
-				hasMessages: view.state.messages.length > 0,
-				isTranscriptEmpty,
-				isHeldBack: Boolean(departure || view.facts.latestError),
-			})}
+			send={homeSend}
+			stage={homeStage}
 		/>
 	)
 

@@ -1,4 +1,4 @@
-import { type MouseEvent, type ReactNode, useContext } from "react"
+import { Fragment, type MouseEvent, type ReactNode, useContext } from "react"
 
 import { greetingPeriodOf } from "@workspace/ui/components/greeting-period"
 import type { HomeAgent } from "@workspace/ui/components/home-agent-picker"
@@ -20,21 +20,35 @@ import {
 	type HomeRoom,
 	HomeRoomLine,
 } from "@workspace/ui/components/home-lines"
+import {
+	HomeTranscript,
+	type HomeTranscriptProps,
+} from "@workspace/ui/components/home-transcript"
+import type { PromptAttachment } from "@workspace/ui/components/prompt-attachments"
+import type { TranscriptItem } from "@workspace/ui/components/transcript"
 
 import { ApprovalPrompt, QuestionPrompt } from "@/components/thread-prompt"
 import { ConversationApplicationsContext } from "@/lib/applications/use-conversation-installs"
 import { useMcpServers } from "@/lib/bots/use-mcp-servers"
 import { faceOfBot } from "@/lib/chat/thread-contract"
+import type {
+	ConversationController,
+	PendingPrompt,
+} from "@/lib/conversations/conversation-controller"
 import type { ConversationRuntimes } from "@/lib/conversations/conversation-runtimes"
 import { toConversationLook } from "@/lib/conversations/roster-conversations"
 import type { Bot, Conversation } from "@/lib/conversations/store-contract"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
-import { useConversation } from "@/lib/conversations/use-conversation"
+import {
+	useConversation,
+	useHeldRecord,
+} from "@/lib/conversations/use-conversation"
 import { homeMissionLinesOf } from "@/lib/home/home-mission-lines"
 import type { HomeRoomLineModel } from "@/lib/home/home-room-lines"
 import type { HomeArchive } from "@/lib/home/home-visits"
 import { useAgentRooms } from "@/lib/home/use-agent-rooms"
 import { useSpaceMissions } from "@/lib/missions/use-space-missions"
+import { conversationHrefOf } from "@/lib/tabs/conversation-tab-opening"
 
 type OpenRoom = (conversationId: string) => void
 
@@ -56,7 +70,7 @@ const firstNameOf = (readerName: string) =>
 
 const roomOf = (conversationId: string, title: string): HomeRoom => ({
 	title,
-	href: `#${conversationId}`,
+	href: conversationHrefOf({ conversationId }),
 })
 
 const homeRoomOf = (conversation: Conversation): HomeRoom => {
@@ -71,25 +85,24 @@ const roomOpenerOf =
 		onOpenRoom(conversationId)
 	}
 
-type HomeRoomRequestProps = {
+type RoomRequest = {
 	room: Conversation
+	prompt: PendingPrompt
+	responder: ConversationController
+}
+
+type HomeRoomRequestProps = RoomRequest & {
 	bots: Bot[]
-	runtimes: ConversationRuntimes
 	onOpenRoom: OpenRoom
 }
 
 const HomeRoomRequest = ({
 	room,
+	prompt,
+	responder,
 	bots,
-	runtimes,
 	onOpenRoom,
 }: HomeRoomRequestProps) => {
-	const { state, controller } = useConversation(runtimes, room)
-	const prompt = state.pendingPrompt
-	if (!prompt) {
-		return null
-	}
-
 	const asker = bots.find(({ id }) => id === prompt.botId)
 	const askedBy = asker ? (
 		<HomeAskedByLine
@@ -105,7 +118,7 @@ const HomeRoomRequest = ({
 				askedBy={askedBy}
 				companionName={asker?.name}
 				request={prompt.request}
-				responder={controller}
+				responder={responder}
 			/>
 		)
 	}
@@ -115,35 +128,117 @@ const HomeRoomRequest = ({
 			<ApprovalPrompt
 				agentName={asker?.name}
 				request={prompt.request}
-				responder={controller}
+				responder={responder}
 			/>
 		</HomeRequest>
 	)
 }
 
-export type HomeLinesProps = {
+type HomeRoomOpeningProps = {
+	room: Conversation
+	runtimes: ConversationRuntimes
+}
+
+const HomeRoomOpening = ({ room, runtimes }: HomeRoomOpeningProps) => {
+	useConversation(runtimes, room)
+	return null
+}
+
+const pendingPromptIn = (
+	runtimes: ConversationRuntimes,
+	conversationId: string,
+) => runtimes.heldFor(conversationId)?.getState().pendingPrompt ?? null
+
+const promptSignOf = (prompt: PendingPrompt | null) => prompt?.request.id ?? ""
+
+const useRoomRequest = (
+	runtimes: ConversationRuntimes,
+	rooms: Conversation[],
+): RoomRequest | null => {
+	const prompts = useHeldRecord(
+		runtimes,
+		rooms.map(({ id }) => id),
+		(conversationId) => pendingPromptIn(runtimes, conversationId),
+		promptSignOf,
+	)
+	const room = rooms.find(({ id }) => prompts[id])
+	const prompt = room ? prompts[room.id] : null
+	const responder = room ? runtimes.heldFor(room.id) : null
+	return room && prompt && responder ? { room, prompt, responder } : null
+}
+
+const roomsAmong = (conversationIds: string[], conversations: Conversation[]) =>
+	conversations.filter(({ id }) => conversationIds.includes(id))
+
+type HomeRoomsProps = {
 	agent: Bot
-	bots: Bot[]
 	conversations: Conversation[]
 	store: Pick<TranscriptStore, "agentRooms">
-	runtimes: ConversationRuntimes
 	spaceId: string | null
-	openedAt: number | null
-	roomLinesOf: (workingIds: string[]) => HomeRoomLineModel[]
 	onOpenRoom: OpenRoom
 }
 
-export const HomeLines = ({
+type HomeRequestsProps = HomeRoomsProps & {
+	bots: Bot[]
+	runtimes: ConversationRuntimes
+}
+
+type HomeComposerSlotProps = HomeRequestsProps & {
+	request: ReactNode
+	composer: ReactNode
+}
+
+const HomeComposerSlot = ({
 	agent,
 	bots,
 	conversations,
 	store,
 	runtimes,
 	spaceId,
+	onOpenRoom,
+	request,
+	composer,
+}: HomeComposerSlotProps) => {
+	const rooms = roomsAmong(
+		useAgentRooms(store, spaceId, agent.id),
+		conversations,
+	)
+	const roomRequest = useRoomRequest(runtimes, rooms)
+	const shownRequest =
+		request ??
+		(roomRequest ? (
+			<HomeRoomRequest
+				{...roomRequest}
+				bots={bots}
+				key={roomRequest.prompt.request.id}
+				onOpenRoom={onOpenRoom}
+			/>
+		) : null)
+
+	return (
+		<>
+			{rooms.map((room) => (
+				<HomeRoomOpening key={room.id} room={room} runtimes={runtimes} />
+			))}
+			{shownRequest ?? composer}
+		</>
+	)
+}
+
+export type HomeLinesProps = HomeRoomsProps & {
+	openedAt: number | null
+	roomLinesOf: (workingIds: string[]) => HomeRoomLineModel[]
+}
+
+const useHomeLines = ({
+	agent,
+	conversations,
+	store,
+	spaceId,
 	openedAt,
 	roomLinesOf,
 	onOpenRoom,
-}: HomeLinesProps) => {
+}: HomeLinesProps): TranscriptItem[] => {
 	const roomLines = roomLinesOf(useAgentRooms(store, spaceId, agent.id))
 	const missions = useSpaceMissions(spaceId)
 	const missionLines =
@@ -162,88 +257,132 @@ export const HomeLines = ({
 		conversations.find(({ id }) => id === conversationId)
 	const homeAgent = homeAgentOf(agent)
 
-	return (
-		<>
-			{roomLines.map((line) => {
-				const room = roomWith(line.conversationId)
-				if (!room) {
-					return null
-				}
-				const opens = roomOpenerOf(onOpenRoom, room.id)
-				return line.state === "working" ? (
-					<HomeRoomLine
-						agent={homeAgent}
-						key={`${room.id}-working`}
-						onOpenRoom={opens}
-						room={homeRoomOf(room)}
-						state="working"
-					/>
-				) : (
-					<HomeRoomLine
-						agent={homeAgent}
-						at={line.at}
-						key={`${room.id}-${line.at}`}
-						onOpenRoom={opens}
-						room={homeRoomOf(room)}
-						state="done"
-					/>
-				)
-			})}
-			{roomLines.map(({ conversationId, state }) => {
-				const room = roomWith(conversationId)
-				return room && state === "working" ? (
-					<HomeRoomRequest
-						bots={bots}
-						key={`${conversationId}-request`}
-						onOpenRoom={onOpenRoom}
-						room={room}
-						runtimes={runtimes}
-					/>
-				) : null
-			})}
-			{missionLines.map((line) => {
-				const room = roomWith(line.roomId)
-				return (
-					<HomeMissionLine
-						at={line.at}
-						key={line.missionId}
-						onOpenRoom={roomOpenerOf(onOpenRoom, line.roomId)}
-						room={room ? homeRoomOf(room) : roomOf(line.roomId, line.roomTitle)}
-						state={line.state}
-						title={line.title}
-					/>
-				)
-			})}
-		</>
-	)
+	const roomItems = roomLines.flatMap((line): TranscriptItem[] => {
+		const room = roomWith(line.conversationId)
+		if (!room) {
+			return []
+		}
+		const opens = roomOpenerOf(onOpenRoom, room.id)
+		const isWorking = line.state === "working"
+		return [
+			{
+				key: `home-room-${room.id}-${isWorking ? "working" : line.at}`,
+				render: () =>
+					isWorking ? (
+						<HomeRoomLine
+							agent={homeAgent}
+							onOpenRoom={opens}
+							room={homeRoomOf(room)}
+							state="working"
+						/>
+					) : (
+						<HomeRoomLine
+							agent={homeAgent}
+							at={line.at}
+							onOpenRoom={opens}
+							room={homeRoomOf(room)}
+							state="done"
+						/>
+					),
+			},
+		]
+	})
+	const missionItems = missionLines.map((line): TranscriptItem => {
+		const room = roomWith(line.roomId)
+		return {
+			key: `home-mission-${line.missionId}`,
+			render: () => (
+				<HomeMissionLine
+					at={line.at}
+					onOpenRoom={roomOpenerOf(onOpenRoom, line.roomId)}
+					room={room ? homeRoomOf(room) : roomOf(line.roomId, line.roomTitle)}
+					state={line.state}
+					title={line.title}
+				/>
+			),
+		}
+	})
+
+	return [...roomItems, ...missionItems]
 }
 
+export const HomeLines = (props: HomeLinesProps) => (
+	<>
+		{useHomeLines(props).map(({ key, render }) => (
+			<Fragment key={key}>{render()}</Fragment>
+		))}
+	</>
+)
+
 export type HomeSend = {
-	draft: string
+	readDraft: () => string
 	onDraftChange: (draft: string) => void
 	onSubmit: (text: string) => void
 	onAttach: (files: File[]) => void
+	attachments: PromptAttachment[]
+	onRemoveAttachment: (id: string) => void
+}
+
+export type HomeConversation = HomeSend & {
+	transcript: HomeTranscriptProps
+	request: ReactNode
+	overlay: ReactNode
+	notice: ReactNode
+	queue: ReactNode
+	isReadOnly: boolean
 }
 
 export type ThreadHome = {
 	isSettling: boolean
 	lines: ReactNode
 	emptyStage: (send: HomeSend) => ReactNode
+	conversationStage: (conversation: HomeConversation) => ReactNode
 }
 
-export type HomeEmptyStageProps = HomeSend & {
+type HomeDraftComposerProps = HomeSend & {
 	agent: Bot
-	agents: Bot[]
-	store: TranscriptStore
-	spaceId: string | null
-	readerName: string
-	archive: HomeArchive | null
-	isBandDismissed: boolean
-	lines: ReactNode
-	onOpenArchive: (conversationId: string) => void
+	bots: Bot[]
+	band?: ReactNode
 	onSelectAgent: (botId: string) => void
-	onDismissBand: () => void
 }
+
+const HomeDraftComposer = ({
+	agent,
+	bots,
+	band,
+	onSelectAgent,
+	readDraft,
+	onDraftChange,
+	onSubmit,
+	onAttach,
+	attachments,
+	onRemoveAttachment,
+}: HomeDraftComposerProps) => (
+	<HomeComposer
+		agents={bots.map(homeAgentOf)}
+		attachments={attachments}
+		band={band}
+		defaultValue={readDraft()}
+		onAttach={onAttach}
+		onRemoveAttachment={onRemoveAttachment}
+		onSelectAgent={onSelectAgent}
+		onSubmit={onSubmit}
+		onValueChange={onDraftChange}
+		selectedAgentId={agent.id}
+	/>
+)
+
+export type HomeEmptyStageProps = HomeSend &
+	HomeRequestsProps & {
+		store: TranscriptStore
+		readerName: string
+		archive: HomeArchive | null
+		isBandDismissed: boolean
+		lines: ReactNode
+		onOpenArchive: (conversationId: string) => void
+		onSelectAgent: (botId: string) => void
+		onDismissBand: () => void
+	}
 
 type ApplicationsBandInput = {
 	store: TranscriptStore
@@ -289,20 +428,20 @@ export const HomeLoadingStage = () => (
 
 export const HomeEmptyStage = ({
 	agent,
-	agents,
+	bots,
+	conversations,
 	store,
+	runtimes,
 	spaceId,
 	readerName,
 	archive,
 	isBandDismissed,
 	lines,
+	onOpenRoom,
 	onOpenArchive,
 	onSelectAgent,
 	onDismissBand,
-	draft,
-	onDraftChange,
-	onSubmit,
-	onAttach,
+	...send
 }: HomeEmptyStageProps) => {
 	const band = useApplicationsBand({
 		store,
@@ -319,15 +458,24 @@ export const HomeEmptyStage = ({
 				firstName={firstNameOf(readerName)}
 				period={periodAt(Date.now())}
 			/>
-			<HomeComposer
-				agents={agents.map(homeAgentOf)}
-				band={band}
-				defaultValue={draft}
-				onAttach={onAttach}
-				onSelectAgent={onSelectAgent}
-				onSubmit={onSubmit}
-				onValueChange={onDraftChange}
-				selectedAgentId={agent.id}
+			<HomeComposerSlot
+				agent={agent}
+				bots={bots}
+				composer={
+					<HomeDraftComposer
+						{...send}
+						agent={agent}
+						band={band}
+						bots={bots}
+						onSelectAgent={onSelectAgent}
+					/>
+				}
+				conversations={conversations}
+				onOpenRoom={onOpenRoom}
+				request={null}
+				runtimes={runtimes}
+				spaceId={spaceId}
+				store={store}
 			/>
 			{archive ? (
 				<HomeArchivedLine
@@ -338,5 +486,86 @@ export const HomeEmptyStage = ({
 			) : null}
 			{lines}
 		</HomeLayout>
+	)
+}
+
+export type HomeConversationStageProps = HomeConversation &
+	HomeLinesProps &
+	HomeRequestsProps & {
+		onSelectAgent: (botId: string) => void
+	}
+
+const NO_ROWS: TranscriptItem[] = []
+
+export const HomeConversationStage = ({
+	transcript,
+	request,
+	overlay,
+	notice,
+	queue,
+	isReadOnly,
+	agent,
+	bots,
+	conversations,
+	store,
+	runtimes,
+	spaceId,
+	openedAt,
+	roomLinesOf,
+	onOpenRoom,
+	onSelectAgent,
+	...send
+}: HomeConversationStageProps) => {
+	const lines = useHomeLines({
+		agent,
+		conversations,
+		store,
+		spaceId,
+		openedAt,
+		roomLinesOf,
+		onOpenRoom,
+	})
+
+	return (
+		<HomeLayout
+			composer={
+				<>
+					{notice}
+					{isReadOnly ? null : (
+						<>
+							{queue}
+							<HomeComposerSlot
+								agent={agent}
+								bots={bots}
+								composer={
+									<HomeDraftComposer
+										{...send}
+										agent={agent}
+										bots={bots}
+										onSelectAgent={onSelectAgent}
+									/>
+								}
+								conversations={conversations}
+								onOpenRoom={onOpenRoom}
+								request={request}
+								runtimes={runtimes}
+								spaceId={spaceId}
+								store={store}
+							/>
+						</>
+					)}
+				</>
+			}
+			stage="conversation"
+			transcript={
+				<>
+					<HomeTranscript
+						{...transcript}
+						rows={[...(transcript.rows ?? NO_ROWS), ...lines]}
+					/>
+					{overlay}
+				</>
+			}
+		/>
 	)
 }

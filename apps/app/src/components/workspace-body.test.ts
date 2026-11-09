@@ -36,7 +36,7 @@ import {
 import { createAttachmentsController } from "@/lib/chat/attachments-controller"
 import { createAttachmentsPort } from "@/lib/chat/attachments-port"
 import { createChatController } from "@/lib/chat/chat-controller"
-import { initialChatState } from "@/lib/chat/chat-state"
+import { type ChatState, initialChatState } from "@/lib/chat/chat-state"
 import { createDraftsController } from "@/lib/chat/drafts-controller"
 import {
 	type ConversationRuntimes,
@@ -49,7 +49,7 @@ import {
 } from "@/lib/conversations/scripted-driver"
 import type { Bot, Conversation } from "@/lib/conversations/store-contract"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
-import { seatBots } from "@/lib/conversations/transcript-fixtures"
+import { message, seatBots } from "@/lib/conversations/transcript-fixtures"
 import { homeQueryKeys } from "@/lib/home/home-query-keys"
 import { createHomeVisits } from "@/lib/home/home-visits"
 import type { Invoke } from "@/lib/host/joined-hosts-invoke"
@@ -79,6 +79,10 @@ import {
 	isJoinedRowId,
 	joinedRowIdOf,
 } from "@/lib/spaces/joined-spaces-controller"
+import {
+	type OpenJoinedHost,
+	OpenJoinedHostContext,
+} from "@/lib/spaces/open-joined-host"
 
 let queries = createQueryTestWrapper()
 
@@ -807,27 +811,33 @@ describe("WorkspaceBody Home", () => {
 		store?: TranscriptStore
 		seated?: Workspace
 		overrides?: Partial<WorkspaceBodyHarnessProps>
+		joinedHost?: OpenJoinedHost
 	}
 
 	const launchHome = async ({
 		store = createFakeTranscriptStore(),
 		seated,
 		overrides = {},
+		joinedHost,
 	}: HomeLaunch = {}) => {
 		const workspace = seated ?? (await workspaceOf(store))
 		const homeVisits = createHomeVisits(store)
 		const onOpenThreadInNewTab = vi.fn()
 		const bodyOf = (more: Partial<WorkspaceBodyHarnessProps> = {}) =>
-			workspace.body({
-				overrides: {
-					bot: workspace.bot,
-					conversation: undefined,
-					homeVisits,
-					onOpenThreadInNewTab,
-					...overrides,
-					...more,
-				},
-			})
+			createElement(
+				OpenJoinedHostContext.Provider,
+				{ value: joinedHost ?? null },
+				workspace.body({
+					overrides: {
+						bot: workspace.bot,
+						conversation: undefined,
+						homeVisits,
+						onOpenThreadInNewTab,
+						...overrides,
+						...more,
+					},
+				}),
+			)
 		const view = render(bodyOf())
 		const open = () => act(() => homeVisits.open(workspace.bot.id, SPACE))
 		const mainChatId = async () =>
@@ -957,6 +967,78 @@ describe("WorkspaceBody Home", () => {
 		expect(homeSlot("home-greeting-skeleton")).not.toBeNull()
 		expect(homeSlot("home-composer-skeleton")).not.toBeNull()
 		expect(screen.queryByRole("heading", { name: /What’s next/ })).toBeNull()
+	})
+
+	const homeChatOf = (state: ChatState) => {
+		const controller = createChatController(
+			createScriptedDriver(),
+			createFakeTranscriptStore(),
+		)
+		return { state, controller: { ...controller, stateFor: () => state } }
+	}
+
+	const saidOnce = {
+		...initialChatState,
+		messages: [message({ content: "Book the flights." })],
+	}
+
+	it("draws the Home conversation, never the thread, once the main conversation holds a message", async () => {
+		const home = await launchHome({
+			overrides: { chat: homeChatOf(saidOnce) },
+		})
+
+		await home.open()
+
+		expect(screen.getByText("Book the flights.")).toBeTruthy()
+		expect(homeSlot("home-layout")?.getAttribute("data-stage")).toBe(
+			"conversation",
+		)
+		expect(homeSlot("home-composer")).not.toBeNull()
+		expect(homeSlot("chat-layout")).toBeNull()
+	})
+
+	it("shows a queued prompt above the Home composer", async () => {
+		const home = await launchHome({
+			overrides: {
+				chat: homeChatOf({
+					...saidOnce,
+					outbox: [
+						{
+							id: "queued-1",
+							text: "And the hotel too.",
+							replyLinks: [],
+							documents: [],
+						},
+					],
+				}),
+			},
+		})
+
+		await home.open()
+
+		expect(screen.getByText("And the hotel too.")).toBeTruthy()
+		expect(homeSlot("home-composer")).not.toBeNull()
+	})
+
+	it("shows the access banner in place of the Home composer once the Space is left", async () => {
+		const home = await launchHome({
+			overrides: { chat: homeChatOf(saidOnce) },
+			joinedHost: {
+				spaceName: "Studio Nord",
+				hostName: "Lea",
+				isOnline: false,
+				isDown: false,
+				departure: "removed",
+			},
+		})
+
+		await home.open()
+
+		expect(screen.getByText("Book the flights.")).toBeTruthy()
+		expect(homeSlot("space-access-banner")?.getAttribute("data-reason")).toBe(
+			"removed",
+		)
+		expect(homeSlot("home-composer")).toBeNull()
 	})
 
 	it("shows only the missions that completed or blocked after the Home opened", async () => {

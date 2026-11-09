@@ -34,18 +34,24 @@ const tabShowing = (tabs: WorkspaceTabs, href: string) =>
 		sameUrl(currentHrefOf(tab), href),
 	)
 
+type Router = ReturnType<typeof useRouter>
+
+const openLibraryItemInItsTab = (router: Router, opening: LibraryOpening) => {
+	const { tabs } = router.options.context
+	const href = router.buildLocation({
+		to: "/library",
+		search: librarySearchOf(opening),
+	}).href
+	if (!tabShowing(tabs, href)) {
+		tabs.openInNewTab(href)
+	}
+	const shown = tabShowing(tabs, href)
+	if (shown) {
+		tabs.select(shown.id)
+	}
+}
+
 export const useOpenLibraryItemInItsTab = () => {
 	const router = useRouter()
-	const hrefOf = useLibraryHrefOf()
-	return (opening: LibraryOpening) => {
-		const { tabs } = router.options.context
-		const href = hrefOf(opening)
-		if (!tabShowing(tabs, href)) {
-			tabs.openInNewTab(href)
-		}
-		const shown = tabShowing(tabs, href)
-		if (shown) {
-			tabs.select(shown.id)
-		}
-	}
+	return (opening: LibraryOpening) => openLibraryItemInItsTab(router, opening)
 }
