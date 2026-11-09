@@ -15,10 +15,10 @@ use kiroshi_rune_kit::strings::{Key, Language, chat, settings};
 use kiroshi_rune_kit::surfaces::s02_rail::{
 	PickerMessage, RailMessage, RailPanel, Space as Row, SpaceHost, SpaceInvitation,
 };
-use kiroshi_rune_kit::surfaces::s04_boot::notice::SurfaceEvent;
 use rune::Waker;
 use serde_json::Value;
 
+use crate::app::notice::Notice;
 use crate::app::{App, Pane, SpaceContent, Workspace};
 use crate::host::HostError;
 use crate::model;
@@ -60,12 +60,6 @@ pub enum Heard {
 	Hosting,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-struct Notice {
-	title: String,
-	description: Option<String>,
-}
-
 struct Opened {
 	space: model::Space,
 	content: SpaceContent,
@@ -79,7 +73,7 @@ pub struct State {
 	invitations: Invitations,
 	opening: Option<String>,
 	is_picker_open: bool,
-	notices: Vec<Notice>,
+	to_raise: Vec<Notice>,
 	queued: Vec<Call>,
 	source: Option<Source>,
 	waker: Option<Waker>,
@@ -116,10 +110,6 @@ fn said(key: Key) -> String {
 
 fn named(line: &str, name: &str) -> String {
 	line.replace("{name}", name)
-}
-
-fn failure_text(failure: &HostError) -> String {
-	format!("{}: {}", failure.title(), failure.detail())
 }
 
 fn is_online(hosting: &Value) -> bool {
@@ -213,7 +203,7 @@ impl State {
 		}
 		if let Some(joined) = self.joined.iter().find(|joined| joined.id == id) {
 			let title = named(JOINED_UNOPENABLE, &joined.name);
-			self.notices.push(Notice { title, description: None });
+			self.to_raise.push(Notice::error(title));
 			return;
 		}
 		if self.space(id).is_none() {
@@ -277,12 +267,6 @@ impl State {
 		}
 	}
 
-	pub fn dismiss(&mut self, index: usize) {
-		if index < self.notices.len() {
-			self.notices.remove(index);
-		}
-	}
-
 	fn listed(&self) -> &[Space] {
 		self.spaces.as_deref().unwrap_or_default()
 	}
@@ -308,7 +292,7 @@ impl State {
 	}
 
 	fn raise(&mut self, title: String, failure: &HostError) {
-		self.notices.push(Notice { title, description: Some(failure_text(failure)) });
+		self.to_raise.push(Notice::of_host_failure(&title, failure));
 	}
 
 	fn raise_and_relist(&mut self, title: String, failure: &HostError) {
@@ -459,12 +443,18 @@ pub fn poll(app: &mut App) -> bool {
 	is_changed
 }
 
+fn raise_queued(app: &mut App) {
+	let to_raise = std::mem::take(&mut app.surfaces.s02_rail.to_raise);
+	app.raise_all(to_raise);
+}
+
 fn landed(app: &mut App, answer: Answer) {
 	let Some(shown) = shown_id(app) else { return };
 	if let Some(opened) = app.surfaces.s02_rail.answered(answer, &shown) {
 		show(app, opened);
 	}
 	follow_listing(app);
+	raise_queued(app);
 }
 
 fn follow_listing(app: &mut App) {
@@ -493,11 +483,13 @@ fn show(app: &mut App, opened: Opened) {
 pub fn select_space(app: &mut App, id: &str) {
 	let Some(shown) = shown_id(app) else { return };
 	app.surfaces.s02_rail.select(id, &shown);
+	raise_queued(app);
 }
 
 pub fn swipe_space(app: &mut App, swipe: Swipe) {
 	let Some(shown) = shown_id(app) else { return };
 	app.surfaces.s02_rail.swipe(swipe, &shown);
+	raise_queued(app);
 }
 
 fn picked(app: &mut App, message: PickerMessage) {
@@ -513,7 +505,7 @@ fn picked(app: &mut App, message: PickerMessage) {
 	}
 }
 
-fn railed(app: &mut App, message: RailMessage) {
+pub fn railed(app: &mut App, message: RailMessage) {
 	match message {
 		RailMessage::SpacesMenu(message) => picked(app, message),
 		RailMessage::OpenSpaceSettings => app.navigation.navigate_main(Route::SpaceSettings),
@@ -524,14 +516,6 @@ fn railed(app: &mut App, message: RailMessage) {
 			app.navigation.navigate_main(Route::Library)
 		}
 		RailMessage::OpenSearch => {}
-	}
-}
-
-fn noticed(app: &mut App, event: SurfaceEvent) {
-	match event {
-		SurfaceEvent::Close(index) | SurfaceEvent::Act(index) | SurfaceEvent::CopyReport(index) => {
-			app.surfaces.s02_rail.dismiss(index)
-		}
 	}
 }
 

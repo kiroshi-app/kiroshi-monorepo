@@ -3,18 +3,20 @@ use std::rc::Rc;
 use kiroshi_core::missions::contract::{Mission, MissionInSpace, MissionState};
 use kiroshi_rune_kit::strings::chat;
 use kiroshi_rune_kit::surfaces::s04_boot::notice::{
-	InlineNotice, NoticeRetry, RaisedNotice, Tone, inline_notice, notice_surface,
+	InlineNotice, NoticeRetry, Tone, inline_notice,
 };
 use kiroshi_rune_kit::surfaces::s08_missions::{
-	self as kit, Bot, Emit, Header, ListEnd, PanelMission, PullRequest, Status, Ticket, ToolCall,
-	mission_header, mission_header_skeleton, missions_feed_skeleton, missions_panel, panel_frame,
+	self as kit, Bot, Emit, Header, ListEnd, OpenMenu, PanelMission, PullRequest, Status, Ticket,
+	ToolCall, mission_header, mission_header_skeleton, mission_menu, missions_feed_skeleton,
+	missions_panel, panel_frame,
 };
 use kiroshi_rune_kit::tokens::Tokens;
 use rune::{El, col};
 
 use super::feed::{grouped, is_working, shown_state};
+use super::menu::menu_facts;
 use super::{
-	Detail, Feed, LANGUAGE, Opened, Panel, detail_noticed, emitted, failure_text, noticed,
+	Detail, Feed, LANGUAGE, Opened, Panel, detail_noticed, emitted, failure_text, known,
 	panel_noticed, said,
 };
 use crate::app::App;
@@ -228,18 +230,18 @@ pub fn header(app: &App, t: &Tokens, opened: &Opened) -> El {
 	}
 }
 
+pub fn shown_menu(app: &App) -> Option<OpenMenu<'_>> {
+	let held = app.surfaces.s08_missions.menu.as_ref()?;
+	let mission = known(app, &held.mission_id)?;
+	Some(OpenMenu {
+		mission: &held.mission_id,
+		source: held.source,
+		at: held.at,
+		facts: menu_facts(mission),
+		is_copy_shown: held.is_copy_shown,
+	})
+}
+
 pub fn layers(app: &App, t: &Tokens) -> Vec<El> {
-	let raised: Vec<RaisedNotice> = app
-		.surfaces
-		.s08_missions
-		.notices
-		.iter()
-		.map(|notice| {
-			RaisedNotice::transient(notice.kind, &notice.title, notice.description.as_deref())
-		})
-		.collect();
-	if raised.is_empty() {
-		return Vec::new();
-	}
-	vec![notice_surface(t, LANGUAGE, &raised, noticed)]
+	shown_menu(app).map(|menu| mission_menu(t, LANGUAGE, &menu, &emit())).unwrap_or_default()
 }

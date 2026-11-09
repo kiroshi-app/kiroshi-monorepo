@@ -328,7 +328,7 @@ impl State {
 			height: f64::from(WINDOW_SIZE.1),
 		};
 		desk.windows.open(&opening)?;
-		let id = desk.navigation.open(Route::Chrome);
+		let id = desk.navigation.open(Route::Conversations);
 		self.windows.push(Window { id, label, tabs });
 		Ok(id)
 	}

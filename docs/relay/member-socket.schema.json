@@ -323,6 +323,31 @@
         },
         {
           "properties": {
+            "permissionIds": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "questionIds": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": {
+              "const": "promptsClosed"
+            }
+          },
+          "required": [
+            "type",
+            "permissionIds",
+            "questionIds"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
             "ended": {
               "$ref": "#/$defs/TurnEnded_Serialize"
             },
@@ -5402,6 +5427,16 @@
         "stateSeq": {
           "type": "integer"
         },
+        "status": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MissionStatus"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "workingBotIds": {
           "items": {
             "type": "string"
@@ -10082,6 +10117,28 @@
       "ok": {
         "items": {
           "$ref": "#/$defs/OfferedModel_Serialize"
+        },
+        "type": "array"
+      }
+    },
+    "agent_pending_prompts": {
+      "args": {
+        "properties": {
+          "conversationId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "conversationId"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/TransportError"
+      },
+      "ok": {
+        "items": {
+          "$ref": "#/$defs/ScopedEvent_Serialize"
         },
         "type": "array"
       }

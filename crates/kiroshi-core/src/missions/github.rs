@@ -2067,6 +2067,7 @@ mod tests {
 				"state": state,
 				"stateSeq": seq,
 				"isAgentRunning": false,
+				"status": null,
 				"liveness": "idle",
 				"lastActivityAt": null,
 				"pendingPrompt": null,

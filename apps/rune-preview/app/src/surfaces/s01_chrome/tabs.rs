@@ -74,6 +74,10 @@ impl Tabs {
 		self.tabs.iter().find(|tab| tab.id == id)
 	}
 
+	pub fn closed_ids(&self) -> impl Iterator<Item = &str> {
+		self.closed.iter().map(|closed| closed.tab.id.as_str())
+	}
+
 	pub fn has_closed_tab(&self) -> bool {
 		!self.closed.is_empty()
 	}

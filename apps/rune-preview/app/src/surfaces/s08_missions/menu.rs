@@ -1,20 +1,17 @@
 use kiroshi_core::missions::contract::Mission;
 use kiroshi_rune_kit::strings::{Key, chat};
-use kiroshi_rune_kit::surfaces::s08_missions::{CopyKind, MenuFacts};
+use kiroshi_rune_kit::surfaces::s08_missions::{CopyKind, MenuFacts, MenuSource};
+use rune::PointerPress;
 
 use super::feed::shown_state;
 use super::view::kit_state;
 use super::worker::Command;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum MenuAction {
-	Open,
-	OpenPullRequest,
-	Copy(CopyKind),
-	MessageAgent,
-	Answer,
-	Close,
-	Reopen,
+pub struct HeldMenu {
+	pub mission_id: String,
+	pub source: MenuSource,
+	pub at: PointerPress,
+	pub is_copy_shown: bool,
 }
 
 pub fn menu_facts(mission: &Mission) -> MenuFacts {

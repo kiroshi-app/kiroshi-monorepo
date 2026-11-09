@@ -6,12 +6,11 @@ use kiroshi_rune_kit::strings::bots;
 use kiroshi_rune_kit::surfaces::s03_roster::{
 	Entry, Media, NameField, Roster, Row, RowBadge, Section, loading, roster, unreadable,
 };
-use kiroshi_rune_kit::surfaces::s04_boot::notice::{RaisedNotice, notice_surface};
 use kiroshi_rune_kit::tokens::Tokens;
 use rune::{El, ScrollSpec, Tx, col};
 
 use super::listing::{Line, Listing, Placed};
-use super::{LANGUAGE, Load, emitted, hue_value, name_edit, noticed, selected_row};
+use super::{LANGUAGE, Load, emitted, hue_value, name_edit, selected_row};
 use crate::app::App;
 use crate::conversations::{now_ms, roster_timestamp};
 
@@ -185,18 +184,4 @@ pub fn view(app: &App, t: &Tokens) -> El {
 		.child(col().key(CONTENT).w_full().child(content(app, t)).on_layout_tx(
 			|app: &mut App, rect, tx| kept_live(tx, app.surfaces.s03_roster.scrolled_content(rect)),
 		))
-}
-
-pub fn layers(app: &App, t: &Tokens) -> Vec<El> {
-	let notices: Vec<RaisedNotice> = app
-		.surfaces
-		.s03_roster
-		.notices
-		.iter()
-		.map(|notice| RaisedNotice::failure(&notice.title, notice.description.as_deref()))
-		.collect();
-	if notices.is_empty() {
-		return Vec::new();
-	}
-	vec![notice_surface(t, LANGUAGE, &notices, noticed)]
 }

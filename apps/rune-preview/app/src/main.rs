@@ -10,13 +10,13 @@ use kiroshi_rune_os::instance::{self, Claim, ClaimError, Endpoint, Forward, Inst
 use kiroshi_rune_os::launch::{self, Launch};
 use kiroshi_rune_os::link::{self, Link};
 use kiroshi_rune_os::scheme;
-use kiroshi_rune_preview::app::App;
+use kiroshi_rune_preview::app::{App, notice};
 use kiroshi_rune_preview::host::Profile;
 use kiroshi_rune_preview::navigation::Route;
 use kiroshi_rune_preview::surfaces::{
-	s01_chrome, s02_rail, s03_roster, s04_boot, s05_thread, s06_composer, s08_missions,
-	s09_routines, s10_agent_settings, s11_applications, s12_person_settings, s13_space_settings,
-	s14_library, s15_boards,
+	s01_chrome, s02_rail, s03_roster, s04_boot, s05_thread, s06_composer, s07_approvals,
+	s08_missions, s09_routines, s10_agent_settings, s11_applications, s12_person_settings,
+	s13_space_settings, s14_library, s15_boards,
 };
 use kiroshi_rune_preview::{conversations, local, menu, scenes, smoke, spike};
 
@@ -26,48 +26,21 @@ fn view(s: &App, cx: &mut Cx<App>) -> El {
 	if let Route::BlockSpike = s.navigation.main_route() {
 		return spike::view::view(s, cx, &t);
 	}
-	if let Route::Rail = s.navigation.main_route() {
-		let (body, layers) = s02_rail::view(s, &t);
-		return rune_kit::root(body, layers);
-	}
-	let k = t.kit();
 	let mut screen_layers = Vec::new();
 	let body = match s.navigation.main_route() {
 		Route::Onboarding(step) => s04_boot::view(step, s, &t.in_space(Some(tokens::BLUE))),
-		Route::Conversations => {
-			let viewport = conversations::Viewport {
-				inset: cx.titlebar_inset(),
-				transcript_height: cx.layout(conversations::TRANSCRIPT).map(|rect| rect[3]),
-			};
-			conversations::view(s, &t, &viewport)
-		}
-		Route::Chrome => {
-			let measured = s01_chrome::Measured {
-				width: cx.layout(KIT_ROOT).map_or(s01_chrome::WINDOW_SIZE.0, |rect| rect[2]),
-				lifted_tab: s
-					.surfaces
-					.s01_chrome
-					.lift
-					.as_ref()
-					.and_then(|lift| cx.layout(&format!("tab-{}", lift.id))),
-			};
-			s01_chrome::view(s, &k, &t, &measured)
+		Route::Conversations | Route::Library | Route::SpaceSettings => {
+			let (body, layers) = conversations::view(s, &t, &viewport(s, cx));
+			screen_layers = layers;
+			body
 		}
 		Route::BlockSpike
-		| Route::Rail
 		| Route::Roster
 		| Route::Boot
 		| Route::Thread
 		| Route::Composer
 		| Route::Approvals
 		| Route::Missions => el(),
-		Route::Library => {
-			let width = cx.layout(s14_library::GRID).map(|rect| rect[2]);
-			let (body, layers) = s14_library::view(s, &t, width);
-			screen_layers = layers;
-			body
-		}
-		Route::SpaceSettings => s13_space_settings::view(s, &t),
 		Route::Routines => s09_routines::view(s, &t),
 		Route::Applications => s11_applications::view(s, &t),
 		Route::PersonSettings => s12_person_settings::view(s, &t),
@@ -78,16 +51,28 @@ fn view(s: &App, cx: &mut Cx<App>) -> El {
 		.into_iter()
 		.chain(s12_person_settings::layers(s, &t))
 		.chain(s09_routines::layers(s, &t))
-		.chain(s04_boot::layers(s, &t))
 		.chain(s11_applications::layers(s, &t))
-		.chain(s03_roster::layers(s, &t))
 		.chain(s08_missions::layers(s, &t))
 		.chain(s13_space_settings::layers(s, &t))
 		.chain(s06_composer::layers(s, &t))
 		.chain(screen_layers)
-		.chain(s14_library::layers(s, &t));
+		.chain(s14_library::layers(s, &t))
+		.chain(notice::layer(s, &t));
 	rune_kit::root(body, layers)
 		.on_paste_content(|s: &mut App, content, _: &mut Tx| s06_composer::pasted(s, content))
+}
+
+fn viewport(s: &App, cx: &mut Cx<App>) -> conversations::Viewport {
+	let lifted = s.surfaces.s01_chrome.lift.as_ref();
+	conversations::Viewport {
+		chrome: s01_chrome::Measured {
+			width: cx.layout(KIT_ROOT).map_or(s01_chrome::WINDOW_SIZE.0, |rect| rect[2]),
+			lifted_tab: lifted.and_then(|lift| cx.layout(&format!("tab-{}", lift.id))),
+		},
+		transcript_height: cx.layout(conversations::TRANSCRIPT).map(|rect| rect[3]),
+		thread_room: cx.layout(conversations::THREAD_ROOM).map(|rect| rect[2]),
+		library_width: cx.layout(s14_library::GRID).map(|rect| rect[2]),
+	}
 }
 
 const KIT_ROOT: &str = "kit-root";
@@ -96,11 +81,12 @@ const DEV_HOST: &str = "--dev-host";
 
 const SKIP_ONBOARDING: &str = "--skip-onboarding";
 
-const CHROME: &str = "--chrome";
-
 const HOST_API: &str = "--host-api";
 
-const RAIL: &str = "--rail";
+fn opening_route(flags: &[String]) -> Option<Route> {
+	let flagged = |flag: &str| flags.iter().any(|arg| arg == flag);
+	(flagged(DEV_HOST) || flagged(SKIP_ONBOARDING)).then_some(Route::Conversations)
+}
 
 fn setup(s: &mut App, waker: Waker) {
 	let flagged = |flag: &str| launched().flags.iter().any(|arg| arg == flag);
@@ -108,17 +94,12 @@ fn setup(s: &mut App, waker: Waker) {
 		s.host_profile = Profile::Dev;
 	}
 	s.uses_host_api = flagged(DEV_HOST) || flagged(HOST_API);
-	if flagged(DEV_HOST) || flagged(SKIP_ONBOARDING) {
-		s.navigation.navigate_main(Route::Conversations);
-	}
-	if flagged(CHROME) {
-		s.navigation.navigate_main(Route::Chrome);
-	}
-	if flagged(RAIL) {
-		s.navigation.navigate_main(Route::Rail);
+	if let Some(route) = opening_route(&launched().flags) {
+		s.navigation.navigate_main(route);
 	}
 	s.surfaces.s05_thread.attach(waker.clone());
 	s.surfaces.s06_composer.attach(waker.clone());
+	s.surfaces.s07_approvals.attach(waker.clone());
 	s.surfaces.s11_applications.attach(waker.clone());
 	s.surfaces.s12_person_settings.attach(waker.clone());
 	s.surfaces.s09_routines.attach(waker.clone());
@@ -134,6 +115,7 @@ fn poll(s: &mut App, seconds: f64, tx: &mut Tx) -> bool {
 	let changed = s.poll();
 	let changed = s05_thread::poll(s, tx) || changed;
 	let changed = s06_composer::poll(s, tx) || changed;
+	let changed = s07_approvals::poll(s) || changed;
 	let changed = s11_applications::poll(s) || changed;
 	let changed = s12_person_settings::poll(s, tx) || changed;
 	let changed = s09_routines::poll(s, tx) || changed;
@@ -399,6 +381,30 @@ mod tests {
 			.iter()
 			.find(|conversation| Some(conversation.id.as_str()) != opened(s));
 		other.expect("a second conversation").id.clone()
+	}
+
+	fn flags(flags: &[&str]) -> Vec<String> {
+		flags.iter().map(|flag| (*flag).to_owned()).collect()
+	}
+
+	#[test]
+	fn skipping_onboarding_or_the_dev_host_opens_on_the_composed_conversation() {
+		let skipped = opening_route(&flags(&["kiroshi", SKIP_ONBOARDING]));
+		let dev_host = opening_route(&flags(&["kiroshi", DEV_HOST]));
+
+		assert!(skipped == Some(Route::Conversations));
+		assert!(dev_host == Some(Route::Conversations));
+		assert_eq!(
+			conversations::content_of(Route::Conversations),
+			conversations::Content::Conversation
+		);
+	}
+
+	#[test]
+	fn the_former_rail_and_chrome_flags_open_no_standalone_screen() {
+		assert!(opening_route(&flags(&["kiroshi", "--rail"])).is_none());
+		assert!(opening_route(&flags(&["kiroshi", "--chrome"])).is_none());
+		assert!(opening_route(&flags(&["kiroshi"])).is_none());
 	}
 
 	#[test]

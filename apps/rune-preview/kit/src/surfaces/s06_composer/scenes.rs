@@ -3,7 +3,7 @@ use rune::{El, TextEdit, TextStyle, col, row, text};
 use super::chips::{FileChip, ReplyChip, prompt_attachments, reply_list};
 use super::menus::{Command, MentionFace, MentionMenu, Mentionable, command_menu, mention_menu};
 use super::picker::{LibraryDocument, LibraryPicker, library_picker, library_trigger};
-use super::prompt::{Offline, PromptInput, attach_control, prompt_input};
+use super::prompt::{Offline, PromptInput, attach_control, focus_prompt, prompt_input};
 use super::queue::{PromptQueue, QueuedMessage, prompt_queue};
 use super::quote::{ReplyQuote, SelectionQuote, prompt_reply, selection_quote};
 use super::{ComposerIntent, Reach, Scope};
@@ -422,6 +422,14 @@ fn input_empty(t: &Tokens, s: &SceneState) -> El {
 
 fn input_focused(t: &Tokens, s: &SceneState) -> El {
 	let input = PromptInput { focused: true, ..PromptInput::new(&s.edit, WIDTH) };
+	centered(t, composer(t, input), Vec::new())
+}
+
+fn input_focused_by_app_with_draft(t: &Tokens, s: &SceneState) -> El {
+	let mut edit = s.edit.clone();
+	edit.set_caret(0);
+	focus_prompt(&mut edit, false);
+	let input = PromptInput { focused: edit.focused, ..PromptInput::new(&edit, WIDTH) };
 	centered(t, composer(t, input), Vec::new())
 }
 
@@ -1137,5 +1145,11 @@ pub static SCENES: &[Scene] = &[
 		selection_narrow_long_content,
 	),
 	tabbed("conversation-prompt-promptinput--focus-within-empty", COMPOSER, "", 1, input_focused),
+	drafted(
+		"conversation-prompt-promptinput--focused-by-app-with-draft",
+		COMPOSER,
+		DRAFT,
+		input_focused_by_app_with_draft,
+	),
 	tabbed("conversation-prompt-promptqueue--row-focused", QUEUE, "", 2, queue_row_focused),
 ];

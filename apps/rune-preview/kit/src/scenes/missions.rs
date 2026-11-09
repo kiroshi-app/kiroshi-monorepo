@@ -1,19 +1,18 @@
 use std::rc::Rc;
 
-use rune::{Align, El, Side, col, row, text};
+use rune::{El, PointerPress, col, row};
 
 use super::SceneState;
-use crate::avatar::Face;
-use crate::strings::{Language, chat};
+use crate::strings::Language;
 use crate::surfaces::s08_missions::{
-	Bot, Emit, EventKind, EventLink, Header, LinkStyle, ListEnd, MenuFacts, Mission, MissionEvent,
-	MissionState, PANEL_WIDTH, Panel, PanelMission, PullRequest, Status, Ticket, TicketLayout,
-	ToolCall, activity_line, author_line, event_row, mission_card, mission_copy_menu,
+	Bot, Emit, EventKind, EventLink, Header, LinkStyle, ListEnd, MenuFacts, MenuSource, Mission,
+	MissionEvent, MissionState, OpenMenu, PANEL_WIDTH, Panel, PanelMission, PullRequest, Status,
+	Ticket, TicketLayout, ToolCall, activity_line, event_row, mission_card,
 	mission_detail_skeleton, mission_header, mission_header_skeleton, mission_menu, mission_row,
-	mission_turn, missions_feed_skeleton, missions_panel, panel_frame, soft_bubble, state_pill,
-	ticket_line, tool_mark, turn_lane,
+	mission_turn, missions_feed_skeleton, missions_panel, panel_frame, state_pill, ticket_line,
+	tool_mark,
 };
-use crate::tokens::{SPACING, TEXT_BUBBLE, Tokens};
+use crate::tokens::{SPACING, Tokens};
 use crate::widgets::not_drawn;
 
 pub(super) const ROWS: (f32, f32) = (640.0, 820.0);
@@ -37,7 +36,6 @@ const SQUEEZED: f32 = SPACING * 80.0;
 const COLUMN: f32 = SPACING * 112.0;
 const ACTIVITY_WIDTH: f32 = SPACING * 96.0;
 const TURN_GAP: f32 = SPACING * 6.0;
-const MENU_POINTER_DROP: f32 = -SPACING * 7.0;
 
 const fn minutes_before(minutes: i64) -> i64 {
 	NOW - minutes * 60_000
@@ -358,7 +356,6 @@ const MANY_TOOLS: &[&str] = &[
 	"Write",
 ];
 const UNNAMED_BEFORE_NAMED_TOOLS: &[&str] = &["gh", "Terminal", "Web search", "GitHub"];
-const OPENING_ANSWER: &str = "That one is wide enough to run on its own, so I opened a mission for it and I will report here when it lands.";
 const LONG_HEADER_OBJECTIVE: &str = "Rework the mission thread so a reader can follow a run that spans several days without ever losing the ticket it answers";
 const LONG_TICKET_TITLE: &str = "Rework the mission thread so a reader can follow a run that spans several days without losing the ticket it answers";
 const LONG_HEADER_TOOLS: &[&str] =
@@ -761,29 +758,6 @@ pub(super) fn turn_working_without_tools(t: &Tokens, _: &SceneState) -> El {
 	turns(t, [Mission { id: "mission-ope-42", tools: &[], ..WORKING_MISSION_CARD }])
 }
 
-fn opening_turn(t: &Tokens) -> El {
-	let still = Face::still(AUTHOR.name, AUTHOR.hue).draw(SPACING * 5.0, t);
-	turn_lane(
-		soft_bubble(
-			t,
-			text(OPENING_ANSWER.to_owned()).font(TEXT_BUBBLE).color(t.bubble_foreground).wrap(),
-		)
-		.child(author_line(t, AUTHOR, still)),
-	)
-}
-
-pub(super) fn turn_under_an_opening_turn(t: &Tokens, _: &SceneState) -> El {
-	padded(
-		t,
-		col()
-			.w_full()
-			.gap(TURN_GAP)
-			.items_start()
-			.child(opening_turn(t))
-			.child(turn(t, WAITING_MISSION_CARD)),
-	)
-}
-
 pub(super) fn turn_with_an_unknown_tool(t: &Tokens, _: &SceneState) -> El {
 	turns(t, [Mission { id: "mission-ope-51", tools: &["Screenshot"], ..WAITING_MISSION_CARD }])
 }
@@ -1091,16 +1065,33 @@ fn densities(t: &Tokens, state: MissionState) -> El {
 		.child(card(t, mission))
 }
 
-fn at_the_row(menu: El) -> El {
-	menu.anchored("mission-row-menu-row", Side::Bottom, Align::Start, MENU_POINTER_DROP)
+const ON_THE_CARD: PointerPress = PointerPress { x: 120.0, y: 160.0 };
+const UNDER_THE_CARD: PointerPress = PointerPress { x: 16.0, y: 220.0 };
+
+fn open_menu(facts: MenuFacts, at: PointerPress, is_copy_shown: bool) -> OpenMenu<'static> {
+	OpenMenu {
+		mission: WAITING_MISSION_CARD.id,
+		source: MenuSource::Card,
+		at,
+		facts,
+		is_copy_shown,
+	}
+}
+
+fn menu_scene_at(t: &Tokens, menu: OpenMenu) -> El {
+	padded_with(t, densities(t, menu.facts.state), mission_menu(t, EN, &menu, &emit()))
 }
 
 fn menu_scene(t: &Tokens, facts: MenuFacts) -> El {
-	padded_with(t, densities(t, facts.state), vec![at_the_row(mission_menu(t, EN, facts, false))])
+	menu_scene_at(t, open_menu(facts, ON_THE_CARD, false))
 }
 
 const fn facts(state: MissionState, has_pull_request: bool) -> MenuFacts {
 	MenuFacts { state, has_pull_request, has_branch: true, has_workspace_path: true }
+}
+
+pub(super) fn menu_from_the_keyboard(t: &Tokens, _: &SceneState) -> El {
+	menu_scene_at(t, open_menu(facts(MissionState::Working, true), UNDER_THE_CARD, false))
 }
 
 pub(super) fn menu_working(t: &Tokens, _: &SceneState) -> El {
@@ -1140,20 +1131,7 @@ pub(super) fn menu_done_without_a_pull_request(t: &Tokens, _: &SceneState) -> El
 }
 
 fn copy_scene(t: &Tokens, facts: MenuFacts) -> El {
-	let copy = chat::missions::menu::COPY.text(EN);
-	padded_with(
-		t,
-		densities(t, facts.state),
-		vec![
-			at_the_row(mission_menu(t, EN, facts, true)),
-			mission_copy_menu(t, EN, facts).anchored(
-				format!("menu-item-{copy}"),
-				Side::Right,
-				Align::Start,
-				0.0,
-			),
-		],
-	)
+	menu_scene_at(t, open_menu(facts, ON_THE_CARD, true))
 }
 
 pub(super) fn menu_copy_choices(t: &Tokens, _: &SceneState) -> El {
@@ -1215,25 +1193,22 @@ pub(super) fn panel_selected_row(t: &Tokens, _: &SceneState) -> El {
 	panel_scene(t, Panel { open_mission: Some(WORKING_MISSION.id), ..DEFAULT_PANEL })
 }
 
+const ON_THE_WAITING_ROW: PointerPress = PointerPress { x: 80.0, y: 66.0 };
+
 pub(super) fn panel_row_menu(t: &Tokens, _: &SceneState) -> El {
-	let menu = mission_menu(
-		t,
-		EN,
-		MenuFacts {
+	let menu = OpenMenu {
+		mission: WAITING_HUMAN_MISSION.id,
+		source: MenuSource::Row,
+		at: ON_THE_WAITING_ROW,
+		facts: MenuFacts {
 			state: MissionState::WaitingHuman,
 			has_pull_request: false,
 			has_branch: false,
 			has_workspace_path: false,
 		},
-		false,
-	)
-	.anchored(
-		format!("mission-row-{}", WAITING_HUMAN_MISSION.id),
-		Side::Bottom,
-		Align::Start,
-		MENU_POINTER_DROP,
-	);
-	in_panel(t, missions_panel(t, EN, &DEFAULT_PANEL, &emit()), vec![menu])
+		is_copy_shown: false,
+	};
+	in_panel(t, missions_panel(t, EN, &DEFAULT_PANEL, &emit()), mission_menu(t, EN, &menu, &emit()))
 }
 
 pub(super) fn panel_reading_more(t: &Tokens, _: &SceneState) -> El {

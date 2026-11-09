@@ -1,8 +1,11 @@
+use std::path::PathBuf;
+
+use chrono::{DateTime, Utc};
+use kiroshi_core::attachments::attachment_block;
+
 const ARROBASE: char = '@';
 const COMMAND_MARK: char = '/';
 const TOKEN_OPENING: char = '<';
-const BLOCK_OPENING: &str = "Attached to this message, sent ";
-const DAY_MS: i64 = 86_400_000;
 
 pub struct Named<'a> {
 	pub id: &'a str,
@@ -105,7 +108,8 @@ pub fn with_attachments(text: &str, paths: &[String], sent_at: i64) -> String {
 	if paths.is_empty() {
 		return text.to_owned();
 	}
-	let block = attachment_block(paths, sent_at);
+	let paths: Vec<PathBuf> = paths.iter().map(PathBuf::from).collect();
+	let block = attachment_block(&paths, sent_instant(sent_at));
 	[text.trim(), block.as_str()]
 		.into_iter()
 		.filter(|part| !part.is_empty())
@@ -113,33 +117,30 @@ pub fn with_attachments(text: &str, paths: &[String], sent_at: i64) -> String {
 		.join("\n")
 }
 
-fn attachment_block(paths: &[String], sent_at: i64) -> String {
-	let count = paths.len();
-	let noun = if count == 1 { "file" } else { "files" };
-	let header = format!("{BLOCK_OPENING}{}, {count} {noun}:", iso_utc(sent_at));
-	let lines =
-		paths.iter().enumerate().map(|(index, path)| format!("{}/{count} {path}", index + 1));
-	std::iter::once(header).chain(lines).collect::<Vec<_>>().join("\n")
+fn sent_instant(sent_at: i64) -> DateTime<Utc> {
+	let calendar_edge =
+		if sent_at < 0 { DateTime::<Utc>::MIN_UTC } else { DateTime::<Utc>::MAX_UTC };
+	DateTime::from_timestamp_millis(sent_at).unwrap_or(calendar_edge)
 }
 
-fn civil_date(days: i64) -> (i64, i64, i64) {
-	let shifted = days + 719_468;
-	let era = shifted.div_euclid(146_097);
-	let day_of_era = shifted.rem_euclid(146_097);
-	let year_of_era =
-		(day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
-	let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
-	let shifted_month = (5 * day_of_year + 2) / 153;
-	let day = day_of_year - (153 * shifted_month + 2) / 5 + 1;
-	let month = if shifted_month < 10 { shifted_month + 3 } else { shifted_month - 9 };
-	let year = year_of_era + era * 400 + i64::from(month <= 2);
-	(year, month, day)
-}
+#[cfg(test)]
+mod tests {
+	use super::with_attachments;
 
-pub fn iso_utc(at: i64) -> String {
-	let (year, month, day) = civil_date(at.div_euclid(DAY_MS));
-	let of_day = at.rem_euclid(DAY_MS);
-	let (hours, minutes) = (of_day / 3_600_000, of_day / 60_000 % 60);
-	let (seconds, millis) = (of_day / 1_000 % 60, of_day % 1_000);
-	format!("{year:04}-{month:02}-{day:02}T{hours:02}:{minutes:02}:{seconds:02}.{millis:03}Z")
+	#[test]
+	fn a_send_instant_beyond_the_calendar_clamps_to_its_edge() {
+		let paths = ["/a/attachments/c/1.png".to_owned()];
+
+		let late = with_attachments("look", &paths, i64::MAX);
+		let early = with_attachments("look", &paths, i64::MIN);
+
+		assert_eq!(
+			late,
+			"look\nAttached to this message, sent +262142-12-31T23:59:59.999Z, 1 file:\n1/1 /a/attachments/c/1.png"
+		);
+		assert_eq!(
+			early,
+			"look\nAttached to this message, sent -262143-01-01T00:00:00.000Z, 1 file:\n1/1 /a/attachments/c/1.png"
+		);
+	}
 }

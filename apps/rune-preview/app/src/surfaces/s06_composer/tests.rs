@@ -7,8 +7,8 @@ use kiroshi_rune_kit::surfaces::s06_composer::ComposerIntent;
 use super::draft::Document;
 use super::open::{Candidate, Kind, Open};
 use super::prompt_text::{
-	Named, command_query, iso_utc, mention_counts, mention_query, mentioned_ids,
-	prompt_with_mention, to_mention_tokens, with_attachments,
+	Named, command_query, mention_counts, mention_query, mentioned_ids, prompt_with_mention,
+	to_mention_tokens, with_attachments,
 };
 use super::worker::{Answer, Call, File, Outgoing, Refusal, Unread, Unsent};
 use super::{Effect, Live, State};
@@ -191,7 +191,6 @@ fn stored_files_follow_the_text_in_the_attachment_block() {
 		"look\nAttached to this message, sent 2025-11-06T03:33:20.123Z, 2 files:\n1/2 /a/attachments/c/1.png\n2/2 /a/attachments/c/2.md"
 	);
 	assert_eq!(with_attachments("look", &[], NOW), "look");
-	assert_eq!(iso_utc(951_782_400_000), "2000-02-29T00:00:00.000Z");
 }
 
 #[test]

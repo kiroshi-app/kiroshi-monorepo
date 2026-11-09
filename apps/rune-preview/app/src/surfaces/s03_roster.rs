@@ -13,9 +13,9 @@ use kiroshi_core::conversations::contract::{
 use kiroshi_core::sections::contract::RosterPin;
 use kiroshi_rune_kit::strings::Language;
 use kiroshi_rune_kit::surfaces::s03_roster::RosterEvent;
-use kiroshi_rune_kit::surfaces::s04_boot::notice::SurfaceEvent;
 use rune::{TextEdit, Waker};
 
+use crate::app::notice::Notice;
 use crate::app::{App, Workspace};
 use crate::host::HostError;
 use crate::model::{self, Message};
@@ -26,7 +26,7 @@ use listing::{Listing, pinned_last, without_pin};
 use worker::{Answer, Call, Worker, Write};
 
 pub use heard::{Heard, heard_of};
-pub use view::{layers, view};
+pub use view::view;
 
 const LANGUAGE: Language = Language::En;
 
@@ -56,12 +56,6 @@ pub enum Load {
 	Shown(Listing),
 }
 
-#[derive(Clone, Debug, PartialEq)]
-struct Notice {
-	title: String,
-	description: Option<String>,
-}
-
 #[derive(Default)]
 pub struct State {
 	rosters: HashMap<String, Load>,
@@ -73,19 +67,19 @@ pub struct State {
 	name_edit: TextEdit,
 	viewport: [f32; 4],
 	content: [f32; 4],
-	notices: Vec<Notice>,
+	to_raise: Vec<Notice>,
 	queued: Vec<Call>,
 	source: Option<Source>,
 	waker: Option<Waker>,
 	worker: Option<Worker>,
 }
 
-fn named(line: &str, name: &str) -> String {
-	line.replace("{name}", name)
+fn failed_in(title: &str, failure: &HostError, space_id: String) -> Notice {
+	Notice::of_host_failure(title, failure).of_space(space_id)
 }
 
-fn failure_text(failure: &HostError) -> String {
-	format!("{}: {}", failure.title(), failure.detail())
+fn named(line: &str, name: &str) -> String {
+	line.replace("{name}", name)
 }
 
 fn hue_value(hue: Option<Hue>) -> Option<f32> {
@@ -328,12 +322,6 @@ impl State {
 		}
 	}
 
-	pub fn dismiss(&mut self, index: usize) {
-		if index < self.notices.len() {
-			self.notices.remove(index);
-		}
-	}
-
 	fn follow(&mut self, source: &Source, space_id: &str) {
 		if self.source.is_none() {
 			self.source = Some(source.clone());
@@ -367,7 +355,7 @@ impl State {
 				self.rosters.insert(space_id, Load::Shown(listing));
 			}
 			Err(failure) if self.listing(&space_id).is_some() => {
-				self.raise(REFRESH_UNREAD.to_owned(), &failure)
+				self.to_raise.push(failed_in(REFRESH_UNREAD, &failure, space_id))
 			}
 			Err(failure) => {
 				self.rosters.insert(space_id, Load::Failed(failure));
@@ -432,10 +420,6 @@ impl State {
 			.unwrap_or_else(|| bot_id.to_owned())
 	}
 
-	fn raise(&mut self, title: String, failure: &HostError) {
-		self.notices.push(Notice { title, description: Some(failure_text(failure)) });
-	}
-
 	fn select(&mut self, id: &str) -> Option<model::Conversation> {
 		self.opening = None;
 		let space_id = self.shown.clone()?;
@@ -470,7 +454,9 @@ impl State {
 					listing.read_more(page);
 				}
 			}
-			Err(failure) => self.raise(MORE_UNREAD.to_owned(), &failure),
+			Err(failure) => {
+				self.to_raise.push(failed_in(MORE_UNREAD, &failure, space_id.to_owned()))
+			}
 		}
 	}
 
@@ -488,54 +474,54 @@ impl State {
 			Ok(chat) => self.listing(&space_id)?.bot(bot_id).map(|bot| main_chat_of(bot, &chat)),
 			Err(failure) => {
 				let name = self.bot_name(&space_id, bot_id);
-				self.raise(named(OPEN_REFUSED, &name), &failure);
+				self.to_raise.push(failed_in(&named(OPEN_REFUSED, &name), &failure, space_id));
 				None
 			}
 		}
 	}
 
 	fn undo(&mut self, write: Write, failure: &HostError) {
-		let title = match write {
+		let notice = match write {
 			Write::Pin { space_id, before, .. } => {
 				if let Some(listing) = self.listing_mut(&space_id) {
 					listing.place(&before);
 				}
-				PINS_UNSAVED.to_owned()
+				failed_in(PINS_UNSAVED, failure, space_id)
 			}
 			Write::Collapse { space_id, before, .. } => {
 				if let Some(listing) = self.listing_mut(&space_id) {
 					listing.collapsed = before;
 				}
-				SECTION_UNSAVED.to_owned()
+				failed_in(SECTION_UNSAVED, failure, space_id)
 			}
 			Write::Rename { space_id, section_id, before, .. } => {
 				if let Some(listing) = self.listing_mut(&space_id) {
 					listing.name_section(&section_id, &before);
 				}
-				SECTION_UNSAVED.to_owned()
+				failed_in(SECTION_UNSAVED, failure, space_id)
 			}
 			Write::MoveToSection { space_id, bot_id, before, .. } => {
 				let name = self.bot_name(&space_id, &bot_id);
 				if let Some(listing) = self.listing_mut(&space_id) {
 					listing.restore_bot(&bot_id, before);
 				}
-				named(MOVE_UNSAVED, &name)
+				failed_in(&named(MOVE_UNSAVED, &name), failure, space_id)
 			}
 			Write::Share { space_id, bot } => {
 				if let Some(listing) = self.listing_mut(&space_id) {
 					listing.drop_bot(&bot.id);
 				}
-				named(SHARE_UNSAVED, &bot.name)
+				Notice::of_host_failure(&named(SHARE_UNSAVED, &bot.name), failure)
 			}
 			Write::Unshare { space_id, bot } => {
 				let name = bot.name.clone();
 				if let Some(listing) = self.listing_mut(&space_id) {
 					listing.admit_bot(*bot);
 				}
-				named(UNSHARE_UNSAVED, &name)
+				failed_in(&named(UNSHARE_UNSAVED, &name), failure, space_id)
 			}
 		};
-		self.raise(title, failure);
+		self.to_raise.push(notice);
 	}
 
 	fn answers(&self) -> Vec<Answer> {
@@ -580,6 +566,8 @@ fn landed(app: &mut App, answer: Answer) {
 	if let Some(conversation) = app.surfaces.s03_roster.answered(answer) {
 		open(app, conversation);
 	}
+	let to_raise = std::mem::take(&mut app.surfaces.s03_roster.to_raise);
+	app.raise_all(to_raise);
 }
 
 fn open(app: &mut App, conversation: model::Conversation) {
@@ -612,14 +600,6 @@ fn emitted(app: &mut App, event: RosterEvent) {
 		RosterEvent::RenameCommit { section, name } => state.commit_rename(&section, &name),
 		RosterEvent::RenameCancel(_) => state.cancel_rename(),
 		RosterEvent::Retry => state.retry(),
-	}
-}
-
-fn noticed(app: &mut App, event: SurfaceEvent) {
-	match event {
-		SurfaceEvent::Close(index) | SurfaceEvent::Act(index) | SurfaceEvent::CopyReport(index) => {
-			app.surfaces.s03_roster.dismiss(index)
-		}
 	}
 }
 

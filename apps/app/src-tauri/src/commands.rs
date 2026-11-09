@@ -152,6 +152,7 @@ fn commands<R: Runtime>() -> Commands<R> {
 		agent::commands::agent_live_sessions,
 		agent::commands::agent_live_sessions_in_space,
 		agent::commands::agent_pending_questions,
+		agent::commands::agent_pending_prompts,
 		agent::commands::agent_pending_questions_in_space,
 		conversations::commands::conversation_bots,
 		conversations::commands::conversation_bots_by_presence,
