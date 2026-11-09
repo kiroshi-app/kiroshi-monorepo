@@ -30,6 +30,7 @@ use kiroshi_rune_kit::surfaces::s14_library::{
 };
 
 use crate::app::App;
+use crate::app::notice::Notice;
 use crate::conversations::now_ms;
 use crate::host::HostError;
 use crate::navigation::Route;
@@ -72,12 +73,6 @@ const MONTHS: [&str; 12] = [
 const DAY_PLACEHOLDER: &str = "{{date, datetime(day: numeric)}}";
 
 const MONTH_PLACEHOLDER: &str = "{{date, datetime(month: long)}}";
-
-#[derive(Clone, Debug, PartialEq)]
-struct Notice {
-	title: String,
-	description: String,
-}
 
 #[derive(Default)]
 enum Listing {
@@ -127,7 +122,7 @@ pub struct State {
 	dialog: Option<Dialog>,
 	is_creating: bool,
 	importing: Vec<String>,
-	notice: Option<Notice>,
+	to_raise: Vec<Notice>,
 	slash: Option<SlashState>,
 	is_flush_armed: bool,
 	copied: Option<String>,
@@ -158,7 +153,7 @@ impl Default for State {
 			dialog: None,
 			is_creating: false,
 			importing: Vec::new(),
-			notice: None,
+			to_raise: Vec::new(),
 			slash: None,
 			is_flush_armed: false,
 			copied: None,
@@ -748,11 +743,15 @@ impl State {
 	}
 
 	fn raise(&mut self, title: String, description: String) {
-		self.notice = Some(Notice { title, description });
-	}
-
-	pub fn dismiss_notice(&mut self) {
-		self.notice = None;
+		let notice = match description.is_empty() {
+			true => Notice::error(title),
+			false => Notice::failure(title, description),
+		};
+		let notice = match self.space_id.clone() {
+			Some(space_id) => notice.of_space(space_id),
+			None => notice,
+		};
+		self.to_raise.push(notice);
 	}
 
 	pub fn take_library_wish(&mut self) -> bool {
@@ -1025,6 +1024,11 @@ fn entered(app: &mut App) -> bool {
 	true
 }
 
+fn raise_all(app: &mut App) {
+	let to_raise = std::mem::take(&mut app.surfaces.s14_library.to_raise);
+	app.raise_all(to_raise);
+}
+
 pub fn open_beside(app: &mut App, name: &str) {
 	if entered(app) {
 		app.surfaces.s14_library.open_beside(name);
@@ -1033,6 +1037,7 @@ pub fn open_beside(app: &mut App, name: &str) {
 
 pub fn heard(app: &mut App, heard: Heard) {
 	app.surfaces.s14_library.heard(heard, now_ms());
+	raise_all(app);
 }
 
 pub fn key_pressed(app: &mut App, event: &KeyEvent) -> bool {
@@ -1054,5 +1059,7 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
 		app.navigation.navigate_main(Route::Library);
 	}
 	let has_effects = actions::perform(app, tx);
-	has_answers || wants_library || has_effects
+	let has_notices = !app.surfaces.s14_library.to_raise.is_empty();
+	raise_all(app);
+	has_answers || wants_library || has_effects || has_notices
 }

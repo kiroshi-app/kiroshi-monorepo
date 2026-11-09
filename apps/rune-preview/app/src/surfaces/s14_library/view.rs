@@ -7,8 +7,8 @@ use kiroshi_rune_kit::surfaces::s14_library::{
 	LibraryItem as Tile, LibraryPanel, LightboxImage, LightboxLook, PanelActions, PanelLook,
 	PanelState, TOOLBAR_GAP, Unavailable, Writer, agent_card, agent_caret, block_editor,
 	delete_confirmation, document_bar, document_column, document_panel, document_skeleton,
-	failure_notice, field_key, format_toolbar, grid_columns, item_unavailable, library_panel,
-	lightbox, new_document_dialog, presence, rows_of, title_field,
+	field_key, format_toolbar, grid_columns, item_unavailable, library_panel, lightbox,
+	new_document_dialog, presence, rows_of, title_field,
 };
 use kiroshi_rune_kit::tokens::{SPACING, Tokens};
 
@@ -316,12 +316,8 @@ fn dialog_layers(state: &State, t: &Tokens) -> Vec<El> {
 
 pub fn layers(app: &App, t: &Tokens) -> Vec<El> {
 	let state = &app.surfaces.s14_library;
-	let notice = state.notice.as_ref().map(|notice| {
-		failure_notice(t, LANGUAGE, &notice.title, &notice.description)
-			.on_press(|app: &mut App| library(app).dismiss_notice())
-	});
 	if app.navigation.main_route() != Route::Library {
-		return notice.into_iter().collect();
+		return Vec::new();
 	}
-	lightbox_layer(state).into_iter().chain(dialog_layers(state, t)).chain(notice).collect()
+	lightbox_layer(state).into_iter().chain(dialog_layers(state, t)).collect()
 }

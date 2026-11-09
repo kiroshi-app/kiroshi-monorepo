@@ -238,7 +238,7 @@ fn open_in_new_tab_names_an_item_the_library_no_longer_lists() {
 	answer(&mut state, Answer::Listed { space_id: SPACE.to_owned(), items: Ok(Vec::new()) });
 
 	assert!(state.shown.is_none());
-	assert!(state.notice.is_some());
+	assert!(!state.to_raise.is_empty());
 	assert!(!state.take_library_wish());
 }
 
@@ -448,7 +448,7 @@ fn a_refused_save_raises_a_notice_and_reads_the_document_back() {
 
 	answer(&mut state, Answer::Applied { target: target("brief.md"), outcome: Err(refused()) });
 
-	assert!(state.notice.is_some());
+	assert!(!state.to_raise.is_empty());
 	assert_eq!(calls(&mut state), vec![Call::Open(target("brief.md"))]);
 }
 
@@ -468,7 +468,7 @@ fn a_refused_rename_puts_the_title_back_and_a_refused_delete_keeps_the_item() {
 	assert_eq!(title.as_deref(), Some("brief"));
 	assert!(matches!(state.dialog, Some(Dialog::Delete { has_failed: true, .. })));
 	assert!(state.shown.is_some());
-	assert!(state.notice.is_some());
+	assert!(!state.to_raise.is_empty());
 }
 
 #[test]
@@ -483,7 +483,7 @@ fn a_drop_checks_the_size_limits_then_lists_each_import_and_names_each_refusal()
 
 	state.dropped(&[small.clone(), large]);
 	let importing = state.importing.clone();
-	let refusal = state.notice.clone().map(|notice| notice.description);
+	let refusal = state.to_raise.first().and_then(|notice| notice.description.clone());
 	let sent = calls(&mut state);
 	let error = LibraryError::Unsupported { name: "small.png".to_owned() };
 	let imports = Ok(vec![LibraryImport::Refused { error }]);
@@ -497,7 +497,7 @@ fn a_drop_checks_the_size_limits_then_lists_each_import_and_names_each_refusal()
 	assert!(refusal.is_some_and(|line| line.starts_with("large.png: ")));
 	assert_eq!(sent, vec![Call::Import { space_id: SPACE.to_owned(), paths: vec![small] }]);
 	assert!(state.importing.is_empty());
-	assert!(state.notice.is_some_and(|notice| notice.title.contains("small.png")));
+	assert!(state.to_raise.last().is_some_and(|notice| notice.title.contains("small.png")));
 }
 
 #[test]
@@ -806,7 +806,7 @@ fn download_and_copy_from_the_bar_and_the_lightbox_reach_the_core() {
 	assert!(matches!(copied_wake.as_slice(), [Call::Wake(_, Due::Copied)]));
 	assert!(!state.is_copied("brief.md"));
 	assert_eq!(calls(&mut images), vec![Call::Download(target("dunes.png"))]);
-	assert!(images.notice.is_some());
+	assert!(!images.to_raise.is_empty());
 }
 
 #[test]
@@ -946,7 +946,7 @@ fn a_writer_from_the_event_loop_shows_on_the_open_document_until_it_finishes() {
 		assert_eq!(document.agents().count(), 0);
 		assert!(document.cards().is_empty());
 	}
-	assert!(app.surfaces.s14_library.notice.is_none());
+	assert!(crate::app::notice::shown(&app).is_empty());
 }
 
 #[test]
@@ -1000,4 +1000,22 @@ fn an_unreadable_library_event_takes_the_unreadable_path() {
 		parsed(&frame("library://changed", json!({ "spaceId": SPACE }))),
 		Some(HostEvent::Library(Heard::Changed(_)))
 	));
+}
+
+#[test]
+fn a_failed_agent_write_raises_its_notice_through_the_app() {
+	let mut app = library_app(&state_of("Body."));
+	let finished = LibraryDocumentWriterFinished {
+		space_id: SPACE.to_owned(),
+		name: "brief.md".to_owned(),
+		agent_id: "atlas".to_owned(),
+		agent_name: "Atlas".to_owned(),
+		outcome: LibraryWriteOutcome::Failed,
+	};
+
+	heard_in(&mut app, &frame("library://document-writer-finished", finished));
+
+	let shown = crate::app::notice::shown(&app);
+	assert!(shown.iter().any(|notice| notice.title.contains("Atlas")));
+	assert!(app.surfaces.s14_library.to_raise.is_empty());
 }
