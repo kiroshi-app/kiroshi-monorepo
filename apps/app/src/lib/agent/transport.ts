@@ -9,6 +9,7 @@ import type {
 	ScopedEvent,
 	SessionHandle,
 	SubmittedTurn,
+	UnattendedStart,
 } from "./contract"
 
 import { activeJoinedSpaceId, invoke, listen } from "../host"
@@ -30,12 +31,14 @@ export const agentTransport: ChatDriver = {
 		resume?: string,
 		cwd?: string,
 		outputSchema?: Record<string, unknown>,
+		unattended?: UnattendedStart,
 	) =>
 		invoke<SessionHandle>("agent_start_or_resume_session", {
 			scope,
 			resume: resume ?? null,
 			cwd: cwd ?? null,
 			outputSchema: outputSchema ?? null,
+			...unattended,
 		}),
 
 	submitPrompt: (scope: RuntimeScope, text: string, turn?: SubmittedTurn) =>

@@ -10,6 +10,7 @@ import type {
 	ScopedEvent,
 	SessionHandle,
 	SubmittedTurn,
+	UnattendedStart,
 } from "../agent/contract"
 
 type ChatDriverUnsubscribe = () => void
@@ -22,6 +23,7 @@ export type ChatDriver = {
 		resume?: string,
 		cwd?: string,
 		outputSchema?: Record<string, unknown>,
+		unattended?: UnattendedStart,
 	) => Promise<SessionHandle>
 	submitPrompt: (
 		scope: RuntimeScope,

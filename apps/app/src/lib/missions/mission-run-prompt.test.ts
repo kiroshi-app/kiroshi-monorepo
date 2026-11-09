@@ -150,4 +150,18 @@ describe("missionRunPromptFor", () => {
 		expect(prompt).not.toContain("[elided]")
 		expect(prompt).toContain("Which branch?")
 	})
+
+	it("sends a blocking question through mission_escalate and no other way", () => {
+		const prompt = missionRunPromptFor(callSaying("Which branch?"))
+
+		expect(prompt).toContain(
+			"When a question blocks you, ask it through mission_escalate and never ask one any other way.",
+		)
+	})
+
+	it("says a refused tool call ends nothing", () => {
+		const prompt = missionRunPromptFor(callSaying("Which branch?"))
+
+		expect(prompt).toContain("a refused call ends nothing")
+	})
 })

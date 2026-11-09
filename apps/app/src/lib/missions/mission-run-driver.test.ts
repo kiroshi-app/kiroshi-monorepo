@@ -18,7 +18,12 @@ import {
 } from "./mission-run-driver"
 import { FAILURE_BURST_MS } from "./mission-run-failure"
 
-import type { AgentEvent, RuntimeScope, TurnEnded } from "../agent/contract"
+import type {
+	AgentEvent,
+	RuntimeScope,
+	TurnEnded,
+	UnattendedStart,
+} from "../agent/contract"
 import { createChatController } from "../chat/chat-controller"
 import type { ChatState } from "../chat/chat-state"
 import { withSettledSettings } from "../chat/with-settled-settings"
@@ -60,6 +65,7 @@ const settled = async () => {
 type Started = {
 	scope: RuntimeScope
 	outputSchema?: Record<string, unknown>
+	unattended?: UnattendedStart
 }
 
 type Harness = {
@@ -132,8 +138,8 @@ const createHarness = async ({
 	const agentCalls: string[] = []
 	const driver: ScriptedDriver = {
 		...scripted,
-		startOrResumeSession: (scope, resume, cwd, outputSchema) => {
-			starts.push({ scope, outputSchema })
+		startOrResumeSession: (scope, resume, cwd, outputSchema, unattended) => {
+			starts.push({ scope, outputSchema, unattended })
 			return scripted.startOrResumeSession(scope, resume, cwd, outputSchema)
 		},
 		cancelTurn: (scope) => {
@@ -339,6 +345,23 @@ const createHarness = async ({
 const failuresRaisedBy = async ({ reportFailure }: Harness) => {
 	await vi.advanceTimersByTimeAsync(FAILURE_BURST_MS)
 	return reportFailure
+}
+
+const declareMode = async (
+	{ store, mission }: Harness,
+	defaultMode: string,
+) => {
+	const bots = await store.bots(SPACE)
+	const bot = bots.find(({ id }) => id === mission.botId)
+
+	if (!bot) {
+		throw new Error("the mission bot is not seated")
+	}
+
+	await store.updateBot(bot.id, {
+		...bot,
+		permissions: { ...bot.permissions, defaultMode },
+	})
 }
 
 const spoken = ({ messages }: ConversationState) =>
@@ -556,6 +579,38 @@ describe("startMissionRunDriver", () => {
 		expect(hasLandedBeforeAnyRun).toBe(true)
 		expect(harness.originStarts()).toHaveLength(1)
 		expect(companion).toMatchObject({ model: "sonnet", effort: "high" })
+	})
+
+	it.each([
+		["auto", "auto"],
+		["dontAsk", "dontAsk"],
+		["default", "dontAsk"],
+		["acceptEdits", "dontAsk"],
+		["plan", "dontAsk"],
+	])(
+		"opens the mission run of a bot declaring %s with AskUserQuestion denied, in %s",
+		async (declaredMode, sentMode) => {
+			await declareMode(harness, declaredMode)
+			await harness.enter("done", closedBy("poller"))
+
+			expect(harness.originStarts()[0].unattended).toEqual({
+				deniedTools: ["AskUserQuestion"],
+				permissionMode: sentMode,
+			})
+		},
+	)
+
+	it("opens a mission run in dontAsk when its bot cannot be read", async () => {
+		await restart({
+			store: { bots: () => Promise.reject(new Error("no companion")) },
+		})
+		vi.spyOn(console, "error").mockImplementation(() => undefined)
+		await harness.enter("done", closedBy("poller"))
+
+		expect(harness.originStarts()[0].unattended).toEqual({
+			deniedTools: ["AskUserQuestion"],
+			permissionMode: "dontAsk",
+		})
 	})
 
 	it("asks a closing run for a report and nothing else", async () => {
