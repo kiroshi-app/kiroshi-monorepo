@@ -792,7 +792,14 @@ impl Session {
 		answers: HashMap<String, String>,
 		annotations: Option<Value>,
 	) -> Result<(), TransportError> {
-		let (key, input) = self.take_pending_input(id).await?;
+		let (key, input) = match self.take_pending_input(id).await {
+			Err(TransportError::UnknownPermission { .. })
+				if self.was_answered_by_message(id).await =>
+			{
+				return Ok(());
+			}
+			taken => taken?,
+		};
 
 		let answered = answered_input(input, answers, annotations);
 		self.write(protocol::allow_command(&key, id, &answered))?;
@@ -801,6 +808,10 @@ impl Session {
 			decision: PermissionDecision::AllowOnce,
 		});
 		Ok(())
+	}
+
+	async fn was_answered_by_message(&self, id: &str) -> bool {
+		self.shared.lock().await.translator.was_answered_by_message(id)
 	}
 
 	fn answer_with_message(

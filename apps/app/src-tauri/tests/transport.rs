@@ -775,6 +775,35 @@ async fn a_typed_message_answers_the_pending_question_and_takes_the_asking_turn_
 }
 
 #[tokio::test]
+async fn a_card_answer_after_a_typed_answer_is_accepted_and_sends_nothing() {
+	let mut harness = start(options("question")).await.expect("session starts");
+	harness.session.submit_in_line("choisis", a_turn("t1")).await.expect("prompt accepted");
+	let request = harness.wait_for_question().await;
+	harness.session.submit_in_line("date-fns", a_turn("t2")).await.expect("message taken");
+
+	let carded = HashMap::from([("Which library should we use?".to_owned(), "Luxon".to_owned())]);
+	harness
+		.session
+		.answer_question(&request.id, carded, None)
+		.await
+		.expect("the late card answer surfaces no error");
+
+	let mut events =
+		harness.wait_for("the asking turn to end", |events| ended_outcome(events).is_some()).await;
+	let answered = harness.drain_turn().await;
+	assert_eq!(assistant_text(&answered), BOTH_ANSWERED_DATE_FNS);
+	events.extend(answered);
+	let resolutions = events
+		.iter()
+		.filter(
+			|event| matches!(event, AgentEvent::PermissionResolved { id, .. } if id == &request.id),
+		)
+		.count();
+	assert_eq!(resolutions, 1, "{events:#?}");
+	harness.session.shutdown().await;
+}
+
+#[tokio::test]
 async fn a_typed_message_answers_a_question_asked_after_the_turn_settled() {
 	let mut harness = start(options("question_after_settle")).await.expect("session starts");
 	harness.session.submit_in_line("choisis", a_turn("t1")).await.expect("prompt accepted");

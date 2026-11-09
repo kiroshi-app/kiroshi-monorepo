@@ -119,6 +119,7 @@ pub struct Translator {
 	cancelling: bool,
 	pending_permissions: HashMap<String, Value>,
 	pending_questions: Vec<String>,
+	answered_by_message: HashSet<String>,
 	activity_titles: HashMap<String, String>,
 	unshown_calls: HashSet<String>,
 	web_reads: WebReads,
@@ -149,7 +150,12 @@ impl Translator {
 	pub fn take_question(&mut self) -> Option<(String, Value)> {
 		let id = self.pending_questions.first()?.clone();
 		let input = self.take_permission_input(&id)?;
+		self.answered_by_message.insert(id.clone());
 		Some((id, input))
+	}
+
+	pub fn was_answered_by_message(&self, request_id: &str) -> bool {
+		self.answered_by_message.contains(request_id)
 	}
 
 	pub fn abandon_prompts(&mut self) -> Vec<String> {
