@@ -12,17 +12,20 @@ import type {
 
 export const RUN_DEADLINE_MS = 30 * 60_000
 
-const MODES_THAT_NEVER_PROMPT: UnattendedPermissionMode[] = ["auto", "dontAsk"]
+const PROMPTLESS_MODE: UnattendedPermissionMode = "dontAsk"
+
+const MODES_THAT_NEVER_PROMPT: UnattendedPermissionMode[] = [
+	"auto",
+	PROMPTLESS_MODE,
+]
 
 const unattendedStartIn = (declaredMode: string): UnattendedStart => ({
 	deniedTools: ["AskUserQuestion"],
 	permissionMode:
 		MODES_THAT_NEVER_PROMPT.find(
 			(mode) => mode === readBotPermissionMode(declaredMode),
-		) ?? "dontAsk",
+		) ?? PROMPTLESS_MODE,
 })
-
-const PROMPTLESS_START = unattendedStartIn("dontAsk")
 
 const failedStart = (thrown: unknown) =>
 	new Error("the mission run could not start", { cause: thrown })
@@ -60,15 +63,13 @@ export const createMissionRunBegin = ({
 		}
 	}
 
-	const unattendedStartOf = async ({ mission }: MissionRunCall) => {
+	const declaredModeOf = async ({ mission }: MissionRunCall) => {
 		try {
 			const bot = (await store.bots()).find(({ id }) => id === mission.botId)
-			return bot
-				? unattendedStartIn(bot.permissions.defaultMode)
-				: PROMPTLESS_START
+			return bot?.permissions.defaultMode ?? PROMPTLESS_MODE
 		} catch (thrown) {
 			reporting("bots")(thrown)
-			return PROMPTLESS_START
+			return PROMPTLESS_MODE
 		}
 	}
 
@@ -161,10 +162,14 @@ export const createMissionRunBegin = ({
 			return
 		}
 
-		const [rosterBlock, unattended] = await Promise.all([
+		const [rosterBlock, declaredMode] = await Promise.all([
 			rosterBlockOf(call),
-			unattendedStartOf(call),
+			declaredModeOf(call),
 		])
-		await begin({ ...call, rosterBlock }, token, unattended)
+		await begin(
+			{ ...call, rosterBlock },
+			token,
+			unattendedStartIn(declaredMode),
+		)
 	}
 }
