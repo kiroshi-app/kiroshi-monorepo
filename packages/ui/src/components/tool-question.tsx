@@ -133,6 +133,7 @@ export interface ToolQuestionProps {
 	onAnswer?: (answers: ToolQuestionAnswers) => unknown
 	onDeny?: () => void
 	companionName?: string
+	askedBy?: ReactNode
 	hasDigitKeys?: boolean
 	minimised?: boolean
 	onMinimise?: () => void
@@ -174,6 +175,7 @@ const ToolQuestion = ({
 	onAnswer,
 	onDeny,
 	companionName,
+	askedBy,
 	hasDigitKeys,
 	minimised,
 	onMinimise,
@@ -328,6 +330,7 @@ const ToolQuestion = ({
 						hasSegments ? "gap-2.5" : "gap-1",
 					)}
 				>
+					{hasSegments ? askedBy : null}
 					{hasSegments ? (
 						<Tabs onValueChange={setShownIndex} value={shownIndex}>
 							<TabsList activateOnFocus className={QUESTION_SEGMENTS_CLASS}>
@@ -353,9 +356,11 @@ const ToolQuestion = ({
 							</TabsList>
 						</Tabs>
 					) : (
-						<p className="truncate font-medium text-muted-foreground text-xs">
-							{item.header}
-						</p>
+						(askedBy ?? (
+							<p className="truncate font-medium text-muted-foreground text-xs">
+								{item.header}
+							</p>
+						))
 					)}
 
 					{item.failure ? (
