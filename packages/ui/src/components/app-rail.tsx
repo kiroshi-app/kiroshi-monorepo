@@ -304,7 +304,7 @@ const AppRail = ({
 	user,
 	updateBadge,
 	onSelectHome,
-	isHomeSelected = false,
+	isHomeSelected,
 	onSelectConversations,
 	onSelectMissions,
 	onSelectLibrary,
