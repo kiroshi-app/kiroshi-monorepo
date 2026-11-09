@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import { Children, type ReactNode } from "react"
 import { expect, fn, screen, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
@@ -35,8 +35,11 @@ import {
 	NoticeSurface,
 	raiseFailureNotice,
 } from "@workspace/ui/components/notice-surface"
+import type { PromptAttachment } from "@workspace/ui/components/prompt-attachments"
+import { PROMPT_ATTACHMENTS } from "@workspace/ui/components/prompt-attachments.fixtures"
 import { ToolApproval } from "@workspace/ui/components/tool-approval"
 import { ToolQuestion } from "@workspace/ui/components/tool-question"
+import { Transcript } from "@workspace/ui/components/transcript"
 import { AssistantTurn, UserTurn } from "@workspace/ui/components/turn"
 
 const ATLAS: HomeAgent = {
@@ -165,6 +168,7 @@ const attached = fn()
 const sent = fn()
 const dismissedBand = fn()
 const openedArchive = fn()
+const removedAttachment = fn()
 
 let raisedSendFailure: string | undefined
 
@@ -174,6 +178,7 @@ type EmptyHomeProps = {
 	firstName?: string
 	draft?: string
 	hasBand?: boolean
+	attachments?: PromptAttachment[]
 	after?: ReactNode
 }
 
@@ -183,12 +188,14 @@ const EmptyHome = ({
 	firstName = "Sam",
 	draft,
 	hasBand = true,
+	attachments,
 	after,
 }: EmptyHomeProps) => (
 	<HomeLayout stage="empty">
 		<HomeGreeting agent={agent} firstName={firstName} period={period} />
 		<HomeComposer
 			agents={AGENTS}
+			attachments={attachments}
 			band={
 				hasBand ? (
 					<HomeApplicationsBand
@@ -200,6 +207,7 @@ const EmptyHome = ({
 			}
 			defaultValue={draft}
 			onAttach={attached}
+			onRemoveAttachment={removedAttachment}
 			onSelectAgent={selectedAgent}
 			onSubmit={sent}
 			selectedAgentId={agent.id}
@@ -208,20 +216,62 @@ const EmptyHome = ({
 	</HomeLayout>
 )
 
-type ConversationHomeProps = { children: ReactNode }
+type ConversationHomeProps = { children: ReactNode; composer?: ReactNode }
 
-const ConversationHome = ({ children }: ConversationHomeProps) => (
-	<HomeLayout stage="conversation">
-		{children}
-		<HomeComposer
-			agents={AGENTS}
-			onAttach={attached}
-			onSelectAgent={selectedAgent}
-			onSubmit={sent}
-			selectedAgentId={ATLAS.id}
-		/>
-	</HomeLayout>
+const ConversationHome = ({ children, composer }: ConversationHomeProps) => (
+	<HomeLayout
+		composer={
+			composer ?? (
+				<HomeComposer
+					agents={AGENTS}
+					onAttach={attached}
+					onSelectAgent={selectedAgent}
+					onSubmit={sent}
+					selectedAgentId={ATLAS.id}
+				/>
+			)
+		}
+		stage="conversation"
+		transcript={
+			<Transcript
+				contentClassName="gap-4"
+				rows={Children.toArray(children).map((turn, index) => ({
+					key: `turn-${index}`,
+					render: () => turn,
+				}))}
+			/>
+		}
+	/>
 )
+
+const expectLastTurnOnComposer = async (canvasElement: HTMLElement) => {
+	const composer = canvasElement.querySelector<HTMLElement>(
+		'[data-slot="home-layout-composer"]',
+	)
+	const turns = canvasElement.querySelectorAll<HTMLElement>(
+		'[data-slot="message-scroller-item"]',
+	)
+	const lastTurn = turns[turns.length - 1]
+	await waitFor(() =>
+		expect(
+			Math.round(
+				(composer?.getBoundingClientRect().top ?? 0) -
+					lastTurn.getBoundingClientRect().bottom,
+			),
+		).toBe(16),
+	)
+}
+
+const expectRoomLinksTo = async (
+	canvasElement: HTMLElement,
+	room: HomeRoom,
+) => {
+	const links = canvasElement.querySelectorAll('[data-slot="home-room-link"]')
+	await expect(links.length).toBeGreaterThan(0)
+	for (const link of links) {
+		await expect(link).toHaveAttribute("href", room.href)
+	}
+}
 
 type YourTurnProps = { text: string; sentAt: number }
 
@@ -263,6 +313,7 @@ const meta = preview.meta({
 		selectedAgent.mockClear()
 		dismissedBand.mockClear()
 		openedArchive.mockClear()
+		removedAttachment.mockClear()
 	},
 })
 
@@ -476,8 +527,80 @@ export const FirstAnswer = meta.story({
 		</ConversationHome>
 	),
 	parameters: withDescription(
-		"The agent's first answer under the first message.",
+		"The agent's first answer under the first message, the last turn right above the composer.",
 	),
+	play: async ({ canvasElement }) => {
+		await expectLastTurnOnComposer(canvasElement)
+	},
+})
+
+export const FilesAttached = meta.story({
+	name: "4d · Files attached, before sending",
+	render: () => <EmptyHome attachments={PROMPT_ATTACHMENTS} />,
+	parameters: withDescription(
+		"Files staged before the first message: the chips sit above the field inside the field card, as in Prompt, and send is enabled with the field empty. Removing a chip keeps focus in the composer. No artboard draws this state.",
+	),
+	play: async ({ canvas, userEvent }) => {
+		await expect(canvas.getAllByRole("listitem")).toHaveLength(2)
+		await expect(canvas.getByRole("textbox")).toHaveValue("")
+		const send = canvas.getByRole("button", { name: "Send" })
+		await expect(send).toBeEnabled()
+		await expect(send).toHaveAttribute("data-filled", "true")
+		await userEvent.click(
+			canvas.getByRole("button", { name: /release-notes\.md/ }),
+		)
+		await expect(removedAttachment).toHaveBeenCalledWith("notes")
+		await expect(canvas.getByRole("textbox")).toHaveFocus()
+	},
+})
+
+const LONG_TRANSCRIPT = [
+	{ isYours: true, text: FLIGHTS_ASK },
+	{ isYours: false, text: FLIGHTS_ANSWER },
+	{ isYours: true, text: OFFSITE_ASK },
+	{ isYours: false, text: OFFSITE_ANSWER },
+	{ isYours: true, text: BOOK_IT },
+	{ isYours: false, text: BOOKING },
+]
+
+const LONG_TRANSCRIPT_HOURS = [9, 11]
+
+export const LongTranscript = meta.story({
+	name: "4e · Long transcript",
+	render: () => (
+		<ConversationHome>
+			{LONG_TRANSCRIPT_HOURS.flatMap((hour) =>
+				LONG_TRANSCRIPT.map(({ isYours, text }) =>
+					isYours ? (
+						<YourTurn
+							key={`${hour}-${text}`}
+							sentAt={at(hour, 0)}
+							text={text}
+						/>
+					) : (
+						<AtlasTurn
+							key={`${hour}-${text}`}
+							sentAt={at(hour, 1)}
+							text={text}
+						/>
+					),
+				),
+			)}
+		</ConversationHome>
+	),
+	parameters: withDescription(
+		"More turns than the panel holds: the transcript scrolls inside itself, follows the last turn, and the composer stays pinned at the bottom.",
+	),
+	play: async ({ canvas, canvasElement }) => {
+		const viewport = canvasElement.querySelector<HTMLElement>(
+			'[data-slot="message-scroller-viewport"]',
+		)
+		await expect(viewport?.scrollHeight).toBeGreaterThan(
+			viewport?.clientHeight ?? 0,
+		)
+		await expect(canvas.getByRole("button", { name: "Send" })).toBeVisible()
+		await expectLastTurnOnComposer(canvasElement)
+	},
 })
 
 export const Loading = meta.story({
@@ -554,10 +677,8 @@ export const WorkingInOneRoom = meta.story({
 	parameters: withDescription(
 		"The agent went to work in a room: the line names it, as a link to the room.",
 	),
-	play: async ({ canvas }) => {
-		await expect(
-			canvas.getByRole("link", { name: "Lisbon offsite" }),
-		).toHaveAttribute("href", "#lisbon-offsite")
+	play: async ({ canvasElement }) => {
+		await expectRoomLinksTo(canvasElement, LISBON_OFFSITE)
 	},
 })
 
@@ -609,48 +730,63 @@ export const RelaysFromTheRooms = meta.story({
 export const ApprovalWaits = meta.story({
 	name: "9a · An approval waits on you",
 	render: () => (
-		<ConversationHome>
+		<ConversationHome
+			composer={
+				<HomeRequest
+					askedBy={<HomeAskedByLine agent={PICO} room={LISBON_OFFSITE} />}
+				>
+					<ToolApproval
+						description="Book 14 seats on the 07:40 from Paris to Lisbon on 12 March, €2,072 in total."
+						onAllowOnce={fn()}
+						onDeny={fn()}
+						parameters={[{ id: "seats", label: "seats", value: "14" }]}
+						tool="Duffel · create_order"
+					/>
+				</HomeRequest>
+			}
+		>
 			<AtlasTurn sentAt={at(14, 17)} text={RELAY} />
 			<YourTurn sentAt={at(14, 21)} text={BOOK_IT} />
-			<HomeRequest
-				askedBy={<HomeAskedByLine agent={PICO} room={LISBON_OFFSITE} />}
-			>
-				<ToolApproval
-					description="Book 14 seats on the 07:40 from Paris to Lisbon on 12 March, €2,072 in total."
-					onAllowOnce={fn()}
-					onDeny={fn()}
-					parameters={[{ id: "seats", label: "seats", value: "14" }]}
-					tool="Duffel · create_order"
-				/>
-			</HomeRequest>
 		</ConversationHome>
 	),
 	parameters: withDescription(
-		"An agent in a room needs an approval: the asked-by line says who and where, the approval card sits in the Home and the composer stays under it.",
+		"An agent in a room needs an approval: the approval takes the composer's place, the asked-by line above it says who and where.",
 	),
+	play: async ({ canvasElement }) => {
+		await expect(
+			canvasElement.querySelector('[data-slot="home-composer"]'),
+		).toBeNull()
+	},
 })
 
 export const QuestionWaits = meta.story({
 	name: "9b · A question waits on you",
 	render: () => (
-		<HomeLayout stage="conversation">
+		<ConversationHome
+			composer={
+				<ToolQuestion
+					askedBy={<HomeAskedByLine agent={JUNO} room={LISBON_OFFSITE} />}
+					onAnswer={fn()}
+					onDeny={fn()}
+					questions={[DEPOSIT_QUESTION]}
+				/>
+			}
+		>
 			<YourTurn sentAt={at(14, 21)} text={BOOK_IT} />
 			<AtlasTurn sentAt={at(14, 24)} text={DEPOSIT_ASK} />
-			<ToolQuestion
-				askedBy={<HomeAskedByLine agent={JUNO} room={LISBON_OFFSITE} />}
-				onAnswer={fn()}
-				onDeny={fn()}
-				questions={[DEPOSIT_QUESTION]}
-			/>
-		</HomeLayout>
+		</ConversationHome>
 	),
 	parameters: withDescription(
 		"An agent in a room asks a question: the question takes the composer's place, the asked-by line in its header. The story picks Today, as drawn.",
 	),
-	play: async ({ canvas, userEvent }) => {
+	play: async ({ canvas, canvasElement, userEvent }) => {
 		await expect(
 			canvas.getByRole("link", { name: "Lisbon offsite" }),
 		).toBeVisible()
+		await expectRoomLinksTo(canvasElement, LISBON_OFFSITE)
+		await expect(
+			canvasElement.querySelector('[data-slot="home-composer"]'),
+		).toBeNull()
 		await userEvent.click(canvas.getByText("Today"))
 	},
 })

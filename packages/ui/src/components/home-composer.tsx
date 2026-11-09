@@ -9,6 +9,10 @@ import {
 } from "@workspace/ui/components/home-agent-picker"
 import { Icons } from "@workspace/ui/components/icons"
 import { PromptAttachButton } from "@workspace/ui/components/prompt-attach-button"
+import {
+	type PromptAttachment,
+	PromptAttachments,
+} from "@workspace/ui/components/prompt-attachments"
 import { PromptField } from "@workspace/ui/components/prompt-input-field"
 import { usePromptLayout } from "@workspace/ui/components/prompt-input-layout"
 import { usePromptTransfer } from "@workspace/ui/components/prompt-input-transfer"
@@ -25,11 +29,15 @@ const ACTIONS = "flex items-center gap-2"
 
 const SKELETON_FILL = "bg-foreground/6"
 
+const NO_ATTACHMENTS: PromptAttachment[] = []
+
 type HomeComposerProps = {
 	agents: HomeAgent[]
 	selectedAgentId: string
 	onSelectAgent: (id: string) => void
 	onAttach: (files: File[]) => void
+	attachments?: PromptAttachment[]
+	onRemoveAttachment?: (id: string) => void
 	value?: string
 	defaultValue?: string
 	onValueChange?: (value: string) => void
@@ -64,6 +72,8 @@ const HomeComposer = ({
 	selectedAgentId,
 	onSelectAgent,
 	onAttach,
+	attachments = NO_ATTACHMENTS,
+	onRemoveAttachment,
 	value,
 	defaultValue = "",
 	onValueChange,
@@ -73,7 +83,7 @@ const HomeComposer = ({
 	const { t } = useTranslation("chat")
 	const [internalValue, setInternalValue] = useState(defaultValue)
 	const currentValue = value ?? internalValue
-	const hasText = currentValue.trim() !== ""
+	const hasPayload = currentValue.trim() !== "" || attachments.length > 0
 	const { refs } = usePromptLayout({ currentValue })
 	const { handlePaste } = usePromptTransfer({ canAttach: true, onAttach })
 	const selectedAgent =
@@ -86,9 +96,14 @@ const HomeComposer = ({
 
 	const submit = (event?: FormEvent) => {
 		event?.preventDefault()
-		if (!hasText) return
+		if (!hasPayload) return
 		onSubmit?.(currentValue.trim())
 		if (value === undefined) setInternalValue("")
+	}
+
+	const removeAttachment = (id: string) => {
+		onRemoveAttachment?.(id)
+		refs.textarea.current?.focus({ preventScroll: true })
 	}
 
 	return (
@@ -99,6 +114,10 @@ const HomeComposer = ({
 			ref={refs.form}
 		>
 			<div className={cn(FIELD_CARD, band && "border-foreground/8 border-b")}>
+				<PromptAttachments
+					items={attachments}
+					onRemove={onRemoveAttachment && removeAttachment}
+				/>
 				<div className="flex">
 					<PromptField
 						onPaste={handlePaste}
@@ -127,7 +146,7 @@ const HomeComposer = ({
 						onSelectAgent={onSelectAgent}
 						selected={selectedAgent}
 					/>
-					<SendButton isFilled={hasText} />
+					<SendButton isFilled={hasPayload} />
 				</div>
 			</div>
 			{band}
