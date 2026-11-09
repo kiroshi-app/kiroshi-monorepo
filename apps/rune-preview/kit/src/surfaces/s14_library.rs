@@ -2657,8 +2657,7 @@ fn resized_by_drag<S: 'static>(
 	look: PanelLook,
 	on: impl Fn(&mut S, DocumentPanelEvent) + 'static,
 ) -> impl Fn(&mut S, &mut rune::Drag, &mut Tx) + 'static {
-	let (min, max) = (look.min_width, look.max_width);
-	let width = look.width;
+	let (width, min, max) = (look.width, look.min_width, look.max_width);
 	move |s: &mut S, drag, _| match drag.phase {
 		rune::Phase::Down => drag.data = width,
 		rune::Phase::Move => {
@@ -3808,12 +3807,12 @@ pub fn gallery_editor<S: 'static>(
 		cell
 	});
 	let cells: Vec<El> = edited.collect();
-	let mut lines = col().w_full().gap(SPACING * 1.5);
+	let mut lines = col().w_full().gap(GALLERY_GAP);
 	for line in cells.chunks(columns.max(1)) {
 		let mut line: Vec<El> = line.to_vec();
 		line.resize_with(columns.max(1), el);
 		lines =
-			lines.child(row().w_full().gap(SPACING * 1.5).children(
+			lines.child(row().w_full().gap(GALLERY_GAP).children(
 				line.into_iter().map(|cell| col().grow(1.0).w(0.0).min_w(0.0).child(cell)),
 			));
 	}
