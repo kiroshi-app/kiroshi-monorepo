@@ -2,8 +2,11 @@ mod actions;
 mod blocks;
 mod document;
 mod editing;
+mod handle;
 mod heard;
 mod imports;
+mod item_menu;
+mod rich;
 mod session;
 #[cfg(test)]
 mod tests;
@@ -30,6 +33,7 @@ use kiroshi_rune_kit::surfaces::s14_library::{
 };
 
 use crate::app::App;
+use crate::app::notice::Notice;
 use crate::conversations::now_ms;
 use crate::host::HostError;
 use crate::navigation::Route;
@@ -40,8 +44,11 @@ pub use view::{GRID, layers, panel, view};
 
 use actions::Effect;
 use document::Document;
-use editing::SlashState;
+use editing::{LinkState, SlashState};
+use handle::BlockMenu;
 use imports::Screened;
+use item_menu::{ItemMenu, MenuSurface};
+use rich::GalleryAdd;
 use worker::{Answer, Call, Due, NewDocument, Target, Worker};
 
 const ZOOM_STEP: u32 = 25;
@@ -72,12 +79,6 @@ const MONTHS: [&str; 12] = [
 const DAY_PLACEHOLDER: &str = "{{date, datetime(day: numeric)}}";
 
 const MONTH_PLACEHOLDER: &str = "{{date, datetime(month: long)}}";
-
-#[derive(Clone, Debug, PartialEq)]
-struct Notice {
-	title: String,
-	description: String,
-}
 
 #[derive(Default)]
 enum Listing {
@@ -125,10 +126,14 @@ pub struct State {
 	awaiting_tab: Option<String>,
 	wants_library: bool,
 	dialog: Option<Dialog>,
+	menu: Option<ItemMenu>,
 	is_creating: bool,
 	importing: Vec<String>,
-	notice: Option<Notice>,
+	to_raise: Vec<Notice>,
 	slash: Option<SlashState>,
+	link: Option<LinkState>,
+	block_menu: Option<BlockMenu>,
+	gallery_add_failed: Option<GalleryAdd>,
 	is_flush_armed: bool,
 	copied: Option<String>,
 	effects: Vec<Effect>,
@@ -156,10 +161,14 @@ impl Default for State {
 			awaiting_tab: None,
 			wants_library: false,
 			dialog: None,
+			menu: None,
 			is_creating: false,
 			importing: Vec::new(),
-			notice: None,
+			to_raise: Vec::new(),
 			slash: None,
+			link: None,
+			block_menu: None,
+			gallery_add_failed: None,
 			is_flush_armed: false,
 			copied: None,
 			effects: Vec::new(),
@@ -289,7 +298,10 @@ impl State {
 		self.previews.clear();
 		self.awaiting_tab = None;
 		self.dialog = None;
+		self.menu = None;
 		self.slash = None;
+		self.link = None;
+		self.block_menu = None;
 	}
 
 	pub fn show_library(&mut self) {
@@ -340,7 +352,8 @@ impl State {
 			}
 			LibraryEvent::Import => self.effects.push(Effect::PickFile),
 			LibraryEvent::NewBoard => self.create_board(),
-			LibraryEvent::Menu { .. } | LibraryEvent::Retry => {}
+			LibraryEvent::Menu { id, anchor } => self.open_menu(id, anchor, MenuSurface::Tile),
+			LibraryEvent::Retry => self.retry_list(),
 		}
 	}
 
@@ -350,15 +363,10 @@ impl State {
 			ItemAction::OpenInNewTab => self.open_in_new_tab(name),
 			ItemAction::Rename => self.open_to_rename(name),
 			ItemAction::Delete => self.ask_delete(name),
-			ItemAction::Copy
-			| ItemAction::Download
-			| ItemAction::ShowInFolder
-			| ItemAction::SaveToLibrary
-			| ItemAction::CopyImage => {
-				eprintln!(
-					"the Library item menu forwards {action:?}, which this surface doesn't wire"
-				)
-			}
+			ItemAction::Copy | ItemAction::CopyImage => self.copy(name),
+			ItemAction::Download => self.download(name),
+			ItemAction::ShowInFolder => self.reveal(name),
+			ItemAction::SaveToLibrary => self.save_to_library(name),
 		}
 	}
 
@@ -457,7 +465,8 @@ impl State {
 			LightboxEvent::Item(ItemEvent::Close | ItemEvent::Back) => self.close_shown(),
 			LightboxEvent::Item(ItemEvent::Download | ItemEvent::Copy) => {}
 			LightboxEvent::Item(ItemEvent::More) => {
-				eprintln!("the lightbox forwards More, whose item menu emits no event")
+				let name = Some(lightbox.name.clone());
+				self.open_bar_menu(name, MenuSurface::Lightbox);
 			}
 			LightboxEvent::Previous => {
 				let previous = position.and_then(|at| at.checked_sub(1));
@@ -509,7 +518,8 @@ impl State {
 				}
 			}
 			ItemEvent::More => {
-				eprintln!("the document bar forwards More, whose item menu emits no event")
+				let name = self.shown_document().map(|document| document.target.name.clone());
+				self.open_bar_menu(name, MenuSurface::Bar);
 			}
 		}
 	}
@@ -596,7 +606,7 @@ impl State {
 				self.wants_library = true;
 				self.list();
 			}
-			DocumentPanelEvent::Resize(_) => {}
+			DocumentPanelEvent::Resize(width) => self.dragged_panel(width),
 		}
 	}
 
@@ -637,6 +647,8 @@ impl State {
 	fn close_shown(&mut self) {
 		let Some(shown) = self.shown.take() else { return };
 		self.slash = self.slash.take().filter(|slash| slash.is_beside);
+		self.link = self.link.take().filter(|link| link.is_beside);
+		self.block_menu = self.block_menu.take().filter(|menu| menu.is_beside);
 		if let Shown::Document(document) = shown {
 			self.leave(*document);
 		}
@@ -644,6 +656,8 @@ impl State {
 
 	fn close_beside(&mut self) {
 		self.slash = self.slash.take().filter(|slash| !slash.is_beside);
+		self.link = self.link.take().filter(|link| !link.is_beside);
+		self.block_menu = self.block_menu.take().filter(|menu| !menu.is_beside);
 		if let Some(document) = self.beside.take() {
 			self.leave(document);
 		}
@@ -730,6 +744,11 @@ impl State {
 
 	pub fn key_pressed(&mut self, event: &KeyEvent) -> bool {
 		use rune::Key as KeyName;
+		if event.key == KeyName::Escape
+			&& (self.menu.take().is_some() || self.block_menu.take().is_some())
+		{
+			return true;
+		}
 		if self.dialog.is_some() && event.key == KeyName::Escape {
 			self.dialog = None;
 			return true;
@@ -748,11 +767,15 @@ impl State {
 	}
 
 	fn raise(&mut self, title: String, description: String) {
-		self.notice = Some(Notice { title, description });
-	}
-
-	pub fn dismiss_notice(&mut self) {
-		self.notice = None;
+		let notice = match description.is_empty() {
+			true => Notice::error(title),
+			false => Notice::failure(title, description),
+		};
+		let notice = match self.space_id.clone() {
+			Some(space_id) => notice.of_space(space_id),
+			None => notice,
+		};
+		self.to_raise.push(notice);
 	}
 
 	pub fn take_library_wish(&mut self) -> bool {
@@ -815,6 +838,11 @@ impl State {
 			}
 			Answer::Downloaded(outcome) => self.downloaded(outcome),
 			Answer::Copied { target, outcome } => self.copied_answer(&target, outcome),
+			Answer::Revealed(outcome) => self.revealed(outcome),
+			Answer::SavedToLibrary { target, item } => self.saved_to_library(&target, item),
+			Answer::GalleryImported { target, add, path, imports } => {
+				self.gallery_imported(&target, add, &path, imports)
+			}
 			Answer::BoardCreated { space_id, item } => self.board_created(&space_id, item),
 			Answer::Due(Due::Flush) => self.flush_due(),
 			Answer::Due(Due::Copied) => self.copied = None,
@@ -1025,6 +1053,11 @@ fn entered(app: &mut App) -> bool {
 	true
 }
 
+fn raise_all(app: &mut App) {
+	let to_raise = std::mem::take(&mut app.surfaces.s14_library.to_raise);
+	app.raise_all(to_raise);
+}
+
 pub fn open_beside(app: &mut App, name: &str) {
 	if entered(app) {
 		app.surfaces.s14_library.open_beside(name);
@@ -1033,6 +1066,7 @@ pub fn open_beside(app: &mut App, name: &str) {
 
 pub fn heard(app: &mut App, heard: Heard) {
 	app.surfaces.s14_library.heard(heard, now_ms());
+	raise_all(app);
 }
 
 pub fn key_pressed(app: &mut App, event: &KeyEvent) -> bool {
@@ -1054,5 +1088,7 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
 		app.navigation.navigate_main(Route::Library);
 	}
 	let has_effects = actions::perform(app, tx);
-	has_answers || wants_library || has_effects
+	let has_notices = !app.surfaces.s14_library.to_raise.is_empty();
+	raise_all(app);
+	has_answers || wants_library || has_effects || has_notices
 }

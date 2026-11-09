@@ -3,12 +3,13 @@ use std::collections::HashSet;
 use kiroshi_core::library::contract::{LibraryPresenceAt, LibraryWriter, LibraryWriterKind};
 use rune::TextEdit;
 
-use kiroshi_rune_kit::surfaces::s14_library::{BLOCK_GAP, LibraryBlockType};
+use kiroshi_rune_kit::surfaces::s14_library::{BLOCK_GAP, LibraryBlockType, Record};
 
 use super::blocks::{
-	self, Block, Format, continued_line, converted, field_of, fresh_id, is_editable, lead_of,
-	line_count, markdown_before_caret, markdown_of, markdown_of_field, rewritten, row_start,
-	texts_of, with_line_after, without_line,
+	self, Block, Format, continued_line, converted, field_of, field_texts_of, fresh_id,
+	gallery_records, has_fields, is_editable, lead_of, line_count, markdown_before_caret,
+	markdown_of, markdown_of_field, rewritten, row_start, texts_of, with_line_after, with_records,
+	without_line,
 };
 use super::session::Session;
 use super::worker::Target;
@@ -173,10 +174,10 @@ impl Document {
 		let mut held: Vec<Field> = std::mem::take(&mut self.fields);
 		for block in &self.blocks {
 			let kind = block.kind();
-			if !is_editable(kind) {
+			if !has_fields(kind) {
 				continue;
 			}
-			for (row, text) in texts_of(&block.source).iter().enumerate() {
+			for (row, text) in field_texts_of(&block.source).iter().enumerate() {
 				let kept = held.iter().position(|field| {
 					field.block == block.id && field.row == row && field.built_from == block.source
 				});
@@ -204,8 +205,18 @@ impl Document {
 		self.fields.iter().find(|field| field.edit.focused)
 	}
 
-	fn block_at(&self, block: &str) -> Option<usize> {
+	pub fn block_at(&self, block: &str) -> Option<usize> {
 		self.blocks.iter().position(|held| held.id == block)
+	}
+
+	pub fn focus_cell(&mut self, block: &str, field: usize) {
+		for held in &mut self.fields {
+			held.edit.focused = false;
+		}
+		if let Some(edit) = self.field_mut(block, field) {
+			edit.focused = true;
+			edit.set_selection(0, edit.text.len());
+		}
 	}
 
 	fn focus(&mut self, block: &str, row: usize) {
@@ -289,9 +300,78 @@ impl Document {
 		self.flushed()
 	}
 
+	fn restructured(&mut self) -> Option<String> {
+		self.rebuild_fields();
+		self.is_dirty = true;
+		self.flushed()
+	}
+
+	fn inserted_after(&mut self, at: usize, source: String) -> String {
+		let taken: HashSet<String> = self.blocks.iter().map(|held| held.id.clone()).collect();
+		let gap = std::mem::replace(&mut self.blocks[at].gap, BLOCK_GAP.to_owned());
+		let added = Block { source, ..empty_paragraph(&taken, gap) };
+		let id = added.id.clone();
+		self.blocks.insert(at + 1, added);
+		id
+	}
+
+	pub fn insert_below(&mut self, block: &str) -> Option<String> {
+		let at = self.block_at(block)?;
+		let id = self.inserted_after(at, String::new());
+		let update = self.restructured();
+		self.focus(&id, 0);
+		update
+	}
+
+	pub fn duplicate(&mut self, block: &str) -> Option<String> {
+		let at = self.block_at(block)?;
+		let source = self.blocks[at].source.clone();
+		self.inserted_after(at, source);
+		self.restructured()
+	}
+
+	pub fn move_block(&mut self, from: usize, to: usize) -> Option<String> {
+		if from == to || from >= self.blocks.len() || to >= self.blocks.len() {
+			return None;
+		}
+		let gaps: Vec<String> = self.blocks.iter().map(|block| block.gap.clone()).collect();
+		let moved = self.blocks.remove(from);
+		self.blocks.insert(to, moved);
+		for (block, gap) in self.blocks.iter_mut().zip(gaps) {
+			block.gap = gap;
+		}
+		self.restructured()
+	}
+
+	pub fn remove_block(&mut self, block: &str) -> Option<String> {
+		let at = self.block_at(block)?;
+		let removed = self.blocks.remove(at);
+		match self.blocks.len() {
+			0 => self.blocks.push(empty_paragraph(&HashSet::new(), removed.gap)),
+			left if at == left => self.blocks[at - 1].gap = removed.gap,
+			_ => {}
+		}
+		self.restructured()
+	}
+
+	pub fn edit_gallery(
+		&mut self,
+		block: &str,
+		change: impl FnOnce(&mut Vec<Record>),
+	) -> Option<String> {
+		let at = self.block_at(block)?;
+		let mut records = gallery_records(&self.blocks[at].source);
+		change(&mut records);
+		self.blocks[at].source = with_records(&self.blocks[at].source, &records);
+		self.restructured()
+	}
+
 	pub fn convert(&mut self, block: &str, kind: LibraryBlockType, cut: Option<Cut>) {
 		let Some(at) = self.block_at(block) else { return };
 		let current = self.blocks[at].kind();
+		if !is_editable(current) {
+			return;
+		}
 		let rows: Vec<String> = texts_of(&self.blocks[at].source)
 			.iter()
 			.enumerate()

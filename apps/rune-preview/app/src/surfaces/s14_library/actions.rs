@@ -6,6 +6,7 @@ use rune::{FileDialogOptions, FileDialogResult};
 
 use kiroshi_rune_kit::strings::common;
 
+use super::rich::GalleryAdd;
 use super::worker::{Call, Due, Target};
 use super::{State, failure_text, said};
 use crate::app::App;
@@ -21,6 +22,7 @@ const DOCUMENT_EXTENSIONS: [&str; 3] = ["md", "markdown", "txt"];
 #[derive(Debug, PartialEq)]
 pub enum Effect {
 	PickFile,
+	PickGalleryImage(GalleryAdd),
 }
 
 fn picker_options() -> FileDialogOptions {
@@ -28,6 +30,23 @@ fn picker_options() -> FileDialogOptions {
 	FileDialogOptions { title, ..FileDialogOptions::default() }
 		.filter(said(common::library::filters::IMAGES), &IMAGE_EXTENSIONS)
 		.filter(said(common::library::filters::DOCUMENTS), &DOCUMENT_EXTENSIONS)
+}
+
+fn gallery_picker_options() -> FileDialogOptions {
+	let title = said(common::library::bring_in::TITLE);
+	FileDialogOptions { title, ..FileDialogOptions::default() }
+		.filter(said(common::library::filters::IMAGES), &IMAGE_EXTENSIONS)
+}
+
+fn gallery_picked(app: &mut App, add: GalleryAdd, result: FileDialogResult) {
+	let library = &mut app.surfaces.s14_library;
+	match result {
+		Ok(Some(path)) => library.import_into_gallery(add, path),
+		Ok(None) => {}
+		Err(failure) => {
+			library.raise(said(common::library::failure::import::GENERIC), failure.to_string())
+		}
+	}
 }
 
 fn picked(app: &mut App, result: FileDialogResult) {
@@ -50,6 +69,10 @@ pub fn perform(app: &mut App, tx: &mut Tx) -> bool {
 			Effect::PickFile => {
 				tx.open_file(picker_options(), |app: &mut App, result, _| picked(app, result))
 			}
+			Effect::PickGalleryImage(add) => tx
+				.open_file(gallery_picker_options(), move |app: &mut App, result, _| {
+					gallery_picked(app, add, result)
+				}),
 		}
 	}
 	if let Some(name) = board {

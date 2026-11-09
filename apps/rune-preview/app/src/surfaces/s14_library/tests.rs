@@ -14,15 +14,17 @@ use serde_json::json;
 use yrs::{Doc, ReadTxn, Text, Transact};
 
 use kiroshi_rune_kit::surfaces::s14_library::{
-	BlockEvent, DOCUMENT_PANEL_MIN_WIDTH, DOCUMENT_PANEL_OPENING_WIDTH, DocumentPanelEvent,
-	Format as Toolbar, ItemAction, ItemEvent, LibraryEvent, LightboxEvent, NewDocumentEvent,
-	NewDocumentTemplate,
+	BlockEvent, BlockMenuAction, DOCUMENT_PANEL_MIN_WIDTH, DOCUMENT_PANEL_OPENING_WIDTH,
+	DocumentPanelEvent, Format as Toolbar, GalleryEvent, HandleEvent, ItemAction, ItemEvent,
+	LibraryBlockType, LibraryEvent, LightboxEvent, LinkEvent, MORE_KEY, NewDocumentEvent,
+	NewDocumentTemplate, TableEvent, panel_max_width, tile_more_key,
 };
 
 use super::blocks::{self, Format};
 use super::document::Phase;
 use super::editing::SEND_INTERVAL;
 use super::imports::{self, HOSTED_LIMIT, JOINED_LIMIT};
+use super::rich::GalleryAdd;
 use super::session::Session;
 use super::worker::{Answer, Call, Due, Target, free_name};
 use kiroshi_rune_kit::surfaces::s14_library::THREAD_MIN_WIDTH;
@@ -238,7 +240,7 @@ fn open_in_new_tab_names_an_item_the_library_no_longer_lists() {
 	answer(&mut state, Answer::Listed { space_id: SPACE.to_owned(), items: Ok(Vec::new()) });
 
 	assert!(state.shown.is_none());
-	assert!(state.notice.is_some());
+	assert!(!state.to_raise.is_empty());
 	assert!(!state.take_library_wish());
 }
 
@@ -448,7 +450,7 @@ fn a_refused_save_raises_a_notice_and_reads_the_document_back() {
 
 	answer(&mut state, Answer::Applied { target: target("brief.md"), outcome: Err(refused()) });
 
-	assert!(state.notice.is_some());
+	assert!(!state.to_raise.is_empty());
 	assert_eq!(calls(&mut state), vec![Call::Open(target("brief.md"))]);
 }
 
@@ -468,7 +470,7 @@ fn a_refused_rename_puts_the_title_back_and_a_refused_delete_keeps_the_item() {
 	assert_eq!(title.as_deref(), Some("brief"));
 	assert!(matches!(state.dialog, Some(Dialog::Delete { has_failed: true, .. })));
 	assert!(state.shown.is_some());
-	assert!(state.notice.is_some());
+	assert!(!state.to_raise.is_empty());
 }
 
 #[test]
@@ -483,7 +485,7 @@ fn a_drop_checks_the_size_limits_then_lists_each_import_and_names_each_refusal()
 
 	state.dropped(&[small.clone(), large]);
 	let importing = state.importing.clone();
-	let refusal = state.notice.clone().map(|notice| notice.description);
+	let refusal = state.to_raise.first().and_then(|notice| notice.description.clone());
 	let sent = calls(&mut state);
 	let error = LibraryError::Unsupported { name: "small.png".to_owned() };
 	let imports = Ok(vec![LibraryImport::Refused { error }]);
@@ -497,7 +499,7 @@ fn a_drop_checks_the_size_limits_then_lists_each_import_and_names_each_refusal()
 	assert!(refusal.is_some_and(|line| line.starts_with("large.png: ")));
 	assert_eq!(sent, vec![Call::Import { space_id: SPACE.to_owned(), paths: vec![small] }]);
 	assert!(state.importing.is_empty());
-	assert!(state.notice.is_some_and(|notice| notice.title.contains("small.png")));
+	assert!(state.to_raise.last().is_some_and(|notice| notice.title.contains("small.png")));
 }
 
 #[test]
@@ -806,7 +808,7 @@ fn download_and_copy_from_the_bar_and_the_lightbox_reach_the_core() {
 	assert!(matches!(copied_wake.as_slice(), [Call::Wake(_, Due::Copied)]));
 	assert!(!state.is_copied("brief.md"));
 	assert_eq!(calls(&mut images), vec![Call::Download(target("dunes.png"))]);
-	assert!(images.notice.is_some());
+	assert!(!images.to_raise.is_empty());
 }
 
 #[test]
@@ -946,7 +948,7 @@ fn a_writer_from_the_event_loop_shows_on_the_open_document_until_it_finishes() {
 		assert_eq!(document.agents().count(), 0);
 		assert!(document.cards().is_empty());
 	}
-	assert!(app.surfaces.s14_library.notice.is_none());
+	assert!(crate::app::notice::shown(&app).is_empty());
 }
 
 #[test]
@@ -1000,4 +1002,504 @@ fn an_unreadable_library_event_takes_the_unreadable_path() {
 		parsed(&frame("library://changed", json!({ "spaceId": SPACE }))),
 		Some(HostEvent::Library(Heard::Changed(_)))
 	));
+}
+
+#[test]
+fn a_failed_agent_write_raises_its_notice_through_the_app() {
+	let mut app = library_app(&state_of("Body."));
+	let finished = LibraryDocumentWriterFinished {
+		space_id: SPACE.to_owned(),
+		name: "brief.md".to_owned(),
+		agent_id: "atlas".to_owned(),
+		agent_name: "Atlas".to_owned(),
+		outcome: LibraryWriteOutcome::Failed,
+	};
+
+	heard_in(&mut app, &frame("library://document-writer-finished", finished));
+
+	let shown = crate::app::notice::shown(&app);
+	assert!(shown.iter().any(|notice| notice.title.contains("Atlas")));
+	assert!(app.surfaces.s14_library.to_raise.is_empty());
+}
+
+fn escape() -> rune::KeyEvent {
+	rune::KeyEvent { key: rune::Key::Escape, mods: rune::Mods::default() }
+}
+
+fn tile_menu(state: &mut State, name: &str) {
+	let anchor = tile_more_key(name);
+	state.handle_library(LibraryEvent::Menu { id: name.to_owned(), anchor });
+}
+
+#[test]
+fn more_on_a_tile_opens_the_item_menu_at_it_with_the_rows_of_its_kind() {
+	let mut state = library_with(vec![
+		item("brief.md", LibraryItemKind::Document),
+		item("dunes.png", LibraryItemKind::Image),
+	]);
+
+	tile_menu(&mut state, "brief.md");
+	let document_rows = state.menu_actions();
+	let anchor = state.menu.as_ref().map(|menu| menu.anchor.clone());
+	tile_menu(&mut state, "dunes.png");
+
+	assert_eq!(document_rows, ItemAction::ALL);
+	assert_eq!(anchor, Some(tile_more_key("brief.md")));
+	assert!(!state.menu_actions().contains(&ItemAction::Rename));
+	assert_eq!(state.menu_actions().len(), ItemAction::ALL.len() - 1);
+}
+
+#[test]
+fn more_on_the_document_bar_and_the_lightbox_opens_their_menu_under_more() {
+	let mut document = opened_document("brief.md", "Body.");
+	let mut images = library_with(vec![item("dunes.png", LibraryItemKind::Image)]);
+	images.handle_library(LibraryEvent::Open("dunes.png".to_owned()));
+
+	document.handle_document_bar(ItemEvent::More);
+	images.handle_lightbox(LightboxEvent::Item(ItemEvent::More));
+
+	for state in [&document, &images] {
+		assert_eq!(state.menu.as_ref().map(|menu| menu.anchor.as_str()), Some(MORE_KEY));
+	}
+	assert_eq!(
+		document.menu_actions(),
+		[
+			ItemAction::OpenInNewTab,
+			ItemAction::Rename,
+			ItemAction::ShowInFolder,
+			ItemAction::Delete
+		]
+	);
+	assert_eq!(
+		images.menu_actions(),
+		[ItemAction::OpenInNewTab, ItemAction::ShowInFolder, ItemAction::Delete]
+	);
+}
+
+#[test]
+fn a_chosen_row_reaches_the_core_and_delete_asks_first() {
+	let mut state = library_with(vec![item("dunes.png", LibraryItemKind::Image)]);
+	let mut chosen = Vec::new();
+	for action in [ItemAction::ShowInFolder, ItemAction::Copy, ItemAction::Download] {
+		tile_menu(&mut state, "dunes.png");
+		state.choose_in_menu(action);
+		chosen.extend(calls(&mut state));
+	}
+	tile_menu(&mut state, "dunes.png");
+	state.choose_in_menu(ItemAction::Delete);
+
+	assert_eq!(
+		chosen,
+		vec![
+			Call::Reveal(target("dunes.png")),
+			Call::Copy(target("dunes.png")),
+			Call::Download(target("dunes.png")),
+		]
+	);
+	assert!(state.menu.is_none());
+	assert!(
+		matches!(&state.dialog, Some(Dialog::Delete { target: asked, .. }) if asked.name == "dunes.png")
+	);
+	assert!(calls(&mut state).is_empty());
+}
+
+#[test]
+fn escape_or_a_click_outside_closes_the_item_menu_without_acting() {
+	let mut state = library_with(vec![item("brief.md", LibraryItemKind::Document)]);
+
+	tile_menu(&mut state, "brief.md");
+	let is_handled = state.key_pressed(&escape());
+	let after_escape = state.menu.is_none();
+	tile_menu(&mut state, "brief.md");
+	state.close_menu();
+
+	assert!(is_handled && after_escape);
+	assert!(state.menu.is_none());
+	assert!(state.shown.is_none() && state.dialog.is_none());
+	assert!(calls(&mut state).is_empty());
+}
+
+#[test]
+fn a_refused_show_in_folder_keeps_the_library_and_raises_a_notice() {
+	let mut state = library_with(vec![item("brief.md", LibraryItemKind::Document)]);
+	tile_menu(&mut state, "brief.md");
+	state.choose_in_menu(ItemAction::ShowInFolder);
+	calls(&mut state);
+
+	answer(&mut state, Answer::Revealed(Err(refused())));
+
+	assert!(matches!(state.listing, Listing::Loaded(ref items) if items.len() == 1));
+	assert!(state.to_raise.iter().any(|notice| notice.title.contains("folder")));
+}
+
+#[test]
+fn retry_on_a_failed_library_reloads_it_showing_loading_then_the_items_or_the_failure() {
+	let mut state = State::default();
+	state.enter_space(SPACE, false);
+	state.show_library();
+	answer(&mut state, Answer::Listed { space_id: SPACE.to_owned(), items: Err(refused()) });
+	calls(&mut state);
+
+	state.handle_library(LibraryEvent::Retry);
+	let is_loading = matches!(state.listing, Listing::Loading);
+	let relisted = calls(&mut state);
+	answer(&mut state, Answer::Listed { space_id: SPACE.to_owned(), items: Err(refused()) });
+	let has_failed_again = matches!(state.listing, Listing::Failed);
+	state.handle_library(LibraryEvent::Retry);
+	let items = Ok(vec![item("brief.md", LibraryItemKind::Document)]);
+	answer(&mut state, Answer::Listed { space_id: SPACE.to_owned(), items });
+
+	assert!(is_loading);
+	assert_eq!(relisted, vec![Call::List { space_id: SPACE.to_owned() }]);
+	assert!(has_failed_again);
+	assert!(matches!(state.listing, Listing::Loaded(ref items) if items.len() == 1));
+}
+
+#[test]
+fn a_resized_panel_keeps_its_width_within_the_room_across_a_reopen() {
+	let mut state = library_with(Vec::new());
+	state.open_beside("brief.md");
+
+	state.handle_panel(DocumentPanelEvent::Resize(DOCUMENT_PANEL_MIN_WIDTH + 80.0));
+	state.handle_panel(DocumentPanelEvent::Close);
+	state.open_beside("notes.md");
+	let reopened = state.panel_width(10_000.0);
+	state.handle_panel(DocumentPanelEvent::Resize(5_000.0));
+	let widest = state.panel_width(1_000.0);
+	state.handle_panel(DocumentPanelEvent::Resize(10.0));
+
+	assert_eq!(reopened, DOCUMENT_PANEL_MIN_WIDTH + 80.0);
+	assert_eq!(widest, panel_max_width(1_000.0));
+	assert_eq!(state.panel_width(10_000.0), DOCUMENT_PANEL_MIN_WIDTH);
+}
+
+fn selected(state: &mut State, from: usize, to: usize) -> String {
+	let block = first_block(state);
+	let edit = state.field_mut(false, &block, 0);
+	edit.focused = true;
+	edit.set_selection(from, to);
+	block
+}
+
+#[test]
+fn the_link_button_shows_the_link_field_and_confirm_links_the_selection_then_saves() {
+	let initial = state_of("Ship today");
+	let mut state = opened_from("notes.txt", &initial);
+	selected(&mut state, 0, 4);
+
+	state.handle_format(false, Toolbar::Link);
+	let is_shown = state.link.as_ref().is_some_and(|link| link.edit.text.is_empty());
+	state.link_mut().replace_text("https://kiroshi.app/a b");
+	let url = state.link_mut().text.clone();
+	state.handle_link(LinkEvent::Confirm(url));
+
+	assert!(is_shown);
+	assert!(state.link.is_none());
+	assert_eq!(
+		saved_markdown(&initial, &calls(&mut state)),
+		"[Ship](https://kiroshi.app/a%20b) today"
+	);
+}
+
+#[test]
+fn the_link_field_opens_on_the_link_already_there_and_an_empty_one_unlinks() {
+	let initial = state_of("[Ship](https://kiroshi.app) today");
+	let mut state = opened_from("notes.txt", &initial);
+	selected(&mut state, 0, 4);
+
+	state.handle_format(false, Toolbar::Link);
+	let shown = state.link.as_ref().map(|link| link.edit.text.clone());
+	state.handle_link(LinkEvent::Confirm("  ".to_owned()));
+
+	assert_eq!(shown.as_deref(), Some("https://kiroshi.app"));
+	assert_eq!(saved_markdown(&initial, &calls(&mut state)), "Ship today");
+}
+
+#[test]
+fn cancel_closes_the_link_field_and_leaves_the_text_unchanged() {
+	let mut state = opened_document("notes.txt", "Ship today");
+	selected(&mut state, 0, 4);
+
+	state.handle_format(false, Toolbar::Link);
+	state.link_mut().replace_text("https://kiroshi.app");
+	state.handle_link(LinkEvent::Cancel);
+
+	assert!(state.link.is_none());
+	assert!(calls(&mut state).is_empty());
+	assert_eq!(shown_markdown(&state).as_deref(), Some("Ship today"));
+	assert!(
+		state.shown_document().is_some_and(|document| document.fields[0].edit.marks().is_empty())
+	);
+}
+
+fn block_ids(state: &State) -> Vec<String> {
+	let document = state.shown_document().expect("an open document");
+	document.blocks.iter().map(|block| block.id.clone()).collect()
+}
+
+fn saved_after(initial: &str, change: impl FnOnce(&mut State, &[String])) -> String {
+	let initial = state_of(initial);
+	let mut state = opened_from("notes.txt", &initial);
+	let ids = block_ids(&state);
+	change(&mut state, &ids);
+	assert!(state.block_menu.is_none());
+	saved_markdown(&initial, &calls(&mut state))
+}
+
+fn chosen_on(state: &mut State, block: &str, action: BlockMenuAction) {
+	state.handle_block_handle(false, block, HandleEvent::Press);
+	state.handle_block_menu(action);
+}
+
+#[test]
+fn pressing_a_handle_opens_the_block_menu_on_that_block_and_escape_closes_it() {
+	let mut state = opened_document("notes.txt", "One\n\nTwo");
+	let ids = block_ids(&state);
+
+	state.handle_block_handle(false, &ids[1], HandleEvent::Press);
+	let handled = state.handled_block(false).map(str::to_owned);
+	let is_handled = state.key_pressed(&escape());
+
+	assert_eq!(handled.as_deref(), Some(ids[1].as_str()));
+	assert!(is_handled);
+	assert!(state.block_menu.is_none());
+	assert!(calls(&mut state).is_empty());
+}
+
+#[test]
+fn each_block_menu_action_changes_the_document_and_saves_it() {
+	let three = "One\n\nTwo\n\nThree";
+	let duplicated =
+		saved_after(three, |state, ids| chosen_on(state, &ids[0], BlockMenuAction::Duplicate));
+	let up = saved_after(three, |state, ids| chosen_on(state, &ids[1], BlockMenuAction::MoveUp));
+	let down =
+		saved_after(three, |state, ids| chosen_on(state, &ids[1], BlockMenuAction::MoveDown));
+	let deleted =
+		saved_after(three, |state, ids| chosen_on(state, &ids[2], BlockMenuAction::Delete));
+	let top = saved_after(three, |state, ids| chosen_on(state, &ids[0], BlockMenuAction::MoveUp));
+
+	assert_eq!(duplicated, "One\n\nOne\n\nTwo\n\nThree");
+	assert_eq!(up, "Two\n\nOne\n\nThree");
+	assert_eq!(down, "One\n\nThree\n\nTwo");
+	assert_eq!(deleted, "One\n\nTwo");
+	assert_eq!(top, three);
+}
+
+#[test]
+fn deleting_the_only_block_leaves_an_empty_paragraph_to_write_in() {
+	let mut state = opened_document("notes.txt", "Only");
+	let ids = block_ids(&state);
+
+	chosen_on(&mut state, &ids[0], BlockMenuAction::Delete);
+
+	let document = state.shown_document().expect("an open document");
+	assert_eq!(document.blocks.len(), 1);
+	assert_eq!(document.markdown(), "");
+	assert_eq!(applies(&calls(&mut state)), 1);
+}
+
+#[test]
+fn insert_on_a_handle_adds_an_empty_paragraph_below_and_focuses_it() {
+	let saved = saved_after("One\n\nTwo", |state, ids| {
+		state.handle_block_handle(false, &ids[0], HandleEvent::Insert);
+		let document = state.shown_document().expect("an open document");
+		let focused = document.focused().map(|field| field.block.clone());
+		assert_eq!(focused.as_ref(), document.blocks.get(1).map(|block| &block.id));
+	});
+
+	assert_eq!(saved, "One\n\n\n\nTwo");
+}
+
+#[test]
+fn a_dragged_handle_moves_its_block_to_the_slot_and_saves() {
+	let saved = saved_after("One\n\nTwo\n\nThree", |state, ids| {
+		state.handle_block_handle(false, &ids[0], HandleEvent::Move { from: 0, to: 2 });
+	});
+
+	assert_eq!(saved, "Two\n\nThree\n\nOne");
+}
+
+const TABLE: &str = "| Name | Role |\n| --- | --- |\n| Ada | Lead |";
+
+#[test]
+fn an_edited_table_cell_is_written_into_its_table_and_saved() {
+	let initial = state_of(TABLE);
+	let mut state = opened_from("notes.txt", &initial);
+	let block = first_block(&state);
+
+	state.field_mut(false, &block, 2).replace_text("Ada | Grace");
+	state.handle_table(false, &block, TableEvent::Edited { row: 1, column: 0 });
+	flush_due(&mut state);
+
+	assert_eq!(
+		saved_markdown(&initial, &calls(&mut state)),
+		"| Name | Role |\n| --- | --- |\n| Ada \\| Grace | Lead |"
+	);
+}
+
+#[test]
+fn table_focus_moves_to_that_cell_with_its_text_selected() {
+	let mut state = opened_document("notes.txt", TABLE);
+	let block = first_block(&state);
+
+	state.handle_table(false, &block, TableEvent::Focus { row: 1, column: 1 });
+
+	let document = state.shown_document().expect("an open document");
+	let focused = document.focused().map(|field| (field.row, field.edit.range()));
+	assert_eq!(focused, Some((3, (0, 4))));
+	assert_eq!(document.fields.iter().filter(|field| field.edit.focused).count(), 1);
+}
+
+#[test]
+fn an_escaped_pipe_stays_inside_its_cell_on_the_next_edit() {
+	let initial = state_of("| Name | Role |\n| --- | --- |\n| Ada \\| Grace | Lead |");
+	let mut state = opened_from("notes.txt", &initial);
+	let block = first_block(&state);
+
+	state.field_mut(false, &block, 3).replace_text("Leads");
+	state.handle_table(false, &block, TableEvent::Edited { row: 1, column: 1 });
+	flush_due(&mut state);
+
+	assert_eq!(
+		saved_markdown(&initial, &calls(&mut state)),
+		"| Name | Role |\n| --- | --- |\n| Ada \\| Grace | Leads |"
+	);
+}
+
+const GALLERY: &str =
+	"```gallery\n- image: dunes.png\n  alt: Dunes\n- image: fern.png\n  alt: Fern\n```";
+
+fn gallery_block(state: &State) -> String {
+	let document = state.shown_document().expect("an open document");
+	let gallery = document.blocks.iter().find(|block| block.kind() == LibraryBlockType::Gallery);
+	gallery.expect("a gallery block").id.clone()
+}
+
+fn gallery_saved(initial: &str, event: GalleryEvent) -> String {
+	let initial = state_of(initial);
+	let mut state = opened_from("notes.txt", &initial);
+	let block = gallery_block(&state);
+	state.handle_gallery(false, &block, event);
+	flush_due(&mut state);
+	saved_markdown(&initial, &calls(&mut state))
+}
+
+#[test]
+fn removing_or_moving_a_gallery_tile_changes_the_gallery_and_saves_it() {
+	let removed = gallery_saved(GALLERY, GalleryEvent::Remove(0));
+	let moved = gallery_saved(GALLERY, GalleryEvent::Move { from: 0, to: 1 });
+	let last = gallery_saved(
+		"Intro\n\n```gallery\n- image: dunes.png\n  alt: Dunes\n```",
+		GalleryEvent::Remove(0),
+	);
+
+	assert_eq!(removed, "```gallery\n- image: fern.png\n  alt: Fern\n```");
+	assert_eq!(
+		moved,
+		"```gallery\n- image: fern.png\n  alt: Fern\n- image: dunes.png\n  alt: Dunes\n```"
+	);
+	assert_eq!(last, "Intro");
+}
+
+#[test]
+fn a_gallery_caption_is_written_into_its_tile_and_an_empty_one_drops_it() {
+	let initial = state_of(GALLERY);
+	let mut state = opened_from("notes.txt", &initial);
+	let block = first_block(&state);
+
+	state.field_mut(false, &block, 1).replace_text("A fern, *close*");
+	state.handle_gallery(false, &block, GalleryEvent::Caption(1));
+	flush_due(&mut state);
+	let captioned = saved_markdown(&initial, &calls(&mut state));
+	state.field_mut(false, &block, 1).replace_text("  ");
+	state.handle_gallery(false, &block, GalleryEvent::Caption(1));
+	flush_due(&mut state);
+
+	assert_eq!(
+		captioned,
+		"```gallery\n- image: dunes.png\n  alt: Dunes\n- image: fern.png\n  alt: Fern\n  caption: A fern, *close*\n```"
+	);
+	assert_eq!(shown_markdown(&state).as_deref(), Some(GALLERY));
+}
+
+#[test]
+fn add_picks_an_image_imports_it_then_appends_its_tile_and_saves() {
+	let initial = state_of(GALLERY);
+	let mut state = opened_from("notes.txt", &initial);
+	let block = first_block(&state);
+	let add = GalleryAdd { is_beside: false, block: block.clone() };
+	let path = PathBuf::from("/photos/Desert road.png");
+
+	state.handle_gallery(false, &block, GalleryEvent::Add);
+	let picks = std::mem::take(&mut state.effects);
+	state.import_into_gallery(add.clone(), path.clone());
+	let imported = calls(&mut state);
+	let item = item("Desert road.png", LibraryItemKind::Image);
+	let imports = Ok(vec![LibraryImport::Imported { item }]);
+	answer(
+		&mut state,
+		Answer::GalleryImported { target: target("notes.txt"), add: add.clone(), path, imports },
+	);
+	let landed = calls(&mut state);
+
+	assert_eq!(picks, vec![super::Effect::PickGalleryImage(add.clone())]);
+	assert!(
+		matches!(imported.as_slice(), [Call::GalleryImport { add: asked, .. }] if *asked == add)
+	);
+	assert!(landed.contains(&Call::List { space_id: SPACE.to_owned() }));
+	assert_eq!(
+		saved_markdown(&initial, &landed),
+		"```gallery\n- image: dunes.png\n  alt: Dunes\n- image: fern.png\n  alt: Fern\n- image: Desert road.png\n  alt: Desert road\n```"
+	);
+}
+
+#[test]
+fn a_refused_gallery_import_keeps_the_gallery_marks_the_add_failed_and_raises_a_notice() {
+	let mut state = opened_document("notes.txt", GALLERY);
+	let block = first_block(&state);
+	let add = GalleryAdd { is_beside: false, block: block.clone() };
+	let path = PathBuf::from("/photos/huge.png");
+
+	answer(
+		&mut state,
+		Answer::GalleryImported { target: target("notes.txt"), add, path, imports: Err(refused()) },
+	);
+
+	assert!(state.has_gallery_add_failed(false, &block));
+	assert!(state.to_raise.iter().any(|notice| notice.title.contains("huge.png")));
+	assert_eq!(applies(&calls(&mut state)), 0);
+	assert_eq!(shown_markdown(&state).as_deref(), Some(GALLERY));
+	state.handle_gallery(false, &block, GalleryEvent::Add);
+	assert!(!state.has_gallery_add_failed(false, &block));
+}
+
+#[test]
+fn copy_image_copies_and_save_to_library_saves_a_copy_through_the_core() {
+	let mut state = library_with(vec![item("dunes.png", LibraryItemKind::Image)]);
+
+	state.act("dunes.png", ItemAction::CopyImage);
+	state.act("dunes.png", ItemAction::SaveToLibrary);
+	let asked = calls(&mut state);
+	let copy = item("dunes 2.png", LibraryItemKind::Image);
+	answer(&mut state, Answer::SavedToLibrary { target: target("dunes.png"), item: Ok(copy) });
+
+	assert_eq!(
+		asked,
+		vec![Call::Copy(target("dunes.png")), Call::SaveToLibrary(target("dunes.png"))]
+	);
+	assert_eq!(calls(&mut state), vec![Call::List { space_id: SPACE.to_owned() }]);
+	assert!(state.to_raise.is_empty());
+}
+
+#[test]
+fn a_refused_save_to_library_keeps_the_library_and_names_the_image() {
+	let mut state = library_with(vec![item("dunes.png", LibraryItemKind::Image)]);
+
+	answer(
+		&mut state,
+		Answer::SavedToLibrary { target: target("dunes.png"), item: Err(refused()) },
+	);
+
+	assert!(matches!(state.listing, Listing::Loaded(ref items) if items.len() == 1));
+	assert!(state.to_raise.iter().any(|notice| notice.title.contains("dunes.png")));
 }

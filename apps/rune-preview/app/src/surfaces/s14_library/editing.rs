@@ -1,10 +1,12 @@
 use std::time::Duration;
 
 use kiroshi_core::library::contract::LibraryPresenceAt;
-use rune::Mark;
+use rune::{Mark, TextEdit};
 
 use kiroshi_rune_kit::strings::Language;
-use kiroshi_rune_kit::surfaces::s14_library::{BlockEvent, Format, LibraryBlockType, Slash};
+use kiroshi_rune_kit::surfaces::s14_library::{
+	BlockEvent, Format, LibraryBlockType, LinkEvent, Slash,
+};
 
 use super::State;
 use super::document::Cut;
@@ -18,6 +20,38 @@ pub struct SlashState {
 	pub field: usize,
 	pub at: usize,
 	pub active: usize,
+}
+
+pub struct LinkState {
+	pub is_beside: bool,
+	pub block: String,
+	pub row: usize,
+	selection: (usize, usize),
+	pub edit: TextEdit,
+}
+
+fn percent_encoded(character: char) -> String {
+	let mut bytes = [0; 4];
+	character.encode_utf8(&mut bytes).bytes().map(|byte| format!("%{byte:02X}")).collect()
+}
+
+fn destination_of(url: &str) -> String {
+	url.trim()
+		.chars()
+		.map(|character| match character {
+			'(' | ')' => percent_encoded(character),
+			_ if character.is_whitespace() => percent_encoded(character),
+			_ => character.to_string(),
+		})
+		.collect()
+}
+
+fn linked(edit: &mut TextEdit, (start, end): (usize, usize), destination: String) {
+	edit.set_selection(start, end);
+	edit.remove_mark(&Mark::Link(String::new()));
+	if !destination.is_empty() {
+		edit.set_mark(Mark::Link(destination));
+	}
 }
 
 fn mark_of(format: Format) -> Option<Mark> {
@@ -154,6 +188,14 @@ impl State {
 				document.typed(&block, row);
 				self.arm_flush();
 			}
+			(Format::Link, None) => {
+				let Some(edit) = document.field(&block, row) else { return };
+				let selection = edit.range();
+				let mut url = TextEdit::new(edit.active_link().unwrap_or_default());
+				url.set_selection(0, url.text.len());
+				url.focused = true;
+				self.link = Some(LinkState { is_beside, block, row, selection, edit: url });
+			}
 			(Format::Heading | Format::List, None) => {
 				let kind = if format == Format::Heading {
 					LibraryBlockType::Heading
@@ -170,7 +212,25 @@ impl State {
 		}
 	}
 
-	fn arm_flush(&mut self) {
+	pub fn handle_link(&mut self, event: LinkEvent) {
+		let Some(link) = self.link.take() else { return };
+		let LinkEvent::Confirm(url) = event else { return };
+		let Some(document) = self.document_mut(link.is_beside) else { return };
+		let Some(edit) = document.field_mut(&link.block, link.row) else { return };
+		linked(edit, link.selection, destination_of(&url));
+		document.typed(&link.block, link.row);
+		let update = document.flushed();
+		self.send(link.is_beside, update);
+	}
+
+	pub fn link_mut(&mut self) -> &mut TextEdit {
+		match self.link.as_mut() {
+			Some(link) => &mut link.edit,
+			None => &mut self.spare,
+		}
+	}
+
+	pub(super) fn arm_flush(&mut self) {
 		if self.is_flush_armed {
 			return;
 		}
@@ -187,7 +247,7 @@ impl State {
 		}
 	}
 
-	fn send(&mut self, is_beside: bool, update: Option<String>) {
+	pub(super) fn send(&mut self, is_beside: bool, update: Option<String>) {
 		let Some(update) = update else { return };
 		let Some(document) = self.document(is_beside) else { return };
 		let target = document.target.clone();
