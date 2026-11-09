@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use rune::image::Image;
 use rune::{
-	Align, Color, Cursor, El, Key as KeyName, KeyEvent, Mods, PointerPress, ScrollSpec, Side,
+	Align, Anim, Color, Cursor, El, Key as KeyName, KeyEvent, Mods, PointerPress, ScrollSpec, Side,
 	SurfaceFit, TextEdit, TextStyle, Tx, col, el, icon, row, text, text_input,
 };
 use rune::{Block, Mark, MarkRange, Span};
@@ -738,7 +738,6 @@ pub struct LibraryPanel<'a> {
 	pub query: &'a TextEdit,
 	pub actions: PanelActions,
 	pub columns: usize,
-	pub focused: Option<&'a str>,
 }
 
 pub const GRID_TILE_MIN: f32 = SPACING * 60.0;
@@ -802,7 +801,7 @@ pub fn library_panel<S: 'static>(
 			.role("status")
 			.child(text(line).font(TEXT_COMPACT).color(t.muted_foreground).wrap())
 	} else {
-		grid(t, lang, &shown, panel.columns, panel.focused, on)
+		grid(t, lang, &shown, panel.columns, on)
 	};
 	let content = col().w_full().grow(1.0).min_h(0.0).child(header).child(body);
 	let content = if is_loading {
@@ -1003,7 +1002,6 @@ fn grid<S: 'static>(
 	lang: Language,
 	items: &[&LibraryItem],
 	columns: usize,
-	focused: Option<&str>,
 	on: impl Fn(&mut S, LibraryEvent) + Clone + 'static,
 ) -> El {
 	let cells = items
@@ -1014,10 +1012,14 @@ fn grid<S: 'static>(
 				let open = emitter(&on, LibraryEvent::Open(item.id.to_owned()));
 				let anchor = tile_more_key(item.id);
 				let menu = LibraryEvent::Menu { id: item.id.to_owned(), anchor: anchor.clone() };
-				let more = tile_more(t, lang, item, anchor, focused == Some(item.id))
+				let more = tile_more(t, lang, item, anchor)
 					.on_press(emitter(&on, menu.clone()))
 					.on_key(pressed_on_return(emitter(&on, menu)));
-				el().w_full().hover_group().child(tile(t, lang, item).on_press(open)).child(more)
+				el().w_full()
+					.hover_group_focus()
+					.hover_motion(Anim::INSTANT, Anim::INSTANT)
+					.child(tile(t, lang, item).on_press(open))
+					.child(more)
 			}
 		})
 		.collect();
@@ -1103,7 +1105,7 @@ pub fn tile_more_key(id: &str) -> String {
 	format!("library-item-more-{id}")
 }
 
-fn tile_more(t: &Tokens, lang: Language, item: &LibraryItem, key: String, is_revealed: bool) -> El {
+fn tile_more(t: &Tokens, lang: Language, item: &LibraryItem, key: String) -> El {
 	let label =
 		filled(say(common::library::item_menu::LABEL, lang), "name", shown_name(item.name, lang));
 	let face = row()
@@ -1112,8 +1114,8 @@ fn tile_more(t: &Tokens, lang: Language, item: &LibraryItem, key: String, is_rev
 		.center()
 		.fill(t.card)
 		.hover(t.muted)
-		.child(icon(&icons::MORE_HORIZONTAL, SPACING * 4.0).color(t.foreground));
-	let face = if is_revealed { face } else { face.group_opacity(0.0, 1.0) };
+		.child(icon(&icons::MORE_HORIZONTAL, SPACING * 4.0).color(t.foreground))
+		.group_opacity(0.0, 1.0);
 	let control = row()
 		.key(key)
 		.pin(None, Some(SPACING * 2.0), Some(SPACING * 2.0), None)
