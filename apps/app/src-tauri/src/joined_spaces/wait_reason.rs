@@ -26,6 +26,7 @@ pub(super) enum Stall {
 	RekeyDropped(JoinedSpaceError),
 	DeviceKeys(JoinedSpaceError),
 	AwaitingApproval,
+	NotAdmitted,
 	SocketUrl(JoinedSpaceError),
 	KeyRead(JoinedSpaceError),
 	RosterMissing,
@@ -90,6 +91,10 @@ pub(super) fn wait_of(stall: Stall) -> JoinedSpaceWait {
 		Stall::AwaitingApproval => (
 			Reason::DeviceAwaitingApproval,
 			"this device awaits its approval by another device of the account".to_owned(),
+		),
+		Stall::NotAdmitted => (
+			Reason::DeviceNotAdmitted,
+			"the host refused the missed rekey frame: this device is not in its roster".to_owned(),
 		),
 		Stall::SocketUrl(JoinedSpaceError::RelayUnreachable { detail }) => {
 			(Reason::RelayUnreachable, detail)
@@ -163,6 +168,7 @@ mod tests {
 			(Stall::RekeyDropped(JoinedSpaceError::BadSignature), Reason::RekeyNotVerified),
 			(Stall::DeviceKeys(key_store()), Reason::DeviceKeysUnreadable),
 			(Stall::AwaitingApproval, Reason::DeviceAwaitingApproval),
+			(Stall::NotAdmitted, Reason::DeviceNotAdmitted),
 			(
 				Stall::SocketUrl(JoinedSpaceError::RelayUnreachable { detail: "down".to_owned() }),
 				Reason::RelayUnreachable,

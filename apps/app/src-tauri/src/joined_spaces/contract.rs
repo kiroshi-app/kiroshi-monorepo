@@ -43,6 +43,7 @@ pub enum JoinedSpaceWaitReason {
 	UnknownInstance,
 	DeviceKeysUnreadable,
 	DeviceAwaitingApproval,
+	DeviceNotAdmitted,
 	SocketUrlFailed,
 	RosterMissing,
 	KeychainReadFailed,
