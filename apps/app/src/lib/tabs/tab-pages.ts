@@ -25,6 +25,8 @@ export const HREF_BASE = "http://tab"
 
 const LIBRARY_PATH = "/library"
 
+const HOME_PATH = "/home"
+
 const USER_SETTINGS_PATH = "/settings/user"
 
 const SPACE_SETTINGS_PATH = /^\/settings\/space\/[^/]+$/
@@ -74,6 +76,9 @@ export const isListPage = ({ pathname }: TabPage) => pathname === LIST_PATH
 export const isLibraryPage = ({ pathname }: Pick<TabPage, "pathname">) =>
 	pathname === LIBRARY_PATH
 
+export const isHomePage = ({ pathname }: Pick<TabPage, "pathname">) =>
+	pathname === HOME_PATH
+
 export type DocumentRename = Omit<LibraryDocumentRenamed, "spaceId">
 
 const opensDocument = (page: TabPage, name: string) =>
@@ -107,6 +112,7 @@ export const isTabHref = (href: string) => {
 	return (
 		pathname === LIST_PATH ||
 		pathname === LIBRARY_PATH ||
+		pathname === HOME_PATH ||
 		pathname === USER_SETTINGS_PATH ||
 		SPACE_SETTINGS_PATH.test(pathname) ||
 		companionIdIn(pathname) !== undefined ||

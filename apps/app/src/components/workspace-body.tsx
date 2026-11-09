@@ -33,18 +33,22 @@ import type { OnboardingCreation } from "@/lib/onboarding/onboarding-flow-contro
 import type { SignIn } from "@/lib/onboarding/use-sign-in"
 import type { MessageLandingController } from "@/lib/search/message-landing-controller"
 
-type WorkspaceBodyProps = {
+type HomeSeat = {
+	visits: HomeVisits
+	store: TranscriptStore
+	conversations: Conversation[]
+	onSelectAgent: (botId: string) => void
+}
+
+export type WorkspaceBodyProps = {
 	activityPanel: ActivityPanel
 	haveSpacesFailed: boolean
 	onRetrySpaces: () => void
 	bot?: Bot
 	bots: Bot[]
 	conversation?: Conversation
-	conversations: Conversation[]
 	conversationRuntimes: ConversationRuntimes
-	store: TranscriptStore
-	homeVisits: HomeVisits
-	onSelectBot: (botId: string) => void
+	home?: HomeSeat
 	chat: Chat
 	attachments: AttachmentsController
 	drafts: DraftsController
@@ -106,26 +110,37 @@ const missionThreadOf = (
 	return null
 }
 
-const homeSeatOf = (
+const NO_VISITS: HomeVisitsState = {}
+
+const ignoreVisits = () => () => undefined
+
+const useVisitsOf = (seat: HomeSeat | undefined) =>
+	useSyncExternalStore(
+		seat?.visits.subscribe ?? ignoreVisits,
+		seat?.visits.getState ?? (() => NO_VISITS),
+	)
+
+const homeOf = (
 	props: WorkspaceBodyProps,
+	seat: HomeSeat,
 	bot: Bot,
 	visits: HomeVisitsState,
 ): ThreadHome => {
-	const { homeVisits, onOpenThreadInNewTab, spaceId } = props
+	const { onOpenThreadInNewTab, spaceId } = props
 	const visit = visitOf(visits, bot.id, spaceId)
 	const openConversation = (conversationId: string) =>
 		onOpenThreadInNewTab({ conversation: conversationId })
 	const rooms = {
 		agent: bot,
-		conversations: props.conversations,
-		store: props.store,
+		conversations: seat.conversations,
+		store: seat.store,
 		spaceId,
 		onOpenRoom: openConversation,
 	}
 	const lineFeed = {
 		openedAt: visit?.openedAt ?? null,
 		roomLinesOf: (workingIds: string[]) =>
-			homeVisits.roomLinesOf(bot.id, spaceId, workingIds),
+			seat.visits.roomLinesOf(bot.id, spaceId, workingIds),
 	}
 	const requests = {
 		bots: props.bots,
@@ -144,9 +159,9 @@ const homeSeatOf = (
 				archive={visit?.archive ?? null}
 				isBandDismissed={visit?.isBandDismissed ?? false}
 				lines={lines}
-				onDismissBand={() => homeVisits.dismissBand(bot.id, spaceId)}
+				onDismissBand={() => seat.visits.dismissBand(bot.id, spaceId)}
 				onOpenArchive={openConversation}
-				onSelectAgent={props.onSelectBot}
+				onSelectAgent={seat.onSelectAgent}
 				readerName={props.readerName}
 			/>
 		),
@@ -157,7 +172,7 @@ const homeSeatOf = (
 				{...lineFeed}
 				{...requests}
 				key={bot.id}
-				onSelectAgent={props.onSelectBot}
+				onSelectAgent={seat.onSelectAgent}
 			/>
 		),
 	}
@@ -167,8 +182,7 @@ export function WorkspaceBody(props: WorkspaceBodyProps) {
 	const t = useCommonCopy()
 	const { missions } = props
 	const opened = useSyncExternalStore(missions.subscribe, missions.getState)
-	const { homeVisits } = props
-	const visits = useSyncExternalStore(homeVisits.subscribe, homeVisits.getState)
+	const visits = useVisitsOf(props.home)
 	const rowId = props.conversation?.id ?? props.bot?.id ?? null
 	const { spaceRowId } = props
 
@@ -237,8 +251,8 @@ export function WorkspaceBody(props: WorkspaceBodyProps) {
 			bots={props.bots}
 			drafts={props.drafts}
 			home={
-				thread.kind === "bot"
-					? homeSeatOf(props, thread.bot, visits)
+				props.home && thread.kind === "bot"
+					? homeOf(props, props.home, thread.bot, visits)
 					: undefined
 			}
 			landings={props.landings}

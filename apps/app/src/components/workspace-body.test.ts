@@ -352,10 +352,6 @@ const workspaceOf = async (store = createFakeTranscriptStore()) => {
 			chat: { state: initialChatState, controller: chatController },
 			conversation: selected,
 			conversationRuntimes: runtimes,
-			conversations: [conversation, otherConversation],
-			store,
-			homeVisits: createHomeVisits(store),
-			onSelectBot: () => undefined,
 			drafts: createDraftsController(),
 			haveSpacesFailed: false,
 			isLibraryOpen: false,
@@ -831,7 +827,15 @@ describe("WorkspaceBody Home", () => {
 					overrides: {
 						bot: workspace.bot,
 						conversation: undefined,
-						homeVisits,
+						home: {
+							visits: homeVisits,
+							store,
+							conversations: [
+								workspace.conversation,
+								workspace.otherConversation,
+							],
+							onSelectAgent: () => undefined,
+						},
 						onOpenThreadInNewTab,
 						...overrides,
 						...more,
@@ -1093,6 +1097,25 @@ describe("WorkspaceBody Home", () => {
 
 		expect(screen.getByRole("heading", { name: /What’s next/ })).toBeTruthy()
 		expect(homeSlot("home-applications-band")).toBeNull()
+	})
+
+	it("shows the normal thread of an agent opened outside the Home, never a Home view", async () => {
+		const home = await launchHome({ overrides: { home: undefined } })
+
+		await home.open()
+
+		expect(homeSlot("chat-layout")).not.toBeNull()
+		expect(homeSlot("home-layout")).toBeNull()
+	})
+
+	it("shows the Home of a Space with no agent without a composer, raising nothing", async () => {
+		render(createElement(NoticeSurface))
+		await launchHome({ overrides: { bot: undefined, bots: [] } })
+		await settle()
+
+		expect(homeSlot("home-composer")).toBeNull()
+		expect(screen.queryByRole("textbox")).toBeNull()
+		expect(screen.queryByRole("alert")).toBeNull()
 	})
 
 	it("keeps a done room line when the person switches to another agent and back", async () => {
