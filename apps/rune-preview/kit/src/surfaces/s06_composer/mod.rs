@@ -1,4 +1,4 @@
-use rune::{Color, Cursor, El, Icon, icon, row};
+use rune::{ClipboardContent, Color, Cursor, El, Icon, icon, row};
 
 use crate::primitives::{DISABLED_OPACITY, FOCUS_RING_WIDTH, Paint, ring_tint};
 use crate::strings::{Key, Language};
@@ -27,6 +27,7 @@ pub enum ComposerIntent {
 	MenuDismiss,
 	OpenLibrary,
 	BrowseFiles,
+	Paste(ClipboardContent),
 	RemoveAttachment(String),
 	RemoveReply(String),
 	RemoveQuote,

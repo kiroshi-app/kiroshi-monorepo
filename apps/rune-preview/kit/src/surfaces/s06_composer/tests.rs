@@ -1,4 +1,10 @@
-use rune::{Cx, El, Env, Key, KeyEvent, Mods, Runtime, TextEdit, TextStyle, col, text_input};
+use std::path::PathBuf;
+
+use rune::clipboard::ClipboardImage;
+use rune::{
+	ClipboardContent, Cx, El, Env, Key, KeyEvent, Mods, Runtime, TextEdit, TextStyle, col,
+	text_input,
+};
 
 use super::chips::formatted_size;
 use super::menus::{Command, MentionFace, Mentionable, command_matches, mention_matches};
@@ -211,4 +217,82 @@ fn typing_paste_and_enter_after_the_app_call_act_as_after_a_click() {
 	runtime.key(KeyEvent { key: Key::Enter, mods: Mods::default() });
 	step(&mut runtime);
 	assert_eq!(runtime.state.sent, 1);
+}
+
+#[derive(Default)]
+struct Pasting {
+	edit: TextEdit,
+	heard: Vec<ComposerIntent>,
+	disabled: bool,
+}
+
+fn heard_while_pasting(s: &mut Pasting, intent: ComposerIntent) {
+	s.heard.push(intent);
+}
+
+fn draft_of(s: &mut Pasting) -> &mut TextEdit {
+	&mut s.edit
+}
+
+fn pasting_view(s: &Pasting, _: &mut Cx<Pasting>) -> El {
+	let t = Tokens::new(false);
+	let scope = Scope { t: &t, language: Language::En, emit: heard_while_pasting };
+	let input = PromptInput { disabled: s.disabled, ..PromptInput::new(&s.edit, 544.0) };
+	prompt_input(scope, input, draft_of)
+}
+
+fn pasted_into_the_focused_field(s: Pasting, content: ClipboardContent) -> Pasting {
+	let mut runtime = Runtime::new(s, pasting_view, (640.0, 200.0), Env::new(false, 1.0));
+	runtime.frame(0.0);
+	let [x, y, width, height] = runtime
+		.elements()
+		.into_iter()
+		.find(|element| element.key.as_deref() == Some(FIELD_KEY))
+		.map(|element| element.rect)
+		.expect("the prompt field is drawn");
+	runtime.pointer_down(x + width / 2.0, y + height / 2.0);
+	runtime.pointer_up(x + width / 2.0, y + height / 2.0);
+	runtime.frame(1.0 / 60.0);
+	runtime.paste_content(content);
+	runtime.frame(2.0 / 60.0);
+	runtime.state
+}
+
+fn screenshot() -> ClipboardImage {
+	let png = [&b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR"[..], &[0, 0, 0, 2, 0, 0, 0, 3]].concat();
+	ClipboardImage::from_png(png).expect("a PNG header reads as an image")
+}
+
+#[test]
+fn a_pasted_image_becomes_one_paste_intent_and_no_text() {
+	let content = ClipboardContent::new("Screenshot").with_image(screenshot());
+	let s = pasted_into_the_focused_field(Pasting::default(), content.clone());
+	assert_eq!(s.heard, [ComposerIntent::Paste(content)]);
+	assert_eq!(s.edit.text, "");
+}
+
+#[test]
+fn pasted_files_become_one_paste_intent_and_no_text() {
+	let files = [PathBuf::from("/notes/release-notes.md"), PathBuf::from("/notes/plan.pdf")];
+	let content = ClipboardContent::new("release-notes.md plan.pdf").with_files(files);
+	let s = pasted_into_the_focused_field(Pasting::default(), content.clone());
+	assert_eq!(s.heard, [ComposerIntent::Paste(content)]);
+	assert_eq!(s.edit.text, "");
+}
+
+#[test]
+fn pasted_plain_text_lands_at_the_caret_and_emits_nothing() {
+	let content = ClipboardContent::new("Summarise the notes");
+	let s = pasted_into_the_focused_field(Pasting::default(), content);
+	assert!(s.heard.is_empty());
+	assert_eq!(s.edit.text, "Summarise the notes");
+}
+
+#[test]
+fn a_disabled_field_emits_no_paste_intent() {
+	let content = ClipboardContent::new("").with_image(screenshot());
+	let disabled = Pasting { disabled: true, ..Pasting::default() };
+	let s = pasted_into_the_focused_field(disabled, content);
+	assert!(s.heard.is_empty());
+	assert_eq!(s.edit.text, "");
 }

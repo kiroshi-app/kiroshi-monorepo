@@ -1,4 +1,6 @@
-use rune::{El, Key, LiveRegion, TextEdit, auto_grow, col, row, text, text_input};
+use rune::{
+	ClipboardContent, El, Key, LiveRegion, TextEdit, auto_grow, col, row, text, text_input,
+};
 
 use super::chips::{ReplyChip, reply_chips};
 use super::quote::{SelectionQuote, selection_quote};
@@ -186,6 +188,11 @@ pub(super) fn menu_key(key: &rune::KeyEvent) -> Option<ComposerIntent> {
 	}
 }
 
+fn paste_intent(content: &ClipboardContent) -> Option<ComposerIntent> {
+	let is_attachable = content.image().is_some() || !content.files().is_empty();
+	is_attachable.then(|| ComposerIntent::Paste(content.clone()))
+}
+
 fn field<S: 'static>(
 	scope: Scope<S>,
 	input: &PromptInput,
@@ -235,9 +242,15 @@ fn field<S: 'static>(
 				emit(s, ComposerIntent::Send);
 			}
 		});
-	if input.disabled {
-		editor = editor.disabled(true).focusable(false).read_only(true);
-	}
+	editor = if input.disabled {
+		editor.disabled(true).focusable(false).read_only(true)
+	} else {
+		editor.on_input_paste(move |s: &mut S, content, _| {
+			let Some(intent) = paste_intent(content) else { return false };
+			emit(s, intent);
+			true
+		})
+	};
 	col().grow(1.0).shrink().min_w(0.0).py(FIELD_INSET_Y).child(auto_grow(editor, 1, MAX_ROWS))
 }
 

@@ -104,6 +104,12 @@ const SCREENSHOT: StagedFile = StagedFile {
 	preview: Some((0x1e293b, 0xf97316)),
 };
 const STAGED: [StagedFile; 2] = [NOTES, SCREENSHOT];
+const PASTED_IMAGE: [StagedFile; 1] = [StagedFile {
+	id: "pasted-image",
+	name: "image.png",
+	bytes: SCREENSHOT.bytes,
+	preview: SCREENSHOT.preview,
+}];
 const LONG_STAGED: [StagedFile; 6] = [
 	NOTES,
 	SCREENSHOT,
@@ -414,7 +420,7 @@ fn input_empty(t: &Tokens, s: &SceneState) -> El {
 	centered(t, composer(t, PromptInput::new(&s.edit, WIDTH)), Vec::new())
 }
 
-fn input_focused_empty(t: &Tokens, s: &SceneState) -> El {
+fn input_focused(t: &Tokens, s: &SceneState) -> El {
 	let input = PromptInput { focused: true, ..PromptInput::new(&s.edit, WIDTH) };
 	centered(t, composer(t, input), Vec::new())
 }
@@ -462,6 +468,15 @@ fn input_states(t: &Tokens, s: &SceneState) -> El {
 fn input_with_attachments(t: &Tokens, s: &SceneState) -> El {
 	let input = PromptInput {
 		attachments: staged(t, &STAGED, Reach::Live),
+		..with_leading(&s.edit, WIDTH, attach(t, Reach::Live))
+	};
+	centered(t, composer(t, input), Vec::new())
+}
+
+fn input_pasted_image(t: &Tokens, s: &SceneState) -> El {
+	let input = PromptInput {
+		focused: true,
+		attachments: staged(t, &PASTED_IMAGE, Reach::Live),
 		..with_leading(&s.edit, WIDTH, attach(t, Reach::Live))
 	};
 	centered(t, composer(t, input), Vec::new())
@@ -943,6 +958,13 @@ pub static SCENES: &[Scene] = &[
 		commands_query_changed,
 	),
 	tabbed("conversation-prompt-promptinput--default", COMPOSER, "", 1, input_empty),
+	tabbed(
+		"conversation-prompt-promptinput--default-pasted-text",
+		COMPOSER,
+		DRAFT,
+		1,
+		input_focused,
+	),
 	drafted("conversation-prompt-promptinput--drag-over", COMPOSER, DRAFT, input_with_attach),
 	fixed("conversation-prompt-promptinput--empty", COMPOSER, input_empty),
 	fixed("conversation-prompt-promptinput--files-only", COMPOSER, input_files_only),
@@ -992,6 +1014,13 @@ pub static SCENES: &[Scene] = &[
 		COMPOSER,
 		DRAFT,
 		input_with_attachments,
+	),
+	tabbed(
+		"conversation-prompt-promptinput--with-attachments-pasted-image",
+		COMPOSER,
+		"",
+		3,
+		input_pasted_image,
 	),
 	drafted("conversation-prompt-promptinput--with-controls", COMPOSER, DRAFT, input_with_controls),
 	fixed("conversation-prompt-promptinput--with-long-quote", TALL, input_with_long_quote),
@@ -1115,13 +1144,7 @@ pub static SCENES: &[Scene] = &[
 		NARROW_CARD,
 		selection_narrow_long_content,
 	),
-	tabbed(
-		"conversation-prompt-promptinput--focus-within-empty",
-		COMPOSER,
-		"",
-		1,
-		input_focused_empty,
-	),
+	tabbed("conversation-prompt-promptinput--focus-within-empty", COMPOSER, "", 1, input_focused),
 	drafted(
 		"conversation-prompt-promptinput--focused-by-app-with-draft",
 		COMPOSER,
