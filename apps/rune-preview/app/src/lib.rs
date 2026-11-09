@@ -15,7 +15,7 @@ mod notices;
 mod runs;
 pub mod scenes;
 pub mod smoke;
-mod source;
+pub mod source;
 pub mod spike;
 pub mod surfaces;
 mod turn;

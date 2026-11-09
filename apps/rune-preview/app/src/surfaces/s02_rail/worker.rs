@@ -2,7 +2,7 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 
 use kiroshi_core::invitations::contract::Invitation;
-use kiroshi_core::joined_spaces::contract::{JoinedSpace, JoinedSpaceConnection};
+use kiroshi_core::joined_spaces::contract::JoinedSpace;
 use kiroshi_core::spaces::contract::Space;
 use kiroshi_core::user::contract::UserPreferences;
 use rune::Waker;
@@ -10,7 +10,7 @@ use serde_json::{Value, json};
 
 use crate::app::{self, SpaceContent};
 use crate::host::HostError;
-use crate::source::Source;
+use crate::source::{self, Source};
 
 #[derive(Debug, PartialEq)]
 pub enum Call {
@@ -67,8 +67,7 @@ fn answered(source: &Source, call: Call) -> Answer {
 			Answer::Loaded { space_id, content }
 		}
 		Call::Connect(joined_id) => {
-			let connection: Result<JoinedSpaceConnection, HostError> =
-				source.invoke("joined_space_connect", json!({ "id": joined_id }));
+			let connection = source::joined_sources().connect(source, &joined_id);
 			Answer::Connected { joined_id, outcome: connection.map(|_| ()) }
 		}
 		Call::Remember(space_id) => Answer::Remembered(remembered(source, space_id)),

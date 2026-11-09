@@ -1,18 +1,23 @@
+use std::fmt;
 use std::path::PathBuf;
-use std::sync::{Mutex, PoisonError};
+use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
+use kiroshi_core::joined_spaces::contract::JoinedSpaceConnection;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 
 use crate::discovery;
 use crate::local::platform_data_root;
+use crate::source::Source;
 
 const READ_PATIENCE: Duration = Duration::from_secs(20);
 
 const TURN_PATIENCE: Duration = Duration::from_secs(15 * 60);
 
 const PROBE: &str = "space_list";
+
+pub const JOINED_SPACE_CONNECT: &str = "joined_space_connect";
 
 const TOKEN_FILE: [&str; 2] = ["host", "token"];
 
@@ -96,6 +101,8 @@ pub enum HostError {
 	Unreadable { command: String, cause: String },
 	WriteRefused { command: String },
 	InProcess { cause: String },
+	JoinedOffline { space_id: String },
+	JoinedRefused { space_id: String },
 }
 
 impl HostError {
@@ -117,6 +124,10 @@ impl HostError {
 			HostError::Unreadable { .. } => "Kiroshi answered something unreadable".to_owned(),
 			HostError::WriteRefused { .. } => "The preview only reads Kiroshi".to_owned(),
 			HostError::InProcess { .. } => "The in-process Kiroshi didn't open".to_owned(),
+			HostError::JoinedOffline { .. } => "Couldn't reach the host of this Space".to_owned(),
+			HostError::JoinedRefused { .. } => {
+				"The host of this Space refused the token".to_owned()
+			}
 		}
 	}
 
@@ -148,6 +159,14 @@ impl HostError {
 				"{command} would change your data, so it isn't sent to the installed Kiroshi."
 			),
 			HostError::InProcess { cause } => cause.clone(),
+			HostError::JoinedOffline { .. } => {
+				"The host of this Space didn't answer. Check that it's online, then try again."
+					.to_owned()
+			}
+			HostError::JoinedRefused { .. } => {
+				"The host of this Space refused a fresh token. Leave and join the Space again."
+					.to_owned()
+			}
 		}
 	}
 
@@ -163,15 +182,39 @@ impl HostError {
 }
 
 #[derive(Clone, Debug)]
+enum Reach {
+	Local { profile: Profile, port: u16, token: String },
+	Joined(Joined),
+}
+
+#[derive(Clone, Debug)]
 pub struct Host {
-	profile: Profile,
-	port: u16,
+	reach: Reach,
+}
+
+struct Endpoint {
+	origin: String,
 	token: String,
 }
 
 impl Host {
 	pub fn detached() -> Host {
-		Host { profile: Profile::Dev, port: 0, token: String::new() }
+		Host::local(Profile::Dev, 0, String::new())
+	}
+
+	fn local(profile: Profile, port: u16, token: String) -> Host {
+		Host { reach: Reach::Local { profile, port, token } }
+	}
+
+	#[cfg(test)]
+	pub fn dev_on(port: u16, token: &str) -> Host {
+		Host::local(Profile::Dev, port, token.to_owned())
+	}
+
+	pub fn joined(local: &Source, connection: JoinedSpaceConnection) -> Host {
+		let joined =
+			Joined { connection: Arc::new(Mutex::new(connection)), local: Arc::new(local.clone()) };
+		Host { reach: Reach::Joined(joined) }
 	}
 
 	pub fn connect(profile: Profile) -> Result<Host, HostError> {
@@ -183,7 +226,7 @@ impl Host {
 		let token = token_of(profile)?;
 		let mut refused = false;
 		for port in ports {
-			let host = Host { profile, port, token: token.clone() };
+			let host = Host::local(profile, port, token.clone());
 			match host.invoke::<Value>(PROBE, json!({})) {
 				Ok(_) => return Ok(host),
 				Err(HostError::TokenRefused { .. }) => refused = true,
@@ -214,16 +257,59 @@ impl Host {
 		self.invoke_within(command, arguments, TURN_PATIENCE)
 	}
 
-	pub fn profile(&self) -> Profile {
-		self.profile
+	pub fn profile(&self) -> Option<Profile> {
+		match self.reach {
+			Reach::Local { profile, .. } => Some(profile),
+			Reach::Joined(_) => None,
+		}
+	}
+
+	pub fn joined_space(&self) -> Option<&Joined> {
+		match &self.reach {
+			Reach::Local { .. } => None,
+			Reach::Joined(joined) => Some(joined),
+		}
 	}
 
 	pub fn events_url(&self) -> String {
-		format!("ws://127.0.0.1:{}/api/events", self.port)
+		let origin = self.endpoint().origin;
+		let socket_origin = match origin.split_once("://") {
+			Some(("https", rest)) => format!("wss://{rest}"),
+			Some(("http", rest)) => format!("ws://{rest}"),
+			_ => origin,
+		};
+		format!("{socket_origin}/api/events")
 	}
 
 	pub fn bearer(&self) -> String {
-		format!("Bearer {}", self.token)
+		format!("Bearer {}", self.endpoint().token)
+	}
+
+	fn endpoint(&self) -> Endpoint {
+		match &self.reach {
+			Reach::Local { port, token, .. } => {
+				Endpoint { origin: format!("http://127.0.0.1:{port}"), token: token.clone() }
+			}
+			Reach::Joined(joined) => {
+				let connection = joined.kept();
+				let origin = connection.host_url.trim_end_matches('/').to_owned();
+				Endpoint { origin, token: connection.token }
+			}
+		}
+	}
+
+	fn refused(&self) -> HostError {
+		match &self.reach {
+			Reach::Local { profile, .. } => HostError::TokenRefused { profile: *profile },
+			Reach::Joined(joined) => HostError::JoinedRefused { space_id: joined.id() },
+		}
+	}
+
+	fn unreachable(&self) -> HostError {
+		match &self.reach {
+			Reach::Local { profile, .. } => HostError::NotRunning { profile: *profile },
+			Reach::Joined(joined) => HostError::JoinedOffline { space_id: joined.id() },
+		}
 	}
 
 	fn invoke_within<T: DeserializeOwned>(
@@ -232,37 +318,99 @@ impl Host {
 		arguments: Value,
 		patience: Duration,
 	) -> Result<T, HostError> {
-		if self.profile == Profile::Installed && !is_read(command) {
-			return Err(HostError::WriteRefused { command: command.to_owned() });
+		match &self.reach {
+			Reach::Local { profile, .. } => {
+				if *profile == Profile::Installed && !is_read(command) {
+					return Err(HostError::WriteRefused { command: command.to_owned() });
+				}
+				SENT.lock()
+					.unwrap_or_else(PoisonError::into_inner)
+					.push((*profile, command.to_owned()));
+				self.posted(command, &arguments, patience)
+			}
+			Reach::Joined(joined) => {
+				let arguments = joined.shared(arguments);
+				match self.posted(command, &arguments, patience) {
+					Err(HostError::JoinedRefused { .. }) => {
+						joined.refresh()?;
+						self.posted(command, &arguments, patience)
+					}
+					answered => answered,
+				}
+			}
 		}
-		SENT.lock()
-			.unwrap_or_else(PoisonError::into_inner)
-			.push((self.profile, command.to_owned()));
-		let url = format!("http://127.0.0.1:{}/api/invoke/{command}", self.port);
-		let answered = ureq::post(&url)
+	}
+
+	fn posted<T: DeserializeOwned>(
+		&self,
+		command: &str,
+		arguments: &Value,
+		patience: Duration,
+	) -> Result<T, HostError> {
+		let Endpoint { origin, token } = self.endpoint();
+		let answered = ureq::post(&format!("{origin}/api/invoke/{command}"))
 			.timeout(patience)
-			.set("Authorization", &self.bearer())
+			.set("Authorization", &format!("Bearer {token}"))
 			.set("Content-Type", "application/json")
 			.send_string(&arguments.to_string());
 		let response = match answered {
 			Ok(response) => response,
-			Err(ureq::Error::Status(401, _)) => {
-				return Err(HostError::TokenRefused { profile: self.profile });
-			}
+			Err(ureq::Error::Status(401, _)) => return Err(self.refused()),
 			Err(ureq::Error::Status(status, response)) => {
 				let body = response
 					.into_string()
 					.unwrap_or_else(|failure| format!("unreadable body: {failure}"));
 				return Err(HostError::CommandFailed { command: command.to_owned(), status, body });
 			}
-			Err(ureq::Error::Transport(_)) => {
-				return Err(HostError::NotRunning { profile: self.profile });
-			}
+			Err(ureq::Error::Transport(_)) => return Err(self.unreachable()),
 		};
 		let unreadable =
 			|cause: String| HostError::Unreadable { command: command.to_owned(), cause };
 		let body = response.into_string().map_err(|failure| unreadable(failure.to_string()))?;
 		serde_json::from_str(&body).map_err(|failure| unreadable(failure.to_string()))
+	}
+}
+
+#[derive(Clone)]
+pub struct Joined {
+	connection: Arc<Mutex<JoinedSpaceConnection>>,
+	local: Arc<Source>,
+}
+
+impl fmt::Debug for Joined {
+	fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+		formatter.debug_struct("Joined").field("id", &self.id()).finish_non_exhaustive()
+	}
+}
+
+impl Joined {
+	pub fn id(&self) -> String {
+		self.kept().id
+	}
+
+	pub fn host(&self) -> Host {
+		Host { reach: Reach::Joined(self.clone()) }
+	}
+
+	pub fn refresh(&self) -> Result<(), HostError> {
+		let fresh: JoinedSpaceConnection =
+			self.local.invoke(JOINED_SPACE_CONNECT, json!({ "id": self.id() }))?;
+		*self.connection.lock().unwrap_or_else(PoisonError::into_inner) = fresh;
+		Ok(())
+	}
+
+	fn kept(&self) -> JoinedSpaceConnection {
+		self.connection.lock().unwrap_or_else(PoisonError::into_inner).clone()
+	}
+
+	fn shared(&self, mut arguments: Value) -> Value {
+		let connection = self.kept();
+		if let Some(space_id) = arguments.get_mut("spaceId")
+			&& space_id.as_str() == Some(connection.id.as_str())
+		{
+			*space_id = Value::String(connection.remote_space_id.unwrap_or(connection.id));
+		}
+		arguments
 	}
 }
 
@@ -298,7 +446,7 @@ mod tests {
 
 	#[test]
 	fn the_installed_host_refuses_every_command_outside_the_reads() {
-		let installed = Host { profile: Profile::Installed, port: 0, token: String::new() };
+		let installed = Host::local(Profile::Installed, 0, String::new());
 		for write in ["conversation_send_turn", "conversation_main_chat", "mission_close"] {
 			let refused = installed.invoke::<Value>(write, json!({}));
 			assert!(matches!(refused, Err(HostError::WriteRefused { .. })), "{write}");

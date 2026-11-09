@@ -1,12 +1,20 @@
+use std::cell::Cell;
+use std::net::{TcpStream, ToSocketAddrs};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, TryRecvError};
 use std::thread;
+use std::time::Duration;
 
+use kiroshi_core::agent::contract::ConnectionState;
 use serde_json::Value;
-use tungstenite::Message as Frame;
 use tungstenite::client::IntoClientRequest;
+use tungstenite::handshake::HandshakeError;
+use tungstenite::handshake::client::Request;
 use tungstenite::http::HeaderValue;
 use tungstenite::http::header::AUTHORIZATION;
+use tungstenite::stream::MaybeTlsStream;
+use tungstenite::{Message as Frame, WebSocket};
 
-use crate::host::Host;
+use crate::host::{Host, Joined};
 use crate::model::{KiroshiAccountState, Message, MissionChanged, ScopedEvent};
 use crate::surfaces::s10_agent_settings::{self, Heard};
 use crate::surfaces::{s02_rail, s03_roster, s04_boot, s07_approvals, s14_library};
@@ -22,6 +30,14 @@ const MISSION_CHANGED: &str = "mission://changed";
 const LIBRARY: &str = "library://";
 
 const DEVICE: &str = "device://";
+
+const CONNECT_PATIENCE: Duration = Duration::from_secs(10);
+
+const READ_POLL: Duration = Duration::from_millis(200);
+
+const FIRST_RECONNECT_DELAY: Duration = Duration::from_millis(500);
+
+const LONGEST_RECONNECT_DELAY: Duration = Duration::from_secs(30);
 
 pub enum HostEvent {
 	Listening,
@@ -40,11 +56,41 @@ pub enum HostEvent {
 	Lost(String),
 }
 
+pub enum JoinedHeard {
+	Host(HostEvent),
+	ConnectionChanged(ConnectionState),
+}
+
+enum Closed {
+	Stopped,
+	Refused,
+	Lost(String),
+}
+
+type Socket = WebSocket<MaybeTlsStream<TcpStream>>;
+
+struct Stop(Receiver<()>);
+
+impl Stop {
+	fn is_stopped(&self) -> bool {
+		matches!(self.0.try_recv(), Err(TryRecvError::Disconnected))
+	}
+
+	fn is_stopped_within(&self, delay: Duration) -> bool {
+		matches!(self.0.recv_timeout(delay), Err(RecvTimeoutError::Disconnected))
+	}
+}
+
 pub fn listen(host: &Host, deliver: impl Fn(HostEvent) + Send + 'static) {
 	let url = host.events_url();
 	let bearer = host.bearer();
 	let spawned = thread::Builder::new().name("host-events".into()).spawn(move || {
-		let lost = relayed(&url, &bearer, &deliver);
+		let (_held, stop) = mpsc::channel();
+		let lost = match relayed(&url, &bearer, &Stop(stop), &deliver) {
+			Closed::Refused => "the host refused the token".to_owned(),
+			Closed::Lost(reason) => reason,
+			Closed::Stopped => "the event listener stopped".to_owned(),
+		};
 		deliver(HostEvent::Lost(lost));
 	});
 	if let Err(failure) = spawned {
@@ -52,38 +98,155 @@ pub fn listen(host: &Host, deliver: impl Fn(HostEvent) + Send + 'static) {
 	}
 }
 
-fn relayed(url: &str, bearer: &str, deliver: &impl Fn(HostEvent)) -> String {
-	let mut request = match url.into_client_request() {
-		Ok(request) => request,
-		Err(failure) => return format!("the event address was refused: {failure}"),
+pub fn listen_joined(
+	joined: &Joined,
+	deliver: impl Fn(JoinedHeard) + Send + 'static,
+) -> Option<Sender<()>> {
+	let (held, stop) = mpsc::channel();
+	let joined = joined.clone();
+	let spawned = thread::Builder::new()
+		.name("joined-space-events".into())
+		.spawn(move || streamed(&joined, &Stop(stop), &deliver));
+	match spawned {
+		Ok(_) => Some(held),
+		Err(failure) => {
+			eprintln!("the joined Space event listener did not start: {failure}");
+			None
+		}
+	}
+}
+
+fn streamed(joined: &Joined, stop: &Stop, deliver: &impl Fn(JoinedHeard)) {
+	let shown = Cell::new(None);
+	let show = |state| {
+		if shown.replace(Some(state)) != Some(state) {
+			deliver(JoinedHeard::ConnectionChanged(state));
+		}
 	};
-	let authorization = match HeaderValue::from_str(bearer) {
-		Ok(value) => value,
-		Err(failure) => return format!("the token is not a header value: {failure}"),
-	};
-	request.headers_mut().insert(AUTHORIZATION, authorization);
-	let mut socket = match tungstenite::connect(request) {
-		Ok((socket, _)) => socket,
-		Err(failure) => return format!("the event socket did not open: {failure}"),
+	let mut failures = 0;
+	loop {
+		let opened = Cell::new(false);
+		let relay = |event| match event {
+			HostEvent::Listening => {
+				opened.set(true);
+				show(ConnectionState::Ready);
+			}
+			other => deliver(JoinedHeard::Host(other)),
+		};
+		let closed = attempted(joined, stop, &relay);
+		if stop.is_stopped() {
+			return;
+		}
+		let reason = match closed {
+			Closed::Stopped => return,
+			Closed::Refused => {
+				eprintln!("the host of joined Space {} refused a fresh token", joined.id());
+				return show(ConnectionState::Unavailable);
+			}
+			Closed::Lost(reason) => reason,
+		};
+		if opened.get() {
+			failures = 0;
+		}
+		if shown.get() != Some(ConnectionState::Unavailable) {
+			eprintln!("the events of joined Space {} dropped: {reason}", joined.id());
+		}
+		show(ConnectionState::Unavailable);
+		if stop.is_stopped_within(reconnect_delay(failures)) {
+			return;
+		}
+		failures = failures.saturating_add(1);
+	}
+}
+
+fn reconnect_delay(failures: u32) -> Duration {
+	FIRST_RECONNECT_DELAY
+		.saturating_mul(2_u32.saturating_pow(failures))
+		.min(LONGEST_RECONNECT_DELAY)
+}
+
+fn attempted(joined: &Joined, stop: &Stop, relay: &impl Fn(HostEvent)) -> Closed {
+	let host = joined.host();
+	match relayed(&host.events_url(), &host.bearer(), stop, relay) {
+		Closed::Refused => match joined.refresh() {
+			Ok(()) => relayed(&host.events_url(), &host.bearer(), stop, relay),
+			Err(failure) => Closed::Lost(failure.detail()),
+		},
+		closed => closed,
+	}
+}
+
+fn relayed(url: &str, bearer: &str, stop: &Stop, deliver: &impl Fn(HostEvent)) -> Closed {
+	let mut socket = match opened(url, bearer) {
+		Ok(socket) => socket,
+		Err(closed) => return closed,
 	};
 	deliver(HostEvent::Listening);
 	loop {
-		match socket.read() {
+		let read = socket.read();
+		if stop.is_stopped() {
+			return Closed::Stopped;
+		}
+		match read {
 			Ok(Frame::Text(text)) => {
 				if let Some(event) = parsed(text.as_str()) {
 					deliver(event);
 				}
 			}
 			Ok(Frame::Close(frame)) => {
-				return frame.map_or_else(
+				return Closed::Lost(frame.map_or_else(
 					|| "the host closed the event socket".to_owned(),
 					|frame| frame.reason.to_string(),
-				);
+				));
 			}
 			Ok(_) => {}
-			Err(failure) => return format!("the event socket failed: {failure}"),
+			Err(tungstenite::Error::Io(failure))
+				if matches!(
+					failure.kind(),
+					std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+				) => {}
+			Err(failure) => return Closed::Lost(format!("the event socket failed: {failure}")),
 		}
 	}
+}
+
+fn opened(url: &str, bearer: &str) -> Result<Socket, Closed> {
+	let mut request = url
+		.into_client_request()
+		.map_err(|failure| Closed::Lost(format!("the event address was refused: {failure}")))?;
+	let authorization = HeaderValue::from_str(bearer)
+		.map_err(|failure| Closed::Lost(format!("the token is not a header value: {failure}")))?;
+	request.headers_mut().insert(AUTHORIZATION, authorization);
+	let did_not_open = |failure: &dyn std::fmt::Display| {
+		Closed::Lost(format!("the event socket did not open: {failure}"))
+	};
+	let stream = connected(&request).map_err(|failure| did_not_open(&failure))?;
+	let polled = stream.try_clone().map_err(|failure| did_not_open(&failure))?;
+	let socket = match tungstenite::client_tls_with_config(request, stream, None, None) {
+		Ok((socket, _)) => socket,
+		Err(HandshakeError::Failure(tungstenite::Error::Http(response)))
+			if response.status() == 401 =>
+		{
+			return Err(Closed::Refused);
+		}
+		Err(failure) => return Err(did_not_open(&failure)),
+	};
+	polled
+		.set_read_timeout(Some(READ_POLL))
+		.map_err(|failure| Closed::Lost(format!("the event socket did not poll: {failure}")))?;
+	Ok(socket)
+}
+
+fn connected(request: &Request) -> std::io::Result<TcpStream> {
+	let uri = request.uri();
+	let unaddressed = || std::io::Error::new(std::io::ErrorKind::InvalidInput, "no host address");
+	let host = uri.host().ok_or_else(unaddressed)?;
+	let port = uri.port_u16().unwrap_or(if uri.scheme_str() == Some("wss") { 443 } else { 80 });
+	let address = (host, port).to_socket_addrs()?.next().ok_or_else(unaddressed)?;
+	let stream = TcpStream::connect_timeout(&address, CONNECT_PATIENCE)?;
+	stream.set_read_timeout(Some(CONNECT_PATIENCE))?;
+	stream.set_write_timeout(Some(CONNECT_PATIENCE))?;
+	Ok(stream)
 }
 
 pub fn parsed(text: &str) -> Option<HostEvent> {
