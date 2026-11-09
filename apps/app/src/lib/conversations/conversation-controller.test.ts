@@ -1464,10 +1464,6 @@ describe("createConversationController", () => {
 			return nyx
 		}
 
-		const askingScopeOf = (harness: Harness, botId: string) =>
-			harness.driver.submissions.find(({ scope }) => scope.botId === botId)
-				?.scope
-
 		it("keeps the ask and the session of a companion whose turn ends on it", async () => {
 			const nyx = await endedOnAsk(harness)
 
@@ -1498,7 +1494,7 @@ describe("createConversationController", () => {
 
 		it("answers the kept ask with a typed reply riding the kept session", async () => {
 			const nyx = await endedOnAsk(harness)
-			const asking = askingScopeOf(harness, nyx)
+			const asking = harness.driver.submissions.at(-1)?.scope
 
 			await harness.controller.send("@Nyx the north one")
 			await harness.settled()
