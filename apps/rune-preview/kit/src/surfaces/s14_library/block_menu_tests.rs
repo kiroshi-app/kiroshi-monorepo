@@ -88,12 +88,12 @@ fn showing(shows: Shows, picture: Option<Image>) -> Runtime<Screen> {
 	runtime
 }
 
-fn step(runtime: &mut Runtime<Screen>) {
+fn step<S>(runtime: &mut Runtime<S>) {
 	runtime.frame(0.0);
 	runtime.frame(1.0);
 }
 
-fn element(runtime: &Runtime<Screen>, key: &str) -> rune::ElementInfo {
+fn element<S>(runtime: &Runtime<S>, key: &str) -> rune::ElementInfo {
 	runtime
 		.elements()
 		.into_iter()
@@ -418,4 +418,90 @@ fn a_lightbox_without_a_picture_hands_back_no_right_click() {
 fn an_escaped_pipe_stays_inside_its_table_cell() {
 	let source = "| Range | Note |\n| --- | --- |\n| a \\| b | ends with \\| |";
 	assert_eq!(table_cells(source), [vec!["Range", "Note"], vec!["a \\| b", "ends with \\|"]],);
+}
+
+#[derive(Clone, Copy)]
+enum Drawn {
+	Landing(usize),
+	BlockGhost,
+	FilesGhost(usize),
+}
+
+struct Sketch {
+	drawn: Drawn,
+	edit: TextEdit,
+}
+
+const BLOCK_IDS: [&str; 3] = ["first", "second", "third"];
+
+fn edit_of<'a>(sketch: &'a mut Sketch, _: &str, _: usize) -> &'a mut TextEdit {
+	&mut sketch.edit
+}
+
+fn drawn_view(sketch: &Sketch, _: &mut Cx<Sketch>) -> El {
+	let t = Tokens::new(false);
+	let lang = Language::En;
+	let body = match sketch.drawn {
+		Drawn::Landing(landing) => {
+			let mut views: Vec<EditorBlock> = BLOCK_IDS
+				.iter()
+				.map(|id| EditorBlock {
+					drawn: Some(el().key(format!("drawn-{id}")).w_full().h(40.0)),
+					..EditorBlock::new(id, LibraryBlockType::Paragraph, Vec::new(), "")
+				})
+				.collect();
+			place_drop_indicator(&t, &mut views, landing);
+			block_editor(&t, lang, &mut views, None, edit_of, |_: &mut Sketch, _| false).0
+		}
+		Drawn::BlockGhost => drag_ghost(&t, lang, &["The spring launch"], None, (0.0, 0.0)),
+		Drawn::FilesGhost(count) => {
+			let names = ["sofa.jpg", "lobby.png", "rates.pdf"];
+			import_drag_ghost(&t, lang, &names[..count], None, (0.0, 0.0))
+		}
+	};
+	col().w_full().h_full().padding(SPACING * 10.0).child(body)
+}
+
+fn sketched(drawn: Drawn) -> Runtime<Sketch> {
+	let sketch = Sketch { drawn, edit: TextEdit::default() };
+	let mut runtime = Runtime::new(sketch, drawn_view, (1000.0, 800.0), Env::new(false, 1.0));
+	step(&mut runtime);
+	runtime
+}
+
+fn top_and_bottom(runtime: &Runtime<Sketch>, key: &str) -> (f32, f32) {
+	let [_, y, _, height] = element(runtime, key).rect;
+	(y, y + height)
+}
+
+fn shows_text(runtime: &Runtime<Sketch>, text: &str) -> bool {
+	runtime.elements().iter().any(|element| element.text.as_deref() == Some(text))
+}
+
+#[test]
+fn a_landing_past_the_last_block_draws_the_drop_line_below_it_at_the_gap_between_two_blocks() {
+	let between = sketched(Drawn::Landing(1));
+	let (_, first_bottom) = top_and_bottom(&between, "drawn-first");
+	let (line_top, _) = top_and_bottom(&between, "library-drop-indicator");
+	let gap_between = line_top - first_bottom;
+	let past = sketched(Drawn::Landing(BLOCK_IDS.len()));
+	let (_, last_bottom) = top_and_bottom(&past, "drawn-third");
+	let (line_top, _) = top_and_bottom(&past, "library-drop-indicator");
+	assert!(gap_between > 0.0);
+	assert_eq!(line_top - last_bottom, gap_between);
+}
+
+#[test]
+fn a_dragged_block_ghost_draws_no_count_badge() {
+	let runtime = sketched(Drawn::BlockGhost);
+	assert!(shows_text(&runtime, "The spring launch"));
+	assert!(!shows_text(&runtime, "1"));
+}
+
+#[test]
+fn a_files_ghost_keeps_its_count_badge_for_one_file_too() {
+	for count in [1, 3] {
+		let runtime = sketched(Drawn::FilesGhost(count));
+		assert!(shows_text(&runtime, &count.to_string()));
+	}
 }
