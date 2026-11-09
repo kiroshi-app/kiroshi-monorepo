@@ -216,21 +216,21 @@ const EmptyHome = ({
 	</HomeLayout>
 )
 
+const ATLAS_COMPOSER = (
+	<HomeComposer
+		agents={AGENTS}
+		onAttach={attached}
+		onSelectAgent={selectedAgent}
+		onSubmit={sent}
+		selectedAgentId={ATLAS.id}
+	/>
+)
+
 type ConversationHomeProps = { children: ReactNode; composer?: ReactNode }
 
 const ConversationHome = ({ children, composer }: ConversationHomeProps) => (
 	<HomeLayout
-		composer={
-			composer ?? (
-				<HomeComposer
-					agents={AGENTS}
-					onAttach={attached}
-					onSelectAgent={selectedAgent}
-					onSubmit={sent}
-					selectedAgentId={ATLAS.id}
-				/>
-			)
-		}
+		composer={composer ?? ATLAS_COMPOSER}
 		stage="conversation"
 		transcript={
 			<HomeTranscript
@@ -595,15 +595,7 @@ export const ClippedTranscript = meta.story({
 	tags: ["test-only"],
 	render: () => (
 		<HomeLayout
-			composer={
-				<HomeComposer
-					agents={AGENTS}
-					onAttach={attached}
-					onSelectAgent={selectedAgent}
-					onSubmit={sent}
-					selectedAgentId={ATLAS.id}
-				/>
-			}
+			composer={ATLAS_COMPOSER}
 			stage="conversation"
 			transcript={LONG_TURNS}
 		/>
