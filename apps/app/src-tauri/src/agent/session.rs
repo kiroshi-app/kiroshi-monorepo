@@ -794,7 +794,7 @@ impl Session {
 	) -> Result<(), TransportError> {
 		let (key, input) = match self.take_pending_input(id).await {
 			Err(TransportError::UnknownPermission { .. })
-				if self.was_answered_by_message(id).await =>
+				if self.shared.lock().await.translator.was_answered_by_message(id) =>
 			{
 				return Ok(());
 			}
@@ -808,10 +808,6 @@ impl Session {
 			decision: PermissionDecision::AllowOnce,
 		});
 		Ok(())
-	}
-
-	async fn was_answered_by_message(&self, id: &str) -> bool {
-		self.shared.lock().await.translator.was_answered_by_message(id)
 	}
 
 	fn answer_with_message(
