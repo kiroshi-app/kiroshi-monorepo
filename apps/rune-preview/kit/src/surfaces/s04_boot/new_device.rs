@@ -187,7 +187,7 @@ fn code_entry<S: 'static>(
 	let active = screen.is_code_focused.then(|| digits.len().min(CODE_LENGTH - 1));
 	let slots = (0..CODE_LENGTH).map(|at| {
 		let is_active = active == Some(at);
-		let mut slot = el()
+		let slot = el()
 			.size(SLOT.0, SLOT.1)
 			.radius(RADIUS_CONTROL)
 			.fill(faded(t.muted, TINT))
@@ -196,12 +196,11 @@ fn code_entry<S: 'static>(
 				if is_active { t.ring } else { t.shell_divider },
 			)
 			.center();
-		slot = match digits.get(at) {
+		match digits.get(at) {
 			Some(digit) => slot.child(text(digit.to_string()).font(CODE_DIGIT).color(t.foreground)),
 			None if is_active => slot.child(el().size(CARET.0, CARET.1).fill(t.foreground)),
 			None => slot,
-		};
-		slot
+		}
 	});
 	instant(
 		row()

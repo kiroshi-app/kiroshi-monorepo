@@ -20,9 +20,8 @@ const BACKDROP_SHARE: f32 = 0.5;
 const BUSY_OPACITY: f32 = 0.7;
 const TITLE: TextStyle = TextStyle { line_height: 24.0, ..TextStyle::new(17.0, 600.0) };
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ApprovalStatus {
-	#[default]
 	Asking,
 	Approving,
 	Failed,
