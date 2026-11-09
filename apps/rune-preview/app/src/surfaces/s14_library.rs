@@ -488,6 +488,7 @@ impl State {
 				lightbox.zoom_percent = Some(zoom.saturating_sub(ZOOM_STEP).max(ZOOM_MIN));
 			}
 			LightboxEvent::Fit => lightbox.zoom_percent = None,
+			LightboxEvent::PictureMenuRequested { .. } => {}
 		}
 	}
 

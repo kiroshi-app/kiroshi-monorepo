@@ -96,6 +96,13 @@ fn script(scene: &Scene, beside: &Path) -> Option<PathBuf> {
 			events.push(format!(r#"{{"t": {tap_at}, "type": "tap", "key": "{key}"}}"#));
 			tap_at + GESTURE
 		}
+		Pointer::RightClicks(key) => {
+			events.push(hover(gesture_at, key));
+			let click_at = gesture_at + HOVER;
+			events
+				.push(format!(r#"{{"t": {click_at}, "type": "secondary-click", "key": "{key}"}}"#));
+			click_at + GESTURE
+		}
 		Pointer::Drags(key, dx, dy) => {
 			events.push(format!(
 				r#"{{"t": {gesture_at}, "type": "drag", "key": "{key}", "dx": {dx}, "dy": {dy}}}"#
@@ -112,7 +119,7 @@ fn script(scene: &Scene, beside: &Path) -> Option<PathBuf> {
 			.map(|(press, key)| key_press(keys_from + press as f64 * KEY_STEP, key)),
 	);
 	match scene.pointer {
-		Pointer::Away | Pointer::Taps(_) | Pointer::Drags(..) => {}
+		Pointer::Away | Pointer::Taps(_) | Pointer::RightClicks(_) | Pointer::Drags(..) => {}
 		Pointer::EntersAtSnap(key) => events.push(hover(last_frame, key)),
 		Pointer::LeavesAtSnap(key) => {
 			events.push(hover(0.0, key));

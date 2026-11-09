@@ -8,19 +8,19 @@ use crate::primitives::toast::{Toast, ToastType, toast};
 use crate::primitives::tooltip::{TooltipSide, tooltip};
 use crate::strings::{Language, common};
 use crate::surfaces::s14_library::{
-	Agent, BarActions, BlockEvent, CalloutTone, DocumentBar, EditorBlock, Format, GalleryDrag,
-	GalleryEdit, HandlePlace, ImageMenu, ItemAction, ItemLook, LibraryBlock, LibraryBlockType,
-	LibraryFilter, LibraryItem, LibraryPanel, LightboxImage, LightboxLook, MORE_KEY,
-	NewDocumentTemplate, PanelActions, PanelLook, PanelState, RowMark, Run, Slash, TOOLBAR_GAP,
-	TableCells, Tile, TileImage, Unavailable, Writer, agent_card, agent_caret, block_editor,
-	block_handle, block_menu, block_text, body_block, callout_editor, code_view,
+	Agent, BarActions, BlockEvent, BlockMenuLook, CalloutTone, DocumentBar, EditorBlock, Format,
+	GalleryDrag, GalleryEdit, HandlePlace, ImageMenu, ItemAction, ItemLook, LibraryBlock,
+	LibraryBlockType, LibraryFilter, LibraryItem, LibraryPanel, LightboxImage, LightboxLook,
+	MORE_KEY, NewDocumentTemplate, PanelActions, PanelLook, PanelState, RowMark, Run, Slash,
+	TOOLBAR_GAP, TableCells, Tile, TileImage, Unavailable, Writer, agent_card, agent_caret,
+	block_editor, block_handle, block_menu, block_text, body_block, callout_editor, code_view,
 	delete_confirmation, document_bar, document_body, document_column, document_panel,
 	document_placeholder, document_skeleton, document_title, drag_ghost, drop_indicator, drop_line,
 	drop_overlay, failed_import, failure_notice, fence_body, field_key, field_of, format_toolbar,
 	format_tooltip, gallery_editor, grid_columns, image_skeleton, inline_field, item_menu,
 	item_unavailable, language_menu, library_panel, lightbox, link_field, new_document_dialog,
 	panel_max_width, parse_blocks, person_caret, presence, records_of, rows_of, shown_name,
-	table_cells, table_editor, title_field, web_page_editor, web_page_view,
+	table_cells, table_editor, title_field, turn_into_menu, web_page_editor, web_page_view,
 };
 use crate::tokens::{
 	BLUE, RADIUS_CONTROL, SPACING, TEXT_COMPACT_MEDIUM, TEXT_TITLE, TEXT_XS_MONO, Tokens, faded,
@@ -37,6 +37,7 @@ const LANG: Language = Language::En;
 const IMAGE_SIDE: f32 = 320.0;
 const IMAGE_SCALE: f32 = 2.0;
 const BLOCK_PITCH: f32 = SPACING * 14.0;
+const BLOCK_DRAG_CURSOR: (f32, f32) = (300.0, 390.0);
 
 const DUNES: &str = "<svg xmlns='http://www.w3.org/2000/svg' width='1600' height='1000' viewBox='0 0 160 100'><rect width='160' height='100' fill='#2b3a55'/><circle cx='118' cy='30' r='14' fill='#f6c177'/><path d='M0 70 Q40 50 80 68 T160 62 V100 H0Z' fill='#c9895b'/><path d='M0 84 Q50 66 100 82 T160 80 V100 H0Z' fill='#8f5a3c'/></svg>";
 const HARBOUR: &str = "<svg xmlns='http://www.w3.org/2000/svg' width='1400' height='1000' viewBox='0 0 140 100'><rect width='140' height='100' fill='#0f2a3d'/><rect y='60' width='140' height='40' fill='#123e57'/><rect x='18' y='38' width='22' height='22' fill='#e2e8f0'/><rect x='46' y='30' width='16' height='30' fill='#94a3b8'/><rect x='92' y='42' width='30' height='18' fill='#cbd5e1'/></svg>";
@@ -947,7 +948,7 @@ fn lightbox_scene(t: &Tokens, s: &SceneState, shown: Shown, layers: Vec<El>) -> 
 		zoom_percent: shown.zoom_percent,
 		actions: BarActions { shown: true, is_copied: shown.is_copied },
 	};
-	let mut overlays = vec![lightbox(LANG, &image, look, ignore)];
+	let mut overlays = vec![lightbox(LANG, &image, look, heard)];
 	overlays.extend(layers);
 	grid_with(t, s, &every_item(s), overlays)
 }
@@ -1159,7 +1160,9 @@ enum Overlay {
 	Notice(&'static str),
 	DeleteConfirm,
 	HandleMenu,
+	TurnInto,
 	DropBelow(usize),
+	BlockDrag { from: usize, below: usize },
 	Handle,
 }
 
@@ -1344,23 +1347,47 @@ impl Spec {
 					next.above = Some(drop_indicator(t));
 				}
 			}
-			Overlay::Handle | Overlay::HandleMenu => {
+			Overlay::BlockDrag { from, below } => {
+				if let Some(view) = views.get_mut(from) {
+					let place = HandlePlace { index: from, pitches: &pitches };
+					view.handle = Some(block_handle(t, LANG, true, place, heard));
+				}
+				if let Some(next) = views.get_mut(below + 1) {
+					next.above = Some(drop_indicator(t));
+				}
+				let held = Spec::texts_of(&blocks[from]);
+				let names: Vec<&str> = held.iter().take(1).map(String::as_str).collect();
+				layers.push(drag_ghost(t, LANG, &names, None, BLOCK_DRAG_CURSOR));
+			}
+			Overlay::Handle | Overlay::HandleMenu | Overlay::TurnInto => {
 				if let Some(view) = views.get_mut(focus.0) {
 					let place = HandlePlace { index: focus.0, pitches: &pitches };
-					let is_pressed = self.overlay == Overlay::HandleMenu;
+					let is_pressed = self.overlay != Overlay::Handle;
 					view.handle = Some(block_handle(t, LANG, is_pressed, place, heard));
 				}
-				if self.overlay == Overlay::HandleMenu {
+				if self.overlay != Overlay::Handle {
 					let handle = format!(
 						"library-handle-{}",
 						common::library::editor::blocks::handle::MENU.text(LANG)
 					);
-					layers.push(block_menu(t, LANG, blocks[focus.0].kind(), true, heard).anchored(
+					let kind = blocks[focus.0].kind();
+					let is_turn_into_shown = self.overlay == Overlay::TurnInto;
+					let look = BlockMenuLook {
+						kind,
+						is_mac: true,
+						can_move_up: focus.0 > 0,
+						can_move_down: focus.0 + 1 < blocks.len(),
+						is_turn_into_shown,
+					};
+					layers.push(block_menu(t, LANG, look, heard).anchored(
 						handle,
 						Side::Bottom,
 						Align::Start,
 						SPACING,
 					));
+					if is_turn_into_shown {
+						layers.push(turn_into_menu(t, LANG, kind, heard));
+					}
 				}
 			}
 			_ => {}
@@ -1905,6 +1932,17 @@ fn block_editor_spec(story: &str) -> Option<Spec> {
 			let spec = fixed(AGENT_BRIEF);
 			let at = spec.block_with("## What we measure");
 			spec.with(Overlay::DropBelow(at))
+		}
+		"turn-into-open" => {
+			fixed(AGENT_BRIEF).focus_on("What we measure", Caret::End).with(Overlay::TurnInto)
+		}
+		"block-drag-in-progress" => {
+			let spec = fixed(AGENT_BRIEF);
+			let below = spec.block_with("## What we measure");
+			spec.with(Overlay::BlockDrag { from: 0, below })
+		}
+		"move-down-disabled-at-the-last-block" => {
+			fixed(AGENT_BRIEF).focus_on("Copy is final", Caret::End).with(Overlay::HandleMenu)
 		}
 		"bubble-and-document-parity" => fixed(RICH_BLOCKS),
 		"agents-writing" => {

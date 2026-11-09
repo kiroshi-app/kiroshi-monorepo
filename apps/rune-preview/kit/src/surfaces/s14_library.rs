@@ -1,7 +1,7 @@
 use rune::image::Image;
 use rune::{
-	Align, Color, Cursor, El, Key as KeyName, KeyEvent, Mods, ScrollSpec, Side, SurfaceFit,
-	TextEdit, TextStyle, Tx, col, el, icon, row, text, text_input,
+	Align, Color, Cursor, El, Key as KeyName, KeyEvent, Mods, PointerPress, ScrollSpec, Side,
+	SurfaceFit, TextEdit, TextStyle, Tx, col, el, icon, row, text, text_input,
 };
 use rune::{Block, Mark, MarkRange, Span};
 
@@ -9,7 +9,7 @@ use crate::avatar::{Face, Person};
 use crate::icons;
 use crate::primitives::button::{Button, ButtonSize, ButtonVariant};
 use crate::primitives::context_menu::{
-	Mark as MenuMark, MenuItem, MenuRow, Shortcut, wired_context_menu,
+	Mark as MenuMark, MenuItem, MenuRow, Shortcut, wired_context_menu, wired_submenu,
 };
 use crate::primitives::dialog::{DialogContent, dialog, scrim};
 use crate::primitives::dropdown_menu::wired_dropdown_menu;
@@ -100,6 +100,13 @@ impl LibraryBlockType {
 				| LibraryBlockType::Checklist
 				| LibraryBlockType::Quote
 		)
+	}
+
+	pub fn conversions(self) -> Vec<LibraryBlockType> {
+		if !self.is_text() {
+			return vec![self];
+		}
+		LibraryBlockType::ALL.into_iter().filter(|kind| kind.is_text()).collect()
 	}
 
 	fn label(self) -> Key {
@@ -2371,7 +2378,7 @@ pub struct LightboxImage<'a> {
 	pub image: Option<&'a Image>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum LightboxEvent {
 	Item(ItemEvent),
 	Previous,
@@ -2379,6 +2386,7 @@ pub enum LightboxEvent {
 	ZoomOut,
 	ZoomIn,
 	Fit,
+	PictureMenuRequested { at: PointerPress },
 }
 
 const STEP: f32 = SPACING * 10.0;
@@ -2447,7 +2455,16 @@ pub fn lightbox<S: 'static>(
 		focus_ring(t, instant(button.hover(faded(t.foreground, 0.16)))).on_press(emit(event))
 	};
 	let fit = if zoom_percent.is_some() { SurfaceFit::Fill } else { SurfaceFit::Fit };
-	let picture = el().w_full().h_full().radius(RADIUS_MD).clip_rounded(RADIUS_MD);
+	let picture_menu = on.clone();
+	let picture = el()
+		.key("lightbox-picture")
+		.w_full()
+		.h_full()
+		.radius(RADIUS_MD)
+		.clip_rounded(RADIUS_MD)
+		.on_secondary_press(move |s: &mut S, at, _| {
+			picture_menu(s, LightboxEvent::PictureMenuRequested { at })
+		});
 	let picture = match shown.image.filter(|image| image.size().is_some()) {
 		Some(image) => picture.pixels_fit(image.pixels(), fit),
 		None => picture.fill(faded(t.border, 0.6)),
@@ -3074,11 +3091,26 @@ pub fn table_cells(source: &str) -> Vec<Vec<String>> {
 		.split('\n')
 		.enumerate()
 		.filter(|(index, _)| *index != 1)
-		.map(|(_, line)| {
-			let inner = line.trim().trim_start_matches('|').trim_end_matches('|');
-			inner.split('|').map(|cell| cell.trim().to_owned()).collect()
-		})
+		.map(|(_, line)| cells_of(line))
 		.collect()
+}
+
+fn cells_of(line: &str) -> Vec<String> {
+	let line = line.trim();
+	let line = line.strip_prefix('|').unwrap_or(line);
+	let line = line.strip_suffix('|').filter(|inner| !inner.ends_with('\\')).unwrap_or(line);
+	let (mut cells, mut cell, mut is_escaped) = (Vec::new(), String::new(), false);
+	for character in line.chars() {
+		if character == '|' && !is_escaped {
+			cells.push(cell.trim().to_owned());
+			cell.clear();
+		} else {
+			cell.push(character);
+		}
+		is_escaped = character == '\\';
+	}
+	cells.push(cell.trim().to_owned());
+	cells
 }
 
 fn agent_tokens(t: &Tokens, agent: Agent) -> Tokens {
@@ -4655,10 +4687,12 @@ pub fn link_field<S: 'static>(
 		)
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum HandleEvent {
 	Insert,
 	Press,
+	Drag { from: usize, offset: (f32, f32), to: usize },
+	DragEnd,
 	Move { from: usize, to: usize },
 }
 
@@ -4669,6 +4703,7 @@ pub struct HandlePlace<'a> {
 }
 
 const DRAG_SLOP: f32 = SPACING;
+const DRAG_STARTED: f32 = 1.0;
 
 pub fn moved_to(pitches: &[f32], from: usize, travel: f32) -> usize {
 	let (mut to, mut left) = (from, travel.abs());
@@ -4716,12 +4751,24 @@ pub fn block_handle<S: 'static>(
 		.cursor(Cursor::Grab)
 		.on_press(emitter(&on, HandleEvent::Press))
 		.on_drag(move |s: &mut S, drag, _| {
-			if drag.phase != rune::Phase::Up || drag.cancelled() || drag.dy.abs() < DRAG_SLOP {
+			if drag.dy.abs() >= DRAG_SLOP {
+				drag.data = DRAG_STARTED;
+			}
+			if drag.data != DRAG_STARTED {
 				return;
 			}
 			let to = moved_to(&pitches, from, drag.dy);
-			if to != from {
-				drag_on(s, HandleEvent::Move { from, to });
+			match drag.phase {
+				rune::Phase::Down => {}
+				rune::Phase::Move => {
+					drag_on(s, HandleEvent::Drag { from, offset: (drag.dx, drag.dy), to });
+				}
+				rune::Phase::Up => {
+					drag_on(s, HandleEvent::DragEnd);
+					if !drag.cancelled() && to != from {
+						drag_on(s, HandleEvent::Move { from, to });
+					}
+				}
 			}
 		});
 	row()
@@ -4736,45 +4783,60 @@ pub fn block_handle<S: 'static>(
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BlockMenuAction {
-	TurnInto,
+	TurnIntoShown,
+	TurnInto(LibraryBlockType),
 	Duplicate,
 	MoveUp,
 	MoveDown,
 	Delete,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BlockMenuLook {
+	pub kind: LibraryBlockType,
+	pub is_mac: bool,
+	pub can_move_up: bool,
+	pub can_move_down: bool,
+	pub is_turn_into_shown: bool,
+}
+
 pub fn block_menu<S: 'static>(
 	t: &Tokens,
 	lang: Language,
-	kind: LibraryBlockType,
-	is_mac: bool,
+	look: BlockMenuLook,
 	on: impl Fn(&mut S, BlockMenuAction) + Clone + 'static,
 ) -> El {
 	use common::library::editor::blocks::menu;
 	let shortcut = |mac: Key, other: Key| Shortcut {
 		command: false,
-		key: say(if is_mac { mac } else { other }, lang),
+		key: say(if look.is_mac { mac } else { other }, lang),
+	};
+	let movable = |item: MenuItem<'static>, can_move: bool| {
+		MenuRow::Item(if can_move { item } else { item.disabled() })
 	};
 	let rows = [
-		MenuRow::Label(say(kind.label(), lang)),
+		MenuRow::Label(say(look.kind.label(), lang)),
 		MenuRow::Item(
 			MenuItem::new(say(menu::TURN_INTO, lang))
 				.glyph(&icons::REFRESH_CW)
-				.mark(MenuMark::Submenu),
+				.mark(MenuMark::Submenu)
+				.highlighted(look.is_turn_into_shown),
 		),
 		MenuRow::Item(MenuItem::new(say(menu::DUPLICATE, lang)).glyph(&icons::COPY).shortcut(
 			shortcut(menu::shortcuts::mac::DUPLICATE, menu::shortcuts::other::DUPLICATE),
 		)),
-		MenuRow::Item(
+		movable(
 			MenuItem::new(say(menu::MOVE_UP, lang))
 				.glyph(&icons::ARROW_UP)
 				.shortcut(shortcut(menu::shortcuts::mac::MOVE_UP, menu::shortcuts::other::MOVE_UP)),
+			look.can_move_up,
 		),
-		MenuRow::Item(
+		movable(
 			MenuItem::new(say(menu::MOVE_DOWN, lang)).glyph(&icons::ARROW_DOWN).shortcut(shortcut(
 				menu::shortcuts::mac::MOVE_DOWN,
 				menu::shortcuts::other::MOVE_DOWN,
 			)),
+			look.can_move_down,
 		),
 		MenuRow::Separator,
 		MenuRow::Item(
@@ -4785,7 +4847,7 @@ pub fn block_menu<S: 'static>(
 		),
 	];
 	let pressed = [
-		BlockMenuAction::TurnInto,
+		BlockMenuAction::TurnIntoShown,
 		BlockMenuAction::Duplicate,
 		BlockMenuAction::MoveUp,
 		BlockMenuAction::MoveDown,
@@ -4801,6 +4863,37 @@ pub fn block_menu<S: 'static>(
 		},
 	)
 	.key("library-block-menu")
+}
+
+fn turn_into_items(
+	lang: Language,
+	kind: LibraryBlockType,
+) -> Vec<(LibraryBlockType, MenuItem<'static>)> {
+	kind.conversions()
+		.into_iter()
+		.map(|each| {
+			let item = MenuItem::new(say(each.label(), lang))
+				.glyph(each.glyph())
+				.mark(MenuMark::Radio(each == kind));
+			(each, item)
+		})
+		.collect()
+}
+
+pub fn turn_into_menu<S: 'static>(
+	t: &Tokens,
+	lang: Language,
+	kind: LibraryBlockType,
+	on: impl Fn(&mut S, BlockMenuAction) + Clone + 'static,
+) -> El {
+	let turn_into = say(common::library::editor::blocks::menu::TURN_INTO, lang);
+	let items = turn_into_items(lang, kind);
+	let rows = items.iter().map(|(_, item)| MenuRow::Item(*item));
+	wired_submenu(t, turn_into, rows, |index, row| {
+		row.on_press(emitter(&on, BlockMenuAction::TurnInto(items[index].0)))
+	})
+	.key("library-turn-into")
+	.anchored(format!("menu-item-{turn_into}"), Side::Right, Align::Start, 0.0)
 }
 
 pub fn drop_indicator(t: &Tokens) -> El {
@@ -4824,5 +4917,7 @@ pub fn title_field<S: 'static>(
 		.on_edit(access)
 }
 
+#[cfg(test)]
+mod block_menu_tests;
 #[cfg(test)]
 mod tile_more_tests;
