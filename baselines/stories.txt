@@ -1756,6 +1756,7 @@ navigation-documentpanel--board-several-agents-dark
 navigation-documentpanel--capped-by-the-room-left
 navigation-documentpanel--consecutive-answers-at-the-thread-floor
 navigation-documentpanel--controlled-width
+navigation-documentpanel--dragged-to-its-maximum-on-a-wide-window
 navigation-documentpanel--handle-with-keyboard-focus
 navigation-documentpanel--handle-with-keyboard-focus-dark
 navigation-documentpanel--header-aligned-with-the-thread-header

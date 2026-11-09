@@ -14,8 +14,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import * as Y from "yjs"
 
 import {
-	DOCUMENT_PANEL_MAX_WIDTH,
 	DOCUMENT_PANEL_MIN_WIDTH,
+	DOCUMENT_PANEL_OPENING_WIDTH,
 	THREAD_MIN_WIDTH,
 } from "@workspace/ui/components/document-panel"
 import { hueTone } from "@workspace/ui/components/hue-palette"
@@ -301,14 +301,14 @@ describe("the width of a document opened beside a conversation", () => {
 		measuredRoom.width = null
 	})
 
-	it("opens at the widest width the panel allows when no width was ever dragged", () => {
+	it("opens at 800 when no width was ever dragged", () => {
 		renderPlanPanel()
 
-		expect(widthOfPanel()).toBe(`${DOCUMENT_PANEL_MAX_WIDTH}px`)
+		expect(widthOfPanel()).toBe(`${DOCUMENT_PANEL_OPENING_WIDTH}px`)
 	})
 
 	it("opens the next document at the width the edge was dragged to", () => {
-		const keptWidth = DOCUMENT_PANEL_MAX_WIDTH - 200
+		const keptWidth = DOCUMENT_PANEL_OPENING_WIDTH - 200
 		const first = renderPlanPanel()
 		dragPanelEdgeBy(200)
 		first.unmount()
@@ -318,7 +318,7 @@ describe("the width of a document opened beside a conversation", () => {
 		expect(widthOfPanel()).toBe(`${keptWidth}px`)
 	})
 
-	describe("in a room narrower than the widest panel and the thread", () => {
+	describe("in a room narrower than the opening width and the thread", () => {
 		const reachableWidth = DOCUMENT_PANEL_MIN_WIDTH + 100
 
 		beforeEach(() => {
@@ -333,7 +333,7 @@ describe("the width of a document opened beside a conversation", () => {
 
 		it("keeps the width the panel reached when the edge is dragged past it", () => {
 			const first = renderPlanPanel()
-			dragPanelEdgeBy(-DOCUMENT_PANEL_MAX_WIDTH)
+			dragPanelEdgeBy(-DOCUMENT_PANEL_OPENING_WIDTH)
 			first.unmount()
 			measuredRoom.width = null
 
@@ -549,7 +549,7 @@ describe("a board opened beside a conversation", () => {
 	})
 
 	it("opens at the width the document panel edge was dragged to", () => {
-		const keptWidth = DOCUMENT_PANEL_MAX_WIDTH - 200
+		const keptWidth = DOCUMENT_PANEL_OPENING_WIDTH - 200
 		const documentPanel = renderPlanPanel()
 		dragPanelEdgeBy(200)
 		documentPanel.unmount()
@@ -560,7 +560,7 @@ describe("a board opened beside a conversation", () => {
 	})
 
 	it("hands the width its edge was dragged to over to the next document", () => {
-		const keptWidth = DOCUMENT_PANEL_MAX_WIDTH - 150
+		const keptWidth = DOCUMENT_PANEL_OPENING_WIDTH - 150
 		const boardPanel = renderLaunchBoardPanel()
 		dragPanelEdgeBy(150)
 		boardPanel.unmount()

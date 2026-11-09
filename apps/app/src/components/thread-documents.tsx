@@ -12,7 +12,7 @@ import {
 	type BoardCardSummary,
 } from "@workspace/ui/components/board/board-card"
 import {
-	DOCUMENT_PANEL_MAX_WIDTH,
+	DOCUMENT_PANEL_OPENING_WIDTH,
 	DocumentPanel,
 } from "@workspace/ui/components/document-panel"
 import {
@@ -252,7 +252,7 @@ const useKeptPanelWidth = () => {
 		setKeptWidth(width)
 	}
 
-	return { width: keptWidth ?? DOCUMENT_PANEL_MAX_WIDTH, keepWidth }
+	return { width: keptWidth ?? DOCUMENT_PANEL_OPENING_WIDTH, keepWidth }
 }
 
 type ThreadDocumentPanelProps = {
@@ -275,7 +275,7 @@ export const ThreadDocumentPanel = ({
 
 	return (
 		<DocumentPanel
-			defaultWidth={DOCUMENT_PANEL_MAX_WIDTH}
+			defaultWidth={DOCUMENT_PANEL_OPENING_WIDTH}
 			onClose={onClose}
 			onOpenInLibrary={() => openInLibrary(name)}
 			onWidthChange={keepWidth}
@@ -360,7 +360,7 @@ export const ThreadBoardPanel = ({
 
 	return (
 		<DocumentPanel
-			defaultWidth={DOCUMENT_PANEL_MAX_WIDTH}
+			defaultWidth={DOCUMENT_PANEL_OPENING_WIDTH}
 			onClose={documents.close}
 			onOpenInLibrary={openInLibrary}
 			onWidthChange={keepWidth}

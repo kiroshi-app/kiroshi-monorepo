@@ -2,25 +2,25 @@ import { describe, expect, it } from "vitest"
 
 import { panelWidthsInRoom } from "@workspace/ui/components/document-panel-widths"
 
-const BOUNDS = { minWidth: 400, maxWidth: 800, threadMinWidth: 320 }
+const BOUNDS = { minWidth: 400, threadMinWidth: 400 }
 
 describe("panelWidthsInRoom", () => {
-	it("draws the asked width and caps the maximum at the room left", () => {
+	it("draws the asked width and caps the maximum at the room left beside a 400 thread", () => {
 		expect(
-			panelWidthsInRoom({ ...BOUNDS, room: 864, askedWidth: 480 }),
-		).toEqual({ width: 480, minWidth: 400, maxWidth: 544 })
+			panelWidthsInRoom({ ...BOUNDS, room: 864, askedWidth: 432 }),
+		).toEqual({ width: 432, minWidth: 400, maxWidth: 464 })
 	})
 
-	it("caps the maximum at 800 when the room leaves more", () => {
+	it("caps the maximum at the room left only, past 800 on a wide window", () => {
 		expect(
-			panelWidthsInRoom({ ...BOUNDS, room: 1536, askedWidth: 600 }),
-		).toEqual({ width: 600, minWidth: 400, maxWidth: 800 })
+			panelWidthsInRoom({ ...BOUNDS, room: 1616, askedWidth: 800 }),
+		).toEqual({ width: 800, minWidth: 400, maxWidth: 1216 })
 	})
 
 	it("draws the room left when it falls between 400 and the asked width", () => {
 		expect(
 			panelWidthsInRoom({ ...BOUNDS, room: 976, askedWidth: 800 }),
-		).toEqual({ width: 656, minWidth: 400, maxWidth: 656 })
+		).toEqual({ width: 576, minWidth: 400, maxWidth: 576 })
 	})
 
 	it("holds 400 when the room left falls under it", () => {
@@ -31,10 +31,10 @@ describe("panelWidthsInRoom", () => {
 
 	it("holds the asked width inside the panel bounds", () => {
 		expect(
-			panelWidthsInRoom({ ...BOUNDS, room: 2000, askedWidth: 900 }),
-		).toEqual({ width: 800, minWidth: 400, maxWidth: 800 })
+			panelWidthsInRoom({ ...BOUNDS, room: 2000, askedWidth: 1700 }),
+		).toEqual({ width: 1600, minWidth: 400, maxWidth: 1600 })
 		expect(
 			panelWidthsInRoom({ ...BOUNDS, room: 2000, askedWidth: 300 }),
-		).toEqual({ width: 400, minWidth: 400, maxWidth: 800 })
+		).toEqual({ width: 400, minWidth: 400, maxWidth: 1600 })
 	})
 })
