@@ -4,15 +4,16 @@ use rune::{Align, El, Side, TextEdit, col};
 use kiroshi_rune_kit::strings::{Language, common};
 use kiroshi_rune_kit::surfaces::s14_library::{
 	Agent, BarActions, DocumentBar, DocumentPanelEvent, EditorBlock, HandlePlace, ItemEvent,
-	ItemLook, LibraryItem as Tile, LibraryPanel, LightboxImage, LightboxLook, PanelActions,
-	PanelLook, PanelState, TOOLBAR_GAP, Unavailable, Writer, agent_card, agent_caret, block_editor,
-	block_handle, block_menu, delete_confirmation, document_bar, document_column, document_panel,
-	document_skeleton, field_key, format_toolbar, grid_columns, item_menu, item_unavailable,
-	library_panel, lightbox, link_field, new_document_dialog, presence, rows_of, title_field,
+	ItemLook, LibraryBlockType, LibraryItem as Tile, LibraryPanel, LightboxImage, LightboxLook,
+	PanelActions, PanelLook, PanelState, TOOLBAR_GAP, TableCells, Unavailable, Writer, agent_card,
+	agent_caret, block_editor, block_handle, block_menu, delete_confirmation, document_bar,
+	document_column, document_panel, document_skeleton, field_key, format_toolbar, grid_columns,
+	item_menu, item_unavailable, library_panel, lightbox, link_field, new_document_dialog,
+	presence, rows_of, table_editor, title_field,
 };
 use kiroshi_rune_kit::tokens::{SPACING, Tokens};
 
-use super::blocks::{Block, is_editable};
+use super::blocks::{Block, field_texts_of, is_editable, table_columns};
 use super::document::{Document, Phase, title_of};
 use super::editing::pressed_of;
 use super::item_menu::MenuSurface;
@@ -231,6 +232,23 @@ fn block_menu_layer(state: &State, t: &Tokens, document: &Document, is_beside: b
 	Some(shown.anchored(handle, Side::Bottom, Align::Start, SPACING))
 }
 
+fn table_view(t: &Tokens, document: &Document, block: &Block, is_beside: bool) -> Option<El> {
+	let columns = table_columns(&block.source);
+	let count = field_texts_of(&block.source).len();
+	let edits: Vec<&TextEdit> =
+		(0..count).map(|field| document.field(&block.id, field)).collect::<Option<_>>()?;
+	let rows = edits.chunks(columns).map(<[&TextEdit]>::to_vec).collect();
+	let focused = document
+		.focused()
+		.filter(|field| field.block == block.id)
+		.map_or((0, 0), |field| (field.row / columns, field.row % columns));
+	let cells = TableCells { block: &block.id, rows, focused };
+	let access = if is_beside { beside_field } else { shown_field };
+	let id = block.id.clone();
+	let on = move |app: &mut App, event| library(app).handle_table(is_beside, &id, event);
+	Some(table_editor(t, LANGUAGE, &cells, access, on))
+}
+
 fn editor(app: &App, t: &Tokens, document: &Document, is_beside: bool) -> (El, Vec<El>) {
 	let blocks = &document.blocks;
 	let placeholder = said(common::library::templates::blank::PLACEHOLDER);
@@ -250,6 +268,9 @@ fn editor(app: &App, t: &Tokens, document: &Document, is_beside: bool) -> (El, V
 			};
 			let mut view = EditorBlock::new(&block.id, kind, rows, &block.source);
 			view.depths = lines.iter().map(|line| line.depth).collect();
+			if kind == LibraryBlockType::Table {
+				view.drawn = table_view(t, document, block, is_beside);
+			}
 			view.placeholder = is_blank.then_some(placeholder.as_str());
 			view
 		})

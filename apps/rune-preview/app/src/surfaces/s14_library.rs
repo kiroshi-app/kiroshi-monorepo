@@ -6,6 +6,7 @@ mod handle;
 mod heard;
 mod imports;
 mod item_menu;
+mod rich;
 mod session;
 #[cfg(test)]
 mod tests;

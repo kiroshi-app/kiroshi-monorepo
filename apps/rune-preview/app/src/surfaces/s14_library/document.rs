@@ -6,9 +6,9 @@ use rune::TextEdit;
 use kiroshi_rune_kit::surfaces::s14_library::{BLOCK_GAP, LibraryBlockType};
 
 use super::blocks::{
-	self, Block, Format, continued_line, converted, field_of, fresh_id, is_editable, lead_of,
-	line_count, markdown_before_caret, markdown_of, markdown_of_field, rewritten, row_start,
-	texts_of, with_line_after, without_line,
+	self, Block, Format, continued_line, converted, field_of, field_texts_of, fresh_id, has_fields,
+	is_editable, lead_of, line_count, markdown_before_caret, markdown_of, markdown_of_field,
+	rewritten, row_start, texts_of, with_line_after, without_line,
 };
 use super::session::Session;
 use super::worker::Target;
@@ -173,10 +173,10 @@ impl Document {
 		let mut held: Vec<Field> = std::mem::take(&mut self.fields);
 		for block in &self.blocks {
 			let kind = block.kind();
-			if !is_editable(kind) {
+			if !has_fields(kind) {
 				continue;
 			}
-			for (row, text) in texts_of(&block.source).iter().enumerate() {
+			for (row, text) in field_texts_of(&block.source).iter().enumerate() {
 				let kept = held.iter().position(|field| {
 					field.block == block.id && field.row == row && field.built_from == block.source
 				});
@@ -206,6 +206,16 @@ impl Document {
 
 	pub fn block_at(&self, block: &str) -> Option<usize> {
 		self.blocks.iter().position(|held| held.id == block)
+	}
+
+	pub fn focus_cell(&mut self, block: &str, field: usize) {
+		for held in &mut self.fields {
+			held.edit.focused = false;
+		}
+		if let Some(edit) = self.field_mut(block, field) {
+			edit.focused = true;
+			edit.set_selection(0, edit.text.len());
+		}
 	}
 
 	fn focus(&mut self, block: &str, row: usize) {
@@ -346,6 +356,9 @@ impl Document {
 	pub fn convert(&mut self, block: &str, kind: LibraryBlockType, cut: Option<Cut>) {
 		let Some(at) = self.block_at(block) else { return };
 		let current = self.blocks[at].kind();
+		if !is_editable(current) {
+			return;
+		}
 		let rows: Vec<String> = texts_of(&self.blocks[at].source)
 			.iter()
 			.enumerate()

@@ -230,7 +230,7 @@ impl State {
 		}
 	}
 
-	fn arm_flush(&mut self) {
+	pub(super) fn arm_flush(&mut self) {
 		if self.is_flush_armed {
 			return;
 		}

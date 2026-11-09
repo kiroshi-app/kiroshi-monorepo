@@ -168,8 +168,113 @@ pub fn texts_of(source: &str) -> Vec<String> {
 	rows_of(source).into_iter().map(|row| row.text).collect()
 }
 
+fn unescaped_pipes(line: &str) -> Vec<usize> {
+	let mut previous = None;
+	let mut pipes = Vec::new();
+	for (at, character) in line.char_indices() {
+		if character == '|' && previous != Some('\\') {
+			pipes.push(at);
+		}
+		previous = Some(character);
+	}
+	pipes
+}
+
+fn cells_of(line: &str) -> Vec<String> {
+	let line = line.trim();
+	let line = line.strip_prefix('|').unwrap_or(line);
+	let pipes = unescaped_pipes(line);
+	let end = match pipes.last() {
+		Some(last) if *last + 1 == line.len() => *last,
+		_ => line.len(),
+	};
+	let starts = std::iter::once(0).chain(pipes.iter().map(|pipe| pipe + 1));
+	let ends = pipes.iter().copied().filter(|pipe| *pipe < end).chain(std::iter::once(end));
+	starts.zip(ends).map(|(start, end)| line[start..end].trim().to_owned()).collect()
+}
+
+fn table_rows_of(source: &str) -> Vec<Vec<String>> {
+	source
+		.split('\n')
+		.enumerate()
+		.filter(|(index, _)| *index != 1)
+		.map(|(_, line)| cells_of(line))
+		.collect()
+}
+
+pub fn field_texts_of(source: &str) -> Vec<String> {
+	match block_type_of(source) {
+		LibraryBlockType::Table => {
+			let columns = table_columns(source);
+			table_rows_of(source)
+				.into_iter()
+				.flat_map(|mut cells| {
+					cells.resize(columns, String::new());
+					cells
+				})
+				.collect()
+		}
+		_ => texts_of(source),
+	}
+}
+
 pub fn is_editable(kind: LibraryBlockType) -> bool {
 	kind.is_text() || matches!(kind, LibraryBlockType::Callout | LibraryBlockType::Code)
+}
+
+pub fn has_fields(kind: LibraryBlockType) -> bool {
+	is_editable(kind) || kind == LibraryBlockType::Table
+}
+
+pub fn table_columns(source: &str) -> usize {
+	table_rows_of(source).first().map_or(1, Vec::len).max(1)
+}
+
+fn one_line(value: &str) -> String {
+	let pieces: Vec<&str> = value.split('\n').collect();
+	let last = pieces.len() - 1;
+	pieces
+		.iter()
+		.enumerate()
+		.map(|(at, piece)| {
+			let piece = if at < last { piece.trim_end_matches([' ', '\t', '\r']) } else { piece };
+			if at > 0 { piece.trim_start_matches([' ', '\t']) } else { piece }
+		})
+		.collect::<Vec<_>>()
+		.join(" ")
+}
+
+fn as_cell(value: &str) -> String {
+	let mut cell = String::new();
+	let mut previous = None;
+	for character in one_line(value).chars() {
+		if character == '|' && previous != Some('\\') {
+			cell.push('\\');
+		}
+		cell.push(character);
+		previous = Some(character);
+	}
+	cell
+}
+
+fn with_cell(source: &str, field: usize, text: &str) -> String {
+	let columns = table_columns(source);
+	let (row, column) = (field / columns, field % columns);
+	let line_at = if row == 0 { 0 } else { row + 1 };
+	source
+		.split('\n')
+		.enumerate()
+		.map(|(index, line)| {
+			if index != line_at {
+				return line.to_owned();
+			}
+			let mut cells = cells_of(line);
+			cells.resize(cells.len().max(column + 1), String::new());
+			cells[column] = as_cell(text);
+			format!("| {} |", cells.join(" | "))
+		})
+		.collect::<Vec<_>>()
+		.join("\n")
 }
 
 pub fn field_of(kind: LibraryBlockType, markdown: &str) -> TextEdit {
@@ -235,6 +340,9 @@ fn closing_fence_of(lines: &[&str]) -> String {
 
 pub fn rewritten(source: &str, row: usize, text: &str) -> String {
 	let kind = block_type_of(source);
+	if kind == LibraryBlockType::Table {
+		return with_cell(source, row, text);
+	}
 	let lines: Vec<&str> = source.split('\n').collect();
 	if kind == LibraryBlockType::Code {
 		return format!("{}\n{text}\n{}", lines[0], closing_fence_of(&lines));

@@ -16,8 +16,8 @@ use yrs::{Doc, ReadTxn, Text, Transact};
 use kiroshi_rune_kit::surfaces::s14_library::{
 	BlockEvent, BlockMenuAction, DOCUMENT_PANEL_MIN_WIDTH, DOCUMENT_PANEL_OPENING_WIDTH,
 	DocumentPanelEvent, Format as Toolbar, HandleEvent, ItemAction, ItemEvent, LibraryEvent,
-	LightboxEvent, LinkEvent, MORE_KEY, NewDocumentEvent, NewDocumentTemplate, panel_max_width,
-	tile_more_key,
+	LightboxEvent, LinkEvent, MORE_KEY, NewDocumentEvent, NewDocumentTemplate, TableEvent,
+	panel_max_width, tile_more_key,
 };
 
 use super::blocks::{self, Format};
@@ -1316,4 +1316,51 @@ fn a_dragged_handle_moves_its_block_to_the_slot_and_saves() {
 	});
 
 	assert_eq!(saved, "Two\n\nThree\n\nOne");
+}
+
+const TABLE: &str = "| Name | Role |\n| --- | --- |\n| Ada | Lead |";
+
+#[test]
+fn an_edited_table_cell_is_written_into_its_table_and_saved() {
+	let initial = state_of(TABLE);
+	let mut state = opened_from("notes.txt", &initial);
+	let block = first_block(&state);
+
+	state.field_mut(false, &block, 2).replace_text("Ada | Grace");
+	state.handle_table(false, &block, TableEvent::Edited { row: 1, column: 0 });
+	flush_due(&mut state);
+
+	assert_eq!(
+		saved_markdown(&initial, &calls(&mut state)),
+		"| Name | Role |\n| --- | --- |\n| Ada \\| Grace | Lead |"
+	);
+}
+
+#[test]
+fn table_focus_moves_to_that_cell_with_its_text_selected() {
+	let mut state = opened_document("notes.txt", TABLE);
+	let block = first_block(&state);
+
+	state.handle_table(false, &block, TableEvent::Focus { row: 1, column: 1 });
+
+	let document = state.shown_document().expect("an open document");
+	let focused = document.focused().map(|field| (field.row, field.edit.range()));
+	assert_eq!(focused, Some((3, (0, 4))));
+	assert_eq!(document.fields.iter().filter(|field| field.edit.focused).count(), 1);
+}
+
+#[test]
+fn an_escaped_pipe_stays_inside_its_cell_on_the_next_edit() {
+	let initial = state_of("| Name | Role |\n| --- | --- |\n| Ada \\| Grace | Lead |");
+	let mut state = opened_from("notes.txt", &initial);
+	let block = first_block(&state);
+
+	state.field_mut(false, &block, 3).replace_text("Leads");
+	state.handle_table(false, &block, TableEvent::Edited { row: 1, column: 1 });
+	flush_due(&mut state);
+
+	assert_eq!(
+		saved_markdown(&initial, &calls(&mut state)),
+		"| Name | Role |\n| --- | --- |\n| Ada \\| Grace | Leads |"
+	);
 }
