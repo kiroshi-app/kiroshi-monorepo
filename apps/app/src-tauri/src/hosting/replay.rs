@@ -18,14 +18,31 @@ pub(super) const RING_FRAMES: usize = BUFFERED_FRAMES;
 
 pub(super) const RING_BYTES: usize = 4 * 1024 * 1024;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) enum Addressee {
+	Everyone,
+	Account(String),
+}
+
+impl Addressee {
+	fn reaches(&self, account_id: &str) -> bool {
+		match self {
+			Addressee::Everyone => true,
+			Addressee::Account(addressed) => addressed == account_id,
+		}
+	}
+}
+
 struct Recorded {
 	seq: u64,
 	published: Frame,
+	addressee: Addressee,
 }
 
 pub(super) struct Stamped {
 	pub(super) seq: u64,
 	pub(super) frame: String,
+	pub(super) addressee: Addressee,
 }
 
 pub(super) struct LastSent {
@@ -64,10 +81,11 @@ impl Ring {
 		}
 	}
 
-	fn recorded(&mut self, published: &Frame) {
+	fn recorded(&mut self, published: &Frame, addressee: Addressee) {
 		self.last_seq += 1;
 		self.bytes += published.len();
-		self.frames.push_back(Recorded { seq: self.last_seq, published: published.clone() });
+		let seq = self.last_seq;
+		self.frames.push_back(Recorded { seq, published: published.clone(), addressee });
 		while self.frames.len() > RING_FRAMES || self.bytes > RING_BYTES {
 			let Some(evicted) = self.frames.pop_front() else {
 				break;
@@ -103,6 +121,7 @@ impl Ring {
 			.map(|recorded| Stamped {
 				seq: recorded.seq,
 				frame: bridge::forwarded(&recorded.published, &self.epoch, recorded.seq),
+				addressee: recorded.addressee.clone(),
 			})
 			.collect()
 	}
@@ -111,7 +130,7 @@ impl Ring {
 		self.frames.iter().filter(move |recorded| recorded.seq > since && recorded.seq <= until)
 	}
 
-	pub(super) fn resumed(&self, call: &ResumeCall, sent_seq: u64) -> Resumed {
+	pub(super) fn resumed(&self, call: &ResumeCall, sent_seq: u64, account_id: &str) -> Resumed {
 		let args = &call.args;
 		if args.epoch != self.epoch || args.since < self.oldest_seq() - 1 {
 			let body = json!({ "token": args.token, "tooOld": true });
@@ -122,6 +141,7 @@ impl Ring {
 		}
 		let frames: Vec<String> = self
 			.between(args.since, sent_seq)
+			.filter(|recorded| recorded.addressee.reaches(account_id))
 			.map(|recorded| {
 				bridge::replayed(&recorded.published, &self.epoch, recorded.seq, &args.token)
 			})
@@ -170,15 +190,15 @@ pub(super) async fn recorded<R: Runtime>(
 	loop {
 		let (pending, mut heard) = subscribed_with_pending_questions(app);
 		for frame in pending {
-			if guest_events.reach_the_guest(app, &frame).await {
-				ring.send_modify(|ring| ring.recorded(&frame));
+			if let Some(addressee) = guest_events.reach_the_guest(app, &frame).await {
+				ring.send_modify(|ring| ring.recorded(&frame, addressee));
 			}
 		}
 		let missed = loop {
 			match heard.recv().await {
 				Ok(frame) => {
-					if guest_events.reach_the_guest(app, &frame).await {
-						ring.send_modify(|ring| ring.recorded(&frame));
+					if let Some(addressee) = guest_events.reach_the_guest(app, &frame).await {
+						ring.send_modify(|ring| ring.recorded(&frame, addressee));
 					}
 				}
 				Err(RecvError::Lagged(missed)) => break missed,
@@ -196,7 +216,7 @@ mod tests {
 	fn a_ring_of(published: &[&str]) -> Ring {
 		let mut ring = Ring::started();
 		for frame in published {
-			ring.recorded(&Frame::from(*frame));
+			ring.recorded(&Frame::from(*frame), Addressee::Everyone);
 		}
 		ring
 	}
@@ -313,7 +333,7 @@ mod tests {
 	fn a_resume_inside_the_ring_replays_up_to_the_sent_seq_stamped_with_its_token() {
 		let ring = a_ring_of(&["{}"; 5]);
 
-		let resumed = ring.resumed(&a_resume(&ring.epoch, 2), 4);
+		let resumed = ring.resumed(&a_resume(&ring.epoch, 2), 4, "anyone");
 
 		let replayed: Vec<Value> = resumed.frames.iter().map(|frame| parsed(frame)).collect();
 		assert_eq!(
@@ -327,10 +347,26 @@ mod tests {
 	}
 
 	#[test]
+	fn a_resume_replays_a_frame_addressed_to_one_account_only_to_that_account() {
+		let mut ring = Ring::started();
+		ring.recorded(&Frame::from("{}"), Addressee::Everyone);
+		ring.recorded(&Frame::from("{}"), Addressee::Account("owner".to_owned()));
+		ring.recorded(&Frame::from("{}"), Addressee::Everyone);
+
+		let seqs_replayed_to = |account_id| {
+			let resumed = ring.resumed(&a_resume(&ring.epoch, 0), ring.last_seq, account_id);
+			resumed.frames.iter().map(|frame| parsed(frame)["seq"].clone()).collect::<Vec<_>>()
+		};
+
+		assert_eq!(seqs_replayed_to("owner"), [json!(1), json!(2), json!(3)]);
+		assert_eq!(seqs_replayed_to("someone-else"), [json!(1), json!(3)]);
+	}
+
+	#[test]
 	fn a_resume_from_just_before_the_oldest_frame_replays_the_whole_ring() {
 		let ring = a_ring_of(&vec!["{}"; RING_FRAMES + 3]);
 
-		let resumed = ring.resumed(&a_resume(&ring.epoch, 3), ring.last_seq);
+		let resumed = ring.resumed(&a_resume(&ring.epoch, 3), ring.last_seq, "anyone");
 
 		assert_eq!(resumed.frames.len(), RING_FRAMES);
 	}
@@ -339,8 +375,9 @@ mod tests {
 	fn a_resume_older_than_the_ring_or_of_another_epoch_is_too_old() {
 		let ring = a_ring_of(&vec!["{}"; RING_FRAMES + 3]);
 
-		let evicted = ring.resumed(&a_resume(&ring.epoch, 2), ring.last_seq);
-		let foreign = ring.resumed(&a_resume("another-epoch", ring.last_seq), ring.last_seq);
+		let evicted = ring.resumed(&a_resume(&ring.epoch, 2), ring.last_seq, "anyone");
+		let foreign =
+			ring.resumed(&a_resume("another-epoch", ring.last_seq), ring.last_seq, "anyone");
 
 		for resumed in [evicted, foreign] {
 			assert!(resumed.frames.is_empty());

@@ -4,6 +4,9 @@ use serde::Deserialize;
 use serde_json::Value;
 use tauri::{AppHandle, Manager, Runtime};
 
+use super::authorship;
+use super::replay::Addressee;
+use crate::db::repositories::conversations::ChatOwner;
 use crate::db::repositories::space_children::SpaceChild::{
 	self, Bot, BotHeldAlone, Conversation, Message, Mission, Routine, RoutineRun, Section, Turn,
 };
@@ -232,6 +235,7 @@ pub(super) const REACHES: &[(&str, Reach)] = &[
 	("conversation_record_bot_commands", Reach::Scoped(&[child(BotHeldAlone, "/botId")])),
 	("conversation_bot_commands", Reach::Scoped(BOT_ID)),
 	("conversation_main_chat", Reach::Scoped(BOT_AND_SPACE)),
+	("conversation_renew_main_chat", Reach::Scoped(BOT_AND_SPACE)),
 	("conversation_solo_states", Reach::Scoped(SPACE_ID)),
 	("conversation_agent_rooms", Reach::Scoped(SPACE_ID)),
 	(
@@ -512,6 +516,7 @@ pub(super) enum Refusal {
 	NoReach,
 	HostOnly,
 	Unheld { held: Held, offending: Offending },
+	NotOwned { held: Held },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -535,6 +540,9 @@ pub(super) fn refusal_line(command: &str, shared_space_id: &str, refusal: &Refus
 			};
 			format!("{} failed the {} check with {value}", held.argument, held.check.kind())
 		}
+		Refusal::NotOwned { held } => {
+			format!("{} names the main conversation of another person", held.argument)
+		}
 	};
 	format!("the relayed {command} was refused outside shared space {shared_space_id}: {reason}")
 }
@@ -542,6 +550,7 @@ pub(super) fn refusal_line(command: &str, shared_space_id: &str, refusal: &Refus
 pub(super) async fn stays_in_the_shared_space<R: Runtime>(
 	app: &AppHandle<R>,
 	shared_space_id: &str,
+	caller: &ChatOwner,
 	command: &str,
 	args: &Value,
 ) -> Result<(), Refusal> {
@@ -558,6 +567,11 @@ pub(super) async fn stays_in_the_shared_space<R: Runtime>(
 			.await
 			.map_err(|offending| Refusal::Unheld { held: *held, offending })?;
 	}
+	for held in helds {
+		if !lookup.is_owned_by(caller, held, args.pointer(held.argument)).await {
+			return Err(Refusal::NotOwned { held: *held });
+		}
+	}
 	Ok(())
 }
 
@@ -568,25 +582,77 @@ struct Published {
 	payload: Value,
 }
 
+const CONVERSATION_POINTERS: [&str; 3] =
+	["/conversationId", "/conversation/id", "/scope/conversationId"];
+
 pub(super) struct GuestEvents {
 	shared_space_id: String,
 	held_children: HashMap<(SpaceChild, String), bool>,
+	main_owners: HashMap<String, Option<ChatOwner>>,
 }
 
 impl GuestEvents {
 	pub(super) fn new(shared_space_id: &str) -> Self {
-		Self { shared_space_id: shared_space_id.to_owned(), held_children: HashMap::new() }
+		Self {
+			shared_space_id: shared_space_id.to_owned(),
+			held_children: HashMap::new(),
+			main_owners: HashMap::new(),
+		}
 	}
 
 	pub(super) async fn reach_the_guest<R: Runtime>(
 		&mut self,
 		app: &AppHandle<R>,
 		frame: &str,
-	) -> bool {
+	) -> Option<Addressee> {
 		let published = match serde_json::from_str::<Published>(frame) {
 			Ok(published) => published,
-			Err(error) => return self.kept_off("without a readable name", &error.to_string()),
+			Err(error) => {
+				self.kept_off("without a readable name", &error.to_string());
+				return None;
+			}
 		};
+		if !self.holds_the_guest(app, &published).await {
+			return None;
+		}
+		self.addressee(app, &published).await
+	}
+
+	async fn addressee<R: Runtime>(
+		&mut self,
+		app: &AppHandle<R>,
+		published: &Published,
+	) -> Option<Addressee> {
+		let named = CONVERSATION_POINTERS
+			.iter()
+			.find_map(|pointer| published.payload.pointer(pointer).and_then(Value::as_str));
+		let Some(conversation_id) = named else {
+			return Some(Addressee::Everyone);
+		};
+		let owner = match self.main_owners.get(conversation_id) {
+			Some(owner) => owner.clone(),
+			None => {
+				let lookup = Lookup {
+					app,
+					shared_space_id: &self.shared_space_id,
+					relayed: &published.event,
+				};
+				let owner = lookup.resolved_owner(Conversation, conversation_id).await?;
+				self.main_owners.insert(conversation_id.to_owned(), owner.clone());
+				owner
+			}
+		};
+		match owner {
+			None => Some(Addressee::Everyone),
+			Some(owner) => authorship::account_of(app, &owner).map(Addressee::Account),
+		}
+	}
+
+	async fn holds_the_guest<R: Runtime>(
+		&mut self,
+		app: &AppHandle<R>,
+		published: &Published,
+	) -> bool {
 		let event = published.event.as_str();
 		let (held, scope) = match verdict(event, &published.payload) {
 			Verdict::HostOnly => return false,
@@ -693,6 +759,34 @@ impl<R: Runtime> Lookup<'_, R> {
 			Ok(())
 		} else {
 			Err(Offending::Value(value.clone()))
+		}
+	}
+
+	async fn is_owned_by(&self, caller: &ChatOwner, held: &Held, value: Option<&Value>) -> bool {
+		let (Check::Child(kind), Some(Value::String(child_id))) = (held.check, value) else {
+			return true;
+		};
+		match self.resolved_owner(kind, child_id).await {
+			Some(owner) => owner.is_none_or(|owner| &owner == caller),
+			None => false,
+		}
+	}
+
+	async fn resolved_owner(&self, kind: SpaceChild, child_id: &str) -> Option<Option<ChatOwner>> {
+		let state = self.app.state::<DatabaseState>();
+		let database = match state.as_ref() {
+			Ok(database) => database,
+			Err(failure) => {
+				self.unresolved(kind, failure);
+				return None;
+			}
+		};
+		match database.space_children().main_owner(kind, child_id.to_owned()).await {
+			Ok(owner) => Some(owner),
+			Err(failure) => {
+				self.unresolved(kind, &failure);
+				None
+			}
 		}
 	}
 

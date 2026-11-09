@@ -221,6 +221,23 @@ pub(super) async fn host_rostered(
 	roster.rostered(space_id.to_owned(), signed_row(host, space_id, &enrolled)).await
 }
 
+pub(super) async fn devices_of_account(
+	database: &Database,
+	space_id: &str,
+	host: &DeviceKeys,
+	account_id: &str,
+) -> Result<Vec<Rostered>, DatabaseError> {
+	let roster = verified_roster(database, space_id, &host.signing_public()).await?;
+	Ok(roster
+		.rows
+		.into_iter()
+		.map(|row| row.rostered)
+		.filter(|rostered| {
+			rostered.account_id == account_id && rostered.device_id != host.device_id()
+		})
+		.collect())
+}
+
 pub(super) async fn sender_of(
 	database: &Database,
 	space_id: &str,

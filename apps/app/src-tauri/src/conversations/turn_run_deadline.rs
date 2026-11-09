@@ -186,6 +186,7 @@ pub async fn conversation_drop_summons<R: Runtime>(
 
 #[cfg(test)]
 mod tests {
+	use crate::db::repositories::conversations::ChatOwner;
 	use serde_json::{json, Value};
 	use tauri::test::mock_builder;
 	use tauri::{Listener, Manager};
@@ -223,7 +224,7 @@ mod tests {
 		database.conversations().ensure_default_bot().await.expect("the bot is seeded");
 		let chat = database
 			.conversations()
-			.ensure_chat(DEFAULT_BOT_ID.to_owned(), None)
+			.ensure_chat(DEFAULT_BOT_ID.to_owned(), None, ChatOwner::Host)
 			.await
 			.expect("the chat is seeded");
 		let messages = database.messages();
@@ -260,7 +261,7 @@ mod tests {
 		database.conversations().ensure_default_bot().await.expect("the bot is seeded");
 		let chat = database
 			.conversations()
-			.ensure_chat(DEFAULT_BOT_ID.to_owned(), None)
+			.ensure_chat(DEFAULT_BOT_ID.to_owned(), None, ChatOwner::Host)
 			.await
 			.expect("the chat is seeded");
 		let messages = database.messages();

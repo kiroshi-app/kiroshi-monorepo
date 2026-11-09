@@ -214,6 +214,8 @@ fn announced_rooms<R: Runtime>(app: &AppHandle<R>) -> State<'_, AnnouncedRooms> 
 
 #[cfg(test)]
 mod tests {
+	use crate::db::repositories::conversations::ChatOwner;
+	use crate::hosting::authorship::Caller;
 	use std::sync::{Arc, Mutex as Held};
 	use std::time::Duration;
 
@@ -279,10 +281,16 @@ mod tests {
 	}
 
 	async fn paged(app: &App<MockRuntime>, conversation_id: &str) -> ObservedState {
-		let page =
-			conversation_page(app.handle().clone(), app.state(), "personal".to_owned(), None, None)
-				.await
-				.expect("the page is read");
+		let page = conversation_page(
+			app.handle().clone(),
+			app.state(),
+			Caller::Host,
+			"personal".to_owned(),
+			None,
+			None,
+		)
+		.await
+		.expect("the page is read");
 		let row = page.conversations.into_iter().find(|row| row.conversation.id == conversation_id);
 		row.expect("the room is on the page").observed
 	}
@@ -692,6 +700,7 @@ mod tests {
 		conversation_main_chat(
 			app.handle().clone(),
 			app.state(),
+			Caller::Host,
 			"b1".to_owned(),
 			Some("personal".to_owned()),
 		)
@@ -781,7 +790,7 @@ mod tests {
 		let app = a_host("first-read").await;
 		let conversations = database(&app).conversations();
 		let solo = conversations
-			.ensure_chat("b1".to_owned(), Some("personal".to_owned()))
+			.ensure_chat("b1".to_owned(), Some("personal".to_owned()), ChatOwner::Host)
 			.await
 			.expect("the solo thread is opened");
 		conversations
@@ -810,7 +819,7 @@ mod tests {
 	async fn a_solo_thread_of(app: &App<MockRuntime>, bot_id: &str) -> String {
 		database(app)
 			.conversations()
-			.ensure_chat(bot_id.to_owned(), Some("personal".to_owned()))
+			.ensure_chat(bot_id.to_owned(), Some("personal".to_owned()), ChatOwner::Host)
 			.await
 			.expect("the solo thread is opened")
 			.id
@@ -843,10 +852,14 @@ mod tests {
 		a_run_of(&app, ("t1", &working, 1), "b2").await;
 		let held_before = conversations_held(&app).await;
 
-		let read =
-			conversation_solo_states(app.handle().clone(), app.state(), "personal".to_owned())
-				.await
-				.expect("the solo states read");
+		let read = conversation_solo_states(
+			app.handle().clone(),
+			app.state(),
+			Caller::Host,
+			"personal".to_owned(),
+		)
+		.await
+		.expect("the solo states read");
 
 		assert_eq!(conversations_held(&app).await, held_before);
 		let answered: Vec<(&str, &str, ConversationState, Vec<String>)> = read
@@ -904,10 +917,16 @@ mod tests {
 			.await
 			.expect("the malformed prompts are planted");
 
-		let page =
-			conversation_page(app.handle().clone(), app.state(), "personal".to_owned(), None, None)
-				.await
-				.expect("the page is read");
+		let page = conversation_page(
+			app.handle().clone(),
+			app.state(),
+			Caller::Host,
+			"personal".to_owned(),
+			None,
+			None,
+		)
+		.await
+		.expect("the page is read");
 
 		let observed_of = |id: &str| {
 			page.conversations

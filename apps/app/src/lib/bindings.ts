@@ -159,6 +159,7 @@ export const commands = {
 	conversationRecordBotCommands: (botId: string, commands: AgentCommand_Deserialize[]) => typedError<null, TranscriptStoreError>(__TAURI_INVOKE("conversation_record_bot_commands", { botId, commands })),
 	conversationBotCommands: (botId: string) => typedError<AgentCommand_Serialize[], TranscriptStoreError>(__TAURI_INVOKE("conversation_bot_commands", { botId })),
 	conversationMainChat: (botId: string, spaceId: string | null) => typedError<Chat, TranscriptStoreError>(__TAURI_INVOKE("conversation_main_chat", { botId, spaceId })),
+	conversationRenewMainChat: (botId: string, spaceId: string) => typedError<Chat, TranscriptStoreError>(__TAURI_INVOKE("conversation_renew_main_chat", { botId, spaceId })),
 	conversationSoloStates: (spaceId: string) => typedError<SoloState[], TranscriptStoreError>(__TAURI_INVOKE("conversation_solo_states", { spaceId })),
 	conversationAgentRooms: (spaceId: string) => typedError<AgentRooms[], TranscriptStoreError>(__TAURI_INVOKE("conversation_agent_rooms", { spaceId })),
 	conversationCreate: (spaceId: string, sectionId: string | null, title: string, botIds: string[]) => typedError<Conversation, TranscriptStoreError>(__TAURI_INVOKE("conversation_create", { spaceId, sectionId, title, botIds })),
@@ -1455,7 +1456,7 @@ export type MessageReference = {
 
 export type MessageRole = "user" | "assistant";
 
-export type MessageSearchError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "queryTooLong"; limit: number };
+export type MessageSearchError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "queryTooLong"; limit: number } | { kind: "unvouchedMember" };
 
 export type MessageSearchQuery = {
 	text: string,
@@ -2192,7 +2193,7 @@ export type TranscriptPage_Serialize = {
 
 export type TranscriptRole = "user" | "assistant";
 
-export type TranscriptStoreError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "conflict"; id: string; field: string } | { kind: "invalidTransition"; id: string; from: string; to: string } | { kind: "unknownBot"; id: string } | { kind: "namelessBot" } | { kind: "unknownConversation"; id: string } | { kind: "foreignBot"; id: string } | { kind: "severalSpaces"; id: string } | { kind: "unknownParticipant"; conversationId: string; botId: string } | { kind: "blankIcon" } | { kind: "unlistedIcon"; icon: string; accepted: string[] } | { kind: "unknownColour"; colour: string; accepted: string[] } | { kind: "unknownMessage"; id: string } | { kind: "unknownTurn"; id: string } | { kind: "unknownMessageSeq"; conversationId: string; seq: number } | { kind: "rejectedAvatarImage"; reason: AvatarRejection } | { kind: "unwritableBundle"; detail: string } | { kind: "unwritableEnvironment"; failure: EnvError } | { kind: "systemSkill"; id: string } | { kind: "unreadableHistory"; detail: string } | { kind: "unreadableSources"; path: string; reason: string } | { kind: "turnAlreadyRunning"; conversationId: string; turnId: string } | { kind: "unreadableCursor"; cursor: string } | { kind: "documentRefused"; name: string; failure: LibraryError };
+export type TranscriptStoreError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "conflict"; id: string; field: string } | { kind: "invalidTransition"; id: string; from: string; to: string } | { kind: "unknownBot"; id: string } | { kind: "namelessBot" } | { kind: "unknownConversation"; id: string } | { kind: "foreignBot"; id: string } | { kind: "severalSpaces"; id: string } | { kind: "unknownParticipant"; conversationId: string; botId: string } | { kind: "blankIcon" } | { kind: "unlistedIcon"; icon: string; accepted: string[] } | { kind: "unknownColour"; colour: string; accepted: string[] } | { kind: "unknownMessage"; id: string } | { kind: "unknownTurn"; id: string } | { kind: "unknownMessageSeq"; conversationId: string; seq: number } | { kind: "rejectedAvatarImage"; reason: AvatarRejection } | { kind: "unwritableBundle"; detail: string } | { kind: "unwritableEnvironment"; failure: EnvError } | { kind: "systemSkill"; id: string } | { kind: "unreadableHistory"; detail: string } | { kind: "unreadableSources"; path: string; reason: string } | { kind: "turnAlreadyRunning"; conversationId: string; turnId: string } | { kind: "unreadableCursor"; cursor: string } | { kind: "documentRefused"; name: string; failure: LibraryError } | { kind: "unvouchedMember" };
 
 export type TranscriptWindow = TranscriptWindow_Serialize | TranscriptWindow_Deserialize;
 

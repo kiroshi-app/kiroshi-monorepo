@@ -60,11 +60,18 @@ pub struct MessageHit {
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum MessageSearchError {
 	#[serde(rename_all = "camelCase")]
-	Unavailable { failure: StorageFailure },
+	Unavailable {
+		failure: StorageFailure,
+	},
 	#[serde(rename_all = "camelCase")]
-	Storage { failure: StorageFailure },
+	Storage {
+		failure: StorageFailure,
+	},
 	#[serde(rename_all = "camelCase")]
-	QueryTooLong { limit: usize },
+	QueryTooLong {
+		limit: usize,
+	},
+	UnvouchedMember,
 }
 
 impl From<DatabaseError> for MessageSearchError {

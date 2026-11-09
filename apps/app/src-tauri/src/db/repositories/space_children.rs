@@ -1,6 +1,7 @@
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 
 use crate::db::repositories::bot_spaces;
+use crate::db::repositories::conversations::ChatOwner;
 use crate::db::{Access, DatabaseError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -32,6 +33,14 @@ impl SpaceChildrenRepository {
 		child_id: String,
 	) -> Result<bool, DatabaseError> {
 		self.access.call(move |connection| Ok(held(connection, &space_id, child, &child_id)?)).await
+	}
+
+	pub async fn main_owner(
+		&self,
+		child: SpaceChild,
+		child_id: String,
+	) -> Result<Option<ChatOwner>, DatabaseError> {
+		self.access.call(move |connection| Ok(main_owner_of(connection, child, &child_id)?)).await
 	}
 
 	pub async fn holds_avatar(
@@ -98,6 +107,32 @@ fn held(
 		}
 	};
 	connection.prepare_cached(held_query)?.query_row(params![child_id, space_id], |row| row.get(0))
+}
+
+fn main_owner_of(
+	connection: &Connection,
+	child: SpaceChild,
+	child_id: &str,
+) -> rusqlite::Result<Option<ChatOwner>> {
+	let owner_query = match child {
+		SpaceChild::Conversation => "SELECT owner FROM conversations WHERE id = ?1",
+		SpaceChild::Turn => {
+			"SELECT conversations.owner FROM turns
+				JOIN conversations ON conversations.id = turns.conversation_id
+				WHERE turns.id = ?1"
+		}
+		SpaceChild::Message => {
+			"SELECT conversations.owner FROM messages
+				JOIN conversations ON conversations.id = messages.conversation_id
+				WHERE messages.id = ?1"
+		}
+		_ => return Ok(None),
+	};
+	let owner: Option<Option<ChatOwner>> = connection
+		.prepare_cached(owner_query)?
+		.query_row([child_id], |row| row.get(0))
+		.optional()?;
+	Ok(owner.flatten())
 }
 
 #[cfg(test)]

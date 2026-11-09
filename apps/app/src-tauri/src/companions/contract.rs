@@ -321,6 +321,9 @@ impl From<MessageSearchError> for CompanionError {
 			MessageSearchError::Unavailable { failure } => CompanionError::Unavailable { failure },
 			MessageSearchError::Storage { failure } => CompanionError::Storage { failure },
 			MessageSearchError::QueryTooLong { limit } => CompanionError::QueryTooLong { limit },
+			MessageSearchError::UnvouchedMember => CompanionError::Unexpected {
+				detail: "the message search named no vouched member".to_owned(),
+			},
 		}
 	}
 }

@@ -77,6 +77,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 68, statements: MESSAGE_WEB_SOURCES },
 	Migration { version: 69, statements: MESSAGE_DOCUMENTS },
 	Migration { version: 70, statements: OPEN_TURNS_BY_CONVERSATION },
+	Migration { version: 71, statements: MAIN_CONVERSATION_OWNER },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -1415,6 +1416,19 @@ const OPEN_TURNS_BY_CONVERSATION: &str = "
 CREATE INDEX turns_open_by_conversation ON turns (conversation_id) WHERE completed_at IS NULL;
 ";
 
+const MAIN_CONVERSATION_OWNER: &str = "
+ALTER TABLE conversations ADD COLUMN owner TEXT CHECK (owner IS NULL OR kind = 'main');
+
+UPDATE conversations SET owner = 'host' WHERE kind = 'main';
+
+CREATE TRIGGER main_conversations_belong_to_the_host_unless_owned
+AFTER INSERT ON conversations
+WHEN NEW.kind = 'main' AND NEW.owner IS NULL
+BEGIN
+	UPDATE conversations SET owner = 'host' WHERE id = NEW.id;
+END;
+";
+
 const FRESH_INSTALL_UNTINTED_PERSONAL_SPACE: &str =
 	"UPDATE spaces SET colour = NULL WHERE id = 'personal';";
 
@@ -1542,6 +1556,7 @@ mod tests {
 	const MESSAGE_REPLY_EXCERPTS_STEP: u32 = 67;
 	const MESSAGE_WEB_SOURCES_STEP: u32 = 68;
 	const MESSAGE_DOCUMENTS_STEP: u32 = 69;
+	const MAIN_CONVERSATION_OWNER_STEP: u32 = 71;
 
 	const A_LIVE_SESSION: &str = "INSERT INTO runtime_sessions
 		(id, conversation_id, bot_id, provider_session_id, seq, status, started_at)
@@ -5214,6 +5229,47 @@ mod tests {
 		assert!(kept.web_sources.is_empty());
 
 		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[test]
+	fn a_main_conversation_kept_before_the_owner_step_belongs_to_the_host_and_no_row_is_lost() {
+		let dir = temp_dir();
+		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
+		apply_each(&mut connection, shipped_before(MAIN_CONVERSATION_OWNER_STEP))
+			.expect("the shipped schema");
+		connection
+			.execute_batch(
+				"INSERT INTO conversations (id, kind, space_id, title, created_at, updated_at)
+					VALUES ('main', 'main', 'personal', 'Chat', 1, 1),
+						('room', 'topic', 'personal', 'Room', 1, 1);",
+			)
+			.expect("the rows are inserted");
+
+		apply(&mut connection).expect("the owner step applies");
+
+		let owners: Vec<(String, Option<String>)> = connection
+			.prepare("SELECT id, owner FROM conversations ORDER BY id")
+			.expect("the statement")
+			.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+			.expect("the rows")
+			.collect::<rusqlite::Result<_>>()
+			.expect("the owners");
+		assert_eq!(
+			owners,
+			vec![("main".to_owned(), Some("host".to_owned())), ("room".to_owned(), None)]
+		);
+		assert!(
+			write(
+				&connection,
+				"INSERT INTO conversations (id, kind, title, owner, created_at, updated_at)
+					VALUES ('owned-room', 'topic', 'Room', 'bea', 1, 1)"
+			)
+			.is_err(),
+			"a room took an owner"
+		);
+
+		drop(connection);
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
