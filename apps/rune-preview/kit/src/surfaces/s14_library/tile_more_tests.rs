@@ -32,7 +32,6 @@ fn view(screen: &Screen, _: &mut Cx<Screen>) -> El {
 		query: &screen.query,
 		actions: PanelActions::default(),
 		columns: 2,
-		focused: None,
 	};
 	library_panel(
 		&Tokens::new(false),
@@ -96,5 +95,51 @@ fn enter_or_space_on_a_focused_more_button_asks_for_its_item_menu() {
 			[LibraryEvent::Menu { id: "brief".to_owned(), anchor: tile_more_key("brief") }],
 			"{key:?}",
 		);
+	}
+}
+
+fn more_opacity(runtime: &Runtime<Screen>, id: &str) -> f32 {
+	let elements = runtime.elements();
+	let more = elements
+		.iter()
+		.position(|element| element.key.as_deref() == Some(tile_more_key(id).as_str()))
+		.expect("the tile has a More button");
+	elements.iter().find(|element| element.parent == Some(more)).expect("More has a face").opacity
+}
+
+#[test]
+fn more_stays_hidden_at_rest() {
+	let runtime = running();
+	assert_eq!(more_opacity(&runtime, "brief"), 0.0);
+	assert_eq!(more_opacity(&runtime, "notes"), 0.0);
+}
+
+#[test]
+fn tab_onto_a_tile_shows_its_more_button() {
+	let mut runtime = running();
+	tab_to(&mut runtime, &tile_key("brief"));
+	assert_eq!(more_opacity(&runtime, "brief"), 1.0);
+	assert_eq!(more_opacity(&runtime, "notes"), 0.0);
+}
+
+#[test]
+fn tab_onto_a_more_button_keeps_it_shown() {
+	let mut runtime = running();
+	tab_to(&mut runtime, &tile_more_key("brief"));
+	assert_eq!(more_opacity(&runtime, "brief"), 1.0);
+	assert_eq!(more_opacity(&runtime, "notes"), 0.0);
+}
+
+#[test]
+fn focus_leaving_a_tile_hides_its_more_button_in_the_same_frame() {
+	let forward = Mods::default();
+	let backward = Mods { shift: true, ..Mods::default() };
+	for (from, mods) in [(tile_more_key("brief"), forward), (tile_key("brief"), backward)] {
+		let mut runtime = running();
+		tab_to(&mut runtime, &from);
+		runtime.key(KeyEvent { key: KeyName::Tab, mods });
+		runtime.frame(0.0);
+		assert_ne!(focused(&runtime).as_deref(), Some(from.as_str()));
+		assert_eq!(more_opacity(&runtime, "brief"), 0.0, "{from} {mods:?}");
 	}
 }

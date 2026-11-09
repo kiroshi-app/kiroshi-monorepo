@@ -449,7 +449,6 @@ fn panel_view(
 		query: &s.edit,
 		actions,
 		columns: grid_columns(card_width(ARTBOARD)),
-		focused: None,
 	};
 	library_panel(t, LANG, &panel, query, heard)
 }
@@ -480,21 +479,6 @@ fn grid_with(t: &Tokens, s: &SceneState, items: &[LibraryItem], layers: Vec<El>)
 
 pub(super) fn grid_all(t: &Tokens, s: &SceneState) -> El {
 	ready(t, s, &every_item(s), LibraryFilter::All)
-}
-
-pub(super) fn grid_with_first_tile_focused(t: &Tokens, s: &SceneState) -> El {
-	let t = &tinted(t);
-	let items = every_item(s);
-	let panel = LibraryPanel {
-		state: PanelState::Ready,
-		items: &items,
-		filter: LibraryFilter::All,
-		query: &s.edit,
-		actions: PanelActions::EVERY,
-		columns: grid_columns(card_width(ARTBOARD)),
-		focused: Some(ITEMS[0].id),
-	};
-	framed(t, library_panel(t, LANG, &panel, query, heard), Vec::new())
 }
 
 pub(super) fn grid_images(t: &Tokens, s: &SceneState) -> El {
@@ -621,7 +605,6 @@ pub(super) fn documents_across_spaces(t: &Tokens, s: &SceneState) -> El {
 			query: &s.edit,
 			actions: PanelActions::default(),
 			columns: grid_columns(half),
-			focused: None,
 		};
 		card(t, library_panel(t, LANG, &panel, query, ignore), Vec::new())
 	};
