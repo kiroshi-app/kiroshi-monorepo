@@ -1839,6 +1839,7 @@ pub struct EditorBlock<'a> {
 	pub placeholder: Option<&'a str>,
 	pub drawn: Option<El>,
 	pub above: Option<El>,
+	pub below: Option<El>,
 	pub start: Option<El>,
 	pub end: Option<El>,
 	pub handle: Option<El>,
@@ -1861,6 +1862,7 @@ impl<'a> EditorBlock<'a> {
 			placeholder: None,
 			drawn: None,
 			above: None,
+			below: None,
 			start: None,
 			end: None,
 			handle: None,
@@ -1973,7 +1975,7 @@ fn editor_block<S: 'static>(
 	if let Some(handle) = block.handle.take() {
 		framed = framed.child(handle.pin(Some(-HANDLE_REACH), Some(0.0), None, None));
 	}
-	column.child(framed)
+	column.child(framed).children(block.below.take())
 }
 
 const HANDLE_REACH: f32 = SPACING * 14.0;
@@ -4381,6 +4383,24 @@ pub fn drop_overlay(t: &Tokens, lang: Language, count: usize) -> El {
 
 pub const GHOST_BELOW_CURSOR: f32 = SPACING * 3.5;
 
+pub fn import_drag_ghost(
+	t: &Tokens,
+	lang: Language,
+	names: &[&str],
+	preview: Option<&Image>,
+	cursor: (f32, f32),
+) -> El {
+	let count = row()
+		.h(SPACING * 5.0)
+		.min_w(SPACING * 5.0)
+		.px(SPACING * 1.5)
+		.radius(SPACING * 2.5)
+		.fill(t.primary)
+		.center()
+		.child(label_text(&names.len().to_string(), TEXT_XS_MEDIUM, t.primary_foreground));
+	drag_ghost(t, lang, names, preview, cursor).child(count)
+}
+
 pub fn drag_ghost(
 	t: &Tokens,
 	lang: Language,
@@ -4422,14 +4442,6 @@ pub fn drag_ghost(
 			.truncate(),
 		);
 	}
-	let count = row()
-		.h(SPACING * 5.0)
-		.min_w(SPACING * 5.0)
-		.px(SPACING * 1.5)
-		.radius(SPACING * 2.5)
-		.fill(t.primary)
-		.center()
-		.child(label_text(&names.len().to_string(), TEXT_XS_MEDIUM, t.primary_foreground));
 	row()
 		.key("library-drag-ghost")
 		.absolute(cursor.0, cursor.1 + GHOST_BELOW_CURSOR)
@@ -4445,7 +4457,6 @@ pub fn drag_ghost(
 		.a11y_hidden()
 		.child(thumb)
 		.child(lines)
-		.child(count)
 }
 
 pub fn failure_notice(t: &Tokens, lang: Language, title: &str, description: &str) -> El {
@@ -4928,6 +4939,14 @@ fn on_arrow<S: 'static>(control: El, arrow: KeyName, emit: impl Fn(&mut S) + 'st
 
 pub fn drop_indicator(t: &Tokens) -> El {
 	el().key("library-drop-indicator").w_full().h(2.0).radius(1.0).fill(t.primary).a11y_hidden()
+}
+
+pub fn place_drop_indicator(t: &Tokens, views: &mut [EditorBlock], landing: usize) {
+	if let Some(next) = views.get_mut(landing) {
+		next.above = Some(drop_indicator(t));
+	} else if let Some(last) = views.last_mut() {
+		last.below = Some(drop_indicator(t));
+	}
 }
 
 pub fn title_field<S: 'static>(

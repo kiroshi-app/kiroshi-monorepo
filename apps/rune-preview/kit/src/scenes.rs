@@ -4062,9 +4062,17 @@ pub static SCENES: &[Scene] = &[
 		"navigation-librarydocumentblockeditor--drag-with-drop-indicator",
 		library::editor,
 	),
+	library::library(
+		"navigation-librarydocumentblockeditor--drop-indicator-after-the-last-block",
+		library::editor,
+	),
 	library::library("navigation-librarydocumentblockeditor--turn-into-open", library::editor),
 	library::library(
 		"navigation-librarydocumentblockeditor--block-drag-in-progress",
+		library::editor,
+	),
+	library::library(
+		"navigation-librarydocumentblockeditor--block-drag-past-the-last-block",
 		library::editor,
 	),
 	library::library(

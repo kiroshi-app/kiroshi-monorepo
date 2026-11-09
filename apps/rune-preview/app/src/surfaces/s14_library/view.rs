@@ -8,9 +8,9 @@ use kiroshi_rune_kit::surfaces::s14_library::{
 	LibraryPanel, LightboxImage, LightboxLook, PanelActions, PanelLook, PanelState, TOOLBAR_GAP,
 	TableCells, Tile as GalleryTile, TileImage, Unavailable, Writer, agent_card, agent_caret,
 	block_editor, block_handle, block_menu, delete_confirmation, document_bar, document_column,
-	document_panel, document_skeleton, drag_ghost, drop_indicator, field_key,
-	field_of as record_field, format_toolbar, gallery_editor, grid_columns, item_menu,
-	item_unavailable, library_panel, lightbox, link_field, new_document_dialog, presence, rows_of,
+	document_panel, document_skeleton, drag_ghost, field_key, field_of as record_field,
+	format_toolbar, gallery_editor, grid_columns, item_menu, item_unavailable, library_panel,
+	lightbox, link_field, new_document_dialog, place_drop_indicator, presence, rows_of,
 	table_editor, title_field, turn_into_menu,
 };
 use kiroshi_rune_kit::tokens::{SPACING, Tokens};
@@ -265,9 +265,7 @@ fn block_menu_layers(state: &State, t: &Tokens, document: &Document, is_beside: 
 
 fn with_drop_indicator(state: &State, t: &Tokens, views: &mut [EditorBlock], is_beside: bool) {
 	let Some(drag) = state.dragged(is_beside) else { return };
-	if let Some(view) = views.get_mut(drag.landing()) {
-		view.above = Some(drop_indicator(t));
-	}
+	place_drop_indicator(t, views, drag.landing());
 }
 
 fn ghost_layer(state: &State, t: &Tokens, document: &Document, is_beside: bool) -> Option<El> {
