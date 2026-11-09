@@ -4,7 +4,7 @@ use super::fill;
 use crate::avatar::Face;
 use crate::icons;
 use crate::primitives::button::ButtonVariant;
-use crate::primitives::{FOCUS_RING_WIDTH, Interaction, ring_tint};
+use crate::primitives::{FOCUS_RING_WIDTH, Paint, ring_tint};
 use crate::strings::{Language, chat};
 use crate::surfaces::s01_chrome::{ConnectionStatus, connection_status};
 use crate::tokens::{RADIUS_2XL, SPACING, TEXT_SM_MEDIUM, Tokens};
@@ -30,8 +30,12 @@ pub fn header_identity<S: 'static>(
 	open_settings: impl Fn(&mut S) + 'static,
 ) -> El {
 	let name = identity.connection.name;
-	let shown = if identity.is_settings_open { Interaction::Hover } else { Interaction::Rest };
-	let paint = ButtonVariant::Ghost.paint(t).resting(shown);
+	let ghost = ButtonVariant::Ghost.paint(t);
+	let paint = if identity.is_settings_open {
+		Paint { fill: t.muted, hover_fill: t.muted, ..ghost }
+	} else {
+		ghost
+	};
 	let button = row()
 		.key("header-identity")
 		.h(HEIGHT)

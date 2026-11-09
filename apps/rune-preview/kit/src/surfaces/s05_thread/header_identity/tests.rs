@@ -24,6 +24,7 @@ struct Header {
 	version: Option<&'static str>,
 	is_settings_open: bool,
 	reduced_motion: bool,
+	is_dark: bool,
 	opened: usize,
 }
 
@@ -35,13 +36,14 @@ impl Header {
 			version: Some("2.1.233"),
 			is_settings_open: false,
 			reduced_motion: false,
+			is_dark: false,
 			opened: 0,
 		}
 	}
 }
 
 fn tokens(s: &Header) -> Tokens {
-	Tokens { reduced_motion: s.reduced_motion, ..Tokens::new(false) }
+	Tokens { reduced_motion: s.reduced_motion, ..Tokens::new(s.is_dark) }
 }
 
 fn view(s: &Header, _: &mut Cx<Header>) -> El {
@@ -214,4 +216,17 @@ fn the_hover_fill_lands_on_the_first_frame() {
 	rt.frame(FRAME);
 
 	assert_eq!(keyed(&rt, "header-identity").hover, 1.0);
+}
+
+#[test]
+fn open_settings_fill_the_button_in_full_muted_and_ink_the_name_in_foreground_in_both_themes() {
+	for is_dark in [false, true] {
+		let t = Tokens::new(is_dark);
+		let open =
+			Header { is_settings_open: true, is_dark, ..Header::new(ConnectionState::Ready) };
+		let rt = laid_out(open, WIDE);
+
+		assert_eq!(keyed(&rt, "header-identity").fill, t.muted, "dark: {is_dark}");
+		assert_eq!(keyed(&rt, "header-identity-name").text_color, Some(t.foreground));
+	}
 }
