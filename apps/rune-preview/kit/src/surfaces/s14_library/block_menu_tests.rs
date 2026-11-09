@@ -305,6 +305,72 @@ fn a_cancelled_block_drag_ends_the_drag_without_a_move() {
 	assert_eq!(runtime.state.heard, [Heard::Handle(HandleEvent::DragEnd)]);
 }
 
+fn dropped_back_on_its_grip(runtime: &mut Runtime<Screen>) {
+	let at = centre_of(runtime, &grip_key());
+	runtime.pointer_down(at.0, at.1);
+	drag_to(runtime, at, 50.0);
+	drag_to(runtime, at, 0.0);
+	runtime.state.heard.clear();
+	runtime.pointer_up(at.0, at.1);
+	step(runtime);
+}
+
+#[test]
+fn a_block_dropped_back_on_its_grip_ends_the_drag_without_a_press() {
+	let mut runtime = running(Shows::Handle);
+	dropped_back_on_its_grip(&mut runtime);
+	assert_eq!(runtime.state.heard, [Heard::Handle(HandleEvent::DragEnd)]);
+}
+
+#[test]
+fn a_cancelled_block_drag_released_on_its_grip_ends_the_drag_without_a_press() {
+	let mut runtime = running(Shows::Handle);
+	let at = centre_of(&runtime, &grip_key());
+	runtime.pointer_down(at.0, at.1);
+	drag_to(&mut runtime, at, 50.0);
+	drag_to(&mut runtime, at, 0.0);
+	runtime.state.heard.clear();
+	runtime.key(KeyEvent { key: KeyName::Escape, mods: Mods::default() });
+	runtime.pointer_up(at.0, at.1);
+	step(&mut runtime);
+	assert_eq!(runtime.state.heard, [Heard::Handle(HandleEvent::DragEnd)]);
+}
+
+#[test]
+fn a_grip_released_within_the_slop_presses_once_without_a_drag_end() {
+	let mut runtime = running(Shows::Handle);
+	let at = centre_of(&runtime, &grip_key());
+	runtime.pointer_down(at.0, at.1);
+	drag_to(&mut runtime, at, DRAG_SLOP / 2.0);
+	runtime.pointer_up(at.0, at.1 + DRAG_SLOP / 2.0);
+	step(&mut runtime);
+	assert_eq!(runtime.state.heard, [Heard::Handle(HandleEvent::Press)]);
+}
+
+#[test]
+fn space_on_the_focused_grip_presses_once() {
+	let mut runtime = running(Shows::Handle);
+	tab_to(&mut runtime, &grip_key());
+	key(&mut runtime, KeyName::Text(" ".into()));
+	assert_eq!(runtime.state.heard, [Heard::Handle(HandleEvent::Press)]);
+}
+
+#[test]
+fn the_click_after_a_block_drag_presses_the_grip() {
+	let mut runtime = running(Shows::Handle);
+	dropped_back_on_its_grip(&mut runtime);
+	runtime.state.heard.clear();
+	press(&mut runtime, &grip_key());
+	assert_eq!(runtime.state.heard, [Heard::Handle(HandleEvent::Press)]);
+}
+
+#[test]
+fn a_click_on_insert_hands_back_insert() {
+	let mut runtime = running(Shows::Handle);
+	press(&mut runtime, &format!("library-handle-{}", say(handle::INSERT, Language::En)));
+	assert_eq!(runtime.state.heard, [Heard::Handle(HandleEvent::Insert)]);
+}
+
 #[test]
 fn the_right_arrow_on_a_focused_turn_into_row_asks_for_its_list() {
 	let mut runtime = running(Shows::Menu(look_of(LibraryBlockType::Paragraph, true, true)));
