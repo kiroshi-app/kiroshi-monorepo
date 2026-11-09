@@ -23,6 +23,7 @@ use crate::agent::contract::{
 	AgentEvent, CancelFailure, CancelFailureReason, CancelOutcome, EventTurn, RuntimeScope,
 	ScopedEvent, SubmittedTurn, TransportError, TurnEnded, TurnOutcome, TurnState,
 };
+use crate::agent::reply_writer::prompts_settled_by;
 use crate::agent::session::{Handed, LinePlace};
 use crate::agent::translate::now_ms;
 use crate::agent::AgentState;
@@ -450,6 +451,24 @@ impl Speaker {
 			self.written.push(id.to_owned());
 		}
 	}
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Release {
+	Done,
+	Kept,
+}
+
+async fn settles_in(
+	heard: &mut mpsc::UnboundedReceiver<ScopedEvent>,
+	scope: &RuntimeScope,
+) -> bool {
+	while let Some(scoped) = heard.recv().await {
+		if scoped.scope.as_ref() == Some(scope) && prompts_settled_by(&scoped.event).is_some() {
+			return true;
+		}
+	}
+	false
 }
 
 enum Refusal {
@@ -1091,18 +1110,62 @@ impl<R: Runtime> HostTurn<R> {
 	}
 
 	async fn release(&self, scope: RuntimeScope) {
+		if self.released(&scope).await == Release::Kept {
+			let kept = self.kept();
+			tauri::async_runtime::spawn(async move { kept.release_once_settled(scope).await });
+		}
+	}
+
+	async fn released(&self, scope: &RuntimeScope) -> Release {
 		let agent = match self.agent() {
 			Ok(agent) => agent,
-			Err(_) => return self.shut_down(scope).await,
+			Err(_) => {
+				self.shut_down(scope.clone()).await;
+				return Release::Done;
+			}
 		};
 		let host_turns = agent.host_turns();
 		let order = host_turns.order_of(&self.participant(&scope.bot_id));
 		let _in_order = order.lock().await;
-		if !host_turns.has_started(&scope) || !run_is_idle(&agent, &scope).await {
-			return;
+		if !host_turns.has_started(scope) {
+			return Release::Done;
 		}
-		host_turns.forget_started(&scope);
-		self.shut_down(scope).await;
+		if !run_is_idle(&agent, scope).await {
+			return Release::Kept;
+		}
+		host_turns.forget_started(scope);
+		self.shut_down(scope.clone()).await;
+		Release::Done
+	}
+
+	fn kept(&self) -> HostTurn<R> {
+		HostTurn {
+			app: self.app.clone(),
+			conversation_id: self.conversation_id.clone(),
+			turn_id: self.turn_id.clone(),
+			prompt_id: self.prompt_id.clone(),
+			stopped: self.stopped.clone(),
+			handed_bot_ids: Mutex::default(),
+		}
+	}
+
+	async fn release_once_settled(&self, scope: RuntimeScope) {
+		let (mut reading, mut heard) = self.listening();
+		while self.released(&scope).await == Release::Kept {
+			if settles_in(&mut heard, &scope).await {
+				continue;
+			}
+			match reading.failure().await {
+				ReadFailure::Lagged { .. } => (reading, heard) = self.listening(),
+				ReadFailure::Ended(reason) => {
+					return log::warn!(
+						"{} keeps the session of {} open: {reason}",
+						self.label(),
+						scope.bot_id
+					);
+				}
+			}
+		}
 	}
 
 	async fn shut_down_started(&self, scope: RuntimeScope) {
@@ -2132,7 +2195,9 @@ mod tests {
 	#[cfg(unix)]
 	mod in_a_session_queue {
 		use super::*;
-		use crate::agent::stub_session::{a_session_held_for, a_session_running, HeldSession};
+		use crate::agent::stub_session::{
+			a_session_held_for, a_session_running, HeldSession, OPENING_SIDECAR,
+		};
 		use crate::removed_on_drop::RemovedOnDrop;
 
 		fn submitted(turn_id: &str, prompt_id: &str) -> SubmittedTurn {
@@ -2260,62 +2325,220 @@ mod tests {
 			assert_eq!(shut_down_scopes(&agent_events(&told)), vec![ada.clone()]);
 		}
 
-		#[tokio::test]
-		async fn a_question_asked_after_the_turn_outlives_the_end_of_the_group_turn() {
+		mod with_a_late_question {
+			use super::*;
 			use crate::agent::commands::{a_run_held_by_the_app, agent_pending_questions};
 			use crate::agent::contract::{PermissionDecision, QuestionRequest};
 			use crate::agent::reply_writer::TurnSink;
 
-			capturing();
-			let app = an_app_of_its_own("host-turn-late-question", mock_builder());
-			app.manage(db::bootstrap(app.handle()));
-			app.manage(AgentState::default());
-			let room = a_room_running(app.handle(), &["Ada"]).await;
-			let ada = scope_in(&room, &room.bot_ids[0]);
-			let asking = a_run_held_by_the_app(app.handle(), ada.clone());
-			let _held = a_session_held_for(app.handle(), &ada).await;
-			app.state::<AgentState>().host_turns().note_started(&ada);
-			let held = app.state::<AgentState>().host_turns().hold(&room.id, "t1").expect("held");
-			let host_turn = a_host_turn(app.handle(), &room, held.stopped.clone());
-			let follow_up = EventTurn {
-				turn_id: "t-follow-up".to_owned(),
-				conversation_id: room.id.clone(),
-				continues_turn_id: Some("t1".to_owned()),
-			};
-			let late =
-				QuestionRequest { id: "q-late".into(), questions: Vec::new(), subject: None };
-			let mut announced = events::subscribed(app.handle());
-			asking.emit(ended_as(TurnOutcome::Completed), Some(host_turn.event_turn()));
-			asking.emit(AgentEvent::QuestionRequested { request: late }, Some(follow_up));
-			let ada_spoke = Speaker { scope: ada.clone(), written: Vec::new(), is_in_line: false };
-			let (heard, mut reading) =
-				heard_in_turn(&host_turn, &ada, vec![ended_as(TurnOutcome::Completed)]);
+			const SETTLE_BOUND: Duration = Duration::from_secs(5);
+			const QUIET_SPELL: Duration = Duration::from_millis(200);
 
-			host_turn.drive(held, vec![ada_spoke], heard, &mut reading).await;
+			const FOLLOWING_UP_SIDECAR: &str = r#"#!/bin/sh
+printf '%s\n' '{"type":"ready","provider":"stub","version":"0"}'
+while IFS= read -r line; do
+	key=$(printf '%s' "$line" | sed -n 's/.*"session":"\([^"]*\)".*/\1/p')
+	case "$line" in
+	*'"type":"open"'*)
+		printf '{"session":"%s","frame":{"type":"opened"}}\n' "$key"
+		printf '{"session":"%s","frame":{"type":"stream_event","event":{"type":"message_start","message":{"id":"m-follow-up","role":"assistant"}}}}\n' "$key"
+		(
+			while [ ! -f 'FOLLOW_UP_ENDS' ]; do sleep 0.02; done
+			printf '{"session":"%s","frame":{"type":"turn_settled","subtype":"success","session_id":"sdk-1","is_error":false}}\n' "$key"
+		) &
+		;;
+	esac
+done
+"#;
 
-			let resolved = |told: &[(String, Value)]| -> Vec<AgentEvent> {
-				agent_events(told)
-					.into_iter()
-					.map(|scoped| scoped.event)
+			struct Kept {
+				app: crate::test_app::AppOfItsOwn,
+				room: Room,
+				ada: RuntimeScope,
+				asking: Box<dyn TurnSink>,
+				held: HeldSession,
+				announced: broadcast::Receiver<Frame>,
+			}
+
+			impl Kept {
+				async fn after_the_group_turn(name: &str, sidecar_script: &str) -> Kept {
+					capturing();
+					let app = an_app_of_its_own(name, mock_builder());
+					app.manage(db::bootstrap(app.handle()));
+					app.manage(AgentState::default());
+					let room = a_room_running(app.handle(), &["Ada"]).await;
+					let ada = scope_in(&room, &room.bot_ids[0]);
+					let asking = Box::new(a_run_held_by_the_app(app.handle(), ada.clone()));
+					let held = a_session_running(app.handle(), &ada, sidecar_script).await;
+					let agent = app.state::<AgentState>();
+					agent.host_turns().note_started(&ada);
+					let turn = agent.host_turns().hold(&room.id, "t1").expect("held");
+					let host_turn = a_host_turn(app.handle(), &room, turn.stopped.clone());
+					let announced = events::subscribed(app.handle());
+					asking.emit(ended_as(TurnOutcome::Completed), Some(host_turn.event_turn()));
+					let kept = Kept { app, room, ada, asking, held, announced };
+					kept.asks("q-late");
+					let spoke =
+						Speaker { scope: kept.ada.clone(), written: Vec::new(), is_in_line: false };
+					let (heard, mut reading) = heard_in_turn(
+						&host_turn,
+						&kept.ada,
+						vec![ended_as(TurnOutcome::Completed)],
+					);
+					host_turn.drive(turn, vec![spoke], heard, &mut reading).await;
+					kept
+				}
+
+				fn asks(&self, id: &str) {
+					let follow_up = EventTurn {
+						turn_id: "t-follow-up".to_owned(),
+						conversation_id: self.room.id.clone(),
+						continues_turn_id: Some("t1".to_owned()),
+					};
+					let request =
+						QuestionRequest { id: id.into(), questions: Vec::new(), subject: None };
+					self.asking.emit(AgentEvent::QuestionRequested { request }, Some(follow_up));
+				}
+
+				fn answers(&self, id: &str) -> AgentEvent {
+					let allowed = AgentEvent::PermissionResolved {
+						id: id.into(),
+						decision: PermissionDecision::AllowOnce,
+					};
+					self.asking.emit(allowed.clone(), None);
+					allowed
+				}
+
+				async fn pending(&self) -> usize {
+					let listed =
+						agent_pending_questions(self.app.state(), self.room.id.clone()).await;
+					listed.expect("the questions read").len()
+				}
+
+				fn is_started(&self) -> bool {
+					self.app.state::<AgentState>().host_turns().has_started(&self.ada)
+				}
+
+				async fn quiet_scoped(&mut self) -> Vec<ScopedEvent> {
+					time::sleep(QUIET_SPELL).await;
+					agent_events(&told(&mut self.announced))
+				}
+
+				async fn quiet_events(&mut self) -> Vec<AgentEvent> {
+					self.quiet_scoped().await.into_iter().map(|scoped| scoped.event).collect()
+				}
+
+				async fn shut_scopes(&mut self) -> Vec<RuntimeScope> {
+					let deadline = time::Instant::now() + SETTLE_BOUND;
+					let mut heard: Vec<ScopedEvent> = Vec::new();
+					while !heard.iter().any(|scoped| scoped.event == shut_down_event()) {
+						assert!(time::Instant::now() < deadline, "the kept session was never shut");
+						heard.extend(self.quiet_scoped().await);
+					}
+					heard.extend(self.quiet_scoped().await);
+					shut_down_scopes(&heard)
+				}
+
+				async fn until_idle_is(&self, expected: bool) {
+					let deadline = time::Instant::now() + SETTLE_BOUND;
+					while self.held.session.is_idle().await != expected {
+						assert!(
+							time::Instant::now() < deadline,
+							"the session never read idle {expected}"
+						);
+						time::sleep(Duration::from_millis(10)).await;
+					}
+				}
+			}
+
+			fn resolved(events: &[AgentEvent]) -> Vec<AgentEvent> {
+				events
+					.iter()
 					.filter(|event| matches!(event, AgentEvent::PermissionResolved { .. }))
+					.cloned()
 					.collect()
-			};
-			let at_the_end = told(&mut announced);
-			assert!(resolved(&at_the_end).is_empty(), "the late question was settled");
-			let shut = shut_down_scopes(&agent_events(&at_the_end));
-			assert!(shut.is_empty(), "the asking run was shut");
-			let pending = agent_pending_questions(app.state(), room.id.clone()).await;
-			assert_eq!(pending.expect("the questions read").len(), 1, "the late question left");
+			}
 
-			let allowed = AgentEvent::PermissionResolved {
-				id: "q-late".into(),
-				decision: PermissionDecision::AllowOnce,
-			};
-			asking.emit(allowed.clone(), None);
+			#[tokio::test]
+			async fn a_question_asked_after_the_turn_outlives_the_end_of_the_group_turn() {
+				let mut kept =
+					Kept::after_the_group_turn("host-turn-late-question", OPENING_SIDECAR).await;
 
-			assert_eq!(resolved(&told(&mut announced)), vec![allowed]);
-			let pending = agent_pending_questions(app.state(), room.id.clone()).await;
-			assert!(pending.expect("the questions read").is_empty(), "the answer kept it listed");
+				let at_the_end = kept.quiet_events().await;
+				assert!(resolved(&at_the_end).is_empty(), "the late question was settled");
+				assert!(!at_the_end.contains(&shut_down_event()), "the asking run was shut");
+				assert_eq!(kept.pending().await, 1, "the late question left");
+
+				kept.answers("q-late");
+
+				let ada = kept.ada.clone();
+				assert_eq!(
+					kept.shut_scopes().await,
+					vec![ada],
+					"the idle run was not released once"
+				);
+				assert!(!kept.is_started(), "the released run is still noted started");
+				assert_eq!(kept.pending().await, 0, "the answer kept it listed");
+			}
+
+			#[tokio::test]
+			async fn a_kept_run_claimed_by_a_new_turn_or_asking_again_stays_open() {
+				let mut kept =
+					Kept::after_the_group_turn("host-turn-claimed-late", OPENING_SIDECAR).await;
+
+				kept.asks("q-second");
+				kept.answers("q-late");
+
+				assert_eq!(kept.pending().await, 1, "the second question was not listed");
+				assert!(
+					!kept.quiet_events().await.contains(&shut_down_event()),
+					"shut while asking"
+				);
+
+				let claimed = kept.held.session.submit_in_line("next", submitted("t2", "p2")).await;
+				assert_eq!(claimed, Ok(Handed::Delivered));
+				kept.answers("q-second");
+
+				assert!(!kept.quiet_events().await.contains(&shut_down_event()), "shut under t2");
+				assert!(kept.is_started(), "the claimed run was forgotten");
+			}
+
+			#[tokio::test]
+			async fn a_kept_run_closes_once_the_follow_up_its_answer_resumed_ends() {
+				let follow_up_ends = RemovedOnDrop(std::env::temp_dir().join(format!(
+					"kiroshi-follow-up-ends-{}-{}",
+					std::process::id(),
+					uuid::Uuid::new_v4()
+				)));
+				let script = FOLLOWING_UP_SIDECAR
+					.replace("FOLLOW_UP_ENDS", &follow_up_ends.display().to_string());
+				let mut kept =
+					Kept::after_the_group_turn("host-turn-follow-up-late", &script).await;
+				kept.until_idle_is(false).await;
+
+				kept.answers("q-late");
+
+				assert!(
+					!kept.quiet_events().await.contains(&shut_down_event()),
+					"shut mid follow-up"
+				);
+				std::fs::write(&*follow_up_ends, "").expect("the follow-up is told to end");
+				kept.until_idle_is(true).await;
+				let follow_up_ended = EventTurn {
+					turn_id: "t-follow-up".to_owned(),
+					conversation_id: kept.room.id.clone(),
+					continues_turn_id: Some("t1".to_owned()),
+				};
+				kept.asking.emit(ended_as(TurnOutcome::Completed), Some(follow_up_ended));
+
+				let ada = kept.ada.clone();
+				assert_eq!(kept.shut_scopes().await, vec![ada]);
+				assert!(!kept.is_started());
+			}
+
+			fn shut_down_event() -> AgentEvent {
+				AgentEvent::ConnectionChanged { state: ConnectionState::Checking }
+			}
 		}
 
 		fn heard_in_turn(

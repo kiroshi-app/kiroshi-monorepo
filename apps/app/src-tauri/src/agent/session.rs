@@ -733,7 +733,7 @@ impl Session {
 
 	pub async fn is_idle(&self) -> bool {
 		let shared = self.shared.lock().await;
-		!shared.is_mid_turn() && shared.queued.is_empty()
+		!shared.is_mid_turn() && !shared.streams_a_follow_up && shared.queued.is_empty()
 	}
 
 	fn line(&self) -> Line<'_> {

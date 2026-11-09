@@ -10,7 +10,7 @@ use crate::agent::sidecar::{Sidecar, SidecarOptions};
 use crate::executable_script::an_executable_script;
 use crate::removed_on_drop::RemovedOnDrop;
 
-const OPENING_SIDECAR: &str = r#"#!/bin/sh
+pub(crate) const OPENING_SIDECAR: &str = r#"#!/bin/sh
 printf '%s\n' '{"type":"ready","provider":"stub","version":"0"}'
 while IFS= read -r line; do
 	case "$line" in
