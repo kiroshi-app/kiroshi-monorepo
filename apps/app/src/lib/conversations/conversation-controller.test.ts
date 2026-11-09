@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
 	type ConversationController,
@@ -6,6 +6,7 @@ import {
 } from "./conversation-controller"
 import { withFakeHostWrites } from "./fake-host-writes"
 import { createFakeTranscriptStore } from "./fake-transcript-store"
+import { KEPT_RUN_GRACE_MS } from "./kept-runs"
 import { readConversation } from "./read-conversation"
 import {
 	createScriptedDriver,
@@ -124,6 +125,30 @@ const settled = async () => {
 	for (let round = 0; round < 20; round += 1) {
 		await Promise.resolve()
 	}
+}
+
+const holdTheClock = () =>
+	vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+
+const passTheGrace = async () => {
+	vi.advanceTimersByTime(KEPT_RUN_GRACE_MS)
+	await settled()
+}
+
+afterEach(() => {
+	vi.useRealTimers()
+})
+
+const writtenThenEnded = async (
+	driver: ScriptedDriver,
+	botId: string,
+	text: string,
+) => {
+	const events = spoke(botId, text)
+	driver.pushTo(botId, events.slice(0, -1))
+	await settled()
+	driver.pushTo(botId, events.slice(-1))
+	await settled()
 }
 
 type Naming = {
@@ -735,7 +760,8 @@ describe("createConversationController", () => {
 		expect(runningIn(harness.controller)).toEqual([])
 	})
 
-	it("names the run it left behind when the same companion speaks again", async () => {
+	it("names the run it left behind when the same companion speaks again after the grace", async () => {
+		holdTheClock()
 		const ada = idOf(harness.conversation, "Ada")
 		const opened = vi.spyOn(harness.store, "openRuntimeSession")
 		await harness.controller.send("and now?")
@@ -744,6 +770,7 @@ describe("createConversationController", () => {
 
 		harness.driver.pushTo(ada, spoke(ada, "walls up"))
 		await harness.settled()
+		await passTheGrace()
 		await harness.controller.send("and then?")
 		await harness.settled()
 
@@ -947,8 +974,7 @@ describe("createConversationController", () => {
 
 		harness.driver.pushTo(ada, spoke(ada, `one <@${nyx}>`))
 		await harness.settled()
-		harness.driver.pushTo(nyx, spoke(nyx, `two <@${ada}>`))
-		await harness.settled()
+		await writtenThenEnded(harness.driver, nyx, `two <@${ada}>`)
 
 		expect(submittedIn(harness)).toEqual([ada, nyx, ada])
 		expect(runningIn(harness.controller)).toEqual([ada])
@@ -1046,8 +1072,41 @@ describe("createConversationController", () => {
 			return nyx
 		}
 
-		it("shuts the scope of a companion down once its turn ends", async () => {
+		it("shuts the scope of a companion down once, when the grace after its turn ends", async () => {
+			holdTheClock()
 			const nyx = await spokenOnce(harness, "walls are held")
+			vi.advanceTimersByTime(KEPT_RUN_GRACE_MS - 1)
+			await harness.settled()
+			expect(harness.driver.shutdowns).toEqual([])
+
+			await passTheGrace()
+			await passTheGrace()
+
+			expect(harness.driver.shutdowns).toEqual([nyx])
+		})
+
+		it("rides the lingering session of a companion summoned again during the grace", async () => {
+			holdTheClock()
+			const started = vi.spyOn(harness.driver, "startOrResumeSession")
+			const nyx = await spokenOnce(harness, "walls are held")
+			const first = harness.driver.submissions.at(-1)?.scope
+
+			await harness.controller.send("@Nyx and the gates?")
+			await harness.settled()
+			await passTheGrace()
+
+			expect(started).toHaveBeenCalledTimes(1)
+			expect(harness.driver.submissions.at(-1)?.scope).toEqual(first)
+			expect(runningIn(harness.controller)).toEqual([nyx])
+			expect(harness.driver.shutdowns).toEqual([])
+		})
+
+		it("shuts a lingering session down at once with the controller", async () => {
+			holdTheClock()
+			const nyx = await spokenOnce(harness, "walls are held")
+
+			await harness.controller.shutdown()
+			await passTheGrace()
 
 			expect(harness.driver.shutdowns).toEqual([nyx])
 		})
@@ -1069,6 +1128,7 @@ describe("createConversationController", () => {
 		})
 
 		it("leaves the companion removed when the release fails", async () => {
+			holdTheClock()
 			const reported = vi
 				.spyOn(console, "error")
 				.mockImplementation(() => undefined)
@@ -1077,6 +1137,7 @@ describe("createConversationController", () => {
 			})
 
 			const nyx = await spokenOnce(harness, "walls are held")
+			await passTheGrace()
 
 			expect(runningIn(harness.controller)).toEqual([])
 			expect(harness.controller.getState().latestError).toBeNull()
@@ -1116,9 +1177,11 @@ describe("createConversationController", () => {
 		})
 
 		it("resumes the next turn of a companion from the session its closed scope stored", async () => {
+			holdTheClock()
 			const opened = vi.spyOn(harness.store, "openRuntimeSession")
 			const nyx = await spokenOnce(harness, "walls are held")
 			const first = harness.driver.submissions[0].scope.runtimeSessionId
+			await passTheGrace()
 
 			await harness.controller.send("@Nyx and the gates?")
 			await harness.settled()
@@ -1133,6 +1196,7 @@ describe("createConversationController", () => {
 		})
 
 		it("holds one open scope at most per companion over ten turns", async () => {
+			holdTheClock()
 			const openRuntimeSession = harness.store.openRuntimeSession
 			let live = 0
 			let peak = 0
@@ -1152,6 +1216,7 @@ describe("createConversationController", () => {
 			for (let turn = 0; turn < 10; turn += 1) {
 				await spokenOnce(harness, "wall".repeat(turn + 1))
 			}
+			await passTheGrace()
 
 			expect(peak).toBe(1)
 			expect(live).toBe(0)
@@ -1506,13 +1571,6 @@ describe("createConversationController", () => {
 			expect(harness.driver.submissions.at(-1)?.scope).toEqual(asking)
 			expect(harness.controller.getState().pendingPrompt).toBeNull()
 			expect(harness.driver.shutdowns).toEqual([])
-
-			harness.driver.pushTo(nyx, [
-				{ type: "turnEnded", ended: { sessionId: null, outcome: "completed" } },
-			])
-			await harness.settled()
-
-			expect(harness.driver.shutdowns).toEqual([nyx])
 		})
 
 		it("shuts the kept session down with the controller", async () => {
@@ -1523,13 +1581,17 @@ describe("createConversationController", () => {
 			expect(harness.driver.shutdowns).toEqual([nyx])
 		})
 
-		it("shuts the session down at the end of a turn holding no ask", async () => {
+		it("shuts the session down after the grace of a turn holding no ask", async () => {
+			holdTheClock()
 			const nyx = await askedIn(harness)
 			harness.driver.pushTo(nyx, [
 				{ type: "permissionResolved", id: "ask-1", decision: "allowOnce" },
 				{ type: "turnEnded", ended: { sessionId: null, outcome: "completed" } },
 			])
 			await harness.settled()
+			expect(harness.driver.shutdowns).toEqual([])
+
+			await passTheGrace()
 
 			expect(harness.driver.shutdowns).toEqual([nyx])
 			expect(harness.controller.getState().pendingPrompt).toBeNull()
@@ -3282,10 +3344,8 @@ describe("the mentions a finished turn carries", () => {
 					listener(arrivalFor(conversation.id, botId))
 				}
 			},
-			spoken: async (botId: string, text: string) => {
-				driver.pushTo(botId, spoke(botId, text))
-				await settled()
-			},
+			spoken: (botId: string, text: string) =>
+				writtenThenEnded(driver, botId, text),
 			sent: async (text: string) => {
 				await controller.send(text)
 				await settled()
@@ -3368,7 +3428,6 @@ describe("the mentions a finished turn carries", () => {
 
 	it("holds a question asked after the companion's turn ended, until it is answered", async () => {
 		const room = await endedRoom()
-		expect(room.driver.shutdowns).toEqual([room.ada])
 		const request = lateQuestion("ask-late")
 
 		await room.askLate("turn-continued", request)
@@ -3393,12 +3452,72 @@ describe("the mentions a finished turn carries", () => {
 		room.detach()
 	})
 
+	it("keeps the session of a question asked five seconds after the turn ended, until it is answered", async () => {
+		holdTheClock()
+		const room = await roomSeating()
+		await room.sent("@Ada take the walls")
+		const asking = room.driver.submissions.at(-1)
+		await room.spoken(room.ada, "walls up")
+		vi.advanceTimersByTime(5_000)
+		const request = lateQuestion("ask-late")
+
+		room.hear({
+			scope: asking?.scope ?? null,
+			turn: {
+				turnId: "turn-continued",
+				continuesTurnId: asking?.turn?.turnId ?? null,
+				conversationId: room.conversation.id,
+			},
+			event: { type: "questionRequested", request },
+		})
+		await settled()
+		await passTheGrace()
+		await passTheGrace()
+
+		expect(room.controller.getState().pendingPrompt).toEqual({
+			kind: "question",
+			botId: room.ada,
+			request,
+		})
+		expect(room.driver.shutdowns).toEqual([])
+
+		await room.controller.answer("ask-late", { "Which wall next?": "north" })
+		await settled()
+		room.driver.pushTo(room.ada, [
+			{ type: "turnEnded", ended: { sessionId: null, outcome: "completed" } },
+		])
+		await settled()
+
+		expect(room.controller.getState().pendingPrompt).toBeNull()
+		expect(room.driver.shutdowns).toEqual([room.ada])
+		room.detach()
+	})
+
+	it("shuts a lingering session down at once when the controller opens another conversation", async () => {
+		holdTheClock()
+		const room = await roomSeating()
+		await room.sent("@Ada take the walls")
+		await room.spoken(room.ada, "walls up")
+		const other = await room.store.createConversation({
+			spaceId: SPACE,
+			sectionId: null,
+			title: "Gates",
+			botIds: [room.ada],
+		})
+
+		await room.controller.open(other)
+		await settled()
+
+		expect(room.driver.shutdowns).toEqual([room.ada])
+		room.detach()
+	})
+
 	it("keeps the session of a late question until the follow-up its answer resumes ends", async () => {
 		const room = await endedRoom()
 		await room.askLate("turn-continued", lateQuestion("ask-late"))
 
 		await room.answerLate("ask-late")
-		expect(room.driver.shutdowns).toEqual([room.ada])
+		expect(room.driver.shutdowns).toEqual([])
 
 		await room.hearLate("turn-continued", {
 			type: "turnEnded",
@@ -3409,7 +3528,7 @@ describe("the mentions a finished turn carries", () => {
 			id: "ask-late",
 			decision: "allowOnce",
 		})
-		expect(room.driver.shutdowns).toEqual([room.ada, room.ada])
+		expect(room.driver.shutdowns).toEqual([room.ada])
 		room.detach()
 	})
 

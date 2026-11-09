@@ -3,14 +3,19 @@ import { keyOf } from "./foreign-turns"
 import type { AgentEvent, RuntimeScope } from "../agent/contract"
 import { isTurnBusy } from "../chat/chat-state"
 
+export const KEPT_RUN_GRACE_MS = 30_000
+
 type KeptRun = {
 	scope: RuntimeScope
 	questionIds: Set<string>
+	settledIds: Set<string>
 	isStreaming: boolean
+	grace: ReturnType<typeof setTimeout> | null
 }
 
 export type KeptRuns = {
-	keep: (scope: RuntimeScope, questionId: string, isStreaming: boolean) => void
+	keep: (scope: RuntimeScope, questionId: string) => void
+	linger: (scope: RuntimeScope) => void
 	hear: (scope: RuntimeScope, event: AgentEvent) => void
 	settle: (scope: RuntimeScope, questionId: string) => void
 	isKeeping: (scope: RuntimeScope) => boolean
@@ -28,37 +33,63 @@ export const createKeptRuns = (
 	release: (scope: RuntimeScope) => Promise<void>,
 ): KeptRuns => {
 	const runs = new Map<string, KeptRun>()
-	const settledIds = new Set<string>()
+
+	const track = (scope: RuntimeScope): KeptRun => {
+		const run: KeptRun = {
+			scope,
+			questionIds: new Set(),
+			settledIds: new Set(),
+			isStreaming: false,
+			grace: null,
+		}
+		runs.set(keyOf(scope), run)
+		return run
+	}
+
+	const endGrace = (run: KeptRun) => {
+		clearTimeout(run.grace ?? undefined)
+		run.grace = null
+	}
+
+	const drop = (run: KeptRun) => {
+		endGrace(run)
+		runs.delete(keyOf(run.scope))
+	}
 
 	const releaseOnceIdle = (run: KeptRun) => {
-		if (run.isStreaming || run.questionIds.size > 0) {
+		if (run.grace || run.isStreaming || run.questionIds.size > 0) {
 			return
 		}
-		runs.delete(keyOf(run.scope))
+		drop(run)
 		void release(run.scope)
 	}
 
-	const keep = (
-		scope: RuntimeScope,
-		questionId: string,
-		isStreaming: boolean,
-	) => {
-		const key = keyOf(scope)
-		const run = runs.get(key) ?? { scope, questionIds: new Set(), isStreaming }
-		if (settledIds.has(questionId) || run.questionIds.has(questionId)) {
+	const ask = (run: KeptRun, questionId: string) => {
+		if (run.settledIds.has(questionId)) {
 			return
 		}
+		endGrace(run)
 		run.questionIds.add(questionId)
-		run.isStreaming ||= isStreaming
-		runs.set(key, run)
+	}
+
+	const keep = (scope: RuntimeScope, questionId: string) => {
+		ask(track(scope), questionId)
+	}
+
+	const linger = (scope: RuntimeScope) => {
+		const run = track(scope)
+		run.grace = setTimeout(() => {
+			run.grace = null
+			releaseOnceIdle(run)
+		}, KEPT_RUN_GRACE_MS)
 	}
 
 	const settle = (scope: RuntimeScope, questionId: string) => {
-		settledIds.add(questionId)
 		const run = runs.get(keyOf(scope))
 		if (!run) {
 			return
 		}
+		run.settledIds.add(questionId)
 		run.questionIds.delete(questionId)
 		releaseOnceIdle(run)
 	}
@@ -78,6 +109,9 @@ export const createKeptRuns = (
 			return
 		}
 		switch (event.type) {
+			case "questionRequested":
+				run.isStreaming = true
+				return ask(run, event.request.id)
 			case "permissionResolved":
 				return settle(scope, event.id)
 			case "turnEnded":
@@ -88,6 +122,8 @@ export const createKeptRuns = (
 		}
 	}
 
+	const isKeeping = (scope: RuntimeScope) => runs.has(keyOf(scope))
+
 	const ride = (conversationId: string, botId: string) => {
 		const run = [...runs.values()].find(
 			({ scope }) =>
@@ -96,19 +132,15 @@ export const createKeptRuns = (
 		if (!run) {
 			return null
 		}
-		runs.delete(keyOf(run.scope))
+		drop(run)
 		return run.scope
 	}
 
 	const releaseWhere = async (isGone: (scope: RuntimeScope) => boolean) => {
 		const gone = [...runs.values()].filter(({ scope }) => isGone(scope))
-		for (const { scope } of gone) {
-			runs.delete(keyOf(scope))
-		}
+		gone.forEach(drop)
 		await Promise.all(gone.map(({ scope }) => release(scope)))
 	}
 
-	const isKeeping = (scope: RuntimeScope) => runs.has(keyOf(scope))
-
-	return { keep, hear, settle, isKeeping, ride, releaseWhere }
+	return { keep, linger, hear, settle, isKeeping, ride, releaseWhere }
 }

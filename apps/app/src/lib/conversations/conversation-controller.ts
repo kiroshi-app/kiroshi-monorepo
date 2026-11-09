@@ -955,11 +955,15 @@ export const createConversationController = (
 		})
 	}
 
-	const keepAsking = ({ scope, turn, pending }: Speaker) => {
-		if (!scope || pending?.kind !== "question") {
+	const keepRun = ({ scope, turn, pending }: Speaker) => {
+		if (!scope) {
 			return
 		}
-		keptRuns.keep(scope, pending.request.id, false)
+		if (pending?.kind !== "question") {
+			keptRuns.linger(scope)
+			return
+		}
+		keptRuns.keep(scope, pending.request.id)
 		foreignTurns.render(
 			scope,
 			{ turnId: turn.id, conversationId: scope.conversationId },
@@ -968,7 +972,7 @@ export const createConversationController = (
 	}
 
 	const endTurn = (held: Speaker, completion: TerminalCompletion) => {
-		keepAsking(held)
+		keepRun(held)
 		closeSpeaker(held, completion)
 	}
 
@@ -1090,17 +1094,6 @@ export const createConversationController = (
 	const isOpenConversation = (conversationId: string) =>
 		conversationId === conversation?.id
 
-	const isOpenedHere = (scope: RuntimeScope) =>
-		isSameRuntimeScope(runs.get(scope.botId) ?? null, scope)
-
-	const heedClosedRun = (scope: RuntimeScope, event: AgentEvent) => {
-		if (event.type === "questionRequested" && isOpenedHere(scope)) {
-			keptRuns.keep(scope, event.request.id, true)
-			return
-		}
-		keptRuns.hear(scope, event)
-	}
-
 	const route = ({ scope, turn, event }: ScopedEvent) => {
 		const held = speakerAt(scope)
 		if (held) {
@@ -1108,7 +1101,7 @@ export const createConversationController = (
 			return
 		}
 		if (scope) {
-			heedClosedRun(scope, event)
+			keptRuns.hear(scope, event)
 		}
 		if (scope && turn && isOpenConversation(turn.conversationId)) {
 			foreignTurns.render(scope, turn, event)
@@ -1971,17 +1964,20 @@ export const createConversationController = (
 		sync()
 	}
 
-	const releaseRunsOfAbsentBots = () => {
+	const releaseRunsLeftBehind = ({ id }: StoredConversation) => {
 		const seated = participants().map(({ botId }) => botId)
-		return keptRuns.releaseWhere(({ botId }) => !seated.includes(botId))
+		return keptRuns.releaseWhere(
+			({ conversationId, botId }) =>
+				conversationId !== id || !seated.includes(botId),
+		)
 	}
 
 	const open = async (next: StoredConversation) => {
 		const isSameConversation = conversation?.id === next.id
 		conversation = next
 		rebuildForeignTurns(next)
+		void releaseRunsLeftBehind(next)
 		if (isSameConversation) {
-			void releaseRunsOfAbsentBots()
 			sync()
 			await readBack(next.id)
 			return
