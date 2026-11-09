@@ -266,6 +266,15 @@ impl State {
 		Some(SpaceAccess { reason, space: &joined.name, host: host_name_of(joined) })
 	}
 
+	pub fn is_joined(&self, id: &str) -> bool {
+		self.joined_space(id).is_some() || self.departed_from(id).is_some()
+	}
+
+	#[cfg(test)]
+	pub fn hold_joined(&mut self, joined: Vec<JoinedSpace>) {
+		self.joined = joined;
+	}
+
 	fn open_joined(&mut self, id: &str, shown: &str) -> Option<Opened> {
 		if id == self.selected(shown) {
 			return None;
