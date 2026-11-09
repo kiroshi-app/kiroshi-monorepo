@@ -2260,6 +2260,63 @@ mod tests {
 			assert_eq!(shut_down_scopes(&agent_events(&told)), vec![ada.clone()]);
 		}
 
+		#[tokio::test]
+		async fn a_question_asked_after_the_turn_outlives_the_end_of_the_group_turn() {
+			use crate::agent::commands::{a_run_held_by_the_app, agent_pending_questions};
+			use crate::agent::contract::{PermissionDecision, QuestionRequest};
+			use crate::agent::reply_writer::TurnSink;
+
+			capturing();
+			let app = an_app_of_its_own("host-turn-late-question", mock_builder());
+			app.manage(db::bootstrap(app.handle()));
+			app.manage(AgentState::default());
+			let room = a_room_running(app.handle(), &["Ada"]).await;
+			let ada = scope_in(&room, &room.bot_ids[0]);
+			let asking = a_run_held_by_the_app(app.handle(), ada.clone());
+			let _held = a_session_held_for(app.handle(), &ada).await;
+			app.state::<AgentState>().host_turns().note_started(&ada);
+			let held = app.state::<AgentState>().host_turns().hold(&room.id, "t1").expect("held");
+			let host_turn = a_host_turn(app.handle(), &room, held.stopped.clone());
+			let follow_up = EventTurn {
+				turn_id: "t-follow-up".to_owned(),
+				conversation_id: room.id.clone(),
+				continues_turn_id: Some("t1".to_owned()),
+			};
+			let late = QuestionRequest { id: "q-late".into(), questions: Vec::new(), subject: None };
+			let mut announced = events::subscribed(app.handle());
+			asking.emit(ended_as(TurnOutcome::Completed), Some(host_turn.event_turn()));
+			asking.emit(AgentEvent::QuestionRequested { request: late }, Some(follow_up));
+			let ada_spoke = Speaker { scope: ada.clone(), written: Vec::new(), is_in_line: false };
+			let (heard, mut reading) =
+				heard_in_turn(&host_turn, &ada, vec![ended_as(TurnOutcome::Completed)]);
+
+			host_turn.drive(held, vec![ada_spoke], heard, &mut reading).await;
+
+			let resolved = |told: &[(String, Value)]| -> Vec<AgentEvent> {
+				agent_events(told)
+					.into_iter()
+					.map(|scoped| scoped.event)
+					.filter(|event| matches!(event, AgentEvent::PermissionResolved { .. }))
+					.collect()
+			};
+			let at_the_end = told(&mut announced);
+			assert!(resolved(&at_the_end).is_empty(), "the late question was settled");
+			let shut = shut_down_scopes(&agent_events(&at_the_end));
+			assert!(shut.is_empty(), "the asking run was shut");
+			let pending = agent_pending_questions(app.state(), room.id.clone()).await;
+			assert_eq!(pending.expect("the questions read").len(), 1, "the late question left");
+
+			let allowed = AgentEvent::PermissionResolved {
+				id: "q-late".into(),
+				decision: PermissionDecision::AllowOnce,
+			};
+			asking.emit(allowed.clone(), None);
+
+			assert_eq!(resolved(&told(&mut announced)), vec![allowed]);
+			let pending = agent_pending_questions(app.state(), room.id.clone()).await;
+			assert!(pending.expect("the questions read").is_empty(), "the answer kept it listed");
+		}
+
 		fn heard_in_turn(
 			host_turn: &HostTurn<MockRuntime>,
 			scope: &RuntimeScope,
