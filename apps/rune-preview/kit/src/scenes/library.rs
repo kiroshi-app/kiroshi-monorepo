@@ -9,18 +9,18 @@ use crate::primitives::tooltip::{TooltipSide, tooltip};
 use crate::strings::{Language, common};
 use crate::surfaces::s14_library::{
 	Agent, BarActions, BlockEvent, CalloutTone, DocumentBar, EditorBlock, Format, GalleryDrag,
-	HandlePlace, ImageMenu, ItemAction, ItemLook, LibraryBlock, LibraryBlockType, LibraryFilter,
-	LibraryItem, LibraryPanel, LightboxImage, LightboxLook, MORE_KEY, NewDocumentTemplate,
-	PanelActions, PanelLook, PanelState, RowMark, Run, Slash, TOOLBAR_GAP, TableCells, Tile,
-	TileImage, Unavailable, Writer, agent_card, agent_caret, block_editor, block_handle,
-	block_menu, block_text, body_block, callout_editor, code_view, delete_confirmation,
-	document_bar, document_body, document_column, document_panel, document_placeholder,
-	document_skeleton, document_title, drag_ghost, drop_indicator, drop_line, drop_overlay,
-	failed_import, failure_notice, fence_body, field_key, field_of, format_toolbar, format_tooltip,
-	gallery_editor, grid_columns, image_skeleton, inline_field, item_menu, item_unavailable,
-	language_menu, library_panel, lightbox, link_field, new_document_dialog, panel_max_width,
-	parse_blocks, person_caret, presence, records_of, rows_of, shown_name, table_cells,
-	table_editor, title_field, web_page_editor, web_page_view,
+	GalleryEdit, HandlePlace, ImageMenu, ItemAction, ItemLook, LibraryBlock, LibraryBlockType,
+	LibraryFilter, LibraryItem, LibraryPanel, LightboxImage, LightboxLook, MORE_KEY,
+	NewDocumentTemplate, PanelActions, PanelLook, PanelState, RowMark, Run, Slash, TOOLBAR_GAP,
+	TableCells, Tile, TileImage, Unavailable, Writer, agent_card, agent_caret, block_editor,
+	block_handle, block_menu, block_text, body_block, callout_editor, code_view,
+	delete_confirmation, document_bar, document_body, document_column, document_panel,
+	document_placeholder, document_skeleton, document_title, drag_ghost, drop_indicator, drop_line,
+	drop_overlay, failed_import, failure_notice, fence_body, field_key, field_of, format_toolbar,
+	format_tooltip, gallery_editor, grid_columns, image_skeleton, inline_field, item_menu,
+	item_unavailable, language_menu, library_panel, lightbox, link_field, new_document_dialog,
+	panel_max_width, parse_blocks, person_caret, presence, records_of, rows_of, shown_name,
+	table_cells, table_editor, title_field, web_page_editor, web_page_view,
 };
 use crate::tokens::{
 	BLUE, RADIUS_CONTROL, SPACING, TEXT_COMPACT_MEDIUM, TEXT_TITLE, TEXT_XS_MONO, Tokens, faded,
@@ -1248,6 +1248,10 @@ impl Spec {
 		match block.kind() {
 			LibraryBlockType::Table => table_cells(&block.source).into_iter().flatten().collect(),
 			LibraryBlockType::Code => vec![fence_body(&block.source).1],
+			LibraryBlockType::Gallery => records_of(&fence_body(&block.source).1)
+				.iter()
+				.map(|record| field_of(record, "caption").to_owned())
+				.collect(),
 			kind if kind.is_text() || kind == LibraryBlockType::Callout => {
 				rows_of(&block.source).into_iter().map(|line| line.text).collect()
 			}
@@ -1258,12 +1262,14 @@ impl Spec {
 	fn fields(&self) -> Vec<(String, usize, TextEdit)> {
 		let mut fields = Vec::new();
 		for (index, block) in self.ids().iter().enumerate() {
-			let is_code = block.kind() == LibraryBlockType::Code;
+			let is_plain =
+				matches!(block.kind(), LibraryBlockType::Code | LibraryBlockType::Gallery);
+			let is_gallery = block.kind() == LibraryBlockType::Gallery;
 			for (row, text) in Spec::texts_of(block).iter().enumerate() {
 				let mut edit =
-					if is_code { TextEdit::new(text.clone()) } else { inline_field(text) };
+					if is_plain { TextEdit::new(text.clone()) } else { inline_field(text) };
 				if let Some((block_at, row_at, caret)) = self.focus
-					&& block_at == index
+					&& !is_gallery && block_at == index
 					&& row_at == row
 				{
 					edit.focused = true;
@@ -1426,11 +1432,28 @@ impl Spec {
 				let src = field_of(record, "image");
 				let is_broken = has_failed_tile && (at == 1 || at == 5);
 				let image = if is_broken { TileImage::Failed } else { s.library.stored(src) };
-				Tile { image, alt: field_of(record, "alt"), caption: field_of(record, "caption") }
+				Tile { image, alt: field_of(record, "alt") }
 			})
 			.collect();
-		let columns = if self.narrow { 2 } else { 5 };
-		Some(gallery_editor(t, LANG, &tiles, columns, drag, false, heard))
+		let block = format!("blk{:03}", index + 1);
+		let edits = (0..tiles.len())
+			.map(|at| {
+				s.library
+					.fields
+					.iter()
+					.find(|(id, field, _)| *id == block && *field == at)
+					.map_or(&s.edit, |(_, _, edit)| edit)
+			})
+			.collect();
+		let edit = GalleryEdit {
+			block: &block,
+			tiles: &tiles,
+			captions: edits,
+			columns: if self.narrow { 2 } else { 5 },
+			drag,
+			has_add_failed: false,
+		};
+		Some(gallery_editor(t, LANG, &edit, field, heard))
 	}
 
 	fn editor_block<'a>(

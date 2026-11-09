@@ -2854,6 +2854,24 @@ mod tests {
 	}
 
 	#[test]
+	fn a_gallery_tile_steps_one_slot_per_arrow_without_a_modifier() {
+		let key = |key: KeyName| KeyEvent { key, mods: rune::Mods::default() };
+		assert_eq!(gallery_key_target(&key(KeyName::Up), 2, 6), Some(1));
+		assert_eq!(gallery_key_target(&key(KeyName::Left), 2, 6), Some(1));
+		assert_eq!(gallery_key_target(&key(KeyName::Down), 2, 6), Some(3));
+		assert_eq!(gallery_key_target(&key(KeyName::Right), 2, 6), Some(3));
+		assert_eq!(gallery_key_target(&key(KeyName::Up), 0, 6), None);
+		assert_eq!(gallery_key_target(&key(KeyName::Down), 5, 6), None);
+		for mods in [
+			rune::Mods { alt: true, ..rune::Mods::default() },
+			rune::Mods { cmd: true, ..rune::Mods::default() },
+			rune::Mods { ctrl: true, ..rune::Mods::default() },
+		] {
+			assert_eq!(gallery_key_target(&KeyEvent { key: KeyName::Down, mods }, 2, 6), None);
+		}
+	}
+
+	#[test]
 	fn the_grid_keeps_four_columns_at_the_artboard_width() {
 		assert_eq!(grid_columns(1280.0 - 60.0 - 6.0), 4);
 		assert_eq!(grid_columns(320.0), 1);
@@ -2955,7 +2973,6 @@ pub enum TileImage<'a> {
 pub struct Tile<'a> {
 	pub image: TileImage<'a>,
 	pub alt: &'a str,
-	pub caption: &'a str,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -3139,11 +3156,7 @@ pub fn body_block<'a>(
 			let records = records_of(&body);
 			let tiles: Vec<Tile> = records
 				.iter()
-				.map(|record| Tile {
-					image: picture(field_of(record, "image")),
-					alt: "",
-					caption: "",
-				})
+				.map(|record| Tile { image: picture(field_of(record, "image")), alt: "" })
 				.collect();
 			gallery_view(t, lang, &tiles)
 		}
@@ -3702,50 +3715,80 @@ fn gallery_drag<S: 'static>(
 	}
 }
 
+pub fn gallery_key_target(event: &KeyEvent, from: usize, count: usize) -> Option<usize> {
+	if event.mods.alt || event.mods.cmd || event.mods.ctrl {
+		return None;
+	}
+	let to = match event.key {
+		KeyName::Left | KeyName::Up => from.checked_sub(1)?,
+		KeyName::Right | KeyName::Down => from + 1,
+		_ => return None,
+	};
+	(to < count).then_some(to)
+}
+
 fn gallery_keys<S: 'static>(
 	from: usize,
 	count: usize,
-	columns: usize,
 	on: impl Fn(&mut S, GalleryEvent) + 'static,
 ) -> impl Fn(&mut S, &KeyEvent, &mut Tx) -> bool + 'static {
 	move |s: &mut S, event, _| {
-		let to = match event.key {
-			KeyName::Left => from.checked_sub(1),
-			KeyName::Right => Some(from + 1),
-			KeyName::Up => from.checked_sub(columns),
-			KeyName::Down => Some(from + columns),
-			_ => return false,
-		};
-		match to.filter(|to| *to < count) {
-			Some(to) => on(s, GalleryEvent::Move { from, to }),
-			None => return false,
-		}
+		let Some(to) = gallery_key_target(event, from, count) else { return false };
+		on(s, GalleryEvent::Move { from, to });
 		true
 	}
+}
+
+pub struct GalleryEdit<'a> {
+	pub block: &'a str,
+	pub tiles: &'a [Tile<'a>],
+	pub captions: Vec<&'a TextEdit>,
+	pub columns: usize,
+	pub drag: Option<GalleryDrag>,
+	pub has_add_failed: bool,
+}
+
+fn gallery_caption<S: 'static>(
+	t: &Tokens,
+	lang: Language,
+	gallery: &GalleryEdit,
+	index: usize,
+	access: FieldAccess<S>,
+	on: impl Fn(&mut S, GalleryEvent) + 'static,
+) -> Option<El> {
+	use common::library::editor::blocks::gallery as copy;
+	let edit = gallery.captions.get(index)?;
+	let block = gallery.block.to_owned();
+	Some(
+		text_input(edit, TEXT_XS_MEDIUM)
+			.single_line()
+			.key(field_key(gallery.block, index))
+			.pin(Some(SPACING * 2.0), None, Some(SPACING * 2.0), Some(SPACING * 2.0))
+			.padding(SPACING * 1.5)
+			.radius(RADIUS_SM)
+			.fill(faded(t.card, 0.92))
+			.color(t.foreground)
+			.placeholder(say(copy::CAPTION_PLACEHOLDER, lang), t.placeholder_foreground)
+			.caret(t.foreground, t.selection)
+			.label(filled(say(copy::CAPTION, lang), "position", &(index + 1).to_string()))
+			.focus_ring(FOCUS_RING_WIDTH, 0.0, ring_tint(t, 0.3))
+			.on_edit(move |s: &mut S| access(s, &block, index))
+			.on_input_change(move |s: &mut S, _: &mut Tx| on(s, GalleryEvent::Caption(index))),
+	)
 }
 
 pub fn gallery_editor<S: 'static>(
 	t: &Tokens,
 	lang: Language,
-	tiles: &[Tile],
-	columns: usize,
-	drag: Option<GalleryDrag>,
-	has_add_failed: bool,
+	edit: &GalleryEdit,
+	access: FieldAccess<S>,
 	on: impl Fn(&mut S, GalleryEvent) + Clone + 'static,
 ) -> (El, Option<El>) {
 	use common::library::editor::blocks::gallery;
+	let (tiles, columns, drag) = (edit.tiles, edit.columns, edit.drag);
 	let count = tiles.len().to_string();
 	let edited = tiles.iter().enumerate().map(|(index, tile)| {
 		let position = (index + 1).to_string();
-		let caption = if tile.caption.is_empty() {
-			label_text(
-				say(gallery::CAPTION_PLACEHOLDER, lang),
-				TEXT_XS_MEDIUM,
-				t.placeholder_foreground,
-			)
-		} else {
-			label_text(tile.caption, TEXT_XS_MEDIUM, t.foreground).truncate()
-		};
 		let remove = focus_ring(
 			t,
 			row()
@@ -3760,24 +3803,10 @@ pub fn gallery_editor<S: 'static>(
 				.child(icon(&icons::CLOSE, SPACING * 3.0).color(Color::WHITE)),
 		)
 		.on_press(emitter(&on, GalleryEvent::Remove(index)));
-		let caption = focus_ring(
-			t,
-			row()
-				.key(format!("library-gallery-caption-{index}"))
-				.pin(Some(SPACING * 2.0), None, Some(SPACING * 2.0), Some(SPACING * 2.0))
-				.padding(SPACING * 1.5)
-				.radius(RADIUS_SM)
-				.fill(faded(t.card, 0.92))
-				.role("textbox")
-				.label(filled(say(gallery::CAPTION, lang), "position", &position))
-				.child(caption),
-		)
-		.cursor(Cursor::Text)
-		.on_press(emitter(&on, GalleryEvent::Caption(index)));
-		let mut cell = el()
+		let face = el()
 			.key(format!("library-gallery-tile-{index}"))
 			.w_full()
-			.h(SPACING * 28.0)
+			.h_full()
 			.label(filled(
 				&filled(say(gallery::TILE, lang), "position", &position),
 				"count",
@@ -3787,10 +3816,10 @@ pub fn gallery_editor<S: 'static>(
 			.focus_ring(FOCUS_RING_WIDTH, 0.0, ring_tint(t, 0.3))
 			.cursor(Cursor::Grab)
 			.on_drag(gallery_drag(index, tiles.len(), columns, on.clone()))
-			.on_key(gallery_keys(index, tiles.len(), columns, on.clone()))
-			.child(tile_view(t, tile))
-			.child(remove)
-			.child(caption);
+			.on_key(gallery_keys(index, tiles.len(), on.clone()))
+			.child(tile_view(t, tile));
+		let caption = gallery_caption(t, lang, edit, index, access, on.clone());
+		let mut cell = el().w_full().h(SPACING * 28.0).child(face).child(remove).children(caption);
 		if let Some(drag) = drag {
 			if drag.from == index {
 				cell = el().w_full().h(SPACING * 28.0).radius(RADIUS_XS * 2.0).fill(t.card);
@@ -3841,7 +3870,7 @@ pub fn gallery_editor<S: 'static>(
 		),
 	)
 	.on_press(emitter(&on, GalleryEvent::Add));
-	let hint = if has_add_failed {
+	let hint = if edit.has_add_failed {
 		label_text(say(gallery::ADD_FAILED, lang), TEXT_XS, t.destructive).role("alert")
 	} else {
 		label_text(say(gallery::HINT, lang), TEXT_XS, t.muted_foreground)

@@ -4135,8 +4135,8 @@ pub static SCENES: &[Scene] = &[
 		"navigation-librarydocumentblockeditor--gallery-caption-edited",
 		library::ARTBOARD,
 		0,
-		"",
-		Pointer::Taps("library-gallery-caption-0"),
+		"Sofa",
+		Pointer::Taps("library-block-blk002:0"),
 		library::editor,
 	),
 	library::library(
