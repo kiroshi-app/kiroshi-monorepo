@@ -233,6 +233,7 @@ pub(super) const REACHES: &[(&str, Reach)] = &[
 	("conversation_bot_commands", Reach::Scoped(BOT_ID)),
 	("conversation_main_chat", Reach::Scoped(BOT_AND_SPACE)),
 	("conversation_solo_states", Reach::Scoped(SPACE_ID)),
+	("conversation_agent_rooms", Reach::Scoped(SPACE_ID)),
 	(
 		"conversation_create",
 		Reach::Scoped(&[
@@ -467,6 +468,7 @@ pub(super) const AUDIENCES: &[(&str, Audience)] = &[
 	(crate::conversations::contract::MESSAGE_STORED_EVENT, IN_THE_CONVERSATION),
 	(crate::conversations::contract::UPDATED_EVENT, IN_THE_SPACE),
 	(crate::conversations::contract::STATE_CHANGED_EVENT, IN_THE_SPACE),
+	(crate::conversations::contract::AGENT_ROOMS_CHANGED_EVENT, IN_THE_SPACE),
 	(super::contract::CHANGED_EVENT, Audience::Scoped(space("/spaceId"))),
 	(super::contract::MEMBERS_CHANGED_EVENT, IN_THE_SPACE),
 	(crate::invitations::contract::CHANGED_EVENT, Audience::HostOnly),

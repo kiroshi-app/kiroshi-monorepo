@@ -2,9 +2,9 @@ use tauri::{AppHandle, Runtime, State};
 
 use super::super::context;
 use super::super::contract::{
-	state_in, Chat, CompanionArrival, ContextCheckpoint, Conversation, ConversationDeleted,
-	ConversationInList, ConversationInPage, ConversationPage, ConversationStored, Hue,
-	ObservedState, RuntimeSession, SoloState, TranscriptStoreError,
+	state_in, AgentRooms, Chat, CompanionArrival, ContextCheckpoint, Conversation,
+	ConversationDeleted, ConversationInList, ConversationInPage, ConversationPage,
+	ConversationStored, Hue, ObservedState, RuntimeSession, SoloState, TranscriptStoreError,
 };
 use super::super::state as conversation_state;
 use super::bot::ready;
@@ -55,6 +55,19 @@ pub async fn conversation_solo_states<R: Runtime>(
 			bot_id: thread.bot_id,
 			conversation_id: thread.conversation_id,
 		})
+		.collect())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn conversation_agent_rooms(
+	state: State<'_, db::DatabaseState>,
+	space_id: String,
+) -> Result<Vec<AgentRooms>, TranscriptStoreError> {
+	let working = ready(&state)?.conversations().rooms_of_working_bots(space_id).await?;
+	Ok(working
+		.into_iter()
+		.map(|(bot_id, conversation_ids)| AgentRooms { bot_id, conversation_ids })
 		.collect())
 }
 
@@ -174,9 +187,13 @@ pub async fn conversation_delete<R: Runtime>(
 	state: State<'_, db::DatabaseState>,
 	conversation_id: String,
 ) -> Result<(), TranscriptStoreError> {
-	let conversations = ready(&state)?.conversations();
+	let database = ready(&state)?;
+	let conversations = database.conversations();
 	let space_id = conversations.space(conversation_id.clone()).await?;
 	conversations.delete_conversation(conversation_id.clone()).await?;
+	if let Some(space_id) = &space_id {
+		conversation_state::observe_agent_rooms(&app, database, space_id).await;
+	}
 	launch::announce(&app, CONVERSATION_DELETED, ConversationDeleted { space_id, conversation_id });
 	Ok(())
 }

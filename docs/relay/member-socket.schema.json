@@ -411,6 +411,46 @@
         }
       ]
     },
+    "AgentRooms": {
+      "properties": {
+        "botId": {
+          "type": "string"
+        },
+        "conversationIds": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "botId",
+        "conversationIds"
+      ],
+      "type": "object"
+    },
+    "AgentRoomsChanged": {
+      "properties": {
+        "botId": {
+          "type": "string"
+        },
+        "conversationIds": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "spaceId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "botId",
+        "spaceId",
+        "conversationIds"
+      ],
+      "type": "object"
+    },
     "AnswerFrame": {
       "description": "The host answers one call. id is null when the call carried no usable id.",
       "properties": {
@@ -10613,6 +10653,28 @@
         "$ref": "#/$defs/Conversation"
       }
     },
+    "conversation_agent_rooms": {
+      "args": {
+        "properties": {
+          "spaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spaceId"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/TranscriptStoreError"
+      },
+      "ok": {
+        "items": {
+          "$ref": "#/$defs/AgentRooms"
+        },
+        "type": "array"
+      }
+    },
     "conversation_append_text": {
       "args": {
         "properties": {
@@ -13718,6 +13780,11 @@
     "companion://updated": {
       "payload": {
         "$ref": "#/$defs/CompanionUpdated"
+      }
+    },
+    "conversation://agent-rooms-changed": {
+      "payload": {
+        "$ref": "#/$defs/AgentRoomsChanged"
       }
     },
     "conversation://companion-arrived": {

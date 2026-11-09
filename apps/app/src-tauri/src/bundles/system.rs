@@ -295,6 +295,7 @@ mod tests {
 			"`conversation_close`, the archive of a room you lead once its subject is settled, answering the id of that room, its title and whether it is archived.",
 			"A main conversation and the thread of a mission still open are never closed.",
 			"An archived room comes back with `archived` false on `conversation_update`, and `archived` true there is refused: only `conversation_close` archives.",
+			"When you work in a room for a person, relay into your main conversation with that person a short summary of what the room produced and the decision or answer expected from them, never the back-and-forth of the room.",
 		] {
 			assert!(said_in_one_breath.contains(said), "{said} is missing");
 		}

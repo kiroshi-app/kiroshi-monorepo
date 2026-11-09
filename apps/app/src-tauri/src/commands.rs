@@ -48,6 +48,7 @@ pub fn builder() -> Builder<tauri::Wry> {
 		)
 		.constant("CLAUDE_IMPORT_PROGRESS_EVENT", claude_import::contract::PROGRESS_EVENT)
 		.constant("SUMMONS_DROPPED_EVENT", conversations::contract::SUMMONS_DROPPED_EVENT)
+		.constant("AGENT_ROOMS_CHANGED_EVENT", conversations::contract::AGENT_ROOMS_CHANGED_EVENT)
 		.constant("MAX_SUMMONS_PER_CHAIN", conversations::summons::MAX_SUMMONS_PER_CHAIN)
 		.typ::<window_controls::MaximizeButtonPointer>()
 		.typ::<window_controls::drag_ghost::DragGhostTab>()
@@ -78,6 +79,7 @@ pub fn builder() -> Builder<tauri::Wry> {
 		.typ::<window_controls::native_move::NativeMoveFailed>()
 		.typ::<claude_import::contract::ClaudeImportProgress>()
 		.typ::<conversations::contract::SummonsDropped>()
+		.typ::<conversations::contract::AgentRoomsChanged>()
 }
 
 // `tauri::test::mock_builder` only ever yields a `Builder<MockRuntime>`, so the handler the
@@ -194,6 +196,7 @@ fn commands<R: Runtime>() -> Commands<R> {
 		conversations::commands::conversation_bot_commands,
 		conversations::commands::conversation_main_chat::<tauri::Wry>,
 		conversations::commands::conversation_solo_states::<tauri::Wry>,
+		conversations::commands::conversation_agent_rooms,
 		conversations::commands::conversation_create::<tauri::Wry>,
 		conversations::commands::conversation_list::<tauri::Wry>,
 		conversations::commands::conversation_mission_thread::<tauri::Wry>,
