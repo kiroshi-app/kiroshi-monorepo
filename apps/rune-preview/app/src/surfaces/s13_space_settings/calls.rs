@@ -10,7 +10,7 @@ use serde_json::{Value, json};
 
 use crate::host::HostError;
 use crate::model::KiroshiAccountState;
-use crate::source::Source;
+use crate::source::{self, Source};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Due {
@@ -135,7 +135,7 @@ fn answered(source: &Source, call: Call) -> Answer {
 			Answer::Declined { invitation, outcome }
 		}
 		Call::Connect(joined_id) => {
-			let outcome = source.invoke("joined_space_connect", json!({ "id": joined_id }));
+			let outcome = source::joined_sources().connect(source, &joined_id);
 			Answer::Connected { joined_id, outcome }
 		}
 		Call::Leave(joined_id) => {
