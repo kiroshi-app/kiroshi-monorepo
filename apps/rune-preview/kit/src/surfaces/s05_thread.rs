@@ -9,7 +9,10 @@ use crate::strings::{Language, chat};
 use crate::surfaces::s04_boot::notice::{
 	InlineNotice, NoticeEvent, NoticeRetry, Tone, inline_notice,
 };
-use crate::surfaces::s08_missions::{self, Bot, EventKind, EventLink, MissionsEvent};
+use crate::surfaces::s08_missions::{
+	self, Bot, EventKind, EventLink, Mission, MissionState, MissionsEvent, PullRequest, Status,
+	Ticket, ToolCall,
+};
 use crate::tokens::{SPACING, TEXT_BASE_SEMIBOLD, TEXT_SM, Tokens};
 
 mod body;
@@ -73,6 +76,32 @@ pub struct MissionEvent {
 	pub created_at: i64,
 	pub text: Option<String>,
 	pub link: Option<(String, Option<u32>)>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct MissionTicket {
+	pub platform: String,
+	pub external_id: String,
+	pub title: String,
+	pub url: String,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct MissionTurn {
+	pub id: String,
+	pub bot: Agent,
+	pub objective: String,
+	pub ticket: MissionTicket,
+	pub tools: Vec<String>,
+	pub state: MissionState,
+	pub is_working: bool,
+	pub timestamp: String,
+	pub now: Option<i64>,
+	pub clock_ms: f64,
+	pub status: Option<(String, i64)>,
+	pub commits_ahead: u32,
+	pub pull_request: Option<(String, u32)>,
+	pub last_activity: Option<(String, String)>,
 }
 
 #[derive(Clone)]
@@ -158,6 +187,7 @@ pub enum Row {
 	StartOfHistory,
 	Work(WorkLine),
 	Event(MissionEvent),
+	Mission(MissionTurn),
 }
 
 #[derive(Clone)]
@@ -281,7 +311,51 @@ fn row_view<S: 'static>(cx: &Context<S>, kind: &ThreadKind, shown: &Row) -> El {
 		Row::StartOfHistory => day_separator(cx.t, cx.say(chat::transcript::START_OF_HISTORY)),
 		Row::Work(line) => work_line(cx, line),
 		Row::Event(event) => mission_event(cx, kind, event),
+		Row::Mission(mission) => mission_turn(cx, mission),
 	}
+}
+
+fn forwarded<S: 'static>(cx: &Context<S>) -> s08_missions::Emit<S> {
+	let emit = Rc::clone(cx.emit);
+	Rc::new(move |s: &mut S, event| emit(s, ThreadEvent::Mission(event)))
+}
+
+fn mission_turn<S: 'static>(cx: &Context<S>, turn: &MissionTurn) -> El {
+	let tools: Vec<&str> = turn.tools.iter().map(String::as_str).collect();
+	let shown = Mission {
+		id: &turn.id,
+		bot: Bot {
+			id: &turn.bot.id,
+			name: &turn.bot.name,
+			title: turn.bot.badge.as_deref().unwrap_or_default(),
+			hue: turn.bot.hue,
+		},
+		objective: &turn.objective,
+		ticket: Ticket {
+			platform: &turn.ticket.platform,
+			external_id: &turn.ticket.external_id,
+			title: &turn.ticket.title,
+			url: &turn.ticket.url,
+		},
+		tools: &tools,
+		state: turn.state,
+		is_working: turn.is_working,
+		is_closed: turn.state.is_closed(),
+		timestamp: &turn.timestamp,
+		now: turn.now,
+		clock_ms: turn.clock_ms,
+		status: turn
+			.status
+			.as_ref()
+			.map(|(text, written_at)| Status { text, written_at: *written_at }),
+		commits_ahead: turn.commits_ahead,
+		pull_request: turn
+			.pull_request
+			.as_ref()
+			.map(|(url, number)| PullRequest { url, number: *number }),
+		last_activity: turn.last_activity.as_ref().map(|(tool, target)| ToolCall { tool, target }),
+	};
+	s08_missions::mission_turn(cx.t, cx.language, &shown, &forwarded(cx))
 }
 
 fn mission_event<S: 'static>(cx: &Context<S>, kind: &ThreadKind, event: &MissionEvent) -> El {
@@ -307,10 +381,7 @@ fn mission_event<S: 'static>(cx: &Context<S>, kind: &ThreadKind, event: &Mission
 			.as_ref()
 			.map(|(url, pull_request)| EventLink { url, pull_request: *pull_request }),
 	};
-	let emit = Rc::clone(cx.emit);
-	let forwarded: s08_missions::Emit<S> =
-		Rc::new(move |s: &mut S, event| emit(s, ThreadEvent::Mission(event)));
-	s08_missions::event_row(cx.t, cx.language, &shown, &tools, bot, now, &forwarded)
+	s08_missions::event_row(cx.t, cx.language, &shown, &tools, bot, now, &forwarded(cx))
 }
 
 fn fill(template: &str, values: &[(&str, &str)]) -> String {

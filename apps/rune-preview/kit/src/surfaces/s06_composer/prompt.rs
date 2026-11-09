@@ -1,4 +1,6 @@
-use rune::{El, Key, LiveRegion, TextEdit, auto_grow, col, row, text, text_input};
+use rune::{
+	ClipboardContent, El, Key, LiveRegion, TextEdit, auto_grow, col, row, text, text_input,
+};
 
 use super::chips::{ReplyChip, reply_chips};
 use super::quote::{SelectionQuote, selection_quote};
@@ -9,6 +11,7 @@ use crate::strings::chat::{attachments, composer};
 use crate::tokens::{RADIUS_3XL, SPACING, TEXT_BUBBLE, Tokens, faded};
 
 pub const COMPOSER_KEY: &str = "composer";
+pub(super) const FIELD_KEY: &str = "composer-field";
 const PADDING: f32 = SPACING * 2.0;
 const GAP: f32 = SPACING;
 const BORDER: f32 = 1.0;
@@ -104,6 +107,14 @@ impl<'a> PromptInput<'a> {
 	}
 }
 
+pub fn focus_prompt(edit: &mut TextEdit, is_blocked: bool) {
+	if is_blocked {
+		return;
+	}
+	edit.focused = true;
+	edit.set_caret(edit.text.len());
+}
+
 pub(super) fn surface(t: &Tokens, input: &PromptInput) -> (rune::Color, rune::Color) {
 	let is_drop_target = input.drop_target && !input.is_blocked();
 	let fill = if input.offline.is_some() {
@@ -177,6 +188,11 @@ pub(super) fn menu_key(key: &rune::KeyEvent) -> Option<ComposerIntent> {
 	}
 }
 
+fn paste_intent(content: &ClipboardContent) -> Option<ComposerIntent> {
+	let is_attachable = content.image().is_some() || !content.files().is_empty();
+	is_attachable.then(|| ComposerIntent::Paste(content.clone()))
+}
+
 fn field<S: 'static>(
 	scope: Scope<S>,
 	input: &PromptInput,
@@ -204,7 +220,7 @@ fn field<S: 'static>(
 	let can_send = input.can_send();
 	let menu_open = input.menu_open;
 	let mut editor = text_input(input.edit, TEXT_BUBBLE)
-		.key("composer-field")
+		.key(FIELD_KEY)
 		.w_full()
 		.px(FIELD_INSET_X)
 		.color(t.foreground)
@@ -226,9 +242,15 @@ fn field<S: 'static>(
 				emit(s, ComposerIntent::Send);
 			}
 		});
-	if input.disabled {
-		editor = editor.disabled(true).focusable(false).read_only(true);
-	}
+	editor = if input.disabled {
+		editor.disabled(true).focusable(false).read_only(true)
+	} else {
+		editor.on_input_paste(move |s: &mut S, content, _| {
+			let Some(intent) = paste_intent(content) else { return false };
+			emit(s, intent);
+			true
+		})
+	};
 	col().grow(1.0).shrink().min_w(0.0).py(FIELD_INSET_Y).child(auto_grow(editor, 1, MAX_ROWS))
 }
 

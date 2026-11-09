@@ -1,27 +1,27 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use rune::{Chrome, Cursor, El, Icon, TextStyle, col, el, icon, row, text};
+use rune::{Chrome, El, TextStyle, col, el, icon, row, text};
 
 use kiroshi_rune_kit::avatar::Face;
 use kiroshi_rune_kit::icons;
 use kiroshi_rune_kit::surfaces::s05_thread::{Agent as ThreadAgent, ThreadKind};
 use kiroshi_rune_kit::surfaces::s14_library::DOCUMENT_PANEL_OPENING_WIDTH;
 use kiroshi_rune_kit::tokens::{
-	RADIUS_LG, SPACING, TEXT_10_MEDIUM, TEXT_COMPACT, TEXT_COMPACT_MONO, TEXT_COMPACT_SEMIBOLD,
-	TEXT_SM, TEXT_SM_MEDIUM, TEXT_TITLE, TEXT_XS_MEDIUM, Tokens, conversation_icon, srgb,
+	RADIUS_LG, SPACING, TEXT_10_MEDIUM, TEXT_COMPACT, TEXT_COMPACT_MONO, TEXT_SM, TEXT_SM_MEDIUM,
+	TEXT_TITLE, Tokens, conversation_icon, srgb,
 };
 use kiroshi_rune_kit::widgets::{Pill, spinner};
 
 use crate::app::{App, Pane, Person, Ready, Thread, Workspace};
 use crate::host::{DEV_START_COMMAND, HostError, Profile};
 use crate::model::{Agent, Conversation};
-use crate::surfaces::{s03_roster, s05_thread, s08_missions, s14_library};
+use crate::navigation::Route;
+use crate::surfaces::{
+	s01_chrome, s02_rail, s03_roster, s05_thread, s08_missions, s13_space_settings, s14_library,
+};
 
 pub const CHROME: Chrome =
 	Chrome { full_size_content: true, traffic_lights: Some((16.0, 14.0)), drag_regions: true };
-
-const TITLE_BAR: f32 = 40.0;
-const RAIL: f32 = 60.0;
 
 const SIGNED_OUT: &str = "Signed out.";
 
@@ -38,9 +38,10 @@ const HEADER_TITLE: TextStyle =
 	TextStyle { line_height: 18.0, tracking: -0.15, ..TextStyle::new(15.0, 600.0) };
 
 pub struct Viewport {
-	pub inset: f32,
+	pub chrome: s01_chrome::Measured,
 	pub transcript_height: Option<f32>,
 	pub thread_room: Option<f32>,
+	pub library_width: Option<f32>,
 }
 
 pub const TRANSCRIPT: &str = "transcript";
@@ -97,8 +98,9 @@ fn host_failed(t: &Tokens, failure: &HostError) -> El {
 }
 
 fn frame(s: &App, ready: &Ready, t: &Tokens, viewport: &Viewport) -> (El, Vec<El>) {
-	let room = viewport.thread_room.unwrap_or(DOCUMENT_PANEL_OPENING_WIDTH);
-	let (panel, layers) = s14_library::panel(s, t, room).unzip();
+	let (title_bar, chrome_layers) = s01_chrome::view(s, &t.kit(), t, &viewport.chrome);
+	let (rail, rail_layers) = s02_rail::view(s, t);
+	let (content, content_layers) = content(s, ready, t, viewport);
 	let card = row()
 		.grow(1.0)
 		.min_w(0.0)
@@ -109,6 +111,47 @@ fn frame(s: &App, ready: &Ready, t: &Tokens, viewport: &Viewport) -> (El, Vec<El
 		.clip_rounded(12.0)
 		.fill(t.card)
 		.border(1.0, t.shell_border)
+		.child(content);
+	let body = col()
+		.w_full()
+		.h_full()
+		.fill(t.background)
+		.child(title_bar)
+		.child(row().w_full().grow(1.0).min_h(0.0).child(rail).child(card));
+	let layers = chrome_layers.into_iter().chain(rail_layers).chain(content_layers).collect();
+	(body, layers)
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum Content {
+	Conversation,
+	Library,
+	SpaceSettings,
+}
+
+pub fn content_of(route: Route) -> Content {
+	match route {
+		Route::Library => Content::Library,
+		Route::SpaceSettings => Content::SpaceSettings,
+		_ => Content::Conversation,
+	}
+}
+
+fn content(s: &App, ready: &Ready, t: &Tokens, viewport: &Viewport) -> (El, Vec<El>) {
+	match content_of(s.navigation.main_route()) {
+		Content::Library => s14_library::view(s, t, viewport.library_width),
+		Content::SpaceSettings => (s13_space_settings::view(s, t), Vec::new()),
+		Content::Conversation => conversation(s, ready, t, viewport),
+	}
+}
+
+fn conversation(s: &App, ready: &Ready, t: &Tokens, viewport: &Viewport) -> (El, Vec<El>) {
+	let room = viewport.thread_room.unwrap_or(DOCUMENT_PANEL_OPENING_WIDTH);
+	let (panel, layers) = s14_library::panel(s, t, room).unzip();
+	let content = row()
+		.grow(1.0)
+		.min_w(0.0)
+		.h_full()
 		.child(match s.pane {
 			Pane::Missions => s08_missions::panel(s, t),
 			Pane::Conversations => roster(s, ready, t),
@@ -123,95 +166,7 @@ fn frame(s: &App, ready: &Ready, t: &Tokens, viewport: &Viewport) -> (El, Vec<El
 				.child(thread_column(s, t))
 				.children(panel),
 		);
-	let body = col()
-		.w_full()
-		.h_full()
-		.fill(t.background)
-		.child(title_bar(s, t, viewport.inset))
-		.child(row().w_full().grow(1.0).min_h(0.0).child(rail(s, ready, t)).child(card));
-	(body, layers.unwrap_or_default())
-}
-
-fn title_bar(s: &App, t: &Tokens, inset: f32) -> El {
-	let glyph = |glyph: &'static Icon| {
-		el().size(24.0, 24.0)
-			.radius(6.0)
-			.center()
-			.child(icon(glyph, 14.0).color(t.muted_foreground))
-	};
-	let title = s.thread.as_ref().map_or_else(String::new, |thread| shown_name(s, thread));
-	let tab_placeholder = row()
-		.h(28.0)
-		.w(180.0)
-		.px(SPACING * 3.0)
-		.radius(8.0)
-		.center_y()
-		.fill(t.foreground.alpha(0.16))
-		.child(text(title).font(TEXT_XS_MEDIUM).color(t.foreground).truncate());
-	row()
-		.w_full()
-		.h(TITLE_BAR)
-		.pl(inset.max(76.0))
-		.gap(SPACING)
-		.center_y()
-		.window_drag()
-		.child(glyph(&icons::PREVIOUS))
-		.child(glyph(&icons::NEXT))
-		.child(tab_placeholder)
-		.child(glyph(&icons::PLUS))
-}
-
-fn rail(s: &App, ready: &Ready, t: &Tokens) -> El {
-	let missions = matches!(s.pane, Pane::Missions);
-	let (ground, ink) = conversation_icon(ready.space.colour, t.dark);
-	let initial: String = ready.space.name.chars().take(1).collect();
-	let space = el()
-		.size(32.0, 32.0)
-		.radius(10.0)
-		.fill(ground)
-		.center()
-		.child(text(initial).font(TEXT_COMPACT_SEMIBOLD).color(ink));
-	let slot = |glyph: &'static Icon, selected: bool| {
-		let ink = if selected { t.foreground } else { t.muted_foreground };
-		let tile = el().size(36.0, 36.0).radius(10.0).center().child(icon(glyph, 18.0).color(ink));
-		if selected {
-			tile.fill(t.rail_item_selected)
-		} else {
-			tile.hover(t.foreground.alpha(0.05))
-		}
-	};
-	let person: String = match &ready.person {
-		Person::SignedIn(email) => email.chars().take(2).collect::<String>().to_uppercase(),
-		Person::SignedOut | Person::Unread => "?".to_owned(),
-	};
-	col()
-		.w(RAIL)
-		.h_full()
-		.items_center()
-		.pt(7.0)
-		.pb(SHELL_INSET + 4.0)
-		.gap(SPACING)
-		.child(space)
-		.child(el().h(SPACING * 2.0))
-		.child(slot(&icons::SEARCH, false))
-		.child(
-			slot(&icons::CONVERSATIONS, !missions)
-				.cursor(Cursor::Pointer)
-				.on_press(|s: &mut App| s.show_conversations()),
-		)
-		.child(
-			slot(&icons::MISSIONS, missions)
-				.cursor(Cursor::Pointer)
-				.on_press(|s: &mut App| s.show_missions()),
-		)
-		.child(el().grow(1.0))
-		.child(
-			el().size(28.0, 28.0)
-				.radius(14.0)
-				.fill(t.person_avatar)
-				.center()
-				.child(text(person).font(TEXT_10_MEDIUM).color(t.foreground)),
-		)
+	(content, layers.unwrap_or_default())
 }
 
 fn roster(s: &App, ready: &Ready, t: &Tokens) -> El {
@@ -258,12 +213,6 @@ impl SoloAgent {
 
 fn opened_conversation<'a>(s: &'a App, thread: &Thread) -> Option<&'a Conversation> {
 	s.ready()?.conversations.iter().find(|held| held.id == thread.conversation_id)
-}
-
-fn shown_name(s: &App, thread: &Thread) -> String {
-	opened_conversation(s, thread)
-		.and_then(|conversation| solo_agent(s, conversation))
-		.map_or_else(|| thread.title.clone(), |agent| agent.name)
 }
 
 fn solo_agent(s: &App, conversation: &Conversation) -> Option<SoloAgent> {
@@ -321,12 +270,11 @@ fn month_and_day(at: i64) -> String {
 }
 
 fn thread_column(s: &App, t: &Tokens) -> El {
-	col()
-		.key("conversation")
-		.grow(1.0)
-		.h_full()
-		.min_w(0.0)
-		.fill(t.background)
+	let column = col().key("conversation").grow(1.0).h_full().min_w(0.0).fill(t.background);
+	if s.thread.is_none() {
+		return column.child(no_thread(t));
+	}
+	column
 		.child(match &s.mission {
 			Some(opened) => s08_missions::header(s, t, opened),
 			None => thread_header(s, t),
@@ -425,7 +373,76 @@ fn thread_header(s: &App, t: &Tokens) -> El {
 
 #[cfg(test)]
 mod tests {
+	use kiroshi_rune_kit::surfaces::s02_rail::{RailMessage, RailPanel};
+	use kiroshi_rune_kit::surfaces::s13_space_settings::SpaceEvent;
+
 	use super::*;
+	use crate::scenes;
+
+	fn loaded() -> App {
+		let mut s = App::new();
+		let (_, thread) =
+			scenes::SCENES.iter().find(|(name, _)| *name == "thread").expect("the thread scene");
+		thread(&mut s);
+		s
+	}
+
+	fn opened(s: &App) -> Option<String> {
+		s.thread.as_ref().map(|thread| thread.conversation_id.clone())
+	}
+
+	fn shown(s: &App) -> Content {
+		content_of(s.navigation.main_route())
+	}
+
+	#[test]
+	fn library_opens_in_the_frame_and_conversations_returns_to_the_open_conversation() {
+		let mut s = loaded();
+		let before = opened(&s);
+
+		s02_rail::railed(&mut s, RailMessage::SelectPanel(RailPanel::Library));
+		let in_library = (shown(&s), opened(&s));
+		s02_rail::railed(&mut s, RailMessage::SelectPanel(RailPanel::Conversations));
+
+		assert!(before.is_some());
+		assert_eq!(in_library, (Content::Library, before.clone()));
+		assert_eq!(shown(&s), Content::Conversation);
+		assert!(s.navigation.main_route() == Route::Conversations);
+		assert_eq!(opened(&s), before);
+	}
+
+	#[test]
+	fn missions_on_the_rail_also_leaves_the_library() {
+		let mut s = loaded();
+		s02_rail::railed(&mut s, RailMessage::SelectPanel(RailPanel::Library));
+
+		s02_rail::railed(&mut s, RailMessage::SelectPanel(RailPanel::Missions));
+
+		assert_eq!(shown(&s), Content::Conversation);
+		assert!(matches!(s.pane, Pane::Missions));
+	}
+
+	#[test]
+	fn space_settings_opens_in_the_frame_and_closing_returns_to_the_open_conversation() {
+		let mut s = loaded();
+		let before = opened(&s);
+
+		s02_rail::railed(&mut s, RailMessage::OpenSpaceSettings);
+		let in_settings = (shown(&s), opened(&s));
+		s13_space_settings::space_event(&mut s, SpaceEvent::Close);
+
+		assert!(before.is_some());
+		assert_eq!(in_settings, (Content::SpaceSettings, before.clone()));
+		assert_eq!(shown(&s), Content::Conversation);
+		assert_eq!(opened(&s), before);
+	}
+
+	#[test]
+	fn only_library_and_space_settings_replace_the_conversation() {
+		assert_eq!(content_of(Route::Conversations), Content::Conversation);
+		assert_eq!(content_of(Route::Library), Content::Library);
+		assert_eq!(content_of(Route::SpaceSettings), Content::SpaceSettings);
+	}
 
 	#[test]
 	fn roster_stamps_follow_the_age_rule_of_main() {

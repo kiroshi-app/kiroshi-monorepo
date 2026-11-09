@@ -8,12 +8,13 @@ use crate::icons;
 use crate::primitives::context_menu::{MenuItem, MenuRow, context_menu};
 use crate::strings::Language;
 use crate::surfaces::s05_thread::{
-	Agent, Attachment, Author, Body, Context, Emit, MissionEvent, PinnedMessage, Quote, Row,
-	SelectionToolbar, Surface, Thread, ThreadKind, ThreadNotice, ToolbarAction, Transcript, Turn,
-	TurnState, WorkLine, WorkState, WorkingAgent, body, column, day_separator, message_menu,
-	pinned_messages, selection_toolbar, thread, transcript_skeleton, turn, work_line,
+	Agent, Attachment, Author, Body, Context, Emit, MissionEvent, MissionTicket, MissionTurn,
+	PinnedMessage, Quote, Row, SelectionToolbar, Surface, Thread, ThreadKind, ThreadNotice,
+	ToolbarAction, Transcript, Turn, TurnState, WorkLine, WorkState, WorkingAgent, body, column,
+	day_separator, message_menu, pinned_messages, selection_toolbar, thread, transcript_skeleton,
+	turn, work_line,
 };
-use crate::surfaces::s08_missions::EventKind;
+use crate::surfaces::s08_missions::{EventKind, MissionState};
 use crate::tokens::{RADIUS_XL, SPACING, TEXT_COMPACT, Tokens};
 
 mod sources;
@@ -25,6 +26,7 @@ pub(super) const TALL: (f32, f32) = (760.0, 960.0);
 pub(super) const TALLER: (f32, f32) = (760.0, 1200.0);
 pub(super) const PANEL: (f32, f32) = (1072.0, 847.0);
 pub(super) const LINE: (f32, f32) = (760.0, 240.0);
+pub(super) const MISSION_TURN: (f32, f32) = (720.0, 400.0);
 
 const PROSE_WIDTH: f32 = 704.0;
 
@@ -553,6 +555,48 @@ fn mission_kind() -> ThreadKind {
 
 pub(super) fn thread_in_a_mission(t: &Tokens, s: &SceneState) -> El {
 	thread_scene(t, s, mission_kind(), Transcript::Rows(mission_rows()))
+}
+
+const OPENING_ANSWER: &str = "That one is wide enough to run on its own, so I opened a mission for it and I will report here when it lands.";
+
+fn opened_mission() -> MissionTurn {
+	MissionTurn {
+		id: "mission-ope-30".to_owned(),
+		bot: atlas(),
+		objective: "Ship the mission thread and the card that summarises it in the conversation it came from.".to_owned(),
+		ticket: MissionTicket {
+			platform: "linear".to_owned(),
+			external_id: "OPE-30".to_owned(),
+			title: "Mission thread screen and mission card in the origin".to_owned(),
+			url: String::new(),
+		},
+		tools: vec!["Superset".to_owned(), "GitHub".to_owned()],
+		state: MissionState::WaitingHuman,
+		is_working: false,
+		timestamp: "2d".to_owned(),
+		now: Some(NOW),
+		clock_ms: 0.0,
+		status: None,
+		commits_ahead: 0,
+		pull_request: None,
+		last_activity: None,
+	}
+}
+
+fn opening_rows() -> Vec<Row> {
+	vec![
+		Row::Turn(Turn::new("o1", Author::Agent(atlas()), OPENING_ANSWER).at("09:12")),
+		Row::Mission(opened_mission()),
+	]
+}
+
+pub(super) fn mission_under_the_turn_that_opened_it(t: &Tokens, s: &SceneState) -> El {
+	let kind = ThreadKind::Group { title: "Mission thread".to_owned() };
+	thread_scene(t, s, kind, Transcript::Rows(opening_rows()))
+}
+
+pub(super) fn mission_in_a_solo_thread(t: &Tokens, s: &SceneState) -> El {
+	thread_scene(t, s, ThreadKind::Solo(atlas()), Transcript::Rows(opening_rows()))
 }
 
 const ANSWER_DONE: &str = "France leads with **412** people, then Germany with 268 and Spain with 190. Most of this week's 86 came from Germany: 51 of them.";

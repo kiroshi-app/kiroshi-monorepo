@@ -522,6 +522,8 @@ pub enum AgentEvent {
 	#[serde(rename_all = "camelCase")]
 	PermissionResolved { id: String, decision: PermissionDecision },
 	#[serde(rename_all = "camelCase")]
+	PromptsClosed { permission_ids: Vec<String>, question_ids: Vec<String> },
+	#[serde(rename_all = "camelCase")]
 	TurnEnded { ended: TurnEnded },
 	#[serde(rename_all = "camelCase")]
 	TasksPending { count: u32 },

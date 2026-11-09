@@ -1,3 +1,4 @@
+use kiroshi_core::missions::contract::MissionStatus;
 use serde::Deserialize;
 
 #[derive(Clone, Debug, Deserialize)]
@@ -239,13 +240,6 @@ pub struct Ticket {
 }
 
 #[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct MissionStatus {
-	pub text: String,
-	pub written_at: i64,
-}
-
-#[derive(Clone, Debug, Deserialize)]
 pub struct MissionActivity {
 	pub tool: String,
 	pub target: String,
@@ -287,7 +281,9 @@ pub struct MissionDetail {
 pub struct MissionChanged {
 	pub mission_id: String,
 	pub state: MissionState,
+	pub state_seq: i64,
 	pub is_agent_running: bool,
+	pub status: Option<MissionStatus>,
 }
 
 #[derive(Clone, Debug, Deserialize)]

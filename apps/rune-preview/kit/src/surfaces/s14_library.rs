@@ -9,10 +9,10 @@ use crate::avatar::{Face, Person};
 use crate::icons;
 use crate::primitives::button::{Button, ButtonSize, ButtonVariant};
 use crate::primitives::context_menu::{
-	Mark as MenuMark, MenuItem, MenuRow, Shortcut, pressed_context_menu,
+	Mark as MenuMark, MenuItem, MenuRow, Shortcut, wired_context_menu,
 };
 use crate::primitives::dialog::{DialogContent, dialog, scrim};
-use crate::primitives::dropdown_menu::pressed_dropdown_menu;
+use crate::primitives::dropdown_menu::wired_dropdown_menu;
 use crate::primitives::toast::{Toast, ToastType, toast};
 use crate::primitives::{
 	DISABLED_OPACITY, FOCUS_RING_WIDTH, elevated, equal_padding, instant, ring_tint, tight,
@@ -4234,9 +4234,8 @@ pub fn item_menu<S: 'static>(
 		rows.push(MenuRow::Item(if image.is_saving { save.disabled() } else { save }));
 		rows.push(MenuRow::Item(item(ItemAction::CopyImage)));
 	}
-	let mut pressed = pressed.into_iter();
-	pressed_context_menu(t, &label, rows, |row| match pressed.next() {
-		Some(action) => row.on_press(emitter(&on, action)),
+	wired_context_menu(t, &label, rows, |index, row| match pressed.get(index) {
+		Some(action) => row.on_press(emitter(&on, *action)),
 		None => row,
 	})
 	.key(ITEM_MENU_KEY)
@@ -4774,20 +4773,19 @@ pub fn block_menu<S: 'static>(
 				.shortcut(shortcut(menu::shortcuts::mac::DELETE, menu::shortcuts::other::DELETE)),
 		),
 	];
-	let mut pressed = [
+	let pressed = [
 		BlockMenuAction::TurnInto,
 		BlockMenuAction::Duplicate,
 		BlockMenuAction::MoveUp,
 		BlockMenuAction::MoveDown,
 		BlockMenuAction::Delete,
-	]
-	.into_iter();
-	pressed_dropdown_menu(
+	];
+	wired_dropdown_menu(
 		t,
 		say(common::library::editor::blocks::handle::MENU, lang),
 		rows,
-		|row| match pressed.next() {
-			Some(action) => row.on_press(emitter(&on, action)),
+		|index, row| match pressed.get(index) {
+			Some(action) => row.on_press(emitter(&on, *action)),
 			None => row,
 		},
 	)

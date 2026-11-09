@@ -4,6 +4,7 @@ pub use super::menu::{COMMAND, Mark, MenuItem, MenuRow, Shortcut};
 use crate::tokens::{SPACING, Tokens};
 
 const MIN_WIDTH: f32 = SPACING * 36.0;
+const SUBMENU_MIN_WIDTH: f32 = SPACING * 24.0;
 
 pub fn context_menu<'a>(
 	t: &Tokens,
@@ -11,15 +12,6 @@ pub fn context_menu<'a>(
 	rows: impl IntoIterator<Item = MenuRow<'a>>,
 ) -> El {
 	super::menu::panel(t, label, MIN_WIDTH, None, rows)
-}
-
-pub fn pressed_context_menu<'a>(
-	t: &Tokens,
-	label: &str,
-	rows: impl IntoIterator<Item = MenuRow<'a>>,
-	press: impl FnMut(El) -> El,
-) -> El {
-	super::menu::pressed_panel(t, label, MIN_WIDTH, None, rows, press)
 }
 
 pub fn context_menu_narrow<'a>(
@@ -32,5 +24,23 @@ pub fn context_menu_narrow<'a>(
 }
 
 pub fn submenu<'a>(t: &Tokens, label: &str, rows: impl IntoIterator<Item = MenuRow<'a>>) -> El {
-	super::menu::panel(t, label, SPACING * 24.0, None, rows)
+	super::menu::panel(t, label, SUBMENU_MIN_WIDTH, None, rows)
+}
+
+pub fn wired_context_menu<'a>(
+	t: &Tokens,
+	label: &str,
+	rows: impl IntoIterator<Item = MenuRow<'a>>,
+	wire: impl Fn(usize, El) -> El,
+) -> El {
+	super::menu::wired_panel(t, label, MIN_WIDTH, None, rows, wire)
+}
+
+pub fn wired_submenu<'a>(
+	t: &Tokens,
+	label: &str,
+	rows: impl IntoIterator<Item = MenuRow<'a>>,
+	wire: impl Fn(usize, El) -> El,
+) -> El {
+	super::menu::wired_panel(t, label, SUBMENU_MIN_WIDTH, None, rows, wire)
 }

@@ -1,10 +1,19 @@
-use rune::{Key, KeyEvent, Mods, TextEdit};
+use std::path::PathBuf;
+
+use rune::clipboard::ClipboardImage;
+use rune::{
+	ClipboardContent, Cx, El, Env, Key, KeyEvent, Mods, Runtime, TextEdit, TextStyle, col,
+	text_input,
+};
 
 use super::chips::formatted_size;
 use super::menus::{Command, MentionFace, Mentionable, command_matches, mention_matches};
-use super::prompt::{Offline, PromptInput, menu_key, surface};
+use super::prompt::{
+	FIELD_KEY, Offline, PromptInput, focus_prompt, menu_key, prompt_input, surface,
+};
 use super::queue::focused_item;
-use super::{ComposerIntent, filled};
+use super::{ComposerIntent, Scope, filled};
+use crate::strings::Language;
 use crate::tokens::Tokens;
 
 const fn member(id: &'static str, is_outside: bool) -> Mentionable<'static> {
@@ -104,4 +113,186 @@ fn a_focused_queue_key_names_its_queued_message() {
 	assert_eq!(focused_item("queue-send-now-top"), Some("top"));
 	assert_eq!(focused_item("queue-remove-city"), Some("city"));
 	assert_eq!(focused_item("composer-send"), None);
+}
+
+const DRAFT: &str = "Summarise the notes";
+const ELSEWHERE: &str = "elsewhere";
+
+#[derive(Clone, Copy, PartialEq)]
+enum Block {
+	Live,
+	Disabled,
+	Offline,
+}
+
+struct Screen {
+	edit: TextEdit,
+	elsewhere: TextEdit,
+	block: Block,
+	sent: usize,
+}
+
+fn heard(screen: &mut Screen, intent: ComposerIntent) {
+	if intent == ComposerIntent::Send {
+		screen.sent += 1;
+	}
+}
+
+fn screen_view(screen: &Screen, _: &mut Cx<Screen>) -> El {
+	let t = Tokens::new(false);
+	let scope = Scope { t: &t, language: Language::En, emit: heard };
+	let input = PromptInput {
+		disabled: screen.block == Block::Disabled,
+		offline: (screen.block == Block::Offline)
+			.then_some(Offline { space: "Studio", host: "Steve" }),
+		focused: screen.edit.focused,
+		..PromptInput::new(&screen.edit, 544.0)
+	};
+	col()
+		.child(
+			text_input(&screen.elsewhere, TextStyle::new(14.0, 400.0))
+				.key(ELSEWHERE)
+				.size(240.0, 32.0)
+				.on_edit(|screen: &mut Screen| &mut screen.elsewhere),
+		)
+		.child(prompt_input(scope, input, |screen: &mut Screen| &mut screen.edit))
+}
+
+fn composer_with(draft: &str, block: Block) -> Runtime<Screen> {
+	let mut edit = TextEdit::new(draft);
+	edit.set_caret(0);
+	let mut elsewhere = TextEdit::new("");
+	elsewhere.focused = true;
+	let screen = Screen { edit, elsewhere, block, sent: 0 };
+	let mut runtime = Runtime::new(screen, screen_view, (640.0, 360.0), Env::new(false, 1.0));
+	runtime.frame(0.0);
+	runtime
+}
+
+fn step(runtime: &mut Runtime<Screen>) {
+	runtime.frame(0.0);
+	runtime.frame(1.0);
+}
+
+fn focused_key(runtime: &Runtime<Screen>) -> Option<String> {
+	runtime.elements().into_iter().find(|element| element.focused).and_then(|element| element.key)
+}
+
+fn call_focus(runtime: &mut Runtime<Screen>) {
+	runtime.update(|screen, _| focus_prompt(&mut screen.edit, screen.block != Block::Live));
+	step(runtime);
+}
+
+#[test]
+fn the_app_call_focuses_the_field_with_the_caret_after_the_draft() {
+	for draft in ["", DRAFT] {
+		let mut runtime = composer_with(draft, Block::Live);
+		assert_eq!(focused_key(&runtime).as_deref(), Some(ELSEWHERE));
+		call_focus(&mut runtime);
+		assert_eq!(focused_key(&runtime).as_deref(), Some(FIELD_KEY), "draft {draft:?}");
+		let edit = &runtime.state.edit;
+		assert_eq!(edit.text, draft);
+		assert_eq!((edit.anchor, edit.focus), (draft.len(), draft.len()), "draft {draft:?}");
+	}
+}
+
+#[test]
+fn a_blocked_composer_leaves_focus_where_it_was() {
+	for block in [Block::Disabled, Block::Offline] {
+		let mut runtime = composer_with(DRAFT, block);
+		call_focus(&mut runtime);
+		assert_eq!(focused_key(&runtime).as_deref(), Some(ELSEWHERE));
+		assert!(!runtime.state.edit.focused);
+	}
+}
+
+#[test]
+fn typing_paste_and_enter_after_the_app_call_act_as_after_a_click() {
+	let mut runtime = composer_with(DRAFT, Block::Live);
+	call_focus(&mut runtime);
+	runtime.key(KeyEvent { key: Key::Text("!".into()), mods: Mods::default() });
+	runtime.paste(" Now.");
+	step(&mut runtime);
+	assert_eq!(runtime.state.edit.text, format!("{DRAFT}! Now."));
+	runtime.key(KeyEvent { key: Key::Enter, mods: Mods::default() });
+	step(&mut runtime);
+	assert_eq!(runtime.state.sent, 1);
+}
+
+#[derive(Default)]
+struct Pasting {
+	edit: TextEdit,
+	heard: Vec<ComposerIntent>,
+	disabled: bool,
+}
+
+fn heard_while_pasting(s: &mut Pasting, intent: ComposerIntent) {
+	s.heard.push(intent);
+}
+
+fn draft_of(s: &mut Pasting) -> &mut TextEdit {
+	&mut s.edit
+}
+
+fn pasting_view(s: &Pasting, _: &mut Cx<Pasting>) -> El {
+	let t = Tokens::new(false);
+	let scope = Scope { t: &t, language: Language::En, emit: heard_while_pasting };
+	let input = PromptInput { disabled: s.disabled, ..PromptInput::new(&s.edit, 544.0) };
+	prompt_input(scope, input, draft_of)
+}
+
+fn pasted_into_the_focused_field(s: Pasting, content: ClipboardContent) -> Pasting {
+	let mut runtime = Runtime::new(s, pasting_view, (640.0, 200.0), Env::new(false, 1.0));
+	runtime.frame(0.0);
+	let [x, y, width, height] = runtime
+		.elements()
+		.into_iter()
+		.find(|element| element.key.as_deref() == Some(FIELD_KEY))
+		.map(|element| element.rect)
+		.expect("the prompt field is drawn");
+	runtime.pointer_down(x + width / 2.0, y + height / 2.0);
+	runtime.pointer_up(x + width / 2.0, y + height / 2.0);
+	runtime.frame(1.0 / 60.0);
+	runtime.paste_content(content);
+	runtime.frame(2.0 / 60.0);
+	runtime.state
+}
+
+fn screenshot() -> ClipboardImage {
+	let png = [&b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR"[..], &[0, 0, 0, 2, 0, 0, 0, 3]].concat();
+	ClipboardImage::from_png(png).expect("a PNG header reads as an image")
+}
+
+#[test]
+fn a_pasted_image_becomes_one_paste_intent_and_no_text() {
+	let content = ClipboardContent::new("Screenshot").with_image(screenshot());
+	let s = pasted_into_the_focused_field(Pasting::default(), content.clone());
+	assert_eq!(s.heard, [ComposerIntent::Paste(content)]);
+	assert_eq!(s.edit.text, "");
+}
+
+#[test]
+fn pasted_files_become_one_paste_intent_and_no_text() {
+	let files = [PathBuf::from("/notes/release-notes.md"), PathBuf::from("/notes/plan.pdf")];
+	let content = ClipboardContent::new("release-notes.md plan.pdf").with_files(files);
+	let s = pasted_into_the_focused_field(Pasting::default(), content.clone());
+	assert_eq!(s.heard, [ComposerIntent::Paste(content)]);
+	assert_eq!(s.edit.text, "");
+}
+
+#[test]
+fn pasted_plain_text_lands_at_the_caret_and_emits_nothing() {
+	let content = ClipboardContent::new("Summarise the notes");
+	let s = pasted_into_the_focused_field(Pasting::default(), content);
+	assert!(s.heard.is_empty());
+	assert_eq!(s.edit.text, "Summarise the notes");
+}
+
+#[test]
+fn a_disabled_field_emits_no_paste_intent() {
+	let content = ClipboardContent::new("").with_image(screenshot());
+	let disabled = Pasting { disabled: true, ..Pasting::default() };
+	let s = pasted_into_the_focused_field(disabled, content);
+	assert!(s.heard.is_empty());
+	assert_eq!(s.edit.text, "");
 }

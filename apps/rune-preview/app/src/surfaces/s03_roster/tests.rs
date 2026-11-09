@@ -9,6 +9,7 @@ use serde_json::{Value, json};
 use super::listing::{Line, Listing, Placed};
 use super::worker::{Answer, Call, Write};
 use super::{Load, State, emitted, landed, poll, selected_row};
+use crate::app::notice;
 use crate::app::{App, Person, Ready, Workspace};
 use crate::events::{HostEvent, parsed};
 use crate::host::{Host, HostError};
@@ -166,7 +167,7 @@ fn refuse_last_write(app: &mut App) {
 }
 
 fn notice_titles(app: &App) -> Vec<&str> {
-	state(app).notices.iter().map(|notice| notice.title.as_str()).collect()
+	notice::shown(app).into_iter().map(|notice| notice.title.as_str()).collect()
 }
 
 fn switch_to(app: &mut App, space_id: &str) {
@@ -488,6 +489,21 @@ fn a_space_already_loading_is_not_loaded_twice() {
 	switch_to(&mut app, OTHER_SPACE);
 	switch_to(&mut app, SPACE);
 	assert_eq!(loads_of(&app, SPACE), 2);
+}
+
+#[test]
+fn a_refused_write_of_a_space_left_says_so_once_that_space_is_back() {
+	let mut app = shown_app(listing());
+	state_mut(&mut app).pin("room");
+	let Some(Call::Write(write)) = state_mut(&mut app).queued.pop() else {
+		panic!("a write was queued")
+	};
+	switch_to(&mut app, OTHER_SPACE);
+	landed(&mut app, Answer::Written { write, outcome: Err(refused("roster")) });
+	let while_away = notice_titles(&app).len();
+	switch_to(&mut app, SPACE);
+	assert_eq!(while_away, 0);
+	assert_eq!(notice_titles(&app), vec![super::PINS_UNSAVED]);
 }
 
 #[test]

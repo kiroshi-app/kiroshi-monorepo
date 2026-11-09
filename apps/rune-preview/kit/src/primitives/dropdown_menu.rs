@@ -13,11 +13,11 @@ pub fn dropdown_menu<'a>(
 	super::menu::panel(t, label, MIN_WIDTH, None, rows)
 }
 
-pub fn pressed_dropdown_menu<'a>(
+pub fn wired_dropdown_menu<'a>(
 	t: &Tokens,
 	label: &str,
 	rows: impl IntoIterator<Item = MenuRow<'a>>,
-	press: impl FnMut(El) -> El,
+	wire: impl Fn(usize, El) -> El,
 ) -> El {
-	super::menu::pressed_panel(t, label, MIN_WIDTH, None, rows, press)
+	super::menu::wired_panel(t, label, MIN_WIDTH, None, rows, wire)
 }

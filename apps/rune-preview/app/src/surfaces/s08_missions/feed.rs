@@ -50,7 +50,9 @@ pub fn is_working(mission: &Mission) -> bool {
 
 pub fn moved(mission: &mut Mission, changed: &model::MissionChanged) {
 	mission.state = core_state(changed.state);
+	mission.state_seq = changed.state_seq;
 	mission.is_agent_running = changed.is_agent_running;
+	mission.status.clone_from(&changed.status);
 	let signs = LivenessSigns {
 		is_prompt_pending: mission.pending_prompt.is_some(),
 		is_turn_running: changed.is_agent_running,

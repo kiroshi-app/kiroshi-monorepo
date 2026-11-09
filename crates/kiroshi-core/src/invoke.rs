@@ -405,6 +405,8 @@ table! { core, client, caller;
 		answered(pending_questions(core, conversation_id).await);
 	agent_pending_questions_in_space(space_id: String) =>
 		answered(agent_pending_questions_in_space(core, space_id).await);
+	agent_pending_prompts(conversation_id: String) =>
+		answered(pending_prompts(core, conversation_id).await);
 
 	mcp_oauth_connect(owner: EnvOwner, name: String, url: String) =>
 		answered(connect_application(core, owner, name, url).await);

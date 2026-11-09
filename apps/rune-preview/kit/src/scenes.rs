@@ -4769,8 +4769,8 @@ pub static SCENES: &[Scene] = &[
 	),
 	scene(
 		"conversation-missions-missionturn--in-a-solo-thread",
-		missions::TURN,
-		missions::turn_under_an_opening_turn,
+		thread::MISSION_TURN,
+		thread::mission_in_a_solo_thread,
 	),
 	scene(
 		"conversation-missions-missionturn--with-an-unknown-tool",
@@ -4779,8 +4779,8 @@ pub static SCENES: &[Scene] = &[
 	),
 	scene(
 		"conversation-missions-missionturn--under-the-turn-that-opened-it",
-		missions::TURN,
-		missions::turn_under_an_opening_turn,
+		thread::MISSION_TURN,
+		thread::mission_under_the_turn_that_opened_it,
 	),
 	focused("conversation-missions-missionheader--default", STORY, 1, missions::header_default),
 	focused("conversation-missions-missionheader--loading", STORY, 1, missions::header_loading),
@@ -4921,7 +4921,12 @@ pub static SCENES: &[Scene] = &[
 		missions::MENU,
 		missions::menu_every_copy_choice,
 	),
-	focused("overlays-missionmenu--keyboard-trigger", missions::MENU, 1, missions::menu_working),
+	focused(
+		"overlays-missionmenu--keyboard-trigger",
+		missions::MENU,
+		1,
+		missions::menu_from_the_keyboard,
+	),
 	scene("navigation-missionspanel--default", missions::PANEL, missions::panel_default),
 	scene("navigation-missionspanel--empty", missions::PANEL, missions::panel_empty),
 	scene("navigation-missionspanel--loading", missions::PANEL, missions::panel_loading),
