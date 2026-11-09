@@ -1455,14 +1455,87 @@ describe("createConversationController", () => {
 			})
 		})
 
-		it("releases the ask when the turn of the companion ends", async () => {
+		const endedOnAsk = async (harness: Harness) => {
 			const nyx = await askedIn(harness)
+			harness.driver.pushTo(nyx, [
+				{ type: "turnEnded", ended: { sessionId: null, outcome: "completed" } },
+			])
+			await harness.settled()
+			return nyx
+		}
+
+		const askingScopeOf = (harness: Harness, botId: string) =>
+			harness.driver.submissions.find(({ scope }) => scope.botId === botId)
+				?.scope
+
+		it("keeps the ask and the session of a companion whose turn ends on it", async () => {
+			const nyx = await endedOnAsk(harness)
+
+			expect(harness.driver.shutdowns).toEqual([])
+			expect(harness.controller.getState().pendingPrompt).toMatchObject({
+				kind: "question",
+				botId: nyx,
+				request: { id: "ask-1" },
+			})
+		})
+
+		it("shuts the kept session down once, when its ask is answered on the card", async () => {
+			const nyx = await endedOnAsk(harness)
+
+			await harness.controller.answer("ask-1", { "Which wall?": "north" })
+			await harness.settled()
+			harness.driver.pushTo(nyx, [
+				{ type: "permissionResolved", id: "ask-1", decision: "allowOnce" },
+			])
+			await harness.settled()
+
+			expect(harness.driver.answered).toEqual([
+				{ botId: nyx, id: "ask-1", answers: { "Which wall?": "north" } },
+			])
+			expect(harness.controller.getState().pendingPrompt).toBeNull()
+			expect(harness.driver.shutdowns).toEqual([nyx])
+		})
+
+		it("answers the kept ask with a typed reply riding the kept session", async () => {
+			const nyx = await endedOnAsk(harness)
+			const asking = askingScopeOf(harness, nyx)
+
+			await harness.controller.send("@Nyx the north one")
+			await harness.settled()
+			harness.driver.pushTo(nyx, [
+				{ type: "permissionResolved", id: "ask-1", decision: "allowOnce" },
+			])
+			await harness.settled()
+
+			expect(harness.driver.submissions.at(-1)?.scope).toEqual(asking)
+			expect(harness.controller.getState().pendingPrompt).toBeNull()
+			expect(harness.driver.shutdowns).toEqual([])
 
 			harness.driver.pushTo(nyx, [
 				{ type: "turnEnded", ended: { sessionId: null, outcome: "completed" } },
 			])
 			await harness.settled()
 
+			expect(harness.driver.shutdowns).toEqual([nyx])
+		})
+
+		it("shuts the kept session down with the controller", async () => {
+			const nyx = await endedOnAsk(harness)
+
+			await harness.controller.shutdown()
+
+			expect(harness.driver.shutdowns).toEqual([nyx])
+		})
+
+		it("shuts the session down at the end of a turn holding no ask", async () => {
+			const nyx = await askedIn(harness)
+			harness.driver.pushTo(nyx, [
+				{ type: "permissionResolved", id: "ask-1", decision: "allowOnce" },
+				{ type: "turnEnded", ended: { sessionId: null, outcome: "completed" } },
+			])
+			await harness.settled()
+
+			expect(harness.driver.shutdowns).toEqual([nyx])
 			expect(harness.controller.getState().pendingPrompt).toBeNull()
 		})
 
@@ -3321,6 +3394,45 @@ describe("the mentions a finished turn carries", () => {
 
 		await room.askLate("turn-continued", request)
 		expect(room.controller.getState().pendingPrompt).toBeNull()
+		room.detach()
+	})
+
+	it("keeps the session of a late question until the follow-up its answer resumes ends", async () => {
+		const room = await endedRoom()
+		await room.askLate("turn-continued", lateQuestion("ask-late"))
+
+		await room.answerLate("ask-late")
+		expect(room.driver.shutdowns).toEqual([room.ada])
+
+		await room.hearLate("turn-continued", {
+			type: "turnEnded",
+			ended: { sessionId: null, outcome: "completed" },
+		})
+		await room.hearLate("turn-continued", {
+			type: "permissionResolved",
+			id: "ask-late",
+			decision: "allowOnce",
+		})
+		expect(room.driver.shutdowns).toEqual([room.ada, room.ada])
+		room.detach()
+	})
+
+	it("shuts the kept session down when its companion leaves the conversation", async () => {
+		const room = await roomSeating()
+		await room.sent("@Ada take the walls")
+		room.driver.pushTo(room.ada, [
+			{ type: "questionRequested", request: lateQuestion("ask-open") },
+			{ type: "turnEnded", ended: { sessionId: null, outcome: "completed" } },
+		])
+		await settled()
+		expect(room.driver.shutdowns).toEqual([])
+
+		await room.unseat(room.ada)
+		const reread = await readConversation(room.store, room.conversation.id)
+		await room.controller.open(reread ?? room.conversation)
+		await settled()
+
+		expect(room.driver.shutdowns).toEqual([room.ada])
 		room.detach()
 	})
 

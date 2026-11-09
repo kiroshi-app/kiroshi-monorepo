@@ -12,6 +12,7 @@ import {
 	type SummonsDroppedListener,
 } from "./create-live-listeners"
 import { createForeignTurns, type ForeignSpeaker } from "./foreign-turns"
+import { createKeptRuns } from "./kept-runs"
 import { addresseesIn, toMentionTokens } from "./mentions"
 import { readConversation } from "./read-conversation"
 import {
@@ -415,6 +416,7 @@ export const createConversationController = (
 		options.rereadConversation?.(conversationId)
 	}
 	const foreignTurns = createForeignTurns(transcript, now, hearSilence)
+	const keptRuns = createKeptRuns((scope) => shutdownRun(scope))
 	const enqueue = createQueue()
 
 	const stateStore = createStore(initialState)
@@ -939,7 +941,9 @@ export const createConversationController = (
 			noteFailedTurn(held)
 		}
 		settleOpenReplies(held, completion)
-		void shutdownSpeaker(held)
+		if (!held.scope || !keptRuns.isKeeping(held.scope)) {
+			void shutdownSpeaker(held)
+		}
 		const handed = noteHandovers(held)
 		if (handed.length === 0) {
 			syncAndDrive()
@@ -949,6 +953,23 @@ export const createConversationController = (
 			handOver(seated, held.turn.id)
 			syncAndDrive()
 		})
+	}
+
+	const keepAsking = ({ scope, turn, pending }: Speaker) => {
+		if (!scope || pending?.kind !== "question") {
+			return
+		}
+		keptRuns.keep(scope, pending.request.id, false)
+		foreignTurns.render(
+			scope,
+			{ turnId: turn.id, conversationId: scope.conversationId },
+			{ type: "questionRequested", request: pending.request },
+		)
+	}
+
+	const endTurn = (held: Speaker, completion: TerminalCompletion) => {
+		keepAsking(held)
+		closeSpeaker(held, completion)
 	}
 
 	const failSpeaker = (held: Speaker, error: TransportError) => {
@@ -987,6 +1008,14 @@ export const createConversationController = (
 			return
 		}
 		held.pending = null
+		sync()
+	}
+
+	const settlePrompt = (held: Speaker, id: string) => {
+		if (held.scope) {
+			foreignTurns.release(held.scope, id)
+		}
+		releasePrompt(held, id)
 		sync()
 	}
 
@@ -1041,11 +1070,11 @@ export const createConversationController = (
 					request: event.request,
 				})
 			case "permissionResolved":
-				return releasePrompt(held, event.id)
+				return settlePrompt(held, event.id)
 			case "turnHeld":
 				return noteHold(held, event.hold)
 			case "turnEnded":
-				return closeSpeaker(held, ENDING_FOR_OUTCOME[event.ended.outcome])
+				return endTurn(held, ENDING_FOR_OUTCOME[event.ended.outcome])
 			case "failed":
 				return failSpeaker(held, event.error)
 			default:
@@ -1061,11 +1090,25 @@ export const createConversationController = (
 	const isOpenConversation = (conversationId: string) =>
 		conversationId === conversation?.id
 
+	const isOpenedHere = (scope: RuntimeScope) =>
+		isSameRuntimeScope(runs.get(scope.botId) ?? null, scope)
+
+	const heedClosedRun = (scope: RuntimeScope, event: AgentEvent) => {
+		if (event.type === "questionRequested" && isOpenedHere(scope)) {
+			keptRuns.keep(scope, event.request.id, true)
+			return
+		}
+		keptRuns.hear(scope, event)
+	}
+
 	const route = ({ scope, turn, event }: ScopedEvent) => {
 		const held = speakerAt(scope)
 		if (held) {
 			apply(held, event)
 			return
+		}
+		if (scope) {
+			heedClosedRun(scope, event)
 		}
 		if (scope && turn && isOpenConversation(turn.conversationId)) {
 			foreignTurns.render(scope, turn, event)
@@ -1193,9 +1236,12 @@ export const createConversationController = (
 			return
 		}
 		const conversationId = conversation.id
-		const scope = await openScope(conversationId, held.botId)
+		const kept = keptRuns.ride(conversationId, held.botId)
+		const scope = kept ?? (await openScope(conversationId, held.botId))
 		held.scope = scope
-		await driver.startOrResumeSession(scope)
+		if (!kept) {
+			await driver.startOrResumeSession(scope)
+		}
 		const context = await store.boundedContext(
 			conversationId,
 			held.botId,
@@ -1785,6 +1831,7 @@ export const createConversationController = (
 		try {
 			await send()
 			foreignTurns.release(scope, id)
+			keptRuns.settle(scope, id)
 			return true
 		} catch (reason) {
 			noteSpeakerFailure(scope.botId, toTransportError(reason))
@@ -1924,11 +1971,17 @@ export const createConversationController = (
 		sync()
 	}
 
+	const releaseRunsOfAbsentBots = () => {
+		const seated = participants().map(({ botId }) => botId)
+		return keptRuns.releaseWhere(({ botId }) => !seated.includes(botId))
+	}
+
 	const open = async (next: StoredConversation) => {
 		const isSameConversation = conversation?.id === next.id
 		conversation = next
 		rebuildForeignTurns(next)
 		if (isSameConversation) {
+			void releaseRunsOfAbsentBots()
 			sync()
 			await readBack(next.id)
 			return
@@ -2052,18 +2105,19 @@ export const createConversationController = (
 			: Promise.resolve(NO_PINS)
 	}
 
+	const shutdownRun = (scope: RuntimeScope) =>
+		driver.shutdown(scope).catch((reason) => {
+			console.error("conversation controller: agent_shutdown failed", reason)
+		})
+
 	const shutdownSpeaker = (held: Speaker) =>
-		held.scope
-			? driver.shutdown(held.scope).catch((reason) => {
-					console.error(
-						"conversation controller: agent_shutdown failed",
-						reason,
-					)
-				})
-			: Promise.resolve()
+		held.scope ? shutdownRun(held.scope) : Promise.resolve()
 
 	const shutdown = async () => {
-		await Promise.all([...speakers.values()].map(shutdownSpeaker))
+		await Promise.all([
+			...[...speakers.values()].map(shutdownSpeaker),
+			keptRuns.releaseWhere(() => true),
+		])
 		disconnect()
 	}
 
