@@ -385,17 +385,48 @@ pub(super) fn import_importing(t: &Tokens, _: &SceneState) -> El {
 	)
 }
 
-pub(super) fn import_done(t: &Tokens, _: &SceneState) -> El {
-	let items = with_status([ATLAS, WREN].into_iter().chain(files()).collect(), ImportStatus::Done);
-	let done = common::claude_import::done::TITLE.text(EN);
+pub(super) fn import_importing_picked_only(t: &Tokens, _: &SceneState) -> El {
+	let done = Some(ImportStatus::Done);
+	let items: Vec<ImportItem> = [
+		ImportItem { status: done, ..ATLAS },
+		ImportItem { checked: false, status: done, ..WREN },
+		ImportItem { in_kiroshi: true, status: done, ..CLAUDE_MD },
+	]
+	.into_iter()
+	.chain(SKILLS)
+	.collect();
+	progress(
+		t,
+		ImportStep::Importing,
+		common::claude_import::importing::TITLE.text(EN),
+		&items,
+		common::claude_import::importing::ACTION.text(EN),
+		None,
+	)
+}
+
+fn done_screen(t: &Tokens, items: Vec<ImportItem>) -> El {
+	let items = with_status(items, ImportStatus::Done);
 	progress(
 		t,
 		ImportStep::Done,
-		done,
+		common::claude_import::done::TITLE.text(EN),
 		&items,
 		common::claude_import::done::CONTINUE.text(EN),
 		None,
 	)
+}
+
+pub(super) fn import_done(t: &Tokens, _: &SceneState) -> El {
+	done_screen(t, [ATLAS, WREN].into_iter().chain(files()).collect())
+}
+
+pub(super) fn import_done_one_companion(t: &Tokens, _: &SceneState) -> El {
+	done_screen(t, [ATLAS].into_iter().chain(files()).collect())
+}
+
+pub(super) fn import_done_without_instructions(t: &Tokens, _: &SceneState) -> El {
+	done_screen(t, [ATLAS, WREN].into_iter().chain(SKILLS).collect())
 }
 
 pub(super) fn import_partly_failed(t: &Tokens, _: &SceneState) -> El {
@@ -407,15 +438,40 @@ pub(super) fn import_partly_failed(t: &Tokens, _: &SceneState) -> El {
 		status: Some(ImportStatus::Failed),
 		..SKILLS[3].clone()
 	});
-	let retry = say(common::claude_import::partly_failed::RETRY, EN, &[("name", "changelog")]);
+	partly_failed(t, &items, "changelog")
+}
+
+fn partly_failed(t: &Tokens, items: &[ImportItem], failed: &str) -> El {
+	let retry = say(common::claude_import::partly_failed::RETRY, EN, &[("name", failed)]);
 	progress(
 		t,
 		ImportStep::Done,
 		common::claude_import::partly_failed::TITLE.text(EN),
-		&items,
+		items,
 		common::claude_import::done::CONTINUE.text(EN),
 		Some(&retry),
 	)
+}
+
+fn partly_failed_on(t: &Tokens, failed: &ImportItem) -> El {
+	let items: Vec<ImportItem> = [ATLAS, WREN]
+		.into_iter()
+		.chain(files())
+		.map(|item| {
+			let status =
+				if item.title == failed.title { ImportStatus::Failed } else { ImportStatus::Done };
+			ImportItem { status: Some(status), ..item }
+		})
+		.collect();
+	partly_failed(t, &items, failed.title)
+}
+
+pub(super) fn import_partly_failed_companion(t: &Tokens, _: &SceneState) -> El {
+	partly_failed_on(t, &WREN)
+}
+
+pub(super) fn import_partly_failed_instructions(t: &Tokens, _: &SceneState) -> El {
+	partly_failed_on(t, &CLAUDE_MD)
 }
 
 pub(super) fn import_unreadable(t: &Tokens, _: &SceneState) -> El {
