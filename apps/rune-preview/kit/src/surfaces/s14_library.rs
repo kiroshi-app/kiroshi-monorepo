@@ -2455,18 +2455,15 @@ pub fn lightbox<S: 'static>(
 		focus_ring(t, instant(button.hover(faded(t.foreground, 0.16)))).on_press(emit(event))
 	};
 	let fit = if zoom_percent.is_some() { SurfaceFit::Fill } else { SurfaceFit::Fit };
-	let picture_menu = on.clone();
-	let picture = el()
-		.key("lightbox-picture")
-		.w_full()
-		.h_full()
-		.radius(RADIUS_MD)
-		.clip_rounded(RADIUS_MD)
-		.on_secondary_press(move |s: &mut S, at, _| {
-			picture_menu(s, LightboxEvent::PictureMenuRequested { at })
-		});
+	let picture =
+		el().key("lightbox-picture").w_full().h_full().radius(RADIUS_MD).clip_rounded(RADIUS_MD);
 	let picture = match shown.image.filter(|image| image.size().is_some()) {
-		Some(image) => picture.pixels_fit(image.pixels(), fit),
+		Some(image) => {
+			let picture_menu = on.clone();
+			picture.pixels_fit(image.pixels(), fit).on_secondary_press(move |s: &mut S, at, _| {
+				picture_menu(s, LightboxEvent::PictureMenuRequested { at })
+			})
+		}
 		None => picture.fill(faded(t.border, 0.6)),
 	};
 	let stage = row()
@@ -4784,6 +4781,7 @@ pub fn block_handle<S: 'static>(
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BlockMenuAction {
 	TurnIntoShown,
+	TurnIntoHidden,
 	TurnInto(LibraryBlockType),
 	Duplicate,
 	MoveUp,
@@ -4858,6 +4856,10 @@ pub fn block_menu<S: 'static>(
 		say(common::library::editor::blocks::handle::MENU, lang),
 		rows,
 		|index, row| match pressed.get(index) {
+			Some(BlockMenuAction::TurnIntoShown) => {
+				let shown = BlockMenuAction::TurnIntoShown;
+				on_arrow(row.on_press(emitter(&on, shown)), KeyName::Right, emitter(&on, shown))
+			}
 			Some(action) => row.on_press(emitter(&on, *action)),
 			None => row,
 		},
@@ -4889,11 +4891,24 @@ pub fn turn_into_menu<S: 'static>(
 	let turn_into = say(common::library::editor::blocks::menu::TURN_INTO, lang);
 	let items = turn_into_items(lang, kind);
 	let rows = items.iter().map(|(_, item)| MenuRow::Item(*item));
+	let trigger = format!("menu-item-{turn_into}");
 	wired_submenu(t, turn_into, rows, |index, row| {
-		row.on_press(emitter(&on, BlockMenuAction::TurnInto(items[index].0)))
+		let picked = row.on_press(emitter(&on, BlockMenuAction::TurnInto(items[index].0)));
+		on_arrow(picked, KeyName::Left, emitter(&on, BlockMenuAction::TurnIntoHidden))
 	})
 	.key("library-turn-into")
-	.anchored(format!("menu-item-{turn_into}"), Side::Right, Align::Start, 0.0)
+	.focus_return(trigger.clone())
+	.anchored(trigger, Side::Right, Align::Start, 0.0)
+}
+
+fn on_arrow<S: 'static>(control: El, arrow: KeyName, emit: impl Fn(&mut S) + 'static) -> El {
+	control.on_key(move |s: &mut S, key: &KeyEvent, _| {
+		let is_arrow = key.key == arrow;
+		if is_arrow {
+			emit(s);
+		}
+		is_arrow
+	})
 }
 
 pub fn drop_indicator(t: &Tokens) -> El {

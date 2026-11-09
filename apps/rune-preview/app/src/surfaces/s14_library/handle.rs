@@ -28,7 +28,9 @@ impl State {
 		let Some(document) = self.document_mut(is_beside) else { return };
 		let Some(at) = document.block_at(&block) else { return };
 		let update = match action {
-			BlockMenuAction::TurnIntoShown | BlockMenuAction::TurnInto(_) => None,
+			BlockMenuAction::TurnIntoShown
+			| BlockMenuAction::TurnIntoHidden
+			| BlockMenuAction::TurnInto(_) => None,
 			BlockMenuAction::Duplicate => document.duplicate(&block),
 			BlockMenuAction::MoveUp => at.checked_sub(1).and_then(|to| document.move_block(at, to)),
 			BlockMenuAction::MoveDown => document.move_block(at, at + 1),

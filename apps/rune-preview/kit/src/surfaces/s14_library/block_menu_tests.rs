@@ -1,3 +1,6 @@
+use std::sync::Arc;
+
+use rune::image::ImageCache;
 use rune::{Cx, Env, Runtime};
 
 use super::*;
@@ -24,13 +27,25 @@ enum Heard {
 
 struct Screen {
 	shows: Shows,
+	picture: Option<Image>,
 	heard: Vec<Heard>,
+}
+
+fn hear_menu(screen: &mut Screen, action: BlockMenuAction) {
+	screen.shows = match (screen.shows, action) {
+		(Shows::Menu(look), BlockMenuAction::TurnIntoShown) => Shows::TurnInto(look.kind),
+		(Shows::TurnInto(kind), BlockMenuAction::TurnIntoHidden) => {
+			Shows::Menu(look_of(kind, true, true))
+		}
+		(shows, _) => shows,
+	};
+	screen.heard.push(Heard::Menu(action));
 }
 
 fn view(screen: &Screen, _: &mut Cx<Screen>) -> El {
 	let t = Tokens::new(false);
 	let lang = Language::En;
-	let menu_on = |screen: &mut Screen, action| screen.heard.push(Heard::Menu(action));
+	let menu_on = hear_menu;
 	let body = match screen.shows {
 		Shows::Menu(look) => block_menu(&t, lang, look, menu_on),
 		Shows::TurnInto(kind) => {
@@ -44,7 +59,8 @@ fn view(screen: &Screen, _: &mut Cx<Screen>) -> El {
 			block_handle(&t, lang, false, place, on)
 		}
 		Shows::Lightbox => {
-			let shown = LightboxImage { name: "sofa.jpg", detail: "1.2 MB", image: None };
+			let image = screen.picture.as_ref();
+			let shown = LightboxImage { name: "sofa.jpg", detail: "1.2 MB", image };
 			let look = LightboxLook {
 				position: 1,
 				count: 2,
@@ -63,7 +79,11 @@ fn look_of(kind: LibraryBlockType, can_move_up: bool, can_move_down: bool) -> Bl
 }
 
 fn running(shows: Shows) -> Runtime<Screen> {
-	let screen = Screen { shows, heard: Vec::new() };
+	showing(shows, None)
+}
+
+fn showing(shows: Shows, picture: Option<Image>) -> Runtime<Screen> {
+	let screen = Screen { shows, picture, heard: Vec::new() };
 	let mut runtime = Runtime::new(screen, view, (1000.0, 800.0), Env::new(false, 1.0));
 	step(&mut runtime);
 	runtime
@@ -92,6 +112,39 @@ fn press(runtime: &mut Runtime<Screen>, key: &str) {
 	runtime.pointer_down(x, y);
 	runtime.pointer_up(x, y);
 	step(runtime);
+}
+
+fn focused(runtime: &Runtime<Screen>) -> Option<String> {
+	runtime.elements().into_iter().find(|element| element.focused).and_then(|element| element.key)
+}
+
+fn key(runtime: &mut Runtime<Screen>, key: KeyName) {
+	runtime.key(KeyEvent { key, mods: Mods::default() });
+	step(runtime);
+}
+
+fn tab_to(runtime: &mut Runtime<Screen>, target: &str) {
+	for _ in 0..16 {
+		if focused(runtime).as_deref() == Some(target) {
+			return;
+		}
+		key(runtime, KeyName::Tab);
+	}
+	panic!("Tab never reached {target}");
+}
+
+fn decoded(bytes: Vec<u8>) -> Image {
+	let image = ImageCache::new(Arc::new(|| {})).rgba(2, 2, bytes);
+	let _ = image.wait();
+	image
+}
+
+fn right_click(runtime: &mut Runtime<Screen>, target: &str) -> PointerPress {
+	let (x, y) = centre_of(runtime, target);
+	runtime.secondary_down(x, y);
+	runtime.secondary_up(x, y);
+	step(runtime);
+	PointerPress { x, y }
 }
 
 fn item_key(key: Key) -> String {
@@ -254,16 +307,46 @@ fn a_cancelled_block_drag_ends_the_drag_without_a_move() {
 }
 
 #[test]
+fn the_right_arrow_on_a_focused_turn_into_row_asks_for_its_list() {
+	let mut runtime = running(Shows::Menu(look_of(LibraryBlockType::Paragraph, true, true)));
+	tab_to(&mut runtime, &item_key(menu::TURN_INTO));
+	key(&mut runtime, KeyName::Right);
+	assert_eq!(runtime.state.heard, [Heard::Menu(BlockMenuAction::TurnIntoShown)]);
+}
+
+#[test]
+fn enter_on_a_focused_turn_into_row_asks_for_its_list() {
+	let mut runtime = running(Shows::Menu(look_of(LibraryBlockType::Paragraph, true, true)));
+	tab_to(&mut runtime, &item_key(menu::TURN_INTO));
+	key(&mut runtime, KeyName::Enter);
+	assert_eq!(runtime.state.heard, [Heard::Menu(BlockMenuAction::TurnIntoShown)]);
+}
+
+#[test]
+fn the_left_arrow_in_turn_into_hides_the_list_and_focus_returns_to_its_row() {
+	let mut runtime = running(Shows::TurnInto(LibraryBlockType::Heading));
+	tab_to(&mut runtime, &item_key(common::library::editor::blocks::types::PARAGRAPH));
+	key(&mut runtime, KeyName::Left);
+	assert_eq!(runtime.state.heard, [Heard::Menu(BlockMenuAction::TurnIntoHidden)]);
+	assert_eq!(focused(&runtime), Some(item_key(menu::TURN_INTO)));
+}
+
+#[test]
 fn right_clicking_the_lightbox_picture_hands_back_the_pointer_position() {
-	let mut runtime = running(Shows::Lightbox);
-	let (x, y) = centre_of(&runtime, "lightbox-picture");
-	runtime.secondary_down(x, y);
-	runtime.secondary_up(x, y);
-	step(&mut runtime);
-	assert_eq!(
-		runtime.state.heard,
-		[Heard::Lightbox(LightboxEvent::PictureMenuRequested { at: PointerPress { x, y } })],
-	);
+	let mut runtime = showing(Shows::Lightbox, Some(decoded(vec![255; 16])));
+	let at = right_click(&mut runtime, "lightbox-picture");
+	assert_eq!(runtime.state.heard, [Heard::Lightbox(LightboxEvent::PictureMenuRequested { at })]);
+}
+
+#[test]
+fn a_lightbox_without_a_picture_hands_back_no_right_click() {
+	let without_size = decoded(vec![255; 3]);
+	assert_eq!(without_size.size(), None);
+	for picture in [None, Some(without_size)] {
+		let mut runtime = showing(Shows::Lightbox, picture);
+		right_click(&mut runtime, "lightbox-picture");
+		assert_eq!(runtime.state.heard, []);
+	}
 }
 
 #[test]
