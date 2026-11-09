@@ -542,6 +542,15 @@ describe("the Home page", () => {
 		localStorage.clear()
 	})
 
+	const launchApp = async () => {
+		const router = createWorkspaceRouter()
+		render(createElement(RouterProvider, { router }), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
+		await settle()
+		return router
+	}
+
 	const mountAppWithTwoAgents = async () => {
 		writeMirror({ ...readMirror(), firstRunDone: true })
 		const store = createFakeTranscriptStore()
@@ -552,11 +561,7 @@ describe("the Home page", () => {
 		)
 		mounted.store = store
 		vi.useFakeTimers()
-		const router = createWorkspaceRouter()
-		render(createElement(RouterProvider, { router }), {
-			wrapper: createQueryTestWrapper().wrapper,
-		})
-		await settle()
+		const router = await launchApp()
 		const [firstOfSpace] = await store.bots(PERSONAL_SPACE_ID)
 		return { router, store, first, second, firstOfSpace }
 	}
@@ -598,16 +603,11 @@ describe("the Home page", () => {
 	it("opens on the agent last picked on the Home in this Space", async () => {
 		const { second } = await mountAppWithTwoAgents()
 		cleanup()
-		vi.useRealTimers()
 		localStorage.setItem(
 			"homeAgentIdBySpace",
 			JSON.stringify({ [PERSONAL_SPACE_ID]: second.id }),
 		)
-		vi.useFakeTimers()
-		render(createElement(RouterProvider, { router: createWorkspaceRouter() }), {
-			wrapper: createQueryTestWrapper().wrapper,
-		})
-		await settle()
+		await launchApp()
 
 		await pressInRail("home")
 
