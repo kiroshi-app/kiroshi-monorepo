@@ -26,6 +26,9 @@ fn view(s: &App, cx: &mut Cx<App>) -> El {
 	if let Route::BlockSpike = s.navigation.main_route() {
 		return spike::view::view(s, cx, &t);
 	}
+	if let Some(screen) = s04_boot::new_device(s, &t) {
+		return rune_kit::root(screen, notice::layer(s, &t));
+	}
 	let mut screen_layers = Vec::new();
 	let body = match s.navigation.main_route() {
 		Route::Onboarding(step) => s04_boot::view(step, s, &t.in_space(Some(tokens::BLUE))),
@@ -57,6 +60,7 @@ fn view(s: &App, cx: &mut Cx<App>) -> El {
 		.chain(s06_composer::layers(s, &t))
 		.chain(screen_layers)
 		.chain(s14_library::layers(s, &t))
+		.chain(s04_boot::layers(s, &t))
 		.chain(notice::layer(s, &t));
 	rune_kit::root(body, layers)
 		.on_paste_content(|s: &mut App, content, _: &mut Tx| s06_composer::pasted(s, content))
@@ -137,6 +141,9 @@ fn poll(s: &mut App, seconds: f64, tx: &mut Tx) -> bool {
 }
 
 fn on_key(s: &mut App, event: &KeyEvent, _: &mut Tx) -> bool {
+	if s04_boot::key_pressed(s, event) {
+		return true;
+	}
 	if s06_composer::key_pressed(s, event) {
 		return true;
 	}

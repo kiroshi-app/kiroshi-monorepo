@@ -9,6 +9,7 @@ use rune::Waker;
 use serde::Deserialize;
 use serde_json::{Value, json};
 
+use super::device::{Approval, ListedDevice};
 use crate::app::{Ready, ready_on};
 use crate::host::HostError;
 use crate::model::ClaudeInventory;
@@ -48,8 +49,20 @@ pub enum KiroshiAccount {
 		email: String,
 		plan: Option<AccountPlan>,
 	},
+	#[serde(rename_all = "camelCase")]
+	SignedOut {
+		reason: Option<SignedOutReason>,
+	},
 	#[serde(other)]
-	SignedOut,
+	Unavailable,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SignedOutReason {
+	DeviceRefused,
+	#[serde(other)]
+	Elsewhere,
 }
 
 #[derive(Deserialize)]
@@ -61,6 +74,7 @@ struct Opened {
 pub enum Due {
 	Notice(u64),
 	AccountWatch,
+	DeviceWatch,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -84,7 +98,15 @@ pub enum Call {
 	ReadKiroshiAccount,
 	KiroshiSignIn,
 	KiroshiCancel,
+	KiroshiSignOut,
 	Land { bot_id: String, space_id: String },
+	ReadDeviceApproval,
+	RetryDeviceApproval,
+	RequestDeviceCode,
+	SubmitDeviceCode(String),
+	ReadDevices,
+	ApproveDevice(String),
+	RefuseDevice(String),
 	Wake(Duration, Due),
 }
 
@@ -103,6 +125,10 @@ pub enum Answer {
 	KiroshiAccount(Result<KiroshiAccount, HostError>),
 	KiroshiCommanded { call: Call, outcome: Result<(), HostError> },
 	Landed { call: Call, landing: Result<(String, Ready), HostError> },
+	DeviceApproval { call: Call, outcome: Result<Approval, HostError> },
+	DeviceCommanded { call: Call, outcome: Result<(), HostError> },
+	Devices(Result<Vec<ListedDevice>, HostError>),
+	DeviceAnswered { call: Call, outcome: Result<(), HostError> },
 	Due(Due),
 }
 
@@ -149,13 +175,38 @@ fn answered(source: &Source, call: Call) -> Answer {
 			let outcome = source.invoke("account_sign_in", none());
 			Answer::KiroshiCommanded { call, outcome }
 		}
-		Call::KiroshiCancel => {
+		Call::KiroshiCancel | Call::KiroshiSignOut => {
 			let outcome = source.invoke("account_sign_out", none());
 			Answer::KiroshiCommanded { call, outcome }
 		}
 		Call::Land { ref bot_id, ref space_id } => {
 			let landing = landed(source, bot_id, space_id);
 			Answer::Landed { call, landing }
+		}
+		Call::ReadDeviceApproval => {
+			let outcome = source.invoke("device_approval", none());
+			Answer::DeviceApproval { call, outcome }
+		}
+		Call::RetryDeviceApproval => {
+			let outcome = source.invoke("device_approval_retry", none());
+			Answer::DeviceApproval { call, outcome }
+		}
+		Call::RequestDeviceCode => {
+			let outcome = source.invoke("device_approval_code_request", none());
+			Answer::DeviceCommanded { call, outcome }
+		}
+		Call::SubmitDeviceCode(ref code) => {
+			let outcome = source.invoke("device_approval_code_submit", json!({ "code": code }));
+			Answer::DeviceCommanded { call, outcome }
+		}
+		Call::ReadDevices => Answer::Devices(source.invoke("devices_list", none())),
+		Call::ApproveDevice(ref device_id) => {
+			let outcome = source.invoke("device_approve", json!({ "deviceId": device_id }));
+			Answer::DeviceAnswered { call, outcome }
+		}
+		Call::RefuseDevice(ref device_id) => {
+			let outcome = source.invoke("device_refuse", json!({ "deviceId": device_id }));
+			Answer::DeviceAnswered { call, outcome }
 		}
 		Call::Wake(after, due) => {
 			thread::sleep(after);
