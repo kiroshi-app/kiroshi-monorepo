@@ -39,9 +39,9 @@ impl State {
 	}
 
 	pub fn handle_gallery(&mut self, is_beside: bool, block: &str, event: GalleryEvent) {
-		let add = GalleryAdd { is_beside, block: block.to_owned() };
 		if event == GalleryEvent::Add {
 			self.gallery_add_failed = None;
+			let add = GalleryAdd { is_beside, block: block.to_owned() };
 			self.effects.push(Effect::PickGalleryImage(add));
 			return;
 		}
