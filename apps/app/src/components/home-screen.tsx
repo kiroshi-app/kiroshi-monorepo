@@ -531,26 +531,28 @@ export const HomeConversationStage = ({
 			composer={
 				<>
 					{notice}
-					{isReadOnly ? null : queue}
 					{isReadOnly ? null : (
-						<HomeComposerSlot
-							agent={agent}
-							bots={bots}
-							composer={
-								<HomeDraftComposer
-									{...send}
-									agent={agent}
-									bots={bots}
-									onSelectAgent={onSelectAgent}
-								/>
-							}
-							conversations={conversations}
-							onOpenRoom={onOpenRoom}
-							request={request}
-							runtimes={runtimes}
-							spaceId={spaceId}
-							store={store}
-						/>
+						<>
+							{queue}
+							<HomeComposerSlot
+								agent={agent}
+								bots={bots}
+								composer={
+									<HomeDraftComposer
+										{...send}
+										agent={agent}
+										bots={bots}
+										onSelectAgent={onSelectAgent}
+									/>
+								}
+								conversations={conversations}
+								onOpenRoom={onOpenRoom}
+								request={request}
+								runtimes={runtimes}
+								spaceId={spaceId}
+								store={store}
+							/>
+						</>
 					)}
 				</>
 			}
