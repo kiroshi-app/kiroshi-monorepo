@@ -680,6 +680,9 @@ impl Session {
 		turn: Option<SubmittedTurn>,
 	) -> Result<(), TransportError> {
 		let mut shared = self.shared.lock().await;
+		if let Some(asked) = shared.translator.take_question() {
+			return self.answer_with_message(&mut shared, asked, text, turn);
+		}
 		if shared.is_mid_turn() {
 			return Err(TransportError::TurnAlreadyRunning);
 		}
@@ -692,6 +695,10 @@ impl Session {
 		turn: SubmittedTurn,
 	) -> Result<Handed, TransportError> {
 		let mut shared = self.shared.lock().await;
+		if let Some(asked) = shared.translator.take_question() {
+			self.answer_with_message(&mut shared, asked, text, Some(turn))?;
+			return Ok(Handed::Delivered);
+		}
 		if shared.is_mid_turn() {
 			log::info!(
 				"a prompt waits for the running turn session={} turn={}",
@@ -785,7 +792,14 @@ impl Session {
 		answers: HashMap<String, String>,
 		annotations: Option<Value>,
 	) -> Result<(), TransportError> {
-		let (key, input) = self.take_pending_input(id).await?;
+		let (key, input) = match self.take_pending_input(id).await {
+			Err(TransportError::UnknownPermission { .. })
+				if self.shared.lock().await.translator.was_answered_by_message(id) =>
+			{
+				return Ok(());
+			}
+			taken => taken?,
+		};
 
 		let answered = answered_input(input, answers, annotations);
 		self.write(protocol::allow_command(&key, id, &answered))?;
@@ -794,6 +808,50 @@ impl Session {
 			decision: PermissionDecision::AllowOnce,
 		});
 		Ok(())
+	}
+
+	fn answer_with_message(
+		&self,
+		shared: &mut Shared,
+		(id, input): (String, Value),
+		text: &str,
+		turn: Option<SubmittedTurn>,
+	) -> Result<(), TransportError> {
+		shared.heard();
+		self.rearmed.notify_one();
+		let answers = typed_answers(&input, text);
+		let answered = answered_input(input, answers, None);
+		self.write(protocol::allow_command(&shared.key, &id, &answered))?;
+		self.sink
+			.emit(AgentEvent::PermissionResolved { id, decision: PermissionDecision::AllowOnce });
+		if let Some(turn) = turn {
+			self.hand_the_running_turn_to(shared, turn);
+		}
+		Ok(())
+	}
+
+	fn hand_the_running_turn_to(&self, shared: &mut Shared, turn: SubmittedTurn) {
+		let key = shared.key.clone();
+		let answered_prompt = match shared.running.as_ref() {
+			Some(running) => {
+				let prompt_uuid = running.prompt_uuid.clone();
+				let released = shared.turn_ended(&key, TurnOutcome::Completed);
+				let ended = shared.ended_as(TurnOutcome::Completed);
+				for event in released.into_iter().chain([ended]) {
+					self.sink.emit(event);
+				}
+				prompt_uuid
+			}
+			None => uuid::Uuid::new_v4().to_string(),
+		};
+		let folds_a_follow_up = std::mem::take(&mut shared.streams_a_follow_up);
+		shared.turn_started(&key, Some(turn.turn_id.clone()), answered_prompt);
+		self.sink.submitted(turn);
+		if folds_a_follow_up {
+			self.sink.follow_up(FollowUp::FoldedIn);
+		}
+		shared.turn = TurnState::Running;
+		self.sink.emit(AgentEvent::TurnChanged { state: TurnState::Running });
 	}
 
 	fn emit(&self, event: Option<AgentEvent>) {
@@ -807,6 +865,12 @@ impl Session {
 			let mut shared = self.shared.lock().await;
 			shared.shutting_down = true;
 			let key = shared.key.clone();
+			for id in shared.translator.abandon_prompts() {
+				self.sink.emit(AgentEvent::PermissionResolved {
+					id,
+					decision: PermissionDecision::Deny,
+				});
+			}
 			for ended in shared.ended_by_shutdown(&key) {
 				self.sink.emit(ended);
 			}
@@ -817,6 +881,17 @@ impl Session {
 		let _ = self.write(protocol::close_command(&key));
 		self.sidecar.detach(&key);
 	}
+}
+
+fn typed_answers(input: &Value, text: &str) -> HashMap<String, String> {
+	input
+		.get("questions")
+		.and_then(Value::as_array)
+		.into_iter()
+		.flatten()
+		.filter_map(|asked| asked.get("question").and_then(Value::as_str))
+		.map(|question| (question.to_owned(), text.to_owned()))
+		.collect()
 }
 
 fn answered_input(

@@ -831,48 +831,10 @@ fn on_prompt(key: &str, runs: &mut HashMap<String, Run>, text: &str, prompt_uuid
 			ask_to_write(key, run, format!("perm_fake_{key}_{}", next_message_id()));
 		}
 		"permission" => ask_to_write(key, run, format!("perm_fake_{key}")),
-		"question" => {
-			let request_id = format!("ask_fake_{key}");
-			run.pending_permission = Some(request_id.clone());
-			emit(
-				key,
-				json!({
-					"type": "control_request",
-					"request_id": request_id,
-					"request": {
-						"subtype": "can_use_tool",
-						"tool_name": "AskUserQuestion",
-						"display_name": "AskUserQuestion",
-						"description": null,
-						"input": {
-							"questions": [
-								{
-									"header": "Library",
-									"question": "Which library should we use?",
-									"multiSelect": false,
-									"options": [
-										{
-											"label": "date-fns",
-											"description": "Small and tree-shakeable.",
-											"preview": "import { format } from \"date-fns\""
-										},
-										{ "label": "Luxon", "description": "Time zones built in." }
-									]
-								},
-								{
-									"header": "Extras",
-									"question": "Which extras do you want?",
-									"multiSelect": true,
-									"options": [
-										{ "label": "Tests", "description": "Ship a spec with it." },
-										{ "label": "Docs", "description": "Write the readme too." }
-									]
-								}
-							]
-						}
-					}
-				}),
-			);
+		"question" => ask_a_question(key, run),
+		"question_after_settle" => {
+			emit_whole_reply(key, run, &format!("echo :: {text}"), Some(prompt_uuid));
+			ask_a_question(key, run);
 		}
 		"slow" | "orphan" => {
 			if run.scenario == "orphan" {
@@ -980,6 +942,50 @@ fn on_permission(key: &str, runs: &mut HashMap<String, Run>, command: &Value) {
 		emit_text_turn(key, run, &format!("echo :: {held}"));
 	}
 	emit_result(key, run, "success", false);
+}
+
+fn ask_a_question(key: &str, run: &mut Run) {
+	let request_id = format!("ask_fake_{key}");
+	run.pending_permission = Some(request_id.clone());
+	emit(
+		key,
+		json!({
+			"type": "control_request",
+			"request_id": request_id,
+			"request": {
+				"subtype": "can_use_tool",
+				"tool_name": "AskUserQuestion",
+				"display_name": "AskUserQuestion",
+				"description": null,
+				"input": {
+					"questions": [
+						{
+							"header": "Library",
+							"question": "Which library should we use?",
+							"multiSelect": false,
+							"options": [
+								{
+									"label": "date-fns",
+									"description": "Small and tree-shakeable.",
+									"preview": "import { format } from \"date-fns\""
+								},
+								{ "label": "Luxon", "description": "Time zones built in." }
+							]
+						},
+						{
+							"header": "Extras",
+							"question": "Which extras do you want?",
+							"multiSelect": true,
+							"options": [
+								{ "label": "Tests", "description": "Ship a spec with it." },
+								{ "label": "Docs", "description": "Write the readme too." }
+							]
+						}
+					]
+				}
+			}
+		}),
+	);
 }
 
 fn ask_to_write(key: &str, run: &mut Run, request_id: String) {
