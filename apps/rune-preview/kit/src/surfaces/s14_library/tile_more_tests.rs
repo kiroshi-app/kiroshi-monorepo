@@ -99,10 +99,11 @@ fn enter_or_space_on_a_focused_more_button_asks_for_its_item_menu() {
 }
 
 fn more_opacity(runtime: &Runtime<Screen>, id: &str) -> f32 {
+	let key = tile_more_key(id);
 	let elements = runtime.elements();
 	let more = elements
 		.iter()
-		.position(|element| element.key.as_deref() == Some(tile_more_key(id).as_str()))
+		.position(|element| element.key.as_deref() == Some(key.as_str()))
 		.expect("the tile has a More button");
 	elements.iter().find(|element| element.parent == Some(more)).expect("More has a face").opacity
 }
