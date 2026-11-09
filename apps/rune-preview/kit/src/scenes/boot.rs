@@ -1,6 +1,8 @@
 use rune::{El, TextEdit, col, el, icon, row, text};
 
-use super::{Pointer, Scene, SceneState, THEMES, stage, staged};
+use super::{
+	Pointer, STORY, STORY_VIEWPORT, Scene, SceneState, THEMES, focused, scene, stage, staged,
+};
 use crate::avatar::Face;
 use crate::hues::Preset;
 use crate::icons;
@@ -13,12 +15,15 @@ use crate::surfaces::s04_boot::boot::{BootFailure, boot_notice, boot_screen};
 use crate::surfaces::s04_boot::connect::{
 	ClaudeAccount, Connect, ConnectMethod, ConnectStep, Entry, connect_screen,
 };
+use crate::surfaces::s04_boot::device_approval::{ApprovalStatus, device_approval_dialog};
+use crate::surfaces::s04_boot::device_card::{Device, DeviceCard, DeviceKind, device_card};
 use crate::surfaces::s04_boot::import::{
 	Import, ImportItem, ImportKind, ImportStatus, ImportStep, import_row, import_screen,
 };
 use crate::surfaces::s04_boot::layouts::{
 	EmptyState, Screen, ScreenWidth, empty_state_shell, screen_layout,
 };
+use crate::surfaces::s04_boot::new_device::{NewDevice, NewDeviceStep, new_device_screen};
 use crate::surfaces::s04_boot::notice::{
 	InlineNotice, NoticeKind, NoticeRetry, RaisedNotice, Report, Tone, inline_notice,
 	notice_surface,
@@ -982,4 +987,134 @@ pub(super) fn empty_long_content(t: &Tokens, _: &SceneState) -> El {
 		hint: Some(HINT),
 	};
 	empty(t, state)
+}
+
+const ACCOUNT_EMAIL: &str = "noa@example.com";
+const TYPED_CODE: &str = "482137";
+const ASKING_PHONE: Device =
+	Device { kind: DeviceKind::Phone, name: "Noa’s iPhone 17", activity: Some("Asked just now") };
+const THIS_MACBOOK_PRO: Device =
+	Device { kind: DeviceKind::Laptop, name: "Noa’s MacBook Pro", activity: None };
+const NEW_MACBOOK_AIR: Device =
+	Device { kind: DeviceKind::Laptop, name: "Noa’s MacBook Air", activity: None };
+const UNBROKEN_NAME: &str = "Noa’sMacBookProFromTheResearchLabThatNobodyEverRenamedAfterTheMove";
+const DIALOG_CARD_WIDTH: f32 = 392.0;
+const NARROW_CARD_WIDTH: f32 = 320.0;
+
+pub(super) static DEVICE_SCENES: &[Scene] = &[
+	focused("feedback-newdevicescreen--waiting", STORY_VIEWPORT, 2, new_device_waiting),
+	focused("feedback-newdevicescreen--code", STORY_VIEWPORT, 2, new_device_code_typed),
+	focused("feedback-newdevicescreen--expired", STORY_VIEWPORT, 1, new_device_expired),
+	focused("feedback-newdevicescreen--rejected", STORY_VIEWPORT, 1, new_device_rejected),
+	scene(
+		"feedback-newdevicescreen--waiting-centred-in-700-px-window",
+		SHORT_WINDOW,
+		new_device_waiting,
+	),
+	scene(
+		"feedback-newdevicescreen--waiting-centred-in-1100-px-window",
+		TALL_WINDOW,
+		new_device_waiting,
+	),
+	scene("feedback-newdevicescreen--code-centred-in-700-px-window", SHORT_WINDOW, new_device_code),
+	scene("feedback-newdevicescreen--code-centred-in-1100-px-window", TALL_WINDOW, new_device_code),
+	scene(
+		"feedback-newdevicescreen--expired-centred-in-700-px-window",
+		SHORT_WINDOW,
+		new_device_expired,
+	),
+	scene(
+		"feedback-newdevicescreen--expired-centred-in-1100-px-window",
+		TALL_WINDOW,
+		new_device_expired,
+	),
+	scene(
+		"feedback-newdevicescreen--rejected-centred-in-700-px-window",
+		SHORT_WINDOW,
+		new_device_rejected,
+	),
+	scene(
+		"feedback-newdevicescreen--rejected-centred-in-1100-px-window",
+		TALL_WINDOW,
+		new_device_rejected,
+	),
+	focused("overlays-deviceapprovaldialog--default", STORY_VIEWPORT, 2, approval_asking),
+	focused("overlays-deviceapprovaldialog--approving", STORY_VIEWPORT, 1, approval_approving),
+	focused("overlays-deviceapprovaldialog--error", STORY_VIEWPORT, 1, approval_failed),
+	scene("primitives-devicecard--default", STORY, device_card_default),
+	scene("primitives-devicecard--with-meta", STORY, device_card_with_meta),
+	scene("primitives-devicecard--long-content", STORY, device_card_long_content),
+];
+
+fn new_device(t: &Tokens, step: NewDeviceStep, code: &str) -> El {
+	let screen = NewDevice {
+		step,
+		email: ACCOUNT_EMAIL,
+		device: &NEW_MACBOOK_AIR,
+		code,
+		is_code_focused: false,
+	};
+	root(new_device_screen(t, EN, &screen, ignore))
+}
+
+fn new_device_waiting(t: &Tokens, _: &SceneState) -> El {
+	new_device(t, NewDeviceStep::Waiting, "")
+}
+
+fn new_device_code(t: &Tokens, _: &SceneState) -> El {
+	new_device(t, NewDeviceStep::Code, "")
+}
+
+fn new_device_code_typed(t: &Tokens, _: &SceneState) -> El {
+	new_device(t, NewDeviceStep::Code, TYPED_CODE)
+}
+
+fn new_device_expired(t: &Tokens, _: &SceneState) -> El {
+	new_device(t, NewDeviceStep::Expired, "")
+}
+
+fn new_device_rejected(t: &Tokens, _: &SceneState) -> El {
+	new_device(t, NewDeviceStep::Rejected, "")
+}
+
+fn approval(t: &Tokens, status: ApprovalStatus) -> El {
+	let canvas = el().w_full().h_full().fill(t.card);
+	rune_kit::root(canvas, vec![device_approval_dialog(t, EN, &ASKING_PHONE, status, ignore)])
+}
+
+fn approval_asking(t: &Tokens, _: &SceneState) -> El {
+	approval(t, ApprovalStatus::Asking)
+}
+
+fn approval_approving(t: &Tokens, _: &SceneState) -> El {
+	approval(t, ApprovalStatus::Approving)
+}
+
+fn approval_failed(t: &Tokens, _: &SceneState) -> El {
+	approval(t, ApprovalStatus::Failed)
+}
+
+fn card_in(t: &Tokens, width: f32, card: &DeviceCard) -> El {
+	stage(t, el().w(width).child(device_card(t, card)))
+}
+
+fn device_card_default(t: &Tokens, _: &SceneState) -> El {
+	let card = DeviceCard { device: &ASKING_PHONE, meta: None, is_name_strong: true };
+	card_in(t, DIALOG_CARD_WIDTH, &card)
+}
+
+fn device_card_with_meta(t: &Tokens, _: &SceneState) -> El {
+	let card =
+		DeviceCard { device: &THIS_MACBOOK_PRO, meta: Some("Active now"), is_name_strong: false };
+	card_in(t, DIALOG_CARD_WIDTH, &card)
+}
+
+fn device_card_long_content(t: &Tokens, _: &SceneState) -> El {
+	let device = Device { name: UNBROKEN_NAME, ..THIS_MACBOOK_PRO };
+	let card = DeviceCard {
+		device: &device,
+		meta: Some(common::devices::new_device::THIS_DEVICE.text(EN)),
+		is_name_strong: false,
+	};
+	card_in(t, NARROW_CARD_WIDTH, &card)
 }

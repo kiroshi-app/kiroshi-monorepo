@@ -8,8 +8,11 @@ use crate::widgets::{Pill, spinner};
 pub mod account;
 pub mod boot;
 pub mod connect;
+pub mod device_approval;
+pub mod device_card;
 pub mod import;
 pub mod layouts;
+pub mod new_device;
 pub mod notice;
 pub mod welcome;
 

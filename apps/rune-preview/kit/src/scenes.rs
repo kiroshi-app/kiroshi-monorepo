@@ -6073,8 +6073,11 @@ pub static SCENES: &[Scene] = &[
 	),
 ];
 
-pub static SURFACES: &[&[Scene]] =
-	&[crate::surfaces::s01_chrome::SCENES, crate::surfaces::s06_composer::scenes::SCENES];
+pub static SURFACES: &[&[Scene]] = &[
+	crate::surfaces::s01_chrome::SCENES,
+	crate::surfaces::s06_composer::scenes::SCENES,
+	boot::DEVICE_SCENES,
+];
 
 pub fn every_scene() -> impl Iterator<Item = &'static Scene> {
 	SCENES.iter().chain(SURFACES.iter().flat_map(|surface| surface.iter()))
