@@ -17,7 +17,7 @@ type HomeAgent = {
 
 type HomeAgentPickerProps = {
 	agents: HomeAgent[]
-	selectedAgentId: string
+	selected?: HomeAgent
 	onSelectAgent: (id: string) => void
 }
 
@@ -25,7 +25,7 @@ const CHIP =
 	"group/chip flex h-8 min-w-0 shrink items-center gap-1.5 rounded-2xl bg-foreground/5 ps-1.5 pe-2 font-medium text-compact text-soft-foreground leading-4 outline-none hover:bg-foreground/8 focus-visible:ring-3 focus-visible:ring-ring/30 data-popup-open:bg-foreground/12"
 
 const MENU =
-	"flex w-72 flex-col gap-0.5 rounded-2xl border border-foreground/10 bg-prompt-surface p-1.5 shadow-[0_12px_32px_rgb(0_0_0/0.4),0_2px_6px_rgb(0_0_0/0.25)] outline-none"
+	"flex w-72 flex-col gap-0.5 rounded-2xl border border-foreground/10 bg-prompt-surface p-1.5 shadow-popover outline-none"
 
 const PICKER_ALIGN_OFFSET = 48
 
@@ -34,16 +34,18 @@ const ITEM =
 
 const HomeAgentPicker = ({
 	agents,
-	selectedAgentId,
+	selected,
 	onSelectAgent,
 }: HomeAgentPickerProps) => {
 	const { t } = useTranslation("chat")
-	const selected =
-		agents.find((agent) => agent.id === selectedAgentId) ?? agents[0]
 
 	return (
 		<Menu.Root>
-			<Menu.Trigger className={CHIP} data-slot="home-agent-chip">
+			<Menu.Trigger
+				aria-label={selected ? undefined : t("home.composer.agents")}
+				className={CHIP}
+				data-slot="home-agent-chip"
+			>
 				{selected ? (
 					<>
 						<span aria-hidden="true" className="flex shrink-0">
@@ -78,7 +80,7 @@ const HomeAgentPicker = ({
 							<Menu.RadioGroup
 								className="flex flex-col gap-0.5"
 								onValueChange={(id: string) => onSelectAgent(id)}
-								value={selectedAgentId}
+								value={selected?.id ?? null}
 							>
 								{agents.map((agent) => (
 									<Menu.RadioItem

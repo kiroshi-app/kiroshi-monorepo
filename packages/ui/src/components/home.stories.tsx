@@ -406,6 +406,31 @@ export const NoBand = meta.story({
 	},
 })
 
+export const PickerWithoutAgents = meta.story({
+	name: "Picker without agents",
+	tags: ["test-only"],
+	render: () => (
+		<HomeLayout stage="empty">
+			<HomeComposer
+				agents={[]}
+				onAttach={attached}
+				onSelectAgent={selectedAgent}
+				selectedAgentId="atlas"
+			/>
+		</HomeLayout>
+	),
+	parameters: withDescription(
+		"Proves the composer before any agent exists in the Space, a case no artboard draws: the chip keeps an accessible name and the field falls back to the plain placeholder, with no dangling agent name.",
+	),
+	play: async ({ canvas }) => {
+		await expect(canvas.getByRole("button", { name: "Agents" })).toBeVisible()
+		await expect(canvas.getByRole("textbox")).toHaveAttribute(
+			"placeholder",
+			"Message",
+		)
+	},
+})
+
 export const FieldFilled = meta.story({
 	name: "4a · Field filled",
 	render: () => <EmptyHome draft={FLIGHTS_ASK} />,

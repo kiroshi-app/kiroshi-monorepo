@@ -76,8 +76,8 @@ const HomeComposer = ({
 	const hasText = currentValue.trim() !== ""
 	const { refs } = usePromptLayout({ currentValue })
 	const { handlePaste } = usePromptTransfer({ canAttach: true, onAttach })
-	const agentName =
-		agents.find((agent) => agent.id === selectedAgentId)?.name ?? ""
+	const selectedAgent =
+		agents.find((agent) => agent.id === selectedAgentId) ?? agents[0]
 
 	const setValue = (next: string) => {
 		if (value === undefined) setInternalValue(next)
@@ -104,7 +104,11 @@ const HomeComposer = ({
 						onPaste={handlePaste}
 						onSubmit={submit}
 						onValueChange={setValue}
-						placeholder={t("home.composer.placeholder", { name: agentName })}
+						placeholder={
+							selectedAgent
+								? t("home.composer.placeholder", { name: selectedAgent.name })
+								: t("composer.placeholder")
+						}
 						refs={refs}
 						size="large"
 						textareaProps={{}}
@@ -121,7 +125,7 @@ const HomeComposer = ({
 					<HomeAgentPicker
 						agents={agents}
 						onSelectAgent={onSelectAgent}
-						selectedAgentId={selectedAgentId}
+						selected={selectedAgent}
 					/>
 					<SendButton isFilled={hasText} />
 				</div>

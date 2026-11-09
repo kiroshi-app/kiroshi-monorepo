@@ -190,6 +190,7 @@ conversation-home-home--morning
 conversation-home-home--night
 conversation-home-home--no-band
 conversation-home-home--picker-open
+conversation-home-home--picker-without-agents
 conversation-home-home--question-waits
 conversation-home-home--relays-from-the-rooms
 conversation-home-home--sent-thinking

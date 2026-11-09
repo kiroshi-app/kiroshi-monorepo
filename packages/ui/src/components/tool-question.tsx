@@ -330,7 +330,7 @@ const ToolQuestion = ({
 						hasSegments ? "gap-2.5" : "gap-1",
 					)}
 				>
-					{hasSegments ? askedBy : null}
+					{askedBy}
 					{hasSegments ? (
 						<Tabs onValueChange={setShownIndex} value={shownIndex}>
 							<TabsList activateOnFocus className={QUESTION_SEGMENTS_CLASS}>
@@ -355,12 +355,10 @@ const ToolQuestion = ({
 								))}
 							</TabsList>
 						</Tabs>
-					) : (
-						(askedBy ?? (
-							<p className="truncate font-medium text-muted-foreground text-xs">
-								{item.header}
-							</p>
-						))
+					) : askedBy ? null : (
+						<p className="truncate font-medium text-muted-foreground text-xs">
+							{item.header}
+						</p>
 					)}
 
 					{item.failure ? (
