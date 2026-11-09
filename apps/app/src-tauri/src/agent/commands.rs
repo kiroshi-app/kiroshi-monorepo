@@ -1564,7 +1564,7 @@ pub(crate) async fn shut_asking_runs_down<R: Runtime>(
 	app: &AppHandle<R>,
 	is_gone: impl Fn(&RuntimeScope) -> bool,
 ) {
-	let gone = asking_runs(app).into_iter().filter(|scope| is_gone(scope)).collect();
+	let gone = asking_runs(app).into_iter().filter(is_gone).collect();
 	shut_runs_down(app, gone).await;
 }
 
