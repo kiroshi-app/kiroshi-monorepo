@@ -236,7 +236,7 @@ Every other command names its session.
 
 | `type` | Carries | Becomes |
 | --- | --- | --- |
-| `open` | `cwd`, `resume?`, `pluginPath?`, `systemPluginPath?`, `userPluginPath?`, `agent?`, `identity?`, `outputStyle?`, `settingsPath?`, `partialMessages`, `env?`, `outputSchema?`, `missionThread?`, `members?` | `query()` options |
+| `open` | `cwd`, `resume?`, `pluginPath?`, `systemPluginPath?`, `userPluginPath?`, `agent?`, `identity?`, `outputStyle?`, `settingsPath?`, `partialMessages`, `env?`, `outputSchema?`, `deniedTools?`, `permissionMode?`, `missionThread?`, `members?` | `query()` options |
 | `prompt` | `text`, `uuid` | one `SDKUserMessage` on the session's prompt stream, stamped with `uuid`, which the SDK echoes as `user_message_uuid` on the turn answering it |
 | `interrupt` | — | `Query.interrupt()` |
 | `permission` | `requestId`, `decision` | the `canUseTool` promise's answer |
@@ -248,6 +248,14 @@ Every other command names its session.
 - `outputSchema` is the JSON schema a caller wants the turn's answer shaped by. It
   reaches the SDK as `outputFormat: { type: "json_schema", schema }` and is read by
   nothing on the way: a session opened without one asks for no `outputFormat` at all.
+- `deniedTools` lists the tools a caller keeps out of the session. It reaches the SDK
+  as `disallowedTools` and is omitted when empty. A routine run always carries
+  `AskUserQuestion`, since nobody is there to answer.
+- `permissionMode` is the mode a caller opens the session under, one of
+  `packages/shared/permission-modes.json`, checked by the host before the request is
+  written. It reaches the SDK as `permissionMode` in place of the mode the bot's
+  settings declare, and is omitted when the caller names none. A relay guest cannot
+  carry it.
 - `missionThread` is carried, as `true`, only when the conversation the session opens
   on has kind `mission`, and is omitted when that kind is any other or cannot be read.
   It gives `query()` one `Stop` hook and no other: a turn that ends without an

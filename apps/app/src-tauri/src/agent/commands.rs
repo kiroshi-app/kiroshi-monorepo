@@ -1166,6 +1166,10 @@ fn reserved_directory(app_data: PathBuf, bot_id: &str) -> PathBuf {
 
 #[tauri::command]
 #[specta::specta]
+#[expect(
+	clippy::too_many_arguments,
+	reason = "each field is a flat argument of the shipped agent_start_or_resume_session wire shape"
+)]
 pub async fn agent_start_or_resume_session<R: Runtime>(
 	app: AppHandle<R>,
 	state: State<'_, AgentState>,
@@ -1174,12 +1178,16 @@ pub async fn agent_start_or_resume_session<R: Runtime>(
 	resume: Option<String>,
 	cwd: Option<String>,
 	output_schema: Option<JsonValue>,
+	denied_tools: Option<Vec<String>>,
+	permission_mode: Option<String>,
 ) -> Result<SessionHandle, TransportError> {
 	let start = RunStart {
 		scope,
 		resume,
 		cwd,
 		output_schema: output_schema.map(JsonValue::into),
+		denied_tools: denied_tools.unwrap_or_default(),
+		permission_mode,
 		lineage: Lineage::RecordedByTheCaller,
 	};
 	start_run(app, &state, &database, start).await
@@ -1196,7 +1204,20 @@ pub(crate) struct RunStart {
 	pub resume: Option<String>,
 	pub cwd: Option<String>,
 	pub output_schema: Option<serde_json::Value>,
+	pub denied_tools: Vec<String>,
+	pub permission_mode: Option<String>,
 	pub lineage: Lineage,
+}
+
+fn listed_mode(permission_mode: Option<String>) -> Result<Option<String>, TransportError> {
+	match permission_mode {
+		Some(mode) if !bundles::is_permission_mode(&mode) => {
+			Err(TransportError::SettingsRejected {
+				detail: format!("{mode:?} is not a permission mode a session opens under"),
+			})
+		}
+		listed => Ok(listed),
+	}
 }
 
 pub(crate) async fn start_run<R: Runtime>(
@@ -1205,7 +1226,9 @@ pub(crate) async fn start_run<R: Runtime>(
 	database: &db::DatabaseState,
 	start: RunStart,
 ) -> Result<SessionHandle, TransportError> {
-	let RunStart { scope, resume, cwd, output_schema, lineage } = start;
+	let RunStart { scope, resume, cwd, output_schema, denied_tools, permission_mode, lineage } =
+		start;
+	let permission_mode = listed_mode(permission_mode)?;
 	let _claim = state.claim(&scope)?;
 
 	let before = state.thread_signs(&scope.conversation_id);
@@ -1276,6 +1299,8 @@ pub(crate) async fn start_run<R: Runtime>(
 		.hosting(hosted(BundleHost::new(app.clone(), scope.clone())))
 		.hosting(hosted(LibraryHost::new(app.clone(), scope.clone())))
 		.answering(output_schema)
+		.denying(denied_tools)
+		.under_mode(permission_mode)
 		.on_mission_thread(mission_thread)
 		.read_by(members)
 		.leased(state.lease);
@@ -2210,6 +2235,44 @@ mod tests {
 
 	fn a_run_named(runtime_session_id: &str) -> RuntimeScope {
 		RuntimeScope { runtime_session_id: runtime_session_id.into(), ..a_scope() }
+	}
+
+	#[tokio::test]
+	async fn a_start_under_a_mode_outside_the_list_is_refused_naming_it_and_opens_no_session() {
+		let app = crate::test_app::an_app_of_its_own("unlisted-mode", tauri::test::mock_builder());
+		app.manage(AgentState::default());
+		app.manage(db::bootstrap(app.handle()));
+
+		let refused = agent_start_or_resume_session(
+			app.handle().clone(),
+			app.state(),
+			app.state(),
+			a_scope(),
+			None,
+			None,
+			None,
+			Some(vec!["AskUserQuestion".to_owned()]),
+			Some("bypassPermissions".to_owned()),
+		)
+		.await;
+
+		assert!(
+			matches!(
+				&refused,
+				Err(TransportError::SettingsRejected { detail })
+					if detail.contains("\"bypassPermissions\"")
+			),
+			"the start answered {refused:?}"
+		);
+		assert_eq!(app.state::<AgentState>().live_session_count(), 0);
+	}
+
+	#[test]
+	fn every_listed_mode_and_no_mode_pass_the_mode_check() {
+		for mode in ["default", "acceptEdits", "plan", "auto", "dontAsk"] {
+			assert_eq!(listed_mode(Some(mode.to_owned())), Ok(Some(mode.to_owned())));
+		}
+		assert_eq!(listed_mode(None), Ok(None));
 	}
 
 	fn is_stale(outcome: &Result<&str, TransportError>) -> bool {

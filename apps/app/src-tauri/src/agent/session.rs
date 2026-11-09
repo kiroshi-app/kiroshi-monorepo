@@ -148,6 +148,8 @@ pub struct SessionOptions {
 	pub server_env: ResolvedEnv,
 	pub connection: Values,
 	pub output_schema: Option<serde_json::Value>,
+	pub denied_tools: Vec<String>,
+	pub permission_mode: Option<String>,
 	pub mission_thread: bool,
 	pub members: Vec<SpaceMember>,
 	pub hosts: Vec<Arc<dyn HostRequests>>,
@@ -167,6 +169,8 @@ impl SessionOptions {
 			server_env: ResolvedEnv::default(),
 			connection: Values::new(),
 			output_schema: None,
+			denied_tools: Vec::new(),
+			permission_mode: None,
 			mission_thread: false,
 			members: Vec::new(),
 			hosts: Vec::new(),
@@ -219,6 +223,16 @@ impl SessionOptions {
 		self
 	}
 
+	pub fn denying(mut self, denied_tools: Vec<String>) -> Self {
+		self.denied_tools = denied_tools;
+		self
+	}
+
+	pub fn under_mode(mut self, permission_mode: Option<String>) -> Self {
+		self.permission_mode = permission_mode;
+		self
+	}
+
 	pub fn on_mission_thread(mut self, mission_thread: bool) -> Self {
 		self.mission_thread = mission_thread;
 		self
@@ -253,6 +267,8 @@ impl SessionOptions {
 			server_env: self.server_env.clone(),
 			connection: self.connection.clone(),
 			output_schema: self.output_schema.clone(),
+			denied_tools: self.denied_tools.clone(),
+			permission_mode: self.permission_mode.clone(),
 			mission_thread: self.mission_thread,
 			members: self.members.clone(),
 		}
@@ -1224,6 +1240,32 @@ mod tests {
 			])
 		);
 		assert_eq!(serialized(options()).get("members"), None);
+	}
+
+	#[test]
+	fn a_run_carries_the_tools_it_denies_and_the_mode_it_opens_under() {
+		let serialized = |options: SessionOptions| {
+			serde_json::to_value(options.open_request(true)).expect("the request serializes")
+		};
+		let narrowed = options()
+			.denying(vec!["AskUserQuestion".to_owned()])
+			.under_mode(Some("dontAsk".to_owned()));
+
+		assert_eq!(
+			serialized(narrowed.clone())["deniedTools"],
+			serde_json::json!(["AskUserQuestion"])
+		);
+		assert_eq!(serialized(narrowed)["permissionMode"], "dontAsk");
+	}
+
+	#[test]
+	fn a_run_carrying_neither_sends_neither() {
+		let request =
+			serde_json::to_value(options().denying(Vec::new()).under_mode(None).open_request(true))
+				.expect("the request serializes");
+
+		assert_eq!(request.get("deniedTools"), None);
+		assert_eq!(request.get("permissionMode"), None);
 	}
 
 	#[test]

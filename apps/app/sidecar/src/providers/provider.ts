@@ -41,6 +41,8 @@ export type SessionRequest = {
 	serverEnv?: ServerEnv
 	connection?: Record<string, string>
 	outputSchema?: Record<string, unknown>
+	deniedTools?: string[]
+	permissionMode?: string
 	missionThread?: boolean
 	members?: SpaceMember[]
 }

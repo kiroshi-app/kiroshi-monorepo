@@ -841,6 +841,8 @@ impl<R: Runtime> HostTurn<R> {
 			resume,
 			cwd: None,
 			output_schema: None,
+			denied_tools: Vec::new(),
+			permission_mode: None,
 			lineage: Lineage::RecordedByTheRun,
 		};
 		let handle =

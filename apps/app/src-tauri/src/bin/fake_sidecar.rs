@@ -145,6 +145,20 @@ fn record_the_runtime_opened(run: &Run, command: &Value) {
 	}
 }
 
+fn record_the_open_command(command: &Value) {
+	let Ok(path) = std::env::var("FAKE_AGENT_OPEN_COMMANDS_FILE") else {
+		return;
+	};
+	let appended = std::fs::OpenOptions::new()
+		.create(true)
+		.append(true)
+		.open(path)
+		.and_then(|mut file| file.write_all(format!("{command}\n").as_bytes()));
+	if let Err(error) = appended {
+		eprintln!("the fake did not record the open command: {error}");
+	}
+}
+
 fn servers_in_the_bundle(command: &Value) -> String {
 	let read = || {
 		let path = command["pluginPath"].as_str()?;
@@ -604,6 +618,7 @@ fn emit_closed(key: &str, detail: &str) {
 fn on_open(key: &str, runs: &mut HashMap<String, Run>, command: &Value) {
 	let mut run = Run::open(command);
 	record_the_runtime_opened(&run, command);
+	record_the_open_command(command);
 
 	match run.scenario.as_str() {
 		"startup_timeout" => return,
