@@ -42,7 +42,7 @@ pub use view::{GRID, layers, panel, view};
 
 use actions::Effect;
 use document::Document;
-use editing::SlashState;
+use editing::{LinkState, SlashState};
 use imports::Screened;
 use item_menu::{ItemMenu, MenuSurface};
 use worker::{Answer, Call, Due, NewDocument, Target, Worker};
@@ -127,6 +127,7 @@ pub struct State {
 	importing: Vec<String>,
 	to_raise: Vec<Notice>,
 	slash: Option<SlashState>,
+	link: Option<LinkState>,
 	is_flush_armed: bool,
 	copied: Option<String>,
 	effects: Vec<Effect>,
@@ -159,6 +160,7 @@ impl Default for State {
 			importing: Vec::new(),
 			to_raise: Vec::new(),
 			slash: None,
+			link: None,
 			is_flush_armed: false,
 			copied: None,
 			effects: Vec::new(),
@@ -290,6 +292,7 @@ impl State {
 		self.dialog = None;
 		self.menu = None;
 		self.slash = None;
+		self.link = None;
 	}
 
 	pub fn show_library(&mut self) {
@@ -639,6 +642,7 @@ impl State {
 	fn close_shown(&mut self) {
 		let Some(shown) = self.shown.take() else { return };
 		self.slash = self.slash.take().filter(|slash| slash.is_beside);
+		self.link = self.link.take().filter(|link| link.is_beside);
 		if let Shown::Document(document) = shown {
 			self.leave(*document);
 		}
@@ -646,6 +650,7 @@ impl State {
 
 	fn close_beside(&mut self) {
 		self.slash = self.slash.take().filter(|slash| !slash.is_beside);
+		self.link = self.link.take().filter(|link| !link.is_beside);
 		if let Some(document) = self.beside.take() {
 			self.leave(document);
 		}

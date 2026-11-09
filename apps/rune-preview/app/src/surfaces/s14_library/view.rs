@@ -8,7 +8,7 @@ use kiroshi_rune_kit::surfaces::s14_library::{
 	PanelState, TOOLBAR_GAP, Unavailable, Writer, agent_card, agent_caret, block_editor,
 	delete_confirmation, document_bar, document_column, document_panel, document_skeleton,
 	field_key, format_toolbar, grid_columns, item_menu, item_unavailable, library_panel, lightbox,
-	new_document_dialog, presence, rows_of, title_field,
+	link_field, new_document_dialog, presence, rows_of, title_field,
 };
 use kiroshi_rune_kit::tokens::{SPACING, Tokens};
 
@@ -144,7 +144,21 @@ fn presence_of(app: &App, t: &Tokens, document: &Document, is_beside: bool) -> O
 	Some(presence(t, LANGUAGE, &agents, &people, (!agents.is_empty()).then_some(stop)))
 }
 
-fn toolbar_layer(t: &Tokens, document: &Document, is_beside: bool) -> Option<El> {
+fn link_edit(app: &mut App) -> &mut TextEdit {
+	library(app).link_mut()
+}
+
+fn link_layer(state: &State, t: &Tokens, is_beside: bool) -> Option<El> {
+	let link = state.link.as_ref().filter(|link| link.is_beside == is_beside)?;
+	let on = |app: &mut App, event| library(app).handle_link(event);
+	let field = link_field(t, LANGUAGE, &link.edit, link_edit, on);
+	Some(field.anchored(field_key(&link.block, link.row), Side::Top, Align::Start, TOOLBAR_GAP))
+}
+
+fn toolbar_layer(state: &State, t: &Tokens, document: &Document, is_beside: bool) -> Option<El> {
+	if let Some(link) = link_layer(state, t, is_beside) {
+		return Some(link);
+	}
 	let field = document.focused()?;
 	let (start, end) = field.edit.range();
 	if start == end {
@@ -214,7 +228,7 @@ fn editor(app: &App, t: &Tokens, document: &Document, is_beside: bool) -> (El, V
 	let access = if is_beside { beside_field } else { shown_field };
 	let on = move |app: &mut App, event| library(app).handle_block(is_beside, event);
 	let (body, mut layers) = block_editor(t, LANGUAGE, &mut views, slash, access, on);
-	layers.extend(toolbar_layer(t, document, is_beside));
+	layers.extend(toolbar_layer(state, t, document, is_beside));
 	layers.extend(card_layers(app, t, document));
 	(body, layers)
 }

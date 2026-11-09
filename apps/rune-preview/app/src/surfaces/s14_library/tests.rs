@@ -15,7 +15,7 @@ use yrs::{Doc, ReadTxn, Text, Transact};
 
 use kiroshi_rune_kit::surfaces::s14_library::{
 	BlockEvent, DOCUMENT_PANEL_MIN_WIDTH, DOCUMENT_PANEL_OPENING_WIDTH, DocumentPanelEvent,
-	Format as Toolbar, ItemAction, ItemEvent, LibraryEvent, LightboxEvent, MORE_KEY,
+	Format as Toolbar, ItemAction, ItemEvent, LibraryEvent, LightboxEvent, LinkEvent, MORE_KEY,
 	NewDocumentEvent, NewDocumentTemplate, panel_max_width, tile_more_key,
 };
 
@@ -1169,4 +1169,63 @@ fn a_resized_panel_keeps_its_width_within_the_room_across_a_reopen() {
 	assert_eq!(reopened, DOCUMENT_PANEL_MIN_WIDTH + 80.0);
 	assert_eq!(widest, panel_max_width(1_000.0));
 	assert_eq!(state.panel_width(10_000.0), DOCUMENT_PANEL_MIN_WIDTH);
+}
+
+fn selected(state: &mut State, from: usize, to: usize) -> String {
+	let block = first_block(state);
+	let edit = state.field_mut(false, &block, 0);
+	edit.focused = true;
+	edit.set_selection(from, to);
+	block
+}
+
+#[test]
+fn the_link_button_shows_the_link_field_and_confirm_links_the_selection_then_saves() {
+	let initial = state_of("Ship today");
+	let mut state = opened_from("notes.txt", &initial);
+	selected(&mut state, 0, 4);
+
+	state.handle_format(false, Toolbar::Link);
+	let is_shown = state.link.as_ref().is_some_and(|link| link.edit.text.is_empty());
+	state.link_mut().replace_text("https://kiroshi.app/a b");
+	let url = state.link_mut().text.clone();
+	state.handle_link(LinkEvent::Confirm(url));
+
+	assert!(is_shown);
+	assert!(state.link.is_none());
+	assert_eq!(
+		saved_markdown(&initial, &calls(&mut state)),
+		"[Ship](https://kiroshi.app/a%20b) today"
+	);
+}
+
+#[test]
+fn the_link_field_opens_on_the_link_already_there_and_an_empty_one_unlinks() {
+	let initial = state_of("[Ship](https://kiroshi.app) today");
+	let mut state = opened_from("notes.txt", &initial);
+	selected(&mut state, 0, 4);
+
+	state.handle_format(false, Toolbar::Link);
+	let shown = state.link.as_ref().map(|link| link.edit.text.clone());
+	state.handle_link(LinkEvent::Confirm("  ".to_owned()));
+
+	assert_eq!(shown.as_deref(), Some("https://kiroshi.app"));
+	assert_eq!(saved_markdown(&initial, &calls(&mut state)), "Ship today");
+}
+
+#[test]
+fn cancel_closes_the_link_field_and_leaves_the_text_unchanged() {
+	let mut state = opened_document("notes.txt", "Ship today");
+	selected(&mut state, 0, 4);
+
+	state.handle_format(false, Toolbar::Link);
+	state.link_mut().replace_text("https://kiroshi.app");
+	state.handle_link(LinkEvent::Cancel);
+
+	assert!(state.link.is_none());
+	assert!(calls(&mut state).is_empty());
+	assert_eq!(shown_markdown(&state).as_deref(), Some("Ship today"));
+	assert!(
+		state.shown_document().is_some_and(|document| document.fields[0].edit.marks().is_empty())
+	);
 }
