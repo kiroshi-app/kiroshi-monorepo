@@ -35,8 +35,8 @@ import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { ContentCard } from "@workspace/ui/components/content-card"
 import {
 	DOCUMENT_PANEL_DEFAULT_WIDTH,
-	DOCUMENT_PANEL_MAX_WIDTH,
 	DOCUMENT_PANEL_MIN_WIDTH,
+	DOCUMENT_PANEL_OPENING_WIDTH,
 	DocumentPanel,
 	type DocumentPanelProps,
 	THREAD_MIN_WIDTH,
@@ -193,7 +193,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"A Library document opened beside the thread, full height, 600 wide by default and resized from its leading edge with the same grip as the sidebar: a drag, an arrow key step of 16px, a double press back to the default, always between 400 and 800. The width is the panel's own unless the caller passes `width`, and `onWidthChange` hears each committed drag or step, never a pointer move. The bar, as tall as the thread header beside it, carries the document's title, the presence chip of whoever writes in it, Open in Library and Close; the column below scrolls and holds the title, then the editor, which the app passes as children. ThreadLayout takes it through its `aside` slot.",
+					"A Library document opened beside the thread, full height, 600 wide by default and resized from its leading edge with the same grip as the sidebar: a drag, an arrow key step of 16px, a double press back to the default, always between 400 and the room left beside a thread kept at 400, with no other maximum. The width is the panel's own unless the caller passes `width`, and `onWidthChange` hears each committed drag or step, never a pointer move. The bar, as tall as the thread header beside it, carries the document's title, the presence chip of whoever writes in it, Open in Library and Close; the column below scrolls and holds the title, then the editor, which the app passes as children. ThreadLayout takes it through its `aside` slot.",
 			},
 		},
 	},
@@ -375,7 +375,7 @@ export const HandleWithKeyboardFocus = meta.story({
 		docs: {
 			description: {
 				story:
-					"The panel's grip reached from the keyboard. Check that it is a separator named Resize document panel announcing 600 between 400 and 800, that the grip lights up under focus, and that `ArrowLeft` widens the panel by 16px and `ArrowRight` narrows it back, each step reported once.",
+					"The panel's grip reached from the keyboard. Check that it is a separator named Resize document panel announcing 600 between 400 and 880, the 1280 room less the 400 kept for the thread, that the grip lights up under focus, and that `ArrowLeft` widens the panel by 16px and `ArrowRight` narrows it back, each step reported once.",
 			},
 		},
 	},
@@ -388,10 +388,12 @@ export const HandleWithKeyboardFocus = meta.story({
 			"aria-valuemin",
 			String(DOCUMENT_PANEL_MIN_WIDTH),
 		)
-		await expect(handle).toHaveAttribute(
-			"aria-valuemax",
-			String(DOCUMENT_PANEL_MAX_WIDTH),
-		)
+		await waitFor(async () => {
+			await expect(handle).toHaveAttribute(
+				"aria-valuemax",
+				String(LAPTOP_WIDTH - THREAD_MIN_WIDTH),
+			)
+		}, FRAME_POLL)
 
 		handle.focus()
 		await userEvent.keyboard("{ArrowLeft}")
@@ -556,7 +558,7 @@ const sidebarWrapperOf = (canvasElement: HTMLElement) => {
 	return wrapper
 }
 
-const ASKED_UNDER_THE_ROOM = 480
+const ASKED_UNDER_THE_ROOM = 432
 
 export const AskedUnderTheRoomLeft = meta.story({
 	args: { defaultWidth: ASKED_UNDER_THE_ROOM },
@@ -571,7 +573,7 @@ export const AskedUnderTheRoomLeft = meta.story({
 		docs: {
 			description: {
 				story:
-					"The panel asked at 480 in the laptop window beside the widest sidebar, with room to spare. Check that the panel draws the 480 it was asked for, that the thread takes the rest, and that the grip announces 400 as its minimum and the room left beside a 320px thread as its maximum.",
+					"The panel asked at 432 in the laptop window beside the widest sidebar, with room to spare. Check that the panel draws the 432 it was asked for, that the thread takes the rest, and that the grip announces 400 as its minimum and 464, the room left beside a 400px thread, as its maximum.",
 			},
 		},
 	},
@@ -605,7 +607,7 @@ export const AskedUnderTheRoomLeft = meta.story({
 })
 
 export const CappedByTheRoomLeft = meta.story({
-	args: { defaultWidth: DOCUMENT_PANEL_MAX_WIDTH },
+	args: { defaultWidth: DOCUMENT_PANEL_OPENING_WIDTH },
 	render: (args: DocumentPanelProps) => (
 		<BesideTheSidebar {...args} windowWidth={LAPTOP_WIDTH} />
 	),
@@ -613,7 +615,7 @@ export const CappedByTheRoomLeft = meta.story({
 		docs: {
 			description: {
 				story:
-					"The panel asked at 800 in the laptop window beside the default sidebar. Check that the thread keeps 320px and the panel gives up the rest, 656 here, that the grip announces the 656 it draws as both its value and its maximum with 400 as its minimum, and that widening the window brings the panel back to the 800 it was asked for, with the same panel and new limits.",
+					"The panel asked at 800 in the laptop window beside the default sidebar. Check that the thread keeps 400px and the panel gives up the rest, 576 here, that the grip announces the 576 it draws as both its value and its maximum with 400 as its minimum, and that widening the window to 1536 brings the panel back to the 800 it was asked for, with the same panel, a 432px thread and 832 as its new maximum.",
 			},
 		},
 	},
@@ -640,21 +642,21 @@ export const CappedByTheRoomLeft = meta.story({
 		await waitFor(async () => {
 			await expect(handle).toHaveAttribute(
 				"aria-valuenow",
-				String(DOCUMENT_PANEL_MAX_WIDTH),
+				String(DOCUMENT_PANEL_OPENING_WIDTH),
 			)
 		}, FRAME_POLL)
 		await expect(handle).toHaveAttribute(
 			"aria-valuemax",
-			String(DOCUMENT_PANEL_MAX_WIDTH),
+			String(WIDE_WINDOW - SIDEBAR_DEFAULT_WIDTH - THREAD_MIN_WIDTH),
 		)
 		await expect(
 			canvas.getByRole("complementary", { name: DOCUMENT_TITLE }),
 		).toBe(panel)
 		await expect(panel.getBoundingClientRect().width).toBe(
-			DOCUMENT_PANEL_MAX_WIDTH,
+			DOCUMENT_PANEL_OPENING_WIDTH,
 		)
 		await expect(thread.getBoundingClientRect().width).toBe(
-			WIDE_WINDOW - SIDEBAR_DEFAULT_WIDTH - DOCUMENT_PANEL_MAX_WIDTH,
+			WIDE_WINDOW - SIDEBAR_DEFAULT_WIDTH - DOCUMENT_PANEL_OPENING_WIDTH,
 		)
 	},
 })
@@ -672,7 +674,7 @@ export const HeldAtItsFloorInTheSmallestWindow = meta.story({
 		docs: {
 			description: {
 				story:
-					"The panel in the 1024 window the app opens at its smallest, beside the widest sidebar, where 400 for the panel and 320 for the thread cannot both hold. Check that the panel keeps 400, that the thread gives way to the 208 left, that the grip announces 400 as its value, minimum and maximum, and that narrowing the sidebar then widening the window brings the panel back to its asked 600 without redrawing it.",
+					"The panel in the 1024 window the app opens at its smallest, beside the widest sidebar, where 400 for the panel and 400 for the thread cannot both hold. Check that the panel keeps 400, that the thread gives way to the 208 left, that the grip announces 400 as its value, minimum and maximum, that narrowing the sidebar to 224 gives the thread its 400 back beside a 400 panel, and that widening the window to 1536 then brings the panel back to its asked 600 without redrawing it, with 912 as its new maximum.",
 			},
 		},
 	},
@@ -702,8 +704,9 @@ export const HeldAtItsFloorInTheSmallestWindow = meta.story({
 		)
 		const cappedWidth = NARROW_WINDOW - SIDEBAR_MIN_WIDTH - THREAD_MIN_WIDTH
 		await waitFor(async () => {
-			await expect(handle).toHaveAttribute("aria-valuenow", String(cappedWidth))
+			await expect(thread.getBoundingClientRect().width).toBe(THREAD_MIN_WIDTH)
 		}, FRAME_POLL)
+		await expect(handle).toHaveAttribute("aria-valuenow", String(cappedWidth))
 		await expect(handle).toHaveAttribute("aria-valuemax", String(cappedWidth))
 
 		canvas.getByTestId("window").style.width = `${WIDE_WINDOW}px`
@@ -715,7 +718,7 @@ export const HeldAtItsFloorInTheSmallestWindow = meta.story({
 		}, FRAME_POLL)
 		await expect(handle).toHaveAttribute(
 			"aria-valuemax",
-			String(DOCUMENT_PANEL_MAX_WIDTH),
+			String(WIDE_WINDOW - SIDEBAR_MIN_WIDTH - THREAD_MIN_WIDTH),
 		)
 		await expect(
 			canvas.getByRole("complementary", { name: DOCUMENT_TITLE }),
@@ -726,9 +729,66 @@ export const HeldAtItsFloorInTheSmallestWindow = meta.story({
 	},
 })
 
+export const DraggedToItsMaximumOnAWideWindow = meta.story({
+	args: { onWidthChange: fn() },
+	render: (args: DocumentPanelProps) => (
+		<BesideTheSidebar {...args} windowWidth={WIDE_WINDOW} />
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The panel's edge dragged toward the thread in the 1536 window beside the default sidebar, past where the thread would drop under 400. Check that the panel stops at 832, past the former 800 cap, with the thread at 400, that the grip announces 832 as its value and its maximum and reports it once, and that one more arrow step toward the thread leaves the thread at 400 and the panel at 832.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		const handle = canvas.getByRole("separator", { name: HANDLE_LABEL })
+		const panel = canvas.getByRole("complementary", {
+			name: DOCUMENT_TITLE,
+		})
+		const thread = threadOf(canvasElement)
+		const reachableMaxWidth =
+			WIDE_WINDOW - SIDEBAR_DEFAULT_WIDTH - THREAD_MIN_WIDTH
+		await waitFor(async () => {
+			await expect(handle).toHaveAttribute(
+				"aria-valuemax",
+				String(reachableMaxWidth),
+			)
+		}, FRAME_POLL)
+
+		const originX = handle.getBoundingClientRect().left
+		const pastTheFloorX = originX - thread.getBoundingClientRect().width
+		handle.dispatchEvent(pointerAt("pointerdown", originX))
+		window.dispatchEvent(pointerAt("pointermove", pastTheFloorX))
+		window.dispatchEvent(pointerAt("pointerup", pastTheFloorX))
+		await waitFor(async () => {
+			await expect(thread.getBoundingClientRect().width).toBe(THREAD_MIN_WIDTH)
+		}, FRAME_POLL)
+		await expect(panel.getBoundingClientRect().width).toBe(reachableMaxWidth)
+		await expect(handle).toHaveAttribute(
+			"aria-valuenow",
+			String(reachableMaxWidth),
+		)
+		await expect(args.onWidthChange).toHaveBeenCalledOnce()
+		await expect(args.onWidthChange).toHaveBeenCalledWith(reachableMaxWidth)
+
+		handle.focus()
+		await userEvent.keyboard("{ArrowLeft}")
+		await expect(args.onWidthChange).toHaveBeenLastCalledWith(reachableMaxWidth)
+		await afterTwoFrames()
+		await expect(thread.getBoundingClientRect().width).toBe(THREAD_MIN_WIDTH)
+		await expect(panel.getBoundingClientRect().width).toBe(reachableMaxWidth)
+		await expect(handle).toHaveAttribute(
+			"aria-valuenow",
+			String(reachableMaxWidth),
+		)
+	},
+})
+
 export const MovesFromTheCappedEdge = meta.story({
 	tags: ["test-only"],
-	args: { defaultWidth: DOCUMENT_PANEL_MAX_WIDTH, onWidthChange: fn() },
+	args: { defaultWidth: DOCUMENT_PANEL_OPENING_WIDTH, onWidthChange: fn() },
 	render: (args: DocumentPanelProps) => (
 		<BesideTheSidebar {...args} windowWidth={LAPTOP_WIDTH} />
 	),
@@ -736,7 +796,7 @@ export const MovesFromTheCappedEdge = meta.story({
 		docs: {
 			description: {
 				story:
-					"The panel asked at 800 and held at 656 by the room left in the laptop window. Check that a drag away from the thread moves the edge from where it is drawn on the first pixels, with no dead zone while the asked width falls back to the drawn one, and that an arrow step starts from the drawn width too.",
+					"The panel asked at 800 and held at 576 by the room left in the laptop window. Check that a drag away from the thread moves the edge from where it is drawn on the first pixels, with no dead zone while the asked width falls back to the drawn one, and that an arrow step starts from the drawn width too.",
 			},
 		},
 	},
@@ -916,7 +976,7 @@ const scrollUpHalfAScreen = async (viewport: HTMLElement) => {
 }
 
 export const ConsecutiveAnswersAtTheThreadFloor = meta.story({
-	args: { defaultWidth: DOCUMENT_PANEL_MAX_WIDTH },
+	args: { defaultWidth: DOCUMENT_PANEL_OPENING_WIDTH },
 	render: (args: DocumentPanelProps) => (
 		<InTheShell {...args} windowWidth={LAPTOP_WIDTH} />
 	),
@@ -924,7 +984,7 @@ export const ConsecutiveAnswersAtTheThreadFloor = meta.story({
 		docs: {
 			description: {
 				story:
-					"Eight long answers in a row from one agent, each signed by its author line with a title badge and a time, beside the document panel with the thread held at the narrowest width its layout allows. Check that every bubble holds its whole text, that each author line stays inside its own message, and that every message ends above the next one.",
+					"Eight long answers in a row from one agent, each signed by its author line with a title badge and a time, beside the document panel with the thread held at its 400px floor. Check that every bubble holds its whole text, that each author line stays inside its own message, and that every message ends above the next one.",
 			},
 		},
 	},
@@ -950,7 +1010,7 @@ export const NarrowedToTheThreadFloorThenScrolled = meta.story({
 		docs: {
 			description: {
 				story:
-					"The same answers in a wide thread, the panel's edge then dragged toward the thread until the thread stops at its narrowest width, then the thread scrolled up three half screens. Check that after every step each message still ends above the next one and every bubble still holds its whole text.",
+					"The same answers in a wide thread, the panel's edge then dragged toward the thread until the thread stops at its 400px floor, then the thread scrolled up three half screens. Check that after every step each message still ends above the next one and every bubble still holds its whole text.",
 			},
 		},
 	},

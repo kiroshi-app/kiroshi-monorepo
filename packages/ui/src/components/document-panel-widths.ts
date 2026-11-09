@@ -2,7 +2,6 @@ type PanelWidthsInput = {
 	room: number
 	askedWidth: number
 	minWidth: number
-	maxWidth: number
 	threadMinWidth: number
 }
 
@@ -16,13 +15,9 @@ const panelWidthsInRoom = ({
 	room,
 	askedWidth,
 	minWidth,
-	maxWidth,
 	threadMinWidth,
 }: PanelWidthsInput): PanelWidths => {
-	const reachableMaxWidth = Math.min(
-		Math.max(room - threadMinWidth, minWidth),
-		maxWidth,
-	)
+	const reachableMaxWidth = Math.max(room - threadMinWidth, minWidth)
 	return {
 		width: Math.min(Math.max(askedWidth, minWidth), reachableMaxWidth),
 		minWidth,
