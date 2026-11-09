@@ -7,9 +7,9 @@ edition = "2024"
 publish = false
 
 [workspace.dependencies]
-rune = { git = "https://github.com/anomalyco/rune", rev = "781e2b6d87cd5f32d6f4365956fad4baaf24ee50" }
-rune-motion = { git = "https://github.com/anomalyco/rune", rev = "781e2b6d87cd5f32d6f4365956fad4baaf24ee50" }
-rune-kit = { git = "https://github.com/anomalyco/rune", rev = "781e2b6d87cd5f32d6f4365956fad4baaf24ee50", features = ["markdown", "mermaid"] }
+rune = { git = "https://github.com/anomalyco/rune", rev = "740ecc0c906025a5b2497f11d7771ee6203e838c" }
+rune-motion = { git = "https://github.com/anomalyco/rune", rev = "740ecc0c906025a5b2497f11d7771ee6203e838c" }
+rune-kit = { git = "https://github.com/anomalyco/rune", rev = "740ecc0c906025a5b2497f11d7771ee6203e838c", features = ["markdown", "mermaid"] }
 
 [profile.dev.package."*"]
 opt-level = 2
