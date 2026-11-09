@@ -3,6 +3,7 @@ use rune::{Color, Icon, Shadow};
 use crate::strings::{Key, Language};
 use crate::tokens::Tokens;
 
+mod connection_status;
 mod drag_thumbnail;
 mod scenes;
 mod tab_chip;
@@ -12,6 +13,7 @@ mod tests;
 mod title_bar;
 mod window_controls;
 
+pub use connection_status::{ConnectionState, ConnectionStatus, connection_status};
 pub use drag_thumbnail::{TabDragThumbnail, ThumbnailAuthor, ThumbnailMessage, drag_thumbnail};
 pub use scenes::SCENES;
 pub use tab_chip::{ChipPlacement, DockTarget, drag_ghost, tab_chip};
