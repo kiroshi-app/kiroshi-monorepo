@@ -529,7 +529,10 @@ async fn without_any_window_a_command_answers_what_the_window_answers() {
 	};
 	assert_eq!(chat.0, 500);
 	assert_eq!(parsed(&chat.2), json!({ "kind": "unvouchedMember" }));
-	assert!(direct(&window, calls[0].0, calls[0].1.clone()).is_ok(), "the host has no main chat");
+	assert!(
+		direct(&window, calls[0].0, calls[0].1.clone()).is_ok(),
+		"the window path returns the main chat of the host"
+	);
 	assert_eq!(rooms.0, 200);
 	assert_eq!(parsed(&rooms.2), direct(&window, calls[1].0, calls[1].1.clone()).expect("rooms"));
 	assert_eq!(rejected.0, 500);
