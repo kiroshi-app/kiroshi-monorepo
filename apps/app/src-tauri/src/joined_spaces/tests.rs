@@ -952,9 +952,7 @@ fn a_waiting_socket_its_host_refuses_names_this_device_not_admitted_and_comes_on
 
 		relay::reconciled(member.app.handle()).await;
 		let waited = until("the refusal kept as the wait", || async {
-			member
-				.last_waited()
-				.filter(|wait| wait.reason == JoinedSpaceWaitReason::DeviceNotAdmitted)
+			member.last_waited().filter(|wait| wait.detail.contains("not in its roster"))
 		})
 		.await;
 		member.relay.hosting(HostSide::Answering(member.host().admitted()));
@@ -963,7 +961,12 @@ fn a_waiting_socket_its_host_refuses_names_this_device_not_admitted_and_comes_on
 		})
 		.await;
 
-		assert!(waited.detail.contains("not in its roster"), "{}", waited.detail);
+		assert_eq!(
+			waited.reason,
+			JoinedSpaceWaitReason::DeviceAwaitingApproval,
+			"{}",
+			waited.detail
+		);
 		assert!(member.held_key_id().is_some());
 		assert_eq!(member.last_wait(), None);
 	});

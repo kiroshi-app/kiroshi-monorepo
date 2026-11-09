@@ -1182,7 +1182,7 @@ export type JoinedSpaceWait = {
 	detail: string,
 };
 
-export type JoinedSpaceWaitReason = "relayUnreachable" | "rekeySendFailed" | "hostSilent" | "socketClosed" | "rekeyNotVerified" | "notMember" | "unknownInstance" | "deviceKeysUnreadable" | "deviceAwaitingApproval" | "deviceNotAdmitted" | "socketUrlFailed" | "rosterMissing" | "keychainReadFailed";
+export type JoinedSpaceWaitReason = "relayUnreachable" | "rekeySendFailed" | "hostSilent" | "socketClosed" | "rekeyNotVerified" | "notMember" | "unknownInstance" | "deviceKeysUnreadable" | "deviceAwaitingApproval" | "socketUrlFailed" | "rosterMissing" | "keychainReadFailed";
 
 export type Json = null | boolean | number | null | string | Json[] | { [key in string]: Json };
 

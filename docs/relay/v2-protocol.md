@@ -340,7 +340,7 @@ No Space key has `key_id` 0, so this frame reads on the host as a frame under a
 key lower than the current one: a rostered device that missed its rekey. The host
 drops it and sends that device its rekey again; while the device is not rostered
 yet, the host drops it and answers a [refused](#refused-host-to-device) frame, the
-device waits on `deviceNotAdmitted`, and the rekey of the admission arrives
+device waits on `deviceAwaitingApproval`, and the rekey of the admission arrives
 on the same socket once the device list gains the device. The subkey of that
 hello derives from a random key the device discards, and the host never opens it.
 
@@ -566,8 +566,9 @@ answers that device alone:
 ```
 
 The frame is not signed: it changes only the reason a waiting device shows,
-`deviceNotAdmitted`, never a key or a roster. The device keeps its socket and its
-hello, so the rekey of a later admission still reaches it.
+`deviceAwaitingApproval` with a detail naming the roster, never a key or a
+roster. The device keeps its socket and its hello, so the rekey of a later
+admission still reaches it.
 
 ### rekey (host to device)
 
