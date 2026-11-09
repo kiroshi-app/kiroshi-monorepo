@@ -263,34 +263,29 @@ const useHomeLines = ({
 			return []
 		}
 		const opens = roomOpenerOf(onOpenRoom, room.id)
-		return line.state === "working"
-			? [
-					{
-						key: `home-room-${room.id}-working`,
-						render: () => (
-							<HomeRoomLine
-								agent={homeAgent}
-								onOpenRoom={opens}
-								room={homeRoomOf(room)}
-								state="working"
-							/>
-						),
-					},
-				]
-			: [
-					{
-						key: `home-room-${room.id}-${line.at}`,
-						render: () => (
-							<HomeRoomLine
-								agent={homeAgent}
-								at={line.at}
-								onOpenRoom={opens}
-								room={homeRoomOf(room)}
-								state="done"
-							/>
-						),
-					},
-				]
+		const isWorking = line.state === "working"
+		return [
+			{
+				key: `home-room-${room.id}-${isWorking ? "working" : line.at}`,
+				render: () =>
+					isWorking ? (
+						<HomeRoomLine
+							agent={homeAgent}
+							onOpenRoom={opens}
+							room={homeRoomOf(room)}
+							state="working"
+						/>
+					) : (
+						<HomeRoomLine
+							agent={homeAgent}
+							at={line.at}
+							onOpenRoom={opens}
+							room={homeRoomOf(room)}
+							state="done"
+						/>
+					),
+			},
+		]
 	})
 	const missionItems = missionLines.map((line): TranscriptItem => {
 		const room = roomWith(line.roomId)
