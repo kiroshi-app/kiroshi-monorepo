@@ -144,6 +144,11 @@ fn main_owner_of(
 				JOIN conversations ON conversations.id = messages.conversation_id
 				WHERE messages.id = ?1"
 		}
+		SpaceChild::Mission => {
+			"SELECT conversations.owner FROM missions
+				JOIN conversations ON conversations.id = missions.origin_conversation_id
+				WHERE missions.id = ?1"
+		}
 		_ => return Ok(None),
 	};
 	let owner: Option<Option<ChatOwner>> = connection
