@@ -232,7 +232,7 @@ fn spike_an_ime_composition_shows_its_preedit_and_inserts_the_commit_once() {
 	rt.ime(Ime::Commit("日本".into()));
 	settle(&mut rt);
 	let committed = field(&rt.state.spike, 0, 0);
-	assert_eq!(committed.preedit, None);
+	assert_eq!(committed.preedit(), None);
 	assert_eq!(rt.state.spike.markdown(), "Hi 日本");
 }
 
