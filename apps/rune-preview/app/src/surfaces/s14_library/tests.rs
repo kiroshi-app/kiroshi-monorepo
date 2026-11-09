@@ -16,7 +16,7 @@ use yrs::{Doc, ReadTxn, Text, Transact};
 use kiroshi_rune_kit::surfaces::s14_library::{
 	BlockEvent, DOCUMENT_PANEL_MIN_WIDTH, DOCUMENT_PANEL_OPENING_WIDTH, DocumentPanelEvent,
 	Format as Toolbar, ItemAction, ItemEvent, LibraryEvent, LightboxEvent, MORE_KEY,
-	NewDocumentEvent, NewDocumentTemplate, tile_more_key,
+	NewDocumentEvent, NewDocumentTemplate, panel_max_width, tile_more_key,
 };
 
 use super::blocks::{self, Format};
@@ -1151,4 +1151,22 @@ fn retry_on_a_failed_library_reloads_it_showing_loading_then_the_items_or_the_fa
 	assert_eq!(relisted, vec![Call::List { space_id: SPACE.to_owned() }]);
 	assert!(has_failed_again);
 	assert!(matches!(state.listing, Listing::Loaded(ref items) if items.len() == 1));
+}
+
+#[test]
+fn a_resized_panel_keeps_its_width_within_the_room_across_a_reopen() {
+	let mut state = library_with(Vec::new());
+	state.open_beside("brief.md");
+
+	state.handle_panel(DocumentPanelEvent::Resize(DOCUMENT_PANEL_MIN_WIDTH + 80.0));
+	state.handle_panel(DocumentPanelEvent::Close);
+	state.open_beside("notes.md");
+	let reopened = state.panel_width(10_000.0);
+	state.handle_panel(DocumentPanelEvent::Resize(5_000.0));
+	let widest = state.panel_width(1_000.0);
+	state.handle_panel(DocumentPanelEvent::Resize(10.0));
+
+	assert_eq!(reopened, DOCUMENT_PANEL_MIN_WIDTH + 80.0);
+	assert_eq!(widest, panel_max_width(1_000.0));
+	assert_eq!(state.panel_width(10_000.0), DOCUMENT_PANEL_MIN_WIDTH);
 }

@@ -598,7 +598,7 @@ impl State {
 				self.wants_library = true;
 				self.list();
 			}
-			DocumentPanelEvent::Resize(_) => {}
+			DocumentPanelEvent::Resize(width) => self.dragged_panel(width),
 		}
 	}
 
