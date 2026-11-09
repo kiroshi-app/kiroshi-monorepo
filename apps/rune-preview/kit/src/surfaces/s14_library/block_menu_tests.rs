@@ -88,12 +88,12 @@ fn showing(shows: Shows, picture: Option<Image>) -> Runtime<Screen> {
 	runtime
 }
 
-fn step(runtime: &mut Runtime<Screen>) {
+fn step<S>(runtime: &mut Runtime<S>) {
 	runtime.frame(0.0);
 	runtime.frame(1.0);
 }
 
-fn element(runtime: &Runtime<Screen>, key: &str) -> rune::ElementInfo {
+fn element<S>(runtime: &Runtime<S>, key: &str) -> rune::ElementInfo {
 	runtime
 		.elements()
 		.into_iter()
@@ -465,22 +465,13 @@ fn drawn_view(sketch: &Sketch, _: &mut Cx<Sketch>) -> El {
 fn sketched(drawn: Drawn) -> Runtime<Sketch> {
 	let sketch = Sketch { drawn, edit: TextEdit::default() };
 	let mut runtime = Runtime::new(sketch, drawn_view, (1000.0, 800.0), Env::new(false, 1.0));
-	runtime.frame(0.0);
-	runtime.frame(1.0);
+	step(&mut runtime);
 	runtime
 }
 
 fn top_and_bottom(runtime: &Runtime<Sketch>, key: &str) -> (f32, f32) {
-	let [_, y, _, height] = element_in(runtime, key).rect;
+	let [_, y, _, height] = element(runtime, key).rect;
 	(y, y + height)
-}
-
-fn element_in(runtime: &Runtime<Sketch>, key: &str) -> rune::ElementInfo {
-	runtime
-		.elements()
-		.into_iter()
-		.find(|element| element.key.as_deref() == Some(key))
-		.unwrap_or_else(|| panic!("nothing is drawn under {key}"))
 }
 
 fn shows_text(runtime: &Runtime<Sketch>, text: &str) -> bool {
