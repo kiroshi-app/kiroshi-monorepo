@@ -355,11 +355,10 @@ mod tests {
 	use super::*;
 	use crate::db::connection::temp_dir;
 	use crate::db::open;
-	use crate::removed_on_drop::RemovedOnDrop;
 
 	#[tokio::test]
 	async fn the_rooms_of_working_bots_are_read_from_the_open_turns_and_never_from_every_room() {
-		let dir: RemovedOnDrop = temp_dir();
+		let dir = temp_dir();
 		let database = open(&dir);
 
 		let plan = database

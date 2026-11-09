@@ -16,10 +16,8 @@ use crate::missions::contract::MissionLiveness;
 #[derive(Default)]
 struct Observed(Mutex<States>);
 
-type RoomsOfBots = BTreeMap<String, Vec<String>>;
-
 #[derive(Default)]
-struct AnnouncedRooms(Mutex<HashMap<String, RoomsOfBots>>);
+struct AnnouncedRooms(Mutex<HashMap<String, BTreeMap<String, Vec<String>>>>);
 
 pub(crate) async fn listed<R: Runtime>(
 	app: &AppHandle<R>,
