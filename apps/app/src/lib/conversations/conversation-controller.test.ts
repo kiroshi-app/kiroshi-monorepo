@@ -3454,23 +3454,11 @@ describe("the mentions a finished turn carries", () => {
 
 	it("keeps the session of a question asked five seconds after the turn ended, until it is answered", async () => {
 		holdTheClock()
-		const room = await roomSeating()
-		await room.sent("@Ada take the walls")
-		const asking = room.driver.submissions.at(-1)
-		await room.spoken(room.ada, "walls up")
+		const room = await endedRoom()
 		vi.advanceTimersByTime(5_000)
 		const request = lateQuestion("ask-late")
 
-		room.hear({
-			scope: asking?.scope ?? null,
-			turn: {
-				turnId: "turn-continued",
-				continuesTurnId: asking?.turn?.turnId ?? null,
-				conversationId: room.conversation.id,
-			},
-			event: { type: "questionRequested", request },
-		})
-		await settled()
+		await room.askLate("turn-continued", request)
 		await passTheGrace()
 		await passTheGrace()
 
@@ -3481,12 +3469,11 @@ describe("the mentions a finished turn carries", () => {
 		})
 		expect(room.driver.shutdowns).toEqual([])
 
-		await room.controller.answer("ask-late", { "Which wall next?": "north" })
-		await settled()
-		room.driver.pushTo(room.ada, [
-			{ type: "turnEnded", ended: { sessionId: null, outcome: "completed" } },
-		])
-		await settled()
+		await room.answerLate("ask-late")
+		await room.hearLate("turn-continued", {
+			type: "turnEnded",
+			ended: { sessionId: null, outcome: "completed" },
+		})
 
 		expect(room.controller.getState().pendingPrompt).toBeNull()
 		expect(room.driver.shutdowns).toEqual([room.ada])
