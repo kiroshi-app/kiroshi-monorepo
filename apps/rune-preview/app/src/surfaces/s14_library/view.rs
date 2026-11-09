@@ -256,12 +256,8 @@ fn block_menu_layers(state: &State, t: &Tokens, document: &Document, is_beside: 
 	};
 	let on = |app: &mut App, action| library(app).handle_block_menu(action);
 	let close = |app: &mut App| library(app).close_block_menu();
-	let shown = block_menu(t, LANGUAGE, look, on).modal(true, close).anchored(
-		grip_key(),
-		Side::Bottom,
-		Align::Start,
-		SPACING,
-	);
+	let shown = block_menu(t, LANGUAGE, look, on).modal(true, close);
+	let shown = shown.anchored(grip_key(), Side::Bottom, Align::Start, SPACING);
 	let turn_into =
 		menu.is_turn_into_shown.then(|| turn_into_menu(t, LANGUAGE, kind, on).modal(true, close));
 	std::iter::once(shown).chain(turn_into).collect()
