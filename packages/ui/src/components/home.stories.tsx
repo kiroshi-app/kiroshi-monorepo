@@ -63,7 +63,6 @@ const JUNIPER: HomeAgent = {
 const JUNO: HomeAgent = {
 	id: "juno",
 	name: "Juno",
-	role: "Venues",
 	hue: BLOT_HUES.cyan,
 }
 

@@ -21,7 +21,7 @@ const SHELL =
 
 const FIELD_CARD = "flex flex-col gap-3 rounded-[20px] bg-prompt-surface p-3"
 
-const ACTIONS = "flex items-center justify-end gap-2"
+const ACTIONS = "flex items-center gap-2"
 
 const SKELETON_FILL = "bg-foreground/6"
 
