@@ -687,6 +687,17 @@ export const HomeKeyboardReach = meta.story({
 	},
 })
 
+export const HomeSelectedWithoutHandler = meta.story({
+	tags: ["test-only"],
+	args: { isHomeSelected: true },
+	play: async ({ canvasElement }) => {
+		await expect(
+			within(railIn(canvasElement)).queryByRole("button", { name: HOME }),
+		).toBeNull()
+		await expectOnlySelected(canvasElement, "conversations")
+	},
+})
+
 const SelectableRail = (args: AppRailProps) => {
 	const [selected, setSelected] = useState(args.selected)
 	return renderRail({

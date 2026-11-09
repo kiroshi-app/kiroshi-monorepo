@@ -325,11 +325,12 @@ const AppRail = ({
 			state={spaceAvatarStateOf(spaceHost)}
 		/>
 	)
-	const isHomeCurrent = openSettings === undefined && isHomeSelected
+	const isHomeCurrent =
+		openSettings === undefined && onSelectHome !== undefined && isHomeSelected
 	const HomeIcon = (isHomeCurrent ? FillIcons : Icons).Home
 	const panelEntry = (entry: AppRailPanel) => {
 		const isSelected =
-			openSettings === undefined && !isHomeSelected && selected === entry
+			openSettings === undefined && !isHomeCurrent && selected === entry
 		const PanelIcon = (isSelected ? FillIcons : Icons)[PANEL_ICON[entry]]
 		return {
 			children: <PanelIcon aria-hidden="true" />,

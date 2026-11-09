@@ -1337,6 +1337,7 @@ navigation-apprail--first-tab-under-title-bar
 navigation-apprail--home-keyboard-reach
 navigation-apprail--home-selected
 navigation-apprail--home-selected-dark
+navigation-apprail--home-selected-without-handler
 navigation-apprail--home-under-space-settings
 navigation-apprail--home-unselected
 navigation-apprail--icon-states-side-by-side
