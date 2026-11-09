@@ -13,6 +13,15 @@ pub fn context_menu<'a>(
 	super::menu::panel(t, label, MIN_WIDTH, None, rows)
 }
 
+pub fn pressed_context_menu<'a>(
+	t: &Tokens,
+	label: &str,
+	rows: impl IntoIterator<Item = MenuRow<'a>>,
+	press: impl FnMut(El) -> El,
+) -> El {
+	super::menu::pressed_panel(t, label, MIN_WIDTH, None, rows, press)
+}
+
 pub fn context_menu_narrow<'a>(
 	t: &Tokens,
 	label: &str,

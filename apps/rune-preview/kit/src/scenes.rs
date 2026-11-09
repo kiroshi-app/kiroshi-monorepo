@@ -61,6 +61,8 @@ pub enum Pointer {
 	Away,
 	EntersAtSnap(&'static str),
 	LeavesAtSnap(&'static str),
+	Taps(&'static str),
+	Drags(&'static str, i32, i32),
 }
 
 pub struct Scene {
@@ -3689,6 +3691,32 @@ pub static SCENES: &[Scene] = &[
 	),
 	library::searched("navigation-librarypanel--search-filled", "dashboard", library::search),
 	library::tabbed("navigation-librarypanel--focus-visible", 9, library::grid_all),
+	library::acted(
+		"navigation-librarypanel--item-menu-row-pressed",
+		library::ARTBOARD,
+		0,
+		"",
+		Pointer::Taps("menu-item-Rename"),
+		library::grid_context_menu,
+	),
+	library::acted(
+		"navigation-librarypanel--tile-menu-opened",
+		library::ARTBOARD,
+		0,
+		"",
+		Pointer::Taps("library-item-more-dunes"),
+		library::grid_all,
+	),
+	library::tabbed("navigation-librarypanel--tile-more-focus-visible", 10, library::grid_all),
+	library::library("navigation-librarypanel--failed", library::failed),
+	library::acted(
+		"navigation-librarypanel--failed-retry",
+		library::ARTBOARD,
+		0,
+		"",
+		Pointer::Taps("button-Retry"),
+		library::failed,
+	),
 	library::library("navigation-librarytabstates--document-loading", library::document_loading),
 	library::library(
 		"navigation-librarytabstates--document-loading-dark",
@@ -3775,6 +3803,27 @@ pub static SCENES: &[Scene] = &[
 		library::lightbox_image_menu_saving,
 	),
 	library::threaded("navigation-documentpanel--in-thread", 0, library::document_panel_in_thread),
+	library::threaded(
+		"navigation-documentpanel--at-its-derived-maximum-with-the-thread-at-320",
+		0,
+		library::document_panel_at_the_derived_maximum,
+	),
+	library::acted(
+		"navigation-documentpanel--resize-by-drag",
+		library::THREAD,
+		0,
+		"",
+		Pointer::Drags("document-panel-grip", -80, 0),
+		library::document_panel_in_thread,
+	),
+	library::acted(
+		"navigation-documentpanel--resize-by-arrow",
+		library::THREAD,
+		0,
+		"←",
+		Pointer::Taps("document-panel-grip"),
+		library::document_panel_in_thread,
+	),
 	library::threaded(
 		"navigation-documentpanel--keeps-the-thread-when-toggled",
 		0,
@@ -3927,6 +3976,22 @@ pub static SCENES: &[Scene] = &[
 	library::library("navigation-librarydocumenteditor--strikethrough-shortcut", library::editor),
 	library::library("navigation-librarydocumenteditor--code-shortcut", library::editor),
 	library::library("navigation-librarydocumenteditor--link-shortcut", library::editor),
+	library::acted(
+		"navigation-librarydocumenteditor--link-field-confirmed",
+		library::ARTBOARD,
+		0,
+		"⏎",
+		Pointer::Taps("library-link-field"),
+		library::editor,
+	),
+	library::acted(
+		"navigation-librarydocumenteditor--link-field-cancelled",
+		library::ARTBOARD,
+		0,
+		"⎋",
+		Pointer::Taps("library-link-field"),
+		library::editor,
+	),
 	library::library("navigation-librarydocumenteditor--escape-closes-toolbar", library::editor),
 	library::library("navigation-librarydocumenteditor--toolbar-after-drag", library::editor),
 	library::library(
@@ -3951,6 +4016,30 @@ pub static SCENES: &[Scene] = &[
 	),
 	library::library("navigation-librarydocumentblockeditor--slash-menu-filtered", library::editor),
 	library::library("navigation-librarydocumentblockeditor--block-handle-menu", library::editor),
+	library::acted(
+		"navigation-librarydocumentblockeditor--block-handle-pressed",
+		library::ARTBOARD,
+		0,
+		"",
+		Pointer::Taps("library-handle-Block menu, drag to move"),
+		library::editor,
+	),
+	library::acted(
+		"navigation-librarydocumentblockeditor--block-moved-by-handle",
+		library::ARTBOARD,
+		0,
+		"",
+		Pointer::Drags("library-handle-Block menu, drag to move", 0, 130),
+		library::editor,
+	),
+	library::acted(
+		"navigation-librarydocumentblockeditor--block-menu-row-pressed",
+		library::ARTBOARD,
+		0,
+		"",
+		Pointer::Taps("menu-item-Duplicate"),
+		library::editor,
+	),
 	library::library(
 		"navigation-librarydocumentblockeditor--drag-with-drop-indicator",
 		library::editor,
@@ -4018,6 +4107,38 @@ pub static SCENES: &[Scene] = &[
 		library::editor,
 	),
 	library::library("navigation-librarydocumentblockeditor--gallery-editing", library::editor),
+	library::acted(
+		"navigation-librarydocumentblockeditor--gallery-image-added",
+		library::ARTBOARD,
+		0,
+		"",
+		Pointer::Taps("library-gallery-add"),
+		library::editor,
+	),
+	library::acted(
+		"navigation-librarydocumentblockeditor--gallery-image-removed",
+		library::ARTBOARD,
+		0,
+		"",
+		Pointer::Taps("library-gallery-remove-1"),
+		library::editor,
+	),
+	library::acted(
+		"navigation-librarydocumentblockeditor--gallery-image-moved",
+		library::ARTBOARD,
+		0,
+		"",
+		Pointer::Drags("library-gallery-tile-0", 300, 0),
+		library::editor,
+	),
+	library::acted(
+		"navigation-librarydocumentblockeditor--gallery-caption-edited",
+		library::ARTBOARD,
+		0,
+		"",
+		Pointer::Taps("library-gallery-caption-0"),
+		library::editor,
+	),
 	library::library(
 		"navigation-librarydocumentblockeditor--gallery-editing-dark",
 		library::editor,
@@ -4045,6 +4166,22 @@ pub static SCENES: &[Scene] = &[
 	),
 	library::library("navigation-librarydocumentblockeditor--callout-tone-switch", library::editor),
 	library::library("navigation-librarydocumentblockeditor--table-editing", library::editor),
+	library::acted(
+		"navigation-librarydocumentblockeditor--table-cell-edited",
+		library::ARTBOARD,
+		0,
+		"x",
+		Pointer::Taps("library-block-blk002:5"),
+		library::editor,
+	),
+	library::acted(
+		"navigation-librarydocumentblockeditor--table-focus-moved",
+		library::ARTBOARD,
+		0,
+		"⇥",
+		Pointer::Taps("library-block-blk002:4"),
+		library::editor,
+	),
 	library::library("navigation-librarydocumentblockeditor--table-editing-dark", library::editor),
 	library::library(
 		"navigation-librarydocumentblockeditor--code-language-chosen",
@@ -5949,7 +6086,11 @@ pub fn setup(s: &mut SceneState, waker: Waker) {
 
 pub fn view(s: &SceneState, cx: &mut Cx<SceneState>) -> El {
 	let t = Tokens { reduced_motion: cx.is_reduced_motion(), ..Tokens::new(cx.system_dark()) };
-	(s.scene.view)(&t, s)
+	let shown = (s.scene.view)(&t, s);
+	match s.scene.pointer {
+		Pointer::Taps(_) | Pointer::Drags(..) => rune_kit::root(shown, library::heard_echo(&t, s)),
+		Pointer::Away | Pointer::EntersAtSnap(_) | Pointer::LeavesAtSnap(_) => shown,
+	}
 }
 
 pub fn spec(scene: &'static Scene) -> AppSpec<SceneState> {

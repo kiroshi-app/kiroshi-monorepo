@@ -94,6 +94,17 @@ pub fn panel<'a>(
 	max_width: Option<f32>,
 	rows: impl IntoIterator<Item = MenuRow<'a>>,
 ) -> El {
+	pressed_panel(t, label, min_width, max_width, rows, |item_row| item_row)
+}
+
+pub fn pressed_panel<'a>(
+	t: &Tokens,
+	label: &str,
+	min_width: f32,
+	max_width: Option<f32>,
+	rows: impl IntoIterator<Item = MenuRow<'a>>,
+	mut press: impl FnMut(El) -> El,
+) -> El {
 	let panel = col()
 		.key(format!("menu-{label}"))
 		.min_w(min_width)
@@ -106,7 +117,7 @@ pub fn panel<'a>(
 		.focus_group()
 		.transition(popup_motion(t))
 		.children(rows.into_iter().map(|menu_row| match menu_row {
-			MenuRow::Item(item) => item_row(t, item, max_width.is_some()),
+			MenuRow::Item(item) => press(item_row(t, item, max_width.is_some())),
 			MenuRow::Label(text_label) => label_row(t, text_label),
 			MenuRow::Separator => {
 				el().h(1.0).fill(faded(t.border, 0.5)).my(SPACING).role("separator")
