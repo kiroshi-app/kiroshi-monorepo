@@ -256,6 +256,7 @@ const chat = {
 		open: "Open {{name}}",
 		remove: "Remove {{name}}",
 		attach: "Attach files",
+		add: "Add files",
 	},
 	composer: {
 		label: "Message",
@@ -1212,6 +1213,53 @@ const chat = {
 			},
 			key: {
 				body: "Pay per use, with nothing to sign in to. Create a key in the Anthropic Console.",
+			},
+		},
+	},
+	home: {
+		greeting: {
+			morning: "Morning, {{name}}. What’s next?",
+			morningUnnamed: "Morning. What’s next?",
+			afternoon: "Afternoon, {{name}}. What’s next?",
+			afternoonUnnamed: "Afternoon. What’s next?",
+			evening: "Evening, {{name}}. What’s next?",
+			eveningUnnamed: "Evening. What’s next?",
+			night: "Still up, {{name}}? What’s next?",
+			nightUnnamed: "Still up? What’s next?",
+		},
+		composer: {
+			placeholder: "Message {{name}}",
+			agents: "Agents",
+		},
+		band: {
+			connect: "Connect Applications so {{name}} can do more",
+			dismiss: "Hide this suggestion",
+		},
+		saved: "Saved to {{name}} in Conversations",
+		thinking: "{{name}} is thinking…",
+		room: {
+			working: "{{name}} is working in",
+			worked: "{{name}} worked in",
+		},
+		mission: {
+			completed: "Completed",
+			blocked: "Blocked",
+		},
+		in: "in",
+		archived: {
+			morning:
+				"This morning’s chat with {{name}} is archived in Conversations.",
+			afternoon:
+				"This afternoon’s chat with {{name}} is archived in Conversations.",
+			evening:
+				"This evening’s chat with {{name}} is archived in Conversations.",
+			night: "Last night’s chat with {{name}} is archived in Conversations.",
+			open: "Open it",
+		},
+		failure: {
+			send: {
+				title: "Couldn’t send that request",
+				description: "Your message is back in the field.",
 			},
 		},
 	},

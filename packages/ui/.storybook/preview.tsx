@@ -146,6 +146,7 @@ export default definePreview({
 					"Conversation/Routines",
 					"Conversation/Missions",
 					"Conversation/Onboarding",
+					"Conversation/Home",
 					"Board/Overview",
 					"Settings/Overview",
 					"Settings/Bot",
