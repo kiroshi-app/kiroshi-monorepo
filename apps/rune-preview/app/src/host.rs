@@ -159,15 +159,13 @@ impl HostError {
 				"{command} would change your data, so it isn't sent to the installed Kiroshi."
 			),
 			HostError::InProcess { cause } => cause.clone(),
-			HostError::JoinedOffline { space_id } => {
-				format!(
-					"The host of {space_id} didn't answer. Check that it's online, then try again."
-				)
+			HostError::JoinedOffline { .. } => {
+				"The host of this Space didn't answer. Check that it's online, then try again."
+					.to_owned()
 			}
-			HostError::JoinedRefused { space_id } => {
-				format!(
-					"The host of {space_id} refused a fresh token. Leave and join the Space again."
-				)
+			HostError::JoinedRefused { .. } => {
+				"The host of this Space refused a fresh token. Leave and join the Space again."
+					.to_owned()
 			}
 		}
 	}

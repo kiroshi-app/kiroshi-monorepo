@@ -129,14 +129,18 @@ fn streamed(joined: &Joined, stop: &Stop, deliver: &impl Fn(JoinedHeard)) {
 			}
 			other => deliver(JoinedHeard::Host(other)),
 		};
-		let reason = match attempted(joined, stop, &relay) {
-			Closed::Stopped => return,
-			Closed::Refused => "the host refused a fresh token".to_owned(),
-			Closed::Lost(reason) => reason,
-		};
+		let closed = attempted(joined, stop, &relay);
 		if stop.is_stopped() {
 			return;
 		}
+		let reason = match closed {
+			Closed::Stopped => return,
+			Closed::Refused => {
+				eprintln!("the host of joined Space {} refused a fresh token", joined.id());
+				return show(ConnectionState::Unavailable);
+			}
+			Closed::Lost(reason) => reason,
+		};
 		if opened.get() {
 			failures = 0;
 		}

@@ -139,7 +139,7 @@ fn answered(source: &Source, call: Call) -> Answer {
 			Answer::Connected { joined_id, outcome }
 		}
 		Call::Leave(joined_id) => {
-			let outcome = source.invoke("joined_space_remove", json!({ "id": joined_id }));
+			let outcome = source::joined_sources().leave(source, &joined_id);
 			Answer::Left { joined_id, outcome }
 		}
 		Call::Wake(after, due) => {

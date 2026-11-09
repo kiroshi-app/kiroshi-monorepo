@@ -3,7 +3,7 @@ use std::net::{TcpListener, TcpStream};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Receiver};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use kiroshi_core::agent::contract::ConnectionState;
 use tungstenite::Message as Frame;
@@ -175,15 +175,22 @@ fn remote(refused_invoke: Option<&'static str>, refused_socket: Option<&'static 
 			}
 			(200, json!([]))
 		}),
-		Box::new(move |bearer| Some(bearer) == refused_socket),
+		Box::new(move |bearer| refused_socket.is_some_and(|refused| bearer.starts_with(refused))),
 	)
 }
 
 fn local_for(remote: &Fake, remote_space_id: Option<&str>) -> Fake {
+	local_removing_with(remote, remote_space_id, 200)
+}
+
+fn local_removing_with(remote: &Fake, remote_space_id: Option<&str>, removal: u16) -> Fake {
 	let (host_url, remote_space_id) = (remote.url(), remote_space_id.map(str::to_owned));
 	let tokens = AtomicUsize::new(0);
 	Fake::start(
 		Box::new(move |invoked| {
+			if invoked.command == JOINED_SPACE_REMOVE {
+				return (removal, Value::Null);
+			}
 			let token = format!("token-{}", tokens.fetch_add(1, Ordering::SeqCst) + 1);
 			let connection = JoinedSpaceConnection {
 				id: invoked.body["id"].as_str().unwrap_or("").to_owned(),
@@ -223,6 +230,18 @@ impl Joining {
 			if let JoinedHeard::ConnectionChanged(state) = event.heard {
 				return state;
 			}
+		}
+	}
+
+	fn live_streams(&self) -> usize {
+		Arc::strong_count(&self.sources.hearer) - 1
+	}
+
+	fn await_no_live_stream(&self) {
+		let deadline = Instant::now() + PATIENCE;
+		while self.live_streams() > 0 {
+			assert!(Instant::now() < deadline, "the joined stream thread did not exit");
+			thread::sleep(Duration::from_millis(20));
 		}
 	}
 }
@@ -352,4 +371,63 @@ fn a_joined_host_maps_its_url_to_the_invoke_and_event_addresses() {
 	assert_eq!(secure.events_url(), "wss://relay.example/member/instance/api/events");
 	assert_eq!(plain.events_url(), "ws://127.0.0.1:4321/api/events");
 	assert_eq!(secure.bearer(), "Bearer token-1");
+}
+
+#[test]
+fn leaving_a_space_drops_its_source_and_ends_its_stream() {
+	let remote = remote(None, None);
+	let local = local_for(&remote, Some(REMOTE_SPACE_ID));
+	let joining = joined_through(&local);
+	assert_eq!(joining.next_state(), ConnectionState::Ready);
+	assert_eq!(joining.live_streams(), 1);
+
+	joining.sources.leave(&joining.local, JOINED_ID).expect("the Space is left");
+
+	joining.await_no_live_stream();
+	assert_eq!(local.invoked(JOINED_SPACE_REMOVE).len(), 1);
+	let source = joining.sources.source_of(&joining.local, JOINED_ID);
+	assert_eq!(source.running_profile(), Some(Profile::Dev));
+}
+
+#[test]
+fn a_refused_leave_keeps_the_joined_source_and_its_stream() {
+	let remote = remote(None, None);
+	let local = local_removing_with(&remote, Some(REMOTE_SPACE_ID), 500);
+	let joining = joined_through(&local);
+	assert_eq!(joining.next_state(), ConnectionState::Ready);
+
+	let left = joining.sources.leave(&joining.local, JOINED_ID);
+
+	assert!(matches!(left, Err(HostError::CommandFailed { status: 500, .. })));
+	assert_eq!(joining.live_streams(), 1);
+	let source = joining.sources.source_of(&joining.local, JOINED_ID);
+	assert_eq!(source.running_profile(), None);
+	remote.push(|| Push::Frame(SIGNED_OUT.to_owned()));
+	let event = joining.heard.recv_timeout(PATIENCE).expect("the kept stream still hears");
+	assert!(matches!(event.heard, JoinedHeard::Host(HostEvent::AccountChanged(_))));
+}
+
+#[test]
+fn a_socket_refused_after_a_fresh_token_shows_unavailable_and_stops_connecting() {
+	let remote = remote(None, Some("Bearer token-"));
+	let local = local_for(&remote, Some(REMOTE_SPACE_ID));
+	let joining = joined_through(&local);
+
+	assert_eq!(joining.next_state(), ConnectionState::Unavailable);
+	joining.await_no_live_stream();
+	assert_eq!(local.invoked(JOINED_SPACE_CONNECT).len(), 2);
+}
+
+#[test]
+fn a_joined_host_error_says_this_space_and_never_its_id() {
+	let failures = [
+		HostError::JoinedOffline { space_id: JOINED_ID.to_owned() },
+		HostError::JoinedRefused { space_id: JOINED_ID.to_owned() },
+	];
+
+	for failure in failures {
+		let (title, detail) = (failure.title(), failure.detail());
+		assert!(!title.contains(JOINED_ID) && !detail.contains(JOINED_ID), "{title} {detail}");
+		assert!(title.contains("this Space") && detail.contains("this Space"), "{title} {detail}");
+	}
 }

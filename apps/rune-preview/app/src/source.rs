@@ -14,6 +14,8 @@ use crate::local::LocalCore;
 #[cfg(test)]
 mod tests;
 
+const JOINED_SPACE_REMOVE: &str = "joined_space_remove";
+
 static JOINED_SOURCES: LazyLock<JoinedSources> = LazyLock::new(JoinedSources::default);
 
 #[derive(Clone)]
@@ -113,6 +115,12 @@ impl JoinedSources {
 			local.invoke(JOINED_SPACE_CONNECT, json!({ "id": joined_id }))?;
 		self.register(local, connection.clone());
 		Ok(connection)
+	}
+
+	pub fn leave(&self, local: &Source, joined_id: &str) -> Result<(), HostError> {
+		local.invoke::<()>(JOINED_SPACE_REMOVE, json!({ "id": joined_id }))?;
+		self.spaces.lock().unwrap_or_else(PoisonError::into_inner).remove(joined_id);
+		Ok(())
 	}
 
 	fn register(&self, local: &Source, connection: JoinedSpaceConnection) {
