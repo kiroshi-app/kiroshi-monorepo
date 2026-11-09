@@ -135,26 +135,24 @@ fn record_the_runtime_opened(run: &Run, command: &Value) {
 	};
 	let bot = Path::new(&run.cwd).file_name().unwrap_or_default().to_string_lossy();
 	let line = format!("{bot} {}\n", runtime_in_the_bundle(command));
-	let appended = std::fs::OpenOptions::new()
+	if let Err(error) = appended_to(&path, &line) {
+		eprintln!("the fake did not record the runtime it opened on: {error}");
+	}
+}
+
+fn appended_to(path: &str, line: &str) -> std::io::Result<()> {
+	std::fs::OpenOptions::new()
 		.create(true)
 		.append(true)
 		.open(path)
-		.and_then(|mut file| file.write_all(line.as_bytes()));
-	if let Err(error) = appended {
-		eprintln!("the fake did not record the runtime it opened on: {error}");
-	}
+		.and_then(|mut file| file.write_all(line.as_bytes()))
 }
 
 fn record_the_open_command(command: &Value) {
 	let Ok(path) = std::env::var("FAKE_AGENT_OPEN_COMMANDS_FILE") else {
 		return;
 	};
-	let appended = std::fs::OpenOptions::new()
-		.create(true)
-		.append(true)
-		.open(path)
-		.and_then(|mut file| file.write_all(format!("{command}\n").as_bytes()));
-	if let Err(error) = appended {
+	if let Err(error) = appended_to(&path, &format!("{command}\n")) {
 		eprintln!("the fake did not record the open command: {error}");
 	}
 }
