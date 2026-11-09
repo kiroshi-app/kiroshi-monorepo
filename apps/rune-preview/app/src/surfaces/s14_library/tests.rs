@@ -864,16 +864,21 @@ fn an_agent_card_counts_its_sentences_under_its_section() {
 	assert_eq!(cards[0].section, "Plan");
 }
 
-fn library_app(initial: &str) -> App {
+fn shown_app(space_id: &str, name: &str) -> App {
 	let mut app = App::new();
 	app.workspace = Workspace::Ready(Ready {
 		source: Source::Running(Host::detached()),
-		space: model::Space { id: SPACE.to_owned(), name: SPACE.to_owned(), colour: None },
+		space: model::Space { id: space_id.to_owned(), name: name.to_owned(), colour: None },
 		agents: Vec::new(),
 		conversations: Vec::new(),
 		person: Person::Unread,
 		longest: None,
 	});
+	app
+}
+
+fn library_app(initial: &str) -> App {
+	let mut app = shown_app(SPACE, SPACE);
 	app.surfaces.s14_library = opened_from("brief.md", initial);
 	super::open_beside(&mut app, "brief.md");
 	let library = &mut app.surfaces.s14_library;
@@ -1601,15 +1606,7 @@ fn right_clicking_the_lightbox_picture_opens_the_image_menu_at_the_pointer() {
 }
 
 fn app_showing(space_id: &str) -> App {
-	let mut app = App::new();
-	app.workspace = Workspace::Ready(Ready {
-		source: Source::Running(Host::detached()),
-		space: model::Space { id: space_id.to_owned(), name: "Studio".to_owned(), colour: None },
-		agents: Vec::new(),
-		conversations: Vec::new(),
-		person: Person::Unread,
-		longest: None,
-	});
+	let mut app = shown_app(space_id, "Studio");
 	let joined = serde_json::from_value(json!({
 		"id": "joined-studio",
 		"hostUrl": "https://relay.test/relay/member",
