@@ -347,6 +347,23 @@ const failuresRaisedBy = async ({ reportFailure }: Harness) => {
 	return reportFailure
 }
 
+const declareMode = async (
+	{ store, mission }: Harness,
+	defaultMode: string,
+) => {
+	const bots = await store.bots(SPACE)
+	const bot = bots.find(({ id }) => id === mission.botId)
+
+	if (!bot) {
+		throw new Error("the mission bot is not seated")
+	}
+
+	await store.updateBot(bot.id, {
+		...bot,
+		permissions: { ...bot.permissions, defaultMode },
+	})
+}
+
 const spoken = ({ messages }: ConversationState) =>
 	messages.map(({ authorBotId, content }) => [authorBotId, content] as const)
 
@@ -564,7 +581,30 @@ describe("startMissionRunDriver", () => {
 		expect(companion).toMatchObject({ model: "sonnet", effort: "high" })
 	})
 
-	it("opens a mission run session with AskUserQuestion denied and no permission prompt", async () => {
+	it.each([
+		["auto", "auto"],
+		["dontAsk", "dontAsk"],
+		["default", "dontAsk"],
+		["acceptEdits", "dontAsk"],
+		["plan", "dontAsk"],
+	])(
+		"opens the mission run of a bot declaring %s with AskUserQuestion denied, in %s",
+		async (declaredMode, sentMode) => {
+			await declareMode(harness, declaredMode)
+			await harness.enter("done", closedBy("poller"))
+
+			expect(harness.originStarts()[0].unattended).toEqual({
+				deniedTools: ["AskUserQuestion"],
+				permissionMode: sentMode,
+			})
+		},
+	)
+
+	it("opens a mission run in dontAsk when its bot cannot be read", async () => {
+		await restart({
+			store: { bots: () => Promise.reject(new Error("no companion")) },
+		})
+		vi.spyOn(console, "error").mockImplementation(() => undefined)
 		await harness.enter("done", closedBy("poller"))
 
 		expect(harness.originStarts()[0].unattended).toEqual({

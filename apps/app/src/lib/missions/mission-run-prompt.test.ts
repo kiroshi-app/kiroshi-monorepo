@@ -159,11 +159,9 @@ describe("missionRunPromptFor", () => {
 		)
 	})
 
-	it("says no permission is granted during the run", () => {
+	it("says a refused tool call ends nothing", () => {
 		const prompt = missionRunPromptFor(callSaying("Which branch?"))
 
-		expect(prompt).toContain(
-			"No permission is granted during this run either: a tool call that needs one is refused",
-		)
+		expect(prompt).toContain("a refused call ends nothing")
 	})
 })

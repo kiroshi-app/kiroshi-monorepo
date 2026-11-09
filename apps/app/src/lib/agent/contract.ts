@@ -34,9 +34,11 @@ type FrontTransportError =
 
 export type TransportError = HostTransportError | FrontTransportError
 
+export type UnattendedPermissionMode = "auto" | "dontAsk"
+
 export type UnattendedStart = {
 	deniedTools: string[]
-	permissionMode: "dontAsk"
+	permissionMode: UnattendedPermissionMode
 }
 
 export type TurnState =
