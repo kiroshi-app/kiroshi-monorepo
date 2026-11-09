@@ -15,15 +15,16 @@ use yrs::{Doc, ReadTxn, Text, Transact};
 
 use kiroshi_rune_kit::surfaces::s14_library::{
 	BlockEvent, BlockMenuAction, DOCUMENT_PANEL_MIN_WIDTH, DOCUMENT_PANEL_OPENING_WIDTH,
-	DocumentPanelEvent, Format as Toolbar, GalleryEvent, HandleEvent, ItemAction, ItemEvent,
-	LibraryBlockType, LibraryEvent, LightboxEvent, LinkEvent, MORE_KEY, NewDocumentEvent,
-	NewDocumentTemplate, TableEvent, panel_max_width, tile_more_key,
+	DocumentPanelEvent, Format as Toolbar, GalleryEvent, HandleEvent, ImageMenu, ItemAction,
+	ItemEvent, LibraryBlockType, LibraryEvent, LightboxEvent, LinkEvent, MORE_KEY,
+	NewDocumentEvent, NewDocumentTemplate, TableEvent, panel_max_width, tile_more_key,
 };
 
 use super::blocks::{self, Format};
 use super::document::Phase;
 use super::editing::SEND_INTERVAL;
 use super::imports::{self, HOSTED_LIMIT, JOINED_LIMIT};
+use super::item_menu::MenuPlace;
 use super::rich::GalleryAdd;
 use super::session::Session;
 use super::worker::{Answer, Call, Due, Target, free_name};
@@ -1040,11 +1041,11 @@ fn more_on_a_tile_opens_the_item_menu_at_it_with_the_rows_of_its_kind() {
 
 	tile_menu(&mut state, "brief.md");
 	let document_rows = state.menu_actions();
-	let anchor = state.menu.as_ref().map(|menu| menu.anchor.clone());
+	let place = state.menu.as_ref().map(|menu| menu.place.clone());
 	tile_menu(&mut state, "dunes.png");
 
 	assert_eq!(document_rows, ItemAction::ALL);
-	assert_eq!(anchor, Some(tile_more_key("brief.md")));
+	assert_eq!(place, Some(MenuPlace::Under(tile_more_key("brief.md"))));
 	assert!(!state.menu_actions().contains(&ItemAction::Rename));
 	assert_eq!(state.menu_actions().len(), ItemAction::ALL.len() - 1);
 }
@@ -1059,7 +1060,8 @@ fn more_on_the_document_bar_and_the_lightbox_opens_their_menu_under_more() {
 	images.handle_lightbox(LightboxEvent::Item(ItemEvent::More));
 
 	for state in [&document, &images] {
-		assert_eq!(state.menu.as_ref().map(|menu| menu.anchor.as_str()), Some(MORE_KEY));
+		let place = state.menu.as_ref().map(|menu| menu.place.clone());
+		assert_eq!(place, Some(MenuPlace::Under(MORE_KEY.to_owned())));
 	}
 	assert_eq!(
 		document.menu_actions(),
@@ -1286,6 +1288,60 @@ fn each_block_menu_action_changes_the_document_and_saves_it() {
 }
 
 #[test]
+fn turn_into_opens_over_the_block_menu_and_a_new_type_converts_the_block_and_saves() {
+	let initial = state_of("One\n\nTwo");
+	let mut state = opened_from("notes.txt", &initial);
+	let ids = block_ids(&state);
+
+	chosen_on(&mut state, &ids[1], BlockMenuAction::TurnIntoShown);
+	let is_shown = state.block_menu.as_ref().map(|menu| menu.is_turn_into_shown);
+	state.handle_block_menu(BlockMenuAction::TurnIntoHidden);
+	let is_hidden = state.block_menu.as_ref().map(|menu| !menu.is_turn_into_shown);
+	state.handle_block_menu(BlockMenuAction::TurnIntoShown);
+	state.handle_block_menu(BlockMenuAction::TurnInto(LibraryBlockType::Paragraph));
+	let unchanged = calls(&mut state);
+	let is_closed_on_same_type = state.block_menu.is_none();
+	chosen_on(&mut state, &ids[1], BlockMenuAction::TurnIntoShown);
+	state.handle_block_menu(BlockMenuAction::TurnInto(LibraryBlockType::Heading));
+
+	assert_eq!(is_shown, Some(true));
+	assert_eq!(is_hidden, Some(true));
+	assert!(unchanged.is_empty());
+	assert!(is_closed_on_same_type);
+	assert!(state.block_menu.is_none());
+	assert_eq!(saved_markdown(&initial, &calls(&mut state)), "One\n\n# Two");
+}
+
+#[test]
+fn a_block_drag_holds_its_landing_until_drag_end_and_never_outlives_the_menu_or_the_document() {
+	let initial = state_of("One\n\nTwo\n\nThree");
+	let mut state = opened_from("notes.txt", &initial);
+	let ids = block_ids(&state);
+	let drag = HandleEvent::Drag { from: 0, offset: (4.0, 60.0), to: 1 };
+
+	state.handle_block_handle(false, &ids[0], drag);
+	let held = state.dragged(false).map(|held| (held.offset, held.landing()));
+	let is_beside_free = state.dragged(true).is_none();
+	state.handle_block_handle(false, &ids[0], HandleEvent::DragEnd);
+	let is_ended = state.dragged(false).is_none();
+	state.handle_block_handle(false, &ids[0], HandleEvent::Move { from: 0, to: 1 });
+	let moved = saved_markdown(&initial, &calls(&mut state));
+	state.handle_block_handle(false, &ids[0], drag);
+	state.handle_block_handle(false, &ids[0], HandleEvent::Press);
+	let is_ended_by_menu = state.dragged(false).is_none();
+	state.close_block_menu();
+	state.handle_block_handle(false, &ids[0], drag);
+	state.handle_document_bar(ItemEvent::Close);
+
+	assert_eq!(held, Some(((4.0, 60.0), 2)));
+	assert!(is_beside_free);
+	assert!(is_ended);
+	assert_eq!(moved, "Two\n\nOne\n\nThree");
+	assert!(is_ended_by_menu);
+	assert!(state.dragged(false).is_none());
+}
+
+#[test]
 fn deleting_the_only_block_leaves_an_empty_paragraph_to_write_in() {
 	let mut state = opened_document("notes.txt", "Only");
 	let ids = block_ids(&state);
@@ -1501,5 +1557,45 @@ fn a_refused_save_to_library_keeps_the_library_and_names_the_image() {
 	);
 
 	assert!(matches!(state.listing, Listing::Loaded(ref items) if items.len() == 1));
+	assert!(state.to_raise.iter().any(|notice| notice.title.contains("dunes.png")));
+}
+
+#[test]
+fn right_clicking_the_lightbox_picture_opens_the_image_menu_at_the_pointer() {
+	let mut state = library_with(vec![item("dunes.png", LibraryItemKind::Image)]);
+	state.handle_library(LibraryEvent::Open("dunes.png".to_owned()));
+	calls(&mut state);
+	let at = rune::PointerPress { x: 120.0, y: 80.0 };
+
+	state.handle_lightbox(LightboxEvent::PictureMenuRequested { at });
+	let place = state.menu.as_ref().map(|menu| menu.place.clone());
+	let actions = state.menu_actions();
+	let image = state.menu_image();
+	state.choose_in_menu(ItemAction::SaveToLibrary);
+	state.handle_lightbox(LightboxEvent::PictureMenuRequested { at });
+	state.choose_in_menu(ItemAction::CopyImage);
+	let asked = calls(&mut state);
+	answer(
+		&mut state,
+		Answer::SavedToLibrary { target: target("dunes.png"), item: Err(refused()) },
+	);
+
+	assert_eq!(place, Some(MenuPlace::At(at)));
+	assert_eq!(
+		actions,
+		[
+			ItemAction::OpenInNewTab,
+			ItemAction::Copy,
+			ItemAction::Download,
+			ItemAction::ShowInFolder,
+			ItemAction::Delete
+		]
+	);
+	assert_eq!(image, Some(ImageMenu { is_saving: false }));
+	assert!(state.menu.is_none());
+	assert_eq!(
+		asked,
+		vec![Call::SaveToLibrary(target("dunes.png")), Call::Copy(target("dunes.png"))]
+	);
 	assert!(state.to_raise.iter().any(|notice| notice.title.contains("dunes.png")));
 }

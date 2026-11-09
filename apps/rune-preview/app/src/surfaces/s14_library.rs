@@ -45,9 +45,9 @@ pub use view::{GRID, layers, panel, view};
 use actions::Effect;
 use document::Document;
 use editing::{LinkState, SlashState};
-use handle::BlockMenu;
+use handle::{BlockDrag, BlockMenu};
 use imports::Screened;
-use item_menu::{ItemMenu, MenuSurface};
+use item_menu::{ItemMenu, MenuPlace, MenuSurface};
 use rich::GalleryAdd;
 use worker::{Answer, Call, Due, NewDocument, Target, Worker};
 
@@ -133,6 +133,7 @@ pub struct State {
 	slash: Option<SlashState>,
 	link: Option<LinkState>,
 	block_menu: Option<BlockMenu>,
+	block_drag: Option<BlockDrag>,
 	gallery_add_failed: Option<GalleryAdd>,
 	is_flush_armed: bool,
 	copied: Option<String>,
@@ -168,6 +169,7 @@ impl Default for State {
 			slash: None,
 			link: None,
 			block_menu: None,
+			block_drag: None,
 			gallery_add_failed: None,
 			is_flush_armed: false,
 			copied: None,
@@ -352,7 +354,9 @@ impl State {
 			}
 			LibraryEvent::Import => self.effects.push(Effect::PickFile),
 			LibraryEvent::NewBoard => self.create_board(),
-			LibraryEvent::Menu { id, anchor } => self.open_menu(id, anchor, MenuSurface::Tile),
+			LibraryEvent::Menu { id, anchor } => {
+				self.open_menu(id, MenuPlace::Under(anchor), MenuSurface::Tile)
+			}
 			LibraryEvent::Retry => self.retry_list(),
 		}
 	}
@@ -488,7 +492,10 @@ impl State {
 				lightbox.zoom_percent = Some(zoom.saturating_sub(ZOOM_STEP).max(ZOOM_MIN));
 			}
 			LightboxEvent::Fit => lightbox.zoom_percent = None,
-			LightboxEvent::PictureMenuRequested { .. } => {}
+			LightboxEvent::PictureMenuRequested { at } => {
+				let name = lightbox.name.clone();
+				self.open_menu(name, MenuPlace::At(at), MenuSurface::Picture);
+			}
 		}
 	}
 
@@ -650,6 +657,7 @@ impl State {
 		self.slash = self.slash.take().filter(|slash| slash.is_beside);
 		self.link = self.link.take().filter(|link| link.is_beside);
 		self.block_menu = self.block_menu.take().filter(|menu| menu.is_beside);
+		self.block_drag = self.block_drag.take().filter(|drag| drag.is_beside);
 		if let Shown::Document(document) = shown {
 			self.leave(*document);
 		}
@@ -659,6 +667,7 @@ impl State {
 		self.slash = self.slash.take().filter(|slash| !slash.is_beside);
 		self.link = self.link.take().filter(|link| !link.is_beside);
 		self.block_menu = self.block_menu.take().filter(|menu| !menu.is_beside);
+		self.block_drag = self.block_drag.take().filter(|drag| !drag.is_beside);
 		if let Some(document) = self.beside.take() {
 			self.leave(document);
 		}
