@@ -6,6 +6,7 @@ use super::picker::{LibraryDocument, LibraryPicker, library_picker, library_trig
 use super::prompt::{Offline, PromptInput, attach_control, focus_prompt, prompt_input};
 use super::queue::{PromptQueue, QueuedMessage, prompt_queue};
 use super::quote::{ReplyQuote, SelectionQuote, prompt_reply, selection_quote};
+use super::space_access::{AccessReason, SpaceAccess, WaitReason, space_access_banner};
 use super::{ComposerIntent, Reach, Scope};
 use crate::hues::Preset;
 use crate::primitives::button::{Button, ButtonSize, ButtonVariant};
@@ -29,6 +30,9 @@ const QUOTED: (f32, f32) = (720.0, 220.0);
 const QUEUE: (f32, f32) = (760.0, 200.0);
 const CONTROL: (f32, f32) = (240.0, 120.0);
 const NARROW_CARD: (f32, f32) = (400.0, 200.0);
+
+const SPOT_INLINE: f32 = SPACING * 12.0;
+const SPOT_BOTTOM: f32 = SPACING * 6.0;
 
 const DRAFT: &str = "Summarise the release notes for v0.1";
 const FILLING_DRAFT: &str = "Summarise the release notes and flag every public export that moved";
@@ -890,6 +894,25 @@ fn selection_narrow_long_content(t: &Tokens, _: &SceneState) -> El {
 	centered(t, col().w(NARROW).child(card), Vec::new())
 }
 
+fn in_composer_spot(t: &Tokens, reason: AccessReason) -> El {
+	let access = SpaceAccess { reason, space: "Studio", host: "Noa" };
+	rune_kit::root(
+		col()
+			.w_full()
+			.h_full()
+			.fill(t.background)
+			.justify_end()
+			.px(SPOT_INLINE)
+			.pb(SPOT_BOTTOM)
+			.child(space_access_banner(t, Language::En, access)),
+		Vec::new(),
+	)
+}
+
+fn waiting(t: &Tokens, wait: WaitReason) -> El {
+	in_composer_spot(t, AccessReason::Offline(Some(wait)))
+}
+
 pub static SCENES: &[Scene] = &[
 	fixed("conversation-prompt-promptattachbutton--default", CONTROL, attach_default),
 	scene(
@@ -1152,4 +1175,52 @@ pub static SCENES: &[Scene] = &[
 		input_focused_by_app_with_draft,
 	),
 	tabbed("conversation-prompt-promptqueue--row-focused", QUEUE, "", 2, queue_row_focused),
+	fixed("feedback-spaceaccessbanner--removed", COMPOSER, |t, _| {
+		in_composer_spot(t, AccessReason::Removed)
+	}),
+	fixed("feedback-spaceaccessbanner--deleted", COMPOSER, |t, _| {
+		in_composer_spot(t, AccessReason::Deleted)
+	}),
+	fixed("feedback-spaceaccessbanner--offline", COMPOSER, |t, _| {
+		in_composer_spot(t, AccessReason::Offline(None))
+	}),
+	fixed("feedback-spaceaccessbanner--unknown", COMPOSER, |t, _| {
+		in_composer_spot(t, AccessReason::Unknown)
+	}),
+	fixed("feedback-spaceaccessbanner--offline-relay-unreachable", COMPOSER, |t, _| {
+		waiting(t, WaitReason::RelayUnreachable)
+	}),
+	fixed("feedback-spaceaccessbanner--offline-rekey-send-failed", COMPOSER, |t, _| {
+		waiting(t, WaitReason::RekeySendFailed)
+	}),
+	fixed("feedback-spaceaccessbanner--offline-host-silent", COMPOSER, |t, _| {
+		waiting(t, WaitReason::HostSilent)
+	}),
+	fixed("feedback-spaceaccessbanner--offline-socket-closed", COMPOSER, |t, _| {
+		waiting(t, WaitReason::SocketClosed)
+	}),
+	fixed("feedback-spaceaccessbanner--offline-rekey-not-verified", COMPOSER, |t, _| {
+		waiting(t, WaitReason::RekeyNotVerified)
+	}),
+	fixed("feedback-spaceaccessbanner--offline-not-member", COMPOSER, |t, _| {
+		waiting(t, WaitReason::NotMember)
+	}),
+	fixed("feedback-spaceaccessbanner--offline-unknown-instance", COMPOSER, |t, _| {
+		waiting(t, WaitReason::UnknownInstance)
+	}),
+	fixed("feedback-spaceaccessbanner--offline-device-keys-unreadable", COMPOSER, |t, _| {
+		waiting(t, WaitReason::DeviceKeysUnreadable)
+	}),
+	fixed("feedback-spaceaccessbanner--offline-device-awaiting-approval", COMPOSER, |t, _| {
+		waiting(t, WaitReason::DeviceAwaitingApproval)
+	}),
+	fixed("feedback-spaceaccessbanner--offline-socket-url-failed", COMPOSER, |t, _| {
+		waiting(t, WaitReason::SocketUrlFailed)
+	}),
+	fixed("feedback-spaceaccessbanner--offline-roster-missing", COMPOSER, |t, _| {
+		waiting(t, WaitReason::RosterMissing)
+	}),
+	fixed("feedback-spaceaccessbanner--offline-keychain-read-failed", COMPOSER, |t, _| {
+		waiting(t, WaitReason::KeychainReadFailed)
+	}),
 ];
