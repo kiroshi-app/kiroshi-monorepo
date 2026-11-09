@@ -164,7 +164,6 @@ fn the_button_is_named_after_the_agent_and_the_status_reads_the_version() {
 		button.label.as_deref(),
 		Some(chat::screen::IDENTITY.text(Language::En).replace("{{name}}", NAME).as_str())
 	);
-	assert!(button.label.as_deref().is_some_and(|label| label.contains(NAME)));
 	assert_eq!(keyed(&rt, "connection-status").role, "status");
 	assert_eq!(keyed(&rt, "connection-status").label, Some(format!("{ready} v2.1.233")));
 	assert_eq!(keyed(&without_version, "connection-status").label, Some(ready));

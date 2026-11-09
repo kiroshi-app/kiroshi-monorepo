@@ -32,20 +32,8 @@ fn centered(t: &Tokens, shown: &HeaderIdentity) -> El {
 	)
 }
 
-fn checking(t: &Tokens, _: &SceneState) -> El {
-	centered(t, &identity(NAME, ConnectionState::Checking, false))
-}
-
-fn ready(t: &Tokens, _: &SceneState) -> El {
-	centered(t, &identity(NAME, ConnectionState::Ready, false))
-}
-
-fn unavailable(t: &Tokens, _: &SceneState) -> El {
-	centered(t, &identity(NAME, ConnectionState::Unavailable, false))
-}
-
-fn crashed(t: &Tokens, _: &SceneState) -> El {
-	centered(t, &identity(NAME, ConnectionState::Crashed, false))
+fn closed(t: &Tokens, state: ConnectionState) -> El {
+	centered(t, &identity(NAME, state, false))
 }
 
 fn expanded(t: &Tokens, _: &SceneState) -> El {
@@ -68,10 +56,18 @@ const fn scene(id: &'static str, size: (f32, f32), view: fn(&Tokens, &SceneState
 }
 
 pub static SCENES: &[Scene] = &[
-	scene("navigation-headeridentitybutton--checking", STAGE, checking),
-	scene("navigation-headeridentitybutton--ready", STAGE, ready),
-	scene("navigation-headeridentitybutton--unavailable", STAGE, unavailable),
-	scene("navigation-headeridentitybutton--crashed", STAGE, crashed),
+	scene("navigation-headeridentitybutton--checking", STAGE, |t, _| {
+		closed(t, ConnectionState::Checking)
+	}),
+	scene("navigation-headeridentitybutton--ready", STAGE, |t, _| {
+		closed(t, ConnectionState::Ready)
+	}),
+	scene("navigation-headeridentitybutton--unavailable", STAGE, |t, _| {
+		closed(t, ConnectionState::Unavailable)
+	}),
+	scene("navigation-headeridentitybutton--crashed", STAGE, |t, _| {
+		closed(t, ConnectionState::Crashed)
+	}),
 	scene("navigation-headeridentitybutton--expanded", STAGE, expanded),
 	scene("navigation-headeridentitybutton--long-content", MOBILE, long_content),
 ];
