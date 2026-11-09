@@ -679,6 +679,11 @@ export const FreshAfterRelaunch = meta.story({
 		"Reach for this after a relaunch: the Home starts empty again and a line under the composer says where the earlier conversation went. Open it calls back.",
 	),
 	play: async ({ canvas, userEvent }) => {
+		await expect(
+			canvas.getByText(
+				"This morning’s conversation with Atlas is archived in Conversations.",
+			),
+		).toBeVisible()
 		await userEvent.click(canvas.getByRole("button", { name: "Open it" }))
 		await expect(openedArchive).toHaveBeenCalledOnce()
 	},
