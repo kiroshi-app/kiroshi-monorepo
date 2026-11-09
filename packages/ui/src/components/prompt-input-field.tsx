@@ -16,13 +16,13 @@ import { cn } from "@workspace/ui/lib/utils"
 
 const NOTICE = "px-2 py-1 text-muted-foreground text-sm leading-6"
 
-const MIRROR = "pointer-events-none invisible absolute top-0 left-0 leading-6"
+const MIRROR = "pointer-events-none invisible absolute top-0 left-0"
 
 type PromptFieldSize = "default" | "large"
 
 const TEXT_OF_SIZE = {
-	default: "px-2 text-sm",
-	large: "px-1 text-reading",
+	default: "px-2 text-sm leading-6",
+	large: "px-1 text-reading leading-6",
 } as const satisfies Record<PromptFieldSize, string>
 
 const FIELD_OF_SIZE = {
@@ -118,7 +118,7 @@ const PromptField = ({
 						onKeyDown={handleKeyDown}
 						onPaste={onPaste}
 						className={cn(
-							"block w-full resize-none overflow-y-auto bg-transparent py-1 text-foreground leading-6 outline-none placeholder:text-faint-foreground disabled:cursor-not-allowed [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-foreground/22 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar]:w-1",
+							"block w-full resize-none overflow-y-auto bg-transparent py-1 text-foreground outline-none placeholder:text-faint-foreground disabled:cursor-not-allowed [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-foreground/22 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar]:w-1",
 							TEXT_OF_SIZE[size],
 							FIELD_OF_SIZE[size],
 						)}
