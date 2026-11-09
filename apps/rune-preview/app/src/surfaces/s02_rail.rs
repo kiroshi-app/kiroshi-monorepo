@@ -258,11 +258,9 @@ impl State {
 	}
 
 	pub fn access_of(&self, shown: &str) -> Option<SpaceAccess<'_>> {
-		let (joined, departure) = match &self.departed {
-			Some(departed) if departed.joined.id == shown => {
-				(&departed.joined, Some(departed.reason))
-			}
-			_ => (self.joined_space(shown)?, None),
+		let (joined, departure) = match self.departed_from(shown) {
+			Some(departed) => (&departed.joined, Some(departed.reason)),
+			None => (self.joined_space(shown)?, None),
 		};
 		let reason = access_reason_of(joined, departure)?;
 		Some(SpaceAccess { reason, space: &joined.name, host: host_name_of(joined) })
@@ -359,8 +357,8 @@ impl State {
 		self.joined.iter().find(|joined| joined.id == id)
 	}
 
-	fn is_departed(&self, id: &str) -> bool {
-		self.departed.as_ref().is_some_and(|departed| departed.joined.id == id)
+	fn departed_from(&self, id: &str) -> Option<&Departed> {
+		self.departed.as_ref().filter(|departed| departed.joined.id == id)
 	}
 
 	fn depart(&mut self, id: &str, reason: JoinedSpaceRemovalReason) {
@@ -420,7 +418,7 @@ impl State {
 		if let Some(joined) = self.joined_space(shown) {
 			return Some(joined_shown_space(joined));
 		}
-		if self.is_departed(shown) {
+		if self.departed_from(shown).is_some() {
 			return None;
 		}
 		let first = spaces.first()?.id.clone();

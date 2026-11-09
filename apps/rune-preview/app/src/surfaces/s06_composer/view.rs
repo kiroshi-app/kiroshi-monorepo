@@ -213,9 +213,10 @@ fn menu(state: &State, t: &Tokens, open: &Open, trigger: &Trigger) -> Option<El>
 }
 
 pub fn layers(app: &App, t: &Tokens) -> Vec<El> {
-	let Some(open) = open::of(app).filter(|_| s02_rail::space_access(app).is_none()) else {
+	if s02_rail::space_access(app).is_some() {
 		return Vec::new();
-	};
+	}
+	let Some(open) = open::of(app) else { return Vec::new() };
 	let state = &app.surfaces.s06_composer;
 	let picker = state.picker.as_ref().map(|query| picker(state, t, query));
 	let trigger = state.trigger(&open).filter(|trigger| !state.menu.is_dismissed(trigger));
