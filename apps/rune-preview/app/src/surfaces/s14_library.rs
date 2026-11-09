@@ -24,9 +24,9 @@ use rune::{KeyEvent, TextEdit, Tx, Waker};
 
 use kiroshi_rune_kit::strings::{Key as Copy, Language, common};
 use kiroshi_rune_kit::surfaces::s14_library::{
-	DOCUMENT_PANEL_MAX_WIDTH, DOCUMENT_PANEL_MIN_WIDTH, DocumentPanelEvent, ItemAction, ItemEvent,
-	LibraryEvent, LibraryFilter, LibraryTemplate, LightboxEvent, NewDocumentEvent,
-	NewDocumentTemplate,
+	DOCUMENT_PANEL_MIN_WIDTH, DOCUMENT_PANEL_OPENING_WIDTH, DocumentPanelEvent, ItemAction,
+	ItemEvent, LibraryEvent, LibraryFilter, LibraryTemplate, LightboxEvent, NewDocumentEvent,
+	NewDocumentTemplate, panel_max_width,
 };
 
 use crate::app::App;
@@ -53,8 +53,6 @@ const ZOOM_MAX: u32 = 400;
 const ZOOM_FIT: u32 = 100;
 
 const EXCERPT_CHARS: usize = 280;
-
-const THREAD_MIN_WIDTH: f32 = 320.0;
 
 const MONTHS: [&str; 12] = [
 	"January",
@@ -342,6 +340,7 @@ impl State {
 			}
 			LibraryEvent::Import => self.effects.push(Effect::PickFile),
 			LibraryEvent::NewBoard => self.create_board(),
+			LibraryEvent::Menu { .. } | LibraryEvent::Retry => {}
 		}
 	}
 
@@ -351,7 +350,11 @@ impl State {
 			ItemAction::OpenInNewTab => self.open_in_new_tab(name),
 			ItemAction::Rename => self.open_to_rename(name),
 			ItemAction::Delete => self.ask_delete(name),
-			ItemAction::Copy | ItemAction::Download | ItemAction::ShowInFolder => {
+			ItemAction::Copy
+			| ItemAction::Download
+			| ItemAction::ShowInFolder
+			| ItemAction::SaveToLibrary
+			| ItemAction::CopyImage => {
 				eprintln!(
 					"the Library item menu forwards {action:?}, which this surface doesn't wire"
 				)
@@ -593,17 +596,19 @@ impl State {
 				self.wants_library = true;
 				self.list();
 			}
+			DocumentPanelEvent::Resize(_) => {}
 		}
 	}
 
 	pub fn panel_width(&self, room: f32) -> f32 {
-		let widest =
-			(room - THREAD_MIN_WIDTH).clamp(DOCUMENT_PANEL_MIN_WIDTH, DOCUMENT_PANEL_MAX_WIDTH);
-		self.kept_width.map_or(widest, |width| width.clamp(DOCUMENT_PANEL_MIN_WIDTH, widest))
+		let widest = panel_max_width(room);
+		self.kept_width.map_or(widest.min(DOCUMENT_PANEL_OPENING_WIDTH), |width| {
+			width.clamp(DOCUMENT_PANEL_MIN_WIDTH, widest)
+		})
 	}
 
 	pub fn dragged_panel(&mut self, width: f32) {
-		self.kept_width = Some(width.clamp(DOCUMENT_PANEL_MIN_WIDTH, DOCUMENT_PANEL_MAX_WIDTH));
+		self.kept_width = Some(width.max(DOCUMENT_PANEL_MIN_WIDTH));
 	}
 
 	pub fn dropped(&mut self, paths: &[PathBuf]) {

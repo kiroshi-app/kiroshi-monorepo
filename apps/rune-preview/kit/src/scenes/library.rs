@@ -9,25 +9,26 @@ use crate::primitives::tooltip::{TooltipSide, tooltip};
 use crate::strings::{Language, common};
 use crate::surfaces::s14_library::{
 	Agent, BarActions, BlockEvent, CalloutTone, DocumentBar, EditorBlock, Format, GalleryDrag,
-	ImageMenu, ItemAction, ItemLook, LibraryBlock, LibraryBlockType, LibraryFilter, LibraryItem,
-	LibraryPanel, LightboxImage, LightboxLook, MORE_KEY, NewDocumentTemplate, PanelActions,
-	PanelLook, PanelState, RowMark, Run, Slash, TOOLBAR_GAP, Tile, TileImage, Unavailable, Writer,
-	agent_card, agent_caret, block_editor, block_handle, block_menu, block_text, body_block,
-	callout_editor, code_view, delete_confirmation, document_bar, document_body, document_column,
-	document_panel, document_placeholder, document_skeleton, document_title, drag_ghost,
-	drop_indicator, drop_line, drop_overlay, failed_import, failure_notice, fence_body, field_key,
-	field_of, format_toolbar, format_tooltip, gallery_editor, grid_columns, image_skeleton,
-	inline_field, item_menu, item_unavailable, language_menu, library_panel, lightbox, link_field,
-	new_document_dialog, parse_blocks, person_caret, presence, records_of, rows_of, shown_name,
+	GalleryEdit, HandlePlace, ImageMenu, ItemAction, ItemLook, LibraryBlock, LibraryBlockType,
+	LibraryFilter, LibraryItem, LibraryPanel, LightboxImage, LightboxLook, MORE_KEY,
+	NewDocumentTemplate, PanelActions, PanelLook, PanelState, RowMark, Run, Slash, TOOLBAR_GAP,
+	TableCells, Tile, TileImage, Unavailable, Writer, agent_card, agent_caret, block_editor,
+	block_handle, block_menu, block_text, body_block, callout_editor, code_view,
+	delete_confirmation, document_bar, document_body, document_column, document_panel,
+	document_placeholder, document_skeleton, document_title, drag_ghost, drop_indicator, drop_line,
+	drop_overlay, failed_import, failure_notice, fence_body, field_key, field_of, format_toolbar,
+	format_tooltip, gallery_editor, grid_columns, image_skeleton, inline_field, item_menu,
+	item_unavailable, language_menu, library_panel, lightbox, link_field, new_document_dialog,
+	panel_max_width, parse_blocks, person_caret, presence, records_of, rows_of, shown_name,
 	table_cells, table_editor, title_field, web_page_editor, web_page_view,
 };
 use crate::tokens::{
-	BLUE, RADIUS_CONTROL, SPACING, TEXT_COMPACT_MEDIUM, TEXT_TITLE, Tokens, faded,
+	BLUE, RADIUS_CONTROL, SPACING, TEXT_COMPACT_MEDIUM, TEXT_TITLE, TEXT_XS_MONO, Tokens, faded,
 };
 
 pub const ARTBOARD: (f32, f32) = (1280.0, 832.0);
 const NARROW: (f32, f32) = (560.0, 832.0);
-const THREAD: (f32, f32) = (1280.0, 800.0);
+pub(super) const THREAD: (f32, f32) = (1280.0, 800.0);
 const SMALL_WINDOW: (f32, f32) = (1024.0, 800.0);
 const FRAME_START: f32 = SPACING * 15.0;
 const FRAME_END: f32 = SPACING * 1.5;
@@ -35,6 +36,7 @@ const FRAME_BLOCK: f32 = SPACING * 2.0;
 const LANG: Language = Language::En;
 const IMAGE_SIDE: f32 = 320.0;
 const IMAGE_SCALE: f32 = 2.0;
+const BLOCK_PITCH: f32 = SPACING * 14.0;
 
 const DUNES: &str = "<svg xmlns='http://www.w3.org/2000/svg' width='1600' height='1000' viewBox='0 0 160 100'><rect width='160' height='100' fill='#2b3a55'/><circle cx='118' cy='30' r='14' fill='#f6c177'/><path d='M0 70 Q40 50 80 68 T160 62 V100 H0Z' fill='#c9895b'/><path d='M0 84 Q50 66 100 82 T160 80 V100 H0Z' fill='#8f5a3c'/></svg>";
 const HARBOUR: &str = "<svg xmlns='http://www.w3.org/2000/svg' width='1400' height='1000' viewBox='0 0 140 100'><rect width='140' height='100' fill='#0f2a3d'/><rect y='60' width='140' height='40' fill='#123e57'/><rect x='18' y='38' width='22' height='22' fill='#e2e8f0'/><rect x='46' y='30' width='16' height='30' fill='#94a3b8'/><rect x='92' y='42' width='30' height='18' fill='#cbd5e1'/></svg>";
@@ -273,6 +275,8 @@ pub struct LibraryScene {
 	stored: Vec<Image>,
 	title: TextEdit,
 	fields: Vec<(String, usize, TextEdit)>,
+	link: TextEdit,
+	heard: Option<String>,
 }
 
 impl LibraryScene {
@@ -282,7 +286,8 @@ impl LibraryScene {
 			Some(spec) => (spec.title_edit(), spec.fields()),
 			None => (TextEdit::new(""), Vec::new()),
 		};
-		LibraryScene { pictures: Vec::new(), stored: Vec::new(), title, fields }
+		let link = spec.as_ref().map_or_else(|| TextEdit::new(""), Spec::link_edit);
+		LibraryScene { pictures: Vec::new(), stored: Vec::new(), title, fields, link, heard: None }
 	}
 
 	pub fn decode(&mut self, images: &ImageCache) {
@@ -324,6 +329,14 @@ fn field<'a>(s: &'a mut SceneState, block: &str, index: usize) -> &'a mut TextEd
 	}
 }
 
+fn edit_of<'a>(s: &'a SceneState, block: &str, at: usize) -> &'a TextEdit {
+	s.library
+		.fields
+		.iter()
+		.find(|(id, field, _)| id == block && *field == at)
+		.map_or(&s.edit, |(_, _, edit)| edit)
+}
+
 fn query(s: &mut SceneState) -> &mut TextEdit {
 	&mut s.edit
 }
@@ -332,7 +345,31 @@ fn title(s: &mut SceneState) -> &mut TextEdit {
 	&mut s.library.title
 }
 
+fn link(s: &mut SceneState) -> &mut TextEdit {
+	&mut s.library.link
+}
+
 fn ignore<E>(_: &mut SceneState, _: E) {}
+
+fn heard<E: std::fmt::Debug>(s: &mut SceneState, event: E) {
+	s.library.heard = Some(format!("{event:?}"));
+}
+
+pub(super) fn heard_echo(t: &Tokens, s: &SceneState) -> Option<El> {
+	let heard = s.library.heard.as_ref()?;
+	Some(
+		row()
+			.key("scene-heard")
+			.pin(Some(SPACING * 2.0), None, None, Some(SPACING * 2.0))
+			.padding(SPACING * 2.0)
+			.radius(RADIUS_CONTROL)
+			.fill(t.popover)
+			.border(1.0, t.border)
+			.child(
+				rune::text(format!("Heard {heard}")).font(TEXT_XS_MONO).color(t.popover_foreground),
+			),
+	)
+}
 
 fn unhandled(_: &mut SceneState, _: BlockEvent) -> bool {
 	false
@@ -410,7 +447,7 @@ fn panel_view(
 		actions,
 		columns: grid_columns(card_width(ARTBOARD)),
 	};
-	library_panel(t, LANG, &panel, query, ignore)
+	library_panel(t, LANG, &panel, query, heard)
 }
 
 fn panel_scene(
@@ -519,7 +556,7 @@ fn grid_menu(
 	image: Option<ImageMenu>,
 ) -> El {
 	let t = &tinted(t);
-	let menu = item_menu(t, LANG, ITEMS[fixture].name, actions, image).anchored(
+	let menu = item_menu(t, LANG, ITEMS[fixture].name, actions, image, heard).anchored(
 		format!("library-item-{}", ITEMS[fixture].id),
 		Side::Bottom,
 		Align::Center,
@@ -579,6 +616,10 @@ pub(super) fn documents_across_spaces(t: &Tokens, s: &SceneState) -> El {
 			.child(side(Preset::Green)),
 		Vec::new(),
 	)
+}
+
+pub(super) fn failed(t: &Tokens, s: &SceneState) -> El {
+	panel_scene(t, s, &[], PanelState::Failed, LibraryFilter::All, PanelActions::EVERY)
 }
 
 pub(super) fn dropping_files(t: &Tokens, s: &SceneState) -> El {
@@ -706,7 +747,12 @@ pub(super) fn document_whitespace_name(t: &Tokens, _: &SceneState) -> El {
 }
 
 fn more_menu(t: &Tokens, name: &str, actions: &[ItemAction]) -> El {
-	item_menu(t, LANG, name, actions, None).anchored(MORE_KEY, Side::Bottom, Align::End, SPACING)
+	item_menu(t, LANG, name, actions, None, ignore).anchored(
+		MORE_KEY,
+		Side::Bottom,
+		Align::End,
+		SPACING,
+	)
 }
 
 pub(super) fn document_more_menu(t: &Tokens, _: &SceneState) -> El {
@@ -902,7 +948,7 @@ pub(super) fn lightbox_first(t: &Tokens, s: &SceneState) -> El {
 }
 
 fn dark_menu(actions: &[ItemAction], image: Option<ImageMenu>) -> El {
-	item_menu(&Tokens::new(true), LANG, LIGHTBOX_IMAGES[1].0, actions, image)
+	item_menu(&Tokens::new(true), LANG, LIGHTBOX_IMAGES[1].0, actions, image, ignore)
 }
 
 fn under_more(menu: El) -> El {
@@ -975,7 +1021,7 @@ pub(super) fn lightbox_image_menu_saving(t: &Tokens, s: &SceneState) -> El {
 }
 
 fn beside_the_thread(t: &Tokens, look: PanelLook, presence_el: Option<El>, body: El) -> El {
-	let aside = document_panel(t, LANG, look, presence_el, body, ignore);
+	let aside = document_panel(t, LANG, look, presence_el, body, heard);
 	rune_kit::root(
 		row().w_full().h_full().fill(t.background).child(el().grow(1.0).min_w(0.0)).child(aside),
 		Vec::new(),
@@ -987,8 +1033,13 @@ fn panel_at(t: &Tokens, width: f32, max: f32) -> El {
 	let live = [Run { agent: ATLAS, sentence: LIVE_SENTENCE, is_held: false }];
 	let body = document_body(t, LANG, DOCUMENT_BODY, &live, &no_picture);
 	let presence_el = presence(t, LANG, &[ATLAS], &[], None::<fn(&mut SceneState)>);
-	let look = PanelLook { width, max_width: max, ..PanelLook::document(BRIEF_NAME) };
+	let look = PanelLook { width, max_width: max, ..PanelLook::document(BRIEF_NAME, THREAD.0) };
 	beside_the_thread(t, look, Some(presence_el), body)
+}
+
+pub(super) fn document_panel_at_the_derived_maximum(t: &Tokens, _: &SceneState) -> El {
+	let widest = panel_max_width(THREAD.0);
+	panel_at(t, widest, widest)
 }
 
 pub(super) fn document_panel_in_thread(t: &Tokens, _: &SceneState) -> El {
@@ -1039,7 +1090,7 @@ pub(super) fn document_board_panel(t: &Tokens, s: &SceneState) -> El {
 				.color(t.soft_foreground),
 		);
 	let board = el().w_full().h_full().fill(t.muted);
-	let look = PanelLook { is_board: true, ..PanelLook::document("Launch plan") };
+	let look = PanelLook { is_board: true, ..PanelLook::document("Launch plan", THREAD.0) };
 	beside_the_thread(t, look, Some(chip), board)
 }
 
@@ -1182,6 +1233,16 @@ impl Spec {
 			.collect()
 	}
 
+	fn link_edit(&self) -> TextEdit {
+		let Overlay::Toolbar(Toolbar::Link(address)) = self.overlay else {
+			return TextEdit::new("");
+		};
+		let mut edit = TextEdit::new(address);
+		edit.focused = true;
+		edit.set_caret(address.len());
+		edit
+	}
+
 	fn title_edit(&self) -> TextEdit {
 		let mut edit = TextEdit::new(self.title.clone());
 		if let Some(caret) = self.title_caret {
@@ -1195,6 +1256,10 @@ impl Spec {
 		match block.kind() {
 			LibraryBlockType::Table => table_cells(&block.source).into_iter().flatten().collect(),
 			LibraryBlockType::Code => vec![fence_body(&block.source).1],
+			LibraryBlockType::Gallery => records_of(&fence_body(&block.source).1)
+				.iter()
+				.map(|record| field_of(record, "caption").to_owned())
+				.collect(),
 			kind if kind.is_text() || kind == LibraryBlockType::Callout => {
 				rows_of(&block.source).into_iter().map(|line| line.text).collect()
 			}
@@ -1205,12 +1270,14 @@ impl Spec {
 	fn fields(&self) -> Vec<(String, usize, TextEdit)> {
 		let mut fields = Vec::new();
 		for (index, block) in self.ids().iter().enumerate() {
-			let is_code = block.kind() == LibraryBlockType::Code;
+			let is_plain =
+				matches!(block.kind(), LibraryBlockType::Code | LibraryBlockType::Gallery);
+			let is_gallery = block.kind() == LibraryBlockType::Gallery;
 			for (row, text) in Spec::texts_of(block).iter().enumerate() {
 				let mut edit =
-					if is_code { TextEdit::new(text.clone()) } else { inline_field(text) };
+					if is_plain { TextEdit::new(text.clone()) } else { inline_field(text) };
 				if let Some((block_at, row_at, caret)) = self.focus
-					&& block_at == index
+					&& !is_gallery && block_at == index
 					&& row_at == row
 				{
 					edit.focused = true;
@@ -1242,6 +1309,7 @@ impl Spec {
 			.map(|(index, block)| self.editor_block(t, s, index, block))
 			.collect();
 		let mut layers = Vec::new();
+		let pitches = vec![BLOCK_PITCH; blocks.len()];
 		let focus = self.focus.unwrap_or((0, 0, Caret::End));
 		let slash = match self.overlay {
 			Overlay::Slash { query, is_above } => Some(Slash {
@@ -1261,14 +1329,16 @@ impl Spec {
 			}
 			Overlay::Handle | Overlay::HandleMenu => {
 				if let Some(view) = views.get_mut(focus.0) {
-					view.handle = Some(block_handle(t, LANG, self.overlay == Overlay::HandleMenu));
+					let place = HandlePlace { index: focus.0, pitches: &pitches };
+					let is_pressed = self.overlay == Overlay::HandleMenu;
+					view.handle = Some(block_handle(t, LANG, is_pressed, place, heard));
 				}
 				if self.overlay == Overlay::HandleMenu {
 					let handle = format!(
 						"library-handle-{}",
 						common::library::editor::blocks::handle::MENU.text(LANG)
 					);
-					layers.push(block_menu(t, LANG, blocks[focus.0].kind(), true).anchored(
+					layers.push(block_menu(t, LANG, blocks[focus.0].kind(), true, heard).anchored(
 						handle,
 						Side::Bottom,
 						Align::Start,
@@ -1297,7 +1367,7 @@ impl Spec {
 					(format_toolbar(t, LANG, &pressed, hovered, ignore), Side::Top)
 				}
 				Toolbar::Below => (format_toolbar(t, LANG, &[], None, ignore), Side::Bottom),
-				Toolbar::Link(address) => (link_field(t, LANG, address), Side::Top),
+				Toolbar::Link(_) => (link_field(t, LANG, &s.library.link, link, heard), Side::Top),
 			};
 			layers.push(shown.anchored(key, side, Align::Center, TOOLBAR_GAP));
 			if let Toolbar::Above { hovered: Some(hovered), .. } = toolbar {
@@ -1370,11 +1440,20 @@ impl Spec {
 				let src = field_of(record, "image");
 				let is_broken = has_failed_tile && (at == 1 || at == 5);
 				let image = if is_broken { TileImage::Failed } else { s.library.stored(src) };
-				Tile { image, alt: field_of(record, "alt"), caption: field_of(record, "caption") }
+				Tile { image, alt: field_of(record, "alt") }
 			})
 			.collect();
-		let columns = if self.narrow { 2 } else { 5 };
-		Some(gallery_editor(t, LANG, &tiles, columns, drag, false))
+		let block = format!("blk{:03}", index + 1);
+		let edits = (0..tiles.len()).map(|at| edit_of(s, &block, at)).collect();
+		let edit = GalleryEdit {
+			block: &block,
+			tiles: &tiles,
+			captions: edits,
+			columns: if self.narrow { 2 } else { 5 },
+			drag,
+			has_add_failed: false,
+		};
+		Some(gallery_editor(t, LANG, &edit, field, heard))
 	}
 
 	fn editor_block<'a>(
@@ -1464,21 +1543,17 @@ impl Spec {
 			Rich::Table => {
 				let cells = table_cells(&block.source);
 				let columns = cells.first().map_or(1, Vec::len);
-				let mut at = 0;
-				let rows = cells
-					.iter()
-					.map(|line| {
-						line.iter()
-							.map(|_| {
-								at += 1;
-								self.cell(t, s, &block.id, LibraryBlockType::Paragraph, at - 1)
-							})
+				let rows = (0..cells.len())
+					.map(|row| {
+						(0..columns)
+							.map(|column| edit_of(s, &block.id, row * columns + column))
 							.collect()
 					})
 					.collect();
 				let focused =
 					self.focus.map_or((0, 0), |(_, row, _)| (row / columns, row % columns));
-				Some(table_editor(t, LANG, rows, focused))
+				let table = TableCells { block: &block.id, rows, focused };
+				Some(table_editor(t, LANG, &table, field, heard))
 			}
 			Rich::WebPage { has_failed } => {
 				let (_, body) = fence_body(&block.source);
@@ -1675,8 +1750,10 @@ fn document_editor_spec(story: &str) -> Option<Spec> {
 		"a-3-toolbar-button-hover" => selection(LAUNCH_DATE)
 			.with(Overlay::Toolbar(Toolbar::Above { pressed: None, hovered: Some(Format::Bold) })),
 		"a-4-toolbar-format-on" => selection("14th").with(toolbar_on(Some(Format::Bold))),
-		"a-5-toolbar-link-field" => selection(LAUNCH_DATE)
-			.with(Overlay::Toolbar(Toolbar::Link("https://kiroshi.app/brief"))),
+		"a-5-toolbar-link-field" | "link-field-confirmed" | "link-field-cancelled" => {
+			selection(LAUNCH_DATE)
+				.with(Overlay::Toolbar(Toolbar::Link("https://kiroshi.app/brief")))
+		}
 		"a-6-toolbar-flipped-below" => {
 			let weeks: Vec<String> = (1..=8)
 				.map(|week| format!("Week {week} brings the next round of screenshots and copy."))
@@ -1801,8 +1878,11 @@ fn block_editor_spec(story: &str) -> Option<Spec> {
 		"focused-to-do-item" => fixed(MARKED_DOCUMENT).focus_on("Order the cake", Caret::End),
 		"focused-quote" => fixed(MARKED_DOCUMENT).focus_on("The export keeps", Caret::End),
 		"focused-every-inline-mark" => fixed(MARKED_DOCUMENT).focus_on("Ship ", Caret::After("bo")),
-		"block-handle-menu" => {
+		"block-handle-menu" | "block-menu-row-pressed" => {
 			fixed(AGENT_BRIEF).focus_on("The spring launch", Caret::End).with(Overlay::HandleMenu)
+		}
+		"block-handle-pressed" | "block-moved-by-handle" => {
+			fixed(AGENT_BRIEF).focus_on("The spring launch", Caret::End).with(Overlay::Handle)
 		}
 		"drag-with-drop-indicator" => {
 			let spec = fixed(AGENT_BRIEF);
@@ -1851,7 +1931,12 @@ fn block_editor_spec(story: &str) -> Option<Spec> {
 			spec.narrow = true;
 			spec.with(Overlay::Handle)
 		}
-		"gallery-editing" | "gallery-editing-at-320" => {
+		"gallery-editing"
+		| "gallery-editing-at-320"
+		| "gallery-image-added"
+		| "gallery-image-removed"
+		| "gallery-image-moved"
+		| "gallery-caption-edited" => {
 			let mut spec = fixed(&url_gallery(&THREE_IMAGES)).rich(editing(None), 1);
 			spec.narrow = story.ends_with("320");
 			spec
@@ -1871,7 +1956,7 @@ fn block_editor_spec(story: &str) -> Option<Spec> {
 			.rich(Rich::Checklist, 1)
 			.with(Overlay::Handle),
 		"callout-tone-switch" => fixed(CALLOUT_DOCUMENT).rich(Rich::Callout, 1),
-		"table-editing" | "table-editing-at-320" => {
+		"table-editing" | "table-editing-at-320" | "table-cell-edited" | "table-focus-moved" => {
 			let mut spec = fixed(TABLE_DOCUMENT).focus_block(1, 5, Caret::End).rich(Rich::Table, 1);
 			spec.narrow = story.ends_with("320");
 			spec
@@ -1899,6 +1984,17 @@ pub(super) const fn library(id: &'static str, view: fn(&Tokens, &SceneState) -> 
 		themes: &THEMES,
 		view,
 	}
+}
+
+pub(super) const fn acted(
+	id: &'static str,
+	size: (f32, f32),
+	tabs: usize,
+	keys: &'static str,
+	pointer: Pointer,
+	view: fn(&Tokens, &SceneState) -> El,
+) -> Scene {
+	Scene { id, size, tabs, pointer, typed: "", keys, themes: &THEMES, view }
 }
 
 pub(super) const fn searched(

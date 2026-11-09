@@ -9,10 +9,10 @@ use crate::avatar::{Face, Person};
 use crate::icons;
 use crate::primitives::button::{Button, ButtonSize, ButtonVariant};
 use crate::primitives::context_menu::{
-	Mark as MenuMark, MenuItem, MenuRow, Shortcut, context_menu,
+	Mark as MenuMark, MenuItem, MenuRow, Shortcut, wired_context_menu,
 };
 use crate::primitives::dialog::{DialogContent, dialog, scrim};
-use crate::primitives::dropdown_menu::dropdown_menu;
+use crate::primitives::dropdown_menu::wired_dropdown_menu;
 use crate::primitives::toast::{Toast, ToastType, toast};
 use crate::primitives::{
 	DISABLED_OPACITY, FOCUS_RING_WIDTH, elevated, equal_padding, instant, ring_tint, tight,
@@ -591,6 +591,7 @@ impl LibraryItem<'_> {
 pub enum PanelState {
 	Loading,
 	Ready,
+	Failed,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -704,6 +705,8 @@ pub enum LibraryEvent {
 	NewBoard,
 	NewDocument,
 	StartTemplate(LibraryTemplate),
+	Menu { id: String, anchor: String },
+	Retry,
 }
 
 pub struct LibraryPanel<'a> {
@@ -740,6 +743,9 @@ pub fn library_panel<S: 'static>(
 	query: Access<S>,
 	on: impl Fn(&mut S, LibraryEvent) + Clone + 'static,
 ) -> El {
+	if panel.state == PanelState::Failed {
+		return library_failed(t, lang, on);
+	}
 	let is_loading = panel.state == PanelState::Loading;
 	let has_query = !panel.query.text.is_empty();
 	let is_empty = !is_loading && panel.items.is_empty() && !has_query;
@@ -782,6 +788,20 @@ pub fn library_panel<S: 'static>(
 		content.scroll(ScrollSpec { stick_bottom: false })
 	};
 	col().key("library-panel").w_full().h_full().min_h(0.0).child(content)
+}
+
+fn library_failed<S: 'static>(
+	t: &Tokens,
+	lang: Language,
+	on: impl Fn(&mut S, LibraryEvent) + Clone + 'static,
+) -> El {
+	let retry = small_pill(t, say(crate::strings::chat::notice::RETRY, lang), true)
+		.on_press(emitter(&on, LibraryEvent::Retry));
+	let card = failure_card(t, say(common::library::failure::LIST, lang), None, vec![retry])
+		.w_full()
+		.max_w(SPACING * 96.0)
+		.radius(RADIUS_CONTROL);
+	row().key("library-panel").w_full().h_full().padding(SPACING * 6.0).center().child(card)
 }
 
 fn library_heading<S: 'static>(
@@ -967,8 +987,16 @@ fn grid<S: 'static>(
 		.map(|item| match item.import_progress {
 			Some(progress) => importing_tile(t, lang, item, progress),
 			None => {
-				let (on, id) = (on.clone(), item.id.to_owned());
-				tile(t, lang, item).on_press(move |s: &mut S| on(s, LibraryEvent::Open(id.clone())))
+				let open = emitter(&on, LibraryEvent::Open(item.id.to_owned()));
+				let anchor = tile_more_key(item.id);
+				let menu = emitter(
+					&on,
+					LibraryEvent::Menu { id: item.id.to_owned(), anchor: anchor.clone() },
+				);
+				el().w_full()
+					.hover_group()
+					.child(tile(t, lang, item).on_press(open))
+					.child(tile_more(t, lang, item, anchor).on_press(menu))
 			}
 		})
 		.collect();
@@ -1048,6 +1076,31 @@ fn tile(t: &Tokens, lang: Language, item: &LibraryItem) -> El {
 		.child(thumbnail(t, item.look))
 		.child(caption(t, name, item.detail));
 	instant(control).focusable(true).cursor(Cursor::Pointer).focus_ring(2.0, 2.0, t.ring)
+}
+
+pub fn tile_more_key(id: &str) -> String {
+	format!("library-item-more-{id}")
+}
+
+fn tile_more(t: &Tokens, lang: Language, item: &LibraryItem, key: String) -> El {
+	let label =
+		filled(say(common::library::item_menu::LABEL, lang), "name", shown_name(item.name, lang));
+	let face = row()
+		.size(BAR_CONTROL, BAR_CONTROL)
+		.radius(BAR_CONTROL / 2.0)
+		.center()
+		.fill(t.card)
+		.hover(t.muted)
+		.group_opacity(0.0, 1.0)
+		.child(icon(&icons::MORE_HORIZONTAL, SPACING * 4.0).color(t.foreground));
+	let control = row()
+		.key(key)
+		.pin(None, Some(SPACING * 2.0), Some(SPACING * 2.0), None)
+		.radius(BAR_CONTROL / 2.0)
+		.role("button")
+		.label(label)
+		.child(face);
+	focus_ring(t, instant(control))
 }
 
 fn importing_tile(t: &Tokens, lang: Language, item: &LibraryItem, progress: f32) -> El {
@@ -2479,10 +2532,11 @@ pub fn lightbox<S: 'static>(
 		)
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum DocumentPanelEvent {
 	OpenInLibrary,
 	Close,
+	Resize(f32),
 }
 
 pub const DOCUMENT_PANEL_WIDTH: f32 = SPACING * 150.0;
@@ -2497,20 +2551,27 @@ pub struct PanelLook<'a> {
 }
 
 impl<'a> PanelLook<'a> {
-	pub fn document(title: &'a str) -> PanelLook<'a> {
+	pub fn document(title: &'a str, room: f32) -> PanelLook<'a> {
+		let max_width = panel_max_width(room);
 		PanelLook {
 			title,
-			width: DOCUMENT_PANEL_WIDTH,
+			width: DOCUMENT_PANEL_WIDTH.min(max_width),
 			min_width: DOCUMENT_PANEL_MIN_WIDTH,
-			max_width: DOCUMENT_PANEL_MAX_WIDTH,
+			max_width,
 			is_board: false,
 		}
 	}
 }
 
 pub const DOCUMENT_PANEL_MIN_WIDTH: f32 = SPACING * 100.0;
-pub const DOCUMENT_PANEL_MAX_WIDTH: f32 = SPACING * 200.0;
+pub const DOCUMENT_PANEL_OPENING_WIDTH: f32 = SPACING * 200.0;
+pub const THREAD_MIN_WIDTH: f32 = SPACING * 80.0;
+
+pub fn panel_max_width(room: f32) -> f32 {
+	(room - THREAD_MIN_WIDTH).max(DOCUMENT_PANEL_MIN_WIDTH)
+}
 const PANEL_GRIP: f32 = SPACING * 2.0;
+pub const RESIZE_STEP: f32 = SPACING * 4.0;
 
 pub fn document_panel<S: 'static>(
 	t: &Tokens,
@@ -2576,7 +2637,9 @@ pub fn document_panel<S: 'static>(
 		.range_value(f64::from(look.width), f64::from(look.min_width), f64::from(look.max_width))
 		.focusable(true)
 		.cursor(Cursor::ResizeColumn)
-		.focus_ring(2.0, -SPACING * 0.75, t.sidebar_ring);
+		.focus_ring(2.0, -SPACING * 0.75, t.sidebar_ring)
+		.on_drag(resized_by_drag(look, on.clone()))
+		.on_key(resized_by_key(look, on));
 	row()
 		.key("document-panel")
 		.w(look.width)
@@ -2588,6 +2651,37 @@ pub fn document_panel<S: 'static>(
 		.child(el().w(1.0).h_full().fill(faded(t.foreground, 0.08)))
 		.child(col().grow(1.0).min_w(0.0).h_full().child(header).child(divider).child(content))
 		.child(grip)
+}
+
+fn resized_by_drag<S: 'static>(
+	look: PanelLook,
+	on: impl Fn(&mut S, DocumentPanelEvent) + 'static,
+) -> impl Fn(&mut S, &mut rune::Drag, &mut Tx) + 'static {
+	let (width, min, max) = (look.width, look.min_width, look.max_width);
+	move |s: &mut S, drag, _| match drag.phase {
+		rune::Phase::Down => drag.data = width,
+		rune::Phase::Move => {
+			on(s, DocumentPanelEvent::Resize((drag.data - drag.dx).clamp(min, max)))
+		}
+		rune::Phase::Up if drag.cancelled() => on(s, DocumentPanelEvent::Resize(drag.data)),
+		rune::Phase::Up => {}
+	}
+}
+
+fn resized_by_key<S: 'static>(
+	look: PanelLook,
+	on: impl Fn(&mut S, DocumentPanelEvent) + 'static,
+) -> impl Fn(&mut S, &KeyEvent, &mut Tx) -> bool + 'static {
+	let (width, min, max) = (look.width, look.min_width, look.max_width);
+	move |s: &mut S, event, _| {
+		let towards_wider = match event.key {
+			KeyName::Left => 1.0,
+			KeyName::Right => -1.0,
+			_ => return false,
+		};
+		on(s, DocumentPanelEvent::Resize((width + towards_wider * RESIZE_STEP).clamp(min, max)));
+		true
+	}
 }
 
 #[cfg(test)]
@@ -2709,6 +2803,75 @@ mod tests {
 	}
 
 	#[test]
+	fn a_block_dropped_past_half_a_neighbour_takes_its_place() {
+		let pitches = [40.0, 60.0, 80.0, 40.0];
+		assert_eq!(moved_to(&pitches, 1, 39.0), 1);
+		assert_eq!(moved_to(&pitches, 1, 41.0), 2);
+		assert_eq!(moved_to(&pitches, 1, 400.0), 3);
+		assert_eq!(moved_to(&pitches, 1, -21.0), 0);
+		assert_eq!(moved_to(&pitches, 0, -100.0), 0);
+	}
+
+	fn pressed(key: KeyName, shift: bool) -> KeyEvent {
+		KeyEvent { key, mods: rune::Mods { shift, ..rune::Mods::default() } }
+	}
+
+	#[test]
+	fn a_table_cell_hands_focus_to_its_neighbour() {
+		let mut edit = TextEdit::new("Ada");
+		let size = (2, 3);
+		edit.set_caret(3);
+		assert_eq!(cell_after(&pressed(KeyName::Tab, false), &edit, size, (0, 2)), Some((1, 0)));
+		assert_eq!(cell_after(&pressed(KeyName::Tab, true), &edit, size, (1, 0)), Some((0, 2)));
+		assert_eq!(cell_after(&pressed(KeyName::Tab, false), &edit, size, (1, 2)), None);
+		assert_eq!(cell_after(&pressed(KeyName::Down, false), &edit, size, (0, 1)), Some((1, 1)));
+		assert_eq!(cell_after(&pressed(KeyName::Up, false), &edit, size, (0, 1)), None);
+		assert_eq!(cell_after(&pressed(KeyName::Right, false), &edit, size, (0, 1)), Some((0, 2)));
+		assert_eq!(cell_after(&pressed(KeyName::Left, false), &edit, size, (0, 1)), None);
+		edit.set_caret(0);
+		assert_eq!(cell_after(&pressed(KeyName::Left, false), &edit, size, (0, 1)), Some((0, 0)));
+		assert_eq!(cell_after(&pressed(KeyName::Right, false), &edit, size, (0, 1)), None);
+	}
+
+	#[test]
+	fn a_gallery_tile_dropped_lands_on_the_nearest_slot() {
+		let tile = (100.0, 112.0);
+		assert_eq!(gallery_moved_to((0, 6, 5), (220.0, 0.0), tile), 2);
+		assert_eq!(gallery_moved_to((0, 6, 5), (0.0, 120.0), tile), 5);
+		assert_eq!(gallery_moved_to((2, 6, 5), (-900.0, 0.0), tile), 0);
+		assert_eq!(gallery_moved_to((2, 6, 5), (40.0, 0.0), tile), 2);
+	}
+
+	#[test]
+	fn the_panel_leaves_the_thread_its_minimum_down_to_the_panel_floor() {
+		assert_eq!(THREAD_MIN_WIDTH, 320.0);
+		assert_eq!(panel_max_width(1_600.0), 1_280.0);
+		assert_eq!(
+			panel_max_width(THREAD_MIN_WIDTH + DOCUMENT_PANEL_MIN_WIDTH),
+			DOCUMENT_PANEL_MIN_WIDTH
+		);
+		assert_eq!(panel_max_width(600.0), DOCUMENT_PANEL_MIN_WIDTH);
+	}
+
+	#[test]
+	fn a_gallery_tile_steps_one_slot_per_arrow_without_a_modifier() {
+		let key = |key: KeyName| KeyEvent { key, mods: rune::Mods::default() };
+		assert_eq!(gallery_key_target(&key(KeyName::Up), 2, 6), Some(1));
+		assert_eq!(gallery_key_target(&key(KeyName::Left), 2, 6), Some(1));
+		assert_eq!(gallery_key_target(&key(KeyName::Down), 2, 6), Some(3));
+		assert_eq!(gallery_key_target(&key(KeyName::Right), 2, 6), Some(3));
+		assert_eq!(gallery_key_target(&key(KeyName::Up), 0, 6), None);
+		assert_eq!(gallery_key_target(&key(KeyName::Down), 5, 6), None);
+		for mods in [
+			rune::Mods { alt: true, ..rune::Mods::default() },
+			rune::Mods { cmd: true, ..rune::Mods::default() },
+			rune::Mods { ctrl: true, ..rune::Mods::default() },
+		] {
+			assert_eq!(gallery_key_target(&KeyEvent { key: KeyName::Down, mods }, 2, 6), None);
+		}
+	}
+
+	#[test]
 	fn the_grid_keeps_four_columns_at_the_artboard_width() {
 		assert_eq!(grid_columns(1280.0 - 60.0 - 6.0), 4);
 		assert_eq!(grid_columns(320.0), 1);
@@ -2810,7 +2973,6 @@ pub enum TileImage<'a> {
 pub struct Tile<'a> {
 	pub image: TileImage<'a>,
 	pub alt: &'a str,
-	pub caption: &'a str,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -2994,11 +3156,7 @@ pub fn body_block<'a>(
 			let records = records_of(&body);
 			let tiles: Vec<Tile> = records
 				.iter()
-				.map(|record| Tile {
-					image: picture(field_of(record, "image")),
-					alt: "",
-					caption: "",
-				})
+				.map(|record| Tile { image: picture(field_of(record, "image")), alt: "" })
 				.collect();
 			gallery_view(t, lang, &tiles)
 		}
@@ -3217,8 +3375,100 @@ fn table_grid(t: &Tokens, rows: Vec<Vec<El>>, focused: Option<(usize, usize)>) -
 	col().w_full().radius(RADIUS_MD).clip_rounded(RADIUS_MD).border(1.0, t.border).children(lines)
 }
 
-pub fn table_editor(t: &Tokens, lang: Language, rows: Vec<Vec<El>>, focused: (usize, usize)) -> El {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TableEvent {
+	Edited { row: usize, column: usize },
+	Focus { row: usize, column: usize },
+}
+
+pub struct TableCells<'a> {
+	pub block: &'a str,
+	pub rows: Vec<Vec<&'a TextEdit>>,
+	pub focused: (usize, usize),
+}
+
+pub fn cell_field(columns: usize, (row, column): (usize, usize)) -> usize {
+	row * columns + column
+}
+
+pub fn cell_after(
+	event: &KeyEvent,
+	edit: &TextEdit,
+	(rows, columns): (usize, usize),
+	(row, column): (usize, usize),
+) -> Option<(usize, usize)> {
+	let at = cell_field(columns, (row, column));
+	let caret = edit.focus;
+	let is_collapsed = edit.anchor == edit.focus;
+	let target = match event.key {
+		KeyName::Tab if event.mods.shift => at.checked_sub(1)?,
+		KeyName::Tab => at + 1,
+		KeyName::Up => at.checked_sub(columns)?,
+		KeyName::Down => at + columns,
+		KeyName::Left if is_collapsed && caret == 0 => at.checked_sub(1)?,
+		KeyName::Right if is_collapsed && caret == edit.text.len() => at + 1,
+		_ => return None,
+	};
+	(target < rows * columns).then_some((target / columns, target % columns))
+}
+
+fn table_cell<S: 'static>(
+	t: &Tokens,
+	lang: Language,
+	cells: &TableCells,
+	at: (usize, usize),
+	access: FieldAccess<S>,
+	on: impl Fn(&mut S, TableEvent) + Clone + 'static,
+) -> El {
 	use common::library::editor::blocks::table;
+	let size = (cells.rows.len(), cells.rows.first().map_or(1, Vec::len));
+	let field = cell_field(size.1, at);
+	let (row, column) = at;
+	let label = filled(
+		&filled(say(table::CELL, lang), "row", &(row + 1).to_string()),
+		"column",
+		&(column + 1).to_string(),
+	);
+	let (edit_id, key_id) = (cells.block.to_owned(), cells.block.to_owned());
+	let change_on = on.clone();
+	let moves = move |s: &mut S, event: &KeyEvent, _: &mut Tx| {
+		let Some((row, column)) = cell_after(event, access(s, &key_id, field), size, at) else {
+			return false;
+		};
+		on(s, TableEvent::Focus { row, column });
+		true
+	};
+	let kind = LibraryBlockType::Paragraph;
+	text_input(cells.rows[row][column], block_style(kind))
+		.key(field_key(cells.block, field))
+		.color(block_ink(t, kind))
+		.w_full()
+		.caret(t.foreground, t.selection)
+		.label(label)
+		.on_edit(move |s: &mut S| access(s, &edit_id, field))
+		.on_input_key(moves.clone())
+		.on_key(moves)
+		.on_input_change(move |s: &mut S, _: &mut Tx| {
+			change_on(s, TableEvent::Edited { row, column })
+		})
+}
+
+pub fn table_editor<S: 'static>(
+	t: &Tokens,
+	lang: Language,
+	cells: &TableCells,
+	access: FieldAccess<S>,
+	on: impl Fn(&mut S, TableEvent) + Clone + 'static,
+) -> El {
+	use common::library::editor::blocks::table;
+	let focused = cells.focused;
+	let rows = (0..cells.rows.len())
+		.map(|row| {
+			(0..cells.rows[row].len())
+				.map(|column| table_cell(t, lang, cells, (row, column), access, on.clone()))
+				.collect()
+		})
+		.collect();
 	let add = |content: El| {
 		instant(
 			row()
@@ -3427,55 +3677,149 @@ pub struct GalleryDrag {
 	pub to: usize,
 }
 
-pub fn gallery_editor(
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GalleryEvent {
+	Add,
+	Remove(usize),
+	Move { from: usize, to: usize },
+	Caption(usize),
+}
+
+const GALLERY_GAP: f32 = SPACING * 1.5;
+
+pub fn gallery_moved_to(
+	(from, count, columns): (usize, usize, usize),
+	(dx, dy): (f32, f32),
+	(width, height): (f32, f32),
+) -> usize {
+	let across = (dx / (width + GALLERY_GAP)).round() as isize;
+	let down = (dy / (height + GALLERY_GAP)).round() as isize;
+	let to = from as isize + across + down * columns.max(1) as isize;
+	to.clamp(0, count.saturating_sub(1) as isize) as usize
+}
+
+fn gallery_drag<S: 'static>(
+	from: usize,
+	count: usize,
+	columns: usize,
+	on: impl Fn(&mut S, GalleryEvent) + 'static,
+) -> impl Fn(&mut S, &mut rune::Drag, &mut Tx) + 'static {
+	move |s: &mut S, drag, _| {
+		if drag.phase != rune::Phase::Up || drag.cancelled() {
+			return;
+		}
+		let to = gallery_moved_to((from, count, columns), (drag.dx, drag.dy), (drag.w, drag.h));
+		if to != from {
+			on(s, GalleryEvent::Move { from, to });
+		}
+	}
+}
+
+pub fn gallery_key_target(event: &KeyEvent, from: usize, count: usize) -> Option<usize> {
+	if event.mods.alt || event.mods.cmd || event.mods.ctrl {
+		return None;
+	}
+	let to = match event.key {
+		KeyName::Left | KeyName::Up => from.checked_sub(1)?,
+		KeyName::Right | KeyName::Down => from + 1,
+		_ => return None,
+	};
+	(to < count).then_some(to)
+}
+
+fn gallery_keys<S: 'static>(
+	from: usize,
+	count: usize,
+	on: impl Fn(&mut S, GalleryEvent) + 'static,
+) -> impl Fn(&mut S, &KeyEvent, &mut Tx) -> bool + 'static {
+	move |s: &mut S, event, _| {
+		let Some(to) = gallery_key_target(event, from, count) else { return false };
+		on(s, GalleryEvent::Move { from, to });
+		true
+	}
+}
+
+pub struct GalleryEdit<'a> {
+	pub block: &'a str,
+	pub tiles: &'a [Tile<'a>],
+	pub captions: Vec<&'a TextEdit>,
+	pub columns: usize,
+	pub drag: Option<GalleryDrag>,
+	pub has_add_failed: bool,
+}
+
+fn gallery_caption<S: 'static>(
 	t: &Tokens,
 	lang: Language,
-	tiles: &[Tile],
-	columns: usize,
-	drag: Option<GalleryDrag>,
-	has_add_failed: bool,
-) -> (El, Option<El>) {
-	use common::library::editor::blocks::gallery;
-	let count = tiles.len().to_string();
-	let edited = tiles.iter().enumerate().map(|(index, tile)| {
-		let position = (index + 1).to_string();
-		let caption = if tile.caption.is_empty() {
-			label_text(
-				say(gallery::CAPTION_PLACEHOLDER, lang),
-				TEXT_XS_MEDIUM,
-				t.placeholder_foreground,
-			)
-		} else {
-			label_text(tile.caption, TEXT_XS_MEDIUM, t.foreground).truncate()
-		};
-		let remove = row()
-			.pin(None, Some(SPACING * 2.0), Some(SPACING * 2.0), None)
-			.size(SPACING * 6.0, SPACING * 6.0)
-			.radius(SPACING * 3.0)
-			.fill(Color::BLACK.alpha(0.6))
-			.center()
-			.role("button")
-			.label(filled(say(gallery::REMOVE, lang), "position", &position))
-			.child(icon(&icons::CLOSE, SPACING * 3.0).color(Color::WHITE));
-		let caption = row()
+	gallery: &GalleryEdit,
+	index: usize,
+	access: FieldAccess<S>,
+	on: impl Fn(&mut S, GalleryEvent) + 'static,
+) -> Option<El> {
+	use common::library::editor::blocks::gallery as copy;
+	let edit = gallery.captions.get(index)?;
+	let block = gallery.block.to_owned();
+	Some(
+		text_input(edit, TEXT_XS_MEDIUM)
+			.single_line()
+			.key(field_key(gallery.block, index))
 			.pin(Some(SPACING * 2.0), None, Some(SPACING * 2.0), Some(SPACING * 2.0))
 			.padding(SPACING * 1.5)
 			.radius(RADIUS_SM)
 			.fill(faded(t.card, 0.92))
-			.role("textbox")
-			.label(filled(say(gallery::CAPTION, lang), "position", &position))
-			.child(caption);
-		let mut cell = el()
+			.color(t.foreground)
+			.placeholder(say(copy::CAPTION_PLACEHOLDER, lang), t.placeholder_foreground)
+			.caret(t.foreground, t.selection)
+			.label(filled(say(copy::CAPTION, lang), "position", &(index + 1).to_string()))
+			.focus_ring(FOCUS_RING_WIDTH, 0.0, ring_tint(t, 0.3))
+			.on_edit(move |s: &mut S| access(s, &block, index))
+			.on_input_change(move |s: &mut S, _: &mut Tx| on(s, GalleryEvent::Caption(index))),
+	)
+}
+
+pub fn gallery_editor<S: 'static>(
+	t: &Tokens,
+	lang: Language,
+	edit: &GalleryEdit,
+	access: FieldAccess<S>,
+	on: impl Fn(&mut S, GalleryEvent) + Clone + 'static,
+) -> (El, Option<El>) {
+	use common::library::editor::blocks::gallery;
+	let (tiles, columns, drag) = (edit.tiles, edit.columns, edit.drag);
+	let count = tiles.len().to_string();
+	let edited = tiles.iter().enumerate().map(|(index, tile)| {
+		let position = (index + 1).to_string();
+		let remove = focus_ring(
+			t,
+			row()
+				.key(format!("library-gallery-remove-{index}"))
+				.pin(None, Some(SPACING * 2.0), Some(SPACING * 2.0), None)
+				.size(SPACING * 6.0, SPACING * 6.0)
+				.radius(SPACING * 3.0)
+				.fill(Color::BLACK.alpha(0.6))
+				.center()
+				.role("button")
+				.label(filled(say(gallery::REMOVE, lang), "position", &position))
+				.child(icon(&icons::CLOSE, SPACING * 3.0).color(Color::WHITE)),
+		)
+		.on_press(emitter(&on, GalleryEvent::Remove(index)));
+		let face = el()
+			.key(format!("library-gallery-tile-{index}"))
 			.w_full()
-			.h(SPACING * 28.0)
+			.h_full()
 			.label(filled(
 				&filled(say(gallery::TILE, lang), "position", &position),
 				"count",
 				&count,
 			))
-			.child(tile_view(t, tile))
-			.child(remove)
-			.child(caption);
+			.focusable(true)
+			.focus_ring(FOCUS_RING_WIDTH, 0.0, ring_tint(t, 0.3))
+			.cursor(Cursor::Grab)
+			.on_drag(gallery_drag(index, tiles.len(), columns, on.clone()))
+			.on_key(gallery_keys(index, tiles.len(), on.clone()))
+			.child(tile_view(t, tile));
+		let caption = gallery_caption(t, lang, edit, index, access, on.clone());
+		let mut cell = el().w_full().h(SPACING * 28.0).child(face).child(remove).children(caption);
 		if let Some(drag) = drag {
 			if drag.from == index {
 				cell = el().w_full().h(SPACING * 28.0).radius(RADIUS_XS * 2.0).fill(t.card);
@@ -3492,12 +3836,12 @@ pub fn gallery_editor(
 		cell
 	});
 	let cells: Vec<El> = edited.collect();
-	let mut lines = col().w_full().gap(SPACING * 1.5);
+	let mut lines = col().w_full().gap(GALLERY_GAP);
 	for line in cells.chunks(columns.max(1)) {
 		let mut line: Vec<El> = line.to_vec();
 		line.resize_with(columns.max(1), el);
 		lines =
-			lines.child(row().w_full().gap(SPACING * 1.5).children(
+			lines.child(row().w_full().gap(GALLERY_GAP).children(
 				line.into_iter().map(|cell| col().grow(1.0).w(0.0).min_w(0.0).child(cell)),
 			));
 	}
@@ -3524,8 +3868,9 @@ pub fn gallery_editor(
 				.child(icon(&icons::PLUS, SPACING * 3.5).color(t.foreground))
 				.child(label_text(say(gallery::ADD, lang), TEXT_COMPACT_MEDIUM, t.foreground)),
 		),
-	);
-	let hint = if has_add_failed {
+	)
+	.on_press(emitter(&on, GalleryEvent::Add));
+	let hint = if edit.has_add_failed {
 		label_text(say(gallery::ADD_FAILED, lang), TEXT_XS, t.destructive).role("alert")
 	} else {
 		label_text(say(gallery::HINT, lang), TEXT_XS, t.muted_foreground)
@@ -3802,6 +4147,8 @@ pub enum ItemAction {
 	Download,
 	ShowInFolder,
 	Delete,
+	SaveToLibrary,
+	CopyImage,
 }
 
 impl ItemAction {
@@ -3833,6 +4180,8 @@ impl ItemAction {
 			ItemAction::Download => item_menu::DOWNLOAD,
 			ItemAction::ShowInFolder => item_menu::SHOW_IN_FOLDER,
 			ItemAction::Delete => item_menu::DELETE,
+			ItemAction::SaveToLibrary => common::library::image_menu::SAVE_TO_LIBRARY,
+			ItemAction::CopyImage => common::library::image_menu::COPY_IMAGE,
 		}
 	}
 
@@ -3845,6 +4194,8 @@ impl ItemAction {
 			ItemAction::Download => &icons::DOWNLOAD,
 			ItemAction::ShowInFolder => &icons::FOLDER,
 			ItemAction::Delete => &icons::BIN,
+			ItemAction::SaveToLibrary => &icons::BOOK,
+			ItemAction::CopyImage => &icons::COPY,
 		}
 	}
 }
@@ -3856,35 +4207,38 @@ pub struct ImageMenu {
 
 pub const ITEM_MENU_KEY: &str = "library-item-menu";
 
-pub fn item_menu(
+pub fn item_menu<S: 'static>(
 	t: &Tokens,
 	lang: Language,
 	name: &str,
 	actions: &[ItemAction],
 	image: Option<ImageMenu>,
+	on: impl Fn(&mut S, ItemAction) + Clone + 'static,
 ) -> El {
-	use common::library::{image_menu, item_menu};
-	let label = filled(say(item_menu::LABEL, lang), "name", shown_name(name, lang));
-	let mut rows: Vec<MenuRow> = actions
-		.iter()
-		.filter(|action| **action != ItemAction::Delete)
-		.map(|action| MenuRow::Item(MenuItem::new(say(action.label(), lang)).glyph(action.glyph())))
-		.collect();
+	let label =
+		filled(say(common::library::item_menu::LABEL, lang), "name", shown_name(name, lang));
+	let item = |action: ItemAction| MenuItem::new(say(action.label(), lang)).glyph(action.glyph());
+	let mut pressed: Vec<ItemAction> =
+		actions.iter().copied().filter(|action| *action != ItemAction::Delete).collect();
+	let mut rows: Vec<MenuRow> =
+		pressed.iter().map(|action| MenuRow::Item(item(*action))).collect();
 	if actions.contains(&ItemAction::Delete) {
+		pressed.push(ItemAction::Delete);
 		rows.push(MenuRow::Separator);
-		rows.push(MenuRow::Item(
-			MenuItem::new(say(item_menu::DELETE, lang)).glyph(&icons::BIN).destructive(),
-		));
+		rows.push(MenuRow::Item(item(ItemAction::Delete).destructive()));
 	}
 	if let Some(image) = image {
-		let save = MenuItem::new(say(image_menu::SAVE_TO_LIBRARY, lang)).glyph(&icons::BOOK);
+		let save = item(ItemAction::SaveToLibrary);
+		pressed.extend([ItemAction::SaveToLibrary, ItemAction::CopyImage]);
 		rows.push(MenuRow::Separator);
 		rows.push(MenuRow::Item(if image.is_saving { save.disabled() } else { save }));
-		rows.push(MenuRow::Item(
-			MenuItem::new(say(image_menu::COPY_IMAGE, lang)).glyph(&icons::COPY),
-		));
+		rows.push(MenuRow::Item(item(ItemAction::CopyImage)));
 	}
-	context_menu(t, &label, rows).key(ITEM_MENU_KEY)
+	wired_context_menu(t, &label, rows, |index, row| match pressed.get(index) {
+		Some(action) => row.on_press(emitter(&on, *action)),
+		None => row,
+	})
+	.key(ITEM_MENU_KEY)
 }
 
 pub fn delete_confirmation<S: 'static>(
@@ -4212,13 +4566,42 @@ pub fn format_tooltip(t: &Tokens, lang: Language, format: Format) -> El {
 	tip.key("toolbar-tooltip")
 }
 
-pub fn link_field(t: &Tokens, lang: Language, address: &str) -> El {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum LinkEvent {
+	Confirm(String),
+	Cancel,
+}
+
+pub fn link_field<S: 'static>(
+	t: &Tokens,
+	lang: Language,
+	edit: &TextEdit,
+	access: Access<S>,
+	on: impl Fn(&mut S, LinkEvent) + Clone + 'static,
+) -> El {
 	use common::library::editor::toolbar;
-	let shown = if address.is_empty() {
-		label_text(say(toolbar::LINK_FIELD, lang), TEXT_COMPACT, t.placeholder_foreground)
-	} else {
-		label_text(address, TEXT_COMPACT, t.foreground)
-	};
+	let confirm = move |s: &mut S| LinkEvent::Confirm(access(s).text.clone());
+	let (submit_on, key_on, press_on) = (on.clone(), on.clone(), on);
+	let field = text_input(edit, TEXT_COMPACT)
+		.single_line()
+		.key("library-link-field")
+		.w_full()
+		.color(t.foreground)
+		.placeholder(say(toolbar::LINK_FIELD, lang), t.placeholder_foreground)
+		.caret(t.foreground, t.selection)
+		.label(say(toolbar::LINK_FIELD, lang))
+		.on_edit(access)
+		.on_submit(move |s: &mut S, _: &mut Tx| {
+			let event = confirm(s);
+			submit_on(s, event);
+		})
+		.on_input_key(move |s: &mut S, event: &KeyEvent, _: &mut Tx| {
+			let is_cancel = event.key == KeyName::Escape;
+			if is_cancel {
+				key_on(s, LinkEvent::Cancel);
+			}
+			is_cancel
+		});
 	toolbar_surface(t)
 		.key(TOOLBAR_KEY)
 		.w(SPACING * 85.0)
@@ -4232,17 +4615,7 @@ pub fn link_field(t: &Tokens, lang: Language, address: &str) -> El {
 				.center()
 				.child(icon(&icons::LINK, SPACING * 4.0).color(t.muted_foreground)),
 		)
-		.child(
-			row()
-				.h(SPACING * 7.0)
-				.grow(1.0)
-				.min_w(0.0)
-				.center_y()
-				.role("textbox")
-				.label(say(toolbar::LINK_FIELD, lang))
-				.child(shown)
-				.child(el().w(1.0).h(SPACING * 4.5).fill(t.foreground)),
-		)
+		.child(row().h(SPACING * 7.0).grow(1.0).min_w(0.0).center_y().child(field))
 		.child(
 			row()
 				.padding(SPACING * 0.5)
@@ -4250,22 +4623,65 @@ pub fn link_field(t: &Tokens, lang: Language, address: &str) -> El {
 				.fill(toolbar_highlight(t))
 				.child(icon(&icons::CORNER_DOWN_LEFT, SPACING * 3.5).color(t.muted_foreground)),
 		)
-		.child(focus_ring(
-			t,
-			instant(
-				row()
-					.size(SPACING * 7.0, SPACING * 7.0)
-					.radius(RADIUS_MD)
-					.center()
-					.hover(faded(t.foreground, 0.06))
-					.role("button")
-					.label(say(toolbar::CONFIRM_LINK, lang))
-					.child(icon(&icons::CHECK, SPACING * 4.0).color(t.foreground)),
-			),
-		))
+		.child(
+			focus_ring(
+				t,
+				instant(
+					row()
+						.size(SPACING * 7.0, SPACING * 7.0)
+						.radius(RADIUS_MD)
+						.center()
+						.hover(faded(t.foreground, 0.06))
+						.role("button")
+						.label(say(toolbar::CONFIRM_LINK, lang))
+						.child(icon(&icons::CHECK, SPACING * 4.0).color(t.foreground)),
+				),
+			)
+			.on_press(move |s: &mut S| {
+				let event = confirm(s);
+				press_on(s, event);
+			}),
+		)
 }
 
-pub fn block_handle(t: &Tokens, lang: Language, is_pressed: bool) -> El {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HandleEvent {
+	Insert,
+	Press,
+	Move { from: usize, to: usize },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct HandlePlace<'a> {
+	pub index: usize,
+	pub pitches: &'a [f32],
+}
+
+const DRAG_SLOP: f32 = SPACING;
+
+pub fn moved_to(pitches: &[f32], from: usize, travel: f32) -> usize {
+	let (mut to, mut left) = (from, travel.abs());
+	if travel > 0.0 {
+		while to + 1 < pitches.len() && left > pitches[to + 1] / 2.0 {
+			left -= pitches[to + 1];
+			to += 1;
+		}
+	} else {
+		while to > 0 && left > pitches[to - 1] / 2.0 {
+			left -= pitches[to - 1];
+			to -= 1;
+		}
+	}
+	to
+}
+
+pub fn block_handle<S: 'static>(
+	t: &Tokens,
+	lang: Language,
+	is_pressed: bool,
+	place: HandlePlace,
+	on: impl Fn(&mut S, HandleEvent) + Clone + 'static,
+) -> El {
 	use common::library::editor::blocks::handle;
 	let button = |glyph: &'static rune::Icon, label: &str, width: f32, is_on: bool| {
 		let control = row()
@@ -4284,14 +4700,45 @@ pub fn block_handle(t: &Tokens, lang: Language, is_pressed: bool) -> El {
 			}));
 		focus_ring(t, instant(if is_on { control.fill(t.accent) } else { control }))
 	};
+	let (from, pitches, drag_on) = (place.index, place.pitches.to_vec(), on.clone());
+	let grip = button(&icons::GRIP_VERTICAL, say(handle::MENU, lang), SPACING * 5.0, is_pressed)
+		.cursor(Cursor::Grab)
+		.on_press(emitter(&on, HandleEvent::Press))
+		.on_drag(move |s: &mut S, drag, _| {
+			if drag.phase != rune::Phase::Up || drag.cancelled() || drag.dy.abs() < DRAG_SLOP {
+				return;
+			}
+			let to = moved_to(&pitches, from, drag.dy);
+			if to != from {
+				drag_on(s, HandleEvent::Move { from, to });
+			}
+		});
 	row()
 		.key("library-block-handle")
 		.gap(SPACING * 0.5)
-		.child(button(&icons::PLUS, say(handle::INSERT, lang), SPACING * 6.0, false))
-		.child(button(&icons::GRIP_VERTICAL, say(handle::MENU, lang), SPACING * 5.0, is_pressed))
+		.child(
+			button(&icons::PLUS, say(handle::INSERT, lang), SPACING * 6.0, false)
+				.on_press(emitter(&on, HandleEvent::Insert)),
+		)
+		.child(grip)
 }
 
-pub fn block_menu(t: &Tokens, lang: Language, kind: LibraryBlockType, is_mac: bool) -> El {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BlockMenuAction {
+	TurnInto,
+	Duplicate,
+	MoveUp,
+	MoveDown,
+	Delete,
+}
+
+pub fn block_menu<S: 'static>(
+	t: &Tokens,
+	lang: Language,
+	kind: LibraryBlockType,
+	is_mac: bool,
+	on: impl Fn(&mut S, BlockMenuAction) + Clone + 'static,
+) -> El {
 	use common::library::editor::blocks::menu;
 	let shortcut = |mac: Key, other: Key| Shortcut {
 		command: false,
@@ -4326,8 +4773,23 @@ pub fn block_menu(t: &Tokens, lang: Language, kind: LibraryBlockType, is_mac: bo
 				.shortcut(shortcut(menu::shortcuts::mac::DELETE, menu::shortcuts::other::DELETE)),
 		),
 	];
-	dropdown_menu(t, say(common::library::editor::blocks::handle::MENU, lang), rows)
-		.key("library-block-menu")
+	let pressed = [
+		BlockMenuAction::TurnInto,
+		BlockMenuAction::Duplicate,
+		BlockMenuAction::MoveUp,
+		BlockMenuAction::MoveDown,
+		BlockMenuAction::Delete,
+	];
+	wired_dropdown_menu(
+		t,
+		say(common::library::editor::blocks::handle::MENU, lang),
+		rows,
+		|index, row| match pressed.get(index) {
+			Some(action) => row.on_press(emitter(&on, *action)),
+			None => row,
+		},
+	)
+	.key("library-block-menu")
 }
 
 pub fn drop_indicator(t: &Tokens) -> El {

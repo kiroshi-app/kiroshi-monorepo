@@ -5,7 +5,7 @@ use rune::{Chrome, El, TextStyle, col, el, icon, row, text};
 use kiroshi_rune_kit::avatar::Face;
 use kiroshi_rune_kit::icons;
 use kiroshi_rune_kit::surfaces::s05_thread::{Agent as ThreadAgent, ThreadKind};
-use kiroshi_rune_kit::surfaces::s14_library::DOCUMENT_PANEL_MAX_WIDTH;
+use kiroshi_rune_kit::surfaces::s14_library::DOCUMENT_PANEL_OPENING_WIDTH;
 use kiroshi_rune_kit::tokens::{
 	RADIUS_LG, SPACING, TEXT_10_MEDIUM, TEXT_COMPACT, TEXT_COMPACT_MONO, TEXT_SM, TEXT_SM_MEDIUM,
 	TEXT_TITLE, Tokens, conversation_icon, srgb,
@@ -146,7 +146,7 @@ fn content(s: &App, ready: &Ready, t: &Tokens, viewport: &Viewport) -> (El, Vec<
 }
 
 fn conversation(s: &App, ready: &Ready, t: &Tokens, viewport: &Viewport) -> (El, Vec<El>) {
-	let room = viewport.thread_room.unwrap_or(DOCUMENT_PANEL_MAX_WIDTH);
+	let room = viewport.thread_room.unwrap_or(DOCUMENT_PANEL_OPENING_WIDTH);
 	let (panel, layers) = s14_library::panel(s, t, room).unzip();
 	let content = row()
 		.grow(1.0)

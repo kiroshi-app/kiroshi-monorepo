@@ -14,7 +14,7 @@ use serde_json::json;
 use yrs::{Doc, ReadTxn, Text, Transact};
 
 use kiroshi_rune_kit::surfaces::s14_library::{
-	BlockEvent, DOCUMENT_PANEL_MAX_WIDTH, DOCUMENT_PANEL_MIN_WIDTH, DocumentPanelEvent,
+	BlockEvent, DOCUMENT_PANEL_MIN_WIDTH, DOCUMENT_PANEL_OPENING_WIDTH, DocumentPanelEvent,
 	Format as Toolbar, ItemAction, ItemEvent, LibraryEvent, LightboxEvent, NewDocumentEvent,
 	NewDocumentTemplate,
 };
@@ -25,7 +25,9 @@ use super::editing::SEND_INTERVAL;
 use super::imports::{self, HOSTED_LIMIT, JOINED_LIMIT};
 use super::session::Session;
 use super::worker::{Answer, Call, Due, Target, free_name};
-use super::{Dialog, Heard, Listing, Shown, State, THREAD_MIN_WIDTH, heard_of};
+use kiroshi_rune_kit::surfaces::s14_library::THREAD_MIN_WIDTH;
+
+use super::{Dialog, Heard, Listing, Shown, State, heard_of};
 use crate::app::{App, Person, Ready, Workspace};
 use crate::events::{HostEvent, parsed};
 use crate::host::{Host, HostError};
@@ -250,7 +252,7 @@ fn a_document_opened_from_a_thread_takes_the_widest_room_then_the_width_last_dra
 
 	assert!(state.beside.is_some());
 	assert_eq!(calls(&mut state), vec![Call::Open(target("brief.md"))]);
-	assert_eq!(widest, (DOCUMENT_PANEL_MAX_WIDTH, 680.0));
+	assert_eq!(widest, (DOCUMENT_PANEL_OPENING_WIDTH, 680.0));
 	assert_eq!(state.panel_width(10_000.0), DOCUMENT_PANEL_MIN_WIDTH + 40.0);
 }
 
@@ -266,11 +268,11 @@ fn the_panel_leaves_the_thread_its_320_unless_the_panel_would_fall_under_its_flo
 	);
 	assert_eq!(state.panel_width(600.0), DOCUMENT_PANEL_MIN_WIDTH);
 	assert_eq!(
-		state.panel_width(THREAD_MIN_WIDTH + DOCUMENT_PANEL_MAX_WIDTH + 1.0),
-		DOCUMENT_PANEL_MAX_WIDTH
+		state.panel_width(THREAD_MIN_WIDTH + DOCUMENT_PANEL_OPENING_WIDTH + 1.0),
+		DOCUMENT_PANEL_OPENING_WIDTH
 	);
 
-	state.dragged_panel(DOCUMENT_PANEL_MAX_WIDTH);
+	state.dragged_panel(DOCUMENT_PANEL_OPENING_WIDTH);
 	assert_eq!(state.panel_width(1_000.0), 680.0);
 }
 

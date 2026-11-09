@@ -15,6 +15,8 @@ const SCALE: &str = "2";
 const SNAP_AT: f64 = 2.0;
 const FRAME: f64 = 1.0 / 60.0;
 const KEY_STEP: f64 = 0.05;
+const GESTURE: f64 = 0.5;
+const HOVER: f64 = 0.2;
 const AWAY: (f64, f64) = (1.0, 1.0);
 const DIFF_INK: [u8; 4] = [255, 0, 64, 255];
 const DIFF_FADE: u8 = 4;
@@ -64,6 +66,21 @@ fn hover(at: f64, key: &str) -> String {
 	format!(r#"{{"t": {at}, "type": "move", "key": "{key}"}}"#)
 }
 
+fn key_press(at: f64, key: char) -> String {
+	let (name, is_shifted) = match key {
+		'←' => ("Left".to_owned(), false),
+		'→' => ("Right".to_owned(), false),
+		'↑' => ("Up".to_owned(), false),
+		'↓' => ("Down".to_owned(), false),
+		'⏎' => ("Enter".to_owned(), false),
+		'⎋' => ("Escape".to_owned(), false),
+		'⇥' => ("Tab".to_owned(), false),
+		'⇤' => ("Tab".to_owned(), true),
+		other => (other.to_string(), false),
+	};
+	format!(r#"{{"t": {at}, "type": "key", "name": "{name}", "shift": {is_shifted}}}"#)
+}
+
 fn script(scene: &Scene, beside: &Path) -> Option<PathBuf> {
 	let last_frame = SNAP_AT - FRAME;
 	let mut events: Vec<String> = (0..scene.tabs)
@@ -71,12 +88,31 @@ fn script(scene: &Scene, beside: &Path) -> Option<PathBuf> {
 			format!(r#"{{"t": {}, "type": "key", "name": "Tab"}}"#, press as f64 * KEY_STEP)
 		})
 		.collect();
-	events.extend(scene.keys.chars().enumerate().map(|(press, key)| {
-		let at = (scene.tabs + press) as f64 * KEY_STEP;
-		format!(r#"{{"t": {at}, "type": "key", "name": "{key}"}}"#)
-	}));
+	let gesture_at = scene.tabs as f64 * KEY_STEP;
+	let keys_from = match scene.pointer {
+		Pointer::Taps(key) => {
+			events.push(hover(gesture_at, key));
+			let tap_at = gesture_at + HOVER;
+			events.push(format!(r#"{{"t": {tap_at}, "type": "tap", "key": "{key}"}}"#));
+			tap_at + GESTURE
+		}
+		Pointer::Drags(key, dx, dy) => {
+			events.push(format!(
+				r#"{{"t": {gesture_at}, "type": "drag", "key": "{key}", "dx": {dx}, "dy": {dy}}}"#
+			));
+			gesture_at + GESTURE
+		}
+		Pointer::Away | Pointer::EntersAtSnap(_) | Pointer::LeavesAtSnap(_) => gesture_at,
+	};
+	events.extend(
+		scene
+			.keys
+			.chars()
+			.enumerate()
+			.map(|(press, key)| key_press(keys_from + press as f64 * KEY_STEP, key)),
+	);
 	match scene.pointer {
-		Pointer::Away => {}
+		Pointer::Away | Pointer::Taps(_) | Pointer::Drags(..) => {}
 		Pointer::EntersAtSnap(key) => events.push(hover(last_frame, key)),
 		Pointer::LeavesAtSnap(key) => {
 			events.push(hover(0.0, key));

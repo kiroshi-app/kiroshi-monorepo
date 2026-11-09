@@ -270,7 +270,7 @@ pub fn panel(app: &App, t: &Tokens, room: f32) -> Option<(El, Vec<El>)> {
 		}
 		Phase::Open(_) => editor(app, t, document, true),
 	};
-	let look = PanelLook { width: state.panel_width(room), ..PanelLook::document(title) };
+	let look = PanelLook { width: state.panel_width(room), ..PanelLook::document(title, room) };
 	let presence = presence_of(app, t, document, true);
 	let panel = document_panel(t, LANGUAGE, look, presence, body, |app: &mut App, event| {
 		library(app).handle_panel(event)
