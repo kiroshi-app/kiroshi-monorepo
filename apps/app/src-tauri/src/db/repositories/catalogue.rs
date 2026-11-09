@@ -18,14 +18,17 @@ const PRESENT_SEAT: &str = "conversation_participants.left_at IS NULL AND bots.d
 
 const CHAT_ORDER: &str = "ORDER BY spoken_at DESC, id";
 
-const CHATS_OF_KIND: &str = "WHERE ?1 IS NULL OR kind = ?1";
+const CHATS_OF_KIND: &str = "WHERE (?1 IS NULL OR kind = ?1)";
 
 const RECENT_CHATS_OF_SCOPE: &str = "WHERE kind <> 'mission' AND space_id = ?1";
+
+const SHOWN_TO_THE_READER: &str = "AND (?2 IS NULL OR owner IS NULL OR owner = ?2)";
 
 fn chats() -> String {
 	format!(
 		"WITH chat AS (
 	SELECT conversations.id AS id, conversations.kind AS kind, conversations.title AS title,
+		conversations.owner AS owner,
 		COALESCE(conversations.space_id, (SELECT bot_spaces.space_id
 			FROM conversation_participants
 			JOIN bots ON bots.id = conversation_participants.bot_id
@@ -37,8 +40,7 @@ fn chats() -> String {
 			WHERE messages.conversation_id = conversations.id
 			ORDER BY messages.seq DESC LIMIT 1),
 			conversations.created_at) AS spoken_at
-	FROM conversations WHERE conversations.archived_at IS NULL
-		AND (?2 IS NULL OR conversations.owner IS NULL OR conversations.owner = ?2))
+	FROM conversations WHERE conversations.archived_at IS NULL)
 	SELECT id, kind, title, space_id FROM chat"
 	)
 }
@@ -137,8 +139,10 @@ fn recent_chats(
 	owned_by: Option<&ChatOwner>,
 ) -> Result<Vec<ChatHit>, CatalogueError> {
 	let seated = seated_bots(connection)?;
-	let mut statement =
-		connection.prepare_cached(&format!("{} {RECENT_CHATS_OF_SCOPE} {CHAT_ORDER}", chats()))?;
+	let mut statement = connection.prepare_cached(&format!(
+		"{} {RECENT_CHATS_OF_SCOPE} {SHOWN_TO_THE_READER} {CHAT_ORDER}",
+		chats()
+	))?;
 	let rows = statement.query_map(params![space_id, owned_by], chat_row)?;
 	Ok(rows
 		.collect::<rusqlite::Result<Vec<_>>>()?
@@ -155,8 +159,10 @@ fn matching_chats(
 	needle: &str,
 	seated: &Seated,
 ) -> Result<Vec<ChatHit>, CatalogueError> {
-	let mut statement =
-		connection.prepare_cached(&format!("{} {CHATS_OF_KIND} {CHAT_ORDER}", chats()))?;
+	let mut statement = connection.prepare_cached(&format!(
+		"{} {CHATS_OF_KIND} {SHOWN_TO_THE_READER} {CHAT_ORDER}",
+		chats()
+	))?;
 	let rows = statement.query_map(params![scope.kind, owned_by], chat_row)?;
 	Ok(rows
 		.collect::<rusqlite::Result<Vec<_>>>()?

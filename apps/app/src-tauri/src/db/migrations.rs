@@ -5088,7 +5088,7 @@ mod tests {
 			.expect("the colours read as hues")
 	}
 
-	fn kept_beside(connection: &Connection, table: &str, column: &str) -> Vec<Kept> {
+	fn kept_beside(connection: &Connection, table: &str, columns: &[&str]) -> Vec<Kept> {
 		let mut statement =
 			connection.prepare(&format!("SELECT * FROM {table} ORDER BY id")).expect("select");
 		let names: Vec<String> = statement.column_names().into_iter().map(str::to_owned).collect();
@@ -5097,7 +5097,7 @@ mod tests {
 				let mut kept = names
 					.iter()
 					.enumerate()
-					.filter(|(_, name)| name.as_str() != column)
+					.filter(|(_, name)| !columns.contains(&name.as_str()))
 					.map(|(at, name)| Ok((name.clone(), row.get(at)?)))
 					.collect::<rusqlite::Result<Kept>>()?;
 				kept.sort_by(|left, right| left.0.cmp(&right.0));
@@ -5117,7 +5117,7 @@ mod tests {
 		let coloured = [("spaces", "colour"), ("bots", "avatar_color"), ("conversations", "color")];
 		let before: Vec<_> = coloured
 			.iter()
-			.map(|(table, column)| kept_beside(&connection, table, column))
+			.map(|(table, column)| kept_beside(&connection, table, &[column]))
 			.collect();
 
 		apply(&mut connection).expect("the file comes up to this build");
@@ -5132,8 +5132,15 @@ mod tests {
 		expected.sort();
 		for (at, (table, column)) in coloured.iter().enumerate() {
 			assert_eq!(colours_of(&connection, table, column), expected, "{table}.{column}");
-			assert_eq!(kept_beside(&connection, table, column), before[at], "{table} moved");
+			let kept = kept_beside(&connection, table, &[column, "owner"]);
+			assert_eq!(kept, before[at], "{table} moved");
 		}
+		let owned_rooms: i64 = connection
+			.query_row("SELECT COUNT(*) FROM conversations WHERE owner IS NOT NULL", [], |row| {
+				row.get(0)
+			})
+			.expect("the owners read");
+		assert_eq!(owned_rooms, 0, "a room took an owner");
 
 		drop(connection);
 		fs::remove_dir_all(&dir).expect("cleanup");

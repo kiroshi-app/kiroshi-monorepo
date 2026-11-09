@@ -55,11 +55,11 @@ use crate::companions::contract::{
 	UPDATED_EVENT as COMPANION_UPDATED_EVENT,
 };
 use crate::conversations::commands::{
-	conversation_add_participant, conversation_append_user_message, conversation_create,
-	conversation_create_bot_from_draft, conversation_delete, conversation_delete_bot,
-	conversation_duplicate_bot, conversation_page, conversation_remove_participant,
-	conversation_renew_main_chat, conversation_send_user_message, conversation_set_lead,
-	conversation_update, conversation_update_bot,
+	conversation_add_participant, conversation_agent_rooms, conversation_append_user_message,
+	conversation_create, conversation_create_bot_from_draft, conversation_delete,
+	conversation_delete_bot, conversation_duplicate_bot, conversation_page,
+	conversation_remove_participant, conversation_renew_main_chat, conversation_send_user_message,
+	conversation_set_lead, conversation_update, conversation_update_bot,
 };
 use crate::conversations::contract::{
 	Bot, BotDraft, BotIdentity, Conversation, ConversationInPage, Hue, LastWord, NewUserMessage,
@@ -99,6 +99,7 @@ use crate::mcp_oauth::asking::AuthorizationAnswers;
 use crate::mcp_oauth::commands::{mcp_application_status, McpOauthState};
 use crate::mcp_oauth::credentials;
 use crate::mcp_oauth::reports::ApplicationReports;
+use crate::missions::commands::{mission_space_feed, mission_space_page};
 use crate::missions::contract::{MissionDetail, MissionDraft, Ticket};
 use crate::removed_on_drop::RemovedOnDrop;
 use crate::routines::commands::CHANGED_EVENT as ROUTINE_CHANGED_EVENT;
@@ -667,6 +668,29 @@ async fn host_effect_applied(
 				CatalogueScope { query: text("query"), space_id: text("spaceId"), kind: None };
 			let found = database.catalogue().search(scope, None).await.expect("the host searches");
 			return answered_json(StatusCode::OK, json!(found));
+		}
+		"conversation_agent_rooms" => {
+			let state = effects.app().state::<DatabaseState>();
+			let rooms =
+				conversation_agent_rooms(state, text("spaceId")).await.expect("the host reads");
+			return answered_json(StatusCode::OK, json!(rooms));
+		}
+		"mission_space_feed" => {
+			let (app, closed_since) = (effects.app().clone(), typed(&args, "closedSince"));
+			let state = effects.app().state::<DatabaseState>();
+			let feed = mission_space_feed(app, state, text("spaceId"), closed_since)
+				.await
+				.expect("the host reads");
+			return answered_json(StatusCode::OK, json!(feed));
+		}
+		"mission_space_page" => {
+			let (app, closed_since) = (effects.app().clone(), typed(&args, "closedSince"));
+			let state = effects.app().state::<DatabaseState>();
+			let (cursor, limit) = (typed(&args, "cursor"), typed(&args, "limit"));
+			let page = mission_space_page(app, state, text("spaceId"), closed_since, cursor, limit)
+				.await
+				.expect("the host reads");
+			return answered_json(StatusCode::OK, json!(page));
 		}
 		"search_recent" => {
 			let found =
