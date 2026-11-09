@@ -415,6 +415,18 @@ fn emitter<S: 'static, E: Clone + 'static>(
 	move |s: &mut S| on(s, event.clone())
 }
 
+fn pressed_on_return<S: 'static>(
+	press: impl Fn(&mut S) + 'static,
+) -> impl Fn(&mut S, &KeyEvent, &mut Tx) -> bool + 'static {
+	move |s: &mut S, event: &KeyEvent, _: &mut Tx| {
+		let is_return = event.key == KeyName::Enter && event.mods == rune::Mods::default();
+		if is_return {
+			press(s);
+		}
+		is_return
+	}
+}
+
 fn label_text(content: &str, style: TextStyle, colour: Color) -> El {
 	text(content.to_owned()).font(style).color(colour)
 }
@@ -716,6 +728,7 @@ pub struct LibraryPanel<'a> {
 	pub query: &'a TextEdit,
 	pub actions: PanelActions,
 	pub columns: usize,
+	pub focused: Option<&'a str>,
 }
 
 pub const GRID_TILE_MIN: f32 = SPACING * 60.0;
@@ -779,7 +792,7 @@ pub fn library_panel<S: 'static>(
 			.role("status")
 			.child(text(line).font(TEXT_COMPACT).color(t.muted_foreground).wrap())
 	} else {
-		grid(t, lang, &shown, panel.columns, on)
+		grid(t, lang, &shown, panel.columns, panel.focused, on)
 	};
 	let content = col().w_full().grow(1.0).min_h(0.0).child(header).child(body);
 	let content = if is_loading {
@@ -980,6 +993,7 @@ fn grid<S: 'static>(
 	lang: Language,
 	items: &[&LibraryItem],
 	columns: usize,
+	focused: Option<&str>,
 	on: impl Fn(&mut S, LibraryEvent) + Clone + 'static,
 ) -> El {
 	let cells = items
@@ -989,14 +1003,11 @@ fn grid<S: 'static>(
 			None => {
 				let open = emitter(&on, LibraryEvent::Open(item.id.to_owned()));
 				let anchor = tile_more_key(item.id);
-				let menu = emitter(
-					&on,
-					LibraryEvent::Menu { id: item.id.to_owned(), anchor: anchor.clone() },
-				);
-				el().w_full()
-					.hover_group()
-					.child(tile(t, lang, item).on_press(open))
-					.child(tile_more(t, lang, item, anchor).on_press(menu))
+				let menu = LibraryEvent::Menu { id: item.id.to_owned(), anchor: anchor.clone() };
+				let more = tile_more(t, lang, item, anchor, focused == Some(item.id))
+					.on_press(emitter(&on, menu.clone()))
+					.on_key(pressed_on_return(emitter(&on, menu)));
+				el().w_full().hover_group().child(tile(t, lang, item).on_press(open)).child(more)
 			}
 		})
 		.collect();
@@ -1082,7 +1093,7 @@ pub fn tile_more_key(id: &str) -> String {
 	format!("library-item-more-{id}")
 }
 
-fn tile_more(t: &Tokens, lang: Language, item: &LibraryItem, key: String) -> El {
+fn tile_more(t: &Tokens, lang: Language, item: &LibraryItem, key: String, is_revealed: bool) -> El {
 	let label =
 		filled(say(common::library::item_menu::LABEL, lang), "name", shown_name(item.name, lang));
 	let face = row()
@@ -1091,8 +1102,8 @@ fn tile_more(t: &Tokens, lang: Language, item: &LibraryItem, key: String) -> El 
 		.center()
 		.fill(t.card)
 		.hover(t.muted)
-		.group_opacity(0.0, 1.0)
 		.child(icon(&icons::MORE_HORIZONTAL, SPACING * 4.0).color(t.foreground));
+	let face = if is_revealed { face } else { face.group_opacity(0.0, 1.0) };
 	let control = row()
 		.key(key)
 		.pin(None, Some(SPACING * 2.0), Some(SPACING * 2.0), None)
@@ -4812,3 +4823,6 @@ pub fn title_field<S: 'static>(
 		.label(say(common::library::editor::TITLE, lang))
 		.on_edit(access)
 }
+
+#[cfg(test)]
+mod tile_more_tests;

@@ -113,6 +113,7 @@ fn panel_view(state: &State, t: &Tokens, width: Option<f32>) -> El {
 		query: &state.query,
 		actions: PANEL_ACTIONS,
 		columns: width.map_or(DEFAULT_COLUMNS, grid_columns),
+		focused: None,
 	};
 	library_panel(t, LANGUAGE, &panel, query_edit, |app: &mut App, event| {
 		library(app).handle_library(event)
