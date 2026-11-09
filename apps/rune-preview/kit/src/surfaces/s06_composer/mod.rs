@@ -11,6 +11,7 @@ pub mod prompt;
 pub mod queue;
 pub mod quote;
 pub mod scenes;
+pub mod space_access;
 
 #[cfg(test)]
 mod tests;

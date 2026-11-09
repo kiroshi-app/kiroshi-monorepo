@@ -1,9 +1,10 @@
 use rune::{El, col, row};
 
 use super::{
-	CONVERSATION, CaptionState, ChipPlacement, ChromeEvent, ChromeTab, Incoming, Landing, Lift,
-	TabDragThumbnail, TabIcon, TabMenu, TabTitle, ThumbnailAuthor, ThumbnailMessage, TitleBar,
-	WindowControls, drag_thumbnail, tab_chip, tab_menu, title_bar, window_controls,
+	CONVERSATION, CaptionState, ChipPlacement, ChromeEvent, ChromeTab, ConnectionState,
+	ConnectionStatus, Incoming, Landing, Lift, TabDragThumbnail, TabIcon, TabMenu, TabTitle,
+	ThumbnailAuthor, ThumbnailMessage, TitleBar, WindowControls, connection_status, drag_thumbnail,
+	tab_chip, tab_menu, title_bar, window_controls,
 };
 use crate::icons;
 use crate::scenes::{Pointer, Scene, SceneState, THEMES};
@@ -15,6 +16,7 @@ const BAR_WITH_MENU: (f32, f32) = (1280.0, 340.0);
 const NARROW_WITH_MENU: (f32, f32) = (600.0, 340.0);
 const CONTROLS: (f32, f32) = (1180.0, 34.0);
 const CHIP: (f32, f32) = (480.0, 120.0);
+const STATUS: (f32, f32) = (240.0, 120.0);
 const THUMBNAIL: (f32, f32) = (640.0, 420.0);
 const STEP: f32 = 180.0;
 const PINNED_STEP: f32 = 32.0;
@@ -412,6 +414,22 @@ fn controls_restore_forced_hover(t: &Tokens, _: &SceneState) -> El {
 	controls(t, forced(true, CaptionState::Hover))
 }
 
+fn status(t: &Tokens, state: ConnectionState, version: Option<&str>) -> El {
+	let status = ConnectionStatus { name: "Nest Keeper", state, version };
+	rune_kit::root(
+		row().w_full().h_full().fill(t.background).center().child(connection_status(
+			t,
+			Language::En,
+			status,
+		)),
+		Vec::new(),
+	)
+}
+
+fn status_ready(t: &Tokens, _: &SceneState) -> El {
+	status(t, ConnectionState::Ready, Some("2.1.233"))
+}
+
 const fn scene(id: &'static str, size: (f32, f32), view: fn(&Tokens, &SceneState) -> El) -> Scene {
 	Scene { id, size, tabs: 0, pointer: Pointer::Away, typed: "", keys: "", themes: &THEMES, view }
 }
@@ -477,4 +495,9 @@ pub static SCENES: &[Scene] = &[
 		controls_forced_idle,
 	),
 	scene("layout-windowcontrols--restore-forced-hover", CONTROLS, controls_restore_forced_hover),
+	scene("feedback-connectionstatus--default", STATUS, status_ready),
+	scene("feedback-connectionstatus--default-dark", STATUS, status_ready),
+	scene("feedback-connectionstatus--zero-value", STATUS, |t, _| {
+		status(t, ConnectionState::Checking, None)
+	}),
 ];
