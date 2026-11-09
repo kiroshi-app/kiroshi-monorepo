@@ -29,6 +29,7 @@ import {
 	HomeRoomLine,
 	HomeThinkingLine,
 } from "@workspace/ui/components/home-lines"
+import { HomeTranscript } from "@workspace/ui/components/home-transcript"
 import { Markdown } from "@workspace/ui/components/markdown"
 import {
 	endNotice,
@@ -39,7 +40,6 @@ import type { PromptAttachment } from "@workspace/ui/components/prompt-attachmen
 import { PROMPT_ATTACHMENTS } from "@workspace/ui/components/prompt-attachments.fixtures"
 import { ToolApproval } from "@workspace/ui/components/tool-approval"
 import { ToolQuestion } from "@workspace/ui/components/tool-question"
-import { Transcript } from "@workspace/ui/components/transcript"
 import { AssistantTurn, UserTurn } from "@workspace/ui/components/turn"
 
 const ATLAS: HomeAgent = {
@@ -233,8 +233,7 @@ const ConversationHome = ({ children, composer }: ConversationHomeProps) => (
 		}
 		stage="conversation"
 		transcript={
-			<Transcript
-				contentClassName="gap-4"
+			<HomeTranscript
 				rows={Children.toArray(children).map((turn, index) => ({
 					key: `turn-${index}`,
 					render: () => turn,
@@ -563,31 +562,19 @@ const LONG_TRANSCRIPT = [
 	{ isYours: false, text: BOOKING },
 ]
 
-const LONG_TRANSCRIPT_HOURS = [9, 11]
+const LONG_TURNS = [9, 11].flatMap((hour) =>
+	LONG_TRANSCRIPT.map(({ isYours, text }) =>
+		isYours ? (
+			<YourTurn key={`${hour}-${text}`} sentAt={at(hour, 0)} text={text} />
+		) : (
+			<AtlasTurn key={`${hour}-${text}`} sentAt={at(hour, 1)} text={text} />
+		),
+	),
+)
 
 export const LongTranscript = meta.story({
 	name: "4e · Long transcript",
-	render: () => (
-		<ConversationHome>
-			{LONG_TRANSCRIPT_HOURS.flatMap((hour) =>
-				LONG_TRANSCRIPT.map(({ isYours, text }) =>
-					isYours ? (
-						<YourTurn
-							key={`${hour}-${text}`}
-							sentAt={at(hour, 0)}
-							text={text}
-						/>
-					) : (
-						<AtlasTurn
-							key={`${hour}-${text}`}
-							sentAt={at(hour, 1)}
-							text={text}
-						/>
-					),
-				),
-			)}
-		</ConversationHome>
-	),
+	render: () => <ConversationHome>{LONG_TURNS}</ConversationHome>,
 	parameters: withDescription(
 		"More turns than the panel holds: the transcript scrolls inside itself, follows the last turn, and the composer stays pinned at the bottom.",
 	),
@@ -600,6 +587,46 @@ export const LongTranscript = meta.story({
 		)
 		await expect(canvas.getByRole("button", { name: "Send" })).toBeVisible()
 		await expectLastTurnOnComposer(canvasElement)
+	},
+})
+
+export const ClippedTranscript = meta.story({
+	name: "Transcript that does not scroll, clipped above the composer",
+	tags: ["test-only"],
+	render: () => (
+		<HomeLayout
+			composer={
+				<HomeComposer
+					agents={AGENTS}
+					onAttach={attached}
+					onSelectAgent={selectedAgent}
+					onSubmit={sent}
+					selectedAgentId={ATLAS.id}
+				/>
+			}
+			stage="conversation"
+			transcript={LONG_TURNS}
+		/>
+	),
+	parameters: withDescription(
+		"A transcript node that does not scroll itself and outgrows the stage: the transcript slot clips it, and the composer stays on top and reachable.",
+	),
+	play: async ({ canvas, canvasElement }) => {
+		const transcript = canvasElement.querySelector<HTMLElement>(
+			'[data-slot="home-layout-transcript"]',
+		)
+		await expect(transcript?.scrollHeight).toBeGreaterThan(
+			transcript?.clientHeight ?? 0,
+		)
+		await expect(transcript).toHaveStyle({ overflowY: "hidden" })
+		const field = canvas.getByRole("textbox")
+		field.scrollIntoView({ block: "center" })
+		const { left, top, width, height } = field.getBoundingClientRect()
+		await expect(
+			field.contains(
+				document.elementFromPoint(left + width / 2, top + height / 2),
+			),
+		).toBe(true)
 	},
 })
 

@@ -13,11 +13,6 @@ import { MessageClock } from "@workspace/ui/components/message"
 import { AGENT_BUBBLE_WIDTH } from "@workspace/ui/components/turn"
 import { cn } from "@workspace/ui/lib/utils"
 
-/**
- * A room a Home line links to. `href` is the navigation: every room link
- * (room line, mission line, asked-by line) renders it as an anchor.
- * `onOpenRoom` on those lines is optional, for a caller that intercepts the click.
- */
 type HomeRoom = {
 	title: string
 	href: string

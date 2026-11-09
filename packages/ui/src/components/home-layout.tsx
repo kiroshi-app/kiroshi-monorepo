@@ -33,7 +33,7 @@ const HomeLayout = (props: HomeLayoutProps) => {
 		>
 			<div className={cn(COLUMN, "min-h-0 flex-1")}>
 				<div
-					className="flex min-h-0 flex-1 flex-col"
+					className="flex min-h-0 flex-1 flex-col overflow-hidden"
 					data-slot="home-layout-transcript"
 				>
 					{props.transcript}

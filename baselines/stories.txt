@@ -178,6 +178,7 @@ branding-spacetint--variants
 conversation-home-home--afternoon
 conversation-home-home--approval-waits
 conversation-home-home--band-shown
+conversation-home-home--clipped-transcript
 conversation-home-home--could-not-send
 conversation-home-home--evening
 conversation-home-home--field-filled
