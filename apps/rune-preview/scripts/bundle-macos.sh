@@ -8,17 +8,27 @@ readonly TARGET="${CARGO_TARGET_DIR:-$PREVIEW_ROOT/target}"
 readonly EXECUTABLE=kiroshi-rune-preview
 readonly BUNDLE="$TARGET/bundle/Kiroshi Rune Preview.app"
 readonly LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+readonly RELEASE_TRIPLE="${1:-}"
+readonly VERSION="${2:-0.0.0}"
 
 if [ "$(uname -s)" != Darwin ]; then
 	echo "bundle-macos.sh: macOS only; elsewhere run the binary with --register-scheme" >&2
 	exit "$USAGE_ERROR"
 fi
 
+if [ -n "$RELEASE_TRIPLE" ]; then
+	build=(--release --locked --target "$RELEASE_TRIPLE")
+	built="$TARGET/$RELEASE_TRIPLE/release/$EXECUTABLE"
+else
+	build=()
+	built="$TARGET/debug/$EXECUTABLE"
+fi
+
 cd "$PREVIEW_ROOT"
-"$REPO_ROOT/scripts/slot.sh" cargo build -p kiroshi-rune-preview --bin "$EXECUTABLE"
+"$REPO_ROOT/scripts/slot.sh" cargo build -p kiroshi-rune-preview --bin "$EXECUTABLE" ${build[@]+"${build[@]}"}
 
 mkdir -p "$BUNDLE/Contents/MacOS"
-cp -f "$TARGET/debug/$EXECUTABLE" "$BUNDLE/Contents/MacOS/$EXECUTABLE"
+cp -f "$built" "$BUNDLE/Contents/MacOS/$EXECUTABLE"
 cat >"$BUNDLE/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -33,7 +43,7 @@ cat >"$BUNDLE/Contents/Info.plist" <<PLIST
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.0.0</string>
+	<string>$VERSION</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>CFBundleURLTypes</key>

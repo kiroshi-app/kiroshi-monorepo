@@ -35,12 +35,12 @@ use tokio::sync::broadcast::error::RecvError;
 
 use crate::app;
 use crate::events::{self, HostEvent};
-use crate::host::HostError;
+use crate::host::{HostError, Profile};
 use crate::model::{AgentEvent, Role};
 use crate::source::Source;
 use crate::turn;
 
-pub const IDENTIFIER: &str = "com.kiroshi.rune-preview";
+pub const IDENTIFIER: &str = Profile::BUILT.identifier();
 
 pub const DATA_ENV: &str = "KIROSHI_PREVIEW_DATA";
 

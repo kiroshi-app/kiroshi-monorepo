@@ -246,6 +246,113 @@ jobs:
           uploadUpdaterJson: true
           args: ${{ matrix.args }}
 
+  rune:
+    needs: [ci-green, draft]
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-15
+            package: apps/rune-preview/scripts/package-macos.sh aarch64-apple-darwin
+            secrets: APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+          - platform: macos-15-intel
+            package: apps/rune-preview/scripts/package-macos.sh x86_64-apple-darwin
+            secrets: APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+          - platform: ubuntu-22.04
+            package: apps/rune-preview/scripts/package-linux.sh
+            secrets: TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+          - platform: windows-latest
+            package: apps/rune-preview/scripts/package-windows.sh
+            secrets: TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+    runs-on: ${{ matrix.platform }}
+    timeout-minutes: 120
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REQUIRED_SECRETS: ${{ matrix.secrets }}
+      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+    steps:
+      - name: Fail on a missing signing secret
+        shell: bash
+        run: |
+          missing=0
+          for secret in $REQUIRED_SECRETS; do
+            if [ -z "${!secret:-}" ]; then
+              echo "::error::Rune package of $GITHUB_REF_NAME not built: the $secret secret is missing"
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: package.json
+
+      - name: Install the keyboard library the Rune app links on Linux
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install --yes --no-install-recommends libxkbcommon-dev
+
+      - name: Put NSIS on the path
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          if [ ! -x "/c/Program Files (x86)/NSIS/makensis.exe" ]; then
+            choco install nsis --no-progress --yes
+          fi
+          echo 'C:\Program Files (x86)\NSIS' >> "$GITHUB_PATH"
+
+      - name: Import the signing certificate into a keychain of the job
+        if: runner.os == 'macOS'
+        run: |
+          keychain="$RUNNER_TEMP/rune-signing.keychain-db"
+          password=$(openssl rand -base64 24)
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          printf '%s' "$APPLE_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security import "$RUNNER_TEMP/certificate.p12" -k "$keychain" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          rm "$RUNNER_TEMP/certificate.p12"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain"
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: apps/rune-preview -> target
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build sidecar
+        run: bun run --filter sidecar build
+
+      - name: Build the Rune package
+        shell: bash
+        run: ${{ matrix.package }} "${GITHUB_REF_NAME#v}" "$RUNNER_TEMP/rune"
+
+      - name: Sign the Rune package with the updater key
+        shell: bash
+        working-directory: apps/app
+        run: |
+          for package in "$RUNNER_TEMP/rune/"*; do
+            bun x tauri signer sign "$package"
+          done
+
+      - name: Attach the Rune package to the draft release
+        shell: bash
+        run: gh release upload "$GITHUB_REF_NAME" "$RUNNER_TEMP/rune/"* --clobber --repo "$GITHUB_REPOSITORY"
+
   publish:
     needs: [draft, release]
     runs-on: ubuntu-latest
