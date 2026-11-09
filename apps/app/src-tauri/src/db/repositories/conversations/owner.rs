@@ -8,18 +8,12 @@ pub enum ChatOwner {
 	Member(String),
 }
 
-impl ChatOwner {
-	pub fn stored(&self) -> &str {
-		match self {
-			ChatOwner::Host => HOST_OWNER,
-			ChatOwner::Member(account_id) => account_id,
-		}
-	}
-}
-
 impl ToSql for ChatOwner {
 	fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
-		Ok(ToSqlOutput::from(self.stored()))
+		Ok(ToSqlOutput::from(match self {
+			ChatOwner::Host => HOST_OWNER,
+			ChatOwner::Member(account_id) => account_id.as_str(),
+		}))
 	}
 }
 
