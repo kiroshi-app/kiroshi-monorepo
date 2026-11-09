@@ -1,20 +1,23 @@
-use std::collections::HashSet;
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use tauri::{AppHandle, Manager, Runtime, State};
 use tokio::sync::Mutex;
 
 use super::contract::{
-	state_in, ConversationState, ConversationStateChanged, ObservedState, PendingPrompt, States,
-	TranscriptStoreError,
+	state_in, AgentRoomsChanged, ConversationState, ConversationStateChanged, ObservedState,
+	PendingPrompt, States, TranscriptStoreError,
 };
 use crate::db;
 use crate::db::repositories::conversations::{Activity, StoredPrompt};
-use crate::events::{self, CONVERSATION_STATE_CHANGED};
+use crate::events::{self, AGENT_ROOMS_CHANGED, CONVERSATION_STATE_CHANGED};
 use crate::missions::commands::observed as mission_observed;
 use crate::missions::contract::MissionLiveness;
 
 #[derive(Default)]
 struct Observed(Mutex<States>);
+
+#[derive(Default)]
+struct AnnouncedRooms(Mutex<HashMap<String, BTreeMap<String, Vec<String>>>>);
 
 pub(crate) async fn listed<R: Runtime>(
 	app: &AppHandle<R>,
@@ -43,23 +46,72 @@ pub(crate) async fn observe<R: Runtime>(
 	};
 	let space_id = activity.space_id.clone();
 	let state = observed_state(activity, &origins_needing_you(app, database).await?);
-	if state_in(&observed, conversation_id) == state {
-		return Ok(state);
+	if state_in(&observed, conversation_id) != state {
+		let changed = ConversationStateChanged {
+			conversation_id: conversation_id.to_owned(),
+			space_id: space_id.clone(),
+			observed: state.clone(),
+		};
+		match events::emit(app, CONVERSATION_STATE_CHANGED, changed) {
+			Ok(()) => {
+				observed.insert(conversation_id.to_owned(), state.clone());
+			}
+			Err(failure) => {
+				log::warn!(
+					"the state of conversation {conversation_id} was not announced: {failure}"
+				)
+			}
+		}
 	}
-	let changed = ConversationStateChanged {
-		conversation_id: conversation_id.to_owned(),
-		space_id,
-		observed: state.clone(),
-	};
-	match events::emit(app, CONVERSATION_STATE_CHANGED, changed) {
-		Ok(()) => {
-			observed.insert(conversation_id.to_owned(), state.clone());
-		}
-		Err(failure) => {
-			log::warn!("the state of conversation {conversation_id} was not announced: {failure}")
-		}
+	if let Some(space_id) = space_id {
+		observe_agent_rooms(app, database, &space_id).await;
 	}
 	Ok(state)
+}
+
+pub(crate) async fn observe_agent_rooms<R: Runtime>(
+	app: &AppHandle<R>,
+	database: &db::Database,
+	space_id: &str,
+) {
+	if let Err(failure) = announce_agent_rooms(app, database, space_id).await {
+		log::warn!("the rooms of the agents of space {space_id} did not read: {failure:?}");
+	}
+}
+
+async fn announce_agent_rooms<R: Runtime>(
+	app: &AppHandle<R>,
+	database: &db::Database,
+	space_id: &str,
+) -> Result<(), TranscriptStoreError> {
+	let held = announced_rooms(app);
+	let mut announced = held.0.lock().await;
+	let working = database.conversations().rooms_of_working_bots(space_id.to_owned()).await?;
+	let seen = announced.entry(space_id.to_owned()).or_default();
+	let bot_ids: BTreeSet<String> = seen.keys().chain(working.keys()).cloned().collect();
+	for bot_id in bot_ids {
+		let conversation_ids = working.get(&bot_id).cloned().unwrap_or_default();
+		if seen.get(&bot_id).map_or(&[][..], Vec::as_slice) == conversation_ids.as_slice() {
+			continue;
+		}
+		let changed = AgentRoomsChanged {
+			bot_id: bot_id.clone(),
+			space_id: space_id.to_owned(),
+			conversation_ids: conversation_ids.clone(),
+		};
+		match events::emit(app, AGENT_ROOMS_CHANGED, changed) {
+			Ok(()) if conversation_ids.is_empty() => {
+				seen.remove(&bot_id);
+			}
+			Ok(()) => {
+				seen.insert(bot_id, conversation_ids);
+			}
+			Err(failure) => {
+				log::warn!("the rooms of agent {bot_id} were not announced: {failure}")
+			}
+		}
+	}
+	Ok(())
 }
 
 pub(crate) async fn observe_reporting<R: Runtime>(
@@ -153,6 +205,13 @@ fn observed<R: Runtime>(app: &AppHandle<R>) -> State<'_, Observed> {
 	app.state::<Observed>()
 }
 
+fn announced_rooms<R: Runtime>(app: &AppHandle<R>) -> State<'_, AnnouncedRooms> {
+	if app.try_state::<AnnouncedRooms>().is_none() {
+		app.manage(AnnouncedRooms::default());
+	}
+	app.state::<AnnouncedRooms>()
+}
+
 #[cfg(test)]
 mod tests {
 	use std::sync::{Arc, Mutex as Held};
@@ -169,11 +228,11 @@ mod tests {
 	use crate::agent::reply_writer::TurnSink;
 	use crate::conversations::commands::ready;
 	use crate::conversations::commands::{
-		conversation_delete, conversation_list, conversation_main_chat, conversation_page,
-		conversation_solo_states,
+		conversation_agent_rooms, conversation_delete, conversation_list, conversation_main_chat,
+		conversation_page, conversation_solo_states,
 	};
 	use crate::conversations::contract::Chat;
-	use crate::conversations::contract::STATE_CHANGED_EVENT;
+	use crate::conversations::contract::{AGENT_ROOMS_CHANGED_EVENT, STATE_CHANGED_EVENT};
 	use crate::db::repositories::conversations::{a_pending_prompt, PromptKind};
 	use crate::db::repositories::messages::NewTurn;
 	use crate::missions::contract::{
@@ -351,9 +410,13 @@ mod tests {
 	}
 
 	fn heard_states(app: &App<MockRuntime>) -> Arc<Held<Vec<Value>>> {
+		heard_on(app, STATE_CHANGED_EVENT)
+	}
+
+	fn heard_on(app: &App<MockRuntime>, event_name: &'static str) -> Arc<Held<Vec<Value>>> {
 		let heard = Arc::new(Held::new(Vec::new()));
 		let kept = heard.clone();
-		app.handle().listen(STATE_CHANGED_EVENT, move |event| {
+		app.handle().listen(event_name, move |event| {
 			let payload = serde_json::from_str(event.payload()).expect("the payload is JSON");
 			kept.lock().expect("the list is kept").push(payload);
 		});
@@ -872,5 +935,162 @@ mod tests {
 			observed_of("c3"),
 			Some(json!({ "state": "needs_you", "pendingPrompt": null, "workingBotIds": [] }))
 		);
+	}
+
+	const ROOMS_OF_TWO_SPACES: &str = "
+		INSERT INTO spaces (id, name, colour, position, created_at)
+			VALUES ('elsewhere', 'Elsewhere', 257, 1, 1);
+		INSERT INTO bot_spaces (bot_id, space_id, joined_at) VALUES ('b1', 'elsewhere', 2);
+		INSERT INTO conversations (id, space_id, kind, title, created_at, updated_at)
+			VALUES ('c3', 'personal', 'topic', 'Third', 1, 1),
+				('e1', 'elsewhere', 'topic', 'Away', 1, 1);
+	";
+
+	async fn rooms_in_two_spaces(name: &str) -> AppOfItsOwn {
+		let app = a_host(name).await;
+		a_second_room(&app).await;
+		database(&app)
+			.call_mut(|connection| Ok(connection.execute_batch(ROOMS_OF_TWO_SPACES)?))
+			.await
+			.expect("the rooms are planted");
+		app
+	}
+
+	fn rooms_of(bot_id: &str, space_id: &str, conversation_ids: &[&str]) -> Value {
+		json!({ "botId": bot_id, "spaceId": space_id, "conversationIds": conversation_ids })
+	}
+
+	fn heard_rooms(app: &App<MockRuntime>) -> Arc<Held<Vec<Value>>> {
+		heard_on(app, AGENT_ROOMS_CHANGED_EVENT)
+	}
+
+	async fn ends(app: &App<MockRuntime>, turn_id: &str, conversation_id: &str) {
+		database(app).messages().complete_turn(turn_id.to_owned(), 9).await.expect("the turn ends");
+		observed_in(app, conversation_id).await;
+	}
+
+	async fn agent_rooms_of(app: &App<MockRuntime>, space_id: &str) -> Value {
+		let rooms = conversation_agent_rooms(app.state(), space_id.to_owned())
+			.await
+			.expect("the rooms read");
+		serde_json::to_value(rooms).expect("the rooms serialize")
+	}
+
+	#[tokio::test]
+	async fn an_agent_starting_in_a_second_room_is_announced_with_its_newest_room_first() {
+		let app = rooms_in_two_spaces("rooms-grow").await;
+		let heard = heard_rooms(&app);
+
+		a_run_of(&app, ("t1", "c1", 1), "b1").await;
+		observed_in(&app, "c1").await;
+		a_run_of(&app, ("t2", "c2", 2), "b1").await;
+		observed_in(&app, "c2").await;
+
+		heard_until(
+			&heard,
+			&[rooms_of("b1", "personal", &["c1"]), rooms_of("b1", "personal", &["c2", "c1"])],
+		)
+		.await;
+	}
+
+	#[tokio::test]
+	async fn the_turns_of_an_agent_ending_shrink_its_rooms_then_empty_them() {
+		let app = rooms_in_two_spaces("rooms-shrink").await;
+		a_run_of(&app, ("t1", "c1", 1), "b1").await;
+		a_run_of(&app, ("t2", "c2", 2), "b1").await;
+		observed_in(&app, "c2").await;
+		let heard = heard_rooms(&app);
+
+		ends(&app, "t2", "c2").await;
+		ends(&app, "t1", "c1").await;
+
+		heard_until(
+			&heard,
+			&[rooms_of("b1", "personal", &["c1"]), rooms_of("b1", "personal", &[])],
+		)
+		.await;
+	}
+
+	#[tokio::test]
+	async fn a_state_change_that_leaves_the_rooms_of_an_agent_alone_announces_no_rooms() {
+		let app = rooms_in_two_spaces("rooms-unchanged").await;
+		a_run_of(&app, ("t1", "c1", 1), "b1").await;
+		observed_in(&app, "c1").await;
+		let heard = heard_rooms(&app);
+		let states = heard_states(&app);
+
+		ask(&app, PromptKind::Question).await;
+		observed_in(&app, "c1").await;
+		answer(&app).await;
+		observed_in(&app, "c1").await;
+		observed_in(&app, "c3").await;
+
+		heard_until(
+			&states,
+			&[
+				a_change_of("c1", "needs_you", the_question(), &["b1"]),
+				a_change_of("c1", "working", Value::Null, &["b1"]),
+			],
+		)
+		.await;
+		assert!(heard.lock().expect("the list is kept").is_empty());
+	}
+
+	#[tokio::test]
+	async fn an_agent_working_in_two_spaces_is_announced_once_per_space_with_its_rooms_there() {
+		let app = rooms_in_two_spaces("rooms-two-spaces").await;
+		let heard = heard_rooms(&app);
+
+		a_run_of(&app, ("t1", "c1", 1), "b1").await;
+		a_run_of(&app, ("t2", "e1", 2), "b1").await;
+		observed_in(&app, "c1").await;
+		observed_in(&app, "e1").await;
+
+		heard_until(
+			&heard,
+			&[rooms_of("b1", "personal", &["c1"]), rooms_of("b1", "elsewhere", &["e1"])],
+		)
+		.await;
+	}
+
+	#[tokio::test]
+	async fn the_rooms_read_lists_each_working_agent_newest_first_and_silences_no_later_change() {
+		let app = rooms_in_two_spaces("rooms-read").await;
+		a_run_of(&app, ("t1", "c1", 1), "b1").await;
+		a_run_of(&app, ("t2", "c3", 3), "b1").await;
+		a_run_of(&app, ("t3", "c2", 2), "b2").await;
+		a_run_of(&app, ("t4", "e1", 4), "b1").await;
+		let heard = heard_rooms(&app);
+
+		let read = agent_rooms_of(&app, "personal").await;
+		observed_in(&app, "c2").await;
+
+		assert_eq!(
+			read,
+			json!([
+				{ "botId": "b1", "conversationIds": ["c3", "c1"] },
+				{ "botId": "b2", "conversationIds": ["c2"] },
+			])
+		);
+		heard_until(
+			&heard,
+			&[rooms_of("b1", "personal", &["c3", "c1"]), rooms_of("b2", "personal", &["c2"])],
+		)
+		.await;
+	}
+
+	#[tokio::test]
+	async fn deleting_a_room_an_agent_works_in_announces_its_rooms_without_it() {
+		let app = rooms_in_two_spaces("rooms-deleted").await;
+		a_run_of(&app, ("t1", "c1", 1), "b1").await;
+		a_run_of(&app, ("t2", "c2", 2), "b1").await;
+		observed_in(&app, "c2").await;
+		let heard = heard_rooms(&app);
+
+		conversation_delete(app.handle().clone(), app.state(), "c2".to_owned())
+			.await
+			.expect("the room is deleted");
+
+		heard_until(&heard, &[rooms_of("b1", "personal", &["c1"])]).await;
 	}
 }

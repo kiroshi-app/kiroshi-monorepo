@@ -76,6 +76,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 67, statements: MESSAGE_REPLY_EXCERPTS },
 	Migration { version: 68, statements: MESSAGE_WEB_SOURCES },
 	Migration { version: 69, statements: MESSAGE_DOCUMENTS },
+	Migration { version: 70, statements: OPEN_TURNS_BY_CONVERSATION },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -1408,6 +1409,10 @@ CREATE TABLE message_documents (
 );
 
 CREATE INDEX message_documents_by_name ON message_documents (name);
+";
+
+const OPEN_TURNS_BY_CONVERSATION: &str = "
+CREATE INDEX turns_open_by_conversation ON turns (conversation_id) WHERE completed_at IS NULL;
 ";
 
 const FRESH_INSTALL_UNTINTED_PERSONAL_SPACE: &str =

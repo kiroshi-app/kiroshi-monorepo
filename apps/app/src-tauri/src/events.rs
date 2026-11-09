@@ -85,6 +85,8 @@ declared! {
 		conversations::contract::DELETED_EVENT,
 	CONVERSATION_STATE_CHANGED: conversations::contract::ConversationStateChanged =
 		conversations::contract::STATE_CHANGED_EVENT,
+	AGENT_ROOMS_CHANGED: conversations::contract::AgentRoomsChanged =
+		conversations::contract::AGENT_ROOMS_CHANGED_EVENT,
 	MESSAGE_STORED: conversations::contract::TranscriptMessage =
 		conversations::contract::MESSAGE_STORED_EVENT,
 	COMPANION_ARRIVED: conversations::contract::CompanionArrival =

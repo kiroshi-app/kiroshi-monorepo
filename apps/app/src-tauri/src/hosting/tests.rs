@@ -62,7 +62,7 @@ use crate::conversations::commands::{
 };
 use crate::conversations::contract::{
 	Bot, BotDraft, BotIdentity, Conversation, ConversationInPage, Hue, LastWord, NewUserMessage,
-	ObservedState, ParticipantRole, TranscriptStoreError, WrittenFrom,
+	ObservedState, ParticipantRole, TranscriptStoreError, WrittenFrom, AGENT_ROOMS_CHANGED_EVENT,
 	CREATED_EVENT as CONVERSATION_CREATED_EVENT, DELETED_EVENT as CONVERSATION_DELETED_EVENT,
 	MESSAGE_STORED_EVENT, STATE_CHANGED_EVENT, UPDATED_EVENT as CONVERSATION_UPDATED_EVENT,
 };
@@ -4448,6 +4448,11 @@ fn a_relay_guest_reads_the_solo_states_of_the_shared_space_only() {
 }
 
 #[test]
+fn a_relay_guest_reads_the_agent_rooms_of_the_shared_space_only() {
+	run(kept_in_the_space_named("conversation_agent_rooms", space_named));
+}
+
+#[test]
 fn a_relay_guest_creates_a_conversation_in_the_shared_space_only() {
 	run(kept_in_the_space_named(
 		"conversation_create",
@@ -5512,6 +5517,36 @@ fn a_relay_guest_hears_the_state_change_of_a_main_conversation_of_the_shared_spa
 			"workingBotIds": [],
 		});
 		assert_eq!(heard, [as_forwarded((STATE_CHANGED_EVENT, changed))]);
+	});
+}
+
+#[test]
+fn a_relay_guest_hears_the_rooms_of_an_agent_in_the_shared_space_only() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("agent-rooms").await;
+		let app = guest.harness.app.handle().clone();
+		let database = db::open(&guest.effects.database);
+		for (turn_id, conversation_id) in [("t-away", "c-shared"), ("t-here", "c-mine")] {
+			let turn = NewTurn {
+				id: turn_id.to_owned(),
+				conversation_id: conversation_id.to_owned(),
+				started_at: 2,
+			};
+			database.messages().start_run(turn, "b-shared".to_owned()).await.expect("it runs");
+			conversation_state::observe(&app, &database, conversation_id)
+				.await
+				.expect("the state reads");
+		}
+
+		let heard = guest.events_until_the_marker().await;
+
+		let rooms =
+			json!({ "botId": "b-shared", "spaceId": PERSONAL, "conversationIds": ["c-mine"] });
+		let rooms_heard: Vec<&Value> = heard
+			.iter()
+			.filter(|frame| frame["event"]["event"] == json!(AGENT_ROOMS_CHANGED_EVENT))
+			.collect();
+		assert_eq!(rooms_heard, [&as_forwarded((AGENT_ROOMS_CHANGED_EVENT, rooms))]);
 	});
 }
 
