@@ -1,17 +1,20 @@
 use kiroshi_core::invitations::contract::Invitation;
-use kiroshi_core::joined_spaces::contract::JoinedSpace;
+use kiroshi_core::joined_spaces::contract::{JoinedSpace, JoinedSpaceRemovalReason};
 use kiroshi_core::spaces::contract::Space;
 use kiroshi_rune_kit::surfaces::s02_rail::{
 	InvitationFailure, InvitationState, PickerMessage, RailMessage, SpaceHost,
 };
+use kiroshi_rune_kit::surfaces::s06_composer::space_access::{AccessReason, WaitReason};
 use serde_json::json;
 
 use super::worker::{Answer, Call};
 use super::{
-	Heard, State, Swipe, heard_of, landed, opening_space, picked, railed, select_space, swipe_space,
+	Heard, State, Swipe, heard_of, landed, opening_space, picked, railed, select_space,
+	space_access, swipe_space,
 };
 use crate::app::notice;
 use crate::app::{App, Person, Ready, SpaceContent, Workspace};
+use crate::events::{HostEvent, parsed};
 use crate::host::{Host, HostError};
 use crate::model::{self, Conversation};
 use crate::navigation::Route;
@@ -35,13 +38,19 @@ fn listed_space(id: &str, name: &str, is_shared: bool) -> Space {
 }
 
 fn joined(id: &str, state: &str) -> JoinedSpace {
+	joined_waiting(id, state, None)
+}
+
+fn joined_waiting(id: &str, state: &str, reason: Option<&str>) -> JoinedSpace {
+	let wait = reason.map(|reason| json!({ "reason": reason, "detail": "" }));
 	serde_json::from_value(json!({
 		"id": id,
 		"hostUrl": "https://relay.test/relay/member",
 		"remoteSpaceId": null,
 		"name": "Studio",
 		"state": state,
-		"hostedBy": null,
+		"wait": wait,
+		"hostedBy": "Noa",
 		"colour": null,
 		"instanceId": "instance-studio",
 	}))
@@ -202,14 +211,86 @@ fn the_picker_lists_local_and_joined_spaces_with_their_host_marks() {
 	assert_eq!(state(&app).hosts(), expected);
 }
 
-#[test]
-fn a_joined_space_stays_closed_with_a_notice() {
+fn access_reason(app: &App) -> Option<AccessReason> {
+	space_access(app).map(|access| access.reason)
+}
+
+fn studio_open(state: &str, reason: Option<&str>) -> App {
 	let mut app = listed_app();
-	landed(&mut app, Answer::Joined(Ok(vec![joined("studio", "online")])));
+	landed(&mut app, Answer::Joined(Ok(vec![joined_waiting("studio", state, reason)])));
 	select_space(&mut app, "studio");
-	assert!(state(&app).queued.is_empty());
-	assert_eq!(shown(&app).id, "perso");
-	assert_eq!(titles(&app).len(), 1);
+	app
+}
+
+#[test]
+fn selecting_a_joined_space_opens_it_with_its_banner_in_place_of_the_composer() {
+	let app = studio_open("waitingForHost", Some("hostSilent"));
+	assert_eq!(shown(&app).id, "studio");
+	assert_eq!(shown(&app).name, "Studio");
+	assert_eq!(state(&app).selected(&shown(&app).id), "studio");
+	assert_eq!(state(&app).queued, vec![Call::Connect("studio".to_owned())]);
+	assert!(titles(&app).is_empty());
+	let access = space_access(&app).expect("a banner");
+	assert_eq!(access.reason, AccessReason::Offline(Some(WaitReason::HostSilent)));
+	assert_eq!((access.space, access.host), ("Studio", "Noa"));
+	assert!(app.thread.is_none());
+}
+
+#[test]
+fn a_joined_space_swaps_or_drops_its_banner_as_its_state_changes() {
+	let mut app = studio_open("online", None);
+	assert_eq!(access_reason(&app), None);
+
+	let waiting = joined_waiting("studio", "waitingForHost", Some("deviceAwaitingApproval"));
+	landed(&mut app, Answer::Joined(Ok(vec![waiting])));
+	let awaiting = AccessReason::Offline(Some(WaitReason::DeviceAwaitingApproval));
+	assert_eq!(access_reason(&app), Some(awaiting));
+
+	landed(&mut app, Answer::Joined(Ok(vec![joined("studio", "online")])));
+	assert_eq!(shown(&app).id, "studio");
+	assert_eq!(access_reason(&app), None);
+}
+
+#[test]
+fn a_departure_keeps_the_space_open_with_its_banner_and_leaving_goes_back() {
+	let mut app = studio_open("online", None);
+	let reason = JoinedSpaceRemovalReason::Removed;
+	app.surfaces.s02_rail.heard(Heard::Departed { id: "studio".to_owned(), reason });
+	landed(&mut app, Answer::Joined(Ok(Vec::new())));
+	assert_eq!(shown(&app).id, "studio");
+	assert_eq!(access_reason(&app), Some(AccessReason::Removed));
+
+	let mut app = studio_open("online", None);
+	let reason = JoinedSpaceRemovalReason::Left;
+	app.surfaces.s02_rail.heard(Heard::Departed { id: "studio".to_owned(), reason });
+	landed(&mut app, Answer::Joined(Ok(Vec::new())));
+	assert_eq!(state(&app).selected(&shown(&app).id), "perso");
+	assert_eq!(access_reason(&app), None);
+}
+
+#[test]
+fn a_refused_connection_waits_in_the_banner_or_raises_a_notice() {
+	let mut app = studio_open("online", None);
+	let waiting = HostError::CommandFailed {
+		command: "joined_space_connect".to_owned(),
+		status: 500,
+		body: json!({
+			"kind": "waitingForHost",
+			"id": "studio",
+			"instanceId": "instance-studio",
+			"reason": "hostSilent",
+			"detail": "",
+		})
+		.to_string(),
+	};
+	let joined_id = "studio".to_owned();
+	landed(&mut app, Answer::Connected { joined_id: joined_id.clone(), outcome: Err(waiting) });
+	assert!(titles(&app).is_empty());
+	assert!(state(&app).queued.contains(&Call::ListJoined));
+
+	let refused = refused("joined_space_connect", "relayRefused");
+	landed(&mut app, Answer::Connected { joined_id, outcome: Err(refused) });
+	assert_eq!(titles(&app), vec!["Couldn't open Studio. Pick it again to try once more."]);
 }
 
 fn invited_app() -> App {
@@ -392,13 +473,32 @@ fn deleting_the_space_on_screen_opens_the_first_remaining_and_remembers_it() {
 	assert!(state(&app).queued.contains(&Call::Remember("work".to_owned())));
 }
 
+fn heard(event: &str, payload: serde_json::Value) -> Option<Heard> {
+	heard_of(event, &payload).map(|heard| heard.expect("a readable event"))
+}
+
 #[test]
 fn space_events_map_to_rereads() {
-	assert_eq!(heard_of("space://described"), Some(Heard::Spaces));
-	assert_eq!(heard_of("joined-space://removed"), Some(Heard::Joined));
-	assert_eq!(heard_of("invitation://changed"), Some(Heard::Invitations));
-	assert_eq!(heard_of("hosting://changed"), Some(Heard::Hosting));
-	assert_eq!(heard_of("mission://changed"), None);
+	assert_eq!(heard("space://described", json!({})), Some(Heard::Spaces));
+	assert_eq!(heard("joined-space://changed", json!({ "id": "studio" })), Some(Heard::Joined));
+	assert_eq!(heard("joined-space://reconnected", json!({ "id": "studio" })), Some(Heard::Joined));
+	assert_eq!(heard("invitation://changed", json!({})), Some(Heard::Invitations));
+	assert_eq!(heard("hosting://changed", json!({})), Some(Heard::Hosting));
+	assert_eq!(heard("mission://changed", json!({})), None);
+}
+
+#[test]
+fn a_removal_names_its_reason_and_an_unreadable_one_reaches_the_app_as_unreadable() {
+	let removed = json!({ "id": "studio", "name": "Studio", "reason": "deleted" });
+	let reason = JoinedSpaceRemovalReason::Deleted;
+	let departed = Heard::Departed { id: "studio".to_owned(), reason };
+	assert_eq!(heard("joined-space://removed", removed), Some(departed));
+
+	let frame = json!({ "event": "joined-space://removed", "payload": { "id": "studio" } });
+	let unreadable = parsed(&frame.to_string());
+	assert!(
+		matches!(unreadable, Some(HostEvent::Unreadable { event, .. }) if event == "joined-space://removed")
+	);
 }
 
 fn solo_conversation(id: &str, bot_id: &str) -> Conversation {

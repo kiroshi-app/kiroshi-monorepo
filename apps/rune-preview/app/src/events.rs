@@ -9,7 +9,7 @@ use tungstenite::http::header::AUTHORIZATION;
 use crate::host::Host;
 use crate::model::{KiroshiAccountState, Message, MissionChanged, ScopedEvent};
 use crate::surfaces::s10_agent_settings::{self, Heard};
-use crate::surfaces::{s03_roster, s07_approvals, s14_library};
+use crate::surfaces::{s02_rail, s03_roster, s04_boot, s07_approvals, s14_library};
 
 const ACCOUNT_CHANGED: &str = "account://changed";
 
@@ -21,6 +21,8 @@ const MISSION_CHANGED: &str = "mission://changed";
 
 const LIBRARY: &str = "library://";
 
+const DEVICE: &str = "device://";
+
 pub enum HostEvent {
 	Listening,
 	AccountChanged(KiroshiAccountState),
@@ -31,6 +33,8 @@ pub enum HostEvent {
 	Roster(s03_roster::Heard),
 	Library(s14_library::Heard),
 	Approvals(s07_approvals::Heard),
+	Device(s04_boot::Heard),
+	Spaces(s02_rail::Heard),
 	Lagged,
 	Unreadable { event: String, cause: String },
 	Lost(String),
@@ -116,13 +120,24 @@ fn named(event: &str, payload: Value) -> Option<HostEvent> {
 		_ if event.starts_with(LIBRARY) => s14_library::heard_of(event, payload).map(|heard| {
 			heard.map_or_else(|failure| unreadable(event, failure), HostEvent::Library)
 		}),
+		_ if event.starts_with(DEVICE) => s04_boot::heard_of(event, payload).map(|heard| {
+			heard.map_or_else(|failure| unreadable(event, failure), HostEvent::Device)
+		}),
 		_ => match s03_roster::heard_of(event, &payload) {
 			Some(heard) => roster_heard(event, heard),
-			None => s10_agent_settings::heard_of(event, payload).map(|heard| {
-				heard.map_or_else(|failure| unreadable(event, failure), HostEvent::Companion)
-			}),
+			None => spaces_heard(event, &payload).or_else(|| companion_heard(event, payload)),
 		},
 	}
+}
+
+fn spaces_heard(event: &str, payload: &Value) -> Option<HostEvent> {
+	s02_rail::heard_of(event, payload)
+		.map(|heard| heard.map_or_else(|failure| unreadable(event, failure), HostEvent::Spaces))
+}
+
+fn companion_heard(event: &str, payload: Value) -> Option<HostEvent> {
+	s10_agent_settings::heard_of(event, payload)
+		.map(|heard| heard.map_or_else(|failure| unreadable(event, failure), HostEvent::Companion))
 }
 
 fn roster_heard(

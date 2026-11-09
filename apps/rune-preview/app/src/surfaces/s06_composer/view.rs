@@ -12,6 +12,7 @@ use kiroshi_rune_kit::surfaces::s06_composer::picker::{
 };
 use kiroshi_rune_kit::surfaces::s06_composer::prompt::{PromptInput, prompt_input};
 use kiroshi_rune_kit::surfaces::s06_composer::queue::{PromptQueue, QueuedMessage, prompt_queue};
+use kiroshi_rune_kit::surfaces::s06_composer::space_access::space_access_banner;
 use kiroshi_rune_kit::surfaces::s06_composer::{Reach, Scope, filled};
 use kiroshi_rune_kit::surfaces::s08_missions::relative_time;
 use kiroshi_rune_kit::tokens::{SPACING, Tokens};
@@ -22,6 +23,7 @@ use super::prompt_text::mention_counts;
 use super::{State, dropped, hovered, intent, named};
 use crate::app::{App, Person};
 use crate::conversations::now_ms;
+use crate::surfaces::s02_rail;
 
 const DETAIL_SEPARATOR: &str = " · ";
 
@@ -130,22 +132,33 @@ fn prompt(app: &App, t: &Tokens, open: &Open, width: f32) -> El {
 	.on_drop_hover(|app: &mut App, is_over, _| hovered(app, is_over))
 }
 
+fn spot(column: El) -> El {
+	row()
+		.key("composer-row")
+		.w_full()
+		.justify_center()
+		.px(COLUMN_INSET)
+		.pt(SPACING * 2.0)
+		.pb(SPACING * 3.0)
+		.on_layout(|app: &mut App, rect| app.surfaces.s06_composer.laid_out(rect[2]))
+		.child(column)
+}
+
+pub fn access_view(app: &App, t: &Tokens) -> Option<El> {
+	let access = s02_rail::space_access(app)?;
+	let width = app.surfaces.s06_composer.prompt_width();
+	Some(spot(col().w(width).child(space_access_banner(t, Language::En, access))))
+}
+
 pub fn view(app: &App, t: &Tokens) -> Option<El> {
+	if let Some(banner) = access_view(app, t) {
+		return Some(banner);
+	}
 	let open = open::of(app)?;
 	let width = app.surfaces.s06_composer.prompt_width();
 	let column =
 		col().w(width).children(queue(app, t, &open, width)).child(prompt(app, t, &open, width));
-	Some(
-		row()
-			.key("composer-row")
-			.w_full()
-			.justify_center()
-			.px(COLUMN_INSET)
-			.pt(SPACING * 2.0)
-			.pb(SPACING * 3.0)
-			.on_layout(|app: &mut App, rect| app.surfaces.s06_composer.laid_out(rect[2]))
-			.child(column),
-	)
+	Some(spot(column))
 }
 
 fn detail_of(item: &LibraryItem, now: i64) -> String {
@@ -200,7 +213,9 @@ fn menu(state: &State, t: &Tokens, open: &Open, trigger: &Trigger) -> Option<El>
 }
 
 pub fn layers(app: &App, t: &Tokens) -> Vec<El> {
-	let Some(open) = open::of(app) else { return Vec::new() };
+	let Some(open) = open::of(app).filter(|_| s02_rail::space_access(app).is_none()) else {
+		return Vec::new();
+	};
 	let state = &app.surfaces.s06_composer;
 	let picker = state.picker.as_ref().map(|query| picker(state, t, query));
 	let trigger = state.trigger(&open).filter(|trigger| !state.menu.is_dismissed(trigger));

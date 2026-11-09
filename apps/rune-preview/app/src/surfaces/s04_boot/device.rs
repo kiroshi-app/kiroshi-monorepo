@@ -1,8 +1,10 @@
-use std::time::Duration;
-
 use chrono::{DateTime, Utc};
-use kiroshi_core::devices::contract::{DeviceKind as CoreDeviceKind, DeviceStatus};
+use kiroshi_core::devices::contract::{
+	APPROVAL_CHANGED_EVENT, APPROVAL_REQUESTED_EVENT, APPROVAL_SETTLED_EVENT,
+	DeviceKind as CoreDeviceKind, DeviceStatus,
+};
 use serde::Deserialize;
+use serde_json::Value;
 
 use kiroshi_rune_kit::surfaces::s04_boot::device_approval::ApprovalStatus;
 use kiroshi_rune_kit::surfaces::s04_boot::device_card::DeviceKind;
@@ -10,12 +12,10 @@ use kiroshi_rune_kit::surfaces::s04_boot::new_device::{
 	CODE_LENGTH, NewDeviceEvent, NewDeviceStep,
 };
 
-use super::calls::{Call, Due, KiroshiAccount, SignedOutReason};
+use super::calls::{Call, KiroshiAccount, SignedOutReason};
 
 #[cfg(test)]
 mod tests;
-
-const DEVICE_WATCH: Duration = Duration::from_secs(2);
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -37,7 +37,8 @@ pub struct ListedDevice {
 	current: bool,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Asking {
 	device_id: String,
 	name: Option<String>,
@@ -55,6 +56,31 @@ impl Asking {
 	}
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Settled {
+	device_id: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Heard {
+	Requested(Asking),
+	Settled(String),
+	Changed(Approval),
+}
+
+pub fn heard_of(event: &str, payload: Value) -> Option<Result<Heard, serde_json::Error>> {
+	match event {
+		APPROVAL_REQUESTED_EVENT => Some(serde_json::from_value(payload).map(Heard::Requested)),
+		APPROVAL_SETTLED_EVENT => Some(
+			serde_json::from_value(payload)
+				.map(|settled: Settled| Heard::Settled(settled.device_id)),
+		),
+		APPROVAL_CHANGED_EVENT => Some(serde_json::from_value(payload).map(Heard::Changed)),
+		_ => None,
+	}
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Run {
 	device_id: String,
@@ -67,7 +93,6 @@ pub struct Devices {
 	last_email: String,
 	is_code_asked: bool,
 	pub code: String,
-	is_watching: bool,
 	has_listed: bool,
 	asking: Vec<Asking>,
 	answered: Vec<String>,
@@ -149,10 +174,6 @@ impl Devices {
 			&& self.approval == Some(Approval::Approved)
 	}
 
-	fn is_pending(&self) -> bool {
-		matches!(self.approval, Some(Approval::Pending {}))
-	}
-
 	pub fn read(&mut self, approval: Approval, account: Option<&KiroshiAccount>) -> Vec<Call> {
 		if !matches!(approval, Approval::Pending {}) {
 			self.is_code_asked = false;
@@ -169,21 +190,27 @@ impl Devices {
 	}
 
 	fn followed(&mut self, account: Option<&KiroshiAccount>) -> Vec<Call> {
-		let mut calls = Vec::new();
 		if self.is_listed(account) && !std::mem::replace(&mut self.has_listed, true) {
-			calls.push(Call::ReadDevices);
+			return vec![Call::ReadDevices];
 		}
-		if self.is_pending() && !std::mem::replace(&mut self.is_watching, true) {
-			calls.push(Call::Wake(DEVICE_WATCH, Due::DeviceWatch));
-		}
-		calls
+		Vec::new()
 	}
 
-	pub fn watch_due(&mut self) -> Vec<Call> {
-		self.is_watching = false;
-		match self.is_pending() {
-			true => vec![Call::ReadDeviceApproval, Call::ReadKiroshiAccount],
-			false => Vec::new(),
+	pub fn heard(&mut self, heard: Heard, account: Option<&KiroshiAccount>) -> Vec<Call> {
+		match heard {
+			Heard::Requested(asking) => {
+				self.ask(vec![asking]);
+				Vec::new()
+			}
+			Heard::Settled(device_id) => {
+				self.settle(&device_id);
+				Vec::new()
+			}
+			Heard::Changed(approval) => {
+				let mut calls = self.read(approval, account);
+				calls.push(Call::ReadKiroshiAccount);
+				calls
+			}
 		}
 	}
 
@@ -213,10 +240,12 @@ impl Devices {
 	}
 
 	pub fn listed(&mut self, devices: Vec<ListedDevice>, now: DateTime<Utc>) {
-		let fresh: Vec<Asking> = asking_devices_of(devices, now)
-			.into_iter()
-			.filter(|device| !self.is_held(device))
-			.collect();
+		self.ask(asking_devices_of(devices, now));
+	}
+
+	fn ask(&mut self, devices: Vec<Asking>) {
+		let fresh: Vec<Asking> =
+			devices.into_iter().filter(|device| !self.is_held(device)).collect();
 		self.asking.extend(fresh);
 	}
 
