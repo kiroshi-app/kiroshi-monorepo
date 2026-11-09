@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::navigation::{MAIN_WINDOW, Navigation, Route, WindowId};
 
+pub mod connection;
 mod desk;
 mod tabs;
 #[cfg(test)]

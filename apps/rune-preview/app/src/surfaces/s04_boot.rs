@@ -1,5 +1,6 @@
 mod calls;
 mod connect;
+mod device;
 mod import;
 #[cfg(test)]
 mod tests;
@@ -8,12 +9,16 @@ mod view;
 use std::time::Duration;
 
 use kiroshi_core::user::contract::{OnboardingStep, UserPreferences};
-use rune::{Tx, Waker};
+use rune::{Key as Typed, KeyEvent, Tx, Waker};
 
+use chrono::Utc;
+use kiroshi_rune_kit::strings::common::devices::approval;
 use kiroshi_rune_kit::strings::{Key, Language, chat, common, settings};
 use kiroshi_rune_kit::surfaces::s04_boot::account::AccountEvent;
 use kiroshi_rune_kit::surfaces::s04_boot::connect::ConnectEvent;
+use kiroshi_rune_kit::surfaces::s04_boot::device_approval::ApprovalEvent;
 use kiroshi_rune_kit::surfaces::s04_boot::import::ImportEvent;
+use kiroshi_rune_kit::surfaces::s04_boot::new_device::{NewDeviceEvent, NewDeviceStep};
 use kiroshi_rune_kit::surfaces::s04_boot::notice::{NoticeEvent, NoticeKind};
 use kiroshi_rune_kit::surfaces::s04_boot::say;
 use kiroshi_rune_kit::surfaces::s04_boot::welcome::{WelcomeEvent, WelcomeStep};
@@ -26,10 +31,11 @@ use crate::navigation::Route;
 use crate::source::Source;
 
 use calls::{Answer, Call, Calls, Due, ImportOutcome, Inventoried, KiroshiAccount};
-use connect::{Next, SignIn, detail_of};
+use connect::{Next, SignIn, detail_of, kind_of};
+use device::{Approval, Devices, ListedDevice};
 use import::{Pressed, Session, offers_import};
 
-pub use view::view;
+pub use view::{layers, new_device, view};
 
 const DOWNLOAD_PAGE_URL: &str = "https://kiroshi.app";
 
@@ -40,6 +46,8 @@ const TRANSIENT_LIFETIME: Duration = Duration::from_secs(5);
 const UNSENT: Key = chat::screen::notice::FAILED;
 
 const LANGUAGE: Language = Language::En;
+
+const UNREACHABLE: &str = "unreachable";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Step {
@@ -81,6 +89,7 @@ pub struct State {
 	import: Session,
 	account: Option<KiroshiAccount>,
 	is_watching_account: bool,
+	devices: Devices,
 	to_raise: Vec<Notice>,
 	told: Option<Notice>,
 	told_count: u64,
@@ -139,7 +148,10 @@ impl State {
 	}
 
 	fn tell(&mut self, kind: NoticeKind, title: Key) {
-		let notice = Notice { kind, ..Notice::error(self.said(title)) };
+		self.tell_notice(Notice { kind, ..Notice::error(self.said(title)) });
+	}
+
+	fn tell_notice(&mut self, notice: Notice) {
 		self.told_count += 1;
 		self.told = Some(notice.clone());
 		self.to_raise.push(notice);
@@ -244,6 +256,8 @@ impl State {
 			Ok(account) => {
 				self.account = Some(account);
 				self.watch_account();
+				let calls = self.devices.account_read(self.account.as_ref());
+				self.queued.extend(calls);
 			}
 			Err(failure) => {
 				self.fail(settings::account::READ_FAILED, &failure, Some(Call::ReadKiroshiAccount))
@@ -329,10 +343,11 @@ impl State {
 			}
 			Answer::KiroshiAccount(outcome) => self.account_read(outcome),
 			Answer::KiroshiCommanded { call, outcome } => match outcome {
-				Ok(()) => self.queued.push(Call::ReadKiroshiAccount),
+				Ok(()) => self.queued.extend([Call::ReadKiroshiAccount, Call::ReadDeviceApproval]),
 				Err(failure) => {
 					let title = match call {
 						Call::KiroshiCancel => settings::account::CANCEL_FAILED,
+						Call::KiroshiSignOut => settings::account::SIGN_OUT_FAILED,
 						_ => settings::account::SIGN_IN_FAILED,
 					};
 					self.fail(title, &failure, Some(call));
@@ -343,10 +358,82 @@ impl State {
 					landing.map(|(conversation_id, ready)| (conversation_id, Box::new(ready)));
 				return Some(Follow::Landed { call, landing });
 			}
+			Answer::DeviceApproval { call, outcome } => self.device_approval_read(call, outcome),
+			Answer::DeviceCommanded { call, outcome } => self.device_commanded(call, outcome),
+			Answer::Devices(outcome) => self.devices_listed(outcome),
+			Answer::DeviceAnswered { call, outcome } => self.device_answered(call, outcome),
 			Answer::Due(Due::Notice(id)) => return self.told_expired(id),
 			Answer::Due(Due::AccountWatch) => self.account_watch_due(),
+			Answer::Due(Due::DeviceWatch) => {
+				let calls = self.devices.watch_due();
+				self.queued.extend(calls);
+			}
 		}
 		None
+	}
+
+	fn fail_device(&mut self, failure: &HostError, retry: Option<Call>) {
+		let title = match kind_of(failure).as_deref() {
+			Some(UNREACHABLE) => settings::account::unreachable::TITLE,
+			_ => UNSENT,
+		};
+		self.fail(title, failure, retry);
+	}
+
+	fn device_approval_read(&mut self, call: Call, outcome: Result<Approval, HostError>) {
+		match (outcome, &call) {
+			(Ok(approval), _) => {
+				let calls = self.devices.read(approval, self.account.as_ref());
+				self.queued.extend(calls);
+			}
+			(Err(failure), Call::RetryDeviceApproval) => self.fail_device(&failure, Some(call)),
+			(Err(failure), _) => self.fail(settings::account::READ_FAILED, &failure, Some(call)),
+		}
+	}
+
+	fn device_commanded(&mut self, call: Call, outcome: Result<(), HostError>) {
+		match (outcome, &call) {
+			(Ok(()), Call::SubmitDeviceCode(_)) => self.queued.push(Call::ReadDeviceApproval),
+			(Ok(()), _) => {}
+			(Err(failure), _) => self.fail_device(&failure, Some(call)),
+		}
+	}
+
+	fn devices_listed(&mut self, outcome: Result<Vec<ListedDevice>, HostError>) {
+		match outcome {
+			Ok(devices) => self.devices.listed(devices, Utc::now()),
+			Err(failure) => {
+				self.fail(settings::account::READ_FAILED, &failure, Some(Call::ReadDevices))
+			}
+		}
+	}
+
+	fn device_answered(&mut self, call: Call, outcome: Result<(), HostError>) {
+		match (call, outcome) {
+			(Call::ApproveDevice(device_id), Ok(())) => self.settled_device(
+				&device_id,
+				approval::approved::TITLE,
+				approval::approved::DESCRIPTION,
+			),
+			(Call::RefuseDevice(device_id), Ok(())) => self.settled_device(
+				&device_id,
+				approval::rejected::TITLE,
+				approval::rejected::DESCRIPTION,
+			),
+			(Call::ApproveDevice(device_id), Err(failure)) => {
+				eprintln!("{device_id} was not approved: {}", detail_of(&failure));
+				self.devices.approval_failed(&device_id);
+			}
+			(call, Err(failure)) => self.fail_device(&failure, Some(call)),
+			(_, Ok(())) => {}
+		}
+	}
+
+	fn settled_device(&mut self, device_id: &str, title: Key, description: Key) {
+		let Some(settled) = self.devices.settle(device_id) else { return };
+		let title = say(title, LANGUAGE, &[("device", settled.name())]);
+		let description = Some(self.said(description));
+		self.tell_notice(Notice { kind: NoticeKind::Info, description, ..Notice::error(title) });
 	}
 
 	fn take_answers(&mut self) -> Vec<Answer> {
@@ -385,8 +472,9 @@ pub fn booted(app: &mut App) {
 	onboarding.use_source(source);
 	if booting {
 		onboarding.queued.push(Call::ReadPreferences);
-		onboarding.flush();
 	}
+	onboarding.queued.extend([Call::ReadDeviceApproval, Call::ReadKiroshiAccount]);
+	onboarding.flush();
 }
 
 fn go(app: &mut App, step: Step) {
@@ -595,6 +683,55 @@ pub fn account_event(app: &mut App, event: AccountEvent) {
 		AccountEvent::Skip | AccountEvent::Continue => onboarding.store(OnboardingStep::Done),
 	}
 	sent(app);
+}
+
+pub fn new_device_step(app: &App) -> Option<NewDeviceStep> {
+	let onboarding = &app.surfaces.s04_boot;
+	onboarding.devices.step(onboarding.account.as_ref())
+}
+
+pub fn new_device_event(app: &mut App, event: NewDeviceEvent) {
+	let onboarding = state(app);
+	if let Some(call) = onboarding.devices.event(event) {
+		onboarding.queued.push(call);
+	}
+	sent(app);
+}
+
+pub fn approval_event(app: &mut App, event: ApprovalEvent) {
+	let devices = &mut state(app).devices;
+	let call = match event {
+		ApprovalEvent::Approve => devices.approve(),
+		ApprovalEvent::Reject => devices.refuse(),
+	};
+	state(app).queued.extend(call);
+	sent(app);
+}
+
+fn typed_on_code(key: &Typed) -> Option<NewDeviceEvent> {
+	match key {
+		Typed::Text(typed) => {
+			let mut chars = typed.chars();
+			match (chars.next(), chars.next()) {
+				(Some(digit), None) if digit.is_ascii_digit() => {
+					Some(NewDeviceEvent::TypeDigit(digit))
+				}
+				_ => None,
+			}
+		}
+		Typed::Backspace => Some(NewDeviceEvent::EraseDigit),
+		Typed::Enter => Some(NewDeviceEvent::ApproveWithCode),
+		_ => None,
+	}
+}
+
+pub fn key_pressed(app: &mut App, event: &KeyEvent) -> bool {
+	if new_device_step(app) != Some(NewDeviceStep::Code) {
+		return false;
+	}
+	let Some(typed) = typed_on_code(&event.key) else { return false };
+	new_device_event(app, typed);
+	true
 }
 
 pub fn boot_failure(app: &App) -> Option<&HostError> {

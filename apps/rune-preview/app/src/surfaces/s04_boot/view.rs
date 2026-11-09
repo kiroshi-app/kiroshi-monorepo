@@ -7,17 +7,23 @@ use kiroshi_rune_kit::surfaces::s04_boot::boot::{BootFailure, boot_notice, boot_
 use kiroshi_rune_kit::surfaces::s04_boot::connect::{
 	ClaudeAccount, Connect, Entry, connect_screen,
 };
+use kiroshi_rune_kit::surfaces::s04_boot::device_approval::device_approval_dialog;
+use kiroshi_rune_kit::surfaces::s04_boot::device_card::{Device, DeviceKind};
 use kiroshi_rune_kit::surfaces::s04_boot::import::{Import, ImportItem, import_screen};
+use kiroshi_rune_kit::surfaces::s04_boot::new_device::{
+	NewDevice, NewDeviceStep, new_device_screen,
+};
 use kiroshi_rune_kit::surfaces::s04_boot::welcome::{Welcome, welcome_screen};
 use kiroshi_rune_kit::surfaces::s04_boot::{Frame, onboarding_shell};
 use kiroshi_rune_kit::tokens::Tokens;
 
 use super::calls::KiroshiAccount;
 use super::connect::{Connection, initials_of};
+use super::device::device_kind_of;
 use super::import::Inventory;
 use super::{
-	LANGUAGE, State, Step, account_event, boot_failure, boot_retried, connect_event, import_event,
-	welcome_event,
+	LANGUAGE, State, Step, account_event, approval_event, boot_failure, boot_retried,
+	connect_event, import_event, new_device_event, new_device_step, welcome_event,
 };
 use crate::app::App;
 
@@ -126,7 +132,30 @@ fn account(onboarding: &State, t: &Tokens) -> El {
 			email,
 			plan: plan.map(plan_of),
 		},
-		Some(KiroshiAccount::SignedOut) | None => AccountState::SignedOut,
+		Some(KiroshiAccount::SignedOut { .. } | KiroshiAccount::Unavailable) | None => {
+			AccountState::SignedOut
+		}
 	};
 	account_screen(t, LANGUAGE, None, &state, account_event)
+}
+
+pub fn new_device(app: &App, t: &Tokens) -> Option<El> {
+	let step = new_device_step(app)?;
+	let devices = &app.surfaces.s04_boot.devices;
+	let device = Device { kind: DeviceKind::Laptop, name: "", activity: None };
+	let screen = NewDevice {
+		step,
+		email: devices.email(),
+		device: &device,
+		code: &devices.code,
+		is_code_focused: step == NewDeviceStep::Code,
+	};
+	Some(new_device_screen(t, LANGUAGE, &screen, new_device_event))
+}
+
+pub fn layers(app: &App, t: &Tokens) -> Option<El> {
+	let devices = &app.surfaces.s04_boot.devices;
+	let asked = devices.asked()?;
+	let device = Device { kind: device_kind_of(asked.kind), name: asked.name(), activity: None };
+	Some(device_approval_dialog(t, LANGUAGE, &device, devices.status_of(asked), approval_event))
 }

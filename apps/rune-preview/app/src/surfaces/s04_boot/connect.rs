@@ -79,7 +79,7 @@ fn field_of(refusal: Option<&Value>, field: &str) -> Option<String> {
 	refusal?.get(field)?.as_str().map(str::to_owned)
 }
 
-fn kind_of(failure: &HostError) -> Option<String> {
+pub fn kind_of(failure: &HostError) -> Option<String> {
 	field_of(refusal_of(failure).as_ref(), "kind")
 }
 
