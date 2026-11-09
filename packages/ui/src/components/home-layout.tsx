@@ -4,34 +4,46 @@ import { cn } from "@workspace/ui/lib/utils"
 
 type HomeStage = "empty" | "conversation"
 
-type HomeLayoutProps = {
-	stage: HomeStage
-	children: ReactNode
-}
+type HomeLayoutProps =
+	| { stage: "empty"; children: ReactNode }
+	| { stage: "conversation"; transcript: ReactNode; composer: ReactNode }
 
-const STAGE = {
-	empty: { panel: "pb-24", column: "my-auto" },
-	conversation: { panel: "pb-4", column: "mt-auto" },
-} as const satisfies Record<HomeStage, { panel: string; column: string }>
+const PANEL = "flex size-full flex-col items-center px-4"
 
-const HomeLayout = ({ stage, children }: HomeLayoutProps) => (
-	<div
-		className={cn(
-			"flex size-full flex-col items-center overflow-y-auto px-4",
-			STAGE[stage].panel,
-		)}
-		data-slot="home-layout"
-		data-stage={stage}
-	>
+const COLUMN = "flex w-170 max-w-full flex-col gap-4"
+
+const HomeLayout = (props: HomeLayoutProps) => {
+	if (props.stage === "empty") {
+		return (
+			<div
+				className={cn(PANEL, "overflow-y-auto pb-24")}
+				data-slot="home-layout"
+				data-stage="empty"
+			>
+				<div className={cn(COLUMN, "my-auto")}>{props.children}</div>
+			</div>
+		)
+	}
+
+	return (
 		<div
-			className={cn(
-				"flex w-170 max-w-full flex-col gap-4",
-				STAGE[stage].column,
-			)}
+			className={cn(PANEL, "pb-4")}
+			data-slot="home-layout"
+			data-stage="conversation"
 		>
-			{children}
+			<div className={cn(COLUMN, "min-h-0 flex-1")}>
+				<div
+					className="flex min-h-0 flex-1 flex-col overflow-hidden"
+					data-slot="home-layout-transcript"
+				>
+					{props.transcript}
+				</div>
+				<div className="shrink-0" data-slot="home-layout-composer">
+					{props.composer}
+				</div>
+			</div>
 		</div>
-	</div>
-)
+	)
+}
 
 export { HomeLayout, type HomeLayoutProps, type HomeStage }

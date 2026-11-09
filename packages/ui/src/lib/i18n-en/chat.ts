@@ -1248,12 +1248,13 @@ const chat = {
 		in: "in",
 		archived: {
 			morning:
-				"This morning’s chat with {{name}} is archived in Conversations.",
+				"This morning’s conversation with {{name}} is archived in Conversations.",
 			afternoon:
-				"This afternoon’s chat with {{name}} is archived in Conversations.",
+				"This afternoon’s conversation with {{name}} is archived in Conversations.",
 			evening:
-				"This evening’s chat with {{name}} is archived in Conversations.",
-			night: "Last night’s chat with {{name}} is archived in Conversations.",
+				"This evening’s conversation with {{name}} is archived in Conversations.",
+			night:
+				"Last night’s conversation with {{name}} is archived in Conversations.",
 			open: "Open it",
 		},
 		failure: {

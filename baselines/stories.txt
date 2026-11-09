@@ -178,12 +178,15 @@ branding-spacetint--variants
 conversation-home-home--afternoon
 conversation-home-home--approval-waits
 conversation-home-home--band-shown
+conversation-home-home--clipped-transcript
 conversation-home-home--could-not-send
 conversation-home-home--evening
 conversation-home-home--field-filled
+conversation-home-home--files-attached
 conversation-home-home--first-answer
 conversation-home-home--fresh-after-relaunch
 conversation-home-home--loading
+conversation-home-home--long-transcript
 conversation-home-home--mission-blocked
 conversation-home-home--mission-completed
 conversation-home-home--morning
