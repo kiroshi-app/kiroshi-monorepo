@@ -55,7 +55,9 @@ impl State {
 			}
 			GalleryEvent::Remove(_) if count == 1 => document.remove_block(block),
 			GalleryEvent::Remove(index) if index < count => {
-				document.edit_gallery(block, |records| drop(records.remove(index)))
+				document.edit_gallery(block, |records| {
+					records.remove(index);
+				})
 			}
 			GalleryEvent::Move { from, to } if from != to && from < count && to < count => document
 				.edit_gallery(block, |records| {
@@ -89,15 +91,13 @@ impl State {
 		if self.space_id.as_deref() == Some(target.space_id.as_str()) {
 			self.list();
 		}
-		let refused = match imports {
-			Ok(mut imported) if !imported.is_empty() => match imported.remove(0) {
-				LibraryImport::Imported { item } => {
-					return self.added_to_gallery(target, add, item, &picked);
-				}
-				refusal => imports::refusals_of(std::slice::from_ref(&picked), Ok(vec![refusal])),
-			},
-			Ok(_) => Vec::new(),
-			Err(failure) => imports::refusals_of(std::slice::from_ref(&picked), Err(failure)),
+		let names = std::slice::from_ref(&picked);
+		let refused = match imports.map(|imported| imported.into_iter().next()) {
+			Ok(Some(LibraryImport::Imported { item })) => {
+				return self.added_to_gallery(target, add, item, &picked);
+			}
+			Ok(refusal) => imports::refusals_of(names, Ok(refusal.into_iter().collect())),
+			Err(failure) => imports::refusals_of(names, Err(failure)),
 		};
 		self.gallery_add_failed = Some(add);
 		match refused.is_empty() {

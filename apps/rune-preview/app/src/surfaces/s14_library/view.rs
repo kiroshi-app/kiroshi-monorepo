@@ -3,9 +3,9 @@ use rune::{Align, El, Side, TextEdit, col};
 
 use kiroshi_rune_kit::strings::{Language, common};
 use kiroshi_rune_kit::surfaces::s14_library::{
-	Agent, BarActions, DocumentBar, DocumentPanelEvent, EditorBlock, GalleryEdit, HandlePlace,
-	ItemEvent, ItemLook, LibraryBlockType, LibraryItem as Tile, LibraryPanel, LightboxImage,
-	LightboxLook, PanelActions, PanelLook, PanelState, TOOLBAR_GAP, TableCells,
+	Agent, BarActions, DocumentBar, DocumentPanelEvent, EditorBlock, FieldAccess, GalleryEdit,
+	HandlePlace, ItemEvent, ItemLook, LibraryBlockType, LibraryItem as Tile, LibraryPanel,
+	LightboxImage, LightboxLook, PanelActions, PanelLook, PanelState, TOOLBAR_GAP, TableCells,
 	Tile as GalleryTile, TileImage, Unavailable, Writer, agent_card, agent_caret, block_editor,
 	block_handle, block_menu, delete_confirmation, document_bar, document_column, document_panel,
 	document_skeleton, field_key, field_of as record_field, format_toolbar, gallery_editor,
@@ -57,6 +57,14 @@ fn shown_field<'a>(app: &'a mut App, block: &str, row: usize) -> &'a mut TextEdi
 
 fn beside_field<'a>(app: &'a mut App, block: &str, row: usize) -> &'a mut TextEdit {
 	library(app).field_mut(true, block, row)
+}
+
+fn field_access(is_beside: bool) -> FieldAccess<App> {
+	if is_beside { beside_field } else { shown_field }
+}
+
+fn block_key(block: &str) -> String {
+	format!("library-block-{block}")
 }
 
 fn title_edit(app: &mut App) -> &mut TextEdit {
@@ -192,17 +200,15 @@ fn card_layers(app: &App, t: &Tokens, document: &Document) -> Vec<El> {
 				sentences: card.sentences,
 				section: &card.section,
 			};
-			let anchor = format!("library-block-{}", card.block);
+			let anchor = block_key(&card.block);
 			agent_card(t, LANGUAGE, &writer).anchored(anchor, Side::Bottom, Align::Start, SPACING)
 		})
 		.collect()
 }
 
 fn pitches_of(blocks: &[Block]) -> Vec<f32> {
-	let rects: Vec<Option<[f32; 4]>> = blocks
-		.iter()
-		.map(|block| rune::memo::layout(&format!("library-block-{}", block.id)))
-		.collect();
+	let rects: Vec<Option<[f32; 4]>> =
+		blocks.iter().map(|block| rune::memo::layout(&block_key(&block.id))).collect();
 	(0..rects.len())
 		.map(|at| match (rects[at], rects.get(at + 1).copied().flatten()) {
 			(Some(rect), Some(next)) => next[1] - rect[1],
@@ -223,7 +229,7 @@ fn with_handle(
 	let Some(index) = views.iter().position(|view| view.id == handled) else { return };
 	let pitches = pitches_of(blocks);
 	let block = handled.to_owned();
-	let on = move |app: &mut App, event| library(app).handle_handle(is_beside, &block, event);
+	let on = move |app: &mut App, event| library(app).handle_block_handle(is_beside, &block, event);
 	let place = HandlePlace { index, pitches: &pitches };
 	let is_pressed = state.block_menu.is_some();
 	views[index].handle = Some(block_handle(t, LANGUAGE, is_pressed, place, on));
@@ -250,14 +256,13 @@ fn table_view(t: &Tokens, document: &Document, block: &Block, is_beside: bool) -
 		.filter(|field| field.block == block.id)
 		.map_or((0, 0), |field| (field.row / columns, field.row % columns));
 	let cells = TableCells { block: &block.id, rows, focused };
-	let access = if is_beside { beside_field } else { shown_field };
 	let id = block.id.clone();
 	let on = move |app: &mut App, event| library(app).handle_table(is_beside, &id, event);
-	Some(table_editor(t, LANGUAGE, &cells, access, on))
+	Some(table_editor(t, LANGUAGE, &cells, field_access(is_beside), on))
 }
 
 fn gallery_columns(block: &str) -> usize {
-	let width = rune::memo::layout(&format!("library-block-{block}")).map(|rect| rect[2]);
+	let width = rune::memo::layout(&block_key(block)).map(|rect| rect[2]);
 	width.map_or(UNMEASURED_GALLERY_COLUMNS, |width| {
 		(((width + GALLERY_TILE_GAP) / (GALLERY_TILE_MIN + GALLERY_TILE_GAP)).floor() as usize)
 			.max(1)
@@ -286,10 +291,9 @@ fn gallery_view(
 		drag: None,
 		has_add_failed: state.has_gallery_add_failed(is_beside, &block.id),
 	};
-	let access = if is_beside { beside_field } else { shown_field };
 	let id = block.id.clone();
 	let on = move |app: &mut App, event| library(app).handle_gallery(is_beside, &id, event);
-	Some(gallery_editor(t, LANGUAGE, &edit, access, on).0)
+	Some(gallery_editor(t, LANGUAGE, &edit, field_access(is_beside), on).0)
 }
 
 fn editor(app: &App, t: &Tokens, document: &Document, is_beside: bool) -> (El, Vec<El>) {
@@ -335,9 +339,9 @@ fn editor(app: &App, t: &Tokens, document: &Document, is_beside: bool) -> (El, V
 		.as_ref()
 		.filter(|slash| slash.is_beside == is_beside)
 		.and_then(|_| state.slash_view(&query));
-	let access = if is_beside { beside_field } else { shown_field };
 	let on = move |app: &mut App, event| library(app).handle_block(is_beside, event);
-	let (body, mut layers) = block_editor(t, LANGUAGE, &mut views, slash, access, on);
+	let (body, mut layers) =
+		block_editor(t, LANGUAGE, &mut views, slash, field_access(is_beside), on);
 	layers.extend(toolbar_layer(state, t, document, is_beside));
 	layers.extend(block_menu_layer(state, t, document, is_beside));
 	layers.extend(card_layers(app, t, document));

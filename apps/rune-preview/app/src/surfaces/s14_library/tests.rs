@@ -1247,7 +1247,7 @@ fn saved_after(initial: &str, change: impl FnOnce(&mut State, &[String])) -> Str
 }
 
 fn chosen_on(state: &mut State, block: &str, action: BlockMenuAction) {
-	state.handle_handle(false, block, HandleEvent::Press);
+	state.handle_block_handle(false, block, HandleEvent::Press);
 	state.handle_block_menu(action);
 }
 
@@ -1256,7 +1256,7 @@ fn pressing_a_handle_opens_the_block_menu_on_that_block_and_escape_closes_it() {
 	let mut state = opened_document("notes.txt", "One\n\nTwo");
 	let ids = block_ids(&state);
 
-	state.handle_handle(false, &ids[1], HandleEvent::Press);
+	state.handle_block_handle(false, &ids[1], HandleEvent::Press);
 	let handled = state.handled_block(false).map(str::to_owned);
 	let is_handled = state.key_pressed(&escape());
 
@@ -1301,7 +1301,7 @@ fn deleting_the_only_block_leaves_an_empty_paragraph_to_write_in() {
 #[test]
 fn insert_on_a_handle_adds_an_empty_paragraph_below_and_focuses_it() {
 	let saved = saved_after("One\n\nTwo", |state, ids| {
-		state.handle_handle(false, &ids[0], HandleEvent::Insert);
+		state.handle_block_handle(false, &ids[0], HandleEvent::Insert);
 		let document = state.shown_document().expect("an open document");
 		let focused = document.focused().map(|field| field.block.clone());
 		assert_eq!(focused.as_ref(), document.blocks.get(1).map(|block| &block.id));
@@ -1313,7 +1313,7 @@ fn insert_on_a_handle_adds_an_empty_paragraph_below_and_focuses_it() {
 #[test]
 fn a_dragged_handle_moves_its_block_to_the_slot_and_saves() {
 	let saved = saved_after("One\n\nTwo\n\nThree", |state, ids| {
-		state.handle_handle(false, &ids[0], HandleEvent::Move { from: 0, to: 2 });
+		state.handle_block_handle(false, &ids[0], HandleEvent::Move { from: 0, to: 2 });
 	});
 
 	assert_eq!(saved, "Two\n\nThree\n\nOne");

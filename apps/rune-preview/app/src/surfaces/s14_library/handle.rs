@@ -9,7 +9,7 @@ pub struct BlockMenu {
 }
 
 impl State {
-	pub fn handle_handle(&mut self, is_beside: bool, block: &str, event: HandleEvent) {
+	pub fn handle_block_handle(&mut self, is_beside: bool, block: &str, event: HandleEvent) {
 		if event == HandleEvent::Press {
 			self.block_menu = Some(BlockMenu { is_beside, block: block.to_owned() });
 			return;
