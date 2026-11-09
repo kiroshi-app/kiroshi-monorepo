@@ -18,7 +18,7 @@ export const useWorkspaceSubscriptions = ({
 	drivers,
 	rosterView,
 }: WorkspaceSubscriptionsInput) => {
-	const { chat, homeRenewals, joinedSpaces, roster, user } = core
+	const { chat, homeVisits, joinedSpaces, roster, user } = core
 	const { onboarding } = drivers
 	const { bots, rosteredSpaceId, selectedBotId, selectedConversationId } =
 		rosterView
@@ -63,7 +63,7 @@ export const useWorkspaceSubscriptions = ({
 		const spaceId =
 			rosteredSpaceId && roster.controller.hostSpaceIdOf(rosteredSpaceId)
 		const renewed = spaceId
-			? homeRenewals.renew(selectedBotId, spaceId)
+			? homeVisits.open(selectedBotId, spaceId)
 			: Promise.resolve()
 		void renewed.then(() => {
 			if (shownRowId.current === selectedBotId) {
@@ -76,7 +76,7 @@ export const useWorkspaceSubscriptions = ({
 		})
 	}, [
 		chat.controller,
-		homeRenewals,
+		homeVisits,
 		roster.controller,
 		user.controller,
 		selectedBotId,

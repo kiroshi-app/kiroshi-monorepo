@@ -1027,7 +1027,7 @@ describe("PRF1 render baseline", () => {
 	it("shows the last message of a two hundred run thread", async () => {
 		expect(await measureThreadOpen()).toMatchInlineSnapshot(`
 			{
-			  "commits": 15,
+			  "commits": 14,
 			  "markdownProcessors": 20,
 			  "runs": 200,
 			  "tasksToLastMessage": 0,
@@ -1041,13 +1041,13 @@ describe("PRF1 render baseline", () => {
 			expect(await measureThreadReopen()).toMatchInlineSnapshot(`
 				{
 				  "cold": {
-				    "commits": 15,
+				    "commits": 14,
 				    "markdownProcessors": 20,
 				    "tasksToLastMessage": 0,
 				  },
 				  "grown": 80,
 				  "reopened": {
-				    "commits": 8,
+				    "commits": 9,
 				    "markdownProcessors": 20,
 				    "tasksToLastMessage": 0,
 				  },
@@ -1065,7 +1065,7 @@ describe("PRF1 render baseline", () => {
 
 			expect(await measureLongTranscriptOpen()).toMatchInlineSnapshot(`
 				{
-				  "commits": 15,
+				  "commits": 14,
 				  "markdownProcessors": 500,
 				  "messages": 500,
 				}

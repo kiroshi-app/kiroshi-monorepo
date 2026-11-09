@@ -1,4 +1,5 @@
 import {
+	type ReactNode,
 	type RefObject,
 	useCallback,
 	useContext,
@@ -64,7 +65,11 @@ import {
 } from "@/components/answer-image-viewer"
 import { ApplicationInstallRow } from "@/components/application-install-row"
 import { FaceAvatar } from "@/components/face-avatar"
-import type { ThreadHome } from "@/components/home-screen"
+import {
+	HomeLoadingStage,
+	type HomeSend,
+	type ThreadHome,
+} from "@/components/home-screen"
 import { useMissionCardMenus } from "@/components/mission-card-menu"
 import { type PromptHandle, ThreadComposer } from "@/components/thread-composer"
 import {
@@ -1289,6 +1294,67 @@ const signInOfferOf = (
 	botId: string | undefined,
 ) => (signIn && botId ? () => signIn.controller.offer(botId) : undefined)
 
+const showsOwnChat = (thread: LoadedThread) =>
+	thread.kind !== "bot" ||
+	thread.state === thread.controller.stateFor(thread.bot.id)
+
+type HomeStage = "loading" | "empty"
+
+type HomeStageFacts = {
+	home: ThreadHome | undefined
+	thread: LoadedThread
+	isFirstLoadPending: boolean
+	hasMessages: boolean
+	isTranscriptEmpty: boolean
+	isHeldBack: boolean
+}
+
+const homeStageOf = ({
+	home,
+	thread,
+	isFirstLoadPending,
+	hasMessages,
+	isTranscriptEmpty,
+	isHeldBack,
+}: HomeStageFacts): HomeStage | null => {
+	if (!home) {
+		return null
+	}
+	if (
+		home.isSettling ||
+		!showsOwnChat(thread) ||
+		(isFirstLoadPending && !hasMessages)
+	) {
+		return "loading"
+	}
+	return isTranscriptEmpty && !isHeldBack ? "empty" : null
+}
+
+type HomeThreadStageProps = {
+	home: ThreadHome | undefined
+	stage: HomeStage | null
+	header: ReactNode
+	layout: ReactNode
+	send: HomeSend
+}
+
+const HomeThreadStage = ({
+	home,
+	stage,
+	header,
+	layout,
+	send,
+}: HomeThreadStageProps) => {
+	if (!home || !stage) {
+		return layout
+	}
+	return (
+		<ScreenLayout header={header} width="full">
+			{stage === "loading" ? <HomeLoadingStage /> : home.emptyStage(send)}
+		</ScreenLayout>
+	)
+}
+
 const showsEmptyState = (
 	rows: TranscriptItem[],
 	signInStep: SignInStep | null,
@@ -2033,22 +2099,26 @@ function ThreadView(props: ThreadViewProps) {
 		}
 	}
 
-	const isHomeEmpty =
-		home !== undefined &&
-		isTranscriptEmpty &&
-		!departure &&
-		!view.facts.latestError
-	const screen = isHomeEmpty ? (
-		<ScreenLayout header={header} width="full">
-			{home.emptyStage({
+	const screen = (
+		<HomeThreadStage
+			header={header}
+			home={home}
+			layout={layout}
+			send={{
 				draft: view.readDraft(),
 				onDraftChange: view.rememberDraft,
 				onSubmit: (text) => void sendFromHome(text),
 				onAttach: view.staged.stage,
+			}}
+			stage={homeStageOf({
+				home,
+				thread,
+				isFirstLoadPending: view.facts.isFirstLoadPending,
+				hasMessages: view.state.messages.length > 0,
+				isTranscriptEmpty,
+				isHeldBack: Boolean(departure || view.facts.latestError),
 			})}
-		</ScreenLayout>
-	) : (
-		layout
+		/>
 	)
 
 	return (

@@ -28,6 +28,7 @@ const movedAtOf = ({ mission }: MissionInSpace) =>
 export const homeMissionLinesOf = (
 	entries: MissionInSpace[],
 	botId: string,
+	since: number,
 ): HomeMissionLineModel[] =>
 	entries
 		.filter(({ mission }) => mission.botId === botId)
@@ -46,4 +47,5 @@ export const homeMissionLinesOf = (
 					]
 				: []
 		})
+		.filter(({ at }) => at >= since)
 		.sort((one, other) => one.at - other.at)

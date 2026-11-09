@@ -50,7 +50,8 @@ import {
 import type { Bot, Conversation } from "@/lib/conversations/store-contract"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import { seatBots } from "@/lib/conversations/transcript-fixtures"
-import { createHomeRenewals } from "@/lib/home/home-renewals"
+import { homeQueryKeys } from "@/lib/home/home-query-keys"
+import { createHomeVisits } from "@/lib/home/home-visits"
 import type { Invoke } from "@/lib/host/joined-hosts-invoke"
 import { base64Of } from "@/lib/library/library-document-session"
 import type {
@@ -58,6 +59,8 @@ import type {
 	MissionChanged,
 	MissionDetail,
 	MissionEvent,
+	MissionInSpace,
+	MissionState,
 } from "@/lib/missions/mission-contract"
 import { missionsTransport } from "@/lib/missions/missions-transport"
 import {
@@ -160,6 +163,15 @@ vi.mock("@/lib/missions/missions-transport", () => ({
 		reopen: vi.fn(),
 		onChanged: vi.fn(),
 	},
+}))
+
+const homeFeed = vi.hoisted(() => ({ entries: [] as MissionInSpace[] }))
+vi.mock("@/lib/missions/use-space-missions", () => ({
+	useSpaceMissions: () => ({
+		waitingOnYou: [],
+		inProgress: [],
+		earlierToday: homeFeed.entries,
+	}),
 }))
 
 const listRoutines = vi.mocked(routinesTransport.list)
@@ -338,7 +350,7 @@ const workspaceOf = async (store = createFakeTranscriptStore()) => {
 			conversationRuntimes: runtimes,
 			conversations: [conversation, otherConversation],
 			store,
-			homeRenewals: createHomeRenewals(store),
+			homeVisits: createHomeVisits(store),
 			onSelectBot: () => undefined,
 			drafts: createDraftsController(),
 			haveSpacesFailed: false,
@@ -764,6 +776,7 @@ describe("WorkspaceBody frame", () => {
 describe("WorkspaceBody Home", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
+		homeFeed.entries = []
 		listRoutines.mockResolvedValue([])
 		listRuns.mockResolvedValue([])
 		listSources.mockResolvedValue([])
@@ -773,62 +786,256 @@ describe("WorkspaceBody Home", () => {
 
 	afterEach(cleanup)
 
-	const homeOf = async (store = createFakeTranscriptStore()) => {
-		const workspace = await workspaceOf(store)
-		const earlier = await store.mainChat(workspace.bot.id, SPACE)
-		const homeRenewals = createHomeRenewals(store)
+	let said = 0
+
+	const sayIn = async (store: TranscriptStore, conversationId: string) => {
+		said += 1
+		const turnId = `home-turn-${said}`
+		await store.startTurn({ conversationId, id: turnId, startedAt: said })
+		await store.appendUserMessage({
+			id: `home-said-${said}`,
+			conversationId,
+			turnId,
+			authorBotId: null,
+			repliedToMessageId: null,
+			content: "Book the flights.",
+			createdAt: said,
+		})
+	}
+
+	type HomeLaunch = {
+		store?: TranscriptStore
+		seated?: Workspace
+		overrides?: Partial<WorkspaceBodyHarnessProps>
+	}
+
+	const launchHome = async ({
+		store = createFakeTranscriptStore(),
+		seated,
+		overrides = {},
+	}: HomeLaunch = {}) => {
+		const workspace = seated ?? (await workspaceOf(store))
+		const homeVisits = createHomeVisits(store)
 		const onOpenThreadInNewTab = vi.fn()
-		render(
+		const bodyOf = (more: Partial<WorkspaceBodyHarnessProps> = {}) =>
 			workspace.body({
 				overrides: {
 					bot: workspace.bot,
 					conversation: undefined,
-					homeRenewals,
+					homeVisits,
 					onOpenThreadInNewTab,
+					...overrides,
+					...more,
 				},
-			}),
-		)
-		await settle()
-		const relaunch = () =>
-			act(() => homeRenewals.renew(workspace.bot.id, SPACE))
+			})
+		const view = render(bodyOf())
+		const open = () => act(() => homeVisits.open(workspace.bot.id, SPACE))
 		const mainChatId = async () =>
 			(await store.mainChat(workspace.bot.id, SPACE)).id
-		return { earlier, relaunch, mainChatId, onOpenThreadInNewTab }
+		const rerender = (more?: Partial<WorkspaceBodyHarnessProps>) =>
+			view.rerender(bodyOf(more))
+		return { workspace, open, mainChatId, rerender, onOpenThreadInNewTab }
 	}
+
+	type HomeMission = {
+		id: string
+		title: string
+		state: MissionState
+		at: number
+	}
+
+	const homeMissionOf = (
+		bot: Bot,
+		room: Conversation,
+		{ id, title, state, at }: HomeMission,
+	): MissionInSpace => {
+		const mission = missionOf(bot, room)
+		return {
+			conversationId: room.id,
+			conversationTitle: room.title,
+			mission: {
+				...mission,
+				id,
+				state,
+				ticket: { ...mission.ticket, title },
+				closedAt: at,
+				lastActivityAt: at,
+			},
+		}
+	}
+
+	const archivedLine = () => screen.queryByRole("button", { name: "Open it" })
+
+	const homeSlot = (slot: string) =>
+		document.querySelector(`[data-slot="${slot}"]`)
 
 	it("starts the Home fresh after a relaunch, the earlier Conversation one click away", async () => {
 		const store = createFakeTranscriptStore()
 		const renewal = vi.spyOn(store, "renewMainChat")
-		const home = await homeOf(store)
-		expect(screen.getByRole("heading", { name: /What’s next/ })).toBeTruthy()
-		expect(screen.queryByRole("button", { name: "Open it" })).toBeNull()
+		const home = await launchHome({ store })
+		const earlier = await home.mainChatId()
+		await sayIn(store, earlier)
 
-		await home.relaunch()
-		await home.relaunch()
+		await home.open()
+		await home.open()
 
 		expect(renewal).toHaveBeenCalledOnce()
-		expect(await home.mainChatId()).not.toBe(home.earlier.id)
+		expect(await home.mainChatId()).not.toBe(earlier)
+		expect(screen.getByRole("heading", { name: /What’s next/ })).toBeTruthy()
 		fireEvent.click(screen.getByRole("button", { name: "Open it" }))
 		expect(home.onOpenThreadInNewTab).toHaveBeenCalledWith({
-			conversation: home.earlier.id,
+			conversation: earlier,
 		})
+	})
+
+	it("keeps an empty main conversation, renews nothing and shows no archived line", async () => {
+		const store = createFakeTranscriptStore()
+		const renewal = vi.spyOn(store, "renewMainChat")
+		const home = await launchHome({ store })
+		const kept = await home.mainChatId()
+
+		await home.open()
+
+		expect(renewal).not.toHaveBeenCalled()
+		expect(await home.mainChatId()).toBe(kept)
+		expect(screen.getByRole("heading", { name: /What’s next/ })).toBeTruthy()
+		expect(archivedLine()).toBeNull()
+	})
+
+	it("creates no archived empty conversation across three relaunches with nothing sent", async () => {
+		const store = createFakeTranscriptStore()
+		const renewal = vi.spyOn(store, "renewMainChat")
+		const first = await launchHome({ store })
+		const kept = await first.mainChatId()
+
+		for (let relaunch = 0; relaunch < 3; relaunch += 1) {
+			cleanup()
+			const home = await launchHome({ store, seated: first.workspace })
+			await home.open()
+			expect(archivedLine()).toBeNull()
+			expect(await home.mainChatId()).toBe(kept)
+		}
+
+		expect(renewal).not.toHaveBeenCalled()
 	})
 
 	it("keeps the previous main conversation and says what failed when the renewal fails", async () => {
 		const store = createFakeTranscriptStore()
 		vi.spyOn(store, "renewMainChat").mockRejectedValue(new Error("disk full"))
 		render(createElement(NoticeSurface))
-		const home = await homeOf(store)
+		const home = await launchHome({ store })
+		const earlier = await home.mainChatId()
+		await sayIn(store, earlier)
 
-		await home.relaunch()
+		await home.open()
 
 		expect(
 			await screen.findAllByText(
 				"Couldn’t load the latest messages. Restart Kiroshi to retry.",
 			),
 		).not.toHaveLength(0)
-		expect(screen.queryByRole("button", { name: "Open it" })).toBeNull()
-		expect(await home.mainChatId()).toBe(home.earlier.id)
+		expect(archivedLine()).toBeNull()
+		expect(await home.mainChatId()).toBe(earlier)
+	})
+
+	it("draws the Home loading state while the agent thread is not loaded yet", async () => {
+		const home = await launchHome({
+			overrides: {
+				chat: {
+					state: { ...initialChatState, isFirstLoadPending: true },
+					controller: createChatController(
+						createScriptedDriver(),
+						createFakeTranscriptStore(),
+					),
+				},
+			},
+		})
+		expect(homeSlot("home-greeting-skeleton")).not.toBeNull()
+
+		await home.open()
+
+		expect(homeSlot("home-greeting-skeleton")).not.toBeNull()
+		expect(homeSlot("home-composer-skeleton")).not.toBeNull()
+		expect(screen.queryByRole("heading", { name: /What’s next/ })).toBeNull()
+	})
+
+	it("shows only the missions that completed or blocked after the Home opened", async () => {
+		const home = await launchHome()
+		await home.open()
+		const openedAt = Date.now()
+		const { bot, conversation } = home.workspace
+		homeFeed.entries = [
+			homeMissionOf(bot, conversation, {
+				id: "before",
+				title: "Earlier booking",
+				state: "done",
+				at: openedAt - 60_000,
+			}),
+			homeMissionOf(bot, conversation, {
+				id: "after",
+				title: "Book flights",
+				state: "waiting_human",
+				at: openedAt + 60_000,
+			}),
+		]
+
+		home.rerender()
+
+		expect(screen.getByText("Book flights")).toBeTruthy()
+		expect(screen.getByText("Blocked")).toBeTruthy()
+		expect(screen.queryByText("Earlier booking")).toBeNull()
+	})
+
+	it("suggests Applications to an agent that has none, until the suggestion is hidden", async () => {
+		const home = await launchHome()
+		await home.open()
+
+		fireEvent.click(
+			await screen.findByRole("button", { name: "Hide this suggestion" }),
+		)
+
+		expect(
+			screen.queryByRole("button", { name: "Hide this suggestion" }),
+		).toBeNull()
+		expect(homeSlot("home-applications-band")).toBeNull()
+	})
+
+	it("suggests no Application to an agent that has one", async () => {
+		const store = createFakeTranscriptStore()
+		vi.spyOn(store, "pluginMcpServers").mockResolvedValue([
+			{ name: "linear", config: {} },
+		])
+		const home = await launchHome({ store })
+		await home.open()
+		await settle()
+
+		expect(screen.getByRole("heading", { name: /What’s next/ })).toBeTruthy()
+		expect(homeSlot("home-applications-band")).toBeNull()
+	})
+
+	it("keeps a done room line when the person switches to another agent and back", async () => {
+		const store = createFakeTranscriptStore()
+		const rooms = vi.spyOn(store, "agentRooms")
+		const home = await launchHome({ store })
+		const { bot, conversation } = home.workspace
+		rooms.mockResolvedValue([
+			{ botId: bot.id, conversationIds: [conversation.id] },
+		])
+		await home.open()
+		expect(await screen.findByText("Nyx is working in")).toBeTruthy()
+
+		rooms.mockResolvedValue([{ botId: bot.id, conversationIds: [] }])
+		await act(() =>
+			queries.queryClient.invalidateQueries({ queryKey: homeQueryKeys.all }),
+		)
+		expect(await screen.findByText("Nyx worked in")).toBeTruthy()
+
+		const [vega] = await seatBots(store, SPACE, ["Vega"])
+		home.rerender({ bot: vega, bots: [bot, vega] })
+		expect(screen.queryByText("Nyx worked in")).toBeNull()
+		home.rerender({ bot, bots: [bot, vega] })
+
+		expect(await screen.findByText("Nyx worked in")).toBeTruthy()
 	})
 })
 

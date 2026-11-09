@@ -1,9 +1,16 @@
-import type { MouseEvent, ReactNode } from "react"
+import { type MouseEvent, type ReactNode, useContext } from "react"
 
 import { greetingPeriodOf } from "@workspace/ui/components/greeting-period"
 import type { HomeAgent } from "@workspace/ui/components/home-agent-picker"
-import { HomeComposer } from "@workspace/ui/components/home-composer"
-import { HomeGreeting } from "@workspace/ui/components/home-greeting"
+import { HomeApplicationsBand } from "@workspace/ui/components/home-applications-band"
+import {
+	HomeComposer,
+	HomeComposerSkeleton,
+} from "@workspace/ui/components/home-composer"
+import {
+	HomeGreeting,
+	HomeGreetingSkeleton,
+} from "@workspace/ui/components/home-greeting"
 import { HomeLayout } from "@workspace/ui/components/home-layout"
 import {
 	HomeArchivedLine,
@@ -15,6 +22,8 @@ import {
 } from "@workspace/ui/components/home-lines"
 
 import { ApprovalPrompt, QuestionPrompt } from "@/components/thread-prompt"
+import { ConversationApplicationsContext } from "@/lib/applications/use-conversation-installs"
+import { useMcpServers } from "@/lib/bots/use-mcp-servers"
 import { faceOfBot } from "@/lib/chat/thread-contract"
 import type { ConversationRuntimes } from "@/lib/conversations/conversation-runtimes"
 import { toConversationLook } from "@/lib/conversations/roster-conversations"
@@ -22,8 +31,8 @@ import type { Bot, Conversation } from "@/lib/conversations/store-contract"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import { useConversation } from "@/lib/conversations/use-conversation"
 import { homeMissionLinesOf } from "@/lib/home/home-mission-lines"
-import type { HomeArchive } from "@/lib/home/home-renewals"
-import { useRoomLines } from "@/lib/home/home-room-lines"
+import type { HomeRoomLineModel } from "@/lib/home/home-room-lines"
+import type { HomeArchive } from "@/lib/home/home-visits"
 import { useAgentRooms } from "@/lib/home/use-agent-rooms"
 import { useSpaceMissions } from "@/lib/missions/use-space-missions"
 
@@ -119,6 +128,8 @@ export type HomeLinesProps = {
 	store: Pick<TranscriptStore, "agentRooms">
 	runtimes: ConversationRuntimes
 	spaceId: string | null
+	openedAt: number | null
+	roomLinesOf: (workingIds: string[]) => HomeRoomLineModel[]
 	onOpenRoom: OpenRoom
 }
 
@@ -129,18 +140,24 @@ export const HomeLines = ({
 	store,
 	runtimes,
 	spaceId,
+	openedAt,
+	roomLinesOf,
 	onOpenRoom,
 }: HomeLinesProps) => {
-	const roomLines = useRoomLines(useAgentRooms(store, spaceId, agent.id))
+	const roomLines = roomLinesOf(useAgentRooms(store, spaceId, agent.id))
 	const missions = useSpaceMissions(spaceId)
-	const missionLines = homeMissionLinesOf(
-		[
-			...missions.waitingOnYou,
-			...missions.inProgress,
-			...missions.earlierToday,
-		],
-		agent.id,
-	)
+	const missionLines =
+		openedAt === null
+			? []
+			: homeMissionLinesOf(
+					[
+						...missions.waitingOnYou,
+						...missions.inProgress,
+						...missions.earlierToday,
+					],
+					agent.id,
+					openedAt,
+				)
 	const roomWith = (conversationId: string) =>
 		conversations.find(({ id }) => id === conversationId)
 	const homeAgent = homeAgentOf(agent)
@@ -201,7 +218,7 @@ export const HomeLines = ({
 	)
 }
 
-type HomeSend = {
+export type HomeSend = {
 	draft: string
 	onDraftChange: (draft: string) => void
 	onSubmit: (text: string) => void
@@ -209,6 +226,7 @@ type HomeSend = {
 }
 
 export type ThreadHome = {
+	isSettling: boolean
 	lines: ReactNode
 	emptyStage: (send: HomeSend) => ReactNode
 }
@@ -216,48 +234,96 @@ export type ThreadHome = {
 export type HomeEmptyStageProps = HomeSend & {
 	agent: Bot
 	agents: Bot[]
+	store: TranscriptStore
+	spaceId: string | null
 	readerName: string
 	archive: HomeArchive | null
+	isBandDismissed: boolean
 	lines: ReactNode
 	onOpenArchive: (conversationId: string) => void
 	onSelectAgent: (botId: string) => void
+	onDismissBand: () => void
 }
+
+const SHOWN_MARKS = 5
+
+const useApplicationsBand = (
+	store: TranscriptStore,
+	agent: Bot,
+	spaceId: string | null,
+	onDismiss: () => void,
+): ReactNode => {
+	const curated = useContext(ConversationApplicationsContext)?.curated ?? []
+	const { servers, isPending, hasFailedToLoad } = useMcpServers(
+		store,
+		spaceId === null ? null : { kind: "bot", id: agent.id, spaceId },
+	)
+	if (spaceId === null || isPending || hasFailedToLoad || servers.length > 0) {
+		return undefined
+	}
+	const marks = curated
+		.flatMap(({ logo }) => (logo ? [logo] : []))
+		.slice(0, SHOWN_MARKS)
+	return (
+		<HomeApplicationsBand
+			agentName={agent.name}
+			marks={marks}
+			onDismiss={onDismiss}
+		/>
+	)
+}
+
+export const HomeLoadingStage = () => (
+	<HomeLayout stage="empty">
+		<HomeGreetingSkeleton />
+		<HomeComposerSkeleton />
+	</HomeLayout>
+)
 
 export const HomeEmptyStage = ({
 	agent,
 	agents,
+	store,
+	spaceId,
 	readerName,
 	archive,
+	isBandDismissed,
 	lines,
 	onOpenArchive,
 	onSelectAgent,
+	onDismissBand,
 	draft,
 	onDraftChange,
 	onSubmit,
 	onAttach,
-}: HomeEmptyStageProps) => (
-	<HomeLayout stage="empty">
-		<HomeGreeting
-			agent={homeAgentOf(agent)}
-			firstName={firstNameOf(readerName)}
-			period={periodAt(Date.now())}
-		/>
-		<HomeComposer
-			agents={agents.map(homeAgentOf)}
-			defaultValue={draft}
-			onAttach={onAttach}
-			onSelectAgent={onSelectAgent}
-			onSubmit={onSubmit}
-			onValueChange={onDraftChange}
-			selectedAgentId={agent.id}
-		/>
-		{archive ? (
-			<HomeArchivedLine
-				agentName={agent.name}
-				onOpen={() => onOpenArchive(archive.conversationId)}
-				period={periodAt(archive.lastActiveAt)}
+}: HomeEmptyStageProps) => {
+	const band = useApplicationsBand(store, agent, spaceId, onDismissBand)
+
+	return (
+		<HomeLayout stage="empty">
+			<HomeGreeting
+				agent={homeAgentOf(agent)}
+				firstName={firstNameOf(readerName)}
+				period={periodAt(Date.now())}
 			/>
-		) : null}
-		{lines}
-	</HomeLayout>
-)
+			<HomeComposer
+				agents={agents.map(homeAgentOf)}
+				band={isBandDismissed ? undefined : band}
+				defaultValue={draft}
+				onAttach={onAttach}
+				onSelectAgent={onSelectAgent}
+				onSubmit={onSubmit}
+				onValueChange={onDraftChange}
+				selectedAgentId={agent.id}
+			/>
+			{archive ? (
+				<HomeArchivedLine
+					agentName={agent.name}
+					onOpen={() => onOpenArchive(archive.conversationId)}
+					period={periodAt(archive.lastActiveAt)}
+				/>
+			) : null}
+			{lines}
+		</HomeLayout>
+	)
+}

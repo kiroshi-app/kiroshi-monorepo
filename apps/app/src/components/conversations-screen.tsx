@@ -46,7 +46,7 @@ export const ConversationsScreen = () => {
 					conversations={rosterView.conversations}
 					drafts={core.drafts}
 					haveSpacesFailed={spaces.state.hasFailedToLoad}
-					homeRenewals={core.homeRenewals}
+					homeVisits={core.homeVisits}
 					isMissionsPanelOpen={sidebarTab.openTab === "missions"}
 					isOverlayOpen={overlay.isOverlayOpen}
 					landings={core.messageLandings}

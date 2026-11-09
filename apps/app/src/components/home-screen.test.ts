@@ -21,6 +21,7 @@ import { createScriptedDriver } from "@/lib/conversations/scripted-driver"
 import type { Bot, Conversation } from "@/lib/conversations/store-contract"
 import { seatBots } from "@/lib/conversations/transcript-fixtures"
 import { homeQueryKeys } from "@/lib/home/home-query-keys"
+import { createRoomLog, type RoomLog } from "@/lib/home/home-room-lines"
 import type { SpaceMissionsView } from "@/lib/missions/use-space-missions"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 
@@ -42,6 +43,7 @@ type HomeFixture = {
 	runtimes: ReturnType<typeof createConversationRuntimes>
 	driver: ReturnType<typeof createScriptedDriver>
 	store: ReturnType<typeof createFakeTranscriptStore>
+	roomLog: RoomLog
 }
 
 const homeFixture = async (): Promise<HomeFixture> => {
@@ -55,7 +57,7 @@ const homeFixture = async (): Promise<HomeFixture> => {
 	})
 	const driver = createScriptedDriver()
 	const runtimes = createConversationRuntimes(driver, store)
-	return { atlas, room, runtimes, driver, store }
+	return { atlas, room, runtimes, driver, store, roomLog: createRoomLog() }
 }
 
 const missionIn = (
@@ -99,6 +101,8 @@ const missionIn = (
 
 const homeLinesOf = (fixture: HomeFixture, onOpenRoom = vi.fn()) =>
 	createElement(HomeLines, {
+		openedAt: 0,
+		roomLinesOf: (workingIds) => fixture.roomLog.linesOf("atlas", workingIds),
 		agent: fixture.atlas,
 		bots: [fixture.atlas],
 		conversations: [fixture.room],

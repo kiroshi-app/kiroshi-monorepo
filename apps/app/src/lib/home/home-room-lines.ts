@@ -1,5 +1,3 @@
-import { useState } from "react"
-
 export type HomeRoomLineModel = { conversationId: string } & (
 	| { state: "working" }
 	| { state: "done"; at: number }
@@ -34,19 +32,27 @@ const nextRoomLines = (
 }
 
 type SeenRooms = {
-	workingIds: string[]
+	signature: string
 	lines: HomeRoomLineModel[]
 }
 
-export const useRoomLines = (workingIds: string[]): HomeRoomLineModel[] => {
-	const [seen, setSeen] = useState<SeenRooms>(() => ({
-		workingIds,
-		lines: workingIds.map(workingLineOf),
-	}))
-	if (seen.workingIds === workingIds) {
-		return seen.lines
+export type RoomLog = {
+	linesOf: (key: string, workingIds: string[]) => HomeRoomLineModel[]
+}
+
+export const createRoomLog = (): RoomLog => {
+	const seen = new Map<string, SeenRooms>()
+
+	return {
+		linesOf: (key, workingIds) => {
+			const signature = workingIds.join(" ")
+			const held = seen.get(key)
+			if (held?.signature === signature) {
+				return held.lines
+			}
+			const lines = nextRoomLines(held?.lines ?? [], workingIds, Date.now())
+			seen.set(key, { signature, lines })
+			return lines
+		},
 	}
-	const lines = nextRoomLines(seen.lines, workingIds, Date.now())
-	setSeen({ workingIds, lines })
-	return lines
 }

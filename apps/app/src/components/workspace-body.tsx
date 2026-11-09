@@ -21,10 +21,10 @@ import type { ConversationRuntimes } from "@/lib/conversations/conversation-runt
 import type { Bot, Conversation } from "@/lib/conversations/store-contract"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import {
-	archiveOf,
-	type HomeArchives,
-	type HomeRenewals,
-} from "@/lib/home/home-renewals"
+	type HomeVisits,
+	type HomeVisitsState,
+	visitOf,
+} from "@/lib/home/home-visits"
 import type { MissionLanding } from "@/lib/missions/mission-actions"
 import type { OpenedMissionController } from "@/lib/missions/opened-mission-controller"
 import type { ThreadSearch } from "@/lib/navigation/thread-search"
@@ -42,7 +42,7 @@ type WorkspaceBodyProps = {
 	conversations: Conversation[]
 	conversationRuntimes: ConversationRuntimes
 	store: TranscriptStore
-	homeRenewals: HomeRenewals
+	homeVisits: HomeVisits
 	onSelectBot: (botId: string) => void
 	chat: Chat
 	attachments: AttachmentsController
@@ -108,9 +108,10 @@ const missionThreadOf = (
 const homeSeatOf = (
 	props: WorkspaceBodyProps,
 	bot: Bot,
-	archives: HomeArchives,
+	visits: HomeVisitsState,
 ): ThreadHome => {
-	const { onOpenThreadInNewTab, spaceId } = props
+	const { homeVisits, onOpenThreadInNewTab, spaceId } = props
+	const visit = visitOf(visits, bot.id, spaceId)
 	const openConversation = (conversationId: string) =>
 		onOpenThreadInNewTab({ conversation: conversationId })
 	const lines = (
@@ -120,6 +121,10 @@ const homeSeatOf = (
 			conversations={props.conversations}
 			key={bot.id}
 			onOpenRoom={openConversation}
+			openedAt={visit?.openedAt ?? null}
+			roomLinesOf={(workingIds) =>
+				homeVisits.roomLinesOf(bot.id, spaceId, workingIds)
+			}
 			runtimes={props.conversationRuntimes}
 			spaceId={spaceId}
 			store={props.store}
@@ -127,17 +132,22 @@ const homeSeatOf = (
 	)
 
 	return {
+		isSettling: spaceId !== null && !visit?.isSettled,
 		lines,
 		emptyStage: (send) => (
 			<HomeEmptyStage
 				{...send}
 				agent={bot}
 				agents={props.bots}
-				archive={archiveOf(archives, bot.id, spaceId)}
+				archive={visit?.archive ?? null}
+				isBandDismissed={visit?.isBandDismissed ?? false}
 				lines={lines}
+				onDismissBand={() => homeVisits.dismissBand(bot.id, spaceId)}
 				onOpenArchive={openConversation}
 				onSelectAgent={props.onSelectBot}
 				readerName={props.readerName}
+				spaceId={spaceId}
+				store={props.store}
 			/>
 		),
 	}
@@ -147,11 +157,8 @@ export function WorkspaceBody(props: WorkspaceBodyProps) {
 	const t = useCommonCopy()
 	const { missions } = props
 	const opened = useSyncExternalStore(missions.subscribe, missions.getState)
-	const { homeRenewals } = props
-	const archives = useSyncExternalStore(
-		homeRenewals.subscribe,
-		homeRenewals.getState,
-	)
+	const { homeVisits } = props
+	const visits = useSyncExternalStore(homeVisits.subscribe, homeVisits.getState)
 	const rowId = props.conversation?.id ?? props.bot?.id ?? null
 	const { spaceRowId } = props
 
@@ -221,7 +228,7 @@ export function WorkspaceBody(props: WorkspaceBodyProps) {
 			drafts={props.drafts}
 			home={
 				thread.kind === "bot"
-					? homeSeatOf(props, thread.bot, archives)
+					? homeSeatOf(props, thread.bot, visits)
 					: undefined
 			}
 			landings={props.landings}

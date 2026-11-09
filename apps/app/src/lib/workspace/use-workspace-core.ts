@@ -26,7 +26,7 @@ import { createTranscriptStore } from "../conversations/create-store"
 import { pluginScopeOf } from "../conversations/plugin-scope"
 import { createSpokenWords } from "../conversations/spoken-words"
 import { useEnvironment } from "../environment/use-environment"
-import { createHomeRenewals } from "../home/home-renewals"
+import { createHomeVisits } from "../home/home-visits"
 import { createOpenedMissionController } from "../missions/opened-mission-controller"
 import type { OpenSettings } from "../navigation/open-settings"
 import { usePlugin } from "../plugins/use-plugin"
@@ -87,7 +87,7 @@ export const useWorkspaceCore = (openSettings: OpenSettings | null) => {
 		[chat.controller, driver, conversationRuntimes],
 	)
 	const drafts = useMemo(createDraftsController, [])
-	const homeRenewals = useMemo(() => createHomeRenewals(store), [store])
+	const homeVisits = useMemo(() => createHomeVisits(store), [store])
 	const spokenWords = useMemo(createSpokenWords, [])
 	const openedMission = useMemo(
 		() => createOpenedMissionController(roster.controller),
@@ -175,7 +175,7 @@ export const useWorkspaceCore = (openSettings: OpenSettings | null) => {
 		conversationRuntimes,
 		drafts,
 		driver,
-		homeRenewals,
+		homeVisits,
 		invitations,
 		joinedSpaces,
 		messageLandings,
