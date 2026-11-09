@@ -3,9 +3,9 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use super::{
-	denies_changes, dir, object_at, object_to_rewrite, serialised, settings_path, ALLOW_KEY,
-	ASK_KEY, CHANGING_TOOLS, DEFAULT_MODE_KEY, DENY_KEY, DIRECTORIES_KEY, PERMISSIONS_KEY,
-	PERMISSION_MODES, SETTINGS_NAME,
+	denies_changes, dir, is_permission_mode, object_at, object_to_rewrite, serialised,
+	settings_path, ALLOW_KEY, ASK_KEY, CHANGING_TOOLS, DEFAULT_MODE_KEY, DENY_KEY, DIRECTORIES_KEY,
+	PERMISSIONS_KEY, PERMISSION_MODES, SETTINGS_NAME,
 };
 use crate::db::repositories::conversations::Bot;
 use crate::private_files;
@@ -111,7 +111,7 @@ fn declared_mode(declared: &serde_json::Map<String, serde_json::Value>) -> Strin
 }
 
 fn accepted_mode(mode: &str) -> &str {
-	if PERMISSION_MODES.modes.iter().any(|listed| listed == mode) {
+	if is_permission_mode(mode) {
 		mode
 	} else {
 		&PERMISSION_MODES.fallback

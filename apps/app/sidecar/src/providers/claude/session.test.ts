@@ -177,6 +177,48 @@ describe("buildOptions", () => {
 		}
 	})
 
+	describe("a start narrowing the session", () => {
+		const declaringAcceptEdits = () => {
+			const bundle = mkdtempSync(join(tmpdir(), "kiroshi-settings-"))
+			const settingsPath = join(bundle, "settings.json")
+			writeFileSync(
+				settingsPath,
+				JSON.stringify({ permissions: { defaultMode: "acceptEdits" } }),
+			)
+			return { ...request, settingsPath }
+		}
+
+		it("opens under the mode the start carries, in place of the declared one", () => {
+			const declared = declaringAcceptEdits()
+
+			const options = buildOptions(
+				{ ...declared, permissionMode: "dontAsk" },
+				undefined,
+			)
+
+			expect(options.permissionMode).toBe("dontAsk")
+			expect(settingsOf(options)).toEqual(
+				settingsOf(buildOptions(declared, undefined)),
+			)
+		})
+
+		it("denies the tools the start carries", () => {
+			const options = buildOptions(
+				{ ...request, deniedTools: ["AskUserQuestion"] },
+				undefined,
+			)
+
+			expect(options.disallowedTools).toEqual(["AskUserQuestion"])
+		})
+
+		it("keeps the declared mode and denies nothing when the start carries neither", () => {
+			const options = buildOptions(declaringAcceptEdits(), undefined)
+
+			expect(options.permissionMode).toBe("acceptEdits")
+			expect(options).not.toHaveProperty("disallowedTools")
+		})
+	})
+
 	it("opens on the settings file the host names, mode and rules at once", () => {
 		const bundle = mkdtempSync(join(tmpdir(), "kiroshi-settings-"))
 		const settingsPath = join(bundle, "settings.json")

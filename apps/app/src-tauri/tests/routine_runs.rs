@@ -35,6 +35,7 @@ use tokio::time::timeout;
 
 const FAKE_SIDECAR: &str = env!("CARGO_BIN_EXE_fake_sidecar");
 const SCENARIO_ENV: &str = "FAKE_AGENT_SCENARIO_FILE";
+const OPEN_COMMANDS_ENV: &str = "FAKE_AGENT_OPEN_COMMANDS_FILE";
 const BOT: &str = "default";
 const SECOND_BOT: &str = "second";
 const EVERY_MINUTE: &str = "* * * * *";
@@ -382,6 +383,47 @@ fn a_schedule_fire_runs_in_the_host_and_writes_its_report() {
 	host.wait_for_changes(1);
 	host.wait_for_no_live_session();
 	assert_the_row_announced_once(&host);
+	host.quit();
+}
+
+struct OpenCommands(RemovedOnDrop);
+
+impl OpenCommands {
+	fn recorded(name: &str) -> Self {
+		let record = RemovedOnDrop(
+			std::env::temp_dir()
+				.join(format!("kiroshi-open-commands-{name}-{}.ndjson", std::process::id())),
+		);
+		std::env::set_var(OPEN_COMMANDS_ENV, &*record);
+		Self(record)
+	}
+
+	fn read(&self) -> Vec<Value> {
+		let held = std::fs::read_to_string(&*self.0).expect("the open commands read");
+		held.lines().map(|line| serde_json::from_str(line).expect("an open command")).collect()
+	}
+}
+
+impl Drop for OpenCommands {
+	fn drop(&mut self) {
+		std::env::remove_var(OPEN_COMMANDS_ENV);
+	}
+}
+
+#[test]
+fn a_run_session_opens_denying_the_question_tool_under_the_bot_mode() {
+	let _serial = serial();
+	let opened = OpenCommands::recorded("question-denied");
+	let host = launch("question-denied", "routine_report");
+
+	assert!(is_started(&host.run_now()));
+	assert_reported(&host, &host.closed_run());
+
+	let commands = opened.read();
+	assert_eq!(commands.len(), 1, "the run opened {commands:?}");
+	assert_eq!(commands[0]["deniedTools"], json!(["AskUserQuestion"]));
+	assert_eq!(commands[0].get("permissionMode"), None);
+	host.wait_for_no_live_session();
 	host.quit();
 }
 

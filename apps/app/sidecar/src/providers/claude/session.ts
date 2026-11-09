@@ -3,6 +3,7 @@ import { homedir } from "node:os"
 import {
 	type HookCallback,
 	type Options,
+	type PermissionMode,
 	query,
 	type SlashCommand,
 } from "@anthropic-ai/claude-agent-sdk"
@@ -136,6 +137,10 @@ export const buildOptions = (
 				servers: Object.keys(resolved.servers),
 			}),
 		),
+		...(request.permissionMode
+			? { permissionMode: request.permissionMode as PermissionMode }
+			: {}),
+		...(request.deniedTools ? { disallowedTools: request.deniedTools } : {}),
 		...(handsServers(request)
 			? {
 					plugins: localPlugins(pluginPaths(request)),

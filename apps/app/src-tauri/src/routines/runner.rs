@@ -45,6 +45,8 @@ const QUESTION_REASON: &str = "a run cannot be asked a question";
 
 const PERMISSION_REASON: &str = "a run cannot be asked for a permission";
 
+const QUESTION_TOOL: &str = "AskUserQuestion";
+
 const DEADLINE_REASON: &str = "the run outlived its deadline";
 
 const TASKS_PENDING_REASON: &str =
@@ -375,6 +377,8 @@ async fn started<R: Runtime>(
 		None,
 		None,
 		Some(run_output_schema().into()),
+		Some(vec![QUESTION_TOOL.to_owned()]),
+		None,
 	)
 	.await
 	.map_err(|error| detail_of(&error))?;

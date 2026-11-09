@@ -92,6 +92,10 @@ static PERMISSION_MODES: LazyLock<PermissionModes> = LazyLock::new(|| {
 		.expect("the embedded permission modes hold a modes list and a fallback")
 });
 
+pub(crate) fn is_permission_mode(mode: &str) -> bool {
+	PERMISSION_MODES.modes.iter().any(|listed| listed == mode)
+}
+
 const MCP_NAME: &str = ".mcp.json";
 const SERVERS_KEY: &str = "mcpServers";
 const MCP_SOURCE: &str = "./.mcp.json";

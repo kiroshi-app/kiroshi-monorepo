@@ -5134,6 +5134,47 @@ fn a_relay_guest_cannot_pick_the_start_folder_of_a_session() {
 	});
 }
 
+#[test]
+fn a_relay_guest_cannot_pick_the_permission_mode_of_a_session() {
+	run(async {
+		let command = "agent_start_or_resume_session";
+		let mut guest = Guest::of_two_spaces("permission-mode").await;
+
+		guest
+			.refused(
+				command,
+				json!({ "scope": a_runtime_scope("c-mine"), "permissionMode": "dontAsk" }),
+			)
+			.await;
+		guest
+			.forwarded(
+				command,
+				json!({ "scope": a_runtime_scope("c-mine"), "permissionMode": null }),
+			)
+			.await;
+		guest.forwarded(command, json!({ "scope": a_runtime_scope("c-mine") })).await;
+
+		assert_eq!(guest.effects.reached(), [command, command]);
+	});
+}
+
+#[test]
+fn a_relay_guest_starts_a_session_denying_tools() {
+	run(async {
+		let command = "agent_start_or_resume_session";
+		let mut guest = Guest::of_two_spaces("denied-tools").await;
+
+		guest
+			.forwarded(
+				command,
+				json!({ "scope": a_runtime_scope("c-mine"), "deniedTools": ["AskUserQuestion"] }),
+			)
+			.await;
+
+		assert_eq!(guest.effects.reached(), [command]);
+	});
+}
+
 fn a_shared_space_marker() -> (&'static str, Value) {
 	(CHANGED_EVENT, json!({ "spaceId": PERSONAL, "marker": true }))
 }
