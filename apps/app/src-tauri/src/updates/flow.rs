@@ -37,6 +37,10 @@ impl Updates {
 		self.held().state.clone()
 	}
 
+	fn is_offering(&self) -> bool {
+		matches!(self.held().state, UpdateState::Available { .. })
+	}
+
 	fn held(&self) -> MutexGuard<'_, Held> {
 		self.0.lock().unwrap_or_else(PoisonError::into_inner)
 	}
@@ -130,7 +134,15 @@ pub async fn check_stored_channel<R: Runtime>(app: &AppHandle<R>) -> UpdateState
 
 pub fn check_stored_channel_on<R: Runtime>(app: &AppHandle<R>) {
 	let app = app.clone();
-	tauri::async_runtime::spawn(async move { check_stored_channel(&app).await });
+	tauri::async_runtime::spawn(async move { check_stored_channel_unless_offering(&app).await });
+}
+
+async fn check_stored_channel_unless_offering<R: Runtime>(app: &AppHandle<R>) -> UpdateState {
+	let updates = app.state::<Updates>();
+	if updates.is_offering() {
+		return updates.state();
+	}
+	check_stored_channel(app).await
 }
 
 async fn stored_channel<R: Runtime>(app: &AppHandle<R>) -> Result<UpdateChannel, String> {
@@ -467,5 +479,16 @@ mod tests {
 		assert_eq!(answered, UpdateState::Checking);
 		let next = app.state::<Updates>().settle_check(UpdateState::UpToDate, None);
 		assert!(matches!(next, Settled::Again(UpdateChannel::Beta)));
+	}
+
+	#[tokio::test]
+	async fn a_reopen_leaves_a_standing_offer_untouched() {
+		let offered = UpdateState::Available { version: "0.27.0-beta.2".to_owned() };
+		let app = an_app_of_its_own("updates", mock_builder().manage(updates_in(offered.clone())));
+
+		let answered = check_stored_channel_unless_offering::<MockRuntime>(app.handle()).await;
+
+		assert_eq!(answered, offered);
+		assert_eq!(held_state(&app), offered);
 	}
 }
