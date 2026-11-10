@@ -17,6 +17,7 @@ use kiroshi_rune_os::policy::{NoticeKind, NoticeTarget};
 use kiroshi_rune_os::{BannerOutcome, Notifier};
 
 use crate::content;
+use crate::conversations::Connections;
 use crate::dev_profile::{self, DevProfile};
 use crate::events::HostEvent;
 use crate::host::{Host, HostError, Profile};
@@ -52,6 +53,8 @@ const LONGEST_UNREAD: &str = "Couldn't find the longest conversation.";
 const HOST_LOST: &str = "Stopped hearing from the host.";
 
 const CONVERSATION_DELETED: &str = "The conversation of this tab was deleted.";
+
+const SESSION_UNCHECKED: &str = "Couldn't check the agent's connection.";
 
 pub enum Workspace {
 	Connecting,
@@ -218,6 +221,7 @@ pub enum Inbound {
 	DevProfile(DevProfile),
 	Longest { space_id: String, found: Result<Option<Longest>, HostError> },
 	Banner(BannerOutcome),
+	SessionChecked(Result<(), HostError>),
 }
 
 #[derive(Clone)]
@@ -245,6 +249,7 @@ pub struct App {
 	pub notice: NoticeBoard,
 	pub dev_profile: Option<DevProfile>,
 	pub runs: Runs,
+	pub connections: Connections,
 	pub clock_ms: f64,
 	pub math: Typesetter,
 	pub pane: Pane,
@@ -277,6 +282,7 @@ impl App {
 			notice: NoticeBoard::default(),
 			dev_profile: None,
 			runs: Runs::default(),
+			connections: Connections::default(),
 			math: Typesetter::default(),
 			pane: Pane::Conversations,
 			host_profile: Profile::Installed,
@@ -375,10 +381,14 @@ impl App {
 			return;
 		};
 		let thread = Thread::of_conversation(conversation);
+		let solo_bot_id = conversation.solo_bot_id.clone();
 		let host = ready.source.clone();
 		self.mission = None;
 		self.thread = Some(thread);
 		self.read_thread(host.clone(), conversation_id.to_owned());
+		if let Some(bot_id) = solo_bot_id {
+			self.check_session(host.clone(), conversation_id.to_owned(), bot_id);
+		}
 		s05_thread::open_conversation(self, conversation_id);
 		let conversation_id = conversation_id.to_owned();
 		self.work(move |outbox| {
@@ -519,6 +529,10 @@ impl App {
 				self.notices.banner_refused(&target, &failure)
 			}
 			Inbound::DevProfile(profile) => self.dev_profile = Some(profile),
+			Inbound::SessionChecked(Ok(())) => {}
+			Inbound::SessionChecked(Err(failure)) => {
+				self.raise(Notice::of_host_failure(SESSION_UNCHECKED, &failure))
+			}
 		}
 	}
 
@@ -550,6 +564,21 @@ impl App {
 	fn reload_visible_thread(&self) {
 		let (Some(ready), Some(thread)) = (self.ready(), self.thread.as_ref()) else { return };
 		self.read_thread(ready.source.clone(), thread.conversation_id.clone());
+	}
+
+	fn check_session(&self, host: Source, conversation_id: String, bot_id: String) {
+		self.work(move |outbox| {
+			let scope = json!({
+				"conversationId": conversation_id,
+				"botId": bot_id,
+				"runtimeSessionId": "",
+				"epoch": 0,
+			});
+			let checked = host
+				.invoke::<serde_json::Value>("agent_check", json!({ "scope": scope }))
+				.map(|_| ());
+			outbox.deliver(Inbound::SessionChecked(checked));
+		});
 	}
 
 	fn read_thread(&self, host: Source, conversation_id: String) {
@@ -587,6 +616,12 @@ impl App {
 				let Some(thread) = self.thread.as_mut() else { return };
 				if thread.shows(&scope.conversation_id) {
 					thread.streamed(&scope.bot_id, scoped.event);
+				}
+			}
+			HostEvent::Connection { scope, state, closing } => {
+				self.connections.changed(&scope, state);
+				if let Some(closing) = closing {
+					self.surfaces.s07_approvals.heard(*closing);
 				}
 			}
 			HostEvent::MessageStored(message) => {
@@ -800,9 +835,12 @@ mod tests {
 	use kiroshi_rune_os::{Gesture, GestureFailure};
 
 	use super::*;
+	use kiroshi_core::agent::contract::ConnectionState;
+
 	use crate::model::{ScopedEvent, StreamedMessage, TurnEnded};
 	use crate::notices::fake::{FakeDesktop, Record};
 	use crate::source::Source;
+	use crate::surfaces::s07_approvals;
 
 	fn thread() -> Thread {
 		Thread {
@@ -1055,5 +1093,128 @@ mod tests {
 		assert!(matches!(app.pane, Pane::Conversations));
 		assert_eq!(app.thread.as_ref().map(|thread| thread.conversation_id.as_str()), Some("c-2"));
 		assert_eq!(record.borrow().raised, 1);
+	}
+
+	fn connection_frame(conversation_id: &str, bot_id: &str, state: &str) -> String {
+		json!({
+			"event": "agent://event",
+			"payload": {
+				"scope": {
+					"conversationId": conversation_id,
+					"botId": bot_id,
+					"runtimeSessionId": "session",
+					"epoch": 1,
+				},
+				"event": { "type": "connectionChanged", "state": state },
+			},
+		})
+		.to_string()
+	}
+
+	fn hear_frame(app: &mut App, frame: &str) {
+		let event = crate::events::parsed(frame).expect("the frame is heard");
+		app.host_event(event);
+	}
+
+	fn connection_of(app: &App, conversation_id: &str) -> ConnectionState {
+		app.connections.of(conversation_id, "wren")
+	}
+
+	fn shown_titles(app: &App) -> Vec<String> {
+		notice::shown(app).into_iter().map(|notice| notice.title.clone()).collect()
+	}
+
+	#[test]
+	fn an_opened_solo_conversation_starts_checking() {
+		let (mut app, _) = notifying_app(true);
+
+		app.open("c-1");
+
+		assert_eq!(connection_of(&app, "c-1"), ConnectionState::Checking);
+	}
+
+	#[test]
+	fn a_session_check_answering_ready_or_unavailable_sets_the_state_of_its_agent() {
+		let (mut app, _) = notifying_app(true);
+		app.open("c-1");
+
+		hear_frame(&mut app, &connection_frame("c-1", "wren", "ready"));
+		let ready = connection_of(&app, "c-1");
+		hear_frame(&mut app, &connection_frame("c-1", "wren", "unavailable"));
+
+		assert_eq!(ready, ConnectionState::Ready);
+		assert_eq!(connection_of(&app, "c-1"), ConnectionState::Unavailable);
+	}
+
+	#[test]
+	fn a_crashed_session_sets_crashed_and_closes_its_prompts() {
+		let (mut app, _) = notifying_app(true);
+		app.open("c-1");
+		let frame = connection_frame("c-1", "wren", "crashed");
+
+		let heard = crate::events::parsed(&frame).expect("the frame is heard");
+		let closing = match &heard {
+			HostEvent::Connection { closing, .. } => closing.as_deref(),
+			_ => None,
+		};
+		let closes_prompts = matches!(
+			closing,
+			Some(s07_approvals::Heard::Closed { scope })
+				if scope.conversation_id == "c-1" && scope.bot_id == "wren"
+		);
+		app.host_event(heard);
+
+		assert!(closes_prompts);
+		assert_eq!(connection_of(&app, "c-1"), ConnectionState::Crashed);
+	}
+
+	#[test]
+	fn a_ready_session_closes_no_prompt() {
+		let heard = crate::events::parsed(&connection_frame("c-1", "wren", "ready"));
+
+		assert!(matches!(heard, Some(HostEvent::Connection { closing: None, .. })));
+	}
+
+	#[test]
+	fn a_connection_is_held_for_a_conversation_that_is_not_open() {
+		let (mut app, _) = notifying_app(true);
+
+		hear_frame(&mut app, &connection_frame("c-2", "wren", "ready"));
+
+		assert!(app.thread.is_none());
+		assert_eq!(connection_of(&app, "c-2"), ConnectionState::Ready);
+	}
+
+	#[test]
+	fn another_conversation_or_agent_leaves_the_open_one_unchanged() {
+		let (mut app, _) = notifying_app(true);
+		app.open("c-1");
+
+		hear_frame(&mut app, &connection_frame("c-2", "wren", "crashed"));
+		hear_frame(&mut app, &connection_frame("c-1", "ada", "ready"));
+
+		assert_eq!(connection_of(&app, "c-1"), ConnectionState::Checking);
+		assert_eq!(app.connections.of("c-1", "ada"), ConnectionState::Ready);
+	}
+
+	#[test]
+	fn an_unreadable_connection_change_raises_the_unreadable_event_notice() {
+		let (mut app, _) = notifying_app(true);
+
+		hear_frame(&mut app, &connection_frame("c-1", "wren", "asleep"));
+
+		assert_eq!(shown_titles(&app), vec!["Couldn't read a agent://event event."]);
+		assert_eq!(connection_of(&app, "c-1"), ConnectionState::Checking);
+	}
+
+	#[test]
+	fn a_failed_session_check_raises_a_notice() {
+		let (mut app, _) = notifying_app(true);
+
+		app.received(Inbound::SessionChecked(Err(HostError::WriteRefused {
+			command: "agent_check".into(),
+		})));
+
+		assert_eq!(shown_titles(&app), vec![SESSION_UNCHECKED]);
 	}
 }
