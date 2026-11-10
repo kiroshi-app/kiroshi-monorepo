@@ -8,15 +8,16 @@ vi.mock("@/lib/host/index", () => ({
 }))
 
 const followFocusFrom = (initiallyFocused: boolean) => {
-	let report: (isFocused: boolean) => void = () => undefined
-	vi.mocked(watchWindowFocus).mockImplementation((reported) => {
-		report = reported
-		reported(initiallyFocused)
+	vi.mocked(watchWindowFocus).mockImplementation((report) => {
+		report(initiallyFocused)
 		return Promise.resolve(() => undefined)
 	})
 	const entries = createHomeEntries()
 	entries.followWindowReturns()
-	return { entries, report: (isFocused: boolean) => report(isFocused) }
+	const [report] = vi.mocked(watchWindowFocus).mock.calls.at(-1) as Parameters<
+		typeof watchWindowFocus
+	>
+	return { entries, report }
 }
 
 describe("the Home entries of a window", () => {
