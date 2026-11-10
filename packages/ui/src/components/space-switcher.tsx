@@ -300,7 +300,7 @@ const SpaceSwitcher = ({
 						size="sm"
 						variant="ghost"
 					>
-						<span aria-hidden="true" className={SWITCHER_MARK}>
+						<span className={SWITCHER_MARK}>
 							<span
 								className={cn(SWITCHER_SQUARE, isOffline && "opacity-80")}
 								data-hue={selected.colour ?? undefined}
@@ -324,9 +324,7 @@ const SpaceSwitcher = ({
 							{selected.name}
 						</span>
 						{isOffline ? (
-							<span aria-hidden="true" className={SWITCHER_OFFLINE}>
-								{t("spaces.host.down")}
-							</span>
+							<span className={SWITCHER_OFFLINE}>{t("spaces.host.down")}</span>
 						) : null}
 						<Icons.Expand aria-hidden="true" className={SWITCHER_CHEVRON} />
 						{elsewhere ? (
