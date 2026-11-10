@@ -70,7 +70,7 @@ const sectionNames = () =>
 	)
 
 const pinnedZoneSeparators = () =>
-	scene().querySelectorAll("[data-slot=roster-zone-separator]")
+	scene().querySelectorAll("[data-slot=roster-zone-header]")
 
 const openMissionsPanel = () =>
 	fireEvent.click(screen.getByRole("button", { name: /^Missions/ }))
