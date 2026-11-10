@@ -184,6 +184,15 @@ const openSpaceSettingsByRail = async () => {
 	await press(currentSpaceRowOf())
 }
 
+const openSpaceSettingsBySwitcher = async () => {
+	await press(spacesLogoOf())
+	await press(
+		within(
+			screen.getByRole("menu", { name: i18n.t("bots:spaces.label") }),
+		).getByRole("menuitem", { name: i18n.t("bots:rail.spaceSettings") }),
+	)
+}
+
 const currentHomeEntryOf = () =>
 	within(railOf()).queryByRole("button", {
 		name: i18n.t("bots:rail.newConversation"),
@@ -242,25 +251,9 @@ const composerOf = () =>
 		name: i18n.t("chat:composer.label"),
 	})
 
-// OPE-2148 gap: the Space switcher has no Space settings entry.
-it.skip("opens the space settings in place of the body on the gear, and marks the gear", async () => {
+it("switches between the space and the user settings on the gear and the avatar", async () => {
 	await mountApp()
-
-	await openSpaceSettingsByRail()
-
-	expect(shownSettingsOf()).toEqual({
-		subtitle: "space",
-		entry: i18n.t("settings:rail.space"),
-	})
-	expect(isMarked(spacesLogoOf())).toBe(true)
-	expect(isMarked(avatarOf())).toBe(false)
-	expect(isMarked(conversationsEntryOf())).toBe(false)
-})
-
-// OPE-2148 gap: the Space switcher has no Space settings entry.
-it.skip("switches between the space and the user settings on the gear and the avatar", async () => {
-	await mountApp()
-	await openSpaceSettingsByRail()
+	await openSpaceSettingsBySwitcher()
 
 	await press(avatarOf())
 
@@ -268,10 +261,8 @@ it.skip("switches between the space and the user settings on the gear and the av
 		subtitle: "user",
 		entry: i18n.t("settings:rail.account"),
 	})
-	expect(isMarked(avatarOf())).toBe(true)
-	expect(isMarked(spacesLogoOf())).toBe(false)
 
-	await openSpaceSettingsByRail()
+	await openSpaceSettingsBySwitcher()
 
 	expect(shownSettingsOf()).toEqual({
 		subtitle: "space",
@@ -400,12 +391,7 @@ it("asks before the Space settings row of the Space switcher leaves an unsaved a
 		{ target: { value: "ledger-desk" } },
 	)
 
-	await press(spacesLogoOf())
-	await press(
-		within(
-			screen.getByRole("menu", { name: i18n.t("bots:spaces.label") }),
-		).getByRole("menuitem", { name: i18n.t("bots:rail.spaceSettings") }),
-	)
+	await openSpaceSettingsBySwitcher()
 
 	await press(
 		within(

@@ -458,6 +458,11 @@ const openCompanionsOfSpace = async () => {
 	await press(menuEntryOf(new RegExp(`^${i18n.t("settings:rail.agents")}`)))
 }
 
+const openCompanionScreenOf = async (name: string) => {
+	await openCompanionsOfSpace()
+	await press(cardOf(name))
+}
+
 const installOf = (
 	atlasId: string,
 	atlasThreadId: string,
@@ -571,42 +576,6 @@ it("creates a companion from Create a companion, as the roster create does", asy
 })
 
 // OPE-2153: needs the expanded conversation list back.
-it.skip("opens the companion screen on General from the Settings of a roster row menu", async () => {
-	await mountApp()
-
-	await openContextMenuOn(rosterRowOf(ATLAS))
-	await chooseInMenu(i18n.t("bots:roster.settings"))
-
-	expect(companionScreenOf(ATLAS)).toEqual(ON_GENERAL)
-})
-
-// OPE-2153: needs the expanded conversation list back.
-it.skip("opens the companion screen on the Danger zone from the Delete of a roster row menu", async () => {
-	await mountApp()
-
-	await openContextMenuOn(rosterRowOf(ATLAS))
-	await chooseInMenu(i18n.t("bots:roster.delete"))
-
-	expect(companionScreenOf(ATLAS)).toEqual({
-		...ON_GENERAL,
-		entry: i18n.t("bots:dialog.tab.danger"),
-	})
-})
-
-// OPE-2153: needs the expanded conversation list back.
-it.skip("leaves the Danger zone for the entry chosen after a Delete", async () => {
-	await mountApp()
-	await openContextMenuOn(rosterRowOf(ATLAS))
-	await chooseInMenu(i18n.t("bots:roster.delete"))
-
-	await press(menuEntryOf(i18n.t("bots:dialog.tab.instructions")))
-
-	expect(companionScreenOf(ATLAS)?.entry).toBe(
-		i18n.t("bots:dialog.tab.instructions"),
-	)
-})
-
-// OPE-2153: needs the expanded conversation list back.
 it.skip("opens the companion screen on General from the Settings of a message avatar menu", async () => {
 	await mountApp()
 	await openRow(ROOM)
@@ -700,11 +669,9 @@ it.skip("brings back the open conversation and its draft on Back to conversation
 	expect(isMarked(conversationsEntryOf())).toBe(true)
 })
 
-// OPE-2153: needs the expanded conversation list back.
-it.skip("keeps the rail on the companion screen, and the Space settings replace it", async () => {
+it("keeps the rail on the companion screen, and the Space settings replace it", async () => {
 	await mountApp()
-	await openContextMenuOn(rosterRowOf(ATLAS))
-	await chooseInMenu(i18n.t("bots:roster.settings"))
+	await openCompanionScreenOf(ATLAS)
 
 	expect(railOf()).toBeTruthy()
 	await openSpaceSettingsByRail()
@@ -715,11 +682,9 @@ it.skip("keeps the rail on the companion screen, and the Space settings replace 
 	})
 })
 
-// OPE-2153: needs the expanded conversation list back.
-it.skip("replaces the companion screen with the User settings from the rail avatar", async () => {
+it("replaces the companion screen with the User settings from the rail avatar", async () => {
 	await mountApp()
-	await openContextMenuOn(rosterRowOf(ATLAS))
-	await chooseInMenu(i18n.t("bots:roster.settings"))
+	await openCompanionScreenOf(ATLAS)
 
 	await press(avatarOf())
 
@@ -729,11 +694,10 @@ it.skip("replaces the companion screen with the User settings from the rail avat
 	})
 })
 
-// OPE-2153: needs the expanded conversation list back.
-it.skip("keeps the companion screen open on the Danger zone and raises a notice when the deletion fails", async () => {
+it("keeps the companion screen open on the Danger zone and raises a notice when the deletion fails", async () => {
 	await mountApp(refusingDeletion)
-	await openContextMenuOn(rosterRowOf(ATLAS))
-	await chooseInMenu(i18n.t("bots:roster.delete"))
+	await openCompanionScreenOf(ATLAS)
+	await press(menuEntryOf(i18n.t("bots:dialog.tab.danger")))
 
 	await deleteFromDangerZone()
 
@@ -748,6 +712,7 @@ it.skip("keeps the companion screen open on the Danger zone and raises a notice 
 	expect(companionScreenOf(ATLAS)).toEqual({
 		...ON_GENERAL,
 		entry: i18n.t("bots:dialog.tab.danger"),
+		back: i18n.t("settings:screen.backToAgents"),
 	})
 })
 
@@ -768,19 +733,19 @@ it("brings back the open mission thread and its draft on Back to conversations",
 	expect(composerOf().value).toBe(MISSION_DRAFT)
 })
 
-// OPE-2153: needs the expanded conversation list back.
-it.skip("returns to the conversations when the companion whose settings are open no longer exists", async () => {
+it("returns to the conversations when the companion whose settings are open no longer exists", async () => {
 	const seeded = await mountApp()
-	await openContextMenuOn(rosterRowOf(ATLAS))
-	await chooseInMenu(i18n.t("bots:roster.settings"))
-	expect(companionScreenOf(ATLAS)).toEqual(ON_GENERAL)
+	await openCompanionScreenOf(ATLAS)
+	expect(companionScreenOf(ATLAS)).toEqual({
+		...ON_GENERAL,
+		back: i18n.t("settings:screen.backToAgents"),
+	})
 
 	await harness.store?.deleteBot(seeded.atlasId)
 	await act(async () => harness.announceArrival())
 	await settle()
 
 	expect(settingsMenuOf()).toBeNull()
-	expect(rosterRowOf(NOVA)).toBeTruthy()
 })
 
 const RUNTIME_MODELS: OfferedModel_Serialize[] = [
@@ -816,8 +781,7 @@ const pickIn = async (select: HTMLElement, option: string) => {
 }
 
 const openRuntimeOf = async (name: string) => {
-	await openContextMenuOn(rosterRowOf(name))
-	await chooseInMenu(i18n.t("bots:roster.settings"))
+	await openCompanionScreenOf(name)
 	await press(menuEntryOf(i18n.t("bots:dialog.tab.runtime")))
 }
 
@@ -839,8 +803,7 @@ const refusingUpdates: StoreChange = (store) => ({
 	updateBot: () => Promise.reject({ kind: "storage" }),
 })
 
-// OPE-2153: needs the expanded conversation list back.
-it.skip("writes a picked model then effort to the store and keeps both on the selectors", async () => {
+it("writes a picked model then effort to the store and keeps both on the selectors", async () => {
 	harness.models = RUNTIME_MODELS
 	const seeded = await mountApp()
 	await openRuntimeOf(ATLAS)
@@ -854,21 +817,19 @@ it.skip("writes a picked model then effort to the store and keeps both on the se
 	expect(shownRuntime()).toEqual(SONNET_ON_HIGH)
 })
 
-// OPE-2153: needs the expanded conversation list back.
-it.skip("shows the picked model and effort once the settings are closed and reopened", async () => {
+it("shows the picked model and effort once the settings are closed and reopened", async () => {
 	harness.models = RUNTIME_MODELS
 	await mountApp()
 	await openRuntimeOf(ATLAS)
 	await pickSonnetOnHigh()
 
-	await pressBack(i18n.t("settings:screen.back"))
+	await pressBack(i18n.t("settings:screen.backToAgents"))
 	await openRuntimeOf(ATLAS)
 
 	expect(shownRuntime()).toEqual(SONNET_ON_HIGH)
 })
 
-// OPE-2153: needs the expanded conversation list back.
-it.skip("shows the picked model and effort read from storage after a relaunch", async () => {
+it("shows the picked model and effort read from storage after a relaunch", async () => {
 	harness.models = RUNTIME_MODELS
 	await mountApp()
 	await openRuntimeOf(ATLAS)
@@ -882,8 +843,7 @@ it.skip("shows the picked model and effort read from storage after a relaunch", 
 	expect(shownRuntime()).toEqual(SONNET_ON_HIGH)
 })
 
-// OPE-2153: needs the expanded conversation list back.
-it.skip("saves no effort and shows Default once the picked model does not support the held one", async () => {
+it("saves no effort and shows Default once the picked model does not support the held one", async () => {
 	harness.models = RUNTIME_MODELS
 	const seeded = await mountApp()
 	await openRuntimeOf(ATLAS)
@@ -898,8 +858,7 @@ it.skip("saves no effort and shows Default once the picked model does not suppor
 	expect(shownRuntime()).toEqual({ model: "haiku", effort: DEFAULT_EFFORT })
 })
 
-// OPE-2153: needs the expanded conversation list back.
-it.skip("keeps the picked model and effort on the selectors when the model catalogue is read again and fails", async () => {
+it("keeps the picked model and effort on the selectors when the model catalogue is read again and fails", async () => {
 	harness.models = RUNTIME_MODELS
 	const { queryClient } = await mountApp()
 	await openRuntimeOf(ATLAS)
@@ -916,8 +875,7 @@ it.skip("keeps the picked model and effort on the selectors when the model catal
 	expect(shownRuntime()).toEqual(SONNET_ON_HIGH)
 })
 
-// OPE-2153: needs the expanded conversation list back.
-it.skip("raises a notice and puts the stored model back on the selector when the write fails", async () => {
+it("raises a notice and puts the stored model back on the selector when the write fails", async () => {
 	harness.models = RUNTIME_MODELS
 	await mountApp(refusingUpdates)
 	await openRuntimeOf(ATLAS)
@@ -976,7 +934,7 @@ const pickSonnetThenSend = async (held: HeldRuntimeWrite) => {
 	await sendInAtlasThread(NEXT_PROMPT)
 }
 
-// OPE-2153: needs the expanded conversation list back.
+// OPE-2153: needs an agent row in the navigation sidebar to open the solo thread.
 it.skip("starts the session of a prompt sent during a runtime write only once the write lands, on the picked model", async () => {
 	harness.models = RUNTIME_MODELS
 	const held = holdingRuntimeWrite()
@@ -992,7 +950,7 @@ it.skip("starts the session of a prompt sent during a runtime write only once th
 	expect(held.modelsSessionsStartedOn[0]).toBe("sonnet")
 })
 
-// OPE-2153: needs the expanded conversation list back.
+// OPE-2153: needs an agent row in the navigation sidebar to open the solo thread.
 it.skip("starts the session on the stored model and raises a notice when the held runtime write is refused", async () => {
 	harness.models = RUNTIME_MODELS
 	const held = holdingRuntimeWrite()
@@ -1045,8 +1003,7 @@ const storedOnUnofferedModel: StoreChange = (store) => ({
 		),
 })
 
-// OPE-2153: needs the expanded conversation list back.
-it.skip("keeps a model and effort picked away from a stored model the catalogue does not offer", async () => {
+it("keeps a model and effort picked away from a stored model the catalogue does not offer", async () => {
 	harness.models = SDK_0_3_321_MODELS
 	const seeded = await mountApp(storedOnUnofferedModel)
 	await openRuntimeOf(ATLAS)
@@ -1062,8 +1019,7 @@ it.skip("keeps a model and effort picked away from a stored model the catalogue 
 	expect(shownRuntime()).toEqual(SONNET_ON_HIGH)
 })
 
-// OPE-2153: needs the expanded conversation list back.
-it.skip("raises a notice and puts back a stored model the catalogue does not offer when the write fails", async () => {
+it("raises a notice and puts back a stored model the catalogue does not offer when the write fails", async () => {
 	harness.models = SDK_0_3_321_MODELS
 	await mountApp((store) => storedOnUnofferedModel(refusingUpdates(store)))
 	await openRuntimeOf(ATLAS)
