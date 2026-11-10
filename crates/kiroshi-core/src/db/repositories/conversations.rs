@@ -17,6 +17,7 @@ mod avatar;
 mod bots;
 mod effort;
 mod icon;
+mod owner;
 mod page;
 mod prompts;
 
@@ -24,6 +25,7 @@ pub use amendment::{Amended, ConversationAmendment};
 pub use avatar::Hue;
 pub use bots::{Bot, BotIdentity};
 pub use icon::conversation_icons;
+pub use owner::ChatOwner;
 pub use page::{
 	ActiveConversation, ActivePage, ActiveTurn, LastWord, ListedConversation, Listing, WorkingBot,
 	LISTED_KINDS,
@@ -96,6 +98,12 @@ pub struct Chat {
 	pub id: String,
 	pub created_at: i64,
 	pub updated_at: i64,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct RenewedChat {
+	pub archived_id: Option<String>,
+	pub fresh: Chat,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -215,16 +223,34 @@ impl ConversationsRepository {
 		&self,
 		bot_id: String,
 		space_id: Option<String>,
+		owner: ChatOwner,
 	) -> Result<Chat, ConversationError> {
-		self.call_mut(move |connection| Ok(ensured_chat(connection, &bot_id, space_id.as_deref())))
-			.await?
-			.at("ensure_chat", "conversations")
+		self.call_mut(move |connection| {
+			Ok(ensured_chat(connection, &bot_id, space_id.as_deref(), &owner))
+		})
+		.await?
+		.at("ensure_chat", "conversations")
 	}
 
-	pub async fn solo_threads(&self, space_id: String) -> Result<Vec<SoloThread>, DatabaseError> {
+	pub async fn renew_chat(
+		&self,
+		bot_id: String,
+		space_id: String,
+		owner: ChatOwner,
+	) -> Result<RenewedChat, ConversationError> {
+		self.call_mut(move |connection| Ok(renewed_chat(connection, &bot_id, &space_id, &owner)))
+			.await?
+			.at("renew_chat", "conversations")
+	}
+
+	pub async fn solo_threads(
+		&self,
+		space_id: String,
+		owner: ChatOwner,
+	) -> Result<Vec<SoloThread>, DatabaseError> {
 		self.call(move |connection| {
 			let mut statement = connection.prepare_cached(SELECT_SOLO_THREADS_OF_SPACE)?;
-			let rows = statement.query_map(params![space_id, CHAT_KIND], solo_thread)?;
+			let rows = statement.query_map(params![space_id, CHAT_KIND, owner], solo_thread)?;
 			Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
 		})
 		.await
@@ -621,6 +647,7 @@ const SELECT_CHAT_OF_BOT: &str = "SELECT conversations.id,
 	JOIN conversations ON conversations.id = conversation_participants.conversation_id
 	WHERE conversation_participants.bot_id = ?1
 		AND conversations.kind = 'main' AND conversations.space_id = ?2
+		AND conversations.owner = ?3 AND conversations.archived_at IS NULL
 	ORDER BY conversations.created_at ASC, conversations.id ASC
 	LIMIT 1";
 
@@ -632,6 +659,7 @@ const SELECT_SOLO_THREADS_OF_SPACE: &str = "SELECT membership.bot_id, chat.id
 		JOIN conversations AS held ON held.id = seat.conversation_id
 		WHERE seat.bot_id = membership.bot_id
 			AND held.kind = ?2 AND held.space_id = membership.space_id
+			AND held.owner = ?3 AND held.archived_at IS NULL
 		ORDER BY held.created_at ASC, held.id ASC
 		LIMIT 1)
 	WHERE membership.space_id = ?1
@@ -652,14 +680,15 @@ fn ensured_chat(
 	connection: &mut Connection,
 	bot_id: &str,
 	wanted_space_id: Option<&str>,
+	owner: &ChatOwner,
 ) -> Result<Chat, ConversationError> {
 	if let Some(space_id) = solo_space_of(connection, bot_id, wanted_space_id)? {
-		if let Some(held) = chat_of(connection, bot_id, &space_id)? {
+		if let Some(held) = chat_of(connection, bot_id, &space_id, owner)? {
 			return Ok(held);
 		}
 	}
 	let transaction = write_transaction(connection)?;
-	let held = ensure_chat_in(&transaction, bot_id, wanted_space_id)?;
+	let held = ensure_chat_in(&transaction, bot_id, wanted_space_id, owner)?;
 	transaction.commit()?;
 	Ok(held)
 }
@@ -668,16 +697,37 @@ pub(in crate::db) fn ensure_chat_in(
 	transaction: &Transaction<'_>,
 	bot_id: &str,
 	wanted_space_id: Option<&str>,
+	owner: &ChatOwner,
 ) -> Result<Chat, ConversationError> {
 	if bot_id == DEFAULT_BOT_ID {
 		seed_default_bot(transaction)?;
 	}
 	let space_id = solo_space_of(transaction, bot_id, wanted_space_id)?
 		.ok_or_else(|| ConversationError::UnknownBot { id: bot_id.to_owned() })?;
-	match chat_of(transaction, bot_id, &space_id)? {
+	match chat_of(transaction, bot_id, &space_id, owner)? {
 		Some(found) => Ok(found),
-		None => insert_chat(transaction, bot_id, &space_id),
+		None => insert_chat(transaction, bot_id, &space_id, owner),
 	}
+}
+
+fn renewed_chat(
+	connection: &mut Connection,
+	bot_id: &str,
+	space_id: &str,
+	owner: &ChatOwner,
+) -> Result<RenewedChat, ConversationError> {
+	let transaction = write_transaction(connection)?;
+	solo_space_of(&transaction, bot_id, Some(space_id))?;
+	let current = chat_of(&transaction, bot_id, space_id, owner)?;
+	if let Some(current) = &current {
+		transaction.execute(
+			"UPDATE conversations SET archived_at = ?2 WHERE id = ?1",
+			params![current.id, now()],
+		)?;
+	}
+	let fresh = insert_chat(&transaction, bot_id, space_id, owner)?;
+	transaction.commit()?;
+	Ok(RenewedChat { archived_id: current.map(|current| current.id), fresh })
 }
 
 fn solo_space_of(
@@ -698,8 +748,11 @@ fn chat_of(
 	connection: &Connection,
 	bot_id: &str,
 	space_id: &str,
+	owner: &ChatOwner,
 ) -> Result<Option<Chat>, ConversationError> {
-	Ok(connection.query_row(SELECT_CHAT_OF_BOT, params![bot_id, space_id], chat).optional()?)
+	Ok(connection
+		.query_row(SELECT_CHAT_OF_BOT, params![bot_id, space_id, owner], chat)
+		.optional()?)
 }
 
 fn write_transaction(connection: &mut Connection) -> Result<Transaction<'_>, DatabaseError> {
@@ -710,14 +763,15 @@ fn insert_chat(
 	transaction: &Transaction<'_>,
 	bot_id: &str,
 	space_id: &str,
+	owner: &ChatOwner,
 ) -> Result<Chat, ConversationError> {
 	let id = Uuid::new_v4().to_string();
 	let at = now();
 	let created = transaction.query_row(
-		"INSERT INTO conversations (id, kind, space_id, title, created_at, updated_at)
-			VALUES (?1, ?2, ?3, ?4, ?5, ?5)
+		"INSERT INTO conversations (id, kind, space_id, title, owner, created_at, updated_at)
+			VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)
 			RETURNING id, created_at, updated_at",
-		params![id, CHAT_KIND, space_id, CHAT_TITLE, at],
+		params![id, CHAT_KIND, space_id, CHAT_TITLE, owner, at],
 		chat,
 	)?;
 	transaction.execute(
@@ -1336,9 +1390,14 @@ mod tests {
 		let database = open(&dir);
 		let repository = database.conversations();
 
-		let first = repository.ensure_chat(DEFAULT_BOT_ID.into(), None).await.expect("the chat");
-		let again =
-			repository.ensure_chat(DEFAULT_BOT_ID.into(), None).await.expect("the same chat");
+		let first = repository
+			.ensure_chat(DEFAULT_BOT_ID.into(), None, ChatOwner::Host)
+			.await
+			.expect("the chat");
+		let again = repository
+			.ensure_chat(DEFAULT_BOT_ID.into(), None, ChatOwner::Host)
+			.await
+			.expect("the same chat");
 
 		assert_eq!(first, again, "a second ask minted another chat");
 		assert_eq!(count_of(&database, "conversations").await, 1);
@@ -1356,13 +1415,16 @@ mod tests {
 		let before = {
 			let database = open(&dir);
 			let repository = database.conversations();
-			repository.ensure_chat(DEFAULT_BOT_ID.into(), None).await.expect("the chat")
+			repository
+				.ensure_chat(DEFAULT_BOT_ID.into(), None, ChatOwner::Host)
+				.await
+				.expect("the chat")
 		};
 
 		let database = open(&dir);
 		let after = database
 			.conversations()
-			.ensure_chat(DEFAULT_BOT_ID.into(), None)
+			.ensure_chat(DEFAULT_BOT_ID.into(), None, ChatOwner::Host)
 			.await
 			.expect("the chat");
 
@@ -1730,8 +1792,10 @@ mod tests {
 		let repository = database.conversations();
 		let bot = repository.create_bot(an_identity("Nyx"), None, None).await.expect("the bot");
 		let home = home_of(repository, &bot).await;
-		let chat =
-			repository.ensure_chat(bot.id.clone(), Some(home.clone())).await.expect("the chat");
+		let chat = repository
+			.ensure_chat(bot.id.clone(), Some(home.clone()), ChatOwner::Host)
+			.await
+			.expect("the chat");
 
 		let dressed = repository
 			.update_conversation(chat.id.clone(), a_look(Some("MessageSquare"), Hue::named("cyan")))
@@ -1905,11 +1969,11 @@ mod tests {
 		joined_on(&database, &bot.id, &joined.id, 2).await;
 
 		let at_home = repository
-			.ensure_chat(bot.id.clone(), Some(home.clone()))
+			.ensure_chat(bot.id.clone(), Some(home.clone()), ChatOwner::Host)
 			.await
 			.expect("the thread of the first space");
 		let away = repository
-			.ensure_chat(bot.id.clone(), Some(joined.id.clone()))
+			.ensure_chat(bot.id.clone(), Some(joined.id.clone()), ChatOwner::Host)
 			.await
 			.expect("the thread of the second space");
 		spoke_in(&database, &at_home.id, &bot.id).await;
@@ -1922,13 +1986,17 @@ mod tests {
 			"a message written in one space was read in the other"
 		);
 		assert_eq!(
-			repository.ensure_chat(bot.id.clone(), Some(home)).await.expect("the same thread").id,
+			repository
+				.ensure_chat(bot.id.clone(), Some(home), ChatOwner::Host)
+				.await
+				.expect("the same thread")
+				.id,
 			at_home.id,
 			"asking again in the first space minted another thread"
 		);
 		assert_eq!(
 			repository
-				.ensure_chat(bot.id.clone(), Some(joined.id))
+				.ensure_chat(bot.id.clone(), Some(joined.id), ChatOwner::Host)
 				.await
 				.expect("the same thread")
 				.id,
@@ -1936,10 +2004,144 @@ mod tests {
 			"asking again in the second space minted another thread"
 		);
 		assert_eq!(
-			repository.ensure_chat(bot.id, None).await.expect("the oldest thread").id,
+			repository
+				.ensure_chat(bot.id, None, ChatOwner::Host)
+				.await
+				.expect("the oldest thread")
+				.id,
 			at_home.id,
 			"asking without a space did not answer the thread of the oldest membership"
 		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn each_person_gets_a_main_conversation_of_their_own_with_the_same_bot() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let repository = database.conversations();
+		let home = database.spaces().list().await.expect("the spaces")[0].id.clone();
+		let bot = repository
+			.create_bot(an_identity("Nyx"), Some(home.clone()), None)
+			.await
+			.expect("the bot");
+		let main_of = |owner| repository.ensure_chat(bot.id.clone(), Some(home.clone()), owner);
+
+		let of_the_host = main_of(ChatOwner::Host).await.expect("the host main");
+		let of_bea = main_of(ChatOwner::Member("bea".to_owned())).await.expect("the main of bea");
+		let of_cy = main_of(ChatOwner::Member("cy".to_owned())).await.expect("the main of cy");
+
+		assert_ne!(of_the_host.id, of_bea.id, "a member was handed the main of the host");
+		assert_ne!(of_bea.id, of_cy.id, "a member was handed the main of another member");
+		assert_eq!(
+			main_of(ChatOwner::Member("bea".to_owned())).await.expect("the same main").id,
+			of_bea.id,
+			"asking again minted another main for the same person"
+		);
+		assert_eq!(main_of(ChatOwner::Host).await.expect("the same main").id, of_the_host.id);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_renewed_main_conversation_is_archived_with_its_messages_and_a_fresh_one_answers() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let repository = database.conversations();
+		let home = database.spaces().list().await.expect("the spaces")[0].id.clone();
+		let bot = repository
+			.create_bot(an_identity("Nyx"), Some(home.clone()), None)
+			.await
+			.expect("the bot");
+		let bea = ChatOwner::Member("bea".to_owned());
+		let of_the_host =
+			repository.ensure_chat(bot.id.clone(), Some(home.clone()), ChatOwner::Host).await;
+		let of_the_host = of_the_host.expect("the host main");
+		let former = repository.ensure_chat(bot.id.clone(), Some(home.clone()), bea.clone()).await;
+		let former = former.expect("the main of bea");
+		spoke_in(&database, &former.id, &bot.id).await;
+
+		let renewed = repository
+			.renew_chat(bot.id.clone(), home.clone(), bea.clone())
+			.await
+			.expect("the main is renewed");
+
+		assert_eq!(renewed.archived_id.as_deref(), Some(former.id.as_str()));
+		assert_ne!(renewed.fresh.id, former.id, "the renewal handed back the archived main");
+		assert_eq!(said_in(&database, &renewed.fresh.id).await, 0, "the fresh main is not empty");
+		assert_eq!(
+			repository
+				.ensure_chat(bot.id.clone(), Some(home.clone()), bea)
+				.await
+				.expect("the main")
+				.id,
+			renewed.fresh.id,
+			"the lookup did not answer the fresh main"
+		);
+		let archived = repository
+			.listed_conversation(former.id.clone())
+			.await
+			.expect("the archived main reads")
+			.expect("the archived main is kept");
+		assert!(archived.is_archived, "the former main was not archived");
+		assert_eq!(said_in(&database, &former.id).await, 1, "the archived main lost its messages");
+		assert_eq!(
+			repository.ensure_chat(bot.id, Some(home), ChatOwner::Host).await.expect("the main").id,
+			of_the_host.id,
+			"renewing the main of a member touched the main of the host"
+		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_page_lists_the_main_conversations_of_its_reader_and_every_room() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let repository = database.conversations();
+		let home = database.spaces().list().await.expect("the spaces")[0].id.clone();
+		let bot = repository
+			.create_bot(an_identity("Nyx"), Some(home.clone()), None)
+			.await
+			.expect("the bot");
+		let bea = ChatOwner::Member("bea".to_owned());
+		let main_of = |owner| repository.ensure_chat(bot.id.clone(), Some(home.clone()), owner);
+		let of_the_host = main_of(ChatOwner::Host).await.expect("the host main").id;
+		let of_bea = main_of(bea.clone()).await.expect("the main of bea").id;
+		let room = repository
+			.create_conversation(ConversationDraft {
+				space_id: home.clone(),
+				section_id: None,
+				title: "Retro".to_owned(),
+				icon: None,
+				bot_ids: vec![bot.id.clone()],
+			})
+			.await
+			.expect("the room")
+			.id;
+		let listed_for = |reader| async {
+			let page = repository.conversation_page(home.clone(), reader, None, 10).await;
+			let page = page.expect("the page reads");
+			let mut ids: Vec<String> = page
+				.pinned
+				.into_iter()
+				.chain(page.page.rows)
+				.map(|row| row.conversation.id)
+				.collect();
+			ids.sort();
+			ids
+		};
+		let sorted = |mut ids: Vec<String>| {
+			ids.sort();
+			ids
+		};
+
+		assert_eq!(listed_for(bea).await, sorted(vec![of_bea, room.clone()]));
+		assert_eq!(listed_for(ChatOwner::Host).await, sorted(vec![of_the_host, room]));
 
 		drop(database);
 		fs::remove_dir_all(&dir).expect("cleanup");
@@ -1953,7 +2155,8 @@ mod tests {
 		let foreign = database.spaces().create("Vocca".to_owned()).await.expect("the space");
 		let bot = repository.create_bot(an_identity("Nyx"), None, None).await.expect("the bot");
 
-		let refused = repository.ensure_chat(bot.id.clone(), Some(foreign.id)).await;
+		let refused =
+			repository.ensure_chat(bot.id.clone(), Some(foreign.id), ChatOwner::Host).await;
 
 		assert!(
 			matches!(refused, Err(ConversationError::ForeignBot { .. })),
@@ -1980,7 +2183,9 @@ mod tests {
 				let mut statement =
 					connection.prepare(&format!("EXPLAIN QUERY PLAN {SELECT_CHAT_OF_BOT}"))?;
 				let steps = statement
-					.query_map(params!["nobody", "personal"], |row| row.get::<_, String>(3))?
+					.query_map(params!["nobody", "personal", "host"], |row| {
+						row.get::<_, String>(3)
+					})?
 					.collect::<rusqlite::Result<Vec<_>>>()?;
 				Ok(steps)
 			})
@@ -2006,13 +2211,14 @@ mod tests {
 		let database = open(&dir);
 		let repository = database.conversations();
 		let bot = repository.create_bot(an_identity("Nyx"), None, None).await.expect("the bot");
-		let chat = repository.ensure_chat(bot.id.clone(), None).await.expect("the chat");
+		let chat =
+			repository.ensure_chat(bot.id.clone(), None, ChatOwner::Host).await.expect("the chat");
 		let room = repository
 			.create_conversation(a_draft(&home_of(repository, &bot).await, &[&bot]))
 			.await
 			.expect("the room is opened");
 
-		let again = repository.ensure_chat(bot.id, None).await.expect("the chat");
+		let again = repository.ensure_chat(bot.id, None, ChatOwner::Host).await.expect("the chat");
 		repository.delete_conversation(room.id.clone()).await.expect("the room is deleted");
 		let refused = repository.delete_conversation(chat.id.clone()).await;
 
@@ -2149,7 +2355,7 @@ mod tests {
 	async fn rostered_ids(database: &Database, space_id: &str) -> Vec<String> {
 		let roster = database
 			.conversations()
-			.conversation_page(space_id.to_owned(), None, 10)
+			.conversation_page(space_id.to_owned(), ChatOwner::Host, None, 10)
 			.await
 			.expect("the roster is read");
 		roster
@@ -2163,11 +2369,10 @@ mod tests {
 	async fn catalogued_ids(database: &Database, space_id: &str) -> Vec<String> {
 		database
 			.catalogue()
-			.search(CatalogueScope {
-				query: String::new(),
-				space_id: space_id.to_owned(),
-				kind: None,
-			})
+			.search(
+				CatalogueScope { query: String::new(), space_id: space_id.to_owned(), kind: None },
+				None,
+			)
 			.await
 			.expect("the catalogue is read")
 			.chats

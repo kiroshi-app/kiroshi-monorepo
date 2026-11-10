@@ -232,11 +232,24 @@ fn sessionless_name(value: Value) -> String {
 			assert_eq!(account.plan.as_deref(), Some("max"));
 		}
 		"models" => {
+			let offered = listed::<OfferedModel>("models", value).expect("the catalogue reads");
 			assert_eq!(
-				listed::<OfferedModel>("models", value).expect("the catalogue reads"),
+				serde_json::to_value(&offered).expect("the catalogue writes"),
+				json!([
+					{
+						"value": "sonnet",
+						"resolvedModel": "claude-sonnet-4-5",
+						"supportedEffortLevels": ["low", "medium", "high"],
+					},
+					{ "value": "claude-opus-4-1", "supportedEffortLevels": [] },
+				])
+			);
+			assert_eq!(
+				offered,
 				[
 					OfferedModel {
-						value: "claude-sonnet-4-5".to_owned(),
+						value: "sonnet".to_owned(),
+						resolved_model: Some("claude-sonnet-4-5".to_owned()),
 						supported_effort_levels: vec![
 							EffortLevel::Low,
 							EffortLevel::Medium,
@@ -245,6 +258,7 @@ fn sessionless_name(value: Value) -> String {
 					},
 					OfferedModel {
 						value: "claude-opus-4-1".to_owned(),
+						resolved_model: None,
 						supported_effort_levels: Vec::new(),
 					},
 				]

@@ -382,6 +382,8 @@ mod tests {
 				"Bash(./scripts/pr-enqueue.sh)",
 				"Bash(scripts/pr-merge-sub.sh)",
 				"Bash(./scripts/pr-merge-sub.sh)",
+				"Bash(scripts/pr-merge-integration.sh)",
+				"Bash(./scripts/pr-merge-integration.sh)",
 			]
 		);
 	}
@@ -443,6 +445,18 @@ mod tests {
 	}
 
 	#[test]
+	fn a_mission_on_the_tracked_settings_runs_the_merge_integration_script_in_both_spellings() {
+		let root = a_checkout("merge-integration");
+
+		let allows = rules_of(&granted(tracked_settings(), &root).expect("granted"), ALLOW_KEY);
+
+		for command in ["scripts/pr-merge-integration.sh", "./scripts/pr-merge-integration.sh"] {
+			assert!(matched_by(&allows, command), "{command} is not allowed in {allows:?}");
+			assert_matched_by_no_deny_rule(command);
+		}
+	}
+
+	#[test]
 	fn the_tracked_settings_hold_only_the_allow_ask_and_deny_permissions() {
 		let settings = tracked_settings();
 
@@ -479,6 +493,8 @@ mod tests {
 				"Write(/scripts/pr-enqueue.sh)",
 				"Edit(/scripts/pr-merge-sub.sh)",
 				"Write(/scripts/pr-merge-sub.sh)",
+				"Edit(/scripts/pr-merge-integration.sh)",
+				"Write(/scripts/pr-merge-integration.sh)",
 			]
 			.map(str::to_owned),
 		);

@@ -1,8 +1,10 @@
 use axum::http::HeaderMap;
 
 use crate::core_context::Core;
+use crate::db::repositories::conversations::ChatOwner;
 use crate::db::repositories::messages::WrittenFrom;
 use crate::host_api::invoke::RELAYED_MEMBER_HEADER;
+use crate::hosting::authorship::person_of;
 use crate::hosting::Hosting;
 
 #[derive(Clone)]
@@ -38,6 +40,14 @@ impl Caller {
 		match self {
 			Caller::Relayed(Some(member)) => Some(&member.user_id),
 			_ => None,
+		}
+	}
+
+	pub fn chat_owner(&self, core: &Core) -> Option<ChatOwner> {
+		match self {
+			Caller::Host => Some(ChatOwner::Host),
+			Caller::Relayed(None) => None,
+			Caller::Relayed(Some(member)) => Some(person_of(core, &member.user_id)),
 		}
 	}
 

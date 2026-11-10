@@ -352,6 +352,7 @@ fn now() -> i64 {
 
 #[cfg(test)]
 mod tests {
+	use crate::db::repositories::conversations::ChatOwner;
 	use std::fs;
 
 	use super::*;
@@ -932,12 +933,12 @@ mod tests {
 			.expect("the bot joins the second space");
 		let kept = database
 			.conversations()
-			.ensure_chat(bot.id.clone(), Some(home))
+			.ensure_chat(bot.id.clone(), Some(home), ChatOwner::Host)
 			.await
 			.expect("the thread of the first space");
 		let dropped = database
 			.conversations()
-			.ensure_chat(bot.id.clone(), Some(elsewhere.id.clone()))
+			.ensure_chat(bot.id.clone(), Some(elsewhere.id.clone()), ChatOwner::Host)
 			.await
 			.expect("the thread of the second space");
 		spoke_in(&database, &dropped.id, &bot.id).await;
@@ -985,12 +986,12 @@ mod tests {
 			.expect("the bot joins the space that goes");
 		let standing_thread = database
 			.conversations()
-			.ensure_chat(bot.id.clone(), Some(kept))
+			.ensure_chat(bot.id.clone(), Some(kept), ChatOwner::Host)
 			.await
 			.expect("the thread of the space that stays");
 		let dying_thread = database
 			.conversations()
-			.ensure_chat(bot.id.clone(), Some(dropped.id.clone()))
+			.ensure_chat(bot.id.clone(), Some(dropped.id.clone()), ChatOwner::Host)
 			.await
 			.expect("the thread of the space that goes");
 
@@ -1083,7 +1084,7 @@ mod tests {
 		joined_on(&database, &shared.id, &dropped.id, 2).await;
 		let main_chat = database
 			.conversations()
-			.ensure_chat(shared.id.clone(), None)
+			.ensure_chat(shared.id.clone(), None, ChatOwner::Host)
 			.await
 			.expect("the main chat of the shared bot");
 		let kept_room = database
@@ -1193,7 +1194,7 @@ mod tests {
 		spoke_in(&database, &room.id, &dying.id).await;
 		let main_chat = database
 			.conversations()
-			.ensure_chat(dying.id.clone(), None)
+			.ensure_chat(dying.id.clone(), None, ChatOwner::Host)
 			.await
 			.expect("the main chat of the dying bot");
 		spaces

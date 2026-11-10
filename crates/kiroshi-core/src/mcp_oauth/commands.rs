@@ -10,21 +10,25 @@ use super::refresh::{self, Renewal, Renewals};
 use super::refusal::{refusal_line, withheld_reason, Refused, Step};
 use super::reports::{ApplicationReports, Standing};
 use super::status::{reads_the_answer, status, ApplicationRow, Evidence};
-use crate::agent::commands::AgentState;
-use crate::agent::contract::TransportError;
+use crate::agent::commands::{live_runs, AgentState};
+use crate::agent::contract::{RuntimeScope, TransportError};
 use crate::agent::protocol::{
 	AuthorizeRequest, Authorized, OauthCredentials, OauthFailureKind, RefreshRequest,
-	RevocationRequest,
+	RevocationRequest, StoredReport,
 };
 use crate::agent::sidecar::Opening;
 use crate::agent::translate::now_ms;
-use crate::bundles::{self, AuthorizationWithheld, McpServer};
+use crate::bundles::{self, McpServer};
+use crate::conversations::contract::TranscriptStoreError;
+use crate::conversations::host_turn::retire_idle_run;
+use crate::db::repositories::space_children::SpaceChild;
 use crate::environment::contract::{
 	EnvError, EnvOwner, EnvScope, Values, OAUTH_ACCESS_TOKEN, OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET,
 	OAUTH_REDIRECT_URI, OAUTH_REFRESH_TOKEN,
 };
 use crate::environment::store;
 use crate::environment::store::writable_root;
+use crate::routines::runner::database;
 
 const NOTHING_STORED: &str = "no access token was stored for that server";
 
@@ -94,7 +98,7 @@ async fn connected(
 		Err(refused) if registers_anew => refused,
 		granted => return granted,
 	};
-	eprintln!("{}", refusal_line(&Step::HandingTheStoredClient.refused(refused.error), stored));
+	log::warn!("{}", refusal_line(&Step::HandingTheStoredClient.refused(refused.error), stored));
 	let registering = AuthorizeRequest { url: request.url, ..AuthorizeRequest::default() };
 	grant_of(settlement(core, &registering).await?)
 }
@@ -117,8 +121,8 @@ fn authorize_request(name: &str, url: String, stored: &Values) -> AuthorizeReque
 	else {
 		return registering;
 	};
-	if credentials::bound_url(stored) != Some(registering.url.as_str()) {
-		eprintln!("the stored client of {name} was withheld: its grant is bound to another url");
+	if !credentials::is_bound_to(stored, &registering.url) {
+		log::warn!("the stored client of {name} was withheld: its grant is bound to another url");
 		return registering;
 	}
 	AuthorizeRequest {
@@ -175,8 +179,18 @@ fn grant_of(settled: Authorized) -> Result<OauthCredentials, Refused> {
 }
 
 fn written(refused: Refused, held: &Values) -> OauthError {
-	eprintln!("{}", refusal_line(&refused, held));
+	log::warn!("the connect was refused: {}", refusal_line(&refused, held));
 	refused.error
+}
+
+fn unstored(root: &Path, scope: &EnvScope, refused: Refused, held: &Values) -> OauthError {
+	if refused.error != OauthError::Cancelled {
+		let reason = refusal_line(&refused, held);
+		if let Err(error) = credentials::remember_refusal(root, scope, &reason) {
+			log::warn!("the refused connect could not be remembered: {error:?}");
+		}
+	}
+	written(refused, held)
 }
 
 pub async fn connect_application(
@@ -185,10 +199,10 @@ pub async fn connect_application(
 	name: String,
 	url: String,
 ) -> Result<(), OauthError> {
-	refuse_what_kiroshi_does_not_authorize(core, &owner, &name, &url)
+	let url = declared_url(core, &owner, &name, url)
 		.map_err(|refused| written(refused, &Values::new()))?;
 	let state = core.state::<McpOauthState>();
-	let scope = EnvScope::Server { name: name.clone(), owner };
+	let scope = EnvScope::Server { name: name.clone(), owner: owner.clone() };
 	let _running = state
 		.begin(Flow::Authorizing(scope.clone()))
 		.map_err(|error| written(Step::ClaimingTheState.refused(error), &Values::new()))?;
@@ -200,42 +214,89 @@ pub async fn connect_application(
 	})?;
 	let credentials = connected(core, authorize_request(&name, url.clone(), &stored), &stored)
 		.await
-		.map_err(|refused| written(refused, &stored))?;
-	kept(&root, &scope, &name, &url, &credentials, &core.state::<ApplicationReports>()).map_err(
-		|error| written(Step::StoringTheGrant.refused(error), &credentials::held(&credentials)),
-	)
+		.map_err(|refused| unstored(&root, &scope, refused, &stored))?;
+	let held = credentials::held(&credentials);
+	let grant_kept =
+		kept(&root, &scope, &name, &url, &credentials, &core.state::<ApplicationReports>())
+			.map_err(|error| Step::StoringTheGrant.refused(error));
+	report_stored(core, &grant_kept, &held).await;
+	grant_kept.map_err(|refused| written(refused, &held))?;
+	reopen_sessions_served_by(core, &owner).await;
+	Ok(())
 }
 
-fn refuse_what_kiroshi_does_not_authorize(
+async fn report_stored(
 	core: &crate::core_context::Core,
-	owner: &EnvOwner,
-	name: &str,
-	url: &str,
-) -> Result<(), Refused> {
-	let withheld = authorization_withheld(core, owner, name, url)
-		.map_err(|error| Step::ReadingTheDeclaredServer.refused(error.into()))?;
-	match withheld {
-		Some(carries) => Err(Step::CheckingTheServer.refused(OauthError::NotAuthorizable {
-			carries,
-			detail: withheld_reason(carries).to_owned(),
-		})),
-		None => Ok(()),
+	grant_kept: &Result<(), Refused>,
+	held: &Values,
+) {
+	let report = StoredReport {
+		stored: grant_kept.is_ok(),
+		detail: grant_kept.as_ref().err().map(|refused| refusal_line(refused, held)),
+	};
+	let reported = core
+		.state::<AgentState>()
+		.sidecar()
+		.await
+		.and_then(|sidecar| sidecar.report_oauth_stored(&report));
+	if let Err(error) = reported {
+		log::warn!(
+			"the browser page of the connect was not told whether the grant was stored: {error:?}"
+		);
 	}
 }
 
-fn authorization_withheld(
+async fn reopen_sessions_served_by(core: &crate::core_context::Core, owner: &EnvOwner) {
+	for scope in live_runs(core) {
+		let bot_id = scope.bot_id.clone();
+		let reopened = match serves(core, owner, &scope).await {
+			Ok(true) => retire_idle_run(core, scope).await.map_err(|error| format!("{error:?}")),
+			Ok(false) => continue,
+			Err(error) => Err(format!("{error:?}")),
+		};
+		if let Err(error) = reopened {
+			log::warn!("the session of {bot_id} keeps the servers it opened with: {error}");
+		}
+	}
+}
+
+async fn serves(
+	core: &crate::core_context::Core,
+	owner: &EnvOwner,
+	scope: &RuntimeScope,
+) -> Result<bool, TranscriptStoreError> {
+	match owner {
+		EnvOwner::User => Ok(true),
+		EnvOwner::Bot { id, .. } => Ok(*id == scope.bot_id),
+		EnvOwner::Space { id } => Ok(database(core)?
+			.space_children()
+			.holds(id.clone(), SpaceChild::Conversation, scope.conversation_id.clone())
+			.await?),
+	}
+}
+
+fn declared_url(
 	core: &crate::core_context::Core,
 	owner: &EnvOwner,
 	name: &str,
-	url: &str,
-) -> Result<Option<AuthorizationWithheld>, EnvError> {
-	let declared = declared_servers(core, owner)?.into_iter().find(|server| server.name == name);
-	let asked = declared.unwrap_or_else(|| McpServer {
+	asked: String,
+) -> Result<String, Refused> {
+	let declared = declared_servers(core, owner)
+		.map_err(|error| Step::ReadingTheDeclaredServer.refused(error.into()))?
+		.into_iter()
+		.find(|server| server.name == name);
+	let server = declared.unwrap_or_else(|| McpServer {
 		name: name.to_owned(),
-		config: serde_json::json!({ "url": url }),
+		config: serde_json::json!({ "url": asked }),
 		mark: bundles::ApplicationMark::default(),
 	});
-	Ok(asked.authorization_withheld())
+	if let Some(carries) = server.authorization_withheld() {
+		return Err(Step::CheckingTheServer.refused(OauthError::NotAuthorizable {
+			carries,
+			detail: withheld_reason(carries).to_owned(),
+		}));
+	}
+	Ok(server.url().map_or(asked, str::to_owned))
 }
 
 fn kept(
@@ -248,6 +309,7 @@ fn kept(
 ) -> Result<(), OauthError> {
 	credentials::store(root, scope, grant)?;
 	credentials::bind(root, scope, url)?;
+	credentials::mark_connected(root, scope, now_ms())?;
 	reports.forget(name);
 	Ok(())
 }
@@ -501,8 +563,9 @@ async fn revoked(
 mod tests {
 	use super::*;
 	use crate::agent::protocol::{OauthFailure, OauthFailureKind};
+	use crate::bundles::AuthorizationWithheld;
 	use crate::db::connection::fixture_root;
-	use crate::environment::contract::OAUTH_SERVER_URL;
+	use crate::environment::contract::{OAUTH_CONNECTED_AT, OAUTH_SERVER_URL};
 	use crate::hosting::caller::Caller;
 	use crate::mcp_oauth::status::ApplicationStatus;
 	use crate::removed_on_drop::RemovedOnDrop;
@@ -613,6 +676,30 @@ mod tests {
 				"carries": "loopbackAddress",
 				"detail": "it is served on a loopback address"
 			})
+		);
+	}
+
+	#[test]
+	fn a_connect_runs_against_the_url_the_session_config_declares_and_else_the_one_asked() {
+		let core = a_core_of_its_own("mcp-oauth-declared-url");
+		let path = bundles::user::path(&core).expect("the plugin has a home");
+		bundles::user::lay_down(&path).expect("the plugin is laid down");
+		let declared = serde_json::json!({ "url": "https://mcp.notion.test/mcp" });
+		bundles::plugin::set_mcp_server(&path, "notion", &declared, None)
+			.expect("the server lands");
+
+		let url_of = |name: &str, asked: &str| {
+			declared_url(&core, &EnvOwner::User, name, asked.to_owned())
+				.map_err(|refused| refused.error)
+		};
+
+		assert_eq!(
+			url_of("notion", "https://MCP.notion.test/mcp/"),
+			Ok("https://mcp.notion.test/mcp".to_owned())
+		);
+		assert_eq!(
+			url_of("undeclared", "https://mcp.undeclared.test/mcp"),
+			Ok("https://mcp.undeclared.test/mcp".to_owned())
 		);
 	}
 
@@ -731,6 +818,22 @@ mod tests {
 	}
 
 	#[test]
+	fn a_reconnect_to_the_bound_url_spelled_another_way_reuses_the_stored_registration() {
+		let stored = a_registered_client_bound_to(Some("https://mcp.granola.test/mcp"));
+		let spelled = "HTTPS://MCP.granola.test:443/mcp/";
+
+		assert_eq!(
+			authorize_request("granola", spelled.to_owned(), &stored),
+			AuthorizeRequest {
+				client_id: Some("registered".to_owned()),
+				client_secret: Some("confidential".to_owned()),
+				redirect_uri: Some("http://127.0.0.1:53682/oauth/callback".to_owned()),
+				..registering(spelled)
+			}
+		);
+	}
+
+	#[test]
 	fn a_connect_hands_the_stored_client_only_beside_its_redirect_uri() {
 		let mut no_redirect = a_registered_client_bound_to(Some("https://a"));
 		no_redirect.remove(OAUTH_REDIRECT_URI);
@@ -837,6 +940,138 @@ mod tests {
 		assert!(store::values(&root, &a_server("granola"))
 			.expect("the scope is readable")
 			.contains_key(OAUTH_ACCESS_TOKEN));
+	}
+
+	#[test]
+	fn a_connect_kept_over_an_unbound_grant_is_the_grant_the_session_of_the_agent_reads() {
+		let root = a_root("connect-session-reads");
+		credentials::store(&root, &a_server("granola"), &a_live_grant())
+			.expect("the unbound grant is written");
+		let renewed =
+			OauthCredentials { access_token: "granted-again".to_owned(), ..a_live_grant() };
+
+		kept(
+			&root,
+			&a_server("granola"),
+			"granola",
+			GRANOLA_URL,
+			&renewed,
+			&ApplicationReports::default(),
+		)
+		.expect("the grant is stored");
+
+		let session = store::resolve(&root, &a_bot()).expect("the session env resolves");
+		let read = &session.per_server["granola"];
+		assert_eq!(read.get(OAUTH_ACCESS_TOKEN).map(String::as_str), Some("granted-again"));
+		assert_eq!(read.get(OAUTH_SERVER_URL).map(String::as_str), Some(GRANOLA_URL));
+	}
+
+	fn an_older_agent_grant(root: &Path) {
+		let agent_grant = OauthCredentials {
+			access_token: "agent-token".to_owned(),
+			client_secret: Some("agent-secret".to_owned()),
+			..a_live_grant()
+		};
+		credentials::store(root, &a_server("granola"), &agent_grant)
+			.expect("the agent grant is written");
+		credentials::bind(root, &a_server("granola"), GRANOLA_URL)
+			.expect("the agent grant is bound");
+		credentials::mark_connected(root, &a_server("granola"), 1)
+			.expect("the agent connect time is written");
+	}
+
+	fn a_newer_connect_at(root: &Path, scope: &EnvScope, access_token: &str) {
+		let grant = OauthCredentials { access_token: access_token.to_owned(), ..a_live_grant() };
+		kept(root, scope, "granola", GRANOLA_URL, &grant, &ApplicationReports::default())
+			.expect("the grant is stored");
+	}
+
+	fn the_session_grant_of_the_agent(root: &Path) -> Values {
+		store::resolve(root, &a_bot()).expect("the session env resolves").per_server["granola"]
+			.clone()
+	}
+
+	#[test]
+	fn a_space_connect_newer_than_the_agent_grant_is_the_token_the_session_of_the_agent_reads() {
+		let root = a_root("newer-space-connect");
+		an_older_agent_grant(&root);
+
+		a_newer_connect_at(&root, &granola_of_the_space(), "space-token");
+
+		let read = the_session_grant_of_the_agent(&root);
+		assert_eq!(read.get(OAUTH_ACCESS_TOKEN).map(String::as_str), Some("space-token"));
+		assert_eq!(read.get(OAUTH_CLIENT_SECRET), None);
+		assert_eq!(held_at(&root, &a_bot(), "granola"), Ok(granola_of_the_space()));
+	}
+
+	#[test]
+	fn a_user_connect_newer_than_the_agent_grant_is_the_token_the_session_of_the_agent_reads() {
+		let root = a_root("newer-user-connect");
+		an_older_agent_grant(&root);
+		let of_the_user = EnvScope::Server { name: "granola".to_owned(), owner: EnvOwner::User };
+
+		a_newer_connect_at(&root, &of_the_user, "user-token");
+
+		let read = the_session_grant_of_the_agent(&root);
+		assert_eq!(read.get(OAUTH_ACCESS_TOKEN).map(String::as_str), Some("user-token"));
+		assert_eq!(read.get(OAUTH_CLIENT_SECRET), None);
+		assert_eq!(held_at(&root, &a_bot(), "granola"), Ok(of_the_user));
+	}
+
+	#[test]
+	fn a_connect_records_its_time_in_the_scope_it_stored() {
+		let root = a_root("connect-time");
+		let before = now_ms();
+
+		a_newer_connect_at(&root, &granola_of_the_space(), "space-token");
+
+		let held = store::values(&root, &granola_of_the_space()).expect("the scope is readable");
+		let connected_at: i64 = held[OAUTH_CONNECTED_AT].parse().expect("a time in milliseconds");
+		assert!((before..=now_ms()).contains(&connected_at));
+	}
+
+	fn a_refused_flow() -> Refused {
+		Step::SettlingTheFlow.refused(OauthError::Failed {
+			detail: "the token endpoint answered 401: invalid_client".to_owned(),
+			step: None,
+			status: None,
+			body: None,
+		})
+	}
+
+	fn a_bound_grant(root: &Path) {
+		credentials::store(root, &a_server("granola"), &a_live_grant())
+			.expect("the grant is written");
+		credentials::bind(root, &a_server("granola"), GRANOLA_URL).expect("the grant is bound");
+	}
+
+	#[test]
+	fn a_connect_that_stored_no_grant_reads_its_failure_and_never_connected() {
+		let root = a_root("connect-unstored");
+		a_bound_grant(&root);
+		assert_eq!(read_row(&root, &a_bot()).status, ApplicationStatus::Connected);
+
+		let error = unstored(&root, &a_server("granola"), a_refused_flow(), &Values::new());
+
+		assert!(matches!(error, OauthError::Failed { .. }), "{error:?}");
+		let ApplicationStatus::NeedsAuthorization { reason: Some(reason) } =
+			read_row(&root, &a_bot()).status
+		else {
+			panic!("the refused connect read as connected or with no reason");
+		};
+		assert!(reason.contains("invalid_client"), "{reason}");
+	}
+
+	#[test]
+	fn a_cancelled_connect_leaves_the_row_as_it_stood() {
+		let root = a_root("connect-cancelled");
+		a_bound_grant(&root);
+
+		let cancelled = Step::SettlingTheFlow.refused(OauthError::Cancelled);
+		let error = unstored(&root, &a_server("granola"), cancelled, &Values::new());
+
+		assert_eq!(error, OauthError::Cancelled);
+		assert_eq!(read_row(&root, &a_bot()).status, ApplicationStatus::Connected);
 	}
 
 	#[test]

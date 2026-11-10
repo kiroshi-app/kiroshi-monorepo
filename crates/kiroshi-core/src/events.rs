@@ -63,6 +63,7 @@ declared! {
 	CONVERSATION_UPDATED: conversations::contract::ConversationStored = conversations::contract::UPDATED_EVENT,
 	CONVERSATION_DELETED: conversations::contract::ConversationDeleted = conversations::contract::DELETED_EVENT,
 	CONVERSATION_STATE_CHANGED: conversations::contract::ConversationStateChanged = conversations::contract::STATE_CHANGED_EVENT,
+	AGENT_ROOMS_CHANGED: conversations::contract::AgentRoomsChanged = conversations::contract::AGENT_ROOMS_CHANGED_EVENT,
 	MESSAGE_STORED: conversations::contract::TranscriptMessage = conversations::contract::MESSAGE_STORED_EVENT,
 	COMPANION_ARRIVED: conversations::contract::CompanionArrival = conversations::contract::COMPANION_ARRIVED_EVENT,
 	COMPANION_SPOKE: conversations::contract::CompanionSpoke = conversations::contract::COMPANION_SPOKE_EVENT,

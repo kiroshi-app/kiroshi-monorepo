@@ -35,7 +35,6 @@ use crate::db::repositories::conversations::{
 };
 use crate::db::repositories::messages::{NewTurn, RunClaim};
 use crate::db::repositories::runtime_context::ParticipantKey;
-use crate::db::repositories::space_children::SpaceChild;
 use crate::environment::connection;
 use crate::environment::contract::{EnvError, EnvOwner, ResolvedEnv, Values};
 use crate::environment::store as environment;
@@ -486,6 +485,16 @@ impl<S: Clone> Live<S> {
 				**held != admitted && run.scope.conversation_id == scope.conversation_id
 			})
 			.map(|(held, _)| held.clone())
+			.collect()
+	}
+
+	fn live_runs(&self) -> Vec<RuntimeScope> {
+		self.runs
+			.lock()
+			.expect("live runs")
+			.values()
+			.filter(|run| run.session.is_some())
+			.map(|run| run.scope.clone())
 			.collect()
 	}
 
@@ -1603,6 +1612,13 @@ pub fn asking_runs(core: &crate::core_context::Core) -> Vec<RuntimeScope> {
 	}
 }
 
+pub fn live_runs(core: &crate::core_context::Core) -> Vec<RuntimeScope> {
+	match core.try_state::<AgentState>() {
+		Some(state) => state.live.live_runs(),
+		None => Vec::new(),
+	}
+}
+
 pub async fn shut_asking_runs_down(
 	core: &crate::core_context::Core,
 	is_gone: impl Fn(&RuntimeScope) -> bool,
@@ -1730,15 +1746,17 @@ pub async fn agent_live_sessions(
 
 pub async fn agent_live_sessions_in_space(
 	core: &crate::core_context::Core,
+	caller: Caller,
 	space_id: String,
 ) -> Result<Vec<LiveSession>, TranscriptStoreError> {
+	let reader = caller.chat_owner(core).ok_or(TranscriptStoreError::UnvouchedMember)?;
 	let state = core.state::<AgentState>();
 	let database = core.state::<db::DatabaseState>();
 	let children = ready(&database)?.space_children();
 	let mut in_the_space = Vec::new();
 	for session in state.live.report() {
 		let conversation_id = session.conversation_id.clone();
-		if children.holds(space_id.clone(), SpaceChild::Conversation, conversation_id).await? {
+		if children.shows_conversation(space_id.clone(), conversation_id, reader.clone()).await? {
 			in_the_space.push(session);
 		}
 	}
@@ -1763,15 +1781,17 @@ pub async fn pending_prompts(
 
 pub async fn agent_pending_questions_in_space(
 	core: &crate::core_context::Core,
+	caller: Caller,
 	space_id: String,
 ) -> Result<Vec<ScopedEvent>, TranscriptStoreError> {
+	let reader = caller.chat_owner(core).ok_or(TranscriptStoreError::UnvouchedMember)?;
 	let state = core.state::<AgentState>();
 	let database = core.state::<db::DatabaseState>();
 	let children = ready(&database)?.space_children();
 	let mut in_the_space = Vec::new();
 	for question in state.live.pending_questions() {
 		let conversation_id = question.scope.conversation_id.clone();
-		if children.holds(space_id.clone(), SpaceChild::Conversation, conversation_id).await? {
+		if children.shows_conversation(space_id.clone(), conversation_id, reader.clone()).await? {
 			in_the_space.push(question.scoped());
 		}
 	}
@@ -2423,6 +2443,16 @@ mod tests {
 
 		assert_eq!(live.live_scope_of(&held_by), Some(a_scope()));
 		assert_eq!(live.live_scope_of(&elsewhere), None, "another conversation shared the run");
+	}
+
+	#[test]
+	fn the_live_runs_are_the_runs_holding_a_session_and_not_one_still_starting() {
+		let live = Live::<&str>::default();
+		live.take_over(a_scope());
+		live.take_over(another_bots_run());
+		assert!(live.install(&another_bots_run(), ANOTHER_BOTS_SESSION));
+
+		assert_eq!(live.live_runs(), vec![another_bots_run()]);
 	}
 
 	#[test]

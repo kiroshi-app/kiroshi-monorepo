@@ -199,6 +199,16 @@ impl ConversationsRepository {
 			.await
 			.at("activity_of", "pending_prompts")?)
 	}
+
+	pub async fn rooms_of_working_bots(
+		&self,
+		space_id: String,
+	) -> Result<BTreeMap<String, Vec<String>>, ConversationError> {
+		Ok(self
+			.call(move |connection| rooms_of_working_bots(connection, &space_id))
+			.await
+			.at("rooms_of_working_bots", "turns")?)
+	}
 }
 
 pub(in crate::db) fn release_every_prompt(connection: &Connection) -> rusqlite::Result<usize> {
@@ -240,6 +250,40 @@ fn held_prompt(row: &Row<'_>) -> rusqlite::Result<(PromptKind, String)> {
 		rusqlite::Error::FromSqlConversionFailure(1, Type::Text, failure.into())
 	})?;
 	Ok((kind, row.get(0)?))
+}
+
+fn rooms_of_working_bots(
+	connection: &Connection,
+	space_id: &str,
+) -> Result<BTreeMap<String, Vec<String>>, DatabaseError> {
+	let mut statement = connection.prepare_cached(&rooms_of_working_bots_statement())?;
+	let rows = statement.query_map([space_id], |row| {
+		Ok((row.get::<_, String>(0)?, open_turn_starts(&row.get::<_, String>(1)?)?))
+	})?;
+	let mut started: BTreeMap<String, Vec<(i64, String)>> = BTreeMap::new();
+	for row in rows {
+		let (conversation_id, starts) = row?;
+		for (bot_id, started_at) in starts {
+			started.entry(bot_id).or_default().push((started_at, conversation_id.clone()));
+		}
+	}
+	Ok(started.into_iter().map(|(bot_id, rooms)| (bot_id, newest_first(rooms))).collect())
+}
+
+fn rooms_of_working_bots_statement() -> String {
+	format!(
+		"SELECT conversations.id, {OPEN_TURN_BOTS}
+		FROM (SELECT DISTINCT conversation_id FROM turns WHERE completed_at IS NULL) AS open_room
+		CROSS JOIN conversations ON conversations.id = open_room.conversation_id
+		WHERE conversations.space_id = ?1"
+	)
+}
+
+fn newest_first(mut rooms: Vec<(i64, String)>) -> Vec<String> {
+	rooms.sort_by(|(left_at, left_id), (right_at, right_id)| {
+		right_at.cmp(left_at).then_with(|| left_id.cmp(right_id))
+	});
+	rooms.into_iter().map(|(_, conversation_id)| conversation_id).collect()
 }
 
 fn waiting_prompt(row: &Row<'_>) -> rusqlite::Result<Option<StoredPrompt>> {
@@ -330,4 +374,38 @@ fn a_request(kind: PromptKind) -> String {
 		}),
 	};
 	request.expect("a request serializes").to_string()
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::db::connection::temp_dir;
+	use crate::db::open;
+
+	#[tokio::test]
+	async fn the_rooms_of_working_bots_are_read_from_the_open_turns_and_never_from_every_room() {
+		let dir = temp_dir();
+		let database = open(&dir);
+
+		let plan = database
+			.call(|connection| {
+				let mut statement = connection.prepare(&format!(
+					"EXPLAIN QUERY PLAN {}",
+					rooms_of_working_bots_statement()
+				))?;
+				let steps = statement.query_map(["personal"], |row| row.get::<_, String>(3))?;
+				Ok(steps.collect::<rusqlite::Result<Vec<_>>>()?)
+			})
+			.await
+			.expect("the plan");
+
+		assert!(
+			plan.iter().any(|step| step.contains("turns_open_by_conversation")),
+			"the open turns are read without their index: {plan:?}"
+		);
+		assert!(
+			!plan.iter().any(|step| step.starts_with("SCAN conversations")),
+			"every room of the space is scanned: {plan:?}"
+		);
+	}
 }

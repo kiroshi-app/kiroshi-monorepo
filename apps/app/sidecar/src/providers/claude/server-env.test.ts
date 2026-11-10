@@ -372,11 +372,43 @@ describe("bound grants", () => {
 
 	it("compares the declared url as written, before any expansion", () => {
 		const { servers } = resolveServers(
-			{ granola: { ...granola, url: `${granola.url}/` } },
+			{ granola: { ...granola, url: `https://${placeholder("HOST")}/mcp` } },
+			{ base: { HOST: "mcp.granola.ai" }, perServer: { granola: grant } },
+		)
+
+		expect(servers.granola).toEqual(granola)
+	})
+
+	it.each([
+		["a trailing slash", "https://mcp.granola.ai/mcp/"],
+		["the default port", "https://mcp.granola.ai:443/mcp"],
+		["the letter case of the scheme", "HTTPS://mcp.granola.ai/mcp"],
+		["the letter case of the host", "https://MCP.Granola.AI/mcp"],
+	])("attaches the bearer to a declared url differing by %s", (_, url) => {
+		const { servers } = resolveServers(
+			{ granola: { ...granola, url } },
 			{ perServer: { granola: grant } },
 		)
 
-		expect(servers.granola).toEqual({ ...granola, url: `${granola.url}/` })
+		expect(servers.granola).toEqual({
+			...granola,
+			url,
+			headers: { Authorization: "Bearer granted" },
+		})
+	})
+
+	it.each([
+		["the host", "https://mcp.granola.test/mcp"],
+		["a path segment", "https://mcp.granola.ai/v2/mcp"],
+		["the letter case of the path", "https://mcp.granola.ai/MCP"],
+		["the port", "https://mcp.granola.ai:8443/mcp"],
+	])("withholds the bearer from a declared url differing by %s", (_, url) => {
+		const { servers } = resolveServers(
+			{ granola: { ...granola, url } },
+			{ perServer: { granola: grant } },
+		)
+
+		expect(servers.granola).toEqual({ ...granola, url })
 	})
 
 	it("never expands a grant name as a placeholder, bound or not, even with a default", () => {

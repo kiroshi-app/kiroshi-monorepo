@@ -221,15 +221,18 @@ impl CompanionHost {
 		let space_id = self.space(database).await?;
 		let hits = database
 			.search()
-			.messages(MessageSearchQuery {
-				text: asked.query.clone(),
-				space_id: space_id.clone(),
-				kind: asked.kind,
-			})
+			.messages(
+				MessageSearchQuery {
+					text: asked.query.clone(),
+					space_id: space_id.clone(),
+					kind: asked.kind,
+				},
+				None,
+			)
 			.await?;
 		let catalogue = database
 			.catalogue()
-			.search(CatalogueScope { query: asked.query, space_id, kind: asked.kind })
+			.search(CatalogueScope { query: asked.query, space_id, kind: asked.kind }, None)
 			.await?;
 		Ok(ConversationsFound {
 			conversations: catalogue.chats.into_iter().map(found_conversation).collect(),

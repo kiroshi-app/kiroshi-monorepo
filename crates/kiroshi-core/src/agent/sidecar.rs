@@ -17,7 +17,7 @@ pub use super::contract::OauthFlowError;
 use super::contract::{ConversationNaming, OfferedModel, TransportError};
 use super::protocol::{
 	self, AuthorizeRequest, Authorized, Checked, OauthStarted, Ready, RefreshRequest,
-	RevocationRequest, Revoked, SignedIn, Titled,
+	RevocationRequest, Revoked, SignedIn, StoredReport, Titled,
 };
 use crate::environment::contract::Values;
 use crate::logging::stderr_lines::StderrLines;
@@ -338,6 +338,10 @@ impl Sidecar {
 
 	pub fn cancel_oauth(&self) -> Result<(), TransportError> {
 		self.send(protocol::oauth_cancel_command())
+	}
+
+	pub fn report_oauth_stored(&self, report: &StoredReport) -> Result<(), TransportError> {
+		self.send(protocol::oauth_stored_command(report))
 	}
 
 	pub fn begin_sign_in(self: &Arc<Self>) -> Result<OauthFlow<SignedIn>, TransportError> {

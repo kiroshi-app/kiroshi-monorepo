@@ -1,8 +1,8 @@
 use super::super::context;
 use super::super::contract::{
-	state_in, Chat, CompanionArrival, ContextCheckpoint, Conversation, ConversationDeleted,
-	ConversationInList, ConversationInPage, ConversationPage, ConversationStored, Hue,
-	ObservedState, RuntimeSession, SoloState, TranscriptStoreError,
+	state_in, AgentRooms, Chat, CompanionArrival, ContextCheckpoint, Conversation,
+	ConversationDeleted, ConversationInList, ConversationInPage, ConversationPage,
+	ConversationStored, Hue, ObservedState, RuntimeSession, SoloState, TranscriptStoreError,
 };
 use super::super::state as conversation_state;
 use super::bot::ready;
@@ -11,7 +11,8 @@ use crate::avatars;
 use crate::companions::launch;
 use crate::db;
 use crate::db::repositories::conversations::{
-	Conversation as StoredConversation, ConversationDraft, ConversationEdit, Joined, MISSION_KIND,
+	ChatOwner, Conversation as StoredConversation, ConversationDraft, ConversationEdit, Joined,
+	MISSION_KIND,
 };
 use crate::db::repositories::keyset;
 use crate::db::repositories::runtime_context::{Handover, ParticipantKey};
@@ -19,27 +20,58 @@ use crate::events::{
 	Event, COMPANION_ARRIVED, CONVERSATION_CREATED, CONVERSATION_DELETED, CONVERSATION_UPDATED,
 };
 use crate::file_store::FileStore;
+use crate::hosting::authorship::Caller;
 
 pub async fn main_chat(
 	core: &crate::core_context::Core,
+	caller: Caller,
 	bot_id: String,
 	space_id: Option<String>,
 ) -> Result<Chat, TranscriptStoreError> {
+	let owner = owner_of(&caller, core)?;
 	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
-	let chat = database.conversations().ensure_chat(bot_id, space_id).await?;
+	let chat = database.conversations().ensure_chat(bot_id, space_id, owner).await?;
 	let states = conversation_state::listed(core, database, vec![chat.id.clone()]).await?;
 	let observed = state_in(&states, &chat.id);
 	Ok(Chat::of(chat, observed))
 }
 
-pub async fn solo_states(
+pub async fn renew_main_chat(
 	core: &crate::core_context::Core,
+	caller: Caller,
+	bot_id: String,
 	space_id: String,
-) -> Result<Vec<SoloState>, TranscriptStoreError> {
+) -> Result<Chat, TranscriptStoreError> {
+	let owner = owner_of(&caller, core)?;
 	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
-	let threads = database.conversations().solo_threads(space_id).await?;
+	let renewed = database.conversations().renew_chat(bot_id, space_id.clone(), owner).await?;
+	if let Some(archived_id) = renewed.archived_id {
+		let archived =
+			ConversationDeleted { space_id: Some(space_id), conversation_id: archived_id };
+		launch::announce(core, CONVERSATION_DELETED, archived);
+	}
+	announce_conversation(core, database, CONVERSATION_CREATED, &renewed.fresh.id).await;
+	Ok(Chat::of(renewed.fresh, ObservedState::idle()))
+}
+
+fn owner_of(
+	caller: &Caller,
+	core: &crate::core_context::Core,
+) -> Result<ChatOwner, TranscriptStoreError> {
+	caller.chat_owner(core).ok_or(TranscriptStoreError::UnvouchedMember)
+}
+
+pub async fn solo_states(
+	core: &crate::core_context::Core,
+	caller: Caller,
+	space_id: String,
+) -> Result<Vec<SoloState>, TranscriptStoreError> {
+	let owner = owner_of(&caller, core)?;
+	let state = core.state::<db::DatabaseState>();
+	let database = ready(&state)?;
+	let threads = database.conversations().solo_threads(space_id, owner).await?;
 	let ids = threads.iter().map(|thread| thread.conversation_id.clone()).collect();
 	let states = conversation_state::listed(core, database, ids).await?;
 	Ok(threads
@@ -49,6 +81,18 @@ pub async fn solo_states(
 			bot_id: thread.bot_id,
 			conversation_id: thread.conversation_id,
 		})
+		.collect())
+}
+
+pub async fn agent_rooms(
+	core: &crate::core_context::Core,
+	space_id: String,
+) -> Result<Vec<AgentRooms>, TranscriptStoreError> {
+	let state = core.state::<db::DatabaseState>();
+	let working = ready(&state)?.conversations().rooms_of_working_bots(space_id).await?;
+	Ok(working
+		.into_iter()
+		.map(|(bot_id, conversation_ids)| AgentRooms { bot_id, conversation_ids })
 		.collect())
 }
 
@@ -97,6 +141,7 @@ pub async fn conversation_mission_thread(
 
 pub async fn conversations_page(
 	core: &crate::core_context::Core,
+	caller: Caller,
 	space_id: String,
 	cursor: Option<String>,
 	limit: Option<u32>,
@@ -104,10 +149,11 @@ pub async fn conversations_page(
 	let state = core.state::<db::DatabaseState>();
 	let after = keyset::after(cursor)
 		.map_err(|cursor| TranscriptStoreError::UnreadableCursor { cursor })?;
+	let reader = owner_of(&caller, core)?;
 	let database = ready(&state)?;
 	let read = database
 		.conversations()
-		.conversation_page(space_id, after, keyset::page_size(limit))
+		.conversation_page(space_id, reader, after, keyset::page_size(limit))
 		.await?;
 	let ids = read.pinned.iter().chain(&read.page.rows).map(|row| row.conversation.id.clone());
 	let states = conversation_state::listed(core, database, ids.collect()).await?;
@@ -151,10 +197,14 @@ pub async fn delete_conversation(
 	conversation_id: String,
 ) -> Result<(), TranscriptStoreError> {
 	let state = core.state::<db::DatabaseState>();
-	let conversations = ready(&state)?.conversations();
+	let database = ready(&state)?;
+	let conversations = database.conversations();
 	let space_id = conversations.space(conversation_id.clone()).await?;
 	conversations.delete_conversation(conversation_id.clone()).await?;
 	shut_asking_runs_down(core, |scope| scope.conversation_id == conversation_id).await;
+	if let Some(space_id) = &space_id {
+		conversation_state::observe_agent_rooms(core, database, space_id).await;
+	}
 	launch::announce(core, CONVERSATION_DELETED, ConversationDeleted { space_id, conversation_id });
 	Ok(())
 }

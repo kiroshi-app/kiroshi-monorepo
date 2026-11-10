@@ -4,8 +4,8 @@ use rusqlite::{params, params_from_iter, Connection, OptionalExtension, Row};
 
 use super::prompts::{open_turn_starts, HAS_OPEN_TURN, OPEN_TURN_BOTS};
 use super::{
-	conversation, seats_by_conversation, Conversation, ConversationError, ConversationsRepository,
-	Seat, CHAT_KIND, MISSION_KIND, SEAT_COLUMNS, TOPIC_KIND,
+	conversation, seats_by_conversation, ChatOwner, Conversation, ConversationError,
+	ConversationsRepository, Seat, CHAT_KIND, MISSION_KIND, SEAT_COLUMNS, TOPIC_KIND,
 };
 use crate::db::repositories::keyset::{paged, Keyset, Page};
 use crate::db::repositories::messages::{AccountAuthor, WrittenFrom};
@@ -65,11 +65,14 @@ impl ConversationsRepository {
 	pub async fn conversation_page(
 		&self,
 		space_id: String,
+		reader: ChatOwner,
 		after: Option<Keyset>,
 		size: u32,
 	) -> Result<ActivePage, ConversationError> {
-		self.call(move |connection| Ok(page_of_space(connection, &space_id, after.as_ref(), size)))
-			.await?
+		self.call(move |connection| {
+			Ok(page_of_space(connection, &space_id, &reader, after.as_ref(), size))
+		})
+		.await?
 	}
 
 	pub async fn conversation_in_page(
@@ -181,20 +184,24 @@ fn by_id_statement() -> String {
 	format!("{} WHERE conversations.id = ?1 AND {}", active_rows(), in_the_feed())
 }
 
+fn owned_by_the_reader(reader_parameter: u8) -> String {
+	format!("(conversations.owner IS NULL OR conversations.owner = ?{reader_parameter})")
+}
+
 fn page_statement(after: Option<&Keyset>) -> String {
 	let past_the_cursor = match after {
 		Some(_) => "AND (conversations.last_activity_at, conversations.id) < (?2, ?3)",
 		None => "",
 	};
 	active_statement(
-		&format!("AND {PIN_POSITION} IS NULL {past_the_cursor}"),
+		&format!("AND {PIN_POSITION} IS NULL AND {} {past_the_cursor}", owned_by_the_reader(5)),
 		"ORDER BY conversations.last_activity_at DESC, conversations.id DESC LIMIT ?4",
 	)
 }
 
 fn pinned_statement() -> String {
 	active_statement(
-		&format!("AND {PIN_POSITION} IS NOT NULL"),
+		&format!("AND {PIN_POSITION} IS NOT NULL AND {}", owned_by_the_reader(2)),
 		&format!("ORDER BY {PIN_POSITION} ASC, conversations.id ASC"),
 	)
 }
@@ -202,14 +209,16 @@ fn pinned_statement() -> String {
 fn page_of_space(
 	connection: &Connection,
 	space_id: &str,
+	reader: &ChatOwner,
 	after: Option<&Keyset>,
 	size: u32,
 ) -> Result<ActivePage, ConversationError> {
 	let pinned = match after {
 		Some(_) => Vec::new(),
-		None => pinned_of_space(connection, space_id)?,
+		None => pinned_of_space(connection, space_id, reader)?,
 	};
-	let mut read = ActivePage { pinned, page: unpinned_page(connection, space_id, after, size)? };
+	let page = unpinned_page(connection, space_id, reader, after, size)?;
+	let mut read = ActivePage { pinned, page };
 	let ids: Vec<&str> =
 		read.pinned.iter().chain(&read.page.rows).map(|row| row.conversation.id.as_str()).collect();
 	let mut seats = seats_of_page(connection, &ids)?;
@@ -279,15 +288,17 @@ pub fn listed_by_id(
 fn pinned_of_space(
 	connection: &Connection,
 	space_id: &str,
+	reader: &ChatOwner,
 ) -> Result<Vec<ActiveConversation>, ConversationError> {
 	let mut statement = connection.prepare_cached(&pinned_statement())?;
-	let rows = statement.query_map([space_id], active)?;
+	let rows = statement.query_map(params![space_id, reader], active)?;
 	Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
 fn unpinned_page(
 	connection: &Connection,
 	space_id: &str,
+	reader: &ChatOwner,
 	after: Option<&Keyset>,
 	size: u32,
 ) -> Result<Page<ActiveConversation>, ConversationError> {
@@ -297,7 +308,8 @@ fn unpinned_page(
 			space_id,
 			after.map(|keyset| keyset.sort_key),
 			after.map(|keyset| keyset.id.as_str()),
-			size + 1
+			size + 1,
+			reader
 		],
 		active,
 	)?;
@@ -419,7 +431,7 @@ mod tests {
 	async fn page(database: &Database, after: Option<Keyset>, size: u32) -> ActivePage {
 		database
 			.conversations()
-			.conversation_page("personal".to_owned(), after, size)
+			.conversation_page("personal".to_owned(), ChatOwner::Host, after, size)
 			.await
 			.expect("the page reads")
 	}
@@ -445,7 +457,8 @@ mod tests {
 		let (database, _dir) = planted(format!("{A_SEATED_BOT}{}", rooms(2, |n| n as i64))).await;
 		let conversations = database.conversations();
 
-		let page = conversations.conversation_page("personal".to_owned(), None, 10).await;
+		let page =
+			conversations.conversation_page("personal".to_owned(), ChatOwner::Host, None, 10).await;
 		let by_id = conversations.conversation_in_page("c01".to_owned()).await;
 		let absent = conversations.conversation_in_page("absent".to_owned()).await;
 
@@ -1081,7 +1094,7 @@ mod tests {
 			.call(move |connection| {
 				let mut explained =
 					connection.prepare(&format!("EXPLAIN QUERY PLAN {statement}"))?;
-				let slots = params!["personal", 1, "c01", 31];
+				let slots = params!["personal", 1, "c01", 31, "host"];
 				let bound = slots.iter().take(explained.parameter_count());
 				let steps = explained
 					.query_map(params_from_iter(bound), |row| row.get::<_, String>(3))?

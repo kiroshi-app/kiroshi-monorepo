@@ -16,14 +16,26 @@ import { cn } from "@workspace/ui/lib/utils"
 
 const NOTICE = "px-2 py-1 text-muted-foreground text-sm leading-6"
 
-const MIRROR =
-	"pointer-events-none invisible absolute top-0 left-0 px-2 text-sm leading-6"
+const MIRROR = "pointer-events-none invisible absolute top-0 left-0"
+
+type PromptFieldSize = "default" | "large"
+
+const TEXT_OF_SIZE = {
+	default: "px-2 text-sm leading-6",
+	large: "px-1 text-reading leading-6",
+} as const satisfies Record<PromptFieldSize, string>
+
+const FIELD_OF_SIZE = {
+	default: "",
+	large: "min-h-14",
+} as const satisfies Record<PromptFieldSize, string>
 
 type PromptFieldProps = {
 	value: string
 	refs: PromptRefs
 	textareaRef: Ref<HTMLTextAreaElement>
 	textareaProps: TextareaHTMLAttributes<HTMLTextAreaElement>
+	size?: PromptFieldSize
 	disabled?: boolean
 	placeholder?: string
 	label?: string
@@ -39,6 +51,7 @@ const PromptField = ({
 	refs,
 	textareaRef,
 	textareaProps,
+	size = "default",
 	disabled,
 	placeholder,
 	label,
@@ -78,7 +91,7 @@ const PromptField = ({
 					<div
 						ref={refs.singleLine}
 						aria-hidden="true"
-						className={cn(MIRROR, "w-max whitespace-pre")}
+						className={cn(MIRROR, TEXT_OF_SIZE[size], "w-max whitespace-pre")}
 					>
 						{`${value}\u200b`}
 					</div>
@@ -87,6 +100,7 @@ const PromptField = ({
 						aria-hidden="true"
 						className={cn(
 							MIRROR,
+							TEXT_OF_SIZE[size],
 							"whitespace-pre-wrap [overflow-wrap:break-word]",
 						)}
 					>
@@ -103,7 +117,11 @@ const PromptField = ({
 						onChange={(event) => onValueChange(event.target.value)}
 						onKeyDown={handleKeyDown}
 						onPaste={onPaste}
-						className="block w-full resize-none overflow-y-auto bg-transparent px-2 py-1 text-foreground text-sm leading-6 outline-none placeholder:text-faint-foreground disabled:cursor-not-allowed [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-foreground/22 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar]:w-1"
+						className={cn(
+							"block w-full resize-none overflow-y-auto bg-transparent py-1 text-foreground outline-none placeholder:text-faint-foreground disabled:cursor-not-allowed [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-foreground/22 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar]:w-1",
+							TEXT_OF_SIZE[size],
+							FIELD_OF_SIZE[size],
+						)}
 					/>
 				</>
 			)}
@@ -111,4 +129,4 @@ const PromptField = ({
 	)
 }
 
-export { PromptField }
+export { PromptField, type PromptFieldSize }

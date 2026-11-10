@@ -60,11 +60,18 @@ pub struct MessageHit {
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum MessageSearchError {
 	#[serde(rename_all = "camelCase")]
-	Unavailable { failure: StorageFailure },
+	Unavailable {
+		failure: StorageFailure,
+	},
 	#[serde(rename_all = "camelCase")]
-	Storage { failure: StorageFailure },
+	Storage {
+		failure: StorageFailure,
+	},
 	#[serde(rename_all = "camelCase")]
-	QueryTooLong { limit: usize },
+	QueryTooLong {
+		limit: usize,
+	},
+	UnvouchedMember,
 }
 
 impl From<DatabaseError> for MessageSearchError {
@@ -191,15 +198,26 @@ pub struct CatalogueScope {
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum CatalogueError {
 	#[serde(rename_all = "camelCase")]
-	Unavailable { failure: StorageFailure },
+	Unavailable {
+		failure: StorageFailure,
+	},
 	#[serde(rename_all = "camelCase")]
-	Storage { failure: StorageFailure },
+	Storage {
+		failure: StorageFailure,
+	},
 	#[serde(rename_all = "camelCase")]
-	QueryTooLong { limit: usize },
+	QueryTooLong {
+		limit: usize,
+	},
 	#[serde(rename_all = "camelCase")]
-	UnknownBot { id: String },
+	UnknownBot {
+		id: String,
+	},
 	#[serde(rename_all = "camelCase")]
-	UnreadableState { detail: String },
+	UnreadableState {
+		detail: String,
+	},
+	UnvouchedMember,
 }
 
 impl From<TranscriptStoreError> for CatalogueError {

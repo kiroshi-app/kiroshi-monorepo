@@ -16,7 +16,7 @@ use serde_json::{json, Value};
 use tokio::net::TcpListener;
 use tokio::sync::{mpsc, watch};
 
-use super::authorship::Caller;
+use super::authorship::{Caller, RelayedMember};
 use super::bridge::{self, belongs_to_the_host, LocalApi, RelayedFile, ATTACHMENT_COMMAND};
 use super::contract::{AccountDevices, RosterDevice};
 use super::contract::{
@@ -42,6 +42,7 @@ use crate::account::session::{sign_out, AccountSession};
 use crate::agent::commands;
 use crate::agent::contract as agent;
 use crate::agent::reply_writer::TurnSink;
+use crate::applications::contract::INSTALLED_EVENT as APPLICATION_INSTALLED_EVENT;
 use crate::attachments;
 use crate::bundles::{BotPermissions, DEFAULT_OUTPUT_STYLE};
 use crate::companions::contract::{
@@ -49,16 +50,18 @@ use crate::companions::contract::{
 	UPDATED_EVENT as COMPANION_UPDATED_EVENT,
 };
 use crate::conversations::commands::{
-	conversation_add_participant, conversation_append_user_message, conversation_create,
-	conversation_delete_bot, conversation_duplicate_bot, conversation_remove_participant,
-	conversation_set_lead, conversation_update, conversation_update_bot, conversations_page,
-	create_bot_from_draft, delete_conversation, send_user_message,
+	agent_rooms, conversation_add_participant, conversation_append_user_message,
+	conversation_create, conversation_delete_bot, conversation_duplicate_bot,
+	conversation_remove_participant, conversation_set_lead, conversation_update,
+	conversation_update_bot, conversations_page, create_bot_from_draft, delete_conversation,
+	renew_main_chat, send_user_message,
 };
 use crate::conversations::contract::{
 	Bot, BotDraft, BotIdentity, Conversation, ConversationInPage, Hue, LastWord, NewUserMessage,
-	ObservedState, ParticipantRole, TranscriptStoreError, WrittenFrom,
-	CREATED_EVENT as CONVERSATION_CREATED_EVENT, DELETED_EVENT as CONVERSATION_DELETED_EVENT,
-	MESSAGE_STORED_EVENT, STATE_CHANGED_EVENT, UPDATED_EVENT as CONVERSATION_UPDATED_EVENT,
+	ObservedState, ParticipantRole, TranscriptStoreError, WrittenFrom, AGENT_ROOMS_CHANGED_EVENT,
+	COMPANION_ARRIVED_EVENT, COMPANION_SPOKE_EVENT, CREATED_EVENT as CONVERSATION_CREATED_EVENT,
+	DELETED_EVENT as CONVERSATION_DELETED_EVENT, MESSAGE_STORED_EVENT, STATE_CHANGED_EVENT,
+	SUMMONS_DROPPED_EVENT, UPDATED_EVENT as CONVERSATION_UPDATED_EVENT,
 };
 use crate::conversations::state as conversation_state;
 use crate::crypto::commands::{DeviceKeysState, SpaceKeys};
@@ -67,8 +70,10 @@ use crate::crypto::error::CryptoError;
 use crate::crypto::frame::CHALLENGE_LENGTH;
 use crate::crypto::space_key::HeldSpaceKey;
 use crate::db::connection::temp_dir;
+use crate::db::repositories::conversations::ChatOwner;
 use crate::db::repositories::conversations::{a_pending_prompt, PromptKind};
 use crate::db::repositories::joined_spaces::{JoinedReach, JoinedSpace};
+use crate::db::repositories::messages::NewTurn;
 use crate::db::{self, DatabaseState};
 use crate::environment::connection;
 use crate::environment::contract::{ConnectionKind, EnvError, EnvScope, ACCOUNT_BEARER};
@@ -76,6 +81,7 @@ use crate::environment::store;
 use crate::events::{Event, BUFFERED_FRAMES};
 use crate::host_api::files::ATTACHMENT_PATH;
 use crate::joined_spaces::contract::JoinedSpaceConnection;
+use crate::joined_spaces::member_link::{MemberLink, Resync};
 use crate::joined_spaces::relay::RelayGuests;
 use crate::library;
 use crate::library::contract::{LibraryError, DOCUMENT_RENAMED_EVENT, DOCUMENT_UPDATED_EVENT};
@@ -84,7 +90,8 @@ use crate::logging::contract::InstallKind;
 use crate::mcp_oauth::credentials;
 use crate::removed_on_drop::RemovedOnDrop;
 use crate::routines::commands::CHANGED_EVENT as ROUTINE_CHANGED_EVENT;
-use crate::search::contract::{CatalogueScope, MessageSearchQuery};
+use crate::search::commands::{search_catalogue, search_recent};
+use crate::search::contract::{CatalogueChat, CatalogueError, CatalogueScope, MessageSearchQuery};
 use crate::spaces::commands::{
 	bot_add_to_space, bot_move_to_space, bot_remove_from_space, space_delete, space_update,
 };
@@ -645,16 +652,43 @@ async fn host_effect_applied(
 		"search_catalogue" => {
 			let scope =
 				CatalogueScope { query: text("query"), space_id: text("spaceId"), kind: None };
-			let found = database.catalogue().search(scope).await.expect("the host searches");
+			let found = database.catalogue().search(scope, None).await.expect("the host searches");
 			return answered_json(StatusCode::OK, json!(found));
 		}
+		"conversation_agent_rooms" => {
+			let rooms = agent_rooms(effects.app(), text("spaceId")).await.expect("the host reads");
+			return answered_json(StatusCode::OK, json!(rooms));
+		}
+		"mission_space_feed" => {
+			let closed_since = typed(&args, "closedSince");
+			let feed =
+				crate::missions::commands::space_feed(effects.app(), text("spaceId"), closed_since)
+					.await
+					.expect("the host reads");
+			return answered_json(StatusCode::OK, json!(feed));
+		}
+		"mission_space_page" => {
+			let closed_since = typed(&args, "closedSince");
+			let (cursor, limit) = (typed(&args, "cursor"), typed(&args, "limit"));
+			let page = crate::missions::commands::space_page(
+				effects.app(),
+				text("spaceId"),
+				closed_since,
+				cursor,
+				limit,
+			)
+			.await
+			.expect("the host reads");
+			return answered_json(StatusCode::OK, json!(page));
+		}
 		"search_recent" => {
-			let found = database.catalogue().recent(text("spaceId")).await.expect("the host reads");
+			let found =
+				database.catalogue().recent(text("spaceId"), None).await.expect("the host reads");
 			return answered_json(StatusCode::OK, json!(found));
 		}
 		"search_messages" => {
 			let query: MessageSearchQuery = typed(&args, "query");
-			let found = database.search().messages(query).await.expect("the host searches");
+			let found = database.search().messages(query, None).await.expect("the host searches");
 			return answered_json(StatusCode::OK, json!(found));
 		}
 		"library_list" => {
@@ -1276,6 +1310,9 @@ fn unstamped(mut frame: Value) -> Value {
 	if let Some(fields) = frame.as_object_mut().filter(|fields| fields.contains_key("event")) {
 		let epoch = fields.remove("epoch");
 		let seq = fields.remove("seq");
+		let rest = fields.remove("rest");
+		fields.remove("seqs");
+		let seq = seq.or(rest);
 		assert!(
 			epoch.as_ref().is_some_and(Value::is_string) && seq.as_ref().is_some_and(Value::is_u64),
 			"an event frame carries its epoch {epoch:?} and seq {seq:?}"
@@ -4051,7 +4088,7 @@ fn the_live_sessions_in_a_space_hold_only_the_sessions_of_its_conversations() {
 		commands::a_run_held_by_the_app(app, a_held_scope_in("c-theirs", "b-theirs"));
 		commands::a_run_held_by_the_app(app, a_held_scope_in("c-shared", "b-shared"));
 
-		let listed = commands::agent_live_sessions_in_space(app, PERSONAL.to_owned())
+		let listed = commands::agent_live_sessions_in_space(app, Caller::Host, PERSONAL.to_owned())
 			.await
 			.expect("the sessions read");
 
@@ -4108,7 +4145,7 @@ async fn pending_in_the_space(
 	app: &crate::core_context::Core,
 	space_id: &str,
 ) -> Vec<agent::ScopedEvent> {
-	commands::agent_pending_questions_in_space(app, space_id.to_owned())
+	commands::agent_pending_questions_in_space(app, Caller::Host, space_id.to_owned())
 		.await
 		.expect("the questions read")
 }
@@ -4141,6 +4178,180 @@ fn the_pending_questions_in_a_space_hold_the_questions_of_each_of_its_conversati
 		assert_eq!(
 			pending_in_the_space(app, PERSONAL).await,
 			pending_in_the_conversation(app, "c-mine").await
+		);
+	});
+}
+
+const BEA: &str = "bea-account";
+
+fn relayed_as(account_id: &str) -> Caller {
+	Caller::Relayed(Some(RelayedMember {
+		space_id: PERSONAL.to_owned(),
+		user_id: account_id.to_owned(),
+		computer: None,
+	}))
+}
+
+struct MainsOfTwoPeople {
+	of_the_host: String,
+	of_bea: String,
+}
+
+async fn mains_of_the_host_and_bea(guest: &Guest) -> MainsOfTwoPeople {
+	let database = db::open(&guest.effects.database);
+	let main_of = |owner| {
+		let conversations = database.conversations();
+		async move {
+			conversations
+				.ensure_chat("b-mine".to_owned(), Some(PERSONAL.to_owned()), owner)
+				.await
+				.expect("the main conversation opens")
+				.id
+		}
+	};
+	MainsOfTwoPeople {
+		of_the_host: main_of(ChatOwner::Host).await,
+		of_bea: main_of(ChatOwner::Member(BEA.to_owned())).await,
+	}
+}
+
+fn sorted(mut ids: Vec<String>) -> Vec<String> {
+	ids.sort();
+	ids
+}
+
+#[test]
+fn the_live_sessions_in_a_space_leave_out_the_main_conversation_of_another_person() {
+	run(async {
+		let guest = Guest::of_two_spaces("live-sessions-of-a-person").await;
+		let app = guest.harness.app.core();
+		let mains = mains_of_the_host_and_bea(&guest).await;
+		for conversation_id in ["c-mine", &mains.of_the_host, &mains.of_bea] {
+			commands::a_run_held_by_the_app(app, a_held_scope_in(conversation_id, "b-mine"));
+		}
+		let listed_for =
+			|caller| commands::agent_live_sessions_in_space(app, caller, PERSONAL.to_owned());
+		let ids = |listed: Vec<agent::LiveSession>| {
+			sorted(listed.into_iter().map(|session| session.conversation_id).collect())
+		};
+
+		let of_bea = ids(listed_for(relayed_as(BEA)).await.expect("bea reads"));
+		let of_the_host = ids(listed_for(Caller::Host).await.expect("the host reads"));
+		let unvouched = listed_for(Caller::Relayed(None)).await;
+
+		assert_eq!(of_bea, sorted(vec!["c-mine".to_owned(), mains.of_bea]));
+		assert_eq!(of_the_host, sorted(vec!["c-mine".to_owned(), mains.of_the_host]));
+		assert_eq!(unvouched, Err(TranscriptStoreError::UnvouchedMember));
+	});
+}
+
+#[test]
+fn the_pending_questions_in_a_space_leave_out_the_main_conversation_of_another_person() {
+	run(async {
+		let guest = Guest::of_two_spaces("pending-questions-of-a-person").await;
+		let app = guest.harness.app.core();
+		let mains = mains_of_the_host_and_bea(&guest).await;
+		for conversation_id in ["c-mine", &mains.of_the_host, &mains.of_bea] {
+			commands::a_run_held_by_the_app(app, a_held_scope_in(conversation_id, "b-mine"))
+				.emit(a_question(&format!("q-{conversation_id}")), a_turn_in(conversation_id));
+		}
+		let listed_for =
+			|caller| commands::agent_pending_questions_in_space(app, caller, PERSONAL.to_owned());
+		let ids = |listed: Vec<agent::ScopedEvent>| {
+			sorted(
+				listed
+					.into_iter()
+					.filter_map(|question| question.scope.map(|scope| scope.conversation_id))
+					.collect(),
+			)
+		};
+
+		let of_bea = ids(listed_for(relayed_as(BEA)).await.expect("bea reads"));
+		let of_the_host = ids(listed_for(Caller::Host).await.expect("the host reads"));
+		let unvouched = listed_for(Caller::Relayed(None)).await;
+
+		assert_eq!(of_bea, sorted(vec!["c-mine".to_owned(), mains.of_bea]));
+		assert_eq!(of_the_host, sorted(vec!["c-mine".to_owned(), mains.of_the_host]));
+		assert_eq!(unvouched, Err(TranscriptStoreError::UnvouchedMember));
+	});
+}
+
+fn chat_ids(chats: Vec<CatalogueChat>) -> Vec<String> {
+	sorted(chats.into_iter().map(|chat| chat.hit.conversation_id).collect())
+}
+
+#[test]
+fn the_catalogue_search_of_a_space_leaves_out_the_main_conversation_of_another_person() {
+	run(async {
+		let guest = Guest::of_two_spaces("catalogue-of-a-person").await;
+		let app = guest.harness.app.core();
+		let mains = mains_of_the_host_and_bea(&guest).await;
+		let searched_by =
+			|caller| search_catalogue(app, caller, "Mine".to_owned(), PERSONAL.to_owned());
+
+		let of_bea = searched_by(relayed_as(BEA)).await.expect("bea searches");
+		let of_the_host = searched_by(Caller::Host).await.expect("the host searches");
+		let unvouched = searched_by(Caller::Relayed(None)).await;
+
+		assert_eq!(chat_ids(of_bea.chats), sorted(vec!["c-mine".to_owned(), mains.of_bea]));
+		assert_eq!(
+			chat_ids(of_the_host.chats),
+			sorted(vec!["c-mine".to_owned(), mains.of_the_host])
+		);
+		assert_eq!(unvouched.err(), Some(CatalogueError::UnvouchedMember));
+	});
+}
+
+#[test]
+fn the_recent_conversations_of_a_space_leave_out_the_main_conversation_of_another_person() {
+	run(async {
+		let guest = Guest::of_two_spaces("recent-of-a-person").await;
+		let app = guest.harness.app.core();
+		let mains = mains_of_the_host_and_bea(&guest).await;
+		let read_by = |caller| search_recent(app, caller, PERSONAL.to_owned());
+
+		let of_bea = chat_ids(read_by(relayed_as(BEA)).await.expect("bea reads"));
+		let of_the_host = chat_ids(read_by(Caller::Host).await.expect("the host reads"));
+		let unvouched = read_by(Caller::Relayed(None)).await;
+
+		assert_eq!(of_bea, sorted(vec!["c-mine".to_owned(), mains.of_bea]));
+		assert_eq!(of_the_host, sorted(vec!["c-mine".to_owned(), mains.of_the_host]));
+		assert_eq!(unvouched, Err(CatalogueError::UnvouchedMember));
+	});
+}
+
+#[test]
+fn a_renewed_main_conversation_is_announced_archived_as_a_closed_room_is() {
+	run(async {
+		let guest = Guest::of_two_spaces("renew-announced").await;
+		let app = guest.harness.app.core();
+		let former = mains_of_the_host_and_bea(&guest).await.of_the_host;
+		let mut published = app.subscribe_frames();
+
+		let fresh = renew_main_chat(app, Caller::Host, "b-mine".to_owned(), PERSONAL.to_owned())
+			.await
+			.expect("the main conversation is renewed");
+
+		let mut announced = Vec::new();
+		while let Ok(frame) = published.try_recv() {
+			let frame: Value = serde_json::from_str(&frame).expect("a json frame");
+			announced.push((frame["event"].clone(), frame["payload"].clone()));
+		}
+		let archived = announced
+			.iter()
+			.filter(|(event, _)| *event == json!(CONVERSATION_DELETED_EVENT))
+			.collect::<Vec<_>>();
+		assert_eq!(
+			archived,
+			[&(
+				json!(CONVERSATION_DELETED_EVENT),
+				json!({ "spaceId": PERSONAL, "conversationId": former }),
+			)]
+		);
+		assert!(
+			announced.iter().any(|(event, payload)| *event == json!(CONVERSATION_CREATED_EVENT)
+				&& payload["conversation"]["id"] == json!(fresh.id)),
+			"the fresh main was not announced: {announced:?}"
 		);
 	});
 }
@@ -4272,9 +4483,15 @@ fn held_of(command: &str, index: usize) -> reach::Held {
 }
 
 async fn shared_space_refusal(guest: &Guest, command: &str, args: Value) -> reach::Refusal {
-	reach::stays_in_the_shared_space(&guest.harness.app, PERSONAL, command, &args)
-		.await
-		.expect_err("the call is refused")
+	reach::stays_in_the_shared_space(
+		&guest.harness.app,
+		PERSONAL,
+		&ChatOwner::Member(MEMBER_ACCOUNT.to_owned()),
+		command,
+		&args,
+	)
+	.await
+	.expect_err("the call is refused")
 }
 
 #[test]
@@ -4444,6 +4661,11 @@ fn a_relay_guest_opens_a_main_chat_in_the_shared_space_only() {
 #[test]
 fn a_relay_guest_reads_the_solo_states_of_the_shared_space_only() {
 	run(kept_in_the_space_named("conversation_solo_states", space_named));
+}
+
+#[test]
+fn a_relay_guest_reads_the_agent_rooms_of_the_shared_space_only() {
+	run(kept_in_the_space_named("conversation_agent_rooms", space_named));
 }
 
 #[test]
@@ -5484,31 +5706,115 @@ fn a_relay_guest_hears_the_end_of_a_host_turn_once_when_its_evolution_lands_befo
 	});
 }
 
+async fn a_main_conversation_waiting_on(guest: &Guest, owner: ChatOwner) -> String {
+	let database = db::open(&guest.effects.database);
+	let conversations = database.conversations();
+	let main = conversations
+		.ensure_chat("b-mine".to_owned(), Some(PERSONAL.to_owned()), owner)
+		.await
+		.expect("the main conversation opens");
+	let prompt = a_pending_prompt(&main.id, PromptKind::Permission);
+	conversations.hold_prompt(prompt).await.expect("the prompt is held");
+	let app = guest.harness.app.core();
+	conversation_state::observe(app, &database, &main.id).await.expect("the state reads");
+	main.id
+}
+
 #[test]
-fn a_relay_guest_hears_the_state_change_of_a_main_conversation_of_the_shared_space() {
+fn a_relay_guest_hears_the_state_change_of_its_own_main_conversation() {
 	run(async {
 		let mut guest = Guest::of_two_spaces("main-state").await;
-		let app = &guest.harness.app.clone();
-		let database = db::open(&guest.effects.database);
-		let conversations = database.conversations();
-		let main = conversations
-			.ensure_chat("b-mine".to_owned(), Some(PERSONAL.to_owned()))
-			.await
-			.expect("the main conversation opens");
-		let prompt = a_pending_prompt(&main.id, PromptKind::Permission);
-		conversations.hold_prompt(prompt).await.expect("the prompt is held");
 
-		conversation_state::observe(app, &database, &main.id).await.expect("the state reads");
+		let main_id =
+			a_main_conversation_waiting_on(&guest, ChatOwner::Member(A_JOINER.to_owned())).await;
 		let heard = guest.events_until_the_marker().await;
 
 		let changed = json!({
-			"conversationId": main.id,
+			"conversationId": main_id,
 			"spaceId": PERSONAL,
 			"state": "needs_you",
 			"pendingPrompt": { "promptId": "p1", "kind": "permission", "text": "Run git push" },
 			"workingBotIds": [],
 		});
 		assert_eq!(heard, [as_forwarded((STATE_CHANGED_EVENT, changed))]);
+	});
+}
+
+#[test]
+fn a_relay_guest_hears_the_rooms_of_an_agent_in_the_shared_space_only() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("agent-rooms").await;
+		let app = guest.harness.app.core().clone();
+		let database = db::open(&guest.effects.database);
+		for (turn_id, conversation_id) in [("t-away", "c-shared"), ("t-here", "c-mine")] {
+			let turn = NewTurn {
+				id: turn_id.to_owned(),
+				conversation_id: conversation_id.to_owned(),
+				started_at: 2,
+			};
+			database.messages().start_run(turn, "b-shared".to_owned()).await.expect("it runs");
+			conversation_state::observe(&app, &database, conversation_id)
+				.await
+				.expect("the state reads");
+		}
+
+		let heard = guest.events_until_the_marker().await;
+
+		let rooms =
+			json!({ "botId": "b-shared", "spaceId": PERSONAL, "conversationIds": ["c-mine"] });
+		let rooms_heard: Vec<&Value> = heard
+			.iter()
+			.filter(|frame| frame["event"]["event"] == json!(AGENT_ROOMS_CHANGED_EVENT))
+			.collect();
+		assert_eq!(rooms_heard, [&as_forwarded((AGENT_ROOMS_CHANGED_EVENT, rooms))]);
+	});
+}
+
+#[test]
+fn a_relay_guest_does_not_hear_the_state_change_of_a_main_conversation_the_host_owns() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("host-main-state").await;
+
+		a_main_conversation_waiting_on(&guest, ChatOwner::Host).await;
+		let heard = guest.events_until_the_marker().await;
+
+		assert_eq!(heard, Vec::<Value>::new());
+	});
+}
+
+#[test]
+fn a_relay_guest_is_refused_on_the_main_conversation_of_another_person_and_served_on_its_own() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("main-of-another").await;
+		let database = db::open(&guest.effects.database);
+		let main_of = |owner| {
+			let conversations = database.conversations();
+			async move {
+				conversations
+					.ensure_chat("b-mine".to_owned(), Some(PERSONAL.to_owned()), owner)
+					.await
+					.expect("the main conversation opens")
+					.id
+			}
+		};
+		let of_the_host = main_of(ChatOwner::Host).await;
+		let of_another = main_of(ChatOwner::Member(OTHER_ACCOUNT.to_owned())).await;
+		let its_own = main_of(ChatOwner::Member(A_JOINER.to_owned())).await;
+		let page_of = |id: &str| json!({ "conversationId": id, "beforeSeq": null, "limit": 10 });
+
+		for refused in [&of_the_host, &of_another] {
+			assert_eq!(
+				guest.called("conversation_message_page", page_of(refused)).await,
+				json!({
+					"id": "conversation_message_page",
+					"status": 403,
+					"body": "this command reaches the main conversation of another person",
+				}),
+			);
+		}
+		guest.forwarded("conversation_message_page", page_of(&its_own)).await;
+
+		assert_eq!(guest.effects.reached(), ["conversation_message_page"]);
 	});
 }
 
@@ -5570,9 +5876,10 @@ impl Guest {
 	}
 
 	async fn paged_row(&self, conversation_id: &str) -> ConversationInPage {
-		let page = conversations_page(&self.harness.app, PERSONAL.to_owned(), None, None)
-			.await
-			.expect("the page is read");
+		let page =
+			conversations_page(&self.harness.app, Caller::Host, PERSONAL.to_owned(), None, None)
+				.await
+				.expect("the page is read");
 		page.conversations
 			.into_iter()
 			.find(|row| row.conversation.id == conversation_id)
@@ -7966,5 +8273,190 @@ fn a_failed_admission_keeps_the_host_socket_open_and_the_next_device_approved_ad
 		assert!(harness.rostered_as(&unadmitted).await.is_some());
 		assert_eq!(harness.attempts(), attempts);
 		assert_eq!(harness.state(), HostingState::Online);
+	});
+}
+
+fn the_rooms_lists_of(frames: &[Value]) -> Vec<Value> {
+	frames
+		.iter()
+		.filter(|frame| frame["event"]["event"] == json!(AGENT_ROOMS_CHANGED_EVENT))
+		.map(|frame| frame["event"]["payload"]["conversationIds"].clone())
+		.collect()
+}
+
+fn opened_by(device: &SealingMember, member: &MemberWire) -> Vec<Value> {
+	stamped_opened_by(device, member).into_iter().map(unstamped).collect()
+}
+
+fn stamped_opened_by(device: &SealingMember, member: &MemberWire) -> Vec<Value> {
+	let space = member.space();
+	member
+		.texts
+		.iter()
+		.filter_map(|text| device.opened(&space, text))
+		.map(|frame| frame.plaintext)
+		.collect()
+}
+
+async fn open_turns_in(database: &db::Database, bot_id: &str, conversation_ids: &[&str]) {
+	for (started_at, conversation_id) in (1..).zip(conversation_ids) {
+		let turn = NewTurn {
+			id: format!("t-{conversation_id}"),
+			conversation_id: (*conversation_id).to_owned(),
+			started_at,
+		};
+		database.messages().start_run(turn, bot_id.to_owned()).await.expect("it runs");
+	}
+}
+
+#[test]
+fn each_member_hears_the_agent_rooms_without_the_main_conversation_of_another_person() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("agent-rooms-of-each-member").await;
+		let bea = SealingMember::new(BEA);
+		guest.harness.rostered(PERSONAL, &bea).await;
+		let mains = mains_of_the_host_and_bea(&guest).await;
+		let database = db::open(&guest.effects.database);
+		let of_the_guest = database
+			.conversations()
+			.ensure_chat("b-mine".to_owned(), Some(PERSONAL.to_owned()), owned_by(A_JOINER))
+			.await
+			.expect("the main conversation opens")
+			.id;
+		let rooms = ["c-mine", &mains.of_the_host, &of_the_guest, &mains.of_bea];
+		open_turns_in(&database, "b-mine", &rooms).await;
+
+		let app = guest.harness.app.core().clone();
+		conversation_state::observe(&app, &database, "c-mine").await.expect("the state reads");
+		let heard = guest.events_until_the_marker().await;
+
+		assert_eq!(the_rooms_lists_of(&heard), [json!([of_the_guest, "c-mine"])]);
+		assert_eq!(
+			the_rooms_lists_of(&opened_by(&bea, &guest.member)),
+			[json!([mains.of_bea, "c-mine"])]
+		);
+		let said = Value::from(heard).to_string();
+		assert!(!said.contains(&mains.of_bea) && !said.contains(&mains.of_the_host), "{said}");
+	});
+}
+
+#[test]
+fn a_member_follows_the_events_of_the_main_conversation_of_another_person_without_a_resume() {
+	run(async {
+		let (guest, bea, mains) = events_mixed_into_the_main_of_bea("seq-of-each-account").await;
+
+		let link_fed = |device: &SealingMember, account_id: &str| {
+			let link = MemberLink::new(INSTANCE, "Studio".to_owned(), account_id.to_owned());
+			let frames = stamped_opened_by(device, &guest.member);
+			let resyncs: Vec<Resync> =
+				frames.iter().map(|frame| link.received(&frame.to_string())).collect();
+			(frames, resyncs)
+		};
+		let (of_bea, resyncs_of_bea) = link_fed(&bea, BEA);
+		let (of_the_guest, resyncs_of_the_guest) = link_fed(&guest.member.device, A_JOINER);
+
+		assert!(of_bea.iter().any(|frame| frame.to_string().contains(&mains.of_bea)));
+		assert!(!of_the_guest.iter().any(|frame| frame.to_string().contains(&mains.of_bea)));
+		for resyncs in [resyncs_of_the_guest, resyncs_of_bea] {
+			assert!(!resyncs.contains(&Resync::Reread), "{resyncs:?}");
+			assert!(
+				!resyncs.iter().any(|resync| matches!(resync, Resync::Resume(_))),
+				"{resyncs:?}"
+			);
+		}
+	});
+}
+
+#[test]
+fn a_member_link_of_before_per_account_seqs_hears_every_frame_to_everyone_naming_its_account() {
+	run(async {
+		let (guest, bea, _) = events_mixed_into_the_main_of_bea("seq-of-an-older-member").await;
+		let frames = stamped_opened_by(&bea, &guest.member);
+		let naming_bea: Vec<&Value> =
+			frames.iter().filter(|frame| frame["seqs"][BEA].is_u64()).collect();
+
+		let older_link = MemberLink::new(INSTANCE, "Studio".to_owned(), BEA.to_owned());
+		let mut heard = older_link.subscribed().expect("an open link");
+		for frame in &frames {
+			older_link.received(&as_read_before_per_account_seqs(frame).to_string());
+		}
+		let mut delivered = Vec::new();
+		while let Ok(event) = heard.try_recv() {
+			delivered.push(serde_json::from_str::<Value>(&event).expect("a json event"));
+		}
+
+		assert!(!naming_bea.is_empty());
+		for frame in naming_bea {
+			assert_eq!(frame.get("seq"), None, "{frame}");
+			assert!(delivered.contains(&frame["event"]), "{frame}");
+		}
+	});
+}
+
+async fn events_mixed_into_the_main_of_bea(name: &str) -> (Guest, SealingMember, MainsOfTwoPeople) {
+	let mut guest = Guest::of_two_spaces(name).await;
+	let bea = SealingMember::new(BEA);
+	guest.harness.rostered(PERSONAL, &bea).await;
+	let mains = mains_of_the_host_and_bea(&guest).await;
+	for (n, (event, payload)) in naming_the_main(&mains.of_bea).into_iter().enumerate() {
+		numbered(&guest.harness, n);
+		guest.harness.app.emit(Event::new(event), payload).expect("emitted");
+	}
+	guest.events_until_the_marker().await;
+	(guest, bea, mains)
+}
+
+fn as_read_before_per_account_seqs(frame: &Value) -> Value {
+	let mut frame = frame.clone();
+	if let Some(fields) = frame.as_object_mut() {
+		fields.remove("seqs");
+		fields.remove("rest");
+	}
+	frame
+}
+
+fn owned_by(account_id: &str) -> ChatOwner {
+	ChatOwner::Member(account_id.to_owned())
+}
+
+fn naming_the_main(main: &str) -> Vec<(&'static str, Value)> {
+	let in_the_space = json!({ "spaceId": PERSONAL, "conversationId": main });
+	let stored = json!({ "spaceId": PERSONAL, "conversation": { "id": main } });
+	let in_the_conversation = json!({ "conversationId": main });
+	vec![
+		(STATE_CHANGED_EVENT, in_the_space.clone()),
+		(CONVERSATION_DELETED_EVENT, in_the_space),
+		(CONVERSATION_CREATED_EVENT, stored.clone()),
+		(CONVERSATION_UPDATED_EVENT, stored),
+		(MESSAGE_STORED_EVENT, in_the_conversation.clone()),
+		(COMPANION_ARRIVED_EVENT, in_the_conversation.clone()),
+		(COMPANION_SPOKE_EVENT, in_the_conversation.clone()),
+		(SUMMONS_DROPPED_EVENT, in_the_conversation.clone()),
+		(APPLICATION_INSTALLED_EVENT, in_the_conversation.clone()),
+		(ROUTINE_CHANGED_EVENT, in_the_conversation),
+		an_agent_event_of(a_runtime_scope(main)),
+		(
+			AGENT_ROOMS_CHANGED_EVENT,
+			json!({ "botId": "b-mine", "spaceId": PERSONAL, "conversationIds": [main] }),
+		),
+	]
+}
+
+#[test]
+fn a_second_member_hears_no_event_that_names_the_main_conversation_of_another_person() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("events-naming-a-main").await;
+		let mains = mains_of_the_host_and_bea(&guest).await;
+
+		for main in [&mains.of_bea, &mains.of_the_host] {
+			for (event, payload) in naming_the_main(main) {
+				guest.harness.app.emit(Event::new(event), payload).expect("emitted");
+			}
+		}
+		let heard = guest.events_until_the_marker().await;
+
+		let said = Value::from(heard.clone()).to_string();
+		assert!(!said.contains(&mains.of_bea) && !said.contains(&mains.of_the_host), "{said}");
+		assert_eq!(the_rooms_lists_of(&heard), [json!([]), json!([])]);
 	});
 }

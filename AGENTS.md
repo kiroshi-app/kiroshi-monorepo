@@ -218,6 +218,8 @@ A PR whose base is not main is merged by `scripts/pr-merge-sub.sh` alone in its 
 
 Auto-merge armed and a fix must land: run `scripts/pr-dequeue.sh` to disarm it, push, then run `scripts/pr-enqueue.sh` again. Never close the PR.
 
+A PR whose base is a `feature/*` integration branch is merged by running `scripts/pr-merge-integration.sh` alone in its own Bash call once its checks pass, never `pr-enqueue.sh`.
+
 Every push to main runs the full verify: lint, then vitest, website, core (kiroshi-core and the Rune workspace on Linux, macOS and Windows) and the Windows installer on the paths it changed, then ios. A red run opens the Red main ticket. A fix PR merges on its own fast gate whatever the state of main.
 
 A push to main retries a failing vitest or Rust test once and names every test that passed only on its retry in the job summary; a pull_request, `bun run ci` and `ci:fast` retry nothing.

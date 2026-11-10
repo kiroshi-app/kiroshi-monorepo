@@ -446,6 +446,7 @@ pub struct Titled {
 pub const OAUTH_AUTHORIZE: &str = "mcp_oauth_authorize";
 pub const OAUTH_STARTED: &str = "oauth_started";
 pub const OAUTH_CANCEL: &str = "mcp_oauth_cancel";
+pub const OAUTH_STORED: &str = "mcp_oauth_stored";
 pub const OAUTH_REVOKE: &str = "mcp_oauth_revoke";
 pub const OAUTH_REFRESH: &str = "mcp_oauth_refresh";
 
@@ -480,6 +481,17 @@ pub fn oauth_authorize_command(request: &AuthorizeRequest) -> Value {
 
 pub fn oauth_cancel_command() -> Value {
 	serde_json::json!({ "type": OAUTH_CANCEL })
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct StoredReport {
+	pub stored: bool,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub detail: Option<String>,
+}
+
+pub fn oauth_stored_command(report: &StoredReport) -> Value {
+	command_carrying(OAUTH_STORED, report)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
