@@ -257,7 +257,7 @@ const homeFrameOf = (canvasElement: HTMLElement) => {
 	return { viewport, composer }
 }
 
-const rowsOf = (viewport: HTMLElement) =>
+const rowBoxesOf = (viewport: HTMLElement) =>
 	Array.from(
 		viewport.querySelectorAll<HTMLElement>(
 			'[data-slot="message-scroller-item"]',
@@ -272,12 +272,12 @@ const expectNoSidewaysScroll = async (viewport: HTMLElement) => {
 const expectHomeFrame = async (canvasElement: HTMLElement) => {
 	const { viewport, composer } = homeFrameOf(canvasElement)
 	await waitFor(() => {
-		const lastRow = rowsOf(viewport).at(-1)
+		const lastRow = rowBoxesOf(viewport).at(-1)
 		expect(
 			Math.round(composer.getBoundingClientRect().top - (lastRow?.bottom ?? 0)),
 		).toBe(HOME_STAGE_GAP)
 	})
-	const rows = rowsOf(viewport)
+	const rows = rowBoxesOf(viewport)
 	for (const [index, row] of rows.slice(1).entries()) {
 		await expect(Math.round(row.top - rows[index].bottom)).toBe(HOME_STAGE_GAP)
 	}
