@@ -226,7 +226,6 @@ const currentEntries = () =>
 	within(sidebar())
 		.getAllByRole("button")
 		.filter((button) => button.getAttribute("aria-current") === "page")
-		.map((button) => button.getAttribute("aria-label") ?? button.textContent)
 
 const press = async (control: HTMLElement) => {
 	await act(async () => {
@@ -273,9 +272,9 @@ describe("the workspace frame", () => {
 		expect(harness.mounts).toEqual({ expandedSidebar: 1, titleBar: 1 })
 	})
 
-	it.each<{ path: RoutedPath; current: string[] }>([
+	it.each<{ path: RoutedPath; current: (string | RegExp)[] }>([
 		{ path: "/home", current: [NEW_CONVERSATION] },
-		{ path: "/missions", current: [`${MISSIONS}0`] },
+		{ path: "/missions", current: [MISSIONS_ENTRY] },
 		{ path: "/library", current: [LIBRARY] },
 		{ path: "/", current: [] },
 	])(
@@ -285,7 +284,7 @@ describe("the workspace frame", () => {
 
 			await navigateTo(router, path)
 
-			expect(currentEntries()).toEqual(current)
+			expect(currentEntries()).toEqual(current.map(entry))
 		},
 	)
 
