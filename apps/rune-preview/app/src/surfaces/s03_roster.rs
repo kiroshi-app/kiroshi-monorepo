@@ -20,7 +20,7 @@ use crate::app::{App, Workspace};
 use crate::host::HostError;
 use crate::model::{self, Message};
 use crate::source::Source;
-use crate::surfaces::s10_agent_settings;
+use crate::surfaces::{s02_rail, s10_agent_settings};
 
 use listing::{Listing, pinned_last, without_pin};
 use worker::{Answer, Call, Worker, Write};
@@ -61,6 +61,7 @@ pub struct State {
 	rosters: HashMap<String, Load>,
 	loading: HashSet<String>,
 	shown: Option<String>,
+	is_shown_unread: bool,
 	reading_more: Option<String>,
 	opening: Option<String>,
 	renaming: Option<String>,
@@ -322,18 +323,18 @@ impl State {
 		}
 	}
 
-	fn follow(&mut self, source: &Source, space_id: &str) {
-		if self.source.is_none() {
-			self.source = Some(source.clone());
-			self.flush();
+	fn follow(&mut self, space_id: &str, source: Option<Source>) {
+		if self.shown.as_deref() != Some(space_id) {
+			self.shown = Some(space_id.to_owned());
+			self.renaming = None;
+			self.opening = None;
+			self.is_shown_unread = true;
 		}
-		if self.shown.as_deref() == Some(space_id) {
-			return;
-		}
-		self.shown = Some(space_id.to_owned());
-		self.renaming = None;
-		self.opening = None;
-		if !matches!(self.rosters.get(space_id), Some(Load::Failed(_))) {
+		let Some(source) = source else { return };
+		self.flush();
+		self.source = Some(source);
+		let is_unread = std::mem::take(&mut self.is_shown_unread);
+		if is_unread && !matches!(self.rosters.get(space_id), Some(Load::Failed(_))) {
 			self.load(space_id.to_owned());
 		}
 	}
@@ -535,21 +536,23 @@ impl State {
 
 	fn flush(&mut self) {
 		if self.worker.is_none()
-			&& let (Some(source), Some(waker)) = (self.source.as_ref(), self.waker.as_ref())
+			&& let Some(waker) = self.waker.as_ref()
 		{
-			self.worker = Worker::spawn(source.clone(), waker.clone());
+			self.worker = Worker::spawn(waker.clone());
 		}
-		let Some(worker) = self.worker.as_ref() else { return };
+		let (Some(worker), Some(source)) = (self.worker.as_ref(), self.source.as_ref()) else {
+			return;
+		};
 		for call in self.queued.drain(..) {
-			worker.send(call);
+			worker.send(source.clone(), call);
 		}
 	}
 }
 
 fn follow_shown(app: &mut App) {
-	let Some(ready) = app.ready() else { return };
-	let (source, space_id) = (ready.source.clone(), ready.space.id.clone());
-	app.surfaces.s03_roster.follow(&source, &space_id);
+	let Some(space_id) = app.ready().map(|ready| ready.space.id.clone()) else { return };
+	let source = s02_rail::source_of(app, &space_id);
+	app.surfaces.s03_roster.follow(&space_id, source);
 }
 
 pub fn poll(app: &mut App) -> bool {

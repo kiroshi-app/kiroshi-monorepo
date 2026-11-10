@@ -63,7 +63,7 @@ fn answered(source: &Source, call: Call) -> Answer {
 			Answer::Hosting { space_id, state }
 		}
 		Call::Load(space_id) => {
-			let content = app::space_content(source, &space_id);
+			let content = app::space_content(&source.of_space(&space_id), &space_id);
 			Answer::Loaded { space_id, content }
 		}
 		Call::Connect(joined_id) => {

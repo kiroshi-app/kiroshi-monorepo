@@ -15,6 +15,22 @@ pub enum Heard {
 	Finished(LibraryDocumentWriterFinished),
 }
 
+impl Heard {
+	pub fn in_space(mut self, remote_id: &str, joined_id: &str) -> Heard {
+		let space_id = match &mut self {
+			Heard::Changed(changed) => &mut changed.space_id,
+			Heard::Updated(updated) => &mut updated.space_id,
+			Heard::Renamed(renamed) => &mut renamed.space_id,
+			Heard::Presence(presence) => &mut presence.space_id,
+			Heard::Finished(finished) => &mut finished.space_id,
+		};
+		if space_id == remote_id {
+			joined_id.clone_into(space_id);
+		}
+		self
+	}
+}
+
 fn read<T: DeserializeOwned>(
 	payload: Value,
 	heard: fn(T) -> Heard,
