@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react"
+import { useRef, useState } from "react"
 
 import { i18n } from "@workspace/ui/lib/i18n"
 
@@ -46,10 +46,7 @@ export const useHomeSend = ({
 	startConversation,
 	openConversation,
 }: HomeSendOptions): HomeSend => {
-	const owner = useMemo<AttachmentsOwner>(
-		() => ({ kind: "home", id: spaceId ?? "" }),
-		[spaceId],
-	)
+	const owner: AttachmentsOwner = { kind: "home", id: spaceId ?? "" }
 	const homeKey = ownerKey(owner)
 	const { staged, documents } = useControllerState(attachments)
 	const isSending = useRef(false)
