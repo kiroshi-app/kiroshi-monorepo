@@ -1,10 +1,17 @@
 import type { ReactNode } from "react"
 
+import { cn } from "@workspace/ui/lib/utils"
+
 type HomeLayoutProps = { stage: "empty"; children: ReactNode }
+
+const EVENS_SCREEN_COLUMN_PADDING = "pb-4"
 
 const HomeLayout = ({ stage, children }: HomeLayoutProps) => (
 	<div
-		className="flex size-full flex-col items-center overflow-y-auto px-4 pb-24"
+		className={cn(
+			"flex size-full flex-1 flex-col items-center px-4",
+			EVENS_SCREEN_COLUMN_PADDING,
+		)}
 		data-slot="home-layout"
 		data-stage={stage}
 	>

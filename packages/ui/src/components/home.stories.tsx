@@ -4,6 +4,7 @@ import { expect, fn, screen, waitFor, within } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import {
 	isInBrowserRunner,
+	slotIn,
 	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
@@ -33,7 +34,11 @@ import {
 	raiseFailureNotice,
 } from "@workspace/ui/components/notice-surface"
 import type { PromptAttachment } from "@workspace/ui/components/prompt-attachments"
-import { PROMPT_ATTACHMENTS } from "@workspace/ui/components/prompt-attachments.fixtures"
+import {
+	LONG_PROMPT_ATTACHMENTS,
+	PROMPT_ATTACHMENTS,
+} from "@workspace/ui/components/prompt-attachments.fixtures"
+import { ScreenLayout } from "@workspace/ui/components/screen-layout"
 import { ToolApproval } from "@workspace/ui/components/tool-approval"
 
 const ATLAS: HomeAgent = {
@@ -86,12 +91,28 @@ const at = (hours: number, minutes: number) =>
 const FLIGHTS_ASK =
 	"Can you find flights to Lisbon for the offsite, 12 to 15 March?"
 
-type HomePanelProps = { children: ReactNode }
+const HOME_PANEL_HEIGHT = 848
 
-const HomePanel = ({ children }: HomePanelProps) => (
-	<div className="h-212 w-343 overflow-clip rounded-xl border border-foreground/6 bg-card">
+const HOME_COLUMN_WIDTH = 680
+
+type HomePanelProps = { children: ReactNode; height: number }
+
+const HomePanel = ({ children, height }: HomePanelProps) => (
+	<div
+		className="w-343 overflow-clip rounded-xl border border-foreground/6 bg-card"
+		data-content-card=""
+		style={{ height }}
+	>
 		{children}
 	</div>
+)
+
+type EmptyStageProps = { children: ReactNode }
+
+const EmptyStage = ({ children }: EmptyStageProps) => (
+	<ScreenLayout width="full">
+		<HomeLayout stage="empty">{children}</HomeLayout>
+	</ScreenLayout>
 )
 
 const selectedAgent = fn()
@@ -122,7 +143,7 @@ const EmptyHome = ({
 	attachments,
 	after,
 }: EmptyHomeProps) => (
-	<HomeLayout stage="empty">
+	<EmptyStage>
 		<HomeGreeting agent={agent} firstName={firstName} period={period} />
 		<HomeComposer
 			agents={AGENTS}
@@ -144,7 +165,7 @@ const EmptyHome = ({
 			selectedAgentId={agent.id}
 		/>
 		{after}
-	</HomeLayout>
+	</EmptyStage>
 )
 
 const meta = preview.meta({
@@ -161,8 +182,8 @@ const meta = preview.meta({
 		},
 	},
 	decorators: [
-		(Story) => (
-			<HomePanel>
+		(Story, { parameters }) => (
+			<HomePanel height={parameters.homePanelHeight ?? HOME_PANEL_HEIGHT}>
 				<Story />
 			</HomePanel>
 		),
@@ -178,6 +199,52 @@ const meta = preview.meta({
 const withDescription = (story: string) => ({
 	docs: { description: { story } },
 })
+
+const inWindowAround = (panelHeight: number) => {
+	const viewport = `home-window-${panelHeight}`
+
+	return {
+		globals: { viewport: { value: viewport } },
+		parameters: {
+			homePanelHeight: panelHeight,
+			viewport: {
+				options: {
+					[viewport]: {
+						name: `Window around a ${panelHeight}px Home panel`,
+						styles: { width: "1440px", height: `${panelHeight + 64}px` },
+					},
+				},
+			},
+		},
+	}
+}
+
+const emptyStageBoxesOf = (canvasElement: HTMLElement) => {
+	const block = slotIn(canvasElement, "home-layout").firstElementChild
+	if (!block) throw new globalThis.Error("The empty Home draws no block")
+
+	return {
+		contentArea: slotIn(
+			canvasElement,
+			"screen-layout-scroller",
+		).getBoundingClientRect(),
+		block: block.getBoundingClientRect(),
+	}
+}
+
+const expectBlockInTheMiddle = async (canvasElement: HTMLElement) => {
+	const { contentArea, block } = emptyStageBoxesOf(canvasElement)
+	const panel = slotIn(canvasElement, "screen-layout").parentElement
+
+	await expect(Math.round(contentArea.height)).toBe(panel?.clientHeight)
+	await expect(
+		Math.abs(block.top - contentArea.top - (contentArea.bottom - block.bottom)),
+	).toBeLessThanOrEqual(1)
+	await expect(
+		Math.abs(block.left - contentArea.left - (contentArea.right - block.right)),
+	).toBeLessThanOrEqual(1)
+	await expect(Math.round(block.width)).toBe(HOME_COLUMN_WIDTH)
+}
 
 export const WithAFirstName = meta.story({
 	name: "1a · With a first name",
@@ -203,6 +270,40 @@ export const WithoutAFirstName = meta.story({
 		await expect(
 			canvas.getByRole("heading", { name: "Morning. What’s next?" }),
 		).toBeVisible()
+	},
+})
+
+const ARTBOARD_WINDOW = inWindowAround(HOME_PANEL_HEIGHT)
+
+const TALL_WINDOW = inWindowAround(1200)
+
+export const CentredInThePanel = meta.story({
+	name: "Fresh page in the middle of the panel",
+	render: () => <EmptyHome />,
+	globals: ARTBOARD_WINDOW.globals,
+	parameters: {
+		...ARTBOARD_WINDOW.parameters,
+		...withDescription(
+			"The fresh page at the artboard panel height, mounted inside ScreenLayout the way the app nests it. Check that the greeting and composer block has as much space above it as below it, within 1px, and keeps its column width centred.",
+		),
+	},
+	play: async ({ canvasElement }) => {
+		await expectBlockInTheMiddle(canvasElement)
+	},
+})
+
+export const CentredInATallPanel = meta.story({
+	name: "Fresh page in the middle of a tall panel",
+	render: () => <EmptyHome />,
+	globals: TALL_WINDOW.globals,
+	parameters: {
+		...TALL_WINDOW.parameters,
+		...withDescription(
+			"The fresh page in a taller window: the block follows the content area and stays in its vertical middle, within 1px. Pick the twin above for the artboard height.",
+		),
+	},
+	play: async ({ canvasElement }) => {
+		await expectBlockInTheMiddle(canvasElement)
 	},
 })
 
@@ -319,14 +420,14 @@ export const PickerWithoutAgents = meta.story({
 	name: "Picker without agents",
 	tags: ["test-only"],
 	render: () => (
-		<HomeLayout stage="empty">
+		<EmptyStage>
 			<HomeComposer
 				agents={[]}
 				onAttach={attached}
 				onSelectAgent={selectedAgent}
 				selectedAgentId="atlas"
 			/>
-		</HomeLayout>
+		</EmptyStage>
 	),
 	parameters: withDescription(
 		"Proves the composer before any agent exists in the Space, a case no artboard draws: the chip keeps an accessible name and the field falls back to the plain placeholder, with no dangling agent name.",
@@ -373,13 +474,42 @@ export const FilesAttached = meta.story({
 	},
 })
 
+const SHORT_WINDOW = inWindowAround(400)
+
+const GROWN_DRAFT = Array.from({ length: 24 }, () => FLIGHTS_ASK).join("\n")
+
+export const ComposerGrownPastAShortPanel = meta.story({
+	name: "Composer grown past a short panel scrolls from the greeting",
+	render: () => (
+		<EmptyHome attachments={LONG_PROMPT_ATTACHMENTS} draft={GROWN_DRAFT} />
+	),
+	globals: SHORT_WINDOW.globals,
+	parameters: {
+		...SHORT_WINDOW.parameters,
+		...withDescription(
+			"A draft of many lines with files attached, until the block is taller than the content area. Check that the greeting starts at the top of the content area, never above it, and that the content area scrolls to reach the rest.",
+		),
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const { contentArea, block } = emptyStageBoxesOf(canvasElement)
+		const greeting = canvas
+			.getByRole("heading", { name: "Morning, Sam. What’s next?" })
+			.getBoundingClientRect()
+		const scroller = slotIn(canvasElement, "screen-layout-scroller")
+
+		await expect(block.height).toBeGreaterThan(contentArea.height)
+		await expect(greeting.top).toBeGreaterThanOrEqual(contentArea.top)
+		await expect(scroller.scrollHeight).toBeGreaterThan(scroller.clientHeight)
+	},
+})
+
 export const Loading = meta.story({
 	name: "5a · Loading",
 	render: () => (
-		<HomeLayout stage="empty">
+		<EmptyStage>
 			<HomeGreetingSkeleton />
 			<HomeComposerSkeleton />
-		</HomeLayout>
+		</EmptyStage>
 	),
 	parameters: withDescription(
 		"Reach for this while the Space and its agents load: the greeting and the composer drawn as skeletons, Add files and send idle, nothing focusable.",
@@ -544,7 +674,7 @@ export const MissionBlocked = meta.story({
 export const ApprovalWaits = meta.story({
 	name: "An approval waits on you",
 	render: () => (
-		<HomeLayout stage="empty">
+		<EmptyStage>
 			<HomeGreeting agent={ATLAS} firstName="Sam" period="afternoon" />
 			<HomeRequest
 				askedBy={<HomeAskedByLine agent={PICO} room={LISBON_OFFSITE} />}
@@ -557,7 +687,7 @@ export const ApprovalWaits = meta.story({
 					tool="Duffel · create_order"
 				/>
 			</HomeRequest>
-		</HomeLayout>
+		</EmptyStage>
 	),
 	parameters: withDescription(
 		"An agent in a room needs an approval: the approval takes the composer's place, the asked-by line above it says who and where.",

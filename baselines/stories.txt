@@ -178,6 +178,9 @@ branding-spacetint--variants
 conversation-home-home--afternoon
 conversation-home-home--approval-waits
 conversation-home-home--band-shown
+conversation-home-home--centred-in-a-tall-panel
+conversation-home-home--centred-in-the-panel
+conversation-home-home--composer-grown-past-a-short-panel
 conversation-home-home--could-not-send
 conversation-home-home--evening
 conversation-home-home--field-filled
