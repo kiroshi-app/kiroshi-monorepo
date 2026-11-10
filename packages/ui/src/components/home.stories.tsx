@@ -290,6 +290,13 @@ const bubbleBoxesOf = (viewport: HTMLElement, from: MessageSender) =>
 		(bubble) => bubble.getBoundingClientRect(),
 	)
 
+const HOME_BUBBLE_PADDING = "12px"
+
+const filledBubblesOf = (viewport: HTMLElement) =>
+	viewport.querySelectorAll<HTMLElement>(
+		'[data-slot="message-bubble"]:not([data-variant="bare"], [data-variant="ghost"]) [data-slot="message-bubble-content"]',
+	)
+
 const edgesOf = (box: DOMRect) => [Math.round(box.left), Math.round(box.right)]
 
 const expectNoSidewaysScroll = async (viewport: HTMLElement) => {
@@ -313,6 +320,14 @@ const expectHomeEdges = async (
 	for (const bubble of bubbleBoxesOf(viewport, "assistant")) {
 		await expect(Math.round(bubble.left)).toBe(Math.round(column.left))
 		await expect(bubble.width).toBeLessThanOrEqual(AGENT_BUBBLE_MAX_WIDTH)
+	}
+	for (const bubble of filledBubblesOf(viewport)) {
+		await expect(bubble).toHaveStyle({
+			paddingTop: HOME_BUBBLE_PADDING,
+			paddingRight: HOME_BUBBLE_PADDING,
+			paddingBottom: HOME_BUBBLE_PADDING,
+			paddingLeft: HOME_BUBBLE_PADDING,
+		})
 	}
 	await expectNoSidewaysScroll(viewport)
 }
@@ -788,6 +803,20 @@ export const LastRowHighlighted = meta.story({
 		await expectHomeFrame(canvasElement)
 		const [, plain, lit] = rowBoxesOf(viewport)
 		await expect(lit.height).toBe(plain.height)
+		for (const answer of viewport.querySelectorAll(
+			'[data-slot="message"][data-from="assistant"]',
+		)) {
+			const bubble = answer.querySelector(
+				'[data-slot="message-bubble-content"]',
+			)
+			const authorLine = answer.querySelector('[data-slot="author-line"]')
+			await expect(
+				Math.round(
+					(bubble?.getBoundingClientRect().bottom ?? 0) -
+						(authorLine?.getBoundingClientRect().bottom ?? 0),
+				),
+			).toBe(12)
+		}
 	},
 })
 
