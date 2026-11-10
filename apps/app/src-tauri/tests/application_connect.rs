@@ -13,7 +13,7 @@ use kiroshi_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
 use kiroshi_app::agent::AgentState;
 use kiroshi_app::environment::contract::{
 	EnvOwner, EnvScope, Values, OAUTH_ACCESS_TOKEN, OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET,
-	OAUTH_REASON, OAUTH_REDIRECT_URI, OAUTH_SERVER_URL,
+	OAUTH_CONNECTED_AT, OAUTH_REASON, OAUTH_REDIRECT_URI, OAUTH_SERVER_URL,
 };
 use kiroshi_app::environment::store;
 use kiroshi_app::mcp_oauth::commands::{mcp_oauth_connect, McpOauthState};
@@ -48,6 +48,7 @@ static ONE_SIDECAR_AT_A_TIME: Mutex<()> = Mutex::new(());
 struct Connected {
 	settled: Result<(), OauthError>,
 	kept: Values,
+	connected_at: Option<String>,
 	flows: Vec<String>,
 	stored: serde_json::Value,
 }
@@ -150,7 +151,8 @@ fn connected_from(staged: &Staged) -> Connected {
 		sidecar.checked(&Values::new()).await.expect("a later command is answered");
 		settled
 	});
-	let kept = store::values(root, scope).expect("the scope is readable");
+	let mut kept = store::values(root, scope).expect("the scope is readable");
+	let connected_at = kept.remove(OAUTH_CONNECTED_AT);
 	tauri::async_runtime::block_on(terminate_session(
 		app.handle(),
 		app.state::<AgentState>().inner(),
@@ -160,7 +162,7 @@ fn connected_from(staged: &Staged) -> Connected {
 		.ok()
 		.and_then(|line| serde_json::from_str(&line).ok())
 		.unwrap_or_default();
-	Connected { settled, kept, flows, stored }
+	Connected { settled, kept, connected_at, flows, stored }
 }
 
 fn sealed(dir: &Path, mode: u32) {
@@ -196,6 +198,7 @@ fn a_handed_client_settling_with_no_grant_is_followed_by_one_new_registration() 
 
 		assert_eq!(connected.settled, Ok(()), "{case}");
 		assert_eq!(connected.kept, granted_anew(), "{case}");
+		assert!(connected.connected_at.is_some(), "{case}");
 		assert!(!connected.kept.contains_key(OAUTH_REASON), "{case}");
 		assert_eq!(connected.flows, flows(&[HANDED, REGISTERED]), "{case}");
 	}
@@ -247,6 +250,7 @@ fn a_stored_client_holding_no_redirect_uri_is_never_handed() {
 	assert_eq!(connected.settled, Ok(()));
 	assert_eq!(connected.flows, flows(&[REGISTERED]));
 	assert_eq!(connected.kept, granted_anew());
+	assert!(connected.connected_at.is_some());
 }
 
 #[test]
@@ -262,6 +266,7 @@ fn a_stored_client_bound_to_another_url_is_never_handed() {
 	assert_eq!(connected.settled, Ok(()));
 	assert_eq!(connected.flows, flows(&[REGISTERED]));
 	assert_eq!(connected.kept, granted_anew());
+	assert!(connected.connected_at.is_some());
 }
 
 #[test]
@@ -272,6 +277,7 @@ fn a_stored_client_of_an_unbound_grant_is_never_handed() {
 	assert_eq!(connected.settled, Ok(()));
 	assert_eq!(connected.flows, flows(&[REGISTERED]));
 	assert_eq!(connected.kept, granted_anew());
+	assert!(connected.connected_at.is_some());
 }
 
 #[test]
