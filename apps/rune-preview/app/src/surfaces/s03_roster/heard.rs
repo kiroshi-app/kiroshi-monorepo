@@ -13,6 +13,21 @@ pub enum Heard {
 	StateChanged { conversation_id: String, observed: ObservedState },
 }
 
+impl Heard {
+	pub fn in_space(self, remote_id: &str, joined_id: &str) -> Heard {
+		match self {
+			Heard::Stored(mut row) => {
+				let space_id = &mut row.conversation.space_id;
+				if space_id.as_deref() == Some(remote_id) {
+					*space_id = Some(joined_id.to_owned());
+				}
+				Heard::Stored(row)
+			}
+			heard @ (Heard::Deleted { .. } | Heard::StateChanged { .. }) => heard,
+		}
+	}
+}
+
 fn field<T: DeserializeOwned>(payload: &Value, name: &str) -> Result<T, serde_json::Error> {
 	serde_json::from_value(payload.get(name).cloned().unwrap_or(Value::Null))
 }

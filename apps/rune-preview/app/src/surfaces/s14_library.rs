@@ -38,6 +38,7 @@ use crate::conversations::now_ms;
 use crate::host::HostError;
 use crate::navigation::Route;
 use crate::source::Source;
+use crate::surfaces::s02_rail;
 
 pub use heard::{Heard, heard_of};
 pub use view::{GRID, layers, panel, view};
@@ -282,8 +283,9 @@ impl State {
 		self.flush();
 	}
 
-	pub fn use_source(&mut self, source: Source) {
-		self.source.get_or_insert(source);
+	pub fn use_source(&mut self, source: Option<Source>) {
+		self.flush();
+		self.source = source;
 	}
 
 	pub fn enter_space(&mut self, space_id: &str, is_joined: bool) {
@@ -1028,13 +1030,15 @@ impl State {
 
 	fn flush(&mut self) {
 		if self.worker.is_none()
-			&& let (Some(source), Some(waker)) = (self.source.as_ref(), self.waker.as_ref())
+			&& let Some(waker) = self.waker.as_ref()
 		{
-			self.worker = Worker::spawn(source.clone(), waker.clone());
+			self.worker = Worker::spawn(waker.clone());
 		}
-		let Some(worker) = self.worker.as_ref() else { return };
+		let (Some(worker), Some(source)) = (self.worker.as_ref(), self.source.as_ref()) else {
+			return;
+		};
 		for call in self.queued.drain(..) {
-			worker.send(call);
+			worker.send(source.clone(), call);
 		}
 	}
 }
@@ -1053,13 +1057,14 @@ fn matches_query(item: &LibraryItem, query: &str) -> bool {
 }
 
 fn entered(app: &mut App) -> bool {
-	let Some(ready) = app.ready() else { return false };
-	let (source, space_id) = (ready.source.clone(), ready.space.id.clone());
+	let Some(space_id) = app.ready().map(|ready| ready.space.id.clone()) else { return false };
+	let source = s02_rail::source_of(app, &space_id);
+	let is_readable = source.is_some();
 	let is_joined = app.surfaces.s02_rail.is_joined(&space_id);
 	let library = &mut app.surfaces.s14_library;
-	library.use_source(source);
 	library.enter_space(&space_id, is_joined);
-	true
+	library.use_source(source);
+	is_readable
 }
 
 fn raise_all(app: &mut App) {

@@ -1625,7 +1625,8 @@ fn app_showing(space_id: &str) -> App {
 #[test]
 fn a_joined_space_enters_its_library_as_joined_and_a_hosted_one_as_hosted() {
 	let mut joined = app_showing("joined-studio");
-	assert!(super::entered(&mut joined));
+	assert!(!super::entered(&mut joined));
+	assert!(matches!(joined.surfaces.s14_library.listing, Listing::Idle));
 	assert!(joined.surfaces.s14_library.is_joined);
 
 	let mut hosted = app_showing(SPACE);
