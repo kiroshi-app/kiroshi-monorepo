@@ -77,13 +77,19 @@ export const PinnedZoneThenSortedZone = meta.story({
 		)
 		await expect(within(pinned).getByText(DESK_ROOM.name)).toBeVisible()
 		await expect(within(sorted).getByText(ATLAS.name)).toBeVisible()
-		await expect(
-			slotsIn(canvasElement, "roster-zone-header").map(
-				(header) => header.textContent,
-			),
-		).toEqual(["Pinned", "Conversations"])
+		await expectZoneHeaders(canvasElement, ["Pinned", "Conversations"])
 	},
 })
+
+const expectZoneHeaders = async (
+	canvasElement: HTMLElement,
+	labels: string[],
+) =>
+	expect(
+		slotsIn(canvasElement, "roster-zone-header").map(
+			(header) => header.textContent,
+		),
+	).toEqual(labels)
 
 const sortedZoneHeaderOf = (canvasElement: HTMLElement) =>
 	slotsIn(canvasElement, "roster-zone-header").at(-1) as HTMLElement
@@ -978,16 +984,6 @@ const MISSIONS_ROSTER = {
 
 const rowNamed = (canvasElement: HTMLElement, name: string) =>
 	within(canvasElement).getByRole("button", { name: new RegExp(name) })
-
-const expectZoneHeaders = async (
-	canvasElement: HTMLElement,
-	labels: string[],
-) =>
-	expect(
-		slotsIn(canvasElement, "roster-zone-header").map(
-			(header) => header.textContent,
-		),
-	).toEqual(labels)
 
 const pixelsOf = (element: Element, property: string) =>
 	Number.parseFloat(getComputedStyle(element).getPropertyValue(property))
