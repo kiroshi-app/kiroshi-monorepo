@@ -101,14 +101,12 @@ const launch = async (tabs = createWorkspaceTabs()) => {
 		wrapper: createQueryTestWrapper().wrapper,
 	})
 	await settle()
-	return router
+	return { tabs, router }
 }
 
-const launchOnHome = async () => {
-	const router = await launch()
-	await act(() => router.navigate({ to: "/home" }))
+const show = async (navigation: () => Promise<void>) => {
+	await act(navigation)
 	await settle()
-	return router
 }
 
 const coldLaunchOnHome = async () => {
@@ -122,7 +120,7 @@ const coldLaunchOnHome = async () => {
 		undefined,
 		launchPageOf(readMirror()),
 	)
-	return { tabs, router: await launch(tabs) }
+	return launch(tabs)
 }
 
 const click = async (
@@ -137,7 +135,8 @@ const click = async (
 
 it("shows the clicked conversation in the tab that showed the New conversation page", async () => {
 	const { room, port } = await aWorkspace()
-	const router = await launchOnHome()
+	const { tabs, router } = await launch()
+	await show(() => router.navigate({ to: "/home" }))
 	expect(slot("home-layout")).not.toBeNull()
 
 	await click(port, { kind: "conversation", id: room.id })
@@ -145,16 +144,14 @@ it("shows the clicked conversation in the tab that showed the New conversation p
 	expect(router.state.location.pathname).toBe("/")
 	expect(router.state.location.search).toEqual({ conversation: room.id })
 	expect(isConversationScreenShown()).toBe(true)
-	expect(router.history.canGoBack()).toBe(true)
+	expect(tabCountIn(tabs)).toBe(1)
 })
 
 it("shows the conversation of the clicked agent over the New conversation page", async () => {
 	const { agent, port } = await aWorkspace()
-	const router = await launch()
-	await act(() => router.navigate({ to: "/", search: { bot: agent.id } }))
-	await settle()
-	await act(() => router.navigate({ to: "/home" }))
-	await settle()
+	const { router } = await launch()
+	await show(() => router.navigate({ to: "/", search: { bot: agent.id } }))
+	await show(() => router.navigate({ to: "/home" }))
 	expect(slot("home-layout")).not.toBeNull()
 
 	await click(port, { kind: "bot", id: agent.id })
