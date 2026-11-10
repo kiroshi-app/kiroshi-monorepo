@@ -678,35 +678,46 @@ pub enum Evolved {
 }
 
 pub fn evolve(root: &Path, bot: &Bot) -> Evolved {
+	let owner = format!("bot {}", bot.id);
 	let bundle = match dir(root, &bot.id) {
 		Ok(bundle) => bundle,
-		Err(error) => return bot_write_failed(&root.join(PLUGINS_DIR), unfound(error)),
+		Err(error) => {
+			return bot_write_failed(&owner, &root.join(PLUGINS_DIR).join(&bot.id), unfound(error))
+		}
 	};
 	let _serialised = serialised(&bundle);
-	evolve_serialised(root, bot, &bundle)
+	evolve_serialised(root, bot, &bundle, &owner)
 }
 
-fn evolve_serialised(root: &Path, bot: &Bot, bundle: &Path) -> Evolved {
+fn evolve_serialised(root: &Path, bot: &Bot, bundle: &Path, owner: &str) -> Evolved {
 	let changed = match git::changes(bundle) {
 		Ok(changed) => changed,
-		Err(error) => return bot_write_failed(bundle, error),
+		Err(error) => return bot_write_failed(owner, bundle, error),
 	};
 	if changed.is_empty() {
 		return Evolved::Unchanged;
 	}
-	let _ = rewrite_agent(root, bot);
+	if let Err(error) = rewrite_agent(root, bot) {
+		log::warn!(
+			"the agent file of {owner} under {} was not rewritten: {error}",
+			bundle.display()
+		);
+	}
 	let (title, body) =
 		learned(bundle).unwrap_or_else(|| (EVOLVED_TITLE.to_owned(), changed.join("\n")));
-	bot_recorded(bundle, title, &body)
+	bot_recorded(owner, bundle, title, &body)
 }
 
-fn bot_recorded(bundle: &Path, title: String, body: &str) -> Evolved {
+fn bot_recorded(owner: &str, bundle: &Path, title: String, body: &str) -> Evolved {
 	let recorded = match git::record(bundle, Author::Bot, &title, body) {
 		Ok(recorded) => recorded,
-		Err(error) => return bot_write_failed(bundle, error),
+		Err(error) => return bot_write_failed(owner, bundle, error),
 	};
 	if let Err(error) = recorded.tightened {
-		eprintln!("the bot write recorded under {} was left open: {error}", bundle.display());
+		log::warn!(
+			"the write of {owner} recorded under {} was left open: {error}",
+			bundle.display()
+		);
 	}
 	let Some(commit_id) = recorded.id else {
 		return Evolved::Unchanged;
@@ -715,8 +726,8 @@ fn bot_recorded(bundle: &Path, title: String, body: &str) -> Evolved {
 	Evolved::Recorded(Evolution { commit_id, title })
 }
 
-fn bot_write_failed(bundle: &Path, error: git2::Error) -> Evolved {
-	eprintln!("the bot write under {} was not recorded: {error}", bundle.display());
+fn bot_write_failed(owner: &str, bundle: &Path, error: git2::Error) -> Evolved {
+	log::warn!("the write of {owner} under {} was not recorded: {error}", bundle.display());
 	Evolved::Failed(error)
 }
 
@@ -1193,6 +1204,7 @@ mod tests {
 	use crate::db::connection::fixture_root;
 	use crate::db::repositories::conversations::Bot;
 	use crate::removed_on_drop::RemovedOnDrop;
+	use crate::test_log::{capturing, logged_naming};
 
 	pub(super) fn a_bot(name: &str, instructions: &str) -> Bot {
 		Bot {
@@ -3494,6 +3506,83 @@ They said figs, not dates.
 			dir(&root, &bot.id).expect("the bundle is held").join(LEARNED_NAME).is_file(),
 			"the note was thrown away"
 		);
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	#[test]
+	fn a_turn_whose_commit_fails_leaves_one_trace_naming_the_bot_and_the_bundle() {
+		capturing();
+		let root = a_root("evolve-refused-trace");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		a_bot_writes(&root, &bot.id, "figs", "Bean likes figs.");
+		let bundle = dir(&root, &bot.id).expect("the bundle is held");
+		a_locked_index(&bundle);
+
+		assert!(matches!(evolve(&root, &bot), Evolved::Failed(_)));
+
+		let traces = logged_naming(&bundle.display().to_string());
+		assert_eq!(traces.len(), 1, "{traces:?}");
+		assert!(traces[0].contains(&format!("bot {}", bot.id)), "{}", traces[0]);
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	#[test]
+	fn a_turn_on_a_bundle_that_is_gone_leaves_one_trace_naming_the_bot_and_the_path() {
+		capturing();
+		let root = a_root("evolve-unfound-trace");
+		let bot = a_bot("Bean", "Answer briefly.");
+
+		assert!(matches!(evolve(&root, &bot), Evolved::Failed(_)));
+
+		let expected = root.join(PLUGINS_DIR).join(&bot.id).display().to_string();
+		let traces = logged_naming(&expected);
+		assert_eq!(traces.len(), 1, "{traces:?}");
+		assert!(traces[0].contains(&format!("bot {}", bot.id)), "{}", traces[0]);
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	#[test]
+	fn a_turn_whose_agent_file_cannot_be_rewritten_leaves_one_trace_and_is_still_recorded() {
+		capturing();
+		let root = a_root("evolve-rewrite-trace");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		a_bot_writes(&root, &bot.id, "figs", "Bean likes figs.");
+		let bundle = dir(&root, &bot.id).expect("the bundle is held");
+		let agent = agent_path(&root, &bot.id).expect("the agent has a path");
+		fs::remove_file(&agent).expect("the agent file goes");
+		fs::create_dir(&agent).expect("a directory takes its place");
+
+		recorded(evolve(&root, &bot)).expect("the turn is recorded");
+
+		let traces = logged_naming(&bundle.display().to_string());
+		assert_eq!(traces.len(), 1, "{traces:?}");
+		assert!(traces[0].contains("not rewritten"), "{}", traces[0]);
+		assert!(traces[0].contains(&format!("bot {}", bot.id)), "{}", traces[0]);
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	#[test]
+	fn a_turn_whose_commit_is_left_open_leaves_one_trace_naming_the_bot_and_the_bundle() {
+		capturing();
+		let root = a_root("evolve-left-open-trace");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		a_bot_writes(&root, &bot.id, "figs", "Bean likes figs.");
+		let bundle = dir(&root, &bot.id).expect("the bundle is held");
+
+		git::stop_the_next_owner_only_walk();
+		recorded(evolve(&root, &bot)).expect("the turn is recorded");
+
+		let traces = logged_naming(&bundle.display().to_string());
+		assert_eq!(traces.len(), 1, "{traces:?}");
+		assert!(traces[0].contains("left open"), "{}", traces[0]);
+		assert!(traces[0].contains(&format!("bot {}", bot.id)), "{}", traces[0]);
 
 		let _ = fs::remove_dir_all(&root);
 	}
