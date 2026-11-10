@@ -10,6 +10,10 @@ import type {
 	MissionStatus,
 	MissionTicketLink,
 } from "@workspace/ui/components/mission"
+import type {
+	MissionsPageAgent,
+	MissionsPageMission,
+} from "@workspace/ui/components/missions-page"
 import type { MissionsPanelMission } from "@workspace/ui/components/missions-panel"
 import type { ReportedRunRowModel } from "@workspace/ui/components/reported-run-row"
 import type { RosterBot } from "@workspace/ui/components/roster"
@@ -474,3 +478,133 @@ export const SPACE_EARLIER_TODAY_MISSIONS: MissionsPanelMission[] = [
 ].map(inConversation("conversation-roster"))
 
 export const NO_SPACE_MISSIONS: MissionsPanelMission[] = []
+
+const ATLAS: MissionsPageAgent = { id: "bot-atlas", name: "Atlas", hue: 257 }
+const JUNO: MissionsPageAgent = { id: "bot-juno", name: "Juno", hue: 296 }
+const PIKE: MissionsPageAgent = { id: "bot-pike", name: "Pike", hue: 132 }
+
+const pullRequestNumbered = (number: number): MissionPullRequest => ({
+	url: `https://github.com/kiroshi/kiroshi-monorepo/pull/${number}`,
+	number,
+})
+
+const PAGE_BLOCKED_ON_YOU_MISSION: MissionsPageMission = {
+	id: "mission-ope-2124",
+	identifier: "OPE-2124",
+	title: "Pick the model of a new agent from the offered catalogue",
+	state: "waiting_human",
+	conversation: { title: "Agent setup", icon: "Sparkles" },
+	agent: ATLAS,
+	updatedAt: minutesBefore(4),
+	pullRequest: pullRequestNumbered(2296),
+}
+
+const PAGE_READY_TO_MERGE_MISSION: MissionsPageMission = {
+	id: "mission-ope-2121",
+	identifier: "OPE-2121",
+	title: "Latch one outcome per connect flow",
+	state: "ready_to_merge",
+	conversation: { title: "Plugins", icon: "ShieldKey" },
+	agent: JUNO,
+	updatedAt: minutesBefore(18),
+	pullRequest: pullRequestNumbered(2304),
+}
+
+const PAGE_WORKING_ATLAS_MISSION: MissionsPageMission = {
+	id: "mission-ope-2118",
+	identifier: "OPE-2118",
+	title: "Carry the resolved model through the offered catalogue",
+	state: "working",
+	conversation: { title: "Sidecar", icon: "Server" },
+	agent: ATLAS,
+	updatedAt: minutesBefore(2),
+	pullRequest: pullRequestNumbered(2298),
+}
+
+const PAGE_WORKING_JUNO_MISSION: MissionsPageMission = {
+	id: "mission-ope-2130",
+	identifier: "OPE-2130",
+	title: "Give each person a main conversation with an agent",
+	state: "working",
+	conversation: { title: "Home", icon: "MessageSquare" },
+	agent: JUNO,
+	updatedAt: minutesBefore(35),
+}
+
+const PAGE_WORKING_PIKE_MISSION: MissionsPageMission = {
+	id: "mission-ope-2127",
+	identifier: "OPE-2127",
+	title: "Serve the grant of the latest Connect to the agent",
+	state: "working",
+	conversation: { title: "Plugins", icon: "ShieldKey" },
+	agent: PIKE,
+	updatedAt: minutesBefore(150),
+}
+
+export const PAGE_MISSIONS_SHOWN: MissionsPageMission[] = [
+	PAGE_BLOCKED_ON_YOU_MISSION,
+	PAGE_READY_TO_MERGE_MISSION,
+	PAGE_WORKING_ATLAS_MISSION,
+	PAGE_WORKING_JUNO_MISSION,
+	PAGE_WORKING_PIKE_MISSION,
+]
+
+const completedMission = (index: number): MissionsPageMission => ({
+	id: `mission-completed-${index}`,
+	identifier: `OPE-${2100 + index}`,
+	title: `Completed mission ${index}`,
+	state: index % 2 === 0 ? "done" : "closed",
+	conversation: { title: "Release", icon: "Rocket" },
+	agent: [ATLAS, JUNO, PIKE][index % 3] ?? ATLAS,
+	updatedAt: minutesBefore(60 * (index + 3)),
+})
+
+export const PAGE_MISSIONS: MissionsPageMission[] = [
+	...PAGE_MISSIONS_SHOWN,
+	...Array.from({ length: 6 }, (_, index) => completedMission(index + 1)),
+	{
+		id: "mission-ope-2109",
+		identifier: "OPE-2109",
+		title: "Retry the relay handshake after a refused token",
+		state: "failed",
+		conversation: { title: "Relay", icon: "Globe" },
+		agent: PIKE,
+		updatedAt: minutesBefore(600),
+	},
+]
+
+export const PAGE_MISSIONS_WAITING_ON_AN_AGENT: MissionsPageMission[] = [
+	...PAGE_MISSIONS,
+	{
+		id: "mission-ope-2133",
+		identifier: "OPE-2133",
+		title: "Wait for the review agent to answer",
+		state: "waiting_bot",
+		conversation: { title: "Review", icon: "Code" },
+		agent: JUNO,
+		updatedAt: minutesBefore(9),
+	},
+]
+
+export const PAGE_LONG_TEXT_MISSIONS: MissionsPageMission[] = [
+	{
+		...PAGE_BLOCKED_ON_YOU_MISSION,
+		id: "mission-long-title",
+		identifier: "OPE-12345",
+		title:
+			"Move every run history table off the shared database and into the per space store without losing a single reported run, then prove it on a space holding ten thousand runs",
+		conversation: {
+			title:
+				"A conversation whose title runs far past the room its chip is given",
+			icon: "BookOpen",
+		},
+		pullRequest: pullRequestNumbered(123456),
+	},
+	{
+		...PAGE_READY_TO_MERGE_MISSION,
+		title: "Supercalifragilisticexpialidocious".repeat(6),
+	},
+	PAGE_WORKING_ATLAS_MISSION,
+]
+
+export const NO_PAGE_MISSIONS: MissionsPageMission[] = []
