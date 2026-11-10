@@ -171,7 +171,8 @@ const ROW_HIGHLIGHT =
 
 const TURN_ROW = "flex flex-col gap-1.5"
 
-const AGENT_BUBBLE_WIDTH = "max-w-145"
+const AGENT_BUBBLE_WIDTH =
+	"max-w-[var(--transcript-agent-bubble-width,--spacing(145))]"
 
 const FRAMED_CARD_MIN_WIDTH = "min-w-[min(--spacing(90),100%)]"
 

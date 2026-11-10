@@ -186,12 +186,14 @@ conversation-home-home--files-attached
 conversation-home-home--first-answer
 conversation-home-home--fresh-after-relaunch
 conversation-home-home--jump-to-latest-shown
+conversation-home-home--last-row-highlighted
 conversation-home-home--loading
 conversation-home-home--long-rows
 conversation-home-home--long-transcript
 conversation-home-home--mission-blocked
 conversation-home-home--mission-completed
 conversation-home-home--morning
+conversation-home-home--narrow-panel
 conversation-home-home--night
 conversation-home-home--no-band
 conversation-home-home--picker-open
@@ -201,6 +203,7 @@ conversation-home-home--relays-from-the-rooms
 conversation-home-home--sent-from-the-composer
 conversation-home-home--sent-thinking
 conversation-home-home--two-rooms-in-a-row
+conversation-home-home--wide-table
 conversation-home-home--with-a-first-name
 conversation-home-home--without-a-first-name
 conversation-home-home--working-in-one-room
