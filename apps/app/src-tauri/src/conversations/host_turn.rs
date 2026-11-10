@@ -154,6 +154,24 @@ impl HostTurns {
 	}
 }
 
+pub(crate) async fn retire_idle_run<R: Runtime>(
+	app: &AppHandle<R>,
+	scope: RuntimeScope,
+) -> Result<(), TransportError> {
+	let agent = managed::<R, AgentState>(app, NO_AGENT).map_err(missing)?;
+	let host_turns = agent.host_turns();
+	let order = host_turns.order_of(&ParticipantKey {
+		conversation_id: scope.conversation_id.clone(),
+		bot_id: scope.bot_id.clone(),
+	});
+	let _in_order = order.lock().await;
+	if !run_is_idle(&agent, &scope).await {
+		return Ok(());
+	}
+	host_turns.forget_started(&scope);
+	agent_shutdown(app.clone(), agent.clone(), scope).await
+}
+
 pub(crate) fn merged(outcomes: Vec<CancelOutcome>) -> CancelOutcome {
 	let mut has_cancelled = false;
 	let mut failures = Vec::new();
@@ -2264,6 +2282,32 @@ mod tests {
 				shut_down_scopes(&agent_events(&told)).is_empty(),
 				"the live run was shut down"
 			);
+		}
+
+		#[tokio::test]
+		async fn an_idle_run_is_retired_for_its_next_turn_to_resume_and_a_running_one_is_kept() {
+			let app = an_app_of_its_own("host-turn-retire-idle", mock_builder());
+			app.manage(db::bootstrap(app.handle()));
+			app.manage(AgentState::default());
+			let room = a_room_running(app.handle(), &["Ada", "Grace"]).await;
+			let ada = scope_in(&room, &room.bot_ids[0]);
+			let grace = scope_in(&room, &room.bot_ids[1]);
+			let _idle = a_session_held_for(app.handle(), &ada).await;
+			let running = a_session_held_for(app.handle(), &grace).await;
+			running.session.submit("still at it", Some(submitted("t0", "h1"))).await.expect("runs");
+			let mut announced = events::subscribed(app.handle());
+
+			retire_idle_run(app.handle(), ada.clone()).await.expect("the idle run is retired");
+			retire_idle_run(app.handle(), grace.clone()).await.expect("the running run is kept");
+
+			assert_eq!(shut_down_scopes(&agent_events(&told(&mut announced))), vec![ada.clone()]);
+			let agent = app.state::<AgentState>();
+			let seat = |scope: &RuntimeScope| ParticipantKey {
+				conversation_id: scope.conversation_id.clone(),
+				bot_id: scope.bot_id.clone(),
+			};
+			assert_eq!(live_run_of(&agent, &seat(&ada)), None);
+			assert_eq!(live_run_of(&agent, &seat(&grace)), Some(grace.clone()));
 		}
 
 		#[tokio::test]

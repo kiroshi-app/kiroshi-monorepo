@@ -415,6 +415,16 @@ impl<S: Clone> Live<S> {
 			.collect()
 	}
 
+	fn live_runs(&self) -> Vec<RuntimeScope> {
+		self.runs
+			.lock()
+			.expect("live runs")
+			.values()
+			.filter(|run| run.session.is_some())
+			.map(|run| run.scope.clone())
+			.collect()
+	}
+
 	fn holds(&self, scope: &RuntimeScope) -> bool {
 		self.runs.lock().expect("live runs").values().any(|run| &run.scope == scope)
 	}
@@ -1560,6 +1570,13 @@ pub(crate) fn asking_runs<R: Runtime>(app: &AppHandle<R>) -> Vec<RuntimeScope> {
 	}
 }
 
+pub(crate) fn live_runs<R: Runtime>(app: &AppHandle<R>) -> Vec<RuntimeScope> {
+	match app.try_state::<AgentState>() {
+		Some(state) => state.live.live_runs(),
+		None => Vec::new(),
+	}
+}
+
 pub(crate) async fn shut_asking_runs_down<R: Runtime>(
 	app: &AppHandle<R>,
 	is_gone: impl Fn(&RuntimeScope) -> bool,
@@ -2339,6 +2356,16 @@ mod tests {
 
 		assert_eq!(live.live_scope_of(&held_by), Some(a_scope()));
 		assert_eq!(live.live_scope_of(&elsewhere), None, "another conversation shared the run");
+	}
+
+	#[test]
+	fn the_live_runs_are_the_runs_holding_a_session_and_not_one_still_starting() {
+		let live = Live::<&str>::default();
+		live.take_over(a_scope());
+		live.take_over(another_bots_run());
+		assert!(live.install(&another_bots_run(), ANOTHER_BOTS_SESSION));
+
+		assert_eq!(live.live_runs(), vec![another_bots_run()]);
 	}
 
 	#[test]
