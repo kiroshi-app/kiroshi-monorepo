@@ -21,7 +21,7 @@ One call:
 git fetch --quiet --tags origin
 echo "branch:  $(git rev-parse --abbrev-ref HEAD)"
 echo "dirty:   $(git status --porcelain | wc -l)"
-echo "current: $(grep -m1 '"version"' apps/app/src-tauri/tauri.conf.json)"
+echo "current: $(grep -m1 '^version = ' apps/rune-preview/app/Cargo.toml)"
 git tag --list 'v*' --sort=-creatordate | head -5
 ```
 
@@ -67,7 +67,7 @@ An empty preview means the release goes out with the line `See the assets to dow
 
 ## 4. Approve
 
-Show the preview as printed, with the target version, the channel and the bump type, and name what the release will commit: the five version files and `bun.lock`. Ask with `AskUserQuestion`: publish or cancel. Publish nothing until the answer is publish.
+Show the preview as printed, with the target version, the channel and the bump type, and name what the release will commit: the three version files, `apps/rune-preview/app/Cargo.toml`, `apps/rune-preview/Cargo.lock` and the system plugin `plugin.json`. Ask with `AskUserQuestion`: publish or cancel. Publish nothing until the answer is publish.
 
 The body is built from the PR titles and is not edited here: when a line reads badly, cancel and say which title it comes from.
 
