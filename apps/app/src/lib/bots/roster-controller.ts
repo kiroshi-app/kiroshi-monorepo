@@ -248,6 +248,7 @@ export type RosterController = {
 	) => Promise<boolean>
 	botsByPresence: (conversationId: string) => Promise<Bot[]>
 	removeConversation: (id: string) => Promise<void>
+	discardConversation: (id: string) => Promise<void>
 }
 
 type RosterChoice = {
@@ -1449,6 +1450,20 @@ export const createRosterController = (
 				)
 				choose(choiceOf(landOn(state.bots, conversations, null)))
 				holdConversations(state.spaceRowId, conversations)
+			}).catch(async (reason: unknown) => {
+				await reload()
+				throw reason
+			}),
+
+		discardConversation: (id: string) =>
+			commit(async () => {
+				await store.deleteConversation(id)
+				conversationWrites.drop(id)
+				const state = current()
+				holdConversations(
+					state.spaceRowId,
+					state.conversations.filter((conversation) => conversation.id !== id),
+				)
 			}).catch(async (reason: unknown) => {
 				await reload()
 				throw reason

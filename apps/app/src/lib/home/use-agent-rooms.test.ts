@@ -34,9 +34,30 @@ describe("the agent rooms read", () => {
 		expect(raiseFailureNotice).toHaveBeenCalledWith(
 			expect.objectContaining({
 				title: "Couldn’t load this agent’s conversations",
-				description: "Restart Kiroshi to retry.",
+				description: "Open Home again to retry.",
 			}),
 		)
 		expect(rooms.result.current).toEqual([])
+	})
+
+	it("reads the rooms again when the agent's Home is opened again", async () => {
+		const agentRooms = vi
+			.fn()
+			.mockRejectedValueOnce(new Error("host gone"))
+			.mockResolvedValue([{ botId: "agent", conversationIds: ["c-1"] }])
+		const { wrapper } = createQueryTestWrapper()
+		const firstVisit = renderHook(
+			() => useAgentRooms({ agentRooms }, "space-a", "agent"),
+			{ wrapper },
+		)
+		await waitFor(() => expect(raiseFailureNotice).toHaveBeenCalledOnce())
+		firstVisit.unmount()
+
+		const nextVisit = renderHook(
+			() => useAgentRooms({ agentRooms }, "space-a", "agent"),
+			{ wrapper },
+		)
+
+		await waitFor(() => expect(nextVisit.result.current).toEqual(["c-1"]))
 	})
 })

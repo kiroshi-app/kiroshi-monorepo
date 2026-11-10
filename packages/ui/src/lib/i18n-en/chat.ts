@@ -1263,7 +1263,7 @@ const chat = {
 			},
 			rooms: {
 				title: "Couldn’t load this agent’s conversations",
-				description: "Restart Kiroshi to retry.",
+				description: "Open Home again to retry.",
 			},
 		},
 	},

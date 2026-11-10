@@ -1321,7 +1321,7 @@ const chat = {
 			},
 			rooms: {
 				title: "Impossible de charger les conversations de cet agent",
-				description: "Redémarrez Kiroshi pour réessayer.",
+				description: "Rouvrez l’accueil pour réessayer.",
 			},
 		},
 	},
