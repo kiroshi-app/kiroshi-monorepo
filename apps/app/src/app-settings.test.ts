@@ -235,7 +235,7 @@ const openApplications = () =>
 	press(menuEntryOf(i18n.t("settings:rail.applications")))
 
 const isMarked = (railItem: HTMLElement) =>
-	["true", "page"].includes(railItem.getAttribute("aria-current") ?? "")
+	railItem.getAttribute("aria-current") === "page"
 
 const composerOf = () =>
 	screen.getByRole<HTMLTextAreaElement>("textbox", {
