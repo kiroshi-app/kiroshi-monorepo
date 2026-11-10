@@ -104,6 +104,7 @@ const useWorkspaceFrameRead = (): WorkspaceFrameRead => {
 	const askedGestures = useMemo(() => gesturesAskedByLeaveGuard(tabs), [tabs])
 	const onSelectSpace = useRailSpaceSelection()
 	const rail = useWorkspaceRail({
+		homeEntries: workspace.core.homeEntries,
 		navigation: workspace.navigation,
 		overlay: workspace.overlay,
 		panels: workspace.panels,

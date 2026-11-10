@@ -24,6 +24,7 @@ import type { ChatDriver } from "@/lib/chat/driver"
 import { createFakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
+import { createHomeEntries } from "@/lib/home/home-entries"
 import { MAIN_CHAT_PAUSE_MS } from "@/lib/home/home-visits"
 import type { JoinedHostState } from "@/lib/host/joined-hosts"
 import type { SettingsNavigation } from "@/lib/navigation/use-settings-navigation"
@@ -169,6 +170,7 @@ const RailHarness = ({
 		NO_INVITATIONS,
 	)
 	const { rail, currentSpace, currentSpaceHost } = useWorkspaceRail({
+		homeEntries: createHomeEntries(),
 		navigation: navigation as SettingsNavigation,
 		overlay: {
 			search: { isOpen: false, open: () => {} },
@@ -381,6 +383,7 @@ const produceRailFor = ({
 	renderHook(
 		() =>
 			useWorkspaceRail({
+				homeEntries: createHomeEntries(),
 				navigation: {} as SettingsNavigation,
 				overlay: {
 					search: { isOpen: false, open: () => {} },
@@ -741,6 +744,113 @@ describe("the Home page", () => {
 
 		expect(renewal).toHaveBeenCalledOnce()
 		expect(screen.getByRole("button", { name: "Open it" })).toBeTruthy()
+	})
+
+	const homeStage = () => slot("home-layout")?.getAttribute("data-stage")
+
+	const keepHomeTabOpen = () =>
+		localStorage.setItem(
+			`spaceTabs:${PERSONAL_SPACE_ID}`,
+			JSON.stringify({
+				tabs: [
+					{ href: "/home", isPinned: false, entries: ["/home"], index: 0 },
+				],
+				activeIndex: 0,
+			}),
+		)
+
+	const bringWindowBack = async () => {
+		const visibility = vi.spyOn(document, "visibilityState", "get")
+		for (const state of ["hidden", "visible"] as const) {
+			visibility.mockReturnValue(state)
+			act(() => {
+				document.dispatchEvent(new Event("visibilitychange"))
+			})
+		}
+		visibility.mockRestore()
+		await settle()
+	}
+
+	const mountHomeSaidToNow = async () => {
+		const mounted = await mountAppWithTwoAgents()
+		const { firstOfSpace, store } = mounted
+		const renewal = vi.spyOn(store, "renewMainChat")
+		const earlier = await store.mainChat(firstOfSpace.id, PERSONAL_SPACE_ID)
+		const saidAt = Date.now()
+		await sayInMainChat(store, earlier.id, saidAt)
+		const mainChatId = async () =>
+			(await store.mainChat(firstOfSpace.id, PERSONAL_SPACE_ID)).id
+		await pressInRail("home")
+		return { ...mounted, renewal, earlier, saidAt, mainChatId }
+	}
+
+	const expectFreshHome = async (
+		mainChatId: () => Promise<string>,
+		earlierId: string,
+	) => {
+		expect(await mainChatId()).not.toBe(earlierId)
+		expect(homeStage()).toBe("empty")
+		expect(screen.getByRole("button", { name: "Open it" })).toBeTruthy()
+	}
+
+	it("launches on a fresh Home, the main chat past the hour archived one click away", async () => {
+		const { firstOfSpace, store } = await mountAppWithTwoAgents()
+		const earlier = await store.mainChat(firstOfSpace.id, PERSONAL_SPACE_ID)
+		await sayInMainChat(store, earlier.id, Date.now() - MAIN_CHAT_PAUSE_MS - 1)
+		cleanup()
+		keepHomeTabOpen()
+
+		const router = await launchApp()
+
+		expect(router.state.location.pathname).toBe("/home")
+		await expectFreshHome(
+			async () => (await store.mainChat(firstOfSpace.id, PERSONAL_SPACE_ID)).id,
+			earlier.id,
+		)
+	})
+
+	it("opens a fresh Home when its window comes back past the hour, keeping the chat when it comes back within it", async () => {
+		const { renewal, earlier, saidAt, mainChatId } = await mountHomeSaidToNow()
+
+		await bringWindowBack()
+
+		expect(renewal).not.toHaveBeenCalled()
+		expect(homeStage()).toBe("conversation")
+
+		vi.setSystemTime(saidAt + MAIN_CHAT_PAUSE_MS + 1)
+		await bringWindowBack()
+
+		expect(renewal).toHaveBeenCalledOnce()
+		await expectFreshHome(mainChatId, earlier.id)
+	})
+
+	it("opens a fresh Home when its rail entry is pressed on the Home past the hour, keeping the chat within it", async () => {
+		const { renewal, earlier, saidAt, mainChatId } = await mountHomeSaidToNow()
+
+		await pressInRail("home")
+
+		expect(renewal).not.toHaveBeenCalled()
+		expect(homeStage()).toBe("conversation")
+
+		vi.setSystemTime(saidAt + MAIN_CHAT_PAUSE_MS + 1)
+		await pressInRail("home")
+
+		expect(renewal).toHaveBeenCalledOnce()
+		await expectFreshHome(mainChatId, earlier.id)
+	})
+
+	it("opens a fresh Home when the person goes back to it from another page past the hour", async () => {
+		const { router, earlier, saidAt, mainChatId } = await mountHomeSaidToNow()
+		await pressInRail("library")
+
+		vi.setSystemTime(saidAt + MAIN_CHAT_PAUSE_MS + 1)
+		act(() => {
+			router.history.back()
+		})
+		await settle()
+
+		expect(router.state.location.pathname).toBe("/home")
+		await expectFreshHome(mainChatId, earlier.id)
 	})
 
 	it.each<RailEntry>(["conversations", "missions", "library"])(

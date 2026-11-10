@@ -9,6 +9,7 @@ import { i18n } from "@workspace/ui/lib/i18n"
 
 import { useWorkspaceRail } from "@/components/workspace-rail"
 import type { HostingState, Space } from "@/lib/bindings"
+import { createHomeEntries } from "@/lib/home/home-entries"
 import { hostQueryKeys } from "@/lib/host/host-query-keys"
 import type { HostedMember } from "@/lib/host/members-transport"
 import type { SettingsNavigation } from "@/lib/navigation/use-settings-navigation"
@@ -114,6 +115,7 @@ const RailOfSpaceHostedHere = () => {
 		NO_INVITATIONS,
 	)
 	const { rail, currentSpace, currentSpaceHost } = useWorkspaceRail({
+		homeEntries: createHomeEntries(),
 		navigation: {} as SettingsNavigation,
 		overlay: {
 			search: { isOpen: false, open: () => {} },
