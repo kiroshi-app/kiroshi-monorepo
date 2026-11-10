@@ -153,7 +153,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"Everything a reader is to the app, in one overlay. A breadcrumb heads it with their own face, the same avatar the sidebar chip draws so the dialog is visibly the one that chip opened, then their name and the word Settings. Down the left is a rail: Account, how they are signed in to Kiroshi; Appearance, how the app is painted; Notifications, what it tells them about; Language, the one it speaks; then Skills, Applications and History for their own plugin; last, About, which Kiroshi this is and how it updates. It opens on the tab the host asks for, else on Account, or on Appearance for a host that passes no account. Same contract as a companion's settings and for the same reason: fully controlled, saving as you type, no draft, no debounce, no persistence, so closing it is never a question. The language does not travel through the value: it is a prop of its own because the translation runtime is what the whole app reads from.",
+					"Everything a reader is to the app, in one overlay. A breadcrumb heads it with their own face, the same avatar the sidebar chip draws so the dialog is visibly the one that chip opened, then their name and the word Settings. Down the left is a rail: Account, how they are signed in to Kiroshi; General, the page the app opens on, for a host that passes it; Appearance, how the app is painted; Notifications, what it tells them about; Language, the one it speaks; then Skills, Applications and History for their own plugin; last, About, which Kiroshi this is and how it updates. It opens on the tab the host asks for, else on Account, or on General then Appearance for a host that passes no account. Same contract as a companion's settings and for the same reason: fully controlled, saving as you type, no draft, no debounce, no persistence, so closing it is never a question. The language does not travel through the value: it is a prop of its own because the translation runtime is what the whole app reads from.",
 			},
 		},
 	},
@@ -195,6 +195,9 @@ export const Default = meta.story({
 		await expect(within(dialog).queryByRole("tab", { name: "Profile" })).toBe(
 			null,
 		)
+		await expect(within(dialog).queryByRole("tab", { name: "General" })).toBe(
+			null,
+		)
 		await expect(
 			within(dialog).getByRole("tab", { name: "Account" }),
 		).toHaveAttribute("aria-selected", "true")
@@ -220,9 +223,79 @@ export const OpensOnAppearanceWithoutAnAccount = meta.story({
 		await expect(within(dialog).queryByRole("tab", { name: "Account" })).toBe(
 			null,
 		)
+		await expect(within(dialog).queryByRole("tab", { name: "General" })).toBe(
+			null,
+		)
 		await expect(
 			within(dialog).getByRole("tab", { name: "Appearance" }),
 		).toHaveAttribute("aria-selected", "true")
+	},
+})
+
+export const General = meta.story({
+	args: {
+		account: accountIn(SIGNED_IN),
+		openOn: "newConversation",
+		onOpenOnChange: fn(),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A host that passes the launch page gets a General entry right after Account, holding the Open on row. Check the order, that the row reads New conversation, and that picking Last conversation reports `lastConversation` once and leaves the value alone. Pick `OpensOnGeneralWithoutAnAccount` for a host that passes no account.",
+			},
+		},
+	},
+	play: async ({ args, userEvent }) => {
+		const dialog = await dialogIn()
+		const names = within(dialog)
+			.getAllByRole("tab")
+			.map((tab) => tab.textContent)
+		await expect(names.slice(0, 3)).toEqual([
+			"Account",
+			"General",
+			"Appearance",
+		])
+
+		await userEvent.click(within(dialog).getByRole("tab", { name: "General" }))
+		const panel = await within(dialog).findByRole("tabpanel", {
+			name: "General",
+		})
+		const trigger = within(panel).getByRole("combobox", { name: "Open on" })
+		await expect(trigger).toHaveTextContent("New conversation")
+
+		await userEvent.click(trigger)
+		await userEvent.click(
+			await screen.findByRole("option", { name: "Last conversation" }),
+		)
+		await expect(args.onOpenOnChange).toHaveBeenCalledOnce()
+		await expect(args.onOpenOnChange).toHaveBeenCalledWith("lastConversation")
+		await expect(args.onValueChange).not.toHaveBeenCalled()
+	},
+})
+
+export const OpensOnGeneralWithoutAnAccount = meta.story({
+	args: { openOn: "lastConversation", onOpenOnChange: fn() },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A host that passes the launch page and no account. Check that General heads the rail and that the dialog lands on it. Pick `General` for the signed in reader.",
+			},
+		},
+	},
+	play: async () => {
+		const dialog = await dialogIn()
+		const tabs = within(dialog).getAllByRole("tab")
+		await expect(tabs[0]).toHaveAccessibleName("General")
+		await expect(tabs[0]).toHaveAttribute("aria-selected", "true")
+
+		const panel = await within(dialog).findByRole("tabpanel", {
+			name: "General",
+		})
+		await expect(
+			within(panel).getByRole("combobox", { name: "Open on" }),
+		).toHaveTextContent("Last conversation")
 	},
 })
 

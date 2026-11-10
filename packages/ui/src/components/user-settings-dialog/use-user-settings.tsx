@@ -38,10 +38,16 @@ import {
 } from "@workspace/ui/components/user-settings-dialog/diagnostics-fields"
 import { LanguageFields } from "@workspace/ui/components/user-settings-dialog/language-fields"
 import { NotificationFields } from "@workspace/ui/components/user-settings-dialog/notification-fields"
+import {
+	type OpenOn,
+	OpenOnFields,
+} from "@workspace/ui/components/user-settings-dialog/open-on-fields"
 import { usePushedPages } from "@workspace/ui/hooks/use-pushed-pages"
 import type { Language } from "@workspace/ui/lib/i18n"
 
 const ACCOUNT_ENTRY = "account"
+
+const GENERAL_ENTRY = "general"
 
 const APPEARANCE_ENTRY = "appearance"
 
@@ -57,6 +63,8 @@ type UserSettingsProps = {
 	onValueChange: (value: UserSettingsValue) => void
 	language: Language | null
 	onLanguageChange: (language: Language | null) => void
+	openOn?: OpenOn
+	onOpenOnChange?: (openOn: OpenOn) => void
 	skills: BotSkillItem[]
 	onSkillCreate: (draft: BotSkillDraft, isPreloaded: boolean) => void
 	onSkillChange: (id: string, draft: BotSkillDraft) => void
@@ -82,6 +90,8 @@ const useUserSettings = ({
 	onValueChange,
 	language,
 	onLanguageChange,
+	openOn,
+	onOpenOnChange,
 	skills,
 	onSkillCreate,
 	onSkillChange,
@@ -132,6 +142,19 @@ const useUserSettings = ({
 						label: t("rail.account"),
 						layout: "scrolling",
 						panel: <AccountPanel {...account} image={value.image} />,
+					} satisfies SettingsEntry,
+				]
+			: []),
+		...(openOn && onOpenOnChange
+			? [
+					{
+						value: GENERAL_ENTRY,
+						icon: "Settings",
+						label: t("rail.general"),
+						layout: "scrolling",
+						panel: (
+							<OpenOnFields onOpenOnChange={onOpenOnChange} openOn={openOn} />
+						),
 					} satisfies SettingsEntry,
 				]
 			: []),
@@ -230,7 +253,7 @@ const useUserSettings = ({
 			history: historySession,
 		},
 		entries,
-		firstEntry: account ? ACCOUNT_ENTRY : APPEARANCE_ENTRY,
+		firstEntry: entries[0].value,
 	}
 }
 
