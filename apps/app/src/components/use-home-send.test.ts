@@ -101,14 +101,6 @@ const mountHome = (workspace: Workspace, spaceId = SPACE_ID) =>
 const noticeTitles = () =>
 	vi.mocked(raiseFailureNotice).mock.calls.map(([notice]) => notice.title)
 
-const deferredDelivery = () => {
-	let deliver: (isTaken: boolean) => void = () => undefined
-	const delivery = new Promise<boolean>((resolve) => {
-		deliver = resolve
-	})
-	return { delivery, deliver }
-}
-
 const namesOf = (attachments: { name: string }[]) =>
 	attachments.map(({ name }) => name)
 
@@ -259,8 +251,8 @@ describe("a Home send", () => {
 	})
 
 	it("keeps the text typed while it was sending", async () => {
-		const { delivery, deliver } = deferredDelivery()
-		const workspace = createWorkspace({ send: () => delivery })
+		const delivery = Promise.withResolvers<boolean>()
+		const workspace = createWorkspace({ send: () => delivery.promise })
 		const home = mountHome(workspace)
 		act(() => home.result.current.onDraftChange("look"))
 		act(() => home.result.current.onSubmit("look"))
@@ -269,7 +261,7 @@ describe("a Home send", () => {
 		)
 
 		act(() => home.result.current.onDraftChange("look again"))
-		act(() => deliver(true))
+		act(() => delivery.resolve(true))
 
 		await waitFor(() =>
 			expect(workspace.openConversation).toHaveBeenCalledWith(
@@ -281,8 +273,8 @@ describe("a Home send", () => {
 	})
 
 	it("shows it is sending and ignores a second submit until it ends", async () => {
-		const { delivery, deliver } = deferredDelivery()
-		const workspace = createWorkspace({ send: () => delivery })
+		const delivery = Promise.withResolvers<boolean>()
+		const workspace = createWorkspace({ send: () => delivery.promise })
 		const home = mountHome(workspace)
 
 		act(() => {
@@ -292,7 +284,7 @@ describe("a Home send", () => {
 
 		expect(home.result.current.isSending).toBe(true)
 		act(() => home.result.current.onSubmit("look"))
-		act(() => deliver(true))
+		act(() => delivery.resolve(true))
 		await waitFor(() => expect(home.result.current.isSending).toBe(false))
 		expect(workspace.conversations.conversationIds()).toEqual([
 			NEW_CONVERSATION_ID,
