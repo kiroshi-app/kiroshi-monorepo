@@ -261,21 +261,14 @@ fn idle() -> Waker {
 	Arc::new(|| {})
 }
 
-fn unlogged_local(local: &FakeHost) -> Source {
-	let reach = JoinedSpaceConnection {
-		id: "local-fake".to_owned(),
-		host_url: local.url(),
-		token: "local-token".to_owned(),
-		remote_space_id: None,
-		name: "Local".to_owned(),
-	};
-	Source::Running(Host::joined(&Source::Running(Host::detached()), reach))
+fn local_source(local: &FakeHost) -> Source {
+	Source::Running(Host::dev_on(local.port, "local-token"))
 }
 
 fn app_on(local: &FakeHost) -> App {
 	let mut app = App::new();
 	app.workspace = Workspace::Ready(Ready {
-		source: unlogged_local(local),
+		source: local_source(local),
 		space: model::Space {
 			id: LOCAL_SPACE.to_owned(),
 			name: "Personal".to_owned(),
