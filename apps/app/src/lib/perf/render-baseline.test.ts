@@ -22,7 +22,7 @@ import {
 	type SentinelScroll,
 	stubSentinelObserver,
 } from "@/lib/query/sentinel-test-observer"
-import { sidebarItemOf } from "@/lib/sidebar/sidebar-fixtures"
+import { rosterRowOf, sidebarItemOf } from "@/lib/sidebar/sidebar-fixtures"
 import { MAIN_WINDOW_LABEL, writeSpaceTabs } from "@/lib/tabs/tabs-mirror"
 import { spaceTabsOn } from "@/lib/tabs/tabs-model"
 import { readMirror, writeMirror } from "@/lib/user/preferences-mirror"
@@ -270,10 +270,6 @@ const countCommits = (): CommitCounter => {
 	return counter
 }
 
-const sidebarRows = () => [
-	...document.querySelectorAll('[data-slot="collapsed-sidebar-conversation"]'),
-]
-
 const takeFrameClock = (): FrameClock => {
 	const pending = new Map<number, FrameRequestCallback>()
 	let nextId = 1
@@ -462,14 +458,23 @@ const openOnFirstCompanion = async (store: TranscriptStore) => {
 	)
 }
 
-const seedFirstRunDone = () => {
-	writeMirror({ ...readMirror(), firstRunDone: true, sidebarCollapsed: true })
+type SidebarLayout = "collapsed" | "expanded"
+
+const seedFirstRunDone = (sidebar: SidebarLayout = "collapsed") => {
+	writeMirror({
+		...readMirror(),
+		firstRunDone: true,
+		sidebarCollapsed: sidebar === "collapsed",
+	})
 }
 
-const mountApp = async (replyFor?: (prompt: string) => string) => {
+const mountApp = async (
+	replyFor?: (prompt: string) => string,
+	sidebar?: SidebarLayout,
+) => {
 	const frames = takeFrameClock()
 	layout = fakeLayout()
-	seedFirstRunDone()
+	seedFirstRunDone(sidebar)
 	const store = createFakeTranscriptStore()
 	harness.store = store
 	harness.driver = createFakeChatDriver({ stepMs: STEP_MS, replyFor })
@@ -577,6 +582,38 @@ const measureMessageReceived = async () => {
 	}
 }
 
+const EARLIER_TEXT = "An earlier message"
+
+const measureRowsOfMessageReceived = async () => {
+	const tally = tallyRenders()
+	const { store } = await mountApp(undefined, "expanded")
+	await storeMessageReceived(store, EARLIER_TEXT)
+	await emitOnHost("conversation://updated", await soloThreadRowOf(store))
+	await settle(MOUNT_MS)
+	await storeMessageReceived(store)
+	const received = await soloThreadRowOf(store)
+	const receiverId = received.conversation.soloBotId ?? ""
+	tally.reset()
+
+	await emitOnHost("conversation://updated", received)
+	await settle(MOUNT_MS)
+
+	const rows = tally.entriesOf("RosterRow")
+	const [space] = await store.spaces()
+	const receiver = (await store.bots(space.id)).find(
+		({ id }) => id === receiverId,
+	)
+	return {
+		app: tally.countOf("App"),
+		receiverRow: rows.find(([id]) => id === receiverId)?.[1] ?? 0,
+		otherRows: rows.filter(([id]) => id !== receiverId).length,
+		isShownInRow:
+			receiver !== undefined &&
+			(rosterRowOf(receiver.name).textContent?.includes(RECEIVED_TEXT) ??
+				false),
+	}
+}
+
 const createRoom = async (store: TranscriptStore, title: string) => {
 	const [space] = await store.spaces()
 	const [bot] = await store.bots(space.id)
@@ -617,12 +654,14 @@ const pageRowOf = async (store: TranscriptStore, conversationId: string) => {
 }
 
 const shownRowNames = () =>
-	sidebarRows().map((item) => item.getAttribute("aria-label"))
+	[...document.querySelectorAll('[data-slot="roster-row-name"]')].map(
+		({ textContent }) => textContent,
+	)
 
 const measureRowMovedToTop = async () => {
 	const tally = tallyRenders()
 	layout = fakeLayout()
-	seedFirstRunDone()
+	seedFirstRunDone("expanded")
 	const store = createFakeTranscriptStore()
 	harness.store = store
 	harness.driver = createFakeChatDriver({ stepMs: STEP_MS })
@@ -932,6 +971,17 @@ describe("PRF1 render baseline", () => {
 			  "navigationSidebar": 1,
 			}
 		`)
+	})
+
+	it("renders the row of a received message alone, never App", async () => {
+		vi.useFakeTimers()
+
+		expect(await measureRowsOfMessageReceived()).toEqual({
+			app: 0,
+			receiverRow: 1,
+			otherRows: 0,
+			isShownInRow: true,
+		})
 	})
 
 	it("re-renders the roster, never App, when a row moves to the top", async () => {

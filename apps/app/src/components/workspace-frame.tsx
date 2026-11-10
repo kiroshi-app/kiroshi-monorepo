@@ -20,6 +20,7 @@ import {
 	WorkspaceFrameContext,
 	type WorkspaceFrameRead,
 	type WorkspaceSidebarNavigation,
+	type WorkspaceSidebarRowMenu,
 } from "@/lib/workspace/workspace-frame"
 
 type AskFirst = ReturnType<typeof useLeaveGuard>["askFirst"]
@@ -64,6 +65,15 @@ const sidebarAskingFirst = (
 	onSelectLibrary: askFirst(sidebar.onSelectLibrary),
 	onOpenConversation: askFirst(sidebar.onOpenConversation),
 	onOpenMission: askFirst(sidebar.onOpenMission),
+})
+
+const rowMenuAskingFirst = (
+	rowMenu: WorkspaceSidebarRowMenu,
+	askFirst: AskFirst,
+): WorkspaceSidebarRowMenu => ({
+	...rowMenu,
+	onOpenSettings: askFirst(rowMenu.onOpenSettings),
+	onOpenAgentDangerZone: askFirst(rowMenu.onOpenAgentDangerZone),
 })
 
 const useSwitcherSpaceSelection = () => {
@@ -115,7 +125,7 @@ const useWorkspaceFrameRead = (): WorkspaceFrameRead => {
 		guardLeave: tabs.guardLeave,
 	})
 	const onSelectSpace = useSwitcherSpaceSelection()
-	const { sidebar, selectedSpaceId } = useWorkspaceNavigation({
+	const { sidebar, rowMenu, selectedSpaceId } = useWorkspaceNavigation({
 		navigation: workspace.navigation,
 		overlay: workspace.overlay,
 		rosterLines,
@@ -132,6 +142,7 @@ const useWorkspaceFrameRead = (): WorkspaceFrameRead => {
 
 	const frame: WorkspaceFrame = {
 		sidebar: sidebarAskingFirst(sidebar, askFirst),
+		rowMenu: rowMenuAskingFirst(rowMenu, askFirst),
 		selectedSpaceId,
 		collapse,
 		guardLeave,

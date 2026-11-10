@@ -59,6 +59,14 @@ export const pinsOf = ({ rows, sections }: RosterPinsSource): RosterPin[] => {
 		.map(toPin)
 }
 
+export const pinsOfRowsNotShown = (
+	rows: PinnedRow[],
+	shownIds: Set<string>,
+): RosterPin[] =>
+	rows
+		.filter((row) => isPinnedRow(row) && !shownIds.has(row.id))
+		.map(({ id, sectionId }) => ({ id, sectionId: sectionId ?? null }))
+
 export const withoutPin = (pins: RosterPin[], id: string) =>
 	pins.filter((pin) => pin.id !== id)
 

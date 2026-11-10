@@ -251,6 +251,13 @@ describe("useSidebarMissions", () => {
 		await waitFor(() => expect(result.current.waitingCount).toBe(1))
 	})
 
+	it("counts the open missions of the space, never the finished ones", async () => {
+		const { result } = renderSidebarMissions()
+
+		await waitFor(() => expect(result.current.waitingCount).toBe(1))
+		expect(result.current.openCount).toBe(2)
+	})
+
 	it("counts nothing when no mission waits on the reader", async () => {
 		readSpacePage.mockResolvedValue(aSpacePage([WORKING, DONE]))
 		const { result } = renderSidebarMissions()

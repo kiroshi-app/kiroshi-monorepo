@@ -23,6 +23,7 @@ import type { Invoke } from "@/lib/host/joined-hosts-invoke"
 import type { Mission } from "@/lib/missions/mission-contract"
 import { aMission } from "@/lib/missions/mission-fixtures"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
+import { rosterRowNamed, rosterRowOf } from "@/lib/sidebar/sidebar-fixtures"
 import { readMirror, writeMirror } from "@/lib/user/preferences-mirror"
 
 type HeldMission = {
@@ -226,6 +227,7 @@ const currentEntries = () =>
 	within(sidebar())
 		.getAllByRole("button")
 		.filter((button) => button.getAttribute("aria-current") === "page")
+		.filter((button) => !button.querySelector('[data-slot="roster-row-name"]'))
 
 const press = async (control: HTMLElement) => {
 	await act(async () => {
@@ -249,7 +251,7 @@ const toggleSidebarButton = () =>
 const SEARCH = i18n.t("search:open")
 const NEW_CONVERSATION = i18n.t("bots:rail.newConversation")
 const MISSIONS = i18n.t("bots:rail.missions")
-const MISSIONS_ENTRY = new RegExp(`^${MISSIONS} \\d+$`)
+const MISSIONS_ENTRY = new RegExp(`^${MISSIONS}( \\d+)?$`)
 const LIBRARY = i18n.t("bots:rail.library")
 
 describe("the workspace frame", () => {
@@ -552,7 +554,7 @@ describe("the conversations of the collapsed sidebar", () => {
 })
 
 describe("the Missions entry of the expanded sidebar", () => {
-	it("counts the missions of the current Space waiting on the person", async () => {
+	it("counts every open mission of the current Space, waiting on the person or in progress", async () => {
 		await mountApp(async (held) => {
 			const room = await roomIn(held, "Release train")
 			harness.missions = [
@@ -564,6 +566,331 @@ describe("the Missions entry of the expanded sidebar", () => {
 			]
 		})
 
+		expect(entry(`${MISSIONS} 2`)).toBeTruthy()
+	})
+})
+
+const foldNamesOf = (index: number) =>
+	Array.from(
+		slotsOf("fold-section")[index].querySelectorAll(
+			'[data-slot="roster-row-name"]',
+		),
+	).map((name) => name.textContent)
+
+const pinnedNames = () => foldNamesOf(0)
+
+const recentNames = () => foldNamesOf(1)
+
+const openRowMenu = async (name: string) => {
+	await act(async () => {
+		fireEvent.contextMenu(rosterRowOf(name), { clientX: 20, clientY: 20 })
+	})
+	await settle()
+}
+
+const pickInRowMenu = async (name: string, item: string) => {
+	await openRowMenu(name)
+	await press(screen.getByRole("menuitem", { name: item }))
+}
+
+const seedPinned = async (held: SpaceSeed) => {
+	const first = await roomIn(held, "First pin")
+	const second = await roomIn(held, "Second pin")
+	await roomIn(held, "Loose room")
+	await held.store.pinRoster(held.spaceId, [
+		{ id: first.id, sectionId: null },
+		{ id: second.id, sectionId: null },
+	])
+}
+
+const liftRow = (name: string) => {
+	const row = rosterRowOf(name)
+	fireEvent.pointerDown(row, {
+		button: 0,
+		clientX: 0,
+		clientY: 0,
+		pointerId: 1,
+	})
+	fireEvent.pointerMove(window, { clientX: 0, clientY: 12, pointerId: 1 })
+}
+
+const dropOver = async (target: Element) => {
+	vi.spyOn(document, "elementFromPoint").mockReturnValue(target)
+	await act(async () => {
+		fireEvent.pointerMove(window, { clientX: 0, clientY: 24, pointerId: 1 })
+		fireEvent.pointerUp(window, { clientX: 0, clientY: 24, pointerId: 1 })
+	})
+	await settle()
+	vi.restoreAllMocks()
+}
+
+const dropAreaWith = (name: string) =>
+	rosterRowOf(name).closest("[data-roster-drop]") as Element
+
+describe("the rows of the expanded sidebar", () => {
+	it("shows the pinned rows in Pinned in their saved order and the other rows in Conversations", async () => {
+		await mountApp(seedPinned)
+
+		expect(pinnedNames()).toEqual(["First pin", "Second pin"])
+		expect(recentNames()).toContain("Loose room")
+		expect(recentNames()).not.toContain("First pin")
+	})
+
+	it("shows the mission of a conversation under its row and opens that mission on press", async () => {
+		let roomId = ""
+		const { router } = await mountApp(async (held) => {
+			const room = await roomIn(held, "Release train")
+			roomId = room.id
+			harness.missions = [missionOn(held, room, { id: "mission-release" })]
+		})
+
+		await press(slotOf("mission-capsule") as HTMLElement)
+
+		expect(router.state.location.search).toMatchObject({
+			conversation: roomId,
+			mission: "mission-release",
+		})
+	})
+
+	it("opens a row from any page", async () => {
+		const { router } = await mountApp(seedPinned)
+		await navigateTo(router, "/missions")
+
+		await press(rosterRowOf("Loose room"))
+
+		expect(router.state.location.pathname).toBe("/")
+	})
+
+	it.each<[string, () => void]>([
+		[
+			"a Cmd-press",
+			() =>
+				fireEvent.click(rosterRowOf("Loose room"), {
+					ctrlKey: true,
+					detail: 1,
+					metaKey: true,
+				}),
+		],
+		[
+			"a middle-button press",
+			() =>
+				fireEvent(
+					rosterRowOf("Loose room"),
+					new MouseEvent("auxclick", {
+						bubbles: true,
+						button: 1,
+						detail: 1,
+					}),
+				),
+		],
+	])(
+		"opens a row in a new tab on %s and stays on the page",
+		async (_, pressRow) => {
+			const { router } = await mountApp(seedPinned)
+			await navigateTo(router, "/missions")
+			const tabsBefore = screen.getAllByRole("tab").length
+
+			await act(async () => pressRow())
+			await settle()
+
+			expect(router.state.location.pathname).toBe("/missions")
+			expect(screen.getAllByRole("tab").length).toBe(tabsBefore + 1)
+		},
+	)
+
+	it("moves a row between the slots from its menu and keeps it after a relaunch", async () => {
+		let store: TranscriptStore | undefined
+		let spaceId = ""
+		await mountApp(async (held) => {
+			store = held.store
+			spaceId = held.spaceId
+			await seedPinned(held)
+		})
+
+		await pickInRowMenu("Loose room", i18n.t("bots:roster.pin"))
+		expect(pinnedNames()).toContain("Loose room")
+		expect(recentNames()).not.toContain("Loose room")
+
+		const pinnedAfter = async () => {
+			const page = await store?.conversationPage(spaceId, null, 30)
+			return page?.pinned.map(({ title }) => title)
+		}
+		expect(await pinnedAfter()).toContain("Loose room")
+
+		await pickInRowMenu("Loose room", i18n.t("bots:roster.unpin"))
+		expect(recentNames()).toContain("Loose room")
+		expect(await pinnedAfter()).not.toContain("Loose room")
+	})
+
+	it("opens the settings of a conversation from its row menu", async () => {
+		const { router } = await mountApp(seedPinned)
+
+		await pickInRowMenu("Loose room", i18n.t("bots:roster.settings"))
+
+		expect(router.state.matches.at(-1)?.routeId).toBe(
+			"/settings/conversation/$conversationId",
+		)
+	})
+
+	it("deletes a conversation from its row menu", async () => {
+		await mountApp(seedPinned)
+
+		await pickInRowMenu("Loose room", i18n.t("bots:roster.delete"))
+
+		expect(rosterRowNamed("Loose room")).toBeNull()
+	})
+
+	it("shows the name field for a new section and files the row in it", async () => {
+		let store: TranscriptStore | undefined
+		let spaceId = ""
+		await mountApp(async (held) => {
+			store = held.store
+			spaceId = held.spaceId
+			await seedPinned(held)
+		})
+
+		await openRowMenu("Loose room")
+		await press(
+			screen.getByRole("menuitem", {
+				name: i18n.t("bots:roster.section.moveTo"),
+			}),
+		)
+		await press(
+			screen.getByRole("menuitem", {
+				name: i18n.t("bots:roster.section.create"),
+			}),
+		)
+		const field = screen.getByRole("textbox", {
+			name: i18n.t("bots:roster.section.createField"),
+		})
+		await act(async () => {
+			fireEvent.change(field, { target: { value: "Clients" } })
+			fireEvent.keyDown(field, { key: "Enter" })
+		})
+		await settle()
+
+		const [section] = (await store?.sections(spaceId)) ?? []
+		const page = await store?.conversationPage(spaceId, null, 30)
+		expect(section?.name).toBe("Clients")
+		expect(
+			page?.pinned.find(({ title }) => title === "Loose room")?.sectionId,
+		).toBe(section?.id)
+	})
+
+	it("moves a pinned row one place on Alt with an arrow and announces the move", async () => {
+		await mountApp(seedPinned)
+
+		await act(async () => {
+			fireEvent.keyDown(rosterRowOf("First pin"), {
+				altKey: true,
+				key: "ArrowDown",
+			})
+		})
+		await settle()
+
+		expect(pinnedNames()).toEqual(["Second pin", "First pin"])
+		expect(slotOf("roster-move-announcement")?.textContent).toBe(
+			i18n.t("bots:roster.moved", {
+				name: "First pin",
+				position: 2,
+				count: 2,
+			}),
+		)
+	})
+
+	it("files a row dropped on Pinned from Conversations, and unpins a row dropped back", async () => {
+		await mountApp(seedPinned)
+
+		liftRow("Loose room")
+		await dropOver(dropAreaWith("First pin"))
+		expect(pinnedNames()).toContain("Loose room")
+
+		liftRow("Loose room")
+		await dropOver(
+			slotOf("fold-section")
+				?.parentElement?.querySelectorAll("[data-roster-drop]")
+				.item(
+					document.querySelectorAll("[data-roster-drop]").length - 1,
+				) as Element,
+		)
+		expect(recentNames()).toContain("Loose room")
+	})
+
+	it("highlights the row of the conversation holding the open mission", async () => {
+		let roomId = ""
+		const { router } = await mountApp(async (held) => {
+			const room = await roomIn(held, "Release train")
+			roomId = room.id
+			harness.missions = [missionOn(held, room, { id: "mission-release" })]
+		})
+
+		await act(async () => {
+			await router.navigate({
+				to: "/",
+				search: { conversation: roomId, mission: "mission-release" },
+			})
+		})
+		await settle()
+
+		expect(rosterRowOf("Release train").getAttribute("aria-current")).toBe(
+			"page",
+		)
+	})
+
+	it("marks the mission cell of the open mission current when collapsed", async () => {
+		let roomId = ""
+		const { router } = await mountCollapsed(async (held) => {
+			const room = await roomIn(held, "Release train")
+			roomId = room.id
+			harness.missions = [missionOn(held, room, { id: "mission-release" })]
+		})
+
+		await act(async () => {
+			await router.navigate({
+				to: "/",
+				search: { conversation: roomId, mission: "mission-release" },
+			})
+		})
+		await settle()
+
+		expect(
+			slotOf("collapsed-sidebar-mission")?.getAttribute("aria-current"),
+		).toBe("page")
+	})
+})
+
+describe("the open mission count of the expanded sidebar", () => {
+	const missionsIn =
+		(states: Mission["state"][]) => async (held: SpaceSeed) => {
+			const room = await roomIn(held, "Release train")
+			harness.missions = states.map((state, index) =>
+				missionOn(held, room, { id: `mission-${index}`, state }),
+			)
+		}
+
+	it("shows five for one mission waiting on the person and four in progress", async () => {
+		await mountApp(
+			missionsIn([
+				"waiting_human",
+				"working",
+				"waiting_bot",
+				"ready_to_merge",
+				"working",
+			]),
+		)
+
+		expect(entry(`${MISSIONS} 5`)).toBeTruthy()
+	})
+
+	it("leaves done, failed and closed missions out of the count", async () => {
+		await mountApp(missionsIn(["working", "done", "failed", "closed"]))
+
 		expect(entry(`${MISSIONS} 1`)).toBeTruthy()
+	})
+
+	it("draws no count when the Space holds no open mission", async () => {
+		await mountApp(missionsIn(["done"]))
+
+		expect(entry(MISSIONS).textContent).toBe(MISSIONS)
 	})
 })

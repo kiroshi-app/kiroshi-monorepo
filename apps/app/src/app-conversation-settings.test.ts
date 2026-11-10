@@ -19,7 +19,11 @@ import { createFakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
-import { sidebarItemNamed, sidebarItemOf } from "@/lib/sidebar/sidebar-fixtures"
+import {
+	rosterRowNamed,
+	rosterRowOf,
+	sidebarItemOf,
+} from "@/lib/sidebar/sidebar-fixtures"
 import { readMirror, writeMirror } from "@/lib/user/preferences-mirror"
 
 type Harness = {
@@ -97,8 +101,8 @@ const settle = async () => {
 	})
 }
 
-const mountRouterAt = async (path = "/") => {
-	writeMirror({ ...readMirror(), firstRunDone: true, sidebarCollapsed: true })
+const mountRouterAt = async (path = "/", sidebarCollapsed = true) => {
+	writeMirror({ ...readMirror(), firstRunDone: true, sidebarCollapsed })
 	const store = createFakeTranscriptStore()
 	const [space] = await store.spaces()
 	const bot = await store.createBot(newBotIdentity([]), space.id)
@@ -131,6 +135,18 @@ const headerButtonOf = (name: string) =>
 	screen.getByRole("button", {
 		name: i18n.t("chat:screen.conversationIdentity", { name }),
 	})
+
+const rowMenuSettingsOf = async () => {
+	await act(async () => {
+		fireEvent.contextMenu(rosterRowOf(ROOM), { clientX: 20, clientY: 20 })
+	})
+	await settle()
+	return screen.getByRole("menuitem", { name: i18n.t("bots:roster.settings") })
+}
+
+const mountExpanded = () => mountRouterAt("/", false)
+
+const openSettingsFromRowMenu = async () => press(await rowMenuSettingsOf())
 
 const openSettingsFromHeader = async () => {
 	await openRoom()
@@ -206,6 +222,14 @@ it("opens the conversation settings full-window from the conversation button of 
 	)
 })
 
+it("opens the conversation settings full-window from the Settings of a sidebar conversation row menu", async () => {
+	await mountExpanded()
+
+	await openSettingsFromRowMenu()
+
+	expect(conversationScreenOf(ROOM)).toEqual(ON_GENERAL)
+})
+
 it("brings back the open conversation and its draft on Back", async () => {
 	await mountRouterAt()
 	await openRoom()
@@ -220,8 +244,8 @@ it("brings back the open conversation and its draft on Back", async () => {
 })
 
 it("paints a rename in the sidebar", async () => {
-	await mountRouterAt()
-	await openSettingsFromHeader()
+	await mountExpanded()
+	await openSettingsFromRowMenu()
 
 	await act(async () => {
 		fireEvent.change(
@@ -234,17 +258,17 @@ it("paints a rename in the sidebar", async () => {
 	await settle()
 	await press(menuEntryOf(i18n.t("settings:screen.back")))
 
-	expect(sidebarItemNamed(RENAMED)).not.toBeNull()
+	expect(rosterRowNamed(RENAMED)).not.toBeNull()
 })
 
 it("deletes the conversation from the Danger zone and leaves the screen", async () => {
-	await mountRouterAt()
-	await openSettingsFromHeader()
+	await mountExpanded()
+	await openSettingsFromRowMenu()
 
 	await deleteFromDangerZone()
 
 	expect(settingsMenuOf()).toBeNull()
-	expect(sidebarItemNamed(ROOM)).toBeNull()
+	expect(rosterRowNamed(ROOM)).toBeNull()
 })
 
 const raisedNoticeTitles = () =>

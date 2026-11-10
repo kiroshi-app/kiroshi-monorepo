@@ -37,8 +37,16 @@ export type WorkspaceSidebarNavigation = Required<
 > &
 	Pick<NavigationSidebarProps, SidebarSwitcherKey>
 
+export type WorkspaceSidebarRowMenu = {
+	isAgent: (id: string) => boolean
+	onOpenInNewTab: (id: string) => void
+	onOpenSettings: (id: string) => void
+	onOpenAgentDangerZone: (id: string) => void
+}
+
 export type WorkspaceFrame = {
 	sidebar: WorkspaceSidebarNavigation
+	rowMenu: WorkspaceSidebarRowMenu
 	selectedSpaceId: string | undefined
 	collapse: SidebarCollapse
 	guardLeave: (requestLeave: SettingsScreenRequestLeave) => () => void

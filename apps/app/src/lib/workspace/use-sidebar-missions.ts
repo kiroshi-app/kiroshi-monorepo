@@ -63,6 +63,8 @@ type SidebarMissionsInput = {
 export type SidebarMissions = {
 	panelsBySpaceId: Record<string, MissionsPanelProps>
 	waitingCount: number
+	openCount: number
+	openMissionId: string | undefined
 	openMissionThread: (missionId: string) => void
 }
 
@@ -242,6 +244,8 @@ export const useSidebarMissions = ({
 	return {
 		panelsBySpaceId,
 		waitingCount: feed.waitingCount,
+		openCount: feed.openCount,
+		openMissionId: opened?.missionId,
 		openMissionThread,
 	}
 }
