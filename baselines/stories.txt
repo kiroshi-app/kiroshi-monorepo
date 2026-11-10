@@ -185,7 +185,9 @@ conversation-home-home--field-filled
 conversation-home-home--files-attached
 conversation-home-home--first-answer
 conversation-home-home--fresh-after-relaunch
+conversation-home-home--jump-to-latest-shown
 conversation-home-home--loading
+conversation-home-home--long-rows
 conversation-home-home--long-transcript
 conversation-home-home--mission-blocked
 conversation-home-home--mission-completed
@@ -196,6 +198,7 @@ conversation-home-home--picker-open
 conversation-home-home--picker-without-agents
 conversation-home-home--question-waits
 conversation-home-home--relays-from-the-rooms
+conversation-home-home--sent-from-the-composer
 conversation-home-home--sent-thinking
 conversation-home-home--two-rooms-in-a-row
 conversation-home-home--with-a-first-name

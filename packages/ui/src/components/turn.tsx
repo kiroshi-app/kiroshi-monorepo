@@ -163,7 +163,8 @@ const AUTHOR_LINE_END: Partial<Record<TurnState, AuthorLineEnd>> = {
 const HIGHLIGHT =
 	"rounded-xl transition-colors duration-200 data-[highlighted]:bg-accent/40 motion-reduce:transition-none"
 
-const ROW_BLEEDS_TO_TRANSCRIPT_EDGE = "-mx-6 w-auto px-6"
+const ROW_BLEEDS_TO_TRANSCRIPT_EDGE =
+	"-mx-[var(--transcript-row-bleed,--spacing(6))] w-auto px-[var(--transcript-row-bleed,--spacing(6))]"
 
 const ROW_HIGHLIGHT =
 	"transition-colors duration-200 data-[highlighted]:bg-accent/40 motion-reduce:transition-none"
