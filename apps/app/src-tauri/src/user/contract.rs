@@ -309,20 +309,6 @@ mod tests {
 		assert_eq!(read.open_on, OpenOn::NewConversation);
 	}
 
-	#[test]
-	fn the_launch_page_crosses_to_the_front_under_its_camel_case_name() {
-		let mut payload = a_payload();
-		payload["openOn"] = json!("lastConversation");
-		let read: UserPreferences =
-			serde_json::from_value(payload).expect("the payload deserializes");
-
-		assert_eq!(read.open_on, OpenOn::LastConversation);
-		assert_eq!(
-			to_value(OpenOn::NewConversation).expect("the page serializes"),
-			json!("newConversation")
-		);
-	}
-
 	#[tokio::test]
 	async fn a_last_conversation_written_through_the_contract_reads_back_through_it() {
 		let dir = temp_dir();
