@@ -476,17 +476,16 @@ const onAnyPort = (answer: Answer): Listening => {
 	return { listener, redirectUrl: loopbackUrl(listener.port) }
 }
 
-const holdUntilStored = (
-	flow: Flow,
+const storeConfirmation = (
 	{ shown, show }: HeldPage,
 	storeTimeoutMs: number,
-) => {
+): Flow["confirm"] => {
 	const unconfirmed = setTimeout(
 		() => show(failedText(UNCONFIRMED)),
 		storeTimeoutMs,
 	)
 	shown.then(() => clearTimeout(unconfirmed))
-	flow.confirm = ({ stored, detail }) => {
+	return ({ stored, detail }) => {
 		show(stored ? GRANTED : failedText(detail ?? UNSTORED))
 	}
 }
@@ -546,7 +545,7 @@ export const authorizeMcpServer = async (
 		await closed
 		return settled
 	}
-	holdUntilStored(flow, { shown, show }, storeTimeoutMs)
+	flow.confirm = storeConfirmation({ shown, show }, storeTimeoutMs)
 	closed.catch((error: unknown) => {
 		process.stderr.write(`${UNCLOSED}: ${describeError(error)}\n`)
 	})
