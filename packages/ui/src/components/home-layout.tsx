@@ -1,8 +1,6 @@
 import type { ReactNode } from "react"
 
-type HomeStage = "empty"
-
-type HomeLayoutProps = { stage: HomeStage; children: ReactNode }
+type HomeLayoutProps = { stage: "empty"; children: ReactNode }
 
 const HomeLayout = ({ stage, children }: HomeLayoutProps) => (
 	<div
@@ -16,4 +14,4 @@ const HomeLayout = ({ stage, children }: HomeLayoutProps) => (
 	</div>
 )
 
-export { HomeLayout, type HomeLayoutProps, type HomeStage }
+export { HomeLayout, type HomeLayoutProps }
