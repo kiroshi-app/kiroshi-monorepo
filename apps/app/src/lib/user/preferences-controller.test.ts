@@ -506,29 +506,23 @@ describe("the page the reader opens on", () => {
 		expect(controller.getState().preferences.openOn).toBe("lastConversation")
 	})
 
-	it("writes Last conversation to the record and the mirror, and shows it before the host answers", async () => {
-		const host = aHost()
-		const controller = await loaded()
+	it.each([
+		{ held: "newConversation", picked: "lastConversation" },
+		{ held: "lastConversation", picked: "newConversation" },
+	] as const)(
+		"writes $picked to the record and the mirror, and shows it before the host answers",
+		async ({ held, picked }) => {
+			const host = aHost({ ...DEFAULTS, openOn: held })
+			const controller = await loaded()
 
-		const written = controller.setOpenOn("lastConversation")
+			const written = controller.setOpenOn(picked)
 
-		expect(controller.getState().preferences.openOn).toBe("lastConversation")
-		await written
-		expect(localStorage.getItem("openOn")).toBe("lastConversation")
-		expect(host()).toEqual({ ...DEFAULTS, openOn: "lastConversation" })
-	})
-
-	it("writes New conversation to the record and the mirror, and shows it before the host answers", async () => {
-		const host = aHost({ ...DEFAULTS, openOn: "lastConversation" })
-		const controller = await loaded()
-
-		const written = controller.setOpenOn("newConversation")
-
-		expect(controller.getState().preferences.openOn).toBe("newConversation")
-		await written
-		expect(localStorage.getItem("openOn")).toBe("newConversation")
-		expect(host()).toEqual({ ...DEFAULTS, openOn: "newConversation" })
-	})
+			expect(controller.getState().preferences.openOn).toBe(picked)
+			await written
+			expect(localStorage.getItem("openOn")).toBe(picked)
+			expect(host()).toEqual({ ...DEFAULTS, openOn: picked })
+		},
+	)
 
 	it("writes nothing for a page the record already holds", async () => {
 		aHost({ ...DEFAULTS, openOn: "lastConversation" })
