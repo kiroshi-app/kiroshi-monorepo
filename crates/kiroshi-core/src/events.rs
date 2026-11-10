@@ -40,6 +40,10 @@ macro_rules! declared {
 
 		#[cfg(any(test, feature = "test-support"))]
 		pub const DECLARED_NAMES: &[&str] = &[$($name),*];
+
+		#[cfg(test)]
+		pub const PAYLOADS: &[(&str, fn(&mut specta::Types) -> specta::datatype::DataType)] =
+			&[$(($name, <$payload as specta::Type>::definition)),*];
 	};
 }
 

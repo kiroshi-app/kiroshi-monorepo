@@ -156,7 +156,7 @@ bun run lint:fix     # Fix
 bun run types        # Type check (tsc -b)
 bun run ci           # The CI gate on this machine: lint, vitest, website, core, then ios
 bun run ci:fast      # The pre-push check: format, Biome and knip against the baseline, types, the changed unit tests
-bun run snapshots    # Rewrite every back-end contract snapshot in apps/app/contracts from the live code
+bun run snapshots    # Rewrite every back-end contract snapshot in apps/app/contracts, and docs/relay/member-socket.schema.json, from the live code
 bun run baseline     # Check the vitest suites, biome and knip against baselines/
 bun run baseline:update  # Record the newly reported items, keeping every entry already there
 bun run baseline:prune   # Drop the baseline entries no longer reported

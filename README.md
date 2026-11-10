@@ -115,7 +115,7 @@ bun run dev
 | `bun run baseline` | Check the vitest suites, Biome and knip against `baselines/`. |
 | `bun run baseline:update` | Record the newly reported items. |
 | `bun run baseline:prune` | Drop the baseline entries no longer reported. |
-| `bun run snapshots` | Rewrite every back-end contract snapshot in `apps/app/contracts` from the live code. |
+| `bun run snapshots` | Rewrite every back-end contract snapshot in `apps/app/contracts`, and `docs/relay/member-socket.schema.json`, from the live code. |
 | `bun run tokens:build` | Regenerate the colour tokens. |
 | `bun run tokens:check-sets` | Check the iPhone app colour sets in `Colors.xcassets` against `packages/ui/tokens.json`. |
 | `bun run avatar:build` | Bundle the Agent avatar drawing into the iPhone app resources. |

@@ -135,8 +135,24 @@ macro_rules! decoded {
 }
 
 macro_rules! table {
-	($core:ident, $client:ident, $caller:ident; $($name:ident ($($arg:ident: $ty:ty),*) => $answer:expr;)*) => {
+	($core:ident, $client:ident, $caller:ident; $($name:ident ($($arg:ident: $ty:ty),*) => $wrap:ident ($($call:tt)*);)*) => {
 		pub const COMMANDS: &[&str] = &[$(stringify!($name)),*];
+
+		#[cfg(test)]
+		#[allow(unreachable_code, unused_variables, clippy::diverging_sub_expression)]
+		pub fn signatures(types: &mut specta::Types) -> Vec<signature::Signature> {
+			vec![$(signature::Signature {
+				command: stringify!($name),
+				args: vec![$((stringify!($arg), <$ty as specta::Type>::definition(types))),*],
+				answer: signature::$wrap(types, || async move {
+					let $core: &Core = unreachable!();
+					let $caller: Caller = unreachable!();
+					let $client: &ClientId = unreachable!();
+					$(let $arg: $ty = unreachable!();)*
+					std::convert::identity($($call)*)
+				}),
+			},)*]
+		}
 
 		async fn answer(
 			core: &Core,
@@ -148,7 +164,7 @@ macro_rules! table {
 			let $caller = caller;
 			let $client = &ClientId::new(IN_PROCESS_CLIENT);
 			Some(match command {
-				$(stringify!($name) => decoded!(command, arguments; ($($arg: $ty),*) => $answer),)*
+				$(stringify!($name) => decoded!(command, arguments; ($($arg: $ty),*) => $wrap($($call)*)),)*
 				_ => return None,
 			})
 		}
@@ -444,10 +460,9 @@ table! { core, client, caller;
 	mission_answered(mission_id: String, seq: i64) =>
 		answered(mark_answered(core, mission_id, seq).await);
 	mission_run_claim(mission_id: String) => plain(mission_run_claim(core, client, mission_id));
-	mission_run_release(token: String) => {
+	mission_run_release(token: String) => plain({
 		mission_run_release(core, token);
-		plain(())
-	};
+	});
 
 	chat_store_attachments(conversation_id: String, attachments: Vec<SubmittedAttachment>) =>
 		answered(chat_store_attachments(core, conversation_id, attachments).await);
@@ -597,10 +612,9 @@ table! { core, client, caller;
 		answered(crate::joined_spaces::commands::joined_space_remove(core, id).await);
 	joined_space_describe(id: String, name: String, colour: Option<i64>) =>
 		answered(crate::joined_spaces::commands::joined_space_describe(core, id, name, colour).await);
-	join_link_listen() => {
+	join_link_listen() => plain({
 		crate::joined_spaces::commands::join_link_listen(core, client);
-		plain(())
-	};
+	});
 
 	joined_space_members(id: String) =>
 		answered(crate::joined_spaces::members::joined_space_members(core, id).await);
@@ -734,6 +748,39 @@ fn read<T: DeserializeOwned>(command: &str, arguments: Value) -> Result<T, Answe
 	serde_json::from_value(arguments).map_err(|failure| {
 		Answer::Unanswerable(format!("invalid args for command {command}: {failure}"))
 	})
+}
+
+#[cfg(test)]
+pub mod signature {
+	use std::future::Future;
+
+	use specta::datatype::DataType;
+	use specta::{Type, Types};
+
+	pub struct Answer {
+		pub ok: DataType,
+		pub error: Option<DataType>,
+	}
+
+	pub struct Signature {
+		pub command: &'static str,
+		pub args: Vec<(&'static str, DataType)>,
+		pub answer: Answer,
+	}
+
+	pub fn plain<T: Type, F: Future<Output = T>>(
+		types: &mut Types,
+		_: impl FnOnce() -> F,
+	) -> Answer {
+		Answer { ok: T::definition(types), error: None }
+	}
+
+	pub fn answered<T: Type, E: Type, F: Future<Output = Result<T, E>>>(
+		types: &mut Types,
+		_: impl FnOnce() -> F,
+	) -> Answer {
+		Answer { ok: T::definition(types), error: Some(E::definition(types)) }
+	}
 }
 
 fn plain<T: Serialize>(answer: T) -> Answer {

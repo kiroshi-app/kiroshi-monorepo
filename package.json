@@ -39,7 +39,7 @@
 		"test:colour-sets": "bun test scripts/check-colour-sets.test.ts",
 		"baseline:update": "bun scripts/baseline.ts --update",
 		"baseline:prune": "bun scripts/baseline.ts --prune",
-		"snapshots": "bun apps/app/sidecar/scripts/generate.ts && UPDATE_SNAPSHOTS=1 bun test --cwd apps/app/sidecar src/contracts.test.ts && UPDATE_SNAPSHOTS=1 cargo test -p kiroshi-core --test contracts",
+		"snapshots": "bun apps/app/sidecar/scripts/generate.ts && UPDATE_SNAPSHOTS=1 bun test --cwd apps/app/sidecar src/contracts.test.ts && UPDATE_SNAPSHOTS=1 cargo test -p kiroshi-core --test contracts && UPDATE_SNAPSHOTS=1 cargo test -p kiroshi-core --lib member_socket::tests::the_committed_schema_is_the_one_the_core_types_produce",
 		"avatar:build": "bun scripts/build-avatar.ts",
 		"lint": "turbo run lint",
 		"lint:fix": "turbo run lint:fix",

@@ -53,4 +53,5 @@ security-framework = "3"
 libc = "0.2"
 
 [dev-dependencies]
+specta-serde = "=0.0.12"
 tokio = { version = "1", features = ["macros", "process", "io-util", "sync", "time", "rt-multi-thread", "test-util"] }
