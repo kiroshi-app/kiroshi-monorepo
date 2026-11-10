@@ -95,6 +95,7 @@ fn ram_bytes() -> Option<u64> {
 
 #[cfg(test)]
 mod tests {
+	#[cfg(unix)]
 	use super::*;
 
 	#[cfg(unix)]

@@ -288,6 +288,7 @@ mod tests {
 		fs::remove_dir_all(&root).expect("cleanup");
 	}
 
+	#[cfg(unix)]
 	fn git_answer(dir: &Path, arguments: &[&str]) -> String {
 		let ran = std::process::Command::new("git")
 			.arg("-C")

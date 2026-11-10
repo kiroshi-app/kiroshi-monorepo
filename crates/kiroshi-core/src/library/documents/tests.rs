@@ -7,7 +7,9 @@ use uuid::Uuid;
 use yrs::updates::decoder::Decode;
 use yrs::{Doc, Map, ReadTxn, Transact, Update};
 
-use super::{state_dir, state_path, Documents};
+#[cfg(unix)]
+use super::state_dir;
+use super::{state_path, Documents};
 use crate::board::{export_canvas, import_canvas, read_board, write_board, Board};
 use crate::library::contract::LibraryError;
 use crate::library::space_dir;
@@ -237,6 +239,7 @@ async fn a_refused_update_leaves_the_board_and_both_files_unchanged() {
 	assert_eq!(stored(&root, BOARD), state_before);
 }
 
+#[cfg(unix)]
 #[tokio::test(start_paused = true)]
 async fn a_failed_write_stays_pending_and_lands_on_the_next_flush() {
 	use std::os::unix::fs::PermissionsExt;

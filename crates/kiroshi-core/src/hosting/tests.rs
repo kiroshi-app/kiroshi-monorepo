@@ -7096,6 +7096,7 @@ impl RelaySide {
 		self.taken(|envelope| envelope["to"] == to.as_str() && envelope.get(key).is_some()).await
 	}
 
+	#[cfg(unix)]
 	async fn frames_until_closed(&mut self) -> Vec<Value> {
 		let mut frames: Vec<Value> = self.unread.drain(..).collect();
 		loop {
