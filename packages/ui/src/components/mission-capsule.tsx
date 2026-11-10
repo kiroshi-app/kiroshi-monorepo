@@ -6,18 +6,18 @@ import { missionTicketPlatform } from "@workspace/ui/components/mission-marks"
 import { cn } from "@workspace/ui/lib/utils"
 
 const CAPSULE_LIST =
-	"-mt-1.5 flex flex-col gap-1 ps-[50px] pe-1.5 pb-1.5 group-data-[collapsible=icon]:hidden"
+	"flex flex-col gap-1 ps-11 group-data-[collapsible=icon]:hidden"
 
 const CAPSULE =
-	"flex h-6 w-full min-w-0 items-center gap-1.5 rounded-sm bg-foreground/10 px-2 py-1 text-start text-xs outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+	"relative flex h-6 w-full min-w-0 items-center gap-1.5 rounded-sm bg-mission-capsule px-2 py-1 text-start text-xs outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
 
 const GLYPH =
 	"pointer-events-none size-3 shrink-0 rounded-full border-[1.5px] border-current bg-[repeating-linear-gradient(135deg,currentColor_0_1px,transparent_1px_3px)]"
 
 const GLYPH_COLOUR = {
-	waiting: "text-warning",
-	failed: "text-bot-badge-failed",
-	ready: "text-bot-badge-done",
+	waiting: "text-mission-glyph-waiting",
+	failed: "text-mission-glyph-failed",
+	ready: "text-mission-glyph-ready",
 	working: "text-primary",
 	waiting_agent: "text-muted-foreground",
 } as const satisfies Record<BotMissionState, string>

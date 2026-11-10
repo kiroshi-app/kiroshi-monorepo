@@ -6,7 +6,14 @@ import {
 	useImperativeHandle,
 	useState,
 } from "react"
-import { expect, fireEvent, fn, waitFor, within } from "storybook/test"
+import {
+	expect,
+	fireEvent,
+	fn,
+	userEvent,
+	waitFor,
+	within,
+} from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
@@ -1009,29 +1016,129 @@ export const ExpandedNewConversationRows = meta.story({
 	},
 })
 
+const TRANSPARENT = "rgba(0, 0, 0, 0)"
+
+const rgbOver = (colour: string, ground: string) => {
+	const canvas = document.createElement("canvas")
+	canvas.width = 1
+	canvas.height = 1
+	const context = canvas.getContext("2d") as CanvasRenderingContext2D
+	context.fillStyle = ground
+	context.fillRect(0, 0, 1, 1)
+	context.fillStyle = colour
+	context.fillRect(0, 0, 1, 1)
+	return Array.from(context.getImageData(0, 0, 1, 1).data.slice(0, 3))
+}
+
+const luminanceOf = (rgb: number[]) => {
+	const [red, green, blue] = rgb.map((channel) => {
+		const unit = channel / 255
+		return unit <= 0.04045 ? unit / 12.92 : ((unit + 0.055) / 1.055) ** 2.4
+	})
+	return 0.2126 * red + 0.7152 * green + 0.0722 * blue
+}
+
+const contrastOf = (colour: string, ground: string) => {
+	const groundRgb = rgbOver(ground, "#000000")
+	const [lighter, darker] = [
+		luminanceOf(rgbOver(colour, `rgb(${groundRgb.join(",")})`)),
+		luminanceOf(groundRgb),
+	].sort((a, b) => b - a)
+	return (lighter + 0.05) / (darker + 0.05)
+}
+
+const surfaceOf = (element: Element) =>
+	element.closest('[data-slot="context-menu-trigger"]') as HTMLElement
+
+const expectMissionsRows = async ({
+	args,
+	canvasElement,
+}: {
+	args: ComponentProps<typeof BotRoster>
+	canvasElement: HTMLElement
+}) => {
+	const capsules = slotsIn(canvasElement, "mission-capsule")
+	await expect(capsules.map((capsule) => capsule.dataset.state)).toEqual([
+		"waiting",
+		"working",
+		"ready",
+		"waiting_agent",
+	])
+	const [first, second] = capsules
+	const head = rowNamed(canvasElement, "Launch room")
+	const surface = surfaceOf(head)
+	await expect(surface.contains(first) && surface.contains(second)).toBe(true)
+	await expect(head.contains(first)).toBe(false)
+	await expect(first.offsetHeight).toBe(24)
+	await expect(
+		first.getBoundingClientRect().top - head.getBoundingClientRect().bottom,
+	).toBe(4)
+	await expect(
+		second.getBoundingClientRect().top - first.getBoundingClientRect().bottom,
+	).toBe(4)
+	await expect(
+		first.getBoundingClientRect().left - surface.getBoundingClientRect().left,
+	).toBe(50)
+	await expect(pixelsOf(surface, "padding-top")).toBe(6)
+	await expect(pixelsOf(surface, "padding-inline-end")).toBe(6)
+	await expect(pixelsOf(surface, "border-top-left-radius")).toBe(10)
+	await expect(
+		surface.getBoundingClientRect().bottom -
+			second.getBoundingClientRect().bottom,
+	).toBe(6)
+
+	await expect(getComputedStyle(surface).backgroundColor).toBe(TRANSPARENT)
+	fireEvent.contextMenu(first)
+	await waitFor(() =>
+		expect(getComputedStyle(surface).backgroundColor).not.toBe(TRANSPARENT),
+	)
+	await expect(getComputedStyle(head).backgroundColor).toBe(TRANSPARENT)
+	await userEvent.keyboard("{Escape}")
+	await waitFor(() =>
+		expect(getComputedStyle(surface).backgroundColor).toBe(TRANSPARENT),
+	)
+
+	first.focus()
+	await expect(first).toHaveFocus()
+	await expect(getComputedStyle(first).transitionDuration).toBe("0s")
+	first.click()
+	await expect(args.onOpenMission).toHaveBeenCalledWith("mission-OPE-512")
+	await expect(args.onSelectConversation).not.toHaveBeenCalled()
+
+	const padding = surface.getBoundingClientRect()
+	const hit = document.elementFromPoint(padding.left + 3, padding.bottom - 3)
+	await expect(hit).toBe(head)
+}
+
 export const ExpandedMissionsRows = meta.story({
 	...PAPER_ARTBOARD,
-	args: { ...MISSIONS_ROSTER, onOpenMission: fn() },
-	play: async ({ args, canvasElement }) => {
-		const capsules = slotsIn(canvasElement, "mission-capsule")
-		await expect(capsules.map((capsule) => capsule.dataset.state)).toEqual([
-			"waiting",
-			"working",
-			"ready",
-			"waiting_agent",
-		])
-		const [first] = capsules
-		await expect(first.offsetHeight).toBe(24)
-		const item = first.closest('[data-slot="sidebar-menu-item"]')
-		await expect(
-			first.getBoundingClientRect().left -
-				(item?.getBoundingClientRect().left ?? 0),
-		).toBe(50)
-		first.focus()
-		await expect(first).toHaveFocus()
-		await expect(getComputedStyle(first).transitionDuration).toBe("0s")
-		first.click()
-		await expect(args.onOpenMission).toHaveBeenCalledWith("mission-OPE-512")
+	args: {
+		...MISSIONS_ROSTER,
+		onOpenMission: fn(),
+		onSelectConversation: fn(),
+	},
+	play: expectMissionsRows,
+})
+
+export const ExpandedMissionsRowsLight = meta.story({
+	parameters: PAPER_ARTBOARD.parameters,
+	args: {
+		...MISSIONS_ROSTER,
+		onOpenMission: fn(),
+		onSelectConversation: fn(),
+	},
+	play: async (context) => {
+		await expectMissionsRows(context)
+		for (const capsule of slotsIn(context.canvasElement, "mission-capsule")) {
+			const ground = getComputedStyle(capsule).backgroundColor
+			const glyph = slotIn(capsule, "mission-capsule-glyph")
+			const title = slotIn(capsule, "mission-capsule-title")
+			const identifier = title.previousElementSibling as HTMLElement
+			for (const part of [glyph, identifier, title])
+				await expect(
+					contrastOf(getComputedStyle(part).color, ground),
+				).toBeGreaterThanOrEqual(4.5)
+		}
 	},
 })
 

@@ -574,13 +574,20 @@ export const OpenRowWithMissionCapsules = meta.story({
 	play: async ({ canvasElement }) => {
 		const row = rowIn(canvasElement)
 		await expect(row).toHaveAttribute("aria-current", "page")
-		await expect(getComputedStyle(row).backgroundColor).not.toBe(TRANSPARENT)
+		const surface = row.closest(
+			'[data-slot="context-menu-trigger"]',
+		) as HTMLElement
+		await expect(getComputedStyle(surface).backgroundColor).not.toBe(
+			TRANSPARENT,
+		)
+		await expect(getComputedStyle(row).backgroundColor).toBe(TRANSPARENT)
 		await expectRowAnatomy(row)
 		await expectKnockoutCutToTheRow(row)
 		const capsules = slotsIn(canvasElement, "mission-capsule")
 		await expect(capsules).toHaveLength(2)
 		for (const capsule of capsules) {
 			await expect(row.contains(capsule)).toBe(false)
+			await expect(surface.contains(capsule)).toBe(true)
 			await expect(capsule.getBoundingClientRect().top).toBeGreaterThan(
 				boxOf(row, "conversation-subject-icon").bottom,
 			)

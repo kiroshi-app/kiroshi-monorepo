@@ -1558,6 +1558,7 @@ navigation-appsidebarroster--drag-over-the-sorted-zone
 navigation-appsidebarroster--drag-over-the-sorted-zone-dark
 navigation-appsidebarroster--empty-section-shows-the-drop-slot
 navigation-appsidebarroster--expanded-missions-rows
+navigation-appsidebarroster--expanded-missions-rows-light
 navigation-appsidebarroster--expanded-new-conversation-rows
 navigation-appsidebarroster--failed-to-load
 navigation-appsidebarroster--idle

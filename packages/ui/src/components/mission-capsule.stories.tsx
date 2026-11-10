@@ -1,10 +1,7 @@
 import { expect, fn } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import {
-	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
-	slotsIn,
-} from "@workspace/storybook/story-utils"
+import { slotsIn } from "@workspace/storybook/story-utils"
 import type { AppSidebarRowMission } from "@workspace/ui/components/app-sidebar-model"
 import { BOT_MISSION_STATES } from "@workspace/ui/components/bot-badge"
 import { MissionCapsuleList } from "@workspace/ui/components/mission-capsule"
@@ -49,9 +46,7 @@ const meta = preview.meta({
 	},
 })
 
-export const EveryState = meta.story({
-	parameters: { a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION },
-})
+export const EveryState = meta.story({})
 
 export const EveryStateDark = meta.story({
 	globals: { theme: "dark", theme_layout: "single" },
