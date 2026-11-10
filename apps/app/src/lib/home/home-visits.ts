@@ -83,13 +83,13 @@ export const createHomeVisits = (
 	const archiveOnOpening = async (
 		botId: string,
 		spaceId: string,
-		previous: HomeArchive | null,
+		archivedLast: HomeArchive | null,
 	) => {
 		const chat = await store.mainChat(botId, spaceId)
 		const { messages } = await store.loadPage(chat.id, null)
 		const lastMessage = messages.at(-1)
 		if (!lastMessage) {
-			return previous
+			return archivedLast
 		}
 		if (now() - lastMessage.createdAt <= MAIN_CHAT_PAUSE_MS) {
 			return null

@@ -791,7 +791,7 @@ describe("WorkspaceBody Home", () => {
 	const sayIn = async (
 		store: TranscriptStore,
 		conversationId: string,
-		createdAt = said + 1,
+		createdAt?: number,
 	) => {
 		said += 1
 		const turnId = `home-turn-${said}`
@@ -803,7 +803,7 @@ describe("WorkspaceBody Home", () => {
 			authorBotId: null,
 			repliedToMessageId: null,
 			content: "Book the flights.",
-			createdAt,
+			createdAt: createdAt ?? said,
 		})
 	}
 
