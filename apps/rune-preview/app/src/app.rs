@@ -1223,21 +1223,13 @@ mod tests {
 		assert_eq!(shown_titles(&app), vec![SESSION_UNCHECKED]);
 	}
 
-	fn listening(app: &mut App) {
-		app.outbox = Some(Outbox { sender: app.pending.clone(), waker: Arc::new(|| {}) });
-	}
-
-	fn on_installed(app: &mut App) {
-		if let Some(ready) = app.ready_mut() {
-			ready.source = Source::Running(Host::installed_on(0, ""));
-		}
-	}
-
 	#[test]
 	fn an_installed_host_opens_a_solo_conversation_without_a_session_check() {
 		let (mut app, _) = notifying_app(true);
-		on_installed(&mut app);
-		listening(&mut app);
+		if let Some(ready) = app.ready_mut() {
+			ready.source = Source::Running(Host::installed_on(0, ""));
+		}
+		app.outbox = Some(Outbox { sender: app.pending.clone(), waker: Arc::new(|| {}) });
 
 		app.open("c-1");
 		let landed: Vec<Inbound> = (0..2)
