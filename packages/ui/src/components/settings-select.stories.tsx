@@ -272,3 +272,62 @@ export const ThemesHover = meta.story({
 		await expectFocusRing(first)
 	},
 })
+
+const REBUILT_MODELS = [
+	{ label: "The agent’s own", value: "" },
+	...MODELS.filter((model) => model.value !== "claude-opus"),
+]
+
+const RebuiltOptionsHost = (props: SettingsSelectProps) => {
+	const [options, setOptions] = useState(props.options)
+
+	return (
+		<div className="flex flex-col gap-2">
+			<SelectHost {...props} options={options} />
+			<button onClick={() => setOptions(REBUILT_MODELS)} type="button">
+				Rebuild the options
+			</button>
+		</div>
+	)
+}
+
+export const OptionsRebuiltWithoutValue = meta.story({
+	tags: ["test-only"],
+	args: { value: "claude-opus" },
+	render: (args) => <RebuiltOptionsHost {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The options rebuilt without the current answer. Base UI then resets its value to null on its own; the surface must not hear that as a pick, or it saves an empty answer. A pick of an option whose value is empty is still a pick, reported once.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		await userEvent.click(canvas.getByRole("combobox"))
+		await screen.findByRole("listbox", { name: "Model" })
+		await userEvent.keyboard("{Escape}")
+		await waitFor(async () => {
+			await expect(screen.queryByRole("listbox")).toBeNull()
+		}, FRAME_POLL)
+
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Rebuild the options" }),
+		)
+		await userEvent.click(canvas.getByRole("combobox"))
+		await screen.findByRole("option", { name: "The agent’s own" })
+		await expect(
+			screen.queryByRole("option", { name: "Claude Opus" }),
+		).toBeNull()
+		await expect(args.onValueChange).not.toHaveBeenCalled()
+
+		await userEvent.click(
+			screen.getByRole("option", { name: "The agent’s own" }),
+		)
+		await waitFor(async () => {
+			await expect(screen.queryByRole("listbox")).toBeNull()
+		}, FRAME_POLL)
+		await expect(args.onValueChange).toHaveBeenCalledOnce()
+		await expect(args.onValueChange).toHaveBeenCalledWith("")
+	},
+})
