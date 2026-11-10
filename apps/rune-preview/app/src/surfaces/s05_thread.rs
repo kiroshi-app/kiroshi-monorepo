@@ -148,6 +148,7 @@ impl State {
 			| HostEvent::Library(_)
 			| HostEvent::Roster(_)
 			| HostEvent::Approvals(_)
+			| HostEvent::Connection { .. }
 			| HostEvent::Device(_)
 			| HostEvent::Spaces(_)
 			| HostEvent::AccountChanged(_)

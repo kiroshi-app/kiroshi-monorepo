@@ -1,14 +1,22 @@
+use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use rune::{Chrome, El, TextStyle, col, el, icon, row, text};
 
-use kiroshi_rune_kit::avatar::Face;
+use kiroshi_core::agent::contract::{ConnectionState, RuntimeScope};
+
+use kiroshi_rune_kit::avatar::Motion;
 use kiroshi_rune_kit::icons;
-use kiroshi_rune_kit::surfaces::s05_thread::{Agent as ThreadAgent, ThreadKind};
+use kiroshi_rune_kit::strings::Language;
+use kiroshi_rune_kit::surfaces::s01_chrome::ConnectionStatus;
+use kiroshi_rune_kit::surfaces::s05_thread::{
+	Agent as ThreadAgent, HeaderIdentity, ThreadKind, header_identity,
+};
+use kiroshi_rune_kit::surfaces::s10_agent_settings::{Event as AgentSettingsEvent, Host as _};
 use kiroshi_rune_kit::surfaces::s14_library::DOCUMENT_PANEL_OPENING_WIDTH;
 use kiroshi_rune_kit::tokens::{
 	RADIUS_LG, SPACING, TEXT_10_MEDIUM, TEXT_COMPACT, TEXT_COMPACT_MONO, TEXT_SM, TEXT_SM_MEDIUM,
-	TEXT_TITLE, Tokens, conversation_icon, srgb,
+	TEXT_TITLE, Tokens, conversation_icon,
 };
 use kiroshi_rune_kit::widgets::{Pill, spinner};
 
@@ -16,9 +24,10 @@ use crate::app::{App, Pane, Person, Ready, Thread, Workspace};
 use crate::host::{DEV_START_COMMAND, HostError, Profile};
 use crate::model::{Agent, Conversation};
 use crate::navigation::Route;
+use crate::surfaces::s01_chrome::connection::connection_state_of;
 use crate::surfaces::{
-	s01_chrome, s02_rail, s03_roster, s05_thread, s06_composer, s08_missions, s13_space_settings,
-	s14_library,
+	s01_chrome, s02_rail, s03_roster, s05_thread, s06_composer, s08_missions, s10_agent_settings,
+	s13_space_settings, s14_library,
 };
 
 pub const CHROME: Chrome =
@@ -31,8 +40,6 @@ const SHELL_INSET: f32 = 8.0;
 const ROSTER: f32 = 304.0;
 const ROSTER_PAD: f32 = 9.0;
 const HEADER: f32 = 48.0;
-
-const PRESENCE_ONLINE: u32 = 0x207144;
 
 const TIMESTAMP: TextStyle = TextStyle { line_height: 20.0, ..TextStyle::new(11.0, 500.0) };
 const HEADER_TITLE: TextStyle =
@@ -206,14 +213,19 @@ struct SoloAgent {
 	hue: Option<f32>,
 }
 
-impl SoloAgent {
-	fn face<'a>(&'a self, s: &App, conversation_id: &str) -> Face<'a> {
-		Face {
-			name: &self.name,
-			hue: self.hue,
-			image: None,
-			motion: s.motion(conversation_id, &self.id),
-		}
+#[derive(Default)]
+pub struct Connections {
+	held: HashMap<(String, String), ConnectionState>,
+}
+
+impl Connections {
+	pub fn changed(&mut self, scope: &RuntimeScope, state: ConnectionState) {
+		self.held.insert((scope.conversation_id.clone(), scope.bot_id.clone()), state);
+	}
+
+	pub fn of(&self, conversation_id: &str, bot_id: &str) -> ConnectionState {
+		let key = (conversation_id.to_owned(), bot_id.to_owned());
+		self.held.get(&key).copied().unwrap_or(ConnectionState::Checking)
 	}
 }
 
@@ -342,28 +354,67 @@ fn no_thread(s: &App, t: &Tokens) -> El {
 	col().w_full().grow(1.0).min_h(0.0).child(hint).children(s06_composer::access_view(s, t))
 }
 
+fn is_agent_settings_open(s: &App) -> bool {
+	s.navigation.main_route() == Route::AgentSettings && s.surfaces.s10_agent_settings.is_open()
+}
+
+fn toggle_agent_settings(app: &mut App, bot_id: &str) {
+	if is_agent_settings_open(app) {
+		return app.emit(AgentSettingsEvent::Close);
+	}
+	s10_agent_settings::open_agent_settings(app, bot_id);
+}
+
+fn solo_identity_of<'a>(
+	s: &App,
+	conversation_id: &str,
+	agent: &'a SoloAgent,
+) -> HeaderIdentity<'a> {
+	let state = s.connections.of(conversation_id, &agent.id);
+	HeaderIdentity {
+		hue: agent.hue,
+		title: None,
+		image: None,
+		motion: Motion::Still,
+		connection: ConnectionStatus {
+			name: &agent.name,
+			state: connection_state_of(state),
+			version: None,
+		},
+		is_settings_open: is_agent_settings_open(s),
+	}
+}
+
+fn solo_identity(s: &App, t: &Tokens, conversation_id: &str, agent: &SoloAgent) -> El {
+	let identity = solo_identity_of(s, conversation_id, agent);
+	let bot_id = agent.id.clone();
+	header_identity(t, Language::En, &identity, move |app: &mut App| {
+		toggle_agent_settings(app, &bot_id)
+	})
+}
+
+fn conversation_identity(t: &Tokens, title: &str, conversation: Option<&Conversation>) -> El {
+	let media = conversation.map_or_else(el, |conversation| subject_icon(conversation, 24.0, t));
+	row()
+		.h(36.0)
+		.pl(6.0)
+		.pr(10.0)
+		.gap(SPACING * 2.0)
+		.center_y()
+		.radius(10.0)
+		.hover(t.muted)
+		.child(media)
+		.child(text(title.to_owned()).font(TEXT_SM_MEDIUM).color(t.foreground))
+		.child(icon(&icons::SETTINGS, 14.0).color(t.muted_foreground))
+}
+
 fn thread_header(s: &App, t: &Tokens) -> El {
 	let identity = s.thread.as_ref().map(|thread| {
 		let conversation = opened_conversation(s, thread);
-		let solo = conversation.and_then(|conversation| solo_agent(s, conversation));
-		let media = match (&solo, conversation) {
-			(Some(agent), _) => agent.face(s, &thread.conversation_id).draw(24.0, t),
-			(None, Some(conversation)) => subject_icon(conversation, 24.0, t),
-			(None, None) => el(),
-		};
-		let name = solo.map_or_else(|| thread.title.clone(), |agent| agent.name);
-		row()
-			.h(36.0)
-			.pl(6.0)
-			.pr(10.0)
-			.gap(SPACING * 2.0)
-			.center_y()
-			.radius(10.0)
-			.hover(t.muted)
-			.child(media)
-			.child(text(name).font(TEXT_SM_MEDIUM).color(t.foreground))
-			.child(el().size(6.0, 6.0).radius(3.0).fill(srgb(PRESENCE_ONLINE)))
-			.child(icon(&icons::SETTINGS, 14.0).color(t.muted_foreground))
+		match conversation.and_then(|conversation| solo_agent(s, conversation)) {
+			Some(agent) => solo_identity(s, t, &thread.conversation_id, &agent),
+			None => conversation_identity(t, &thread.title, conversation),
+		}
 	});
 	let header = row()
 		.w_full()
@@ -380,6 +431,7 @@ fn thread_header(s: &App, t: &Tokens) -> El {
 
 #[cfg(test)]
 mod tests {
+	use kiroshi_rune_kit::surfaces::s01_chrome::ConnectionState as ShownState;
 	use kiroshi_rune_kit::surfaces::s02_rail::{RailMessage, RailPanel};
 	use kiroshi_rune_kit::surfaces::s13_space_settings::SpaceEvent;
 
@@ -460,5 +512,97 @@ mod tests {
 		assert_eq!(roster_timestamp(now - 2 * 86_400_000, now), "2d");
 		assert_eq!(roster_timestamp(now - 15 * 86_400_000, now), "2w");
 		assert_eq!(roster_timestamp(1_757_980_800_000, now), "9/16");
+	}
+
+	fn skippy_scope(conversation_id: &str) -> RuntimeScope {
+		RuntimeScope {
+			conversation_id: conversation_id.into(),
+			bot_id: "skippy".into(),
+			runtime_session_id: String::new(),
+			epoch: 0,
+		}
+	}
+
+	fn shown_identity(s: &App) -> Option<(String, Option<f32>, ShownState, bool)> {
+		let thread = s.thread.as_ref()?;
+		let agent = solo_agent(s, opened_conversation(s, thread)?)?;
+		let identity = solo_identity_of(s, &thread.conversation_id, &agent);
+		let connection = identity.connection;
+		Some((
+			connection.name.to_owned(),
+			identity.hue,
+			connection.state,
+			identity.is_settings_open,
+		))
+	}
+
+	#[test]
+	fn a_solo_header_shows_the_agent_checking_until_its_session_answers() {
+		let s = loaded();
+
+		let shown = shown_identity(&s);
+
+		assert_eq!(shown, Some(("Skippy".into(), Some(257.0), ShownState::Checking, false)));
+	}
+
+	#[test]
+	fn a_solo_header_follows_every_connection_state_of_its_agent() {
+		let mut s = loaded();
+		let cases = [
+			(ConnectionState::Ready, ShownState::Ready),
+			(ConnectionState::Unavailable, ShownState::Unavailable),
+			(ConnectionState::Crashed, ShownState::Crashed),
+			(ConnectionState::Checking, ShownState::Checking),
+		];
+		for (state, shown) in cases {
+			s.connections.changed(&skippy_scope("chat-skippy"), state);
+
+			let identity = shown_identity(&s).map(|(_, _, state, _)| state);
+
+			assert_eq!(identity, Some(shown));
+		}
+	}
+
+	#[test]
+	fn a_solo_header_ignores_the_state_of_another_conversation() {
+		let mut s = loaded();
+
+		s.connections.changed(&skippy_scope("chat-atlas"), ConnectionState::Crashed);
+
+		assert_eq!(shown_identity(&s).map(|(_, _, state, _)| state), Some(ShownState::Checking));
+	}
+
+	#[test]
+	fn a_group_header_shows_no_connection_state() {
+		let mut s = loaded();
+		let group = Conversation {
+			id: "group".into(),
+			title: "Nest".into(),
+			color: None,
+			participants: Vec::new(),
+			last_activity_at: None,
+			last_word: None,
+			solo_bot_id: None,
+		};
+		let thread = Thread::of_conversation(&group);
+		if let Workspace::Ready(ready) = &mut s.workspace {
+			ready.conversations.push(group);
+		}
+		s.thread = Some(thread);
+
+		assert_eq!(shown_identity(&s), None);
+	}
+
+	#[test]
+	fn the_header_button_toggles_the_agent_settings() {
+		let mut s = loaded();
+
+		toggle_agent_settings(&mut s, "skippy");
+		let opened = shown_identity(&s).map(|(_, _, _, is_open)| is_open);
+		toggle_agent_settings(&mut s, "skippy");
+
+		assert_eq!(opened, Some(true));
+		assert_eq!(shown_identity(&s).map(|(_, _, _, is_open)| is_open), Some(false));
+		assert!(s.navigation.main_route() == Route::Conversations);
 	}
 }

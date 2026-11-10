@@ -211,6 +211,11 @@ impl Host {
 		Host::local(Profile::Dev, port, token.to_owned())
 	}
 
+	#[cfg(test)]
+	pub fn installed_on(port: u16, token: &str) -> Host {
+		Host::local(Profile::Installed, port, token.to_owned())
+	}
+
 	pub fn joined(local: &Source, connection: JoinedSpaceConnection) -> Host {
 		let joined =
 			Joined { connection: Arc::new(Mutex::new(connection)), local: Arc::new(local.clone()) };
