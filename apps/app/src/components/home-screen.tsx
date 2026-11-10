@@ -3,27 +3,16 @@ import { Fragment, type MouseEvent, type ReactNode, useContext } from "react"
 import { greetingPeriodOf } from "@workspace/ui/components/greeting-period"
 import type { HomeAgent } from "@workspace/ui/components/home-agent-picker"
 import { HomeApplicationsBand } from "@workspace/ui/components/home-applications-band"
-import {
-	HomeComposer,
-	HomeComposerSkeleton,
-} from "@workspace/ui/components/home-composer"
-import {
-	HomeGreeting,
-	HomeGreetingSkeleton,
-} from "@workspace/ui/components/home-greeting"
+import { HomeComposer } from "@workspace/ui/components/home-composer"
+import { HomeGreeting } from "@workspace/ui/components/home-greeting"
 import { HomeLayout } from "@workspace/ui/components/home-layout"
 import {
-	HomeArchivedLine,
 	HomeAskedByLine,
 	HomeMissionLine,
 	HomeRequest,
 	type HomeRoom,
 	HomeRoomLine,
 } from "@workspace/ui/components/home-lines"
-import {
-	HomeTranscript,
-	type HomeTranscriptProps,
-} from "@workspace/ui/components/home-transcript"
 import type { PromptAttachment } from "@workspace/ui/components/prompt-attachments"
 import type { TranscriptItem } from "@workspace/ui/components/transcript"
 
@@ -45,7 +34,6 @@ import {
 } from "@/lib/conversations/use-conversation"
 import { homeMissionLinesOf } from "@/lib/home/home-mission-lines"
 import type { HomeRoomLineModel } from "@/lib/home/home-room-lines"
-import type { HomeArchive } from "@/lib/home/home-visits"
 import { useAgentRooms } from "@/lib/home/use-agent-rooms"
 import { useSpaceMissions } from "@/lib/missions/use-space-missions"
 import { conversationHrefOf } from "@/lib/tabs/conversation-tab-opening"
@@ -184,7 +172,6 @@ type HomeRequestsProps = HomeRoomsProps & {
 }
 
 type HomeComposerSlotProps = HomeRequestsProps & {
-	request: ReactNode
 	composer: ReactNode
 }
 
@@ -196,7 +183,6 @@ const HomeComposerSlot = ({
 	runtimes,
 	spaceId,
 	onOpenRoom,
-	request,
 	composer,
 }: HomeComposerSlotProps) => {
 	const rooms = roomsAmong(
@@ -204,16 +190,14 @@ const HomeComposerSlot = ({
 		conversations,
 	)
 	const roomRequest = useRoomRequest(runtimes, rooms)
-	const shownRequest =
-		request ??
-		(roomRequest ? (
-			<HomeRoomRequest
-				{...roomRequest}
-				bots={bots}
-				key={roomRequest.prompt.request.id}
-				onOpenRoom={onOpenRoom}
-			/>
-		) : null)
+	const shownRequest = roomRequest ? (
+		<HomeRoomRequest
+			{...roomRequest}
+			bots={bots}
+			key={roomRequest.prompt.request.id}
+			onOpenRoom={onOpenRoom}
+		/>
+	) : null
 
 	return (
 		<>
@@ -315,28 +299,12 @@ export const HomeLines = (props: HomeLinesProps) => (
 )
 
 export type HomeSend = {
-	readDraft: () => string
+	draft: string
 	onDraftChange: (draft: string) => void
 	onSubmit: (text: string) => void
 	onAttach: (files: File[]) => void
 	attachments: PromptAttachment[]
 	onRemoveAttachment: (id: string) => void
-}
-
-export type HomeConversation = HomeSend & {
-	transcript: HomeTranscriptProps
-	request: ReactNode
-	overlay: ReactNode
-	notice: ReactNode
-	queue: ReactNode
-	isReadOnly: boolean
-}
-
-export type ThreadHome = {
-	isSettling: boolean
-	lines: ReactNode
-	emptyStage: (send: HomeSend) => ReactNode
-	conversationStage: (conversation: HomeConversation) => ReactNode
 }
 
 type HomeDraftComposerProps = HomeSend & {
@@ -351,7 +319,7 @@ const HomeDraftComposer = ({
 	bots,
 	band,
 	onSelectAgent,
-	readDraft,
+	draft,
 	onDraftChange,
 	onSubmit,
 	onAttach,
@@ -362,13 +330,13 @@ const HomeDraftComposer = ({
 		agents={bots.map(homeAgentOf)}
 		attachments={attachments}
 		band={band}
-		defaultValue={readDraft()}
 		onAttach={onAttach}
 		onRemoveAttachment={onRemoveAttachment}
 		onSelectAgent={onSelectAgent}
 		onSubmit={onSubmit}
 		onValueChange={onDraftChange}
 		selectedAgentId={agent.id}
+		value={draft}
 	/>
 )
 
@@ -376,10 +344,10 @@ export type HomeEmptyStageProps = HomeSend &
 	HomeRequestsProps & {
 		store: TranscriptStore
 		readerName: string
-		archive: HomeArchive | null
 		isBandDismissed: boolean
 		lines: ReactNode
-		onOpenArchive: (conversationId: string) => void
+		notice: ReactNode
+		isReadOnly: boolean
 		onSelectAgent: (botId: string) => void
 		onDismissBand: () => void
 	}
@@ -419,13 +387,6 @@ const useApplicationsBand = ({
 	)
 }
 
-export const HomeLoadingStage = () => (
-	<HomeLayout stage="empty">
-		<HomeGreetingSkeleton />
-		<HomeComposerSkeleton />
-	</HomeLayout>
-)
-
 export const HomeEmptyStage = ({
 	agent,
 	bots,
@@ -434,11 +395,11 @@ export const HomeEmptyStage = ({
 	runtimes,
 	spaceId,
 	readerName,
-	archive,
 	isBandDismissed,
 	lines,
+	notice,
+	isReadOnly,
 	onOpenRoom,
-	onOpenArchive,
 	onSelectAgent,
 	onDismissBand,
 	...send
@@ -458,114 +419,28 @@ export const HomeEmptyStage = ({
 				firstName={firstNameOf(readerName)}
 				period={periodAt(Date.now())}
 			/>
-			<HomeComposerSlot
-				agent={agent}
-				bots={bots}
-				composer={
-					<HomeDraftComposer
-						{...send}
-						agent={agent}
-						band={band}
-						bots={bots}
-						onSelectAgent={onSelectAgent}
-					/>
-				}
-				conversations={conversations}
-				onOpenRoom={onOpenRoom}
-				request={null}
-				runtimes={runtimes}
-				spaceId={spaceId}
-				store={store}
-			/>
-			{archive ? (
-				<HomeArchivedLine
-					agentName={agent.name}
-					onOpen={() => onOpenArchive(archive.conversationId)}
-					period={periodAt(archive.lastActiveAt)}
+			{notice}
+			{isReadOnly ? null : (
+				<HomeComposerSlot
+					agent={agent}
+					bots={bots}
+					composer={
+						<HomeDraftComposer
+							{...send}
+							agent={agent}
+							band={band}
+							bots={bots}
+							onSelectAgent={onSelectAgent}
+						/>
+					}
+					conversations={conversations}
+					onOpenRoom={onOpenRoom}
+					runtimes={runtimes}
+					spaceId={spaceId}
+					store={store}
 				/>
-			) : null}
+			)}
 			{lines}
 		</HomeLayout>
-	)
-}
-
-export type HomeConversationStageProps = HomeConversation &
-	HomeLinesProps &
-	HomeRequestsProps & {
-		onSelectAgent: (botId: string) => void
-	}
-
-const NO_ROWS: TranscriptItem[] = []
-
-export const HomeConversationStage = ({
-	transcript,
-	request,
-	overlay,
-	notice,
-	queue,
-	isReadOnly,
-	agent,
-	bots,
-	conversations,
-	store,
-	runtimes,
-	spaceId,
-	openedAt,
-	roomLinesOf,
-	onOpenRoom,
-	onSelectAgent,
-	...send
-}: HomeConversationStageProps) => {
-	const lines = useHomeLines({
-		agent,
-		conversations,
-		store,
-		spaceId,
-		openedAt,
-		roomLinesOf,
-		onOpenRoom,
-	})
-
-	return (
-		<HomeLayout
-			composer={
-				<>
-					{notice}
-					{isReadOnly ? null : (
-						<>
-							{queue}
-							<HomeComposerSlot
-								agent={agent}
-								bots={bots}
-								composer={
-									<HomeDraftComposer
-										{...send}
-										agent={agent}
-										bots={bots}
-										onSelectAgent={onSelectAgent}
-									/>
-								}
-								conversations={conversations}
-								onOpenRoom={onOpenRoom}
-								request={request}
-								runtimes={runtimes}
-								spaceId={spaceId}
-								store={store}
-							/>
-						</>
-					)}
-				</>
-			}
-			stage="conversation"
-			transcript={
-				<>
-					<HomeTranscript
-						{...transcript}
-						rows={[...(transcript.rows ?? NO_ROWS), ...lines]}
-					/>
-					{overlay}
-				</>
-			}
-		/>
 	)
 }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useSyncExternalStore } from "react"
+import { useEffect } from "react"
 
 import type { RosterView } from "./use-roster-view"
 import type { WorkspaceCore } from "./use-workspace-core"
@@ -25,7 +25,7 @@ export const useWorkspaceSubscriptions = ({
 	rosterView,
 	home,
 }: WorkspaceSubscriptionsInput) => {
-	const { chat, homeEntries, homeVisits, joinedSpaces, roster, user } = core
+	const { chat, homeVisits, joinedSpaces, roster, user } = core
 	const { onboarding } = drivers
 	const { bots, rosteredSpaceId, selectedBotId, selectedConversationId } =
 		rosterView
@@ -53,26 +53,9 @@ export const useWorkspaceSubscriptions = ({
 		void roster.controller.reload()
 	})
 
-	useEffect(() => homeEntries.followWindowReturns(), [homeEntries])
-	const homeEntry = useSyncExternalStore(
-		homeEntries.subscribe,
-		homeEntries.getState,
-	)
-	const shownHomeEntry = home.isShown ? homeEntry : null
-
 	const shownBotId = home.isShown ? home.agentId : selectedBotId
 	const holdsShownBot = bots.some((bot) => bot.id === shownBotId)
 	const holdsSelectedBot = bots.some((bot) => bot.id === selectedBotId)
-	const shownRowId = useRef<string | null>(null)
-	const onScreenRowId = home.isShown
-		? home.agentId
-		: (selectedBotId ?? selectedConversationId)
-
-	useEffect(() => {
-		if (onScreenRowId) {
-			shownRowId.current = onScreenRowId
-		}
-	}, [onScreenRowId])
 
 	useEffect(() => {
 		if (!shownBotId || !holdsShownBot) {
@@ -80,22 +63,20 @@ export const useWorkspaceSubscriptions = ({
 		}
 		const spaceId =
 			rosteredSpaceId && roster.controller.hostSpaceIdOf(rosteredSpaceId)
-		const renewed =
-			shownHomeEntry !== null && spaceId
-				? homeVisits.open(shownBotId, spaceId)
-				: Promise.resolve()
-		void renewed.then(() => {
-			if (shownRowId.current === shownBotId) {
-				void chat.controller.open(shownBotId, spaceId)
-			}
-		})
+		if (!home.isShown) {
+			void chat.controller.open(shownBotId, spaceId)
+			return
+		}
+		if (spaceId) {
+			homeVisits.open(shownBotId, spaceId)
+		}
 	}, [
 		chat.controller,
 		homeVisits,
 		roster.controller,
 		shownBotId,
 		holdsShownBot,
-		shownHomeEntry,
+		home.isShown,
 		rosteredSpaceId,
 	])
 

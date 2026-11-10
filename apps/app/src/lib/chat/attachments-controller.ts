@@ -51,11 +51,31 @@ export type AttachmentsController = {
 		text: string,
 		replyLinks?: ReplyLink[],
 	) => Promise<boolean>
+	submitTo: (
+		staging: AttachmentsOwner,
+		target: AttachmentsOwner,
+		text: string,
+	) => Promise<boolean>
 	forget: (owner: AttachmentsOwner) => void
 	release: () => void
 }
 
 export const ownerKey = (owner: AttachmentsOwner) => `${owner.kind}:${owner.id}`
+
+type Delivery = (
+	target: AttachmentsOwner,
+	text: string,
+	replyLinks?: ReplyLink[],
+	documents?: string[],
+) => boolean | Promise<boolean>
+
+type Submission = {
+	staging: AttachmentsOwner
+	target: AttachmentsOwner
+	text: string
+	replyLinks?: ReplyLink[]
+	deliver: Delivery
+}
 
 export function createAttachmentsController(
 	port: AttachmentsPort,
@@ -103,22 +123,24 @@ export function createAttachmentsController(
 		return [...held, ...added.filter(({ id }) => !heldIds.has(id))]
 	}
 
-	const sendWithDocuments = (
-		owner: AttachmentsOwner,
+	const takenBy: Delivery = (target, text, replyLinks, documents) =>
+		port.send(target, text, replyLinks, documents) !== false
+
+	const sendWithDocuments = async (
+		{ staging, target, replyLinks, deliver }: Submission,
 		text: string,
-		replyLinks?: ReplyLink[],
 	) => {
-		const documents = documentsFor(owner)
-		const taken = port.send(
-			owner,
+		const documents = documentsFor(staging)
+		const isTaken = await deliver(
+			target,
 			text,
 			replyLinks,
 			documents.map(({ id }) => id),
 		)
-		if (taken === false) {
+		if (!isTaken) {
 			return false
 		}
-		holdDocuments(owner, NO_DOCUMENTS)
+		holdDocuments(staging, NO_DOCUMENTS)
 		return true
 	}
 
@@ -145,46 +167,42 @@ export function createAttachmentsController(
 		)
 	}
 
-	const submit = async (
-		owner: AttachmentsOwner,
-		text: string,
-		replyLinks?: ReplyLink[],
-	) => {
-		const key = ownerKey(owner)
+	const submitStaged = async (submission: Submission) => {
+		const { staging, target, text } = submission
+		const key = ownerKey(staging)
 		if (sending.has(key)) {
 			return false
 		}
-		const items = stagedFor(owner)
+		const items = stagedFor(staging)
 		if (items.length === 0) {
-			holdRefusal(owner, null)
-			return sendWithDocuments(owner, text, replyLinks)
+			holdRefusal(staging, null)
+			return sendWithDocuments(submission, text)
 		}
 
 		const sentAt = new Date()
 		sending.add(key)
 		let paths: string[]
 		try {
-			paths = await port.store(owner, await submittedFrom(items))
+			paths = await port.store(target, await submittedFrom(items))
 		} catch (reason) {
-			holdRefusal(owner, toAttachmentStoreError(reason))
+			holdRefusal(staging, toAttachmentStoreError(reason))
 			return false
 		} finally {
 			sending.delete(key)
 		}
 
 		if (
-			!sendWithDocuments(
-				owner,
+			!(await sendWithDocuments(
+				submission,
 				promptWithAttachments(text, paths, sentAt),
-				replyLinks,
-			)
+			))
 		) {
 			return false
 		}
 
 		releasePreviews(items)
-		dropSent(owner, items)
-		holdRefusal(owner, null)
+		dropSent(staging, items)
+		holdRefusal(staging, null)
 		return true
 	}
 
@@ -212,7 +230,17 @@ export function createAttachmentsController(
 
 		dismissRefusal: (owner) => holdRefusal(owner, null),
 
-		submit,
+		submit: (owner, text, replyLinks) =>
+			submitStaged({
+				staging: owner,
+				target: owner,
+				text,
+				replyLinks,
+				deliver: takenBy,
+			}),
+
+		submitTo: (staging, target, text) =>
+			submitStaged({ staging, target, text, deliver: port.send }),
 
 		forget: (owner) => {
 			const key = ownerKey(owner)

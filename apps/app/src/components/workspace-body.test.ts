@@ -36,7 +36,7 @@ import {
 import { createAttachmentsController } from "@/lib/chat/attachments-controller"
 import { createAttachmentsPort } from "@/lib/chat/attachments-port"
 import { createChatController } from "@/lib/chat/chat-controller"
-import { type ChatState, initialChatState } from "@/lib/chat/chat-state"
+import { initialChatState } from "@/lib/chat/chat-state"
 import { createDraftsController } from "@/lib/chat/drafts-controller"
 import {
 	type ConversationRuntimes,
@@ -51,7 +51,7 @@ import type { Bot, Conversation } from "@/lib/conversations/store-contract"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import { message, seatBots } from "@/lib/conversations/transcript-fixtures"
 import { homeQueryKeys } from "@/lib/home/home-query-keys"
-import { createHomeVisits, MAIN_CHAT_PAUSE_MS } from "@/lib/home/home-visits"
+import { createHomeVisits } from "@/lib/home/home-visits"
 import type { Invoke } from "@/lib/host/joined-hosts-invoke"
 import { base64Of } from "@/lib/library/library-document-session"
 import type {
@@ -786,30 +786,8 @@ describe("WorkspaceBody Home", () => {
 
 	afterEach(cleanup)
 
-	let said = 0
-
-	const sayIn = async (
-		store: TranscriptStore,
-		conversationId: string,
-		createdAt?: number,
-	) => {
-		said += 1
-		const turnId = `home-turn-${said}`
-		await store.startTurn({ conversationId, id: turnId, startedAt: said })
-		await store.appendUserMessage({
-			id: `home-said-${said}`,
-			conversationId,
-			turnId,
-			authorBotId: null,
-			repliedToMessageId: null,
-			content: "Book the flights.",
-			createdAt: createdAt ?? said,
-		})
-	}
-
 	type HomeLaunch = {
 		store?: TranscriptStore
-		now?: () => number
 		seated?: Workspace
 		overrides?: Partial<WorkspaceBodyHarnessProps>
 		joinedHost?: OpenJoinedHost
@@ -817,13 +795,12 @@ describe("WorkspaceBody Home", () => {
 
 	const launchHome = async ({
 		store = createFakeTranscriptStore(),
-		now,
 		seated,
 		overrides = {},
 		joinedHost,
 	}: HomeLaunch = {}) => {
 		const workspace = seated ?? (await workspaceOf(store))
-		const homeVisits = createHomeVisits(store, now)
+		const homeVisits = createHomeVisits()
 		const onOpenThreadInNewTab = vi.fn()
 		const bodyOf = (more: Partial<WorkspaceBodyHarnessProps> = {}) =>
 			createElement(
@@ -841,6 +818,8 @@ describe("WorkspaceBody Home", () => {
 								workspace.otherConversation,
 							],
 							onSelectAgent: () => undefined,
+							startConversation: () => Promise.resolve(null),
+							openConversation: () => undefined,
 						},
 						onOpenThreadInNewTab,
 						...overrides,
@@ -849,19 +828,12 @@ describe("WorkspaceBody Home", () => {
 				}),
 			)
 		const view = render(bodyOf())
-		const openHome = () => homeVisits.open(workspace.bot.id, SPACE)
-		const open = () => act(openHome)
-		const openTwiceAtOnce = () =>
-			act(() => Promise.all([openHome(), openHome()]))
-		const mainChatId = async () =>
-			(await store.mainChat(workspace.bot.id, SPACE)).id
+		const open = () => act(() => homeVisits.open(workspace.bot.id, SPACE))
 		const rerender = (more?: Partial<WorkspaceBodyHarnessProps>) =>
 			view.rerender(bodyOf(more))
 		return {
 			workspace,
 			open,
-			openTwiceAtOnce,
-			mainChatId,
 			rerender,
 			onOpenThreadInNewTab,
 		}
@@ -894,230 +866,37 @@ describe("WorkspaceBody Home", () => {
 		}
 	}
 
-	const archivedLine = () => screen.queryByRole("button", { name: "Open it" })
-
 	const homeSlot = (slot: string) =>
 		document.querySelector(`[data-slot="${slot}"]`)
 
-	it("starts the Home fresh after a relaunch, the earlier Conversation one click away", async () => {
-		const store = createFakeTranscriptStore()
-		const renewal = vi.spyOn(store, "renewMainChat")
-		const home = await launchHome({ store })
-		const earlier = await home.mainChatId()
-		await sayIn(store, earlier)
-
-		await home.open()
-		await home.open()
-
-		expect(renewal).toHaveBeenCalledOnce()
-		expect(await home.mainChatId()).not.toBe(earlier)
-		expect(screen.getByRole("heading", { name: /What’s next/ })).toBeTruthy()
-		fireEvent.click(screen.getByRole("button", { name: "Open it" }))
-		expect(home.onOpenThreadInNewTab).toHaveBeenCalledWith({
-			conversation: earlier,
-		})
-	})
-
-	const SAID_AT = 1_000_000
-
-	const clockAt = (at: number) => {
-		const clock = { at }
-		return { clock, now: () => clock.at }
-	}
-
-	it("renews a main conversation whose last message is more than an hour old", async () => {
-		const store = createFakeTranscriptStore()
-		const renewal = vi.spyOn(store, "renewMainChat")
-		const { now } = clockAt(SAID_AT + MAIN_CHAT_PAUSE_MS + 1)
-		const home = await launchHome({ store, now })
-		const earlier = await home.mainChatId()
-		await sayIn(store, earlier, SAID_AT)
-
-		await home.open()
-
-		expect(renewal).toHaveBeenCalledOnce()
-		expect(await home.mainChatId()).not.toBe(earlier)
-		expect(archivedLine()).toBeTruthy()
-	})
-
-	it("keeps a main conversation whose last message is an hour old, after a relaunch too", async () => {
-		const store = createFakeTranscriptStore()
-		const renewal = vi.spyOn(store, "renewMainChat")
-		const { now } = clockAt(SAID_AT + MAIN_CHAT_PAUSE_MS)
-		const first = await launchHome({ store, now })
-		const kept = await first.mainChatId()
-		await sayIn(store, kept, SAID_AT)
-		await first.open()
-		cleanup()
-
-		const relaunched = await launchHome({ store, now, seated: first.workspace })
-		await relaunched.open()
-
-		expect(renewal).not.toHaveBeenCalled()
-		expect(await relaunched.mainChatId()).toBe(kept)
-		expect(archivedLine()).toBeNull()
-	})
-
-	it("weighs the hour again on a later opening in the same process, the archived line staying while nothing is said", async () => {
-		const store = createFakeTranscriptStore()
-		const renewal = vi.spyOn(store, "renewMainChat")
-		const { clock, now } = clockAt(SAID_AT + MAIN_CHAT_PAUSE_MS / 2)
-		const home = await launchHome({ store, now })
-		const earlier = await home.mainChatId()
-		await sayIn(store, earlier, SAID_AT)
-
-		await home.open()
-		expect(renewal).not.toHaveBeenCalled()
-		expect(await home.mainChatId()).toBe(earlier)
-
-		clock.at = SAID_AT + MAIN_CHAT_PAUSE_MS + 1
-		await home.open()
-		await home.open()
-
-		expect(renewal).toHaveBeenCalledOnce()
-		expect(await home.mainChatId()).not.toBe(earlier)
-		fireEvent.click(screen.getByRole("button", { name: "Open it" }))
-		expect(home.onOpenThreadInNewTab).toHaveBeenCalledWith({
-			conversation: earlier,
-		})
-	})
-
-	it("renews the main conversation once when two openings overlap", async () => {
-		const store = createFakeTranscriptStore()
-		const renewal = vi.spyOn(store, "renewMainChat")
-		const home = await launchHome({ store })
-		await sayIn(store, await home.mainChatId())
-
-		await home.openTwiceAtOnce()
-
-		expect(renewal).toHaveBeenCalledOnce()
-	})
-
-	it("keeps an empty main conversation, renews nothing and shows no archived line", async () => {
-		const store = createFakeTranscriptStore()
-		const renewal = vi.spyOn(store, "renewMainChat")
-		const home = await launchHome({ store })
-		const kept = await home.mainChatId()
-
-		await home.open()
-
-		expect(renewal).not.toHaveBeenCalled()
-		expect(await home.mainChatId()).toBe(kept)
-		expect(screen.getByRole("heading", { name: /What’s next/ })).toBeTruthy()
-		expect(archivedLine()).toBeNull()
-	})
-
-	it("creates no archived empty conversation across three relaunches with nothing sent", async () => {
-		const store = createFakeTranscriptStore()
-		const renewal = vi.spyOn(store, "renewMainChat")
-		const first = await launchHome({ store })
-		const kept = await first.mainChatId()
-
-		for (let relaunch = 0; relaunch < 3; relaunch += 1) {
-			cleanup()
-			const home = await launchHome({ store, seated: first.workspace })
-			await home.open()
-			expect(archivedLine()).toBeNull()
-			expect(await home.mainChatId()).toBe(kept)
-		}
-
-		expect(renewal).not.toHaveBeenCalled()
-	})
-
-	it("keeps the previous main conversation and says what failed when the renewal fails", async () => {
-		const store = createFakeTranscriptStore()
-		vi.spyOn(store, "renewMainChat").mockRejectedValue(new Error("disk full"))
-		render(createElement(NoticeSurface))
-		const home = await launchHome({ store })
-		const earlier = await home.mainChatId()
-		await sayIn(store, earlier)
-
-		await home.open()
-
-		expect(
-			await screen.findAllByText(
-				"Couldn’t load the latest messages. Restart Kiroshi to retry.",
-			),
-		).not.toHaveLength(0)
-		expect(archivedLine()).toBeNull()
-		expect(await home.mainChatId()).toBe(earlier)
-	})
-
-	it("draws the Home loading state while the agent thread is not loaded yet", async () => {
-		const home = await launchHome({
-			overrides: {
-				chat: {
-					state: { ...initialChatState, isFirstLoadPending: true },
-					controller: createChatController(
-						createScriptedDriver(),
-						createFakeTranscriptStore(),
-					),
-				},
-			},
-		})
-		expect(homeSlot("home-greeting-skeleton")).not.toBeNull()
-
-		await home.open()
-
-		expect(homeSlot("home-greeting-skeleton")).not.toBeNull()
-		expect(homeSlot("home-composer-skeleton")).not.toBeNull()
-		expect(screen.queryByRole("heading", { name: /What’s next/ })).toBeNull()
-	})
-
-	const homeChatOf = (state: ChatState) => {
+	it("shows the fresh Home, never a transcript, whatever the agent was told before", async () => {
 		const controller = createChatController(
 			createScriptedDriver(),
 			createFakeTranscriptStore(),
 		)
-		return { state, controller: { ...controller, stateFor: () => state } }
-	}
-
-	const saidOnce = {
-		...initialChatState,
-		messages: [message({ content: "Book the flights." })],
-	}
-
-	it("draws the Home conversation, never the thread, once the main conversation holds a message", async () => {
-		const home = await launchHome({
-			overrides: { chat: homeChatOf(saidOnce) },
-		})
-
-		await home.open()
-
-		expect(screen.getByText("Book the flights.")).toBeTruthy()
-		expect(homeSlot("home-layout")?.getAttribute("data-stage")).toBe(
-			"conversation",
-		)
-		expect(homeSlot("home-composer")).not.toBeNull()
-		expect(homeSlot("chat-layout")).toBeNull()
-	})
-
-	it("shows a queued prompt above the Home composer", async () => {
+		const told = {
+			...initialChatState,
+			messages: [message({ content: "Book the flights." })],
+		}
 		const home = await launchHome({
 			overrides: {
-				chat: homeChatOf({
-					...saidOnce,
-					outbox: [
-						{
-							id: "queued-1",
-							text: "And the hotel too.",
-							replyLinks: [],
-							documents: [],
-						},
-					],
-				}),
+				chat: {
+					state: told,
+					controller: { ...controller, stateFor: () => told },
+				},
 			},
 		})
 
 		await home.open()
 
-		expect(screen.getByText("And the hotel too.")).toBeTruthy()
-		expect(homeSlot("home-composer")).not.toBeNull()
+		expect(screen.getByRole("heading", { name: /What’s next/ })).toBeTruthy()
+		expect(homeSlot("home-layout")?.getAttribute("data-stage")).toBe("empty")
+		expect(screen.queryByText("Book the flights.")).toBeNull()
+		expect(homeSlot("chat-layout")).toBeNull()
 	})
 
 	it("shows the access banner in place of the Home composer once the Space is left", async () => {
 		const home = await launchHome({
-			overrides: { chat: homeChatOf(saidOnce) },
 			joinedHost: {
 				spaceName: "Studio Nord",
 				hostName: "Lea",
@@ -1129,7 +908,6 @@ describe("WorkspaceBody Home", () => {
 
 		await home.open()
 
-		expect(screen.getByText("Book the flights.")).toBeTruthy()
 		expect(homeSlot("space-access-banner")?.getAttribute("data-reason")).toBe(
 			"removed",
 		)
@@ -1211,12 +989,14 @@ describe("WorkspaceBody Home", () => {
 
 	it("keeps a done room line when the person switches to another agent and back", async () => {
 		const store = createFakeTranscriptStore()
-		const rooms = vi.spyOn(store, "agentRooms")
-		const home = await launchHome({ store })
-		const { bot, conversation } = home.workspace
-		rooms.mockResolvedValue([
-			{ botId: bot.id, conversationIds: [conversation.id] },
-		])
+		const seated = await workspaceOf(store)
+		const { bot, conversation } = seated
+		const rooms = vi
+			.spyOn(store, "agentRooms")
+			.mockResolvedValue([
+				{ botId: bot.id, conversationIds: [conversation.id] },
+			])
+		const home = await launchHome({ store, seated })
 		await home.open()
 		expect(await screen.findByText("Nyx is working in")).toBeTruthy()
 

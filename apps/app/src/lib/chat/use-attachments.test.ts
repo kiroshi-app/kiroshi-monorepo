@@ -81,6 +81,7 @@ const watchedController = () => {
 		remove: () => undefined,
 		dismissRefusal: () => undefined,
 		submit: () => Promise.resolve(true),
+		submitTo: () => Promise.resolve(true),
 		forget: () => undefined,
 		release: () => undefined,
 	}

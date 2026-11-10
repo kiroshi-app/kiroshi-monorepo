@@ -14,8 +14,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import "@workspace/ui/lib/i18n"
 
 import {
-	HomeConversationStage,
-	type HomeConversationStageProps,
+	HomeEmptyStage,
+	type HomeEmptyStageProps,
 	HomeLines,
 } from "@/components/home-screen"
 import type { MissionInSpace, MissionState } from "@/lib/bindings"
@@ -115,35 +115,31 @@ const homeLinesOf = (fixture: HomeFixture, onOpenRoom = vi.fn()) =>
 		onOpenRoom,
 	})
 
-const LAST_TURN = "Book the Lisbon offsite"
-
-const conversationStageOf = (
+const emptyStageOf = (
 	fixture: HomeFixture,
-	stage: Partial<HomeConversationStageProps> = {},
+	stage: Partial<HomeEmptyStageProps> = {},
 ) =>
-	createElement(HomeConversationStage, {
-		readDraft: () => "Also the hotel",
+	createElement(HomeEmptyStage, {
+		draft: "Also the hotel",
 		onDraftChange: vi.fn(),
 		onSubmit: vi.fn(),
 		onAttach: vi.fn(),
 		attachments: [],
 		onRemoveAttachment: vi.fn(),
-		transcript: { rows: [{ key: "turn-1", render: () => LAST_TURN }] },
-		request: null,
-		overlay: null,
-		notice: null,
-		queue: null,
-		isReadOnly: false,
-		openedAt: 0,
-		roomLinesOf: (workingIds) => fixture.roomLog.linesOf("atlas", workingIds),
 		agent: fixture.atlas,
 		bots: [fixture.atlas],
 		conversations: [fixture.room],
 		store: fixture.store,
 		runtimes: fixture.runtimes,
 		spaceId: SPACE,
+		readerName: "Lea",
+		isBandDismissed: true,
+		lines: homeLinesOf(fixture),
+		notice: null,
+		isReadOnly: false,
 		onOpenRoom: vi.fn(),
 		onSelectAgent: vi.fn(),
+		onDismissBand: vi.fn(),
 		...stage,
 	})
 
@@ -238,28 +234,11 @@ const askQuestion = async () => {
 	])
 }
 
-it("draws the room and mission lines after the last turn of the conversation", async () => {
-	workingIn([fixture.room.id])
-	feed.entries = [missionIn(fixture.room, fixture.atlas.id, "done")]
-
-	render(conversationStageOf(fixture), {
-		wrapper: createQueryTestWrapper().wrapper,
-	})
-
-	const roomLine = await screen.findByText("Atlas is working in")
-	const lastTurn = screen.getByText(LAST_TURN)
-	for (const line of [roomLine, screen.getByText("Completed")]) {
-		expect(
-			lastTurn.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING,
-		).toBeTruthy()
-	}
-})
-
 it("puts an approval waiting in a room in place of the composer, then gives the draft back", async () => {
 	workingIn([fixture.room.id])
 	await askApproval()
 
-	render(conversationStageOf(fixture), {
+	render(emptyStageOf(fixture), {
 		wrapper: createQueryTestWrapper().wrapper,
 	})
 
@@ -284,7 +263,7 @@ it("puts a question waiting in a room in place of the composer, under who asked 
 	workingIn([fixture.room.id])
 	await askQuestion()
 
-	render(conversationStageOf(fixture), {
+	render(emptyStageOf(fixture), {
 		wrapper: createQueryTestWrapper().wrapper,
 	})
 
@@ -306,12 +285,9 @@ it("opens a runtime only for the rooms the agent works in", async () => {
 	})
 	workingIn([fixture.room.id])
 
-	render(
-		conversationStageOf(fixture, { conversations: [fixture.room, idle] }),
-		{
-			wrapper: createQueryTestWrapper().wrapper,
-		},
-	)
+	render(emptyStageOf(fixture, { conversations: [fixture.room, idle] }), {
+		wrapper: createQueryTestWrapper().wrapper,
+	})
 
 	await screen.findByText("Atlas is working in")
 	expect(fixture.runtimes.heldFor(fixture.room.id)).not.toBeNull()
@@ -333,8 +309,8 @@ it("shows the staged files, unstages a removed one, and sends files alone", asyn
 	const onSubmit = vi.fn()
 
 	render(
-		conversationStageOf(fixture, {
-			readDraft: () => "",
+		emptyStageOf(fixture, {
+			draft: "",
 			attachments: [{ id: "notes", name: "release-notes.md", size: 4212 }],
 			onRemoveAttachment,
 			onSubmit,

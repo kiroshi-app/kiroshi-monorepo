@@ -182,6 +182,43 @@ describe("a refused store", () => {
 	})
 })
 
+describe("a submission carried to another owner", () => {
+	it("stores the files for the target, sends there and empties the staging owner", async () => {
+		const host = heldPort()
+		const controller = createAttachmentsController(host.port)
+		controller.stage(bot("a"), [fileNamed("notes.md")])
+
+		const submission = controller.submitTo(bot("a"), room("r"), "look")
+		await host.whenStored()
+		host.answerWith(["/data/a/1.md"])
+
+		expect(await submission).toBe(true)
+		expect(host.stored).toEqual([
+			{ owner: "conversation:r", names: ["notes.md"] },
+		])
+		expect(host.sent).toEqual([
+			{ owner: "conversation:r", text: SENT_WITH_NOTES },
+		])
+		expect(controller.getState().staged["bot:a"]).toHaveLength(0)
+	})
+
+	it("waits for the target to take the message and keeps the files when it refuses", async () => {
+		const host = heldPort()
+		const controller = createAttachmentsController({
+			...host.port,
+			send: () => Promise.resolve(false),
+		})
+		controller.stage(bot("a"), [fileNamed("notes.md")])
+
+		const submission = controller.submitTo(bot("a"), room("r"), "look")
+		await host.whenStored()
+		host.answerWith(["/data/a/1.md"])
+
+		expect(await submission).toBe(false)
+		expect(controller.getState().staged["bot:a"]).toHaveLength(1)
+	})
+})
+
 describe("files that stop being reachable", () => {
 	it("release their previews when the companion is forgotten", () => {
 		const released = vi.spyOn(URL, "revokeObjectURL")
