@@ -1,0 +1,47 @@
+pub mod account;
+pub mod agent;
+pub mod applications;
+pub mod attachments;
+pub mod avatars;
+pub mod bundles;
+pub mod claude_import;
+pub mod companions;
+pub mod conversations;
+pub mod core_context;
+pub mod crypto;
+pub mod db;
+pub mod descriptors;
+pub mod desktop_events;
+pub mod devices;
+pub mod environment;
+pub mod events;
+pub mod file_store;
+pub mod host_api;
+pub mod host_services;
+pub mod hosting;
+pub mod invitations;
+pub mod invoke;
+pub mod joined_spaces;
+pub mod json;
+pub mod library;
+pub mod logging;
+pub mod mcp_oauth;
+pub mod missions;
+pub mod plugins;
+pub mod private_files;
+pub mod remote_image;
+pub mod removed_on_drop;
+pub mod routines;
+pub mod search;
+pub mod sections;
+pub mod spaces;
+#[cfg(any(test, feature = "test-support"))]
+pub mod test_core;
+pub mod test_log;
+pub mod updates;
+pub mod user;
+
+const REPO_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
+pub mod board;
+#[cfg(all(any(test, feature = "test-support"), unix))]
+pub mod executable_script;

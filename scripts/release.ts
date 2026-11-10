@@ -3,12 +3,9 @@ import { $ } from "bun"
 const ROOT = new URL("..", import.meta.url).pathname
 
 const FILES = {
-	tauriConf: `${ROOT}apps/app/src-tauri/tauri.conf.json`,
-	appPkg: `${ROOT}apps/app/package.json`,
-	cargoToml: `${ROOT}apps/app/src-tauri/Cargo.toml`,
-	cargoLock: `${ROOT}apps/app/src-tauri/Cargo.lock`,
-	systemPlugin: `${ROOT}apps/app/src-tauri/plugins/kiroshi/.claude-plugin/plugin.json`,
-	bunLock: `${ROOT}bun.lock`,
+	appManifest: `${ROOT}apps/rune-preview/app/Cargo.toml`,
+	appLock: `${ROOT}apps/rune-preview/Cargo.lock`,
+	systemPlugin: `${ROOT}crates/kiroshi-core/plugins/kiroshi/.claude-plugin/plugin.json`,
 }
 
 const SEMVER = /^\d+\.\d+\.\d+(-beta\.\d+)?$/
@@ -24,9 +21,12 @@ const usage =
 	"Usage: bun run release <patch|minor|major|X.Y.Z|X.Y.Z-beta.N> [--dry-run]"
 
 const readCurrentVersion = async () => {
-	const text = await Bun.file(FILES.tauriConf).text()
-	const match = text.match(/"version":\s*"([^"]+)"/)
-	if (!match) throw new Error("Could not read version from tauri.conf.json")
+	const text = await Bun.file(FILES.appManifest).text()
+	const match = text.match(/^version = "([^"]+)"/m)
+	if (!match)
+		throw new Error(
+			"Could not read version from apps/rune-preview/app/Cargo.toml",
+		)
 	return match[1]
 }
 
@@ -51,7 +51,10 @@ const bumpCargoToml = (text: string, next: string) =>
 	text.replace(/^version = "[^"]+"/m, `version = "${next}"`)
 
 const bumpCargoLock = (text: string, next: string) =>
-	text.replace(/(name = "kiroshi-app"\nversion = ")[^"]+(")/, `$1${next}$2`)
+	text.replace(
+		/(name = "kiroshi-rune-preview"\nversion = ")[^"]+(")/,
+		`$1${next}$2`,
+	)
 
 const writeFile = async (path: string, transform: (text: string) => string) => {
 	const text = await Bun.file(path).text()
@@ -90,15 +93,11 @@ const run = async () => {
 	if (status)
 		throw new Error("Working tree is not clean. Commit or stash first.")
 
-	await writeFile(FILES.tauriConf, (text) => bumpJsonVersion(text, next))
-	await writeFile(FILES.appPkg, (text) => bumpJsonVersion(text, next))
-	await writeFile(FILES.cargoToml, (text) => bumpCargoToml(text, next))
-	await writeFile(FILES.cargoLock, (text) => bumpCargoLock(text, next))
+	await writeFile(FILES.appManifest, (text) => bumpCargoToml(text, next))
+	await writeFile(FILES.appLock, (text) => bumpCargoLock(text, next))
 	await writeFile(FILES.systemPlugin, (text) => bumpJsonVersion(text, next))
 
-	await $`bun install`
-
-	await $`git add ${FILES.tauriConf} ${FILES.appPkg} ${FILES.cargoToml} ${FILES.cargoLock} ${FILES.systemPlugin} ${FILES.bunLock}`
+	await $`git add ${FILES.appManifest} ${FILES.appLock} ${FILES.systemPlugin}`
 	await $`git commit -m ${`chore(app): release ${tag}`}`
 	await $`git tag -a ${tag} --cleanup=verbatim -m ${`Release ${tag}`}`
 	await $`git push -u origin ${branch}`

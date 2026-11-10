@@ -12,7 +12,6 @@
 			"**",
 			"!**/src/generated",
 			"!apps/app/contracts",
-			"!apps/app/src/lib/bindings.ts",
 			"!apps/ios/Kiroshi/Resources",
 			"!packages/ui/src/components/companion-avatar.fixture.jsonl",
 			"!docs/relay/member-socket.schema.json",
@@ -27,11 +26,7 @@
 	"plugins": [
 		{
 			"path": "./biome-plugins/no-hardcoded-text.grit",
-			"includes": [
-				"**/src/**/*.tsx",
-				"!**/*.stories.tsx",
-				"!**/src/foundations/**"
-			]
+			"includes": ["**/src/**/*.tsx", "!**/src/foundations/**"]
 		}
 	],
 	"linter": {
@@ -126,7 +121,7 @@
 	},
 	"overrides": [
 		{
-			"includes": ["apps/app/src-tauri/plugins/kiroshi/applications/logos/**"],
+			"includes": ["crates/kiroshi-core/plugins/kiroshi/applications/logos/**"],
 			"linter": {
 				"rules": {
 					"a11y": {
@@ -159,13 +154,7 @@
 			}
 		},
 		{
-			"includes": [
-				"packages/ui/.storybook/**",
-				"packages/components/.storybook/**",
-				"packages/ui/vitest.config.ts",
-				"packages/ui/src/**/*.stories.tsx",
-				"**/*.stories.*"
-			],
+			"includes": ["packages/ui/vitest.config.ts"],
 			"linter": {
 				"rules": {
 					"style": {
@@ -181,10 +170,7 @@
 			}
 		},
 		{
-			"includes": [
-				"packages/ui/src/components/icons.tsx",
-				"packages/ui/src/foundations/icon-stroke.stories.tsx"
-			],
+			"includes": ["packages/ui/src/components/icons.tsx"],
 			"linter": {
 				"rules": {
 					"style": {

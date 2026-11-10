@@ -41,6 +41,7 @@ storybook-static
 
 .claude/settings.local.json
 
-# tauri sidecar binaries
-apps/app/src-tauri/binaries
+# sidecar binaries
+apps/app/sidecar/binaries
 apps/app/sidecar/src/**/generated
+/target

@@ -1,0 +1,15 @@
+[workspace]
+resolver = "3"
+members = ["app", "kit", "os"]
+
+[workspace.package]
+edition = "2024"
+publish = false
+
+[workspace.dependencies]
+rune = { git = "https://github.com/anomalyco/rune", rev = "740ecc0c906025a5b2497f11d7771ee6203e838c" }
+rune-motion = { git = "https://github.com/anomalyco/rune", rev = "740ecc0c906025a5b2497f11d7771ee6203e838c" }
+rune-kit = { git = "https://github.com/anomalyco/rune", rev = "740ecc0c906025a5b2497f11d7771ee6203e838c", features = ["markdown", "mermaid"] }
+
+[profile.dev.package."*"]
+opt-level = 2

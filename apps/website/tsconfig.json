@@ -8,6 +8,6 @@
 			"@workspace/ui/*": ["../../packages/ui/src/*"]
 		}
 	},
-	"include": ["src", "../app/src/lib/missions/mission-chip-states.ts"],
+	"include": ["src"],
 	"references": [{ "path": "../../packages/ui" }]
 }

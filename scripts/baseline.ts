@@ -11,8 +11,6 @@ import { fileURLToPath } from "node:url"
 
 import { pathsChangedSinceMain, reportRetriedTests } from "./ci"
 
-export const STORIES = "stories"
-
 export const TESTS = "tests"
 
 export type Verdict = { failures: string[]; warnings: string[] }
@@ -20,8 +18,6 @@ export type Verdict = { failures: string[]; warnings: string[] }
 export type SuiteOutcome = { suite: string; red: boolean; items: string[] }
 
 type ItemComparison = { area: string; committed: string[]; live: string[] }
-
-type StoryComparison = { committed: string[]; live: string[] }
 
 export const compareItems = ({
 	area,
@@ -37,27 +33,6 @@ export const compareItems = ({
 		warnings: committed
 			.filter((item) => !liveItems.has(item))
 			.map((item) => `${area}: baselined but no longer reported: ${item}`),
-	}
-}
-
-export const compareStories = ({
-	committed,
-	live,
-}: StoryComparison): Verdict => {
-	const committedIds = new Set(committed)
-	const liveIds = new Set(live)
-	return {
-		failures: [
-			...live
-				.filter((id) => !committedIds.has(id))
-				.map((id) => `${STORIES}: reported but not in the baseline: ${id}`),
-			...committed
-				.filter((id) => !liveIds.has(id))
-				.map(
-					(id) => `${STORIES}: in the baseline but no longer reported: ${id}`,
-				),
-		],
-		warnings: [],
 	}
 }
 
@@ -103,8 +78,6 @@ const BASELINES = join(REPO, "baselines")
 
 const SIDECAR = join(REPO, "apps/app/sidecar")
 
-const UI = join(REPO, "packages/ui")
-
 const KNIP = "knip@6.37.0"
 
 const UPDATE = "bun run baseline:update"
@@ -133,12 +106,6 @@ type VitestSuite = {
 
 type UnitSuite = VitestSuite & { root: string }
 
-const APP_SUITE: VitestSuite = {
-	name: "app",
-	filter: "app",
-	script: "test:unit",
-}
-
 const UI_SUITE: VitestSuite = {
 	name: "ui",
 	filter: "@workspace/ui",
@@ -146,26 +113,15 @@ const UI_SUITE: VitestSuite = {
 	project: "unit",
 }
 
-const STORYBOOK_SUITE: VitestSuite = {
-	name: "storybook",
-	filter: "@workspace/ui",
-	script: "test",
-	project: "storybook",
-}
-
 const SIDECAR_SUITE = "sidecar"
 
 const VITEST_SUITES: VitestSuite[] = [
-	APP_SUITE,
 	UI_SUITE,
 	{ name: "website", filter: "website", script: "test" },
 	{ name: "shared", filter: "@workspace/shared", script: "test" },
 ]
 
-export const UNIT_SUITES: UnitSuite[] = [
-	{ ...APP_SUITE, project: "unit", root: "apps/app" },
-	{ ...UI_SUITE, root: "packages/ui" },
-]
+export const UNIT_SUITES: UnitSuite[] = [{ ...UI_SUITE, root: "packages/ui" }]
 
 const TEST_FILE = /\.test\.tsx?$/
 
@@ -279,41 +235,6 @@ export const vitestRetriedPasses = (report: VitestReport) =>
 				name: assertion.fullName,
 			})),
 	)
-
-const TESTED_STORY_TAG = "test"
-
-type StorybookIndexEntry = { id: string; type: string; tags?: string[] }
-
-export type StorybookIndex = { entries: Record<string, StorybookIndexEntry> }
-
-export const testedStoryIds = (index: StorybookIndex) =>
-	Object.values(index.entries)
-		.filter(
-			(entry) =>
-				entry.type === "story" && (entry.tags ?? []).includes(TESTED_STORY_TAG),
-		)
-		.map((entry) => entry.id)
-
-const indexedStoryIds = (into: string) => {
-	const path = join(into, "storybook-index.json")
-	const label = "the storybook index"
-	const exitCode = runInherited({
-		command: [
-			join(UI, "node_modules/.bin/storybook"),
-			"index",
-			`--output-file=${path}`,
-			"--quiet",
-			"--disable-telemetry",
-		],
-		cwd: UI,
-	})
-	if (exitCode !== 0) throw new Error(`${label} exited with ${exitCode}`)
-	const index = JSON.parse(readReport({ path, label })) as StorybookIndex
-	if (typeof index.entries !== "object" || index.entries === null) {
-		throw unreadable(label)
-	}
-	return testedStoryIds(index)
-}
 
 const XML_ENTITIES: Record<string, string> = {
 	"&lt;": "<",
@@ -494,17 +415,7 @@ const collectVitest = (retries: number): Live => {
 	const ran = runSuites({ suites: VITEST_SUITES, into, retries })
 	return {
 		[TESTS]: attributedFailures([...ran.map(outcomeOf), sidecarOutcome(into)]),
-		[STORIES]: indexedStoryIds(into),
 	}
-}
-
-const collectStorybook = (retries: number): Live => {
-	const ran = runSuites({
-		suites: [STORYBOOK_SUITE],
-		into: newReportFolder(),
-		retries,
-	})
-	return { [TESTS]: attributedFailures(ran.map(outcomeOf)) }
 }
 
 const collectUnit = (retries: number): Live => {
@@ -553,10 +464,6 @@ export const SCOPES = {
 		collect: collectVitest,
 		suites: [...suiteNames(VITEST_SUITES), SIDECAR_SUITE],
 	},
-	storybook: {
-		collect: collectStorybook,
-		suites: suiteNames([STORYBOOK_SUITE]),
-	},
 	lint: { collect: collectLint, suites: [] },
 	unit: { collect: collectUnit, suites: suiteNames(UNIT_SUITES) },
 	changed: { collect: collectChanged, suites: suiteNames(UNIT_SUITES) },
@@ -564,7 +471,7 @@ export const SCOPES = {
 
 type Scope = keyof typeof SCOPES
 
-const FULL_SCOPES: Scope[] = ["vitest", "storybook", "lint"]
+const FULL_SCOPES: Scope[] = ["vitest", "lint"]
 
 const isScope = (name: string): name is Scope => name in SCOPES
 
@@ -601,9 +508,7 @@ const compareArea = ({ area, items, suites }: OwnedArea) => {
 		committed: readItems(area),
 		suites,
 	})
-	return area === STORIES
-		? compareStories({ committed, live: items })
-		: compareItems({ area, committed, live: items })
+	return compareItems({ area, committed, live: items })
 }
 
 const check = ({ live, suites }: Collected) => {
@@ -624,8 +529,7 @@ const check = ({ live, suites }: Collected) => {
 
 const update = (live: Live) => {
 	for (const [area, items] of Object.entries(live)) {
-		const kept = area === STORIES ? [] : readItems(area)
-		writeItems({ area, items: [...kept, ...items] })
+		writeItems({ area, items: [...readItems(area), ...items] })
 	}
 	return 0
 }

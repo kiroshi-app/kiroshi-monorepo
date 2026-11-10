@@ -83,9 +83,8 @@ You sign in to your Kiroshi account from the desktop app's Settings, in your bro
 ### Requirements
 
 - [Bun](https://bun.sh): runtime and package manager.
-- [Rust toolchain](https://rustup.rs): the desktop app's host is Rust.
-- On Linux, the [Tauri system dependencies](https://tauri.app/start/prerequisites/#linux).
-- Headless Chromium, for the Storybook half of the test run: install it once with `bunx playwright install chromium` from `packages/ui`.
+- [Rust toolchain](https://rustup.rs): the desktop app and its host core are Rust.
+- On Linux, `libxkbcommon-dev`, which the desktop app links.
 - For the iPhone app, on macOS only: Xcode at the version pinned in `.xcode-version`, and [XcodeGen](https://github.com/yonaskolb/XcodeGen).
 
 The version of the coding session executable is pinned by `claudeCodeVersion` in `apps/app/sidecar/package.json`. The sidecar build fails when the executable resolved in `node_modules` disagrees, so that pin moves in the same commit as `@anthropic-ai/claude-agent-sdk`.
@@ -97,24 +96,24 @@ bun install
 bun run dev
 ```
 
-`bun run dev` launches the desktop app locally: the Vite dev server plus the native window, with hot reload.
+`bun run dev` builds the sidecar, then launches the desktop app in its dev profile.
 
 ### Commands
 
 | Command | What it does |
 | --- | --- |
-| `bun run dev` | Launch the desktop app: Vite dev server and native window, hot reload. |
-| `bun run storybook` | Storybook on <http://localhost:6006>, the place to build UI. |
-| `bun run build` | Build every workspace. |
+| `bun run dev` | Build the sidecar, then launch the desktop app in its dev profile. |
+| `bun run dev:website` | The website on the Vite dev server. |
+| `bun run build` | Build the website and the sidecar. |
 | `bun run build:website` | Build the website only. |
-| `bun run tauri:build` | Package the desktop app. |
-| `bun run test` | Vitest for the app, the UI, the website and the shared package, `bun test` for the sidecar, `cargo test` for the desktop host. |
+| `bun run test` | Vitest for the UI, the website and the shared package, `bun test` for the sidecar, then `cargo test` for the host core and the desktop app. |
+| `bun run test:rust` | `cargo test` for the host core and the desktop app, against the fake agent. |
 | `bun run lint` | Biome lint. |
 | `bun run lint:fix` | Biome check with fixes applied. |
 | `bun run format` | Biome format. |
 | `bun run types` | Type check across the workspaces. |
-| `bun run baseline` | Check the vitest suites, Biome, knip and the story counts against `baselines/`. |
-| `bun run baseline:update` | Record the newly reported items and the live story counts. |
+| `bun run baseline` | Check the vitest suites, Biome and knip against `baselines/`. |
+| `bun run baseline:update` | Record the newly reported items. |
 | `bun run baseline:prune` | Drop the baseline entries no longer reported. |
 | `bun run snapshots` | Rewrite every back-end contract snapshot in `apps/app/contracts`, and `docs/relay/member-socket.schema.json`, from the live code. |
 | `bun run tokens:build` | Regenerate the colour tokens. |
@@ -139,7 +138,7 @@ bun run dev
 | `KIROSHI_AGENT_SIDECAR` | the desktop app, whenever it resolves the agent | Path to a `kiroshi-agent` executable. It is tried **before** the copy beside the app executable and the one left in the build tree, so it wins over the sidecar the app ships with. Leave it unset to run that one. |
 | `KIROSHI_CLAUDE_EXECUTABLE` | the sidecar, whenever it resolves the Claude provider | Path to the coding session executable. It is tried **before** the copy shipped beside the sidecar. Leave it unset to run that one; the sidecar test suites point it at the platform binary of the agent SDK in `node_modules`. |
 | `KIROSHI_ROUTINE_DEADLINE_SECS` | the desktop app, in a debug build only | A positive whole number of seconds that replaces the 30-minute routine deadline. A release build ignores it. |
-| `APPLE_SIGNING_IDENTITY` | `bun run tauri:build` | Developer ID to sign the macOS bundle with. Turbo passes it through to that task, and the release workflow feeds it from a repository secret. |
+| `APPLE_SIGNING_IDENTITY` | `apps/rune-preview/scripts/package-macos.sh` | Developer ID to sign the macOS bundle with. The release workflow feeds it from a repository secret. |
 
 `KIROSHI_AGENT_SIDECAR` is what the host test suites point at a fake sidecar. A leftover export silently sends the app at that fake too, so `unset KIROSHI_AGENT_SIDECAR` before running against the bundled sidecar.
 
@@ -147,32 +146,25 @@ bun run dev
 
 | Workspace | Path | Purpose |
 | --- | --- | --- |
-| `app` | `apps/app` | The desktop app, technical composition only. Tauri, React and Vite. |
+| `kiroshi-core` | `crates/kiroshi-core` | The host core: the database, the agent sessions, hosting, joined Spaces and updates. Rust. |
+| `kiroshi-rune-preview` | `apps/rune-preview` | The desktop app: the `app` crate, the `kit` crate that draws every visual, and the `os` crate. Rust and Rune. |
 | `sidecar` | `apps/app/sidecar` | The `kiroshi-agent` binary: one compiled Bun executable carrying the agent SDK, the coding session executable it spawns, and the protocol the host speaks. |
-| `@workspace/ui` | `packages/ui` | Every desktop visual: components, foundations, tokens. React, Storybook, Tailwind and Base UI. |
+| `@workspace/ui` | `packages/ui` | The components the website renders. React, Tailwind and Base UI. |
 | `@workspace/shared` | `packages/shared` | Code shared between the workspaces. |
 | `website` | `apps/website` | The public site at kiroshi.app. |
 | (none) | `apps/ios` | The native iPhone app. Swift, SwiftUI and XcodeGen. |
 
-The boundary between the app and the UI package is absolute: no markup, no Tailwind class and no raw DOM element lives in `apps/app`. That rule and the rest of the conventions are in [`AGENTS.md`](AGENTS.md), which every contributor and every AI agent working here must follow.
+The boundary between the app crate and the kit is absolute: the app crate draws nothing itself. That rule and the rest of the conventions are in [`AGENTS.md`](AGENTS.md), which every contributor and every AI agent working here must follow.
 
-The protocol the host speaks to the sidecar (the frames, the permission handshake, session resume) is documented in [`apps/app/src-tauri/src/agent/PROTOCOL.md`](apps/app/src-tauri/src/agent/PROTOCOL.md).
+The protocol the host speaks to the sidecar (the frames, the permission handshake, session resume) is documented in [`crates/kiroshi-core/src/agent/PROTOCOL.md`](crates/kiroshi-core/src/agent/PROTOCOL.md).
 
 ### Releasing
 
 ```bash
-bun run tauri:build
+bun run release <patch|minor|major|X.Y.Z|X.Y.Z-beta.N>
 ```
 
-To sign the macOS bundle with a Developer ID, put the identity in the environment:
-
-```bash
-APPLE_SIGNING_IDENTITY="Developer ID Application: ..." bun run tauri:build
-```
-
-Signing is not notarization: a signed bundle is still refused by Gatekeeper until it has been submitted to Apple and stapled, which is a separate step. The release workflow carries the Apple credentials for it.
-
-Before tagging a release, walk [`apps/app/SMOKE.md`](apps/app/SMOKE.md): the manual checks against a real signed-in binary, the network and a packaged bundle that the automated suite cannot reach.
+The `v*` tag it pushes builds the signed desktop packages, `Kiroshi.app` on macOS, a `.deb` on Linux and an NSIS installer on Windows, attaches them to a draft release with the `latest.json` the updater reads, then publishes it.
 
 ## Author
 

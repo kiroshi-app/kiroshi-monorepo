@@ -7,7 +7,7 @@ import { prepareProviders, stageProviders } from "../src/providers/build"
 const BINARY_NAME = "kiroshi-agent"
 
 const sidecarRoot = dirname(import.meta.dir)
-const binariesDirectory = join(sidecarRoot, "..", "src-tauri", "binaries")
+const binariesDirectory = join(sidecarRoot, "binaries")
 
 const hostTargetTriple = () => {
 	const rustc = Bun.spawnSync(["rustc", "-vV"])

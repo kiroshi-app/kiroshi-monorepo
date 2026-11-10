@@ -23,9 +23,3 @@ command = "bun run dev"
 icon = "play"
 default = true
 available_in = ["local", "cloud"]
-
-[tasks.storybook]
-label = "Storybook"
-command = "bun run storybook"
-icon = "play"
-available_in = ["local", "cloud"]

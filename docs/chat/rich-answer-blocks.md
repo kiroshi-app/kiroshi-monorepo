@@ -3,7 +3,7 @@
 An agent answers in Markdown. Ten shapes of content earn a block of their own, drawn by the
 chat as a component instead of as text. This document is the syntax of each block, the fields it
 takes and when an agent writes it. The system skill `skills/rich-answers/SKILL.md` of the `kiroshi`
-plugin states the same syntax to every agent, and a test in `apps/app/src-tauri/src/bundles/system.rs`
+plugin states the same syntax to every agent, and a test in `crates/kiroshi-core/src/bundles/system.rs`
 fails when a form named here is missing from it.
 
 There is no video block and no map block.

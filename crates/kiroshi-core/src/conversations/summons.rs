@@ -1,0 +1,133 @@
+use super::awaited_runs::TurnWindows;
+use super::context::mentioned_bot_ids;
+use super::contract::SummonsDropped;
+use crate::agent::contract::TransportError;
+pub use crate::conversations::contract::SummonsDropReason;
+use crate::events::SUMMONS_DROPPED;
+
+pub const MAX_SUMMONS_PER_CHAIN: usize = 5;
+
+pub struct SummonsRun<'a> {
+	pub conversation_id: &'a str,
+	pub turn_id: &'a str,
+	pub bot_id: &'a str,
+}
+
+pub fn note_received(conversation_id: &str, message_id: &str, content: &str) {
+	for bot_id in mentioned_bot_ids(content) {
+		log::info!(
+			"summons received | conversation: {conversation_id} | message: {message_id} | bot: {bot_id}"
+		);
+	}
+}
+
+pub fn note_queued(run: &SummonsRun<'_>) {
+	log::info!(
+		"summons queued | conversation: {} | turn: {} | bot: {}",
+		run.conversation_id,
+		run.turn_id,
+		run.bot_id
+	);
+}
+
+pub fn note_started(run: &SummonsRun<'_>) {
+	log::info!(
+		"summons started | conversation: {} | turn: {} | bot: {}",
+		run.conversation_id,
+		run.turn_id,
+		run.bot_id
+	);
+}
+
+pub fn note_dropped(
+	core: &crate::core_context::Core,
+	run: &SummonsRun<'_>,
+	reason: SummonsDropReason,
+	error: Option<TransportError>,
+) {
+	log::warn!(
+		"summons dropped | conversation: {} | turn: {} | bot: {} | reason: {}",
+		run.conversation_id,
+		run.turn_id,
+		run.bot_id,
+		reason.name()
+	);
+	if reason == SummonsDropReason::Cancelled {
+		return;
+	}
+	let dropped = dropped_of(run, reason, error);
+	if reason.is_noticed() {
+		keep_for_the_room(core, dropped.clone());
+	}
+	if let Err(failure) = core.emit(SUMMONS_DROPPED, dropped) {
+		log::warn!(
+			"the dropped summons of bot {} in turn {} of conversation {} was not announced: {failure}",
+			run.bot_id,
+			run.turn_id,
+			run.conversation_id
+		);
+	}
+}
+
+fn keep_for_the_room(core: &crate::core_context::Core, dropped: SummonsDropped) {
+	match core.try_state::<TurnWindows>() {
+		Some(windows) => windows.keep_unless_driven(dropped),
+		None => log::error!(
+			"the dropped summons of bot {} in turn {} of conversation {} found no window state to wait in",
+			dropped.bot_id,
+			dropped.turn_id,
+			dropped.conversation_id
+		),
+	}
+}
+
+fn dropped_of(
+	run: &SummonsRun<'_>,
+	reason: SummonsDropReason,
+	error: Option<TransportError>,
+) -> SummonsDropped {
+	SummonsDropped {
+		conversation_id: run.conversation_id.to_owned(),
+		turn_id: run.turn_id.to_owned(),
+		bot_id: run.bot_id.to_owned(),
+		reason,
+		error,
+	}
+}
+
+#[cfg(any(test, feature = "test-support"))]
+pub fn traced_steps(conversation_id: &str, bot_id: &str) -> Vec<String> {
+	let of_the_bot = format!("| bot: {bot_id}");
+	let of_the_bot_and_more = format!("{of_the_bot} |");
+	let mut steps: Vec<String> =
+		crate::test_log::logged_naming(&format!("| conversation: {conversation_id} |"))
+			.into_iter()
+			.filter(|line| line.starts_with("summons "))
+			.filter(|line| line.ends_with(&of_the_bot) || line.contains(&of_the_bot_and_more))
+			.map(|line| step_of(&line))
+			.collect();
+	steps.sort();
+	steps
+}
+
+#[cfg(any(test, feature = "test-support"))]
+fn step_of(line: &str) -> String {
+	let step = line.split(' ').nth(1).unwrap_or(line);
+	match line.split("| reason: ").nth(1) {
+		Some(reason) => format!("{step} {reason}"),
+		None => step.to_owned(),
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::SummonsDropReason;
+
+	#[test]
+	fn every_summons_drop_reason_crosses_under_the_name_it_logs() {
+		for reason in SummonsDropReason::ALL {
+			let crossed = serde_json::to_value(reason).expect("the reason serialises");
+			assert_eq!(crossed, serde_json::json!(reason.name()));
+		}
+	}
+}
