@@ -70,8 +70,7 @@ const LINE = "text-compact leading-4"
 const SMALL_LINE = "text-xs leading-4"
 const FOCUS_RING =
 	"outline-none focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-solid focus-visible:-outline-offset-2"
-const PRESSABLE =
-	"hover:bg-mission-list-hover active:bg-mission-list-pressed transition-none"
+const PRESSABLE = "hover:bg-mission-list-hover active:bg-mission-list-pressed"
 
 type MissionsPageAgent = {
 	id: string
@@ -437,18 +436,14 @@ const MissionsPageSkeletonGroup = () => (
 	</div>
 )
 
-type MissionsPageBodyProps = Omit<MissionsPageProps, "status"> & {
-	status: MissionsPageStatus
-}
-
 const MissionsPageBody = ({
 	missions,
 	now,
 	onOpen,
 	onRetry,
-	status,
+	status = "loaded",
 	defaultFoldedGroups = [],
-}: MissionsPageBodyProps) => {
+}: MissionsPageProps) => {
 	const { t } = useTranslation("chat")
 	const [foldedGroups, setFoldedGroups] = useState(
 		() => new Set(defaultFoldedGroups),
@@ -510,10 +505,7 @@ const MissionsPageBody = ({
 	)
 }
 
-const MissionsPage = ({
-	status = "loaded",
-	...bodyProps
-}: MissionsPageProps) => {
+const MissionsPage = (props: MissionsPageProps) => {
 	const { t } = useTranslation("chat")
 	const titleId = useId()
 
@@ -522,7 +514,6 @@ const MissionsPage = ({
 			aria-labelledby={titleId}
 			className="flex size-full min-h-0 min-w-0 flex-col overflow-hidden rounded-[12px] border border-shell-border bg-card"
 			data-slot="missions-page"
-			data-status={status}
 		>
 			<header className="flex shrink-0 items-center border-shell-border border-b p-3">
 				<h1
@@ -532,7 +523,7 @@ const MissionsPage = ({
 					{t("missions.page.title")}
 				</h1>
 			</header>
-			<MissionsPageBody {...bodyProps} status={status} />
+			<MissionsPageBody {...props} />
 		</section>
 	)
 }
