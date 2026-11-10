@@ -699,6 +699,14 @@ describe("the Home page", () => {
 		}),
 	})
 
+	const openInConversations = async (
+		router: Awaited<ReturnType<typeof launchApp>>,
+		botId: string,
+	) => {
+		await act(() => router.navigate({ to: "/", search: { bot: botId } }))
+		await settle()
+	}
+
 	const sendFromHome = async (text: string) => {
 		const composer = screen.getByRole("textbox")
 		act(() => {
@@ -728,8 +736,7 @@ describe("the Home page", () => {
 	it("shows no activity panel on the Home, even with the panel left open in Conversations", async () => {
 		writeMirror({ ...readMirror(), activityPanelOpen: true })
 		const { router, first } = await mountAppWithTwoAgents()
-		await act(() => router.navigate({ to: "/", search: { bot: first.id } }))
-		await settle()
+		await openInConversations(router, first.id)
 		expect(threadChrome().activityPanel).not.toBeNull()
 
 		await pressInRail("home")
@@ -742,8 +749,7 @@ describe("the Home page", () => {
 	it("keeps the thread header and the activity panel of an agent opened in Conversations", async () => {
 		const { router, first } = await mountAppWithTwoAgents()
 
-		await act(() => router.navigate({ to: "/", search: { bot: first.id } }))
-		await settle()
+		await openInConversations(router, first.id)
 
 		expect(threadChrome().header).not.toBeNull()
 		expect(threadChrome().activityToggle).not.toBeNull()
@@ -752,8 +758,7 @@ describe("the Home page", () => {
 	it("shows an agent opened in Conversations in its thread layout, never a Home view", async () => {
 		const { router, first } = await mountAppWithTwoAgents()
 
-		await act(() => router.navigate({ to: "/", search: { bot: first.id } }))
-		await settle()
+		await openInConversations(router, first.id)
 
 		expect(slot("chat-layout")).not.toBeNull()
 		expect(slot("home-layout")).toBeNull()
