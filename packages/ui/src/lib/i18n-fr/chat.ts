@@ -1024,6 +1024,17 @@ const chat = {
 					"Les missions ouvertes par vos agents dans cet espace apparaissent ici.",
 			},
 		},
+		page: {
+			title: "Missions",
+			group: {
+				blockedOnYou: "Bloquées sur vous",
+				readyToMerge: "Prêtes à fusionner",
+				working: "En cours",
+				waitingOnAgent: "En attente d’un agent",
+				completed: "Terminées",
+				blocked: "Bloquées",
+			},
+		},
 		state: {
 			waiting_human: "Bloquée sur vous",
 			ready_to_merge: "Prête à fusionner",

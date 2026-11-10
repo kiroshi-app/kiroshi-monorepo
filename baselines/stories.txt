@@ -2020,6 +2020,12 @@ navigation-librarytabstates--missing-item
 navigation-librarytabstates--missing-item-dark
 navigation-librarytabstates--unreadable-item
 navigation-librarytabstates--unreadable-item-dark
+navigation-missionspage--default
+navigation-missionspage--empty
+navigation-missionspage--failed
+navigation-missionspage--loading
+navigation-missionspage--long-text
+navigation-missionspage--unfolded
 navigation-missionspanel--complete
 navigation-missionspanel--complete-dark
 navigation-missionspanel--default
