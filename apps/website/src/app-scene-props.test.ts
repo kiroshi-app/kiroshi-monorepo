@@ -16,8 +16,9 @@ import { CHIP_STATE_OF } from "../../app/src/lib/missions/mission-chip-states"
 
 const REPOSITORY = resolve(import.meta.dirname, "../../..")
 
-const APP_SIDEBAR_CALL = "apps/app/src/components/workspace-sidebar.tsx"
-const RAIL_CALL = "apps/app/src/components/workspace-rail.tsx"
+const NAVIGATION_SIDEBAR_CALL =
+	"apps/app/src/components/workspace-navigation-sidebar.tsx"
+const EXPANDED_ROWS_CALL = "apps/app/src/components/expanded-sidebar-rows.tsx"
 const SHELL_CALL = "apps/app/src/components/workspace-frame.tsx"
 const SCENE = "apps/website/src/app-scene.tsx"
 const SIDEBAR_BADGES = "apps/app/src/lib/chat/sidebar-badges.ts"
@@ -26,40 +27,63 @@ const MISSIONS_MODEL = "apps/app/src/lib/missions/missions-model.ts"
 const LEFT_OUT_OF_THE_SIDEBAR: Record<string, string> = {
 	"data-tauri-drag-region": "a web page holds no Tauri window to drag",
 	windowControls: "macOS draws no caption buttons, the scene paints its lights",
-	rosterSkeleton: "the scene roster never loads",
-	onRetryLoadBots: "the scene roster never fails to load",
-	updateBadge: "the scene shows an app that is up to date",
-	openSettings: "no settings screen opens in the scene",
+	listStatus: "the scene roster never loads and never fails to load",
+	onRetryList: "the scene roster never fails to load",
+	update: "the scene shows an app that is up to date",
+	openMissionId: "no mission thread opens in the scene",
 	incomingTab: "no tab arrives from another window on a web page",
-	isSearchOpen:
-		"the scene opens no search palette, its rail entry stays at rest",
 	onSelectLibrary: "the scene opens no Library, so its rail draws no entry",
-	onSelectHome: "the scene opens no Home, so its rail draws no entry",
-	isHomeSelected: "the scene opens no Home, so its rail draws no entry",
-	onToggleSidebar:
-		"the app wires no sidebar toggle yet, so the scene draws none",
+	onToggleSidebar: "the scene keeps its sidebar open, so it draws no toggle",
 }
 
-const SIDEBAR_PROP_OF_RAIL_PROP: Record<string, string> = {
-	dots: "railDots",
-	onOpenYou: "onOpenUserSettings",
-	onSelectConversations: "onOpenPanelChange",
+const SCENE_PROP_OF_SIDEBAR_PROP: Record<string, string> = {
+	destination: "openPanel",
+	listEnd: "rosterListEnd",
+	missionCount: "railDots",
+	onNewConversation: "onCreateConversation",
+	onOpenChange: "onSpaceSwitcherOpenChange",
+	onOpenConversation: "onSelectConversation",
+	onOpenMission: "missionsBySpaceId",
+	onOpenSettings: "onOpenUserSettings",
 	onSelectMissions: "onOpenPanelChange",
-	onSpacesMenuOpenChange: "onSpaceSwitcherOpenChange",
-	selected: "openPanel",
+	openConversationId: "selectedConversationId",
+	pinned: "conversations",
+	zones: "conversations",
 }
 
-const SHELL_PROPS_DRAWN_BY_THE_SIDEBAR = [
-	"rail",
-	"titleBar",
-	"space",
-	"spaceHost",
-]
+const AGENT_ROWS_ARE_GONE =
+	"the scene still draws the agent rows of AppSidebar, the shell lists none"
+
+const ONE_SPACE_AT_A_TIME =
+	"the scene still swipes between Spaces in AppSidebar, the shell lists one"
+
+const SCENE_PROPS_THE_SHELL_NO_LONGER_TAKES: Record<string, string> = {
+	bots: AGENT_ROWS_ARE_GONE,
+	botsBySpaceId: AGENT_ROWS_ARE_GONE,
+	onAddBotToSpace: AGENT_ROWS_ARE_GONE,
+	onCreateBot: AGENT_ROWS_ARE_GONE,
+	onDeleteBot: AGENT_ROWS_ARE_GONE,
+	onDuplicateBot: AGENT_ROWS_ARE_GONE,
+	onEditBot: AGENT_ROWS_ARE_GONE,
+	onOpenBotInNewTab: AGENT_ROWS_ARE_GONE,
+	onRemoveBotFromSpace: AGENT_ROWS_ARE_GONE,
+	onSelectBot: AGENT_ROWS_ARE_GONE,
+	selectedBotId: AGENT_ROWS_ARE_GONE,
+	conversationsBySpaceId: ONE_SPACE_AT_A_TIME,
+	isSpaceSwitchingEnabled: ONE_SPACE_AT_A_TIME,
+	sectionsBySpaceId: ONE_SPACE_AT_A_TIME,
+	haveBotsFailedToLoad: "the scene roster never fails to load",
+	sidebar: "the app renders its sidebar as a child of the shell",
+	space: "the switcher reads the Space from spaces and selectedSpaceId",
+	spaceHost: "the switcher reads the host from hostBySpaceId",
+}
 
 const LEFT_OUT_OF_THE_SHELL: Record<string, string> = {
 	width: "the scene keeps no saved sidebar width, the shell holds its own",
 	onWidthChange:
 		"the scene keeps no saved sidebar width, the shell holds its own",
+	open: "the scene keeps its sidebar open",
+	onOpenChange: "the scene keeps its sidebar open",
 }
 
 const SLOW_PROGRAM_MS = 60_000
@@ -67,6 +91,9 @@ const SLOW_PROGRAM_MS = 60_000
 type PropReader = {
 	propsPassedTo: (file: string, tag: string) => string[]
 	propsOfObject: (file: string, property: string) => string[]
+	propsOfVariable: (file: string, name: string) => string[]
+	propsReadOn: (file: string, name: string) => string[]
+	propsAcceptedBy: (file: string, tag: string) => string[]
 }
 
 const appCompilerOptions = () => {
@@ -118,7 +145,7 @@ const createPropReader = (files: string[]): PropReader => {
 			? namesOf(attribute.expression)
 			: [attribute.name.getText()]
 
-	const propsPassedTo = (file: string, tag: string) => {
+	const openingsOf = (file: string, tag: string) => {
 		const source = sourceOf(file)
 		const openings = nodesIn(
 			file,
@@ -127,10 +154,55 @@ const createPropReader = (files: string[]): PropReader => {
 				node.tagName.getText(source) === tag,
 		) as (ts.JsxOpeningElement | ts.JsxSelfClosingElement)[]
 		if (openings.length === 0) throw new Error(`${file} renders no <${tag}>`)
-		return openings.flatMap((opening) => [
+		return openings
+	}
+
+	const propsPassedTo = (file: string, tag: string) =>
+		openingsOf(file, tag).flatMap((opening) => [
 			...opening.attributes.properties.flatMap(attributeNamesOf),
 			...(hasChildren(opening) ? ["children"] : []),
 		])
+
+	const propsAcceptedBy = (file: string, tag: string) =>
+		openingsOf(file, tag).flatMap((opening) => {
+			const [props] = checker
+				.getTypeAtLocation(opening.tagName)
+				.getCallSignatures()
+				.flatMap((signature) => signature.getParameters())
+			if (!props) throw new Error(`<${tag}> takes no props`)
+			return checker
+				.getTypeOfSymbolAtLocation(props, opening)
+				.getProperties()
+				.map((property) => property.getName())
+		})
+
+	const propsOfVariable = (file: string, name: string) => {
+		const source = sourceOf(file)
+		const declarations = nodesIn(
+			file,
+			(node) =>
+				ts.isVariableDeclaration(node) &&
+				node.name.getText(source) === name &&
+				node.initializer !== undefined &&
+				ts.isObjectLiteralExpression(node.initializer),
+		) as ts.VariableDeclaration[]
+		if (declarations.length === 0)
+			throw new Error(`${file} declares no ${name} object`)
+		return declarations.flatMap((declaration) =>
+			namesOf(declaration.initializer as ts.Expression),
+		)
+	}
+
+	const propsReadOn = (file: string, name: string) => {
+		const source = sourceOf(file)
+		const reads = nodesIn(
+			file,
+			(node) =>
+				ts.isPropertyAccessExpression(node) &&
+				node.expression.getText(source) === name,
+		) as ts.PropertyAccessExpression[]
+		if (reads.length === 0) throw new Error(`${file} reads nothing on ${name}`)
+		return reads.map((read) => read.name.getText(source))
 	}
 
 	const propsOfObject = (file: string, property: string) => {
@@ -147,21 +219,39 @@ const createPropReader = (files: string[]): PropReader => {
 		return assignments.flatMap((assignment) => namesOf(assignment.initializer))
 	}
 
-	return { propsPassedTo, propsOfObject }
+	return {
+		propsPassedTo,
+		propsOfObject,
+		propsOfVariable,
+		propsReadOn,
+		propsAcceptedBy,
+	}
 }
 
 const sidebarPropsOf = (reader: PropReader) => [
-	...reader.propsPassedTo(APP_SIDEBAR_CALL, "AppSidebarBody"),
 	...reader
-		.propsOfObject(RAIL_CALL, "rail")
-		.map((prop) => SIDEBAR_PROP_OF_RAIL_PROP[prop] ?? prop),
+		.propsPassedTo(NAVIGATION_SIDEBAR_CALL, "NavigationSidebar")
+		.map((prop) => SCENE_PROP_OF_SIDEBAR_PROP[prop] ?? prop),
 	...reader.propsOfObject(SHELL_CALL, "titleBar"),
 ]
 
 const shellPropsOf = (reader: PropReader) =>
-	reader
-		.propsPassedTo(SHELL_CALL, "AppFrameShell")
-		.filter((prop) => !SHELL_PROPS_DRAWN_BY_THE_SIDEBAR.includes(prop))
+	reader.propsPassedTo(SHELL_CALL, "WorkspaceShellRoot")
+
+const scenePropsOf = (reader: PropReader) => [
+	...reader.propsPassedTo(SCENE, "AppSidebar"),
+	...reader.propsPassedTo(SCENE, "WorkspaceShell"),
+]
+
+const propsTheShellTakes = (reader: PropReader) => [
+	...reader.propsAcceptedBy(NAVIGATION_SIDEBAR_CALL, "NavigationSidebar"),
+	...reader.propsAcceptedBy(SHELL_CALL, "AppTitleBar"),
+	...reader.propsAcceptedBy(SHELL_CALL, "WorkspaceShellRoot"),
+	...reader.propsPassedTo(EXPANDED_ROWS_CALL, "PinnedZone"),
+	...reader.propsOfVariable(EXPANDED_ROWS_CALL, "rows"),
+	...reader.propsReadOn(EXPANDED_ROWS_CALL, "actions"),
+	...Object.values(SCENE_PROP_OF_SIDEBAR_PROP),
+]
 
 const missingFrom = (scene: string[], app: string[]) =>
 	[...new Set(app)].filter((prop) => !scene.includes(prop)).sort()
@@ -170,7 +260,12 @@ describe("the landing scene against apps/app", () => {
 	let reader: PropReader
 
 	beforeAll(() => {
-		reader = createPropReader([APP_SIDEBAR_CALL, RAIL_CALL, SHELL_CALL, SCENE])
+		reader = createPropReader([
+			NAVIGATION_SIDEBAR_CALL,
+			EXPANDED_ROWS_CALL,
+			SHELL_CALL,
+			SCENE,
+		])
 	}, SLOW_PROGRAM_MS)
 
 	it("passes AppSidebar every prop the app passes it", () => {
@@ -204,10 +299,7 @@ describe("the landing scene against apps/app", () => {
 
 	it("leaves out only props the app still passes and the scene does not", () => {
 		const appProps = [...sidebarPropsOf(reader), ...shellPropsOf(reader)]
-		const sceneProps = [
-			...reader.propsPassedTo(SCENE, "AppSidebar"),
-			...reader.propsPassedTo(SCENE, "WorkspaceShell"),
-		]
+		const sceneProps = scenePropsOf(reader)
 		const leftOut = Object.keys({
 			...LEFT_OUT_OF_THE_SIDEBAR,
 			...LEFT_OUT_OF_THE_SHELL,
@@ -216,6 +308,26 @@ describe("the landing scene against apps/app", () => {
 		expect(
 			leftOut.filter(
 				(prop) => !appProps.includes(prop) || sceneProps.includes(prop),
+			),
+		).toEqual([])
+	})
+
+	it("passes no prop the shell no longer takes", () => {
+		const taken = [
+			...propsTheShellTakes(reader),
+			...Object.keys(SCENE_PROPS_THE_SHELL_NO_LONGER_TAKES),
+		]
+
+		expect(missingFrom(taken, scenePropsOf(reader))).toEqual([])
+	})
+
+	it("excuses only scene props the shell really dropped", () => {
+		const taken = propsTheShellTakes(reader)
+		const sceneProps = scenePropsOf(reader)
+
+		expect(
+			Object.keys(SCENE_PROPS_THE_SHELL_NO_LONGER_TAKES).filter(
+				(prop) => taken.includes(prop) || !sceneProps.includes(prop),
 			),
 		).toEqual([])
 	})
