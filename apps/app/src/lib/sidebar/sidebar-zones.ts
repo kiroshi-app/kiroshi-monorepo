@@ -6,15 +6,15 @@ import type { CollapsedSidebarZone } from "@workspace/ui/components/collapsed-si
 
 import { isPinnedRow, pinsOf } from "./roster-pins"
 
-type RailZonesSource = {
+type SidebarZonesSource = {
 	conversations: AppSidebarConversation[]
 	sections: AppSidebarSection[]
 }
 
-export const railZonesOf = ({
+export const sidebarZonesOf = ({
 	conversations,
 	sections,
-}: RailZonesSource): CollapsedSidebarZone[] => {
+}: SidebarZonesSource): CollapsedSidebarZone[] => {
 	const conversationOf = new Map(
 		conversations.map((conversation) => [conversation.id, conversation]),
 	)

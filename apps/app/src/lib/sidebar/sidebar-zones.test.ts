@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import type { AppSidebarConversation } from "@workspace/ui/components/app-sidebar-model"
 
-import { railZonesOf } from "./rail-zones"
+import { sidebarZonesOf } from "./sidebar-zones"
 
 const conversationOf = (
 	id: string,
@@ -13,15 +13,15 @@ const CLIENTS = { id: "clients", name: "Clients", position: 1 }
 
 const REVIEW = { id: "review", name: "Review", position: 3 }
 
-const shapeOf = (zones: ReturnType<typeof railZonesOf>) =>
+const shapeOf = (zones: ReturnType<typeof sidebarZonesOf>) =>
 	zones.map(({ name, conversations }) => ({
 		name,
 		ids: conversations.map(({ id }) => id),
 	}))
 
-describe("railZonesOf", () => {
+describe("sidebarZonesOf", () => {
 	it("lays the pinned runs, each section and then the unpinned conversations out in the pinned order", () => {
-		const zones = railZonesOf({
+		const zones = sidebarZonesOf({
 			conversations: [
 				conversationOf("hiring"),
 				conversationOf("design", { pinPosition: 0 }),
@@ -44,7 +44,7 @@ describe("railZonesOf", () => {
 	})
 
 	it("keeps every conversation in one unnamed zone when nothing is pinned", () => {
-		const zones = railZonesOf({
+		const zones = sidebarZonesOf({
 			conversations: [conversationOf("hiring"), conversationOf("pricing")],
 			sections: [],
 		})
@@ -55,8 +55,8 @@ describe("railZonesOf", () => {
 	})
 
 	it("leaves one empty zone when the Space holds no conversation", () => {
-		expect(shapeOf(railZonesOf({ conversations: [], sections: [] }))).toEqual([
-			{ name: undefined, ids: [] },
-		])
+		expect(
+			shapeOf(sidebarZonesOf({ conversations: [], sections: [] })),
+		).toEqual([{ name: undefined, ids: [] }])
 	})
 })

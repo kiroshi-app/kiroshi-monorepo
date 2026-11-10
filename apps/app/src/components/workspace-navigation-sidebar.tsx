@@ -2,7 +2,7 @@ import type { ExpandedSidebarDestination } from "@workspace/ui/components/expand
 import { NavigationSidebar } from "@workspace/ui/components/navigation-sidebar"
 
 import type { Section } from "@/lib/conversations/store-contract"
-import { railZonesOf } from "@/lib/sidebar/rail-zones"
+import { sidebarZonesOf } from "@/lib/sidebar/sidebar-zones"
 import { isHomePage, isLibraryPage, isMissionsPage } from "@/lib/tabs/tab-pages"
 import { usePageShown } from "@/lib/tabs/use-page-shown"
 import type { WorkspaceTabs } from "@/lib/tabs/workspace-tabs"
@@ -37,7 +37,7 @@ export const WorkspaceNavigationSidebar = () => {
 	const { sidebar, selectedSpaceId } = frame
 	const destination = useShownDestination(tabs)
 	const { roster, sections } = core
-	const zones = railZonesOf({
+	const zones = sidebarZonesOf({
 		conversations: rosterLists.rosterConversations,
 		sections: sectionsIn(sections.state.sections, rosterView.rosteredSpaceId),
 	})
