@@ -30,7 +30,8 @@ export const HomeRoute = () => {
 					store: core.store,
 					conversations: rosterView.conversations,
 					onSelectAgent: pickAgent,
-					startConversation: core.roster.controller.createConversation,
+					startConversation:
+						core.roster.controller.createUnselectedConversation,
 					discardConversation: core.roster.controller.discardConversation,
 					openConversation,
 				}}
