@@ -14,12 +14,12 @@ import {
 	useMissionCardMenus,
 } from "@/components/mission-card-menu"
 import type { RosterController } from "../bots/roster-controller"
-import { faceOfBot } from "../chat/thread-contract"
 import type { Bot, Conversation } from "../conversations/store-contract"
 import type { MissionLanding } from "../missions/mission-actions"
 import {
+	botFacesOf,
+	missionEntriesOf,
 	missionRowIdOf,
-	type SpaceMissionGroups,
 	toMissionsPanel,
 } from "../missions/missions-model"
 import type { OpenedMissionController } from "../missions/opened-mission-controller"
@@ -57,20 +57,14 @@ type SidebarMissionsCore = {
 type SidebarMissionsInput = {
 	core: SidebarMissionsCore
 	rosterLines: { now: number }
-	navigation: Pick<SettingsNavigation, "openThreadInNewTab">
+	navigation: Pick<SettingsNavigation, "openThread" | "openThreadInNewTab">
 }
 
 export type SidebarMissions = {
 	panelsBySpaceId: Record<string, MissionsPanelProps>
 	waitingCount: number
+	openMissionThread: (missionId: string) => void
 }
-
-const facesOf = (rosters: Record<string, Bot[]>) =>
-	new Map(
-		Object.values(rosters).flatMap((bots) =>
-			bots.map((bot) => [bot.id, faceOfBot(bot)] as const),
-		),
-	)
 
 const listedConversationIdsOf = (
 	conversationRosters: Record<string, Conversation[]>,
@@ -81,12 +75,6 @@ const listedConversationIdsOf = (
 			({ id }) => id,
 		),
 	)
-
-const entriesOf = ({
-	waitingOnYou,
-	inProgress,
-	earlierToday,
-}: SpaceMissionGroups) => [...waitingOnYou, ...inProgress, ...earlierToday]
 
 export const useSidebarMissions = ({
 	core,
@@ -106,7 +94,7 @@ export const useSidebarMissions = ({
 	useSpaceMissionsFailure(feed)
 	const feedSkeleton = useSkeletonSlot(feed.isPending, MISSIONS_FEED_SKELETON)
 
-	const entries = useMemo(() => entriesOf(feed), [feed])
+	const entries = useMemo(() => missionEntriesOf(feed), [feed])
 	const missions = useMemo(
 		() => entries.map(({ mission }) => mission),
 		[entries],
@@ -117,7 +105,7 @@ export const useSidebarMissions = ({
 	)
 	const liveMissionIds = useLiveMissions(conversationRuntimes, missions, now)
 	const faces = useMemo(
-		() => facesOf(roster.state.rosters),
+		() => botFacesOf(roster.state.rosters),
 		[roster.state.rosters],
 	)
 
@@ -175,19 +163,37 @@ export const useSidebarMissions = ({
 		],
 	)
 
-	const openMissionInNewTab = useCallback(
+	const missionThreadOf = useCallback(
 		(missionId: string) => {
 			const row = missionRowOf(missionId)
 			if (!row) {
-				return
+				return null
 			}
-			navigation.openThreadInNewTab(
-				row.isConversation
-					? { conversation: row.rowId, mission: missionId }
-					: { bot: row.rowId, mission: missionId },
-			)
+			return row.isConversation
+				? { conversation: row.rowId, mission: missionId }
+				: { bot: row.rowId, mission: missionId }
 		},
-		[missionRowOf, navigation],
+		[missionRowOf],
+	)
+
+	const openMissionInNewTab = useCallback(
+		(missionId: string) => {
+			const thread = missionThreadOf(missionId)
+			if (thread) {
+				navigation.openThreadInNewTab(thread)
+			}
+		},
+		[missionThreadOf, navigation],
+	)
+
+	const openMissionThread = useCallback(
+		(missionId: string) => {
+			const thread = missionThreadOf(missionId)
+			if (thread) {
+				navigation.openThread(thread)
+			}
+		},
+		[missionThreadOf, navigation],
 	)
 
 	const openFromPanel = useCallback(
@@ -236,5 +242,6 @@ export const useSidebarMissions = ({
 	return {
 		panelsBySpaceId,
 		waitingCount: feed.waitingCount,
+		openMissionThread,
 	}
 }

@@ -13,6 +13,7 @@ const RECORD: ReaderPreferences = {
 	notifyOnFinishedTurn: true,
 	notifyWithSound: true,
 	sidebarWidth: null,
+	sidebarCollapsed: false,
 	sidebarTab: "conversations",
 	openOn: "newConversation",
 	activityPanelOpen: false,

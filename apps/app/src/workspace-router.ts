@@ -7,6 +7,7 @@ import {
 import { ConversationsScreen } from "@/components/conversations-screen"
 import { HomeRoute } from "@/components/home-route"
 import { LibraryRoute } from "@/components/library-route"
+import { MissionsRoute } from "@/components/missions-route"
 import { WorkspaceLayout } from "@/components/workspace-layout"
 import {
 	CompanionSettingsRoute,
@@ -53,6 +54,12 @@ const libraryRoute = createRoute({
 	component: LibraryRoute,
 })
 
+const missionsRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: "/missions",
+	component: MissionsRoute,
+})
+
 const spaceSettingsRoute = createRoute({
 	getParentRoute: () => rootRoute,
 	path: "/settings/space/$spaceId",
@@ -85,6 +92,7 @@ const routeTree = rootRoute.addChildren([
 	conversationsRoute,
 	homeRoute,
 	libraryRoute,
+	missionsRoute,
 	spaceSettingsRoute,
 	userSettingsRoute,
 	companionSettingsRoute,

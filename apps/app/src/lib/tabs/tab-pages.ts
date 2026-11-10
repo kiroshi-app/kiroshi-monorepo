@@ -27,6 +27,8 @@ const LIBRARY_PATH = "/library"
 
 const HOME_PATH = "/home"
 
+const MISSIONS_PATH = "/missions"
+
 const USER_SETTINGS_PATH = "/settings/user"
 
 const SPACE_SETTINGS_PATH = /^\/settings\/space\/[^/]+$/
@@ -78,6 +80,9 @@ export const isLibraryPage = ({ pathname }: Pick<TabPage, "pathname">) =>
 
 export const isHomePage = ({ pathname }: Pick<TabPage, "pathname">) =>
 	pathname === HOME_PATH
+
+export const isMissionsPage = ({ pathname }: Pick<TabPage, "pathname">) =>
+	pathname === MISSIONS_PATH
 
 export type LaunchPage = {
 	spaceId: string
@@ -131,6 +136,7 @@ export const isTabHref = (href: string) => {
 		pathname === LIST_PATH ||
 		pathname === LIBRARY_PATH ||
 		pathname === HOME_PATH ||
+		pathname === MISSIONS_PATH ||
 		pathname === USER_SETTINGS_PATH ||
 		SPACE_SETTINGS_PATH.test(pathname) ||
 		companionIdIn(pathname) !== undefined ||

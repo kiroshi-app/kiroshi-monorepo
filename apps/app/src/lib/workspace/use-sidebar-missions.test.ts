@@ -161,6 +161,7 @@ const sidebarMissionsWiring = () => {
 	const openedMission = createOpenedController<OpenedMission>()
 	const open = vi.spyOn(openedMission, "open")
 	const openThreadInNewTab = vi.fn()
+	const openThread = vi.fn()
 	const openConversation = vi.fn(async (target: ConversationTarget) =>
 		target.openInPlace(),
 	)
@@ -188,7 +189,7 @@ const sidebarMissionsWiring = () => {
 			spaces: { state: { selectedSpaceId } },
 		},
 		rosterLines: { now: NOW },
-		navigation: { openThreadInNewTab },
+		navigation: { openThread, openThreadInNewTab },
 	})
 	return {
 		inputFor,
@@ -197,6 +198,7 @@ const sidebarMissionsWiring = () => {
 		open,
 		openedMission,
 		openThreadInNewTab,
+		openThread,
 		openConversation,
 	}
 }
@@ -383,6 +385,20 @@ describe("useSidebarMissions", () => {
 		expect(open).not.toHaveBeenCalled()
 		expect(select).not.toHaveBeenCalled()
 		expect(selectConversation).not.toHaveBeenCalled()
+	})
+
+	it("opens the thread of a mission of the Missions page by its address", async () => {
+		const { result, open, openThread } = renderSidebarMissions()
+		await waitFor(() => expect(panelOf(result.current).open).toHaveLength(2))
+
+		result.current.openMissionThread("m-working")
+		result.current.openMissionThread("m-waiting")
+
+		expect(openThread.mock.calls).toEqual([
+			[{ conversation: "c-2", mission: "m-working" }],
+			[{ bot: BOT.id, mission: "m-waiting" }],
+		])
+		expect(open).not.toHaveBeenCalled()
 	})
 
 	it("raises one failure notice when the feed fails, whose retry reads again", async () => {

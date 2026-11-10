@@ -33,6 +33,8 @@ const common = {
 		toggle: "Afficher ou masquer la barre latérale",
 		close: "Fermer la barre latérale",
 		resize: "Redimensionner la barre latérale",
+		collapseUnsaved:
+			"Impossible de mémoriser l’affichage de la barre latérale. Basculez-la de nouveau pour l’enregistrer.",
 	},
 	windowControls: {
 		minimize: "Réduire",

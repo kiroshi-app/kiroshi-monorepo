@@ -37,7 +37,8 @@ import { toMissionFace } from "./mission-thread-model"
 
 import type { SoloThreads } from "@/lib/bots/roster-line"
 import { rosterTimestamp } from "@/lib/bots/roster-timestamp"
-import type { ThreadFace } from "@/lib/chat/thread-contract"
+import { faceOfBot, type ThreadFace } from "@/lib/chat/thread-contract"
+import type { Bot } from "@/lib/conversations/store-contract"
 import type { ReportedRunRead } from "@/lib/routines/routines-model"
 
 const BADGE_BY_STATE: Record<MissionState, BotBadge | null> = {
@@ -184,6 +185,19 @@ const TIME_OF_DAY: Intl.DateTimeFormatOptions = {
 	minute: "2-digit",
 	hourCycle: "h23",
 }
+
+export const missionEntriesOf = ({
+	waitingOnYou,
+	inProgress,
+	earlierToday,
+}: SpaceMissionGroups) => [...waitingOnYou, ...inProgress, ...earlierToday]
+
+export const botFacesOf = (rosters: Record<string, Bot[]>) =>
+	new Map(
+		Object.values(rosters).flatMap((bots) =>
+			bots.map((bot) => [bot.id, faceOfBot(bot)] as const),
+		),
+	)
 
 export const startOfLocalDay = (now: number): number => {
 	const day = new Date(now)
@@ -381,7 +395,9 @@ export type MissionHeaderActivity = AgentActivity & {
 
 const PULL_REQUEST_NUMBER = /^\d+$/
 
-const pullRequestOf = (url: string | null): MissionPullRequest | undefined => {
+export const pullRequestOf = (
+	url: string | null,
+): MissionPullRequest | undefined => {
 	const lastSegment = url?.split("/").at(-1)
 	if (!url || !lastSegment || !PULL_REQUEST_NUMBER.test(lastSegment)) {
 		return undefined

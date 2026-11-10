@@ -20,6 +20,9 @@ export const userPreferencesStore = {
 	setOnboardingFirstCompanion: (botId: string) =>
 		invoke<UserPreferences>("user_set_onboarding_first_companion", { botId }),
 
+	setSidebarCollapsed: (isCollapsed: boolean) =>
+		invoke<UserPreferences>("user_set_sidebar_collapsed", { isCollapsed }),
+
 	markOnboardingImportSeen: () =>
 		invoke<UserPreferences>("user_mark_onboarding_import_seen"),
 }

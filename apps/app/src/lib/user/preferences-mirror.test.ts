@@ -38,6 +38,7 @@ const MIRRORED: MirroredPreferences = {
 	colorScheme: "light",
 	language: null,
 	sidebarWidth: null,
+	sidebarCollapsed: false,
 	activityPanelOpen: false,
 	firstRunDone: false,
 	lastSpaceId: null,
@@ -91,6 +92,7 @@ describe("the mirror", () => {
 			colorScheme: "system",
 			language: null,
 			sidebarWidth: null,
+			sidebarCollapsed: false,
 			activityPanelOpen: false,
 			firstRunDone: false,
 			lastSpaceId: null,
@@ -160,6 +162,13 @@ describe("the mirror", () => {
 
 		expect(localStorage.getItem("sidebarWidth")).toBeNull()
 		expect(readMirror().sidebarWidth).toBeNull()
+	})
+
+	it("holds the sidebar the reader collapsed", () => {
+		writeMirror({ ...MIRRORED, sidebarCollapsed: true })
+
+		expect(isMirrorKey("sidebarCollapsed")).toBe(true)
+		expect(readMirror().sidebarCollapsed).toBe(true)
 	})
 
 	it("reads no width for a width that is not a count of pixels", () => {
@@ -251,6 +260,7 @@ describe("the record the host holds", () => {
 			colorScheme: "dark",
 			language: "fr",
 			sidebarWidth: 320,
+			sidebarCollapsed: false,
 			activityPanelOpen: false,
 			firstRunDone: false,
 			lastSpaceId: "vocca",
@@ -270,6 +280,7 @@ describe("the record the host holds", () => {
 			colorScheme: "dark",
 			language: null,
 			sidebarWidth: null,
+			sidebarCollapsed: false,
 			activityPanelOpen: false,
 			firstRunDone: false,
 			lastSpaceId: null,
@@ -324,6 +335,7 @@ describe("sameMirror", () => {
 			colorScheme: "dark",
 			language: "fr",
 			sidebarWidth: 320,
+			sidebarCollapsed: false,
 			activityPanelOpen: false,
 			firstRunDone: false,
 			lastSpaceId: "vocca",
@@ -337,6 +349,9 @@ describe("sameMirror", () => {
 		)
 		expect(sameMirror(mirrored, { ...mirrored, language: null })).toBe(false)
 		expect(sameMirror(mirrored, { ...mirrored, sidebarWidth: 256 })).toBe(false)
+		expect(sameMirror(mirrored, { ...mirrored, sidebarCollapsed: true })).toBe(
+			false,
+		)
 		expect(sameMirror(mirrored, { ...mirrored, activityPanelOpen: true })).toBe(
 			false,
 		)

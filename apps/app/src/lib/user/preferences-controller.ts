@@ -15,6 +15,7 @@ import {
 	changeOnboardingStep,
 	changePreferences,
 	changeProfilePicture,
+	changeSidebarCollapsed,
 	markOnboardingImportSeen,
 	readPreferences,
 	replayOnboarding,
@@ -64,6 +65,7 @@ export type UserController = {
 	setColorScheme: (colorScheme: ColorScheme) => Promise<void>
 	setLanguage: (language: Language | null) => Promise<void>
 	setSidebarWidth: (sidebarWidth: number) => Promise<void>
+	setSidebarCollapsed: (sidebarCollapsed: boolean) => Promise<void>
 	setSidebarTab: (sidebarTab: SidebarTab) => Promise<void>
 	setOpenOn: (openOn: OpenOn) => Promise<void>
 	setActivityPanelOpen: (activityPanelOpen: boolean) => Promise<void>
@@ -247,6 +249,13 @@ export const createUserController = (): UserController => {
 		setLanguage: (language: Language | null) => changeMirrored({ language }),
 
 		setSidebarWidth: (sidebarWidth: number) => changeMirrored({ sidebarWidth }),
+
+		setSidebarCollapsed: (sidebarCollapsed: boolean) => {
+			const preferences = { ...current().preferences, sidebarCollapsed }
+			show(preferences)
+			mirror(preferences)
+			return changeSidebarCollapsed(sidebarCollapsed).then(apply)
+		},
 
 		setSidebarTab: (sidebarTab: SidebarTab) => {
 			const held = current().preferences

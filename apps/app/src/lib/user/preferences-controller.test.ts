@@ -20,6 +20,7 @@ const DEFAULTS: UserPreferences = {
 	notifyOnFinishedTurn: true,
 	notifyWithSound: true,
 	sidebarWidth: null,
+	sidebarCollapsed: false,
 	sidebarTab: "conversations",
 	openOn: "newConversation",
 	activityPanelOpen: false,
@@ -53,6 +54,12 @@ const aHost = (record: UserPreferences = DEFAULTS) => {
 		}
 		if (command === "user_set_onboarding_step") {
 			held = { ...held, onboardingStep: (args as OnboardingStepArgs).step }
+		}
+		if (command === "user_set_sidebar_collapsed") {
+			held = {
+				...held,
+				sidebarCollapsed: (args as { isCollapsed: boolean }).isCollapsed,
+			}
 		}
 		if (command === "user_replay_onboarding") {
 			held = { ...held, onboardingStep: "welcome" }
@@ -459,6 +466,44 @@ describe("the sidebar edge the reader drags", () => {
 		await controller.setSidebarWidth(320)
 
 		expect(hostInvoke).not.toHaveBeenCalled()
+	})
+})
+
+describe("the sidebar the reader collapses", () => {
+	it("shows the collapsed sidebar before the host answers, then writes it", async () => {
+		const host = aHost()
+		const controller = await loaded()
+
+		const written = controller.setSidebarCollapsed(true)
+
+		expect(controller.getState().preferences.sidebarCollapsed).toBe(true)
+		await written
+		expect(host().sidebarCollapsed).toBe(true)
+		expect(hostInvoke).toHaveBeenCalledWith("user_set_sidebar_collapsed", {
+			isCollapsed: true,
+		})
+	})
+
+	it("opens the next window collapsed before the host has answered", async () => {
+		aHost()
+		const controller = await loaded()
+		await controller.setSidebarCollapsed(true)
+		hostInvoke.mockReset()
+
+		const opening = createUserController()
+
+		expect(opening.getState().preferences.sidebarCollapsed).toBe(true)
+	})
+
+	it("keeps the collapsed sidebar on screen when the host refuses it", async () => {
+		aHost()
+		const controller = await loaded()
+		const refused = new Error("refused")
+		hostInvoke.mockRejectedValue(refused)
+
+		await expect(controller.setSidebarCollapsed(true)).rejects.toBe(refused)
+
+		expect(controller.getState().preferences.sidebarCollapsed).toBe(true)
 	})
 })
 
