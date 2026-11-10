@@ -124,8 +124,6 @@ const shallowCheckoutPastGreen = (name: string) => {
 	return { checkout, green }
 }
 
-const isShared = (path: string) => touching(path).ios && touching(path).website
-
 const ABSENT_SHA = "0123456789abcdef0123456789abcdef01234567"
 
 describe("ci jobs per event", () => {
@@ -330,9 +328,7 @@ describe("the paths each job watches", () => {
 		const embedded = filesTheRustCratesEmbed()
 
 		expect(embedded).toContain(".claude/settings.json")
-		expect(
-			embedded.filter((path) => !touching(path).core && !isShared(path)),
-		).toEqual([])
+		expect(embedded.filter((path) => !touching(path).core)).toEqual([])
 	})
 
 	it("runs every job when the change detector scripts/ci-changes.ts changed", () => {

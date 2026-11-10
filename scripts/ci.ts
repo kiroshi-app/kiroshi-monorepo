@@ -152,7 +152,6 @@ export const GATE = {
 			cwd: RUNE_WORKSPACE,
 			heavy: true,
 			retry: "cargo",
-			crateRoot: RUNE_WORKSPACE,
 		},
 	],
 	ios: [
