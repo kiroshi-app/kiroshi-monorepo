@@ -19,13 +19,6 @@ import { usePromptTransfer } from "@workspace/ui/components/prompt-input-transfe
 import { Button } from "@workspace/ui/components/ui/button"
 import { cn } from "@workspace/ui/lib/utils"
 
-const SHELL =
-	"flex w-full flex-col overflow-clip rounded-[20px] border border-foreground/10 bg-prompt-surface-inert"
-
-const FIELD_CARD = "flex flex-col gap-3 rounded-[20px] bg-prompt-surface p-3"
-
-const ACTIONS = "flex items-center gap-2"
-
 const NO_ATTACHMENTS: PromptAttachment[] = []
 
 type HomeComposerProps = {
@@ -105,12 +98,17 @@ const HomeComposer = ({
 
 	return (
 		<form
-			className={SHELL}
+			className="flex w-full flex-col overflow-clip rounded-[20px] border border-foreground/10 bg-prompt-surface-inert"
 			data-slot="home-composer"
 			onSubmit={submit}
 			ref={refs.form}
 		>
-			<div className={cn(FIELD_CARD, band && "border-foreground/8 border-b")}>
+			<div
+				className={cn(
+					"flex flex-col gap-3 rounded-[20px] bg-prompt-surface p-3",
+					band && "border-foreground/8 border-b",
+				)}
+			>
 				<PromptAttachments
 					items={attachments}
 					onRemove={onRemoveAttachment && removeAttachment}
@@ -132,7 +130,7 @@ const HomeComposer = ({
 						value={currentValue}
 					/>
 				</div>
-				<div className={ACTIONS} ref={refs.controls}>
+				<div className="flex items-center gap-2" ref={refs.controls}>
 					<PromptAttachButton
 						className="me-auto"
 						hasLabel

@@ -6,8 +6,6 @@ import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
 import type { GreetingPeriod } from "@workspace/ui/components/greeting-period"
 import type { HomeAgent } from "@workspace/ui/components/home-agent-picker"
 
-const GREETING = "flex items-center justify-center gap-3 pb-3"
-
 type HomeGreetingProps = {
 	agent: HomeAgent
 	period: GreetingPeriod
@@ -21,7 +19,10 @@ const HomeGreeting = ({ agent, period, firstName }: HomeGreetingProps) => {
 		: t(`home.greeting.${period}Unnamed`)
 
 	return (
-		<div className={GREETING} data-slot="home-greeting">
+		<div
+			className="flex items-center justify-center gap-3 pb-3"
+			data-slot="home-greeting"
+		>
 			<BotIdentityAvatar
 				hue={agent.hue}
 				image={agent.image}
