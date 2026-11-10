@@ -79,4 +79,29 @@ describe("offeredModels", () => {
 			{ value: "fable", supportedEffortLevels: [] },
 		])
 	})
+
+	it("carries the canonical id an alias row resolves to", () => {
+		const [opus] = offeredModels([
+			{ value: "default" },
+			{
+				value: "opus",
+				resolvedModel: "claude-opus-5-5",
+				supportsEffort: true,
+				supportedEffortLevels: ["low", "medium", "high", "xhigh", "max"],
+			},
+		])
+
+		expect(opus?.resolvedModel).toBe("claude-opus-5-5")
+		expect(opus?.supportedEffortLevels).not.toBeEmpty()
+	})
+
+	it("leaves the resolved id out when the row names none", () => {
+		const [explicit, unnamed] = offeredModels([
+			{ value: "claude-opus-5-5" },
+			{ value: "opus[1m]", resolvedModel: "" },
+		])
+
+		expect(explicit).not.toHaveProperty("resolvedModel")
+		expect(unnamed).not.toHaveProperty("resolvedModel")
+	})
 })
