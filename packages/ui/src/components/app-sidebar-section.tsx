@@ -284,8 +284,8 @@ const SectionBody = ({ id, isOpen, children }: SectionBodyProps) => (
 	</SidebarGroupContent>
 )
 
-interface RosterSectionProps extends SectionHeadActions, SectionPlace {
-	section: AppSidebarSection
+interface ActionableSectionProps extends SectionHeadActions, SectionPlace {
+	section: Pick<AppSidebarSection, "id" | "name">
 	slotId?: string
 	children: ReactNode
 }
@@ -296,7 +296,7 @@ const RosterSection = ({
 	slotId,
 	children,
 	...head
-}: RosterSectionProps) => {
+}: ActionableSectionProps) => {
 	const bodyId = useId()
 
 	return (
@@ -371,19 +371,13 @@ const FoldSection = ({ name, children }: FoldSectionProps) => {
 	)
 }
 
-interface NamedFoldSectionProps extends SectionHeadActions, SectionPlace {
-	section: Pick<AppSidebarSection, "id" | "name">
-	slotId?: string
-	children: ReactNode
-}
-
 const NamedFoldSection = ({
 	section,
 	isOpen,
 	slotId,
 	children,
 	...head
-}: NamedFoldSectionProps) => {
+}: ActionableSectionProps) => {
 	const bodyId = useId()
 
 	return (

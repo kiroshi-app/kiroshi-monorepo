@@ -962,8 +962,8 @@ const chooseFromMenu = async (header: HTMLElement, item: string) => {
 	await waitFor(() => expect(page().queryByRole("menu")).toBeNull())
 }
 
-const closeMenu = async (menu: HTMLElement) => {
-	fireEvent.keyDown(menu, { key: "Escape" })
+const closeMenu = async () => {
+	fireEvent.keyDown(page().getByRole("menu"), { key: "Escape" })
 	await waitFor(() => expect(page().queryByRole("menu")).toBeNull())
 }
 
@@ -1049,13 +1049,13 @@ export const N1NamedSectionExpanded = meta.story({
 		await expect(
 			firstMenu.getByRole("menuitem", { name: "Move down" }),
 		).not.toHaveAttribute("aria-disabled", "true")
-		await closeMenu(page().getByRole("menu"))
+		await closeMenu()
 
 		const lastMenu = within(await openSectionMenu(press))
 		await expect(
 			lastMenu.getByRole("menuitem", { name: "Move down" }),
 		).toHaveAttribute("aria-disabled", "true")
-		await closeMenu(page().getByRole("menu"))
+		await closeMenu()
 
 		await chooseFromMenu(clients, "Rename")
 		const field = await renameFieldIn(canvasElement)
