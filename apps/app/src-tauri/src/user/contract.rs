@@ -143,6 +143,8 @@ pub struct UserPreferences {
 	pub notify_with_sound: bool,
 	pub sidebar_width: Option<u32>,
 	#[serde(default)]
+	pub sidebar_collapsed: bool,
+	#[serde(default)]
 	pub sidebar_tab: SidebarTab,
 	#[serde(default)]
 	pub open_on: OpenOn,
@@ -191,6 +193,7 @@ impl UserPreferences {
 			notify_on_finished_turn: preferences.notify_on_finished_turn,
 			notify_with_sound: preferences.notify_with_sound,
 			sidebar_width: preferences.sidebar_width,
+			sidebar_collapsed: preferences.sidebar_collapsed,
 			sidebar_tab: preferences.sidebar_tab.into(),
 			open_on: preferences.open_on.into(),
 			activity_panel_open: preferences.activity_panel_open,
@@ -220,6 +223,7 @@ impl From<UserPreferences> for user::Preferences {
 			notify_on_finished_turn: preferences.notify_on_finished_turn,
 			notify_with_sound: preferences.notify_with_sound,
 			sidebar_width: preferences.sidebar_width,
+			sidebar_collapsed: preferences.sidebar_collapsed,
 			sidebar_tab: preferences.sidebar_tab.into(),
 			open_on: preferences.open_on.into(),
 			activity_panel_open: preferences.activity_panel_open,
@@ -299,6 +303,31 @@ mod tests {
 			"lastSeenVersion": "0.24.1",
 			"onboardingStep": "done"
 		})
+	}
+
+	#[test]
+	fn a_payload_without_a_sidebar_state_reads_as_an_expanded_sidebar() {
+		let read: UserPreferences =
+			serde_json::from_value(a_payload()).expect("the payload deserializes");
+
+		assert!(!read.sidebar_collapsed);
+	}
+
+	#[tokio::test]
+	async fn a_collapsed_sidebar_written_through_the_contract_reads_back_through_it() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let mut payload = a_payload();
+		payload["sidebarCollapsed"] = json!(true);
+		let sent: UserPreferences =
+			serde_json::from_value(payload).expect("the payload deserializes");
+
+		database.user().set_preferences(sent.clone().into()).await.expect("the write");
+		let stored = database.user().preferences().await.expect("the record");
+		let read = UserPreferences::of(stored, None);
+
+		assert_eq!(read, sent);
+		assert_eq!(to_value(&read).expect("the record serializes")["sidebarCollapsed"], true);
 	}
 
 	#[test]
