@@ -461,6 +461,16 @@ describe("ci:fast", () => {
 			"PR enqueue script unit tests",
 			"test:pr-enqueue",
 		],
+		[
+			"scripts/pr-merge-integration.sh",
+			"PR integration merge script unit tests",
+			"test:pr-merge-integration",
+		],
+		[
+			"scripts/pr-merge-integration.test.ts",
+			"PR integration merge script unit tests",
+			"test:pr-merge-integration",
+		],
 	]
 	const QUEUE_SCRIPT_PATHS = QUEUE_SCRIPT_UNIT_TESTS.map(([path]) => path)
 	const QUEUE_SCRIPT_STEPS = QUEUE_SCRIPT_UNIT_TESTS.map(([, step]) => step)
