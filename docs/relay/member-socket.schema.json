@@ -6370,6 +6370,9 @@
     },
     "OfferedModel_Serialize": {
       "properties": {
+        "resolvedModel": {
+          "type": "string"
+        },
         "supportedEffortLevels": {
           "items": {
             "$ref": "#/$defs/EffortLevel"
