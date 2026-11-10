@@ -325,6 +325,27 @@ it("shows the staged files, unstages a removed one, and sends files alone", asyn
 	expect(onRemoveAttachment).toHaveBeenCalledWith("notes")
 })
 
+it("marks the send busy and holds the submit while it is in flight, then frees it", () => {
+	const onSubmit = vi.fn()
+	const { rerender } = render(
+		emptyStageOf(fixture, { isSending: true, onSubmit }),
+		{
+			wrapper: createQueryTestWrapper().wrapper,
+		},
+	)
+	const send = () => screen.getByRole("button", { name: "Send" })
+
+	expect(send().getAttribute("aria-busy")).toBe("true")
+	fireEvent.click(send())
+	expect(onSubmit).not.toHaveBeenCalled()
+
+	rerender(emptyStageOf(fixture, { isSending: false, onSubmit }))
+
+	expect(send().hasAttribute("aria-busy")).toBe(false)
+	fireEvent.click(send())
+	expect(onSubmit).toHaveBeenCalledWith("Also the hotel")
+})
+
 it("surfaces a mission of the agent once it completes, then once it blocks", async () => {
 	const { wrapper } = createQueryTestWrapper()
 	feed.entries = [missionIn(fixture.room, fixture.atlas.id, "working")]
