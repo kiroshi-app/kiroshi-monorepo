@@ -290,7 +290,7 @@ const bubbleBoxesOf = (viewport: HTMLElement, from: MessageSender) =>
 		(bubble) => bubble.getBoundingClientRect(),
 	)
 
-const HOME_BUBBLE_PADDING = "12px"
+const HOME_BUBBLE_PADDING = 12
 
 const filledBubblesOf = (viewport: HTMLElement) =>
 	viewport.querySelectorAll<HTMLElement>(
@@ -323,10 +323,10 @@ const expectHomeEdges = async (
 	}
 	for (const bubble of filledBubblesOf(viewport)) {
 		await expect(bubble).toHaveStyle({
-			paddingTop: HOME_BUBBLE_PADDING,
-			paddingRight: HOME_BUBBLE_PADDING,
-			paddingBottom: HOME_BUBBLE_PADDING,
-			paddingLeft: HOME_BUBBLE_PADDING,
+			paddingTop: `${HOME_BUBBLE_PADDING}px`,
+			paddingRight: `${HOME_BUBBLE_PADDING}px`,
+			paddingBottom: `${HOME_BUBBLE_PADDING}px`,
+			paddingLeft: `${HOME_BUBBLE_PADDING}px`,
 		})
 	}
 	await expectNoSidewaysScroll(viewport)
@@ -815,7 +815,7 @@ export const LastRowHighlighted = meta.story({
 					(bubble?.getBoundingClientRect().bottom ?? 0) -
 						(authorLine?.getBoundingClientRect().bottom ?? 0),
 				),
-			).toBe(12)
+			).toBe(HOME_BUBBLE_PADDING)
 		}
 	},
 })
