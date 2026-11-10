@@ -161,18 +161,19 @@ const press = async (control: Element) => {
 	await settle()
 }
 
-const openConversation = async () => {
-	const label = [
-		...document.querySelectorAll('[data-slot="roster-row-name"]'),
-	].find((name) => name.textContent === CONVERSATION_TITLE)
-	await press(label?.closest("button") as HTMLButtonElement)
-}
+const collapseSidebar = () =>
+	writeMirror({ ...readMirror(), sidebarCollapsed: true })
+
+const openConversation = () =>
+	press(within(railOf()).getByRole("button", { name: CONVERSATION_TITLE }))
 
 const railOf = () =>
 	screen.getByRole("navigation", { name: i18n.t("bots:rail.label") })
 
 const spacesLogoOf = () =>
-	railOf().querySelector('[data-slot="space-switcher"]') as HTMLElement
+	railOf().querySelector(
+		'[data-slot="space-switcher"], [data-slot="collapsed-sidebar-space"]',
+	) as HTMLElement
 
 const currentSpaceRowOf = () =>
 	within(settingsMenuOf() as HTMLElement)
@@ -270,28 +271,14 @@ it("switches between the space and the user settings on the gear and the avatar"
 	})
 })
 
-// OPE-2153: needs the expanded conversation list back.
-it.skip("brings back the open conversation and its draft on Back to your settings", async () => {
+it("brings back the open conversation and its draft on Back to your settings", async () => {
+	collapseSidebar()
 	await mountApp()
 	await openConversation()
 	fireEvent.change(composerOf(), { target: { value: DRAFT } })
-	await openSpaceSettingsByRail()
+	await openSpaceSettingsBySwitcher()
 
 	await press(spaceBackOf())
-
-	expect(shownSettingsOf()).toBeNull()
-	expect(composerOf().value).toBe(DRAFT)
-	expect(isMarked(conversationsEntryOf())).toBe(true)
-})
-
-// OPE-2153: needs the expanded conversation list back.
-it.skip("closes the settings on the Conversations entry of the rail", async () => {
-	await mountApp()
-	await openConversation()
-	fireEvent.change(composerOf(), { target: { value: DRAFT } })
-	await press(avatarOf())
-
-	await press(conversationsEntryOf())
 
 	expect(shownSettingsOf()).toBeNull()
 	expect(composerOf().value).toBe(DRAFT)
@@ -904,6 +891,7 @@ const answerLeave = (answer: string) =>
 	)
 
 const openUnsavedApplicationInSecondTab = async () => {
+	collapseSidebar()
 	await mountApp(twoSpaceApplications)
 	await openConversation()
 	await press(barButtonOf(NEW_TAB))
@@ -915,8 +903,7 @@ const openUnsavedApplicationInSecondTab = async () => {
 	})
 }
 
-// OPE-2153: needs the expanded conversation list back.
-it.skip.each([
+it.each([
 	["selecting another tab", () => press(tabNamed(CONVERSATION_TITLE))],
 	["opening a new tab", () => press(barButtonOf(NEW_TAB))],
 	["going Back", () => press(barButtonOf(i18n.t("common:titleBar.back")))],
@@ -946,8 +933,7 @@ it.skip.each([
 	},
 )
 
-// OPE-2153: needs the expanded conversation list back.
-it.skip("closes the active settings tab with an unsaved application once Leave is pressed", async () => {
+it("closes the active settings tab with an unsaved application once Leave is pressed", async () => {
 	await openUnsavedApplicationInSecondTab()
 
 	await press(
@@ -961,8 +947,7 @@ it.skip("closes the active settings tab with an unsaved application once Leave i
 	expect(shownSettingsOf()).toBeNull()
 })
 
-// OPE-2153: needs the expanded conversation list back.
-it.skip("pins, unpins, closes another tab and the other tabs at once beside an unsaved application", async () => {
+it("pins, unpins, closes another tab and the other tabs at once beside an unsaved application", async () => {
 	await openUnsavedApplicationInSecondTab()
 
 	await pickInTabMenu(CONVERSATION_TITLE, i18n.t("common:titleBar.pinTab"))

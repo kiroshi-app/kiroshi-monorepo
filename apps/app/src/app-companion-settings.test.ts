@@ -328,16 +328,20 @@ const openContextMenuOn = async (target: Element) => {
 const chooseInMenu = async (label: string) =>
 	press(screen.getByRole("menuitem", { name: label }))
 
-const rosterRowOf = (name: string) => {
-	const label = [
-		...document.querySelectorAll('[data-slot="roster-row-name"]'),
-	].find((row) => row.textContent === name)
-	const button = label?.closest("button")
-	if (!button) throw new Error(`no roster row for ${name}`)
-	return button
+const collapseSidebar = () =>
+	writeMirror({ ...readMirror(), sidebarCollapsed: true })
+
+const sidebarRowOf = (name: string) => {
+	const row = [
+		...document.querySelectorAll(
+			'[data-slot="collapsed-sidebar-conversation"]',
+		),
+	].find((item) => item.getAttribute("aria-label") === name)
+	if (!row) throw new Error(`no sidebar row for ${name}`)
+	return row
 }
 
-const openRow = (name: string) => press(rosterRowOf(name))
+const openRow = (name: string) => press(sidebarRowOf(name))
 
 const turnOf = (text: string) => {
 	const turn = screen.getByText(text).closest('[data-slot="message"]')
@@ -374,14 +378,6 @@ const openSpaceSettingsByRail = async () => {
 
 const avatarOf = () =>
 	within(railOf()).getAllByRole("button").at(-1) as HTMLElement
-
-const conversationsEntryOf = () =>
-	within(railOf()).getByRole("button", {
-		name: i18n.t("bots:rail.conversations"),
-	})
-
-const isMarked = (railItem: HTMLElement) =>
-	railItem.getAttribute("aria-current") === "true"
 
 const settingsMenuOf = () =>
 	screen.queryByRole("navigation", { name: i18n.t("settings:screen.menu") })
@@ -575,8 +571,8 @@ it("creates a companion from Create a companion, as the roster create does", asy
 	expect(companionCards()).toHaveLength(companionCount + 1)
 })
 
-// OPE-2153: needs the expanded conversation list back.
-it.skip("opens the companion screen on General from the Settings of a message avatar menu", async () => {
+it("opens the companion screen on General from the Settings of a message avatar menu", async () => {
+	collapseSidebar()
 	await mountApp()
 	await openRow(ROOM)
 
@@ -586,8 +582,8 @@ it.skip("opens the companion screen on General from the Settings of a message av
 	expect(companionScreenOf(ATLAS)).toEqual(ON_GENERAL)
 })
 
-// OPE-2153: needs the expanded conversation list back.
-it.skip("opens the companion screen on General from the Settings of a mention pill menu", async () => {
+it("opens the companion screen on General from the Settings of a mention pill menu", async () => {
+	collapseSidebar()
 	await mountApp()
 	await openRow(ROOM)
 
@@ -597,8 +593,8 @@ it.skip("opens the companion screen on General from the Settings of a mention pi
 	expect(companionScreenOf(ATLAS)).toEqual(ON_GENERAL)
 })
 
-// OPE-2153: needs the expanded conversation list back.
-it.skip("opens the companion screen on General from the identity button of the solo header", async () => {
+it("opens the companion screen on General from the identity button of the solo header", async () => {
+	collapseSidebar()
 	await mountApp()
 	await openRow(ATLAS)
 
@@ -611,8 +607,8 @@ it.skip("opens the companion screen on General from the identity button of the s
 	expect(companionScreenOf(ATLAS)).toEqual(ON_GENERAL)
 })
 
-// OPE-2153: needs the expanded conversation list back.
-it.skip("opens the companion screen on Applications from an application install card", async () => {
+it("opens the companion screen on Applications from an application install card", async () => {
+	collapseSidebar()
 	const seeded = await mountApp()
 	harness.installs = [
 		installOf(seeded.atlasId, seeded.atlasThreadId, { kind: "nothing" }),
@@ -627,8 +623,8 @@ it.skip("opens the companion screen on Applications from an application install 
 	})
 })
 
-// OPE-2153: needs the expanded conversation list back.
-it.skip("opens the companion screen on the application a deep link names", async () => {
+it("opens the companion screen on the application a deep link names", async () => {
+	collapseSidebar()
 	const seeded = await mountApp()
 	harness.installs = [
 		installOf(seeded.atlasId, seeded.atlasThreadId, {
@@ -654,19 +650,18 @@ it.skip("opens the companion screen on the application a deep link names", async
 	expect(screen.getByRole("heading", { level: 2, name: SENTRY })).toBeTruthy()
 })
 
-// OPE-2153: needs the expanded conversation list back.
-it.skip("brings back the open conversation and its draft on Back to conversations", async () => {
+it("brings back the open conversation and its draft on Back to conversations", async () => {
+	collapseSidebar()
 	await mountApp()
 	await openRow(ROOM)
 	fireEvent.change(composerOf(), { target: { value: DRAFT } })
-	await openContextMenuOn(rosterRowOf(ATLAS))
+	await openContextMenuOn(authorAvatarOf(ROOM_POST))
 	await chooseInMenu(i18n.t("bots:roster.settings"))
 
 	await pressBack(i18n.t("settings:screen.back"))
 
 	expect(settingsMenuOf()).toBeNull()
 	expect(composerOf().value).toBe(DRAFT)
-	expect(isMarked(conversationsEntryOf())).toBe(true)
 })
 
 it("keeps the rail on the companion screen, and the Space settings replace it", async () => {
@@ -917,7 +912,7 @@ const holdingRuntimeWrite = (): HeldRuntimeWrite => {
 }
 
 const sendInAtlasThread = async (text: string) => {
-	await pressBack(i18n.t("settings:screen.back"))
+	await pressBack(i18n.t("settings:screen.backToAgents"))
 	await openRow(ATLAS)
 	fireEvent.change(composerOf(), { target: { value: text } })
 	await act(async () => {
@@ -934,8 +929,8 @@ const pickSonnetThenSend = async (held: HeldRuntimeWrite) => {
 	await sendInAtlasThread(NEXT_PROMPT)
 }
 
-// OPE-2153: needs an agent row in the navigation sidebar to open the solo thread.
-it.skip("starts the session of a prompt sent during a runtime write only once the write lands, on the picked model", async () => {
+it("starts the session of a prompt sent during a runtime write only once the write lands, on the picked model", async () => {
+	collapseSidebar()
 	harness.models = RUNTIME_MODELS
 	const held = holdingRuntimeWrite()
 	await mountApp(held.change)
@@ -950,8 +945,8 @@ it.skip("starts the session of a prompt sent during a runtime write only once th
 	expect(held.modelsSessionsStartedOn[0]).toBe("sonnet")
 })
 
-// OPE-2153: needs an agent row in the navigation sidebar to open the solo thread.
-it.skip("starts the session on the stored model and raises a notice when the held runtime write is refused", async () => {
+it("starts the session on the stored model and raises a notice when the held runtime write is refused", async () => {
+	collapseSidebar()
 	harness.models = RUNTIME_MODELS
 	const held = holdingRuntimeWrite()
 	await mountApp((store) => held.change(refusingUpdates(store)))
