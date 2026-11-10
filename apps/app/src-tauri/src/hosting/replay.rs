@@ -220,10 +220,9 @@ impl Ring {
 			.frames
 			.iter()
 			.take_while(|recorded| recorded.position <= sent_position)
-			.filter_map(|recorded| Some((recorded, recorded.seq_of(account_id)?)))
-			.filter(|(_, seq)| *seq > args.since)
-			.map(|(recorded, seq)| {
-				bridge::replayed(&recorded.published, &self.epoch, seq, &args.token)
+			.filter_map(|recorded| {
+				let seq = recorded.seq_of(account_id).filter(|seq| *seq > args.since)?;
+				Some(bridge::replayed(&recorded.published, &self.epoch, seq, &args.token))
 			})
 			.collect();
 		let body = json!({ "token": args.token, "replayed": frames.len() });
