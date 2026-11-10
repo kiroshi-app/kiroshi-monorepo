@@ -62,7 +62,13 @@ const BotBadgeDot = ({
 	/>
 )
 
-const BOT_MISSION_STATES = ["waiting", "failed", "ready", "working"] as const
+const BOT_MISSION_STATES = [
+	"waiting",
+	"failed",
+	"ready",
+	"working",
+	"waiting_agent",
+] as const
 
 type BotMissionState = (typeof BOT_MISSION_STATES)[number]
 
@@ -78,6 +84,7 @@ const botMissionDotVariants = cva(`${BOT_MISSION_DOT_SLOT} rounded-full`, {
 			failed: "bg-bot-badge-failed",
 			ready: "bg-bot-badge-done",
 			working: "bg-muted-foreground/40",
+			waiting_agent: "bg-muted-foreground",
 		},
 	},
 })

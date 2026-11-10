@@ -539,7 +539,7 @@ export const KnockoutWearsTheRowAtRestAndHovered = meta.story({
 	},
 })
 
-export const OpenRowWithMissionStrips = meta.story({
+export const OpenRowWithMissionCapsules = meta.story({
 	tags: ["test-only"],
 	parameters: { a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION },
 	args: {
@@ -577,10 +577,11 @@ export const OpenRowWithMissionStrips = meta.story({
 		await expect(getComputedStyle(row).backgroundColor).not.toBe(TRANSPARENT)
 		await expectRowAnatomy(row)
 		await expectKnockoutCutToTheRow(row)
-		const strips = slotsIn(row, "bot-mission-strip")
-		await expect(strips).toHaveLength(2)
-		for (const strip of strips) {
-			await expect(strip.getBoundingClientRect().top).toBeGreaterThan(
+		const capsules = slotsIn(canvasElement, "mission-capsule")
+		await expect(capsules).toHaveLength(2)
+		for (const capsule of capsules) {
+			await expect(row.contains(capsule)).toBe(false)
+			await expect(capsule.getBoundingClientRect().top).toBeGreaterThan(
 				boxOf(row, "conversation-subject-icon").bottom,
 			)
 		}

@@ -11,7 +11,6 @@ import {
 } from "@workspace/ui/components/app-sidebar-model"
 import { BotMissionStrip } from "@workspace/ui/components/bot-badge"
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
-import { DitheredFieldAvatar } from "@workspace/ui/components/dithered-field-avatar"
 import { dropArea } from "@workspace/ui/hooks/use-roster-lift"
 import {
 	SHIFTABLE,
@@ -37,18 +36,11 @@ const LIFTED_IN_ZONE = cn(
 const LIFTED_LOOSE = cn(LIFTED, "translate-y-(--lift-dy)")
 
 const SECTION_DROP =
-	"flex items-center justify-center gap-2 rounded-xl border border-sidebar-border border-dashed px-3 py-3 text-center text-muted-foreground text-xs"
-
-const SECTION_DROP_AVATAR = "block opacity-40"
+	"flex items-center justify-center rounded-lg border border-input border-dashed p-3 text-center text-compact text-faint-foreground leading-5"
 
 const DROP_AREA = "group/roster-drop relative rounded-2xl"
 
 const DROP_AREA_LANDING = "bg-sidebar-accent/60"
-
-const ZONE_SEPARATOR =
-	"mx-1.5 my-1 block h-px shrink-0 rounded-full bg-sidebar-border"
-
-const DROP_AVATAR_SIZE = 28
 
 const missionStripsOf = (missions: AppSidebarRowMission[] | undefined) =>
 	missions?.length
@@ -164,21 +156,12 @@ const RosterMoveAnnouncement = ({ move }: RosterMoveAnnouncementProps) => {
 	)
 }
 
-const RosterZoneSeparator = () => (
-	<span
-		aria-hidden="true"
-		className={ZONE_SEPARATOR}
-		data-slot="roster-zone-separator"
-	/>
-)
-
 interface SectionDropZoneProps {
-	name: string
 	label?: string
 	slotId?: string
 }
 
-const SectionDropZone = ({ name, label, slotId }: SectionDropZoneProps) => {
+const SectionDropZone = ({ label, slotId }: SectionDropZoneProps) => {
 	const { t } = useTranslation("bots")
 
 	return (
@@ -187,9 +170,6 @@ const SectionDropZone = ({ name, label, slotId }: SectionDropZoneProps) => {
 			className={SECTION_DROP}
 			data-slot="roster-section-drop"
 		>
-			<span aria-hidden="true" className={SECTION_DROP_AVATAR}>
-				<DitheredFieldAvatar name={name} size={DROP_AVATAR_SIZE} />
-			</span>
 			{label ?? t("roster.section.empty")}
 		</div>
 	)
@@ -253,7 +233,6 @@ export {
 	type RosterMove,
 	RosterMoveAnnouncement,
 	type RosterRowSlot,
-	RosterZoneSeparator,
 	rosterRowSlotOf,
 	rosterSlot,
 	SectionDropZone,

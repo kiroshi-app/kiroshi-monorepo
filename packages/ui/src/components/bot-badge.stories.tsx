@@ -245,7 +245,7 @@ export const MissionStates = meta.story({
 		docs: {
 			description: {
 				story:
-					"The four states a mission is read in, each on the same ticket, and the working state twice: quiet on the fourth strip, live on the fifth. The dot closes the strip at its trailing edge and is drawn only when the mission asks for a reader or runs right now, so a mission nobody is waiting on shows none. The tint is never the only carrier: every strip names its state in a screen-reader-only span whether or not a dot is drawn, so the five rows stay distinguishable without colour. Check the quiet strip still holds the width of the dot at its end, so the title lane is the same on all five.",
+					"The five states a mission is read in, each on the same ticket, and the working state twice: quiet on the fourth strip, live on the last. The dot closes the strip at its trailing edge and is drawn only when the mission asks for a reader or runs right now, so a mission nobody is waiting on shows none. The tint is never the only carrier: every strip names its state in a screen-reader-only span whether or not a dot is drawn, so the rows stay distinguishable without colour. Check the quiet strip still holds the width of the dot at its end, so the title lane is the same on every row.",
 			},
 		},
 	},
@@ -262,6 +262,7 @@ export const MissionStates = meta.story({
 				"bot-mission-dot",
 				"bot-mission-dot",
 				"bot-mission-dot-placeholder",
+				"bot-mission-dot",
 				"bot-mission-dot",
 			],
 		)

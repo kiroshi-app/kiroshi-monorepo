@@ -14,6 +14,7 @@ import {
 	expectAnswered,
 	expectGlazeBorders,
 	expectNeedingYou,
+	expectSkeletonFilledTo,
 	SidebarFrame,
 	slotIn,
 	slotsIn,
@@ -33,20 +34,23 @@ import { BotRosterRow } from "@workspace/ui/components/app-sidebar-bot-row"
 import { ConversationRosterRow } from "@workspace/ui/components/app-sidebar-conversation-row"
 import type {
 	AppSidebarBot,
+	AppSidebarConversation,
+	AppSidebarRowMission,
 	AppSidebarSection,
 	RosterPin,
 } from "@workspace/ui/components/app-sidebar-model"
 import { BotRoster } from "@workspace/ui/components/app-sidebar-roster"
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import type { GlazeTheme } from "@workspace/ui/components/glaze-border"
+import { SidebarListSkeleton } from "@workspace/ui/components/sidebar-list-skeleton"
 
 const meta = preview.meta({
 	title: "Navigation/AppSidebarRoster",
 	component: BotRoster,
 	parameters: { layout: "fullscreen" },
 	decorators: [
-		(Story) => (
-			<SidebarFrame>
+		(Story, { parameters }) => (
+			<SidebarFrame width={parameters.sidebarWidth}>
 				<Story />
 			</SidebarFrame>
 		),
@@ -74,10 +78,15 @@ export const PinnedZoneThenSortedZone = meta.story({
 		await expect(within(pinned).getByText(DESK_ROOM.name)).toBeVisible()
 		await expect(within(sorted).getByText(ATLAS.name)).toBeVisible()
 		await expect(
-			slotIn(canvasElement, "roster-zone-separator"),
-		).toBeInTheDocument()
+			slotsIn(canvasElement, "roster-zone-header").map(
+				(header) => header.textContent,
+			),
+		).toEqual(["Pinned", "Conversations"])
 	},
 })
+
+const sortedZoneHeaderOf = (canvasElement: HTMLElement) =>
+	slotsIn(canvasElement, "roster-zone-header").at(-1) as HTMLElement
 
 const READING_MORE = { hasNextPage: true, isFetchingNextPage: true }
 
@@ -460,7 +469,7 @@ const playLiftedRowWithNeighboursShifted = async ({
 		itemOf(canvasElement, DESK_ROOM.name),
 		itemOf(canvasElement, DUNE.name),
 		itemOf(canvasElement, ATLAS.name),
-		slotIn(canvasElement, "roster-zone-separator"),
+		sortedZoneHeaderOf(canvasElement),
 	]
 	const [beaconAt, emberAt] = [beacon, ember].map(boxOf)
 	const stillAt = still.map(boxOf)
@@ -575,7 +584,7 @@ const playDragOverTheSortedZone = async ({
 }) => {
 	const sorted = cardOf(canvasElement, "__sorted__")
 	const pinned = cardOf(canvasElement, "__pinned__")
-	const separator = slotIn(canvasElement, "roster-zone-separator")
+	const separator = sortedZoneHeaderOf(canvasElement)
 	const beacon = itemOf(canvasElement, BEACON.name)
 	const separatorAt = boxOf(separator)
 
@@ -709,7 +718,7 @@ const playPinnedRowLiftedOutOfItsSection = async ({
 	const below = [
 		cardOf(canvasElement, REVIEW.id),
 		itemOf(canvasElement, DUNE.name),
-		slotIn(canvasElement, "roster-zone-separator"),
+		sortedZoneHeaderOf(canvasElement),
 		itemOf(canvasElement, ATLAS.name),
 	]
 	const ember = itemOf(canvasElement, EMBER.name)
@@ -882,5 +891,261 @@ export const KeyboardMovesAPinnedRowOrSection = meta.story({
 		await expect(args.onPinRoster).toHaveBeenCalledTimes(4)
 		await expect(fireEvent.keyDown(ember(), altArrow("ArrowDown"))).toBe(true)
 		await expect(args.onPinRoster).toHaveBeenCalledTimes(4)
+	},
+})
+
+const PAPER_ARTBOARD = {
+	globals: { theme: "dark", theme_layout: "single" },
+	parameters: { sidebarWidth: 288 },
+} as const
+
+const conversationOf = (
+	id: string,
+	name: string,
+	overrides: Partial<AppSidebarConversation> = {},
+): AppSidebarConversation => ({
+	id,
+	name,
+	participants: [ATLAS, BEACON],
+	lastMessage: "The changelog is ready for a read.",
+	lastSpeaker: ATLAS.name,
+	timestamp: "08:50",
+	color: BLOT_HUES.blue,
+	icon: "Rocket",
+	...overrides,
+})
+
+const PINNED_CONVERSATIONS = [
+	conversationOf("launch", "Launch room", { pinPosition: 0 }),
+	conversationOf("design", "Design review", {
+		pinPosition: 1,
+		color: BLOT_HUES.purple,
+		participants: [ATLAS],
+		timestamp: "Yesterday",
+	}),
+]
+
+const RECENT_CONVERSATIONS = [
+	conversationOf("research", "Research notes", {
+		color: BLOT_HUES.green,
+		participants: [BEACON],
+		lastSpeaker: BEACON.name,
+		lastMessage: "Pulled the three papers and summarised each one for you.",
+		timestamp: "09:24",
+	}),
+	conversationOf("billing", "Billing migration with a title too long to fit", {
+		color: BLOT_HUES.orange,
+		timestamp: "Mon",
+	}),
+]
+
+const ARTBOARD_ROSTER = {
+	bots: [],
+	sections: [],
+	conversations: [...PINNED_CONVERSATIONS, ...RECENT_CONVERSATIONS],
+}
+
+const missionOf = (
+	state: AppSidebarRowMission["state"],
+	externalId: string,
+	title: string,
+): AppSidebarRowMission => ({
+	id: `mission-${externalId}`,
+	state,
+	ticket: { platform: "linear", externalId, title },
+})
+
+const MISSIONS_ROSTER = {
+	...ARTBOARD_ROSTER,
+	conversations: [
+		conversationOf("launch", "Launch room", {
+			pinPosition: 0,
+			missions: [
+				missionOf("waiting", "OPE-512", "Ship the release notes"),
+				missionOf("working", "OPE-513", "Rebuild the bundle for every target"),
+			],
+		}),
+		conversationOf("research", "Research notes", {
+			color: BLOT_HUES.green,
+			missions: [
+				missionOf("ready", "OPE-520", "Summarise the three papers"),
+				missionOf("waiting_agent", "OPE-521", "Draft the reading list"),
+			],
+		}),
+		...RECENT_CONVERSATIONS.slice(1),
+	],
+}
+
+const rowNamed = (canvasElement: HTMLElement, name: string) =>
+	within(canvasElement).getByRole("button", { name: new RegExp(name) })
+
+const expectZoneHeaders = async (
+	canvasElement: HTMLElement,
+	labels: string[],
+) =>
+	expect(
+		slotsIn(canvasElement, "roster-zone-header").map(
+			(header) => header.textContent,
+		),
+	).toEqual(labels)
+
+const pixelsOf = (element: Element, property: string) =>
+	Number.parseFloat(getComputedStyle(element).getPropertyValue(property))
+
+export const ExpandedNewConversationRows = meta.story({
+	...PAPER_ARTBOARD,
+	args: ARTBOARD_ROSTER,
+	play: async ({ canvasElement }) => {
+		await expectZoneHeaders(canvasElement, ["Pinned", "Conversations"])
+		const row = rowNamed(canvasElement, "Launch room")
+		await expect(pixelsOf(row, "padding-inline-end")).toBe(6)
+		await expect(pixelsOf(row, "padding-inline-start")).toBe(6)
+		await expect(pixelsOf(row, "border-top-left-radius")).toBe(10)
+		await expect(getComputedStyle(row).transitionProperty).not.toMatch(
+			/color|background/,
+		)
+		await expect(slotIn(row, "roster-row-timestamp").offsetWidth).toBe(44)
+		const title = slotIn(
+			rowNamed(canvasElement, "Billing migration"),
+			"roster-row-name",
+		)
+		await expect(title.scrollWidth).toBeGreaterThan(title.clientWidth)
+	},
+})
+
+export const ExpandedMissionsRows = meta.story({
+	...PAPER_ARTBOARD,
+	args: { ...MISSIONS_ROSTER, onOpenMission: fn() },
+	play: async ({ args, canvasElement }) => {
+		const capsules = slotsIn(canvasElement, "mission-capsule")
+		await expect(capsules.map((capsule) => capsule.dataset.state)).toEqual([
+			"waiting",
+			"working",
+			"ready",
+			"waiting_agent",
+		])
+		const [first] = capsules
+		await expect(first.offsetHeight).toBe(24)
+		const item = first.closest('[data-slot="sidebar-menu-item"]')
+		await expect(
+			first.getBoundingClientRect().left -
+				(item?.getBoundingClientRect().left ?? 0),
+		).toBe(50)
+		first.focus()
+		await expect(first).toHaveFocus()
+		await expect(getComputedStyle(first).transitionDuration).toBe("0s")
+		first.click()
+		await expect(args.onOpenMission).toHaveBeenCalledWith("mission-OPE-512")
+	},
+})
+
+export const NoAgentsYet = meta.story({
+	...PAPER_ARTBOARD,
+	args: { bots: [], conversations: [], sections: [] },
+	play: async ({ canvas, canvasElement }) => {
+		await expect(canvas.getByText("No agents yet")).toBeVisible()
+		await expectZoneHeaders(canvasElement, [])
+	},
+})
+
+export const NothingPinned = meta.story({
+	...PAPER_ARTBOARD,
+	args: { ...ARTBOARD_ROSTER, conversations: RECENT_CONVERSATIONS },
+	play: ({ canvasElement }) =>
+		expectZoneHeaders(canvasElement, ["Conversations"]),
+})
+
+export const EmptySectionShowsTheDropSlot = meta.story({
+	...PAPER_ARTBOARD,
+	args: { ...ARTBOARD_ROSTER, sections: [SIDEBAR_SECTION] },
+	play: async ({ canvas, canvasElement }) => {
+		await expect(canvas.getByText(SIDEBAR_SECTION.name)).toBeVisible()
+		const slot = slotIn(canvasElement, "roster-section-drop")
+		await expect(slot).toHaveTextContent("Drop an agent here")
+		await expect(getComputedStyle(slot).borderTopStyle).toBe("dashed")
+	},
+})
+
+export const Loading = meta.story({
+	...PAPER_ARTBOARD,
+	render: () => <SidebarListSkeleton />,
+	play: async ({ canvasElement }) => {
+		await expect(
+			slotsIn(canvasElement, "sidebar-list-skeleton-header"),
+		).toHaveLength(2)
+		await expectSkeletonFilledTo(canvasElement, "bottom")
+	},
+})
+
+export const FailedToLoad = meta.story({
+	...PAPER_ARTBOARD,
+	args: {
+		bots: [],
+		conversations: [],
+		haveBotsFailedToLoad: true,
+		onRetryLoadBots: fn(),
+	},
+	play: async ({ args, canvas }) => {
+		await expect(canvas.getByText("Couldn’t load your agents.")).toBeVisible()
+		await fireEvent.click(canvas.getByRole("button", { name: "Retry" }))
+		await expect(args.onRetryLoadBots).toHaveBeenCalledOnce()
+	},
+})
+
+export const LoadingMoreAtTheEnd = meta.story({
+	...PAPER_ARTBOARD,
+	args: { ...ARTBOARD_ROSTER, listEnd: READING_MORE },
+	play: async ({ canvasElement }) => {
+		await waitFor(() =>
+			expect(slotsIn(canvasElement, "list-end-skeleton")).toHaveLength(1),
+		)
+		await expect(
+			slotsIn(
+				slotIn(canvasElement, "list-end-skeleton"),
+				"sidebar-list-skeleton-row",
+			),
+		).toHaveLength(2)
+	},
+})
+
+const WRITING_ATLAS: AppSidebarBot = {
+	...ATLAS,
+	status: "working",
+	pose: "writing",
+}
+
+export const RowStates = meta.story({
+	...PAPER_ARTBOARD,
+	args: {
+		...ARTBOARD_ROSTER,
+		conversations: [
+			conversationOf("writing", "Launch room", {
+				participants: [WRITING_ATLAS, BEACON],
+			}),
+			conversationOf("not-sent", "Design review", {
+				color: BLOT_HUES.purple,
+				isNotSent: true,
+				lastMessage: "Can you check the spacing on the header?",
+			}),
+			conversationOf("needs-you", "Research notes", {
+				color: BLOT_HUES.green,
+				pendingQuestion: PENDING_QUESTION,
+			}),
+		],
+	},
+	play: async ({ canvasElement }) => {
+		await expect(
+			slotIn(rowNamed(canvasElement, "Launch room"), "roster-row-preview"),
+		).toHaveTextContent("Atlas: writing…")
+		const notSent = slotIn(
+			rowNamed(canvasElement, "Design review"),
+			"roster-row-timestamp",
+		)
+		await expect(notSent).toHaveTextContent("Not sent")
+		await expect(notSent.offsetWidth).toBeGreaterThanOrEqual(52)
+		await expectNeedingYou(
+			rowNamed(canvasElement, "Research notes"),
+			PENDING_QUESTION,
+		)
 	},
 })

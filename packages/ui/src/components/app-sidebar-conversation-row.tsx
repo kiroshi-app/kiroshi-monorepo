@@ -9,13 +9,13 @@ import {
 	workingBotOf,
 } from "@workspace/ui/components/app-sidebar-model"
 import {
-	missionStripsOf,
 	type RosterRowSlot,
 	rosterRowSlotOf,
 } from "@workspace/ui/components/app-sidebar-roster-parts"
 import { ConversationBotPile } from "@workspace/ui/components/conversation-bot-pile"
 import { ConversationSubjectIcon } from "@workspace/ui/components/conversation-subject-icon"
 import { Icons } from "@workspace/ui/components/icons"
+import { MissionCapsuleList } from "@workspace/ui/components/mission-capsule"
 import {
 	PinGroup,
 	type RosterPinActions,
@@ -44,6 +44,7 @@ interface ConversationRosterRowProps extends RosterRowSlot, RosterPinActions {
 	onDelete?: (id: string) => void
 	onMoveToSection?: (id: string, sectionId: string | null) => void
 	onCreateSectionFor?: (id: string) => void
+	onOpenMission?: (missionId: string) => void
 	lift: Lifter
 }
 
@@ -66,6 +67,7 @@ const ConversationRosterRow = ({
 	onDelete,
 	onMoveToSection,
 	onCreateSectionFor,
+	onOpenMission,
 }: ConversationRosterRowProps) => {
 	const { t } = useTranslation("bots")
 
@@ -107,7 +109,6 @@ const ConversationRosterRow = ({
 						previewTrailing={
 							<ConversationBotPile bots={heldBotsOf(conversation)} />
 						}
-						strips={missionStripsOf(conversation.missions)}
 						isTimestampDestructive={conversation.isNotSent}
 						timestamp={
 							conversation.isNotSent
@@ -148,6 +149,10 @@ const ConversationRosterRow = ({
 					</ContextMenuItem>
 				</ContextMenuContent>
 			</ContextMenu>
+			<MissionCapsuleList
+				missions={conversation.missions}
+				onOpen={onOpenMission}
+			/>
 		</SidebarMenuItem>
 	)
 }

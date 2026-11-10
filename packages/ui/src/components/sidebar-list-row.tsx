@@ -16,7 +16,7 @@ type SidebarListRowGeometry = "roster" | "menu"
 
 const ROW: Record<SidebarListRowGeometry, string> = {
 	roster:
-		"flex-nowrap border-0 py-1.5 pl-1.5 transition-[width,height,padding,scale] will-change-transform focus-visible:ring-sidebar-ring active:scale-[0.98] aria-expanded:bg-sidebar-accent/70 group-data-[collapsible=icon]:pl-0",
+		"flex-nowrap border-0 py-1.5 pl-1.5 pe-1.5 transition-[width,height,padding,scale] will-change-transform focus-visible:ring-sidebar-ring active:scale-[0.98] aria-expanded:bg-sidebar-accent/70 *:data-[slot=sidebar-menu-head]:pe-0 group-data-[collapsible=icon]:pl-0 group-data-[collapsible=icon]:pe-0",
 	menu: "flex-nowrap gap-2 rounded-control border-0 py-0 ps-1.5 pe-2 font-normal text-muted-foreground text-sm hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
 }
 
