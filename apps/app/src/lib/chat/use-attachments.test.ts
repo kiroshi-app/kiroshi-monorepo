@@ -176,11 +176,9 @@ const mountConversation = ({ controller, drafts }: Composer) =>
 	})
 
 describe("a conversation composer left and come back to", () => {
-	let revoked: ReturnType<typeof vi.spyOn>
-
 	beforeEach(() => {
 		vi.spyOn(URL, "createObjectURL").mockReturnValue(PREVIEW)
-		revoked = vi.spyOn(URL, "revokeObjectURL").mockReturnValue(undefined)
+		vi.spyOn(URL, "revokeObjectURL").mockReturnValue(undefined)
 	})
 
 	afterEach(() => {
@@ -203,7 +201,7 @@ describe("a conversation composer left and come back to", () => {
 		expect(back.result.current.staged.items).toEqual([
 			expect.objectContaining({ name: "shot.png", previewUrl: PREVIEW }),
 		])
-		expect(revoked).not.toHaveBeenCalled()
+		expect(URL.revokeObjectURL).not.toHaveBeenCalled()
 	})
 
 	it("leaves the files staged on the Home untouched when it unmounts", () => {
@@ -216,6 +214,6 @@ describe("a conversation composer left and come back to", () => {
 		expect(composer.controller.getState().staged["home:space-a"]).toEqual([
 			expect.objectContaining({ name: "shot.png", previewUrl: PREVIEW }),
 		])
-		expect(revoked).not.toHaveBeenCalled()
+		expect(URL.revokeObjectURL).not.toHaveBeenCalled()
 	})
 })

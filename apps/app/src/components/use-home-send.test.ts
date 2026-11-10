@@ -53,7 +53,7 @@ const createWorkspace = (): Workspace => ({
 	openConversation: vi.fn(),
 })
 
-const mountHome = (workspace: Workspace, spaceId: string = SPACE_ID) =>
+const mountHome = (workspace: Workspace, spaceId = SPACE_ID) =>
 	renderHook(() =>
 		useHomeSend({
 			agentId: "agent",
@@ -69,11 +69,9 @@ const mountHome = (workspace: Workspace, spaceId: string = SPACE_ID) =>
 const namesOf = (attachments: { name: string }[]) =>
 	attachments.map(({ name }) => name)
 
-let revoked: ReturnType<typeof vi.spyOn>
-
 beforeEach(() => {
 	vi.spyOn(URL, "createObjectURL").mockReturnValue(PREVIEW)
-	revoked = vi.spyOn(URL, "revokeObjectURL").mockReturnValue(undefined)
+	vi.spyOn(URL, "revokeObjectURL").mockReturnValue(undefined)
 })
 
 afterEach(() => {
@@ -97,7 +95,7 @@ describe("the Home composer", () => {
 		expect(back.result.current.attachments).toEqual([
 			expect.objectContaining({ name: "shot.png", previewUrl: PREVIEW }),
 		])
-		expect(revoked).not.toHaveBeenCalled()
+		expect(URL.revokeObjectURL).not.toHaveBeenCalled()
 	})
 
 	it("keeps its files per Space and apart from every conversation", () => {
