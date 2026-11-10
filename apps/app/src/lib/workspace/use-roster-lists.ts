@@ -208,10 +208,15 @@ export const useRosterLists = ({
 	)
 
 	const rosterSkeletonPhase = useSkeletonTiming(roster.state.isRosterPending)
-	const rosterListStatus = rosterListStatusOf({
-		isSkeletonShown: rosterSkeletonPhase === "skeleton",
+	const isSkeletonShown = rosterSkeletonPhase === "skeleton"
+	const listRead = {
 		hasFailedToLoad: roster.state.hasFailedToLoad,
 		isEmpty: rosterConversations.length === 0,
+	}
+	const rosterListStatus = rosterListStatusOf({ ...listRead, isSkeletonShown })
+	const expandedListStatus = rosterListStatusOf({
+		...listRead,
+		isSkeletonShown: isSkeletonShown || roster.state.isRosterPending,
 	})
 
 	const railSignals = useMemo(
@@ -226,6 +231,7 @@ export const useRosterLists = ({
 
 	return {
 		badgesBySpaceId,
+		expandedListStatus,
 		railSignals,
 		rosterBots,
 		rosterBotsBySpace,

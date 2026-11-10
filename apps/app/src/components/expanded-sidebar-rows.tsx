@@ -109,6 +109,26 @@ const selectedRowIdOf = ({
 	selectedConversationId,
 }: RowSelection) => selectedBotId ?? selectedConversationId ?? undefined
 
+type SlotPresenceSource = {
+	hasNamedRow: boolean
+	isNamingPinnedRow: boolean
+	isRowLifted: boolean
+	pinnedEntryCount: number
+	recentRowCount: number
+}
+
+const slotPresenceOf = ({
+	hasNamedRow,
+	isNamingPinnedRow,
+	isRowLifted,
+	pinnedEntryCount,
+	recentRowCount,
+}: SlotPresenceSource) => ({
+	hasPinned: pinnedEntryCount > 0 || isRowLifted || isNamingPinnedRow,
+	hasConversations:
+		recentRowCount > 0 || isRowLifted || (hasNamedRow && !isNamingPinnedRow),
+})
+
 type ExpandedRowsSource = {
 	conversations: AppSidebarConversation[]
 	sections: AppSidebarSection[]
@@ -218,6 +238,13 @@ const useExpandedRows = ({ conversations, sections }: ExpandedRowsSource) => {
 	const isNamingPinnedRow = namedRow ? isPinnedRow(namedRow) : false
 
 	return {
+		...slotPresenceOf({
+			hasNamedRow: Boolean(namedRow),
+			isNamingPinnedRow,
+			isRowLifted,
+			pinnedEntryCount: topLevel.length,
+			recentRowCount: sortedConversations.length,
+		}),
 		conversations: (
 			<>
 				<RecentRows
@@ -254,10 +281,10 @@ const useExpandedRows = ({ conversations, sections }: ExpandedRowsSource) => {
 	}
 }
 
-type ExpandedSlots = Pick<
-	ReturnType<typeof useExpandedRows>,
-	"conversations" | "pinned"
->
+type ExpandedSlots = {
+	conversations: ReactNode
+	pinned: ReactNode
+}
 
 const ExpandedSlotsContext = createContext<ExpandedSlots | null>(null)
 
@@ -271,9 +298,25 @@ const PinnedRows = () => useExpandedSlots().pinned
 
 const ConversationRows = () => useExpandedSlots().conversations
 
-export const EXPANDED_PINNED_ROWS = <PinnedRows />
+const PINNED_ROWS = <PinnedRows />
 
-export const EXPANDED_CONVERSATION_ROWS = <ConversationRows />
+const CONVERSATION_ROWS = <ConversationRows />
+
+type ExpandedSlotElements = {
+	pinned: ReactNode
+	conversations: ReactNode
+}
+
+const ExpandedSlotElementsContext = createContext<ExpandedSlotElements | null>(
+	null,
+)
+
+export const useExpandedSlotElements = () => {
+	const elements = useContext(ExpandedSlotElementsContext)
+	if (!elements)
+		throw new Error("expanded rows are read outside their provider")
+	return elements
+}
 
 type ExpandedRowsProviderProps = {
 	children: ReactNode
@@ -282,16 +325,21 @@ type ExpandedRowsProviderProps = {
 export const ExpandedRowsProvider = ({
 	children,
 }: ExpandedRowsProviderProps) => {
-	const { conversations, frame, move, pinned } = useExpandedRows(
-		useSidebarConversations(),
-	)
+	const { conversations, frame, hasConversations, hasPinned, move, pinned } =
+		useExpandedRows(useSidebarConversations())
+	const elements = {
+		pinned: hasPinned ? PINNED_ROWS : null,
+		conversations: hasConversations ? CONVERSATION_ROWS : null,
+	}
 
 	return (
 		<ExpandedSlotsContext.Provider value={{ conversations, pinned }}>
-			<RosterLiftFrame {...frame}>
-				{children}
-				<RosterMoveAnnouncement move={move} />
-			</RosterLiftFrame>
+			<ExpandedSlotElementsContext.Provider value={elements}>
+				<RosterLiftFrame {...frame}>
+					{children}
+					<RosterMoveAnnouncement move={move} />
+				</RosterLiftFrame>
+			</ExpandedSlotElementsContext.Provider>
 		</ExpandedSlotsContext.Provider>
 	)
 }

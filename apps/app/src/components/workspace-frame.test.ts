@@ -17,12 +17,17 @@ import { i18n } from "@workspace/ui/lib/i18n"
 import { newBotIdentity } from "@/lib/bots/bot-settings"
 import { createFakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
-import type { Bot, Conversation } from "@/lib/conversations/store-contract"
+import type {
+	Bot,
+	Conversation,
+	ConversationInPage,
+} from "@/lib/conversations/store-contract"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import type { Invoke } from "@/lib/host/joined-hosts-invoke"
 import type { Mission } from "@/lib/missions/mission-contract"
 import { aMission } from "@/lib/missions/mission-fixtures"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
+import { stubSentinelObserver } from "@/lib/query/sentinel-test-observer"
 import { rosterRowNamed, rosterRowOf } from "@/lib/sidebar/sidebar-fixtures"
 import { readMirror, writeMirror } from "@/lib/user/preferences-mirror"
 
@@ -164,6 +169,7 @@ afterEach(() => {
 	cleanup()
 	localStorage.clear()
 	vi.useRealTimers()
+	vi.unstubAllGlobals()
 	harness.store = null
 	harness.missions = []
 	harness.mounts = { expandedSidebar: 0, titleBar: 0 }
@@ -624,6 +630,10 @@ const dropOver = async (target: Element) => {
 	vi.restoreAllMocks()
 }
 
+const rowNameIn = (index: number) =>
+	document.querySelectorAll('[data-slot="roster-row-name"]')[index]
+		.textContent as string
+
 const dropAreaWith = (name: string) =>
 	rosterRowOf(name).closest("[data-roster-drop]") as Element
 
@@ -892,5 +902,217 @@ describe("the open mission count of the expanded sidebar", () => {
 		await mountApp(missionsIn(["done"]))
 
 		expect(entry(MISSIONS).textContent).toBe(MISSIONS)
+	})
+})
+
+const FAILED_LINE = i18n.t("bots:roster.failed")
+const EMPTY_LINE = i18n.t("bots:roster.empty")
+const PINNED = i18n.t("bots:rail.pinned")
+const CONVERSATIONS = i18n.t("bots:rail.conversations")
+
+const foldHeaders = () =>
+	Array.from(slotsOf("fold-section-trigger")).map(
+		(header) => header.textContent,
+	)
+
+const emptyLine = () => screen.queryByText(EMPTY_LINE)
+
+const seesPagesFilteredBy = (
+	store: TranscriptStore,
+	keeps: (row: ConversationInPage) => boolean,
+) => {
+	const read = store.conversationPage.bind(store)
+	vi.spyOn(store, "conversationPage").mockImplementation(async (...args) => {
+		const page = await read(...args)
+		return {
+			...page,
+			pinned: page.pinned.filter(keeps),
+			conversations: page.conversations.filter(keeps),
+		}
+	})
+}
+
+const holdsNoAgent = (store: TranscriptStore) =>
+	vi.spyOn(store, "bots").mockResolvedValue([])
+
+const holdsNoRow = (store: TranscriptStore) => {
+	holdsNoAgent(store)
+	seesPagesFilteredBy(store, () => false)
+}
+
+const holdsRoomsOnly = (store: TranscriptStore) => {
+	holdsNoAgent(store)
+	seesPagesFilteredBy(store, ({ soloBotId }) => !soloBotId)
+}
+
+const nameFieldFor = async (name: string) => {
+	await openRowMenu(name)
+	await press(
+		screen.getByRole("menuitem", {
+			name: i18n.t("bots:roster.section.moveTo"),
+		}),
+	)
+	await press(
+		screen.getByRole("menuitem", {
+			name: i18n.t("bots:roster.section.create"),
+		}),
+	)
+}
+
+describe("the list states of the expanded sidebar", () => {
+	it("draws no Pinned header when nothing is pinned, and the Conversations under it", async () => {
+		await mountApp()
+
+		expect(foldHeaders()).toEqual([CONVERSATIONS])
+	})
+
+	it("keeps the Pinned header for the name field of the only pinned row", async () => {
+		await mountApp(async (held) => {
+			const room = await roomIn(held, "Only pin")
+			await held.store.pinRoster(held.spaceId, [
+				{ id: room.id, sectionId: null },
+			])
+			holdsRoomsOnly(held.store)
+		})
+
+		expect(foldHeaders()).toEqual([PINNED])
+		await nameFieldFor("Only pin")
+
+		expect(foldHeaders()).toEqual([PINNED])
+		expect(
+			screen.getByRole("textbox", {
+				name: i18n.t("bots:roster.section.createField"),
+			}),
+		).toBeTruthy()
+	})
+
+	it("draws no Conversations header when every row is pinned", async () => {
+		await mountApp(async (held) => {
+			const room = await roomIn(held, "Only pin")
+			await held.store.pinRoster(held.spaceId, [
+				{ id: room.id, sectionId: null },
+			])
+			holdsRoomsOnly(held.store)
+		})
+
+		expect(foldHeaders()).toEqual([PINNED])
+	})
+
+	it("keeps the Conversations header for the name field of the only loose row", async () => {
+		await mountApp(async (held) => {
+			await roomIn(held, "Only room")
+			holdsRoomsOnly(held.store)
+		})
+
+		await nameFieldFor("Only room")
+
+		expect(foldHeaders()).toEqual([CONVERSATIONS])
+		expect(
+			screen.getByRole("textbox", {
+				name: i18n.t("bots:roster.section.createField"),
+			}),
+		).toBeTruthy()
+	})
+
+	it("draws the empty line alone when the Space holds no row and no section", async () => {
+		await mountApp(async ({ store }) => holdsNoRow(store))
+
+		expect(emptyLine()).not.toBeNull()
+		expect(foldHeaders()).toEqual([])
+	})
+
+	it("draws Pinned, not the empty line, for a Space holding only a section", async () => {
+		await mountApp(async ({ store, spaceId }) => {
+			await store.createSection(spaceId, "Clients")
+			holdsNoRow(store)
+		})
+
+		expect(emptyLine()).toBeNull()
+		expect(foldHeaders()).toEqual([PINNED])
+	})
+
+	it("keeps the drop zone of Pinned while its only way in is a lifted row", async () => {
+		await mountApp()
+		expect(slotOf("roster-section-drop")).toBeNull()
+
+		act(() => liftRow(rowNameIn(0)))
+
+		expect(foldHeaders()).toEqual([PINNED, CONVERSATIONS])
+		expect(slotOf("roster-section-drop")?.textContent).toBe(
+			i18n.t("bots:roster.pinDrop"),
+		)
+	})
+
+	it("keeps the drop zone of Conversations emptied by a lifted pinned row", async () => {
+		await mountApp(async (held) => {
+			const room = await roomIn(held, "Only pin")
+			await held.store.pinRoster(held.spaceId, [
+				{ id: room.id, sectionId: null },
+			])
+			holdsRoomsOnly(held.store)
+		})
+
+		act(() => liftRow("Only pin"))
+
+		expect(foldHeaders()).toEqual([PINNED, CONVERSATIONS])
+		expect(slotOf("roster-section-drop")?.textContent).toBe(
+			i18n.t("bots:roster.section.empty"),
+		)
+	})
+
+	it("draws the skeleton in place of both slots from the first moment the list is read, never the empty line", async () => {
+		await mountApp(async ({ store }) => {
+			vi.spyOn(store, "bots").mockReturnValue(new Promise(() => undefined))
+		})
+
+		expect(slotOf("sidebar-list-skeleton")).not.toBeNull()
+		expect(emptyLine()).toBeNull()
+		expect(foldHeaders()).toEqual([])
+	})
+
+	it("draws the failure line and reloads the list on its Retry", async () => {
+		let reads: ReturnType<typeof vi.spyOn> | null = null
+		await mountApp(async ({ store }) => {
+			reads = vi
+				.spyOn(store, "bots")
+				.mockRejectedValueOnce(new Error("no record"))
+		})
+
+		expect(screen.getByText(FAILED_LINE)).toBeTruthy()
+		await press(
+			within(sidebar()).getByRole("button", {
+				name: i18n.t("bots:roster.retry"),
+			}),
+		)
+
+		expect(reads).toHaveBeenCalledTimes(2)
+		expect(screen.queryByText(FAILED_LINE)).toBeNull()
+		expect(foldHeaders()).toEqual([CONVERSATIONS])
+	})
+
+	it("draws the list end under Conversations while more conversations load", async () => {
+		const scroll = stubSentinelObserver()
+		await mountApp(async ({ store }) => {
+			const read = store.conversationPage.bind(store)
+			vi.spyOn(store, "conversationPage").mockImplementation(
+				async (spaceId, cursor, limit) =>
+					cursor === null
+						? { ...(await read(spaceId, cursor, limit)), nextCursor: "more" }
+						: new Promise(() => undefined),
+			)
+		})
+		const conversations = slotsOf("fold-section")[0]
+		const sentinel = conversations.querySelector(
+			'[data-slot="list-end-sentinel"]',
+		) as Element
+
+		await scroll.scrollInto(sentinel)
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(SKELETON_MS)
+		})
+
+		expect(
+			conversations.querySelector('[data-slot="list-end-skeleton"]'),
+		).not.toBeNull()
 	})
 })
