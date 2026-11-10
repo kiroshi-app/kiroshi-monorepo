@@ -93,10 +93,6 @@ const FLIGHTS_ASK =
 
 const HOME_PANEL_HEIGHT = 848
 
-const TALL_HOME_PANEL_HEIGHT = 1200
-
-const SHORT_HOME_PANEL_HEIGHT = 400
-
 const HOME_COLUMN_WIDTH = 680
 
 type HomePanelProps = { children: ReactNode; height: number }
@@ -279,7 +275,7 @@ export const WithoutAFirstName = meta.story({
 
 const ARTBOARD_WINDOW = inWindowAround(HOME_PANEL_HEIGHT)
 
-const TALL_WINDOW = inWindowAround(TALL_HOME_PANEL_HEIGHT)
+const TALL_WINDOW = inWindowAround(1200)
 
 export const CentredInThePanel = meta.story({
 	name: "Fresh page in the middle of the panel",
@@ -478,7 +474,7 @@ export const FilesAttached = meta.story({
 	},
 })
 
-const SHORT_WINDOW = inWindowAround(SHORT_HOME_PANEL_HEIGHT)
+const SHORT_WINDOW = inWindowAround(400)
 
 const GROWN_DRAFT = Array.from({ length: 24 }, () => FLIGHTS_ASK).join("\n")
 
