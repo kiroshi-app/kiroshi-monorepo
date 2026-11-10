@@ -131,6 +131,7 @@ describe("useConnections", () => {
 		await expect(connecting).resolves.toEqual({
 			rows: ATLAS_CONNECTED,
 			failure: null,
+			isCancelled: false,
 		})
 		await waitFor(() => expect(result.current.connecting).toBeNull())
 		expect(result.current.rows).toEqual(ATLAS_CONNECTED)
@@ -145,7 +146,11 @@ describe("useConnections", () => {
 
 		act(() => result.current.cancel())
 
-		await expect(connecting).resolves.toEqual({ rows: [], failure: null })
+		await expect(connecting).resolves.toEqual({
+			rows: [],
+			failure: null,
+			isCancelled: true,
+		})
 		await waitFor(() => expect(result.current.connecting).toBeNull())
 		expect(result.current.failure).toBeNull()
 		expect(commandsOf(port).slice(0, 3)).toEqual([
@@ -178,6 +183,7 @@ describe("useConnections", () => {
 			expect(await result.current.connect("atlas", URL)).toEqual({
 				rows: [],
 				failure: { command: "connect", name: "atlas", reason: DENIED },
+				isCancelled: false,
 			})
 		})
 
