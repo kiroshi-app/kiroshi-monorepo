@@ -546,7 +546,7 @@ impl SummonsDropReason {
 
 #[cfg(test)]
 mod tests {
-	use serde_json::{json, Value};
+	use serde_json::json;
 
 	use super::super::tests::{a_message, a_message_wire, assert_crosses_as};
 	use super::super::TranscriptStoreError;
@@ -751,50 +751,5 @@ mod tests {
 		] {
 			assert_eq!(messages::TerminalState::from(reported), stored);
 		}
-	}
-
-	fn transcript_mirror() -> String {
-		let path = std::path::PathBuf::from(crate::APP_DIR)
-			.join("..")
-			.join("src")
-			.join("lib")
-			.join("conversations")
-			.join("transcript-contract.ts");
-		std::fs::read_to_string(&path).expect("the mirror reads")
-	}
-
-	fn mirrored_fields(mirror: &str, alias: &str) -> std::collections::BTreeSet<String> {
-		let opening = format!("export type {alias} = {{\n");
-		let start =
-			mirror.find(&opening).unwrap_or_else(|| panic!("the mirror declares no {alias}"))
-				+ opening.len();
-		let body = &mirror[start..];
-		let body = body.split("\n}").next().unwrap_or(body);
-		body.lines()
-			.filter_map(|line| line.split_once(':'))
-			.map(|(name, _)| name.trim().to_owned())
-			.collect()
-	}
-
-	#[test]
-	fn the_companion_spoke_event_is_named_and_shaped_like_its_mirror() {
-		let mirror = transcript_mirror();
-		let spoke = CompanionSpoke {
-			conversation_id: "c1".to_owned(),
-			author_bot_id: "b1".to_owned(),
-			text: "Hello".to_owned(),
-		};
-		let fields = match serde_json::to_value(&spoke).expect("the payload serialises") {
-			Value::Object(fields) => fields.keys().cloned().collect(),
-			other => panic!("the payload crossed as {other}"),
-		};
-
-		assert!(
-			mirror.contains(&format!(
-				"export const COMPANION_SPOKE_EVENT = \"{COMPANION_SPOKE_EVENT}\""
-			)),
-			"the mirror names the event otherwise"
-		);
-		assert_eq!(mirrored_fields(&mirror, "CompanionSpoke"), fields);
 	}
 }

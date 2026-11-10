@@ -2,28 +2,14 @@ pub const NAME: &str = "Shoto";
 
 pub const TITLE: &str = "Guide";
 
-pub const AVATAR: &[u8] =
-	include_bytes!("../../../../apps/app/src-tauri/plugins/shoto/avatar.jpeg");
+pub const AVATAR: &[u8] = include_bytes!("../../plugins/shoto/avatar.jpeg");
 
-const PERSONA: &[u8] = include_bytes!("../../../../apps/app/src-tauri/plugins/shoto/persona.md");
+const PERSONA: &[u8] = include_bytes!("../../plugins/shoto/persona.md");
 
 pub const SKILLS: [(&str, &[u8]); 3] = [
-	(
-		"first-companion",
-		include_bytes!(
-			"../../../../apps/app/src-tauri/plugins/shoto/skills/first-companion/SKILL.md"
-		),
-	),
-	(
-		"how-kiroshi-works",
-		include_bytes!(
-			"../../../../apps/app/src-tauri/plugins/shoto/skills/how-kiroshi-works/SKILL.md"
-		),
-	),
-	(
-		"hand-off",
-		include_bytes!("../../../../apps/app/src-tauri/plugins/shoto/skills/hand-off/SKILL.md"),
-	),
+	("first-companion", include_bytes!("../../plugins/shoto/skills/first-companion/SKILL.md")),
+	("how-kiroshi-works", include_bytes!("../../plugins/shoto/skills/how-kiroshi-works/SKILL.md")),
+	("hand-off", include_bytes!("../../plugins/shoto/skills/hand-off/SKILL.md")),
 ];
 
 pub const RETIRED_SKILL: &str = "connect";
@@ -47,7 +33,7 @@ mod tests {
 	const AVATAR_NAME: &str = "avatar.jpeg";
 
 	fn committed() -> PathBuf {
-		PathBuf::from(crate::APP_DIR).join("plugins").join("shoto")
+		PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("plugins").join("shoto")
 	}
 
 	fn committed_files(dir: &Path) -> Vec<PathBuf> {

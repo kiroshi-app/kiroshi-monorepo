@@ -6,8 +6,7 @@ use sha2::{Digest, Sha256};
 pub const WORD_COUNT: usize = 6;
 const BITS_PER_WORD: usize = 11;
 const WORD_MASK: u128 = (1 << BITS_PER_WORD) - 1;
-const WORD_LIST: &str =
-	include_str!("../../../../apps/app/src-tauri/tests/vectors/bip39-english.txt");
+const WORD_LIST: &str = include_str!("../../tests/vectors/bip39-english.txt");
 
 static WORDS: LazyLock<Vec<&'static str>> = LazyLock::new(|| WORD_LIST.lines().collect());
 

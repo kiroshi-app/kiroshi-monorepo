@@ -6,18 +6,18 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use kiroshi_app::agent::commands::check;
-use kiroshi_app::agent::contract::{
+use kiroshi_core::agent::commands::check;
+use kiroshi_core::agent::contract::{
 	ActivityKind, AgentEvent, ConnectionState, PermissionDecision, TurnOutcome,
 };
-use kiroshi_app::agent::redact;
-use kiroshi_app::agent::session::{Bundle, EventSink, Session, SessionOptions};
-use kiroshi_app::agent::sidecar::{self, Sidecar, SidecarOptions};
-use kiroshi_app::bundles;
-use kiroshi_app::db::repositories::conversations::Bot;
-use kiroshi_app::environment::connection;
-use kiroshi_app::environment::contract::{ConnectionKind, EnvOwner, ResolvedEnv, Values, API_KEY};
-use kiroshi_app::environment::store;
+use kiroshi_core::agent::redact;
+use kiroshi_core::agent::session::{Bundle, EventSink, Session, SessionOptions};
+use kiroshi_core::agent::sidecar::{self, Sidecar, SidecarOptions};
+use kiroshi_core::bundles;
+use kiroshi_core::db::repositories::conversations::Bot;
+use kiroshi_core::environment::connection;
+use kiroshi_core::environment::contract::{ConnectionKind, EnvOwner, ResolvedEnv, Values, API_KEY};
+use kiroshi_core::environment::store;
 use removed_on_drop::RemovedOnDrop;
 use tokio::sync::mpsc;
 
@@ -775,7 +775,7 @@ async fn a_bot_denied_the_write_by_its_settings_writes_nothing_and_asks_nothing(
 #[tokio::test]
 #[ignore = "needs a signed-in subscription and the network"]
 async fn the_check_report_carries_no_identity() {
-	let state = kiroshi_app::agent::AgentState::default();
+	let state = kiroshi_core::agent::AgentState::default();
 	let report = check(&state, None).await;
 	assert_eq!(report.connection, ConnectionState::Ready, "expected a signed-in install");
 	assert!(report.authenticated, "expected a signed-in install");

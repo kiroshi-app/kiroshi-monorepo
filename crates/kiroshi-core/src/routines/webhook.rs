@@ -1148,7 +1148,7 @@ mod tests {
 
 	#[test]
 	fn the_header_and_the_source_are_the_ones_the_committed_bundle_declares() {
-		let bundle = PathBuf::from(crate::APP_DIR).join("plugins").join("kiroshi");
+		let bundle = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("plugins").join("kiroshi");
 		let declared = super::super::sources::sources_at(&bundle).expect("the bundle reads");
 
 		let source = declared

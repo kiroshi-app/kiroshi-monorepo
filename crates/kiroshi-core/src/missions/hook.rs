@@ -34,9 +34,9 @@ pub const TOOL_USED: &str = "PostToolUse";
 
 const HOOKED_EVENTS: [&str; 4] = ["Notification", PROMPT_SUBMITTED, TURN_STOPPED, TOOL_USED];
 
-const SCRIPT: &str = include_str!("../../../../apps/app/src-tauri/hooks/kiroshi-agent-hook.sh");
+const SCRIPT: &str = include_str!("../../hooks/kiroshi-agent-hook.sh");
 
-const READER: &str = include_str!("../../../../apps/app/src-tauri/hooks/kiroshi-agent-hook.py");
+const READER: &str = include_str!("../../hooks/kiroshi-agent-hook.py");
 
 pub fn dir(core: &crate::core_context::Core, mission_id: &str) -> Result<PathBuf, MissionError> {
 	Ok(core.data_dir().join(MISSIONS_DIR).join(mission_id).join(HOOK_DIR))

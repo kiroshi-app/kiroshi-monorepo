@@ -1372,7 +1372,7 @@ mod tests {
 			serde_json::from_str(&config()).expect("the config is JSON");
 		assert_eq!(
 			fs::read_to_string(&reader).expect("the reader reads"),
-			include_str!("../../../../apps/app/src-tauri/hooks/kiroshi-agent-hook.py"),
+			include_str!("../../hooks/kiroshi-agent-hook.py"),
 			"the launch left the older reader in place"
 		);
 		assert_eq!(key_after["key"], key_before["key"], "the launch moved the delivery key");

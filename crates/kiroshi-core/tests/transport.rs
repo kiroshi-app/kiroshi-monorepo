@@ -5,16 +5,16 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use kiroshi_app::agent::commands::start_with_fallback;
-use kiroshi_app::agent::contract::{
+use kiroshi_core::agent::commands::start_with_fallback;
+use kiroshi_core::agent::contract::{
 	ActivityKind, ActivityStatus, AgentCommand, AgentEvent, ConnectionState, MessageCompletion,
 	OfferedModel, PermissionDecision, PermissionRequest, QuestionRequest, SubmittedTurn,
 	TransportError, TurnOutcome, TurnState,
 };
-use kiroshi_app::agent::protocol::AuthorizeRequest;
-use kiroshi_app::agent::session::{EventSink, Handed, Session, SessionOptions, PARTIAL_MESSAGES};
-use kiroshi_app::agent::sidecar::{self, Opening, Sidecar, SidecarOptions};
-use kiroshi_app::environment::contract::Values;
+use kiroshi_core::agent::protocol::AuthorizeRequest;
+use kiroshi_core::agent::session::{EventSink, Handed, Session, SessionOptions, PARTIAL_MESSAGES};
+use kiroshi_core::agent::sidecar::{self, Opening, Sidecar, SidecarOptions};
+use kiroshi_core::environment::contract::Values;
 use removed_on_drop::RemovedOnDrop;
 use tokio::sync::mpsc;
 

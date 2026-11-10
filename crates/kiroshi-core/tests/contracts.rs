@@ -1,15 +1,15 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-use kiroshi_app::agent::contract::OfferedModel;
-use kiroshi_app::agent::protocol::{
+use kiroshi_core::agent::contract::OfferedModel;
+use kiroshi_core::agent::protocol::{
 	listed, Authorized, Checked, ContentBlock, ContentDelta, ControlRequestBody, Envelope, Frame,
 	OauthFailureKind, OauthStarted, OauthStep, Ready, ResultFrame, Revoked, SignInFailureKind,
 	SignedIn, StreamEvent, Titled,
 };
-use kiroshi_app::bundles;
-use kiroshi_app::bundles::EffortLevel;
-use kiroshi_app::routines::sources::stacked;
+use kiroshi_core::bundles;
+use kiroshi_core::bundles::EffortLevel;
+use kiroshi_core::routines::sources::stacked;
 use serde::Serialize;
 use serde_json::{json, Value};
 
@@ -24,7 +24,7 @@ const LAYERS_SNAPSHOT: &str = "plugin-layers.rust.json";
 const LAYERS: [&str; 4] = ["system", "user", "space", "companion"];
 
 fn contracts() -> PathBuf {
-	PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../contracts")
+	PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../apps/app/contracts")
 }
 
 fn lines(name: &str) -> Vec<Value> {

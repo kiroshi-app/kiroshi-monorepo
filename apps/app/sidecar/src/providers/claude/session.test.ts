@@ -53,7 +53,7 @@ process.env[EXECUTABLE_OVERRIDE_ENV] = claudeSourceExecutable()
 const identity = "You are Bean, the baker."
 
 const systemBundle = new URL(
-	"../../../../src-tauri/plugins/kiroshi",
+	"../../../../../../crates/kiroshi-core/plugins/kiroshi",
 	import.meta.url,
 ).pathname
 

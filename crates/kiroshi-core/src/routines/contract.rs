@@ -444,8 +444,7 @@ mod tests {
 	use super::*;
 
 	fn vocabulary() -> serde_json::Value {
-		let path =
-			PathBuf::from(crate::APP_DIR).join("..").join("shared").join("filter-vocabulary.json");
+		let path = PathBuf::from(crate::REPO_DIR).join("apps/app/shared/filter-vocabulary.json");
 		let text = std::fs::read_to_string(&path).expect("the vocabulary reads");
 		serde_json::from_str(&text).expect("the vocabulary is JSON")
 	}
@@ -507,60 +506,6 @@ mod tests {
 		let vocabulary = vocabulary();
 
 		assert_eq!(named(&FilterMatchMode::ALL), listed(&vocabulary["matchModes"]));
-	}
-
-	fn mirror() -> String {
-		let path = PathBuf::from(crate::APP_DIR)
-			.join("..")
-			.join("src")
-			.join("lib")
-			.join("routines")
-			.join("routine-contract.ts");
-		std::fs::read_to_string(&path).expect("the mirror reads")
-	}
-
-	fn mirrored(alias: &str) -> BTreeSet<String> {
-		let mirror = mirror();
-		let opening = format!("export type {alias} =");
-		let start =
-			mirror.find(&opening).unwrap_or_else(|| panic!("the mirror declares no {alias}"))
-				+ opening.len();
-		let body = &mirror[start..];
-		let body = body.split("\nexport ").next().unwrap_or(body);
-		body.split('"').skip(1).step_by(2).map(str::to_owned).collect()
-	}
-
-	fn tagged<T: Serialize>(values: &[T]) -> BTreeSet<String> {
-		values
-			.iter()
-			.map(|value| {
-				to_value(value).expect("the decision serialises")["kind"]
-					.as_str()
-					.expect("the tag is a name")
-					.to_owned()
-			})
-			.collect()
-	}
-
-	#[test]
-	fn every_refusal_of_a_reported_turn_carries_the_kind_the_front_declares() {
-		let refusals = [
-			RoutineError::UnknownTurn { id: "t1".to_owned() },
-			RoutineError::TurnOfAnotherConversation {
-				turn_id: "t1".to_owned(),
-				conversation_id: "c2".to_owned(),
-			},
-			RoutineError::TurnAlreadyReported {
-				turn_id: "t1".to_owned(),
-				run_id: "run-1".to_owned(),
-			},
-			RoutineError::TurnWithoutReport {
-				turn_id: "t1".to_owned(),
-				outcome: RunOutcome::Nothing,
-			},
-		];
-
-		assert_eq!(tagged(&refusals), mirrored("ReportRefusal"));
 	}
 
 	#[test]

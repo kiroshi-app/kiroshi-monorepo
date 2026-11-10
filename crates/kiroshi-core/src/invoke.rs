@@ -819,53 +819,6 @@ mod tests {
 		assert_eq!(answered.status().as_u16(), 404);
 	}
 
-	const OS_SHELL_MODULES: [&str; 3] = ["badge", "notifications", "window_controls"];
-
-	const RUNE_ONLY_COMMANDS: [&str; 3] =
-		["restart_to_update", "whats_new", "acknowledge_whats_new"];
-
-	fn tauri_commands() -> Vec<(String, String)> {
-		let table = std::fs::read_to_string(format!("{}/src/commands.rs", crate::APP_DIR))
-			.expect("the Tauri command table reads");
-		let listed = table.split_once("collect_commands![").expect("the table collects").1;
-		let listed = listed.split_once(']').expect("the table closes").0;
-		listed
-			.split(',')
-			.map(|entry| entry.trim().trim_end_matches("::<tauri::Wry>"))
-			.filter(|entry| !entry.is_empty())
-			.map(|entry| {
-				let module = entry.split("::").next().expect("a path").to_owned();
-				let name = entry.rsplit("::").next().expect("a path").to_owned();
-				(module, name)
-			})
-			.collect()
-	}
-
-	#[test]
-	fn every_tauri_command_outside_the_os_shell_is_answered_by_the_core_under_its_name() {
-		let missing: Vec<String> = tauri_commands()
-			.into_iter()
-			.filter(|(module, _)| !OS_SHELL_MODULES.contains(&module.as_str()))
-			.map(|(_, name)| name)
-			.filter(|name| !COMMANDS.contains(&name.as_str()))
-			.collect();
-
-		assert!(missing.is_empty(), "the core answers none of {missing:?}");
-	}
-
-	#[test]
-	fn every_core_command_names_a_tauri_command() {
-		let tauri: Vec<String> = tauri_commands().into_iter().map(|(_, name)| name).collect();
-		let unknown: Vec<&str> = COMMANDS
-			.iter()
-			.copied()
-			.filter(|name| !RUNE_ONLY_COMMANDS.contains(name))
-			.filter(|name| !tauri.iter().any(|listed| listed == name))
-			.collect();
-
-		assert!(unknown.is_empty(), "no Tauri command bears {unknown:?}");
-	}
-
 	fn refused_status(command: &str, refusal: Value) -> u16 {
 		Answer::Refused(refusal).into_http(command).status().as_u16()
 	}

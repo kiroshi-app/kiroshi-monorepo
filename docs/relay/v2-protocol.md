@@ -7,9 +7,9 @@ adversary: it may drop, reorder, replay, alter or inject frames.
 Three files make the contract:
 
 - this document: keys, derivations and byte layouts;
-- [`apps/app/src-tauri/tests/vectors/v2-crypto.json`](../../apps/app/src-tauri/tests/vectors/v2-crypto.json):
+- [`crates/kiroshi-core/tests/vectors/v2-crypto.json`](../../crates/kiroshi-core/tests/vectors/v2-crypto.json):
   test vectors every client checks itself against;
-- [`apps/app/src-tauri/tests/vectors/bip39-english.txt`](../../apps/app/src-tauri/tests/vectors/bip39-english.txt):
+- [`crates/kiroshi-core/tests/vectors/bip39-english.txt`](../../crates/kiroshi-core/tests/vectors/bip39-english.txt):
   the BIP39 English word list the fingerprint reads (SHA-256
   `2f5eed53a4727b4bf8880d8f3f199efc90e58503646d9ff8eff3a2ed3b24dbda`).
 

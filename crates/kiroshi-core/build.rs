@@ -1,6 +1,6 @@
-const APP_MANIFEST: &str = "../../apps/app/src-tauri/Cargo.toml";
+const APP_MANIFEST: &str = "../../apps/rune-preview/app/Cargo.toml";
 
-const CLOUD_SETTINGS_FILE: &str = "../../apps/app/src-tauri/kiroshi-cloud.conf";
+const CLOUD_SETTINGS_FILE: &str = "kiroshi-cloud.conf";
 
 fn cloud_profile_key() -> &'static str {
 	match std::env::var("PROFILE").as_deref() {

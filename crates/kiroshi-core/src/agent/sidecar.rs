@@ -83,8 +83,8 @@ fn bundled_name() -> String {
 }
 
 fn in_the_build_tree() -> PathBuf {
-	std::path::Path::new(crate::APP_DIR)
-		.join("binaries")
+	std::path::Path::new(crate::REPO_DIR)
+		.join("apps/app/sidecar/binaries")
 		.join(format!("{SIDECAR_NAME}-{}", env!("KIROSHI_TARGET_TRIPLE")))
 }
 
