@@ -2824,6 +2824,10 @@ settings-user-languagefields--following-the-machine
 settings-user-notificationfields--all-off
 settings-user-notificationfields--default
 settings-user-notificationfields--in-french
+settings-user-openonfields--dark
+settings-user-openonfields--in-french
+settings-user-openonfields--last-conversation
+settings-user-openonfields--new-conversation
 settings-user-settingsscreen--about
 settings-user-settingsscreen--account
 settings-user-settingsscreen--account-dark
@@ -2862,6 +2866,7 @@ settings-user-usersettingsdialog--cant-reach-kiroshi
 settings-user-usersettingsdialog--default
 settings-user-usersettingsdialog--diagnostics
 settings-user-usersettingsdialog--empty
+settings-user-usersettingsdialog--general
 settings-user-usersettingsdialog--history
 settings-user-usersettingsdialog--language-tab
 settings-user-usersettingsdialog--no-skills
@@ -2869,6 +2874,7 @@ settings-user-usersettingsdialog--notifications
 settings-user-usersettingsdialog--opens-on-a-missing-application
 settings-user-usersettingsdialog--opens-on-an-application
 settings-user-usersettingsdialog--opens-on-appearance-without-an-account
+settings-user-usersettingsdialog--opens-on-general-without-an-account
 settings-user-usersettingsdialog--request-expired
 settings-user-usersettingsdialog--signed-in
 settings-user-usersettingsdialog--signed-in-on-the-free-plan
