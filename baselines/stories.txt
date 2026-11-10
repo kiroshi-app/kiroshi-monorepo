@@ -1797,6 +1797,15 @@ navigation-documentpanel--in-thread
 navigation-documentpanel--keeps-the-thread-when-toggled
 navigation-documentpanel--moves-from-the-capped-edge
 navigation-documentpanel--narrowed-to-the-thread-floor-then-scrolled
+navigation-expandedsidebar--expanded-missions
+navigation-expandedsidebar--expanded-new-conversation
+navigation-expandedsidebar--s-1-several-spaces-expanded
+navigation-expandedsidebar--s-2-shared-space-host-not-connected-expanded
+navigation-expandedsidebar--u-1-expanded
+navigation-expandedsidebar--u-2-expanded
+navigation-expandedsidebar--u-3-expanded
+navigation-expandedsidebar--u-4-expanded
+navigation-expandedsidebar--u-5-expanded
 navigation-headerconversationbutton--crowded
 navigation-headerconversationbutton--default
 navigation-headerconversationbutton--expanded

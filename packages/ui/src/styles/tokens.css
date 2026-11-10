@@ -134,6 +134,27 @@
 	--shell-divider: oklch(0 0 0 / 8%);
 	--rail-item-selected: oklch(0 0 0 / 10%);
 	--rail-avatar: #e5e5e5;
+	--sidebar-person-foreground: color-mix(
+		in srgb,
+		var(--foreground) 70%,
+		var(--background)
+	);
+	--space-dot: oklch(0 0 0 / 20%);
+	--space-offline: #5c5c5c;
+	--update-row: oklch(0 0 0 / 4%);
+	--update-track: oklch(0 0 0 / 12%);
+	--update-blocked-foreground: color-mix(
+		in srgb,
+		var(--foreground) 65%,
+		var(--background)
+	);
+	--update-failed: #b83232;
+	--update-failed-surface: color-mix(
+		in srgb,
+		var(--update-failed) 8%,
+		transparent
+	);
+	--update-failed-foreground: #ffffff;
 	--person-avatar: #e5e5e5;
 	--bot-avatar-field: var(
 		--hue-light-avatar-ink,
@@ -347,6 +368,27 @@
 	--shell-divider: oklch(1 0 0 / 8%);
 	--rail-item-selected: oklch(1 0 0 / 12%);
 	--rail-avatar: #3a3a3a;
+	--sidebar-person-foreground: color-mix(
+		in srgb,
+		var(--foreground) 70%,
+		var(--background)
+	);
+	--space-dot: oklch(1 0 0 / 25%);
+	--space-offline: #8a8a8a;
+	--update-row: oklch(1 0 0 / 5%);
+	--update-track: oklch(1 0 0 / 15%);
+	--update-blocked-foreground: color-mix(
+		in srgb,
+		var(--foreground) 50%,
+		var(--background)
+	);
+	--update-failed: #f07a7a;
+	--update-failed-surface: color-mix(
+		in srgb,
+		var(--update-failed) 8%,
+		transparent
+	);
+	--update-failed-foreground: #2a0f0f;
 	--person-avatar: #333333;
 	--bot-avatar-field: var(
 		--hue-dark-avatar-ink,

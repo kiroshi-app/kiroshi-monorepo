@@ -20,6 +20,7 @@ import {
 	SpaceAvatar,
 	spaceAvatarStateOf,
 } from "@workspace/ui/components/space-avatar"
+import { spaceInitial } from "@workspace/ui/components/space-avatar-recipe"
 import {
 	type SpaceInvitation,
 	type SpaceInvitationCallbacks,
@@ -46,11 +47,21 @@ import { STILL_UNDER_REDUCED_MOTION } from "@workspace/ui/lib/reduced-motion"
 import { cn } from "@workspace/ui/lib/utils"
 
 const SWITCHER =
-	"relative h-8 min-w-0 max-w-64 shrink gap-2 rounded-md px-2 font-normal text-compact text-muted-foreground leading-4 aria-expanded:bg-sidebar-accent"
+	"relative h-9 w-full min-w-0 justify-start gap-2 rounded-control px-1.25 font-normal hover:bg-rail-item-selected/50 aria-expanded:bg-rail-item-selected dark:hover:bg-rail-item-selected/50"
 
-const SWITCHER_NAME = "min-w-0 truncate"
+const SWITCHER_MARK = "relative size-5.5 shrink-0"
 
-const SWITCHER_CHEVRON = "size-3 shrink-0 stroke-2!"
+const SWITCHER_SQUARE =
+	"grid size-full place-items-center rounded-sm bg-primary-strong font-semibold text-on-foreground text-xs leading-4"
+
+const SWITCHER_OFFLINE_DOT =
+	"-end-0.75 -bottom-0.75 absolute size-2.25 rounded-full bg-space-offline ring-2 ring-background"
+
+const SWITCHER_NAME = "min-w-0 truncate font-semibold text-foreground text-sm"
+
+const SWITCHER_OFFLINE = "shrink-0 text-space-offline text-xs"
+
+const SWITCHER_CHEVRON = "size-3.5 shrink-0 stroke-2! text-muted-foreground"
 
 const SWITCHER_INVITATION =
 	"pointer-events-none absolute end-0.25 top-1 size-1.75 rounded-full bg-primary-strong ring-2 ring-background"
@@ -63,13 +74,13 @@ const ROW_NAME = "min-w-0 grow truncate"
 
 const SPACE_ROW = "h-10 min-h-10"
 
-const DOT = "h-2.5 w-2.5 shrink-0 rounded-full"
+const DOT = "h-1.5 w-1.5 shrink-0 rounded-full"
 
 const DOTS =
-	"flex flex-wrap items-center justify-center group-data-[collapsible=icon]:hidden"
+	"flex flex-wrap items-center justify-center px-1 group-data-[collapsible=icon]:hidden"
 
 const DOT_BUTTON =
-	"group/space-dot relative grid size-5 shrink-0 touch-none select-none place-items-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+	"group/space-dot relative grid h-5.5 shrink-0 px-1 touch-none select-none place-items-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
 
 const DOT_LIFTED =
 	"pointer-events-none z-10 scale-125 drop-shadow-md translate-x-[var(--lift-dx,0px)] translate-y-[var(--lift-dy,0px)]"
@@ -88,7 +99,7 @@ const DOT_OPEN = "w-4 bg-sidebar-foreground"
 
 const DOT_CLOSED = "group-hover/space-dot:bg-sidebar-foreground"
 
-const DOT_UNTINTED = "bg-sidebar-foreground/30"
+const DOT_UNTINTED = "bg-space-dot"
 
 const BADGE_RANK: BotBadge[] = ["attention", "failed"]
 
@@ -253,6 +264,7 @@ const SpaceSwitcher = ({
 	if (!selected) return null
 
 	const host = hostBySpaceId?.[selected.id]
+	const isOffline = host === "down"
 	const isInvited = invitations.length > 0
 	const switchLabel = isInvited
 		? host
@@ -288,16 +300,34 @@ const SpaceSwitcher = ({
 						size="sm"
 						variant="ghost"
 					>
-						<SpaceAvatar
-							colour={selected.colour}
-							name={selected.name}
-							size={12}
-							spaceId={selected.avatarSeed}
-							state={spaceAvatarStateOf(host)}
-						/>
+						<span aria-hidden="true" className={SWITCHER_MARK}>
+							<span
+								className={cn(SWITCHER_SQUARE, isOffline && "opacity-80")}
+								data-hue={selected.colour ?? undefined}
+								data-slot="space-switcher-square"
+								style={
+									selected.colour == null
+										? undefined
+										: hueStyle(selected.colour)
+								}
+							>
+								{spaceInitial(selected.name)}
+							</span>
+							{isOffline ? (
+								<span
+									className={SWITCHER_OFFLINE_DOT}
+									data-slot="space-switcher-offline-dot"
+								/>
+							) : null}
+						</span>
 						<span className={SWITCHER_NAME} data-slot="space-switcher-name">
 							{selected.name}
 						</span>
+						{isOffline ? (
+							<span aria-hidden="true" className={SWITCHER_OFFLINE}>
+								{t("spaces.host.down")}
+							</span>
+						) : null}
 						<Icons.Expand aria-hidden="true" className={SWITCHER_CHEVRON} />
 						{elsewhere ? (
 							<BotBadgeDot

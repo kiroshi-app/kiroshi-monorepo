@@ -59,6 +59,14 @@ const SECTION_BODY_INNER = "min-h-0 overflow-hidden"
 const SECTION_BODY_INNER_OPEN =
 	"group-data-[lifting]/roster-lift:overflow-visible"
 
+const FOLD_SECTION = "flex flex-col gap-0.5 p-0"
+
+const FOLD_TRIGGER =
+	"flex w-full min-w-0 items-center justify-between gap-2 rounded-md p-1.5 text-start font-medium text-muted-foreground text-xs hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-1"
+
+const FOLD_CHEVRON =
+	"size-3.5 shrink-0 text-foreground/50 transition-transform duration-150 ease-out motion-reduce:transition-none"
+
 const SECTION_FIELD =
 	"w-full min-w-0 border-none bg-transparent px-[10.5px] py-2.5 text-sidebar-foreground text-xs outline-none"
 
@@ -254,4 +262,48 @@ const RosterSection = ({
 	)
 }
 
-export { RosterSection, SECTION_GROUP, SectionLabel, SectionNameField }
+interface FoldSectionProps {
+	name: string
+	children: ReactNode
+}
+
+const FoldSection = ({ name, children }: FoldSectionProps) => {
+	const bodyId = useId()
+	const [isOpen, setIsOpen] = useState(true)
+
+	return (
+		<SidebarGroup className={FOLD_SECTION} data-slot="fold-section">
+			<button
+				aria-controls={bodyId}
+				aria-expanded={isOpen}
+				className={FOLD_TRIGGER}
+				data-slot="fold-section-trigger"
+				onClick={() => setIsOpen(!isOpen)}
+				type="button"
+			>
+				<span className={SECTION_NAME}>{name}</span>
+				<Icons.Expand
+					aria-hidden="true"
+					className={cn(FOLD_CHEVRON, !isOpen && "-rotate-90")}
+				/>
+			</button>
+			<SidebarGroupContent
+				className={cn(
+					SECTION_BODY,
+					isOpen ? SECTION_BODY_OPEN : SECTION_BODY_CLOSED,
+				)}
+				id={bodyId}
+			>
+				<div className={SECTION_BODY_INNER}>{children}</div>
+			</SidebarGroupContent>
+		</SidebarGroup>
+	)
+}
+
+export {
+	FoldSection,
+	RosterSection,
+	SECTION_GROUP,
+	SectionLabel,
+	SectionNameField,
+}
