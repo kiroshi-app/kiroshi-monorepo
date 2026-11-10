@@ -498,6 +498,63 @@ describe("the sidebar tab the reader selects", () => {
 	})
 })
 
+describe("the page the reader opens on", () => {
+	it("reads the page the record holds", async () => {
+		aHost({ ...DEFAULTS, openOn: "lastConversation" })
+		const controller = await loaded()
+
+		expect(controller.getState().preferences.openOn).toBe("lastConversation")
+	})
+
+	it("writes Last conversation to the record and the mirror, and shows it before the host answers", async () => {
+		const host = aHost()
+		const controller = await loaded()
+
+		const written = controller.setOpenOn("lastConversation")
+
+		expect(controller.getState().preferences.openOn).toBe("lastConversation")
+		await written
+		expect(localStorage.getItem("openOn")).toBe("lastConversation")
+		expect(host()).toEqual({ ...DEFAULTS, openOn: "lastConversation" })
+	})
+
+	it("writes New conversation to the record and the mirror, and shows it before the host answers", async () => {
+		const host = aHost({ ...DEFAULTS, openOn: "lastConversation" })
+		const controller = await loaded()
+
+		const written = controller.setOpenOn("newConversation")
+
+		expect(controller.getState().preferences.openOn).toBe("newConversation")
+		await written
+		expect(localStorage.getItem("openOn")).toBe("newConversation")
+		expect(host()).toEqual({ ...DEFAULTS, openOn: "newConversation" })
+	})
+
+	it("writes nothing for a page the record already holds", async () => {
+		aHost({ ...DEFAULTS, openOn: "lastConversation" })
+		const controller = await loaded()
+		hostInvoke.mockClear()
+
+		await controller.setOpenOn("lastConversation")
+
+		expect(hostInvoke).not.toHaveBeenCalled()
+	})
+
+	it("shows the stored page again when the write is refused", async () => {
+		aHost()
+		const controller = await loaded()
+		hostInvoke.mockRejectedValue({
+			kind: "storage",
+			failure: { kind: "sqlite", detail: "disk I/O error" },
+		})
+
+		await controller.setOpenOn("lastConversation")
+
+		expect(controller.getState().preferences.openOn).toBe("newConversation")
+		expect(localStorage.getItem("openOn")).toBe("newConversation")
+	})
+})
+
 describe("the onboarding step the reader reaches", () => {
 	it("stores the step on the host, and shows it before the host answers", async () => {
 		const host = aHost()
