@@ -315,15 +315,15 @@ export const OptionsRebuiltWithoutValue = meta.story({
 			canvas.getByRole("button", { name: "Rebuild the options" }),
 		)
 		await userEvent.click(canvas.getByRole("combobox"))
-		await screen.findByRole("option", { name: "The agent’s own" })
+		const agentsOwn = await screen.findByRole("option", {
+			name: "The agent’s own",
+		})
 		await expect(
 			screen.queryByRole("option", { name: "Claude Opus" }),
 		).toBeNull()
 		await expect(args.onValueChange).not.toHaveBeenCalled()
 
-		await userEvent.click(
-			screen.getByRole("option", { name: "The agent’s own" }),
-		)
+		await userEvent.click(agentsOwn)
 		await waitFor(async () => {
 			await expect(screen.queryByRole("listbox")).toBeNull()
 		}, FRAME_POLL)
