@@ -33,6 +33,7 @@ import {
 	SidebarMenuItem,
 } from "@workspace/ui/components/ui/sidebar"
 import type { UserChipIdentity } from "@workspace/ui/components/user-chip"
+import { useSpaceSwipe } from "@workspace/ui/hooks/use-space-swipe"
 
 const COLUMN = "flex min-h-0 w-72 shrink-0 flex-col gap-2 px-2 pt-2 pb-1"
 
@@ -80,6 +81,7 @@ type ExpandedSidebarProps = SpaceSwitcherProps & {
 	listEnd?: ListEnd
 	update?: ReactNode
 	user?: UserChipIdentity
+	isSpaceSwitchingEnabled?: boolean
 	onReorderSpaces?: (ids: string[]) => void
 	onOpenSearch?: () => void
 	onNewConversation?: () => void
@@ -245,6 +247,7 @@ const ExpandedSidebar = ({
 	listEnd,
 	update,
 	user,
+	isSpaceSwitchingEnabled,
 	onReorderSpaces,
 	onOpenSearch,
 	onNewConversation,
@@ -255,12 +258,19 @@ const ExpandedSidebar = ({
 	...switcher
 }: ExpandedSidebarProps) => {
 	const { t } = useTranslation(["bots", "search"])
+	const swipeRef = useSpaceSwipe({
+		isEnabled: isSpaceSwitchingEnabled,
+		onSelectSpace: switcher.onSelectSpace,
+		selectedSpaceId: switcher.selectedSpaceId,
+		spaces: switcher.spaces,
+	})
 
 	return (
 		<nav
 			aria-label={t("rail.label")}
 			className={COLUMN}
 			data-slot="expanded-sidebar"
+			ref={swipeRef}
 		>
 			<SpaceSwitcher {...switcher} />
 			<SidebarMenu>

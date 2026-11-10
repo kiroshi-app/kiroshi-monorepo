@@ -125,8 +125,8 @@ const sidebarOf = () =>
 
 const switcherTint = () =>
 	sidebarOf()
-		.querySelector<HTMLElement>("[data-slot='space-switcher-square']")
-		?.getAttribute("data-hue")
+		.querySelector<HTMLElement>("[data-slot='space-avatar']")
+		?.getAttribute("data-colour")
 
 afterEach(cleanup)
 

@@ -14,6 +14,10 @@ const LIFT_THRESHOLD = 4
 
 const DROP_AREA_ATTRIBUTE = "data-roster-drop"
 
+let liftsUnderway = 0
+
+export const isRosterLiftUnderway = () => liftsUnderway > 0
+
 export const dropArea = (landing: string) => ({
 	[DROP_AREA_ATTRIBUTE]: landing,
 })
@@ -148,6 +152,7 @@ export const useRosterLift = <Landing>({
 			window.removeEventListener("keydown", cancelOnEscape, true)
 			element.removeEventListener("lostpointercapture", cancel)
 			if (!isLifted) return
+			liftsUnderway -= 1
 			releasePointer(element, pointerId)
 			hasDropped.current = true
 			landing.write(null)
@@ -164,6 +169,7 @@ export const useRosterLift = <Landing>({
 				)
 				if (travelled < LIFT_THRESHOLD) return
 				isLifted = true
+				liftsUnderway += 1
 				capturePointer(element, pointerId)
 				element.addEventListener("lostpointercapture", cancel)
 				window.addEventListener("keydown", cancelOnEscape, true)

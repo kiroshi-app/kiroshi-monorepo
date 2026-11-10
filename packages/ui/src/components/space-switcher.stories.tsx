@@ -143,12 +143,6 @@ const ICON_SVG = 'svg:not([data-slot="space-avatar"] svg)'
 const insertionOn = (root: HTMLElement) =>
 	slotsIn(root, "space-insertion")[0]?.parentElement
 
-const squareOn = (trigger: HTMLElement) =>
-	slotsIn(trigger, "space-switcher-square")[0]
-
-const offlineDotOn = (trigger: HTMLElement) =>
-	slotsIn(trigger, "space-switcher-offline-dot")[0]
-
 const openMenu = async (trigger: HTMLElement) => {
 	fireEvent.click(trigger)
 	const menu = await settled(await screen.findByRole("menu"))
@@ -227,7 +221,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The control that says which space a reader is in and moves them to another one. It is a 36px ghost button at the top of the expanded sidebar: a 22px square in the space's tint carrying its initial, its name in the 14px semibold line, then a chevron that says it opens; when the host of a shared space is not connected the square dims under a grey dot and `Not connected` follows the name. Pressing it opens a single-choice menu: every space with its tint and its rank as a Cmd shortcut hint, then any waiting invitations, then a single rule over Space settings and an item to create one, and nothing else. `SpaceDots` is its companion for a pinned strip, one dot per space, the open one filled with its tint and larger, the rest muted and smaller, so the reader knows how many spaces exist and where they stand without opening anything. Both take the same selection props, so a host maps its store onto `spaces` and `selectedSpaceId` once and hands the pair the same callbacks; the dots alone take `onReorderSpaces`, since the order is the reader's to set: a dot is dragged to the place its space should hold. That order is not decoration, it is which space each `⌘1`…`⌘9` reaches and the order a swipe walks, so it is reported whole, as the full list of ids, and never applied here. A single space still shows the button, since creating a second one lives in its menu, but draws no dots, there is nothing to count. Reach for this at the top of a sidebar; `AppSidebar` mounts both and adds the swipe and the Cmd+digit chords that go with them.",
+					"The control that says which space a reader is in and moves them to another one. It is a 36px ghost button at the top of the expanded sidebar: the generated 26px Space avatar with its host state at the bottom right, its name in the 14px semibold line, then a chevron that says it opens; when the host of a shared space is not connected the avatar turns offline and `Not connected` follows the name. Pressing it opens a single-choice menu: every space with its tint and its rank as a Cmd shortcut hint, then any waiting invitations, then a single rule over Space settings and an item to create one, and nothing else. `SpaceDots` is its companion for a pinned strip, one dot per space, the open one filled with its tint and larger, the rest muted and smaller, so the reader knows how many spaces exist and where they stand without opening anything. Both take the same selection props, so a host maps its store onto `spaces` and `selectedSpaceId` once and hands the pair the same callbacks; the dots alone take `onReorderSpaces`, since the order is the reader's to set: a dot is dragged to the place its space should hold. That order is not decoration, it is which space each `⌘1`…`⌘9` reaches and the order a swipe walks, so it is reported whole, as the full list of ids, and never applied here. A single space still shows the button, since creating a second one lives in its menu, but draws no dots, there is nothing to count. Reach for this at the top of a sidebar; `AppSidebar` mounts both and adds the swipe and the Cmd+digit chords that go with them.",
 			},
 		},
 	},
@@ -265,10 +259,10 @@ export const Default = meta.story({
 		await expect(trigger.getBoundingClientRect().height).toBe(36)
 		await expect(getComputedStyle(trigger).borderStartStartRadius).toBe("12px")
 		await expect(getComputedStyle(trigger).columnGap).toBe("8px")
-		const square = squareOn(trigger)
-		await expect(square).toHaveTextContent("V")
-		await expect(square.getBoundingClientRect().width).toBe(22)
-		await expect(square).toHaveAttribute("data-hue", String(BLOT_HUES.green))
+		const avatar = avatarOn(trigger)
+		await expect(avatar?.getBoundingClientRect().width).toBe(26)
+		await expect(avatar).toHaveAttribute("data-size", "26")
+		await expect(avatar).toHaveAttribute("data-colour", String(BLOT_HUES.green))
 	},
 })
 
@@ -948,7 +942,7 @@ export const ThemesLocalSpaceMenu = meta.story({
 		const [light, dark] = triggersIn(canvasElement)
 		for (const trigger of [light, dark]) {
 			await expect(trigger).toHaveAccessibleName("Change space, Perso open")
-			await expect(offlineDotOn(trigger)).toBeUndefined()
+			await expect(avatarOn(trigger)?.dataset.state).not.toBe("offline")
 		}
 		await expect(slotsIn(canvasElement, "host-pill")).toHaveLength(0)
 
@@ -998,7 +992,7 @@ export const ThemesTitleBarHosts = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${MOCKUP} The button on a Space shared from this computer, a joined Space online, one connecting and one whose host does not answer. Check each line shows the Space name in full, that only the one whose host does not answer dims its square under the grey dot and reads Not connected, that no state pill sits beside the button, and that the button names the state after the Space for assistive technology. Pick \`ThemesLocalSpaceMenu\` for the rows of the menu.`,
+				story: `${MOCKUP} The button on a Space shared from this computer, a joined Space online, one connecting and one whose host does not answer. Check each line shows the Space name in full, that only the one whose host does not answer wears the offline avatar and reads Not connected, that no state pill sits beside the button, and that the button names the state after the Space for assistive technology. Pick \`ThemesLocalSpaceMenu\` for the rows of the menu.`,
 			},
 		},
 	},
@@ -1017,7 +1011,9 @@ export const ThemesTitleBarHosts = meta.story({
 			await expect(triggers).toHaveLength(2)
 			for (const trigger of triggers) {
 				await expectNameShown(slotsIn(trigger, "space-switcher-name")[0])
-				await expect(Boolean(offlineDotOn(trigger))).toBe(host === "down")
+				await expect(avatarOn(trigger)?.dataset.state === "offline").toBe(
+					host === "down",
+				)
 			}
 		}
 		await expect(slotsIn(canvasElement, "host-pill")).toHaveLength(0)
@@ -1221,8 +1217,8 @@ export const FreeHue = meta.story({
 		},
 	},
 	play: async ({ canvasElement }) => {
-		const [swatch] = slotsIn(canvasElement, "space-switcher-square")
-		await expect(swatch).toHaveAttribute("data-hue", String(FREE_HUE))
+		const [swatch] = slotsIn(canvasElement, "space-avatar")
+		await expect(swatch).toHaveAttribute("data-colour", String(FREE_HUE))
 		const openDot = slotsIn(canvasElement, "space-dot").find(
 			(dot) => dot.dataset.hue !== undefined,
 		)
@@ -1526,7 +1522,7 @@ export const M5Joined = meta.story({
 			name: "Change space, Studio open, Online",
 		})
 		await expect(invitationDotOn(trigger)).toBeUndefined()
-		await expect(offlineDotOn(trigger)).toBeUndefined()
+		await expect(avatarOn(trigger)?.dataset.state).toBe("online")
 		const menu = await openSwitcher(canvasElement)
 		await expectRowAvatar(rowNamed(menu, "Studio"), "up")
 		await expect(slotsIn(menu, "space-invitations")).toHaveLength(0)

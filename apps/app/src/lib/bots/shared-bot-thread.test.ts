@@ -148,7 +148,13 @@ const openFirstRow = async () => {
 }
 
 const enterSpace = async (name: string) => {
-	fireEvent.click(screen.getByRole("button", { name: `Open ${name}` }))
+	const switcher = document.querySelector(
+		'[data-slot="collapsed-sidebar-space"]',
+	)
+	if (!switcher) throw new Error("no sidebar Space switcher")
+	fireEvent.click(switcher)
+	await settle(MOUNT_MS)
+	fireEvent.click(screen.getByRole("menuitemradio", { name: new RegExp(name) }))
 	await settle(MOUNT_MS)
 }
 
