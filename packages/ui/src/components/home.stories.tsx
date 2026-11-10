@@ -131,6 +131,7 @@ type EmptyHomeProps = {
 	draft?: string
 	hasBand?: boolean
 	attachments?: PromptAttachment[]
+	isSending?: boolean
 	after?: ReactNode
 }
 
@@ -141,6 +142,7 @@ const EmptyHome = ({
 	draft,
 	hasBand = true,
 	attachments,
+	isSending,
 	after,
 }: EmptyHomeProps) => (
 	<EmptyStage>
@@ -163,6 +165,7 @@ const EmptyHome = ({
 			onSelectAgent={selectedAgent}
 			onSubmit={sent}
 			selectedAgentId={agent.id}
+			sending={isSending}
 		/>
 		{after}
 	</EmptyStage>
@@ -193,6 +196,7 @@ const meta = preview.meta({
 		dismissedBand.mockClear()
 		openedArchive.mockClear()
 		removedAttachment.mockClear()
+		sent.mockClear()
 	},
 })
 
@@ -471,6 +475,38 @@ export const FilesAttached = meta.story({
 		)
 		await expect(removedAttachment).toHaveBeenCalledWith("notes")
 		await expect(canvas.getByRole("textbox")).toHaveFocus()
+	},
+})
+
+export const Sending = meta.story({
+	name: "4e · Sending",
+	render: () => (
+		<EmptyHome attachments={PROMPT_ATTACHMENTS} draft={FLIGHTS_ASK} isSending />
+	),
+	parameters: withDescription(
+		"A send is on its way: send wears its idle look and stays focusable but does nothing, while the field, attach and the picker stay live and the draft and files stay in place. Pick `4a` once the send has settled.",
+	),
+	play: async ({ canvas, userEvent }) => {
+		const send = canvas.getByRole("button", { name: "Send" })
+		await expect(send).toHaveAttribute("aria-busy", "true")
+		await expect(send).toHaveAttribute("aria-disabled", "true")
+		await expect(send).toHaveAttribute("data-filled", "false")
+		await expect(send).not.toBeDisabled()
+		await userEvent.click(send)
+		await expect(send).toHaveFocus()
+		await expect(sent).not.toHaveBeenCalled()
+		const field = canvas.getByRole("textbox")
+		await userEvent.click(field)
+		await userEvent.keyboard("{Enter}")
+		await expect(sent).not.toHaveBeenCalled()
+		await expect(field).toHaveValue(FLIGHTS_ASK)
+		await expect(canvas.getAllByRole("listitem")).toHaveLength(2)
+		await userEvent.type(field, " Thanks.")
+		await expect(field).toHaveValue(`${FLIGHTS_ASK} Thanks.`)
+		await expect(
+			canvas.getByRole("button", { name: "Add files" }),
+		).toBeEnabled()
+		await expect(canvas.getByRole("button", { name: "Atlas" })).toBeEnabled()
 	},
 })
 

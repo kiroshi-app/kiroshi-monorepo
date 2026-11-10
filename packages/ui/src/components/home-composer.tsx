@@ -43,22 +43,27 @@ type HomeComposerProps = {
 	onValueChange?: (value: string) => void
 	onSubmit?: (value: string) => void
 	band?: ReactNode
+	sending?: boolean
 }
 
-type SendButtonProps = { isFilled: boolean }
+type SendButtonProps = { isFilled: boolean; isSending?: boolean }
 
-const SendButton = ({ isFilled }: SendButtonProps) => {
+const SendButton = ({ isFilled, isSending = false }: SendButtonProps) => {
 	const { t } = useTranslation("chat")
+	const looksFilled = isFilled && !isSending
 
 	return (
 		<Button
+			aria-busy={isSending || undefined}
+			aria-disabled={isSending || undefined}
 			aria-label={t("composer.send")}
 			className={cn(
 				"size-8 rounded-full transition-none disabled:opacity-100",
-				!isFilled && "bg-foreground/8 text-disabled-foreground",
+				!looksFilled &&
+					"bg-foreground/8 text-disabled-foreground hover:bg-foreground/8",
 			)}
-			data-filled={isFilled}
-			disabled={!isFilled}
+			data-filled={looksFilled}
+			disabled={!isFilled && !isSending}
 			size="icon"
 			type="submit"
 		>
@@ -79,6 +84,7 @@ const HomeComposer = ({
 	onValueChange,
 	onSubmit,
 	band,
+	sending = false,
 }: HomeComposerProps) => {
 	const { t } = useTranslation("chat")
 	const [internalValue, setInternalValue] = useState(defaultValue)
@@ -96,7 +102,7 @@ const HomeComposer = ({
 
 	const submit = (event?: FormEvent) => {
 		event?.preventDefault()
-		if (!hasPayload) return
+		if (!hasPayload || sending) return
 		onSubmit?.(currentValue.trim())
 		if (value === undefined) setInternalValue("")
 	}
@@ -146,7 +152,7 @@ const HomeComposer = ({
 						onSelectAgent={onSelectAgent}
 						selected={selectedAgent}
 					/>
-					<SendButton isFilled={hasPayload} />
+					<SendButton isFilled={hasPayload} isSending={sending} />
 				</div>
 			</div>
 			{band}
