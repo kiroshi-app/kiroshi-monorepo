@@ -3255,6 +3255,13 @@ mod tests {
 		UnreadableIndex { path, valid }
 	}
 
+	fn only_trace_naming(path: &Path, bot: &Bot) -> String {
+		let traces = logged_naming(&path.display().to_string());
+		assert_eq!(traces.len(), 1, "{traces:?}");
+		assert!(traces[0].contains(&format!("bot {}", bot.id)), "{}", traces[0]);
+		traces[0].clone()
+	}
+
 	fn a_locked_index(bundle: &Path) {
 		private_files::replace(&bundle.join(".git").join("index.lock"), b"")
 			.expect("the lock lands");
@@ -3522,9 +3529,7 @@ They said figs, not dates.
 
 		assert!(matches!(evolve(&root, &bot), Evolved::Failed(_)));
 
-		let traces = logged_naming(&bundle.display().to_string());
-		assert_eq!(traces.len(), 1, "{traces:?}");
-		assert!(traces[0].contains(&format!("bot {}", bot.id)), "{}", traces[0]);
+		only_trace_naming(&bundle, &bot);
 
 		let _ = fs::remove_dir_all(&root);
 	}
@@ -3537,10 +3542,7 @@ They said figs, not dates.
 
 		assert!(matches!(evolve(&root, &bot), Evolved::Failed(_)));
 
-		let expected = root.join(PLUGINS_DIR).join(&bot.id).display().to_string();
-		let traces = logged_naming(&expected);
-		assert_eq!(traces.len(), 1, "{traces:?}");
-		assert!(traces[0].contains(&format!("bot {}", bot.id)), "{}", traces[0]);
+		only_trace_naming(&root.join(PLUGINS_DIR).join(&bot.id), &bot);
 
 		let _ = fs::remove_dir_all(&root);
 	}
@@ -3559,10 +3561,8 @@ They said figs, not dates.
 
 		recorded(evolve(&root, &bot)).expect("the turn is recorded");
 
-		let traces = logged_naming(&bundle.display().to_string());
-		assert_eq!(traces.len(), 1, "{traces:?}");
-		assert!(traces[0].contains("not rewritten"), "{}", traces[0]);
-		assert!(traces[0].contains(&format!("bot {}", bot.id)), "{}", traces[0]);
+		let trace = only_trace_naming(&bundle, &bot);
+		assert!(trace.contains("not rewritten"), "{trace}");
 
 		let _ = fs::remove_dir_all(&root);
 	}
@@ -3579,10 +3579,8 @@ They said figs, not dates.
 		git::stop_the_next_owner_only_walk();
 		recorded(evolve(&root, &bot)).expect("the turn is recorded");
 
-		let traces = logged_naming(&bundle.display().to_string());
-		assert_eq!(traces.len(), 1, "{traces:?}");
-		assert!(traces[0].contains("left open"), "{}", traces[0]);
-		assert!(traces[0].contains(&format!("bot {}", bot.id)), "{}", traces[0]);
+		let trace = only_trace_naming(&bundle, &bot);
+		assert!(trace.contains("left open"), "{trace}");
 
 		let _ = fs::remove_dir_all(&root);
 	}
