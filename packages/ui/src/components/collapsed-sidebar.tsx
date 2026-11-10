@@ -93,7 +93,7 @@ const OVERFLOW_MENU =
 	"w-62 rounded-control bg-prompt-surface p-1 text-foreground shadow-rail-popover outline-none"
 
 const OVERFLOW_ROW =
-	"flex items-center gap-2 rounded-md p-2 text-xs/4 outline-none data-highlighted:bg-title-bar-chip"
+	"flex items-center gap-2 rounded-md p-2 text-xs/4 outline-none aria-[current=page]:bg-title-bar-chip data-highlighted:bg-title-bar-chip"
 
 const OVERFLOW_TICKET =
 	"w-15 shrink-0 truncate text-muted-foreground tabular-nums"

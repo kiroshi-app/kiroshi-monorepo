@@ -363,12 +363,16 @@ export const EveryOpenState = meta.story({
 
 export const OverflowWithPopoverOpen = meta.story({
 	name: "Overflow with popover open",
-	args: { zones: zonesWith(OVERFLOWING) },
+	args: {
+		destination: undefined,
+		zones: zonesWith(OVERFLOWING),
+		openMissionId: "mission-OPE-513",
+	},
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"A conversation with five open missions shows the first two then +3. Check +3 opens the 248px popover on the three hidden missions, the arrow keys move the white 10 percent row, Escape gives focus back to +3 and a row opens its mission.",
+					"A conversation with five open missions shows the first two then +3. Check +3 opens the 248px popover on the three hidden missions, the open OPE-513 row holds white 10 percent with aria-current, the arrow-key highlight lights its own row beside it and merges into one background on it, Escape gives focus back to +3 and a row opens its mission.",
 			},
 		},
 	},
@@ -384,12 +388,21 @@ export const OverflowWithPopoverOpen = meta.story({
 			"OPE-513Split the vendor chunk",
 			"OPE-514Pin the toolchain",
 		])
+		const chip = resolvedRootColor("--title-bar-chip")
+		await expect(rows[1]).toHaveAttribute("aria-current", "page")
+		await expect(backgroundOf(rows[1])).toBe(chip)
+		await expect(backgroundOf(rows[0])).not.toBe(chip)
 		await userEvent.keyboard("{ArrowDown}")
+		await waitFor(() => expect(rows[0]).toHaveFocus())
+		await expect([backgroundOf(rows[0]), backgroundOf(rows[1])]).toEqual([
+			chip,
+			chip,
+		])
 		await userEvent.keyboard("{ArrowDown}")
 		await waitFor(() => expect(rows[1]).toHaveFocus())
-		await expect(backgroundOf(rows[1])).toBe(
-			resolvedRootColor("--title-bar-chip"),
-		)
+		await expect(backgroundOf(rows[1])).toBe(chip)
+		await expect(backgroundOf(rows[0])).not.toBe(chip)
+		await expect(rows[1]).toHaveAttribute("aria-current", "page")
 		await userEvent.keyboard("{Escape}")
 		await waitFor(() => expect(overflow).toHaveFocus())
 		await userEvent.click(overflow)
