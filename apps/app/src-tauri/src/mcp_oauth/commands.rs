@@ -315,6 +315,7 @@ fn kept(
 ) -> Result<(), OauthError> {
 	credentials::store(root, scope, grant)?;
 	credentials::bind(root, scope, url)?;
+	credentials::mark_connected(root, scope, now_ms())?;
 	reports.forget(name);
 	Ok(())
 }
@@ -567,7 +568,7 @@ mod tests {
 	use crate::agent::protocol::{OauthFailure, OauthFailureKind};
 	use crate::bundles::AuthorizationWithheld;
 	use crate::db::connection::fixture_root;
-	use crate::environment::contract::OAUTH_SERVER_URL;
+	use crate::environment::contract::{OAUTH_CONNECTED_AT, OAUTH_SERVER_URL};
 	use crate::mcp_oauth::status::ApplicationStatus;
 	use crate::removed_on_drop::RemovedOnDrop;
 	use crate::test_app::an_app_of_its_own;
@@ -971,6 +972,70 @@ mod tests {
 		let read = &session.per_server["granola"];
 		assert_eq!(read.get(OAUTH_ACCESS_TOKEN).map(String::as_str), Some("granted-again"));
 		assert_eq!(read.get(OAUTH_SERVER_URL).map(String::as_str), Some(GRANOLA_URL));
+	}
+
+	fn an_older_agent_grant(root: &Path) {
+		let agent_grant = OauthCredentials {
+			access_token: "agent-token".to_owned(),
+			client_secret: Some("agent-secret".to_owned()),
+			..a_live_grant()
+		};
+		credentials::store(root, &a_server("granola"), &agent_grant)
+			.expect("the agent grant is written");
+		credentials::bind(root, &a_server("granola"), GRANOLA_URL)
+			.expect("the agent grant is bound");
+		credentials::mark_connected(root, &a_server("granola"), 1)
+			.expect("the agent connect time is written");
+	}
+
+	fn a_newer_connect_at(root: &Path, scope: &EnvScope, access_token: &str) {
+		let grant = OauthCredentials { access_token: access_token.to_owned(), ..a_live_grant() };
+		kept(root, scope, "granola", GRANOLA_URL, &grant, &ApplicationReports::default())
+			.expect("the grant is stored");
+	}
+
+	fn the_session_grant_of_the_agent(root: &Path) -> Values {
+		store::resolve(root, &a_bot()).expect("the session env resolves").per_server["granola"]
+			.clone()
+	}
+
+	#[test]
+	fn a_space_connect_newer_than_the_agent_grant_is_the_token_the_session_of_the_agent_reads() {
+		let root = a_root("newer-space-connect");
+		an_older_agent_grant(&root);
+
+		a_newer_connect_at(&root, &granola_of_the_space(), "space-token");
+
+		let read = the_session_grant_of_the_agent(&root);
+		assert_eq!(read.get(OAUTH_ACCESS_TOKEN).map(String::as_str), Some("space-token"));
+		assert_eq!(read.get(OAUTH_CLIENT_SECRET), None);
+		assert_eq!(held_at(&root, &a_bot(), "granola"), Ok(granola_of_the_space()));
+	}
+
+	#[test]
+	fn a_user_connect_newer_than_the_agent_grant_is_the_token_the_session_of_the_agent_reads() {
+		let root = a_root("newer-user-connect");
+		an_older_agent_grant(&root);
+		let of_the_user = EnvScope::Server { name: "granola".to_owned(), owner: EnvOwner::User };
+
+		a_newer_connect_at(&root, &of_the_user, "user-token");
+
+		let read = the_session_grant_of_the_agent(&root);
+		assert_eq!(read.get(OAUTH_ACCESS_TOKEN).map(String::as_str), Some("user-token"));
+		assert_eq!(read.get(OAUTH_CLIENT_SECRET), None);
+		assert_eq!(held_at(&root, &a_bot(), "granola"), Ok(of_the_user));
+	}
+
+	#[test]
+	fn a_connect_records_its_time_in_the_scope_it_stored() {
+		let root = a_root("connect-time");
+		let before = now_ms();
+
+		a_newer_connect_at(&root, &granola_of_the_space(), "space-token");
+
+		let held = store::values(&root, &granola_of_the_space()).expect("the scope is readable");
+		let connected_at: i64 = held[OAUTH_CONNECTED_AT].parse().expect("a time in milliseconds");
+		assert!((before..=now_ms()).contains(&connected_at));
 	}
 
 	fn a_refused_flow() -> Refused {

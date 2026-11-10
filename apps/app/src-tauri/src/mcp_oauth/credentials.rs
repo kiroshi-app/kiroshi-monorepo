@@ -7,8 +7,8 @@ use super::refusal::on_one_line;
 use crate::agent::protocol::OauthCredentials;
 use crate::environment::contract::{
 	EnvError, EnvOwner, EnvScope, Values, OAUTH_ACCESS_TOKEN, OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET,
-	OAUTH_EXPIRES_AT, OAUTH_REASON, OAUTH_REDIRECT_URI, OAUTH_REFRESH_TOKEN, OAUTH_SERVER_URL,
-	RESERVED_NAMES,
+	OAUTH_CONNECTED_AT, OAUTH_EXPIRES_AT, OAUTH_REASON, OAUTH_REDIRECT_URI, OAUTH_REFRESH_TOKEN,
+	OAUTH_SERVER_URL, RESERVED_NAMES,
 };
 use crate::environment::store;
 
@@ -17,6 +17,8 @@ const AN_UNREADABLE_EXPIRY_HAS_PASSED: i64 = i64::MIN;
 const REDACTED: &str = "[redacted]";
 
 const SECRET_NAMES: [&str; 3] = [OAUTH_ACCESS_TOKEN, OAUTH_REFRESH_TOKEN, OAUTH_CLIENT_SECRET];
+
+const WRITTEN_AT_CONNECT: [&str; 2] = [OAUTH_SERVER_URL, OAUTH_CONNECTED_AT];
 
 const TOKEN_NAMES: [&str; 3] = [OAUTH_ACCESS_TOKEN, OAUTH_REFRESH_TOKEN, OAUTH_EXPIRES_AT];
 
@@ -77,39 +79,14 @@ pub struct ServedGrant {
 
 pub type ServedGrants = BTreeMap<String, ServedGrant>;
 
-#[derive(PartialEq, PartialOrd)]
-enum Hold {
-	Reserved,
-	Refused,
-	Granted,
-}
-
-fn hold_of(held: &Values) -> Option<Hold> {
-	if held.contains_key(OAUTH_ACCESS_TOKEN) {
-		return Some(Hold::Granted);
-	}
-	if held.contains_key(OAUTH_REASON) {
-		return Some(Hold::Refused);
-	}
-	RESERVED_NAMES.iter().any(|reserved| held.contains_key(*reserved)).then_some(Hold::Reserved)
-}
-
 pub fn served(root: &Path, owner: &EnvOwner) -> Result<ServedGrants, EnvError> {
-	let mut served = ServedGrants::new();
-	for scope in store::server_scopes(root, owner)? {
-		let held = store::values(root, &scope)?;
-		let EnvScope::Server { name, .. } = &scope else {
-			continue;
-		};
-		let Some(hold) = hold_of(&held) else {
-			continue;
-		};
-		if served.get(name).and_then(|kept| hold_of(&kept.held)).is_some_and(|kept| kept > hold) {
-			continue;
-		}
-		served.insert(name.clone(), ServedGrant { scope: scope.clone(), held });
-	}
-	Ok(served)
+	Ok(store::server_holds(root, owner)?
+		.into_iter()
+		.filter_map(|(name, holds)| {
+			let (scope, held) = store::winning_grant(&holds)?.clone();
+			Some((name, ServedGrant { scope, held }))
+		})
+		.collect())
 }
 
 fn named(held: &OauthCredentials, name: &str) -> Option<String> {
@@ -125,7 +102,7 @@ fn named(held: &OauthCredentials, name: &str) -> Option<String> {
 }
 
 pub fn store(root: &Path, scope: &EnvScope, held: &OauthCredentials) -> Result<(), EnvError> {
-	for name in RESERVED_NAMES.into_iter().filter(|name| *name != OAUTH_SERVER_URL) {
+	for name in RESERVED_NAMES.into_iter().filter(|name| !WRITTEN_AT_CONNECT.contains(name)) {
 		let written = match named(held, name) {
 			Some(value) => store::set(root, scope, name, &value),
 			None => store::delete(root, scope, name),
@@ -139,6 +116,11 @@ pub fn store(root: &Path, scope: &EnvScope, held: &OauthCredentials) -> Result<(
 
 pub fn bind(root: &Path, scope: &EnvScope, url: &str) -> Result<(), EnvError> {
 	store::set(root, scope, OAUTH_SERVER_URL, url)
+		.map_err(|refused| rolled_back(root, scope, refused))
+}
+
+pub fn mark_connected(root: &Path, scope: &EnvScope, at: i64) -> Result<(), EnvError> {
+	store::set(root, scope, OAUTH_CONNECTED_AT, &at.to_string())
 		.map_err(|refused| rolled_back(root, scope, refused))
 }
 
@@ -249,6 +231,31 @@ mod tests {
 		let kept = store::values(&root, &scope).expect("the scope is readable");
 		assert_eq!(bound_url(&kept), Some(SERVER_URL));
 		assert_eq!(kept.get(OAUTH_ACCESS_TOKEN).map(String::as_str), Some("granted-again"));
+	}
+
+	#[test]
+	fn a_refresh_store_keeps_the_connect_time() {
+		let root = a_root("store-keeps-connect-time");
+		let scope = a_server();
+		store(&root, &scope, &a_full_grant()).expect("the grant is written");
+		mark_connected(&root, &scope, 1_700_000_000_000).expect("the connect time is written");
+
+		store(&root, &scope, &a_bare_grant()).expect("the renewed grant is written");
+
+		let kept = store::values(&root, &scope).expect("the scope is readable");
+		assert_eq!(kept.get(OAUTH_CONNECTED_AT).map(String::as_str), Some("1700000000000"));
+	}
+
+	#[test]
+	fn forgetting_a_grant_forgets_its_connect_time() {
+		let root = a_root("forget-connect-time");
+		let scope = a_server();
+		store(&root, &scope, &a_full_grant()).expect("the grant is written");
+		mark_connected(&root, &scope, 1).expect("the connect time is written");
+
+		forget(&root, &scope).expect("the grant is forgotten");
+
+		assert_eq!(store::values(&root, &scope).expect("the scope is readable"), Values::new());
 	}
 
 	fn bound_to(url: &str) -> Values {

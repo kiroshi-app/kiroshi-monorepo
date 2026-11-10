@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, PoisonError};
@@ -6,7 +7,8 @@ use tauri::{AppHandle, Manager, Runtime};
 
 use super::contract::{
 	is_a_connection_name, is_reserved, EnvEntry, EnvError, EnvOwner, EnvScope, PerServer,
-	ResolvedEnv, Values, ACCOUNT_BEARER,
+	ResolvedEnv, Values, ACCOUNT_BEARER, OAUTH_ACCESS_TOKEN, OAUTH_CONNECTED_AT, OAUTH_REASON,
+	RESERVED_NAMES,
 };
 use crate::descriptors;
 use crate::private_files;
@@ -148,28 +150,67 @@ pub fn resolve(root: &Path, owner: &EnvOwner) -> Result<ResolvedEnv, EnvError> {
 	}
 	base.retain(|name, _| !is_a_connection_name(name));
 	let mut per_server = PerServer::new();
-	for held in owners(owner) {
-		for name in server_names(root, &held)? {
-			let scope = EnvScope::Server { name: name.clone(), owner: held.clone() };
-			let mut own = stored(&file(root, &scope)?)?;
-			own.retain(|(name, _)| !is_a_connection_name(name));
-			if own.is_empty() {
-				continue;
-			}
-			per_server.entry(name).or_default().extend(own);
+	for (name, holds) in server_holds(root, owner)? {
+		let granting = winning_grant(&holds).map(|(scope, _)| scope.clone());
+		let mut own = Values::new();
+		for (scope, held) in holds {
+			let is_granting = granting.as_ref() == Some(&scope);
+			own.extend(held.into_iter().filter(|(name, _)| {
+				!is_a_connection_name(name) && (is_granting || !is_a_grant_name(name))
+			}));
+		}
+		if !own.is_empty() {
+			per_server.insert(name, own);
 		}
 	}
 	Ok(ResolvedEnv { base, per_server, ..ResolvedEnv::default() })
 }
 
-pub fn server_scopes(root: &Path, owner: &EnvOwner) -> Result<Vec<EnvScope>, EnvError> {
-	let mut scopes = Vec::new();
+pub type ServerHold = (EnvScope, Values);
+
+pub fn server_holds(
+	root: &Path,
+	owner: &EnvOwner,
+) -> Result<BTreeMap<String, Vec<ServerHold>>, EnvError> {
+	let mut holds: BTreeMap<String, Vec<ServerHold>> = BTreeMap::new();
 	for held in owners(owner) {
 		for name in server_names(root, &held)? {
-			scopes.push(EnvScope::Server { name, owner: held.clone() });
+			let scope = EnvScope::Server { name: name.clone(), owner: held.clone() };
+			let values = values(root, &scope)?;
+			holds.entry(name).or_default().push((scope, values));
 		}
 	}
-	Ok(scopes)
+	Ok(holds)
+}
+
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+enum Hold {
+	Reserved,
+	Refused,
+	Granted { connected_at: Option<i64> },
+}
+
+fn hold_of(held: &Values) -> Option<Hold> {
+	if held.contains_key(OAUTH_ACCESS_TOKEN) {
+		let connected_at = held.get(OAUTH_CONNECTED_AT).and_then(|at| at.parse().ok());
+		return Some(Hold::Granted { connected_at });
+	}
+	if held.contains_key(OAUTH_REASON) {
+		return Some(Hold::Refused);
+	}
+	held.keys().any(|name| is_a_grant_name(name)).then_some(Hold::Reserved)
+}
+
+pub fn winning_grant(broad_to_narrow: &[ServerHold]) -> Option<&ServerHold> {
+	broad_to_narrow
+		.iter()
+		.filter_map(|hold| Some((hold_of(&hold.1)?, hold)))
+		.max_by(|(left, _), (right, _)| left.cmp(right))
+		.map(|(_, hold)| hold)
+}
+
+fn is_a_grant_name(name: &str) -> bool {
+	RESERVED_NAMES.contains(&name)
 }
 
 pub fn copy_owner(root: &Path, source: &EnvOwner, target: &EnvOwner) -> Result<(), EnvError> {
@@ -432,7 +473,7 @@ fn is_a_name_character(character: char) -> bool {
 mod tests {
 	use super::*;
 	use crate::db::connection::fixture_root;
-	use crate::environment::contract::{API_KEY, OAUTH_ACCESS_TOKEN};
+	use crate::environment::contract::{API_KEY, OAUTH_CLIENT_ID, OAUTH_REFRESH_TOKEN};
 	use crate::removed_on_drop::RemovedOnDrop;
 
 	fn a_root(name: &str) -> RemovedOnDrop {
@@ -642,8 +683,111 @@ mod tests {
 
 		assert_eq!(resolved.per_server["clock"], holding(&[("REGION", "eu")]));
 		assert_eq!(
-			server_scopes(&root, &EnvOwner::User).expect("the store reads"),
+			server_holds(&root, &EnvOwner::User)
+				.expect("the store reads")
+				.into_values()
+				.flatten()
+				.map(|(scope, _)| scope)
+				.collect::<Vec<_>>(),
 			vec![a_user_server("clock")]
+		);
+	}
+
+	fn a_space_server() -> EnvScope {
+		EnvScope::Server {
+			name: "clock".to_owned(),
+			owner: EnvOwner::Space { id: "s1".to_owned() },
+		}
+	}
+
+	fn granted_at(root: &Path, scope: &EnvScope, token: &str, connected_at: Option<&str>) {
+		set(root, scope, OAUTH_ACCESS_TOKEN, token).expect("the token is written");
+		if let Some(at) = connected_at {
+			set(root, scope, OAUTH_CONNECTED_AT, at).expect("the connect time is written");
+		}
+	}
+
+	fn served_token(root: &Path) -> String {
+		resolve(root, &an_owner()).expect("the store reads").per_server["clock"][OAUTH_ACCESS_TOKEN]
+			.clone()
+	}
+
+	fn winning_scope(root: &Path) -> Option<EnvScope> {
+		let holds = server_holds(root, &an_owner()).expect("the store reads");
+		winning_grant(&holds["clock"]).map(|(scope, _)| scope.clone())
+	}
+
+	#[test]
+	fn the_latest_connect_is_served_whatever_its_scope() {
+		let root = a_root("latest-connect");
+		granted_at(&root, &a_server(), "bot", Some("100"));
+		granted_at(&root, &a_space_server(), "space", Some("300"));
+		granted_at(&root, &a_user_server("clock"), "user", Some("200"));
+
+		assert_eq!(served_token(&root), "space");
+		assert_eq!(winning_scope(&root), Some(a_space_server()));
+	}
+
+	#[test]
+	fn a_grant_with_no_connect_time_ranks_older_than_one_that_holds_one() {
+		let root = a_root("unstamped-connect");
+		granted_at(&root, &a_server(), "bot", None);
+		granted_at(&root, &a_user_server("clock"), "user", Some("1"));
+
+		assert_eq!(served_token(&root), "user");
+	}
+
+	#[test]
+	fn an_equal_connect_time_or_none_serves_the_narrowest_scope() {
+		let root = a_root("equal-connect");
+		granted_at(&root, &a_user_server("clock"), "user", Some("100"));
+		granted_at(&root, &a_space_server(), "space", Some("100"));
+		granted_at(&root, &a_server(), "bot", Some("100"));
+
+		assert_eq!(served_token(&root), "bot");
+
+		let root = a_root("no-connect");
+		granted_at(&root, &a_user_server("clock"), "user", None);
+		granted_at(&root, &a_space_server(), "space", None);
+
+		assert_eq!(served_token(&root), "space");
+	}
+
+	#[test]
+	fn every_grant_name_comes_from_the_winning_scope_and_the_other_names_still_merge() {
+		let root = a_root("grant-names-unmixed");
+		granted_at(&root, &a_server(), "bot", Some("100"));
+		set(&root, &a_server(), OAUTH_REFRESH_TOKEN, "bot-refresh").expect("the bot keeps it");
+		set(&root, &a_server(), "REGION", "bot").expect("the bot keeps it");
+		set(&root, &a_server(), "ONLY_BOT", "bot").expect("the bot keeps it");
+		granted_at(&root, &a_space_server(), "space", Some("200"));
+		set(&root, &a_space_server(), "REGION", "space").expect("the space keeps it");
+		set(&root, &a_space_server(), "ONLY_SPACE", "space").expect("the space keeps it");
+
+		let resolved = resolve(&root, &an_owner()).expect("the store reads");
+
+		assert_eq!(
+			resolved.per_server["clock"],
+			holding(&[
+				(OAUTH_ACCESS_TOKEN, "space"),
+				(OAUTH_CONNECTED_AT, "200"),
+				("ONLY_BOT", "bot"),
+				("ONLY_SPACE", "space"),
+				("REGION", "bot"),
+			])
+		);
+	}
+
+	#[test]
+	fn with_no_access_token_a_refusal_wins_over_a_narrower_reservation() {
+		let root = a_root("refusal-over-reservation");
+		set(&root, &a_space_server(), OAUTH_REASON, "invalid_grant").expect("the space keeps it");
+		set(&root, &a_server(), OAUTH_CLIENT_ID, "registered").expect("the bot keeps it");
+
+		assert_eq!(winning_scope(&root), Some(a_space_server()));
+		assert_eq!(
+			resolve(&root, &an_owner()).expect("the store reads").per_server["clock"],
+			holding(&[(OAUTH_REASON, "invalid_grant")])
 		);
 	}
 

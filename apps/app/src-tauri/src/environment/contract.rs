@@ -13,8 +13,9 @@ pub const OAUTH_CLIENT_SECRET: &str = "KIROSHI_OAUTH_CLIENT_SECRET";
 pub const OAUTH_REASON: &str = "KIROSHI_OAUTH_REASON";
 pub const OAUTH_REDIRECT_URI: &str = "KIROSHI_OAUTH_REDIRECT_URI";
 pub const OAUTH_SERVER_URL: &str = "KIROSHI_OAUTH_SERVER_URL";
+pub const OAUTH_CONNECTED_AT: &str = "KIROSHI_OAUTH_CONNECTED_AT";
 
-pub const RESERVED_NAMES: [&str; 8] = [
+pub const RESERVED_NAMES: [&str; 9] = [
 	OAUTH_ACCESS_TOKEN,
 	OAUTH_REFRESH_TOKEN,
 	OAUTH_EXPIRES_AT,
@@ -23,6 +24,7 @@ pub const RESERVED_NAMES: [&str; 8] = [
 	OAUTH_REASON,
 	OAUTH_REDIRECT_URI,
 	OAUTH_SERVER_URL,
+	OAUTH_CONNECTED_AT,
 ];
 
 pub const API_KEY: &str = "ANTHROPIC_API_KEY";
@@ -230,7 +232,7 @@ mod tests {
 
 	#[test]
 	fn every_name_a_grant_writes_is_reserved_and_opens_with_the_one_prefix() {
-		assert_eq!(RESERVED_NAMES.len(), 8);
+		assert_eq!(RESERVED_NAMES.len(), 9);
 		assert!(RESERVED_NAMES.iter().all(|name| name.starts_with("KIROSHI_OAUTH_")));
 		assert!(RESERVED_NAMES.iter().all(|name| is_reserved(name)));
 		assert!(!is_reserved("KIROSHI_OAUTH"));
