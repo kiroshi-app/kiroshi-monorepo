@@ -1039,11 +1039,9 @@ const luminanceOf = (rgb: number[]) => {
 }
 
 const contrastOf = (colour: string, ground: string) => {
-	const groundRgb = rgbOver(ground, "#000000")
-	const [lighter, darker] = [
-		luminanceOf(rgbOver(colour, `rgb(${groundRgb.join(",")})`)),
-		luminanceOf(groundRgb),
-	].sort((a, b) => b - a)
+	const [lighter, darker] = [rgbOver(colour, ground), rgbOver(ground, ground)]
+		.map(luminanceOf)
+		.sort((a, b) => b - a)
 	return (lighter + 0.05) / (darker + 0.05)
 }
 
