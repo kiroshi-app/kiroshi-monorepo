@@ -215,6 +215,9 @@ export type RosterController = {
 	create: () => Promise<void>
 	createFromDraft: (draft: BotDraft) => Promise<Bot>
 	createConversation: (botIds?: string[]) => Promise<Conversation | null>
+	createUnselectedConversation: (
+		botIds: string[],
+	) => Promise<Conversation | null>
 	duplicate: (id: string, spaceRowId?: string) => Promise<Bot | null>
 	describe: (id: string, value: BotSettingsValue) => void
 	restyle: (id: string, outputStyle: BotOutputStyle) => void
@@ -756,11 +759,14 @@ export const createRosterController = (
 	const enrol = (written: Bot, spaceRowId: string) =>
 		holdBots(spaceRowId, [...rosterIn(current().rosters, spaceRowId), written])
 
-	const admitConversation = (written: Conversation, spaceRowId: string) => {
+	const enrolConversation = (written: Conversation, spaceRowId: string) =>
 		holdConversations(spaceRowId, [
 			...rosterIn(current().conversationRosters, spaceRowId),
 			written,
 		])
+
+	const admitConversation = (written: Conversation, spaceRowId: string) => {
+		enrolConversation(written, spaceRowId)
 		choose({
 			spaceRowId,
 			chosenBotId: null,
@@ -973,6 +979,25 @@ export const createRosterController = (
 		await reload()
 		return null
 	}
+
+	const writeConversation = (
+		botIds: string[],
+		hold: (written: Conversation, spaceRowId: string) => void,
+	) =>
+		commit(async () => {
+			const spaceRowId = current().spaceRowId
+			if (spaceRowId === null) {
+				return null
+			}
+			const created = await store.createConversation({
+				spaceId: hostSpaceIdOf(spaceRowId),
+				sectionId: null,
+				title: NO_TITLE,
+				botIds,
+			})
+			hold(created, spaceRowId)
+			return created
+		}).catch(reloadAndYield)
 
 	const emptySeatsIn = async (spaceRowId: string, botId: string) => {
 		const seated = rosterIn(current().conversationRosters, spaceRowId)
@@ -1208,20 +1233,10 @@ export const createRosterController = (
 			}),
 
 		createConversation: (botIds = NOBODY_SEATED) =>
-			commit(async () => {
-				const spaceRowId = current().spaceRowId
-				if (spaceRowId === null) {
-					return null
-				}
-				const created = await store.createConversation({
-					spaceId: hostSpaceIdOf(spaceRowId),
-					sectionId: null,
-					title: NO_TITLE,
-					botIds,
-				})
-				admitConversation(created, spaceRowId)
-				return created
-			}).catch(reloadAndYield),
+			writeConversation(botIds, admitConversation),
+
+		createUnselectedConversation: (botIds: string[]) =>
+			writeConversation(botIds, enrolConversation),
 
 		duplicate: (id: string, spaceRowId?: string) =>
 			commit(async () => {

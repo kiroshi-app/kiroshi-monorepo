@@ -1903,6 +1903,33 @@ describe("createRosterController on conversations", () => {
 		expect(await store.conversations("personal")).toEqual([])
 	})
 
+	it("adds an unselected conversation to the roster and keeps the selected row", async () => {
+		const { store, room } = await aStoreWithARoom()
+		const controller = await loaded(store)
+		controller.selectConversation(room.id)
+
+		const created = await controller.createUnselectedConversation(["default"])
+
+		const state = controller.getState()
+		expect(state.conversations.map((held) => held.id)).toContain(created?.id)
+		expect(state.selectedConversationId).toBe(room.id)
+		expect(state.selectedBotId).toBeNull()
+	})
+
+	it("keeps the prior selection once an unselected conversation is discarded", async () => {
+		const { store, room } = await aStoreWithARoom()
+		const controller = await loaded(store)
+		controller.selectConversation(room.id)
+		const created = await controller.createUnselectedConversation(["default"])
+
+		await controller.discardConversation(created?.id ?? "")
+
+		const state = controller.getState()
+		expect(state.conversations.map((held) => held.id)).toEqual([room.id])
+		expect(state.selectedConversationId).toBe(room.id)
+		expect(state.selectedBotId).toBeNull()
+	})
+
 	it("discards a conversation and keeps the selected agent", async () => {
 		const { store, room } = await aStoreWithARoom()
 		const controller = await loaded(store)
