@@ -18,15 +18,19 @@ import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { useWorkspaceRail } from "@/components/workspace-rail"
-import type { JoinedSpace, Space } from "@/lib/bindings"
+import type { JoinedSpace, Space, TransportError } from "@/lib/bindings"
 import { newBotIdentity } from "@/lib/bots/bot-settings"
+import type { ChatDriver } from "@/lib/chat/driver"
 import { createFakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import type { JoinedHostState } from "@/lib/host/joined-hosts"
 import type { SettingsNavigation } from "@/lib/navigation/use-settings-navigation"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
-import type { JoinedSpacesController } from "@/lib/spaces/joined-spaces-controller"
+import type {
+	DepartedSpace,
+	JoinedSpacesController,
+} from "@/lib/spaces/joined-spaces-controller"
 import { joinedRowIdOf } from "@/lib/spaces/joined-spaces-controller"
 import { useSwitcherSpaces } from "@/lib/spaces/use-joined-spaces"
 import { createWorkspaceTabs } from "@/lib/tabs/workspace-tabs"
@@ -40,10 +44,17 @@ import type { WorkspaceOverlay } from "@/lib/workspace/use-workspace-overlay"
 type MountedApp = {
 	store: TranscriptStore | null
 	openJoinedSpace: JoinedSpace | null
+	departed: DepartedSpace | null
+	sessionFailure: TransportError | null
 }
 
 const mounted = vi.hoisted(
-	(): MountedApp => ({ store: null, openJoinedSpace: null }),
+	(): MountedApp => ({
+		store: null,
+		openJoinedSpace: null,
+		departed: null,
+		sessionFailure: null,
+	}),
 )
 
 vi.mock("@/lib/conversations/create-store", () => ({
@@ -59,9 +70,18 @@ vi.mock("@/lib/chat/create-driver", async () => {
 	const { withFakeHostWrites } = await import(
 		"@/lib/conversations/fake-host-writes"
 	)
+	const failingWhenAsked = (driver: ChatDriver): ChatDriver => ({
+		...driver,
+		startOrResumeSession: (...args) =>
+			mounted.sessionFailure
+				? Promise.reject(mounted.sessionFailure)
+				: driver.startOrResumeSession(...args),
+	})
 	return {
 		createChatDriver: (store: TranscriptStore) =>
-			withFakeHostWrites(createFakeChatDriver({ stepMs: 1 }), store),
+			failingWhenAsked(
+				withFakeHostWrites(createFakeChatDriver({ stepMs: 1 }), store),
+			),
 	}
 })
 
@@ -71,6 +91,12 @@ vi.mock("@/lib/spaces/use-joined-spaces", async (importOriginal) => {
 	const useJoinedSpaces: typeof original.useJoinedSpaces = (...args) => {
 		const joinedSpaces = original.useJoinedSpaces(...args)
 		const open = mounted.openJoinedSpace
+		if (mounted.departed) {
+			return {
+				...joinedSpaces,
+				state: { ...joinedSpaces.state, departed: mounted.departed },
+			}
+		}
 		return open
 			? {
 					...joinedSpaces,
@@ -539,6 +565,8 @@ describe("the Home page", () => {
 	afterEach(() => {
 		vi.useRealTimers()
 		mounted.store = null
+		mounted.departed = null
+		mounted.sessionFailure = null
 		localStorage.clear()
 	})
 
@@ -688,11 +716,111 @@ describe("the Home page", () => {
 		},
 	)
 
+	const threadChrome = () => ({
+		header: slot("app-header"),
+		identity: slot("header-identity-button"),
+		activityToggle: screen.queryByRole("button", {
+			name: i18n.t("chat:activity.panel.toggle"),
+		}),
+		activityPanel: screen.queryByRole("complementary", {
+			name: i18n.t("chat:activity.panel.label"),
+		}),
+	})
+
+	const openInConversations = async (
+		router: Awaited<ReturnType<typeof launchApp>>,
+		botId: string,
+	) => {
+		await act(() => router.navigate({ to: "/", search: { bot: botId } }))
+		await settle()
+	}
+
+	const sendFromHome = async (text: string) => {
+		const composer = screen.getByRole("textbox")
+		act(() => {
+			fireEvent.change(composer, { target: { value: text } })
+			fireEvent.keyDown(composer, { key: "Enter" })
+		})
+		await settle()
+	}
+
+	it("frames the empty Home and its first message with no thread header and no routines trigger", async () => {
+		await mountAppWithTwoAgents()
+		await pressInRail("home")
+
+		expect(slot("home-layout")?.getAttribute("data-stage")).toBe("empty")
+		expect(threadChrome().header).toBeNull()
+		expect(threadChrome().activityToggle).toBeNull()
+
+		await sendFromHome("Book the flights.")
+
+		expect(slot("home-layout")?.getAttribute("data-stage")).toBe("conversation")
+		expect(screen.getByText("Book the flights.")).toBeTruthy()
+		expect(threadChrome().header).toBeNull()
+		expect(threadChrome().identity).toBeNull()
+		expect(threadChrome().activityToggle).toBeNull()
+	})
+
+	it("shows no activity panel on the Home, even with the panel left open in Conversations", async () => {
+		writeMirror({ ...readMirror(), activityPanelOpen: true })
+		const { router, first } = await mountAppWithTwoAgents()
+		await openInConversations(router, first.id)
+		expect(threadChrome().activityPanel).not.toBeNull()
+
+		await pressInRail("home")
+
+		expect(slot("home-layout")).not.toBeNull()
+		expect(threadChrome().activityPanel).toBeNull()
+		expect(threadChrome().activityToggle).toBeNull()
+	})
+
+	it("frames the Home of a left Space as a read-only Home, the departure notice in place of the composer", async () => {
+		mounted.departed = {
+			rowId: "studio-host",
+			spaceId: PERSONAL_SPACE_ID,
+			reason: "removed",
+			space: "Studio Nord",
+			host: "Lea",
+			threadId: null,
+		}
+		await mountAppWithTwoAgents()
+
+		await pressInRail("home")
+
+		expect(slot("home-layout")?.getAttribute("data-stage")).toBe("conversation")
+		expect(slot("space-access-banner")?.getAttribute("data-reason")).toBe(
+			"removed",
+		)
+		expect(slot("home-composer")).toBeNull()
+		expect(slot("chat-layout")).toBeNull()
+	})
+
+	it("keeps the Home frame and its composer when the first turn fails, the failure notice raised", async () => {
+		mounted.sessionFailure = { kind: "spawnFailed", detail: "no binary" }
+		await mountAppWithTwoAgents()
+		await pressInRail("home")
+
+		await sendFromHome("Book the flights.")
+
+		expect(slot("home-layout")?.getAttribute("data-stage")).toBe("empty")
+		expect(slot("home-composer")).not.toBeNull()
+		expect(slot("chat-layout")).toBeNull()
+		expect(screen.getAllByText(/no binary/)).not.toHaveLength(0)
+	})
+
+	it("keeps the thread header and the activity panel of an agent opened in Conversations", async () => {
+		const { router, first } = await mountAppWithTwoAgents()
+
+		await openInConversations(router, first.id)
+
+		expect(threadChrome().header).not.toBeNull()
+		expect(threadChrome().activityToggle).not.toBeNull()
+	})
+
 	it("shows an agent opened in Conversations in its thread layout, never a Home view", async () => {
 		const { router, first } = await mountAppWithTwoAgents()
 
-		await act(() => router.navigate({ to: "/", search: { bot: first.id } }))
-		await settle()
+		await openInConversations(router, first.id)
 
 		expect(slot("chat-layout")).not.toBeNull()
 		expect(slot("home-layout")).toBeNull()

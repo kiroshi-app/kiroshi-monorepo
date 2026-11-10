@@ -1311,7 +1311,7 @@ type HomeStageFacts = {
 	isFirstLoadPending: boolean
 	hasMessages: boolean
 	isTranscriptEmpty: boolean
-	isHeldBack: boolean
+	isReadOnly: boolean
 }
 
 const homeStageOf = ({
@@ -1320,7 +1320,7 @@ const homeStageOf = ({
 	isFirstLoadPending,
 	hasMessages,
 	isTranscriptEmpty,
-	isHeldBack,
+	isReadOnly,
 }: HomeStageFacts): HomeStage | null => {
 	if (!home) {
 		return null
@@ -1332,10 +1332,9 @@ const homeStageOf = ({
 	) {
 		return "loading"
 	}
-	if (hasMessages) {
-		return "conversation"
-	}
-	return isTranscriptEmpty && !isHeldBack ? "empty" : null
+	return isTranscriptEmpty && !hasMessages && !isReadOnly
+		? "empty"
+		: "conversation"
 }
 
 type HomeConversationInput = {
@@ -1380,7 +1379,6 @@ const homeConversationOf = (
 type HomeThreadStageProps = {
 	home: ThreadHome | undefined
 	stage: HomeStage | null
-	header: ReactNode
 	layout: ReactNode
 	send: HomeSend
 	conversation: HomeConversation
@@ -1389,7 +1387,6 @@ type HomeThreadStageProps = {
 const HomeThreadStage = ({
 	home,
 	stage,
-	header,
 	layout,
 	send,
 	conversation,
@@ -1400,15 +1397,12 @@ const HomeThreadStage = ({
 	if (stage === "conversation") {
 		return (
 			<ThreadDocumentsInTabs>
-				<ScreenLayout
-					header={header}
-					scroller={() => home.conversationStage(conversation)}
-				/>
+				<ScreenLayout scroller={() => home.conversationStage(conversation)} />
 			</ThreadDocumentsInTabs>
 		)
 	}
 	return (
-		<ScreenLayout header={header} width="full">
+		<ScreenLayout width="full">
 			{stage === "loading" ? <HomeLoadingStage /> : home.emptyStage(send)}
 		</ScreenLayout>
 	)
@@ -2020,7 +2014,7 @@ function ThreadView(props: ThreadViewProps) {
 		view.missionSeat ? MISSION_TRANSCRIPT_SKELETON : THREAD_TRANSCRIPT_SKELETON,
 	)
 
-	const header = (
+	const header = home ? undefined : (
 		<ThreadHeader
 			botImage={view.botImage}
 			botWork={view.facts.botWork}
@@ -2182,13 +2176,15 @@ function ThreadView(props: ThreadViewProps) {
 		onRemoveAttachment: view.staged.remove,
 	}
 
+	const isReadOnly = Boolean(departure)
+
 	const homeStage = homeStageOf({
 		home,
 		thread,
 		isFirstLoadPending: view.facts.isFirstLoadPending,
 		hasMessages: view.state.messages.length > 0,
 		isTranscriptEmpty,
-		isHeldBack: Boolean(departure || view.facts.latestError),
+		isReadOnly,
 	})
 
 	const screen = (
@@ -2205,9 +2201,8 @@ function ThreadView(props: ThreadViewProps) {
 				overlay,
 				notice,
 				queue,
-				isReadOnly: Boolean(departure),
+				isReadOnly,
 			})}
-			header={header}
 			home={home}
 			layout={layout}
 			send={homeSend}
@@ -2215,31 +2210,39 @@ function ThreadView(props: ThreadViewProps) {
 		/>
 	)
 
+	const content = (
+		<AnswerActionsContext value={answerActions}>
+			<ThreadDocumentsContext value={documents}>
+				<ThreadBoardDrawers
+					bots={known}
+					conversationId={conversationId}
+					spaceId={documents?.spaceId}
+					workingAgentIds={workingAgentIds}
+				>
+					{screen}
+				</ThreadBoardDrawers>
+			</ThreadDocumentsContext>
+		</AnswerActionsContext>
+	)
+
 	return (
 		<RosterProvider bots={view.bots}>
-			<ThreadRoutines
-				{...view.routinesScope}
-				activityPanel={activityPanel}
-				faceOf={view.faceOf}
-				liveMissionIds={view.liveMissionIds}
-				missions={view.missions}
-				onOpenMission={onOpenMission}
-				onOpenMissionInNewTab={onOpenMissionInNewTab}
-				wrapMissionCard={view.wrapMissionCard}
-			>
-				<AnswerActionsContext value={answerActions}>
-					<ThreadDocumentsContext value={documents}>
-						<ThreadBoardDrawers
-							bots={known}
-							conversationId={conversationId}
-							spaceId={documents?.spaceId}
-							workingAgentIds={workingAgentIds}
-						>
-							{screen}
-						</ThreadBoardDrawers>
-					</ThreadDocumentsContext>
-				</AnswerActionsContext>
-			</ThreadRoutines>
+			{home ? (
+				content
+			) : (
+				<ThreadRoutines
+					{...view.routinesScope}
+					activityPanel={activityPanel}
+					faceOf={view.faceOf}
+					liveMissionIds={view.liveMissionIds}
+					missions={view.missions}
+					onOpenMission={onOpenMission}
+					onOpenMissionInNewTab={onOpenMissionInNewTab}
+					wrapMissionCard={view.wrapMissionCard}
+				>
+					{content}
+				</ThreadRoutines>
+			)}
 		</RosterProvider>
 	)
 }
