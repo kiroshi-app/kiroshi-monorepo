@@ -98,13 +98,14 @@ fn dot(rt: &Runtime<Header>) -> ElementInfo {
 		.expect("the connection status draws its dot")
 }
 
-fn children_of(rt: &Runtime<Header>, label: &str) -> Vec<ElementInfo> {
+fn labelled(rt: &Runtime<Header>, label: &str) -> (ElementInfo, Vec<ElementInfo>) {
 	let elements = rt.elements();
-	let parent = elements
+	let at = elements
 		.iter()
 		.position(|element| element.label.as_deref() == Some(label))
 		.unwrap_or_else(|| panic!("no element labelled {label}"));
-	elements.into_iter().filter(|element| element.parent == Some(parent)).collect()
+	let children = elements.iter().filter(|element| element.parent == Some(at)).cloned().collect();
+	(elements[at].clone(), children)
 }
 
 fn ready() -> Header {
@@ -278,21 +279,16 @@ fn a_provided_image_sits_in_the_circle_inscribed_in_the_hexagon_and_the_field_dr
  {
 	let pictured = laid_out(Header { image: Some(picture()), ..ready() }, WIDE);
 	let field = laid_out(ready(), WIDE);
-	let avatar = children_of(&pictured, NAME);
-	let frame = pictured
-		.elements()
-		.into_iter()
-		.find(|element| element.label.as_deref() == Some(NAME))
-		.expect("the avatar is drawn")
-		.rect;
+	let (avatar, layers) = labelled(&pictured, NAME);
+	let frame = avatar.rect;
 	let inscribed = AVATAR * 181.5 / 200.5;
-	let clip = avatar.first().expect("the image is framed").rect;
+	let clip = layers.first().expect("the image is framed").rect;
 
-	assert!(children_of(&field, NAME).is_empty());
-	assert_eq!(avatar.len(), 2);
+	assert!(labelled(&field, NAME).1.is_empty());
+	assert_eq!(layers.len(), 2);
 	assert!((clip[2] - inscribed).abs() < 0.01 && (clip[3] - inscribed).abs() < 0.01);
 	assert!((clip[0] - frame[0] - (AVATAR - inscribed) / 2.0).abs() < 0.01);
-	assert_eq!(avatar[1].rect, frame);
+	assert_eq!(layers[1].rect, frame);
 }
 
 #[test]
