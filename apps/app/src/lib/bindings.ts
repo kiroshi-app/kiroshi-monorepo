@@ -1652,6 +1652,8 @@ export type OfferedModel_Serialize = {
 
 export type OnboardingStep = "welcome" | "connect" | "import" | "account" | "done";
 
+export type OpenOn = "newConversation" | "lastConversation";
+
 export type Participant = {
 	botId: string,
 	role: ParticipantRole,
@@ -2297,6 +2299,7 @@ export type UserPreferences = {
 	notifyWithSound: boolean,
 	sidebarWidth: number | null,
 	sidebarTab?: SidebarTab,
+	openOn?: OpenOn,
 	activityPanelOpen?: boolean,
 	firstRunDone?: boolean,
 	lastSpaceId: string | null,

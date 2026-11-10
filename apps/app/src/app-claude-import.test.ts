@@ -92,6 +92,7 @@ const FRESH_FIRST_RUN_AT_IMPORT: UserPreferences = {
 	notifyWithSound: true,
 	sidebarWidth: null,
 	sidebarTab: "conversations",
+	openOn: "newConversation",
 	activityPanelOpen: false,
 	firstRunDone: false,
 	lastSpaceId: null,

@@ -71,6 +71,32 @@ impl From<SidebarTab> for user::SidebarTab {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
+pub enum OpenOn {
+	#[default]
+	NewConversation,
+	LastConversation,
+}
+
+impl From<user::OpenOn> for OpenOn {
+	fn from(page: user::OpenOn) -> Self {
+		match page {
+			user::OpenOn::NewConversation => OpenOn::NewConversation,
+			user::OpenOn::LastConversation => OpenOn::LastConversation,
+		}
+	}
+}
+
+impl From<OpenOn> for user::OpenOn {
+	fn from(page: OpenOn) -> Self {
+		match page {
+			OpenOn::NewConversation => user::OpenOn::NewConversation,
+			OpenOn::LastConversation => user::OpenOn::LastConversation,
+		}
+	}
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
 pub enum OnboardingStep {
 	#[default]
 	Welcome,
@@ -119,6 +145,8 @@ pub struct UserPreferences {
 	#[serde(default)]
 	pub sidebar_tab: SidebarTab,
 	#[serde(default)]
+	pub open_on: OpenOn,
+	#[serde(default)]
 	pub activity_panel_open: bool,
 	#[serde(default)]
 	pub first_run_done: bool,
@@ -164,6 +192,7 @@ impl UserPreferences {
 			notify_with_sound: preferences.notify_with_sound,
 			sidebar_width: preferences.sidebar_width,
 			sidebar_tab: preferences.sidebar_tab.into(),
+			open_on: preferences.open_on.into(),
 			activity_panel_open: preferences.activity_panel_open,
 			first_run_done: preferences.first_run_done,
 			last_space_id: preferences.last_space_id,
@@ -192,6 +221,7 @@ impl From<UserPreferences> for user::Preferences {
 			notify_with_sound: preferences.notify_with_sound,
 			sidebar_width: preferences.sidebar_width,
 			sidebar_tab: preferences.sidebar_tab.into(),
+			open_on: preferences.open_on.into(),
 			activity_panel_open: preferences.activity_panel_open,
 			first_run_done: preferences.first_run_done,
 			last_space_id: preferences.last_space_id,
@@ -238,5 +268,75 @@ impl From<user::UserError> for UserPreferencesError {
 impl From<avatars::Rejection> for UserPreferencesError {
 	fn from(rejection: avatars::Rejection) -> Self {
 		UserPreferencesError::RejectedProfilePicture { reason: rejection.into() }
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use serde_json::{json, to_value};
+
+	use super::*;
+	use crate::db::connection::temp_dir;
+	use crate::db::open;
+
+	fn a_payload() -> serde_json::Value {
+		json!({
+			"displayName": "Nyx",
+			"profilePicturePath": null,
+			"colorScheme": "dark",
+			"language": "fr",
+			"notifyOnQuestion": false,
+			"notifyOnPermission": true,
+			"notifyOnFinishedTurn": false,
+			"notifyWithSound": false,
+			"sidebarWidth": 320,
+			"sidebarTab": "missions",
+			"activityPanelOpen": true,
+			"firstRunDone": true,
+			"lastSpaceId": "space-one",
+			"updateChannel": "beta",
+			"showWhatsNew": false,
+			"lastSeenVersion": "0.24.1",
+			"onboardingStep": "done"
+		})
+	}
+
+	#[test]
+	fn a_payload_without_a_launch_page_opens_on_a_new_conversation() {
+		let read: UserPreferences =
+			serde_json::from_value(a_payload()).expect("the payload deserializes");
+
+		assert_eq!(read.open_on, OpenOn::NewConversation);
+	}
+
+	#[test]
+	fn the_launch_page_crosses_to_the_front_under_its_camel_case_name() {
+		let mut payload = a_payload();
+		payload["openOn"] = json!("lastConversation");
+		let read: UserPreferences =
+			serde_json::from_value(payload).expect("the payload deserializes");
+
+		assert_eq!(read.open_on, OpenOn::LastConversation);
+		assert_eq!(
+			to_value(OpenOn::NewConversation).expect("the page serializes"),
+			json!("newConversation")
+		);
+	}
+
+	#[tokio::test]
+	async fn a_last_conversation_written_through_the_contract_reads_back_through_it() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let mut payload = a_payload();
+		payload["openOn"] = json!("lastConversation");
+		let sent: UserPreferences =
+			serde_json::from_value(payload).expect("the payload deserializes");
+
+		database.user().set_preferences(sent.clone().into()).await.expect("the write");
+		let stored = database.user().preferences().await.expect("the record");
+		let read = UserPreferences::of(stored, None);
+
+		assert_eq!(read, sent);
+		assert_eq!(to_value(&read).expect("the record serializes")["openOn"], "lastConversation");
 	}
 }

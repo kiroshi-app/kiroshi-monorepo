@@ -23,6 +23,7 @@ const STORED: UserPreferences = {
 	notifyWithSound: true,
 	sidebarWidth: null,
 	sidebarTab: "conversations",
+	openOn: "newConversation",
 	activityPanelOpen: false,
 	firstRunDone: true,
 	lastSpaceId: null,
