@@ -7,10 +7,10 @@ readonly REPO_ROOT="$(cd "$PREVIEW_ROOT/../.." && pwd)"
 readonly TARGET="${CARGO_TARGET_DIR:-$PREVIEW_ROOT/target}"
 readonly TRIPLE=x86_64-unknown-linux-gnu
 readonly EXECUTABLE=kiroshi-rune-preview
-readonly TAURI_APP="$REPO_ROOT/apps/app/src-tauri"
-readonly APP_DIR="$TARGET/bundle/Kiroshi-Rune-Preview.AppDir"
-readonly APPIMAGETOOL_URL=https://github.com/AppImage/appimagetool/releases/download/1.9.0/appimagetool-x86_64.AppImage
-readonly APPIMAGETOOL_SHA256=46fdd785094c7f6e545b61afcfb0f3d98d8eab243f644b4b17698c01d06083d1
+readonly IDENTIFIER=com.kiroshi.app
+readonly INSTALLED_TAURI_EXECUTABLE=Kiroshi
+readonly SIDECARS="$REPO_ROOT/apps/app/sidecar/binaries"
+readonly PACKAGE_ROOT="$TARGET/bundle/deb"
 
 if [ $# -ne 2 ]; then
 	echo "package-linux.sh: usage: package-linux.sh <version> <output-folder>" >&2
@@ -18,30 +18,39 @@ if [ $# -ne 2 ]; then
 fi
 readonly VERSION=$1
 readonly OUTPUT=$2
-readonly APPIMAGE="$OUTPUT/Kiroshi-Rune-Preview_${VERSION}_amd64.AppImage"
-readonly APPIMAGETOOL="$TARGET/appimagetool-x86_64.AppImage"
+readonly DEB="$OUTPUT/Kiroshi_${VERSION}_amd64.deb"
 
 (cd "$PREVIEW_ROOT" && cargo build -p kiroshi-rune-preview --bin "$EXECUTABLE" --release --locked --target "$TRIPLE")
 
-mkdir -p "$APP_DIR/usr/bin" "$OUTPUT"
-cp -f "$TARGET/$TRIPLE/release/$EXECUTABLE" "$APP_DIR/usr/bin/$EXECUTABLE"
-for sidecar in "$TAURI_APP/binaries/"*"-$TRIPLE"; do
-	cp -f "$sidecar" "$APP_DIR/usr/bin/$(basename "$sidecar" "-$TRIPLE")"
+rm -rf "$PACKAGE_ROOT"
+mkdir -p "$PACKAGE_ROOT/DEBIAN" "$PACKAGE_ROOT/usr/bin" "$PACKAGE_ROOT/usr/share/applications" \
+	"$PACKAGE_ROOT/usr/share/icons/hicolor/128x128/apps" "$OUTPUT"
+install -m 0755 "$TARGET/$TRIPLE/release/$EXECUTABLE" "$PACKAGE_ROOT/usr/bin/$EXECUTABLE"
+for sidecar in "$SIDECARS/"*"-$TRIPLE"; do
+	install -m 0755 "$sidecar" "$PACKAGE_ROOT/usr/bin/$(basename "$sidecar" "-$TRIPLE")"
 done
-cp -f "$TAURI_APP/icons/128x128.png" "$APP_DIR/$EXECUTABLE.png"
-ln -sf "usr/bin/$EXECUTABLE" "$APP_DIR/AppRun"
-cat >"$APP_DIR/$EXECUTABLE.desktop" <<DESKTOP
+ln -s "$EXECUTABLE" "$PACKAGE_ROOT/usr/bin/$INSTALLED_TAURI_EXECUTABLE"
+install -m 0644 "$PREVIEW_ROOT/assets/icons/128x128.png" \
+	"$PACKAGE_ROOT/usr/share/icons/hicolor/128x128/apps/$IDENTIFIER.png"
+cat >"$PACKAGE_ROOT/usr/share/applications/$IDENTIFIER.desktop" <<DESKTOP
 [Desktop Entry]
 Type=Application
-Name=Kiroshi Rune Preview
+Name=Kiroshi
 Exec=$EXECUTABLE %u
-Icon=$EXECUTABLE
+Icon=$IDENTIFIER
 Categories=Development;
 MimeType=x-scheme-handler/kiroshi;
 DESKTOP
+cat >"$PACKAGE_ROOT/DEBIAN/control" <<CONTROL
+Package: kiroshi
+Version: $VERSION
+Architecture: amd64
+Maintainer: Kiroshi
+Section: devel
+Priority: optional
+Depends: libxkbcommon0
+Description: Kiroshi
+CONTROL
 
-curl --fail --silent --show-error --location --output "$APPIMAGETOOL" "$APPIMAGETOOL_URL"
-echo "$APPIMAGETOOL_SHA256  $APPIMAGETOOL" | sha256sum --check --quiet
-chmod +x "$APPIMAGETOOL"
-APPIMAGE_EXTRACT_AND_RUN=1 ARCH=x86_64 "$APPIMAGETOOL" --no-appstream "$APP_DIR" "$APPIMAGE"
-echo "$APPIMAGE"
+dpkg-deb --root-owner-group --build "$PACKAGE_ROOT" "$DEB"
+echo "$DEB"
