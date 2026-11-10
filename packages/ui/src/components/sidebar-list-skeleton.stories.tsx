@@ -18,40 +18,18 @@ import {
 const LOADED = {
 	rowHeight: 52,
 	rowGap: 2,
-	rowInlineStart: 6,
-	rowInlineEnd: 12,
-	avatar: 40,
-	avatarGap: 10,
-	nameCentre: 18,
-	previewCentre: 36,
-	previewLineTop: 28,
-	badgeGap: 6,
-	badgeHeight: 14,
-	pileGap: 8,
-	pileOfTwo: [24, 16],
-	pileAvatar: 14,
-	separatorHeight: 1,
-	separatorInset: 6,
-	separatorClearance: 8,
+	rowPadding: 6,
+	tile: 40,
+	tileRadius: 12,
+	tileGap: 10,
+	titleHeight: 12,
+	previewHeight: 10,
+	barGap: 8,
+	headerBar: [52, 12],
+	zoneGap: 12,
 }
 
 const boxOf = (element: Element) => element.getBoundingClientRect()
-
-const centreOf = (element: Element) =>
-	boxOf(element).top + boxOf(element).height / 2
-
-const rowPartsOf = (row: Element) => {
-	const [hexagon, title] = slotsIn(row, "skeleton")
-	const nameLine = title.parentElement?.parentElement as HTMLElement
-	const previewLine = nameLine.nextElementSibling as HTMLElement
-	return {
-		hexagon,
-		title,
-		badge: title.nextElementSibling,
-		stamp: nameLine.lastElementChild as HTMLElement,
-		preview: previewLine.firstElementChild as HTMLElement,
-	}
-}
 
 const PANEL_STYLE = {
 	"--sidebar-width": `${SIDEBAR_DEFAULT_WIDTH}px`,
@@ -65,7 +43,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The stand-in for the sidebar roster while it is on its way, drawn on the loaded roster: two pinned rows, the zone separator, then recent rows. Every row is a 40px hexagon beside a title, a time and a preview; agent rows add a title badge after the name, conversation rows an agent pile at the end of the preview. Rows sit 2px apart, the separator 8px from each zone, and bar widths turn over a cycle of six rows. It reads from the top and runs to the bottom of the list region, the last row cut by its edge. Only the list region waits: the panel header and the rail stay the loaded components.",
+					"The stand-in for the sidebar roster while it is on its way, drawn on the loaded roster: a section header bar over two pinned rows, then a second header over recent rows. Every row is a 40px rounded tile beside a title bar and a fainter preview bar 8px under it. Rows sit 2px apart, the two sections 12px apart, and bar widths turn over a cycle of six rows. It reads from the top and runs to the bottom of the list region, the last row cut by its edge. Only the list region waits: the panel header and the rail stay the loaded components.",
 			},
 		},
 	},
@@ -81,84 +59,38 @@ const meta = preview.meta({
 	play: async ({ canvasElement }) => {
 		await expectSkeletonFilledTo(canvasElement, "bottom")
 		const skeleton = slotIn(canvasElement, "sidebar-list-skeleton")
-		const pinnedRows = Array.from(
-			slotIn(skeleton, "sidebar-list-skeleton-pinned").children,
-		)
-		const separator = slotIn(skeleton, "roster-zone-separator")
+		const headers = slotsIn(skeleton, "sidebar-list-skeleton-header")
+		const rows = slotsIn(skeleton, "sidebar-list-skeleton-row")
 		const recentRows = slotsIn(skeleton, "list-skeleton-row")
-		const [agentRow, conversationRow] = recentRows
 
 		await expect(skeleton).toHaveAttribute("aria-hidden", "true")
-		await expect(pinnedRows).toHaveLength(2)
-		await expect(boxOf(pinnedRows[1]).top - boxOf(pinnedRows[0]).bottom).toBe(
-			LOADED.rowGap,
+		await expect(headers).toHaveLength(2)
+		const headerBar = headers[0].firstElementChild as Element
+		await expect([boxOf(headerBar).width, boxOf(headerBar).height]).toEqual(
+			LOADED.headerBar,
 		)
-		await expect(boxOf(separator).height).toBe(LOADED.separatorHeight)
-		await expect(boxOf(separator).top - boxOf(pinnedRows[1]).bottom).toBe(
-			LOADED.separatorClearance,
+		await expect(boxOf(rows[1]).top - boxOf(rows[0]).bottom).toBe(LOADED.rowGap)
+		await expect(boxOf(headers[1]).top - boxOf(rows[1]).bottom).toBe(
+			LOADED.zoneGap,
 		)
-		await expect(boxOf(recentRows[0]).top - boxOf(separator).bottom).toBe(
-			LOADED.separatorClearance,
-		)
-		await expect(boxOf(separator).left - boxOf(skeleton).left).toBe(
-			LOADED.separatorInset,
-		)
-		await expect(boxOf(skeleton).right - boxOf(separator).right).toBe(
-			LOADED.separatorInset,
-		)
-		await expect(boxOf(recentRows[1]).top - boxOf(recentRows[0]).bottom).toBe(
-			LOADED.rowGap,
+		await expect(boxOf(recentRows[0]).top).toBeGreaterThan(
+			boxOf(headers[1]).bottom,
 		)
 
-		for (const row of [...pinnedRows, ...recentRows.slice(0, 2)]) {
-			const { hexagon, title, stamp, preview } = rowPartsOf(row)
+		for (const row of rows.slice(0, 4)) {
+			const [tile, column] = Array.from(row.children)
+			const [title, preview] = Array.from(column.children)
 			await expect(boxOf(row).height).toBe(LOADED.rowHeight)
-			await expect(boxOf(hexagon).width).toBe(LOADED.avatar)
-			await expect(boxOf(hexagon).left - boxOf(row).left).toBe(
-				LOADED.rowInlineStart,
+			await expect(boxOf(tile).width).toBe(LOADED.tile)
+			await expect(getComputedStyle(tile).borderTopLeftRadius).toBe(
+				`${LOADED.tileRadius}px`,
 			)
-			await expect(boxOf(title).left - boxOf(hexagon).right).toBe(
-				LOADED.avatarGap,
-			)
-			await expect(centreOf(title) - boxOf(row).top).toBe(LOADED.nameCentre)
-			await expect(centreOf(stamp) - boxOf(row).top).toBe(LOADED.nameCentre)
-			await expect(boxOf(row).right - boxOf(stamp).right).toBe(
-				LOADED.rowInlineEnd,
-			)
-			await expect(boxOf(preview).left).toBe(boxOf(title).left)
-			await expect(centreOf(preview) - boxOf(row).top).toBe(
-				LOADED.previewCentre,
-			)
+			await expect(boxOf(tile).left - boxOf(row).left).toBe(LOADED.rowPadding)
+			await expect(boxOf(title).left - boxOf(tile).right).toBe(LOADED.tileGap)
+			await expect(boxOf(title).height).toBe(LOADED.titleHeight)
+			await expect(boxOf(preview).height).toBe(LOADED.previewHeight)
+			await expect(boxOf(preview).top - boxOf(title).bottom).toBe(LOADED.barGap)
 		}
-
-		const { title: agentTitle, badge } = rowPartsOf(agentRow)
-		await expect(boxOf(badge as Element).left - boxOf(agentTitle).right).toBe(
-			LOADED.badgeGap,
-		)
-		await expect(boxOf(badge as Element).height).toBe(LOADED.badgeHeight)
-		await expect(getComputedStyle(badge as Element).borderRadius).not.toBe(
-			"0px",
-		)
-		await expect(rowPartsOf(conversationRow).badge).toBeNull()
-		await expect(slotsIn(agentRow, "skeleton-agent-pile")).toHaveLength(0)
-
-		const pile = slotIn(conversationRow, "skeleton-agent-pile")
-		const { preview } = rowPartsOf(conversationRow)
-		await expect([boxOf(pile).width, boxOf(pile).height]).toEqual(
-			LOADED.pileOfTwo,
-		)
-		await expect(boxOf(conversationRow).right - boxOf(pile).right).toBe(
-			LOADED.rowInlineEnd,
-		)
-		await expect(boxOf(pile).top - boxOf(conversationRow).top).toBe(
-			LOADED.previewLineTop,
-		)
-		await expect(
-			boxOf(pile).left - boxOf(preview).right,
-		).toBeGreaterThanOrEqual(LOADED.pileGap)
-		await expect(
-			slotsIn(pile, "skeleton").map((hexagon) => boxOf(hexagon).width),
-		).toEqual([LOADED.pileAvatar, LOADED.pileAvatar])
 
 		const rowsAtFullHeight = recentRows.length
 		const panel = canvasElement.querySelector<HTMLElement>(
@@ -187,7 +119,7 @@ export const Light = meta.story({
 		docs: {
 			description: {
 				story:
-					"The list in the sidebar at its default width, light theme. Check that two pinned rows sit above the separator, that badges follow agent names and piles end conversation previews, that no two neighbours share their bar widths, and that the last row is cut by the bottom edge. Pick `Dark` for the dark theme.",
+					"The list in the sidebar at its default width, light theme. Check that each section header bar sits above its rows, that no two neighbours share their bar widths, and that the last row is cut by the bottom edge. Pick `Dark` for the dark theme.",
 			},
 		},
 	},
@@ -199,7 +131,7 @@ export const Dark = meta.story({
 		docs: {
 			description: {
 				story:
-					"The same list in the dark theme. Check that the solid title bar and hexagons stay apart from the faint time, preview and badge bars, and that the separator stays visible against the dark sidebar. Pick `Light` for the light theme.",
+					"The same list in the dark theme. Check that the title bars and tiles stay apart from the fainter preview bars against the dark sidebar. Pick `Light` for the light theme.",
 			},
 		},
 	},

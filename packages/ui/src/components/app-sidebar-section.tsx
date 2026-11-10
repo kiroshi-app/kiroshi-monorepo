@@ -37,10 +37,10 @@ const SECTION_CARD_OPEN =
 	"before:bg-sidebar-accent/50 group-data-[landing]/roster-drop:before:bg-sidebar-accent"
 
 const SECTION_LABEL =
-	"mb-0 h-auto px-0 font-semibold text-sidebar-foreground text-xs normal-case tracking-normal"
+	"mb-0 h-auto px-0 font-medium text-muted-foreground text-xs leading-4 normal-case tracking-normal"
 
 const SECTION_TRIGGER =
-	"flex w-full min-w-0 touch-none select-none items-center gap-1.5 rounded-xl px-[10.5px] py-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+	"flex w-full min-w-0 touch-none select-none items-center gap-1.5 rounded-md p-1.5 text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
 
 const SECTION_NAME = "min-w-0 truncate"
 
@@ -68,7 +68,25 @@ const FOLD_CHEVRON =
 	"size-3.5 shrink-0 text-foreground/50 transition-transform duration-150 ease-out motion-reduce:transition-none"
 
 const SECTION_FIELD =
-	"w-full min-w-0 border-none bg-transparent px-[10.5px] py-2.5 text-sidebar-foreground text-xs outline-none"
+	"w-full min-w-0 border-none bg-transparent p-1.5 text-sidebar-foreground text-xs leading-4 outline-none"
+
+const ZONE = "flex flex-col gap-0.5"
+
+const ZONE_HEADER = "p-1.5 font-medium text-muted-foreground text-xs leading-4"
+
+interface RosterZoneProps {
+	label: string
+	children: ReactNode
+}
+
+const RosterZone = ({ label, children }: RosterZoneProps) => (
+	<section className={ZONE} data-slot="roster-zone">
+		<h2 className={ZONE_HEADER} data-slot="roster-zone-header">
+			{label}
+		</h2>
+		{children}
+	</section>
+)
 
 interface SectionLabelProps {
 	slotId?: string
@@ -303,6 +321,7 @@ const FoldSection = ({ name, children }: FoldSectionProps) => {
 export {
 	FoldSection,
 	RosterSection,
+	RosterZone,
 	SECTION_GROUP,
 	SectionLabel,
 	SectionNameField,

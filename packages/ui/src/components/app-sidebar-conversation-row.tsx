@@ -9,13 +9,13 @@ import {
 	workingBotOf,
 } from "@workspace/ui/components/app-sidebar-model"
 import {
-	missionStripsOf,
 	type RosterRowSlot,
 	rosterRowSlotOf,
 } from "@workspace/ui/components/app-sidebar-roster-parts"
 import { ConversationBotPile } from "@workspace/ui/components/conversation-bot-pile"
 import { ConversationSubjectIcon } from "@workspace/ui/components/conversation-subject-icon"
 import { Icons } from "@workspace/ui/components/icons"
+import { MissionCapsuleList } from "@workspace/ui/components/mission-capsule"
 import {
 	PinGroup,
 	type RosterPinActions,
@@ -34,6 +34,9 @@ import { SidebarMenuItem } from "@workspace/ui/components/ui/sidebar"
 import { dropArea, type Lifter } from "@workspace/ui/hooks/use-roster-lift"
 import { STILL_UNDER_REDUCED_MOTION } from "@workspace/ui/lib/reduced-motion"
 
+const MISSION_SURFACE =
+	"relative flex flex-col gap-1 rounded-lg p-1.5 hover:bg-sidebar-accent active:bg-sidebar-accent has-[[data-active]]:bg-sidebar-accent data-popup-open:bg-sidebar-accent/70 group-data-[collapsible=icon]:p-0"
+
 interface ConversationRosterRowProps extends RosterRowSlot, RosterPinActions {
 	conversation: AppSidebarConversation
 	isSelected: boolean
@@ -44,6 +47,7 @@ interface ConversationRosterRowProps extends RosterRowSlot, RosterPinActions {
 	onDelete?: (id: string) => void
 	onMoveToSection?: (id: string, sectionId: string | null) => void
 	onCreateSectionFor?: (id: string) => void
+	onOpenMission?: (missionId: string) => void
 	lift: Lifter
 }
 
@@ -66,8 +70,10 @@ const ConversationRosterRow = ({
 	onDelete,
 	onMoveToSection,
 	onCreateSectionFor,
+	onOpenMission,
 }: ConversationRosterRowProps) => {
 	const { t } = useTranslation("bots")
+	const hasMissions = Boolean(conversation.missions?.length)
 
 	return (
 		<SidebarMenuItem
@@ -83,11 +89,14 @@ const ConversationRosterRow = ({
 			ref={(node) => keepFocus?.(conversation.id, node)}
 		>
 			<ContextMenu>
-				<ContextMenuTrigger>
+				<ContextMenuTrigger
+					className={hasMissions ? MISSION_SURFACE : undefined}
+				>
 					<SidebarListRow
 						{...lift.handlersFor(conversation.id)}
 						isLiftable
 						badge={badgeOf(conversation)}
+						geometry={hasMissions ? "surfaced" : "roster"}
 						isActive={isSelected}
 						isMiddleClickSelectable
 						isWorking={Boolean(workingBotOf(conversation))}
@@ -107,13 +116,16 @@ const ConversationRosterRow = ({
 						previewTrailing={
 							<ConversationBotPile bots={heldBotsOf(conversation)} />
 						}
-						strips={missionStripsOf(conversation.missions)}
 						isTimestampDestructive={conversation.isNotSent}
 						timestamp={
 							conversation.isNotSent
 								? t("roster.conversation.notSent")
 								: (conversation.timestamp ?? "")
 						}
+					/>
+					<MissionCapsuleList
+						missions={conversation.missions}
+						onOpen={onOpenMission}
 					/>
 				</ContextMenuTrigger>
 				<ContextMenuContent

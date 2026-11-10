@@ -27,6 +27,7 @@ const bots = {
 				failed: "bloquée",
 				ready: "prête à fusionner",
 				working: "en cours",
+				waiting_agent: "en attente d’un agent",
 			},
 			unavailable: {
 				title: "Impossible de charger les missions",
@@ -43,6 +44,7 @@ const bots = {
 			lastSpace:
 				"Un agent reste dans au moins un espace. Pour retirer un agent de son dernier espace, supprimez l’agent.",
 		},
+		pinned: "Épinglées",
 		pin: "Épingler",
 		pinDrop: "Déposer ici pour épingler",
 		unpin: "Détacher",

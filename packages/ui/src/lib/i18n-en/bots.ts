@@ -35,6 +35,7 @@ const bots = {
 				failed: "blocked",
 				ready: "ready to merge",
 				working: "working",
+				waiting_agent: "waiting on an agent",
 			},
 			unavailable: {
 				title: "Couldn’t load missions",
@@ -52,6 +53,7 @@ const bots = {
 				"An agent stays in at least one space. To remove an agent from its last space, delete the agent.",
 		},
 		pin: "Pin",
+		pinned: "Pinned",
 		pinDrop: "Drop here to pin",
 		unpin: "Unpin",
 		moved: "{{name}} moved to position {{position}} of {{count}}",

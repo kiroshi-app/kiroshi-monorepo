@@ -1966,7 +1966,7 @@ export const MissionStripWithChatBadge = meta.story({
 		docs: {
 			description: {
 				story:
-					"A companion whose mission waits on the reader and whose conversation is asking for them too, which is the one case where the two marks of the row meet. Check both are drawn and that they stack: the chat dot at the trailing edge of the preview line, the mission dot at the trailing edge of the strip below it, their trailing edges 2px apart, so they read as one column down the row rather than as two. They carry the same warning colour here, measured against `--warning` on both, so colour and column are exactly what a reader cannot tell them apart by: the line each one sits on is, the preview line answering what the conversation wants and the strip answering what the work is doing. Check the strip hangs below the badge instead of colliding with it. Pick `Badges` for the dot alone, `MissionStripStates` for the strip alone.",
+					"A companion whose mission waits on the reader and whose conversation is asking for them too, which is the one case where the two marks of the row meet. Check both are drawn and that they stack: the chat dot at the trailing edge of the preview line, the mission dot at the trailing edge of the strip below it, the mission dot held 8px inside the chat dot by the strip's own inline padding. They carry the same warning colour here, measured against `--warning` on both, so colour and column are exactly what a reader cannot tell them apart by: the line each one sits on is, the preview line answering what the conversation wants and the strip answering what the work is doing. Check the strip hangs below the badge instead of colliding with it. Pick `Badges` for the dot alone, `MissionStripStates` for the strip alone.",
 			},
 		},
 	},
@@ -1987,7 +1987,7 @@ export const MissionStripWithChatBadge = meta.story({
 				chatDot.getBoundingClientRect().right -
 					missionDot.getBoundingClientRect().right,
 			),
-		).toBe(2)
+		).toBe(8)
 		await expect(
 			[chatDot, missionDot].map((dot) => getComputedStyle(dot).backgroundColor),
 		).toEqual([warning, warning])
@@ -4448,7 +4448,7 @@ export const EmptySection = meta.story({
 		docs: {
 			description: {
 				story:
-					"A section nothing has been filed into. It is drawn, not hidden: the header stays where the host put it and a dashed zone under it stands in for the rows that are not there yet. The zone wears a faded glyph of its own, drawn from the section\u2019s name so it is the same glyph every time that section is empty. It is at rest and never animates, since a placeholder that moves competes with the companions that are actually working. It is decoration and is kept out of the accessibility tree; the invitation beside it is what a reader hears. Check it is drawn under the Archive header, that no row is drawn with it, and that it goes with the headers on the icon rail, where there is nothing to drop onto.",
+					"A section nothing has been filed into. It is drawn, not hidden: the header stays where the host put it and a dashed zone under it stands in for the rows that are not there yet. The zone is the invitation alone, in a dashed outline, at rest. Check it is drawn under the Archive header, that no row is drawn with it, and that it goes with the headers on the icon rail, where there is nothing to drop onto.",
 			},
 		},
 	},
@@ -4457,11 +4457,9 @@ export const EmptySection = meta.story({
 		await expect(invitation).toBeVisible()
 
 		const zone = slotIn(canvasElement, "roster-section-drop")
-		const placeholder = companionGlyphOf(zone)
-		await expect(placeholder.closest("[aria-hidden='true']")).not.toBeNull()
-		await expect(placeholder.dataset.state).toBe("idle")
+		await expect(getComputedStyle(zone).borderTopStyle).toBe("dashed")
 		await expect(getComputedStyle(zone).color).toBe(
-			tokenColor(canvasElement, "--muted-foreground"),
+			tokenColor(canvasElement, "--faint-foreground"),
 		)
 		await expect(
 			sectionHeader(canvasElement, "Archive").getBoundingClientRect().bottom,
@@ -4544,12 +4542,10 @@ export const SectionCard = meta.story({
 		).toBeNull()
 
 		const heading = typeOf(sectionHeader(canvasElement, "Research"))
-		const row = typeOf(
-			slotIn(rowFor(canvasElement, "Beacon"), "roster-row-name"),
-		)
-		await expect(Number(heading.fontWeight)).toBeGreaterThan(
-			Number(row.fontWeight),
-		)
+		await expect(Number(heading.fontWeight)).toBe(500)
+		await expect(
+			getComputedStyle(sectionHeader(canvasElement, "Research")).color,
+		).toBe(tokenColor(canvasElement, "--muted-foreground"))
 
 		const name = sectionHeadersIn(canvasElement)[0].getBoundingClientRect()
 		const chevron = chevronOf(canvasElement, "Research").getBoundingClientRect()
@@ -5062,7 +5058,11 @@ export const DragBotIntoAnEmptyPinnedZone = meta.story({
 			dropAreaFor(canvasElement, PINNED_ZONE_LANDING),
 		)
 		await expect(pinned).toBeVisible()
-		await expect(slotIn(canvasElement, "roster-zone-separator")).toBeVisible()
+		await expect(
+			slotsIn(canvasElement, "roster-zone-header").map(
+				(header) => header.textContent,
+			),
+		).toEqual(["Pinned", "Conversations"])
 
 		moveOver(handle, pinned)
 		await waitFor(async () => {
@@ -5938,11 +5938,11 @@ export const ConversationMissionStrips = meta.story({
 			"Transport migration",
 			"Atlas",
 		])
-		await expect(rows.map(stripStatesIn)).toEqual([
-			["waiting", "working"],
-			[],
-			[],
-		])
+		await expect(
+			rows.map((row) =>
+				slotsIn(row, "mission-capsule").map((capsule) => capsule.dataset.state),
+			),
+		).toEqual([["waiting", "working"], [], []])
 		await expect(rowHeights(rows)).toEqual([
 			heightForStrips(2),
 			heightForStrips(0),

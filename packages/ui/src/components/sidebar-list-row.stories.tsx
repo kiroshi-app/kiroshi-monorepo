@@ -29,7 +29,7 @@ import {
 const BOX_ON_B1E22DA1 = {
 	open: {
 		height: 52,
-		padding: "6px 12px 6px 6px",
+		padding: "6px 6px 6px 6px",
 		gap: "10px",
 		radius: "10px",
 		border: "0px",

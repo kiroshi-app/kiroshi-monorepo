@@ -2,11 +2,10 @@ import { expect } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { slotIn } from "@workspace/storybook/story-utils"
-import { ATLAS, BEACON } from "@workspace/ui/components/app-sidebar.fixtures"
+import { BEACON } from "@workspace/ui/components/app-sidebar.fixtures"
 import {
 	BotRowAvatar,
 	RosterDropArea,
-	RosterZoneSeparator,
 	SectionDropZone,
 } from "@workspace/ui/components/app-sidebar-roster-parts"
 
@@ -25,21 +24,8 @@ export const WorkingBotAvatar = meta.story({
 	},
 })
 
-export const ZoneSeparator = meta.story({
-	render: () => (
-		<div className="flex w-48 flex-col">
-			<RosterZoneSeparator />
-		</div>
-	),
-	play: async ({ canvasElement }) => {
-		await expect(
-			slotIn(canvasElement, "roster-zone-separator"),
-		).toHaveAttribute("aria-hidden", "true")
-	},
-})
-
 export const EmptySectionDrop = meta.story({
-	render: () => <SectionDropZone name={ATLAS.name} />,
+	render: () => <SectionDropZone />,
 	play: async ({ canvasElement }) => {
 		await expect(slotIn(canvasElement, "roster-section-drop")).toBeVisible()
 	},
