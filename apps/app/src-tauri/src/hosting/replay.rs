@@ -342,7 +342,11 @@ mod tests {
 					Addressee::Everyone => parsed(&stamped.to_everyone()),
 					_ => parsed(&stamped.to_account(account_id)),
 				};
-				frame["seqs"][account_id].as_u64().or(frame["seq"].as_u64()).expect("a seq")
+				frame["seqs"][account_id]
+					.as_u64()
+					.or(frame["rest"].as_u64())
+					.or(frame["seq"].as_u64())
+					.expect("a seq")
 			})
 			.collect()
 	}
@@ -381,7 +385,7 @@ mod tests {
 	}
 
 	#[test]
-	fn a_frame_to_everyone_carries_the_seq_of_each_named_account_beside_the_seq_of_the_rest() {
+	fn a_frame_to_everyone_carries_the_seq_of_each_named_account_and_of_the_rest_without_seq() {
 		let ring = a_ring_addressed(&[Addressee::Everyone, to("owner"), Addressee::Everyone]);
 
 		let unsent = ring.followed(&sent_up_to(&ring, 2)).expect("the same epoch");
@@ -390,7 +394,7 @@ mod tests {
 			unsent.iter().map(|stamped| parsed(&stamped.to_everyone())).collect();
 		assert_eq!(
 			frames,
-			vec![json!({ "event": {}, "epoch": ring.epoch, "seq": 2, "seqs": { "owner": 3 } })]
+			vec![json!({ "event": {}, "epoch": ring.epoch, "rest": 2, "seqs": { "owner": 3 } })]
 		);
 	}
 

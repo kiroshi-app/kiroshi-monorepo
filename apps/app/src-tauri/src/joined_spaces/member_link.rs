@@ -190,7 +190,7 @@ impl MemberLink {
 		(resuming, frame)
 	}
 
-	pub(super) fn subscribed(&self) -> Option<broadcast::Receiver<Frame>> {
+	pub(crate) fn subscribed(&self) -> Option<broadcast::Receiver<Frame>> {
 		self.events().as_ref().map(broadcast::Sender::subscribe)
 	}
 
@@ -223,6 +223,7 @@ impl MemberLink {
 			let seq = frame
 				.get("seqs")
 				.and_then(|seqs| seqs.get(&self.account_id))
+				.or_else(|| frame.get("rest"))
 				.or_else(|| frame.get("seq"))
 				.and_then(Value::as_u64);
 			let (Some(epoch), Some(seq)) = (epoch, seq) else {
@@ -587,12 +588,12 @@ mod tests {
 	}
 
 	#[test]
-	fn a_frame_to_everyone_is_sequenced_on_the_seq_its_seqs_give_this_account_or_else_on_seq() {
+	fn a_frame_to_everyone_is_sequenced_on_its_seqs_at_this_account_or_else_on_rest() {
 		let link = an_open_link_applied_to("e-1", 1);
 		let mut heard = link.subscribed().expect("an open session");
-		let to_everyone = |payload: u64, seq: u64, seqs: Value| {
+		let to_everyone = |payload: u64, rest: u64, seqs: Value| {
 			let event = json!({ "event": "a://b", "payload": payload });
-			json!({ "event": event, "epoch": "e-1", "seq": seq, "seqs": seqs }).to_string()
+			json!({ "event": event, "epoch": "e-1", "rest": rest, "seqs": seqs }).to_string()
 		};
 
 		let in_step = [

@@ -1317,7 +1317,9 @@ fn unstamped(mut frame: Value) -> Value {
 	if let Some(fields) = frame.as_object_mut().filter(|fields| fields.contains_key("event")) {
 		let epoch = fields.remove("epoch");
 		let seq = fields.remove("seq");
+		let rest = fields.remove("rest");
 		fields.remove("seqs");
+		let seq = seq.or(rest);
 		assert!(
 			epoch.as_ref().is_some_and(Value::is_string) && seq.as_ref().is_some_and(Value::is_u64),
 			"an event frame carries its epoch {epoch:?} and seq {seq:?}"
@@ -9569,17 +9571,7 @@ fn each_member_hears_the_agent_rooms_without_the_main_conversation_of_another_pe
 #[test]
 fn a_member_follows_the_events_of_the_main_conversation_of_another_person_without_a_resume() {
 	run(async {
-		let mut guest = Guest::of_two_spaces("seq-of-each-account").await;
-		let bea = SealingMember::new(BEA);
-		guest.harness.rostered(PERSONAL, &bea).await;
-		let mains = mains_of_the_host_and_bea(&guest).await;
-
-		for (n, (event, payload)) in naming_the_main(&mains.of_bea).into_iter().enumerate() {
-			numbered(&guest.harness, n);
-			events::emit(guest.harness.app.handle(), Event::untyped(event), payload)
-				.expect("emitted");
-		}
-		guest.events_until_the_marker().await;
+		let (guest, bea, mains) = events_mixed_into_the_main_of_bea("seq-of-each-account").await;
 
 		let link_fed = |device: &SealingMember, account_id: &str| {
 			let link = MemberLink::new(INSTANCE, "Studio".to_owned(), account_id.to_owned());
@@ -9601,6 +9593,54 @@ fn a_member_follows_the_events_of_the_main_conversation_of_another_person_withou
 			);
 		}
 	});
+}
+
+#[test]
+fn a_member_link_of_before_per_account_seqs_hears_every_frame_to_everyone_naming_its_account() {
+	run(async {
+		let (guest, bea, _) = events_mixed_into_the_main_of_bea("seq-of-an-older-member").await;
+		let frames = stamped_opened_by(&bea, &guest.member);
+		let naming_bea: Vec<&Value> =
+			frames.iter().filter(|frame| frame["seqs"][BEA].is_u64()).collect();
+
+		let older_link = MemberLink::new(INSTANCE, "Studio".to_owned(), BEA.to_owned());
+		let mut heard = older_link.subscribed().expect("an open link");
+		for frame in &frames {
+			older_link.received(&as_read_before_per_account_seqs(frame).to_string());
+		}
+		let mut delivered = Vec::new();
+		while let Ok(event) = heard.try_recv() {
+			delivered.push(serde_json::from_str::<Value>(&event).expect("a json event"));
+		}
+
+		assert!(!naming_bea.is_empty());
+		for frame in naming_bea {
+			assert_eq!(frame.get("seq"), None, "{frame}");
+			assert!(delivered.contains(&frame["event"]), "{frame}");
+		}
+	});
+}
+
+async fn events_mixed_into_the_main_of_bea(name: &str) -> (Guest, SealingMember, MainsOfTwoPeople) {
+	let mut guest = Guest::of_two_spaces(name).await;
+	let bea = SealingMember::new(BEA);
+	guest.harness.rostered(PERSONAL, &bea).await;
+	let mains = mains_of_the_host_and_bea(&guest).await;
+	for (n, (event, payload)) in naming_the_main(&mains.of_bea).into_iter().enumerate() {
+		numbered(&guest.harness, n);
+		events::emit(guest.harness.app.handle(), Event::untyped(event), payload).expect("emitted");
+	}
+	guest.events_until_the_marker().await;
+	(guest, bea, mains)
+}
+
+fn as_read_before_per_account_seqs(frame: &Value) -> Value {
+	let mut frame = frame.clone();
+	if let Some(fields) = frame.as_object_mut() {
+		fields.remove("seqs");
+		fields.remove("rest");
+	}
+	frame
 }
 
 fn owned_by(account_id: &str) -> ChatOwner {

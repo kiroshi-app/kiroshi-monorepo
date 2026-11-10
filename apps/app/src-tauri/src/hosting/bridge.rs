@@ -208,16 +208,16 @@ pub(super) fn forwarded(frame: &str, epoch: &str, seq: u64) -> String {
 pub(super) fn forwarded_to_everyone(
 	frame: &str,
 	epoch: &str,
-	seq: u64,
+	rest: u64,
 	seqs: &BTreeMap<String, u64>,
 ) -> String {
 	if seqs.is_empty() {
-		return forwarded(frame, epoch, seq);
+		return forwarded(frame, epoch, rest);
 	}
 	let seqs: Map<String, Value> =
 		seqs.iter().map(|(account_id, seq)| (account_id.clone(), Value::from(*seq))).collect();
 	let seqs = Value::Object(seqs);
-	format!("{{\"event\":{frame},\"epoch\":\"{epoch}\",\"seq\":{seq},\"seqs\":{seqs}}}")
+	format!("{{\"event\":{frame},\"epoch\":\"{epoch}\",\"rest\":{rest},\"seqs\":{seqs}}}")
 }
 
 pub(super) fn replayed(frame: &str, epoch: &str, seq: u64, token: &str) -> String {

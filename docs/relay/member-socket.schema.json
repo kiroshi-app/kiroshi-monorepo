@@ -3114,8 +3114,13 @@
           ],
           "type": "object"
         },
+        "rest": {
+          "description": "Present only beside seqs: the seq of the frame for every account seqs does not name, in place of seq.",
+          "minimum": 1,
+          "type": "integer"
+        },
         "seq": {
-          "description": "The place of the frame on the sequence of the account it reaches: 1 for the first frame of the epoch that reaches the account, one more for each next one. A frame to everyone carries here the seq of every account seqs does not name.",
+          "description": "The place of the frame on the sequence of the account it reaches: 1 for the first frame of the epoch that reaches the account, one more for each next one. Absent whenever seqs is present.",
           "minimum": 1,
           "type": "integer"
         },
