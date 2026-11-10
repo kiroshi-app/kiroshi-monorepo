@@ -3,13 +3,18 @@ import type {
 	BotMcpConnectionState,
 	BotMcpServerItem,
 } from "@workspace/ui/components/bot-settings"
-import type { McpConnectionSection } from "@workspace/ui/components/bot-settings-dialog/mcp-connection"
+import {
+	type McpConnectionSection,
+	readMcpConnectionReason,
+} from "@workspace/ui/components/bot-settings-dialog/mcp-connection"
 import { readMcpServerLaunch } from "@workspace/ui/components/bot-settings-dialog/mcp-server-launch"
+import { i18n } from "@workspace/ui/lib/i18n"
 
 import type { ApplicationRow } from "./connection-port"
 import { toConnectionReason } from "./connection-reason"
 import type { ConnectionOutcome, Connections } from "./use-connections"
 
+import { failureReporterIn } from "../failure-report"
 import type { BotMcpServer } from "../conversations/store-contract"
 
 export const APPLICATIONS_TAB = "mcp"
@@ -79,19 +84,80 @@ const isLanded = (
 	return landing === "connected" ? isConnected : !isConnected
 }
 
-const settling =
-	(onSettled?: (name: string) => void) =>
-	(
-		name: string,
-		landing: ConnectionLanding,
+const failedRefusal = () =>
+	new Error(i18n.t("bots:applications.connection.state.failed"))
+
+export const connectRefusalOf = (
+	{ failure, rows }: ConnectionOutcome,
+	name: string,
+): unknown => {
+	if (failure?.command === "connect" && failure.name === name) {
+		return failure.reason ?? failedRefusal()
+	}
+	const row = rows.find((held) => held.name === name)
+	if (!row) {
+		return failedRefusal()
+	}
+	if (row.status !== "needsAuthorization" && row.status !== "failed") {
+		return null
+	}
+	return new Error(
+		row.reason ?? i18n.t(`bots:applications.connection.state.${row.status}`),
+	)
+}
+
+const reportFailure = failureReporterIn("connection-settings")
+
+const refusalSentenceOf = (refusal: unknown) =>
+	refusal instanceof Error
+		? refusal.message
+		: (readMcpConnectionReason(
+				i18n.getFixedT(null, "bots"),
+				toConnectionReason(refusal),
+			) ?? undefined)
+
+const raiseConnectRefusal = (title: string, refusal: unknown) => {
+	void reportFailure(
+		{
+			title: i18n.t("bots:applications.connection.failed", { name: title }),
+			description: refusalSentenceOf(refusal),
+		},
+		{ command: "connect" },
+	)
+}
+
+type ConnectingApplication = {
+	name: string
+	title: string
+}
+
+const settling = (onSettled?: (name: string) => void) => ({
+	connected: (
+		{ name, title }: ConnectingApplication,
 		run: Promise<ConnectionOutcome>,
 	) => {
-		void run.then(({ rows }) => {
-			if (isLanded(rows, name, landing)) {
+		void run.then((outcome) => {
+			if (outcome.isCancelled) {
+				return
+			}
+			const refusal = connectRefusalOf(outcome, name)
+			if (refusal) {
+				raiseConnectRefusal(title, refusal)
+				return
+			}
+			if (isLanded(outcome.rows, name, "connected")) {
 				onSettled?.(name)
 			}
 		})
-	}
+	},
+	disconnected: (name: string, run: Promise<ConnectionOutcome>) => {
+		void run.then(({ rows }) => {
+			if (isLanded(rows, name, "disconnected")) {
+				onSettled?.(name)
+			}
+		})
+	},
+})
 
 type ConnectionRuns = ReturnType<typeof settling>
 
@@ -111,15 +177,14 @@ const sectionOf = (
 		reason: connection.reason,
 		host: hostOf(url),
 		onConnect: () => {
-			settle(server.name, "connected", connections.connect(server.name, url))
+			settle.connected(
+				{ name: server.name, title: server.title ?? server.name },
+				connections.connect(server.name, url),
+			)
 		},
 		onCancel: connections.cancel,
 		onDisconnect: () => {
-			settle(
-				server.name,
-				"disconnected",
-				connections.disconnect(server.name, url),
-			)
+			settle.disconnected(server.name, connections.disconnect(server.name, url))
 		},
 	}
 }
@@ -145,9 +210,8 @@ export const toConnectionSettings = ({
 			}
 		}),
 		onServerConnect: (server) => {
-			settle(
-				server.name,
-				"connected",
+			settle.connected(
+				{ name: server.name, title: server.displayName ?? server.name },
 				connections.connect(server.name, urlOf(server.config)),
 			)
 		},

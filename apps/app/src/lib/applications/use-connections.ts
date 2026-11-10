@@ -22,6 +22,7 @@ export type ConnectionFailure = {
 export type ConnectionOutcome = {
 	rows: ApplicationRow[]
 	failure: ConnectionFailure | null
+	isCancelled: boolean
 }
 
 export type Connections = {
@@ -48,7 +49,11 @@ type ConnectionRun = {
 
 const NO_ROWS: ApplicationRow[] = []
 
-const NO_OUTCOME: ConnectionOutcome = { rows: NO_ROWS, failure: null }
+const NO_OUTCOME: ConnectionOutcome = {
+	rows: NO_ROWS,
+	failure: null,
+	isCancelled: false,
+}
 
 const RENDERED_INLINE = { rendersErrorInline: true } as const
 
@@ -129,14 +134,18 @@ export const useConnections = (
 	const outcomeOf = async (
 		variables: ConnectionRun,
 	): Promise<ConnectionOutcome> => {
-		const failed = await run.mutateAsync(variables).then(
+		const refused = await run.mutateAsync(variables).then(
 			() => null,
-			(reason: unknown) => failureOf(variables, reason),
+			(reason: unknown) => ({ reason }),
 		)
 		const rows = queryClient.getQueryData<ApplicationRow[]>(
 			applicationQueryKeys.connectionsOf(variables.owner),
 		)
-		return { rows: rows ?? NO_ROWS, failure: failed }
+		return {
+			rows: rows ?? NO_ROWS,
+			failure: refused && failureOf(variables, refused.reason),
+			isCancelled: refused !== null && isCancellation(refused.reason),
+		}
 	}
 
 	const sendTo =

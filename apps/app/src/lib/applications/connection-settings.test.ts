@@ -6,11 +6,13 @@ import {
 	fireEvent,
 	render,
 	screen,
+	waitFor,
 	within,
 } from "@testing-library/react"
 import { createElement, useState } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
+import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
 import { SpaceSettingsDialog } from "@workspace/ui/components/space-settings-dialog"
 import "@workspace/ui/lib/i18n"
 
@@ -23,6 +25,13 @@ import { useConnections } from "./use-connections"
 
 import type { BotMcpServer, EnvOwner } from "../conversations/store-contract"
 import { createQueryTestWrapper } from "../query/query-test-wrapper"
+
+vi.mock("@workspace/ui/components/notice-surface", async (importOriginal) => ({
+	...(await importOriginal<
+		typeof import("@workspace/ui/components/notice-surface")
+	>()),
+	raiseFailureNotice: vi.fn(),
+}))
 
 const SPACE: EnvOwner = { kind: "space", id: "s-1" }
 
@@ -123,7 +132,23 @@ const connectionPort = (status: "needsAuthorization" | "connected") => {
 	return port
 }
 
+const raisedNotice = async (title: string, description: string | RegExp) => {
+	await waitFor(() => expect(raiseFailureNotice).toHaveBeenCalledOnce())
+	expect(raiseFailureNotice).toHaveBeenCalledWith(
+		expect.objectContaining({
+			title,
+			description: expect.stringMatching(description),
+			report: expect.objectContaining({
+				context: expect.objectContaining({
+					raisedIn: "connection-settings",
+				}),
+			}),
+		}),
+	)
+}
+
 beforeEach(() => {
+	vi.mocked(raiseFailureNotice).mockClear()
 	vi.spyOn(console, "error").mockImplementation(() => undefined)
 })
 
@@ -342,5 +367,74 @@ describe("space connections", () => {
 		expect(within(atlas).getByText("Couldn’t connect")).toBeTruthy()
 		expect(within(atlas).queryByText(/boom/)).toBeNull()
 		expect(within(atlas).queryByText(/sign-in/i)).toBeNull()
+	})
+
+	it("raises a notice naming the application when a row connect is refused", async () => {
+		const port = connectionPort("needsAuthorization")
+		port.refusals.connect = { kind: "transport" }
+		await mounted(port)
+
+		await press("Connect atlas")
+
+		await raisedNotice(
+			"Couldn’t connect atlas. Retry.",
+			/couldn’t reach the agent/i,
+		)
+		expect(within(rowOf("atlas")).getByText("Couldn’t connect")).toBeTruthy()
+	})
+
+	it("raises a notice carrying the reason of a row that reads failed after a connect", async () => {
+		const port = connectionPort("needsAuthorization")
+		await mounted(port)
+
+		await press("Connect atlas")
+		port.rows.space = [{ name: "atlas", status: "failed", reason: "boom" }]
+		port.grant()
+		await settle()
+
+		await raisedNotice("Couldn’t connect atlas. Retry.", /^boom$/)
+	})
+
+	it("raises a notice saying the state of a row that still needs authorization after a connect", async () => {
+		const port = connectionPort("needsAuthorization")
+		const onSettled = vi.fn()
+		await mounted(port, onSettled)
+
+		await press("Connect atlas")
+		port.grant()
+		await settle()
+
+		await raisedNotice(
+			"Couldn’t connect atlas. Retry.",
+			/^Needs authorization$/,
+		)
+		expect(onSettled).not.toHaveBeenCalled()
+	})
+
+	it("raises no notice when the person cancels the connect", async () => {
+		const port = connectionPort("needsAuthorization")
+		await mounted(port)
+		await press("Connect atlas")
+		await press("Open atlas")
+
+		await press("Cancel")
+		await settle()
+
+		expect(screen.getByRole("button", { name: "Connect" })).toBeTruthy()
+		expect(raiseFailureNotice).not.toHaveBeenCalled()
+	})
+
+	it("raises no notice when the connect lands connected", async () => {
+		const port = connectionPort("needsAuthorization")
+		const onSettled = vi.fn()
+		await mounted(port, onSettled)
+
+		await press("Connect atlas")
+		port.rows.space = [{ name: "atlas", status: "connected" }]
+		port.grant()
+		await settle()
+
+		expect(onSettled).toHaveBeenCalledWith("atlas")
+		expect(raiseFailureNotice).not.toHaveBeenCalled()
 	})
 })
