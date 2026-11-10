@@ -154,7 +154,10 @@ fn identity<S>(cx: &Context<S>, author: &Author, state: TurnState) -> (String, C
 	let (name, face) = match author {
 		Author::Agent(agent) if state == TurnState::Streaming => {
 			let motion = Motion::Running { activity: Activity::Writing, at_ms: 0.0 };
-			(agent.name.clone(), Face { name: &agent.name, hue: agent.hue, motion }.draw(AVATAR, t))
+			(
+				agent.name.clone(),
+				Face { name: &agent.name, hue: agent.hue, image: None, motion }.draw(AVATAR, t),
+			)
 		}
 		_ => face_and_name(cx, author, AVATAR),
 	};

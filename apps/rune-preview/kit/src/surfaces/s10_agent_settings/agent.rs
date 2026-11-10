@@ -72,7 +72,7 @@ impl Identity<'_> {
 		} else {
 			Motion::Still
 		};
-		Face { name: self.name, hue: self.hue, motion }.draw(size, t)
+		Face { name: self.name, hue: self.hue, image: None, motion }.draw(size, t)
 	}
 }
 

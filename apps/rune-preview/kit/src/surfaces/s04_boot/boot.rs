@@ -13,7 +13,8 @@ const NOTICE_WIDTH: f32 = SPACING * 96.0;
 pub fn boot_screen(t: &Tokens, language: Language, clock_ms: f64) -> El {
 	let status = common::boot::STATUS.text(language);
 	let thinking = Motion::Running { activity: Activity::Thinking, at_ms: clock_ms };
-	let mark = Face { name: BRAND_NAME, hue: None, motion: thinking }.draw(BOOT_MARK, t);
+	let mark =
+		Face { name: BRAND_NAME, hue: None, image: None, motion: thinking }.draw(BOOT_MARK, t);
 	let content = col().key("app-boot-screen").items_center().child(mark);
 	let content = if t.reduced_motion {
 		content

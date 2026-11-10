@@ -208,7 +208,12 @@ struct SoloAgent {
 
 impl SoloAgent {
 	fn face<'a>(&'a self, s: &App, conversation_id: &str) -> Face<'a> {
-		Face { name: &self.name, hue: self.hue, motion: s.motion(conversation_id, &self.id) }
+		Face {
+			name: &self.name,
+			hue: self.hue,
+			image: None,
+			motion: s.motion(conversation_id, &self.id),
+		}
 	}
 }
 

@@ -107,7 +107,8 @@ fn faces(t: &Tokens, working: &[&WorkingAgent]) -> El {
 				WorkState::Tool => Motion::Running { activity: Activity::Working, at_ms: 0.0 },
 				_ => Motion::Still,
 			};
-			Face { name: &agent.agent.name, hue: agent.agent.hue, motion }.draw(LINE, t)
+			Face { name: &agent.agent.name, hue: agent.agent.hue, image: None, motion }
+				.draw(LINE, t)
 		}));
 	let hidden = working.len() - shown;
 	if hidden > 0 {
