@@ -239,6 +239,7 @@ export {
 	missionStripsOf,
 	ROSTER_SLOT,
 	RosterDropArea,
+	type RosterDropAreaProps,
 	RosterLiftFrame,
 	type RosterMove,
 	RosterMoveAnnouncement,

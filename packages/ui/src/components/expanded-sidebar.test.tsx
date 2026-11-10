@@ -4,9 +4,11 @@ import { cleanup, render, screen } from "@testing-library/react"
 import type { ReactNode } from "react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
+import { STILL_LIFT } from "@workspace/ui/components/app-sidebar.fixtures"
 import {
 	ExpandedSidebar,
 	type ExpandedSidebarProps,
+	type ExpandedSidebarSection,
 } from "@workspace/ui/components/expanded-sidebar"
 import { NavigationSidebar } from "@workspace/ui/components/navigation-sidebar"
 import { SidebarProvider } from "@workspace/ui/components/ui/sidebar"
@@ -20,6 +22,20 @@ const ROWLESS_VALUES: [string, ReactNode][] = [
 	["false", false],
 	["an empty array", []],
 ]
+
+const sectionOf = (
+	id: string,
+	name: string,
+	rows: ReactNode,
+): ExpandedSidebarSection => ({
+	id,
+	name,
+	rows,
+	isOpen: true,
+	onOpenChange: vi.fn(),
+	lift: STILL_LIFT,
+	dropArea: { landing: id, isLanding: false },
+})
 
 const SWITCHER = { spaces: [], selectedSpaceId: "", onSelectSpace: vi.fn() }
 
@@ -61,19 +77,27 @@ describe("ExpandedSidebar list", () => {
 
 	it("renders the sections between Pinned and Conversations in order", () => {
 		renderSidebar({
-			sections: [
-				{ id: "a", name: "Clients", rows: ROW },
-				{ id: "b", name: "Press", rows: ROW },
-			],
+			sections: [sectionOf("a", "Clients", ROW), sectionOf("b", "Press", ROW)],
 		})
 		expect(headers()).toEqual(["Pinned", "Clients", "Press", "Conversations"])
+	})
+
+	it("adds no list around the slots the app passes", () => {
+		const { container } = renderSidebar({
+			conversations: <div data-slot="slot" />,
+			pinned: <div data-slot="slot" />,
+			sections: [sectionOf("a", "Clients", <div data-slot="slot" />)],
+		})
+		const slots = container.querySelectorAll('[data-slot="slot"]')
+		expect(slots).toHaveLength(3)
+		for (const held of slots) expect(held.closest("ul")).toBeNull()
 	})
 
 	it("shows only the empty copy when no list holds a row", () => {
 		renderSidebar({
 			conversations: [],
 			pinned: [],
-			sections: [{ id: "a", name: "Clients", rows: [] }],
+			sections: [sectionOf("a", "Clients", [])],
 		})
 		expect(headers()).toEqual([])
 		expect(screen.getByText("No agents yet")).toBeTruthy()
@@ -125,7 +149,7 @@ describe("NavigationSidebar", () => {
 					conversations={ROW}
 					listEnd={NEXT_PAGE}
 					pinned={ROW}
-					sections={[{ id: "a", name: "Clients", rows: ROW }]}
+					sections={[sectionOf("a", "Clients", ROW)]}
 					zones={[]}
 				/>
 			</SidebarProvider>,

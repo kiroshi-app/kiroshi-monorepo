@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { type ReactNode, useRef, useState } from "react"
 import { expect, fireEvent, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
@@ -11,6 +11,7 @@ import {
 	swipeOn,
 	wheelTrainOn,
 } from "@workspace/storybook/story-utils"
+import { pointerAt } from "@workspace/storybook/tab-drag-gesture"
 import type { AppSidebarConversation } from "@workspace/ui/components/app-sidebar"
 import {
 	ATLAS,
@@ -20,19 +21,46 @@ import {
 	STILL_LIFT,
 } from "@workspace/ui/components/app-sidebar.fixtures"
 import { ConversationRosterRow } from "@workspace/ui/components/app-sidebar-conversation-row"
+import type { AppSidebarSection } from "@workspace/ui/components/app-sidebar-model"
+import {
+	PINNED_ZONE,
+	SORTED,
+	SORTED_ZONE,
+} from "@workspace/ui/components/app-sidebar-pins"
+import {
+	emptySlotOf,
+	headSlotOf,
+	useRosterDrag,
+} from "@workspace/ui/components/app-sidebar-roster-drag"
+import { rosterEntriesOf } from "@workspace/ui/components/app-sidebar-roster-layout"
+import {
+	type RosterRowsContext,
+	recentMenuOf,
+	rosterMenuOf,
+} from "@workspace/ui/components/app-sidebar-roster-menu"
+import {
+	RosterDropArea,
+	RosterLiftFrame,
+} from "@workspace/ui/components/app-sidebar-roster-parts"
 import { AppTitleBar } from "@workspace/ui/components/app-title-bar"
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { ContentCard } from "@workspace/ui/components/content-card"
 import {
 	ExpandedSidebar,
 	type ExpandedSidebarProps,
+	type ExpandedSidebarSection,
 } from "@workspace/ui/components/expanded-sidebar"
 import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import type { Space } from "@workspace/ui/components/space"
 import type { SpaceAvatarState } from "@workspace/ui/components/space-avatar"
-import { SidebarMenuItem } from "@workspace/ui/components/ui/sidebar"
+import {
+	SidebarMenu,
+	SidebarMenuItem,
+} from "@workspace/ui/components/ui/sidebar"
 import { UpdateRow } from "@workspace/ui/components/update-badge"
 import { WorkspaceShellRoot } from "@workspace/ui/components/workspace-shell"
+import type { Lifter } from "@workspace/ui/hooks/use-roster-lift"
+import { mergeRefs } from "@workspace/ui/lib/utils"
 
 const KIROSHI: Space = {
 	id: "kiroshi",
@@ -87,17 +115,34 @@ const RECENT: AppSidebarConversation[] = [
 	},
 ]
 
-const rowsOf = (conversations: AppSidebarConversation[], isPinned: boolean) =>
-	conversations.map((conversation) => (
-		<ConversationRosterRow
-			conversation={conversation}
-			isPinned={isPinned}
-			isSelected={false}
-			key={conversation.id}
-			lift={STILL_LIFT}
-			sections={[SIDEBAR_SECTION]}
-		/>
-	))
+const rowsOf = (conversations: AppSidebarConversation[], isPinned: boolean) => (
+	<SidebarMenu>
+		{conversations.map((conversation) => (
+			<ConversationRosterRow
+				conversation={conversation}
+				isPinned={isPinned}
+				isSelected={false}
+				key={conversation.id}
+				lift={STILL_LIFT}
+				sections={[SIDEBAR_SECTION]}
+			/>
+		))}
+	</SidebarMenu>
+)
+
+const sectionOf = (
+	id: string,
+	name: string,
+	rows: ReactNode,
+): ExpandedSidebarSection => ({
+	id,
+	name,
+	rows,
+	isOpen: true,
+	onOpenChange: fn(),
+	lift: STILL_LIFT,
+	dropArea: { landing: id, isLanding: false },
+})
 
 const STUDIO: Space = {
 	id: "studio",
@@ -153,7 +198,11 @@ const DOWNLOAD = fn()
 
 const DARK = { theme: "dark", theme_layout: "single" }
 
-const PAPER_WINDOW = (args: ExpandedSidebarProps) => (
+type PaperWindowProps = {
+	children: ReactNode
+}
+
+const PaperWindow = ({ children }: PaperWindowProps) => (
 	<WorkspaceShellRoot>
 		<AppTitleBar
 			canGoBack
@@ -164,9 +213,15 @@ const PAPER_WINDOW = (args: ExpandedSidebarProps) => (
 			onToggleSidebar={fn()}
 			tabs={[]}
 		/>
-		<ExpandedSidebar {...args} />
+		{children}
 		<ContentCard />
 	</WorkspaceShellRoot>
+)
+
+const PAPER_WINDOW = (args: ExpandedSidebarProps) => (
+	<PaperWindow>
+		<ExpandedSidebar {...args} />
+	</PaperWindow>
 )
 
 const meta = preview.meta({
@@ -672,9 +727,11 @@ export const SwipeOverTextFieldKeepsSpaceExpanded = meta.story({
 	args: {
 		spaces: SEVERAL_SPACES,
 		pinned: (
-			<SidebarMenuItem>
-				<input aria-label="Rename" defaultValue="Design review" />
-			</SidebarMenuItem>
+			<SidebarMenu>
+				<SidebarMenuItem>
+					<input aria-label="Rename" defaultValue="Design review" />
+				</SidebarMenuItem>
+			</SidebarMenu>
 		),
 	},
 	play: async ({ args, canvasElement }) => {
@@ -741,7 +798,7 @@ export const E3EmptySectionExpanded = meta.story({
 	name: "E3 Empty section Expanded",
 	args: {
 		...POPULATED_ARTBOARD,
-		sections: [{ id: "clients", name: "Clients", rows: [] }],
+		sections: [sectionOf("clients", "Clients", [])],
 	},
 	parameters: {
 		docs: {
@@ -860,5 +917,437 @@ export const L3LoadingMoreExpanded = meta.story({
 				return [boxOf(title).width, boxOf(preview).width]
 			}),
 		).toEqual(LIST_END_BAR_WIDTHS)
+	},
+})
+
+const RENAME_SECTION = fn()
+const MOVE_SECTION = fn()
+const DELETE_SECTION = fn()
+const REPORT_FOLD = fn()
+const PRESS_HEADER = fn()
+
+const PRESSABLE_LIFT: Lifter = {
+	handlersFor: (id) => ({ onPointerDown: () => PRESS_HEADER(id) }),
+	hasJustDropped: () => false,
+}
+
+const namedSectionOf = (
+	id: string,
+	name: string,
+	rows: ReactNode,
+	isOpen: boolean,
+): ExpandedSidebarSection => ({
+	...sectionOf(id, name, rows),
+	isOpen,
+	lift: PRESSABLE_LIFT,
+	onDelete: DELETE_SECTION,
+	onMove: MOVE_SECTION,
+	onOpenChange: REPORT_FOLD,
+	onRename: RENAME_SECTION,
+})
+
+const headerNamed = (canvasElement: HTMLElement, name: string) =>
+	within(sidebarIn(canvasElement)).getByRole("button", { name })
+
+const page = () => within(document.body)
+
+const openSectionMenu = async (header: HTMLElement) => {
+	fireEvent.contextMenu(header)
+	return page().findByRole("menu")
+}
+
+const chooseFromMenu = async (header: HTMLElement, item: string) => {
+	const menu = await openSectionMenu(header)
+	fireEvent.click(within(menu).getByRole("menuitem", { name: item }))
+	await waitFor(() => expect(page().queryByRole("menu")).toBeNull())
+}
+
+const closeMenu = async () => {
+	fireEvent.keyDown(page().getByRole("menu"), { key: "Escape" })
+	await waitFor(() => expect(page().queryByRole("menu")).toBeNull())
+}
+
+const renameFieldIn = (canvasElement: HTMLElement) =>
+	within(canvasElement).findByRole("textbox", { name: "Rename Clients" })
+
+export const N1NamedSectionExpanded = meta.story({
+	name: "N1 Named section Expanded",
+	args: {
+		...POPULATED_ARTBOARD,
+		sections: [
+			namedSectionOf(
+				"clients",
+				"Clients",
+				rowsOf([ROADMAP_REVIEW], false),
+				true,
+			),
+			namedSectionOf("press", "Press", rowsOf([PRICING_COPY], false), false),
+		],
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A named section with rows between Pinned and Conversations. Check Clients wears the same header as Pinned, that pressing a header only reports the next open state and the header follows what comes back, that the context menu offers Rename, Move up, Move down and Delete with the ends disabled, and that Escape or an empty name restores the header.",
+			},
+		},
+	},
+	play: async ({ canvasElement, userEvent }) => {
+		await expect(sectionHeadersIn(canvasElement)).toEqual([
+			"Pinned",
+			"Clients",
+			"Press",
+			"Conversations",
+		])
+
+		const clients = headerNamed(canvasElement, "Clients")
+		const pinned = headerNamed(canvasElement, "Pinned")
+		const style = getComputedStyle(clients)
+		await expect(style.padding).toBe("6px")
+		await expect(style.borderTopLeftRadius).toBe("8px")
+		await expect(style.columnGap).toBe("4px")
+		await expect(style.justifyContent).toBe("space-between")
+		await expect(style.fontSize).toBe("12px")
+		await expect(style.lineHeight).toBe("16px")
+		await expect(style.fontWeight).toBe("500")
+		await expect(style.color).toBe(getComputedStyle(pinned).color)
+		await expect(boxOf(clients).height).toBe(boxOf(pinned).height)
+		await expect(boxOf(clients.querySelector("svg") as Element).width).toBe(14)
+		await expect(getComputedStyle(pinned).columnGap).toBe("4px")
+
+		const bodyId = clients.getAttribute("aria-controls") as string
+		await expect(
+			within(document.getElementById(bodyId) as HTMLElement).getByText(
+				ROADMAP_REVIEW.name,
+			),
+		).toBeVisible()
+
+		const press = headerNamed(canvasElement, "Press")
+		await expect(press).toHaveAttribute("aria-expanded", "false")
+		await userEvent.click(press)
+		await expect(REPORT_FOLD).toHaveBeenLastCalledWith(true)
+		await expect(press).toHaveAttribute("aria-expanded", "false")
+
+		await userEvent.click(clients)
+		await expect(REPORT_FOLD).toHaveBeenLastCalledWith(false)
+		await expect(clients).toHaveAttribute("aria-expanded", "true")
+
+		await userEvent.keyboard("{Shift>}{Tab}{/Shift}")
+		await userEvent.tab()
+		await expect(clients).toHaveFocus()
+		await expect(getComputedStyle(clients).outlineStyle).toBe("solid")
+
+		fireEvent.pointerDown(clients, pointerAt(10, 10))
+		await expect(PRESS_HEADER).toHaveBeenCalledWith("clients")
+
+		const firstMenu = within(await openSectionMenu(clients))
+		for (const name of ["Rename", "Move up", "Move down", "Delete"])
+			await expect(firstMenu.getByRole("menuitem", { name })).toBeVisible()
+		await expect(
+			firstMenu.getByRole("menuitem", { name: "Move up" }),
+		).toHaveAttribute("aria-disabled", "true")
+		await expect(
+			firstMenu.getByRole("menuitem", { name: "Move down" }),
+		).not.toHaveAttribute("aria-disabled", "true")
+		await closeMenu()
+
+		const lastMenu = within(await openSectionMenu(press))
+		await expect(
+			lastMenu.getByRole("menuitem", { name: "Move down" }),
+		).toHaveAttribute("aria-disabled", "true")
+		await closeMenu()
+
+		await chooseFromMenu(clients, "Rename")
+		const field = await renameFieldIn(canvasElement)
+		await userEvent.clear(field)
+		await userEvent.type(field, "  Partners  {Enter}")
+		await expect(RENAME_SECTION).toHaveBeenCalledOnce()
+		await expect(RENAME_SECTION).toHaveBeenCalledWith("clients", "Partners")
+
+		await chooseFromMenu(headerNamed(canvasElement, "Clients"), "Rename")
+		await userEvent.type(await renameFieldIn(canvasElement), "Other{Escape}")
+		await expect(RENAME_SECTION).toHaveBeenCalledOnce()
+		await expect(headerNamed(canvasElement, "Clients")).toBeVisible()
+
+		await chooseFromMenu(headerNamed(canvasElement, "Clients"), "Rename")
+		const emptied = await renameFieldIn(canvasElement)
+		await userEvent.clear(emptied)
+		await userEvent.keyboard("{Enter}")
+		await expect(RENAME_SECTION).toHaveBeenCalledOnce()
+		await expect(headerNamed(canvasElement, "Clients")).toBeVisible()
+
+		await chooseFromMenu(headerNamed(canvasElement, "Clients"), "Delete")
+		await expect(DELETE_SECTION).toHaveBeenCalledOnce()
+		await expect(DELETE_SECTION).toHaveBeenCalledWith("clients")
+	},
+})
+
+const appSlotOf = (landing: string, menu: ReactNode) => (
+	<RosterDropArea isLanding={false} landing={landing}>
+		{menu}
+	</RosterDropArea>
+)
+
+export const A1SlotsComposedAsTheAppExpanded = meta.story({
+	name: "A1 Slots composed as the app Expanded",
+	args: {
+		...POPULATED_ARTBOARD,
+		pinned: appSlotOf(PINNED_ZONE, rowsOf([LISBON_OFFSITE], true)),
+		conversations: appSlotOf(SORTED_ZONE, rowsOf([ONBOARDING_EMAIL], false)),
+		sections: [
+			sectionOf("clients", "Clients", rowsOf([ROADMAP_REVIEW], false)),
+		],
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The slots as the app feeds them, a drop area around a menu around rows. Check the list reads the same as the plain slots, and that the menu the app passes is the only list around its rows.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const content = slotIn(canvasElement, "sidebar-content")
+		const lists = Array.from(content.querySelectorAll("ul"))
+		await expect(lists).toHaveLength(3)
+		for (const list of lists)
+			await expect(list.parentElement?.closest("ul")).toBeNull()
+		for (const item of content.querySelectorAll("li"))
+			await expect(item.parentElement?.tagName).toBe("UL")
+	},
+})
+
+const CARRIED_SECTIONS: AppSidebarSection[] = [
+	{ id: "clients", name: "Clients", position: 2 },
+	{ id: "press", name: "Press", position: 4 },
+]
+
+const CLIENT_KICKOFF = artboardRow("Client kickoff")
+const PRESS_KIT = artboardRow("Press kit")
+
+const CARRIED_CONVERSATIONS: AppSidebarConversation[] = [
+	{ ...LISBON_OFFSITE, pinPosition: 0 },
+	{ ...RELEASE_NOTES, pinPosition: 1 },
+	{ ...CLIENT_KICKOFF, sectionId: "clients", pinPosition: 3 },
+	{ ...PRESS_KIT, sectionId: "press", pinPosition: 5 },
+	ONBOARDING_EMAIL,
+	ROADMAP_REVIEW,
+]
+
+const LAND_ROW = fn()
+const REORDER_SECTION = fn()
+
+type CarriedSidebarProps = ExpandedSidebarProps & {
+	collapsedSectionIds: string[]
+}
+
+const CarriedSidebar = ({
+	collapsedSectionIds,
+	...args
+}: CarriedSidebarProps) => {
+	const frameRef = useRef<HTMLDivElement>(null)
+	const entries = rosterEntriesOf({
+		bots: [],
+		conversations: CARRIED_CONVERSATIONS,
+		naming: null,
+		sections: CARRIED_SECTIONS,
+	})
+	const drag = useRosterDrag({
+		collapsedSectionIds,
+		containerRef: frameRef,
+		entries,
+		onLand: LAND_ROW,
+		onMoveSection: REORDER_SECTION,
+	})
+	const rows: RosterRowsContext = {
+		keepFocus: drag.keepFocus,
+		lift: drag.rosterLift,
+		liftedId: drag.liftedId,
+		membershipsOf: () => [],
+		onMoveKey: drag.moveRowByKey,
+		sections: CARRIED_SECTIONS,
+		shiftOf: drag.rowShiftOf,
+		spaces: [STUDIO],
+	}
+
+	return (
+		<PaperWindow>
+			<RosterLiftFrame
+				isLifting={drag.isLifting}
+				ref={mergeRefs(frameRef, drag.rosterLift.followRef)}
+			>
+				<ExpandedSidebar
+					{...args}
+					conversations={
+						<RosterDropArea
+							isLanding={drag.isLandingSorted}
+							landing={SORTED_ZONE}
+						>
+							{recentMenuOf(entries.sortedConversations, [], rows)}
+						</RosterDropArea>
+					}
+					pinned={appSlotOf(
+						PINNED_ZONE,
+						rosterMenuOf(
+							entries.topLevel.filter(({ section }) => !section),
+							true,
+							rows,
+						),
+					)}
+					sections={CARRIED_SECTIONS.map(({ id, name }) => ({
+						id,
+						name,
+						rows: rosterMenuOf(entries.rowsOf(id), true, rows),
+						isOpen: !collapsedSectionIds.includes(id),
+						onOpenChange: fn(),
+						lift: drag.rosterLift,
+						headSlotId: headSlotOf(id),
+						emptySlotId: emptySlotOf(id),
+						dropArea: {
+							landing: id,
+							slotId: id,
+							isLanding: drag.landingSection === id,
+							isGiving: drag.isGiving(id),
+							isReceiving: drag.isReceiving(id),
+							isSliding: drag.isLifting,
+							shift: drag.cardShiftOf(id),
+							ref: (node) => drag.keepFocus(id, node),
+						},
+					}))}
+				/>
+			</RosterLiftFrame>
+		</PaperWindow>
+	)
+}
+
+const CARRIED_ARGS = {
+	...STATE_ARTBOARD,
+	missionCount: 5,
+	pinned: null,
+	conversations: null,
+}
+
+const renderCarried =
+	(collapsedSectionIds: string[]) => (args: ExpandedSidebarProps) => (
+		<CarriedSidebar {...args} collapsedSectionIds={collapsedSectionIds} />
+	)
+
+const rowHandleNamed = (canvasElement: HTMLElement, name: string) =>
+	within(sidebarIn(canvasElement))
+		.getByText(name)
+		.closest<HTMLElement>('[data-slot="sidebar-menu-button"]') as HTMLElement
+
+const middleYOf = (element: Element) =>
+	boxOf(element).top + boxOf(element).height / 2
+
+const liftByPress = (handle: HTMLElement) => {
+	const x = boxOf(handle).left + boxOf(handle).width / 2
+	const y = middleYOf(handle)
+	fireEvent.pointerDown(handle, pointerAt(x, y))
+	fireEvent.pointerMove(handle, pointerAt(x, y + 8))
+	return x
+}
+
+const clippingAncestorsOf = (node: Element) => {
+	const clipping: Element[] = []
+	for (
+		let parent = node.parentElement;
+		parent && parent.getAttribute("data-slot") !== "expanded-sidebar";
+		parent = parent.parentElement
+	)
+		if (getComputedStyle(parent).overflowY !== "visible") clipping.push(parent)
+	return clipping
+}
+
+const expectInsideEveryClip = async (node: Element) => {
+	const box = boxOf(node)
+	for (const clip of clippingAncestorsOf(node)) {
+		await expect(box.top).toBeGreaterThanOrEqual(boxOf(clip).top)
+		await expect(box.bottom).toBeLessThanOrEqual(boxOf(clip).bottom)
+	}
+}
+
+const foldBodyOf = (header: HTMLElement) =>
+	document.getElementById(header.getAttribute("aria-controls") as string)
+		?.firstElementChild as HTMLElement
+
+export const D1RowCarriedToConversationsExpanded = meta.story({
+	name: "D1 Row carried to Conversations Expanded",
+	args: CARRIED_ARGS,
+	render: renderCarried([]),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A pinned row carried over a named section, then over Conversations, through the real drag. Check the row keeps its lifted surface above the other sections at every step, is never cut by a fold body, and that releasing it over Conversations lands it there.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const handle = rowHandleNamed(canvasElement, LISBON_OFFSITE.name)
+		const item = handle.closest("li") as HTMLElement
+		const pinnedBody = foldBodyOf(headerNamed(canvasElement, "Pinned"))
+		const pinnedBottom = boxOf(pinnedBody).bottom
+		const overClient = middleYOf(
+			rowHandleNamed(canvasElement, CLIENT_KICKOFF.name),
+		)
+		const overConversations = middleYOf(
+			rowHandleNamed(canvasElement, ROADMAP_REVIEW.name),
+		)
+		const x = liftByPress(handle)
+
+		fireEvent.pointerMove(handle, pointerAt(x, overClient))
+		await waitFor(() => expect(boxOf(item).top).toBeGreaterThan(pinnedBottom))
+		await expect(item).toHaveAttribute("data-lifted", "true")
+		await expect(getComputedStyle(pinnedBody).overflowY).toBe("visible")
+		await expectInsideEveryClip(item)
+
+		fireEvent.pointerMove(handle, pointerAt(x, overConversations))
+		await waitFor(() =>
+			expect(
+				slotIn(canvasElement, "roster-lift-frame").querySelector(
+					`[data-roster-drop="${SORTED_ZONE}"]`,
+				),
+			).toHaveAttribute("data-landing", "true"),
+		)
+		await expect(item).toHaveAttribute("data-lifted", "true")
+		await expectInsideEveryClip(item)
+
+		fireEvent.pointerUp(handle, pointerAt(x, overConversations))
+		await expect(LAND_ROW).toHaveBeenCalledOnce()
+		await expect(LAND_ROW).toHaveBeenCalledWith(LISBON_OFFSITE.id, SORTED)
+	},
+})
+
+export const D2ClosedSectionHiddenDuringLiftExpanded = meta.story({
+	name: "D2 Closed section hidden during lift Expanded",
+	args: CARRIED_ARGS,
+	render: renderCarried(["press"]),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A row is lifted while Press is closed. Check Press keeps its rows out of sight during the whole lift while the open sections let the row travel over them.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const handle = rowHandleNamed(canvasElement, LISBON_OFFSITE.name)
+		const x = liftByPress(handle)
+		await waitFor(() =>
+			expect(slotIn(canvasElement, "roster-lift-frame")).toHaveAttribute(
+				"data-lifting",
+				"true",
+			),
+		)
+		const press = foldBodyOf(headerNamed(canvasElement, "Press"))
+		await expect(getComputedStyle(press).overflowY).toBe("hidden")
+		await expect(boxOf(press).height).toBe(0)
+		await expect(within(press).getByText(PRESS_KIT.name)).not.toBeVisible()
+		await expect(
+			getComputedStyle(foldBodyOf(headerNamed(canvasElement, "Clients")))
+				.overflowY,
+		).toBe("visible")
+		fireEvent.pointerUp(handle, pointerAt(x, 0))
 	},
 })

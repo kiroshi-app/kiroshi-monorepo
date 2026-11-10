@@ -62,7 +62,9 @@ const SECTION_BODY_INNER_OPEN =
 const FOLD_SECTION = "flex flex-col gap-0.5 p-0"
 
 const FOLD_TRIGGER =
-	"flex w-full min-w-0 items-center justify-between gap-2 rounded-md p-1.5 text-start font-medium text-muted-foreground text-xs hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-1"
+	"flex w-full min-w-0 items-center justify-between gap-1 rounded-md p-1.5 text-start font-medium text-muted-foreground text-xs hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-1"
+
+const NAMED_FOLD_TRIGGER = cn(FOLD_TRIGGER, "touch-none select-none")
 
 const FOLD_CHEVRON =
 	"size-3.5 shrink-0 text-foreground/50 transition-transform duration-150 ease-out motion-reduce:transition-none"
@@ -152,133 +154,194 @@ const SectionNameField = ({
 	)
 }
 
-interface RosterSectionProps {
-	section: AppSidebarSection
-	isFirst: boolean
-	isLast: boolean
+interface SectionHeadActions {
 	isOpen: boolean
 	onOpenChange: (isOpen: boolean) => void
 	onRename?: (id: string, name: string) => void
 	onMove?: (id: string, by: number) => void
 	onDelete?: (id: string) => void
 	lift: Lifter
-	slotId?: string
 	onMoveKey?: (event: KeyboardEvent<HTMLElement>) => void
+}
+
+interface SectionPlace {
+	isFirst: boolean
+	isLast: boolean
+}
+
+interface SectionHeadProps extends SectionHeadActions, SectionPlace {
+	section: Pick<AppSidebarSection, "id" | "name">
+	bodyId: string
+	className: string
+	slot: string
 	children: ReactNode
 }
 
-const RosterSection = ({
+const SectionHead = ({
 	section,
 	isFirst,
 	isLast,
 	isOpen,
 	onOpenChange,
 	lift,
-	slotId,
 	onMoveKey,
 	onRename,
 	onMove,
 	onDelete,
+	bodyId,
+	className,
+	slot,
 	children,
-}: RosterSectionProps) => {
+}: SectionHeadProps) => {
 	const { t } = useTranslation("bots")
-	const bodyId = useId()
 	const [isRenaming, setIsRenaming] = useState(false)
+
+	if (isRenaming)
+		return (
+			<SectionNameField
+				ariaLabel={t("roster.section.renameField", { name: section.name })}
+				initialName={section.name}
+				onCancel={() => setIsRenaming(false)}
+				onCommit={(name) => {
+					setIsRenaming(false)
+					onRename?.(section.id, name)
+				}}
+			/>
+		)
+
+	return (
+		<ContextMenu>
+			<ContextMenuTrigger
+				render={
+					<button
+						{...lift.handlersFor(section.id)}
+						aria-controls={bodyId}
+						aria-expanded={isOpen}
+						className={className}
+						data-slot={slot}
+						onClick={() => {
+							if (lift.hasJustDropped()) return
+							onOpenChange(!isOpen)
+						}}
+						onKeyDown={onMoveKey}
+						type="button"
+					>
+						{children}
+					</button>
+				}
+			/>
+			<ContextMenuContent
+				aria-label={t("roster.section.actions", { name: section.name })}
+				className={STILL_UNDER_REDUCED_MOTION}
+			>
+				<ContextMenuItem onClick={() => setIsRenaming(true)}>
+					<Icons.Edit aria-hidden="true" className="size-3.5" />
+					{t("roster.section.rename")}
+				</ContextMenuItem>
+				<ContextMenuItem
+					disabled={isFirst}
+					onClick={() => onMove?.(section.id, -1)}
+				>
+					<Icons.ArrowUp aria-hidden="true" className="size-3.5" />
+					{t("roster.section.moveUp")}
+				</ContextMenuItem>
+				<ContextMenuItem
+					disabled={isLast}
+					onClick={() => onMove?.(section.id, 1)}
+				>
+					<Icons.ArrowDown aria-hidden="true" className="size-3.5" />
+					{t("roster.section.moveDown")}
+				</ContextMenuItem>
+				<ContextMenuItem
+					onClick={() => onDelete?.(section.id)}
+					variant="destructive"
+				>
+					<Icons.Delete aria-hidden="true" className="size-3.5" />
+					{t("roster.section.delete")}
+				</ContextMenuItem>
+			</ContextMenuContent>
+		</ContextMenu>
+	)
+}
+
+interface SectionBodyProps {
+	id: string
+	isOpen: boolean
+	children: ReactNode
+}
+
+const SectionBody = ({ id, isOpen, children }: SectionBodyProps) => (
+	<SidebarGroupContent
+		className={cn(
+			SECTION_BODY,
+			isOpen ? SECTION_BODY_OPEN : SECTION_BODY_CLOSED,
+		)}
+		id={id}
+	>
+		<div className={cn(SECTION_BODY_INNER, isOpen && SECTION_BODY_INNER_OPEN)}>
+			{children}
+		</div>
+	</SidebarGroupContent>
+)
+
+interface ActionableSectionProps extends SectionHeadActions, SectionPlace {
+	section: Pick<AppSidebarSection, "id" | "name">
+	slotId?: string
+	children: ReactNode
+}
+
+const RosterSection = ({
+	section,
+	isOpen,
+	slotId,
+	children,
+	...head
+}: ActionableSectionProps) => {
+	const bodyId = useId()
 
 	return (
 		<SidebarGroup
 			className={cn(SECTION_GROUP, SECTION_CARD, isOpen && SECTION_CARD_OPEN)}
 		>
 			<SectionLabel slotId={slotId}>
-				{isRenaming ? (
-					<SectionNameField
-						ariaLabel={t("roster.section.renameField", { name: section.name })}
-						initialName={section.name}
-						onCancel={() => setIsRenaming(false)}
-						onCommit={(name) => {
-							setIsRenaming(false)
-							onRename?.(section.id, name)
-						}}
-					/>
-				) : (
-					<ContextMenu>
-						<ContextMenuTrigger
-							render={
-								<button
-									{...lift.handlersFor(section.id)}
-									aria-controls={bodyId}
-									aria-expanded={isOpen}
-									className={SECTION_TRIGGER}
-									data-slot="roster-section-trigger"
-									onClick={() => {
-										if (lift.hasJustDropped()) return
-										onOpenChange(!isOpen)
-									}}
-									onKeyDown={onMoveKey}
-									type="button"
-								>
-									<span
-										className={SECTION_NAME}
-										data-slot="roster-section-name"
-									>
-										{section.name}
-									</span>
-									<Icons.Next
-										aria-hidden="true"
-										className={cn(SECTION_CHEVRON, isOpen && "rotate-90")}
-									/>
-								</button>
-							}
-						/>
-						<ContextMenuContent
-							aria-label={t("roster.section.actions", { name: section.name })}
-							className={STILL_UNDER_REDUCED_MOTION}
-						>
-							<ContextMenuItem onClick={() => setIsRenaming(true)}>
-								<Icons.Edit aria-hidden="true" className="size-3.5" />
-								{t("roster.section.rename")}
-							</ContextMenuItem>
-							<ContextMenuItem
-								disabled={isFirst}
-								onClick={() => onMove?.(section.id, -1)}
-							>
-								<Icons.ArrowUp aria-hidden="true" className="size-3.5" />
-								{t("roster.section.moveUp")}
-							</ContextMenuItem>
-							<ContextMenuItem
-								disabled={isLast}
-								onClick={() => onMove?.(section.id, 1)}
-							>
-								<Icons.ArrowDown aria-hidden="true" className="size-3.5" />
-								{t("roster.section.moveDown")}
-							</ContextMenuItem>
-							<ContextMenuItem
-								onClick={() => onDelete?.(section.id)}
-								variant="destructive"
-							>
-								<Icons.Delete aria-hidden="true" className="size-3.5" />
-								{t("roster.section.delete")}
-							</ContextMenuItem>
-						</ContextMenuContent>
-					</ContextMenu>
-				)}
-			</SectionLabel>
-			<SidebarGroupContent
-				className={cn(
-					SECTION_BODY,
-					isOpen ? SECTION_BODY_OPEN : SECTION_BODY_CLOSED,
-				)}
-				id={bodyId}
-			>
-				<div
-					className={cn(SECTION_BODY_INNER, isOpen && SECTION_BODY_INNER_OPEN)}
+				<SectionHead
+					{...head}
+					bodyId={bodyId}
+					className={SECTION_TRIGGER}
+					isOpen={isOpen}
+					section={section}
+					slot="roster-section-trigger"
 				>
-					<div className={SECTION_PAD}>{children}</div>
-				</div>
-			</SidebarGroupContent>
+					<span className={SECTION_NAME} data-slot="roster-section-name">
+						{section.name}
+					</span>
+					<Icons.Next
+						aria-hidden="true"
+						className={cn(SECTION_CHEVRON, isOpen && "rotate-90")}
+					/>
+				</SectionHead>
+			</SectionLabel>
+			<SectionBody id={bodyId} isOpen={isOpen}>
+				<div className={SECTION_PAD}>{children}</div>
+			</SectionBody>
 		</SidebarGroup>
 	)
 }
+
+interface FoldHeadLabelProps {
+	name: string
+	isOpen: boolean
+}
+
+const FoldHeadLabel = ({ name, isOpen }: FoldHeadLabelProps) => (
+	<>
+		<span className={SECTION_NAME}>{name}</span>
+		<Icons.Expand
+			aria-hidden="true"
+			className={cn(FOLD_CHEVRON, !isOpen && "-rotate-90")}
+		/>
+	</>
+)
 
 interface FoldSectionProps {
 	name: string
@@ -299,30 +362,52 @@ const FoldSection = ({ name, children }: FoldSectionProps) => {
 				onClick={() => setIsOpen(!isOpen)}
 				type="button"
 			>
-				<span className={SECTION_NAME}>{name}</span>
-				<Icons.Expand
-					aria-hidden="true"
-					className={cn(FOLD_CHEVRON, !isOpen && "-rotate-90")}
-				/>
+				<FoldHeadLabel isOpen={isOpen} name={name} />
 			</button>
-			<SidebarGroupContent
-				className={cn(
-					SECTION_BODY,
-					isOpen ? SECTION_BODY_OPEN : SECTION_BODY_CLOSED,
-				)}
-				id={bodyId}
-			>
-				<div className={SECTION_BODY_INNER}>{children}</div>
-			</SidebarGroupContent>
+			<SectionBody id={bodyId} isOpen={isOpen}>
+				{children}
+			</SectionBody>
+		</SidebarGroup>
+	)
+}
+
+const NamedFoldSection = ({
+	section,
+	isOpen,
+	slotId,
+	children,
+	...head
+}: ActionableSectionProps) => {
+	const bodyId = useId()
+
+	return (
+		<SidebarGroup className={FOLD_SECTION} data-slot="fold-section">
+			<SectionLabel slotId={slotId}>
+				<SectionHead
+					{...head}
+					bodyId={bodyId}
+					className={NAMED_FOLD_TRIGGER}
+					isOpen={isOpen}
+					section={section}
+					slot="fold-section-trigger"
+				>
+					<FoldHeadLabel isOpen={isOpen} name={section.name} />
+				</SectionHead>
+			</SectionLabel>
+			<SectionBody id={bodyId} isOpen={isOpen}>
+				{children}
+			</SectionBody>
 		</SidebarGroup>
 	)
 }
 
 export {
 	FoldSection,
+	NamedFoldSection,
 	RosterSection,
 	RosterZone,
 	SECTION_GROUP,
+	type SectionHeadActions,
 	SectionLabel,
 	SectionNameField,
 }

@@ -38,6 +38,7 @@ import {
 } from "@workspace/ui/components/sidebar-resize"
 import { ThreadLayout } from "@workspace/ui/components/thread-layout"
 import { AssistantTurn, UserTurn } from "@workspace/ui/components/turn"
+import { SidebarMenu } from "@workspace/ui/components/ui/sidebar"
 import {
 	SHELL_TITLE_BAR_HEIGHT,
 	WorkspaceShell,
@@ -773,13 +774,15 @@ const NavigationShell = () => {
 				destination="newConversation"
 				missionCount={1}
 				pinned={
-					<ConversationRosterRow
-						conversation={DESK_ROOM}
-						isPinned
-						isSelected={false}
-						lift={STILL_LIFT}
-						sections={[SIDEBAR_SECTION]}
-					/>
+					<SidebarMenu>
+						<ConversationRosterRow
+							conversation={DESK_ROOM}
+							isPinned
+							isSelected={false}
+							lift={STILL_LIFT}
+							sections={[SIDEBAR_SECTION]}
+						/>
+					</SidebarMenu>
 				}
 				selectedSpaceId="kiroshi"
 				spaces={[
