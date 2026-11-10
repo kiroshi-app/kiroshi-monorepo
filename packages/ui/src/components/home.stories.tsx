@@ -11,17 +11,10 @@ import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import type { GreetingPeriod } from "@workspace/ui/components/greeting-period"
 import type { HomeAgent } from "@workspace/ui/components/home-agent-picker"
 import { HomeApplicationsBand } from "@workspace/ui/components/home-applications-band"
-import {
-	HomeComposer,
-	HomeComposerSkeleton,
-} from "@workspace/ui/components/home-composer"
-import {
-	HomeGreeting,
-	HomeGreetingSkeleton,
-} from "@workspace/ui/components/home-greeting"
+import { HomeComposer } from "@workspace/ui/components/home-composer"
+import { HomeGreeting } from "@workspace/ui/components/home-greeting"
 import { HomeLayout } from "@workspace/ui/components/home-layout"
 import {
-	HomeArchivedLine,
 	HomeAskedByLine,
 	HomeMissionLine,
 	HomeRequest,
@@ -119,7 +112,6 @@ const selectedAgent = fn()
 const attached = fn()
 const sent = fn()
 const dismissedBand = fn()
-const openedArchive = fn()
 const removedAttachment = fn()
 
 let raisedSendFailure: string | undefined
@@ -191,7 +183,6 @@ const meta = preview.meta({
 	beforeEach: () => {
 		selectedAgent.mockClear()
 		dismissedBand.mockClear()
-		openedArchive.mockClear()
 		removedAttachment.mockClear()
 	},
 })
@@ -503,19 +494,6 @@ export const ComposerGrownPastAShortPanel = meta.story({
 	},
 })
 
-export const Loading = meta.story({
-	name: "5a · Loading",
-	render: () => (
-		<EmptyStage>
-			<HomeGreetingSkeleton />
-			<HomeComposerSkeleton />
-		</EmptyStage>
-	),
-	parameters: withDescription(
-		"Reach for this while the Space and its agents load: the greeting and the composer drawn as skeletons, Add files and send idle, nothing focusable.",
-	),
-})
-
 export const CouldNotSend = meta.story({
 	name: "5b · Couldn't send",
 	render: () => (
@@ -538,35 +516,6 @@ export const CouldNotSend = meta.story({
 		})
 		const titles = await screen.findAllByText("Couldn’t send that request")
 		await expect(titles.length).toBeGreaterThan(0)
-	},
-})
-
-export const FreshAfterRelaunch = meta.story({
-	name: "6a · Fresh Home after relaunch",
-	render: () => (
-		<EmptyHome
-			after={
-				<HomeArchivedLine
-					agentName="Atlas"
-					onOpen={openedArchive}
-					period="morning"
-				/>
-			}
-			hasBand={false}
-			period="afternoon"
-		/>
-	),
-	parameters: withDescription(
-		"Reach for this after a relaunch: the Home starts empty again and a line under the composer says where the earlier conversation went. Open it calls back.",
-	),
-	play: async ({ canvas, userEvent }) => {
-		await expect(
-			canvas.getByText(
-				"This morning’s conversation with Atlas is archived in Conversations.",
-			),
-		).toBeVisible()
-		await userEvent.click(canvas.getByRole("button", { name: "Open it" }))
-		await expect(openedArchive).toHaveBeenCalledOnce()
 	},
 })
 

@@ -5,7 +5,6 @@ import { useTranslation } from "react-i18next"
 
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
 import { ConversationSubjectIcon } from "@workspace/ui/components/conversation-subject-icon"
-import type { GreetingPeriod } from "@workspace/ui/components/greeting-period"
 import type { HomeAgent } from "@workspace/ui/components/home-agent-picker"
 import { hueStyle } from "@workspace/ui/components/hue-palette"
 import { Icons } from "@workspace/ui/components/icons"
@@ -229,45 +228,7 @@ const HomeRequest = ({ askedBy, children }: HomeRequestProps) => (
 	</div>
 )
 
-type HomeArchivedLineProps = {
-	agentName: string
-	period: GreetingPeriod
-	onOpen: () => void
-}
-
-const HomeArchivedLine = ({
-	agentName,
-	period,
-	onOpen,
-}: HomeArchivedLineProps) => {
-	const { t } = useTranslation("chat")
-
-	return (
-		<div
-			className="flex flex-wrap items-center justify-center gap-1.5 pt-1 text-compact leading-4"
-			data-slot="home-archived-line"
-		>
-			<Icons.Archive
-				aria-hidden="true"
-				className="size-3.5 shrink-0 text-faint-foreground"
-			/>
-			<p className="text-muted-foreground">
-				{t(`home.archived.${period}`, { name: agentName })}
-			</p>
-			<button
-				className="relative rounded-sm font-medium text-foreground underline decoration-1 underline-offset-3 outline-offset-2 after:absolute after:-inset-y-1 after:inset-x-0"
-				onClick={onOpen}
-				type="button"
-			>
-				{t("home.archived.open")}
-			</button>
-		</div>
-	)
-}
-
 export {
-	HomeArchivedLine,
-	type HomeArchivedLineProps,
 	HomeAskedByLine,
 	type HomeAskedByLineProps,
 	HomeMissionLine,

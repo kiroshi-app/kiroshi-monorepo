@@ -1245,17 +1245,6 @@ const chat = {
 			blocked: "Blocked",
 		},
 		in: "in",
-		archived: {
-			morning:
-				"This morning’s conversation with {{name}} is archived in Conversations.",
-			afternoon:
-				"This afternoon’s conversation with {{name}} is archived in Conversations.",
-			evening:
-				"This evening’s conversation with {{name}} is archived in Conversations.",
-			night:
-				"Last night’s conversation with {{name}} is archived in Conversations.",
-			open: "Open it",
-		},
 		failure: {
 			send: {
 				title: "Couldn’t send that request",
