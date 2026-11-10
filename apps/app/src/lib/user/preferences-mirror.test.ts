@@ -27,6 +27,7 @@ const RECORD: UserPreferences = {
 	notifyWithSound: true,
 	sidebarWidth: null,
 	sidebarTab: "conversations",
+	openOn: "newConversation",
 	activityPanelOpen: false,
 	firstRunDone: false,
 	lastSpaceId: null,
