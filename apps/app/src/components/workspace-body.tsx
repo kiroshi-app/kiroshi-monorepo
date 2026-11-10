@@ -132,6 +132,7 @@ const HomeView = ({ body, seat, bot }: HomeViewProps) => {
 		drafts: body.drafts,
 		runtimes: body.conversationRuntimes,
 		startConversation: seat.startConversation,
+		discardConversation: seat.discardConversation,
 		openConversation: seat.openConversation,
 	})
 	const rooms = {

@@ -1319,6 +1319,10 @@ const chat = {
 				title: "Impossible d’envoyer cette demande",
 				description: "Votre message est de retour dans le champ.",
 			},
+			rooms: {
+				title: "Impossible de charger les conversations de cet agent",
+				description: "Redémarrez Kiroshi pour réessayer.",
+			},
 		},
 	},
 } as const
