@@ -389,7 +389,7 @@ fn solo_identity(s: &App, t: &Tokens, conversation_id: &str, agent: &SoloAgent) 
 	})
 }
 
-fn conversation_identity(t: &Tokens, thread: &Thread, conversation: Option<&Conversation>) -> El {
+fn conversation_identity(t: &Tokens, title: &str, conversation: Option<&Conversation>) -> El {
 	let media = conversation.map_or_else(el, |conversation| subject_icon(conversation, 24.0, t));
 	row()
 		.h(36.0)
@@ -400,7 +400,7 @@ fn conversation_identity(t: &Tokens, thread: &Thread, conversation: Option<&Conv
 		.radius(10.0)
 		.hover(t.muted)
 		.child(media)
-		.child(text(thread.title.clone()).font(TEXT_SM_MEDIUM).color(t.foreground))
+		.child(text(title.to_owned()).font(TEXT_SM_MEDIUM).color(t.foreground))
 		.child(icon(&icons::SETTINGS, 14.0).color(t.muted_foreground))
 }
 
@@ -409,7 +409,7 @@ fn thread_header(s: &App, t: &Tokens) -> El {
 		let conversation = opened_conversation(s, thread);
 		match conversation.and_then(|conversation| solo_agent(s, conversation)) {
 			Some(agent) => solo_identity(s, t, &thread.conversation_id, &agent),
-			None => conversation_identity(t, thread, conversation),
+			None => conversation_identity(t, &thread.title, conversation),
 		}
 	});
 	let header = row()
