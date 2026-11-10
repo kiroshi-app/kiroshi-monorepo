@@ -340,14 +340,15 @@ describe("the gate", () => {
 		])
 	})
 
-	it("passes a heavy step through scripts/slot.sh, every other step straight to bash", () => {
+	it("passes a heavy step to bash running scripts/slot.sh, every other step straight to bash", () => {
 		for (const step of GROUP_ORDER.flatMap((group) => GATE[group])) {
 			const command = spawnedCommand(step)
 			const bash = ["bash", "-ec", step.command]
 
 			if (step.heavy) {
-				expect(command.slice(1)).toEqual(bash)
-				expect(command[0]).toEndWith("/scripts/slot.sh")
+				expect(command[0]).toBe("bash")
+				expect(command[1]).toEndWith("/scripts/slot.sh")
+				expect(command.slice(2)).toEqual(bash)
 			} else expect(command).toEqual(bash)
 		}
 	})

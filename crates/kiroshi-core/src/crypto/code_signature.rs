@@ -1,7 +1,15 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Signature {
+	#[cfg_attr(
+		not(any(target_os = "macos", test)),
+		expect(dead_code, reason = "only the macOS signature check reads a team signature")
+	)]
 	TeamSigned,
 	Unsigned,
+	#[cfg_attr(
+		not(any(target_os = "macos", test)),
+		expect(dead_code, reason = "only the macOS signature check fails to verify one")
+	)]
 	Unverified,
 }
 

@@ -393,7 +393,7 @@ type Labelled = { label: string; step: Step }
 
 export const spawnedCommand = (step: Step) => {
 	const command = ["bash", "-ec", step.command]
-	return step.heavy ? [SLOT, ...command] : command
+	return step.heavy ? ["bash", SLOT, ...command] : command
 }
 
 export const elapsedText = (milliseconds: number) => {
