@@ -1311,7 +1311,7 @@ type HomeStageFacts = {
 	isFirstLoadPending: boolean
 	hasMessages: boolean
 	isTranscriptEmpty: boolean
-	isHeldBack: boolean
+	isReadOnly: boolean
 }
 
 const homeStageOf = ({
@@ -1320,7 +1320,7 @@ const homeStageOf = ({
 	isFirstLoadPending,
 	hasMessages,
 	isTranscriptEmpty,
-	isHeldBack,
+	isReadOnly,
 }: HomeStageFacts): HomeStage | null => {
 	if (!home) {
 		return null
@@ -1332,10 +1332,9 @@ const homeStageOf = ({
 	) {
 		return "loading"
 	}
-	if (hasMessages) {
-		return "conversation"
-	}
-	return isTranscriptEmpty && !isHeldBack ? "empty" : null
+	return isTranscriptEmpty && !hasMessages && !isReadOnly
+		? "empty"
+		: "conversation"
 }
 
 type HomeConversationInput = {
@@ -2183,7 +2182,7 @@ function ThreadView(props: ThreadViewProps) {
 		isFirstLoadPending: view.facts.isFirstLoadPending,
 		hasMessages: view.state.messages.length > 0,
 		isTranscriptEmpty,
-		isHeldBack: Boolean(departure || view.facts.latestError),
+		isReadOnly: Boolean(departure),
 	})
 
 	const screen = (
