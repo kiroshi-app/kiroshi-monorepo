@@ -158,10 +158,10 @@ port, so a name resolved to it is a rebinding attempt. So is a request on anothe
 or one carrying a state other than the one that flow generated. A redirect carrying an
 `error` parameter settles the ask as `denied`, naming it. No redirect within 300000 ms
 settles it as `timedOut`, and a `mcp_oauth_cancel` settles it as `cancelled`. However a
-flow settles, its listener is closed and its port freed, once the page it holds is
-answered. One flow at a time: a second `mcp_oauth_authorize` is answered `busy` until that
-page is answered, since one queue of pending answers per command type would cross two
-flows' answers.
+flow settles, its listener is closed and its port freed, once its exchange has returned
+and the page it holds is answered. One flow at a time: a second `mcp_oauth_authorize` is
+answered `busy` until then, a cancel or the deadline answering the page included, since
+one queue of pending answers per command type would cross two flows' answers.
 
 An authorization url the metadata builds under a scheme other than `http` or `https` is
 refused before any frame is written: the ask settles naming that scheme and no

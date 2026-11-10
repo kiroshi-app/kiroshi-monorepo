@@ -523,12 +523,6 @@ export const authorizeMcpServer = async (
 	const flow: Flow = { end, confirm: () => undefined }
 	running = flow
 	const expiry = setTimeout(() => end({ kind: "timedOut" }), timeoutMs)
-	const closed = shown.then(async () => {
-		clearTimeout(expiry)
-		running = undefined
-		await theAnswerWritten()
-		await listener.stop(true)
-	})
 	const { fetchFn, refusal } = watched(timedFetch)
 	const settled = await exchanged({
 		serverUrl: url,
@@ -540,6 +534,12 @@ export const authorizeMcpServer = async (
 		fetchFn,
 		client,
 	}).catch((error: unknown) => ({ error: flowFailure(error, refusal()) }))
+	const closed = shown.then(async () => {
+		clearTimeout(expiry)
+		running = undefined
+		await theAnswerWritten()
+		await listener.stop(true)
+	})
 	if ("error" in settled) {
 		show(failurePage(settled.error))
 		await closed

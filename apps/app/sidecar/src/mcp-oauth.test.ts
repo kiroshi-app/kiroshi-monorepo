@@ -872,6 +872,35 @@ describe("mcp oauth", () => {
 		}
 	}, 20_000)
 
+	it("refuses a second flow while a cancelled exchange has not returned", async () => {
+		const { promise: stalled, resolve: resume } = Promise.withResolvers<void>()
+		const authority = anAuthorizationServer({ tokenDelay: () => stalled })
+		try {
+			const flow = aFlow(authority.url)
+			const page = textOf(redirectedWithCode(await waitForStarted()))
+			while (authority.seen.tokenRequests.length === 0) {
+				await Bun.sleep(10)
+			}
+			cancelMcpAuthorization()
+
+			expect((await page).text).toBe(
+				`Authorization failed: the connect was cancelled in Kiroshi. ${CONNECT_AGAIN}`,
+			)
+			expect(
+				await authorizeMcpServer({ url: authority.url }, collect),
+			).toMatchObject({ error: { kind: "busy" } })
+			resume()
+			await flow
+			const next = aFlow(authority.url)
+			await waitForStarted()
+			cancelMcpAuthorization()
+			expect(await next).toEqual({ error: { kind: "cancelled" } })
+		} finally {
+			resume()
+			await authority.stop()
+		}
+	}, 20_000)
+
 	it("keeps the listener and the one-flow guard until the held page is answered", async () => {
 		const authority = anAuthorizationServer()
 		try {
