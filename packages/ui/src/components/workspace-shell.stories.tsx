@@ -1,5 +1,5 @@
-import type { ReactNode } from "react"
-import { expect, fn, waitFor, type within } from "storybook/test"
+import { type ReactNode, useState } from "react"
+import { expect, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
@@ -14,10 +14,19 @@ import {
 	AppSidebar,
 	type AppSidebarBot,
 } from "@workspace/ui/components/app-sidebar"
+import {
+	DESK_ROOM,
+	SIDEBAR_SECTION,
+	STILL_LIFT,
+} from "@workspace/ui/components/app-sidebar.fixtures"
+import { ConversationRosterRow } from "@workspace/ui/components/app-sidebar-conversation-row"
+import { AppTitleBar } from "@workspace/ui/components/app-title-bar"
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
+import { ContentCard } from "@workspace/ui/components/content-card"
 import { HeaderIdentityButton } from "@workspace/ui/components/header-identity-button"
 import { hueTone } from "@workspace/ui/components/hue-palette"
 import { hueDistance } from "@workspace/ui/components/hue-recipe"
+import { NavigationSidebar } from "@workspace/ui/components/navigation-sidebar"
 import { PinnedMessages } from "@workspace/ui/components/pinned-messages"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
 import type { ReplyQuote } from "@workspace/ui/components/prompt-reply"
@@ -32,6 +41,7 @@ import { AssistantTurn, UserTurn } from "@workspace/ui/components/turn"
 import {
 	SHELL_TITLE_BAR_HEIGHT,
 	WorkspaceShell,
+	WorkspaceShellRoot,
 } from "@workspace/ui/components/workspace-shell"
 import { schemeOf } from "@workspace/ui/hooks/use-color-scheme"
 
@@ -166,7 +176,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The application shell: the sidebar surface is the window itself, reaching every edge with no seam, and the main column floats on it as a rounded card detached on all four sides. It is a thin composition over the sidebar foundation — the shell pins the sidebar expanded at one fixed width, with no collapse, no trigger and no resize edge, and hands the room that is left to the card. Whatever fills that card keeps its own scroll boundary, so a `ThreadLayout` still scrolls its transcript alone while the surface around it stays put. `spaceTint` hands the hue of the space in view to the bubbles, the accent and the New line inside the shell, while the surface itself stays neutral.",
+					"The application shell: the sidebar surface is the window itself, reaching every edge with no seam, and the main column floats on it as a rounded card detached on all four sides. It is a thin composition over the sidebar foundation — the shell keeps the sidebar expanded at one fixed width unless its caller collapses it through `open` and `onOpenChange`, with no trigger and no resize edge of its own, and hands the room that is left to the card. Whatever fills that card keeps its own scroll boundary, so a `ThreadLayout` still scrolls its transcript alone while the surface around it stays put. `spaceTint` hands the hue of the space in view to the bubbles, the accent and the New line inside the shell, while the surface itself stays neutral.",
 			},
 		},
 	},
@@ -745,5 +755,82 @@ export const TallHost = meta.story({
 		await expect(canvas.getByRole("main").getBoundingClientRect().bottom).toBe(
 			host.bottom - shellInset(),
 		)
+	},
+})
+
+const NavigationShell = () => {
+	const [isOpen, setIsOpen] = useState(true)
+
+	return (
+		<WorkspaceShellRoot onOpenChange={setIsOpen} open={isOpen}>
+			<AppTitleBar
+				insetWindowControls
+				onToggleSidebar={() => setIsOpen(!isOpen)}
+				tabs={[]}
+			/>
+			<NavigationSidebar
+				conversations={null}
+				destination="newConversation"
+				missionCount={1}
+				pinned={
+					<ConversationRosterRow
+						conversation={DESK_ROOM}
+						isPinned
+						isSelected={false}
+						lift={STILL_LIFT}
+						sections={[SIDEBAR_SECTION]}
+					/>
+				}
+				selectedSpaceId="kiroshi"
+				spaces={[
+					{
+						id: "kiroshi",
+						name: "Kiroshi",
+						colour: BLOT_HUES.blue,
+						avatarSeed: "kiroshi",
+					},
+				]}
+				update={{ status: "available", onDownload: fn() }}
+				user={{ name: "Ada Martin" }}
+				zones={[{ id: "pinned", conversations: [DESK_ROOM] }]}
+			/>
+			<ContentCard />
+		</WorkspaceShellRoot>
+	)
+}
+
+export const SwitchesBetweenExpandedAndCollapsed = meta.story({
+	globals: { theme: "dark", theme_layout: "single" },
+	render: () => <NavigationShell />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The caller holds the open state. Check the title bar toggle swaps the expanded sidebar for the 60px rail drawn from the same Space, destination, update and person, and the sidebar shortcut brings the expanded sidebar back through `onOpenChange`.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		await expect(slotIn(canvasElement, "expanded-sidebar")).toBeVisible()
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Toggle sidebar" }),
+		)
+		await expect(slotsIn(canvasElement, "expanded-sidebar")).toHaveLength(0)
+		const rail = slotIn(canvasElement, "collapsed-sidebar")
+		await expect(rail.getBoundingClientRect().width).toBe(60)
+		const inRail = within(rail)
+		await expect(
+			inRail.getByRole("button", { name: "New conversation" }),
+		).toHaveAttribute("aria-current", "page")
+		await expect(
+			inRail.getByRole("button", { name: "Download update" }),
+		).toBeVisible()
+		await expect(
+			inRail.getByRole("button", { name: "Ada Martin" }),
+		).toBeVisible()
+		await expect(inRail.getByRole("button", { name: "Kiroshi" })).toBeVisible()
+		await userEvent.keyboard("{Control>}b{/Control}")
+		await expect(slotIn(canvasElement, "expanded-sidebar")).toBeVisible()
+		await expect(slotsIn(canvasElement, "collapsed-sidebar")).toHaveLength(0)
 	},
 })

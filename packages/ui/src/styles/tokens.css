@@ -141,6 +141,7 @@
 	--sidebar-person-foreground: #515151;
 	--space-dot: oklch(0 0 0 / 20%);
 	--space-offline: #5c5c5c;
+	--rail-section-placeholder: oklch(0 0 0 / 20%);
 	--update-row: oklch(0 0 0 / 4%);
 	--update-track: oklch(0 0 0 / 12%);
 	--update-blocked-foreground: #5c5c5c;
@@ -380,6 +381,7 @@
 	--sidebar-person-foreground: #acacac;
 	--space-dot: oklch(1 0 0 / 25%);
 	--space-offline: #8a8a8a;
+	--rail-section-placeholder: oklch(1 0 0 / 20%);
 	--update-row: oklch(1 0 0 / 5%);
 	--update-track: oklch(1 0 0 / 15%);
 	--update-blocked-foreground: #7b7b7b;

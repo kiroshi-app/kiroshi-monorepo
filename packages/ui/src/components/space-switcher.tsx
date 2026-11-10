@@ -1,6 +1,11 @@
 "use client"
 
-import { useLayoutEffect, useRef } from "react"
+import {
+	type HTMLAttributes,
+	type ReactElement,
+	useLayoutEffect,
+	useRef,
+} from "react"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -76,11 +81,19 @@ const SPACE_ROW = "h-10 min-h-10"
 
 const DOT = "h-1.5 w-1.5 shrink-0 rounded-full"
 
-const DOTS =
-	"flex flex-wrap items-center justify-center px-1 group-data-[collapsible=icon]:hidden"
+const DOTS = {
+	horizontal:
+		"flex flex-wrap items-center justify-center px-1 group-data-[collapsible=icon]:hidden",
+	vertical: "flex flex-col items-center py-1",
+} as const
 
 const DOT_BUTTON =
-	"group/space-dot relative grid h-5.5 shrink-0 px-1 touch-none select-none place-items-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+	"group/space-dot relative grid shrink-0 touch-none select-none place-items-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+
+const DOT_BUTTON_ALONG = {
+	horizontal: "h-5.5 px-1",
+	vertical: "w-5.5 py-1",
+} as const
 
 const DOT_LIFTED =
 	"pointer-events-none z-10 scale-125 drop-shadow-md translate-x-[var(--lift-dx,0px)] translate-y-[var(--lift-dy,0px)]"
@@ -95,7 +108,10 @@ const INSERTION_AFTER = "end-0"
 const DOT_MOTION =
 	"transition-[width] duration-150 ease-out motion-reduce:transition-none"
 
-const DOT_OPEN = "w-4 bg-sidebar-foreground"
+const DOT_OPEN = {
+	horizontal: "w-4 bg-sidebar-foreground",
+	vertical: "h-4 bg-sidebar-foreground",
+} as const
 
 const DOT_CLOSED = "group-hover/space-dot:bg-sidebar-foreground"
 
@@ -159,6 +175,8 @@ const SpaceDot = ({
 	)
 }
 
+type SpaceDotsOrientation = keyof typeof DOTS
+
 type SpaceSelection = {
 	spaces: Space[]
 	selectedSpaceId?: string
@@ -175,7 +193,32 @@ type SpaceSwitcherProps = Omit<SpaceSelection, "onReorderSpaces"> &
 		focusedInvitationId?: string
 		onCreateSpace?: () => void
 		onOpenChange?: (isOpen: boolean) => void
+		trigger?: ReactElement<HTMLAttributes<HTMLElement>>
 	}
+
+type SpaceMarkProps = {
+	space: Space
+	isOffline: boolean
+}
+
+const SpaceMark = ({ space, isOffline }: SpaceMarkProps) => (
+	<span className={SWITCHER_MARK}>
+		<span
+			className={cn(SWITCHER_SQUARE, isOffline && "opacity-80")}
+			data-hue={space.colour ?? undefined}
+			data-slot="space-switcher-square"
+			style={space.colour == null ? undefined : hueStyle(space.colour)}
+		>
+			{spaceInitial(space.name)}
+		</span>
+		{isOffline ? (
+			<span
+				className={SWITCHER_OFFLINE_DOT}
+				data-slot="space-switcher-offline-dot"
+			/>
+		) : null}
+	</span>
+)
 
 type SpaceMenuRowsProps = Pick<
 	SpaceSwitcherProps,
@@ -248,6 +291,7 @@ const SpaceSwitcher = ({
 	onDeclineInvitation,
 	onRetryInvitation,
 	onOpenChange,
+	trigger,
 }: SpaceSwitcherProps) => {
 	const { t } = useTranslation("bots")
 	const triggerRef = useRef<HTMLElement>(null)
@@ -289,59 +333,44 @@ const SpaceSwitcher = ({
 			<ContextMenuPressTrigger
 				ref={triggerRef}
 				render={
-					<Button
-						aria-label={t(switchLabel, {
-							count: invitations.length,
-							host: host ? t(`spaces.host.${host}`) : "",
-							name: selected.name,
-						})}
-						className={SWITCHER}
-						data-slot="space-switcher"
-						size="sm"
-						variant="ghost"
-					>
-						<span className={SWITCHER_MARK}>
-							<span
-								className={cn(SWITCHER_SQUARE, isOffline && "opacity-80")}
-								data-hue={selected.colour ?? undefined}
-								data-slot="space-switcher-square"
-								style={
-									selected.colour == null
-										? undefined
-										: hueStyle(selected.colour)
-								}
-							>
-								{spaceInitial(selected.name)}
+					trigger ?? (
+						<Button
+							aria-label={t(switchLabel, {
+								count: invitations.length,
+								host: host ? t(`spaces.host.${host}`) : "",
+								name: selected.name,
+							})}
+							className={SWITCHER}
+							data-slot="space-switcher"
+							size="sm"
+							variant="ghost"
+						>
+							<SpaceMark isOffline={isOffline} space={selected} />
+							<span className={SWITCHER_NAME} data-slot="space-switcher-name">
+								{selected.name}
 							</span>
 							{isOffline ? (
-								<span
-									className={SWITCHER_OFFLINE_DOT}
-									data-slot="space-switcher-offline-dot"
+								<span className={SWITCHER_OFFLINE}>
+									{t("spaces.host.down")}
+								</span>
+							) : null}
+							<Icons.Expand aria-hidden="true" className={SWITCHER_CHEVRON} />
+							{elsewhere ? (
+								<BotBadgeDot
+									badge={elsewhere}
+									data-slot="space-switcher-badge"
+									placement="switcher"
 								/>
 							) : null}
-						</span>
-						<span className={SWITCHER_NAME} data-slot="space-switcher-name">
-							{selected.name}
-						</span>
-						{isOffline ? (
-							<span className={SWITCHER_OFFLINE}>{t("spaces.host.down")}</span>
-						) : null}
-						<Icons.Expand aria-hidden="true" className={SWITCHER_CHEVRON} />
-						{elsewhere ? (
-							<BotBadgeDot
-								badge={elsewhere}
-								data-slot="space-switcher-badge"
-								placement="switcher"
-							/>
-						) : null}
-						{isInvited ? (
-							<span
-								aria-hidden="true"
-								className={SWITCHER_INVITATION}
-								data-slot="space-switcher-invitation"
-							/>
-						) : null}
-					</Button>
+							{isInvited ? (
+								<span
+									aria-hidden="true"
+									className={SWITCHER_INVITATION}
+									data-slot="space-switcher-invitation"
+								/>
+							) : null}
+						</Button>
+					)
 				}
 			/>
 			<ContextMenuContent
@@ -375,13 +404,18 @@ const SpaceSwitcher = ({
 	)
 }
 
+type SpaceDotsProps = SpaceSelection & {
+	orientation?: SpaceDotsOrientation
+}
+
 const SpaceDots = ({
 	spaces,
 	selectedSpaceId,
 	badgesBySpaceId,
 	onSelectSpace,
 	onReorderSpaces,
-}: SpaceSelection) => {
+	orientation = "horizontal",
+}: SpaceDotsProps) => {
 	const { t } = useTranslation("bots")
 
 	const placeSpace = (id: string, at: number) => {
@@ -396,7 +430,7 @@ const SpaceDots = ({
 	}
 
 	const lift = useRosterLift({
-		isEnabled: spaces.length > 1,
+		isEnabled: spaces.length > 1 && orientation === "horizontal",
 		landingAt: insertionAt,
 		onLand: placeSpace,
 	})
@@ -415,7 +449,7 @@ const SpaceDots = ({
 	return (
 		<span
 			aria-label={t("spaces.label")}
-			className={DOTS}
+			className={DOTS[orientation]}
 			data-slot="space-dots"
 			data-tauri-drag-region="false"
 			role="group"
@@ -435,7 +469,11 @@ const SpaceDots = ({
 						{...lift.handlersFor(space.id)}
 						aria-current={isSelected}
 						aria-label={t("spaces.open", { name: space.name })}
-						className={cn(DOT_BUTTON, isLifted && DOT_LIFTED)}
+						className={cn(
+							DOT_BUTTON,
+							DOT_BUTTON_ALONG[orientation],
+							isLifted && DOT_LIFTED,
+						)}
 						data-slot="space-dot-button"
 						key={space.id}
 						onClick={() => {
@@ -453,7 +491,7 @@ const SpaceDots = ({
 						) : null}
 						<SpaceDot
 							badge={badgesBySpaceId?.[space.id]}
-							className={isSelected ? DOT_OPEN : DOT_CLOSED}
+							className={isSelected ? DOT_OPEN[orientation] : DOT_CLOSED}
 							colour={space.colour}
 							isFilled={isSelected}
 						/>
@@ -464,4 +502,10 @@ const SpaceDots = ({
 	)
 }
 
-export { SpaceDots, SpaceMenuRows, SpaceSwitcher, type SpaceSwitcherProps }
+export {
+	SpaceDots,
+	SpaceMark,
+	SpaceMenuRows,
+	SpaceSwitcher,
+	type SpaceSwitcherProps,
+}

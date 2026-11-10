@@ -41,6 +41,8 @@ interface WorkspaceShellRootProps {
 	className?: string
 	spaceTint?: number | null
 	isLandmark?: boolean
+	open?: boolean
+	onOpenChange?: (open: boolean) => void
 	children: ReactNode
 }
 
@@ -50,6 +52,8 @@ const WorkspaceShellRoot = ({
 	width,
 	onWidthChange,
 	isResizable,
+	open = true,
+	onOpenChange,
 	children,
 	className,
 }: WorkspaceShellRootProps) => {
@@ -67,7 +71,8 @@ const WorkspaceShellRoot = ({
 					className={cn(SHELL, className)}
 					data-resizing={resize.isResizing}
 					data-hue={spaceHue}
-					open
+					onOpenChange={onOpenChange}
+					open={open}
 					style={shellStyle(resize.width, spaceHue)}
 				>
 					<ContentCardLandmarkId value={isLandmark ? mainId : undefined}>
