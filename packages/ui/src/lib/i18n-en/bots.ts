@@ -94,6 +94,7 @@ const bots = {
 	},
 	rail: {
 		label: "Navigation",
+		home: "Home",
 		conversations: "Conversations",
 		missions: "Missions",
 		library: "Library",

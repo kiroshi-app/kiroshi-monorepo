@@ -636,17 +636,6 @@ it("opens the companion screen on General from the identity button of the solo h
 	expect(companionScreenOf(ATLAS)).toEqual(ON_GENERAL)
 })
 
-it("opens the companion screen on General from the Settings of an empty conversation", async () => {
-	await mountApp()
-	await openRow(NOVA)
-
-	await press(
-		screen.getByRole("button", { name: i18n.t("chat:emptyState.settings") }),
-	)
-
-	expect(companionScreenOf(NOVA)).toEqual(ON_GENERAL)
-})
-
 it("opens the companion screen on Applications from an application install card", async () => {
 	const seeded = await mountApp()
 	harness.installs = [

@@ -110,7 +110,7 @@ import {
 	type AnsweredCards,
 	answeredCardsIn,
 } from "@/lib/chat/answered-question"
-import type { AttachmentsOwner } from "@/lib/chat/attachments-contract"
+import type { ThreadOwner } from "@/lib/chat/attachments-contract"
 import type { AttachmentsController } from "@/lib/chat/attachments-controller"
 import type { ChatError, OutboxEntry } from "@/lib/chat/chat-state"
 import { canStopTurn } from "@/lib/chat/chat-state"
@@ -1400,7 +1400,7 @@ const useThreadSeats = ({
 	const botImage = botFace?.image
 	const isSoloThread = facts.bot !== null
 
-	const owner = useMemo<AttachmentsOwner>(
+	const owner = useMemo<ThreadOwner>(
 		() => ({ kind: facts.bot ? "bot" : "conversation", id: facts.id }),
 		[facts.bot, facts.id],
 	)
@@ -1881,14 +1881,108 @@ function ThreadView(props: ThreadViewProps) {
 		"thread open",
 		view.facts.isFirstLoadPending ? null : shownConversationIdOf(thread),
 	)
+	const isTranscriptEmpty = showsEmptyState(
+		view.transcriptRows,
+		view.signInStep,
+		view.facts.isFirstLoadPending,
+	)
 	const transcriptSkeleton = useSkeletonSlot(
 		view.facts.isFirstLoadPending && view.state.messages.length === 0,
 		view.missionSeat ? MISSION_TRANSCRIPT_SKELETON : THREAD_TRANSCRIPT_SKELETON,
 	)
 
+	const header = (
+		<ThreadHeader
+			botImage={view.botImage}
+			botWork={view.facts.botWork}
+			hasRoutines={view.routinesScope.conversationId !== null}
+			liveMissionIds={view.liveMissionIds}
+			mission={view.missionSeat}
+			onJumpToPin={view.jumpToMessage}
+			onUnpin={view.pins.unpin}
+			pinnedRows={view.pinnedRows}
+			present={view.present}
+			thread={thread}
+		/>
+	)
+
+	const transcript = {
+		anchorOnSend: view.isSoloThread,
+		busy: view.facts.isBusy,
+		highlightedMessageId: view.highlightedMessageId,
+		label: view.missionSeat
+			? view.t("missions.feed.label")
+			: view.t("screen.label"),
+		marksNewMessages: !view.isSoloThread,
+		newer: newerControlOf({
+			hasNewer: view.hasNewer,
+			isLoading: view.facts.isLoadingNewer,
+			onLoad: view.loadNewer,
+			onLoadLatest: view.loadLatest,
+		}),
+		older: view.state.messages.length > 0 ? view.older : undefined,
+		onFollowChange: view.controller.follow,
+		rows: view.transcriptRows,
+		scrollerRef: view.scrollerRef,
+		transcriptKey: view.facts.id,
+	}
+
+	const askedPrompt = view.asked ? (
+		<QuestionPrompt
+			companionName={askerNameOf(view)}
+			key={view.asked.request.id}
+			request={view.asked.request}
+			responder={view.promptResponder}
+		/>
+	) : null
+
+	const approval = (
+		<ThreadApproval
+			authors={view.authors}
+			botFace={view.botFace}
+			permission={view.facts.permission}
+			responder={view.promptResponder}
+		/>
+	)
+
+	const overlay = (
+		<AnswerImageViewer
+			imageActions={imageActions}
+			onClose={imageViewer.close}
+			onStep={imageViewer.step}
+			viewed={imageViewer.viewed}
+		/>
+	)
+
+	const tail = (
+		<ThreadTail
+			botWork={view.facts.botWork}
+			bots={view.bots}
+			onStop={view.stop}
+			readerName={view.reader}
+			refusedQuotes={view.refusedTargets?.map(view.toQuote)}
+			signInStep={view.signInStep}
+			thread={thread}
+		/>
+	)
+
+	const notice =
+		joinedHost && access ? (
+			<SpaceAccessBanner
+				host={joinedHost.hostName}
+				reason={access.reason}
+				space={joinedHost.spaceName}
+				waitReason={access.waitReason}
+			/>
+		) : (
+			<ThreadNotices pins={view.pins} staged={view.staged} />
+		)
+
+	const queue = <ThreadQueue readerName={view.reader} thread={thread} />
+
 	const layout = (
 		<ThreadLayout
-			anchorOnSend={view.isSoloThread}
+			{...transcript}
 			aside={
 				documents?.opened ? (
 					<ThreadOpenedItemPanel
@@ -1898,104 +1992,36 @@ function ThreadView(props: ThreadViewProps) {
 					/>
 				) : undefined
 			}
-			busy={view.facts.isBusy}
 			composer={
-				departure ? undefined : view.asked ? (
-					<QuestionPrompt
-						companionName={askerNameOf(view)}
-						key={view.asked.request.id}
-						request={view.asked.request}
-						responder={view.promptResponder}
-					/>
-				) : (
-					<ThreadComposerSlot
-						bots={known}
-						canAttach={view.canAttach}
-						composerRef={view.composerRef}
-						isDisabled={view.isMissionClosed}
-						onPromptChange={view.rememberDraft}
-						onRemoveReply={view.releaseReply}
-						onSubmitPrompt={view.submitPrompt}
-						placeholder={view.composerPlaceholder}
-						promptRef={view.promptRef}
-						readDraft={view.readDraft}
-						replies={view.replyChips}
-						staged={view.staged}
-						thread={thread}
-					/>
-				)
+				departure
+					? undefined
+					: (askedPrompt ?? (
+							<ThreadComposerSlot
+								bots={known}
+								canAttach={view.canAttach}
+								composerRef={view.composerRef}
+								isDisabled={view.isMissionClosed}
+								onPromptChange={view.rememberDraft}
+								onRemoveReply={view.releaseReply}
+								onSubmitPrompt={view.submitPrompt}
+								placeholder={view.composerPlaceholder}
+								promptRef={view.promptRef}
+								readDraft={view.readDraft}
+								replies={view.replyChips}
+								staged={view.staged}
+								thread={thread}
+							/>
+						))
 			}
-			header={
-				<ThreadHeader
-					botImage={view.botImage}
-					botWork={view.facts.botWork}
-					hasRoutines={view.routinesScope.conversationId !== null}
-					liveMissionIds={view.liveMissionIds}
-					mission={view.missionSeat}
-					onJumpToPin={view.jumpToMessage}
-					onUnpin={view.pins.unpin}
-					pinnedRows={view.pinnedRows}
-					present={view.present}
-					thread={thread}
-				/>
-			}
-			highlightedMessageId={view.highlightedMessageId}
-			label={
-				view.missionSeat
-					? view.t("missions.feed.label")
-					: view.t("screen.label")
-			}
-			notice={
-				joinedHost && access ? (
-					<SpaceAccessBanner
-						host={joinedHost.hostName}
-						reason={access.reason}
-						space={joinedHost.spaceName}
-						waitReason={access.waitReason}
-					/>
-				) : (
-					<ThreadNotices pins={view.pins} staged={view.staged} />
-				)
-			}
-			marksNewMessages={!view.isSoloThread}
-			newer={newerControlOf({
-				hasNewer: view.hasNewer,
-				isLoading: view.facts.isLoadingNewer,
-				onLoad: view.loadNewer,
-				onLoadLatest: view.loadLatest,
-			})}
-			older={view.state.messages.length > 0 ? view.older : undefined}
-			onFollowChange={view.controller.follow}
-			overlay={
-				<AnswerImageViewer
-					imageActions={imageActions}
-					onClose={imageViewer.close}
-					onStep={imageViewer.step}
-					viewed={imageViewer.viewed}
-				/>
-			}
-			pending={
-				departure ? undefined : (
-					<ThreadApproval
-						authors={view.authors}
-						botFace={view.botFace}
-						permission={view.facts.permission}
-						responder={view.promptResponder}
-					/>
-				)
-			}
-			queue={<ThreadQueue readerName={view.reader} thread={thread} />}
+			header={header}
+			notice={notice}
+			overlay={overlay}
+			pending={departure ? undefined : approval}
+			queue={queue}
 			rootRef={view.rootRef}
-			rows={view.transcriptRows}
-			scrollerRef={view.scrollerRef}
 			skeleton={transcriptSkeleton}
-			transcriptKey={view.facts.id}
 		>
-			{showsEmptyState(
-				view.transcriptRows,
-				view.signInStep,
-				view.facts.isFirstLoadPending,
-			) ? (
+			{isTranscriptEmpty ? (
 				<ThreadEmptyState
 					botImage={view.botImage}
 					latestError={view.facts.latestError}
@@ -2007,16 +2033,23 @@ function ThreadView(props: ThreadViewProps) {
 				/>
 			) : null}
 
-			<ThreadTail
-				botWork={view.facts.botWork}
-				bots={view.bots}
-				onStop={view.stop}
-				readerName={view.reader}
-				refusedQuotes={view.refusedTargets?.map(view.toQuote)}
-				signInStep={view.signInStep}
-				thread={thread}
-			/>
+			{tail}
 		</ThreadLayout>
+	)
+
+	const content = (
+		<AnswerActionsContext value={answerActions}>
+			<ThreadDocumentsContext value={documents}>
+				<ThreadBoardDrawers
+					bots={known}
+					conversationId={conversationId}
+					spaceId={documents?.spaceId}
+					workingAgentIds={workingAgentIds}
+				>
+					{layout}
+				</ThreadBoardDrawers>
+			</ThreadDocumentsContext>
+		</AnswerActionsContext>
 	)
 
 	return (
@@ -2031,18 +2064,7 @@ function ThreadView(props: ThreadViewProps) {
 				onOpenMissionInNewTab={onOpenMissionInNewTab}
 				wrapMissionCard={view.wrapMissionCard}
 			>
-				<AnswerActionsContext value={answerActions}>
-					<ThreadDocumentsContext value={documents}>
-						<ThreadBoardDrawers
-							bots={known}
-							conversationId={conversationId}
-							spaceId={documents?.spaceId}
-							workingAgentIds={workingAgentIds}
-						>
-							{layout}
-						</ThreadBoardDrawers>
-					</ThreadDocumentsContext>
-				</AnswerActionsContext>
+				{content}
 			</ThreadRoutines>
 		</RosterProvider>
 	)

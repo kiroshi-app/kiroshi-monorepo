@@ -30,6 +30,7 @@ const settings = {
 	},
 	rail: {
 		account: "Account",
+		general: "General",
 		space: "Space",
 		members: "Members",
 		agents: "Agents",
@@ -153,6 +154,13 @@ const settings = {
 			switch: "Play a sound",
 			description:
 				"Kiroshi plays a short chime with every notification, even when your system shows it silently.",
+		},
+	},
+	openOn: {
+		label: "Open on",
+		option: {
+			newConversation: "New conversation",
+			lastConversation: "Last conversation",
 		},
 	},
 	language: {

@@ -1466,6 +1466,8 @@ export const createFakeTranscriptStore = (
 			})
 		},
 
+		agentRooms: () => Promise.resolve([]),
+
 		conversations: (spaceId: string) =>
 			Promise.resolve(
 				[...conversations.values()]

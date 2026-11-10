@@ -49,7 +49,9 @@ import {
 } from "@/lib/conversations/scripted-driver"
 import type { Bot, Conversation } from "@/lib/conversations/store-contract"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
-import { seatBots } from "@/lib/conversations/transcript-fixtures"
+import { message, seatBots } from "@/lib/conversations/transcript-fixtures"
+import { homeQueryKeys } from "@/lib/home/home-query-keys"
+import { createHomeVisits } from "@/lib/home/home-visits"
 import type { Invoke } from "@/lib/host/joined-hosts-invoke"
 import { base64Of } from "@/lib/library/library-document-session"
 import type {
@@ -57,6 +59,8 @@ import type {
 	MissionChanged,
 	MissionDetail,
 	MissionEvent,
+	MissionInSpace,
+	MissionState,
 } from "@/lib/missions/mission-contract"
 import { missionsTransport } from "@/lib/missions/missions-transport"
 import {
@@ -75,6 +79,10 @@ import {
 	isJoinedRowId,
 	joinedRowIdOf,
 } from "@/lib/spaces/joined-spaces-controller"
+import {
+	type OpenJoinedHost,
+	OpenJoinedHostContext,
+} from "@/lib/spaces/open-joined-host"
 
 let queries = createQueryTestWrapper()
 
@@ -159,6 +167,15 @@ vi.mock("@/lib/missions/missions-transport", () => ({
 		reopen: vi.fn(),
 		onChanged: vi.fn(),
 	},
+}))
+
+const homeFeed = vi.hoisted(() => ({ entries: [] as MissionInSpace[] }))
+vi.mock("@/lib/missions/use-space-missions", () => ({
+	useSpaceMissions: () => ({
+		waitingOnYou: [],
+		inProgress: [],
+		earlierToday: homeFeed.entries,
+	}),
 }))
 
 const listRoutines = vi.mocked(routinesTransport.list)
@@ -753,6 +770,311 @@ describe("WorkspaceBody frame", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Retry" }))
 
 		expect(onRetrySpaces).toHaveBeenCalledTimes(1)
+	})
+})
+
+describe("WorkspaceBody Home", () => {
+	beforeEach(() => {
+		vi.clearAllMocks()
+		homeFeed.entries = []
+		listRoutines.mockResolvedValue([])
+		listRuns.mockResolvedValue([])
+		listSources.mockResolvedValue([])
+		listenToMissions.mockResolvedValue(() => undefined)
+		listMissions.mockResolvedValue({ open: [], done: [] })
+	})
+
+	afterEach(cleanup)
+
+	type HomeLaunch = {
+		store?: TranscriptStore
+		seated?: Workspace
+		overrides?: Partial<WorkspaceBodyHarnessProps>
+		joinedHost?: OpenJoinedHost
+	}
+
+	const launchHome = async ({
+		store = createFakeTranscriptStore(),
+		seated,
+		overrides = {},
+		joinedHost,
+	}: HomeLaunch = {}) => {
+		const workspace = seated ?? (await workspaceOf(store))
+		const homeVisits = createHomeVisits()
+		const onOpenThreadInNewTab = vi.fn()
+		const bodyOf = (more: Partial<WorkspaceBodyHarnessProps> = {}) =>
+			createElement(
+				OpenJoinedHostContext.Provider,
+				{ value: joinedHost ?? null },
+				workspace.body({
+					overrides: {
+						bot: workspace.bot,
+						conversation: undefined,
+						home: {
+							visits: homeVisits,
+							store,
+							conversations: [
+								workspace.conversation,
+								workspace.otherConversation,
+							],
+							onSelectAgent: () => undefined,
+							startConversation: () => Promise.resolve(null),
+							discardConversation: () => Promise.resolve(),
+							openConversation: () => undefined,
+						},
+						onOpenThreadInNewTab,
+						...overrides,
+						...more,
+					},
+				}),
+			)
+		const view = render(bodyOf())
+		const open = () => act(() => homeVisits.open(workspace.bot.id, SPACE))
+		const rerender = (more?: Partial<WorkspaceBodyHarnessProps>) =>
+			view.rerender(bodyOf(more))
+		return {
+			workspace,
+			open,
+			rerender,
+			onOpenThreadInNewTab,
+		}
+	}
+
+	type HomeMission = {
+		id: string
+		title: string
+		state: MissionState
+		at: number
+	}
+
+	const homeMissionOf = (
+		bot: Bot,
+		room: Conversation,
+		{ id, title, state, at }: HomeMission,
+	): MissionInSpace => {
+		const mission = missionOf(bot, room)
+		return {
+			conversationId: room.id,
+			conversationTitle: room.title,
+			mission: {
+				...mission,
+				id,
+				state,
+				ticket: { ...mission.ticket, title },
+				closedAt: at,
+				lastActivityAt: at,
+			},
+		}
+	}
+
+	const homeSlot = (slot: string) =>
+		document.querySelector(`[data-slot="${slot}"]`)
+
+	const typeOnHome = (text: string) =>
+		act(() => {
+			fireEvent.change(screen.getByRole("textbox"), {
+				target: { value: text },
+			})
+		})
+
+	const stageOnHome = (name: string) =>
+		act(() => {
+			fireEvent.change(
+				document.querySelector("input[type='file']") as HTMLInputElement,
+				{ target: { files: [new File(["notes"], name)] } },
+			)
+		})
+
+	const stagedChip = (name: string) =>
+		screen.queryByRole("button", { name: new RegExp(name) })
+
+	it("keeps the Home draft and staged file through an agent pick, out of every conversation composer", async () => {
+		const store = createFakeTranscriptStore()
+		const seated = await workspaceOf(store)
+		const [vega] = await seatBots(store, SPACE, ["Vega"])
+		const home = await launchHome({
+			store,
+			seated,
+			overrides: { drafts: createDraftsController() },
+		})
+		await home.open()
+		typeOnHome("Book the flights.")
+		stageOnHome("notes.md")
+
+		home.rerender({ bot: vega, bots: [seated.bot, vega] })
+
+		expect(screen.getByDisplayValue("Book the flights.")).toBeTruthy()
+		expect(stagedChip("notes.md")).not.toBeNull()
+
+		for (const shown of [
+			{ bot: seated.bot },
+			{ bot: undefined, conversation: seated.conversation },
+		]) {
+			home.rerender({ home: undefined, ...shown })
+			await settle()
+			expect(homeSlot("chat-layout")).not.toBeNull()
+			expect(screen.queryByDisplayValue("Book the flights.")).toBeNull()
+			expect(stagedChip("notes.md")).toBeNull()
+		}
+	})
+
+	it("shows each Space its own Home draft", async () => {
+		const home = await launchHome({
+			overrides: { drafts: createDraftsController() },
+		})
+		await home.open()
+		typeOnHome("Book the flights.")
+
+		home.rerender({ spaceId: "studio" })
+		expect(screen.queryByDisplayValue("Book the flights.")).toBeNull()
+
+		home.rerender({ spaceId: SPACE })
+		expect(screen.getByDisplayValue("Book the flights.")).toBeTruthy()
+	})
+
+	it("shows the fresh Home, never a transcript, whatever the agent was told before", async () => {
+		const controller = createChatController(
+			createScriptedDriver(),
+			createFakeTranscriptStore(),
+		)
+		const told = {
+			...initialChatState,
+			messages: [message({ content: "Book the flights." })],
+		}
+		const home = await launchHome({
+			overrides: {
+				chat: {
+					state: told,
+					controller: { ...controller, stateFor: () => told },
+				},
+			},
+		})
+
+		await home.open()
+
+		expect(screen.getByRole("heading", { name: /What’s next/ })).toBeTruthy()
+		expect(homeSlot("home-layout")?.getAttribute("data-stage")).toBe("empty")
+		expect(screen.queryByText("Book the flights.")).toBeNull()
+		expect(homeSlot("chat-layout")).toBeNull()
+	})
+
+	it("shows the access banner in place of the Home composer once the Space is left", async () => {
+		const home = await launchHome({
+			joinedHost: {
+				spaceName: "Studio Nord",
+				hostName: "Lea",
+				isOnline: false,
+				isDown: false,
+				departure: "removed",
+			},
+		})
+
+		await home.open()
+
+		expect(homeSlot("space-access-banner")?.getAttribute("data-reason")).toBe(
+			"removed",
+		)
+		expect(homeSlot("home-composer")).toBeNull()
+	})
+
+	it("shows only the missions that completed or blocked after the Home opened", async () => {
+		const home = await launchHome()
+		await home.open()
+		const openedAt = Date.now()
+		const { bot, conversation } = home.workspace
+		homeFeed.entries = [
+			homeMissionOf(bot, conversation, {
+				id: "before",
+				title: "Earlier booking",
+				state: "done",
+				at: openedAt - 60_000,
+			}),
+			homeMissionOf(bot, conversation, {
+				id: "after",
+				title: "Book flights",
+				state: "waiting_human",
+				at: openedAt + 60_000,
+			}),
+		]
+
+		home.rerender()
+
+		expect(screen.getByText("Book flights")).toBeTruthy()
+		expect(screen.getByText("Blocked")).toBeTruthy()
+		expect(screen.queryByText("Earlier booking")).toBeNull()
+	})
+
+	it("suggests Applications to an agent that has none, until the suggestion is hidden", async () => {
+		const home = await launchHome()
+		await home.open()
+
+		fireEvent.click(
+			await screen.findByRole("button", { name: "Hide this suggestion" }),
+		)
+
+		expect(
+			screen.queryByRole("button", { name: "Hide this suggestion" }),
+		).toBeNull()
+		expect(homeSlot("home-applications-band")).toBeNull()
+	})
+
+	it("suggests no Application to an agent that has one", async () => {
+		const store = createFakeTranscriptStore()
+		vi.spyOn(store, "pluginMcpServers").mockResolvedValue([
+			{ name: "linear", config: {} },
+		])
+		const home = await launchHome({ store })
+		await home.open()
+		await settle()
+
+		expect(screen.getByRole("heading", { name: /What’s next/ })).toBeTruthy()
+		expect(homeSlot("home-applications-band")).toBeNull()
+	})
+
+	it("shows the normal thread of an agent opened outside the Home, never a Home view", async () => {
+		const home = await launchHome({ overrides: { home: undefined } })
+
+		await home.open()
+
+		expect(homeSlot("chat-layout")).not.toBeNull()
+		expect(homeSlot("home-layout")).toBeNull()
+	})
+
+	it("shows the Home of a Space with no agent without a composer, raising nothing", async () => {
+		render(createElement(NoticeSurface))
+		await launchHome({ overrides: { bot: undefined, bots: [] } })
+		await settle()
+
+		expect(homeSlot("home-composer")).toBeNull()
+		expect(screen.queryByRole("textbox")).toBeNull()
+		expect(screen.queryByRole("alert")).toBeNull()
+	})
+
+	it("keeps a done room line when the person switches to another agent and back", async () => {
+		const store = createFakeTranscriptStore()
+		const seated = await workspaceOf(store)
+		const { bot, conversation } = seated
+		const rooms = vi
+			.spyOn(store, "agentRooms")
+			.mockResolvedValue([
+				{ botId: bot.id, conversationIds: [conversation.id] },
+			])
+		const home = await launchHome({ store, seated })
+		await home.open()
+		expect(await screen.findByText("Nyx is working in")).toBeTruthy()
+
+		rooms.mockResolvedValue([{ botId: bot.id, conversationIds: [] }])
+		await act(() =>
+			queries.queryClient.invalidateQueries({ queryKey: homeQueryKeys.all }),
+		)
+		expect(await screen.findByText("Nyx worked in")).toBeTruthy()
+
+		const [vega] = await seatBots(store, SPACE, ["Vega"])
+		home.rerender({ bot: vega, bots: [bot, vega] })
+		expect(screen.queryByText("Nyx worked in")).toBeNull()
+		home.rerender({ bot, bots: [bot, vega] })
+
+		expect(await screen.findByText("Nyx worked in")).toBeTruthy()
 	})
 })
 

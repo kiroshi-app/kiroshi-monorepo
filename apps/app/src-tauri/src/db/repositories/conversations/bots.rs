@@ -5,7 +5,7 @@ use super::super::{bot_spaces, sections};
 use super::avatar::Hue;
 use super::{
 	ensure_chat_in, now, refuse_if_untouched, space_of, unserializable, write_transaction,
-	ConversationError, CHAT_KIND, DEFAULT_BOT_ID, DEFAULT_BOT_MODEL, DEFAULT_BOT_NAME,
+	ChatOwner, ConversationError, CHAT_KIND, DEFAULT_BOT_ID, DEFAULT_BOT_MODEL, DEFAULT_BOT_NAME,
 };
 use crate::bundles::{BotPermissions, EffortLevel};
 
@@ -216,7 +216,7 @@ pub(super) fn created_bot(
 	)?;
 	let joined = space_of(&transaction, space_id)?;
 	bot_spaces::join(&transaction, &id, &joined, section_id, None)?;
-	ensure_chat_in(&transaction, &id, Some(&joined))?;
+	ensure_chat_in(&transaction, &id, Some(&joined), &ChatOwner::Host)?;
 	let created = stored_bot(&transaction, &id)?;
 	transaction.commit()?;
 	Ok(created)
@@ -478,7 +478,10 @@ mod tests {
 
 		let created = repository.create_bot(an_identity("Nyx"), None, None).await.expect("the bot");
 
-		let chat = repository.ensure_chat(created.id.clone(), None).await.expect("the chat");
+		let chat = repository
+			.ensure_chat(created.id.clone(), None, ChatOwner::Host)
+			.await
+			.expect("the chat");
 		let seats = repository.participants(chat.id.clone()).await.expect("the participants");
 		assert_eq!(seats.len(), 1, "a bot was created with a thread nobody sits in");
 		assert_eq!(seats[0].bot_id, created.id);
@@ -804,8 +807,12 @@ mod tests {
 		let repository = database.conversations();
 		let deleted = repository.create_bot(an_identity("Nyx"), None, None).await.expect("the bot");
 		let kept = repository.create_bot(an_identity("Ada"), None, None).await.expect("the bot");
-		let chat = repository.ensure_chat(deleted.id.clone(), None).await.expect("the chat");
-		let kept_chat = repository.ensure_chat(kept.id.clone(), None).await.expect("the chat");
+		let chat = repository
+			.ensure_chat(deleted.id.clone(), None, ChatOwner::Host)
+			.await
+			.expect("the chat");
+		let kept_chat =
+			repository.ensure_chat(kept.id.clone(), None, ChatOwner::Host).await.expect("the chat");
 		a_transcript_for(&database, &chat.id, &deleted.id).await;
 
 		repository.delete_bot(deleted.id.clone()).await.expect("the bot is deleted");
@@ -834,7 +841,8 @@ mod tests {
 		let database = open(&dir);
 		let repository = database.conversations();
 		let only = repository.ensure_default_bot().await.expect("the default bot");
-		let chat = repository.ensure_chat(only.id.clone(), None).await.expect("the chat");
+		let chat =
+			repository.ensure_chat(only.id.clone(), None, ChatOwner::Host).await.expect("the chat");
 		a_transcript_for(&database, &chat.id, &only.id).await;
 
 		repository.delete_bot(only.id).await.expect("the bot is deleted");
@@ -889,7 +897,10 @@ mod tests {
 		let repository = database.conversations();
 		let read = repository.default_bot().await.expect("the default bot");
 		let seeded = repository.ensure_default_bot().await.expect("the default bot");
-		let held = repository.ensure_chat(DEFAULT_BOT_ID.into(), None).await.expect("the chat");
+		let held = repository
+			.ensure_chat(DEFAULT_BOT_ID.into(), None, ChatOwner::Host)
+			.await
+			.expect("the chat");
 
 		assert_eq!(moved.model, "opus");
 		assert_eq!(read.as_ref(), Some(&moved), "a launch could not read its own default bot");

@@ -1186,6 +1186,7 @@ fn is_named_at(chars: &[char], from: usize, name: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+	use crate::db::repositories::conversations::ChatOwner;
 	use std::time::Duration;
 
 	use serde_json::json;
@@ -1238,7 +1239,7 @@ mod tests {
 			let conversations = written.database().conversations();
 			conversations.ensure_default_bot().await.expect("the bot is seeded");
 			let chat = conversations
-				.ensure_chat(DEFAULT_BOT_ID.to_owned(), None)
+				.ensure_chat(DEFAULT_BOT_ID.to_owned(), None, ChatOwner::Host)
 				.await
 				.expect("the chat is seeded");
 			Self { conversation_id: chat.id, ..written }

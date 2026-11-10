@@ -16,6 +16,7 @@ import { useWorkspaceOverlay } from "./use-workspace-overlay"
 import { useWorkspaceSubscriptions } from "./use-workspace-subscriptions"
 
 import { useNewDevice } from "../devices/use-new-device"
+import { useHomeAgent } from "../home/use-home-agent"
 import { useLibraryBoardFileReplacedNotices } from "../library/use-library-board-file-replaced-notices"
 import { useOpenSettings } from "../navigation/open-settings"
 import { useSettingsNavigation } from "../navigation/use-settings-navigation"
@@ -27,6 +28,8 @@ import {
 	useSwitcherSpaces,
 } from "../spaces/use-joined-spaces"
 import { useNewTabClicks } from "../tabs/new-tab-clicks"
+import { isHomePage } from "../tabs/tab-pages"
+import { usePageShown } from "../tabs/use-page-shown"
 import { useTabKeys } from "../tabs/use-tab-keys"
 import { useTabThreadSync } from "../tabs/use-tab-thread-sync"
 import { useTabsFollowingRenames } from "../tabs/use-tabs-following-renames"
@@ -87,7 +90,18 @@ export const useWorkspaceAssembly = () => {
 			rosterView.rosteredSpaceId === scopes.openRowId &&
 			!core.roster.state.isRosterPending,
 	})
-	useWorkspaceSubscriptions({ core, drivers, rosterView })
+	const homeAgent = useHomeAgent(
+		core.homePicks,
+		rosterView.bots,
+		rosterView.rosteredSpaceId,
+	)
+	const isHomeShown = usePageShown(tabs, isHomePage)
+	useWorkspaceSubscriptions({
+		core,
+		drivers,
+		rosterView,
+		home: { isShown: isHomeShown, agentId: homeAgent?.id ?? null },
+	})
 	const rosterLines = useRosterLines({
 		core,
 		drivers,
@@ -160,6 +174,7 @@ export const useWorkspaceAssembly = () => {
 		companionMenu,
 		core,
 		drivers,
+		homeAgent,
 		joinedHost,
 		loadSpaces,
 		navigation,

@@ -9,7 +9,8 @@ import {
 import { act, cleanup, fireEvent, renderHook } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { pageOf } from "./tab-pages"
+import { createConversationTabOpening } from "./conversation-tab-opening"
+import { launchPageOf, pageOf } from "./tab-pages"
 import { useTabKeys } from "./use-tab-keys"
 import { useTabsFollowingSpace } from "./use-tab-thread-sync"
 import { useTabsFollowingRenames } from "./use-tabs-following-renames"
@@ -28,6 +29,7 @@ import {
 	type Json,
 	LIBRARY_DOCUMENT_RENAMED_EVENT,
 	type LibraryDocumentRenamed,
+	type OpenOn,
 	type ScreenPosition,
 	type TabDrag,
 } from "../bindings"
@@ -40,6 +42,7 @@ import {
 } from "../navigation/library-search"
 import { validateSettingsSearch } from "../navigation/settings-search"
 import { validateThreadSearch } from "../navigation/thread-search"
+import { readMirror, writeMirror } from "../user/preferences-mirror"
 
 const commandKey = vi.hoisted(() => ({ isUsed: true }))
 
@@ -161,6 +164,8 @@ const OTHER_SPACE = "space-away"
 const USER_SETTINGS = "/settings/user"
 
 const LIBRARY = "/library"
+
+const HOME = "/home"
 
 const routerOn = (tabs: WorkspaceTabs) => {
 	const root = createRootRoute()
@@ -2342,5 +2347,104 @@ describe("a renamed Library document", () => {
 		const after = tabsOfSpace()
 		expect(openedNames(after)).toEqual([undefined, RENAMED, RENAMED])
 		expect(activeHref(after)).toBe(libraryOn(RENAMED))
+	})
+})
+
+describe("the page the main window opens on at a cold launch", () => {
+	const quitOn = (href: string, spaceId = SPACE) => {
+		const before = tabsOfSpace(spaceId)
+		showInNewTab(before, href)
+		cleanup()
+		writeMirror({ ...readMirror(), lastSpaceId: spaceId })
+	}
+
+	const choose = (openOn: OpenOn) => {
+		writeMirror({ ...readMirror(), openOn })
+	}
+
+	const launched = () =>
+		createWorkspaceTabs(undefined, undefined, launchPageOf(readMirror()))
+
+	const launchedOn = (spaceId: string) => {
+		const tabs = launched()
+		tabs.showSpace(spaceId)
+		return tabs
+	}
+
+	it("shows the New conversation page of the last Space quitted for newConversation", () => {
+		quitOn(threadOf("last"))
+		choose("newConversation")
+
+		const tabs = launchedOn(SPACE)
+
+		expect(activeHref(tabs)).toBe(HOME)
+		expect(shownHrefs(tabs)).toEqual(["/", HOME])
+		tabs.back()
+		expect(activeHref(tabs)).toBe(threadOf("last"))
+	})
+
+	it("opens exactly what it opened before for lastConversation", () => {
+		quitOn(threadOf("last"))
+		choose("lastConversation")
+
+		const tabs = launchedOn(SPACE)
+
+		expect(activeHref(tabs)).toBe(threadOf("last"))
+		expect(shownHrefs(tabs)).toEqual(["/", threadOf("last")])
+	})
+
+	it("shows the New conversation page for a profile that never set openOn", () => {
+		quitOn(threadOf("last"))
+
+		const tabs = launchedOn(SPACE)
+
+		expect(activeHref(tabs)).toBe(HOME)
+	})
+
+	it("opens a notification target instead of the New conversation page", () => {
+		quitOn(threadOf("last"))
+		choose("newConversation")
+		const tabs = launched()
+		const opening = createConversationTabOpening({
+			tabs,
+			selectSpace: tabs.showSpace,
+		})
+
+		opening.openInTab("notified", SPACE)
+
+		expect(tabs.getState().spaceId).toBe(SPACE)
+		expect(activeHref(tabs)).toBe(threadOf("notified"))
+		expect(shownHrefs(tabs)).not.toContain(HOME)
+	})
+
+	it("shows a Space other than the last one quitted as it was left", () => {
+		quitOn(threadOf("away"), OTHER_SPACE)
+		quitOn(threadOf("last"))
+
+		const tabs = launchedOn(OTHER_SPACE)
+
+		expect(activeHref(tabs)).toBe(threadOf("away"))
+	})
+
+	it("shows a Space switched to after launch as it was left", () => {
+		quitOn(threadOf("away"), OTHER_SPACE)
+		quitOn(threadOf("last"))
+		const tabs = launchedOn(SPACE)
+
+		tabs.showSpace(OTHER_SPACE)
+
+		expect(activeHref(tabs)).toBe(threadOf("away"))
+	})
+
+	it("keeps a secondary window on the page it was opened on", () => {
+		quitOn(threadOf("last"))
+		const tabs = createWorkspaceTabs(
+			threadOf("moved"),
+			SECONDARY,
+			launchPageOf(readMirror()),
+		)
+		tabs.showSpace(SPACE)
+
+		expect(shownHrefs(tabs)).toEqual([threadOf("moved")])
 	})
 })

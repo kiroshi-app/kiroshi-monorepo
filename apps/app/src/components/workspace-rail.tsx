@@ -1,8 +1,9 @@
-import { useMemo, useSyncExternalStore } from "react"
+import { useMemo } from "react"
 
 import type { SettingsNavigation } from "@/lib/navigation/use-settings-navigation"
 import type { useSwitcherSpaces } from "@/lib/spaces/use-joined-spaces"
-import { isLibraryPage, pageOf } from "@/lib/tabs/tab-pages"
+import { isHomePage, isLibraryPage } from "@/lib/tabs/tab-pages"
+import { usePageShown } from "@/lib/tabs/use-page-shown"
 import type { WorkspaceTabs } from "@/lib/tabs/workspace-tabs"
 import type { SidebarPanel } from "@/lib/user/use-sidebar-tab"
 import type { RosterLines } from "@/lib/workspace/use-roster-lines"
@@ -46,9 +47,8 @@ export const useWorkspaceRail = ({
 	const user = overlay.userSettings
 	const openSettings = panels.railSettings
 	const search = overlay.search
-	const isLibraryShown = useSyncExternalStore(tabs.history.subscribe, () =>
-		isLibraryPage(pageOf(tabs.history.location.href)),
-	)
+	const isLibraryShown = usePageShown(tabs, isLibraryPage)
+	const isHomeShown = usePageShown(tabs, isHomePage)
 
 	return useMemo(() => {
 		const space = switcher.selectedSpace
@@ -64,6 +64,7 @@ export const useWorkspaceRail = ({
 				dots: railSignals,
 				hostBySpaceId: switcher.hostBySpaceId,
 				invitations: switcher.invitations,
+				isHomeSelected: isHomeShown,
 				isSearchOpen: search.isOpen,
 				onAcceptInvitation: switcher.onAcceptInvitation,
 				onCreateSpace,
@@ -76,6 +77,7 @@ export const useWorkspaceRail = ({
 					? () => navigation.openSpaceSettings(space.id)
 					: undefined,
 				onOpenYou: () => navigation.openUserSettings(),
+				onSelectHome: navigation.openHome,
 				onSelectConversations: () => leaveSettingsFor("conversations"),
 				onSelectLibrary: navigation.openLibrary,
 				onSelectMissions: () => leaveSettingsFor("missions"),
@@ -90,6 +92,7 @@ export const useWorkspaceRail = ({
 		}
 	}, [
 		badgesBySpaceId,
+		isHomeShown,
 		isLibraryShown,
 		navigation,
 		onCreateSpace,

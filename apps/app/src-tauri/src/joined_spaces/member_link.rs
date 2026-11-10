@@ -32,7 +32,7 @@ pub(super) struct Answer {
 }
 
 #[derive(Debug, PartialEq)]
-pub(super) enum Resync {
+pub(crate) enum Resync {
 	InStep,
 	Resume(String),
 	Reread,
@@ -69,9 +69,10 @@ impl Sequence {
 	}
 }
 
-pub(super) struct MemberLink {
+pub(crate) struct MemberLink {
 	instance_id: String,
 	computer: String,
+	account_id: String,
 	calls: Mutex<Option<mpsc::Sender<String>>>,
 	events: Mutex<Option<broadcast::Sender<Frame>>>,
 	pending: Mutex<HashMap<u64, oneshot::Sender<Answer>>>,
@@ -81,10 +82,11 @@ pub(super) struct MemberLink {
 }
 
 impl MemberLink {
-	pub(super) fn new(instance_id: &str, computer: String) -> Self {
+	pub(crate) fn new(instance_id: &str, computer: String, account_id: String) -> Self {
 		Self {
 			instance_id: instance_id.to_owned(),
 			computer,
+			account_id,
 			calls: Mutex::new(None),
 			events: Mutex::new(Some(broadcast::channel(BUFFERED_EVENTS).0)),
 			pending: Mutex::new(HashMap::new()),
@@ -188,7 +190,7 @@ impl MemberLink {
 		(resuming, frame)
 	}
 
-	pub(super) fn subscribed(&self) -> Option<broadcast::Receiver<Frame>> {
+	pub(crate) fn subscribed(&self) -> Option<broadcast::Receiver<Frame>> {
 		self.events().as_ref().map(broadcast::Sender::subscribe)
 	}
 
@@ -208,7 +210,7 @@ impl MemberLink {
 		answered
 	}
 
-	pub(super) fn received(&self, text: &str) -> Resync {
+	pub(crate) fn received(&self, text: &str) -> Resync {
 		let Ok(frame) = serde_json::from_str::<Value>(text) else {
 			log::warn!(
 				"the member relay of instance {} sent a frame that is not json",
@@ -218,7 +220,12 @@ impl MemberLink {
 		};
 		if let Some(event) = frame.get("event") {
 			let epoch = frame.get("epoch").and_then(Value::as_str);
-			let seq = frame.get("seq").and_then(Value::as_u64);
+			let seq = frame
+				.get("seqs")
+				.and_then(|seqs| seqs.get(&self.account_id))
+				.or_else(|| frame.get("rest"))
+				.or_else(|| frame.get("seq"))
+				.and_then(Value::as_u64);
 			let (Some(epoch), Some(seq)) = (epoch, seq) else {
 				self.heard(event.to_string());
 				return Resync::InStep;
@@ -351,7 +358,7 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_call_is_framed_with_an_id_and_its_answer_reaches_the_caller() {
-		let link = MemberLink::new("instance-1", "Studio".to_owned());
+		let link = MemberLink::new("instance-1", "Studio".to_owned(), "bob".to_owned());
 		let (calls, mut sent) = mpsc::channel(4);
 		link.opened(calls);
 
@@ -371,7 +378,7 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_call_while_closed_or_cut_by_a_close_gets_no_answer() {
-		let link = MemberLink::new("instance-1", "Studio".to_owned());
+		let link = MemberLink::new("instance-1", "Studio".to_owned(), "bob".to_owned());
 		assert!(link.called("space_list", json!({})).await.is_none());
 
 		let (calls, mut sent) = mpsc::channel(4);
@@ -390,7 +397,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_link_ended_for_good_closes_every_subscriber_and_takes_no_new_one() {
 		for presence in [Presence::Ended, Presence::Down] {
-			let link = MemberLink::new("instance-1", "Studio".to_owned());
+			let link = MemberLink::new("instance-1", "Studio".to_owned(), "bob".to_owned());
 			let (calls, _sent) = mpsc::channel(4);
 			link.opened(calls);
 			let mut heard = link.subscribed().expect("a subscriber");
@@ -405,7 +412,7 @@ mod tests {
 
 	#[tokio::test]
 	async fn an_event_frame_reaches_every_subscriber_unwrapped() {
-		let link = MemberLink::new("instance-1", "Studio".to_owned());
+		let link = MemberLink::new("instance-1", "Studio".to_owned(), "bob".to_owned());
 		let (calls, _sent) = mpsc::channel(4);
 		link.opened(calls);
 		let mut heard = link.subscribed().expect("an open session");
@@ -456,7 +463,7 @@ mod tests {
 	}
 
 	fn an_open_link_applied_to(epoch: &str, seq: u64) -> MemberLink {
-		let link = MemberLink::new("instance-1", "Studio".to_owned());
+		let link = MemberLink::new("instance-1", "Studio".to_owned(), "bob".to_owned());
 		let (calls, _sent) = mpsc::channel(4);
 		assert_eq!(link.opened(calls), Resync::Reread);
 		assert_eq!(link.received(&stamped(epoch, seq)), Resync::InStep);
@@ -581,6 +588,27 @@ mod tests {
 	}
 
 	#[test]
+	fn a_frame_to_everyone_is_sequenced_on_its_seqs_at_this_account_or_else_on_rest() {
+		let link = an_open_link_applied_to("e-1", 1);
+		let mut heard = link.subscribed().expect("an open session");
+		let to_everyone = |payload: u64, rest: u64, seqs: Value| {
+			let event = json!({ "event": "a://b", "payload": payload });
+			json!({ "event": event, "epoch": "e-1", "rest": rest, "seqs": seqs }).to_string()
+		};
+
+		let in_step = [
+			link.received(&to_everyone(2, 9, json!({ "bob": 2, "ann": 7 }))),
+			link.received(&stamped("e-1", 3)),
+			link.received(&to_everyone(4, 4, json!({ "ann": 8 }))),
+		];
+		let gap = link.received(&to_everyone(6, 5, json!({ "bob": 6 })));
+
+		assert_eq!(in_step, [Resync::InStep, Resync::InStep, Resync::InStep]);
+		assert_eq!(resume_args(&gap)["since"], 4);
+		assert_eq!(delivered(&mut heard), vec![2, 3, 4]);
+	}
+
+	#[test]
 	fn a_resume_answer_bearing_another_token_is_ignored() {
 		let link = an_open_link_applied_to("e-1", 1);
 		let mut heard = link.subscribed().expect("an open session");
@@ -626,7 +654,7 @@ mod tests {
 
 	#[test]
 	fn a_link_that_awaits_no_replay_drops_one_meant_for_another_member_and_adopts_the_live_frame() {
-		let link = MemberLink::new("instance-1", "Studio".to_owned());
+		let link = MemberLink::new("instance-1", "Studio".to_owned(), "bob".to_owned());
 		let (calls, _sent) = mpsc::channel(4);
 		assert_eq!(link.opened(calls), Resync::Reread);
 		let mut heard = link.subscribed().expect("an open session");

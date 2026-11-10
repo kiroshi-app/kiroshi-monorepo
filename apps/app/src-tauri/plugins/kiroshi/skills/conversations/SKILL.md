@@ -143,3 +143,7 @@ room turns up a question only they can settle, bring it back here and ask it her
 
 Opening a room is reported in one line carrying its title, in the conversation the room
 was opened from. Say that you opened it, say what it is called, and carry on.
+
+When you work in a room for a person, relay into your main conversation with that person
+a short summary of what the room produced and the decision or answer expected from them,
+never the back-and-forth of the room.

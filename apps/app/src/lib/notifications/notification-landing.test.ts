@@ -76,6 +76,7 @@ const PREFERENCES = {
 	firstRunDone: false,
 	lastSpaceId: null,
 	lastBotIdBySpace: {},
+	openOn: "newConversation",
 } as const
 
 const chatRunningIn = (threads: Record<string, string>) => ({

@@ -170,6 +170,7 @@ pub enum TranscriptStoreError {
 		name: String,
 		failure: Box<LibraryError>,
 	},
+	UnvouchedMember,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]

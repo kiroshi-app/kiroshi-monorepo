@@ -34,6 +34,8 @@ const LEFT_OUT_OF_THE_SIDEBAR: Record<string, string> = {
 	isSearchOpen:
 		"the scene opens no search palette, its rail entry stays at rest",
 	onSelectLibrary: "the scene opens no Library, so its rail draws no entry",
+	onSelectHome: "the scene opens no Home, so its rail draws no entry",
+	isHomeSelected: "the scene opens no Home, so its rail draws no entry",
 }
 
 const SIDEBAR_PROP_OF_RAIL_PROP: Record<string, string> = {

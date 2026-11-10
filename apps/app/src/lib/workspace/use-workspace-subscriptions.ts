@@ -7,18 +7,25 @@ import type { WorkspaceDrivers } from "./use-workspace-drivers"
 import { useCompanionAnnouncements } from "../companions/use-companion-announcements"
 import { useCompanionArrivals } from "../conversations/use-companion-arrivals"
 
+type ShownHome = {
+	isShown: boolean
+	agentId: string | null
+}
+
 type WorkspaceSubscriptionsInput = {
 	core: WorkspaceCore
 	drivers: WorkspaceDrivers
 	rosterView: RosterView
+	home: ShownHome
 }
 
 export const useWorkspaceSubscriptions = ({
 	core,
 	drivers,
 	rosterView,
+	home,
 }: WorkspaceSubscriptionsInput) => {
-	const { chat, joinedSpaces, roster, user } = core
+	const { chat, homeVisits, joinedSpaces, roster, user } = core
 	const { onboarding } = drivers
 	const { bots, rosteredSpaceId, selectedBotId, selectedConversationId } =
 		rosterView
@@ -46,28 +53,42 @@ export const useWorkspaceSubscriptions = ({
 		void roster.controller.reload()
 	})
 
+	const shownBotId = home.isShown ? home.agentId : selectedBotId
+	const holdsShownBot = bots.some((bot) => bot.id === shownBotId)
 	const holdsSelectedBot = bots.some((bot) => bot.id === selectedBotId)
+
+	useEffect(() => {
+		if (!shownBotId || !holdsShownBot) {
+			return
+		}
+		const spaceId =
+			rosteredSpaceId && roster.controller.hostSpaceIdOf(rosteredSpaceId)
+		if (!home.isShown) {
+			void chat.controller.open(shownBotId, spaceId)
+			return
+		}
+		if (spaceId) {
+			homeVisits.open(shownBotId, spaceId)
+		}
+	}, [
+		chat.controller,
+		homeVisits,
+		roster.controller,
+		shownBotId,
+		holdsShownBot,
+		home.isShown,
+		rosteredSpaceId,
+	])
 
 	useEffect(() => {
 		if (!selectedBotId || !holdsSelectedBot) {
 			return
 		}
-		void chat.controller.open(
-			selectedBotId,
-			rosteredSpaceId && roster.controller.hostSpaceIdOf(rosteredSpaceId),
-		)
 		void user.controller.setLastBot({
 			spaceId: rosteredSpaceId,
 			botId: selectedBotId,
 		})
-	}, [
-		chat.controller,
-		roster.controller,
-		user.controller,
-		selectedBotId,
-		holdsSelectedBot,
-		rosteredSpaceId,
-	])
+	}, [user.controller, selectedBotId, holdsSelectedBot, rosteredSpaceId])
 
 	useEffect(() => {
 		if (!selectedConversationId) {

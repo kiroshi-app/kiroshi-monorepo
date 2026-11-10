@@ -18,6 +18,7 @@ use kiroshi_app::conversations::contract::UPDATED_EVENT;
 use kiroshi_app::db;
 use kiroshi_app::db::repositories::conversations::Bot;
 use kiroshi_app::db::repositories::messages::{MessagePageQuery, MessageState, StoredMessage};
+use kiroshi_app::hosting::authorship::Caller;
 use kiroshi_app::routines::commands::{routine_run_now, CHANGED_EVENT};
 use kiroshi_app::routines::contract::{
 	FieldType, Filter, FilterMatchMode, PayloadField, ReportedRun, Routine, RoutineDraft,
@@ -90,18 +91,28 @@ const REFUSED_TURNS: &str = "
 fn launch(name: &str, played: &str) -> Host {
 	let scenario = scenario(played);
 	let app = booted(name);
-	let chat =
-		block_on(conversation_main_chat(app.handle().clone(), app.state(), BOT.to_owned(), None))
-			.expect("the main chat opens");
+	let chat = block_on(conversation_main_chat(
+		app.handle().clone(),
+		app.state(),
+		Caller::Host,
+		BOT.to_owned(),
+		None,
+	))
+	.expect("the main chat opens");
 	hosting(app, scenario, name, chat.id)
 }
 
 fn launch_leased(name: &str, played: &str, lease: RunLease) -> Host {
 	let scenario = scenario(played);
 	let app = booted_with(name, AgentState::leasing(lease));
-	let chat =
-		block_on(conversation_main_chat(app.handle().clone(), app.state(), BOT.to_owned(), None))
-			.expect("the main chat opens");
+	let chat = block_on(conversation_main_chat(
+		app.handle().clone(),
+		app.state(),
+		Caller::Host,
+		BOT.to_owned(),
+		None,
+	))
+	.expect("the main chat opens");
 	hosting(app, scenario, name, chat.id)
 }
 
@@ -645,6 +656,7 @@ fn two_bots_running_a_routine_at_once_each_report_their_own_turn_on_their_own_co
 	let second_chat = block_on(conversation_main_chat(
 		host.app.handle().clone(),
 		host.app.state(),
+		Caller::Host,
 		SECOND_BOT.to_owned(),
 		None,
 	))
@@ -708,6 +720,7 @@ fn a_runtime_write_held_on_one_bot_holds_no_run_of_another() {
 	let second_chat = block_on(conversation_main_chat(
 		host.app.handle().clone(),
 		host.app.state(),
+		Caller::Host,
 		SECOND_BOT.to_owned(),
 		None,
 	))

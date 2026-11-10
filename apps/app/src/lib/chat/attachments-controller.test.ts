@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type {
 	AttachmentsOwner,
 	SubmittedAttachment,
+	ThreadOwner,
 } from "./attachments-contract"
 import {
 	type AttachmentsPort,
@@ -15,9 +16,14 @@ const fileNamed = (name: string, type = "text/markdown") =>
 
 type Sent = { owner: string; text: string }
 
-const bot = (id: string): AttachmentsOwner => ({ kind: "bot", id })
+const bot = (id: string): ThreadOwner => ({ kind: "bot", id })
 
-const room = (id: string): AttachmentsOwner => ({ kind: "conversation", id })
+const room = (id: string): ThreadOwner => ({ kind: "conversation", id })
+
+const home = (spaceId: string): AttachmentsOwner => ({
+	kind: "home",
+	id: spaceId,
+})
 
 const heldPort = (unreachable: string[] = []) => {
 	const stored: { owner: string; names: string[] }[] = []
@@ -27,7 +33,7 @@ const heldPort = (unreachable: string[] = []) => {
 	let reached: (() => void) | null = null
 
 	const port: AttachmentsPort = {
-		store: (owner: AttachmentsOwner, attachments: SubmittedAttachment[]) => {
+		store: (owner: ThreadOwner, attachments: SubmittedAttachment[]) => {
 			stored.push({
 				owner: ownerKey(owner),
 				names: attachments.map((attachment) => attachment.name),
@@ -38,7 +44,7 @@ const heldPort = (unreachable: string[] = []) => {
 				refuse = reject
 			})
 		},
-		send: (owner: AttachmentsOwner, text: string) => {
+		send: (owner: ThreadOwner, text: string) => {
 			if (unreachable.includes(ownerKey(owner))) {
 				return false
 			}
@@ -182,6 +188,43 @@ describe("a refused store", () => {
 	})
 })
 
+describe("a submission carried to another owner", () => {
+	it("stores the files for the target, sends there and empties the staging owner", async () => {
+		const host = heldPort()
+		const controller = createAttachmentsController(host.port)
+		controller.stage(home("s"), [fileNamed("notes.md")])
+
+		const submission = controller.submitTo(home("s"), room("r"), "look")
+		await host.whenStored()
+		host.answerWith(["/data/a/1.md"])
+
+		expect(await submission).toBe(true)
+		expect(host.stored).toEqual([
+			{ owner: "conversation:r", names: ["notes.md"] },
+		])
+		expect(host.sent).toEqual([
+			{ owner: "conversation:r", text: SENT_WITH_NOTES },
+		])
+		expect(controller.getState().staged["home:s"]).toHaveLength(0)
+	})
+
+	it("waits for the target to take the message and keeps the files when it refuses", async () => {
+		const host = heldPort()
+		const controller = createAttachmentsController({
+			...host.port,
+			send: () => Promise.resolve(false),
+		})
+		controller.stage(home("s"), [fileNamed("notes.md")])
+
+		const submission = controller.submitTo(home("s"), room("r"), "look")
+		await host.whenStored()
+		host.answerWith(["/data/a/1.md"])
+
+		expect(await submission).toBe(false)
+		expect(controller.getState().staged["home:s"]).toHaveLength(1)
+	})
+})
+
 describe("files that stop being reachable", () => {
 	it("release their previews when the companion is forgotten", () => {
 		const released = vi.spyOn(URL, "revokeObjectURL")
@@ -196,7 +239,7 @@ describe("files that stop being reachable", () => {
 		released.mockRestore()
 	})
 
-	it("release their previews when the composer goes away", () => {
+	it("release their previews when the workspace lets the controller go", () => {
 		const released = vi.spyOn(URL, "revokeObjectURL")
 		const controller = createAttachmentsController(heldPort().port)
 		controller.stage(bot("a"), [fileNamed("shot.png", "image/png")])

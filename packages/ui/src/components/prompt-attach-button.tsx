@@ -10,12 +10,17 @@ import { cn } from "@workspace/ui/lib/utils"
 export interface PromptAttachButtonProps {
 	onAttach: (files: File[]) => void
 	disabled?: boolean
+	hasLabel?: boolean
 	className?: string
 }
+
+const LABELLED_PILL =
+	"h-8 w-auto gap-1.5 rounded-2xl ps-2.5 pe-3 font-medium text-compact leading-4 transition-none [&_svg]:size-3.5"
 
 export function PromptAttachButton({
 	onAttach,
 	disabled,
+	hasLabel = false,
 	className,
 }: PromptAttachButtonProps) {
 	const { t } = useTranslation("chat")
@@ -34,15 +39,17 @@ export function PromptAttachButton({
 				type="button"
 				variant="ghost"
 				size="icon"
-				aria-label={label}
+				aria-label={hasLabel ? undefined : label}
 				disabled={disabled}
 				onClick={() => fileRef.current?.click()}
 				className={cn(
 					"size-8 rounded-full border-foreground/12 text-soft-foreground",
+					hasLabel && LABELLED_PILL,
 					className,
 				)}
 			>
 				<Icons.Add />
+				{hasLabel ? t("attachments.add") : null}
 			</Button>
 			<input
 				aria-label={label}

@@ -2,9 +2,9 @@ use tauri::{AppHandle, Runtime, State};
 
 use super::super::context;
 use super::super::contract::{
-	state_in, Chat, CompanionArrival, ContextCheckpoint, Conversation, ConversationDeleted,
-	ConversationInList, ConversationInPage, ConversationPage, ConversationStored, Hue,
-	ObservedState, RuntimeSession, SoloState, TranscriptStoreError,
+	state_in, AgentRooms, Chat, CompanionArrival, ContextCheckpoint, Conversation,
+	ConversationDeleted, ConversationInList, ConversationInPage, ConversationPage,
+	ConversationStored, Hue, ObservedState, RuntimeSession, SoloState, TranscriptStoreError,
 };
 use super::super::state as conversation_state;
 use super::bot::ready;
@@ -13,7 +13,8 @@ use crate::avatars;
 use crate::companions::launch;
 use crate::db;
 use crate::db::repositories::conversations::{
-	Conversation as StoredConversation, ConversationDraft, ConversationEdit, Joined, MISSION_KIND,
+	ChatOwner, Conversation as StoredConversation, ConversationDraft, ConversationEdit, Joined,
+	MISSION_KIND,
 };
 use crate::db::repositories::keyset;
 use crate::db::repositories::runtime_context::{Handover, ParticipantKey};
@@ -22,17 +23,20 @@ use crate::events::{
 	CONVERSATION_UPDATED,
 };
 use crate::file_store::FileStore;
+use crate::hosting::authorship::Caller;
 
 #[tauri::command]
 #[specta::specta]
 pub async fn conversation_main_chat<R: Runtime>(
 	app: AppHandle<R>,
 	state: State<'_, db::DatabaseState>,
+	caller: Caller,
 	bot_id: String,
 	space_id: Option<String>,
 ) -> Result<Chat, TranscriptStoreError> {
+	let owner = owner_of(&caller, &app)?;
 	let database = ready(&state)?;
-	let chat = database.conversations().ensure_chat(bot_id, space_id).await?;
+	let chat = database.conversations().ensure_chat(bot_id, space_id, owner).await?;
 	let states = conversation_state::listed(&app, database, vec![chat.id.clone()]).await?;
 	let observed = state_in(&states, &chat.id);
 	Ok(Chat::of(chat, observed))
@@ -40,13 +44,43 @@ pub async fn conversation_main_chat<R: Runtime>(
 
 #[tauri::command]
 #[specta::specta]
+pub async fn conversation_renew_main_chat<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	caller: Caller,
+	bot_id: String,
+	space_id: String,
+) -> Result<Chat, TranscriptStoreError> {
+	let owner = owner_of(&caller, &app)?;
+	let database = ready(&state)?;
+	let renewed = database.conversations().renew_chat(bot_id, space_id.clone(), owner).await?;
+	if let Some(archived_id) = renewed.archived_id {
+		let archived =
+			ConversationDeleted { space_id: Some(space_id), conversation_id: archived_id };
+		launch::announce(&app, CONVERSATION_DELETED, archived);
+	}
+	announce_conversation(&app, database, CONVERSATION_CREATED, &renewed.fresh.id).await;
+	Ok(Chat::of(renewed.fresh, ObservedState::idle()))
+}
+
+fn owner_of<R: Runtime>(
+	caller: &Caller,
+	app: &AppHandle<R>,
+) -> Result<ChatOwner, TranscriptStoreError> {
+	caller.chat_owner(app).ok_or(TranscriptStoreError::UnvouchedMember)
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn conversation_solo_states<R: Runtime>(
 	app: AppHandle<R>,
 	state: State<'_, db::DatabaseState>,
+	caller: Caller,
 	space_id: String,
 ) -> Result<Vec<SoloState>, TranscriptStoreError> {
+	let owner = owner_of(&caller, &app)?;
 	let database = ready(&state)?;
-	let threads = database.conversations().solo_threads(space_id).await?;
+	let threads = database.conversations().solo_threads(space_id, owner).await?;
 	let ids = threads.iter().map(|thread| thread.conversation_id.clone()).collect();
 	let states = conversation_state::listed(&app, database, ids).await?;
 	Ok(threads
@@ -56,6 +90,19 @@ pub async fn conversation_solo_states<R: Runtime>(
 			bot_id: thread.bot_id,
 			conversation_id: thread.conversation_id,
 		})
+		.collect())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn conversation_agent_rooms(
+	state: State<'_, db::DatabaseState>,
+	space_id: String,
+) -> Result<Vec<AgentRooms>, TranscriptStoreError> {
+	let working = ready(&state)?.conversations().rooms_of_working_bots(space_id).await?;
+	Ok(working
+		.into_iter()
+		.map(|(bot_id, conversation_ids)| AgentRooms { bot_id, conversation_ids })
 		.collect())
 }
 
@@ -113,16 +160,18 @@ pub async fn conversation_mission_thread<R: Runtime>(
 pub async fn conversation_page<R: Runtime>(
 	app: AppHandle<R>,
 	state: State<'_, db::DatabaseState>,
+	caller: Caller,
 	space_id: String,
 	cursor: Option<String>,
 	limit: Option<u32>,
 ) -> Result<ConversationPage, TranscriptStoreError> {
 	let after = keyset::after(cursor)
 		.map_err(|cursor| TranscriptStoreError::UnreadableCursor { cursor })?;
+	let reader = owner_of(&caller, &app)?;
 	let database = ready(&state)?;
 	let read = database
 		.conversations()
-		.conversation_page(space_id, after, keyset::page_size(limit))
+		.conversation_page(space_id, reader, after, keyset::page_size(limit))
 		.await?;
 	let ids = read.pinned.iter().chain(&read.page.rows).map(|row| row.conversation.id.clone());
 	let states = conversation_state::listed(&app, database, ids.collect()).await?;
@@ -175,10 +224,14 @@ pub async fn conversation_delete<R: Runtime>(
 	state: State<'_, db::DatabaseState>,
 	conversation_id: String,
 ) -> Result<(), TranscriptStoreError> {
-	let conversations = ready(&state)?.conversations();
+	let database = ready(&state)?;
+	let conversations = database.conversations();
 	let space_id = conversations.space(conversation_id.clone()).await?;
 	conversations.delete_conversation(conversation_id.clone()).await?;
 	shut_asking_runs_down(&app, |scope| scope.conversation_id == conversation_id).await;
+	if let Some(space_id) = &space_id {
+		conversation_state::observe_agent_rooms(&app, database, space_id).await;
+	}
 	launch::announce(&app, CONVERSATION_DELETED, ConversationDeleted { space_id, conversation_id });
 	Ok(())
 }

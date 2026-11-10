@@ -7,10 +7,7 @@ import {
 	NO_DOCUMENTS,
 	type StagedAttachment,
 } from "./attachments"
-import type {
-	AttachmentStoreError,
-	AttachmentsOwner,
-} from "./attachments-contract"
+import type { AttachmentStoreError, ThreadOwner } from "./attachments-contract"
 import { type AttachmentsController, ownerKey } from "./attachments-controller"
 import { watchConversationDrags } from "./conversation-drags"
 
@@ -31,7 +28,7 @@ export type StagedFiles = {
 
 export function useAttachments(
 	controller: AttachmentsController,
-	owner: AttachmentsOwner,
+	owner: ThreadOwner,
 	canAttach: boolean,
 	conversation: RefObject<HTMLElement | null>,
 ): StagedFiles {
@@ -51,8 +48,6 @@ export function useAttachments(
 		}),
 		[controller, owner],
 	)
-
-	useEffect(() => controller.release, [controller])
 
 	useEffect(
 		() =>

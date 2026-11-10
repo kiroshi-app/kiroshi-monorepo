@@ -1,6 +1,7 @@
 import {
 	AlignLeftIcon,
 	AppWindowPlusIcon,
+	ArchiveIcon,
 	ArrowDownIcon,
 	ArrowRightIcon,
 	ArrowUpIcon,
@@ -284,6 +285,7 @@ const Icons = {
 	Add: PlusIcon,
 	Alert: TriangleAlertIcon,
 	AlertCircle: CircleAlertIcon,
+	Archive: ArchiveIcon,
 	ArrowDown: ArrowDownIcon,
 	ArrowRight: ArrowRightIcon,
 	ArrowUp: ArrowUpIcon,

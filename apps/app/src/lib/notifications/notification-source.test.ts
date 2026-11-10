@@ -207,7 +207,8 @@ const createFakeRoster = (
 
 const createFakeConversations = () => ({
 	open: vi.fn(async ({ openInPlace }: ConversationTarget) => openInPlace()),
-	openInNewTab: vi.fn(),
+	openInTab: vi.fn(),
+	showOverHome: vi.fn(),
 })
 
 const createFakeJoinedSpaces = () => ({
@@ -774,7 +775,7 @@ describe("startNotificationSource on a conversation", () => {
 		expect(harness.conversations.open).toHaveBeenCalledExactlyOnceWith(
 			expect.objectContaining({ conversationId: "room-one" }),
 		)
-		expect(harness.conversations.openInNewTab).toHaveBeenCalledExactlyOnceWith(
+		expect(harness.conversations.openInTab).toHaveBeenCalledExactlyOnceWith(
 			"room-one",
 			SPACE,
 		)
@@ -788,7 +789,7 @@ describe("startNotificationSource on a conversation", () => {
 		harness.notifications.activate(ROOM)
 
 		expect(harness.conversations.open).toHaveBeenCalledOnce()
-		expect(harness.conversations.openInNewTab).not.toHaveBeenCalled()
+		expect(harness.conversations.openInTab).not.toHaveBeenCalled()
 	})
 
 	it("shows the window and opens no tab for a conversation that is gone", async () => {
@@ -799,7 +800,7 @@ describe("startNotificationSource on a conversation", () => {
 		harness.notifications.activate(ROOM)
 
 		expect(raiseWindow).toHaveBeenCalled()
-		expect(harness.conversations.openInNewTab).not.toHaveBeenCalled()
+		expect(harness.conversations.openInTab).not.toHaveBeenCalled()
 	})
 
 	it("forgets the round of a conversation whose runtime was let go", async () => {

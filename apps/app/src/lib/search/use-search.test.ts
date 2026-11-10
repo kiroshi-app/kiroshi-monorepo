@@ -168,6 +168,7 @@ const aNavigation = (): TracedNavigation => {
 			openThreadInNewTab: (thread) =>
 				trace.push(`new-tab:${JSON.stringify(thread)}`),
 			openConversation: async ({ openInPlace }) => openInPlace(),
+			showOverHome: () => undefined,
 		},
 	}
 }

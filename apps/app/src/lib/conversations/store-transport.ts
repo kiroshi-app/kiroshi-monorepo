@@ -59,6 +59,7 @@ import {
 } from "../host"
 import type { AgentCommand } from "@/lib/agent/contract"
 import {
+	type AgentRooms,
 	SUMMONS_DROPPED_EVENT,
 	type SummonsDropped,
 	type SummonsDropReason,
@@ -406,6 +407,9 @@ export const conversationStore: TranscriptStore = {
 			{ botId, spaceId: spaceOrJoined(spaceId) },
 			{ signal },
 		),
+
+	agentRooms: (spaceId: string, signal?: AbortSignal) =>
+		invoke<AgentRooms[]>("conversation_agent_rooms", { spaceId }, { signal }),
 
 	conversationPage: (
 		spaceId: string,

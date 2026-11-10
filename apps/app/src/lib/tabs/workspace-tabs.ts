@@ -14,6 +14,7 @@ import {
 	EMPTY_LIST_HREF,
 	HREF_BASE,
 	hrefAfterRename,
+	type LaunchPage,
 	pageOf,
 	rowIdsNamedBy,
 } from "./tab-pages"
@@ -61,6 +62,7 @@ import {
 	reopenTab,
 	reorderTabs,
 	replaceEntry,
+	revealTab,
 	rewriteHrefs,
 	type SpaceTabs,
 	selectTab,
@@ -339,6 +341,7 @@ const startSecondaryWindow = (
 export const createWorkspaceTabs = (
 	openingHref = EMPTY_LIST_HREF,
 	windowLabel = MAIN_WINDOW_LABEL,
+	launchPage: LaunchPage | null = null,
 ): WorkspaceTabs => {
 	const isMainWindow = windowLabel === MAIN_WINDOW_LABEL
 	const predecessor = predecessorNamedIn(openingHref)
@@ -525,6 +528,23 @@ export const createWorkspaceTabs = (
 		return heldOrRestoredTabsOf(spaceId) ?? { space: fresh, isRestored: false }
 	}
 
+	const isLaunchingOn = (spaceId: string) =>
+		isMainWindow &&
+		store.getState().spaceId === NO_SPACE &&
+		!store.getState().bySpace[spaceId]
+
+	const launchedTabsOf = (spaceId: string) => {
+		const reached = reachedTabsOf(spaceId)
+		if (launchPage?.spaceId !== spaceId || !isLaunchingOn(spaceId)) {
+			return reached
+		}
+		const { space } = reached
+		return {
+			...reached,
+			space: revealTab(space, space.activeId, launchPage.href),
+		}
+	}
+
 	const changeAway = (
 		spaceId: string,
 		update: (space: SpaceTabs) => SpaceTabs,
@@ -654,7 +674,7 @@ export const createWorkspaceTabs = (
 
 	const reachSpace = (spaceId: string) => {
 		const state = store.getState()
-		const { space, isRestored } = reachedTabsOf(spaceId)
+		const { space, isRestored } = launchedTabsOf(spaceId)
 		showChange(() =>
 			store.setState({
 				...state,

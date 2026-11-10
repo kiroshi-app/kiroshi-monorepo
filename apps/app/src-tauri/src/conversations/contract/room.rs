@@ -44,6 +44,21 @@ pub struct SoloState {
 	pub observed: ObservedState,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentRooms {
+	pub bot_id: String,
+	pub conversation_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentRoomsChanged {
+	pub bot_id: String,
+	pub space_id: String,
+	pub conversation_ids: Vec<String>,
+}
+
 pub const CREATED_EVENT: &str = "conversation://created";
 
 pub const UPDATED_EVENT: &str = "conversation://updated";
@@ -51,6 +66,8 @@ pub const UPDATED_EVENT: &str = "conversation://updated";
 pub const DELETED_EVENT: &str = "conversation://deleted";
 
 pub const STATE_CHANGED_EVENT: &str = "conversation://state-changed";
+
+pub const AGENT_ROOMS_CHANGED_EVENT: &str = "conversation://agent-rooms-changed";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "snake_case")]

@@ -411,6 +411,46 @@
         }
       ]
     },
+    "AgentRooms": {
+      "properties": {
+        "botId": {
+          "type": "string"
+        },
+        "conversationIds": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "botId",
+        "conversationIds"
+      ],
+      "type": "object"
+    },
+    "AgentRoomsChanged": {
+      "properties": {
+        "botId": {
+          "type": "string"
+        },
+        "conversationIds": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "spaceId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "botId",
+        "spaceId",
+        "conversationIds"
+      ],
+      "type": "object"
+    },
     "AnswerFrame": {
       "description": "The host answers one call. id is null when the call carried no usable id.",
       "properties": {
@@ -1865,6 +1905,17 @@
             "detail"
           ],
           "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "unvouchedMember"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -3063,10 +3114,23 @@
           ],
           "type": "object"
         },
-        "seq": {
-          "description": "1 for the first frame of the epoch, one more for each next frame.",
+        "rest": {
+          "description": "Present only beside seqs: the seq of the frame for every account seqs does not name, in place of seq.",
           "minimum": 1,
           "type": "integer"
+        },
+        "seq": {
+          "description": "The place of the frame on the sequence of the account it reaches: 1 for the first frame of the epoch that reaches the account, one more for each next one. Absent whenever seqs is present.",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "seqs": {
+          "additionalProperties": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "description": "Present only on a frame to everyone once a frame of the epoch reached one account and not another: the seq of the frame for each account it names, in place of seq.",
+          "type": "object"
         },
         "token": {
           "description": "Present only on a frame replayed for a ResumeCallFrame: the token of that call. A member that did not send it drops the frame.",
@@ -5107,6 +5171,17 @@
             "limit"
           ],
           "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "unvouchedMember"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -6776,7 +6851,7 @@
       "type": "object"
     },
     "ResumeCallFrame": {
-      "description": "A call frame asking the host to replay every frame of epoch above since. The host answers it itself.",
+      "description": "A call frame asking the host to replay every frame of epoch that reaches the account of the caller, above since on the sequence of that account. The host answers it itself.",
       "properties": {
         "args": {
           "properties": {
@@ -9337,6 +9412,17 @@
             "failure"
           ],
           "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "unvouchedMember"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -10616,6 +10702,28 @@
         "$ref": "#/$defs/Conversation"
       }
     },
+    "conversation_agent_rooms": {
+      "args": {
+        "properties": {
+          "spaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spaceId"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/TranscriptStoreError"
+      },
+      "ok": {
+        "items": {
+          "$ref": "#/$defs/AgentRooms"
+        },
+        "type": "array"
+      }
+    },
     "conversation_append_text": {
       "args": {
         "properties": {
@@ -11457,6 +11565,29 @@
       },
       "ok": {
         "$ref": "#/$defs/Conversation"
+      }
+    },
+    "conversation_renew_main_chat": {
+      "args": {
+        "properties": {
+          "botId": {
+            "type": "string"
+          },
+          "spaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "botId",
+          "spaceId"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/TranscriptStoreError"
+      },
+      "ok": {
+        "$ref": "#/$defs/Chat"
       }
     },
     "conversation_roster_block": {
@@ -13721,6 +13852,11 @@
     "companion://updated": {
       "payload": {
         "$ref": "#/$defs/CompanionUpdated"
+      }
+    },
+    "conversation://agent-rooms-changed": {
+      "payload": {
+        "$ref": "#/$defs/AgentRoomsChanged"
       }
     },
     "conversation://companion-arrived": {

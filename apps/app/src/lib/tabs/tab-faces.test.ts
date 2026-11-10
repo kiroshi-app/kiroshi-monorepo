@@ -125,6 +125,15 @@ describe("the face of a tab", () => {
 		expect(tabFaceOf("/", SOURCES).title).toBe(i18n.t("common:titleBar.newTab"))
 	})
 
+	it("draws the Home icon and the Home name for the Home page", () => {
+		const face = tabFaceOf("/home", SOURCES)
+		const homeGlyph = markupOf(createElement(Icons.Home))
+		cleanup()
+
+		expect(face.title).toBe(i18n.t("bots:rail.home"))
+		expect(markupOf(face.icon)).toBe(homeGlyph)
+	})
+
 	it("draws the Library icon and the Library name for the Library page", () => {
 		const face = tabFaceOf("/library", SOURCES)
 		const libraryGlyph = markupOf(createElement(Icons.Library))

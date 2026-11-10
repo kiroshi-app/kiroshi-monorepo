@@ -11,6 +11,8 @@ import type {
 	UserPreferences,
 } from "./preferences-contract"
 
+import type { OpenOn } from "@/lib/bindings"
+
 const COLOR_SCHEME_KEY = "theme"
 const LANGUAGE_KEY = "language"
 const SIDEBAR_WIDTH_KEY = "sidebarWidth"
@@ -20,10 +22,15 @@ const FIRST_RUN_DONE_KEY = "firstRunDone"
 const LAST_SPACE_KEY = "lastSpaceId"
 const LAST_BOT_BY_SPACE_KEY = "lastBotIdBySpace"
 const DROPPED_LAST_BOT_KEY = "lastBotId"
+const OPEN_ON_KEY = "openOn"
 
 const COLOR_SCHEMES: ColorScheme[] = ["system", "light", "dark"]
 
 const DEFAULT_COLOR_SCHEME: ColorScheme = "system"
+
+const OPEN_ON_CHOICES: OpenOn[] = ["newConversation", "lastConversation"]
+
+const DEFAULT_OPEN_ON: OpenOn = "newConversation"
 
 const SWITCH_ON = "on"
 const SWITCH_OFF = "off"
@@ -36,10 +43,14 @@ export type MirroredPreferences = {
 	firstRunDone: boolean
 	lastSpaceId: string | null
 	lastBotIdBySpace: BotIdBySpace
+	openOn: OpenOn
 }
 
 const colorSchemeOf = (value: string | null): ColorScheme =>
 	COLOR_SCHEMES.find((scheme) => scheme === value) ?? DEFAULT_COLOR_SCHEME
+
+const openOnOf = (value: string | null): OpenOn =>
+	OPEN_ON_CHOICES.find((choice) => choice === value) ?? DEFAULT_OPEN_ON
 
 const isBotIdBySpace = (value: unknown): value is BotIdBySpace =>
 	typeof value === "object" &&
@@ -50,7 +61,7 @@ const isBotIdBySpace = (value: unknown): value is BotIdBySpace =>
 const botIdBySpaceOf = (value: unknown): BotIdBySpace =>
 	isBotIdBySpace(value) ? value : {}
 
-const parseBotIdBySpace = (value: string | null): BotIdBySpace => {
+export const parseBotIdBySpace = (value: string | null): BotIdBySpace => {
 	try {
 		return botIdBySpaceOf(JSON.parse(value ?? ""))
 	} catch {
@@ -103,6 +114,7 @@ export const mirrorOf = (record: UserPreferences): MirroredPreferences => ({
 	firstRunDone: record.firstRunDone === true,
 	lastSpaceId: record.lastSpaceId ?? null,
 	lastBotIdBySpace: botIdBySpaceOf(record.lastBotIdBySpace),
+	openOn: openOnOf(record.openOn),
 })
 
 export const sameMirror = (
@@ -115,7 +127,8 @@ export const sameMirror = (
 	one.activityPanelOpen === other.activityPanelOpen &&
 	one.firstRunDone === other.firstRunDone &&
 	one.lastSpaceId === other.lastSpaceId &&
-	sameBotIdBySpace(one.lastBotIdBySpace, other.lastBotIdBySpace)
+	sameBotIdBySpace(one.lastBotIdBySpace, other.lastBotIdBySpace) &&
+	one.openOn === other.openOn
 
 export const readMirror = (): MirroredPreferences => ({
 	colorScheme: colorSchemeOf(localStorage.getItem(COLOR_SCHEME_KEY)),
@@ -128,6 +141,7 @@ export const readMirror = (): MirroredPreferences => ({
 	lastBotIdBySpace: parseBotIdBySpace(
 		localStorage.getItem(LAST_BOT_BY_SPACE_KEY),
 	),
+	openOn: openOnOf(localStorage.getItem(OPEN_ON_KEY)),
 })
 
 const keep = (key: string, value: string | number | null) => {
@@ -154,6 +168,7 @@ export const writeMirror = (mirrored: MirroredPreferences) => {
 	keep(LAST_SPACE_KEY, mirrored.lastSpaceId)
 	keep(LAST_BOT_BY_SPACE_KEY, JSON.stringify(mirrored.lastBotIdBySpace))
 	localStorage.removeItem(DROPPED_LAST_BOT_KEY)
+	localStorage.setItem(OPEN_ON_KEY, mirrored.openOn)
 }
 
 const MIRROR_KEYS = [
@@ -164,6 +179,7 @@ const MIRROR_KEYS = [
 	FIRST_RUN_DONE_KEY,
 	LAST_SPACE_KEY,
 	LAST_BOT_BY_SPACE_KEY,
+	OPEN_ON_KEY,
 ]
 
 export const isMirrorKey = (key: string | null) =>

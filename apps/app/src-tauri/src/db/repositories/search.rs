@@ -2,6 +2,7 @@ use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSqlOutput, ValueRe
 use rusqlite::ToSql;
 use rusqlite::{params, Row};
 
+use crate::db::repositories::conversations::ChatOwner;
 use crate::db::{Access, DatabaseError};
 use crate::search::contract::{
 	ConversationKind, MessageHit, MessageSearchError, MessageSearchQuery, SnippetPart,
@@ -36,6 +37,7 @@ const SEARCH_MESSAGES: &str = "SELECT message_id, seq, conversation_id, kind, ti
 		JOIN messages ON messages.id = message_search.message_id
 		JOIN conversations ON conversations.id = messages.conversation_id
 		WHERE message_search MATCH ?1
+			AND (?9 IS NULL OR conversations.owner IS NULL OR conversations.owner = ?9)
 	)
 	WHERE space_id = ?6 AND (?8 IS NULL OR kind = ?8)
 	ORDER BY relevance ASC, created_at DESC
@@ -69,6 +71,7 @@ impl SearchRepository {
 	pub async fn messages(
 		&self,
 		query: MessageSearchQuery,
+		owned_by: Option<ChatOwner>,
 	) -> Result<Vec<MessageHit>, MessageSearchError> {
 		if query.text.chars().count() > MAX_QUERY_CHARS {
 			return Err(MessageSearchError::QueryTooLong { limit: MAX_QUERY_CHARS });
@@ -89,7 +92,8 @@ impl SearchRepository {
 						SNIPPET_TOKENS,
 						query.space_id,
 						MAX_HITS,
-						query.kind
+						query.kind,
+						owned_by
 					],
 					read_hit,
 				)?;

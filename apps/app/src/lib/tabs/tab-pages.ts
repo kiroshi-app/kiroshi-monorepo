@@ -4,7 +4,7 @@ import {
 	defaultStringifySearch,
 } from "@tanstack/react-router"
 
-import type { LibraryDocumentRenamed } from "../bindings"
+import type { LibraryDocumentRenamed, OpenOn } from "../bindings"
 import {
 	type LibraryOpening,
 	librarySearchOf,
@@ -24,6 +24,8 @@ const LIST_PATH = "/"
 export const HREF_BASE = "http://tab"
 
 const LIBRARY_PATH = "/library"
+
+const HOME_PATH = "/home"
 
 const USER_SETTINGS_PATH = "/settings/user"
 
@@ -74,6 +76,27 @@ export const isListPage = ({ pathname }: TabPage) => pathname === LIST_PATH
 export const isLibraryPage = ({ pathname }: Pick<TabPage, "pathname">) =>
 	pathname === LIBRARY_PATH
 
+export const isHomePage = ({ pathname }: Pick<TabPage, "pathname">) =>
+	pathname === HOME_PATH
+
+export type LaunchPage = {
+	spaceId: string
+	href: string
+}
+
+type LaunchChoice = {
+	openOn: OpenOn
+	lastSpaceId: string | null
+}
+
+export const launchPageOf = ({
+	openOn,
+	lastSpaceId,
+}: LaunchChoice): LaunchPage | null =>
+	openOn === "lastConversation" || lastSpaceId === null
+		? null
+		: { spaceId: lastSpaceId, href: HOME_PATH }
+
 export type DocumentRename = Omit<LibraryDocumentRenamed, "spaceId">
 
 const opensDocument = (page: TabPage, name: string) =>
@@ -107,6 +130,7 @@ export const isTabHref = (href: string) => {
 	return (
 		pathname === LIST_PATH ||
 		pathname === LIBRARY_PATH ||
+		pathname === HOME_PATH ||
 		pathname === USER_SETTINGS_PATH ||
 		SPACE_SETTINGS_PATH.test(pathname) ||
 		companionIdIn(pathname) !== undefined ||

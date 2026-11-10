@@ -8,6 +8,7 @@ type AlwaysSerialized =
 	| "activityPanelOpen"
 	| "firstRunDone"
 	| "lastBotIdBySpace"
+	| "openOn"
 	| "sidebarTab"
 
 export type UserPreferences = GeneratedUserPreferences &

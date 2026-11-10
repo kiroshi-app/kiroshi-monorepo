@@ -111,6 +111,10 @@ export const UserSettingsScreen = ({
 				onLanguageChange={(next) => {
 					void user.controller.setLanguage(next)
 				}}
+				openOn={preferences.openOn}
+				onOpenOnChange={(next) => {
+					void user.controller.setOpenOn(next)
+				}}
 				onValueChange={(value) => {
 					if (value.colorScheme !== userSettings.colorScheme) {
 						void user.controller.setColorScheme(value.colorScheme)

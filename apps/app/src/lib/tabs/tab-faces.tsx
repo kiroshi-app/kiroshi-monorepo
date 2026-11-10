@@ -12,6 +12,7 @@ import type {
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import {
+	isHomePage,
 	isLibraryPage,
 	isListPage,
 	pageOf,
@@ -56,6 +57,11 @@ const SETTINGS_SUBTITLE_KEY = {
 	companion: "agent",
 	conversation: "conversation",
 } as const satisfies Record<SettingsTarget, string>
+
+const homeFace = (): TabFace => ({
+	title: i18n.t("bots:rail.home"),
+	icon: <Icons.Home />,
+})
 
 const libraryFace = (): TabFace => ({
 	title: i18n.t("common:library.title"),
@@ -130,6 +136,9 @@ export const tabFaceOf = (href: string, sources: TabFaceSources): TabFace => {
 	const page = pageOf(href)
 	if (isLibraryPage(page)) {
 		return libraryFaceOf(page)
+	}
+	if (isHomePage(page)) {
+		return homeFace()
 	}
 	if (!isListPage(page)) {
 		return settingsFaceOf(page)
