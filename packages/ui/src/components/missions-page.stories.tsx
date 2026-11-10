@@ -96,7 +96,6 @@ const drawsABorder = (element: Element) => {
 	const style = getComputedStyle(element)
 	return ["top", "right", "bottom", "left"].some(
 		(side) =>
-			style.getPropertyValue(`border-${side}-style`) !== "none" &&
 			Number.parseFloat(style.getPropertyValue(`border-${side}-width`)) > 0,
 	)
 }
