@@ -10,14 +10,13 @@ import {
 	screen,
 	within,
 } from "@testing-library/react"
-import { createElement, type ReactElement } from "react"
+import { createElement } from "react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { AppRail } from "@workspace/ui/components/app-rail"
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { i18n } from "@workspace/ui/lib/i18n"
 
-import { useWorkspaceRail } from "@/components/workspace-rail"
+import { useWorkspaceNavigation } from "@/components/workspace-navigation"
 import type { JoinedSpace, Space } from "@/lib/bindings"
 import { newBotIdentity } from "@/lib/bots/bot-settings"
 import { createFakeChatDriver } from "@/lib/chat/fake-driver"
@@ -36,8 +35,6 @@ import { createWorkspaceTabs } from "@/lib/tabs/workspace-tabs"
 import { readMirror, writeMirror } from "@/lib/user/preferences-mirror"
 import type { RosterLines } from "@/lib/workspace/use-roster-lines"
 import type { RosterLists } from "@/lib/workspace/use-roster-lists"
-import type { SettingsPanels } from "@/lib/workspace/use-settings-panels"
-import type { useSidebarPanelSwitch } from "@/lib/workspace/use-sidebar-panel-switch"
 import type { WorkspaceOverlay } from "@/lib/workspace/use-workspace-overlay"
 
 type MountedApp = {
@@ -114,9 +111,6 @@ const STUDIO: JoinedSpace = {
 	colour: 296,
 	instanceId: "instance-of-studio-host",
 }
-const SPACE_SETTINGS = i18n.t("bots:rail.spaceSettings")
-const SETTINGS_RAILS: SettingsPanels["railSettings"][] = ["space", "you"]
-
 const NO_INVITATIONS = {
 	rows: [],
 	termsOf: () => undefined,
@@ -126,206 +120,15 @@ const NO_INVITATIONS = {
 	sweepWithdrawn: () => undefined,
 }
 
-type RailHarnessProps = {
-	selectedSpaceId: string
-	railSettings?: SettingsPanels["railSettings"]
-	navigation?: Partial<SettingsNavigation>
-	onSelectSpace?: (id: string) => void
-	badgesBySpaceId?: RosterLists["badgesBySpaceId"]
-}
-
-const RailHarness = ({
-	selectedSpaceId,
-	railSettings = "space",
-	navigation = {},
-	onSelectSpace = () => undefined,
-	badgesBySpaceId = {},
-}: RailHarnessProps) => {
-	const switcher = useSwitcherSpaces(
-		{ spaces: [HOME, GARAGE], selectedSpaceId },
-		{
-			state: {
-				joinedSpaces: [STUDIO],
-				hasFailedToLoad: false,
-				openId: STUDIO.id,
-				departed: null,
-			},
-			controller: {} as JoinedSpacesController,
-			hosts: { active: null, connections: {} },
-		},
-		NO_INVITATIONS,
-	)
-	const { rail, currentSpace, currentSpaceHost } = useWorkspaceRail({
-		navigation: navigation as SettingsNavigation,
-		overlay: {
-			search: { isOpen: false, open: () => {} },
-		} as unknown as WorkspaceOverlay,
-		panels: { railSettings } as SettingsPanels,
-		rosterLines: {
-			sidebarActions: { onCreateSpace: () => undefined },
-		} as RosterLines,
-		rosterLists: { badgesBySpaceId } as RosterLists,
-		sidebarTab: { openTab: "conversations" } as ReturnType<
-			typeof useSidebarPanelSwitch
-		>,
-		switcher,
-		tabs: createWorkspaceTabs(),
-		onSelectSpace,
-	})
-	return createElement(AppRail, {
-		...rail,
-		space: currentSpace,
-		spaceHost: currentSpaceHost,
-	})
-}
-
-const railOf = () =>
+const sidebarOf = () =>
 	screen.getByRole("navigation", { name: i18n.t("bots:rail.label") })
 
-const railLogo = () =>
-	railOf().querySelector<HTMLElement>("[data-slot='space-avatar']")
-
-const openSpacesMenu = () => {
-	const trigger = railLogo()?.closest("button")
-	act(() => {
-		fireEvent.click(trigger as HTMLElement)
-	})
-	return screen.getByRole("menu", { name: i18n.t("bots:spaces.label") })
-}
-
-const railLogoTint = () => railLogo()?.dataset.colour
+const switcherTint = () =>
+	sidebarOf()
+		.querySelector<HTMLElement>("[data-slot='space-switcher-square']")
+		?.getAttribute("data-hue")
 
 afterEach(cleanup)
-
-const renderWithQueries = (screen: ReactElement) =>
-	render(screen, { wrapper: createQueryTestWrapper().wrapper })
-
-describe.each(SETTINGS_RAILS)(
-	"the rail on the %s settings screen",
-	(railSettings) => {
-		it("wears the colour of the owned Space that is open", () => {
-			renderWithQueries(
-				createElement(RailHarness, { selectedSpaceId: HOME.id, railSettings }),
-			)
-
-			expect(railLogoTint()).toBe(String(BLOT_HUES.red))
-		})
-
-		it("wears the host colour of the joined Space that is open", () => {
-			renderWithQueries(
-				createElement(RailHarness, {
-					selectedSpaceId: "studio",
-					railSettings,
-				}),
-			)
-
-			expect(railLogoTint()).toBe(String(BLOT_HUES.purple))
-		})
-
-		it("repaints its logo when another Space is selected", () => {
-			const { rerender } = renderWithQueries(
-				createElement(RailHarness, { selectedSpaceId: HOME.id, railSettings }),
-			)
-			expect(railLogoTint()).toBe(String(BLOT_HUES.red))
-
-			rerender(
-				createElement(RailHarness, {
-					selectedSpaceId: GARAGE.id,
-					railSettings,
-				}),
-			)
-
-			expect(railLogoTint()).toBe("210")
-		})
-	},
-)
-
-describe("the rail on a settings screen", () => {
-	it("falls back to the first Space when none matches the selection", () => {
-		renderWithQueries(createElement(RailHarness, { selectedSpaceId: "gone" }))
-
-		expect(railLogoTint()).toBe(String(BLOT_HUES.red))
-	})
-
-	it("draws the open Space in the host state the switcher reads", () => {
-		const { rerender } = renderWithQueries(
-			createElement(RailHarness, { selectedSpaceId: HOME.id }),
-		)
-		expect(railLogo()?.dataset.state).toBe("local")
-
-		rerender(createElement(RailHarness, { selectedSpaceId: "studio" }))
-
-		expect(railLogo()?.dataset.state).toBe("connecting")
-	})
-
-	it("opens the Spaces menu from its logo, its Space settings opening the selected Space settings", () => {
-		const openSpaceSettings = vi.fn()
-		renderWithQueries(
-			createElement(RailHarness, {
-				selectedSpaceId: GARAGE.id,
-				navigation: { openSpaceSettings },
-			}),
-		)
-
-		const menu = openSpacesMenu()
-		expect(openSpaceSettings).not.toHaveBeenCalled()
-		act(() => {
-			fireEvent.click(
-				within(menu).getByRole("menuitem", { name: SPACE_SETTINGS }),
-			)
-		})
-
-		expect(openSpaceSettings).toHaveBeenCalledExactlyOnceWith(GARAGE.id)
-	})
-
-	it("switches to the Space picked in its Spaces menu", () => {
-		const onSelectSpace = vi.fn()
-		renderWithQueries(
-			createElement(RailHarness, { selectedSpaceId: HOME.id, onSelectSpace }),
-		)
-
-		const menu = openSpacesMenu()
-		act(() => {
-			fireEvent.click(
-				within(menu).getByRole("menuitemradio", { name: /Garage/ }),
-			)
-		})
-
-		expect(onSelectSpace).toHaveBeenCalledExactlyOnceWith(GARAGE.id)
-	})
-
-	it("offers to create a space in its Spaces menu", () => {
-		renderWithQueries(createElement(RailHarness, { selectedSpaceId: HOME.id }))
-
-		const menu = openSpacesMenu()
-
-		expect(
-			within(menu).getByRole("menuitem", {
-				name: i18n.t("bots:spaces.create"),
-			}),
-		).toBeTruthy()
-	})
-})
-
-describe("the Spaces button of the rail", () => {
-	it("carries no dot while other Spaces carry attention and failed", () => {
-		renderWithQueries(
-			createElement(RailHarness, {
-				selectedSpaceId: HOME.id,
-				badgesBySpaceId: {
-					[GARAGE.id]: "failed",
-					[joinedRowIdOf(STUDIO.id)]: "attention",
-				},
-			}),
-		)
-
-		expect(
-			railLogo()
-				?.closest("button")
-				?.querySelector("[data-slot='app-rail-dot']"),
-		).toBeNull()
-	})
-})
 
 type ProducedSpace = {
 	label: string
@@ -361,23 +164,19 @@ const PRODUCED_SPACES: ProducedSpace[] = [
 	},
 ]
 
-const produceRailFor = ({
+const produceNavigationFor = ({
 	selectedSpaceId,
 	connections,
 }: Pick<ProducedSpace, "selectedSpaceId" | "connections">) =>
 	renderHook(
 		() =>
-			useWorkspaceRail({
+			useWorkspaceNavigation({
 				navigation: {} as SettingsNavigation,
 				overlay: {
 					search: { isOpen: false, open: () => {} },
 				} as unknown as WorkspaceOverlay,
-				panels: {} as SettingsPanels,
 				rosterLines: { sidebarActions: {} } as RosterLines,
 				rosterLists: {} as RosterLists,
-				sidebarTab: { openTab: "conversations" } as ReturnType<
-					typeof useSidebarPanelSwitch
-				>,
 				switcher: useSwitcherSpaces(
 					{ spaces: [HOME, GARAGE], selectedSpaceId },
 					{
@@ -399,33 +198,38 @@ const produceRailFor = ({
 	).result.current
 
 describe.each(PRODUCED_SPACES)(
-	"the sidebar frame producer with $label selected",
+	"the navigation of the sidebar with $label selected",
 	({ selectedSpaceId, connections, space, host }) => {
-		it("outputs that Space as the current Space", () => {
-			const { currentSpace } = produceRailFor({ selectedSpaceId, connections })
-
-			expect(currentSpace).toMatchObject(space)
-		})
-
-		it("outputs the connection state of that Space", () => {
-			const { currentSpaceHost } = produceRailFor({
+		it("selects that Space in the Space switcher", () => {
+			const { selectedSpaceId: selected } = produceNavigationFor({
 				selectedSpaceId,
 				connections,
 			})
 
-			expect(currentSpaceHost).toBe(host)
+			expect(selected).toBe(space.id)
 		})
 
-		it("keeps handing the Space switcher rows every Space's connection state", () => {
-			const { hostBySpaceId } = produceRailFor({
+		it("hands the Space switcher every Space's connection state", () => {
+			const { hostBySpaceId } = produceNavigationFor({
 				selectedSpaceId,
 				connections,
-			}).rail
+			}).gestures
 
 			expect(hostBySpaceId?.[space.id]).toBe(host)
 		})
 	},
 )
+
+describe("the navigation of the sidebar on a Space that is gone", () => {
+	it("selects the first Space in the Space switcher", () => {
+		const { selectedSpaceId } = produceNavigationFor({
+			selectedSpaceId: "gone",
+			connections: {},
+		})
+
+		expect(selectedSpaceId).toBe(HOME.id)
+	})
+})
 
 const SETTLE_MS = 200
 
@@ -527,10 +331,10 @@ describe.each(OPEN_SPACES)(
 			mounted.openJoinedSpace = null
 		})
 
-		it("paints the rail logo of the conversations sidebar with the selected Space", async () => {
+		it("paints the Space switcher of the sidebar with the selected Space", async () => {
 			await mountAppAtConversations(joined)
 
-			expect(railLogoTint()).toBe(colour)
+			expect(switcherTint()).toBe(colour)
 		})
 
 		it.each(SETTINGS_ROUTES)(
@@ -581,20 +385,22 @@ describe("the Home page", () => {
 		return { router, store, first, second, firstOfSpace }
 	}
 
-	type RailEntry = "home" | "conversations" | "missions" | "library"
+	type SidebarEntry = "newConversation" | "missions" | "library"
 
-	const railEntry = (name: RailEntry) =>
-		within(railOf()).getByRole("button", { name: i18n.t(`bots:rail.${name}`) })
+	const sidebarEntry = (name: SidebarEntry) =>
+		within(sidebarOf()).getByRole("button", {
+			name: i18n.t(`bots:rail.${name}`),
+		})
 
-	const selectedEntries = () =>
-		within(railOf())
+	const currentEntries = () =>
+		within(sidebarOf())
 			.getAllByRole("button")
-			.filter((entry) => entry.getAttribute("aria-current") === "true")
+			.filter((entry) => entry.getAttribute("aria-current") === "page")
 			.map((entry) => entry.getAttribute("aria-label") ?? entry.textContent)
 
-	const pressInRail = async (name: RailEntry) => {
+	const pressInSidebar = async (name: SidebarEntry) => {
 		act(() => {
-			fireEvent.click(railEntry(name))
+			fireEvent.click(sidebarEntry(name))
 		})
 		await settle()
 	}
@@ -604,13 +410,13 @@ describe("the Home page", () => {
 
 	const slot = (name: string) => document.querySelector(`[data-slot='${name}']`)
 
-	it("opens from the rail on the first agent, marking Home and no panel entry", async () => {
+	it("opens from New conversation on the first agent, marking New conversation alone", async () => {
 		const { router, firstOfSpace } = await mountAppWithTwoAgents()
 
-		await pressInRail("home")
+		await pressInSidebar("newConversation")
 
 		expect(router.state.location.pathname).toBe("/home")
-		expect(selectedEntries()).toEqual([i18n.t("bots:rail.home")])
+		expect(currentEntries()).toEqual([i18n.t("bots:rail.newConversation")])
 		expect(pickedAgentName()).toBe(firstOfSpace.name)
 		expect(slot("home-layout")).not.toBeNull()
 	})
@@ -624,14 +430,14 @@ describe("the Home page", () => {
 		)
 		await launchApp()
 
-		await pressInRail("home")
+		await pressInSidebar("newConversation")
 
 		expect(pickedAgentName()).toBe(second.name)
 	})
 
 	it("shows the Home of the agent picked in the composer, the previous agent chat untouched", async () => {
 		const { firstOfSpace, second, store } = await mountAppWithTwoAgents()
-		await pressInRail("home")
+		await pressInSidebar("newConversation")
 		const previousChat = await store.mainChat(
 			firstOfSpace.id,
 			PERSONAL_SPACE_ID,
@@ -655,15 +461,15 @@ describe("the Home page", () => {
 		).toEqual({ [PERSONAL_SPACE_ID]: second.id })
 	})
 
-	it.each<RailEntry>(["conversations", "missions", "library"])(
-		"leaves the Home for %s, the rail selecting that entry",
+	it.each<SidebarEntry>(["missions", "library"])(
+		"leaves the Home for %s, the sidebar marking that entry",
 		async (entry) => {
 			await mountAppWithTwoAgents()
-			await pressInRail("home")
+			await pressInSidebar("newConversation")
 
-			await pressInRail(entry)
+			await pressInSidebar(entry)
 
-			expect(selectedEntries()).toEqual([i18n.t(`bots:rail.${entry}`)])
+			expect(currentEntries()).toEqual([i18n.t(`bots:rail.${entry}`)])
 			expect(slot("home-layout")).toBeNull()
 		},
 	)
@@ -707,11 +513,6 @@ describe("the Home page", () => {
 			participants.some(({ botId }) => botId === agentId),
 		)
 
-	const rosterRowNames = () =>
-		[...document.querySelectorAll("[data-slot='roster-row-name']")].map(
-			(name) => name.textContent,
-		)
-
 	const pickInComposer = async (agentName: string) => {
 		act(() => {
 			fireEvent.click(slot("home-agent-chip") as HTMLElement)
@@ -725,7 +526,7 @@ describe("the Home page", () => {
 
 	it("frames the fresh Home with no thread header and no routines trigger", async () => {
 		await mountAppWithTwoAgents()
-		await pressInRail("home")
+		await pressInSidebar("newConversation")
 
 		expect(slot("home-layout")?.getAttribute("data-stage")).toBe("empty")
 		expect(threadChrome().header).toBeNull()
@@ -733,9 +534,9 @@ describe("the Home page", () => {
 		expect(threadChrome().activityToggle).toBeNull()
 	})
 
-	it("opens the first message in a new conversation seating the picked agent, listed without a reload", async () => {
+	it("opens the first message in a new conversation seating the picked agent", async () => {
 		const { router, store, second } = await mountAppWithTwoAgents()
-		await pressInRail("home")
+		await pressInSidebar("newConversation")
 		await pickInComposer(second.name)
 
 		await sendFromHome("Book the flights.")
@@ -745,15 +546,14 @@ describe("the Home page", () => {
 		expect(router.state.location.search).toEqual({ conversation: created?.id })
 		expect(slot("home-layout")).toBeNull()
 		expect(screen.getAllByText("Book the flights.")).not.toHaveLength(0)
-		expect(rosterRowNames()).toContain(created?.title)
 	})
 
 	it("comes back to a fresh Home after a send, a second send opening a second conversation", async () => {
 		const { router, store, firstOfSpace } = await mountAppWithTwoAgents()
-		await pressInRail("home")
+		await pressInSidebar("newConversation")
 		await sendFromHome("Book the flights.")
 
-		await pressInRail("home")
+		await pressInSidebar("newConversation")
 
 		expect(slot("home-layout")?.getAttribute("data-stage")).toBe("empty")
 		expect(composerText()).toBe("")
@@ -777,7 +577,7 @@ describe("the Home page", () => {
 		await openInConversations(router, first.id)
 		expect(threadChrome().activityPanel).not.toBeNull()
 
-		await pressInRail("home")
+		await pressInSidebar("newConversation")
 
 		expect(slot("home-layout")).not.toBeNull()
 		expect(threadChrome().activityPanel).toBeNull()
@@ -795,7 +595,7 @@ describe("the Home page", () => {
 		}
 		await mountAppWithTwoAgents()
 
-		await pressInRail("home")
+		await pressInSidebar("newConversation")
 
 		expect(slot("home-layout")?.getAttribute("data-stage")).toBe("empty")
 		expect(slot("space-access-banner")?.getAttribute("data-reason")).toBe(
@@ -810,7 +610,7 @@ describe("the Home page", () => {
 		vi.spyOn(store, "createConversation").mockRejectedValue(
 			new Error("disk full"),
 		)
-		await pressInRail("home")
+		await pressInSidebar("newConversation")
 
 		await sendFromHome("Book the flights.")
 
@@ -824,7 +624,7 @@ describe("the Home page", () => {
 	it("keeps the draft on the Home and raises a notice when the message can't be sent", async () => {
 		const { router, store } = await mountAppWithTwoAgents()
 		vi.spyOn(store, "sendUserMessage").mockRejectedValue(new Error("disk full"))
-		await pressInRail("home")
+		await pressInSidebar("newConversation")
 
 		await sendFromHome("Book the flights.")
 

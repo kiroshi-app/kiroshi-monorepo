@@ -35,3 +35,8 @@ export const changeOnboardingFirstCompanion = (
 
 export const markOnboardingImportSeen = (): Promise<UserPreferences> =>
 	enqueue(() => userPreferencesStore.markOnboardingImportSeen())
+
+export const changeSidebarCollapsed = (
+	isCollapsed: boolean,
+): Promise<UserPreferences> =>
+	enqueue(() => userPreferencesStore.setSidebarCollapsed(isCollapsed))

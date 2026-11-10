@@ -72,6 +72,7 @@ const PREFERENCES = {
 	colorScheme: "system",
 	language: null,
 	sidebarWidth: null,
+	sidebarCollapsed: false,
 	activityPanelOpen: false,
 	firstRunDone: false,
 	lastSpaceId: null,

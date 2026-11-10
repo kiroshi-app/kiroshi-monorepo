@@ -1,13 +1,9 @@
 // @vitest-environment happy-dom
 
-import { cleanup, render, screen, waitFor } from "@testing-library/react"
-import { createElement } from "react"
+import { cleanup, renderHook, waitFor } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { AppRail } from "@workspace/ui/components/app-rail"
-import { i18n } from "@workspace/ui/lib/i18n"
-
-import { useWorkspaceRail } from "@/components/workspace-rail"
+import { useWorkspaceNavigation } from "@/components/workspace-navigation"
 import type { HostingState, Space } from "@/lib/bindings"
 import { hostQueryKeys } from "@/lib/host/host-query-keys"
 import type { HostedMember } from "@/lib/host/members-transport"
@@ -18,8 +14,6 @@ import { useSwitcherSpaces } from "@/lib/spaces/use-joined-spaces"
 import { createWorkspaceTabs } from "@/lib/tabs/workspace-tabs"
 import type { RosterLines } from "@/lib/workspace/use-roster-lines"
 import type { RosterLists } from "@/lib/workspace/use-roster-lists"
-import type { SettingsPanels } from "@/lib/workspace/use-settings-panels"
-import type { useSidebarPanelSwitch } from "@/lib/workspace/use-sidebar-panel-switch"
 import type { WorkspaceOverlay } from "@/lib/workspace/use-workspace-overlay"
 
 type HostBoundaries = {
@@ -98,7 +92,7 @@ const NO_INVITATIONS = {
 	sweepWithdrawn: () => undefined,
 }
 
-const RailOfSpaceHostedHere = () => {
+const useNavigationOfSpaceHostedHere = () => {
 	const switcher = useSwitcherSpaces(
 		{ spaces: [HOSTED_HERE], selectedSpaceId: HOSTED_HERE.id },
 		{
@@ -113,34 +107,25 @@ const RailOfSpaceHostedHere = () => {
 		},
 		NO_INVITATIONS,
 	)
-	const { rail, currentSpace, currentSpaceHost } = useWorkspaceRail({
+	return useWorkspaceNavigation({
 		navigation: {} as SettingsNavigation,
 		overlay: {
 			search: { isOpen: false, open: () => {} },
 		} as unknown as WorkspaceOverlay,
-		panels: { railSettings: undefined } as SettingsPanels,
 		rosterLines: {
 			sidebarActions: { onCreateSpace: () => undefined },
 		} as RosterLines,
 		rosterLists: { badgesBySpaceId: {} } as RosterLists,
-		sidebarTab: { openTab: "conversations" } as ReturnType<
-			typeof useSidebarPanelSwitch
-		>,
 		switcher,
 		tabs: createWorkspaceTabs(),
 		onSelectSpace: () => undefined,
 	})
-	return createElement(AppRail, {
-		...rail,
-		space: currentSpace,
-		spaceHost: currentSpaceHost,
-	})
 }
 
-const mountRail = async (boundaries: HostBoundaries) => {
+const hostOfSpaceHostedHere = async (boundaries: HostBoundaries) => {
 	Object.assign(host, boundaries)
 	const { queryClient, wrapper } = createQueryTestWrapper()
-	render(createElement(RailOfSpaceHostedHere), { wrapper })
+	const { result } = renderHook(useNavigationOfSpaceHostedHere, { wrapper })
 	await waitFor(() => {
 		expect(readMembers.mock.settledResults[0]?.type).toBe("fulfilled")
 		expect(
@@ -148,34 +133,39 @@ const mountRail = async (boundaries: HostBoundaries) => {
 				?.status,
 		).toBe("success")
 	})
+	return result.current.gestures.hostBySpaceId?.[HOSTED_HERE.id]
 }
-
-const railSpaceAvatarState = () =>
-	screen
-		.getByRole("navigation", { name: i18n.t("bots:rail.label") })
-		.querySelector<HTMLElement>("[data-slot='space-avatar']")?.dataset.state
 
 afterEach(() => {
 	cleanup()
 	readMembers.mockClear()
 })
 
-describe("the rail logo of a Space hosted from this computer", () => {
-	it("is online when the Space has members and its hosting reads online", async () => {
-		await mountRail({ members: [OWNER, MEMBER], hosting: { kind: "online" } })
-
-		expect(railSpaceAvatarState()).toBe("online")
+describe("the Space switcher of a Space hosted from this computer", () => {
+	it("reads up when the Space has members and its hosting reads online", async () => {
+		expect(
+			await hostOfSpaceHostedHere({
+				members: [OWNER, MEMBER],
+				hosting: { kind: "online" },
+			}),
+		).toBe("up")
 	})
 
-	it("is offline when the Space has members and its hosting reads stopped", async () => {
-		await mountRail({ members: [OWNER, MEMBER], hosting: { kind: "off" } })
-
-		expect(railSpaceAvatarState()).toBe("offline")
+	it("reads down when the Space has members and its hosting reads stopped", async () => {
+		expect(
+			await hostOfSpaceHostedHere({
+				members: [OWNER, MEMBER],
+				hosting: { kind: "off" },
+			}),
+		).toBe("down")
 	})
 
-	it("is local when the Space has no members", async () => {
-		await mountRail({ members: [OWNER], hosting: { kind: "online" } })
-
-		expect(railSpaceAvatarState()).toBe("local")
+	it("reads no host when the Space has no members", async () => {
+		expect(
+			await hostOfSpaceHostedHere({
+				members: [OWNER],
+				hosting: { kind: "online" },
+			}),
+		).toBeUndefined()
 	})
 })

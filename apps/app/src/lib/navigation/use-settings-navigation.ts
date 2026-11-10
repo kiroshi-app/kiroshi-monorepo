@@ -84,6 +84,7 @@ export const useSettingsNavigation = (holder: ThreadHolder) => {
 			openConversations: () => {
 				void navigate({ to: "/", search: heldThreadOf(holder) })
 			},
+			openThread: (thread: ThreadSearch) => go({ to: "/", search: thread }),
 			openThreadInNewTab: (thread: ThreadSearch, spaceId?: string) =>
 				openInBackgroundTab({ to: "/", search: thread }, spaceId),
 			openSpaceSettings: (
@@ -97,6 +98,7 @@ export const useSettingsNavigation = (holder: ThreadHolder) => {
 				),
 			openHome: () => go({ to: "/home" }),
 			openLibrary: () => go({ to: "/library" }),
+			openMissions: () => go({ to: "/missions" }),
 			openUserSettings: (search: SettingsSearch = {}) =>
 				go({ to: "/settings/user", search }),
 			openCompanionSettings: (

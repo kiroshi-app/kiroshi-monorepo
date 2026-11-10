@@ -2,16 +2,17 @@ import { createContext, useContext } from "react"
 
 import type { AppFrameRailProps } from "@workspace/ui/components/app-frame"
 import type { AppTitleBarProps } from "@workspace/ui/components/app-title-bar"
-import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import type { SettingsScreenRequestLeave } from "@workspace/ui/components/settings-screen"
 import type { Space } from "@workspace/ui/components/space"
 
 import type { RosterLists } from "./use-roster-lists"
 
+import type { SidebarCollapse } from "../user/use-sidebar-collapse"
+
 export type WorkspaceFrame = {
-	rail: AppFrameRailProps
-	currentSpace: Space | undefined
-	currentSpaceHost: SpaceHost | undefined
+	gestures: AppFrameRailProps
+	selectedSpaceId: string | undefined
+	collapse: SidebarCollapse
 	guardLeave: (requestLeave: SettingsScreenRequestLeave) => () => void
 	titleBar: AppTitleBarProps
 	width: number | undefined
