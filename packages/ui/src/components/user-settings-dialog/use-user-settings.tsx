@@ -133,8 +133,6 @@ const useUserSettings = ({
 	const patch = (fields: Partial<UserSettingsValue>) =>
 		onValueChange({ ...value, ...fields })
 
-	const hasGeneral = openOn !== undefined && onOpenOnChange !== undefined
-
 	const entries: SettingsEntry[] = [
 		...(account
 			? [
@@ -147,7 +145,7 @@ const useUserSettings = ({
 					} satisfies SettingsEntry,
 				]
 			: []),
-		...(hasGeneral
+		...(openOn && onOpenOnChange
 			? [
 					{
 						value: GENERAL_ENTRY,
@@ -255,11 +253,7 @@ const useUserSettings = ({
 			history: historySession,
 		},
 		entries,
-		firstEntry: account
-			? ACCOUNT_ENTRY
-			: hasGeneral
-				? GENERAL_ENTRY
-				: APPEARANCE_ENTRY,
+		firstEntry: entries[0].value,
 	}
 }
 
