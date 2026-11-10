@@ -51,7 +51,7 @@ import type { Bot, Conversation } from "@/lib/conversations/store-contract"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import { message, seatBots } from "@/lib/conversations/transcript-fixtures"
 import { homeQueryKeys } from "@/lib/home/home-query-keys"
-import { createHomeVisits } from "@/lib/home/home-visits"
+import { createHomeVisits, MAIN_CHAT_PAUSE_MS } from "@/lib/home/home-visits"
 import type { Invoke } from "@/lib/host/joined-hosts-invoke"
 import { base64Of } from "@/lib/library/library-document-session"
 import type {
@@ -788,7 +788,11 @@ describe("WorkspaceBody Home", () => {
 
 	let said = 0
 
-	const sayIn = async (store: TranscriptStore, conversationId: string) => {
+	const sayIn = async (
+		store: TranscriptStore,
+		conversationId: string,
+		createdAt?: number,
+	) => {
 		said += 1
 		const turnId = `home-turn-${said}`
 		await store.startTurn({ conversationId, id: turnId, startedAt: said })
@@ -799,12 +803,13 @@ describe("WorkspaceBody Home", () => {
 			authorBotId: null,
 			repliedToMessageId: null,
 			content: "Book the flights.",
-			createdAt: said,
+			createdAt: createdAt ?? said,
 		})
 	}
 
 	type HomeLaunch = {
 		store?: TranscriptStore
+		now?: () => number
 		seated?: Workspace
 		overrides?: Partial<WorkspaceBodyHarnessProps>
 		joinedHost?: OpenJoinedHost
@@ -812,12 +817,13 @@ describe("WorkspaceBody Home", () => {
 
 	const launchHome = async ({
 		store = createFakeTranscriptStore(),
+		now,
 		seated,
 		overrides = {},
 		joinedHost,
 	}: HomeLaunch = {}) => {
 		const workspace = seated ?? (await workspaceOf(store))
-		const homeVisits = createHomeVisits(store)
+		const homeVisits = createHomeVisits(store, now)
 		const onOpenThreadInNewTab = vi.fn()
 		const bodyOf = (more: Partial<WorkspaceBodyHarnessProps> = {}) =>
 			createElement(
@@ -843,12 +849,22 @@ describe("WorkspaceBody Home", () => {
 				}),
 			)
 		const view = render(bodyOf())
-		const open = () => act(() => homeVisits.open(workspace.bot.id, SPACE))
+		const openHome = () => homeVisits.open(workspace.bot.id, SPACE)
+		const open = () => act(openHome)
+		const openTwiceAtOnce = () =>
+			act(() => Promise.all([openHome(), openHome()]))
 		const mainChatId = async () =>
 			(await store.mainChat(workspace.bot.id, SPACE)).id
 		const rerender = (more?: Partial<WorkspaceBodyHarnessProps>) =>
 			view.rerender(bodyOf(more))
-		return { workspace, open, mainChatId, rerender, onOpenThreadInNewTab }
+		return {
+			workspace,
+			open,
+			openTwiceAtOnce,
+			mainChatId,
+			rerender,
+			onOpenThreadInNewTab,
+		}
 	}
 
 	type HomeMission = {
@@ -900,6 +916,81 @@ describe("WorkspaceBody Home", () => {
 		expect(home.onOpenThreadInNewTab).toHaveBeenCalledWith({
 			conversation: earlier,
 		})
+	})
+
+	const SAID_AT = 1_000_000
+
+	const clockAt = (at: number) => {
+		const clock = { at }
+		return { clock, now: () => clock.at }
+	}
+
+	it("renews a main conversation whose last message is more than an hour old", async () => {
+		const store = createFakeTranscriptStore()
+		const renewal = vi.spyOn(store, "renewMainChat")
+		const { now } = clockAt(SAID_AT + MAIN_CHAT_PAUSE_MS + 1)
+		const home = await launchHome({ store, now })
+		const earlier = await home.mainChatId()
+		await sayIn(store, earlier, SAID_AT)
+
+		await home.open()
+
+		expect(renewal).toHaveBeenCalledOnce()
+		expect(await home.mainChatId()).not.toBe(earlier)
+		expect(archivedLine()).toBeTruthy()
+	})
+
+	it("keeps a main conversation whose last message is an hour old, after a relaunch too", async () => {
+		const store = createFakeTranscriptStore()
+		const renewal = vi.spyOn(store, "renewMainChat")
+		const { now } = clockAt(SAID_AT + MAIN_CHAT_PAUSE_MS)
+		const first = await launchHome({ store, now })
+		const kept = await first.mainChatId()
+		await sayIn(store, kept, SAID_AT)
+		await first.open()
+		cleanup()
+
+		const relaunched = await launchHome({ store, now, seated: first.workspace })
+		await relaunched.open()
+
+		expect(renewal).not.toHaveBeenCalled()
+		expect(await relaunched.mainChatId()).toBe(kept)
+		expect(archivedLine()).toBeNull()
+	})
+
+	it("weighs the hour again on a later opening in the same process, the archived line staying while nothing is said", async () => {
+		const store = createFakeTranscriptStore()
+		const renewal = vi.spyOn(store, "renewMainChat")
+		const { clock, now } = clockAt(SAID_AT + MAIN_CHAT_PAUSE_MS / 2)
+		const home = await launchHome({ store, now })
+		const earlier = await home.mainChatId()
+		await sayIn(store, earlier, SAID_AT)
+
+		await home.open()
+		expect(renewal).not.toHaveBeenCalled()
+		expect(await home.mainChatId()).toBe(earlier)
+
+		clock.at = SAID_AT + MAIN_CHAT_PAUSE_MS + 1
+		await home.open()
+		await home.open()
+
+		expect(renewal).toHaveBeenCalledOnce()
+		expect(await home.mainChatId()).not.toBe(earlier)
+		fireEvent.click(screen.getByRole("button", { name: "Open it" }))
+		expect(home.onOpenThreadInNewTab).toHaveBeenCalledWith({
+			conversation: earlier,
+		})
+	})
+
+	it("renews the main conversation once when two openings overlap", async () => {
+		const store = createFakeTranscriptStore()
+		const renewal = vi.spyOn(store, "renewMainChat")
+		const home = await launchHome({ store })
+		await sayIn(store, await home.mainChatId())
+
+		await home.openTwiceAtOnce()
+
+		expect(renewal).toHaveBeenCalledOnce()
 	})
 
 	it("keeps an empty main conversation, renews nothing and shows no archived line", async () => {

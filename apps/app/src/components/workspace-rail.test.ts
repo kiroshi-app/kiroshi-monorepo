@@ -24,6 +24,7 @@ import type { ChatDriver } from "@/lib/chat/driver"
 import { createFakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
+import { MAIN_CHAT_PAUSE_MS } from "@/lib/home/home-visits"
 import type { JoinedHostState } from "@/lib/host/joined-hosts"
 import type { SettingsNavigation } from "@/lib/navigation/use-settings-navigation"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
@@ -668,23 +669,31 @@ describe("the Home page", () => {
 		).toEqual({ [PERSONAL_SPACE_ID]: second.id })
 	})
 
-	it("archives a main chat holding messages only once the Home opens, one click away", async () => {
-		const { router, firstOfSpace, store } = await mountAppWithTwoAgents()
-		const earlier = await store.mainChat(firstOfSpace.id, PERSONAL_SPACE_ID)
+	const sayInMainChat = async (
+		store: TranscriptStore,
+		conversationId: string,
+		createdAt: number,
+	) => {
 		await store.startTurn({
-			conversationId: earlier.id,
+			conversationId,
 			id: "said",
-			startedAt: 1,
+			startedAt: createdAt,
 		})
 		await store.appendUserMessage({
 			id: "said-message",
-			conversationId: earlier.id,
+			conversationId,
 			turnId: "said",
 			authorBotId: null,
 			repliedToMessageId: null,
 			content: "Book the flights.",
-			createdAt: 1,
+			createdAt,
 		})
+	}
+
+	it("archives a main chat holding messages only once the Home opens, one click away", async () => {
+		const { router, firstOfSpace, store } = await mountAppWithTwoAgents()
+		const earlier = await store.mainChat(firstOfSpace.id, PERSONAL_SPACE_ID)
+		await sayInMainChat(store, earlier.id, 1)
 
 		await act(() =>
 			router.navigate({ to: "/", search: { bot: firstOfSpace.id } }),
@@ -700,6 +709,37 @@ describe("the Home page", () => {
 			(await store.mainChat(firstOfSpace.id, PERSONAL_SPACE_ID)).id,
 		).not.toBe(earlier.id)
 		expect(slot("home-layout")?.getAttribute("data-stage")).toBe("empty")
+		expect(screen.getByRole("button", { name: "Open it" })).toBeTruthy()
+	})
+
+	it("keeps a main chat said to within the hour, then archives it on a later opening past the hour", async () => {
+		const { firstOfSpace, store } = await mountAppWithTwoAgents()
+		const renewal = vi.spyOn(store, "renewMainChat")
+		const earlier = await store.mainChat(firstOfSpace.id, PERSONAL_SPACE_ID)
+		const saidAt = Date.now()
+		await sayInMainChat(store, earlier.id, saidAt)
+		const mainChatId = async () =>
+			(await store.mainChat(firstOfSpace.id, PERSONAL_SPACE_ID)).id
+
+		await pressInRail("home")
+
+		expect(renewal).not.toHaveBeenCalled()
+		expect(await mainChatId()).toBe(earlier.id)
+		expect(slot("home-layout")?.getAttribute("data-stage")).toBe("conversation")
+
+		await pressInRail("conversations")
+		vi.setSystemTime(saidAt + MAIN_CHAT_PAUSE_MS + 1)
+		await pressInRail("home")
+
+		expect(renewal).toHaveBeenCalledOnce()
+		expect(await mainChatId()).not.toBe(earlier.id)
+		expect(slot("home-layout")?.getAttribute("data-stage")).toBe("empty")
+		expect(screen.getByRole("button", { name: "Open it" })).toBeTruthy()
+
+		await pressInRail("conversations")
+		await pressInRail("home")
+
+		expect(renewal).toHaveBeenCalledOnce()
 		expect(screen.getByRole("button", { name: "Open it" })).toBeTruthy()
 	})
 

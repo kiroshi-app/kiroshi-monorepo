@@ -38,6 +38,8 @@ type VisitingStore = Pick<
 
 const reportRenewal = failureReporterIn("home-visits")
 
+export const MAIN_CHAT_PAUSE_MS = 3_600_000
+
 const homeKeyOf = (botId: string, spaceId: string | null) =>
 	`${spaceId}:${botId}`
 
@@ -55,7 +57,10 @@ const raiseRenewalFailure = (reason: unknown) => {
 	})
 }
 
-export const createHomeVisits = (store: VisitingStore): HomeVisits => {
+export const createHomeVisits = (
+	store: VisitingStore,
+	now: () => number = () => Date.now(),
+): HomeVisits => {
 	const openings = new Map<string, Promise<void>>()
 	const listeners = new Set<() => void>()
 	const roomLog = createRoomLog()
@@ -75,25 +80,36 @@ export const createHomeVisits = (store: VisitingStore): HomeVisits => {
 		}
 	}
 
-	const archivedBy = async (botId: string, spaceId: string) => {
-		const previous = await store.mainChat(botId, spaceId)
-		const { messages } = await store.loadPage(previous.id, null)
-		if (messages.length === 0) {
+	const archiveOnOpening = async (
+		botId: string,
+		spaceId: string,
+		archivedLast: HomeArchive | null,
+	) => {
+		const chat = await store.mainChat(botId, spaceId)
+		const { messages } = await store.loadPage(chat.id, null)
+		const lastMessage = messages.at(-1)
+		if (!lastMessage) {
+			return archivedLast
+		}
+		if (now() - lastMessage.createdAt <= MAIN_CHAT_PAUSE_MS) {
 			return null
 		}
 		await store.renewMainChat(botId, spaceId)
-		return { conversationId: previous.id, lastActiveAt: previous.updatedAt }
+		return { conversationId: chat.id, lastActiveAt: chat.updatedAt }
 	}
 
 	const openOnce = async (key: string, botId: string, spaceId: string) => {
-		write(key, {
-			openedAt: Date.now(),
+		const previous = visits[key] ?? {
+			openedAt: now(),
 			isSettled: false,
 			archive: null,
 			isBandDismissed: false,
-		})
+		}
+		write(key, { ...previous, isSettled: false })
 		try {
-			update(key, { archive: await archivedBy(botId, spaceId) })
+			update(key, {
+				archive: await archiveOnOpening(botId, spaceId, previous.archive),
+			})
 		} catch (reason) {
 			raiseRenewalFailure(reason)
 		}
@@ -102,7 +118,9 @@ export const createHomeVisits = (store: VisitingStore): HomeVisits => {
 
 	const open = (botId: string, spaceId: string) => {
 		const key = homeKeyOf(botId, spaceId)
-		const held = openings.get(key) ?? openOnce(key, botId, spaceId)
+		const held =
+			openings.get(key) ??
+			openOnce(key, botId, spaceId).finally(() => openings.delete(key))
 		openings.set(key, held)
 		return held
 	}
