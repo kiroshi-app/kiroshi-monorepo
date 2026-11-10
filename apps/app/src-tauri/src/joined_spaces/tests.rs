@@ -1977,7 +1977,7 @@ fn a_description_the_host_never_answers_is_host_offline_and_leaves_the_row_uncha
 fn a_call_over_a_link_that_is_down_is_host_offline_without_being_sent() {
 	run(async {
 		let member = Member::new("described-down").await;
-		let link = MemberLink::new(INSTANCE, "Studio".to_owned());
+		let link = MemberLink::new(INSTANCE, "Studio".to_owned(), "bob".to_owned());
 		link.closed(Presence::Down);
 		let call = HostCall { command: "space_update", args: json!({}), bound: PATIENCE };
 

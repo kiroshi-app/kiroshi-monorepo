@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
@@ -202,6 +203,21 @@ pub(super) fn refused(id: Option<Value>) -> String {
 
 pub(super) fn forwarded(frame: &str, epoch: &str, seq: u64) -> String {
 	format!("{{\"event\":{frame},\"epoch\":\"{epoch}\",\"seq\":{seq}}}")
+}
+
+pub(super) fn forwarded_to_everyone(
+	frame: &str,
+	epoch: &str,
+	rest: u64,
+	seqs: &BTreeMap<String, u64>,
+) -> String {
+	if seqs.is_empty() {
+		return forwarded(frame, epoch, rest);
+	}
+	let seqs: Map<String, Value> =
+		seqs.iter().map(|(account_id, seq)| (account_id.clone(), Value::from(*seq))).collect();
+	let seqs = Value::Object(seqs);
+	format!("{{\"event\":{frame},\"epoch\":\"{epoch}\",\"rest\":{rest},\"seqs\":{seqs}}}")
 }
 
 pub(super) fn replayed(frame: &str, epoch: &str, seq: u64, token: &str) -> String {

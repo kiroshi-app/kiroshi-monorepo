@@ -646,7 +646,7 @@ async fn online<R: Runtime>(
 					}
 					Received::Stale(sender) => Outgoing::Rechallenge(sender),
 					Received::Resume(sender, call) => {
-						let resumed = recorded.borrow().resumed(&call, last_sent.seq, &sender.account_id);
+						let resumed = recorded.borrow().resumed(&call, last_sent.position, &sender.account_id);
 						if let Err(ended) = all_sent(&mut sink, &mut wire, &sender, resumed.frames).await {
 							return ended;
 						}
@@ -975,14 +975,15 @@ async fn all_recorded_sent(
 ) -> Result<(), Ended> {
 	for stamped in unsent {
 		match &stamped.addressee {
-			Addressee::Everyone => sealed_sent(sink, wire, &stamped.frame, None).await?,
+			Addressee::Everyone => sealed_sent(sink, wire, &stamped.to_everyone(), None).await?,
 			addressee => {
 				for device in devices_of(hosted, addressee).await? {
-					sealed_sent(sink, wire, &stamped.frame, Some(&device)).await?;
+					let frame = stamped.to_account(&device.account_id);
+					sealed_sent(sink, wire, &frame, Some(&device)).await?;
 				}
 			}
 		}
-		last_sent.seq = stamped.seq;
+		last_sent.position = stamped.position;
 	}
 	Ok(())
 }

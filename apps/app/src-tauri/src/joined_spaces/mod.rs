@@ -4,7 +4,7 @@ pub mod deep_link;
 mod description;
 mod held;
 pub mod join;
-mod member_link;
+pub(crate) mod member_link;
 mod member_wire;
 pub mod members;
 mod proxy;
