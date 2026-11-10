@@ -313,11 +313,6 @@ const summonLimitDescriptionOf = (names: string[]) =>
 		limit: MAX_SUMMONS_PER_CHAIN,
 	})
 
-const dropDescriberOf =
-	({ error }: NoticedDrop) =>
-	(names: string[]) =>
-		notStartedDescriptionOf(error ?? NO_SESSION, names)
-
 const isSameWork = (left: WorkingState | null, right: WorkingState | null) =>
 	left?.kind === right?.kind &&
 	left?.label === right?.label &&
@@ -1489,7 +1484,9 @@ export const createConversationController = (
 			void raiseSummonLimit(dropped)
 			return
 		}
-		void raiseNotStarted(dropped, [dropped.botId], dropDescriberOf(dropped))
+		void raiseNotStarted(dropped, [dropped.botId], (names) =>
+			notStartedDescriptionOf(dropped.error ?? NO_SESSION, names),
+		)
 	}
 
 	const noteFrontDrop = (
