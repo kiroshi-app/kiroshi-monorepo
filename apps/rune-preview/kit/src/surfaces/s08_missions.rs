@@ -510,7 +510,7 @@ fn bot_avatar(t: &Tokens, bot: Bot, side: f32, working: Option<f64>, dot: Option
 		Some(at_ms) => Motion::Running { activity: Activity::Working, at_ms },
 		None => Motion::Still,
 	};
-	let face = Face { name: bot.name, hue: bot.hue, motion }.draw(side, t);
+	let face = Face { name: bot.name, hue: bot.hue, image: None, motion }.draw(side, t);
 	let Some(dot) = dot else { return face };
 	let badge = (side * AVATAR_DOT_SHARE).min(AVATAR_DOT_MAX);
 	let edge = side - side * AVATAR_DOT_INSET - badge;
@@ -698,7 +698,7 @@ pub fn soft_bubble(t: &Tokens, content: El) -> El {
 		.child(content)
 }
 
-fn title_badge(t: &Tokens, title: &str) -> El {
+pub(crate) fn title_badge(t: &Tokens, title: &str) -> El {
 	row()
 		.h(SPACING * 5.0)
 		.px(SPACING * 1.5)

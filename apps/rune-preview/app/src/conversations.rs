@@ -5,6 +5,7 @@ use rune::{Chrome, El, TextStyle, col, el, icon, row, text};
 
 use kiroshi_core::agent::contract::{ConnectionState, RuntimeScope};
 
+use kiroshi_rune_kit::avatar::Motion;
 use kiroshi_rune_kit::icons;
 use kiroshi_rune_kit::strings::Language;
 use kiroshi_rune_kit::surfaces::s01_chrome::ConnectionStatus;
@@ -372,6 +373,9 @@ fn solo_identity_of<'a>(
 	let state = s.connections.of(conversation_id, &agent.id);
 	HeaderIdentity {
 		hue: agent.hue,
+		title: None,
+		image: None,
+		motion: Motion::Still,
 		connection: ConnectionStatus {
 			name: &agent.name,
 			state: connection_state_of(state),

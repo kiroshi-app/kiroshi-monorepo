@@ -53,6 +53,7 @@ fn writing(name: &str, preset: Preset) -> Face<'_> {
 	Face {
 		name,
 		hue: Some(preset.hue()),
+		image: None,
 		motion: Motion::Running { activity: Activity::Writing, at_ms: WORKING_AT_MS },
 	}
 }
@@ -381,6 +382,7 @@ pub(super) fn list_row_working(t: &Tokens, _: &SceneState) -> El {
 	let face = Face {
 		name: "Atlas",
 		hue: None,
+		image: None,
 		motion: Motion::Running { activity: Activity::Thinking, at_ms: WORKING_AT_MS },
 	};
 	listed(
