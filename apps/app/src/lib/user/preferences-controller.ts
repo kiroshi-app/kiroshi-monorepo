@@ -21,7 +21,12 @@ import {
 } from "./preferences-queue"
 
 import { createStore } from "../store"
-import type { OnboardingStep, SidebarTab, UpdateChannel } from "@/lib/bindings"
+import type {
+	OnboardingStep,
+	OpenOn,
+	SidebarTab,
+	UpdateChannel,
+} from "@/lib/bindings"
 
 type NotificationField = Extract<keyof UserPreferences, `notify${string}`>
 
@@ -60,6 +65,7 @@ export type UserController = {
 	setLanguage: (language: Language | null) => Promise<void>
 	setSidebarWidth: (sidebarWidth: number) => Promise<void>
 	setSidebarTab: (sidebarTab: SidebarTab) => Promise<void>
+	setOpenOn: (openOn: OpenOn) => Promise<void>
 	setActivityPanelOpen: (activityPanelOpen: boolean) => Promise<void>
 	markFirstRunDone: () => Promise<void>
 	setOnboardingStep: (step: OnboardingStep) => Promise<void>
@@ -252,6 +258,8 @@ export const createUserController = (): UserController => {
 				.then(apply)
 				.catch(restore)
 		},
+
+		setOpenOn: (openOn: OpenOn) => changeMirrored({ openOn }),
 
 		setActivityPanelOpen: (activityPanelOpen: boolean) =>
 			changeMirrored({ activityPanelOpen }),

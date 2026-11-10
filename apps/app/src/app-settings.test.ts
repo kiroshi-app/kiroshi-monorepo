@@ -585,6 +585,66 @@ it("opens the New conversation page over the settings left open, after a restart
 	expect(currentHomeEntryOf()).not.toBeNull()
 })
 
+const openOnSelectOf = () =>
+	screen.getByRole("combobox", { name: i18n.t("settings:openOn.label") })
+
+const openGeneralSettings = async () => {
+	await press(avatarOf())
+	await press(menuEntryOf(i18n.t("settings:rail.general")))
+}
+
+const pickOpenOn = async (option: string) => {
+	await press(openOnSelectOf())
+	const choice = screen.getByRole("option", { name: option })
+	await act(async () => {
+		fireEvent.pointerDown(choice, { pointerType: "mouse" })
+	})
+	await press(choice)
+}
+
+it("shows the saved Open on page under General, and opens on Last conversation once picked, after a restart", async () => {
+	harness.preferences = STORED_PREFERENCES
+	await mountApp()
+	await openGeneralSettings()
+	expect(openOnSelectOf().textContent).toBe(
+		i18n.t("settings:openOn.option.newConversation"),
+	)
+
+	await pickOpenOn(i18n.t("settings:openOn.option.lastConversation"))
+
+	expect(openOnSelectOf().textContent).toBe(
+		i18n.t("settings:openOn.option.lastConversation"),
+	)
+	expect(harness.preferences?.openOn).toBe("lastConversation")
+
+	cleanup()
+	await mountApp()
+
+	expect(shownSettingsOf()?.subtitle).toBe("user")
+})
+
+it("shows the saved Open on page under General, and opens on New conversation once picked, after a restart", async () => {
+	harness.preferences = { ...STORED_PREFERENCES, openOn: "lastConversation" }
+	await mountApp()
+	await openGeneralSettings()
+	expect(openOnSelectOf().textContent).toBe(
+		i18n.t("settings:openOn.option.lastConversation"),
+	)
+
+	await pickOpenOn(i18n.t("settings:openOn.option.newConversation"))
+
+	expect(openOnSelectOf().textContent).toBe(
+		i18n.t("settings:openOn.option.newConversation"),
+	)
+	expect(harness.preferences?.openOn).toBe("newConversation")
+
+	cleanup()
+	await mountApp()
+
+	expect(shownSettingsOf()).toBeNull()
+	expect(currentHomeEntryOf()).not.toBeNull()
+})
+
 it("shows the settings of the Space reached and leaves the tab of the Space left on its own settings", async () => {
 	const opened = await mountApp(secondSpace)
 	await openSpaceSettingsByRail()
