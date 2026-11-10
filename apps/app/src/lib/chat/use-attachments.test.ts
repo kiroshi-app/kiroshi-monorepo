@@ -1,13 +1,24 @@
 // @vitest-environment happy-dom
 
-import { cleanup, render, screen } from "@testing-library/react"
+import {
+	act,
+	cleanup,
+	render,
+	renderHook,
+	screen,
+} from "@testing-library/react"
 import { createElement, useRef } from "react"
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import type {
-	AttachmentsController,
-	AttachmentsState,
+import {
+	type AttachmentsController,
+	type AttachmentsState,
+	createAttachmentsController,
 } from "@/lib/chat/attachments-controller"
+import {
+	createDraftsController,
+	type DraftsController,
+} from "@/lib/chat/drafts-controller"
 import {
 	factsOf,
 	type LoadedConversationThread,
@@ -131,5 +142,80 @@ describe("a file dropped on the window of a thread", () => {
 		dropOnWindow("screenshot.png")
 
 		expect(staged).toEqual([])
+	})
+})
+
+const PREVIEW = "blob:conversation-preview"
+
+const HOME = { kind: "home", id: "space-a" } as const
+
+const screenshot = () =>
+	new File([new Uint8Array([1, 2, 3])], "shot.png", { type: "image/png" })
+
+type Composer = {
+	controller: AttachmentsController
+	drafts: DraftsController
+}
+
+const createComposer = (): Composer => ({
+	controller: createAttachmentsController({
+		store: () => Promise.resolve([]),
+		send: () => true,
+	}),
+	drafts: createDraftsController(),
+})
+
+const mountConversation = ({ controller, drafts }: Composer) =>
+	renderHook(() => {
+		const rootRef = useRef<HTMLDivElement>(null)
+		return {
+			staged: useAttachments(controller, OWNER, true, rootRef),
+			draft: drafts.read(CONVERSATION_ID),
+			rememberDraft: (draft: string) => drafts.remember(CONVERSATION_ID, draft),
+		}
+	})
+
+describe("a conversation composer left and come back to", () => {
+	let revoked: ReturnType<typeof vi.spyOn>
+
+	beforeEach(() => {
+		vi.spyOn(URL, "createObjectURL").mockReturnValue(PREVIEW)
+		revoked = vi.spyOn(URL, "revokeObjectURL").mockReturnValue(undefined)
+	})
+
+	afterEach(() => {
+		cleanup()
+		vi.restoreAllMocks()
+	})
+
+	it("shows the same text and file with its preview", () => {
+		const composer = createComposer()
+		const conversation = mountConversation(composer)
+		act(() => {
+			conversation.result.current.rememberDraft("half a thought")
+			conversation.result.current.staged.stage([screenshot()])
+		})
+
+		conversation.unmount()
+		const back = mountConversation(composer)
+
+		expect(back.result.current.draft).toBe("half a thought")
+		expect(back.result.current.staged.items).toEqual([
+			expect.objectContaining({ name: "shot.png", previewUrl: PREVIEW }),
+		])
+		expect(revoked).not.toHaveBeenCalled()
+	})
+
+	it("leaves the files staged on the Home untouched when it unmounts", () => {
+		const composer = createComposer()
+		composer.controller.stage(HOME, [screenshot()])
+		const conversation = mountConversation(composer)
+
+		conversation.unmount()
+
+		expect(composer.controller.getState().staged["home:space-a"]).toEqual([
+			expect.objectContaining({ name: "shot.png", previewUrl: PREVIEW }),
+		])
+		expect(revoked).not.toHaveBeenCalled()
 	})
 })

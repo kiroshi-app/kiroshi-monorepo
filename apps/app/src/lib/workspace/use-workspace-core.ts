@@ -87,6 +87,7 @@ export const useWorkspaceCore = (openSettings: OpenSettings | null) => {
 			),
 		[chat.controller, driver, conversationRuntimes],
 	)
+	useEffect(() => attachments.release, [attachments])
 	const drafts = useMemo(createDraftsController, [])
 	const homeVisits = useMemo(createHomeVisits, [])
 	const homePicks = useMemo(createHomePicks, [])
