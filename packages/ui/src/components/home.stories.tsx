@@ -455,6 +455,7 @@ export const FieldFilled = meta.story({
 		const send = canvas.getByRole("button", { name: "Send" })
 		await expect(send).toBeEnabled()
 		await expect(send).toHaveAttribute("data-filled", "true")
+		await expect(send).toHaveClass("active:not-aria-[haspopup]:translate-y-px")
 	},
 })
 
@@ -492,6 +493,9 @@ export const Sending = meta.story({
 		await expect(send).toHaveAttribute("aria-disabled", "true")
 		await expect(send).toHaveAttribute("data-filled", "false")
 		await expect(send).not.toBeDisabled()
+		await expect(send).not.toHaveClass(
+			"active:not-aria-[haspopup]:translate-y-px",
+		)
 		await userEvent.click(send)
 		await expect(send).toHaveFocus()
 		await expect(sent).not.toHaveBeenCalled()

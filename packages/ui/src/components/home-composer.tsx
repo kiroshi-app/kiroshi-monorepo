@@ -61,6 +61,7 @@ const SendButton = ({ isFilled, isSending = false }: SendButtonProps) => {
 				"size-8 rounded-full transition-none disabled:opacity-100",
 				!looksFilled &&
 					"bg-foreground/8 text-disabled-foreground hover:bg-foreground/8",
+				isSending && "active:not-aria-[haspopup]:translate-y-0",
 			)}
 			data-filled={looksFilled}
 			disabled={!isFilled && !isSending}
