@@ -1235,7 +1235,7 @@ export const createRosterController = (
 		createConversation: (botIds = NOBODY_SEATED) =>
 			writeConversation(botIds, admitConversation),
 
-		createUnselectedConversation: (botIds: string[]) =>
+		createUnselectedConversation: (botIds) =>
 			writeConversation(botIds, enrolConversation),
 
 		duplicate: (id: string, spaceRowId?: string) =>
