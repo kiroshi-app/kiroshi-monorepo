@@ -227,14 +227,23 @@ const ATLAS_COMPOSER = (
 	/>
 )
 
-type ConversationHomeProps = { children: ReactNode; composer?: ReactNode }
+type ConversationHomeProps = {
+	children: ReactNode
+	composer?: ReactNode
+	highlightedMessageId?: string
+}
 
-const ConversationHome = ({ children, composer }: ConversationHomeProps) => (
+const ConversationHome = ({
+	children,
+	composer,
+	highlightedMessageId,
+}: ConversationHomeProps) => (
 	<HomeLayout
 		composer={composer ?? ATLAS_COMPOSER}
 		stage="conversation"
 		transcript={
 			<HomeTranscript
+				highlightedMessageId={highlightedMessageId}
 				rows={Children.toArray(children).map((turn, index) => ({
 					key: `turn-${index}`,
 					render: () => turn,
@@ -753,41 +762,19 @@ const HIGHLIGHTED_ID = "flights-answer-again"
 export const LastRowHighlighted = meta.story({
 	name: "Last row highlighted, the same size as unhighlighted",
 	render: () => (
-		<HomeLayout
-			composer={ATLAS_COMPOSER}
-			stage="conversation"
-			transcript={
-				<HomeTranscript
-					highlightedMessageId={HIGHLIGHTED_ID}
-					rows={[
-						{
-							key: "ask",
-							render: () => <YourTurn sentAt={at(9, 12)} text={FLIGHTS_ASK} />,
-						},
-						{
-							key: "answer",
-							render: () => (
-								<AtlasTurn
-									messageId="flights-answer"
-									sentAt={at(9, 12)}
-									text={FLIGHTS_ANSWER}
-								/>
-							),
-						},
-						{
-							key: "answer-again",
-							render: () => (
-								<AtlasTurn
-									messageId={HIGHLIGHTED_ID}
-									sentAt={at(9, 12)}
-									text={FLIGHTS_ANSWER}
-								/>
-							),
-						},
-					]}
-				/>
-			}
-		/>
+		<ConversationHome highlightedMessageId={HIGHLIGHTED_ID}>
+			<YourTurn sentAt={at(9, 12)} text={FLIGHTS_ASK} />
+			<AtlasTurn
+				messageId="flights-answer"
+				sentAt={at(9, 12)}
+				text={FLIGHTS_ANSWER}
+			/>
+			<AtlasTurn
+				messageId={HIGHLIGHTED_ID}
+				sentAt={at(9, 12)}
+				text={FLIGHTS_ANSWER}
+			/>
+		</ConversationHome>
 	),
 	parameters: withDescription(
 		"A search or a pin jumps to the last row: the highlight paints the row without growing it, so the row keeps its edges and the 16 px above the composer.",
