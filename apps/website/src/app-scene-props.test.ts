@@ -134,6 +134,16 @@ const createPropReader = (files: string[]): PropReader => {
 		return found
 	}
 
+	const someIn = (
+		file: string,
+		isWanted: (node: ts.Node) => boolean,
+		absence: string,
+	) => {
+		const found = nodesIn(file, isWanted)
+		if (found.length === 0) throw new Error(`${file} ${absence}`)
+		return found
+	}
+
 	const namesOf = (node: ts.Node) =>
 		checker
 			.getTypeAtLocation(node)
@@ -147,14 +157,13 @@ const createPropReader = (files: string[]): PropReader => {
 
 	const openingsOf = (file: string, tag: string) => {
 		const source = sourceOf(file)
-		const openings = nodesIn(
+		return someIn(
 			file,
 			(node) =>
 				(ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) &&
 				node.tagName.getText(source) === tag,
+			`renders no <${tag}>`,
 		) as (ts.JsxOpeningElement | ts.JsxSelfClosingElement)[]
-		if (openings.length === 0) throw new Error(`${file} renders no <${tag}>`)
-		return openings
 	}
 
 	const propsPassedTo = (file: string, tag: string) =>
@@ -178,16 +187,15 @@ const createPropReader = (files: string[]): PropReader => {
 
 	const propsOfVariable = (file: string, name: string) => {
 		const source = sourceOf(file)
-		const declarations = nodesIn(
+		const declarations = someIn(
 			file,
 			(node) =>
 				ts.isVariableDeclaration(node) &&
 				node.name.getText(source) === name &&
 				node.initializer !== undefined &&
 				ts.isObjectLiteralExpression(node.initializer),
+			`declares no ${name} object`,
 		) as ts.VariableDeclaration[]
-		if (declarations.length === 0)
-			throw new Error(`${file} declares no ${name} object`)
 		return declarations.flatMap((declaration) =>
 			namesOf(declaration.initializer as ts.Expression),
 		)
@@ -195,27 +203,26 @@ const createPropReader = (files: string[]): PropReader => {
 
 	const propsReadOn = (file: string, name: string) => {
 		const source = sourceOf(file)
-		const reads = nodesIn(
+		const reads = someIn(
 			file,
 			(node) =>
 				ts.isPropertyAccessExpression(node) &&
 				node.expression.getText(source) === name,
+			`reads nothing on ${name}`,
 		) as ts.PropertyAccessExpression[]
-		if (reads.length === 0) throw new Error(`${file} reads nothing on ${name}`)
 		return reads.map((read) => read.name.getText(source))
 	}
 
 	const propsOfObject = (file: string, property: string) => {
 		const source = sourceOf(file)
-		const assignments = nodesIn(
+		const assignments = someIn(
 			file,
 			(node) =>
 				ts.isPropertyAssignment(node) &&
 				node.name.getText(source) === property &&
 				ts.isObjectLiteralExpression(node.initializer),
+			`builds no ${property} object`,
 		) as ts.PropertyAssignment[]
-		if (assignments.length === 0)
-			throw new Error(`${file} builds no ${property} object`)
 		return assignments.flatMap((assignment) => namesOf(assignment.initializer))
 	}
 
