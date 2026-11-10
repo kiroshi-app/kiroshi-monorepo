@@ -17,7 +17,6 @@ import { PromptField } from "@workspace/ui/components/prompt-input-field"
 import { usePromptLayout } from "@workspace/ui/components/prompt-input-layout"
 import { usePromptTransfer } from "@workspace/ui/components/prompt-input-transfer"
 import { Button } from "@workspace/ui/components/ui/button"
-import { Skeleton } from "@workspace/ui/components/ui/skeleton"
 import { cn } from "@workspace/ui/lib/utils"
 
 const SHELL =
@@ -26,8 +25,6 @@ const SHELL =
 const FIELD_CARD = "flex flex-col gap-3 rounded-[20px] bg-prompt-surface p-3"
 
 const ACTIONS = "flex items-center gap-2"
-
-const SKELETON_FILL = "bg-foreground/6"
 
 const NO_ATTACHMENTS: PromptAttachment[] = []
 
@@ -154,25 +151,4 @@ const HomeComposer = ({
 	)
 }
 
-const HomeComposerSkeleton = () => (
-	<div className={SHELL} data-slot="home-composer-skeleton" inert>
-		<div className={FIELD_CARD}>
-			<div className="min-h-14 p-1">
-				<Skeleton
-					className={cn("mt-1.25 h-3.5 w-35 rounded-full", SKELETON_FILL)}
-				/>
-			</div>
-			<div className={ACTIONS}>
-				<PromptAttachButton
-					className="me-auto"
-					hasLabel
-					onAttach={() => undefined}
-				/>
-				<Skeleton className="h-8 w-21 rounded-2xl bg-foreground/5" />
-				<SendButton isFilled={false} />
-			</div>
-		</div>
-	</div>
-)
-
-export { HomeComposer, type HomeComposerProps, HomeComposerSkeleton }
+export { HomeComposer, type HomeComposerProps }

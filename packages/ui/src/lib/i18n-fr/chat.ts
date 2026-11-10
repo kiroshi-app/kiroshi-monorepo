@@ -1303,17 +1303,6 @@ const chat = {
 			blocked: "Bloquée",
 		},
 		in: "dans",
-		archived: {
-			morning:
-				"La conversation de ce matin avec {{name}} est archivée dans Conversations.",
-			afternoon:
-				"La conversation de cet après-midi avec {{name}} est archivée dans Conversations.",
-			evening:
-				"La conversation de ce soir avec {{name}} est archivée dans Conversations.",
-			night:
-				"La conversation de cette nuit avec {{name}} est archivée dans Conversations.",
-			open: "L’ouvrir",
-		},
 		failure: {
 			send: {
 				title: "Impossible d’envoyer cette demande",
