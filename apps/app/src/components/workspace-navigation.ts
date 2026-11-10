@@ -32,7 +32,7 @@ export const useWorkspaceNavigation = ({
 	tabs,
 	onSelectSpace,
 }: WorkspaceNavigationOptions): WorkspaceNavigation => {
-	const { badgesBySpaceId } = rosterLists
+	const { badgesBySpaceId, rosterBots } = rosterLists
 	const { onCreateSpace, onOpenSpaceSettings, onSelectConversation } =
 		rosterLines.sidebarActions
 	const { openMissionThread } = sidebarMissions
@@ -59,7 +59,10 @@ export const useWorkspaceNavigation = ({
 				onNewConversation: navigation.openHome,
 				onSelectLibrary: navigation.openLibrary,
 				onSelectMissions: navigation.openMissions,
-				onOpenConversation: onSelectConversation,
+				onOpenConversation: (id) =>
+					rosterBots.some((agent) => agent.id === id)
+						? navigation.openThread({ bot: id })
+						: onSelectConversation(id),
 				onOpenMission: openMissionThread,
 				spaces: switcher.spaces,
 				user,
@@ -72,6 +75,7 @@ export const useWorkspaceNavigation = ({
 		onCreateSpace,
 		onOpenSpaceSettings,
 		onSelectConversation,
+		rosterBots,
 		openMissionThread,
 		onSelectSpace,
 		search.open,

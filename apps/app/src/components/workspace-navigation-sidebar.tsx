@@ -3,6 +3,7 @@ import { NavigationSidebar } from "@workspace/ui/components/navigation-sidebar"
 
 import type { Section } from "@/lib/conversations/store-contract"
 import { sidebarZonesOf } from "@/lib/sidebar/sidebar-zones"
+import { soloThreadRowsOf } from "@/lib/sidebar/solo-thread-rows"
 import { isHomePage, isLibraryPage, isMissionsPage } from "@/lib/tabs/tab-pages"
 import { usePageShown } from "@/lib/tabs/use-page-shown"
 import type { WorkspaceTabs } from "@/lib/tabs/workspace-tabs"
@@ -38,7 +39,14 @@ export const WorkspaceNavigationSidebar = () => {
 	const destination = useShownDestination(tabs)
 	const { roster, sections } = core
 	const zones = sidebarZonesOf({
-		conversations: rosterLists.rosterConversations,
+		conversations: [
+			...rosterLists.rosterConversations,
+			...soloThreadRowsOf({
+				agents: rosterLists.rosterBots,
+				soloThreads: rosterView.soloThreads,
+				spaceId: rosterView.rosteredSpaceId,
+			}),
+		],
 		sections: sectionsIn(sections.state.sections, rosterView.rosteredSpaceId),
 	})
 
