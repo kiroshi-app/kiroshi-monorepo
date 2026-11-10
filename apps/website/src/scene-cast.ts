@@ -20,8 +20,7 @@ import type { RosterBot } from "@workspace/ui/components/roster"
 import type { RoutineRowModel } from "@workspace/ui/components/routine-row"
 
 import { SCENE_COPY, TICKET_PLATFORM } from "./copy"
-
-import { CHIP_STATE_OF } from "../../app/src/lib/missions/mission-chip-states"
+import { CHIP_STATE_OF } from "./mission-chip-states"
 
 type BotCopy = {
 	name: string

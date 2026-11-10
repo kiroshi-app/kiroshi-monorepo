@@ -28,7 +28,6 @@ export default defineConfig({
 	resolve: {
 		alias: {
 			"@workspace/ui": resolve(import.meta.dirname, "../../packages/ui/src"),
-			"@": resolve(import.meta.dirname, "../app/src"),
 		},
 	},
 })
