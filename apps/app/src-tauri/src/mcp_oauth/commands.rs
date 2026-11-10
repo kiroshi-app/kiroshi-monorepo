@@ -958,12 +958,16 @@ mod tests {
 		})
 	}
 
+	fn a_bound_grant(root: &Path) {
+		credentials::store(root, &a_server("granola"), &a_live_grant())
+			.expect("the grant is written");
+		credentials::bind(root, &a_server("granola"), GRANOLA_URL).expect("the grant is bound");
+	}
+
 	#[test]
 	fn a_connect_that_stored_no_grant_reads_its_failure_and_never_connected() {
 		let root = a_root("connect-unstored");
-		credentials::store(&root, &a_server("granola"), &a_live_grant())
-			.expect("the grant is written");
-		credentials::bind(&root, &a_server("granola"), GRANOLA_URL).expect("the grant is bound");
+		a_bound_grant(&root);
 		assert_eq!(read_row(&root, &a_bot()).status, ApplicationStatus::Connected);
 
 		let error = unstored(&root, &a_server("granola"), a_refused_flow(), &Values::new());
@@ -980,9 +984,7 @@ mod tests {
 	#[test]
 	fn a_cancelled_connect_leaves_the_row_as_it_stood() {
 		let root = a_root("connect-cancelled");
-		credentials::store(&root, &a_server("granola"), &a_live_grant())
-			.expect("the grant is written");
-		credentials::bind(&root, &a_server("granola"), GRANOLA_URL).expect("the grant is bound");
+		a_bound_grant(&root);
 
 		let cancelled = Step::SettlingTheFlow.refused(OauthError::Cancelled);
 		let error = unstored(&root, &a_server("granola"), cancelled, &Values::new());
