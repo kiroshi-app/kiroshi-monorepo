@@ -618,7 +618,7 @@ impl App {
 		}
 	}
 
-	fn host_event(&mut self, event: HostEvent) {
+	pub(crate) fn host_event(&mut self, event: HostEvent) {
 		self.surfaces.s05_thread.heard(&event);
 		match event {
 			HostEvent::Agent(scoped) => {
