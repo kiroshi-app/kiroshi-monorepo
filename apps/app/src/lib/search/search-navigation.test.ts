@@ -23,6 +23,8 @@ const tracedNavigation = (isShownInATab = false) => {
 		recordLanding: ({ messageId }) => trace.push(`landing:${messageId}`),
 		openThreadInNewTab: (thread, spaceId = "open") =>
 			trace.push(`new-tab:${JSON.stringify(thread)}:${spaceId}`),
+		showOverHome: (thread, spaceId = "open") =>
+			trace.push(`over-home:${JSON.stringify(thread)}:${spaceId}`),
 		openConversation: async ({ conversationId, openInPlace }) => {
 			trace.push(`open:${conversationId}`)
 			if (isShownInATab) {
@@ -52,6 +54,7 @@ it("leaves the mission on screen before it shows the thread of the row", () => {
 		"mission:left",
 		"landing:m-1",
 		"bot:bot-1",
+		'over-home:{"bot":"bot-1"}:space-1',
 		"space:space-1",
 	])
 })
@@ -64,7 +67,12 @@ it("holds the mission it was asked to open", () => {
 		navigation,
 	)
 
-	expect(trace).toEqual(["bot:bot-1", "space:space-1", "mission:mi-1"])
+	expect(trace).toEqual([
+		"bot:bot-1",
+		"space:space-1",
+		"mission:mi-1",
+		'over-home:{"bot":"bot-1","mission":"mi-1"}:space-1',
+	])
 })
 
 it("leaves the mission on screen before it opens a routine", () => {
@@ -84,6 +92,7 @@ it("leaves the mission on screen before it opens a routine", () => {
 	expect(trace).toEqual([
 		"mission:left",
 		"bot:bot-1",
+		'over-home:{"bot":"bot-1"}:space-1',
 		"space:space-1",
 		"activity",
 		"routine:r-1",
@@ -127,6 +136,7 @@ it("opens a conversation result in place through the shared path when no tab sho
 		"open:c-1",
 		"mission:left",
 		"conversation:c-1",
+		'over-home:{"conversation":"c-1"}:space-1',
 		"space:space-1",
 	])
 })

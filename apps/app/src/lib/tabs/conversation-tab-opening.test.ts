@@ -53,6 +53,8 @@ const ROOM_HREF = "/?conversation=room"
 
 const OTHER_HREF = "/?conversation=other"
 
+const HOME_PAGE_HREF = "/home"
+
 const openInPlace = vi.fn()
 
 const ROOM = { conversationId: "room", openInPlace }
@@ -270,12 +272,58 @@ describe("opening a conversation no tab shows", () => {
 		const tabs = windowOn(MAIN, HOME, [OTHER_HREF])
 		const { opening, selectSpace } = openingOf(tabs)
 
-		opening.openInNewTab("room", VOCCA)
+		opening.openInTab("room", VOCCA)
 
 		expect(selectSpace).toHaveBeenCalledExactlyOnceWith(VOCCA)
 		expect(tabs.getState().spaceId).toBe(VOCCA)
 		expect(hrefsOf(shown(tabs))).toEqual(["/", ROOM_HREF])
 		expect(activeHrefOf(shown(tabs))).toBe(ROOM_HREF)
+	})
+
+	it("shows it in the active tab when that tab shows the New conversation page", () => {
+		const tabs = windowOn(MAIN, HOME, [OTHER_HREF, HOME_PAGE_HREF])
+		tabs.select(shown(tabs).tabs[1]?.id ?? "")
+		const { opening } = openingOf(tabs)
+
+		opening.openInTab("room", HOME)
+
+		expect(hrefsOf(shown(tabs))).toEqual([OTHER_HREF, ROOM_HREF])
+		expect(activeHrefOf(shown(tabs))).toBe(ROOM_HREF)
+	})
+})
+
+describe("showing a thread over the New conversation page", () => {
+	it("shows it in the active tab of the shown Space, one Back away from that page", () => {
+		const tabs = windowOn(MAIN, HOME, [HOME_PAGE_HREF])
+		const { opening } = openingOf(tabs)
+
+		opening.showOverHome({ bot: "agent" })
+
+		expect(hrefsOf(shown(tabs))).toEqual(["/?bot=agent"])
+		tabs.history.back()
+		expect(activeHrefOf(shown(tabs))).toBe(HOME_PAGE_HREF)
+	})
+
+	it("shows it in the active tab of the Space asked for, the shown Space untouched", () => {
+		const tabs = windowOn(MAIN, VOCCA, [HOME_PAGE_HREF])
+		tabs.showSpace(HOME)
+		tabs.history.push(HOME_PAGE_HREF)
+		const { opening } = openingOf(tabs)
+
+		opening.showOverHome({ bot: "agent", mission: "fix" }, VOCCA)
+
+		expect(activeHrefOf(shown(tabs))).toBe(HOME_PAGE_HREF)
+		tabs.showSpace(VOCCA)
+		expect(activeHrefOf(shown(tabs))).toBe("/?bot=agent&mission=fix")
+	})
+
+	it("leaves a tab on any other page as it is", () => {
+		const tabs = windowOn(MAIN, HOME, [OTHER_HREF])
+		const { opening } = openingOf(tabs)
+
+		opening.showOverHome({ conversation: "room" })
+
+		expect(hrefsOf(shown(tabs))).toEqual([OTHER_HREF])
 	})
 })
 

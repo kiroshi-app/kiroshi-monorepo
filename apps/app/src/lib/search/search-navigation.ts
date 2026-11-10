@@ -47,6 +47,7 @@ export type SearchNavigation = {
 	recordLanding: (landing: MessageLanding) => void
 	openThreadInNewTab: (thread: ThreadSearch, spaceId?: string) => void
 	openConversation: ConversationTabOpening["open"]
+	showOverHome: ConversationTabOpening["showOverHome"]
 }
 
 type RowTarget = Extract<SearchTarget, { row: SearchRow }>
@@ -57,12 +58,16 @@ const recordLandingOf = (target: RowTarget, navigation: SearchNavigation) => {
 	}
 }
 
+const threadOfRow = ({ kind, id }: SearchRow): ThreadSearch =>
+	kind === "bot" ? { bot: id } : { conversation: id }
+
 const showRow = ({ row, spaceId }: RowTarget, navigation: SearchNavigation) => {
 	if (row.kind === "bot") {
 		navigation.selectBot(row.id)
 	} else {
 		navigation.selectConversation(row.id)
 	}
+	navigation.showOverHome(threadOfRow(row), spaceId ?? undefined)
 	if (spaceId) {
 		navigation.selectSpace(spaceId)
 	}
@@ -97,6 +102,10 @@ export const openSearchTarget = (
 			rowId: target.botId,
 			spaceId: target.spaceId,
 		})
+		navigation.showOverHome(
+			{ bot: target.botId, mission: target.missionId },
+			target.spaceId,
+		)
 		return
 	}
 
@@ -115,9 +124,7 @@ const threadOfSearchTarget = (target: SearchTarget): ThreadSearch => {
 	if (target.kind === "mission") {
 		return { bot: target.botId, mission: target.missionId }
 	}
-	return target.row.kind === "bot"
-		? { bot: target.row.id }
-		: { conversation: target.row.id }
+	return threadOfRow(target.row)
 }
 
 export const openSearchTargetInNewTab = (
@@ -141,7 +148,7 @@ export type SearchNavigationSource = {
 	landings: Pick<MessageLandingController, "record">
 	user: Pick<UserController, "setActivityPanelOpen">
 	threads: Pick<SettingsNavigation, "openThreadInNewTab">
-	conversations: Pick<ConversationTabOpening, "open">
+	conversations: Pick<ConversationTabOpening, "open" | "showOverHome">
 }
 
 export const createSearchNavigation = ({
@@ -164,4 +171,5 @@ export const createSearchNavigation = ({
 	recordLanding: landings.record,
 	openThreadInNewTab: threads.openThreadInNewTab,
 	openConversation: conversations.open,
+	showOverHome: conversations.showOverHome,
 })

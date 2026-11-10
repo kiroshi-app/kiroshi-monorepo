@@ -66,7 +66,10 @@ type JoinedSpacesSource = {
 	selectSpace: (rowId: string) => void
 }
 
-type ConversationsSource = Pick<ConversationTabOpening, "open" | "openInNewTab">
+type ConversationsSource = Pick<
+	ConversationTabOpening,
+	"open" | "openInTab" | "showOverHome"
+>
 
 type MissionsSource = {
 	board: () => Promise<Pick<MissionOnBoard, "mission">[]>
