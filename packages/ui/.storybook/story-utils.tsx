@@ -223,6 +223,37 @@ export const slotIn = (root: Element, slot: string) => {
 	return node
 }
 
+const SWIPE_DELTAS = [
+	10, 24, 42, 60, 70, 64, 50, 38, 28, 20, 14, 10, 7, 5, 3, 2, 1, 1,
+]
+
+const SWIPE_END_WAIT_MS = 200
+
+export const wheelTrainOn = (
+	target: Element,
+	deltas: ReadonlyArray<readonly [deltaX: number, deltaY: number]>,
+) =>
+	deltas.map(
+		([deltaX, deltaY]) =>
+			!target.dispatchEvent(
+				new WheelEvent("wheel", {
+					bubbles: true,
+					cancelable: true,
+					deltaX,
+					deltaY,
+				}),
+			),
+	)
+
+export const swipeOn = (target: Element, direction: 1 | -1) =>
+	wheelTrainOn(
+		target,
+		SWIPE_DELTAS.map((delta) => [delta * direction, 0] as const),
+	)
+
+export const swipeEnded = () =>
+	new Promise((resolve) => setTimeout(resolve, SWIPE_END_WAIT_MS))
+
 export const expectOnboardingDragStrip = async (root: HTMLElement) => {
 	const strips = slotsIn(root, "onboarding-drag-strip")
 	await expect(strips.length).toBeGreaterThan(0)

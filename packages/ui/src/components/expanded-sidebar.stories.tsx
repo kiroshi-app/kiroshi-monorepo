@@ -1,10 +1,15 @@
-import { expect, fn, waitFor, within } from "storybook/test"
+import { useState } from "react"
+import { expect, fireEvent, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
+	A11Y_FLOATING_FOCUS_GUARDS,
 	expectSkeletonFilledTo,
 	slotIn,
 	slotsIn,
+	swipeEnded,
+	swipeOn,
+	wheelTrainOn,
 } from "@workspace/storybook/story-utils"
 import type { AppSidebarConversation } from "@workspace/ui/components/app-sidebar"
 import {
@@ -22,7 +27,10 @@ import {
 	ExpandedSidebar,
 	type ExpandedSidebarProps,
 } from "@workspace/ui/components/expanded-sidebar"
+import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import type { Space } from "@workspace/ui/components/space"
+import type { SpaceAvatarState } from "@workspace/ui/components/space-avatar"
+import { SidebarMenuItem } from "@workspace/ui/components/ui/sidebar"
 import { UpdateRow } from "@workspace/ui/components/update-badge"
 import { WorkspaceShellRoot } from "@workspace/ui/components/workspace-shell"
 
@@ -170,7 +178,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The expanded sidebar of the navigation shell, top to bottom: Space switcher, the destinations menu, Pinned and Conversations, then the space dots, the update row and the person footer when they apply. One story per Paper page A artboard; the row list is the current conversation rows, restyled in OPE-2148.",
+					"The expanded sidebar of the navigation shell, top to bottom: Space switcher, the destinations menu, Pinned and Conversations, then the space dots, the update row and the person footer when they apply. A two finger horizontal swipe anywhere over it changes Space. One story per Paper page A artboard; the row list is the current conversation rows, restyled in OPE-2148.",
 			},
 		},
 	},
@@ -419,16 +427,264 @@ export const S2SharedSpaceHostNotConnectedExpanded = meta.story({
 		docs: {
 			description: {
 				story:
-					"The current space is shared and its host is not connected. Check the switcher square dims with a grey dot at its corner and Not connected follows the name before the chevron.",
+					"The current space is shared and its host is not connected. Check the switcher avatar wears its offline hatching with the crossed badge at its corner and Not connected follows the name before the chevron.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
 		const switcher = slotIn(canvasElement, "space-switcher")
 		await expect(within(switcher).getByText("Not connected")).toBeVisible()
-		await expect(
-			slotIn(switcher, "space-switcher-offline-dot"),
-		).toBeInTheDocument()
+		await expect(slotIn(switcher, "space-avatar").dataset.state).toBe("offline")
+	},
+})
+
+type StoryCanvas = {
+	canvasElement: HTMLElement
+}
+
+const triggerAt = (state: SpaceAvatarState, host?: SpaceHost) => ({
+	args: {
+		hostBySpaceId: host ? { [KIROSHI.id]: host } : undefined,
+		badgesBySpaceId: { [KIROSHI.id]: "attention" as const },
+	},
+	parameters: {
+		docs: {
+			description: {
+				story: `The switcher of a ${state} Space. Check the row stays 36px tall with an 8px gap, and draws the generated 26px avatar in the Space colour with the ${state} host state, then the name and the chevron, with no attention ring even though the Space waits on the person.`,
+			},
+		},
+	},
+	play: async ({ canvasElement }: StoryCanvas) => {
+		const switcher = slotIn(canvasElement, "space-switcher")
+		const avatar = slotIn(switcher, "space-avatar")
+		await expect(switcher.getBoundingClientRect().height).toBe(36)
+		await expect(getComputedStyle(switcher).columnGap).toBe("8px")
+		await expect(avatar.dataset.state).toBe(state)
+		await expect(avatar.dataset.size).toBe("26")
+		await expect(avatar.dataset.colour).toBe(String(KIROSHI.colour))
+		await expect(avatar).not.toHaveAttribute("data-attention")
+		await expect(slotsIn(avatar, "space-avatar-attention")).toHaveLength(0)
+		await expect(avatar.nextElementSibling).toHaveAttribute(
+			"data-slot",
+			"space-switcher-name",
+		)
+	},
+})
+
+export const TriggerLocalExpanded = meta.story({
+	name: "Trigger local Expanded",
+	...triggerAt("local"),
+})
+
+export const TriggerSharedExpanded = meta.story({
+	name: "Trigger shared Expanded",
+	...triggerAt("shared", "shared"),
+})
+
+export const TriggerOnlineExpanded = meta.story({
+	name: "Trigger online Expanded",
+	...triggerAt("online", "up"),
+})
+
+export const TriggerConnectingExpanded = meta.story({
+	name: "Trigger connecting Expanded",
+	...triggerAt("connecting", "connecting"),
+})
+
+export const TriggerOfflineExpanded = meta.story({
+	name: "Trigger offline Expanded",
+	...triggerAt("offline", "down"),
+})
+
+const SpaceFollowingWindow = (args: ExpandedSidebarProps) => {
+	const [selectedSpaceId, setSelectedSpaceId] = useState(args.selectedSpaceId)
+
+	return PAPER_WINDOW({
+		...args,
+		selectedSpaceId,
+		onSelectSpace: (id) => {
+			args.onSelectSpace?.(id)
+			setSelectedSpaceId(id)
+		},
+	})
+}
+
+const SEVERAL_SPACES_FOLLOWED = {
+	args: { spaces: SEVERAL_SPACES },
+	render: (args: ExpandedSidebarProps) => <SpaceFollowingWindow {...args} />,
+}
+
+const expandedSwitcherFor = (canvasElement: HTMLElement, name: string) =>
+	within(sidebarIn(canvasElement)).getByRole("button", {
+		name: `Change space, ${name} open`,
+	})
+
+export const SwipeMovesBetweenSpacesExpanded = meta.story({
+	name: "Swipe moves between spaces Expanded",
+	...SEVERAL_SPACES_FOLLOWED,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A two finger swipe over the sidebar, momentum tail included. Check one forward swipe moves to the next Space, one backward swipe returns, and nothing moves sideways. Pick `SwipeWithOneSpaceDoesNothingExpanded` for a lone Space.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		const target = within(sidebarIn(canvasElement)).getByRole("button", {
+			name: "Library",
+		})
+
+		await expect(swipeOn(target, 1)).not.toContain(false)
+		await expect(args.onSelectSpace).toHaveBeenCalledTimes(1)
+		await expect(args.onSelectSpace).toHaveBeenLastCalledWith("perso")
+		await waitFor(() =>
+			expect(expandedSwitcherFor(canvasElement, "Perso")).toBeVisible(),
+		)
+
+		await swipeEnded()
+		await expect(swipeOn(target, -1)).not.toContain(false)
+		await expect(args.onSelectSpace).toHaveBeenCalledTimes(2)
+		await expect(args.onSelectSpace).toHaveBeenLastCalledWith("kiroshi")
+		await expect(sidebarIn(canvasElement).scrollLeft).toBe(0)
+		await expect(document.documentElement.scrollLeft).toBe(0)
+	},
+})
+
+export const SwipeWithOneSpaceDoesNothingExpanded = meta.story({
+	name: "Swipe with one space does nothing Expanded",
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A swipe with a single Space. Check the Space stays and no selection is reported.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		swipeOn(sidebarIn(canvasElement), 1)
+		await expect(args.onSelectSpace).not.toHaveBeenCalled()
+	},
+})
+
+export const SwipeWithSwitchingNotAllowedDoesNothingExpanded = meta.story({
+	name: "Swipe with switching not allowed does nothing Expanded",
+	args: { spaces: SEVERAL_SPACES, isSpaceSwitchingEnabled: false },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A swipe while the host forbids changing Space, with three Spaces. Check the Space stays and no selection is reported.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		swipeOn(sidebarIn(canvasElement), 1)
+		await expect(args.onSelectSpace).not.toHaveBeenCalled()
+	},
+})
+
+export const SwipePastTheEdgesKeepsSpaceExpanded = meta.story({
+	name: "Swipe past the edges keeps the space Expanded",
+	tags: ["test-only"],
+	...SEVERAL_SPACES_FOLLOWED,
+	play: async ({ args, canvasElement }) => {
+		const nav = sidebarIn(canvasElement)
+
+		swipeOn(nav, -1)
+		await expect(args.onSelectSpace).not.toHaveBeenCalled()
+
+		for (const expected of ["perso", "vocca"]) {
+			await swipeEnded()
+			swipeOn(nav, 1)
+			await expect(args.onSelectSpace).toHaveBeenLastCalledWith(expected)
+		}
+
+		await swipeEnded()
+		swipeOn(nav, 1)
+		await expect(args.onSelectSpace).toHaveBeenCalledTimes(2)
+	},
+})
+
+export const VerticalGestureKeepsSpaceExpanded = meta.story({
+	name: "Vertical gesture keeps the space Expanded",
+	tags: ["test-only"],
+	args: { spaces: SEVERAL_SPACES },
+	play: async ({ args, canvasElement }) => {
+		const cancelled = wheelTrainOn(
+			sidebarIn(canvasElement),
+			Array.from({ length: 15 }, () => [16, 40] as const),
+		)
+		await expect(cancelled).not.toContain(true)
+		await expect(args.onSelectSpace).not.toHaveBeenCalled()
+	},
+})
+
+export const SmallDriftKeepsSpaceExpanded = meta.story({
+	name: "Small drift keeps the space Expanded",
+	tags: ["test-only"],
+	args: { spaces: SEVERAL_SPACES },
+	play: async ({ args, canvasElement }) => {
+		wheelTrainOn(
+			sidebarIn(canvasElement),
+			Array.from({ length: 5 }, () => [8, 0] as const),
+		)
+		await expect(args.onSelectSpace).not.toHaveBeenCalled()
+	},
+})
+
+const DOT_POINTER = { button: 0, pointerId: 1 }
+
+export const SwipeWhileDotIsDraggedKeepsSpaceExpanded = meta.story({
+	name: "Swipe while a dot is dragged keeps the space Expanded",
+	tags: ["test-only"],
+	args: { spaces: SEVERAL_SPACES },
+	play: async ({ args, canvasElement }) => {
+		const [dot] = slotsIn(canvasElement, "space-dot-button")
+		if (!dot) throw new Error("No Space dot to drag")
+		const { left, top } = dot.getBoundingClientRect()
+		const at = { clientX: Math.round(left), clientY: Math.round(top) }
+
+		fireEvent.pointerDown(dot, { ...DOT_POINTER, ...at })
+		fireEvent.pointerMove(dot, {
+			...DOT_POINTER,
+			clientX: at.clientX + 12,
+			clientY: at.clientY,
+		})
+		swipeOn(sidebarIn(canvasElement), 1)
+		await expect(args.onSelectSpace).not.toHaveBeenCalled()
+		fireEvent.pointerUp(dot, { ...DOT_POINTER, ...at })
+	},
+})
+
+export const SwipeInsideOpenMenuKeepsSpaceExpanded = meta.story({
+	name: "Swipe inside an open menu keeps the space Expanded",
+	tags: ["test-only"],
+	args: { spaces: SEVERAL_SPACES },
+	parameters: { a11y: A11Y_FLOATING_FOCUS_GUARDS },
+	play: async ({ args, canvasElement }) => {
+		fireEvent.click(slotIn(canvasElement, "space-switcher"))
+		const menu = await within(document.body).findByRole("menu")
+		swipeOn(menu, 1)
+		await expect(args.onSelectSpace).not.toHaveBeenCalled()
+	},
+})
+
+export const SwipeOverTextFieldKeepsSpaceExpanded = meta.story({
+	name: "Swipe over a text field keeps the space Expanded",
+	tags: ["test-only"],
+	args: {
+		spaces: SEVERAL_SPACES,
+		pinned: (
+			<SidebarMenuItem>
+				<input aria-label="Rename" defaultValue="Design review" />
+			</SidebarMenuItem>
+		),
+	},
+	play: async ({ args, canvasElement }) => {
+		const field = within(canvasElement).getByRole("textbox", { name: "Rename" })
+		await expect(swipeOn(field, 1)).not.toContain(true)
+		await expect(args.onSelectSpace).not.toHaveBeenCalled()
 	},
 })
 

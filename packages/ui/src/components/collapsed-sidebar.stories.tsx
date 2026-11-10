@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { expect, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
@@ -7,6 +8,8 @@ import {
 	resolvedRootColor,
 	slotIn,
 	slotsIn,
+	swipeEnded,
+	swipeOn,
 	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
 import { ATLAS, BEACON } from "@workspace/ui/components/app-sidebar.fixtures"
@@ -23,7 +26,9 @@ import {
 } from "@workspace/ui/components/collapsed-sidebar"
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { ContentCard } from "@workspace/ui/components/content-card"
+import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import type { Space } from "@workspace/ui/components/space"
+import type { SpaceAvatarState } from "@workspace/ui/components/space-avatar"
 import { WorkspaceShellRoot } from "@workspace/ui/components/workspace-shell"
 
 const KIROSHI: Space = {
@@ -222,7 +227,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The 60px icon rail of the collapsed navigation shell, top to bottom: the Space avatar, Search, New conversation, Missions, Library, the pinned and conversation items with their missions grouped under them, then the update button, the space dots and the person when they apply. Every item names itself in a tooltip to the right of the rail. One story per Paper page A artboard.",
+					"The 60px icon rail of the collapsed navigation shell, top to bottom: the Space avatar, Search, New conversation, Missions, Library, the pinned and conversation items with their missions grouped under them, then the update button and the person when they apply. A two finger horizontal swipe anywhere over the rail changes Space. Every item names itself in a tooltip to the right of the rail. One story per Paper page A artboard.",
 			},
 		},
 	},
@@ -817,19 +822,18 @@ export const S1SeveralSpacesCollapsed = meta.story({
 		docs: {
 			description: {
 				story:
-					"The person belongs to three spaces. Check the dots stack above the person, the current Space a 6x16 pill in its colour, the others 6px dots.",
+					"The person belongs to three spaces. Check the rail draws no Space dots, the Space avatar stays at its head and the person stays at its foot.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
-		const dots = rail(canvasElement).getByRole("group", { name: "Spaces" })
-		const current = within(dots).getByRole("button", { name: "Open Kiroshi" })
-		const pill = slotIn(current, "space-dot").getBoundingClientRect()
-		await expect([pill.width, pill.height]).toEqual([6, 16])
-		await expect(dots.nextElementSibling).toHaveAttribute(
-			"data-slot",
-			"collapsed-sidebar-person",
-		)
+		await expect(slotsIn(canvasElement, "space-dots")).toHaveLength(0)
+		await expect(
+			slotIn(canvasElement, "collapsed-sidebar").firstElementChild,
+		).toHaveAttribute("data-slot", "collapsed-sidebar-space")
+		await expect(
+			slotIn(canvasElement, "collapsed-sidebar").lastElementChild,
+		).toHaveAttribute("data-slot", "collapsed-sidebar-person")
 	},
 })
 
@@ -844,7 +848,7 @@ export const S2SharedSpaceHostNotConnectedCollapsed = meta.story({
 		docs: {
 			description: {
 				story:
-					"The current space is shared and its host is not connected. Check the Space avatar dims to 80 percent with a grey dot at its corner and its tooltip reads Studio · Not connected.",
+					"The current space is shared and its host is not connected. Check the Space avatar wears its offline hatching with the crossed badge at its corner and its tooltip reads Studio · Not connected.",
 			},
 		},
 	},
@@ -852,13 +856,145 @@ export const S2SharedSpaceHostNotConnectedCollapsed = meta.story({
 		const space = rail(canvasElement).getByRole("button", {
 			name: "Studio · Not connected",
 		})
-		await expect(
-			slotIn(space, "space-switcher-offline-dot"),
-		).toBeInTheDocument()
+		await expect(slotIn(space, "space-avatar").dataset.state).toBe("offline")
 		await userEvent.hover(space)
 		await expect(await tooltipShown()).toHaveTextContent(
 			"Studio· Not connected",
 		)
+	},
+})
+
+type StoryCanvas = {
+	canvasElement: HTMLElement
+}
+
+const triggerAt = (state: SpaceAvatarState, host?: SpaceHost) => ({
+	args: {
+		hostBySpaceId: host ? { [KIROSHI.id]: host } : undefined,
+		badgesBySpaceId: { [KIROSHI.id]: "attention" as const },
+	},
+	parameters: {
+		docs: {
+			description: {
+				story: `The trigger of a ${state} Space. Check the rail draws the generated 26px avatar in the Space colour with the ${state} host state, and no attention ring even though the Space waits on the person.`,
+			},
+		},
+	},
+	play: async ({ canvasElement }: StoryCanvas) => {
+		const avatar = slotIn(
+			slotIn(canvasElement, "collapsed-sidebar-space"),
+			"space-avatar",
+		)
+		await expect(avatar.dataset.state).toBe(state)
+		await expect(avatar.dataset.size).toBe("26")
+		await expect(avatar.dataset.colour).toBe(String(KIROSHI.colour))
+		await expect(avatar).not.toHaveAttribute("data-attention")
+		await expect(slotsIn(avatar, "space-avatar-attention")).toHaveLength(0)
+	},
+})
+
+export const TriggerLocalCollapsed = meta.story({
+	name: "Trigger local Collapsed",
+	...triggerAt("local"),
+})
+
+export const TriggerSharedCollapsed = meta.story({
+	name: "Trigger shared Collapsed",
+	...triggerAt("shared", "shared"),
+})
+
+export const TriggerOnlineCollapsed = meta.story({
+	name: "Trigger online Collapsed",
+	...triggerAt("online", "up"),
+})
+
+export const TriggerConnectingCollapsed = meta.story({
+	name: "Trigger connecting Collapsed",
+	...triggerAt("connecting", "connecting"),
+})
+
+export const TriggerOfflineCollapsed = meta.story({
+	name: "Trigger offline Collapsed",
+	...triggerAt("offline", "down"),
+})
+
+const SpaceFollowingWindow = (args: CollapsedSidebarProps) => {
+	const [selectedSpaceId, setSelectedSpaceId] = useState(args.selectedSpaceId)
+
+	return PAPER_WINDOW({
+		...args,
+		selectedSpaceId,
+		onSelectSpace: (id) => {
+			args.onSelectSpace?.(id)
+			setSelectedSpaceId(id)
+		},
+	})
+}
+
+export const SwipeMovesBetweenSpacesCollapsed = meta.story({
+	name: "Swipe moves between spaces Collapsed",
+	args: { spaces: SEVERAL_SPACES },
+	render: (args) => <SpaceFollowingWindow {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A two finger swipe over the rail, momentum tail included. Check one forward swipe moves to the next Space, one backward swipe returns, and nothing moves sideways. Pick `SwipeWithOneSpaceDoesNothingCollapsed` for a lone Space.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		const nav = slotIn(canvasElement, "collapsed-sidebar")
+		const target = rail(canvasElement).getByRole("button", { name: "Library" })
+
+		await expect(swipeOn(target, 1)).not.toContain(false)
+		await expect(args.onSelectSpace).toHaveBeenCalledTimes(1)
+		await expect(args.onSelectSpace).toHaveBeenLastCalledWith("perso")
+		await waitFor(() =>
+			expect(
+				rail(canvasElement).getByRole("button", { name: "Perso" }),
+			).toBeVisible(),
+		)
+
+		await swipeEnded()
+		await expect(swipeOn(target, -1)).not.toContain(false)
+		await expect(args.onSelectSpace).toHaveBeenCalledTimes(2)
+		await expect(args.onSelectSpace).toHaveBeenLastCalledWith("kiroshi")
+		await expect(nav.scrollLeft).toBe(0)
+		await expect(document.documentElement.scrollLeft).toBe(0)
+	},
+})
+
+export const SwipeWithOneSpaceDoesNothingCollapsed = meta.story({
+	name: "Swipe with one space does nothing Collapsed",
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A swipe with a single Space. Check the Space stays and no selection is reported.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		swipeOn(slotIn(canvasElement, "collapsed-sidebar"), 1)
+		await expect(args.onSelectSpace).not.toHaveBeenCalled()
+	},
+})
+
+export const SwipeWithSwitchingNotAllowedDoesNothingCollapsed = meta.story({
+	name: "Swipe with switching not allowed does nothing Collapsed",
+	args: { spaces: SEVERAL_SPACES, isSpaceSwitchingEnabled: false },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A swipe while the host forbids changing Space, with three Spaces. Check the Space stays and no selection is reported.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		swipeOn(slotIn(canvasElement, "collapsed-sidebar"), 1)
+		await expect(args.onSelectSpace).not.toHaveBeenCalled()
 	},
 })
 

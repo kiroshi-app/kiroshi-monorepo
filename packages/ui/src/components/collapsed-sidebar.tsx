@@ -30,8 +30,10 @@ import {
 import { missionTicketPlatform } from "@workspace/ui/components/mission-marks"
 import { ProgressRing } from "@workspace/ui/components/progress-ring"
 import {
-	SpaceDots,
-	SpaceMark,
+	SpaceAvatar,
+	spaceAvatarStateOf,
+} from "@workspace/ui/components/space-avatar"
+import {
 	SpaceSwitcher,
 	type SpaceSwitcherProps,
 } from "@workspace/ui/components/space-switcher"
@@ -46,6 +48,7 @@ import type {
 	UpdateBadgeProps,
 	UpdateBadgeStatus,
 } from "@workspace/ui/components/update-badge"
+import { useSpaceSwipe } from "@workspace/ui/hooks/use-space-swipe"
 import { STILL_UNDER_REDUCED_MOTION } from "@workspace/ui/lib/reduced-motion"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -295,8 +298,8 @@ const SpaceSlot = (switcher: SpaceSwitcherProps) => {
 
 	if (!selected) return null
 
-	const isOffline = switcher.hostBySpaceId?.[selected.id] === "down"
-	const offline = isOffline ? t("spaces.host.down") : undefined
+	const host = switcher.hostBySpaceId?.[selected.id]
+	const offline = host === "down" ? t("spaces.host.down") : undefined
 	const label = offline
 		? t("roster.titled", { name: selected.name, title: offline })
 		: selected.name
@@ -319,7 +322,13 @@ const SpaceSlot = (switcher: SpaceSwitcherProps) => {
 								data-slot="collapsed-sidebar-space"
 								type="button"
 							>
-								<SpaceMark isOffline={isOffline} space={selected} />
+								<SpaceAvatar
+									colour={selected.colour}
+									name={selected.name}
+									size={26}
+									spaceId={selected.avatarSeed}
+									state={spaceAvatarStateOf(host)}
+								/>
 							</button>
 						}
 					/>
@@ -839,9 +848,16 @@ const CollapsedSidebar = ({
 	onOpenConversation,
 	onOpenMission,
 	onRetryList,
+	isSpaceSwitchingEnabled,
 	...switcher
 }: CollapsedSidebarProps) => {
 	const { t } = useTranslation(["bots", "search"])
+	const swipeRef = useSpaceSwipe({
+		isEnabled: isSpaceSwitchingEnabled,
+		onSelectSpace: switcher.onSelectSpace,
+		selectedSpaceId: switcher.selectedSpaceId,
+		spaces: switcher.spaces,
+	})
 
 	return (
 		<TooltipProvider delay={HOVER_INTENT_DELAY_MS}>
@@ -849,6 +865,7 @@ const CollapsedSidebar = ({
 				aria-label={t("rail.label")}
 				className={RAIL}
 				data-slot="collapsed-sidebar"
+				ref={swipeRef}
 			>
 				<SpaceSlot {...switcher} />
 				<Destination
@@ -886,13 +903,6 @@ const CollapsedSidebar = ({
 					zones={zones}
 				/>
 				{update ? <UpdateSlot {...update} /> : null}
-				<SpaceDots
-					badgesBySpaceId={switcher.badgesBySpaceId}
-					onSelectSpace={switcher.onSelectSpace}
-					orientation="vertical"
-					selectedSpaceId={switcher.selectedSpaceId}
-					spaces={switcher.spaces}
-				/>
 				<PersonSlot onOpenSettings={onOpenSettings} user={user} />
 			</nav>
 		</TooltipProvider>
