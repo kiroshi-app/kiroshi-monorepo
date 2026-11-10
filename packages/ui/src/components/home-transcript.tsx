@@ -20,7 +20,7 @@ type HomeTranscriptProps = Pick<
 
 const HomeTranscript = (props: HomeTranscriptProps) => (
 	<Transcript
-		contentClassName="gap-4 [--transcript-row-bleed:0px]"
+		contentClassName="gap-4 [--transcript-row-bleed:0px] [--transcript-agent-bubble-width:--spacing(130)]"
 		{...props}
 		anchorOnSend={false}
 	/>

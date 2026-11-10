@@ -283,6 +283,10 @@ export const Default = meta.story({
 			canvasElement.querySelector('[data-slot="message-scroller-older"]'),
 		).toBeNull()
 		await expectRestingAtBottom(canvasElement)
+		const agentBubble = canvasElement.querySelector(
+			'[data-slot="message"][data-from="assistant"] [data-slot="message-bubble"]',
+		)
+		await expect(agentBubble).toHaveStyle({ maxWidth: "580px" })
 	},
 })
 

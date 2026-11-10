@@ -246,6 +246,12 @@ const ConversationHome = ({ children, composer }: ConversationHomeProps) => (
 
 const HOME_STAGE_GAP = 16
 
+const HOME_COLUMN_WIDTH = 680
+
+const YOUR_BUBBLE_MAX_WIDTH = 480
+
+const AGENT_BUBBLE_MAX_WIDTH = 520
+
 const homeFrameOf = (canvasElement: HTMLElement) => {
 	const viewport = canvasElement.querySelector<HTMLElement>(
 		'[data-slot="message-scroller-viewport"]',
@@ -265,11 +271,47 @@ const rowBoxesOf = (viewport: HTMLElement) =>
 		(row) => row.getBoundingClientRect(),
 	)
 
+type MessageSender = "user" | "assistant"
+
+const bubbleBoxesOf = (viewport: HTMLElement, from: MessageSender) =>
+	Array.from(
+		viewport.querySelectorAll<HTMLElement>(
+			`[data-slot="message"][data-from="${from}"] [data-slot="message-bubble-content"]`,
+		),
+		(bubble) => bubble.getBoundingClientRect(),
+	)
+
+const edgesOf = (box: DOMRect) => [Math.round(box.left), Math.round(box.right)]
+
 const expectNoSidewaysScroll = async (viewport: HTMLElement) => {
 	await expect(viewport.scrollWidth).toBe(viewport.clientWidth)
 }
 
-const expectHomeFrame = async (canvasElement: HTMLElement) => {
+const expectHomeEdges = async (
+	canvasElement: HTMLElement,
+	columnWidth = HOME_COLUMN_WIDTH,
+) => {
+	const { viewport, composer } = homeFrameOf(canvasElement)
+	const column = composer.getBoundingClientRect()
+	await expect(Math.round(column.width)).toBe(columnWidth)
+	for (const row of rowBoxesOf(viewport)) {
+		await expect(edgesOf(row)).toEqual(edgesOf(column))
+	}
+	for (const bubble of bubbleBoxesOf(viewport, "user")) {
+		await expect(Math.round(bubble.right)).toBe(Math.round(column.right))
+		await expect(bubble.width).toBeLessThanOrEqual(YOUR_BUBBLE_MAX_WIDTH)
+	}
+	for (const bubble of bubbleBoxesOf(viewport, "assistant")) {
+		await expect(Math.round(bubble.left)).toBe(Math.round(column.left))
+		await expect(bubble.width).toBeLessThanOrEqual(AGENT_BUBBLE_MAX_WIDTH)
+	}
+	await expectNoSidewaysScroll(viewport)
+}
+
+const expectHomeFrame = async (
+	canvasElement: HTMLElement,
+	columnWidth = HOME_COLUMN_WIDTH,
+) => {
 	const { viewport, composer } = homeFrameOf(canvasElement)
 	await waitFor(() => {
 		const lastRow = rowBoxesOf(viewport).at(-1)
@@ -281,13 +323,7 @@ const expectHomeFrame = async (canvasElement: HTMLElement) => {
 	for (const [index, row] of rows.slice(1).entries()) {
 		await expect(Math.round(row.top - rows[index].bottom)).toBe(HOME_STAGE_GAP)
 	}
-	await expectNoSidewaysScroll(viewport)
-	const column = composer.getBoundingClientRect()
-	const transcript = viewport.getBoundingClientRect()
-	await expect([transcript.left, transcript.right]).toEqual([
-		column.left,
-		column.right,
-	])
+	await expectHomeEdges(canvasElement, columnWidth)
 }
 
 const expectRoomLinksTo = async (
@@ -309,10 +345,15 @@ const YourTurn = ({ text, sentAt }: YourTurnProps) => (
 	</UserTurn>
 )
 
-type AtlasTurnProps = { text: string; sentAt: number }
+type AtlasTurnProps = { text: string; sentAt: number; messageId?: string }
 
-const AtlasTurn = ({ text, sentAt }: AtlasTurnProps) => (
-	<AssistantTurn copyText={text} identity={ATLAS_IDENTITY} sentAt={sentAt}>
+const AtlasTurn = ({ text, sentAt, messageId }: AtlasTurnProps) => (
+	<AssistantTurn
+		copyText={text}
+		identity={ATLAS_IDENTITY}
+		messageId={messageId}
+		sentAt={sentAt}
+	>
 		<Markdown>{text}</Markdown>
 	</AssistantTurn>
 )
@@ -690,18 +731,142 @@ export const JumpToLatestShown = meta.story({
 		"The reader scrolled back through a long transcript: the jump to latest button shows without widening the transcript, and brings the last turn back onto the composer.",
 	),
 	play: async ({ canvas, canvasElement, userEvent }) => {
-		const { viewport } = homeFrameOf(canvasElement)
+		const { viewport, composer } = homeFrameOf(canvasElement)
 		await waitFor(() => expect(viewport.scrollTop).toBeGreaterThan(0))
+		const composerAtTheEnd = composer.getBoundingClientRect()
 		viewport.dispatchEvent(new WheelEvent("wheel", { bubbles: true }))
 		viewport.scrollTop = 0
 		const jump = canvas.getByRole("button", { name: "Jump to latest" })
 		await waitFor(() => expect(jump).toHaveAttribute("data-active", "true"))
-		await expectNoSidewaysScroll(viewport)
+		await expect(composer.getBoundingClientRect()).toEqual(composerAtTheEnd)
+		await expectHomeEdges(canvasElement)
 		await Promise.all(
 			jump.getAnimations().map((transition) => transition.finished),
 		)
 		await userEvent.click(jump)
 		await expectHomeFrame(canvasElement)
+	},
+})
+
+const HIGHLIGHTED_ID = "flights-answer-again"
+
+export const LastRowHighlighted = meta.story({
+	name: "Last row highlighted, the same size as unhighlighted",
+	render: () => (
+		<HomeLayout
+			composer={ATLAS_COMPOSER}
+			stage="conversation"
+			transcript={
+				<HomeTranscript
+					highlightedMessageId={HIGHLIGHTED_ID}
+					rows={[
+						{
+							key: "ask",
+							render: () => <YourTurn sentAt={at(9, 12)} text={FLIGHTS_ASK} />,
+						},
+						{
+							key: "answer",
+							render: () => (
+								<AtlasTurn
+									messageId="flights-answer"
+									sentAt={at(9, 12)}
+									text={FLIGHTS_ANSWER}
+								/>
+							),
+						},
+						{
+							key: "answer-again",
+							render: () => (
+								<AtlasTurn
+									messageId={HIGHLIGHTED_ID}
+									sentAt={at(9, 12)}
+									text={FLIGHTS_ANSWER}
+								/>
+							),
+						},
+					]}
+				/>
+			}
+		/>
+	),
+	parameters: withDescription(
+		"A search or a pin jumps to the last row: the highlight paints the row without growing it, so the row keeps its edges and the 16 px above the composer.",
+	),
+	play: async ({ canvasElement }) => {
+		const { viewport } = homeFrameOf(canvasElement)
+		const highlighted = viewport.querySelector(
+			`[data-message-id="${HIGHLIGHTED_ID}"]`,
+		)
+		await expect(highlighted).toHaveAttribute("data-highlighted", "true")
+		await expectHomeFrame(canvasElement)
+		const [, plain, lit] = rowBoxesOf(viewport)
+		await expect(lit.height).toBe(plain.height)
+	},
+})
+
+const WIDE_TABLE_ANSWER = `Every direct fare for the 14 of you, from Paris on the 12th:
+
+| Flight | Departs | Arrives | Airline | Seats left | Fare | Bags | Change fee | Group total |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| TP 433 | 07:40 | 09:05 | TAP Air Portugal | 22 | €148 | 1 cabin, 1 hold | €70 | €2,072 |
+| AF 1024 | 10:15 | 11:45 | Air France | 9 | €212 | 1 cabin | €90 | €2,968 |
+| U2 4511 | 13:30 | 15:00 | easyJet | 31 | €96 | 1 under seat | €55 | €1,344 |`
+
+export const WideTable = meta.story({
+	name: "A table wider than the bubble scrolls inside itself",
+	render: () => (
+		<ConversationHome>
+			<YourTurn sentAt={at(9, 12)} text={FLIGHTS_ASK} />
+			<AtlasTurn sentAt={at(9, 13)} text={WIDE_TABLE_ANSWER} />
+		</ConversationHome>
+	),
+	parameters: withDescription(
+		"The last answer holds a table wider than its bubble: the table scrolls sideways inside its own block, every column reachable, while the transcript keeps its edges and never scrolls sideways.",
+	),
+	play: async ({ canvasElement }) => {
+		await expectHomeFrame(canvasElement)
+		const { viewport } = homeFrameOf(canvasElement)
+		const table = viewport.querySelector<HTMLElement>(
+			'[data-slot="markdown-table"] > [role="group"]',
+		)
+		if (!table) throw new Error("The table is not rendered")
+		const [bubble] = bubbleBoxesOf(viewport, "assistant")
+		await expect(table.scrollWidth).toBeGreaterThan(table.clientWidth)
+		await expect(table.getBoundingClientRect().right).toBeLessThanOrEqual(
+			bubble.right,
+		)
+		table.scrollLeft = table.scrollWidth
+		const lastColumn = table.querySelector("th:last-child")
+		await waitFor(() =>
+			expect(lastColumn?.getBoundingClientRect().right).toBeLessThanOrEqual(
+				table.getBoundingClientRect().right,
+			),
+		)
+	},
+})
+
+const NARROW_PANEL_WIDTH = 400
+
+const HOME_PANEL_INLINE_PADDING = 32
+
+export const NarrowPanel = meta.story({
+	name: "A panel narrower than the column shrinks rows and composer together",
+	decorators: [
+		(Story) => (
+			<div className="h-full w-100">
+				<Story />
+			</div>
+		),
+	],
+	render: () => <ConversationHome>{LONG_TURNS.slice(0, 4)}</ConversationHome>,
+	parameters: withDescription(
+		"A panel narrower than 680 px plus its side padding: the transcript rows and the composer shrink together and keep the same edges.",
+	),
+	play: async ({ canvasElement }) => {
+		await expectHomeFrame(
+			canvasElement,
+			NARROW_PANEL_WIDTH - HOME_PANEL_INLINE_PADDING,
+		)
 	},
 })
 
