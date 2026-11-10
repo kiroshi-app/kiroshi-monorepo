@@ -74,6 +74,31 @@ const NamingRow = ({ namedRow, onCancel, onCreate, rows }: NamingRowProps) => (
 	</>
 )
 
+type RecentRowsProps = {
+	conversations: AppSidebarConversation[]
+	isLanding: boolean
+	isRowLifted: boolean
+	rows: RosterRowsContext
+}
+
+const RecentRows = ({
+	conversations,
+	isLanding,
+	isRowLifted,
+	rows,
+}: RecentRowsProps) => {
+	if (conversations.length === 0 && !isRowLifted) return null
+	return (
+		<RosterDropArea isLanding={isLanding} landing={SORTED_ZONE}>
+			{conversations.length > 0 ? (
+				recentMenuOf(conversations, NO_AGENTS, rows)
+			) : (
+				<SectionDropZone />
+			)}
+		</RosterDropArea>
+	)
+}
+
 type RowSelection = {
 	selectedBotId: string | null
 	selectedConversationId: string | null
@@ -178,7 +203,6 @@ const useExpandedRows = ({ conversations, sections }: ExpandedRowsSource) => {
 	const { sortedConversations, topLevel } = entries
 	const isRowLifted = Boolean(drag.liftedEntry && !drag.liftedEntry.section)
 	const hasPinnedZone = topLevel.length > 0 || isRowLifted
-	const hasSortedRows = sortedConversations.length > 0
 
 	const namingField = namedRow ? (
 		<NamingRow
@@ -196,18 +220,12 @@ const useExpandedRows = ({ conversations, sections }: ExpandedRowsSource) => {
 	return {
 		conversations: (
 			<>
-				{hasSortedRows || isRowLifted ? (
-					<RosterDropArea
-						isLanding={drag.isLandingSorted}
-						landing={SORTED_ZONE}
-					>
-						{hasSortedRows ? (
-							recentMenuOf(sortedConversations, NO_AGENTS, rows)
-						) : (
-							<SectionDropZone />
-						)}
-					</RosterDropArea>
-				) : null}
+				<RecentRows
+					conversations={sortedConversations}
+					isLanding={drag.isLandingSorted}
+					isRowLifted={isRowLifted}
+					rows={rows}
+				/>
 				{isNamingPinnedRow ? null : namingField}
 			</>
 		),
