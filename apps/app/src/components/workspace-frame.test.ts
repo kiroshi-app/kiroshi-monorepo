@@ -362,13 +362,14 @@ describe("the sidebar toggle", () => {
 		expect(harness.mounts.expandedSidebar).toBe(0)
 	})
 
-	it("keeps the toggled sidebar on screen and raises a notice when the layout can't be saved", async () => {
+	it("rolls the sidebar back to expanded and raises a notice when the layout can't be saved", async () => {
 		await mountApp()
 		harness.refusesSidebarLayout = true
 
 		await press(toggleSidebarButton())
 
-		expect(slotOf("collapsed-sidebar")).not.toBeNull()
+		expect(slotOf("collapsed-sidebar")).toBeNull()
+		expect(slotOf("expanded-sidebar")).not.toBeNull()
 		expect(raiseFailureNotice).toHaveBeenCalledWith(
 			expect.objectContaining({
 				title: i18n.t("common:sidebar.collapseUnsaved"),

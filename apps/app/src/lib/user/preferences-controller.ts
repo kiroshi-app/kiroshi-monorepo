@@ -254,7 +254,13 @@ export const createUserController = (): UserController => {
 			const preferences = { ...current().preferences, sidebarCollapsed }
 			show(preferences)
 			mirror(preferences)
-			return changeSidebarCollapsed(sidebarCollapsed).then(apply)
+			return changeSidebarCollapsed(sidebarCollapsed).then(
+				apply,
+				(failure: unknown) => {
+					restore()
+					throw failure
+				},
+			)
 		},
 
 		setSidebarTab: (sidebarTab: SidebarTab) => {
