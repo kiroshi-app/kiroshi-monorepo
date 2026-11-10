@@ -322,6 +322,9 @@ export const OptionsRebuiltWithoutValue = meta.story({
 			screen.queryByRole("option", { name: "Claude Opus" }),
 		).toBeNull()
 		await expect(args.onValueChange).not.toHaveBeenCalled()
+		await expect(canvas.getByRole("combobox")).toHaveTextContent(
+			/^claude-opus$/,
+		)
 
 		await userEvent.click(agentsOwn)
 		await waitFor(async () => {
