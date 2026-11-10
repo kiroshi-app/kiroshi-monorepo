@@ -327,7 +327,6 @@ const AppRail = ({
 	)
 	const isHomeCurrent =
 		openSettings === undefined && onSelectHome !== undefined && isHomeSelected
-	const HomeIcon = (isHomeCurrent ? FillIcons : Icons).Home
 	const panelEntry = (entry: AppRailPanel) => {
 		const isSelected =
 			openSettings === undefined && !isHomeCurrent && selected === entry
@@ -395,7 +394,7 @@ const AppRail = ({
 						name={t("rail.home")}
 						onPress={onSelectHome}
 					>
-						<HomeIcon aria-hidden="true" />
+						<Icons.Add aria-hidden="true" />
 					</RailItem>
 				) : null}
 				<RailItem

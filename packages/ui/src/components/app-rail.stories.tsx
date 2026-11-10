@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { renderToStaticMarkup } from "react-dom/server"
 import { expect, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
@@ -31,6 +32,7 @@ import {
 } from "@workspace/ui/components/app-title-bar.fixtures"
 import type { BotBadge } from "@workspace/ui/components/bot-badge"
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
+import { type Icon, Icons } from "@workspace/ui/components/icons"
 import type { Space } from "@workspace/ui/components/space"
 import {
 	UpdateBadge,
@@ -218,6 +220,18 @@ const paintedPathsOf = (entry: HTMLElement) =>
 
 const iconStyleOf = (entry: HTMLElement): IconStyle =>
 	paintedPathsOf(entry).length > 0 ? "fill" : "stroke"
+
+const glyphOf = (root: ParentNode) =>
+	Array.from(root.querySelectorAll("path"), (path) => path.getAttribute("d"))
+
+const glyphDrawnBy = (Glyph: Icon) => {
+	const template = document.createElement("template")
+	template.innerHTML = renderToStaticMarkup(<Glyph />)
+	return glyphOf(template.content)
+}
+
+const expectDrawnWith = async (entry: HTMLElement, Glyph: Icon) =>
+	expect(glyphOf(iconOf(entry))).toEqual(glyphDrawnBy(Glyph))
 
 const fillOf = (entry: HTMLElement) => getComputedStyle(entry).backgroundColor
 
@@ -558,15 +572,15 @@ const expectHomeEntry = async (
 		await expect(iconColourOf(home)).toBe(
 			tokenStyleIn(rail, "text-foreground", "color"),
 		)
-		await expect(iconStyleOf(home)).toBe("fill")
 	} else {
 		await expect(home).not.toHaveAttribute("aria-current")
 		await expect(fillOf(home)).toBe(NO_FILL)
 		await expect(iconColourOf(home)).toBe(
 			tokenStyleIn(rail, "text-muted-foreground", "color"),
 		)
-		await expect(iconStyleOf(home)).toBe("stroke")
 	}
+	await expect(iconStyleOf(home)).toBe("stroke")
+	await expectDrawnWith(home, Icons.Add)
 }
 
 const expectNoPanelCurrent = async (canvasElement: HTMLElement) => {
@@ -614,7 +628,7 @@ export const HomeUnselected = meta.story({
 		docs: {
 			description: {
 				story:
-					"Home beside an open Conversations. Check Home sits third in the top group, after the Space logo and Search and directly above Conversations, in the muted ink on no fill with its stroked house, that hovering it lays the half fill with its tooltip on the right, as an idle panel does, that Conversations keeps its current mark, and that a press reports once. Pick `HomeSelected` for Home open.",
+					"Home beside an open Conversations. Check Home sits third in the top group, after the Space logo and Search and directly above Conversations, in the muted ink on no fill with its stroked plus, that hovering it lays the half fill with its tooltip on the right, as an idle panel does, that Conversations keeps its current mark, and that a press reports once. Pick `HomeSelected` for Home open.",
 			},
 		},
 	},
@@ -635,7 +649,7 @@ export const HomeSelected = meta.story({
 		docs: {
 			description: {
 				story:
-					"Home open while `selected` still names Conversations. Check Home, directly above Conversations, is the one entry marked `aria-current`, on the selected fill with the filled house in the foreground ink, and that Conversations, Missions and Library sit on no fill with their stroked icons. Pick `HomeSelectedDark` for the same state in dark.",
+					"Home open while `selected` still names Conversations. Check Home, directly above Conversations, is the one entry marked `aria-current`, on the selected fill with the stroked plus in the foreground ink, and that Conversations, Missions and Library sit on no fill with their stroked icons. Pick `HomeSelectedDark` for the same state in dark.",
 			},
 		},
 	},
@@ -648,7 +662,7 @@ export const HomeSelectedDark = meta.story({
 		docs: {
 			description: {
 				story:
-					"Home open, dark: the filled house on the dark selected fill. Pick `HomeSelected` for the light theme.",
+					"Home open, dark: the stroked plus on the dark selected fill. Pick `HomeSelected` for the light theme.",
 			},
 		},
 	},

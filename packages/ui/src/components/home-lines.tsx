@@ -87,31 +87,6 @@ const HomeRoomLink = ({ room, tone, onOpen }: HomeRoomLinkProps) => {
 	)
 }
 
-type HomeThinkingLineProps = { agent: HomeAgent }
-
-const HomeThinkingLine = ({ agent }: HomeThinkingLineProps) => {
-	const { t } = useTranslation("chat")
-
-	return (
-		<div className={LINE} data-slot="home-thinking-line" role="status">
-			<span aria-hidden="true" className="flex shrink-0">
-				<BotIdentityAvatar
-					hue={agent.hue}
-					image={agent.image}
-					kind="thinking"
-					name={agent.name}
-					seed={agent.id}
-					size={20}
-					working
-				/>
-			</span>
-			<span className="min-w-0 truncate font-medium text-muted-foreground text-sm leading-5">
-				{t("home.thinking", { name: agent.name })}
-			</span>
-		</div>
-	)
-}
-
 type HomeRoomLineProps = {
 	agent: HomeAgent
 	room: HomeRoom
@@ -303,6 +278,4 @@ export {
 	type HomeRoom,
 	HomeRoomLine,
 	type HomeRoomLineProps,
-	HomeThinkingLine,
-	type HomeThinkingLineProps,
 }
