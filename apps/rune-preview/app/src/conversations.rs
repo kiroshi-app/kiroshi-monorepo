@@ -5,7 +5,7 @@ use rune::{Chrome, El, TextStyle, col, el, icon, row, text};
 
 use kiroshi_core::agent::contract::{ConnectionState, RuntimeScope};
 
-use kiroshi_rune_kit::avatar::Motion;
+use kiroshi_rune_kit::avatar::{Activity, Motion};
 use kiroshi_rune_kit::icons;
 use kiroshi_rune_kit::strings::Language;
 use kiroshi_rune_kit::surfaces::s01_chrome::ConnectionStatus;
@@ -210,6 +210,7 @@ fn roster(s: &App, ready: &Ready, t: &Tokens) -> El {
 struct SoloAgent {
 	id: String,
 	name: String,
+	title: String,
 	hue: Option<f32>,
 }
 
@@ -236,7 +237,12 @@ fn opened_conversation<'a>(s: &'a App, thread: &Thread) -> Option<&'a Conversati
 fn solo_agent(s: &App, conversation: &Conversation) -> Option<SoloAgent> {
 	let bot_id = conversation.solo_bot_id.as_deref()?;
 	let agent = s.ready()?.agents.iter().find(|agent| agent.id == bot_id)?;
-	Some(SoloAgent { id: agent.id.clone(), name: agent.name.clone(), hue: agent.avatar_blot })
+	Some(SoloAgent {
+		id: agent.id.clone(),
+		name: agent.name.clone(),
+		title: agent.title.clone(),
+		hue: agent.avatar_blot,
+	})
 }
 
 fn subject_icon(conversation: &Conversation, size: f32, t: &Tokens) -> El {
@@ -365,6 +371,17 @@ fn toggle_agent_settings(app: &mut App, bot_id: &str) {
 	s10_agent_settings::open_agent_settings(app, bot_id);
 }
 
+fn header_motion(s: &App, conversation_id: &str, bot_id: &str) -> Motion {
+	match s.motion(conversation_id, bot_id) {
+		Motion::Running { at_ms, .. }
+			if s.surfaces.s07_approvals.is_waiting_on(conversation_id, bot_id) =>
+		{
+			Motion::Running { activity: Activity::Waiting, at_ms }
+		}
+		motion => motion,
+	}
+}
+
 fn solo_identity_of<'a>(
 	s: &App,
 	conversation_id: &str,
@@ -373,9 +390,9 @@ fn solo_identity_of<'a>(
 	let state = s.connections.of(conversation_id, &agent.id);
 	HeaderIdentity {
 		hue: agent.hue,
-		title: None,
+		title: Some(agent.title.as_str()).filter(|title| !title.is_empty()),
 		image: None,
-		motion: Motion::Still,
+		motion: header_motion(s, conversation_id, &agent.id),
 		connection: ConnectionStatus {
 			name: &agent.name,
 			state: connection_state_of(state),
@@ -534,6 +551,96 @@ mod tests {
 			connection.state,
 			identity.is_settings_open,
 		))
+	}
+
+	fn shown_face(s: &App) -> Option<(Option<String>, bool, Motion)> {
+		let thread = s.thread.as_ref()?;
+		let agent = solo_agent(s, opened_conversation(s, thread)?)?;
+		let identity = solo_identity_of(s, &thread.conversation_id, &agent);
+		Some((identity.title.map(str::to_owned), identity.image.is_some(), identity.motion))
+	}
+
+	fn hear_skippy(s: &mut App, event: serde_json::Value) {
+		let frame = serde_json::json!({
+			"event": "agent://event",
+			"payload": { "scope": skippy_scope("chat-skippy"), "event": event },
+		});
+		let heard = crate::events::parsed(&frame.to_string()).expect("the frame is heard");
+		s.host_event(heard);
+	}
+
+	fn skippy_runs(s: &mut App) {
+		hear_skippy(s, serde_json::json!({ "type": "turnChanged", "state": "running" }));
+	}
+
+	fn open_atlas(s: &mut App) {
+		let atlas = s
+			.ready()
+			.and_then(|ready| ready.conversations.iter().find(|held| held.id == "chat-atlas"))
+			.map(Thread::of_conversation);
+		s.thread = atlas;
+	}
+
+	#[test]
+	fn a_solo_header_shows_the_agent_title_only_when_it_has_one() {
+		let mut s = loaded();
+		let untitled = shown_face(&s).map(|(title, _, _)| title);
+
+		open_atlas(&mut s);
+
+		assert_eq!(untitled, Some(None));
+		assert_eq!(shown_face(&s).map(|(title, _, _)| title), Some(Some("Research".into())));
+	}
+
+	#[test]
+	fn a_solo_header_draws_the_dithered_hexagon_without_a_readable_avatar() {
+		let s = loaded();
+
+		assert_eq!(shown_face(&s).map(|(_, has_image, _)| has_image), Some(false));
+	}
+
+	#[test]
+	fn a_solo_header_moves_like_the_roster_row_while_its_agent_runs() {
+		let mut s = loaded();
+
+		skippy_runs(&mut s);
+
+		let roster_motion = s.motion("chat-skippy", "skippy");
+		assert!(matches!(roster_motion, Motion::Running { activity: Activity::Thinking, .. }));
+		assert_eq!(shown_face(&s).map(|(_, _, motion)| motion), Some(roster_motion));
+	}
+
+	#[test]
+	fn a_solo_header_waits_while_its_agent_asks_the_person() {
+		let mut s = loaded();
+		skippy_runs(&mut s);
+		let request = kiroshi_core::agent::contract::PermissionRequest {
+			id: "p1".into(),
+			tool_name: "Bash".into(),
+			title: "Run a command".into(),
+			detail: None,
+		};
+
+		hear_skippy(
+			&mut s,
+			serde_json::json!({ "type": "permissionRequested", "request": request }),
+		);
+
+		let motion = shown_face(&s).map(|(_, _, motion)| motion);
+		assert!(matches!(motion, Some(Motion::Running { activity: Activity::Waiting, .. })));
+	}
+
+	#[test]
+	fn a_solo_header_stills_when_the_run_ends() {
+		let mut s = loaded();
+		skippy_runs(&mut s);
+
+		hear_skippy(
+			&mut s,
+			serde_json::json!({ "type": "turnEnded", "ended": { "outcome": "completed" } }),
+		);
+
+		assert_eq!(shown_face(&s).map(|(_, _, motion)| motion), Some(Motion::Still));
 	}
 
 	#[test]

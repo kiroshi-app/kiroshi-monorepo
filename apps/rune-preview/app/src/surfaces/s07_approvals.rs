@@ -361,6 +361,21 @@ impl State {
 		self.queue(Call::Answer { scope, id: id.to_owned(), answers });
 	}
 
+	pub fn is_waiting_on(&self, conversation_id: &str, bot_id: &str) -> bool {
+		let is_of_agent = |scope: &RuntimeScope| {
+			scope.conversation_id == conversation_id && scope.bot_id == bot_id
+		};
+		let is_asking = self
+			.approvals
+			.iter()
+			.any(|approval| is_of_agent(&approval.scope) && approval.can_decide());
+		is_asking
+			|| self
+				.questions
+				.iter()
+				.any(|asked| is_of_agent(&asked.scope) && !asked.call.is_sending())
+	}
+
 	pub fn edit_mut(&mut self, id: &str) -> &mut TextEdit {
 		let shown =
 			self.questions.iter_mut().find(|asked| asked.request.id == id).and_then(|asked| {
