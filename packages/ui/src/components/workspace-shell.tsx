@@ -5,9 +5,9 @@ import {
 	ContentCardLandmarkId,
 } from "@workspace/ui/components/content-card"
 import { hueStyle } from "@workspace/ui/components/hue-palette"
+import { ShellSidebarProvider } from "@workspace/ui/components/shell-sidebar-provider"
 import { SidebarResizeProvider } from "@workspace/ui/components/sidebar-resize"
 import { SkipLink } from "@workspace/ui/components/skip-link"
-import { SidebarProvider } from "@workspace/ui/components/ui/sidebar"
 import { cn } from "@workspace/ui/lib/utils"
 
 const SIDEBAR_INSIDE_SHELL =
@@ -67,7 +67,7 @@ const WorkspaceShellRoot = ({
 			width={width}
 		>
 			{(resize) => (
-				<SidebarProvider
+				<ShellSidebarProvider
 					className={cn(SHELL, className)}
 					data-resizing={resize.isResizing}
 					data-hue={spaceHue}
@@ -79,7 +79,7 @@ const WorkspaceShellRoot = ({
 						{isLandmark ? <SkipLink targetId={mainId} /> : null}
 						{children}
 					</ContentCardLandmarkId>
-				</SidebarProvider>
+				</ShellSidebarProvider>
 			)}
 		</SidebarResizeProvider>
 	)
