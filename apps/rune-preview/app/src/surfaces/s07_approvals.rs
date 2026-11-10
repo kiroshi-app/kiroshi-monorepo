@@ -365,15 +365,15 @@ impl State {
 		let is_of_agent = |scope: &RuntimeScope| {
 			scope.conversation_id == conversation_id && scope.bot_id == bot_id
 		};
-		let is_asking = self
+		let is_asking_permission = self
 			.approvals
 			.iter()
 			.any(|approval| is_of_agent(&approval.scope) && approval.can_decide());
-		is_asking
-			|| self
-				.questions
-				.iter()
-				.any(|asked| is_of_agent(&asked.scope) && !asked.call.is_sending())
+		let is_asking_question = self
+			.questions
+			.iter()
+			.any(|asked| is_of_agent(&asked.scope) && !asked.call.is_sending());
+		is_asking_permission || is_asking_question
 	}
 
 	pub fn edit_mut(&mut self, id: &str) -> &mut TextEdit {
