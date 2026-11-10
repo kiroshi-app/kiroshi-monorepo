@@ -423,10 +423,16 @@ mod tests {
 			Addressee::Everyone,
 		]);
 
-		for (account_id, received) in [("ann", 5), ("bob", 5), ("cid", 6), ("dee", 5)] {
-			let expected: Vec<u64> = (1..=received).collect();
-			assert_eq!(seqs_received_by(&ring, account_id), expected, "{account_id}");
-		}
+		let accounts = ["ann", "bob", "cid", "dee"];
+		let received: Vec<(&str, Vec<u64>)> =
+			accounts.iter().map(|&account| (account, seqs_received_by(&ring, account))).collect();
+		let expected: Vec<(&str, Vec<u64>)> = vec![
+			("ann", (1..=5).collect()),
+			("bob", (1..=5).collect()),
+			("cid", (1..=6).collect()),
+			("dee", (1..=5).collect()),
+		];
+		assert_eq!(received, expected);
 	}
 
 	#[test]
@@ -441,9 +447,12 @@ mod tests {
 			),
 		]);
 
-		for account_id in ["ann", "bob", "someone-else"] {
-			assert_eq!(seqs_received_by(&ring, account_id), vec![1, 2], "{account_id}");
-		}
+		let accounts = ["ann", "bob", "someone-else"];
+		let received: Vec<(&str, Vec<u64>)> =
+			accounts.iter().map(|&account| (account, seqs_received_by(&ring, account))).collect();
+		let expected: Vec<(&str, Vec<u64>)> =
+			accounts.iter().map(|&account| (account, vec![1, 2])).collect();
+		assert_eq!(received, expected);
 	}
 
 	#[test]
