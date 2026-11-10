@@ -1,10 +1,13 @@
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::f64::consts::{PI, TAU};
 
 use rune::color::srgb_encode;
-use rune::text::icon_coverage;
-use rune::{Color, El, Icon, Pixels, TextStyle, el, row, text};
+use rune::{Color, El, Pixels, TextStyle, el, row, text};
+use zeno::{
+	Angle, ArcSize, ArcSweep, Cap, Command, Fill, Join, Mask, PathBuilder, PathData, Point, Stroke,
+	Style, Transform,
+};
 
 use crate::avatar::companion_seed;
 use crate::tokens::{Tokens, srgb};
@@ -178,7 +181,12 @@ impl SpaceAvatar<'_> {
 	}
 
 	fn layers(&self, t: &Tokens) -> Layers {
-		let key = LayerKey {
+		let key = self.layer_key(t);
+		LAYERS.with(|cache| cache.borrow_mut().get_or_draw(key, || Recipe::new(self, t).layers()))
+	}
+
+	fn layer_key(&self, t: &Tokens) -> LayerKey {
+		LayerKey {
 			seed: self.space_id.to_owned(),
 			colour: self.shown_colour().map(f32::to_bits),
 			size: self.size,
@@ -187,39 +195,52 @@ impl SpaceAvatar<'_> {
 			dark: t.dark,
 			warning: bits_of(t.warning),
 			online: bits_of(t.presence_online),
-		};
-		LAYERS.with(|cache| {
-			let mut cache = cache.borrow_mut();
-			if let Some(layers) = cache.get(&key) {
-				return layers.clone();
-			}
-			if cache.len() >= LAYER_CAP {
-				cache.clear();
-			}
-			let layers = Recipe::new(self, t).layers();
-			cache.insert(key, layers.clone());
-			layers
-		})
+		}
 	}
 }
 
 const LAYER_CAP: usize = 256;
 
 thread_local! {
-	static LAYERS: RefCell<HashMap<LayerKey, Layers>> = RefCell::new(HashMap::new());
-	static BODIES: RefCell<HashSet<&'static str>> = RefCell::new(HashSet::new());
+	static LAYERS: RefCell<LayerCache> = RefCell::new(LayerCache::default());
 }
 
-fn interned(body: String) -> &'static str {
-	BODIES.with(|bodies| {
-		let mut bodies = bodies.borrow_mut();
-		if let Some(&held) = bodies.get(body.as_str()) {
-			return held;
+#[derive(Default)]
+struct LayerCache {
+	entries: HashMap<LayerKey, CachedLayers>,
+	clock: u64,
+}
+
+struct CachedLayers {
+	layers: Layers,
+	last_used: u64,
+}
+
+impl LayerCache {
+	fn get_or_draw(&mut self, key: LayerKey, draw: impl FnOnce() -> Layers) -> Layers {
+		self.clock += 1;
+		if let Some(cached) = self.entries.get_mut(&key) {
+			cached.last_used = self.clock;
+			return cached.layers.clone();
 		}
-		let leaked: &'static str = Box::leak(body.into_boxed_str());
-		bodies.insert(leaked);
-		leaked
-	})
+		if self.entries.len() >= LAYER_CAP {
+			self.evict_least_recently_used();
+		}
+		let layers = draw();
+		self.entries.insert(key, CachedLayers { layers: layers.clone(), last_used: self.clock });
+		layers
+	}
+
+	fn evict_least_recently_used(&mut self) {
+		let oldest = self
+			.entries
+			.iter()
+			.min_by_key(|(_, cached)| cached.last_used)
+			.map(|(key, _)| key.clone());
+		if let Some(key) = oldest {
+			self.entries.remove(&key);
+		}
+	}
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -501,6 +522,13 @@ fn dashes(outline: &[[f64; 2]], stroke: f64) -> Vec<Vec<[f64; 2]>> {
 	runs
 }
 
+fn stroke(width: f64, round: bool) -> Stroke<'static> {
+	let (cap, join) = if round { (Cap::Round, Join::Round) } else { (Cap::Butt, Join::Miter) };
+	let mut stroke = Stroke::new(width as f32);
+	stroke.cap(cap).join(join);
+	stroke
+}
+
 fn transformed_glyph(path: &str, origin: f64, scale: f64) -> String {
 	let mut out = String::new();
 	let mut number = String::new();
@@ -581,11 +609,15 @@ impl Recipe {
 		value + f64::from(OVERFLOW)
 	}
 
-	fn cover(&self, element: String) -> Vec<u8> {
-		icon_coverage(
-			&Icon { name: "space-avatar", view: self.view, body: interned(element) },
-			self.px,
-		)
+	fn cover<'a>(&self, path: impl PathData, style: impl Into<Style<'a>>) -> Vec<u8> {
+		let scale = self.px as f32 / self.view;
+		let mut coverage = vec![0; (self.px * self.px) as usize];
+		Mask::new(path)
+			.style(style)
+			.transform(Some(Transform::scale(scale, scale)))
+			.size(self.px, self.px)
+			.render_into(&mut coverage, None);
+		coverage
 	}
 
 	fn polygon(&self, points: &[[f64; 2]], closed: bool) -> String {
@@ -601,30 +633,36 @@ impl Recipe {
 	}
 
 	fn filled_path(&self, d: &str) -> Vec<u8> {
-		self.cover(format!(r#"<path d="{d}" fill="currentColor"/>"#))
+		self.cover(d, Fill::NonZero)
 	}
 
 	fn stroked_path(&self, d: &str, width: f64, round: bool) -> Vec<u8> {
-		let cap = if round { r#" stroke-linecap="round" stroke-linejoin="round""# } else { "" };
-		self.cover(format!(
-			r#"<path d="{d}" fill="none" stroke="currentColor" stroke-width="{width}"{cap}/>"#
-		))
+		self.cover(d, stroke(width, round))
 	}
 
 	fn disc(&self, centre: [f64; 2], radius: f64) -> Vec<u8> {
-		self.cover(format!(
-			r#"<circle cx="{}" cy="{}" r="{radius}" fill="currentColor"/>"#,
-			self.at(centre[0]),
-			self.at(centre[1])
-		))
+		self.cover(&self.circle(centre, radius), Fill::NonZero)
 	}
 
 	fn ring(&self, centre: [f64; 2], radius: f64, width: f64) -> Vec<u8> {
-		self.cover(format!(
-			r#"<circle cx="{}" cy="{}" r="{radius}" fill="none" stroke="currentColor" stroke-width="{width}"/>"#,
-			self.at(centre[0]),
-			self.at(centre[1])
-		))
+		self.cover(&self.circle(centre, radius), stroke(width, false))
+	}
+
+	fn circle(&self, centre: [f64; 2], radius: f64) -> Vec<Command> {
+		let radius = radius as f32;
+		let start = Point::new(self.at(centre[0]) as f32 - radius, self.at(centre[1]) as f32);
+		let mut path = Vec::new();
+		path.move_to(start);
+		let mut to = start;
+		for chord in [2.0 * radius, -2.0 * radius] {
+			to.x += chord;
+			path.arc_to(radius, radius, Angle::ZERO, ArcSize::Large, ArcSweep::Negative, to);
+			if let Some(Command::CurveTo(_, _, end)) = path.last_mut() {
+				*end = to;
+			}
+		}
+		path.close();
+		path
 	}
 
 	fn shape(&self) -> String {
@@ -964,24 +1002,88 @@ mod tests {
 		);
 	}
 
-	#[test]
-	fn a_dragged_hue_keeps_the_cache_under_its_cap_and_leaks_nothing_new() {
-		let t = Tokens::new(false);
-		let face = |colour: f32| SpaceAvatar {
-			space_id: "vocca",
+	const STATES: [SpaceAvatarState; 7] = [
+		SpaceAvatarState::Local,
+		SpaceAvatarState::Shared,
+		SpaceAvatarState::Online,
+		SpaceAvatarState::Connecting,
+		SpaceAvatarState::Offline,
+		SpaceAvatarState::Invitation,
+		SpaceAvatarState::Joining,
+	];
+
+	fn local(space_id: &str) -> SpaceAvatar<'_> {
+		SpaceAvatar {
+			space_id,
 			name: "Vocca",
-			colour: Some(colour),
+			colour: Some(210.0),
 			size: SpaceAvatarSize::Px26,
 			state: SpaceAvatarState::Local,
 			has_attention: false,
-		};
-		face(0.0).draw(&t);
-		let leaked = BODIES.with(|bodies| bodies.borrow().len());
-		for step in 0..1000 {
-			face(step as f32 * 0.36).draw(&t);
-			assert!(LAYERS.with(|cache| cache.borrow().len()) <= LAYER_CAP);
 		}
-		assert_eq!(BODIES.with(|bodies| bodies.borrow().len()), leaked);
+	}
+
+	fn cached_layers() -> usize {
+		LAYERS.with(|cache| cache.borrow().entries.len())
+	}
+
+	fn is_cached(key: &LayerKey) -> bool {
+		LAYERS.with(|cache| cache.borrow().entries.contains_key(key))
+	}
+
+	#[test]
+	fn a_dragged_hue_keeps_the_cache_under_its_cap() {
+		let t = Tokens::new(false);
+		for step in 0..1000 {
+			SpaceAvatar { colour: Some(step as f32 * 0.36), ..local("vocca") }.draw(&t);
+			assert!(cached_layers() <= LAYER_CAP);
+		}
+	}
+
+	#[test]
+	fn ten_thousand_space_ids_keep_the_cache_under_its_cap() {
+		let themes = [Tokens::new(false), Tokens::new(true)];
+		let sizes = SpaceAvatarSize::ALL.len();
+		for index in 0..10_000 {
+			let space_id = format!("space-{index}");
+			SpaceAvatar {
+				size: SpaceAvatarSize::ALL[index % sizes],
+				state: STATES[index % STATES.len()],
+				..local(&space_id)
+			}
+			.draw(&themes[index / (sizes * STATES.len()) % themes.len()]);
+			assert!(cached_layers() <= LAYER_CAP);
+		}
+		assert_eq!(cached_layers(), LAYER_CAP);
+	}
+
+	#[test]
+	fn a_full_cache_evicts_its_least_recently_used_entry_only() {
+		let t = Tokens::new(false);
+		let ids: Vec<String> = (0..=LAYER_CAP).map(|index| format!("space-{index}")).collect();
+		for id in &ids[..LAYER_CAP] {
+			local(id).draw(&t);
+		}
+		local(&ids[0]).draw(&t);
+		local(&ids[LAYER_CAP]).draw(&t);
+		assert_eq!(cached_layers(), LAYER_CAP);
+		assert!(!is_cached(&local(&ids[1]).layer_key(&t)));
+		for id in [&ids[0], &ids[2], &ids[LAYER_CAP - 1], &ids[LAYER_CAP]] {
+			assert!(is_cached(&local(id).layer_key(&t)), "{id} was evicted");
+		}
+	}
+
+	#[test]
+	fn a_space_drawn_every_frame_stays_cached_while_new_ids_arrive() {
+		let t = Tokens::new(false);
+		let current = local("current");
+		let key = current.layer_key(&t);
+		current.draw(&t);
+		for index in 0..4 * LAYER_CAP {
+			local(&format!("arrival-{index}")).draw(&t);
+			assert!(is_cached(&key), "evicted after {index} arrivals");
+			current.draw(&t);
+		}
 	}
 
 	#[test]
