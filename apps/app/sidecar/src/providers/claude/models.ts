@@ -20,7 +20,7 @@ const UNRESOLVED_MODEL = "default"
 
 type SupportedModel = Pick<
 	ModelInfo,
-	"value" | "supportsEffort" | "supportedEffortLevels"
+	"value" | "resolvedModel" | "supportsEffort" | "supportedEffortLevels"
 >
 
 const effortLevelsOf = (model: SupportedModel) =>
@@ -33,6 +33,7 @@ export const offeredModels = (
 		.filter((model) => model.value !== UNRESOLVED_MODEL)
 		.map((model) => ({
 			value: model.value,
+			...(model.resolvedModel ? { resolvedModel: model.resolvedModel } : {}),
 			supportedEffortLevels: effortLevelsOf(model),
 		}))
 

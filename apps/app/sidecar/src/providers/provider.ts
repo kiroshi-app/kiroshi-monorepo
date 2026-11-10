@@ -7,6 +7,7 @@ export type ProviderCapability =
 
 export type OfferedModel = {
 	value: string
+	resolvedModel?: string
 	supportedEffortLevels: string[]
 }
 
