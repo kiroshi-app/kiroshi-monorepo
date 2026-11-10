@@ -67,6 +67,17 @@ const loaded = async (store: TranscriptStore) => {
 	return controller
 }
 
+const aStoreWithARoom = async () => {
+	const store = createFakeTranscriptStore()
+	const room = await store.createConversation({
+		spaceId: "personal",
+		sectionId: null,
+		title: "Launch",
+		botIds: ["default"],
+	})
+	return { store, room }
+}
+
 const names = (bots: Bot[]) => bots.map((bot) => bot.name)
 
 const ids = (bots: Bot[]) => bots.map((bot) => bot.id)
@@ -1878,13 +1889,7 @@ describe("createRosterController on conversations", () => {
 	})
 
 	it("discards a conversation and leaves nothing selected when nothing was", async () => {
-		const store = createFakeTranscriptStore()
-		const room = await store.createConversation({
-			spaceId: "personal",
-			sectionId: null,
-			title: "Launch",
-			botIds: ["default"],
-		})
+		const { store, room } = await aStoreWithARoom()
 		const controller = await loaded(store)
 		controller.showList()
 
@@ -1899,13 +1904,7 @@ describe("createRosterController on conversations", () => {
 	})
 
 	it("discards a conversation and keeps the selected agent", async () => {
-		const store = createFakeTranscriptStore()
-		const room = await store.createConversation({
-			spaceId: "personal",
-			sectionId: null,
-			title: "Launch",
-			botIds: ["default"],
-		})
+		const { store, room } = await aStoreWithARoom()
 		const controller = await loaded(store)
 		controller.select("default")
 
