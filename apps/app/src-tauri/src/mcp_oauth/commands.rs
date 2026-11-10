@@ -253,8 +253,15 @@ fn declared_url<R: Runtime>(
 	name: &str,
 	asked: String,
 ) -> Result<String, Refused> {
-	let server = declared_server(app, owner, name, &asked)
-		.map_err(|error| Step::ReadingTheDeclaredServer.refused(error.into()))?;
+	let declared = declared_servers(app, owner)
+		.map_err(|error| Step::ReadingTheDeclaredServer.refused(error.into()))?
+		.into_iter()
+		.find(|server| server.name == name);
+	let server = declared.unwrap_or_else(|| McpServer {
+		name: name.to_owned(),
+		config: serde_json::json!({ "url": asked }),
+		mark: bundles::ApplicationMark::default(),
+	});
 	if let Some(carries) = server.authorization_withheld() {
 		return Err(Step::CheckingTheServer.refused(OauthError::NotAuthorizable {
 			carries,
@@ -262,20 +269,6 @@ fn declared_url<R: Runtime>(
 		}));
 	}
 	Ok(server.url().map_or(asked, str::to_owned))
-}
-
-fn declared_server<R: Runtime>(
-	app: &AppHandle<R>,
-	owner: &EnvOwner,
-	name: &str,
-	asked: &str,
-) -> Result<McpServer, EnvError> {
-	let declared = declared_servers(app, owner)?.into_iter().find(|server| server.name == name);
-	Ok(declared.unwrap_or_else(|| McpServer {
-		name: name.to_owned(),
-		config: serde_json::json!({ "url": asked }),
-		mark: bundles::ApplicationMark::default(),
-	}))
 }
 
 fn kept(
