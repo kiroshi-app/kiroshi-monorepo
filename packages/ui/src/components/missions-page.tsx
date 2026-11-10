@@ -532,7 +532,7 @@ const MissionsPage = (props: MissionsPageProps) => {
 	return (
 		<section
 			aria-labelledby={titleId}
-			className="flex size-full min-h-0 min-w-0 flex-col overflow-hidden rounded-[12px] border border-shell-border bg-card"
+			className="flex size-full min-h-0 min-w-0 flex-col overflow-hidden"
 			data-slot="missions-page"
 		>
 			<header className="flex shrink-0 items-center border-shell-border border-b p-3">

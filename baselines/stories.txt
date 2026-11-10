@@ -1322,6 +1322,7 @@ navigation-appframe--offline-space-dark
 navigation-appframe--offline-space-with-space-settings-open
 navigation-appframe--online-space
 navigation-appframe--shared-space
+navigation-appframe--sidebar-asks-before-leaving-settings
 navigation-apprail--a-7-spaces-menu
 navigation-apprail--a-7-spaces-menu-attention-row
 navigation-apprail--a-7-spaces-menu-dark
@@ -2067,6 +2068,7 @@ navigation-missioncapsule--every-state-dark
 navigation-missionspage--default
 navigation-missionspage--empty
 navigation-missionspage--failed
+navigation-missionspage--in-main-card
 navigation-missionspage--loading
 navigation-missionspage--long-text
 navigation-missionspage--narrow
@@ -2133,6 +2135,9 @@ navigation-settingsrail--scrolling-panel
 navigation-settingsrail--scrolling-panel-handle-with-motion
 navigation-settingsrail--selected-beside-idle
 navigation-settingsrail--with-back
+navigation-shellsidebarprovider--held-shortcut
+navigation-shellsidebarprovider--shortcut-in-a-text-field
+navigation-shellsidebarprovider--single-press
 navigation-sidebar--expanded
 navigation-sidebar--right-side
 navigation-sidebarlistrow--all-slots

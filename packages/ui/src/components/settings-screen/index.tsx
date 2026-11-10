@@ -286,10 +286,18 @@ const askingBeforeLeaving = (
 	}
 }
 
+const askingFirst =
+	<Args extends unknown[]>(
+		requestLeave: SettingsScreenRequestLeave,
+		navigate: (...args: Args) => void,
+	) =>
+	(...args: Args) =>
+		requestLeave(() => navigate(...args))
+
 const askedFirst = <Args extends unknown[]>(
 	requestLeave: SettingsScreenRequestLeave,
 	gesture?: (...args: Args) => void,
-) => gesture && ((...args: Args) => requestLeave(() => gesture(...args)))
+) => gesture && askingFirst(requestLeave, gesture)
 
 const railAskingBeforeLeaving = (
 	rail: AppFrameRailProps,
@@ -304,19 +312,18 @@ const railAskingBeforeLeaving = (
 	onSelectLibrary: askedFirst(requestLeave, rail.onSelectLibrary),
 })
 
-type SettingsLeaveGuard = {
+type LeaveGuard = {
+	guardLeave?: SettingsScreenGuardLeave
+}
+
+type SettingsLeaveGuard = LeaveGuard & {
 	rail: AppFrameRailProps
 	titleBar?: AppTitleBarProps
-	guardLeave?: SettingsScreenGuardLeave
 }
 
 const leaveAtOnce: SettingsScreenRequestLeave = (navigate) => navigate()
 
-const useSettingsLeaveGuard = ({
-	rail,
-	titleBar,
-	guardLeave,
-}: SettingsLeaveGuard) => {
+const useLeaveGuard = ({ guardLeave }: LeaveGuard) => {
 	const [requestLeave, setRequestLeave] = useState<SettingsScreenRequestLeave>(
 		() => leaveAtOnce,
 	)
@@ -333,10 +340,24 @@ const useSettingsLeaveGuard = ({
 		[guardLeave],
 	)
 
+	const askFirst = <Args extends unknown[]>(
+		navigate: (...args: Args) => void,
+	) => askingFirst(requestLeave, navigate)
+
+	return { askFirst, requestLeave, guardLeave: guardBodyLeave }
+}
+
+const useSettingsLeaveGuard = ({
+	rail,
+	titleBar,
+	guardLeave,
+}: SettingsLeaveGuard) => {
+	const leaveGuard = useLeaveGuard({ guardLeave })
+
 	return {
-		rail: railAskingBeforeLeaving(rail, requestLeave),
-		titleBar: askingBeforeLeaving(titleBar, requestLeave),
-		guardLeave: guardBodyLeave,
+		rail: railAskingBeforeLeaving(rail, leaveGuard.requestLeave),
+		titleBar: askingBeforeLeaving(titleBar, leaveGuard.requestLeave),
+		guardLeave: leaveGuard.guardLeave,
 	}
 }
 
@@ -1219,6 +1240,7 @@ export {
 	ConversationSettingsScreenBody,
 	type ConversationSettingsScreenBodyProps,
 	type ConversationSettingsScreenProps,
+	type LeaveGuard,
 	SettingsScreen,
 	SettingsScreenBody,
 	type SettingsScreenBodyProps,
@@ -1230,5 +1252,6 @@ export {
 	type UserSettingsScreenBodyProps,
 	type UserSettingsScreenProps,
 	type UserSpace,
+	useLeaveGuard,
 	useSettingsLeaveGuard,
 }

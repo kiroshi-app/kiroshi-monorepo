@@ -7,6 +7,7 @@ import {
 	slotIn,
 	slotsIn,
 } from "@workspace/storybook/story-utils"
+import { ContentCard } from "@workspace/ui/components/content-card"
 import {
 	MISSION_NOW,
 	NO_PAGE_MISSIONS,
@@ -20,6 +21,7 @@ import {
 	MissionsPage,
 	type MissionsPageGroupKey,
 } from "@workspace/ui/components/missions-page"
+import { WorkspaceShellRoot } from "@workspace/ui/components/workspace-shell"
 
 const DRAWN_GROUPS = [
 	"Blocked on you",
@@ -89,6 +91,15 @@ const loadedGroupHeaderHeight = (root: Element) =>
 		MISSIONS_PAGE_FRAMES.groupHeader,
 		MISSIONS_PAGE_FRAMES.glyph,
 	)
+
+const drawsABorder = (element: Element) => {
+	const style = getComputedStyle(element)
+	return ["top", "right", "bottom", "left"].some(
+		(side) =>
+			style.getPropertyValue(`border-${side}-style`) !== "none" &&
+			Number.parseFloat(style.getPropertyValue(`border-${side}-width`)) > 0,
+	)
+}
 
 const isClipped = (element: HTMLElement) =>
 	element.scrollWidth > element.clientWidth
@@ -289,7 +300,7 @@ export const Loading = meta.story({
 			slotIn(canvasElement, "missions-page-skeleton").getBoundingClientRect()
 				.bottom,
 		).toBeCloseTo(
-			slotIn(canvasElement, "missions-page").getBoundingClientRect().bottom - 1,
+			slotIn(canvasElement, "missions-page").getBoundingClientRect().bottom,
 			0,
 		)
 		await expect(
@@ -412,5 +423,49 @@ export const Narrow = meta.story({
 			"missions-page-conversation-chip",
 		).map((chip) => chip.lastElementChild as HTMLElement)
 		await expect(conversationLabels.some(isClipped)).toBe(true)
+	},
+})
+
+export const InMainCard = meta.story({
+	globals: { theme: "dark" },
+	render: (args) => (
+		<WorkspaceShellRoot className="h-full">
+			<ContentCard>
+				<MissionsPage {...args} />
+			</ContentCard>
+		</WorkspaceShellRoot>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story: `Default inside the main card of the shell, artboard 2 Expanded, Missions. Check that the card draws the only border and the only radius around the page, that the page paints no background of its own, and that the line under the page header is the only line inside the card. ${WIRED_BY_NOBODY_YET}`,
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const page = slotIn(canvasElement, "missions-page")
+		const card = page.closest("[data-content-card]")
+		if (!card) throw new Error("The page sits in no main card")
+		await expect(drawsABorder(card)).toBe(true)
+		await expect(getComputedStyle(card).borderTopLeftRadius).not.toBe("0px")
+
+		const pageStyle = getComputedStyle(page)
+		await expect(drawsABorder(page)).toBe(false)
+		await expect(pageStyle.borderTopLeftRadius).toBe("0px")
+		await expect(pageStyle.backgroundColor).toBe("rgba(0, 0, 0, 0)")
+
+		const framesBetween: Element[] = []
+		for (let frame = page.parentElement; frame && frame !== card; ) {
+			framesBetween.push(frame)
+			frame = frame.parentElement
+		}
+		await expect(framesBetween.filter(drawsABorder)).toEqual([])
+
+		const header = page.querySelector("header")
+		if (!header) throw new Error("The page draws no header")
+		await expect(
+			Number.parseFloat(getComputedStyle(header).borderBottomWidth),
+		).toBeGreaterThan(0)
+		await expect(getComputedStyle(header).borderTopWidth).toBe("0px")
 	},
 })
