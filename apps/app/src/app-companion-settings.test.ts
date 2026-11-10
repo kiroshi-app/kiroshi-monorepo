@@ -23,7 +23,6 @@ import type { ChatDriver } from "@/lib/chat/driver"
 import { createFakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
-import { keepMainChatsAtLaunch } from "@/lib/conversations/transcript-fixtures"
 import { aMission } from "@/lib/missions/mission-fixtures"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 import { readMirror, writeMirror } from "@/lib/user/preferences-mirror"
@@ -283,7 +282,7 @@ const mountApp = async (change: StoreChange = (store) => store) => {
 	const store = change(createFakeTranscriptStore())
 	const seeded = await seed(store)
 	vi.useFakeTimers()
-	harness.store = keepMainChatsAtLaunch(store)
+	harness.store = store
 	const { queryClient } = launchApp()
 	await settle()
 	return { ...seeded, queryClient }

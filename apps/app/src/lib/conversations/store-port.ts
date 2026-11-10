@@ -140,7 +140,6 @@ export type TranscriptStore = TranscriptPort & {
 		spaceId?: string | null,
 		signal?: AbortSignal,
 	) => Promise<Chat>
-	renewMainChat: (botId: string, spaceId: string) => Promise<Chat>
 	agentRooms: (spaceId: string, signal?: AbortSignal) => Promise<AgentRooms[]>
 	addBotToSpace: (
 		botId: string,

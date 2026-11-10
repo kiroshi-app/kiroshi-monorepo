@@ -75,8 +75,3 @@ export const seatBots = async (
 	}
 	return bots
 }
-
-export const keepMainChatsAtLaunch = (store: TranscriptStore) => {
-	store.renewMainChat = (botId, spaceId) => store.mainChat(botId, spaceId)
-	return store
-}

@@ -408,9 +408,6 @@ export const conversationStore: TranscriptStore = {
 			{ signal },
 		),
 
-	renewMainChat: (botId: string, spaceId: string) =>
-		invoke<Chat>("conversation_renew_main_chat", { botId, spaceId }),
-
 	agentRooms: (spaceId: string, signal?: AbortSignal) =>
 		invoke<AgentRooms[]>("conversation_agent_rooms", { spaceId }, { signal }),
 
