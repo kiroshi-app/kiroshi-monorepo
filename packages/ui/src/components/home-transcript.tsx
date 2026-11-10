@@ -8,7 +8,6 @@ type HomeTranscriptProps = Pick<
 	| "rows"
 	| "transcriptKey"
 	| "autoScroll"
-	| "anchorOnSend"
 	| "marksNewMessages"
 	| "onFollowChange"
 	| "label"
@@ -20,7 +19,11 @@ type HomeTranscriptProps = Pick<
 >
 
 const HomeTranscript = (props: HomeTranscriptProps) => (
-	<Transcript contentClassName="gap-4" {...props} />
+	<Transcript
+		contentClassName="gap-4 [--transcript-row-bleed:0px]"
+		{...props}
+		anchorOnSend={false}
+	/>
 )
 
 export { HomeTranscript, type HomeTranscriptProps }

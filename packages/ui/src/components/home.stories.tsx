@@ -1,4 +1,4 @@
-import { Children, type ReactNode } from "react"
+import { Children, type ReactNode, useState } from "react"
 import { expect, fn, screen, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
@@ -40,6 +40,7 @@ import type { PromptAttachment } from "@workspace/ui/components/prompt-attachmen
 import { PROMPT_ATTACHMENTS } from "@workspace/ui/components/prompt-attachments.fixtures"
 import { ToolApproval } from "@workspace/ui/components/tool-approval"
 import { ToolQuestion } from "@workspace/ui/components/tool-question"
+import type { TranscriptItem } from "@workspace/ui/components/transcript"
 import { AssistantTurn, UserTurn } from "@workspace/ui/components/turn"
 
 const ATLAS: HomeAgent = {
@@ -243,22 +244,50 @@ const ConversationHome = ({ children, composer }: ConversationHomeProps) => (
 	/>
 )
 
-const expectLastTurnOnComposer = async (canvasElement: HTMLElement) => {
+const HOME_STAGE_GAP = 16
+
+const homeFrameOf = (canvasElement: HTMLElement) => {
+	const viewport = canvasElement.querySelector<HTMLElement>(
+		'[data-slot="message-scroller-viewport"]',
+	)
 	const composer = canvasElement.querySelector<HTMLElement>(
 		'[data-slot="home-layout-composer"]',
 	)
-	const turns = canvasElement.querySelectorAll<HTMLElement>(
-		'[data-slot="message-scroller-item"]',
+	if (!viewport || !composer) throw new Error("The Home stage is not rendered")
+	return { viewport, composer }
+}
+
+const rowBoxesOf = (viewport: HTMLElement) =>
+	Array.from(
+		viewport.querySelectorAll<HTMLElement>(
+			'[data-slot="message-scroller-item"]',
+		),
+		(row) => row.getBoundingClientRect(),
 	)
-	const lastTurn = turns[turns.length - 1]
-	await waitFor(() =>
+
+const expectNoSidewaysScroll = async (viewport: HTMLElement) => {
+	await expect(viewport.scrollWidth).toBe(viewport.clientWidth)
+}
+
+const expectHomeFrame = async (canvasElement: HTMLElement) => {
+	const { viewport, composer } = homeFrameOf(canvasElement)
+	await waitFor(() => {
+		const lastRow = rowBoxesOf(viewport).at(-1)
 		expect(
-			Math.round(
-				(composer?.getBoundingClientRect().top ?? 0) -
-					lastTurn.getBoundingClientRect().bottom,
-			),
-		).toBe(16),
-	)
+			Math.round(composer.getBoundingClientRect().top - (lastRow?.bottom ?? 0)),
+		).toBe(HOME_STAGE_GAP)
+	})
+	const rows = rowBoxesOf(viewport)
+	for (const [index, row] of rows.slice(1).entries()) {
+		await expect(Math.round(row.top - rows[index].bottom)).toBe(HOME_STAGE_GAP)
+	}
+	await expectNoSidewaysScroll(viewport)
+	const column = composer.getBoundingClientRect()
+	const transcript = viewport.getBoundingClientRect()
+	await expect([transcript.left, transcript.right]).toEqual([
+		column.left,
+		column.right,
+	])
 }
 
 const expectRoomLinksTo = async (
@@ -510,6 +539,9 @@ export const SentThinking = meta.story({
 	parameters: withDescription(
 		"The first message sent from Home: the panel turns into a conversation sitting on the composer, the day divider says where it is saved, and the agent thinks.",
 	),
+	play: async ({ canvasElement }) => {
+		await expectHomeFrame(canvasElement)
+	},
 })
 
 export const FirstAnswer = meta.story({
@@ -529,7 +561,7 @@ export const FirstAnswer = meta.story({
 		"The agent's first answer under the first message, the last turn right above the composer.",
 	),
 	play: async ({ canvasElement }) => {
-		await expectLastTurnOnComposer(canvasElement)
+		await expectHomeFrame(canvasElement)
 	},
 })
 
@@ -586,7 +618,7 @@ export const LongTranscript = meta.story({
 			viewport?.clientHeight ?? 0,
 		)
 		await expect(canvas.getByRole("button", { name: "Send" })).toBeVisible()
-		await expectLastTurnOnComposer(canvasElement)
+		await expectHomeFrame(canvasElement)
 	},
 })
 
@@ -619,6 +651,128 @@ export const ClippedTranscript = meta.story({
 				document.elementFromPoint(left + width / 2, top + height / 2),
 			),
 		).toBe(true)
+	},
+})
+
+const UNBREAKABLE = "x".repeat(300)
+
+const CODE_ANSWER = `Here is the booking call Pico runs:
+
+\`\`\`ts
+const order = await duffel.orders.create({ selectedOffers: ["off_0000AEdGRhtp5AUUdJqMxo"], passengers: travellers.map(toDuffelPassenger), payments: [{ type: "balance", currency: "EUR", amount: "2072.00" }] })
+\`\`\``
+
+export const LongRows = meta.story({
+	name: "Long rows, an unbreakable string and a code block stay in the column",
+	tags: ["test-only"],
+	render: () => (
+		<ConversationHome>
+			<YourTurn sentAt={at(14, 2)} text={UNBREAKABLE} />
+			<AtlasTurn sentAt={at(14, 2)} text={UNBREAKABLE} />
+			<YourTurn sentAt={at(14, 3)} text={OFFSITE_ASK.repeat(4)} />
+			<AtlasTurn sentAt={at(14, 3)} text={RELAY} />
+			<AtlasTurn sentAt={at(14, 4)} text={CODE_ANSWER} />
+		</ConversationHome>
+	),
+	parameters: withDescription(
+		"Rows the product does not author: they wrap or scroll inside their own bubble, and the transcript never scrolls sideways.",
+	),
+	play: async ({ canvasElement }) => {
+		await expectHomeFrame(canvasElement)
+	},
+})
+
+export const JumpToLatestShown = meta.story({
+	name: "Scrolled up, the jump to latest button shows",
+	tags: ["test-only"],
+	render: () => <ConversationHome>{LONG_TURNS}</ConversationHome>,
+	parameters: withDescription(
+		"The reader scrolled back through a long transcript: the jump to latest button shows without widening the transcript, and brings the last turn back onto the composer.",
+	),
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		const { viewport } = homeFrameOf(canvasElement)
+		await waitFor(() => expect(viewport.scrollTop).toBeGreaterThan(0))
+		viewport.dispatchEvent(new WheelEvent("wheel", { bubbles: true }))
+		viewport.scrollTop = 0
+		const jump = canvas.getByRole("button", { name: "Jump to latest" })
+		await waitFor(() => expect(jump).toHaveAttribute("data-active", "true"))
+		await expectNoSidewaysScroll(viewport)
+		await Promise.all(
+			jump.getAnimations().map((transition) => transition.finished),
+		)
+		await userEvent.click(jump)
+		await expectHomeFrame(canvasElement)
+	},
+})
+
+const SENT_ROWS: TranscriptItem[] = [
+	{
+		key: "day",
+		render: () => (
+			<DaySeparator
+				at={at(9, 12)}
+				note="Saved to Atlas in Conversations"
+				now={NOW}
+			/>
+		),
+	},
+	{
+		key: "first-ask",
+		render: () => <YourTurn sentAt={at(9, 12)} text={FLIGHTS_ASK} />,
+	},
+	{
+		key: "first-answer",
+		render: () => <AtlasTurn sentAt={at(9, 12)} text={FLIGHTS_ANSWER} />,
+	},
+]
+
+const AS_THE_APP_WIRES_IT = { anchorOnSend: true }
+
+const SendingHome = () => {
+	const [rows, setRows] = useState(SENT_ROWS)
+	const send = (text: string) =>
+		setRows((current) => [
+			...current,
+			{
+				key: `sent-${current.length}`,
+				isAnchor: true,
+				render: () => <YourTurn sentAt={at(9, 14)} text={text} />,
+			},
+			{
+				key: `thinking-${current.length}`,
+				render: () => <HomeThinkingLine agent={ATLAS} />,
+			},
+		])
+
+	return (
+		<HomeLayout
+			composer={
+				<HomeComposer
+					agents={AGENTS}
+					onAttach={attached}
+					onSelectAgent={selectedAgent}
+					onSubmit={send}
+					selectedAgentId={ATLAS.id}
+				/>
+			}
+			stage="conversation"
+			transcript={<HomeTranscript {...AS_THE_APP_WIRES_IT} rows={rows} />}
+		/>
+	)
+}
+
+export const SentFromTheComposer = meta.story({
+	name: "A message sent from the composer sits on the composer",
+	tags: ["test-only"],
+	render: () => <SendingHome />,
+	parameters: withDescription(
+		"The app marks a message the reader sends as the anchor of a solo thread. On the Home the sent message still lands right above the composer, as 4b draws it, never lifted to the top of the panel.",
+	),
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		await userEvent.type(canvas.getByRole("textbox"), BOOK_IT)
+		await userEvent.click(canvas.getByRole("button", { name: "Send" }))
+		await expect(await canvas.findByText(BOOK_IT)).toBeVisible()
+		await expectHomeFrame(canvasElement)
 	},
 })
 
@@ -703,6 +857,7 @@ export const WorkingInOneRoom = meta.story({
 	),
 	play: async ({ canvasElement }) => {
 		await expectRoomLinksTo(canvasElement, LISBON_OFFSITE)
+		await expectHomeFrame(canvasElement)
 	},
 })
 
@@ -724,6 +879,9 @@ export const TwoRoomsInARow = meta.story({
 	parameters: withDescription(
 		"One line per room: the room the agent left turns done with its time, the next one works.",
 	),
+	play: async ({ canvasElement }) => {
+		await expectHomeFrame(canvasElement)
+	},
 })
 
 export const RelaysFromTheRooms = meta.story({
@@ -749,6 +907,9 @@ export const RelaysFromTheRooms = meta.story({
 	parameters: withDescription(
 		"The agent comes back from its rooms with an ordinary answer: done lines stay in the history above it.",
 	),
+	play: async ({ canvasElement }) => {
+		await expectHomeFrame(canvasElement)
+	},
 })
 
 export const ApprovalWaits = meta.story({
@@ -780,6 +941,7 @@ export const ApprovalWaits = meta.story({
 		await expect(
 			canvasElement.querySelector('[data-slot="home-composer"]'),
 		).toBeNull()
+		await expectHomeFrame(canvasElement)
 	},
 })
 
@@ -811,6 +973,7 @@ export const QuestionWaits = meta.story({
 		await expect(
 			canvasElement.querySelector('[data-slot="home-composer"]'),
 		).toBeNull()
+		await expectHomeFrame(canvasElement)
 		await userEvent.click(canvas.getByText("Today"))
 	},
 })
@@ -832,8 +995,9 @@ export const MissionCompleted = meta.story({
 	parameters: withDescription(
 		"A mission ended well: the line carries Completed as text, in the success colour.",
 	),
-	play: async ({ canvas }) => {
+	play: async ({ canvas, canvasElement }) => {
 		await expect(canvas.getByText("Completed")).toBeVisible()
+		await expectHomeFrame(canvasElement)
 	},
 })
 
@@ -855,7 +1019,8 @@ export const MissionBlocked = meta.story({
 	parameters: withDescription(
 		"A mission is stuck: the line carries Blocked as text, in the destructive colour, and the agent relays what it needs.",
 	),
-	play: async ({ canvas }) => {
+	play: async ({ canvas, canvasElement }) => {
 		await expect(canvas.getByText("Blocked")).toBeVisible()
+		await expectHomeFrame(canvasElement)
 	},
 })
