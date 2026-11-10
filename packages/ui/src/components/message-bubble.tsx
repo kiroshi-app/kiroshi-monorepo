@@ -114,7 +114,7 @@ function bubbleContentClass(
 	interactive: boolean,
 ) {
 	return cn(
-		"group/bubble-content relative z-0 flex min-w-9 flex-col gap-2 break-words rounded-bubble p-(--bubble-padding) text-bubble-foreground [--bubble-padding:var(--transcript-bubble-padding,--spacing(4.5))] text-sm leading-6 has-data-[stuck=true]:overflow-clip",
+		"group/bubble-content relative z-0 flex min-w-9 flex-col gap-2 break-words rounded-bubble p-(--bubble-padding) text-bubble-foreground [--bubble-padding:--spacing(4.5)] text-sm leading-6 has-data-[stuck=true]:overflow-clip",
 		BUBBLE_FOCUS_RING,
 		"[&_[data-slot=markdown]_:is(p,li,blockquote)]:text-sm [&_[data-slot=markdown]_:is(p,li,blockquote)]:leading-6",
 		hasSurface(variant) && "max-w-full",
