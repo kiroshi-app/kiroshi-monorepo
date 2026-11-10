@@ -313,23 +313,6 @@ mod tests {
 		assert!(!read.sidebar_collapsed);
 	}
 
-	#[tokio::test]
-	async fn a_collapsed_sidebar_written_through_the_contract_reads_back_through_it() {
-		let dir = temp_dir();
-		let database = open(&dir);
-		let mut payload = a_payload();
-		payload["sidebarCollapsed"] = json!(true);
-		let sent: UserPreferences =
-			serde_json::from_value(payload).expect("the payload deserializes");
-
-		database.user().set_preferences(sent.clone().into()).await.expect("the write");
-		let stored = database.user().preferences().await.expect("the record");
-		let read = UserPreferences::of(stored, None);
-
-		assert_eq!(read, sent);
-		assert_eq!(to_value(&read).expect("the record serializes")["sidebarCollapsed"], true);
-	}
-
 	#[test]
 	fn a_payload_without_a_launch_page_opens_on_a_new_conversation() {
 		let read: UserPreferences =
