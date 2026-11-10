@@ -112,11 +112,8 @@ fn is_offered(running: &Version, remote: &Version) -> bool {
 	remote > running
 }
 
-async fn check<R: Runtime>(
-	app: &AppHandle<R>,
-	channel: Result<UpdateChannel, String>,
-) -> UpdateState {
-	let channel = match channel {
+pub async fn check_stored_channel<R: Runtime>(app: &AppHandle<R>) -> UpdateState {
+	let channel = match stored_channel(app).await {
 		Ok(channel) => channel,
 		Err(message) => {
 			return match app.state::<Updates>().fail_unless_busy(failed("check", message)) {
@@ -129,10 +126,6 @@ async fn check<R: Runtime>(
 		Ok(()) => run(app, channel).await,
 		Err(current) => current,
 	}
-}
-
-pub async fn check_stored_channel<R: Runtime>(app: &AppHandle<R>) -> UpdateState {
-	check(app, stored_channel(app).await).await
 }
 
 pub fn check_stored_channel_on<R: Runtime>(app: &AppHandle<R>) {
