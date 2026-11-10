@@ -56,7 +56,7 @@ its answer both.
 | `models` | `{"type":"models","models":[…]}` | the model catalogue |
 | `tools` | `{"type":"tools","tools":[…]}` | the tool catalogue |
 | `mcp_oauth_authorize` | `{"type":"mcp_oauth_authorize","credentials"?:{…},"error"?:{"kind":…}}` | the grant `mcp_oauth_connect` stores |
-| `mcp_oauth_cancel` | — | the pending `mcp_oauth_authorize`, settled `cancelled`, or the browser page a settled flow still holds, answered with the failure text |
+| `mcp_oauth_cancel` | — | the pending `mcp_oauth_authorize`, settled `cancelled` with its page; a flow that already settled with credentials is left as it is |
 | `mcp_oauth_stored` | — | the browser page a flow that answered `credentials` holds, answered from `stored` and `detail` |
 | `mcp_oauth_revoke` | `{"type":"mcp_oauth_revoke","revoked":bool,"detail"?:string}` | the `Disconnected` a `mcp_oauth_disconnect` answers |
 | `mcp_oauth_refresh` | `{"type":"mcp_oauth_refresh","credentials"?:{…},"error"?:{"kind":"rejected"\|"failed",…}}` | the grant written before a session opens, or what the refusal code costs it |
@@ -163,6 +163,13 @@ and the page it holds is answered. One flow at a time: a second `mcp_oauth_autho
 answered `busy` until then, a cancel or the deadline answering the page included, since
 one queue of pending answers per command type would cross two flows' answers.
 
+A flow latches its outcome once, first writer wins. A cancel or the deadline that lands
+before the ask is settled, the token exchange still in flight included, latches it
+`cancelled` or `timedOut`: the page is answered with that failure text and the ask settles
+with it and no credentials, whatever the exchange returns afterwards. An exchange that
+returns credentials first latches the grant: a later cancel or deadline changes neither
+the settle nor the page, which waits for `mcp_oauth_stored`.
+
 An authorization url the metadata builds under a scheme other than `http` or `https` is
 refused before any frame is written: the ask settles naming that scheme and no
 `oauth_started` crosses, since the SDK's own metadata schema turns away `javascript:`,
@@ -184,8 +191,8 @@ sessionless frame:
 `mcp_oauth_connect` sends it once `kept` has written the grant, `stored` true, or once
 `kept` refused it, `stored` false and `detail` the refusal line, scrubbed of every value
 of the grant. `stored` true answers the granted text, `stored` false the failure text
-carrying `detail`. No `mcp_oauth_stored` within 30000 ms of the credentials, a
-`mcp_oauth_cancel`, or the 300000 ms flow deadline answers the failure text. Every page is
+carrying `detail`. No `mcp_oauth_stored` within 30000 ms of the credentials answers the
+failure text. Every page is
 served `text/plain`. Once the page is answered, the listener is closed with its
 connections on the next turn of the loop rather than waiting on one: a browser holding the
 socket open never delays the next connect.

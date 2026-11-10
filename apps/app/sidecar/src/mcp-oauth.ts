@@ -516,24 +516,34 @@ export const authorizeMcpServer = async (
 		answerRedirect(redirect, state, settle, shown)
 	const { listener, redirectUrl, client } =
 		onRegisteredPort(request, answer) ?? onAnyPort(answer)
+	let outcome: OauthAnswer | undefined
+	const latched = (candidate: OauthAnswer) => {
+		outcome ??= candidate
+		return outcome
+	}
 	const end = (failure: OauthFailure) => {
-		settle({ failure })
-		show(failurePage(failure))
+		const answered = latched({ error: failure })
+		if ("error" in answered) {
+			settle({ failure: answered.error })
+			show(failurePage(answered.error))
+		}
 	}
 	const flow: Flow = { end, confirm: () => undefined }
 	running = flow
 	const expiry = setTimeout(() => end({ kind: "timedOut" }), timeoutMs)
 	const { fetchFn, refusal } = watched(timedFetch)
-	const settled = await exchanged({
-		serverUrl: url,
-		redirectUrl,
-		state,
-		arrival,
-		settle,
-		emit,
-		fetchFn,
-		client,
-	}).catch((error: unknown) => ({ error: flowFailure(error, refusal()) }))
+	const settled = latched(
+		await exchanged({
+			serverUrl: url,
+			redirectUrl,
+			state,
+			arrival,
+			settle,
+			emit,
+			fetchFn,
+			client,
+		}).catch((error: unknown) => ({ error: flowFailure(error, refusal()) })),
+	)
 	const closed = shown.then(async () => {
 		clearTimeout(expiry)
 		running = undefined
