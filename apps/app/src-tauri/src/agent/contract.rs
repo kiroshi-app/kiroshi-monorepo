@@ -8,6 +8,9 @@ use crate::conversations::contract::{TranscriptStoreError, WebSource};
 #[serde(rename_all = "camelCase")]
 pub struct OfferedModel {
 	pub value: String,
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	#[specta(type = String, optional)]
+	pub resolved_model: Option<String>,
 	#[serde(default, deserialize_with = "levels_the_app_knows")]
 	#[specta(type = Vec<EffortLevel>)]
 	pub supported_effort_levels: Vec<EffortLevel>,

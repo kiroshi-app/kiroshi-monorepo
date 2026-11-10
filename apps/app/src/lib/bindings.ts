@@ -1627,11 +1627,13 @@ export type OfferedModel = OfferedModel_Serialize | OfferedModel_Deserialize;
 
 export type OfferedModel_Deserialize = {
 	value: string,
+	resolvedModel?: string,
 	supportedEffortLevels?: EffortLevel[],
 };
 
 export type OfferedModel_Serialize = {
 	value: string,
+	resolvedModel?: string,
 	supportedEffortLevels: EffortLevel[],
 };
 
