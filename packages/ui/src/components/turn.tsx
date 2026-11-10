@@ -163,16 +163,14 @@ const AUTHOR_LINE_END: Partial<Record<TurnState, AuthorLineEnd>> = {
 const HIGHLIGHT =
 	"rounded-xl transition-colors duration-200 data-[highlighted]:bg-accent/40 motion-reduce:transition-none"
 
-const ROW_BLEEDS_TO_TRANSCRIPT_EDGE =
-	"-mx-[var(--transcript-row-bleed,--spacing(6))] w-auto px-[var(--transcript-row-bleed,--spacing(6))]"
+const ROW_BLEEDS_TO_TRANSCRIPT_EDGE = "-mx-6 w-auto px-6"
 
 const ROW_HIGHLIGHT =
 	"transition-colors duration-200 data-[highlighted]:bg-accent/40 motion-reduce:transition-none"
 
 const TURN_ROW = "flex flex-col gap-1.5"
 
-const AGENT_BUBBLE_WIDTH =
-	"max-w-[var(--transcript-agent-bubble-width,--spacing(145))]"
+const AGENT_BUBBLE_WIDTH = "max-w-145"
 
 const FRAMED_CARD_MIN_WIDTH = "min-w-[min(--spacing(90),100%)]"
 

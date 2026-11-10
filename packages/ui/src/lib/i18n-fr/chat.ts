@@ -1294,7 +1294,6 @@ const chat = {
 			dismiss: "Masquer cette suggestion",
 		},
 		saved: "Enregistrée dans {{name}}, dans Conversations",
-		thinking: "{{name}} réfléchit…",
 		room: {
 			working: "{{name}} travaille dans",
 			worked: "{{name}} a travaillé dans",
