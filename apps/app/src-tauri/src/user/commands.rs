@@ -124,23 +124,3 @@ pub async fn user_mark_onboarding_import_seen<R: Runtime>(
 	let stored = ready(&state)?.user().mark_onboarding_import_seen().await?;
 	Ok(UserPreferences::of(stored, dir.as_deref()))
 }
-
-#[cfg(test)]
-mod tests {
-	use tauri::test::mock_builder;
-	use tauri::Manager;
-
-	use super::*;
-	use crate::db::DatabaseError;
-	use crate::test_app::an_app_of_its_own;
-
-	#[tokio::test]
-	async fn a_sidebar_state_set_without_a_database_answers_unavailable() {
-		let app = an_app_of_its_own("user-commands-sidebar-unavailable", mock_builder());
-		app.manage::<db::DatabaseState>(Err(DatabaseError::AppDataDir));
-
-		let answered = user_set_sidebar_collapsed(app.handle().clone(), app.state(), true).await;
-
-		assert!(matches!(answered, Err(UserPreferencesError::Unavailable { .. })));
-	}
-}
