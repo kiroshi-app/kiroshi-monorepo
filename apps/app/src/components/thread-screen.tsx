@@ -2176,13 +2176,15 @@ function ThreadView(props: ThreadViewProps) {
 		onRemoveAttachment: view.staged.remove,
 	}
 
+	const isReadOnly = Boolean(departure)
+
 	const homeStage = homeStageOf({
 		home,
 		thread,
 		isFirstLoadPending: view.facts.isFirstLoadPending,
 		hasMessages: view.state.messages.length > 0,
 		isTranscriptEmpty,
-		isReadOnly: Boolean(departure),
+		isReadOnly,
 	})
 
 	const screen = (
@@ -2199,7 +2201,7 @@ function ThreadView(props: ThreadViewProps) {
 				overlay,
 				notice,
 				queue,
-				isReadOnly: Boolean(departure),
+				isReadOnly,
 			})}
 			home={home}
 			layout={layout}
