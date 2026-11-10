@@ -77,13 +77,13 @@ describe("the updater feed", () => {
 	})
 
 	it.each([
-		["package-macos.sh", "Kiroshi_${VERSION}_${TRIPLE%%-*}.app.tar.gz"],
-		["package-linux.sh", "Kiroshi_${VERSION}_amd64.deb"],
-		["package-windows.sh", "Kiroshi_${VERSION}_x64-setup.exe"],
+		["package-macos.sh", `Kiroshi_\${VERSION}_\${TRIPLE%%-*}.app.tar.gz`],
+		["package-linux.sh", `Kiroshi_\${VERSION}_amd64.deb`],
+		["package-windows.sh", `Kiroshi_\${VERSION}_x64-setup.exe`],
 	])("names the package %s writes", (script, written) => {
 		expect(read(`apps/rune-preview/scripts/${script}`)).toContain(written)
-		const named = Object.values(packageOf("${VERSION}")).map((file) =>
-			file.replace(/_(aarch64|x86_64)\.app/, "_${TRIPLE%%-*}.app"),
+		const named = Object.values(packageOf(`\${VERSION}`)).map((file) =>
+			file.replace(/_(aarch64|x86_64)\.app/, `_\${TRIPLE%%-*}.app`),
 		)
 		expect(named).toContain(written)
 	})

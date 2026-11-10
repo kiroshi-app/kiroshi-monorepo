@@ -1003,7 +1003,7 @@ describe("the jobs of ci.yml", () => {
 			matrix: { os: ["ubuntu-latest", "macos-latest", "windows-latest"] },
 		})
 		expect(JSON.stringify(workflow.jobs.core)).toContain(
-			'"runs-on":"${{ matrix.os }}"',
+			`"runs-on":"\${{ matrix.os }}"`,
 		)
 	})
 
@@ -1029,7 +1029,7 @@ describe("the jobs of ci.yml", () => {
 		expect(runs).toContain("apps/rune-preview/scripts/package-windows.sh")
 		expect(runs).toContain("apps/rune-preview/scripts/install-windows.ps1")
 		expect(upload?.if).toBe("always()")
-		expect(upload?.with?.path).toBe("${{ runner.temp }}/install-log")
+		expect(upload?.with?.path).toBe(`\${{ runner.temp }}/install-log`)
 	})
 
 	it("starts lint without changes on every event, and has verify require it", () => {
