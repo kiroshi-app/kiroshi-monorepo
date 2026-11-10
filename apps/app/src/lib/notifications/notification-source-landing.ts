@@ -121,6 +121,10 @@ export const createNotificationLanding = ({
 				rowId: mission.botId,
 				spaceId: rowId,
 			})
+			conversations.showOverHome(
+				{ bot: mission.botId, mission: mission.id },
+				rowId,
+			)
 		}
 
 		const isHeldOnLanding = isHeld()
@@ -175,21 +179,22 @@ export const createNotificationLanding = ({
 		}
 
 		roster.select(botId)
+		conversations.showOverHome({ bot: botId }, spaceId)
 		spaces.select(roster.hostSpaceIdOf(spaceId))
 	}
 
-	const openInNewTab = (conversationId: string) => {
+	const openInTab = (conversationId: string) => {
 		const spaceId = roster.spaceOfConversation(conversationId)
 
 		if (spaceId) {
-			conversations.openInNewTab(conversationId, spaceId)
+			conversations.openInTab(conversationId, spaceId)
 		}
 	}
 
 	const landOnConversation = (conversationId: string) =>
 		conversations.open({
 			conversationId,
-			openInPlace: () => openInNewTab(conversationId),
+			openInPlace: () => openInTab(conversationId),
 		})
 
 	const activate = ({ kind, id }: NotificationTarget) => {

@@ -2,7 +2,7 @@ import { defaultStringifySearch } from "@tanstack/react-router"
 
 import { i18n } from "@workspace/ui/lib/i18n"
 
-import { EMPTY_LIST_HREF, isListPage, pageOf } from "./tab-pages"
+import { EMPTY_LIST_HREF, isHomePage, isListPage, pageOf } from "./tab-pages"
 import {
 	askReveal,
 	type RevealRequest,
@@ -26,6 +26,7 @@ import type { WorkspaceTabs } from "./workspace-tabs"
 
 import { raiseReportedFailure } from "../failure-report"
 import { liveWindowLabels, revealWindow } from "../host"
+import type { ThreadSearch } from "../navigation/thread-search"
 
 export type ConversationTarget = {
 	conversationId: string
@@ -35,7 +36,8 @@ export type ConversationTarget = {
 
 export type ConversationTabOpening = {
 	open: (target: ConversationTarget) => Promise<void>
-	openInNewTab: (conversationId: string, spaceId: string) => void
+	openInTab: (conversationId: string, spaceId: string) => void
+	showOverHome: (thread: ThreadSearch, spaceId?: string) => void
 	answerReveals: () => Promise<() => void>
 }
 
@@ -66,15 +68,28 @@ const revealShowing =
 		return tab ? revealTab(space, tab.id, href) : space
 	}
 
+const threadHrefOf = (thread: ThreadSearch) =>
+	`${EMPTY_LIST_HREF}${defaultStringifySearch(thread)}`
+
 export const conversationHrefOf = ({
 	conversationId,
 	mission,
 }: Omit<ConversationTarget, "openInPlace">) =>
-	`${EMPTY_LIST_HREF}${defaultStringifySearch(
+	threadHrefOf(
 		mission === undefined
 			? { conversation: conversationId }
 			: { conversation: conversationId, mission },
-	)}`
+	)
+
+const showsHome = (space: SpaceTabs) =>
+	isHomePage(pageOf(currentHrefOf(activeTabOf(space))))
+
+const overHomeOr =
+	(href: string, otherwise: (space: SpaceTabs) => SpaceTabs) =>
+	(space: SpaceTabs) =>
+		showsHome(space) ? revealTab(space, space.activeId, href) : otherwise(space)
+
+const unchanged = (space: SpaceTabs) => space
 
 const isWindowShowing = (windowLabel: string, conversationId: string) =>
 	keptSpaceIdsOf(windowLabel).some((spaceId) => {
@@ -156,11 +171,19 @@ export const createConversationTabOpening = ({
 		)
 	}
 
-	const openInNewTab = (conversationId: string, spaceId: string) => {
+	const openInTab = (conversationId: string, spaceId: string) => {
 		const href = conversationHrefOf({ conversationId })
-		tabs.changeSpace(spaceId, (space) => openTabOn(space, href))
+		tabs.changeSpace(
+			spaceId,
+			overHomeOr(href, (space) => openTabOn(space, href)),
+		)
 		showSpace(spaceId)
 	}
+
+	const showOverHome = (
+		thread: ThreadSearch,
+		spaceId = tabs.getState().spaceId,
+	) => tabs.changeSpace(spaceId, overHomeOr(threadHrefOf(thread), unchanged))
 
 	const revealAsked = async ({ conversationId, href }: RevealRequest) => {
 		const spaceId = tabs.findSpace(isShowingIn(conversationId))
@@ -174,7 +197,8 @@ export const createConversationTabOpening = ({
 
 	return {
 		open,
-		openInNewTab,
+		openInTab,
+		showOverHome,
 		answerReveals: () => watchRevealAsks(tabs.windowLabel, revealAsked),
 	}
 }
