@@ -15,6 +15,7 @@ pub struct Agent {
 	pub name: String,
 	pub title: String,
 	pub avatar_blot: Option<f32>,
+	pub avatar_image_path: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]

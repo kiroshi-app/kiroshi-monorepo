@@ -108,6 +108,7 @@ fn ready_app() -> App {
 			name: "Atlas".to_owned(),
 			title: "Builder".to_owned(),
 			avatar_blot: None,
+			avatar_image_path: None,
 		}],
 		conversations: vec![conversation("room"), conversation("elsewhere")],
 		person: Person::Unread,

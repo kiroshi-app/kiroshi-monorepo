@@ -395,6 +395,9 @@ impl App {
 		self.mission = None;
 		self.thread = Some(thread);
 		self.read_thread(host.clone(), conversation_id.to_owned());
+		if let Some(bot_id) = solo_bot_id.as_deref() {
+			self.request_solo_avatar(bot_id);
+		}
 		if let Some(bot_id) = solo_bot_id.filter(|_| checks_sessions(&host)) {
 			self.check_session(host.clone(), conversation_id.to_owned(), bot_id);
 		}
@@ -723,18 +726,36 @@ impl App {
 		self.notices.focus_wake()
 	}
 
+	pub fn avatar_url(&self, agent: &Agent) -> Option<String> {
+		let path = agent.avatar_image_path.as_deref()?;
+		s02_rail::shown_source(self)?.access()?.avatar_url(path)
+	}
+
+	fn request_solo_avatar(&mut self, bot_id: &str) {
+		let agent =
+			self.ready().and_then(|ready| ready.agents.iter().find(|agent| agent.id == bot_id));
+		if let Some(url) = agent.and_then(|agent| self.avatar_url(agent)) {
+			self.request_image(url);
+		}
+	}
+
 	fn request_images(&mut self) {
 		let Some(thread) = self.thread.as_ref() else { return };
-		let Some(outbox) = self.outbox.clone() else { return };
 		let urls: Vec<String> = thread
 			.messages
 			.iter()
 			.flat_map(|message| content::image_urls(&message.content))
 			.collect();
 		for url in urls {
-			let outbox = outbox.clone();
-			self.images.request(url, move |fetched| outbox.deliver(Inbound::Image(fetched)));
+			self.request_image(url);
 		}
+	}
+
+	fn request_image(&mut self, url: String) {
+		let Some(outbox) = self.outbox.clone() else { return };
+		let access = s02_rail::shown_source(self).and_then(|source| source.access());
+		self.images
+			.request(url, access.as_ref(), move |fetched| outbox.deliver(Inbound::Image(fetched)));
 	}
 
 	fn work(&self, job: impl FnOnce(Outbox) + Send + 'static) {
@@ -866,6 +887,7 @@ mod tests {
 	use super::*;
 	use kiroshi_core::agent::contract::ConnectionState;
 
+	use crate::images::Slot;
 	use crate::model::{ScopedEvent, StreamedMessage, TurnEnded};
 	use crate::notices::fake::{FakeDesktop, Record};
 	use crate::source::Source;
@@ -954,6 +976,7 @@ mod tests {
 				name: "Wren".into(),
 				title: String::new(),
 				avatar_blot: None,
+				avatar_image_path: None,
 			}],
 			conversations: vec![conversation("c-1"), conversation("c-2")],
 			person: Person::Unread,
@@ -1245,6 +1268,22 @@ mod tests {
 		})));
 
 		assert_eq!(shown_titles(&app), vec![SESSION_UNCHECKED]);
+	}
+
+	#[test]
+	fn opening_a_solo_conversation_requests_the_agent_picture_from_the_host() {
+		let (mut app, _) = notifying_app(true);
+		app.images.start(ImageCache::new(Arc::new(|| {})));
+		app.outbox = Some(Outbox { sender: app.pending.clone(), waker: Arc::new(|| {}) });
+		if let Some(ready) = app.ready_mut() {
+			ready.source = Source::Running(Host::installed_on(0, "secret"));
+			ready.agents[0].avatar_image_path = Some("/data/avatars/wren 2.png".into());
+		}
+
+		app.open("c-1");
+
+		let requested = app.images.slot("http://127.0.0.1:0/api/files/avatars/wren%202.png");
+		assert!(matches!(requested, Some(Slot::Loading)));
 	}
 
 	#[test]

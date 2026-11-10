@@ -21,6 +21,8 @@ pub const JOINED_SPACE_CONNECT: &str = "joined_space_connect";
 
 const TOKEN_FILE: [&str; 2] = ["host", "token"];
 
+const AVATAR_ROUTE: &str = "/api/files/avatars/";
+
 const INSTALLED_READS: [&str; 10] = [
 	"space_list",
 	"conversation_bots",
@@ -197,6 +199,32 @@ struct Endpoint {
 	token: String,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Access {
+	pub origin: String,
+	pub bearer: String,
+}
+
+impl Access {
+	pub fn avatar_url(&self, path: &str) -> Option<String> {
+		let file = path.rsplit(['/', '\\']).next().filter(|file| !file.is_empty())?;
+		Some(format!("{}{AVATAR_ROUTE}{}", self.origin, percent_encoded(file)))
+	}
+}
+
+fn percent_encoded(segment: &str) -> String {
+	segment
+		.bytes()
+		.map(|byte| {
+			if is_unreserved(byte) { char::from(byte).to_string() } else { format!("%{byte:02X}") }
+		})
+		.collect()
+}
+
+fn is_unreserved(byte: u8) -> bool {
+	byte.is_ascii_alphanumeric() || b"-_.!~*'()".contains(&byte)
+}
+
 impl Host {
 	pub fn detached() -> Host {
 		Host::local(Profile::Dev, 0, String::new())
@@ -287,7 +315,12 @@ impl Host {
 	}
 
 	pub fn bearer(&self) -> String {
-		format!("Bearer {}", self.endpoint().token)
+		self.access().bearer
+	}
+
+	pub fn access(&self) -> Access {
+		let Endpoint { origin, token } = self.endpoint();
+		Access { origin, bearer: format!("Bearer {token}") }
 	}
 
 	fn endpoint(&self) -> Endpoint {
@@ -455,6 +488,22 @@ mod tests {
 	use std::net::TcpListener;
 
 	use super::*;
+
+	#[test]
+	fn an_avatar_url_serves_the_last_segment_of_the_path_from_the_host() {
+		let access = Host::dev_on(4000, "secret").access();
+
+		let unix = access.avatar_url("/Users/ada/Kiroshi/avatars/sky pilot#1.png");
+		let windows = access.avatar_url("C:\\Kiroshi\\avatars\\skippy.png");
+
+		assert_eq!(
+			unix.as_deref(),
+			Some("http://127.0.0.1:4000/api/files/avatars/sky%20pilot%231.png")
+		);
+		assert_eq!(windows.as_deref(), Some("http://127.0.0.1:4000/api/files/avatars/skippy.png"));
+		assert_eq!(access.avatar_url("/Users/ada/Kiroshi/avatars/"), None);
+		assert_eq!(access.bearer, "Bearer secret");
+	}
 
 	#[test]
 	fn the_installed_host_refuses_every_command_outside_the_reads() {

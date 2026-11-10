@@ -94,6 +94,7 @@ fn workspace(s: &mut App) -> i64 {
 			name: (*name).into(),
 			title: if *id == "atlas" { "Research".into() } else { String::new() },
 			avatar_blot: Some(*hue),
+			avatar_image_path: None,
 		})
 		.collect();
 	let conversations = AGENTS
