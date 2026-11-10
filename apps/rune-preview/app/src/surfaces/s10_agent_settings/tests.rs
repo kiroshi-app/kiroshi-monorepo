@@ -762,6 +762,7 @@ fn ready_app() -> App {
 			name: "Nest Keeper".to_owned(),
 			title: "Archivist".to_owned(),
 			avatar_blot: None,
+			avatar_image_path: None,
 		}],
 		conversations: Vec::new(),
 		person: Person::Unread,

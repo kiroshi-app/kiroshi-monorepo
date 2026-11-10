@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use rune::image::Image;
 use rune::{Chrome, El, TextStyle, col, el, icon, row, text};
 
 use kiroshi_core::agent::contract::{ConnectionState, RuntimeScope};
@@ -22,6 +23,7 @@ use kiroshi_rune_kit::widgets::{Pill, spinner};
 
 use crate::app::{App, Pane, Person, Ready, Thread, Workspace};
 use crate::host::{DEV_START_COMMAND, HostError, Profile};
+use crate::images::Slot;
 use crate::model::{Agent, Conversation};
 use crate::navigation::Route;
 use crate::surfaces::s01_chrome::connection::connection_state_of;
@@ -212,6 +214,7 @@ struct SoloAgent {
 	name: String,
 	title: String,
 	hue: Option<f32>,
+	avatar_url: Option<String>,
 }
 
 #[derive(Default)]
@@ -242,6 +245,7 @@ fn solo_agent(s: &App, conversation: &Conversation) -> Option<SoloAgent> {
 		name: agent.name.clone(),
 		title: agent.title.clone(),
 		hue: agent.avatar_blot,
+		avatar_url: s.avatar_url(agent),
 	})
 }
 
@@ -383,7 +387,7 @@ fn header_motion(s: &App, conversation_id: &str, bot_id: &str) -> Motion {
 }
 
 fn solo_identity_of<'a>(
-	s: &App,
+	s: &'a App,
 	conversation_id: &str,
 	agent: &'a SoloAgent,
 ) -> HeaderIdentity<'a> {
@@ -391,7 +395,7 @@ fn solo_identity_of<'a>(
 	HeaderIdentity {
 		hue: agent.hue,
 		title: Some(agent.title.as_str()).filter(|title| !title.is_empty()),
-		image: None,
+		image: agent.avatar_url.as_deref().and_then(|url| ready_image(s, url)),
 		motion: header_motion(s, conversation_id, &agent.id),
 		connection: ConnectionStatus {
 			name: &agent.name,
@@ -399,6 +403,13 @@ fn solo_identity_of<'a>(
 			version: None,
 		},
 		is_settings_open: is_agent_settings_open(s),
+	}
+}
+
+fn ready_image<'a>(s: &'a App, url: &str) -> Option<&'a Image> {
+	match s.images.slot(url)? {
+		Slot::Ready(image) => Some(image),
+		Slot::Loading | Slot::Failed(_) => None,
 	}
 }
 
@@ -452,8 +463,15 @@ mod tests {
 	use kiroshi_rune_kit::surfaces::s02_rail::{RailMessage, RailPanel};
 	use kiroshi_rune_kit::surfaces::s13_space_settings::SpaceEvent;
 
+	use std::sync::Arc;
+
+	use rune::image::ImageCache;
+
 	use super::*;
+	use crate::host::Host;
+	use crate::images::Fetched;
 	use crate::scenes;
+	use crate::source::Source;
 
 	fn loaded() -> App {
 		let mut s = App::new();
@@ -597,6 +615,54 @@ mod tests {
 		let s = loaded();
 
 		assert_eq!(shown_face(&s).map(|(_, has_image, _)| has_image), Some(false));
+	}
+
+	const SKIPPY_PICTURE: &str = "http://127.0.0.1:4000/api/files/avatars/skippy.png";
+
+	fn pictured_skippy() -> App {
+		let mut s = loaded();
+		s.images.start(ImageCache::new(Arc::new(|| {})));
+		if let Workspace::Ready(ready) = &mut s.workspace {
+			ready.source = Source::Running(Host::dev_on(4000, "secret"));
+			for agent in ready.agents.iter_mut().filter(|agent| agent.id == "skippy") {
+				agent.avatar_image_path = Some("/data/avatars/skippy.png".into());
+			}
+		}
+		s
+	}
+
+	fn shows_a_picture(s: &App) -> Option<bool> {
+		shown_face(s).map(|(_, has_image, _)| has_image)
+	}
+
+	#[test]
+	fn a_solo_header_shows_the_agent_picture_once_it_lands() {
+		let mut s = pictured_skippy();
+		let before = shows_a_picture(&s);
+
+		s.images.landed(Fetched { url: SKIPPY_PICTURE.into(), bytes: Ok(vec![0x89, b'P']) });
+
+		assert_eq!(before, Some(false));
+		assert_eq!(shows_a_picture(&s), Some(true));
+	}
+
+	#[test]
+	fn a_solo_header_keeps_the_hexagon_when_the_picture_fails() {
+		let mut s = pictured_skippy();
+
+		s.images.landed(Fetched { url: SKIPPY_PICTURE.into(), bytes: Err("404".into()) });
+
+		assert_eq!(shows_a_picture(&s), Some(false));
+	}
+
+	#[test]
+	fn a_solo_header_ignores_a_picture_landed_for_another_agent() {
+		let mut s = pictured_skippy();
+		open_atlas(&mut s);
+
+		s.images.landed(Fetched { url: SKIPPY_PICTURE.into(), bytes: Ok(vec![0x89, b'P']) });
+
+		assert_eq!(shows_a_picture(&s), Some(false));
 	}
 
 	#[test]
