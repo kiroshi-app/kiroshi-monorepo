@@ -121,6 +121,7 @@ const emptyStageOf = (
 ) =>
 	createElement(HomeEmptyStage, {
 		draft: "Also the hotel",
+		isSending: false,
 		onDraftChange: vi.fn(),
 		onSubmit: vi.fn(),
 		onAttach: vi.fn(),

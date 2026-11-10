@@ -31,6 +31,7 @@ export const HomeRoute = () => {
 					conversations: rosterView.conversations,
 					onSelectAgent: pickAgent,
 					startConversation: core.roster.controller.createConversation,
+					discardConversation: core.roster.controller.discardConversation,
 					openConversation,
 				}}
 				isMissionsPanelOpen={false}

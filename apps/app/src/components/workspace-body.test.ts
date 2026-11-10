@@ -819,6 +819,7 @@ describe("WorkspaceBody Home", () => {
 							],
 							onSelectAgent: () => undefined,
 							startConversation: () => Promise.resolve(null),
+							discardConversation: () => Promise.resolve(),
 							openConversation: () => undefined,
 						},
 						onOpenThreadInNewTab,

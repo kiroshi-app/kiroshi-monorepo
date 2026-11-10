@@ -24,7 +24,8 @@ export const useAgentRooms = (
 			: skipToken,
 		meta: {
 			failureNotice: () => ({
-				title: i18n.t("bots:roster.previewUnreadable"),
+				title: i18n.t("chat:home.failure.rooms.title"),
+				description: i18n.t("chat:home.failure.rooms.description"),
 			}),
 			raisedIn: "use-agent-rooms",
 		},

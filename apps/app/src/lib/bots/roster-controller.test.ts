@@ -67,6 +67,17 @@ const loaded = async (store: TranscriptStore) => {
 	return controller
 }
 
+const aStoreWithARoom = async () => {
+	const store = createFakeTranscriptStore()
+	const room = await store.createConversation({
+		spaceId: "personal",
+		sectionId: null,
+		title: "Launch",
+		botIds: ["default"],
+	})
+	return { store, room }
+}
+
 const names = (bots: Bot[]) => bots.map((bot) => bot.name)
 
 const ids = (bots: Bot[]) => bots.map((bot) => bot.id)
@@ -1875,6 +1886,34 @@ describe("createRosterController on conversations", () => {
 		expect(state.selectedConversationId).toBeNull()
 		expect(state.selectedBotId).toBe("default")
 		expect(await store.conversations("personal")).toEqual([])
+	})
+
+	it("discards a conversation and leaves nothing selected when nothing was", async () => {
+		const { store, room } = await aStoreWithARoom()
+		const controller = await loaded(store)
+		controller.showList()
+
+		await controller.discardConversation(room.id)
+
+		const state = controller.getState()
+		expect(ids(state.bots)).toEqual(["default"])
+		expect(state.conversations).toEqual([])
+		expect(state.selectedBotId).toBeNull()
+		expect(state.selectedConversationId).toBeNull()
+		expect(await store.conversations("personal")).toEqual([])
+	})
+
+	it("discards a conversation and keeps the selected agent", async () => {
+		const { store, room } = await aStoreWithARoom()
+		const controller = await loaded(store)
+		controller.select("default")
+
+		await controller.discardConversation(room.id)
+
+		const state = controller.getState()
+		expect(state.conversations).toEqual([])
+		expect(state.selectedBotId).toBe("default")
+		expect(state.selectedConversationId).toBeNull()
 	})
 
 	it("rejects a refused deletion and keeps the conversation shown", async () => {

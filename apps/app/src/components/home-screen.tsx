@@ -300,6 +300,7 @@ export const HomeLines = (props: HomeLinesProps) => (
 
 export type HomeSend = {
 	draft: string
+	isSending: boolean
 	onDraftChange: (draft: string) => void
 	onSubmit: (text: string) => void
 	onAttach: (files: File[]) => void

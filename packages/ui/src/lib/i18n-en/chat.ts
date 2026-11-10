@@ -1261,6 +1261,10 @@ const chat = {
 				title: "Couldn’t send that request",
 				description: "Your message is back in the field.",
 			},
+			rooms: {
+				title: "Couldn’t load this agent’s conversations",
+				description: "Open Home again to retry.",
+			},
 		},
 	},
 } as const
