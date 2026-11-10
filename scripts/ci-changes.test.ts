@@ -13,20 +13,18 @@ import { fileURLToPath } from "node:url"
 import { decideJobs, touchedJobs } from "./ci-changes"
 
 const none = {
-	rust: false,
 	vitest: false,
 	website: false,
-	storybook: false,
 	ios: false,
 	core: false,
+	installer: false,
 }
 const every = {
-	rust: true,
 	vitest: true,
 	website: true,
-	storybook: true,
 	ios: true,
 	core: true,
+	installer: true,
 }
 const CI_EVENTS = ["pull_request", "push", "tag"] as const
 
@@ -39,8 +37,9 @@ const PATH_MIXES = [
 	[],
 	["bun.lock"],
 	["packages/ui/src/components/button.tsx"],
-	["apps/app/src/main.tsx"],
-	["apps/app/src-tauri/src/lib.rs"],
+	["apps/app/sidecar/src/index.ts"],
+	["crates/kiroshi-core/src/lib.rs"],
+	["apps/rune-preview/app/src/main.rs"],
 	["apps/ios/Kiroshi/App.swift"],
 	SHARED_ONLY_PATHS,
 ]
@@ -50,8 +49,8 @@ const touching = (...paths: string[]) => touchedJobs(paths)
 const REPO = fileURLToPath(new URL("..", import.meta.url))
 
 const RUST_SOURCES = [
-	"apps/app/src-tauri/{src,tests}/**/*.rs",
 	"crates/*/{src,tests}/**/*.rs",
+	"apps/rune-preview/*/{src,tests}/**/*.rs",
 ]
 
 const EMBEDDED_PATH = /include_(?:str|bytes)!\(\s*"([^"]+)"\s*\)/g
@@ -119,35 +118,37 @@ const shallowCheckoutPastGreen = (name: string) => {
 	git(origin, "config", "user.name", "CI")
 	const green = commitFile(origin, "packages/ui/src/button.tsx")
 	commitFile(origin, "apps/website/src/page.tsx")
-	commitFile(origin, "apps/app/src-tauri/src/lib.rs")
+	commitFile(origin, "crates/kiroshi-core/src/lib.rs")
 	const checkout = join(scratch, `${name}-checkout`)
 	git(scratch, "clone", "--quiet", "--depth=1", `file://${origin}`, checkout)
 	return { checkout, green }
 }
 
+const isShared = (path: string) => touching(path).ios && touching(path).website
+
 const ABSENT_SHA = "0123456789abcdef0123456789abcdef01234567"
 
 describe("ci jobs per event", () => {
 	it.each(PATH_MIXES)(
-		"selects only vitest, rust and core on a pull_request, on the paths they watch, on %p",
+		"selects only vitest, core and installer on a pull_request, on the paths they watch, on %p",
 		(...paths) => {
 			expect(decideJobs({ event: "pull_request", paths })).toEqual({
 				...none,
 				vitest: touchedJobs(paths).vitest,
-				rust: touchedJobs(paths).rust,
 				core: touchedJobs(paths).core,
+				installer: touchedJobs(paths).installer,
 			})
 		},
 	)
 
-	it("skips storybook, website and ios on a pull_request touching every path", () => {
+	it("skips website and ios on a pull_request touching every path", () => {
 		const jobs = decideJobs({ event: "pull_request", paths: ["bun.lock"] })
 
-		expect(jobs).toEqual({ ...none, vitest: true, rust: true, core: true })
+		expect(jobs).toEqual({ ...none, vitest: true, core: true, installer: true })
 	})
 
 	it.each(PATH_MIXES)(
-		"selects rust, vitest, website and storybook on the paths they watch on a push to main, and ios always, on %p",
+		"selects vitest, website, core and installer on the paths they watch on a push to main, and ios always, on %p",
 		(...paths) => {
 			expect(decideJobs({ event: "push", paths })).toEqual({
 				...touchedJobs(paths),
@@ -161,27 +162,31 @@ describe("ci jobs per event", () => {
 	})
 
 	it.each(PATH_MIXES)(
-		"selects vitest, website, rust and storybook on a v* tag, never ios nor core, on %p",
+		"selects vitest, website and core on a v* tag, never ios nor installer, on %p",
 		(...paths) => {
 			expect(decideJobs({ event: "tag", paths })).toEqual({
 				...every,
 				ios: false,
-				core: false,
+				installer: false,
 			})
 		},
 	)
 
-	it.each(CI_EVENTS)("selects rust-check on no %s", (event) => {
-		expect(decideJobs({ event, paths: ["bun.lock"] })).not.toHaveProperty(
-			"rust-check",
-		)
-	})
+	it.each(CI_EVENTS)(
+		"selects no Tauri rust job nor storybook on %s",
+		(event) => {
+			const jobs = decideJobs({ event, paths: ["bun.lock"] })
+
+			expect(jobs).not.toHaveProperty("rust")
+			expect(jobs).not.toHaveProperty("storybook")
+		},
+	)
 
 	it("decides a tag without a BASE to diff against", () => {
 		const detection = runChangeDetector("tag")
 
 		expect(detection.exitCode).toBe(0)
-		expect(detection.stdout.toString().split("\n")).toContain("rust=true")
+		expect(detection.stdout.toString().split("\n")).toContain("core=true")
 	})
 
 	it("refuses a pull_request without a BASE to diff against", () => {
@@ -222,7 +227,7 @@ describe("ci jobs per event", () => {
 		expect(outputOf(detection)).toEqual({
 			...none,
 			website: true,
-			rust: true,
+			core: true,
 			ios: true,
 		})
 	})
@@ -240,17 +245,7 @@ describe("ci jobs per event", () => {
 describe("the paths each job watches", () => {
 	it("runs every job when a shared root path changed", () => {
 		expect(touching("bun.lock")).toEqual(every)
-		expect(touching("patches/a.patch")).toEqual(every)
 		expect(touching(".github/workflows/release.yml")).toEqual(every)
-	})
-
-	it("runs vitest, website and storybook on a story under packages/ui, since tsc -b checks it", () => {
-		const uiJobs = { ...none, vitest: true, website: true, storybook: true }
-
-		expect(touching("packages/ui/src/components/button.stories.tsx")).toEqual(
-			uiJobs,
-		)
-		expect(touching("packages/ui/.storybook/preview.tsx")).toEqual(uiJobs)
 	})
 
 	it.each(["package.json", "bun.lock", "turbo.json", "tsconfig.base.json"])(
@@ -260,76 +255,65 @@ describe("the paths each job watches", () => {
 		},
 	)
 
-	it("runs vitest, website and storybook on a component under packages/ui", () => {
+	it("runs vitest and website on a component under packages/ui", () => {
 		expect(touching("packages/ui/src/components/button.tsx")).toEqual({
 			...none,
 			vitest: true,
 			website: true,
-			storybook: true,
 		})
 	})
 
-	it("runs vitest and storybook on the scripts and baselines the gate reads", () => {
-		const both = { ...none, vitest: true, storybook: true }
-
-		expect(touching("scripts/baseline.ts")).toEqual(both)
-		expect(touching("baselines/tests.txt")).toEqual(both)
-	})
-
-	it("runs only rust on a Rust file under src-tauri", () => {
-		expect(touching("apps/app/src-tauri/src/lib.rs")).toEqual({
+	it("runs vitest, website and core on the markdown renderer a kiroshi-core test reads", () => {
+		expect(touching("packages/ui/src/components/markdown/blocks.tsx")).toEqual({
 			...none,
-			rust: true,
+			vitest: true,
+			website: true,
+			core: true,
 		})
 	})
 
-	it("runs rust and vitest on a sidecar file", () => {
+	it("runs only vitest on the scripts and baselines the gate reads", () => {
+		expect(touching("scripts/baseline.ts")).toEqual({ ...none, vitest: true })
+		expect(touching("baselines/tests.txt")).toEqual({ ...none, vitest: true })
+	})
+
+	it("runs core and vitest on a sidecar file", () => {
 		expect(touching("apps/app/sidecar/src/index.ts")).toEqual({
 			...none,
-			rust: true,
+			core: true,
 			vitest: true,
 		})
 	})
 
-	it("runs rust on a Cargo manifest anywhere", () => {
-		expect(touching("crates/relay/Cargo.toml").rust).toBe(true)
+	it("runs core on a Cargo manifest anywhere", () => {
+		expect(touching("crates/relay/Cargo.toml").core).toBe(true)
 	})
 
-	it("runs every job but ios and core on paths only under packages/shared", () => {
+	it("runs every job but ios and installer on paths only under packages/shared", () => {
 		expect(touching(...SHARED_ONLY_PATHS)).toEqual({
 			...every,
 			ios: false,
-			core: false,
+			installer: false,
 		})
 	})
 
-	it("runs storybook on paths only under packages/shared, since packages/ui depends on it", () => {
-		expect(touching(...SHARED_ONLY_PATHS).storybook).toBe(true)
-	})
-
-	it("runs website on paths only under packages/shared, since apps/website resolves it through packages/ui", () => {
-		expect(touching(...SHARED_ONLY_PATHS).website).toBe(true)
-	})
-
-	it("runs rust and core on a Rust file under crates", () => {
+	it("runs only core on a Rust file under crates", () => {
 		expect(touching("crates/kiroshi-core/src/lib.rs")).toEqual({
-			...touching("apps/app/src-tauri/src/lib.rs"),
-			core: true,
-		})
-	})
-
-	it("runs only core on the Rune preview", () => {
-		expect(touching("apps/rune-preview/src/local.rs")).toEqual({
 			...none,
 			core: true,
 		})
 	})
 
-	it("runs rust and core on the fake sidecar the Rune preview builds", () => {
-		expect(touching("apps/app/src-tauri/src/bin/fake_sidecar.rs")).toEqual({
+	it("runs core and the installer on the Rune app", () => {
+		expect(touching("apps/rune-preview/app/src/local.rs")).toEqual({
 			...none,
-			rust: true,
 			core: true,
+			installer: true,
+		})
+		expect(touching("apps/rune-preview/scripts/installer.nsi")).toEqual({
+			...none,
+			core: true,
+			installer: true,
 		})
 	})
 
@@ -338,54 +322,36 @@ describe("the paths each job watches", () => {
 		expect(touching("Cargo.lock").core).toBe(true)
 	})
 
-	it("runs rust on packages/shared/permission-modes.json alone, since src-tauri embeds it", () => {
-		expect(touching("packages/shared/permission-modes.json").rust).toBe(true)
+	it("runs only core on .claude/settings.json, since kiroshi-core embeds it", () => {
+		expect(touching(".claude/settings.json")).toEqual({ ...none, core: true })
 	})
 
-	it("runs only rust on .claude/settings.json, since src-tauri embeds it", () => {
-		expect(touching(".claude/settings.json")).toEqual({ ...none, rust: true })
-	})
-
-	it("runs rust and vitest on apps/app/src/lib/host/index.ts, since a src-tauri test embeds it", () => {
-		expect(touching("apps/app/src/lib/host/index.ts")).toEqual({
-			...none,
-			rust: true,
-			vitest: true,
-		})
-	})
-
-	it("runs rust on every file the Rust crates embed with include_str! or include_bytes!", () => {
+	it("runs core on every file the Rust crates embed with include_str! or include_bytes!", () => {
 		const embedded = filesTheRustCratesEmbed()
 
 		expect(embedded).toContain(".claude/settings.json")
-		expect(embedded.filter((path) => !touching(path).rust)).toEqual([])
+		expect(
+			embedded.filter((path) => !touching(path).core && !isShared(path)),
+		).toEqual([])
 	})
 
 	it("runs every job when the change detector scripts/ci-changes.ts changed", () => {
 		expect(touching("scripts/ci-changes.ts")).toEqual(every)
 	})
 
-	it("runs only vitest and storybook on scripts/ci-changes.test.ts alone, as any other script", () => {
+	it("runs only vitest on scripts/ci-changes.test.ts alone, as any other script", () => {
 		expect(touching("scripts/ci-changes.test.ts")).toEqual({
 			...none,
 			vitest: true,
-			storybook: true,
 		})
 	})
 
-	it("leaves rust unselected on packages/ui", () => {
-		expect(touching("packages/ui/src/components/button.tsx").rust).toBe(false)
+	it("leaves core unselected on a packages/ui component outside the markdown renderer", () => {
+		expect(touching("packages/ui/src/components/button.tsx").core).toBe(false)
 	})
 
 	it("runs only vitest on a sibling like packages/sharedfoo", () => {
 		expect(touching("packages/sharedfoo/x.ts")).toEqual({
-			...none,
-			vitest: true,
-		})
-	})
-
-	it("runs only vitest on an app file outside src-tauri", () => {
-		expect(touching("apps/app/src/main.tsx")).toEqual({
 			...none,
 			vitest: true,
 		})

@@ -24,7 +24,6 @@ import {
 	loggedCargoStep,
 	offPullRequestNote,
 	parsedShard,
-	RUST_PULL_REQUEST_STEPS,
 	retriedTestAnnotation,
 	retriedTestSummary,
 	retryOf,
@@ -89,38 +88,33 @@ const releaseWorkflow = Bun.YAML.parse(
 
 const SETUP_STEPS = new Set([
 	"Install dependencies",
-	"Drop the unused third-party apt sources",
-	"Install Playwright browser",
+	"Install the keyboard library the Rune app links on Linux",
 	"Select the Xcode pinned in .xcode-version",
 	"Install XcodeGen",
 	"Boot the simulator while the app builds",
 	"Read the changed test files against the base the merge ref was built on",
 ])
 
-const UNGATED_JOBS = new Set(["changes", "core", "verify"])
+const UNGATED_JOBS = new Set(["changes", "installer", "verify"])
 
-const LOCAL_ONLY_GROUPS: Group[] = ["rust-check"]
+const CI_JOBS: Group[] = GROUP_ORDER
 
-const CI_JOBS = GROUP_ORDER.filter(
-	(group) => !LOCAL_ONLY_GROUPS.includes(group),
-)
-
-const OFF_PULL_REQUEST_JOBS: Group[] = ["website", "storybook", "ios"]
+const OFF_PULL_REQUEST_JOBS: Group[] = ["website", "ios"]
 
 const EVERY_PATH_TOUCHED = {
-	rust: true,
 	vitest: true,
 	website: true,
-	storybook: true,
 	ios: true,
+	core: true,
+	installer: true,
 }
 
 const NO_PATH_TOUCHED = {
-	rust: false,
 	vitest: false,
 	website: false,
-	storybook: false,
 	ios: false,
+	core: false,
+	installer: false,
 }
 
 const runStepsOf = (job: string) =>
@@ -251,23 +245,11 @@ const pullRequest = (number: number, runId: number): GitHubContext => ({
 
 const A_PULL_REQUEST = pullRequest(7, 11)
 
-const A_PULL_REQUEST_OPTED_INTO_STORYBOOK: GitHubContext = {
-	...pullRequest(8, 12),
-	event: { pull_request: { labels: [{ name: "ci:storybook" }] } },
-}
-
-const storybookEnvOn = (github: GitHubContext) =>
-	Object.fromEntries(
-		Object.entries(workflow.jobs.storybook?.env ?? {}).map(
-			([name, template]) => [name, interpolate(template, { github })],
-		),
-	)
-
 const PULL_REQUEST_JOB_SET = [
 	"changes",
 	"core",
+	"installer",
 	"lint",
-	"rust",
 	"verify",
 	"vitest",
 ]
@@ -275,10 +257,9 @@ const PULL_REQUEST_JOB_SET = [
 const PUSH_TO_MAIN_JOB_SET = [
 	"changes",
 	"core",
+	"installer",
 	"ios",
 	"lint",
-	"rust",
-	"storybook",
 	"verify",
 	"vitest",
 	"website",
@@ -286,15 +267,7 @@ const PUSH_TO_MAIN_JOB_SET = [
 
 describe("the gate", () => {
 	it("runs the pull_request groups, then the post-merge groups", () => {
-		expect(GROUP_ORDER).toEqual([
-			"lint",
-			"rust-check",
-			"vitest",
-			"website",
-			"rust",
-			"storybook",
-			"ios",
-		])
+		expect(GROUP_ORDER).toEqual(["lint", "vitest", "website", "core", "ios"])
 		expect(Object.keys(GATE).sort()).toEqual([...GROUP_ORDER].sort())
 	})
 
@@ -310,42 +283,29 @@ describe("the gate", () => {
 		}
 	})
 
-	it("runs the full cargo test in rust, the bindings test only in rust-check", () => {
-		const commands = (group: "rust" | "rust-check") =>
-			GATE[group].map((step) => step.command)
-
-		expect(commands("rust")).toContain(
-			"cargo test --manifest-path src-tauri/Cargo.toml --workspace --features fake-claude",
-		)
-		expect(commands("rust-check")).toContain(
-			"cargo test --manifest-path src-tauri/Cargo.toml --features fake-claude --test bindings",
-		)
+	it("runs fmt, clippy with -D warnings and cargo test for kiroshi-core and the Rune workspace in core", () => {
 		expect(
-			commands("rust-check").filter((command) =>
-				command.startsWith("cargo test"),
-			),
-		).toHaveLength(1)
-		for (const group of ["rust", "rust-check"] as const) {
-			expect(commands(group).at(-1)).toBe(
-				"git diff --exit-code apps/app/src/lib/bindings.ts",
-			)
-		}
+			GATE.core.map((step) => `${step.cwd ?? "."} $ ${step.command}`),
+		).toEqual([
+			". $ cargo fmt --all --check",
+			". $ cargo clippy --workspace --all-targets --locked -- -D warnings",
+			". $ cargo test -p kiroshi-core --locked",
+			"apps/rune-preview $ cargo fmt --all --check",
+			"apps/rune-preview $ cargo clippy --workspace --all-targets --features fake-claude --locked -- -D warnings",
+			"apps/rune-preview $ cargo test --workspace --features fake-claude --locked",
+		])
 	})
 
-	it("runs rustfmt, clippy, the library tests, every integration target and the bindings check on a pull_request", () => {
-		expect(RUST_PULL_REQUEST_STEPS.map((step) => step.command)).toEqual([
-			"cargo fmt --all --manifest-path src-tauri/Cargo.toml --check",
-			"bun run --filter sidecar build",
-			"cargo clippy --manifest-path src-tauri/Cargo.toml --workspace --all-targets --features fake-claude -- -D warnings",
-			"cargo test --manifest-path src-tauri/Cargo.toml --workspace --features fake-claude --lib",
-			"cargo test --manifest-path src-tauri/Cargo.toml --features fake-claude --test '*'",
-			"git diff --exit-code apps/app/src/lib/bindings.ts",
-		])
+	it("runs no storybook, Tauri or bindings step in any group", () => {
+		const commands = GROUP_ORDER.flatMap((group) =>
+			GATE[group].map((step) => step.command),
+		)
+
 		expect(
-			RUST_PULL_REQUEST_STEPS.filter((step) => step.heavy).map(
-				(step) => step.name,
+			commands.filter((command) =>
+				/storybook|src-tauri|tauri|bindings/.test(command),
 			),
-		).toEqual(["Build sidecar", "Clippy", "Library tests", "Integration tests"])
+		).toEqual([])
 	})
 
 	it("checks the colour set names against tokens.json before tokens:build rewrites the catalogue", () => {
@@ -363,15 +323,7 @@ describe("the gate", () => {
 		])
 	})
 
-	it("plays the stories in the storybook group only", () => {
-		const playing = GROUP_ORDER.filter((group) =>
-			GATE[group].some((step) => step.command.includes("baseline storybook")),
-		)
-
-		expect(playing).toEqual(["storybook"])
-	})
-
-	it("marks heavy exactly the clippy, cargo test, sidecar build, storybook and xcodebuild steps", () => {
+	it("marks heavy exactly the clippy, cargo test and xcodebuild steps", () => {
 		const heavy = GROUP_ORDER.flatMap((group) =>
 			GATE[group]
 				.filter((step) => step.heavy)
@@ -379,13 +331,10 @@ describe("the gate", () => {
 		)
 
 		expect(heavy).toEqual([
-			"rust-check / Build sidecar",
-			"rust-check / Clippy",
-			"rust-check / Regenerate the bindings",
-			"rust / Build sidecar",
-			"rust / Clippy",
-			"rust / Test",
-			"storybook / Stories played in chromium against the baseline",
+			"core / Clippy kiroshi-core",
+			"core / Test kiroshi-core",
+			"core / Clippy the Rune app",
+			"core / Test the Rune app",
 			"ios / Build for testing",
 			"ios / Test on the simulator",
 		])
@@ -410,9 +359,6 @@ describe("the gate", () => {
 		expect(offPullRequestNote("website")).toBe(
 			"website skips a pull_request, CI runs it on a push to main and on a v* tag",
 		)
-		expect(offPullRequestNote("storybook")).toBe(
-			"storybook skips a pull_request, CI runs it on a push to main, on a v* tag and on a pull_request labelled ci:storybook",
-		)
 		expect(offPullRequestNote("ios")).toBe(
 			"ios skips a pull_request, CI runs it on a push to main only",
 		)
@@ -424,23 +370,11 @@ describe("the gate", () => {
 		)
 	})
 
-	it("runs rust and storybook when their paths are touched", () => {
-		for (const group of ["rust", "storybook"] as const) {
+	it("runs core when its paths are touched", () => {
+		for (const group of ["core"] as const) {
 			expect(skipReason({ group, touched: EVERY_PATH_TOUCHED })).toBeUndefined()
 			expect(skipReason({ group, touched: NO_PATH_TOUCHED })).toBeDefined()
 		}
-	})
-
-	it("runs rust-check on the paths that touch rust", () => {
-		expect(
-			skipReason({
-				group: "rust-check",
-				touched: { ...NO_PATH_TOUCHED, rust: true },
-			}),
-		).toBeUndefined()
-		expect(
-			skipReason({ group: "rust-check", touched: NO_PATH_TOUCHED }),
-		).toBeDefined()
 	})
 })
 
@@ -500,7 +434,12 @@ describe("ci:fast", () => {
 		],
 		[
 			"the importer threshold",
-			{ scope: "full", path: "apps/app/src/a.ts", importers: 20, graphMs: 5 },
+			{
+				scope: "full",
+				path: "packages/ui/src/a.ts",
+				importers: 20,
+				graphMs: 5,
+			},
 		],
 		[
 			"an import graph failure",
@@ -515,7 +454,7 @@ describe("ci:fast", () => {
 		})
 
 	it.each(FULL_SCOPES)(
-		"runs the app and ui unit projects against the baseline, no perf project, no website suite, no sidecar suite and no slot when %s makes the scope full",
+		"runs the ui unit project against the baseline, no timing-bound test, no website suite, no sidecar suite and no slot when %s makes the scope full",
 		(_, scope) => {
 			const steps = fastSteps([], scope)
 			const suites = baselineScopesOf(steps).flatMap(
@@ -526,27 +465,18 @@ describe("ci:fast", () => {
 			expect(steps.filter((step) => step.heavy)).toEqual([])
 			for (const step of GATE.vitest) expect(steps).not.toContainEqual(step)
 			expect(baselineScopesOf(steps)).toEqual(["lint", "unit"])
-			expect(suites).toEqual(["app", "ui"])
-			expect(UNIT_SUITES.map((suite) => suite.project)).toEqual([
-				"unit",
-				"unit",
-			])
+			expect(suites).toEqual(["ui"])
+			expect(UNIT_SUITES.map((suite) => suite.project)).toEqual(["unit"])
 		},
 	)
 
-	it("leaves the app perf project and the website, shared and sidecar suites to the gate", () => {
+	it("leaves every timing-bound test and the website, shared and sidecar suites to the gate", () => {
 		expect(gate).not.toContainEqual(FULL_UNIT_TESTS)
 		expect(baselineScopesOf(gate)).toContain("vitest")
-		expect(SCOPES.vitest.suites).toEqual([
-			"app",
-			"ui",
-			"website",
-			"shared",
-			"sidecar",
-		])
+		expect(SCOPES.vitest.suites).toEqual(["ui", "website", "shared", "sidecar"])
 	})
 
-	it("leaves the full unit set and the perf set to the gate when the scope is changed", () => {
+	it("leaves the full unit set to the gate when the scope is changed", () => {
 		expect(gate).not.toContainEqual(CHANGED_UNIT_TESTS)
 		for (const step of GATE.vitest)
 			expect(fastSteps(QUEUE_SCRIPT_PATHS, CHANGED_SCOPE)).not.toContainEqual(
@@ -609,7 +539,7 @@ const fixtureRepo = ({ directImporters, relayImporters }: FixtureRepo) => {
 		)
 	for (let index = 0; index < relayImporters; index++)
 		write(
-			`apps/app/src/relay-${index}.test.ts`,
+			`packages/ui/src/hooks/relay-${index}.test.ts`,
 			'import { shared } from "@workspace/ui/components/relay"\nshared\n',
 		)
 	return repo
@@ -666,7 +596,7 @@ describe("the unit test scope of a pull request", () => {
 					"AGENTS.md",
 					"scripts/ci.ts",
 					"packages/ui/src/components/shared.css",
-					"apps/app/src-tauri/src/main.rs",
+					"crates/kiroshi-core/src/lib.rs",
 				],
 				repo: NO_REPO,
 			}),
@@ -798,7 +728,6 @@ describe("the push to main retry", () => {
 	const everyStep = (scope: UnitTestScope) => [
 		...new Set([
 			...GROUP_ORDER.flatMap((group) => GATE[group]),
-			...RUST_PULL_REQUEST_STEPS,
 			CHANGED_UNIT_TESTS,
 			...fastSteps(
 				[
@@ -816,24 +745,20 @@ describe("the push to main retry", () => {
 			const retry = retryOf(step, ref)
 			return retry ? [`${step.name}: ${retry}`] : []
 		})
-	const RUST_TEST = GATE.rust.find((step) => step.name === "Test") as Step
+	const RUST_TEST = GATE.core.find(
+		(step) => step.name === "Test kiroshi-core",
+	) as Step
 
 	it.each(SCOPES)(
-		"retries the vitest gate, the rust cargo test and the storybook gate on a push to main, nothing else, under %s",
+		"retries the vitest gate and the two cargo tests on a push to main, nothing else, under %s",
 		(_, scope) => {
 			expect(retried({ ref: "refs/heads/main", scope })).toEqual([
-				"Unit tests, website, sidecar and story ids against the baseline: vitest",
-				"Test: cargo",
-				"Stories played in chromium against the baseline: vitest",
+				"Unit tests, website, shared and sidecar suites against the baseline: vitest",
+				"Test kiroshi-core: cargo",
+				"Test the Rune app: cargo",
 			])
 		},
 	)
-
-	it("hands the storybook gate one retry per failing story", () => {
-		expect(vitestRetryStep(GATE.storybook[0] as Step).command).toBe(
-			"bun run baseline storybook --retry",
-		)
-	})
 
 	it.each([
 		["a pull_request", "refs/pull/7/merge"],
@@ -854,33 +779,33 @@ describe("the push to main retry", () => {
 		expect(loggedCargoStep(RUST_TEST, "/tmp/run/cargo-test.log")).toEqual({
 			...RUST_TEST,
 			command:
-				"set -o pipefail; cargo test --manifest-path src-tauri/Cargo.toml --workspace --features fake-claude --no-fail-fast 2>&1 | tee '/tmp/run/cargo-test.log'",
+				"set -o pipefail; cargo test -p kiroshi-core --locked --no-fail-fast 2>&1 | tee '/tmp/run/cargo-test.log'",
 		})
 	})
 
 	it("reruns one failed rust test alone, in its own target", () => {
 		const rerun = rustRerunStep(RUST_TEST, {
 			target: "--test other",
-			file: "apps/app/src-tauri/tests/other.rs",
+			file: "crates/kiroshi-core/tests/other.rs",
 			test: "src/lib.rs - it's (line 3)",
 		})
 
 		expect(rerun.command).toBe(
-			"cargo test --manifest-path src-tauri/Cargo.toml --workspace --features fake-claude --test other -- --exact 'src/lib.rs - it'\\''s (line 3)'",
+			"cargo test -p kiroshi-core --locked --test other -- --exact 'src/lib.rs - it'\\''s (line 3)'",
 		)
 		expect(rerun.heavy).toBe(true)
-		expect(rerun.cwd).toBe("apps/app")
+		expect(rerun.cwd).toBeUndefined()
 	})
 
 	it("reruns a failed doc test by its name, which rustdoc never matches exactly", () => {
 		const rerun = rustRerunStep(RUST_TEST, {
 			target: "--doc",
-			file: "apps/app/src-tauri",
+			file: "crates/kiroshi-core",
 			test: "src/lib.rs - documented (line 11)",
 		})
 
 		expect(rerun.command).toBe(
-			"cargo test --manifest-path src-tauri/Cargo.toml --workspace --features fake-claude --doc -- 'src/lib.rs - documented (line 11)'",
+			"cargo test -p kiroshi-core --locked --doc -- 'src/lib.rs - documented (line 11)'",
 		)
 	})
 
@@ -916,16 +841,16 @@ error: 2 targets failed:
 `
 
 	it("names each failed rust test with its target and its file", () => {
-		expect(failedRustTargets(CARGO_OUTPUT)).toEqual([
+		expect(failedRustTargets(CARGO_OUTPUT, "crates/kiroshi-core")).toEqual([
 			{
 				target: "--lib",
-				file: "apps/app/src-tauri/src/lib.rs",
+				file: "crates/kiroshi-core/src/lib.rs",
 				tests: ["tests::flaky", "tests::red"],
 				isAttributed: true,
 			},
 			{
 				target: "--test other",
-				file: "apps/app/src-tauri/tests/other.rs",
+				file: "crates/kiroshi-core/tests/other.rs",
 				tests: ["red"],
 				isAttributed: true,
 			},
@@ -942,10 +867,10 @@ Caused by:
   process didn't exit successfully (signal: 6, SIGABRT: process abort signal)
 `
 
-		expect(failedRustTargets(crashed)).toEqual([
+		expect(failedRustTargets(crashed, "apps/rune-preview")).toEqual([
 			{
 				target: "--test crash",
-				file: "apps/app/src-tauri/tests/crash.rs",
+				file: "apps/rune-preview/tests/crash.rs",
 				tests: [],
 				isAttributed: false,
 			},
@@ -954,35 +879,38 @@ Caused by:
 
 	it("finds no failed target in a build that never ran a test", () => {
 		expect(
-			failedRustTargets("error[E0425]: cannot find value `x` in this scope\n"),
+			failedRustTargets(
+				"error[E0425]: cannot find value `x` in this scope\n",
+				"crates/kiroshi-core",
+			),
 		).toEqual([])
 	})
 
 	it("names the file and the test of a pass on its retry in one warning annotation", () => {
 		expect(
 			retriedTestAnnotation({
-				file: "apps/app/src/a,b.test.ts",
+				file: "apps/website/src/a,b.test.ts",
 				name: "counts 100%\nof it",
 			}),
 		).toBe(
-			"::warning file=apps/app/src/a%2Cb.test.ts,title=Passed only on its retry::apps/app/src/a,b.test.ts :: counts 100%25%0Aof it",
+			"::warning file=apps/website/src/a%2Cb.test.ts,title=Passed only on its retry::apps/website/src/a,b.test.ts :: counts 100%25%0Aof it",
 		)
 	})
 
 	it("lists every pass on its retry in the job summary", () => {
 		expect(
 			retriedTestSummary([
-				{ file: "apps/app/src/a.test.ts", name: "flips once" },
-				{ file: "apps/app/src-tauri/src/lib.rs", name: "tests::flaky" },
+				{ file: "apps/website/src/a.test.ts", name: "flips once" },
+				{ file: "crates/kiroshi-core/src/lib.rs", name: "tests::flaky" },
 			]),
 		).toBe(
-			"### Passed only on its retry\n\n- `apps/app/src/a.test.ts` :: flips once\n- `apps/app/src-tauri/src/lib.rs` :: tests::flaky\n\n",
+			"### Passed only on its retry\n\n- `apps/website/src/a.test.ts` :: flips once\n- `crates/kiroshi-core/src/lib.rs` :: tests::flaky\n\n",
 		)
 	})
 })
 
 describe("the jobs of ci.yml", () => {
-	it("gate every group of scripts/ci.ts but the local rust-check, one job per group", () => {
+	it("gate every group of scripts/ci.ts, one job per group", () => {
 		const gatedJobs = Object.keys(workflow.jobs).filter(
 			(job) => !UNGATED_JOBS.has(job),
 		)
@@ -990,30 +918,42 @@ describe("the jobs of ci.yml", () => {
 		expect(gatedJobs.sort()).toEqual([...CI_JOBS].sort())
 	})
 
-	it("carries no rust-check job and no rust-check verify step", () => {
-		expect(workflow.jobs["rust-check"]).toBeUndefined()
-		expect(JSON.stringify(workflow.jobs.verify)).not.toContain("rust-check")
-	})
+	it.each(["rust", "rust-check", "storybook"])(
+		"carries no %s job and no verify step for it",
+		(job) => {
+			expect(workflow.jobs[job]).toBeUndefined()
+			expect(JSON.stringify(workflow.jobs.verify)).not.toContain(
+				`needs.${job}.`,
+			)
+		},
+	)
 
-	it.each(
-		CI_JOBS.filter((group) => !["vitest", "rust", "storybook"].includes(group)),
-	)("%s runs its checks through bun scripts/ci.ts", (job) => {
-		const gateSteps = runStepsOf(job).filter(
-			(step) => !SETUP_STEPS.has(step.name ?? ""),
+	it("runs no Tauri step and plays no story in any job", () => {
+		expect(JSON.stringify(workflow.jobs)).not.toMatch(
+			/tauri-apps|src-tauri|storybook|playwright/i,
 		)
-
-		expect(gateSteps.map((step) => step.run?.trim())).toEqual([
-			`bun scripts/ci.ts ${job}`,
-		])
 	})
+
+	it.each(CI_JOBS.filter((group) => group !== "vitest"))(
+		"%s runs its checks through bun scripts/ci.ts",
+		(job) => {
+			const gateSteps = runStepsOf(job).filter(
+				(step) => !SETUP_STEPS.has(step.name ?? ""),
+			)
+
+			expect(gateSteps.map((step) => step.run?.trim())).toEqual([
+				`bun scripts/ci.ts ${job}`,
+			])
+		},
+	)
 
 	it.each([
 		["vitest", A_PULL_REQUEST, "bun scripts/ci.ts changed"],
 		["vitest", A_PUSH_TO_MAIN, "bun scripts/ci.ts vitest"],
 		["vitest", A_RELEASE_TAG, "bun scripts/ci.ts vitest"],
-		["rust", A_PULL_REQUEST, "bun scripts/ci.ts rust-pr"],
-		["rust", A_PUSH_TO_MAIN, "bun scripts/ci.ts rust"],
-		["rust", A_RELEASE_TAG, "bun scripts/ci.ts rust"],
+		["core", A_PULL_REQUEST, "bun scripts/ci.ts core"],
+		["core", A_PUSH_TO_MAIN, "bun scripts/ci.ts core"],
+		["core", A_RELEASE_TAG, "bun scripts/ci.ts core"],
 	] as const)(
 		"has %s run one gate through bun scripts/ci.ts on %p",
 		(job, github, command) => {
@@ -1057,22 +997,39 @@ describe("the jobs of ci.yml", () => {
 		},
 	)
 
-	it("bounds the rust job by 25 minutes", () => {
-		expect(workflow.jobs.rust?.["timeout-minutes"]).toBe(25)
-	})
-
-	it("runs the rust job inside the prebuilt ci-rust image", () => {
-		expect(workflow.jobs.rust?.container?.image).toStartWith(
-			"ghcr.io/kiroshi-app/ci-rust:",
+	it("runs core on Linux, macOS and Windows", () => {
+		expect(workflow.jobs.core?.strategy).toEqual({
+			"fail-fast": false,
+			matrix: { os: ["ubuntu-latest", "macos-latest", "windows-latest"] },
+		})
+		expect(JSON.stringify(workflow.jobs.core)).toContain(
+			'"runs-on":"${{ matrix.os }}"',
 		)
 	})
 
-	it("installs no system package in the rust job", () => {
-		const systemCommands = (workflow.jobs.rust?.steps ?? []).filter((step) =>
-			/\b(apt-get|sudo)\b/.test(step.run ?? ""),
+	it("runs the installer when changes selects it, and has verify require it then and its skip otherwise", () => {
+		const selected = "needs.changes.outputs.installer == 'true'"
+
+		expect(workflow.jobs.installer?.if).toBe(selected)
+		expect(verifyCondition("installer")).toBe(
+			`needs.installer.result != (${selected} && 'success' || 'skipped')`,
+		)
+	})
+
+	it("builds the NSIS installer on Windows, installs it silently, launches it once and uploads the log", () => {
+		const steps = workflow.jobs.installer?.steps ?? []
+		const runs = steps.map((step) => step.run ?? "").join("\n")
+		const upload = steps.find((step) =>
+			step.uses?.startsWith("actions/upload-artifact@"),
 		)
 
-		expect(systemCommands).toEqual([])
+		expect(JSON.stringify(workflow.jobs.installer)).toContain(
+			'"runs-on":"windows-latest"',
+		)
+		expect(runs).toContain("apps/rune-preview/scripts/package-windows.sh")
+		expect(runs).toContain("apps/rune-preview/scripts/install-windows.ps1")
+		expect(upload?.if).toBe("always()")
+		expect(upload?.with?.path).toBe("${{ runner.temp }}/install-log")
 	})
 
 	it("starts lint without changes on every event, and has verify require it", () => {
@@ -1130,67 +1087,19 @@ describe("the jobs of ci.yml", () => {
 		})
 	})
 
-	it("runs only changes, lint, vitest, rust and core on a pull_request", () => {
+	it("runs only changes, lint, vitest, core and installer on a pull_request", () => {
 		expect(jobsRunningOn(A_PULL_REQUEST)).toEqual(PULL_REQUEST_JOB_SET)
 	})
 
-	it("adds storybook on a pull_request labelled ci:storybook", () => {
-		expect(jobsRunningOn(A_PULL_REQUEST_OPTED_INTO_STORYBOOK)).toEqual(
-			[...PULL_REQUEST_JOB_SET, "storybook"].sort(),
-		)
-	})
-
-	it("has verify require storybook to succeed on a pull_request labelled ci:storybook", () => {
-		const github = A_PULL_REQUEST_OPTED_INTO_STORYBOOK
-		const passed = resultsByRule(github)
-
-		expect(failingVerifySteps(github, passed)).toEqual([])
-		expect(
-			failingVerifySteps(github, { ...passed, storybook: "failure" }),
-		).not.toEqual([])
-	})
-
-	it.each([A_PULL_REQUEST, A_PUSH_TO_MAIN, A_RELEASE_TAG])(
-		"has storybook run its gate with no debug output and upload nothing on %p",
-		(github) => {
-			const env = storybookEnvOn(github)
-			const gate = stepNamed("storybook", "Gate")
-			const upload = (workflow.jobs.storybook?.steps ?? []).find(
-				(step) => step.name === "Upload the browser debug output",
-			)
-
-			expect(gate?.run).toContain("bun scripts/ci.ts storybook 2>&1 | tee")
-			expect(interpolate(gate?.env?.DEBUG ?? "", { env })).toBe("")
-			expect(evaluate(upload?.if ?? "true", { env })).toBe(false)
-		},
-	)
-
-	it("has storybook run its gate with the browser debug output and upload it on a pull_request labelled ci:storybook", () => {
-		const env = storybookEnvOn(A_PULL_REQUEST_OPTED_INTO_STORYBOOK)
-		const gate = stepNamed("storybook", "Gate")
-		const upload = (workflow.jobs.storybook?.steps ?? []).find(
-			(step) => step.name === "Upload the browser debug output",
-		)
-
-		expect(interpolate(gate?.env?.DEBUG ?? "", { env })).toBe(
-			"vitest:browser*,pw:browser*",
-		)
-		expect(evaluate(upload?.if ?? "false", { env })).toBe(true)
-		expect(upload?.with?.path).toEndWith("/storybook-debug.log")
-		expect(gate?.run).toStartWith("set -o pipefail\n")
-		expect(gate?.run).toContain('tee "$RUNNER_TEMP/storybook-debug.log"')
-	})
-
-	it("runs every desktop job, core and ios on a push to main", () => {
+	it("runs every job on a push to main", () => {
 		expect(jobsRunningOn(A_PUSH_TO_MAIN)).toEqual(PUSH_TO_MAIN_JOB_SET)
 	})
 
-	it("keeps the desktop jobs on a v* tag, never ios nor core", () => {
+	it("runs core and website on a v* tag, never ios nor the installer", () => {
 		expect(jobsRunningOn(A_RELEASE_TAG)).toEqual([
 			"changes",
+			"core",
 			"lint",
-			"rust",
-			"storybook",
 			"verify",
 			"vitest",
 			"website",
@@ -1226,23 +1135,23 @@ describe("the jobs of ci.yml", () => {
 		expect(failingVerifySteps(A_PULL_REQUEST, results)).not.toEqual([])
 	})
 
-	it("skips rust on a pull_request whose paths leave the rust filter unselected, and has verify accept the skip", () => {
+	it("skips core on a pull_request whose paths leave the core filter unselected, and has verify accept the skip", () => {
 		const scope = {
 			github: A_PULL_REQUEST,
 			needs: {
-				rust: { result: "skipped" },
+				core: { result: "skipped" },
 				changes: {
 					result: "success",
-					outputs: outputsOn(A_PULL_REQUEST, ["apps/app/src/main.tsx"]),
+					outputs: outputsOn(A_PULL_REQUEST, ["apps/website/src/main.tsx"]),
 				},
 			},
 		}
 
-		expect(evaluate(workflow.jobs.rust?.if ?? "true", scope)).toBe(false)
-		expect(evaluate(verifyCondition("rust") ?? "true", scope)).toBe(false)
+		expect(evaluate(workflow.jobs.core?.if ?? "true", scope)).toBe(false)
+		expect(evaluate(verifyCondition("core") ?? "true", scope)).toBe(false)
 	})
 
-	it.each(["storybook", "website"])(
+	it.each(["website", "ios"])(
 		"has verify fail on a pull_request when %s ran",
 		(job) => {
 			const results = { ...resultsByRule(A_PULL_REQUEST), [job]: "success" }
@@ -1405,23 +1314,10 @@ describe("the jobs of ci.yml", () => {
 			"lint",
 			"vitest",
 			"website",
-			"rust",
 			"core",
-			"storybook",
+			"installer",
 			"ios",
 		])
-	})
-
-	it("restores and installs the Playwright browser in storybook only", () => {
-		const installing = Object.keys(workflow.jobs).filter((job) =>
-			(workflow.jobs[job]?.steps ?? []).some(
-				(step) =>
-					step.id === "playwright" ||
-					step.name === "Install Playwright browser",
-			),
-		)
-
-		expect(installing).toEqual(["storybook"])
 	})
 
 	it("has the ci-green job of release.yml wait on the CI run alone, never on ios", () => {
@@ -1439,8 +1335,12 @@ describe("the jobs of ci.yml", () => {
 		expect(waitStep?.run).toContain('--branch "$GITHUB_REF_NAME"')
 	})
 
-	it("has release.yml publish only after the draft job and every desktop job", () => {
-		expect(releaseWorkflow.jobs.publish?.needs).toEqual(["draft", "release"])
+	it("has release.yml publish only after the draft job, the Rune packages and their feed", () => {
+		expect(releaseWorkflow.jobs.publish?.needs).toEqual([
+			"draft",
+			"rune",
+			"feed",
+		])
 	})
 
 	it("has release.yml build the Rune packages only once ci-green passed and the draft exists", () => {
@@ -1453,25 +1353,28 @@ describe("the jobs of ci.yml", () => {
 			(step) => step.run ?? "",
 		)
 
-		expect(runs.some((run) => run.includes("tauri signer sign"))).toBe(true)
+		expect(runs.some((run) => run.includes("signer sign"))).toBe(true)
 		expect(
 			runs.some((run) => run.includes('gh release upload "$GITHUB_REF_NAME"')),
 		).toBe(true)
 	})
 
-	it("has both tauri-action steps upload into the draft job's release, kept a draft", () => {
-		const tauriSteps = (releaseWorkflow.jobs.release?.steps ?? []).filter(
-			(step) => step.uses?.startsWith("tauri-apps/tauri-action@"),
-		)
+	it("builds no Tauri bundle on a v* tag", () => {
+		expect(releaseWorkflow.jobs.release).toBeUndefined()
+		expect(JSON.stringify(releaseWorkflow.jobs)).not.toContain("tauri-action")
+	})
 
-		expect(tauriSteps).toHaveLength(2)
-		for (const step of tauriSteps) {
-			expect(step.with?.releaseId).toMatch(
-				/^\$\{\{ needs\.draft\.outputs\.release-id \}\}$/,
-			)
-			expect(step.with?.releaseDraft).toBe(true)
-			expect(step.with?.tagName).toBeUndefined()
-		}
+	it("has the feed job write latest.json from the Rune signatures and attach it to the draft", () => {
+		const runs = (releaseWorkflow.jobs.feed?.steps ?? [])
+			.map((step) => step.run ?? "")
+			.join("\n")
+
+		expect(releaseWorkflow.jobs.feed?.needs).toEqual(["draft", "rune"])
+		expect(runs).toContain("--pattern '*.sig'")
+		expect(runs).toContain("bun scripts/updater-feed.ts")
+		expect(runs).toContain(
+			'gh release upload "$GITHUB_REF_NAME" "$RUNNER_TEMP/latest.json"',
+		)
 	})
 
 	it("has exactly one step of release.yml publish the release", () => {

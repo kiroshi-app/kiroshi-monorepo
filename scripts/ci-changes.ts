@@ -3,12 +3,11 @@ const CI_EVENTS = ["pull_request", "push", "tag"] as const
 type CiEvent = (typeof CI_EVENTS)[number]
 
 type FilteredJobs = {
-	rust: boolean
 	vitest: boolean
 	website: boolean
-	storybook: boolean
 	ios: boolean
 	core: boolean
+	installer: boolean
 }
 
 type ChangeSet = { event: CiEvent; paths: string[] }
@@ -24,31 +23,26 @@ const SHARED_ROOT_FILES = [
 	"scripts/ci-changes.ts",
 ]
 
-const SHARED_ROOT_DIRECTORIES = ["patches/", ".github/"]
+const SHARED_ROOT_DIRECTORIES = [".github/"]
 
 const IOS_ROOT_FILES = [".swift-format", ".xcode-version"]
 
-const FILES_SRC_TAURI_EMBEDS = [
-	".claude/settings.json",
-	"apps/app/src/lib/host/index.ts",
-]
+const FILES_THE_CORE_READS = [".claude/settings.json"]
 
 const EVERY_JOB: FilteredJobs = {
-	rust: true,
 	vitest: true,
 	website: true,
-	storybook: true,
 	ios: true,
 	core: true,
+	installer: true,
 }
 
 const NO_JOB: FilteredJobs = {
-	rust: false,
 	vitest: false,
 	website: false,
-	storybook: false,
 	ios: false,
 	core: false,
+	installer: false,
 }
 
 const isUnder = (path: string, directories: string[]) =>
@@ -59,32 +53,25 @@ const fileName = (path: string) => path.slice(path.lastIndexOf("/") + 1)
 const isShared = (path: string) =>
 	SHARED_ROOT_FILES.includes(path) || isUnder(path, SHARED_ROOT_DIRECTORIES)
 
-const touchesRust = (path: string) =>
-	isUnder(path, [
-		"apps/app/src-tauri/",
-		"crates/",
-		"apps/app/sidecar/",
-		"packages/shared/",
-	]) ||
-	FILES_SRC_TAURI_EMBEDS.includes(path) ||
-	["Cargo.toml", "Cargo.lock"].includes(fileName(path))
-
 const touchesVitest = (path: string) =>
-	isUnder(path, ["packages/", "scripts/", "baselines/"]) ||
-	(path.startsWith("apps/app/") && !path.startsWith("apps/app/src-tauri/"))
+	isUnder(path, ["packages/", "scripts/", "baselines/", "apps/app/"])
 
 const touchesWebsite = (path: string) =>
 	isUnder(path, ["apps/website/", "packages/ui/", "packages/shared/"])
 
-const touchesStorybook = (path: string) =>
-	isUnder(path, ["packages/ui/", "packages/shared/", "scripts/", "baselines/"])
-
-const FILES_THE_PREVIEW_BUILDS = ["apps/app/src-tauri/src/bin/fake_sidecar.rs"]
-
 const touchesCore = (path: string) =>
-	isUnder(path, ["crates/", "apps/rune-preview/"]) ||
-	FILES_THE_PREVIEW_BUILDS.includes(path) ||
-	["Cargo.toml", "Cargo.lock"].includes(path)
+	isUnder(path, [
+		"crates/",
+		"apps/rune-preview/",
+		"apps/app/",
+		"packages/shared/",
+		"packages/ui/src/components/markdown/",
+		"docs/chat/",
+	]) ||
+	FILES_THE_CORE_READS.includes(path) ||
+	["Cargo.toml", "Cargo.lock"].includes(fileName(path))
+
+const touchesInstaller = (path: string) => path.startsWith("apps/rune-preview/")
 
 const touchesIos = (path: string) =>
 	path.startsWith("apps/ios/") || IOS_ROOT_FILES.includes(path)
@@ -92,28 +79,26 @@ const touchesIos = (path: string) =>
 export const touchedJobs = (paths: string[]): FilteredJobs => {
 	if (paths.some(isShared)) return EVERY_JOB
 	return {
-		rust: paths.some(touchesRust),
 		vitest: paths.some(touchesVitest),
 		website: paths.some(touchesWebsite),
-		storybook: paths.some(touchesStorybook),
 		ios: paths.some(touchesIos),
 		core: paths.some(touchesCore),
+		installer: paths.some(touchesInstaller),
 	}
 }
 
 export const decideJobs = ({ event, paths }: ChangeSet): FilteredJobs => {
-	if (event === "tag") return { ...EVERY_JOB, ios: false, core: false }
+	if (event === "tag") return { ...EVERY_JOB, ios: false, installer: false }
 	const touched = touchedJobs(paths)
 	if (event === "pull_request")
 		return {
 			...NO_JOB,
 			vitest: touched.vitest,
-			rust: touched.rust,
 			core: touched.core,
+			installer: touched.installer,
 		}
 	return { ...touched, ios: true }
 }
-
 const readEvent = (name: string | undefined): CiEvent => {
 	const event = CI_EVENTS.find((candidate) => candidate === name)
 	if (event) return event

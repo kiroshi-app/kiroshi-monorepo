@@ -3,12 +3,11 @@ import { dirname, join, relative } from "node:path"
 
 import ts from "typescript"
 
-export const TEST_SOURCE_ROOTS = ["apps/app/src/", "packages/ui/src/"]
+export const TEST_SOURCE_ROOTS = ["packages/ui/src/"]
 
 const ALIASES: [string, string][] = [
 	["@workspace/ui/", "packages/ui/src/"],
 	["@workspace/shared/", "packages/shared/"],
-	["@/", "apps/app/src/"],
 ]
 
 const RESOLVED_SUFFIXES = [

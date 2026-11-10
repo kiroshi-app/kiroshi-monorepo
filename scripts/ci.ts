@@ -18,15 +18,16 @@ export type Step = {
 	cwd?: string
 	heavy?: true
 	retry?: Retry
+	crateRoot?: string
 }
 
 const REPO = fileURLToPath(new URL("..", import.meta.url))
 
 const SLOT = join(REPO, "scripts/slot.sh")
 
-const APP = "apps/app"
+const CORE_CRATE = "crates/kiroshi-core"
 
-const SRC_TAURI = join(APP, "src-tauri")
+const RUNE_WORKSPACE = "apps/rune-preview"
 
 const RETRYING_REF = "refs/heads/main"
 
@@ -34,26 +35,6 @@ const UI_TESTS = join(REPO, "apps/ios/KiroshiUITests")
 
 const SIMULATOR_DESTINATION =
 	'-destination "platform=iOS Simulator,id=$SIMULATOR"'
-
-const RUSTFMT: Step = {
-	name: "Rustfmt",
-	command: "cargo fmt --all --manifest-path src-tauri/Cargo.toml --check",
-	cwd: APP,
-}
-
-const BUILD_SIDECAR: Step = {
-	name: "Build sidecar",
-	command: "bun run --filter sidecar build",
-	heavy: true,
-}
-
-const CLIPPY: Step = {
-	name: "Clippy",
-	command:
-		"cargo clippy --manifest-path src-tauri/Cargo.toml --workspace --all-targets --features fake-claude -- -D warnings",
-	cwd: APP,
-	heavy: true,
-}
 
 const PR_DEQUEUE_UNIT_TESTS: Step = {
 	name: "PR dequeue script unit tests",
@@ -85,32 +66,6 @@ const QUEUE_SCRIPT_UNIT_TESTS = [
 	},
 ]
 
-const BINDINGS_MATCH: Step = {
-	name: "Bindings match the command surface",
-	command: "git diff --exit-code apps/app/src/lib/bindings.ts",
-}
-
-export const RUST_PULL_REQUEST_STEPS: Step[] = [
-	RUSTFMT,
-	BUILD_SIDECAR,
-	CLIPPY,
-	{
-		name: "Library tests",
-		command:
-			"cargo test --manifest-path src-tauri/Cargo.toml --workspace --features fake-claude --lib",
-		cwd: APP,
-		heavy: true,
-	},
-	{
-		name: "Integration tests",
-		command:
-			"cargo test --manifest-path src-tauri/Cargo.toml --features fake-claude --test '*'",
-		cwd: APP,
-		heavy: true,
-	},
-	BINDINGS_MATCH,
-]
-
 export const GATE = {
 	lint: [
 		{ name: "Biome format", command: "bun run format" },
@@ -120,6 +75,10 @@ export const GATE = {
 			command: "bun run test:ci-changes",
 		},
 		{ name: "Red main reporter unit tests", command: "bun run test:red-main" },
+		{
+			name: "Updater feed unit tests",
+			command: "bun run test:updater-feed",
+		},
 		{
 			name: "Colour set check unit tests",
 			command: "bun run test:colour-sets",
@@ -153,47 +112,47 @@ export const GATE = {
 				"bun run avatar:build && git diff --exit-code apps/ios/Kiroshi/Resources",
 		},
 	],
-	"rust-check": [
-		RUSTFMT,
-		BUILD_SIDECAR,
-		CLIPPY,
-		{
-			name: "Regenerate the bindings",
-			command:
-				"cargo test --manifest-path src-tauri/Cargo.toml --features fake-claude --test bindings",
-			cwd: APP,
-			heavy: true,
-		},
-		BINDINGS_MATCH,
-	],
 	vitest: [
 		{
-			name: "Unit tests, website, sidecar and story ids against the baseline",
+			name: "Unit tests, website, shared and sidecar suites against the baseline",
 			command: "bun run baseline vitest",
 			retry: "vitest",
 		},
 	],
 	website: [{ name: "Build website", command: "bun run build:website" }],
-	rust: [
-		RUSTFMT,
-		BUILD_SIDECAR,
-		CLIPPY,
+	core: [
+		{ name: "Rustfmt kiroshi-core", command: "cargo fmt --all --check" },
 		{
-			name: "Test",
-			command:
-				"cargo test --manifest-path src-tauri/Cargo.toml --workspace --features fake-claude",
-			cwd: APP,
+			name: "Clippy kiroshi-core",
+			command: "cargo clippy --workspace --all-targets --locked -- -D warnings",
+			heavy: true,
+		},
+		{
+			name: "Test kiroshi-core",
+			command: "cargo test -p kiroshi-core --locked",
 			heavy: true,
 			retry: "cargo",
+			crateRoot: CORE_CRATE,
 		},
-		BINDINGS_MATCH,
-	],
-	storybook: [
 		{
-			name: "Stories played in chromium against the baseline",
-			command: "bun run baseline storybook",
+			name: "Rustfmt the Rune app",
+			command: "cargo fmt --all --check",
+			cwd: RUNE_WORKSPACE,
+		},
+		{
+			name: "Clippy the Rune app",
+			command:
+				"cargo clippy --workspace --all-targets --features fake-claude --locked -- -D warnings",
+			cwd: RUNE_WORKSPACE,
 			heavy: true,
-			retry: "vitest",
+		},
+		{
+			name: "Test the Rune app",
+			command: "cargo test --workspace --features fake-claude --locked",
+			cwd: RUNE_WORKSPACE,
+			heavy: true,
+			retry: "cargo",
+			crateRoot: RUNE_WORKSPACE,
 		},
 	],
 	ios: [
@@ -217,20 +176,10 @@ export const GATE = {
 
 export type Group = keyof typeof GATE
 
-export const GROUP_ORDER: Group[] = [
-	"lint",
-	"rust-check",
-	"vitest",
-	"website",
-	"rust",
-	"storybook",
-	"ios",
-]
+export const GROUP_ORDER: Group[] = ["lint", "vitest", "website", "core", "ios"]
 
 const OFF_PULL_REQUEST_TRIGGERS: Partial<Record<Group, string>> = {
 	website: "on a push to main and on a v* tag",
-	storybook:
-		"on a push to main, on a v* tag and on a pull_request labelled ci:storybook",
 	ios: "on a push to main only",
 }
 
@@ -240,10 +189,10 @@ const OFF_PULL_REQUEST_TRIGGERS: Partial<Record<Group, string>> = {
 // test step bun scripts/ci.ts changed picks for the same diff, and the
 // pr-dequeue, pr-enqueue or pr-merge-sub script tests when the diff touches that script
 // or its tests. That unit test step runs the changed test files, or the
-// whole unit project of the app and ui suites when a changed path is shared,
-// and never the app perf project. bun run ci and the CI jobs keep the rest:
-// the perf set, the stories, the website and sidecar suites, rust, the
-// website build and ios.
+// whole unit project of the ui suite when a changed path is shared. bun run
+// ci and the CI jobs keep the rest: every timing-bound test, the website,
+// shared and sidecar suites, kiroshi-core and the Rune app, the website
+// build and ios.
 export const FAST_STEP_NAMES = [
 	"Biome format",
 	"Biome and knip against the baseline",
@@ -256,7 +205,7 @@ export const CHANGED_UNIT_TESTS: Step = {
 }
 
 export const FULL_UNIT_TESTS: Step = {
-	name: "App and ui unit projects against the baseline",
+	name: "Ui unit project against the baseline",
 	command: "bun run baseline unit",
 }
 
@@ -269,8 +218,6 @@ export const SHARED_PATH_RULES = [
 	"packages/ui/src/styles/**",
 	"packages/ui/src/lib/**",
 	"packages/shared/**",
-	"apps/app/src/lib/**",
-	"apps/app/vitest.config.ts",
 	"packages/ui/vitest.config.ts",
 	"baselines/**",
 ]
@@ -510,15 +457,15 @@ const DOC_TESTS_TARGET = "--doc"
 
 const SINGLE_RUST_TEST_PASSED = /^test result: ok\. 1 passed;/m
 
-export const failedRustTargets = (output: string) => {
+export const failedRustTargets = (output: string, crateRoot: string) => {
 	const targets: FailedRustTarget[] = []
-	let file = SRC_TAURI
+	let file = crateRoot
 	let tests: string[] = []
 	let reportedFailures = -1
 	for (const line of output.split("\n").map((raw) => raw.trimEnd())) {
 		const start = RUST_TARGET_START.exec(line)
 		if (start) {
-			file = start[1] ? join(SRC_TAURI, start[1]) : SRC_TAURI
+			file = start[1] ? join(crateRoot, start[1]) : crateRoot
 			tests = []
 			reportedFailures = -1
 		}
@@ -586,7 +533,10 @@ const rerunPasses = (rerun: Step) => {
 const runRustTestsWithRerun = ({ label, step }: Labelled) => {
 	const log = join(mkdtempSync(join(tmpdir(), "kiroshi-ci-")), "cargo-test.log")
 	if (runStep({ label, step: loggedCargoStep(step, log) })) return true
-	const targets = failedRustTargets(readFileSync(log, "utf8"))
+	const targets = failedRustTargets(
+		readFileSync(log, "utf8"),
+		step.crateRoot ?? step.cwd ?? ".",
+	)
 	const unattributed = targets
 		.filter((target) => !target.isAttributed)
 		.map((target) => target.target)
@@ -705,11 +655,9 @@ const runRequested = (argument: string | undefined) => {
 	if (argument === undefined) return runGate()
 	if (argument === "fast") return runFast()
 	if (argument === "changed") return runChangedUnitTests()
-	if (argument === "rust-pr")
-		return runSteps("rust-pr", RUST_PULL_REQUEST_STEPS)
 	if (isGroup(argument)) return runGroup(argument)
 	throw new Error(
-		`unknown argument "${argument}", expected fast, changed, rust-pr or one of ${GROUP_ORDER.join(", ")}`,
+		`unknown argument "${argument}", expected fast, changed or one of ${GROUP_ORDER.join(", ")}`,
 	)
 }
 
