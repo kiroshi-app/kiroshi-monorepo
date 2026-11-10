@@ -16,7 +16,6 @@ import type { FakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
-import { keepMainChatsAtLaunch } from "@/lib/conversations/transcript-fixtures"
 import { type FakeLayout, fakeLayout } from "@/lib/perf/fake-layout"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 import {
@@ -470,7 +469,7 @@ const mountApp = async (replyFor?: (prompt: string) => string) => {
 	layout = fakeLayout()
 	seedFirstRunDone()
 	const store = createFakeTranscriptStore()
-	harness.store = keepMainChatsAtLaunch(store)
+	harness.store = store
 	harness.driver = createFakeChatDriver({ stepMs: STEP_MS, replyFor })
 	const watch = watchTurn(harness.driver)
 	await seedRoster(store)
@@ -657,7 +656,7 @@ const measureRowMovedToTop = async () => {
 	layout = fakeLayout()
 	seedFirstRunDone()
 	const store = createFakeTranscriptStore()
-	harness.store = keepMainChatsAtLaunch(store)
+	harness.store = store
 	harness.driver = createFakeChatDriver({ stepMs: STEP_MS })
 	await seedRoster(store)
 	const older = await createRoom(store, "Older room")
@@ -722,7 +721,7 @@ const seedThreadApp = async ({ messages, pageSize }: SeededThread) => {
 		space.id,
 	)
 	await seedTranscript(store, bot.id, messages)
-	harness.store = keepMainChatsAtLaunch(store)
+	harness.store = store
 	harness.driver = createFakeChatDriver({ stepMs: STEP_MS })
 	return { bot, store }
 }
@@ -1027,7 +1026,7 @@ describe("PRF1 render baseline", () => {
 	it("shows the last message of a two hundred run thread", async () => {
 		expect(await measureThreadOpen()).toMatchInlineSnapshot(`
 			{
-			  "commits": 12,
+			  "commits": 10,
 			  "markdownProcessors": 20,
 			  "runs": 200,
 			  "tasksToLastMessage": 0,
@@ -1041,13 +1040,13 @@ describe("PRF1 render baseline", () => {
 			expect(await measureThreadReopen()).toMatchInlineSnapshot(`
 				{
 				  "cold": {
-				    "commits": 12,
+				    "commits": 10,
 				    "markdownProcessors": 20,
 				    "tasksToLastMessage": 0,
 				  },
 				  "grown": 80,
 				  "reopened": {
-				    "commits": 8,
+				    "commits": 6,
 				    "markdownProcessors": 20,
 				    "tasksToLastMessage": 0,
 				  },
@@ -1065,7 +1064,7 @@ describe("PRF1 render baseline", () => {
 
 			expect(await measureLongTranscriptOpen()).toMatchInlineSnapshot(`
 				{
-				  "commits": 12,
+				  "commits": 10,
 				  "markdownProcessors": 500,
 				  "messages": 500,
 				}

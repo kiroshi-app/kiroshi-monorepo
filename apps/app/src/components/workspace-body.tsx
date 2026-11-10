@@ -1,19 +1,19 @@
-import { useCallback, useSyncExternalStore } from "react"
+import { useCallback, useContext, useSyncExternalStore } from "react"
 
 import { Notice } from "@workspace/ui/components/notice"
 import { ScreenLayout } from "@workspace/ui/components/screen-layout"
+import { SpaceAccessBanner } from "@workspace/ui/components/space-access-banner"
 import { useCommonCopy } from "@workspace/ui/hooks/use-common-copy"
 
 import { BareAppHeader } from "@/components/bare-app-header"
-import {
-	HomeConversationStage,
-	HomeEmptyStage,
-	HomeLines,
-	type ThreadHome,
-} from "@/components/home-screen"
+import { HomeEmptyStage, HomeLines } from "@/components/home-screen"
 import { MissionThreadScreen } from "@/components/mission-thread-screen"
 import type { ActivityPanel } from "@/components/thread-routines"
 import { ThreadScreen } from "@/components/thread-screen"
+import {
+	type HomeConversationStart,
+	useHomeSend,
+} from "@/components/use-home-send"
 import type { AttachmentsController } from "@/lib/chat/attachments-controller"
 import type { DraftsController } from "@/lib/chat/drafts-controller"
 import type { Thread } from "@/lib/chat/thread-contract"
@@ -21,19 +21,19 @@ import type { Chat } from "@/lib/chat/use-chat"
 import type { ConversationRuntimes } from "@/lib/conversations/conversation-runtimes"
 import type { Bot, Conversation } from "@/lib/conversations/store-contract"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
-import {
-	type HomeVisits,
-	type HomeVisitsState,
-	visitOf,
-} from "@/lib/home/home-visits"
+import { type HomeVisits, visitOf } from "@/lib/home/home-visits"
 import type { MissionLanding } from "@/lib/missions/mission-actions"
 import type { OpenedMissionController } from "@/lib/missions/opened-mission-controller"
 import type { ThreadSearch } from "@/lib/navigation/thread-search"
 import type { OnboardingCreation } from "@/lib/onboarding/onboarding-flow-controller"
 import type { SignIn } from "@/lib/onboarding/use-sign-in"
 import type { MessageLandingController } from "@/lib/search/message-landing-controller"
+import {
+	OpenJoinedHostContext,
+	spaceAccessOf,
+} from "@/lib/spaces/open-joined-host"
 
-type HomeSeat = {
+type HomeSeat = HomeConversationStart & {
 	visits: HomeVisits
 	store: TranscriptStore
 	conversations: Conversation[]
@@ -110,79 +110,80 @@ const missionThreadOf = (
 	return null
 }
 
-const NO_VISITS: HomeVisitsState = {}
+type HomeViewProps = {
+	body: WorkspaceBodyProps
+	seat: HomeSeat
+	bot: Bot
+}
 
-const ignoreVisits = () => () => undefined
-
-const useVisitsOf = (seat: HomeSeat | undefined) =>
-	useSyncExternalStore(
-		seat?.visits.subscribe ?? ignoreVisits,
-		seat?.visits.getState ?? (() => NO_VISITS),
+const HomeView = ({ body, seat, bot }: HomeViewProps) => {
+	const { onOpenThreadInNewTab, spaceId } = body
+	const visits = useSyncExternalStore(
+		seat.visits.subscribe,
+		seat.visits.getState,
 	)
-
-const homeOf = (
-	props: WorkspaceBodyProps,
-	seat: HomeSeat,
-	bot: Bot,
-	visits: HomeVisitsState,
-): ThreadHome => {
-	const { onOpenThreadInNewTab, spaceId } = props
 	const visit = visitOf(visits, bot.id, spaceId)
-	const openConversation = (conversationId: string) =>
-		onOpenThreadInNewTab({ conversation: conversationId })
+	const joinedHost = useContext(OpenJoinedHostContext)
+	const access = spaceAccessOf(joinedHost)
+	const send = useHomeSend({
+		agentId: bot.id,
+		spaceId,
+		attachments: body.attachments,
+		drafts: body.drafts,
+		runtimes: body.conversationRuntimes,
+		startConversation: seat.startConversation,
+		openConversation: seat.openConversation,
+	})
 	const rooms = {
 		agent: bot,
 		conversations: seat.conversations,
 		store: seat.store,
 		spaceId,
-		onOpenRoom: openConversation,
+		onOpenRoom: (conversationId: string) =>
+			onOpenThreadInNewTab({ conversation: conversationId }),
 	}
-	const lineFeed = {
-		openedAt: visit?.openedAt ?? null,
-		roomLinesOf: (workingIds: string[]) =>
-			seat.visits.roomLinesOf(bot.id, spaceId, workingIds),
-	}
-	const requests = {
-		bots: props.bots,
-		runtimes: props.conversationRuntimes,
-	}
-	const lines = <HomeLines {...rooms} {...lineFeed} key={bot.id} />
 
-	return {
-		isSettling: spaceId !== null && !visit?.isSettled,
-		lines,
-		emptyStage: (send) => (
+	return (
+		<ScreenLayout width="full">
 			<HomeEmptyStage
 				{...send}
 				{...rooms}
-				{...requests}
-				archive={visit?.archive ?? null}
+				bots={body.bots}
 				isBandDismissed={visit?.isBandDismissed ?? false}
-				lines={lines}
+				isReadOnly={Boolean(joinedHost?.departure)}
+				lines={
+					<HomeLines
+						{...rooms}
+						key={bot.id}
+						openedAt={visit?.openedAt ?? null}
+						roomLinesOf={(workingIds) =>
+							seat.visits.roomLinesOf(bot.id, spaceId, workingIds)
+						}
+					/>
+				}
+				notice={
+					joinedHost && access ? (
+						<SpaceAccessBanner
+							host={joinedHost.hostName}
+							reason={access.reason}
+							space={joinedHost.spaceName}
+							waitReason={access.waitReason}
+						/>
+					) : null
+				}
 				onDismissBand={() => seat.visits.dismissBand(bot.id, spaceId)}
-				onOpenArchive={openConversation}
 				onSelectAgent={seat.onSelectAgent}
-				readerName={props.readerName}
+				readerName={body.readerName}
+				runtimes={body.conversationRuntimes}
 			/>
-		),
-		conversationStage: (conversation) => (
-			<HomeConversationStage
-				{...conversation}
-				{...rooms}
-				{...lineFeed}
-				{...requests}
-				key={bot.id}
-				onSelectAgent={seat.onSelectAgent}
-			/>
-		),
-	}
+		</ScreenLayout>
+	)
 }
 
 export function WorkspaceBody(props: WorkspaceBodyProps) {
 	const t = useCommonCopy()
 	const { missions } = props
 	const opened = useSyncExternalStore(missions.subscribe, missions.getState)
-	const visits = useVisitsOf(props.home)
 	const rowId = props.conversation?.id ?? props.bot?.id ?? null
 	const { spaceRowId } = props
 
@@ -238,6 +239,17 @@ export function WorkspaceBody(props: WorkspaceBodyProps) {
 		)
 	}
 
+	if (props.home && props.bot) {
+		return (
+			<HomeView
+				body={props}
+				bot={props.bot}
+				key={props.spaceId}
+				seat={props.home}
+			/>
+		)
+	}
+
 	const thread = props.isMissionsPanelOpen ? null : threadOf(props)
 
 	if (!thread) {
@@ -250,11 +262,6 @@ export function WorkspaceBody(props: WorkspaceBodyProps) {
 			attachments={props.attachments}
 			bots={props.bots}
 			drafts={props.drafts}
-			home={
-				props.home && thread.kind === "bot"
-					? homeOf(props, props.home, thread.bot, visits)
-					: undefined
-			}
 			landings={props.landings}
 			onboardingCreation={props.onboardingCreation}
 			onOpenMission={openMission}

@@ -1,6 +1,5 @@
 import { useMemo } from "react"
 
-import type { HomeEntries } from "@/lib/home/home-entries"
 import type { SettingsNavigation } from "@/lib/navigation/use-settings-navigation"
 import type { useSwitcherSpaces } from "@/lib/spaces/use-joined-spaces"
 import { isHomePage, isLibraryPage } from "@/lib/tabs/tab-pages"
@@ -15,7 +14,6 @@ import type { WorkspaceOverlay } from "@/lib/workspace/use-workspace-overlay"
 import type { WorkspaceFrame } from "@/lib/workspace/workspace-frame"
 
 type WorkspaceRailOptions = {
-	homeEntries: Pick<HomeEntries, "enter">
 	navigation: SettingsNavigation
 	overlay: WorkspaceOverlay
 	panels: SettingsPanels
@@ -33,7 +31,6 @@ type WorkspaceRail = Pick<
 >
 
 export const useWorkspaceRail = ({
-	homeEntries,
 	navigation,
 	overlay,
 	panels,
@@ -80,10 +77,7 @@ export const useWorkspaceRail = ({
 					? () => navigation.openSpaceSettings(space.id)
 					: undefined,
 				onOpenYou: () => navigation.openUserSettings(),
-				onSelectHome: () => {
-					homeEntries.enter()
-					navigation.openHome()
-				},
+				onSelectHome: navigation.openHome,
 				onSelectConversations: () => leaveSettingsFor("conversations"),
 				onSelectLibrary: navigation.openLibrary,
 				onSelectMissions: () => leaveSettingsFor("missions"),
@@ -98,7 +92,6 @@ export const useWorkspaceRail = ({
 		}
 	}, [
 		badgesBySpaceId,
-		homeEntries,
 		isHomeShown,
 		isLibraryShown,
 		navigation,

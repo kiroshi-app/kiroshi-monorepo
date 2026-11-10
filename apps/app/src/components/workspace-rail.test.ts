@@ -18,14 +18,11 @@ import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { useWorkspaceRail } from "@/components/workspace-rail"
-import type { JoinedSpace, Space, TransportError } from "@/lib/bindings"
+import type { JoinedSpace, Space } from "@/lib/bindings"
 import { newBotIdentity } from "@/lib/bots/bot-settings"
-import type { ChatDriver } from "@/lib/chat/driver"
 import { createFakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
-import { createHomeEntries } from "@/lib/home/home-entries"
-import { MAIN_CHAT_PAUSE_MS } from "@/lib/home/home-visits"
 import type { JoinedHostState } from "@/lib/host/joined-hosts"
 import type { SettingsNavigation } from "@/lib/navigation/use-settings-navigation"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
@@ -47,8 +44,6 @@ type MountedApp = {
 	store: TranscriptStore | null
 	openJoinedSpace: JoinedSpace | null
 	departed: DepartedSpace | null
-	sessionFailure: TransportError | null
-	focusReports: Set<(isFocused: boolean) => void>
 }
 
 const mounted = vi.hoisted(
@@ -56,8 +51,6 @@ const mounted = vi.hoisted(
 		store: null,
 		openJoinedSpace: null,
 		departed: null,
-		sessionFailure: null,
-		focusReports: new Set(),
 	}),
 )
 
@@ -68,31 +61,15 @@ vi.mock("@/lib/conversations/create-store", () => ({
 vi.mock("@/lib/host/index", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/lib/host/index")>()),
 	isDesktopHost: () => false,
-	watchWindowFocus: (report: (isFocused: boolean) => void) => {
-		mounted.focusReports.add(report)
-		report(true)
-		return Promise.resolve(() => {
-			mounted.focusReports.delete(report)
-		})
-	},
 }))
 
 vi.mock("@/lib/chat/create-driver", async () => {
 	const { withFakeHostWrites } = await import(
 		"@/lib/conversations/fake-host-writes"
 	)
-	const failingWhenAsked = (driver: ChatDriver): ChatDriver => ({
-		...driver,
-		startOrResumeSession: (...args) =>
-			mounted.sessionFailure
-				? Promise.reject(mounted.sessionFailure)
-				: driver.startOrResumeSession(...args),
-	})
 	return {
 		createChatDriver: (store: TranscriptStore) =>
-			failingWhenAsked(
-				withFakeHostWrites(createFakeChatDriver({ stepMs: 1 }), store),
-			),
+			withFakeHostWrites(createFakeChatDriver({ stepMs: 1 }), store),
 	}
 })
 
@@ -179,7 +156,6 @@ const RailHarness = ({
 		NO_INVITATIONS,
 	)
 	const { rail, currentSpace, currentSpaceHost } = useWorkspaceRail({
-		homeEntries: createHomeEntries(),
 		navigation: navigation as SettingsNavigation,
 		overlay: {
 			search: { isOpen: false, open: () => {} },
@@ -392,7 +368,6 @@ const produceRailFor = ({
 	renderHook(
 		() =>
 			useWorkspaceRail({
-				homeEntries: createHomeEntries(),
 				navigation: {} as SettingsNavigation,
 				overlay: {
 					search: { isOpen: false, open: () => {} },
@@ -579,7 +554,6 @@ describe("the Home page", () => {
 		vi.useRealTimers()
 		mounted.store = null
 		mounted.departed = null
-		mounted.sessionFailure = null
 		localStorage.clear()
 	})
 
@@ -681,218 +655,6 @@ describe("the Home page", () => {
 		).toEqual({ [PERSONAL_SPACE_ID]: second.id })
 	})
 
-	const sayInMainChat = async (
-		store: TranscriptStore,
-		conversationId: string,
-		createdAt: number,
-	) => {
-		await store.startTurn({
-			conversationId,
-			id: "said",
-			startedAt: createdAt,
-		})
-		await store.appendUserMessage({
-			id: "said-message",
-			conversationId,
-			turnId: "said",
-			authorBotId: null,
-			repliedToMessageId: null,
-			content: "Book the flights.",
-			createdAt,
-		})
-	}
-
-	it("archives a main chat holding messages only once the Home opens, one click away", async () => {
-		const { router, firstOfSpace, store } = await mountAppWithTwoAgents()
-		const earlier = await store.mainChat(firstOfSpace.id, PERSONAL_SPACE_ID)
-		await sayInMainChat(store, earlier.id, 1)
-
-		await act(() =>
-			router.navigate({ to: "/", search: { bot: firstOfSpace.id } }),
-		)
-		await settle()
-		expect((await store.mainChat(firstOfSpace.id, PERSONAL_SPACE_ID)).id).toBe(
-			earlier.id,
-		)
-
-		await pressInRail("home")
-
-		expect(
-			(await store.mainChat(firstOfSpace.id, PERSONAL_SPACE_ID)).id,
-		).not.toBe(earlier.id)
-		expect(slot("home-layout")?.getAttribute("data-stage")).toBe("empty")
-		expect(screen.getByRole("button", { name: "Open it" })).toBeTruthy()
-	})
-
-	it("keeps a main chat said to within the hour, then archives it on a later opening past the hour", async () => {
-		const { firstOfSpace, store } = await mountAppWithTwoAgents()
-		const renewal = vi.spyOn(store, "renewMainChat")
-		const earlier = await store.mainChat(firstOfSpace.id, PERSONAL_SPACE_ID)
-		const saidAt = Date.now()
-		await sayInMainChat(store, earlier.id, saidAt)
-		const mainChatId = async () =>
-			(await store.mainChat(firstOfSpace.id, PERSONAL_SPACE_ID)).id
-
-		await pressInRail("home")
-
-		expect(renewal).not.toHaveBeenCalled()
-		expect(await mainChatId()).toBe(earlier.id)
-		expect(slot("home-layout")?.getAttribute("data-stage")).toBe("conversation")
-
-		await pressInRail("conversations")
-		vi.setSystemTime(saidAt + MAIN_CHAT_PAUSE_MS + 1)
-		await pressInRail("home")
-
-		expect(renewal).toHaveBeenCalledOnce()
-		expect(await mainChatId()).not.toBe(earlier.id)
-		expect(slot("home-layout")?.getAttribute("data-stage")).toBe("empty")
-		expect(screen.getByRole("button", { name: "Open it" })).toBeTruthy()
-
-		await pressInRail("conversations")
-		await pressInRail("home")
-
-		expect(renewal).toHaveBeenCalledOnce()
-		expect(screen.getByRole("button", { name: "Open it" })).toBeTruthy()
-	})
-
-	const homeStage = () => slot("home-layout")?.getAttribute("data-stage")
-
-	const keepHomeTabOpen = () =>
-		localStorage.setItem(
-			`spaceTabs:${PERSONAL_SPACE_ID}`,
-			JSON.stringify({
-				tabs: [
-					{ href: "/home", isPinned: false, entries: ["/home"], index: 0 },
-				],
-				activeIndex: 0,
-			}),
-		)
-
-	const reportWindowFocus = async (isFocused: boolean) => {
-		act(() => {
-			for (const report of [...mounted.focusReports]) {
-				report(isFocused)
-			}
-		})
-		await settle()
-	}
-
-	const bringWindowBack = async () => {
-		await reportWindowFocus(false)
-		await reportWindowFocus(true)
-	}
-
-	const mountHomeSaidToNow = async () => {
-		const app = await mountAppWithTwoAgents()
-		const renewal = vi.spyOn(app.store, "renewMainChat")
-		const earlier = await app.store.mainChat(
-			app.firstOfSpace.id,
-			PERSONAL_SPACE_ID,
-		)
-		const saidAt = Date.now()
-		await sayInMainChat(app.store, earlier.id, saidAt)
-		await pressInRail("home")
-		return { ...app, renewal, earlier, saidAt }
-	}
-
-	type ArchivedChat = {
-		store: TranscriptStore
-		agentId: string
-		earlierId: string
-	}
-
-	const expectFreshHome = async ({
-		store,
-		agentId,
-		earlierId,
-	}: ArchivedChat) => {
-		const { id } = await store.mainChat(agentId, PERSONAL_SPACE_ID)
-		expect(id).not.toBe(earlierId)
-		expect(homeStage()).toBe("empty")
-		expect(screen.getByRole("button", { name: "Open it" })).toBeTruthy()
-	}
-
-	it("launches on a fresh Home, the main chat past the hour archived one click away", async () => {
-		const { firstOfSpace, store } = await mountAppWithTwoAgents()
-		const earlier = await store.mainChat(firstOfSpace.id, PERSONAL_SPACE_ID)
-		await sayInMainChat(store, earlier.id, Date.now() - MAIN_CHAT_PAUSE_MS - 1)
-		cleanup()
-		keepHomeTabOpen()
-
-		const router = await launchApp()
-
-		expect(router.state.location.pathname).toBe("/home")
-		await expectFreshHome({
-			store,
-			agentId: firstOfSpace.id,
-			earlierId: earlier.id,
-		})
-	})
-
-	it("opens a fresh Home when its window regains focus past the hour, keeping the chat on a return within it and on a blur", async () => {
-		const { renewal, earlier, saidAt, store, firstOfSpace } =
-			await mountHomeSaidToNow()
-
-		await bringWindowBack()
-
-		expect(renewal).not.toHaveBeenCalled()
-		expect(homeStage()).toBe("conversation")
-
-		vi.setSystemTime(saidAt + MAIN_CHAT_PAUSE_MS + 1)
-		await reportWindowFocus(false)
-
-		expect(renewal).not.toHaveBeenCalled()
-		expect(homeStage()).toBe("conversation")
-
-		await reportWindowFocus(true)
-
-		expect(renewal).toHaveBeenCalledOnce()
-		await expectFreshHome({
-			store,
-			agentId: firstOfSpace.id,
-			earlierId: earlier.id,
-		})
-	})
-
-	it("opens a fresh Home when its rail entry is pressed on the Home past the hour, keeping the chat within it", async () => {
-		const { renewal, earlier, saidAt, store, firstOfSpace } =
-			await mountHomeSaidToNow()
-
-		await pressInRail("home")
-
-		expect(renewal).not.toHaveBeenCalled()
-		expect(homeStage()).toBe("conversation")
-
-		vi.setSystemTime(saidAt + MAIN_CHAT_PAUSE_MS + 1)
-		await pressInRail("home")
-
-		expect(renewal).toHaveBeenCalledOnce()
-		await expectFreshHome({
-			store,
-			agentId: firstOfSpace.id,
-			earlierId: earlier.id,
-		})
-	})
-
-	it("opens a fresh Home when the person goes back to it from another page past the hour", async () => {
-		const { router, earlier, saidAt, store, firstOfSpace } =
-			await mountHomeSaidToNow()
-		await pressInRail("library")
-
-		vi.setSystemTime(saidAt + MAIN_CHAT_PAUSE_MS + 1)
-		act(() => {
-			router.history.back()
-		})
-		await settle()
-
-		expect(router.state.location.pathname).toBe("/home")
-		await expectFreshHome({
-			store,
-			agentId: firstOfSpace.id,
-			earlierId: earlier.id,
-		})
-	})
-
 	it.each<RailEntry>(["conversations", "missions", "library"])(
 		"leaves the Home for %s, the rail selecting that entry",
 		async (entry) => {
@@ -934,21 +696,79 @@ describe("the Home page", () => {
 		await settle()
 	}
 
-	it("frames the empty Home and its first message with no thread header and no routines trigger", async () => {
+	const composerText = () =>
+		(screen.getByRole("textbox") as HTMLTextAreaElement).value
+
+	const conversationsSeating = async (
+		store: TranscriptStore,
+		agentId: string,
+	) =>
+		(await store.conversations(PERSONAL_SPACE_ID)).filter(({ participants }) =>
+			participants.some(({ botId }) => botId === agentId),
+		)
+
+	const rosterRowNames = () =>
+		[...document.querySelectorAll("[data-slot='roster-row-name']")].map(
+			(name) => name.textContent,
+		)
+
+	const pickInComposer = async (agentName: string) => {
+		act(() => {
+			fireEvent.click(slot("home-agent-chip") as HTMLElement)
+		})
+		await settle()
+		act(() => {
+			fireEvent.click(screen.getByRole("menuitemradio", { name: agentName }))
+		})
+		await settle()
+	}
+
+	it("frames the fresh Home with no thread header and no routines trigger", async () => {
 		await mountAppWithTwoAgents()
 		await pressInRail("home")
 
 		expect(slot("home-layout")?.getAttribute("data-stage")).toBe("empty")
 		expect(threadChrome().header).toBeNull()
+		expect(threadChrome().identity).toBeNull()
 		expect(threadChrome().activityToggle).toBeNull()
+	})
+
+	it("opens the first message in a new conversation seating the picked agent, listed without a reload", async () => {
+		const { router, store, second } = await mountAppWithTwoAgents()
+		await pressInRail("home")
+		await pickInComposer(second.name)
 
 		await sendFromHome("Book the flights.")
 
-		expect(slot("home-layout")?.getAttribute("data-stage")).toBe("conversation")
-		expect(screen.getByText("Book the flights.")).toBeTruthy()
-		expect(threadChrome().header).toBeNull()
-		expect(threadChrome().identity).toBeNull()
-		expect(threadChrome().activityToggle).toBeNull()
+		const [created] = await conversationsSeating(store, second.id)
+		expect(router.state.location.pathname).toBe("/")
+		expect(router.state.location.search).toEqual({ conversation: created?.id })
+		expect(slot("home-layout")).toBeNull()
+		expect(screen.getAllByText("Book the flights.")).not.toHaveLength(0)
+		expect(rosterRowNames()).toContain(created?.title)
+	})
+
+	it("comes back to a fresh Home after a send, a second send opening a second conversation", async () => {
+		const { router, store, firstOfSpace } = await mountAppWithTwoAgents()
+		await pressInRail("home")
+		await sendFromHome("Book the flights.")
+
+		await pressInRail("home")
+
+		expect(slot("home-layout")?.getAttribute("data-stage")).toBe("empty")
+		expect(composerText()).toBe("")
+		expect(screen.queryByText("Book the flights.")).toBeNull()
+
+		await sendFromHome("Book the hotel.")
+
+		const opened = await conversationsSeating(store, firstOfSpace.id)
+		expect(opened.map(({ title }) => title).sort()).toEqual([
+			"Book the flights.",
+			"Book the hotel.",
+		])
+		expect(router.state.location.search).toEqual({
+			conversation: opened.find(({ title }) => title === "Book the hotel.")?.id,
+		})
 	})
 
 	it("shows no activity panel on the Home, even with the panel left open in Conversations", async () => {
@@ -977,7 +797,7 @@ describe("the Home page", () => {
 
 		await pressInRail("home")
 
-		expect(slot("home-layout")?.getAttribute("data-stage")).toBe("conversation")
+		expect(slot("home-layout")?.getAttribute("data-stage")).toBe("empty")
 		expect(slot("space-access-banner")?.getAttribute("data-reason")).toBe(
 			"removed",
 		)
@@ -985,17 +805,34 @@ describe("the Home page", () => {
 		expect(slot("chat-layout")).toBeNull()
 	})
 
-	it("keeps the Home frame and its composer when the first turn fails, the failure notice raised", async () => {
-		mounted.sessionFailure = { kind: "spawnFailed", detail: "no binary" }
-		await mountAppWithTwoAgents()
+	it("keeps the draft on the Home and raises a notice when the conversation can't be created", async () => {
+		const { router, store } = await mountAppWithTwoAgents()
+		vi.spyOn(store, "createConversation").mockRejectedValue(
+			new Error("disk full"),
+		)
 		await pressInRail("home")
 
 		await sendFromHome("Book the flights.")
 
-		expect(slot("home-layout")?.getAttribute("data-stage")).toBe("empty")
-		expect(slot("home-composer")).not.toBeNull()
-		expect(slot("chat-layout")).toBeNull()
-		expect(screen.getAllByText(/no binary/)).not.toHaveLength(0)
+		expect(router.state.location.pathname).toBe("/home")
+		expect(composerText()).toBe("Book the flights.")
+		expect(
+			screen.getAllByText(i18n.t("chat:home.failure.send.title")),
+		).not.toHaveLength(0)
+	})
+
+	it("keeps the draft on the Home and raises a notice when the message can't be sent", async () => {
+		const { router, store } = await mountAppWithTwoAgents()
+		vi.spyOn(store, "sendUserMessage").mockRejectedValue(new Error("disk full"))
+		await pressInRail("home")
+
+		await sendFromHome("Book the flights.")
+
+		expect(router.state.location.pathname).toBe("/home")
+		expect(composerText()).toBe("Book the flights.")
+		expect(
+			screen.getAllByText(i18n.t("chat:home.failure.send.title")),
+		).not.toHaveLength(0)
 	})
 
 	it("keeps the thread header and the activity panel of an agent opened in Conversations", async () => {
