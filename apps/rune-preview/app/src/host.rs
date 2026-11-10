@@ -461,7 +461,7 @@ mod tests {
 			let refused = installed.invoke::<Value>(write, json!({}));
 			assert!(matches!(refused, Err(HostError::WriteRefused { .. })), "{write}");
 		}
-		let reached = listener.accept().map(|(_, from)| from);
+		let reached = listener.accept();
 		assert!(
 			matches!(&reached, Err(failure) if failure.kind() == ErrorKind::WouldBlock),
 			"the installed host received {reached:?}"
