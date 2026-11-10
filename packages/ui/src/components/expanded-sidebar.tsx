@@ -3,8 +3,16 @@
 import { Children, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
-import { SectionDropZone } from "@workspace/ui/components/app-sidebar-roster-parts"
-import { FoldSection } from "@workspace/ui/components/app-sidebar-section"
+import {
+	RosterDropArea,
+	type RosterDropAreaProps,
+	SectionDropZone,
+} from "@workspace/ui/components/app-sidebar-roster-parts"
+import {
+	FoldSection,
+	NamedFoldSection,
+	type SectionHeadActions,
+} from "@workspace/ui/components/app-sidebar-section"
 import type { CollapsedSidebarListStatus } from "@workspace/ui/components/collapsed-sidebar"
 import { Icons } from "@workspace/ui/components/icons"
 import {
@@ -65,10 +73,13 @@ const FOOTER_SETTINGS =
 
 type ExpandedSidebarDestination = "newConversation" | "missions" | "library"
 
-type ExpandedSidebarSection = {
+type ExpandedSidebarSection = SectionHeadActions & {
 	id: string
 	name: string
 	rows: ReactNode
+	dropArea: Omit<RosterDropAreaProps, "children">
+	headSlotId?: string
+	emptySlotId?: string
 }
 
 type ExpandedSidebarProps = SpaceSwitcherProps & {
@@ -210,23 +221,34 @@ const ExpandedSidebarList = ({
 	return (
 		<>
 			{hasPinned ? (
-				<FoldSection name={t("rail.pinned")}>
-					<SidebarMenu>{pinned}</SidebarMenu>
-				</FoldSection>
+				<FoldSection name={t("rail.pinned")}>{pinned}</FoldSection>
 			) : null}
-			{sections.map(({ id, name, rows }) => (
-				<FoldSection key={id} name={name}>
-					{holdsRows(rows) ? (
-						<SidebarMenu>{rows}</SidebarMenu>
-					) : (
-						<SectionDropZone align="start" />
-					)}
-				</FoldSection>
-			))}
+			{sections.map(
+				(
+					{ id, name, rows, dropArea, headSlotId, emptySlotId, ...head },
+					rank,
+				) => (
+					<RosterDropArea key={id} {...dropArea}>
+						<NamedFoldSection
+							{...head}
+							isFirst={rank === 0}
+							isLast={rank === sections.length - 1}
+							section={{ id, name }}
+							slotId={headSlotId}
+						>
+							{holdsRows(rows) ? (
+								rows
+							) : (
+								<SectionDropZone align="start" slotId={emptySlotId} />
+							)}
+						</NamedFoldSection>
+					</RosterDropArea>
+				),
+			)}
 			{hasConversations ? (
 				<FoldSection name={t("rail.conversations")}>
 					<div className={CONVERSATIONS_BODY}>
-						<SidebarMenu>{conversations}</SidebarMenu>
+						{conversations}
 						{listEndSlot}
 					</div>
 				</FoldSection>
@@ -330,4 +352,5 @@ export {
 	ExpandedSidebar,
 	type ExpandedSidebarDestination,
 	type ExpandedSidebarProps,
+	type ExpandedSidebarSection,
 }

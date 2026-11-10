@@ -1839,6 +1839,9 @@ navigation-documentpanel--in-thread
 navigation-documentpanel--keeps-the-thread-when-toggled
 navigation-documentpanel--moves-from-the-capped-edge
 navigation-documentpanel--narrowed-to-the-thread-floor-then-scrolled
+navigation-expandedsidebar--a-1-slots-composed-as-the-app-expanded
+navigation-expandedsidebar--d-1-row-carried-to-conversations-expanded
+navigation-expandedsidebar--d-2-closed-section-hidden-during-lift-expanded
 navigation-expandedsidebar--e-1-no-agents-yet-expanded
 navigation-expandedsidebar--e-2-nothing-pinned-expanded
 navigation-expandedsidebar--e-3-empty-section-expanded
@@ -1847,6 +1850,7 @@ navigation-expandedsidebar--expanded-new-conversation
 navigation-expandedsidebar--l-1-loading-expanded
 navigation-expandedsidebar--l-2-failed-expanded
 navigation-expandedsidebar--l-3-loading-more-expanded
+navigation-expandedsidebar--n-1-named-section-expanded
 navigation-expandedsidebar--s-1-several-spaces-expanded
 navigation-expandedsidebar--s-2-shared-space-host-not-connected-expanded
 navigation-expandedsidebar--small-drift-keeps-space-expanded

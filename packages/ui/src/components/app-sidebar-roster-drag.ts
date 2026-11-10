@@ -28,7 +28,7 @@ const NOWHERE = "nowhere"
 type SlideLanding = number | typeof SORTED | typeof NOWHERE
 
 const FOCUSABLE =
-	'[data-slot="roster-section-trigger"], [data-slot="sidebar-menu-button"]'
+	'[data-slot="roster-section-trigger"], [data-slot="fold-section-trigger"], [data-slot="sidebar-menu-button"]'
 
 const headSlotOf = (sectionId: string) => `${sectionId}:head`
 
