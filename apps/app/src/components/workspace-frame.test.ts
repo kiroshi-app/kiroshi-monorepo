@@ -917,7 +917,7 @@ const foldHeaders = () =>
 
 const emptyLine = () => screen.queryByText(EMPTY_LINE)
 
-const seesPagesFilteredBy = (
+const filterPagesBy = (
 	store: TranscriptStore,
 	keeps: (row: ConversationInPage) => boolean,
 ) => {
@@ -937,12 +937,12 @@ const holdsNoAgent = (store: TranscriptStore) =>
 
 const holdsNoRow = (store: TranscriptStore) => {
 	holdsNoAgent(store)
-	seesPagesFilteredBy(store, () => false)
+	filterPagesBy(store, () => false)
 }
 
 const holdsRoomsOnly = (store: TranscriptStore) => {
 	holdsNoAgent(store)
-	seesPagesFilteredBy(store, ({ soloBotId }) => !soloBotId)
+	filterPagesBy(store, ({ soloBotId }) => !soloBotId)
 }
 
 const nameFieldFor = async (name: string) => {

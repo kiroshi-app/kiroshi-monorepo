@@ -302,14 +302,7 @@ const PINNED_ROWS = <PinnedRows />
 
 const CONVERSATION_ROWS = <ConversationRows />
 
-type ExpandedSlotElements = {
-	pinned: ReactNode
-	conversations: ReactNode
-}
-
-const ExpandedSlotElementsContext = createContext<ExpandedSlotElements | null>(
-	null,
-)
+const ExpandedSlotElementsContext = createContext<ExpandedSlots | null>(null)
 
 export const useExpandedSlotElements = () => {
 	const elements = useContext(ExpandedSlotElementsContext)
