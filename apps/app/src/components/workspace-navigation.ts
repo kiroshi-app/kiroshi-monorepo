@@ -2,6 +2,8 @@ import { useMemo } from "react"
 
 import type { SettingsNavigation } from "@/lib/navigation/use-settings-navigation"
 import type { useSwitcherSpaces } from "@/lib/spaces/use-joined-spaces"
+import { isListPage } from "@/lib/tabs/tab-pages"
+import { usePageShown } from "@/lib/tabs/use-page-shown"
 import type { WorkspaceTabs } from "@/lib/tabs/workspace-tabs"
 import type { RosterLines } from "@/lib/workspace/use-roster-lines"
 import type { RosterLists } from "@/lib/workspace/use-roster-lists"
@@ -33,11 +35,16 @@ export const useWorkspaceNavigation = ({
 	onSelectSpace,
 }: WorkspaceNavigationOptions): WorkspaceNavigation => {
 	const { badgesBySpaceId, rosterBots } = rosterLists
-	const { onCreateSpace, onOpenSpaceSettings, onSelectConversation } =
-		rosterLines.sidebarActions
+	const {
+		onCreateSpace,
+		onOpenSpaceSettings,
+		onSelectBot,
+		onSelectConversation,
+	} = rosterLines.sidebarActions
 	const { openMissionThread } = sidebarMissions
 	const user = overlay.userSettings
 	const search = overlay.search
+	const isListShown = usePageShown(tabs, isListPage)
 
 	return useMemo(() => {
 		const space = switcher.selectedSpace
@@ -59,10 +66,15 @@ export const useWorkspaceNavigation = ({
 				onNewConversation: navigation.openHome,
 				onSelectLibrary: navigation.openLibrary,
 				onSelectMissions: navigation.openMissions,
-				onOpenConversation: (id) =>
-					rosterBots.some((agent) => agent.id === id)
-						? navigation.openThread({ bot: id })
-						: onSelectConversation(id),
+				onOpenConversation: (id) => {
+					const isAgent = rosterBots.some((agent) => agent.id === id)
+					if (!isListShown) {
+						navigation.openThread(isAgent ? { bot: id } : { conversation: id })
+						return
+					}
+					if (isAgent) onSelectBot(id)
+					else onSelectConversation(id)
+				},
 				onOpenMission: openMissionThread,
 				spaces: switcher.spaces,
 				user,
@@ -74,6 +86,8 @@ export const useWorkspaceNavigation = ({
 		navigation,
 		onCreateSpace,
 		onOpenSpaceSettings,
+		isListShown,
+		onSelectBot,
 		onSelectConversation,
 		rosterBots,
 		openMissionThread,

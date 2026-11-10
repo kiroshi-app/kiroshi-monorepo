@@ -508,6 +508,21 @@ describe("the conversations of the collapsed sidebar", () => {
 		})
 	})
 
+	it("opens a conversation picked from the Missions page", async () => {
+		let roomId = ""
+		const { router } = await mountCollapsed(async (held) => {
+			roomId = (await roomIn(held, "Release train")).id
+		})
+		await navigateTo(router, "/missions")
+
+		await press(rail().getByRole("button", { name: "Release train" }))
+
+		expect(router.state.location.pathname).toBe("/")
+		expect(router.state.location.search).toMatchObject({
+			conversation: roomId,
+		})
+	})
+
 	it("shows the skeleton while the list is read", async () => {
 		await mountCollapsed(async ({ store }) => {
 			vi.spyOn(store, "bots").mockReturnValue(new Promise(() => undefined))
