@@ -4,7 +4,7 @@ mod tests;
 mod view;
 mod worker;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use kiroshi_core::joined_spaces::contract::{
 	self as joined_contract, JoinedSpace, JoinedSpaceError, JoinedSpaceRemovalReason,
@@ -78,6 +78,12 @@ struct Removal {
 	reason: RemovalReason,
 }
 
+pub enum Reach {
+	Open(Source),
+	Connecting,
+	Refused(HostError),
+}
+
 struct Opened {
 	space: model::Space,
 	content: SpaceContent,
@@ -93,6 +99,8 @@ pub struct State {
 	spaces: Option<Vec<Space>>,
 	joined: Vec<JoinedSpace>,
 	departed: Option<Departed>,
+	connected: HashSet<String>,
+	refused: HashMap<String, HostError>,
 	online_hosting: HashMap<String, bool>,
 	invitations: Invitations,
 	opening: Option<String>,
@@ -267,7 +275,30 @@ impl State {
 	}
 
 	pub fn is_joined(&self, id: &str) -> bool {
-		self.joined_space(id).is_some() || self.departed_from(id).is_some()
+		self.joined_of(id).is_some()
+	}
+
+	pub fn remote_id_of(&self, id: &str) -> Option<&str> {
+		let joined = self.joined_of(id)?;
+		Some(joined.remote_space_id.as_deref().unwrap_or(&joined.id))
+	}
+
+	fn reach_of(&self, local: &Source, space_id: &str) -> Reach {
+		if !self.is_joined(space_id) {
+			return Reach::Open(local.clone());
+		}
+		if self.connected.contains(space_id) {
+			return Reach::Open(local.of_space(space_id));
+		}
+		match self.refused.get(space_id) {
+			Some(failure) => Reach::Refused(failure.clone()),
+			None => Reach::Connecting,
+		}
+	}
+
+	fn connect_joined(&mut self, joined_id: &str) {
+		self.refused.remove(joined_id);
+		self.queue(Call::Connect(joined_id.to_owned()));
 	}
 
 	#[cfg(test)]
@@ -282,7 +313,7 @@ impl State {
 		let space = joined_shown_space(self.joined_space(id)?);
 		self.opening = None;
 		self.departed = None;
-		self.queue(Call::Connect(id.to_owned()));
+		self.connect_joined(id);
 		Some(Opened {
 			space,
 			content: SpaceContent { agents: Vec::new(), conversations: Vec::new() },
@@ -366,6 +397,11 @@ impl State {
 		self.joined.iter().find(|joined| joined.id == id)
 	}
 
+	fn joined_of(&self, id: &str) -> Option<&JoinedSpace> {
+		let departed = self.departed_from(id).map(|departed| &departed.joined);
+		self.joined_space(id).or(departed)
+	}
+
 	fn departed_from(&self, id: &str) -> Option<&Departed> {
 		self.departed.as_ref().filter(|departed| departed.joined.id == id)
 	}
@@ -391,7 +427,7 @@ impl State {
 			return;
 		}
 		let name = self.joined_space(joined_id).map_or(joined_id, |joined| &joined.name).to_owned();
-		self.raise(named(OPEN_REFUSED, &name), failure);
+		self.raise_in(joined_id, named(OPEN_REFUSED, &name), failure);
 	}
 
 	fn read_hosting(&mut self) {
@@ -412,6 +448,10 @@ impl State {
 
 	fn raise(&mut self, title: String, failure: &HostError) {
 		self.to_raise.push(Notice::of_host_failure(&title, failure));
+	}
+
+	fn raise_in(&mut self, space_id: &str, title: String, failure: &HostError) {
+		self.to_raise.push(Notice::of_host_failure(&title, failure).of_space(space_id.to_owned()));
 	}
 
 	fn raise_and_relist(&mut self, title: String, failure: &HostError) {
@@ -457,10 +497,17 @@ impl State {
 				let is_up = state.as_ref().is_ok_and(is_online);
 				self.online_hosting.insert(space_id, is_up);
 			}
+			Answer::Loaded { space_id, content } if self.is_joined(&space_id) => {
+				return self.joined_loaded(&space_id, content, shown);
+			}
 			Answer::Loaded { space_id, content } => return self.loaded(&space_id, content),
-			Answer::Connected { outcome: Ok(()), .. } => {}
+			Answer::Connected { joined_id, outcome: Ok(()) } => {
+				self.connected.insert(joined_id.clone());
+				self.queue(Call::Load(joined_id));
+			}
 			Answer::Connected { joined_id, outcome: Err(failure) } => {
-				self.connection_refused(&joined_id, &failure, shown)
+				self.connection_refused(&joined_id, &failure, shown);
+				self.refused.insert(joined_id, failure);
 			}
 			Answer::Remembered(Ok(())) => {}
 			Answer::Remembered(Err(failure)) => {
@@ -532,6 +579,25 @@ impl State {
 		}
 	}
 
+	fn joined_loaded(
+		&mut self,
+		joined_id: &str,
+		content: Result<SpaceContent, HostError>,
+		shown: &str,
+	) -> Option<Opened> {
+		if joined_id != shown {
+			return None;
+		}
+		let space = joined_shown_space(self.joined_of(joined_id)?);
+		match content {
+			Ok(content) => Some(Opened { space, content }),
+			Err(failure) => {
+				self.raise_in(joined_id, named(OPEN_REFUSED, &space.name), &failure);
+				None
+			}
+		}
+	}
+
 	fn answers(&self) -> Vec<Answer> {
 		self.worker.as_ref().map(Worker::answers).unwrap_or_default()
 	}
@@ -556,6 +622,26 @@ impl State {
 
 fn shown_id(app: &App) -> Option<String> {
 	app.ready().map(|ready| ready.space.id.clone())
+}
+
+pub fn reach_of(app: &App, space_id: &str) -> Option<Reach> {
+	let local = &app.ready()?.source;
+	Some(app.surfaces.s02_rail.reach_of(local, space_id))
+}
+
+pub fn source_of(app: &App, space_id: &str) -> Option<Source> {
+	match reach_of(app, space_id)? {
+		Reach::Open(source) => Some(source),
+		Reach::Connecting | Reach::Refused(_) => None,
+	}
+}
+
+pub fn reconnect(app: &mut App, joined_id: &str) {
+	app.surfaces.s02_rail.connect_joined(joined_id);
+}
+
+pub fn shown_source(app: &App) -> Option<Source> {
+	source_of(app, &app.ready()?.space.id)
 }
 
 pub fn connected(app: &mut App) {

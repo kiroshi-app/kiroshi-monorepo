@@ -15,6 +15,7 @@ pub enum Activity {
 	Searching,
 	Working,
 	Writing,
+	Waiting,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -26,20 +27,24 @@ pub enum Motion {
 pub struct Face<'a> {
 	pub name: &'a str,
 	pub hue: Option<f32>,
+	pub image: Option<&'a Image>,
 	pub motion: Motion,
 }
 
 impl<'a> Face<'a> {
 	pub fn still(name: &'a str, hue: Option<f32>) -> Face<'a> {
-		Face { name, hue, motion: Motion::Still }
+		Face { name, hue, image: None, motion: Motion::Still }
 	}
 
 	pub fn draw(&self, size: f32, t: &Tokens) -> El {
 		let dark = t.dark;
-		let motion = if t.reduced_motion { Motion::Still } else { self.motion };
-		let (ink, ground) = colours(self.name, self.hue, dark);
 		let side = f64::from(size);
 		let outline = Outline::of_width(side);
+		if let Some(image) = self.image.filter(|image| image.size().is_some()) {
+			return self.picture(image, size, &outline, dark);
+		}
+		let motion = if t.reduced_motion { Motion::Still } else { self.motion };
+		let (ink, ground) = colours(self.name, self.hue, dark);
 		let mut shape = Shape::new().view_box(size, size).fill_path(&outline.path(0.0), ground);
 		for (cell, tone) in grid().cells.iter().zip(tones(&field(self.name), motion)) {
 			let Some(opacity) = opacity_of(tone) else { continue };
@@ -49,6 +54,21 @@ impl<'a> Face<'a> {
 			shape = shape.fill(corners, ink.alpha(opacity));
 		}
 		canvas(glazed(shape, &outline, side, dark)).size(size, size).label(self.name)
+	}
+
+	fn picture(&self, image: &Image, size: f32, outline: &Outline, dark: bool) -> El {
+		let square = || el().size(size, size);
+		let picture = outline.cut_centres().into_iter().fold(
+			square().pixels_fit(image.pixels(), SurfaceFit::Fill),
+			|kept, [x, y]| {
+				square().child(kept).cutout_circle([x as f32, y as f32], CUT_RADIUS, CUT_RADIUS)
+			},
+		);
+		let outlined = glazed(Shape::new().view_box(size, size), outline, f64::from(size), dark);
+		square()
+			.label(self.name)
+			.child(picture.absolute(0.0, 0.0))
+			.child(canvas(outlined).absolute(0.0, 0.0).size(size, size))
 	}
 }
 
@@ -128,6 +148,8 @@ const RIPPLE_SPAN: f64 = 0.5;
 const OUTER_HALF_WIDTH: f64 = 200.5;
 const OUTER_HALF_HEIGHT: f64 = 181.5;
 const OUTLINE_SIDE: f64 = OUTER_HALF_WIDTH * 2.0;
+const CUT_RADIUS: f32 = 10_000.0;
+const CUT_STEPS: usize = 12;
 const COS_30: f64 = 0.866_025_403_784_438_6;
 const TAN_30: f64 = 0.577_350_269_189_625_8;
 const TURN: f64 = PI / 3.0;
@@ -386,6 +408,7 @@ impl Activity {
 			Activity::Searching => 1400.0,
 			Activity::Working => 1000.0,
 			Activity::Writing => 2000.0,
+			Activity::Waiting => 3000.0,
 		}
 	}
 
@@ -395,12 +418,14 @@ impl Activity {
 			Activity::Searching => across(x) * SWEEP_SPAN,
 			Activity::Working => fraction(y.atan2(x) / TAU),
 			Activity::Writing => across(y) * SWEEP_SPAN + across(x) * 0.05,
+			Activity::Waiting => 0.5,
 		}
 	}
 
 	fn wave(self, cycle: f64) -> f64 {
 		match self {
 			Activity::Writing => f64::from(u8::from(cycle < REVEAL_SPAN)),
+			Activity::Waiting => 0.5 - 0.5 * (TAU * cycle).cos(),
 			_ => pulse(cycle),
 		}
 	}
@@ -534,6 +559,19 @@ impl Outline {
 		path.close()
 	}
 
+	fn cut_centres(&self) -> Vec<[f64; 2]> {
+		let reach = f64::from(CUT_RADIUS);
+		(0..CUT_STEPS)
+			.filter(|step| step % (CUT_STEPS / 2) != 0)
+			.map(|step| {
+				let angle = step as f64 * TURN / 2.0;
+				let across = if step % 2 == 1 { self.apothem } else { self.apothem / COS_30 };
+				let distance = across + self.rounding + reach;
+				[self.centre + distance * angle.cos(), self.centre + distance * angle.sin()]
+			})
+			.collect()
+	}
+
 	fn top_chain(&self, drop: f64) -> Vec<[f32; 2]> {
 		let arcs = [
 			(3, PI, 7.0 * PI / 6.0),
@@ -620,6 +658,38 @@ mod tests {
 		assert_eq!(companion_seed("a"), 3_826_002_220);
 		assert!((Random(1).next() - 0.627_073_940_588_161_3).abs() < 1e-15);
 		assert_eq!([hue_shift("Wren"), hue_shift("Juniper"), hue_shift("Atlas")], [7.0, -1.0, 6.0]);
+	}
+
+	#[test]
+	fn the_cuts_keep_the_whole_hexagon_and_leave_no_band_outside_it() {
+		let side = 24.0;
+		let outline = Outline::of_width(side);
+		let band = side * 0.006;
+		let grown = Outline::of_half(
+			side / 2.0 + band,
+			OUTER_HALF_HEIGHT * side / OUTLINE_SIDE + band,
+			side / 2.0,
+		);
+		let cuts = outline.cut_centres();
+		let steps = 480;
+		for (column, row) in (0..steps).flat_map(|column| (0..steps).map(move |row| (column, row)))
+		{
+			let [x, y] = [column, row].map(|at| (f64::from(at) + 0.5) * side / f64::from(steps));
+			let is_cut = cuts.iter().any(|[cx, cy]| (x - cx).hypot(y - cy) < f64::from(CUT_RADIUS));
+			let (u, v) = (x - side / 2.0, y - side / 2.0);
+			assert!(!(is_cut && outline.contains(u, v)), "cut inside the hexagon at {x}, {y}");
+			assert!(is_cut || grown.contains(u, v), "uncovered band at {x}, {y}");
+		}
+	}
+
+	#[test]
+	fn waiting_breathes_the_whole_field_from_rest_to_its_dimmest_halfway() {
+		let waiting = |at_ms| Motion::Running { activity: Activity::Waiting, at_ms };
+		let full =
+			|motion| tones(&field("Wren"), motion).into_iter().filter(|t| *t == Tone::Full).count();
+
+		assert_eq!(full(waiting(0.0)), full(Motion::Still));
+		assert!(full(waiting(1500.0)) < full(Motion::Still));
 	}
 
 	#[test]

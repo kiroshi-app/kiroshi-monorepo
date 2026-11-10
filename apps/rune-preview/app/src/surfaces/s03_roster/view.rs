@@ -74,6 +74,7 @@ fn pile_of<'a>(app: &App, row: &'a ConversationInPage) -> Vec<Face<'a>> {
 		.map(|seat| Face {
 			name: &seat.name,
 			hue: hue_value(seat.avatar_blot),
+			image: None,
 			motion: motion_of(app, Some(row), &seat.bot_id),
 		})
 		.collect()
@@ -87,6 +88,7 @@ fn row_of<'a>(app: &App, drawn: &'a Drawn, selected: Option<&str>) -> Row<'a> {
 			let face = Face {
 				name: &bot.name,
 				hue: hue_value(bot.avatar_blot),
+				image: None,
 				motion: motion_of(app, solo, &bot.id),
 			};
 			let title = Some(bot.title.as_str()).filter(|title| !title.is_empty());

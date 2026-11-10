@@ -4,7 +4,9 @@ use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, TryRecvError};
 use std::thread;
 use std::time::Duration;
 
-use kiroshi_core::agent::contract::ConnectionState;
+use kiroshi_core::agent::contract::{
+	AgentEvent as CoreAgentEvent, ConnectionState, RuntimeScope, ScopedEvent as CoreScopedEvent,
+};
 use serde_json::Value;
 use tungstenite::client::IntoClientRequest;
 use tungstenite::handshake::HandshakeError;
@@ -22,6 +24,8 @@ use crate::surfaces::{s02_rail, s03_roster, s04_boot, s07_approvals, s14_library
 const ACCOUNT_CHANGED: &str = "account://changed";
 
 const AGENT_EVENT: &str = "agent://event";
+
+const CONNECTION_CHANGED: &str = "connectionChanged";
 
 const MESSAGE_STORED: &str = "conversation://message-stored";
 
@@ -43,6 +47,11 @@ pub enum HostEvent {
 	Listening,
 	AccountChanged(KiroshiAccountState),
 	Agent(ScopedEvent),
+	Connection {
+		scope: RuntimeScope,
+		state: ConnectionState,
+		closing: Option<Box<s07_approvals::Heard>>,
+	},
 	MessageStored(Message),
 	MissionChanged(MissionChanged),
 	Companion(Heard),
@@ -52,8 +61,20 @@ pub enum HostEvent {
 	Device(s04_boot::Heard),
 	Spaces(s02_rail::Heard),
 	Lagged,
-	Unreadable { event: String, cause: String },
+	Unreadable {
+		event: String,
+		cause: String,
+	},
 	Lost(String),
+}
+
+pub fn of_joined_space(event: HostEvent, remote_id: &str, joined_id: &str) -> Option<HostEvent> {
+	match event {
+		HostEvent::AccountChanged(_) | HostEvent::Device(_) | HostEvent::Spaces(_) => None,
+		HostEvent::Roster(heard) => Some(HostEvent::Roster(heard.in_space(remote_id, joined_id))),
+		HostEvent::Library(heard) => Some(HostEvent::Library(heard.in_space(remote_id, joined_id))),
+		heard => Some(heard),
+	}
 }
 
 pub enum JoinedHeard {
@@ -265,6 +286,7 @@ fn named(event: &str, payload: Value) -> Option<HostEvent> {
 			serde_json::from_value(payload)
 				.map_or_else(|failure| unreadable(event, failure), HostEvent::AccountChanged),
 		),
+		AGENT_EVENT if is_connection_change(&payload) => connection_heard(event, payload),
 		AGENT_EVENT => Some(match s07_approvals::heard_of(&payload) {
 			Some(heard) => {
 				heard.map_or_else(|failure| unreadable(event, failure), HostEvent::Approvals)
@@ -290,6 +312,26 @@ fn named(event: &str, payload: Value) -> Option<HostEvent> {
 			Some(heard) => roster_heard(event, heard),
 			None => spaces_heard(event, &payload).or_else(|| companion_heard(event, payload)),
 		},
+	}
+}
+
+fn is_connection_change(payload: &Value) -> bool {
+	payload.pointer("/event/type").and_then(Value::as_str) == Some(CONNECTION_CHANGED)
+}
+
+fn connection_heard(event: &str, payload: Value) -> Option<HostEvent> {
+	let closing = match s07_approvals::heard_of(&payload).transpose() {
+		Ok(closing) => closing.map(Box::new),
+		Err(failure) => return Some(unreadable(event, failure)),
+	};
+	match serde_json::from_value::<CoreScopedEvent>(payload) {
+		Ok(CoreScopedEvent {
+			scope: Some(scope),
+			event: CoreAgentEvent::ConnectionChanged { state },
+			..
+		}) => Some(HostEvent::Connection { scope, state, closing }),
+		Ok(_) => None,
+		Err(failure) => Some(unreadable(event, failure)),
 	}
 }
 

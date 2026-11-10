@@ -1,3 +1,5 @@
+#[cfg(test)]
+mod joined_tests;
 pub mod notice;
 
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -17,8 +19,9 @@ use kiroshi_rune_os::policy::{NoticeKind, NoticeTarget};
 use kiroshi_rune_os::{BannerOutcome, Notifier};
 
 use crate::content;
+use crate::conversations::Connections;
 use crate::dev_profile::{self, DevProfile};
-use crate::events::HostEvent;
+use crate::events::{self, HostEvent, JoinedHeard};
 use crate::host::{Host, HostError, Profile};
 use crate::images::{Fetched, Images};
 use crate::local;
@@ -30,7 +33,7 @@ use crate::model::{
 use crate::navigation::{HeldPage, Navigation, Route};
 use crate::notices::Notices;
 use crate::runs::Runs;
-use crate::source::Source;
+use crate::source::{self, JoinedEvent, Source};
 use crate::surfaces::s04_boot::{self, Step};
 use crate::surfaces::s08_missions::{self, Opened, Opening};
 use crate::surfaces::{
@@ -52,6 +55,8 @@ const LONGEST_UNREAD: &str = "Couldn't find the longest conversation.";
 const HOST_LOST: &str = "Stopped hearing from the host.";
 
 const CONVERSATION_DELETED: &str = "The conversation of this tab was deleted.";
+
+const SESSION_UNCHECKED: &str = "Couldn't check the agent's connection.";
 
 pub enum Workspace {
 	Connecting,
@@ -214,10 +219,12 @@ pub enum Inbound {
 	Connected(Result<Ready, HostError>),
 	ThreadRead { conversation_id: String, messages: Result<Vec<Message>, HostError> },
 	Host(HostEvent),
+	Joined(JoinedEvent),
 	Image(Fetched),
 	DevProfile(DevProfile),
 	Longest { space_id: String, found: Result<Option<Longest>, HostError> },
 	Banner(BannerOutcome),
+	SessionChecked(Result<(), HostError>),
 }
 
 #[derive(Clone)]
@@ -245,6 +252,7 @@ pub struct App {
 	pub notice: NoticeBoard,
 	pub dev_profile: Option<DevProfile>,
 	pub runs: Runs,
+	pub connections: Connections,
 	pub clock_ms: f64,
 	pub math: Typesetter,
 	pub pane: Pane,
@@ -277,6 +285,7 @@ impl App {
 			notice: NoticeBoard::default(),
 			dev_profile: None,
 			runs: Runs::default(),
+			connections: Connections::default(),
 			math: Typesetter::default(),
 			pane: Pane::Conversations,
 			host_profile: Profile::Installed,
@@ -294,13 +303,11 @@ impl App {
 		self.images.start(ImageCache::new(waker.clone()));
 		self.surfaces.s10_agent_settings.attach(waker.clone());
 		self.surfaces.s04_boot.attach(waker.clone());
-		let outbox = Outbox { sender: self.pending.clone(), waker };
-		let heard = outbox.clone();
+		let heard = self.open_outbox(waker);
 		self.notices
 			.attach(Box::new(Notifier::new(self.host_profile.identifier(), move |outcome| {
 				heard.deliver(Inbound::Banner(outcome))
 			})));
-		self.outbox = Some(outbox);
 		s01_chrome::restore(self);
 		if matches!(self.workspace, Workspace::Connecting) {
 			self.connect();
@@ -312,6 +319,14 @@ impl App {
 			(true, false) => self.dev_profile = Some(DevProfile::default()),
 			(false, _) => {}
 		}
+	}
+
+	fn open_outbox(&mut self, waker: Waker) -> Outbox {
+		let outbox = Outbox { sender: self.pending.clone(), waker };
+		let joined = outbox.clone();
+		source::joined_sources().hear(move |event| joined.deliver(Inbound::Joined(event)));
+		self.outbox = Some(outbox.clone());
+		outbox
 	}
 
 	pub fn connect(&mut self) {
@@ -375,11 +390,15 @@ impl App {
 			return;
 		};
 		let thread = Thread::of_conversation(conversation);
-		let host = ready.source.clone();
+		let solo_bot_id = conversation.solo_bot_id.clone();
+		let Some(host) = s02_rail::shown_source(self) else { return };
 		self.mission = None;
 		self.thread = Some(thread);
 		self.read_thread(host.clone(), conversation_id.to_owned());
-		s05_thread::open_conversation(self, conversation_id);
+		if let Some(bot_id) = solo_bot_id.filter(|_| checks_sessions(&host)) {
+			self.check_session(host.clone(), conversation_id.to_owned(), bot_id);
+		}
+		s05_thread::open_conversation(self, conversation_id, host.clone());
 		let conversation_id = conversation_id.to_owned();
 		self.work(move |outbox| {
 			let missions =
@@ -440,8 +459,8 @@ impl App {
 	pub fn open_mission_thread(&mut self, conversation_id: &str, title: &str, bot: Option<&Agent>) {
 		let Some(host) = self.ready().map(|ready| ready.source.clone()) else { return };
 		self.thread = Some(Thread::of_mission(conversation_id, title, bot));
-		self.read_thread(host, conversation_id.to_owned());
-		s05_thread::open_conversation(self, conversation_id);
+		self.read_thread(host.clone(), conversation_id.to_owned());
+		s05_thread::open_conversation(self, conversation_id, host);
 	}
 
 	fn missions_of(
@@ -513,12 +532,17 @@ impl App {
 				self.thread_read(&conversation_id, messages)
 			}
 			Inbound::Host(event) => self.host_event(event),
+			Inbound::Joined(event) => self.joined_event(event),
 			Inbound::Image(fetched) => self.images.landed(fetched),
 			Inbound::Banner(BannerOutcome::Clicked(target)) => self.notice_clicked(target),
 			Inbound::Banner(BannerOutcome::Refused { target, failure }) => {
 				self.notices.banner_refused(&target, &failure)
 			}
 			Inbound::DevProfile(profile) => self.dev_profile = Some(profile),
+			Inbound::SessionChecked(Ok(())) => {}
+			Inbound::SessionChecked(Err(failure)) => {
+				self.raise(Notice::of_host_failure(SESSION_UNCHECKED, &failure))
+			}
 		}
 	}
 
@@ -548,8 +572,26 @@ impl App {
 	}
 
 	fn reload_visible_thread(&self) {
-		let (Some(ready), Some(thread)) = (self.ready(), self.thread.as_ref()) else { return };
-		self.read_thread(ready.source.clone(), thread.conversation_id.clone());
+		let (Some(host), Some(thread)) = (s02_rail::shown_source(self), self.thread.as_ref())
+		else {
+			return;
+		};
+		self.read_thread(host, thread.conversation_id.clone());
+	}
+
+	fn check_session(&self, host: Source, conversation_id: String, bot_id: String) {
+		self.work(move |outbox| {
+			let scope = json!({
+				"conversationId": conversation_id,
+				"botId": bot_id,
+				"runtimeSessionId": "",
+				"epoch": 0,
+			});
+			let checked = host
+				.invoke::<serde_json::Value>("agent_check", json!({ "scope": scope }))
+				.map(|_| ());
+			outbox.deliver(Inbound::SessionChecked(checked));
+		});
 	}
 
 	fn read_thread(&self, host: Source, conversation_id: String) {
@@ -576,7 +618,7 @@ impl App {
 		}
 	}
 
-	fn host_event(&mut self, event: HostEvent) {
+	pub(crate) fn host_event(&mut self, event: HostEvent) {
 		self.surfaces.s05_thread.heard(&event);
 		match event {
 			HostEvent::Agent(scoped) => {
@@ -587,6 +629,12 @@ impl App {
 				let Some(thread) = self.thread.as_mut() else { return };
 				if thread.shows(&scope.conversation_id) {
 					thread.streamed(&scope.bot_id, scoped.event);
+				}
+			}
+			HostEvent::Connection { scope, state, closing } => {
+				self.connections.changed(&scope, state);
+				if let Some(closing) = closing {
+					self.surfaces.s07_approvals.heard(*closing);
 				}
 			}
 			HostEvent::MessageStored(message) => {
@@ -628,6 +676,17 @@ impl App {
 				HOST_LOST,
 				format!("{reason}. Restart the preview to listen again."),
 			)),
+		}
+	}
+
+	fn joined_event(&mut self, JoinedEvent { space_id, heard }: JoinedEvent) {
+		let JoinedHeard::Host(event) = heard else { return };
+		if self.ready().is_none_or(|ready| ready.space.id != space_id) {
+			return;
+		}
+		let Some(remote_id) = self.surfaces.s02_rail.remote_id_of(&space_id) else { return };
+		if let Some(event) = events::of_joined_space(event, remote_id, &space_id) {
+			self.host_event(event);
 		}
 	}
 
@@ -686,6 +745,10 @@ impl App {
 			eprintln!("a host call did not start: {failure}");
 		}
 	}
+}
+
+fn checks_sessions(source: &Source) -> bool {
+	source.running_profile() != Some(Profile::Installed)
 }
 
 pub fn connected(profile: Profile) -> Result<Ready, HostError> {
@@ -795,14 +858,18 @@ pub fn whole_thread(host: &Source, conversation_id: &str) -> Result<Vec<Message>
 mod tests {
 	use std::cell::RefCell;
 	use std::rc::Rc;
+	use std::sync::Arc;
 
 	use kiroshi_rune_os::policy::Notice;
 	use kiroshi_rune_os::{Gesture, GestureFailure};
 
 	use super::*;
+	use kiroshi_core::agent::contract::ConnectionState;
+
 	use crate::model::{ScopedEvent, StreamedMessage, TurnEnded};
 	use crate::notices::fake::{FakeDesktop, Record};
 	use crate::source::Source;
+	use crate::surfaces::s07_approvals;
 
 	fn thread() -> Thread {
 		Thread {
@@ -1055,5 +1122,152 @@ mod tests {
 		assert!(matches!(app.pane, Pane::Conversations));
 		assert_eq!(app.thread.as_ref().map(|thread| thread.conversation_id.as_str()), Some("c-2"));
 		assert_eq!(record.borrow().raised, 1);
+	}
+
+	fn connection_frame(conversation_id: &str, bot_id: &str, state: &str) -> String {
+		json!({
+			"event": "agent://event",
+			"payload": {
+				"scope": {
+					"conversationId": conversation_id,
+					"botId": bot_id,
+					"runtimeSessionId": "session",
+					"epoch": 1,
+				},
+				"event": { "type": "connectionChanged", "state": state },
+			},
+		})
+		.to_string()
+	}
+
+	fn hear_frame(app: &mut App, frame: &str) {
+		let event = crate::events::parsed(frame).expect("the frame is heard");
+		app.host_event(event);
+	}
+
+	fn connection_of(app: &App, conversation_id: &str) -> ConnectionState {
+		app.connections.of(conversation_id, "wren")
+	}
+
+	fn shown_titles(app: &App) -> Vec<String> {
+		notice::shown(app).into_iter().map(|notice| notice.title.clone()).collect()
+	}
+
+	#[test]
+	fn an_opened_solo_conversation_starts_checking() {
+		let (mut app, _) = notifying_app(true);
+
+		app.open("c-1");
+
+		assert_eq!(connection_of(&app, "c-1"), ConnectionState::Checking);
+	}
+
+	#[test]
+	fn a_session_check_answering_ready_or_unavailable_sets_the_state_of_its_agent() {
+		let (mut app, _) = notifying_app(true);
+		app.open("c-1");
+
+		hear_frame(&mut app, &connection_frame("c-1", "wren", "ready"));
+		let ready = connection_of(&app, "c-1");
+		hear_frame(&mut app, &connection_frame("c-1", "wren", "unavailable"));
+
+		assert_eq!(ready, ConnectionState::Ready);
+		assert_eq!(connection_of(&app, "c-1"), ConnectionState::Unavailable);
+	}
+
+	#[test]
+	fn a_crashed_session_sets_crashed_and_closes_its_prompts() {
+		let (mut app, _) = notifying_app(true);
+		app.open("c-1");
+		let frame = connection_frame("c-1", "wren", "crashed");
+
+		let heard = crate::events::parsed(&frame).expect("the frame is heard");
+		let closing = match &heard {
+			HostEvent::Connection { closing, .. } => closing.as_deref(),
+			_ => None,
+		};
+		let closes_prompts = matches!(
+			closing,
+			Some(s07_approvals::Heard::Closed { scope })
+				if scope.conversation_id == "c-1" && scope.bot_id == "wren"
+		);
+		app.host_event(heard);
+
+		assert!(closes_prompts);
+		assert_eq!(connection_of(&app, "c-1"), ConnectionState::Crashed);
+	}
+
+	#[test]
+	fn a_ready_session_closes_no_prompt() {
+		let heard = crate::events::parsed(&connection_frame("c-1", "wren", "ready"));
+
+		assert!(matches!(heard, Some(HostEvent::Connection { closing: None, .. })));
+	}
+
+	#[test]
+	fn a_connection_is_held_for_a_conversation_that_is_not_open() {
+		let (mut app, _) = notifying_app(true);
+
+		hear_frame(&mut app, &connection_frame("c-2", "wren", "ready"));
+
+		assert!(app.thread.is_none());
+		assert_eq!(connection_of(&app, "c-2"), ConnectionState::Ready);
+	}
+
+	#[test]
+	fn another_conversation_or_agent_leaves_the_open_one_unchanged() {
+		let (mut app, _) = notifying_app(true);
+		app.open("c-1");
+
+		hear_frame(&mut app, &connection_frame("c-2", "wren", "crashed"));
+		hear_frame(&mut app, &connection_frame("c-1", "ada", "ready"));
+
+		assert_eq!(connection_of(&app, "c-1"), ConnectionState::Checking);
+		assert_eq!(app.connections.of("c-1", "ada"), ConnectionState::Ready);
+	}
+
+	#[test]
+	fn an_unreadable_connection_change_raises_the_unreadable_event_notice() {
+		let (mut app, _) = notifying_app(true);
+
+		hear_frame(&mut app, &connection_frame("c-1", "wren", "asleep"));
+
+		assert_eq!(shown_titles(&app), vec!["Couldn't read a agent://event event."]);
+		assert_eq!(connection_of(&app, "c-1"), ConnectionState::Checking);
+	}
+
+	#[test]
+	fn a_failed_session_check_raises_a_notice() {
+		let (mut app, _) = notifying_app(true);
+
+		app.received(Inbound::SessionChecked(Err(HostError::WriteRefused {
+			command: "agent_check".into(),
+		})));
+
+		assert_eq!(shown_titles(&app), vec![SESSION_UNCHECKED]);
+	}
+
+	#[test]
+	fn an_installed_host_opens_a_solo_conversation_without_a_session_check() {
+		let (mut app, _) = notifying_app(true);
+		if let Some(ready) = app.ready_mut() {
+			ready.source = Source::Running(Host::installed_on(0, ""));
+		}
+		app.outbox = Some(Outbox { sender: app.pending.clone(), waker: Arc::new(|| {}) });
+
+		app.open("c-1");
+		let landed: Vec<Inbound> = (0..2)
+			.map(|_| app.inbox.recv_timeout(Duration::from_secs(10)).expect("a read lands"))
+			.collect();
+		let is_checked = landed.iter().any(|inbound| matches!(inbound, Inbound::SessionChecked(_)));
+		let late = app.inbox.recv_timeout(Duration::from_millis(200));
+		for inbound in landed {
+			app.received(inbound);
+		}
+
+		assert!(!is_checked);
+		assert!(late.is_err());
+		assert!(!shown_titles(&app).contains(&SESSION_UNCHECKED.to_owned()));
+		assert_eq!(connection_of(&app, "c-1"), ConnectionState::Checking);
 	}
 }

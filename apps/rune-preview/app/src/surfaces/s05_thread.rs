@@ -66,7 +66,8 @@ impl State {
 	}
 
 	pub fn use_source(&mut self, source: Source) {
-		self.source.get_or_insert(source);
+		self.flush();
+		self.source = Some(source);
 	}
 
 	pub fn conversation_id(&self) -> Option<&str> {
@@ -116,7 +117,7 @@ impl State {
 		self.load_older();
 	}
 
-	fn take_answers(&mut self) -> bool {
+	pub(crate) fn take_answers(&mut self) -> bool {
 		let answers = self.worker.as_ref().map(Worker::answers).unwrap_or_default();
 		let changed = !answers.is_empty();
 		for answer in answers {
@@ -147,6 +148,7 @@ impl State {
 			| HostEvent::Library(_)
 			| HostEvent::Roster(_)
 			| HostEvent::Approvals(_)
+			| HostEvent::Connection { .. }
 			| HostEvent::Device(_)
 			| HostEvent::Spaces(_)
 			| HostEvent::AccountChanged(_)
@@ -352,19 +354,20 @@ impl State {
 
 	fn flush(&mut self) {
 		if self.worker.is_none()
-			&& let (Some(source), Some(waker)) = (self.source.as_ref(), self.waker.as_ref())
+			&& let Some(waker) = self.waker.as_ref()
 		{
-			self.worker = Worker::spawn(source.clone(), waker.clone());
+			self.worker = Worker::spawn(waker.clone());
 		}
-		let Some(worker) = self.worker.as_ref() else { return };
+		let (Some(worker), Some(source)) = (self.worker.as_ref(), self.source.as_ref()) else {
+			return;
+		};
 		for call in self.queued.drain(..) {
-			worker.send(call);
+			worker.send(source.clone(), call);
 		}
 	}
 }
 
-pub fn open_conversation(app: &mut App, conversation_id: &str) {
-	let Some(source) = app.ready().map(|ready| ready.source.clone()) else { return };
+pub fn open_conversation(app: &mut App, conversation_id: &str, source: Source) {
 	let thread = &mut app.surfaces.s05_thread;
 	thread.use_source(source);
 	thread.open(conversation_id);

@@ -127,9 +127,9 @@ fn answered(source: &Source, call: Call) -> Answer {
 	}
 }
 
-fn served(source: &Source, calls: &Receiver<Call>, answers: &Sender<Answer>, waker: &Waker) {
-	for call in calls {
-		if answers.send(answered(source, call)).is_err() {
+fn served(calls: &Receiver<(Source, Call)>, answers: &Sender<Answer>, waker: &Waker) {
+	for (source, call) in calls {
+		if answers.send(answered(&source, call)).is_err() {
 			return;
 		}
 		waker();
@@ -137,17 +137,17 @@ fn served(source: &Source, calls: &Receiver<Call>, answers: &Sender<Answer>, wak
 }
 
 pub struct Worker {
-	calls: Sender<Call>,
+	calls: Sender<(Source, Call)>,
 	answers: Receiver<Answer>,
 }
 
 impl Worker {
-	pub fn spawn(source: Source, waker: Waker) -> Option<Worker> {
+	pub fn spawn(waker: Waker) -> Option<Worker> {
 		let (calls, waiting) = mpsc::channel();
 		let (answering, answers) = mpsc::channel();
 		let spawned = thread::Builder::new()
 			.name("roster-calls".into())
-			.spawn(move || served(&source, &waiting, &answering, &waker));
+			.spawn(move || served(&waiting, &answering, &waker));
 		match spawned {
 			Ok(_) => Some(Worker { calls, answers }),
 			Err(failure) => {
@@ -157,9 +157,9 @@ impl Worker {
 		}
 	}
 
-	pub fn send(&self, call: Call) {
-		if let Err(unsent) = self.calls.send(call) {
-			eprintln!("a roster call was not sent, the roster calls stopped: {:?}", unsent.0);
+	pub fn send(&self, source: Source, call: Call) {
+		if let Err(unsent) = self.calls.send((source, call)) {
+			eprintln!("a roster call was not sent, the roster calls stopped: {:?}", unsent.0.1);
 		}
 	}
 
