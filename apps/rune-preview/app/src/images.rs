@@ -98,9 +98,8 @@ fn scheme_of(url: &str) -> &str {
 
 fn authorization_for(url: &str, access: Option<&Access>) -> Option<String> {
 	let access = access?;
-	let is_same_origin =
-		origin_of(url).is_some_and(|origin| Some(origin) == origin_of(&access.origin));
-	is_same_origin.then(|| access.bearer.clone())
+	let origin = origin_of(url)?;
+	(Some(origin) == origin_of(&access.origin)).then(|| access.bearer.clone())
 }
 
 fn origin_of(url: &str) -> Option<(String, String, u16)> {
