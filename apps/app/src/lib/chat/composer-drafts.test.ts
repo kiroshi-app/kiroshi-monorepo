@@ -57,7 +57,7 @@ const settle = async (ms: number) => {
 }
 
 const mountApp = async () => {
-	writeMirror({ ...readMirror(), firstRunDone: true })
+	writeMirror({ ...readMirror(), firstRunDone: true, sidebarCollapsed: true })
 	layout = fakeLayout()
 	const store = createFakeTranscriptStore()
 	const [space] = await store.spaces()
@@ -76,13 +76,15 @@ const mountApp = async () => {
 }
 
 const rowFor = (name: string) => {
-	const labels = [...document.querySelectorAll('[data-slot="roster-row-name"]')]
-	const row = labels.find((label) => label.textContent === name)
-	const button = row?.closest("button")
-	if (!button) {
-		throw new Error(`no roster row for ${name}`)
+	const row = [
+		...document.querySelectorAll(
+			'[data-slot="collapsed-sidebar-conversation"]',
+		),
+	].find((item) => item.getAttribute("aria-label") === name)
+	if (!row) {
+		throw new Error(`no sidebar row for ${name}`)
 	}
-	return button
+	return row
 }
 
 const open = async (name: string) => {
@@ -104,11 +106,11 @@ describe("composer drafts", () => {
 		layout?.restore()
 		layout = null
 		cleanup()
+		localStorage.clear()
 		vi.useRealTimers()
 	})
 
-	// OPE-2153: needs the expanded conversation list back.
-	it.skip("holds a draft per thread across a companion to conversation round trip", async () => {
+	it("holds a draft per thread across a companion to conversation round trip", async () => {
 		vi.useFakeTimers()
 		const bot = await mountApp()
 

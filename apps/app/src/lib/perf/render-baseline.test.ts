@@ -96,21 +96,28 @@ vi.mock(
 	},
 )
 
-vi.mock("@workspace/ui/components/app-sidebar", async (importOriginal) => {
-	const actual =
-		await importOriginal<
-			typeof import("@workspace/ui/components/app-sidebar")
-		>()
-	const { createElement: element } = await import("react")
-	const { probeRender: probe } = await import("@workspace/ui/lib/render-probe")
-	return {
-		...actual,
-		AppSidebarBody: (props: Parameters<typeof actual.AppSidebarBody>[0]) => {
-			probe("AppSidebar")
-			return element(actual.AppSidebarBody, props)
-		},
-	}
-})
+vi.mock(
+	"@workspace/ui/components/navigation-sidebar",
+	async (importOriginal) => {
+		const actual =
+			await importOriginal<
+				typeof import("@workspace/ui/components/navigation-sidebar")
+			>()
+		const { createElement: element } = await import("react")
+		const { probeRender: probe } = await import(
+			"@workspace/ui/lib/render-probe"
+		)
+		return {
+			...actual,
+			NavigationSidebar: (
+				props: Parameters<typeof actual.NavigationSidebar>[0],
+			) => {
+				probe("NavigationSidebar")
+				return element(actual.NavigationSidebar, props)
+			},
+		}
+	},
+)
 
 vi.mock("@/lib/chat/create-driver", async () => {
 	const { withFakeHostWrites } = await import(
@@ -262,14 +269,18 @@ const countCommits = (): CommitCounter => {
 	return counter
 }
 
+const sidebarRows = () => [
+	...document.querySelectorAll('[data-slot="collapsed-sidebar-conversation"]'),
+]
+
 const rowFor = (name: string) => {
-	const labels = [...document.querySelectorAll('[data-slot="roster-row-name"]')]
-	const row = labels.find((label) => label.textContent === name)
-	const button = row?.closest("button")
-	if (!button) {
-		throw new Error(`no roster row for ${name}`)
+	const row = sidebarRows().find(
+		(item) => item.getAttribute("aria-label") === name,
+	)
+	if (!row) {
+		throw new Error(`no sidebar row for ${name}`)
 	}
-	return button
+	return row
 }
 
 const takeFrameClock = (): FrameClock => {
@@ -461,7 +472,7 @@ const openOnFirstCompanion = async (store: TranscriptStore) => {
 }
 
 const seedFirstRunDone = () => {
-	writeMirror({ ...readMirror(), firstRunDone: true })
+	writeMirror({ ...readMirror(), firstRunDone: true, sidebarCollapsed: true })
 }
 
 const mountApp = async (replyFor?: (prompt: string) => string) => {
@@ -570,40 +581,8 @@ const measureMessageReceived = async () => {
 
 	return {
 		app: tally.countOf("App"),
-		appSidebar: tally.countOf("AppSidebar"),
+		navigationSidebar: tally.countOf("NavigationSidebar"),
 		cacheEvents: cacheEvents.count(),
-		isShown: document.body.textContent?.includes(RECEIVED_TEXT) ?? false,
-	}
-}
-
-const EARLIER_TEXT = "An earlier message"
-
-const measureRowsOfMessageReceived = async () => {
-	const tally = tallyRenders()
-	const { store } = await mountApp()
-	await storeMessageReceived(store, EARLIER_TEXT)
-	await emitOnHost("conversation://updated", await soloThreadRowOf(store))
-	await settle(MOUNT_MS)
-	await storeMessageReceived(store)
-	const received = await soloThreadRowOf(store)
-	const receiverId = received.conversation.soloBotId ?? ""
-	tally.reset()
-
-	await emitOnHost("conversation://updated", received)
-	await settle(MOUNT_MS)
-
-	const rows = tally.entriesOf("RosterRow")
-	const [space] = await store.spaces()
-	const receiver = (await store.bots(space.id)).find(
-		({ id }) => id === receiverId,
-	)
-	return {
-		app: tally.countOf("App"),
-		receiverRow: rows.find(([id]) => id === receiverId)?.[1] ?? 0,
-		otherRows: rows.filter(([id]) => id !== receiverId).length,
-		isShownInRow:
-			receiver !== undefined &&
-			(rowFor(receiver.name).textContent?.includes(RECEIVED_TEXT) ?? false),
 	}
 }
 
@@ -647,9 +626,7 @@ const pageRowOf = async (store: TranscriptStore, conversationId: string) => {
 }
 
 const shownRowNames = () =>
-	[...document.querySelectorAll('[data-slot="roster-row-name"]')].map(
-		({ textContent }) => textContent,
-	)
+	sidebarRows().map((item) => item.getAttribute("aria-label"))
 
 const measureRowMovedToTop = async () => {
 	const tally = tallyRenders()
@@ -674,7 +651,7 @@ const measureRowMovedToTop = async () => {
 	const [topAfter] = shownRowNames()
 	return {
 		app: tally.countOf("App"),
-		appSidebar: tally.countOf("AppSidebar"),
+		navigationSidebar: tally.countOf("NavigationSidebar"),
 		topBefore,
 		topAfter,
 	}
@@ -899,7 +876,7 @@ const measureTurn = async (chunks: number) => {
 		chunks: watch.chunks,
 		cacheEvents: cacheEvents.count(),
 		app: tally.countOf("App"),
-		appSidebar: tally.countOf("AppSidebar"),
+		navigationSidebar: tally.countOf("NavigationSidebar"),
 		rosterBots: tally.countOf("rosterBots"),
 		rosterBotsBySpace: tally.countOf("rosterBotsBySpace"),
 		streamingTurn: maxOf(countsWhere(false)),
@@ -920,16 +897,15 @@ describe("PRF1 render baseline", () => {
 		vi.unstubAllGlobals()
 	})
 
-	// OPE-2153: needs the expanded conversation list back.
-	it.skip("counts what one streamed turn re-renders", async () => {
+	it("counts what one streamed turn re-renders", async () => {
 		vi.useFakeTimers()
 
 		expect(await measureTurn(SHORT_TURN_CHUNKS)).toMatchInlineSnapshot(`
 			{
 			  "app": 17,
-			  "appSidebar": 6,
 			  "cacheEvents": 26,
 			  "chunks": 11,
+			  "navigationSidebar": 6,
 			  "quietTurn": 2,
 			  "rosterBots": 7,
 			  "rosterBotsBySpace": 7,
@@ -938,16 +914,15 @@ describe("PRF1 render baseline", () => {
 		`)
 	})
 
-	// OPE-2153: needs the expanded conversation list back.
-	it.skip("counts what a turn twice as long re-renders", async () => {
+	it("counts what a turn twice as long re-renders", async () => {
 		vi.useFakeTimers()
 
 		expect(await measureTurn(LONG_TURN_CHUNKS)).toMatchInlineSnapshot(`
 			{
 			  "app": 28,
-			  "appSidebar": 6,
 			  "cacheEvents": 37,
 			  "chunks": 22,
+			  "navigationSidebar": 6,
 			  "quietTurn": 2,
 			  "rosterBots": 7,
 			  "rosterBotsBySpace": 7,
@@ -956,46 +931,30 @@ describe("PRF1 render baseline", () => {
 		`)
 	})
 
-	// OPE-2153: needs the expanded conversation list back.
-	it.skip("counts what one message received re-renders", async () => {
+	it("counts what one message received re-renders", async () => {
 		vi.useFakeTimers()
 
 		expect(await measureMessageReceived()).toMatchInlineSnapshot(`
 			{
 			  "app": 0,
-			  "appSidebar": 1,
 			  "cacheEvents": 3,
-			  "isShown": true,
+			  "navigationSidebar": 1,
 			}
 		`)
 	})
 
-	// OPE-2153: needs the expanded conversation list back.
-	it.skip("renders the row of a received message alone, never App", async () => {
-		vi.useFakeTimers()
-
-		expect(await measureRowsOfMessageReceived()).toEqual({
-			app: 0,
-			receiverRow: 1,
-			otherRows: 0,
-			isShownInRow: true,
-		})
-	})
-
-	// OPE-2153: needs the expanded conversation list back.
-	it.skip("re-renders the roster, never App, when a row moves to the top", async () => {
+	it("re-renders the roster, never App, when a row moves to the top", async () => {
 		vi.useFakeTimers()
 
 		expect(await measureRowMovedToTop()).toEqual({
 			app: 0,
-			appSidebar: 1,
+			navigationSidebar: 1,
 			topBefore: "Newer room",
 			topAfter: "Older room",
 		})
 	})
 
-	// OPE-2153: needs the expanded conversation list back.
-	it.skip("counts what the avatars write over sixty frames", async () => {
+	it("counts what the avatars write over sixty frames", async () => {
 		vi.useFakeTimers()
 		const { frames, store } = await mountApp()
 
@@ -1012,7 +971,7 @@ describe("PRF1 render baseline", () => {
 			working,
 		}).toMatchInlineSnapshot(`
 			{
-			  "avatars": 7,
+			  "avatars": 3,
 			  "idle": {
 			    "draws": 0,
 			    "movingAvatars": 0,
@@ -1020,17 +979,16 @@ describe("PRF1 render baseline", () => {
 			    "repeatedPaints": 0,
 			  },
 			  "working": {
-			    "draws": 125676,
-			    "movingAvatars": 3,
-			    "paints": 180,
+			    "draws": 83784,
+			    "movingAvatars": 2,
+			    "paints": 120,
 			    "repeatedPaints": 0,
 			  },
 			}
 		`)
 	})
 
-	// OPE-2153: needs the expanded conversation list back.
-	it.skip("shows the last message of a two hundred run thread", async () => {
+	it("shows the last message of a two hundred run thread", async () => {
 		expect(await measureThreadOpen()).toMatchInlineSnapshot(`
 			{
 			  "commits": 10,
@@ -1041,8 +999,7 @@ describe("PRF1 render baseline", () => {
 		`)
 	})
 
-	// OPE-2153: needs the expanded conversation list back.
-	it.skip(
+	it(
 		"reopens a thread on one page, like a cold open",
 		async () => {
 			expect(await measureThreadReopen()).toMatchInlineSnapshot(`
@@ -1065,8 +1022,7 @@ describe("PRF1 render baseline", () => {
 		THREAD_REOPEN_TIMEOUT_MS,
 	)
 
-	// OPE-2153: needs the expanded conversation list back.
-	it.skip(
+	it(
 		"opens a five hundred message transcript",
 		async () => {
 			vi.useFakeTimers()

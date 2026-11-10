@@ -233,7 +233,7 @@ type MountedApp = {
 type MountOptions = { delayMs?: number; pageBotIndex?: number }
 
 const seedFirstRunDone = () => {
-	writeMirror({ ...readMirror(), firstRunDone: true })
+	writeMirror({ ...readMirror(), firstRunDone: true, sidebarCollapsed: true })
 }
 
 const openOnFirstCompanion = async (store: TranscriptStore) => {
@@ -289,13 +289,15 @@ const mountApp = async ({
 }
 
 const rowFor = (name: string) => {
-	const labels = [...document.querySelectorAll('[data-slot="roster-row-name"]')]
-	const row = labels.find((label) => label.textContent === name)
-	const button = row?.closest("button")
-	if (!button) {
-		throw new Error(`no roster row for ${name}`)
+	const row = [
+		...document.querySelectorAll(
+			'[data-slot="collapsed-sidebar-conversation"]',
+		),
+	].find((item) => item.getAttribute("aria-label") === name)
+	if (!row) {
+		throw new Error(`no sidebar row for ${name}`)
 	}
-	return button
+	return row
 }
 
 const chooseBot = async (name: string) => {
@@ -414,8 +416,7 @@ describe("PRF5 chat open baseline", () => {
 		expect(onPaintPath).toBeLessThan(offPaintPath / 100)
 	})
 
-	// OPE-2153: needs the expanded conversation list back.
-	it.skip("lists the store calls an opening waits on", async () => {
+	it("lists the store calls an opening waits on", async () => {
 		vi.useFakeTimers()
 
 		expect(await measureOpenings(0)).toMatchInlineSnapshot(`
@@ -450,8 +451,7 @@ describe("PRF5 chat open baseline", () => {
 		`)
 	})
 
-	// OPE-2153: needs the expanded conversation list back.
-	it.skip("times the same openings with one fixed delay per store call", async () => {
+	it("times the same openings with one fixed delay per store call", async () => {
 		vi.useFakeTimers()
 
 		expect(await measureOpenings(CALL_DELAY_MS)).toMatchInlineSnapshot(`
@@ -488,8 +488,7 @@ describe("PRF5 chat open baseline", () => {
 		`)
 	})
 
-	// OPE-2153: needs the expanded conversation list back.
-	it.skip("counts what a page of twenty stored messages costs", async () => {
+	it("counts what a page of twenty stored messages costs", async () => {
 		vi.useFakeTimers()
 
 		expect(await measurePage()).toMatchInlineSnapshot(`
