@@ -20,6 +20,7 @@ import {
 } from "./bot-settings"
 
 import { avatarSrc } from "../host"
+import type { OfferedModel_Serialize } from "@/lib/bindings"
 import type { Bot } from "../conversations/store-contract"
 import { botIdentity } from "../conversations/transcript-fixtures"
 
@@ -306,6 +307,110 @@ describe("modelOptionsFor", () => {
 		expect(
 			modelOptionsFor("default", []).map((option) => option.value),
 		).toEqual(FALLBACK_MODELS)
+	})
+
+	describe("for a model saved under its explicit id", () => {
+		const RESOLVING: OfferedModel_Serialize[] = [
+			{ value: "sonnet", supportedEffortLevels: [] },
+			{
+				value: "opus",
+				resolvedModel: "claude-opus-5-5",
+				supportedEffortLevels: ["low", "high", "max"],
+			},
+			{
+				value: "opus[1m]",
+				resolvedModel: "claude-opus-5-5[1m]",
+				supportedEffortLevels: ["low", "high"],
+			},
+			{ value: "haiku", supportedEffortLevels: [] },
+		]
+
+		it("stands on the alias row it resolves to, keeping the id it was saved under", () => {
+			expect(modelOptionsFor("claude-opus-5-5", RESOLVING)).toEqual([
+				{ label: "sonnet", value: "sonnet", supportedEfforts: [] },
+				{
+					label: "opus",
+					value: "claude-opus-5-5",
+					supportedEfforts: ["low", "high", "max"],
+				},
+				{
+					label: "opus[1m]",
+					value: "opus[1m]",
+					supportedEfforts: ["low", "high"],
+				},
+				{ label: "haiku", value: "haiku", supportedEfforts: [] },
+			])
+		})
+
+		it("carries the effort levels of the alias it resolves to", () => {
+			const matched = modelOptionsFor("claude-opus-5-5[1m]", RESOLVING).find(
+				(option) => option.value === "claude-opus-5-5[1m]",
+			)
+
+			expect(matched).toEqual({
+				label: "opus[1m]",
+				value: "claude-opus-5-5[1m]",
+				supportedEfforts: ["low", "high"],
+			})
+		})
+
+		it("does not offer the saved id back beside its alias", () => {
+			const labels = modelOptionsFor("claude-opus-5-5", RESOLVING).map(
+				(option) => option.label,
+			)
+
+			expect(labels).toEqual(["sonnet", "opus", "opus[1m]", "haiku"])
+		})
+
+		it("leaves the catalogue as it is when the saved model is a row value", () => {
+			expect(modelOptionsFor("opus", RESOLVING)).toEqual(
+				RESOLVING.map(({ value, supportedEffortLevels }) => ({
+					label: value,
+					value,
+					supportedEfforts: supportedEffortLevels,
+				})),
+			)
+		})
+
+		it("offers the saved id back when no row resolves to it", () => {
+			const options = modelOptionsFor("claude-mythos-preview", RESOLVING)
+
+			expect(options).toHaveLength(RESOLVING.length + 1)
+			expect(options.at(-1)).toEqual({
+				label: "claude-mythos-preview",
+				value: "claude-mythos-preview",
+				supportedEfforts: [],
+			})
+		})
+
+		it("stands on the first of two rows resolving to the same id", () => {
+			const options = modelOptionsFor("claude-opus-5-5", [
+				{
+					value: "best",
+					resolvedModel: "claude-opus-5-5",
+					supportedEffortLevels: ["high"],
+				},
+				...RESOLVING,
+			])
+
+			expect(
+				options.filter((option) => option.value === "claude-opus-5-5"),
+			).toEqual([
+				{ label: "best", value: "claude-opus-5-5", supportedEfforts: ["high"] },
+			])
+		})
+
+		it("shows the alias with its effort levels and saves the id unchanged", () => {
+			const held = bot({ model: "claude-opus-5-5" })
+			const value = toSettingsValue(held)
+			const selected = modelOptionsFor(value.model, RESOLVING).find(
+				(option) => option.value === value.model,
+			)
+
+			expect(selected?.label).toBe("opus")
+			expect(selected?.supportedEfforts).not.toHaveLength(0)
+			expect(toIdentity(value, held).model).toBe("claude-opus-5-5")
+		})
 	})
 })
 
