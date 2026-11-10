@@ -177,6 +177,7 @@ const produceNavigationFor = ({
 				} as unknown as WorkspaceOverlay,
 				rosterLines: { sidebarActions: {} } as RosterLines,
 				rosterLists: {} as RosterLists,
+				sidebarMissions: { openMissionThread: () => undefined },
 				switcher: useSwitcherSpaces(
 					{ spaces: [HOME, GARAGE], selectedSpaceId },
 					{
@@ -213,7 +214,7 @@ describe.each(PRODUCED_SPACES)(
 			const { hostBySpaceId } = produceNavigationFor({
 				selectedSpaceId,
 				connections,
-			}).gestures
+			}).sidebar
 
 			expect(hostBySpaceId?.[space.id]).toBe(host)
 		})

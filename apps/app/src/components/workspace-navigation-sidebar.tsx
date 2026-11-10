@@ -34,7 +34,7 @@ export const WorkspaceNavigationSidebar = () => {
 	const { core, rosterLines, rosterView, sidebarMissions, tabs } =
 		useWorkspace()
 	const { frame, rosterLists } = useWorkspaceFrame()
-	const { gestures, selectedSpaceId } = frame
+	const { sidebar, selectedSpaceId } = frame
 	const destination = useShownDestination(tabs)
 	const { roster, sections } = core
 	const zones = railZonesOf({
@@ -44,34 +44,18 @@ export const WorkspaceNavigationSidebar = () => {
 
 	return (
 		<NavigationSidebar
-			badgesBySpaceId={gestures.badgesBySpaceId}
+			{...sidebar}
 			conversations={null}
 			destination={destination}
-			hostBySpaceId={gestures.hostBySpaceId}
-			invitations={gestures.invitations}
 			listEnd={roster.listEnd}
 			listStatus={rosterLists.rosterListStatus}
 			missionCount={sidebarMissions.waitingCount}
-			onAcceptInvitation={gestures.onAcceptInvitation}
-			onCreateSpace={gestures.onCreateSpace}
-			onDeclineInvitation={gestures.onDeclineInvitation}
-			onNewConversation={gestures.onSelectHome}
-			onOpenChange={gestures.onSpacesMenuOpenChange}
-			onOpenConversation={rosterLines.sidebarActions.onSelectConversation}
-			onOpenMission={sidebarMissions.openMissionThread}
-			onOpenSearch={gestures.onOpenSearch}
-			onOpenSettings={gestures.onOpenYou}
-			onRetryInvitation={gestures.onRetryInvitation}
 			onRetryList={roster.controller.retryLoad}
-			onSelectLibrary={gestures.onSelectLibrary}
-			onSelectMissions={gestures.onSelectMissions}
-			onSelectSpace={gestures.onSelectSpace}
 			openConversationId={rosterView.selectedConversationId ?? undefined}
 			pinned={null}
 			selectedSpaceId={selectedSpaceId}
-			spaces={gestures.spaces ?? []}
+			spaces={sidebar.spaces ?? []}
 			update={rosterLines.updateBadge}
-			user={gestures.user}
 			zones={zones}
 		/>
 	)

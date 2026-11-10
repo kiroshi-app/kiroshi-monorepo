@@ -390,6 +390,39 @@ it("asks before a sidebar press leaves an unsaved application, and leaves once o
 	expect(isMarked(libraryEntryOf())).toBe(true)
 })
 
+it("asks before the Space settings row of the Space switcher leaves an unsaved application", async () => {
+	await mountApp(twoSpaceApplications)
+	await openSpaceSettingsByRail()
+	await openApplications()
+	await press(menuEntryOf(/^ledger/))
+	fireEvent.change(
+		screen.getByLabelText(i18n.t("bots:applications.name.label")),
+		{ target: { value: "ledger-desk" } },
+	)
+
+	await press(spacesLogoOf())
+	await press(
+		within(
+			screen.getByRole("menu", { name: i18n.t("bots:spaces.label") }),
+		).getByRole("menuitem", { name: i18n.t("bots:rail.spaceSettings") }),
+	)
+
+	await press(
+		within(
+			screen.getByRole("alertdialog", {
+				name: i18n.t("bots:applications.leave.title"),
+			}),
+		).getByRole("button", { name: i18n.t("common:confirm.cancel") }),
+	)
+
+	expect(menuEntryOf(/^ledger/).getAttribute("aria-current")).toBe("page")
+	expect(
+		screen.getByLabelText<HTMLInputElement>(
+			i18n.t("bots:applications.name.label"),
+		).value,
+	).toBe("ledger-desk")
+})
+
 const pressCloseTab = async () => {
 	await act(async () => {
 		fireEvent.keyDown(window, { key: "w", metaKey: true })
