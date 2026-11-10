@@ -49,8 +49,6 @@ export function useAttachments(
 		[controller, owner],
 	)
 
-	useEffect(() => controller.release, [controller])
-
 	useEffect(
 		() =>
 			watchConversationDrags({

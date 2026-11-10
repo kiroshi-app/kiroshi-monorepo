@@ -239,7 +239,7 @@ describe("files that stop being reachable", () => {
 		released.mockRestore()
 	})
 
-	it("release their previews when the composer goes away", () => {
+	it("release their previews when the workspace lets the controller go", () => {
 		const released = vi.spyOn(URL, "revokeObjectURL")
 		const controller = createAttachmentsController(heldPort().port)
 		controller.stage(bot("a"), [fileNamed("shot.png", "image/png")])
