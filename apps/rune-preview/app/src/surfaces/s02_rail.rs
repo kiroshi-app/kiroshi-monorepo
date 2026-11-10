@@ -78,6 +78,12 @@ struct Removal {
 	reason: RemovalReason,
 }
 
+pub enum Reach {
+	Open(Source),
+	Connecting,
+	Refused(HostError),
+}
+
 struct Opened {
 	space: model::Space,
 	content: SpaceContent,
@@ -94,6 +100,7 @@ pub struct State {
 	joined: Vec<JoinedSpace>,
 	departed: Option<Departed>,
 	connected: HashSet<String>,
+	refused: HashMap<String, HostError>,
 	online_hosting: HashMap<String, bool>,
 	invitations: Invitations,
 	opening: Option<String>,
@@ -276,11 +283,22 @@ impl State {
 		Some(joined.remote_space_id.as_deref().unwrap_or(&joined.id))
 	}
 
-	fn source_of(&self, local: &Source, space_id: &str) -> Option<Source> {
+	fn reach_of(&self, local: &Source, space_id: &str) -> Reach {
 		if !self.is_joined(space_id) {
-			return Some(local.clone());
+			return Reach::Open(local.clone());
 		}
-		self.connected.contains(space_id).then(|| local.of_space(space_id))
+		if self.connected.contains(space_id) {
+			return Reach::Open(local.of_space(space_id));
+		}
+		match self.refused.get(space_id) {
+			Some(failure) => Reach::Refused(failure.clone()),
+			None => Reach::Connecting,
+		}
+	}
+
+	fn connect_joined(&mut self, joined_id: &str) {
+		self.refused.remove(joined_id);
+		self.queue(Call::Connect(joined_id.to_owned()));
 	}
 
 	#[cfg(test)]
@@ -295,7 +313,7 @@ impl State {
 		let space = joined_shown_space(self.joined_space(id)?);
 		self.opening = None;
 		self.departed = None;
-		self.queue(Call::Connect(id.to_owned()));
+		self.connect_joined(id);
 		Some(Opened {
 			space,
 			content: SpaceContent { agents: Vec::new(), conversations: Vec::new() },
@@ -488,7 +506,8 @@ impl State {
 				self.queue(Call::Load(joined_id));
 			}
 			Answer::Connected { joined_id, outcome: Err(failure) } => {
-				self.connection_refused(&joined_id, &failure, shown)
+				self.connection_refused(&joined_id, &failure, shown);
+				self.refused.insert(joined_id, failure);
 			}
 			Answer::Remembered(Ok(())) => {}
 			Answer::Remembered(Err(failure)) => {
@@ -605,9 +624,20 @@ fn shown_id(app: &App) -> Option<String> {
 	app.ready().map(|ready| ready.space.id.clone())
 }
 
-pub fn source_of(app: &App, space_id: &str) -> Option<Source> {
+pub fn reach_of(app: &App, space_id: &str) -> Option<Reach> {
 	let local = &app.ready()?.source;
-	app.surfaces.s02_rail.source_of(local, space_id)
+	Some(app.surfaces.s02_rail.reach_of(local, space_id))
+}
+
+pub fn source_of(app: &App, space_id: &str) -> Option<Source> {
+	match reach_of(app, space_id)? {
+		Reach::Open(source) => Some(source),
+		Reach::Connecting | Reach::Refused(_) => None,
+	}
+}
+
+pub fn reconnect(app: &mut App, joined_id: &str) {
+	app.surfaces.s02_rail.connect_joined(joined_id);
 }
 
 pub fn shown_source(app: &App) -> Option<Source> {

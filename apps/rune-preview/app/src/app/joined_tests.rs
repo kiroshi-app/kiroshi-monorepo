@@ -1,5 +1,6 @@
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -13,7 +14,7 @@ use rune::Waker;
 use serde_json::{Value, json};
 use tungstenite::Message as Frame;
 
-use super::{App, Inbound, Person, Ready, Workspace};
+use super::{App, Inbound, Person, Ready, Workspace, notice};
 use crate::events::{HostEvent, JoinedHeard};
 use crate::host::Host;
 use crate::model;
@@ -27,9 +28,16 @@ const REMOTE_SPACE_ID: &str = "remote-space";
 
 const CHAT: &str = "remote-chat";
 
+const ONLINE: &str = "online";
+
+const WAITING: &str = "waitingForHost";
+
+const ROSTER_WRITES: [&str; 4] =
+	["roster_pin", "space_set_preferences", "section_rename", "bot_move_to_section"];
+
 const PATIENCE: Duration = Duration::from_secs(10);
 
-type Answer = Box<dyn Fn(&str, &Value) -> Option<Value> + Send + Sync>;
+type Answer = Box<dyn Fn(&str, &Value) -> (u16, Value) + Send + Sync>;
 
 #[derive(Clone)]
 struct FakeHost {
@@ -116,10 +124,7 @@ impl FakeHost {
 		let mut body = vec![0_u8; length];
 		reader.read_exact(&mut body).expect("the body reads");
 		let body: Value = serde_json::from_slice(&body).expect("the body is JSON");
-		let (status, answered) = match answer(&command, &body) {
-			Some(answered) => (200, answered),
-			None => (404, json!(format!("{command} is not served here"))),
-		};
+		let (status, answered) = answer(&command, &body);
 		self.invoked.lock().expect("the invoked calls are writable").push((command, body));
 		let answered = answered.to_string();
 		let mut stream = stream;
@@ -132,32 +137,44 @@ impl FakeHost {
 	}
 }
 
-fn joined_space(joined_id: &str) -> Value {
+fn unserved(command: &str) -> (u16, Value) {
+	(404, json!(format!("{command} is not served here")))
+}
+
+fn joined_space(joined_id: &str, state: &str) -> Value {
+	let wait = (state == WAITING).then(|| json!({ "reason": "hostSilent", "detail": "" }));
 	json!({
 		"id": joined_id,
 		"hostUrl": "https://relay.test/relay/member",
 		"remoteSpaceId": REMOTE_SPACE_ID,
 		"name": "Studio",
-		"state": "online",
+		"state": state,
+		"wait": wait,
 		"hostedBy": "Noa",
 		"colour": null,
 		"instanceId": "instance-studio",
 	})
 }
 
-fn local_host(remote: &FakeHost, joined_id: &str) -> FakeHost {
-	let (host_url, joined) = (remote.url(), joined_space(joined_id));
+fn local_host(remote: &FakeHost, joined: Value, refusals: usize) -> FakeHost {
+	let (host_url, connects) = (remote.url(), AtomicUsize::new(0));
 	FakeHost::start(Box::new(move |command, body| match command {
-		"space_list" | "invitations_list" => Some(json!([])),
-		"joined_spaces_list" => Some(json!([joined])),
-		"joined_space_connect" => Some(json!(JoinedSpaceConnection {
-			id: body["id"].as_str().unwrap_or_default().to_owned(),
-			host_url: host_url.clone(),
-			token: "remote-token".to_owned(),
-			remote_space_id: Some(REMOTE_SPACE_ID.to_owned()),
-			name: "Studio".to_owned(),
-		})),
-		_ => None,
+		"space_list" | "invitations_list" => (200, json!([])),
+		"joined_spaces_list" => (200, json!([joined])),
+		"joined_space_connect" if connects.fetch_add(1, Ordering::SeqCst) < refusals => {
+			(500, json!({ "kind": "relayRefused", "detail": "refused" }))
+		}
+		"joined_space_connect" => (
+			200,
+			json!(JoinedSpaceConnection {
+				id: body["id"].as_str().unwrap_or_default().to_owned(),
+				host_url: host_url.clone(),
+				token: "remote-token".to_owned(),
+				remote_space_id: Some(REMOTE_SPACE_ID.to_owned()),
+				name: "Studio".to_owned(),
+			}),
+		),
+		_ => unserved(command),
 	}))
 }
 
@@ -215,14 +232,14 @@ fn transcript() -> Value {
 
 fn remote_host() -> FakeHost {
 	FakeHost::start(Box::new(|command, _| match command {
-		"conversation_bots" | "section_list" | "conversation_pinned_messages" => Some(json!([])),
+		"conversation_bots" | "section_list" | "conversation_pinned_messages" => (200, json!([])),
 		"conversation_page" => {
-			Some(json!({ "pinned": [], "conversations": [row(CHAT)], "nextCursor": null }))
+			(200, json!({ "pinned": [], "conversations": [row(CHAT)], "nextCursor": null }))
 		}
-		"space_preferences" => Some(json!({ "collapsedSectionIds": [] })),
-		"conversation_message_page" => Some(transcript()),
-		"mission_list" => Some(json!({ "open": [], "done": [] })),
-		_ => None,
+		"space_preferences" => (200, json!({ "collapsedSectionIds": [] })),
+		"conversation_message_page" => (200, transcript()),
+		"mission_list" => (200, json!({ "open": [], "done": [] })),
+		_ => unserved(command),
 	}))
 }
 
@@ -276,8 +293,12 @@ fn app_on(local: &FakeHost) -> App {
 }
 
 fn joined(id: &'static str) -> Joined {
+	joined_refused(id, ONLINE, 0)
+}
+
+fn joined_refused(id: &'static str, state: &str, refusals: usize) -> Joined {
 	let remote = remote_host();
-	let local = local_host(&remote, id);
+	let local = local_host(&remote, joined_space(id, state), refusals);
 	let mut app = app_on(&local);
 	s02_rail::connected(&mut app);
 	let mut joined = Joined { app, local, remote, id };
@@ -301,6 +322,11 @@ impl Joined {
 	fn open(&mut self) {
 		s02_rail::select_space(&mut self.app, self.id);
 		self.settle(|app| matches!(app.surfaces.s03_roster.shown(), Some(Load::Shown(_))));
+	}
+
+	fn refused_on_screen(&mut self) {
+		s02_rail::select_space(&mut self.app, self.id);
+		self.settle(|app| matches!(app.surfaces.s03_roster.shown(), Some(Load::Failed(_))));
 	}
 
 	fn read_locally(&self) -> Vec<Value> {
@@ -372,4 +398,51 @@ fn stored(id: &str) -> Heard {
 	let mut row = row(id);
 	row["spaceId"] = json!("another-joined");
 	Heard::Stored(Box::new(serde_json::from_value(row).expect("a conversation row")))
+}
+
+#[test]
+fn a_refused_connect_shows_the_failed_roster_under_the_banner_and_the_notice() {
+	let mut joined = joined_refused("studio-refused", WAITING, 1);
+
+	joined.refused_on_screen();
+
+	assert_eq!(joined.app.ready().map(|ready| ready.space.id.as_str()), Some(joined.id));
+	assert!(s02_rail::space_access(&joined.app).is_some());
+	let titles: Vec<&str> =
+		notice::shown(&joined.app).into_iter().map(|shown| shown.title.as_str()).collect();
+	assert_eq!(titles, ["Couldn't open Studio. Pick it again to try once more."]);
+}
+
+#[test]
+fn retrying_a_refused_roster_connects_the_space_again_and_shows_its_roster() {
+	let mut joined = joined_refused("studio-retried", WAITING, 1);
+	joined.refused_on_screen();
+
+	s03_roster::retry(&mut joined.app);
+	s03_roster::poll(&mut joined.app);
+	assert!(matches!(joined.app.surfaces.s03_roster.shown(), Some(Load::Loading)));
+
+	joined.settle(|app| roster_holds(app, CHAT));
+	assert_eq!(joined.local.invoked("joined_space_connect").len(), 2);
+	assert!(joined.read_locally().is_empty());
+}
+
+#[test]
+fn a_roster_write_started_before_the_connect_reaches_neither_host() {
+	let mut joined = joined_refused("studio-unconnected", ONLINE, usize::MAX);
+	s02_rail::select_space(&mut joined.app, joined.id);
+	s03_roster::poll(&mut joined.app);
+	assert!(matches!(joined.app.surfaces.s03_roster.shown(), Some(Load::Loading)));
+
+	let roster = &mut joined.app.surfaces.s03_roster;
+	roster.toggle_section("desk");
+	roster.commit_rename("desk", "Studio desk");
+	roster.move_to_section("atlas", Some("desk"));
+	roster.pin(CHAT);
+	joined.settle(|app| matches!(app.surfaces.s03_roster.shown(), Some(Load::Failed(_))));
+
+	for write in ROSTER_WRITES {
+		assert!(joined.local.invoked(write).is_empty(), "{write} reached the local host");
+		assert!(joined.remote.invoked(write).is_empty(), "{write} reached the joined host");
+	}
 }
