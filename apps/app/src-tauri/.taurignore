@@ -1,8 +1,0 @@
-# macOS FSEvents workaround: the dev watcher self-triggers on dirs the CLI
-# re-reads on every build (phantom events with no real file changes), killing
-# and reopening the window in a loop. Editing icons/ or capabilities/ needs a
-# manual `bun run dev` restart.
-/target
-/gen
-/icons
-/capabilities

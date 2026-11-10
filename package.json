@@ -18,18 +18,20 @@
 	},
 	"packageManager": "bun@1.4.4",
 	"scripts": {
-		"dev": "turbo run dev",
-		"storybook": "turbo run storybook",
+		"dev": "bun run --filter sidecar build && scripts/slot.sh cargo run --manifest-path apps/rune-preview/Cargo.toml --bin kiroshi-rune-preview",
+		"dev:website": "turbo run dev --filter=website",
 		"build": "turbo run build",
 		"build:website": "turbo run build --filter=website",
-		"tauri:build": "turbo run tauri:build",
-		"test": "turbo run test",
+		"test": "turbo run test && bun run test:rust",
+		"test:rust": "scripts/slot.sh cargo test -p kiroshi-core && scripts/slot.sh cargo test --manifest-path apps/rune-preview/Cargo.toml --workspace --features fake-claude",
+		"test:live": "bun run --filter sidecar build && scripts/slot.sh cargo test -p kiroshi-core --test real_claude -- --ignored --test-threads=1",
 		"baseline": "bun scripts/baseline.ts",
 		"test:baseline": "bun test scripts/baseline.test.ts",
 		"test:ci-changes": "bun test scripts/ci-changes.test.ts",
 		"test:red-main": "bun test scripts/red-main.test.ts",
 		"test:ci": "bun test scripts/ci.test.ts",
 		"test:release": "bun test scripts/release.test.ts",
+		"test:updater-feed": "bun test scripts/updater-feed.test.ts",
 		"test:pr-dequeue": "bun test scripts/pr-dequeue.test.ts",
 		"test:pr-enqueue": "bun test scripts/pr-enqueue.test.ts",
 		"test:pr-merge-sub": "bun test scripts/pr-merge-sub.test.ts",
@@ -37,7 +39,7 @@
 		"test:colour-sets": "bun test scripts/check-colour-sets.test.ts",
 		"baseline:update": "bun scripts/baseline.ts --update",
 		"baseline:prune": "bun scripts/baseline.ts --prune",
-		"snapshots": "bun apps/app/sidecar/scripts/generate.ts && UPDATE_SNAPSHOTS=1 bun test --cwd apps/app/sidecar src/contracts.test.ts && UPDATE_SNAPSHOTS=1 cargo test --manifest-path apps/app/src-tauri/Cargo.toml --features fake-claude --test contracts && UPDATE_SNAPSHOTS=1 cargo test --manifest-path apps/app/src-tauri/Cargo.toml --features fake-claude --lib member_socket::tests::the_committed_schema_is_the_one_the_specta_types_produce",
+		"snapshots": "bun apps/app/sidecar/scripts/generate.ts && UPDATE_SNAPSHOTS=1 bun test --cwd apps/app/sidecar src/contracts.test.ts && UPDATE_SNAPSHOTS=1 cargo test -p kiroshi-core --test contracts",
 		"avatar:build": "bun scripts/build-avatar.ts",
 		"lint": "turbo run lint",
 		"lint:fix": "turbo run lint:fix",
@@ -73,8 +75,5 @@
 	},
 	"overrides": {
 		"katex": "^0.19.0"
-	},
-	"patchedDependencies": {
-		"@storybook/addon-vitest@10.6.5": "patches/@storybook%2Faddon-vitest@10.6.5.patch"
 	}
 }

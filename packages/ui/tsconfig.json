@@ -5,15 +5,9 @@
 		"outDir": "./dist",
 		"jsx": "react-jsx",
 		"paths": {
-			"@workspace/ui/*": ["./src/*"],
-			"@workspace/storybook/*": ["./.storybook/*"]
+			"@workspace/ui/*": ["./src/*"]
 		}
 	},
-	"include": [
-		"src",
-		".storybook/**/*.ts",
-		".storybook/**/*.tsx",
-		"vitest.config.ts"
-	],
+	"include": ["src", "vitest.config.ts"],
 	"exclude": ["node_modules", "dist"]
 }
