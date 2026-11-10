@@ -293,10 +293,10 @@ fn app_on(local: &FakeHost) -> App {
 }
 
 fn joined(id: &'static str) -> Joined {
-	joined_refused(id, ONLINE, 0)
+	joined_with(id, ONLINE, 0)
 }
 
-fn joined_refused(id: &'static str, state: &str, refusals: usize) -> Joined {
+fn joined_with(id: &'static str, state: &str, refusals: usize) -> Joined {
 	let remote = remote_host();
 	let local = local_host(&remote, joined_space(id, state), refusals);
 	let mut app = app_on(&local);
@@ -402,7 +402,7 @@ fn stored(id: &str) -> Heard {
 
 #[test]
 fn a_refused_connect_shows_the_failed_roster_under_the_banner_and_the_notice() {
-	let mut joined = joined_refused("studio-refused", WAITING, 1);
+	let mut joined = joined_with("studio-refused", WAITING, 1);
 
 	joined.refused_on_screen();
 
@@ -415,7 +415,7 @@ fn a_refused_connect_shows_the_failed_roster_under_the_banner_and_the_notice() {
 
 #[test]
 fn retrying_a_refused_roster_connects_the_space_again_and_shows_its_roster() {
-	let mut joined = joined_refused("studio-retried", WAITING, 1);
+	let mut joined = joined_with("studio-retried", WAITING, 1);
 	joined.refused_on_screen();
 
 	s03_roster::retry(&mut joined.app);
@@ -429,7 +429,7 @@ fn retrying_a_refused_roster_connects_the_space_again_and_shows_its_roster() {
 
 #[test]
 fn a_roster_write_started_before_the_connect_reaches_neither_host() {
-	let mut joined = joined_refused("studio-unconnected", ONLINE, usize::MAX);
+	let mut joined = joined_with("studio-unconnected", ONLINE, usize::MAX);
 	s02_rail::select_space(&mut joined.app, joined.id);
 	s03_roster::poll(&mut joined.app);
 	assert!(matches!(joined.app.surfaces.s03_roster.shown(), Some(Load::Loading)));
