@@ -13,15 +13,18 @@ use super::refresh::{self, Renewal, Renewals};
 use super::refusal::{refusal_line, withheld_reason, Refused, Step};
 use super::reports::{ApplicationReports, Standing};
 use super::status::{reads_the_answer, status, ApplicationRow, Evidence};
-use crate::agent::commands::AgentState;
-use crate::agent::contract::TransportError;
+use crate::agent::commands::{live_runs, AgentState};
+use crate::agent::contract::{RuntimeScope, TransportError};
 use crate::agent::protocol::{
 	AuthorizeRequest, Authorized, OauthCredentials, OauthFailureKind, RefreshRequest,
 	RevocationRequest,
 };
 use crate::agent::sidecar::Opening;
 use crate::agent::translate::now_ms;
-use crate::bundles::{self, AuthorizationWithheld, McpServer};
+use crate::bundles::{self, McpServer};
+use crate::conversations::contract::TranscriptStoreError;
+use crate::conversations::host_turn::retire_idle_run;
+use crate::db::repositories::space_children::SpaceChild;
 use crate::environment::commands::writable_root;
 use crate::environment::contract::{
 	EnvError, EnvOwner, EnvScope, Values, OAUTH_ACCESS_TOKEN, OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET,
@@ -29,6 +32,7 @@ use crate::environment::contract::{
 };
 use crate::environment::store;
 use crate::hosting::authorship::Caller;
+use crate::routines::runner::database;
 
 const NOTHING_STORED: &str = "no access token was stored for that server";
 
@@ -121,7 +125,7 @@ fn authorize_request(name: &str, url: String, stored: &Values) -> AuthorizeReque
 	else {
 		return registering;
 	};
-	if credentials::bound_url(stored) != Some(registering.url.as_str()) {
+	if !credentials::is_bound_to(stored, &registering.url) {
 		eprintln!("the stored client of {name} was withheld: its grant is bound to another url");
 		return registering;
 	}
@@ -191,10 +195,10 @@ pub async fn mcp_oauth_connect<R: Runtime>(
 	name: String,
 	url: String,
 ) -> Result<(), OauthError> {
-	refuse_what_kiroshi_does_not_authorize(&app, &owner, &name, &url)
+	let url = declared_url(&app, &owner, &name, url)
 		.map_err(|refused| written(refused, &Values::new()))?;
 	let state = app.state::<McpOauthState>();
-	let scope = EnvScope::Server { name: name.clone(), owner };
+	let scope = EnvScope::Server { name: name.clone(), owner: owner.clone() };
 	let _running = state
 		.begin(Flow::Authorizing(scope.clone()))
 		.map_err(|error| written(Step::ClaimingTheState.refused(error), &Values::new()))?;
@@ -209,39 +213,69 @@ pub async fn mcp_oauth_connect<R: Runtime>(
 		.map_err(|refused| written(refused, &stored))?;
 	kept(&root, &scope, &name, &url, &credentials, &app.state::<ApplicationReports>()).map_err(
 		|error| written(Step::StoringTheGrant.refused(error), &credentials::held(&credentials)),
-	)
+	)?;
+	reopen_sessions_served_by(&app, &owner).await;
+	Ok(())
 }
 
-fn refuse_what_kiroshi_does_not_authorize<R: Runtime>(
-	app: &AppHandle<R>,
-	owner: &EnvOwner,
-	name: &str,
-	url: &str,
-) -> Result<(), Refused> {
-	let withheld = authorization_withheld(app, owner, name, url)
-		.map_err(|error| Step::ReadingTheDeclaredServer.refused(error.into()))?;
-	match withheld {
-		Some(carries) => Err(Step::CheckingTheServer.refused(OauthError::NotAuthorizable {
-			carries,
-			detail: withheld_reason(carries).to_owned(),
-		})),
-		None => Ok(()),
+async fn reopen_sessions_served_by<R: Runtime>(app: &AppHandle<R>, owner: &EnvOwner) {
+	for scope in live_runs(app) {
+		let bot_id = scope.bot_id.clone();
+		let reopened = match serves(app, owner, &scope).await {
+			Ok(true) => retire_idle_run(app, scope).await.map_err(|error| format!("{error:?}")),
+			Ok(false) => continue,
+			Err(error) => Err(format!("{error:?}")),
+		};
+		if let Err(error) = reopened {
+			log::warn!("the session of {bot_id} keeps the servers it opened with: {error}");
+		}
 	}
 }
 
-fn authorization_withheld<R: Runtime>(
+async fn serves<R: Runtime>(
+	app: &AppHandle<R>,
+	owner: &EnvOwner,
+	scope: &RuntimeScope,
+) -> Result<bool, TranscriptStoreError> {
+	match owner {
+		EnvOwner::User => Ok(true),
+		EnvOwner::Bot { id, .. } => Ok(*id == scope.bot_id),
+		EnvOwner::Space { id } => Ok(database(app)?
+			.space_children()
+			.holds(id.clone(), SpaceChild::Conversation, scope.conversation_id.clone())
+			.await?),
+	}
+}
+
+fn declared_url<R: Runtime>(
 	app: &AppHandle<R>,
 	owner: &EnvOwner,
 	name: &str,
-	url: &str,
-) -> Result<Option<AuthorizationWithheld>, EnvError> {
+	asked: String,
+) -> Result<String, Refused> {
+	let server = declared_server(app, owner, name, &asked)
+		.map_err(|error| Step::ReadingTheDeclaredServer.refused(error.into()))?;
+	if let Some(carries) = server.authorization_withheld() {
+		return Err(Step::CheckingTheServer.refused(OauthError::NotAuthorizable {
+			carries,
+			detail: withheld_reason(carries).to_owned(),
+		}));
+	}
+	Ok(server.url().map_or(asked, str::to_owned))
+}
+
+fn declared_server<R: Runtime>(
+	app: &AppHandle<R>,
+	owner: &EnvOwner,
+	name: &str,
+	asked: &str,
+) -> Result<McpServer, EnvError> {
 	let declared = declared_servers(app, owner)?.into_iter().find(|server| server.name == name);
-	let asked = declared.unwrap_or_else(|| McpServer {
+	Ok(declared.unwrap_or_else(|| McpServer {
 		name: name.to_owned(),
-		config: serde_json::json!({ "url": url }),
+		config: serde_json::json!({ "url": asked }),
 		mark: bundles::ApplicationMark::default(),
-	});
-	Ok(asked.authorization_withheld())
+	}))
 }
 
 fn kept(
@@ -504,6 +538,7 @@ async fn revoked<R: Runtime>(app: &AppHandle<R>, url: Option<&str>, held: &Value
 mod tests {
 	use super::*;
 	use crate::agent::protocol::{OauthFailure, OauthFailureKind};
+	use crate::bundles::AuthorizationWithheld;
 	use crate::db::connection::fixture_root;
 	use crate::environment::contract::OAUTH_SERVER_URL;
 	use crate::mcp_oauth::status::ApplicationStatus;
@@ -625,6 +660,30 @@ mod tests {
 	}
 
 	#[test]
+	fn a_connect_runs_against_the_url_the_session_config_declares_and_else_the_one_asked() {
+		let app = an_app_of_its_own("mcp-oauth-declared-url", mock_builder());
+		let path = bundles::user::path(app.handle()).expect("the plugin has a home");
+		bundles::user::lay_down(&path).expect("the plugin is laid down");
+		let declared = serde_json::json!({ "url": "https://mcp.notion.test/mcp" });
+		bundles::plugin::set_mcp_server(&path, "notion", &declared, None)
+			.expect("the server lands");
+
+		let url_of = |name: &str, asked: &str| {
+			declared_url(app.handle(), &EnvOwner::User, name, asked.to_owned())
+				.map_err(|refused| refused.error)
+		};
+
+		assert_eq!(
+			url_of("notion", "https://MCP.notion.test/mcp/"),
+			Ok("https://mcp.notion.test/mcp".to_owned())
+		);
+		assert_eq!(
+			url_of("undeclared", "https://mcp.undeclared.test/mcp"),
+			Ok("https://mcp.undeclared.test/mcp".to_owned())
+		);
+	}
+
+	#[test]
 	fn a_second_flow_is_refused_while_one_is_running() {
 		let state = McpOauthState::default();
 		let running =
@@ -734,6 +793,22 @@ mod tests {
 				client_id: Some("registered".to_owned()),
 				client_secret: Some("confidential".to_owned()),
 				redirect_uri: Some("http://127.0.0.1:53682/oauth/callback".to_owned()),
+			}
+		);
+	}
+
+	#[test]
+	fn a_reconnect_to_the_bound_url_spelled_another_way_reuses_the_stored_registration() {
+		let stored = a_registered_client_bound_to(Some("https://mcp.granola.test/mcp"));
+		let spelled = "HTTPS://MCP.granola.test:443/mcp/";
+
+		assert_eq!(
+			authorize_request("granola", spelled.to_owned(), &stored),
+			AuthorizeRequest {
+				client_id: Some("registered".to_owned()),
+				client_secret: Some("confidential".to_owned()),
+				redirect_uri: Some("http://127.0.0.1:53682/oauth/callback".to_owned()),
+				..registering(spelled)
 			}
 		);
 	}

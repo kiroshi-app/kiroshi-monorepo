@@ -205,7 +205,7 @@ where
 fn unbound_reason(held: &Values, declared: &str) -> Option<&'static str> {
 	match credentials::bound_url(held) {
 		None => Some(UNBOUND),
-		Some(bound) if bound != declared => Some(MOVED),
+		Some(_) if !credentials::is_bound_to(held, declared) => Some(MOVED),
 		Some(_) => None,
 	}
 }
