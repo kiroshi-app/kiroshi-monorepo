@@ -29,14 +29,19 @@ export const REFRESH_TIMEOUT_MS = 10_000
 const GRANTED = "Authorization granted. You can close this tab."
 const DENIED = "Authorization was refused. You can close this tab."
 const REFUSED = "This is not the redirect this flow is waiting for."
+const UNCONFIRMED = "Kiroshi never confirmed it stored the grant"
+const UNSTORED = "the grant could not be stored"
+const PLAIN_TEXT = "text/plain; charset=utf-8"
 const PORT_TAKEN = "the registered redirect port could not be bound"
 const UNREACHED = "the authorization url could not be requested"
+const UNCLOSED = "the redirect listener could not be closed"
 const NO_REVOCATION =
 	"the authorization server advertises no revocation endpoint"
 
 export const OAUTH_STARTED = "oauth_started"
 
 const FLOW_TIMEOUT_MS = 300_000
+const STORE_TIMEOUT_MS = 30_000
 
 const FORM_CONTENT = "application/x-www-form-urlencoded"
 const JSON_CONTENT = "application/json"
@@ -48,6 +53,15 @@ const REFUSED_GRANT_CODES = new Set([
 	"invalid_client",
 	"unauthorized_client",
 ])
+
+const FAILED_REASON: Record<OauthFailureKind, string> = {
+	busy: "another authorization was already running",
+	cancelled: "the connect was cancelled in Kiroshi",
+	timedOut: "Kiroshi stopped waiting for this authorization",
+	denied: "the authorization was refused",
+	rejected: "the authorization server rejected the grant",
+	failed: "the authorization failed",
+}
 
 const ENDPOINT_OF: Record<OauthStep, string> = {
 	discovery: "the discovery endpoint",
@@ -107,6 +121,11 @@ export type RevokeRequest = {
 	clientSecret?: string
 }
 
+export type StoredReport = {
+	stored?: boolean
+	detail?: string
+}
+
 export type RefreshRequest = {
 	url?: string
 	refreshToken?: string
@@ -120,7 +139,17 @@ type Redirect = { code: string } | { failure: OauthFailure }
 
 type Settle = (redirect: Redirect) => void
 
-type Answer = (request: Request) => Response
+type Answer = (request: Request) => Response | Promise<Response>
+
+type HeldPage = {
+	shown: Promise<string>
+	show: (text: string) => void
+}
+
+type Flow = {
+	end: (failure: OauthFailure) => void
+	confirm: (report: StoredReport) => void
+}
 
 type Listening = {
 	listener: Server<undefined>
@@ -156,7 +185,7 @@ type Watched = {
 	refusal: () => Refusal | undefined
 }
 
-let running: Settle | undefined
+let running: Flow | undefined
 
 const timedFetch: FetchLike = (input, init) =>
 	fetch(input, { ...init, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) })
@@ -166,7 +195,16 @@ const fetchWithin =
 	(input, init) =>
 		fetch(input, { ...init, signal: deadline })
 
-const refused = () => new Response(REFUSED, { status: 400 })
+const page = (text: string, status = 200) =>
+	new Response(text, { status, headers: { "content-type": PLAIN_TEXT } })
+
+const refused = () => page(REFUSED, 400)
+
+const failedText = (reason: string) =>
+	`Authorization failed: ${reason}. Go back to Kiroshi and connect again.`
+
+const failurePage = ({ kind, detail }: OauthFailure) =>
+	failedText(detail ?? FAILED_REASON[kind])
 
 const stepOf = (init?: RequestInit): OauthStep => {
 	const posted = new Headers(init?.headers).get("content-type") ?? ""
@@ -231,6 +269,8 @@ const flowFailure = (error: unknown, refusal?: Refusal): OauthFailure =>
 const isLoopback = (host: string | null) =>
 	host !== null && LOOPBACK_HOSTS.has(host.replace(PORT_SUFFIX, ""))
 
+const theAnswerWritten = () => Bun.sleep(0)
+
 const settleOnceAnswered = (settle: Settle, redirect: Redirect) => {
 	setTimeout(() => settle(redirect), 0)
 }
@@ -239,7 +279,8 @@ const answerRedirect = (
 	request: Request,
 	state: string,
 	settle: Settle,
-): Response => {
+	held: Promise<string>,
+): Response | Promise<Response> => {
 	if (!isLoopback(request.headers.get("host"))) {
 		return refused()
 	}
@@ -255,14 +296,14 @@ const answerRedirect = (
 		settleOnceAnswered(settle, {
 			failure: { kind: "denied", detail: denied, code: denied },
 		})
-		return new Response(DENIED)
+		return page(DENIED)
 	}
 	const code = asked.searchParams.get("code")
 	if (!code) {
 		return refused()
 	}
-	settleOnceAnswered(settle, { code })
-	return new Response(GRANTED)
+	settle({ code })
+	return held.then((text) => page(text))
 }
 
 const clientMetadata = (redirectUrl: string): OAuthClientMetadata => ({
@@ -435,10 +476,26 @@ const onAnyPort = (answer: Answer): Listening => {
 	return { listener, redirectUrl: loopbackUrl(listener.port) }
 }
 
+const holdUntilStored = (
+	flow: Flow,
+	{ shown, show }: HeldPage,
+	storeTimeoutMs: number,
+) => {
+	const unconfirmed = setTimeout(
+		() => show(failedText(UNCONFIRMED)),
+		storeTimeoutMs,
+	)
+	shown.then(() => clearTimeout(unconfirmed))
+	flow.confirm = ({ stored, detail }) => {
+		show(stored ? GRANTED : failedText(detail ?? UNSTORED))
+	}
+}
+
 export const authorizeMcpServer = async (
 	request: AuthorizeRequest,
 	emit: Emit,
 	timeoutMs = FLOW_TIMEOUT_MS,
+	storeTimeoutMs = STORE_TIMEOUT_MS,
 ): Promise<OauthAnswer> => {
 	const { url } = request
 	if (!url) {
@@ -453,41 +510,55 @@ export const authorizeMcpServer = async (
 		}
 	}
 	const state = crypto.randomUUID()
-	let settle: Settle = () => undefined
-	const arrival = new Promise<Redirect>((resolve) => {
-		settle = resolve
-	})
-	const answer: Answer = (redirect) => answerRedirect(redirect, state, settle)
+	const { promise: arrival, resolve: settle } =
+		Promise.withResolvers<Redirect>()
+	const { promise: shown, resolve: show } = Promise.withResolvers<string>()
+	const answer: Answer = (redirect) =>
+		answerRedirect(redirect, state, settle, shown)
 	const { listener, redirectUrl, client } =
 		onRegisteredPort(request, answer) ?? onAnyPort(answer)
-	const expiry = setTimeout(
-		() => settle({ failure: { kind: "timedOut" } }),
-		timeoutMs,
-	)
-	running = settle
-	const { fetchFn, refusal } = watched(timedFetch)
-	try {
-		return await exchanged({
-			serverUrl: url,
-			redirectUrl,
-			state,
-			arrival,
-			settle,
-			emit,
-			fetchFn,
-			client,
-		})
-	} catch (error) {
-		return { error: flowFailure(error, refusal()) }
-	} finally {
+	const end = (failure: OauthFailure) => {
+		settle({ failure })
+		show(failurePage(failure))
+	}
+	const flow: Flow = { end, confirm: () => undefined }
+	running = flow
+	const expiry = setTimeout(() => end({ kind: "timedOut" }), timeoutMs)
+	const closed = shown.then(async () => {
 		clearTimeout(expiry)
 		running = undefined
+		await theAnswerWritten()
 		await listener.stop(true)
+	})
+	const { fetchFn, refusal } = watched(timedFetch)
+	const settled = await exchanged({
+		serverUrl: url,
+		redirectUrl,
+		state,
+		arrival,
+		settle,
+		emit,
+		fetchFn,
+		client,
+	}).catch((error: unknown) => ({ error: flowFailure(error, refusal()) }))
+	if ("error" in settled) {
+		show(failurePage(settled.error))
+		await closed
+		return settled
 	}
+	holdUntilStored(flow, { shown, show }, storeTimeoutMs)
+	closed.catch((error: unknown) => {
+		process.stderr.write(`${UNCLOSED}: ${describeError(error)}\n`)
+	})
+	return settled
 }
 
 export const cancelMcpAuthorization = () => {
-	running?.({ failure: { kind: "cancelled" } })
+	running?.end({ kind: "cancelled" })
+}
+
+export const confirmMcpGrantStored = (report: StoredReport) => {
+	running?.confirm(report)
 }
 
 type Revocable = [token: string, hint: string]

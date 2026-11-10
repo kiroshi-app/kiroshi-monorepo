@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "bun:test"
 import {
 	authorizeMcpServer,
 	cancelMcpAuthorization,
+	confirmMcpGrantStored,
 	OAUTH_STARTED,
 	type OauthAnswer,
 	REFRESH_TIMEOUT_MS,
@@ -26,6 +27,10 @@ const TIMEOUT_FLOW_MS = 2_000
 const BODY_LIMIT = 400
 const REFUSAL_BUDGET_MS = 3_000
 const LATE_ANSWER_MS = 50
+const STORE_BOUND_MS = 200
+const GRANTED = "Authorization granted. You can close this tab."
+const CONNECT_AGAIN = "Go back to Kiroshi and connect again."
+const STILL_HELD = Symbol("the page is still held")
 const UNREACHABLE_AUTHORIZATION = "http://127.0.0.1:1/authorize"
 const SESSION_GATE = "<html><body>Sign in to continue</body></html>"
 const UNAVAILABLE = JSON.stringify({
@@ -267,11 +272,39 @@ const waitForStarted = async () => {
 	throw new Error("the flow never opened an authorization url")
 }
 
-const redirectedWithCode = async (asked: URL) => {
+const redirectedWithCode = (asked: URL) => {
 	const landing = new URL(String(asked.searchParams.get("redirect_uri")))
 	landing.searchParams.set("code", CODE)
 	landing.searchParams.set("state", String(asked.searchParams.get("state")))
-	await fetch(landing)
+	return fetch(landing)
+}
+
+const aFlowWaitingForStore = (
+	url: string,
+	storeTimeoutMs: number,
+	timeoutMs?: number,
+) => {
+	frames.length = 0
+	inFlight = authorizeMcpServer({ url }, collect, timeoutMs, storeTimeoutMs)
+	return inFlight
+}
+
+const aHeldPage = async (url: string, storeTimeoutMs: number) => {
+	const flow = aFlowWaitingForStore(url, storeTimeoutMs)
+	const page = redirectedWithCode(await waitForStarted())
+	const settled = await flow
+	return { page, settled }
+}
+
+const stillHeld = (page: Promise<Response>) =>
+	Promise.race([page, Bun.sleep(LATE_ANSWER_MS).then(() => STILL_HELD)])
+
+const textOf = async (page: Promise<Response>) => {
+	const answered = await page
+	return {
+		text: await answered.text(),
+		type: answered.headers.get("content-type"),
+	}
 }
 
 describe("mcp oauth", () => {
@@ -289,10 +322,11 @@ describe("mcp oauth", () => {
 			const landing = new URL(redirect)
 			landing.searchParams.set("code", CODE)
 			landing.searchParams.set("state", String(asked.searchParams.get("state")))
-			const answered = await fetch(landing)
+			const answered = fetch(landing)
 			const settled = await flow
+			confirmMcpGrantStored({ stored: true })
 
-			expect(answered.status).toBe(200)
+			expect((await answered).status).toBe(200)
 			expect(landing.hostname).toBe("127.0.0.1")
 			expect(asked.searchParams.get("code_challenge_method")).toBe("S256")
 			expect(asked.searchParams.get("client_id")).toBe(CLIENT_ID)
@@ -322,7 +356,7 @@ describe("mcp oauth", () => {
 			const registered = await aRegisteredRedirect()
 			const flow = aFlowUnder(authority.url, registered)
 			const asked = await waitForStarted()
-			await redirectedWithCode(asked)
+			redirectedWithCode(asked)
 			const settled = await flow
 
 			expect(asked.searchParams.get("client_id")).toBe(HANDED_CLIENT_ID)
@@ -381,7 +415,7 @@ describe("mcp oauth", () => {
 			const registered = `http://127.0.0.1:${taken.port}/oauth/callback`
 			const flow = aFlowUnder(authority.url, registered)
 			const { redirect, asked } = await waitForAuthorization(authority.seen)
-			await redirectedWithCode(asked)
+			redirectedWithCode(asked)
 
 			expect(asked.searchParams.get("client_id")).toBe(CLIENT_ID)
 			expect(redirect).not.toBe(registered)
@@ -399,7 +433,7 @@ describe("mcp oauth", () => {
 		try {
 			const flow = aFlowUnder(authority.url)
 			const { redirect, asked } = await waitForAuthorization(authority.seen)
-			await redirectedWithCode(asked)
+			redirectedWithCode(asked)
 
 			expect(asked.searchParams.get("client_id")).toBe(CLIENT_ID)
 			expect(await flow).toMatchObject({
@@ -447,7 +481,7 @@ describe("mcp oauth", () => {
 				await Bun.sleep(10)
 			}
 			await Bun.sleep(LATE_ANSWER_MS)
-			await redirectedWithCode(asked)
+			redirectedWithCode(asked)
 
 			expect(await flow).toMatchObject({
 				credentials: { accessToken: ACCESS_TOKEN, clientId: HANDED_CLIENT_ID },
@@ -526,7 +560,7 @@ describe("mcp oauth", () => {
 		})
 		try {
 			const flow = aFlowUnder(authority.url, await aRegisteredRedirect())
-			await redirectedWithCode(await waitForStarted())
+			redirectedWithCode(await waitForStarted())
 			const settled = await flow
 			release()
 			await Bun.sleep(LATE_ANSWER_MS)
@@ -684,14 +718,15 @@ describe("mcp oauth", () => {
 			const landing = new URL(redirect)
 			landing.searchParams.set("code", CODE)
 			landing.searchParams.set("state", String(asked.searchParams.get("state")))
-			const answered = await fetch(landing, {
+			const answered = fetch(landing, {
 				headers: { Host: `localhost:${landing.port}` },
 			})
 
-			expect(answered.status).toBe(200)
 			expect(await flow).toMatchObject({
 				credentials: { accessToken: ACCESS_TOKEN },
 			})
+			confirmMcpGrantStored({ stored: true })
+			expect((await answered).status).toBe(200)
 		} finally {
 			await authority.stop()
 		}
@@ -735,6 +770,127 @@ describe("mcp oauth", () => {
 			})
 			expect(startedFrames()).toEqual([])
 			expect(authority.seen.tokenRequests).toHaveLength(0)
+		} finally {
+			await authority.stop()
+		}
+	}, 20_000)
+
+	it("answers the held page with the failure text once the code exchange fails", async () => {
+		const authority = anAuthorizationServer({
+			tokenRefusal: refusedWith("invalid_grant"),
+		})
+		try {
+			const flow = aFlow(authority.url)
+			const page = textOf(redirectedWithCode(await waitForStarted()))
+
+			expect(await flow).toMatchObject({ error: { kind: "rejected" } })
+			const { text, type } = await page
+			expect(text).toContain("the token endpoint answered 400: invalid_grant")
+			expect(text).toContain(CONNECT_AGAIN)
+			expect(text).not.toContain(GRANTED)
+			expect(type).toStartWith("text/plain")
+		} finally {
+			await authority.stop()
+		}
+	}, 20_000)
+
+	it("holds the page past the exchange until the host confirms the store, then answers granted", async () => {
+		const authority = anAuthorizationServer()
+		try {
+			const { page, settled } = await aHeldPage(
+				authority.url,
+				AUTHORIZATION_BUDGET_MS,
+			)
+
+			expect(settled).toMatchObject({
+				credentials: { accessToken: ACCESS_TOKEN },
+			})
+			expect(await stillHeld(page)).toBe(STILL_HELD)
+			confirmMcpGrantStored({ stored: true })
+			expect(await textOf(page)).toEqual({
+				text: GRANTED,
+				type: expect.stringMatching(/^text\/plain/),
+			})
+		} finally {
+			await authority.stop()
+		}
+	}, 20_000)
+
+	it("answers the held page with the failure text carrying the detail of a refused store", async () => {
+		const authority = anAuthorizationServer()
+		try {
+			const { page } = await aHeldPage(authority.url, AUTHORIZATION_BUDGET_MS)
+			confirmMcpGrantStored({
+				stored: false,
+				detail: "the grant could not be stored: the disk is full",
+			})
+
+			const { text, type } = await textOf(page)
+			expect(text).toBe(
+				`Authorization failed: the grant could not be stored: the disk is full. ${CONNECT_AGAIN}`,
+			)
+			expect(type).toStartWith("text/plain")
+		} finally {
+			await authority.stop()
+		}
+	}, 20_000)
+
+	it("answers the held page with the failure text when the store is never confirmed", async () => {
+		const authority = anAuthorizationServer()
+		try {
+			const { page } = await aHeldPage(authority.url, STORE_BOUND_MS)
+
+			const { text } = await textOf(page)
+			expect(text).toContain("Kiroshi never confirmed it stored the grant")
+			expect(text).toContain(CONNECT_AGAIN)
+		} finally {
+			await authority.stop()
+		}
+	}, 20_000)
+
+	it("answers the held page with the failure text on a cancel and on the flow timeout", async () => {
+		const authority = anAuthorizationServer()
+		try {
+			const cancelled = await aHeldPage(authority.url, AUTHORIZATION_BUDGET_MS)
+			cancelMcpAuthorization()
+
+			expect((await textOf(cancelled.page)).text).toBe(
+				`Authorization failed: the connect was cancelled in Kiroshi. ${CONNECT_AGAIN}`,
+			)
+			const flow = aFlowWaitingForStore(
+				authority.url,
+				AUTHORIZATION_BUDGET_MS,
+				TIMEOUT_FLOW_MS,
+			)
+			const outlasted = redirectedWithCode(await waitForStarted())
+			await flow
+			expect((await textOf(outlasted)).text).toBe(
+				`Authorization failed: Kiroshi stopped waiting for this authorization. ${CONNECT_AGAIN}`,
+			)
+		} finally {
+			await authority.stop()
+		}
+	}, 20_000)
+
+	it("keeps the listener and the one-flow guard until the held page is answered", async () => {
+		const authority = anAuthorizationServer()
+		try {
+			const { page, settled } = await aHeldPage(
+				authority.url,
+				AUTHORIZATION_BUDGET_MS,
+			)
+			const redirect = String(
+				"credentials" in settled ? settled.credentials.redirectUri : "",
+			)
+
+			expect((await fetch(redirect)).status).toBe(400)
+			expect(
+				await authorizeMcpServer({ url: authority.url }, collect),
+			).toMatchObject({ error: { kind: "busy" } })
+			confirmMcpGrantStored({ stored: true })
+			await page
+			await Bun.sleep(LATE_ANSWER_MS)
+			await expect(fetch(redirect)).rejects.toThrow()
 		} finally {
 			await authority.stop()
 		}

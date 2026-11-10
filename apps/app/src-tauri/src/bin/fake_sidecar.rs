@@ -1076,6 +1076,7 @@ fn answer_the_host(command: &Value) {
 		}
 		Some("mcp_oauth_authorize") => on_oauth_authorize(command),
 		Some("mcp_oauth_cancel") => on_oauth_cancel(),
+		Some("mcp_oauth_stored") => on_oauth_stored(command),
 		Some("mcp_oauth_revoke") => {
 			emit_raw(&json!({ "type": "mcp_oauth_revoke", "revoked": true }).to_string())
 		}
@@ -1185,6 +1186,13 @@ fn on_oauth_cancel() {
 	emit_raw(
 		&json!({ "type": "mcp_oauth_authorize", "error": { "kind": "cancelled" } }).to_string(),
 	);
+}
+
+fn on_oauth_stored(command: &Value) {
+	let Ok(path) = std::env::var("FAKE_AGENT_OAUTH_STORED_FILE") else { return };
+	if let Err(error) = std::fs::write(path, command.to_string()) {
+		eprintln!("the fake did not record the stored report: {error}");
+	}
 }
 
 fn checked(connection: &Value) -> Value {
