@@ -176,6 +176,7 @@ branding-spacetint--free-hue
 branding-spacetint--untinted
 branding-spacetint--variants
 conversation-home-home--afternoon
+conversation-home-home--approval-waits
 conversation-home-home--band-shown
 conversation-home-home--could-not-send
 conversation-home-home--evening
@@ -183,6 +184,8 @@ conversation-home-home--field-filled
 conversation-home-home--files-attached
 conversation-home-home--fresh-after-relaunch
 conversation-home-home--loading
+conversation-home-home--mission-blocked
+conversation-home-home--mission-completed
 conversation-home-home--morning
 conversation-home-home--night
 conversation-home-home--no-band
@@ -190,6 +193,8 @@ conversation-home-home--picker-open
 conversation-home-home--picker-without-agents
 conversation-home-home--with-a-first-name
 conversation-home-home--without-a-first-name
+conversation-home-home--worked-in-a-room
+conversation-home-home--working-in-a-room
 conversation-markdown-answerblocks--broken-block-as-source
 conversation-markdown-answerblocks--callouts-in-answer
 conversation-markdown-answerblocks--callouts-with-titles

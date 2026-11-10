@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { expect, fn, screen, waitFor } from "storybook/test"
+import { expect, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
@@ -19,7 +19,14 @@ import {
 	HomeGreetingSkeleton,
 } from "@workspace/ui/components/home-greeting"
 import { HomeLayout } from "@workspace/ui/components/home-layout"
-import { HomeArchivedLine } from "@workspace/ui/components/home-lines"
+import {
+	HomeArchivedLine,
+	HomeAskedByLine,
+	HomeMissionLine,
+	HomeRequest,
+	type HomeRoom,
+	HomeRoomLine,
+} from "@workspace/ui/components/home-lines"
 import {
 	endNotice,
 	NoticeSurface,
@@ -27,6 +34,7 @@ import {
 } from "@workspace/ui/components/notice-surface"
 import type { PromptAttachment } from "@workspace/ui/components/prompt-attachments"
 import { PROMPT_ATTACHMENTS } from "@workspace/ui/components/prompt-attachments.fixtures"
+import { ToolApproval } from "@workspace/ui/components/tool-approval"
 
 const ATLAS: HomeAgent = {
 	id: "atlas",
@@ -63,6 +71,17 @@ const APPLICATION_MARKS = [
 	markOf("#4a154b", "#ffffff", "S"),
 	markOf("#1a73e8", "#ffffff", "C"),
 ]
+
+const LISBON_OFFSITE: HomeRoom = {
+	title: "Lisbon offsite",
+	href: "#lisbon-offsite",
+	icon: "Globe",
+}
+
+const LISBON_MISSION = "Book flights and venue for Lisbon"
+
+const at = (hours: number, minutes: number) =>
+	new Date(2026, 10, 9, hours, minutes).getTime()
 
 const FLIGHTS_ASK =
 	"Can you find flights to Lisbon for the offsite, 12 to 15 March?"
@@ -418,5 +437,139 @@ export const FreshAfterRelaunch = meta.story({
 		).toBeVisible()
 		await userEvent.click(canvas.getByRole("button", { name: "Open it" }))
 		await expect(openedArchive).toHaveBeenCalledOnce()
+	},
+})
+
+const expectRoomLink = async (canvasElement: HTMLElement) => {
+	const link = within(canvasElement).getByRole("link", {
+		name: LISBON_OFFSITE.title,
+	})
+	await expect(link).toBeVisible()
+	await expect(link).toHaveAttribute("href", LISBON_OFFSITE.href)
+}
+
+export const WorkingInARoom = meta.story({
+	name: "Working in a room",
+	render: () => (
+		<EmptyHome
+			after={
+				<HomeRoomLine agent={ATLAS} room={LISBON_OFFSITE} state="working" />
+			}
+			hasBand={false}
+		/>
+	),
+	parameters: withDescription(
+		"Reach for this while the agent works in a room: a line under the composer says so and links to the room. Pick `Worked in a room` once it is done.",
+	),
+	play: async ({ canvas, canvasElement }) => {
+		await expect(canvas.getByText("Atlas is working in")).toBeVisible()
+		await expectRoomLink(canvasElement)
+	},
+})
+
+export const WorkedInARoom = meta.story({
+	name: "Worked in a room",
+	render: () => (
+		<EmptyHome
+			after={
+				<HomeRoomLine
+					agent={ATLAS}
+					at={at(14, 9)}
+					room={LISBON_OFFSITE}
+					state="done"
+				/>
+			}
+			hasBand={false}
+		/>
+	),
+	parameters: withDescription(
+		"The agent left a room: the line turns done, with a check and the time it finished.",
+	),
+	play: async ({ canvas, canvasElement }) => {
+		await expect(canvas.getByText("Atlas worked in")).toBeVisible()
+		await expectRoomLink(canvasElement)
+	},
+})
+
+export const MissionCompleted = meta.story({
+	name: "A mission completed",
+	render: () => (
+		<EmptyHome
+			after={
+				<HomeMissionLine
+					at={at(14, 51)}
+					room={LISBON_OFFSITE}
+					state="completed"
+					title={LISBON_MISSION}
+				/>
+			}
+			hasBand={false}
+		/>
+	),
+	parameters: withDescription(
+		"A mission ended well: the line carries Completed as text, in the success colour. Pick `A mission blocked` for the other state.",
+	),
+	play: async ({ canvas, canvasElement }) => {
+		await expect(canvas.getByText(LISBON_MISSION)).toBeVisible()
+		await expect(canvas.getByText("Completed")).toBeVisible()
+		await expectRoomLink(canvasElement)
+	},
+})
+
+export const MissionBlocked = meta.story({
+	name: "A mission blocked",
+	render: () => (
+		<EmptyHome
+			after={
+				<HomeMissionLine
+					at={at(14, 38)}
+					room={LISBON_OFFSITE}
+					state="blocked"
+					title={LISBON_MISSION}
+				/>
+			}
+			hasBand={false}
+		/>
+	),
+	parameters: withDescription(
+		"A mission is stuck: the line carries Blocked as text, in the destructive colour.",
+	),
+	play: async ({ canvas, canvasElement }) => {
+		await expect(canvas.getByText(LISBON_MISSION)).toBeVisible()
+		await expect(canvas.getByText("Blocked")).toBeVisible()
+		await expectRoomLink(canvasElement)
+	},
+})
+
+export const ApprovalWaits = meta.story({
+	name: "An approval waits on you",
+	render: () => (
+		<HomeLayout stage="empty">
+			<HomeGreeting agent={ATLAS} firstName="Sam" period="afternoon" />
+			<HomeRequest
+				askedBy={<HomeAskedByLine agent={PICO} room={LISBON_OFFSITE} />}
+			>
+				<ToolApproval
+					description="Book 14 seats on the 07:40 from Paris to Lisbon on 12 March, €2,072 in total."
+					onAllowOnce={fn()}
+					onDeny={fn()}
+					parameters={[{ id: "seats", label: "seats", value: "14" }]}
+					tool="Duffel · create_order"
+				/>
+			</HomeRequest>
+		</HomeLayout>
+	),
+	parameters: withDescription(
+		"An agent in a room needs an approval: the approval takes the composer's place, the asked-by line above it says who and where.",
+	),
+	play: async ({ canvas, canvasElement }) => {
+		await expect(
+			canvas.getByRole("group", { name: "Allow this tool to run?" }),
+		).toBeVisible()
+		await expect(canvas.getByText("Pico")).toBeVisible()
+		await expectRoomLink(canvasElement)
+		await expect(
+			canvasElement.querySelector('[data-slot="home-composer"]'),
+		).toBeNull()
 	},
 })
