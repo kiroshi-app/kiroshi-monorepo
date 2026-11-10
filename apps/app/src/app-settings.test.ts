@@ -183,6 +183,12 @@ const openSpaceSettingsByRail = async () => {
 	)
 }
 
+const currentHomeEntryOf = () =>
+	within(railOf()).queryByRole("button", {
+		name: i18n.t("bots:rail.home"),
+		current: true,
+	})
+
 const avatarOf = () =>
 	within(railOf()).getAllByRole("button").at(-1) as HTMLElement
 
@@ -545,7 +551,7 @@ it("goes back one entry, to the user settings the space settings were opened ove
 })
 
 it("opens the conversations and every settings screen at the width set on a settings screen, after a restart too", async () => {
-	harness.preferences = STORED_PREFERENCES
+	harness.preferences = { ...STORED_PREFERENCES, openOn: "lastConversation" }
 	await mountApp()
 	await openSpaceSettingsByRail()
 	const openingWidth = sidebarWidthOf()
@@ -564,6 +570,19 @@ it("opens the conversations and every settings screen at the width set on a sett
 
 	expect(shownSettingsOf()?.subtitle).toBe("user")
 	expect(sidebarWidthOf()).toBe(widened)
+})
+
+it("opens the New conversation page over the settings left open, after a restart", async () => {
+	harness.preferences = STORED_PREFERENCES
+	await mountApp()
+	await press(avatarOf())
+	expect(shownSettingsOf()?.subtitle).toBe("user")
+
+	cleanup()
+	await mountApp()
+
+	expect(shownSettingsOf()).toBeNull()
+	expect(currentHomeEntryOf()).not.toBeNull()
 })
 
 it("shows the settings of the Space reached and leaves the tab of the Space left on its own settings", async () => {

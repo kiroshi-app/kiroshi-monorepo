@@ -42,6 +42,7 @@ const MIRRORED: MirroredPreferences = {
 	firstRunDone: false,
 	lastSpaceId: null,
 	lastBotIdBySpace: {},
+	openOn: "newConversation",
 }
 
 const createStorage = () => {
@@ -94,7 +95,22 @@ describe("the mirror", () => {
 			firstRunDone: false,
 			lastSpaceId: null,
 			lastBotIdBySpace: {},
+			openOn: "newConversation",
 		})
+	})
+
+	it("holds the page the main window opens on", () => {
+		writeMirror({ ...MIRRORED, openOn: "lastConversation" })
+
+		expect(localStorage.getItem("openOn")).toBe("lastConversation")
+		expect(isMirrorKey("openOn")).toBe(true)
+		expect(readMirror().openOn).toBe("lastConversation")
+	})
+
+	it("reads the New conversation page for a launch page it cannot serve", () => {
+		localStorage.setItem("openOn", "lastMission")
+
+		expect(readMirror().openOn).toBe("newConversation")
 	})
 
 	it("holds the companion last opened in each space", () => {
@@ -239,6 +255,7 @@ describe("the record the host holds", () => {
 			firstRunDone: false,
 			lastSpaceId: "vocca",
 			lastBotIdBySpace: {},
+			openOn: "newConversation",
 		})
 	})
 
@@ -257,6 +274,7 @@ describe("the record the host holds", () => {
 			firstRunDone: false,
 			lastSpaceId: null,
 			lastBotIdBySpace: {},
+			openOn: "newConversation",
 		})
 	})
 })
@@ -310,6 +328,7 @@ describe("sameMirror", () => {
 			firstRunDone: false,
 			lastSpaceId: "vocca",
 			lastBotIdBySpace: {},
+			openOn: "newConversation",
 		} as const
 
 		expect(sameMirror(mirrored, { ...mirrored })).toBe(true)
@@ -324,6 +343,9 @@ describe("sameMirror", () => {
 		expect(sameMirror(mirrored, { ...mirrored, lastSpaceId: null })).toBe(false)
 		expect(
 			sameMirror(mirrored, { ...mirrored, lastBotIdBySpace: { vocca: "nyx" } }),
+		).toBe(false)
+		expect(
+			sameMirror(mirrored, { ...mirrored, openOn: "lastConversation" }),
 		).toBe(false)
 	})
 })

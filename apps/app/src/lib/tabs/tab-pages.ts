@@ -4,7 +4,7 @@ import {
 	defaultStringifySearch,
 } from "@tanstack/react-router"
 
-import type { LibraryDocumentRenamed } from "../bindings"
+import type { LibraryDocumentRenamed, OpenOn } from "../bindings"
 import {
 	type LibraryOpening,
 	librarySearchOf,
@@ -78,6 +78,24 @@ export const isLibraryPage = ({ pathname }: Pick<TabPage, "pathname">) =>
 
 export const isHomePage = ({ pathname }: Pick<TabPage, "pathname">) =>
 	pathname === HOME_PATH
+
+export type LaunchPage = {
+	spaceId: string
+	href: string
+}
+
+type LaunchChoice = {
+	openOn: OpenOn
+	lastSpaceId: string | null
+}
+
+export const launchPageOf = ({
+	openOn,
+	lastSpaceId,
+}: LaunchChoice): LaunchPage | null =>
+	openOn === "lastConversation" || lastSpaceId === null
+		? null
+		: { spaceId: lastSpaceId, href: HOME_PATH }
 
 export type DocumentRename = Omit<LibraryDocumentRenamed, "spaceId">
 
