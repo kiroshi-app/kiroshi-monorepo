@@ -262,8 +262,6 @@ const expectRightOfRail = async (
 		slotIn(canvasElement, "collapsed-sidebar").getBoundingClientRect().right,
 	)
 
-const releaseFocus = (element: HTMLElement) => element.blur()
-
 const tileOf = (item: HTMLElement) => getComputedStyle(item, "::before")
 
 const backgroundOf = (element: HTMLElement) =>
@@ -332,11 +330,12 @@ export const OneMission = meta.story({
 			within(group).getByRole("button", { name: "OPE-512 Rebuild the bundle" }),
 		)
 		await expect(OPEN_MISSION).toHaveBeenCalledWith("mission-OPE-512")
-		await userEvent.click(
-			within(group).getByRole("button", { name: "Release train" }),
-		)
+		const conversation = within(group).getByRole("button", {
+			name: "Release train",
+		})
+		await userEvent.click(conversation)
 		await expect(OPEN_CONVERSATION).toHaveBeenCalledWith("release-train")
-		releaseFocus(within(group).getByRole("button", { name: "Release train" }))
+		conversation.blur()
 	},
 })
 
@@ -562,7 +561,7 @@ export const U1Collapsed = meta.story({
 		await expect(await tooltipShown()).toHaveTextContent("Download update")
 		await userEvent.click(update)
 		await expect(DOWNLOAD).toHaveBeenCalled()
-		releaseFocus(update)
+		update.blur()
 	},
 })
 
@@ -604,7 +603,7 @@ export const U3Collapsed = meta.story({
 		const update = updateSlotNamed(canvasElement, "Restart to update to 0.15.0")
 		await userEvent.click(update)
 		await expect(RESTART).toHaveBeenCalled()
-		releaseFocus(update)
+		update.blur()
 	},
 })
 
@@ -770,7 +769,7 @@ export const L2FailedCollapsed = meta.story({
 		)
 		await userEvent.click(retry)
 		await expect(RETRY).toHaveBeenCalled()
-		releaseFocus(retry)
+		retry.blur()
 	},
 })
 
