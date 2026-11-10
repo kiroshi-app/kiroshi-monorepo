@@ -118,6 +118,8 @@ pub struct Translator {
 	delta_seq: u64,
 	cancelling: bool,
 	pending_permissions: HashMap<String, Value>,
+	pending_questions: Vec<String>,
+	answered_by_message: HashSet<String>,
 	activity_titles: HashMap<String, String>,
 	unshown_calls: HashSet<String>,
 	web_reads: WebReads,
@@ -141,7 +143,24 @@ impl Translator {
 	}
 
 	pub fn take_permission_input(&mut self, request_id: &str) -> Option<Value> {
+		self.pending_questions.retain(|asked| asked != request_id);
 		self.pending_permissions.remove(request_id)
+	}
+
+	pub fn take_question(&mut self) -> Option<(String, Value)> {
+		let id = self.pending_questions.first()?.clone();
+		let input = self.take_permission_input(&id)?;
+		self.answered_by_message.insert(id.clone());
+		Some((id, input))
+	}
+
+	pub fn was_answered_by_message(&self, request_id: &str) -> bool {
+		self.answered_by_message.contains(request_id)
+	}
+
+	pub fn abandon_prompts(&mut self) -> Vec<String> {
+		self.pending_questions.clear();
+		self.pending_permissions.drain().map(|(id, _)| id).collect()
 	}
 
 	pub fn ingest(&mut self, frame: Frame) -> Vec<AgentEvent> {
@@ -378,6 +397,7 @@ impl Translator {
 		self.activity_titles.clear();
 		self.unshown_calls.clear();
 		self.pending_permissions.clear();
+		self.pending_questions.clear();
 
 		events.push(AgentEvent::TurnEnded {
 			ended: TurnEnded {
@@ -411,6 +431,9 @@ impl Translator {
 		let questions = (tool_name == ASK_USER_QUESTION)
 			.then(|| read_list(&input, "questions", asked_question));
 		let subject = question_subject(&input);
+		if questions.is_some() {
+			self.pending_questions.push(request_id.clone());
+		}
 		self.pending_permissions.insert(request_id.clone(), input);
 
 		let pending = AgentEvent::Activity {
@@ -1146,5 +1169,14 @@ mod tests {
 		);
 
 		assert!(translator.take_permission_input("req-1").is_none());
+	}
+
+	#[test]
+	fn only_a_pending_question_is_taken_as_answered_by_a_message() {
+		let mut translator = Translator::new(false);
+		ingest(&mut translator, vec![control_request("Bash", json!({ "command": "ls" }))]);
+
+		assert!(translator.take_question().is_none());
+		assert!(translator.take_permission_input("req-1").is_some());
 	}
 }

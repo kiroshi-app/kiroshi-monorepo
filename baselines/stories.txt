@@ -1210,6 +1210,10 @@ forms-settingsselect--default
 forms-settingsselect--disabled
 forms-settingsselect--empty
 forms-settingsselect--error
+forms-settingsselect--options-rebuilt-without-pick
+forms-settingsselect--options-rebuilt-without-value
+forms-settingsselect--picked-by-typing-on-the-trigger
+forms-settingsselect--picked-from-the-list-by-keyboard
 forms-settingsselect--themes-at-rest
 forms-settingsselect--themes-filled
 forms-settingsselect--themes-focus-visible

@@ -26,7 +26,9 @@ use crate::conversations::summons::{self, SummonsDropReason, SummonsRun};
 use crate::conversations::turn_run_deadline::arm_start_deadlines;
 use crate::db;
 use crate::db::repositories::conversations::{PendingPrompt, PromptKind, MISSION_KIND, TOPIC_KIND};
-use crate::db::repositories::messages::{EndedRun, NewAssistantMessage, NewTurn, TerminalState};
+use crate::db::repositories::messages::{
+	EndedRun, LatestMessageQuery, MessageAuthorship, NewAssistantMessage, NewTurn, TerminalState,
+};
 use crate::db::DatabaseError;
 use crate::events::CONVERSATION_UPDATED;
 
@@ -365,17 +367,30 @@ impl<R: Runtime> Desk<R> {
 		if self.streams_a_continuation() {
 			return;
 		}
-		let Some(continued) = &self.last_answered else {
+		let Some(continued) = self.continued_turn().await else {
 			log::warn!(
-				"a follow-up of conversation {} continues no turn this run answered and is not written",
+				"a follow-up of conversation {} continues no turn its bot answered and is not written",
 				self.store.conversation_id
 			);
 			return;
 		};
-		let turn = OpenTurn::continuing(continued);
+		let turn = OpenTurn::continuing(&continued);
 		match self.store.start_continuation(&turn.id, &continued.turn_id).await {
 			Ok(()) => self.parked = self.turn.replace(turn),
 			Err(error) => self.store.report(&turn.id, &error),
+		}
+	}
+
+	async fn continued_turn(&self) -> Option<SubmittedTurn> {
+		if let Some(answered) = &self.last_answered {
+			return Some(answered.clone());
+		}
+		match self.store.latest_answered_turn().await {
+			Ok(answered) => answered,
+			Err(error) => {
+				self.store.report("the turn a follow-up continues", &error);
+				None
+			}
 		}
 	}
 
@@ -819,6 +834,23 @@ impl<R: Runtime> Store<R> {
 		self.owned.claim_turn(id);
 		self.announce_updated(database).await;
 		Ok(())
+	}
+
+	async fn latest_answered_turn(&self) -> Result<Option<SubmittedTurn>, TranscriptStoreError> {
+		let latest = self
+			.database()?
+			.messages()
+			.latest_message(LatestMessageQuery {
+				conversation_id: self.conversation_id.clone(),
+				authorship: MessageAuthorship::Bot(self.bot_id.clone()),
+				not_after: now_ms(),
+			})
+			.await?;
+		Ok(latest.and_then(|reply| {
+			let prompt_id = reply.reply_links.into_iter().next()?.message_id;
+			let turn_id = reply.continues_turn_id.unwrap_or(reply.turn_id);
+			Some(SubmittedTurn { turn_id, prompt_id })
+		}))
 	}
 
 	async fn start_turn(&self, id: &str) -> Result<(), TranscriptStoreError> {
@@ -2851,5 +2883,56 @@ mod tests {
 			.collect();
 		assert_eq!(ended, ["t1".to_owned(), follow_up.turn_id, "t2".to_owned()]);
 		assert!(written.completed_at("t2").await.is_some());
+	}
+
+	fn the_question_heard(heard: &[Heard]) -> Option<&Option<EventTurn>> {
+		heard.iter().find_map(|(event, turn)| {
+			matches!(event, AgentEvent::QuestionRequested { .. }).then_some(turn)
+		})
+	}
+
+	#[tokio::test]
+	async fn a_question_asked_after_the_turn_ended_is_told_in_a_continuation_of_that_turn() {
+		let written = Written::new("follow-up-question").await;
+		written.prompt("t1", "p1").await;
+		let entries = entries_of(&a_spoken_turn())
+			.into_iter()
+			.chain([Entry::FollowUp(FollowUp::Started), Entry::Event(question("q1"))])
+			.collect();
+
+		let heard = written.forwarded_with_turns(entries).await;
+
+		let row = written.stored(&question_message_id_of("q1")).await.expect("the row is written");
+		assert_eq!(row.content, QUESTION_TEXT);
+		assert_eq!(row.continues_turn_id.as_deref(), Some("t1"));
+		assert_ne!(row.turn_id, "t1");
+		let continuation = EventTurn {
+			turn_id: row.turn_id.clone(),
+			conversation_id: written.conversation_id.clone(),
+			continues_turn_id: Some("t1".to_owned()),
+		};
+		assert_eq!(the_question_heard(&heard), Some(&Some(continuation)));
+		assert_eq!(held_prompts(&written).await, [held("q1", "question")]);
+	}
+
+	#[tokio::test]
+	async fn a_question_a_new_run_asks_before_it_answered_a_turn_continues_the_last_turn_of_its_bot(
+	) {
+		let written = Written::new("new-run-follow-up-question").await;
+		written.prompt("t1", "p1").await;
+		written.forwarded(entries_of(&a_spoken_turn())).await;
+		let entries = vec![Entry::FollowUp(FollowUp::Started), Entry::Event(question("q1"))];
+
+		let heard = written.forwarded_with_turns(entries).await;
+
+		let row = written.stored(&question_message_id_of("q1")).await.expect("the row is written");
+		assert_eq!(row.content, QUESTION_TEXT);
+		let continuation = EventTurn {
+			turn_id: row.turn_id.clone(),
+			conversation_id: written.conversation_id.clone(),
+			continues_turn_id: Some("t1".to_owned()),
+		};
+		assert_eq!(the_question_heard(&heard), Some(&Some(continuation)));
+		assert_eq!(held_prompts(&written).await, [held("q1", "question")]);
 	}
 }

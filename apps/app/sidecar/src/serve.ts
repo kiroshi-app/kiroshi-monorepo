@@ -6,6 +6,7 @@ import { closeHostChannel, openHostChannel, settleHostAnswer } from "./host"
 import {
 	authorizeMcpServer,
 	cancelMcpAuthorization,
+	confirmMcpGrantStored,
 	refreshMcpToken,
 	revokeMcpToken,
 } from "./mcp-oauth"
@@ -53,6 +54,8 @@ export type Command = {
 	clientId?: string
 	clientSecret?: string
 	redirectUri?: string
+	stored?: boolean
+	detail?: string
 	requestId?: string
 	decision?: PermissionDecision
 	result?: unknown
@@ -85,6 +88,7 @@ export const sessionRequest = (command: Command): SessionRequest => ({
 
 const AUTHORIZE = "mcp_oauth_authorize"
 const CANCEL = "mcp_oauth_cancel"
+const STORED = "mcp_oauth_stored"
 const REVOKE = "mcp_oauth_revoke"
 const REFRESH = "mcp_oauth_refresh"
 const SIGN_IN = "sign_in"
@@ -243,6 +247,7 @@ export const createRouter = (
 		[SIGN_IN_CANCEL, cancelSignIn],
 		[AUTHORIZE, authorizeServer],
 		[CANCEL, cancelMcpAuthorization],
+		[STORED, confirmMcpGrantStored],
 		[REVOKE, revokeGrant],
 		[REFRESH, refreshGrant],
 	])

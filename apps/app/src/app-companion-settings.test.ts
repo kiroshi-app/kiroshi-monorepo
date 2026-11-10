@@ -987,3 +987,66 @@ it("starts the session on the stored model and raises a notice when the held run
 	expect(held.modelsSessionsStartedOn[0]).toBe("opus")
 	expect(raisedNoticeTitles()).toContain(i18n.t("bots:roster.settingsUnsaved"))
 })
+
+const EVERY_EFFORT: OfferedModel_Serialize["supportedEffortLevels"] = [
+	"low",
+	"medium",
+	"high",
+	"xhigh",
+	"max",
+]
+
+const offeredOnEveryEffort = (value: string): OfferedModel_Serialize => ({
+	value,
+	supportedEffortLevels: EVERY_EFFORT,
+})
+
+const SDK_0_3_321_MODELS: OfferedModel_Serialize[] = [
+	...["opus", "fable", "sonnet", "haiku", "claude-fable-5-1"].map(
+		offeredOnEveryEffort,
+	),
+	{ value: "claude-haiku-4-5-20251001", supportedEffortLevels: [] },
+	...["claude-sonnet-5", "claude-opus-5", "claude-opus-4-8"].map(
+		offeredOnEveryEffort,
+	),
+]
+
+const UNOFFERED_MODEL = "opus[1m]"
+
+const storedOnUnofferedModel: StoreChange = (store) => ({
+	...store,
+	createBot: (identity, spaceId) =>
+		store.createBot(
+			identity.name === ATLAS
+				? { ...identity, model: UNOFFERED_MODEL }
+				: identity,
+			spaceId,
+		),
+})
+
+it("keeps a model and effort picked away from a stored model the catalogue does not offer", async () => {
+	harness.models = SDK_0_3_321_MODELS
+	const seeded = await mountApp(storedOnUnofferedModel)
+	await openRuntimeOf(ATLAS)
+
+	expect(modelSelectOf().textContent).toBe(UNOFFERED_MODEL)
+
+	await pickSonnetOnHigh()
+
+	expect(await storedRuntimeOf(seeded.atlasId)).toEqual({
+		model: "sonnet",
+		effort: "high",
+	})
+	expect(shownRuntime()).toEqual(SONNET_ON_HIGH)
+})
+
+it("raises a notice and puts back a stored model the catalogue does not offer when the write fails", async () => {
+	harness.models = SDK_0_3_321_MODELS
+	await mountApp((store) => storedOnUnofferedModel(refusingUpdates(store)))
+	await openRuntimeOf(ATLAS)
+
+	await pickIn(modelSelectOf(), "sonnet")
+
+	expect(raisedNoticeTitles()).toContain(i18n.t("bots:roster.settingsUnsaved"))
+	expect(modelSelectOf().textContent).toBe(UNOFFERED_MODEL)
+})

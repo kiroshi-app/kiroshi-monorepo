@@ -8,14 +8,13 @@ import type {
 	CatalogueCategory,
 } from "@workspace/ui/components/plugin-settings/applications-catalogue"
 import type { ApplicationsCatalogueSection } from "@workspace/ui/components/plugin-settings/use-mcp-session"
-import { i18n } from "@workspace/ui/lib/i18n"
 
 import { categoriesOf } from "./application-categories"
 import { type InstallTarget, serverScopeOf } from "./application-install"
 import type { Application, Install } from "./application-port"
-import type { ApplicationRow } from "./connection-port"
 import {
 	type ConnectionSettings,
+	connectRefusalOf,
 	toConnectionSettings,
 } from "./connection-settings"
 import { type SessionReopener, scopeOfOwner } from "./session-reopening"
@@ -126,26 +125,9 @@ export const toInstallableApplication = (
 	refusal: refusalOf(application),
 })
 
-const connectRefusalOf = (rows: ApplicationRow[], name: string) => {
-	const row = rows.find((held) => held.name === name)
-	if (!row) {
-		return new Error(i18n.t("bots:applications.connection.state.failed"))
-	}
-	if (row.status !== "needsAuthorization" && row.status !== "failed") {
-		return null
-	}
-	return new Error(
-		row.reason ?? i18n.t(`bots:applications.connection.state.${row.status}`),
-	)
-}
-
 const connectFor =
 	(connections: Connections) => async (name: string, url: string) => {
-		const { failure, rows } = await connections.connect(name, url)
-		if (failure?.command === "connect" && failure.name === name) {
-			throw failure.reason
-		}
-		const refused = connectRefusalOf(rows, name)
+		const refused = connectRefusalOf(await connections.connect(name, url), name)
 		if (refused) {
 			throw refused
 		}

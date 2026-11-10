@@ -1,3 +1,4 @@
+import { raiseTransientNotice } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { createArrivalsListener } from "./create-arrivals-listener"
@@ -12,6 +13,7 @@ import {
 	type SummonsDroppedListener,
 } from "./create-live-listeners"
 import { createForeignTurns, type ForeignSpeaker } from "./foreign-turns"
+import { createKeptRuns } from "./kept-runs"
 import { addresseesIn, toMentionTokens } from "./mentions"
 import { readConversation } from "./read-conversation"
 import {
@@ -220,6 +222,7 @@ export type ConversationControllerOptions = {
 		notice: UnreportedFailureNotice,
 		facts?: ReporterFacts,
 	) => unknown
+	raiseTransientNotice?: typeof raiseTransientNotice
 }
 
 type Seating = "held" | "unknown" | "unreadable"
@@ -309,13 +312,6 @@ const summonLimitDescriptionOf = (names: string[]) =>
 		name: names[0],
 		limit: MAX_SUMMONS_PER_CHAIN,
 	})
-
-const dropDescriberOf =
-	({ reason, error }: NoticedDrop) =>
-	(names: string[]) =>
-		reason === "summonLimit"
-			? summonLimitDescriptionOf(names)
-			: notStartedDescriptionOf(error ?? NO_SESSION, names)
 
 const isSameWork = (left: WorkingState | null, right: WorkingState | null) =>
 	left?.kind === right?.kind &&
@@ -409,12 +405,14 @@ export const createConversationController = (
 		options.onSummonsDropped ?? createSummonsDroppedListener()
 	const reportFailure =
 		options.reportFailure ?? failureReporterIn("conversation-controller")
+	const raiseNotice = options.raiseTransientNotice ?? raiseTransientNotice
 	const transcript = createTranscriptController(store)
 	const hearSilence = ({ conversationId }: RuntimeScope) => {
 		sync()
 		options.rereadConversation?.(conversationId)
 	}
 	const foreignTurns = createForeignTurns(transcript, now, hearSilence)
+	const keptRuns = createKeptRuns((scope) => shutdownRun(scope))
 	const enqueue = createQueue()
 
 	const stateStore = createStore(initialState)
@@ -437,6 +435,7 @@ export const createConversationController = (
 	let stopReconnections: (() => void) | null = null
 	let stopDrops: Promise<() => void> | null = null
 	const noticedRuns = new Set<string>()
+	const summonLimitsNoticed = new Set<string>()
 	let shouldRebuildForeignTurns = false
 
 	const settle = (next: ConversationState) => {
@@ -939,7 +938,9 @@ export const createConversationController = (
 			noteFailedTurn(held)
 		}
 		settleOpenReplies(held, completion)
-		void shutdownSpeaker(held)
+		if (!held.scope || !keptRuns.isKeeping(held.scope)) {
+			void shutdownSpeaker(held)
+		}
 		const handed = noteHandovers(held)
 		if (handed.length === 0) {
 			syncAndDrive()
@@ -949,6 +950,27 @@ export const createConversationController = (
 			handOver(seated, held.turn.id)
 			syncAndDrive()
 		})
+	}
+
+	const keepRun = ({ scope, turn, pending }: Speaker) => {
+		if (!scope) {
+			return
+		}
+		if (pending?.kind !== "question") {
+			keptRuns.linger(scope)
+			return
+		}
+		keptRuns.keep(scope, pending.request.id)
+		foreignTurns.render(
+			scope,
+			{ turnId: turn.id, conversationId: scope.conversationId },
+			{ type: "questionRequested", request: pending.request },
+		)
+	}
+
+	const endTurn = (held: Speaker, completion: TerminalCompletion) => {
+		keepRun(held)
+		closeSpeaker(held, completion)
 	}
 
 	const failSpeaker = (held: Speaker, error: TransportError) => {
@@ -987,6 +1009,14 @@ export const createConversationController = (
 			return
 		}
 		held.pending = null
+		sync()
+	}
+
+	const settlePrompt = (held: Speaker, id: string) => {
+		if (held.scope) {
+			foreignTurns.release(held.scope, id)
+		}
+		releasePrompt(held, id)
 		sync()
 	}
 
@@ -1041,11 +1071,11 @@ export const createConversationController = (
 					request: event.request,
 				})
 			case "permissionResolved":
-				return releasePrompt(held, event.id)
+				return settlePrompt(held, event.id)
 			case "turnHeld":
 				return noteHold(held, event.hold)
 			case "turnEnded":
-				return closeSpeaker(held, ENDING_FOR_OUTCOME[event.ended.outcome])
+				return endTurn(held, ENDING_FOR_OUTCOME[event.ended.outcome])
 			case "failed":
 				return failSpeaker(held, event.error)
 			default:
@@ -1066,6 +1096,9 @@ export const createConversationController = (
 		if (held) {
 			apply(held, event)
 			return
+		}
+		if (scope) {
+			keptRuns.hear(scope, event)
 		}
 		if (scope && turn && isOpenConversation(turn.conversationId)) {
 			foreignTurns.render(scope, turn, event)
@@ -1193,9 +1226,12 @@ export const createConversationController = (
 			return
 		}
 		const conversationId = conversation.id
-		const scope = await openScope(conversationId, held.botId)
+		const kept = keptRuns.ride(conversationId, held.botId)
+		const scope = kept ?? (await openScope(conversationId, held.botId))
 		held.scope = scope
-		await driver.startOrResumeSession(scope)
+		if (!kept) {
+			await driver.startOrResumeSession(scope)
+		}
 		const context = await store.boundedContext(
 			conversationId,
 			held.botId,
@@ -1409,6 +1445,16 @@ export const createConversationController = (
 		}
 	}
 
+	const raiseSummonLimit = async ({ turnId, botId }: NoticedDrop) => {
+		const run = runKeyOf(turnId, botId)
+		if (!conversation || summonLimitsNoticed.has(run)) {
+			return
+		}
+		summonLimitsNoticed.add(run)
+		const names = await namesOf(conversation, [botId])
+		raiseNotice({ type: "info", title: summonLimitDescriptionOf(names) })
+	}
+
 	const noteUnseatedIn = (said: TranscriptMessage) => {
 		const { unresolved } = addresseesIn(said.content, presentBotIds())
 		dropAll(
@@ -1434,7 +1480,13 @@ export const createConversationController = (
 		if (noticedRuns.delete(runKeyOf(dropped.turnId, dropped.botId))) {
 			return
 		}
-		void raiseNotStarted(dropped, [dropped.botId], dropDescriberOf(dropped))
+		if (dropped.reason === "summonLimit") {
+			void raiseSummonLimit(dropped)
+			return
+		}
+		void raiseNotStarted(dropped, [dropped.botId], (names) =>
+			notStartedDescriptionOf(dropped.error ?? NO_SESSION, names),
+		)
 	}
 
 	const noteFrontDrop = (
@@ -1785,6 +1837,7 @@ export const createConversationController = (
 		try {
 			await send()
 			foreignTurns.release(scope, id)
+			keptRuns.settle(scope, id)
 			return true
 		} catch (reason) {
 			noteSpeakerFailure(scope.botId, toTransportError(reason))
@@ -1924,10 +1977,19 @@ export const createConversationController = (
 		sync()
 	}
 
+	const releaseRunsLeftBehind = ({ id }: StoredConversation) => {
+		const seated = participants().map(({ botId }) => botId)
+		return keptRuns.releaseWhere(
+			({ conversationId, botId }) =>
+				conversationId !== id || !seated.includes(botId),
+		)
+	}
+
 	const open = async (next: StoredConversation) => {
 		const isSameConversation = conversation?.id === next.id
 		conversation = next
 		rebuildForeignTurns(next)
+		void releaseRunsLeftBehind(next)
 		if (isSameConversation) {
 			sync()
 			await readBack(next.id)
@@ -2052,18 +2114,19 @@ export const createConversationController = (
 			: Promise.resolve(NO_PINS)
 	}
 
+	const shutdownRun = (scope: RuntimeScope) =>
+		driver.shutdown(scope).catch((reason) => {
+			console.error("conversation controller: agent_shutdown failed", reason)
+		})
+
 	const shutdownSpeaker = (held: Speaker) =>
-		held.scope
-			? driver.shutdown(held.scope).catch((reason) => {
-					console.error(
-						"conversation controller: agent_shutdown failed",
-						reason,
-					)
-				})
-			: Promise.resolve()
+		held.scope ? shutdownRun(held.scope) : Promise.resolve()
 
 	const shutdown = async () => {
-		await Promise.all([...speakers.values()].map(shutdownSpeaker))
+		await Promise.all([
+			...[...speakers.values()].map(shutdownSpeaker),
+			keptRuns.releaseWhere(() => true),
+		])
 		disconnect()
 	}
 

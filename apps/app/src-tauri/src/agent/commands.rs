@@ -224,6 +224,20 @@ impl<S> Live<S> {
 		self.questions().clone()
 	}
 
+	fn is_asking(&self, scope: &RuntimeScope) -> bool {
+		self.questions().iter().any(|question| question.asked_by(scope))
+	}
+
+	fn asking_runs(&self) -> Vec<RuntimeScope> {
+		let mut asking: Vec<RuntimeScope> = Vec::new();
+		for question in self.questions().iter() {
+			if !asking.contains(&question.scope) {
+				asking.push(question.scope.clone());
+			}
+		}
+		asking
+	}
+
 	fn questions_in(&self, conversation_id: &str) -> Vec<ScopedEvent> {
 		self.questions()
 			.iter()
@@ -397,6 +411,16 @@ impl<S: Clone> Live<S> {
 				**held != admitted && run.scope.conversation_id == scope.conversation_id
 			})
 			.map(|(held, _)| held.clone())
+			.collect()
+	}
+
+	fn live_runs(&self) -> Vec<RuntimeScope> {
+		self.runs
+			.lock()
+			.expect("live runs")
+			.values()
+			.filter(|run| run.session.is_some())
+			.map(|run| run.scope.clone())
 			.collect()
 	}
 
@@ -1529,9 +1553,46 @@ pub(crate) async fn line_place_of(
 }
 
 pub(crate) async fn run_is_idle(state: &AgentState, scope: &RuntimeScope) -> bool {
+	if state.live.is_asking(scope) {
+		return false;
+	}
 	match state.live.session_for(scope) {
 		Ok(session) => session.is_idle().await,
 		Err(_) => true,
+	}
+}
+
+pub(crate) fn asking_runs<R: Runtime>(app: &AppHandle<R>) -> Vec<RuntimeScope> {
+	match app.try_state::<AgentState>() {
+		Some(state) => state.live.asking_runs(),
+		None => Vec::new(),
+	}
+}
+
+pub(crate) fn live_runs<R: Runtime>(app: &AppHandle<R>) -> Vec<RuntimeScope> {
+	match app.try_state::<AgentState>() {
+		Some(state) => state.live.live_runs(),
+		None => Vec::new(),
+	}
+}
+
+pub(crate) async fn shut_asking_runs_down<R: Runtime>(
+	app: &AppHandle<R>,
+	is_gone: impl Fn(&RuntimeScope) -> bool,
+) {
+	let gone = asking_runs(app).into_iter().filter(is_gone).collect();
+	shut_runs_down(app, gone).await;
+}
+
+pub(crate) async fn shut_runs_down<R: Runtime>(app: &AppHandle<R>, gone: Vec<RuntimeScope>) {
+	let Some(state) = app.try_state::<AgentState>() else {
+		return;
+	};
+	for scope in gone {
+		let bot_id = scope.bot_id.clone();
+		if let Err(error) = agent_shutdown(app.clone(), state.clone(), scope).await {
+			log::warn!("the asking session of {bot_id} could not shut down: {error:?}");
+		}
 	}
 }
 
@@ -2303,6 +2364,16 @@ mod tests {
 	}
 
 	#[test]
+	fn the_live_runs_are_the_runs_holding_a_session_and_not_one_still_starting() {
+		let live = Live::<&str>::default();
+		live.take_over(a_scope());
+		live.take_over(another_bots_run());
+		assert!(live.install(&another_bots_run(), ANOTHER_BOTS_SESSION));
+
+		assert_eq!(live.live_runs(), vec![another_bots_run()]);
+	}
+
+	#[test]
 	fn a_scope_differing_on_the_epoch_is_stale_and_one_naming_another_run_is_not_held() {
 		let live = Live::<&str>::default();
 		live.take_over(a_scope());
@@ -2994,6 +3065,23 @@ mod tests {
 				1,
 				"another run lost its question"
 			);
+		}
+
+		#[tokio::test]
+		async fn an_agent_gone_denies_the_questions_its_kept_run_holds_and_spares_the_others() {
+			let app = an_app("gone");
+			two_questions_and_one_elsewhere(app.handle());
+			let mut heard = events::subscribed(app.handle());
+
+			shut_asking_runs_down(app.handle(), |scope| scope.bot_id == a_scope().bot_id).await;
+
+			let resolved: Vec<Frame> = everything_heard(&mut heard)
+				.into_iter()
+				.filter(|frame| frame.contains("permissionResolved"))
+				.collect();
+			assert_eq!(resolved, vec![denied("q1"), denied("q2")]);
+			assert!(pending_in(app.handle(), "c1").await.is_empty());
+			assert_eq!(pending_in(app.handle(), "c2").await.len(), 1, "another run was shut");
 		}
 
 		#[tokio::test]

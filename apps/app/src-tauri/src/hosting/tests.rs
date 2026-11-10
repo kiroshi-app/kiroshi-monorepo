@@ -36,7 +36,7 @@ use super::roster::SignedRow;
 use super::sealing_member::{
 	host_frame_opened, space_key_of, verified_set, HostFrame, SealingMember, Space,
 };
-use super::wire::{host_keys, HELLO};
+use super::wire::{host_keys, HELLO, NO_KEY_ID};
 use super::{opening, renamed, resumed, signed_out, start, stop, Hosting, Opening};
 use crate::account::contract::SignedOutReason;
 use crate::account::contract::{AccountState, CHANGED_EVENT as ACCOUNT_CHANGED_EVENT};
@@ -9143,6 +9143,48 @@ fn a_pending_device_gets_no_rekey_until_the_device_list_returns_it_approved() {
 			.expect("the roster set verifies")
 			.contains(&pending.keys.device_id()));
 		assert!(harness.rostered_as(&pending).await.is_some());
+	});
+}
+
+#[test]
+fn a_device_outside_the_roster_asking_its_missed_rekey_is_refused_as_not_admitted_until_approved() {
+	run(async {
+		capturing();
+		let mut harness = Harness::signed_in("devices-not-admitted").await;
+		harness.started().await;
+		let mut relay = harness.relay_side().await;
+		let host = harness.host_keys().signing_public();
+		let instance_id = relay.instance_id.clone();
+		let pending = SealingMember::new("guest");
+		let unheld = HeldSpaceKey::under(NO_KEY_ID).expect("randomness");
+		let asked = Space { instance_id: &instance_id, key: &unheld, host: &host };
+
+		harness.listed_pending(&pending);
+		relay.sent(pending.sealed(&asked, 1, HELLO, None)).await;
+		let refused = tokio::time::timeout(PATIENCE, relay.addressed(&pending, "refused"))
+			.await
+			.expect("the host refuses the device in time");
+		let dropped = warnings_naming(&pending.relay_device_id).await;
+		harness.approved(&pending);
+		relay.sent(device_approved_event(&pending.relay_device_id, "guest")).await;
+		let rekey = relay.addressed(&pending, "rekey").await;
+		let handover = rekeyed_handover(&relay, &pending, &rekey, &host);
+
+		assert_eq!(
+			refused,
+			json!({
+				"v": 2,
+				"instance": instance_id,
+				"to": pending.relay_device_id,
+				"refused": "notAdmitted",
+			})
+		);
+		assert_eq!(dropped.len(), 1, "{dropped:?}");
+		assert!(dropped[0].contains(&format!("(instance {instance_id})")), "{}", dropped[0]);
+		assert!(dropped[0].contains("NotAdmitted"), "{}", dropped[0]);
+		assert!(verified_set(&host, &handover.roster)
+			.expect("the roster set verifies")
+			.contains(&pending.keys.device_id()));
 	});
 }
 

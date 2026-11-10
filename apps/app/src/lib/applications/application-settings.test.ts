@@ -137,8 +137,8 @@ const connectionsReading = (
 	connecting: null,
 	failure,
 	isPending: false,
-	connect: vi.fn(async () => ({ rows, failure })),
-	disconnect: vi.fn(async () => ({ rows, failure })),
+	connect: vi.fn(async () => ({ rows, failure, isCancelled: false })),
+	disconnect: vi.fn(async () => ({ rows, failure, isCancelled: false })),
 	cancel: vi.fn(),
 })
 

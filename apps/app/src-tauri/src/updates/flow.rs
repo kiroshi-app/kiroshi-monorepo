@@ -7,7 +7,7 @@ use tauri::{AppHandle, Manager, Runtime, Url};
 use tauri_plugin_updater::{Update, UpdaterExt};
 
 use super::contract::{UpdateChannel, UpdateState};
-use crate::events;
+use crate::{db, events};
 
 const STABLE_MANIFEST: &str =
 	"https://github.com/kiroshi-app/kiroshi-monorepo/releases/latest/download/latest.json";
@@ -35,6 +35,10 @@ enum Settled {
 impl Updates {
 	pub fn state(&self) -> UpdateState {
 		self.held().state.clone()
+	}
+
+	fn is_offering(&self) -> bool {
+		matches!(self.held().state, UpdateState::Available { .. })
 	}
 
 	fn held(&self) -> MutexGuard<'_, Held> {
@@ -112,11 +116,8 @@ fn is_offered(running: &Version, remote: &Version) -> bool {
 	remote > running
 }
 
-pub async fn check<R: Runtime>(
-	app: &AppHandle<R>,
-	channel: Result<UpdateChannel, String>,
-) -> UpdateState {
-	let channel = match channel {
+pub async fn check_stored_channel<R: Runtime>(app: &AppHandle<R>) -> UpdateState {
+	let channel = match stored_channel(app).await {
 		Ok(channel) => channel,
 		Err(message) => {
 			return match app.state::<Updates>().fail_unless_busy(failed("check", message)) {
@@ -129,6 +130,26 @@ pub async fn check<R: Runtime>(
 		Ok(()) => run(app, channel).await,
 		Err(current) => current,
 	}
+}
+
+pub fn check_stored_channel_on<R: Runtime>(app: &AppHandle<R>) {
+	let app = app.clone();
+	tauri::async_runtime::spawn(async move { check_stored_channel_unless_offering(&app).await });
+}
+
+async fn check_stored_channel_unless_offering<R: Runtime>(app: &AppHandle<R>) -> UpdateState {
+	let updates = app.state::<Updates>();
+	if updates.is_offering() {
+		return updates.state();
+	}
+	check_stored_channel(app).await
+}
+
+async fn stored_channel<R: Runtime>(app: &AppHandle<R>) -> Result<UpdateChannel, String> {
+	let state = app.state::<db::DatabaseState>();
+	let database = state.as_ref().map_err(|failure| format!("{failure:?}"))?;
+	let preferences = database.user().preferences().await.map_err(|error| format!("{error:?}"))?;
+	Ok(preferences.update_channel.into())
 }
 
 pub fn check_on<R: Runtime>(app: &AppHandle<R>, channel: UpdateChannel) {
@@ -161,6 +182,7 @@ where
 {
 	let updates = app.state::<Updates>();
 	loop {
+		log::info!("checking for updates on the {channel:?} channel at {}", manifest_url(channel));
 		let (state, offered) = check(channel).await;
 		match updates.settle_check(state, offered) {
 			Settled::Done(state) => return announced(app, state),
@@ -173,9 +195,7 @@ async fn checked<R: Runtime>(
 	app: &AppHandle<R>,
 	channel: UpdateChannel,
 ) -> (UpdateState, Option<Update>) {
-	let manifest = manifest_url(channel);
-	eprintln!("info: checking for updates on the {channel:?} channel at {manifest}");
-	match offered_release(app, manifest).await {
+	match offered_release(app, manifest_url(channel)).await {
 		Ok(Some(update)) => {
 			(UpdateState::Available { version: update.version.clone() }, Some(update))
 		}
@@ -230,7 +250,7 @@ pub async fn install<R: Runtime>(app: &AppHandle<R>) -> UpdateState {
 }
 
 fn failed(operation: &str, message: String) -> UpdateState {
-	eprintln!("warn: the update {operation} failed: {message}");
+	log::warn!("the update {operation} failed: {message}");
 	UpdateState::Failed { message }
 }
 
@@ -249,7 +269,9 @@ mod tests {
 	use tokio::sync::Notify;
 
 	use super::*;
+	use crate::db::repositories::user;
 	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
+	use crate::test_log::{capturing, logged_naming};
 
 	fn version(text: &str) -> Version {
 		Version::parse(text).expect("a version")
@@ -415,6 +437,58 @@ mod tests {
 		let offered = UpdateState::Available { version: "0.24.2".to_owned() };
 		assert_eq!(check.asked(), vec![UpdateChannel::Stable]);
 		assert_eq!(settled, offered);
+		assert_eq!(held_state(&app), offered);
+	}
+
+	#[tokio::test]
+	async fn every_check_logs_its_channel_and_manifest() {
+		capturing();
+		let app = an_app();
+		begin::<MockRuntime>(app.handle(), UpdateChannel::Beta).expect("the check is claimed");
+
+		settled_after(app.handle(), UpdateChannel::Beta, |_| async {
+			(UpdateState::UpToDate, None)
+		})
+		.await;
+
+		let logged = logged_naming(&format!("on the Beta channel at {BETA_MANIFEST}"));
+		assert!(!logged.is_empty(), "no check of the beta manifest was logged");
+	}
+
+	#[tokio::test]
+	async fn a_reopen_checks_the_stored_beta_channel_once_the_running_check_settles() {
+		let running_on_stable = Updates(Mutex::new(Held {
+			state: UpdateState::Checking,
+			checking: Some(UpdateChannel::Stable),
+			..Held::default()
+		}));
+		let app = an_app_of_its_own("updates", mock_builder().manage(running_on_stable));
+		app.manage(db::bootstrap(app.handle()));
+		let stored =
+			user::Preferences { update_channel: user::UpdateChannel::Beta, ..Default::default() };
+		app.state::<db::DatabaseState>()
+			.as_ref()
+			.expect("the database opens")
+			.user()
+			.set_preferences(stored)
+			.await
+			.expect("the beta channel is stored");
+
+		let answered = check_stored_channel::<MockRuntime>(app.handle()).await;
+
+		assert_eq!(answered, UpdateState::Checking);
+		let next = app.state::<Updates>().settle_check(UpdateState::UpToDate, None);
+		assert!(matches!(next, Settled::Again(UpdateChannel::Beta)));
+	}
+
+	#[tokio::test]
+	async fn a_reopen_leaves_a_standing_offer_untouched() {
+		let offered = UpdateState::Available { version: "0.27.0-beta.2".to_owned() };
+		let app = an_app_of_its_own("updates", mock_builder().manage(updates_in(offered.clone())));
+
+		let answered = check_stored_channel_unless_offering::<MockRuntime>(app.handle()).await;
+
+		assert_eq!(answered, offered);
 		assert_eq!(held_state(&app), offered);
 	}
 }

@@ -5,11 +5,8 @@ import {
 } from "@workspace/ui/components/settings-screen"
 import { i18n } from "@workspace/ui/lib/i18n"
 
-import {
-	changesRuntime,
-	modelOptionsFor,
-	toSettingsValue,
-} from "@/lib/bots/bot-settings"
+import { changesRuntime, toSettingsValue } from "@/lib/bots/bot-settings"
+import { useModelOptions } from "@/lib/bots/use-model-options"
 import { toEnvironmentRows } from "@/lib/environment/environment-rows"
 import { failureReporterIn } from "@/lib/failure-report"
 import type { CompanionSettingsSearch } from "@/lib/navigation/settings-search"
@@ -55,6 +52,7 @@ export const CompanionScreenHost = ({
 		serverEnvironmentSection,
 		setOpenedMcpServer,
 	} = scopes
+	const models = useModelOptions(settingsBot, catalogue.models)
 
 	if (!settingsBot) {
 		return null
@@ -105,7 +103,7 @@ export const CompanionScreenHost = ({
 				navigation.showApplication(name)
 			}}
 			serverEnvironment={serverEnvironmentSection}
-			models={modelOptionsFor(settingsBot.model, catalogue.models)}
+			models={models}
 			outputStyle={readBotOutputStyle(settingsBot.outputStyle)}
 			memory={settingsBot.memory}
 			onMemoryChange={(memory) => {

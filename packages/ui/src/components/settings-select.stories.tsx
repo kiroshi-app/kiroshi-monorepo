@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { expect, fn, screen, waitFor } from "storybook/test"
+import { expect, fn, mocked, screen, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
@@ -270,5 +270,156 @@ export const ThemesHover = meta.story({
 		await pointer.hover(first)
 		await waitFor(() => expect(first.matches(":hover")).toBe(true))
 		await expectFocusRing(first)
+	},
+})
+
+const REBUILT_MODELS = [
+	{ label: "The agent’s own", value: "" },
+	...MODELS.filter((model) => model.value !== "claude-opus"),
+]
+
+const RebuiltOptionsHost = (props: SettingsSelectProps) => {
+	const [options, setOptions] = useState(props.options)
+
+	return (
+		<div className="flex flex-col gap-2">
+			<SelectHost {...props} options={options} />
+			<button onClick={() => setOptions(REBUILT_MODELS)} type="button">
+				Rebuild the options
+			</button>
+		</div>
+	)
+}
+
+export const OptionsRebuiltWithoutValue = meta.story({
+	tags: ["test-only"],
+	args: { value: "claude-opus" },
+	render: (args) => <RebuiltOptionsHost {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The options rebuilt without the current answer. Base UI then resets its value to null on its own; the surface must not hear that as a pick, or it saves an empty answer. A pick of an option whose value is empty is still a pick, reported once.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		await userEvent.click(canvas.getByRole("combobox"))
+		await screen.findByRole("listbox", { name: "Model" })
+		await userEvent.keyboard("{Escape}")
+		await waitFor(async () => {
+			await expect(screen.queryByRole("listbox")).toBeNull()
+		}, FRAME_POLL)
+
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Rebuild the options" }),
+		)
+		await userEvent.click(canvas.getByRole("combobox"))
+		const agentsOwn = await screen.findByRole("option", {
+			name: "The agent’s own",
+		})
+		await expect(
+			screen.queryByRole("option", { name: "Claude Opus" }),
+		).toBeNull()
+		await expect(args.onValueChange).not.toHaveBeenCalled()
+		await expect(canvas.getByRole("combobox")).toHaveTextContent(
+			/^claude-opus$/,
+		)
+
+		await userEvent.click(agentsOwn)
+		await waitFor(async () => {
+			await expect(screen.queryByRole("listbox")).toBeNull()
+		}, FRAME_POLL)
+		await expect(args.onValueChange).toHaveBeenCalledOnce()
+		await expect(args.onValueChange).toHaveBeenCalledWith("")
+	},
+})
+
+export const OptionsRebuiltWithoutPick = meta.story({
+	tags: ["test-only"],
+	render: (args) => <RebuiltOptionsHost {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Mounted on one answer, a second one picked, then the options rebuilt without the pick but with the first answer. Base UI then falls back to the answer it mounted with on its own; the surface must hear the pick once and never the fallback, or it saves an answer nobody chose.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		await userEvent.click(canvas.getByRole("combobox"))
+		await userEvent.click(
+			await screen.findByRole("option", { name: "Claude Opus" }),
+		)
+		await waitFor(async () => {
+			await expect(screen.queryByRole("listbox")).toBeNull()
+		}, FRAME_POLL)
+
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Rebuild the options" }),
+		)
+		await userEvent.click(canvas.getByRole("combobox"))
+		await screen.findByRole("option", { name: "The agent’s own" })
+
+		await expect(args.onValueChange).toHaveBeenCalledOnce()
+		await expect(args.onValueChange).toHaveBeenCalledWith("claude-opus")
+		await expect(canvas.getByRole("combobox")).toHaveTextContent(
+			/^claude-opus$/,
+		)
+	},
+})
+
+export const PickedFromTheListByKeyboard = meta.story({
+	tags: ["test-only"],
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The list opened and an answer picked with the arrow keys and Enter. Check that the surface hears that pick once.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		await userEvent.tab()
+		await expect(canvas.getByRole("combobox")).toHaveFocus()
+		await userEvent.keyboard("{ArrowDown}")
+		await screen.findByRole("listbox", { name: "Model" })
+		const opus = await screen.findByRole("option", { name: "Claude Opus" })
+		await userEvent.keyboard("{ArrowDown}")
+		await waitFor(() => expect(opus).toHaveAttribute("data-highlighted"))
+		await userEvent.keyboard("{Enter}")
+		await waitFor(async () => {
+			await expect(screen.queryByRole("listbox")).toBeNull()
+		}, FRAME_POLL)
+
+		await expect(args.onValueChange).toHaveBeenCalledOnce()
+		await expect(args.onValueChange).toHaveBeenCalledWith("claude-opus")
+	},
+})
+
+export const PickedByTypingOnTheTrigger = meta.story({
+	tags: ["test-only"],
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"An answer typed on the closed trigger, without opening the list. Check that the trigger reads the typed answer and that the surface hears it once; each prefix typed on the way reports the answer it lands on, as a native select does.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		await userEvent.tab()
+		const trigger = canvas.getByRole("combobox")
+		await expect(trigger).toHaveFocus()
+		await userEvent.keyboard("Claude H")
+		await waitFor(() => expect(trigger).toHaveTextContent("Claude Haiku"))
+
+		await expect(screen.queryByRole("listbox")).toBeNull()
+		await expect(args.onValueChange).toHaveBeenLastCalledWith("claude-haiku")
+		await expect(
+			mocked(args.onValueChange).mock.calls.filter(
+				([value]) => value === "claude-haiku",
+			),
+		).toHaveLength(1)
 	},
 })

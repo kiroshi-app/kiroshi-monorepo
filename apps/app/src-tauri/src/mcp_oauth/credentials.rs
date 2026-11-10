@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
+use tauri::Url;
+
 use super::refusal::on_one_line;
 use crate::agent::protocol::OauthCredentials;
 use crate::environment::contract::{
@@ -20,6 +22,33 @@ const TOKEN_NAMES: [&str; 3] = [OAUTH_ACCESS_TOKEN, OAUTH_REFRESH_TOKEN, OAUTH_E
 
 pub fn bound_url(held: &Values) -> Option<&str> {
 	held.get(OAUTH_SERVER_URL).map(String::as_str)
+}
+
+pub fn is_bound_to(held: &Values, declared: &str) -> bool {
+	bound_url(held).is_some_and(|bound| canonical_url(bound) == canonical_url(declared))
+}
+
+pub fn canonical_url(url: &str) -> String {
+	let Ok(parsed) = Url::parse(url) else {
+		return url.to_owned();
+	};
+	let Some(host) = parsed.host_str() else {
+		return url.to_owned();
+	};
+	let userinfo = match (parsed.username(), parsed.password()) {
+		("", None) => String::new(),
+		(user, None) => format!("{user}@"),
+		(user, Some(password)) => format!("{user}:{password}@"),
+	};
+	let port = parsed.port().map(|port| format!(":{port}")).unwrap_or_default();
+	let query = parsed.query().filter(|query| !query.is_empty());
+	format!(
+		"{}://{userinfo}{}{port}{}{}",
+		parsed.scheme(),
+		host,
+		parsed.path().trim_end_matches('/'),
+		query.map(|query| format!("?{query}")).unwrap_or_default(),
+	)
 }
 
 pub fn expires_at(held: &Values) -> Option<i64> {
@@ -220,6 +249,36 @@ mod tests {
 		let kept = store::values(&root, &scope).expect("the scope is readable");
 		assert_eq!(bound_url(&kept), Some(SERVER_URL));
 		assert_eq!(kept.get(OAUTH_ACCESS_TOKEN).map(String::as_str), Some("granted-again"));
+	}
+
+	fn bound_to(url: &str) -> Values {
+		Values::from([(OAUTH_SERVER_URL.to_owned(), url.to_owned())])
+	}
+
+	#[test]
+	fn a_grant_is_bound_to_its_url_whatever_its_trailing_slash_default_port_or_letter_case() {
+		for declared in [
+			"https://mcp.granola.test/mcp/",
+			"https://mcp.granola.test:443/mcp",
+			"HTTPS://mcp.granola.test/mcp",
+			"https://MCP.Granola.TEST/mcp",
+		] {
+			assert!(is_bound_to(&bound_to(SERVER_URL), declared), "{declared}");
+		}
+	}
+
+	#[test]
+	fn a_grant_is_not_bound_to_another_host_path_or_port() {
+		for declared in [
+			"https://mcp.granola.example/mcp",
+			"https://mcp.granola.test/v2/mcp",
+			"https://mcp.granola.test/MCP",
+			"https://mcp.granola.test:8443/mcp",
+			"http://mcp.granola.test/mcp",
+		] {
+			assert!(!is_bound_to(&bound_to(SERVER_URL), declared), "{declared}");
+		}
+		assert!(!is_bound_to(&Values::new(), SERVER_URL));
 	}
 
 	#[test]

@@ -8,6 +8,7 @@ use super::super::contract::{
 };
 use super::super::state as conversation_state;
 use super::bot::ready;
+use crate::agent::commands::shut_asking_runs_down;
 use crate::avatars;
 use crate::companions::launch;
 use crate::db;
@@ -227,6 +228,7 @@ pub async fn conversation_delete<R: Runtime>(
 	let conversations = database.conversations();
 	let space_id = conversations.space(conversation_id.clone()).await?;
 	conversations.delete_conversation(conversation_id.clone()).await?;
+	shut_asking_runs_down(&app, |scope| scope.conversation_id == conversation_id).await;
 	if let Some(space_id) = &space_id {
 		conversation_state::observe_agent_rooms(&app, database, space_id).await;
 	}
@@ -275,7 +277,14 @@ pub async fn conversation_remove_participant<R: Runtime>(
 	bot_id: String,
 ) -> Result<Conversation, TranscriptStoreError> {
 	let database = ready(&state)?;
-	let left = database.conversations().remove_participant(conversation_id, bot_id).await?;
+	let left = database
+		.conversations()
+		.remove_participant(conversation_id.clone(), bot_id.clone())
+		.await?;
+	shut_asking_runs_down(&app, |scope| {
+		scope.conversation_id == conversation_id && scope.bot_id == bot_id
+	})
+	.await;
 	let left = drawn(&app, left);
 	announce_conversation(&app, database, CONVERSATION_UPDATED, &left.id).await;
 	Ok(left)

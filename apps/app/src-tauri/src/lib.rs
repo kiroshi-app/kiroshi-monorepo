@@ -154,7 +154,10 @@ pub fn run() {
 		.run(|app, event| match event {
 			RunEvent::ExitRequested { code: None, api, .. } => api.prevent_exit(),
 			#[cfg(target_os = "macos")]
-			RunEvent::Reopen { .. } => window_controls::raise_last_focused(app),
+			RunEvent::Reopen { .. } => {
+				window_controls::raise_last_focused(app);
+				updates::check_stored_channel_on(app);
+			}
 			RunEvent::Exit => {
 				library::write_pending_boards(app);
 				if let Err(failure) = badge::wear(app, 0) {

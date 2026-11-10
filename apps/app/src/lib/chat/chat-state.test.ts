@@ -303,7 +303,9 @@ describe("chatReducer", () => {
 				],
 			},
 		})
-		expect(applyEvents(initialChatState, [asked("ask-1")]).question).toBeNull()
+		expect(applyEvents(initialChatState, [asked("ask-1")]).question?.id).toBe(
+			"ask-1",
+		)
 
 		const state = applyEvents(initialChatState, [
 			{ type: "turnChanged", state: "submitting" },

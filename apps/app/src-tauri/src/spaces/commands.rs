@@ -4,10 +4,13 @@ use tauri::{AppHandle, Runtime, State};
 
 use super::archive;
 use super::contract::{CompanionCounts, Space, SpaceDescribed, SpaceError, SpacePreferences};
+use crate::agent::commands::{asking_runs, shut_runs_down};
+use crate::agent::contract::RuntimeScope;
 use crate::bundles;
 use crate::conversations::commands::{announce_joined, announce_left, list_bundles};
 use crate::conversations::contract::Hue;
 use crate::db;
+use crate::db::repositories::space_children::SpaceChild;
 use crate::environment;
 use crate::events;
 use crate::hosting;
@@ -102,12 +105,30 @@ pub async fn space_delete<R: Runtime>(
 ) -> Result<(), SpaceError> {
 	let database = ready(&state)?;
 	hosting::forgotten(&app, &id).await;
+	let asking_here = asking_runs_held_by(&app, database, &id).await?;
 	let held_bots = database.spaces().delete(id.clone()).await?;
+	shut_runs_down(&app, asking_here).await;
 	bundles::space::remove(&app, &id);
 	library::forget_space(&app, &id);
 	forget_bundles(bundles::root(&app).as_deref(), database, &held_bots).await;
 	environment::store::forget_space(&app, &id, &held_bots);
 	Ok(())
+}
+
+async fn asking_runs_held_by<R: Runtime>(
+	app: &AppHandle<R>,
+	database: &db::Database,
+	space_id: &str,
+) -> Result<Vec<RuntimeScope>, SpaceError> {
+	let children = database.space_children();
+	let mut held = Vec::new();
+	for scope in asking_runs(app) {
+		let conversation_id = scope.conversation_id.clone();
+		if children.holds(space_id.to_owned(), SpaceChild::Conversation, conversation_id).await? {
+			held.push(scope);
+		}
+	}
+	Ok(held)
 }
 
 #[tauri::command]

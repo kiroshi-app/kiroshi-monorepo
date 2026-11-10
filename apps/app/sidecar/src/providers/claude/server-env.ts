@@ -121,11 +121,26 @@ const authorized = (server: Server, own: Values | undefined): Server => {
 const withoutGrant = (own: Values): Values =>
 	Object.fromEntries(Object.entries(own).filter(([name]) => !isGrantName(name)))
 
+const canonicalUrl = (url: string): string => {
+	if (!URL.canParse(url)) {
+		return url
+	}
+	const { protocol, username, password, host, pathname, search } = new URL(url)
+	if (!host) {
+		return url
+	}
+	const credentials = password ? `${username}:${password}` : username
+	const userinfo = credentials ? `${credentials}@` : ""
+	return `${protocol}//${userinfo}${host}${pathname.replace(/\/+$/, "")}${search}`
+}
+
 const holdsItsGrant = (server: Server | undefined, own: Values): boolean => {
 	const bound = own[SERVER_URL]
+	const declared = (server as Record<string, unknown> | undefined)?.url
 	return (
 		bound !== undefined &&
-		(server as Record<string, unknown> | undefined)?.url === bound
+		typeof declared === "string" &&
+		canonicalUrl(declared) === canonicalUrl(bound)
 	)
 }
 

@@ -27,11 +27,9 @@ use crate::db::repositories::joined_spaces::HostListing;
 use crate::devices;
 use crate::hosting::handover::{rekey_bytes, KeyHandover};
 use crate::hosting::relay::{opened, Opened, Socket};
-use crate::hosting::wire::{envelope_of, HELLO};
+use crate::hosting::wire::{envelope_of, HELLO, NO_KEY_ID};
 
 const MEMBERSHIP_ENDED: u16 = 4003;
-
-const NO_KEY_ID: u32 = 0;
 
 pub async fn joined<R: Runtime>(
 	app: &AppHandle<R>,
