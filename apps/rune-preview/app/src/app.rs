@@ -386,7 +386,7 @@ impl App {
 		self.mission = None;
 		self.thread = Some(thread);
 		self.read_thread(host.clone(), conversation_id.to_owned());
-		if let Some(bot_id) = solo_bot_id {
+		if let Some(bot_id) = solo_bot_id.filter(|_| checks_sessions(&host)) {
 			self.check_session(host.clone(), conversation_id.to_owned(), bot_id);
 		}
 		s05_thread::open_conversation(self, conversation_id);
@@ -723,6 +723,10 @@ impl App {
 	}
 }
 
+fn checks_sessions(source: &Source) -> bool {
+	source.running_profile() != Some(Profile::Installed)
+}
+
 pub fn connected(profile: Profile) -> Result<Ready, HostError> {
 	ready_on(Source::Running(Host::connect(profile)?))
 }
@@ -830,6 +834,7 @@ pub fn whole_thread(host: &Source, conversation_id: &str) -> Result<Vec<Message>
 mod tests {
 	use std::cell::RefCell;
 	use std::rc::Rc;
+	use std::sync::Arc;
 
 	use kiroshi_rune_os::policy::Notice;
 	use kiroshi_rune_os::{Gesture, GestureFailure};
@@ -1216,5 +1221,37 @@ mod tests {
 		})));
 
 		assert_eq!(shown_titles(&app), vec![SESSION_UNCHECKED]);
+	}
+
+	fn listening(app: &mut App) {
+		app.outbox = Some(Outbox { sender: app.pending.clone(), waker: Arc::new(|| {}) });
+	}
+
+	fn on_installed(app: &mut App) {
+		if let Some(ready) = app.ready_mut() {
+			ready.source = Source::Running(Host::installed_on(0, ""));
+		}
+	}
+
+	#[test]
+	fn an_installed_host_opens_a_solo_conversation_without_a_session_check() {
+		let (mut app, _) = notifying_app(true);
+		on_installed(&mut app);
+		listening(&mut app);
+
+		app.open("c-1");
+		let landed: Vec<Inbound> = (0..2)
+			.map(|_| app.inbox.recv_timeout(Duration::from_secs(10)).expect("a read lands"))
+			.collect();
+		let is_checked = landed.iter().any(|inbound| matches!(inbound, Inbound::SessionChecked(_)));
+		let late = app.inbox.recv_timeout(Duration::from_millis(200));
+		for inbound in landed {
+			app.received(inbound);
+		}
+
+		assert!(!is_checked);
+		assert!(late.is_err());
+		assert!(!shown_titles(&app).contains(&SESSION_UNCHECKED.to_owned()));
+		assert_eq!(connection_of(&app, "c-1"), ConnectionState::Checking);
 	}
 }
