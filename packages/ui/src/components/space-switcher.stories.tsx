@@ -227,7 +227,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The control that says which space a reader is in and moves them to another one. It is a 36px ghost button at the top of the expanded sidebar: a 22px square in the space's tint carrying its initial, its name in the 14px semibold line, then a chevron that says it opens; when the host of a shared space is not connected the square dims under a grey dot and `Not connected` follows the name. Pressing it opens a single-choice menu: every space with its tint and its rank as a Cmd shortcut hint, then any waiting invitations, then a single rule over an item to create one, and nothing else. `SpaceDots` is its companion for a pinned strip, one dot per space, the open one filled with its tint and larger, the rest muted and smaller, so the reader knows how many spaces exist and where they stand without opening anything. Both take the same selection props, so a host maps its store onto `spaces` and `selectedSpaceId` once and hands the pair the same callbacks; the dots alone take `onReorderSpaces`, since the order is the reader's to set: a dot is dragged to the place its space should hold. That order is not decoration, it is which space each `⌘1`…`⌘9` reaches and the order a swipe walks, so it is reported whole, as the full list of ids, and never applied here. A single space still shows the button, since creating a second one lives in its menu, but draws no dots, there is nothing to count. Reach for this at the top of a sidebar; `AppSidebar` mounts both and adds the swipe and the Cmd+digit chords that go with them.",
+					"The control that says which space a reader is in and moves them to another one. It is a 36px ghost button at the top of the expanded sidebar: a 22px square in the space's tint carrying its initial, its name in the 14px semibold line, then a chevron that says it opens; when the host of a shared space is not connected the square dims under a grey dot and `Not connected` follows the name. Pressing it opens a single-choice menu: every space with its tint and its rank as a Cmd shortcut hint, then any waiting invitations, then a single rule over Space settings and an item to create one, and nothing else. `SpaceDots` is its companion for a pinned strip, one dot per space, the open one filled with its tint and larger, the rest muted and smaller, so the reader knows how many spaces exist and where they stand without opening anything. Both take the same selection props, so a host maps its store onto `spaces` and `selectedSpaceId` once and hands the pair the same callbacks; the dots alone take `onReorderSpaces`, since the order is the reader's to set: a dot is dragged to the place its space should hold. That order is not decoration, it is which space each `⌘1`…`⌘9` reaches and the order a swipe walks, so it is reported whole, as the full list of ids, and never applied here. A single space still shows the button, since creating a second one lives in its menu, but draws no dots, there is nothing to count. Reach for this at the top of a sidebar; `AppSidebar` mounts both and adds the swipe and the Cmd+digit chords that go with them.",
 			},
 		},
 	},
@@ -235,6 +235,7 @@ const meta = preview.meta({
 		spaces: SPACES,
 		selectedSpaceId: "vocca",
 		onSelectSpace: fn(),
+		onOpenSpaceSettings: fn(),
 		onCreateSpace: fn(),
 		onAcceptInvitation: fn(),
 		onDeclineInvitation: fn(),
@@ -278,7 +279,7 @@ export const Open = meta.story({
 		docs: {
 			description: {
 				story:
-					"The menu the press opens, on a joined space, which is the only place a space is chosen or created. Check the spaces are a single-choice group, one mark on the open one and arrows walking the whole list, that each row carries its tint and its rank as `⌘1`…`⌘5`, and that one rule then `Create a space` close the menu with nothing after it: no `Share`, no `Move up`, no `Move down`, no space settings and no `Leave space`, since the rail's Space logo opens the settings and the dots carry the order. Choosing a row reports the id and closes. Pick `Default` for the resting button. The app assembles it at `apps/app/src/App.tsx:935`.",
+					"The menu the press opens, on a joined space, which is the only place a space is chosen or created. Check the spaces are a single-choice group, one mark on the open one and arrows walking the whole list, that each row carries its tint and its rank as `⌘1`…`⌘5`, and that one rule then `Space settings` and `Create a space` close the menu with nothing after them: no `Share`, no `Move up`, no `Move down` and no `Leave space`, since the dots carry the order. Choosing a row reports the id and closes. Pick `Default` for the resting button. The app assembles it at `apps/app/src/App.tsx:935`.",
 			},
 		},
 	},
@@ -300,15 +301,11 @@ export const Open = meta.story({
 		await expect(within(menu).getByText("⌘5")).toBeInTheDocument()
 
 		const items = within(menu).getAllByRole("menuitem")
-		await expect(items).toHaveLength(1)
-		await expect(items[0]).toHaveAccessibleName("Create a space")
-		for (const removed of [
-			"Share",
-			"Move up",
-			"Move down",
-			/space settings/i,
-			"Leave space",
-		]) {
+		await expect(items.map((item) => item.textContent)).toEqual([
+			"Space settings",
+			"Create a space",
+		])
+		for (const removed of ["Share", "Move up", "Move down", "Leave space"]) {
 			await expect(
 				within(menu).queryByRole("menuitem", { name: removed }),
 			).toBeNull()
@@ -316,14 +313,51 @@ export const Open = meta.story({
 		const rules = within(menu).getAllByRole("separator")
 		await expect(rules).toHaveLength(1)
 		await expect(rules[0].nextElementSibling).toBe(items[0])
-		await expect(items[0]).toBe(menu.lastElementChild)
+		await expect(items[0].nextElementSibling).toBe(items[1])
+		await expect(items[1]).toBe(menu.lastElementChild)
 
-		await userEvent.click(items[0])
+		await userEvent.click(items[1])
 		await expect(args.onCreateSpace).toHaveBeenCalled()
 
 		await openMenu(canvas.getByRole("button", { name: /^Change space/ }))
 		await userEvent.click(screen.getAllByRole("menuitemradio")[3])
 		await expect(args.onSelectSpace).toHaveBeenCalledWith("veille")
+	},
+})
+
+export const OpensSpaceSettings = meta.story({
+	parameters: {
+		a11y: A11Y_FLOATING_FOCUS_GUARDS,
+		docs: {
+			description: {
+				story:
+					"Space settings, the row after the rule, wearing the Settings icon. Check that a click on it reports the open space's settings once and closes the menu, and that reaching it with the arrows and pressing Enter does the same.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const trigger = canvas.getByRole("button", { name: /^Change space/ })
+		const menu = await openMenu(trigger)
+		const spaceSettings = within(menu).getByRole("menuitem", {
+			name: "Space settings",
+		})
+		await expect(spaceSettings.querySelector("svg")).not.toBeNull()
+
+		await userEvent.click(spaceSettings)
+		await expect(args.onOpenSpaceSettings).toHaveBeenCalledOnce()
+		await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
+
+		await openMenu(trigger)
+		await userEvent.keyboard("{End}{ArrowUp}")
+		await waitFor(() =>
+			expect(
+				screen.getByRole("menuitem", { name: "Space settings" }),
+			).toHaveFocus(),
+		)
+		await userEvent.keyboard("{Enter}")
+		await expect(args.onOpenSpaceSettings).toHaveBeenCalledTimes(2)
+		await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
+		await expect(args.onCreateSpace).not.toHaveBeenCalled()
 	},
 })
 
@@ -372,7 +406,7 @@ export const SingleSpace = meta.story({
 		docs: {
 			description: {
 				story:
-					"A reader who has only ever had one space — the state every account opens in. Check the button still draws the name and still opens its menu, since creating the second space lives there, that no dot strip is drawn at all — a single dot would say nothing and would invite a press that changes nothing — and that a single rule sits between the list and `Create a space`. Pick `WithDots` for the strip once a second space exists. The app assembles it at `apps/app/src/App.tsx:935`.",
+					"A reader who has only ever had one space — the state every account opens in. Check the button still draws the name and still opens its menu, since creating the second space lives there, that no dot strip is drawn at all — a single dot would say nothing and would invite a press that changes nothing — and that a single rule sits between the list and `Space settings` then `Create a space`. Pick `WithDots` for the strip once a second space exists. The app assembles it at `apps/app/src/App.tsx:935`.",
 			},
 		},
 	},
@@ -885,7 +919,9 @@ const expectCreateLast = async (menu: HTMLElement) => {
 	).toBeNull()
 	const create = within(menu).getByRole("menuitem", { name: "Create a space" })
 	await expect(create).toBe(menu.lastElementChild)
-	await expect(create.previousElementSibling).toHaveAttribute(
+	const spaceSettings = create.previousElementSibling
+	await expect(spaceSettings).toHaveAccessibleName("Space settings")
+	await expect(spaceSettings?.previousElementSibling).toHaveAttribute(
 		"role",
 		"separator",
 	)
@@ -904,7 +940,7 @@ export const ThemesLocalSpaceMenu = meta.story({
 		a11y: SIDE_BY_SIDE_MENU_A11Y,
 		docs: {
 			description: {
-				story: `${MOCKUP} The menu of a local space beside shared and joined ones (A7 rows). Check every 40px row carries its 26px SpaceAvatar, 7px from the row top, in the state of its host: the grey laptop badge for the local row, the 12px green dot cut out of the bottom end corner for the shared and the reachable rows, lines for the connecting one and hatched greys under a crossed red dot for the one that does not answer, every name shown in full and no state pill: the avatar is the only connection signal, and assistive technology reads the state after the name. No globe and no \`Unreachable\` remain, and a single rule then \`Create a space\` close the menu. Pick \`ThemesJoinedSpaceMenu\` for the menu of a joined space.`,
+				story: `${MOCKUP} The menu of a local space beside shared and joined ones (A7 rows). Check every 40px row carries its 26px SpaceAvatar, 7px from the row top, in the state of its host: the grey laptop badge for the local row, the 12px green dot cut out of the bottom end corner for the shared and the reachable rows, lines for the connecting one and hatched greys under a crossed red dot for the one that does not answer, every name shown in full and no state pill: the avatar is the only connection signal, and assistive technology reads the state after the name. No globe and no \`Unreachable\` remain, and a single rule then \`Space settings\` and \`Create a space\` close the menu. Pick \`ThemesJoinedSpaceMenu\` for the menu of a joined space.`,
 			},
 		},
 	},
@@ -931,7 +967,7 @@ export const ThemesJoinedSpaceMenu = meta.story({
 		a11y: SIDE_BY_SIDE_MENU_A11Y,
 		docs: {
 			description: {
-				story: `${MOCKUP} The menu of a joined space whose host does not answer. Check the open row keeps its mark and its muted dot and stays choosable, that the rows read their state to assistive technology after their name, and that the menu still closes on a rule then \`Create a space\`, with no \`Leave space\`: leaving lives in the space settings the rail's Space logo opens. Pick \`ThemesLocalSpaceMenu\` for the menu of a local space.`,
+				story: `${MOCKUP} The menu of a joined space whose host does not answer. Check the open row keeps its mark and its muted dot and stays choosable, that the rows read their state to assistive technology after their name, and that the menu still closes on a rule then \`Space settings\` and \`Create a space\`, with no \`Leave space\`: leaving lives in the space settings. Pick \`ThemesLocalSpaceMenu\` for the menu of a local space.`,
 			},
 		},
 	},
@@ -1255,7 +1291,7 @@ export const M2InvitationWaiting = meta.story({
 		a11y: A11Y_FLOATING_FOCUS_GUARDS,
 		docs: {
 			description: {
-				story: `${INVITED_ARTBOARD} M2, artboard 3.1 of the Mockup page: one invitation waits. Check the 7px primary dot sits on the trigger's top end corner and the trigger names it, that the 280px menu places a rule then an Invitations group between Personal and Create a space, that the row reads the Space name (14/20) over who invited and when it expires (12/16), and that Accept and Decline, 28px tall with a 12px radius in 13px medium and indented 18px under the ring, are real buttons the arrow keys reach, each reporting the invitation id.`,
+				story: `${INVITED_ARTBOARD} M2, artboard 3.1 of the Mockup page: one invitation waits. Check the 7px primary dot sits on the trigger's top end corner and the trigger names it, that the 280px menu places a rule then an Invitations group between Personal and Space settings, that the row reads the Space name (14/20) over who invited and when it expires (12/16), and that Accept and Decline, 28px tall with a 12px radius in 13px medium and indented 18px under the ring, are real buttons the arrow keys reach, each reporting the invitation id.`,
 			},
 		},
 	},
@@ -1267,7 +1303,7 @@ export const M2InvitationWaiting = meta.story({
 
 		const menu = await openSwitcher(canvasElement)
 		await expect(menu.getBoundingClientRect().width).toBe(280)
-		await expectGroupBetweenSpacesAnd(menu, "Create a space")
+		await expectGroupBetweenSpacesAnd(menu, "Space settings")
 		const row = invitationNamed(menu, INVITED.name)
 		await expect(hostLineOf(row)).toHaveTextContent(
 			`Invited by ${INVITED.hostEmail}`,
@@ -1392,7 +1428,7 @@ export const OpenedOnInvitation = meta.story({
 	play: async ({ args, canvasElement, userEvent }) => {
 		const menu = await settled(await screen.findByRole("menu"))
 		await expect(menu.getBoundingClientRect().width).toBe(280)
-		await expectGroupBetweenSpacesAnd(menu, "Create a space")
+		await expectGroupBetweenSpacesAnd(menu, "Space settings")
 		const rows = invitationsIn(menu)
 		await expect(rows[1]).toHaveAccessibleName(SECOND_INVITED.name)
 		await expect(
@@ -1813,7 +1849,7 @@ export const InvitationWithoutJoinEntry = meta.story({
 		a11y: A11Y_FLOATING_FOCUS_GUARDS,
 		docs: {
 			description: {
-				story: `${ITERATION_FIVE} 5.5: a reader with one space and one waiting invitation, now that joining goes through the invitation alone. Check the rows read Notes with its \`⌘1\` and its check, a rule, the Invitations label over Studio invited by its host with Accept and Decline, a rule, then \`Create a space\` and nothing after it, and that no \`Join a space\` is offered anywhere. Pick \`M2InvitationWaiting\` for the same invitation beside several spaces.`,
+				story: `${ITERATION_FIVE} 5.5: a reader with one space and one waiting invitation, now that joining goes through the invitation alone. Check the rows read Notes with its \`⌘1\` and its check, a rule, the Invitations label over Studio invited by its host with Accept and Decline, a rule, then \`Space settings\` and \`Create a space\` and nothing after them, and that no \`Join a space\` is offered anywhere. Pick \`M2InvitationWaiting\` for the same invitation beside several spaces.`,
 			},
 		},
 	},
@@ -1855,9 +1891,11 @@ export const InvitationWithoutJoinEntry = meta.story({
 
 		const rule = group.nextElementSibling
 		await expect(rule).toHaveAttribute("role", "separator")
-		await expect(rule?.nextElementSibling).toHaveAccessibleName(
+		const spaceSettings = rule?.nextElementSibling
+		await expect(spaceSettings).toHaveAccessibleName("Space settings")
+		await expect(spaceSettings?.nextElementSibling).toHaveAccessibleName(
 			"Create a space",
 		)
-		await expect(rule?.nextElementSibling).toBe(menu.lastElementChild)
+		await expect(spaceSettings?.nextElementSibling).toBe(menu.lastElementChild)
 	},
 })

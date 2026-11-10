@@ -191,6 +191,7 @@ type SpaceSwitcherProps = Omit<SpaceSelection, "onReorderSpaces"> &
 		invitations?: SpaceInvitation[]
 		open?: boolean
 		focusedInvitationId?: string
+		onOpenSpaceSettings?: () => void
 		onCreateSpace?: () => void
 		onOpenChange?: (isOpen: boolean) => void
 		trigger?: ReactElement<HTMLAttributes<HTMLElement>>
@@ -286,6 +287,7 @@ const SpaceSwitcher = ({
 	open,
 	focusedInvitationId,
 	onSelectSpace,
+	onOpenSpaceSettings,
 	onCreateSpace,
 	onAcceptInvitation,
 	onDeclineInvitation,
@@ -395,6 +397,10 @@ const SpaceSwitcher = ({
 					onRetryInvitation={onRetryInvitation}
 				/>
 				<ContextMenuSeparator />
+				<ContextMenuItem onClick={onOpenSpaceSettings}>
+					<Icons.Settings aria-hidden="true" className="size-3.5" />
+					{t("rail.spaceSettings")}
+				</ContextMenuItem>
 				<ContextMenuItem onClick={onCreateSpace}>
 					<Icons.Add aria-hidden="true" className="size-3.5" />
 					{t("spaces.create")}
