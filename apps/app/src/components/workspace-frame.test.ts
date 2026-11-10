@@ -17,13 +17,23 @@ import { i18n } from "@workspace/ui/lib/i18n"
 import { newBotIdentity } from "@/lib/bots/bot-settings"
 import { createFakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
+import type { Bot, Conversation } from "@/lib/conversations/store-contract"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import type { Invoke } from "@/lib/host/joined-hosts-invoke"
+import type { Mission } from "@/lib/missions/mission-contract"
+import { aMission } from "@/lib/missions/mission-fixtures"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 import { readMirror, writeMirror } from "@/lib/user/preferences-mirror"
 
+type HeldMission = {
+	mission: Mission
+	bot: Bot
+	conversation: Conversation
+}
+
 type Harness = {
 	store: TranscriptStore | null
+	missions: HeldMission[]
 	mounts: { expandedSidebar: number; titleBar: number }
 	refusesSidebarLayout: boolean
 }
@@ -31,6 +41,7 @@ type Harness = {
 const harness = vi.hoisted(
 	(): Harness => ({
 		store: null,
+		missions: [],
 		mounts: { expandedSidebar: 0, titleBar: 0 },
 		refusesSidebarLayout: false,
 	}),
@@ -112,6 +123,28 @@ vi.mock("@/lib/chat/create-driver", async () => {
 	}
 })
 
+vi.mock("@/lib/missions/missions-transport", async (importOriginal) => {
+	const actual =
+		await importOriginal<typeof import("@/lib/missions/missions-transport")>()
+	const { aSpacePage } = await import("@/lib/missions/mission-fixtures")
+	return {
+		...actual,
+		missionsTransport: {
+			...actual.missionsTransport,
+			board: async () =>
+				harness.missions.map(({ mission, bot }) => ({ mission, bot })),
+			spacePage: async () =>
+				aSpacePage(
+					harness.missions.map(({ mission, conversation }) => ({
+						mission,
+						conversationId: conversation.id,
+						conversationTitle: conversation.title,
+					})),
+				),
+		},
+	}
+})
+
 vi.mock("@/lib/search/search-port", () => ({
 	searchPort: {
 		messages: async () => [],
@@ -131,6 +164,7 @@ afterEach(() => {
 	localStorage.clear()
 	vi.useRealTimers()
 	harness.store = null
+	harness.missions = []
 	harness.mounts = { expandedSidebar: 0, titleBar: 0 }
 	harness.refusesSidebarLayout = false
 	savedLayouts.mockClear()
@@ -143,11 +177,20 @@ const settle = async () => {
 	})
 }
 
-const mountApp = async () => {
+type SpaceSeed = {
+	store: TranscriptStore
+	spaceId: string
+	bot: Bot
+}
+
+const mountApp = async (
+	seed: (held: SpaceSeed) => Promise<void> = async () => undefined,
+) => {
 	writeMirror({ ...readMirror(), firstRunDone: true })
 	const store = createFakeTranscriptStore()
 	const [space] = await store.spaces()
 	const bot = await store.createBot(newBotIdentity([]), space.id)
+	await seed({ store, spaceId: space.id, bot })
 	vi.useFakeTimers()
 	harness.store = store
 	const router = createWorkspaceRouter()
@@ -176,7 +219,8 @@ const slotsOf = (slot: string) =>
 const sidebar = () =>
 	screen.getByRole("navigation", { name: i18n.t("bots:rail.label") })
 
-const entry = (name: string) => within(sidebar()).getByRole("button", { name })
+const entry = (name: string | RegExp) =>
+	within(sidebar()).getByRole("button", { name })
 
 const currentEntries = () =>
 	within(sidebar())
@@ -206,6 +250,7 @@ const toggleSidebarButton = () =>
 const SEARCH = i18n.t("search:open")
 const NEW_CONVERSATION = i18n.t("bots:rail.newConversation")
 const MISSIONS = i18n.t("bots:rail.missions")
+const MISSIONS_ENTRY = new RegExp(`^${MISSIONS} \\d+$`)
 const LIBRARY = i18n.t("bots:rail.library")
 
 describe("the workspace frame", () => {
@@ -230,7 +275,7 @@ describe("the workspace frame", () => {
 
 	it.each<{ path: RoutedPath; current: string[] }>([
 		{ path: "/home", current: [NEW_CONVERSATION] },
-		{ path: "/missions", current: [MISSIONS] },
+		{ path: "/missions", current: [`${MISSIONS}0`] },
 		{ path: "/library", current: [LIBRARY] },
 		{ path: "/", current: [] },
 	])(
@@ -258,9 +303,9 @@ describe("the workspace frame", () => {
 		}
 	})
 
-	it.each<{ name: string; path: RoutedPath }>([
+	it.each<{ name: string | RegExp; path: RoutedPath }>([
 		{ name: NEW_CONVERSATION, path: "/home" },
-		{ name: MISSIONS, path: "/missions" },
+		{ name: MISSIONS_ENTRY, path: "/missions" },
 		{ name: LIBRARY, path: "/library" },
 	])("opens $path from $name", async ({ name, path }) => {
 		const { router } = await mountApp()
@@ -273,7 +318,7 @@ describe("the workspace frame", () => {
 	it("shows the Missions page of the current Space in the main area", async () => {
 		await mountApp()
 
-		await press(entry(MISSIONS))
+		await press(entry(MISSIONS_ENTRY))
 
 		expect(slotOf("missions-page")).not.toBeNull()
 		expect(
@@ -375,5 +420,136 @@ describe("the sidebar toggle", () => {
 				title: i18n.t("common:sidebar.collapseUnsaved"),
 			}),
 		)
+	})
+})
+
+const SKELETON_MS = 400
+
+const roomIn = (
+	{ store, spaceId, bot }: SpaceSeed,
+	title: string,
+): Promise<Conversation> =>
+	store.createConversation({
+		botIds: [bot.id],
+		sectionId: null,
+		spaceId,
+		title,
+	})
+
+const missionOn = (
+	{ bot }: SpaceSeed,
+	conversation: Conversation,
+	held: Partial<Mission>,
+): HeldMission => ({
+	mission: aMission({
+		botId: bot.id,
+		originConversationId: conversation.id,
+		threadConversationId: conversation.id,
+		...held,
+	}),
+	bot,
+	conversation,
+})
+
+const mountCollapsed = (seed?: (held: SpaceSeed) => Promise<void>) => {
+	writeMirror({ ...readMirror(), sidebarCollapsed: true })
+	return mountApp(seed)
+}
+
+const railConversationNames = () =>
+	Array.from(slotsOf("collapsed-sidebar-conversation")).map((item) =>
+		item.getAttribute("aria-label"),
+	)
+
+const rail = () => within(slotOf("collapsed-sidebar") as HTMLElement)
+
+describe("the conversations of the collapsed sidebar", () => {
+	it("lists the pinned conversations, then each section, then the others of the current Space", async () => {
+		await mountCollapsed(async (held) => {
+			const hiring = await roomIn(held, "Hiring loop")
+			const roadmap = await roomIn(held, "Roadmap")
+			await roomIn(held, "Pricing")
+			const clients = await held.store.createSection(held.spaceId, "Clients")
+			await held.store.pinRoster(held.spaceId, [
+				{ id: roadmap.id, sectionId: null },
+				{ id: clients.id, sectionId: null },
+				{ id: hiring.id, sectionId: null },
+			])
+		})
+
+		expect(railConversationNames().slice(0, 2)).toEqual([
+			"Roadmap",
+			"Hiring loop",
+		])
+		expect(railConversationNames()).toContain("Pricing")
+		expect(
+			rail().getByRole("img", {
+				name: i18n.t("bots:roster.titled", {
+					name: "Clients",
+					title: i18n.t("bots:roster.section.empty"),
+				}),
+			}),
+		).toBeTruthy()
+	})
+
+	it("shows the mission of a conversation under it and opens that mission on click", async () => {
+		let roomId = ""
+		const { router } = await mountCollapsed(async (held) => {
+			const room = await roomIn(held, "Release train")
+			roomId = room.id
+			harness.missions = [missionOn(held, room, { id: "mission-release" })]
+		})
+
+		const mission = slotOf("collapsed-sidebar-mission") as HTMLElement
+		await press(mission)
+
+		expect(router.state.location.search).toMatchObject({
+			conversation: roomId,
+			mission: "mission-release",
+		})
+	})
+
+	it("shows the skeleton while the list is read", async () => {
+		await mountCollapsed(async ({ store }) => {
+			vi.spyOn(store, "bots").mockReturnValue(new Promise(() => undefined))
+		})
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(SKELETON_MS)
+		})
+
+		expect(slotsOf("collapsed-sidebar-skeleton").length).toBeGreaterThan(0)
+	})
+
+	it("offers a retry when the list fails to load and reads it again on retry", async () => {
+		let reads: ReturnType<typeof vi.spyOn> | null = null
+		await mountCollapsed(async ({ store }) => {
+			reads = vi
+				.spyOn(store, "bots")
+				.mockRejectedValueOnce(new Error("no record"))
+		})
+
+		await press(
+			rail().getByRole("button", { name: i18n.t("bots:roster.retry") }),
+		)
+
+		expect(reads).toHaveBeenCalledTimes(2)
+		expect(slotOf("collapsed-sidebar-retry")).toBeNull()
+	})
+})
+
+describe("the Missions entry of the expanded sidebar", () => {
+	it("counts the missions of the current Space waiting on the person", async () => {
+		await mountApp(async (held) => {
+			const room = await roomIn(held, "Release train")
+			harness.missions = [
+				missionOn(held, room, {
+					id: "mission-waiting",
+					state: "waiting_human",
+				}),
+				missionOn(held, room, { id: "mission-working", state: "working" }),
+			]
+		})
+
+		expect(entry(`${MISSIONS} 1`)).toBeTruthy()
 	})
 })

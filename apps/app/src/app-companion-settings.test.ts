@@ -475,7 +475,9 @@ const installOf = (
 })
 
 const missionsEntryOf = () =>
-	within(railOf()).getByRole("button", { name: i18n.t("bots:rail.missions") })
+	within(railOf()).getByRole("button", {
+		name: new RegExp(`^${i18n.t("bots:rail.missions")} \\d+$`),
+	})
 
 const missionCardOf = (objective: string) =>
 	screen.getByRole("button", { name: new RegExp(objective) })
