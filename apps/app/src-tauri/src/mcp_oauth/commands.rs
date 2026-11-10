@@ -17,7 +17,7 @@ use crate::agent::commands::{live_runs, AgentState};
 use crate::agent::contract::{RuntimeScope, TransportError};
 use crate::agent::protocol::{
 	AuthorizeRequest, Authorized, OauthCredentials, OauthFailureKind, RefreshRequest,
-	RevocationRequest,
+	RevocationRequest, StoredReport,
 };
 use crate::agent::sidecar::Opening;
 use crate::agent::translate::now_ms;
@@ -221,11 +221,35 @@ pub async fn mcp_oauth_connect<R: Runtime>(
 	let credentials = connected(&app, authorize_request(&name, url.clone(), &stored), &stored)
 		.await
 		.map_err(|refused| unstored(&root, &scope, refused, &stored))?;
-	kept(&root, &scope, &name, &url, &credentials, &app.state::<ApplicationReports>()).map_err(
-		|error| written(Step::StoringTheGrant.refused(error), &credentials::held(&credentials)),
-	)?;
+	let held = credentials::held(&credentials);
+	let grant_kept =
+		kept(&root, &scope, &name, &url, &credentials, &app.state::<ApplicationReports>())
+			.map_err(|error| Step::StoringTheGrant.refused(error));
+	report_stored(&app, &grant_kept, &held).await;
+	grant_kept.map_err(|refused| written(refused, &held))?;
 	reopen_sessions_served_by(&app, &owner).await;
 	Ok(())
+}
+
+async fn report_stored<R: Runtime>(
+	app: &AppHandle<R>,
+	grant_kept: &Result<(), Refused>,
+	held: &Values,
+) {
+	let report = StoredReport {
+		stored: grant_kept.is_ok(),
+		detail: grant_kept.as_ref().err().map(|refused| refusal_line(refused, held)),
+	};
+	let reported = app
+		.state::<AgentState>()
+		.sidecar()
+		.await
+		.and_then(|sidecar| sidecar.report_oauth_stored(&report));
+	if let Err(error) = reported {
+		log::warn!(
+			"the browser page of the connect was not told whether the grant was stored: {error:?}"
+		);
+	}
 }
 
 async fn reopen_sessions_served_by<R: Runtime>(app: &AppHandle<R>, owner: &EnvOwner) {

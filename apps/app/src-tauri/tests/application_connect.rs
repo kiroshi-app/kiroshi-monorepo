@@ -1,10 +1,12 @@
 mod common;
 
 use std::fs;
-use std::sync::Mutex;
+use std::os::unix::fs::PermissionsExt;
+use std::path::{Path, PathBuf};
+use std::sync::{Mutex, MutexGuard};
 
-use common::an_app_of_its_own;
 use common::removed_on_drop::RemovedOnDrop;
+use common::{an_app_of_its_own, AppOfItsOwn};
 use kiroshi_app::agent::commands::terminate_session;
 use kiroshi_app::agent::protocol::OauthCredentials;
 use kiroshi_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
@@ -29,6 +31,8 @@ const REGISTRATION_SETTLES: &str = "FAKE_AGENT_OAUTH_REGISTRATION_SETTLES";
 
 const AUTHORIZE_LOG: &str = "FAKE_AGENT_OAUTH_AUTHORIZE_LOG";
 
+const STORED_FILE: &str = "FAKE_AGENT_OAUTH_STORED_FILE";
+
 const URL: &str = "https://mcp.granola.test/mcp";
 
 const HANDED_CLIENT: &str = "registered";
@@ -45,6 +49,17 @@ struct Connected {
 	settled: Result<(), OauthError>,
 	kept: Values,
 	flows: Vec<String>,
+	stored: serde_json::Value,
+}
+
+struct Staged {
+	_one: MutexGuard<'static, ()>,
+	app: AppOfItsOwn,
+	root: PathBuf,
+	scope: EnvScope,
+	owner: EnvOwner,
+	log: RemovedOnDrop,
+	stored_file: RemovedOnDrop,
 }
 
 fn a_refused_grant() -> OauthCredentials {
@@ -73,14 +88,31 @@ fn connected_holding(
 	handed_settles: &str,
 	registration_settles: Option<&str>,
 ) -> Connected {
-	let _one = ONE_SIDECAR_AT_A_TIME.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-	let log = RemovedOnDrop(
-		std::env::temp_dir().join(format!("kiroshi-connect-{case}-{}", std::process::id())),
+	connected_from(&staged(case, held, bound, handed_settles, registration_settles))
+}
+
+fn a_temp_file(kind: &str, case: &str) -> RemovedOnDrop {
+	let path = RemovedOnDrop(
+		std::env::temp_dir().join(format!("kiroshi-{kind}-{case}-{}", std::process::id())),
 	);
-	let _ = fs::remove_file(&log);
+	let _ = fs::remove_file(&path);
+	path
+}
+
+fn staged(
+	case: &str,
+	held: &OauthCredentials,
+	bound: Option<&str>,
+	handed_settles: &str,
+	registration_settles: Option<&str>,
+) -> Staged {
+	let one = ONE_SIDECAR_AT_A_TIME.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+	let log = a_temp_file("connect", case);
+	let stored_file = a_temp_file("connect-stored", case);
 	std::env::set_var(SIDECAR_OVERRIDE_ENV, FAKE_SIDECAR);
 	std::env::set_var(HANDED_CLIENT_SETTLES, handed_settles);
 	std::env::set_var(AUTHORIZE_LOG, &*log);
+	std::env::set_var(STORED_FILE, &*stored_file);
 	match registration_settles {
 		Some(settles) => std::env::set_var(REGISTRATION_SETTLES, settles),
 		None => std::env::remove_var(REGISTRATION_SETTLES),
@@ -101,21 +133,38 @@ fn connected_holding(
 	}
 	credentials::forget_tokens(&root, &scope).expect("the tokens are deleted");
 	credentials::remember_refusal(&root, &scope, "invalid_grant").expect("the reason is written");
+	Staged { _one: one, app, root, scope, owner, log, stored_file }
+}
 
-	let settled = tauri::async_runtime::block_on(mcp_oauth_connect(
-		app.handle().clone(),
-		owner,
-		"granola".to_owned(),
-		URL.to_owned(),
-	));
-	let kept = store::values(&root, &scope).expect("the scope is readable");
+fn connected_from(staged: &Staged) -> Connected {
+	let Staged { app, root, scope, owner, log, stored_file, .. } = staged;
+	let settled = tauri::async_runtime::block_on(async {
+		let settled = mcp_oauth_connect(
+			app.handle().clone(),
+			owner.clone(),
+			"granola".to_owned(),
+			URL.to_owned(),
+		)
+		.await;
+		let sidecar = app.state::<AgentState>().sidecar().await.expect("the sidecar runs");
+		sidecar.checked(&Values::new()).await.expect("a later command is answered");
+		settled
+	});
+	let kept = store::values(root, scope).expect("the scope is readable");
 	tauri::async_runtime::block_on(terminate_session(
 		app.handle(),
 		app.state::<AgentState>().inner(),
 	));
-	let flows = fs::read_to_string(&log).unwrap_or_default().lines().map(str::to_owned).collect();
-	let _ = fs::remove_file(&log);
-	Connected { settled, kept, flows }
+	let flows = fs::read_to_string(log).unwrap_or_default().lines().map(str::to_owned).collect();
+	let stored = fs::read_to_string(stored_file)
+		.ok()
+		.and_then(|line| serde_json::from_str(&line).ok())
+		.unwrap_or_default();
+	Connected { settled, kept, flows, stored }
+}
+
+fn sealed(dir: &Path, mode: u32) {
+	fs::set_permissions(dir, fs::Permissions::from_mode(mode)).expect("the mode is set");
 }
 
 fn granted_anew() -> Values {
@@ -223,4 +272,30 @@ fn a_stored_client_of_an_unbound_grant_is_never_handed() {
 	assert_eq!(connected.settled, Ok(()));
 	assert_eq!(connected.flows, flows(&[REGISTERED]));
 	assert_eq!(connected.kept, granted_anew());
+}
+
+#[test]
+fn a_stored_grant_tells_the_sidecar_it_was_stored() {
+	let connected = connected_under("reported-stored", r#"{"kind":"timedOut"}"#, None);
+
+	assert_eq!(connected.settled, Ok(()));
+	assert_eq!(connected.stored, serde_json::json!({ "type": "mcp_oauth_stored", "stored": true }));
+}
+
+#[test]
+fn a_grant_the_store_refuses_tells_the_sidecar_it_was_not_stored_and_why() {
+	let staged =
+		staged("reported-unstored", &a_refused_grant(), Some(URL), r#"{"kind":"timedOut"}"#, None);
+	let scope_dir = staged.root.join("server").join("bot").join("b1").join("granola");
+	sealed(&scope_dir, 0o500);
+
+	let connected = connected_from(&staged);
+	sealed(&scope_dir, 0o700);
+
+	assert!(matches!(connected.settled, Err(OauthError::Store { .. })), "{:?}", connected.settled);
+	assert_eq!(connected.stored["type"], "mcp_oauth_stored");
+	assert_eq!(connected.stored["stored"], false);
+	let detail = connected.stored["detail"].as_str().expect("the report names why");
+	assert!(detail.starts_with("the grant could not be stored: "), "{detail}");
+	assert!(!detail.contains("granted-anew"), "{detail}");
 }
