@@ -48,6 +48,7 @@ type MountedApp = {
 	openJoinedSpace: JoinedSpace | null
 	departed: DepartedSpace | null
 	sessionFailure: TransportError | null
+	focusReports: Set<(isFocused: boolean) => void>
 }
 
 const mounted = vi.hoisted(
@@ -56,6 +57,7 @@ const mounted = vi.hoisted(
 		openJoinedSpace: null,
 		departed: null,
 		sessionFailure: null,
+		focusReports: new Set(),
 	}),
 )
 
@@ -66,6 +68,13 @@ vi.mock("@/lib/conversations/create-store", () => ({
 vi.mock("@/lib/host/index", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/lib/host/index")>()),
 	isDesktopHost: () => false,
+	watchWindowFocus: (report: (isFocused: boolean) => void) => {
+		mounted.focusReports.add(report)
+		report(true)
+		return Promise.resolve(() => {
+			mounted.focusReports.delete(report)
+		})
+	},
 }))
 
 vi.mock("@/lib/chat/create-driver", async () => {
@@ -759,16 +768,18 @@ describe("the Home page", () => {
 			}),
 		)
 
-	const bringWindowBack = async () => {
-		const visibility = vi.spyOn(document, "visibilityState", "get")
-		for (const state of ["hidden", "visible"] as const) {
-			visibility.mockReturnValue(state)
-			act(() => {
-				document.dispatchEvent(new Event("visibilitychange"))
-			})
-		}
-		visibility.mockRestore()
+	const reportWindowFocus = async (isFocused: boolean) => {
+		act(() => {
+			for (const report of [...mounted.focusReports]) {
+				report(isFocused)
+			}
+		})
 		await settle()
+	}
+
+	const bringWindowBack = async () => {
+		await reportWindowFocus(false)
+		await reportWindowFocus(true)
 	}
 
 	const mountHomeSaidToNow = async () => {
@@ -818,7 +829,7 @@ describe("the Home page", () => {
 		})
 	})
 
-	it("opens a fresh Home when its window comes back past the hour, keeping the chat when it comes back within it", async () => {
+	it("opens a fresh Home when its window regains focus past the hour, keeping the chat on a return within it and on a blur", async () => {
 		const { renewal, earlier, saidAt, store, firstOfSpace } =
 			await mountHomeSaidToNow()
 
@@ -828,7 +839,12 @@ describe("the Home page", () => {
 		expect(homeStage()).toBe("conversation")
 
 		vi.setSystemTime(saidAt + MAIN_CHAT_PAUSE_MS + 1)
-		await bringWindowBack()
+		await reportWindowFocus(false)
+
+		expect(renewal).not.toHaveBeenCalled()
+		expect(homeStage()).toBe("conversation")
+
+		await reportWindowFocus(true)
 
 		expect(renewal).toHaveBeenCalledOnce()
 		await expectFreshHome({
