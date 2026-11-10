@@ -1,3 +1,4 @@
+import { raiseTransientNotice } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { createArrivalsListener } from "./create-arrivals-listener"
@@ -221,6 +222,7 @@ export type ConversationControllerOptions = {
 		notice: UnreportedFailureNotice,
 		facts?: ReporterFacts,
 	) => unknown
+	raiseTransientNotice?: typeof raiseTransientNotice
 }
 
 type Seating = "held" | "unknown" | "unreadable"
@@ -310,13 +312,6 @@ const summonLimitDescriptionOf = (names: string[]) =>
 		name: names[0],
 		limit: MAX_SUMMONS_PER_CHAIN,
 	})
-
-const dropDescriberOf =
-	({ reason, error }: NoticedDrop) =>
-	(names: string[]) =>
-		reason === "summonLimit"
-			? summonLimitDescriptionOf(names)
-			: notStartedDescriptionOf(error ?? NO_SESSION, names)
 
 const isSameWork = (left: WorkingState | null, right: WorkingState | null) =>
 	left?.kind === right?.kind &&
@@ -410,6 +405,7 @@ export const createConversationController = (
 		options.onSummonsDropped ?? createSummonsDroppedListener()
 	const reportFailure =
 		options.reportFailure ?? failureReporterIn("conversation-controller")
+	const raiseNotice = options.raiseTransientNotice ?? raiseTransientNotice
 	const transcript = createTranscriptController(store)
 	const hearSilence = ({ conversationId }: RuntimeScope) => {
 		sync()
@@ -439,6 +435,7 @@ export const createConversationController = (
 	let stopReconnections: (() => void) | null = null
 	let stopDrops: Promise<() => void> | null = null
 	const noticedRuns = new Set<string>()
+	const summonLimitsNoticed = new Set<string>()
 	let shouldRebuildForeignTurns = false
 
 	const settle = (next: ConversationState) => {
@@ -1448,6 +1445,16 @@ export const createConversationController = (
 		}
 	}
 
+	const raiseSummonLimit = async ({ turnId, botId }: NoticedDrop) => {
+		const run = runKeyOf(turnId, botId)
+		if (!conversation || summonLimitsNoticed.has(run)) {
+			return
+		}
+		summonLimitsNoticed.add(run)
+		const names = await namesOf(conversation, [botId])
+		raiseNotice({ type: "info", title: summonLimitDescriptionOf(names) })
+	}
+
 	const noteUnseatedIn = (said: TranscriptMessage) => {
 		const { unresolved } = addresseesIn(said.content, presentBotIds())
 		dropAll(
@@ -1473,7 +1480,13 @@ export const createConversationController = (
 		if (noticedRuns.delete(runKeyOf(dropped.turnId, dropped.botId))) {
 			return
 		}
-		void raiseNotStarted(dropped, [dropped.botId], dropDescriberOf(dropped))
+		if (dropped.reason === "summonLimit") {
+			void raiseSummonLimit(dropped)
+			return
+		}
+		void raiseNotStarted(dropped, [dropped.botId], (names) =>
+			notStartedDescriptionOf(dropped.error ?? NO_SESSION, names),
+		)
 	}
 
 	const noteFrontDrop = (

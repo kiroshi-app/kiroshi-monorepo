@@ -3280,6 +3280,7 @@ describe("the mentions a finished turn carries", () => {
 		const stopDrops = vi.fn()
 		const scopedListeners: ((scoped: ScopedEvent) => void)[] = []
 		const reportFailure = vi.fn()
+		const raiseTransientNotice = vi.fn()
 		const hostDriver = withFakeHostWrites(driver, store)
 		const controller = createConversationController(
 			{
@@ -3303,6 +3304,7 @@ describe("the mentions a finished turn carries", () => {
 					}
 				},
 				reportFailure,
+				raiseTransientNotice,
 			},
 		)
 		const detach = controller.attach()
@@ -3314,6 +3316,7 @@ describe("the mentions a finished turn carries", () => {
 			controller,
 			conversation,
 			reportFailure,
+			raiseTransientNotice,
 			stopDrops,
 			ada: ada.id,
 			iris: iris.id,
@@ -3830,26 +3833,30 @@ describe("the mentions a finished turn carries", () => {
 		await room.spoken(room.ada, `over to <@${room.iris}>`)
 	}
 
-	it("stops a mutual mention loop once a companion was handed the turn as often as a chain allows", async () => {
+	const summonLimitOf = (name: string) =>
+		`Agents already handed ${name} the turn ${MAX_SUMMONS_PER_CHAIN} times in this exchange, so the exchange stops here. Mention ${name} yourself to carry on.`
+
+	const expectOneSummonLimitNotice = (
+		room: Awaited<ReturnType<typeof roomSeating>>,
+		name: string,
+	) => {
+		expect(room.raiseTransientNotice).toHaveBeenCalledTimes(1)
+		expect(room.raiseTransientNotice).toHaveBeenCalledWith(
+			expect.objectContaining({ title: summonLimitOf(name) }),
+		)
+	}
+
+	it("stops a mutual mention loop once a companion was handed the turn as often as a chain allows, with a notice rather than a failure report", async () => {
 		const room = await roomSeating()
 
 		await pingPong(room)
 
 		expect(submittedIn(room)).toHaveLength(2 * MAX_SUMMONS_PER_CHAIN + 1)
 		expect(room.controller.getState().waitingBotIds).toEqual([])
-		expect(room.reportFailure).toHaveBeenCalledTimes(1)
-		expect(room.reportFailure).toHaveBeenCalledWith(
-			...notStarted(
-				"Iris didn’t start",
-				`Agents already handed Iris the turn ${MAX_SUMMONS_PER_CHAIN} times in this exchange, so the exchange stops here. Mention Iris yourself to carry on.`,
-				{ botId: room.iris, botName: "Iris" },
-			),
-		)
+		expectOneSummonLimitNotice(room, "Iris")
+		expect(room.reportFailure).not.toHaveBeenCalled()
 		room.detach()
 	})
-
-	const summonLimitOf = (name: string) =>
-		`Agents already handed ${name} the turn ${MAX_SUMMONS_PER_CHAIN} times in this exchange, so the exchange stops here. Mention ${name} yourself to carry on.`
 
 	it("releases on the host the run the loop bound stopped and raises one notice for it, not for the host echo", async () => {
 		const room = await roomSeating()
@@ -3869,13 +3876,8 @@ describe("the mentions a finished turn carries", () => {
 			}),
 			"summonLimit",
 		)
-		expect(room.reportFailure).toHaveBeenCalledTimes(1)
-		expect(room.reportFailure).toHaveBeenCalledWith(
-			...notStarted("Iris didn’t start", summonLimitOf("Iris"), {
-				botId: room.iris,
-				botName: "Iris",
-			}),
-		)
+		expectOneSummonLimitNotice(room, "Iris")
+		expect(room.reportFailure).not.toHaveBeenCalled()
 		room.detach()
 	})
 
@@ -3961,7 +3963,8 @@ describe("the mentions a finished turn carries", () => {
 
 		await pingPong(room)
 
-		expect(room.reportFailure).toHaveBeenCalledTimes(1)
+		expectOneSummonLimitNotice(room, "Iris")
+		expect(room.reportFailure).not.toHaveBeenCalled()
 		expect(room.controller.getState().latestError).not.toBeNull()
 		room.detach()
 	})
@@ -3972,7 +3975,19 @@ describe("the mentions a finished turn carries", () => {
 		await room.drop({ botId: room.iris })
 		await room.drop({ botId: room.iris, reason: "summonLimit" })
 
-		expect(room.reportFailure).toHaveBeenCalledTimes(2)
+		expect(room.reportFailure).toHaveBeenCalledTimes(1)
+		expectOneSummonLimitNotice(room, "Iris")
+		room.detach()
+	})
+
+	it("raises one cap notice per agent per turn however often the host reports it", async () => {
+		const room = await roomSeating()
+
+		await room.drop({ botId: room.iris, reason: "summonLimit" })
+		await room.drop({ botId: room.iris, reason: "summonLimit" })
+
+		expectOneSummonLimitNotice(room, "Iris")
+		expect(room.reportFailure).not.toHaveBeenCalled()
 		room.detach()
 	})
 
@@ -4002,13 +4017,8 @@ describe("the mentions a finished turn carries", () => {
 		await settled()
 
 		expect(claim).toHaveBeenCalledWith(gates.id)
-		expect(room.reportFailure).toHaveBeenCalledTimes(1)
-		expect(room.reportFailure).toHaveBeenCalledWith(
-			...notStarted("Ada didn’t start", summonLimitOf("Ada"), {
-				botId: room.ada,
-				botName: "Ada",
-			}),
-		)
+		expectOneSummonLimitNotice(room, "Ada")
+		expect(room.reportFailure).not.toHaveBeenCalled()
 		room.detach()
 	})
 
