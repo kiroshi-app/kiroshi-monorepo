@@ -363,10 +363,14 @@ export const OptionsRebuiltWithoutPick = meta.story({
 
 		await expect(args.onValueChange).toHaveBeenCalledOnce()
 		await expect(args.onValueChange).toHaveBeenCalledWith("claude-opus")
+		await expect(canvas.getByRole("combobox")).toHaveTextContent(
+			/^claude-opus$/,
+		)
 	},
 })
 
 export const PickedFromTheListByKeyboard = meta.story({
+	tags: ["test-only"],
 	parameters: {
 		docs: {
 			description: {
@@ -394,6 +398,7 @@ export const PickedFromTheListByKeyboard = meta.story({
 })
 
 export const PickedByTypingOnTheTrigger = meta.story({
+	tags: ["test-only"],
 	parameters: {
 		docs: {
 			description: {
