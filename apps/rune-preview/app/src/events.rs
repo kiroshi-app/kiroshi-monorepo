@@ -68,6 +68,15 @@ pub enum HostEvent {
 	Lost(String),
 }
 
+pub fn of_joined_space(event: HostEvent, remote_id: &str, joined_id: &str) -> Option<HostEvent> {
+	match event {
+		HostEvent::AccountChanged(_) | HostEvent::Device(_) | HostEvent::Spaces(_) => None,
+		HostEvent::Roster(heard) => Some(HostEvent::Roster(heard.in_space(remote_id, joined_id))),
+		HostEvent::Library(heard) => Some(HostEvent::Library(heard.in_space(remote_id, joined_id))),
+		heard => Some(heard),
+	}
+}
+
 pub enum JoinedHeard {
 	Host(HostEvent),
 	ConnectionChanged(ConnectionState),

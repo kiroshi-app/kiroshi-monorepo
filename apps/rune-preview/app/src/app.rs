@@ -1,3 +1,5 @@
+#[cfg(test)]
+mod joined_tests;
 pub mod notice;
 
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -19,7 +21,7 @@ use kiroshi_rune_os::{BannerOutcome, Notifier};
 use crate::content;
 use crate::conversations::Connections;
 use crate::dev_profile::{self, DevProfile};
-use crate::events::HostEvent;
+use crate::events::{self, HostEvent, JoinedHeard};
 use crate::host::{Host, HostError, Profile};
 use crate::images::{Fetched, Images};
 use crate::local;
@@ -31,7 +33,7 @@ use crate::model::{
 use crate::navigation::{HeldPage, Navigation, Route};
 use crate::notices::Notices;
 use crate::runs::Runs;
-use crate::source::Source;
+use crate::source::{self, JoinedEvent, Source};
 use crate::surfaces::s04_boot::{self, Step};
 use crate::surfaces::s08_missions::{self, Opened, Opening};
 use crate::surfaces::{
@@ -217,6 +219,7 @@ pub enum Inbound {
 	Connected(Result<Ready, HostError>),
 	ThreadRead { conversation_id: String, messages: Result<Vec<Message>, HostError> },
 	Host(HostEvent),
+	Joined(JoinedEvent),
 	Image(Fetched),
 	DevProfile(DevProfile),
 	Longest { space_id: String, found: Result<Option<Longest>, HostError> },
@@ -300,13 +303,11 @@ impl App {
 		self.images.start(ImageCache::new(waker.clone()));
 		self.surfaces.s10_agent_settings.attach(waker.clone());
 		self.surfaces.s04_boot.attach(waker.clone());
-		let outbox = Outbox { sender: self.pending.clone(), waker };
-		let heard = outbox.clone();
+		let heard = self.open_outbox(waker);
 		self.notices
 			.attach(Box::new(Notifier::new(self.host_profile.identifier(), move |outcome| {
 				heard.deliver(Inbound::Banner(outcome))
 			})));
-		self.outbox = Some(outbox);
 		s01_chrome::restore(self);
 		if matches!(self.workspace, Workspace::Connecting) {
 			self.connect();
@@ -318,6 +319,14 @@ impl App {
 			(true, false) => self.dev_profile = Some(DevProfile::default()),
 			(false, _) => {}
 		}
+	}
+
+	fn open_outbox(&mut self, waker: Waker) -> Outbox {
+		let outbox = Outbox { sender: self.pending.clone(), waker };
+		let joined = outbox.clone();
+		source::joined_sources().hear(move |event| joined.deliver(Inbound::Joined(event)));
+		self.outbox = Some(outbox.clone());
+		outbox
 	}
 
 	pub fn connect(&mut self) {
@@ -382,14 +391,14 @@ impl App {
 		};
 		let thread = Thread::of_conversation(conversation);
 		let solo_bot_id = conversation.solo_bot_id.clone();
-		let host = ready.source.clone();
+		let Some(host) = s02_rail::shown_source(self) else { return };
 		self.mission = None;
 		self.thread = Some(thread);
 		self.read_thread(host.clone(), conversation_id.to_owned());
 		if let Some(bot_id) = solo_bot_id.filter(|_| checks_sessions(&host)) {
 			self.check_session(host.clone(), conversation_id.to_owned(), bot_id);
 		}
-		s05_thread::open_conversation(self, conversation_id);
+		s05_thread::open_conversation(self, conversation_id, host.clone());
 		let conversation_id = conversation_id.to_owned();
 		self.work(move |outbox| {
 			let missions =
@@ -450,8 +459,8 @@ impl App {
 	pub fn open_mission_thread(&mut self, conversation_id: &str, title: &str, bot: Option<&Agent>) {
 		let Some(host) = self.ready().map(|ready| ready.source.clone()) else { return };
 		self.thread = Some(Thread::of_mission(conversation_id, title, bot));
-		self.read_thread(host, conversation_id.to_owned());
-		s05_thread::open_conversation(self, conversation_id);
+		self.read_thread(host.clone(), conversation_id.to_owned());
+		s05_thread::open_conversation(self, conversation_id, host);
 	}
 
 	fn missions_of(
@@ -523,6 +532,7 @@ impl App {
 				self.thread_read(&conversation_id, messages)
 			}
 			Inbound::Host(event) => self.host_event(event),
+			Inbound::Joined(event) => self.joined_event(event),
 			Inbound::Image(fetched) => self.images.landed(fetched),
 			Inbound::Banner(BannerOutcome::Clicked(target)) => self.notice_clicked(target),
 			Inbound::Banner(BannerOutcome::Refused { target, failure }) => {
@@ -562,8 +572,11 @@ impl App {
 	}
 
 	fn reload_visible_thread(&self) {
-		let (Some(ready), Some(thread)) = (self.ready(), self.thread.as_ref()) else { return };
-		self.read_thread(ready.source.clone(), thread.conversation_id.clone());
+		let (Some(host), Some(thread)) = (s02_rail::shown_source(self), self.thread.as_ref())
+		else {
+			return;
+		};
+		self.read_thread(host, thread.conversation_id.clone());
 	}
 
 	fn check_session(&self, host: Source, conversation_id: String, bot_id: String) {
@@ -663,6 +676,17 @@ impl App {
 				HOST_LOST,
 				format!("{reason}. Restart the preview to listen again."),
 			)),
+		}
+	}
+
+	fn joined_event(&mut self, JoinedEvent { space_id, heard }: JoinedEvent) {
+		let JoinedHeard::Host(event) = heard else { return };
+		if self.ready().is_none_or(|ready| ready.space.id != space_id) {
+			return;
+		}
+		let Some(remote_id) = self.surfaces.s02_rail.remote_id_of(&space_id) else { return };
+		if let Some(event) = events::of_joined_space(event, remote_id, &space_id) {
+			self.host_event(event);
 		}
 	}
 
