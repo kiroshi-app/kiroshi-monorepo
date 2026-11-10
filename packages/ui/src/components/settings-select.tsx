@@ -1,7 +1,7 @@
 "use client"
 
 import { Select } from "@base-ui/react/select"
-import { type Ref, useId } from "react"
+import { type Ref, useId, useRef } from "react"
 
 import { Icons } from "@workspace/ui/components/icons"
 import {
@@ -44,14 +44,20 @@ const SettingsSelect = ({
 	const hintId = hint ? `${id}-hint` : undefined
 	const errorId = error ? `${id}-error` : undefined
 	const describedBy = [hintId, errorId].filter(Boolean).join(" ") || undefined
+	const isTriggerKeyDownRef = useRef(false)
+
+	const isChosenByPerson = (details: Select.Root.ChangeEventDetails) =>
+		details.reason !== "none" ||
+		details.event.isTrusted ||
+		isTriggerKeyDownRef.current
 
 	return (
 		<div className="flex shrink-0 flex-col gap-1.5 in-data-companion-page:gap-2">
 			<Select.Root
 				disabled={isDisabled}
 				items={options}
-				onValueChange={(next: string | null) => {
-					if (next !== null) onValueChange(next)
+				onValueChange={(next: string | null, details) => {
+					if (next !== null && isChosenByPerson(details)) onValueChange(next)
 				}}
 				value={value}
 			>
@@ -59,6 +65,12 @@ const SettingsSelect = ({
 				<Select.Trigger
 					aria-describedby={describedBy}
 					aria-invalid={error ? true : undefined}
+					onKeyDown={() => {
+						isTriggerKeyDownRef.current = true
+						queueMicrotask(() => {
+							isTriggerKeyDownRef.current = false
+						})
+					}}
 					className={cn(
 						FIELD_CONTROL_CLASS,
 						error
