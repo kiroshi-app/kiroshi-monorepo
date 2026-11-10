@@ -106,6 +106,10 @@ const bots = {
 		spaceSettings: "Space settings",
 		settings: "Settings",
 		dot: "{{name}}, new activity",
+		detail: "· {{detail}}",
+		missionCount_one: "{{count}} mission",
+		missionCount_other: "{{count}} missions",
+		moreMissions: "+{{count}} missions",
 		badge: {
 			attention: "{{name}}, waiting for you",
 			done: "{{name}}, activity finished",

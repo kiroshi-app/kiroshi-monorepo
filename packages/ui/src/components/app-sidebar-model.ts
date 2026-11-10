@@ -53,6 +53,7 @@ interface AppSidebarRowMission {
 	ticket: BotMissionTicket
 	objective?: string
 	isLive?: boolean
+	agentName?: string
 }
 
 interface AppSidebarBot {

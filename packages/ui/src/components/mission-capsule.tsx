@@ -11,10 +11,10 @@ const CAPSULE_LIST =
 const CAPSULE =
 	"relative flex h-6 w-full min-w-0 items-center gap-1.5 rounded-sm bg-mission-capsule px-2 py-1 text-start text-xs outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
 
-const GLYPH =
+const MISSION_GLYPH =
 	"pointer-events-none size-3 shrink-0 rounded-full border-[1.5px] border-current bg-[repeating-linear-gradient(135deg,currentColor_0_1px,transparent_1px_3px)]"
 
-const GLYPH_COLOUR = {
+const MISSION_GLYPH_COLOUR = {
 	waiting: "text-mission-glyph-waiting",
 	failed: "text-mission-glyph-failed",
 	ready: "text-mission-glyph-ready",
@@ -42,7 +42,7 @@ const MissionCapsule = ({ mission, onOpen }: MissionCapsuleProps) => {
 			<span className="sr-only">{t(`roster.mission.state.${state}`)}</span>
 			<span
 				aria-hidden="true"
-				className={cn(GLYPH, GLYPH_COLOUR[state])}
+				className={cn(MISSION_GLYPH, MISSION_GLYPH_COLOUR[state])}
 				data-slot="mission-capsule-glyph"
 			/>
 			{missionTicketPlatform(ticket.platform).isNamed ? (
@@ -74,4 +74,4 @@ const MissionCapsuleList = ({ missions, onOpen }: MissionCapsuleListProps) =>
 		</div>
 	) : null
 
-export { MissionCapsuleList }
+export { MISSION_GLYPH, MISSION_GLYPH_COLOUR, MissionCapsuleList }
