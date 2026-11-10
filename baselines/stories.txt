@@ -192,6 +192,7 @@ conversation-home-home--night
 conversation-home-home--no-band
 conversation-home-home--picker-open
 conversation-home-home--picker-without-agents
+conversation-home-home--sending
 conversation-home-home--with-a-first-name
 conversation-home-home--without-a-first-name
 conversation-home-home--worked-in-a-room
