@@ -19,6 +19,7 @@ import { createFakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
+import { sidebarItemNamed, sidebarItemOf } from "@/lib/sidebar/sidebar-fixtures"
 import { readMirror, writeMirror } from "@/lib/user/preferences-mirror"
 
 type Harness = {
@@ -124,20 +125,7 @@ const press = async (control: Element, init: MouseEventInit = {}) => {
 	await settle()
 }
 
-const sidebarConversationNamed = (name: string) =>
-	[
-		...document.querySelectorAll(
-			'[data-slot="collapsed-sidebar-conversation"]',
-		),
-	].find((item) => item.getAttribute("aria-label") === name) ?? null
-
-const sidebarConversationOf = (name: string) => {
-	const item = sidebarConversationNamed(name)
-	if (!item) throw new Error(`no sidebar conversation for ${name}`)
-	return item
-}
-
-const openRoom = () => press(sidebarConversationOf(ROOM))
+const openRoom = () => press(sidebarItemOf(ROOM))
 
 const headerButtonOf = (name: string) =>
 	screen.getByRole("button", {
@@ -246,7 +234,7 @@ it("paints a rename in the sidebar", async () => {
 	await settle()
 	await press(menuEntryOf(i18n.t("settings:screen.back")))
 
-	expect(sidebarConversationNamed(RENAMED)).not.toBeNull()
+	expect(sidebarItemNamed(RENAMED)).not.toBeNull()
 })
 
 it("deletes the conversation from the Danger zone and leaves the screen", async () => {
@@ -256,7 +244,7 @@ it("deletes the conversation from the Danger zone and leaves the screen", async 
 	await deleteFromDangerZone()
 
 	expect(settingsMenuOf()).toBeNull()
-	expect(sidebarConversationNamed(ROOM)).toBeNull()
+	expect(sidebarItemNamed(ROOM)).toBeNull()
 })
 
 const raisedNoticeTitles = () =>

@@ -25,6 +25,7 @@ import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-s
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import { aMission } from "@/lib/missions/mission-fixtures"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
+import { sidebarItemOf } from "@/lib/sidebar/sidebar-fixtures"
 import { readMirror, writeMirror } from "@/lib/user/preferences-mirror"
 
 type Harness = {
@@ -331,17 +332,7 @@ const chooseInMenu = async (label: string) =>
 const collapseSidebar = () =>
 	writeMirror({ ...readMirror(), sidebarCollapsed: true })
 
-const sidebarRowOf = (name: string) => {
-	const row = [
-		...document.querySelectorAll(
-			'[data-slot="collapsed-sidebar-conversation"]',
-		),
-	].find((item) => item.getAttribute("aria-label") === name)
-	if (!row) throw new Error(`no sidebar row for ${name}`)
-	return row
-}
-
-const openRow = (name: string) => press(sidebarRowOf(name))
+const openRow = (name: string) => press(sidebarItemOf(name))
 
 const turnOf = (text: string) => {
 	const turn = screen.getByText(text).closest('[data-slot="message"]')

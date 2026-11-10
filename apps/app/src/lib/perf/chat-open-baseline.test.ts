@@ -21,6 +21,7 @@ import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-s
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import { type FakeLayout, fakeLayout } from "@/lib/perf/fake-layout"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
+import { sidebarItemOf } from "@/lib/sidebar/sidebar-fixtures"
 import { MAIN_WINDOW_LABEL, writeSpaceTabs } from "@/lib/tabs/tabs-mirror"
 import { spaceTabsOn } from "@/lib/tabs/tabs-model"
 import { readMirror, writeMirror } from "@/lib/user/preferences-mirror"
@@ -288,21 +289,9 @@ const mountApp = async ({
 	}
 }
 
-const rowFor = (name: string) => {
-	const row = [
-		...document.querySelectorAll(
-			'[data-slot="collapsed-sidebar-conversation"]',
-		),
-	].find((item) => item.getAttribute("aria-label") === name)
-	if (!row) {
-		throw new Error(`no sidebar row for ${name}`)
-	}
-	return row
-}
-
 const chooseBot = async (name: string) => {
 	await act(async () => {
-		fireEvent.click(rowFor(name))
+		fireEvent.click(sidebarItemOf(name))
 	})
 }
 

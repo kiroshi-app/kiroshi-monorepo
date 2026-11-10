@@ -22,6 +22,7 @@ import {
 	type SentinelScroll,
 	stubSentinelObserver,
 } from "@/lib/query/sentinel-test-observer"
+import { sidebarItemOf } from "@/lib/sidebar/sidebar-fixtures"
 import { MAIN_WINDOW_LABEL, writeSpaceTabs } from "@/lib/tabs/tabs-mirror"
 import { spaceTabsOn } from "@/lib/tabs/tabs-model"
 import { readMirror, writeMirror } from "@/lib/user/preferences-mirror"
@@ -272,16 +273,6 @@ const countCommits = (): CommitCounter => {
 const sidebarRows = () => [
 	...document.querySelectorAll('[data-slot="collapsed-sidebar-conversation"]'),
 ]
-
-const rowFor = (name: string) => {
-	const row = sidebarRows().find(
-		(item) => item.getAttribute("aria-label") === name,
-	)
-	if (!row) {
-		throw new Error(`no sidebar row for ${name}`)
-	}
-	return row
-}
 
 const takeFrameClock = (): FrameClock => {
 	const pending = new Map<number, FrameRequestCallback>()
@@ -737,7 +728,7 @@ const openThread = async ({
 	const openedAt = commits.count
 	builds.markdownRenders = 0
 	await act(async () => {
-		fireEvent.click(rowFor(name))
+		fireEvent.click(sidebarItemOf(name))
 	})
 	let tasksToLastMessage = 0
 	while (
@@ -815,7 +806,7 @@ const measureThreadReopen = async () => {
 	const grown = bubbleCount()
 
 	await act(async () => {
-		fireEvent.click(rowFor(other.name))
+		fireEvent.click(sidebarItemOf(other.name))
 	})
 	await frames.flush(SETTLE_TASKS)
 	const reopened = await openThread(opening)
@@ -838,7 +829,7 @@ const measureLongTranscriptOpen = async () => {
 		hasPaintedRow ||= name === "ThreadTurn"
 	})
 	await act(async () => {
-		fireEvent.click(rowFor(bot.name))
+		fireEvent.click(sidebarItemOf(bot.name))
 	})
 	for (let step = 0; step < OPEN_STEP_LIMIT && !hasPaintedRow; step += 1) {
 		await settle(STEP_MS)
