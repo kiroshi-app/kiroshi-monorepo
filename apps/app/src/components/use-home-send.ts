@@ -3,13 +3,17 @@ import { useMemo, useRef, useState } from "react"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import type { HomeSend } from "@/components/home-screen"
+import { NO_ATTACHMENTS, NO_DOCUMENTS } from "@/lib/chat/attachments"
 import type { AttachmentsOwner } from "@/lib/chat/attachments-contract"
-import type { AttachmentsController } from "@/lib/chat/attachments-controller"
+import {
+	type AttachmentsController,
+	ownerKey,
+} from "@/lib/chat/attachments-controller"
 import type { DraftsController } from "@/lib/chat/drafts-controller"
-import { useAttachments } from "@/lib/chat/use-attachments"
 import type { ConversationRuntimes } from "@/lib/conversations/conversation-runtimes"
 import type { Conversation } from "@/lib/conversations/store-contract"
 import { failureReporterIn } from "@/lib/failure-report"
+import { useControllerState } from "@/lib/use-controller"
 
 export type HomeConversationStart = {
 	startConversation: (botIds: string[]) => Promise<Conversation | null>
@@ -18,12 +22,11 @@ export type HomeConversationStart = {
 
 type HomeSendOptions = HomeConversationStart & {
 	agentId: string
+	spaceId: string | null
 	attachments: AttachmentsController
 	drafts: DraftsController
 	runtimes: ConversationRuntimes
 }
-
-const NO_DROP_ZONE = { current: null }
 
 const reportUnsent = failureReporterIn("use-home-send")
 
@@ -36,6 +39,7 @@ const raiseUnsent = () => {
 
 export const useHomeSend = ({
 	agentId,
+	spaceId,
 	attachments,
 	drafts,
 	runtimes,
@@ -43,16 +47,17 @@ export const useHomeSend = ({
 	openConversation,
 }: HomeSendOptions): HomeSend => {
 	const owner = useMemo<AttachmentsOwner>(
-		() => ({ kind: "bot", id: agentId }),
-		[agentId],
+		() => ({ kind: "home", id: spaceId ?? "" }),
+		[spaceId],
 	)
-	const staged = useAttachments(attachments, owner, true, NO_DROP_ZONE)
+	const homeKey = ownerKey(owner)
+	const { staged, documents } = useControllerState(attachments)
 	const isSending = useRef(false)
-	const [draft, setDraft] = useState(() => drafts.read(agentId))
+	const [draft, setDraft] = useState(() => drafts.read(homeKey))
 
 	const changeDraft = (next: string) => {
 		setDraft(next)
-		drafts.remember(agentId, next)
+		drafts.remember(homeKey, next)
 	}
 
 	const sendInNewConversation = async (text: string) => {
@@ -99,8 +104,11 @@ export const useHomeSend = ({
 				void send(text)
 			}
 		},
-		onAttach: staged.stage,
-		attachments: [...staged.items, ...staged.documents],
-		onRemoveAttachment: staged.remove,
+		onAttach: (files) => attachments.stage(owner, files),
+		attachments: [
+			...(staged[homeKey] ?? NO_ATTACHMENTS),
+			...(documents[homeKey] ?? NO_DOCUMENTS),
+		],
+		onRemoveAttachment: (id) => attachments.remove(owner, id),
 	}
 }

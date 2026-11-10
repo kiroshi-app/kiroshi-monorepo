@@ -127,6 +127,7 @@ const HomeView = ({ body, seat, bot }: HomeViewProps) => {
 	const access = spaceAccessOf(joinedHost)
 	const send = useHomeSend({
 		agentId: bot.id,
+		spaceId,
 		attachments: body.attachments,
 		drafts: body.drafts,
 		runtimes: body.conversationRuntimes,
@@ -153,6 +154,7 @@ const HomeView = ({ body, seat, bot }: HomeViewProps) => {
 				lines={
 					<HomeLines
 						{...rooms}
+						key={bot.id}
 						openedAt={visit?.openedAt ?? null}
 						roomLinesOf={(workingIds) =>
 							seat.visits.roomLinesOf(bot.id, spaceId, workingIds)
@@ -242,7 +244,7 @@ export function WorkspaceBody(props: WorkspaceBodyProps) {
 			<HomeView
 				body={props}
 				bot={props.bot}
-				key={props.bot.id}
+				key={props.spaceId}
 				seat={props.home}
 			/>
 		)

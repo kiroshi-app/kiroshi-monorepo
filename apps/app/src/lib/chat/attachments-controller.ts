@@ -15,6 +15,7 @@ import type {
 	AttachmentStoreError,
 	AttachmentsOwner,
 	SubmittedAttachment,
+	ThreadOwner,
 } from "./attachments-contract"
 
 import type { ReplyLink } from "../bindings"
@@ -28,11 +29,11 @@ export type AttachmentsState = {
 
 export type AttachmentsPort = {
 	store: (
-		owner: AttachmentsOwner,
+		owner: ThreadOwner,
 		attachments: SubmittedAttachment[],
 	) => Promise<string[]>
 	send: (
-		owner: AttachmentsOwner,
+		owner: ThreadOwner,
 		text: string,
 		replyLinks?: ReplyLink[],
 		documents?: string[],
@@ -47,13 +48,13 @@ export type AttachmentsController = {
 	remove: (owner: AttachmentsOwner, id: string) => void
 	dismissRefusal: (owner: AttachmentsOwner) => void
 	submit: (
-		owner: AttachmentsOwner,
+		owner: ThreadOwner,
 		text: string,
 		replyLinks?: ReplyLink[],
 	) => Promise<boolean>
 	submitTo: (
 		staging: AttachmentsOwner,
-		target: AttachmentsOwner,
+		target: ThreadOwner,
 		text: string,
 	) => Promise<boolean>
 	forget: (owner: AttachmentsOwner) => void
@@ -63,7 +64,7 @@ export type AttachmentsController = {
 export const ownerKey = (owner: AttachmentsOwner) => `${owner.kind}:${owner.id}`
 
 type Delivery = (
-	target: AttachmentsOwner,
+	target: ThreadOwner,
 	text: string,
 	replyLinks?: ReplyLink[],
 	documents?: string[],
@@ -71,7 +72,7 @@ type Delivery = (
 
 type Submission = {
 	staging: AttachmentsOwner
-	target: AttachmentsOwner
+	target: ThreadOwner
 	text: string
 	replyLinks?: ReplyLink[]
 	deliver: Delivery

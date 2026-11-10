@@ -869,6 +869,68 @@ describe("WorkspaceBody Home", () => {
 	const homeSlot = (slot: string) =>
 		document.querySelector(`[data-slot="${slot}"]`)
 
+	const typeOnHome = (text: string) =>
+		act(() => {
+			fireEvent.change(screen.getByRole("textbox"), {
+				target: { value: text },
+			})
+		})
+
+	const stageOnHome = (name: string) =>
+		act(() => {
+			fireEvent.change(
+				document.querySelector("input[type='file']") as HTMLInputElement,
+				{ target: { files: [new File(["notes"], name)] } },
+			)
+		})
+
+	const stagedChip = (name: string) =>
+		screen.queryByRole("button", { name: new RegExp(name) })
+
+	it("keeps the Home draft and staged file through an agent pick, out of every conversation composer", async () => {
+		const store = createFakeTranscriptStore()
+		const seated = await workspaceOf(store)
+		const [vega] = await seatBots(store, SPACE, ["Vega"])
+		const home = await launchHome({
+			store,
+			seated,
+			overrides: { drafts: createDraftsController() },
+		})
+		await home.open()
+		typeOnHome("Book the flights.")
+		stageOnHome("notes.md")
+
+		home.rerender({ bot: vega, bots: [seated.bot, vega] })
+
+		expect(screen.getByDisplayValue("Book the flights.")).toBeTruthy()
+		expect(stagedChip("notes.md")).not.toBeNull()
+
+		for (const shown of [
+			{ bot: seated.bot },
+			{ bot: undefined, conversation: seated.conversation },
+		]) {
+			home.rerender({ home: undefined, ...shown })
+			await settle()
+			expect(homeSlot("chat-layout")).not.toBeNull()
+			expect(screen.queryByDisplayValue("Book the flights.")).toBeNull()
+			expect(stagedChip("notes.md")).toBeNull()
+		}
+	})
+
+	it("shows each Space its own Home draft", async () => {
+		const home = await launchHome({
+			overrides: { drafts: createDraftsController() },
+		})
+		await home.open()
+		typeOnHome("Book the flights.")
+
+		home.rerender({ spaceId: "studio" })
+		expect(screen.queryByDisplayValue("Book the flights.")).toBeNull()
+
+		home.rerender({ spaceId: SPACE })
+		expect(screen.getByDisplayValue("Book the flights.")).toBeTruthy()
+	})
+
 	it("shows the fresh Home, never a transcript, whatever the agent was told before", async () => {
 		const controller = createChatController(
 			createScriptedDriver(),

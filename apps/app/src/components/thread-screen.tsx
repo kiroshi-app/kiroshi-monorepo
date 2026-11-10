@@ -110,7 +110,7 @@ import {
 	type AnsweredCards,
 	answeredCardsIn,
 } from "@/lib/chat/answered-question"
-import type { AttachmentsOwner } from "@/lib/chat/attachments-contract"
+import type { ThreadOwner } from "@/lib/chat/attachments-contract"
 import type { AttachmentsController } from "@/lib/chat/attachments-controller"
 import type { ChatError, OutboxEntry } from "@/lib/chat/chat-state"
 import { canStopTurn } from "@/lib/chat/chat-state"
@@ -1400,7 +1400,7 @@ const useThreadSeats = ({
 	const botImage = botFace?.image
 	const isSoloThread = facts.bot !== null
 
-	const owner = useMemo<AttachmentsOwner>(
+	const owner = useMemo<ThreadOwner>(
 		() => ({ kind: facts.bot ? "bot" : "conversation", id: facts.id }),
 		[facts.bot, facts.id],
 	)
