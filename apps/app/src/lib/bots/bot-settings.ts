@@ -45,20 +45,32 @@ const withNoEffort = (value: string): OfferedModel_Serialize => ({
 	supportedEffortLevels: [],
 })
 
+const toModelOption = ({
+	value,
+	supportedEffortLevels,
+}: OfferedModel_Serialize): BotModelOption => ({
+	label: value,
+	value,
+	supportedEfforts: supportedEffortLevels,
+})
+
 export const modelOptionsFor = (
 	model: string,
 	catalogue: OfferedModel_Serialize[],
 ): BotModelOption[] => {
 	const read = catalogue.filter(({ value }) => value !== UNRUNNABLE_MODEL)
 	const offered = read.length > 0 ? read : FALLBACK_MODELS.map(withNoEffort)
+	const options = offered.map(toModelOption)
 	const isOffered =
 		offered.some(({ value }) => value === model) || model === UNRUNNABLE_MODEL
-	const models = isOffered ? offered : [...offered, withNoEffort(model)]
-	return models.map(({ value, supportedEffortLevels }) => ({
-		label: value,
-		value,
-		supportedEfforts: supportedEffortLevels,
-	}))
+	if (isOffered) return options
+	const resolving = offered.findIndex(
+		({ resolvedModel }) => resolvedModel === model,
+	)
+	if (resolving === -1) return [...options, toModelOption(withNoEffort(model))]
+	return options.map((option, index) =>
+		index === resolving ? { ...option, value: model } : option,
+	)
 }
 
 export const BOT_NAMES = [
