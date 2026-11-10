@@ -102,7 +102,7 @@ async fn connected<R: Runtime>(
 		Err(refused) if registers_anew => refused,
 		granted => return granted,
 	};
-	eprintln!("{}", refusal_line(&Step::HandingTheStoredClient.refused(refused.error), stored));
+	log::warn!("{}", refusal_line(&Step::HandingTheStoredClient.refused(refused.error), stored));
 	let registering = AuthorizeRequest { url: request.url, ..AuthorizeRequest::default() };
 	grant_of(settlement(app, &registering).await?)
 }
@@ -126,7 +126,7 @@ fn authorize_request(name: &str, url: String, stored: &Values) -> AuthorizeReque
 		return registering;
 	};
 	if !credentials::is_bound_to(stored, &registering.url) {
-		eprintln!("the stored client of {name} was withheld: its grant is bound to another url");
+		log::warn!("the stored client of {name} was withheld: its grant is bound to another url");
 		return registering;
 	}
 	AuthorizeRequest {
@@ -183,8 +183,18 @@ fn grant_of(settled: Authorized) -> Result<OauthCredentials, Refused> {
 }
 
 fn written(refused: Refused, held: &Values) -> OauthError {
-	eprintln!("{}", refusal_line(&refused, held));
+	log::warn!("the connect was refused: {}", refusal_line(&refused, held));
 	refused.error
+}
+
+fn unstored(root: &Path, scope: &EnvScope, refused: Refused, held: &Values) -> OauthError {
+	if refused.error != OauthError::Cancelled {
+		let reason = refusal_line(&refused, held);
+		if let Err(error) = credentials::remember_refusal(root, scope, &reason) {
+			log::warn!("the refused connect could not be remembered: {error:?}");
+		}
+	}
+	written(refused, held)
 }
 
 #[tauri::command]
@@ -210,7 +220,7 @@ pub async fn mcp_oauth_connect<R: Runtime>(
 	})?;
 	let credentials = connected(&app, authorize_request(&name, url.clone(), &stored), &stored)
 		.await
-		.map_err(|refused| written(refused, &stored))?;
+		.map_err(|refused| unstored(&root, &scope, refused, &stored))?;
 	kept(&root, &scope, &name, &url, &credentials, &app.state::<ApplicationReports>()).map_err(
 		|error| written(Step::StoringTheGrant.refused(error), &credentials::held(&credentials)),
 	)?;
@@ -913,6 +923,72 @@ mod tests {
 		assert!(store::values(&root, &a_server("granola"))
 			.expect("the scope is readable")
 			.contains_key(OAUTH_ACCESS_TOKEN));
+	}
+
+	#[test]
+	fn a_connect_kept_over_an_unbound_grant_is_the_grant_the_session_of_the_agent_reads() {
+		let root = a_root("connect-session-reads");
+		credentials::store(&root, &a_server("granola"), &a_live_grant())
+			.expect("the unbound grant is written");
+		let renewed =
+			OauthCredentials { access_token: "granted-again".to_owned(), ..a_live_grant() };
+
+		kept(
+			&root,
+			&a_server("granola"),
+			"granola",
+			GRANOLA_URL,
+			&renewed,
+			&ApplicationReports::default(),
+		)
+		.expect("the grant is stored");
+
+		let session = store::resolve(&root, &a_bot()).expect("the session env resolves");
+		let read = &session.per_server["granola"];
+		assert_eq!(read.get(OAUTH_ACCESS_TOKEN).map(String::as_str), Some("granted-again"));
+		assert_eq!(read.get(OAUTH_SERVER_URL).map(String::as_str), Some(GRANOLA_URL));
+	}
+
+	fn a_refused_flow() -> Refused {
+		Step::SettlingTheFlow.refused(OauthError::Failed {
+			detail: "the token endpoint answered 401: invalid_client".to_owned(),
+			step: None,
+			status: None,
+			body: None,
+		})
+	}
+
+	#[test]
+	fn a_connect_that_stored_no_grant_reads_its_failure_and_never_connected() {
+		let root = a_root("connect-unstored");
+		credentials::store(&root, &a_server("granola"), &a_live_grant())
+			.expect("the grant is written");
+		credentials::bind(&root, &a_server("granola"), GRANOLA_URL).expect("the grant is bound");
+		assert_eq!(read_row(&root, &a_bot()).status, ApplicationStatus::Connected);
+
+		let error = unstored(&root, &a_server("granola"), a_refused_flow(), &Values::new());
+
+		assert!(matches!(error, OauthError::Failed { .. }), "{error:?}");
+		let ApplicationStatus::NeedsAuthorization { reason: Some(reason) } =
+			read_row(&root, &a_bot()).status
+		else {
+			panic!("the refused connect read as connected or with no reason");
+		};
+		assert!(reason.contains("invalid_client"), "{reason}");
+	}
+
+	#[test]
+	fn a_cancelled_connect_leaves_the_row_as_it_stood() {
+		let root = a_root("connect-cancelled");
+		credentials::store(&root, &a_server("granola"), &a_live_grant())
+			.expect("the grant is written");
+		credentials::bind(&root, &a_server("granola"), GRANOLA_URL).expect("the grant is bound");
+
+		let cancelled = Step::SettlingTheFlow.refused(OauthError::Cancelled);
+		let error = unstored(&root, &a_server("granola"), cancelled, &Values::new());
+
+		assert_eq!(error, OauthError::Cancelled);
+		assert_eq!(read_row(&root, &a_bot()).status, ApplicationStatus::Connected);
 	}
 
 	#[test]
