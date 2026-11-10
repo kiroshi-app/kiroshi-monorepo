@@ -8,6 +8,17 @@ struct URLSessionRelaySocketTests {
     let idleTask = URLSession.shared.webSocketTask(with: URL(string: "wss://relay.invalid")!)
     let aborted = POSIXError(.ECONNABORTED)
 
+    @Test func theRelaySocketAcceptsFramesUpTo64MiB() {
+        let request = URLRequest(url: URL(string: "wss://relay.invalid")!)
+
+        let task = URLSessionRelayTransport.webSocketTask(for: request)
+
+        #expect(URLSessionRelayTransport.maximumFrameBytes == 67_108_864)
+        #expect(task.maximumMessageSize == 67_108_864)
+        #expect(task.state == .suspended)
+        task.cancel()
+    }
+
     @Test func aPingAnsweredTwiceAsTheSocketCloses() async {
         let socket = URLSessionRelaySocket(task: idleTask) { [aborted] answer in
             answer(aborted)

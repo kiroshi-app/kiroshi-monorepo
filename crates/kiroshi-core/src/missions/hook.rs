@@ -34,9 +34,9 @@ pub const TOOL_USED: &str = "PostToolUse";
 
 const HOOKED_EVENTS: [&str; 4] = ["Notification", PROMPT_SUBMITTED, TURN_STOPPED, TOOL_USED];
 
-const SCRIPT: &str = include_str!("../../../../apps/app/src-tauri/hooks/kiroshi-agent-hook.sh");
+const SCRIPT: &str = include_str!("../../hooks/kiroshi-agent-hook.sh");
 
-const READER: &str = include_str!("../../../../apps/app/src-tauri/hooks/kiroshi-agent-hook.py");
+const READER: &str = include_str!("../../hooks/kiroshi-agent-hook.py");
 
 pub fn dir(core: &crate::core_context::Core, mission_id: &str) -> Result<PathBuf, MissionError> {
 	Ok(core.data_dir().join(MISSIONS_DIR).join(mission_id).join(HOOK_DIR))
@@ -44,8 +44,11 @@ pub fn dir(core: &crate::core_context::Core, mission_id: &str) -> Result<PathBuf
 
 pub fn installed(dir: &Path, workspace: &str, url: &str, key: &str) -> Result<(), MissionError> {
 	let root = checkout(workspace)?;
+	let claude = root.join(CLAUDE_DIR);
+	let settings = claude.join(SETTINGS_NAME);
+	refuse_a_link(&claude)?;
+	refuse_a_link(&settings)?;
 	let script = laid_out(dir, url, key)?;
-	let settings = root.join(CLAUDE_DIR).join(SETTINGS_NAME);
 	let held = read(&settings)?;
 	let merged = permissions::granted(merged(held, &command(&script))?, &root)?;
 	let written = serde_json::to_vec_pretty(&merged)
@@ -53,6 +56,21 @@ pub fn installed(dir: &Path, workspace: &str, url: &str, key: &str) -> Result<()
 	private_files::replace_atomically(&settings, &written).map_err(|error| {
 		unreachable(format!("the settings of the workspace were not written: {error}"))
 	})
+}
+
+fn refuse_a_link(path: &Path) -> Result<(), MissionError> {
+	match fs::symlink_metadata(path) {
+		Ok(found) if found.file_type().is_symlink() => Err(unreachable(format!(
+			"{} is a symbolic link, so the settings of the workspace were not written",
+			path.display()
+		))),
+		Ok(_) => Ok(()),
+		Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+		Err(error) => Err(unreachable(format!(
+			"{} could not be inspected, so the settings of the workspace were not written: {error}",
+			path.display()
+		))),
+	}
 }
 
 fn laid_out(dir: &Path, url: &str, key: &str) -> Result<PathBuf, MissionError> {
@@ -373,6 +391,49 @@ mod tests {
 		);
 		assert!(files_in(&bare).is_empty(), "the refused workspace was written in");
 		assert!(files_in(&dir.join("hook")).is_empty(), "the refused install laid the hook out");
+
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[cfg(unix)]
+	#[test]
+	fn a_claude_directory_that_is_a_link_is_refused_and_nothing_is_written_through_it() {
+		let dir = a_dir("linked-claude");
+		let elsewhere = dir.join("elsewhere");
+		fs::create_dir_all(&elsewhere).expect("the link target is there");
+		std::os::unix::fs::symlink(&elsewhere, dir.join("workspace").join(CLAUDE_DIR))
+			.expect("the link is there");
+
+		let refused = installed(&dir.join("hook"), &workspace_of(&dir), A_URL, A_KEY)
+			.expect_err("the install is refused");
+
+		assert!(matches!(refused, MissionError::Undeliverable { .. }), "got {refused:?}");
+		assert!(files_in(&elsewhere).is_empty(), "the install wrote through the link");
+		assert!(!dir.join("hook").exists(), "the refused install laid out its hook");
+
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[cfg(unix)]
+	#[test]
+	fn a_settings_file_that_is_a_link_is_refused_and_its_target_stands() {
+		let dir = a_dir("linked-settings");
+		let claude = dir.join("workspace").join(CLAUDE_DIR);
+		fs::create_dir_all(&claude).expect("the claude directory is there");
+		let target = dir.join("target.json");
+		fs::write(&target, "{}").expect("the link target lands");
+		std::os::unix::fs::symlink(&target, claude.join(SETTINGS_NAME)).expect("the link is there");
+
+		let refused = installed(&dir.join("hook"), &workspace_of(&dir), A_URL, A_KEY)
+			.expect_err("the install is refused");
+
+		assert!(matches!(refused, MissionError::Undeliverable { .. }), "got {refused:?}");
+		assert_eq!(
+			fs::read_to_string(&target).expect("the link target reads"),
+			"{}",
+			"the install wrote through the link"
+		);
+		assert!(!dir.join("hook").exists(), "the refused install laid out its hook");
 
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}

@@ -2,10 +2,13 @@ use std::path::{Path, PathBuf};
 
 use super::archive;
 use super::contract::{CompanionCounts, Space, SpaceDescribed, SpaceError, SpacePreferences};
+use crate::agent::commands::{asking_runs, shut_runs_down};
+use crate::agent::contract::RuntimeScope;
 use crate::bundles;
 use crate::conversations::commands::{announce_joined, announce_left, list_bundles};
 use crate::conversations::contract::Hue;
 use crate::db;
+use crate::db::repositories::space_children::SpaceChild;
 use crate::environment;
 use crate::events;
 use crate::hosting;
@@ -85,12 +88,30 @@ pub async fn space_delete(core: &crate::core_context::Core, id: String) -> Resul
 	let state = core.state::<db::DatabaseState>();
 	let database = ready(&state)?;
 	hosting::forgotten(core, &id).await;
+	let asking_here = asking_runs_held_by(core, database, &id).await?;
 	let held_bots = database.spaces().delete(id.clone()).await?;
+	shut_runs_down(core, asking_here).await;
 	bundles::space::remove(core, &id);
 	library::forget_space(core, &id);
 	forget_bundles(bundles::root(core).as_deref(), database, &held_bots).await;
 	environment::store::forget_space(core, &id, &held_bots);
 	Ok(())
+}
+
+async fn asking_runs_held_by(
+	core: &crate::core_context::Core,
+	database: &db::Database,
+	space_id: &str,
+) -> Result<Vec<RuntimeScope>, SpaceError> {
+	let children = database.space_children();
+	let mut held = Vec::new();
+	for scope in asking_runs(core) {
+		let conversation_id = scope.conversation_id.clone();
+		if children.holds(space_id.to_owned(), SpaceChild::Conversation, conversation_id).await? {
+			held.push(scope);
+		}
+	}
+	Ok(held)
 }
 
 pub async fn space_export(

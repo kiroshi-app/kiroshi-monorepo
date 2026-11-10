@@ -7,9 +7,9 @@ adversary: it may drop, reorder, replay, alter or inject frames.
 Three files make the contract:
 
 - this document: keys, derivations and byte layouts;
-- [`apps/app/src-tauri/tests/vectors/v2-crypto.json`](../../apps/app/src-tauri/tests/vectors/v2-crypto.json):
+- [`crates/kiroshi-core/tests/vectors/v2-crypto.json`](../../crates/kiroshi-core/tests/vectors/v2-crypto.json):
   test vectors every client checks itself against;
-- [`apps/app/src-tauri/tests/vectors/bip39-english.txt`](../../apps/app/src-tauri/tests/vectors/bip39-english.txt):
+- [`crates/kiroshi-core/tests/vectors/bip39-english.txt`](../../crates/kiroshi-core/tests/vectors/bip39-english.txt):
   the BIP39 English word list the fingerprint reads (SHA-256
   `2f5eed53a4727b4bf8880d8f3f199efc90e58503646d9ff8eff3a2ed3b24dbda`).
 
@@ -323,10 +323,11 @@ The Tauri command is `invitation_decline(invitationId)`.
 
 ## Joining by the first rekey
 
-The host answers no frame of a device outside its roster. It admits a device from
-the [device list](#device-list-admission) and hands it the key in a
-[rekey](#rekey-host-to-device) frame, so a member joins on its first verified
-rekey.
+The host answers no frame of a device outside its roster, except its hello under
+`key_id` 0, which it refuses as [not admitted](#refused-host-to-device). It
+admits a device from the [device list](#device-list-admission) and hands it the
+key in a [rekey](#rekey-host-to-device) frame, so a member joins on its first
+verified rekey.
 
 After the accept, the device opens the member socket of the instance with its
 relay device id and sends one sealed hello under `key_id` 0:
@@ -338,7 +339,8 @@ relay device id and sends one sealed hello under `key_id` 0:
 No Space key has `key_id` 0, so this frame reads on the host as a frame under a
 key lower than the current one: a rostered device that missed its rekey. The host
 drops it and sends that device its rekey again; while the device is not rostered
-yet, the host drops it with nothing sent, and the rekey of the admission arrives
+yet, the host drops it and answers a [refused](#refused-host-to-device) frame, the
+device waits on `deviceAwaitingApproval`, and the rekey of the admission arrives
 on the same socket once the device list gains the device. The subkey of that
 hello derives from a random key the device discards, and the host never opens it.
 
@@ -552,6 +554,21 @@ When that rotation fails as the socket comes online, the host ends the socket
 session before it seals any frame on it, so it never serves frames under a key a
 removed device holds. The relay connection is retried with the usual backoff,
 and each new session tries the rotation again.
+
+### refused (host to device)
+
+When a device outside the roster sends its hello under `key_id` 0, the host logs
+one line naming the Space, the instance, the relay device and the cause, and
+answers that device alone:
+
+```json
+{ "v": 2, "instance": "…", "to": "…relay device id…", "refused": "notAdmitted" }
+```
+
+The frame is not signed: it changes only the reason a waiting device shows,
+`deviceAwaitingApproval` with a detail naming the roster, never a key or a
+roster. The device keeps its socket and its hello, so the rekey of a later
+admission still reaches it.
 
 ### rekey (host to device)
 

@@ -17,6 +17,7 @@ import { KIROSHI_LAYER } from "./system-layer"
 
 const scope: KiroshiScope = {
 	cwd: "/tmp",
+	env: {},
 	floor: {
 		home: "/home",
 		platform: "darwin",
@@ -30,7 +31,7 @@ const scope: KiroshiScope = {
 const systemSkill = (id: string) =>
 	readFileSync(
 		new URL(
-			`../../../../src-tauri/plugins/kiroshi/skills/${id}/SKILL.md`,
+			`../../../../../../crates/kiroshi-core/plugins/kiroshi/skills/${id}/SKILL.md`,
 			import.meta.url,
 		),
 		"utf8",

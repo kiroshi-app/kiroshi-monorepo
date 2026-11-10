@@ -1,6 +1,6 @@
 [package]
 name = "kiroshi-rune-preview"
-version = "0.0.0"
+version = "0.27.0-beta.1"
 edition.workspace = true
 publish.workspace = true
 
@@ -9,7 +9,7 @@ fake-claude = []
 
 [[bin]]
 name = "fake_sidecar"
-path = "../../app/src-tauri/src/bin/fake_sidecar.rs"
+path = "../../../crates/kiroshi-core/src/bin/fake_sidecar.rs"
 required-features = ["fake-claude"]
 test = false
 

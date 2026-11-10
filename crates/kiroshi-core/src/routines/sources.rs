@@ -82,7 +82,7 @@ mod tests {
 	}
 
 	fn committed_system_bundle() -> PathBuf {
-		PathBuf::from(crate::APP_DIR).join("plugins").join("kiroshi")
+		PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("plugins").join("kiroshi")
 	}
 
 	#[test]

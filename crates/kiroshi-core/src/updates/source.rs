@@ -156,10 +156,8 @@ mod tests {
 	use super::*;
 
 	fn tauri_updater_config() -> serde_json::Value {
-		let config: serde_json::Value =
-			serde_json::from_str(include_str!("../../../../apps/app/src-tauri/tauri.conf.json"))
-				.expect("the config parses");
-		config["plugins"]["updater"].clone()
+		serde_json::from_str(include_str!("../../tests/fixtures/tauri-updater.json"))
+			.expect("the config parses")
 	}
 
 	#[test]

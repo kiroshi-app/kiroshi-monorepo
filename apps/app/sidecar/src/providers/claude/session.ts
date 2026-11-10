@@ -3,6 +3,7 @@ import { homedir } from "node:os"
 import {
 	type HookCallback,
 	type Options,
+	type PermissionMode,
 	query,
 	type SlashCommand,
 } from "@anthropic-ai/claude-agent-sdk"
@@ -36,8 +37,11 @@ import {
 	unconnectedServers,
 } from "./server-connect"
 import {
+	boundEnv,
 	type ResolvedServers,
+	requestedServers,
 	resolvedServers,
+	resolveServers,
 	type Servers,
 	serverNamed,
 } from "./server-env"
@@ -133,12 +137,17 @@ export const buildOptions = (
 				servers: Object.keys(resolved.servers),
 			}),
 		),
+		...(request.permissionMode
+			? { permissionMode: request.permissionMode as PermissionMode }
+			: {}),
+		...(request.deniedTools ? { disallowedTools: request.deniedTools } : {}),
 		...(handsServers(request)
 			? {
 					plugins: localPlugins(pluginPaths(request)),
 					agent: request.agent,
 					mcpServers: kiroshiServer({
 						cwd: request.cwd,
+						env: sessionEnv(request.connection),
 						floor,
 						managedSettings,
 						session: request.session,
@@ -370,6 +379,7 @@ export type ConnectionReport = {
 	push: (text: string, uuid?: string) => void
 	pass: ConnectPass
 	record?: (line: ServerLine) => void
+	secrets?: string[]
 }
 
 const latest = (lines: WaitingLine[]): WaitingLine[] => {
@@ -387,12 +397,12 @@ export const reportConnections = ({
 	push,
 	pass,
 	record,
+	secrets = heldSecrets(pass.env),
 }: ConnectionReport) => {
 	const abandoning = new AbortController()
 	const { signal } = abandoning
 	const held: HeldPrompt[] = []
 	const waiting: WaitingLine[] = []
-	const secrets = heldSecrets(pass.env)
 	let holding = pass.names.length > 0
 
 	const framed = (detail: string) => {
@@ -502,7 +512,9 @@ export const openClaudeSession = async (
 	if (botSettings.rejection) {
 		emit({ type: "settings_rejected", detail: botSettings.rejection })
 	}
-	const resolved = resolvedServers(request)
+	const requested = requestedServers(request)
+	const serverEnv = request.serverEnv ?? {}
+	const resolved = resolveServers(requested, serverEnv)
 	const record = recordStanding(request.session)
 	for (const line of resolved.rejections) {
 		emit({ type: "server_env_rejected", detail: line.detail })
@@ -575,13 +587,14 @@ export const openClaudeSession = async (
 				status: () => run.mcpServerStatus(),
 				reconnect: (name) => run.reconnectMcpServer(name),
 			},
-			env: request.serverEnv,
+			env: boundEnv(requested, serverEnv),
 			grants: {
 				renew: renewGrant(request.session),
 				declare,
 			},
 		},
 		record,
+		secrets: heldSecrets(serverEnv),
 	})
 
 	return {

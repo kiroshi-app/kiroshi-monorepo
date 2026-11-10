@@ -8,7 +8,7 @@ struct RelayCryptoVectorTests {
     static let folder = URL(filePath: #filePath).deletingLastPathComponent()
     static let copiedVectors = folder.appending(path: "Vectors/v2-crypto.json")
     static let sharedVectors = folder.appending(
-        path: "../../app/src-tauri/tests/vectors/v2-crypto.json")
+        path: "../../../crates/kiroshi-core/tests/vectors/v2-crypto.json")
     static let sharedVectorsSHA256 =
         "37ca967280f24544ee95ae9deee001282118f3de7fff3ff7c572f57844981e71"
     static let swiftSignature = folder.appending(path: "Vectors/swift-signature.json")

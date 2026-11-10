@@ -9,31 +9,14 @@
 			"cache": false
 		},
 		"dev": {
-			"dependsOn": ["^build", "sidecar#build"],
+			"dependsOn": ["^build"],
 			"cache": false,
 			"persistent": true
-		},
-		"tauri:build": {
-			"dependsOn": ["^build", "sidecar#build"],
-			"cache": false,
-			"passThroughEnv": ["APPLE_SIGNING_IDENTITY"]
-		},
-		"storybook": {
-			"cache": false,
-			"persistent": true
-		},
-		"build-storybook": {
-			"outputs": ["storybook-static/**"]
 		},
 		"types": {
 			"dependsOn": ["^types"]
 		},
 		"test": {
-			"cache": false,
-			"passThroughEnv": ["KIROSHI_TEST_WORKERS"]
-		},
-		"app#test": {
-			"dependsOn": ["sidecar#build"],
 			"cache": false,
 			"passThroughEnv": ["KIROSHI_TEST_WORKERS"]
 		},

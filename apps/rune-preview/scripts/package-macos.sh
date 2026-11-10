@@ -5,9 +5,9 @@ readonly USAGE_ERROR=64
 readonly PREVIEW_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly REPO_ROOT="$(cd "$PREVIEW_ROOT/../.." && pwd)"
 readonly TARGET="${CARGO_TARGET_DIR:-$PREVIEW_ROOT/target}"
-readonly BUNDLE="$TARGET/bundle/Kiroshi Rune Preview.app"
-readonly TAURI_APP="$REPO_ROOT/apps/app/src-tauri"
-readonly ENTITLEMENTS="$TAURI_APP/entitlements.plist"
+readonly BUNDLE="$TARGET/bundle/Kiroshi.app"
+readonly SIDECARS="$REPO_ROOT/apps/app/sidecar/binaries"
+readonly ENTITLEMENTS="$PREVIEW_ROOT/scripts/entitlements.plist"
 readonly PLIST_BUDDY=/usr/libexec/PlistBuddy
 
 if [ $# -ne 3 ]; then
@@ -17,7 +17,8 @@ fi
 readonly TRIPLE=$1
 readonly VERSION=$2
 readonly OUTPUT=$3
-readonly DMG="$OUTPUT/Kiroshi-Rune-Preview_${VERSION}_${TRIPLE%%-*}.dmg"
+readonly DMG="$OUTPUT/Kiroshi_${VERSION}_${TRIPLE%%-*}.dmg"
+readonly UPDATE="$OUTPUT/Kiroshi_${VERSION}_${TRIPLE%%-*}.app.tar.gz"
 
 signed() {
 	codesign --force --options runtime --timestamp --entitlements "$ENTITLEMENTS" \
@@ -26,19 +27,19 @@ signed() {
 
 "$PREVIEW_ROOT/scripts/bundle-macos.sh" "$TRIPLE" "$VERSION"
 
-for sidecar in "$TAURI_APP/binaries/"*"-$TRIPLE"; do
+for sidecar in "$SIDECARS/"*"-$TRIPLE"; do
 	beside="$BUNDLE/Contents/MacOS/$(basename "$sidecar" "-$TRIPLE")"
 	cp -f "$sidecar" "$beside"
 	signed "$beside"
 done
 mkdir -p "$BUNDLE/Contents/Resources"
-cp -f "$TAURI_APP/icons/icon.icns" "$BUNDLE/Contents/Resources/icon.icns"
+cp -f "$PREVIEW_ROOT/assets/icons/icon.icns" "$BUNDLE/Contents/Resources/icon.icns"
 "$PLIST_BUDDY" -c "Add :CFBundleIconFile string icon.icns" "$BUNDLE/Contents/Info.plist"
 signed "$BUNDLE"
 codesign --verify --strict --deep "$BUNDLE"
 
 mkdir -p "$OUTPUT"
-hdiutil create -volname "Kiroshi Rune Preview" -srcfolder "$BUNDLE" -ov -format UDZO "$DMG"
+hdiutil create -volname Kiroshi -srcfolder "$BUNDLE" -ov -format UDZO "$DMG"
 codesign --force --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$DMG"
 
 notarised=$(xcrun notarytool submit "$DMG" --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" \
@@ -49,4 +50,7 @@ if [ "$status" != Accepted ]; then
 	exit 1
 fi
 xcrun stapler staple "$DMG"
+xcrun stapler staple "$BUNDLE"
+tar -czf "$UPDATE" -C "$(dirname "$BUNDLE")" "$(basename "$BUNDLE")"
 echo "$DMG"
+echo "$UPDATE"

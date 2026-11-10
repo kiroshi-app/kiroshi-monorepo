@@ -209,6 +209,20 @@ describe("serve", () => {
 		expect(sessionRequest(openCommand()).missionThread).toBeUndefined()
 	})
 
+	it("carries the denied tools and the permission mode the open command holds", () => {
+		const request = sessionRequest(
+			openCommand({
+				deniedTools: ["AskUserQuestion"],
+				permissionMode: "dontAsk",
+			}),
+		)
+
+		expect(request.deniedTools).toEqual(["AskUserQuestion"])
+		expect(request.permissionMode).toBe("dontAsk")
+		expect(sessionRequest(openCommand()).deniedTools).toBeUndefined()
+		expect(sessionRequest(openCommand()).permissionMode).toBeUndefined()
+	})
+
 	it("carries the members the open command names", () => {
 		const members = [{ name: "Ada", email: "ada@example.com", isHost: true }]
 		expect(sessionRequest(openCommand({ members })).members).toEqual(members)

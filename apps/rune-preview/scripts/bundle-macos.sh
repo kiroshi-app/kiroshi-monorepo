@@ -6,7 +6,6 @@ readonly PREVIEW_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly REPO_ROOT="$(cd "$PREVIEW_ROOT/../.." && pwd)"
 readonly TARGET="${CARGO_TARGET_DIR:-$PREVIEW_ROOT/target}"
 readonly EXECUTABLE=kiroshi-rune-preview
-readonly BUNDLE="$TARGET/bundle/Kiroshi Rune Preview.app"
 readonly LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 readonly RELEASE_TRIPLE="${1:-}"
 readonly VERSION="${2:-0.0.0}"
@@ -19,10 +18,15 @@ fi
 if [ -n "$RELEASE_TRIPLE" ]; then
 	build=(--release --locked --target "$RELEASE_TRIPLE")
 	built="$TARGET/$RELEASE_TRIPLE/release/$EXECUTABLE"
+	name=Kiroshi
+	identifier=com.kiroshi.app
 else
 	build=()
 	built="$TARGET/debug/$EXECUTABLE"
+	name="Kiroshi Dev"
+	identifier=com.kiroshi.app.dev
 fi
+readonly BUNDLE="$TARGET/bundle/$name.app"
 
 cd "$PREVIEW_ROOT"
 "$REPO_ROOT/scripts/slot.sh" cargo build -p kiroshi-rune-preview --bin "$EXECUTABLE" ${build[@]+"${build[@]}"}
@@ -35,9 +39,9 @@ cat >"$BUNDLE/Contents/Info.plist" <<PLIST
 <plist version="1.0">
 <dict>
 	<key>CFBundleIdentifier</key>
-	<string>com.kiroshi.rune-preview</string>
+	<string>$identifier</string>
 	<key>CFBundleName</key>
-	<string>Kiroshi Rune Preview</string>
+	<string>$name</string>
 	<key>CFBundleExecutable</key>
 	<string>$EXECUTABLE</string>
 	<key>CFBundlePackageType</key>
@@ -50,7 +54,7 @@ cat >"$BUNDLE/Contents/Info.plist" <<PLIST
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>com.kiroshi.rune-preview</string>
+			<string>$identifier</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>kiroshi</string>

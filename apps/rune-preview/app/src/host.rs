@@ -46,7 +46,7 @@ pub fn is_read(command: &str) -> bool {
 	INSTALLED_READS.contains(&command)
 }
 
-pub const DEV_START_COMMAND: &str = "cd apps/app/sidecar && bun run build && cd .. && bun run dev";
+pub const DEV_START_COMMAND: &str = "bun run dev";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Profile {
@@ -488,6 +488,19 @@ mod tests {
 	use std::net::TcpListener;
 
 	use super::*;
+
+	#[test]
+	fn the_dev_start_command_is_the_root_dev_script_that_builds_the_sidecar_and_runs_this_app() {
+		let manifest = include_str!("../../../../package.json");
+		let script = DEV_START_COMMAND.strip_prefix("bun run ").expect("a bun script");
+		let line = manifest
+			.lines()
+			.find_map(|line| line.trim().strip_prefix(&format!("\"{script}\": ")))
+			.expect("the root package.json names the script");
+
+		assert!(line.contains("--filter sidecar build"), "{line}");
+		assert!(line.contains("--bin kiroshi-rune-preview"), "{line}");
+	}
 
 	#[test]
 	fn an_avatar_url_serves_the_last_segment_of_the_path_from_the_host() {

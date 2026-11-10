@@ -16,8 +16,7 @@ use std::sync::{Arc, Once};
 
 use policy::{Notice, NoticeTarget};
 
-pub const CHIME: &[u8] =
-	include_bytes!("../../../app/src/lib/notifications/notification-chime.wav");
+pub const CHIME: &[u8] = include_bytes!("../../assets/notification-chime.wav");
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Gesture {

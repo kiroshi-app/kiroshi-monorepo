@@ -29,61 +29,26 @@ pub const VISUAL_FIRST_STYLE: &str = "kiroshi:visual-first";
 const TRIGGERS: &str = ".triggers.json";
 
 const FILES: [(&str, &[u8]); 12] = [
-	(
-		MANIFEST,
-		include_bytes!("../../../../apps/app/src-tauri/plugins/kiroshi/.claude-plugin/plugin.json"),
-	),
-	(TRIGGERS, include_bytes!("../../../../apps/app/src-tauri/plugins/kiroshi/.triggers.json")),
-	(LEARN, include_bytes!("../../../../apps/app/src-tauri/plugins/kiroshi/skills/learn/SKILL.md")),
-	(
-		ROUTINES,
-		include_bytes!("../../../../apps/app/src-tauri/plugins/kiroshi/skills/routines/SKILL.md"),
-	),
-	(
-		INSTALLS,
-		include_bytes!(
-			"../../../../apps/app/src-tauri/plugins/kiroshi/skills/applications/SKILL.md"
-		),
-	),
-	(
-		MISSIONS,
-		include_bytes!("../../../../apps/app/src-tauri/plugins/kiroshi/skills/missions/SKILL.md"),
-	),
-	(
-		CONVERSATIONS,
-		include_bytes!(
-			"../../../../apps/app/src-tauri/plugins/kiroshi/skills/conversations/SKILL.md"
-		),
-	),
-	(
-		RICH_ANSWERS,
-		include_bytes!(
-			"../../../../apps/app/src-tauri/plugins/kiroshi/skills/rich-answers/SKILL.md"
-		),
-	),
-	(
-		VISUAL_FIRST,
-		include_bytes!(
-			"../../../../apps/app/src-tauri/plugins/kiroshi/output-styles/visual-first.md"
-		),
-	),
+	(MANIFEST, include_bytes!("../../plugins/kiroshi/.claude-plugin/plugin.json")),
+	(TRIGGERS, include_bytes!("../../plugins/kiroshi/.triggers.json")),
+	(LEARN, include_bytes!("../../plugins/kiroshi/skills/learn/SKILL.md")),
+	(ROUTINES, include_bytes!("../../plugins/kiroshi/skills/routines/SKILL.md")),
+	(INSTALLS, include_bytes!("../../plugins/kiroshi/skills/applications/SKILL.md")),
+	(MISSIONS, include_bytes!("../../plugins/kiroshi/skills/missions/SKILL.md")),
+	(CONVERSATIONS, include_bytes!("../../plugins/kiroshi/skills/conversations/SKILL.md")),
+	(RICH_ANSWERS, include_bytes!("../../plugins/kiroshi/skills/rich-answers/SKILL.md")),
+	(VISUAL_FIRST, include_bytes!("../../plugins/kiroshi/output-styles/visual-first.md")),
 	(
 		"skills/learn/references/skills.md",
-		include_bytes!(
-			"../../../../apps/app/src-tauri/plugins/kiroshi/skills/learn/references/skills.md"
-		),
+		include_bytes!("../../plugins/kiroshi/skills/learn/references/skills.md"),
 	),
 	(
 		"skills/learn/references/mcp.md",
-		include_bytes!(
-			"../../../../apps/app/src-tauri/plugins/kiroshi/skills/learn/references/mcp.md"
-		),
+		include_bytes!("../../plugins/kiroshi/skills/learn/references/mcp.md"),
 	),
 	(
 		"skills/learn/references/determinism.md",
-		include_bytes!(
-			"../../../../apps/app/src-tauri/plugins/kiroshi/skills/learn/references/determinism.md"
-		),
+		include_bytes!("../../plugins/kiroshi/skills/learn/references/determinism.md"),
 	),
 ];
 
@@ -133,7 +98,7 @@ mod tests {
 	}
 
 	fn committed() -> PathBuf {
-		PathBuf::from(crate::APP_DIR).join("plugins").join(PLUGIN_NAME)
+		PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("plugins").join(PLUGIN_NAME)
 	}
 
 	fn committed_files(dir: &Path) -> Vec<PathBuf> {
@@ -156,14 +121,7 @@ mod tests {
 	}
 
 	fn app_version() -> String {
-		let manifest = fs::read_to_string(PathBuf::from(crate::APP_DIR).join("Cargo.toml"))
-			.expect("the app manifest reads");
-		manifest
-			.lines()
-			.find_map(|line| line.strip_prefix("version = \""))
-			.and_then(|rest| rest.strip_suffix('"'))
-			.expect("the app manifest names its version")
-			.to_owned()
+		env!("KIROSHI_APP_VERSION").to_owned()
 	}
 
 	#[test]
@@ -390,7 +348,7 @@ mod tests {
 	}
 
 	fn rich_answer_reference() -> String {
-		let path = PathBuf::from(crate::APP_DIR).join("../../../docs/chat/rich-answer-blocks.md");
+		let path = PathBuf::from(crate::REPO_DIR).join("docs/chat/rich-answer-blocks.md");
 		fs::read_to_string(path).expect("the rich answer reference reads")
 	}
 
@@ -555,9 +513,8 @@ mod tests {
 	];
 
 	fn renderer(file: &str) -> String {
-		let path = PathBuf::from(crate::APP_DIR)
-			.join("../../../packages/ui/src/components/markdown")
-			.join(file);
+		let path =
+			PathBuf::from(crate::REPO_DIR).join("packages/ui/src/components/markdown").join(file);
 		fs::read_to_string(&path).unwrap_or_else(|_| panic!("{file} of the renderer reads"))
 	}
 

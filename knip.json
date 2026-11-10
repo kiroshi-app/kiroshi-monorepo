@@ -2,7 +2,6 @@
 	"$schema": "https://unpkg.com/knip@6/schema.json",
 	"ignoreWorkspaces": ["apps/app/sidecar"],
 	"ignore": [
-		"apps/app/src/lib/bindings.ts",
 		"apps/ios/Kiroshi/Resources/companion-avatar.js",
 		"apps/ios/build/**"
 	],
@@ -14,9 +13,6 @@
 				"scripts/generate-v2-vectors.ts",
 				"apps/ios/scripts/space-avatar-vectors.ts"
 			]
-		},
-		"apps/app": {
-			"entry": ["src/main.tsx", "src/styles.css"]
 		},
 		"apps/website": {
 			"entry": ["src/main.tsx", "src/styles.css"]

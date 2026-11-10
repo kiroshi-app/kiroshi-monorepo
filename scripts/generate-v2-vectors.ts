@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
 const ROOT = join(import.meta.dir, "..")
-const VECTORS = join(ROOT, "apps/app/src-tauri/tests/vectors")
+const VECTORS = join(ROOT, "crates/kiroshi-core/tests/vectors")
 const WORD_LIST = "bip39-english.txt"
 const OUTPUT = join(VECTORS, "v2-crypto.json")
 

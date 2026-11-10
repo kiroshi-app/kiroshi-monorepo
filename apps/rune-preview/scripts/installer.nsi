@@ -2,8 +2,8 @@ Unicode true
 RequestExecutionLevel user
 SetCompressor /SOLID lzma
 
-!define NAME "Kiroshi Rune Preview"
-!define UNINSTALL_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\com.kiroshi.rune-preview"
+!define NAME "Kiroshi"
+!define UNINSTALL_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\com.kiroshi.app"
 
 Name "${NAME}"
 OutFile "${INSTALLER}"

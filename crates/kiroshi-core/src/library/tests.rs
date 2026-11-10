@@ -1331,11 +1331,9 @@ fn an_unchanged_file_opens_without_a_host_edit() {
 	assert_eq!(state_vector_of(&after_restart.state), state_vector_of(&reopened.state));
 }
 
-const MARKDOWN_ON_MAIN: &[u8] =
-	include_bytes!("../../../../apps/app/src-tauri/tests/vectors/library-markdown-on-main.md");
+const MARKDOWN_ON_MAIN: &[u8] = include_bytes!("../../tests/vectors/library-markdown-on-main.md");
 
-const STATE_ON_MAIN: &[u8] =
-	include_bytes!("../../../../apps/app/src-tauri/tests/vectors/library-markdown-on-main.yjs");
+const STATE_ON_MAIN: &[u8] = include_bytes!("../../tests/vectors/library-markdown-on-main.yjs");
 
 #[test]
 fn a_document_and_its_state_stored_before_document_kinds_open_unchanged() {
@@ -2530,7 +2528,7 @@ const A_BOARD: &str = r#"{
 }"#;
 
 fn board_fixtures() -> PathBuf {
-	Path::new(crate::APP_DIR).join("../../../packages/shared/board/fixtures")
+	Path::new(crate::REPO_DIR).join("packages/shared/board/fixtures")
 }
 
 async fn summary_of(

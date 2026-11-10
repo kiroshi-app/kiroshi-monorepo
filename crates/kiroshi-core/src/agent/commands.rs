@@ -249,6 +249,20 @@ impl<S> Live<S> {
 		self.questions().clone()
 	}
 
+	fn is_asking(&self, scope: &RuntimeScope) -> bool {
+		self.questions().iter().any(|question| question.asked_by(scope))
+	}
+
+	fn asking_runs(&self) -> Vec<RuntimeScope> {
+		let mut asking: Vec<RuntimeScope> = Vec::new();
+		for question in self.questions().iter() {
+			if !asking.contains(&question.scope) {
+				asking.push(question.scope.clone());
+			}
+		}
+		asking
+	}
+
 	fn questions_in(&self, conversation_id: &str) -> Vec<ScopedEvent> {
 		self.questions()
 			.iter()
@@ -1237,13 +1251,20 @@ fn reserved_directory(app_data: PathBuf, bot_id: &str) -> PathBuf {
 	}
 }
 
+pub struct SessionStart {
+	pub scope: RuntimeScope,
+	pub resume: Option<String>,
+	pub cwd: Option<String>,
+	pub output_schema: Option<JsonValue>,
+	pub denied_tools: Option<Vec<String>>,
+	pub permission_mode: Option<String>,
+}
+
 pub async fn start_or_resume_session(
 	core: &crate::core_context::Core,
-	scope: RuntimeScope,
-	resume: Option<String>,
-	cwd: Option<String>,
-	output_schema: Option<JsonValue>,
+	session: SessionStart,
 ) -> Result<SessionHandle, TransportError> {
+	let SessionStart { scope, resume, cwd, output_schema, denied_tools, permission_mode } = session;
 	let state = core.state::<AgentState>();
 	let database = core.state::<db::DatabaseState>();
 	let start = RunStart {
@@ -1251,6 +1272,8 @@ pub async fn start_or_resume_session(
 		resume,
 		cwd,
 		output_schema: output_schema.map(JsonValue::into),
+		denied_tools: denied_tools.unwrap_or_default(),
+		permission_mode,
 		lineage: Lineage::RecordedByTheCaller,
 	};
 	start_run(core.clone(), &state, &database, start).await
@@ -1267,7 +1290,20 @@ pub struct RunStart {
 	pub resume: Option<String>,
 	pub cwd: Option<String>,
 	pub output_schema: Option<serde_json::Value>,
+	pub denied_tools: Vec<String>,
+	pub permission_mode: Option<String>,
 	pub lineage: Lineage,
+}
+
+fn listed_mode(permission_mode: Option<String>) -> Result<Option<String>, TransportError> {
+	match permission_mode {
+		Some(mode) if !bundles::is_permission_mode(&mode) => {
+			Err(TransportError::SettingsRejected {
+				detail: format!("{mode:?} is not a permission mode a session opens under"),
+			})
+		}
+		listed => Ok(listed),
+	}
 }
 
 pub async fn start_run(
@@ -1276,7 +1312,9 @@ pub async fn start_run(
 	database: &db::DatabaseState,
 	start: RunStart,
 ) -> Result<SessionHandle, TransportError> {
-	let RunStart { scope, resume, cwd, output_schema, lineage } = start;
+	let RunStart { scope, resume, cwd, output_schema, denied_tools, permission_mode, lineage } =
+		start;
+	let permission_mode = listed_mode(permission_mode)?;
 	let _claim = state.claim(&scope)?;
 
 	let before = state.thread_signs(&scope.conversation_id);
@@ -1326,6 +1364,8 @@ pub async fn start_run(
 		)))
 		.hosting_all(session_hosts(&core, &scope, &identity.space_id))
 		.answering(output_schema)
+		.denying(denied_tools)
+		.under_mode(permission_mode)
 		.on_mission_thread(mission_thread)
 		.read_by(members)
 		.leased(state.lease);
@@ -1547,9 +1587,36 @@ pub async fn line_place_of(
 }
 
 pub async fn run_is_idle(state: &AgentState, scope: &RuntimeScope) -> bool {
+	if state.live.is_asking(scope) {
+		return false;
+	}
 	match state.live.session_for(scope) {
 		Ok(session) => session.is_idle().await,
 		Err(_) => true,
+	}
+}
+
+pub fn asking_runs(core: &crate::core_context::Core) -> Vec<RuntimeScope> {
+	match core.try_state::<AgentState>() {
+		Some(state) => state.live.asking_runs(),
+		None => Vec::new(),
+	}
+}
+
+pub async fn shut_asking_runs_down(
+	core: &crate::core_context::Core,
+	is_gone: impl Fn(&RuntimeScope) -> bool,
+) {
+	let gone = asking_runs(core).into_iter().filter(is_gone).collect();
+	shut_runs_down(core, gone).await;
+}
+
+pub async fn shut_runs_down(core: &crate::core_context::Core, gone: Vec<RuntimeScope>) {
+	for scope in gone {
+		let bot_id = scope.bot_id.clone();
+		if let Err(error) = shut_down_agent(core, scope).await {
+			log::warn!("the asking session of {bot_id} could not shut down: {error:?}");
+		}
 	}
 }
 
@@ -2301,6 +2368,41 @@ mod tests {
 		RuntimeScope { runtime_session_id: runtime_session_id.into(), ..a_scope() }
 	}
 
+	#[tokio::test]
+	async fn a_start_under_a_mode_outside_the_list_is_refused_naming_it_and_opens_no_session() {
+		let core = crate::test_core::a_core_of_its_own("unlisted-mode");
+		core.manage(AgentState::default());
+		crate::db::install(&core);
+		let session = SessionStart {
+			scope: a_scope(),
+			resume: None,
+			cwd: None,
+			output_schema: None,
+			denied_tools: Some(vec!["AskUserQuestion".to_owned()]),
+			permission_mode: Some("bypassPermissions".to_owned()),
+		};
+
+		let refused = start_or_resume_session(&core, session).await;
+
+		assert!(
+			matches!(
+				&refused,
+				Err(TransportError::SettingsRejected { detail })
+					if detail.contains("\"bypassPermissions\"")
+			),
+			"the start answered {refused:?}"
+		);
+		assert_eq!(core.state::<AgentState>().live_session_count(), 0);
+	}
+
+	#[test]
+	fn every_listed_mode_and_no_mode_pass_the_mode_check() {
+		for mode in ["default", "acceptEdits", "plan", "auto", "dontAsk"] {
+			assert_eq!(listed_mode(Some(mode.to_owned())), Ok(Some(mode.to_owned())));
+		}
+		assert_eq!(listed_mode(None), Ok(None));
+	}
+
 	fn is_stale(outcome: &Result<&str, TransportError>) -> bool {
 		matches!(outcome, Err(TransportError::StaleRuntimeSession { .. }))
 	}
@@ -3003,6 +3105,23 @@ mod tests {
 			assert_eq!(everything_heard(&mut heard), vec![denied("q1"), denied("q2")]);
 			assert!(pending_in(&core, "c1").await.is_empty());
 			assert_eq!(pending_in(&core, "c2").await.len(), 1, "another run lost its question");
+		}
+
+		#[tokio::test]
+		async fn an_agent_gone_denies_the_questions_its_kept_run_holds_and_spares_the_others() {
+			let core = an_app("gone");
+			two_questions_and_one_elsewhere(&core);
+			let mut heard = core.subscribe_frames();
+
+			shut_asking_runs_down(&core, |scope| scope.bot_id == a_scope().bot_id).await;
+
+			let resolved: Vec<Frame> = everything_heard(&mut heard)
+				.into_iter()
+				.filter(|frame| frame.contains("permissionResolved"))
+				.collect();
+			assert_eq!(resolved, vec![denied("q1"), denied("q2")]);
+			assert!(pending_in(&core, "c1").await.is_empty());
+			assert_eq!(pending_in(&core, "c2").await.len(), 1, "another run was shut");
 		}
 
 		#[tokio::test]

@@ -1,6 +1,5 @@
 deserialize :: biome.json :: "linter": {
 lint/complexity/noExcessiveCognitiveComplexity :: apps/app/sidecar/src/mcp-oauth.test.ts :: fetch: async (request): Promise<Response> => {
-lint/style/noNonNullAssertion :: apps/app/src/main.tsx :: createRoot(document.getElementById("root")!).render(
 lint/style/noNonNullAssertion :: apps/website/src/main.tsx :: createRoot(document.getElementById("root")!).render(
 lint/suspicious/noTemplateCurlyInString :: apps/app/sidecar/src/providers/claude/server-env.test.ts :: args: ["--token", "${TOKEN}"],
 lint/suspicious/noTemplateCurlyInString :: apps/app/sidecar/src/providers/claude/server-env.test.ts :: command: "${RUNNER}",

@@ -15,7 +15,8 @@ use super::contract::{RoutineError, RunClosing, RunOutcome, RunRequested};
 use super::core::{Clock, RunSink, SystemClock};
 use super::run::{read_run_report, run_output_schema, run_prompt_for, RunReport};
 use crate::agent::commands::{
-	cancel_session_turn, shut_down_agent, start_or_resume_session, submit_prompt, EVENT_CHANNEL,
+	cancel_session_turn, shut_down_agent, start_or_resume_session, submit_prompt, SessionStart,
+	EVENT_CHANNEL,
 };
 use crate::agent::contract::{
 	AgentEvent, CancelOutcome, ChatMessage, EventTurn, MessageCompletion, MessageRole,
@@ -41,6 +42,8 @@ const MISSING_OUTPUT_REASON: &str = "the run's turn ended with no structured out
 const QUESTION_REASON: &str = "a run cannot be asked a question";
 
 const PERMISSION_REASON: &str = "a run cannot be asked for a permission";
+
+const QUESTION_TOOL: &str = "AskUserQuestion";
 
 const DEADLINE_REASON: &str = "the run outlived its deadline";
 
@@ -356,6 +359,17 @@ async fn opened_scope(
 	})
 }
 
+fn run_session(scope: &RuntimeScope) -> SessionStart {
+	SessionStart {
+		scope: scope.clone(),
+		resume: None,
+		cwd: None,
+		output_schema: Some(run_output_schema().into()),
+		denied_tools: Some(vec![QUESTION_TOOL.to_owned()]),
+		permission_mode: None,
+	}
+}
+
 async fn started(
 	core: &crate::core_context::Core,
 	scope: &RuntimeScope,
@@ -363,9 +377,7 @@ async fn started(
 ) -> Result<(), String> {
 	held::<AgentState>(core, NO_AGENT)?;
 	held::<db::DatabaseState>(core, NO_DATABASE)?;
-	start_or_resume_session(core, scope.clone(), None, None, Some(run_output_schema().into()))
-		.await
-		.map_err(|error| detail_of(&error))?;
+	start_or_resume_session(core, run_session(scope)).await.map_err(|error| detail_of(&error))?;
 	submit_prompt(held(core, NO_AGENT)?, scope.clone(), run_prompt_for(requested), None)
 		.await
 		.map_err(|error| detail_of(&error))
@@ -724,6 +736,14 @@ mod tests {
 			.await
 			.expect("the reader stops once dropped");
 		assert_eq!(stopped, None);
+	}
+
+	#[test]
+	fn a_run_session_opens_denying_the_question_tool_under_the_bot_mode() {
+		let session = run_session(&a_scope("rs-1"));
+
+		assert_eq!(session.denied_tools, Some(vec!["AskUserQuestion".to_owned()]));
+		assert_eq!(session.permission_mode, None);
 	}
 
 	#[test]

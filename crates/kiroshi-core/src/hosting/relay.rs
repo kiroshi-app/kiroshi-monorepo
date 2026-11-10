@@ -9,7 +9,7 @@ use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
 use reqwest::StatusCode;
 use serde::Deserialize;
-use serde_json::Value;
+use serde_json::{json, Value};
 use tokio::net::TcpStream;
 use tokio::sync::{watch, Mutex};
 use tokio::task::JoinSet;
@@ -619,8 +619,8 @@ async fn online(
 				let opened = match wire.opened(text.as_str()).await {
 					Ok(opened) => opened,
 					Err(refusal) => {
-						log::warn!("{}", wire::dropped_line(ids.space_id, &refusal));
-						if let Err(ended) = stale_rekeyed(&mut sink, &hosted, &refusal).await {
+						log::warn!("{}", wire::dropped_line(ids.space_id, ids.instance_id, &refusal));
+						if let Err(ended) = rekey_answered(&mut sink, &hosted, &refusal).await {
 							return ended;
 						}
 						continue;
@@ -781,7 +781,7 @@ fn unread_ended(frame: Option<Result<Message, SocketError>>, ids: Ids<'_>) -> Op
 		Some(Ok(Message::Close(frame))) => Some(closed_by_relay(frame, ids)),
 		Some(Ok(Message::Binary(_))) => {
 			let refusal = Refusal { from: None, cause: wire::Dropped::NotV2 };
-			log::warn!("{}", wire::dropped_line(ids.space_id, &refusal));
+			log::warn!("{}", wire::dropped_line(ids.space_id, ids.instance_id, &refusal));
 			None
 		}
 		Some(Ok(_)) => None,
@@ -860,22 +860,46 @@ async fn revocation_handled(
 	}
 }
 
-async fn stale_rekeyed(
+async fn rekey_answered(
 	sink: &mut MeasuredSink<'_>,
 	hosted: &HostedSpace<'_>,
 	refusal: &Refusal,
 ) -> Result<(), Ended> {
-	match (&refusal.cause, refusal.from.as_deref()) {
-		(Dropped::StaleKey(_), Some(from)) => {
-			rekeys_sent(sink, hosted, Recipients::Device(from)).await
+	let Some(from) = refusal.from.as_deref() else {
+		return Ok(());
+	};
+	match refusal.cause {
+		Dropped::StaleKey(_) => rekeys_sent(sink, hosted, Recipients::Device(from)).await,
+		Dropped::NotAdmitted => {
+			let refused = handover::not_admitted_frame(hosted.instance_id, from);
+			sink.sent(Message::text(refused)).await.map_err(Ended::Dropped)
 		}
 		_ => Ok(()),
 	}
 }
 
+#[derive(Clone, Copy)]
 enum Recipients<'a> {
 	Everyone,
 	Device(&'a str),
+}
+
+impl Recipients<'_> {
+	fn named(self) -> String {
+		match self {
+			Self::Everyone => "any rostered device".to_owned(),
+			Self::Device(relay_device_id) => format!("relay device {}", json!(relay_device_id)),
+		}
+	}
+}
+
+fn rekey_dropped(hosted: &HostedSpace<'_>, recipients: Recipients<'_>, reason: &str) {
+	log::warn!(
+		"hosted space {} (instance {}) sent no rekey to {}: {reason}",
+		hosted.space_id,
+		hosted.instance_id,
+		recipients.named()
+	);
 }
 
 fn recipients_of<'a>(
@@ -890,10 +914,7 @@ fn recipients_of<'a>(
 	let found: Vec<&Rostered> =
 		members.filter(|member| member.relay_device_id == relay_device_id).collect();
 	if found.is_empty() {
-		log::warn!(
-			"hosted space {} sent no rekey: relay device {relay_device_id} is not in its handover roster",
-			hosted.space_id
-		);
+		rekey_dropped(hosted, recipients, "it is not in the handover roster");
 	}
 	found
 }
@@ -903,18 +924,19 @@ async fn rekeys_sent(
 	hosted: &HostedSpace<'_>,
 	recipients: Recipients<'_>,
 ) -> Result<(), Ended> {
-	let space_id = hosted.space_id;
-	let handover = match handover::current(hosted.database, hosted.keys, space_id).await {
+	let handover = match handover::current(hosted.database, hosted.keys, hosted.space_id).await {
 		Ok(handover) => handover,
 		Err(reason) => {
-			log::warn!("hosted space {space_id} sent no rekey: {reason}");
+			rekey_dropped(hosted, recipients, &reason);
 			return Ok(());
 		}
 	};
 	for member in recipients_of(&handover, hosted, recipients) {
 		match handover.rekey_frame(hosted.keys, hosted.instance_id, member) {
 			Ok(frame) => sink.sent(Message::text(frame)).await.map_err(Ended::Dropped)?,
-			Err(reason) => log::warn!("hosted space {space_id} sent no rekey: {reason}"),
+			Err(reason) => {
+				rekey_dropped(hosted, Recipients::Device(&member.relay_device_id), &reason)
+			}
 		}
 	}
 	Ok(())
@@ -1045,6 +1067,7 @@ mod tests {
 		let warned = warnings_naming("relay-device-gone").await;
 		assert_eq!(warned.len(), 1, "{warned:?}");
 		assert!(warned[0].contains(SPACE), "{}", warned[0]);
+		assert!(warned[0].contains("instance i-1"), "{}", warned[0]);
 	}
 
 	#[test]

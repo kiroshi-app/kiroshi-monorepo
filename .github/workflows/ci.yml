@@ -15,14 +15,13 @@ env:
 
 concurrency:
   group: ${{ github.workflow }}-${{ (github.event_name == 'pull_request' || github.ref == 'refs/heads/main') && github.ref || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.ref == 'refs/heads/main' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # lint runs on every event, without waiting on changes.
 # scripts/ci-changes.ts selects every other job per event, verify requires every selected job.
-# pull_request: changes, lint, vitest on the test files the diff changed, rust on its library tests, core on macOS, Windows and Linux, verify.
-# pull_request labelled ci:storybook: storybook too, on the full story set, its browser debug output uploaded as an artifact.
-# push to main: changes, lint, vitest, website, rust, core, storybook on the paths changed since the last green push to main, ios split over three jobs, verify.
-# v* tag: changes, lint, vitest, website, rust, storybook, verify.
+# pull_request: changes, lint, vitest on the test files the diff changed, core on Linux, macOS and Windows, installer when apps/rune-preview changed, verify.
+# push to main: changes, lint, vitest, website, core, installer on the paths changed since the last green push to main, ios split over three jobs, verify.
+# v* tag: changes, lint, vitest, website, core, verify.
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -87,20 +86,19 @@ jobs:
         if: github.event_name != 'pull_request'
         run: bun scripts/ci.ts vitest
 
-  rust:
+  core:
     needs: changes
-    if: needs.changes.outputs.rust == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
+    if: needs.changes.outputs.core == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     permissions:
       contents: read
-      packages: read
-    container:
-      image: ghcr.io/kiroshi-app/ci-rust:${{ needs.changes.outputs.rust-image }}
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-      options: --user runner --init
+    env:
+      RUSTC_WRAPPER: ""
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -110,8 +108,10 @@ jobs:
 
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
-          workspaces: . -> target
-          shared-key: src-tauri
+          workspaces: |
+            . -> target
+            apps/rune-preview -> target
+          shared-key: core
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
@@ -121,22 +121,18 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Gate on the library tests, the integration targets and the bindings
-        if: github.event_name == 'pull_request'
-        run: bun scripts/ci.ts rust-pr
+      - name: Install the keyboard library the Rune app links on Linux
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install --yes --no-install-recommends libxkbcommon-dev
 
       - name: Gate
-        if: github.event_name != 'pull_request'
-        run: bun scripts/ci.ts rust
+        shell: bash
+        run: bun scripts/ci.ts core
 
-  core:
+  installer:
     needs: changes
-    if: needs.changes.outputs.core == 'true'
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-latest, windows-latest, ubuntu-latest]
-    runs-on: ${{ matrix.os }}
+    if: needs.changes.outputs.installer == 'true'
+    runs-on: windows-latest
     timeout-minutes: 60
     permissions:
       contents: read
@@ -149,37 +145,9 @@ jobs:
 
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
-          workspaces: |
-            . -> target
-            apps/rune-preview -> target
-          shared-key: core
+          workspaces: apps/rune-preview -> target
+          shared-key: installer
           save-if: ${{ github.ref == 'refs/heads/main' }}
-
-      - name: Build kiroshi-core
-        run: cargo build -p kiroshi-core --locked
-
-      - name: Test kiroshi-core
-        run: cargo test -p kiroshi-core --locked
-
-      - name: Install the keyboard library the Rune preview links on Linux
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install --yes --no-install-recommends libxkbcommon-dev
-
-      - name: Build the Rune preview
-        run: cargo build --manifest-path apps/rune-preview/Cargo.toml --features fake-claude --locked
-
-      - name: Test the Rune preview against the fake agent
-        run: cargo test --manifest-path apps/rune-preview/Cargo.toml --features fake-claude --locked
-
-  storybook:
-    needs: changes
-    if: needs.changes.outputs.storybook == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    env:
-      STORYBOOK_OPT_IN: ${{ contains(github.event.pull_request.labels.*.name, 'ci:storybook') }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
@@ -188,34 +156,31 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Restore Playwright browser
-        id: playwright
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('bun.lock') }}
+      - name: Build sidecar
+        run: bun run --filter sidecar build
 
-      - name: Drop the unused third-party apt sources
-        run: sudo rm -f /etc/apt/sources.list.d/google-chrome.*
-
-      - name: Install Playwright browser
-        if: steps.playwright.outputs.cache-hit != 'true'
-        working-directory: packages/ui
-        run: bunx playwright install --with-deps chromium
-
-      - name: Gate
-        env:
-          DEBUG: ${{ env.STORYBOOK_OPT_IN == 'true' && 'vitest:browser*,pw:browser*' || '' }}
+      - name: Put NSIS on the path
+        shell: bash
         run: |
-          set -o pipefail
-          bun scripts/ci.ts storybook 2>&1 | tee "$RUNNER_TEMP/storybook-debug.log"
+          if [ ! -x "/c/Program Files (x86)/NSIS/makensis.exe" ]; then
+            choco install nsis --no-progress --yes
+          fi
+          echo 'C:\Program Files (x86)\NSIS' >> "$GITHUB_PATH"
 
-      - name: Upload the browser debug output
-        if: always() && env.STORYBOOK_OPT_IN == 'true'
+      - name: Build the NSIS installer
+        shell: bash
+        run: apps/rune-preview/scripts/package-windows.sh 0.0.0-ci "$RUNNER_TEMP/installer"
+
+      - name: Install silently and launch the installed app once
+        shell: pwsh
+        run: apps/rune-preview/scripts/install-windows.ps1 -Installer "$env:RUNNER_TEMP\installer\Kiroshi_0.0.0-ci_x64-setup.exe" -LogDirectory "$env:RUNNER_TEMP\install-log"
+
+      - name: Upload the install and launch log
+        if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: storybook-debug-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/storybook-debug.log
+          name: windows-install-log-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/install-log
 
   changes:
     runs-on: ubuntu-latest
@@ -226,13 +191,11 @@ jobs:
     env:
       CI_EVENT: ${{ startsWith(github.ref, 'refs/tags/v') && 'tag' || github.event_name }}
     outputs:
-      rust: ${{ steps.filter.outputs.rust }}
       vitest: ${{ steps.filter.outputs.vitest }}
       website: ${{ steps.filter.outputs.website }}
-      storybook: ${{ steps.filter.outputs.storybook == 'true' || contains(github.event.pull_request.labels.*.name, 'ci:storybook') }}
       ios: ${{ steps.filter.outputs.ios }}
       core: ${{ steps.filter.outputs.core }}
-      rust-image: ${{ steps.image.outputs.tag }}
+      installer: ${{ steps.filter.outputs.installer }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -264,10 +227,6 @@ jobs:
         env:
           BASE: ${{ github.event.pull_request.base.sha || steps.green.outputs.sha }}
         run: bun scripts/ci-changes.ts "$CI_EVENT" "$BASE" | tee -a "$GITHUB_OUTPUT"
-
-      - name: Tag the CI rust image with the Dockerfile digest
-        id: image
-        run: echo "tag=$(sha256sum .github/ci-rust/Dockerfile | cut -c1-12)" >> "$GITHUB_OUTPUT"
 
   ios:
     needs: changes
@@ -304,7 +263,7 @@ jobs:
         run: bun scripts/ci.ts ios
 
   verify:
-    needs: [changes, lint, vitest, website, rust, core, storybook, ios]
+    needs: [changes, lint, vitest, website, core, installer, ios]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -325,16 +284,12 @@ jobs:
         if: needs.website.result != (needs.changes.outputs.website == 'true' && 'success' || 'skipped')
         run: exit 1
 
-      - name: Require rust to succeed when changes selected it, and to be skipped otherwise
-        if: needs.rust.result != (needs.changes.outputs.rust == 'true' && 'success' || 'skipped')
-        run: exit 1
-
       - name: Require core to succeed on every OS when changes selected it, and to be skipped otherwise
         if: needs.core.result != (needs.changes.outputs.core == 'true' && 'success' || 'skipped')
         run: exit 1
 
-      - name: Require storybook to succeed when changes selected it, and to be skipped otherwise
-        if: needs.storybook.result != (needs.changes.outputs.storybook == 'true' && 'success' || 'skipped')
+      - name: Require installer to succeed when changes selected it, and to be skipped otherwise
+        if: needs.installer.result != (needs.changes.outputs.installer == 'true' && 'success' || 'skipped')
         run: exit 1
 
       - name: Require ios to succeed when changes selected it, and to be skipped otherwise

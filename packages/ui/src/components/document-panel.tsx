@@ -52,8 +52,8 @@ const BAR_BUTTON = cn(
 
 const DOCUMENT_PANEL_DEFAULT_WIDTH = 600
 const DOCUMENT_PANEL_MIN_WIDTH = 400
-const DOCUMENT_PANEL_MAX_WIDTH = 800
-const THREAD_MIN_WIDTH = 320
+const DOCUMENT_PANEL_OPENING_WIDTH = 800
+const THREAD_MIN_WIDTH = 400
 
 type DocumentPanelProps = {
 	variant?: "document" | "board"
@@ -87,23 +87,24 @@ const DocumentPanel = ({
 		defaultWidth,
 		onWidthChange,
 		minWidth: DOCUMENT_PANEL_MIN_WIDTH,
-		maxWidth: DOCUMENT_PANEL_MAX_WIDTH,
+		maxWidth: Number.POSITIVE_INFINITY,
 	})
 	const [panel, setPanel] = useState<HTMLElement | null>(null)
 	const room = useRenderedWidth(panel?.parentElement ?? null)
-	const reachableResize: ResizableWidth = {
-		...resize,
-		...(room === null
-			? {}
+	const widthsInRoom =
+		room === null
+			? null
 			: panelWidthsInRoom({
 					room,
 					askedWidth: resize.width,
 					minWidth: DOCUMENT_PANEL_MIN_WIDTH,
-					maxWidth: DOCUMENT_PANEL_MAX_WIDTH,
 					threadMinWidth: THREAD_MIN_WIDTH,
-				})),
+				})
+	const reachableResize: ResizableWidth = {
+		...resize,
+		...(widthsInRoom ?? { maxWidth: resize.width }),
 		commitWidth: (next: number) =>
-			resize.commitWidth(Math.min(next, reachableResize.maxWidth)),
+			resize.commitWidth(Math.min(next, widthsInRoom?.maxWidth ?? next)),
 	}
 
 	return (
@@ -184,8 +185,8 @@ const DocumentPanel = ({
 export {
 	BoardGlyph,
 	DOCUMENT_PANEL_DEFAULT_WIDTH,
-	DOCUMENT_PANEL_MAX_WIDTH,
 	DOCUMENT_PANEL_MIN_WIDTH,
+	DOCUMENT_PANEL_OPENING_WIDTH,
 	DocumentGlyph,
 	DocumentPanel,
 	type DocumentPanelProps,

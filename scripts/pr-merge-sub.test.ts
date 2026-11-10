@@ -123,12 +123,12 @@ const GREEN_PULL_REQUEST: PullRequest = {
 const UNOWNED_FILES: ChangedFile[] = [
 	{ filename: "packages/ui/src/components/rune/kit.tsx" },
 	{ filename: "packages/ui/.github/notes.md" },
-	{ filename: "apps/app/src-tauri/build.rs.orig" },
-	{ filename: "apps/app/src-tauri/src/accounting/ledger.rs" },
-	{ filename: "apps/app/src-tauri/src/rune/not_migrations.rs" },
+	{ filename: "crates/kiroshi-core/build.rs.orig" },
+	{ filename: "crates/kiroshi-core/src/accounting/ledger.rs" },
+	{ filename: "crates/kiroshi-core/src/rune/not_migrations.rs" },
 	{
-		filename: "apps/app/src-tauri/src/rune/kit.rs",
-		previous_filename: "apps/app/src-tauri/src/kit.rs",
+		filename: "crates/kiroshi-core/src/rune/kit.rs",
+		previous_filename: "crates/kiroshi-core/src/kit.rs",
 	},
 ]
 
@@ -397,12 +397,12 @@ describe("scripts/pr-merge-sub.sh", () => {
 		["a rooted directory", ".github/workflows/ci.yml", "/.github/"],
 		[
 			"a rooted file",
-			"apps/app/src-tauri/build.rs",
-			"/apps/app/src-tauri/build.rs",
+			"crates/kiroshi-core/build.rs",
+			"/crates/kiroshi-core/build.rs",
 		],
 		[
 			"a double-star file",
-			"apps/app/src-tauri/src/rune/migrations.rs",
+			"crates/kiroshi-core/src/rune/migrations.rs",
 			"**/migrations.rs",
 		],
 	])(
@@ -428,15 +428,15 @@ describe("scripts/pr-merge-sub.sh", () => {
 		const result = await runPrMergeSub({
 			files: [
 				{
-					filename: "apps/app/src-tauri/src/rune/updates.rs",
-					previous_filename: "apps/app/src-tauri/src/updates/mod.rs",
+					filename: "crates/kiroshi-core/src/rune/updates.rs",
+					previous_filename: "crates/kiroshi-core/src/updates/mod.rs",
 				},
 			],
 		})
 
 		expect(result.exitCode).not.toBe(0)
 		expect(result.stderr).toContain(
-			"  apps/app/src-tauri/src/updates/mod.rs matches /apps/app/src-tauri/src/updates/\n",
+			"  crates/kiroshi-core/src/updates/mod.rs matches /crates/kiroshi-core/src/updates/\n",
 		)
 		expectNoMerge()
 	})

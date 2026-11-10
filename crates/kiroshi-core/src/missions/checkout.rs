@@ -1,9 +1,8 @@
 use std::collections::HashSet;
-use std::path::Path;
-use std::process::Stdio;
+use std::future::Future;
 use std::time::Duration;
 
-use tokio::process::Command;
+use git2::{Repository, StatusOptions};
 
 use super::contract::{CheckoutCounts, Mission, MissionError};
 use super::liveness::{announce_change, announce_when};
@@ -11,12 +10,7 @@ use crate::db;
 
 pub const GIT_TIMEOUT: Duration = Duration::from_secs(5);
 
-const AHEAD_OF_MAIN: [&str; 3] = ["rev-list", "--count", "origin/main..HEAD"];
-
-const STATUS: [&str; 2] = ["status", "--porcelain"];
-
-#[cfg(windows)]
-pub const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+const ORIGIN_MAIN: &str = "refs/remotes/origin/main";
 
 #[derive(Debug, PartialEq, Eq)]
 enum Read {
@@ -90,7 +84,14 @@ pub fn told(core: &crate::core_context::Core, mission: &Mission) {
 }
 
 async fn read(workspace: &str, limit: Duration) -> Read {
-	match tokio::time::timeout(limit, counts(workspace)).await {
+	bounded(limit, counts(workspace)).await
+}
+
+async fn bounded(
+	limit: Duration,
+	counting: impl Future<Output = Result<CheckoutCounts, String>>,
+) -> Read {
+	match tokio::time::timeout(limit, counting).await {
 		Ok(Ok(counts)) => Read::Counted(counts),
 		Ok(Err(detail)) => Read::Unread(detail),
 		Err(_) => Read::Abandoned,
@@ -98,45 +99,29 @@ async fn read(workspace: &str, limit: Duration) -> Read {
 }
 
 async fn counts(workspace: &str) -> Result<CheckoutCounts, String> {
-	if !Path::new(workspace).is_dir() {
-		return Err("the checkout is absent".to_owned());
-	}
-	let ahead = answered(workspace, &AHEAD_OF_MAIN).await?;
-	let commits_ahead =
-		ahead.trim().parse().map_err(|error| format!("git rev-list answered no count: {error}"))?;
-	let status = answered(workspace, &STATUS).await?;
-	let dirty_files = status.lines().filter(|line| !line.is_empty()).count() as i64;
-	Ok(CheckoutCounts { commits_ahead, dirty_files })
+	let workspace = workspace.to_owned();
+	tokio::task::spawn_blocking(move || {
+		counted(&workspace).map_err(|error| error.message().to_owned())
+	})
+	.await
+	.map_err(|error| format!("the checkout read stopped: {error}"))?
 }
 
-async fn answered(workspace: &str, arguments: &[&str]) -> Result<String, String> {
-	let mut command = Command::new("git");
-	command
-		.arg("-C")
-		.arg(workspace)
-		.args(arguments)
-		.stdin(Stdio::null())
-		.stderr(Stdio::null())
-		.kill_on_drop(true);
-
-	#[cfg(windows)]
-	command.creation_flags(CREATE_NO_WINDOW);
-
-	let output = command
-		.output()
-		.await
-		.map_err(|error| format!("git {} did not run: {error}", arguments[0]))?;
-	if !output.status.success() {
-		return Err(format!("git {} ended with {}", arguments[0], output.status));
-	}
-	String::from_utf8(output.stdout)
-		.map_err(|error| format!("git {} answered no text: {error}", arguments[0]))
+fn counted(workspace: &str) -> Result<CheckoutCounts, git2::Error> {
+	let repository = Repository::discover(workspace)?;
+	let main = repository.refname_to_id(ORIGIN_MAIN)?;
+	let head = repository.head()?.peel_to_commit()?.id();
+	let (ahead, _) = repository.graph_ahead_behind(head, main)?;
+	let mut options = StatusOptions::new();
+	options.include_untracked(true).renames_head_to_index(true);
+	let dirty_files = repository.statuses(Some(&mut options))?.len();
+	Ok(CheckoutCounts { commits_ahead: ahead as i64, dirty_files: dirty_files as i64 })
 }
 
 #[cfg(test)]
 mod tests {
 	use std::fs;
-	use std::path::PathBuf;
+	use std::path::{Path, PathBuf};
 	use std::sync::mpsc::channel;
 
 	use serde_json::{json, Value};
@@ -276,22 +261,73 @@ mod tests {
 		fs::remove_dir_all(&root).expect("cleanup");
 	}
 
+	#[tokio::test]
+	async fn a_read_past_its_limit_is_abandoned() {
+		let held = bounded(Duration::from_millis(50), std::future::pending()).await;
+
+		assert_eq!(held, Read::Abandoned);
+	}
+
 	#[cfg(unix)]
 	#[tokio::test]
-	async fn a_git_read_past_its_limit_is_abandoned() {
+	async fn a_checkout_read_never_runs_the_fsmonitor_the_repository_names() {
 		use crate::executable_script::an_executable_script;
 
 		let root = temp_dir();
 		let checkout = a_checkout(&root);
-		let monitor = root.join("slow-monitor.sh");
-		an_executable_script(&monitor, "#!/bin/sh\nsleep 30\n");
+		let marker = root.join("monitor-ran");
+		let monitor = root.join("monitor.sh");
+		an_executable_script(&monitor, &format!("#!/bin/sh\ntouch {}\n", marker.display()));
 		git(&checkout, &["config", "core.fsmonitor", &monitor.to_string_lossy()]);
 
-		let started = std::time::Instant::now();
-		let held = read(&checkout.to_string_lossy(), Duration::from_millis(500)).await;
+		let held = read(&checkout.to_string_lossy(), GIT_TIMEOUT).await;
 
-		assert_eq!(held, Read::Abandoned);
-		assert!(started.elapsed() < Duration::from_secs(10), "the read was not abandoned");
+		assert_eq!(held, Read::Counted(CheckoutCounts { commits_ahead: 2, dirty_files: 2 }));
+		assert!(!marker.exists(), "the fsmonitor of the repository ran");
+
+		fs::remove_dir_all(&root).expect("cleanup");
+	}
+
+	fn git_answer(dir: &Path, arguments: &[&str]) -> String {
+		let ran = std::process::Command::new("git")
+			.arg("-C")
+			.arg(dir)
+			.args(arguments)
+			.output()
+			.expect("git runs");
+		assert!(ran.status.success(), "git {arguments:?} failed");
+		String::from_utf8(ran.stdout).expect("git answers text")
+	}
+
+	#[cfg(unix)]
+	#[tokio::test]
+	async fn a_checkout_read_runs_no_clean_filter_and_counts_what_the_git_cli_counts() {
+		let root = temp_dir();
+		let checkout = a_checkout(&root);
+		let marker = root.join("filter-ran");
+		let filter = format!("touch {} && cat", marker.display());
+		git(&checkout, &["mv", "two", "renamed"]);
+		git(&checkout, &["config", "filter.x.clean", &filter]);
+		fs::write(checkout.join(".gitattributes"), "one filter=x\n").expect("the attributes land");
+		fs::write(checkout.join("one"), "ONE").expect("the same size edit lands");
+		fs::create_dir_all(checkout.join("nested/deeper")).expect("the untracked folder lands");
+		fs::write(checkout.join("nested/a"), "a").expect("an untracked file lands");
+		fs::write(checkout.join("nested/deeper/b"), "b").expect("an untracked file lands");
+		fs::create_dir_all(checkout.join("logs")).expect("the ignored folder lands");
+		fs::write(checkout.join("logs/run.log"), "log").expect("an ignored file lands");
+		fs::write(checkout.join("top.log"), "log").expect("an ignored file lands");
+		fs::write(checkout.join(".git/info/exclude"), "*.log\n").expect("the exclude lands");
+
+		let held = read(&checkout.to_string_lossy(), GIT_TIMEOUT).await;
+
+		assert!(!marker.exists(), "the clean filter of the repository ran");
+		let status = git_answer(&checkout, &["status", "--porcelain"]);
+		let ahead = git_answer(&checkout, &["rev-list", "--count", "origin/main..HEAD"]);
+		let expected = CheckoutCounts {
+			commits_ahead: ahead.trim().parse().expect("git counts"),
+			dirty_files: status.lines().count() as i64,
+		};
+		assert_eq!(held, Read::Counted(expected), "git status answered {status}");
 
 		fs::remove_dir_all(&root).expect("cleanup");
 	}

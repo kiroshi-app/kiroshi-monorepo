@@ -4,11 +4,9 @@ import {
 	assertRedSuitesAreAttributed,
 	changedTestFiles,
 	compareItems,
-	compareStories,
 	mergeVerdicts,
 	splitByOwner,
 	TESTS,
-	testedStoryIds,
 	vitestFailures,
 	vitestRetriedPasses,
 	withOrdinals,
@@ -32,7 +30,7 @@ describe("baseline items", () => {
 	it("warns without failing on a recorded item no longer reported", () => {
 		const verdict = compareItems({
 			area: "tests",
-			committed: ["ui :: panel.stories.tsx :: Picking The Mode"],
+			committed: ["ui :: panel.test.tsx :: Picking The Mode"],
 			live: [],
 		})
 
@@ -62,20 +60,20 @@ describe("baseline items", () => {
 
 describe("baseline entries owned by the suites that ran", () => {
 	const committed = [
-		"app :: src/a.test.ts :: stays red",
-		"storybook :: src/b.stories.tsx :: Plays",
+		"website :: src/a.test.ts :: stays red",
+		"shared :: src/b.test.ts :: Plays",
 		"sidecar :: src/c.test.ts :: times out",
 	]
 
 	it("owns the test entries of the suites that ran and keeps the others", () => {
 		expect(
-			splitByOwner({ area: TESTS, committed, suites: ["app", "sidecar"] }),
+			splitByOwner({ area: TESTS, committed, suites: ["website", "sidecar"] }),
 		).toEqual({
 			owned: [
-				"app :: src/a.test.ts :: stays red",
+				"website :: src/a.test.ts :: stays red",
 				"sidecar :: src/c.test.ts :: times out",
 			],
-			others: ["storybook :: src/b.stories.tsx :: Plays"],
+			others: ["shared :: src/b.test.ts :: Plays"],
 		})
 	})
 
@@ -83,14 +81,14 @@ describe("baseline entries owned by the suites that ran", () => {
 		const { owned } = splitByOwner({
 			area: TESTS,
 			committed,
-			suites: ["storybook"],
+			suites: ["shared"],
 		})
 
 		expect(
 			compareItems({
 				area: TESTS,
 				committed: owned,
-				live: ["storybook :: src/b.stories.tsx :: Plays"],
+				live: ["shared :: src/b.test.ts :: Plays"],
 			}).warnings,
 		).toEqual([])
 	})
@@ -99,15 +97,15 @@ describe("baseline entries owned by the suites that ran", () => {
 		expect(
 			splitByOwner({
 				area: TESTS,
-				committed: ["storybook :: src/b.stories.tsx :: Plays"],
-				suites: ["story"],
+				committed: ["shared :: src/b.test.ts :: Plays"],
+				suites: ["share"],
 			}).owned,
 		).toEqual([])
 	})
 
 	it("owns every entry of an area that is not split by suite", () => {
 		expect(
-			splitByOwner({ area: "stories", committed: ["a--b"], suites: [] }),
+			splitByOwner({ area: "knip", committed: ["a--b"], suites: [] }),
 		).toEqual({ owned: ["a--b"], others: [] })
 	})
 })
@@ -115,12 +113,12 @@ describe("baseline entries owned by the suites that ran", () => {
 describe("baseline test items", () => {
 	it("emits an item for a failed file holding no failed assertion", () => {
 		const items = vitestFailures({
-			suite: "app",
+			suite: "website",
 			report: {
 				success: false,
 				testResults: [
 					{
-						name: "apps/app/src/broken.test.ts",
+						name: "apps/website/src/broken.test.ts",
 						status: "failed",
 						message: "collection blew\n   up",
 						assertionResults: [],
@@ -130,7 +128,7 @@ describe("baseline test items", () => {
 		})
 
 		expect(items).toEqual([
-			"app :: apps/app/src/broken.test.ts :: collection blew up",
+			"website :: apps/website/src/broken.test.ts :: collection blew up",
 		])
 	})
 
@@ -163,7 +161,7 @@ describe("baseline test items", () => {
 			success: false,
 			testResults: [
 				{
-					name: "apps/app/src/flip.test.ts",
+					name: "apps/website/src/flip.test.ts",
 					status: "failed",
 					assertionResults: [
 						{ ...passing, failureMessages: [] },
@@ -183,18 +181,18 @@ describe("baseline test items", () => {
 		})
 
 		expect(retried).toEqual([
-			{ file: "apps/app/src/flip.test.ts", name: "flips once" },
+			{ file: "apps/website/src/flip.test.ts", name: "flips once" },
 		])
 	})
 
 	it("emits nothing for a green file", () => {
 		const items = vitestFailures({
-			suite: "app",
+			suite: "website",
 			report: {
 				success: true,
 				testResults: [
 					{
-						name: "apps/app/src/fine.test.ts",
+						name: "apps/website/src/fine.test.ts",
 						status: "passed",
 						assertionResults: [passing],
 					},
@@ -210,7 +208,7 @@ describe("red suites", () => {
 	it("throws on a suite red with no attributable failure, naming it", () => {
 		expect(() =>
 			assertRedSuitesAreAttributed([
-				{ suite: "app", red: false, items: [] },
+				{ suite: "website", red: false, items: [] },
 				{ suite: "sidecar", red: true, items: [] },
 			]),
 		).toThrow(/sidecar/)
@@ -225,76 +223,20 @@ describe("red suites", () => {
 	})
 })
 
-describe("baseline stories", () => {
-	it("fails on a story id the baseline does not record, naming it", () => {
-		const verdict = compareStories({
-			committed: ["primitives-button--variants"],
-			live: ["primitives-button--variants", "primitives-button--sizes"],
-		})
-
-		expect(verdict.failures).toHaveLength(1)
-		expect(verdict.failures[0]).toContain("primitives-button--sizes")
-	})
-
-	it("fails on a recorded story id no longer reported, naming it", () => {
-		const verdict = compareStories({
-			committed: ["overlays-dialog--playground", "overlays-dialog--nested"],
-			live: ["overlays-dialog--playground"],
-		})
-
-		expect(verdict.failures).toHaveLength(1)
-		expect(verdict.failures[0]).toContain("overlays-dialog--nested")
-		expect(verdict.warnings).toEqual([])
-	})
-
-	it("fails on a story moved between families", () => {
-		const verdict = compareStories({
-			committed: ["forms-switch--playground"],
-			live: ["primitives-switch--playground"],
-		})
-
-		expect(verdict.failures).toHaveLength(2)
-	})
-
-	it("passes when the reported story ids are exactly the recorded ones", () => {
-		const verdict = compareStories({
-			committed: ["layout-shell--playground", "forms-field--playground"],
-			live: ["forms-field--playground", "layout-shell--playground"],
-		})
-
-		expect(verdict.failures).toEqual([])
-	})
-})
-
-describe("story ids read from the storybook index", () => {
-	it("keeps the stories the storybook vitest project plays, nothing else", () => {
-		const ids = testedStoryIds({
-			entries: {
-				played: { id: "chat--played", type: "story", tags: ["dev", "test"] },
-				untested: { id: "chat--untested", type: "story", tags: ["dev"] },
-				untagged: { id: "chat--untagged", type: "story" },
-				docs: { id: "chat--docs", type: "docs", tags: ["dev", "test"] },
-			},
-		})
-
-		expect(ids).toEqual(["chat--played"])
-	})
-})
-
 describe("unit test files changed since origin/main", () => {
 	it("keeps the test files under the source folder of the workspace", () => {
 		expect(
 			changedTestFiles({
-				root: "apps/app",
+				root: "apps/website",
 				paths: [
-					"apps/app/src/lib/chat/rotation.test.ts",
-					"apps/app/src/lib/chat/rotation.ts",
-					"apps/app/vitest.config.ts",
+					"apps/website/src/login-search.test.ts",
+					"apps/website/src/login-search.ts",
+					"apps/website/vitest.config.ts",
 					"apps/app/sidecar/src/contracts.test.ts",
 					"packages/ui/src/hooks/use-skeleton-timing.test.tsx",
 				],
 			}),
-		).toEqual(["apps/app/src/lib/chat/rotation.test.ts"])
+		).toEqual(["apps/website/src/login-search.test.ts"])
 	})
 
 	it("keeps the tsx test files of packages/ui", () => {
@@ -307,10 +249,10 @@ describe("unit test files changed since origin/main", () => {
 	})
 
 	it.each([
-		["apps/website", ["apps/website/src/pages/index.test.ts"]],
+		["apps/app/sidecar", ["apps/app/sidecar/src/contracts.test.ts"]],
 		[".github", [".github/workflows/ci.yml"]],
 	])("finds none on a branch that changes only %s", (_, paths) => {
-		expect(changedTestFiles({ root: "apps/app", paths })).toEqual([])
+		expect(changedTestFiles({ root: "apps/website", paths })).toEqual([])
 		expect(changedTestFiles({ root: "packages/ui", paths })).toEqual([])
 	})
 })

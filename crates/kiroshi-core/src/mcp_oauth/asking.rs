@@ -650,14 +650,7 @@ mod tests {
 
 	#[test]
 	fn the_initialize_names_the_app_and_its_version_not_the_core_crate() {
-		let manifest =
-			std::fs::read_to_string(std::path::PathBuf::from(crate::APP_DIR).join("Cargo.toml"))
-				.expect("the app manifest reads");
-		let app_version = manifest
-			.lines()
-			.find_map(|line| line.strip_prefix("version = \""))
-			.and_then(|rest| rest.strip_suffix('"'))
-			.expect("the app manifest names its version");
+		let app_version = env!("KIROSHI_APP_VERSION");
 
 		let client = &an_initialize()["params"]["clientInfo"];
 

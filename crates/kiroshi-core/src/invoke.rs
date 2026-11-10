@@ -135,8 +135,24 @@ macro_rules! decoded {
 }
 
 macro_rules! table {
-	($core:ident, $client:ident, $caller:ident; $($name:ident ($($arg:ident: $ty:ty),*) => $answer:expr;)*) => {
+	($core:ident, $client:ident, $caller:ident; $($name:ident ($($arg:ident: $ty:ty),*) => $wrap:ident ($($call:tt)*);)*) => {
 		pub const COMMANDS: &[&str] = &[$(stringify!($name)),*];
+
+		#[cfg(test)]
+		#[allow(unreachable_code, unused_variables, clippy::diverging_sub_expression)]
+		pub fn signatures(types: &mut specta::Types) -> Vec<signature::Signature> {
+			vec![$(signature::Signature {
+				command: stringify!($name),
+				args: vec![$((stringify!($arg), <$ty as specta::Type>::definition(types))),*],
+				answer: signature::$wrap(types, || async move {
+					let $core: &Core = unreachable!();
+					let $caller: Caller = unreachable!();
+					let $client: &ClientId = unreachable!();
+					$(let $arg: $ty = unreachable!();)*
+					std::convert::identity($($call)*)
+				}),
+			},)*]
+		}
 
 		async fn answer(
 			core: &Core,
@@ -148,7 +164,7 @@ macro_rules! table {
 			let $caller = caller;
 			let $client = &ClientId::new(IN_PROCESS_CLIENT);
 			Some(match command {
-				$(stringify!($name) => decoded!(command, arguments; ($($arg: $ty),*) => $answer),)*
+				$(stringify!($name) => decoded!(command, arguments; ($($arg: $ty),*) => $wrap($($call)*)),)*
 				_ => return None,
 			})
 		}
@@ -384,8 +400,16 @@ table! { core, client, caller;
 		scope: RuntimeScope,
 		resume: Option<String>,
 		cwd: Option<String>,
-		output_schema: Option<JsonValue>
-	) => answered(start_or_resume_session(core, scope, resume, cwd, output_schema).await);
+		output_schema: Option<JsonValue>,
+		denied_tools: Option<Vec<String>>,
+		permission_mode: Option<String>
+	) => answered(
+		start_or_resume_session(
+			core,
+			SessionStart { scope, resume, cwd, output_schema, denied_tools, permission_mode },
+		)
+		.await
+	);
 	agent_submit_prompt(scope: RuntimeScope, text: String, turn: Option<SubmittedTurn>) =>
 		answered(agent_submit_prompt(core, client, caller, scope, text, turn).await);
 	agent_cancel_turn(scope: RuntimeScope) => answered(cancel_turn(core, scope).await);
@@ -436,10 +460,9 @@ table! { core, client, caller;
 	mission_answered(mission_id: String, seq: i64) =>
 		answered(mark_answered(core, mission_id, seq).await);
 	mission_run_claim(mission_id: String) => plain(mission_run_claim(core, client, mission_id));
-	mission_run_release(token: String) => {
+	mission_run_release(token: String) => plain({
 		mission_run_release(core, token);
-		plain(())
-	};
+	});
 
 	chat_store_attachments(conversation_id: String, attachments: Vec<SubmittedAttachment>) =>
 		answered(chat_store_attachments(core, conversation_id, attachments).await);
@@ -589,10 +612,9 @@ table! { core, client, caller;
 		answered(crate::joined_spaces::commands::joined_space_remove(core, id).await);
 	joined_space_describe(id: String, name: String, colour: Option<i64>) =>
 		answered(crate::joined_spaces::commands::joined_space_describe(core, id, name, colour).await);
-	join_link_listen() => {
+	join_link_listen() => plain({
 		crate::joined_spaces::commands::join_link_listen(core, client);
-		plain(())
-	};
+	});
 
 	joined_space_members(id: String) =>
 		answered(crate::joined_spaces::members::joined_space_members(core, id).await);
@@ -728,6 +750,39 @@ fn read<T: DeserializeOwned>(command: &str, arguments: Value) -> Result<T, Answe
 	})
 }
 
+#[cfg(test)]
+pub mod signature {
+	use std::future::Future;
+
+	use specta::datatype::DataType;
+	use specta::{Type, Types};
+
+	pub struct Answer {
+		pub ok: DataType,
+		pub error: Option<DataType>,
+	}
+
+	pub struct Signature {
+		pub command: &'static str,
+		pub args: Vec<(&'static str, DataType)>,
+		pub answer: Answer,
+	}
+
+	pub fn plain<T: Type, F: Future<Output = T>>(
+		types: &mut Types,
+		_: impl FnOnce() -> F,
+	) -> Answer {
+		Answer { ok: T::definition(types), error: None }
+	}
+
+	pub fn answered<T: Type, E: Type, F: Future<Output = Result<T, E>>>(
+		types: &mut Types,
+		_: impl FnOnce() -> F,
+	) -> Answer {
+		Answer { ok: T::definition(types), error: Some(E::definition(types)) }
+	}
+}
+
 fn plain<T: Serialize>(answer: T) -> Answer {
 	answered(Ok::<T, ()>(answer))
 }
@@ -809,53 +864,6 @@ mod tests {
 			.expect("the router answers");
 
 		assert_eq!(answered.status().as_u16(), 404);
-	}
-
-	const OS_SHELL_MODULES: [&str; 3] = ["badge", "notifications", "window_controls"];
-
-	const RUNE_ONLY_COMMANDS: [&str; 3] =
-		["restart_to_update", "whats_new", "acknowledge_whats_new"];
-
-	fn tauri_commands() -> Vec<(String, String)> {
-		let table = std::fs::read_to_string(format!("{}/src/commands.rs", crate::APP_DIR))
-			.expect("the Tauri command table reads");
-		let listed = table.split_once("collect_commands![").expect("the table collects").1;
-		let listed = listed.split_once(']').expect("the table closes").0;
-		listed
-			.split(',')
-			.map(|entry| entry.trim().trim_end_matches("::<tauri::Wry>"))
-			.filter(|entry| !entry.is_empty())
-			.map(|entry| {
-				let module = entry.split("::").next().expect("a path").to_owned();
-				let name = entry.rsplit("::").next().expect("a path").to_owned();
-				(module, name)
-			})
-			.collect()
-	}
-
-	#[test]
-	fn every_tauri_command_outside_the_os_shell_is_answered_by_the_core_under_its_name() {
-		let missing: Vec<String> = tauri_commands()
-			.into_iter()
-			.filter(|(module, _)| !OS_SHELL_MODULES.contains(&module.as_str()))
-			.map(|(_, name)| name)
-			.filter(|name| !COMMANDS.contains(&name.as_str()))
-			.collect();
-
-		assert!(missing.is_empty(), "the core answers none of {missing:?}");
-	}
-
-	#[test]
-	fn every_core_command_names_a_tauri_command() {
-		let tauri: Vec<String> = tauri_commands().into_iter().map(|(_, name)| name).collect();
-		let unknown: Vec<&str> = COMMANDS
-			.iter()
-			.copied()
-			.filter(|name| !RUNE_ONLY_COMMANDS.contains(name))
-			.filter(|name| !tauri.iter().any(|listed| listed == name))
-			.collect();
-
-		assert!(unknown.is_empty(), "no Tauri command bears {unknown:?}");
 	}
 
 	fn refused_status(command: &str, refusal: Value) -> u16 {

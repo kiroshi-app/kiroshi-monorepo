@@ -11,7 +11,7 @@ use super::*;
 const FIXTURE_CLIENT_ID: u64 = 1;
 
 fn fixtures() -> PathBuf {
-	Path::new(crate::APP_DIR).join("../../../packages/shared/board/fixtures")
+	Path::new(crate::REPO_DIR).join("packages/shared/board/fixtures")
 }
 
 fn cases() -> Vec<PathBuf> {

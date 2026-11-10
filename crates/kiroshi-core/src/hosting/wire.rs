@@ -18,6 +18,8 @@ use crate::spaces::commands::ready;
 
 pub const HELLO: &str = r#"{"hello":{}}"#;
 
+pub const NO_KEY_ID: u32 = 0;
+
 pub const CTR_BLOCK: u64 = 1024;
 
 pub const MAX_CTR: u64 = (1 << 53) - 1;
@@ -101,6 +103,7 @@ pub enum Dropped {
 	UnknownKey(u32),
 	StaleKey(u32),
 	UnknownSender,
+	NotAdmitted,
 	Refused(CryptoError),
 	Unstored(String),
 }
@@ -111,10 +114,13 @@ pub(super) struct Refusal {
 	pub(super) cause: Dropped,
 }
 
-pub(super) fn dropped_line(space_id: &str, refusal: &Refusal) -> String {
+pub(super) fn dropped_line(space_id: &str, instance_id: &str, refusal: &Refusal) -> String {
 	let from =
 		refusal.from.as_deref().map_or_else(|| "none".to_owned(), |from| json!(from).to_string());
-	format!("hosted space {space_id} dropped a relay frame from {from}: {:?}", refusal.cause)
+	format!(
+		"hosted space {space_id} (instance {instance_id}) dropped a relay frame from {from}: {:?}",
+		refusal.cause
+	)
 }
 
 pub(super) struct Opened {
@@ -194,7 +200,11 @@ impl<'a> Wire<'a> {
 		let sender = roster::sender_of(self.database, self.space_id, &self.keys.device, wire_from)
 			.await
 			.map_err(unstored)?
-			.ok_or(Dropped::UnknownSender)?;
+			.ok_or(if key_id == NO_KEY_ID {
+				Dropped::NotAdmitted
+			} else {
+				Dropped::UnknownSender
+			})?;
 		if key_id < space.key_id {
 			return Err(Dropped::StaleKey(key_id));
 		}
@@ -432,8 +442,9 @@ mod tests {
 		let unknown = unknown.expect("the stranger frame is dropped");
 		assert_eq!(forged.cause, Dropped::Refused(CryptoError::ForgedSignature));
 		assert_eq!(unknown.cause, Dropped::UnknownSender);
-		let line = dropped_line(SPACE, &unknown);
+		let line = dropped_line(SPACE, INSTANCE, &unknown);
 		assert!(line.contains(SPACE), "{line}");
+		assert!(line.contains(INSTANCE), "{line}");
 		assert!(line.contains(&stranger.relay_device_id), "{line}");
 		assert!(line.contains("UnknownSender"), "{line}");
 		assert!(!line.contains("\"ct\"") && !line.contains("agent_models"), "{line}");

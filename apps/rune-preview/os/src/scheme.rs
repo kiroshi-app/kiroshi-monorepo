@@ -8,6 +8,9 @@ use std::path::Path;
 #[cfg(any(test, not(target_os = "macos")))]
 const APP_NAME: &str = "Kiroshi (Rune preview)";
 
+#[cfg(any(test, not(any(target_os = "macos", windows))))]
+const DESKTOP_FILE: &str = "com.kiroshi.app.desktop";
+
 #[derive(Debug)]
 pub enum RegisterError {
 	Io(io::Error),
@@ -104,7 +107,6 @@ pub fn register(carried: &[&str]) -> Result<(), RegisterError> {
 
 #[cfg(not(any(target_os = "macos", windows)))]
 pub fn register(carried: &[&str]) -> Result<(), RegisterError> {
-	const DESKTOP_FILE: &str = "kiroshi-rune-preview.desktop";
 	const SCHEME_TYPE: &str = "x-scheme-handler/kiroshi";
 
 	let data = std::env::var_os("XDG_DATA_HOME")
@@ -147,7 +149,7 @@ fn desktop_entry(executable: &Path, carried: &[&str]) -> Result<String, Register
 		.ok_or(RegisterError::UnwritablePath)?;
 	exec.push("%u".into());
 	Ok(format!(
-		"[Desktop Entry]\nType=Application\nName={APP_NAME}\nExec={}\nTerminal=false\nNoDisplay=true\nMimeType=x-scheme-handler/kiroshi;\n",
+		"[Desktop Entry]\nType=Application\nName={APP_NAME}\nExec={}\nTerminal=false\nMimeType=x-scheme-handler/kiroshi;\n",
 		exec.join(" ")
 	))
 }
@@ -195,6 +197,31 @@ mod tests {
 		let entry = desktop_entry(Path::new("/a$b\\c%d\"e`f"), &[]).expect("an entry");
 
 		assert!(entry.contains("\nExec=\"/a\\\\$b\\\\\\\\c%%d\\\\\"e\\\\`f\" %u\n"), "{entry}");
+	}
+
+	#[test]
+	fn the_scheme_lands_on_the_desktop_file_the_linux_package_installs() {
+		let package = include_str!("../../scripts/package-linux.sh");
+		let identifier = package
+			.lines()
+			.find_map(|line| line.strip_prefix("readonly IDENTIFIER="))
+			.expect("the package names its identifier");
+		let installed = package
+			.split("usr/share/applications/$IDENTIFIER.desktop\" <<DESKTOP\n")
+			.nth(1)
+			.and_then(|rest| rest.split("\nDESKTOP\n").next())
+			.expect("the package writes its desktop file");
+
+		assert_eq!(DESKTOP_FILE, format!("{identifier}.desktop"));
+		assert!(installed.contains("\nMimeType=x-scheme-handler/kiroshi;"), "{installed}");
+	}
+
+	#[test]
+	fn the_desktop_entry_hides_no_menu_entry_of_the_package_it_shares_a_name_with() {
+		let entry =
+			desktop_entry(Path::new("/usr/bin/kiroshi-rune-preview"), &[]).expect("an entry");
+
+		assert!(!entry.contains("NoDisplay"), "{entry}");
 	}
 
 	#[test]
