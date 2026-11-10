@@ -178,9 +178,14 @@ fn frames() -> BTreeMap<String, Value> {
 						"type": "string",
 					},
 					"seq": {
-						"description": "1 for the first frame of the epoch, one more for each next frame.",
+						"description": "The place of the frame on the sequence of the account it reaches: 1 for the first frame of the epoch that reaches the account, one more for each next one. A frame to everyone carries here the seq of every account seqs does not name.",
 						"type": "integer",
 						"minimum": 1,
+					},
+					"seqs": {
+						"description": "Present only on a frame to everyone once a frame of the epoch reached one account and not another: the seq of the frame for each account it names, in place of seq.",
+						"type": "object",
+						"additionalProperties": { "type": "integer", "minimum": 1 },
 					},
 					"token": {
 						"description": "Present only on a frame replayed for a ResumeCallFrame: the token of that call. A member that did not send it drops the frame.",
@@ -193,7 +198,7 @@ fn frames() -> BTreeMap<String, Value> {
 		(
 			"ResumeCallFrame".to_owned(),
 			json!({
-				"description": "A call frame asking the host to replay every frame of epoch above since. The host answers it itself.",
+				"description": "A call frame asking the host to replay every frame of epoch that reaches the account of the caller, above since on the sequence of that account. The host answers it itself.",
 				"type": "object",
 				"properties": {
 					"id": id,

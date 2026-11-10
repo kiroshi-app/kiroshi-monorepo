@@ -90,6 +90,7 @@ use crate::environment::store;
 use crate::events::{self, Event, BUFFERED_FRAMES};
 use crate::host_api::files::ATTACHMENT_PATH;
 use crate::joined_spaces::contract::JoinedSpaceConnection;
+use crate::joined_spaces::member_link::{MemberLink, Resync};
 use crate::joined_spaces::relay::RelayGuests;
 use crate::library;
 use crate::library::contract::{LibraryError, DOCUMENT_RENAMED_EVENT, DOCUMENT_UPDATED_EVENT};
@@ -1316,6 +1317,7 @@ fn unstamped(mut frame: Value) -> Value {
 	if let Some(fields) = frame.as_object_mut().filter(|fields| fields.contains_key("event")) {
 		let epoch = fields.remove("epoch");
 		let seq = fields.remove("seq");
+		fields.remove("seqs");
 		assert!(
 			epoch.as_ref().is_some_and(Value::is_string) && seq.as_ref().is_some_and(Value::is_u64),
 			"an event frame carries its epoch {epoch:?} and seq {seq:?}"
@@ -9509,12 +9511,16 @@ fn the_rooms_lists_of(frames: &[Value]) -> Vec<Value> {
 }
 
 fn opened_by(device: &SealingMember, member: &MemberWire) -> Vec<Value> {
+	stamped_opened_by(device, member).into_iter().map(unstamped).collect()
+}
+
+fn stamped_opened_by(device: &SealingMember, member: &MemberWire) -> Vec<Value> {
 	let space = member.space();
 	member
 		.texts
 		.iter()
 		.filter_map(|text| device.opened(&space, text))
-		.map(|frame| unstamped(frame.plaintext))
+		.map(|frame| frame.plaintext)
 		.collect()
 }
 
@@ -9557,6 +9563,43 @@ fn each_member_hears_the_agent_rooms_without_the_main_conversation_of_another_pe
 		);
 		let said = Value::from(heard).to_string();
 		assert!(!said.contains(&mains.of_bea) && !said.contains(&mains.of_the_host), "{said}");
+	});
+}
+
+#[test]
+fn a_member_follows_the_events_of_the_main_conversation_of_another_person_without_a_resume() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("seq-of-each-account").await;
+		let bea = SealingMember::new(BEA);
+		guest.harness.rostered(PERSONAL, &bea).await;
+		let mains = mains_of_the_host_and_bea(&guest).await;
+
+		for (n, (event, payload)) in naming_the_main(&mains.of_bea).into_iter().enumerate() {
+			numbered(&guest.harness, n);
+			events::emit(guest.harness.app.handle(), Event::untyped(event), payload)
+				.expect("emitted");
+		}
+		guest.events_until_the_marker().await;
+
+		let link_fed = |device: &SealingMember, account_id: &str| {
+			let link = MemberLink::new(INSTANCE, "Studio".to_owned(), account_id.to_owned());
+			let frames = stamped_opened_by(device, &guest.member);
+			let resyncs: Vec<Resync> =
+				frames.iter().map(|frame| link.received(&frame.to_string())).collect();
+			(frames, resyncs)
+		};
+		let (of_bea, resyncs_of_bea) = link_fed(&bea, BEA);
+		let (of_the_guest, resyncs_of_the_guest) = link_fed(&guest.member.device, A_JOINER);
+
+		assert!(of_bea.iter().any(|frame| frame.to_string().contains(&mains.of_bea)));
+		assert!(!of_the_guest.iter().any(|frame| frame.to_string().contains(&mains.of_bea)));
+		for resyncs in [resyncs_of_the_guest, resyncs_of_bea] {
+			assert!(!resyncs.contains(&Resync::Reread), "{resyncs:?}");
+			assert!(
+				!resyncs.iter().any(|resync| matches!(resync, Resync::Resume(_))),
+				"{resyncs:?}"
+			);
+		}
 	});
 }
 
