@@ -96,6 +96,13 @@ const completed = (name: string, conclusion: string): CheckRun => ({
 	conclusion,
 })
 
+const pending = (name: string, status: string): CheckRun => ({
+	__typename: "CheckRun",
+	name,
+	status,
+	conclusion: "",
+})
+
 const PASSING_CHECKS = [
 	completed("lint", "SUCCESS"),
 	completed("rust", "SKIPPED"),
@@ -236,18 +243,8 @@ describe("scripts/pr-merge-integration.sh", () => {
 		const result = await runPrMergeIntegration({
 			checks: [
 				completed("lint", "SUCCESS"),
-				{
-					__typename: "CheckRun",
-					name: "vitest",
-					status: "IN_PROGRESS",
-					conclusion: "",
-				},
-				{
-					__typename: "CheckRun",
-					name: "rust",
-					status: "QUEUED",
-					conclusion: "",
-				},
+				pending("vitest", "IN_PROGRESS"),
+				pending("rust", "QUEUED"),
 				completed("storybook", "FAILURE"),
 				completed("ios", "CANCELLED"),
 				{ __typename: "StatusContext", context: "external", state: "PENDING" },
