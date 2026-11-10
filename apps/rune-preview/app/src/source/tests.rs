@@ -180,16 +180,21 @@ fn remote(refused_invoke: Option<&'static str>, refused_socket: Option<&'static 
 }
 
 fn local_for(remote: &Fake, remote_space_id: Option<&str>) -> Fake {
-	local_removing_with(remote, remote_space_id, 200)
+	local_answering(remote, remote_space_id, JOINED_SPACE_REMOVE, 200)
 }
 
-fn local_removing_with(remote: &Fake, remote_space_id: Option<&str>, removal: u16) -> Fake {
+fn local_answering(
+	remote: &Fake,
+	remote_space_id: Option<&str>,
+	answered: &'static str,
+	status: u16,
+) -> Fake {
 	let (host_url, remote_space_id) = (remote.url(), remote_space_id.map(str::to_owned));
 	let tokens = AtomicUsize::new(0);
 	Fake::start(
 		Box::new(move |invoked| {
-			if invoked.command == JOINED_SPACE_REMOVE {
-				return (removal, Value::Null);
+			if invoked.command == answered {
+				return (status, Value::Null);
 			}
 			let token = format!("token-{}", tokens.fetch_add(1, Ordering::SeqCst) + 1);
 			let connection = JoinedSpaceConnection {
@@ -392,7 +397,7 @@ fn leaving_a_space_drops_its_source_and_ends_its_stream() {
 #[test]
 fn a_refused_leave_keeps_the_joined_source_and_its_stream() {
 	let remote = remote(None, None);
-	let local = local_removing_with(&remote, Some(REMOTE_SPACE_ID), 500);
+	let local = local_answering(&remote, Some(REMOTE_SPACE_ID), JOINED_SPACE_REMOVE, 500);
 	let joining = joined_through(&local);
 	assert_eq!(joining.next_state(), ConnectionState::Ready);
 
@@ -430,4 +435,74 @@ fn a_joined_host_error_says_this_space_and_never_its_id() {
 		assert!(!title.contains(JOINED_ID) && !detail.contains(JOINED_ID), "{title} {detail}");
 		assert!(title.contains("this Space") && detail.contains("this Space"), "{title} {detail}");
 	}
+}
+
+fn assert_kept_on_this_computer(commands: &[&str]) {
+	let remote = remote(None, None);
+	let local = local_for(&remote, Some(REMOTE_SPACE_ID));
+	let joining = joined_through(&local);
+	let source = joining.sources.source_of(&joining.local, JOINED_ID);
+
+	for command in commands {
+		let arguments = json!({ "spaceId": JOINED_ID, "path": "/picked/file.png" });
+		source.invoke::<Value>(command, arguments.clone()).expect("the local host answers");
+
+		let kept = local.invoked(command);
+		assert_eq!(kept.len(), 1, "{command}");
+		assert_eq!(kept[0].body, arguments, "{command}");
+		assert_eq!(kept[0].bearer, "Bearer local-token", "{command}");
+		assert!(remote.invoked(command).is_empty(), "{command}");
+	}
+}
+
+#[test]
+fn a_joined_space_imports_files_through_this_computer() {
+	assert_kept_on_this_computer(&["library_import_paths"]);
+}
+
+#[test]
+fn a_joined_space_saves_files_through_this_computer() {
+	assert_kept_on_this_computer(&["library_save", "library_save_bytes"]);
+}
+
+#[test]
+fn a_joined_space_copies_files_through_this_computer() {
+	assert_kept_on_this_computer(&["library_copy", "library_copy_bytes"]);
+}
+
+#[test]
+fn a_joined_space_reveals_files_through_this_computer() {
+	assert_kept_on_this_computer(&["library_reveal"]);
+}
+
+#[test]
+fn a_joined_space_sends_every_other_command_to_its_own_host() {
+	let remote = remote(None, None);
+	let local = local_for(&remote, Some(REMOTE_SPACE_ID));
+	let joining = joined_through(&local);
+	let source = joining.sources.source_of(&joining.local, JOINED_ID);
+
+	source
+		.invoke_turn::<Value>("conversation_send_turn", json!({ "spaceId": JOINED_ID }))
+		.expect("the joined host answers the turn");
+
+	let sent = remote.invoked("conversation_send_turn");
+	assert_eq!(sent.len(), 1);
+	assert_eq!(sent[0].body, json!({ "spaceId": REMOTE_SPACE_ID }));
+	assert!(local.invoked("conversation_send_turn").is_empty());
+}
+
+#[test]
+fn a_local_command_refused_on_this_computer_is_never_retried_on_the_joined_host() {
+	let remote = remote(None, None);
+	let local = local_answering(&remote, Some(REMOTE_SPACE_ID), "library_save", 401);
+	let joining = joined_through(&local);
+	let source = joining.sources.source_of(&joining.local, JOINED_ID);
+
+	let refused = source.invoke_turn::<Value>("library_save", json!({ "path": "/picked" }));
+
+	assert!(matches!(refused, Err(HostError::TokenRefused { profile: Profile::Dev })));
+	assert_eq!(local.invoked("library_save").len(), 1);
+	assert!(remote.invoked("library_save").is_empty());
+	assert_eq!(local.invoked(JOINED_SPACE_CONNECT).len(), 1);
 }

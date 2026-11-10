@@ -430,6 +430,10 @@ impl Joined {
 		Host { reach: Reach::Joined(self.clone()) }
 	}
 
+	pub fn local(&self) -> &Source {
+		&self.local
+	}
+
 	pub fn refresh(&self) -> Result<(), HostError> {
 		let fresh: JoinedSpaceConnection =
 			self.local.invoke(JOINED_SPACE_CONNECT, json!({ "id": self.id() }))?;
@@ -480,6 +484,9 @@ pub fn data_folders() -> Vec<PathBuf> {
 
 #[cfg(test)]
 mod tests {
+	use std::io::ErrorKind;
+	use std::net::TcpListener;
+
 	use super::*;
 
 	#[test]
@@ -500,12 +507,19 @@ mod tests {
 
 	#[test]
 	fn the_installed_host_refuses_every_command_outside_the_reads() {
-		let installed = Host::local(Profile::Installed, 0, String::new());
+		let listener = TcpListener::bind("127.0.0.1:0").expect("the installed stand-in binds");
+		listener.set_nonblocking(true).expect("the installed stand-in polls");
+		let port = listener.local_addr().expect("the installed stand-in has an address").port();
+		let installed = Host::local(Profile::Installed, port, String::new());
 		for write in ["conversation_send_turn", "conversation_main_chat", "mission_close"] {
 			let refused = installed.invoke::<Value>(write, json!({}));
 			assert!(matches!(refused, Err(HostError::WriteRefused { .. })), "{write}");
 		}
-		assert!(sent_commands().iter().all(|(_, command)| is_read(command)));
+		let reached = listener.accept();
+		assert!(
+			matches!(&reached, Err(failure) if failure.kind() == ErrorKind::WouldBlock),
+			"the installed host received {reached:?}"
+		);
 	}
 
 	#[test]
