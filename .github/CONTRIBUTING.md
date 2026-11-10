@@ -1,7 +1,8 @@
 # Contributing to Kiroshi
 
-Thanks for taking the time. Kiroshi is a Tauri desktop app in a Bun monorepo:
-`apps/app` composes screens and owns the logic, `packages/ui` owns every visual.
+Thanks for taking the time. Kiroshi is a Rust desktop app drawn with Rune, in a Bun monorepo:
+`crates/kiroshi-core` holds the host core, the app crate in `apps/rune-preview/app`
+composes screens, the kit crate in `apps/rune-preview/kit` owns every visual.
 
 ## Conventions
 
@@ -14,9 +15,9 @@ disagree, `AGENTS.md` wins.
 Two rules from it are worth repeating, because they are the ones pull requests
 trip over:
 
-- **No visual code in `apps/app`.** A raw HTML element, a Tailwind class, or any
-  markup that is not already a `@workspace/ui` component belongs in
-  `packages/ui`, with a Storybook story. A component without a story is not done.
+- **No drawing in the app crate.** Everything the desktop app draws belongs in
+  the kit crate, `apps/rune-preview/kit`, with a scene. A surface without a
+  scene is not done.
 - **No new dependencies without approval.** Open an issue first and say what the
   package buys us.
 
@@ -24,15 +25,12 @@ trip over:
 
 ```bash
 bun install
-bun run dev        # Tauri app: Vite dev server + native window
-bun run storybook  # Storybook on :6006 — the place to build UI
+bun run dev          # Build the sidecar, then launch the desktop app in its dev profile
+bun run dev:website  # The website on Vite
 ```
 
 You need [Bun](https://bun.sh) and the [Rust toolchain](https://rustup.rs). On
-Linux, install the
-[Tauri system dependencies](https://tauri.app/start/prerequisites/#linux). The
-test suite drives headless Chromium: run `bunx playwright install chromium` once
-from `packages/ui`.
+Linux, install `libxkbcommon-dev`, which the desktop app links.
 
 Running the app locally launches a real Claude Code CLI on your machine. Read
 [`SECURITY.md`](SECURITY.md) so you know what that means before you approve tool

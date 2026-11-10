@@ -2,8 +2,7 @@
 * text=auto
 .claude/settings.json eol=lf
 apps/app/shared/** eol=lf
-apps/app/src-tauri/** eol=lf
-apps/app/src/lib/** eol=lf
+apps/rune-preview/scripts/** eol=lf
 crates/** eol=lf
 docs/chat/rich-answer-blocks.md eol=lf
 packages/shared/** eol=lf
