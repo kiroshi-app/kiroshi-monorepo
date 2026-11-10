@@ -15,6 +15,12 @@ const NEXT_PAGE = { hasNextPage: true, isFetchingNextPage: false }
 
 const ROW = <li data-slot="row" />
 
+const ROWLESS_VALUES: [string, ReactNode][] = [
+	["null", null],
+	["false", false],
+	["an empty array", []],
+]
+
 const SWITCHER = { spaces: [], selectedSpaceId: "", onSelectSpace: vi.fn() }
 
 const renderSidebar = (props: Partial<ExpandedSidebarProps>) =>
@@ -40,23 +46,18 @@ const slot = (container: Element, name: string) =>
 describe("ExpandedSidebar list", () => {
 	afterEach(cleanup)
 
-	it.each<[string, ReactNode]>([
-		["null", null],
-		["false", false],
-		["an empty array", []],
-	])("omits Pinned when it is %s", (_, pinned) => {
+	it.each(ROWLESS_VALUES)("omits Pinned when it is %s", (_, pinned) => {
 		renderSidebar({ pinned })
 		expect(headers()).toEqual(["Conversations"])
 	})
 
-	it.each<[string, ReactNode]>([
-		["null", null],
-		["false", false],
-		["an empty array", []],
-	])("omits Conversations when it is %s", (_, conversations) => {
-		renderSidebar({ conversations })
-		expect(headers()).toEqual(["Pinned"])
-	})
+	it.each(ROWLESS_VALUES)(
+		"omits Conversations when it is %s",
+		(_, conversations) => {
+			renderSidebar({ conversations })
+			expect(headers()).toEqual(["Pinned"])
+		},
+	)
 
 	it("renders the sections between Pinned and Conversations in order", () => {
 		renderSidebar({
