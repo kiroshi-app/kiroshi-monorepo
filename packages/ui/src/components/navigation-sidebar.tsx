@@ -14,12 +14,13 @@ import { UpdateRow } from "@workspace/ui/components/update-badge"
 type NavigationSidebarProps = CollapsedSidebarProps &
 	Pick<
 		ExpandedSidebarProps,
-		"pinned" | "conversations" | "missionCount" | "onReorderSpaces"
+		"pinned" | "conversations" | "sections" | "missionCount" | "onReorderSpaces"
 	>
 
 const NavigationSidebar = ({
 	pinned,
 	conversations,
+	sections,
 	missionCount,
 	onReorderSpaces,
 	...collapsed
@@ -30,13 +31,10 @@ const NavigationSidebar = ({
 
 	const {
 		zones: _zones,
-		listStatus: _listStatus,
-		listEnd: _listEnd,
 		openConversationId: _openConversationId,
 		openMissionId: _openMissionId,
 		onOpenConversation: _onOpenConversation,
 		onOpenMission: _onOpenMission,
-		onRetryList: _onRetryList,
 		update,
 		...shared
 	} = collapsed
@@ -48,6 +46,7 @@ const NavigationSidebar = ({
 			missionCount={missionCount}
 			onReorderSpaces={onReorderSpaces}
 			pinned={pinned}
+			sections={sections}
 			update={update ? <UpdateRow {...update} /> : null}
 		/>
 	)

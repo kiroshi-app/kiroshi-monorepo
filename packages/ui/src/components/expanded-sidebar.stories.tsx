@@ -1,7 +1,11 @@
-import { expect, fn, within } from "storybook/test"
+import { expect, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { slotIn } from "@workspace/storybook/story-utils"
+import {
+	expectSkeletonFilledTo,
+	slotIn,
+	slotsIn,
+} from "@workspace/storybook/story-utils"
 import type { AppSidebarConversation } from "@workspace/ui/components/app-sidebar"
 import {
 	ATLAS,
@@ -87,6 +91,56 @@ const rowsOf = (conversations: AppSidebarConversation[], isPinned: boolean) =>
 		/>
 	))
 
+const STUDIO: Space = {
+	id: "studio",
+	name: "Studio",
+	colour: BLOT_HUES.blue,
+	avatarSeed: "studio",
+}
+
+const STATE_ARTBOARD = {
+	spaces: [STUDIO],
+	selectedSpaceId: STUDIO.id,
+	user: { name: "Maya" },
+}
+
+const NO_ROWS_ARTBOARD = {
+	...STATE_ARTBOARD,
+	missionCount: undefined,
+	pinned: [],
+	conversations: [],
+}
+
+const artboardRow = (name: string): AppSidebarConversation => ({
+	id: name,
+	name,
+	participants: [ATLAS],
+	lastMessage: "The first draft is ready for a read.",
+	lastSpeaker: "Atlas",
+	timestamp: "09:12",
+})
+
+const ONBOARDING_EMAIL = artboardRow("Onboarding email draft")
+const ROADMAP_REVIEW = artboardRow("Q3 roadmap review")
+const LISBON_OFFSITE = artboardRow("Lisbon offsite plan")
+const PRICING_COPY = artboardRow("Fix the pricing page copy")
+const RELEASE_NOTES = artboardRow("Weekly release notes")
+
+const POPULATED_ARTBOARD = {
+	...STATE_ARTBOARD,
+	missionCount: 5,
+	pinned: rowsOf([LISBON_OFFSITE, RELEASE_NOTES], true),
+	conversations: rowsOf(
+		[ONBOARDING_EMAIL, ROADMAP_REVIEW, PRICING_COPY],
+		false,
+	),
+}
+
+const LIST_END_BAR_WIDTHS = [
+	[140, 180],
+	[112, 164],
+]
+
 const DOWNLOAD = fn()
 
 const DARK = { theme: "dark", theme_layout: "single" }
@@ -140,6 +194,13 @@ const meta = preview.meta({
 
 const sidebarIn = (canvasElement: HTMLElement) =>
 	slotIn(canvasElement, "expanded-sidebar")
+
+const sectionHeadersIn = (canvasElement: HTMLElement) =>
+	slotsIn(canvasElement, "fold-section-trigger").map(
+		(trigger) => trigger.textContent,
+	)
+
+const boxOf = (element: Element) => element.getBoundingClientRect()
 
 export const ExpandedNewConversation = meta.story({
 	name: "1 Expanded New conversation",
@@ -368,5 +429,184 @@ export const S2SharedSpaceHostNotConnectedExpanded = meta.story({
 		await expect(
 			slotIn(switcher, "space-switcher-offline-dot"),
 		).toBeInTheDocument()
+	},
+})
+
+export const E1NoAgentsYetExpanded = meta.story({
+	name: "E1 No agents yet Expanded",
+	args: NO_ROWS_ARTBOARD,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The Space holds nothing yet. Check one faint start aligned line replaces both sections, with no header above it and no mission count. Pick `E2NothingPinnedExpanded` when conversations exist.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const copy = within(canvasElement).getByText("No agents yet")
+		await expect(copy).toBeVisible()
+		await expect(getComputedStyle(copy).textAlign).toBe("start")
+		await expect(getComputedStyle(copy).padding).toBe("12px")
+		await expect(sectionHeadersIn(canvasElement)).toEqual([])
+	},
+})
+
+export const E2NothingPinnedExpanded = meta.story({
+	name: "E2 Nothing pinned Expanded",
+	args: {
+		...STATE_ARTBOARD,
+		missionCount: 5,
+		pinned: [],
+		conversations: rowsOf(
+			[
+				ONBOARDING_EMAIL,
+				ROADMAP_REVIEW,
+				LISBON_OFFSITE,
+				PRICING_COPY,
+				RELEASE_NOTES,
+			],
+			false,
+		),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Nothing is pinned. Check Conversations opens the list right under the destinations menu with no Pinned header.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expect(sectionHeadersIn(canvasElement)).toEqual(["Conversations"])
+		await expect(
+			within(canvasElement).getByText("Weekly release notes"),
+		).toBeVisible()
+	},
+})
+
+export const E3EmptySectionExpanded = meta.story({
+	name: "E3 Empty section Expanded",
+	args: {
+		...POPULATED_ARTBOARD,
+		sections: [{ id: "clients", name: "Clients", rows: [] }],
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The Clients section is empty. Check its header stays between Pinned and Conversations and a dashed zone sits 2px under it, its copy start aligned where the roster centres it.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expect(sectionHeadersIn(canvasElement)).toEqual([
+			"Pinned",
+			"Clients",
+			"Conversations",
+		])
+		const zone = slotIn(canvasElement, "roster-section-drop")
+		await expect(zone).toHaveTextContent("Drop an agent here")
+		await expect(getComputedStyle(zone).borderTopStyle).toBe("dashed")
+		await expect(getComputedStyle(zone).borderTopLeftRadius).toBe("10px")
+		await expect(getComputedStyle(zone).textAlign).toBe("start")
+		const clients = slotsIn(canvasElement, "fold-section-trigger")[1]
+		await expect(boxOf(zone).top - boxOf(clients).bottom).toBe(2)
+	},
+})
+
+export const L1LoadingExpanded = meta.story({
+	name: "L1 Loading Expanded",
+	args: { ...NO_ROWS_ARTBOARD, listStatus: "loading" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The list is loading. Check the skeleton replaces every section, runs flat with its second header bar after two rows, and reaches the bottom of the list area.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expect(sectionHeadersIn(canvasElement)).toEqual([])
+		await expect(
+			slotsIn(canvasElement, "sidebar-list-skeleton-header"),
+		).toHaveLength(2)
+		await expectSkeletonFilledTo(canvasElement, "bottom")
+		await expect(
+			boxOf(slotIn(canvasElement, "sidebar-list-skeleton")).bottom,
+		).toBe(boxOf(slotIn(canvasElement, "sidebar-content")).bottom)
+	},
+})
+
+export const L2FailedExpanded = meta.story({
+	name: "L2 Failed Expanded",
+	args: {
+		...NO_ROWS_ARTBOARD,
+		listStatus: "failed",
+		onRetryList: fn(),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The list could not load. Check the failure copy and Retry replace every section, both start aligned, and that pressing Retry asks for the list again.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const canvas = within(canvasElement)
+		await expect(canvas.getByText("Couldn’t load your agents.")).toBeVisible()
+		await expect(sectionHeadersIn(canvasElement)).toEqual([])
+		const retry = canvas.getByRole("button", { name: "Retry" })
+		await expect(getComputedStyle(retry).borderTopLeftRadius).toBe("6px")
+		await expect(boxOf(retry).left).toBe(
+			boxOf(canvas.getByText("Couldn’t load your agents.")).left,
+		)
+		await userEvent.click(retry)
+		await expect(args.onRetryList).toHaveBeenCalledOnce()
+	},
+})
+
+export const L3LoadingMoreExpanded = meta.story({
+	name: "L3 Loading more Expanded",
+	args: {
+		...POPULATED_ARTBOARD,
+		listEnd: { hasNextPage: true, isFetchingNextPage: true },
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The next page is loading. Check two skeleton rows follow the last conversation row 2px under it, inside the Conversations body.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await waitFor(() =>
+			expect(slotsIn(canvasElement, "list-end-skeleton")).toHaveLength(1),
+		)
+		await expect(sectionHeadersIn(canvasElement)).toEqual([
+			"Pinned",
+			"Conversations",
+		])
+		const body = slotsIn(canvasElement, "fold-section")[1]
+		const lastRow = Array.from(slotIn(body, "sidebar-menu").children).at(
+			-1,
+		) as Element
+		const rows = slotsIn(
+			slotIn(body, "list-end-skeleton"),
+			"sidebar-list-skeleton-row",
+		)
+		await expect(rows).toHaveLength(2)
+		await expect(boxOf(rows[0]).top - boxOf(lastRow).bottom).toBe(2)
+		await expect(boxOf(rows[1]).top - boxOf(rows[0]).bottom).toBe(2)
+		await expect(
+			rows.map((row) => {
+				const [title, preview] = Array.from(
+					(row.lastElementChild as Element).children,
+				)
+				return [boxOf(title).width, boxOf(preview).width]
+			}),
+		).toEqual(LIST_END_BAR_WIDTHS)
 	},
 })

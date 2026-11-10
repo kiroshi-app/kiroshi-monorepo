@@ -155,6 +155,7 @@ type CollapsedSidebarProps = Omit<
 	ExpandedSidebarProps,
 	| "pinned"
 	| "conversations"
+	| "sections"
 	| "update"
 	| "missionCount"
 	| "onReorderSpaces"

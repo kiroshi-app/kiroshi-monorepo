@@ -26,8 +26,26 @@ const LOADED = {
 	previewHeight: 10,
 	barGap: 8,
 	headerBar: [52, 12],
-	zoneGap: 12,
+	secondHeaderBar: [88, 12],
+	secondHeaderTop: 12,
+	headerRadius: 4,
+	columnTop: 4,
 }
+
+const BAR_WIDTHS = [
+	[140, 180],
+	[110, 160],
+	[150, 190],
+	[120, 170],
+	[136, 150],
+	[100, 176],
+	[144, 164],
+	[126, 184],
+	[112, 158],
+	[138, 172],
+]
+
+const ROWS_FOR_A_FULL_CYCLE = BAR_WIDTHS.length + 2
 
 const boxOf = (element: Element) => element.getBoundingClientRect()
 
@@ -43,7 +61,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The stand-in for the sidebar roster while it is on its way, drawn on the loaded roster: a section header bar over two pinned rows, then a second header over recent rows. Every row is a 40px rounded tile beside a title bar and a fainter preview bar 8px under it. Rows sit 2px apart, the two sections 12px apart, and bar widths turn over a cycle of six rows. It reads from the top and runs to the bottom of the list region, the last row cut by its edge. Only the list region waits: the panel header and the rail stay the loaded components.",
+					"The stand-in for the sidebar list while it is on its way, drawn flat: a 52px header bar over two rows, then an 88px header bar set off by 12px above it over the remaining rows. Every row is a 40px rounded tile beside a title bar and a fainter preview bar 8px under it. Every child sits 2px apart, and bar widths turn over a cycle of ten rows. It reads from the top and runs to the bottom of the list region, the last row cut by its edge. Only the list region waits: the panel header and the rail stay the loaded components.",
 			},
 		},
 	},
@@ -62,6 +80,8 @@ const meta = preview.meta({
 		const headers = slotsIn(skeleton, "sidebar-list-skeleton-header")
 		const rows = slotsIn(skeleton, "sidebar-list-skeleton-row")
 		const recentRows = slotsIn(skeleton, "list-skeleton-row")
+		const barsOf = (row: Element) =>
+			Array.from((row.lastElementChild as Element).children)
 
 		await expect(skeleton).toHaveAttribute("aria-hidden", "true")
 		await expect(headers).toHaveLength(2)
@@ -69,9 +89,26 @@ const meta = preview.meta({
 		await expect([boxOf(headerBar).width, boxOf(headerBar).height]).toEqual(
 			LOADED.headerBar,
 		)
+		await expect(getComputedStyle(headerBar).borderTopLeftRadius).toBe(
+			`${LOADED.headerRadius}px`,
+		)
+		const secondHeaderBar = headers[1].firstElementChild as Element
+		await expect([
+			boxOf(secondHeaderBar).width,
+			boxOf(secondHeaderBar).height,
+		]).toEqual(LOADED.secondHeaderBar)
+		await expect(boxOf(secondHeaderBar).top - boxOf(headers[1]).top).toBe(
+			LOADED.secondHeaderTop,
+		)
+		await expect(boxOf(headers[0]).top - boxOf(skeleton).top).toBe(
+			LOADED.columnTop,
+		)
 		await expect(boxOf(rows[1]).top - boxOf(rows[0]).bottom).toBe(LOADED.rowGap)
 		await expect(boxOf(headers[1]).top - boxOf(rows[1]).bottom).toBe(
-			LOADED.zoneGap,
+			LOADED.rowGap,
+		)
+		await expect(boxOf(rows[2]).top - boxOf(headers[1]).bottom).toBe(
+			LOADED.rowGap,
 		)
 		await expect(boxOf(recentRows[0]).top).toBeGreaterThan(
 			boxOf(headers[1]).bottom,
@@ -92,10 +129,32 @@ const meta = preview.meta({
 			await expect(boxOf(preview).top - boxOf(title).bottom).toBe(LOADED.barGap)
 		}
 
-		const rowsAtFullHeight = recentRows.length
 		const panel = canvasElement.querySelector<HTMLElement>(
 			'[data-slot="sidebar-wrapper"]',
 		) as HTMLElement
+		panel.style.height = "1000px"
+		await waitFor(() =>
+			expect(
+				slotsIn(skeleton, "sidebar-list-skeleton-row").length,
+			).toBeGreaterThanOrEqual(ROWS_FOR_A_FULL_CYCLE),
+		)
+		const rowsPastACycle = slotsIn(skeleton, "sidebar-list-skeleton-row")
+		await expect(
+			rowsPastACycle
+				.slice(0, BAR_WIDTHS.length)
+				.map((row) => barsOf(row).map((bar) => boxOf(bar).width)),
+		).toEqual(BAR_WIDTHS)
+		await expect(
+			barsOf(rowsPastACycle[BAR_WIDTHS.length]).map((bar) => boxOf(bar).width),
+		).toEqual(BAR_WIDTHS[0])
+		panel.style.removeProperty("height")
+		await waitFor(() =>
+			expect(slotsIn(skeleton, "list-skeleton-row")).toHaveLength(
+				recentRows.length,
+			),
+		)
+
+		const rowsAtFullHeight = recentRows.length
 		panel.style.minHeight = "0"
 		panel.style.height = "50vh"
 		await waitFor(() =>
@@ -119,7 +178,7 @@ export const Light = meta.story({
 		docs: {
 			description: {
 				story:
-					"The list in the sidebar at its default width, light theme. Check that each section header bar sits above its rows, that no two neighbours share their bar widths, and that the last row is cut by the bottom edge. Pick `Dark` for the dark theme.",
+					"The list in the sidebar at its default width, light theme. Check that the second header bar sits after two rows with no group gap, that no two neighbours share their bar widths, and that the last row is cut by the bottom edge. Pick `Dark` for the dark theme.",
 			},
 		},
 	},
