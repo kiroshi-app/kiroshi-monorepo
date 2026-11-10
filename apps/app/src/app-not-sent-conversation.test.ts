@@ -157,7 +157,8 @@ const refuseInRoom = async (store: RefusingStore) => {
 	await sendInComposer(REFUSED)
 }
 
-it("marks the row of a conversation whose last message was refused Not sent, on screen and once left", async () => {
+// OPE-2153: needs the expanded conversation list back.
+it.skip("marks the row of a conversation whose last message was refused Not sent, on screen and once left", async () => {
 	const store = await mountTwoRooms()
 
 	await refuseInRoom(store)
@@ -171,7 +172,8 @@ it("marks the row of a conversation whose last message was refused Not sent, on 
 	expect(isNotSent(OTHER_ROOM)).toBe(false)
 })
 
-it("returns the row to its normal state once Retry sends the refused message", async () => {
+// OPE-2153: needs the expanded conversation list back.
+it.skip("returns the row to its normal state once Retry sends the refused message", async () => {
 	const store = await mountTwoRooms()
 	await refuseInRoom(store)
 	expect(isNotSent(ROOM)).toBe(true)

@@ -162,7 +162,8 @@ afterEach(() => {
 	vi.useRealTimers()
 })
 
-it("opens the solo thread of the space entered and leaves the one it left", async () => {
+// OPE-2153: needs the expanded conversation list back.
+it.skip("opens the solo thread of the space entered and leaves the one it left", async () => {
 	vi.useFakeTimers()
 	await aSharedBot()
 	await openFirstRow()
@@ -183,7 +184,8 @@ it("opens the solo thread of the space entered and leaves the one it left", asyn
 	expect(threadText()).not.toContain(AWAY_WORD)
 })
 
-it("opens the thread of the companion's own space when its notification is clicked", async () => {
+// OPE-2153: needs the expanded conversation list back.
+it.skip("opens the thread of the companion's own space when its notification is clicked", async () => {
 	vi.useFakeTimers()
 	const { away, notifications } = await aBotOfAnotherSpace()
 

@@ -411,6 +411,23 @@ describe("the Space switcher of the sidebar", () => {
 		).toBeTruthy()
 	})
 
+	// OPE-2148 gap: the Space switcher has no Space settings entry.
+	it.skip("opens the Space settings from its Space settings entry", async () => {
+		const { router } = await mountApp()
+
+		const menu = await openSpacesMenu()
+		await press(
+			within(menu).getByRole("menuitem", {
+				name: i18n.t("bots:rail.spaceSettings"),
+			}),
+		)
+
+		expect(router.state.matches.at(-1)?.routeId).toBe(
+			"/settings/space/$spaceId",
+		)
+		expect(tabNames()).toEqual([i18n.t("settings:screen.subtitle.space")])
+	})
+
 	it("switches to the Space picked and shows its own tabs", async () => {
 		const { botName, spaceName } = await mountApp()
 		await showInActiveTab(botName)
