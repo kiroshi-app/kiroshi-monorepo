@@ -30,6 +30,7 @@ const LATE_ANSWER_MS = 50
 const STORE_BOUND_MS = 200
 const GRANTED = "Authorization granted. You can close this tab."
 const CONNECT_AGAIN = "Go back to Kiroshi and connect again."
+const CANCELLED_PAGE = `Authorization failed: the connect was cancelled in Kiroshi. ${CONNECT_AGAIN}`
 const STILL_HELD = Symbol("the page is still held")
 const UNREACHABLE_AUTHORIZATION = "http://127.0.0.1:1/authorize"
 const SESSION_GATE = "<html><body>Sign in to continue</body></html>"
@@ -299,6 +300,12 @@ const aHeldPage = async (url: string, storeTimeoutMs: number) => {
 const stillHeld = (page: Promise<Response>) =>
 	Promise.race([page, Bun.sleep(LATE_ANSWER_MS).then(() => STILL_HELD)])
 
+const exchangeReached = async (seen: Registration) => {
+	while (seen.tokenRequests.length === 0) {
+		await Bun.sleep(10)
+	}
+}
+
 const textOf = async (page: Promise<Response>) => {
 	const answered = await page
 	return {
@@ -311,6 +318,7 @@ describe("mcp oauth", () => {
 	afterEach(async () => {
 		cancelMcpAuthorization()
 		await inFlight
+		confirmMcpGrantStored({ stored: false })
 		inFlight = undefined
 	})
 
@@ -848,25 +856,78 @@ describe("mcp oauth", () => {
 		}
 	}, 20_000)
 
-	it("answers the held page with the failure text on a cancel and on the flow timeout", async () => {
-		const authority = anAuthorizationServer()
+	it("answers the held page with the failure text on the flow timeout during the exchange", async () => {
+		const { promise: stalled, resolve: resume } = Promise.withResolvers<void>()
+		const authority = anAuthorizationServer({ tokenDelay: () => stalled })
 		try {
-			const cancelled = await aHeldPage(authority.url, AUTHORIZATION_BUDGET_MS)
-			cancelMcpAuthorization()
-
-			expect((await textOf(cancelled.page)).text).toBe(
-				`Authorization failed: the connect was cancelled in Kiroshi. ${CONNECT_AGAIN}`,
-			)
 			const flow = aFlowWaitingForStore(
 				authority.url,
 				AUTHORIZATION_BUDGET_MS,
 				TIMEOUT_FLOW_MS,
 			)
 			const outlasted = redirectedWithCode(await waitForStarted())
-			await flow
+
 			expect((await textOf(outlasted)).text).toBe(
 				`Authorization failed: Kiroshi stopped waiting for this authorization. ${CONNECT_AGAIN}`,
 			)
+			resume()
+			expect(await flow).toEqual({ error: { kind: "timedOut" } })
+		} finally {
+			resume()
+			await authority.stop()
+		}
+	}, 20_000)
+
+	it("answers cancelled on the page and in the authorize answer when a cancel reaches the exchange in flight", async () => {
+		for (const tokenRefusal of [undefined, refusedWith("invalid_grant")]) {
+			const { promise: stalled, resolve: resume } =
+				Promise.withResolvers<void>()
+			const authority = anAuthorizationServer({
+				tokenDelay: () => stalled,
+				tokenRefusal,
+			})
+			try {
+				const flow = aFlow(authority.url)
+				const page = textOf(redirectedWithCode(await waitForStarted()))
+				await exchangeReached(authority.seen)
+				cancelMcpAuthorization()
+				resume()
+
+				expect(await flow).toEqual({ error: { kind: "cancelled" } })
+				expect((await page).text).toBe(CANCELLED_PAGE)
+			} finally {
+				resume()
+				await authority.stop()
+			}
+		}
+	}, 20_000)
+
+	it("keeps the granted outcome and the page held when a cancel follows the credentials", async () => {
+		const authority = anAuthorizationServer()
+		try {
+			for (const { report, text } of [
+				{ report: { stored: true }, text: GRANTED },
+				{
+					report: { stored: false, detail: "the disk is full" },
+					text: `Authorization failed: the disk is full. ${CONNECT_AGAIN}`,
+				},
+			]) {
+				const { page, settled } = await aHeldPage(
+					authority.url,
+					AUTHORIZATION_BUDGET_MS,
+				)
+				cancelMcpAuthorization()
+
+				expect(settled).toMatchObject({
+					credentials: { accessToken: ACCESS_TOKEN },
+				})
+				expect(await stillHeld(page)).toBe(STILL_HELD)
+				expect(
+					await authorizeMcpServer({ url: authority.url }, collect),
+				).toMatchObject({ error: { kind: "busy" } })
+				confirmMcpGrantStored(report)
+				expect((await textOf(page)).text).toBe(text)
+			}
 		} finally {
 			await authority.stop()
 		}

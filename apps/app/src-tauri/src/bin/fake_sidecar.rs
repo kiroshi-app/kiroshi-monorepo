@@ -1135,6 +1135,7 @@ const OAUTH_AUTHORIZATION_URL: &str = "https://authority.test/authorize?state=fa
 
 fn on_oauth_authorize(command: &Value) {
 	if let Ok(handed_settles) = std::env::var("FAKE_AGENT_OAUTH_HANDED_CLIENT_SETTLES") {
+		exchange_in_flight();
 		return emit_raw(&handed_client_settled(command, &handed_settles).to_string());
 	}
 	if std::env::var("FAKE_AGENT_OAUTH_SETTLES_FIRST").is_ok() {
@@ -1147,6 +1148,13 @@ fn on_oauth_authorize(command: &Value) {
 		);
 	}
 	emit_raw(&json!({ "type": "oauth_started", "url": OAUTH_AUTHORIZATION_URL }).to_string());
+}
+
+fn exchange_in_flight() {
+	let lasts = std::env::var("FAKE_AGENT_OAUTH_EXCHANGE_MS").ok().and_then(|ms| ms.parse().ok());
+	if let Some(ms) = lasts {
+		std::thread::sleep(std::time::Duration::from_millis(ms));
+	}
 }
 
 fn handed_client_settled(command: &Value, handed_settles: &str) -> Value {

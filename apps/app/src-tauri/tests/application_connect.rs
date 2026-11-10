@@ -1,5 +1,6 @@
 mod common;
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
@@ -32,6 +33,8 @@ const REGISTRATION_SETTLES: &str = "FAKE_AGENT_OAUTH_REGISTRATION_SETTLES";
 const AUTHORIZE_LOG: &str = "FAKE_AGENT_OAUTH_AUTHORIZE_LOG";
 
 const STORED_FILE: &str = "FAKE_AGENT_OAUTH_STORED_FILE";
+
+const EXCHANGE_MS: &str = "FAKE_AGENT_OAUTH_EXCHANGE_MS";
 
 const URL: &str = "https://mcp.granola.test/mcp";
 
@@ -114,6 +117,7 @@ fn staged(
 	std::env::set_var(HANDED_CLIENT_SETTLES, handed_settles);
 	std::env::set_var(AUTHORIZE_LOG, &*log);
 	std::env::set_var(STORED_FILE, &*stored_file);
+	std::env::remove_var(EXCHANGE_MS);
 	match registration_settles {
 		Some(settles) => std::env::set_var(REGISTRATION_SETTLES, settles),
 		None => std::env::remove_var(REGISTRATION_SETTLES),
@@ -167,6 +171,17 @@ fn connected_from(staged: &Staged) -> Connected {
 
 fn sealed(dir: &Path, mode: u32) {
 	fs::set_permissions(dir, fs::Permissions::from_mode(mode)).expect("the mode is set");
+}
+
+fn bytes_under(dir: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
+	fs::read_dir(dir)
+		.expect("the scope directory is listed")
+		.map(|entry| {
+			let path = entry.expect("the entry is read").path();
+			let bytes = fs::read(&path).expect("the stored file is read");
+			(path, bytes)
+		})
+		.collect()
 }
 
 fn granted_anew() -> Values {
@@ -304,4 +319,26 @@ fn a_grant_the_store_refuses_tells_the_sidecar_it_was_not_stored_and_why() {
 	let detail = connected.stored["detail"].as_str().expect("the report names why");
 	assert!(detail.starts_with("the grant could not be stored: "), "{detail}");
 	assert!(!detail.contains("granted-anew"), "{detail}");
+}
+
+#[test]
+fn a_connect_cancelled_during_the_exchange_leaves_the_store_untouched() {
+	let staged = staged(
+		"cancelled-mid-exchange",
+		&a_refused_grant(),
+		Some(URL),
+		r#"{"kind":"cancelled"}"#,
+		None,
+	);
+	std::env::set_var(EXCHANGE_MS, "300");
+	let scope_dir = staged.root.join("server").join("bot").join("b1").join("granola");
+	let before = bytes_under(&scope_dir);
+
+	let connected = connected_from(&staged);
+
+	assert_eq!(connected.settled, Err(OauthError::Cancelled));
+	assert_eq!(bytes_under(&scope_dir), before);
+	assert!(!connected.kept.contains_key(OAUTH_ACCESS_TOKEN));
+	assert_eq!(connected.stored, serde_json::Value::Null);
+	assert_eq!(connected.flows, flows(&[HANDED]));
 }
