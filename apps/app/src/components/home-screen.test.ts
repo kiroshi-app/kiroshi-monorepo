@@ -326,12 +326,11 @@ it("shows the staged files, unstages a removed one, and sends files alone", asyn
 })
 
 it("marks the send busy and holds the submit while it is in flight, then frees it", () => {
+	const { wrapper } = createQueryTestWrapper()
 	const onSubmit = vi.fn()
 	const { rerender } = render(
 		emptyStageOf(fixture, { isSending: true, onSubmit }),
-		{
-			wrapper: createQueryTestWrapper().wrapper,
-		},
+		{ wrapper },
 	)
 	const send = () => screen.getByRole("button", { name: "Send" })
 
