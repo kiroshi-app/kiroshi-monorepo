@@ -321,6 +321,7 @@ const HomeDraftComposer = ({
 	band,
 	onSelectAgent,
 	draft,
+	isSending,
 	onDraftChange,
 	onSubmit,
 	onAttach,
@@ -337,6 +338,7 @@ const HomeDraftComposer = ({
 		onSubmit={onSubmit}
 		onValueChange={onDraftChange}
 		selectedAgentId={agent.id}
+		sending={isSending}
 		value={draft}
 	/>
 )
