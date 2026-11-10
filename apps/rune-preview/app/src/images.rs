@@ -5,6 +5,8 @@ use std::time::Duration;
 
 use rune::image::{Image, ImageCache};
 
+use crate::host::Access;
+
 const FETCH_PATIENCE: Duration = Duration::from_secs(20);
 
 const MAX_IMAGE_BYTES: u64 = 32 * 1024 * 1024;
@@ -39,7 +41,12 @@ impl Images {
 		self.slots.get(url)
 	}
 
-	pub fn request(&mut self, url: String, deliver: impl Fn(Fetched) + Send + 'static) {
+	pub fn request(
+		&mut self,
+		url: String,
+		access: Option<&Access>,
+		deliver: impl Fn(Fetched) + Send + 'static,
+	) {
 		if self.slots.contains_key(&url) {
 			return;
 		}
@@ -47,7 +54,7 @@ impl Images {
 			return;
 		};
 		let slot = if is_remote(&url) {
-			fetch(url.clone(), deliver);
+			fetch(url.clone(), authorization_for(&url, access), deliver);
 			Slot::Loading
 		} else if let Some(path) = local_path(&url) {
 			if crate::host::data_folders()
@@ -89,9 +96,37 @@ fn scheme_of(url: &str) -> &str {
 	url.split_once(':').map_or("relative", |(scheme, _)| scheme)
 }
 
-fn fetch(url: String, deliver: impl Fn(Fetched) + Send + 'static) {
+fn authorization_for(url: &str, access: Option<&Access>) -> Option<String> {
+	let access = access?;
+	let origin = origin_of(url)?;
+	(Some(origin) == origin_of(&access.origin)).then(|| access.bearer.clone())
+}
+
+fn origin_of(url: &str) -> Option<(String, String, u16)> {
+	let (scheme, rest) = url.split_once("://")?;
+	let scheme = scheme.to_ascii_lowercase();
+	let authority = rest.split(['/', '?', '#']).next()?;
+	if authority.contains('@') {
+		return None;
+	}
+	let (host, port) = match authority.rsplit_once(':') {
+		Some((host, port)) => (host, port.parse().ok()?),
+		None => (authority, default_port(&scheme)?),
+	};
+	Some((scheme, host.to_ascii_lowercase(), port))
+}
+
+fn default_port(scheme: &str) -> Option<u16> {
+	match scheme {
+		"http" => Some(80),
+		"https" => Some(443),
+		_ => None,
+	}
+}
+
+fn fetch(url: String, authorization: Option<String>, deliver: impl Fn(Fetched) + Send + 'static) {
 	let spawned = thread::Builder::new().name("image-fetch".into()).spawn(move || {
-		let bytes = fetched_bytes(&url);
+		let bytes = fetched_bytes(&url, authorization.as_deref());
 		deliver(Fetched { url, bytes });
 	});
 	if let Err(failure) = spawned {
@@ -99,9 +134,13 @@ fn fetch(url: String, deliver: impl Fn(Fetched) + Send + 'static) {
 	}
 }
 
-fn fetched_bytes(url: &str) -> Result<Vec<u8>, String> {
-	let response =
-		ureq::get(url).timeout(FETCH_PATIENCE).call().map_err(|failure| failure.to_string())?;
+fn fetched_bytes(url: &str, authorization: Option<&str>) -> Result<Vec<u8>, String> {
+	let request = ureq::get(url).timeout(FETCH_PATIENCE);
+	let request = match authorization {
+		Some(bearer) => request.set("Authorization", bearer),
+		None => request,
+	};
+	let response = request.call().map_err(|failure| failure.to_string())?;
 	let mut bytes = Vec::new();
 	response
 		.into_reader()
@@ -109,4 +148,45 @@ fn fetched_bytes(url: &str) -> Result<Vec<u8>, String> {
 		.read_to_end(&mut bytes)
 		.map_err(|failure| failure.to_string())?;
 	Ok(bytes)
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	fn local_host() -> Access {
+		Access { origin: "http://127.0.0.1:4000".into(), bearer: "Bearer secret".into() }
+	}
+
+	#[test]
+	fn the_host_origin_receives_the_bearer() {
+		let url = "http://127.0.0.1:4000/api/files/avatars/skippy.png";
+
+		assert_eq!(authorization_for(url, Some(&local_host())), Some("Bearer secret".into()));
+	}
+
+	#[test]
+	fn another_origin_receives_no_bearer() {
+		for url in [
+			"https://example.com/picture.png",
+			"https://127.0.0.1:4000/picture.png",
+			"http://localhost:4000/picture.png",
+			"http://127.0.0.1:4000@example.com/picture.png",
+			"http://127.0.0.1:4000.example.com/picture.png",
+		] {
+			assert_eq!(authorization_for(url, Some(&local_host())), None, "{url}");
+		}
+	}
+
+	#[test]
+	fn a_lookalike_origin_on_another_port_receives_no_bearer() {
+		for url in ["http://127.0.0.1:40001/picture.png", "http://127.0.0.1/picture.png"] {
+			assert_eq!(authorization_for(url, Some(&local_host())), None, "{url}");
+		}
+	}
+
+	#[test]
+	fn a_source_without_a_host_sends_no_bearer() {
+		assert_eq!(authorization_for("http://127.0.0.1:4000/picture.png", None), None);
+	}
 }

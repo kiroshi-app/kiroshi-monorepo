@@ -54,7 +54,13 @@ fn conversation(id: &str, solo_bot_id: Option<&str>) -> Conversation {
 }
 
 fn agent(id: &str, name: &str) -> Agent {
-	Agent { id: id.to_owned(), name: name.to_owned(), title: String::new(), avatar_blot: None }
+	Agent {
+		id: id.to_owned(),
+		name: name.to_owned(),
+		title: String::new(),
+		avatar_blot: None,
+		avatar_image_path: None,
+	}
 }
 
 fn ready_app(person: Person) -> App {

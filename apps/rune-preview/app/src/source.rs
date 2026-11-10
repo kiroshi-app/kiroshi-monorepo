@@ -8,7 +8,7 @@ use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 
 use crate::events::{self, HostEvent, JoinedHeard};
-use crate::host::{Host, HostError, JOINED_SPACE_CONNECT, Profile};
+use crate::host::{Access, Host, HostError, JOINED_SPACE_CONNECT, Profile};
 use crate::local::LocalCore;
 
 #[cfg(test)]
@@ -44,6 +44,13 @@ impl Source {
 		match self {
 			Source::InProcess(core) => core.invoke(command, arguments),
 			Source::Running(host) => host.invoke_turn(command, arguments),
+		}
+	}
+
+	pub fn access(&self) -> Option<Access> {
+		match self {
+			Source::InProcess(_) => None,
+			Source::Running(host) => Some(host.access()),
 		}
 	}
 
