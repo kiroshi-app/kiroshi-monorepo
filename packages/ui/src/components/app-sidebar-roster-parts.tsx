@@ -36,7 +36,12 @@ const LIFTED_IN_ZONE = cn(
 const LIFTED_LOOSE = cn(LIFTED, "translate-y-(--lift-dy)")
 
 const SECTION_DROP =
-	"flex items-center justify-center rounded-lg border border-input border-dashed p-3 text-center text-compact text-faint-foreground leading-5"
+	"flex items-center rounded-lg border border-input border-dashed p-3 text-compact text-faint-foreground leading-5"
+
+const SECTION_DROP_ALIGN = {
+	center: "justify-center text-center",
+	start: "justify-start text-start",
+}
 
 const DROP_AREA = "group/roster-drop relative rounded-2xl"
 
@@ -157,17 +162,22 @@ const RosterMoveAnnouncement = ({ move }: RosterMoveAnnouncementProps) => {
 }
 
 interface SectionDropZoneProps {
+	align?: keyof typeof SECTION_DROP_ALIGN
 	label?: string
 	slotId?: string
 }
 
-const SectionDropZone = ({ label, slotId }: SectionDropZoneProps) => {
+const SectionDropZone = ({
+	align = "center",
+	label,
+	slotId,
+}: SectionDropZoneProps) => {
 	const { t } = useTranslation("bots")
 
 	return (
 		<div
 			{...(slotId ? rosterSlot(slotId) : undefined)}
-			className={SECTION_DROP}
+			className={cn(SECTION_DROP, SECTION_DROP_ALIGN[align])}
 			data-slot="roster-section-drop"
 		>
 			{label ?? t("roster.section.empty")}

@@ -1164,6 +1164,7 @@ export const EmptySectionShowsTheDropSlot = meta.story({
 		const slot = slotIn(canvasElement, "roster-section-drop")
 		await expect(slot).toHaveTextContent("Drop an agent here")
 		await expect(getComputedStyle(slot).borderTopStyle).toBe("dashed")
+		await expect(getComputedStyle(slot).textAlign).toBe("center")
 	},
 })
 

@@ -1831,8 +1831,14 @@ navigation-documentpanel--in-thread
 navigation-documentpanel--keeps-the-thread-when-toggled
 navigation-documentpanel--moves-from-the-capped-edge
 navigation-documentpanel--narrowed-to-the-thread-floor-then-scrolled
+navigation-expandedsidebar--e-1-no-agents-yet-expanded
+navigation-expandedsidebar--e-2-nothing-pinned-expanded
+navigation-expandedsidebar--e-3-empty-section-expanded
 navigation-expandedsidebar--expanded-missions
 navigation-expandedsidebar--expanded-new-conversation
+navigation-expandedsidebar--l-1-loading-expanded
+navigation-expandedsidebar--l-2-failed-expanded
+navigation-expandedsidebar--l-3-loading-more-expanded
 navigation-expandedsidebar--s-1-several-spaces-expanded
 navigation-expandedsidebar--s-2-shared-space-host-not-connected-expanded
 navigation-expandedsidebar--u-1-expanded
