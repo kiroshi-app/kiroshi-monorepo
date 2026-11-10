@@ -11,8 +11,6 @@ type RailZonesSource = {
 	sections: AppSidebarSection[]
 }
 
-const RECENT_ZONE_ID = "recent"
-
 export const railZonesOf = ({
 	conversations,
 	sections,
@@ -43,7 +41,7 @@ export const railZonesOf = ({
 	return [
 		...zones,
 		{
-			id: RECENT_ZONE_ID,
+			id: "recent",
 			conversations: conversations.filter(
 				(conversation) => !isPinnedRow(conversation),
 			),
