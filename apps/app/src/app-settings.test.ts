@@ -211,11 +211,6 @@ const currentEntriesOf = () =>
 const avatarOf = () =>
 	within(railOf()).getAllByRole("button").at(-1) as HTMLElement
 
-const conversationsEntryOf = () =>
-	within(railOf()).getByRole("button", {
-		name: i18n.t("bots:rail.conversations"),
-	})
-
 const settingsMenuOf = () =>
 	screen.queryByRole("navigation", { name: i18n.t("settings:screen.menu") })
 
@@ -292,7 +287,8 @@ it("opens the user settings again on the first entry once they were closed", asy
 			name: i18n.t("settings:rail.appearance"),
 		}),
 	)
-	await press(conversationsEntryOf())
+	await press(libraryEntryOf())
+	expect(settingsMenuOf()).toBeNull()
 
 	await press(avatarOf())
 
