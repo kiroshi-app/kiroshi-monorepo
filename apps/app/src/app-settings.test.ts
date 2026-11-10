@@ -183,8 +183,11 @@ const openSpaceSettingsByRail = async () => {
 	)
 }
 
-const homeEntryOf = () =>
-	within(railOf()).getByRole("button", { name: i18n.t("bots:rail.home") })
+const currentHomeEntryOf = () =>
+	within(railOf()).queryByRole("button", {
+		name: i18n.t("bots:rail.home"),
+		current: true,
+	})
 
 const avatarOf = () =>
 	within(railOf()).getAllByRole("button").at(-1) as HTMLElement
@@ -579,7 +582,7 @@ it("opens the New conversation page over the settings left open, after a restart
 	await mountApp()
 
 	expect(shownSettingsOf()).toBeNull()
-	expect(homeEntryOf().getAttribute("aria-current")).toBe("true")
+	expect(currentHomeEntryOf()).not.toBeNull()
 })
 
 it("shows the settings of the Space reached and leaves the tab of the Space left on its own settings", async () => {
