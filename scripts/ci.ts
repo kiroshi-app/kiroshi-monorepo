@@ -51,6 +51,11 @@ const PR_MERGE_SUB_UNIT_TESTS: Step = {
 	command: "bun run test:pr-merge-sub",
 }
 
+const PR_MERGE_INTEGRATION_UNIT_TESTS: Step = {
+	name: "PR integration merge script unit tests",
+	command: "bun run test:pr-merge-integration",
+}
+
 const QUEUE_SCRIPT_UNIT_TESTS = [
 	{
 		step: PR_DEQUEUE_UNIT_TESTS,
@@ -63,6 +68,13 @@ const QUEUE_SCRIPT_UNIT_TESTS = [
 	{
 		step: PR_MERGE_SUB_UNIT_TESTS,
 		paths: ["scripts/pr-merge-sub.sh", "scripts/pr-merge-sub.test.ts"],
+	},
+	{
+		step: PR_MERGE_INTEGRATION_UNIT_TESTS,
+		paths: [
+			"scripts/pr-merge-integration.sh",
+			"scripts/pr-merge-integration.test.ts",
+		],
 	},
 ]
 
@@ -86,6 +98,7 @@ export const GATE = {
 		PR_DEQUEUE_UNIT_TESTS,
 		PR_ENQUEUE_UNIT_TESTS,
 		PR_MERGE_SUB_UNIT_TESTS,
+		PR_MERGE_INTEGRATION_UNIT_TESTS,
 		{ name: "Gate definition matches ci.yml", command: "bun run test:ci" },
 		{
 			name: "Biome and knip against the baseline",

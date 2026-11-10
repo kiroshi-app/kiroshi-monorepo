@@ -232,8 +232,12 @@ table! { core, client, caller;
 	conversation_bot_commands(bot_id: String) =>
 		answered(conversation_bot_commands(core, bot_id).await);
 	conversation_main_chat(bot_id: String, space_id: Option<String>) =>
-		answered(main_chat(core, bot_id, space_id).await);
-	conversation_solo_states(space_id: String) => answered(solo_states(core, space_id).await);
+		answered(main_chat(core, caller, bot_id, space_id).await);
+	conversation_renew_main_chat(bot_id: String, space_id: String) =>
+		answered(renew_main_chat(core, caller, bot_id, space_id).await);
+	conversation_solo_states(space_id: String) =>
+		answered(solo_states(core, caller, space_id).await);
+	conversation_agent_rooms(space_id: String) => answered(agent_rooms(core, space_id).await);
 	conversation_create(
 		space_id: String,
 		section_id: Option<String>,
@@ -245,7 +249,7 @@ table! { core, client, caller;
 	conversation_mission_thread(conversation_id: String) =>
 		answered(conversation_mission_thread(core, conversation_id).await);
 	conversation_page(space_id: String, cursor: Option<String>, limit: Option<u32>) =>
-		answered(conversations_page(core, space_id, cursor, limit).await);
+		answered(conversations_page(core, caller, space_id, cursor, limit).await);
 	conversation_local_ids() => answered(conversation_local_ids(core).await);
 	conversation_update(
 		conversation_id: String,
@@ -424,11 +428,11 @@ table! { core, client, caller;
 	agent_shutdown(scope: RuntimeScope) => answered(shut_down_agent(core, scope).await);
 	agent_live_sessions() => answered(agent_live_sessions(core).await);
 	agent_live_sessions_in_space(space_id: String) =>
-		answered(agent_live_sessions_in_space(core, space_id).await);
+		answered(agent_live_sessions_in_space(core, caller, space_id).await);
 	agent_pending_questions(conversation_id: String) =>
 		answered(pending_questions(core, conversation_id).await);
 	agent_pending_questions_in_space(space_id: String) =>
-		answered(agent_pending_questions_in_space(core, space_id).await);
+		answered(agent_pending_questions_in_space(core, caller, space_id).await);
 	agent_pending_prompts(conversation_id: String) =>
 		answered(pending_prompts(core, conversation_id).await);
 
@@ -472,11 +476,11 @@ table! { core, client, caller;
 		answered(claude_import_run(core, selection, space_id).await);
 
 	search_messages(query: MessageSearchQuery) =>
-		answered(crate::search::commands::search_messages(core, query).await);
+		answered(crate::search::commands::search_messages(core, caller, query).await);
 	search_catalogue(query: String, space_id: String) =>
-		answered(crate::search::commands::search_catalogue(core, query, space_id).await);
+		answered(crate::search::commands::search_catalogue(core, caller, query, space_id).await);
 	search_recent(space_id: String) =>
-		answered(crate::search::commands::search_recent(core, space_id).await);
+		answered(crate::search::commands::search_recent(core, caller, space_id).await);
 
 	plugin_skills(scope: PluginScope) =>
 		answered(crate::plugins::commands::plugin_skills(core, scope).await);
@@ -845,7 +849,9 @@ mod tests {
 		.await;
 
 		assert_eq!((written, read), (200, 200));
-		let direct = main_chat(&core, DEFAULT_BOT_ID.to_owned(), None).await.expect("it reads");
+		let direct = main_chat(&core, Caller::Host, DEFAULT_BOT_ID.to_owned(), None)
+			.await
+			.expect("it reads");
 		assert_eq!(chat, serde_json::to_value(direct).expect("it encodes"));
 		let direct = message_page(&core, conversation_id, None, 50).await.expect("it reads");
 		assert_eq!(page, serde_json::to_value(direct).expect("it encodes"));

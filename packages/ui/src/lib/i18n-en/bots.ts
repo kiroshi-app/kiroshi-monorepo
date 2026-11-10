@@ -94,6 +94,7 @@ const bots = {
 	},
 	rail: {
 		label: "Navigation",
+		home: "Home",
 		conversations: "Conversations",
 		missions: "Missions",
 		library: "Library",
@@ -509,6 +510,7 @@ const bots = {
 				retry: "Retry {{name}}",
 			},
 			waiting: "Waiting for your browser",
+			failed: "Couldn’t connect {{name}}. Retry.",
 			description: {
 				needsAuthorization:
 					"{{name}} signs you in through your browser. Kiroshi keeps the token with this application’s secrets, never in the configuration below.",

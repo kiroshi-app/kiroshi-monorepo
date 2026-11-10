@@ -210,6 +210,7 @@ async fn claimed_runs_of(
 
 #[cfg(test)]
 mod tests {
+	use crate::db::repositories::conversations::ChatOwner;
 	use std::time::Duration;
 	use tokio::time;
 
@@ -234,7 +235,7 @@ mod tests {
 		database.conversations().ensure_default_bot().await.expect("the bot is seeded");
 		let chat = database
 			.conversations()
-			.ensure_chat(DEFAULT_BOT_ID.to_owned(), None)
+			.ensure_chat(DEFAULT_BOT_ID.to_owned(), None, ChatOwner::Host)
 			.await
 			.expect("the chat is seeded");
 		let turn = NewTurn { id: "t1".to_owned(), conversation_id: chat.id.clone(), started_at: 1 };

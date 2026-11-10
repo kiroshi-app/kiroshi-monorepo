@@ -31,6 +31,7 @@ const settings = {
 	},
 	rail: {
 		account: "Compte",
+		general: "Général",
 		space: "Espace",
 		members: "Membres",
 		agents: "Agents",
@@ -157,6 +158,13 @@ const settings = {
 			switch: "Jouer un son",
 			description:
 				"Kiroshi joue un bref carillon à chaque notification, même quand votre système l’affiche en silence.",
+		},
+	},
+	openOn: {
+		label: "Ouvrir sur",
+		option: {
+			newConversation: "Nouvelle conversation",
+			lastConversation: "Dernière conversation",
 		},
 	},
 	language: {

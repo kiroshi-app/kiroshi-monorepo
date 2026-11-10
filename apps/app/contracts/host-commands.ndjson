@@ -13,5 +13,6 @@
 {"type":"sign_in_cancel"}
 {"type":"mcp_oauth_authorize","url":"https://mcp.example.test/mcp","clientId":"registered","clientSecret":"<redacted>","redirectUri":"http://127.0.0.1:53682/oauth/callback"}
 {"type":"mcp_oauth_cancel"}
+{"type":"mcp_oauth_stored","stored":false,"detail":"the grant could not be stored: Permission denied (os error 13)"}
 {"type":"mcp_oauth_revoke","url":"https://mcp.example.test/mcp","token":"<redacted>","refreshToken":"<redacted>","clientId":"registered","clientSecret":"<redacted>"}
 {"type":"mcp_oauth_refresh","url":"https://mcp.example.test/mcp","refreshToken":"<redacted>","clientId":"registered","clientSecret":"<redacted>"}

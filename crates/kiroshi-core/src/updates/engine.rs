@@ -169,7 +169,7 @@ where
 async fn checked(core: &Core, channel: UpdateChannel) -> (UpdateState, Option<Offer>) {
 	let updates = core.state::<Updates>();
 	let feed = updates.source().feed(channel).to_owned();
-	log::info!("checking for updates on the {channel:?} channel");
+	log::info!("checking for updates on the {channel:?} channel at {feed}");
 	let offered = within(CHECK_BOUND, CHECK_EXCEEDED, async {
 		fetched_feed(&feed).await?.offer_for(updates.running())
 	})

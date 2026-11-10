@@ -87,6 +87,7 @@ const bots = {
 	},
 	rail: {
 		label: "Navigation",
+		home: "Accueil",
 		conversations: "Conversations",
 		missions: "Missions",
 		library: "Bibliothèque",
@@ -520,6 +521,7 @@ const bots = {
 				retry: "Réessayer {{name}}",
 			},
 			waiting: "En attente de votre navigateur",
+			failed: "Impossible de connecter {{name}}. Réessayez.",
 			description: {
 				needsAuthorization:
 					"{{name}} vous identifie via votre navigateur. Kiroshi garde le jeton avec les secrets de cette application, jamais dans la configuration ci-dessous.",

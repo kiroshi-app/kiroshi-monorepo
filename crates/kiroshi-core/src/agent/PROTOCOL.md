@@ -56,7 +56,8 @@ its answer both.
 | `models` | `{"type":"models","models":[…]}` | the model catalogue |
 | `tools` | `{"type":"tools","tools":[…]}` | the tool catalogue |
 | `mcp_oauth_authorize` | `{"type":"mcp_oauth_authorize","credentials"?:{…},"error"?:{"kind":…}}` | the grant `mcp_oauth_connect` stores |
-| `mcp_oauth_cancel` | — | the pending `mcp_oauth_authorize`, settled `cancelled` |
+| `mcp_oauth_cancel` | — | the pending `mcp_oauth_authorize`, settled `cancelled` with its page; a flow that already settled with credentials is left as it is |
+| `mcp_oauth_stored` | — | the browser page a flow that answered `credentials` holds, answered from `stored` and `detail` |
 | `mcp_oauth_revoke` | `{"type":"mcp_oauth_revoke","revoked":bool,"detail"?:string}` | the `Disconnected` a `mcp_oauth_disconnect` answers |
 | `mcp_oauth_refresh` | `{"type":"mcp_oauth_refresh","credentials"?:{…},"error"?:{"kind":"rejected"\|"failed",…}}` | the grant written before a session opens, or what the refusal code costs it |
 
@@ -157,9 +158,17 @@ port, so a name resolved to it is a rebinding attempt. So is a request on anothe
 or one carrying a state other than the one that flow generated. A redirect carrying an
 `error` parameter settles the ask as `denied`, naming it. No redirect within 300000 ms
 settles it as `timedOut`, and a `mcp_oauth_cancel` settles it as `cancelled`. However a
-flow settles, its listener is closed and its port freed. One flow at a time: a second
-`mcp_oauth_authorize` is answered `busy`, since one queue of pending answers per command
-type would cross two flows' answers.
+flow settles, its listener is closed and its port freed, once its exchange has returned
+and the page it holds is answered. One flow at a time: a second `mcp_oauth_authorize` is
+answered `busy` until then, a cancel or the deadline answering the page included, since
+one queue of pending answers per command type would cross two flows' answers.
+
+A flow latches its outcome once, first writer wins. A cancel or the deadline that lands
+before the ask is settled, the token exchange still in flight included, latches it
+`cancelled` or `timedOut`: the page is answered with that failure text and the ask settles
+with it and no credentials, whatever the exchange returns afterwards. An exchange that
+returns credentials first latches the grant: a later cancel or deadline changes neither
+the settle nor the page, which waits for `mcp_oauth_stored`.
 
 An authorization url the metadata builds under a scheme other than `http` or `https` is
 refused before any frame is written: the ask settles naming that scheme and no
@@ -167,9 +176,26 @@ refused before any frame is written: the ask settles naming that scheme and no
 `data:` and `vbscript:` and nothing else. The host refuses the same url a second time
 before it reaches a browser, `refusedUrl` naming it.
 
-Once the redirect is answered, the flow settles on the next turn of the loop and the
-listener is closed with its connections rather than waiting on one: a browser holding the
-socket open never delays the connect.
+A redirect carrying the flow's state and a `code` is not answered at once: the browser
+page stays open while the code is exchanged and the host stores the grant. A failed
+exchange answers it with the failure text, `Authorization failed: <what failed>. Go back to
+Kiroshi and connect again.`, and settles the ask. An exchange that returns credentials
+settles the ask with them and keeps the page open until the host answers with one
+sessionless frame:
+
+```json
+{"type":"mcp_oauth_stored","stored":true}
+{"type":"mcp_oauth_stored","stored":false,"detail":"the grant could not be stored: …"}
+```
+
+`mcp_oauth_connect` sends it once `kept` has written the grant, `stored` true, or once
+`kept` refused it, `stored` false and `detail` the refusal line, scrubbed of every value
+of the grant. `stored` true answers the granted text, `stored` false the failure text
+carrying `detail`. No `mcp_oauth_stored` within 30000 ms of the credentials answers the
+failure text. Every page is
+served `text/plain`. Once the page is answered, the listener is closed with its
+connections on the next turn of the loop rather than waiting on one: a browser holding the
+socket open never delays the next connect.
 
 The host holds one deadline for the whole flow and none of its own for `oauth_started`:
 a flow the sidecar settles before it ever built a url, discovery having been refused,
@@ -199,9 +225,10 @@ field is absent; `authMethod` is the method the probe names, carried to the
 could not be answered at all, which reaches the frontend as `authCheckFailed`
 rather than as `notAuthenticated`. `models` is `Query.supportedModels()`, asked of
 a session opened for nothing else and closed again — there is no file to read and
-no endpoint to ask. Each entry of the answer is `{ value, supportedEffortLevels }`,
-`default` left out: `supportedEffortLevels` is the SDK list when `supportsEffort` is
-true and empty otherwise. The host drops a level it has no name for, and writes a
+no endpoint to ask. Each entry of the answer is `{ value, resolvedModel?, supportedEffortLevels }`,
+`default` left out: `resolvedModel` is the canonical id an alias row resolves to, left
+out when the SDK names none, and `supportedEffortLevels` is the SDK list when
+`supportsEffort` is true and empty otherwise. The host drops a level it has no name for, and writes a
 companion's `effort` into its `agent.md` only when the catalogue lists that level for
 its model, or has not answered for that model at all.
 
@@ -899,6 +926,7 @@ Host → sidecar:
 {"type":"sign_in_cancel"}
 {"type":"mcp_oauth_authorize",…}
 {"type":"mcp_oauth_cancel"}
+{"type":"mcp_oauth_stored",…}
 {"type":"mcp_oauth_revoke",…}
 {"type":"mcp_oauth_refresh",…}
 ```

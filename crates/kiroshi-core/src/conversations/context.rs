@@ -821,6 +821,7 @@ fn estimated_tokens(summary: &str) -> i64 {
 
 #[cfg(test)]
 mod tests {
+	use crate::db::repositories::conversations::ChatOwner;
 	use std::fs;
 
 	use serde_json::json;
@@ -1127,7 +1128,11 @@ mod tests {
 
 	async fn a_conversation(database: &Database) -> String {
 		let bot = database.conversations().ensure_default_bot().await.expect("the bot");
-		let chat = database.conversations().ensure_chat(bot.id, None).await.expect("the chat");
+		let chat = database
+			.conversations()
+			.ensure_chat(bot.id, None, ChatOwner::Host)
+			.await
+			.expect("the chat");
 		database
 			.messages()
 			.start_turn(NewTurn {

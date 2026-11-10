@@ -10,6 +10,7 @@ use super::{members, Hosting};
 use crate::account::contract::{AccountState, KiroshiAccount};
 use crate::account::session::{this_computer, AccountSession};
 use crate::agent::protocol::SpaceMember;
+use crate::db::repositories::conversations::ChatOwner;
 use crate::db::repositories::messages::AccountAuthor;
 use crate::db::{Database, DatabaseError};
 use crate::hosting::authors::Authors;
@@ -95,6 +96,20 @@ fn signed_in_account(core: &crate::core_context::Core) -> Option<KiroshiAccount>
 		AccountState::SignedIn(account) => Some(account),
 		_ => None,
 	})
+}
+
+pub(super) fn person_of(core: &crate::core_context::Core, account_id: &str) -> ChatOwner {
+	match signed_in_account(core) {
+		Some(host) if host.id == account_id => ChatOwner::Host,
+		_ => ChatOwner::Member(account_id.to_owned()),
+	}
+}
+
+pub(super) fn account_of(core: &crate::core_context::Core, owner: &ChatOwner) -> Option<String> {
+	match owner {
+		ChatOwner::Host => signed_in_account(core).map(|host| host.id),
+		ChatOwner::Member(account_id) => Some(account_id.clone()),
+	}
 }
 
 async fn host_author(

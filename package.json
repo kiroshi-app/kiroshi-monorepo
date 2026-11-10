@@ -35,6 +35,7 @@
 		"test:pr-dequeue": "bun test scripts/pr-dequeue.test.ts",
 		"test:pr-enqueue": "bun test scripts/pr-enqueue.test.ts",
 		"test:pr-merge-sub": "bun test scripts/pr-merge-sub.test.ts",
+		"test:pr-merge-integration": "bun test scripts/pr-merge-integration.test.ts",
 		"test:slot": "bun test scripts/slot.test.ts",
 		"test:colour-sets": "bun test scripts/check-colour-sets.test.ts",
 		"baseline:update": "bun scripts/baseline.ts --update",

@@ -279,6 +279,7 @@ const chat = {
 		open: "Ouvrir {{name}}",
 		remove: "Retirer {{name}}",
 		attach: "Joindre des fichiers",
+		add: "Ajouter des fichiers",
 	},
 	composer: {
 		label: "Message",
@@ -1270,6 +1271,46 @@ const chat = {
 			},
 			key: {
 				body: "Paiement à l’usage, sans connexion. Créez une clé dans la console Anthropic.",
+			},
+		},
+	},
+	home: {
+		greeting: {
+			morning: "Bonjour, {{name}}. Et maintenant ?",
+			morningUnnamed: "Bonjour. Et maintenant ?",
+			afternoon: "Bon après-midi, {{name}}. Et maintenant ?",
+			afternoonUnnamed: "Bon après-midi. Et maintenant ?",
+			evening: "Bonsoir, {{name}}. Et maintenant ?",
+			eveningUnnamed: "Bonsoir. Et maintenant ?",
+			night: "Encore debout, {{name}} ? Et maintenant ?",
+			nightUnnamed: "Encore debout ? Et maintenant ?",
+		},
+		composer: {
+			placeholder: "Message à {{name}}",
+			agents: "Agents",
+		},
+		band: {
+			connect: "Connectez des Applications pour que {{name}} en fasse plus",
+			dismiss: "Masquer cette suggestion",
+		},
+		saved: "Enregistrée dans {{name}}, dans Conversations",
+		room: {
+			working: "{{name}} travaille dans",
+			worked: "{{name}} a travaillé dans",
+		},
+		mission: {
+			completed: "Terminée",
+			blocked: "Bloquée",
+		},
+		in: "dans",
+		failure: {
+			send: {
+				title: "Impossible d’envoyer cette demande",
+				description: "Votre message est de retour dans le champ.",
+			},
+			rooms: {
+				title: "Impossible de charger les conversations de cet agent",
+				description: "Rouvrez l’accueil pour réessayer.",
 			},
 		},
 	},

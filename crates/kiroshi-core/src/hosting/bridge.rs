@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
@@ -10,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use tokio::sync::{Mutex, OwnedMutexGuard};
 
-use super::authorship::RelayedMember;
+use super::authorship::{self, RelayedMember};
 use super::reach::{self, Reach};
 use super::Hosting;
 
@@ -29,6 +30,9 @@ const INVOKE_BOUND: Duration = Duration::from_secs(300);
 const HOST_ONLY_REFUSAL: &str = "this command belongs to the host";
 
 const OTHER_SPACE_REFUSAL: &str = "this command reaches outside the shared space";
+
+const OTHER_PERSON_REFUSAL: &str = "this command reaches the main conversation of another person";
+const UNCHECKED_ANSWER: &str = "the answer was not checked against the main conversations it names";
 
 pub const SHARED_SPACE_COMMAND: &str = "relay_shared_space";
 
@@ -200,6 +204,21 @@ pub(super) fn forwarded(frame: &str, epoch: &str, seq: u64) -> String {
 	format!("{{\"event\":{frame},\"epoch\":\"{epoch}\",\"seq\":{seq}}}")
 }
 
+pub(super) fn forwarded_to_everyone(
+	frame: &str,
+	epoch: &str,
+	rest: u64,
+	seqs: &BTreeMap<String, u64>,
+) -> String {
+	if seqs.is_empty() {
+		return forwarded(frame, epoch, rest);
+	}
+	let seqs: Map<String, Value> =
+		seqs.iter().map(|(account_id, seq)| (account_id.clone(), Value::from(*seq))).collect();
+	let seqs = Value::Object(seqs);
+	format!("{{\"event\":{frame},\"epoch\":\"{epoch}\",\"rest\":{rest},\"seqs\":{seqs}}}")
+}
+
 pub(super) fn replayed(frame: &str, epoch: &str, seq: u64, token: &str) -> String {
 	let token = Value::from(token);
 	format!("{{\"event\":{frame},\"epoch\":\"{epoch}\",\"seq\":{seq},\"token\":{token}}}")
@@ -211,11 +230,22 @@ pub async fn bridged(
 	shared_space_id: String,
 	call: MemberCall,
 ) -> String {
-	if let Err(refusal) =
-		reach::stays_in_the_shared_space(&core, &shared_space_id, &call.command, &call.args).await
-	{
+	let caller = authorship::person_of(&core, &call.sender);
+	let reached = reach::stays_in_the_shared_space(
+		&core,
+		&shared_space_id,
+		&caller,
+		&call.command,
+		&call.args,
+	)
+	.await;
+	if let Err(refusal) = reached {
 		log::warn!("{}", reach::refusal_line(&call.command, &shared_space_id, &refusal));
-		return answer(call.id, StatusCode::FORBIDDEN, json!(OTHER_SPACE_REFUSAL));
+		let reason = match refusal {
+			reach::Refusal::NotOwned { .. } => OTHER_PERSON_REFUSAL,
+			_ => OTHER_SPACE_REFUSAL,
+		};
+		return answer(call.id, StatusCode::FORBIDDEN, json!(reason));
 	}
 	let hosting = core.state::<Hosting>();
 	let member = RelayedMember {
@@ -224,9 +254,16 @@ pub async fn bridged(
 		computer: call.computer.clone(),
 	};
 	let vouched = hosting.relayed.vouch(member);
-	match invoked(&local, &call, &vouched.nonce).await {
-		Ok((status, body)) => answer(call.id, status, body),
-		Err(reason) => answer(call.id, StatusCode::BAD_GATEWAY, json!(reason)),
+	let (status, body) = match invoked(&local, &call, &vouched.nonce).await {
+		Ok(answered) => answered,
+		Err(reason) => return answer(call.id, StatusCode::BAD_GATEWAY, json!(reason)),
+	};
+	if !status.is_success() {
+		return answer(call.id, status, body);
+	}
+	match reach::answer_shown_to(&core, &shared_space_id, &caller, &call.command, body).await {
+		Some(shown) => answer(call.id, status, shown),
+		None => answer(call.id, StatusCode::INTERNAL_SERVER_ERROR, json!(UNCHECKED_ANSWER)),
 	}
 }
 
