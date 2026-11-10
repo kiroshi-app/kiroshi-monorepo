@@ -688,6 +688,67 @@ describe("the Home page", () => {
 		},
 	)
 
+	const threadChrome = () => ({
+		header: slot("app-header"),
+		identity: slot("header-identity-button"),
+		activityToggle: screen.queryByRole("button", {
+			name: i18n.t("chat:activity.panel.toggle"),
+		}),
+		activityPanel: screen.queryByRole("complementary", {
+			name: i18n.t("chat:activity.panel.label"),
+		}),
+	})
+
+	const sendFromHome = async (text: string) => {
+		const composer = screen.getByRole("textbox")
+		act(() => {
+			fireEvent.change(composer, { target: { value: text } })
+			fireEvent.keyDown(composer, { key: "Enter" })
+		})
+		await settle()
+	}
+
+	it("frames the empty Home and its first message with no thread header and no routines trigger", async () => {
+		await mountAppWithTwoAgents()
+		await pressInRail("home")
+
+		expect(slot("home-layout")?.getAttribute("data-stage")).toBe("empty")
+		expect(threadChrome().header).toBeNull()
+		expect(threadChrome().activityToggle).toBeNull()
+
+		await sendFromHome("Book the flights.")
+
+		expect(slot("home-layout")?.getAttribute("data-stage")).toBe("conversation")
+		expect(screen.getByText("Book the flights.")).toBeTruthy()
+		expect(threadChrome().header).toBeNull()
+		expect(threadChrome().identity).toBeNull()
+		expect(threadChrome().activityToggle).toBeNull()
+	})
+
+	it("shows no activity panel on the Home, even with the panel left open in Conversations", async () => {
+		writeMirror({ ...readMirror(), activityPanelOpen: true })
+		const { router, first } = await mountAppWithTwoAgents()
+		await act(() => router.navigate({ to: "/", search: { bot: first.id } }))
+		await settle()
+		expect(threadChrome().activityPanel).not.toBeNull()
+
+		await pressInRail("home")
+
+		expect(slot("home-layout")).not.toBeNull()
+		expect(threadChrome().activityPanel).toBeNull()
+		expect(threadChrome().activityToggle).toBeNull()
+	})
+
+	it("keeps the thread header and the activity panel of an agent opened in Conversations", async () => {
+		const { router, first } = await mountAppWithTwoAgents()
+
+		await act(() => router.navigate({ to: "/", search: { bot: first.id } }))
+		await settle()
+
+		expect(threadChrome().header).not.toBeNull()
+		expect(threadChrome().activityToggle).not.toBeNull()
+	})
+
 	it("shows an agent opened in Conversations in its thread layout, never a Home view", async () => {
 		const { router, first } = await mountAppWithTwoAgents()
 
