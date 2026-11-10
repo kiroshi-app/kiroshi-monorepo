@@ -146,11 +146,7 @@ export const WorkspaceFrameOutlet = () => {
 				width={guardedFrame.width}
 			>
 				<AppTitleBar {...guardedFrame.titleBar} />
-				<WorkspaceNavigationSidebar
-					gestures={guardedFrame.gestures}
-					rosterLists={rosterLists}
-					selectedSpaceId={guardedFrame.selectedSpaceId}
-				/>
+				<WorkspaceNavigationSidebar />
 				<Outlet />
 			</WorkspaceShellRoot>
 		</WorkspaceFrameContext.Provider>

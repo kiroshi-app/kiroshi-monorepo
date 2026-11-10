@@ -1,18 +1,11 @@
-import type { AppFrameRailProps } from "@workspace/ui/components/app-frame"
 import type { ExpandedSidebarDestination } from "@workspace/ui/components/expanded-sidebar"
 import { NavigationSidebar } from "@workspace/ui/components/navigation-sidebar"
 
 import { isHomePage, isLibraryPage, isMissionsPage } from "@/lib/tabs/tab-pages"
 import { usePageShown } from "@/lib/tabs/use-page-shown"
 import type { WorkspaceTabs } from "@/lib/tabs/workspace-tabs"
-import type { RosterLists } from "@/lib/workspace/use-roster-lists"
 import { useWorkspace } from "@/lib/workspace/workspace-context"
-
-type WorkspaceNavigationSidebarProps = {
-	gestures: AppFrameRailProps
-	selectedSpaceId: string | undefined
-	rosterLists: RosterLists
-}
+import { useWorkspaceFrame } from "@/lib/workspace/workspace-frame"
 
 const useShownDestination = (
 	tabs: WorkspaceTabs,
@@ -27,12 +20,10 @@ const useShownDestination = (
 	return undefined
 }
 
-export const WorkspaceNavigationSidebar = ({
-	gestures,
-	selectedSpaceId,
-	rosterLists,
-}: WorkspaceNavigationSidebarProps) => {
+export const WorkspaceNavigationSidebar = () => {
 	const { rosterLines, rosterView, tabs } = useWorkspace()
+	const { frame, rosterLists } = useWorkspaceFrame()
+	const { gestures, selectedSpaceId } = frame
 	const destination = useShownDestination(tabs)
 
 	return (
