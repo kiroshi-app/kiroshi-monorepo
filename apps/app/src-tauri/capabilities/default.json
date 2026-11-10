@@ -22,6 +22,7 @@
 		"dialog:allow-open",
 		"opener:allow-open-url",
 		"opener:allow-default-urls",
+		"opener:allow-reveal-item-in-dir",
 		{
 			"identifier": "opener:allow-open-path",
 			"allow": [{ "path": "$APPDATA/attachments/**" }]

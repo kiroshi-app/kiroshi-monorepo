@@ -49,6 +49,8 @@ const DIR_NAME: &str = "bots";
 
 const PLUGINS_DIR: &str = "plugins";
 
+const SHOWN_DIRS_ABOVE_BUNDLE: usize = 3;
+
 const MANIFEST_DIR: &str = ".claude-plugin";
 const MANIFEST_NAME: &str = "plugin.json";
 const MARKETPLACE_NAME: &str = "marketplace.json";
@@ -88,6 +90,10 @@ static PERMISSION_MODES: LazyLock<PermissionModes> = LazyLock::new(|| {
 	serde_json::from_str(include_str!("../../../packages/shared/permission-modes.json"))
 		.expect("the embedded permission modes hold a modes list and a fallback")
 });
+
+pub(crate) fn is_permission_mode(mode: &str) -> bool {
+	PERMISSION_MODES.modes.iter().any(|listed| listed == mode)
+}
 
 const MCP_NAME: &str = ".mcp.json";
 const SERVERS_KEY: &str = "mcpServers";
@@ -375,23 +381,34 @@ pub fn agent_file(root: &Path, bot_id: &str) -> Option<PathBuf> {
 }
 
 pub fn settings_file(root: &Path, bot_id: &str) -> Option<PathBuf> {
-	let path = settings_path(root, bot_id).ok()?;
+	let bundle = dir(root, bot_id).ok()?;
+	let path = bundle.join(SETTINGS_NAME);
 	if !path.is_file() {
 		return None;
 	}
-	forget_directories(&path);
+	forget_directories(&bundle);
 	Some(path)
 }
 
-fn forget_directories(path: &Path) {
-	let mut kept = object_at(path);
+fn forget_directories(bundle: &Path) {
+	let path = bundle.join(SETTINGS_NAME);
+	if let Err(failure) = forgotten_directories(bundle, &path) {
+		log::warn!(
+			"{} still names its additional directories: {failure}",
+			shown_path(bundle, &path).display()
+		);
+	}
+}
+
+fn forgotten_directories(bundle: &Path, path: &Path) -> std::io::Result<()> {
+	let mut kept = object_to_rewrite(bundle, path)?;
 	let Some(serde_json::Value::Object(declared)) = kept.get_mut(PERMISSIONS_KEY) else {
-		return;
+		return Ok(());
 	};
 	if declared.remove(DIRECTORIES_KEY).is_none() {
-		return;
+		return Ok(());
 	}
-	let _ = private_files::replace(path, serde_json::Value::Object(kept).to_string().as_bytes());
+	private_files::replace_atomically(path, serde_json::Value::Object(kept).to_string().as_bytes())
 }
 
 fn settings_path(root: &Path, bot_id: &str) -> std::io::Result<PathBuf> {
@@ -803,7 +820,7 @@ pub fn write_marketplace(root: &Path, bots: &[Bot]) -> std::io::Result<()> {
 		"owner": { "name": OWNER },
 		"plugins": plugins,
 	});
-	private_files::replace(&marketplace_file(root), indented_json(&listed).as_bytes())
+	private_files::replace_atomically(&marketplace_file(root), indented_json(&listed).as_bytes())
 }
 
 fn describe(bot: &Bot) -> &str {
@@ -814,14 +831,14 @@ fn describe(bot: &Bot) -> &str {
 	}
 }
 
-fn manifest(path: &Path, bundle: &Path, bot: &Bot) -> String {
-	let mut kept = object_at(path);
+fn manifest(path: &Path, bundle: &Path, bot: &Bot) -> std::io::Result<String> {
+	let mut kept = object_to_rewrite(bundle, path)?;
 	kept.insert("name".to_owned(), dir_name(bot).into());
 	kept.insert("version".to_owned(), VERSION.into());
 	kept.insert("displayName".to_owned(), bot.name.clone().into());
 	kept.insert("description".to_owned(), describe(bot).into());
 	declare_servers(&mut kept, bundle);
-	indented_json(&serde_json::Value::Object(kept))
+	Ok(indented_json(&serde_json::Value::Object(kept)))
 }
 
 fn indented_json(value: &serde_json::Value) -> String {
@@ -831,7 +848,7 @@ fn indented_json(value: &serde_json::Value) -> String {
 fn rewrite_manifest(root: &Path, bot: &Bot) -> std::io::Result<()> {
 	let bundle = dir(root, &bot.id)?;
 	let path = manifest_file(&bundle);
-	private_files::replace(&path, manifest(&path, &bundle, bot).as_bytes())
+	private_files::replace_atomically(&path, manifest(&path, &bundle, bot)?.as_bytes())
 }
 
 fn manifest_file(bundle: &Path) -> PathBuf {
@@ -846,7 +863,7 @@ fn declare_servers(kept: &mut serde_json::Map<String, serde_json::Value>, bundle
 
 fn rewrite_declared_servers(bundle: &Path) -> std::io::Result<()> {
 	let path = manifest_file(bundle);
-	let kept = object_at(&path);
+	let kept = object_to_rewrite(bundle, &path)?;
 	let mut rewritten = kept.clone();
 	if bundle.join(MCP_NAME).is_file() {
 		declare_servers(&mut rewritten, bundle);
@@ -856,7 +873,10 @@ fn rewrite_declared_servers(bundle: &Path) -> std::io::Result<()> {
 	if rewritten == kept {
 		return Ok(());
 	}
-	private_files::replace(&path, indented_json(&serde_json::Value::Object(rewritten)).as_bytes())
+	private_files::replace_atomically(
+		&path,
+		indented_json(&serde_json::Value::Object(rewritten)).as_bytes(),
+	)
 }
 
 fn undeclare_servers(root: &Path, bot: &Bot) -> std::io::Result<()> {
@@ -865,12 +885,15 @@ fn undeclare_servers(root: &Path, bot: &Bot) -> std::io::Result<()> {
 		return Ok(());
 	}
 	let path = manifest_file(&bundle);
-	let mut kept = object_at(&path);
+	let mut kept = object_to_rewrite(&bundle, &path)?;
 	if kept.get(SERVERS_KEY).and_then(serde_json::Value::as_str) != Some(MCP_SOURCE) {
 		return Ok(());
 	}
 	kept.remove(SERVERS_KEY);
-	private_files::replace(&path, indented_json(&serde_json::Value::Object(kept)).as_bytes())
+	private_files::replace_atomically(
+		&path,
+		indented_json(&serde_json::Value::Object(kept)).as_bytes(),
+	)
 }
 
 pub fn held_memory(written: Option<&Generated>, stored: &str) -> String {
@@ -966,12 +989,13 @@ fn paragraphs(parts: &[&str]) -> String {
 
 type Keyed = serde_json::Map<String, serde_json::Value>;
 
-fn write_declared(path: &Path, key: &str, entries: Keyed) -> std::io::Result<()> {
-	let mut kept = object_at(path);
+fn write_declared(bundle: &Path, name: &str, key: &str, entries: Keyed) -> std::io::Result<()> {
+	let path = bundle.join(name);
+	let mut kept = object_to_rewrite(bundle, &path)?;
 	if entries.is_empty() {
 		kept.remove(key);
 		if kept.is_empty() {
-			return match fs::remove_file(path) {
+			return match fs::remove_file(&path) {
 				Err(error) if error.kind() != std::io::ErrorKind::NotFound => Err(error),
 				_ => Ok(()),
 			};
@@ -979,7 +1003,7 @@ fn write_declared(path: &Path, key: &str, entries: Keyed) -> std::io::Result<()>
 	} else {
 		kept.insert(key.to_owned(), serde_json::Value::Object(entries));
 	}
-	private_files::replace(path, serde_json::Value::Object(kept).to_string().as_bytes())
+	private_files::replace_atomically(&path, serde_json::Value::Object(kept).to_string().as_bytes())
 }
 
 fn declared(path: &Path, key: &str) -> Keyed {
@@ -994,6 +1018,33 @@ fn object_at(path: &Path) -> Keyed {
 		.ok()
 		.and_then(|text| serde_json::from_str(&text).ok())
 		.unwrap_or_default()
+}
+
+fn object_to_rewrite(bundle: &Path, path: &Path) -> std::io::Result<Keyed> {
+	let bytes = match fs::read(path) {
+		Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Keyed::new()),
+		read => read?,
+	};
+	match serde_json::from_slice(&bytes) {
+		Ok(serde_json::Value::Object(kept)) => Ok(kept),
+		_ => Err(std::io::Error::new(
+			std::io::ErrorKind::InvalidData,
+			format!(
+				"{} is not a JSON object, fix or remove it before it is changed",
+				shown_path(bundle, path).display()
+			),
+		)),
+	}
+}
+
+fn shown_path(bundle: &Path, path: &Path) -> PathBuf {
+	bundle
+		.ancestors()
+		.nth(SHOWN_DIRS_ABOVE_BUNDLE)
+		.and_then(|hidden| path.strip_prefix(hidden).ok())
+		.or_else(|| path.file_name().map(Path::new))
+		.unwrap_or(path)
+		.to_path_buf()
 }
 
 fn rewrite_agent(root: &Path, bot: &Bot) -> std::io::Result<()> {
@@ -3569,5 +3620,70 @@ They said figs, not dates.
 		assert!(revert(&root, &bot.id, absent, absent).is_err());
 
 		let _ = fs::remove_dir_all(&root);
+	}
+
+	pub(super) fn shown_in_bundle(root: &Path, bot_id: &str, file: &str) -> String {
+		let bundle = dir(root, bot_id).expect("the bundle is held");
+		let named = |path: &Path| {
+			path.file_name().expect("the folder is named").to_string_lossy().into_owned()
+		};
+		format!("{}/{PLUGINS_DIR}/{}/{file}", named(root), named(&bundle))
+	}
+
+	pub(super) fn a_refusal_naming(refused: std::io::Result<()>, shown: &str) {
+		let error = refused.expect_err("a file that does not parse was overwritten");
+		assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+		let message = error.to_string();
+		assert!(message.starts_with(shown), "the refusal does not name {shown}: {message}");
+	}
+
+	#[test]
+	fn a_broken_mcp_file_is_refused_and_kept_as_it_was() {
+		let root = a_root("broken-mcp");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		let bundle = dir(&root, &bot.id).expect("the bundle is held");
+		let path = bundle.join(MCP_NAME);
+		let broken = r#"{"mcpServers": {,}"#;
+		private_files::replace(&path, broken.as_bytes()).expect("the broken file is written");
+
+		let entries =
+			Keyed::from_iter([("notes".to_owned(), serde_json::json!({ "command": "notes" }))]);
+		a_refusal_naming(
+			write_declared(&bundle, MCP_NAME, SERVERS_KEY, entries),
+			&shown_in_bundle(&root, &bot.id, MCP_NAME),
+		);
+
+		assert_eq!(fs::read_to_string(&path).expect("the file is still there"), broken);
+	}
+
+	#[test]
+	fn a_missing_file_is_written_from_nothing() {
+		let root = a_root("missing-mcp");
+		let path = root.join(MCP_NAME);
+		assert!(!path.exists(), "the file was there before the write");
+
+		let entries =
+			Keyed::from_iter([("notes".to_owned(), serde_json::json!({ "command": "notes" }))]);
+		write_declared(&root, MCP_NAME, SERVERS_KEY, entries).expect("the missing file is written");
+
+		assert_eq!(object_at(&path)[SERVERS_KEY]["notes"]["command"], serde_json::json!("notes"));
+	}
+
+	#[test]
+	fn a_broken_plugin_manifest_is_refused_and_kept_as_it_was() {
+		let root = a_root("broken-manifest");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		let path = manifest_file(&dir(&root, &bot.id).expect("the bundle is held"));
+		let broken = r#"{"name": "bean", "hooks": {},}"#;
+		private_files::replace(&path, broken.as_bytes()).expect("the broken file is written");
+
+		a_refusal_naming(
+			rewrite_manifest(&root, &bot),
+			&shown_in_bundle(&root, &bot.id, &format!("{MANIFEST_DIR}/{MANIFEST_NAME}")),
+		);
+
+		assert_eq!(fs::read_to_string(&path).expect("the file is still there"), broken);
 	}
 }

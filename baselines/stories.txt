@@ -1249,6 +1249,7 @@ layout-threadlayout--older-messages
 layout-threadlayout--outside-content-card
 layout-threadlayout--pending
 layout-threadlayout--prompt-overhangs-the-thread
+layout-threadlayout--skeleton-in-the-transcript-column
 layout-threadlayout--start-of-older-messages
 layout-threadlayout--streaming-into-short-transcript
 layout-threadlayout--user-message-above-the-prompt
@@ -1755,6 +1756,7 @@ navigation-documentpanel--board-several-agents-dark
 navigation-documentpanel--capped-by-the-room-left
 navigation-documentpanel--consecutive-answers-at-the-thread-floor
 navigation-documentpanel--controlled-width
+navigation-documentpanel--dragged-to-its-maximum-on-a-wide-window
 navigation-documentpanel--handle-with-keyboard-focus
 navigation-documentpanel--handle-with-keyboard-focus-dark
 navigation-documentpanel--header-aligned-with-the-thread-header

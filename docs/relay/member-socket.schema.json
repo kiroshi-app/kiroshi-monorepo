@@ -10246,10 +10246,33 @@
               }
             ]
           },
+          "deniedTools": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "outputSchema": {
             "anyOf": [
               {
                 "$ref": "#/$defs/Json"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "permissionMode": {
+            "anyOf": [
+              {
+                "type": "string"
               },
               {
                 "type": "null"

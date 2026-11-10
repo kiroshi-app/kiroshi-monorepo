@@ -117,8 +117,16 @@ function ThreadLayout({
 					header={header}
 					scroller={(columnClassName) =>
 						skeleton ? (
-							<div className="min-h-0 flex-1" data-slot="thread-skeleton">
-								{skeleton}
+							<div
+								className="@container min-h-0 flex-1"
+								data-slot="thread-skeleton"
+							>
+								<div
+									className={cn(columnClassName, "h-full py-0")}
+									data-slot="thread-skeleton-column"
+								>
+									{skeleton}
+								</div>
 							</div>
 						) : (
 							<MarkProvider transcriptKey={transcriptKey}>

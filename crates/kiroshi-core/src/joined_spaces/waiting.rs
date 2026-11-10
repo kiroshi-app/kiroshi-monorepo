@@ -1,4 +1,5 @@
 use futures_util::StreamExt;
+use serde_json::Value;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tokio::time::{interval_at, sleep, Instant};
@@ -19,6 +20,7 @@ use crate::crypto::device_keys::DeviceKeys;
 use crate::db;
 use crate::db::repositories::joined_spaces::JoinedReach;
 use crate::devices;
+use crate::hosting::handover::NOT_ADMITTED;
 use crate::hosting::relay::{
 	opened_unpaused, sent, until_stopped, Backoff, Departure, Opened, Socket, SILENCE_BOUND,
 };
@@ -188,6 +190,7 @@ async fn listened(
 		return Attempt::Dropped(Stall::AskNotSent(reason));
 	}
 	waited(core, instance_id, Stall::Asked);
+	let mut is_refused = false;
 	let every = core.state::<RelayGuests>().resend_every();
 	let mut beats = interval_at(Instant::now() + every, every);
 	let silence = sleep(SILENCE_BOUND);
@@ -197,6 +200,12 @@ async fn listened(
 			frame = stream.next() => {
 				silence.as_mut().reset(Instant::now() + SILENCE_BOUND);
 				match frame {
+					Some(Ok(Message::Text(text))) if is_not_admitted(text.as_str()) => {
+						if !is_refused {
+							is_refused = true;
+							waited(core, instance_id, Stall::NotAdmitted);
+						}
+					}
 					Some(Ok(Message::Text(text))) => {
 						if is_kept(core, instance_id, device, text.as_str()).await {
 							let close = CloseFrame { code: CloseCode::Normal, reason: "".into() };
@@ -224,6 +233,10 @@ async fn listened(
 			}
 		}
 	}
+}
+
+fn is_not_admitted(text: &str) -> bool {
+	serde_json::from_str::<Value>(text).is_ok_and(|envelope| envelope["refused"] == NOT_ADMITTED)
 }
 
 async fn is_kept(

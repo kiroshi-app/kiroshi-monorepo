@@ -384,8 +384,16 @@ table! { core, client, caller;
 		scope: RuntimeScope,
 		resume: Option<String>,
 		cwd: Option<String>,
-		output_schema: Option<JsonValue>
-	) => answered(start_or_resume_session(core, scope, resume, cwd, output_schema).await);
+		output_schema: Option<JsonValue>,
+		denied_tools: Option<Vec<String>>,
+		permission_mode: Option<String>
+	) => answered(
+		start_or_resume_session(
+			core,
+			SessionStart { scope, resume, cwd, output_schema, denied_tools, permission_mode },
+		)
+		.await
+	);
 	agent_submit_prompt(scope: RuntimeScope, text: String, turn: Option<SubmittedTurn>) =>
 		answered(agent_submit_prompt(core, client, caller, scope, text, turn).await);
 	agent_cancel_turn(scope: RuntimeScope) => answered(cancel_turn(core, scope).await);

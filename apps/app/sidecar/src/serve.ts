@@ -40,6 +40,8 @@ export type Command = {
 	partialMessages?: boolean
 	serverEnv?: ServerEnv
 	outputSchema?: Record<string, unknown>
+	deniedTools?: string[]
+	permissionMode?: string
 	missionThread?: boolean
 	members?: SpaceMember[]
 	connection?: Record<string, string>
@@ -75,6 +77,8 @@ export const sessionRequest = (command: Command): SessionRequest => ({
 	serverEnv: command.serverEnv,
 	connection: command.connection,
 	outputSchema: command.outputSchema,
+	deniedTools: command.deniedTools,
+	permissionMode: command.permissionMode,
 	missionThread: command.missionThread,
 	members: command.members,
 })

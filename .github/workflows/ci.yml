@@ -15,7 +15,7 @@ env:
 
 concurrency:
   group: ${{ github.workflow }}-${{ (github.event_name == 'pull_request' || github.ref == 'refs/heads/main') && github.ref || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.ref == 'refs/heads/main' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # lint runs on every event, without waiting on changes.
 # scripts/ci-changes.ts selects every other job per event, verify requires every selected job.

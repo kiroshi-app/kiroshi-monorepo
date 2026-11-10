@@ -27,6 +27,7 @@ const LEFT_OUT_OF_THE_SIDEBAR: Record<string, string> = {
 	"data-tauri-drag-region": "a web page holds no Tauri window to drag",
 	windowControls: "macOS draws no caption buttons, the scene paints its lights",
 	rosterSkeleton: "the scene roster never loads",
+	onRetryLoadBots: "the scene roster never fails to load",
 	updateBadge: "the scene shows an app that is up to date",
 	openSettings: "no settings screen opens in the scene",
 	incomingTab: "no tab arrives from another window on a web page",

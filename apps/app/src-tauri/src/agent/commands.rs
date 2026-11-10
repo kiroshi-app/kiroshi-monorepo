@@ -48,14 +48,21 @@ pub async fn agent_account<R: Runtime>(app: AppHandle<R>) -> AccountReport {
 
 #[tauri::command]
 #[specta::specta]
+#[expect(
+	clippy::too_many_arguments,
+	reason = "each field is a flat argument of the shipped agent_start_or_resume_session wire shape"
+)]
 pub async fn agent_start_or_resume_session(
 	core: State<'_, crate::core_context::Core>,
 	scope: RuntimeScope,
 	resume: Option<String>,
 	cwd: Option<String>,
 	output_schema: Option<JsonValue>,
+	denied_tools: Option<Vec<String>>,
+	permission_mode: Option<String>,
 ) -> Result<SessionHandle, TransportError> {
-	start_or_resume_session(core.inner(), scope, resume, cwd, output_schema).await
+	let session = SessionStart { scope, resume, cwd, output_schema, denied_tools, permission_mode };
+	start_or_resume_session(core.inner(), session).await
 }
 
 #[tauri::command]

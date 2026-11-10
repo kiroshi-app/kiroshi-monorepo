@@ -80,10 +80,11 @@ const CONVERSATION_AND_MESSAGE: &[Held] =
 	&[child(Conversation, "/conversationId"), child(Message, "/messageId")];
 const RUNTIME_SCOPE: &[Held] =
 	&[child(Conversation, "/scope/conversationId"), child(Bot, "/scope/botId")];
-const RUNTIME_SCOPE_IN_THE_BOT_DIRECTORY: &[Held] = &[
+const RUNTIME_SCOPE_ON_THE_BOT_TERMS: &[Held] = &[
 	child(Conversation, "/scope/conversationId"),
 	child(Bot, "/scope/botId"),
 	Held { argument: "/cwd", check: Check::Absent, is_optional: true },
+	Held { argument: "/permissionMode", check: Check::Absent, is_optional: true },
 ];
 const NEW_MESSAGE: &[Held] = &[
 	child(Conversation, "/message/conversationId"),
@@ -161,7 +162,7 @@ pub const REACHES: &[(&str, Reach)] = &[
 	("agent_models", Reach::Free),
 	("agent_tools", Reach::Free),
 	("agent_title", Reach::Free),
-	("agent_start_or_resume_session", Reach::Scoped(RUNTIME_SCOPE_IN_THE_BOT_DIRECTORY)),
+	("agent_start_or_resume_session", Reach::Scoped(RUNTIME_SCOPE_ON_THE_BOT_TERMS)),
 	(
 		"agent_submit_prompt",
 		Reach::Scoped(&[

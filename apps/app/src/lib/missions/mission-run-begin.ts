@@ -1,9 +1,31 @@
+import { readBotPermissionMode } from "@workspace/ui/components/bot-settings"
+
 import { type MissionRunBook, reporting } from "./mission-run-book"
 import type { MissionRunDriverOptions } from "./mission-run-driver"
 import { MISSION_RUN_OUTPUT_SCHEMA } from "./mission-run-output"
 import { type MissionRunCall, missionRunPromptFor } from "./mission-run-prompt"
 
+import type {
+	UnattendedPermissionMode,
+	UnattendedStart,
+} from "../agent/contract"
+
 export const RUN_DEADLINE_MS = 30 * 60_000
+
+const PROMPTLESS_MODE: UnattendedPermissionMode = "dontAsk"
+
+const MODES_THAT_NEVER_PROMPT: UnattendedPermissionMode[] = [
+	"auto",
+	PROMPTLESS_MODE,
+]
+
+const unattendedStartIn = (declaredMode: string): UnattendedStart => ({
+	deniedTools: ["AskUserQuestion"],
+	permissionMode:
+		MODES_THAT_NEVER_PROMPT.find(
+			(mode) => mode === readBotPermissionMode(declaredMode),
+		) ?? PROMPTLESS_MODE,
+})
 
 const failedStart = (thrown: unknown) =>
 	new Error("the mission run could not start", { cause: thrown })
@@ -38,6 +60,16 @@ export const createMissionRunBegin = ({
 		} catch (thrown) {
 			reporting("conversation_roster_block")(thrown)
 			return null
+		}
+	}
+
+	const declaredModeOf = async ({ mission }: MissionRunCall) => {
+		try {
+			const bot = (await store.bots()).find(({ id }) => id === mission.botId)
+			return bot?.permissions.defaultMode ?? PROMPTLESS_MODE
+		} catch (thrown) {
+			reporting("bots")(thrown)
+			return PROMPTLESS_MODE
 		}
 	}
 
@@ -87,7 +119,11 @@ export const createMissionRunBegin = ({
 		}
 	}
 
-	const begin = async (call: MissionRunCall, token: string) => {
+	const begin = async (
+		call: MissionRunCall,
+		token: string,
+		unattended: UnattendedStart,
+	) => {
 		const { id } = call.mission
 		const scope = await openClaimedScope(call, token)
 		const held = {
@@ -108,6 +144,7 @@ export const createMissionRunBegin = ({
 				undefined,
 				undefined,
 				MISSION_RUN_OUTPUT_SCHEMA,
+				unattended,
 			)
 			await driver.submitPrompt(scope, missionRunPromptFor(call))
 		} catch (thrown) {
@@ -125,7 +162,14 @@ export const createMissionRunBegin = ({
 			return
 		}
 
-		const rosterBlock = await rosterBlockOf(call)
-		await begin({ ...call, rosterBlock }, token)
+		const [rosterBlock, declaredMode] = await Promise.all([
+			rosterBlockOf(call),
+			declaredModeOf(call),
+		])
+		await begin(
+			{ ...call, rosterBlock },
+			token,
+			unattendedStartIn(declaredMode),
+		)
 	}
 }

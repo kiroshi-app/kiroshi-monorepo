@@ -12,6 +12,8 @@ use crate::db::Database;
 
 const REKEY_DOMAIN: &[u8] = b"kiroshi/v2/rekey";
 
+pub(crate) const NOT_ADMITTED: &str = "notAdmitted";
+
 #[derive(Serialize, Deserialize)]
 pub struct KeyHandover {
 	pub key_id: u32,
@@ -75,6 +77,11 @@ impl Handover {
 		})
 		.to_string())
 	}
+}
+
+pub fn not_admitted_frame(instance_id: &str, relay_device_id: &str) -> String {
+	json!({ "v": VERSION, "instance": instance_id, "to": relay_device_id, "refused": NOT_ADMITTED })
+		.to_string()
 }
 
 pub fn rekey_bytes(instance_id: &str, to: &DeviceId, sealed: &[u8]) -> Vec<u8> {

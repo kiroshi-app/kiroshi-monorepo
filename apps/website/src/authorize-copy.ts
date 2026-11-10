@@ -16,7 +16,7 @@ export const AUTHORIZE_COPY = {
 	deviceCaption: (platform: string, askedAgo: string) =>
 		`${PLATFORM_APPS[platform] ?? "Kiroshi"} · ${askedAgo}`,
 	benefits: [
-		"Host spaces for people who aren’t on your network",
+		"Host spaces for other people",
 		"Join the spaces they host for you",
 	],
 	approve: "Sign in",

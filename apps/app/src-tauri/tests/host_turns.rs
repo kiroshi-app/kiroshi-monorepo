@@ -606,9 +606,17 @@ impl Host {
 			runtime_session_id: opened.id,
 			epoch: opened.seq,
 		};
-		agent_start_or_resume_session(self.app.state(), scope.clone(), None, None, None)
-			.await
-			.expect("the host run starts");
+		agent_start_or_resume_session(
+			self.app.state(),
+			scope.clone(),
+			None,
+			None,
+			None,
+			None,
+			None,
+		)
+		.await
+		.expect("the host run starts");
 		scope
 	}
 

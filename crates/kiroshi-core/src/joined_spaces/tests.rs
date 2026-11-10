@@ -937,6 +937,39 @@ fn a_waiting_socket_held_open_asks_again_for_its_rekey_and_comes_online_once_adm
 }
 
 #[test]
+fn a_waiting_socket_its_host_refuses_names_this_device_not_admitted_and_comes_online_once_admitted()
+{
+	run(async {
+		let member = Member::facing_a_silent_host("join-not-admitted").await;
+		member.relay.hosting(HostSide::Silent);
+		let joined = member.accepted().await.expect("the join waits");
+		let refused =
+			json!({ "v": 2, "instance": INSTANCE, "to": "relay-device", "refused": "notAdmitted" });
+		member.relay.hosting(HostSide::Answering(refused.to_string()));
+
+		relay::reconciled(&member.app).await;
+		let waited = until("the refusal kept as the wait", || async {
+			member.last_waited().filter(|wait| wait.detail.contains("not in its roster"))
+		})
+		.await;
+		member.relay.hosting(HostSide::Answering(member.host().admitted()));
+		until("the waiting socket to stop", || async {
+			(!member.is_waiting(&joined.id)).then_some(())
+		})
+		.await;
+
+		assert_eq!(
+			waited.reason,
+			JoinedSpaceWaitReason::DeviceAwaitingApproval,
+			"{}",
+			waited.detail
+		);
+		assert!(member.held_key_id().is_some());
+		assert_eq!(member.last_wait(), None);
+	});
+}
+
+#[test]
 fn an_unreadable_key_still_starts_every_waiting_join_and_its_space_comes_online_once_answered() {
 	run(async {
 		let member = Member::facing_a_silent_host("join-unreadable-key").await;

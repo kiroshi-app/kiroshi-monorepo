@@ -15,7 +15,8 @@ use super::contract::{RoutineError, RunClosing, RunOutcome, RunRequested};
 use super::core::{Clock, RunSink, SystemClock};
 use super::run::{read_run_report, run_output_schema, run_prompt_for, RunReport};
 use crate::agent::commands::{
-	cancel_session_turn, shut_down_agent, start_or_resume_session, submit_prompt, EVENT_CHANNEL,
+	cancel_session_turn, shut_down_agent, start_or_resume_session, submit_prompt, SessionStart,
+	EVENT_CHANNEL,
 };
 use crate::agent::contract::{
 	AgentEvent, CancelOutcome, ChatMessage, EventTurn, MessageCompletion, MessageRole,
@@ -41,6 +42,8 @@ const MISSING_OUTPUT_REASON: &str = "the run's turn ended with no structured out
 const QUESTION_REASON: &str = "a run cannot be asked a question";
 
 const PERMISSION_REASON: &str = "a run cannot be asked for a permission";
+
+const QUESTION_TOOL: &str = "AskUserQuestion";
 
 const DEADLINE_REASON: &str = "the run outlived its deadline";
 
@@ -363,9 +366,15 @@ async fn started(
 ) -> Result<(), String> {
 	held::<AgentState>(core, NO_AGENT)?;
 	held::<db::DatabaseState>(core, NO_DATABASE)?;
-	start_or_resume_session(core, scope.clone(), None, None, Some(run_output_schema().into()))
-		.await
-		.map_err(|error| detail_of(&error))?;
+	let session = SessionStart {
+		scope: scope.clone(),
+		resume: None,
+		cwd: None,
+		output_schema: Some(run_output_schema().into()),
+		denied_tools: Some(vec![QUESTION_TOOL.to_owned()]),
+		permission_mode: None,
+	};
+	start_or_resume_session(core, session).await.map_err(|error| detail_of(&error))?;
 	submit_prompt(held(core, NO_AGENT)?, scope.clone(), run_prompt_for(requested), None)
 		.await
 		.map_err(|error| detail_of(&error))

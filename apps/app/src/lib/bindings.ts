@@ -82,7 +82,7 @@ export const commands = {
 	title: string,
 	icon: string | null,
 } | null>("agent_title", { text }),
-	agentStartOrResumeSession: (scope: RuntimeScope, resume: string | null, cwd: string | null, outputSchema: null | boolean | number | null | string | Json[] | { [key in string]: Json } | null) => typedError<SessionHandle, TransportError>(__TAURI_INVOKE("agent_start_or_resume_session", { scope, resume, cwd, outputSchema })),
+	agentStartOrResumeSession: (scope: RuntimeScope, resume: string | null, cwd: string | null, outputSchema: null | boolean | number | null | string | Json[] | { [key in string]: Json } | null, deniedTools: string[] | null, permissionMode: string | null) => typedError<SessionHandle, TransportError>(__TAURI_INVOKE("agent_start_or_resume_session", { scope, resume, cwd, outputSchema, deniedTools, permissionMode })),
 	agentSubmitPrompt: (scope: RuntimeScope, text: string, turn: {
 	turnId: string,
 	promptId: string,

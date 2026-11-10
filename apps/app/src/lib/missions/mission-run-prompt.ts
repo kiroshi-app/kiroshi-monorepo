@@ -23,6 +23,9 @@ const INSTRUCTION_OF: Record<MissionRunCause, string> = {
 		"Report in a few lines where your mission stands right now and mention whoever picks the work up next. Name no step, no tool, no merge, no ticket and no pull request.",
 }
 
+const UNATTENDED_NOTICE =
+	"Nobody answers a question during this run. When a question blocks you, ask it through mission_escalate and never ask one any other way. A tool call may be refused without anyone asked: a refused call ends nothing, so carry on with what you are allowed to use."
+
 const UNTRUSTED_NOTICE = untrustedNoticeOf(
 	"the mission, its events and the last message of the agent",
 )
@@ -104,6 +107,7 @@ export const missionRunPromptFor = (call: MissionRunCall): string => {
 
 	return [
 		INSTRUCTION_OF[call.cause],
+		UNATTENDED_NOTICE,
 		...(call.rosterBlock ? [call.rosterBlock] : []),
 		UNTRUSTED_NOTICE,
 		...noticesOf(shortEvents),
