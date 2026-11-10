@@ -509,19 +509,10 @@ const SpaceFollowingWindow = (args: ExpandedSidebarProps) => {
 	})
 }
 
-const SEVERAL_SPACES_FOLLOWED = {
-	args: { spaces: SEVERAL_SPACES },
-	render: (args: ExpandedSidebarProps) => <SpaceFollowingWindow {...args} />,
-}
-
-const expandedSwitcherFor = (canvasElement: HTMLElement, name: string) =>
-	within(sidebarIn(canvasElement)).getByRole("button", {
-		name: `Change space, ${name} open`,
-	})
-
 export const SwipeMovesBetweenSpacesExpanded = meta.story({
 	name: "Swipe moves between spaces Expanded",
-	...SEVERAL_SPACES_FOLLOWED,
+	args: { spaces: SEVERAL_SPACES },
+	render: (args) => <SpaceFollowingWindow {...args} />,
 	parameters: {
 		docs: {
 			description: {
@@ -539,7 +530,11 @@ export const SwipeMovesBetweenSpacesExpanded = meta.story({
 		await expect(args.onSelectSpace).toHaveBeenCalledTimes(1)
 		await expect(args.onSelectSpace).toHaveBeenLastCalledWith("perso")
 		await waitFor(() =>
-			expect(expandedSwitcherFor(canvasElement, "Perso")).toBeVisible(),
+			expect(
+				within(sidebarIn(canvasElement)).getByRole("button", {
+					name: "Change space, Perso open",
+				}),
+			).toBeVisible(),
 		)
 
 		await swipeEnded()
@@ -587,7 +582,8 @@ export const SwipeWithSwitchingNotAllowedDoesNothingExpanded = meta.story({
 export const SwipePastTheEdgesKeepsSpaceExpanded = meta.story({
 	name: "Swipe past the edges keeps the space Expanded",
 	tags: ["test-only"],
-	...SEVERAL_SPACES_FOLLOWED,
+	args: { spaces: SEVERAL_SPACES },
+	render: (args) => <SpaceFollowingWindow {...args} />,
 	play: async ({ args, canvasElement }) => {
 		const nav = sidebarIn(canvasElement)
 
