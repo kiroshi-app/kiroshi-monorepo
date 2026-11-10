@@ -21,11 +21,7 @@ import type { Chat } from "@/lib/chat/use-chat"
 import type { ConversationRuntimes } from "@/lib/conversations/conversation-runtimes"
 import type { Bot, Conversation } from "@/lib/conversations/store-contract"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
-import {
-	type HomeVisits,
-	type HomeVisitsState,
-	visitOf,
-} from "@/lib/home/home-visits"
+import { type HomeVisits, visitOf } from "@/lib/home/home-visits"
 import type { MissionLanding } from "@/lib/missions/mission-actions"
 import type { OpenedMissionController } from "@/lib/missions/opened-mission-controller"
 import type { ThreadSearch } from "@/lib/navigation/thread-search"
@@ -114,25 +110,18 @@ const missionThreadOf = (
 	return null
 }
 
-const NO_VISITS: HomeVisitsState = {}
-
-const ignoreVisits = () => () => undefined
-
-const useVisitsOf = (seat: HomeSeat | undefined) =>
-	useSyncExternalStore(
-		seat?.visits.subscribe ?? ignoreVisits,
-		seat?.visits.getState ?? (() => NO_VISITS),
-	)
-
 type HomeViewProps = {
 	body: WorkspaceBodyProps
 	seat: HomeSeat
 	bot: Bot
-	visits: HomeVisitsState
 }
 
-const HomeView = ({ body, seat, bot, visits }: HomeViewProps) => {
+const HomeView = ({ body, seat, bot }: HomeViewProps) => {
 	const { onOpenThreadInNewTab, spaceId } = body
+	const visits = useSyncExternalStore(
+		seat.visits.subscribe,
+		seat.visits.getState,
+	)
 	const visit = visitOf(visits, bot.id, spaceId)
 	const joinedHost = useContext(OpenJoinedHostContext)
 	const access = spaceAccessOf(joinedHost)
@@ -193,7 +182,6 @@ export function WorkspaceBody(props: WorkspaceBodyProps) {
 	const t = useCommonCopy()
 	const { missions } = props
 	const opened = useSyncExternalStore(missions.subscribe, missions.getState)
-	const visits = useVisitsOf(props.home)
 	const rowId = props.conversation?.id ?? props.bot?.id ?? null
 	const { spaceRowId } = props
 
@@ -256,7 +244,6 @@ export function WorkspaceBody(props: WorkspaceBodyProps) {
 				bot={props.bot}
 				key={props.bot.id}
 				seat={props.home}
-				visits={visits}
 			/>
 		)
 	}
