@@ -57,21 +57,17 @@ impl<'a> Face<'a> {
 	}
 
 	fn picture(&self, image: &Image, size: f32, outline: &Outline, dark: bool) -> El {
-		let inscribed = size * INSCRIBED_SHARE;
-		let inset = (size - inscribed) / 2.0;
-		let picture = el()
-			.absolute(-inset, -inset)
-			.size(size, size)
-			.pixels_fit(image.pixels(), SurfaceFit::Fill);
+		let square = || el().size(size, size);
+		let picture = outline.cut_centres().into_iter().fold(
+			square().pixels_fit(image.pixels(), SurfaceFit::Fill),
+			|kept, [x, y]| {
+				square().child(kept).cutout_circle([x as f32, y as f32], CUT_RADIUS, CUT_RADIUS)
+			},
+		);
 		let outlined = glazed(Shape::new().view_box(size, size), outline, f64::from(size), dark);
-		el().size(size, size)
+		square()
 			.label(self.name)
-			.child(
-				el().absolute(inset, inset)
-					.size(inscribed, inscribed)
-					.clip_rounded(inscribed / 2.0)
-					.child(picture),
-			)
+			.child(picture.absolute(0.0, 0.0))
 			.child(canvas(outlined).absolute(0.0, 0.0).size(size, size))
 	}
 }
@@ -152,7 +148,8 @@ const RIPPLE_SPAN: f64 = 0.5;
 const OUTER_HALF_WIDTH: f64 = 200.5;
 const OUTER_HALF_HEIGHT: f64 = 181.5;
 const OUTLINE_SIDE: f64 = OUTER_HALF_WIDTH * 2.0;
-const INSCRIBED_SHARE: f32 = (OUTER_HALF_HEIGHT / OUTER_HALF_WIDTH) as f32;
+const CUT_RADIUS: f32 = 10_000.0;
+const CUT_STEPS: usize = 12;
 const COS_30: f64 = 0.866_025_403_784_438_6;
 const TAN_30: f64 = 0.577_350_269_189_625_8;
 const TURN: f64 = PI / 3.0;
@@ -562,6 +559,19 @@ impl Outline {
 		path.close()
 	}
 
+	fn cut_centres(&self) -> Vec<[f64; 2]> {
+		let reach = f64::from(CUT_RADIUS);
+		(0..CUT_STEPS)
+			.filter(|step| step % (CUT_STEPS / 2) != 0)
+			.map(|step| {
+				let angle = step as f64 * TURN / 2.0;
+				let across = if step % 2 == 1 { self.apothem } else { self.apothem / COS_30 };
+				let distance = across + self.rounding + reach;
+				[self.centre + distance * angle.cos(), self.centre + distance * angle.sin()]
+			})
+			.collect()
+	}
+
 	fn top_chain(&self, drop: f64) -> Vec<[f32; 2]> {
 		let arcs = [
 			(3, PI, 7.0 * PI / 6.0),
@@ -648,6 +658,28 @@ mod tests {
 		assert_eq!(companion_seed("a"), 3_826_002_220);
 		assert!((Random(1).next() - 0.627_073_940_588_161_3).abs() < 1e-15);
 		assert_eq!([hue_shift("Wren"), hue_shift("Juniper"), hue_shift("Atlas")], [7.0, -1.0, 6.0]);
+	}
+
+	#[test]
+	fn the_cuts_keep_the_whole_hexagon_and_leave_no_band_outside_it() {
+		let side = 24.0;
+		let outline = Outline::of_width(side);
+		let band = side * 0.006;
+		let grown = Outline::of_half(
+			side / 2.0 + band,
+			OUTER_HALF_HEIGHT * side / OUTLINE_SIDE + band,
+			side / 2.0,
+		);
+		let cuts = outline.cut_centres();
+		let steps = 480;
+		for (column, row) in (0..steps).flat_map(|column| (0..steps).map(move |row| (column, row)))
+		{
+			let [x, y] = [column, row].map(|at| (f64::from(at) + 0.5) * side / f64::from(steps));
+			let is_cut = cuts.iter().any(|[cx, cy]| (x - cx).hypot(y - cy) < f64::from(CUT_RADIUS));
+			let (u, v) = (x - side / 2.0, y - side / 2.0);
+			assert!(!(is_cut && outline.contains(u, v)), "cut inside the hexagon at {x}, {y}");
+			assert!(is_cut || grown.contains(u, v), "uncovered band at {x}, {y}");
+		}
 	}
 
 	#[test]

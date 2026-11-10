@@ -3,7 +3,7 @@ use rune::runtime::ElementInfo;
 use rune::{Color, Cx, El, Env, Key, KeyEvent, Mods, Runtime, row};
 
 use super::super::scenes::picture;
-use super::{AVATAR, HeaderIdentity, header_identity};
+use super::{HeaderIdentity, header_identity};
 use crate::avatar::{Activity, Motion};
 use crate::strings::{Language, chat};
 use crate::surfaces::s01_chrome::{ConnectionState, ConnectionStatus};
@@ -275,20 +275,24 @@ fn a_running_avatar_keeps_every_part_where_it_rests_with_and_without_reduced_mot
 }
 
 #[test]
-fn a_provided_image_sits_in_the_circle_inscribed_in_the_hexagon_and_the_field_draws_alone_otherwise()
+fn a_provided_image_covers_the_whole_avatar_under_the_hexagon_outline_and_the_field_draws_alone_otherwise()
  {
 	let pictured = laid_out(Header { image: Some(picture()), ..ready() }, WIDE);
 	let field = laid_out(ready(), WIDE);
+	let elements = pictured.elements();
 	let (avatar, layers) = labelled(&pictured, NAME);
-	let frame = avatar.rect;
-	let inscribed = AVATAR * 181.5 / 200.5;
-	let clip = layers.first().expect("the image is framed").rect;
+	let [picture, outline] = layers.as_slice() else { panic!("a picture and its outline") };
+	let mut cut = elements.iter().position(|element| element.path == picture.path);
+	let mut depth = 0;
+	while let Some(at) = cut {
+		assert_eq!(elements[at].rect, avatar.rect, "a cut layer leaves the avatar square");
+		depth += 1;
+		cut = elements.iter().position(|element| element.parent == Some(at));
+	}
 
 	assert!(labelled(&field, NAME).1.is_empty());
-	assert_eq!(layers.len(), 2);
-	assert!((clip[2] - inscribed).abs() < 0.01 && (clip[3] - inscribed).abs() < 0.01);
-	assert!((clip[0] - frame[0] - (AVATAR - inscribed) / 2.0).abs() < 0.01);
-	assert_eq!(layers[1].rect, frame);
+	assert_eq!(depth, 11, "ten hexagon cuts around the picture");
+	assert_eq!(outline.rect, avatar.rect);
 }
 
 #[test]
