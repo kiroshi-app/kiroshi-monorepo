@@ -102,6 +102,15 @@
 	--color-shell-divider: var(--shell-divider);
 	--color-rail-item-selected: var(--rail-item-selected);
 	--color-rail-avatar: var(--rail-avatar);
+	--color-sidebar-person-foreground: var(--sidebar-person-foreground);
+	--color-space-dot: var(--space-dot);
+	--color-space-offline: var(--space-offline);
+	--color-update-row: var(--update-row);
+	--color-update-track: var(--update-track);
+	--color-update-blocked-foreground: var(--update-blocked-foreground);
+	--color-update-failed: var(--update-failed);
+	--color-update-failed-surface: var(--update-failed-surface);
+	--color-update-failed-foreground: var(--update-failed-foreground);
 	--color-person-avatar: var(--person-avatar);
 	--color-input: var(--input);
 	--color-ring: var(--ring);

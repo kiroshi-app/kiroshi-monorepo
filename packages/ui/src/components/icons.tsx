@@ -372,6 +372,8 @@ const Icons = {
 	Pin: PinIcon,
 	Play: PlayIcon,
 	Unpin: PinOffIcon,
+	UpdateRestart: RotateCcwIcon,
+	UpdateRetry: RotateCwIcon,
 	ReopenTab: RotateCcwIcon,
 	Reply: ReplyIcon,
 	Previous: ChevronLeftIcon,

@@ -36,6 +36,8 @@ const LEFT_OUT_OF_THE_SIDEBAR: Record<string, string> = {
 	onSelectLibrary: "the scene opens no Library, so its rail draws no entry",
 	onSelectHome: "the scene opens no Home, so its rail draws no entry",
 	isHomeSelected: "the scene opens no Home, so its rail draws no entry",
+	onToggleSidebar:
+		"the app wires no sidebar toggle yet, so the scene draws none",
 }
 
 const SIDEBAR_PROP_OF_RAIL_PROP: Record<string, string> = {

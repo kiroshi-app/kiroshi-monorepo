@@ -111,11 +111,14 @@ type TitleBarTabsProps = {
 	onNewTab?: () => void
 	onGoBack?: () => void
 	onGoForward?: () => void
+	onToggleSidebar?: () => void
 }
 
 const STRIP = "flex min-w-0 flex-1 items-center gap-1 self-stretch"
 
 const HISTORY = "flex shrink-0 items-center gap-0.5 pe-1"
+
+const HISTORY_BESIDE_SIDEBAR = "w-52.25"
 
 const BAR_BUTTON =
 	"grid size-7 shrink-0 place-items-center rounded-sm text-muted-foreground hover:bg-title-bar-highlight hover:text-foreground focus-visible:outline-2 focus-visible:outline-foreground focus-visible:outline-offset-1 disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-3.75"
@@ -959,6 +962,7 @@ const TitleBarTabs = ({
 	onNewTab,
 	onGoBack,
 	onGoForward,
+	onToggleSidebar,
 }: TitleBarTabsProps) => {
 	const { t } = useTranslation("common")
 	const pinned = tabs.filter((tab) => tab.isPinned)
@@ -1042,7 +1046,20 @@ const TitleBarTabs = ({
 
 	return (
 		<div className={STRIP} data-slot="title-bar-tabs" ref={stripRef}>
-			<div className={HISTORY} data-slot="title-bar-history">
+			<div
+				className={cn(HISTORY, onToggleSidebar && HISTORY_BESIDE_SIDEBAR)}
+				data-slot="title-bar-history"
+			>
+				{onToggleSidebar ? (
+					<button
+						aria-label={t("sidebar.toggle")}
+						className={BAR_BUTTON}
+						onClick={onToggleSidebar}
+						type="button"
+					>
+						<Icons.Sidebar aria-hidden="true" />
+					</button>
+				) : null}
 				<button
 					aria-label={t("titleBar.back")}
 					className={BAR_BUTTON}

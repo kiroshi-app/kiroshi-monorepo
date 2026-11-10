@@ -95,11 +95,14 @@ const bots = {
 	rail: {
 		label: "Navigation",
 		home: "Home",
+		newConversation: "New conversation",
 		conversations: "Conversations",
+		pinned: "Pinned",
 		missions: "Missions",
 		library: "Library",
 		searchMissions: "Search missions",
 		spaceSettings: "Space settings",
+		settings: "Settings",
 		dot: "{{name}}, new activity",
 		badge: {
 			attention: "{{name}}, waiting for you",

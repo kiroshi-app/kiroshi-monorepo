@@ -88,11 +88,14 @@ const bots = {
 	rail: {
 		label: "Navigation",
 		home: "Accueil",
+		newConversation: "Nouvelle conversation",
 		conversations: "Conversations",
+		pinned: "Épinglées",
 		missions: "Missions",
 		library: "Bibliothèque",
 		searchMissions: "Rechercher des missions",
 		spaceSettings: "Réglages de l’espace",
+		settings: "Réglages",
 		dot: "{{name}}, nouvelle activité",
 		badge: {
 			attention: "{{name}}, en attente de vous",
