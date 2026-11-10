@@ -50,7 +50,9 @@ const SettingsSelect = ({
 			<Select.Root
 				disabled={isDisabled}
 				items={options}
-				onValueChange={(next: string | null) => onValueChange(next ?? "")}
+				onValueChange={(next: string | null) => {
+					if (next !== null) onValueChange(next)
+				}}
 				value={value}
 			>
 				<Select.Label className={FIELD_LABEL_CLASS}>{label}</Select.Label>

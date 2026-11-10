@@ -1188,6 +1188,7 @@ forms-settingsselect--default
 forms-settingsselect--disabled
 forms-settingsselect--empty
 forms-settingsselect--error
+forms-settingsselect--options-rebuilt-without-value
 forms-settingsselect--themes-at-rest
 forms-settingsselect--themes-filled
 forms-settingsselect--themes-focus-visible
