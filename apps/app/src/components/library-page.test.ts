@@ -395,7 +395,9 @@ const SIDEBAR_ENTRIES: SidebarEntry[] = [
 ]
 
 const sidebarButton = (entry: SidebarEntry) =>
-	screen.getByRole("button", { name: i18n.t(`bots:rail.${entry}`) })
+	screen.getByRole("button", {
+		name: new RegExp(`^${i18n.t(`bots:rail.${entry}`)}( \\d+)?$`),
+	})
 
 const currentSidebarEntries = () =>
 	SIDEBAR_ENTRIES.filter(

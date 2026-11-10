@@ -2,9 +2,12 @@ import { useMemo } from "react"
 
 import type { SettingsNavigation } from "@/lib/navigation/use-settings-navigation"
 import type { useSwitcherSpaces } from "@/lib/spaces/use-joined-spaces"
+import { isListPage } from "@/lib/tabs/tab-pages"
+import { usePageShown } from "@/lib/tabs/use-page-shown"
 import type { WorkspaceTabs } from "@/lib/tabs/workspace-tabs"
 import type { RosterLines } from "@/lib/workspace/use-roster-lines"
 import type { RosterLists } from "@/lib/workspace/use-roster-lists"
+import type { SidebarMissions } from "@/lib/workspace/use-sidebar-missions"
 import type { WorkspaceOverlay } from "@/lib/workspace/use-workspace-overlay"
 import type { WorkspaceFrame } from "@/lib/workspace/workspace-frame"
 
@@ -13,33 +16,41 @@ type WorkspaceNavigationOptions = {
 	overlay: WorkspaceOverlay
 	rosterLines: RosterLines
 	rosterLists: RosterLists
+	sidebarMissions: Pick<SidebarMissions, "openMissionThread">
 	switcher: ReturnType<typeof useSwitcherSpaces>
 	tabs: WorkspaceTabs
 	onSelectSpace: (id: string) => void
 }
 
-type WorkspaceNavigation = Pick<WorkspaceFrame, "gestures" | "selectedSpaceId">
+type WorkspaceNavigation = Pick<WorkspaceFrame, "sidebar" | "selectedSpaceId">
 
 export const useWorkspaceNavigation = ({
 	navigation,
 	overlay,
 	rosterLines,
 	rosterLists,
+	sidebarMissions,
 	switcher,
 	tabs,
 	onSelectSpace,
 }: WorkspaceNavigationOptions): WorkspaceNavigation => {
-	const { badgesBySpaceId } = rosterLists
-	const { onCreateSpace } = rosterLines.sidebarActions
+	const { badgesBySpaceId, rosterBots } = rosterLists
+	const {
+		onCreateSpace,
+		onOpenSpaceSettings,
+		onSelectBot,
+		onSelectConversation,
+	} = rosterLines.sidebarActions
+	const { openMissionThread } = sidebarMissions
 	const user = overlay.userSettings
 	const search = overlay.search
+	const isListShown = usePageShown(tabs, isListPage)
 
 	return useMemo(() => {
 		const space = switcher.selectedSpace
 
 		return {
-			gestures: {
-				selected: "conversations",
+			sidebar: {
 				badgesBySpaceId,
 				hostBySpaceId: switcher.hostBySpaceId,
 				invitations: switcher.invitations,
@@ -49,11 +60,22 @@ export const useWorkspaceNavigation = ({
 				onOpenSearch: search.open,
 				onRetryInvitation: switcher.onRetryInvitation,
 				onSelectSpace: (id) => tabs.leaveAsked(() => onSelectSpace(id)),
-				onSpacesMenuOpenChange: switcher.onSpaceSwitcherOpenChange,
-				onOpenYou: () => navigation.openUserSettings(),
-				onSelectHome: navigation.openHome,
+				onOpenChange: switcher.onSpaceSwitcherOpenChange,
+				onOpenSpaceSettings,
+				onOpenSettings: () => navigation.openUserSettings(),
+				onNewConversation: navigation.openHome,
 				onSelectLibrary: navigation.openLibrary,
 				onSelectMissions: navigation.openMissions,
+				onOpenConversation: (id) => {
+					const isAgent = rosterBots.some((agent) => agent.id === id)
+					if (!isListShown) {
+						navigation.openThread(isAgent ? { bot: id } : { conversation: id })
+						return
+					}
+					if (isAgent) onSelectBot(id)
+					else onSelectConversation(id)
+				},
+				onOpenMission: openMissionThread,
 				spaces: switcher.spaces,
 				user,
 			},
@@ -63,6 +85,12 @@ export const useWorkspaceNavigation = ({
 		badgesBySpaceId,
 		navigation,
 		onCreateSpace,
+		onOpenSpaceSettings,
+		isListShown,
+		onSelectBot,
+		onSelectConversation,
+		rosterBots,
+		openMissionThread,
 		onSelectSpace,
 		search.open,
 		switcher,

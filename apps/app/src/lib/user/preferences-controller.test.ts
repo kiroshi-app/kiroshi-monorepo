@@ -5,6 +5,7 @@ import { i18n } from "@workspace/ui/lib/i18n"
 
 import type { UserPreferences } from "./preferences-contract"
 import { createUserController } from "./preferences-controller"
+import { readMirror } from "./preferences-mirror"
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }))
 
@@ -495,7 +496,7 @@ describe("the sidebar the reader collapses", () => {
 		expect(opening.getState().preferences.sidebarCollapsed).toBe(true)
 	})
 
-	it("keeps the collapsed sidebar on screen when the host refuses it", async () => {
+	it("rolls the sidebar back to expanded when the host refuses to collapse it", async () => {
 		aHost()
 		const controller = await loaded()
 		const refused = new Error("refused")
@@ -503,7 +504,8 @@ describe("the sidebar the reader collapses", () => {
 
 		await expect(controller.setSidebarCollapsed(true)).rejects.toBe(refused)
 
-		expect(controller.getState().preferences.sidebarCollapsed).toBe(true)
+		expect(controller.getState().preferences.sidebarCollapsed).toBe(false)
+		expect(readMirror().sidebarCollapsed).toBe(false)
 	})
 })
 

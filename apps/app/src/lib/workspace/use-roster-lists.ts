@@ -1,6 +1,7 @@
-import { createElement, useMemo } from "react"
+import { useMemo } from "react"
 
-import { SidebarListSkeleton } from "@workspace/ui/components/sidebar-list-skeleton"
+import type { CollapsedSidebarListStatus } from "@workspace/ui/components/collapsed-sidebar"
+import { useSkeletonTiming } from "@workspace/ui/hooks/use-skeleton-timing"
 
 import { useRosterBots } from "./use-roster-bots"
 import { useRosterBotsBySpace } from "./use-roster-bots-by-space"
@@ -28,9 +29,22 @@ import {
 	missionsIn,
 	withMissions,
 } from "../missions/missions-model"
-import { useSkeletonSlot } from "../query/use-skeleton-slot"
 
-const ROSTER_SKELETON = createElement(SidebarListSkeleton)
+type RosterListStatusInput = {
+	isSkeletonShown: boolean
+	hasFailedToLoad: boolean
+	isEmpty: boolean
+}
+
+const rosterListStatusOf = ({
+	isSkeletonShown,
+	hasFailedToLoad,
+	isEmpty,
+}: RosterListStatusInput): CollapsedSidebarListStatus => {
+	if (isSkeletonShown) return "loading"
+	if (hasFailedToLoad && isEmpty) return "failed"
+	return "ready"
+}
 
 type RosterListsInput = {
 	core: WorkspaceCore
@@ -193,10 +207,12 @@ export const useRosterLists = ({
 		[rosterBotsBySpace, rosterConversationsBySpace],
 	)
 
-	const rosterSkeleton = useSkeletonSlot(
-		roster.state.isRosterPending,
-		ROSTER_SKELETON,
-	)
+	const rosterSkeletonPhase = useSkeletonTiming(roster.state.isRosterPending)
+	const rosterListStatus = rosterListStatusOf({
+		isSkeletonShown: rosterSkeletonPhase === "skeleton",
+		hasFailedToLoad: roster.state.hasFailedToLoad,
+		isEmpty: rosterConversations.length === 0,
+	})
 
 	const railSignals = useMemo(
 		() =>
@@ -215,7 +231,7 @@ export const useRosterLists = ({
 		rosterBotsBySpace,
 		rosterConversations,
 		rosterConversationsBySpace,
-		rosterSkeleton,
+		rosterListStatus,
 	}
 }
 

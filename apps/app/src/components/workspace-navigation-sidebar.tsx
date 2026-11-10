@@ -1,6 +1,9 @@
 import type { ExpandedSidebarDestination } from "@workspace/ui/components/expanded-sidebar"
 import { NavigationSidebar } from "@workspace/ui/components/navigation-sidebar"
 
+import type { Section } from "@/lib/conversations/store-contract"
+import { sidebarZonesOf } from "@/lib/sidebar/sidebar-zones"
+import { soloThreadRowsOf } from "@/lib/sidebar/solo-thread-rows"
 import { isHomePage, isLibraryPage, isMissionsPage } from "@/lib/tabs/tab-pages"
 import { usePageShown } from "@/lib/tabs/use-page-shown"
 import type { WorkspaceTabs } from "@/lib/tabs/workspace-tabs"
@@ -20,43 +23,48 @@ const useShownDestination = (
 	return undefined
 }
 
+const NO_SECTIONS: Section[] = []
+
+const sectionsIn = (
+	sectionsBySpaceId: Record<string, Section[]>,
+	spaceId: string | null,
+) =>
+	spaceId === null ? NO_SECTIONS : (sectionsBySpaceId[spaceId] ?? NO_SECTIONS)
+
 export const WorkspaceNavigationSidebar = () => {
-	const { rosterLines, rosterView, tabs } = useWorkspace()
+	const { core, rosterLines, rosterView, sidebarMissions, tabs } =
+		useWorkspace()
 	const { frame, rosterLists } = useWorkspaceFrame()
-	const { gestures, selectedSpaceId } = frame
+	const { sidebar, selectedSpaceId } = frame
 	const destination = useShownDestination(tabs)
+	const { roster, sections } = core
+	const zones = sidebarZonesOf({
+		conversations: [
+			...rosterLists.rosterConversations,
+			...soloThreadRowsOf({
+				agents: rosterLists.rosterBots,
+				soloThreads: rosterView.soloThreads,
+				spaceId: rosterView.rosteredSpaceId,
+			}),
+		],
+		sections: sectionsIn(sections.state.sections, rosterView.rosteredSpaceId),
+	})
 
 	return (
 		<NavigationSidebar
-			badgesBySpaceId={gestures.badgesBySpaceId}
+			{...sidebar}
 			conversations={null}
 			destination={destination}
-			hostBySpaceId={gestures.hostBySpaceId}
-			invitations={gestures.invitations}
-			onAcceptInvitation={gestures.onAcceptInvitation}
-			onCreateSpace={gestures.onCreateSpace}
-			onDeclineInvitation={gestures.onDeclineInvitation}
-			onNewConversation={gestures.onSelectHome}
-			onOpenChange={gestures.onSpacesMenuOpenChange}
-			onOpenConversation={rosterLines.sidebarActions.onSelectConversation}
-			onOpenSearch={gestures.onOpenSearch}
-			onOpenSettings={gestures.onOpenYou}
-			onRetryInvitation={gestures.onRetryInvitation}
-			onSelectLibrary={gestures.onSelectLibrary}
-			onSelectMissions={gestures.onSelectMissions}
-			onSelectSpace={gestures.onSelectSpace}
+			listEnd={roster.listEnd}
+			listStatus={rosterLists.rosterListStatus}
+			missionCount={sidebarMissions.waitingCount}
+			onRetryList={roster.controller.retryLoad}
 			openConversationId={rosterView.selectedConversationId ?? undefined}
 			pinned={null}
 			selectedSpaceId={selectedSpaceId}
-			spaces={gestures.spaces ?? []}
+			spaces={sidebar.spaces ?? []}
 			update={rosterLines.updateBadge}
-			user={gestures.user}
-			zones={[
-				{
-					id: "conversations",
-					conversations: rosterLists.rosterConversations,
-				},
-			]}
+			zones={zones}
 		/>
 	)
 }

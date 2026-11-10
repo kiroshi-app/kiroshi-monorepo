@@ -177,6 +177,7 @@ const produceNavigationFor = ({
 				} as unknown as WorkspaceOverlay,
 				rosterLines: { sidebarActions: {} } as RosterLines,
 				rosterLists: {} as RosterLists,
+				sidebarMissions: { openMissionThread: () => undefined },
 				switcher: useSwitcherSpaces(
 					{ spaces: [HOME, GARAGE], selectedSpaceId },
 					{
@@ -213,7 +214,7 @@ describe.each(PRODUCED_SPACES)(
 			const { hostBySpaceId } = produceNavigationFor({
 				selectedSpaceId,
 				connections,
-			}).gestures
+			}).sidebar
 
 			expect(hostBySpaceId?.[space.id]).toBe(host)
 		})
@@ -389,14 +390,13 @@ describe("the Home page", () => {
 
 	const sidebarEntry = (name: SidebarEntry) =>
 		within(sidebarOf()).getByRole("button", {
-			name: i18n.t(`bots:rail.${name}`),
+			name: new RegExp(`^${i18n.t(`bots:rail.${name}`)}( \\d+)?$`),
 		})
 
 	const currentEntries = () =>
 		within(sidebarOf())
 			.getAllByRole("button")
 			.filter((entry) => entry.getAttribute("aria-current") === "page")
-			.map((entry) => entry.getAttribute("aria-label") ?? entry.textContent)
 
 	const pressInSidebar = async (name: SidebarEntry) => {
 		act(() => {
@@ -416,7 +416,7 @@ describe("the Home page", () => {
 		await pressInSidebar("newConversation")
 
 		expect(router.state.location.pathname).toBe("/home")
-		expect(currentEntries()).toEqual([i18n.t("bots:rail.newConversation")])
+		expect(currentEntries()).toEqual([sidebarEntry("newConversation")])
 		expect(pickedAgentName()).toBe(firstOfSpace.name)
 		expect(slot("home-layout")).not.toBeNull()
 	})
@@ -469,7 +469,7 @@ describe("the Home page", () => {
 
 			await pressInSidebar(entry)
 
-			expect(currentEntries()).toEqual([i18n.t(`bots:rail.${entry}`)])
+			expect(currentEntries()).toEqual([sidebarEntry(entry)])
 			expect(slot("home-layout")).toBeNull()
 		},
 	)

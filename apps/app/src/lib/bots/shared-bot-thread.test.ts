@@ -17,6 +17,7 @@ import {
 } from "@/lib/notifications/fake-notification-port"
 import { type FakeLayout, fakeLayout } from "@/lib/perf/fake-layout"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
+import { readMirror, writeMirror } from "@/lib/user/preferences-mirror"
 
 const harness = vi.hoisted(
 	(): {
@@ -92,6 +93,7 @@ const settle = async (ms: number) => {
 }
 
 const mount = async (store: TranscriptStore) => {
+	writeMirror({ ...readMirror(), sidebarCollapsed: true })
 	harness.store = store
 	harness.driver = createFakeChatDriver({ stepMs: STEP_MS })
 	harness.notifications = createFakeNotificationPort()
@@ -136,15 +138,11 @@ const REFUSED_READ = "the transcript store refused it"
 
 const noticeText = () => textIn("chat-notice")
 
-const previewText = () => textIn("roster-row-preview")
-
 const openFirstRow = async () => {
-	const row = document
-		.querySelector(
-			'[data-slot="space-panel"]:not([inert]) [data-slot="roster-row-name"]',
-		)
-		?.closest("button")
-	if (!row) throw new Error("no roster row")
+	const row = document.querySelector(
+		'[data-slot="collapsed-sidebar-conversation"]',
+	)
+	if (!row) throw new Error("no sidebar row")
 	fireEvent.click(row)
 	await settle(MOUNT_MS)
 }
@@ -162,21 +160,18 @@ afterEach(() => {
 	vi.useRealTimers()
 })
 
-// OPE-2153: needs the expanded conversation list back.
-it.skip("opens the solo thread of the space entered and leaves the one it left", async () => {
+it("opens the solo thread of the space entered and leaves the one it left", async () => {
 	vi.useFakeTimers()
 	await aSharedBot()
 	await openFirstRow()
 
 	expect(threadText()).toContain(HOME_WORD)
-	expect(previewText()).toContain(HOME_WORD)
 
 	await enterSpace("Vocca")
 	await openFirstRow()
 
 	expect(threadText()).toContain(AWAY_WORD)
 	expect(threadText()).not.toContain(HOME_WORD)
-	expect(previewText()).toContain(AWAY_WORD)
 
 	await enterSpace("Personal")
 
@@ -184,8 +179,7 @@ it.skip("opens the solo thread of the space entered and leaves the one it left",
 	expect(threadText()).not.toContain(AWAY_WORD)
 })
 
-// OPE-2153: needs the expanded conversation list back.
-it.skip("opens the thread of the companion's own space when its notification is clicked", async () => {
+it("opens the thread of the companion's own space when its notification is clicked", async () => {
 	vi.useFakeTimers()
 	const { away, notifications } = await aBotOfAnotherSpace()
 

@@ -19,6 +19,7 @@ import { createFakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
+import { sidebarItemNamed, sidebarItemOf } from "@/lib/sidebar/sidebar-fixtures"
 import { readMirror, writeMirror } from "@/lib/user/preferences-mirror"
 
 type Harness = {
@@ -97,7 +98,7 @@ const settle = async () => {
 }
 
 const mountRouterAt = async (path = "/") => {
-	writeMirror({ ...readMirror(), firstRunDone: true })
+	writeMirror({ ...readMirror(), firstRunDone: true, sidebarCollapsed: true })
 	const store = createFakeTranscriptStore()
 	const [space] = await store.spaces()
 	const bot = await store.createBot(newBotIdentity([]), space.id)
@@ -124,33 +125,17 @@ const press = async (control: Element, init: MouseEventInit = {}) => {
 	await settle()
 }
 
-const rosterRowNamed = (name: string) =>
-	[...document.querySelectorAll('[data-slot="roster-row-name"]')]
-		.find((label) => label.textContent === name)
-		?.closest("button") ?? null
-
-const rosterRowOf = (name: string) => {
-	const row = rosterRowNamed(name)
-	if (!row) throw new Error(`no roster row for ${name}`)
-	return row
-}
-
-const openRoom = () => press(rosterRowOf(ROOM))
+const openRoom = () => press(sidebarItemOf(ROOM))
 
 const headerButtonOf = (name: string) =>
 	screen.getByRole("button", {
 		name: i18n.t("chat:screen.conversationIdentity", { name }),
 	})
 
-const rowMenuSettingsOf = async () => {
-	await act(async () => {
-		fireEvent.contextMenu(rosterRowOf(ROOM), { clientX: 20, clientY: 20 })
-	})
-	await settle()
-	return screen.getByRole("menuitem", { name: i18n.t("bots:roster.settings") })
+const openSettingsFromHeader = async () => {
+	await openRoom()
+	await press(headerButtonOf(ROOM))
 }
-
-const openSettingsFromRowMenu = async () => press(await rowMenuSettingsOf())
 
 const railOf = () =>
 	screen.queryByRole("navigation", { name: i18n.t("bots:rail.label") })
@@ -209,8 +194,7 @@ const tabsOf = () => within(titleBarOf()).getAllByRole("tab")
 const tabNames = () =>
 	tabsOf().map((tab) => tab.getAttribute("aria-label") ?? tab.textContent)
 
-// OPE-2153: needs the expanded conversation list back.
-it.skip("opens the conversation settings full-window from the conversation button of the thread header", async () => {
+it("opens the conversation settings full-window from the conversation button of the thread header", async () => {
 	const router = await mountRouterAt()
 	await openRoom()
 
@@ -222,17 +206,7 @@ it.skip("opens the conversation settings full-window from the conversation butto
 	)
 })
 
-// OPE-2153: needs the expanded conversation list back.
-it.skip("opens the conversation settings full-window from the Settings of a sidebar conversation row menu", async () => {
-	await mountRouterAt()
-
-	await openSettingsFromRowMenu()
-
-	expect(conversationScreenOf(ROOM)).toEqual(ON_GENERAL)
-})
-
-// OPE-2153: needs the expanded conversation list back.
-it.skip("brings back the open conversation and its draft on Back", async () => {
+it("brings back the open conversation and its draft on Back", async () => {
 	await mountRouterAt()
 	await openRoom()
 	fireEvent.change(composerOf(), { target: { value: DRAFT } })
@@ -245,10 +219,9 @@ it.skip("brings back the open conversation and its draft on Back", async () => {
 	expect(headerButtonOf(ROOM)).toBeTruthy()
 })
 
-// OPE-2153: needs the expanded conversation list back.
-it.skip("paints a rename in the sidebar", async () => {
+it("paints a rename in the sidebar", async () => {
 	await mountRouterAt()
-	await openSettingsFromRowMenu()
+	await openSettingsFromHeader()
 
 	await act(async () => {
 		fireEvent.change(
@@ -261,18 +234,17 @@ it.skip("paints a rename in the sidebar", async () => {
 	await settle()
 	await press(menuEntryOf(i18n.t("settings:screen.back")))
 
-	expect(rosterRowNamed(RENAMED)).not.toBeNull()
+	expect(sidebarItemNamed(RENAMED)).not.toBeNull()
 })
 
-// OPE-2153: needs the expanded conversation list back.
-it.skip("deletes the conversation from the Danger zone and leaves the screen", async () => {
+it("deletes the conversation from the Danger zone and leaves the screen", async () => {
 	await mountRouterAt()
-	await openSettingsFromRowMenu()
+	await openSettingsFromHeader()
 
 	await deleteFromDangerZone()
 
 	expect(settingsMenuOf()).toBeNull()
-	expect(rosterRowNamed(ROOM)).toBeNull()
+	expect(sidebarItemNamed(ROOM)).toBeNull()
 })
 
 const raisedNoticeTitles = () =>
@@ -291,15 +263,14 @@ const refuseStoreDeletion = () => {
 	).mockRejectedValue(new Error("no record"))
 }
 
-// OPE-2153: needs the expanded conversation list back.
-it.skip.each([
+it.each([
 	["the runtime release", refuseRelease],
 	["the store deletion", refuseStoreDeletion],
 ])(
 	"keeps the screen on the Danger zone and reports the failure once when %s is refused",
 	async (_, refuse) => {
 		await mountRouterAt()
-		await openSettingsFromRowMenu()
+		await openSettingsFromHeader()
 		refuse()
 
 		await deleteFromDangerZone()
@@ -327,14 +298,7 @@ const cmdClickHeaderButton = async () => {
 	await press(headerButtonOf(ROOM), { metaKey: true })
 }
 
-const cmdClickRowMenuSettings = async () =>
-	press(await rowMenuSettingsOf(), { metaKey: true })
-
-// OPE-2153: needs the expanded conversation list back.
-it.skip.each([
-	["the thread header button", cmdClickHeaderButton],
-	["the Settings of a sidebar row menu", cmdClickRowMenuSettings],
-])(
+it.each([["the thread header button", cmdClickHeaderButton]])(
 	"opens the conversation settings in a new background tab on a Cmd-click of %s",
 	async (_, cmdClick) => {
 		const router = await mountRouterAt()

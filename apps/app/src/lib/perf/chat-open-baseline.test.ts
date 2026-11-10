@@ -21,6 +21,7 @@ import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-s
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import { type FakeLayout, fakeLayout } from "@/lib/perf/fake-layout"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
+import { sidebarItemOf } from "@/lib/sidebar/sidebar-fixtures"
 import { MAIN_WINDOW_LABEL, writeSpaceTabs } from "@/lib/tabs/tabs-mirror"
 import { spaceTabsOn } from "@/lib/tabs/tabs-model"
 import { readMirror, writeMirror } from "@/lib/user/preferences-mirror"
@@ -233,7 +234,7 @@ type MountedApp = {
 type MountOptions = { delayMs?: number; pageBotIndex?: number }
 
 const seedFirstRunDone = () => {
-	writeMirror({ ...readMirror(), firstRunDone: true })
+	writeMirror({ ...readMirror(), firstRunDone: true, sidebarCollapsed: true })
 }
 
 const openOnFirstCompanion = async (store: TranscriptStore) => {
@@ -288,19 +289,9 @@ const mountApp = async ({
 	}
 }
 
-const rowFor = (name: string) => {
-	const labels = [...document.querySelectorAll('[data-slot="roster-row-name"]')]
-	const row = labels.find((label) => label.textContent === name)
-	const button = row?.closest("button")
-	if (!button) {
-		throw new Error(`no roster row for ${name}`)
-	}
-	return button
-}
-
 const chooseBot = async (name: string) => {
 	await act(async () => {
-		fireEvent.click(rowFor(name))
+		fireEvent.click(sidebarItemOf(name))
 	})
 }
 
@@ -414,8 +405,7 @@ describe("PRF5 chat open baseline", () => {
 		expect(onPaintPath).toBeLessThan(offPaintPath / 100)
 	})
 
-	// OPE-2153: needs the expanded conversation list back.
-	it.skip("lists the store calls an opening waits on", async () => {
+	it("lists the store calls an opening waits on", async () => {
 		vi.useFakeTimers()
 
 		expect(await measureOpenings(0)).toMatchInlineSnapshot(`
@@ -450,8 +440,7 @@ describe("PRF5 chat open baseline", () => {
 		`)
 	})
 
-	// OPE-2153: needs the expanded conversation list back.
-	it.skip("times the same openings with one fixed delay per store call", async () => {
+	it("times the same openings with one fixed delay per store call", async () => {
 		vi.useFakeTimers()
 
 		expect(await measureOpenings(CALL_DELAY_MS)).toMatchInlineSnapshot(`
@@ -488,8 +477,7 @@ describe("PRF5 chat open baseline", () => {
 		`)
 	})
 
-	// OPE-2153: needs the expanded conversation list back.
-	it.skip("counts what a page of twenty stored messages costs", async () => {
+	it("counts what a page of twenty stored messages costs", async () => {
 		vi.useFakeTimers()
 
 		expect(await measurePage()).toMatchInlineSnapshot(`

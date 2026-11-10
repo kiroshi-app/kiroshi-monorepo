@@ -161,18 +161,19 @@ const press = async (control: Element) => {
 	await settle()
 }
 
-const openConversation = async () => {
-	const label = [
-		...document.querySelectorAll('[data-slot="roster-row-name"]'),
-	].find((name) => name.textContent === CONVERSATION_TITLE)
-	await press(label?.closest("button") as HTMLButtonElement)
-}
+const collapseSidebar = () =>
+	writeMirror({ ...readMirror(), sidebarCollapsed: true })
+
+const openConversation = () =>
+	press(within(railOf()).getByRole("button", { name: CONVERSATION_TITLE }))
 
 const railOf = () =>
 	screen.getByRole("navigation", { name: i18n.t("bots:rail.label") })
 
 const spacesLogoOf = () =>
-	railOf().querySelector('[data-slot="space-switcher"]') as HTMLElement
+	railOf().querySelector(
+		'[data-slot="space-switcher"], [data-slot="collapsed-sidebar-space"]',
+	) as HTMLElement
 
 const currentSpaceRowOf = () =>
 	within(settingsMenuOf() as HTMLElement)
@@ -182,6 +183,15 @@ const currentSpaceRowOf = () =>
 const openSpaceSettingsByRail = async () => {
 	await press(avatarOf())
 	await press(currentSpaceRowOf())
+}
+
+const openSpaceSettingsBySwitcher = async () => {
+	await press(spacesLogoOf())
+	await press(
+		within(
+			screen.getByRole("menu", { name: i18n.t("bots:spaces.label") }),
+		).getByRole("menuitem", { name: i18n.t("bots:rail.spaceSettings") }),
+	)
 }
 
 const currentHomeEntryOf = () =>
@@ -242,25 +252,9 @@ const composerOf = () =>
 		name: i18n.t("chat:composer.label"),
 	})
 
-// OPE-2148 gap: the Space switcher has no Space settings entry.
-it.skip("opens the space settings in place of the body on the gear, and marks the gear", async () => {
+it("switches between the space and the user settings on the gear and the avatar", async () => {
 	await mountApp()
-
-	await openSpaceSettingsByRail()
-
-	expect(shownSettingsOf()).toEqual({
-		subtitle: "space",
-		entry: i18n.t("settings:rail.space"),
-	})
-	expect(isMarked(spacesLogoOf())).toBe(true)
-	expect(isMarked(avatarOf())).toBe(false)
-	expect(isMarked(conversationsEntryOf())).toBe(false)
-})
-
-// OPE-2148 gap: the Space switcher has no Space settings entry.
-it.skip("switches between the space and the user settings on the gear and the avatar", async () => {
-	await mountApp()
-	await openSpaceSettingsByRail()
+	await openSpaceSettingsBySwitcher()
 
 	await press(avatarOf())
 
@@ -268,10 +262,8 @@ it.skip("switches between the space and the user settings on the gear and the av
 		subtitle: "user",
 		entry: i18n.t("settings:rail.account"),
 	})
-	expect(isMarked(avatarOf())).toBe(true)
-	expect(isMarked(spacesLogoOf())).toBe(false)
 
-	await openSpaceSettingsByRail()
+	await openSpaceSettingsBySwitcher()
 
 	expect(shownSettingsOf()).toEqual({
 		subtitle: "space",
@@ -279,28 +271,14 @@ it.skip("switches between the space and the user settings on the gear and the av
 	})
 })
 
-// OPE-2153: needs the expanded conversation list back.
-it.skip("brings back the open conversation and its draft on Back to your settings", async () => {
+it("brings back the open conversation and its draft on Back to your settings", async () => {
+	collapseSidebar()
 	await mountApp()
 	await openConversation()
 	fireEvent.change(composerOf(), { target: { value: DRAFT } })
-	await openSpaceSettingsByRail()
+	await openSpaceSettingsBySwitcher()
 
 	await press(spaceBackOf())
-
-	expect(shownSettingsOf()).toBeNull()
-	expect(composerOf().value).toBe(DRAFT)
-	expect(isMarked(conversationsEntryOf())).toBe(true)
-})
-
-// OPE-2153: needs the expanded conversation list back.
-it.skip("closes the settings on the Conversations entry of the rail", async () => {
-	await mountApp()
-	await openConversation()
-	fireEvent.change(composerOf(), { target: { value: DRAFT } })
-	await press(avatarOf())
-
-	await press(conversationsEntryOf())
 
 	expect(shownSettingsOf()).toBeNull()
 	expect(composerOf().value).toBe(DRAFT)
@@ -388,6 +366,34 @@ it("asks before a sidebar press leaves an unsaved application, and leaves once o
 
 	expect(shownSettingsOf()).toBeNull()
 	expect(isMarked(libraryEntryOf())).toBe(true)
+})
+
+it("asks before the Space settings row of the Space switcher leaves an unsaved application", async () => {
+	await mountApp(twoSpaceApplications)
+	await openSpaceSettingsByRail()
+	await openApplications()
+	await press(menuEntryOf(/^ledger/))
+	fireEvent.change(
+		screen.getByLabelText(i18n.t("bots:applications.name.label")),
+		{ target: { value: "ledger-desk" } },
+	)
+
+	await openSpaceSettingsBySwitcher()
+
+	await press(
+		within(
+			screen.getByRole("alertdialog", {
+				name: i18n.t("bots:applications.leave.title"),
+			}),
+		).getByRole("button", { name: i18n.t("common:confirm.cancel") }),
+	)
+
+	expect(menuEntryOf(/^ledger/).getAttribute("aria-current")).toBe("page")
+	expect(
+		screen.getByLabelText<HTMLInputElement>(
+			i18n.t("bots:applications.name.label"),
+		).value,
+	).toBe("ledger-desk")
 })
 
 const pressCloseTab = async () => {
@@ -885,6 +891,7 @@ const answerLeave = (answer: string) =>
 	)
 
 const openUnsavedApplicationInSecondTab = async () => {
+	collapseSidebar()
 	await mountApp(twoSpaceApplications)
 	await openConversation()
 	await press(barButtonOf(NEW_TAB))
@@ -896,8 +903,7 @@ const openUnsavedApplicationInSecondTab = async () => {
 	})
 }
 
-// OPE-2153: needs the expanded conversation list back.
-it.skip.each([
+it.each([
 	["selecting another tab", () => press(tabNamed(CONVERSATION_TITLE))],
 	["opening a new tab", () => press(barButtonOf(NEW_TAB))],
 	["going Back", () => press(barButtonOf(i18n.t("common:titleBar.back")))],
@@ -927,8 +933,7 @@ it.skip.each([
 	},
 )
 
-// OPE-2153: needs the expanded conversation list back.
-it.skip("closes the active settings tab with an unsaved application once Leave is pressed", async () => {
+it("closes the active settings tab with an unsaved application once Leave is pressed", async () => {
 	await openUnsavedApplicationInSecondTab()
 
 	await press(
@@ -942,8 +947,7 @@ it.skip("closes the active settings tab with an unsaved application once Leave i
 	expect(shownSettingsOf()).toBeNull()
 })
 
-// OPE-2153: needs the expanded conversation list back.
-it.skip("pins, unpins, closes another tab and the other tabs at once beside an unsaved application", async () => {
+it("pins, unpins, closes another tab and the other tabs at once beside an unsaved application", async () => {
 	await openUnsavedApplicationInSecondTab()
 
 	await pickInTabMenu(CONVERSATION_TITLE, i18n.t("common:titleBar.pinTab"))

@@ -116,6 +116,7 @@ const useNavigationOfSpaceHostedHere = () => {
 			sidebarActions: { onCreateSpace: () => undefined },
 		} as RosterLines,
 		rosterLists: { badgesBySpaceId: {} } as RosterLists,
+		sidebarMissions: { openMissionThread: () => undefined },
 		switcher,
 		tabs: createWorkspaceTabs(),
 		onSelectSpace: () => undefined,
@@ -133,7 +134,7 @@ const hostOfSpaceHostedHere = async (boundaries: HostBoundaries) => {
 				?.status,
 		).toBe("success")
 	})
-	return result.current.gestures.hostBySpaceId?.[HOSTED_HERE.id]
+	return result.current.sidebar.hostBySpaceId?.[HOSTED_HERE.id]
 }
 
 afterEach(() => {

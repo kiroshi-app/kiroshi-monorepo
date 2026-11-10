@@ -1,7 +1,7 @@
 import { createContext, useContext } from "react"
 
-import type { AppFrameRailProps } from "@workspace/ui/components/app-frame"
 import type { AppTitleBarProps } from "@workspace/ui/components/app-title-bar"
+import type { NavigationSidebarProps } from "@workspace/ui/components/navigation-sidebar"
 import type { SettingsScreenRequestLeave } from "@workspace/ui/components/settings-screen"
 import type { Space } from "@workspace/ui/components/space"
 
@@ -9,8 +9,36 @@ import type { RosterLists } from "./use-roster-lists"
 
 import type { SidebarCollapse } from "../user/use-sidebar-collapse"
 
+type SidebarNavigateKey =
+	| "onSelectSpace"
+	| "onOpenSpaceSettings"
+	| "onOpenSettings"
+	| "onNewConversation"
+	| "onSelectMissions"
+	| "onSelectLibrary"
+	| "onOpenConversation"
+	| "onOpenMission"
+
+type SidebarSwitcherKey =
+	| "badgesBySpaceId"
+	| "hostBySpaceId"
+	| "invitations"
+	| "onAcceptInvitation"
+	| "onCreateSpace"
+	| "onDeclineInvitation"
+	| "onRetryInvitation"
+	| "onOpenChange"
+	| "onOpenSearch"
+	| "spaces"
+	| "user"
+
+export type WorkspaceSidebarNavigation = Required<
+	Pick<NavigationSidebarProps, SidebarNavigateKey>
+> &
+	Pick<NavigationSidebarProps, SidebarSwitcherKey>
+
 export type WorkspaceFrame = {
-	gestures: AppFrameRailProps
+	sidebar: WorkspaceSidebarNavigation
 	selectedSpaceId: string | undefined
 	collapse: SidebarCollapse
 	guardLeave: (requestLeave: SettingsScreenRequestLeave) => () => void

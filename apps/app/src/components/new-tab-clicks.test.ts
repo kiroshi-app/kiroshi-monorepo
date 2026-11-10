@@ -238,7 +238,9 @@ const showMissions = () =>
 	click(
 		within(
 			screen.getByRole("navigation", { name: i18n.t("bots:rail.label") }),
-		).getByRole("button", { name: i18n.t("bots:rail.missions") }),
+		).getByRole("button", {
+			name: new RegExp(`^${i18n.t("bots:rail.missions")} \\d+$`),
+		}),
 	)
 
 const missionRowOf = (objective: string) =>
