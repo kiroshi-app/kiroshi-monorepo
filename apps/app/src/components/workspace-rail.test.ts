@@ -772,23 +772,31 @@ describe("the Home page", () => {
 	}
 
 	const mountHomeSaidToNow = async () => {
-		const mounted = await mountAppWithTwoAgents()
-		const { firstOfSpace, store } = mounted
-		const renewal = vi.spyOn(store, "renewMainChat")
-		const earlier = await store.mainChat(firstOfSpace.id, PERSONAL_SPACE_ID)
+		const app = await mountAppWithTwoAgents()
+		const renewal = vi.spyOn(app.store, "renewMainChat")
+		const earlier = await app.store.mainChat(
+			app.firstOfSpace.id,
+			PERSONAL_SPACE_ID,
+		)
 		const saidAt = Date.now()
-		await sayInMainChat(store, earlier.id, saidAt)
-		const mainChatId = async () =>
-			(await store.mainChat(firstOfSpace.id, PERSONAL_SPACE_ID)).id
+		await sayInMainChat(app.store, earlier.id, saidAt)
 		await pressInRail("home")
-		return { ...mounted, renewal, earlier, saidAt, mainChatId }
+		return { ...app, renewal, earlier, saidAt }
 	}
 
-	const expectFreshHome = async (
-		mainChatId: () => Promise<string>,
-		earlierId: string,
-	) => {
-		expect(await mainChatId()).not.toBe(earlierId)
+	type ArchivedChat = {
+		store: TranscriptStore
+		agentId: string
+		earlierId: string
+	}
+
+	const expectFreshHome = async ({
+		store,
+		agentId,
+		earlierId,
+	}: ArchivedChat) => {
+		const { id } = await store.mainChat(agentId, PERSONAL_SPACE_ID)
+		expect(id).not.toBe(earlierId)
 		expect(homeStage()).toBe("empty")
 		expect(screen.getByRole("button", { name: "Open it" })).toBeTruthy()
 	}
@@ -803,14 +811,16 @@ describe("the Home page", () => {
 		const router = await launchApp()
 
 		expect(router.state.location.pathname).toBe("/home")
-		await expectFreshHome(
-			async () => (await store.mainChat(firstOfSpace.id, PERSONAL_SPACE_ID)).id,
-			earlier.id,
-		)
+		await expectFreshHome({
+			store,
+			agentId: firstOfSpace.id,
+			earlierId: earlier.id,
+		})
 	})
 
 	it("opens a fresh Home when its window comes back past the hour, keeping the chat when it comes back within it", async () => {
-		const { renewal, earlier, saidAt, mainChatId } = await mountHomeSaidToNow()
+		const { renewal, earlier, saidAt, store, firstOfSpace } =
+			await mountHomeSaidToNow()
 
 		await bringWindowBack()
 
@@ -821,11 +831,16 @@ describe("the Home page", () => {
 		await bringWindowBack()
 
 		expect(renewal).toHaveBeenCalledOnce()
-		await expectFreshHome(mainChatId, earlier.id)
+		await expectFreshHome({
+			store,
+			agentId: firstOfSpace.id,
+			earlierId: earlier.id,
+		})
 	})
 
 	it("opens a fresh Home when its rail entry is pressed on the Home past the hour, keeping the chat within it", async () => {
-		const { renewal, earlier, saidAt, mainChatId } = await mountHomeSaidToNow()
+		const { renewal, earlier, saidAt, store, firstOfSpace } =
+			await mountHomeSaidToNow()
 
 		await pressInRail("home")
 
@@ -836,11 +851,16 @@ describe("the Home page", () => {
 		await pressInRail("home")
 
 		expect(renewal).toHaveBeenCalledOnce()
-		await expectFreshHome(mainChatId, earlier.id)
+		await expectFreshHome({
+			store,
+			agentId: firstOfSpace.id,
+			earlierId: earlier.id,
+		})
 	})
 
 	it("opens a fresh Home when the person goes back to it from another page past the hour", async () => {
-		const { router, earlier, saidAt, mainChatId } = await mountHomeSaidToNow()
+		const { router, earlier, saidAt, store, firstOfSpace } =
+			await mountHomeSaidToNow()
 		await pressInRail("library")
 
 		vi.setSystemTime(saidAt + MAIN_CHAT_PAUSE_MS + 1)
@@ -850,7 +870,11 @@ describe("the Home page", () => {
 		await settle()
 
 		expect(router.state.location.pathname).toBe("/home")
-		await expectFreshHome(mainChatId, earlier.id)
+		await expectFreshHome({
+			store,
+			agentId: firstOfSpace.id,
+			earlierId: earlier.id,
+		})
 	})
 
 	it.each<RailEntry>(["conversations", "missions", "library"])(
