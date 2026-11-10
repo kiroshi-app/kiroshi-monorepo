@@ -66,6 +66,14 @@ const GLYPH_TONE: Record<MissionGlyphTone, string> = {
 	failure: "text-mission-glyph-failure",
 }
 
+const MISSIONS_PAGE_FRAMES = {
+	row: "flex w-full min-w-0 items-center gap-2.5 border-mission-list-divider border-b p-3",
+	groupHeader:
+		"flex w-full min-w-0 items-center gap-2 bg-mission-list-group p-3",
+	chip: "inline-flex h-5.5 shrink-0 items-center",
+	glyph: "flex size-4 shrink-0 items-center justify-center",
+}
+
 const LINE = "text-compact leading-4"
 const SMALL_LINE = "text-xs leading-4"
 const FOCUS_RING =
@@ -112,7 +120,8 @@ const MissionGlyph = ({ tone, isDone = false }: MissionGlyphProps) => (
 	<span
 		aria-hidden="true"
 		className={cn(
-			"pointer-events-none flex size-4 shrink-0 items-center justify-center",
+			"pointer-events-none",
+			MISSIONS_PAGE_FRAMES.glyph,
 			GLYPH_TONE[tone],
 		)}
 		data-slot="missions-page-glyph"
@@ -159,7 +168,8 @@ type MissionChipProps = {
 const MissionChip = ({ slot, mark, label, className }: MissionChipProps) => (
 	<span
 		className={cn(
-			"inline-flex h-5.5 min-w-0 shrink-0 items-center gap-1.5 rounded-full border border-mission-chip-border px-2 text-mission-chip-foreground",
+			MISSIONS_PAGE_FRAMES.chip,
+			"gap-1.5 rounded-full border border-mission-chip-border px-2 text-mission-chip-foreground",
 			SMALL_LINE,
 			className,
 		)}
@@ -191,7 +201,8 @@ const MissionsPageRow = ({
 		<li className="flex">
 			<button
 				className={cn(
-					"flex w-full min-w-0 items-center gap-2.5 border-mission-list-divider border-b p-3 text-start",
+					MISSIONS_PAGE_FRAMES.row,
+					"text-start",
 					FOCUS_RING,
 					PRESSABLE,
 				)}
@@ -211,7 +222,7 @@ const MissionsPageRow = ({
 				<MissionGlyph isDone={group.isDone} tone={group.tone} />
 				<span
 					className={cn(
-						"min-w-0 flex-1 truncate text-mission-list-foreground",
+						"min-w-24 flex-1 truncate text-mission-list-foreground",
 						LINE,
 						group.key === EMPHASISED_GROUP && "font-medium",
 					)}
@@ -220,7 +231,7 @@ const MissionsPageRow = ({
 					{mission.title}
 				</span>
 				<MissionChip
-					className="max-w-48"
+					className="min-w-9 max-w-48 shrink"
 					label={mission.conversation.title}
 					mark={<ConversationIcon aria-hidden="true" className={CHIP_ICON} />}
 					slot="missions-page-conversation-chip"
@@ -347,7 +358,8 @@ const MissionsPageGroup = ({
 					aria-controls={rowsId}
 					aria-expanded={!isFolded}
 					className={cn(
-						"flex w-full min-w-0 items-center gap-2 bg-mission-list-group p-3 text-start",
+						MISSIONS_PAGE_FRAMES.groupHeader,
+						"text-start",
 						FOCUS_RING,
 						PRESSABLE,
 					)}
@@ -403,20 +415,24 @@ const MissionsPageGroup = ({
 const SKELETON_ROW_TITLES = ["w-56", "w-72", "w-44"]
 
 const SkeletonGlyph = () => (
-	<span className="flex size-4 shrink-0 items-center justify-center">
+	<span className={MISSIONS_PAGE_FRAMES.glyph}>
 		<SkeletonBar className="size-3.5" />
 	</span>
 )
 
 const MissionsPageSkeletonGroup = () => (
 	<div className="flex flex-col">
-		<div className="flex h-10 items-center gap-2 bg-mission-list-group p-3">
+		<div
+			className={MISSIONS_PAGE_FRAMES.groupHeader}
+			data-slot="missions-page-skeleton-group-header"
+		>
 			<SkeletonGlyph />
 			<SkeletonBar className="h-2.25 w-24" />
 		</div>
 		{SKELETON_ROW_TITLES.map((titleWidth) => (
 			<div
-				className="flex h-10 items-center gap-2.5 border-mission-list-divider border-b p-3"
+				className={MISSIONS_PAGE_FRAMES.row}
+				data-slot="missions-page-skeleton-row"
 				key={titleWidth}
 			>
 				<span className="w-16 shrink-0">
@@ -426,8 +442,12 @@ const MissionsPageSkeletonGroup = () => (
 				<span className="min-w-0 flex-1">
 					<SkeletonBar className={cn("h-2.25 max-w-full", titleWidth)} />
 				</span>
-				<SkeletonBar className="h-5.5 w-28 shrink-0 rounded-full" isFaint />
-				<SkeletonBar className="h-5.5 w-16 shrink-0 rounded-full" isFaint />
+				<span className={cn(MISSIONS_PAGE_FRAMES.chip, "w-28")}>
+					<SkeletonBar className="size-full" isFaint />
+				</span>
+				<span className={cn(MISSIONS_PAGE_FRAMES.chip, "w-16")}>
+					<SkeletonBar className="size-full" isFaint />
+				</span>
 				<span className="flex w-11 shrink-0 justify-end">
 					<SkeletonBar className="h-2.25 w-6" />
 				</span>
@@ -529,6 +549,7 @@ const MissionsPage = (props: MissionsPageProps) => {
 }
 
 export {
+	MISSIONS_PAGE_FRAMES,
 	MissionsPage,
 	type MissionsPageAgent,
 	type MissionsPageConversation,

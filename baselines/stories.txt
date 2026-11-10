@@ -2025,6 +2025,7 @@ navigation-missionspage--empty
 navigation-missionspage--failed
 navigation-missionspage--loading
 navigation-missionspage--long-text
+navigation-missionspage--narrow
 navigation-missionspage--unfolded
 navigation-missionspanel--complete
 navigation-missionspanel--complete-dark

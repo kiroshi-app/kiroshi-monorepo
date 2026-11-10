@@ -16,6 +16,7 @@ import {
 	PAGE_MISSIONS_WAITING_ON_AN_AGENT,
 } from "@workspace/ui/components/missions.fixtures"
 import {
+	MISSIONS_PAGE_FRAMES,
 	MissionsPage,
 	type MissionsPageGroupKey,
 } from "@workspace/ui/components/missions-page"
@@ -54,6 +55,43 @@ const anatomyOf = (row: HTMLElement) =>
 	Array.from(row.querySelectorAll<HTMLElement>("[data-slot]"))
 		.map((part) => part.dataset.slot ?? "")
 		.filter((slot) => ROW_ANATOMY.includes(slot))
+
+const NARROW_PAGE_WIDTH = 480
+
+const MIN_TITLE_REM = 6
+
+const FULL_WIDTH_PARTS = [
+	"missions-page-row-identifier",
+	"missions-page-glyph",
+	"missions-page-pull-request-chip",
+	"missions-page-agent-chip",
+	"missions-page-row-time",
+]
+
+const frameHeight = (root: Element, frame: string, tallestPart: string) => {
+	const probe = document.createElement("div")
+	probe.className = frame
+	const part = document.createElement("span")
+	part.className = tallestPart
+	probe.append(part)
+	root.append(probe)
+	const { height } = probe.getBoundingClientRect()
+	probe.remove()
+	return height
+}
+
+const loadedRowHeight = (root: Element) =>
+	frameHeight(root, MISSIONS_PAGE_FRAMES.row, MISSIONS_PAGE_FRAMES.chip)
+
+const loadedGroupHeaderHeight = (root: Element) =>
+	frameHeight(
+		root,
+		MISSIONS_PAGE_FRAMES.groupHeader,
+		MISSIONS_PAGE_FRAMES.glyph,
+	)
+
+const isClipped = (element: HTMLElement) =>
+	element.scrollWidth > element.clientWidth
 
 const WIRED_BY_NOBODY_YET =
 	"The app does not mount the page yet: it opens and feeds it in a later ticket."
@@ -138,6 +176,18 @@ export const Default = meta.story({
 		await expect(
 			within(rowWithoutPullRequest).queryByText(/^#/),
 		).not.toBeInTheDocument()
+
+		const page = slotIn(canvasElement, "missions-page")
+		for (const row of rows) {
+			await expect(row.getBoundingClientRect().height).toBe(
+				loadedRowHeight(page),
+			)
+		}
+		for (const header of headers) {
+			await expect(header.getBoundingClientRect().height).toBe(
+				loadedGroupHeaderHeight(page),
+			)
+		}
 
 		await userEvent.click(firstRow)
 		await expect(args.onOpen).toHaveBeenLastCalledWith("mission-ope-2124")
@@ -245,6 +295,19 @@ export const Loading = meta.story({
 		await expect(
 			canvas.queryByRole("heading", { name: "No missions yet" }),
 		).not.toBeInTheDocument()
+
+		const page = slotIn(canvasElement, "missions-page")
+		const rowHeight = loadedRowHeight(page)
+		const headerHeight = loadedGroupHeaderHeight(page)
+		for (const row of slotsIn(canvasElement, "missions-page-skeleton-row")) {
+			await expect(row.getBoundingClientRect().height).toBe(rowHeight)
+		}
+		for (const header of slotsIn(
+			canvasElement,
+			"missions-page-skeleton-group-header",
+		)) {
+			await expect(header.getBoundingClientRect().height).toBe(headerHeight)
+		}
 	},
 })
 
@@ -296,5 +359,58 @@ export const LongText = meta.story({
 			(row) => slotIn(row, "missions-page-glyph").getBoundingClientRect().left,
 		)
 		await expect(new Set(rowGlyphs).size).toBe(1)
+	},
+})
+
+export const Narrow = meta.story({
+	globals: { theme: "dark" },
+	decorators: [
+		(Story) => (
+			<div className="h-full" style={{ width: NARROW_PAGE_WIDTH }}>
+				<Story />
+			</div>
+		),
+	],
+	parameters: {
+		docs: {
+			description: {
+				story: `Default on a page 480px wide. Check no row and no part of the groups scroller overflows sideways, that the conversation chip shrinks and truncates before a title drops under 6rem, and that identifier, glyph, pull request, agent and time keep their full width. ${WIRED_BY_NOBODY_YET}`,
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expect(
+			slotIn(canvasElement, "missions-page").getBoundingClientRect().width,
+		).toBe(NARROW_PAGE_WIDTH)
+		await expect(isClipped(slotIn(canvasElement, "missions-page-groups"))).toBe(
+			false,
+		)
+
+		const minTitleWidth =
+			MIN_TITLE_REM *
+			Number.parseFloat(getComputedStyle(document.documentElement).fontSize)
+		const rows = slotsIn(canvasElement, "missions-page-row")
+		await expect(rows).toHaveLength(PAGE_MISSIONS_SHOWN.length)
+		for (const row of rows) {
+			await expect(isClipped(row)).toBe(false)
+			await expect(
+				slotIn(row, "missions-page-row-title").getBoundingClientRect().width,
+			).toBeGreaterThanOrEqual(minTitleWidth)
+			for (const slot of FULL_WIDTH_PARTS) {
+				for (const part of slotsIn(row, slot)) {
+					await expect(getComputedStyle(part).flexShrink).toBe("0")
+					await expect(isClipped(part)).toBe(false)
+					for (const label of part.querySelectorAll<HTMLElement>("span")) {
+						await expect(isClipped(label)).toBe(false)
+					}
+				}
+			}
+		}
+
+		const conversationLabels = slotsIn(
+			canvasElement,
+			"missions-page-conversation-chip",
+		).map((chip) => chip.lastElementChild as HTMLElement)
+		await expect(conversationLabels.some(isClipped)).toBe(true)
 	},
 })
