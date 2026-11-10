@@ -233,6 +233,13 @@ struct Joined {
 	id: &'static str,
 }
 
+fn roster_holds(app: &App, conversation_id: &str) -> bool {
+	match app.surfaces.s03_roster.shown() {
+		Some(Load::Shown(listing)) => listing.line(conversation_id).is_some(),
+		_ => false,
+	}
+}
+
 fn idle() -> Waker {
 	Arc::new(|| {})
 }
@@ -296,13 +303,6 @@ impl Joined {
 		self.settle(|app| matches!(app.surfaces.s03_roster.shown(), Some(Load::Shown(_))));
 	}
 
-	fn roster_holds(&self, conversation_id: &str) -> bool {
-		match self.app.surfaces.s03_roster.shown() {
-			Some(Load::Shown(listing)) => listing.line(conversation_id).is_some(),
-			_ => false,
-		}
-	}
-
 	fn read_locally(&self) -> Vec<Value> {
 		let invoked = self.local.invoked.lock().expect("the invoked calls are readable");
 		let names_joined =
@@ -326,7 +326,7 @@ fn opening_a_joined_space_shows_its_roster_read_through_its_own_host() {
 	let conversations: Vec<&str> =
 		ready.conversations.iter().map(|held| held.id.as_str()).collect();
 	assert_eq!(conversations, [CHAT]);
-	assert!(joined.roster_holds(CHAT));
+	assert!(roster_holds(&joined.app, CHAT));
 	let pages = joined.remote.invoked("conversation_page");
 	assert!(pages.iter().all(|body| body["spaceId"] == REMOTE_SPACE_ID));
 	assert!(joined.read_locally().is_empty());
@@ -359,13 +359,13 @@ fn an_event_of_the_joined_space_on_screen_updates_its_roster_under_its_local_id(
 		heard: JoinedHeard::Host(HostEvent::Roster(stored("elsewhere-chat"))),
 	};
 	joined.app.received(Inbound::Joined(elsewhere));
-	assert!(!joined.roster_holds("elsewhere-chat"));
+	assert!(!roster_holds(&joined.app, "elsewhere-chat"));
 
 	joined.remote.push(&json!({
 		"event": "conversation://created",
 		"payload": { "spaceId": REMOTE_SPACE_ID, "conversation": row("fresh-chat") },
 	}));
-	joined.settle(|app| matches!(app.surfaces.s03_roster.shown(), Some(Load::Shown(listing)) if listing.line("fresh-chat").is_some()));
+	joined.settle(|app| roster_holds(app, "fresh-chat"));
 }
 
 fn stored(id: &str) -> Heard {
