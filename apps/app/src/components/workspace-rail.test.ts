@@ -24,6 +24,7 @@ import type { ChatDriver } from "@/lib/chat/driver"
 import { createFakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
+import { createHomeEntries } from "@/lib/home/home-entries"
 import { MAIN_CHAT_PAUSE_MS } from "@/lib/home/home-visits"
 import type { JoinedHostState } from "@/lib/host/joined-hosts"
 import type { SettingsNavigation } from "@/lib/navigation/use-settings-navigation"
@@ -47,6 +48,7 @@ type MountedApp = {
 	openJoinedSpace: JoinedSpace | null
 	departed: DepartedSpace | null
 	sessionFailure: TransportError | null
+	focusReports: Set<(isFocused: boolean) => void>
 }
 
 const mounted = vi.hoisted(
@@ -55,6 +57,7 @@ const mounted = vi.hoisted(
 		openJoinedSpace: null,
 		departed: null,
 		sessionFailure: null,
+		focusReports: new Set(),
 	}),
 )
 
@@ -65,6 +68,13 @@ vi.mock("@/lib/conversations/create-store", () => ({
 vi.mock("@/lib/host/index", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/lib/host/index")>()),
 	isDesktopHost: () => false,
+	watchWindowFocus: (report: (isFocused: boolean) => void) => {
+		mounted.focusReports.add(report)
+		report(true)
+		return Promise.resolve(() => {
+			mounted.focusReports.delete(report)
+		})
+	},
 }))
 
 vi.mock("@/lib/chat/create-driver", async () => {
@@ -169,6 +179,7 @@ const RailHarness = ({
 		NO_INVITATIONS,
 	)
 	const { rail, currentSpace, currentSpaceHost } = useWorkspaceRail({
+		homeEntries: createHomeEntries(),
 		navigation: navigation as SettingsNavigation,
 		overlay: {
 			search: { isOpen: false, open: () => {} },
@@ -381,6 +392,7 @@ const produceRailFor = ({
 	renderHook(
 		() =>
 			useWorkspaceRail({
+				homeEntries: createHomeEntries(),
 				navigation: {} as SettingsNavigation,
 				overlay: {
 					search: { isOpen: false, open: () => {} },
@@ -741,6 +753,144 @@ describe("the Home page", () => {
 
 		expect(renewal).toHaveBeenCalledOnce()
 		expect(screen.getByRole("button", { name: "Open it" })).toBeTruthy()
+	})
+
+	const homeStage = () => slot("home-layout")?.getAttribute("data-stage")
+
+	const keepHomeTabOpen = () =>
+		localStorage.setItem(
+			`spaceTabs:${PERSONAL_SPACE_ID}`,
+			JSON.stringify({
+				tabs: [
+					{ href: "/home", isPinned: false, entries: ["/home"], index: 0 },
+				],
+				activeIndex: 0,
+			}),
+		)
+
+	const reportWindowFocus = async (isFocused: boolean) => {
+		act(() => {
+			for (const report of [...mounted.focusReports]) {
+				report(isFocused)
+			}
+		})
+		await settle()
+	}
+
+	const bringWindowBack = async () => {
+		await reportWindowFocus(false)
+		await reportWindowFocus(true)
+	}
+
+	const mountHomeSaidToNow = async () => {
+		const app = await mountAppWithTwoAgents()
+		const renewal = vi.spyOn(app.store, "renewMainChat")
+		const earlier = await app.store.mainChat(
+			app.firstOfSpace.id,
+			PERSONAL_SPACE_ID,
+		)
+		const saidAt = Date.now()
+		await sayInMainChat(app.store, earlier.id, saidAt)
+		await pressInRail("home")
+		return { ...app, renewal, earlier, saidAt }
+	}
+
+	type ArchivedChat = {
+		store: TranscriptStore
+		agentId: string
+		earlierId: string
+	}
+
+	const expectFreshHome = async ({
+		store,
+		agentId,
+		earlierId,
+	}: ArchivedChat) => {
+		const { id } = await store.mainChat(agentId, PERSONAL_SPACE_ID)
+		expect(id).not.toBe(earlierId)
+		expect(homeStage()).toBe("empty")
+		expect(screen.getByRole("button", { name: "Open it" })).toBeTruthy()
+	}
+
+	it("launches on a fresh Home, the main chat past the hour archived one click away", async () => {
+		const { firstOfSpace, store } = await mountAppWithTwoAgents()
+		const earlier = await store.mainChat(firstOfSpace.id, PERSONAL_SPACE_ID)
+		await sayInMainChat(store, earlier.id, Date.now() - MAIN_CHAT_PAUSE_MS - 1)
+		cleanup()
+		keepHomeTabOpen()
+
+		const router = await launchApp()
+
+		expect(router.state.location.pathname).toBe("/home")
+		await expectFreshHome({
+			store,
+			agentId: firstOfSpace.id,
+			earlierId: earlier.id,
+		})
+	})
+
+	it("opens a fresh Home when its window regains focus past the hour, keeping the chat on a return within it and on a blur", async () => {
+		const { renewal, earlier, saidAt, store, firstOfSpace } =
+			await mountHomeSaidToNow()
+
+		await bringWindowBack()
+
+		expect(renewal).not.toHaveBeenCalled()
+		expect(homeStage()).toBe("conversation")
+
+		vi.setSystemTime(saidAt + MAIN_CHAT_PAUSE_MS + 1)
+		await reportWindowFocus(false)
+
+		expect(renewal).not.toHaveBeenCalled()
+		expect(homeStage()).toBe("conversation")
+
+		await reportWindowFocus(true)
+
+		expect(renewal).toHaveBeenCalledOnce()
+		await expectFreshHome({
+			store,
+			agentId: firstOfSpace.id,
+			earlierId: earlier.id,
+		})
+	})
+
+	it("opens a fresh Home when its rail entry is pressed on the Home past the hour, keeping the chat within it", async () => {
+		const { renewal, earlier, saidAt, store, firstOfSpace } =
+			await mountHomeSaidToNow()
+
+		await pressInRail("home")
+
+		expect(renewal).not.toHaveBeenCalled()
+		expect(homeStage()).toBe("conversation")
+
+		vi.setSystemTime(saidAt + MAIN_CHAT_PAUSE_MS + 1)
+		await pressInRail("home")
+
+		expect(renewal).toHaveBeenCalledOnce()
+		await expectFreshHome({
+			store,
+			agentId: firstOfSpace.id,
+			earlierId: earlier.id,
+		})
+	})
+
+	it("opens a fresh Home when the person goes back to it from another page past the hour", async () => {
+		const { router, earlier, saidAt, store, firstOfSpace } =
+			await mountHomeSaidToNow()
+		await pressInRail("library")
+
+		vi.setSystemTime(saidAt + MAIN_CHAT_PAUSE_MS + 1)
+		act(() => {
+			router.history.back()
+		})
+		await settle()
+
+		expect(router.state.location.pathname).toBe("/home")
+		await expectFreshHome({
+			store,
+			agentId: firstOfSpace.id,
+			earlierId: earlier.id,
+		})
 	})
 
 	it.each<RailEntry>(["conversations", "missions", "library"])(
