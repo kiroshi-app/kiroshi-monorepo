@@ -126,6 +126,7 @@
 	--color-bot-badge-failed: var(--bot-badge-failed);
 	--color-warning: var(--warning);
 	--color-warning-foreground: var(--warning-foreground);
+	--color-mission-capsule: var(--mission-capsule);
 	--color-mission-mark-cut-out: var(--mission-mark-cut-out);
 	--color-mission-glyph-waiting: var(--mission-glyph-waiting);
 	--color-mission-glyph-failed: var(--mission-glyph-failed);
