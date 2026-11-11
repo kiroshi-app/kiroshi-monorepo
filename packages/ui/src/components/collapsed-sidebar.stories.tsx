@@ -66,6 +66,15 @@ const missionOf = (
 	agentName,
 })
 
+const unticketedMissionOf = (
+	state: BotMissionState,
+	id: string,
+	title: string,
+): AppSidebarRowMission => ({
+	...missionOf(state, id, title),
+	ticket: { platform: "local", externalId: id, title },
+})
+
 const conversationOf = (
 	id: string,
 	name: string,
@@ -180,6 +189,20 @@ const OVERFLOWING = conversationOf(
 		missionOf("failed", "OPE-514", "Pin the toolchain"),
 		missionOf("waiting_agent", "OPE-513", "Split the vendor chunk"),
 		missionOf("working", "OPE-512", "Rebuild the bundle"),
+		missionOf("ready", "OPE-511", "Bump the runtime"),
+		missionOf("waiting", "OPE-510", "Ship the release notes"),
+	],
+)
+
+const OVERFLOWING_UNTICKETED = conversationOf(
+	"release-train",
+	"Release train",
+	"Rocket",
+	BLOT_HUES.orange,
+	[
+		unticketedMissionOf("failed", "local-3", "Pin the toolchain"),
+		missionOf("waiting_agent", "OPE-513", "Split the vendor chunk"),
+		unticketedMissionOf("working", "local-2", "Rebuild the bundle"),
 		missionOf("ready", "OPE-511", "Bump the runtime"),
 		missionOf("waiting", "OPE-510", "Ship the release notes"),
 	],
@@ -423,6 +446,44 @@ export const OverflowWithPopoverOpen = meta.story({
 		await expect(OPEN_MISSION).toHaveBeenCalledWith("mission-OPE-514")
 		await userEvent.click(overflow)
 		await within(document.body).findByRole("menu")
+	},
+})
+
+const inlineGapBetween = (before: Element, after: Element) =>
+	after.getBoundingClientRect().left - before.getBoundingClientRect().right
+
+export const OverflowWithoutNamedTicket = meta.story({
+	name: "Overflow without a named ticket",
+	args: { destination: undefined, zones: zonesWith(OVERFLOWING_UNTICKETED) },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Two hidden missions carry no named ticket, the one between them is on Linear. Check the unticketed rows start the title 8px after the glyph with no empty column, and the ticketed row keeps its 60px ticket column with 8px on each side.",
+			},
+		},
+	},
+	play: async ({ canvasElement, userEvent }) => {
+		const [group] = slotsIn(canvasElement, "collapsed-sidebar-group")
+		await userEvent.click(
+			within(group).getByRole("button", { name: "+3 missions" }),
+		)
+		const menu = await within(document.body).findByRole("menu")
+		const rows = within(menu).getAllByRole("menuitem")
+		await expect(rows.map((row) => row.textContent)).toEqual([
+			"Rebuild the bundle",
+			"OPE-513Split the vendor chunk",
+			"Pin the toolchain",
+		])
+		for (const row of [rows[0], rows[2]]) {
+			const glyph = slotIn(row, "collapsed-sidebar-mission-glyph")
+			await expect(row.children).toHaveLength(2)
+			await expect(inlineGapBetween(glyph, row.children[1])).toBe(8)
+		}
+		const [glyph, ticket, title] = rows[1].children
+		await expect(ticket.getBoundingClientRect().width).toBe(60)
+		await expect(inlineGapBetween(glyph, ticket)).toBe(8)
+		await expect(inlineGapBetween(ticket, title)).toBe(8)
 	},
 })
 
