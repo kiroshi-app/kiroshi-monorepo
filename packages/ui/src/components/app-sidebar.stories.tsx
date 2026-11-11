@@ -244,8 +244,6 @@ const dotsIn = (root: HTMLElement) => slotsIn(root, "bot-mission-dot")
 
 const BARE_ROW_HEIGHT = 52
 
-const CONVERSATION_ROW_HEIGHT = 52
-
 const MISSION_LINE_HEIGHT = 32
 
 const ROW_HEAD_HEIGHT = 36
@@ -5566,8 +5564,8 @@ export const ConversationMissionStrips = meta.story({
 			),
 		).toEqual([["waiting", "working"], [], []])
 		await expect(rowHeights(rows)).toEqual([
-			CONVERSATION_ROW_HEIGHT + 2 * MISSION_LINE_HEIGHT,
-			CONVERSATION_ROW_HEIGHT,
+			BARE_ROW_HEIGHT + 2 * MISSION_LINE_HEIGHT,
+			BARE_ROW_HEIGHT,
 			BARE_ROW_HEIGHT,
 		])
 		await expect(slotIn(rows[0], "roster-row-timestamp")).toHaveTextContent(
