@@ -1,26 +1,14 @@
 import { useTranslation } from "react-i18next"
 
 import type { AppSidebarRowMission } from "@workspace/ui/components/app-sidebar-model"
-import type { BotMissionState } from "@workspace/ui/components/bot-badge"
 import { missionTicketPlatform } from "@workspace/ui/components/mission-marks"
-import { cn } from "@workspace/ui/lib/utils"
+import { MissionStateMark } from "@workspace/ui/components/mission-state-mark"
 
 const CAPSULE_LIST =
 	"pointer-events-none flex flex-col gap-1 ps-11 group-data-[collapsible=icon]:hidden"
 
 const CAPSULE =
 	"relative flex h-6 w-full min-w-0 items-center gap-1.5 rounded-sm bg-mission-capsule px-2 py-1 text-xs"
-
-const MISSION_GLYPH =
-	"pointer-events-none size-3 shrink-0 rounded-full border-[1.5px] border-current bg-[repeating-linear-gradient(135deg,currentColor_0_1px,transparent_1px_3px)]"
-
-const MISSION_GLYPH_COLOUR = {
-	waiting: "text-mission-glyph-waiting",
-	failed: "text-mission-glyph-failed",
-	ready: "text-mission-glyph-ready",
-	working: "text-primary",
-	waiting_agent: "text-muted-foreground",
-} as const satisfies Record<BotMissionState, string>
 
 type MissionCapsuleProps = {
 	mission: AppSidebarRowMission
@@ -33,11 +21,7 @@ const MissionCapsule = ({ mission }: MissionCapsuleProps) => {
 	return (
 		<div className={CAPSULE} data-slot="mission-capsule" data-state={state}>
 			<span className="sr-only">{t(`roster.mission.state.${state}`)}</span>
-			<span
-				aria-hidden="true"
-				className={cn(MISSION_GLYPH, MISSION_GLYPH_COLOUR[state])}
-				data-slot="mission-capsule-glyph"
-			/>
+			<MissionStateMark data-slot="mission-capsule-glyph" state={state} />
 			{missionTicketPlatform(ticket.platform).isNamed ? (
 				<span className="shrink-0 font-medium text-foreground/70 tabular-nums">
 					{ticket.externalId}
@@ -66,4 +50,4 @@ const MissionCapsuleList = ({ missions }: MissionCapsuleListProps) =>
 		</div>
 	) : null
 
-export { MISSION_GLYPH, MISSION_GLYPH_COLOUR, MissionCapsuleList }
+export { MissionCapsuleList }

@@ -389,7 +389,7 @@ export const EveryOpenState = meta.story({
 		docs: {
 			description: {
 				story:
-					"The five open mission states across two groups. Check each glyph wears the state colour of the mission capsules and every group lists waiting, ready, working, waiting on an agent, then blocked.",
+					"The five open mission states across two groups. Check each 14px mark, centred in its 44 by 28 cell, draws the same shape and colour as the mission capsules and every group lists waiting, ready, working, waiting on an agent, then blocked.",
 			},
 		},
 	},
@@ -399,6 +399,17 @@ export const EveryOpenState = meta.story({
 				(cell) => cell.dataset.state,
 			),
 		).toEqual(["waiting", "ready", "working", "waiting_agent", "failed"])
+		const marks = slotsIn(canvasElement, "collapsed-sidebar-mission-glyph")
+		await expect(marks.map((mark) => mark.dataset.state)).toEqual([
+			"waiting",
+			"ready",
+			"working",
+			"waiting_agent",
+			"failed",
+		])
+		for (const mark of marks) {
+			await expect(mark.getBoundingClientRect().width).toBe(14)
+		}
 	},
 })
 

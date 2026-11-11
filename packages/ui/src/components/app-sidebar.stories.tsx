@@ -1520,7 +1520,7 @@ export const MissionStripStates = meta.story({
 		docs: {
 			description: {
 				story:
-					"Four companions each carrying one open mission, one per state a mission can be in, the running one live. The mission speaks in a strip under the row and the conversation in the dot on the preview line, and since the strip closes on a dot of its own, in the same three colours, on the same trailing column, the line each one sits on is what separates them: the dot above the strip is the state of the conversation, the dot inside it is the state of the work, and only the strip carries a ticket beside it. Check each strip runs the full width of the row, from the leading edge of the avatar to the trailing inner edge, so it passes under the avatar rather than starting after it. Check the strip opens on the platform mark, then the identifier and the title, and closes on its state dot at the trailing edge, in the attention, failed and done colours the panel already uses and the muted grey of a mission running right now. Check the strip never moves: it is the one mark in the row that does not pulse, because a mission is a fact and not an alarm. The title and the mark carry `--muted-foreground`, which reaches 3.9:1 on the strip fill instead of the 4.5:1 AA asks for: the pair is the artboard’s and the fix is a lightness step on the token, which every muted line in the panel would take with it, so it is flagged for review here rather than settled inside this strip. Check every row measures 80px, the head staying 40px with the avatar centred on it rather than on the row plus the strip, and that the four chat signals are exactly what the host passed. Pick `MissionStripQuiet` for the running mission nobody is watching, `MissionStripStack` for a row carrying four, `MissionStripSelected` for the strip under a lit row.",
+					"Four companions each carrying one open mission, one per state a mission can be in, the running one live. The mission speaks in a strip under the row and the conversation in the dot on the preview line, and since the strip closes on a dot of its own, in the same three colours, on the same trailing column, the line each one sits on is what separates them: the dot above the strip is the state of the conversation, the dot inside it is the state of the work, and only the strip carries a ticket beside it. Check each strip runs the full width of the row, from the leading edge of the avatar to the trailing inner edge, so it passes under the avatar rather than starting after it. Check the strip opens on the platform mark, then the identifier and the title, and closes on its mission state mark at the trailing edge, a disc in the attention, failed and done colours the panel already uses and a soft grey ring for a mission running right now. Check the strip never moves: it is the one mark in the row that does not pulse, because a mission is a fact and not an alarm. The title and the mark carry `--muted-foreground`, which reaches 3.9:1 on the strip fill instead of the 4.5:1 AA asks for: the pair is the artboard’s and the fix is a lightness step on the token, which every muted line in the panel would take with it, so it is flagged for review here rather than settled inside this strip. Check every row measures 80px, the head staying 40px with the avatar centred on it rather than on the row plus the strip, and that the four chat signals are exactly what the host passed. Pick `MissionStripQuiet` for the running mission nobody is watching, `MissionStripStack` for a row carrying four, `MissionStripSelected` for the strip under a lit row.",
 			},
 		},
 	},
@@ -1543,15 +1543,10 @@ export const MissionStripStates = meta.story({
 			await expect(strip.lastElementChild).toBe(dotIn(strip))
 		}
 
-		const dotColours = rows.map(
-			(row) => getComputedStyle(dotIn(row)).backgroundColor,
-		)
+		const dotColours = rows.map((row) => getComputedStyle(dotIn(row)).color)
 		await expect(uniqueCount(dotColours)).toBe(4)
 		await expect(dotColours[3]).toBe(
-			tokenBackground(
-				canvasElement,
-				"color-mix(in oklab, var(--muted-foreground) 40%, transparent)",
-			),
+			tokenBackground(canvasElement, "var(--soft-foreground)"),
 		)
 		for (const row of rows) {
 			await expect(getComputedStyle(dotIn(row)).animationName).toBe("none")
@@ -2000,9 +1995,10 @@ export const MissionStripWithChatBadge = meta.story({
 					missionDot.getBoundingClientRect().right,
 			),
 		).toBe(8)
-		await expect(
-			[chatDot, missionDot].map((dot) => getComputedStyle(dot).backgroundColor),
-		).toEqual([warning, warning])
+		await expect([
+			getComputedStyle(chatDot).backgroundColor,
+			getComputedStyle(missionDot).color,
+		]).toEqual([warning, warning])
 		await expect(stripsIn(rows[1])).toHaveLength(0)
 		await expectAlignedRows(rows)
 	},

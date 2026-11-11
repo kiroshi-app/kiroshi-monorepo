@@ -245,7 +245,7 @@ export const MissionStates = meta.story({
 		docs: {
 			description: {
 				story:
-					"The five states a mission is read in, each on the same ticket, and the working state twice: quiet on the fourth strip, live on the last. The dot closes the strip at its trailing edge and is drawn only when the mission asks for a reader or runs right now, so a mission nobody is waiting on shows none. The tint is never the only carrier: every strip names its state in a screen-reader-only span whether or not a dot is drawn, so the rows stay distinguishable without colour. Check the quiet strip still holds the width of the dot at its end, so the title lane is the same on every row.",
+					"The five states a mission is read in, each on the same ticket, and the working state twice: quiet on the fourth strip, live on the last. The mission state mark closes the strip at its trailing edge and is drawn only when the mission asks for a reader or runs right now, so a mission nobody is waiting on shows none. The tint is never the only carrier: every strip names its state in a screen-reader-only span whether or not a mark is drawn, so the rows stay distinguishable without colour. Check the quiet strip still holds the width of the mark at its end, so the title lane is the same on every row.",
 			},
 		},
 	},
@@ -268,11 +268,11 @@ export const MissionStates = meta.story({
 		)
 		await expect(strips[3]).toHaveTextContent("working")
 		const waitingDot = trailingOf(strips[0])
-		await expect(getComputedStyle(waitingDot).backgroundColor).toBe(
-			tokenStyleIn(waitingDot, "bg-warning", "backgroundColor"),
+		await expect(getComputedStyle(waitingDot).color).toBe(
+			tokenStyleIn(waitingDot, "text-warning", "color"),
 		)
 		await expect(strips.map((strip) => boxOf(trailingOf(strip)).width)).toEqual(
-			strips.map(() => 6),
+			strips.map(() => 12),
 		)
 	},
 })
@@ -288,7 +288,7 @@ export const MissionLongContent = meta.story({
 		docs: {
 			description: {
 				story:
-					"A ticket title longer than the rail it sits in, the shape a real objective takes, on a mission that is running right now. Check the title truncates while the mark and the id keep their full width and the live dot keeps its place at the trailing edge - those three are what identifies the mission and says it is running, the title is what can be cut.",
+					"A ticket title longer than the rail it sits in, the shape a real objective takes, on a mission that is running right now. Check the title truncates while the mark and the id keep their full width and the live state mark keeps its place at the trailing edge - those three are what identifies the mission and says it is running, the title is what can be cut.",
 			},
 		},
 	},

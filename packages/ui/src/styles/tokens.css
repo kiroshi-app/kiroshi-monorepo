@@ -76,6 +76,7 @@
 	--warning: oklch(0.64 0.16 60);
 	--warning-foreground: #fffffc;
 	--mission-capsule: #ffffff;
+	--mission-mark-cut-out: #0a0a0a;
 	--mission-glyph-waiting: oklch(0.56 0.16 60);
 	--mission-glyph-failed: oklch(0.58 0.22 27);
 	--mission-glyph-ready: oklch(0.54 0.17 148);
@@ -180,10 +181,7 @@
 	--mission-list-pressed: oklch(0 0 0 / 8%);
 	--mission-chip-foreground: #404044;
 	--mission-chip-border: oklch(0 0 0 / 10%);
-	--mission-glyph-attention: #a86b00;
 	--mission-glyph-success: #2f7d32;
-	--mission-glyph-progress: #2d62ac;
-	--mission-glyph-idle: #737378;
 	--mission-glyph-failure: #c93b3b;
 	--prompt-surface: #ffffff;
 	--prompt-surface-inert: #f0f0f0;
@@ -318,6 +316,7 @@
 	--warning: oklch(0.76 0.16 72);
 	--warning-foreground: #1f1400;
 	--mission-capsule: oklch(0.97 0 0 / 10%);
+	--mission-mark-cut-out: #0a0a0a;
 	--mission-glyph-waiting: var(--warning);
 	--mission-glyph-failed: var(--bot-badge-failed);
 	--mission-glyph-ready: var(--bot-badge-done);
@@ -421,10 +420,7 @@
 	--mission-list-pressed: oklch(1 0 0 / 8%);
 	--mission-chip-foreground: #c8c8cc;
 	--mission-chip-border: oklch(1 0 0 / 10%);
-	--mission-glyph-attention: #f0b54a;
 	--mission-glyph-success: #9ad39a;
-	--mission-glyph-progress: #88baff;
-	--mission-glyph-idle: #9a9aa0;
 	--mission-glyph-failure: #f07a7a;
 	--prompt-surface: #1c1c1e;
 	--prompt-surface-inert: #161618;

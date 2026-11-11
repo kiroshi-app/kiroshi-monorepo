@@ -28,11 +28,8 @@ import {
 	ListEndSlot,
 	ListSkeleton,
 } from "@workspace/ui/components/list-skeleton"
-import {
-	MISSION_GLYPH,
-	MISSION_GLYPH_COLOUR,
-} from "@workspace/ui/components/mission-capsule"
 import { missionTicketPlatform } from "@workspace/ui/components/mission-marks"
+import { MissionStateMark } from "@workspace/ui/components/mission-state-mark"
 import { ProgressRing } from "@workspace/ui/components/progress-ring"
 import {
 	SpaceAvatar,
@@ -339,22 +336,6 @@ const SpaceSlot = (switcher: SpaceSwitcherProps) => {
 	)
 }
 
-type MissionGlyphProps = {
-	state: BotMissionState
-}
-
-const MissionGlyph = ({ state }: MissionGlyphProps) => (
-	<span
-		aria-hidden="true"
-		className={cn(
-			MISSION_GLYPH,
-			"relative size-3.5",
-			MISSION_GLYPH_COLOUR[state],
-		)}
-		data-slot="collapsed-sidebar-mission-glyph"
-	/>
-)
-
 type MissionCellProps = {
 	mission: AppSidebarRowMission
 	isOpen: boolean
@@ -368,7 +349,12 @@ const MissionCell = ({ mission, isOpen }: MissionCellProps) => (
 		data-state={mission.state}
 	>
 		<span className="sr-only">{missionNameOf(mission)}</span>
-		<MissionGlyph state={mission.state} />
+		<MissionStateMark
+			className="relative"
+			data-slot="collapsed-sidebar-mission-glyph"
+			size={14}
+			state={mission.state}
+		/>
 	</span>
 )
 

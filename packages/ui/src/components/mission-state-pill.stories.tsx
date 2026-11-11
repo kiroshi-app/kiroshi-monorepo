@@ -34,7 +34,7 @@ export const States = meta.story({
 		docs: {
 			description: {
 				story:
-					"The seven states a mission can be in, exhaustively, each in its own holder. Check that five of them name themselves in words on the very same badge, that only the mark changes colour between them, the `waiting_human` bell on `--warning` because it is the one waiting on the reader, and that `working` and `waiting_bot` leave their holder empty. Adding a state to `MissionState` without adding it here is a type error, so this list cannot drift from the contract. `packages/ui/src/components/mission-card.tsx:43` and `packages/ui/src/components/mission-header.tsx:84` each mount one pill for the state their mission is in.",
+					"The seven states a mission can be in, exhaustively, each in its own holder. Check that five of them name themselves in words on the very same badge, that only the mark changes colour between them, the `waiting_human` mission state mark on `--warning` because it is the one waiting on the reader, and that `working` and `waiting_bot` leave their holder empty. Adding a state to `MissionState` without adding it here is a type error, so this list cannot drift from the contract. `packages/ui/src/components/mission-card.tsx:43` and `packages/ui/src/components/mission-header.tsx:84` each mount one pill for the state their mission is in.",
 			},
 		},
 	},
