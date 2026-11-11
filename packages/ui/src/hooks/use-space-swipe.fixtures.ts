@@ -10,6 +10,9 @@ const MOMENTUM_DELTAS_X = [
 	6, 5, 5, 4, 4, 4, 3, 3, 3, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1,
 ]
 
+const MOMENTUM_STARTS_AT =
+	(FINGER_DELTAS_X.length - 1) * FRAME_MS + MOMENTUM_GAP_MS
+
 type TrackpadWheel = {
 	deltaX: number
 	deltaY: number
@@ -23,24 +26,20 @@ const fingerPhase = (direction: 1 | -1): TrackpadWheel[] =>
 		at: frame * FRAME_MS,
 	}))
 
-const momentumPhase = (direction: 1 | -1): TrackpadWheel[] => {
-	const startsAt = (FINGER_DELTAS_X.length - 1) * FRAME_MS + MOMENTUM_GAP_MS
-	return MOMENTUM_DELTAS_X.map((deltaX, frame) => ({
+const momentumPhase = (direction: 1 | -1): TrackpadWheel[] =>
+	MOMENTUM_DELTAS_X.map((deltaX, frame) => ({
 		deltaX: deltaX * direction,
 		deltaY: 0,
-		at: startsAt + frame * FRAME_MS,
+		at: MOMENTUM_STARTS_AT + frame * FRAME_MS,
 	}))
-}
 
 export const trackpadSwipe = (direction: 1 | -1) => ({
 	fingers: fingerPhase(direction),
 	momentum: momentumPhase(direction),
 })
 
-export const trackpadSwipeDuration = (() => {
-	const { momentum } = trackpadSwipe(1)
-	return momentum[momentum.length - 1]?.at ?? 0
-})()
+export const trackpadSwipeDuration =
+	MOMENTUM_STARTS_AT + (MOMENTUM_DELTAS_X.length - 1) * FRAME_MS
 
 export const dispatchTrackpadWheels = (
 	target: Element,
