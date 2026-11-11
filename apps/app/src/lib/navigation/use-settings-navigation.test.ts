@@ -24,6 +24,8 @@ import type { WorkspaceTabs } from "../tabs/workspace-tabs"
 
 const USER_SETTINGS = "/settings/user"
 
+const HOME = "/home"
+
 const MIDDLE_CLICK = { ...NO_CLICK_MODIFIERS, middle: true }
 
 const MOD_CLICK = { ...NO_CLICK_MODIFIERS, meta: true }
@@ -42,7 +44,10 @@ const NavigationProbe = () => {
 	return null
 }
 
-const settingsRouterOn = (tabs: Pick<WorkspaceTabs, "openInNewTab">) => {
+const settingsRouterOn = (
+	tabs: Pick<WorkspaceTabs, "openInNewTab">,
+	initialEntries: string[],
+) => {
 	const root = createRootRouteWithContext<{ tabs: typeof tabs }>()({
 		component: NavigationProbe,
 	})
@@ -56,16 +61,20 @@ const settingsRouterOn = (tabs: Pick<WorkspaceTabs, "openInNewTab">) => {
 		path: "/settings/space/$spaceId",
 		validateSearch: validateSettingsSearch,
 	})
+	const home = createRoute({ getParentRoute: () => root, path: HOME })
 	return createRouter({
-		routeTree: root.addChildren([userSettings, spaceSettings]),
-		history: createMemoryHistory({ initialEntries: [USER_SETTINGS] }),
+		routeTree: root.addChildren([userSettings, spaceSettings, home]),
+		history: createMemoryHistory({
+			initialEntries,
+			initialIndex: initialEntries.length - 1,
+		}),
 		context: { tabs },
 	})
 }
 
-const renderSettingsNavigation = async () => {
+const renderSettingsNavigation = async (initialEntries = [USER_SETTINGS]) => {
 	const openInNewTab = vi.fn()
-	const router = settingsRouterOn({ openInNewTab })
+	const router = settingsRouterOn({ openInNewTab }, initialEntries)
 	await act(async () => {
 		render(
 			createElement(RouterProvider, {
@@ -160,6 +169,23 @@ describe("useSettingsNavigation", () => {
 
 		expect(openInNewTab).not.toHaveBeenCalled()
 		expect(shownHref()).toBe(`${USER_SETTINGS}?entry=mcp&application=github`)
+	})
+
+	it("marks a fresh arrival when New conversation is opened from New conversation, without a new history entry", async () => {
+		const { navigation, router, shownHref } = await renderSettingsNavigation([
+			USER_SETTINGS,
+			HOME,
+		])
+		const arrivalBefore = router.state.location.state.__TSR_key
+		const historyLength = router.history.length
+
+		await act(async () => navigation.openHome())
+
+		expect(shownHref()).toBe(HOME)
+		expect(router.state.location.state.__TSR_key).not.toBe(arrivalBefore)
+		expect(router.history.length).toBe(historyLength)
+		await act(async () => router.history.back())
+		expect(shownHref()).toBe(USER_SETTINGS)
 	})
 
 	it("names the application opened in place in the address, without a new history entry", async () => {
