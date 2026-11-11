@@ -48,7 +48,7 @@ const SkeletonSectionHeader = ({
 
 const SidebarSkeletonRow = ({ title, preview }: SidebarRowWidths) => (
 	<div
-		className="flex min-h-12 shrink-0 items-center gap-2.5 p-1.5"
+		className="flex min-h-13 shrink-0 items-center gap-2.5 p-2"
 		data-slot="sidebar-list-skeleton-row"
 	>
 		<span

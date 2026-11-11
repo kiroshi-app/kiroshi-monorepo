@@ -31,13 +31,16 @@ import {
 	ContextMenuSeparator,
 	ContextMenuTrigger,
 } from "@workspace/ui/components/ui/context-menu"
-import { SidebarMenuItem } from "@workspace/ui/components/ui/sidebar"
+import {
+	SidebarMenuItem,
+	useSidebar,
+} from "@workspace/ui/components/ui/sidebar"
 import { dropArea, type Lifter } from "@workspace/ui/hooks/use-roster-lift"
 import { STILL_UNDER_REDUCED_MOTION } from "@workspace/ui/lib/reduced-motion"
 
 const ROW_ICON_SIDE = 28
 
-const MISSION_GROUP =
+const SURFACE =
 	"rounded-lg hover:bg-sidebar-accent has-data-active:bg-sidebar-accent data-popup-open:bg-sidebar-accent/70"
 
 interface ConversationRosterRowProps extends RosterRowSlot, RosterPinActions {
@@ -74,7 +77,9 @@ const ConversationRosterRow = ({
 	onCreateSectionFor,
 }: ConversationRosterRowProps) => {
 	const { t } = useTranslation("bots")
-	const hasMissions = Boolean(conversation.missions?.length)
+	const { state } = useSidebar()
+	const hasSurface =
+		state !== "collapsed" || Boolean(conversation.missions?.length)
 
 	return (
 		<SidebarMenuItem
@@ -90,12 +95,12 @@ const ConversationRosterRow = ({
 			ref={(node) => keepFocus?.(conversation.id, node)}
 		>
 			<ContextMenu>
-				<ContextMenuTrigger className={hasMissions ? MISSION_GROUP : undefined}>
+				<ContextMenuTrigger className={hasSurface ? SURFACE : undefined}>
 					<SidebarListRow
 						{...lift.handlersFor(conversation.id)}
 						isLiftable
 						badge={badgeOf(conversation)}
-						geometry={hasMissions ? "tree" : "roster"}
+						geometry={hasSurface ? "conversation" : "roster"}
 						isActive={isSelected}
 						isMiddleClickSelectable
 						isWorking={Boolean(workingBotOf(conversation))}

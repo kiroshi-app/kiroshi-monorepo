@@ -494,11 +494,15 @@ export const ExpandedMissions = meta.story({
 
 const EVEN_PADDING = Array(4).fill("6px")
 
+const CONVERSATION_PADDING = Array(4).fill("8px")
+
 const TOP_MENU_HEIGHT = 32
 
 const TOP_MENU_GLYPH = 14
 
 const ROW_X_OFFSETS = { iconCentre: 28, labelStart: 52 }
+
+const CONVERSATION_X_OFFSETS = { iconCentre: 30, labelStart: 54 }
 
 const paddingOf = (element: Element) => {
 	const style = getComputedStyle(element)
@@ -525,6 +529,11 @@ const colourTransitionsOf = (element: Element) => {
 const conversationButtonOf = (tree: Element) =>
 	slotIn(tree.parentElement as HTMLElement, "sidebar-menu-button")
 
+const isConversationRow = (row: Element) => {
+	const name = row.querySelector('[data-slot="roster-row-name"]')
+	return Boolean(name) && name?.textContent !== ATLAS.name
+}
+
 const centreOfBox = (element: Element) => {
 	const box = boxOf(element)
 	return [box.left + box.width / 2, box.top + box.height / 2] as const
@@ -542,7 +551,10 @@ const expectTreeArtboard = async ({ canvasElement }: StoryCanvas) => {
 		...slotsIn(sidebar, "fold-section-trigger"),
 		slotIn(sidebar, "expanded-sidebar-footer"),
 	]
-	for (const row of rows) await expect(paddingOf(row)).toEqual(EVEN_PADDING)
+	for (const row of rows)
+		await expect(paddingOf(row)).toEqual(
+			isConversationRow(row) ? CONVERSATION_PADDING : EVEN_PADDING,
+		)
 
 	for (const name of ["New conversation", /^Missions/, "Library"]) {
 		const item = within(sidebar).getByRole("button", { name })
@@ -578,17 +590,17 @@ const expectTreeArtboard = async ({ canvasElement }: StoryCanvas) => {
 		const trunk = getComputedStyle(tree, "::before")
 		await expect(boxOf(tree).top).toBe(boxOf(head).bottom)
 		await expect([trunk.insetInlineStart, trunk.width, trunk.bottom]).toEqual([
-			"19px",
+			"21px",
 			"1.5px",
-			"14px",
+			"16px",
 		])
 		await expect(getComputedStyle(tree).pointerEvents).toBe("none")
 		const title = slotIn(head, "roster-row-name")
 		for (const row of slotsIn(tree, "mission-capsule")) {
 			const branch = row.firstElementChild as HTMLElement
 			const glyph = slotIn(row, "mission-capsule-glyph")
-			await expect(boxOf(row).height).toBe(28)
-			await expect(boxOf(branch).left - boxOf(tree).left).toBe(20)
+			await expect(boxOf(row).height).toBe(32)
+			await expect(boxOf(branch).left - boxOf(tree).left).toBe(22)
 			await expect(boxOf(branch).width).toBe(16)
 			await expect(centreOfBox(branch)[1]).toBe(centreOfBox(row)[1])
 			await expect(boxOf(glyph).width).toBe(14)
@@ -601,7 +613,7 @@ const expectTreeArtboard = async ({ canvasElement }: StoryCanvas) => {
 }
 
 const TREE_DESCRIPTION =
-	"Paper artboard Missions 1 Tree Corrected: four conversations, two of them carrying missions drawn as a tree under their row, and one agent row. Check each mission hangs off a trunk from the avatar centre with a branch to its state mark, that the mark sits on the title column, that the destinations show their glyph alone, and that every row pads 6 on all four sides."
+	"Paper artboard Missions 1 Tree Corrected: four conversations, two of them carrying missions drawn as a tree under their row, and one agent row. Check each mission hangs off a trunk from the avatar centre with a branch to its state mark, that the mark sits on the title column, that the destinations show their glyph alone, and that every conversation row pads 8 on all four sides and every other row 6."
 
 export const Missions1TreeExpanded = meta.story({
 	name: "Missions 1 Tree",
@@ -645,7 +657,7 @@ export const Missions1TreeLongTitlesExpanded = meta.story({
 		await expect(boxOf(name).height).toBe(20)
 		await expect(boxOf(title).height).toBe(16)
 		await expect(boxOf(slotIn(canvasElement, "mission-capsule")).height).toBe(
-			28,
+			32,
 		)
 	},
 })
@@ -1712,7 +1724,9 @@ const expectTopMenuAlignedOnConversations = async (
 		":scope > span:first-child > *",
 	) as Element
 	await expect(xOffsetsOf(item, glyph, box)).toEqual(ROW_X_OFFSETS)
-	await expect(xOffsetsOf(conversation, avatar, box)).toEqual(ROW_X_OFFSETS)
+	await expect(xOffsetsOf(conversation, avatar, box)).toEqual(
+		CONVERSATION_X_OFFSETS,
+	)
 	return item
 }
 
@@ -1722,7 +1736,7 @@ export const TopMenuAtRestExpanded = meta.story({
 		docs: {
 			description: {
 				story:
-					"The destinations menu at rest. Check each button is 32px tall with a 14px glyph and pads 6 on all four sides, and that its icon centre and label start sit 28px and 52px from the sidebar edge, the same offsets as a conversation row.",
+					"The destinations menu at rest. Check each button is 32px tall with a 14px glyph and pads 6 on all four sides, and that its icon centre and label start sit 28px and 52px from the sidebar edge, 2px before a conversation row's 30px and 54px.",
 			},
 		},
 	},

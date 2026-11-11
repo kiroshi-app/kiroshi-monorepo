@@ -244,7 +244,9 @@ const dotsIn = (root: HTMLElement) => slotsIn(root, "bot-mission-dot")
 
 const BARE_ROW_HEIGHT = 48
 
-const CONVERSATION_ROW_HEIGHT = 48
+const CONVERSATION_ROW_HEIGHT = 52
+
+const MISSION_LINE_HEIGHT = 32
 
 const ROW_HEAD_HEIGHT = 36
 
@@ -5546,7 +5548,7 @@ export const ConversationMissionStrips = meta.story({
 		docs: {
 			description: {
 				story:
-					"A mission belongs to the conversation it was opened from, so a room carrying open missions wears the strips its companions would otherwise wear alone. Check the strips sit under the room row, in the same lane and the same shapes a companion row gives them, and that the room draws one per open mission whichever of its companions runs it. Check the room whose mission waits on the reader is drawn first even though it spoke longest ago, exactly as a waiting companion row is raised, that it measures 104px for its two missions while the room with none keeps its 48px and the companion its 52px, and that the avatar stack stays centred on the row part. Pick `MissionStripStates` for the strip on a companion row.",
+					"A mission belongs to the conversation it was opened from, so a room carrying open missions wears the strips its companions would otherwise wear alone. Check the strips sit under the room row, in the same lane and the same shapes a companion row gives them, and that the room draws one per open mission whichever of its companions runs it. Check the room whose mission waits on the reader is drawn first even though it spoke longest ago, exactly as a waiting companion row is raised, that it measures 116px for its two missions while the room with none keeps its 52px and the companion its 48px, and that the avatar stack stays centred on the row part. Pick `MissionStripStates` for the strip on a companion row.",
 			},
 		},
 	},
@@ -5564,7 +5566,7 @@ export const ConversationMissionStrips = meta.story({
 			),
 		).toEqual([["waiting", "working"], [], []])
 		await expect(rowHeights(rows)).toEqual([
-			CONVERSATION_ROW_HEIGHT + 2 * STRIP_STEP,
+			CONVERSATION_ROW_HEIGHT + 2 * MISSION_LINE_HEIGHT,
 			CONVERSATION_ROW_HEIGHT,
 			BARE_ROW_HEIGHT,
 		])

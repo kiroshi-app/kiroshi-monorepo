@@ -1001,8 +1001,8 @@ export const ExpandedNewConversationRows = meta.story({
 	play: async ({ canvasElement }) => {
 		await expectZoneHeaders(canvasElement, ["Pinned", "Conversations"])
 		const row = rowNamed(canvasElement, "Launch room")
-		await expect(pixelsOf(row, "padding-inline-end")).toBe(6)
-		await expect(pixelsOf(row, "padding-inline-start")).toBe(6)
+		await expect(pixelsOf(row, "padding-inline-end")).toBe(8)
+		await expect(pixelsOf(row, "padding-inline-start")).toBe(8)
 		await expect(pixelsOf(row, "border-top-left-radius")).toBe(10)
 		await expect(getComputedStyle(row).transitionProperty).not.toMatch(
 			/color|background/,
@@ -1074,7 +1074,7 @@ const expectMissionsRows = async ({
 	const surface = surfaceOf(head)
 	await expect(surface.contains(first) && surface.contains(second)).toBe(true)
 	await expect(head.contains(first)).toBe(false)
-	await expect(first.offsetHeight).toBe(28)
+	await expect(first.offsetHeight).toBe(32)
 	await expect(
 		first.getBoundingClientRect().top - head.getBoundingClientRect().bottom,
 	).toBe(0)
@@ -1084,7 +1084,7 @@ const expectMissionsRows = async ({
 	await expect(
 		slotIn(first, "mission-capsule-glyph").getBoundingClientRect().left -
 			surface.getBoundingClientRect().left,
-	).toBe(44)
+	).toBe(46)
 	await expect(
 		surface.getBoundingClientRect().bottom -
 			second.getBoundingClientRect().bottom,
