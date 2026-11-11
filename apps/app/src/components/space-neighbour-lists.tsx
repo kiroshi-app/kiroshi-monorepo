@@ -27,22 +27,22 @@ import { useSpaceSidebarConversations } from "@/lib/sidebar/use-sidebar-conversa
 
 const NO_AGENTS: never[] = []
 
+const IGNORED = () => undefined
+
 const STILL_LIFT: Lifter = {
-	handlersFor: () => ({ onPointerDown: () => undefined }),
+	handlersFor: () => ({ onPointerDown: IGNORED }),
 	hasJustDropped: () => false,
 }
 
 const STILL_ROWS: RosterRowsContext = {
-	keepFocus: () => undefined,
+	keepFocus: IGNORED,
 	lift: STILL_LIFT,
 	membershipsOf: () => [],
-	onMoveKey: () => undefined,
+	onMoveKey: IGNORED,
 	sections: [],
-	shiftOf: () => undefined,
+	shiftOf: IGNORED,
 	spaces: [],
 }
-
-const HELD_OPEN = () => undefined
 
 const stillSectionsOf = (entries: RosterEntries): ExpandedSidebarSection[] =>
 	namedSectionsOf(entries).map(({ id, name }) => {
@@ -52,7 +52,7 @@ const stillSectionsOf = (entries: RosterEntries): ExpandedSidebarSection[] =>
 			name,
 			isOpen: true,
 			lift: STILL_LIFT,
-			onOpenChange: HELD_OPEN,
+			onOpenChange: IGNORED,
 			rows:
 				heldRows.length > 0 ? rosterMenuOf(heldRows, true, STILL_ROWS) : null,
 			dropArea: { landing: id, isLanding: false },
