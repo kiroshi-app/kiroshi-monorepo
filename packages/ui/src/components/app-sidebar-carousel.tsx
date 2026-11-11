@@ -50,6 +50,9 @@ const isFlushWithPanel = (row: HTMLDivElement) => {
 	return Math.abs(drift) <= 1
 }
 
+const scrollerOf = (panel: HTMLElement, look: SpacePanelLook) =>
+	look === "inset" ? panel : panel.firstElementChild
+
 interface SpacePanelProps {
 	look: SpacePanelLook
 	scrollKey: string
@@ -66,9 +69,17 @@ const SpacePanel = ({
 	children,
 }: SpacePanelProps) => {
 	const panel = useRef<HTMLDivElement>(null)
+	const restoredScroller = useRef<Element | null>(null)
 	useOverlayScrollbars(panel, {
 		isEnabled: look === "inset",
 		options: CLIPPED_SIDEWAYS,
+	})
+
+	useLayoutEffect(() => {
+		const scroller = panel.current && scrollerOf(panel.current, look)
+		if (!scroller || scroller === restoredScroller.current) return
+		restoredScroller.current = scroller
+		scroller.scrollTop = scrolls.get(scrollKey) ?? 0
 	})
 
 	return (
@@ -76,13 +87,12 @@ const SpacePanel = ({
 			className={cn(CAROUSEL_PANEL, PANEL_LOOKS[look])}
 			data-slot="space-panel"
 			inert={!isInView}
-			onScroll={(event) => {
-				scrolls.set(scrollKey, event.currentTarget.scrollTop)
+			onScrollCapture={(event) => {
+				const scroller = scrollerOf(event.currentTarget, look)
+				if (scroller && event.target === scroller)
+					scrolls.set(scrollKey, scroller.scrollTop)
 			}}
-			ref={(node) => {
-				panel.current = node
-				if (node) node.scrollTop = scrolls.get(scrollKey) ?? 0
-			}}
+			ref={panel}
 		>
 			{children}
 		</div>
@@ -217,6 +227,7 @@ interface CurrentSpaceCarouselProps {
 	selectedSpaceId?: string
 	isSwitchingEnabled: boolean
 	onSelectSpace?: (id: string) => void
+	renderSpaceList?: (space: Space) => ReactNode
 	children: ReactNode
 }
 
@@ -225,6 +236,7 @@ const CurrentSpaceCarousel = ({
 	selectedSpaceId,
 	isSwitchingEnabled,
 	onSelectSpace,
+	renderSpaceList,
 	children,
 }: CurrentSpaceCarouselProps) => {
 	const shown =
@@ -237,7 +249,9 @@ const CurrentSpaceCarousel = ({
 			list="conversations"
 			onSelectSpace={onSelectSpace}
 			panel="bare"
-			renderSpace={(space) => (space.id === shown.id ? children : null)}
+			renderSpace={(space) =>
+				space.id === shown.id ? children : renderSpaceList?.(space)
+			}
 			selectedSpaceId={shown.id}
 			spaces={spaces}
 		/>

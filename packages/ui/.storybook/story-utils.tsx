@@ -231,6 +231,19 @@ export const scrollSpaceCarousel = async (root: Element, step: 1 | -1) => {
 	await new Promise((resolve) => setTimeout(resolve, SPACE_CAROUSEL_SETTLE_MS))
 }
 
+export const carrySpaceCarousel = async (root: Element, panels: number) => {
+	const carousel = slotIn(root, "space-carousel")
+	carousel.style.scrollSnapType = "none"
+	carousel.scrollLeft = panels * carousel.clientWidth
+	await new Promise((resolve) => setTimeout(resolve, SPACE_CAROUSEL_SETTLE_MS))
+}
+
+export const spaceListInView = (root: Element) => {
+	const list = root.querySelector('[data-slot="space-panel"]:not([inert]) > *')
+	if (!list) throw new Error("No Space list is in view")
+	return list
+}
+
 export const expectSpaceCarouselHeld = (root: Element) =>
 	expect(getComputedStyle(slotIn(root, "space-carousel")).overflowX).toBe(
 		"hidden",

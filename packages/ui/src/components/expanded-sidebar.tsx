@@ -30,6 +30,7 @@ import {
 	SidebarListSkeleton,
 } from "@workspace/ui/components/sidebar-list-skeleton"
 import { SidebarMenuRow } from "@workspace/ui/components/sidebar-menu-row"
+import type { Space } from "@workspace/ui/components/space"
 import {
 	SpaceDots,
 	SpaceSwitcher,
@@ -98,6 +99,7 @@ type ExpandedSidebarProps = SpaceSwitcherProps & {
 	update?: ReactNode
 	user?: UserChipIdentity
 	isSpaceSwitchingEnabled?: boolean
+	renderSpaceList?: (space: Space) => ReactNode
 	onReorderSpaces?: (ids: string[]) => void
 	onOpenSearch?: () => void
 	onNewConversation?: () => void
@@ -181,7 +183,7 @@ type ExpandedSidebarListProps = Pick<
 
 const holdsRows = (rows: ReactNode) => Children.toArray(rows).length > 0
 
-const ExpandedSidebarList = ({
+const ExpandedSidebarListBody = ({
 	pinned,
 	conversations,
 	sections = [],
@@ -263,6 +265,12 @@ const ExpandedSidebarList = ({
 	)
 }
 
+const ExpandedSidebarList = (props: ExpandedSidebarListProps) => (
+	<SidebarContent className={SECTIONS}>
+		<ExpandedSidebarListBody {...props} />
+	</SidebarContent>
+)
+
 const ExpandedSidebar = ({
 	destination,
 	missionCount,
@@ -274,6 +282,7 @@ const ExpandedSidebar = ({
 	update,
 	user,
 	isSpaceSwitchingEnabled = true,
+	renderSpaceList,
 	onReorderSpaces,
 	onOpenSearch,
 	onNewConversation,
@@ -334,19 +343,18 @@ const ExpandedSidebar = ({
 			<CurrentSpaceCarousel
 				isSwitchingEnabled={isSpaceSwitchingEnabled}
 				onSelectSpace={switcher.onSelectSpace}
+				renderSpaceList={renderSpaceList}
 				selectedSpaceId={switcher.selectedSpaceId}
 				spaces={switcher.spaces}
 			>
-				<SidebarContent className={SECTIONS}>
-					<ExpandedSidebarList
-						conversations={conversations}
-						listEnd={listEnd}
-						listStatus={listStatus}
-						onRetryList={onRetryList}
-						pinned={pinned}
-						sections={sections}
-					/>
-				</SidebarContent>
+				<ExpandedSidebarList
+					conversations={conversations}
+					listEnd={listEnd}
+					listStatus={listStatus}
+					onRetryList={onRetryList}
+					pinned={pinned}
+					sections={sections}
+				/>
 			</CurrentSpaceCarousel>
 			<SpaceDots
 				badgesBySpaceId={switcher.badgesBySpaceId}
@@ -364,6 +372,8 @@ const ExpandedSidebar = ({
 export {
 	ExpandedSidebar,
 	type ExpandedSidebarDestination,
+	ExpandedSidebarList,
+	type ExpandedSidebarListProps,
 	type ExpandedSidebarProps,
 	type ExpandedSidebarSection,
 }

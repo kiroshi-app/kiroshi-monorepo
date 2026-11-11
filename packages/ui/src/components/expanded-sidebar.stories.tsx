@@ -3,6 +3,7 @@ import { expect, fireEvent, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
+	carrySpaceCarousel,
 	expectSkeletonFilledTo,
 	expectSpaceCarouselHeld,
 	FRAME_POLL,
@@ -10,6 +11,7 @@ import {
 	scrollSpaceCarousel,
 	slotIn,
 	slotsIn,
+	spaceListInView,
 	tokenStyleIn,
 } from "@workspace/storybook/story-utils"
 import { pointerAt } from "@workspace/storybook/tab-drag-gesture"
@@ -48,6 +50,7 @@ import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { ContentCard } from "@workspace/ui/components/content-card"
 import {
 	ExpandedSidebar,
+	ExpandedSidebarList,
 	type ExpandedSidebarProps,
 	type ExpandedSidebarSection,
 } from "@workspace/ui/components/expanded-sidebar"
@@ -630,6 +633,77 @@ export const SwipeWithSwitchingNotAllowedDoesNothingExpanded = meta.story({
 	play: async ({ args, canvasElement }) => {
 		await expectSpaceCarouselHeld(sidebarIn(canvasElement))
 		await expect(args.onSelectSpace).not.toHaveBeenCalled()
+	},
+})
+
+const spaceListOf = (space: Space) => (
+	<ExpandedSidebarList
+		conversations={rowsOf([artboardRow(`${space.name} weekly sync`)], false)}
+		pinned={null}
+	/>
+)
+
+export const NeighbourListShowsMidSwipeExpanded = meta.story({
+	name: "Neighbour list shows mid swipe Expanded",
+	tags: ["test-only"],
+	args: { spaces: SEVERAL_SPACES, renderSpaceList: spaceListOf },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A swipe carried four tenths of a panel towards the next Space, short of the crossing, with the list of every Space handed in. Check the next Space's list is drawn in the incoming panel and already under the fingers, and that no Space is selected yet.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		const view = sidebarIn(canvasElement)
+		const carousel = slotIn(view, "space-carousel")
+		const neighbour = within(carousel).getByText("Perso weekly sync")
+		const carouselRight = carousel.getBoundingClientRect().right
+		await expect(neighbour.getBoundingClientRect().left).toBeGreaterThanOrEqual(
+			carouselRight,
+		)
+
+		await carrySpaceCarousel(view, 0.4)
+		await expect(neighbour.getBoundingClientRect().left).toBeLessThan(
+			carouselRight,
+		)
+		await expect(args.onSelectSpace).not.toHaveBeenCalled()
+	},
+})
+
+const LONG_LIST = rowsOf(
+	Array.from({ length: 40 }, (_, rank) => artboardRow(`Thread ${rank + 1}`)),
+	false,
+)
+
+export const ListScrollKeptAcrossSwipeExpanded = meta.story({
+	name: "List scroll kept across a swipe Expanded",
+	args: { spaces: SEVERAL_SPACES, conversations: LONG_LIST },
+	render: (args) => <SpaceFollowingWindow {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A list scrolled down, then a swipe to the next Space and back. Check the next Space opens at the top of its list and the first one comes back at the offset it was left at.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const view = sidebarIn(canvasElement)
+		const list = spaceListInView(view)
+		await expect(list.scrollHeight).toBeGreaterThan(list.clientHeight)
+		list.scrollTop = 90
+		await new Promise(requestAnimationFrame)
+
+		await scrollSpaceCarousel(view, 1)
+		await expect(spaceListInView(view).scrollTop).toBe(0)
+
+		await scrollSpaceCarousel(view, -1)
+		await waitFor(
+			() => expect(spaceListInView(view).scrollTop).toBe(90),
+			FRAME_POLL,
+		)
 	},
 })
 

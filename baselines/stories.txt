@@ -1791,7 +1791,9 @@ navigation-collapsedsidebar--l-1-loading-collapsed
 navigation-collapsedsidebar--l-2-failed-collapsed
 navigation-collapsedsidebar--l-3-loading-more-collapsed
 navigation-collapsedsidebar--last-mission-completes
+navigation-collapsedsidebar--list-scroll-kept-across-swipe-collapsed
 navigation-collapsedsidebar--mission-thread-open
+navigation-collapsedsidebar--neighbour-list-shows-mid-swipe-collapsed
 navigation-collapsedsidebar--one-mission
 navigation-collapsedsidebar--overflow-count-is-plain-text
 navigation-collapsedsidebar--r-1-not-sent-collapsed
@@ -1873,8 +1875,10 @@ navigation-expandedsidebar--footer-is-one-settings-button-expanded
 navigation-expandedsidebar--l-1-loading-expanded
 navigation-expandedsidebar--l-2-failed-expanded
 navigation-expandedsidebar--l-3-loading-more-expanded
+navigation-expandedsidebar--list-scroll-kept-across-swipe-expanded
 navigation-expandedsidebar--long-space-name-truncates-expanded
 navigation-expandedsidebar--n-1-named-section-expanded
+navigation-expandedsidebar--neighbour-list-shows-mid-swipe-expanded
 navigation-expandedsidebar--new-conversation-draws-the-plus-expanded
 navigation-expandedsidebar--s-1-several-spaces-expanded
 navigation-expandedsidebar--s-2-shared-space-host-not-connected-expanded

@@ -603,7 +603,7 @@ const RetrySlot = ({ onRetry }: RetrySlotProps) => {
 	)
 }
 
-type RailListProps = Pick<
+type CollapsedSidebarListProps = Pick<
 	CollapsedSidebarProps,
 	| "zones"
 	| "listStatus"
@@ -614,13 +614,13 @@ type RailListProps = Pick<
 	| "onRetryList"
 >
 
-const RailList = ({
+const CollapsedSidebarList = ({
 	zones,
 	listStatus,
 	listEnd,
 	onRetryList,
 	...conversations
-}: RailListProps) => {
+}: CollapsedSidebarListProps) => {
 	if (listStatus === "loading")
 		return (
 			<div className={LIST} data-slot="collapsed-sidebar-list">
@@ -788,6 +788,7 @@ const CollapsedSidebar = ({
 	onOpenMission: _onOpenMission,
 	onRetryList,
 	isSpaceSwitchingEnabled = true,
+	renderSpaceList,
 	...switcher
 }: CollapsedSidebarProps) => {
 	const { t } = useTranslation(["bots", "search"])
@@ -827,10 +828,11 @@ const CollapsedSidebar = ({
 				<CurrentSpaceCarousel
 					isSwitchingEnabled={isSpaceSwitchingEnabled}
 					onSelectSpace={switcher.onSelectSpace}
+					renderSpaceList={renderSpaceList}
 					selectedSpaceId={switcher.selectedSpaceId}
 					spaces={switcher.spaces}
 				>
-					<RailList
+					<CollapsedSidebarList
 						listEnd={listEnd}
 						listStatus={listStatus}
 						onOpenConversation={onOpenConversation}
@@ -849,6 +851,8 @@ const CollapsedSidebar = ({
 
 export {
 	CollapsedSidebar,
+	CollapsedSidebarList,
+	type CollapsedSidebarListProps,
 	type CollapsedSidebarListStatus,
 	type CollapsedSidebarProps,
 	type CollapsedSidebarZone,

@@ -3,6 +3,7 @@ import { expect, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
+	carrySpaceCarousel,
 	expectSkeletonFilledTo,
 	expectSpaceCarouselHeld,
 	FRAME_POLL,
@@ -12,6 +13,7 @@ import {
 	scrollSpaceCarousel,
 	slotIn,
 	slotsIn,
+	spaceListInView,
 	tokenStyleIn,
 	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
@@ -24,6 +26,7 @@ import { AppTitleBar } from "@workspace/ui/components/app-title-bar"
 import type { BotMissionState } from "@workspace/ui/components/bot-badge"
 import {
 	CollapsedSidebar,
+	CollapsedSidebarList,
 	type CollapsedSidebarProps,
 	type CollapsedSidebarZone,
 } from "@workspace/ui/components/collapsed-sidebar"
@@ -999,6 +1002,91 @@ export const SwipeWithSwitchingNotAllowedDoesNothingCollapsed = meta.story({
 	play: async ({ args, canvasElement }) => {
 		await expectSpaceCarouselHeld(slotIn(canvasElement, "collapsed-sidebar"))
 		await expect(args.onSelectSpace).not.toHaveBeenCalled()
+	},
+})
+
+const railListOf = (space: Space) => (
+	<CollapsedSidebarList
+		zones={[
+			recentZone([
+				conversationOf(
+					`${space.id}-sync`,
+					`${space.name} weekly sync`,
+					"Users",
+					BLOT_HUES.blue,
+				),
+			]),
+		]}
+	/>
+)
+
+export const NeighbourListShowsMidSwipeCollapsed = meta.story({
+	name: "Neighbour list shows mid swipe Collapsed",
+	tags: ["test-only"],
+	args: { spaces: SEVERAL_SPACES, renderSpaceList: railListOf },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A swipe carried four tenths of a panel towards the next Space, short of the crossing, with the list of every Space handed in. Check the next Space's list is drawn in the incoming panel and already under the fingers, and that no Space is selected yet.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		const view = slotIn(canvasElement, "collapsed-sidebar")
+		const carousel = slotIn(view, "space-carousel")
+		const neighbour = within(carousel).getByLabelText("Perso weekly sync")
+		const carouselRight = carousel.getBoundingClientRect().right
+		await expect(neighbour.getBoundingClientRect().left).toBeGreaterThanOrEqual(
+			carouselRight,
+		)
+
+		await carrySpaceCarousel(view, 0.4)
+		await expect(neighbour.getBoundingClientRect().left).toBeLessThan(
+			carouselRight,
+		)
+		await expect(args.onSelectSpace).not.toHaveBeenCalled()
+	},
+})
+
+const LONG_ZONE = recentZone(
+	Array.from({ length: 30 }, (_, rank) =>
+		conversationOf(
+			`thread-${rank}`,
+			`Thread ${rank + 1}`,
+			"Users",
+			BLOT_HUES.blue,
+		),
+	),
+)
+
+export const ListScrollKeptAcrossSwipeCollapsed = meta.story({
+	name: "List scroll kept across a swipe Collapsed",
+	args: { spaces: SEVERAL_SPACES, zones: [LONG_ZONE] },
+	render: (args) => <SpaceFollowingWindow {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A list scrolled down, then a swipe to the next Space and back. Check the next Space opens at the top of its list and the first one comes back at the offset it was left at.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const view = slotIn(canvasElement, "collapsed-sidebar")
+		const list = spaceListInView(view)
+		await expect(list.scrollHeight).toBeGreaterThan(list.clientHeight)
+		list.scrollTop = 90
+		await new Promise(requestAnimationFrame)
+
+		await scrollSpaceCarousel(view, 1)
+		await expect(spaceListInView(view).scrollTop).toBe(0)
+
+		await scrollSpaceCarousel(view, -1)
+		await waitFor(
+			() => expect(spaceListInView(view).scrollTop).toBe(90),
+			FRAME_POLL,
+		)
 	},
 })
 
