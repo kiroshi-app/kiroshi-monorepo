@@ -1881,6 +1881,7 @@ navigation-expandedsidebar--missions-1-tree-expanded
 navigation-expandedsidebar--missions-1-tree-light-expanded
 navigation-expandedsidebar--missions-1-tree-long-titles-expanded
 navigation-expandedsidebar--n-1-named-section-expanded
+navigation-expandedsidebar--neighbour-empty-section-mid-swipe-expanded
 navigation-expandedsidebar--neighbour-list-shows-mid-swipe-expanded
 navigation-expandedsidebar--s-1-several-spaces-expanded
 navigation-expandedsidebar--s-2-shared-space-host-not-connected-expanded

@@ -51,7 +51,6 @@ import {
 import {
 	RosterDropArea,
 	RosterLiftFrame,
-	SectionDropZone,
 } from "@workspace/ui/components/app-sidebar-roster-parts"
 import { AppTitleBar } from "@workspace/ui/components/app-title-bar"
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
@@ -955,6 +954,46 @@ export const NeighbourListShowsMidSwipeExpanded = meta.story({
 	},
 })
 
+const spaceListWithEmptySectionOf = (space: Space) => (
+	<ExpandedSidebarList
+		conversations={rowsOf([artboardRow(`${space.name} weekly sync`)], false)}
+		pinned={null}
+		sections={[sectionOf(`${space.id}-clients`, "Clients", null)]}
+	/>
+)
+
+export const NeighbourEmptySectionMidSwipeExpanded = meta.story({
+	name: "Neighbour empty section mid swipe Expanded",
+	args: {
+		spaces: SEVERAL_SPACES,
+		renderSpaceList: spaceListWithEmptySectionOf,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A swipe carried four tenths of a panel towards the next Space, whose Clients section holds no row, the way the app hands a neighbour's empty section in. Check the section still draws its dashed drop zone with its empty label, start aligned, in the incoming panel, and that no Space is selected yet.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		const view = sidebarIn(canvasElement)
+		const carousel = slotIn(view, "space-carousel")
+		const zone = slotIn(carousel, "roster-section-drop")
+		await expect(zone.closest("[data-slot=space-panel]")).toHaveAttribute(
+			"inert",
+		)
+		await expect(zone).toHaveTextContent("Drop an agent here")
+		await expect(getComputedStyle(zone).borderTopStyle).toBe("dashed")
+		await expect(getComputedStyle(zone).textAlign).toBe("start")
+
+		const carouselRight = carousel.getBoundingClientRect().right
+		await carrySpaceCarousel(view, 0.4)
+		await expect(zone.getBoundingClientRect().left).toBeLessThan(carouselRight)
+		await expect(args.onSelectSpace).not.toHaveBeenCalled()
+	},
+})
+
 const LONG_LIST = rowsOf(
 	Array.from({ length: 40 }, (_, rank) => artboardRow(`Thread ${rank + 1}`)),
 	false,
@@ -1048,9 +1087,7 @@ export const E3EmptySectionExpanded = meta.story({
 	name: "E3 Empty section Expanded",
 	args: {
 		...POPULATED_ARTBOARD,
-		sections: [
-			sectionOf("clients", "Clients", <SectionDropZone align="start" />),
-		],
+		sections: [sectionOf("clients", "Clients", [])],
 	},
 	parameters: {
 		docs: {

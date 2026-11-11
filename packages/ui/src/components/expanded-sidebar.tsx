@@ -7,6 +7,7 @@ import { CurrentSpaceCarousel } from "@workspace/ui/components/app-sidebar-carou
 import {
 	RosterDropArea,
 	type RosterDropAreaProps,
+	SectionDropZone,
 } from "@workspace/ui/components/app-sidebar-roster-parts"
 import {
 	FoldSection,
@@ -273,7 +274,7 @@ const ExpandedSidebarListBody = ({
 							section={{ id, name }}
 							slotId={headSlotId}
 						>
-							{rows}
+							{holdsRows(rows) ? rows : <SectionDropZone align="start" />}
 						</NamedFoldSection>
 					</RosterDropArea>
 				),
