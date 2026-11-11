@@ -151,5 +151,4 @@ export {
 	type SidebarClickModifiers,
 	SidebarMenuRow,
 	type SidebarMenuRowProps,
-	type SidebarMenuRowVariant,
 }

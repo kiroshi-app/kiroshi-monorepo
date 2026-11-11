@@ -136,7 +136,6 @@ const SPACE_ARGS = {
 	spaceId: "release-desk",
 	entry: "members",
 	onEntryChange: fn(),
-	onBack: fn(),
 	rail: RAIL,
 	titleBar: TITLE_BAR,
 	isShared: true,

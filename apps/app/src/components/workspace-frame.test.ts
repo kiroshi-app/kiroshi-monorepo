@@ -932,7 +932,7 @@ describe("the open mission count of the expanded sidebar", () => {
 
 const FAILED_LINE = i18n.t("bots:roster.failed")
 const EMPTY_LINE = i18n.t("bots:roster.empty")
-const PINNED = i18n.t("bots:rail.pinned")
+const PINNED = i18n.t("bots:roster.pinned")
 const CONVERSATIONS = i18n.t("bots:rail.conversations")
 
 const foldHeaders = () =>

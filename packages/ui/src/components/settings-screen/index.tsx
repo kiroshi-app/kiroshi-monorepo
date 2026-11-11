@@ -180,9 +180,8 @@ type InvitedSpace = {
 type SpaceSettingsScreenBodyProps = Omit<
 	SettingsScreenBodyNavigation,
 	"onBack" | "backLabel"
-> & {
-	onBack?: () => void
-} & SpaceSettingsProps &
+> &
+	SpaceSettingsProps &
 	(OwnedOrJoinedSpace | InvitedSpace) & {
 		target: "space"
 		spaceId: string
@@ -612,7 +611,6 @@ const SpaceSettingsScreen = (
 		entry,
 		onEntryChange,
 		onOpenApplication,
-		onBack: _onBack,
 		rail,
 		currentSpace,
 		currentSpaceHost,
