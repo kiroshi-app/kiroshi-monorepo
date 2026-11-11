@@ -295,16 +295,10 @@ const Panel = ({
 type ConversationHeaderProps = {
 	name: string
 	icon: string
-	bots?: RosterBot[]
 }
 
-const ConversationHeader = ({
-	name,
-	icon,
-	bots = [],
-}: ConversationHeaderProps) => (
+const ConversationHeader = ({ name, icon }: ConversationHeaderProps) => (
 	<HeaderConversationButton
-		bots={bots}
 		color={BLOT_HUES.green}
 		icon={icon}
 		name={name}
@@ -312,9 +306,7 @@ const ConversationHeader = ({
 	/>
 )
 
-const LISBON_HEADER = (
-	<ConversationHeader name="Lisbon offsite" icon="Globe" bots={[ATLAS]} />
-)
+const LISBON_HEADER = <ConversationHeader name="Lisbon offsite" icon="Globe" />
 
 type WorkLineExtra = {
 	label?: string
@@ -446,13 +438,7 @@ export const Conversations2 = meta.story({
 	render: () => (
 		<Panel
 			face={ATLAS}
-			leading={
-				<ConversationHeader
-					name="Pricing page"
-					icon="CreditCard"
-					bots={[ATLAS, PICO]}
-				/>
-			}
+			leading={<ConversationHeader name="Pricing page" icon="CreditCard" />}
 			rows={PRICING.map(rowOf)}
 			placeholder="Message Pricing page"
 		/>
@@ -787,9 +773,7 @@ export const Conversations8 = meta.story({
 		<Panel
 			face={ATLAS}
 			hasPins={false}
-			leading={
-				<ConversationHeader name="Lisbon flights" icon="Globe" bots={[ATLAS]} />
-			}
+			leading={<ConversationHeader name="Lisbon flights" icon="Globe" />}
 			placeholder="Message Lisbon flights"
 		>
 			<ConversationEmptyState

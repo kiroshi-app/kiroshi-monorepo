@@ -18,6 +18,10 @@ import { CONVERSATION_BOTS } from "@workspace/ui/components/bots.fixtures"
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { ContentCard } from "@workspace/ui/components/content-card"
 import { BOT_ENVIRONMENT } from "@workspace/ui/components/environment.fixtures"
+import {
+	ExpandedSidebar,
+	type ExpandedSidebarDestination,
+} from "@workspace/ui/components/expanded-sidebar"
 import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import { LIBRARY_ITEMS } from "@workspace/ui/components/library.fixtures"
 import { LibraryPanel } from "@workspace/ui/components/library-panel"
@@ -38,9 +42,11 @@ import {
 	type ConversationSettingsScreenBodyProps,
 	SettingsScreenBody,
 	type UserSettingsScreenBodyProps,
+	useLeaveGuard,
 	useSettingsLeaveGuard,
 } from "@workspace/ui/components/settings-screen"
 import type { SpaceAvatarState } from "@workspace/ui/components/space-avatar"
+import { WorkspaceShellRoot } from "@workspace/ui/components/workspace-shell"
 
 const RAIL: AppFrameShellProps["rail"] = {
 	selected: "conversations",
@@ -534,5 +540,65 @@ export const HoldingConversationSettings = meta.story({
 					"The frame holding a conversation's settings, the settings menu beside the rail and the General page in the card, then each page reached from the rail. Check that the frame draws one title bar and one rail on every page, the same elements at the same place and size.",
 			},
 		},
+	},
+})
+
+type SidebarPage = ExpandedSidebarDestination | "companion"
+
+const SidebarAcrossPages = () => {
+	const [page, setPage] = useState<SidebarPage>("companion")
+	const leaveGuard = useLeaveGuard({})
+
+	return (
+		<WorkspaceShellRoot>
+			<ExpandedSidebar
+				conversations={null}
+				destination={page === "companion" ? undefined : page}
+				onNewConversation={leaveGuard.askFirst(() =>
+					setPage("newConversation"),
+				)}
+				onSelectLibrary={leaveGuard.askFirst(() => setPage("library"))}
+				onSelectMissions={leaveGuard.askFirst(() => setPage("missions"))}
+				onSelectSpace={fn()}
+				pinned={null}
+				selectedSpaceId={STUDIO.id}
+				spaces={[STUDIO]}
+				user={{ name: "Ada Martin" }}
+			/>
+			{page === "companion" ? (
+				<CompanionSettingsScreenBody
+					{...COMPANION_SETTINGS}
+					guardLeave={leaveGuard.guardLeave}
+				/>
+			) : (
+				<ContentCard />
+			)}
+		</WorkspaceShellRoot>
+	)
+}
+
+export const SidebarAsksBeforeLeavingSettings = meta.story({
+	render: () => <SidebarAcrossPages />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The navigation shell with no rail: the expanded sidebar beside a companion's settings, a skill edited and not saved, its destinations wrapped by `useLeaveGuard`. Check that Missions asks before leaving the unsaved skill and opens only once Leave is pressed, and that Library, pressed with no settings open, opens at once.",
+			},
+		},
+	},
+	play: async ({ canvasElement, userEvent }) => {
+		await editASkill(canvasElement, userEvent)
+		const sidebar = within(slotIn(canvasElement, "expanded-sidebar"))
+		const missions = sidebar.getByRole("button", { name: /^Missions/ })
+		await userEvent.click(missions)
+		await expect(missions).not.toHaveAttribute("aria-current")
+		await leaveWithoutSaving(userEvent)
+		await expect(missions).toHaveAttribute("aria-current", "page")
+
+		const library = sidebar.getByRole("button", { name: "Library" })
+		await userEvent.click(library)
+		await expect(screen.queryByRole("alertdialog")).toBeNull()
+		await expect(library).toHaveAttribute("aria-current", "page")
 	},
 })

@@ -223,6 +223,32 @@ export const slotIn = (root: Element, slot: string) => {
 	return node
 }
 
+const SPACE_CAROUSEL_SETTLE_MS = 250
+
+export const scrollSpaceCarousel = async (root: Element, step: 1 | -1) => {
+	const carousel = slotIn(root, "space-carousel")
+	carousel.scrollLeft += step * carousel.clientWidth
+	await new Promise((resolve) => setTimeout(resolve, SPACE_CAROUSEL_SETTLE_MS))
+}
+
+export const carrySpaceCarousel = async (root: Element, panels: number) => {
+	const carousel = slotIn(root, "space-carousel")
+	carousel.style.scrollSnapType = "none"
+	carousel.scrollLeft = panels * carousel.clientWidth
+	await new Promise((resolve) => setTimeout(resolve, SPACE_CAROUSEL_SETTLE_MS))
+}
+
+export const spaceListInView = (root: Element) => {
+	const list = root.querySelector('[data-slot="space-panel"]:not([inert]) > *')
+	if (!list) throw new Error("No Space list is in view")
+	return list
+}
+
+export const expectSpaceCarouselHeld = (root: Element) =>
+	expect(getComputedStyle(slotIn(root, "space-carousel")).overflowX).toBe(
+		"hidden",
+	)
+
 export const expectOnboardingDragStrip = async (root: HTMLElement) => {
 	const strips = slotsIn(root, "onboarding-drag-strip")
 	await expect(strips.length).toBeGreaterThan(0)
@@ -433,7 +459,7 @@ const LEFT_COLUMN = {
 
 type LeftColumnParts = {
 	column: HTMLElement
-	header: HTMLElement
+	header?: HTMLElement
 	row: HTMLElement
 }
 
@@ -450,24 +476,38 @@ export const expectLeftColumn = async ({
 	await expect(style.paddingInlineStart).toBe(LEFT_COLUMN.paddingInline)
 	await expect(style.paddingInlineEnd).toBe(LEFT_COLUMN.paddingInline)
 	await expect(style.rowGap).toBe(LEFT_COLUMN.gap)
-	await expect(header.getBoundingClientRect().height).toBe(
-		LEFT_COLUMN.headerHeight,
-	)
+	if (header) {
+		await expect(header.getBoundingClientRect().height).toBe(
+			LEFT_COLUMN.headerHeight,
+		)
+	}
 	await expect(row.getBoundingClientRect().left - innerLeft).toBe(
 		LEFT_COLUMN.rowInset,
 	)
 }
 
-export const expectSettingsMenuLeftColumn = (root: Element) => {
+type SettingsMenuLeftColumnOptions = {
+	hasBackRow?: boolean
+}
+
+export const expectSettingsMenuLeftColumn = async (
+	root: Element,
+	{ hasBackRow = true }: SettingsMenuLeftColumnOptions = {},
+) => {
 	const column = slotIn(root, "settings-menu")
 	const firstEntry = slotIn(column, "settings-menu-entries").querySelector(
 		"button",
 	)
 	if (!firstEntry) throw new Error("The settings menu lists no entry")
+	if (!hasBackRow) {
+		await expect(
+			column.querySelector('[data-slot="settings-menu-back"]'),
+		).toBeNull()
+	}
 
 	return expectLeftColumn({
 		column,
-		header: slotIn(column, "settings-menu-back"),
+		header: hasBackRow ? slotIn(column, "settings-menu-back") : undefined,
 		row: firstEntry,
 	})
 }

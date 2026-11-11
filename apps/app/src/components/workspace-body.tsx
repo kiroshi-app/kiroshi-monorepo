@@ -38,6 +38,7 @@ type HomeSeat = HomeConversationStart & {
 	store: TranscriptStore
 	conversations: Conversation[]
 	onSelectAgent: (botId: string) => void
+	arrivalKey?: string
 }
 
 export type WorkspaceBodyProps = {
@@ -56,7 +57,6 @@ export type WorkspaceBodyProps = {
 	readerName: string
 	isOverlayOpen: boolean
 	onToggleSettings: () => void
-	isMissionsPanelOpen: boolean
 	onOpenConversationSettings: (conversationId: string) => void
 	onOpenThreadInNewTab: (thread: ThreadSearch) => void
 	missions: OpenedMissionController
@@ -149,6 +149,7 @@ const HomeView = ({ body, seat, bot }: HomeViewProps) => {
 			<HomeEmptyStage
 				{...send}
 				{...rooms}
+				arrivalKey={seat.arrivalKey}
 				bots={body.bots}
 				isBandDismissed={visit?.isBandDismissed ?? false}
 				isReadOnly={Boolean(joinedHost?.departure)}
@@ -251,7 +252,7 @@ export function WorkspaceBody(props: WorkspaceBodyProps) {
 		)
 	}
 
-	const thread = props.isMissionsPanelOpen ? null : threadOf(props)
+	const thread = threadOf(props)
 
 	if (!thread) {
 		return <ScreenLayout header={<BareAppHeader />} />

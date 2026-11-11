@@ -9,7 +9,16 @@ const UNITS = [
 	["minute", 60_000],
 ] as const satisfies readonly (readonly [Intl.RelativeTimeFormatUnit, number])[]
 
+const ELAPSED_UNITS = [
+	["year", 31_536_000_000],
+	["day", 86_400_000],
+	["hour", 3_600_000],
+	["minute", 60_000],
+] as const
+
 const dateTimeFormatters = new Map<string, Intl.DateTimeFormat>()
+
+const elapsedFormatters = new Map<string, Intl.NumberFormat>()
 
 const relativeTimeFormatters = new Map<string, Intl.RelativeTimeFormat>()
 
@@ -72,4 +81,24 @@ const toRelativeTime = (at: number, now: number) => {
 	return format.format(0, "second")
 }
 
-export { formatDateTime, formatShortMonthAndDay, toRelativeTime }
+const toElapsedTime = (at: number, now: number) => {
+	const elapsed = Math.max(now - at, 0)
+	const [unit, span] =
+		ELAPSED_UNITS.find(([, unitSpan]) => elapsed >= unitSpan) ??
+		ELAPSED_UNITS[ELAPSED_UNITS.length - 1]
+	const language = i18n.language
+	const format = keptOrMade(
+		elapsedFormatters,
+		`${language}|${unit}`,
+		() =>
+			new Intl.NumberFormat(language, {
+				style: "unit",
+				unit,
+				unitDisplay: "narrow",
+			}),
+	)
+
+	return format.format(Math.floor(elapsed / span))
+}
+
+export { formatDateTime, formatShortMonthAndDay, toElapsedTime, toRelativeTime }

@@ -235,17 +235,14 @@ const PinnedZone = ({
 								{heldRows.length > 0 ? (
 									rosterMenuOf(heldRows, true, rows)
 								) : (
-									<SectionDropZone
-										name={entry.section.name}
-										slotId={emptySlotOf(id)}
-									/>
+									<SectionDropZone slotId={emptySlotOf(id)} />
 								)}
 							</RosterSection>
 						</RosterDropArea>
 					)
 				})
 			) : (
-				<SectionDropZone label={t("roster.pinDrop")} name={t("roster.pin")} />
+				<SectionDropZone label={t("roster.pinDrop")} />
 			)}
 		</RosterDropArea>
 	)

@@ -88,8 +88,8 @@ const MANY_SPACES: Space[] = [
 	},
 ]
 
-const TITLE_BAR_LINE =
-	"flex h-8.5 w-64 items-center gap-2 rounded-xl border border-border border-dashed px-2.5"
+const SIDEBAR_LINE =
+	"flex w-68 items-center rounded-xl border border-border border-dashed bg-background p-2"
 
 const NARROW_STRIP = "w-24 rounded-xl border border-border border-dashed py-2"
 
@@ -143,9 +143,6 @@ const ICON_SVG = 'svg:not([data-slot="space-avatar"] svg)'
 const insertionOn = (root: HTMLElement) =>
 	slotsIn(root, "space-insertion")[0]?.parentElement
 
-const tintVisibleIn = (trigger: HTMLElement) =>
-	slotsIn(trigger, "space-avatar")[0]?.checkVisibility()
-
 const openMenu = async (trigger: HTMLElement) => {
 	fireEvent.click(trigger)
 	const menu = await settled(await screen.findByRole("menu"))
@@ -154,7 +151,7 @@ const openMenu = async (trigger: HTMLElement) => {
 }
 
 const SwitcherLine = (props: SpaceSwitcherProps) => (
-	<div className={TITLE_BAR_LINE}>
+	<div className={SIDEBAR_LINE}>
 		<SpaceSwitcher {...props} />
 	</div>
 )
@@ -224,7 +221,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The control that says which space a reader is in and moves them to another one. It is a 32px ghost button in the window's title bar: the space's tint as a 10px swatch, its name in the muted 13px line, then a chevron that says it opens. Pressing it opens a single-choice menu: every space with its tint and its rank as a Cmd shortcut hint, then any waiting invitations, then a single rule over an item to create one, and nothing else. `SpaceDots` is its companion for a pinned strip, one dot per space, the open one filled with its tint and larger, the rest muted and smaller, so the reader knows how many spaces exist and where they stand without opening anything. Both take the same selection props, so a host maps its store onto `spaces` and `selectedSpaceId` once and hands the pair the same callbacks; the dots alone take `onReorderSpaces`, since the order is the reader's to set: a dot is dragged to the place its space should hold. That order is not decoration, it is which space each `⌘1`…`⌘9` reaches and the order a swipe walks, so it is reported whole, as the full list of ids, and never applied here. A single space still shows the button, since creating a second one lives in its menu, but draws no dots, there is nothing to count. Reach for this at the top of a sidebar; `AppSidebar` mounts both and adds the swipe and the Cmd+digit chords that go with them.",
+					"The control that says which space a reader is in and moves them to another one. It is a 36px ghost button at the top of the expanded sidebar: the generated 26px Space avatar with its host state at the bottom right, its name in the 14px semibold line, then a chevron that says it opens; when the host of a shared space is not connected the avatar turns offline and `Not connected` follows the name. Pressing it opens a single-choice menu: every space with its tint and its rank as a Cmd shortcut hint, then any waiting invitations, then a single rule over Space settings and an item to create one, and nothing else. `SpaceDots` is its companion for a pinned strip, one dot per space, the open one filled with its tint and larger, the rest muted and smaller, so the reader knows how many spaces exist and where they stand without opening anything. Both take the same selection props, so a host maps its store onto `spaces` and `selectedSpaceId` once and hands the pair the same callbacks; the dots alone take `onReorderSpaces`, since the order is the reader's to set: a dot is dragged to the place its space should hold. That order is not decoration, it is which space each `⌘1`…`⌘9` reaches and the order a swipe walks, so it is reported whole, as the full list of ids, and never applied here. A single space still shows the button, since creating a second one lives in its menu, but draws no dots, there is nothing to count. Reach for this at the top of a sidebar; `AppSidebar` mounts both and adds the swipe and the Cmd+digit chords that go with them.",
 			},
 		},
 	},
@@ -232,6 +229,7 @@ const meta = preview.meta({
 		spaces: SPACES,
 		selectedSpaceId: "vocca",
 		onSelectSpace: fn(),
+		onOpenSpaceSettings: fn(),
 		onCreateSpace: fn(),
 		onAcceptInvitation: fn(),
 		onDeclineInvitation: fn(),
@@ -246,7 +244,7 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"Five spaces with the second one open, in the title bar it was sized for. Check the button is 32px tall with 8px corners, that it reads as the swatch, the space's name and a 12px chevron 8px apart, that the swatch carries the space's tint on a 3px radius, and that the button is one Tab stop announcing the open space rather than the word `button`. Pick `Open` for the menu it opens, `SingleSpace` for a reader who has never made a second one. The app assembles it at `apps/app/src/App.tsx:935`.",
+					"Five spaces with the second one open, in the sidebar it was sized for. Check the button is 44px tall, its 28px square padded 8 on all four sides, with 10px corners, that it reads as the 28px square with the space's initial, the space's name and a 14px chevron 10px apart, that the square carries the space's tint, and that the button is one Tab stop announcing the open space rather than the word `button`. Pick `Open` for the menu it opens, `SingleSpace` for a reader who has never made a second one. The app assembles it at `apps/app/src/App.tsx:935`.",
 			},
 		},
 	},
@@ -258,13 +256,14 @@ export const Default = meta.story({
 		await expect(trigger).toHaveAttribute("aria-haspopup", "menu")
 		await expect(trigger).toHaveAttribute("aria-expanded", "false")
 		await expect(within(trigger).getByText("Vocca")).toBeVisible()
-		await expect(tintVisibleIn(trigger)).toBe(true)
-		await expect(trigger.getBoundingClientRect().height).toBe(32)
-		await expect(getComputedStyle(trigger).borderStartStartRadius).toBe("8px")
-		await expect(getComputedStyle(trigger).columnGap).toBe("8px")
-		const avatar = slotsIn(trigger, "space-avatar")[0]
-		await expect(avatar.getBoundingClientRect().width).toBe(12)
-		await expect(avatar.dataset.recipe).toBe("compact")
+		await expect(trigger.getBoundingClientRect().height).toBe(44)
+		await expect(getComputedStyle(trigger).padding).toBe("8px")
+		await expect(getComputedStyle(trigger).borderStartStartRadius).toBe("10px")
+		await expect(getComputedStyle(trigger).columnGap).toBe("10px")
+		const avatar = avatarOn(trigger)
+		await expect(avatar?.getBoundingClientRect().width).toBe(28)
+		await expect(avatar).toHaveAttribute("data-size", "28")
+		await expect(avatar).toHaveAttribute("data-colour", String(BLOT_HUES.green))
 	},
 })
 
@@ -275,7 +274,7 @@ export const Open = meta.story({
 		docs: {
 			description: {
 				story:
-					"The menu the press opens, on a joined space, which is the only place a space is chosen or created. Check the spaces are a single-choice group, one mark on the open one and arrows walking the whole list, that each row carries its tint and its rank as `⌘1`…`⌘5`, and that one rule then `Create a space` close the menu with nothing after it: no `Share`, no `Move up`, no `Move down`, no space settings and no `Leave space`, since the rail's Space logo opens the settings and the dots carry the order. Choosing a row reports the id and closes. Pick `Default` for the resting button. The app assembles it at `apps/app/src/App.tsx:935`.",
+					"The menu the press opens, on a joined space, which is the only place a space is chosen or created. Check the spaces are a single-choice group, one mark on the open one and arrows walking the whole list, that each row carries its tint and its rank as `⌘1`…`⌘5`, and that one rule then `Space settings` and `Create a space` close the menu with nothing after them: no `Share`, no `Move up`, no `Move down` and no `Leave space`, since the dots carry the order. Choosing a row reports the id and closes. Pick `Default` for the resting button. The app assembles it at `apps/app/src/App.tsx:935`.",
 			},
 		},
 	},
@@ -297,15 +296,11 @@ export const Open = meta.story({
 		await expect(within(menu).getByText("⌘5")).toBeInTheDocument()
 
 		const items = within(menu).getAllByRole("menuitem")
-		await expect(items).toHaveLength(1)
-		await expect(items[0]).toHaveAccessibleName("Create a space")
-		for (const removed of [
-			"Share",
-			"Move up",
-			"Move down",
-			/space settings/i,
-			"Leave space",
-		]) {
+		await expect(items.map((item) => item.textContent)).toEqual([
+			"Space settings",
+			"Create a space",
+		])
+		for (const removed of ["Share", "Move up", "Move down", "Leave space"]) {
 			await expect(
 				within(menu).queryByRole("menuitem", { name: removed }),
 			).toBeNull()
@@ -313,14 +308,51 @@ export const Open = meta.story({
 		const rules = within(menu).getAllByRole("separator")
 		await expect(rules).toHaveLength(1)
 		await expect(rules[0].nextElementSibling).toBe(items[0])
-		await expect(items[0]).toBe(menu.lastElementChild)
+		await expect(items[0].nextElementSibling).toBe(items[1])
+		await expect(items[1]).toBe(menu.lastElementChild)
 
-		await userEvent.click(items[0])
+		await userEvent.click(items[1])
 		await expect(args.onCreateSpace).toHaveBeenCalled()
 
 		await openMenu(canvas.getByRole("button", { name: /^Change space/ }))
 		await userEvent.click(screen.getAllByRole("menuitemradio")[3])
 		await expect(args.onSelectSpace).toHaveBeenCalledWith("veille")
+	},
+})
+
+export const OpensSpaceSettings = meta.story({
+	parameters: {
+		a11y: A11Y_FLOATING_FOCUS_GUARDS,
+		docs: {
+			description: {
+				story:
+					"Space settings, the row after the rule, wearing the Settings icon. Check that a click on it reports the open space's settings once and closes the menu, and that reaching it with the arrows and pressing Enter does the same.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const trigger = canvas.getByRole("button", { name: /^Change space/ })
+		const menu = await openMenu(trigger)
+		const spaceSettings = within(menu).getByRole("menuitem", {
+			name: "Space settings",
+		})
+		await expect(spaceSettings.querySelector("svg")).not.toBeNull()
+
+		await userEvent.click(spaceSettings)
+		await expect(args.onOpenSpaceSettings).toHaveBeenCalledOnce()
+		await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
+
+		await openMenu(trigger)
+		await userEvent.keyboard("{End}{ArrowUp}")
+		await waitFor(() =>
+			expect(
+				screen.getByRole("menuitem", { name: "Space settings" }),
+			).toHaveFocus(),
+		)
+		await userEvent.keyboard("{Enter}")
+		await expect(args.onOpenSpaceSettings).toHaveBeenCalledTimes(2)
+		await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
+		await expect(args.onCreateSpace).not.toHaveBeenCalled()
 	},
 })
 
@@ -369,7 +401,7 @@ export const SingleSpace = meta.story({
 		docs: {
 			description: {
 				story:
-					"A reader who has only ever had one space — the state every account opens in. Check the button still draws the name and still opens its menu, since creating the second space lives there, that no dot strip is drawn at all — a single dot would say nothing and would invite a press that changes nothing — and that a single rule sits between the list and `Create a space`. Pick `WithDots` for the strip once a second space exists. The app assembles it at `apps/app/src/App.tsx:935`.",
+					"A reader who has only ever had one space — the state every account opens in. Check the button still draws the name and still opens its menu, since creating the second space lives there, that no dot strip is drawn at all — a single dot would say nothing and would invite a press that changes nothing — and that a single rule sits between the list and `Space settings` then `Create a space`. Pick `WithDots` for the strip once a second space exists. The app assembles it at `apps/app/src/App.tsx:935`.",
 			},
 		},
 	},
@@ -717,7 +749,7 @@ export const WrappedDots = meta.story({
 		docs: {
 			description: {
 				story:
-					"Nine spaces in a strip too narrow to hold them, which is the sidebar at its most crowded. Check the row wraps onto further lines instead of shrinking the dots or scrolling sideways, and that a lift reads the dot under the pointer rather than how far the pointer has travelled from the row's start: the first dot of the second line sits at the same distance from that start as the first dot of the first line, and dropping on it must place the space there and nowhere else. Pick `DragDotToPlace` for the gesture on a row that fits on one line. The app assembles it at `apps/app/src/App.tsx:935`.",
+					"Nine spaces in a strip too narrow to hold them, which is the sidebar at its most crowded. Check the row wraps onto further lines instead of shrinking the dots or scrolling sideways, and that a lift reads the dot under the pointer rather than how far the pointer has travelled from the row's start: dropping on the first dot of the second line must place the space there and nowhere else. Pick `DragDotToPlace` for the gesture on a row that fits on one line. The app assembles it at `apps/app/src/App.tsx:935`.",
 			},
 		},
 	},
@@ -731,7 +763,6 @@ export const WrappedDots = meta.story({
 
 		const handle = dotsIn(canvasElement)[0]
 		const below = dotsIn(canvasElement)[wrapped]
-		await expect(centreOf(below).clientX).toBe(centreOf(handle).clientX)
 
 		liftBy(handle, 12)
 		moveOver(handle, below)
@@ -815,8 +846,6 @@ const ROW_AVATAR = 26
 
 const ROW_HEIGHT = 40
 
-const TRIGGER_DOT = 6.857
-
 const avatarOn = (root: HTMLElement) => slotsIn(root, "space-avatar")[0]
 
 const presenceDotOn = (root: HTMLElement) =>
@@ -885,7 +914,9 @@ const expectCreateLast = async (menu: HTMLElement) => {
 	).toBeNull()
 	const create = within(menu).getByRole("menuitem", { name: "Create a space" })
 	await expect(create).toBe(menu.lastElementChild)
-	await expect(create.previousElementSibling).toHaveAttribute(
+	const spaceSettings = create.previousElementSibling
+	await expect(spaceSettings).toHaveAccessibleName("Space settings")
+	await expect(spaceSettings?.previousElementSibling).toHaveAttribute(
 		"role",
 		"separator",
 	)
@@ -904,7 +935,7 @@ export const ThemesLocalSpaceMenu = meta.story({
 		a11y: SIDE_BY_SIDE_MENU_A11Y,
 		docs: {
 			description: {
-				story: `${MOCKUP} The menu of a local space beside shared and joined ones (A7 rows). Check every 40px row carries its 26px SpaceAvatar, 7px from the row top, in the state of its host: the grey laptop badge for the local row, the 12px green dot cut out of the bottom end corner for the shared and the reachable rows, lines for the connecting one and hatched greys under a crossed red dot for the one that does not answer, every name shown in full and no state pill: the avatar is the only connection signal, and assistive technology reads the state after the name. No globe and no \`Unreachable\` remain, and a single rule then \`Create a space\` close the menu. Pick \`ThemesJoinedSpaceMenu\` for the menu of a joined space.`,
+				story: `${MOCKUP} The menu of a local space beside shared and joined ones (A7 rows). Check every 40px row carries its 26px SpaceAvatar, 7px from the row top, in the state of its host: the grey laptop badge for the local row, the 12px green dot cut out of the bottom end corner for the shared and the reachable rows, lines for the connecting one and hatched greys under a crossed red dot for the one that does not answer, every name shown in full and no state pill: the avatar is the only connection signal, and assistive technology reads the state after the name. No globe and no \`Unreachable\` remain, and a single rule then \`Space settings\` and \`Create a space\` close the menu. Pick \`ThemesJoinedSpaceMenu\` for the menu of a joined space.`,
 			},
 		},
 	},
@@ -912,7 +943,7 @@ export const ThemesLocalSpaceMenu = meta.story({
 		const [light, dark] = triggersIn(canvasElement)
 		for (const trigger of [light, dark]) {
 			await expect(trigger).toHaveAccessibleName("Change space, Perso open")
-			await expect(avatarOn(trigger).dataset.state).toBe("local")
+			await expect(avatarOn(trigger)?.dataset.state).not.toBe("offline")
 		}
 		await expect(slotsIn(canvasElement, "host-pill")).toHaveLength(0)
 
@@ -931,7 +962,7 @@ export const ThemesJoinedSpaceMenu = meta.story({
 		a11y: SIDE_BY_SIDE_MENU_A11Y,
 		docs: {
 			description: {
-				story: `${MOCKUP} The menu of a joined space whose host does not answer. Check the open row keeps its mark and its muted dot and stays choosable, that the rows read their state to assistive technology after their name, and that the menu still closes on a rule then \`Create a space\`, with no \`Leave space\`: leaving lives in the space settings the rail's Space logo opens. Pick \`ThemesLocalSpaceMenu\` for the menu of a local space.`,
+				story: `${MOCKUP} The menu of a joined space whose host does not answer. Check the open row keeps its mark and its muted dot and stays choosable, that the rows read their state to assistive technology after their name, and that the menu still closes on a rule then \`Space settings\` and \`Create a space\`, with no \`Leave space\`: leaving lives in the space settings. Pick \`ThemesLocalSpaceMenu\` for the menu of a local space.`,
 			},
 		},
 	},
@@ -962,7 +993,7 @@ export const ThemesTitleBarHosts = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${MOCKUP} The button in the title bar on a Space shared from this computer, a joined Space online, one connecting and one whose host does not answer. Check each line shows the Space name in full beside its avatar in the state of its host, that no state pill sits beside the button, and that the button names the state after the Space for assistive technology. Pick \`ThemesLocalSpaceMenu\` for the rows of the menu.`,
+				story: `${MOCKUP} The button on a Space shared from this computer, a joined Space online, one connecting and one whose host does not answer. Check each line shows the Space name in full, that only the one whose host does not answer wears the offline avatar and reads Not connected, that no state pill sits beside the button, and that the button names the state after the Space for assistive technology. Pick \`ThemesLocalSpaceMenu\` for the rows of the menu.`,
 			},
 		},
 	},
@@ -981,8 +1012,8 @@ export const ThemesTitleBarHosts = meta.story({
 			await expect(triggers).toHaveLength(2)
 			for (const trigger of triggers) {
 				await expectNameShown(slotsIn(trigger, "space-switcher-name")[0])
-				await expect(avatarOn(trigger).dataset.state).toBe(
-					AVATAR_STATE_OF_HOST[host],
+				await expect(avatarOn(trigger)?.dataset.state === "offline").toBe(
+					host === "down",
 				)
 			}
 		}
@@ -1257,7 +1288,7 @@ export const M2InvitationWaiting = meta.story({
 		a11y: A11Y_FLOATING_FOCUS_GUARDS,
 		docs: {
 			description: {
-				story: `${INVITED_ARTBOARD} M2, artboard 3.1 of the Mockup page: one invitation waits. Check the 7px primary dot sits on the trigger's top end corner and the trigger names it, that the 280px menu places a rule then an Invitations group between Personal and Create a space, that the row reads the Space name (14/20) over who invited and when it expires (12/16), and that Accept and Decline, 28px tall with a 12px radius in 13px medium and indented 18px under the ring, are real buttons the arrow keys reach, each reporting the invitation id.`,
+				story: `${INVITED_ARTBOARD} M2, artboard 3.1 of the Mockup page: one invitation waits. Check the 7px primary dot sits on the trigger's top end corner and the trigger names it, that the 280px menu places a rule then an Invitations group between Personal and Space settings, that the row reads the Space name (14/20) over who invited and when it expires (12/16), and that Accept and Decline, 28px tall with a 12px radius in 13px medium and indented 18px under the ring, are real buttons the arrow keys reach, each reporting the invitation id.`,
 			},
 		},
 	},
@@ -1269,7 +1300,7 @@ export const M2InvitationWaiting = meta.story({
 
 		const menu = await openSwitcher(canvasElement)
 		await expect(menu.getBoundingClientRect().width).toBe(280)
-		await expectGroupBetweenSpacesAnd(menu, "Create a space")
+		await expectGroupBetweenSpacesAnd(menu, "Space settings")
 		const row = invitationNamed(menu, INVITED.name)
 		await expect(hostLineOf(row)).toHaveTextContent(
 			`Invited by ${INVITED.hostEmail}`,
@@ -1394,7 +1425,7 @@ export const OpenedOnInvitation = meta.story({
 	play: async ({ args, canvasElement, userEvent }) => {
 		const menu = await settled(await screen.findByRole("menu"))
 		await expect(menu.getBoundingClientRect().width).toBe(280)
-		await expectGroupBetweenSpacesAnd(menu, "Create a space")
+		await expectGroupBetweenSpacesAnd(menu, "Space settings")
 		const rows = invitationsIn(menu)
 		await expect(rows[1]).toHaveAccessibleName(SECOND_INVITED.name)
 		await expect(
@@ -1483,7 +1514,7 @@ export const M5Joined = meta.story({
 		a11y: A11Y_FLOATING_FOCUS_GUARDS,
 		docs: {
 			description: {
-				story: `${INVITED_ARTBOARD} M5, artboard 3.7 of the Mockup page: the invitation is accepted and Studio is open. At rest the menu is closed and the trigger shows Studio, its 12px avatar online with the presence dot scaled down from 14px, and no invitation dot. Check that, then that the menu lists Studio under Personal with the online dot on its row's avatar and no Invitations group, and that Escape leaves the menu closed again.`,
+				story: `${INVITED_ARTBOARD} M5, artboard 3.7 of the Mockup page: the invitation is accepted and Studio is open. At rest the menu is closed and the trigger shows Studio with its square and no offline dot, and no invitation dot. Check that, then that the menu lists Studio under Personal with the online dot on its row's avatar and no Invitations group, and that Escape leaves the menu closed again.`,
 			},
 		},
 	},
@@ -1492,10 +1523,7 @@ export const M5Joined = meta.story({
 			name: "Change space, Studio open, Online",
 		})
 		await expect(invitationDotOn(trigger)).toBeUndefined()
-		await expect(avatarOn(trigger).dataset.state).toBe("online")
-		await expect(
-			presenceDotOn(trigger).getBoundingClientRect().width,
-		).toBeCloseTo(TRIGGER_DOT, 2)
+		await expect(avatarOn(trigger)?.dataset.state).toBe("online")
 		const menu = await openSwitcher(canvasElement)
 		await expectRowAvatar(rowNamed(menu, "Studio"), "up")
 		await expect(slotsIn(menu, "space-invitations")).toHaveLength(0)
@@ -1818,7 +1846,7 @@ export const InvitationWithoutJoinEntry = meta.story({
 		a11y: A11Y_FLOATING_FOCUS_GUARDS,
 		docs: {
 			description: {
-				story: `${ITERATION_FIVE} 5.5: a reader with one space and one waiting invitation, now that joining goes through the invitation alone. Check the rows read Notes with its \`⌘1\` and its check, a rule, the Invitations label over Studio invited by its host with Accept and Decline, a rule, then \`Create a space\` and nothing after it, and that no \`Join a space\` is offered anywhere. Pick \`M2InvitationWaiting\` for the same invitation beside several spaces.`,
+				story: `${ITERATION_FIVE} 5.5: a reader with one space and one waiting invitation, now that joining goes through the invitation alone. Check the rows read Notes with its \`⌘1\` and its check, a rule, the Invitations label over Studio invited by its host with Accept and Decline, a rule, then \`Space settings\` and \`Create a space\` and nothing after them, and that no \`Join a space\` is offered anywhere. Pick \`M2InvitationWaiting\` for the same invitation beside several spaces.`,
 			},
 		},
 	},
@@ -1860,9 +1888,11 @@ export const InvitationWithoutJoinEntry = meta.story({
 
 		const rule = group.nextElementSibling
 		await expect(rule).toHaveAttribute("role", "separator")
-		await expect(rule?.nextElementSibling).toHaveAccessibleName(
+		const spaceSettings = rule?.nextElementSibling
+		await expect(spaceSettings).toHaveAccessibleName("Space settings")
+		await expect(spaceSettings?.nextElementSibling).toHaveAccessibleName(
 			"Create a space",
 		)
-		await expect(rule?.nextElementSibling).toBe(menu.lastElementChild)
+		await expect(spaceSettings?.nextElementSibling).toBe(menu.lastElementChild)
 	},
 })

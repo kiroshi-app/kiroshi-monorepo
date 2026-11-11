@@ -67,14 +67,6 @@ import {
 	COMPANION_SILHOUETTE_SPACE,
 	silhouetteKey,
 } from "@workspace/ui/components/companion-silhouette"
-import {
-	SPACE_EARLIER_TODAY_MISSIONS,
-	SPACE_OPEN_MISSIONS,
-} from "@workspace/ui/components/missions.fixtures"
-import type {
-	MissionsPanelMission,
-	MissionsPanelProps,
-} from "@workspace/ui/components/missions-panel"
 import { SidebarListSkeleton } from "@workspace/ui/components/sidebar-list-skeleton"
 import { NO_CLICK_MODIFIERS } from "@workspace/ui/components/sidebar-menu-row"
 import { WindowControls } from "@workspace/ui/components/window-controls"
@@ -252,7 +244,9 @@ const dotsIn = (root: HTMLElement) => slotsIn(root, "bot-mission-dot")
 
 const BARE_ROW_HEIGHT = 52
 
-const ROW_HEAD_HEIGHT = 40
+const MISSION_LINE_HEIGHT = 32
+
+const ROW_HEAD_HEIGHT = 36
 
 const STRIP_STEP = 28
 
@@ -433,12 +427,6 @@ const panelInView = (canvasElement: HTMLElement) => {
 	return panel
 }
 
-const missionsPanelOf = (open: MissionsPanelMission[]): MissionsPanelProps => ({
-	open,
-	earlierToday: [],
-	onOpen: fn(),
-})
-
 const SEARCH = "Search"
 
 const RAIL_STOPS = 5
@@ -583,11 +571,21 @@ const expectStripSpansRow = async (row: HTMLElement) => {
 	const button = rowButton(row).getBoundingClientRect()
 
 	await expect(Math.round(strip.left)).toBe(Math.round(avatar.left))
-	await expect(Math.round(button.right - strip.right)).toBe(6)
+	await expect(Math.round(button.right - strip.right)).toBe(8)
 	await expect(rowButton(row).contains(stripsIn(row)[0])).toBe(true)
 }
 
+const isConversationRow = (row: HTMLElement) =>
+	row.querySelector('[data-slot="conversation-subject-icon"]') !== null
+
 const expectAlignedRows = async (rows: HTMLElement[]) => {
+	const conversations = rows.filter(isConversationRow)
+	const companions = rows.filter((row) => !isConversationRow(row))
+	for (const kind of [conversations, companions])
+		if (kind.length > 0) await expectAlignedRowsOfOneKind(kind)
+}
+
+const expectAlignedRowsOfOneKind = async (rows: HTMLElement[]) => {
 	await expect(uniqueCount(startOffsets(rows, "roster-row-name"))).toBe(1)
 	await expect(uniqueCount(startOffsets(rows, "roster-row-preview"))).toBe(1)
 	await expect(uniqueCount(startOffsets(rows, "roster-row-timestamp"))).toBe(1)
@@ -626,7 +624,7 @@ const expectMutedSecondaryText = async (row: HTMLElement, muted: string) => {
 	await expect(colorOf(row, "roster-row-name")).not.toBe(muted)
 }
 
-const EXPANDED_PANEL_WIDTH = 304
+const EXPANDED_PANEL_WIDTH = 288
 
 const shellWidthOf = (property: string) => {
 	const shell = document.querySelector<HTMLElement>(
@@ -1508,7 +1506,7 @@ export const MissionStripStates = meta.story({
 		docs: {
 			description: {
 				story:
-					"Four companions each carrying one open mission, one per state a mission can be in, the running one live. The mission speaks in a strip under the row and the conversation in the dot on the preview line, and since the strip closes on a dot of its own, in the same three colours, on the same trailing column, the line each one sits on is what separates them: the dot above the strip is the state of the conversation, the dot inside it is the state of the work, and only the strip carries a ticket beside it. Check each strip runs the full width of the row, from the leading edge of the avatar to the trailing inner edge, so it passes under the avatar rather than starting after it. Check the strip opens on the platform mark, then the identifier and the title, and closes on its state dot at the trailing edge, in the attention, failed and done colours the panel already uses and the muted grey of a mission running right now. Check the strip never moves: it is the one mark in the row that does not pulse, because a mission is a fact and not an alarm. The title and the mark carry `--muted-foreground`, which reaches 3.9:1 on the strip fill instead of the 4.5:1 AA asks for: the pair is the artboard’s and the fix is a lightness step on the token, which every muted line in the panel would take with it, so it is flagged for review here rather than settled inside this strip. Check every row measures 80px, the head staying 40px with the avatar centred on it rather than on the row plus the strip, and that the four chat signals are exactly what the host passed. Pick `MissionStripQuiet` for the running mission nobody is watching, `MissionStripStack` for a row carrying four, `MissionStripSelected` for the strip under a lit row.",
+					"Four companions each carrying one open mission, one per state a mission can be in, the running one live. The mission speaks in a strip under the row and the conversation in the dot on the preview line, and since the strip closes on a dot of its own, in the same three colours, on the same trailing column, the line each one sits on is what separates them: the dot above the strip is the state of the conversation, the dot inside it is the state of the work, and only the strip carries a ticket beside it. Check each strip runs the full width of the row, from the leading edge of the avatar to the trailing inner edge, so it passes under the avatar rather than starting after it. Check the strip opens on the platform mark, then the identifier and the title, and closes on its mission state mark at the trailing edge, a disc in the attention, failed and done colours the panel already uses and a soft grey ring for a mission running right now. Check the strip never moves: it is the one mark in the row that does not pulse, because a mission is a fact and not an alarm. The title and the mark carry `--muted-foreground`, which reaches 3.9:1 on the strip fill instead of the 4.5:1 AA asks for: the pair is the artboard’s and the fix is a lightness step on the token, which every muted line in the panel would take with it, so it is flagged for review here rather than settled inside this strip. Check every row measures 80px, the head staying 36px with the avatar centred on it rather than on the row plus the strip, and that the four chat signals are exactly what the host passed. Pick `MissionStripQuiet` for the running mission nobody is watching, `MissionStripStack` for a row carrying four, `MissionStripSelected` for the strip under a lit row.",
 			},
 		},
 	},
@@ -1531,15 +1529,10 @@ export const MissionStripStates = meta.story({
 			await expect(strip.lastElementChild).toBe(dotIn(strip))
 		}
 
-		const dotColours = rows.map(
-			(row) => getComputedStyle(dotIn(row)).backgroundColor,
-		)
+		const dotColours = rows.map((row) => getComputedStyle(dotIn(row)).color)
 		await expect(uniqueCount(dotColours)).toBe(4)
 		await expect(dotColours[3]).toBe(
-			tokenBackground(
-				canvasElement,
-				"color-mix(in oklab, var(--muted-foreground) 40%, transparent)",
-			),
+			tokenBackground(canvasElement, "var(--soft-foreground)"),
 		)
 		for (const row of rows) {
 			await expect(getComputedStyle(dotIn(row)).animationName).toBe("none")
@@ -1616,7 +1609,7 @@ export const MissionStripSingle = meta.story({
 		docs: {
 			description: {
 				story:
-					"One companion on one mission over one companion on none. Check the first row measures 80px and the second 52px: a strip costs 24px of height and the 4px that separates it from the row above it, and a row with nothing to say pays neither. Check the strip sits inside the row button, under the head, so one surface and one rounding cover both: the head keeps the 40px it has everywhere else in the panel and the avatar stays centred on it rather than on the row plus what hangs below it. Pick `MissionStripNone` for the bare row alone, `MissionStripStack` for four at once.",
+					"One companion on one mission over one companion on none. Check the first row measures 80px and the second 52px: a strip costs 24px of height and the 4px that separates it from the row above it, and a row with nothing to say pays neither. Check the strip sits inside the row button, under the head, so one surface and one rounding cover both: the head keeps the 36px it has everywhere else in the panel and the avatar stays centred on it rather than on the row plus what hangs below it. Pick `MissionStripNone` for the bare row alone, `MissionStripStack` for four at once.",
 			},
 		},
 	},
@@ -1720,7 +1713,7 @@ export const MissionStripSelected = meta.story({
 		docs: {
 			description: {
 				story:
-					"The same two rows, the first of them the one the reader is in. Check the lit background and its rounding cover the head and the strip alike: the strip lives inside the button, 4px under the head and 6px from the surface edge, so a selected row reads as one block and not as a row with something stapled under it. Check the strip keeps its own rounded corners and the same 10 percent foreground fill on the lit row as on the resting one, since a mission does not change because the reader happens to be reading it, and that fill is neither the panel surface nor the selected surface it sits on. Pick `MissionStripStates` for the strip on rows at rest.",
+					"The same two rows, the first of them the one the reader is in. Check the lit background and its rounding cover the head and the strip alike: the strip lives inside the button, 4px under the head and 8px from the surface edge, so a selected row reads as one block and not as a row with something stapled under it. Check the strip keeps its own rounded corners and the same 10 percent foreground fill on the lit row as on the resting one, since a mission does not change because the reader happens to be reading it, and that fill is neither the panel surface nor the selected surface it sits on. Pick `MissionStripStates` for the strip on rows at rest.",
 			},
 		},
 	},
@@ -1752,7 +1745,7 @@ export const MissionStripSelected = meta.story({
 				rowButton(rows[0]).getBoundingClientRect().bottom -
 					stripsIn(rows[0])[0].getBoundingClientRect().bottom,
 			),
-		).toBe(6)
+		).toBe(8)
 	},
 })
 
@@ -1966,7 +1959,7 @@ export const MissionStripWithChatBadge = meta.story({
 		docs: {
 			description: {
 				story:
-					"A companion whose mission waits on the reader and whose conversation is asking for them too, which is the one case where the two marks of the row meet. Check both are drawn and that they stack: the chat dot at the trailing edge of the preview line, the mission dot at the trailing edge of the strip below it, their trailing edges 2px apart, so they read as one column down the row rather than as two. They carry the same warning colour here, measured against `--warning` on both, so colour and column are exactly what a reader cannot tell them apart by: the line each one sits on is, the preview line answering what the conversation wants and the strip answering what the work is doing. Check the strip hangs below the badge instead of colliding with it. Pick `Badges` for the dot alone, `MissionStripStates` for the strip alone.",
+					"A companion whose mission waits on the reader and whose conversation is asking for them too, which is the one case where the two marks of the row meet. Check both are drawn and that they stack: the chat dot at the trailing edge of the preview line, the mission dot at the trailing edge of the strip below it, the mission dot held 8px inside the chat dot by the strip's own inline padding. They carry the warning hue here, the chat dot on `--warning` and the mission mark on `--mission-glyph-waiting`, its alias in dark and one lightness step deeper in light, so colour and column are exactly what a reader cannot tell them apart by: the line each one sits on is, the preview line answering what the conversation wants and the strip answering what the work is doing. Check the strip hangs below the badge instead of colliding with it. Pick `Badges` for the dot alone, `MissionStripStates` for the strip alone.",
 			},
 		},
 	},
@@ -1987,10 +1980,14 @@ export const MissionStripWithChatBadge = meta.story({
 				chatDot.getBoundingClientRect().right -
 					missionDot.getBoundingClientRect().right,
 			),
-		).toBe(2)
-		await expect(
-			[chatDot, missionDot].map((dot) => getComputedStyle(dot).backgroundColor),
-		).toEqual([warning, warning])
+		).toBe(8)
+		await expect([
+			getComputedStyle(chatDot).backgroundColor,
+			getComputedStyle(missionDot).color,
+		]).toEqual([
+			warning,
+			tokenBackground(canvasElement, "var(--mission-glyph-waiting)"),
+		])
 		await expect(stripsIn(rows[1])).toHaveLength(0)
 		await expectAlignedRows(rows)
 	},
@@ -2367,14 +2364,13 @@ const expectJoinedCard = async (canvasElement: HTMLElement) => {
 export const ConversationsPanel = meta.story({
 	args: {
 		insetWindowControls: true,
-		railDots: { conversations: "done", missions: "attention" },
 	},
 	globals: { theme: "dark" },
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The V1 shell as the app opens it, drawn against the reference artboard: the title bar with the space switcher, the rail on the window ground with Conversations selected, a still green dot on Conversations and a pulsing warning dot on Missions, then the shell card holding the Conversations panel and the conversation. Check the rail is 60px wide, the panel 304px with its 1px divider, the panel header 32px with the 15px semibold title and the create button alone, the card on its 12px radius with a 1px border 34px under the top of the window and 4px off the trailing and bottom edges, and the roster below the header exactly as the list has always drawn it.",
+					"The V1 shell as the app opens it, drawn against the reference artboard: the title bar with the space switcher, the rail on the window ground with Conversations selected, then the shell card holding the Conversations panel and the conversation. Check the rail is 60px wide, the panel 288px with its 1px divider, the panel header 32px with the 15px semibold title and the create button alone, the card on its 12px radius with a 1px border 34px under the top of the window and 4px off the trailing and bottom edges, and the roster below the header exactly as the list has always drawn it.",
 			},
 		},
 	},
@@ -2382,9 +2378,7 @@ export const ConversationsPanel = meta.story({
 		const rail = slotIn(canvasElement, "app-rail")
 		await expect(rail.getBoundingClientRect().width).toBe(RAIL_WIDTH)
 		await expect(
-			within(rail).getByRole("button", {
-				name: "Conversations, activity finished",
-			}),
+			within(rail).getByRole("button", { name: "Conversations" }),
 		).toHaveAttribute("aria-current", "true")
 
 		const panel = canvas.getByRole("complementary", { name: "Conversations" })
@@ -2419,81 +2413,6 @@ export const ConversationsPanel = meta.story({
 	},
 })
 
-export const EmptyPanels = meta.story({
-	tags: ["test-only"],
-	args: { missionsBySpaceId: { [HOME]: missionsPanelOf([]) } },
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"The rail entry whose panel has no content yet. Check it opens a panel titled and named after it, with no roster, no search and no create button, that the rail marks it current, that it draws its empty state, and that coming back to Conversations brings the roster back.",
-			},
-		},
-	},
-	play: async ({ canvas, canvasElement, userEvent }) => {
-		const rail = slotIn(canvasElement, "app-rail")
-		const name = "Missions"
-		const entry = within(rail).getByRole("button", { name })
-		await userEvent.click(entry)
-		await expect(entry).toHaveAttribute("aria-current", "true")
-		const panel = canvas.getByRole("complementary", { name })
-		await expect(within(panel).getByRole("heading", { name })).toBeVisible()
-		await expect(rowsIn(canvasElement)).toHaveLength(0)
-		await expect(querySearchButtonIn(canvasElement)).toBeNull()
-		await expect(canvas.queryByRole("button", { name: CREATE })).toBeNull()
-		await userEvent.click(
-			within(rail).getByRole("button", { name: "Missions" }),
-		)
-		await expect(
-			canvas.getByRole("heading", { name: "No missions yet" }),
-		).toBeVisible()
-		await userEvent.click(
-			within(rail).getByRole("button", { name: "Conversations" }),
-		)
-		await expect(rowsIn(canvasElement)).toHaveLength(ROSTER.length)
-	},
-})
-
-export const MissionsTab = meta.story({
-	args: {
-		insetWindowControls: true,
-		openPanel: "missions",
-		missionsBySpaceId: {
-			[HOME]: {
-				open: SPACE_OPEN_MISSIONS,
-				earlierToday: SPACE_EARLIER_TODAY_MISSIONS,
-				onOpen: fn(),
-			},
-		},
-		onSearchMissions: fn(),
-	},
-	globals: { theme: "dark" },
-	parameters: {
-		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
-		docs: {
-			description: {
-				story:
-					"The V1 shell with the Missions tab selected, drawn against the V1f artboard: the 304px panel, its 32px header carrying the title and the search button, then Waiting on you, In progress and Earlier today folded. Check the panel holds no roster, that the search button is named and fires once, and that each group carries its count.",
-			},
-		},
-	},
-	play: async ({ args, canvas, canvasElement, userEvent }) => {
-		const panel = canvas.getByRole("complementary", { name: "Missions" })
-		await expect(panel.getBoundingClientRect().width).toBe(EXPANDED_PANEL_WIDTH)
-		await expect(rowsIn(canvasElement)).toHaveLength(0)
-		await expect(
-			within(panel).getByRole("heading", { name: "Waiting on you" }),
-		).toBeVisible()
-		await expect(
-			within(panel).getByRole("button", { name: /Earlier today/ }),
-		).toHaveAttribute("aria-expanded", "false")
-		await userEvent.click(
-			within(panel).getByRole("button", { name: "Search missions" }),
-		)
-		await expect(args.onSearchMissions).toHaveBeenCalledTimes(1)
-	},
-})
-
 const expectPanelLeftColumn = (canvasElement: HTMLElement, row: HTMLElement) =>
 	expectLeftColumn({
 		column: slotIn(canvasElement, "sidebar-inner"),
@@ -2525,35 +2444,8 @@ export const ConversationsLeftColumnDark = meta.story({
 	globals: { theme: "dark" },
 })
 
-const MISSIONS_LEFT_COLUMN = {
-	args: MissionsTab.input.args,
-	parameters: {
-		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
-		docs: {
-			description: {
-				story:
-					"The Missions panel as the left column every screen shares. Check that the column opens 8px under its top edge and closes 12px over its bottom edge, that its pieces stand 8px apart, that its header is 32px tall and that its missions sit 8px in from its inner edge, the same numbers the Conversations panel and the User and Space settings menus read.",
-			},
-		},
-	},
-	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-		await expectPanelLeftColumn(
-			canvasElement,
-			slotIn(canvasElement, "missions-panel"),
-		)
-	},
-}
-
-export const MissionsLeftColumn = meta.story(MISSIONS_LEFT_COLUMN)
-
-export const MissionsLeftColumnDark = meta.story({
-	...MISSIONS_LEFT_COLUMN,
-	globals: { theme: "dark" },
-})
-
-const railHostStory = (panel: "conversations" | "missions") => ({
+const CONVERSATIONS_RAIL_SPACE_HOST = {
 	args: {
-		...(panel === "missions" ? MissionsTab.input.args : {}),
 		space: SPACES[0],
 		hostBySpaceId: { [HOME]: RAIL_SPACE_HOST },
 		spaceHost: RAIL_SPACE_HOST,
@@ -2561,40 +2453,32 @@ const railHostStory = (panel: "conversations" | "missions") => ({
 	parameters: {
 		docs: {
 			description: {
-				story: `The ${panel === "missions" ? "Missions" : "Conversations"} panel while the current Space's host is being reached. Check that the Space logo at the top of the rail draws the connecting state, the same one the User and Space settings screens draw for the same host.`,
+				story:
+					"The Conversations panel while the current Space's host is being reached. Check that the Space logo at the top of the rail draws the connecting state, the same one the User and Space settings screens draw for the same host.",
 			},
 		},
 	},
 	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
 		await expectRailSpaceHost(canvasElement)
 	},
-})
+}
 
 export const ConversationsRailSpaceHost = meta.story(
-	railHostStory("conversations"),
+	CONVERSATIONS_RAIL_SPACE_HOST,
 )
 
-export const MissionsRailSpaceHost = meta.story(railHostStory("missions"))
-
-const railHostDarkStory = (panel: "conversations" | "missions") => ({
-	...railHostStory(panel),
+export const ConversationsRailSpaceHostDark = meta.story({
+	...CONVERSATIONS_RAIL_SPACE_HOST,
 	globals: { theme: "dark" },
 	parameters: {
 		docs: {
 			description: {
-				story: `\`${panel === "missions" ? "Missions" : "Conversations"}RailSpaceHost\` in the dark theme. Check that the Space logo at the top of the rail still draws the connecting state, its hatching legible on its dark fill and told apart from the filled online logo.`,
+				story:
+					"`ConversationsRailSpaceHost` in the dark theme. Check that the Space logo at the top of the rail still draws the connecting state, its hatching legible on its dark fill and told apart from the filled online logo.",
 			},
 		},
 	},
 })
-
-export const ConversationsRailSpaceHostDark = meta.story(
-	railHostDarkStory("conversations"),
-)
-
-export const MissionsRailSpaceHostDark = meta.story(
-	railHostDarkStory("missions"),
-)
 
 export const DragRegion = meta.story({
 	tags: ["test-only"],
@@ -2709,35 +2593,6 @@ const NINE_ROSTERS = rostersAcross(SPACES)
 const ROSTER_IN_EVERY_SPACE: Record<string, AppSidebarBot[]> =
 	Object.fromEntries(FIVE_SPACES.map((space) => [space.id, ROSTER]))
 
-const missionsAcross = (spaces: Space[]): Record<string, MissionsPanelProps> =>
-	Object.fromEntries(
-		spaces.map((space, rank) => [
-			space.id,
-			missionsPanelOf(
-				SPACE_OPEN_MISSIONS.filter(
-					(_, index) => index % spaces.length === rank,
-				),
-			),
-		]),
-	)
-
-const missionIdsIn = (panel: HTMLElement) =>
-	Array.from(panel.querySelectorAll("[data-opens]"), (row) =>
-		row.getAttribute("data-opens"),
-	).sort()
-
-const missionIdsOf = ({ open }: MissionsPanelProps) =>
-	open.map(({ id }) => id).sort()
-
-const IN_MISSIONS: Partial<AppSidebarProps> = {
-	openPanel: "missions",
-	missionsBySpaceId: missionsAcross(FIVE_SPACES),
-}
-
-const TWO_SPACES = FIVE_SPACES.slice(0, 2)
-
-const TWO_SPACE_MISSIONS = missionsAcross(TWO_SPACES)
-
 const expectOneSpaceHeld = async (
 	args: AppSidebarProps,
 	canvasElement: HTMLElement,
@@ -2818,25 +2673,6 @@ export const OneSpace = meta.story({
 			HEADER_ACTION_INSET + ROSTER_LANE,
 		)
 
-		await expectOneSpaceHeld(args, canvasElement)
-	},
-})
-
-export const OneSpaceInMissions = meta.story({
-	tags: ["test-only"],
-	args: {
-		openPanel: "missions",
-		missionsBySpaceId: missionsAcross(HOME_SPACES),
-	},
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"The Missions tab with one space: the same carousel host as Conversations, so the row holds one panel and a swipe lands nowhere. Check the hold is the one `OneSpace` proves, run on this tab.",
-			},
-		},
-	},
-	play: async ({ args, canvasElement }) => {
 		await expectOneSpaceHeld(args, canvasElement)
 	},
 })
@@ -3890,216 +3726,6 @@ export const SpaceScrollMemory = meta.story({
 	},
 })
 
-const inMissionsDocs = (story: string) => ({
-	docs: {
-		description: {
-			story: `The Missions tab mounted in the same carousel host as Conversations, with one mission per space. Check the play of \`${story}\` holds unchanged on this tab.`,
-		},
-	},
-})
-
-export const LiveSpaceSelectionInMissions = LiveSpaceSelection.extend({
-	args: IN_MISSIONS,
-	parameters: inMissionsDocs("LiveSpaceSelection"),
-})
-
-export const SpaceScrollingInMissions = SpaceScrolling.extend({
-	args: IN_MISSIONS,
-	parameters: inMissionsDocs("SpaceScrolling"),
-})
-
-export const SpaceSwipeTakenBackInMissions = SpaceSwipeTakenBack.extend({
-	args: IN_MISSIONS,
-	parameters: inMissionsDocs("SpaceSwipeTakenBack"),
-})
-
-export const SpaceSwitchingOffInMissions = SpaceSwitchingOff.extend({
-	tags: ["test-only"],
-	args: IN_MISSIONS,
-	parameters: inMissionsDocs("SpaceSwitchingOff"),
-})
-
-export const MissionsAcrossSpaces = meta.story({
-	render: (args) => <LiveSpaces {...args} />,
-	args: {
-		spaces: TWO_SPACES,
-		selectedSpaceId: HOME,
-		openPanel: "missions",
-		missionsBySpaceId: TWO_SPACE_MISSIONS,
-		onSearchMissions: fn(),
-	},
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"The Missions tab with two spaces, each with its own missions, mounted in the carousel that carries Conversations: the swipe that switches spaces there switches them here, while the title bar, the rail and the header with its search button stay still. Check each drawn panel lists only its own space, that the panel off the edge is inert, that a swipe reports the next space once and lands on its list, and that the swipe back does the same the other way.",
-			},
-		},
-	},
-	play: async ({ args, canvasElement }) => {
-		const carousel = carouselIn(canvasElement)
-		const [home, next] = TWO_SPACES
-		const panels = panelsIn(canvasElement)
-		await expect(panels).toHaveLength(2)
-		await expect(missionIdsIn(panels[0])).toEqual(
-			missionIdsOf(TWO_SPACE_MISSIONS[home.id]),
-		)
-		await expect(missionIdsIn(panels[1])).toEqual(
-			missionIdsOf(TWO_SPACE_MISSIONS[next.id]),
-		)
-		await expect(panels[1]).toHaveAttribute("inert")
-
-		const header = slotIn(canvasElement, "sidebar-header")
-		const still = leftOf(header)
-
-		await swipeBeside(carousel, 1)
-		await expect(args.onSelectSpace).toHaveBeenCalledTimes(1)
-		await expect(args.onSelectSpace).toHaveBeenLastCalledWith(next.id)
-		await expect(missionIdsIn(panelInView(canvasElement))).toEqual(
-			missionIdsOf(TWO_SPACE_MISSIONS[next.id]),
-		)
-		await expect(leftOf(header)).toBe(still)
-
-		await swipeBeside(carousel, -1)
-		await expect(args.onSelectSpace).toHaveBeenCalledTimes(2)
-		await expect(args.onSelectSpace).toHaveBeenLastCalledWith(home.id)
-		await expect(missionIdsIn(panelInView(canvasElement))).toEqual(
-			missionIdsOf(TWO_SPACE_MISSIONS[home.id]),
-		)
-	},
-})
-
-export const MissionsOfUnloadedSpaces = meta.story({
-	tags: ["test-only"],
-	args: {
-		spaces: FIVE_SPACES,
-		selectedSpaceId: "vocca",
-		botsBySpaceId: FIVE_ROSTERS,
-		openPanel: "missions",
-		missionsBySpaceId: { vocca: missionsPanelOf(SPACE_OPEN_MISSIONS) },
-	},
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"The Missions tab as the app hands it over: only the open space has a feed, so the panels waiting off each edge have no entry of their own. Check the panel in view lists the open space's missions, and each neighbour draws nothing at all, neither borrowing that list nor claiming an empty state for a feed not loaded yet.",
-			},
-		},
-	},
-	play: async ({ canvasElement }) => {
-		const [before, inView, after] = panelsIn(canvasElement)
-		await expect(inView).toBe(panelInView(canvasElement))
-		await expect(missionIdsIn(inView)).toEqual(
-			missionIdsOf(missionsPanelOf(SPACE_OPEN_MISSIONS)),
-		)
-		for (const neighbour of [before, after]) {
-			await expect(neighbour).toHaveAttribute("inert")
-			await expect(missionIdsIn(neighbour)).toEqual([])
-			await expect(
-				neighbour.querySelector('[data-slot="missions-panel-empty"]'),
-			).toBeNull()
-			await expect(neighbour.textContent).toBe("")
-		}
-	},
-})
-
-const scrollPanelTo = async (panel: HTMLElement, top: number) => {
-	const dispatched = new Promise((resolve) =>
-		panel.addEventListener("scroll", resolve, { once: true }),
-	)
-	panel.scrollTop = top
-	await dispatched
-}
-
-interface CarouselRest {
-	slot: number
-	drawn: number
-}
-
-const swipeToRest = async (
-	carousel: HTMLElement,
-	step: number,
-	{ slot, drawn }: CarouselRest,
-) => {
-	const aimed = slotReported(carousel) + step
-	const target = panelsIn(carousel)[aimed]
-	carousel.scrollLeft = aimed * carousel.clientWidth
-	await waitFor(async () => {
-		await expect(target).not.toHaveAttribute("inert")
-		await expect(panelsIn(carousel)).toHaveLength(drawn)
-		await expect(panelsIn(carousel).indexOf(target)).toBe(slot)
-		await expect(slotShown(carousel)).toBe(slot)
-	}, FRAME_POLL)
-}
-
-export const MissionsScrollMemory = meta.story({
-	tags: ["test-only"],
-	render: (args) => <LiveSpaces {...args} />,
-	globals: { viewport: { value: "short" } },
-	args: {
-		spaces: FIVE_SPACES,
-		selectedSpaceId: HOME,
-		botsBySpaceId: ROSTER_IN_EVERY_SPACE,
-		missionsBySpaceId: Object.fromEntries(
-			FIVE_SPACES.map((space) => [
-				space.id,
-				missionsPanelOf(SPACE_OPEN_MISSIONS),
-			]),
-		),
-	},
-	parameters: {
-		viewport: { options: SHORT_VIEWPORT },
-		docs: {
-			description: {
-				story:
-					"A window too short to show a space's missions whole, walked away from and back to in the Missions tab. Check the panel comes back where it was left, and that its memory is its own: the Conversations tab of the same space starts at its own top, keeps its own offset, and handing back to Missions finds the missions offset untouched.",
-			},
-		},
-	},
-	play: async ({ canvasElement, userEvent }) => {
-		const carousel = carouselIn(canvasElement)
-		const rail = slotIn(canvasElement, "app-rail")
-		await userEvent.click(
-			within(rail).getByRole("button", { name: "Missions" }),
-		)
-		const missions = panelInView(canvasElement)
-		const depth = missions.scrollHeight - missions.clientHeight
-		await expect(depth).toBeGreaterThan(0)
-
-		await scrollPanelTo(missions, depth)
-
-		await swipeToRest(carousel, 1, { slot: 1, drawn: 3 })
-		await swipeToRest(carousel, 1, { slot: 1, drawn: 3 })
-		await expect(missions.isConnected).toBe(false)
-		await swipeToRest(carousel, -1, { slot: 1, drawn: 3 })
-		await swipeToRest(carousel, -1, { slot: 0, drawn: 2 })
-		await waitFor(async () => {
-			await expect(panelInView(canvasElement).scrollTop).toBe(depth)
-		}, FRAME_POLL)
-
-		await userEvent.click(
-			within(rail).getByRole("button", { name: "Conversations" }),
-		)
-		const roster = panelInView(canvasElement)
-		await expect(roster.scrollTop).toBe(0)
-		await scrollPanelTo(roster, depth - 1)
-
-		await userEvent.click(
-			within(rail).getByRole("button", { name: "Missions" }),
-		)
-		await waitFor(async () => {
-			await expect(panelInView(canvasElement).scrollTop).toBe(depth)
-		}, FRAME_POLL)
-
-		await userEvent.click(
-			within(rail).getByRole("button", { name: "Conversations" }),
-		)
-		await waitFor(async () => {
-			await expect(panelInView(canvasElement).scrollTop).toBe(depth - 1)
-		}, FRAME_POLL)
-	},
-})
-
 const TITLE_BAR_HEIGHT = 40
 
 const TRAFFIC_LIGHTS_SLOT = 57
@@ -4448,7 +4074,7 @@ export const EmptySection = meta.story({
 		docs: {
 			description: {
 				story:
-					"A section nothing has been filed into. It is drawn, not hidden: the header stays where the host put it and a dashed zone under it stands in for the rows that are not there yet. The zone wears a faded glyph of its own, drawn from the section\u2019s name so it is the same glyph every time that section is empty. It is at rest and never animates, since a placeholder that moves competes with the companions that are actually working. It is decoration and is kept out of the accessibility tree; the invitation beside it is what a reader hears. Check it is drawn under the Archive header, that no row is drawn with it, and that it goes with the headers on the icon rail, where there is nothing to drop onto.",
+					"A section nothing has been filed into. It is drawn, not hidden: the header stays where the host put it and a dashed zone under it stands in for the rows that are not there yet. The zone is the invitation alone, in a dashed outline, at rest. Check it is drawn under the Archive header, that no row is drawn with it, and that it goes with the headers on the icon rail, where there is nothing to drop onto.",
 			},
 		},
 	},
@@ -4457,11 +4083,9 @@ export const EmptySection = meta.story({
 		await expect(invitation).toBeVisible()
 
 		const zone = slotIn(canvasElement, "roster-section-drop")
-		const placeholder = companionGlyphOf(zone)
-		await expect(placeholder.closest("[aria-hidden='true']")).not.toBeNull()
-		await expect(placeholder.dataset.state).toBe("idle")
+		await expect(getComputedStyle(zone).borderTopStyle).toBe("dashed")
 		await expect(getComputedStyle(zone).color).toBe(
-			tokenColor(canvasElement, "--muted-foreground"),
+			tokenColor(canvasElement, "--faint-foreground"),
 		)
 		await expect(
 			sectionHeader(canvasElement, "Archive").getBoundingClientRect().bottom,
@@ -4544,12 +4168,10 @@ export const SectionCard = meta.story({
 		).toBeNull()
 
 		const heading = typeOf(sectionHeader(canvasElement, "Research"))
-		const row = typeOf(
-			slotIn(rowFor(canvasElement, "Beacon"), "roster-row-name"),
-		)
-		await expect(Number(heading.fontWeight)).toBeGreaterThan(
-			Number(row.fontWeight),
-		)
+		await expect(Number(heading.fontWeight)).toBe(500)
+		await expect(
+			getComputedStyle(sectionHeader(canvasElement, "Research")).color,
+		).toBe(tokenColor(canvasElement, "--muted-foreground"))
 
 		const name = sectionHeadersIn(canvasElement)[0].getBoundingClientRect()
 		const chevron = chevronOf(canvasElement, "Research").getBoundingClientRect()
@@ -5062,7 +4684,11 @@ export const DragBotIntoAnEmptyPinnedZone = meta.story({
 			dropAreaFor(canvasElement, PINNED_ZONE_LANDING),
 		)
 		await expect(pinned).toBeVisible()
-		await expect(slotIn(canvasElement, "roster-zone-separator")).toBeVisible()
+		await expect(
+			slotsIn(canvasElement, "roster-zone-header").map(
+				(header) => header.textContent,
+			),
+		).toEqual(["Pinned", "Conversations"])
 
 		moveOver(handle, pinned)
 		await waitFor(async () => {
@@ -5488,7 +5114,7 @@ export const Conversations = meta.story({
 		docs: {
 			description: {
 				story:
-					"A conversation is a room holding several companions of the space, and it lives in the roster among them rather than in a list of its own. Its row is built from the same parts as a companion row — a 40px avatar slot, the name, the time of the last message and one clipped line of that message — so the two kinds sit on the same columns and stand the same height, which is what this story checks across a mixed list. What changes is the slot: instead of one companion it carries the room's subject icon, a 40px hexagon cell, and the companions of the room move to a pile of small hexagons on the preview line, under the time. Pick `ConversationParticipants` for the stack on its own, `ConversationSelected` for the room a reader is in, `ConversationRowMenu` for what a right-click offers.",
+					"A conversation is a room holding several companions of the space, and it lives in the roster among them rather than in a list of its own. Its row is built from the same parts as a companion row — a 28px avatar slot, the name, the time of the last message and one clipped line of that message — so the two kinds sit on the same columns and stand the same height, which is what this story checks across a mixed list. What changes is the slot: instead of one companion it carries the room's subject icon, a 28px hexagon cell, and the companions of the room move to a pile of small hexagons on the preview line, under the time. Pick `ConversationParticipants` for the stack on its own, `ConversationSelected` for the room a reader is in, `ConversationRowMenu` for what a right-click offers.",
 			},
 		},
 	},
@@ -5648,14 +5274,7 @@ export const ConversationParticipants = meta.story({
 				slotIn(crowd, "conversation-subject-icon").getBoundingClientRect()
 					.width,
 			),
-		).toBe(
-			Math.round(
-				slotIn(
-					rowFor(canvasElement, "Atlas"),
-					"bot-identity-avatar",
-				).getBoundingClientRect().width,
-			),
-		)
+		).toBe(28)
 	},
 })
 
@@ -5678,7 +5297,7 @@ export const ConversationOfOneBot = meta.story({
 		docs: {
 			description: {
 				story:
-					"A room holding one companion, sitting right above that same companion's own row. Nothing on the two lines of text says which is which, so the kind is carried by the left cell: a companion shows its own avatar, a room shows its subject icon and the companion it holds as one small hexagon under the time. The footprint is identical, so the column never moves. A room of one is still a room, which is why it keeps the subject icon rather than being flattened into the companion it holds.",
+					"A room holding one companion, sitting right above that same companion's own row. Nothing on the two lines of text says which is which, so the kind is carried by the left cell: a companion shows its own avatar, a room shows its subject icon and the companion it holds as one small hexagon under the time. The subject icon is 28px, centred on the room's two lines of text, beside the companion's 28px avatar. A room of one is still a room, which is why it keeps the subject icon rather than being flattened into the companion it holds.",
 			},
 		},
 	},
@@ -5695,9 +5314,8 @@ export const ConversationOfOneBot = meta.story({
 			bot.querySelector('[data-slot="conversation-bot-pile"]'),
 		).toBeNull()
 
-		await expect(Math.round(cell.getBoundingClientRect().width)).toBe(
-			Math.round(loose.getBoundingClientRect().width),
-		)
+		await expect(Math.round(cell.getBoundingClientRect().width)).toBe(28)
+		await expect(Math.round(loose.getBoundingClientRect().width)).toBe(28)
 		await expect(pileIn(room)).toHaveLength(1)
 		await expect(pileIn(room)[0].getBoundingClientRect().width).toBeLessThan(
 			loose.getBoundingClientRect().width,
@@ -5898,7 +5516,9 @@ export const WorkingLongSummary = meta.story({
 		await expect(preview.getBoundingClientRect().height).toBe(
 			quiet.getBoundingClientRect().height,
 		)
-		await expect(uniqueCount(rowHeights(rowsIn(canvasElement)))).toBe(1)
+		await expect(
+			uniqueCount(rowHeights(rowsIn(canvasElement).filter(isConversationRow))),
+		).toBe(1)
 	},
 })
 
@@ -5926,7 +5546,7 @@ export const ConversationMissionStrips = meta.story({
 		docs: {
 			description: {
 				story:
-					"A mission belongs to the conversation it was opened from, so a room carrying open missions wears the strips its companions would otherwise wear alone. Check the strips sit under the room row, in the same lane and the same shapes a companion row gives them, and that the room draws one per open mission whichever of its companions runs it. Check the room whose mission waits on the reader is drawn first even though it spoke longest ago, exactly as a waiting companion row is raised, that it measures 108px for its two missions while the rows with none keep their 52px, and that the avatar stack stays centred on the row part. Pick `MissionStripStates` for the strip on a companion row.",
+					"A mission belongs to the conversation it was opened from, so a room carrying open missions wears the strips its companions would otherwise wear alone. Check the strips sit under the room row, in the same lane and the same shapes a companion row gives them, and that the room draws one per open mission whichever of its companions runs it. Check the room whose mission waits on the reader is drawn first even though it spoke longest ago, exactly as a waiting companion row is raised, that it measures 116px for its two missions while the room with none and the companion both keep their 52px, and that the avatar stack stays centred on the row part. Pick `MissionStripStates` for the strip on a companion row.",
 			},
 		},
 	},
@@ -5938,15 +5558,15 @@ export const ConversationMissionStrips = meta.story({
 			"Transport migration",
 			"Atlas",
 		])
-		await expect(rows.map(stripStatesIn)).toEqual([
-			["waiting", "working"],
-			[],
-			[],
-		])
+		await expect(
+			rows.map((row) =>
+				slotsIn(row, "mission-capsule").map((capsule) => capsule.dataset.state),
+			),
+		).toEqual([["waiting", "working"], [], []])
 		await expect(rowHeights(rows)).toEqual([
-			heightForStrips(2),
-			heightForStrips(0),
-			heightForStrips(0),
+			BARE_ROW_HEIGHT + 2 * MISSION_LINE_HEIGHT,
+			BARE_ROW_HEIGHT,
+			BARE_ROW_HEIGHT,
 		])
 		await expect(slotIn(rows[0], "roster-row-timestamp")).toHaveTextContent(
 			"Tue",

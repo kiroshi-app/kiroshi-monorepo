@@ -21,6 +21,7 @@ import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-s
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import { isDesktopHost } from "@/lib/host/index"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
+import { rosterRowOf } from "@/lib/sidebar/sidebar-fixtures"
 import type { UserPreferences } from "@/lib/user/preferences-contract"
 import { readMirror, writeMirror } from "@/lib/user/preferences-mirror"
 
@@ -85,8 +86,6 @@ const { createWorkspaceTabs } = await import("@/lib/tabs/workspace-tabs")
 const SETTLE_MS = 200
 
 const CONVERSATION_TITLE = "Round table"
-
-const DRAFT = "half a thought for the room"
 
 afterEach(() => {
 	cleanup()
@@ -161,41 +160,56 @@ const press = async (control: Element) => {
 	await settle()
 }
 
-const openConversation = async () => {
-	const label = [
-		...document.querySelectorAll('[data-slot="roster-row-name"]'),
-	].find((name) => name.textContent === CONVERSATION_TITLE)
-	await press(label?.closest("button") as HTMLButtonElement)
-}
+const collapseSidebar = () =>
+	writeMirror({ ...readMirror(), sidebarCollapsed: true })
+
+const openConversation = () =>
+	press(within(railOf()).getByRole("button", { name: CONVERSATION_TITLE }))
 
 const railOf = () =>
 	screen.getByRole("navigation", { name: i18n.t("bots:rail.label") })
 
 const spacesLogoOf = () =>
-	railOf()
-		.querySelector('[data-slot="space-avatar"]')
-		?.closest("button") as HTMLElement
+	railOf().querySelector(
+		'[data-slot="space-switcher"], [data-slot="collapsed-sidebar-space"]',
+	) as HTMLElement
+
+const currentSpaceRowOf = () =>
+	within(settingsMenuOf() as HTMLElement)
+		.getAllByRole("button")
+		.find((row) => row.getAttribute("aria-current") === "true") as HTMLElement
 
 const openSpaceSettingsByRail = async () => {
+	await press(avatarOf())
+	await press(currentSpaceRowOf())
+}
+
+const openSpaceSettingsBySwitcher = async () => {
 	await press(spacesLogoOf())
 	await press(
-		screen.getByRole("menuitem", { name: i18n.t("bots:rail.spaceSettings") }),
+		within(
+			screen.getByRole("menu", { name: i18n.t("bots:spaces.label") }),
+		).getByRole("menuitem", { name: i18n.t("bots:rail.spaceSettings") }),
 	)
 }
 
 const currentHomeEntryOf = () =>
 	within(railOf()).queryByRole("button", {
-		name: i18n.t("bots:rail.home"),
-		current: true,
+		name: i18n.t("bots:rail.newConversation"),
+		current: "page",
 	})
+
+const libraryEntryOf = () =>
+	within(railOf()).getByRole("button", { name: i18n.t("bots:rail.library") })
+
+const currentEntriesOf = () =>
+	within(railOf())
+		.getAllByRole("button")
+		.filter((entry) => entry.getAttribute("aria-current") === "page")
+		.filter((entry) => !entry.querySelector('[data-slot="roster-row-name"]'))
 
 const avatarOf = () =>
 	within(railOf()).getAllByRole("button").at(-1) as HTMLElement
-
-const conversationsEntryOf = () =>
-	within(railOf()).getByRole("button", {
-		name: i18n.t("bots:rail.conversations"),
-	})
 
 const settingsMenuOf = () =>
 	screen.queryByRole("navigation", { name: i18n.t("settings:screen.menu") })
@@ -226,30 +240,11 @@ const openApplications = () =>
 	press(menuEntryOf(i18n.t("settings:rail.applications")))
 
 const isMarked = (railItem: HTMLElement) =>
-	railItem.getAttribute("aria-current") === "true"
-
-const composerOf = () =>
-	screen.getByRole<HTMLTextAreaElement>("textbox", {
-		name: i18n.t("chat:composer.label"),
-	})
-
-it("opens the space settings in place of the body on the gear, and marks the gear", async () => {
-	await mountApp()
-
-	await openSpaceSettingsByRail()
-
-	expect(shownSettingsOf()).toEqual({
-		subtitle: "space",
-		entry: i18n.t("settings:rail.space"),
-	})
-	expect(isMarked(spacesLogoOf())).toBe(true)
-	expect(isMarked(avatarOf())).toBe(false)
-	expect(isMarked(conversationsEntryOf())).toBe(false)
-})
+	railItem.getAttribute("aria-current") === "page"
 
 it("switches between the space and the user settings on the gear and the avatar", async () => {
 	await mountApp()
-	await openSpaceSettingsByRail()
+	await openSpaceSettingsBySwitcher()
 
 	await press(avatarOf())
 
@@ -257,40 +252,13 @@ it("switches between the space and the user settings on the gear and the avatar"
 		subtitle: "user",
 		entry: i18n.t("settings:rail.account"),
 	})
-	expect(isMarked(avatarOf())).toBe(true)
-	expect(isMarked(spacesLogoOf())).toBe(false)
 
-	await openSpaceSettingsByRail()
+	await openSpaceSettingsBySwitcher()
 
 	expect(shownSettingsOf()).toEqual({
 		subtitle: "space",
 		entry: i18n.t("settings:rail.space"),
 	})
-})
-
-it("brings back the open conversation and its draft on Back to your settings", async () => {
-	await mountApp()
-	await openConversation()
-	fireEvent.change(composerOf(), { target: { value: DRAFT } })
-	await openSpaceSettingsByRail()
-
-	await press(spaceBackOf())
-
-	expect(shownSettingsOf()).toBeNull()
-	expect(composerOf().value).toBe(DRAFT)
-	expect(isMarked(conversationsEntryOf())).toBe(true)
-})
-
-it("closes the settings on the Conversations entry of the rail", async () => {
-	await mountApp()
-	await openConversation()
-	fireEvent.change(composerOf(), { target: { value: DRAFT } })
-	await press(avatarOf())
-
-	await press(conversationsEntryOf())
-
-	expect(shownSettingsOf()).toBeNull()
-	expect(composerOf().value).toBe(DRAFT)
 })
 
 it("opens the user settings again on the first entry once they were closed", async () => {
@@ -301,7 +269,8 @@ it("opens the user settings again on the first entry once they were closed", asy
 			name: i18n.t("settings:rail.appearance"),
 		}),
 	)
-	await press(conversationsEntryOf())
+	await press(libraryEntryOf())
+	expect(settingsMenuOf()).toBeNull()
 
 	await press(avatarOf())
 
@@ -336,7 +305,7 @@ it("shows the page of the application its sub-entry selects", async () => {
 	expect(screen.getByRole("heading", { level: 2, name: "ledger" })).toBeTruthy()
 })
 
-it("asks before a rail press leaves an unsaved application, and leaves once on Leave", async () => {
+it("asks before a sidebar press leaves an unsaved application, and leaves once on Leave", async () => {
 	await mountApp(twoSpaceApplications)
 	await openSpaceSettingsByRail()
 	await openApplications()
@@ -351,7 +320,7 @@ it("asks before a rail press leaves an unsaved application, and leaves once on L
 			name: i18n.t("bots:applications.leave.title"),
 		})
 
-	await press(conversationsEntryOf())
+	await press(libraryEntryOf())
 	await press(
 		within(leaveQuestion()).getByRole("button", {
 			name: i18n.t("common:confirm.cancel"),
@@ -366,7 +335,7 @@ it("asks before a rail press leaves an unsaved application, and leaves once on L
 	expect(nameField().value).toBe("ledger-desk")
 	expect(menuEntryOf(/^ledger/).getAttribute("aria-current")).toBe("page")
 
-	await press(conversationsEntryOf())
+	await press(libraryEntryOf())
 	await press(
 		within(leaveQuestion()).getByRole("button", {
 			name: i18n.t("bots:applications.leave.action"),
@@ -374,7 +343,71 @@ it("asks before a rail press leaves an unsaved application, and leaves once on L
 	)
 
 	expect(shownSettingsOf()).toBeNull()
-	expect(isMarked(conversationsEntryOf())).toBe(true)
+	expect(isMarked(libraryEntryOf())).toBe(true)
+})
+
+it.each([
+	["a row press", () => press(rosterRowOf(CONVERSATION_TITLE))],
+	[
+		"the Settings of a row menu",
+		async () => {
+			await act(async () => {
+				fireEvent.contextMenu(rosterRowOf(CONVERSATION_TITLE), {
+					clientX: 20,
+					clientY: 20,
+				})
+			})
+			await settle()
+			await press(
+				screen.getByRole("menuitem", { name: i18n.t("bots:roster.settings") }),
+			)
+		},
+	],
+])("asks before %s leaves an unsaved application", async (_, leave) => {
+	await mountApp(twoSpaceApplications)
+	await openSpaceSettingsByRail()
+	await openApplications()
+	await press(menuEntryOf(/^ledger/))
+	fireEvent.change(
+		screen.getByLabelText(i18n.t("bots:applications.name.label")),
+		{ target: { value: "ledger-desk" } },
+	)
+
+	await leave()
+
+	expect(
+		screen.getByRole("alertdialog", {
+			name: i18n.t("bots:applications.leave.title"),
+		}),
+	).toBeTruthy()
+})
+
+it("asks before the Space settings row of the Space switcher leaves an unsaved application", async () => {
+	await mountApp(twoSpaceApplications)
+	await openSpaceSettingsByRail()
+	await openApplications()
+	await press(menuEntryOf(/^ledger/))
+	fireEvent.change(
+		screen.getByLabelText(i18n.t("bots:applications.name.label")),
+		{ target: { value: "ledger-desk" } },
+	)
+
+	await openSpaceSettingsBySwitcher()
+
+	await press(
+		within(
+			screen.getByRole("alertdialog", {
+				name: i18n.t("bots:applications.leave.title"),
+			}),
+		).getByRole("button", { name: i18n.t("common:confirm.cancel") }),
+	)
+
+	expect(menuEntryOf(/^ledger/).getAttribute("aria-current")).toBe("page")
+	expect(
+		screen.getByLabelText<HTMLInputElement>(
+			i18n.t("bots:applications.name.label"),
+		).value,
+	).toBe("ledger-desk")
 })
 
 const pressCloseTab = async () => {
@@ -504,8 +537,6 @@ const backLabelled = (name: string) =>
 
 const backOf = () => backLabelled(i18n.t("settings:screen.back"))
 
-const spaceBackOf = () => backLabelled(i18n.t("settings:screen.backToSettings"))
-
 const resizeHandleOf = () =>
 	document.querySelector(
 		'[data-slot="sidebar-resize-handle"][data-side="left"]',
@@ -536,20 +567,6 @@ const openFirstCompanionOfSpace = async () => {
 	)
 }
 
-it("goes back one entry, to the user settings the space settings were opened over, then to the conversations", async () => {
-	await mountApp()
-	await press(avatarOf())
-	await openSpaceSettingsByRail()
-
-	await press(spaceBackOf())
-
-	expect(shownSettingsOf()?.subtitle).toBe("user")
-
-	await press(backOf())
-
-	expect(shownSettingsOf()).toBeNull()
-})
-
 it("opens the conversations and every settings screen at the width set on a settings screen, after a restart too", async () => {
 	harness.preferences = { ...STORED_PREFERENCES, openOn: "lastConversation" }
 	await mountApp()
@@ -560,7 +577,7 @@ it("opens the conversations and every settings screen at the width set on a sett
 	const widened = sidebarWidthOf()
 
 	expect(widened).toBeGreaterThan(openingWidth)
-	await press(spaceBackOf())
+	await press(avatarOf())
 	expect(sidebarWidthOf()).toBe(widened)
 	await press(avatarOf())
 	expect(sidebarWidthOf()).toBe(widened)
@@ -654,7 +671,7 @@ it("shows the settings of the Space reached and leaves the tab of the Space left
 	expect(shownSettingsOf()?.subtitle).toBe("space")
 	expect(screen.getByDisplayValue(VOCCA)).toBeTruthy()
 
-	await press(conversationsEntryOf())
+	await press(libraryEntryOf())
 	expect(shownSettingsOf()).toBeNull()
 	await switchSpaceTo(opened.name)
 
@@ -679,7 +696,7 @@ const spaceRowOf = (name: string) =>
 		name: new RegExp(`^${name}`),
 	})
 
-const openSpaceLabelOf = () => spacesLogoOf().getAttribute("aria-label")
+const openSpaceLabelOf = () => spacesLogoOf().textContent
 
 it("lists every Space on the user settings, the current one marked", async () => {
 	const opened = await mountApp(secondSpace)
@@ -690,7 +707,7 @@ it("lists every Space on the user settings, the current one marked", async () =>
 	expect(spaceRowOf(VOCCA).getAttribute("aria-current")).toBeNull()
 })
 
-it("opens the settings of a Space other than the current one from its row, then goes back to the user settings", async () => {
+it("opens the settings of a Space other than the current one from its row", async () => {
 	const opened = await mountApp(secondSpace)
 	await press(avatarOf())
 
@@ -699,10 +716,6 @@ it("opens the settings of a Space other than the current one from its row, then 
 	expect(shownSettingsOf()?.subtitle).toBe("space")
 	expect(screen.getByDisplayValue(VOCCA)).toBeTruthy()
 	expect(openSpaceLabelOf()).toContain(opened.name)
-
-	await press(spaceBackOf())
-
-	expect(shownSettingsOf()?.subtitle).toBe("user")
 })
 
 it("reads the secrets of the Space its route shows, though another Space is current", async () => {
@@ -754,9 +767,11 @@ it("switches to the Space and shows its conversations on Open", async () => {
 	await press(spaceRowOf(VOCCA))
 
 	await press(
-		screen.getByRole("button", {
-			name: new RegExp(`^${i18n.t("settings:space.open")}`),
-		}),
+		screen
+			.getAllByRole("button", {
+				name: new RegExp(`^${i18n.t("settings:space.open")}`),
+			})
+			.find((button) => !railOf().contains(button)) as HTMLElement,
 	)
 
 	expect(shownSettingsOf()).toBeNull()
@@ -780,31 +795,6 @@ it("adds the row of a new Space on the + of Your spaces", async () => {
 	).toBeTruthy()
 })
 
-it("opens the user settings on Back to your settings when the Space settings are the first entry of the history", async () => {
-	const space = await seedStore()
-	const router = createWorkspaceRouter()
-	render(createElement(RouterProvider, { router }), {
-		wrapper: createQueryTestWrapper().wrapper,
-	})
-	await settle()
-	await act(async () => {
-		await router.navigate({
-			to: "/settings/space/$spaceId",
-			params: { spaceId: space.id },
-			replace: true,
-		})
-	})
-	await settle()
-	expect(shownSettingsOf()?.subtitle).toBe("space")
-
-	await press(spaceBackOf())
-
-	expect(shownSettingsOf()).toEqual({
-		subtitle: "user",
-		entry: i18n.t("settings:rail.account"),
-	})
-})
-
 it("returns to the conversations when the Space switches from the settings of a companion", async () => {
 	await mountApp(secondSpace)
 	await openFirstCompanionOfSpace()
@@ -822,7 +812,7 @@ it("opens the conversations on Back when a settings screen is the first entry of
 	await press(backOf())
 
 	expect(shownSettingsOf()).toBeNull()
-	expect(isMarked(conversationsEntryOf())).toBe(true)
+	expect(currentEntriesOf()).toEqual([])
 })
 
 const titleBarOf = () =>
@@ -870,6 +860,7 @@ const answerLeave = (answer: string) =>
 	)
 
 const openUnsavedApplicationInSecondTab = async () => {
+	collapseSidebar()
 	await mountApp(twoSpaceApplications)
 	await openConversation()
 	await press(barButtonOf(NEW_TAB))

@@ -6,7 +6,6 @@ import { useRosterLines } from "./use-roster-lines"
 import { useRosterView } from "./use-roster-view"
 import { useSettingsPanels } from "./use-settings-panels"
 import { useSidebarMissions } from "./use-sidebar-missions"
-import { useSidebarPanelSwitch } from "./use-sidebar-panel-switch"
 import { useSpaceLoading } from "./use-space-loading"
 import { useSpaceSections } from "./use-space-sections"
 import { useThreadAuthorship } from "./use-thread-authorship"
@@ -110,7 +109,6 @@ export const useWorkspaceAssembly = () => {
 	})
 	const sidebarMissions = useSidebarMissions({
 		core,
-		rosterLines,
 		navigation,
 	})
 	const overlay = useWorkspaceOverlay({
@@ -122,7 +120,6 @@ export const useWorkspaceAssembly = () => {
 		scopes,
 	})
 	const collapsedSectionIds = useSpaceSections({ core, rosterLines })
-	const sidebarTab = useSidebarPanelSwitch({ core, tabs })
 	const selectCompanion = useCompanionSelectGuard({
 		openSpaceId: scopes.openRowId,
 		rosters: core.roster.state.rosters,
@@ -187,7 +184,6 @@ export const useWorkspaceAssembly = () => {
 		scopes,
 		selectCompanion,
 		sidebarMissions,
-		sidebarTab,
 		switcher,
 		tabs,
 		whatsNew,

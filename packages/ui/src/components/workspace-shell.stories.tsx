@@ -1,23 +1,35 @@
-import type { ReactNode } from "react"
-import { expect, fn, waitFor, type within } from "storybook/test"
+import { type ReactNode, useState } from "react"
+import { expect, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
 	companionHueOf,
 	FRAME_POLL,
+	isInBrowserRunner,
 	slotIn,
 	slotsIn,
 	tokenLengthOf,
+	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
 import { AppHeader } from "@workspace/ui/components/app-header"
 import {
 	AppSidebar,
 	type AppSidebarBot,
 } from "@workspace/ui/components/app-sidebar"
+import {
+	DESK_ROOM,
+	SIDEBAR_SECTION,
+	STILL_LIFT,
+} from "@workspace/ui/components/app-sidebar.fixtures"
+import { ConversationRosterRow } from "@workspace/ui/components/app-sidebar-conversation-row"
+import { AppTitleBar } from "@workspace/ui/components/app-title-bar"
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
+import { ContentCard } from "@workspace/ui/components/content-card"
 import { HeaderIdentityButton } from "@workspace/ui/components/header-identity-button"
 import { hueTone } from "@workspace/ui/components/hue-palette"
 import { hueDistance } from "@workspace/ui/components/hue-recipe"
+import { Icons } from "@workspace/ui/components/icons"
+import { NavigationSidebar } from "@workspace/ui/components/navigation-sidebar"
 import { PinnedMessages } from "@workspace/ui/components/pinned-messages"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
 import type { ReplyQuote } from "@workspace/ui/components/prompt-reply"
@@ -28,10 +40,13 @@ import {
 	SIDEBAR_WIDTH_STEP,
 } from "@workspace/ui/components/sidebar-resize"
 import { ThreadLayout } from "@workspace/ui/components/thread-layout"
+import type { TitleBarTab } from "@workspace/ui/components/title-bar-tabs"
 import { AssistantTurn, UserTurn } from "@workspace/ui/components/turn"
+import { SidebarMenu } from "@workspace/ui/components/ui/sidebar"
 import {
 	SHELL_TITLE_BAR_HEIGHT,
 	WorkspaceShell,
+	WorkspaceShellRoot,
 } from "@workspace/ui/components/workspace-shell"
 import { schemeOf } from "@workspace/ui/hooks/use-color-scheme"
 
@@ -166,7 +181,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The application shell: the sidebar surface is the window itself, reaching every edge with no seam, and the main column floats on it as a rounded card detached on all four sides. It is a thin composition over the sidebar foundation — the shell pins the sidebar expanded at one fixed width, with no collapse, no trigger and no resize edge, and hands the room that is left to the card. Whatever fills that card keeps its own scroll boundary, so a `ThreadLayout` still scrolls its transcript alone while the surface around it stays put. `spaceTint` hands the hue of the space in view to the bubbles, the accent and the New line inside the shell, while the surface itself stays neutral.",
+					"The application shell: the sidebar surface is the window itself, reaching every edge with no seam, and the main column floats on it as a rounded card detached on all four sides. It is a thin composition over the sidebar foundation — the shell keeps the sidebar expanded at one fixed width unless its caller collapses it through `open` and `onOpenChange`, with no trigger and no resize edge of its own, and hands the room that is left to the card. Whatever fills that card keeps its own scroll boundary, so a `ThreadLayout` still scrolls its transcript alone while the surface around it stays put. `spaceTint` hands the hue of the space in view to the bubbles, the accent and the New line inside the shell, while the surface itself stays neutral.",
 			},
 		},
 	},
@@ -178,12 +193,7 @@ const meta = preview.meta({
 export const ConversationOpenDark = meta.story({
 	args: {
 		sidebar: (
-			<AppSidebar
-				bots={ROSTER}
-				insetWindowControls
-				railDots={{ conversations: "done", missions: "attention" }}
-				selectedBotId="atlas"
-			/>
+			<AppSidebar bots={ROSTER} insetWindowControls selectedBotId="atlas" />
 		),
 	},
 	globals: { theme: "dark" },
@@ -520,13 +530,17 @@ interface DragParams {
 	pointer: (steps: PointerStep[]) => Promise<void>
 }
 
-const dragHandleBy = async ({ by, handle, pointer }: DragParams) => {
+const grabHandle = (handle: HTMLElement, by: number) => {
 	const grip = handle.getBoundingClientRect()
 	const from = {
 		clientX: grip.left + grip.width / 2,
 		clientY: grip.top + grip.height / 2,
 	}
-	const to = { clientX: from.clientX + by, clientY: from.clientY }
+	return { from, to: { clientX: from.clientX + by, clientY: from.clientY } }
+}
+
+const dragHandleBy = async ({ by, handle, pointer }: DragParams) => {
+	const { from, to } = grabHandle(handle, by)
 	await pointer([
 		{ keys: "[MouseLeft>]", target: handle, coords: from },
 		{ coords: to },
@@ -744,6 +758,351 @@ export const TallHost = meta.story({
 		await expectSidebarFillingHost(canvas, canvasElement)
 		await expect(canvas.getByRole("main").getBoundingClientRect().bottom).toBe(
 			host.bottom - shellInset(),
+		)
+	},
+})
+
+type NavigationShellProps = {
+	hasInsetControls?: boolean
+	isInitiallyOpen?: boolean
+	tabs?: TitleBarTab[]
+}
+
+const NavigationShell = ({
+	hasInsetControls = true,
+	isInitiallyOpen = true,
+	tabs = [],
+}: NavigationShellProps) => {
+	const [isOpen, setIsOpen] = useState(isInitiallyOpen)
+
+	return (
+		<WorkspaceShellRoot onOpenChange={setIsOpen} open={isOpen}>
+			<AppTitleBar
+				insetWindowControls={hasInsetControls}
+				onOpenSearch={fn()}
+				onToggleSidebar={() => setIsOpen(!isOpen)}
+				tabs={tabs}
+			/>
+			<NavigationSidebar
+				conversations={null}
+				destination="newConversation"
+				missionCount={1}
+				pinned={
+					<SidebarMenu>
+						<ConversationRosterRow
+							conversation={DESK_ROOM}
+							isPinned
+							isSelected={false}
+							lift={STILL_LIFT}
+							sections={[SIDEBAR_SECTION]}
+						/>
+					</SidebarMenu>
+				}
+				selectedSpaceId="kiroshi"
+				spaces={[
+					{
+						id: "kiroshi",
+						name: "Kiroshi",
+						colour: BLOT_HUES.blue,
+						avatarSeed: "kiroshi",
+					},
+				]}
+				update={{ status: "available", onDownload: fn() }}
+				user={{ name: "Ada Martin" }}
+				zones={[{ id: "pinned", conversations: [DESK_ROOM] }]}
+			/>
+			<ContentCard />
+		</WorkspaceShellRoot>
+	)
+}
+
+export const SwitchesBetweenExpandedAndCollapsed = meta.story({
+	globals: { theme: "dark", theme_layout: "single" },
+	render: () => <NavigationShell />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The caller holds the open state. Check the title bar toggle swaps the expanded sidebar for the 60px rail drawn from the same Space, destination, update and person, and the sidebar shortcut brings the expanded sidebar back through `onOpenChange`.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		await expect(slotIn(canvasElement, "expanded-sidebar")).toBeVisible()
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Toggle sidebar" }),
+		)
+		await waitFor(
+			() => expect(slotsIn(canvasElement, "expanded-sidebar")).toHaveLength(0),
+			FRAME_POLL,
+		)
+		const rail = slotIn(canvasElement, "collapsed-sidebar")
+		await expect(rail.getBoundingClientRect().width).toBe(60)
+		const inRail = within(rail)
+		await expect(
+			inRail.getByRole("button", { name: "New conversation" }),
+		).toHaveAttribute("aria-current", "page")
+		await expect(
+			inRail.getByRole("button", { name: "Download update" }),
+		).toBeVisible()
+		await expect(
+			inRail.getByRole("button", { name: "Ada Martin" }),
+		).toBeVisible()
+		await expect(inRail.getByRole("button", { name: "Kiroshi" })).toBeVisible()
+		await userEvent.keyboard("{Control>}b{/Control}")
+		await expect(slotIn(canvasElement, "expanded-sidebar")).toBeVisible()
+		await expect(slotsIn(canvasElement, "collapsed-sidebar")).toHaveLength(0)
+	},
+})
+
+const NOTES_TAB: TitleBarTab = {
+	id: "notes",
+	title: "Notes",
+	icon: <Icons.Library />,
+}
+
+const PINNED_NOTES_TAB: TitleBarTab = { ...NOTES_TAB, isPinned: true }
+
+type ShellCanvas = ReturnType<typeof within>
+
+const navigationSidebarIn = (canvasElement: HTMLElement) =>
+	slotIn(canvasElement, "navigation-sidebar")
+
+const leftOf = (element: Element) => element.getBoundingClientRect().left
+
+const firstTabIn = (canvas: ShellCanvas) => canvas.getAllByRole("tab")[0]
+
+const expectFirstTabOnThePanelEdge = async (
+	canvas: ShellCanvas,
+	edge: number,
+) => {
+	await expect(leftOf(firstTabIn(canvas))).toBe(edge)
+	await expect(leftOf(canvas.getByRole("main"))).toBe(edge)
+}
+
+const firstTabStory = (shell: NavigationShellProps, edge: number) => ({
+	render: () => <NavigationShell {...shell} />,
+	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+		const canvas = within(canvasElement)
+		await expect(
+			navigationSidebarIn(canvasElement).getAnimations(),
+		).toHaveLength(0)
+		await expectFirstTabOnThePanelEdge(canvas, edge)
+	},
+})
+
+export const FirstTabOnThePanelEdge = meta.story(
+	firstTabStory({ tabs: [NOTES_TAB] }, SIDEBAR_DEFAULT_WIDTH),
+)
+
+export const FirstPinnedTabOnThePanelEdge = meta.story(
+	firstTabStory({ tabs: [PINNED_NOTES_TAB] }, SIDEBAR_DEFAULT_WIDTH),
+)
+
+export const FirstTabOnThePanelEdgeWithoutInsetControls = meta.story(
+	firstTabStory(
+		{ hasInsetControls: false, tabs: [NOTES_TAB] },
+		SIDEBAR_DEFAULT_WIDTH,
+	),
+)
+
+export const FirstTabAfterTheHistoryCollapsed = meta.story({
+	render: () => <NavigationShell isInitiallyOpen={false} tabs={[NOTES_TAB]} />,
+	play: async ({ canvas, canvasElement }) => {
+		const sidebar = navigationSidebarIn(canvasElement)
+		await expect(leftOf(firstTabIn(canvas))).toBe(205)
+		await expect(sidebar.getBoundingClientRect().width).toBe(60)
+		await expect(sidebar.getAnimations()).toHaveLength(0)
+		await expect(slotsIn(canvasElement, "expanded-sidebar")).toHaveLength(0)
+	},
+})
+
+export const DragResizesWithoutAnimation = meta.story({
+	render: () => <NavigationShell tabs={[NOTES_TAB]} />,
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		if (!isInBrowserRunner()) return
+		await withMotionAllowed(async () => {
+			const sidebar = navigationSidebarIn(canvasElement)
+			const handle = handleIn(canvas)
+			const { from, to } = grabHandle(handle, WIDER_BY)
+
+			await userEvent.pointer([
+				{ keys: "[MouseLeft>]", target: handle, coords: from },
+				{ coords: to },
+			])
+			await expect(getComputedStyle(sidebar).transitionProperty).toBe("none")
+			await expect(sidebar.getAnimations()).toHaveLength(0)
+			await expectFirstTabOnThePanelEdge(
+				canvas,
+				SIDEBAR_DEFAULT_WIDTH + WIDER_BY,
+			)
+			await userEvent.pointer([{ keys: "[/MouseLeft]", coords: to }])
+			await expectFirstTabOnThePanelEdge(
+				canvas,
+				SIDEBAR_DEFAULT_WIDTH + WIDER_BY,
+			)
+		})
+	},
+})
+
+export const ToggleDuringDragSwapsAtOnce = meta.story({
+	render: () => <NavigationShell />,
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		const handle = handleIn(canvas)
+		const { from, to } = grabHandle(handle, WIDER_BY)
+		await userEvent.pointer([
+			{ keys: "[MouseLeft>]", target: handle, coords: from },
+			{ coords: to },
+		])
+		await userEvent.keyboard("{Control>}b{/Control}")
+		await expect(slotsIn(canvasElement, "expanded-sidebar")).toHaveLength(0)
+		await expect(slotIn(canvasElement, "collapsed-sidebar")).toBeVisible()
+		await userEvent.pointer([{ keys: "[/MouseLeft]", coords: to }])
+	},
+})
+
+const FOLD_FROZEN_FOR = "60s"
+
+const freezeMotionOf = (elements: HTMLElement[]) => {
+	for (const element of elements)
+		element.style.transitionDuration = FOLD_FROZEN_FOR
+}
+
+const finishMotionOf = (elements: HTMLElement[]) => {
+	for (const element of elements)
+		for (const animation of element.getAnimations()) animation.finish()
+}
+
+const progressOf = (element: HTMLElement) =>
+	element.getAnimations()[0]?.effect?.getComputedTiming().progress ?? 0
+
+export const FoldAnimatesAsOneMotion = meta.story({
+	render: () => <NavigationShell tabs={[NOTES_TAB]} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The fold, frozen half way. Check the sidebar and the tab strip run on one clock and one curve in both directions, that the content panel follows the edge, that the expanded column keeps its full width under the clip, and that the rail is all that is left at the end.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		if (!isInBrowserRunner()) return
+		await withMotionAllowed(async () => {
+			const sidebar = navigationSidebarIn(canvasElement)
+			const history = slotIn(canvasElement, "title-bar-history")
+			const toggle = canvas.getByRole("button", { name: "Toggle sidebar" })
+			const motion = getComputedStyle(sidebar)
+			await expect(motion.transitionDuration).toBe("0.18s")
+			await expect(getComputedStyle(history).transitionDuration).toBe("0.18s")
+			await expect(getComputedStyle(history).transitionTimingFunction).toBe(
+				motion.transitionTimingFunction,
+			)
+
+			freezeMotionOf([sidebar, history])
+			await userEvent.click(toggle)
+			await waitFor(
+				() => expect(progressOf(sidebar)).toBeGreaterThan(0),
+				FRAME_POLL,
+			)
+			await expect(
+				Math.abs(progressOf(sidebar) - progressOf(history)),
+			).toBeLessThan(0.05)
+			const expanded = slotIn(canvasElement, "expanded-sidebar")
+			await expect(expanded.getBoundingClientRect().width).toBe(
+				SIDEBAR_DEFAULT_WIDTH,
+			)
+			await expect(sidebar.getBoundingClientRect().width).toBeLessThan(
+				SIDEBAR_DEFAULT_WIDTH,
+			)
+			await expect(leftOf(canvas.getByRole("main"))).toBeLessThan(
+				SIDEBAR_DEFAULT_WIDTH,
+			)
+			await expect(leftOf(firstTabIn(canvas))).toBeLessThan(
+				SIDEBAR_DEFAULT_WIDTH,
+			)
+
+			finishMotionOf([sidebar, history])
+			await waitFor(
+				() =>
+					expect(slotsIn(canvasElement, "expanded-sidebar")).toHaveLength(0),
+				FRAME_POLL,
+			)
+			await expect(slotIn(canvasElement, "collapsed-sidebar")).toBeVisible()
+			await expect(leftOf(firstTabIn(canvas))).toBe(205)
+
+			await userEvent.click(toggle)
+			await expect(slotIn(canvasElement, "expanded-sidebar")).toBeVisible()
+			await waitFor(
+				() => expect(progressOf(sidebar)).toBeGreaterThan(0),
+				FRAME_POLL,
+			)
+			finishMotionOf([sidebar, history])
+			await expectFirstTabOnThePanelEdge(canvas, SIDEBAR_DEFAULT_WIDTH)
+		})
+	},
+})
+
+export const FoldUnderReducedMotionHasNoAnimation = meta.story({
+	render: () => <NavigationShell />,
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		const sidebar = navigationSidebarIn(canvasElement)
+		await expect(
+			Number.parseFloat(getComputedStyle(sidebar).transitionDuration),
+		).toBeLessThan(0.001)
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Toggle sidebar" }),
+		)
+		await waitFor(
+			() =>
+				expect(slotIn(canvasElement, "collapsed-sidebar")).toBeInTheDocument(),
+			FRAME_POLL,
+		)
+		await expect(sidebar.getBoundingClientRect().width).toBe(60)
+	},
+})
+
+const FADED_PROPERTIES = [
+	"all",
+	"color",
+	"background-color",
+	"border-color",
+	"outline-color",
+	"opacity",
+]
+
+const expectNoColourFadeOn = async (controls: HTMLElement[]) => {
+	for (const control of controls) {
+		const { transitionDuration, transitionProperty } = getComputedStyle(control)
+		const isInstant = transitionDuration
+			.split(", ")
+			.every((duration) => Number.parseFloat(duration) === 0)
+		const faded = transitionProperty
+			.split(", ")
+			.filter((property) => FADED_PROPERTIES.includes(property))
+		await expect(isInstant ? [] : faded).toEqual([])
+	}
+}
+
+export const ControlsFadeNoColour = meta.story({
+	render: () => <NavigationShell />,
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		const toggle = canvas.getByRole("button", { name: "Toggle sidebar" })
+		await expectNoColourFadeOn([
+			toggle,
+			slotIn(canvasElement, "space-switcher"),
+			canvas.getByRole("button", { name: "Search" }),
+			slotIn(canvasElement, "expanded-sidebar-footer"),
+			canvas.getByRole("button", { name: "New conversation" }),
+		])
+		await userEvent.click(toggle)
+		await waitFor(
+			() =>
+				expect(slotIn(canvasElement, "collapsed-sidebar")).toBeInTheDocument(),
+			FRAME_POLL,
+		)
+		await expectNoColourFadeOn(
+			slotsIn(canvasElement, "collapsed-sidebar-destination"),
 		)
 	},
 })

@@ -5,6 +5,7 @@ import { i18n } from "@workspace/ui/lib/i18n"
 
 import type { UserPreferences } from "./preferences-contract"
 import { createUserController } from "./preferences-controller"
+import { readMirror } from "./preferences-mirror"
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }))
 
@@ -20,6 +21,7 @@ const DEFAULTS: UserPreferences = {
 	notifyOnFinishedTurn: true,
 	notifyWithSound: true,
 	sidebarWidth: null,
+	sidebarCollapsed: false,
 	sidebarTab: "conversations",
 	openOn: "newConversation",
 	activityPanelOpen: false,
@@ -53,6 +55,12 @@ const aHost = (record: UserPreferences = DEFAULTS) => {
 		}
 		if (command === "user_set_onboarding_step") {
 			held = { ...held, onboardingStep: (args as OnboardingStepArgs).step }
+		}
+		if (command === "user_set_sidebar_collapsed") {
+			held = {
+				...held,
+				sidebarCollapsed: (args as { isCollapsed: boolean }).isCollapsed,
+			}
 		}
 		if (command === "user_replay_onboarding") {
 			held = { ...held, onboardingStep: "welcome" }
@@ -462,39 +470,42 @@ describe("the sidebar edge the reader drags", () => {
 	})
 })
 
-describe("the sidebar tab the reader selects", () => {
-	it("writes the tab to the record, and shows it before the host answers", async () => {
+describe("the sidebar the reader collapses", () => {
+	it("shows the collapsed sidebar before the host answers, then writes it", async () => {
 		const host = aHost()
 		const controller = await loaded()
 
-		const written = controller.setSidebarTab("missions")
+		const written = controller.setSidebarCollapsed(true)
 
-		expect(controller.getState().preferences.sidebarTab).toBe("missions")
+		expect(controller.getState().preferences.sidebarCollapsed).toBe(true)
 		await written
-		expect(host()).toEqual({ ...DEFAULTS, sidebarTab: "missions" })
+		expect(host().sidebarCollapsed).toBe(true)
+		expect(hostInvoke).toHaveBeenCalledWith("user_set_sidebar_collapsed", {
+			isCollapsed: true,
+		})
 	})
 
-	it("writes nothing for a tab the record already holds", async () => {
-		aHost({ ...DEFAULTS, sidebarTab: "missions" })
-		const controller = await loaded()
-		hostInvoke.mockClear()
-
-		await controller.setSidebarTab("missions")
-
-		expect(hostInvoke).not.toHaveBeenCalled()
-	})
-
-	it("shows the stored tab again when the write is refused", async () => {
+	it("opens the next window collapsed before the host has answered", async () => {
 		aHost()
 		const controller = await loaded()
-		hostInvoke.mockRejectedValue({
-			kind: "storage",
-			failure: { kind: "sqlite", detail: "disk I/O error" },
-		})
+		await controller.setSidebarCollapsed(true)
+		hostInvoke.mockReset()
 
-		await controller.setSidebarTab("companions")
+		const opening = createUserController()
 
-		expect(controller.getState().preferences.sidebarTab).toBe("conversations")
+		expect(opening.getState().preferences.sidebarCollapsed).toBe(true)
+	})
+
+	it("rolls the sidebar back to expanded when the host refuses to collapse it", async () => {
+		aHost()
+		const controller = await loaded()
+		const refused = new Error("refused")
+		hostInvoke.mockRejectedValue(refused)
+
+		await expect(controller.setSidebarCollapsed(true)).rejects.toBe(refused)
+
+		expect(controller.getState().preferences.sidebarCollapsed).toBe(false)
+		expect(readMirror().sidebarCollapsed).toBe(false)
 	})
 })
 

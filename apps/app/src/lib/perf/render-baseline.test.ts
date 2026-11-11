@@ -22,6 +22,7 @@ import {
 	type SentinelScroll,
 	stubSentinelObserver,
 } from "@/lib/query/sentinel-test-observer"
+import { rosterRowOf, sidebarItemOf } from "@/lib/sidebar/sidebar-fixtures"
 import { MAIN_WINDOW_LABEL, writeSpaceTabs } from "@/lib/tabs/tabs-mirror"
 import { spaceTabsOn } from "@/lib/tabs/tabs-model"
 import { readMirror, writeMirror } from "@/lib/user/preferences-mirror"
@@ -96,21 +97,28 @@ vi.mock(
 	},
 )
 
-vi.mock("@workspace/ui/components/app-sidebar", async (importOriginal) => {
-	const actual =
-		await importOriginal<
-			typeof import("@workspace/ui/components/app-sidebar")
-		>()
-	const { createElement: element } = await import("react")
-	const { probeRender: probe } = await import("@workspace/ui/lib/render-probe")
-	return {
-		...actual,
-		AppSidebarBody: (props: Parameters<typeof actual.AppSidebarBody>[0]) => {
-			probe("AppSidebar")
-			return element(actual.AppSidebarBody, props)
-		},
-	}
-})
+vi.mock(
+	"@workspace/ui/components/navigation-sidebar",
+	async (importOriginal) => {
+		const actual =
+			await importOriginal<
+				typeof import("@workspace/ui/components/navigation-sidebar")
+			>()
+		const { createElement: element } = await import("react")
+		const { probeRender: probe } = await import(
+			"@workspace/ui/lib/render-probe"
+		)
+		return {
+			...actual,
+			NavigationSidebar: (
+				props: Parameters<typeof actual.NavigationSidebar>[0],
+			) => {
+				probe("NavigationSidebar")
+				return element(actual.NavigationSidebar, props)
+			},
+		}
+	},
+)
 
 vi.mock("@/lib/chat/create-driver", async () => {
 	const { withFakeHostWrites } = await import(
@@ -260,16 +268,6 @@ const countCommits = (): CommitCounter => {
 		},
 	}
 	return counter
-}
-
-const rowFor = (name: string) => {
-	const labels = [...document.querySelectorAll('[data-slot="roster-row-name"]')]
-	const row = labels.find((label) => label.textContent === name)
-	const button = row?.closest("button")
-	if (!button) {
-		throw new Error(`no roster row for ${name}`)
-	}
-	return button
 }
 
 const takeFrameClock = (): FrameClock => {
@@ -460,14 +458,23 @@ const openOnFirstCompanion = async (store: TranscriptStore) => {
 	)
 }
 
-const seedFirstRunDone = () => {
-	writeMirror({ ...readMirror(), firstRunDone: true })
+type SidebarLayout = "collapsed" | "expanded"
+
+const seedFirstRunDone = (sidebar: SidebarLayout = "collapsed") => {
+	writeMirror({
+		...readMirror(),
+		firstRunDone: true,
+		sidebarCollapsed: sidebar === "collapsed",
+	})
 }
 
-const mountApp = async (replyFor?: (prompt: string) => string) => {
+const mountApp = async (
+	replyFor?: (prompt: string) => string,
+	sidebar?: SidebarLayout,
+) => {
 	const frames = takeFrameClock()
 	layout = fakeLayout()
-	seedFirstRunDone()
+	seedFirstRunDone(sidebar)
 	const store = createFakeTranscriptStore()
 	harness.store = store
 	harness.driver = createFakeChatDriver({ stepMs: STEP_MS, replyFor })
@@ -570,9 +577,8 @@ const measureMessageReceived = async () => {
 
 	return {
 		app: tally.countOf("App"),
-		appSidebar: tally.countOf("AppSidebar"),
+		navigationSidebar: tally.countOf("NavigationSidebar"),
 		cacheEvents: cacheEvents.count(),
-		isShown: document.body.textContent?.includes(RECEIVED_TEXT) ?? false,
 	}
 }
 
@@ -580,7 +586,7 @@ const EARLIER_TEXT = "An earlier message"
 
 const measureRowsOfMessageReceived = async () => {
 	const tally = tallyRenders()
-	const { store } = await mountApp()
+	const { store } = await mountApp(undefined, "expanded")
 	await storeMessageReceived(store, EARLIER_TEXT)
 	await emitOnHost("conversation://updated", await soloThreadRowOf(store))
 	await settle(MOUNT_MS)
@@ -603,7 +609,8 @@ const measureRowsOfMessageReceived = async () => {
 		otherRows: rows.filter(([id]) => id !== receiverId).length,
 		isShownInRow:
 			receiver !== undefined &&
-			(rowFor(receiver.name).textContent?.includes(RECEIVED_TEXT) ?? false),
+			(rosterRowOf(receiver.name).textContent?.includes(RECEIVED_TEXT) ??
+				false),
 	}
 }
 
@@ -654,7 +661,7 @@ const shownRowNames = () =>
 const measureRowMovedToTop = async () => {
 	const tally = tallyRenders()
 	layout = fakeLayout()
-	seedFirstRunDone()
+	seedFirstRunDone("expanded")
 	const store = createFakeTranscriptStore()
 	harness.store = store
 	harness.driver = createFakeChatDriver({ stepMs: STEP_MS })
@@ -674,7 +681,7 @@ const measureRowMovedToTop = async () => {
 	const [topAfter] = shownRowNames()
 	return {
 		app: tally.countOf("App"),
-		appSidebar: tally.countOf("AppSidebar"),
+		navigationSidebar: tally.countOf("NavigationSidebar"),
 		topBefore,
 		topAfter,
 	}
@@ -760,7 +767,7 @@ const openThread = async ({
 	const openedAt = commits.count
 	builds.markdownRenders = 0
 	await act(async () => {
-		fireEvent.click(rowFor(name))
+		fireEvent.click(sidebarItemOf(name))
 	})
 	let tasksToLastMessage = 0
 	while (
@@ -838,7 +845,7 @@ const measureThreadReopen = async () => {
 	const grown = bubbleCount()
 
 	await act(async () => {
-		fireEvent.click(rowFor(other.name))
+		fireEvent.click(sidebarItemOf(other.name))
 	})
 	await frames.flush(SETTLE_TASKS)
 	const reopened = await openThread(opening)
@@ -861,7 +868,7 @@ const measureLongTranscriptOpen = async () => {
 		hasPaintedRow ||= name === "ThreadTurn"
 	})
 	await act(async () => {
-		fireEvent.click(rowFor(bot.name))
+		fireEvent.click(sidebarItemOf(bot.name))
 	})
 	for (let step = 0; step < OPEN_STEP_LIMIT && !hasPaintedRow; step += 1) {
 		await settle(STEP_MS)
@@ -899,7 +906,7 @@ const measureTurn = async (chunks: number) => {
 		chunks: watch.chunks,
 		cacheEvents: cacheEvents.count(),
 		app: tally.countOf("App"),
-		appSidebar: tally.countOf("AppSidebar"),
+		navigationSidebar: tally.countOf("NavigationSidebar"),
 		rosterBots: tally.countOf("rosterBots"),
 		rosterBotsBySpace: tally.countOf("rosterBotsBySpace"),
 		streamingTurn: maxOf(countsWhere(false)),
@@ -926,9 +933,9 @@ describe("PRF1 render baseline", () => {
 		expect(await measureTurn(SHORT_TURN_CHUNKS)).toMatchInlineSnapshot(`
 			{
 			  "app": 17,
-			  "appSidebar": 6,
 			  "cacheEvents": 26,
 			  "chunks": 11,
+			  "navigationSidebar": 6,
 			  "quietTurn": 2,
 			  "rosterBots": 7,
 			  "rosterBotsBySpace": 7,
@@ -943,9 +950,9 @@ describe("PRF1 render baseline", () => {
 		expect(await measureTurn(LONG_TURN_CHUNKS)).toMatchInlineSnapshot(`
 			{
 			  "app": 28,
-			  "appSidebar": 6,
 			  "cacheEvents": 37,
 			  "chunks": 22,
+			  "navigationSidebar": 6,
 			  "quietTurn": 2,
 			  "rosterBots": 7,
 			  "rosterBotsBySpace": 7,
@@ -960,9 +967,8 @@ describe("PRF1 render baseline", () => {
 		expect(await measureMessageReceived()).toMatchInlineSnapshot(`
 			{
 			  "app": 0,
-			  "appSidebar": 1,
 			  "cacheEvents": 3,
-			  "isShown": true,
+			  "navigationSidebar": 1,
 			}
 		`)
 	})
@@ -983,7 +989,7 @@ describe("PRF1 render baseline", () => {
 
 		expect(await measureRowMovedToTop()).toEqual({
 			app: 0,
-			appSidebar: 1,
+			navigationSidebar: 1,
 			topBefore: "Newer room",
 			topAfter: "Older room",
 		})
@@ -1006,7 +1012,7 @@ describe("PRF1 render baseline", () => {
 			working,
 		}).toMatchInlineSnapshot(`
 			{
-			  "avatars": 7,
+			  "avatars": 3,
 			  "idle": {
 			    "draws": 0,
 			    "movingAvatars": 0,
@@ -1014,9 +1020,9 @@ describe("PRF1 render baseline", () => {
 			    "repeatedPaints": 0,
 			  },
 			  "working": {
-			    "draws": 125676,
-			    "movingAvatars": 3,
-			    "paints": 180,
+			    "draws": 83784,
+			    "movingAvatars": 2,
+			    "paints": 120,
 			    "repeatedPaints": 0,
 			  },
 			}

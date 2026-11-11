@@ -1237,7 +1237,7 @@ export const RowBoxMatchesARosterRow = meta.story({
 		const missionBox = boxOf(mission)
 		const rosterBox = boxOf(roster)
 
-		await expect(missionBox.padding).toBe("6px 12px 6px 6px")
+		await expect(missionBox.padding).toBe("6px 6px 6px 6px")
 		await expect(missionBox.gap).toBe("10px")
 		await expect(missionBox).toEqual({
 			...rosterBox,

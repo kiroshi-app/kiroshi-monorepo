@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { invoke } from "@tauri-apps/api/core"
-import { cleanup, render, renderHook, screen } from "@testing-library/react"
+import { cleanup, renderHook } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { UpdaterController, UpdaterState } from "./updater-controller"
@@ -51,9 +51,11 @@ describe("useUpdateBadge", () => {
 			() => useUpdateBadge({ updater: updaterOf(OFFERED), working: {} }),
 			{ wrapper: createQueryTestWrapper().wrapper },
 		)
-		render(mounted.result.current)
 
 		expect(releaseNotesAsked()).toBe(0)
-		expect(screen.getByRole("button", { name: /update/i })).toBeTruthy()
+		expect(mounted.result.current).toMatchObject({
+			status: "available",
+			version: "1.4.0",
+		})
 	})
 })

@@ -25,14 +25,6 @@ export const useSettingsNavigation = (holder: ThreadHolder) => {
 	const router = useRouter()
 
 	return useMemo(() => {
-		const backOr = (fallback: () => void) => {
-			if (router.history.canGoBack()) {
-				router.history.back()
-				return
-			}
-			fallback()
-		}
-
 		const openInBackgroundTab = (options: NavigateOptions, spaceId?: string) =>
 			router.options.context.tabs.openInNewTab(
 				router.buildLocation(options).href,
@@ -70,20 +62,17 @@ export const useSettingsNavigation = (holder: ThreadHolder) => {
 		}
 
 		return {
-			back: () =>
-				backOr(
-					() =>
-						void navigate({
-							to: "/",
-							search: heldThreadOf(holder),
-							replace: true,
-						}),
-				),
-			backToUserSettings: () =>
-				backOr(() => void navigate({ to: "/settings/user", replace: true })),
+			back: () => {
+				if (router.history.canGoBack()) {
+					router.history.back()
+					return
+				}
+				void navigate({ to: "/", search: heldThreadOf(holder), replace: true })
+			},
 			openConversations: () => {
 				void navigate({ to: "/", search: heldThreadOf(holder) })
 			},
+			openThread: (thread: ThreadSearch) => go({ to: "/", search: thread }),
 			openThreadInNewTab: (thread: ThreadSearch, spaceId?: string) =>
 				openInBackgroundTab({ to: "/", search: thread }, spaceId),
 			openSpaceSettings: (
@@ -95,8 +84,16 @@ export const useSettingsNavigation = (holder: ThreadHolder) => {
 					{ to: "/settings/space/$spaceId", params: { spaceId }, search },
 					modifiers,
 				),
-			openHome: () => go({ to: "/home" }),
+			openHome: () => {
+				const shown = router.history.location
+				if (shown.pathname === "/home" && !isNewTabClickInFlight()) {
+					router.history.replace(shown.href)
+					return
+				}
+				go({ to: "/home" })
+			},
 			openLibrary: () => go({ to: "/library" }),
+			openMissions: () => go({ to: "/missions" }),
 			openUserSettings: (search: SettingsSearch = {}) =>
 				go({ to: "/settings/user", search }),
 			openCompanionSettings: (

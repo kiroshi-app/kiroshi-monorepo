@@ -27,6 +27,7 @@ const bots = {
 				failed: "bloquée",
 				ready: "prête à fusionner",
 				working: "en cours",
+				waiting_agent: "en attente d’un agent",
 			},
 			unavailable: {
 				title: "Impossible de charger les missions",
@@ -43,6 +44,7 @@ const bots = {
 			lastSpace:
 				"Un agent reste dans au moins un espace. Pour retirer un agent de son dernier espace, supprimez l’agent.",
 		},
+		pinned: "Épinglées",
 		pin: "Épingler",
 		pinDrop: "Déposer ici pour épingler",
 		unpin: "Détacher",
@@ -88,17 +90,18 @@ const bots = {
 	rail: {
 		label: "Navigation",
 		home: "Accueil",
+		newConversation: "Nouvelle conversation",
 		conversations: "Conversations",
 		missions: "Missions",
 		library: "Bibliothèque",
 		searchMissions: "Rechercher des missions",
 		spaceSettings: "Réglages de l’espace",
-		dot: "{{name}}, nouvelle activité",
-		badge: {
-			attention: "{{name}}, en attente de vous",
-			done: "{{name}}, activité terminée",
-			failed: "{{name}}, activité en échec",
-		},
+		personSettings: "{{name}}, Réglages",
+		detail: "· {{detail}}",
+		missionCount_one: "{{count}} mission",
+		missionCount_other: "{{count}} missions",
+		missionCount_many: "{{count}} missions",
+		moreMissions: "+{{count}} missions",
 	},
 	spaces: {
 		label: "Espaces",

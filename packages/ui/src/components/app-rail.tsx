@@ -9,7 +9,7 @@ import {
 } from "react"
 import { useTranslation } from "react-i18next"
 
-import { type BotBadge, BotBadgeDot } from "@workspace/ui/components/bot-badge"
+import type { BotBadge } from "@workspace/ui/components/bot-badge"
 import { ContextMenuPressTrigger } from "@workspace/ui/components/context-menu-press-trigger"
 import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import { FillIcons, Icons } from "@workspace/ui/components/icons"
@@ -49,10 +49,6 @@ type AppRailPanel = "conversations" | "missions" | "library"
 
 type AppRailSettings = "space" | "you"
 
-type AppRailDots = Partial<
-	Record<AppRailPanel, BotBadge> & Record<"you", boolean>
->
-
 const PANEL_ICON = {
 	conversations: "Conversations",
 	missions: "Missions",
@@ -71,9 +67,6 @@ const RAIL_SLOT =
 
 const RAIL_ITEM =
 	"relative size-11 rounded-lg text-muted-foreground hover:bg-rail-item-selected/50 hover:text-foreground dark:hover:bg-rail-item-selected/50 aria-[current=true]:bg-rail-item-selected aria-[current=true]:text-foreground dark:aria-[current=true]:bg-rail-item-selected [&_svg]:size-4.5 [&_svg]:stroke-[1.75]!"
-
-const RAIL_DOT =
-	"pointer-events-none absolute -end-px -top-px size-2 rounded-full bg-primary-strong ring-2 ring-background transition-shadow duration-400 ease-out motion-reduce:transition-none"
 
 const RAIL_AVATAR =
 	"grid size-full place-items-center bg-rail-avatar font-medium text-foreground text-xs/4 uppercase"
@@ -94,8 +87,6 @@ type RailButton = ReactElement<HTMLAttributes<HTMLElement>>
 type RailItemProps = {
 	name: string
 	tooltip?: ReactNode
-	badge?: BotBadge
-	hasDot?: boolean
 	isSelected?: boolean
 	className?: string
 	onPress?: () => void
@@ -106,25 +97,16 @@ type RailItemProps = {
 const RailItem = ({
 	name,
 	tooltip = name,
-	badge,
-	hasDot,
 	isSelected,
 	className,
 	onPress,
 	renderButton,
 	children,
 }: RailItemProps) => {
-	const { t } = useTranslation("bots")
-	const spokenName = badge
-		? t(`rail.badge.${badge}`, { name })
-		: hasDot
-			? t("rail.dot", { name })
-			: name
-
 	const button = (
 		<TooltipButton
 			aria-current={isSelected ? "true" : undefined}
-			aria-label={spokenName}
+			aria-label={name}
 			className={cn(RAIL_ITEM, className)}
 			data-slot="app-rail-item"
 			onClick={onPress}
@@ -134,16 +116,6 @@ const RailItem = ({
 			variant="ghost"
 		>
 			{children}
-			{badge ? (
-				<BotBadgeDot badge={badge} data-slot="app-rail-dot" placement="rail" />
-			) : null}
-			{hasDot ? (
-				<span
-					aria-hidden="true"
-					className={RAIL_DOT}
-					data-slot="app-rail-dot"
-				/>
-			) : null}
 		</TooltipButton>
 	)
 
@@ -271,7 +243,6 @@ type AppRailProps = Omit<ComponentProps<"nav">, "children"> &
 		onCreateSpace?: () => void
 		onSpacesMenuOpenChange?: (isOpen: boolean) => void
 		openSettings?: AppRailSettings
-		dots?: AppRailDots
 		user?: UserChipIdentity
 		updateBadge?: ReactNode
 		onSelectHome?: () => void
@@ -300,7 +271,6 @@ const AppRail = ({
 	onDeclineInvitation,
 	onRetryInvitation,
 	openSettings,
-	dots,
 	user,
 	updateBadge,
 	onSelectHome,
@@ -333,7 +303,6 @@ const AppRail = ({
 		const PanelIcon = (isSelected ? FillIcons : Icons)[PANEL_ICON[entry]]
 		return {
 			children: <PanelIcon aria-hidden="true" />,
-			badge: dots?.[entry],
 			isSelected,
 			name: t(`rail.${entry}`),
 		}
@@ -413,7 +382,6 @@ const AppRail = ({
 					</li>
 				) : null}
 				<RailItem
-					hasDot={dots?.you}
 					isSelected={openSettings === "you"}
 					name={displayNameOf(user?.name)}
 					onPress={onOpenYou}
@@ -427,7 +395,6 @@ const AppRail = ({
 
 export {
 	AppRail,
-	type AppRailDots,
 	type AppRailPanel,
 	type AppRailProps,
 	type AppRailSettings,

@@ -19,6 +19,11 @@ import { createFakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
+import {
+	rosterRowNamed,
+	rosterRowOf,
+	sidebarItemOf,
+} from "@/lib/sidebar/sidebar-fixtures"
 import { readMirror, writeMirror } from "@/lib/user/preferences-mirror"
 
 type Harness = {
@@ -96,8 +101,8 @@ const settle = async () => {
 	})
 }
 
-const mountRouterAt = async (path = "/") => {
-	writeMirror({ ...readMirror(), firstRunDone: true })
+const mountRouterAt = async (path = "/", sidebarCollapsed = true) => {
+	writeMirror({ ...readMirror(), firstRunDone: true, sidebarCollapsed })
 	const store = createFakeTranscriptStore()
 	const [space] = await store.spaces()
 	const bot = await store.createBot(newBotIdentity([]), space.id)
@@ -124,18 +129,7 @@ const press = async (control: Element, init: MouseEventInit = {}) => {
 	await settle()
 }
 
-const rosterRowNamed = (name: string) =>
-	[...document.querySelectorAll('[data-slot="roster-row-name"]')]
-		.find((label) => label.textContent === name)
-		?.closest("button") ?? null
-
-const rosterRowOf = (name: string) => {
-	const row = rosterRowNamed(name)
-	if (!row) throw new Error(`no roster row for ${name}`)
-	return row
-}
-
-const openRoom = () => press(rosterRowOf(ROOM))
+const openRoom = () => press(sidebarItemOf(ROOM))
 
 const headerButtonOf = (name: string) =>
 	screen.getByRole("button", {
@@ -150,15 +144,17 @@ const rowMenuSettingsOf = async () => {
 	return screen.getByRole("menuitem", { name: i18n.t("bots:roster.settings") })
 }
 
+const mountExpanded = () => mountRouterAt("/", false)
+
 const openSettingsFromRowMenu = async () => press(await rowMenuSettingsOf())
+
+const openSettingsFromHeader = async () => {
+	await openRoom()
+	await press(headerButtonOf(ROOM))
+}
 
 const railOf = () =>
 	screen.queryByRole("navigation", { name: i18n.t("bots:rail.label") })
-
-const conversationsEntryOf = () =>
-	within(railOf() as HTMLElement).getByRole("button", {
-		name: i18n.t("bots:rail.conversations"),
-	})
 
 const settingsMenuOf = () =>
 	screen.queryByRole("navigation", { name: i18n.t("settings:screen.menu") })
@@ -227,7 +223,7 @@ it("opens the conversation settings full-window from the conversation button of 
 })
 
 it("opens the conversation settings full-window from the Settings of a sidebar conversation row menu", async () => {
-	await mountRouterAt()
+	await mountExpanded()
 
 	await openSettingsFromRowMenu()
 
@@ -248,7 +244,7 @@ it("brings back the open conversation and its draft on Back", async () => {
 })
 
 it("paints a rename in the sidebar", async () => {
-	await mountRouterAt()
+	await mountExpanded()
 	await openSettingsFromRowMenu()
 
 	await act(async () => {
@@ -266,7 +262,7 @@ it("paints a rename in the sidebar", async () => {
 })
 
 it("deletes the conversation from the Danger zone and leaves the screen", async () => {
-	await mountRouterAt()
+	await mountExpanded()
 	await openSettingsFromRowMenu()
 
 	await deleteFromDangerZone()
@@ -298,7 +294,7 @@ it.each([
 	"keeps the screen on the Danger zone and reports the failure once when %s is refused",
 	async (_, refuse) => {
 		await mountRouterAt()
-		await openSettingsFromRowMenu()
+		await openSettingsFromHeader()
 		refuse()
 
 		await deleteFromDangerZone()
@@ -315,10 +311,10 @@ it.each([
 )
 
 it("returns to the conversations when the route names no conversation of the Space", async () => {
-	await mountRouterAt("/settings/conversation/nowhere")
+	const router = await mountRouterAt("/settings/conversation/nowhere")
 
 	expect(settingsMenuOf()).toBeNull()
-	expect(conversationsEntryOf().getAttribute("aria-current")).toBe("true")
+	expect(router.state.location.pathname).toBe("/")
 })
 
 const cmdClickHeaderButton = async () => {
@@ -326,13 +322,7 @@ const cmdClickHeaderButton = async () => {
 	await press(headerButtonOf(ROOM), { metaKey: true })
 }
 
-const cmdClickRowMenuSettings = async () =>
-	press(await rowMenuSettingsOf(), { metaKey: true })
-
-it.each([
-	["the thread header button", cmdClickHeaderButton],
-	["the Settings of a sidebar row menu", cmdClickRowMenuSettings],
-])(
+it.each([["the thread header button", cmdClickHeaderButton]])(
 	"opens the conversation settings in a new background tab on a Cmd-click of %s",
 	async (_, cmdClick) => {
 		const router = await mountRouterAt()

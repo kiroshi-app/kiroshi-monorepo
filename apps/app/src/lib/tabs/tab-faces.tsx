@@ -15,6 +15,7 @@ import {
 	isHomePage,
 	isLibraryPage,
 	isListPage,
+	isMissionsPage,
 	pageOf,
 	type SettingsTarget,
 	settingsTargetOf,
@@ -59,8 +60,13 @@ const SETTINGS_SUBTITLE_KEY = {
 } as const satisfies Record<SettingsTarget, string>
 
 const homeFace = (): TabFace => ({
-	title: i18n.t("bots:rail.home"),
-	icon: <Icons.Home />,
+	title: i18n.t("bots:rail.newConversation"),
+	icon: <Icons.Add />,
+})
+
+const missionsFace = (): TabFace => ({
+	title: i18n.t("bots:rail.missions"),
+	icon: <Icons.Missions />,
 })
 
 const libraryFace = (): TabFace => ({
@@ -139,6 +145,9 @@ export const tabFaceOf = (href: string, sources: TabFaceSources): TabFace => {
 	}
 	if (isHomePage(page)) {
 		return homeFace()
+	}
+	if (isMissionsPage(page)) {
+		return missionsFace()
 	}
 	if (!isListPage(page)) {
 		return settingsFaceOf(page)

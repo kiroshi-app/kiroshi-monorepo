@@ -2,7 +2,6 @@ import type { TFunction } from "i18next"
 import type { ComponentProps, ReactNode } from "react"
 
 import type {
-	AppRailDots,
 	AppRailPanel,
 	AppRailSettings,
 } from "@workspace/ui/components/app-rail"
@@ -15,7 +14,6 @@ import type { ActivityIndicatorKind } from "@workspace/ui/components/bot-identit
 import type { ConversationParticipant } from "@workspace/ui/components/conversation-bot-pile"
 import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import type { ListEnd } from "@workspace/ui/components/list-skeleton"
-import type { MissionsPanelProps } from "@workspace/ui/components/missions-panel"
 import type { SidebarClickModifiers } from "@workspace/ui/components/sidebar-menu-row"
 import type { Space } from "@workspace/ui/components/space"
 import type {
@@ -29,7 +27,7 @@ import { toPlainText } from "@workspace/ui/lib/plain-text"
 
 type AppSidebarOpenPanel = Exclude<AppRailPanel, "library">
 
-const ROW_AVATAR_SIZE = 40
+const ROW_AVATAR_SIZE = 28
 
 type AppSidebarStatus = "idle" | "working"
 
@@ -80,6 +78,7 @@ interface AppSidebarConversation {
 	sectionId?: string | null
 	pinPosition?: number | null
 	participants: AppSidebarBot[]
+	agent?: AppSidebarBot
 	lastMessage?: string
 	lastSpeaker?: string
 	timestamp?: string
@@ -263,11 +262,9 @@ interface AppSidebarProps
 	onOpenUserSettings?: () => void
 	onOpenSearch?: () => void
 	isSearchOpen?: boolean
-	missionsBySpaceId?: Record<string, MissionsPanelProps>
 	onSearchMissions?: () => void
 	insetWindowControls?: boolean
 	windowControls?: ReactNode
-	railDots?: AppRailDots
 	openPanel?: string
 	openSettings?: AppRailSettings
 	onOpenPanelChange?: (panel: AppSidebarOpenPanel) => void

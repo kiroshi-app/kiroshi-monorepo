@@ -99,6 +99,7 @@ fn a_record(picture: Value) -> Value {
 		"notifyOnFinishedTurn": false,
 		"notifyWithSound": false,
 		"sidebarWidth": 320,
+		"sidebarCollapsed": true,
 		"sidebarTab": "companions",
 		"openOn": "lastConversation",
 		"activityPanelOpen": true,
@@ -155,6 +156,10 @@ fn a_host_without_a_database_answers_every_preferences_command_with_why_there_is
 		call(&window, "user_set_onboarding_step", json!({ "step": "connect" })),
 		unavailable
 	);
+	assert_eq!(
+		call(&window, "user_set_sidebar_collapsed", json!({ "isCollapsed": true })),
+		unavailable
+	);
 	assert_eq!(call(&window, "user_replay_onboarding", json!({})), unavailable);
 	assert_eq!(call(&window, "user_mark_onboarding_import_seen", json!({})), unavailable);
 	assert_eq!(
@@ -181,6 +186,7 @@ fn a_record_nobody_has_written_crosses_as_the_defaults() {
 			"notifyOnFinishedTurn": true,
 			"notifyWithSound": true,
 			"sidebarWidth": null,
+			"sidebarCollapsed": false,
 			"sidebarTab": "conversations",
 			"openOn": "newConversation",
 			"activityPanelOpen": false,
@@ -409,6 +415,39 @@ fn a_set_onboarding_step_is_answered_and_read_back_after_the_host_reopens() {
 	let window = window(&app);
 
 	assert_eq!(read(&window)["onboardingStep"], json!("account"));
+}
+
+#[test]
+fn a_set_sidebar_state_is_answered_whole_and_changes_nothing_else() {
+	let home = Home::new();
+	let app = home.app();
+	let window = window(&app);
+	call(&window, "user_set_preferences", json!({ "preferences": a_record(Value::Null) }))
+		.expect("the record is stored");
+	let mut expanded = a_record(Value::Null);
+	expanded["sidebarCollapsed"] = json!(false);
+
+	let answered = call(&window, "user_set_sidebar_collapsed", json!({ "isCollapsed": false }))
+		.expect("the sidebar state is stored");
+
+	assert_eq!(answered, expanded);
+	assert_eq!(read(&window), expanded);
+}
+
+#[test]
+fn a_collapsed_sidebar_is_read_back_collapsed_after_the_host_reopens() {
+	let home = Home::new();
+	{
+		let app = home.app();
+		let window = window(&app);
+		call(&window, "user_set_sidebar_collapsed", json!({ "isCollapsed": true }))
+			.expect("the sidebar state is stored");
+	}
+
+	let app = home.app();
+	let window = window(&app);
+
+	assert_eq!(read(&window)["sidebarCollapsed"], json!(true));
 }
 
 #[test]

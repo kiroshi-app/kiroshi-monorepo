@@ -296,6 +296,12 @@ describe("toRosterConversations", () => {
 		expect(row.color).toBeNull()
 	})
 
+	it("leads a room with one agent seated with its own icon, not that agent's avatar", () => {
+		const [row] = toRosterConversations([conversation()], atRest(), NOW)
+
+		expect(row?.agent).toBeUndefined()
+	})
+
 	it("draws the room of the most recent word first", () => {
 		const rows = toRosterConversations(
 			[

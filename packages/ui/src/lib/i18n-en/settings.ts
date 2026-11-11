@@ -5,7 +5,6 @@ const settings = {
 	screen: {
 		back: "Back to conversations",
 		backToAgents: "Back to Agents",
-		backToSettings: "Back to your settings",
 		menu: "Settings",
 		subtitle: {
 			space: "Space settings",

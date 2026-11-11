@@ -11,10 +11,6 @@ import type {
 	MissionPullRequest,
 	MissionEventKind as ShownEventKind,
 } from "@workspace/ui/components/mission"
-import type {
-	MissionsPanelMission,
-	MissionsPanelProps,
-} from "@workspace/ui/components/missions-panel"
 import type { RosterBot } from "@workspace/ui/components/roster"
 import type {
 	EarlierTodayRow,
@@ -381,7 +377,9 @@ export type MissionHeaderActivity = AgentActivity & {
 
 const PULL_REQUEST_NUMBER = /^\d+$/
 
-const pullRequestOf = (url: string | null): MissionPullRequest | undefined => {
+export const pullRequestOf = (
+	url: string | null,
+): MissionPullRequest | undefined => {
 	const lastSegment = url?.split("/").at(-1)
 	if (!url || !lastSegment || !PULL_REQUEST_NUMBER.test(lastSegment)) {
 		return undefined
@@ -620,39 +618,3 @@ export const missionRingBadges = (
 			})),
 		]),
 	)
-
-type MissionsPanelRowsRead = {
-	faceOf: MissionFaces
-	liveMissionIds: LiveMissionIds
-	now: number
-}
-
-type MissionsPanelRead = MissionsPanelRowsRead & {
-	groups: SpaceMissionGroups
-}
-
-const missionsPanelRowsOf = (
-	entries: MissionInSpace[],
-	{ faceOf, liveMissionIds, now }: MissionsPanelRowsRead,
-): MissionsPanelMission[] =>
-	entries.map(({ mission, conversationId }) => ({
-		...toMissionCard({
-			mission,
-			identity: missionFaceOf(faceOf, mission.botId),
-			state: missionStateOf(mission),
-			isWorking: isMissionWorking(mission, liveMissionIds),
-			now,
-		}),
-		conversationId,
-	}))
-
-export const toMissionsPanel = ({
-	groups,
-	...read
-}: MissionsPanelRead): Omit<MissionsPanelProps, "onOpen"> => ({
-	open: missionsPanelRowsOf(
-		[...groups.waitingOnYou, ...groups.inProgress],
-		read,
-	),
-	earlierToday: missionsPanelRowsOf(groups.earlierToday, read),
-})

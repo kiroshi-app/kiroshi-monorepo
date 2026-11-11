@@ -1,17 +1,52 @@
 import { createContext, useContext } from "react"
 
-import type { AppFrameRailProps } from "@workspace/ui/components/app-frame"
 import type { AppTitleBarProps } from "@workspace/ui/components/app-title-bar"
-import type { SpaceHost } from "@workspace/ui/components/host-pill"
+import type { NavigationSidebarProps } from "@workspace/ui/components/navigation-sidebar"
 import type { SettingsScreenRequestLeave } from "@workspace/ui/components/settings-screen"
 import type { Space } from "@workspace/ui/components/space"
 
 import type { RosterLists } from "./use-roster-lists"
 
+import type { SidebarCollapse } from "../user/use-sidebar-collapse"
+
+type SidebarNavigateKey =
+	| "onSelectSpace"
+	| "onOpenSpaceSettings"
+	| "onOpenSettings"
+	| "onNewConversation"
+	| "onSelectMissions"
+	| "onSelectLibrary"
+	| "onOpenConversation"
+
+type SidebarSwitcherKey =
+	| "badgesBySpaceId"
+	| "hostBySpaceId"
+	| "invitations"
+	| "onAcceptInvitation"
+	| "onCreateSpace"
+	| "onDeclineInvitation"
+	| "onRetryInvitation"
+	| "onOpenChange"
+	| "spaces"
+	| "user"
+
+export type WorkspaceSidebarNavigation = Required<
+	Pick<NavigationSidebarProps, SidebarNavigateKey>
+> &
+	Pick<NavigationSidebarProps, SidebarSwitcherKey>
+
+export type WorkspaceSidebarRowMenu = {
+	isAgent: (id: string) => boolean
+	onOpenInNewTab: (id: string) => void
+	onOpenSettings: (id: string) => void
+	onOpenAgentDangerZone: (id: string) => void
+}
+
 export type WorkspaceFrame = {
-	rail: AppFrameRailProps
-	currentSpace: Space | undefined
-	currentSpaceHost: SpaceHost | undefined
+	sidebar: WorkspaceSidebarNavigation
+	rowMenu: WorkspaceSidebarRowMenu
+	selectedSpaceId: string | undefined
+	collapse: SidebarCollapse
 	guardLeave: (requestLeave: SettingsScreenRequestLeave) => () => void
 	titleBar: AppTitleBarProps
 	width: number | undefined

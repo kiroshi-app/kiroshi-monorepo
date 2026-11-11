@@ -81,6 +81,18 @@ pub async fn user_set_onboarding_step<R: Runtime>(
 
 #[tauri::command]
 #[specta::specta]
+pub async fn user_set_sidebar_collapsed<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	is_collapsed: bool,
+) -> Result<UserPreferences, UserPreferencesError> {
+	let dir = avatars::Avatars::dir(&app);
+	let stored = ready(&state)?.user().set_sidebar_collapsed(is_collapsed).await?;
+	Ok(UserPreferences::of(stored, dir.as_deref()))
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn user_replay_onboarding<R: Runtime>(
 	app: AppHandle<R>,
 	state: State<'_, db::DatabaseState>,

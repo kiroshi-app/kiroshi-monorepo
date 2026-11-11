@@ -16,6 +16,7 @@ import type { OpenOn } from "@/lib/bindings"
 const COLOR_SCHEME_KEY = "theme"
 const LANGUAGE_KEY = "language"
 const SIDEBAR_WIDTH_KEY = "sidebarWidth"
+const SIDEBAR_COLLAPSED_KEY = "sidebarCollapsed"
 const DOCUMENT_PANEL_WIDTH_KEY = "documentPanelWidth"
 const ACTIVITY_PANEL_OPEN_KEY = "activityPanelOpen"
 const FIRST_RUN_DONE_KEY = "firstRunDone"
@@ -39,6 +40,7 @@ export type MirroredPreferences = {
 	colorScheme: ColorScheme
 	language: Language | null
 	sidebarWidth: number | null
+	sidebarCollapsed: boolean
 	activityPanelOpen: boolean
 	firstRunDone: boolean
 	lastSpaceId: string | null
@@ -110,6 +112,7 @@ export const mirrorOf = (record: UserPreferences): MirroredPreferences => ({
 	colorScheme: colorSchemeOf(record.colorScheme),
 	language: languageOf(record.language),
 	sidebarWidth: record.sidebarWidth ?? null,
+	sidebarCollapsed: record.sidebarCollapsed === true,
 	activityPanelOpen: record.activityPanelOpen === true,
 	firstRunDone: record.firstRunDone === true,
 	lastSpaceId: record.lastSpaceId ?? null,
@@ -124,6 +127,7 @@ export const sameMirror = (
 	one.colorScheme === other.colorScheme &&
 	one.language === other.language &&
 	one.sidebarWidth === other.sidebarWidth &&
+	one.sidebarCollapsed === other.sidebarCollapsed &&
 	one.activityPanelOpen === other.activityPanelOpen &&
 	one.firstRunDone === other.firstRunDone &&
 	one.lastSpaceId === other.lastSpaceId &&
@@ -134,6 +138,7 @@ export const readMirror = (): MirroredPreferences => ({
 	colorScheme: colorSchemeOf(localStorage.getItem(COLOR_SCHEME_KEY)),
 	language: languageOf(localStorage.getItem(LANGUAGE_KEY)),
 	sidebarWidth: widthOf(localStorage.getItem(SIDEBAR_WIDTH_KEY)),
+	sidebarCollapsed: localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === SWITCH_ON,
 	activityPanelOpen:
 		localStorage.getItem(ACTIVITY_PANEL_OPEN_KEY) === SWITCH_ON,
 	firstRunDone: localStorage.getItem(FIRST_RUN_DONE_KEY) === SWITCH_ON,
@@ -158,6 +163,10 @@ export const writeMirror = (mirrored: MirroredPreferences) => {
 	keep(LANGUAGE_KEY, mirrored.language)
 	keep(SIDEBAR_WIDTH_KEY, mirrored.sidebarWidth)
 	localStorage.setItem(
+		SIDEBAR_COLLAPSED_KEY,
+		mirrored.sidebarCollapsed ? SWITCH_ON : SWITCH_OFF,
+	)
+	localStorage.setItem(
 		ACTIVITY_PANEL_OPEN_KEY,
 		mirrored.activityPanelOpen ? SWITCH_ON : SWITCH_OFF,
 	)
@@ -175,6 +184,7 @@ const MIRROR_KEYS = [
 	COLOR_SCHEME_KEY,
 	LANGUAGE_KEY,
 	SIDEBAR_WIDTH_KEY,
+	SIDEBAR_COLLAPSED_KEY,
 	ACTIVITY_PANEL_OPEN_KEY,
 	FIRST_RUN_DONE_KEY,
 	LAST_SPACE_KEY,

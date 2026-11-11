@@ -17,7 +17,6 @@ import * as Y from "yjs"
 
 import { type Board, zAt } from "@workspace/shared/board/board"
 import { writeBoard } from "@workspace/shared/board/board-doc"
-import type { AppRailPanel } from "@workspace/ui/components/app-rail"
 import {
 	fieldSelectionOf,
 	selectInField,
@@ -387,17 +386,22 @@ const libraryHeading = () =>
 
 const shownThread = () => document.querySelector('[data-slot="chat-layout"]')
 
-const rosterRowOf = (name: string) =>
-	[...document.querySelectorAll('[data-slot="roster-row-name"]')]
-		.find((label) => label.textContent === name)
-		?.closest("button")
+type SidebarEntry = "newConversation" | "missions" | "library"
 
-const railButton = (entry: AppRailPanel) =>
-	screen.getByRole("button", { name: i18n.t(`bots:rail.${entry}`) })
+const SIDEBAR_ENTRIES: SidebarEntry[] = [
+	"newConversation",
+	"missions",
+	"library",
+]
 
-const selectedRailEntries = () =>
-	(["conversations", "missions", "library"] as const).filter(
-		(entry) => railButton(entry).getAttribute("aria-current") === "true",
+const sidebarButton = (entry: SidebarEntry) =>
+	screen.getByRole("button", {
+		name: new RegExp(`^${i18n.t(`bots:rail.${entry}`)}( \\d+)?$`),
+	})
+
+const currentSidebarEntries = () =>
+	SIDEBAR_ENTRIES.filter(
+		(entry) => sidebarButton(entry).getAttribute("aria-current") === "page",
 	)
 
 const currentTab = () => screen.getByRole("tab", { selected: true })
@@ -407,89 +411,77 @@ const tabTitled = (title: string) =>
 		.getAllByRole("tab")
 		.find((tab) => tab.textContent?.includes(title)) as HTMLElement
 
-const showOtherRoom = () => click(rosterRowOf(OTHER_ROOM_TITLE) as HTMLElement)
+type MountedApp = Awaited<ReturnType<typeof mountApp>>
+
+const showOtherRoom = async ({ router, otherRoom }: MountedApp) => {
+	await act(async () =>
+		router.navigate({ to: "/", search: { conversation: otherRoom.id } }),
+	)
+	await settle()
+}
 
 describe("the Library page of a tab", () => {
-	it("opens from the rail as a new entry of the current tab, titled Library, without the conversation list", async () => {
-		const { router } = await mountApp()
-		await showOtherRoom()
+	it("opens from the sidebar as a new entry of the current tab, titled Library, without the conversation", async () => {
+		const app = await mountApp()
+		await showOtherRoom(app)
 		const tabCount = screen.getAllByRole("tab").length
 
-		await click(railButton("library"))
+		await click(sidebarButton("library"))
 
-		expect(router.state.location.pathname).toBe("/library")
-		expect(router.history.canGoBack()).toBe(true)
+		expect(app.router.state.location.pathname).toBe("/library")
+		expect(app.router.history.canGoBack()).toBe(true)
 		expect(screen.getAllByRole("tab")).toHaveLength(tabCount)
 		expect(currentTab().textContent).toContain(LIBRARY_NAME)
 		expect(libraryHeading()).not.toBeNull()
 		expect(shownThread()).toBeNull()
-		expect(rosterRowOf(ROOM_TITLE)).toBeUndefined()
-		expect(rosterRowOf(OTHER_ROOM_TITLE)).toBeUndefined()
-		expect(selectedRailEntries()).toEqual(["library"])
+		expect(currentSidebarEntries()).toEqual(["library"])
 	})
 
 	it("restores the conversation layout and the conversation shown before on Back", async () => {
-		const { router, otherRoom } = await mountApp()
-		await showOtherRoom()
-		await click(railButton("library"))
+		const app = await mountApp()
+		await showOtherRoom(app)
+		await click(sidebarButton("library"))
 
-		await act(async () => router.history.back())
+		await act(async () => app.router.history.back())
 		await settle()
 
 		expect(libraryHeading()).toBeNull()
 		expect(shownThread()).not.toBeNull()
-		expect(rosterRowOf(ROOM_TITLE)).toBeInstanceOf(HTMLElement)
-		expect(router.state.location.search.conversation).toBe(otherRoom.id)
+		expect(app.router.state.location.search.conversation).toBe(app.otherRoom.id)
 		expect(currentTab().textContent).toContain(OTHER_ROOM_TITLE)
-		expect(selectedRailEntries()).toEqual(["conversations"])
+		expect(currentSidebarEntries()).toEqual([])
 	})
 
-	it("restores the conversation layout and the conversation shown before on Conversations in the rail", async () => {
-		const { router, otherRoom } = await mountApp()
-		await showOtherRoom()
-		await click(railButton("library"))
+	it("leaves for the Missions page on Missions in the sidebar", async () => {
+		const { router } = await mountApp()
+		await click(sidebarButton("library"))
 
-		await click(railButton("conversations"))
-
-		expect(libraryHeading()).toBeNull()
-		expect(shownThread()).not.toBeNull()
-		expect(router.state.location.search.conversation).toBe(otherRoom.id)
-		expect(selectedRailEntries()).toEqual(["conversations"])
-	})
-
-	it("leaves for the missions panel on Missions in the rail", async () => {
-		await mountApp()
-		await click(railButton("library"))
-
-		await click(railButton("missions"))
+		await click(sidebarButton("missions"))
 
 		expect(libraryHeading()).toBeNull()
-		expect(selectedRailEntries()).toEqual(["missions"])
+		expect(router.state.location.pathname).toBe("/missions")
+		expect(currentSidebarEntries()).toEqual(["missions"])
 	})
 
 	it("shows each tab its own page when switching away from the Library and back", async () => {
-		const { router } = await mountApp()
-		await showOtherRoom()
-		await click(railButton("library"))
+		const app = await mountApp()
+		await showOtherRoom(app)
+		await click(sidebarButton("library"))
 
-		await act(async () => router.options.context.tabs.openEmptyTab())
+		await act(async () => app.router.options.context.tabs.openEmptyTab())
 		await settle()
 		expect(libraryHeading()).toBeNull()
-		expect(selectedRailEntries()).toEqual(["conversations"])
+		expect(currentSidebarEntries()).toEqual([])
 
 		await click(tabTitled(LIBRARY_NAME))
 
 		expect(currentTab().textContent).toContain(LIBRARY_NAME)
 		expect(libraryHeading()).not.toBeNull()
-		expect(rosterRowOf(ROOM_TITLE)).toBeUndefined()
-		expect(selectedRailEntries()).toEqual(["library"])
+		expect(currentSidebarEntries()).toEqual(["library"])
 	})
 })
 
-const railSearch = () =>
-	screen.getByRole("button", { name: i18n.t("search:open") })
-
-describe("the search entry of the rail", () => {
+describe("the Search entry of the sidebar", () => {
 	it.each([
 		["the Library", "/library"],
 		["the user settings", "/settings/user"],
@@ -498,12 +490,9 @@ describe("the search entry of the rail", () => {
 		await act(async () => router.navigate({ to: path }))
 		await settle()
 
-		const search = railSearch()
-
-		await click(search)
+		await click(screen.getByRole("button", { name: i18n.t("search:open") }))
 
 		expect(router.state.location.pathname).toBe(path)
-		expect(search.getAttribute("aria-expanded")).toBe("true")
 		expect(screen.getByRole("dialog")).toBeInstanceOf(HTMLElement)
 	})
 })
@@ -1331,7 +1320,7 @@ describe("an image opened from the Library grid", () => {
 		},
 	)
 
-	it("is drawn inside the Library panel, the rail still shown", async () => {
+	it("is drawn inside the Library panel, the sidebar still shown", async () => {
 		const { router } = await mountApp()
 		await showLibraryGrid(router)
 
@@ -1340,7 +1329,7 @@ describe("an image opened from the Library grid", () => {
 		expect(
 			screen.getByRole("dialog").closest('[data-slot="library-panel"]'),
 		).not.toBeNull()
-		expect(libraryRailButton()).toBeInstanceOf(HTMLElement)
+		expect(librarySidebarButton()).toBeInstanceOf(HTMLElement)
 	})
 
 	it("leaves the pinned Library tab on its grid once the image tab is closed", async () => {
@@ -1374,18 +1363,18 @@ describe("an image opened from the Library grid", () => {
 	})
 })
 
-const libraryRailButton = () =>
+const librarySidebarButton = () =>
 	screen.getByRole("button", {
 		name: i18n.t("bots:rail.library"),
 		hidden: true,
 	})
 
-describe("the Library opened from the rail", () => {
+describe("the Library opened from the sidebar", () => {
 	it("shows in the same unpinned tab", async () => {
 		const { router } = await mountApp()
 		const tabsBefore = tabCount()
 
-		await click(libraryRailButton())
+		await click(librarySidebarButton())
 
 		expect(tabCount()).toBe(tabsBefore)
 		expect(selectedTabName()).toContain(LIBRARY_NAME)
@@ -1399,7 +1388,7 @@ describe("the Library opened from the rail", () => {
 		const pinnedHref = currentHrefOfTab(router, pinnedId)
 		const tabsBefore = tabCount()
 
-		await click(libraryRailButton())
+		await click(librarySidebarButton())
 
 		expect(tabCount()).toBe(tabsBefore + 1)
 		expect(selectedTabName()).toContain(LIBRARY_NAME)

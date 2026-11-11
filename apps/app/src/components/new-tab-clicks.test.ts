@@ -20,6 +20,7 @@ import { createFakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import { aMission } from "@/lib/missions/mission-fixtures"
+import type { ThreadSearch } from "@/lib/navigation/thread-search"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 import type { CatalogueChat } from "@/lib/search/catalogue-contract"
 import { readMirror, writeMirror } from "@/lib/user/preferences-mirror"
@@ -127,6 +128,7 @@ const missionIn = (
 		id: missionIdOf(objective),
 		botId,
 		objective,
+		ticket: { ...aMission().ticket, title: objective },
 		originConversationId: room.id,
 		spaceId,
 		threadConversationId: room.id,
@@ -166,7 +168,7 @@ const mountApp = async () => {
 		wrapper: createQueryTestWrapper().wrapper,
 	})
 	await settle()
-	return { botId: bot.id, botName: bot.name, router }
+	return { botId: bot.id, botName: bot.name, roomId: room.id, router }
 }
 
 const missionIdOf = (objective: string) => `mission-${objective}`
@@ -213,16 +215,32 @@ const middleClick = async (target: Element) => {
 	await settle()
 }
 
-const rosterRowOf = (name: string) =>
-	[...document.querySelectorAll('[data-slot="roster-row-name"]')]
-		.find((label) => label.textContent === name)
-		?.closest("button") as HTMLElement
+type MountedApp = Awaited<ReturnType<typeof mountApp>>
+
+const showThread = async ({ router }: MountedApp, search: ThreadSearch) => {
+	await act(async () => router.navigate({ to: "/", search }))
+	await settle()
+}
+
+const openThreadBehind = async (
+	{ router }: MountedApp,
+	search: ThreadSearch,
+) => {
+	await act(async () => {
+		router.options.context.tabs.openInNewTab(
+			router.buildLocation({ to: "/", search }).href,
+		)
+	})
+	await settle()
+}
 
 const showMissions = () =>
 	click(
 		within(
 			screen.getByRole("navigation", { name: i18n.t("bots:rail.label") }),
-		).getByRole("button", { name: i18n.t("bots:rail.missions") }),
+		).getByRole("button", {
+			name: new RegExp(`^${i18n.t("bots:rail.missions")} \\d+$`),
+		}),
 	)
 
 const missionRowOf = (objective: string) =>
@@ -247,7 +265,7 @@ const linkTo = (href: string) => {
 	return anchor
 }
 
-describe("a mission of the sidebar missions list", () => {
+describe("a mission of the Missions page", () => {
 	it("opens in the active tab on a plain click", async () => {
 		const { router } = await mountApp()
 		await showMissions()
@@ -281,8 +299,8 @@ describe("a mission of the sidebar missions list", () => {
 
 describe("a search result", () => {
 	it("opens in the active tab on a plain click", async () => {
-		const { botName } = await mountApp()
-		await click(rosterRowOf(botName))
+		const app = await mountApp()
+		await showThread(app, { bot: app.botId })
 		await openSearch()
 
 		await click(searchResultOf(ROOM_TITLE))
@@ -291,8 +309,9 @@ describe("a search result", () => {
 	})
 
 	it("opens in a new background tab on Cmd-click", async () => {
-		const { botName } = await mountApp()
-		await click(rosterRowOf(botName))
+		const app = await mountApp()
+		const { botName } = app
+		await showThread(app, { bot: app.botId })
 		await openSearch()
 
 		await click(searchResultOf(ROOM_TITLE), { metaKey: true })
@@ -304,8 +323,9 @@ describe("a search result", () => {
 
 describe("an in-app link", () => {
 	it("opens its destination in a new background tab on middle-click and on Cmd-click", async () => {
-		const { botId, botName } = await mountApp()
-		await click(rosterRowOf(ROOM_TITLE))
+		const app = await mountApp()
+		const { botId, botName } = app
+		await showThread(app, { conversation: app.roomId })
 		const settingsName = i18n.t("settings:screen.subtitle.user")
 
 		await middleClick(linkTo(USER_SETTINGS_HREF))
@@ -320,8 +340,9 @@ describe("an in-app link", () => {
 	})
 
 	it("leaves an external link to the external-link path", async () => {
-		const { botName } = await mountApp()
-		await click(rosterRowOf(botName))
+		const app = await mountApp()
+		const { botName } = app
+		await showThread(app, { bot: app.botId })
 		const external = linkTo("https://example.com/notes")
 		const middle = new MouseEvent("auxclick", {
 			bubbles: true,
@@ -398,9 +419,10 @@ describe.each([
 	["the settings screen", openUserSettings],
 ])("a title bar tab on %s", (_, showScreen) => {
 	it("closes on middle-click when unpinned", async () => {
-		const { botName, router } = await mountApp()
-		await click(rosterRowOf(botName))
-		await click(rosterRowOf(ROOM_TITLE), { metaKey: true })
+		const app = await mountApp()
+		const { router } = app
+		await showThread(app, { bot: app.botId })
+		await openThreadBehind(app, { conversation: app.roomId })
 		await showScreen(router)
 		expect(tabsOf()).toHaveLength(2)
 
@@ -410,9 +432,10 @@ describe.each([
 	})
 
 	it("stays open on middle-click when pinned", async () => {
-		const { botName, router } = await mountApp()
-		await click(rosterRowOf(botName))
-		await click(rosterRowOf(ROOM_TITLE), { metaKey: true })
+		const app = await mountApp()
+		const { router } = app
+		await showThread(app, { bot: app.botId })
+		await openThreadBehind(app, { conversation: app.roomId })
 		await showScreen(router)
 		await pressTogglePin()
 

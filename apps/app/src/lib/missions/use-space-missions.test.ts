@@ -7,6 +7,7 @@ import type {
 	MissionChanged,
 	MissionInSpace,
 	MissionSpacePage,
+	MissionState,
 } from "./mission-contract"
 import { aMission, aSpacePage } from "./mission-fixtures"
 import { missionsTransport } from "./missions-transport"
@@ -47,6 +48,46 @@ describe("useSpaceMissions", () => {
 	})
 
 	afterEach(cleanup)
+
+	const entryIn = (id: string, state: MissionState): MissionInSpace => ({
+		mission: aMission({ id, state, stateSeq: 1 }),
+		conversationId: "c-1",
+		conversationTitle: "Crashes",
+	})
+
+	it("counts the missions waiting on the person and in progress as open, and only waiting_human as waiting on the person", async () => {
+		readSpacePage.mockResolvedValue(
+			aSpacePage([
+				entryIn("m-waiting", "waiting_human"),
+				entryIn("m-working", "working"),
+				entryIn("m-bot", "waiting_bot"),
+				entryIn("m-merge", "ready_to_merge"),
+				entryIn("m-working-2", "working"),
+			]),
+		)
+		const { result } = renderHook(() => useSpaceMissions("s-1"), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
+
+		await waitFor(() => expect(result.current.openCount).toBe(5))
+		expect(result.current.waitingOnYou).toHaveLength(1)
+	})
+
+	it("leaves done, failed and closed missions out of the open count", async () => {
+		readSpacePage.mockResolvedValue(
+			aSpacePage([
+				entryIn("m-done", "done"),
+				entryIn("m-failed", "failed"),
+				entryIn("m-closed", "closed"),
+			]),
+		)
+		const { result } = renderHook(() => useSpaceMissions("s-1"), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
+
+		await waitFor(() => expect(result.current.earlierToday).toHaveLength(3))
+		expect(result.current.openCount).toBe(0)
+	})
 
 	it("reads the feed of the space from the local midnight", async () => {
 		const { result } = renderHook(() => useSpaceMissions("s-1"), {
@@ -96,7 +137,7 @@ describe("useSpaceMissions", () => {
 			expect(idsOf(result.current.waitingOnYou)).toEqual(["m-1"]),
 		)
 		expect(result.current.inProgress).toEqual([])
-		expect(result.current.waitingCount).toBe(1)
+		expect(result.current.waitingOnYou).toHaveLength(1)
 		expect(readSpacePage).toHaveBeenCalledTimes(2)
 	})
 
@@ -132,14 +173,14 @@ describe("useSpaceMissions", () => {
 		await waitFor(() =>
 			expect(idsOf(result.current.waitingOnYou)).toEqual(["m-1"]),
 		)
-		expect(result.current.waitingCount).toBe(1)
+		expect(result.current.waitingOnYou).toHaveLength(1)
 
 		livenessChange("working")
 
 		await waitFor(() =>
 			expect(idsOf(result.current.inProgress)).toEqual(["m-1"]),
 		)
-		expect(result.current.waitingCount).toBe(0)
+		expect(result.current.waitingOnYou).toHaveLength(0)
 	})
 
 	it("lists a mission a change closes in earlier today before the reread answers", async () => {
@@ -198,7 +239,7 @@ describe("useSpaceMissions", () => {
 		expect(result.current.waitingOnYou).toEqual([])
 		expect(result.current.inProgress).toEqual([])
 		expect(result.current.earlierToday).toEqual([])
-		expect(result.current.waitingCount).toBe(0)
+		expect(result.current.waitingOnYou).toHaveLength(0)
 	})
 
 	it("drops a read that answers after the space changed", async () => {

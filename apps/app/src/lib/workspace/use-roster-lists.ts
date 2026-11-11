@@ -1,6 +1,7 @@
-import { createElement, useMemo } from "react"
+import { useMemo } from "react"
 
-import { SidebarListSkeleton } from "@workspace/ui/components/sidebar-list-skeleton"
+import type { CollapsedSidebarListStatus } from "@workspace/ui/components/collapsed-sidebar"
+import { useSkeletonTiming } from "@workspace/ui/hooks/use-skeleton-timing"
 
 import { useRosterBots } from "./use-roster-bots"
 import { useRosterBotsBySpace } from "./use-roster-bots-by-space"
@@ -12,11 +13,7 @@ import type { WorkspaceDrivers } from "./use-workspace-drivers"
 
 import { useControllerState } from "../use-controller"
 import { useSharedStructure } from "../use-shared-structure"
-import {
-	toRailSignals,
-	toSpaceBadges,
-	withBadges,
-} from "../chat/sidebar-badges"
+import { toSpaceBadges, withBadges } from "../chat/sidebar-badges"
 import { withNeedsYou } from "../conversations/host-state-rows"
 import { toRosterConversations } from "../conversations/roster-conversations"
 import {
@@ -28,16 +25,28 @@ import {
 	missionsIn,
 	withMissions,
 } from "../missions/missions-model"
-import { useSkeletonSlot } from "../query/use-skeleton-slot"
 
-const ROSTER_SKELETON = createElement(SidebarListSkeleton)
+type RosterListStatusInput = {
+	isSkeletonShown: boolean
+	hasFailedToLoad: boolean
+	isEmpty: boolean
+}
+
+const rosterListStatusOf = ({
+	isSkeletonShown,
+	hasFailedToLoad,
+	isEmpty,
+}: RosterListStatusInput): CollapsedSidebarListStatus => {
+	if (isSkeletonShown) return "loading"
+	if (hasFailedToLoad && isEmpty) return "failed"
+	return "ready"
+}
 
 type RosterListsInput = {
 	core: WorkspaceCore
 	drivers: WorkspaceDrivers
 	rosterLines: RosterLines
 	rosterView: RosterView
-	waitingMissionCount: number
 }
 
 export const useRosterLists = ({
@@ -45,7 +54,6 @@ export const useRosterLists = ({
 	drivers,
 	rosterLines,
 	rosterView,
-	waitingMissionCount,
 }: RosterListsInput) => {
 	const { conversationRuntimes, roster } = core
 	const { badges, conversationBadges } = drivers
@@ -193,29 +201,26 @@ export const useRosterLists = ({
 		[rosterBotsBySpace, rosterConversationsBySpace],
 	)
 
-	const rosterSkeleton = useSkeletonSlot(
-		roster.state.isRosterPending,
-		ROSTER_SKELETON,
-	)
-
-	const railSignals = useMemo(
-		() =>
-			toRailSignals({
-				conversationsBySpaceId: rosterConversationsBySpace,
-				waitingMissionCount,
-				spaceId: rosteredSpaceId,
-			}),
-		[rosterConversationsBySpace, waitingMissionCount, rosteredSpaceId],
-	)
+	const rosterSkeletonPhase = useSkeletonTiming(roster.state.isRosterPending)
+	const isSkeletonShown = rosterSkeletonPhase === "skeleton"
+	const listRead = {
+		hasFailedToLoad: roster.state.hasFailedToLoad,
+		isEmpty: rosterConversations.length === 0,
+	}
+	const rosterListStatus = rosterListStatusOf({ ...listRead, isSkeletonShown })
+	const expandedListStatus = rosterListStatusOf({
+		...listRead,
+		isSkeletonShown: isSkeletonShown || roster.state.isRosterPending,
+	})
 
 	return {
 		badgesBySpaceId,
-		railSignals,
+		expandedListStatus,
 		rosterBots,
 		rosterBotsBySpace,
 		rosterConversations,
 		rosterConversationsBySpace,
-		rosterSkeleton,
+		rosterListStatus,
 	}
 }
 

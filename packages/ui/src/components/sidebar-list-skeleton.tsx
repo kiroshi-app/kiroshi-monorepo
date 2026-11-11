@@ -1,119 +1,117 @@
-import { Fragment } from "react"
-
-import { NAVIGATION_ROW_GAP } from "@workspace/ui/components/app-rail"
-import { RosterZoneSeparator } from "@workspace/ui/components/app-sidebar-roster-parts"
-import {
-	ListSkeleton,
-	SkeletonBar,
-	SkeletonHexagon,
-	SkeletonRow,
-	type SkeletonRowProps,
-} from "@workspace/ui/components/list-skeleton"
+import { ROW_ICON_SIDE } from "@workspace/ui/components/app-sidebar-conversation-row"
+import { ListSkeleton } from "@workspace/ui/components/list-skeleton"
+import { SIDEBAR_ROW_INSET } from "@workspace/ui/components/sidebar-menu-row"
 import { cn } from "@workspace/ui/lib/utils"
 
-type SidebarRowKind = "agent" | "conversation"
-
-type SidebarRowShape = Pick<
-	SkeletonRowProps,
-	"titleClassName" | "stampClassName" | "previewClassName"
-> & { kind: SidebarRowKind }
-
-const AGENT_TITLE_BADGE = (
-	<SkeletonBar className="h-3.5 w-14 shrink-0" isFaint />
-)
-
-const AGENT_PILE = (
-	<span
-		className="relative block h-4 w-6 shrink-0"
-		data-slot="skeleton-agent-pile"
-	>
-		<SkeletonHexagon className="absolute start-0 top-px size-3.5" />
-		<SkeletonHexagon className="absolute start-2.5 top-px size-3.5" />
-	</span>
-)
-
-const SIDEBAR_ROW_CYCLE: SidebarRowShape[] = [
-	{
-		kind: "conversation",
-		titleClassName: "w-16.5",
-		stampClassName: "w-7.5",
-		previewClassName: "w-43",
-	},
-	{
-		kind: "agent",
-		titleClassName: "w-12",
-		stampClassName: "w-6.5",
-		previewClassName: "w-34.5",
-	},
-	{
-		kind: "agent",
-		titleClassName: "w-18.5",
-		stampClassName: "w-8.5",
-		previewClassName: "w-46",
-	},
-	{
-		kind: "conversation",
-		titleClassName: "w-13.5",
-		stampClassName: "w-6.5",
-		previewClassName: "w-31.5",
-	},
-	{
-		kind: "agent",
-		titleClassName: "w-15.5",
-		stampClassName: "w-7.5",
-		previewClassName: "w-40",
-	},
-	{
-		kind: "conversation",
-		titleClassName: "w-11",
-		stampClassName: "w-6",
-		previewClassName: "w-36.5",
-	},
-]
-
-const PINNED_ROW_COUNT = 2
-
-const sidebarRowAt = (index: number) => {
-	const { kind, ...widths } =
-		SIDEBAR_ROW_CYCLE[index % SIDEBAR_ROW_CYCLE.length]
-
-	return (
-		<SkeletonRow
-			hexagonClassName="size-10"
-			previewTrailing={kind === "conversation" ? AGENT_PILE : undefined}
-			titleTrailing={kind === "agent" ? AGENT_TITLE_BADGE : undefined}
-			{...widths}
-		/>
-	)
+type SidebarRowWidths = {
+	title: string
+	preview: string
 }
 
-const recentRowAt = (index: number) => sidebarRowAt(PINNED_ROW_COUNT + index)
+const SIDEBAR_ROW_CYCLE: SidebarRowWidths[] = [
+	{ title: "w-35", preview: "w-45" },
+	{ title: "w-27.5", preview: "w-40" },
+	{ title: "w-37.5", preview: "w-47.5" },
+	{ title: "w-30", preview: "w-42.5" },
+	{ title: "w-34", preview: "w-37.5" },
+	{ title: "w-25", preview: "w-44" },
+	{ title: "w-36", preview: "w-41" },
+	{ title: "w-31.5", preview: "w-46" },
+	{ title: "w-28", preview: "w-39.5" },
+	{ title: "w-34.5", preview: "w-43" },
+]
 
-const PINNED_ROW_KEYS = Array.from(
-	{ length: PINNED_ROW_COUNT },
-	(_, index) => `pinned-${index}`,
+const LIST_END_ROW_WIDTHS: SidebarRowWidths[] = [
+	{ title: "w-35", preview: "w-45" },
+	{ title: "w-28", preview: "w-41" },
+]
+
+const ROW_GAP = "gap-0.5"
+
+const SECTION_GAP = "gap-3"
+
+const SECTION = cn("flex flex-col", ROW_GAP)
+
+const BAR = "block max-w-full rounded"
+
+type SkeletonSectionHeaderProps = {
+	width: string
+}
+
+const SkeletonSectionHeader = ({ width }: SkeletonSectionHeaderProps) => (
+	<div
+		className={cn("flex shrink-0", SIDEBAR_ROW_INSET)}
+		data-slot="sidebar-list-skeleton-header"
+	>
+		<span className="flex h-4 min-w-0 flex-1 items-center">
+			<span className={cn(BAR, "h-3 bg-foreground/7", width)} />
+		</span>
+	</div>
 )
+
+const SidebarSkeletonRow = ({ title, preview }: SidebarRowWidths) => (
+	<div
+		className={cn(
+			"flex min-h-13 shrink-0 items-center gap-2.5",
+			SIDEBAR_ROW_INSET,
+		)}
+		data-slot="sidebar-list-skeleton-row"
+	>
+		<span
+			className="shrink-0 rounded-control bg-foreground/7"
+			style={{ width: ROW_ICON_SIDE, height: ROW_ICON_SIDE }}
+		/>
+		<span className="flex min-w-0 flex-1 flex-col gap-2">
+			<span className={cn(BAR, "h-3 bg-foreground/7", title)} />
+			<span className={cn(BAR, "h-2.5 bg-foreground/4", preview)} />
+		</span>
+	</div>
+)
+
+const sidebarRowAt = (index: number) => (
+	<SidebarSkeletonRow
+		{...SIDEBAR_ROW_CYCLE[index % SIDEBAR_ROW_CYCLE.length]}
+	/>
+)
+
+const ROWS_BEFORE_SECOND_HEADER = 2
+
+const rowAfterSecondHeaderAt = (index: number) =>
+	sidebarRowAt(ROWS_BEFORE_SECOND_HEADER + index)
 
 const SidebarListSkeleton = () => (
 	<div
 		aria-hidden="true"
-		className="flex size-full animate-pulse flex-col gap-1 overflow-hidden motion-reduce:animate-none"
+		className={cn(
+			"flex size-full animate-pulse flex-col overflow-hidden motion-reduce:animate-none",
+			SECTION_GAP,
+		)}
 		data-slot="sidebar-list-skeleton"
 	>
-		<div
-			className={cn("flex shrink-0 flex-col", NAVIGATION_ROW_GAP)}
-			data-slot="sidebar-list-skeleton-pinned"
-		>
-			{PINNED_ROW_KEYS.map((rowKey, index) => (
-				<Fragment key={rowKey}>{sidebarRowAt(index)}</Fragment>
-			))}
+		<div className={cn(SECTION, "shrink-0")}>
+			<SkeletonSectionHeader width="w-13" />
+			{sidebarRowAt(0)}
+			{sidebarRowAt(1)}
 		</div>
-		<RosterZoneSeparator />
-		<ListSkeleton
-			className={cn("min-h-0 flex-1 animate-none", NAVIGATION_ROW_GAP)}
-			row={recentRowAt}
-		/>
+		<div className={cn(SECTION, "min-h-0 flex-1")}>
+			<SkeletonSectionHeader width="w-22" />
+			<ListSkeleton
+				className={cn("min-h-0 flex-1 animate-none", ROW_GAP)}
+				row={rowAfterSecondHeaderAt}
+			/>
+		</div>
 	</div>
 )
 
-export { SidebarListSkeleton, sidebarRowAt }
+const SIDEBAR_LIST_END_ROWS = (
+	<div
+		className={cn("flex flex-col", ROW_GAP)}
+		data-slot="sidebar-list-end-rows"
+	>
+		{LIST_END_ROW_WIDTHS.map((widths) => (
+			<SidebarSkeletonRow key={widths.title} {...widths} />
+		))}
+	</div>
+)
+
+export { SIDEBAR_LIST_END_ROWS, SidebarListSkeleton }

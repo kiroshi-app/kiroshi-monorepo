@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { createElement } from "react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import "@workspace/ui/lib/i18n"
+import { i18n } from "@workspace/ui/lib/i18n"
 
 import { newBotIdentity } from "@/lib/bots/bot-settings"
 import type { FakeChatDriver } from "@/lib/chat/fake-driver"
@@ -13,6 +13,8 @@ import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-s
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import { type FakeLayout, fakeLayout } from "@/lib/perf/fake-layout"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
+import { rosterRowOf } from "@/lib/sidebar/sidebar-fixtures"
+import { readMirror, writeMirror } from "@/lib/user/preferences-mirror"
 
 const harness = vi.hoisted(
 	(): { store: TranscriptStore | null; driver: FakeChatDriver | null } => ({
@@ -53,16 +55,6 @@ const settle = async (ms: number) => {
 	})
 }
 
-const rowFor = (name: string) => {
-	const labels = [...document.querySelectorAll('[data-slot="roster-row-name"]')]
-	const row = labels.find((label) => label.textContent === name)
-	const button = row?.closest("button")
-	if (!button) {
-		throw new Error(`no roster row for ${name}`)
-	}
-	return button
-}
-
 const openedThreadHeader = () =>
 	document.querySelector('[data-slot="app-header"]')?.textContent ?? ""
 
@@ -70,7 +62,11 @@ const seedRoster = async (store: TranscriptStore) => {
 	const [space] = await store.spaces()
 	for (const name of [OPENED, ELSEWHERE]) {
 		const held = await store.bots(space.id)
-		await store.createBot({ ...newBotIdentity(held), name }, space.id)
+		const bot = await store.createBot(
+			{ ...newBotIdentity(held), name },
+			space.id,
+		)
+		await store.mainChat(bot.id, space.id)
 	}
 	const [firstBot] = await store.bots(space.id)
 	await store.createConversation({
@@ -82,6 +78,7 @@ const seedRoster = async (store: TranscriptStore) => {
 }
 
 const mountApp = async () => {
+	writeMirror({ ...readMirror(), firstRunDone: true })
 	layout = fakeLayout()
 	const store = createFakeTranscriptStore()
 	harness.store = store
@@ -93,18 +90,20 @@ const mountApp = async () => {
 
 const openThread = async (name: string) => {
 	await act(async () => {
-		fireEvent.click(rowFor(name))
+		fireEvent.click(rosterRowOf(name))
 	})
 	await settle(MOUNT_MS)
 }
 
 const openSettingsFromContextMenu = async (name: string) => {
 	await act(async () => {
-		fireEvent.contextMenu(rowFor(name))
+		fireEvent.contextMenu(rosterRowOf(name))
 	})
 	await settle(MOUNT_MS)
 	await act(async () => {
-		fireEvent.click(screen.getByRole("menuitem", { name: "Open settings" }))
+		fireEvent.click(
+			screen.getByRole("menuitem", { name: i18n.t("bots:roster.settings") }),
+		)
 	})
 	await settle(MOUNT_MS)
 }
@@ -114,6 +113,7 @@ describe("settings opened from the sidebar", () => {
 		layout?.restore()
 		layout = null
 		cleanup()
+		localStorage.clear()
 		vi.useRealTimers()
 	})
 

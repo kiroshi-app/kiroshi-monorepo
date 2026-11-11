@@ -4,6 +4,7 @@ import { expect, fireEvent, fn, screen, waitFor, within } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import {
 	A11Y_FLOATING_FOCUS_GUARDS,
+	FRAME_POLL,
 	settled,
 	slotIn,
 } from "@workspace/storybook/story-utils"
@@ -76,12 +77,14 @@ type DescriptorPlayContext = {
 const glyphOf = (root: ParentNode) =>
 	Array.from(root.querySelectorAll("path"), (path) => path.getAttribute("d"))
 
-const glyphNamedBy = ({ icon }: TitleBarTabDescriptor) => {
-	const Glyph = Icons[icon]
+const glyphDrawnBy = (Glyph: (typeof Icons)[keyof typeof Icons]) => {
 	const template = document.createElement("template")
 	template.innerHTML = renderToStaticMarkup(<Glyph />)
 	return glyphOf(template.content)
 }
+
+const glyphNamedBy = ({ icon }: TitleBarTabDescriptor) =>
+	glyphDrawnBy(Icons[icon])
 
 const expectIconOf = async (
 	owner: HTMLElement,
@@ -274,5 +277,67 @@ export const LongNameTruncated = meta.story({
 		})
 		await expect(row).toHaveTextContent(MOODBOARD.name)
 		await expectIconOf(row, MOODBOARD, ICON_SLOT)
+	},
+})
+
+export const SearchAfterForward = meta.story({
+	args: {
+		canGoBack: true,
+		canGoForward: true,
+		onToggleSidebar: fn(),
+		onGoBack: fn(),
+		onGoForward: fn(),
+		onOpenSearch: fn(),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The history cluster with Search, as the workspace mounts it. Check the order reads Sidebar toggle, Back, Forward, Search, that Search draws the Search glyph at the size and on the button of Back and Forward, carries Search as its name and its tooltip, and that a click opens the search once.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const history = within(slotIn(canvasElement, "title-bar-history"))
+		const buttons = history.getAllByRole("button")
+		await expect(buttons.map((button) => button.ariaLabel)).toEqual([
+			"Toggle sidebar",
+			"Back",
+			"Forward",
+			"Search",
+		])
+		const [, , forward, search] = buttons as [
+			HTMLElement,
+			HTMLElement,
+			HTMLElement,
+			HTMLElement,
+		]
+		await expect(search).toHaveAccessibleName("Search")
+		await expect(search.className).toBe(forward.className)
+		await expect(boxOf(search).width).toBe(boxOf(forward).width)
+		const glyph = search.querySelector("svg")
+		if (!glyph) throw new Error("Search draws no glyph")
+		await expect(boxOf(glyph).width).toBe(GLYPH_ICON)
+		await expect(glyphOf(glyph)).toEqual(glyphDrawnBy(Icons.Search))
+
+		await userEvent.click(search)
+		await expect(args.onOpenSearch).toHaveBeenCalledOnce()
+		await userEvent.hover(search)
+		await waitFor(
+			() =>
+				expect(document.querySelector('[role="tooltip"]')).toHaveTextContent(
+					"Search",
+				),
+			FRAME_POLL,
+		)
+	},
+})
+
+export const NoSearchWithoutHandler = meta.story({
+	args: { onToggleSidebar: fn() },
+	play: async ({ canvasElement }) => {
+		const history = within(slotIn(canvasElement, "title-bar-history"))
+		await expect(history.getAllByRole("button")).toHaveLength(3)
+		await expect(history.queryByRole("button", { name: "Search" })).toBeNull()
 	},
 })

@@ -30,6 +30,8 @@
 	--drop-pill-shadow: 0 8px 20px rgb(0 0 0 / 0.18);
 	--lifted-tile-shadow:
 		0 2px 4px rgb(0 0 0 / 0.12), 0 20px 40px rgb(0 0 0 / 0.22);
+	--rail-tooltip-shadow:
+		0 0 0 1px var(--title-bar-menu-border), 0 8px 24px rgb(0 0 0 / 0.12);
 	--selection-toolbar-border: oklch(0 0 0 / 8%);
 	--selection-toolbar-highlight: oklch(0 0 0 / 6%);
 	--selection-toolbar-shadow:
@@ -53,6 +55,8 @@
 	--drop-pill-shadow: 0 8px 20px rgb(0 0 0 / 0.4);
 	--lifted-tile-shadow:
 		0 2px 4px rgb(0 0 0 / 0.4), 0 20px 40px rgb(0 0 0 / 0.6);
+	--rail-tooltip-shadow:
+		0 0 0 1px var(--title-bar-menu-border), 0 8px 24px rgb(0 0 0 / 0.5);
 	--selection-toolbar-border: oklch(1 0 0 / 10%);
 	--selection-toolbar-highlight: oklch(1 0 0 / 8%);
 	--selection-toolbar-shadow:
@@ -74,6 +78,7 @@
 	--shadow-drop-pill: var(--drop-pill-shadow);
 	--shadow-lifted-tile: var(--lifted-tile-shadow);
 	--shadow-selection-toolbar: var(--selection-toolbar-shadow);
+	--shadow-rail-tooltip: var(--rail-tooltip-shadow);
 	--color-selection-toolbar-border: var(--selection-toolbar-border);
 	--color-selection-toolbar-highlight: var(--selection-toolbar-highlight);
 	--color-primary: var(--primary);
@@ -101,7 +106,18 @@
 	--color-shell-border: var(--shell-border);
 	--color-shell-divider: var(--shell-divider);
 	--color-rail-item-selected: var(--rail-item-selected);
+	--color-rail-item-selected-hover: var(--rail-item-selected-hover);
 	--color-rail-avatar: var(--rail-avatar);
+	--color-sidebar-person-foreground: var(--sidebar-person-foreground);
+	--color-space-dot: var(--space-dot);
+	--color-space-offline: var(--space-offline);
+	--color-rail-section-placeholder: var(--rail-section-placeholder);
+	--color-update-row: var(--update-row);
+	--color-update-track: var(--update-track);
+	--color-update-blocked-foreground: var(--update-blocked-foreground);
+	--color-update-failed: var(--update-failed);
+	--color-update-failed-surface: var(--update-failed-surface);
+	--color-update-failed-foreground: var(--update-failed-foreground);
 	--color-person-avatar: var(--person-avatar);
 	--color-input: var(--input);
 	--color-ring: var(--ring);
@@ -110,6 +126,10 @@
 	--color-bot-badge-failed: var(--bot-badge-failed);
 	--color-warning: var(--warning);
 	--color-warning-foreground: var(--warning-foreground);
+	--color-mission-mark-cut-out: var(--mission-mark-cut-out);
+	--color-mission-glyph-waiting: var(--mission-glyph-waiting);
+	--color-mission-glyph-failed: var(--mission-glyph-failed);
+	--color-mission-glyph-ready: var(--mission-glyph-ready);
 	--color-success: var(--success);
 	--color-state-connected: var(--state-connected);
 	--color-state-needs-authorization: var(--state-needs-authorization);
@@ -135,6 +155,13 @@
 	--color-disabled-foreground: var(--disabled-foreground);
 	--color-on-foreground: var(--on-foreground);
 	--color-waiting-foreground: var(--waiting-foreground);
+	--color-mission-list-faint-foreground: var(--mission-list-faint-foreground);
+	--color-mission-list-group: var(--mission-list-group);
+	--color-mission-list-divider: var(--mission-list-divider);
+	--color-mission-list-hover: var(--mission-list-hover);
+	--color-mission-chip-foreground: var(--mission-chip-foreground);
+	--color-mission-glyph-success: var(--mission-glyph-success);
+	--color-mission-glyph-failure: var(--mission-glyph-failure);
 	--color-prompt-surface: var(--prompt-surface);
 	--color-prompt-surface-inert: var(--prompt-surface-inert);
 	--color-prompt-menu: var(--prompt-menu);

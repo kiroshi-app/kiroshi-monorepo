@@ -25,6 +25,7 @@ import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-s
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import { aMission } from "@/lib/missions/mission-fixtures"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
+import { rosterRowOf, sidebarItemOf } from "@/lib/sidebar/sidebar-fixtures"
 import { readMirror, writeMirror } from "@/lib/user/preferences-mirror"
 
 type Harness = {
@@ -259,6 +260,7 @@ const seed = async (store: TranscriptStore): Promise<Seeded> => {
 			mission: aMission({
 				botId: atlas.id,
 				objective: MISSION_OBJECTIVE,
+				ticket: { ...aMission().ticket, title: MISSION_OBJECTIVE },
 				originConversationId: room.id,
 				spaceId: space.id,
 				threadConversationId: missionThread.id,
@@ -327,16 +329,10 @@ const openContextMenuOn = async (target: Element) => {
 const chooseInMenu = async (label: string) =>
 	press(screen.getByRole("menuitem", { name: label }))
 
-const rosterRowOf = (name: string) => {
-	const label = [
-		...document.querySelectorAll('[data-slot="roster-row-name"]'),
-	].find((row) => row.textContent === name)
-	const button = label?.closest("button")
-	if (!button) throw new Error(`no roster row for ${name}`)
-	return button
-}
+const collapseSidebar = () =>
+	writeMirror({ ...readMirror(), sidebarCollapsed: true })
 
-const openRow = (name: string) => press(rosterRowOf(name))
+const openRow = (name: string) => press(sidebarItemOf(name))
 
 const turnOf = (text: string) => {
 	const turn = screen.getByText(text).closest('[data-slot="message"]')
@@ -361,28 +357,18 @@ const mentionPillOf = (text: string) => {
 const railOf = () =>
 	screen.getByRole("navigation", { name: i18n.t("bots:rail.label") })
 
-const spacesLogoOf = () =>
-	railOf()
-		.querySelector('[data-slot="space-avatar"]')
-		?.closest("button") as HTMLElement
+const currentSpaceRowOf = () =>
+	within(settingsMenuOf() as HTMLElement)
+		.getAllByRole("button")
+		.find((row) => row.getAttribute("aria-current") === "true") as HTMLElement
 
 const openSpaceSettingsByRail = async () => {
-	await press(spacesLogoOf())
-	await press(
-		screen.getByRole("menuitem", { name: i18n.t("bots:rail.spaceSettings") }),
-	)
+	await press(avatarOf())
+	await press(currentSpaceRowOf())
 }
 
 const avatarOf = () =>
 	within(railOf()).getAllByRole("button").at(-1) as HTMLElement
-
-const conversationsEntryOf = () =>
-	within(railOf()).getByRole("button", {
-		name: i18n.t("bots:rail.conversations"),
-	})
-
-const isMarked = (railItem: HTMLElement) =>
-	railItem.getAttribute("aria-current") === "true"
 
 const settingsMenuOf = () =>
 	screen.queryByRole("navigation", { name: i18n.t("settings:screen.menu") })
@@ -459,6 +445,11 @@ const openCompanionsOfSpace = async () => {
 	await press(menuEntryOf(new RegExp(`^${i18n.t("settings:rail.agents")}`)))
 }
 
+const openCompanionScreenOf = async (name: string) => {
+	await openCompanionsOfSpace()
+	await press(cardOf(name))
+}
+
 const installOf = (
 	atlasId: string,
 	atlasThreadId: string,
@@ -476,10 +467,17 @@ const installOf = (
 })
 
 const missionsEntryOf = () =>
-	within(railOf()).getByRole("button", { name: i18n.t("bots:rail.missions") })
+	within(railOf()).getByRole("button", {
+		name: new RegExp(`^${i18n.t("bots:rail.missions")} \\d+$`),
+	})
 
-const missionCardOf = (objective: string) =>
-	screen.getByRole("button", { name: new RegExp(objective) })
+const missionCardOf = (objective: string) => {
+	const card = screen
+		.getAllByRole("button", { name: new RegExp(objective) })
+		.find((button) => button.getAttribute("data-slot") !== "mission-capsule")
+	if (!card) throw new Error(`no mission card for ${objective}`)
+	return card
+}
 
 const raisedNoticeTitles = () =>
 	[...document.querySelectorAll('[data-slot="toast-title"]')].map(
@@ -546,7 +544,6 @@ it("opens the screen of a pressed card with Back to Companions, and Back returns
 		...ON_GENERAL,
 		back: i18n.t("settings:screen.backToAgents"),
 	})
-	expect(isMarked(spacesLogoOf())).toBe(true)
 
 	await pressBack(i18n.t("settings:screen.backToAgents"))
 
@@ -604,6 +601,7 @@ it("leaves the Danger zone for the entry chosen after a Delete", async () => {
 })
 
 it("opens the companion screen on General from the Settings of a message avatar menu", async () => {
+	collapseSidebar()
 	await mountApp()
 	await openRow(ROOM)
 
@@ -614,6 +612,7 @@ it("opens the companion screen on General from the Settings of a message avatar 
 })
 
 it("opens the companion screen on General from the Settings of a mention pill menu", async () => {
+	collapseSidebar()
 	await mountApp()
 	await openRow(ROOM)
 
@@ -624,6 +623,7 @@ it("opens the companion screen on General from the Settings of a mention pill me
 })
 
 it("opens the companion screen on General from the identity button of the solo header", async () => {
+	collapseSidebar()
 	await mountApp()
 	await openRow(ATLAS)
 
@@ -637,6 +637,7 @@ it("opens the companion screen on General from the identity button of the solo h
 })
 
 it("opens the companion screen on Applications from an application install card", async () => {
+	collapseSidebar()
 	const seeded = await mountApp()
 	harness.installs = [
 		installOf(seeded.atlasId, seeded.atlasThreadId, { kind: "nothing" }),
@@ -652,6 +653,7 @@ it("opens the companion screen on Applications from an application install card"
 })
 
 it("opens the companion screen on the application a deep link names", async () => {
+	collapseSidebar()
 	const seeded = await mountApp()
 	harness.installs = [
 		installOf(seeded.atlasId, seeded.atlasThreadId, {
@@ -678,23 +680,22 @@ it("opens the companion screen on the application a deep link names", async () =
 })
 
 it("brings back the open conversation and its draft on Back to conversations", async () => {
+	collapseSidebar()
 	await mountApp()
 	await openRow(ROOM)
 	fireEvent.change(composerOf(), { target: { value: DRAFT } })
-	await openContextMenuOn(rosterRowOf(ATLAS))
+	await openContextMenuOn(authorAvatarOf(ROOM_POST))
 	await chooseInMenu(i18n.t("bots:roster.settings"))
 
 	await pressBack(i18n.t("settings:screen.back"))
 
 	expect(settingsMenuOf()).toBeNull()
 	expect(composerOf().value).toBe(DRAFT)
-	expect(isMarked(conversationsEntryOf())).toBe(true)
 })
 
 it("keeps the rail on the companion screen, and the Space settings replace it", async () => {
 	await mountApp()
-	await openContextMenuOn(rosterRowOf(ATLAS))
-	await chooseInMenu(i18n.t("bots:roster.settings"))
+	await openCompanionScreenOf(ATLAS)
 
 	expect(railOf()).toBeTruthy()
 	await openSpaceSettingsByRail()
@@ -707,8 +708,7 @@ it("keeps the rail on the companion screen, and the Space settings replace it", 
 
 it("replaces the companion screen with the User settings from the rail avatar", async () => {
 	await mountApp()
-	await openContextMenuOn(rosterRowOf(ATLAS))
-	await chooseInMenu(i18n.t("bots:roster.settings"))
+	await openCompanionScreenOf(ATLAS)
 
 	await press(avatarOf())
 
@@ -720,8 +720,8 @@ it("replaces the companion screen with the User settings from the rail avatar", 
 
 it("keeps the companion screen open on the Danger zone and raises a notice when the deletion fails", async () => {
 	await mountApp(refusingDeletion)
-	await openContextMenuOn(rosterRowOf(ATLAS))
-	await chooseInMenu(i18n.t("bots:roster.delete"))
+	await openCompanionScreenOf(ATLAS)
+	await press(menuEntryOf(i18n.t("bots:dialog.tab.danger")))
 
 	await deleteFromDangerZone()
 
@@ -736,6 +736,7 @@ it("keeps the companion screen open on the Danger zone and raises a notice when 
 	expect(companionScreenOf(ATLAS)).toEqual({
 		...ON_GENERAL,
 		entry: i18n.t("bots:dialog.tab.danger"),
+		back: i18n.t("settings:screen.backToAgents"),
 	})
 })
 
@@ -758,16 +759,17 @@ it("brings back the open mission thread and its draft on Back to conversations",
 
 it("returns to the conversations when the companion whose settings are open no longer exists", async () => {
 	const seeded = await mountApp()
-	await openContextMenuOn(rosterRowOf(ATLAS))
-	await chooseInMenu(i18n.t("bots:roster.settings"))
-	expect(companionScreenOf(ATLAS)).toEqual(ON_GENERAL)
+	await openCompanionScreenOf(ATLAS)
+	expect(companionScreenOf(ATLAS)).toEqual({
+		...ON_GENERAL,
+		back: i18n.t("settings:screen.backToAgents"),
+	})
 
 	await harness.store?.deleteBot(seeded.atlasId)
 	await act(async () => harness.announceArrival())
 	await settle()
 
 	expect(settingsMenuOf()).toBeNull()
-	expect(rosterRowOf(NOVA)).toBeTruthy()
 })
 
 const RUNTIME_MODELS: OfferedModel_Serialize[] = [
@@ -803,8 +805,7 @@ const pickIn = async (select: HTMLElement, option: string) => {
 }
 
 const openRuntimeOf = async (name: string) => {
-	await openContextMenuOn(rosterRowOf(name))
-	await chooseInMenu(i18n.t("bots:roster.settings"))
+	await openCompanionScreenOf(name)
 	await press(menuEntryOf(i18n.t("bots:dialog.tab.runtime")))
 }
 
@@ -846,7 +847,7 @@ it("shows the picked model and effort once the settings are closed and reopened"
 	await openRuntimeOf(ATLAS)
 	await pickSonnetOnHigh()
 
-	await pressBack(i18n.t("settings:screen.back"))
+	await pressBack(i18n.t("settings:screen.backToAgents"))
 	await openRuntimeOf(ATLAS)
 
 	expect(shownRuntime()).toEqual(SONNET_ON_HIGH)
@@ -940,7 +941,7 @@ const holdingRuntimeWrite = (): HeldRuntimeWrite => {
 }
 
 const sendInAtlasThread = async (text: string) => {
-	await pressBack(i18n.t("settings:screen.back"))
+	await pressBack(i18n.t("settings:screen.backToAgents"))
 	await openRow(ATLAS)
 	fireEvent.change(composerOf(), { target: { value: text } })
 	await act(async () => {
@@ -958,6 +959,7 @@ const pickSonnetThenSend = async (held: HeldRuntimeWrite) => {
 }
 
 it("starts the session of a prompt sent during a runtime write only once the write lands, on the picked model", async () => {
+	collapseSidebar()
 	harness.models = RUNTIME_MODELS
 	const held = holdingRuntimeWrite()
 	await mountApp(held.change)
@@ -973,6 +975,7 @@ it("starts the session of a prompt sent during a runtime write only once the wri
 })
 
 it("starts the session on the stored model and raises a notice when the held runtime write is refused", async () => {
+	collapseSidebar()
 	harness.models = RUNTIME_MODELS
 	const held = holdingRuntimeWrite()
 	await mountApp((store) => held.change(refusingUpdates(store)))

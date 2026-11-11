@@ -6,6 +6,7 @@ import type { ComponentPropsWithRef } from "react"
 import { useTranslation } from "react-i18next"
 
 import { missionTicketPlatform } from "@workspace/ui/components/mission-marks"
+import { MissionStateMark } from "@workspace/ui/components/mission-state-mark"
 import { Badge } from "@workspace/ui/components/ui/badge"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -29,7 +30,6 @@ const botBadgeVariants = cva("", {
 			switcher:
 				"group-data-[collapsible=icon]:absolute group-data-[collapsible=icon]:top-1 group-data-[collapsible=icon]:right-1 group-data-[collapsible=icon]:ring-2 group-data-[collapsible=icon]:ring-[var(--badge-ring,var(--color-sidebar))]",
 			row: "absolute end-0 bottom-1",
-			rail: "absolute -end-px -top-px ring-2 ring-background transition-shadow duration-400 ease-out motion-reduce:transition-none",
 		},
 	},
 })
@@ -62,25 +62,20 @@ const BotBadgeDot = ({
 	/>
 )
 
-const BOT_MISSION_STATES = ["waiting", "failed", "ready", "working"] as const
+const BOT_MISSION_STATES = [
+	"waiting",
+	"failed",
+	"ready",
+	"working",
+	"waiting_agent",
+] as const
 
 type BotMissionState = (typeof BOT_MISSION_STATES)[number]
 
 const BOT_MISSION_STRIP =
 	"flex h-6 items-center gap-1.5 rounded-sm bg-foreground/10 px-2 py-1 text-xs"
 
-const BOT_MISSION_DOT_SLOT = "size-1.5 shrink-0"
-
-const botMissionDotVariants = cva(`${BOT_MISSION_DOT_SLOT} rounded-full`, {
-	variants: {
-		state: {
-			waiting: "bg-warning",
-			failed: "bg-bot-badge-failed",
-			ready: "bg-bot-badge-done",
-			working: "bg-muted-foreground/40",
-		},
-	},
-})
+const BOT_MISSION_MARK_SLOT = "size-3 shrink-0"
 
 type BotMissionTicket = {
 	platform: string
@@ -132,15 +127,11 @@ const BotMissionStrip = ({
 				{ticket.title || objective}
 			</span>
 			{isDotDrawn ? (
-				<span
-					aria-hidden="true"
-					className={botMissionDotVariants({ state })}
-					data-slot="bot-mission-dot"
-				/>
+				<MissionStateMark data-slot="bot-mission-dot" state={state} />
 			) : (
 				<span
 					aria-hidden="true"
-					className={BOT_MISSION_DOT_SLOT}
+					className={BOT_MISSION_MARK_SLOT}
 					data-slot="bot-mission-dot-placeholder"
 				/>
 			)}

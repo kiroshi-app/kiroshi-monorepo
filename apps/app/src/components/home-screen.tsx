@@ -313,6 +313,7 @@ type HomeDraftComposerProps = HomeSend & {
 	bots: Bot[]
 	band?: ReactNode
 	onSelectAgent: (botId: string) => void
+	arrivalKey?: string
 }
 
 const HomeDraftComposer = ({
@@ -327,9 +328,11 @@ const HomeDraftComposer = ({
 	onAttach,
 	attachments,
 	onRemoveAttachment,
+	arrivalKey,
 }: HomeDraftComposerProps) => (
 	<HomeComposer
 		agents={bots.map(homeAgentOf)}
+		arrivalKey={arrivalKey}
 		attachments={attachments}
 		band={band}
 		onAttach={onAttach}
@@ -353,6 +356,7 @@ export type HomeEmptyStageProps = HomeSend &
 		isReadOnly: boolean
 		onSelectAgent: (botId: string) => void
 		onDismissBand: () => void
+		arrivalKey?: string
 	}
 
 type ApplicationsBandInput = {
@@ -405,6 +409,7 @@ export const HomeEmptyStage = ({
 	onOpenRoom,
 	onSelectAgent,
 	onDismissBand,
+	arrivalKey,
 	...send
 }: HomeEmptyStageProps) => {
 	const band = useApplicationsBand({
@@ -431,6 +436,7 @@ export const HomeEmptyStage = ({
 						<HomeDraftComposer
 							{...send}
 							agent={agent}
+							arrivalKey={arrivalKey}
 							band={band}
 							bots={bots}
 							onSelectAgent={onSelectAgent}

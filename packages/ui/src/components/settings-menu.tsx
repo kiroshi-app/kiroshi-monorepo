@@ -118,7 +118,7 @@ const SettingsMenuHeader = ({
 )
 
 type SettingsMenuProps = SettingsMenuHeaderProps & {
-	onBack: () => void
+	onBack?: () => void
 	backLabel?: string
 	footer?: ReactNode
 	resizeHandle?: ReactNode
@@ -148,15 +148,17 @@ const SettingsMenu = ({
 			data-companion-page={isCompanionPage ? "" : undefined}
 			data-slot="settings-menu"
 		>
-			<div className={BACK_HEADER} data-slot="settings-menu-back">
-				<button className={BACK} onClick={onBack} type="button">
-					<Icons.Previous
-						aria-hidden="true"
-						className="size-4 shrink-0 stroke-2!"
-					/>
-					{backLabel ?? t("screen.back")}
-				</button>
-			</div>
+			{onBack ? (
+				<div className={BACK_HEADER} data-slot="settings-menu-back">
+					<button className={BACK} onClick={onBack} type="button">
+						<Icons.Previous
+							aria-hidden="true"
+							className="size-4 shrink-0 stroke-2!"
+						/>
+						{backLabel ?? t("screen.back")}
+					</button>
+				</div>
+			) : null}
 			<SettingsMenuHeader avatar={avatar} name={name} subtitle={subtitle} />
 			<div
 				className="-my-0.5 left-column-inset min-h-0 flex-1 overflow-y-auto py-0.5"
