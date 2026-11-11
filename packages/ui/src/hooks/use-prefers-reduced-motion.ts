@@ -17,7 +17,9 @@ const subscribe = (onChange: () => void) => {
 	return () => query.removeEventListener("change", onChange)
 }
 
-const prefersReducedMotion = () => reducedMotionQuery().matches
-
 export const usePrefersReducedMotion = () =>
-	useSyncExternalStore(subscribe, prefersReducedMotion, () => false)
+	useSyncExternalStore(
+		subscribe,
+		() => reducedMotionQuery().matches,
+		() => false,
+	)

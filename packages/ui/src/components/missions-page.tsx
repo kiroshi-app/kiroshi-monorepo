@@ -67,7 +67,7 @@ const LINE = "text-compact leading-4"
 const SMALL_LINE = "text-xs leading-4"
 const FOCUS_RING =
 	"outline-none focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-solid focus-visible:-outline-offset-2"
-const PRESSABLE = "hover:bg-mission-list-hover active:bg-mission-list-pressed"
+const PRESSABLE = "hover:bg-mission-list-hover active:bg-title-bar-highlight"
 
 type MissionsPageAgent = {
 	id: string
@@ -146,7 +146,7 @@ const MissionChip = ({ slot, mark, label, className }: MissionChipProps) => (
 	<span
 		className={cn(
 			MISSIONS_PAGE_FRAMES.chip,
-			"gap-1.5 rounded-full border border-mission-chip-border px-2 text-mission-chip-foreground",
+			"gap-1.5 rounded-full border border-title-bar-chip px-2 text-mission-chip-foreground",
 			SMALL_LINE,
 			className,
 		)}
@@ -214,7 +214,7 @@ const MissionsPageRow = ({
 				<MissionGlyph mark={group.mark} />
 				<span
 					className={cn(
-						"min-w-24 flex-1 truncate text-mission-list-foreground",
+						"min-w-24 flex-1 truncate text-bubble-foreground",
 						LINE,
 						group.key === EMPHASISED_GROUP && "font-medium",
 					)}
@@ -371,7 +371,7 @@ const MissionsPageGroup = ({
 					<MissionGlyph mark={group.mark} />
 					<span
 						className={cn(
-							"min-w-0 truncate font-medium text-mission-list-foreground",
+							"min-w-0 truncate font-medium text-bubble-foreground",
 							LINE,
 						)}
 					>
@@ -540,7 +540,7 @@ const MissionsPage = (props: MissionsPageProps) => {
 		>
 			<header className="flex shrink-0 items-center border-shell-border border-b p-3">
 				<h1
-					className={cn("font-semibold text-mission-list-foreground", LINE)}
+					className={cn("font-semibold text-bubble-foreground", LINE)}
 					id={titleId}
 				>
 					{t("missions.page.title")}
