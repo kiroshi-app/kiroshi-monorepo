@@ -2129,6 +2129,7 @@ navigation-missionspage--loading
 navigation-missionspage--long-text
 navigation-missionspage--narrow
 navigation-missionspage--unfolded
+navigation-missionspage--unfolded-dark
 navigation-missionspanel--complete
 navigation-missionspanel--complete-dark
 navigation-missionspanel--default
@@ -2147,6 +2148,8 @@ navigation-missionspanel--reading-more-under-a-fold
 navigation-missionspanel--row-menu
 navigation-missionspanel--selected-row
 navigation-missionspanel--toggling
+navigation-missionstatemark--every-state-at-both-sizes
+navigation-missionstatemark--every-state-at-both-sizes-dark
 navigation-searchresultrow--activated
 navigation-searchresultrow--active
 navigation-searchresultrow--active-under-pointer

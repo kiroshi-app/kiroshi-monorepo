@@ -127,6 +127,7 @@
 	--color-warning: var(--warning);
 	--color-warning-foreground: var(--warning-foreground);
 	--color-mission-capsule: var(--mission-capsule);
+	--color-mission-mark-cut-out: var(--mission-mark-cut-out);
 	--color-mission-glyph-waiting: var(--mission-glyph-waiting);
 	--color-mission-glyph-failed: var(--mission-glyph-failed);
 	--color-mission-glyph-ready: var(--mission-glyph-ready);
@@ -163,10 +164,7 @@
 	--color-mission-list-pressed: var(--mission-list-pressed);
 	--color-mission-chip-foreground: var(--mission-chip-foreground);
 	--color-mission-chip-border: var(--mission-chip-border);
-	--color-mission-glyph-attention: var(--mission-glyph-attention);
 	--color-mission-glyph-success: var(--mission-glyph-success);
-	--color-mission-glyph-progress: var(--mission-glyph-progress);
-	--color-mission-glyph-idle: var(--mission-glyph-idle);
 	--color-mission-glyph-failure: var(--mission-glyph-failure);
 	--color-prompt-surface: var(--prompt-surface);
 	--color-prompt-surface-inert: var(--prompt-surface-inert);

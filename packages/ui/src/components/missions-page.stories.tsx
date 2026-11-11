@@ -221,7 +221,7 @@ export const Unfolded = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `Every group open, one mission waiting on an agent added so all six states show. Check the groups keep the drawn order, that a header folds and unfolds its rows from the pointer, Enter and Space and says so through aria-expanded, and that keyboard focus draws a ring on headers and rows. ${WIRED_BY_NOBODY_YET}`,
+				story: `Every group open, one mission waiting on an agent added so all six states show. Check each header and row carries its group's 14px mission state mark, that the groups keep the drawn order, that a header folds and unfolds its rows from the pointer, Enter and Space and says so through aria-expanded, and that keyboard focus draws a ring on headers and rows. ${WIRED_BY_NOBODY_YET}`,
 			},
 		},
 	},
@@ -233,6 +233,21 @@ export const Unfolded = meta.story({
 		await expect(slotsIn(canvasElement, "missions-page-row")).toHaveLength(
 			PAGE_MISSIONS_WAITING_ON_AN_AGENT.length,
 		)
+		await expect(
+			headers.map(
+				(header) => slotIn(header, "missions-page-glyph").dataset.state,
+			),
+		).toEqual([
+			"waiting",
+			"ready",
+			"working",
+			"waiting_agent",
+			"done",
+			"failed",
+		])
+		for (const mark of slotsIn(canvasElement, "mission-state-mark")) {
+			await expect(mark.getBoundingClientRect().width).toBe(14)
+		}
 
 		const completed = groupIn(canvasElement, "completed")
 		const header = headerOf(canvasElement, "completed")
@@ -257,6 +272,19 @@ export const Unfolded = meta.story({
 		await expect(blockedRow).toHaveFocus()
 		await expect(getComputedStyle(blockedRow).outlineStyle).toBe("solid")
 	},
+})
+
+export const UnfoldedDark = meta.story({
+	args: Unfolded.input.args,
+	globals: { theme: "dark" },
+	parameters: {
+		docs: {
+			description: {
+				story: `Unfolded in the dark theme. Check each group header and row carries the mission state mark of its group, the five shapes side by side, and Completed keeps its green check disc. ${WIRED_BY_NOBODY_YET}`,
+			},
+		},
+	},
+	play: Unfolded.input.play,
 })
 
 export const Empty = meta.story({

@@ -1,22 +1,30 @@
+import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
-import { type Icon, Icons } from "@workspace/ui/components/icons"
+import { Icons } from "@workspace/ui/components/icons"
 import type { MissionState } from "@workspace/ui/components/mission"
+import { MissionStateMark } from "@workspace/ui/components/mission-state-mark"
 import { Badge } from "@workspace/ui/components/ui/badge"
-import { cn } from "@workspace/ui/lib/utils"
-
-type StateMark = {
-	Mark: Icon
-	markClass: string
-}
 
 const MISSION_STATE_MARK = {
-	waiting_human: { Mark: Icons.Bell, markClass: "text-warning" },
-	ready_to_merge: { Mark: Icons.Check, markClass: "text-bot-badge-done" },
-	failed: { Mark: Icons.Error, markClass: "text-bot-badge-failed" },
-	done: { Mark: Icons.Success, markClass: "text-bot-badge-done" },
-	closed: { Mark: Icons.Close, markClass: "text-muted-foreground" },
-} as const satisfies Partial<Record<MissionState, StateMark>>
+	waiting_human: <MissionStateMark data-icon="inline-start" state="waiting" />,
+	ready_to_merge: <MissionStateMark data-icon="inline-start" state="ready" />,
+	failed: <MissionStateMark data-icon="inline-start" state="failed" />,
+	done: (
+		<Icons.Success
+			aria-hidden="true"
+			className="shrink-0 text-bot-badge-done"
+			data-icon="inline-start"
+		/>
+	),
+	closed: (
+		<Icons.Close
+			aria-hidden="true"
+			className="shrink-0 text-muted-foreground"
+			data-icon="inline-start"
+		/>
+	),
+} as const satisfies Partial<Record<MissionState, ReactNode>>
 
 type MissionStateWithPill = keyof typeof MISSION_STATE_MARK
 
@@ -33,8 +41,6 @@ const MissionStatePill = ({ state, className }: MissionStatePillProps) => {
 
 	if (!hasStatePill(state)) return null
 
-	const { Mark, markClass } = MISSION_STATE_MARK[state]
-
 	return (
 		<Badge
 			className={className}
@@ -42,11 +48,7 @@ const MissionStatePill = ({ state, className }: MissionStatePillProps) => {
 			data-state={state}
 			variant="outline"
 		>
-			<Mark
-				aria-hidden="true"
-				className={cn("shrink-0", markClass)}
-				data-icon="inline-start"
-			/>
+			{MISSION_STATE_MARK[state]}
 			{t(`missions.state.${state}`)}
 		</Badge>
 	)

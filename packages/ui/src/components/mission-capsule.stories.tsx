@@ -41,6 +41,13 @@ const meta = preview.meta({
 		await expect(title.scrollWidth).toBeGreaterThan(title.clientWidth)
 		await expect(within(canvasElement).queryAllByRole("button")).toEqual([])
 		await expect(capsules[0]).toHaveTextContent("waiting for you")
+		const marks = slotsIn(canvasElement, "mission-capsule-glyph")
+		await expect(marks.map((mark) => mark.dataset.state)).toEqual([
+			...BOT_MISSION_STATES,
+		])
+		for (const mark of marks) {
+			await expect(mark.getBoundingClientRect().width).toBe(12)
+		}
 		for (const capsule of capsules) {
 			await expect(capsule.tabIndex).toBe(-1)
 			await expect(getComputedStyle(capsule).pointerEvents).toBe("none")

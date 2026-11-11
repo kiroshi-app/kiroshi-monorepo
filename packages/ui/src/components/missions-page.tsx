@@ -1,6 +1,7 @@
 import { type ReactNode, useId, useState } from "react"
 import { useTranslation } from "react-i18next"
 
+import type { BotMissionState } from "@workspace/ui/components/bot-badge"
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
 import {
 	type ConversationIconName,
@@ -15,6 +16,7 @@ import type {
 	MissionPullRequest,
 	MissionState,
 } from "@workspace/ui/components/mission"
+import { MissionStateMark } from "@workspace/ui/components/mission-state-mark"
 import { MissionsPanelEmpty } from "@workspace/ui/components/missions-panel"
 import { Notice } from "@workspace/ui/components/notice"
 import { toElapsedTime } from "@workspace/ui/lib/time-format"
@@ -28,43 +30,22 @@ type MissionsPageGroupKey =
 	| "completed"
 	| "blocked"
 
-type MissionGlyphTone =
-	| "attention"
-	| "success"
-	| "progress"
-	| "idle"
-	| "failure"
-
 type MissionsPageGroupShape = {
 	key: MissionsPageGroupKey
 	states: MissionState[]
-	tone: MissionGlyphTone
-	isDone?: boolean
+	mark?: BotMissionState
 }
 
 const MISSIONS_PAGE_GROUPS: MissionsPageGroupShape[] = [
-	{ key: "blockedOnYou", states: ["waiting_human"], tone: "attention" },
-	{ key: "readyToMerge", states: ["ready_to_merge"], tone: "success" },
-	{ key: "working", states: ["working"], tone: "progress" },
-	{ key: "waitingOnAgent", states: ["waiting_bot"], tone: "idle" },
-	{
-		key: "completed",
-		states: ["done", "closed"],
-		tone: "success",
-		isDone: true,
-	},
-	{ key: "blocked", states: ["failed"], tone: "failure" },
+	{ key: "blockedOnYou", states: ["waiting_human"], mark: "waiting" },
+	{ key: "readyToMerge", states: ["ready_to_merge"], mark: "ready" },
+	{ key: "working", states: ["working"], mark: "working" },
+	{ key: "waitingOnAgent", states: ["waiting_bot"], mark: "waiting_agent" },
+	{ key: "completed", states: ["done", "closed"] },
+	{ key: "blocked", states: ["failed"], mark: "failed" },
 ]
 
 const EMPHASISED_GROUP: MissionsPageGroupKey = "blockedOnYou"
-
-const GLYPH_TONE: Record<MissionGlyphTone, string> = {
-	attention: "text-mission-glyph-attention",
-	success: "text-mission-glyph-success",
-	progress: "text-mission-glyph-progress",
-	idle: "text-mission-glyph-idle",
-	failure: "text-mission-glyph-failure",
-}
 
 const MISSIONS_PAGE_FRAMES = {
 	row: "flex w-full min-w-0 items-center gap-2.5 border-mission-list-divider border-b p-3",
@@ -114,47 +95,34 @@ type MissionsPageProps = {
 	defaultFoldedGroups?: MissionsPageGroupKey[]
 }
 
-type MissionGlyphProps = Pick<MissionsPageGroupShape, "tone" | "isDone">
+type MissionGlyphProps = Pick<MissionsPageGroupShape, "mark">
 
-const MissionGlyph = ({ tone, isDone = false }: MissionGlyphProps) => (
+const MissionGlyph = ({ mark }: MissionGlyphProps) => (
 	<span
 		aria-hidden="true"
-		className={cn(
-			"pointer-events-none",
-			MISSIONS_PAGE_FRAMES.glyph,
-			GLYPH_TONE[tone],
-		)}
+		className={cn("pointer-events-none", MISSIONS_PAGE_FRAMES.glyph)}
 		data-slot="missions-page-glyph"
-		data-tone={tone}
+		data-state={mark ?? "done"}
 	>
-		<svg
-			aria-hidden="true"
-			className="size-3.5"
-			fill="none"
-			viewBox="0 0 14 14"
-		>
-			{isDone ? (
-				<>
-					<circle cx="7" cy="7" fill="currentColor" r="7" />
-					<path
-						className="stroke-card"
-						d="M4.25 7.25 6.1 9.1 9.75 5.25"
-						strokeLinecap="round"
-						strokeLinejoin="round"
-						strokeWidth="1.5"
-					/>
-				</>
-			) : (
-				<circle
-					cx="7"
-					cy="7"
-					r="6.25"
-					stroke="currentColor"
-					strokeDasharray="1.96 1.31"
+		{mark ? (
+			<MissionStateMark size={14} state={mark} />
+		) : (
+			<svg
+				aria-hidden="true"
+				className="size-3.5 text-mission-glyph-success"
+				fill="none"
+				viewBox="0 0 14 14"
+			>
+				<circle cx="7" cy="7" fill="currentColor" r="7" />
+				<path
+					className="stroke-card"
+					d="M4.25 7.25 6.1 9.1 9.75 5.25"
+					strokeLinecap="round"
+					strokeLinejoin="round"
 					strokeWidth="1.5"
 				/>
-			)}
-		</svg>
+			</svg>
+		)}
 	</span>
 )
 
@@ -219,7 +187,7 @@ const MissionsPageRow = ({
 				>
 					{mission.identifier}
 				</span>
-				<MissionGlyph isDone={group.isDone} tone={group.tone} />
+				<MissionGlyph mark={group.mark} />
 				<span
 					className={cn(
 						"min-w-24 flex-1 truncate text-mission-list-foreground",
@@ -367,7 +335,7 @@ const MissionsPageGroup = ({
 					onClick={onToggle}
 					type="button"
 				>
-					<MissionGlyph isDone={group.isDone} tone={group.tone} />
+					<MissionGlyph mark={group.mark} />
 					<span
 						className={cn(
 							"min-w-0 truncate font-medium text-mission-list-foreground",
