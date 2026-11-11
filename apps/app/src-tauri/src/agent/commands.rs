@@ -14,6 +14,7 @@ use super::contract::{
 };
 use super::host::hosted;
 use super::lease::RunLease;
+use super::pending_writes::{PendingWrite, PendingWrites};
 use super::protocol::{self, Checked, SpaceMember};
 use super::reply_writer::{
 	prompts_settled_by, HostWrites, ReplyWriter, SettledPrompts, TurnAttachments, TurnSink,
@@ -463,6 +464,7 @@ struct RunSink<R: Runtime> {
 	scope: RuntimeScope,
 	live: Arc<Live>,
 	records_its_own_lineage: bool,
+	pending_writes: PendingWrites,
 }
 
 impl<R: Runtime> TurnSink for RunSink<R> {
@@ -484,10 +486,11 @@ impl<R: Runtime> TurnSink for RunSink<R> {
 		if let AgentEvent::SessionReady { session_id, .. } = &event {
 			self.record_its_own_lineage(session_id.clone());
 		}
-		let ended = matches!(event, AgentEvent::TurnEnded { .. });
+		let pending_write = matches!(event, AgentEvent::TurnEnded { .. })
+			.then(|| self.pending_writes.register(&self.scope.bot_id));
 		announce_in_turn(&self.app, Some(self.scope.clone()), turn, event);
-		if ended {
-			self.record_writes();
+		if let Some(pending_write) = pending_write {
+			self.record_writes(pending_write);
 		}
 	}
 }
@@ -536,11 +539,12 @@ impl<R: Runtime> RunSink<R> {
 		});
 	}
 
-	fn record_writes(&self) {
+	fn record_writes(&self, pending_write: PendingWrite) {
 		let app = self.app.clone();
 		let scope = self.scope.clone();
 		let live = self.live.clone();
 		tauri::async_runtime::spawn(async move {
+			let _released_when_the_task_ends = pending_write;
 			for (bundle, evolved) in evolutions(&app, &scope).await {
 				if !live.holds(&scope) {
 					return;
@@ -601,17 +605,26 @@ async fn evolutions<R: Runtime>(
 	let Some(database) = bot_database(app) else {
 		return announced;
 	};
-	let Ok(Some(bot)) = database.conversations().bot(scope.bot_id.clone()).await else {
-		return announced;
+	let bot = match database.conversations().bot(scope.bot_id.clone()).await {
+		Ok(Some(bot)) => bot,
+		Ok(None) => return announced,
+		Err(error) => {
+			evolution_step_failed(&scope.bot_id, &format!("{ROW_UNREADABLE}: {error:?}"));
+			return announced;
+		}
 	};
-	if let Ok(space_id) =
-		space_of_the_conversation(database, &scope.conversation_id, &scope.bot_id).await
-	{
-		if let Some(path) = bundles::space::laid_down(app, &space_id) {
-			announced.push((EvolvedBundle::Space, bundles::space::evolve(&path)));
+	match space_of_the_conversation(database, &scope.conversation_id, &scope.bot_id).await {
+		Ok(space_id) => {
+			if let Some(path) = bundles::space::laid_down(app, &space_id) {
+				announced.push((EvolvedBundle::Space, bundles::space::evolve(&path)));
+			}
+		}
+		Err(error) => {
+			evolution_step_failed(&scope.bot_id, &format!("{SPACE_UNRESOLVED}: {error:?}"));
 		}
 	}
 	let Some(root) = bundles::root(app) else {
+		evolution_step_failed(&scope.bot_id, ROOT_UNRESOLVED);
 		return announced;
 	};
 	let evolved = bundles::evolve(&root, &bot);
@@ -620,6 +633,10 @@ async fn evolutions<R: Runtime>(
 	}
 	announced.push((EvolvedBundle::Bot, evolved));
 	announced
+}
+
+fn evolution_step_failed(bot_id: &str, step: &str) {
+	log::warn!("the turn-end evolution of bot {bot_id} failed a step: {step}");
 }
 
 const NO_DATABASE_FOR_THE_LINEAGE: &str =
@@ -649,10 +666,15 @@ fn bot_database<R: Runtime>(app: &AppHandle<R>) -> Option<&db::Database> {
 
 pub(crate) async fn reconcile_bot(database: &db::Database, root: &Path, bot: &StoredBot) {
 	if let Some(found) = bundles::adopted(root, bot) {
-		let _ = database.conversations().adopt_instructions(bot.id.clone(), found).await;
+		if let Err(error) = database.conversations().adopt_instructions(bot.id.clone(), found).await
+		{
+			log::warn!("the instructions of bot {} were not adopted: {error:?}", bot.id);
+		}
 	}
 	if let Some(learned) = bundles::adopted_memory(root, bot) {
-		let _ = database.conversations().adopt_memory(bot.id.clone(), learned).await;
+		if let Err(error) = database.conversations().adopt_memory(bot.id.clone(), learned).await {
+			log::warn!("the memory of bot {} was not adopted: {error:?}", bot.id);
+		}
 	}
 }
 
@@ -689,6 +711,7 @@ pub struct AgentState {
 	host_writes: Arc<HostWrites>,
 	host_turns: HostTurns,
 	lease: RunLease,
+	pending_writes: PendingWrites,
 }
 
 struct Catalogue<Item> {
@@ -712,6 +735,7 @@ impl Default for AgentState {
 			host_writes: Arc::default(),
 			host_turns: HostTurns::default(),
 			lease: RunLease::default(),
+			pending_writes: PendingWrites::default(),
 		}
 	}
 }
@@ -1059,6 +1083,9 @@ pub(crate) async fn laid_down_session<R: Runtime>(
 	database: &db::Database,
 	scope: &RuntimeScope,
 ) -> Result<LaidDownSession, TransportError> {
+	if let Some(state) = app.try_state::<AgentState>() {
+		state.pending_writes.settled_for(&scope.bot_id).await;
+	}
 	let _memory = bundles::holding_the_memory(&scope.bot_id).await;
 	let ResolvedRun { bot, space_id, root } =
 		resolved_run(database, bundles::root(app), scope).await?;
@@ -1273,6 +1300,7 @@ pub(crate) async fn start_run<R: Runtime>(
 		scope: scope.clone(),
 		live: state.live.clone(),
 		records_its_own_lineage: lineage_is_held_elsewhere || lineage == Lineage::RecordedByTheRun,
+		pending_writes: state.pending_writes.clone(),
 	});
 	let attachments = Arc::new(TurnAttachments::default());
 	let sink: Arc<dyn EventSink> = Arc::new(ReplyWriter::spawn(
@@ -1830,6 +1858,7 @@ async fn end_every_session<R: Runtime>(app: &AppHandle<R>, state: &AgentState) {
 			log::warn!("a session did not shut down at quit: {failure}");
 		}
 	}
+	state.pending_writes.all_settled().await;
 	release_every_stored_prompt(app).await;
 }
 
@@ -1870,7 +1899,13 @@ pub(crate) fn a_quitting_host<R: Runtime>(app: &AppHandle<R>) {
 pub(crate) fn a_live_run<R: Runtime>(app: &AppHandle<R>, scope: RuntimeScope) -> impl TurnSink {
 	let live = Arc::new(Live::default());
 	live.take_over(scope.clone());
-	RunSink { app: app.clone(), scope, live, records_its_own_lineage: false }
+	RunSink {
+		app: app.clone(),
+		scope,
+		live,
+		records_its_own_lineage: false,
+		pending_writes: PendingWrites::default(),
+	}
 }
 
 #[cfg(test)]
@@ -1883,7 +1918,8 @@ pub(crate) fn a_run_held_by_the_app<R: Runtime>(
 	}
 	let live = app.state::<AgentState>().live.clone();
 	live.take_over(scope.clone());
-	RunSink { app: app.clone(), scope, live, records_its_own_lineage: false }
+	let pending_writes = app.state::<AgentState>().pending_writes.clone();
+	RunSink { app: app.clone(), scope, live, records_its_own_lineage: false, pending_writes }
 }
 
 #[cfg(test)]
@@ -2844,6 +2880,9 @@ mod tests {
 	}
 
 	mod pending_questions {
+		use std::pin::pin;
+		use std::time::Duration;
+
 		use tauri::test::{mock_builder, MockRuntime};
 
 		use tauri::Listener;
@@ -2854,6 +2893,8 @@ mod tests {
 		use crate::conversations::contract::{ConversationState, STATE_CHANGED_EVENT};
 		use crate::db::repositories::conversations::{a_pending_prompt, PendingPrompt, PromptKind};
 		use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
+
+		const A_BEAT: Duration = Duration::from_millis(200);
 
 		fn an_app(name: &str) -> AppOfItsOwn {
 			an_app_of_its_own(&format!("pending-question-{name}"), mock_builder())
@@ -3334,6 +3375,76 @@ mod tests {
 			app.state::<AgentState>().admit(app.handle(), a_scope()).await;
 
 			assert!(app.state::<AgentState>().live.holds(&a_scope()), "the run was not admitted");
+		}
+
+		#[tokio::test]
+		async fn a_quit_releases_the_stored_prompts_only_once_the_pending_writes_are_done() {
+			let app = an_app_storing("stored-quit-pending-write", vec![stored("r1", "w1")]).await;
+			let state = app.state::<AgentState>();
+			let write = state.pending_writes.register("b1");
+			let mut quitting = pin!(end_every_session(app.handle(), &state));
+
+			assert!(
+				tokio::time::timeout(A_BEAT, quitting.as_mut()).await.is_err(),
+				"the quit did not wait"
+			);
+			assert_eq!(stored_prompts(&app).await, 1, "the prompts went before the write ended");
+			drop(write);
+			quitting.await;
+
+			assert_eq!(stored_prompts(&app).await, 0);
+		}
+
+		#[tokio::test]
+		async fn a_session_waits_for_its_bot_without_a_guard_and_never_for_another_bot() {
+			let app = an_app_storing("session-waits-for-write", Vec::new()).await;
+			let database = bot_database(app.handle()).expect("the database opens");
+			let state = app.state::<AgentState>();
+			let write = state.pending_writes.register("bot-writing");
+			let scope = RuntimeScope { bot_id: "bot-writing".into(), ..a_scope() };
+			let other = RuntimeScope { bot_id: "bot-idle".into(), ..a_scope() };
+
+			let elsewhere =
+				tokio::time::timeout(A_BEAT, laid_down_session(app.handle(), database, &other))
+					.await;
+			assert_row_missing(elsewhere.expect("another bot waited").err());
+
+			let mut opening = pin!(laid_down_session(app.handle(), database, &scope));
+			assert!(
+				tokio::time::timeout(A_BEAT, opening.as_mut()).await.is_err(),
+				"the session did not wait"
+			);
+			let held =
+				tokio::time::timeout(A_BEAT, bundles::holding_the_memory("bot-writing")).await;
+			drop(held.expect("the wait holds the memory guard"));
+
+			drop(write);
+			assert_row_missing(opening.await.err());
+		}
+
+		fn assert_row_missing(refused: Option<TransportError>) {
+			let Some(TransportError::SpawnFailed { detail }) = refused else {
+				panic!("the session read a row that does not exist: {refused:?}");
+			};
+			assert!(detail.contains(ROW_MISSING), "{detail}");
+		}
+
+		#[tokio::test]
+		async fn a_turn_end_is_announced_with_the_write_of_its_bot_already_pending() {
+			let app = an_app_storing("registered-before-announced", Vec::new()).await;
+			let run = a_run_held_by_the_app(app.handle(), a_scope());
+			let pending_when_heard = Arc::new(std::sync::Mutex::new(None));
+			let (handle, kept) = (app.handle().clone(), pending_when_heard.clone());
+			app.handle().listen(EVENT_CHANNEL, move |event| {
+				if event.payload().contains("turnEnded") {
+					let is_pending = handle.state::<AgentState>().pending_writes.is_pending("b1");
+					*kept.lock().expect("the answer is kept") = Some(is_pending);
+				}
+			});
+
+			run.emit(turn_ended(), the_turn());
+
+			assert_eq!(*pending_when_heard.lock().expect("the answer is kept"), Some(true));
 		}
 
 		#[tokio::test]

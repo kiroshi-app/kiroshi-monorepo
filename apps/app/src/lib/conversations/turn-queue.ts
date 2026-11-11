@@ -5,9 +5,13 @@ export type Summons = {
 	promptId: string
 }
 
+type HeldSummons = Summons & {
+	handedBy: string | null
+}
+
 export type TurnQueue = {
 	wave: Summons[]
-	waiting: Summons[]
+	waiting: HeldSummons[]
 	handedBotIds: string[]
 }
 
@@ -22,14 +26,38 @@ export const reopenedFor = (
 	summoned: Summons[],
 ): TurnQueue => ({
 	...queue,
-	waiting: [...summoned],
+	waiting: summoned.map((summons) => ({ ...summons, handedBy: null })),
 	handedBotIds: [],
 })
 
-export const openedWave = (queue: TurnQueue): TurnQueue =>
-	queue.waiting.length === 0
-		? queue
-		: { ...queue, wave: queue.waiting, waiting: [] }
+export const startableIn = (
+	queue: TurnQueue,
+	speakingBotIds: string[],
+): HeldSummons[] => {
+	const isFree = (botId: string | null) =>
+		botId === null || !speakingBotIds.includes(botId)
+	return queue.waiting.filter(
+		({ botId, handedBy }) => isFree(botId) && isFree(handedBy),
+	)
+}
+
+export const openedWave = (
+	queue: TurnQueue,
+	speakingBotIds: string[],
+): TurnQueue => {
+	const startable = startableIn(queue, speakingBotIds)
+	if (startable.length === 0) {
+		return queue
+	}
+	return {
+		...queue,
+		wave: [
+			...queue.wave.filter(({ botId }) => speakingBotIds.includes(botId)),
+			...startable,
+		],
+		waiting: queue.waiting.filter((summons) => !startable.includes(summons)),
+	}
+}
 
 const isHeld = (queue: TurnQueue, botId: string) =>
 	queue.waiting.some((summons) => summons.botId === botId)
@@ -63,7 +91,7 @@ export const handedOver = (
 	}
 	return {
 		...queue,
-		waiting: [...queue.waiting, summons],
+		waiting: [...queue.waiting, { ...summons, handedBy: from }],
 		handedBotIds: [...queue.handedBotIds, summons.botId],
 	}
 }

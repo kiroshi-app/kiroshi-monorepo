@@ -103,6 +103,9 @@ const chat = {
 				description_other:
 					"Seat them in this conversation, or pick other agents.",
 			},
+			neverStarted: {
+				description: "Mention {{name}} again to carry on.",
+			},
 			summonLimit: {
 				description:
 					"Agents already handed {{name}} the turn {{limit}} times in this exchange, so the exchange stops here. Mention {{name}} yourself to carry on.",

@@ -584,7 +584,7 @@ describe("createConversationController", () => {
 		])
 	})
 
-	it("holds the companion a speaker names until its whole wave has stopped", async () => {
+	it("starts the companion a speaker hands over as it ends while a wave mate still speaks", async () => {
 		const ada = idOf(harness.conversation, "Ada")
 		const nyx = idOf(harness.conversation, "Nyx")
 		const iris = idOf(harness.conversation, "Iris")
@@ -594,13 +594,15 @@ describe("createConversationController", () => {
 		harness.driver.pushTo(nyx, spoke(nyx, `over to <@${ada}>`))
 		await harness.settled()
 
-		expect(submittedIn(harness)).toEqual([nyx, iris])
-		expect(harness.controller.getState().waitingBotIds).toEqual([ada])
+		expect(submittedIn(harness)).toEqual([nyx, iris, ada])
+		expect(runningIn(harness.controller)).toEqual([iris, ada])
+		expect(harness.controller.getState().waitingBotIds).toEqual([])
 
 		harness.driver.pushTo(iris, spoke(iris, "gates up"))
 		await harness.settled()
 
 		expect(submittedIn(harness)).toEqual([nyx, iris, ada])
+		expect(runningIn(harness.controller)).toEqual([ada])
 	})
 
 	it("runs once more, after its running turn ends, a companion a wave mate named", async () => {
@@ -1032,12 +1034,11 @@ describe("createConversationController", () => {
 	})
 
 	it("cancels every companion and drops the summons held when the reader stops the conversation", async () => {
-		const ada = idOf(harness.conversation, "Ada")
 		const nyx = idOf(harness.conversation, "Nyx")
 		const iris = idOf(harness.conversation, "Iris")
 		await harness.controller.send("@Nyx then @Iris")
 		await harness.settled()
-		harness.driver.pushTo(nyx, spoke(nyx, `over to <@${ada}>`))
+		harness.driver.pushTo(nyx, spoke(nyx, `over to <@${iris}>`))
 		await harness.settled()
 
 		await harness.controller.stop()
@@ -3807,17 +3808,16 @@ describe("the mentions a finished turn carries", () => {
 		room.detach()
 	})
 
-	it("describes a dropped summons with no error as a session that never ran", async () => {
+	it("asks to mention again the companion whose summons never started", async () => {
 		const room = await roomSeating()
 
 		await room.drop({ botId: room.iris, reason: "neverStarted" })
 
 		expect(room.reportFailure).toHaveBeenCalledWith(
-			...notStarted(
-				"Iris didn’t start",
-				"No session is running. Start a session to continue.",
-				{ botId: room.iris, botName: "Iris" },
-			),
+			...notStarted("Iris didn’t start", "Mention Iris again to carry on.", {
+				botId: room.iris,
+				botName: "Iris",
+			}),
 		)
 		room.detach()
 	})
