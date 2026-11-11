@@ -1,3 +1,4 @@
+import type { ComponentProps } from "react"
 import {
 	expect,
 	fireEvent,
@@ -700,6 +701,79 @@ const expectOneMissionSurface = async (row: HTMLElement, fill: string) => {
 	await expect(getComputedStyle(row).backgroundColor).toBe(TRANSPARENT)
 }
 
+const MISSION_FREE_ROOM: AppSidebarConversation = {
+	...MISSIONS_ROOM,
+	id: "release-desk",
+	name: "Release desk",
+	missions: undefined,
+}
+
+const ROW_INSET = 8
+
+const renderBesideAMissionFreeRow = (
+	args: ComponentProps<typeof ConversationRosterRow>,
+) => (
+	<>
+		<ConversationRosterRow {...args} />
+		<ConversationRosterRow
+			{...args}
+			conversation={MISSION_FREE_ROOM}
+			isSelected={false}
+		/>
+	</>
+)
+
+const rowsIn = (canvasElement: HTMLElement) =>
+	slotsIn(canvasElement, "sidebar-menu-button") as HTMLElement[]
+
+const contentBoxesOf = (surface: HTMLElement) =>
+	[...surface.querySelectorAll("*")]
+		.filter((element) => !element.childElementCount)
+		.filter((element) => !element.closest(".sr-only"))
+		.map((element) => element.getBoundingClientRect())
+		.filter((box) => box.width > 0 && box.height > 0)
+
+const insetsOf = (row: HTMLElement) => {
+	const edge = surfaceOf(row).getBoundingClientRect()
+	const boxes = contentBoxesOf(surfaceOf(row))
+	return {
+		left: Math.round(Math.min(...boxes.map((box) => box.left)) - edge.left),
+		right: Math.round(edge.right - Math.max(...boxes.map((box) => box.right))),
+		top: Math.round(Math.min(...boxes.map((box) => box.top)) - edge.top),
+		bottom: Math.round(
+			edge.bottom - Math.max(...boxes.map((box) => box.bottom)),
+		),
+	}
+}
+
+const xOf = (row: HTMLElement) => ({
+	icon: boxOf(row, "conversation-subject-icon").left,
+	title: boxOf(row, "roster-row-name").left,
+	timestamp: boxOf(row, "roster-row-timestamp").left,
+})
+
+const expectEvenInsets = async (row: HTMLElement) =>
+	expect(insetsOf(row)).toEqual({
+		left: ROW_INSET,
+		right: ROW_INSET,
+		top: ROW_INSET,
+		bottom: ROW_INSET,
+	})
+
+const expectOneRowGeometry = async (canvasElement: HTMLElement) => {
+	const [withMissions, withoutMissions] = rowsIn(canvasElement)
+	await expect(
+		slotsIn(surfaceOf(withMissions), "mission-capsule"),
+	).toHaveLength(2)
+	await expect(
+		slotsIn(surfaceOf(withoutMissions), "mission-capsule-list"),
+	).toHaveLength(0)
+	await expectEvenInsets(withMissions)
+	await expectEvenInsets(withoutMissions)
+	await expect(xOf(withMissions)).toEqual(xOf(withoutMissions))
+	return xOf(withMissions)
+}
+
 export const OpenRowWithMissionCapsules = meta.story({
 	tags: ["test-only"],
 	parameters: { a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION },
@@ -776,10 +850,13 @@ const hoverMissionGroup = async (
 	target = row,
 	fill = missionGroupFillOf(row),
 ) => {
+	const atRest = xOf(row)
 	const pointer = await realPointer()
 	try {
 		await pointer.hover(target, { force: true })
 		await expectOneMissionSurface(row, fill)
+		await expectEvenInsets(row)
+		await expect(xOf(row)).toEqual(atRest)
 	} finally {
 		await pointer.unhover(row)
 	}
@@ -787,23 +864,28 @@ const hoverMissionGroup = async (
 
 const missionGroupAtRestStory = (globals?: typeof DARK) => ({
 	globals,
+	render: renderBesideAMissionFreeRow,
 	args: { conversation: MISSIONS_ROOM },
 	parameters: {
 		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:
-					"A conversation with two open missions, at rest. Check the row and its mission tree carry no fill, the tree line and branches read against the sidebar, and neither the row nor the tree runs a colour transition.",
+					"A conversation with two open missions, at rest. Check the row and its mission tree carry no fill, the tree line and branches read against the sidebar, and neither the row nor the tree runs a colour transition. Beside it, a conversation without missions drawn by the same row: check both keep an 8px inset from the surface edge to their content on all four sides, and the icon, title and timestamp at the same x, lit or at rest.",
 			},
 		},
 	},
 	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-		const row = rowIn(canvasElement)
+		const [row, missionFreeRow] = rowsIn(canvasElement)
 		await expectOneMissionSurface(row, TRANSPARENT)
+		await expectOneMissionSurface(missionFreeRow, TRANSPARENT)
+		await expectOneRowGeometry(canvasElement)
 		if (!isInBrowserRunner()) return
 		await withMotionAllowed(async () => {
-			await expect(colourTransitionsOf(surfaceOf(row))).toEqual([])
-			await expect(colourTransitionsOf(row)).toEqual([])
+			for (const each of [row, missionFreeRow]) {
+				await expect(colourTransitionsOf(surfaceOf(each))).toEqual([])
+				await expect(colourTransitionsOf(each)).toEqual([])
+			}
 		})
 	},
 })
@@ -814,6 +896,7 @@ export const MissionGroupAtRestDark = meta.story(missionGroupAtRestStory(DARK))
 
 const missionGroupHoveredStory = (globals?: typeof DARK) => ({
 	globals,
+	render: renderBesideAMissionFreeRow,
 	args: { conversation: MISSIONS_ROOM },
 	parameters: {
 		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
@@ -821,13 +904,14 @@ const missionGroupHoveredStory = (globals?: typeof DARK) => ({
 		docs: {
 			description: {
 				story:
-					"The pointer rests on a conversation with two open missions. Check the row and its mission tree light at once as one surface in `--sidebar-accent`, with no second tile on the row, whether the pointer is on the row or on a mission line.",
+					"The pointer rests on a conversation with two open missions. Check the row and its mission tree light at once as one surface in `--sidebar-accent`, with no second tile on the row, whether the pointer is on the row or on a mission line. Beside it, a conversation without missions drawn by the same row: check both keep an 8px inset from the surface edge to their content on all four sides, and the icon, title and timestamp at the same x, lit or at rest.",
 			},
 		},
 	},
 	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+		await expectOneRowGeometry(canvasElement)
 		if (!isInBrowserRunner()) return
-		const row = rowIn(canvasElement)
+		const [row, missionFreeRow] = rowsIn(canvasElement)
 		const lastMission = slotsIn(canvasElement, "mission-capsule").at(
 			-1,
 		) as HTMLElement
@@ -835,6 +919,7 @@ const missionGroupHoveredStory = (globals?: typeof DARK) => ({
 			await hoverMissionGroup(row)
 			await expectOneMissionSurface(row, TRANSPARENT)
 			await hoverMissionGroup(row, lastMission)
+			await hoverMissionGroup(missionFreeRow)
 		})
 	},
 })
@@ -847,13 +932,14 @@ export const MissionGroupHoveredDark = meta.story(
 
 const missionGroupActiveStory = (globals?: typeof DARK) => ({
 	globals,
+	render: renderBesideAMissionFreeRow,
 	args: { conversation: MISSIONS_ROOM, isSelected: true },
 	parameters: {
 		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:
-					"The current conversation carries two open missions. Check the row and its mission tree wear the active fill `--sidebar-accent` as one surface, the row reporting itself as the current page, and that the pointer on it keeps that one surface.",
+					"The current conversation carries two open missions. Check the row and its mission tree wear the active fill `--sidebar-accent` as one surface, the row reporting itself as the current page, and that the pointer on it keeps that one surface. Beside it, a conversation without missions drawn by the same row: check both keep an 8px inset from the surface edge to their content on all four sides, and the icon, title and timestamp at the same x, lit or at rest.",
 			},
 		},
 	},
@@ -861,6 +947,7 @@ const missionGroupActiveStory = (globals?: typeof DARK) => ({
 		const row = rowIn(canvasElement)
 		await expect(row).toHaveAttribute("aria-current", "page")
 		await expectOneMissionSurface(row, missionGroupFillOf(row))
+		await expectOneRowGeometry(canvasElement)
 		if (isInBrowserRunner())
 			await withMotionAllowed(() => hoverMissionGroup(row))
 	},
@@ -872,13 +959,14 @@ export const MissionGroupActiveDark = meta.story(missionGroupActiveStory(DARK))
 
 const missionGroupMenuOpenStory = (globals?: typeof DARK) => ({
 	globals,
+	render: renderBesideAMissionFreeRow,
 	args: { conversation: MISSIONS_ROOM },
 	parameters: {
 		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:
-					"The context menu of a conversation with two open missions is open. Check the row and its mission tree wear the roster open menu fill `--sidebar-accent` at 70 percent as one surface, the row itself transparent, and that the pointer resting on the group still shows a single fill.",
+					"The context menu of a conversation with two open missions is open. Check the row and its mission tree wear the roster open menu fill `--sidebar-accent` at 70 percent as one surface, the row itself transparent, and that the pointer resting on the group still shows a single fill. Beside it, a conversation without missions drawn by the same row: check both keep an 8px inset from the surface edge to their content on all four sides, and the icon, title and timestamp at the same x, lit or at rest.",
 			},
 		},
 	},
@@ -889,6 +977,7 @@ const missionGroupMenuOpenStory = (globals?: typeof DARK) => ({
 			"bg-sidebar-accent/70",
 			"backgroundColor",
 		)
+		const atRest = await expectOneRowGeometry(canvasElement)
 		fireEvent.contextMenu(row)
 		await shown(
 			await screen.findByRole("menu", {
@@ -897,12 +986,28 @@ const missionGroupMenuOpenStory = (globals?: typeof DARK) => ({
 		)
 		try {
 			await expectOneMissionSurface(row, openMenuFill)
+			await expectEvenInsets(row)
+			await expect(xOf(row)).toEqual(atRest)
 			await expect(
 				getComputedStyle(slotIn(canvasElement, "mission-capsule-list"))
 					.backgroundColor,
 			).toBe(TRANSPARENT)
 			if (isInBrowserRunner())
 				await withMotionAllowed(() => hoverMissionGroup(row, row, openMenuFill))
+		} finally {
+			await userEvent.keyboard("{Escape}")
+		}
+		const missionFreeRow = rowsIn(canvasElement)[1]
+		fireEvent.contextMenu(missionFreeRow)
+		await shown(
+			await screen.findByRole("menu", {
+				name: `Actions for ${MISSION_FREE_ROOM.name}`,
+			}),
+		)
+		try {
+			await expectOneMissionSurface(missionFreeRow, openMenuFill)
+			await expectEvenInsets(missionFreeRow)
+			await expect(xOf(missionFreeRow)).toEqual(atRest)
 		} finally {
 			await userEvent.keyboard("{Escape}")
 		}
@@ -920,14 +1025,14 @@ export const IconAtTheHeightOfItsTwoLines = meta.story({
 		docs: {
 			description: {
 				story:
-					"Check the subject icon is 28px, centred on the 20px name line plus the 16px preview line, and the row without missions is 48px, the height of a sidebar skeleton row.",
+					"Check the subject icon is 28px, centred on the 20px name line plus the 16px preview line, and the row without missions is 52px, the height of a sidebar skeleton row.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
 		const row = rowIn(canvasElement)
 		await expectRowAnatomy(row)
-		await expect(row.getBoundingClientRect().height).toBe(48)
+		await expect(row.getBoundingClientRect().height).toBe(52)
 	},
 })
 
