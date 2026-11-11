@@ -83,7 +83,7 @@ const ROUTINE_SKELETON_LIST =
 	"gap-2 [--skeleton-title:--spacing(28)] [--skeleton-sub:--spacing(24)] [&>:nth-child(3n+2)]:[--skeleton-title:--spacing(35)] [&>:nth-child(3n+2)]:[--skeleton-sub:--spacing(32)] [&>:nth-child(3n)]:[--skeleton-title:--spacing(24.5)] [&>:nth-child(3n)]:[--skeleton-sub:--spacing(27.5)]"
 
 const PANEL_HEADER =
-	"h-12 shrink-0 flex-row items-center px-[calc(var(--shell-inset)+--spacing(2.5))] py-0"
+	"h-12 shrink-0 flex-row items-center ps-[calc(var(--shell-inset)+--spacing(2.5))] pe-[calc(var(--shell-inset)+--spacing(0.5))] py-0"
 
 type PanelWidthStyle = CSSProperties & { "--sidebar-width": string }
 

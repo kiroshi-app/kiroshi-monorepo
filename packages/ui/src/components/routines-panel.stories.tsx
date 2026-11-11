@@ -1498,11 +1498,6 @@ const panelBodyInsetIn = (panel: HTMLElement): InlineInset => {
 	return { start, end }
 }
 
-const centreXOf = (element: Element) => {
-	const box = element.getBoundingClientRect()
-	return box.left + box.width / 2
-}
-
 const expectWithinAPixel = async (actual: number, expected: number) => {
 	await expect(Math.abs(actual - expected)).toBeLessThanOrEqual(1)
 }
@@ -1538,14 +1533,11 @@ const expectRowsOnThePanelInsetRule = async (
 		.getAttribute("aria-labelledby")
 	const title = titleId && row.ownerDocument.getElementById(titleId)
 	if (!title) throw new Error("This routine row names no title")
-	const remove = within(row).getByRole("button", { name: /^Delete / })
-	const close = within(panel).getByRole("button", { name: "Close activity" })
 
 	await expectBodyInsetUnderHeader(panel)
 	await expectWithinAPixel(card.left - surface.left, inset)
 	await expectWithinAPixel(surface.right - card.right, inset)
 	await expectWithinAPixel(title.getBoundingClientRect().left, headerTitleStart)
-	await expectWithinAPixel(centreXOf(iconOf(close)), centreXOf(iconOf(remove)))
 	await expect(body.scrollHeight).toBeLessThanOrEqual(body.clientHeight)
 	await expectWithinAPixel(
 		surface.bottom -
@@ -1579,6 +1571,12 @@ const expectOneInsetRuleOnShell = async (
 	const headerTitleStart = within(slotIn(panel, "sidebar-header"))
 		.getByRole("heading")
 		.getBoundingClientRect().left
+	const edges = surfaceEdgesOf(panel)
+	const close = within(panel).getByRole("button", { name: "Close activity" })
+	await expectWithinAPixel(
+		edges.right - iconOf(close).getBoundingClientRect().right,
+		headerTitleStart - edges.left,
+	)
 
 	await openRoutines(canvasElement, userEvent)
 	await within(panel).findByRole("heading", { name: "Routines" })
@@ -1586,7 +1584,7 @@ const expectOneInsetRuleOnShell = async (
 }
 
 const ONE_INSET_RULE_ON_SHELL =
-	"The thread opens its panel inside the shell: the shell card keeps its distance from the top, the trailing and the bottom edges of the window, and the transcript and the composer stay centred in the thread card, the composer never closer than the shell inset to its edges. Inside the panel, cards line up with cards and text with text: the panel body takes the shell inset from its surface on every side, the routine cards sit that inset in from the surface edges, the header title starts where a routine title starts, and the close icon sits on the same line as each row's delete icon. Check the conversation and the composer stay centred as the panel opens, that the first item sits one shell inset under the header, and that the Routines list keeps the composer's inset above the bottom of the panel. Pick `OnShellSurfaceOpen` for the frames the two surfaces draw. `apps/app/src/App.tsx:935` is the shell, and `apps/app/src/components/thread-routines.tsx:107` the panel inside it."
+	"The thread opens its panel inside the shell: the shell card keeps its distance from the top, the trailing and the bottom edges of the window, and the transcript and the composer stay centred in the thread card, the composer never closer than the shell inset to its edges. Inside the panel, cards line up with cards and text with text: the panel body takes the shell inset from its surface on every side, the routine cards sit that inset in from the surface edges, the header title starts where a routine title starts, and the close icon sits as far in from the panel's right edge as the header title from its left edge. Check the conversation and the composer stay centred as the panel opens, that the first item sits one shell inset under the header, and that the Routines list keeps the composer's inset above the bottom of the panel. Pick `OnShellSurfaceOpen` for the frames the two surfaces draw. `apps/app/src/App.tsx:935` is the shell, and `apps/app/src/components/thread-routines.tsx:107` the panel inside it."
 
 export const OnShellSurfaceInsets = meta.story({
 	args: { isOpen: false },
