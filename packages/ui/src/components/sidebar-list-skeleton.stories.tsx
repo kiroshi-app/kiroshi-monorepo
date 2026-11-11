@@ -89,9 +89,10 @@ const meta = preview.meta({
 
 		await expect(skeleton).toHaveAttribute("aria-hidden", "true")
 		await expect(headers).toHaveLength(2)
-		const [headerBar, secondHeaderBar] = headers.map(
+		const headerBars = headers.map(
 			(header) => header.querySelector("span > span") as Element,
 		)
+		const [headerBar, secondHeaderBar] = headerBars
 		await expect([boxOf(headerBar).width, boxOf(headerBar).height]).toEqual(
 			LOADED.headerBar,
 		)
@@ -102,8 +103,8 @@ const meta = preview.meta({
 			boxOf(secondHeaderBar).width,
 			boxOf(secondHeaderBar).height,
 		]).toEqual(LOADED.secondHeaderBar)
-		for (const header of headers) {
-			const bar = boxOf(header.querySelector("span > span") as Element)
+		for (const [rank, header] of headers.entries()) {
+			const bar = boxOf(headerBars[rank])
 			await expect(boxOf(header).height).toBe(LOADED.headerHeight)
 			await expect(bar.left - boxOf(header).left).toBe(LOADED.rowPadding)
 			await expect(bar.top - boxOf(header).top).toBe(LOADED.headerBarTop)
