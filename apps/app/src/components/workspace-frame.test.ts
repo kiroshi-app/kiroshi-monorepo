@@ -1199,16 +1199,11 @@ const layOutRosterSlots = () => {
 const slotHolding = (handle: Element) =>
 	handle.closest("[data-roster-slot]") as Element
 
-const dragToSlot = async (
-	handle: Element,
-	area: Element,
-	target: Element,
-	offset = 0,
-) => {
+const dragToSlot = async (handle: Element, area: Element, target: Element) => {
 	layOutRosterSlots()
 	const pointAt = (clientY: number) => ({ clientX: 0, clientY, pointerId: 1 })
 	const fromY = slotTopOf(slotHolding(handle)) + SLOT_HEIGHT / 2
-	const toY = slotTopOf(target) + SLOT_HEIGHT / 2 + offset
+	const toY = slotTopOf(target) + SLOT_HEIGHT / 2
 	vi.spyOn(document, "elementFromPoint").mockReturnValue(area)
 	await act(async () => {
 		fireEvent.pointerDown(handle, { button: 0, ...pointAt(fromY) })
@@ -1235,7 +1230,7 @@ const pickInSectionMenu = async (name: string, item: string) => {
 	await press(screen.getByRole("menuitem", { name: item }))
 }
 
-const SECTIONS_BETWEEN = (...sections: string[]) => [
+const foldsAround = (...sections: string[]) => [
 	PINNED,
 	...sections,
 	CONVERSATIONS,
@@ -1245,7 +1240,7 @@ describe("the named sections of the expanded sidebar", () => {
 	it("draws Pinned with its rows only, then each section in saved order, then Conversations", async () => {
 		await mountSections()
 
-		expect(foldHeaders()).toEqual(SECTIONS_BETWEEN("Clients", "Press"))
+		expect(foldHeaders()).toEqual(foldsAround("Clients", "Press"))
 		expect(namesIn(PINNED)).toEqual(["First pin", "Last pin"])
 		expect(namesIn("Clients")).toEqual(["Client kickoff", "Client brief"])
 		expect(namesIn("Press")).toEqual(["Press kit"])
@@ -1263,7 +1258,7 @@ describe("the named sections of the expanded sidebar", () => {
 		)
 
 		expect(namesIn(PINNED)).toEqual(["Last pin", "First pin"])
-		expect(foldHeaders()).toEqual(SECTIONS_BETWEEN("Clients", "Press"))
+		expect(foldHeaders()).toEqual(foldsAround("Clients", "Press"))
 	})
 
 	it("lands a section row dropped between two pinned rows where the pointer drops it", async () => {
@@ -1360,11 +1355,11 @@ describe("the named sections of the expanded sidebar", () => {
 			slotHolding(first),
 		)
 
-		expect(foldHeaders()).toEqual(SECTIONS_BETWEEN("Press", "Clients"))
+		expect(foldHeaders()).toEqual(foldsAround("Press", "Clients"))
 		expect(namesIn(PINNED)).toEqual(["First pin", "Last pin"])
 
 		await relaunch(store)
-		expect(foldHeaders()).toEqual(SECTIONS_BETWEEN("Press", "Clients"))
+		expect(foldHeaders()).toEqual(foldsAround("Press", "Clients"))
 	})
 
 	it("keeps a section and its rows when it is released over Conversations", async () => {
@@ -1376,7 +1371,7 @@ describe("the named sections of the expanded sidebar", () => {
 			slotHolding(headerOf("Press")),
 		)
 
-		expect(foldHeaders()).toEqual(SECTIONS_BETWEEN("Press", "Clients"))
+		expect(foldHeaders()).toEqual(foldsAround("Press", "Clients"))
 		expect(namesIn("Clients")).toEqual(["Client kickoff", "Client brief"])
 	})
 
@@ -1390,7 +1385,7 @@ describe("the named sections of the expanded sidebar", () => {
 
 			await pressAltArrow(headerOf(name), key)
 
-			expect(foldHeaders()).toEqual(SECTIONS_BETWEEN("Clients", "Press"))
+			expect(foldHeaders()).toEqual(foldsAround("Clients", "Press"))
 			expect(announcement()).toBe("")
 		},
 	)
@@ -1400,7 +1395,7 @@ describe("the named sections of the expanded sidebar", () => {
 
 		await pressAltArrow(headerOf("Press"), "ArrowUp")
 
-		expect(foldHeaders()).toEqual(SECTIONS_BETWEEN("Press", "Clients"))
+		expect(foldHeaders()).toEqual(foldsAround("Press", "Clients"))
 		expect(announcement()).toBe(
 			i18n.t("bots:roster.moved", { name: "Press", position: 1, count: 2 }),
 		)
@@ -1457,20 +1452,20 @@ describe("the named sections of the expanded sidebar", () => {
 			fireEvent.keyDown(field, { key: "Enter" })
 		})
 		await settle()
-		expect(foldHeaders()).toEqual(SECTIONS_BETWEEN("Partners", "Press"))
+		expect(foldHeaders()).toEqual(foldsAround("Partners", "Press"))
 
 		await relaunch(store)
-		expect(foldHeaders()).toEqual(SECTIONS_BETWEEN("Partners", "Press"))
+		expect(foldHeaders()).toEqual(foldsAround("Partners", "Press"))
 	})
 
 	it("keeps Move up after a relaunch", async () => {
 		const store = await mountSections()
 
 		await pickInSectionMenu("Press", i18n.t("bots:roster.section.moveUp"))
-		expect(foldHeaders()).toEqual(SECTIONS_BETWEEN("Press", "Clients"))
+		expect(foldHeaders()).toEqual(foldsAround("Press", "Clients"))
 
 		await relaunch(store)
-		expect(foldHeaders()).toEqual(SECTIONS_BETWEEN("Press", "Clients"))
+		expect(foldHeaders()).toEqual(foldsAround("Press", "Clients"))
 		expect(namesIn(PINNED)).toEqual(["First pin", "Last pin"])
 	})
 
@@ -1478,10 +1473,10 @@ describe("the named sections of the expanded sidebar", () => {
 		const store = await mountSections()
 
 		await pickInSectionMenu("Clients", i18n.t("bots:roster.section.moveDown"))
-		expect(foldHeaders()).toEqual(SECTIONS_BETWEEN("Press", "Clients"))
+		expect(foldHeaders()).toEqual(foldsAround("Press", "Clients"))
 
 		await relaunch(store)
-		expect(foldHeaders()).toEqual(SECTIONS_BETWEEN("Press", "Clients"))
+		expect(foldHeaders()).toEqual(foldsAround("Press", "Clients"))
 		expect(namesIn("Clients")).toEqual(["Client kickoff", "Client brief"])
 	})
 
@@ -1489,10 +1484,10 @@ describe("the named sections of the expanded sidebar", () => {
 		const store = await mountSections()
 
 		await pickInSectionMenu("Press", i18n.t("bots:roster.section.delete"))
-		expect(foldHeaders()).toEqual(SECTIONS_BETWEEN("Clients"))
+		expect(foldHeaders()).toEqual(foldsAround("Clients"))
 
 		await relaunch(store)
-		expect(foldHeaders()).toEqual(SECTIONS_BETWEEN("Clients"))
+		expect(foldHeaders()).toEqual(foldsAround("Clients"))
 	})
 
 	it("keeps a dragged section after a relaunch", async () => {
@@ -1503,10 +1498,10 @@ describe("the named sections of the expanded sidebar", () => {
 			foldOf("Press").closest("[data-roster-drop]") as Element,
 			slotHolding(headerOf("Press")),
 		)
-		expect(foldHeaders()).toEqual(SECTIONS_BETWEEN("Press", "Clients"))
+		expect(foldHeaders()).toEqual(foldsAround("Press", "Clients"))
 
 		await relaunch(store)
-		expect(foldHeaders()).toEqual(SECTIONS_BETWEEN("Press", "Clients"))
+		expect(foldHeaders()).toEqual(foldsAround("Press", "Clients"))
 	})
 
 	it("keeps a section closed after a relaunch and opens it again", async () => {
