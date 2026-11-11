@@ -79,8 +79,6 @@ export const useSettingsNavigation = (holder: ThreadHolder) => {
 							replace: true,
 						}),
 				),
-			backToUserSettings: () =>
-				backOr(() => void navigate({ to: "/settings/user", replace: true })),
 			openConversations: () => {
 				void navigate({ to: "/", search: heldThreadOf(holder) })
 			},

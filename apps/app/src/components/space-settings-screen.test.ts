@@ -222,7 +222,6 @@ const SpaceSettingsHarness = ({
 	} as unknown as WorkspaceCore
 	const navigation = {
 		back: () => setIsOpen(false),
-		backToUserSettings: () => setIsOpen(false),
 		openConversations: () => setIsOpen(false),
 		openCompanionSettings: vi.fn(),
 		showEntry: showEntry ?? ((entry: string) => setSearch({ entry })),
