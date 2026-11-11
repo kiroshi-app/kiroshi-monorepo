@@ -297,11 +297,7 @@ describe("toRosterConversations", () => {
 	})
 
 	it("leads a room with one agent seated with its own icon, not that agent's avatar", () => {
-		const [row] = toRosterConversations(
-			[conversation({ participants: [participant()] })],
-			atRest(),
-			NOW,
-		)
+		const [row] = toRosterConversations([conversation()], atRest(), NOW)
 
 		expect(row?.agent).toBeUndefined()
 	})
