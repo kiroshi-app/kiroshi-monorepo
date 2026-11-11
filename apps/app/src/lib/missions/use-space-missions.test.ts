@@ -7,6 +7,7 @@ import type {
 	MissionChanged,
 	MissionInSpace,
 	MissionSpacePage,
+	MissionState,
 } from "./mission-contract"
 import { aMission, aSpacePage } from "./mission-fixtures"
 import { missionsTransport } from "./missions-transport"
@@ -47,6 +48,46 @@ describe("useSpaceMissions", () => {
 	})
 
 	afterEach(cleanup)
+
+	const entryIn = (id: string, state: MissionState): MissionInSpace => ({
+		mission: aMission({ id, state, stateSeq: 1 }),
+		conversationId: "c-1",
+		conversationTitle: "Crashes",
+	})
+
+	it("counts the missions waiting on the person and in progress, and keeps the waiting count on waiting_human", async () => {
+		readSpacePage.mockResolvedValue(
+			aSpacePage([
+				entryIn("m-waiting", "waiting_human"),
+				entryIn("m-working", "working"),
+				entryIn("m-bot", "waiting_bot"),
+				entryIn("m-merge", "ready_to_merge"),
+				entryIn("m-working-2", "working"),
+			]),
+		)
+		const { result } = renderHook(() => useSpaceMissions("s-1"), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
+
+		await waitFor(() => expect(result.current.openCount).toBe(5))
+		expect(result.current.waitingCount).toBe(1)
+	})
+
+	it("leaves done, failed and closed missions out of the open count", async () => {
+		readSpacePage.mockResolvedValue(
+			aSpacePage([
+				entryIn("m-done", "done"),
+				entryIn("m-failed", "failed"),
+				entryIn("m-closed", "closed"),
+			]),
+		)
+		const { result } = renderHook(() => useSpaceMissions("s-1"), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
+
+		await waitFor(() => expect(result.current.earlierToday).toHaveLength(3))
+		expect(result.current.openCount).toBe(0)
+	})
 
 	it("reads the feed of the space from the local midnight", async () => {
 		const { result } = renderHook(() => useSpaceMissions("s-1"), {

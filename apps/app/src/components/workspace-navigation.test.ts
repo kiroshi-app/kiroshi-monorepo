@@ -557,7 +557,7 @@ describe("the Home page", () => {
 
 		expect(slot("home-layout")?.getAttribute("data-stage")).toBe("empty")
 		expect(composerText()).toBe("")
-		expect(screen.queryByText("Book the flights.")).toBeNull()
+		expect(slot("home-layout")?.textContent).not.toContain("Book the flights.")
 
 		await sendFromHome("Book the hotel.")
 

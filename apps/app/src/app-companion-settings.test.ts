@@ -25,7 +25,7 @@ import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-s
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import { aMission } from "@/lib/missions/mission-fixtures"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
-import { sidebarItemOf } from "@/lib/sidebar/sidebar-fixtures"
+import { rosterRowOf, sidebarItemOf } from "@/lib/sidebar/sidebar-fixtures"
 import { readMirror, writeMirror } from "@/lib/user/preferences-mirror"
 
 type Harness = {
@@ -471,8 +471,13 @@ const missionsEntryOf = () =>
 		name: new RegExp(`^${i18n.t("bots:rail.missions")} \\d+$`),
 	})
 
-const missionCardOf = (objective: string) =>
-	screen.getByRole("button", { name: new RegExp(objective) })
+const missionCardOf = (objective: string) => {
+	const card = screen
+		.getAllByRole("button", { name: new RegExp(objective) })
+		.find((button) => button.getAttribute("data-slot") !== "mission-capsule")
+	if (!card) throw new Error(`no mission card for ${objective}`)
+	return card
+}
 
 const raisedNoticeTitles = () =>
 	[...document.querySelectorAll('[data-slot="toast-title"]')].map(
@@ -560,6 +565,39 @@ it("creates a companion from Create a companion, as the roster create does", asy
 	)
 
 	expect(companionCards()).toHaveLength(companionCount + 1)
+})
+
+it("opens the companion screen on General from the Settings of a roster row menu", async () => {
+	await mountApp()
+
+	await openContextMenuOn(rosterRowOf(ATLAS))
+	await chooseInMenu(i18n.t("bots:roster.settings"))
+
+	expect(companionScreenOf(ATLAS)).toEqual(ON_GENERAL)
+})
+
+it("opens the companion screen on the Danger zone from the Delete of a roster row menu", async () => {
+	await mountApp()
+
+	await openContextMenuOn(rosterRowOf(ATLAS))
+	await chooseInMenu(i18n.t("bots:roster.delete"))
+
+	expect(companionScreenOf(ATLAS)).toEqual({
+		...ON_GENERAL,
+		entry: i18n.t("bots:dialog.tab.danger"),
+	})
+})
+
+it("leaves the Danger zone for the entry chosen after a Delete", async () => {
+	await mountApp()
+	await openContextMenuOn(rosterRowOf(ATLAS))
+	await chooseInMenu(i18n.t("bots:roster.delete"))
+
+	await press(menuEntryOf(i18n.t("bots:dialog.tab.instructions")))
+
+	expect(companionScreenOf(ATLAS)?.entry).toBe(
+		i18n.t("bots:dialog.tab.instructions"),
+	)
 })
 
 it("opens the companion screen on General from the Settings of a message avatar menu", async () => {

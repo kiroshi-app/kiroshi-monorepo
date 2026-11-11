@@ -45,6 +45,7 @@ const spaceMissionsReadOf = ({ pages }: SpaceFeed): SpaceMissionsRead => ({
 
 export type SpaceMissionsView = SpaceMissionGroups & {
 	waitingCount: number
+	openCount: number
 	isPending: boolean
 	hasFailed: boolean
 	isFailureRaised: boolean
@@ -91,6 +92,7 @@ export const useSpaceMissions = (spaceId: string | null): SpaceMissionsView => {
 		() => ({
 			...groups,
 			waitingCount: groups.waitingOnYou.length,
+			openCount: groups.waitingOnYou.length + groups.inProgress.length,
 			isPending,
 			hasFailed,
 			isFailureRaised,

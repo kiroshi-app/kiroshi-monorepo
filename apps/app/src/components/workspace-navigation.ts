@@ -22,7 +22,10 @@ type WorkspaceNavigationOptions = {
 	onSelectSpace: (id: string) => void
 }
 
-type WorkspaceNavigation = Pick<WorkspaceFrame, "sidebar" | "selectedSpaceId">
+type WorkspaceNavigation = Pick<
+	WorkspaceFrame,
+	"sidebar" | "rowMenu" | "selectedSpaceId"
+>
 
 export const useWorkspaceNavigation = ({
 	navigation,
@@ -37,6 +40,11 @@ export const useWorkspaceNavigation = ({
 	const { badgesBySpaceId, rosterBots } = rosterLists
 	const {
 		onCreateSpace,
+		onDeleteBot,
+		onEditBot,
+		onOpenBotInNewTab,
+		onOpenConversationInNewTab,
+		onOpenConversationSettings,
 		onOpenSpaceSettings,
 		onSelectBot,
 		onSelectConversation,
@@ -48,6 +56,7 @@ export const useWorkspaceNavigation = ({
 
 	return useMemo(() => {
 		const space = switcher.selectedSpace
+		const isAgent = (id: string) => rosterBots.some((agent) => agent.id === id)
 
 		return {
 			sidebar: {
@@ -67,17 +76,26 @@ export const useWorkspaceNavigation = ({
 				onSelectLibrary: navigation.openLibrary,
 				onSelectMissions: navigation.openMissions,
 				onOpenConversation: (id) => {
-					const isAgent = rosterBots.some((agent) => agent.id === id)
 					if (!isListShown) {
-						navigation.openThread(isAgent ? { bot: id } : { conversation: id })
+						navigation.openThread(
+							isAgent(id) ? { bot: id } : { conversation: id },
+						)
 						return
 					}
-					if (isAgent) onSelectBot(id)
+					if (isAgent(id)) onSelectBot(id)
 					else onSelectConversation(id)
 				},
 				onOpenMission: openMissionThread,
 				spaces: switcher.spaces,
 				user,
+			},
+			rowMenu: {
+				isAgent,
+				onOpenInNewTab: (id) =>
+					isAgent(id) ? onOpenBotInNewTab(id) : onOpenConversationInNewTab(id),
+				onOpenSettings: (id) =>
+					isAgent(id) ? onEditBot(id) : onOpenConversationSettings(id),
+				onOpenAgentDangerZone: onDeleteBot,
 			},
 			selectedSpaceId: space?.id,
 		}
@@ -85,6 +103,11 @@ export const useWorkspaceNavigation = ({
 		badgesBySpaceId,
 		navigation,
 		onCreateSpace,
+		onDeleteBot,
+		onEditBot,
+		onOpenBotInNewTab,
+		onOpenConversationInNewTab,
+		onOpenConversationSettings,
 		onOpenSpaceSettings,
 		isListShown,
 		onSelectBot,

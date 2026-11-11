@@ -88,7 +88,7 @@ const refusingStoreOf = (store: TranscriptStore): RefusingStore => {
 }
 
 const mountTwoRooms = async () => {
-	writeMirror({ ...readMirror(), firstRunDone: true, sidebarCollapsed: true })
+	writeMirror({ ...readMirror(), firstRunDone: true })
 	const store = refusingStoreOf(createFakeTranscriptStore())
 	const [space] = await store.spaces()
 	const bot = await store.createBot(newBotIdentity([]), space.id)
@@ -117,28 +117,18 @@ const press = async (control: Element) => {
 	await settle()
 }
 
-const NOT_SENT = i18n.t("bots:roster.conversation.notSent")
-
-const notSentLabelOf = (name: string) =>
-	i18n.t("bots:roster.titled", { name, title: NOT_SENT })
-
-const sidebarConversationOf = (name: string) => {
-	const item = [
-		...document.querySelectorAll(
-			'[data-slot="collapsed-sidebar-conversation"]',
-		),
-	].find((shown) =>
-		[name, notSentLabelOf(name)].includes(
-			shown.getAttribute("aria-label") ?? "",
-		),
-	)
-	if (!item) throw new Error(`no sidebar conversation for ${name}`)
-	return item
+const rosterRowOf = (name: string) => {
+	const row = [...document.querySelectorAll('[data-slot="roster-row-name"]')]
+		.find((label) => label.textContent === name)
+		?.closest("button")
+	if (!row) throw new Error(`no roster row for ${name}`)
+	return row
 }
 
+const NOT_SENT = i18n.t("bots:roster.conversation.notSent")
+
 const isNotSent = (name: string) =>
-	sidebarConversationOf(name).getAttribute("aria-label") ===
-	notSentLabelOf(name)
+	within(rosterRowOf(name)).queryByText(NOT_SENT) !== null
 
 const sendInComposer = async (text: string) => {
 	const composer = screen.getByRole("textbox", {
@@ -162,7 +152,7 @@ const retryOfRefusedMessage = () => {
 }
 
 const refuseInRoom = async (store: RefusingStore) => {
-	await press(sidebarConversationOf(ROOM))
+	await press(rosterRowOf(ROOM))
 	store.refuseNextSend()
 	await sendInComposer(REFUSED)
 }
@@ -175,7 +165,7 @@ it("marks the row of a conversation whose last message was refused Not sent, on 
 	expect(isNotSent(ROOM)).toBe(true)
 	expect(isNotSent(OTHER_ROOM)).toBe(false)
 
-	await press(sidebarConversationOf(OTHER_ROOM))
+	await press(rosterRowOf(OTHER_ROOM))
 
 	expect(isNotSent(ROOM)).toBe(true)
 	expect(isNotSent(OTHER_ROOM)).toBe(false)

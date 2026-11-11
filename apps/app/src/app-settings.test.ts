@@ -21,6 +21,7 @@ import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-s
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import { isDesktopHost } from "@/lib/host/index"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
+import { rosterRowOf } from "@/lib/sidebar/sidebar-fixtures"
 import type { UserPreferences } from "@/lib/user/preferences-contract"
 import { readMirror, writeMirror } from "@/lib/user/preferences-mirror"
 
@@ -207,6 +208,7 @@ const currentEntriesOf = () =>
 	within(railOf())
 		.getAllByRole("button")
 		.filter((entry) => entry.getAttribute("aria-current") === "page")
+		.filter((entry) => !entry.querySelector('[data-slot="roster-row-name"]'))
 
 const avatarOf = () =>
 	within(railOf()).getAllByRole("button").at(-1) as HTMLElement
@@ -362,6 +364,42 @@ it("asks before a sidebar press leaves an unsaved application, and leaves once o
 
 	expect(shownSettingsOf()).toBeNull()
 	expect(isMarked(libraryEntryOf())).toBe(true)
+})
+
+it.each([
+	["a row press", () => press(rosterRowOf(CONVERSATION_TITLE))],
+	[
+		"the Settings of a row menu",
+		async () => {
+			await act(async () => {
+				fireEvent.contextMenu(rosterRowOf(CONVERSATION_TITLE), {
+					clientX: 20,
+					clientY: 20,
+				})
+			})
+			await settle()
+			await press(
+				screen.getByRole("menuitem", { name: i18n.t("bots:roster.settings") }),
+			)
+		},
+	],
+])("asks before %s leaves an unsaved application", async (_, leave) => {
+	await mountApp(twoSpaceApplications)
+	await openSpaceSettingsByRail()
+	await openApplications()
+	await press(menuEntryOf(/^ledger/))
+	fireEvent.change(
+		screen.getByLabelText(i18n.t("bots:applications.name.label")),
+		{ target: { value: "ledger-desk" } },
+	)
+
+	await leave()
+
+	expect(
+		screen.getByRole("alertdialog", {
+			name: i18n.t("bots:applications.leave.title"),
+		}),
+	).toBeTruthy()
 })
 
 it("asks before the Space settings row of the Space switcher leaves an unsaved application", async () => {
