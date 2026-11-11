@@ -121,17 +121,25 @@ pub(super) async fn member_socket_of<R: Runtime>(
 	device: &DeviceKeys,
 	instance_id: &str,
 ) -> Result<String, JoinedSpaceError> {
+	let relay_device_id = registered_relay_device(app, bearer, device, instance_id).await?;
+	let cloud = app.state::<RelayGuests>().inner().cloud();
+	Ok(relay::member_socket_url(cloud, instance_id, &relay_device_id))
+}
+
+pub(super) async fn registered_relay_device<R: Runtime>(
+	app: &AppHandle<R>,
+	bearer: &str,
+	device: &DeviceKeys,
+	instance_id: &str,
+) -> Result<String, JoinedSpaceError> {
 	let guests = app.state::<RelayGuests>().inner();
 	let device_id = device.device_id().to_string();
-	let relay_device_id = match guests.known_relay_device(bearer, &device_id) {
-		Some(known) => known,
-		None => {
-			let read = relay_device_of(app, guests.cloud(), bearer, device, instance_id).await?;
-			guests.relay_device_known(bearer, &device_id, &read);
-			read
-		}
-	};
-	Ok(relay::member_socket_url(guests.cloud(), instance_id, &relay_device_id))
+	if let Some(known) = guests.known_relay_device(bearer, &device_id) {
+		return Ok(known);
+	}
+	let read = relay_device_of(app, guests.cloud(), bearer, device, instance_id).await?;
+	guests.relay_device_known(bearer, &device_id, &read);
+	Ok(read)
 }
 
 async fn relay_device_of<R: Runtime>(
