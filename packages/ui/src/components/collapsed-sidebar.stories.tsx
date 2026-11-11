@@ -61,12 +61,10 @@ const missionOf = (
 	state: BotMissionState,
 	externalId: string,
 	title: string,
-	agentName = "Atlas",
 ): AppSidebarRowMission => ({
 	id: `mission-${externalId}`,
 	state,
 	ticket: { platform: "linear", externalId, title },
-	agentName,
 })
 
 const conversationOf = (
@@ -91,7 +89,7 @@ const RELEASE_TRAIN = conversationOf(
 	BLOT_HUES.orange,
 	[
 		missionOf("working", "OPE-512", "Rebuild the bundle"),
-		missionOf("waiting", "OPE-510", "Ship the release notes", "Beacon"),
+		missionOf("waiting", "OPE-510", "Ship the release notes"),
 	],
 )
 
@@ -170,7 +168,7 @@ const BILLING = conversationOf(
 	BLOT_HUES.yellow,
 	[
 		missionOf("failed", "OPE-521", "Move the invoices table"),
-		missionOf("waiting_agent", "OPE-520", "Backfill the ledger", "Beacon"),
+		missionOf("waiting_agent", "OPE-520", "Backfill the ledger"),
 	],
 )
 
@@ -315,11 +313,27 @@ export const Hover3b = meta.story({
 		docs: {
 			description: {
 				story:
-					"The collapsed rail with the pointer on a mission cell. Check the whole Release train group lights white 8 percent as one surface, the only tooltip is the conversation's, right of the rail, it stays one tooltip while the pointer moves to the next cell, a click on the cell opens Release train, and Missions carries the attention dot.",
+					"The collapsed rail with the pointer on a mission cell. Check the whole Release train group lights white 8 percent as one surface, the only tooltip is the conversation's, right of the rail, it stays one tooltip while the pointer moves to the next cell, a click on the cell opens Release train, and Missions carries the attention dot. Check too that New conversation follows the Space avatar as the first destination, that no Search button sits in the rail, and that with a single Space the carousel refuses a sideways scroll and reports no selection.",
 			},
 		},
 	},
-	play: async ({ canvasElement, userEvent }) => {
+	play: async ({ args, canvasElement, userEvent }) => {
+		await expectSpaceCarouselHeld(slotIn(canvasElement, "collapsed-sidebar"))
+		await expect(args.onSelectSpace).not.toHaveBeenCalled()
+
+		const buttons = rail(canvasElement).getAllByRole("button")
+		const space = slotIn(canvasElement, "collapsed-sidebar-space")
+		const newConversation = rail(canvasElement).getByRole("button", {
+			name: "New conversation",
+		})
+		await expect(buttons[buttons.indexOf(space) + 1]).toBe(newConversation)
+		await expect(
+			slotsIn(canvasElement, "collapsed-sidebar-destination")[0],
+		).toBe(newConversation)
+		await expect(
+			rail(canvasElement).queryByRole("button", { name: "Search" }),
+		).toBeNull()
+
 		const cell = missionCellNamed(
 			canvasElement,
 			"OPE-510 Ship the release notes",
@@ -566,6 +580,7 @@ export const MissionThreadOpen = meta.story({
 
 export const TabSkipsTheMissionCells = meta.story({
 	name: "Tab skips the mission cells",
+	tags: ["test-only"],
 	args: { zones: zonesWith(EVERY_STATE) },
 	parameters: {
 		docs: {
@@ -961,6 +976,7 @@ export const TriggerLocalCollapsed = meta.story({
 
 export const TriggerSharedCollapsed = meta.story({
 	name: "Trigger shared Collapsed",
+	tags: ["test-only"],
 	...triggerAt("shared", "shared"),
 })
 
@@ -994,6 +1010,7 @@ const SpaceFollowingWindow = (args: CollapsedSidebarProps) => {
 
 export const SwipeMovesBetweenSpacesCollapsed = meta.story({
 	name: "Swipe moves between spaces Collapsed",
+	tags: ["test-only"],
 	args: { spaces: SEVERAL_SPACES },
 	render: (args) => <SpaceFollowingWindow {...args} />,
 	parameters: {
@@ -1026,24 +1043,9 @@ export const SwipeMovesBetweenSpacesCollapsed = meta.story({
 	},
 })
 
-export const SwipeWithOneSpaceDoesNothingCollapsed = meta.story({
-	name: "Swipe with one space does nothing Collapsed",
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"A single Space. Check the carousel refuses a sideways scroll and no selection is reported.",
-			},
-		},
-	},
-	play: async ({ args, canvasElement }) => {
-		await expectSpaceCarouselHeld(slotIn(canvasElement, "collapsed-sidebar"))
-		await expect(args.onSelectSpace).not.toHaveBeenCalled()
-	},
-})
-
 export const SwipeWithSwitchingNotAllowedDoesNothingCollapsed = meta.story({
 	name: "Swipe with switching not allowed does nothing Collapsed",
+	tags: ["test-only"],
 	args: { spaces: SEVERAL_SPACES, isSpaceSwitchingEnabled: false },
 	parameters: {
 		docs: {
@@ -1116,6 +1118,7 @@ const LONG_ZONE = recentZone(
 
 export const ListScrollKeptAcrossSwipeCollapsed = meta.story({
 	name: "List scroll kept across a swipe Collapsed",
+	tags: ["test-only"],
 	args: { spaces: SEVERAL_SPACES, zones: [LONG_ZONE] },
 	render: (args) => <SpaceFollowingWindow {...args} />,
 	parameters: {
@@ -1209,20 +1212,3 @@ export const CurrentDestinationHoveredCollapsed = meta.story(
 export const CurrentDestinationHoveredLightCollapsed = meta.story(
 	currentDestinationHoverStory(LIGHT),
 )
-
-export const NewConversationUnderTheSpaceCollapsed = meta.story({
-	play: async ({ canvasElement }) => {
-		const buttons = rail(canvasElement).getAllByRole("button")
-		const space = slotIn(canvasElement, "collapsed-sidebar-space")
-		const newConversation = rail(canvasElement).getByRole("button", {
-			name: "New conversation",
-		})
-		await expect(buttons[buttons.indexOf(space) + 1]).toBe(newConversation)
-		await expect(
-			slotsIn(canvasElement, "collapsed-sidebar-destination")[0],
-		).toBe(newConversation)
-		await expect(
-			rail(canvasElement).queryByRole("button", { name: "Search" }),
-		).toBeNull()
-	},
-})

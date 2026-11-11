@@ -1797,14 +1797,12 @@ navigation-collapsedsidebar--last-mission-completes
 navigation-collapsedsidebar--list-scroll-kept-across-swipe-collapsed
 navigation-collapsedsidebar--mission-thread-open
 navigation-collapsedsidebar--neighbour-list-shows-mid-swipe-collapsed
-navigation-collapsedsidebar--new-conversation-under-the-space-collapsed
 navigation-collapsedsidebar--one-mission
 navigation-collapsedsidebar--overflow-count-is-plain-text
 navigation-collapsedsidebar--r-1-not-sent-collapsed
 navigation-collapsedsidebar--s-1-several-spaces-collapsed
 navigation-collapsedsidebar--s-2-shared-space-host-not-connected-collapsed
 navigation-collapsedsidebar--swipe-moves-between-spaces-collapsed
-navigation-collapsedsidebar--swipe-with-one-space-does-nothing-collapsed
 navigation-collapsedsidebar--swipe-with-switching-not-allowed-does-nothing-collapsed
 navigation-collapsedsidebar--tab-skips-the-mission-cells
 navigation-collapsedsidebar--trigger-connecting-collapsed
@@ -1874,7 +1872,6 @@ navigation-expandedsidebar--e-2-nothing-pinned-expanded
 navigation-expandedsidebar--e-3-empty-section-expanded
 navigation-expandedsidebar--expanded-missions
 navigation-expandedsidebar--expanded-new-conversation
-navigation-expandedsidebar--footer-is-one-settings-button-expanded
 navigation-expandedsidebar--l-1-loading-expanded
 navigation-expandedsidebar--l-2-failed-expanded
 navigation-expandedsidebar--l-3-loading-more-expanded
@@ -1885,14 +1882,10 @@ navigation-expandedsidebar--missions-1-tree-light-expanded
 navigation-expandedsidebar--missions-1-tree-long-titles-expanded
 navigation-expandedsidebar--n-1-named-section-expanded
 navigation-expandedsidebar--neighbour-list-shows-mid-swipe-expanded
-navigation-expandedsidebar--new-conversation-draws-the-plus-expanded
 navigation-expandedsidebar--s-1-several-spaces-expanded
 navigation-expandedsidebar--s-2-shared-space-host-not-connected-expanded
 navigation-expandedsidebar--swipe-moves-between-spaces-expanded
-navigation-expandedsidebar--swipe-with-one-space-does-nothing-expanded
 navigation-expandedsidebar--swipe-with-switching-not-allowed-does-nothing-expanded
-navigation-expandedsidebar--switcher-alone-in-its-row-expanded
-navigation-expandedsidebar--switcher-and-footer-insets-expanded
 navigation-expandedsidebar--trigger-connecting-expanded
 navigation-expandedsidebar--trigger-local-expanded
 navigation-expandedsidebar--trigger-offline-expanded
