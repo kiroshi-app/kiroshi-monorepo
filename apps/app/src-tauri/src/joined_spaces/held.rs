@@ -36,10 +36,8 @@ pub(super) async fn held<R: Runtime>(
 	instance_id: &str,
 ) -> Result<Result<Held, JoinedSpaceWait>, JoinedSpaceError> {
 	let device = device_keys(app)?;
-	if is_unadmitted(app, instance_id) {
-		return Ok(Err(last_wait(app, instance_id)));
-	}
-	let Some(space) = space_keys(app)?.held(&key_item(instance_id)).map_err(key_store)? else {
+	let space = space_keys(app)?.held(&key_item(instance_id)).map_err(key_store)?;
+	let Some(space) = space.filter(|_| !is_unadmitted(app, instance_id)) else {
 		return Ok(Err(last_wait(app, instance_id)));
 	};
 	let Some(roster) = roster_verified(app, instance_id, &device).await? else {
