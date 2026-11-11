@@ -250,13 +250,18 @@ export const wheelTrainOn = (
 
 let nextSwipeAt = 0
 
+const nextSwipeStart = (model: typeof FAST_FLICK) => {
+	const startsAt = Math.max(performance.now(), nextSwipeAt)
+	nextSwipeAt = startsAt + trackpadSwipeDuration(model) + SWIPE_END_WAIT_MS
+	return startsAt
+}
+
 export const swipeOn = (
 	target: Element,
 	direction: 1 | -1,
 	model = FAST_FLICK,
 ) => {
-	const startsAt = Math.max(performance.now(), nextSwipeAt)
-	nextSwipeAt = startsAt + trackpadSwipeDuration(model) + SWIPE_END_WAIT_MS
+	const startsAt = nextSwipeStart(model)
 	const { fingers, momentum } = trackpadSwipe(model, direction)
 	return dispatchTrackpadWheels(target, [...fingers, ...momentum], startsAt)
 }
@@ -279,9 +284,7 @@ export const expectListFollowsSwipe = async ({
 	const restingLeft = listIn().getBoundingClientRect().left
 	const { fingers, momentum } = trackpadSwipe(SLOW_SHORT_SWIPE, 1)
 	const travel = fingers.reduce((sum, { deltaX }) => sum + deltaX, 0)
-	const startsAt = Math.max(performance.now(), nextSwipeAt)
-	nextSwipeAt =
-		startsAt + trackpadSwipeDuration(SLOW_SHORT_SWIPE) + SWIPE_END_WAIT_MS
+	const startsAt = nextSwipeStart(SLOW_SHORT_SWIPE)
 
 	dispatchTrackpadWheels(nav, fingers, startsAt)
 	await expect(listIn().getBoundingClientRect().left).toBeCloseTo(
