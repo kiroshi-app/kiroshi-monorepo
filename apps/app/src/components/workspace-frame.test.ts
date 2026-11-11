@@ -270,6 +270,11 @@ const MISSIONS = i18n.t("bots:rail.missions")
 const MISSIONS_ENTRY = new RegExp(`^${MISSIONS}( \\d+)?$`)
 const LIBRARY = i18n.t("bots:rail.library")
 
+const titleBarSearchButton = () =>
+	within(slotOf("app-title-bar") as HTMLElement).getByRole("button", {
+		name: SEARCH,
+	})
+
 describe("the workspace frame", () => {
 	it("keeps one navigation sidebar and one title bar mounted across every page, and no rail", async () => {
 		const { router } = await mountApp()
@@ -371,7 +376,13 @@ describe("the workspace frame", () => {
 			await settle()
 			expect(slotOf("search-palette")).toBeNull()
 
-			await press(entry(SEARCH))
+			expect(
+				within(slotOf("expanded-sidebar") as HTMLElement).queryByRole(
+					"button",
+					{ name: SEARCH },
+				),
+			).toBeNull()
+			await press(titleBarSearchButton())
 			expect(slotOf("search-palette")).not.toBeNull()
 		},
 	)
