@@ -33,14 +33,14 @@ pub fn evolve(descriptor: &Descriptor, path: &Path) -> Evolved {
 	let _serialised = super::serialised(path);
 	let changed = match git::changes(path) {
 		Ok(changed) => changed,
-		Err(error) => return bot_write_failed(path, error),
+		Err(error) => return bot_write_failed(descriptor.plugin_name, path, error),
 	};
 	if changed.is_empty() {
 		return Evolved::Unchanged;
 	}
 	let (title, body) =
 		learned(path).unwrap_or_else(|| (descriptor.written_title.to_owned(), changed.join("\n")));
-	bot_recorded(path, title, &body)
+	bot_recorded(descriptor.plugin_name, path, title, &body)
 }
 
 pub fn skills(path: &Path) -> Vec<Skill> {
