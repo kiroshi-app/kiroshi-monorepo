@@ -12,6 +12,12 @@ pub static APP_WINDOW_PLUS: Icon = Icon {
 	body: r#"<path d="M11 21H6C4.34315 21 3 19.6569 3 18V6C3 4.34315 4.34315 3 6 3H18C19.6569 3 21 4.34315 21 6V11M18 15V21M15 18H21" fill="none" stroke="currentColor" stroke-width="2.16" stroke-linecap="round" stroke-linejoin="round"></path><path d="M8 7C8 7.5523 7.5523 8 7 8C6.4477 8 6 7.5523 6 7C6 6.4477 6.4477 6 7 6C7.5523 6 8 6.4477 8 7ZM12 7C12 7.5523 11.5523 8 11 8C10.4477 8 10 7.5523 10 7C10 6.4477 10.4477 6 11 6C11.5523 6 12 6.4477 12 7ZM16 7C16 7.5523 15.5523 8 15 8C14.4477 8 14 7.5523 14 7C14 6.4477 14.4477 6 15 6C15.5523 6 16 6.4477 16 7Z" fill="currentColor" stroke="none" stroke-width="2.16" stroke-linecap="round" stroke-linejoin="round"></path>"#,
 };
 
+pub static ARCHIVE: Icon = Icon {
+	name: "keyline-Archive-outline",
+	view: 24.0,
+	body: r#"<path d="M4 4L20 4C21.1046 4 22 4.8954 22 6L22 7C22 8.1046 21.1046 9 20 9L4 9C2.8954 9 2 8.1046 2 7L2 6C2 4.8954 2.8954 4 4 4ZM4 9L4 17C4 18.6569 5.3431 20 7 20L17 20C18.6569 20 20 18.6569 20 17L20 9M10 13L14 13" fill="none" stroke="currentColor" stroke-width="2.16" stroke-linecap="round" stroke-linejoin="round"></path>"#,
+};
+
 pub static ARROW_DOWN: Icon = Icon {
 	name: "keyline-ArrowDown-outline",
 	view: 24.0,
@@ -1008,9 +1014,10 @@ pub static WRENCH_FILL: Icon = Icon {
 	body: r#"<path d="M17.9749 8.1464L19.5607 6.5607C19.9357 6.1856 20.4444 5.9749 20.9749 5.9749C22.0055 5.9749 22.8673 6.758 22.9657 7.7839C22.9886 8.0219 23 8.2609 23 8.5C23 12.6421 19.6421 16 15.5 16C11.3579 16 8 12.6421 8 8.5C8 4.3579 11.3579 1 15.5 1C15.7391 1 15.9781 1.0114 16.2161 1.0343C17.242 1.1327 18.0251 1.9945 18.0251 3.0251C18.0251 3.5556 17.8144 4.0643 17.4393 4.4393L15.8536 6.0251C15.5722 6.3064 15.4142 6.688 15.4142 7.0858C15.4142 7.9142 16.0858 8.5858 16.9142 8.5858C17.312 8.5858 17.6936 8.4278 17.9749 8.1464Z" fill="currentColor" stroke="none" stroke-width="2.16" stroke-linecap="round" stroke-linejoin="round"></path><path d="M15.3955 14.9992C15.3688 14.9987 15.342 14.9985 15.3152 14.9985C13.9891 14.9985 12.7173 15.5253 11.7797 16.463L7.1213 21.1213C6.5587 21.6839 5.7956 22 5 22C3.3431 22 2 20.6569 2 19C2 18.2044 2.3161 17.4413 2.8787 16.8787L7.537 12.2203C8.4747 11.2827 9.0015 10.0109 9.0015 8.6848C9.0015 8.658 9.0013 8.6312 9.0008 8.6045" fill="none" stroke="currentColor" stroke-width="2.16" stroke-linecap="round" stroke-linejoin="round"></path>"#,
 };
 
-pub static KEYLINE: [&Icon; 168] = [
+pub static KEYLINE: [&Icon; 169] = [
 	&ALIGN_LEFT,
 	&APP_WINDOW_PLUS,
+	&ARCHIVE,
 	&ARROW_DOWN,
 	&ARROW_RIGHT,
 	&ARROW_UP,
@@ -1179,10 +1186,11 @@ pub static KEYLINE: [&Icon; 168] = [
 	&WRENCH_FILL,
 ];
 
-pub static ICONS: [(&str, &Icon); 133] = [
+pub static ICONS: [(&str, &Icon); 134] = [
 	("Add", &PLUS),
 	("Alert", &TRIANGLE_ALERT),
 	("AlertCircle", &CIRCLE_ALERT),
+	("Archive", &ARCHIVE),
 	("ArrowDown", &ARROW_DOWN),
 	("ArrowRight", &ARROW_RIGHT),
 	("ArrowUp", &ARROW_UP),

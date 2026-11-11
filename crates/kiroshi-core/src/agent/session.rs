@@ -1193,9 +1193,12 @@ async fn on_exit(
 
 #[cfg(test)]
 mod tests {
+	#[cfg(unix)]
 	use super::super::sidecar::SidecarOptions;
 	use super::*;
+	#[cfg(unix)]
 	use crate::executable_script::an_executable_script;
+	#[cfg(unix)]
 	use crate::removed_on_drop::RemovedOnDrop;
 
 	#[derive(Debug)]
@@ -1595,6 +1598,7 @@ mod tests {
 		);
 	}
 
+	#[cfg(unix)]
 	const PROMPTING_SIDECAR: &str = r#"#!/bin/sh
 printf '%s\n' '{"type":"ready","provider":"stub","version":"0"}'
 while IFS= read -r line; do
@@ -1614,6 +1618,7 @@ while IFS= read -r line; do
 done
 "#;
 
+	#[cfg(unix)]
 	async fn heard_until(
 		heard: &mut mpsc::UnboundedReceiver<AgentEvent>,
 		ends: impl Fn(&AgentEvent) -> bool,
@@ -1632,6 +1637,7 @@ done
 		told
 	}
 
+	#[cfg(unix)]
 	#[tokio::test]
 	async fn an_answer_to_a_prompt_its_stop_closed_is_refused_and_resolves_nothing() {
 		let script = RemovedOnDrop(std::env::temp_dir().join(format!(

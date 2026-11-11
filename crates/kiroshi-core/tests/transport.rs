@@ -13,14 +13,18 @@ use kiroshi_core::agent::contract::{
 };
 use kiroshi_core::agent::protocol::AuthorizeRequest;
 use kiroshi_core::agent::session::{EventSink, Handed, Session, SessionOptions, PARTIAL_MESSAGES};
-use kiroshi_core::agent::sidecar::{self, Opening, Sidecar, SidecarOptions};
+#[cfg(unix)]
+use kiroshi_core::agent::sidecar;
+use kiroshi_core::agent::sidecar::{Opening, Sidecar, SidecarOptions};
 use kiroshi_core::environment::contract::Values;
 use removed_on_drop::RemovedOnDrop;
 use tokio::sync::mpsc;
 
 const FAKE_SIDECAR: &str = env!("CARGO_BIN_EXE_fake_sidecar");
 const DEADLINE: Duration = Duration::from_secs(60);
+#[cfg(unix)]
 const POLL: Duration = Duration::from_millis(25);
+#[cfg(unix)]
 const LADDER_CEILING: Duration = Duration::from_secs(60);
 const TIMING_OUT_STARTUP: Duration = Duration::from_secs(2);
 
