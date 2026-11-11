@@ -213,7 +213,6 @@ const heldBotsOf = (
 
 interface ConversationRosterActions {
 	onSelectConversation?: (id: string, modifiers?: SidebarClickModifiers) => void
-	onOpenMission?: (missionId: string) => void
 	onOpenConversationInNewTab?: (id: string) => void
 	onOpenConversationSettings?: (id: string) => void
 	onDeleteConversation?: (id: string) => void

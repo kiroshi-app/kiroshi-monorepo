@@ -67,7 +67,6 @@ const NavigationSidebar = ({
 		openConversationId: _openConversationId,
 		openMissionId: _openMissionId,
 		onOpenConversation: _onOpenConversation,
-		onOpenMission: _onOpenMission,
 		update,
 		...shared
 	} = collapsed

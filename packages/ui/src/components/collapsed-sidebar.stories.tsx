@@ -199,8 +199,6 @@ const DARK = { theme: "dark", theme_layout: "single" }
 
 const OPEN_CONVERSATION = fn()
 
-const OPEN_MISSION = fn()
-
 const RETRY = fn()
 
 const DOWNLOAD = fn()
@@ -249,7 +247,6 @@ const meta = preview.meta({
 		onOpenSettings: fn(),
 		onSelectSpace: fn(),
 		onOpenConversation: OPEN_CONVERSATION,
-		onOpenMission: OPEN_MISSION,
 		onRetryList: RETRY,
 	},
 	render: PAPER_WINDOW,
@@ -277,16 +274,16 @@ const tileOf = (item: HTMLElement) => getComputedStyle(item, "::before")
 const backgroundOf = (element: HTMLElement) =>
 	getComputedStyle(element).backgroundColor
 
-const expectHoverTile = async (item: HTMLElement) => {
+const expectHoverTile = async (item: HTMLElement, surface = item) => {
 	if (!isInBrowserRunner()) return
 	const pointer = (await import("vitest/browser")).userEvent
 	try {
 		await pointer.hover(item)
-		await expect(tileOf(item).backgroundColor).toBe(
+		await expect(tileOf(surface).backgroundColor).toBe(
 			resolvedRootColor("--title-bar-highlight"),
 		)
 		await withMotionAllowed(async () => {
-			await expect(tileOf(item).transitionDuration).toBe("0s")
+			await expect(tileOf(surface).transitionDuration).toBe("0s")
 		})
 	} finally {
 		await pointer.unhover(item)
@@ -298,12 +295,15 @@ const missionCellNamed = (canvasElement: HTMLElement, name: string) =>
 		.getByText(name)
 		.closest('[data-slot="collapsed-sidebar-mission"]') as HTMLElement
 
-const expectNoHoverFill = async (cell: HTMLElement) => {
+const groupOf = (cell: HTMLElement) =>
+	cell.closest('[data-slot="collapsed-sidebar-group"]') as HTMLElement
+
+const expectNoHoverFill = async (cell: HTMLElement, surface = cell) => {
 	if (!isInBrowserRunner()) return
 	const pointer = (await import("vitest/browser")).userEvent
 	try {
 		await pointer.hover(cell)
-		await expect(tileOf(cell).backgroundColor).toBe("rgba(0, 0, 0, 0)")
+		await expect(tileOf(surface).backgroundColor).toBe("rgba(0, 0, 0, 0)")
 	} finally {
 		await pointer.unhover(cell)
 	}
@@ -315,7 +315,7 @@ export const Hover3b = meta.story({
 		docs: {
 			description: {
 				story:
-					"The collapsed rail with the pointer on a mission cell. Check the cell is no button and draws no tile, the tooltip opens right of the rail with the ticket and title on line 1, the state in its colour and the agent on line 2, and Missions carries the attention dot.",
+					"The collapsed rail with the pointer on a mission cell. Check the whole Release train group lights white 8 percent as one surface, the only tooltip is the conversation's, right of the rail, it stays one tooltip while the pointer moves to the next cell, a click on the cell opens Release train, and Missions carries the attention dot.",
 			},
 		},
 	},
@@ -329,13 +329,23 @@ export const Hover3b = meta.story({
 		await userEvent.hover(cell)
 		const tooltip = await tooltipShown()
 		await expect(tooltip).toHaveTextContent(
-			"OPE-510Ship the release noteswaiting for you· Beacon",
+			"Release train2 missions· waiting for you",
 		)
+		await expect(tooltip).not.toHaveTextContent("Ship the release notes")
 		await expectRightOfRail(canvasElement, tooltip)
+		await userEvent.hover(
+			missionCellNamed(canvasElement, "OPE-512 Rebuild the bundle"),
+		)
+		await expect(within(document.body).getAllByRole("tooltip")).toEqual([
+			tooltip,
+		])
 		await expect(
 			slotIn(canvasElement, "collapsed-sidebar-attention"),
 		).toBeInTheDocument()
+		await expectHoverTile(cell, groupOf(cell))
 		await expectNoHoverFill(cell)
+		await userEvent.click(cell)
+		await expect(OPEN_CONVERSATION).toHaveBeenCalledWith("release-train")
 	},
 })
 
@@ -346,7 +356,7 @@ export const OneMission = meta.story({
 		docs: {
 			description: {
 				story:
-					"A conversation with one open mission. Check the conversation and its single 44x28 mission cell share one white 5 percent group with no +N, that a click on the cell does nothing and the conversation item opens its conversation.",
+					"A conversation with one open mission. Check the conversation and its single 44x28 mission cell share one white 5 percent group with no +N, and that a click on the cell or on the conversation item opens the conversation.",
 			},
 		},
 	},
@@ -357,13 +367,14 @@ export const OneMission = meta.story({
 		await userEvent.click(
 			missionCellNamed(canvasElement, "OPE-512 Rebuild the bundle"),
 		)
-		await expect(OPEN_MISSION).not.toHaveBeenCalled()
+		await expect(OPEN_CONVERSATION).toHaveBeenCalledOnce()
+		await expect(OPEN_CONVERSATION).toHaveBeenCalledWith("release-train")
 		await expect(within(group).getAllByRole("button")).toHaveLength(1)
 		const conversation = within(group).getByRole("button", {
 			name: "Release train",
 		})
 		await userEvent.click(conversation)
-		await expect(OPEN_CONVERSATION).toHaveBeenCalledWith("release-train")
+		await expect(OPEN_CONVERSATION).toHaveBeenCalledTimes(2)
 		conversation.blur()
 	},
 })
@@ -401,7 +412,7 @@ export const OverflowCountIsPlainText = meta.story({
 		docs: {
 			description: {
 				story:
-					"A conversation with five open missions shows the first two then +3. Check +3 is 11px semibold text in the foreground colour with no tile, no button and no tab stop, that a click on it opens nothing, and that a screen reader hears +3 missions.",
+					"A conversation with five open missions shows the first two then +3. Check +3 is 11px semibold text in the foreground colour with no tile, no button and no tab stop, that a click on it opens the conversation, and that a screen reader hears +3 missions.",
 			},
 		},
 	},
@@ -422,7 +433,7 @@ export const OverflowCountIsPlainText = meta.story({
 			resolvedRootColor("--foreground"),
 		)
 		await userEvent.click(overflow)
-		await expect(within(document.body).queryByRole("menu")).toBeNull()
+		await expect(OPEN_CONVERSATION).toHaveBeenCalledWith("release-train")
 		await expectNoHoverFill(overflow)
 	},
 })
@@ -431,11 +442,15 @@ export const HoverOnConversation = meta.story({
 	name: "Hover on a conversation",
 	args: { zones: zonesWith(EVERY_STATE) },
 	parameters: {
-		pseudo: { hover: ['[aria-label="Release train"]'] },
+		pseudo: {
+			hover: [
+				'[data-slot="collapsed-sidebar-group"]:has([aria-label="Release train"])',
+			],
+		},
 		docs: {
 			description: {
 				story:
-					"The pointer rests on a conversation with open missions. Check its 36x36 tile lights white 8 percent and the tooltip reads the title, then the mission count and the state of its first mission.",
+					"The pointer rests on a conversation with open missions. Check its whole group lights white 8 percent as one surface with no second tile on the conversation, and the tooltip reads the title, then the mission count and the state of its first mission.",
 			},
 		},
 	},
@@ -448,7 +463,8 @@ export const HoverOnConversation = meta.story({
 		await expect(tooltip).toHaveTextContent(
 			"Release train3 missions· waiting for you",
 		)
-		await expectHoverTile(item)
+		await expectHoverTile(item, groupOf(item))
+		await expect(tileOf(item).backgroundColor).toBe("rgba(0, 0, 0, 0)")
 	},
 })
 
@@ -478,6 +494,34 @@ export const ConversationOpen = meta.story({
 		await expect(
 			canvasElement.querySelectorAll('[aria-current="page"]'),
 		).toHaveLength(1)
+	},
+})
+
+export const GroupConversationOpen = meta.story({
+	name: "Group conversation open",
+	args: {
+		destination: undefined,
+		zones: zonesWith(EVERY_STATE),
+		openConversationId: EVERY_STATE.id,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Release train, which has open missions, is the open conversation. Check its 36x36 tile holds white 12 percent and the pointer on one of its mission cells lights nothing over the group.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const item = rail(canvasElement).getByRole("button", {
+			name: "Release train",
+		})
+		await expect(item).toHaveAttribute("aria-current", "page")
+		await expect(tileOf(item).backgroundColor).toBe(
+			resolvedRootColor("--rail-item-selected"),
+		)
+		const cell = missionCellNamed(canvasElement, "OPE-511 Bump the runtime")
+		await expectNoHoverFill(cell, groupOf(cell))
 	},
 })
 
