@@ -1063,9 +1063,10 @@ const TitleBarTabs = ({
 			<div
 				className={cn(
 					HISTORY,
-					onToggleSidebar && HISTORY_BESIDE_SIDEBAR,
-					onToggleSidebar &&
-						(onOpenSearch ? HISTORY_COLLAPSED_WITH_SEARCH : HISTORY_COLLAPSED),
+					onToggleSidebar && [
+						HISTORY_BESIDE_SIDEBAR,
+						onOpenSearch ? HISTORY_COLLAPSED_WITH_SEARCH : HISTORY_COLLAPSED,
+					],
 				)}
 				data-slot="title-bar-history"
 			>
