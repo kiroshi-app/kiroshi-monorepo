@@ -1094,12 +1094,12 @@ const expectMissionsRows = async ({
 	await expect(getComputedStyle(head).backgroundColor).toBe(TRANSPARENT)
 	fireEvent.contextMenu(first)
 	await waitFor(() =>
-		expect(getComputedStyle(head).backgroundColor).not.toBe(TRANSPARENT),
+		expect(getComputedStyle(surface).backgroundColor).not.toBe(TRANSPARENT),
 	)
-	await expect(getComputedStyle(surface).backgroundColor).toBe(TRANSPARENT)
+	await expect(getComputedStyle(head).backgroundColor).toBe(TRANSPARENT)
 	await userEvent.keyboard("{Escape}")
 	await waitFor(() =>
-		expect(getComputedStyle(head).backgroundColor).toBe(TRANSPARENT),
+		expect(getComputedStyle(surface).backgroundColor).toBe(TRANSPARENT),
 	)
 
 	await expect(first.tabIndex).toBe(-1)
