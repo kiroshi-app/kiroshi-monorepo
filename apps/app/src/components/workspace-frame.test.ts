@@ -511,21 +511,19 @@ describe("the conversations of the collapsed sidebar", () => {
 		).toBeTruthy()
 	})
 
-	it("shows the mission of a conversation under it and opens that mission on click", async () => {
-		let roomId = ""
+	it("shows the mission cell of a conversation under it and opens nothing on click", async () => {
 		const { router } = await mountCollapsed(async (held) => {
 			const room = await roomIn(held, "Release train")
-			roomId = room.id
 			harness.missions = [missionOn(held, room, { id: "mission-release" })]
 		})
 
 		const mission = slotOf("collapsed-sidebar-mission") as HTMLElement
+		expect(
+			mission.closest('[data-slot="collapsed-sidebar-group"]'),
+		).not.toBeNull()
 		await press(mission)
 
-		expect(router.state.location.search).toMatchObject({
-			conversation: roomId,
-			mission: "mission-release",
-		})
+		expect(router.state.location.search).not.toHaveProperty("mission")
 	})
 
 	it("opens a conversation picked from the Missions page", async () => {
@@ -658,20 +656,18 @@ describe("the rows of the expanded sidebar", () => {
 		expect(recentNames()).not.toContain("First pin")
 	})
 
-	it("shows the mission of a conversation under its row and opens that mission on press", async () => {
-		let roomId = ""
+	it("shows the mission of a conversation as an inert capsule inside its row's menu area", async () => {
 		const { router } = await mountApp(async (held) => {
 			const room = await roomIn(held, "Release train")
-			roomId = room.id
 			harness.missions = [missionOn(held, room, { id: "mission-release" })]
 		})
 
-		await press(slotOf("mission-capsule") as HTMLElement)
+		const capsule = slotOf("mission-capsule") as HTMLElement
+		const menuArea = capsule.closest('[data-slot="context-menu-trigger"]')
+		expect(menuArea?.contains(rosterRowOf("Release train"))).toBe(true)
+		await press(capsule)
 
-		expect(router.state.location.search).toMatchObject({
-			conversation: roomId,
-			mission: "mission-release",
-		})
+		expect(router.state.location.search).not.toHaveProperty("mission")
 	})
 
 	it("opens a row from any page", async () => {
