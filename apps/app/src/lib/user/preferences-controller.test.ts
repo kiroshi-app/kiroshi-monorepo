@@ -509,42 +509,6 @@ describe("the sidebar the reader collapses", () => {
 	})
 })
 
-describe("the sidebar tab the reader selects", () => {
-	it("writes the tab to the record, and shows it before the host answers", async () => {
-		const host = aHost()
-		const controller = await loaded()
-
-		const written = controller.setSidebarTab("missions")
-
-		expect(controller.getState().preferences.sidebarTab).toBe("missions")
-		await written
-		expect(host()).toEqual({ ...DEFAULTS, sidebarTab: "missions" })
-	})
-
-	it("writes nothing for a tab the record already holds", async () => {
-		aHost({ ...DEFAULTS, sidebarTab: "missions" })
-		const controller = await loaded()
-		hostInvoke.mockClear()
-
-		await controller.setSidebarTab("missions")
-
-		expect(hostInvoke).not.toHaveBeenCalled()
-	})
-
-	it("shows the stored tab again when the write is refused", async () => {
-		aHost()
-		const controller = await loaded()
-		hostInvoke.mockRejectedValue({
-			kind: "storage",
-			failure: { kind: "sqlite", detail: "disk I/O error" },
-		})
-
-		await controller.setSidebarTab("companions")
-
-		expect(controller.getState().preferences.sidebarTab).toBe("conversations")
-	})
-})
-
 describe("the page the reader opens on", () => {
 	it("reads the page the record holds", async () => {
 		aHost({ ...DEFAULTS, openOn: "lastConversation" })

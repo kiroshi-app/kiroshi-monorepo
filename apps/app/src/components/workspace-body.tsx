@@ -57,7 +57,6 @@ export type WorkspaceBodyProps = {
 	readerName: string
 	isOverlayOpen: boolean
 	onToggleSettings: () => void
-	isMissionsPanelOpen: boolean
 	onOpenConversationSettings: (conversationId: string) => void
 	onOpenThreadInNewTab: (thread: ThreadSearch) => void
 	missions: OpenedMissionController
@@ -253,7 +252,7 @@ export function WorkspaceBody(props: WorkspaceBodyProps) {
 		)
 	}
 
-	const thread = props.isMissionsPanelOpen ? null : threadOf(props)
+	const thread = threadOf(props)
 
 	if (!thread) {
 		return <ScreenLayout header={<BareAppHeader />} />
