@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import { type ReactNode, useState } from "react"
 import { expect, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
@@ -33,6 +33,7 @@ import {
 } from "@workspace/ui/components/prompt-attachments.fixtures"
 import { ScreenLayout } from "@workspace/ui/components/screen-layout"
 import { ToolApproval } from "@workspace/ui/components/tool-approval"
+import { Button } from "@workspace/ui/components/ui/button"
 
 const ATLAS: HomeAgent = {
 	id: "atlas",
@@ -124,6 +125,7 @@ type EmptyHomeProps = {
 	hasBand?: boolean
 	attachments?: PromptAttachment[]
 	isSending?: boolean
+	arrivalKey?: string
 	after?: ReactNode
 }
 
@@ -135,12 +137,14 @@ const EmptyHome = ({
 	hasBand = true,
 	attachments,
 	isSending,
+	arrivalKey,
 	after,
 }: EmptyHomeProps) => (
 	<EmptyStage>
 		<HomeGreeting agent={agent} firstName={firstName} period={period} />
 		<HomeComposer
 			agents={AGENTS}
+			arrivalKey={arrivalKey}
 			attachments={attachments}
 			band={
 				hasBand ? (
@@ -467,6 +471,61 @@ export const FilesAttached = meta.story({
 		)
 		await expect(removedAttachment).toHaveBeenCalledWith("notes")
 		await expect(canvas.getByRole("textbox")).toHaveFocus()
+	},
+})
+
+const HomeArrivedTwice = () => {
+	const [arrival, setArrival] = useState(1)
+
+	return (
+		<EmptyHome
+			after={
+				<Button onClick={() => setArrival(arrival + 1)} variant="outline">
+					Arrive again
+				</Button>
+			}
+			arrivalKey={`arrival-${arrival}`}
+		/>
+	)
+}
+
+export const FocusedOnArrival = meta.story({
+	name: "Focused on arrival",
+	render: () => <EmptyHome arrivalKey="arrival-1" />,
+	parameters: withDescription(
+		"Arriving on the page puts the keyboard in the field, without scrolling the panel, so the person types straight away.",
+	),
+	play: async ({ canvas, canvasElement }) => {
+		await expect(canvas.getByRole("textbox")).toHaveFocus()
+		await expect(
+			slotIn(canvasElement, "screen-layout-scroller").scrollTop,
+		).toBe(0)
+	},
+})
+
+export const FocusBackOnANewArrival = meta.story({
+	name: "Focus back on a new arrival",
+	tags: ["test-only"],
+	render: () => <HomeArrivedTwice />,
+	parameters: withDescription(
+		"Proves a return to a page that stayed mounted: focus left elsewhere stays there until the next arrival, which puts it back in the field with the draft whole and the caret at its end.",
+	),
+	play: async ({ canvas, userEvent }) => {
+		const field = canvas.getByRole<HTMLTextAreaElement>("textbox")
+		await userEvent.type(field, FLIGHTS_ASK)
+		field.setSelectionRange(0, 0)
+		await userEvent.tab()
+		await expect(
+			canvas.getByRole("button", { name: "Add files" }),
+		).toHaveFocus()
+		await expect(field).not.toHaveFocus()
+
+		await userEvent.click(canvas.getByRole("button", { name: "Arrive again" }))
+
+		await expect(field).toHaveFocus()
+		await expect(field).toHaveValue(FLIGHTS_ASK)
+		await expect(field.selectionStart).toBe(FLIGHTS_ASK.length)
+		await expect(field.selectionEnd).toBe(FLIGHTS_ASK.length)
 	},
 })
 

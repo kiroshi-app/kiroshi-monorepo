@@ -1,4 +1,4 @@
-import { useNavigate } from "@tanstack/react-router"
+import { useLocation, useNavigate } from "@tanstack/react-router"
 
 import { ContentCard } from "@workspace/ui/components/content-card"
 
@@ -10,6 +10,9 @@ export const HomeRoute = () => {
 	const { core, homeAgent, rosterView } = useWorkspace()
 	const body = useWorkspaceBodyProps()
 	const navigate = useNavigate()
+	const arrivalKey = useLocation({
+		select: (location) => location.state.__TSR_key,
+	})
 	const spaceRowId = rosterView.rosteredSpaceId
 	const pickAgent = (botId: string) => {
 		if (spaceRowId) {
@@ -26,6 +29,7 @@ export const HomeRoute = () => {
 				{...body}
 				bot={homeAgent ?? undefined}
 				home={{
+					arrivalKey,
 					visits: core.homeVisits,
 					store: core.store,
 					conversations: rosterView.conversations,

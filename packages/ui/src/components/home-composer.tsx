@@ -1,6 +1,6 @@
 "use client"
 
-import { type FormEvent, type ReactNode, useState } from "react"
+import { type FormEvent, type ReactNode, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -34,6 +34,7 @@ type HomeComposerProps = {
 	onSubmit?: (value: string) => void
 	band?: ReactNode
 	sending?: boolean
+	arrivalKey?: string
 }
 
 type SendButtonProps = { isFilled: boolean; isSending?: boolean }
@@ -76,6 +77,7 @@ const HomeComposer = ({
 	onSubmit,
 	band,
 	sending = false,
+	arrivalKey,
 }: HomeComposerProps) => {
 	const { t } = useTranslation("chat")
 	const [internalValue, setInternalValue] = useState(defaultValue)
@@ -97,6 +99,13 @@ const HomeComposer = ({
 		onSubmit?.(currentValue.trim())
 		if (value === undefined) setInternalValue("")
 	}
+
+	useEffect(() => {
+		const field = refs.textarea.current
+		if (arrivalKey === undefined || !field) return
+		field.focus({ preventScroll: true })
+		field.setSelectionRange(field.value.length, field.value.length)
+	}, [arrivalKey, refs.textarea])
 
 	const removeAttachment = (id: string) => {
 		onRemoveAttachment?.(id)

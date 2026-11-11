@@ -368,3 +368,24 @@ it("leaves out the missions of another agent", () => {
 
 	expect(screen.queryByText("Completed")).toBeNull()
 })
+
+it("puts the keyboard after the draft on each arrival, and leaves it alone in between", async () => {
+	const { wrapper } = createQueryTestWrapper()
+	const { rerender } = render(emptyStageOf(fixture, { arrivalKey: "first" }), {
+		wrapper,
+	})
+	const field = () =>
+		screen.getByPlaceholderText<HTMLTextAreaElement>("Message Atlas")
+
+	await waitFor(() => expect(document.activeElement).toBe(field()))
+	field().blur()
+	rerender(emptyStageOf(fixture, { arrivalKey: "first" }))
+	expect(document.activeElement).not.toBe(field())
+
+	rerender(emptyStageOf(fixture, { arrivalKey: "second" }))
+
+	expect(document.activeElement).toBe(field())
+	expect(field().value).toBe("Also the hotel")
+	expect(field().selectionStart).toBe("Also the hotel".length)
+	expect(field().selectionEnd).toBe("Also the hotel".length)
+})

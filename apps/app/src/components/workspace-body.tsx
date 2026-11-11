@@ -38,6 +38,7 @@ type HomeSeat = HomeConversationStart & {
 	store: TranscriptStore
 	conversations: Conversation[]
 	onSelectAgent: (botId: string) => void
+	arrivalKey?: string
 }
 
 export type WorkspaceBodyProps = {
@@ -149,6 +150,7 @@ const HomeView = ({ body, seat, bot }: HomeViewProps) => {
 			<HomeEmptyStage
 				{...send}
 				{...rooms}
+				arrivalKey={seat.arrivalKey}
 				bots={body.bots}
 				isBandDismissed={visit?.isBandDismissed ?? false}
 				isReadOnly={Boolean(joinedHost?.departure)}
