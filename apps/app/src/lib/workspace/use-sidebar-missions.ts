@@ -1,45 +1,32 @@
-import {
-	createElement,
-	useCallback,
-	useMemo,
-	useSyncExternalStore,
-} from "react"
+import { useCallback, useMemo, useSyncExternalStore } from "react"
 
-import { MissionsFeedSkeleton } from "@workspace/ui/components/missions-feed-skeleton"
-import type { MissionsPageRowWrap } from "@workspace/ui/components/missions-page"
-import type { MissionsPanelProps } from "@workspace/ui/components/missions-panel"
-import type { ClickModifiers } from "@workspace/ui/lib/click-modifiers"
+import type { MissionsPageProps } from "@workspace/ui/components/missions-page"
 
 import {
 	type StoppableRuntimes,
 	useMissionMenus,
 } from "@/components/mission-card-menu"
 import type { RosterController } from "../bots/roster-controller"
+import { faceOfBot } from "../chat/thread-contract"
 import type { Bot, Conversation } from "../conversations/store-contract"
 import type { MissionLanding } from "../missions/mission-actions"
 import {
-	botFacesOf,
-	missionEntriesOf,
 	missionRowIdOf,
-	toMissionsPanel,
+	type SpaceMissionGroups,
 } from "../missions/missions-model"
-import type { OpenedMissionController } from "../missions/opened-mission-controller"
 import {
-	type MissionSpeakingRuntimes,
-	useLiveMissions,
-} from "../missions/use-live-missions"
+	missionsPageStatusOf,
+	toMissionsPageMissions,
+} from "../missions/missions-page-model"
+import type { OpenedMissionController } from "../missions/opened-mission-controller"
 import { useSpaceMissionsFailure } from "../missions/use-mission-failure-notices"
 import { useSpaceMissions } from "../missions/use-space-missions"
 import type { SettingsNavigation } from "../navigation/use-settings-navigation"
-import { useSkeletonSlot } from "../query/use-skeleton-slot"
 import type { ConversationTabOpening } from "../tabs/conversation-tab-opening"
-import { opensInNewTab } from "../tabs/new-tab-clicks"
-
-const MISSIONS_FEED_SKELETON = createElement(MissionsFeedSkeleton)
 
 type SidebarMissionsCore = {
 	conversationOpening: Pick<ConversationTabOpening, "open">
-	conversationRuntimes: MissionSpeakingRuntimes & StoppableRuntimes
+	conversationRuntimes: StoppableRuntimes
 	openedMission: Pick<
 		OpenedMissionController,
 		"open" | "getState" | "subscribe"
@@ -57,32 +44,45 @@ type SidebarMissionsCore = {
 
 type SidebarMissionsInput = {
 	core: SidebarMissionsCore
-	rosterLines: { now: number }
-	navigation: Pick<SettingsNavigation, "openThread" | "openThreadInNewTab">
+	navigation: Pick<SettingsNavigation, "openThread">
 }
+
+type MissionsPageFeed = Pick<
+	MissionsPageProps,
+	"missions" | "status" | "onOpen" | "onRetry" | "wrap"
+>
 
 export type SidebarMissions = {
-	panelsBySpaceId: Record<string, MissionsPanelProps>
-	waitingCount: number
 	openCount: number
 	openMissionId: string | undefined
-	openMissionThread: (missionId: string) => void
-	wrapPageRow: MissionsPageRowWrap
+	page: MissionsPageFeed
 }
 
-const listedConversationIdsOf = (
-	conversationRosters: Record<string, Conversation[]>,
-	spaceId: string | null,
-) =>
-	new Set(
-		(spaceId === null ? [] : (conversationRosters[spaceId] ?? [])).map(
-			({ id }) => id,
+const NO_CONVERSATIONS: Conversation[] = []
+
+const facesOf = (rosters: Record<string, Bot[]>) =>
+	new Map(
+		Object.values(rosters).flatMap((bots) =>
+			bots.map((bot) => [bot.id, faceOfBot(bot)] as const),
 		),
 	)
 
+const listedConversationsOf = (
+	conversationRosters: Record<string, Conversation[]>,
+	spaceId: string | null,
+) =>
+	spaceId === null
+		? NO_CONVERSATIONS
+		: (conversationRosters[spaceId] ?? NO_CONVERSATIONS)
+
+const entriesOf = ({
+	waitingOnYou,
+	inProgress,
+	earlierToday,
+}: SpaceMissionGroups) => [...waitingOnYou, ...inProgress, ...earlierToday]
+
 export const useSidebarMissions = ({
 	core,
-	rosterLines,
 	navigation,
 }: SidebarMissionsInput): SidebarMissions => {
 	const {
@@ -92,13 +92,11 @@ export const useSidebarMissions = ({
 		roster,
 		spaces,
 	} = core
-	const { now } = rosterLines
 	const feed = useSpaceMissions(spaces.state.selectedSpaceId)
 	const { spaceRowId } = roster.state
 	useSpaceMissionsFailure(feed)
-	const feedSkeleton = useSkeletonSlot(feed.isPending, MISSIONS_FEED_SKELETON)
 
-	const entries = useMemo(() => missionEntriesOf(feed), [feed])
+	const entries = useMemo(() => entriesOf(feed), [feed])
 	const missions = useMemo(
 		() => entries.map(({ mission }) => mission),
 		[entries],
@@ -107,15 +105,18 @@ export const useSidebarMissions = ({
 		openedMission.subscribe,
 		openedMission.getState,
 	)
-	const liveMissionIds = useLiveMissions(conversationRuntimes, missions, now)
 	const faces = useMemo(
-		() => botFacesOf(roster.state.rosters),
+		() => facesOf(roster.state.rosters),
 		[roster.state.rosters],
 	)
 
+	const listedConversations = listedConversationsOf(
+		roster.state.conversationRosters,
+		spaceRowId,
+	)
 	const listedConversationIds = useMemo(
-		() => listedConversationIdsOf(roster.state.conversationRosters, spaceRowId),
-		[roster.state.conversationRosters, spaceRowId],
+		() => new Set(listedConversations.map(({ id }) => id)),
+		[listedConversations],
 	)
 
 	const missionRowOf = useCallback(
@@ -167,88 +168,47 @@ export const useSidebarMissions = ({
 		],
 	)
 
-	const missionThreadOf = useCallback(
+	const openMissionThread = useCallback(
 		(missionId: string) => {
 			const row = missionRowOf(missionId)
 			if (!row) {
-				return null
+				return
 			}
-			return row.isConversation
-				? { conversation: row.rowId, mission: missionId }
-				: { bot: row.rowId, mission: missionId }
+			navigation.openThread(
+				row.isConversation
+					? { conversation: row.rowId, mission: missionId }
+					: { bot: row.rowId, mission: missionId },
+			)
 		},
-		[missionRowOf],
+		[missionRowOf, navigation],
 	)
 
-	const openMissionInNewTab = useCallback(
-		(missionId: string) => {
-			const thread = missionThreadOf(missionId)
-			if (thread) {
-				navigation.openThreadInNewTab(thread)
-			}
-		},
-		[missionThreadOf, navigation],
-	)
-
-	const openMissionThread = useCallback(
-		(missionId: string) => {
-			const thread = missionThreadOf(missionId)
-			if (thread) {
-				navigation.openThread(thread)
-			}
-		},
-		[missionThreadOf, navigation],
-	)
-
-	const openFromPanel = useCallback(
-		(missionId: string, _conversationId: string, modifiers: ClickModifiers) =>
-			opensInNewTab(modifiers)
-				? openMissionInNewTab(missionId)
-				: openMission(missionId),
-		[openMission, openMissionInNewTab],
-	)
-
-	const { wrapCard: wrap, wrapPageRow } = useMissionMenus({
+	const { wrapPageRow } = useMissionMenus({
 		missions,
 		runtimes: conversationRuntimes,
 		onOpenMission: openMission,
 		onChanged: feed.reload,
 	})
 
-	const panelsBySpaceId = useMemo(() => {
-		if (spaceRowId === null) return {}
-		const panel = {
-			...toMissionsPanel({
-				groups: feed,
+	const pageMissions = useMemo(
+		() =>
+			toMissionsPageMissions({
+				entries,
 				faceOf: (botId) => faces.get(botId),
-				liveMissionIds,
-				now,
+				conversations: listedConversations,
 			}),
-			onOpen: openFromPanel,
-			openMissionId: opened?.missionId ?? null,
-			wrap,
-			skeleton: feedSkeleton,
-			listEnd: feed.listEnd,
-		}
-		return { [spaceRowId]: panel }
-	}, [
-		spaceRowId,
-		feed,
-		faces,
-		liveMissionIds,
-		now,
-		openFromPanel,
-		opened,
-		wrap,
-		feedSkeleton,
-	])
+		[entries, faces, listedConversations],
+	)
 
 	return {
-		panelsBySpaceId,
-		waitingCount: feed.waitingCount,
 		openCount: feed.openCount,
 		openMissionId: opened?.missionId,
-		openMissionThread,
-		wrapPageRow,
+		page: {
+			missions: pageMissions,
+			status: missionsPageStatusOf(feed),
+			onOpen: openMissionThread,
+			onRetry: feed.reload,
+			wrap: wrapPageRow,
+		},
 	}
 }

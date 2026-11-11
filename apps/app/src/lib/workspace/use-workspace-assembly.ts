@@ -110,7 +110,6 @@ export const useWorkspaceAssembly = () => {
 	})
 	const sidebarMissions = useSidebarMissions({
 		core,
-		rosterLines,
 		navigation,
 	})
 	const overlay = useWorkspaceOverlay({

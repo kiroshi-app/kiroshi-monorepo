@@ -1,8 +1,6 @@
 import { skipToken, useInfiniteQuery } from "@tanstack/react-query"
 import { useCallback, useMemo, useState } from "react"
 
-import type { ListEnd } from "@workspace/ui/components/list-skeleton"
-
 import { useMissionChanges } from "./mission-changes"
 import type { MissionInSpace } from "./mission-contract"
 import { missionQueryKeys } from "./mission-query-keys"
@@ -21,7 +19,6 @@ import {
 import { isHostRefused } from "@/lib/host/host-refused"
 import { useReachableHost } from "@/lib/host/use-reachable-host"
 import { isFirstReadPending } from "@/lib/query/last-read"
-import { useInfiniteListEnd } from "@/lib/query/use-infinite-list-end"
 
 const NO_GROUPS: SpaceMissionGroups = {
 	waitingOnYou: [],
@@ -44,12 +41,10 @@ const spaceMissionsReadOf = ({ pages }: SpaceFeed): SpaceMissionsRead => ({
 })
 
 export type SpaceMissionsView = SpaceMissionGroups & {
-	waitingCount: number
 	openCount: number
 	isPending: boolean
 	hasFailed: boolean
 	isFailureRaised: boolean
-	listEnd: ListEnd
 	reload: () => void
 }
 
@@ -70,7 +65,6 @@ export const useSpaceMissions = (spaceId: string | null): SpaceMissionsView => {
 		meta: { rendersErrorInline: true, rereadsItselfOnReconnect: true },
 	})
 	const { data, error, isError, isFetching, refetch } = feed
-	const listEnd = useInfiniteListEnd(feed)
 
 	const reload = useCallback(() => {
 		if (!canRead) {
@@ -91,14 +85,12 @@ export const useSpaceMissions = (spaceId: string | null): SpaceMissionsView => {
 	return useMemo(
 		() => ({
 			...groups,
-			waitingCount: groups.waitingOnYou.length,
 			openCount: groups.waitingOnYou.length + groups.inProgress.length,
 			isPending,
 			hasFailed,
 			isFailureRaised,
-			listEnd,
 			reload,
 		}),
-		[groups, isPending, hasFailed, isFailureRaised, listEnd, reload],
+		[groups, isPending, hasFailed, isFailureRaised, reload],
 	)
 }
