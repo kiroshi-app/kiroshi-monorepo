@@ -109,11 +109,13 @@ const settle = async () => {
 	})
 }
 
-const missionFrom = (origin: Conversation, thread: Conversation): Mission => ({
+type MissionSeat = { botId: string; origin: Conversation; thread: Conversation }
+
+const missionOf = ({ botId, origin, thread }: MissionSeat): Mission => ({
 	id: "m-1",
 	originConversationId: origin.id,
 	spaceId: null,
-	botId: origin.participants[0].botId,
+	botId,
 	threadConversationId: thread.id,
 	objective: "Rewrite the changelog parser",
 	ticket: {
@@ -153,7 +155,7 @@ const seedConversationWithMission = async () => {
 		})
 	const origin = await conversationOf("Round table")
 	const thread = await conversationOf("Mission thread")
-	const mission = missionFrom(origin, thread)
+	const mission = missionOf({ botId: bot.id, origin, thread })
 	vi.mocked(missionsTransport.detailOn).mockResolvedValue({
 		mission,
 		events: [],
