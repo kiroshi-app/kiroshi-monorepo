@@ -1794,6 +1794,7 @@ navigation-collapsedsidebar--r-1-not-sent-collapsed
 navigation-collapsedsidebar--s-1-several-spaces-collapsed
 navigation-collapsedsidebar--s-2-shared-space-host-not-connected-collapsed
 navigation-collapsedsidebar--search-stays-in-the-rail-collapsed
+navigation-collapsedsidebar--swipe-follows-the-fingers-collapsed
 navigation-collapsedsidebar--swipe-moves-between-spaces-collapsed
 navigation-collapsedsidebar--swipe-with-one-space-does-nothing-collapsed
 navigation-collapsedsidebar--swipe-with-switching-not-allowed-does-nothing-collapsed
@@ -1875,6 +1876,7 @@ navigation-expandedsidebar--s-1-several-spaces-expanded
 navigation-expandedsidebar--s-2-shared-space-host-not-connected-expanded
 navigation-expandedsidebar--search-beside-the-switcher-expanded
 navigation-expandedsidebar--small-drift-keeps-space-expanded
+navigation-expandedsidebar--swipe-follows-the-fingers-expanded
 navigation-expandedsidebar--swipe-inside-open-menu-keeps-space-expanded
 navigation-expandedsidebar--swipe-moves-between-spaces-expanded
 navigation-expandedsidebar--swipe-over-text-field-keeps-space-expanded

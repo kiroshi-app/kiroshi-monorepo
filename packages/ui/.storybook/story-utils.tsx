@@ -49,6 +49,8 @@ import { SHELL_TITLE_BAR_HEIGHT } from "@workspace/ui/components/workspace-shell
 import { schemeOf } from "@workspace/ui/hooks/use-color-scheme"
 import {
 	dispatchTrackpadWheels,
+	FAST_FLICK,
+	SLOW_SHORT_SWIPE,
 	trackpadSwipe,
 	trackpadSwipeDuration,
 } from "@workspace/ui/hooks/use-space-swipe.fixtures"
@@ -248,11 +250,50 @@ export const wheelTrainOn = (
 
 let nextSwipeAt = 0
 
-export const swipeOn = (target: Element, direction: 1 | -1) => {
+export const swipeOn = (
+	target: Element,
+	direction: 1 | -1,
+	model = FAST_FLICK,
+) => {
 	const startsAt = Math.max(performance.now(), nextSwipeAt)
-	nextSwipeAt = startsAt + trackpadSwipeDuration + SWIPE_END_WAIT_MS
-	const { fingers, momentum } = trackpadSwipe(direction)
+	nextSwipeAt = startsAt + trackpadSwipeDuration(model) + SWIPE_END_WAIT_MS
+	const { fingers, momentum } = trackpadSwipe(model, direction)
 	return dispatchTrackpadWheels(target, [...fingers, ...momentum], startsAt)
+}
+
+type SwipeFollowing = {
+	nav: HTMLElement
+	listIn: () => HTMLElement
+	onSelectSpace: unknown
+}
+
+export const expectListFollowsSwipe = async ({
+	nav,
+	listIn,
+	onSelectSpace,
+}: SwipeFollowing) => {
+	await waitFor(() =>
+		expect(matchMedia("(prefers-reduced-motion: reduce)").matches).toBe(false),
+	)
+	await new Promise(requestAnimationFrame)
+	const restingLeft = listIn().getBoundingClientRect().left
+	const { fingers, momentum } = trackpadSwipe(SLOW_SHORT_SWIPE, 1)
+	const travel = fingers.reduce((sum, { deltaX }) => sum + deltaX, 0)
+	const startsAt = Math.max(performance.now(), nextSwipeAt)
+	nextSwipeAt =
+		startsAt + trackpadSwipeDuration(SLOW_SHORT_SWIPE) + SWIPE_END_WAIT_MS
+
+	dispatchTrackpadWheels(nav, fingers, startsAt)
+	await expect(listIn().getBoundingClientRect().left).toBeCloseTo(
+		restingLeft - travel,
+		0,
+	)
+	await expect(onSelectSpace).not.toHaveBeenCalled()
+
+	dispatchTrackpadWheels(nav, momentum, startsAt)
+	await expect(onSelectSpace).toHaveBeenCalledTimes(1)
+	await waitFor(() => expect(nav).not.toHaveAttribute("data-space-swipe"))
+	await expect(listIn().getBoundingClientRect().left).toBe(restingLeft)
 }
 
 export const swipeEnded = () =>

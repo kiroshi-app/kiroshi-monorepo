@@ -4,16 +4,18 @@ import { cleanup, renderHook } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { Space } from "@workspace/ui/components/space"
-import { usePrefersReducedMotion } from "@workspace/ui/hooks/use-prefers-reduced-motion"
+import { prefersReducedMotion } from "@workspace/ui/hooks/use-prefers-reduced-motion"
 import { useSpaceSwipe } from "@workspace/ui/hooks/use-space-swipe"
 import {
 	dispatchTrackpadWheels,
+	FAST_FLICK,
+	SLOW_SHORT_SWIPE,
 	trackpadSwipe,
 	trackpadSwipeDuration,
 } from "@workspace/ui/hooks/use-space-swipe.fixtures"
 
 vi.mock("@workspace/ui/hooks/use-prefers-reduced-motion", () => ({
-	usePrefersReducedMotion: vi.fn(() => false),
+	prefersReducedMotion: vi.fn(() => false),
 }))
 
 const SPACES: Space[] = [
@@ -44,12 +46,17 @@ const mountSwipe = (swipe: Partial<Swipe> = {}) => {
 	return { node, target, onSelectSpace }
 }
 
+const wholeSwipe = (...args: Parameters<typeof trackpadSwipe>) => {
+	const { fingers, momentum } = trackpadSwipe(...args)
+	return [...fingers, ...momentum]
+}
+
 const offsetOf = (node: HTMLElement) =>
 	node.style.getPropertyValue("--space-swipe-offset")
 
 describe("useSpaceSwipe on a trackpad", () => {
 	beforeEach(() => {
-		vi.mocked(usePrefersReducedMotion).mockReturnValue(false)
+		vi.mocked(prefersReducedMotion).mockReturnValue(false)
 	})
 
 	afterEach(() => {
@@ -58,57 +65,69 @@ describe("useSpaceSwipe on a trackpad", () => {
 		vi.useRealTimers()
 	})
 
-	it("moves one Space forward for a moderate swipe, momentum included", () => {
-		const { target, onSelectSpace } = mountSwipe()
-		const { fingers, momentum } = trackpadSwipe(1)
+	describe.each([SLOW_SHORT_SWIPE, FAST_FLICK])(
+		"$name, $provenance",
+		(model) => {
+			it("moves exactly one Space forward", () => {
+				const { target, onSelectSpace } = mountSwipe()
 
-		const cancelled = dispatchTrackpadWheels(
-			target,
-			[...fingers, ...momentum],
-			0,
-		)
+				const cancelled = dispatchTrackpadWheels(
+					target,
+					wholeSwipe(model, 1),
+					0,
+				)
 
-		expect(onSelectSpace).toHaveBeenCalledTimes(1)
-		expect(onSelectSpace).toHaveBeenCalledWith("vocca")
-		expect(cancelled).not.toContain(false)
-	})
+				expect(onSelectSpace).toHaveBeenCalledTimes(1)
+				expect(onSelectSpace).toHaveBeenCalledWith("vocca")
+				expect(cancelled).not.toContain(false)
+			})
 
-	it("moves one Space backward for a swipe the other way", () => {
-		const { target, onSelectSpace } = mountSwipe()
-		const { fingers, momentum } = trackpadSwipe(-1)
+			it("moves exactly one Space backward", () => {
+				const { target, onSelectSpace } = mountSwipe()
 
-		dispatchTrackpadWheels(target, [...fingers, ...momentum], 0)
+				dispatchTrackpadWheels(target, wholeSwipe(model, -1), 0)
 
-		expect(onSelectSpace).toHaveBeenCalledTimes(1)
-		expect(onSelectSpace).toHaveBeenCalledWith("kiroshi")
-	})
+				expect(onSelectSpace).toHaveBeenCalledTimes(1)
+				expect(onSelectSpace).toHaveBeenCalledWith("kiroshi")
+			})
+		},
+	)
 
 	it("moves once per swipe across two swipes apart in time", () => {
 		const { target, onSelectSpace } = mountSwipe({ selectedSpaceId: "kiroshi" })
-		const { fingers, momentum } = trackpadSwipe(1)
-		const swipe = [...fingers, ...momentum]
+		const swipe = wholeSwipe(FAST_FLICK, 1)
 
 		dispatchTrackpadWheels(target, swipe, 0)
-		dispatchTrackpadWheels(target, swipe, trackpadSwipeDuration + SETTLED_MS)
+		dispatchTrackpadWheels(
+			target,
+			swipe,
+			trackpadSwipeDuration(FAST_FLICK) + SETTLED_MS,
+		)
 
 		expect(onSelectSpace).toHaveBeenCalledTimes(2)
 	})
 
 	it("moves the content with the fingers before the Space changes", () => {
 		const { node, target, onSelectSpace } = mountSwipe()
+		const { fingers } = trackpadSwipe(SLOW_SHORT_SWIPE, 1)
+		const travel = fingers.reduce((sum, { deltaX }) => sum + deltaX, 0)
 
-		dispatchTrackpadWheels(target, trackpadSwipe(1).fingers.slice(0, 6), 0)
+		dispatchTrackpadWheels(target, fingers, 0)
 
 		expect(onSelectSpace).not.toHaveBeenCalled()
 		expect(node.dataset.spaceSwipe).toBe("following")
-		expect(Number.parseFloat(offsetOf(node))).toBeLessThan(0)
+		expect(Number.parseFloat(offsetOf(node))).toBeCloseTo(-travel)
 	})
 
 	it("settles the content back when the swipe stops short", () => {
 		vi.useFakeTimers()
 		const { node, target, onSelectSpace } = mountSwipe()
 
-		dispatchTrackpadWheels(target, trackpadSwipe(-1).fingers.slice(0, 6), 0)
+		dispatchTrackpadWheels(
+			target,
+			trackpadSwipe(SLOW_SHORT_SWIPE, -1).fingers.slice(0, 20),
+			0,
+		)
 		vi.advanceTimersByTime(200)
 
 		expect(onSelectSpace).not.toHaveBeenCalled()
@@ -120,9 +139,9 @@ describe("useSpaceSwipe on a trackpad", () => {
 	})
 
 	it("changes Space without moving the content under reduced motion", () => {
-		vi.mocked(usePrefersReducedMotion).mockReturnValue(true)
+		vi.mocked(prefersReducedMotion).mockReturnValue(true)
 		const { node, target, onSelectSpace } = mountSwipe()
-		const { fingers, momentum } = trackpadSwipe(1)
+		const { fingers, momentum } = trackpadSwipe(SLOW_SHORT_SWIPE, 1)
 
 		dispatchTrackpadWheels(target, fingers, 0)
 		expect(node.dataset.spaceSwipe).toBeUndefined()
@@ -135,9 +154,9 @@ describe("useSpaceSwipe on a trackpad", () => {
 
 	it("leaves a mostly vertical gesture to the list", () => {
 		const { target, onSelectSpace } = mountSwipe()
-		const vertical = trackpadSwipe(1).fingers.map((wheel) => ({
+		const vertical = wholeSwipe(FAST_FLICK, 1).map((wheel) => ({
 			...wheel,
-			deltaX: Math.round(wheel.deltaX / 3),
+			deltaX: wheel.deltaX / 3,
 			deltaY: wheel.deltaX,
 		}))
 
@@ -151,9 +170,8 @@ describe("useSpaceSwipe on a trackpad", () => {
 		const { node, target, onSelectSpace } = mountSwipe({
 			selectedSpaceId: "vocca",
 		})
-		const { fingers, momentum } = trackpadSwipe(1)
 
-		dispatchTrackpadWheels(target, [...fingers, ...momentum], 0)
+		dispatchTrackpadWheels(target, wholeSwipe(FAST_FLICK, 1), 0)
 
 		expect(onSelectSpace).not.toHaveBeenCalled()
 		expect(node.dataset.spaceSwipe).toBeUndefined()
@@ -163,9 +181,8 @@ describe("useSpaceSwipe on a trackpad", () => {
 		const { target, onSelectSpace } = mountSwipe({
 			selectedSpaceId: "kiroshi",
 		})
-		const { fingers, momentum } = trackpadSwipe(-1)
 
-		dispatchTrackpadWheels(target, [...fingers, ...momentum], 0)
+		dispatchTrackpadWheels(target, wholeSwipe(FAST_FLICK, -1), 0)
 
 		expect(onSelectSpace).not.toHaveBeenCalled()
 	})
@@ -174,11 +191,10 @@ describe("useSpaceSwipe on a trackpad", () => {
 		const { node, onSelectSpace } = mountSwipe()
 		const field = document.createElement("input")
 		node.append(field)
-		const { fingers, momentum } = trackpadSwipe(1)
 
 		const cancelled = dispatchTrackpadWheels(
 			field,
-			[...fingers, ...momentum],
+			wholeSwipe(FAST_FLICK, 1),
 			0,
 		)
 
@@ -188,11 +204,10 @@ describe("useSpaceSwipe on a trackpad", () => {
 
 	it("ignores the swipe while switching is disabled", () => {
 		const { node, target, onSelectSpace } = mountSwipe({ isEnabled: false })
-		const { fingers, momentum } = trackpadSwipe(1)
 
 		const cancelled = dispatchTrackpadWheels(
 			target,
-			[...fingers, ...momentum],
+			wholeSwipe(FAST_FLICK, 1),
 			0,
 		)
 
@@ -205,9 +220,8 @@ describe("useSpaceSwipe on a trackpad", () => {
 		const { target, onSelectSpace } = mountSwipe({
 			spaces: [{ id: "perso", name: "Perso", avatarSeed: "perso" }],
 		})
-		const { fingers, momentum } = trackpadSwipe(1)
 
-		dispatchTrackpadWheels(target, [...fingers, ...momentum], 0)
+		dispatchTrackpadWheels(target, wholeSwipe(FAST_FLICK, 1), 0)
 
 		expect(onSelectSpace).not.toHaveBeenCalled()
 	})

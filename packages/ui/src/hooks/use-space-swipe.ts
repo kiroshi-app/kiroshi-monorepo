@@ -1,7 +1,7 @@
 import { useCallback } from "react"
 
 import type { Space } from "@workspace/ui/components/space"
-import { usePrefersReducedMotion } from "@workspace/ui/hooks/use-prefers-reduced-motion"
+import { prefersReducedMotion } from "@workspace/ui/hooks/use-prefers-reduced-motion"
 import { isRosterLiftUnderway } from "@workspace/ui/hooks/use-roster-lift"
 import { useStableCallback } from "@workspace/ui/hooks/use-stable-callback"
 import { isTypingTarget } from "@workspace/ui/lib/typing-target"
@@ -10,9 +10,7 @@ const SWIPE_END_GAP_MS = 150
 
 const AXIS_SLOP_PX = 6
 
-const SWIPE_TRAVEL_PX = 80
-
-const FOLLOW_RATIO = 0.5
+const SWIPE_TRAVEL_PX = 48
 
 const SETTLE_MS = 180
 
@@ -89,8 +87,6 @@ export const useSpaceSwipe = ({
 	isEnabled = true,
 	onSelectSpace,
 }: SpaceSwipe) => {
-	const isReducedMotion = usePrefersReducedMotion()
-
 	const canSwipe = useStableCallback(
 		() => isEnabled && spaces.length > 1 && !isRosterLiftUnderway(),
 	)
@@ -107,8 +103,6 @@ export const useSpaceSwipe = ({
 	)
 
 	const select = useStableCallback((id: string) => onSelectSpace?.(id))
-
-	const isFollowing = useStableCallback(() => !isReducedMotion)
 
 	return useCallback(
 		(node: HTMLElement) => {
@@ -127,7 +121,7 @@ export const useSpaceSwipe = ({
 			}
 
 			const enterFrom = (direction: number) => {
-				drawSwipe(node, "following", direction * SWIPE_TRAVEL_PX * FOLLOW_RATIO)
+				drawSwipe(node, "following", direction * SWIPE_TRAVEL_PX)
 				entering = requestAnimationFrame(() => {
 					entering = requestAnimationFrame(settle)
 				})
@@ -139,12 +133,12 @@ export const useSpaceSwipe = ({
 				if (travel >= SWIPE_TRAVEL_PX) {
 					gesture.isSpent = true
 					select(neighbour.id)
-					if (isFollowing()) enterFrom(direction)
+					if (!prefersReducedMotion()) enterFrom(direction)
 					return
 				}
-				if (!isFollowing()) return
+				if (prefersReducedMotion()) return
 				cancelAnimationFrame(entering)
-				drawSwipe(node, "following", -direction * travel * FOLLOW_RATIO)
+				drawSwipe(node, "following", -direction * travel)
 				settleAfterGap()
 			}
 
@@ -165,6 +159,6 @@ export const useSpaceSwipe = ({
 				clearSwipe(node)
 			}
 		},
-		[canSwipe, neighbourTowards, select, isFollowing],
+		[canSwipe, neighbourTowards, select],
 	)
 }
