@@ -24,7 +24,10 @@ import {
 	STILL_LIFT,
 } from "@workspace/ui/components/app-sidebar.fixtures"
 import { BotRosterRow } from "@workspace/ui/components/app-sidebar-bot-row"
-import { ConversationRosterRow } from "@workspace/ui/components/app-sidebar-conversation-row"
+import {
+	ConversationRosterRow,
+	ROW_ICON_SIDE,
+} from "@workspace/ui/components/app-sidebar-conversation-row"
 import type {
 	AppSidebarRowMission,
 	AppSidebarSection,
@@ -433,8 +436,6 @@ export const ExpandedMissions = meta.story({
 	},
 })
 
-const ROW_MEDIA_SIDE = 28
-
 const EVEN_PADDING = Array(4).fill("6px")
 
 const paddingOf = (element: Element) => {
@@ -460,9 +461,7 @@ const colourTransitionsOf = (element: Element) => {
 }
 
 const conversationButtonOf = (tree: Element) =>
-	tree.parentElement?.querySelector<HTMLElement>(
-		'[data-slot="sidebar-menu-button"]',
-	) as HTMLElement
+	slotIn(tree.parentElement as HTMLElement, "sidebar-menu-button")
 
 const centreOfBox = (element: Element) => {
 	const box = boxOf(element)
@@ -487,7 +486,7 @@ const expectTreeArtboard = async ({ canvasElement }: StoryCanvas) => {
 		const item = within(sidebar).getByRole("button", { name })
 		const slot = item.querySelector("span[aria-hidden]") as HTMLElement
 		await expect(boxOf(item).height).toBe(40)
-		await expect(boxOf(slot).width).toBe(ROW_MEDIA_SIDE)
+		await expect(boxOf(slot).width).toBe(ROW_ICON_SIDE)
 		await expect(getComputedStyle(slot).backgroundColor).toBe(
 			"rgba(0, 0, 0, 0)",
 		)
@@ -507,10 +506,7 @@ const expectTreeArtboard = async ({ canvasElement }: StoryCanvas) => {
 			boxOf(avatar as Element).width,
 		]),
 	).toEqual(
-		avatars.map((avatar) => [
-			avatar?.getAttribute("data-slot"),
-			ROW_MEDIA_SIDE,
-		]),
+		avatars.map((avatar) => [avatar?.getAttribute("data-slot"), ROW_ICON_SIDE]),
 	)
 
 	for (const tree of slotsIn(sidebar, "mission-capsule-list")) {
