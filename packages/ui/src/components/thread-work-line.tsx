@@ -16,6 +16,7 @@ import {
 import {
 	AuthorLineDivider,
 	AuthorLineName,
+	GIVES_WAY_TO_THE_NAME,
 } from "@workspace/ui/components/author-line"
 import {
 	BotIdentityAvatar,
@@ -131,6 +132,12 @@ const AgentIndicator = ({ agent, layout, className }: AgentIndicatorProps) => (
 	/>
 )
 
+type LeadProps = { children: ReactNode }
+
+const Lead = ({ children }: LeadProps) => (
+	<span className="flex min-w-0 items-center gap-2">{children}</span>
+)
+
 type FailureProps = { agent: FailedAgent }
 
 const Failure = ({ agent }: FailureProps) => {
@@ -145,13 +152,18 @@ const Failure = ({ agent }: FailureProps) => {
 				seed={agent.id}
 				size={WORK_LINE_AVATAR_SIZE}
 			/>
-			<AuthorLineName tone="agent" name={agent.name} hue={agent.blot} />
-			<span
-				data-slot="thread-work-line-failed"
-				className="min-w-0 truncate text-destructive text-xs leading-5"
-			>
-				{t("turn.footer.failed")}
-			</span>
+			<Lead>
+				<AuthorLineName tone="agent" name={agent.name} hue={agent.blot} />
+				<span
+					data-slot="thread-work-line-failed"
+					className={cn(
+						"text-destructive text-xs leading-5",
+						GIVES_WAY_TO_THE_NAME,
+					)}
+				>
+					{t("turn.footer.failed")}
+				</span>
+			</Lead>
 			<Button
 				variant="ghost"
 				aria-label={t("workLine.retry", { name: agent.name })}
@@ -167,7 +179,13 @@ const Failure = ({ agent }: FailureProps) => {
 type StateTextProps = { children: ReactNode }
 
 const StateText = ({ children }: StateTextProps) => (
-	<span className="min-w-0 truncate text-compact text-soft-foreground leading-5">
+	<span
+		data-slot="thread-work-line-state"
+		className={cn(
+			"text-compact text-soft-foreground leading-5",
+			GIVES_WAY_TO_THE_NAME,
+		)}
+	>
 		<TextShimmer className="inline" duration={WORKING_SHIMMER_DURATION}>
 			{children}
 		</TextShimmer>
@@ -185,7 +203,7 @@ const Headline = ({ agents }: HeadlineProps) => {
 
 	if (agents.length === 2)
 		return (
-			<>
+			<Lead>
 				<span className="flex min-w-0 items-center gap-1">
 					<AuthorLineName tone="agent" name={first.name} hue={first.blot} />
 					<span className="shrink-0 text-compact text-soft-foreground leading-5">
@@ -194,16 +212,16 @@ const Headline = ({ agents }: HeadlineProps) => {
 					<AuthorLineName tone="agent" name={second.name} hue={second.blot} />
 				</span>
 				{state}
-			</>
+			</Lead>
 		)
 
 	return (
-		<>
+		<Lead>
 			<span className="shrink-0 font-semibold text-compact text-foreground leading-5">
 				{t("workLine.agents", { count: agents.length })}
 			</span>
 			{state}
-		</>
+		</Lead>
 	)
 }
 
@@ -213,12 +231,17 @@ const WaitingHeadline = ({ agent }: WaitingHeadlineProps) => {
 	const { t } = useTranslation("chat")
 
 	return (
-		<>
+		<Lead>
 			<AuthorLineName tone="agent" name={agent.name} hue={agent.blot} />
-			<span className="min-w-0 truncate text-compact text-waiting-foreground leading-5">
+			<span
+				className={cn(
+					"text-compact text-waiting-foreground leading-5",
+					GIVES_WAY_TO_THE_NAME,
+				)}
+			>
 				{t("working.line.state", { verb: t("working.verb.waiting") })}
 			</span>
-		</>
+		</Lead>
 	)
 }
 
