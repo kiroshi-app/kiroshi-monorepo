@@ -1003,7 +1003,7 @@ export const SwipeMovesBetweenSpacesCollapsed = meta.story({
 		docs: {
 			description: {
 				story:
-					"A two finger swipe over the rail, momentum tail included. Check one forward swipe moves to the next Space, one backward swipe returns, and nothing moves sideways. Pick `SwipeWithOneSpaceDoesNothingCollapsed` for a lone Space.",
+					"A two finger swipe over the rail as a macOS trackpad sends it: a burst of small horizontal deltas, then a decaying momentum tail. Check each swipe moves the Space by exactly one, forward then back. Outside reduced motion the list follows the fingers and settles; the test browser runs under reduced motion, where the Space changes and nothing moves. Pick `SwipeWithOneSpaceDoesNothingCollapsed` for a lone Space.",
 			},
 		},
 	},
@@ -1026,6 +1026,7 @@ export const SwipeMovesBetweenSpacesCollapsed = meta.story({
 		await expect(args.onSelectSpace).toHaveBeenLastCalledWith("kiroshi")
 		await expect(nav.scrollLeft).toBe(0)
 		await expect(document.documentElement.scrollLeft).toBe(0)
+		await expect(nav).not.toHaveAttribute("data-space-swipe")
 	},
 })
 

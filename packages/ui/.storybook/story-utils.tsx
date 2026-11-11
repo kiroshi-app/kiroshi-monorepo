@@ -48,6 +48,11 @@ import {
 import { SHELL_TITLE_BAR_HEIGHT } from "@workspace/ui/components/workspace-shell"
 import { schemeOf } from "@workspace/ui/hooks/use-color-scheme"
 import {
+	dispatchTrackpadWheels,
+	trackpadSwipe,
+	trackpadSwipeDuration,
+} from "@workspace/ui/hooks/use-space-swipe.fixtures"
+import {
 	type ClickModifiers,
 	NO_CLICK_MODIFIERS,
 } from "@workspace/ui/lib/click-modifiers"
@@ -223,10 +228,6 @@ export const slotIn = (root: Element, slot: string) => {
 	return node
 }
 
-const SWIPE_DELTAS = [
-	10, 24, 42, 60, 70, 64, 50, 38, 28, 20, 14, 10, 7, 5, 3, 2, 1, 1,
-]
-
 const SWIPE_END_WAIT_MS = 200
 
 export const wheelTrainOn = (
@@ -245,11 +246,14 @@ export const wheelTrainOn = (
 			),
 	)
 
-export const swipeOn = (target: Element, direction: 1 | -1) =>
-	wheelTrainOn(
-		target,
-		SWIPE_DELTAS.map((delta) => [delta * direction, 0] as const),
-	)
+let nextSwipeAt = 0
+
+export const swipeOn = (target: Element, direction: 1 | -1) => {
+	const startsAt = Math.max(performance.now(), nextSwipeAt)
+	nextSwipeAt = startsAt + trackpadSwipeDuration + SWIPE_END_WAIT_MS
+	const { fingers, momentum } = trackpadSwipe(direction)
+	return dispatchTrackpadWheels(target, [...fingers, ...momentum], startsAt)
+}
 
 export const swipeEnded = () =>
 	new Promise((resolve) => setTimeout(resolve, SWIPE_END_WAIT_MS))
