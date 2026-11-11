@@ -116,7 +116,6 @@ const useNavigationOfSpaceHostedHere = () => {
 			sidebarActions: { onCreateSpace: () => undefined },
 		} as RosterLines,
 		rosterLists: { badgesBySpaceId: {} } as RosterLists,
-		sidebarMissions: { openMissionThread: () => undefined },
 		switcher,
 		tabs: createWorkspaceTabs(),
 		onSelectSpace: () => undefined,

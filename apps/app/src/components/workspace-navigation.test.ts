@@ -177,7 +177,6 @@ const produceNavigationFor = ({
 				} as unknown as WorkspaceOverlay,
 				rosterLines: { sidebarActions: {} } as RosterLines,
 				rosterLists: {} as RosterLists,
-				sidebarMissions: { openMissionThread: () => undefined },
 				switcher: useSwitcherSpaces(
 					{ spaces: [HOME, GARAGE], selectedSpaceId },
 					{

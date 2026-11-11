@@ -362,7 +362,6 @@ const useExpandedRows = ({ conversations, sections }: ExpandedRowsSource) => {
 	})
 	const openInNewTab = useStableCallback(rowMenu.onOpenInNewTab)
 	const openSettings = useStableCallback(rowMenu.onOpenSettings)
-	const openMission = useStableCallback(sidebar.onOpenMission)
 	const createSectionFor = useStableCallback((rowId: string) =>
 		setNaming({ rowId }),
 	)
@@ -378,7 +377,6 @@ const useExpandedRows = ({ conversations, sections }: ExpandedRowsSource) => {
 		onMoveToSection: sections.length > 0 ? fileRow : undefined,
 		onOpenConversationInNewTab: openInNewTab,
 		onOpenConversationSettings: openSettings,
-		onOpenMission: openMission,
 		onPin: pinLast,
 		onSelectConversation: selectRow,
 		onUnpin: unpin,
