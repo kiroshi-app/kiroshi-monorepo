@@ -627,3 +627,156 @@ export const Final17 = meta.story({
 		}
 	},
 })
+
+const SQUEEZED_COLUMN = "w-[240px]"
+
+const SMALLEST_COLUMN = "w-[320px]"
+
+const LONG_ACTIVITY = "mcp__Linear__update_issue_with_a_long_description"
+
+const UNBREAKABLE_NAME = "Juniper-the-release-shepherd-of-the-monorepo"
+
+const isTruncated = (node: HTMLElement) => node.scrollWidth > node.clientWidth
+
+const expectNamesWhole = async (canvasElement: HTMLElement) => {
+	const names = slotsIn(canvasElement, "author-line-name")
+	await expect(names.length).toBeGreaterThan(0)
+	for (const name of names)
+		await expect(name.scrollWidth).toBe(name.clientWidth)
+}
+
+const expectTruncated = async (texts: HTMLElement[]) => {
+	await expect(texts).toHaveLength(THEMES)
+	for (const text of texts) {
+		await expect(isTruncated(text)).toBe(true)
+		await expect(getComputedStyle(text).textOverflow).toBe("ellipsis")
+	}
+}
+
+export const OneAgentNarrow = meta.story({
+	render: () => (
+		<Line
+			agents={[
+				{
+					...JUNIPER,
+					state: "tool",
+					label: LONG_ACTIVITY,
+					elapsedSeconds: 12,
+				},
+			]}
+			width={SQUEEZED_COLUMN}
+		/>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"One agent in a squeezed column, its tool title far wider than the line. Check that Juniper reads in full while the title gives way alone, ending in an ellipsis, and the clock keeps its size at the end.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expectNamesWhole(canvasElement)
+		await expectTruncated(slotsIn(canvasElement, "bot-working-label"))
+		for (const clock of slotsIn(canvasElement, "bot-working-elapsed"))
+			await expect(clock.scrollWidth).toBe(clock.clientWidth)
+		await expectOneLine(canvasElement)
+	},
+})
+
+export const SeveralAgentsNarrow = meta.story({
+	render: () => (
+		<Line
+			agents={[
+				{ ...JUNIPER, state: "writing", elapsedSeconds: 28 },
+				{ ...ORION, state: "thinking", elapsedSeconds: 9 },
+			]}
+			width={SQUEEZED_COLUMN}
+		/>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Two agents in a squeezed column. Check that Juniper and Orion both read in full while the shared state text gives way first, ending in an ellipsis, the chevron at the right end.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expectNamesWhole(canvasElement)
+		await expect(slotsIn(canvasElement, "author-line-name")).toHaveLength(
+			2 * THEMES,
+		)
+		await expectTruncated(slotsIn(canvasElement, "thread-work-line-state"))
+		await expectOneLine(canvasElement)
+		await expectChevronAtRightEnd(canvasElement)
+	},
+})
+
+export const NameWiderThanTheLine = meta.story({
+	render: () => (
+		<Line
+			agents={[
+				{
+					...JUNIPER,
+					name: UNBREAKABLE_NAME,
+					state: "writing",
+					elapsedSeconds: 12,
+				},
+			]}
+			width={SQUEEZED_COLUMN}
+		/>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"One agent whose name alone is wider than the line. Check that the name ends in an ellipsis inside the line, the state text gone, and the clock keeps its size at the end.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expectTruncated(slotsIn(canvasElement, "author-line-name"))
+		for (const clock of slotsIn(canvasElement, "bot-working-elapsed"))
+			await expect(clock.scrollWidth).toBe(clock.clientWidth)
+		await expectOneLine(canvasElement)
+	},
+})
+
+export const DetailNarrow = meta.story({
+	render: () => (
+		<Line
+			agents={[
+				{ ...SABLE, state: "failed", onRetry: retrySable },
+				{ ...ORION, state: "waiting" },
+				{
+					...JUNIPER,
+					state: "tool",
+					label: LONG_ACTIVITY,
+					elapsedSeconds: 12,
+				},
+			]}
+			isInitiallyOpen
+			width={SMALLEST_COLUMN}
+		/>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A failed, a waiting and a working agent, the detail open, in a 320px column. Check that every name reads in full on the line and in each row, while the failed, waiting and tool texts give way first.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expectNamesWhole(canvasElement)
+		await expectTruncated(
+			Array.from(
+				canvasElement.querySelectorAll<HTMLElement>(
+					'[data-kind="working"] [data-slot="bot-working-label"]',
+				),
+			),
+		)
+		await expectOneLine(canvasElement)
+	},
+})

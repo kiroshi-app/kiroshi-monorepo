@@ -577,6 +577,7 @@ conversation-message-thread--work-3
 conversation-message-thread--work-4
 conversation-message-thread--work-5
 conversation-message-thread--work-6
+conversation-message-threadworkline--detail-narrow
 conversation-message-threadworkline--final-10
 conversation-message-threadworkline--final-11
 conversation-message-threadworkline--final-12
@@ -588,6 +589,9 @@ conversation-message-threadworkline--final-17
 conversation-message-threadworkline--final-7
 conversation-message-threadworkline--final-8
 conversation-message-threadworkline--final-9
+conversation-message-threadworkline--name-wider-than-the-line
+conversation-message-threadworkline--one-agent-narrow
+conversation-message-threadworkline--several-agents-narrow
 conversation-message-transcript--anchors-the-sent-message
 conversation-message-transcript--appends-rows-live
 conversation-message-transcript--conversation-rests-without-a-band
