@@ -84,7 +84,14 @@ export const useSettingsNavigation = (holder: ThreadHolder) => {
 					{ to: "/settings/space/$spaceId", params: { spaceId }, search },
 					modifiers,
 				),
-			openHome: () => go({ to: "/home" }),
+			openHome: () => {
+				const shown = router.history.location
+				if (shown.pathname === "/home" && !isNewTabClickInFlight()) {
+					router.history.replace(shown.href)
+					return
+				}
+				go({ to: "/home" })
+			},
 			openLibrary: () => go({ to: "/library" }),
 			openMissions: () => go({ to: "/missions" }),
 			openUserSettings: (search: SettingsSearch = {}) =>
