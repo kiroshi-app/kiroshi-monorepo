@@ -4,6 +4,7 @@ import type { TFunction } from "i18next"
 import { Fragment, type ReactElement, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
+import { CurrentSpaceCarousel } from "@workspace/ui/components/app-sidebar-carousel"
 import type {
 	AppSidebarConversation,
 	AppSidebarRowMission,
@@ -47,20 +48,14 @@ import type {
 	UpdateBadgeProps,
 	UpdateBadgeStatus,
 } from "@workspace/ui/components/update-badge"
-import {
-	SPACE_SWIPE_FOLLOWER,
-	useSpaceSwipe,
-} from "@workspace/ui/hooks/use-space-swipe"
 import { STILL_UNDER_REDUCED_MOTION } from "@workspace/ui/lib/reduced-motion"
 import { cn } from "@workspace/ui/lib/utils"
 
 const RAIL =
 	"flex min-h-0 w-15 shrink-0 flex-col items-center gap-0.5 px-2 pt-2"
 
-const LIST = cn(
-	"flex min-h-0 w-full flex-1 flex-col items-center gap-0.5 overflow-y-auto scrollbar-hide",
-	SPACE_SWIPE_FOLLOWER,
-)
+const LIST =
+	"flex min-h-0 w-full flex-1 flex-col items-center gap-0.5 overflow-y-auto scrollbar-hide"
 
 const SLOT =
 	"relative grid size-11 shrink-0 place-items-center rounded-lg text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring"
@@ -608,7 +603,7 @@ const RetrySlot = ({ onRetry }: RetrySlotProps) => {
 	)
 }
 
-type RailListProps = Pick<
+type CollapsedSidebarListProps = Pick<
 	CollapsedSidebarProps,
 	| "zones"
 	| "listStatus"
@@ -619,13 +614,13 @@ type RailListProps = Pick<
 	| "onRetryList"
 >
 
-const RailList = ({
+const CollapsedSidebarList = ({
 	zones,
 	listStatus,
 	listEnd,
 	onRetryList,
 	...conversations
-}: RailListProps) => {
+}: CollapsedSidebarListProps) => {
 	if (listStatus === "loading")
 		return (
 			<div className={LIST} data-slot="collapsed-sidebar-list">
@@ -792,16 +787,11 @@ const CollapsedSidebar = ({
 	onOpenConversation,
 	onOpenMission: _onOpenMission,
 	onRetryList,
-	isSpaceSwitchingEnabled,
+	isSpaceSwitchingEnabled = true,
+	renderSpaceList,
 	...switcher
 }: CollapsedSidebarProps) => {
 	const { t } = useTranslation(["bots", "search"])
-	const swipeRef = useSpaceSwipe({
-		isEnabled: isSpaceSwitchingEnabled,
-		onSelectSpace: switcher.onSelectSpace,
-		selectedSpaceId: switcher.selectedSpaceId,
-		spaces: switcher.spaces,
-	})
 
 	return (
 		<TooltipProvider delay={HOVER_INTENT_DELAY_MS}>
@@ -809,7 +799,6 @@ const CollapsedSidebar = ({
 				aria-label={t("rail.label")}
 				className={RAIL}
 				data-slot="collapsed-sidebar"
-				ref={swipeRef}
 			>
 				<SpaceSlot {...switcher} />
 				<Destination
@@ -836,15 +825,23 @@ const CollapsedSidebar = ({
 					label={t("rail.library")}
 					onSelect={onSelectLibrary}
 				/>
-				<RailList
-					listEnd={listEnd}
-					listStatus={listStatus}
-					onOpenConversation={onOpenConversation}
-					onRetryList={onRetryList}
-					openConversationId={openConversationId}
-					openMissionId={openMissionId}
-					zones={zones}
-				/>
+				<CurrentSpaceCarousel
+					isSwitchingEnabled={isSpaceSwitchingEnabled}
+					onSelectSpace={switcher.onSelectSpace}
+					renderSpaceList={renderSpaceList}
+					selectedSpaceId={switcher.selectedSpaceId}
+					spaces={switcher.spaces}
+				>
+					<CollapsedSidebarList
+						listEnd={listEnd}
+						listStatus={listStatus}
+						onOpenConversation={onOpenConversation}
+						onRetryList={onRetryList}
+						openConversationId={openConversationId}
+						openMissionId={openMissionId}
+						zones={zones}
+					/>
+				</CurrentSpaceCarousel>
 				{update ? <UpdateSlot {...update} /> : null}
 				<PersonSlot onOpenSettings={onOpenSettings} user={user} />
 			</nav>
@@ -854,6 +851,8 @@ const CollapsedSidebar = ({
 
 export {
 	CollapsedSidebar,
+	CollapsedSidebarList,
+	type CollapsedSidebarListProps,
 	type CollapsedSidebarListStatus,
 	type CollapsedSidebarProps,
 	type CollapsedSidebarZone,

@@ -3,19 +3,16 @@ import { expect, fireEvent, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
-	A11Y_FLOATING_FOCUS_GUARDS,
-	expectListFollowsSwipe,
+	carrySpaceCarousel,
 	expectSkeletonFilledTo,
+	expectSpaceCarouselHeld,
 	FRAME_POLL,
-	isInBrowserRunner,
 	realPointer,
+	scrollSpaceCarousel,
 	slotIn,
 	slotsIn,
-	swipeEnded,
-	swipeOn,
+	spaceListInView,
 	tokenStyleIn,
-	wheelTrainOn,
-	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
 import { pointerAt } from "@workspace/storybook/tab-drag-gesture"
 import type { AppSidebarConversation } from "@workspace/ui/components/app-sidebar"
@@ -53,20 +50,17 @@ import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { ContentCard } from "@workspace/ui/components/content-card"
 import {
 	ExpandedSidebar,
+	ExpandedSidebarList,
 	type ExpandedSidebarProps,
 	type ExpandedSidebarSection,
 } from "@workspace/ui/components/expanded-sidebar"
 import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import type { Space } from "@workspace/ui/components/space"
 import type { SpaceAvatarState } from "@workspace/ui/components/space-avatar"
-import {
-	SidebarMenu,
-	SidebarMenuItem,
-} from "@workspace/ui/components/ui/sidebar"
+import { SidebarMenu } from "@workspace/ui/components/ui/sidebar"
 import { UpdateRow } from "@workspace/ui/components/update-badge"
 import { WorkspaceShellRoot } from "@workspace/ui/components/workspace-shell"
 import type { Lifter } from "@workspace/ui/hooks/use-roster-lift"
-import { SLOW_SHORT_SWIPE } from "@workspace/ui/hooks/use-space-swipe.fixtures"
 import { mergeRefs } from "@workspace/ui/lib/utils"
 
 const KIROSHI: Space = {
@@ -240,7 +234,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The expanded sidebar of the navigation shell, top to bottom: Space switcher, the destinations menu, Pinned and Conversations, then the space dots, the update row and the person footer when they apply. A two finger horizontal swipe anywhere over it changes Space. One story per Paper page A artboard; the row list is the current conversation rows, restyled in OPE-2148.",
+					"The expanded sidebar of the navigation shell, top to bottom: Space switcher, the destinations menu, Pinned and Conversations, then the space dots, the update row and the person footer when they apply. A two finger horizontal swipe over the list changes Space. One story per Paper page A artboard; the row list is the current conversation rows, restyled in OPE-2148.",
 			},
 		},
 	},
@@ -296,7 +290,7 @@ export const ExpandedNewConversation = meta.story({
 		).toEqual([
 			"expanded-sidebar-switcher-row",
 			"sidebar-menu",
-			"sidebar-content",
+			"space-carousel",
 			"expanded-sidebar-footer",
 		])
 		await expect(
@@ -581,59 +575,31 @@ export const SwipeMovesBetweenSpacesExpanded = meta.story({
 		docs: {
 			description: {
 				story:
-					"Two swipes over the sidebar as WebKit hands them to the page on a macOS trackpad: a short slow swipe forward, then a fast flick back with a long momentum tail. Check each moves the Space by exactly one. The test browser runs under reduced motion, where the Space changes and nothing moves; pick `SwipeFollowsTheFingersExpanded` for the list following the fingers. Pick `SwipeWithOneSpaceDoesNothingExpanded` for a lone Space.",
+					"The list sits in the native scroll snap carousel of the pre-shell sidebar: a two finger swipe over it scrolls the panels under the fingers, and a panel covering more than half of the carousel selects its Space. Check a scroll of one panel width forward selects the next Space, shows it in the switcher and draws the list in its panel, and one back selects the first again. Swipe with a trackpad over the list to feel it. Pick `SwipeWithSwitchingNotAllowedDoesNothingExpanded` for the held carousel.",
 			},
 		},
 	},
 	play: async ({ args, canvasElement }) => {
-		const target = within(sidebarIn(canvasElement)).getByRole("button", {
-			name: "Library",
-		})
+		const sidebar = sidebarIn(canvasElement)
 
-		await expect(swipeOn(target, 1, SLOW_SHORT_SWIPE)).not.toContain(false)
+		await scrollSpaceCarousel(sidebar, 1)
 		await expect(args.onSelectSpace).toHaveBeenCalledTimes(1)
 		await expect(args.onSelectSpace).toHaveBeenLastCalledWith("perso")
 		await waitFor(() =>
 			expect(
-				within(sidebarIn(canvasElement)).getByRole("button", {
+				within(sidebar).getByRole("button", {
 					name: "Change space, Perso open",
 				}),
 			).toBeVisible(),
 		)
+		await expect(
+			slotIn(sidebar, "sidebar-content").closest("[data-slot=space-panel]"),
+		).not.toHaveAttribute("inert")
 
-		await swipeEnded()
-		await expect(swipeOn(target, -1)).not.toContain(false)
+		await scrollSpaceCarousel(sidebar, -1)
 		await expect(args.onSelectSpace).toHaveBeenCalledTimes(2)
 		await expect(args.onSelectSpace).toHaveBeenLastCalledWith("kiroshi")
-		await expect(sidebarIn(canvasElement).scrollLeft).toBe(0)
 		await expect(document.documentElement.scrollLeft).toBe(0)
-		await expect(sidebarIn(canvasElement)).not.toHaveAttribute(
-			"data-space-swipe",
-		)
-	},
-})
-
-export const SwipeFollowsTheFingersExpanded = meta.story({
-	name: "Swipe follows the fingers Expanded",
-	args: { spaces: SEVERAL_SPACES },
-	render: (args) => <SpaceFollowingWindow {...args} />,
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"A short slow swipe over the sidebar with reduced motion off. Check the list moves with the fingers mid-swipe, the Space changes once as the momentum carries it past the threshold, and the list is back at rest after release. Swipe with a trackpad over the story to feel it.",
-			},
-		},
-	},
-	play: async ({ args, canvasElement }) => {
-		if (!isInBrowserRunner()) return
-		await withMotionAllowed(() =>
-			expectListFollowsSwipe({
-				nav: sidebarIn(canvasElement),
-				listIn: () => slotIn(sidebarIn(canvasElement), "sidebar-content"),
-				onSelectSpace: args.onSelectSpace,
-			}),
-		)
 	},
 })
 
@@ -643,12 +609,12 @@ export const SwipeWithOneSpaceDoesNothingExpanded = meta.story({
 		docs: {
 			description: {
 				story:
-					"A swipe with a single Space. Check the Space stays and no selection is reported.",
+					"A single Space. Check the carousel refuses a sideways scroll and no selection is reported.",
 			},
 		},
 	},
 	play: async ({ args, canvasElement }) => {
-		swipeOn(sidebarIn(canvasElement), 1)
+		await expectSpaceCarouselHeld(sidebarIn(canvasElement))
 		await expect(args.onSelectSpace).not.toHaveBeenCalled()
 	},
 })
@@ -660,120 +626,84 @@ export const SwipeWithSwitchingNotAllowedDoesNothingExpanded = meta.story({
 		docs: {
 			description: {
 				story:
-					"A swipe while the host forbids changing Space, with three Spaces. Check the Space stays and no selection is reported.",
+					"Three Spaces while the host forbids changing Space. Check the carousel refuses a sideways scroll and no selection is reported.",
 			},
 		},
 	},
 	play: async ({ args, canvasElement }) => {
-		swipeOn(sidebarIn(canvasElement), 1)
+		await expectSpaceCarouselHeld(sidebarIn(canvasElement))
 		await expect(args.onSelectSpace).not.toHaveBeenCalled()
 	},
 })
 
-export const SwipePastTheEdgesKeepsSpaceExpanded = meta.story({
-	name: "Swipe past the edges keeps the space Expanded",
+const spaceListOf = (space: Space) => (
+	<ExpandedSidebarList
+		conversations={rowsOf([artboardRow(`${space.name} weekly sync`)], false)}
+		pinned={null}
+	/>
+)
+
+export const NeighbourListShowsMidSwipeExpanded = meta.story({
+	name: "Neighbour list shows mid swipe Expanded",
 	tags: ["test-only"],
-	args: { spaces: SEVERAL_SPACES },
+	args: { spaces: SEVERAL_SPACES, renderSpaceList: spaceListOf },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A swipe carried four tenths of a panel towards the next Space, short of the crossing, with the list of every Space handed in. Check the next Space's list is drawn in the incoming panel and already under the fingers, and that no Space is selected yet.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		const view = sidebarIn(canvasElement)
+		const carousel = slotIn(view, "space-carousel")
+		const neighbour = within(carousel).getByText("Perso weekly sync")
+		const carouselRight = carousel.getBoundingClientRect().right
+		await expect(neighbour.getBoundingClientRect().left).toBeGreaterThanOrEqual(
+			carouselRight,
+		)
+
+		await carrySpaceCarousel(view, 0.4)
+		await expect(neighbour.getBoundingClientRect().left).toBeLessThan(
+			carouselRight,
+		)
+		await expect(args.onSelectSpace).not.toHaveBeenCalled()
+	},
+})
+
+const LONG_LIST = rowsOf(
+	Array.from({ length: 40 }, (_, rank) => artboardRow(`Thread ${rank + 1}`)),
+	false,
+)
+
+export const ListScrollKeptAcrossSwipeExpanded = meta.story({
+	name: "List scroll kept across a swipe Expanded",
+	args: { spaces: SEVERAL_SPACES, conversations: LONG_LIST },
 	render: (args) => <SpaceFollowingWindow {...args} />,
-	play: async ({ args, canvasElement }) => {
-		const nav = sidebarIn(canvasElement)
-
-		swipeOn(nav, -1)
-		await expect(args.onSelectSpace).not.toHaveBeenCalled()
-
-		for (const expected of ["perso", "vocca"]) {
-			await swipeEnded()
-			swipeOn(nav, 1)
-			await expect(args.onSelectSpace).toHaveBeenLastCalledWith(expected)
-		}
-
-		await swipeEnded()
-		swipeOn(nav, 1)
-		await expect(args.onSelectSpace).toHaveBeenCalledTimes(2)
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A list scrolled down, then a swipe to the next Space and back. Check the next Space opens at the top of its list and the first one comes back at the offset it was left at.",
+			},
+		},
 	},
-})
+	play: async ({ canvasElement }) => {
+		const view = sidebarIn(canvasElement)
+		const list = spaceListInView(view)
+		await expect(list.scrollHeight).toBeGreaterThan(list.clientHeight)
+		list.scrollTop = 90
+		await new Promise(requestAnimationFrame)
 
-export const VerticalGestureKeepsSpaceExpanded = meta.story({
-	name: "Vertical gesture keeps the space Expanded",
-	tags: ["test-only"],
-	args: { spaces: SEVERAL_SPACES },
-	play: async ({ args, canvasElement }) => {
-		const cancelled = wheelTrainOn(
-			sidebarIn(canvasElement),
-			Array.from({ length: 15 }, () => [16, 40] as const),
+		await scrollSpaceCarousel(view, 1)
+		await expect(spaceListInView(view).scrollTop).toBe(0)
+
+		await scrollSpaceCarousel(view, -1)
+		await waitFor(
+			() => expect(spaceListInView(view).scrollTop).toBe(90),
+			FRAME_POLL,
 		)
-		await expect(cancelled).not.toContain(true)
-		await expect(args.onSelectSpace).not.toHaveBeenCalled()
-	},
-})
-
-export const SmallDriftKeepsSpaceExpanded = meta.story({
-	name: "Small drift keeps the space Expanded",
-	tags: ["test-only"],
-	args: { spaces: SEVERAL_SPACES },
-	play: async ({ args, canvasElement }) => {
-		wheelTrainOn(
-			sidebarIn(canvasElement),
-			Array.from({ length: 5 }, () => [8, 0] as const),
-		)
-		await expect(args.onSelectSpace).not.toHaveBeenCalled()
-	},
-})
-
-const DOT_POINTER = { button: 0, pointerId: 1 }
-
-export const SwipeWhileDotIsDraggedKeepsSpaceExpanded = meta.story({
-	name: "Swipe while a dot is dragged keeps the space Expanded",
-	tags: ["test-only"],
-	args: { spaces: SEVERAL_SPACES },
-	play: async ({ args, canvasElement }) => {
-		const [dot] = slotsIn(canvasElement, "space-dot-button")
-		if (!dot) throw new Error("No Space dot to drag")
-		const { left, top } = dot.getBoundingClientRect()
-		const at = { clientX: Math.round(left), clientY: Math.round(top) }
-
-		fireEvent.pointerDown(dot, { ...DOT_POINTER, ...at })
-		fireEvent.pointerMove(dot, {
-			...DOT_POINTER,
-			clientX: at.clientX + 12,
-			clientY: at.clientY,
-		})
-		swipeOn(sidebarIn(canvasElement), 1)
-		await expect(args.onSelectSpace).not.toHaveBeenCalled()
-		fireEvent.pointerUp(dot, { ...DOT_POINTER, ...at })
-	},
-})
-
-export const SwipeInsideOpenMenuKeepsSpaceExpanded = meta.story({
-	name: "Swipe inside an open menu keeps the space Expanded",
-	tags: ["test-only"],
-	args: { spaces: SEVERAL_SPACES },
-	parameters: { a11y: A11Y_FLOATING_FOCUS_GUARDS },
-	play: async ({ args, canvasElement }) => {
-		fireEvent.click(slotIn(canvasElement, "space-switcher"))
-		const menu = await within(document.body).findByRole("menu")
-		swipeOn(menu, 1)
-		await expect(args.onSelectSpace).not.toHaveBeenCalled()
-	},
-})
-
-export const SwipeOverTextFieldKeepsSpaceExpanded = meta.story({
-	name: "Swipe over a text field keeps the space Expanded",
-	tags: ["test-only"],
-	args: {
-		spaces: SEVERAL_SPACES,
-		pinned: (
-			<SidebarMenu>
-				<SidebarMenuItem>
-					<input aria-label="Rename" defaultValue="Design review" />
-				</SidebarMenuItem>
-			</SidebarMenu>
-		),
-	},
-	play: async ({ args, canvasElement }) => {
-		const field = within(canvasElement).getByRole("textbox", { name: "Rename" })
-		await expect(swipeOn(field, 1)).not.toContain(true)
-		await expect(args.onSelectSpace).not.toHaveBeenCalled()
 	},
 })
 

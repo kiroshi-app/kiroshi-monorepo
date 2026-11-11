@@ -3,16 +3,17 @@ import { expect, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
-	expectListFollowsSwipe,
+	carrySpaceCarousel,
 	expectSkeletonFilledTo,
+	expectSpaceCarouselHeld,
 	FRAME_POLL,
 	isInBrowserRunner,
 	realPointer,
 	resolvedRootColor,
+	scrollSpaceCarousel,
 	slotIn,
 	slotsIn,
-	swipeEnded,
-	swipeOn,
+	spaceListInView,
 	tokenStyleIn,
 	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
@@ -25,6 +26,7 @@ import { AppTitleBar } from "@workspace/ui/components/app-title-bar"
 import type { BotMissionState } from "@workspace/ui/components/bot-badge"
 import {
 	CollapsedSidebar,
+	CollapsedSidebarList,
 	type CollapsedSidebarProps,
 	type CollapsedSidebarZone,
 } from "@workspace/ui/components/collapsed-sidebar"
@@ -34,7 +36,6 @@ import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import type { Space } from "@workspace/ui/components/space"
 import type { SpaceAvatarState } from "@workspace/ui/components/space-avatar"
 import { WorkspaceShellRoot } from "@workspace/ui/components/workspace-shell"
-import { SLOW_SHORT_SWIPE } from "@workspace/ui/hooks/use-space-swipe.fixtures"
 
 const KIROSHI: Space = {
 	id: "kiroshi",
@@ -232,7 +233,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The 60px icon rail of the collapsed navigation shell, top to bottom: the Space avatar, Search, New conversation, Missions, Library, the pinned and conversation items with their missions grouped under them, then the update button and the person when they apply. A two finger horizontal swipe anywhere over the rail changes Space. Every item names itself in a tooltip to the right of the rail. One story per Paper page A artboard.",
+					"The 60px icon rail of the collapsed navigation shell, top to bottom: the Space avatar, Search, New conversation, Missions, Library, the pinned and conversation items with their missions grouped under them, then the update button and the person when they apply. A two finger horizontal swipe over the list changes Space. Every item names itself in a tooltip to the right of the rail. One story per Paper page A artboard.",
 			},
 		},
 	},
@@ -945,15 +946,14 @@ export const SwipeMovesBetweenSpacesCollapsed = meta.story({
 		docs: {
 			description: {
 				story:
-					"Two swipes over the rail as WebKit hands them to the page on a macOS trackpad: a short slow swipe forward, then a fast flick back with a long momentum tail. Check each moves the Space by exactly one. The test browser runs under reduced motion, where the Space changes and nothing moves; pick `SwipeFollowsTheFingersCollapsed` for the list following the fingers. Pick `SwipeWithOneSpaceDoesNothingCollapsed` for a lone Space.",
+					"The rail list sits in the native scroll snap carousel of the pre-shell sidebar: a two finger swipe over it scrolls the panels under the fingers, and a panel covering more than half of the carousel selects its Space. Check a scroll of one panel width forward selects the next Space, shows it on the Space avatar and draws the list in its panel, and one back selects the first again. Swipe with a trackpad over the list to feel it. Pick `SwipeWithSwitchingNotAllowedDoesNothingCollapsed` for the held carousel.",
 			},
 		},
 	},
 	play: async ({ args, canvasElement }) => {
 		const nav = slotIn(canvasElement, "collapsed-sidebar")
-		const target = rail(canvasElement).getByRole("button", { name: "Library" })
 
-		await expect(swipeOn(target, 1, SLOW_SHORT_SWIPE)).not.toContain(false)
+		await scrollSpaceCarousel(nav, 1)
 		await expect(args.onSelectSpace).toHaveBeenCalledTimes(1)
 		await expect(args.onSelectSpace).toHaveBeenLastCalledWith("perso")
 		await waitFor(() =>
@@ -961,38 +961,14 @@ export const SwipeMovesBetweenSpacesCollapsed = meta.story({
 				rail(canvasElement).getByRole("button", { name: "Perso" }),
 			).toBeVisible(),
 		)
+		await expect(
+			slotIn(nav, "collapsed-sidebar-list").closest("[data-slot=space-panel]"),
+		).not.toHaveAttribute("inert")
 
-		await swipeEnded()
-		await expect(swipeOn(target, -1)).not.toContain(false)
+		await scrollSpaceCarousel(nav, -1)
 		await expect(args.onSelectSpace).toHaveBeenCalledTimes(2)
 		await expect(args.onSelectSpace).toHaveBeenLastCalledWith("kiroshi")
-		await expect(nav.scrollLeft).toBe(0)
 		await expect(document.documentElement.scrollLeft).toBe(0)
-		await expect(nav).not.toHaveAttribute("data-space-swipe")
-	},
-})
-
-export const SwipeFollowsTheFingersCollapsed = meta.story({
-	name: "Swipe follows the fingers Collapsed",
-	args: { spaces: SEVERAL_SPACES },
-	render: (args) => <SpaceFollowingWindow {...args} />,
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"A short slow swipe over the rail with reduced motion off. Check the list moves with the fingers mid-swipe, the Space changes once as the momentum carries it past the threshold, and the list is back at rest after release. Swipe with a trackpad over the story to feel it.",
-			},
-		},
-	},
-	play: async ({ args, canvasElement }) => {
-		if (!isInBrowserRunner()) return
-		await withMotionAllowed(() =>
-			expectListFollowsSwipe({
-				nav: slotIn(canvasElement, "collapsed-sidebar"),
-				listIn: () => slotIn(canvasElement, "collapsed-sidebar-list"),
-				onSelectSpace: args.onSelectSpace,
-			}),
-		)
 	},
 })
 
@@ -1002,12 +978,12 @@ export const SwipeWithOneSpaceDoesNothingCollapsed = meta.story({
 		docs: {
 			description: {
 				story:
-					"A swipe with a single Space. Check the Space stays and no selection is reported.",
+					"A single Space. Check the carousel refuses a sideways scroll and no selection is reported.",
 			},
 		},
 	},
 	play: async ({ args, canvasElement }) => {
-		swipeOn(slotIn(canvasElement, "collapsed-sidebar"), 1)
+		await expectSpaceCarouselHeld(slotIn(canvasElement, "collapsed-sidebar"))
 		await expect(args.onSelectSpace).not.toHaveBeenCalled()
 	},
 })
@@ -1019,13 +995,98 @@ export const SwipeWithSwitchingNotAllowedDoesNothingCollapsed = meta.story({
 		docs: {
 			description: {
 				story:
-					"A swipe while the host forbids changing Space, with three Spaces. Check the Space stays and no selection is reported.",
+					"Three Spaces while the host forbids changing Space. Check the carousel refuses a sideways scroll and no selection is reported.",
 			},
 		},
 	},
 	play: async ({ args, canvasElement }) => {
-		swipeOn(slotIn(canvasElement, "collapsed-sidebar"), 1)
+		await expectSpaceCarouselHeld(slotIn(canvasElement, "collapsed-sidebar"))
 		await expect(args.onSelectSpace).not.toHaveBeenCalled()
+	},
+})
+
+const railListOf = (space: Space) => (
+	<CollapsedSidebarList
+		zones={[
+			recentZone([
+				conversationOf(
+					`${space.id}-sync`,
+					`${space.name} weekly sync`,
+					"Users",
+					BLOT_HUES.blue,
+				),
+			]),
+		]}
+	/>
+)
+
+export const NeighbourListShowsMidSwipeCollapsed = meta.story({
+	name: "Neighbour list shows mid swipe Collapsed",
+	tags: ["test-only"],
+	args: { spaces: SEVERAL_SPACES, renderSpaceList: railListOf },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A swipe carried four tenths of a panel towards the next Space, short of the crossing, with the list of every Space handed in. Check the next Space's list is drawn in the incoming panel and already under the fingers, and that no Space is selected yet.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		const view = slotIn(canvasElement, "collapsed-sidebar")
+		const carousel = slotIn(view, "space-carousel")
+		const neighbour = within(carousel).getByLabelText("Perso weekly sync")
+		const carouselRight = carousel.getBoundingClientRect().right
+		await expect(neighbour.getBoundingClientRect().left).toBeGreaterThanOrEqual(
+			carouselRight,
+		)
+
+		await carrySpaceCarousel(view, 0.4)
+		await expect(neighbour.getBoundingClientRect().left).toBeLessThan(
+			carouselRight,
+		)
+		await expect(args.onSelectSpace).not.toHaveBeenCalled()
+	},
+})
+
+const LONG_ZONE = recentZone(
+	Array.from({ length: 30 }, (_, rank) =>
+		conversationOf(
+			`thread-${rank}`,
+			`Thread ${rank + 1}`,
+			"Users",
+			BLOT_HUES.blue,
+		),
+	),
+)
+
+export const ListScrollKeptAcrossSwipeCollapsed = meta.story({
+	name: "List scroll kept across a swipe Collapsed",
+	args: { spaces: SEVERAL_SPACES, zones: [LONG_ZONE] },
+	render: (args) => <SpaceFollowingWindow {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A list scrolled down, then a swipe to the next Space and back. Check the next Space opens at the top of its list and the first one comes back at the offset it was left at.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const view = slotIn(canvasElement, "collapsed-sidebar")
+		const list = spaceListInView(view)
+		await expect(list.scrollHeight).toBeGreaterThan(list.clientHeight)
+		list.scrollTop = 90
+		await new Promise(requestAnimationFrame)
+
+		await scrollSpaceCarousel(view, 1)
+		await expect(spaceListInView(view).scrollTop).toBe(0)
+
+		await scrollSpaceCarousel(view, -1)
+		await waitFor(
+			() => expect(spaceListInView(view).scrollTop).toBe(90),
+			FRAME_POLL,
+		)
 	},
 })
 

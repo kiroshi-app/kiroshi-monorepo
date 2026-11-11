@@ -3,6 +3,7 @@
 import { Children, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
+import { CurrentSpaceCarousel } from "@workspace/ui/components/app-sidebar-carousel"
 import {
 	RosterDropArea,
 	type RosterDropAreaProps,
@@ -29,6 +30,7 @@ import {
 	SidebarListSkeleton,
 } from "@workspace/ui/components/sidebar-list-skeleton"
 import { SidebarMenuRow } from "@workspace/ui/components/sidebar-menu-row"
+import type { Space } from "@workspace/ui/components/space"
 import {
 	SpaceDots,
 	SpaceSwitcher,
@@ -42,15 +44,11 @@ import {
 	SidebarMenuItem,
 } from "@workspace/ui/components/ui/sidebar"
 import type { UserChipIdentity } from "@workspace/ui/components/user-chip"
-import {
-	SPACE_SWIPE_FOLLOWER,
-	useSpaceSwipe,
-} from "@workspace/ui/hooks/use-space-swipe"
 
 const COLUMN =
 	"flex min-h-0 w-(--sidebar-width) shrink-0 flex-col gap-2 px-2 pt-2 pb-1"
 
-const SECTIONS = `gap-3 ${SPACE_SWIPE_FOLLOWER}`
+const SECTIONS = "gap-3"
 
 const CONVERSATIONS_BODY = "flex flex-col gap-0.5"
 
@@ -101,6 +99,7 @@ type ExpandedSidebarProps = SpaceSwitcherProps & {
 	update?: ReactNode
 	user?: UserChipIdentity
 	isSpaceSwitchingEnabled?: boolean
+	renderSpaceList?: (space: Space) => ReactNode
 	onReorderSpaces?: (ids: string[]) => void
 	onOpenSearch?: () => void
 	onNewConversation?: () => void
@@ -184,7 +183,7 @@ type ExpandedSidebarListProps = Pick<
 
 const holdsRows = (rows: ReactNode) => Children.toArray(rows).length > 0
 
-const ExpandedSidebarList = ({
+const ExpandedSidebarListBody = ({
 	pinned,
 	conversations,
 	sections = [],
@@ -266,6 +265,12 @@ const ExpandedSidebarList = ({
 	)
 }
 
+const ExpandedSidebarList = (props: ExpandedSidebarListProps) => (
+	<SidebarContent className={SECTIONS}>
+		<ExpandedSidebarListBody {...props} />
+	</SidebarContent>
+)
+
 const ExpandedSidebar = ({
 	destination,
 	missionCount,
@@ -276,7 +281,8 @@ const ExpandedSidebar = ({
 	listEnd,
 	update,
 	user,
-	isSpaceSwitchingEnabled,
+	isSpaceSwitchingEnabled = true,
+	renderSpaceList,
 	onReorderSpaces,
 	onOpenSearch,
 	onNewConversation,
@@ -288,19 +294,12 @@ const ExpandedSidebar = ({
 }: ExpandedSidebarProps) => {
 	const { t } = useTranslation(["bots", "search"])
 	const searchLabel = t("open", { ns: "search" })
-	const swipeRef = useSpaceSwipe({
-		isEnabled: isSpaceSwitchingEnabled,
-		onSelectSpace: switcher.onSelectSpace,
-		selectedSpaceId: switcher.selectedSpaceId,
-		spaces: switcher.spaces,
-	})
 
 	return (
 		<nav
 			aria-label={t("rail.label")}
 			className={COLUMN}
 			data-slot="expanded-sidebar"
-			ref={swipeRef}
 		>
 			<div className={SWITCHER_ROW} data-slot="expanded-sidebar-switcher-row">
 				<SpaceSwitcher {...switcher} />
@@ -341,7 +340,13 @@ const ExpandedSidebar = ({
 					onSelect={onSelectLibrary}
 				/>
 			</SidebarMenu>
-			<SidebarContent className={SECTIONS}>
+			<CurrentSpaceCarousel
+				isSwitchingEnabled={isSpaceSwitchingEnabled}
+				onSelectSpace={switcher.onSelectSpace}
+				renderSpaceList={renderSpaceList}
+				selectedSpaceId={switcher.selectedSpaceId}
+				spaces={switcher.spaces}
+			>
 				<ExpandedSidebarList
 					conversations={conversations}
 					listEnd={listEnd}
@@ -350,7 +355,7 @@ const ExpandedSidebar = ({
 					pinned={pinned}
 					sections={sections}
 				/>
-			</SidebarContent>
+			</CurrentSpaceCarousel>
 			<SpaceDots
 				badgesBySpaceId={switcher.badgesBySpaceId}
 				onReorderSpaces={onReorderSpaces}
@@ -367,6 +372,8 @@ const ExpandedSidebar = ({
 export {
 	ExpandedSidebar,
 	type ExpandedSidebarDestination,
+	ExpandedSidebarList,
+	type ExpandedSidebarListProps,
 	type ExpandedSidebarProps,
 	type ExpandedSidebarSection,
 }
