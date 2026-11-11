@@ -21,8 +21,8 @@ import { pointerAt } from "@workspace/storybook/tab-drag-gesture"
 import type { AppSidebarConversation } from "@workspace/ui/components/app-sidebar"
 import {
 	ATLAS,
-	BEACON,
-	DESK_ROOM,
+	PINNED_CONVERSATIONS,
+	RECENT_CONVERSATIONS,
 	SIDEBAR_SECTION,
 	STILL_LIFT,
 } from "@workspace/ui/components/app-sidebar.fixtures"
@@ -55,6 +55,10 @@ import {
 	RosterLiftFrame,
 } from "@workspace/ui/components/app-sidebar-roster-parts"
 import { AppTitleBar } from "@workspace/ui/components/app-title-bar"
+import {
+	CollapsedSidebar,
+	type CollapsedSidebarZone,
+} from "@workspace/ui/components/collapsed-sidebar"
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { ContentCard } from "@workspace/ui/components/content-card"
 import {
@@ -83,46 +87,6 @@ const SEVERAL_SPACES: Space[] = [
 	KIROSHI,
 	{ id: "perso", name: "Perso", colour: BLOT_HUES.green, avatarSeed: "perso" },
 	{ id: "vocca", name: "Vocca", colour: BLOT_HUES.pink, avatarSeed: "vocca" },
-]
-
-const PINNED: AppSidebarConversation[] = [
-	DESK_ROOM,
-	{
-		id: "roadmap",
-		name: "Roadmap",
-		participants: [ATLAS],
-		lastMessage: "Q3 themes are drafted.",
-		lastSpeaker: "Atlas",
-		timestamp: "Yesterday",
-		pinPosition: 2,
-	},
-]
-
-const RECENT: AppSidebarConversation[] = [
-	{
-		id: "hiring",
-		name: "Hiring loop",
-		participants: [BEACON],
-		lastMessage: "Two candidates booked for Thursday.",
-		lastSpeaker: "Beacon",
-		timestamp: "09:12",
-	},
-	{
-		id: "pricing",
-		name: "Pricing page",
-		participants: [ATLAS, BEACON],
-		lastMessage: "The new tiers read well.",
-		lastSpeaker: "Atlas",
-		timestamp: "Mon",
-	},
-	{
-		id: "support",
-		name: "Support inbox",
-		participants: [BEACON],
-		lastMessage: "Three tickets need a reply.",
-		lastSpeaker: "Beacon",
-		timestamp: "Sun",
-	},
 ]
 
 const rowsOf = (conversations: AppSidebarConversation[], isPinned: boolean) => (
@@ -337,8 +301,8 @@ const meta = preview.meta({
 		selectedSpaceId: KIROSHI.id,
 		destination: "newConversation" as const,
 		missionCount: 3,
-		pinned: rowsOf(PINNED, true),
-		conversations: rowsOf(RECENT, false),
+		pinned: rowsOf(PINNED_CONVERSATIONS, true),
+		conversations: rowsOf(RECENT_CONVERSATIONS, false),
 		user: { name: "Ada Martin" },
 		onNewConversation: fn(),
 		onSelectMissions: fn(),
@@ -1996,5 +1960,119 @@ export const LongSpaceNameTruncatesExpanded = meta.story({
 		await expect(boxOf(switcher).right - boxOf(chevron).right).toBe(8)
 		await expect(name.scrollWidth).toBeGreaterThan(name.clientWidth)
 		await expect(boxOf(switcher).right).toBe(boxOf(row).right)
+	},
+})
+
+const SHARED_ROWS_DESCRIPTION =
+	"The content the collapsed sidebar draws in its own Shared rows story: one Space, the three destinations, two pinned and three recent conversations, an available update and the person. Check the Space switcher, each destination, the list, the update row and the footer start at the same distance from the top edge and stand as tall as their collapsed slots."
+
+export const SharedRowsExpanded = meta.story({
+	name: "Shared rows Expanded",
+	args: { update: <UpdateRow onDownload={DOWNLOAD} status="available" /> },
+	parameters: { docs: { description: { story: SHARED_ROWS_DESCRIPTION } } },
+})
+
+export const SharedRowsLightExpanded = SharedRowsExpanded.extend({
+	name: "Shared rows Light Expanded",
+	globals: LIGHT,
+})
+
+const SHARED_ROW_ZONES: CollapsedSidebarZone[] = [
+	{ id: "pinned", conversations: PINNED_CONVERSATIONS },
+	{ id: "recent", conversations: RECENT_CONVERSATIONS },
+]
+
+const BOTH_VIEWS = (args: ExpandedSidebarProps) => (
+	<WorkspaceShellRoot isLandmark={false}>
+		<ExpandedSidebar {...args} />
+		<CollapsedSidebar
+			destination={args.destination}
+			onSelectSpace={args.onSelectSpace}
+			selectedSpaceId={args.selectedSpaceId}
+			spaces={args.spaces}
+			update={{ status: "available", onDownload: DOWNLOAD }}
+			user={args.user}
+			zones={SHARED_ROW_ZONES}
+		/>
+	</WorkspaceShellRoot>
+)
+
+const EXPANDED_ROW_SLOTS = {
+	switcher: "space-switcher",
+	update: "update-row",
+	footer: "expanded-sidebar-footer",
+}
+
+const COLLAPSED_ROW_SLOTS = {
+	switcher: "collapsed-sidebar-space",
+	update: "collapsed-sidebar-update",
+	footer: "collapsed-sidebar-person",
+}
+
+const EXPANDED_TOP_ROWS = [
+	{ top: 8, height: AVATAR_ROW_HEIGHT },
+	{ top: 60, height: TOP_MENU_HEIGHT },
+	{ top: 98, height: TOP_MENU_HEIGHT },
+	{ top: 136, height: TOP_MENU_HEIGHT },
+]
+
+const sharedRowEdgesIn = (
+	sidebar: HTMLElement,
+	slots: typeof EXPANDED_ROW_SLOTS,
+) =>
+	[
+		slotIn(sidebar, slots.switcher),
+		...within(slotIn(sidebar, "sidebar-menu")).getAllByRole("button"),
+		slotIn(sidebar, "space-carousel"),
+		slotIn(sidebar, slots.update),
+		slotIn(sidebar, slots.footer),
+	].map((row) => ({
+		top: boxOf(row).top - boxOf(sidebar).top,
+		height: boxOf(row).height,
+	}))
+
+export const SharedRowsLineUpAcrossViews = SharedRowsExpanded.extend({
+	name: "Shared rows line up across views",
+	tags: ["test-only"],
+	render: BOTH_VIEWS,
+	parameters: {
+		a11y: {
+			config: { rules: [{ id: "landmark-unique", reviewOnFail: true }] },
+		},
+		docs: {
+			description: {
+				story:
+					"The expanded and the collapsed sidebar side by side on the same content. Check the Space switcher, each destination, the list, the update row and the footer start at the same distance from the top edge and stand as tall in both, that the expanded ones keep 8, 60, 98 and 136px for 44, 36, 36 and 36px, that the first collapsed separator starts where the first section header does, and that the collapsed update disc is as large as the expanded one with as much space above it as to its left inside its slot.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const expanded = sidebarIn(canvasElement)
+		const collapsed = slotIn(canvasElement, "collapsed-sidebar")
+		const expandedRows = sharedRowEdgesIn(expanded, EXPANDED_ROW_SLOTS)
+		await expect(expandedRows.slice(0, EXPANDED_TOP_ROWS.length)).toEqual(
+			EXPANDED_TOP_ROWS,
+		)
+		await expect(sharedRowEdgesIn(collapsed, COLLAPSED_ROW_SLOTS)).toEqual(
+			expandedRows,
+		)
+		await expect(
+			boxOf(slotIn(collapsed, "collapsed-sidebar-separator")).top,
+		).toBe(boxOf(slotIn(expanded, "fold-section-trigger")).top)
+
+		const updateSlot = boxOf(slotIn(collapsed, COLLAPSED_ROW_SLOTS.update))
+		const collapsedDisc = boxOf(
+			slotIn(collapsed, "collapsed-sidebar-update-disc"),
+		)
+		const expandedDisc = boxOf(
+			slotIn(expanded, EXPANDED_ROW_SLOTS.update).firstElementChild as Element,
+		)
+		await expect([collapsedDisc.width, collapsedDisc.height]).toEqual([
+			expandedDisc.width,
+			expandedDisc.height,
+		])
+		await expect(collapsedDisc.top - updateSlot.top).toBe(
+			collapsedDisc.left - updateSlot.left,
+		)
 	},
 })

@@ -1793,6 +1793,8 @@ navigation-collapsedsidebar--overflow-count-is-plain-text
 navigation-collapsedsidebar--r-1-not-sent-collapsed
 navigation-collapsedsidebar--s-1-several-spaces-collapsed
 navigation-collapsedsidebar--s-2-shared-space-host-not-connected-collapsed
+navigation-collapsedsidebar--shared-rows-collapsed
+navigation-collapsedsidebar--shared-rows-light-collapsed
 navigation-collapsedsidebar--swipe-moves-between-spaces-collapsed
 navigation-collapsedsidebar--swipe-with-switching-not-allowed-does-nothing-collapsed
 navigation-collapsedsidebar--tab-skips-the-mission-cells
@@ -1878,6 +1880,9 @@ navigation-expandedsidebar--row-columns-expanded
 navigation-expandedsidebar--row-columns-light-expanded
 navigation-expandedsidebar--s-1-several-spaces-expanded
 navigation-expandedsidebar--s-2-shared-space-host-not-connected-expanded
+navigation-expandedsidebar--shared-rows-expanded
+navigation-expandedsidebar--shared-rows-light-expanded
+navigation-expandedsidebar--shared-rows-line-up-across-views
 navigation-expandedsidebar--swipe-moves-between-spaces-expanded
 navigation-expandedsidebar--swipe-with-switching-not-allowed-does-nothing-expanded
 navigation-expandedsidebar--top-menu-at-rest-expanded

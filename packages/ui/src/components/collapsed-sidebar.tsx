@@ -35,6 +35,12 @@ import { missionTicketPlatform } from "@workspace/ui/components/mission-marks"
 import { MissionStateMark } from "@workspace/ui/components/mission-state-mark"
 import { ProgressRing } from "@workspace/ui/components/progress-ring"
 import {
+	SIDEBAR_AVATAR_SIDE,
+	SIDEBAR_COLUMN,
+	SIDEBAR_GLYPH_BOX,
+	SIDEBAR_ROW_INSET,
+} from "@workspace/ui/components/sidebar-menu-row"
+import {
 	SpaceAvatar,
 	spaceAvatarStateOf,
 } from "@workspace/ui/components/space-avatar"
@@ -44,26 +50,39 @@ import {
 } from "@workspace/ui/components/space-switcher"
 import { HOVER_INTENT_DELAY_MS } from "@workspace/ui/components/tooltip-hint"
 import {
+	SidebarMenu,
+	SidebarMenuItem,
+} from "@workspace/ui/components/ui/sidebar"
+import {
 	Tooltip,
 	TooltipContent,
 	TooltipProvider,
 	TooltipTrigger,
 } from "@workspace/ui/components/ui/tooltip"
-import type {
-	UpdateBadgeProps,
-	UpdateBadgeStatus,
+import {
+	UPDATE_DISC,
+	UPDATE_DISC_FAILED,
+	UPDATE_RING,
+	type UpdateBadgeProps,
+	type UpdateBadgeStatus,
 } from "@workspace/ui/components/update-badge"
 import { STILL_UNDER_REDUCED_MOTION } from "@workspace/ui/lib/reduced-motion"
 import { cn } from "@workspace/ui/lib/utils"
 
-const RAIL =
-	"flex min-h-0 w-15 shrink-0 flex-col items-center gap-0.5 px-2 pt-2"
+const RAIL = cn(SIDEBAR_COLUMN, "w-15 items-center")
 
 const LIST =
 	"flex min-h-0 w-full flex-1 flex-col items-center gap-0.5 overflow-y-auto scrollbar-hide"
 
-const SLOT =
-	"relative grid size-11 shrink-0 place-items-center rounded-lg text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring"
+const SLOT = cn(
+	SIDEBAR_ROW_INSET,
+	"relative box-content grid shrink-0 place-content-center rounded-lg text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring",
+)
+
+const AVATAR_SLOT_BOX = {
+	width: SIDEBAR_AVATAR_SIDE,
+	height: SIDEBAR_AVATAR_SIDE,
+}
 
 const SLOT_ICON = "[&_svg]:size-4.5 [&_svg]:stroke-[1.75]"
 
@@ -113,20 +132,12 @@ const TIP_OFFSET = 12
 
 const SKELETON_TILE = "size-7 rounded-md bg-foreground/7"
 
-const SKELETON_LIST = "items-center gap-0.5 pt-2"
+const SKELETON_LIST = "items-center gap-0.5"
 
 const EMPTY_TILE =
 	"size-7 rounded-md border border-rail-section-placeholder border-dashed"
 
-const UPDATE_DISC =
-	"grid size-7 place-items-center rounded-full bg-foreground text-on-foreground [&_svg]:size-3.5 [&_svg]:stroke-[2.5]"
-
-const UPDATE_DISC_FAILED = "bg-update-failed text-update-failed-foreground"
-
-const UPDATE_RING =
-	"size-7 [&_circle]:stroke-[2.57] [&_circle:first-child]:stroke-update-track [&_circle:last-child]:stroke-foreground"
-
-const UPDATE_RING_ARROW = "size-3.5 stroke-[2.5] text-muted-foreground"
+const UPDATE_RING_ARROW = "size-3 stroke-[2.5] text-muted-foreground"
 
 const PERSON_INITIAL =
 	"grid size-full place-items-center bg-rail-avatar font-medium text-foreground text-xs/4 uppercase"
@@ -267,7 +278,12 @@ const Destination = ({
 		<button
 			aria-current={isCurrent ? "page" : undefined}
 			aria-label={label}
-			className={cn(SLOT, SLOT_ICON, isCurrent ? SLOT_CURRENT : SLOT_HOVER)}
+			className={cn(
+				SLOT,
+				SIDEBAR_GLYPH_BOX,
+				SLOT_ICON,
+				isCurrent ? SLOT_CURRENT : SLOT_HOVER,
+			)}
 			data-slot="collapsed-sidebar-destination"
 			onClick={onSelect}
 			type="button"
@@ -316,6 +332,7 @@ const SpaceSlot = (switcher: SpaceSwitcherProps) => {
 									"aria-expanded:bg-rail-item-selected",
 								)}
 								data-slot="collapsed-sidebar-space"
+								style={AVATAR_SLOT_BOX}
 								type="button"
 							>
 								<SpaceAvatar
@@ -592,6 +609,7 @@ const RetrySlot = ({ onRetry }: RetrySlotProps) => {
 				)}
 				data-slot="collapsed-sidebar-retry"
 				onClick={onRetry}
+				style={AVATAR_SLOT_BOX}
 				type="button"
 			>
 				<Icons.Retry aria-hidden="true" />
@@ -621,6 +639,7 @@ const CollapsedSidebarList = ({
 	if (listStatus === "loading")
 		return (
 			<div className={LIST} data-slot="collapsed-sidebar-list">
+				<RailSeparator />
 				<ListSkeleton className={SKELETON_LIST} row={SKELETON_SLOT} />
 			</div>
 		)
@@ -750,6 +769,7 @@ const PersonSlot = ({ user, onOpenSettings }: PersonSlotProps) => {
 				className={cn(SLOT, SLOT_HOVER)}
 				data-slot="collapsed-sidebar-person"
 				onClick={onOpenSettings}
+				style={AVATAR_SLOT_BOX}
 				type="button"
 			>
 				<AvatarFrame
@@ -796,20 +816,23 @@ const CollapsedSidebar = ({
 				data-slot="collapsed-sidebar"
 			>
 				<SpaceSlot {...switcher} />
-				{navigationDestinationsOf({
-					onNewConversation,
-					onSelectMissions,
-					onSelectLibrary,
-				}).map(({ id, label, Icon, onSelect }) => (
-					<Destination
-						hasAttention={id === "missions" && hasWaitingMission(zones)}
-						icon={<Icon aria-hidden="true" />}
-						isCurrent={destination === id}
-						key={id}
-						label={t(label)}
-						onSelect={onSelect}
-					/>
-				))}
+				<SidebarMenu>
+					{navigationDestinationsOf({
+						onNewConversation,
+						onSelectMissions,
+						onSelectLibrary,
+					}).map(({ id, label, Icon, onSelect }) => (
+						<SidebarMenuItem key={id}>
+							<Destination
+								hasAttention={id === "missions" && hasWaitingMission(zones)}
+								icon={<Icon aria-hidden="true" />}
+								isCurrent={destination === id}
+								label={t(label)}
+								onSelect={onSelect}
+							/>
+						</SidebarMenuItem>
+					))}
+				</SidebarMenu>
 				<CurrentSpaceCarousel
 					isSwitchingEnabled={isSpaceSwitchingEnabled}
 					onSelectSpace={switcher.onSelectSpace}

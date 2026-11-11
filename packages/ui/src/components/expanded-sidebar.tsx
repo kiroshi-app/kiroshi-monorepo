@@ -30,6 +30,8 @@ import {
 	SidebarListSkeleton,
 } from "@workspace/ui/components/sidebar-list-skeleton"
 import {
+	SIDEBAR_AVATAR_SIDE,
+	SIDEBAR_COLUMN,
 	SIDEBAR_ROW_INSET,
 	SidebarMenuRow,
 } from "@workspace/ui/components/sidebar-menu-row"
@@ -48,7 +50,7 @@ import {
 import type { UserChipIdentity } from "@workspace/ui/components/user-chip"
 import { cn } from "@workspace/ui/lib/utils"
 
-const COLUMN = "flex min-h-0 w-(--sidebar-width) shrink-0 flex-col gap-2 p-2"
+const COLUMN = cn(SIDEBAR_COLUMN, "w-(--sidebar-width)")
 
 const SECTIONS = "gap-3"
 
@@ -197,7 +199,7 @@ const PersonFooter = ({ user, onOpenSettings }: PersonFooterProps) => {
 			<AvatarFrame
 				image={user?.image}
 				shape="round"
-				size={28}
+				size={SIDEBAR_AVATAR_SIDE}
 				slot="expanded-sidebar-avatar"
 			>
 				<span aria-hidden="true" className={FOOTER_AVATAR}>
