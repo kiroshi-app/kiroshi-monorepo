@@ -1,4 +1,4 @@
-import type { ComponentProps } from "react"
+import type { ComponentProps, ReactNode } from "react"
 import {
 	expect,
 	fireEvent,
@@ -46,24 +46,54 @@ import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { ConversationIcons } from "@workspace/ui/components/icons"
 import { NO_CLICK_MODIFIERS } from "@workspace/ui/components/sidebar-menu-row"
 import { SIDEBAR_MIN_WIDTH } from "@workspace/ui/components/sidebar-resize"
-import { SidebarMenu } from "@workspace/ui/components/ui/sidebar"
+import {
+	Sidebar,
+	SidebarContent,
+	SidebarGroup,
+	SidebarGroupContent,
+	SidebarMenu,
+	SidebarProvider,
+} from "@workspace/ui/components/ui/sidebar"
 
 const FREE_HUE = 210
 
 const DARK = { theme: "dark", theme_layout: "single" }
+
+type IconRailFrameProps = {
+	children: ReactNode
+}
+
+const IconRailFrame = ({ children }: IconRailFrameProps) => (
+	<SidebarProvider defaultOpen={false}>
+		<Sidebar aria-label="Roster" collapsible="icon" role="complementary">
+			<SidebarContent>
+				<SidebarGroup>
+					<SidebarGroupContent>{children}</SidebarGroupContent>
+				</SidebarGroup>
+			</SidebarContent>
+		</Sidebar>
+	</SidebarProvider>
+)
 
 const meta = preview.meta({
 	title: "Navigation/AppSidebarConversationRow",
 	component: ConversationRosterRow,
 	parameters: { layout: "fullscreen" },
 	decorators: [
-		(Story, { parameters }) => (
-			<SidebarFrame width={parameters.sidebarWidth}>
-				<SidebarMenu>
-					<Story />
-				</SidebarMenu>
-			</SidebarFrame>
-		),
+		(Story, { parameters }) =>
+			parameters.isOnIconRail ? (
+				<IconRailFrame>
+					<SidebarMenu>
+						<Story />
+					</SidebarMenu>
+				</IconRailFrame>
+			) : (
+				<SidebarFrame width={parameters.sidebarWidth}>
+					<SidebarMenu>
+						<Story />
+					</SidebarMenu>
+				</SidebarFrame>
+			),
 	],
 	args: {
 		conversation: DESK_ROOM,
@@ -1021,6 +1051,56 @@ export const MissionGroupMenuOpen = meta.story(missionGroupMenuOpenStory())
 
 export const MissionGroupMenuOpenDark = meta.story(
 	missionGroupMenuOpenStory(DARK),
+)
+
+const RAIL_TILE_SIDE = 44
+
+const conversationOnTheIconRailStory = (globals?: typeof DARK) => ({
+	globals,
+	tags: ["test-only"],
+	args: { isSelected: true },
+	parameters: {
+		isOnIconRail: true,
+		docs: {
+			description: {
+				story:
+					"The current conversation, without missions, on the icon rail. Check it is drawn as the roster tile it was before conversation rows took the lit surface: a 44px square with a 10px radius wearing the active fill `--sidebar-accent`, the surface around it left transparent, and the pointer on it keeping that one tile.",
+			},
+		},
+	},
+	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+		const row = rowIn(canvasElement)
+		const tile = row.getBoundingClientRect()
+		const activeFill = missionGroupFillOf(row)
+		await expect([tile.width, tile.height]).toEqual([
+			RAIL_TILE_SIDE,
+			RAIL_TILE_SIDE,
+		])
+		await expect(getComputedStyle(row).borderTopLeftRadius).toBe("10px")
+		await expect(getComputedStyle(row).backgroundColor).toBe(activeFill)
+		await expect(getComputedStyle(surfaceOf(row)).backgroundColor).toBe(
+			TRANSPARENT,
+		)
+		if (!isInBrowserRunner()) return
+		const pointer = await realPointer()
+		try {
+			await pointer.hover(row)
+			await expect(getComputedStyle(row).backgroundColor).toBe(activeFill)
+			await expect(getComputedStyle(surfaceOf(row)).backgroundColor).toBe(
+				TRANSPARENT,
+			)
+		} finally {
+			await pointer.unhover(row)
+		}
+	},
+})
+
+export const ConversationOnTheIconRail = meta.story(
+	conversationOnTheIconRailStory(),
+)
+
+export const ConversationOnTheIconRailDark = meta.story(
+	conversationOnTheIconRailStory(DARK),
 )
 
 export const IconAtTheHeightOfItsTwoLines = meta.story({

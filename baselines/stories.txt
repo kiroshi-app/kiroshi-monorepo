@@ -1505,6 +1505,8 @@ navigation-appsidebarconversationrow--conversation-answered-dark
 navigation-appsidebarconversationrow--conversation-long-question-at-the-narrowest-sidebar
 navigation-appsidebarconversationrow--conversation-needing-you
 navigation-appsidebarconversationrow--conversation-needing-you-dark
+navigation-appsidebarconversationrow--conversation-on-the-icon-rail
+navigation-appsidebarconversationrow--conversation-on-the-icon-rail-dark
 navigation-appsidebarconversationrow--icon-at-the-height-of-its-two-lines
 navigation-appsidebarconversationrow--idle-conversation-ignores-background-tasks
 navigation-appsidebarconversationrow--knockout-wears-the-row-at-rest-and-hovered
