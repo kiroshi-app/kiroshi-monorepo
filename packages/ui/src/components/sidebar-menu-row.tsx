@@ -34,10 +34,10 @@ const ICON_SLOT =
 	"grid min-h-5 min-w-5 shrink-0 place-items-center [&_svg]:size-full!"
 
 const NAVIGATION_ROW =
-	"h-10 gap-2.5 rounded-lg p-1.5 font-normal text-soft-foreground hover:bg-rail-item-selected/50 hover:text-foreground active:bg-rail-item-selected active:text-foreground data-active:bg-rail-item-selected data-active:font-normal data-active:text-foreground data-active:hover:bg-rail-item-selected-hover"
+	"min-h-8 gap-2.5 rounded-lg p-1.5 font-normal text-soft-foreground hover:bg-rail-item-selected/50 hover:text-foreground active:bg-rail-item-selected active:text-foreground data-active:bg-rail-item-selected data-active:font-normal data-active:text-foreground data-active:hover:bg-rail-item-selected-hover"
 
 const NAVIGATION_ICON_SLOT =
-	"grid size-7 shrink-0 place-items-center [&_svg]:size-4! [&_svg]:stroke-[1.75]!"
+	"grid h-5 w-7 shrink-0 place-items-center [&_svg]:size-3.5! [&_svg]:stroke-[1.75]!"
 
 const LABEL_SLOT =
 	"min-w-0 flex-1 truncate group-data-[collapsible=icon]:pointer-events-none group-data-[collapsible=icon]:w-0 group-data-[collapsible=icon]:flex-none"

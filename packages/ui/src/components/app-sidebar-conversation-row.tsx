@@ -37,6 +37,9 @@ import { STILL_UNDER_REDUCED_MOTION } from "@workspace/ui/lib/reduced-motion"
 
 const ROW_ICON_SIDE = 28
 
+const MISSION_GROUP =
+	"rounded-lg hover:bg-sidebar-accent has-data-active:bg-sidebar-accent data-popup-open:bg-sidebar-accent/70"
+
 interface ConversationRosterRowProps extends RosterRowSlot, RosterPinActions {
 	conversation: AppSidebarConversation
 	isSelected: boolean
@@ -87,7 +90,7 @@ const ConversationRosterRow = ({
 			ref={(node) => keepFocus?.(conversation.id, node)}
 		>
 			<ContextMenu>
-				<ContextMenuTrigger>
+				<ContextMenuTrigger className={hasMissions ? MISSION_GROUP : undefined}>
 					<SidebarListRow
 						{...lift.handlersFor(conversation.id)}
 						isLiftable
