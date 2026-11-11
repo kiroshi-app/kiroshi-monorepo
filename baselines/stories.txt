@@ -1785,6 +1785,7 @@ navigation-collapsedsidebar--e-1-no-conversations-collapsed
 navigation-collapsedsidebar--e-2-nothing-pinned-collapsed
 navigation-collapsedsidebar--e-3-empty-section-collapsed
 navigation-collapsedsidebar--every-open-state
+navigation-collapsedsidebar--group-conversation-open
 navigation-collapsedsidebar--hover-3-b
 navigation-collapsedsidebar--hover-on-conversation
 navigation-collapsedsidebar--l-1-loading-collapsed

@@ -511,9 +511,11 @@ describe("the conversations of the collapsed sidebar", () => {
 		).toBeTruthy()
 	})
 
-	it("shows the mission cell of a conversation under it and opens nothing on click", async () => {
+	it("shows the mission cell of a conversation under it and opens that conversation on click", async () => {
+		let roomId = ""
 		const { router } = await mountCollapsed(async (held) => {
 			const room = await roomIn(held, "Release train")
+			roomId = room.id
 			harness.missions = [missionOn(held, room, { id: "mission-release" })]
 		})
 
@@ -523,6 +525,10 @@ describe("the conversations of the collapsed sidebar", () => {
 		).not.toBeNull()
 		await press(mission)
 
+		expect(router.state.location.pathname).toBe("/")
+		expect(router.state.location.search).toMatchObject({
+			conversation: roomId,
+		})
 		expect(router.state.location.search).not.toHaveProperty("mission")
 	})
 

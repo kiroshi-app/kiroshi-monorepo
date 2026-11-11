@@ -1,7 +1,12 @@
 "use client"
 
 import type { TFunction } from "i18next"
-import { Fragment, type ReactElement, type ReactNode } from "react"
+import {
+	type ComponentProps,
+	Fragment,
+	type ReactElement,
+	type ReactNode,
+} from "react"
 import { useTranslation } from "react-i18next"
 
 import { CurrentSpaceCarousel } from "@workspace/ui/components/app-sidebar-carousel"
@@ -87,7 +92,10 @@ const TILE_CURRENT = "before:bg-rail-item-selected"
 const NOT_SENT_DOT =
 	"-bottom-0.5 -end-0.5 pointer-events-none absolute size-2.5 rounded-full bg-mission-glyph-failure ring-2 ring-background"
 
-const GROUP = "flex w-11 shrink-0 flex-col rounded-control bg-update-row pb-2"
+const GROUP =
+	"relative flex w-11 shrink-0 flex-col rounded-control bg-update-row pb-2 before:pointer-events-none before:absolute before:inset-0 before:rounded-control"
+
+const GROUP_HOVER = "hover:before:bg-title-bar-highlight"
 
 const OVERFLOW_COUNT =
 	"relative font-semibold text-[11px] text-foreground tabular-nums"
@@ -162,7 +170,6 @@ type CollapsedSidebarProps = Omit<
 	openMissionId?: string
 	update?: UpdateBadgeProps
 	onOpenConversation?: (conversationId: string) => void
-	onOpenMission?: (missionId: string) => void
 	onRetryList?: () => void
 }
 
@@ -332,36 +339,6 @@ const SpaceSlot = (switcher: SpaceSwitcherProps) => {
 	)
 }
 
-type MissionTipProps = {
-	mission: AppSidebarRowMission
-}
-
-const MissionTip = ({ mission }: MissionTipProps) => {
-	const { t } = useTranslation("bots")
-	const ticket = missionTicketOf(mission)
-
-	return (
-		<>
-			<span className={TIP_LINE}>
-				{ticket ? (
-					<span className={cn(TIP_MUTED, "tabular-nums")}>{ticket}</span>
-				) : null}
-				<span className={TIP_STRONG}>{missionTitleOf(mission)}</span>
-			</span>
-			<span className={TIP_LINE}>
-				<span className={cn(TIP_STRONG, MISSION_GLYPH_COLOUR[mission.state])}>
-					{t(`roster.mission.state.${mission.state}`)}
-				</span>
-				{mission.agentName ? (
-					<span className={TIP_MUTED}>
-						{t("rail.detail", { detail: mission.agentName })}
-					</span>
-				) : null}
-			</span>
-		</>
-	)
-}
-
 type MissionGlyphProps = {
 	state: BotMissionState
 }
@@ -384,17 +361,15 @@ type MissionCellProps = {
 }
 
 const MissionCell = ({ mission, isOpen }: MissionCellProps) => (
-	<RailTip content={<MissionTip mission={mission} />}>
-		<span
-			aria-current={isOpen ? "page" : undefined}
-			className={cn(ITEM, MISSION_ITEM, isOpen && TILE_CURRENT)}
-			data-slot="collapsed-sidebar-mission"
-			data-state={mission.state}
-		>
-			<span className="sr-only">{missionNameOf(mission)}</span>
-			<MissionGlyph state={mission.state} />
-		</span>
-	</RailTip>
+	<span
+		aria-current={isOpen ? "page" : undefined}
+		className={cn(ITEM, MISSION_ITEM, isOpen && TILE_CURRENT)}
+		data-slot="collapsed-sidebar-mission"
+		data-state={mission.state}
+	>
+		<span className="sr-only">{missionNameOf(mission)}</span>
+		<MissionGlyph state={mission.state} />
+	</span>
 )
 
 type MissionOverflowProps = {
@@ -448,6 +423,58 @@ const ConversationTip = ({ conversation, missions }: ConversationTipProps) => {
 	)
 }
 
+type ConversationButtonProps = ComponentProps<"button"> & {
+	conversation: AppSidebarConversation
+	isOpen: boolean
+	isHoverable: boolean
+}
+
+const ConversationButton = ({
+	conversation,
+	isOpen,
+	isHoverable,
+	...props
+}: ConversationButtonProps) => {
+	const { t } = useTranslation("bots")
+
+	return (
+		<button
+			{...props}
+			aria-current={isOpen ? "page" : undefined}
+			aria-label={
+				conversation.isNotSent
+					? t("roster.titled", {
+							name: conversation.name,
+							title: t("roster.conversation.notSent"),
+						})
+					: conversation.name
+			}
+			className={cn(
+				ITEM,
+				CONVERSATION_ITEM,
+				isOpen ? TILE_CURRENT : isHoverable && TILE_HOVER,
+			)}
+			data-slot="collapsed-sidebar-conversation"
+			type="button"
+		>
+			<span className="relative">
+				<ConversationSubjectIcon
+					hue={conversation.color}
+					icon={conversation.icon}
+					side={28}
+				/>
+				{conversation.isNotSent ? (
+					<span
+						aria-hidden="true"
+						className={NOT_SENT_DOT}
+						data-slot="collapsed-sidebar-not-sent"
+					/>
+				) : null}
+			</span>
+		</button>
+	)
+}
+
 type RailConversationProps = {
 	conversation: AppSidebarConversation
 	openConversationId?: string
@@ -461,72 +488,54 @@ const RailConversation = ({
 	openMissionId,
 	onOpenConversation,
 }: RailConversationProps) => {
-	const { t } = useTranslation("bots")
 	const missions = inRailOrder(conversation.missions)
 	const isOpen = conversation.id === openConversationId
 	const isOverflowing = missions.length > MAX_MISSION_CELLS
 	const cells = isOverflowing
 		? missions.slice(0, CELLS_BEFORE_OVERFLOW)
 		: missions
-	const item = (
-		<RailTip
-			content={
-				<ConversationTip conversation={conversation} missions={missions} />
-			}
-		>
-			<button
-				aria-current={isOpen ? "page" : undefined}
-				aria-label={
-					conversation.isNotSent
-						? t("roster.titled", {
-								name: conversation.name,
-								title: t("roster.conversation.notSent"),
-							})
-						: conversation.name
-				}
-				className={cn(
-					ITEM,
-					CONVERSATION_ITEM,
-					isOpen ? TILE_CURRENT : TILE_HOVER,
-				)}
-				data-slot="collapsed-sidebar-conversation"
-				onClick={() => onOpenConversation?.(conversation.id)}
-				type="button"
-			>
-				<span className="relative">
-					<ConversationSubjectIcon
-						hue={conversation.color}
-						icon={conversation.icon}
-						side={28}
-					/>
-					{conversation.isNotSent ? (
-						<span
-							aria-hidden="true"
-							className={NOT_SENT_DOT}
-							data-slot="collapsed-sidebar-not-sent"
-						/>
-					) : null}
-				</span>
-			</button>
-		</RailTip>
+	const tip = (
+		<ConversationTip conversation={conversation} missions={missions} />
 	)
+	const openConversation = () => onOpenConversation?.(conversation.id)
 
-	if (missions.length === 0) return item
+	if (missions.length === 0)
+		return (
+			<RailTip content={tip}>
+				<ConversationButton
+					conversation={conversation}
+					isHoverable
+					isOpen={isOpen}
+					onClick={openConversation}
+				/>
+			</RailTip>
+		)
 
 	return (
-		<div className={GROUP} data-slot="collapsed-sidebar-group">
-			{item}
-			{cells.map((mission) => (
-				<MissionCell
-					isOpen={mission.id === openMissionId}
-					key={mission.id}
-					mission={mission}
+		<RailTip content={tip}>
+			{/* biome-ignore lint/a11y/noStaticElementInteractions: the mission cells and the +N label are pointer extensions of the conversation button, which is the group's only tab stop and whose click bubbles here */}
+			<div
+				className={cn(GROUP, !isOpen && GROUP_HOVER)}
+				data-slot="collapsed-sidebar-group"
+				onClick={openConversation}
+			>
+				<ConversationButton
+					conversation={conversation}
+					isHoverable={false}
+					isOpen={isOpen}
 				/>
-			))}
-			{isOverflowing ? (
-				<MissionOverflow count={missions.length - CELLS_BEFORE_OVERFLOW} />
-			) : null}
-		</div>
+				{cells.map((mission) => (
+					<MissionCell
+						isOpen={mission.id === openMissionId}
+						key={mission.id}
+						mission={mission}
+					/>
+				))}
+				{isOverflowing ? (
+					<MissionOverflow count={missions.length - CELLS_BEFORE_OVERFLOW} />
+				) : null}
+			</div>
+		</RailTip>
 	)
 }
 
@@ -785,7 +794,6 @@ const CollapsedSidebar = ({
 	onSelectLibrary,
 	onOpenSettings,
 	onOpenConversation,
-	onOpenMission: _onOpenMission,
 	onRetryList,
 	isSpaceSwitchingEnabled = true,
 	renderSpaceList,
