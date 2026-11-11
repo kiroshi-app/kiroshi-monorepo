@@ -1973,7 +1973,7 @@ export const MissionStripWithChatBadge = meta.story({
 		docs: {
 			description: {
 				story:
-					"A companion whose mission waits on the reader and whose conversation is asking for them too, which is the one case where the two marks of the row meet. Check both are drawn and that they stack: the chat dot at the trailing edge of the preview line, the mission dot at the trailing edge of the strip below it, the mission dot held 8px inside the chat dot by the strip's own inline padding. They carry the same warning colour here, measured against `--warning` on both, so colour and column are exactly what a reader cannot tell them apart by: the line each one sits on is, the preview line answering what the conversation wants and the strip answering what the work is doing. Check the strip hangs below the badge instead of colliding with it. Pick `Badges` for the dot alone, `MissionStripStates` for the strip alone.",
+					"A companion whose mission waits on the reader and whose conversation is asking for them too, which is the one case where the two marks of the row meet. Check both are drawn and that they stack: the chat dot at the trailing edge of the preview line, the mission dot at the trailing edge of the strip below it, the mission dot held 8px inside the chat dot by the strip's own inline padding. They carry the warning hue here, the chat dot on `--warning` and the mission mark on `--mission-glyph-waiting`, its alias in dark and one lightness step deeper in light, so colour and column are exactly what a reader cannot tell them apart by: the line each one sits on is, the preview line answering what the conversation wants and the strip answering what the work is doing. Check the strip hangs below the badge instead of colliding with it. Pick `Badges` for the dot alone, `MissionStripStates` for the strip alone.",
 			},
 		},
 	},
@@ -1998,7 +1998,10 @@ export const MissionStripWithChatBadge = meta.story({
 		await expect([
 			getComputedStyle(chatDot).backgroundColor,
 			getComputedStyle(missionDot).color,
-		]).toEqual([warning, warning])
+		]).toEqual([
+			warning,
+			tokenBackground(canvasElement, "var(--mission-glyph-waiting)"),
+		])
 		await expect(stripsIn(rows[1])).toHaveLength(0)
 		await expectAlignedRows(rows)
 	},

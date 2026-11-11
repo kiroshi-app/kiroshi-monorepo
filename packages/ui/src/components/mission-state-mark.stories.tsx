@@ -12,6 +12,12 @@ import { MissionStateMark } from "@workspace/ui/components/mission-state-mark"
 
 const SIZES = [12, 14] as const
 
+const DISC_TOKENS = [
+	["waiting", "text-mission-glyph-waiting"],
+	["failed", "text-mission-glyph-failed"],
+	["ready", "text-mission-glyph-ready"],
+] as const
+
 const shapeOf = (mark: Element) =>
 	Array.from(mark.children)
 		.map((part) =>
@@ -67,9 +73,12 @@ const everyStateAtBothSizes = {
 				await expect(boxOf(mark).width).toBe(size)
 				await expect(mark).toHaveAttribute("aria-hidden", "true")
 			}
-			await expect(getComputedStyle(marks[0]).color).toBe(
-				tokenStyleIn(marks[0], "text-warning", "color"),
-			)
+			for (const [state, token] of DISC_TOKENS) {
+				const mark = marks[BOT_MISSION_STATES.indexOf(state)]
+				await expect(getComputedStyle(mark).color).toBe(
+					tokenStyleIn(mark, token, "color"),
+				)
+			}
 		}
 	},
 }

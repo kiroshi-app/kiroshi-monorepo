@@ -269,7 +269,7 @@ export const MissionStates = meta.story({
 		await expect(strips[3]).toHaveTextContent("working")
 		const waitingDot = trailingOf(strips[0])
 		await expect(getComputedStyle(waitingDot).color).toBe(
-			tokenStyleIn(waitingDot, "text-warning", "color"),
+			tokenStyleIn(waitingDot, "text-mission-glyph-waiting", "color"),
 		)
 		await expect(strips.map((strip) => boxOf(trailingOf(strip)).width)).toEqual(
 			strips.map(() => 12),
