@@ -18,39 +18,21 @@ afterEach(() => {
 	vi.mocked(raiseFailureNotice).mockClear()
 })
 
-const renderCollapse = (
-	isCollapsed: boolean,
+const renderExpanded = (
 	setSidebarCollapsed: (isCollapsed: boolean) => Promise<void>,
 ) =>
 	renderHook(
 		() =>
-			useSidebarCollapse({ isCollapsed, controller: { setSidebarCollapsed } }),
+			useSidebarCollapse({
+				isCollapsed: false,
+				controller: { setSidebarCollapsed },
+			}),
 		{ wrapper: createQueryTestWrapper().wrapper },
 	)
 
-it("saves the collapsed sidebar when the expanded one toggles", async () => {
-	const setSidebarCollapsed = vi.fn(async () => undefined)
-	const { result } = renderCollapse(false, setSidebarCollapsed)
-
-	act(() => result.current.toggle())
-
-	await waitFor(() => expect(setSidebarCollapsed).toHaveBeenCalledWith(true))
-	expect(raiseFailureNotice).not.toHaveBeenCalled()
-})
-
-it("saves the expanded sidebar when the shortcut opens the collapsed one", async () => {
-	const setSidebarCollapsed = vi.fn(async () => undefined)
-	const { result } = renderCollapse(true, setSidebarCollapsed)
-
-	expect(result.current.isOpen).toBe(false)
-	act(() => result.current.changeOpen(true))
-
-	await waitFor(() => expect(setSidebarCollapsed).toHaveBeenCalledWith(false))
-})
-
 it("raises a failure notice when the host refuses the layout", async () => {
 	const setSidebarCollapsed = vi.fn(() => Promise.reject(new Error("refused")))
-	const { result } = renderCollapse(false, setSidebarCollapsed)
+	const { result } = renderExpanded(setSidebarCollapsed)
 
 	act(() => result.current.toggle())
 

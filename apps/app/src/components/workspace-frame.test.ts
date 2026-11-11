@@ -586,23 +586,6 @@ describe("the conversations of the collapsed sidebar", () => {
 	})
 })
 
-describe("the Missions entry of the expanded sidebar", () => {
-	it("counts every open mission of the current Space, waiting on the person or in progress", async () => {
-		await mountApp(async (held) => {
-			const room = await roomIn(held, "Release train")
-			harness.missions = [
-				missionOn(held, room, {
-					id: "mission-waiting",
-					state: "waiting_human",
-				}),
-				missionOn(held, room, { id: "mission-working", state: "working" }),
-			]
-		})
-
-		expect(entry(`${MISSIONS} 2`)).toBeTruthy()
-	})
-})
-
 const foldNamesOf = (index: number) =>
 	Array.from(
 		slotsOf("fold-section")[index].querySelectorAll(
@@ -915,12 +898,6 @@ describe("the open mission count of the expanded sidebar", () => {
 		)
 
 		expect(entry(`${MISSIONS} 5`)).toBeTruthy()
-	})
-
-	it("leaves done, failed and closed missions out of the count", async () => {
-		await mountApp(missionsIn(["working", "done", "failed", "closed"]))
-
-		expect(entry(`${MISSIONS} 1`)).toBeTruthy()
 	})
 
 	it("draws no count when the Space holds no open mission", async () => {

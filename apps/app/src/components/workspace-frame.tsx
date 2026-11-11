@@ -105,14 +105,12 @@ const useSwitcherSpaceSelection = () => {
 
 const useWorkspaceFrameRead = (): WorkspaceFrameRead => {
 	const workspace = useWorkspace()
-	const { core, drivers, rosterLines, rosterView, sidebarMissions, tabs } =
-		workspace
+	const { core, drivers, rosterLines, rosterView, tabs } = workspace
 	const rosterLists = useRosterLists({
 		core,
 		drivers,
 		rosterLines,
 		rosterView,
-		waitingMissionCount: sidebarMissions.waitingCount,
 	})
 	const titleBarTabs = useWorkspaceTitleBarTabs({
 		core,

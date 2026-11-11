@@ -11,10 +11,6 @@ import type {
 	MissionPullRequest,
 	MissionEventKind as ShownEventKind,
 } from "@workspace/ui/components/mission"
-import type {
-	MissionsPanelMission,
-	MissionsPanelProps,
-} from "@workspace/ui/components/missions-panel"
 import type { RosterBot } from "@workspace/ui/components/roster"
 import type {
 	EarlierTodayRow,
@@ -37,8 +33,7 @@ import { toMissionFace } from "./mission-thread-model"
 
 import type { SoloThreads } from "@/lib/bots/roster-line"
 import { rosterTimestamp } from "@/lib/bots/roster-timestamp"
-import { faceOfBot, type ThreadFace } from "@/lib/chat/thread-contract"
-import type { Bot } from "@/lib/conversations/store-contract"
+import type { ThreadFace } from "@/lib/chat/thread-contract"
 import type { ReportedRunRead } from "@/lib/routines/routines-model"
 
 const BADGE_BY_STATE: Record<MissionState, BotBadge | null> = {
@@ -185,19 +180,6 @@ const TIME_OF_DAY: Intl.DateTimeFormatOptions = {
 	minute: "2-digit",
 	hourCycle: "h23",
 }
-
-export const missionEntriesOf = ({
-	waitingOnYou,
-	inProgress,
-	earlierToday,
-}: SpaceMissionGroups) => [...waitingOnYou, ...inProgress, ...earlierToday]
-
-export const botFacesOf = (rosters: Record<string, Bot[]>) =>
-	new Map(
-		Object.values(rosters).flatMap((bots) =>
-			bots.map((bot) => [bot.id, faceOfBot(bot)] as const),
-		),
-	)
 
 export const startOfLocalDay = (now: number): number => {
 	const day = new Date(now)
@@ -636,39 +618,3 @@ export const missionRingBadges = (
 			})),
 		]),
 	)
-
-type MissionsPanelRowsRead = {
-	faceOf: MissionFaces
-	liveMissionIds: LiveMissionIds
-	now: number
-}
-
-type MissionsPanelRead = MissionsPanelRowsRead & {
-	groups: SpaceMissionGroups
-}
-
-const missionsPanelRowsOf = (
-	entries: MissionInSpace[],
-	{ faceOf, liveMissionIds, now }: MissionsPanelRowsRead,
-): MissionsPanelMission[] =>
-	entries.map(({ mission, conversationId }) => ({
-		...toMissionCard({
-			mission,
-			identity: missionFaceOf(faceOf, mission.botId),
-			state: missionStateOf(mission),
-			isWorking: isMissionWorking(mission, liveMissionIds),
-			now,
-		}),
-		conversationId,
-	}))
-
-export const toMissionsPanel = ({
-	groups,
-	...read
-}: MissionsPanelRead): Omit<MissionsPanelProps, "onOpen"> => ({
-	open: missionsPanelRowsOf(
-		[...groups.waitingOnYou, ...groups.inProgress],
-		read,
-	),
-	earlierToday: missionsPanelRowsOf(groups.earlierToday, read),
-})

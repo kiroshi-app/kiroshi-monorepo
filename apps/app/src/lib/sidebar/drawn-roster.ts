@@ -3,16 +3,22 @@ import type { KeyboardEvent } from "react"
 import type {
 	AppSidebarConversation,
 	AppSidebarSection,
+	SectionNaming,
 } from "@workspace/ui/components/app-sidebar-model"
 import {
 	endOfSection,
 	type Landing,
 	SORTED,
 } from "@workspace/ui/components/app-sidebar-pins"
-import type { RosterEntries } from "@workspace/ui/components/app-sidebar-roster-layout"
+import {
+	type RosterEntries,
+	rosterEntriesOf,
+} from "@workspace/ui/components/app-sidebar-roster-layout"
 import type { RosterMove } from "@workspace/ui/components/app-sidebar-roster-parts"
 
-export const sectionsDrawnAfterPins = (
+const NO_AGENTS: never[] = []
+
+const sectionsDrawnAfterPins = (
 	conversations: AppSidebarConversation[],
 	sections: AppSidebarSection[],
 ) => {
@@ -23,6 +29,24 @@ export const sectionsDrawnAfterPins = (
 		position: section.position + firstFreeRank,
 	}))
 }
+
+type DrawnRoster = {
+	conversations: AppSidebarConversation[]
+	sections: AppSidebarSection[]
+	naming: SectionNaming | null
+}
+
+export const drawnEntriesOf = ({
+	conversations,
+	sections,
+	naming,
+}: DrawnRoster) =>
+	rosterEntriesOf({
+		bots: NO_AGENTS,
+		conversations,
+		naming,
+		sections: sectionsDrawnAfterPins(conversations, sections),
+	})
 
 export const pinnedRowsOf = ({ topLevel }: RosterEntries) =>
 	topLevel.filter(({ section }) => !section)

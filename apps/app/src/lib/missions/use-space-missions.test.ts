@@ -55,7 +55,7 @@ describe("useSpaceMissions", () => {
 		conversationTitle: "Crashes",
 	})
 
-	it("counts the missions waiting on the person and in progress, and keeps the waiting count on waiting_human", async () => {
+	it("counts the missions waiting on the person and in progress as open, and only waiting_human as waiting on the person", async () => {
 		readSpacePage.mockResolvedValue(
 			aSpacePage([
 				entryIn("m-waiting", "waiting_human"),
@@ -70,7 +70,7 @@ describe("useSpaceMissions", () => {
 		})
 
 		await waitFor(() => expect(result.current.openCount).toBe(5))
-		expect(result.current.waitingCount).toBe(1)
+		expect(result.current.waitingOnYou).toHaveLength(1)
 	})
 
 	it("leaves done, failed and closed missions out of the open count", async () => {
@@ -137,7 +137,7 @@ describe("useSpaceMissions", () => {
 			expect(idsOf(result.current.waitingOnYou)).toEqual(["m-1"]),
 		)
 		expect(result.current.inProgress).toEqual([])
-		expect(result.current.waitingCount).toBe(1)
+		expect(result.current.waitingOnYou).toHaveLength(1)
 		expect(readSpacePage).toHaveBeenCalledTimes(2)
 	})
 
@@ -173,14 +173,14 @@ describe("useSpaceMissions", () => {
 		await waitFor(() =>
 			expect(idsOf(result.current.waitingOnYou)).toEqual(["m-1"]),
 		)
-		expect(result.current.waitingCount).toBe(1)
+		expect(result.current.waitingOnYou).toHaveLength(1)
 
 		livenessChange("working")
 
 		await waitFor(() =>
 			expect(idsOf(result.current.inProgress)).toEqual(["m-1"]),
 		)
-		expect(result.current.waitingCount).toBe(0)
+		expect(result.current.waitingOnYou).toHaveLength(0)
 	})
 
 	it("lists a mission a change closes in earlier today before the reread answers", async () => {
@@ -239,7 +239,7 @@ describe("useSpaceMissions", () => {
 		expect(result.current.waitingOnYou).toEqual([])
 		expect(result.current.inProgress).toEqual([])
 		expect(result.current.earlierToday).toEqual([])
-		expect(result.current.waitingCount).toBe(0)
+		expect(result.current.waitingOnYou).toHaveLength(0)
 	})
 
 	it("drops a read that answers after the space changed", async () => {

@@ -1,8 +1,5 @@
 import { PINNED_ZONE } from "@workspace/ui/components/app-sidebar-pins"
-import {
-	type RosterEntries,
-	rosterEntriesOf,
-} from "@workspace/ui/components/app-sidebar-roster-layout"
+import type { RosterEntries } from "@workspace/ui/components/app-sidebar-roster-layout"
 import {
 	type RosterRowsContext,
 	rosterMenuOf,
@@ -18,14 +15,12 @@ import type { Lifter } from "@workspace/ui/hooks/use-roster-lift"
 
 import { RecentRows } from "@/components/expanded-sidebar-rows"
 import {
+	drawnEntriesOf,
 	namedSectionsOf,
 	pinnedRowsOf,
-	sectionsDrawnAfterPins,
 } from "@/lib/sidebar/drawn-roster"
 import { sidebarZonesOf } from "@/lib/sidebar/sidebar-zones"
 import { useSpaceSidebarConversations } from "@/lib/sidebar/use-sidebar-conversations"
-
-const NO_AGENTS: never[] = []
 
 const IGNORED = () => undefined
 
@@ -64,13 +59,8 @@ type SpaceListProps = {
 }
 
 const ExpandedSpaceList = ({ spaceId }: SpaceListProps) => {
-	const { conversations, sections } = useSpaceSidebarConversations(spaceId)
-	const entries = rosterEntriesOf({
-		bots: NO_AGENTS,
-		conversations,
-		naming: null,
-		sections: sectionsDrawnAfterPins(conversations, sections),
-	})
+	const rows = useSpaceSidebarConversations(spaceId)
+	const entries = drawnEntriesOf({ ...rows, naming: null })
 	const pinnedRows = pinnedRowsOf(entries)
 
 	return (

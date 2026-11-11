@@ -11,7 +11,7 @@ import type { SpaceMissionsView } from "./use-space-missions"
 import type { ThreadFace } from "@/lib/chat/thread-contract"
 import type { Conversation } from "@/lib/conversations/store-contract"
 
-export type MissionsPageRead = {
+type MissionsPageRead = {
 	entries: MissionInSpace[]
 	faceOf: (botId: string) => ThreadFace | undefined
 	conversations: Conversation[]
