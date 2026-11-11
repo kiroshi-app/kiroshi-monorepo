@@ -76,11 +76,10 @@ const SWITCHER_ROW = "flex h-10 shrink-0 items-center gap-1"
 
 type ExpandedSidebarDestination = "newConversation" | "missions" | "library"
 
-type DestinationHandlers = {
-	onNewConversation?: () => void
-	onSelectMissions?: () => void
-	onSelectLibrary?: () => void
-}
+type DestinationHandlers = Pick<
+	ExpandedSidebarProps,
+	"onNewConversation" | "onSelectMissions" | "onSelectLibrary"
+>
 
 type NavigationDestination = {
 	id: ExpandedSidebarDestination
@@ -122,23 +121,25 @@ type ExpandedSidebarSection = SectionHeadActions & {
 	headSlotId?: string
 }
 
-type ExpandedSidebarProps = SpaceSwitcherProps &
-	DestinationHandlers & {
-		destination?: ExpandedSidebarDestination
-		missionCount?: number
-		pinned: ReactNode
-		conversations: ReactNode
-		sections?: ExpandedSidebarSection[]
-		listStatus?: CollapsedSidebarListStatus
-		listEnd?: ListEnd
-		update?: ReactNode
-		user?: UserChipIdentity
-		isSpaceSwitchingEnabled?: boolean
-		renderSpaceList?: (space: Space) => ReactNode
-		onReorderSpaces?: (ids: string[]) => void
-		onOpenSettings?: () => void
-		onRetryList?: () => void
-	}
+type ExpandedSidebarProps = SpaceSwitcherProps & {
+	destination?: ExpandedSidebarDestination
+	missionCount?: number
+	pinned: ReactNode
+	conversations: ReactNode
+	sections?: ExpandedSidebarSection[]
+	listStatus?: CollapsedSidebarListStatus
+	listEnd?: ListEnd
+	update?: ReactNode
+	user?: UserChipIdentity
+	isSpaceSwitchingEnabled?: boolean
+	renderSpaceList?: (space: Space) => ReactNode
+	onReorderSpaces?: (ids: string[]) => void
+	onNewConversation?: () => void
+	onSelectMissions?: () => void
+	onSelectLibrary?: () => void
+	onOpenSettings?: () => void
+	onRetryList?: () => void
+}
 
 type NavigationItemProps = {
 	label: string
