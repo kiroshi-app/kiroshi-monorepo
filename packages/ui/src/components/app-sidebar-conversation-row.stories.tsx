@@ -771,11 +771,15 @@ export const MissionCapsulesAreInert = meta.story({
 
 const MISSION_GROUP_HOVER = { hover: '[data-slot="context-menu-trigger"]' }
 
-const hoverMissionGroup = async (row: HTMLElement, target = row) => {
+const hoverMissionGroup = async (
+	row: HTMLElement,
+	target = row,
+	fill = missionGroupFillOf(row),
+) => {
 	const pointer = await realPointer()
 	try {
 		await pointer.hover(target, { force: true })
-		await expectOneMissionSurface(row, missionGroupFillOf(row))
+		await expectOneMissionSurface(row, fill)
 	} finally {
 		await pointer.unhover(row)
 	}
@@ -898,15 +902,7 @@ const missionGroupMenuOpenStory = (globals?: typeof DARK) => ({
 					.backgroundColor,
 			).toBe(TRANSPARENT)
 			if (isInBrowserRunner())
-				await withMotionAllowed(async () => {
-					const pointer = await realPointer()
-					try {
-						await pointer.hover(row, { force: true })
-						await expectOneMissionSurface(row, openMenuFill)
-					} finally {
-						await pointer.unhover(row)
-					}
-				})
+				await withMotionAllowed(() => hoverMissionGroup(row, row, openMenuFill))
 		} finally {
 			await userEvent.keyboard("{Escape}")
 		}
