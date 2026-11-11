@@ -89,7 +89,7 @@ const SpacePanel = ({
 			inert={!isInView}
 			onScrollCapture={(event) => {
 				const scroller = scrollerOf(event.currentTarget, look)
-				if (scroller && event.target === scroller)
+				if (event.target === scroller)
 					scrolls.set(scrollKey, scroller.scrollTop)
 			}}
 			ref={panel}
