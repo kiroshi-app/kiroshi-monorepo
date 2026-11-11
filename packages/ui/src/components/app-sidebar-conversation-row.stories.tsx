@@ -866,6 +866,59 @@ export const MissionGroupActive = meta.story(missionGroupActiveStory())
 
 export const MissionGroupActiveDark = meta.story(missionGroupActiveStory(DARK))
 
+const missionGroupMenuOpenStory = (globals?: typeof DARK) => ({
+	globals,
+	args: { conversation: MISSIONS_ROOM },
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"The context menu of a conversation with two open missions is open. Check the row and its mission tree wear the roster open menu fill `--sidebar-accent` at 70 percent as one surface, the row itself transparent, and that the pointer resting on the group still shows a single fill.",
+			},
+		},
+	},
+	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+		const row = rowIn(canvasElement)
+		const openMenuFill = tokenStyleIn(
+			row,
+			"bg-sidebar-accent/70",
+			"backgroundColor",
+		)
+		fireEvent.contextMenu(row)
+		await shown(
+			await screen.findByRole("menu", {
+				name: `Actions for ${MISSIONS_ROOM.name}`,
+			}),
+		)
+		try {
+			await expectOneMissionSurface(row, openMenuFill)
+			await expect(
+				getComputedStyle(slotIn(canvasElement, "mission-capsule-list"))
+					.backgroundColor,
+			).toBe(TRANSPARENT)
+			if (isInBrowserRunner())
+				await withMotionAllowed(async () => {
+					const pointer = await realPointer()
+					try {
+						await pointer.hover(row, { force: true })
+						await expectOneMissionSurface(row, openMenuFill)
+					} finally {
+						await pointer.unhover(row)
+					}
+				})
+		} finally {
+			await userEvent.keyboard("{Escape}")
+		}
+	},
+})
+
+export const MissionGroupMenuOpen = meta.story(missionGroupMenuOpenStory())
+
+export const MissionGroupMenuOpenDark = meta.story(
+	missionGroupMenuOpenStory(DARK),
+)
+
 export const IconAtTheHeightOfItsTwoLines = meta.story({
 	parameters: {
 		docs: {

@@ -1516,6 +1516,8 @@ navigation-appsidebarconversationrow--mission-group-at-rest
 navigation-appsidebarconversationrow--mission-group-at-rest-dark
 navigation-appsidebarconversationrow--mission-group-hovered
 navigation-appsidebarconversationrow--mission-group-hovered-dark
+navigation-appsidebarconversationrow--mission-group-menu-open
+navigation-appsidebarconversationrow--mission-group-menu-open-dark
 navigation-appsidebarconversationrow--mixed-rooms-and-solo-conversations
 navigation-appsidebarconversationrow--monochrome-row
 navigation-appsidebarconversationrow--monochrome-row-dark
