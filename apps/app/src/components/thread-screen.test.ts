@@ -3599,6 +3599,21 @@ describe("ThreadScreen wearing the look of a group conversation", () => {
 		}
 	})
 
+	it("leads the header of a room with one agent seated with the conversation avatar", async () => {
+		const room = await roomOf({ names: ["Ada"] })
+		render(
+			screenOf(
+				wearing(room.thread, { icon: "Rocket", color: null }),
+				room.bots,
+			),
+			{ wrapper: createQueryTestWrapper().wrapper },
+		)
+		await settle()
+
+		const header = screen.getByRole("button", { name: HEADER_OF_WALLS })
+		expect(pictogramIn(header)).toBe(drawnPictogramOf("Rocket"))
+	})
+
 	it.each([BLOT_HUES.cyan, FREE_HUE, null])(
 		"draws the icon of a conversation coloured %s with no message in that colour in its empty state",
 		async (color) => {
