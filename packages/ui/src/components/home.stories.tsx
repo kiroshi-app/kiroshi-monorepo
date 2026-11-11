@@ -518,7 +518,6 @@ export const FocusBackOnANewArrival = meta.story({
 		await expect(
 			canvas.getByRole("button", { name: "Add files" }),
 		).toHaveFocus()
-		await expect(field).not.toHaveFocus()
 
 		await userEvent.click(canvas.getByRole("button", { name: "Arrive again" }))
 
