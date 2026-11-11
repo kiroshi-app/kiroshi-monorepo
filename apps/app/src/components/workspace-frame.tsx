@@ -64,7 +64,6 @@ const sidebarAskingFirst = (
 	onSelectMissions: askFirst(sidebar.onSelectMissions),
 	onSelectLibrary: askFirst(sidebar.onSelectLibrary),
 	onOpenConversation: askFirst(sidebar.onOpenConversation),
-	onOpenMission: askFirst(sidebar.onOpenMission),
 })
 
 const rowMenuAskingFirst = (
@@ -130,7 +129,6 @@ const useWorkspaceFrameRead = (): WorkspaceFrameRead => {
 		overlay: workspace.overlay,
 		rosterLines,
 		rosterLists,
-		sidebarMissions,
 		switcher: workspace.switcher,
 		tabs,
 		onSelectSpace,

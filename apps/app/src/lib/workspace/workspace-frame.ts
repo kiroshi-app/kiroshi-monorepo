@@ -17,7 +17,6 @@ type SidebarNavigateKey =
 	| "onSelectMissions"
 	| "onSelectLibrary"
 	| "onOpenConversation"
-	| "onOpenMission"
 
 type SidebarSwitcherKey =
 	| "badgesBySpaceId"
