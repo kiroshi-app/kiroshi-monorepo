@@ -1,12 +1,17 @@
 "use client"
 
 import { ContextMenu as ContextMenuPrimitive } from "@base-ui/react/context-menu"
-import { cloneElement, type ReactElement, useRef } from "react"
+import {
+	cloneElement,
+	type HTMLAttributes,
+	type ReactElement,
+	type Ref,
+	useRef,
+} from "react"
 import { useTranslation } from "react-i18next"
 
 import { Icons } from "@workspace/ui/components/icons"
 import type { MissionState } from "@workspace/ui/components/mission"
-import type { MissionCardProps } from "@workspace/ui/components/mission-card"
 import {
 	ContextMenu,
 	ContextMenuContent,
@@ -35,12 +40,18 @@ type MissionMenuActions = {
 	onReopen: () => void
 }
 
+type MissionMenuSurface = HTMLAttributes<HTMLElement> & {
+	ref?: Ref<HTMLElement>
+}
+
+type MissionMenuTrigger = ReactElement<{ surface?: MissionMenuSurface }>
+
 type MissionMenuProps = MissionMenuActions & {
 	state: MissionState
 	hasPullRequest: boolean
 	hasBranch: boolean
 	hasWorkspacePath: boolean
-	children: ReactElement<MissionCardProps>
+	children: MissionMenuTrigger
 }
 
 type MissionMenuContentProps = Omit<MissionMenuProps, "children"> & {
@@ -190,4 +201,5 @@ export {
 	MissionMenu,
 	type MissionMenuActions,
 	type MissionMenuProps,
+	type MissionMenuTrigger,
 }

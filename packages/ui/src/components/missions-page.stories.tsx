@@ -1,13 +1,27 @@
-import { expect, fn, userEvent, within } from "storybook/test"
+import {
+	expect,
+	fireEvent,
+	fn,
+	screen,
+	userEvent,
+	waitFor,
+	within,
+} from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+	A11Y_FLOATING_FOCUS_GUARDS,
+	A11Y_SUBMENU_PORTAL_GUARD,
 	expectSkeletonFilledTo,
+	FRAME_POLL,
+	mergeA11y,
+	shown,
 	slotIn,
 	slotsIn,
 } from "@workspace/storybook/story-utils"
 import { ContentCard } from "@workspace/ui/components/content-card"
+import { MissionMenu } from "@workspace/ui/components/mission-menu"
 import {
 	MISSION_NOW,
 	NO_PAGE_MISSIONS,
@@ -20,6 +34,7 @@ import {
 	MISSIONS_PAGE_FRAMES,
 	MissionsPage,
 	type MissionsPageGroupKey,
+	type MissionsPageRowWrap,
 } from "@workspace/ui/components/missions-page"
 import { WorkspaceShellRoot } from "@workspace/ui/components/workspace-shell"
 
@@ -494,5 +509,128 @@ export const InMainCard = meta.story({
 			Number.parseFloat(getComputedStyle(header).borderBottomWidth),
 		).toBeGreaterThan(0)
 		await expect(getComputedStyle(header).borderTopWidth).toBe("0px")
+	},
+})
+
+const MENU_LABEL = "Mission actions"
+
+const MISSION_WITHOUT_A_MENU = "mission-ope-2109"
+
+const MENU_ACTIONS = {
+	onOpen: fn(),
+	onOpenPullRequest: fn(),
+	onCopy: fn(),
+	onMessageAgent: fn(),
+	onStopAgent: fn(),
+	onAnswer: fn(),
+	onClose: fn(),
+	onReopen: fn(),
+}
+
+const wrapInMissionMenu: MissionsPageRowWrap = (row) => {
+	const { mission } = row.props
+	if (mission.id === MISSION_WITHOUT_A_MENU) return row
+
+	return (
+		<MissionMenu
+			{...MENU_ACTIONS}
+			hasBranch
+			hasPullRequest={mission.pullRequest !== undefined}
+			hasWorkspacePath
+			state={mission.state}
+		>
+			{row}
+		</MissionMenu>
+	)
+}
+
+const ROW_MENUS = [
+	{
+		row: /^OPE-2118/,
+		entries: [
+			"Open mission",
+			"Open PR",
+			"Copy",
+			"Message the coding session",
+			"Stop the coding session",
+			"Close",
+		],
+	},
+	{
+		row: /^OPE-2124/,
+		entries: [
+			"Open mission",
+			"Open PR",
+			"Copy",
+			"Answer the question",
+			"Close",
+		],
+	},
+	{
+		row: /^OPE-2102/,
+		entries: ["Open mission", "Copy", "Reopen"],
+	},
+]
+
+const rightClick = (row: HTMLElement) =>
+	fireEvent.contextMenu(row, { clientX: 40, clientY: 20 })
+
+const openedMenuEntries = async () =>
+	within(await shown(await screen.findByRole("menu", { name: MENU_LABEL })))
+		.getAllByRole("menuitem")
+		.map((item) => item.textContent)
+
+const closeMenuWithEscape = async () => {
+	await waitFor(
+		() =>
+			expect(screen.getByRole("menu").contains(document.activeElement)).toBe(
+				true,
+			),
+		FRAME_POLL,
+	)
+	fireEvent.keyDown(document.activeElement ?? document.body, {
+		key: "Escape",
+	})
+	await waitFor(() => expect(screen.queryByRole("menu")).toBeNull(), FRAME_POLL)
+}
+
+export const MenuOnARow = meta.story({
+	globals: { theme: "dark" },
+	args: { defaultFoldedGroups: [], wrap: wrapInMissionMenu },
+	parameters: {
+		a11y: mergeA11y(
+			A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+			A11Y_FLOATING_FOCUS_GUARDS,
+			A11Y_SUBMENU_PORTAL_GUARD,
+		),
+		docs: {
+			description: {
+				story:
+					"Every group open, each row wrapped in the mission menu the sidebar draws, left open on the working OPE-2118 row. Check that a right click on a working, a blocked-on-you and a done row opens the entries its state allows, that Escape hands focus back to the row it opened from, that a left click still opens the mission, and that the failed OPE-2109 row, given no menu, opens none and still opens its mission.",
+			},
+		},
+	},
+	play: async ({ args, canvas }) => {
+		const rowWithoutMenu = canvas.getByRole("button", { name: /^OPE-2109/ })
+		rightClick(rowWithoutMenu)
+		await expect(screen.queryByRole("menu")).toBeNull()
+		await userEvent.click(rowWithoutMenu)
+		await expect(args.onOpen).toHaveBeenLastCalledWith(MISSION_WITHOUT_A_MENU)
+
+		for (const { row: name, entries } of ROW_MENUS) {
+			const row = canvas.getByRole("button", { name })
+			rightClick(row)
+			await expect(await openedMenuEntries()).toEqual(entries)
+			await expect(row).toHaveAttribute("data-slot", "missions-page-row")
+			await closeMenuWithEscape()
+			await waitFor(() => expect(row).toHaveFocus(), FRAME_POLL)
+			await expect(getComputedStyle(row).outlineStyle).toBe("solid")
+		}
+
+		const workingRow = canvas.getByRole("button", { name: /^OPE-2118/ })
+		await userEvent.click(workingRow)
+		await expect(args.onOpen).toHaveBeenLastCalledWith("mission-ope-2118")
+		rightClick(workingRow)
+		await expect(await openedMenuEntries()).toEqual(ROW_MENUS[0]?.entries)
 	},
 })
