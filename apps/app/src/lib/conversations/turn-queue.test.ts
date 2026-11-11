@@ -33,25 +33,49 @@ const waveIn = (queue: { wave: Summons[] }) =>
 
 describe("openedWave", () => {
 	it("takes every companion held, in the order they were named", () => {
-		const queue = openedWave(opened(["ada", "nyx"]))
+		const queue = openedWave(opened(["ada", "nyx"]), [])
 		expect(waveIn(queue)).toEqual(["ada", "nyx"])
 		expect(queue.waiting).toEqual([])
 	})
 
 	it("leaves the queue alone when no companion is held", () => {
-		const running = openedWave(opened(["ada"]))
-		expect(openedWave(running)).toBe(running)
+		const running = openedWave(opened(["ada"]), [])
+		expect(openedWave(running, [])).toBe(running)
+	})
+
+	it("joins to the companions still speaking the one handed by a wave mate", () => {
+		const running = openedWave(opened(["ada", "nyx"]), [])
+		const named = handedOver(running, "ada", summons("iris"))
+		const queue = openedWave(named, ["nyx"])
+		expect(waveIn(queue)).toEqual(["nyx", "iris"])
+		expect(queue.waiting).toEqual([])
+	})
+
+	it("holds a companion handed while it speaks until its run ends", () => {
+		const running = openedWave(opened(["ada", "nyx"]), [])
+		const named = handedOver(running, "ada", summons("nyx"))
+		expect(openedWave(named, ["nyx"])).toBe(named)
+		expect(waveIn(openedWave(named, []))).toEqual(["nyx"])
+	})
+
+	it("holds a companion handed by one still speaking until that run ends", () => {
+		const running = openedWave(opened(["ada", "nyx"]), [])
+		const named = handedOver(running, "ada", summons("iris"))
+		expect(openedWave(named, ["ada", "nyx"])).toBe(named)
+		expect(waveIn(openedWave(named, ["nyx"]))).toEqual(["nyx", "iris"])
 	})
 })
 
 describe("handedOver", () => {
 	it("holds the companion named for the next wave, pointed at the message that named it", () => {
 		const queue = handedOver(
-			openedWave(opened(["ada"])),
+			openedWave(opened(["ada"]), []),
 			"ada",
 			summons("nyx", "m-said-by-ada"),
 		)
-		expect(queue.waiting).toEqual([{ botId: "nyx", promptId: "m-said-by-ada" }])
+		expect(queue.waiting).toEqual([
+			{ botId: "nyx", promptId: "m-said-by-ada", handedBy: "ada" },
+		])
 	})
 
 	it("leaves a companion already held where it is", () => {
@@ -60,25 +84,25 @@ describe("handedOver", () => {
 	})
 
 	it("holds for its next run a companion still running in the open wave", () => {
-		const running = openedWave(opened(["ada", "nyx"]))
+		const running = openedWave(opened(["ada", "nyx"]), [])
 		const queue = handedOver(running, "ada", summons("nyx"))
 		expect(waitingIn(queue)).toEqual(["nyx"])
 		expect(refusalOf(running, "ada", summons("nyx"))).toBeNull()
 	})
 
 	it("holds again the companion named back by the one it named", () => {
-		const first = openedWave(opened(["ada"]))
-		const second = openedWave(handedOver(first, "ada", summons("nyx")))
+		const first = openedWave(opened(["ada"]), [])
+		const second = openedWave(handedOver(first, "ada", summons("nyx")), [])
 		const queue = handedOver(second, "nyx", summons("ada"))
 		expect(waitingIn(queue)).toEqual(["ada"])
 		expect(refusalOf(second, "nyx", summons("ada"))).toBeNull()
 	})
 
 	it("refuses a companion handed the turn as many times as the chain allows", () => {
-		let queue = openedWave(opened(["ada"]))
+		let queue = openedWave(opened(["ada"]), [])
 		for (let i = 0; i < MAX_SUMMONS_PER_CHAIN; i++) {
-			queue = openedWave(handedOver(queue, "ada", summons("nyx")))
-			queue = openedWave(handedOver(queue, "nyx", summons("ada")))
+			queue = openedWave(handedOver(queue, "ada", summons("nyx")), [])
+			queue = openedWave(handedOver(queue, "nyx", summons("ada")), [])
 		}
 		expect(waveIn(queue)).toEqual(["ada"])
 		expect(refusalOf(queue, "ada", summons("nyx"))).toBe("summonLimit")
@@ -88,9 +112,9 @@ describe("handedOver", () => {
 	it("counts once a companion named twice before its next run", () => {
 		let queue = opened(["ada", "iris"])
 		for (let i = 0; i < MAX_SUMMONS_PER_CHAIN - 1; i++) {
-			queue = handedOver(openedWave(queue), "ada", summons("nyx"))
+			queue = handedOver(openedWave(queue, []), "ada", summons("nyx"))
 		}
-		queue = openedWave(queue)
+		queue = openedWave(queue, [])
 		const named = handedOver(queue, "ada", summons("nyx"))
 		expect(refusalOf(named, "iris", summons("nyx"))).toBeNull()
 		expect(waitingIn(handedOver(named, "iris", summons("nyx")))).toEqual([
@@ -99,23 +123,23 @@ describe("handedOver", () => {
 	})
 
 	it("counts the handovers again from the next message", () => {
-		let queue = openedWave(opened(["ada"]))
+		let queue = openedWave(opened(["ada"]), [])
 		for (let i = 0; i < MAX_SUMMONS_PER_CHAIN; i++) {
-			queue = openedWave(handedOver(queue, "ada", summons("nyx")))
+			queue = openedWave(handedOver(queue, "ada", summons("nyx")), [])
 		}
-		const next = openedWave(reopenedFor(queue, [summons("ada")]))
+		const next = openedWave(reopenedFor(queue, [summons("ada")]), [])
 		expect(refusalOf(next, "ada", summons("nyx"))).toBeNull()
 	})
 
 	it("opens a second wave with the companion the first one named", () => {
-		const first = openedWave(opened(["ada"]))
-		const second = openedWave(handedOver(first, "ada", summons("nyx")))
+		const first = openedWave(opened(["ada"]), [])
+		const second = openedWave(handedOver(first, "ada", summons("nyx")), [])
 		expect(waveIn(second)).toEqual(["nyx"])
 		expect(second.waiting).toEqual([])
 	})
 
 	it("ignores a companion naming itself", () => {
-		const running = openedWave(opened(["ada"]))
+		const running = openedWave(opened(["ada"]), [])
 		const queue = handedOver(running, "ada", summons("ada"))
 		expect(queue.waiting).toEqual([])
 		expect(refusalOf(running, "ada", summons("ada"))).toBe("selfMention")
@@ -136,13 +160,13 @@ describe("droppedWaiting", () => {
 	})
 
 	it("leaves a companion seated in the open wave in its seat", () => {
-		const running = openedWave(opened(["ada", "nyx"]))
+		const running = openedWave(opened(["ada", "nyx"]), [])
 		expect(droppedWaiting(running, "ada")).toBe(running)
 		expect(waveIn(running)).toEqual(["ada", "nyx"])
 	})
 
 	it("drops the companion held after a handover", () => {
-		const running = openedWave(opened(["ada"]))
+		const running = openedWave(opened(["ada"]), [])
 		const named = handedOver(running, "ada", summons("nyx"))
 		expect(droppedWaiting(named, "nyx").waiting).toEqual([])
 	})
@@ -150,14 +174,14 @@ describe("droppedWaiting", () => {
 
 describe("reopenedFor", () => {
 	it("drops those held and leaves the open wave in flight", () => {
-		const running = openedWave(opened(["ada", "nyx", "iris"]))
+		const running = openedWave(opened(["ada", "nyx", "iris"]), [])
 		const queue = reopenedFor(running, [])
 		expect(waveIn(queue)).toEqual(["ada", "nyx", "iris"])
 		expect(queue.waiting).toEqual([])
 	})
 
 	it("keeps the open wave and holds the ones newly named", () => {
-		const running = openedWave(opened(["ada", "nyx"]))
+		const running = openedWave(opened(["ada", "nyx"]), [])
 		const queue = reopenedFor(running, [summons("iris")])
 		expect(waveIn(queue)).toEqual(["ada", "nyx"])
 		expect(waitingIn(queue)).toEqual(["iris"])

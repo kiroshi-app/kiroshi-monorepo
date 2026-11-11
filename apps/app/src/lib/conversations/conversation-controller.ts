@@ -58,6 +58,7 @@ import {
 	refusalOf,
 	reopenedFor,
 	type Summons,
+	startableIn,
 	type TurnQueue,
 } from "./turn-queue"
 
@@ -306,6 +307,11 @@ const notStartedDescriptionOf = (
 		: i18n.t("chat:transcript.mention.notStarted.description", {
 				count: names.length,
 			})
+
+const neverStartedDescriptionOf = (names: string[]) =>
+	i18n.t("chat:transcript.mention.neverStarted.description", {
+		name: names[0],
+	})
 
 const summonLimitDescriptionOf = (names: string[]) =>
 	i18n.t("chat:transcript.mention.summonLimit.description", {
@@ -1265,13 +1271,18 @@ export const createConversationController = (
 		droppedFor: null,
 	})
 
+	const isSpeakingElsewhere = (turn: OpenTurn) =>
+		[...speakers.values()].some((held) => held.turn.id !== turn.id)
+
 	const openWave = (): Speaker[] => {
 		const turn = activeTurn
-		if (!turn || speakers.size > 0 || queue.waiting.length === 0) {
+		const speakingBotIds = [...speakers.keys()]
+		const startable = startableIn(queue, speakingBotIds)
+		if (!turn || isSpeakingElsewhere(turn) || startable.length === 0) {
 			return []
 		}
-		queue = openedWave(queue)
-		const started = queue.wave.map((summons) => newSpeaker(summons, turn))
+		queue = openedWave(queue, speakingBotIds)
+		const started = startable.map((summons) => newSpeaker(summons, turn))
 		for (const held of started) {
 			speakers.set(held.botId, held)
 		}
@@ -1482,6 +1493,10 @@ export const createConversationController = (
 		}
 		if (dropped.reason === "summonLimit") {
 			void raiseSummonLimit(dropped)
+			return
+		}
+		if (dropped.reason === "neverStarted") {
+			void raiseNotStarted(dropped, [dropped.botId], neverStartedDescriptionOf)
 			return
 		}
 		void raiseNotStarted(dropped, [dropped.botId], (names) =>
