@@ -4,6 +4,7 @@ import { RouterProvider } from "@tanstack/react-router"
 import {
 	act,
 	cleanup,
+	createEvent,
 	fireEvent,
 	render,
 	screen,
@@ -241,6 +242,15 @@ const pressCommand = async (key: string, target: Element | Window = window) => {
 	await settle()
 }
 
+const endSidebarFold = async () => {
+	const sidebar = slotOf("navigation-sidebar") as HTMLElement
+	const widthEnd = createEvent.transitionEnd(sidebar)
+	Object.defineProperty(widthEnd, "propertyName", { value: "width" })
+	await act(async () => {
+		fireEvent(sidebar, widthEnd)
+	})
+}
+
 const toggleSidebarButton = () =>
 	within(slotOf("app-title-bar") as HTMLElement).getByRole("button", {
 		name: i18n.t("common:sidebar.toggle"),
@@ -331,7 +341,7 @@ describe("the workspace frame", () => {
 	it("opens the user settings from the settings of its footer", async () => {
 		const { router } = await mountApp()
 
-		await press(entry(i18n.t("bots:rail.settings")))
+		await press(entry(i18n.t("bots:rail.personSettings", { name: "You" })))
 
 		expect(router.state.location.pathname).toBe("/settings/user")
 	})
@@ -364,6 +374,7 @@ describe("the sidebar toggle", () => {
 		await mountApp()
 
 		await press(toggleSidebarButton())
+		await endSidebarFold()
 
 		expect(slotOf("expanded-sidebar")).toBeNull()
 		expect(slotOf("collapsed-sidebar")).not.toBeNull()
@@ -386,6 +397,7 @@ describe("the sidebar toggle", () => {
 		await navigateTo(router, "/home")
 
 		await pressCommand("b")
+		await endSidebarFold()
 
 		expect(slotOf("collapsed-sidebar")).not.toBeNull()
 		expect(savedLayouts).toHaveBeenCalledExactlyOnceWith({ isCollapsed: true })
