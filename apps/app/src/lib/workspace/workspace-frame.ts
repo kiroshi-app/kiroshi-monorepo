@@ -27,7 +27,6 @@ type SidebarSwitcherKey =
 	| "onDeclineInvitation"
 	| "onRetryInvitation"
 	| "onOpenChange"
-	| "onOpenSearch"
 	| "spaces"
 	| "user"
 

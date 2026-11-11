@@ -151,6 +151,7 @@ const useWorkspaceFrameRead = (): WorkspaceFrameRead => {
 			...titleBarTabs,
 			...tabGesturesAskingFirst(tabs, titleBarTabs.activeTabId, askFirst),
 			onToggleSidebar: collapse.toggle,
+			onOpenSearch: workspace.overlay.search.open,
 		},
 		width: core.preferences.sidebarWidth ?? undefined,
 		onWidthChange: workspace.overlay.changeSidebarWidth,

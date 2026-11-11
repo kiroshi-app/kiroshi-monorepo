@@ -774,7 +774,6 @@ const CollapsedSidebar = ({
 	openMissionId,
 	update,
 	user,
-	onOpenSearch,
 	onNewConversation,
 	onSelectMissions,
 	onSelectLibrary,
@@ -785,7 +784,7 @@ const CollapsedSidebar = ({
 	renderSpaceList,
 	...switcher
 }: CollapsedSidebarProps) => {
-	const { t } = useTranslation(["bots", "search"])
+	const { t } = useTranslation("bots")
 
 	return (
 		<TooltipProvider delay={HOVER_INTENT_DELAY_MS}>
@@ -795,11 +794,6 @@ const CollapsedSidebar = ({
 				data-slot="collapsed-sidebar"
 			>
 				<SpaceSlot {...switcher} />
-				<Destination
-					icon={<Icons.Search aria-hidden="true" />}
-					label={t("open", { ns: "search" })}
-					onSelect={onOpenSearch}
-				/>
 				<Destination
 					icon={<Icons.Add aria-hidden="true" />}
 					isCurrent={destination === "newConversation"}

@@ -47,7 +47,6 @@ export const useWorkspaceNavigation = ({
 		onSelectConversation,
 	} = rosterLines.sidebarActions
 	const user = overlay.userSettings
-	const search = overlay.search
 	const isListShown = usePageShown(tabs, isListPage)
 
 	return useMemo(() => {
@@ -62,7 +61,6 @@ export const useWorkspaceNavigation = ({
 				onAcceptInvitation: switcher.onAcceptInvitation,
 				onCreateSpace,
 				onDeclineInvitation: switcher.onDeclineInvitation,
-				onOpenSearch: search.open,
 				onRetryInvitation: switcher.onRetryInvitation,
 				onSelectSpace: (id) => tabs.leaveAsked(() => onSelectSpace(id)),
 				onOpenChange: switcher.onSpaceSwitcherOpenChange,
@@ -109,7 +107,6 @@ export const useWorkspaceNavigation = ({
 		onSelectConversation,
 		rosterBots,
 		onSelectSpace,
-		search.open,
 		switcher,
 		tabs,
 		user,

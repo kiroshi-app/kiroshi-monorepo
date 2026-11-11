@@ -241,7 +241,6 @@ const meta = preview.meta({
 		destination: "newConversation" as const,
 		zones: ZONES,
 		user: { name: "Ada Martin" },
-		onOpenSearch: fn(),
 		onNewConversation: fn(),
 		onSelectMissions: fn(),
 		onSelectLibrary: fn(),
@@ -1211,12 +1210,19 @@ export const CurrentDestinationHoveredLightCollapsed = meta.story(
 	currentDestinationHoverStory(LIGHT),
 )
 
-export const SearchStaysInTheRailCollapsed = meta.story({
-	play: async ({ args, canvasElement, userEvent }) => {
-		const destinations = slotsIn(canvasElement, "collapsed-sidebar-destination")
-		const search = rail(canvasElement).getByRole("button", { name: "Search" })
-		await expect(destinations[0]).toBe(search)
-		await userEvent.click(search)
-		await expect(args.onOpenSearch).toHaveBeenCalledOnce()
+export const NewConversationUnderTheSpaceCollapsed = meta.story({
+	play: async ({ canvasElement }) => {
+		const buttons = rail(canvasElement).getAllByRole("button")
+		const space = slotIn(canvasElement, "collapsed-sidebar-space")
+		const newConversation = rail(canvasElement).getByRole("button", {
+			name: "New conversation",
+		})
+		await expect(buttons[buttons.indexOf(space) + 1]).toBe(newConversation)
+		await expect(
+			slotsIn(canvasElement, "collapsed-sidebar-destination")[0],
+		).toBe(newConversation)
+		await expect(
+			rail(canvasElement).queryByRole("button", { name: "Search" }),
+		).toBeNull()
 	},
 })

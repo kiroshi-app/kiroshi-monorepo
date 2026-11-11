@@ -1797,12 +1797,12 @@ navigation-collapsedsidebar--last-mission-completes
 navigation-collapsedsidebar--list-scroll-kept-across-swipe-collapsed
 navigation-collapsedsidebar--mission-thread-open
 navigation-collapsedsidebar--neighbour-list-shows-mid-swipe-collapsed
+navigation-collapsedsidebar--new-conversation-under-the-space-collapsed
 navigation-collapsedsidebar--one-mission
 navigation-collapsedsidebar--overflow-count-is-plain-text
 navigation-collapsedsidebar--r-1-not-sent-collapsed
 navigation-collapsedsidebar--s-1-several-spaces-collapsed
 navigation-collapsedsidebar--s-2-shared-space-host-not-connected-collapsed
-navigation-collapsedsidebar--search-stays-in-the-rail-collapsed
 navigation-collapsedsidebar--swipe-moves-between-spaces-collapsed
 navigation-collapsedsidebar--swipe-with-one-space-does-nothing-collapsed
 navigation-collapsedsidebar--swipe-with-switching-not-allowed-does-nothing-collapsed
@@ -1885,10 +1885,10 @@ navigation-expandedsidebar--neighbour-list-shows-mid-swipe-expanded
 navigation-expandedsidebar--new-conversation-draws-the-plus-expanded
 navigation-expandedsidebar--s-1-several-spaces-expanded
 navigation-expandedsidebar--s-2-shared-space-host-not-connected-expanded
-navigation-expandedsidebar--search-beside-the-switcher-expanded
 navigation-expandedsidebar--swipe-moves-between-spaces-expanded
 navigation-expandedsidebar--swipe-with-one-space-does-nothing-expanded
 navigation-expandedsidebar--swipe-with-switching-not-allowed-does-nothing-expanded
+navigation-expandedsidebar--switcher-alone-in-its-row-expanded
 navigation-expandedsidebar--switcher-and-footer-insets-expanded
 navigation-expandedsidebar--trigger-connecting-expanded
 navigation-expandedsidebar--trigger-local-expanded
@@ -2287,6 +2287,8 @@ navigation-titlebartabchip--short-title-dark
 navigation-titlebartabs--library-document-tab
 navigation-titlebartabs--library-image-tab
 navigation-titlebartabs--long-name-truncated
+navigation-titlebartabs--no-search-without-handler
+navigation-titlebartabs--search-after-forward
 navigation-titlebartabs--whitespace-document-name-reads-untitled
 navigation-userchip--default
 navigation-userchip--long-content

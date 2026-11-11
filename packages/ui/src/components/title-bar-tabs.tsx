@@ -24,6 +24,7 @@ import {
 	TITLE_BAR_MENU_ROW,
 } from "@workspace/ui/components/title-bar-menu"
 import { TitleBarTabChip } from "@workspace/ui/components/title-bar-tab-chip"
+import { TooltipHint } from "@workspace/ui/components/tooltip-hint"
 import {
 	ContextMenu,
 	ContextMenuContent,
@@ -113,6 +114,7 @@ type TitleBarTabsProps = {
 	onGoBack?: () => void
 	onGoForward?: () => void
 	onToggleSidebar?: () => void
+	onOpenSearch?: () => void
 }
 
 const STRIP = "flex min-w-0 flex-1 items-center gap-1 self-stretch"
@@ -120,9 +122,13 @@ const STRIP = "flex min-w-0 flex-1 items-center gap-1 self-stretch"
 const HISTORY = "flex shrink-0 items-center gap-0.5 pe-1"
 
 const HISTORY_BESIDE_SIDEBAR = cn(
-	"w-[calc(var(--sidebar-width)-var(--title-bar-lead)-var(--spacing))] in-data-[sidebar-open=false]:w-23",
+	"w-[calc(var(--sidebar-width)-var(--title-bar-lead)-var(--spacing))]",
 	SIDEBAR_FOLD_MOTION,
 )
+
+const HISTORY_COLLAPSED = "in-data-[sidebar-open=false]:w-23"
+
+const HISTORY_COLLAPSED_WITH_SEARCH = "in-data-[sidebar-open=false]:w-30.5"
 
 const BAR_BUTTON =
 	"grid size-7 shrink-0 place-items-center rounded-sm text-muted-foreground hover:bg-title-bar-highlight hover:text-foreground focus-visible:outline-2 focus-visible:outline-foreground focus-visible:outline-offset-1 disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-3.75"
@@ -969,8 +975,10 @@ const TitleBarTabs = ({
 	onGoBack,
 	onGoForward,
 	onToggleSidebar,
+	onOpenSearch,
 }: TitleBarTabsProps) => {
 	const { t } = useTranslation("common")
+	const searchLabel = t("open", { ns: "search" })
 	const pinned = tabs.filter((tab) => tab.isPinned)
 	const unpinned = tabs.filter((tab) => !tab.isPinned)
 	const { stripRef, fittingCount } = useFittingTabCount(unpinned.length)
@@ -1053,7 +1061,12 @@ const TitleBarTabs = ({
 	return (
 		<div className={STRIP} data-slot="title-bar-tabs" ref={stripRef}>
 			<div
-				className={cn(HISTORY, onToggleSidebar && HISTORY_BESIDE_SIDEBAR)}
+				className={cn(
+					HISTORY,
+					onToggleSidebar && HISTORY_BESIDE_SIDEBAR,
+					onToggleSidebar &&
+						(onOpenSearch ? HISTORY_COLLAPSED_WITH_SEARCH : HISTORY_COLLAPSED),
+				)}
 				data-slot="title-bar-history"
 			>
 				{onToggleSidebar ? (
@@ -1084,6 +1097,18 @@ const TitleBarTabs = ({
 				>
 					<Icons.Next aria-hidden="true" />
 				</button>
+				{onOpenSearch ? (
+					<TooltipHint content={searchLabel} side="bottom">
+						<button
+							aria-label={searchLabel}
+							className={BAR_BUTTON}
+							onClick={onOpenSearch}
+							type="button"
+						>
+							<Icons.Search aria-hidden="true" />
+						</button>
+					</TooltipHint>
+				) : null}
 			</div>
 			<Tabs.Root
 				className={TABS}
