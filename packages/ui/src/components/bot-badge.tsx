@@ -76,7 +76,7 @@ type BotMissionState = (typeof BOT_MISSION_STATES)[number]
 const BOT_MISSION_STRIP =
 	"flex h-6 items-center gap-1.5 rounded-sm bg-foreground/10 px-2 py-1 text-xs"
 
-const BOT_MISSION_DOT_SLOT = "size-3 shrink-0"
+const BOT_MISSION_MARK_SLOT = "size-3 shrink-0"
 
 type BotMissionTicket = {
 	platform: string
@@ -132,7 +132,7 @@ const BotMissionStrip = ({
 			) : (
 				<span
 					aria-hidden="true"
-					className={BOT_MISSION_DOT_SLOT}
+					className={BOT_MISSION_MARK_SLOT}
 					data-slot="bot-mission-dot-placeholder"
 				/>
 			)}
